@@ -1,0 +1,64 @@
+{
+  "name": "@velaros-ai/platform",
+  "version": "0.1.0",
+  "velaros": {
+    "platform": "0.6"
+  },
+  "description": "Cross-platform conventions for VelarOS hosts: path text, shells, process commands, app and data directories, and the VelarOS shared resource roots.",
+  "license": "Apache-2.0",
+  "author": "VelarOS",
+  "type": "module",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "main": "./dist/exports/index.js",
+  "types": "./dist/exports/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/exports/index.d.ts",
+      "import": "./dist/exports/index.js"
+    },
+    "./contracts": {
+      "types": "./dist/exports/contracts.d.ts",
+      "import": "./dist/exports/contracts.js"
+    },
+    "./shared-resources": {
+      "types": "./dist/exports/shared-resources.d.ts",
+      "import": "./dist/exports/shared-resources.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "clean": "rm -rf dist",
+    "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/capabilities/build/fix-esm-extensions.mjs dist && node ../../scripts/build/normalize-package-declarations.mjs",
+    "test": "bun run build && bun test spec/acceptance.test.ts test/platform-compatibility.test.ts test/shared-resources.test.ts",
+    "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/platform"
+  },
+  "dependencies": {
+    "@velaros-ai/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.17",
+    "typescript": "^5.7.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/VelarOS-AI/VelarOS-Platform.git",
+    "directory": "packages/platform"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://npm.pkg.github.com"
+  },
+  "homepage": "https://github.com/VelarOS-AI/VelarOS-Platform/tree/main/packages/platform#readme",
+  "bugs": {
+    "url": "https://github.com/VelarOS-AI/VelarOS-Platform/issues"
+  }
+}

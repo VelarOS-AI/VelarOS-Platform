@@ -5,8 +5,7 @@
 
 import { toNullable } from '@velaros-ai/core'
 
-import type { CommandSpec, RuntimePlatform } from '../contract/platform.js'
-import type { SystemShellKind } from '../contract/system.js'
+import type { CommandSpec, RuntimePlatform, ShellKind } from '../contract/platform.js'
 
 /** Windows 上可信的 CMD 路径；打开文件、启动应用都用它，不信任 PATH 或 ComSpec 里的值。 */
 export const WindowsCommandShellPath = 'C:\\Windows\\System32\\cmd.exe'
@@ -15,7 +14,7 @@ export const WindowsCommandShellPath = 'C:\\Windows\\System32\\cmd.exe'
 const DefaultWindowsExecutableExtensions = ['.EXE', '.CMD', '.BAT', '.COM']
 
 /** 根据 shell 可执行文件的路径判断它是哪种 shell：pwsh、powershell、cmd、git-bash 或 posix。 */
-export function getSystemShellKind(shellPath: string): SystemShellKind {
+export function getShellKind(shellPath: string): ShellKind {
   if (/(?:^|[\\/])pwsh(?:\.exe)?$/i.test(shellPath)) return 'pwsh'
   if (/(?:^|[\\/])powershell(?:\.exe)?$/i.test(shellPath)) return 'powershell'
   if (/(?:^|[\\/])cmd(?:\.exe)?$/i.test(shellPath)) return 'cmd'
@@ -93,7 +92,7 @@ export function preferredPosixShellPath(platform: RuntimePlatform, env: NodeJS.P
 }
 
 /** 生成「用某个 shell 执行一段命令」的启动规格：按 shell 种类拼参数，统一 UTF-8 输出；PowerShell 里命令失败时如实返回非零退出码。 */
-export function buildShellCommandSpec(command: string, file: string, kind: SystemShellKind): CommandSpec {
+export function buildShellCommandSpec(command: string, file: string, kind: ShellKind): CommandSpec {
   if (kind === 'pwsh' || kind === 'powershell') return {
     file,
     args: ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command',
@@ -111,7 +110,7 @@ export function buildShellCommandSpec(command: string, file: string, kind: Syste
 }
 
 /** 按 shell 种类给一个参数加引号；CMD 下带换行、NUL、`%` 这类无法安全转义的字符时抛错，要求改用原生 argv 执行。 */
-export function quoteShellArgument(value: string, kind: SystemShellKind): string {
+export function quoteShellArgument(value: string, kind: ShellKind): string {
   if (kind === 'pwsh' || kind === 'powershell') return `'${value.replace(/'/g, "''")}'`
   if (kind === 'cmd') {
     if (/[\r\n\0%]/.test(value)) throw new Error('This argument requires native file + argv execution in CMD.')

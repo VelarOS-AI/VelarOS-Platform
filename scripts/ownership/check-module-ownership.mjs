@@ -2,7 +2,7 @@
 // 模块结构门：核对每个已治理模块的文件分工与对外边界有没有塌。登记在 governed-modules.mjs。
 //
 // 这里不拦编辑，只核对：
-//   1. 工具文件：全部工具定义都在登记的那一个文件里，定义工具的函数只在那里被调用。
+//   1. 工具文件：全部工具定义都在登记的那一个文件里，定义工具的函数只在那里被调用（没有工具的包不登记 toolsFile / toolDefiner / hostPort）。
 //   2. contract：扁平；只放数据（接口字段、类型、常量表），不许出现函数类型、方法签名、类和函数；只用 type import，只引契约。
 //      可移植数据文件不 import 任何东西、不用 Node 专属类型。
 //   3. interface：只有登记的几个文件；只放类型声明，只用 type import，只引 interface 与 contract；
@@ -174,7 +174,7 @@ for (const module of GovernedModules) {
   if (manifest.name !== module.name) fail(`${label}: 包名与登记表不符（${manifest.name}）`)
 
   const srcRoot = join(packageRoot, 'src')
-  const toolsFilePath = join(packageRoot, module.toolsFile)
+  const toolsFilePath = module.toolsFile ? join(packageRoot, module.toolsFile) : null
   const contractRoot = join(packageRoot, module.contract)
   const interfaceRoot = join(packageRoot, module.interface)
   const implRoot = join(packageRoot, module.impl)
@@ -218,10 +218,10 @@ for (const module of GovernedModules) {
 
   // ── 1. 工具文件 ─────────────────────────────────────────────────────────
   const toolNames = []
-  const toolsSourceFile = program.getSourceFile(toolsFilePath)
-  if (!toolsSourceFile) {
+  const toolsSourceFile = toolsFilePath ? program.getSourceFile(toolsFilePath) : undefined
+  if (toolsFilePath && !toolsSourceFile) {
     fail(`${label}: 缺少工具文件 ${module.toolsFile}`)
-  } else {
+  } else if (toolsSourceFile) {
     const visitTools = (node) => {
       if (ts.isCallExpression(node) && node.expression.getText(toolsSourceFile) === module.toolDefiner) {
         const [spec] = node.arguments
@@ -237,13 +237,15 @@ for (const module of GovernedModules) {
     visitTools(toolsSourceFile)
     if (toolNames.length === 0) fail(`${label}: 工具文件 ${module.toolsFile} 里一个工具定义都没有`)
   }
-  const definerCall = new RegExp(`\\b${module.toolDefiner}\\s*[<(]`, 'u')
-  const definerDeclaration = new RegExp(`\\bfunction\\s+${module.toolDefiner}\\b`, 'u')
-  for (const file of sourceFiles) {
-    if (file === toolsFilePath) continue
-    const source = readFileSync(file, 'utf8')
-    if (definerCall.test(source) && !definerDeclaration.test(source)) {
-      fail(`${label}: ${shortPath(file)} 调用了 ${module.toolDefiner}；工具定义只许写在工具文件 ${module.toolsFile} 里`)
+  if (module.toolDefiner) {
+    const definerCall = new RegExp(`\\b${module.toolDefiner}\\s*[<(]`, 'u')
+    const definerDeclaration = new RegExp(`\\bfunction\\s+${module.toolDefiner}\\b`, 'u')
+    for (const file of sourceFiles) {
+      if (file === toolsFilePath) continue
+      const source = readFileSync(file, 'utf8')
+      if (definerCall.test(source) && !definerDeclaration.test(source)) {
+        fail(`${label}: ${shortPath(file)} 调用了 ${module.toolDefiner}；工具定义只许写在工具文件 ${module.toolsFile} 里`)
+      }
     }
   }
 
@@ -747,10 +749,10 @@ for (const module of GovernedModules) {
     }
     visitCalls(toolsSourceFile)
   }
-  const hostPortDeclaration = publicDeclarations.find((statement) => statement.name.text === module.hostPort)
-  if (!hostPortDeclaration) {
+  const hostPortDeclaration = module.hostPort ? publicDeclarations.find((statement) => statement.name.text === module.hostPort) : null
+  if (module.hostPort && !hostPortDeclaration) {
     fail(`${label}: 登记的宿主端口 ${module.hostPort} 不在公开接口文件里`)
-  } else {
+  } else if (hostPortDeclaration) {
     for (const member of hostPortDeclaration.members ?? []) {
       const memberName = member.name?.getText(hostPortDeclaration.getSourceFile())
       if (memberName && !calledPortMembers.has(memberName)) {
@@ -803,12 +805,12 @@ for (const module of GovernedModules) {
       if (!provides.includes(`\`${statement.name.text}\``)) fail(`${label}: 卡片「提供什么」没有列出公开接口 \`${statement.name.text}\``)
     }
     const chains = sections.get('骨干链路') ?? ''
-    if (!chains.includes(basename(module.toolsFile))) fail(`${label}: 卡片「骨干链路」没有点到工具文件 ${basename(module.toolsFile)}`)
+    if (module.toolsFile && !chains.includes(basename(module.toolsFile))) fail(`${label}: 卡片「骨干链路」没有点到工具文件 ${basename(module.toolsFile)}`)
     for (const toolName of toolNames) {
       if (!chains.includes(`\`${toolName}\``)) fail(`${label}: 卡片「骨干链路」没有写工具 ${toolName} 的链路`)
     }
     const structure = sections.get('结构') ?? ''
-    if (!structure.includes(basename(module.toolsFile))) fail(`${label}: 卡片「结构」没有写明工具文件 ${basename(module.toolsFile)}`)
+    if (module.toolsFile && !structure.includes(basename(module.toolsFile))) fail(`${label}: 卡片「结构」没有写明工具文件 ${basename(module.toolsFile)}`)
     for (const directory of allowedSourceDirectories) {
       if (!new RegExp(`^\\s+${directory}/\\s`, 'mu').test(structure)) fail(`${label}: 卡片「结构」的目录树里没有列出 ${directory}/`)
     }
@@ -873,7 +875,7 @@ for (const module of GovernedModules) {
   if (failures.length === 0) {
     const kinds = InvariantCheckKinds.filter((kind) => counts[kind] > 0).map((kind) => `${kind} ${counts[kind]}`).join('、')
     const exportedValues = [...exported.values()].filter((record) => record.isValue).length
-    console.info(`✓ ${label}: ${basename(module.toolsFile)} 里 ${toolNames.length} 个工具；实现 ${implFiles.length} 个文件，${classCount} 个类都有接口（另有 ${errorClassCount} 个错误类）；公开接口 ${publicDeclarations.length} 个，对外的值 ${exportedValues} 个，公开签名用到的数据 ${closure.size} 个；${subpaths.length} 个入口；环境变量 ${registeredVariables.size} 个；不变量 ${seenIds.size} 条（${kinds}）`)
+    console.info(`✓ ${label}: ${module.toolsFile ? `${basename(module.toolsFile)} 里 ${toolNames.length} 个工具` : '没有工具'}；实现 ${implFiles.length} 个文件，${classCount} 个类都有接口（另有 ${errorClassCount} 个错误类）；公开接口 ${publicDeclarations.length} 个，对外的值 ${exportedValues} 个，公开签名用到的数据 ${closure.size} 个；${subpaths.length} 个入口；环境变量 ${registeredVariables.size} 个；不变量 ${seenIds.size} 条（${kinds}）`)
   }
 }
 

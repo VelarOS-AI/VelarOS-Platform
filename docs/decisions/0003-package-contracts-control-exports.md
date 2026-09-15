@@ -51,6 +51,8 @@
 | `ParsedProcessRow`、`RawPortEntry`、`ResolvedSystemShell`、`SystemSearchIgnorePolicy` 等内部类型 | 不出包 |
 | `LocalSystemKernelApi.listCommandRuns`、`SystemCommandRunRecord`、`SystemCommandRunQueryOptions`、`SystemCommandRunStatus` | 删除。命令日志是产品壳的概念，本地内核从不记录；Desktop 的 journal 自己定义记录类型 |
 | `SystemToolSystemApi.canStartBackgroundCommands`、`canRefreshShellEnvironment` | 删除。宿主不能或不允许跑后台命令，就在 `runCommand` 里以 PERMISSION 拒绝（子代理的边界在 agent 包里改包 `runCommand`）；刷新环境没有宿主需要禁止 |
+| `@velaros-ai/system/platform-compatibility` 入口，以及根入口里的 `createSystemPlatform`、`currentSystemPlatform`、`SystemPlatformCompatibilityApi`、`SystemPlatformCompatibilityOptions` | 移到 `@velaros-ai/platform`：`createPlatform`、`currentPlatform`、`PlatformCompatibilityApi`、`PlatformCompatibilityOptions`；`SystemShellKind` 在那边叫 `ShellKind`（本包契约仍保留同名同值的 `SystemShellKind`）。见 ADR 0005 |
+| `@velaros-ai/system/shared-resources` 入口，以及 `velarosSharedResources`、`VelarOSSharedResourcesApi`、`VelarOSSharedResourceStoreOptions` | 移到 `@velaros-ai/platform/shared-resources`，名字不变 |
 | `SystemToolSystemApi.resolveCommandCwd?` | 改成必需的 `resolvePath(path?)`：`~` 与相对路径的解析全交给宿主，文件工具和 `system:run` 的 cwd 用同一个口径，审批看到的目标和实际操作的目标一致 |
 
 已知差距：本包的受管进程在直接子进程退出后总是清理整个进程组，Desktop 自己的执行器会放过用 nohup、setsid、disown 脱离的进程。Desktop 迁到本地内核前，要把这条策略收进本包。

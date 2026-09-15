@@ -6,7 +6,7 @@ import { basename } from 'node:path'
 
 import { isNotNull, isNull, isPresent, toNullable } from '@velaros-ai/core'
 
-import type { ByteStats, ParsedProcessRow, RawPortEntry } from '../contract/platform.js'
+import type { ByteStats, ParsedProcessRow, RawPortEntry } from '../contract/process-info.js'
 import type {
   SystemOpenPortInfo,
   SystemOpenPortQueryOptions,

@@ -26,7 +26,8 @@
         "agent"
       ],
       "core": [
-        "core"
+        "core",
+        "platform"
       ],
       "model": [
         "model"
@@ -186,6 +187,7 @@
     "@velaros-ai/memory": "workspace:*",
     "@velaros-ai/model": "workspace:*",
     "@velaros-ai/office": "workspace:*",
+    "@velaros-ai/platform": "workspace:*",
     "@velaros-ai/surface-protocol": "workspace:*",
     "@velaros-ai/system": "workspace:*",
     "@velaros-ai/ui": "workspace:*",

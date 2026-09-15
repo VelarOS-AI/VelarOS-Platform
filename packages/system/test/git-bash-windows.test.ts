@@ -5,8 +5,9 @@ import { join, win32 } from 'node:path'
 
 import { expect, test } from 'bun:test'
 
+import { createPlatform } from '@velaros-ai/platform'
+
 import { LocalSystemKernel } from '../src/impl/LocalSystemKernel'
-import { SystemPlatformCompatibility } from '../src/impl/SystemPlatformCompatibility'
 import { systemShellResolver } from '../src/impl/SystemShellResolver.js'
 import { SystemShellUnavailableError } from '../src/impl/SystemShellUnavailableError'
 import { buildSystemOwnedProcessSpec } from '../src/utils/process.js'
@@ -36,7 +37,7 @@ test.skipIf(!hasGitBash())(
       expect(lines[1]).toMatch(/\/usr\/bin\/grep(?:\.exe)?$/)
       expect(lines[2]).toBe('./中文 空格.txt')
 
-      const platform = new SystemPlatformCompatibility()
+      const platform = createPlatform()
       const args = ['中文🙂 空格', `literal $HOME "double" 'single' \`text\` \\n`]
       const script = `
         process.stdout.write(JSON.stringify({
@@ -86,7 +87,7 @@ test.skipIf(process.platform !== 'win32')(
       ])].filter(existsSync)
       const shells = await Promise.all(candidates.map((shellPath) => systemShellResolver.resolveReady({ shellPath })))
       for (const shell of shells) {
-        const platform = new SystemPlatformCompatibility()
+        const platform = createPlatform()
         const shellSpec = platform.getShellCommandSpec(`node.exe ${platform.quoteShellArg(script, shell)}`, shell)
         const ownedShell = buildSystemOwnedProcessSpec(shellSpec, { env: shell.env })
         expect(ownedShell.ownership.backend).toBe('windows-job')

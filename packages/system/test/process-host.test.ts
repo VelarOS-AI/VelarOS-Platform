@@ -7,7 +7,8 @@ import { promisify } from 'node:util'
 
 import { expect, test } from 'bun:test'
 
-import { SystemPlatformCompatibility } from '../src/impl/SystemPlatformCompatibility'
+import { createPlatform } from '@velaros-ai/platform'
+
 import { systemShellResolver } from '../src/impl/SystemShellResolver.js'
 import { buildSystemOwnedProcessSpec, getSystemProcessHostPath } from '../src/utils/process.js'
 import { buildSystemNativeCommandSpec } from '../src/utils/shell.js'
@@ -73,7 +74,7 @@ windowsTest('native host preserves CMD Unicode output and batch shim literal arg
     })
     expect(shell.kind).toBe('cmd')
     expect(shell.readiness).toBe('ready')
-    const compatibility = new SystemPlatformCompatibility()
+    const compatibility = createPlatform()
     const cmd = compatibility.getShellCommandSpec(
       'echo 中文🙂 标准输出& echo 错误🙂 1>&2& exit /b 17', shell
     )

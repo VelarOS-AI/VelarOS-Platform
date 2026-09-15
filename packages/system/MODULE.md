@@ -24,8 +24,6 @@
 | `SystemCapability` | 能力令牌，服务是 `SystemCapabilityService` | 在内核里按名调用系统工具 |
 | `createLocalSystemKernel` | `LocalSystemKernelApi` | 宿主端口的本机实现，外加宿主界面要的搜索、进程、端口、终止任务，以及交互式任务控制台的写输入、读增量输出、发中断 |
 | `systemCommandPolicy` | `SystemCommandPolicyApi` | 执行前给命令分类，和 `system:run` 用同一份判定 |
-| `currentSystemPlatform`、`createSystemPlatform` | `SystemPlatformCompatibilityApi` | 跨平台兼容层 |
-| `velarosSharedResources` | `VelarOSSharedResourcesApi` | 产品家族共享资源目录 |
 
 **注入面**，写在 `interface/requires.ts`，是宿主要塞进来的东西。本包只从这些口子接收外部能力，别处不留钩子：
 
@@ -39,14 +37,12 @@
 
 **数据面**是 `contract/`。可移植数据文件 `contract/system.ts` 整个就是 `./contracts` 入口：工具身份表 `SystemToolNames`、`SystemToolCategoryByName`，身份常量 `SystemModId`、`SystemSpaceId`，错误码 `SystemErrorCodes`，环境变量表 `SystemEnvironmentVariables`，以及经过宿主端口流动的全部数据结构。其余数据只有被公开签名用到时才出包。
 
-四个入口对应 `package.json` 的 `exports`，源文件在 `src/exports/`，只有转发语句：
+两个入口对应 `package.json` 的 `exports`，源文件在 `src/exports/`，只有转发语句：
 
 | 入口 | 给谁用 | 里面有什么 |
 | --- | --- | --- |
 | `.` | Node 宿主 | 三个面的全部 |
 | `./contracts` | 任何进程，含浏览器 | 可移植数据 |
-| `./platform-compatibility` | Node 宿主与渲染进程 | 跨平台兼容层 |
-| `./shared-resources` | Node 宿主 | 共享资源目录 |
 
 模型面的六个工具是本模块的主产品。它们都在 `src/impl/SystemTools.ts`，按文件、执行两类排列，每个工具的定义就是模型看到的全部信息面：一句话摘要、适用与禁用场景、协议、用法、示例、参数说明、权限、能力声明、审批语义，以及 execute 里的执行链路。schema 由 `check:capabilities-schemas` 冻结。
 
@@ -88,7 +84,6 @@
 - **文件版本历史**：文件操作持有一份，只在内存里，每个文件留最近 10 份改动前的内容、单份不超过 2 MB、总量不超过 64 MB；随进程消失，持久化的本地历史是宿主的事。
 - **shell 选择**：不缓存，每次运行前重新自检。`system:refresh-environment` 在 Windows 上重读用户与系统环境变量写回本进程并给出新的 `revision`，其他平台只重新选 shell。
 - **审批记忆**：不归本模块。本模块只发起确认，记不记、记多久由宿主的 `ApprovalPort` 决定。
-- **共享资源根目录**：只算路径，不建目录、不写盘。
 
 ## 生命周期
 
@@ -126,10 +121,10 @@
 src/
   interface/    接口：provides 是产品面，requires 是注入面，internal 是不属于某个类的内部接口（utils 函数的选项、工具定义的入参）；每个方法都有中文说明
                 包内部类的接口不在这里：写在类文件里、紧挨在类的上方
-  contract/     数据：字段、类型、常量表，不含任何函数和方法
+  contract/     数据：字段、类型、常量表，不含任何函数和方法；命令规格与 shell 种类这类平台数据来自 `@velaros-ai/platform`
   impl/         扁平：SystemTools.ts 放六个工具，其余一个类一个文件，文件名就是类名
   utils/        纯工具函数，按类别分文件；每个函数上方一句中文说明
-  exports/      四个对外入口，只转发，package.json 的 exports 指向这里
+  exports/      两个对外入口，只转发，package.json 的 exports 指向这里
 ```
 
 **看代码的顺序**：`SystemTools.ts` → `interface/` 的三个文件 → 需要时看 utils 里函数上方的一句说明。类的实现、数据字段、工具函数的内部一般不用看。
@@ -145,8 +140,6 @@ src/
 | `SystemTools.ts` | 没有类 | 六个工具的定义、分组、内置 mod、内核挂载 |
 | `LocalSystemKernel.ts` | `LocalSystemKernelApi`（provides），扩展宿主端口 `SystemToolSystemApi`（requires） | 宿主端口的本机实现，只做转接 |
 | `SystemCommandPolicy.ts` | `SystemCommandPolicyApi`（provides） | 执行前给命令分类的唯一出口 |
-| `SystemPlatformCompatibility.ts` | `SystemPlatformCompatibilityApi`（provides） | 跨平台兼容层 |
-| `VelarOSSharedResources.ts` | `VelarOSSharedResourcesApi`（provides） | 产品家族共享资源目录 |
 | `SystemCommandRunner.ts` | `SystemCommandRunnerApi`（同文件） | 跑命令：前台采集，后台登记成任务、可查可停；交互式任务另带控制台，可写输入、读增量输出、发中断 |
 | `SystemShellResolver.ts` | `SystemShellResolverApi`（同文件） | 找 shell、自检、判断命令在不在、刷新 Windows 环境变量 |
 | `SystemProcessManager.ts` | `SystemProcessManagerApi`（同文件） | 受管子进程登记表 |
@@ -158,9 +151,9 @@ src/
 | `GitIgnoreSystemSearchPolicy.ts` | `SystemSearchIgnorePolicy`（同文件） | 遍历时按各级 .gitignore 判断跳过哪些条目 |
 | `SystemShellUnavailableError.ts` | 错误类，不写接口 | 找不到能用的 shell |
 
-实现分四层，上层可以调下层，下层不调上层：工具（`SystemTools.ts`）→ 宿主（`LocalSystemKernel.ts`）→ 能力（命令、策略、进程、shell、文件操作、文件版本、搜索）→ 平台（兼容层、它的错误、共享资源目录）。每个文件属于哪一层登记在 `scripts/ownership/governed-modules.mjs`。utils 在最底下，谁都可以用，它只引 utils、契约与接口。
+实现分四层，上层可以调下层，下层不调上层：工具（`SystemTools.ts`）→ 宿主（`LocalSystemKernel.ts`）→ 能力（命令、策略、进程、shell、文件操作、文件版本、搜索）→ shell 错误类（`SystemShellUnavailableError.ts`）。每个文件属于哪一层登记在 `scripts/ownership/governed-modules.mjs`。utils 在最底下，谁都可以用，它只引 utils、契约与接口。
 
-`./contracts` 与 `./platform-compatibility` 两个入口会被渲染进程加载，它们的整条引用链不碰 Node 模块。
+`./contracts` 入口会被渲染进程加载，它的整条引用链不碰 Node 模块；跨平台兼容层与共享资源目录在 `@velaros-ai/platform`。
 
 `SystemTools.ts` 改了要在差量报告里点名，人复核；`interface/provides.ts` 与 `interface/requires.ts` 改了等于改对外契约，也要点名。其余代码由 agent 维护。以上分工、分层、接口与数据的边界、导出规则、环境变量登记都由门禁机械核对。
 

@@ -11,6 +11,7 @@ import { tmpdir } from 'node:os'
 
 import { isFalse, Log, optionalWhen, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
+import type { PlatformCompatibilityApi } from '@velaros-ai/platform'
 
 import type { PreparedSystemCommand, SystemConsoleOutputBuffer, SystemProcessConfinementPolicy } from '../contract/commands.js'
 import type {
@@ -31,7 +32,6 @@ import type {
   SystemProcessConfinementEvidence,
   SystemRunCommandOptions,
 } from '../contract/system.js'
-import type { SystemPlatformCompatibilityApi } from '../interface/provides.js'
 import type { SystemProcessConfinementProvider } from '../interface/requires.js'
 import { buildSystemCommandResult } from '../utils/command-result.js'
 import { buildSystemProcessConfinementSpawnSpec } from '../utils/confinement.js'
@@ -102,7 +102,7 @@ export interface SystemCommandRunnerOptions {
   /** 命令跑在哪个平台上。 */
   platform: NodeJS.Platform
   /** 按这个平台算 shell 参数、终止命令、要不要独立进程组。 */
-  platformTools: SystemPlatformCompatibilityApi
+  platformTools: PlatformCompatibilityApi
   /** 进程约束策略：模式、工作区根、额外写根、是否断网。 */
   confinement: SystemProcessConfinementPolicy
   /** 宿主注入的约束后端；没有内置后端的平台（Windows）靠它，缺了就在受约束模式下失败。 */

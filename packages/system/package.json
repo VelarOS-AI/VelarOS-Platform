@@ -4,7 +4,7 @@
   "velaros": {
     "platform": "0.6"
   },
-  "description": "System-space files, execution, processes, desktop integration, contracts, and composition.",
+  "description": "System-space tools for VelarOS hosts: text file read/view/edit, shell command execution, background tasks and interactive consoles, process and port inspection, global search, and the local kernel.",
   "license": "Apache-2.0",
   "author": "VelarOS",
   "type": "module",
@@ -22,14 +22,6 @@
     "./contracts": {
       "types": "./dist/exports/contracts.d.ts",
       "import": "./dist/exports/contracts.js"
-    },
-    "./platform-compatibility": {
-      "types": "./dist/exports/platform-compatibility.d.ts",
-      "import": "./dist/exports/platform-compatibility.js"
-    },
-    "./shared-resources": {
-      "types": "./dist/exports/shared-resources.d.ts",
-      "import": "./dist/exports/shared-resources.js"
     }
   },
   "files": [
@@ -45,12 +37,13 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "clean": "rm -rf dist",
     "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/capabilities/build/fix-esm-extensions.mjs dist && node ../../scripts/build/normalize-package-declarations.mjs",
-    "test": "bun run build && bun test spec/acceptance.test.ts test/system.test.ts test/kernel-module.test.ts test/platform-compatibility.test.ts test/shell-readiness.test.ts test/git-bash-windows.test.ts test/process-host.test.ts test/process-lifecycle.test.ts test/interactive-console.test.ts test/system-search-visibility.test.ts test/shared-resources.test.ts",
+    "test": "bun run build && bun test spec/acceptance.test.ts test/system.test.ts test/kernel-module.test.ts test/shell-resolution.test.ts test/shell-readiness.test.ts test/git-bash-windows.test.ts test/process-host.test.ts test/process-lifecycle.test.ts test/interactive-console.test.ts test/system-search-visibility.test.ts",
     "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/system"
   },
   "dependencies": {
     "@velaros-ai/core": "workspace:*",
     "@velaros-ai/kernel": "workspace:*",
+    "@velaros-ai/platform": "workspace:*",
     "zod": "^4.3.6"
   },
   "peerDependencies": {

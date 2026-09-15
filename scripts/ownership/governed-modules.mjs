@@ -4,7 +4,7 @@
 // 字段：
 //   directory       相对 packages/ 的目录
 //   name            包名
-//   toolsFile       工具文件（相对包根）：全部工具定义都在这一个文件里，外加它们的分组与挂载。人最先看的地方，改了要在差量报告里点名
+//   toolsFile       工具文件（相对包根，没有工具的包不填）：全部工具定义都在这一个文件里，外加它们的分组与挂载。人最先看的地方，改了要在差量报告里点名
 //   contract        数据契约目录：扁平文件，只放数据（字段、类型、常量表），不许出现函数类型和方法
 //   portable        可移植数据文件：不 import 任何东西、不用 Node 专属类型，浏览器也能用；`./contracts` 入口就是它
 //   interface       接口目录：只放带中文说明的类型声明，文件就是下面登记的几个
@@ -37,7 +37,7 @@ export const GovernedModules = [
     impl: 'src/impl',
     utils: 'src/utils',
     exports: 'src/exports',
-    browserSafeEntries: ['contracts.ts', 'platform-compatibility.ts'],
+    browserSafeEntries: ['contracts.ts'],
     // 可移植数据文件里的环境变量表：代码里出现的每个 VELAROS_* 名字都要登记在这里
     environmentTable: 'SystemEnvironmentVariables',
     // 宿主端口：注入面里工具经 ctx.system 调的那个接口；它的每个方法都必须有工具在调，没人调的不许留
@@ -53,10 +53,32 @@ export const GovernedModules = [
         'SystemCommandRunner.ts', 'SystemCommandPolicy.ts', 'SystemShellResolver.ts', 'SystemProcessManager.ts', 'SystemManagedProcess.ts',
         'SystemOutputDecoder.ts', 'SystemFileOperations.ts', 'SystemFileHistory.ts', 'SystemGlobalSearch.ts', 'GitIgnoreSystemSearchPolicy.ts',
       ],
-      // 平台：跨平台兼容层与它的错误、共享资源目录
-      ['SystemPlatformCompatibility.ts', 'SystemShellUnavailableError.ts', 'VelarOSSharedResources.ts'],
+      // shell 错误类
+      ['SystemShellUnavailableError.ts'],
     ],
     toolDefiner: 'defineSystemTool',
+    card: 'MODULE.md',
+    invariants: 'spec/invariants.md',
+    acceptance: 'spec/acceptance.test.ts',
+  },
+  {
+    directory: 'platform',
+    name: '@velaros-ai/platform',
+    // 没有工具：不登记 toolsFile、toolDefiner、hostPort
+    contract: 'src/contract',
+    portable: 'platform.ts',
+    interface: 'src/interface',
+    publicInterfaces: ['provides.ts'],
+    internalInterfaces: [],
+    impl: 'src/impl',
+    utils: 'src/utils',
+    exports: 'src/exports',
+    browserSafeEntries: ['index.ts', 'contracts.ts'],
+    environmentTable: 'PlatformEnvironmentVariables',
+    layers: [
+      // 兼容层与共享资源目录互不依赖
+      ['PlatformCompatibility.ts', 'VelarOSSharedResources.ts'],
+    ],
     card: 'MODULE.md',
     invariants: 'spec/invariants.md',
     acceptance: 'spec/acceptance.test.ts',

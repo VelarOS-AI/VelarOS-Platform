@@ -8,12 +8,12 @@ import { createHash } from 'node:crypto'
 import { win32 } from 'node:path'
 
 import { isPlainObject, isString, Log, toNullable } from '@velaros-ai/core'
+import { currentPlatform } from '@velaros-ai/platform'
+import type { CommandSpec } from '@velaros-ai/platform/contracts'
 
 import type { RefreshedWindowsEnvironment, ResolvedSystemShell, SystemShellProbeResult } from '../contract/commands.js'
-import type { CommandSpec } from '../contract/platform.js'
 import type { SystemEnvironmentCommandAvailability } from '../contract/system.js'
 import type { ResolveSystemShellOptions } from '../interface/internal.js'
-import { buildShellCommandSpec, quoteShellArgument } from '../utils/platform.js'
 import { buildSystemOwnedProcessSpec } from '../utils/process.js'
 import { detectSystemShells, readWindowsEnv, uniquePaths } from '../utils/shell.js'
 
@@ -82,7 +82,7 @@ class SystemShellResolver implements SystemShellResolverApi {
 
   public async resolveCommand(name: string, shell: ResolvedSystemShell): Promise<SystemEnvironmentCommandAvailability> {
     if (shell.kind === 'cmd' && CmdBuiltins.has(name.trim().toLowerCase())) return { name, available: true, path: name.trim(), kind: 'builtin' }
-    const quoted = quoteShellArgument(name.replace(/\\/g, shell.kind === 'git-bash' ? '/' : '\\'), shell.kind)
+    const quoted = currentPlatform.quoteShellArg(name.replace(/\\/g, shell.kind === 'git-bash' ? '/' : '\\'), { kind: shell.kind })
     // @arch-guard:suspend code-style/require-chinese-comments 理由：下方字符串是发送给各 Shell 的命令，不是说明文案。
     const command = shell.kind === 'cmd' ? `where ${quoted}`
       : shell.kind === 'pwsh' || shell.kind === 'powershell'
@@ -90,7 +90,7 @@ class SystemShellResolver implements SystemShellResolverApi {
         : shell.kind === 'git-bash'
           ? `p=$(command -v ${quoted}) || exit $?; case "$p" in /*) cygpath -w -- "$p" ;; *) printf '%s\\n' "$p" ;; esac`
           : `command -v ${quoted}`
-    const result = await this.capture(buildShellCommandSpec(command, shell.shellPath, shell.kind), shell.env, 2_500)
+    const result = await this.capture(currentPlatform.getShellCommandSpec(command, { shellPath: shell.shellPath, kind: shell.kind }), shell.env, 2_500)
     const path = result.exitCode === 0 ? result.stdout.trim().split(/\r?\n/)[0] || null : null
     return {
       name, available: !!path, path,
@@ -164,7 +164,7 @@ class SystemShellResolver implements SystemShellResolverApi {
       : shell.kind === 'pwsh' || shell.kind === 'powershell'
         ? `Write-Output '${marker}'; Write-Output $PSVersionTable.PSVersion.ToString()`
         : `printf '${marker}\\n%s\\n' "\${BASH_VERSION:-posix}"`
-    const result = await this.capture(buildShellCommandSpec(command, shell.shellPath, shell.kind), shell.env, timeoutMs)
+    const result = await this.capture(currentPlatform.getShellCommandSpec(command, { shellPath: shell.shellPath, kind: shell.kind }), shell.env, timeoutMs)
     const ready = result.exitCode === 0 && result.stdout.includes(marker) && !result.timedOut
     if (ready) return {
       ready,

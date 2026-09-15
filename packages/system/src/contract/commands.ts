@@ -3,7 +3,8 @@
  * 只放数据；带行为的接口在 `interface/`。
  */
 
-import type { CommandSpec } from './platform.js'
+import type { CommandSpec } from '@velaros-ai/platform/contracts'
+
 import type { SystemProcessConfinementEvidence, SystemProcessConfinementMode, SystemProcessOwnership, SystemShellDescriptor } from './system.js'
 
 // ── 执行前分类 ──────────────────────────────────────────────────

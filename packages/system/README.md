@@ -2,13 +2,11 @@
 
 > 六个工具都在 [src/impl/SystemTools.ts](./src/impl/SystemTools.ts)；模块卡片见 [MODULE.md](./MODULE.md)。本文是操作手册。
 
-System 是 `@velaros-ai` 品牌下的系统空间包。对外只有四个入口，里面只有接口标注过的整件能力、宿主要注入的接口和数据，
-零件不出包（详见 [MODULE.md](./MODULE.md) 的「提供什么」）：
+System 是 `@velaros-ai` 品牌下的系统空间包。对外只有两个入口，里面只有接口标注过的整件能力、宿主要注入的接口和数据，
+零件不出包（详见 [MODULE.md](./MODULE.md) 的「提供什么」）；跨平台兼容层与共享资源目录在 `@velaros-ai/platform`：
 
 - `@velaros-ai/system`：Node 宿主用的全部公开面，包括六个工具、内置 mod、内核模块、本地内核、命令策略。
 - `@velaros-ai/system/contracts`：可移植数据，浏览器也能用。
-- `@velaros-ai/system/platform-compatibility`：跨平台兼容层，渲染进程也能用。
-- `@velaros-ai/system/shared-resources`：VelarOS 产品家族共享资源目录。
 
 模型工具使用 canonical `namespace:tool` 协议：
 
@@ -48,7 +46,7 @@ Windows 子进程同时设置 Python UTF-8。第三方程序仍需遵循自身�
 包括 npm `.cmd` shim 的双层转义。该字段只供宿主组合能力使用，不出现在模型工具 schema 中。
 
 Windows 上刷新环境时，本包异步重读用户与系统环境变量，保留启动器额外 PATH 和应用覆盖项，并给出新的 revision。
-跨平台兼容层（`currentSystemPlatform`）与描述符类型可以在浏览器里用；文件发现和自检只在 Node 里做。
+跨平台兼容层（`@velaros-ai/platform` 的 `currentPlatform`）与描述符类型可以在浏览器里用；文件发现和自检只在 Node 里做。
 本包读写的环境变量全部登记在 `SystemEnvironmentVariables`。
 
 ## 进程约束契约

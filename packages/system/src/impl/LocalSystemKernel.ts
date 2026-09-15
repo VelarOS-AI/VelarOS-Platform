@@ -7,9 +7,11 @@ import { cpus, freemem, homedir, loadavg, platform, release, totalmem } from 'no
 import { isAbsolute, join, resolve } from 'node:path'
 
 import { isEmpty, Log, toNullable } from '@velaros-ai/core'
+import type { PlatformCompatibilityApi } from '@velaros-ai/platform'
+import { createPlatform } from '@velaros-ai/platform'
+import type { CommandSpec } from '@velaros-ai/platform/contracts'
 
 import type { ResolvedSystemShell } from '../contract/commands.js'
-import type { CommandSpec } from '../contract/platform.js'
 import type {
   SystemBackgroundTaskQueryOptions,
   SystemBackgroundTaskRecord,
@@ -33,7 +35,6 @@ import type {
   SystemShellEnvironmentRefreshResult,
 } from '../contract/system.js'
 import type { LocalSystemKernelApi } from '../interface/provides.js'
-import type { SystemPlatformCompatibilityApi } from '../interface/provides.js'
 import type { LocalSystemKernelOptions } from '../interface/requires.js'
 import { runPlatformCommand } from '../utils/process.js'
 import { toShellDescriptor } from '../utils/shell.js'
@@ -53,7 +54,6 @@ import type { SystemCommandRunnerApi } from './SystemCommandRunner.js'
 import { SystemCommandRunner } from './SystemCommandRunner.js'
 import type { SystemGlobalSearchApi } from './SystemGlobalSearch.js'
 import { SystemGlobalSearch } from './SystemGlobalSearch.js'
-import { SystemPlatformCompatibility } from './SystemPlatformCompatibility.js'
 import { systemProcessManager } from './SystemProcessManager.js'
 import type { SystemShellResolverApi } from './SystemShellResolver.js'
 import { systemShellResolver } from './SystemShellResolver.js'
@@ -68,7 +68,7 @@ export function createLocalSystemKernel(options: LocalSystemKernelOptions): Loca
 export class LocalSystemKernel implements LocalSystemKernelApi {
   private readonly homeDir: string
   private readonly hostPlatform: NodeJS.Platform
-  private readonly platformTools: SystemPlatformCompatibilityApi
+  private readonly platformTools: PlatformCompatibilityApi
   private readonly workingDirectory: string
   private readonly shells: SystemShellResolverApi = systemShellResolver
   private readonly commands: SystemCommandRunnerApi
@@ -80,7 +80,7 @@ export class LocalSystemKernel implements LocalSystemKernelApi {
     const root = resolve(options.cwd)
     this.homeDir = options.homeDir ?? homedir()
     this.hostPlatform = options.platform ?? platform()
-    this.platformTools = new SystemPlatformCompatibility({ platform: this.hostPlatform, env: process.env })
+    this.platformTools = createPlatform({ platform: this.hostPlatform, env: process.env })
     this.workingDirectory = root
     const confinement: NonNullable<LocalSystemKernelOptions['processConfinement']> =
       options.processConfinement ?? { mode: 'danger-full-access', workspaceRoot: root }

@@ -5,9 +5,9 @@
 
 import type { ToolPermission } from '@velaros-ai/agent/protocol'
 import type { DefineToolRuntimeSpecInput } from '@velaros-ai/agent/tool-contract'
+import type { ShellCommandSpecOptions } from '@velaros-ai/platform'
 
 import type { ResolvedSystemShell, SystemShellProbeResult } from '../contract/commands.js'
-import type { ShellCommandSpecOptions } from '../contract/platform.js'
 import type { SystemToolName } from '../contract/system.js'
 
 import type { SystemProcessConfinementProvider, SystemToolContext } from './requires.js'

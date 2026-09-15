@@ -129,12 +129,10 @@
       "directory": "packages/system",
       "name": "@velaros-ai/system",
       "version": "1.1.17",
-      "description": "System-space files, execution, processes, desktop integration, contracts, and composition.",
+      "description": "System-space tools for VelarOS hosts: text file read/view/edit, shell command execution, background tasks and interactive consoles, process and port inspection, global search, and the local kernel.",
       "exportSubpaths": [
         ".",
-        "./contracts",
-        "./platform-compatibility",
-        "./shared-resources"
+        "./contracts"
       ],
       "repositoryDirectory": "packages/system"
     },
@@ -153,6 +151,19 @@
         "./utils/*"
       ],
       "repositoryDirectory": "packages/core"
+    },
+    {
+      "domain": "core",
+      "directory": "packages/platform",
+      "name": "@velaros-ai/platform",
+      "version": "0.1.0",
+      "description": "Cross-platform conventions for VelarOS hosts: path text, shells, process commands, app and data directories, and the VelarOS shared resource roots.",
+      "exportSubpaths": [
+        ".",
+        "./contracts",
+        "./shared-resources"
+      ],
+      "repositoryDirectory": "packages/platform"
     },
     {
       "domain": "evaluation",

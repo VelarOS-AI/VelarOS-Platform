@@ -6,13 +6,13 @@ import { statSync } from 'node:fs'
 import { win32 } from 'node:path'
 
 import { Log } from '@velaros-ai/core'
+import { createPlatform, currentPlatform } from '@velaros-ai/platform'
+import type { CommandSpec } from '@velaros-ai/platform/contracts'
 
 import type { ResolvedSystemShell } from '../contract/commands.js'
-import type { CommandSpec } from '../contract/platform.js'
 import type { SystemShellDescriptor, SystemShellKind, SystemShellRecommendation } from '../contract/system.js'
 import type { ResolveSystemShellOptions } from '../interface/internal.js'
 
-import { buildShellCommandSpec, getSystemShellKind, preferredPosixShellPath, quoteShellArgument } from './platform.js'
 
 const shellNames: Record<SystemShellKind, string> = {
   'git-bash': 'Git Bash', pwsh: 'PowerShell 7', powershell: 'Windows PowerShell',
@@ -169,7 +169,7 @@ export function windowsCandidates(env: NodeJS.ProcessEnv, isFile: (path: string)
 
 /** 为一个 shell 生成完整描述：种类、名称、启动参数、运行环境与安装建议。 */
 export function describeShell(shellPath: string, env: NodeJS.ProcessEnv, isFile: (path: string) => boolean): ResolvedSystemShell {
-  const kind = getSystemShellKind(shellPath)
+  const kind = currentPlatform.getShellKind(shellPath)
   const gitRoot = kind === 'git-bash' ? gitRootForBash(shellPath, isFile) : undefined
   const shellEnv = gitRoot ? gitBashEnvironment(env, shellPath, gitRoot, isFile) : { ...env }
   if (kind !== 'posix') {
@@ -221,13 +221,13 @@ export function detectSystemShells(options: ResolveSystemShellOptions): Resolved
   const env = options.env ?? process.env
   const platform = options.platform ?? process.platform
   const isFile = options.isFile ?? isRegularFile
-  if (platform !== 'win32') return [describeShell(options.shellPath || preferredPosixShellPath(platform, env), env, isFile)]
+  if (platform !== 'win32') return [describeShell(options.shellPath || createPlatform({ platform, env }).getPreferredShellPath(env), env, isFile)]
   const selected = options.shellPath || readWindowsEnv(env, 'VELAROS_SHELL_PATH')
   const candidates = selected ? [normalizeWindowsPath(selected)] : windowsCandidates(env, isFile)
   const result: ResolvedSystemShell[] = []
   for (const candidate of candidates) {
     if (!isAbsoluteWindowsPath(candidate) || !isFile(candidate)) continue
-    const kind = getSystemShellKind(candidate)
+    const kind = currentPlatform.getShellKind(candidate)
     if (kind === 'posix' || (options.kind && kind !== options.kind)) continue
     if (kind === 'git-bash' && !gitRootForBash(candidate, isFile)) continue
     result.push(describeShell(candidate, env, isFile))
@@ -265,8 +265,8 @@ export function buildSystemNativeCommandSpec(
     }
   }
   if (/\.ps1$/i.test(file) && (shell.kind === 'pwsh' || shell.kind === 'powershell')) {
-    const command = `& ${[file, ...input.args].map((arg) => quoteShellArgument(arg, shell.kind)).join(' ')}`
-    return { ...buildShellCommandSpec(command, shell.shellPath, shell.kind), env }
+    const command = `& ${[file, ...input.args].map((arg) => currentPlatform.quoteShellArg(arg, { kind: shell.kind })).join(' ')}`
+    return { ...currentPlatform.getShellCommandSpec(command, { shellPath: shell.shellPath, kind: shell.kind }), env }
   }
   if (shell.kind === 'git-bash' && isRegularFile(file) && !/\.(?:exe|com)$/i.test(file)) return {
     file: shell.shellPath, args: ['--noprofile', '--norc', file.replace(/\\/g, '/'), ...input.args],

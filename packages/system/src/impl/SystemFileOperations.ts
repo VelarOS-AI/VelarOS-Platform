@@ -8,9 +8,10 @@ import { dirname } from 'node:path'
 
 import { isArray, isEmpty, isNotNull, isNull, isPresent, Log, toOptional } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
+import type { PlatformCompatibilityApi } from '@velaros-ai/platform'
+import { currentPlatform } from '@velaros-ai/platform'
 
 import type { SystemEditFileInput, SystemEditFileResult, SystemEditInput, SystemEditPlan, SystemEditProblem, SystemEditReplacedResult, SystemEditResult, SystemEditTarget, SystemEditWindow, SystemReadFileInput, SystemReadFileResult, SystemReadInput, SystemReadResult, SystemTextEncoding, SystemTextFileContent, SystemTextRange, SystemViewFileInput, SystemViewFileResult, SystemViewInput, SystemViewResult } from '../contract/files.js'
-import type { SystemPlatformCompatibilityApi } from '../interface/provides.js'
 import type { SystemToolContext } from '../interface/requires.js'
 import { assertFileBatchSize, failureEntry, staleProblem, unresolvedEditFailure, withLinkTarget } from '../utils/file-batch.js'
 import { comparisonPath, confirmCredentialAccess, confirmSensitiveSystemMutation, realPathForSafety } from '../utils/file-safety.js'
@@ -35,7 +36,6 @@ import {
 
 import type { SystemFileHistoryApi } from './SystemFileHistory.js'
 import { SystemFileHistory } from './SystemFileHistory.js'
-import { currentSystemPlatform } from './SystemPlatformCompatibility.js'
 
 const log = Log.tag('SystemFileOperations')
 
@@ -85,10 +85,10 @@ export interface SystemFileOperationsApi {
 }
 
 class SystemFileOperations implements SystemFileOperationsApi {
-  private readonly platform: SystemPlatformCompatibilityApi
+  private readonly platform: PlatformCompatibilityApi
   private readonly history: SystemFileHistoryApi
 
-  constructor(platformTools: SystemPlatformCompatibilityApi, history: SystemFileHistoryApi) {
+  constructor(platformTools: PlatformCompatibilityApi, history: SystemFileHistoryApi) {
     this.platform = platformTools
     this.history = history
   }
@@ -427,4 +427,4 @@ class SystemFileOperations implements SystemFileOperationsApi {
 }
 
 /** 整个进程只有一份的文件操作，按当前进程的平台规整路径。 */
-export const systemFileOperations: SystemFileOperationsApi = new SystemFileOperations(currentSystemPlatform, new SystemFileHistory())
+export const systemFileOperations: SystemFileOperationsApi = new SystemFileOperations(currentPlatform, new SystemFileHistory())

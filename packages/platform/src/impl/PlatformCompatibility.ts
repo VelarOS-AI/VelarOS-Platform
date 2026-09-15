@@ -1,18 +1,18 @@
 /**
- * 跨平台兼容层：`SystemPlatformCompatibility` 与按当前进程创建的 `currentSystemPlatform`。
- * 接口见 `interface/provides.ts` 的 `SystemPlatformCompatibilityApi`。不 import 任何 Node 模块，渲染进程也会加载。
+ * 跨平台兼容层：`PlatformCompatibility`、按当前进程创建的 `currentPlatform` 与工厂 `createPlatform`。接口见 `interface/provides.ts` 的 `PlatformCompatibilityApi`。不 import 任何 Node 模块，渲染进程也会加载。
+ * 接口见 `interface/provides.ts` 的 `PlatformCompatibilityApi`。不 import 任何 Node 模块，渲染进程也会加载。
  */
 
 import { isEmpty, isPlainObject } from '@velaros-ai/core'
 
-import type { BackgroundShellLaunchOptions, CommandSpec, DefaultAppDataPathOptions, DirectorySymlinkType, EditorCommandDefinition, PathTextSeparator, RuntimePlatform, ShellCommandSpecOptions, SystemPlatformCompatibilityOptions } from '../contract/platform.js'
-import type { SystemShellKind } from '../contract/system.js'
-import type { SystemPlatformCompatibilityApi } from '../interface/provides.js'
+import type { DefaultAppDataPathOptions, PlatformCompatibilityOptions, ShellCommandSpecOptions } from '../contract/options.js'
+import type { BackgroundShellLaunchOptions, CommandSpec, DirectorySymlinkType, EditorCommandDefinition, PathTextSeparator, RuntimePlatform, ShellKind } from '../contract/platform.js'
+import type { PlatformCompatibilityApi } from '../interface/provides.js'
 import {
   buildShellCommandSpec,
   buildWindowsExecutableCandidates,
   buildWindowsPowerShellCommandSpec,
-  getSystemShellKind,
+  getShellKind,
   isPathTextSeparator,
   isWindowsAbsolutePathText,
   preferredPosixShellPath,
@@ -27,11 +27,11 @@ import {
 const UnicodeSpacesPattern = /[\u00A0\u2000-\u200A\u202F\u205F\u3000]/g
 
 
-export class SystemPlatformCompatibility implements SystemPlatformCompatibilityApi {
+export class PlatformCompatibility implements PlatformCompatibilityApi {
   private readonly platform: RuntimePlatform
   private readonly env: NodeJS.ProcessEnv
 
-  constructor(options: SystemPlatformCompatibilityOptions = {}) {
+  constructor(options: PlatformCompatibilityOptions = {}) {
     const currentProcess = readCurrentProcess()
     this.platform = options.platform ?? currentProcess?.platform ?? 'linux'
     this.env = options.env ?? currentProcess?.env ?? {}
@@ -135,11 +135,11 @@ export class SystemPlatformCompatibility implements SystemPlatformCompatibilityA
 
   public getShellCommandSpec(command: string, options: ShellCommandSpecOptions = {}): CommandSpec {
     const file = options.shellPath || this.getPreferredShellPath(options.env)
-    return buildShellCommandSpec(command, file, options.kind ?? getSystemShellKind(file))
+    return buildShellCommandSpec(command, file, options.kind ?? getShellKind(file))
   }
 
-  public getShellKind(shellPath: string): SystemShellKind {
-    return getSystemShellKind(shellPath)
+  public getShellKind(shellPath: string): ShellKind {
+    return getShellKind(shellPath)
   }
 
   public getPreferredShellPath(env: NodeJS.ProcessEnv = this.env): string {
@@ -150,7 +150,7 @@ export class SystemPlatformCompatibility implements SystemPlatformCompatibilityA
   }
 
   public getInteractiveShellArgs(options: ShellCommandSpecOptions = {}): string[] {
-    const kind = options.kind ?? getSystemShellKind(options.shellPath || this.getPreferredShellPath(options.env))
+    const kind = options.kind ?? getShellKind(options.shellPath || this.getPreferredShellPath(options.env))
     if (kind === 'git-bash') return ['--noprofile', '--norc', '-i']
     if (kind === 'pwsh' || kind === 'powershell') return ['-NoLogo', '-NoProfile']
     return kind === 'cmd' ? ['/d', '/v:off'] : ['-l']
@@ -164,7 +164,7 @@ export class SystemPlatformCompatibility implements SystemPlatformCompatibilityA
   }
 
   public quoteShellArg(value: string, options: ShellCommandSpecOptions = {}): string {
-    return quoteShellArgument(value, options.kind ?? getSystemShellKind(options.shellPath || this.getPreferredShellPath(options.env)))
+    return quoteShellArgument(value, options.kind ?? getShellKind(options.shellPath || this.getPreferredShellPath(options.env)))
   }
 
   public getDefaultInspectableCommands(): string[] {
@@ -191,7 +191,7 @@ export class SystemPlatformCompatibility implements SystemPlatformCompatibilityA
 
   public getTerminateCommand(pid: number, force = false, options: ShellCommandSpecOptions = {}): Nullable<string> {
     if (this.isWindows()) {
-      const kind = options.kind ?? getSystemShellKind(options.shellPath || this.getPreferredShellPath(options.env))
+      const kind = options.kind ?? getShellKind(options.shellPath || this.getPreferredShellPath(options.env))
       return `${kind === 'git-bash' ? 'MSYS_NO_PATHCONV=1 ' : ''}taskkill.exe /PID ${pid} /T${force ? ' /F' : ''}`
     }
     return force ? `kill -KILL ${pid}` : `kill -TERM ${pid}`
@@ -338,10 +338,10 @@ export class SystemPlatformCompatibility implements SystemPlatformCompatibilityA
   }
 }
 
-/** 按指定的平台与环境变量创建一份兼容层；什么都不指定时和 `currentSystemPlatform` 一样按当前进程回答。 */
-export function createSystemPlatform(options: SystemPlatformCompatibilityOptions = {}): SystemPlatformCompatibilityApi {
-  return new SystemPlatformCompatibility(options)
+/** 按指定的平台与环境变量创建一份兼容层；什么都不指定时和 `currentPlatform` 一样按当前进程回答。 */
+export function createPlatform(options: PlatformCompatibilityOptions = {}): PlatformCompatibilityApi {
+  return new PlatformCompatibility(options)
 }
 
 /** 按当前进程的平台与环境变量创建的一份，产品壳和本包直接用它。 */
-export const currentSystemPlatform: SystemPlatformCompatibilityApi = new SystemPlatformCompatibility()
+export const currentPlatform: PlatformCompatibilityApi = new PlatformCompatibility()

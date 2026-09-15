@@ -646,11 +646,6 @@ const SystemEnvironmentVariables = Object.freeze({
     direction: 'input',
     description: 'Windows 原生进程宿主的路径，优先于默认位置。',
   },
-  sharedDataRoot: {
-    name: 'VELAROS_SHARED_DATA_ROOT',
-    direction: 'input',
-    description: 'VelarOS 产品家族共享数据的根目录，覆盖按平台算出的默认位置。',
-  },
   shellKind: {
     name: 'VELAROS_SHELL_KIND',
     direction: 'marker',

@@ -6,7 +6,7 @@
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 
-import type { VelarOSSharedResourceStoreOptions } from '../contract/platform.js'
+import type { VelarOSSharedResourceStoreOptions } from '../contract/options.js'
 import type { VelarOSSharedResourcesApi } from '../interface/provides.js'
 
 export class VelarOSSharedResources implements VelarOSSharedResourcesApi {

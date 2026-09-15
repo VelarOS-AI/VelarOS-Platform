@@ -78,6 +78,12 @@
       "@velaros-ai/kernel/*": [
         "./packages/kernel/src/*"
       ],
+      "@velaros-ai/platform": [
+        "./packages/platform/src/exports/index.ts"
+      ],
+      "@velaros-ai/platform/*": [
+        "./packages/platform/src/exports/*"
+      ],
       "@velaros-ai/surface-protocol": [
         "./packages/surface-protocol/src/index.ts"
       ],

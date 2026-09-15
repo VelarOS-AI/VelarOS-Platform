@@ -15,7 +15,7 @@ src/
 
 人看代码的顺序：先看工具文件（`packages/system` 是 `src/impl/SystemTools.ts`），再看 `interface/` 的三个文件，需要时看 utils 里函数上方的一句说明。类的实现、数据字段和工具函数的内部一般不用看。工具文件和两个公开接口文件也由 agent 动手改，但每一轮都要在差量报告里点名，人读懂、复核；其余代码由 agent 维护。
 
-登记表在 `scripts/ownership/governed-modules.mjs`，门禁是 `bun run check:module-ownership`，已在 `check:gates` 链上。第一个进入治理的包是 `packages/system`，它的卡片 `packages/system/MODULE.md` 是样板。
+登记表在 `scripts/ownership/governed-modules.mjs`，门禁是 `bun run check:module-ownership`，已在 `check:gates` 链上。第一个进入治理的包是 `packages/system`，它的卡片 `packages/system/MODULE.md` 是样板；第二个是 `packages/platform`，它没有工具，登记表里不填 toolsFile、toolDefiner、hostPort，卡片「骨干链路」写的是每件能力的回答方式。
 
 ## 接口与数据分开
 

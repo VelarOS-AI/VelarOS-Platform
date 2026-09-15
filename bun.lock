@@ -16,6 +16,7 @@
         "@velaros-ai/memory": "workspace:*",
         "@velaros-ai/model": "workspace:*",
         "@velaros-ai/office": "workspace:*",
+        "@velaros-ai/platform": "workspace:*",
         "@velaros-ai/project": "workspace:*",
         "@velaros-ai/surface-protocol": "workspace:*",
         "@velaros-ai/system": "workspace:*",
@@ -284,6 +285,17 @@
         "@velaros-ai/agent": "workspace:^",
       },
     },
+    "packages/platform": {
+      "name": "@velaros-ai/platform",
+      "version": "0.1.0",
+      "dependencies": {
+        "@velaros-ai/core": "workspace:*",
+      },
+      "devDependencies": {
+        "@types/node": "^22.19.17",
+        "typescript": "^5.7.0",
+      },
+    },
     "packages/project": {
       "name": "@velaros-ai/project",
       "version": "2.2.0",
@@ -332,6 +344,7 @@
       "dependencies": {
         "@velaros-ai/core": "workspace:*",
         "@velaros-ai/kernel": "workspace:*",
+        "@velaros-ai/platform": "workspace:*",
         "zod": "^4.3.6",
       },
       "devDependencies": {
@@ -1001,6 +1014,8 @@
     "@velaros-ai/model": ["@velaros-ai/model@workspace:packages/model"],
 
     "@velaros-ai/office": ["@velaros-ai/office@workspace:packages/office"],
+
+    "@velaros-ai/platform": ["@velaros-ai/platform@workspace:packages/platform"],
 
     "@velaros-ai/project": ["@velaros-ai/project@workspace:packages/project"],
 

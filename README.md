@@ -21,7 +21,7 @@ packages declare a shared `velaros.platform` generation for cross-package compat
 | --- | --- |
 | Kernel | `@velaros-ai/kernel` |
 | Agent runtime | `@velaros-ai/agent` |
-| Shared primitives | `@velaros-ai/core` |
+| Shared primitives | `@velaros-ai/core`, `@velaros-ai/platform` |
 | Model providers | `@velaros-ai/model` |
 | Capabilities | `@velaros-ai/browser`, `@velaros-ai/cli`, `@velaros-ai/computer`, `@velaros-ai/development`, `@velaros-ai/office`, `@velaros-ai/project`, `@velaros-ai/system` |
 | Memory | `@velaros-ai/memory` |

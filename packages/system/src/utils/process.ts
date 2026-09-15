@@ -12,8 +12,8 @@ import { promisify } from 'node:util'
 import { isPlainObject, isString, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
+import type { CommandSpec } from '@velaros-ai/platform/contracts'
 
-import type { CommandSpec } from '../contract/platform.js'
 import type { SystemProcessOwnership } from '../contract/system.js'
 import type { SystemProcessHostOptions } from '../interface/internal.js'
 

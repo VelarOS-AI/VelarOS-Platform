@@ -3,7 +3,8 @@ import { win32 } from 'node:path'
 
 import { describe, expect, test } from 'bun:test'
 
-import { SystemPlatformCompatibility } from '../src/impl/SystemPlatformCompatibility'
+import { createPlatform } from '@velaros-ai/platform'
+
 import { systemShellResolver } from '../src/impl/SystemShellResolver.js'
 import { SystemShellUnavailableError } from '../src/impl/SystemShellUnavailableError'
 import { buildSystemNativeCommandSpec, describeSystemNativeCommand } from '../src/utils/shell.js'
@@ -50,7 +51,7 @@ describe('Windows shell readiness and fallback', () => {
     expect(shell.readiness).toBe('ready')
     expect(shell.version).toBe('5.1')
     expect(systemShellResolver.resolve({ ...options, env: shell.env }).shellPath).toBe(powershell)
-    expect(new SystemPlatformCompatibility({ platform: 'win32' }).getShellCommandSpec('Write-Output ready', shell).file)
+    expect(createPlatform({ platform: 'win32' }).getShellCommandSpec('Write-Output ready', shell).file)
       .toBe(powershell)
   })
 
@@ -70,7 +71,7 @@ describe('Windows shell readiness and fallback', () => {
   })
 
   test('PowerShell and CMD specs initialize encoding and retain their own command syntax', () => {
-    const platform = new SystemPlatformCompatibility({ platform: 'win32' })
+    const platform = createPlatform({ platform: 'win32' })
     const ps = platform.getShellCommandSpec("Write-Output '中文'; node -e 'process.exit(17)'", { shellPath: powershell })
     expect(ps.args.at(-1)).toContain('[Console]::OutputEncoding')
     expect(ps.args.at(-1)).toContain('exit $LASTEXITCODE')
