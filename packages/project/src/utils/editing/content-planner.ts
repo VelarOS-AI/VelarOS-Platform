@@ -1,7 +1,7 @@
-import type { ProjectContentEdit, ProjectEditView } from '../../types/editing.js'
+import type { ProjectContentEdit, ProjectEditView, ProjectResolvedMutation } from '../../types/editing.js'
 import { ProjectError } from '../errors.js'
 
-import { type ProjectResolvedMutation, selectProjectMutations } from './select.js'
+import { selectProjectMutations } from './select.js'
 
 function assertDisjoint(mutations: readonly ProjectResolvedMutation[], path: string): void {
   const replacements = mutations.filter((change) => change.kind === 'replace').sort((left, right) => left.start - right.start || left.end - right.end)

@@ -4,17 +4,10 @@ import { isNotUndefined } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import type { ProjectToolContext } from '../../contract/requires'
+import type { EditTarget } from '../../types/agent.js'
 import type { AgentProjectReadResult } from '../../types/agent-port.js'
 
 
-interface EditTarget {
-  kind: 'project-edit-target'
-  root: string
-  path: string
-  revision: string
-  startLine: number
-  endLine: number
-}
 const ToolName = '__project_edit_target__'
 
 /** 仅完整行窗口提供定位引用；正文与 revision 仍由内核读取结果绑定。 */

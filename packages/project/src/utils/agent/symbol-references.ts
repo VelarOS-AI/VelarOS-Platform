@@ -4,16 +4,9 @@ import { resolve } from 'node:path'
 import { isString } from '@velaros-ai/core'
 
 import type { ProjectToolContext } from '../../contract/requires.js'
+import type { CodeSymbolTarget } from '../../types/agent.js'
 import { ProjectError } from '../errors.js'
 import type { ProjectCodeTarget } from '../schemas/code.js'
-
-export interface CodeSymbolTarget {
-  path: string
-  symbol: string
-  container?: string
-  line?: number
-  nodeId?: string
-}
 
 const ToolName = '__project_code_symbol__'
 

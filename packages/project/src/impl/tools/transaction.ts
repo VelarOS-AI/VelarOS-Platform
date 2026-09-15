@@ -4,8 +4,9 @@ import { isEmpty, isPlainObject, isString, Log, optionalWhen } from '@velaros-ai
 
 import type { ProjectAuthorizationDecision, ProjectToolContext } from '../../contract/requires'
 import type { PrepareEditInput } from '../../types/edit'
+import type { ProjectSourceWindow } from '../../types/source-window.js'
 import { changedFileContextRanges, committedFileContextSnapshots, registerProjectFileContext } from '../../utils/agent/file-context'
-import { presentProjectContextSnapshot, type ProjectSourceWindow } from '../../utils/agent/source-window'
+import { presentProjectContextSnapshot } from '../../utils/agent/source-window'
 import { ProjectError } from '../../utils/errors'
 import { rethrowNotApplied } from '../../utils/transactions/transaction-errors'
 

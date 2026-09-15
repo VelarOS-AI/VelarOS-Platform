@@ -1,58 +1,12 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { resolve } from 'node:path'
 
-import { type FileContextCarrier,fileContextFor } from '@velaros-ai/agent/tool-contract'
+import {fileContextFor } from '@velaros-ai/agent/tool-contract'
 import { isObject } from '@velaros-ai/core'
 
-import type { ProjectToolApi } from '../../contract/requires.js'
+import type { PageRecord, ProjectFileView, ProjectReferenceContext, ProjectVisibleCoverage, RefRecord,SourceRecord } from '../../types/file-refs.js'
 import { ProjectError } from '../errors.js'
 
-export interface ProjectReferenceContext extends FileContextCarrier {
-  project: Pick<ProjectToolApi, 'getRootPath' | 'kernel'>
-  fileRefScopeId?: string
-}
-
-export interface ProjectVisibleCoverage {
-  startOffset: number
-  endOffset: number
-  startLine: number
-  endLine: number
-  completeLines: boolean
-}
-
-export interface ProjectFileView {
-  path: string
-  revision: string
-  contentRevision: string
-  content: string
-  coverage: ProjectVisibleCoverage[]
-}
-
-interface SourceRecord {
-  kind: 'project-file-source'
-  version: 1
-  workspace: string
-  scope: string
-  path: string
-  revision: string
-  contentRevision: string
-  content: string
-}
-interface ViewRecord {
-  kind: 'project-file-view'
-  version: 1
-  source: string
-  scope: string
-  coverage: ProjectVisibleCoverage[]
-}
-interface PageRecord {
-  kind: 'project-read-page'
-  version: 1
-  source: string
-  scope: string
-  range: { startLine: number; startColumn?: number; endLine?: number; endColumn?: number }
-}
-type RefRecord = SourceRecord | ViewRecord | PageRecord
 const RefTool = '__project_file_reference__'
 const fallbackStores = new WeakMap<object, Map<string, RefRecord>>()
 const fallbackScopes = new WeakMap<object, string>()

@@ -1,8 +1,7 @@
 import { isEmpty } from '@velaros-ai/core'
 
-import type { ProjectEditView } from '../../types/editing.js'
+import type { OffsetWindow,ProjectEditView, ProjectMatchCandidate, ProjectMatchElsewhere } from '../../types/editing.js'
 
-import type { OffsetWindow } from './selection-coverage.js'
 import type { ProjectSourceCoordinates } from './source.js'
 import { diagnoseTextMatchMiss, findLineWhitespaceTolerantMatches } from './text-match-feedback.js'
 
@@ -10,19 +9,6 @@ const CandidateLimit = 8
 const CandidateTextLimit = 1200
 const ContextLimit = 120
 const DiagnosisBudget = 16_000
-
-export interface ProjectMatchCandidate {
-  range: readonly [number, number]
-  startOffset: number
-  endOffset: number
-  text: string
-  truncated: boolean
-  match?: string
-  prefix?: string
-  suffix?: string
-  differences?: readonly string[]
-  confidence: 'exact' | 'whitespace' | 'similar'
-}
 
 function boundedText(text: string): { text: string; truncated: boolean } {
   let end = Math.min(text.length, CandidateTextLimit)
@@ -91,9 +77,6 @@ export function exactMatchCandidates(source: ProjectSourceCoordinates, windows: 
   return matches.slice(0, CandidateLimit).map((match) => matchCandidate(source,
     windows.find((window) => window.start <= match.start && window.end >= match.end)!, windows, match.start, match.end, 'exact'))
 }
-
-/** match 在所选区域之外的一处原文（首尾行）：visible 表示它在 fileRef 可见范围内，只是不在 range 里。 */
-export interface ProjectMatchElsewhere { range: readonly [number, number]; visible: boolean }
 
 /** 零命中时找所选区域之外的精确原文（最多 8 处），只用来指路：可见的改 range，不可见的先读取。 */
 export function matchesElsewhere(source: ProjectSourceCoordinates, visible: readonly OffsetWindow[], selected: readonly OffsetWindow[], match: string): ProjectMatchElsewhere[] {

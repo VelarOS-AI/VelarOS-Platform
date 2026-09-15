@@ -2,12 +2,7 @@ import { isAbsolute, relative, resolve, sep } from 'node:path'
 
 import { isEmpty, isNotNull } from '@velaros-ai/core'
 
-export interface ProjectPathPlatform {
-  isAbsolute(path: string): boolean
-  relative(from: string, to: string): string
-  resolve(...paths: string[]): string
-  sep: string
-}
+import type { ProjectPathPlatform } from '../../types/files.js'
 
 const defaultPlatform: ProjectPathPlatform = { isAbsolute, relative, resolve, sep }
 

@@ -5,8 +5,9 @@ import { join } from 'node:path'
 import { describe, expect, test } from 'bun:test'
 
 import { createProjectKernel, type EditIntent, type ProjectKernel, type ProjectPlugin } from '../src/exports/index'
-import { FileProjectTransactionStateStore, type ProjectTransactionPendingOperation } from '../src/impl/persistence/FileProjectTransactionStateStore'
+import { FileProjectTransactionStateStore } from '../src/impl/persistence/FileProjectTransactionStateStore'
 import type { ApprovalRequest } from '../src/types/policy'
+import type { ProjectTransactionPendingOperation } from '../src/types/transaction.js'
 import { encodeProjectTextBuffer } from '../src/utils/text'
 
 // 风险按「能否恢复」划线：能完整回滚的覆盖、删除、重命名不打扰用户；

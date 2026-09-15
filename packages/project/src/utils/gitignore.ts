@@ -3,13 +3,10 @@ import * as path from "node:path";
 
 import { isEmpty } from '@velaros-ai/core'
 
+import type { GitignoreRule } from '../types/files.js'
+
 import { matchesAny } from "./glob.js";
 import { normalizeRel } from "./path.js";
-
-export interface GitignoreRule {
-  negated: boolean;
-  patterns: string[];
-}
 
 function normalizeGitignoreLine(line: string): string {
   let value = line.replace(/\r$/, "");

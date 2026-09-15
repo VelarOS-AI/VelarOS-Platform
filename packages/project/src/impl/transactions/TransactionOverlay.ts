@@ -5,15 +5,8 @@ import { toOptional } from '@velaros-ai/core/utils/nullish'
 import type { Diagnostic } from '../../types/common.js'
 import type { PreparedPatch } from '../../types/edit.js'
 import type { FileAttributes } from '../../types/snapshot.js'
+import type { StagedFileContent, TransactionContentOverlay } from '../../types/transaction.js'
 import { patchFileAttributes } from '../../utils/transactions/patch-attributes.js'
-
-export type StagedFileContent = Nullable<string>
-
-export interface TransactionContentOverlay {
-  readonly contentByPath: Map<string, StagedFileContent>
-  readonly attributesByPath: Map<string, FileAttributes>
-  readonly diagnostics: Diagnostic[]
-}
 
 export interface TransactionOverlayDependencies {
   /** 基于前一补丁产出的暂存正文重新推导后继补丁；无法安全推导时返回 null。 */

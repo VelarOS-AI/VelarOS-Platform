@@ -1,34 +1,18 @@
 import { isEmpty, isPresent } from '@velaros-ai/core'
 
 import type { PatchStrategy } from '../../contract/requires.js'
-import type { OffsetRange } from '../../types/common.js'
 import type { EditOperation, PreparedPatch } from '../../types/edit.js'
+import type { SourceSplice } from '../../types/editing.js'
+import type { JsTsSymbol } from '../../types/jsts.js'
 import type { PatchStrategyInput } from '../../types/patch.js'
 import type { FileSnapshot } from '../../types/snapshot.js'
+import type { JsTsPatchStrategyIdentity, LocatedSymbol,SymbolOperation } from '../../types/strategies.js'
 import { unifiedDiff } from '../../utils/diff.js'
-import { planAddImport, planRemoveImport, type SourceSplice } from '../../utils/editing/import-mutation.js'
+import { planAddImport, planRemoveImport } from '../../utils/editing/import-mutation.js'
 import { ProjectError } from '../../utils/errors.js'
 import { id } from '../../utils/id.js'
-import {
-  isJsTsPath,
-  type JsTsSymbol,
-  parseJsTs,
-  selectJsTsSymbols,
-} from '../../utils/jsts-ast.js'
+import { isJsTsPath, parseJsTs, selectJsTsSymbols } from '../../utils/jsts-ast.js'
 import { countChangedLines } from '../../utils/text.js'
-
-type SymbolOperation = Extract<
-  EditOperation,
-  {
-    type: 'replace_symbol' | 'insert_around_symbol' | 'insert_before_symbol' | 'insert_after_symbol'
-  }
->
-
-/** 同一实现以不同身份注册：核心策略与 TypeScript 插件策略只差 id 与优先级。 */
-export interface JsTsPatchStrategyIdentity {
-  id: string
-  priority: number
-}
 
 const HandledOperations = new Set<string>([
   'replace_symbol',
@@ -41,13 +25,6 @@ const HandledOperations = new Set<string>([
 
 /** 符号歧义时在错误里列出的候选上限，足够模型补 kind/container，又不把整份大纲塞进错误。 */
 const MaxListedCandidates = 8
-
-interface LocatedSymbol {
-  range: OffsetRange
-  /** insert_* 的锚点：多声明语句里的绑定取整条语句，插入永远落在语句边界上，不会切进声明列表中间。 */
-  anchor: OffsetRange
-  body?: OffsetRange
-}
 
 export function jsTsPatchStrategy(): PatchStrategy {
   return createJsTsPatchStrategy({ id: 'jsts.patch', priority: 90 })

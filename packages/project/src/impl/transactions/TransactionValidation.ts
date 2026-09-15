@@ -3,7 +3,7 @@ import { isEmpty, isFunction, isNull, isString, optionalWhen } from '@velaros-ai
 import type { CommandProvider, FileAdapter,ProjectProviders } from '../../contract/requires.js'
 import type { CorePolicy } from '../../types/policy.js'
 import type { FileSnapshot } from '../../types/snapshot.js'
-import type { StoredTransaction } from '../../types/transaction.js'
+import type { StagedFileContent, StoredTransaction, TransactionContentOverlay } from '../../types/transaction.js'
 import type {
   ProjectValidationContext,
   ProjectValidationPolicy,
@@ -13,7 +13,6 @@ import type {
   ValidationResult,
 } from '../../types/validation.js'
 
-import type { StagedFileContent, TransactionContentOverlay } from './TransactionOverlay.js'
 
 function validationPolicyView(policy: CorePolicy): ProjectValidationPolicy {
   return Object.freeze({

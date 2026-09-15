@@ -1,30 +1,12 @@
 import { isEmpty, isString } from '@velaros-ai/core'
 
-import {
-  type ProjectTransactionFileState,
-  type ProjectTransactionPendingOperation,
-  type ProjectTransactionRestoreEntry,
-} from '../../impl/persistence/FileProjectTransactionStateStore.js'
 import { isDeletePatch } from '../../impl/transactions/TransactionOverlay.js'
 import type { FileSnapshot } from '../../types/snapshot.js'
-import type { StoredTransaction } from '../../types/transaction.js'
+import type { ApplyRestoreState, ProjectTransactionFileState, ProjectTransactionPendingOperation, ProjectTransactionRestoreEntry,StoredTransaction, TransactionBytePlan } from '../../types/transaction.js'
 import { ProjectError } from '../errors.js'
-import { type ProjectTextEncoding } from '../text.js'
 
-import type { TransactionBytePlan } from './byte-plan.js'
 import { bytePatchFor } from './byte-plan.js'
 import { createsMissingFile } from './patch-ownership.js'
-
-/** applyEdit 失败回滚所需的单个路径原始状态。 */
-export interface ApplyRestoreState {
-  existedBefore: boolean
-  oldContent?: string
-  bytes?: string
-  /** 原文件的文本编码；还原时文件若已被删掉，按它重建而不是写成 UTF-8。 */
-  encoding?: ProjectTextEncoding
-  mode?: number
-  restorable: boolean
-}
 
 export function transactionOwnedStates(
   tx: StoredTransaction,

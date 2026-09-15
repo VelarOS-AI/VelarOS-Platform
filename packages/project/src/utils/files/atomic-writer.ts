@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 
 import { isObject, isPresent, isUndefined } from "@velaros-ai/core";
 
+import type { ProjectExpectedBytes } from '../../types/files.js'
 import type { ProjectTextEncoding } from "../../types/text.js";
 import { ProjectError } from "../errors.js";
 import {
@@ -15,11 +16,6 @@ import { readBoundedProjectBytes } from "./private-byte-io.js";
 
 function isMissing(error: unknown): boolean {
   return isObject(error) && "code" in error && error.code === "ENOENT";
-}
-
-export interface ProjectExpectedBytes {
-  readonly exists: boolean;
-  readonly bytes?: Uint8Array;
 }
 
 /** 私有字节写入与文本写入共享原子替换、权限和持久化边界。 */

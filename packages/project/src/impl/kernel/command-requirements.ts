@@ -1,18 +1,7 @@
 import { isUndefined } from "@velaros-ai/core";
 import { AppError } from "@velaros-ai/core/error";
 
-import type {
-  CommandRunInput,
-  CommandToolRequirement,
-} from "../../types/provider.js";
-
-interface MissingCommandDetectionInput {
-  command: string;
-  sourceCommand?: string;
-  exitCode?: LooseOptional<number>;
-  stderr?: string;
-  error?: any;
-}
+import type { CommandRunInput, CommandToolRequirement, MissingCommandDetectionInput } from "../../types/provider.js";
 
 function createMissingCommandRequirement(input: {
   command: string;

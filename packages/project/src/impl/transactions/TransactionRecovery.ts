@@ -3,24 +3,13 @@ import { isString, isUndefined, optionalWhen } from "@velaros-ai/core";
 import type { PreparedPatch } from "../../types/edit.js";
 import type { ProjectFileAccess } from "../../types/file-access.js";
 import type { FileSnapshot } from "../../types/snapshot.js";
-import type { StoredTransaction } from "../../types/transaction.js";
+import type { ApplyRestoreState, ProjectTransactionPendingOperation,StoredTransaction, TransactionBytePlan } from "../../types/transaction.js";
 import { ProjectError } from "../../utils/errors.js";
 import { decodeProjectTextBuffer } from "../../utils/text.js";
 import { bytesEqual, decodeStoredBytes } from "../../utils/transactions/byte-codec.js";
-import {
-  bytePatchFor,
-  plannedBytes,
-  prepareTransactionBytePlan,
-  type TransactionBytePlan,
-} from "../../utils/transactions/byte-plan.js";
+import { bytePatchFor, plannedBytes, prepareTransactionBytePlan } from "../../utils/transactions/byte-plan.js";
 import { patchFileAttributes, patchTargetEncoding } from "../../utils/transactions/patch-attributes.js";
-import {
-  type ApplyRestoreState,
-  durableRestorePlan,
-  fileStateMatches,
-  refreshRecoveredBaseRevisions,
-} from "../../utils/transactions/recovery-plan.js";
-import { type ProjectTransactionPendingOperation } from "../persistence/FileProjectTransactionStateStore.js";
+import { durableRestorePlan, fileStateMatches, refreshRecoveredBaseRevisions } from "../../utils/transactions/recovery-plan.js";
 interface TransactionRecoveryDependencies {
   readonly store: Pick<ProjectFileAccess, "snapshot"> & {
     remove(

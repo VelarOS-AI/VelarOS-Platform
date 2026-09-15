@@ -4,51 +4,11 @@ import * as path from 'node:path'
 
 import { isEmpty, isTrue } from '@velaros-ai/core'
 
-import type { CommandProvider } from '../../contract/requires.js'
-import type { ProjectFileAccess } from '../../types/file-access.js'
+import type { GitignoreRule,ListedDirectory, ListingDependencies, ListingDirectory, ListingNode } from '../../types/files.js'
 import type { FileListEntry, ObserveInput } from '../../types/io.js'
-import type { FileFilterInput } from '../../types/provider.js'
-import {
-  type GitignoreRule,
-  isGitignored,
-  readAncestorGitignoreRules,
-  readGitignoreRules,
-} from '../gitignore.js'
+import { isGitignored, readAncestorGitignoreRules, readGitignoreRules } from '../gitignore.js'
 import { matchesAny } from '../glob.js'
 import { normalizeRel } from '../path.js'
-
-interface ListingDependencies {
-  readonly root: string
-  readonly command: CommandProvider
-  readonly authorize: ProjectFileAccess['authorize']
-  readonly allowed: (
-    path: string,
-    action: FileFilterInput['action'],
-    options?: { skipFileFilter?: boolean },
-  ) => Promise<boolean>
-}
-
-/** listFiles 发现阶段通过全部过滤的条目；children 只在该目录被深入时填充。 */
-export interface ListingNode {
-  readonly entry: FileListEntry
-  readonly included: boolean
-  readonly children: ListingNode[]
-}
-
-/** 待读取的目录：读到的条目挂到 children 下；rules 是从根目录累积到它父目录的 gitignore 规则。 */
-export interface ListingDirectory {
-  readonly abs: string
-  readonly rel: string
-  readonly children: ListingNode[]
-  readonly rules: readonly GitignoreRule[]
-}
-
-/** 一个目录读到的条目，连同判定它们所用的规则（根目录到该目录逐级累积）。 */
-export interface ListedDirectory {
-  readonly directory: ListingDirectory
-  readonly rules: readonly GitignoreRule[]
-  readonly entries: ReadonlyArray<{ entry: Dirent; abs: string; rel: string }>
-}
 
 export function normalizeFilterList(values: LooseOptional<readonly string[]>): string[] {
   return [...new Set((values ?? []).map((value) => value.trim()).filter(Boolean))]

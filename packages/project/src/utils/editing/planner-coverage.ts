@@ -1,10 +1,7 @@
-import type { ProjectEditView, ProjectVisibleCoverage } from '../../types/editing.js'
+import type { PlannerCoverageWindow, ProjectEditView, ProjectResolvedMutation,ProjectVisibleCoverage } from '../../types/editing.js'
 
 import { orderProjectMutations } from './content-planner.js'
-import type { ProjectResolvedMutation } from './select.js'
 import { ProjectSourceCoordinates } from './source.js'
-
-interface Window { start: number; end: number }
 
 export function completeProjectCoverage(content: string): ProjectVisibleCoverage[] {
   const source = new ProjectSourceCoordinates(content)
@@ -14,7 +11,7 @@ export function completeProjectCoverage(content: string): ProjectVisibleCoverage
 /** Preserve knowledge of unchanged visible text and add only text generated in this plan. */
 export function advanceProjectCoverage(view: ProjectEditView, content: string, mutations: readonly ProjectResolvedMutation[]): ProjectVisibleCoverage[] {
   const ordered = orderProjectMutations(mutations)
-  const known: Window[] = []
+  const known: PlannerCoverageWindow[] = []
   let oldCursor = 0
   let newCursor = 0
   const copyKnown = (end: number) => {
@@ -34,7 +31,7 @@ export function advanceProjectCoverage(view: ProjectEditView, content: string, m
   }
   copyKnown(view.content.length)
   known.sort((left, right) => left.start - right.start || left.end - right.end)
-  const merged: Window[] = []
+  const merged: PlannerCoverageWindow[] = []
   for (const window of known) {
     const previous = merged.at(-1)
     if (previous && previous.end >= window.start) previous.end = Math.max(previous.end, window.end)

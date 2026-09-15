@@ -9,6 +9,7 @@
 // 系统会自动放过的差异不能被报告成「第一处分歧」，否则模型会去修一行根本不用修的内容。
 import { isBlank, isEmpty, isPresent, optionalWhen, toNullable, truncate, unique } from '@velaros-ai/core'
 
+import type { CandidateStart,TextMatchLocation, TextMatchMissDiagnosis, TextMismatchCause } from '../../types/editing.js'
 import { offsetToLine } from '../text.js'
 
 const MaxCandidateStarts = 200
@@ -18,42 +19,6 @@ const MinFragmentSimilarity = 0.75
 const MaxReportedMatches = 10
 const ExcerptChars = 160
 const MaxEnclosingLookbackLines = 200
-
-export type TextMismatchCause =
-  | 'line_ending'
-  | 'trailing_whitespace'
-  | 'indentation'
-  | 'backslash_escape'
-  | 'quote_style'
-  | 'content'
-  | 'end_of_file'
-  | 'absent'
-
-export interface TextMatchMissDiagnosis {
-  /** oldText 在文件中最接近的对齐起始行（1-based）；连相近的行都找不到时缺省。 */
-  candidateLine?: number
-  /** 候选位置从 oldText 第 1 行起、忽略行尾空白与换行符后连续一致的行数。 */
-  matchedLines?: number
-  oldTextLines: number
-  firstMismatch?: {
-    oldTextLine: number
-    fileLine: number
-    expected: string
-    /** null 表示文件在该行之前已结束。 */
-    actual: Nullable<string>
-  }
-  causes: TextMismatchCause[]
-  /** 首个分歧之前各行存在、但宽容匹配会自动忽略的差异（行尾空白、换行符），无需修正。 */
-  tolerated?: TextMismatchCause[]
-  hint: string
-}
-
-export interface TextMatchLocation {
-  occurrence: number
-  line: number
-  /** 匹配所在行之上最近的外层（缩进更浅的）行，用来区分同形文本分别属于哪个块。 */
-  within?: string
-}
 
 // 差异归因按「逐级放宽」的顺序定义；只报告让两行相等所必需的那几级。
 // 前两级正是宽容匹配的口径，前三级是忽略缩进的宽松口径，全部五级用于找候选位置。
@@ -127,12 +92,6 @@ function equalUnder(
     index,
     count,
   )
-}
-
-interface CandidateStart {
-  start: number
-  /** 产生该起点的锚的相似度；精确对齐的锚为 1。 */
-  similarity: number
 }
 
 /**

@@ -1,25 +1,7 @@
 import { isPresent } from '@velaros-ai/core'
 
-import type {
-  ProjectTransactionExecutionStatus,
-  ProjectTransactionStatus,
-  StoredTransaction,
-} from '../../types/transaction.js'
+import type { ProjectTransactionCommand, ProjectTransactionExecution,ProjectTransactionExecutionStatus, ProjectTransactionStatus, StoredTransaction } from '../../types/transaction.js'
 import { ProjectError } from '../../utils/errors.js'
-
-export type ProjectTransactionCommand = 'amend' | 'validate' | 'apply' | 'rollback' | 'discard'
-
-export type ProjectTransactionExecution =
-  | {
-      readonly command: 'apply'
-      readonly from: 'prepared' | 'validated' | 'rolled_back'
-      readonly status: 'applying'
-    }
-  | {
-      readonly command: 'rollback'
-      readonly from: 'applied'
-      readonly status: 'rolling_back'
-    }
 
 /** 命令可以从哪些稳定状态开始；运行期额外不变量（如 appliedAt）由状态机一并检查。 */
 export const ProjectTransactionCommandTable = Object.freeze({

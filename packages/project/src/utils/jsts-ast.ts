@@ -5,8 +5,8 @@ import * as ts from 'typescript'
 
 import { isEmpty, isPresent, isUndefined } from '@velaros-ai/core'
 
-import type { SymbolInfo } from '../types/adapter.js'
-import type { Diagnostic, OffsetRange, Range } from '../types/common.js'
+import type { Diagnostic } from '../types/common.js'
+import type { JsTsAccessor, JsTsRange, JsTsSymbol, JsTsSymbolKind, JsTsSymbolQuery, OverloadableDeclaration,ParsedJsTs } from '../types/jsts.js'
 
 import { sha256 } from './hash.js'
 import { ext } from './path.js'
@@ -29,52 +29,6 @@ const MaxExcerptLength = 160
 // 内容寻址保证不会返回陈旧 AST；LRU 上限避免长会话常驻内存无界增长。结果只读消费。
 const MaxCachedParses = 200
 const parseCache = new Map<string, ParsedJsTs>()
-
-type JsTsSymbolKind =
-  | 'function'
-  | 'method'
-  | 'class'
-  | 'interface'
-  | 'type'
-  | 'enum'
-  | 'namespace'
-  | 'variable'
-  | 'import'
-
-type JsTsAccessor = 'get' | 'set'
-
-/** AST 产出的范围总是同时带行列与偏移。 */
-type JsTsRange = Range & OffsetRange
-
-type JsTsSymbolMetadata = { exported: boolean; accessor?: JsTsAccessor }
-
-export interface JsTsSymbol extends SymbolInfo {
-  kind: JsTsSymbolKind
-  range: JsTsRange
-  metadata: JsTsSymbolMetadata
-  /**
-   * `const a = …, b = …` 里单个绑定所在的整条语句。range 只覆盖该绑定，替换不牵连兄弟绑定；
-   * 插入则必须以整条语句为锚，否则会插进声明列表中间。单声明语句的 range 本就是整条语句，不带此字段。
-   */
-  statementRange?: JsTsRange
-  /**
-   * mode:'body' 的可替换区间：花括号界定的体（函数块、类、interface、enum、namespace、对象字面量类型）
-   * 取两括号之间，箭头函数的表达式体取表达式本身；重载签名、抽象方法等没有 body 的声明不带此字段。
-   */
-  bodyRange?: JsTsRange
-}
-
-export interface ParsedJsTs {
-  sourceFile: ts.SourceFile
-  symbols: JsTsSymbol[]
-  diagnostics: readonly ts.DiagnosticWithLocation[]
-}
-
-export interface JsTsSymbolQuery {
-  name?: string
-  kind?: string
-  container?: string
-}
 
 export function isJsTsPath(path: string): boolean {
   return JsTsExtensions.has(ext(path))
@@ -331,8 +285,6 @@ function collectSymbols(sourceFile: ts.SourceFile): JsTsSymbol[] {
   ts.forEachChild(sourceFile, (child) => visit(child, undefined))
   return symbols.sort((a, b) => a.range.startOffset - b.range.startOffset)
 }
-
-type OverloadableDeclaration = ts.FunctionDeclaration | ts.MethodDeclaration | ts.ConstructorDeclaration
 
 /** 无 body 且紧跟同名同类声明的是重载签名：它并入实现所在的符号，不单独成符号。 */
 function isOverloadSignature(node: OverloadableDeclaration): boolean {

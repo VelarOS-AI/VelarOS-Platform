@@ -2,17 +2,8 @@ import { isArray,isEmpty, isPlainObject, isString } from "@velaros-ai/core";
 
 import type { ProjectFixer,ProjectValidator } from '../../contract/requires.js'
 import type { FixInput, FixResult, ProjectFixContext } from "../../types/fix.js";
+import type { CommandValidatorOptions } from '../../types/plugins.js'
 import type { ProjectValidationContext, ValidateInput, ValidationResult } from "../../types/validation.js";
-
-export interface CommandValidatorOptions {
-  id: string;
-  command: string;
-  args?: string[];
-  fileExtensions?: string[];
-  timeoutMs?: number;
-  cwd?: string;
-  when?: (input: ValidateInput) => boolean;
-}
 
 async function runCommand(options: CommandValidatorOptions, context: ProjectValidationContext) {
   return context.providers.command.run({

@@ -1,14 +1,8 @@
 import { isString, isTrue } from '@velaros-ai/core'
 
+import type { PathEffect } from '../../types/agent.js'
 import type { AgentProjectPreparedPatch } from '../../types/agent-port.js'
 
-
-interface PathEffect {
-  first: AgentProjectPreparedPatch
-  last: AgentProjectPreparedPatch
-  existedBefore: boolean
-  existsAfter: boolean
-}
 
 function deletes(patch: AgentProjectPreparedPatch): boolean {
   return patch.metadata?.op === 'delete_file' || patch.metadata?.op === 'rename_file_delete'

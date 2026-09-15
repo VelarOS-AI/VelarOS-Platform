@@ -1,15 +1,7 @@
 import { isEmpty } from '@velaros-ai/core'
 
-interface Waiter {
-  write: boolean
-  start(): void
-  cancel(): void
-}
-interface Gate {
-  readers: number
-  writing: boolean
-  queue: Waiter[]
-}
+import type { Gate,Waiter } from '../../types/agent.js'
+
 const gates = new Map<string, Gate>()
 
 /** 同进程多个 Agent 共用项目资源门；前台构建/修改与读取互斥，读取之间共享。 */

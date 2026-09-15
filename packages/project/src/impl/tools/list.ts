@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 
 import { ProjectToolNames } from '../../contract/constants'
+import type { ListCursor } from '../../types/agent.js'
 import type { ObserveInput } from '../../types/io'
 import { ProjectError } from '../../utils/errors'
 import { ProjectListSchema } from '../../utils/schemas/list'
@@ -10,12 +11,6 @@ import { readProjectReceipt, saveProjectReceipt } from './receipts'
 import { defineProjectTool, scopeProjectListPatterns } from './shared'
 
 const MaximumListingEntries = 100_000
-
-interface ListCursor {
-  query: ObserveInput
-  fingerprint: string
-  offset: number
-}
 
 export const projectList = defineProjectTool({
   name: ProjectToolNames.list,

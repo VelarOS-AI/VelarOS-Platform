@@ -3,7 +3,7 @@ import * as iconv from 'iconv-lite'
 import { isEmpty, isPresent, isString } from '@velaros-ai/core'
 
 import type { Range } from '../types/common.js'
-import type { ProjectTextEncoding } from '../types/text.js'
+import type { LineEndingAwareTextMatch,ProjectTextEncoding } from '../types/text.js'
 
 import { ProjectError } from './errors.js'
 
@@ -303,13 +303,6 @@ export function uniqueIndexOf(content: string, needle: string): { index: number;
     from = found + Math.max(1, needle.length)
   }
   return { index, count }
-}
-
-export interface LineEndingAwareTextMatch {
-  index: number
-  count: number
-  matchedText: string
-  replacementText?: string
 }
 
 export function resolveLineEndingAwareTextMatch(

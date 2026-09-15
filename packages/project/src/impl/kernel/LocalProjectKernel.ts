@@ -97,7 +97,7 @@ import type {
 import type { CorePolicy, PolicyDecisionInput } from '../../types/policy.js'
 import type { FileAttributes, FileSnapshot, ProjectSnapshot } from '../../types/snapshot.js'
 import type { ResolveTargetInput, ResolveTargetResult } from '../../types/target.js'
-import type { StoredTransaction } from '../../types/transaction.js'
+import type { ApplyRestoreState, ProjectTransactionPendingOperation, StagedFileContent,StoredTransaction } from '../../types/transaction.js'
 import type { ValidateInput, ValidationResult } from '../../types/validation.js'
 import { combineDiffs } from '../../utils/diff.js'
 import { ProjectError } from '../../utils/errors.js'
@@ -113,17 +113,14 @@ import {
   type ProjectChangeRecordInput,
   type ProjectChangeRevision,
 } from '../persistence/change-feed.js'
-import {
-  FileProjectTransactionStateStore,
-  type ProjectTransactionPendingOperation,
-} from '../persistence/FileProjectTransactionStateStore.js'
+import { FileProjectTransactionStateStore } from '../persistence/FileProjectTransactionStateStore.js'
 import { corePlugin } from '../plugins/core-plugin.js'
 import { AdapterRegistry } from '../registries/AdapterRegistry.js'
 import { FixerRegistry } from '../registries/FixerRegistry.js'
 import { HookRegistry } from '../registries/HookRegistry.js'
 import { PatchStrategyRegistry } from '../registries/PatchStrategyRegistry.js'
 import { PipelineRegistry } from '../registries/PipelineRegistry.js'
-import { PluginRegistry, type RegistrySink } from '../registries/PluginRegistry.js'
+import { PluginRegistry } from '../registries/PluginRegistry.js'
 import { ValidatorRegistry } from '../registries/ValidatorRegistry.js'
 import { TransactionPlanner } from '../transactions/TransactionPlanner.js'
 
@@ -138,20 +135,13 @@ import {
   canRevertToOriginal,
   createsMissingFile,
 } from '../../utils/transactions/patch-ownership.js'
-import { type ApplyRestoreState } from '../../utils/transactions/recovery-plan.js'
 import { rethrowNotApplied, revisionMismatch, validationFailed, withNotAppliedOutcome } from '../../utils/transactions/transaction-errors.js'
 import { FileStore } from '../files/FileStore.js'
 import { ProjectGitIndex } from '../files/ProjectGitIndex.js'
 import { ProjectQueries } from '../files/ProjectQueries.js'
 import { LockManager } from '../transactions/LockManager.js'
 import { TransactionCoordinator } from '../transactions/TransactionCoordinator.js'
-import {
-  isCreatePatch,
-  isDeletePatch,
-  stagedContentAfter,
-  type StagedFileContent,
-  TransactionOverlay,
-} from '../transactions/TransactionOverlay.js'
+import { isCreatePatch, isDeletePatch, stagedContentAfter, TransactionOverlay } from '../transactions/TransactionOverlay.js'
 import { TransactionProjectionRepository } from '../transactions/TransactionProjectionRepository.js'
 import { TransactionRecovery } from '../transactions/TransactionRecovery.js'
 import { TransactionRepository } from '../transactions/TransactionRepository.js'
@@ -208,7 +198,7 @@ function metadataPaths(value: unknown): string[] {
 }
 
 /** 事务安全的项目内核实现，统一协调 IO、适配器、校验和审计 hook。 */
-class LocalProjectKernel implements ProjectKernel, RegistrySink {
+class LocalProjectKernel implements ProjectKernel {
   readonly root: string
   readonly policy: CorePolicy
   readonly providers: ProjectRuntimeProviders

@@ -1,16 +1,11 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
 
-import type { ApprovalPort } from '@velaros-ai/agent/tool-contract'
 import { createApprovalOperationKey } from '@velaros-ai/agent/tool-contract'
 import { isEmpty } from '@velaros-ai/core'
 
 import type { ApprovalProvider } from '../../contract/requires.js'
+import type { ProjectApprovalContext } from '../../types/agent.js'
 
-
-interface ProjectApprovalContext {
-  approval: ApprovalPort
-  abortSignal: AbortSignal
-}
 
 const ProjectApprovalStore = new AsyncLocalStorage<ProjectApprovalContext>()
 
@@ -55,4 +50,4 @@ function installProjectApprovalProvider(kernel: {
 }
 
 export { installProjectApprovalProvider, withProjectApproval }
-export type { ProjectApprovalContext }
+export type { ProjectApprovalContext } from '../../types/agent.js'

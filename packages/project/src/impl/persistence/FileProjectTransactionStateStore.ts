@@ -27,11 +27,10 @@ import {
   toOptional,
 } from '@velaros-ai/core'
 
-import type { StoredTransaction } from '../../types/transaction.js'
+import type { ProjectTransactionFileState, ProjectTransactionPendingOperation, ProjectTransactionStateSnapshot,StoredTransaction, TransactionBytePlan } from '../../types/transaction.js'
 import { ProjectError } from '../../utils/errors.js'
 import { decodeProjectTextBuffer } from '../../utils/text.js'
-import { isProjectTextEncoding, type ProjectTextEncoding } from '../../utils/text.js'
-import type { TransactionBytePlan } from '../../utils/transactions/byte-plan.js'
+import { isProjectTextEncoding } from '../../utils/text.js'
 import { createsMissingFile } from '../../utils/transactions/patch-ownership.js'
 import { isDeletePatch } from '../transactions/TransactionOverlay.js'
 
@@ -45,39 +44,6 @@ const MaximumChangedFilesPerTransaction = 10_000
 const MaximumContentBytes = 16 * 1024 * 1024
 const MaximumIdentifierBytes = 512
 const MaximumPathBytes = 16 * 1024
-
-export type ProjectTransactionOperationKind = 'apply' | 'rollback'
-
-export interface ProjectTransactionFileState {
-  readonly exists: boolean
-  readonly content?: string
-  readonly bytes?: string
-}
-
-export interface ProjectTransactionRestoreEntry extends ProjectTransactionFileState {
-  readonly path: string
-  /** 原文件的文本编码（非无 BOM UTF-8 时记下）；恢复时文件已被删掉就按它重建。 */
-  readonly encoding?: ProjectTextEncoding
-  readonly mode?: number
-  readonly ownedStates: readonly ProjectTransactionFileState[]
-}
-
-export interface ProjectTransactionPendingOperation {
-  readonly kind: ProjectTransactionOperationKind
-  readonly transactionId: string
-  readonly previousStatus: StoredTransaction['status']
-  readonly restore: readonly ProjectTransactionRestoreEntry[]
-}
-
-export interface ProjectTransactionStateSnapshot {
-  readonly formatVersion: 1 | 2
-  readonly revision: number
-  readonly root: string
-  readonly transactions: readonly StoredTransaction[]
-  readonly projections: readonly ProjectChangeRecordInput[]
-  readonly pending?: ProjectTransactionPendingOperation
-  readonly bytePlans?: readonly TransactionBytePlan[]
-}
 
 export interface FileProjectTransactionStateStoreOptions {
   /** Host-owned path outside the project tree. */

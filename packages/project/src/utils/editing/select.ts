@@ -1,24 +1,14 @@
 import { isEmpty, isString, isUndefined } from '@velaros-ai/core'
 
-import type { ProjectContentEdit, ProjectEditView } from '../../types/editing.js'
+import type { OffsetWindow,ProjectContentEdit, ProjectEditView, ProjectMatchCandidate, ProjectMatchElsewhere, ProjectResolvedMutation } from '../../types/editing.js'
 import { ProjectError } from '../errors.js'
 import { assertWellFormedProjectText } from '../text.js'
 
 import { normalizeProjectLineRange } from './line-range.js'
 import { insertionLineText, replacementLineText } from './line-text.js'
-import { exactMatchCandidates, matchesElsewhere, missingMatchCandidates, type ProjectMatchCandidate, type ProjectMatchElsewhere } from './match-feedback.js'
-import { assertVisibleLines, intersectWindows, type OffsetWindow, visibleWindows } from './selection-coverage.js'
+import { exactMatchCandidates, matchesElsewhere, missingMatchCandidates } from './match-feedback.js'
+import { assertVisibleLines, intersectWindows, visibleWindows } from './selection-coverage.js'
 import { normalizePhysicalNewlines, ProjectSourceCoordinates } from './source.js'
-
-export interface ProjectResolvedMutation {
-  start: number
-  end: number
-  text: string
-  editIndex: number
-  fileIndex?: number
-  /** 文件末尾空行的替换仍按替换操作检查重叠。 */
-  kind: 'replace' | 'insert'
-}
 
 const CandidateNextAction = '请检查候选后用 reuse + changes 缩小 range 或修正 match；扩展 match 时，替换 text 也须保留候选 prefix/suffix。候选仅供确认，没有写入。'
 

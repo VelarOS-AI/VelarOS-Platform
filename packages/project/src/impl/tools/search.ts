@@ -3,9 +3,10 @@ import { isNotUndefined, Log } from '@velaros-ai/core'
 
 import { ProjectToolNames } from '../../contract/constants.js'
 import type { ProjectToolContext } from '../../contract/requires.js'
+import type { ProjectSourceWindow } from '../../types/source-window.js'
 import { registerProjectFileContext, snapshotFromRead } from '../../utils/agent/file-context.js'
 import { executeAgentProjectRead, executeAgentProjectSearch } from '../../utils/agent/kernel-port.js'
-import { presentProjectRead, ProjectSourceInstructions, type ProjectSourceWindow } from '../../utils/agent/source-window.js'
+import { presentProjectRead, ProjectSourceInstructions } from '../../utils/agent/source-window.js'
 import { type ProjectSearchInput,ProjectSearchInputSchema } from '../../utils/schemas/search.js'
 
 import { ProjectReadCapability } from './capabilities.js'

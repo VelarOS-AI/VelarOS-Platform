@@ -3,6 +3,7 @@ import { open } from 'node:fs/promises'
 
 import { isEmpty, isUndefined, mapDefined, optionalWhen } from '@velaros-ai/core'
 
+import type { ByteLimitedContent, LineWindowReadResult, ReadCursor } from '../../types/files.js'
 import type { ReadInput, ReadResult } from '../../types/io.js'
 import type { FileSnapshot } from '../../types/snapshot.js'
 import { ProjectError } from '../errors.js'
@@ -13,23 +14,6 @@ import { readProjectTextChunks } from './text-stream.js'
 export const ReadPrefixChunkBytes = 64 * 1024
 
 export const BinaryDetectionSampleBytes = 8000
-
-/** 文本切片以及继续有界读取所需的元数据。 */
-export interface ByteLimitedContent {
-  content: string
-  truncated: boolean
-  lineCount: number
-  /** 从原始输入消费的 UTF-16 code units；可能包含为保持完整行而省略的末尾换行。 */
-  consumedChars: number
-}
-
-export interface LineWindowReadResult {
-  content: string
-  range: { startLine: number; endLine: number }
-  hasMore: boolean
-  /** 只有读到文件末尾时才确定的总行数，计数口径与内存路径一致（按 \n 切分）。 */
-  totalLines?: number
-}
 
 /** 按逻辑 UTF-8 字节数和 Unicode 字符数截断；CRLF 计一个换行，续读仍保存原始 UTF-16 offset。 */
 export function limitContent(
@@ -113,11 +97,6 @@ export function countTextLines(content: string): number {
   if (isEmpty(content)) return 0
   const newlineMatches = content.match(/\n/g)?.length ?? 0
   return content.endsWith('\n') ? newlineMatches : newlineMatches + 1
-}
-
-export interface ReadCursor {
-  line: number
-  column: number
 }
 
 /**

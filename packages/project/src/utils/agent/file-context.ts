@@ -1,14 +1,13 @@
 import { isAbsolute, relative, resolve } from 'node:path'
 
 import {
-  type FileContextCarrier,
   fileContextFor,
   type FileContextRange,
   type FileContextSnapshot,
 } from '@velaros-ai/agent/tool-contract'
 import { isEmpty, isUndefined } from '@velaros-ai/core'
 
-import type { ProjectToolApi } from '../../contract/requires'
+import type { DiffHunk,ProjectFileContextCarrier } from '../../types/agent.js'
 import type { AgentProjectPreparedPatch, AgentProjectReadResult } from '../../types/agent-port.js'
 
 import { projectAgentReadResult } from './kernel-port'
@@ -16,10 +15,6 @@ import { finalizeProjectModelResult, presentProjectRead } from './source-window.
 
 /** 大文件当前视图最多读取的范围段数。 */
 const MaxFocusRanges = 8
-
-export interface ProjectFileContextCarrier extends FileContextCarrier {
-  project: Pick<ProjectToolApi, 'getRootPath' | 'kernel'>
-}
 
 /** 读取端口仍经过 Project 授权；宿主在发送模型首轮前登记，以支持重启后的视图恢复。 */
 export function registerProjectFileContext(context: ProjectFileContextCarrier): ReturnType<typeof fileContextFor> {
@@ -129,8 +124,6 @@ export function snapshotFromRead(
       range.endLine >= (result.totalLines ?? 0),
   }
 }
-
-interface DiffHunk { oldStart: number; oldLines: number; newStart: number; newLines: number }
 
 function diffHunks(diff: string): DiffHunk[] {
   return [...diff.matchAll(/^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/gm)].map((match) => ({

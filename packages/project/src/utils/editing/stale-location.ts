@@ -1,16 +1,11 @@
 import { isUndefined } from '@velaros-ai/core'
 
 import type { ProjectContentEdit, ProjectEditView } from '../../types/editing'
+import type { ProjectRelocatedEdit } from '../../types/editing.js'
 
 import { normalizeProjectLineRange } from './line-range'
 import { selectProjectMutations } from './select'
 import { ProjectSourceCoordinates } from './source'
-
-export interface ProjectRelocatedEdit {
-  editIndex: number
-  range: number | [number, number]
-  unchanged: true
-}
 
 function uniqueIndex(content: string, text: string): number {
   if (!text) return -1

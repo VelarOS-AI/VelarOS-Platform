@@ -23,3 +23,4 @@ export { createProjectSpace }
 export type { CreateProjectSpaceOptions }
 export type { ProjectSpace } from '../contract/provides.js'
 export type { ProjectBundledModDefinition } from '../contract/provides.js'
+export type { ProjectApprovalContext } from '../types/agent.js'

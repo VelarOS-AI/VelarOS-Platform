@@ -1,32 +1,15 @@
 import { isEmpty, isUndefined, toOptional } from '@velaros-ai/core'
 
 import type { PrepareEditInput } from '../../types/edit.js'
-import type { ProjectChangeApplyInput, ProjectContentEdit, ProjectEditView, ProjectFileInput, ProjectPlanFileAction, ProjectPlannerResolver, ProjectPlanSource, ProjectRecodeAction, ProjectRecodeNewline } from '../../types/editing.js'
+import type { FileIdentity, ProjectChangeApplyInput, ProjectContentEdit, ProjectEditView, ProjectFileInput, ProjectPlanFileAction, ProjectPlannerResolver, ProjectPlanSource, ProjectRecodeAction, ProjectRecodeNewline, ProjectRecodeReceipt, ProjectResolvedMutation,SourceSelection } from '../../types/editing.js'
 import type { ProjectTextEncoding } from '../../types/text.js'
 import { ProjectError } from '../errors.js'
 import { normalizeProjectInputText } from '../text.js'
 
 import { applyProjectMutations } from './content-planner.js'
 import { advanceProjectCoverage, completeProjectCoverage } from './planner-coverage.js'
-import { type ProjectResolvedMutation, selectProjectMutations } from './select.js'
+import { selectProjectMutations } from './select.js'
 import { normalizePhysicalNewlines, ProjectSourceCoordinates } from './source.js'
-
-interface FileIdentity {
-  view: ProjectEditView
-  initial: ProjectEditView
-  created: boolean
-  deleted: boolean
-  generation: number
-  history: Array<{ content: string; mutations?: readonly ProjectResolvedMutation[] }>
-}
-
-interface SourceSelection { identity: FileIdentity; view: ProjectEditView }
-
-/** 回执只报告模型可读的格式名；转换本身由事务字节计划按目标编码重写。 */
-export interface ProjectRecodeReceipt {
-  converted: Array<{ path: string; from: string; to: string }>
-  unchanged: string[]
-}
 
 function recodeTargetEncoding(action: ProjectRecodeAction): ProjectTextEncoding {
   const encoding = action.encoding ?? 'utf-8'

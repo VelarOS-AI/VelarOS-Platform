@@ -26,6 +26,7 @@ import { isNull, isObject, isPresent, isUndefined, optionalWhen, toOptional } fr
 
 import type { CommandProvider, FileFilterProvider } from '../../contract/requires.js'
 import type { ProjectFileAccess } from '../../types/file-access.js'
+import type { ProjectExpectedBytes } from '../../types/files.js'
 import type {
   FileListEntry,
   FileStatInput,
@@ -37,7 +38,7 @@ import type {
 import type { CorePolicy } from '../../types/policy.js'
 import type { FileSnapshot, ProjectSnapshot } from '../../types/snapshot.js'
 import { ProjectError, RevisionMismatchSuggestedNextAction } from '../../utils/errors.js'
-import { atomicWriteProjectBytes, atomicWriteProjectText, type ProjectExpectedBytes } from '../../utils/files/atomic-writer.js'
+import { atomicWriteProjectBytes, atomicWriteProjectText } from '../../utils/files/atomic-writer.js'
 import { listProjectFiles } from '../../utils/files/file-listing.js'
 import {
   advanceReadCursor,

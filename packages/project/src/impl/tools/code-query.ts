@@ -4,14 +4,13 @@ import { isArray, isEmpty, isNumber, isPlainObject, isString, isTrue, numberOrNu
 
 import type { ProjectToolContext } from '../../contract/requires.js'
 import type { ProjectSymbol } from '../../types/adapter.js'
-import { type CodeSymbolTarget, resolveCodeSymbolReference, sameCodePath, saveCodeSymbolReference } from '../../utils/agent/symbol-references.js'
+import type { CodeSymbolTarget, RecordValue } from '../../types/agent.js'
+import { resolveCodeSymbolReference, sameCodePath, saveCodeSymbolReference } from '../../utils/agent/symbol-references.js'
 import { ProjectError } from '../../utils/errors.js'
 import type { ProjectCodeAnalysisInput, ProjectCodeInput, ProjectCodeTarget } from '../../utils/schemas/code.js'
 import type { ProjectCodeQuery } from '../../utils/schemas/code-query.js'
 
 import { executeProjectRead } from './read.js'
-
-type RecordValue = Record<string, unknown>
 
 function record(value: unknown): RecordValue {
   return isPlainObject(value) ? value as RecordValue : { result: value }

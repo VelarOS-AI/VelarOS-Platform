@@ -1,47 +1,8 @@
 import { isEmpty, isFalse, isNumber, isTrue, optionalWhen } from '@velaros-ai/core'
 
-import type { CommandProvider } from '../../contract/requires.js'
+import type { RgMessage, RipgrepSearchContext, RipgrepSearchResult } from '../../types/files.js'
 import type { SearchHit } from '../../types/io.js'
-import type { CorePolicy } from '../../types/policy.js'
-import type { CommandToolRequirement } from '../../types/provider.js'
 import { matchesAny } from '../glob.js'
-
-export interface RipgrepSearchContext {
-  rootAbs: string
-  /** rootAbs 下用于收窄搜索范围的相对目录（可选）。 */
-  subdirRel?: string
-  query: string
-  regex: boolean
-  caseSensitive?: boolean
-  include?: string[]
-  exclude?: string[]
-  excludeGitignored?: boolean
-  maxResults: number
-  /** 已授权且可由 rg 精确解释的路径；在命中数上限之前过滤。 */
-  filterPath?: (path: string) => boolean
-  command: CommandProvider
-  policy: CorePolicy
-}
-
-interface RgMatchPayload {
-  path?: { text?: string }
-  lines?: { text?: string }
-  line_number?: number
-  submatches?: Array<{ start?: number; end?: number }>
-}
-
-interface RgMessage {
-  type?: string
-  data?: RgMatchPayload
-}
-
-interface RipgrepSearchResult {
-  hits: Nullable<SearchHit[]>
-  timedOut?: boolean
-  truncated?: boolean
-  diagnostics?: string[]
-  toolRequirements?: CommandToolRequirement[]
-}
 
 function normalizeGlobList(values: readonly string[]): string[] {
   const seen = new Set<string>()

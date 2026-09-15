@@ -15,20 +15,8 @@
 //    那是比挂起更坏的失败方向（静默数据损坏 vs 可观测的卡住）。
 import { isEmpty } from '@velaros-ai/core'
 
+import type { PendingProjectLock,ProjectLock } from '../../types/transaction.js'
 import { id } from '../../utils/id.js'
-
-/** 覆盖事务将要修改的相对路径的内存锁。 */
-export interface ProjectLock {
-  lockId: string
-  owner: string
-  paths: string[]
-  createdAt: number
-}
-
-interface PendingProjectLock {
-  lock: ProjectLock
-  resolve: (lock: ProjectLock) => void
-}
 
 /** 公平路径锁队列，用于串行化重叠写入和回滚。 */
 export class LockManager {

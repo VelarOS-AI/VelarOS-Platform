@@ -4,6 +4,7 @@ import type { PatchStrategy } from '../../contract/requires.js'
 import type { CreateFileOperation, PreparedPatch } from '../../types/edit.js'
 import type { PatchStrategyInput } from '../../types/patch.js'
 import type { FileSnapshot } from '../../types/snapshot.js'
+import type { SelectedTextMatches,TextMatchSelectionOperation } from '../../types/strategies.js'
 import { replaceSnapshotLines } from '../../utils/editing/line-edit.js'
 import { createTextPatch as patch } from '../../utils/editing/prepared-patch.js'
 import {
@@ -21,21 +22,6 @@ import {
   offsetToLine,
   resolveLineEndingAwareTextMatch,
 } from '../../utils/text.js'
-
-interface TextMatchSelectionOperation {
-  expectedMatches?: number
-  occurrence?: number
-  replaceAll?: boolean
-}
-
-interface SelectedTextMatches {
-  indices: number[]
-  matchedText: string
-  replacementText?: string
-  totalMatches: number
-  /** 发生行尾空白宽容匹配时写入补丁 metadata，由 Agent 边界回显给模型。 */
-  matchNote?: string
-}
 
 function allMatchIndices(content: string, needle: string): number[] {
   const indices: number[] = []

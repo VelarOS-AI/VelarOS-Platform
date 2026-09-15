@@ -1,12 +1,5 @@
+import type { SourceLine } from '../../types/editing.js'
 import { ProjectError } from '../errors.js'
-
-export interface SourceLine {
-  start: number
-  bodyEnd: number
-  end: number
-  logicalStart: number
-  newline: string
-}
 
 /** CRLF is a physical encoding of one logical newline; every other source character is literal. */
 export class ProjectSourceCoordinates {

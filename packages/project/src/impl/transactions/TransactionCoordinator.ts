@@ -1,11 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
 
+import type { ActiveTransactionCommand } from '../../types/transaction.js'
 import { ProjectError } from '../../utils/errors.js'
-
-interface ActiveTransactionCommand {
-  active: boolean
-  transactionId: string
-}
 
 /** 按 transactionId 串行化同一事务的生命周期命令（amend/apply/rollback），不同事务互不阻塞。 */
 export class TransactionCoordinator {

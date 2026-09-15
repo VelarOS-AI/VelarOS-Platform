@@ -2,6 +2,14 @@ import type { CommandProvider,ProjectProviders } from '../contract/requires.js'
 
 import type { TrustLabel } from "./common.js";
 
+export interface MissingCommandDetectionInput {
+  command: string;
+  sourceCommand?: string;
+  exitCode?: LooseOptional<number>;
+  stderr?: string;
+  error?: any;
+}
+
 export type ProjectRuntimeProviders = ProjectProviders & {
   command: CommandProvider
 }

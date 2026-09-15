@@ -1,11 +1,11 @@
 import { isEmpty } from '@velaros-ai/core'
 
 import type { PrepareEditInput } from '../../types/edit.js'
-import type { ProjectEditInput, ProjectEditView, ProjectPlannerResolver } from '../../types/editing.js'
+import type { ProjectEditInput, ProjectEditView, ProjectPlannerResolver, ProjectResolvedMutation } from '../../types/editing.js'
 import { ProjectError } from '../errors.js'
 
 import { applyProjectMutations } from './content-planner.js'
-import { type ProjectResolvedMutation, selectProjectMutations } from './select.js'
+import { selectProjectMutations } from './select.js'
 
 export async function compileProjectEdit(input: ProjectEditInput, resolver: ProjectPlannerResolver): Promise<PrepareEditInput> {
   if (isEmpty(input.files) || input.files.length > 1000) throw new ProjectError('INVALID_INPUT', 'files 需要 1–1000 个文件分组。')

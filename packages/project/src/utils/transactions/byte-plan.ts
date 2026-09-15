@@ -2,7 +2,7 @@ import { isString, isUndefined } from "@velaros-ai/core";
 
 import { isDeletePatch } from "../../impl/transactions/TransactionOverlay.js";
 import type { PreparedPatch } from "../../types/edit.js";
-import type { StoredTransaction } from "../../types/transaction.js";
+import type { StoredTransaction, TransactionBytePatch, TransactionBytePlan } from "../../types/transaction.js";
 import { ProjectError } from "../errors.js";
 import {
   decodeProjectTextBuffer,
@@ -15,20 +15,6 @@ import {
   encodePreservingProjectBytes,
 } from "./byte-codec.js";
 import { patchFileAttributes, patchTargetEncoding } from "./patch-attributes.js";
-
-/** 私有持久化记录；不会附加到补丁、快照或模型回执。 */
-export interface TransactionBytePatch {
-  readonly patchId: string;
-  readonly path: string;
-  readonly before?: string;
-  readonly beforeUnavailable?: true;
-  readonly after?: string;
-}
-
-export interface TransactionBytePlan {
-  readonly transactionId: string;
-  readonly patches: readonly TransactionBytePatch[];
-}
 
 export function prepareTransactionBytePlan(
   transaction: StoredTransaction,

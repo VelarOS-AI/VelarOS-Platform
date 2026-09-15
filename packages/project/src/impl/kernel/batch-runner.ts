@@ -1,25 +1,8 @@
 import { first, isEmpty, isFalse,isPresent } from '@velaros-ai/core'
 
-import type { BatchConflict, BatchInput, BatchResult, BatchTask, BatchTaskResult } from "../../types/batch.js";
+import type { BatchConflict, BatchInput, BatchKernelLike,BatchResult, BatchTask, BatchTaskResult, DagPoolMetrics } from "../../types/batch.js";
 import type { PreparedTransaction } from "../../types/edit.js";
 import { ProjectError,toErrorObject } from "../../utils/errors.js";
-
-interface DagPoolMetrics {
-  concurrency: number;
-  peakActive: number;
-  maxQueuedReady: number;
-}
-
-interface BatchKernelLike {
-  read(input: any): Promise<any>;
-  search(input: any): Promise<any>;
-  resolveTarget(input: any): Promise<any>;
-  prepareEdit(input: any): Promise<any>;
-  applyEdit(input: any): Promise<any>;
-  validate(input: any): Promise<any>;
-  rollback(input: any): Promise<any>;
-  policy?: { maxConcurrentBatchTasks?: number };
-}
 
 function depsDone(task: BatchTask, done: Set<string>): boolean {
   return (task.dependsOn ?? []).every((id) => done.has(id));

@@ -1,9 +1,7 @@
-import type { ProjectEditView } from '../../types/editing.js'
+import type { OffsetWindow,ProjectEditView } from '../../types/editing.js'
 import { ProjectError } from '../errors.js'
 
 import type { ProjectSourceCoordinates } from './source.js'
-
-export interface OffsetWindow { start: number; end: number }
 
 export function visibleWindows(view: ProjectEditView, source: ProjectSourceCoordinates): OffsetWindow[] {
   const windows: OffsetWindow[] = []

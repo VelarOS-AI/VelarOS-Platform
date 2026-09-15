@@ -33,7 +33,7 @@ import { matchesAny } from '../../utils/glob.js'
 import { id } from '../../utils/id.js'
 import { type AuditJournal } from '../persistence/AuditJournal.js'
 
-interface ProjectQueryDependencies {
+interface ProjectQueriesDependencies {
   readonly root: string
   readonly policy: CorePolicy
   readonly providers: ProjectRuntimeProviders
@@ -103,7 +103,7 @@ const DefaultImplicitSearchExcludeGlobs = [
 export class ProjectQueries {
   private targets = new Map<string, ResolvedTarget>()
   private evidence = new Map<string, EvidencePack>()
-  constructor(private readonly dependencies: ProjectQueryDependencies) {}
+  constructor(private readonly dependencies: ProjectQueriesDependencies) {}
 
   private defaultExcludeGitignoredForRoot(root?: string): boolean | undefined {
     const normalizedRoot = root?.trim()

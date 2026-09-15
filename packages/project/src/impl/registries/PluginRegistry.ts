@@ -1,7 +1,7 @@
 import type { FileAdapterFactory, PatchStrategy, PipelineStage,ProjectFixer, ProjectHook, ProjectPlugin, ProjectPluginContext, ProjectValidator } from '../../contract/requires.js'
 
 /** plugin 安装时可写入的注册入口，由 Project 实例实现。 */
-export interface RegistrySink {
+export interface PluginRegistrySink {
   registerAdapterFactory(factory: FileAdapterFactory): void;
   registerPatchStrategy(strategy: PatchStrategy): void;
   registerValidator(validator: ProjectValidator): void;
@@ -16,7 +16,7 @@ export class PluginRegistry {
   private pluginNames = new Set<string>();
 
   /** 安装一个插件，并把插件注册的能力写入目标 registry。 */
-  public async install(plugin: ProjectPlugin, sink: RegistrySink): Promise<void> {
+  public async install(plugin: ProjectPlugin, sink: PluginRegistrySink): Promise<void> {
     if (this.pluginNames.has(plugin.name)) return;
     this.pluginNames.add(plugin.name);
     // 只暴露绑定过的注册函数，避免 plugin 直接依赖 Project 具体实现。

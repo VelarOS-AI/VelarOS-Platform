@@ -1,18 +1,11 @@
 import { isEmpty, isTrue } from '@velaros-ai/core'
 
 import type { FileAdapter, FileAdapterFactory } from '../../contract/requires.js'
+import type { JsTsAdapterIdentity,JsTsSymbol } from '../../types/jsts.js'
 import type { FileSnapshot } from '../../types/snapshot.js'
 import type { ResolvedTarget, ResolveTargetInput, ResolveTargetResult } from '../../types/target.js'
 import { id } from '../../utils/id.js'
-import { isJsTsPath, type JsTsSymbol, jsTsSyntaxDiagnostics, parseJsTs, selectJsTsSymbols } from '../../utils/jsts-ast.js'
-
-/** 同一实现以不同身份注册：核心 adapter 与 TypeScript 插件 adapter 只差 id、优先级与检查项名。 */
-export interface JsTsAdapterIdentity {
-  factoryId: string
-  adapterId: string
-  priority: number
-  checkId: string
-}
+import { isJsTsPath, jsTsSyntaxDiagnostics, parseJsTs, selectJsTsSymbols } from '../../utils/jsts-ast.js'
 
 export function jsTsAdapterFactory(): FileAdapterFactory {
   return createJsTsAdapterFactory({

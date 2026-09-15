@@ -6,33 +6,9 @@ import * as ts from 'typescript'
 import { isEmpty, isFalse, isPresent, isTrue } from '@velaros-ai/core'
 
 import type { AddImportOperation, RemoveImportOperation } from '../../types/edit.js'
+import type { ImportBinding,ImportStyle, NamedSpec, SourceSplice } from '../../types/editing.js'
 import { ProjectError } from '../errors.js'
 import { parseJsTs } from '../jsts-ast.js'
-
-/** 用 text 替换原文的 [start, end)。 */
-export interface SourceSplice {
-  start: number
-  end: number
-  text: string
-}
-
-/** named 列表里的一项：`a`、`a as b`、`type a`；imported/local 用于判重，text 原样写回源码。 */
-interface NamedSpec {
-  imported: string
-  local: string
-  typeOnly: boolean
-  text: string
-}
-
-interface ImportStyle {
-  quote: string
-  semicolon: string
-}
-
-type ImportBinding =
-  | { kind: 'default'; clause: ts.ImportClause }
-  | { kind: 'namespace'; clause: ts.ImportClause }
-  | { kind: 'named'; clause: ts.ImportClause; element: ts.ImportSpecifier }
 
 const NamedSpecPattern = /^(type\s+)?([\w$]+|"[^"]*"|'[^']*')(?:\s+as\s+([\w$]+))?$/
 

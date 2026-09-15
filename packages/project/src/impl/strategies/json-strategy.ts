@@ -15,14 +15,11 @@ import type { PatchStrategy } from '../../contract/requires.js'
 import type { JsonValue } from '../../types/common.js'
 import type { PreparedPatch } from '../../types/edit.js'
 import type { PatchStrategyInput } from '../../types/patch.js'
+import type { JsonContainer, JsonPatch } from '../../types/strategies.js'
 import { unifiedDiff } from '../../utils/diff.js'
 import { ProjectError } from '../../utils/errors.js'
 import { id } from '../../utils/id.js'
 import { countChangedLines } from '../../utils/text.js'
-
-type JsonContainer = JsonValue[] | { [key: string]: JsonValue }
-type JsonPatch =
-  { op: 'add' | 'replace'; path: string; value: JsonValue } | { op: 'remove'; path: string }
 
 function patchError(
   patchIndex: number,

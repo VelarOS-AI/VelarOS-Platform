@@ -15,6 +15,7 @@ import type { PatchStrategyInput } from '../../types/patch.js'
 import type { CorePolicy } from '../../types/policy.js'
 import type { FileAttributes, FileSnapshot } from '../../types/snapshot.js'
 import type { ResolvedTarget } from '../../types/target.js'
+import type { StagedFileContent } from '../../types/transaction.js'
 import { combineDiffs, unifiedDiff } from '../../utils/diff.js'
 import { replaceSnapshotLineRanges } from '../../utils/editing/line-edit.js'
 import { createTextPatch } from '../../utils/editing/prepared-patch.js'
@@ -27,11 +28,7 @@ import { patchFileAttributes, withPatchFileAttributes } from '../../utils/transa
 import { assertEditsReadOriginal, canRevertToOriginal } from '../../utils/transactions/patch-ownership.js'
 import { revisionMismatch } from '../../utils/transactions/transaction-errors.js'
 
-import {
-  stagedContentAfter,
-  type StagedFileContent,
-  withoutStagedOffsets,
-} from './TransactionOverlay.js'
+import { stagedContentAfter, withoutStagedOffsets } from './TransactionOverlay.js'
 interface TransactionPlannerDependencies {
   readonly root: string
   readonly policy: CorePolicy

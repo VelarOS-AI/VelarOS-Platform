@@ -43,7 +43,7 @@ const parse = (file) => ts.createSourceFile(file, read(file), ts.ScriptTarget.La
 
 /** 把一个相对模块路径解析成真实文件；解析不到返回 null。 */
 function resolveSpecifier(fromFile, specifier) {
-  if (!specifier.startsWith('.')) return null
+  if (typeof specifier !== 'string' || !specifier.startsWith('.')) return null
   const base = resolve(dirname(fromFile), specifier)
   const candidates = [base, base.replace(/\.js$/u, '.ts'), `${base}.ts`, `${base}.tsx`, join(base, 'index.ts')]
   return candidates.find((candidate) => (contents.has(candidate) && contents.get(candidate) !== undefined) || (existsSync(candidate) && statSync(candidate).isFile())) ?? null
@@ -156,11 +156,25 @@ function addImports(text, imports) {
   for (const [key, entries] of byModule) {
     const [module, typeOnlyText] = key.split('\0')
     const typeOnly = typeOnlyText === 'true'
+    // 命名空间与默认导入各自单独成行，不能塞进花括号。
+    for (const entry of entries.filter((item) => item.imported === '*' || item.imported === 'default')) {
+      const line = entry.imported === '*'
+        ? `import ${typeOnly ? 'type ' : ''}* as ${entry.name} from '${module}'`
+        : `import ${typeOnly ? 'type ' : ''}${entry.name} from '${module}'`
+      sourceFile = ts.createSourceFile('x.ts', output, ts.ScriptTarget.Latest, true)
+      const imports = sourceFile.statements.filter((statement) => ts.isImportDeclaration(statement))
+      output = imports.length > 0
+        ? `${output.slice(0, imports.at(-1).getEnd())}\n${line}${output.slice(imports.at(-1).getEnd())}`
+        : insertAfterImports(output, line)
+    }
+    const named = entries.filter((item) => item.imported !== '*' && item.imported !== 'default')
+    if (named.length === 0) continue
     sourceFile = ts.createSourceFile('x.ts', output, ts.ScriptTarget.Latest, true)
-    const target = sourceFile.statements.find((statement) => ts.isImportDeclaration(statement) && statement.moduleSpecifier.text === module
+    const namedTarget = sourceFile.statements.find((statement) => ts.isImportDeclaration(statement) && statement.moduleSpecifier.text === module
       && statement.importClause && !statement.importClause.name && statement.importClause.namedBindings && ts.isNamedImports(statement.importClause.namedBindings)
       && statement.importClause.isTypeOnly === typeOnly)
-    const specifiers = entries.map((entry) => entry.imported === entry.name ? entry.name : `${entry.imported} as ${entry.name}`)
+    const specifiers = named.map((entry) => entry.imported === entry.name ? entry.name : `${entry.imported} as ${entry.name}`)
+    const target = namedTarget
     if (target) {
       const bindings = target.importClause.namedBindings
       const names = [...bindings.elements.map((element) => element.getText(sourceFile)), ...specifiers]

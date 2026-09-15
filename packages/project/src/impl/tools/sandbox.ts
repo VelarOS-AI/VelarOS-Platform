@@ -9,23 +9,11 @@ import { AppError } from '@velaros-ai/core/error'
 import { ProjectToolNames } from '../../contract/constants'
 import type { ProjectSandboxPort, ProjectToolContext } from '../../contract/requires'
 import type { ProjectSandboxDiff } from '../../types/project'
+import type { ProjectSandboxInput } from '../../types/tools.js'
 import { analyzeCommandExecution, buildBackgroundCommandConfirmationMessage } from '../../utils/command-policy'
 
 import { ProjectExecutionCapability } from './capabilities'
 import { defineProjectTool } from './shared'
-
-interface ProjectSandboxInput {
-  action: 'create' | 'run' | 'diff' | 'apply' | 'discard'
-  source?: string
-  network?: boolean
-  ignored?: 'link' | 'copy' | 'skip'
-  sandboxId?: string
-  command?: string
-  timeoutMs?: number
-  maxOutputChars?: number
-  paths?: string[]
-  maxFiles?: number
-}
 
 /** 宿主没接沙箱端口时这个工具不可用，也不出现在工具面上。 */
 function requireSandboxPort(context: ProjectToolContext): ProjectSandboxPort {

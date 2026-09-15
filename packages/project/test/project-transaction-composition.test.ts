@@ -11,11 +11,9 @@ import {
   type ProjectPlugin,
   typescriptPlugin,
 } from '../src/exports/index'
-import {
-  FileProjectTransactionStateStore,
-  type ProjectTransactionPendingOperation,
-} from '../src/impl/persistence/FileProjectTransactionStateStore'
+import { FileProjectTransactionStateStore } from '../src/impl/persistence/FileProjectTransactionStateStore'
 import type { Diagnostic } from '../src/types/common'
+import type { ProjectTransactionPendingOperation } from '../src/types/transaction.js'
 import { unifiedDiff } from '../src/utils/diff'
 
 type KernelFactory = (root: string, plugins?: ProjectPlugin[]) => Promise<ProjectKernel>

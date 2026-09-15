@@ -3,6 +3,23 @@ import type { ReadInput, SearchInput } from "./io.js";
 import type { ResolveTargetInput } from "./target.js";
 import type { ValidateInput } from "./validation.js";
 
+export interface DagPoolMetrics {
+  concurrency: number;
+  peakActive: number;
+  maxQueuedReady: number;
+}
+
+export interface BatchKernelLike {
+  read(input: any): Promise<any>;
+  search(input: any): Promise<any>;
+  resolveTarget(input: any): Promise<any>;
+  prepareEdit(input: any): Promise<any>;
+  applyEdit(input: any): Promise<any>;
+  validate(input: any): Promise<any>;
+  rollback(input: any): Promise<any>;
+  policy?: { maxConcurrentBatchTasks?: number };
+}
+
 /** runner 可以在依赖图中调度的批处理操作类型。 */
 export type BatchTaskOperation =
   | { kind: "read"; input: ReadInput }
