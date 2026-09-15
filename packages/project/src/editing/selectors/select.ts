@@ -6,7 +6,7 @@ import { insertionLineText, replacementLineText } from '../mutations/line-text.j
 import type { ProjectContentEdit, ProjectEditView } from '../types.js'
 
 import { assertVisibleLines, intersectWindows, type OffsetWindow, visibleWindows } from './coverage.js'
-import { exactMatchCandidates, missingMatchCandidates } from './feedback.js'
+import { exactMatchCandidates, matchesElsewhere, missingMatchCandidates, type ProjectMatchCandidate, type ProjectMatchElsewhere } from './feedback.js'
 import { normalizeProjectLineRange } from './range.js'
 import { normalizePhysicalNewlines, ProjectSourceCoordinates } from './source.js'
 
@@ -18,6 +18,27 @@ export interface ProjectResolvedMutation {
   fileIndex?: number
   /** 文件末尾空行的替换仍按替换操作检查重叠。 */
   kind: 'replace' | 'insert'
+}
+
+const CandidateNextAction = '请检查候选后用 reuse + changes 缩小 range 或修正 match；扩展 match 时，替换 text 也须保留候选 prefix/suffix。候选仅供确认，没有写入。'
+
+/** 零命中按原因给下一步：原文在 range 外、在未显示的行、有相近候选，或完全对不上。 */
+function missingMatchGuidance(candidates: readonly ProjectMatchCandidate[], elsewhere: readonly ProjectMatchElsewhere[]): { message: string; next: string } {
+  const lines = (visible: boolean) => elsewhere.filter((item) => item.visible === visible).slice(0, 3)
+    .map(({ range: [start, end] }) => start === end ? `${start}` : `${start}–${end}`).join('、')
+  if (elsewhere.some((item) => item.visible)) return {
+    message: `match 不在所选 range 内，它出现在第 ${lines(true)} 行。`,
+    next: '用 reuse + changes 把该项的 range 改成覆盖这段原文，或去掉 range 只用 match（须在可见区域中唯一）。',
+  }
+  if (!isEmpty(elsewhere)) return {
+    message: `match 在 fileRef 可见区域中没有匹配，原文在未显示的第 ${lines(false)} 行。`,
+    next: '先用 project:read 读取这些行获取新 fileRef，再用 reuse + changes 替换 fileRef（必要时同步 range），正文保持原样。',
+  }
+  if (!isEmpty(candidates)) return { message: 'match 在所选可见区域中没有精确匹配。', next: CandidateNextAction }
+  return {
+    message: 'match 在所选可见区域中没有精确匹配，也没有相近的原文。',
+    next: '重新读取目标行，按显示的原文逐字复制 match（空白、引号、反斜杠以 JSON 解码后的源码为准）；或改用 range 按整行定位。',
+  }
 }
 
 export function selectProjectMutations(view: ProjectEditView, edits: readonly ProjectContentEdit[]): ProjectResolvedMutation[] {
@@ -70,11 +91,14 @@ export function selectProjectMutations(view: ProjectEditView, edits: readonly Pr
           const candidates = total === 0
             ? missingMatchCandidates(view, source, windows, edit.match)
             : exactMatchCandidates(source, windows, matches)
-          throw new ProjectError(total === 0 ? 'TARGET_NOT_FOUND' : 'AMBIGUOUS_TARGET',
-            total === 0 ? 'match 在所选可见区域中没有精确匹配。' : `match 在所选可见区域中有 ${total} 个匹配。`,
-            { path: view.path, revision: view.revision, range: edit.range, matches: total,
-              recovery: { kind: 'project-edit-candidates', requiresConfirmation: true, candidates, candidatesTruncated: total > candidates.length } },
-            '请检查候选后用 reuse + changes 缩小 range 或修正 match；扩展 match 时，替换 text 也须保留候选 prefix/suffix。候选仅供确认，没有写入。')
+          const elsewhere = total === 0 ? matchesElsewhere(source, allWindows, windows, edit.match) : []
+          const details: Record<string, unknown> = { path: view.path, revision: view.revision, range: edit.range, matches: total,
+            recovery: { kind: 'project-edit-candidates', requiresConfirmation: true, candidates, candidatesTruncated: total > candidates.length } }
+          if (!isEmpty(elsewhere)) details.elsewhere = elsewhere
+          const { message, next } = total === 0
+            ? missingMatchGuidance(candidates, elsewhere)
+            : { message: `match 在所选可见区域中有 ${total} 个匹配。`, next: CandidateNextAction }
+          throw new ProjectError(total === 0 ? 'TARGET_NOT_FOUND' : 'AMBIGUOUS_TARGET', message, details, next)
         }
         start = matches[0].start
         end = matches[0].end

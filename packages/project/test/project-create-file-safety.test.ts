@@ -39,7 +39,7 @@ describe('create_file 不静默覆盖、回滚不丢原文', () => {
       const project = await createProjectKernel({ root })
 
       await expect(project.prepareEdit({ operations: [createFile('keep.txt', 'new\n')] })).rejects.toMatchObject({
-        reason: 'CONFLICT_WITH_EXTERNAL_EDIT',
+        reason: 'TARGET_EXISTS',
         details: { path: 'keep.txt' },
         suggestedNextAction: expect.stringContaining('overwrite'),
       })
@@ -98,7 +98,7 @@ describe('create_file 不静默覆盖、回滚不丢原文', () => {
       const project = await createProjectKernel({ root })
       await expect(project.prepareEdit({
         operations: [createFile('notes.md', '# A\n'), createFile('notes.md', '# B\n')],
-      })).rejects.toMatchObject({ reason: 'CONFLICT_WITH_EXTERNAL_EDIT', details: { path: 'notes.md' } })
+      })).rejects.toMatchObject({ reason: 'TARGET_EXISTS', details: { path: 'notes.md' } })
 
       const transaction = await project.prepareEdit({
         operations: [
@@ -203,7 +203,7 @@ describe('project:write 工具层', () => {
       await expect(projectTools[ProjectToolNames.write].execute(
         { path: 'keep.txt', content: 'new\n', mode: 'create' },
         toolContext(root),
-      )).rejects.toMatchObject({ reason: 'CONFLICT_WITH_EXTERNAL_EDIT', details: { path: 'keep.txt' } })
+      )).rejects.toMatchObject({ reason: 'TARGET_EXISTS', details: { path: 'keep.txt' } })
       expect(await readFile(join(root, 'keep.txt'), 'utf8')).toBe(Precious)
     })
   })

@@ -89,7 +89,7 @@ describe('compact edit selector contract', () => {
       { startOffset: 0, endOffset: 6, startLine: 1, endLine: 1, completeLines: true },
       { startOffset: 13, endOffset: 18, startLine: 3, endLine: 3, completeLines: true },
     ])
-    expect(() => planProjectFileEdits(partial, [{ op: 'replace', match: 'hidden', text: 'x' }])).toThrow('没有精确匹配')
+    expect(() => planProjectFileEdits(partial, [{ op: 'replace', match: 'hidden', text: 'x' }])).toThrow('原文在未显示的第 2 行')
     expect(() => planProjectFileEdits(partial, [{ op: 'replace', match: 'first\nlast', text: 'x' }])).toThrow('没有精确匹配')
     expect(() => planProjectFileEdits(partial, [{ op: 'replace', range: [1, 3], match: 'first', text: 'x' }])).toThrow('实际显示')
   })
@@ -98,7 +98,7 @@ describe('compact edit selector contract', () => {
     const fragment = view('left target right', [{ startOffset: 5, endOffset: 11, startLine: 1, endLine: 1, completeLines: false }])
     expect(planProjectFileEdits(fragment, [{ op: 'replace', range: 1, match: 'target', text: 'changed' }]).content).toBe('left changed right')
     expect(() => planProjectFileEdits(fragment, [{ op: 'replace', range: 1, text: 'changed' }])).toThrow('实际显示')
-    expect(() => planProjectFileEdits(fragment, [{ op: 'replace', match: 'target right', text: 'changed' }])).toThrow('没有精确匹配')
+    expect(() => planProjectFileEdits(fragment, [{ op: 'replace', match: 'target right', text: 'changed' }])).toThrow('原文在未显示的第 1 行')
     expect(() => planProjectFileEdits(fragment, [{ op: 'insert', at: 'end', text: 'new' }])).toThrow('实际显示')
   })
 
@@ -129,8 +129,25 @@ describe('compact edit selector contract', () => {
     throw new Error('ambiguous long line unexpectedly accepted')
   })
 
+  test('zero-hit guidance says whether to move the range, read more, or recopy the source', () => {
+    const failure = (content: string, edits: ProjectContentEdit[], coverage?: Parameters<typeof view>[1]) => {
+      try { planProjectFileEdits(coverage ? view(content, coverage) : view(content), edits) } catch (error: any) { return error }
+      throw new Error('edit unexpectedly accepted')
+    }
+    const outside = failure('one\ntwo\nthree\n', [{ op: 'replace', range: 1, match: 'three', text: 'x' }])
+    expect(outside.details.elsewhere).toEqual([{ range: [3, 3], visible: true }])
+    expect(outside.suggestedNextAction).toContain('range')
+    const hidden = failure('one\ntwo\nthree\n', [{ op: 'replace', match: 'three', text: 'x' }], [{ startOffset: 0, endOffset: 4, startLine: 1, endLine: 1, completeLines: true }])
+    expect(hidden.details.elsewhere).toEqual([{ range: [3, 3], visible: false }])
+    expect(hidden.suggestedNextAction).toContain('project:read')
+    const absent = failure('one\ntwo\n', [{ op: 'replace', match: 'zzz', text: 'x' }])
+    expect(absent.message).toContain('也没有相近的原文')
+    expect(absent.details.elsewhere).toBeUndefined()
+    expect(absent.suggestedNextAction).not.toContain('检查候选')
+  })
+
   test('matches cannot extend beyond an explicit range', () => {
-    expect(() => edit('one\ntwo\n', [{ op: 'replace', range: 1, match: 'one\ntwo', text: 'x' }])).toThrow('没有精确匹配')
+    expect(() => edit('one\ntwo\n', [{ op: 'replace', range: 1, match: 'one\ntwo', text: 'x' }])).toThrow('不在所选 range 内，它出现在第 1–2 行')
     expect(() => edit('one\n', [{ op: 'replace', range: 3, text: 'x' }])).toThrow('超出文件')
   })
 })
@@ -158,7 +175,8 @@ describe('fixed coordinates and exact text preservation', () => {
     ['a\nb', [{ op: 'replace', range: 2, text: '' }], 'a\n'],
     ['a\nb', [{ op: 'replace', range: 2, text: 'x' }], 'a\nx'],
     ['a\nb', [{ op: 'replace', range: 2, text: 'x\n' }], 'a\nx\n'],
-    ['a\n', [{ op: 'replace', range: 2, text: 'x' }], 'a\nx'],
+    // 末尾换行之后那条空行被整行替换时，保留原文件的末尾换行（与在该处插入一致）。
+    ['a\n', [{ op: 'replace', range: 2, text: 'x' }], 'a\nx\n'],
     ['a\n', [{ op: 'insert', range: 2, side: 'before', text: 'x' }], 'a\nx\n'],
     ['a', [{ op: 'insert', at: 'start', text: 'x\n' }], 'x\na'],
     ['a\n', [{ op: 'insert', at: 'end', text: 'x' }], 'a\nx\n'],
@@ -257,8 +275,8 @@ describe('compiled plans on the real transaction engine', () => {
 
   test('file operations reject existing destinations, unintended path sources and stale repeat refs', async () => {
     const { resolver } = await kernelFixture({ 'a.txt': 'a', 'b.txt': 'b' })
-    await expect(compileProjectFile({ actions: [{ op: 'create', path: './a.txt', text: 'bad' }] }, resolver)).rejects.toMatchObject({ reason: 'CONFLICT_WITH_EXTERNAL_EDIT' })
-    await expect(compileProjectFile({ actions: [{ op: 'move', fileRef: 'a.txt', to: 'b.txt' }] }, resolver)).rejects.toMatchObject({ reason: 'CONFLICT_WITH_EXTERNAL_EDIT' })
+    await expect(compileProjectFile({ actions: [{ op: 'create', path: './a.txt', text: 'bad' }] }, resolver)).rejects.toMatchObject({ reason: 'TARGET_EXISTS', details: { path: 'a.txt' } })
+    await expect(compileProjectFile({ actions: [{ op: 'move', fileRef: 'a.txt', to: 'b.txt' }] }, resolver)).rejects.toMatchObject({ reason: 'TARGET_EXISTS', details: { path: 'b.txt' } })
     await expect(compileProjectChange({ action: 'apply', steps: [{ tool: 'edit', files: [{ path: 'a.txt', edits: [{ op: 'replace', range: 1, text: 'bad' }] }] }] }, resolver)).rejects.toMatchObject({ reason: 'TARGET_NOT_FOUND' })
     await expect(compileProjectFile({ actions: [{ op: 'overwrite', fileRef: 'a.txt', text: 'new' }, { op: 'delete', fileRef: 'a.txt' }] }, resolver)).rejects.toMatchObject({ reason: 'BASE_REVISION_MISMATCH' })
   })

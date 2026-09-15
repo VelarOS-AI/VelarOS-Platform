@@ -60,7 +60,7 @@
     },
     "packages/agent": {
       "name": "@velaros-ai/agent",
-      "version": "0.6.28",
+      "version": "0.6.29",
       "dependencies": {
         "@modelcontextprotocol/sdk": "^1.29.0",
         "@types/json-schema": "7.0.15",
@@ -286,7 +286,7 @@
     },
     "packages/project": {
       "name": "@velaros-ai/project",
-      "version": "2.1.0",
+      "version": "2.2.0",
       "dependencies": {
         "@velaros-ai/core": "workspace:*",
         "@velaros-ai/kernel": "workspace:*",
@@ -344,7 +344,7 @@
     },
     "packages/ui": {
       "name": "@velaros-ai/ui",
-      "version": "0.2.53",
+      "version": "0.2.54",
       "dependencies": {
         "@phosphor-icons/react": "^2.1.10",
         "@radix-ui/react-dialog": "^1.1.15",

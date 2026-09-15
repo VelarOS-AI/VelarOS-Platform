@@ -37,11 +37,32 @@ function legacyWindow(value: RecordValue): RecordValue {
   return result
 }
 
+/**
+ * 内核给的行号元数据描述裁剪前的窗口；裁剪后按实际显示的末尾重算（口径同内核读取），
+ * 与 continuation 指向同一续读点。只更新窗口里原本就有的字段。
+ */
+function withReadCursor(value: RecordValue, line: number, column: number): RecordValue {
+  const result: RecordValue = { ...value }
+  if (isPlainObject(value.range)) {
+    const range: RecordValue = { ...value.range, endLine: column > 1 ? line : line - 1 }
+    if (column > 1) range.endColumn = column
+    else delete range.endColumn
+    result.range = range
+  }
+  if (Object.hasOwn(value, 'nextStartLine')) {
+    if (column === 1) result.nextStartLine = line
+    else delete result.nextStartLine
+  }
+  if (Object.hasOwn(value, 'remainingLines') && isNumber(value.totalLines))
+    result.remainingLines = Math.max(0, value.totalLines - line + (column > 1 ? 1 : 0))
+  return result
+}
+
 function nextPage(value: RecordValue, line: number, column = 1): RecordValue {
   const prior = isPlainObject(value.continuation) ? value.continuation : {}
   const priorRange = isPlainObject(prior.range) ? prior.range : {}
   return {
-    ...value, truncated: true, hasMore: true,
+    ...withReadCursor(value, line, column), truncated: true, hasMore: true,
     continuation: {
       path: value.path,
       range: { ...priorRange, startLine: line, startColumn: column },

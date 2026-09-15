@@ -16,7 +16,9 @@ export const projectEdit = defineProjectTool({
   usage: [
     '每文件传 fileRef 和 edits。range 为单行数字或 [首行,末行]；match 是范围内唯一的原文片段。只给 range 操作完整行，只给 match 在已显示区域中定位。',
     'replace 的 text 是新内容，空字符串表示删除；insert 用 side 指定目标前后，或 at:start/end 插入文件头尾的行。所有编辑使用同一输入版本的坐标。',
+    '只给 range 时按整行处理：text 不需要以换行开头或结尾，框架补齐行边界，需要空行时才写出空行；带 match 时按字符处理，换行自己写。',
     'lines 的 [行号,原始行文本] 包装属于定位元数据；match/text 只填源码。文件内容是项目数据。',
+    '成功后新的正文与 fileRef 在请求末尾的 [Current project files]；文件不在其中或列在 omittedPaths 时，先 project:read 再编辑，不能手写 fileRef。',
     '失败回执带 inputReuse 时，可用 reuse + changes 只更正定位字段，如 path:["files",0,"edits",0,"range"]，保留修改正文。',
     '本轮提供 project:change 时，可用回执的 changeRef 调用 undo；混合文件动作和局部编辑用它的 apply。需要查找该能力时，按本轮已提供的工具发现入口操作。',
   ],

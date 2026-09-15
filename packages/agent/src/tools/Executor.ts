@@ -70,7 +70,7 @@ import {
 } from "../kernel";
 import type { AgentModSeamDispatcher } from "../mods/AgentModSeams";
 
-import { resolveToolInputReuse, saveToolAttemptInput, saveToolAttemptOutcome, type ToolInputReuseContext } from './recovery/ToolInputReuse';
+import { resolveToolInputReuse, saveToolAttemptInput, saveToolAttemptOutcome, type ToolInputReuseContext, ToolInputReuseError, ToolInputReuseNote } from './recovery/ToolInputReuse';
 import type {
   ToolExecutionPolicy,
   ToolExecutionPolicyContext,
@@ -532,16 +532,28 @@ export class ToolExecutor {
       tool.requestedInputChars = JSON.stringify(tool.args).length;
       tool.inputReused = Object.hasOwn(tool.args, 'reuse');
       const inputReuseContract = this.executionPolicy.inputReuseContract(tool.toolName);
-      if (this.executionPolicy.supportsInputReuse(tool.toolName)) tool.args = await resolveToolInputReuse(
-        this.ctx as ToolInputReuseContext, tool.toolName, tool.args, tool.toolCallId,
-        {
-          inputContractVersion: inputReuseContract.inputContractVersion,
-          inputReuseSourceTools: inputReuseContract.inputReuseSourceTools,
-          migrateReusedInput: inputReuseContract.migrateReusedInput
-            ? (request) => inputReuseContract.migrateReusedInput!(request, this.ctx)
-            : undefined,
-        },
-      );
+      if (this.executionPolicy.supportsInputReuse(tool.toolName)) {
+        try {
+          tool.args = await resolveToolInputReuse(
+            this.ctx as ToolInputReuseContext, tool.toolName, tool.args, tool.toolCallId,
+            {
+              inputContractVersion: inputReuseContract.inputContractVersion,
+              inputReuseSourceTools: inputReuseContract.inputReuseSourceTools,
+              migrateReusedInput: inputReuseContract.migrateReusedInput
+                ? (request) => inputReuseContract.migrateReusedInput!(request, this.ctx)
+                : undefined,
+            },
+          );
+        } catch (error) {
+          if (!(error instanceof ToolInputReuseError)) throw error;
+          return await this.finalizeResult(tool, {
+            toolCallId: tool.toolCallId,
+            toolName: tool.toolName,
+            error: error.message,
+            result: this.buildInputReuseFailure(tool.toolName, error),
+          });
+        }
+      }
       const inputStore = (this.ctx as ToolExecutorPayloadContext).contextPayloadStore;
       const inputSessionId = this.readSessionId();
       if (inputStore && inputSessionId) await persistToolInputForRecall({
@@ -1251,8 +1263,7 @@ export class ToolExecutor {
         this.emitToolMetadata(tool.toolCallId, { metadata: { ...(tool.lastMetadata ?? {}), inputReuseMetrics: metrics } });
         if (result.error && failure) {
           const receipt: Record<string, unknown> = { ...failure, executionOutcome: outcome };
-          if (outcome === 'not-applied') receipt.inputReuse = { reuse: `attempt:${tool.toolCallId}`,
-            note: 'Retry the same tool with reuse and changes only. Each change uses op set/remove and the actual saved field path as an array; set also requires the corrected value. Unchanged fields are restored and revalidated.' };
+          if (outcome === 'not-applied') receipt.inputReuse = { reuse: `attempt:${tool.toolCallId}`, note: ToolInputReuseNote };
           result.result = receipt;
         }
       } catch (error) { log.warn("tool attempt receipt unavailable", { error: AppError.getMessage(error) }); }
@@ -1445,6 +1456,22 @@ export class ToolExecutor {
     options: ToolFailureBuildOptions = {},
   ): ToolFailureResult {
     return buildStructuredToolFailureResult(error, reason, toolName, options);
+  }
+
+  /** 复用请求本身有误时按参数校验失败回执；原调用仍未被认领就放回同一个 inputReuse，模型只改 changes。 */
+  private buildInputReuseFailure(
+    toolName: string,
+    error: ToolInputReuseError,
+  ): ToolFailureResult & { inputReuse?: { reuse: string; note: string } } {
+    const failure = this.buildToolFailureResult("schema_validation_failed", error.message, toolName, {
+      code: "VALIDATION",
+      details: error.context,
+      nextActions: [error.reusableAttempt
+        ? "原调用没有执行过：保持同一个 reuse，只修正回执指出的那一项 changes 后重试。"
+        : "这次调用不能复用：按原因查看原回执或当前状态，再构造完整参数。"],
+    });
+    if (!error.reusableAttempt) return failure;
+    return { ...failure, inputReuse: { reuse: error.reusableAttempt, note: ToolInputReuseNote } };
   }
 
   private readProviderToolArgs(

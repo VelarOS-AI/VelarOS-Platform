@@ -2,7 +2,6 @@ import type { RiskLevel } from "./common.js";
 
 /** provider 运行前就会执行的内核静态安全限制和路径策略。 */
 export interface CorePolicy {
-  allowFullFileRewrite: boolean;
   /** 要求调用方证明自己基于最新已知 revision 编辑。 */
   requireBaseRevision: boolean;
   requireUniqueTarget: boolean;

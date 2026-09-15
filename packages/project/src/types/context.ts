@@ -43,7 +43,6 @@ export interface EvidencePack {
     forbiddenFiles?: string[];
     maxChangedFiles?: number;
     maxChangedLines?: number;
-    allowFullFileRewrite?: boolean;
   };
   freshContext?: {
     /** 目标附近的新鲜有界文本窗口，用来给模型提供依据。 */

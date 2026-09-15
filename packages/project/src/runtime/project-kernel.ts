@@ -105,6 +105,7 @@ import type {
   ApplyEditInput,
   ApplyResult,
   EditIntent,
+  PreparedPatch,
   PreparedTransaction,
   PrepareEditInput,
   RollbackInput,
@@ -144,7 +145,7 @@ import {
 } from '../transactions/patch-ownership.js'
 import { type ApplyRestoreState } from '../transactions/recovery-plan.js'
 import { TransactionCoordinator } from '../transactions/transaction-coordinator.js'
-import { revisionMismatch, validationFailed } from '../transactions/transaction-errors.js'
+import { rethrowNotApplied, revisionMismatch, validationFailed, withNotAppliedOutcome } from '../transactions/transaction-errors.js'
 import {
   isCreatePatch,
   isDeletePatch,
@@ -840,7 +841,8 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
     return this.runTransactionCommand(input.transactionId, () => this.applyEditSerialized(input))
   }
 
-  private async applyEditSerialized(input: ApplyEditInput): Promise<ApplyResult> {
+  /** apply 写盘前的检查：事务状态、校验、写权限、审批，最后加锁。任何一步失败时磁盘都还没被改动。 */
+  private async beginApplyCommand(input: ApplyEditInput) {
     await this.hooks.emit('BeforeApplyEdit', this, input)
     const tx = this.transactionRepository.get(input.transactionId)
     if (!tx) throw new ProjectError('INVALID_INPUT', `未知事务：${input.transactionId}`)
@@ -854,6 +856,12 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
     const authorizedChangedFiles = await this.authorizePaths(tx.changedFiles, 'write', '写入')
     await this.decide('apply_edit', toOptional(authorizedChangedFiles), input, tx.risk)
     const lock = await this.locks.lock(tx.changedFiles, tx.transactionId)
+    return { tx, isRestoringRolledBackTransaction, execution, lock }
+  }
+
+  private async applyEditSerialized(input: ApplyEditInput): Promise<ApplyResult> {
+    const { tx, isRestoringRolledBackTransaction, execution, lock } =
+      await this.beginApplyCommand(input).catch(rethrowNotApplied)
     try {
       const oldRevisions: Record<string, string> = {}
       const newRevisions: Record<string, string> = {}
@@ -945,7 +953,7 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
       } catch (error) {
         this.transactionRepository.set(tx.transactionId, transactionBeforePreflight)
         this.transactionRecovery.restoreBytePlans(bytesBeforePreflight)
-        throw error
+        throw withNotAppliedOutcome(error)
       }
       const writtenOrder: string[] = []
 
@@ -1101,72 +1109,83 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
     return this.runTransactionCommand(input.transactionId, () => this.rollbackSerialized(input))
   }
 
-  private async rollbackSerialized(input: RollbackInput): Promise<RollbackResult> {
+  /** rollback 写盘前的检查：事务状态与加锁。失败时磁盘都还没被改动。 */
+  private async beginRollbackCommand(input: RollbackInput) {
     await this.hooks.emit('BeforeRollback', this, input)
     const tx = this.transactionRepository.get(input.transactionId)
     if (!tx) throw new ProjectError('INVALID_INPUT', `未知事务：${input.transactionId}`)
     const execution = this.transactionStateMachine.beginRollback(tx)
     const lock = await this.locks.lock(tx.changedFiles, `rollback:${tx.transactionId}`)
+    return { tx, execution, lock }
+  }
+
+  /** 回滚写盘前的预检：每个文件仍是 apply 后的状态、每个补丁都能还原；通过后捕获回滚前状态。 */
+  private async prepareRollbackWrites(tx: StoredTransaction, reversed: readonly PreparedPatch[]) {
+    const appliedRevisions =
+      this.transactionProjectionRepository.get(tx.transactionId)?.revisions ??
+      this.changeFeed.get(tx.transactionId)?.revisions ??
+      []
+    for (const pathValue of tx.changedFiles) {
+      const expectedRevision = appliedRevisions.find(
+        (revision) => revision.path === pathValue,
+      )?.after
+      if (!expectedRevision) {
+        throw new ProjectError(
+          'CONFLICT_WITH_EXTERNAL_EDIT',
+          `无法安全回滚事务 ${tx.transactionId}：缺少 apply 后 revision（${pathValue}）`,
+          { transactionId: tx.transactionId, path: pathValue },
+          '请重新读取冲突文件并人工确认恢复内容；不要强制覆盖当前工作区。',
+        )
+      }
+      const current = await this.store.snapshot(pathValue, true, { skipFileFilter: true })
+      const finalPatch = [...tx.patches]
+        .reverse()
+        .find((patchValue) => patchValue.path === pathValue)
+      const expectedContent =
+        finalPatch && !isDeletePatch(finalPatch) ? finalPatch.newContent : undefined
+      if (finalPatch) await this.transactionRecovery.assertPatchBytes(tx, finalPatch, 'rollback')
+      const matchesAppliedState =
+        expectedRevision === 'deleted'
+          ? !current.exists
+          : current.exists &&
+            (isString(expectedContent)
+              ? current.content === expectedContent
+              : current.revision === expectedRevision)
+      if (!matchesAppliedState) {
+        throw new ProjectError(
+          'CONFLICT_WITH_EXTERNAL_EDIT',
+          `事务应用后文件已被外部修改，拒绝回滚：${pathValue}`,
+          {
+            transactionId: tx.transactionId,
+            path: pathValue,
+            expectedRevision,
+            actualRevision: current.exists ? current.revision : 'deleted',
+          },
+          '请重新读取冲突文件并人工合并；不要重试会覆盖当前内容的回滚。',
+        )
+      }
+    }
+    // 预检：每个补丁都必须可撤销（`canRevertToOriginal`：写入前不存在的新建，或带可还原的旧正文，
+    // 含覆盖既有文件的 create_file）。否则用 "" 写盘会把文件截断为空（静默丢数据），宁可整体失败也不半改。
+    for (const patch of reversed) {
+      if (!canRevertToOriginal(patch)) {
+        throw new ProjectError(
+          'PATCH_APPLY_ERROR',
+          `无法回滚事务 ${tx.transactionId}：补丁缺少可还原的旧正文（${patch.path}）`,
+          { path: patch.path, op: patch.metadata?.op },
+        )
+      }
+    }
+    // 捕获回滚前状态；任一步写盘失败时按逆序还原，保持 rollback 自身的原子性
+    //（与 applyEdit 一致，并用 skipFileFilter 还原 apply 时绕过 fileFilter 的文件）。
+    return this.transactionRecovery.captureApplyRestoreState(tx.changedFiles)
+  }
+
+  private async rollbackSerialized(input: RollbackInput): Promise<RollbackResult> {
+    const { tx, execution, lock } = await this.beginRollbackCommand(input).catch(rethrowNotApplied)
     try {
       const reversed = [...tx.patches].reverse()
-      const appliedRevisions =
-        this.transactionProjectionRepository.get(tx.transactionId)?.revisions ??
-        this.changeFeed.get(tx.transactionId)?.revisions ??
-        []
-      for (const pathValue of tx.changedFiles) {
-        const expectedRevision = appliedRevisions.find(
-          (revision) => revision.path === pathValue,
-        )?.after
-        if (!expectedRevision) {
-          throw new ProjectError(
-            'CONFLICT_WITH_EXTERNAL_EDIT',
-            `无法安全回滚事务 ${tx.transactionId}：缺少 apply 后 revision（${pathValue}）`,
-            { transactionId: tx.transactionId, path: pathValue },
-            '请重新读取冲突文件并人工确认恢复内容；不要强制覆盖当前工作区。',
-          )
-        }
-        const current = await this.store.snapshot(pathValue, true, { skipFileFilter: true })
-        const finalPatch = [...tx.patches]
-          .reverse()
-          .find((patchValue) => patchValue.path === pathValue)
-        const expectedContent =
-          finalPatch && !isDeletePatch(finalPatch) ? finalPatch.newContent : undefined
-        if (finalPatch) await this.transactionRecovery.assertPatchBytes(tx, finalPatch, 'rollback')
-        const matchesAppliedState =
-          expectedRevision === 'deleted'
-            ? !current.exists
-            : current.exists &&
-              (isString(expectedContent)
-                ? current.content === expectedContent
-                : current.revision === expectedRevision)
-        if (!matchesAppliedState) {
-          throw new ProjectError(
-            'CONFLICT_WITH_EXTERNAL_EDIT',
-            `事务应用后文件已被外部修改，拒绝回滚：${pathValue}`,
-            {
-              transactionId: tx.transactionId,
-              path: pathValue,
-              expectedRevision,
-              actualRevision: current.exists ? current.revision : 'deleted',
-            },
-            '请重新读取冲突文件并人工合并；不要重试会覆盖当前内容的回滚。',
-          )
-        }
-      }
-      // 预检：每个补丁都必须可撤销（`canRevertToOriginal`：写入前不存在的新建，或带可还原的旧正文，
-      // 含覆盖既有文件的 create_file）。否则用 "" 写盘会把文件截断为空（静默丢数据），宁可整体失败也不半改。
-      for (const patch of reversed) {
-        if (!canRevertToOriginal(patch)) {
-          throw new ProjectError(
-            'PATCH_APPLY_ERROR',
-            `无法回滚事务 ${tx.transactionId}：补丁缺少可还原的旧正文（${patch.path}）`,
-            { path: patch.path, op: patch.metadata?.op },
-          )
-        }
-      }
-      // 捕获回滚前状态；任一步写盘失败时按逆序还原，保持 rollback 自身的原子性
-      //（与 applyEdit 一致，并用 skipFileFilter 还原 apply 时绕过 fileFilter 的文件）。
-      const restoreByPath = await this.transactionRecovery.captureApplyRestoreState(tx.changedFiles)
+      const restoreByPath = await this.prepareRollbackWrites(tx, reversed).catch(rethrowNotApplied)
       const pending = this.beginDurableOperation(tx, 'rollback', restoreByPath)
       const writtenOrder: string[] = []
       const rolledBackRevisions: Record<string, string> = {}

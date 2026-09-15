@@ -2,10 +2,12 @@ import { describe, expect, test } from 'bun:test'
 import { z } from 'zod'
 
 import { InMemoryContextPayloadStore } from '../src/agent/context/ContextPayloadStore'
+import { schemaToInputSchema } from '../src/tool-contract/schema-bundle'
 import {
   resolveToolInputReuse,
   saveToolAttemptInput,
   saveToolAttemptOutcome,
+  ToolInputReuseError,
   withToolInputReuse,
 } from '../src/tools/recovery/ToolInputReuse'
 
@@ -117,7 +119,72 @@ test('one failed attempt admits only one execution, including concurrent retries
   expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1)
   await expect(
     resolveToolInputReuse(context(ctx.contextPayloadStore), toolName, retry, 'after-restart')
-  ).rejects.toThrow('already has a retry')
+  ).rejects.toThrow('已经被复用过一次')
+})
+
+describe('malformed reuse requests', () => {
+  async function failedAttempt() {
+    const ctx = context()
+    await saveToolAttemptInput(ctx, 'first', toolName, input)
+    await saveToolAttemptOutcome(ctx, 'first', 'not-applied')
+    return ctx
+  }
+  async function rejection(promise: Promise<unknown>): Promise<ToolInputReuseError> {
+    const error = await promise.then(() => undefined, (reason: unknown) => reason)
+    expect(error).toBeInstanceOf(ToolInputReuseError)
+    return error as ToolInputReuseError
+  }
+
+  test('keep the source attempt reusable and name the broken change segment', async () => {
+    const ctx = await failedAttempt()
+    const typo = await rejection(resolveToolInputReuse(ctx, toolName, {
+      reuse: 'attempt:first', changes: [{ op: 'set', path: ['edit', 0, 'oldText'], value: 'right' }],
+    }, 'typo'))
+    expect(typo.reusableAttempt).toBe('attempt:first')
+    expect(typo.message).toContain('changes[0].path')
+    expect(typo.message).toContain('"edit"')
+    expect(typo.context).toMatchObject({ changeIndex: 0, segmentIndex: 0, availableKeys: ['edits'] })
+
+    const index = await rejection(resolveToolInputReuse(ctx, toolName, {
+      reuse: 'attempt:first', changes: [{ op: 'set', path: ['edits', 3, 'oldText'], value: 'right' }],
+    }, 'index'))
+    expect(index.message).toContain('edits 是长度 1 的数组')
+
+    const mixed = await rejection(resolveToolInputReuse(ctx, toolName, { ...retry, edits: [] }, 'mixed'))
+    expect(mixed.reusableAttempt).toBe('attempt:first')
+    expect(mixed.message).toContain('多了 edits')
+
+    const missingValue = await rejection(resolveToolInputReuse(ctx, toolName, {
+      reuse: 'attempt:first', changes: [{ op: 'set', path: ['edits', 0, 'oldText'] }],
+    }, 'value'))
+    expect(missingValue.context).toMatchObject({ schemaIssues: [{ path: 'changes.0.value' }] })
+
+    // 以上请求都没有认领原调用，修正后的复用照常执行。
+    expect(await resolveToolInputReuse(ctx, toolName, retry, 'fixed')).toEqual({ edits: [{ ...input.edits[0], oldText: 'right' }] })
+  })
+
+  test('references that cannot be reused carry no reusable attempt', async () => {
+    const ctx = await failedAttempt()
+    const invented = await rejection(resolveToolInputReuse(ctx, toolName, { reuse: 'call_1', changes: retry.changes }))
+    expect(invented.reusableAttempt).toBeUndefined()
+    await resolveToolInputReuse(ctx, toolName, retry, 'second')
+    const claimed = await rejection(resolveToolInputReuse(ctx, toolName, retry, 'third'))
+    expect(claimed.reusableAttempt).toBeUndefined()
+    expect(claimed.context).toMatchObject({ retry: 'second' })
+  })
+})
+
+test('the provider schema keeps a strict root and says which fields a new call needs', () => {
+  const wrapped = withToolInputReuse(z.strictObject({
+    files: z.array(z.strictObject({ range: z.union([z.number(), z.tuple([z.number(), z.number()])]) })),
+    dryRun: z.boolean().optional(),
+  }))
+  const schema = schemaToInputSchema(wrapped) as any
+  expect(schema.additionalProperties).toBe(false)
+  expect(schema.properties.files.description).toContain('新调用必填')
+  expect(schema.properties.dryRun.description).toBeUndefined()
+  expect(schema.properties.files.items.properties.range.anyOf[1]).toMatchObject({ minItems: 2, maxItems: 2 })
+  expect(wrapped.safeParse({ files: [], extra: true }).error?.issues).toEqual([expect.objectContaining({ code: 'unrecognized_keys', keys: ['extra'] })])
 })
 
 describe('trusted saved input contract migration', () => {
@@ -139,7 +206,7 @@ describe('trusted saved input contract migration', () => {
       sourceToolName: toolName, sourceCallId: 'first', toolCallId: 'second',
     })
     expect(input.edits[0]!.oldText).toBe('wrong')
-    await expect(resolveToolInputReuse(ctx, toolName, retry, 'duplicate')).rejects.toThrow('already has a retry')
+    await expect(resolveToolInputReuse(ctx, toolName, retry, 'duplicate')).rejects.toThrow('已经被复用过一次')
   })
 
   test('migration failure preserves the source attempt so the next retry only supplies missing fields', async () => {
@@ -204,7 +271,7 @@ describe('trusted saved input contract migration', () => {
       const ctx = context()
       await saveToolAttemptInput(ctx, 'first', toolName, input)
       await saveToolAttemptOutcome(ctx, 'first', outcome)
-      await expect(resolveToolInputReuse(ctx, toolName, retry, 'retry', options)).rejects.toThrow('may already have applied')
+      await expect(resolveToolInputReuse(ctx, toolName, retry, 'retry', options)).rejects.toThrow('可能已经生效')
     }
     const ctx = { sessionId: 's', resourceId: 'resource:one', contextPayloadStore: new InMemoryContextPayloadStore() }
     await saveToolAttemptInput(ctx, 'first', toolName, input)

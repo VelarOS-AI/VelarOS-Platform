@@ -13,12 +13,12 @@ export type ProjectErrorCode =
   | 'BASE_REVISION_MISMATCH'
   | 'TARGET_NOT_FOUND'
   | 'AMBIGUOUS_TARGET'
+  | 'TARGET_EXISTS'
   | 'LOW_CONFIDENCE_TARGET'
   | 'ANCHOR_MISMATCH'
   | 'PATCH_PARSE_ERROR'
   | 'PATCH_APPLY_ERROR'
   | 'SCOPE_VIOLATION'
-  | 'WHOLE_FILE_REWRITE_FORBIDDEN'
   | 'PROTECTED_FILE'
   | 'GENERATED_FILE'
   | 'VALIDATION_FAILED'
@@ -29,6 +29,16 @@ export type ProjectErrorCode =
   | 'TRANSACTION_RECOVERY_CONFLICT'
   | 'NOT_SUPPORTED'
   | 'INVALID_INPUT'
+
+/**
+ * 版本过期时的下一步。内核同时服务领域 SDK 与模型工具，只说「重读当前内容」，
+ * 不点名 snapshot.revision、fileRef 这类某一侧协议的字段。
+ */
+export const RevisionMismatchSuggestedNextAction = '文件在读取后已被修改：请重新读取当前内容，再基于它修改。'
+
+/** 命中 policy.generatedFiles 时的下一步：改生成器的输入再重新生成，而不是手改产物。 */
+export const GeneratedFileSuggestedNextAction =
+  '该路径匹配项目策略 generatedFiles：修改生成器的输入或配置，再用 project:run 执行生成命令；确需手工维护，请调整项目策略。'
 
 /** 带结构化详情和 agent 恢复建议的领域错误。 */
 export class ProjectError extends Error {

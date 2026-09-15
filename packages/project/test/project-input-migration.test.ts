@@ -126,7 +126,7 @@ test('strict old contract and completed history remain guarded during migration'
   await saveToolAttemptOutcome(context, 'completed', 'completed')
   await expect(resolveToolInputReuse(context, 'project:edit', { reuse: 'attempt:completed', changes: [{ op: 'set', path: ['edits'], value: [] }] }, 'invalid', {
     inputContractVersion: 2, migrateReusedInput: () => { throw new Error('must not call migration') },
-  })).rejects.toThrow('may already have applied')
+  })).rejects.toThrow('可能已经生效')
   await expect(resolveToolInputReuse({ ...context, project: { getRootPath: () => '/other-project' } }, 'project:edit', { reuse: 'attempt:old', changes: refCorrection(file.fileRef) }, 'invalid', {
     inputContractVersion: 2, migrateReusedInput: () => { throw new Error('must not call migration') },
   })).rejects.toThrow('different tool or resource scope')

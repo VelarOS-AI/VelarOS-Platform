@@ -2,7 +2,7 @@ import { isNull, isNumber, isPresent, isString, isUndefined, numberOrNull, toOpt
 
 import { replaceSnapshotLineRanges } from '../edits/strategies/line-edit.js'
 import { createTextPatch } from '../edits/strategies/prepared-patch.js'
-import { ProjectError } from '../errors.js'
+import { GeneratedFileSuggestedNextAction, ProjectError } from '../errors.js'
 import type { FileAdapter } from '../types/adapter.js'
 import type { RiskLevel } from '../types/common.js'
 import type { ReplaceLinesOperation } from '../types/edit.js'
@@ -493,6 +493,9 @@ export class TransactionPlanner {
     for (const file of changedFiles) {
       if (matchesAny(file, this.dependencies.policy.protectedFiles))
         throw new ProjectError('PROTECTED_FILE', `受保护文件被修改：${file}`)
+      if (matchesAny(file, this.dependencies.policy.generatedFiles))
+        throw new ProjectError('GENERATED_FILE', `生成文件不能手工修改：${file}`, { path: file },
+          GeneratedFileSuggestedNextAction)
     }
   }
 

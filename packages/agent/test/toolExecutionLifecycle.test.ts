@@ -275,10 +275,7 @@ describe('tool execution lifecycle', () => {
     expect(JSON.parse(history[0].content[0].output.value)).toMatchObject({
       error: 'schema_validation_failed',
       details: {
-        schemaIssues: expect.arrayContaining([{
-          path: 'path',
-          message: expect.stringContaining('Union option 1:'),
-        }]),
+        schemaIssues: [{ path: 'path', message: expect.stringContaining('expected string') }],
       },
     })
   })
@@ -1066,6 +1063,35 @@ test('failed large input retries by field amendment through current schema and p
   third.enqueue('duplicate', 'probe:write', { reuse: 'attempt:fixed', changes: [{ op: 'set', path: ['line'], value: 2 }] }, false)
   expect((await third.collectAll())[0]!.error).toBeDefined()
   expect(calls).toHaveLength(1)
+})
+
+test('a malformed reuse request fails validation and hands the untouched attempt back', async () => {
+  const calls: unknown[] = []
+  const schema = z.strictObject({ content: z.string(), line: z.number().int().positive() })
+  const h = harness((_ctx, input) => { calls.push(input); return { changed: true } }, { schema: withToolInputReuse(schema) })
+  Object.assign(h.context, { sessionId: 'reuse-request', contextPayloadStore: new InMemoryContextPayloadStore() })
+  const first = new ToolExecutor(h.context, h.events, h.policy)
+  first.enqueue('bad', 'probe:write', { content: 'body', line: -1 }, false)
+  await first.collectAll()
+
+  const typo = new ToolExecutor(h.context, h.events, h.policy)
+  typo.enqueue('typo', 'probe:write', { reuse: 'attempt:bad', changes: [{ op: 'set', path: ['lines'], value: 1 }], content: 'body' }, false)
+  const history: any[] = []
+  await new AgentTurnHistoryHelper().appendToolResultsToHistory(history, typo)
+  const failure = JSON.parse(history[0].content[0].output.value)
+  expect(failure).toMatchObject({
+    error: 'schema_validation_failed',
+    code: 'VALIDATION',
+    details: { reuse: 'attempt:bad' },
+    inputReuse: { reuse: 'attempt:bad' },
+  })
+  expect(failure.reason).toContain('多了 content')
+  expect(calls).toHaveLength(0)
+
+  const fixed = new ToolExecutor(h.context, h.events, h.policy)
+  fixed.enqueue('fixed', 'probe:write', { reuse: 'attempt:bad', changes: [{ op: 'set', path: ['line'], value: 1 }] }, false)
+  expect((await fixed.collectAll())[0]!.error).toBeUndefined()
+  expect(calls).toEqual([{ content: 'body', line: 1 }])
 })
 
 test('Executor migrates trusted failed input before the current schema and persists the current contract', async () => {

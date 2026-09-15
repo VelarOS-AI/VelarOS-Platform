@@ -5,7 +5,7 @@ import { clampedInt } from '../src/tool-contract'
 import { ToolArgsSchemaValidator } from '../src/tools/ToolArgsSchemaValidator'
 
 describe('ToolArgsSchemaValidator effective arguments', () => {
-  test('union failures expose concrete nested field issues instead of only Invalid input', () => {
+  test('union failures report only the branch selected by the supplied discriminator', () => {
     const validator = new ToolArgsSchemaValidator()
     const schema = z.union([
       z.object({ action: z.literal('read'), path: z.string() }),
@@ -14,13 +14,11 @@ describe('ToolArgsSchemaValidator effective arguments', () => {
     const result = validator.validateWithNormalization(schema, { action: 'read', path: 3 })
     expect(result.success).toBe(false)
     if (result.success) return
-    expect(result.issues).toContainEqual({ path: 'path', message: expect.stringContaining('string') })
-    expect(result.issues).toHaveLength(3)
-    expect(result.issues.every((issue) => issue.message.startsWith('Union option '))).toBe(true)
+    expect(result.issues).toEqual([{ path: 'path', message: expect.stringContaining('expected string') }])
     expect(result.error.issues[0]?.code).toBe('invalid_union')
   })
 
-  test('nested union alternatives preserve outer field paths and do not coerce across branches', () => {
+  test('nested union alternatives keep outer field paths and do not coerce across branches', () => {
     const validator = new ToolArgsSchemaValidator()
     const schema = z.object({
       request: z.union([
@@ -33,15 +31,39 @@ describe('ToolArgsSchemaValidator effective arguments', () => {
 
     expect(result.success).toBe(false)
     if (result.success) return
-    expect(result.issues).toContainEqual({
-      path: 'request.limit',
-      message: expect.stringContaining('Union option 1:'),
-    })
-    expect(result.issues).toContainEqual({
-      path: 'request.action',
-      message: expect.stringContaining('Union option 2:'),
-    })
+    expect(result.issues).toEqual([{ path: 'request.limit', message: expect.stringContaining('expected number') }])
     expect(args.request.limit).toBe('5')
+  })
+
+  test('a missing variant field is not mistaken for a discriminator', () => {
+    const validator = new ToolArgsSchemaValidator()
+    const Line = z.number().int().positive()
+    const Range = z.union([Line, z.tuple([Line, Line])])
+    const edit = z.union([
+      z.strictObject({ op: z.literal('replace'), range: Range.optional(), text: z.string() }),
+      z.strictObject({ op: z.literal('insert'), range: Range.optional(), side: z.enum(['before', 'after']), text: z.string() }),
+      z.strictObject({ op: z.literal('insert'), at: z.enum(['start', 'end']), text: z.string() }),
+    ])
+    const schema = z.object({ edits: z.array(edit) })
+
+    const missingSide = validator.validateWithNormalization(schema, { edits: [{ op: 'insert', range: 2, text: 'x' }] })
+    expect(missingSide.success).toBe(false)
+    if (!missingSide.success) expect(missingSide.issues).toEqual([{ path: 'edits.0.side', message: expect.stringContaining('"before"|"after"') }])
+
+    const wrongRange = validator.validateWithNormalization(schema, { edits: [{ op: 'replace', range: [1, 2, 3], text: 'x' }] })
+    expect(wrongRange.success).toBe(false)
+    if (!wrongRange.success) {
+      expect(wrongRange.issues.every((issue) => issue.path.startsWith('edits.0.range'))).toBe(true)
+      expect(wrongRange.issues.some((issue) => /\bop\b/u.test(issue.message))).toBe(false)
+    }
+
+    const unknownOp = validator.validateWithNormalization(schema, { edits: [{ op: 'delete', range: 2, text: '' }] })
+    expect(unknownOp.success).toBe(false)
+    if (!unknownOp.success) expect(unknownOp.issues).toEqual([{ path: 'edits.0.op', message: 'Invalid option: expected one of "replace"|"insert"' }])
+
+    const scalarRange = validator.validateWithNormalization(schema, { edits: [{ op: 'replace', range: '2', text: 'x' }] })
+    expect(scalarRange.success).toBe(false)
+    if (!scalarRange.success) expect(scalarRange.issues).toEqual([{ path: 'edits.0.range', message: 'Invalid input: expected number | tuple, received string' }])
   })
 
   test('bounds feedback for deeply nested external union schemas', () => {

@@ -24,7 +24,7 @@ import * as path from 'node:path'
 
 import { isNull, isObject, isPresent, isUndefined, optionalWhen, toOptional } from '@velaros-ai/core'
 
-import { ProjectError } from '../errors.js'
+import { ProjectError, RevisionMismatchSuggestedNextAction } from '../errors.js'
 import type { ProjectFileAccess } from '../types/file-access.js'
 import type {
   FileListEntry,
@@ -66,9 +66,6 @@ import {
 import { readBoundedProjectBytes } from './private-byte-io.js'
 import { validateReadBounds } from './read-bounds.js'
 import { readProjectTextFile } from './text-stream.js'
-
-const RevisionMismatchSuggestedNextAction =
-  '请重新读取受影响文件，并使用最新 snapshot.revision 重试。'
 
 const StatRecommendedMaxLines = 120
 const StatMaxLineCountBytes = 1024 * 1024

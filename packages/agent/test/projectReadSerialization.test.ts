@@ -66,6 +66,18 @@ describe('Project source model presentation', () => {
     expect(small.continuation.range.startLine).toBe(small.lines.at(-1)[0] + 1)
   })
 
+  test('trimmed pages rewrite the kernel line metadata to the displayed end', () => {
+    const lines = Array.from({ length: 400 }, (_, i) => [i + 101, `line ${i + 101} ${'x'.repeat(80)}`] as [number, string])
+    const raw = { ...window(lines), range: { startLine: 101, endLine: 500 }, totalLines: 600, hasMore: true, nextStartLine: 501, remainingLines: 100 }
+    const result = fitProjectReadsForModel(raw, 12_000) as any
+    const last = result.lines.at(-1)[0]
+    expect(last).toBeLessThan(500)
+    expect(result.range).toEqual({ startLine: 101, endLine: last })
+    expect(result.nextStartLine).toBe(last + 1)
+    expect(result.continuation.range).toMatchObject({ startLine: last + 1, startColumn: 1 })
+    expect(result.remainingLines).toBe(600 - (last + 1))
+  })
+
   test('fragment continuation starts at the original noninitial column', () => {
     const raw = { ...window([]), fragments: [{ line: 42, columns: [51, 2051], text: '🙂'.repeat(1000) }] }
     const result = fitProjectReadsForModel(raw, 1000) as any

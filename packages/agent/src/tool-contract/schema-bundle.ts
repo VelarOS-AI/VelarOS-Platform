@@ -43,8 +43,19 @@ const BundleSharedSchemaRefPrefix = '#/$defs/'
  */
 export function schemaToInputSchema(schema: z.ZodType): Record<string, unknown> {
   return stripSchemaMetadata(
-    z.toJSONSchema(schema, { io: 'input' })
+    z.toJSONSchema(schema, { io: 'input', override: boundTupleLength })
   ) as Record<string, unknown>
+}
+
+/**
+ * Zod 的元组只输出 prefixItems，没有长度界限：provider 看到的 [行号] 与 [首行,末行] 都能多塞元素。
+ * 固定元组补上 minItems（到最后一个必填元素）与 maxItems，让 schema 与运行时一样拒绝多余元素。
+ */
+function boundTupleLength({ zodSchema, jsonSchema }: { zodSchema: z.core.$ZodTypes; jsonSchema: z.core.JSONSchema.BaseSchema }): void {
+  const def = zodSchema._zod.def
+  if (def.type !== 'tuple' || def.rest) return
+  jsonSchema.minItems = def.items.findLastIndex((item) => item._zod.optin !== 'optional') + 1
+  jsonSchema.maxItems = def.items.length
 }
 
 /** 稳定并收紧即将发送给 provider 的工具 JSON schema。 */
@@ -75,6 +86,7 @@ export function createToolSchemaBundle(
 
   const schemas = z.toJSONSchema(registry, {
     io: 'input',
+    override: boundTupleLength,
     reused: 'ref',
     uri: (schemaId) => schemaId === sharedSchemaId ? sharedSchemaExternalUri : schemaId,
   }).schemas

@@ -99,9 +99,13 @@ async function put(context: ProjectReferenceContext, value: RefRecord, prefix: s
   return `${prefix}${hash}`
 }
 
+/** 引用不可用时的下一步：模型只能原样复制框架签发的引用，缺引用就去读，不能自己拼。 */
+const ReadForReferenceNextAction =
+  '引用只能原样复制 [Current project files] 或读取结果里的值；当前视图没有该文件时，先用 project:read 读取目标范围获取 fileRef。失败回执带 inputReuse 时，用 reuse + changes 只替换引用字段，正文保持原样。'
+
 async function get(context: ProjectReferenceContext, ref: string): Promise<RefRecord> {
   if (!/^(?:source|view|read-page):[a-f0-9]{64}$/.test(ref))
-    throw new ProjectError('INVALID_INPUT', 'Use a fileRef or continuation returned by project:read.')
+    throw new ProjectError('INVALID_INPUT', `引用 ${JSON.stringify(ref.slice(0, 80))} 不是框架签发的值（view:… / read-page:… 加 64 位十六进制），不能手写或改写。`, { ref: ref.slice(0, 80) }, ReadForReferenceNextAction)
   const hash = ref.slice(ref.indexOf(':') + 1)
   let value: RefRecord | undefined
   if (context.contextPayloadStore && context.sessionId) {
@@ -110,9 +114,9 @@ async function get(context: ProjectReferenceContext, ref: string): Promise<RefRe
       value = JSON.parse(record.serializedResult) as RefRecord
   } else value = fallbackStores.get(owner(context))?.get(hash)
   if (!value || value.version !== 1 || value.scope !== projectFileRefScope(context))
-    throw new ProjectError('INVALID_INPUT', 'File reference is unavailable in this execution branch; read the file again.')
+    throw new ProjectError('INVALID_INPUT', '该引用不属于当前会话或执行分支（可能来自别的会话，或所在分支已回退）。', { ref }, ReadForReferenceNextAction)
   if (value.kind === 'project-file-source' && value.workspace !== resolve(context.project.getRootPath()))
-    throw new ProjectError('INVALID_INPUT', 'File reference belongs to another workspace.')
+    throw new ProjectError('INVALID_INPUT', '该引用属于另一个工作区。', { ref }, ReadForReferenceNextAction)
   return value
 }
 
@@ -154,26 +158,29 @@ export async function saveProjectFileRef(
 export async function loadProjectFileView(context: ProjectReferenceContext, fileRef: string): Promise<ProjectFileView> {
   const record = await get(context, fileRef)
   if (record.kind !== 'project-file-view' || !fileRef.startsWith('view:'))
-    throw new ProjectError('INVALID_INPUT', 'This is a source candidate, not an editable fileRef. Read the file first.')
+    throw new ProjectError('INVALID_INPUT', '这不是可编辑的 fileRef：编辑只接受当前视图或读取结果里的 view:… 引用。', { ref: fileRef }, ReadForReferenceNextAction)
   const source = await resolveProjectFileSource(context, record.source)
   const kernel = await context.project.kernel()
   if (!kernel.prepareContextSnapshot) throw new ProjectError('INVALID_INPUT', 'Historical snapshot authorization is unavailable.')
   const authorized = await kernel.prepareContextSnapshot({ path: source.path, content: source.content })
   if (authorized.redacted || authorized.content !== source.content)
-    throw new ProjectError('INVALID_INPUT', 'This source reference is restricted by current project policy.')
+    throw new ProjectError('PERMISSION_DENIED', '当前项目策略限制了该引用对应的源码，不能用它编辑。', { path: source.path })
   return { path: source.path, revision: source.revision, contentRevision: source.contentRevision, content: source.content, coverage: structuredClone(record.coverage) }
 }
 
-/** Reads the immutable original, and rechecks actual source content even under metadata revision policies. */
+/**
+ * 读取不可变原文并按正文复核当前文件。正文未变就沿用当前 revision：元数据型 revision 策略下只动 mtime
+ * 不算过期，计划也以当前版本为基准提交；正文变了才按过期拒绝，由编辑恢复链给出新位置候选。
+ */
 export async function resolveProjectFileRef(context: ProjectReferenceContext, fileRef: string): Promise<ProjectFileView> {
   const source = await loadProjectFileView(context, fileRef)
   const kernel = await context.project.kernel()
-  const current = await kernel.read({ path: source.path, baseRevision: source.revision, maxChars: Math.max(source.content.length + 1, 1) })
-  if (current.redacted || current.truncated || current.hasMore || current.content !== source.content)
-    throw new ProjectError('BASE_REVISION_MISMATCH', 'File content changed since this view was displayed.',
+  const current = await kernel.read({ path: source.path, maxChars: Math.max(source.content.length + 1, 1) })
+  if (current.redacted || current.truncated || current.hasMore || current.content !== source.content || !current.snapshot.revision)
+    throw new ProjectError('BASE_REVISION_MISMATCH', `${source.path} 在该 fileRef 显示之后已被修改。`,
       { path: source.path, expected: source.revision, actual: current.snapshot.revision },
-      'Read the current target and confirm a new fileRef; reuse unchanged edit text.')
-  return source
+      '用 project:read 重新读取目标范围获取新 fileRef；失败回执带 inputReuse 时，用 reuse + changes 只替换 fileRef（有 range 的编辑同时确认新行号），正文保持原样。')
+  return { ...source, revision: current.snapshot.revision }
 }
 
 export async function saveProjectReadPage(

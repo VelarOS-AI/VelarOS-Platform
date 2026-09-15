@@ -217,7 +217,6 @@ export interface CustomEditOperation {
 export interface EditConstraints {
   /** prepared transaction 的总补丁大小超过该限制时拒绝。 */
   maxChangedLines?: number;
-  allowFullFileRewrite?: boolean;
   /** 要求选中的文本、锚点或符号匹配指定次数。 */
   expectedMatches?: number;
   onlyModifyTarget?: boolean;

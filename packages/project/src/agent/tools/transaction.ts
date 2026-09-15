@@ -1,15 +1,23 @@
+import { resolve } from 'node:path'
+
 import { isEmpty, isPlainObject, isString, Log, optionalWhen } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
 
 import { ProjectError } from '../../errors'
+import { rethrowNotApplied } from '../../transactions/transaction-errors'
 import type { PrepareEditInput } from '../../types/edit'
 import { presentProjectContextSnapshot, type ProjectSourceWindow } from '../presentation/source-window'
 import { runWithProjectExecutionGate } from '../ProjectExecutionGate'
 import { changedFileContextRanges, committedFileContextSnapshots, registerProjectFileContext } from '../ProjectFileContext'
-import type { ProjectToolContext } from '../Types'
+import type { ProjectAuthorizationDecision, ProjectToolContext } from '../Types'
 
 import { saveProjectReceipt } from './receipts'
 import { projectTransactionHasChanges } from './transaction-result'
+
+/** 宿主或用户拒绝写入：一个文件都没写，按拒绝失败回执；用户改主意后模型可用 inputReuse 原样重提。 */
+export function projectMutationDenied(authorization: ProjectAuthorizationDecision): ProjectError {
+  return new ProjectError('PERMISSION_DENIED', authorization.rejectionMessage ?? authorization.message, { executionOutcome: 'not-applied' },
+    '没有写入任何文件。除非用户明确改变主意，不要自行重试；用户同意后用回执的 inputReuse 原样重提。')
+}
 
 export async function applyProjectEditTransaction(
   input: {
@@ -28,12 +36,7 @@ export async function applyProjectEditTransaction(
     operation: input.operationLabel,
     targetPath: input.targetPath,
   })
-  if (!authorization.approved)
-    return {
-      approved: false,
-      changed: false,
-      message: authorization.rejectionMessage ?? authorization.message,
-    }
+  if (!authorization.approved) throw projectMutationDenied(authorization)
 
   return context.project.runInDirectory(authorization.rootPath, async () =>
     context.project.runWithApproval(() =>
@@ -44,26 +47,12 @@ export async function applyProjectEditTransaction(
         async () => {
           const kernel = await context.project.kernel()
           const fileContext = registerProjectFileContext(context)
-          const notApplied = (error: unknown): never => {
-            if (error instanceof ProjectError)
-              throw new ProjectError(
-                error.reason,
-                error.message,
-                { ...error.details, executionOutcome: 'not-applied' },
-                error.suggestedNextAction
-              )
-            const failure = AppError.from(error)
-            throw new AppError(failure.code, failure.message, error, {
-              ...failure.context,
-              executionOutcome: 'not-applied',
-            })
-          }
           const plan = await Promise.resolve()
             .then(async (): Promise<PrepareEditInput> => input.plan ? input.plan() : {
               operations: input.operations ?? [],
               baseRevisions: input.baseRevisions,
             })
-            .catch(notApplied)
+            .catch(rethrowNotApplied)
           // 计划没有产生任何写入（例如所有文件已是目标编码）时不开事务，直接回执。
           if (isEmpty(plan.operations))
             return {
@@ -73,16 +62,20 @@ export async function applyProjectEditTransaction(
               recode: optionalWhen(isPlainObject, plan.metadata?.recode),
               message: '没有需要写入的文件。',
             }
-          const transaction = await kernel.prepareEdit(plan).catch(notApplied)
+          const transaction = await kernel.prepareEdit(plan).catch(rethrowNotApplied)
           try {
             const applied = await kernel.applyEdit({ transactionId: transaction.transactionId })
             const finalTransaction = kernel.getTransaction(transaction.transactionId) ?? transaction
             let contextRefreshError: string | undefined
             try {
+              const root = resolve(context.project.getRootPath())
+              const previousRanges = Object.fromEntries((fileContext?.currentViews() ?? [])
+                .filter((view) => view.workspaceId === root)
+                .map((view) => [view.path, view.ranges]))
               fileContext?.touch(
                 context.project.getRootPath(),
                 applied.changedFiles,
-                changedFileContextRanges(finalTransaction.patches)
+                changedFileContextRanges(finalTransaction.patches, previousRanges)
               )
               try {
                 if (fileContext && kernel.prepareContextSnapshot) {

@@ -27,6 +27,9 @@ export function scopeValidator(): ProjectValidator {
           if (matchesAny(file, context.policy.protectedFiles)) {
             diagnostics.push({ severity: "error", message: `受保护文件被修改：${file}`, path: file, source: "core.scope" });
           }
+          if (matchesAny(file, context.policy.generatedFiles)) {
+            diagnostics.push({ severity: "error", message: `生成文件不能手工修改：${file}`, path: file, source: "core.scope" });
+          }
         }
       }
       return { ok: isEmpty(diagnostics), diagnostics, checks: [{ id: "core.scope", ok: isEmpty(diagnostics), diagnostics }] };

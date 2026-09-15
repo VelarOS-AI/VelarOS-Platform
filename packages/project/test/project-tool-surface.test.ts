@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
@@ -14,14 +14,15 @@ import { registerProjectFileContext } from '../src/agent/ProjectFileContext'
 import type { ProjectToolContext } from '../src/agent/Types'
 import { resolveProjectFileRef } from '../src/context/file-refs'
 import { createProjectKernel } from '../src/index'
+import type { ProjectProviders } from '../src/types/provider'
 
 const execute = promisify(execFile)
 let root = ''
 beforeEach(async () => { root = await mkdtemp(join(tmpdir(), 'project-tool-surface-')) })
 afterEach(async () => { await rm(root, { recursive: true, force: true }) })
 
-async function fixture(options: { approved?: boolean; readDeny?: string[] } = {}) {
-  const kernel = await createProjectKernel({ root, corePolicy: { readDeny: options.readDeny ?? [] } })
+async function fixture(options: { approved?: boolean; readDeny?: string[]; providers?: ProjectProviders } = {}) {
+  const kernel = await createProjectKernel({ root, corePolicy: { readDeny: options.readDeny ?? [] }, providers: options.providers })
   const store = new InMemoryContextPayloadStore()
   const ctx: ProjectToolContext = {
     sessionId: 'project-surface',
@@ -263,14 +264,13 @@ describe('actual Project tool surface with final model references', () => {
     expect(regex.files.every((file: any) => typeof file.fileRef === 'string')).toBe(true)
   })
 
-  test('rejected mutation authorization returns without changing any file', async () => {
+  test('rejected mutation authorization fails as not applied without changing any file', async () => {
     await writeFile(join(root, 'a.txt'), 'old\n')
     const { call, read } = await fixture({ approved: false })
     const file = await read('a.txt')
-    const edited = await call('project:edit', { files: [{ fileRef: file.fileRef, edits: [{ op: 'replace', range: 1, text: 'new' }] }] })
-    expect(edited).toMatchObject({ approved: false, changed: false })
-    const created = await call('project:file', { actions: [{ op: 'create', path: 'new.txt', text: 'new' }] })
-    expect(created).toMatchObject({ approved: false, changed: false })
+    const denied = { reason: 'PERMISSION_DENIED', details: { executionOutcome: 'not-applied' } }
+    await expect(call('project:edit', { files: [{ fileRef: file.fileRef, edits: [{ op: 'replace', range: 1, text: 'new' }] }] })).rejects.toMatchObject(denied)
+    await expect(call('project:file', { actions: [{ op: 'create', path: 'new.txt', text: 'new' }] })).rejects.toMatchObject(denied)
     expect(await readFile(join(root, 'a.txt'), 'utf8')).toBe('old\n')
     await expect(readFile(join(root, 'new.txt'))).rejects.toThrow()
   })
@@ -301,3 +301,81 @@ describe('actual Project tool surface with final model references', () => {
     await expect(call('project:run', { command: 'printf background', background: true })).rejects.toThrow('后台')
   })
 })
+
+describe('edit outcomes and guidance the model can act on', () => {
+  test('a policy denial inside apply is reported as not applied', async () => {
+    await writeFile(join(root, 'a.txt'), 'old\n')
+    const policy = { decide: async ({ action }: { action: string }) => action === 'apply_edit' ? { allow: false, reason: 'writes paused' } : { allow: true } }
+    const { call, read } = await fixture({ providers: { policy } as ProjectProviders })
+    const file = await read('a.txt')
+    await expect(call('project:edit', { files: [{ fileRef: file.fileRef, edits: [{ op: 'replace', range: 1, text: 'new' }] }] }))
+      .rejects.toMatchObject({ reason: 'PERMISSION_DENIED', details: { executionOutcome: 'not-applied' } })
+    expect(await readFile(join(root, 'a.txt'), 'utf8')).toBe('old\n')
+  })
+
+  test('undo that meets a later edit, or an unknown receipt, has not written anything', async () => {
+    await writeFile(join(root, 'a.txt'), 'one\n')
+    const { call, read } = await fixture()
+    const edited = await call('project:edit', { files: [{ fileRef: (await read('a.txt')).fileRef, edits: [{ op: 'replace', range: 1, text: 'two' }] }] })
+    await writeFile(join(root, 'a.txt'), 'three\n')
+    await expect(call('project:change', { action: 'undo', changeRef: edited.changeRef }))
+      .rejects.toMatchObject({ reason: 'CONFLICT_WITH_EXTERNAL_EDIT', details: { executionOutcome: 'not-applied' } })
+    await expect(call('project:change', { action: 'undo', changeRef: `change:${'0'.repeat(64)}` }))
+      .rejects.toMatchObject({ context: { executionOutcome: 'not-applied' } })
+    expect(await readFile(join(root, 'a.txt'), 'utf8')).toBe('three\n')
+  })
+
+  test('generated outputs are not hand-edited', async () => {
+    const { call } = await fixture()
+    await expect(call('project:file', { actions: [{ op: 'create', path: 'src/api.generated.ts', text: 'export {}\n' }] }))
+      .rejects.toMatchObject({ reason: 'GENERATED_FILE', suggestedNextAction: expect.stringContaining('project:run') })
+    await expect(readFile(join(root, 'src/api.generated.ts'))).rejects.toThrow()
+  })
+
+  test('a touched file with unchanged content keeps its fileRef usable', async () => {
+    await writeFile(join(root, 'a.txt'), 'keep\n')
+    const { call, read } = await fixture()
+    const file = await read('a.txt')
+    await utimes(join(root, 'a.txt'), new Date(2001, 1, 1), new Date(2001, 1, 1))
+    await call('project:edit', { files: [{ fileRef: file.fileRef, edits: [{ op: 'replace', range: 1, text: 'kept' }] }] })
+    expect(await readFile(join(root, 'a.txt'), 'utf8')).toBe('kept\n')
+  })
+
+  test('a stale fileRef without a relocatable target names the fileRef to replace', async () => {
+    await writeFile(join(root, 'a.txt'), 'alpha\nbeta\n')
+    const { call, read } = await fixture()
+    const file = await read('a.txt')
+    await writeFile(join(root, 'a.txt'), 'gamma\ndelta\n')
+    const failure = await call('project:edit', { files: [{ fileRef: file.fileRef, edits: [{ op: 'replace', range: 1, text: 'x' }] }] }).then(() => undefined, (error) => error)
+    expect(failure).toMatchObject({ reason: 'BASE_REVISION_MISMATCH', details: { fileIndex: 0, executionOutcome: 'not-applied' } })
+    expect(failure.suggestedNextAction).toContain('["files",0,"fileRef"]')
+    expect(failure.suggestedNextAction).not.toContain('snapshot.revision')
+  })
+
+  test('relocation offers a window only when it fits the failure envelope', async () => {
+    const body = `${Array.from({ length: 30 }, (_, index) => `line ${index + 1}`).join('\n')}\n`
+    await writeFile(join(root, 'a.txt'), body)
+    const { call, read } = await fixture()
+    const file = await read('a.txt')
+    await writeFile(join(root, 'a.txt'), `inserted\n${body}`)
+    const small = await call('project:edit', { files: [{ fileRef: file.fileRef, edits: [{ op: 'replace', range: 5, text: 'x' }] }] }).then(() => undefined, (error) => error)
+    expect(small.details.recovery).toMatchObject({ candidates: [{ editIndex: 0, range: 6 }], window: { kind: 'project-source-window' } })
+    const large = await call('project:edit', { files: [{ fileRef: file.fileRef, edits: [{ op: 'replace', range: [5, 20], text: 'x' }] }] }).then(() => undefined, (error) => error)
+    expect(large.details.recovery.candidates).toEqual([{ editIndex: 0, range: [6, 21], unchanged: true }])
+    expect(large.details.recovery.window).toBeUndefined()
+    expect(large.suggestedNextAction).toContain('project:read')
+  })
+
+  test('editing a large file keeps previously read ranges in the current view', async () => {
+    const body = `${Array.from({ length: 900 }, (_, index) => `const value${index + 1} = ${'x'.repeat(40)}`).join('\n')}\n`
+    await writeFile(join(root, 'big.ts'), body)
+    const { call, read, ctx } = await fixture()
+    const file = await read('big.ts', [1, 300])
+    await call('project:edit', { files: [{ fileRef: file.fileRef, edits: [{ op: 'insert', range: 100, side: 'after', text: 'const added = 1' }] }] })
+    const coordinator = registerProjectFileContext(ctx)!
+    await coordinator.prepare()
+    const view = coordinator.currentViews().find((item) => item.path === 'big.ts')!
+    expect(view.ranges).toMatchObject([{ startLine: 1, endLine: 301 }])
+  })
+})
+

@@ -92,6 +92,22 @@ export function exactMatchCandidates(source: ProjectSourceCoordinates, windows: 
     windows.find((window) => window.start <= match.start && window.end >= match.end)!, windows, match.start, match.end, 'exact'))
 }
 
+/** match 在所选区域之外的一处原文（首尾行）：visible 表示它在 fileRef 可见范围内，只是不在 range 里。 */
+export interface ProjectMatchElsewhere { range: readonly [number, number]; visible: boolean }
+
+/** 零命中时找所选区域之外的精确原文（最多 8 处），只用来指路：可见的改 range，不可见的先读取。 */
+export function matchesElsewhere(source: ProjectSourceCoordinates, visible: readonly OffsetWindow[], selected: readonly OffsetWindow[], match: string): ProjectMatchElsewhere[] {
+  const needle = match.replace(/\r\n/g, '\n')
+  const found: ProjectMatchElsewhere[] = []
+  for (let at = source.logical.indexOf(needle); at !== -1 && found.length < CandidateLimit; at = source.logical.indexOf(needle, at + 1)) {
+    const start = source.physicalOffset(at)
+    const end = source.physicalOffset(at + needle.length)
+    const within = (windows: readonly OffsetWindow[]) => windows.some((window) => window.start <= start && end <= window.end)
+    if (!within(selected)) found.push({ range: [source.lineAt(start), source.lineAt(Math.max(start, end - 1))], visible: within(visible) })
+  }
+  return found
+}
+
 /** Suggestions never authorize or apply a fuzzy edit. Only displayed windows are examined. */
 export function missingMatchCandidates(view: ProjectEditView, source: ProjectSourceCoordinates, windows: readonly OffsetWindow[], match: string): ProjectMatchCandidate[] {
   const candidates: ProjectMatchCandidate[] = []

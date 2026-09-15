@@ -219,7 +219,7 @@ function createFilePatch(op: CreateFileOperation, snapshot: Optional<FileSnapsho
   const replaced = optionalWhen(isTrue(snapshot?.exists), snapshot)
   if (isPresent(replaced) && !isTrue(op.overwrite)) {
     throw new ProjectError(
-      'CONFLICT_WITH_EXTERNAL_EDIT',
+      'TARGET_EXISTS',
       `目标文件已存在，create_file 未开启 overwrite，拒绝覆盖：${op.path}`,
       { path: op.path, actual: replaced.revision },
       '先读取现有文件；整文件替换需明确选择 overwrite 覆盖操作，局部修改需选择文本编辑操作。创建新文件请使用尚不存在的路径。',

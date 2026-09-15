@@ -562,6 +562,9 @@ test('explicit reads outrank incidental search windows in the current view and s
   expect(projected.files[0].path).toBe('requested.ts')
   expect(projected.files[0].excerpts).toHaveLength(1)
   expect(projected.omittedFiles).toBeGreaterThan(0)
+  expect(tail.length).toBeLessThanOrEqual(2_000)
+  // 放不下的文件列出路径（有上限），模型据此先读取再编辑。
+  expect(projected.omittedPaths).toEqual(views.slice(projected.files.length, projected.files.length + 40).map((view) => view.path))
   // 顺带观察不会把显式读取降级；刷新沿用层级；再次显式读取则升级并排到最前。
   await files.observe([requested], files.beginObservation(), 'search-2', false, 'incidental')
   expect(files.currentViews().find((view) => view.path === 'requested.ts')!.tier).toBe('requested')

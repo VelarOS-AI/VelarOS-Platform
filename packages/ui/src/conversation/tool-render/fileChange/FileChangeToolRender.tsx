@@ -101,8 +101,9 @@ function isProjectApplyPreflight(result: Nullable<Record<string, unknown>>): boo
   )
 }
 
+/** 用户或宿主拒绝写入：旧回执是 approved:false，现在是 tool_denied 失败回执；两种都显示为拒绝而不是失败。 */
 function isProjectApplyRejected(result: Nullable<Record<string, unknown>>): boolean {
-  return isTrue(result?.skipped) || isFalse(result?.approved)
+  return isTrue(result?.skipped) || isFalse(result?.approved) || result?.error === 'tool_denied'
 }
 
 function getProjectApplyStatusText(
@@ -111,9 +112,9 @@ function getProjectApplyStatusText(
   locale: string
 ): string {
   const zh = isZhLocale(locale)
+  if (isProjectApplyRejected(result)) return zh ? '已拒绝' : 'Rejected'
   if (block.error) return zh ? '应用失败' : 'Failed'
   if (block.isRunning) return zh ? '正在应用' : 'Applying'
-  if (isProjectApplyRejected(result)) return zh ? '已拒绝' : 'Rejected'
   if (isProjectApplyPreflight(result)) return zh ? '待确认' : 'Pending confirmation'
   switch (result?.status) {
     case 'needs_model_review': {
@@ -134,6 +135,7 @@ function getProjectApplyTone(
   block: ToolCallBlock,
   result: Nullable<Record<string, unknown>>
 ): CompactToolTone {
+  if (isProjectApplyRejected(result)) return 'neutral'
   if (block.error) return 'error'
   switch (result?.status) {
     case 'validation_failed': {
@@ -143,7 +145,7 @@ function getProjectApplyTone(
       return 'neutral'
     }
   }
-  if (isProjectApplyRejected(result) || isFalse(result?.changed)) return 'neutral'
+  if (isFalse(result?.changed)) return 'neutral'
   if (block.isRunning || isProjectApplyPreflight(result)) return 'running'
   return 'success'
 }

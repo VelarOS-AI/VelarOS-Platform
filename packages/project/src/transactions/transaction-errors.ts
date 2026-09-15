@@ -1,17 +1,30 @@
 import { isEmpty, isPlainObject, isPresent, optionalWhen } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 
-import { ProjectError } from '../errors.js'
+import { ProjectError, RevisionMismatchSuggestedNextAction } from '../errors.js'
 import type { Diagnostic } from '../types/common.js'
 import type { ValidationResult } from '../types/validation.js'
-
-const RevisionMismatchSuggestedNextAction =
-  '请重新读取受影响文件，并使用最新 snapshot.revision 重试。'
 
 // 失败信封只携带模型定位问题所需的诊断：前几条足以指路，其余只报总数。
 const MaxReportedDiagnostics = 10
 // 命令型 validator 会把整段 stdout/stderr 塞进一条诊断，信封里按字符截断。
 const MaxDiagnosticMessageChars = 2000
 const MaxHeadlineChars = 200
+
+/**
+ * 写盘开始之前失败：原错误照旧抛出，只补上「没有写入」的结论。Agent 边界据此把失败记为 not-applied，
+ * 允许模型用 reuse 修正后重提；写盘开始之后的失败不能这样标。
+ */
+export function withNotAppliedOutcome(error: unknown): Error {
+  if (error instanceof ProjectError)
+    return new ProjectError(error.reason, error.message, { ...error.details, executionOutcome: 'not-applied' }, error.suggestedNextAction)
+  const failure = AppError.from(error)
+  return new AppError(failure.code, failure.message, error, { ...failure.context, executionOutcome: 'not-applied' })
+}
+
+export function rethrowNotApplied(error: unknown): never {
+  throw withNotAppliedOutcome(error)
+}
 
 export function revisionMismatch(message: string, details: any): ProjectError {
   return new ProjectError(

@@ -4,6 +4,8 @@ import { normalizePhysicalNewlines, type ProjectSourceCoordinates } from '../sel
 
 export function replacementLineText(source: ProjectSourceCoordinates, start: number, end: number, text: string): string {
   if (isEmpty(text)) return ''
+  // 只选中末尾换行之后那条空行时，替换就是在文件末尾写入整行，和插入一样保留原有的末尾换行。
+  if (start === end) return insertionLineText(source, start, text)
   const newline = source.newlineAt(start, end)
   const replacement = normalizePhysicalNewlines(text, newline)
   return source.content.slice(start, end).endsWith('\n') && !replacement.endsWith('\n')

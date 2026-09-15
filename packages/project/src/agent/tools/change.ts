@@ -2,6 +2,7 @@ import { compileProjectChange } from '../../editing/planner/index'
 import type { ProjectChangeStep } from '../../editing/types'
 import { ProjectError } from '../../errors'
 import { ProjectToolNames } from '../../project-tool-names'
+import { rethrowNotApplied } from '../../transactions/transaction-errors'
 import { ProjectChangeSchema } from '../contracts/change'
 import { ProjectWriteCapability } from '../ProjectCapabilities'
 import { runWithProjectExecutionGate } from '../ProjectExecutionGate'
@@ -10,7 +11,7 @@ import { registerProjectFileContext } from '../ProjectFileContext'
 import { projectPlannerResolver } from './planner-resolver'
 import { readProjectReceipt } from './receipts'
 import { defineProjectTool } from './shared'
-import { applyProjectEditTransaction } from './transaction'
+import { applyProjectEditTransaction, projectMutationDenied } from './transaction'
 
 export const projectChange = defineProjectTool({
   name: ProjectToolNames.change,
@@ -37,8 +38,9 @@ export const projectChange = defineProjectTool({
     }, context)
     context.abortSignal.throwIfAborted()
     const changeRef = input.changeRef!
+    // 回执解析失败时什么都没做：标成未执行，模型可以只改 changeRef 重试。
     const record = changeRef.startsWith('change:')
-      ? await readProjectReceipt(context, 'change', changeRef) as {
+      ? await readProjectReceipt(context, 'change', changeRef).catch(rethrowNotApplied) as {
         transactionId: string
         oldRevisions?: Record<string, string>
         newRevisions?: Record<string, string>
@@ -47,7 +49,8 @@ export const projectChange = defineProjectTool({
     const kernel = await context.project.kernel()
     const transaction = kernel.getTransaction(record.transactionId)
     if (!transaction)
-      throw new ProjectError('TARGET_NOT_FOUND', '变更回执当前不可用。', { changeRef })
+      throw new ProjectError('TARGET_NOT_FOUND', '变更回执当前不可用。', { changeRef, executionOutcome: 'not-applied' },
+        'changeRef 只能原样复制本会话 edit/file/change 成功回执里的值。')
     if (input.action === 'inspect') {
       const diff = transaction.diff.slice(0, 16_000)
       return { changeRef, transactionId: transaction.transactionId, status: transaction.status,
@@ -58,8 +61,7 @@ export const projectChange = defineProjectTool({
       }
     }
     const authorization = await context.project.prepareMutation({ operation: '撤销项目变更' })
-    if (!authorization.approved)
-      return { approved: false, changed: false, message: authorization.rejectionMessage ?? authorization.message }
+    if (!authorization.approved) throw projectMutationDenied(authorization)
     return context.project.runWithApproval(() => runWithProjectExecutionGate(
       context.project.getRootPath(), true, context.abortSignal, async () => {
         const files = registerProjectFileContext(context)

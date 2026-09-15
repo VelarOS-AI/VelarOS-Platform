@@ -2,7 +2,6 @@ import type { CorePolicy } from '../types/policy.js'
 
 /** 保守默认值：有界读取、revision 防护、事务范围限制，高风险写入必须显式审批。 */
 export const DEFAULT_CORE_POLICY: CorePolicy = {
-  allowFullFileRewrite: false,
   requireBaseRevision: true,
   requireUniqueTarget: true,
   maxFileSizeToReadBytes: 5 * 1024 * 1024,

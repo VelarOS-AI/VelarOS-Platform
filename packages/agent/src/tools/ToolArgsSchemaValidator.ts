@@ -21,6 +21,10 @@ interface ToolSchemaIssue {
   expected?: unknown
   code?: unknown
   errors?: ToolSchemaIssue[][]
+  /** unrecognized_keys 的多余字段。 */
+  keys?: unknown
+  /** invalid_value 的可选值。 */
+  values?: unknown
 }
 
 type ToolSchemaResult<TInput> =
@@ -121,7 +125,7 @@ class ToolArgsSchemaValidator {
     return {
       success: false,
       error: lastResult.error,
-      issues: this.formatIssues(lastResult.error.issues),
+      issues: this.formatIssues(lastResult.error.issues, current),
     }
   }
 
@@ -153,11 +157,22 @@ class ToolArgsSchemaValidator {
   }
 
   public formatIssues(
-    issues: ToolSchemaIssue[]
+    issues: ToolSchemaIssue[],
+    input?: unknown
   ): ToolSchemaIssueDetail[] {
     const formatted: ToolSchemaIssueDetail[] = []
     const seen = new Set<string>()
     let visited = 0
+    const push = (path: PropertyKey[], message: string, alternatives: number[]): void => {
+      const field = this.issuePathKey(path)
+      const key = JSON.stringify([field, message])
+      if (seen.has(key)) return
+      seen.add(key)
+      formatted.push({
+        path: field,
+        message: !isEmpty(alternatives) ? `Union option ${alternatives.join('.')}: ${message}` : message,
+      })
+    }
     const append = (
       nestedIssues: ToolSchemaIssue[],
       parentPath: PropertyKey[] = [],
@@ -168,27 +183,73 @@ class ToolArgsSchemaValidator {
         visited += 1
         const path = [...parentPath, ...issue.path]
         if (issue.code === 'invalid_union' && issue.errors?.length && alternatives.length < 8) {
-          // Zod 的 union 分支路径相对外层 issue；分支条件必须保留，避免提示模型同时满足互斥选项。
-          for (const [index, branch] of issue.errors.entries()) {
+          // Zod 的 union 分支路径相对外层 issue。只展开输入实际对应的分支；仍并列的分支保留编号，
+          // 避免提示模型同时满足互斥选项。
+          const relevant = this.relevantUnionBranches(issue.errors, this.valueAtPath(input, path))
+          if (relevant.merged) {
+            push([...path, ...relevant.merged.path], relevant.merged.message, alternatives)
+            continue
+          }
+          for (const { index, issues: branch } of relevant.branches) {
             if (formatted.length >= 3 || visited >= 50) return
-            append(branch, path, [...alternatives, index + 1])
+            append(branch, path, relevant.branches.length > 1 ? [...alternatives, index + 1] : alternatives)
           }
           continue
         }
-        const field = this.issuePathKey(path)
-        const key = JSON.stringify([field, issue.message])
-        if (seen.has(key)) continue
-        seen.add(key)
-        formatted.push({
-          path: field,
-          message: !isEmpty(alternatives)
-            ? `Union option ${alternatives.join('.')}: ${issue.message}`
-            : issue.message,
-        })
+        push(path, issue.message, alternatives)
       }
     }
     append(issues)
     return formatted
+  }
+
+  /**
+   * 选出与输入相符的 union 分支：输入里确有值、有分支对它报 invalid_value、也有分支对它毫无异议的字段就是
+   * 判别字段（如 op），报错的分支直接淘汰；缺失字段同样报 invalid_value，所以必须看输入里是否真有这个值。
+   * 所有分支都拒绝同一个判别值时合并成一句「可选值」；剩余分支取问题最少的；都只差同一处类型时合并成一句。
+   */
+  private relevantUnionBranches(
+    branches: ToolSchemaIssue[][],
+    value: unknown
+  ): { branches: Array<{ index: number; issues: ToolSchemaIssue[] }>; merged?: { path: PropertyKey[]; message: string } } {
+    let candidates = branches.map((issues, index) => ({ index, issues }))
+    const rejections = (issues: ToolSchemaIssue[], key: PropertyKey) =>
+      issues.filter((issue) => issue.code === 'invalid_value' && issue.path.length === 1 && issue.path[0] === key)
+    const touches = (issues: ToolSchemaIssue[], key: PropertyKey) =>
+      issues.some((issue) => issue.path[0] === key || (issue.code === 'unrecognized_keys' && isEmpty(issue.path) && isArray(issue.keys) && issue.keys.includes(key)))
+    const keys = new Set(branches.flat()
+      .filter((issue) => issue.code === 'invalid_value' && issue.path.length === 1)
+      .map((issue) => issue.path[0]!)
+      .filter((key) => isPlainObject(value) && isPresent(value[key as string])))
+    for (const key of keys) {
+      if (candidates.every(({ issues }) => !isEmpty(rejections(issues, key)))) {
+        const allowed = [...new Set(candidates.flatMap(({ issues }) => rejections(issues, key).flatMap((issue) => isArray(issue.values) ? issue.values : [])))]
+        return { branches: [], merged: { path: [key], message: `Invalid option: expected one of ${allowed.map((option) => JSON.stringify(option)).join('|')}` } }
+      }
+      const accepting = candidates.filter(({ issues }) => !touches(issues, key))
+      if (!isEmpty(accepting)) candidates = candidates.filter(({ issues }) => isEmpty(rejections(issues, key)))
+    }
+    const weight = (issues: ToolSchemaIssue[]) =>
+      issues.reduce((total, issue) => total + (issue.code === 'unrecognized_keys' && isArray(issue.keys) ? issue.keys.length : 1), 0)
+    const fewest = Math.min(...candidates.map(({ issues }) => weight(issues)))
+    const selected = candidates.filter(({ issues }) => weight(issues) === fewest)
+    const only = selected.map(({ issues }) => issues[0])
+    if (selected.length > 1 && selected.every(({ issues }) => issues.length === 1) &&
+      only.every((issue) => issue?.code === 'invalid_type' && isString(issue.expected) && JSON.stringify(issue.path) === JSON.stringify(only[0]!.path))) {
+      const received = /received (\S+)$/u.exec(only[0]!.message)?.[1]
+      const expected = [...new Set(only.map((issue) => String(issue!.expected)))].join(' | ')
+      return { branches: [], merged: { path: only[0]!.path, message: `Invalid input: expected ${expected}${received ? `, received ${received}` : ''}` } }
+    }
+    return { branches: selected }
+  }
+
+  private valueAtPath(input: unknown, path: readonly PropertyKey[]): unknown {
+    let cursor = input
+    for (const segment of path) {
+      if (!isObject(cursor)) return undefined
+      cursor = (cursor as Record<PropertyKey, unknown>)[segment]
+    }
+    return cursor
   }
 
   public describeValidationHint(

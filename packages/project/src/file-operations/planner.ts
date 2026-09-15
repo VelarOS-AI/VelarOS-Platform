@@ -103,7 +103,7 @@ class ProjectFilePlan {
     const observed = await this.resolver.readPath(path)
     const staged = this.paths.get(observed.path)
     if (staged || (isUndefined(staged) && observed.exists)) {
-      throw new ProjectError('CONFLICT_WITH_EXTERNAL_EDIT', '目标文件已存在。', { path: observed.path }, '请选择不存在的路径；明确覆盖现有文件请使用 overwrite。')
+      throw new ProjectError('TARGET_EXISTS', `目标路径已存在：${observed.path}。`, { path: observed.path }, 'create 与 move 不覆盖已有文件：换一个不存在的路径；确实要整体替换，先读取该文件获取 fileRef，再用 overwrite。')
     }
     if (isUndefined(staged)) this.baseRevisions[observed.path] = observed.revision
     return observed.path

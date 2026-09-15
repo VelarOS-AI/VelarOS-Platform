@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "packageName": "@velaros-ai/agent",
-  "acceptedPackageVersion": "0.6.28",
+  "acceptedPackageVersion": "0.6.29",
   "entries": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -1008,7 +1008,7 @@
         "ToolAllocatorDeniedRequest\ttype\ta1e1eeba4b7998940fcde889b02a9bd45efab91319c72ffd102387f031886232",
         "ToolAllocatorOperation\ttype\t1b11f153d925a4897d90d7f81ad87e02ad740f22277e617b57c402042f68425a",
         "ToolAllocatorRequest\ttype\tbb0995417f9f106f0511d55bc36a6a8ead4523bed2267d120180ef63bea9c12d",
-        "ToolArgsSchemaValidator\ttype,value\t526d3ea8d633bbae3ac12c67f00998bf7401b16be0fa7a9eb15dbe93dd50e23f",
+        "ToolArgsSchemaValidator\ttype,value\t8e16c180e95c5bbae622ecb422df5e87deddc65d6af83c449eaeb9cf5da21421",
         "ToolArgsValidationResult\ttype\t93019f36e0834e1ad1492cd4dff802dfa40ddc5b1e05f72bb821a996eeb77be0",
         "ToolBackgroundJobOutputSnapshot\ttype\t30fabb445907ca7a325163663bf6749075960f7797f9e6e02b2c9d6daa610128",
         "ToolCallFact\ttype\tbdecd1695b909860a8069acbd3c0325ffc4458243e42afca4e3ebc0da3235830",
@@ -1051,7 +1051,7 @@
         "ToolExecutionPolicyRegistry\ttype\ta0a4ca6ce8226dafcc1d9f8bc3e9530dba727fda334f6e3823f66dc346fe87a4",
         "ToolExecutionPolicyTool\ttype\t0ce7a1505c75c1e6cd1846252f0288a72275d21d157863f7b90f59dbe4e5ab88",
         "ToolExecutionPrepared\ttype\t813b33f0c457f144d0ca768cf75490ce4cd1a1552b38f9fea62ec1f886b6d590",
-        "ToolExecutor\ttype,value\ta613d9b28b878b5381b6596a99bdd4b874965ec03b55203ae6320594956327c6",
+        "ToolExecutor\ttype,value\t17e281cd973a2476a24d92b9b31d4efb680b27bd1cb9e78bf0792e9afd3cdb7a",
         "ToolExecutorEvents\ttype\t8bf67814b5c7c0ed31e7559aef9aab4d4fd90514988e549804f2dbb541792581",
         "ToolFailureResult\ttype\t39cbef43b9ee6fafe9340099e8a57c435dcd72d2e927a3929407f68202c3de64",
         "ToolInputBoundMessages\tvalue\t32f640a83fe9121c8512083a59088868e27d223af49ec1afa4a73450760e10aa",
@@ -1349,7 +1349,7 @@
         "formatMigrationEventLine\tvalue\t5fbce6cc2eaf1ed8f883a82c169215fbd800fd0d0762e38243a756f4cf9b1a4a",
         "formatSkillDisplayMarkdown\tvalue\t8055d721597ffe38c3f8222140bf113d15ae351a011a8e356810f4c087fdcfc3",
         "formatSubAgentToolResult\tvalue\t6def81a2d8ce22d4a769bbffa6a9892024f4c90f9c8114346f09b8ddca32f740",
-        "formatToolSchemaIssues\tvalue\t1cbc8b47a6341537610dd2b0994cc71614a2b92a05fe379b4303a36bfb7a4dbe",
+        "formatToolSchemaIssues\tvalue\t3b73d97eca1d2a61cb30a526993ff939b9047cd025646b089a30487e0fc48ea0",
         "formatTurnContextOmittedNote\tvalue\tff2817c0c4abad939d6a7dba73f0bff6222153141ed5fe6e3897dd04280465f1",
         "getDirectiveType\tvalue\t8ab8a105ac51f0e3be02a0250fb45636f9fc55ce0f56c079539cc3dc4bd4e753",
         "getExecutionMode\tvalue\tec5d890435bbcc4c2dc1dc3447cf33cace9d1e4677a98e475fda4cd4809f0974",
@@ -1613,7 +1613,7 @@
         "validateToolArgsWithNormalization\tvalue\t2af404974e5bfbd4ac224e9b5eb0d13a2571567ad8de03d9cd8e07bea515adc8",
         "withDefaultNote\tvalue\t4279a8b2675555ff6bfa217b2e00041fb45c88eb689647d5fbe04f41d8f5f957",
         "withReadBoundJsonSchemaConstraints\tvalue\t35e1126d9979c4c7612f625c2b8ce436830bee47355c39ab9f64baa9f05ddcf4",
-        "withToolInputReuse\tvalue\t54d47d4efb6e28c65102c2ea3ffbcc9cbf045ff27e6cafdb106b06b6f0138d1c"
+        "withToolInputReuse\tvalue\tb3d294fd1e36c1ae11d7c1ea71ead843ca1f7b2d0fbca4f93fbbe3e2d78a23bc"
       ]
     },
     "./bridge": {
@@ -3089,7 +3089,7 @@
         "structureToolDescriptionsForCategory\tvalue\t29229b20508127362a177ea3c85558894b5f8e088bab40918d717fce6fb47f4a",
         "withDefaultNote\tvalue\t4279a8b2675555ff6bfa217b2e00041fb45c88eb689647d5fbe04f41d8f5f957",
         "withReadBoundJsonSchemaConstraints\tvalue\t35e1126d9979c4c7612f625c2b8ce436830bee47355c39ab9f64baa9f05ddcf4",
-        "withToolInputReuse\tvalue\t54d47d4efb6e28c65102c2ea3ffbcc9cbf045ff27e6cafdb106b06b6f0138d1c"
+        "withToolInputReuse\tvalue\tb3d294fd1e36c1ae11d7c1ea71ead843ca1f7b2d0fbca4f93fbbe3e2d78a23bc"
       ]
     }
   }
