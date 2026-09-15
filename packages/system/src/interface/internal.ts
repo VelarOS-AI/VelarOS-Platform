@@ -11,6 +11,7 @@ import type { SystemFileSnapshot } from '../contract/files.js'
 import type { SystemEditInput, SystemEditResult, SystemReadInput, SystemReadResult } from '../contract/files.js'
 import type { ShellCommandSpecOptions } from '../contract/platform.js'
 import type { SystemBackgroundTaskQueryOptions, SystemBackgroundTaskRecord, SystemBackgroundTaskTerminateRequest, SystemBackgroundTaskTerminateResult, SystemCommandResult, SystemEnvironmentCommandAvailability, SystemGlobalSearchOptions, SystemGlobalSearchResult, SystemRunCommandOptions } from '../contract/system.js'
+import type { SystemConsoleControlResult, SystemConsoleInputRequest, SystemConsoleInterruptRequest, SystemConsoleOutputChunk, SystemConsoleOutputRequest } from '../contract/system.js'
 
 import type { SystemPlatformCompatibilityApi } from './provides.js'
 import type { SystemToolContext } from './requires.js'
@@ -30,6 +31,8 @@ export interface SystemCommandRunnerApi {
    * 链路：选 shell（给了 nativeCommand 就按原生 argv 执行）→ 加进程约束 → Windows 上包进原生进程宿主 → 启动受管子进程。
    * 前台：有界采集 stdout 与 stderr，超时或取消后在期限内收敛，失败时把输出末尾摘进 verification。
    * 后台（options.background）：进程拉起后登记成后台任务就返回，结果里带任务 id 和终止命令。
+   * 交互式（options.interactive，必须和 background 一起）：stdin 留一根保持打开的管道，输出另外存进控制台缓冲区，
+   * 结果的 `backgroundProcess.console` 给出这个控制台；本机没有 PTY，channel 一律是 `pipe`，真正的 PTY 由宿主自己的端口实现提供。
    * 命令自己失败（非零退出、超时、取消）不抛错，如实写进结果；找不到能用的 shell、约束后端缺失、进程拉不起来才抛错。
    * @param command 命令文本；给了 options.nativeCommand 时只用来展示
    * @param cwd 已经解析好的绝对工作目录
@@ -44,6 +47,15 @@ export interface SystemCommandRunnerApi {
    * 进程已经不在了不算失败，结果里如实说明；核对不过或期限内没退出时抛错。
    */
   terminateTask(request: SystemBackgroundTaskTerminateRequest): Promise<SystemBackgroundTaskTerminateResult>
+  /**
+   * 往交互式任务的控制台写一段输入，缺省补一个换行。
+   * 先核对任务存在、属于请求里的会话；进程已经退出、这条任务不是交互式的、stdin 已经关掉时不抛错，结果里 `accepted` 为 false。
+   */
+  writeConsoleInput(request: SystemConsoleInputRequest): Promise<SystemConsoleControlResult>
+  /** 读控制台从 cursor 起的增量输出；缓冲区只留最近一段，挤掉的字符数如实给出。任务不存在或不属于该会话时抛错。 */
+  readConsoleOutput(request: SystemConsoleOutputRequest): Promise<SystemConsoleOutputChunk>
+  /** 给控制台发中断（POSIX 向进程组发 SIGINT，Windows 退回按进程树终止）；进程已经退出时不抛错，`accepted` 为 false。 */
+  interruptConsole(request: SystemConsoleInterruptRequest): Promise<SystemConsoleControlResult>
   /** 停掉这个执行器启动过、还没退出的全部后台进程。 */
   dispose(): Promise<void>
 }

@@ -1,6 +1,6 @@
 /**
  * 本地内核：`LocalSystemKernel`，宿主端口 `ctx.system` 在本机上的实现。接口见 `contract/host.ts` 的 `LocalSystemKernelApi`。
- * 它只做转接：命令与后台任务交给命令执行器，搜索交给全局搜索，进程、端口、指标跑平台命令读出来。
+ * 它只做转接：命令、后台任务与交互式任务的控制台交给命令执行器，搜索交给全局搜索，进程、端口、指标跑平台命令读出来。
  */
 
 import { cpus, freemem, homedir, loadavg, platform, release, totalmem } from 'node:os'
@@ -18,6 +18,11 @@ import type {
   SystemCommandResult,
   SystemCommandRunQueryOptions,
   SystemCommandRunRecord,
+  SystemConsoleControlResult,
+  SystemConsoleInputRequest,
+  SystemConsoleInterruptRequest,
+  SystemConsoleOutputChunk,
+  SystemConsoleOutputRequest,
   SystemEnvironmentInspection,
   SystemGlobalSearchOptions,
   SystemGlobalSearchResult,
@@ -200,6 +205,18 @@ export class LocalSystemKernel implements LocalSystemKernelApi {
 
   public terminateBackgroundTask(request: SystemBackgroundTaskTerminateRequest): Promise<SystemBackgroundTaskTerminateResult> {
     return this.commands.terminateTask(request)
+  }
+
+  public writeConsoleInput(request: SystemConsoleInputRequest): Promise<SystemConsoleControlResult> {
+    return this.commands.writeConsoleInput(request)
+  }
+
+  public readConsoleOutput(request: SystemConsoleOutputRequest): Promise<SystemConsoleOutputChunk> {
+    return this.commands.readConsoleOutput(request)
+  }
+
+  public interruptConsole(request: SystemConsoleInterruptRequest): Promise<SystemConsoleControlResult> {
+    return this.commands.interruptConsole(request)
   }
 
   public async refreshShellEnvironment(): Promise<SystemShellEnvironmentRefreshResult> {

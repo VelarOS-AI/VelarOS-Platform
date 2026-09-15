@@ -923,6 +923,39 @@ export interface ProjectBackgroundProcessInfo {
   fallbackTerminateCommand: Nullable<string>
   requested: boolean
   autoStarted: boolean
+  /** 交互式任务的控制台：命令在控制台里等用户输入，聊天里渲染成控制台卡片。不是交互式任务时缺席。 */
+  console?: LooseOptional<SystemConsoleSessionInfo>
+}
+
+/** 控制台后面接的是什么：宿主给的真终端，还是一根保持打开的 stdin 管道（没有回显）。 */
+export type SystemConsoleChannel = 'pty' | 'pipe'
+
+/** 一个交互式任务的控制台；与 `@velaros-ai/system` 的同名数据对齐。 */
+export interface SystemConsoleSessionInfo {
+  taskId: string
+  channel: SystemConsoleChannel
+  /** 现在还能不能往里写输入；进程退出后为 false。 */
+  acceptsInput: boolean
+  /** 一句说明：任务正在控制台里等用户。 */
+  note: string
+}
+
+/** 控制台的一段增量输出：`cursor` 下次原样传回来，`droppedChars` 是缓冲区挤掉的字符数。 */
+export interface SystemConsoleOutputChunk {
+  taskId: string
+  text: string
+  cursor: number
+  droppedChars: number
+  status: string
+  acceptsInput: boolean
+}
+
+/** 写输入或发中断的结果；`accepted` 为 false 时看 `message`。 */
+export interface SystemConsoleControlResult {
+  taskId: string
+  accepted: boolean
+  status: string
+  message: string
 }
 
 export interface ProjectVerificationSummary {

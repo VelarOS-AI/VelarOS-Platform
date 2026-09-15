@@ -22,7 +22,7 @@
 | `createSystemBundledModDefinition` | `SystemBundledModDefinition` | 系统空间作为官方内置 mod 的定义 |
 | `createSystemKernelModule` | 上游的 `KernelModuleDefinition` | 挂进内核的模块 |
 | `SystemCapability` | 能力令牌，服务是 `SystemCapabilityService` | 在内核里按名调用系统工具 |
-| `createLocalSystemKernel` | `LocalSystemKernelApi` | 宿主端口的本机实现 |
+| `createLocalSystemKernel` | `LocalSystemKernelApi` | 宿主端口的本机实现，外加宿主界面要的搜索、进程、端口、终止任务，以及交互式任务控制台的写输入、读增量输出、发中断 |
 | `systemCommandPolicy` | `SystemCommandPolicyApi` | 执行前给命令分类，和 `system:run` 用同一份判定 |
 | `currentSystemPlatform`、`createSystemPlatform` | `SystemPlatformCompatibilityApi` | 跨平台兼容层 |
 | `velarosSharedResources` | `VelarOSSharedResourcesApi` | 产品家族共享资源目录 |
@@ -61,7 +61,7 @@
 | `system:read` | files 每项一个文件：相对路径相对宿主给 system:run 的默认目录 → 读私钥、云凭证这类文件先向用户确认 → 按字符取一段，默认读到上限，返回它的 range 和内容的版本号；给 version 就读本次运行里 edit 留下的旧版本 → 一次调用总共最多 20 万字符，按顺序分给各文件，分完的文件只带位置并在 note 里说明 → 结果的 files 一一对应，某个文件读不了只标记它那一项，全部失败才报错 |
 | `system:view` | files 每项一张图：整张作为模型可见的内容块交给模型，和用户上传一样 → 内容块按 files 的顺序排，每块前面一行说明是哪个文件；某个文件看不了只标记它那一项。PDF 与其他文档归别的 mod |
 | `system:edit` | files 每项一个文件，一批全成或全不成：同一文件只能出现一次 → 每个文件先过审批（系统敏感路径、凭证文件，符号链接解开后判定），被拒就整批不写 → 再把每一处在原文上定下来、什么都不写（带 version 的先核对；不是合法文本的字节拒改；各处只在 read 读到的 range 里找，越界的 range 按过期报，多处匹配给锚点），定不下来就整批失败，回执 details.problems 列出第几个文件第几处出了什么问题、入参可复用 → 写之前再核一次文件没变 → 按顺序写：改动前把原内容留成一个版本，newText 整个写入，edits 从后往前一起套用并交回每处的新样子，restore 回滚到留下的版本 |
-| `system:run` | ① 执行前分类（只读 / 危险 / 后台）→ ② 显式 background 优先，否则按命令形态推断 → ③ 审批：危险命令高风险手动确认，长驻服务低风险确认 → ④ 宿主执行 → ⑤ 整形：输出窗口、召回续接、后台状态续接 |
+| `system:run` | ① 执行前分类（只读 / 危险 / 后台）→ ② 显式 background 优先，否则按命令形态推断；`interactive` 为真时一定走后台，命令跑在控制台里等用户输入 → ③ 审批：危险命令高风险手动确认，长驻服务低风险确认 → ④ 宿主执行 → ⑤ 整形：输出窗口、召回续接、后台状态续接；要了控制台却没拿到就在 note 里说清楚宿主不支持 |
 | `system:refresh-environment` | 宿主允许刷新才继续 → 宿主重载 PATH 与环境变量 |
 | `system:list-tasks` | 给了 taskId 精确查一条，否则按 limit / onlyRunning 列表 → 附 count |
 
@@ -83,6 +83,7 @@
 ## 状态归谁
 
 - **后台任务表**：每个本地内核持有一个命令执行器，任务表归它私有，在内存里，随内核 `dispose()` 结束；只保留结尾的输出窗口（后台任务最近 4000 字符），不落日志文件；宿主自己留了会话终端日志（`logPath`）时结果里才有召回续接。已结束的任务只留最近 200 条。
+- **交互式任务的控制台缓冲**：和任务表一起归命令执行器，在内存里，每个控制台留最近 10 万字符，更早的输出被挤掉时读取方会拿到 `droppedChars`；随 `dispose()` 清空。
 - **受管子进程登记表**：整个进程一份（`systemProcessManager`），已结束的进程最多保留 512 条回执，供状态查询和 pid 身份核对。
 - **文件版本历史**：文件操作持有一份，只在内存里，每个文件留最近 10 份改动前的内容、单份不超过 2 MB、总量不超过 64 MB；随进程消失，持久化的本地历史是宿主的事。
 - **shell 选择缓存**：进程级；`refreshWindowsEnvironment` 会清空并给出新的 `revision`。
@@ -95,6 +96,7 @@
 - 本地内核由宿主创建；`dispose()` 停掉它管理的后台执行。
 - 内核模块 `createSystemKernelModule` 在 `activate` 时注册能力服务；每次调用先严格解析入参，再向宿主解析一次上下文。
 - 后台任务由 `system:run` 的后台模式创建，`system:list-tasks` 查询，模型要停它就用 `system:run` 执行任务条目里的 `terminateCommand`；宿主自己的界面经本地内核的 `terminateBackgroundTask` 终止。进程退出后状态变 `exited`，拿不准时报 `unknown` 而不是猜。
+- 交互式任务（`system:run` 的 `interactive`）就是一条带控制台的后台任务：启动时 stdin 留一根打开的管道，用户经本地内核的 `writeConsoleInput`、`readConsoleOutput`、`interruptConsole` 与它打交道；进程退出后控制台还在任务上，只是 `acceptsInput` 变成 false。
 - 前台命令：超时或取消后一定在期限内收敛，清理没做完就如实标 `cleanupIncomplete`。
 
 ## 失败语义
@@ -144,7 +146,7 @@ src/
 | `SystemCommandPolicy.ts` | `SystemCommandPolicyApi`（provides） | 执行前给命令分类的唯一出口 |
 | `SystemPlatformCompatibility.ts` | `SystemPlatformCompatibilityApi`（provides） | 跨平台兼容层 |
 | `VelarOSSharedResources.ts` | `VelarOSSharedResourcesApi`（provides） | 产品家族共享资源目录 |
-| `SystemCommandRunner.ts` | `SystemCommandRunnerApi`（internal） | 跑命令：前台采集，后台登记成任务、可查可停 |
+| `SystemCommandRunner.ts` | `SystemCommandRunnerApi`（internal） | 跑命令：前台采集，后台登记成任务、可查可停；交互式任务另带控制台，可写输入、读增量输出、发中断 |
 | `SystemShellResolver.ts` | `SystemShellResolverApi`（internal） | 找 shell、自检、判断命令在不在、刷新 Windows 环境变量 |
 | `SystemProcessManager.ts` | `SystemProcessManagerApi`（internal） | 受管子进程登记表 |
 | `SystemManagedProcess.ts` | `ManagedSystemProcess`（internal） | 单个受管子进程的超时、取消、有界终止与收尾 |
@@ -161,4 +163,4 @@ src/
 
 `SystemTools.ts` 改了要在差量报告里点名，人复核；`interface/provides.ts` 与 `interface/requires.ts` 改了等于改对外契约，也要点名。其余代码由 agent 维护。以上分工、分层、接口与数据的边界、导出规则、环境变量登记都由门禁机械核对。
 
-规模截至 2026-09-15：`src/interface/` 3 个文件约 620 行；`src/contract/` 4 个文件约 930 行，其中 `system.ts` 约 630 行；`src/impl/` 14 个文件约 2460 行，其中 `SystemTools.ts` 约 500 行、13 个类各一个文件；`src/utils/` 13 个文件约 2610 行；`src/exports/` 4 个文件约 80 行。
+规模截至 2026-09-15：`src/interface/` 3 个文件约 680 行；`src/contract/` 4 个文件约 1110 行，其中 `system.ts` 约 710 行；`src/impl/` 15 个文件约 2830 行，其中 `SystemTools.ts` 约 540 行、13 个类各一个文件加一个错误类；`src/utils/` 14 个文件约 2780 行；`src/exports/` 4 个文件约 80 行。

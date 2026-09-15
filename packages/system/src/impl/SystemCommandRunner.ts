@@ -1,13 +1,14 @@
 /**
  * 命令执行器：`SystemCommandRunner`。接口见 `contract/commands.ts`。
  * 本地内核创建并持有它；一条命令从选 shell、加约束、起受管子进程，到前台采集或后台登记，都在这里。
+ * 交互式任务的控制台也归它：stdin 留一根打开的管道，输出另存一份带位置的缓冲，用户的输入、中断经这里递给进程。
  */
 
 import { spawn } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { tmpdir } from 'node:os'
 
-import { Log, optionalWhen, toNullable } from '@velaros-ai/core'
+import { isFalse, Log, optionalWhen, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import type { CommandSpec } from '../contract/platform.js'
@@ -20,6 +21,12 @@ import type {
   SystemBackgroundTaskTerminateResult,
   SystemCommandOutputCapture,
   SystemCommandResult,
+  SystemConsoleControlResult,
+  SystemConsoleInputRequest,
+  SystemConsoleInterruptRequest,
+  SystemConsoleOutputChunk,
+  SystemConsoleOutputRequest,
+  SystemConsoleSessionInfo,
   SystemProcessConfinementEvidence,
   SystemProcessOwnership,
   SystemRunCommandOptions,
@@ -28,9 +35,9 @@ import type {
 import type { ManagedSystemProcess, SystemCommandRunnerApi, SystemCommandRunnerOptions } from '../interface/internal.js'
 import { buildSystemCommandResult } from '../utils/command-result.js'
 import { buildSystemProcessConfinementSpawnSpec } from '../utils/confinement.js'
-import { buildSystemOwnedProcessSpec, waitForSystemProcessSpawn } from '../utils/process.js'
+import { buildSystemOwnedProcessSpec, terminateSystemProcessTree, waitForSystemProcessSpawn } from '../utils/process.js'
 import { buildSystemNativeCommandSpec, describeSystemNativeCommand, toShellDescriptor } from '../utils/shell.js'
-import { appendBoundedOutput } from '../utils/text.js'
+import { appendBoundedOutput, readBoundedOutputSince } from '../utils/text.js'
 
 import { SystemOutputDecoder } from './SystemOutputDecoder.js'
 
@@ -40,6 +47,10 @@ const DefaultOutputChars = 50_000
 const BackgroundRecentOutputChars = 4_000
 /** 已结束的后台任务最多留多少条，超过从最早结束的删起，进程句柄一起释放。 */
 const MaxFinishedTasks = 200
+/** 交互式任务的控制台缓冲区保留的字符数；再往前的输出会被挤掉，读的时候如实报告丢了多少。 */
+const ConsoleOutputBufferChars = 100_000
+/** 交互式任务启动后给模型的一句话：别在这次工具调用里等输出。 */
+const ConsoleStartedNote = '命令在控制台里跑，正在等用户输入；用户在聊天里的控制台卡片中打字，本次调用不再有输出。'
 const log = Log.tag('SystemCommandRunner')
 
 /** 准备好的一条命令：可以直接 spawn 的规格和环境，外加约束、归属、shell 三份证据。 */
@@ -51,9 +62,16 @@ type PreparedSystemCommand = {
   shell: SystemShellDescriptor
 }
 
+/** 一个交互式任务的控制台输出缓冲：只留末尾一段，produced 记住这路输出从头到现在一共产生过多少字符。 */
+type ConsoleOutputBuffer = {
+  buffer: string
+  produced: number
+}
+
 export class SystemCommandRunner implements SystemCommandRunnerApi {
   private readonly tasks = new Map<string, SystemBackgroundTaskRecord>()
   private readonly executions = new Map<string, ManagedSystemProcess>()
+  private readonly consoles = new Map<string, ConsoleOutputBuffer>()
   private readonly options: SystemCommandRunnerOptions
 
   constructor(options: SystemCommandRunnerOptions) {
@@ -72,7 +90,7 @@ export class SystemCommandRunner implements SystemCommandRunnerApi {
     const prepared = await this.prepare(command, options.nativeCommand)
     abortSignal?.throwIfAborted()
     if (options.background) {
-      const backgroundProcess = await this.startInBackground(command, cwd, prepared, options.sessionId, startedAt, abortSignal)
+      const backgroundProcess = await this.startInBackground(command, cwd, prepared, options, startedAt, abortSignal)
       return buildSystemCommandResult(command, cwd, startedAt, {
         exitCode: null, signal: null, stdout: '', stderr: '', timedOut: false, aborted: false,
         backgroundProcess, confinement: prepared.evidence, ownership: prepared.ownership, shell: prepared.shell,
@@ -109,24 +127,8 @@ export class SystemCommandRunner implements SystemCommandRunnerApi {
   }
 
   public async terminateTask(request: SystemBackgroundTaskTerminateRequest): Promise<SystemBackgroundTaskTerminateResult> {
-    const taskId = request.taskId.trim()
-    if (!taskId) {
-      throw new AppError('VALIDATION', '后台任务 id 不能为空。')
-    }
-
-    const task = this.tasks.get(taskId)
-    if (!task) {
-      throw new AppError('NOT_FOUND', `未找到后台任务：${taskId}`)
-    }
-
-    if (request.sessionId && task.sessionId !== request.sessionId) {
-      throw new AppError('PERMISSION', '后台任务不属于当前会话。', undefined, {
-        taskId,
-        sessionId: request.sessionId,
-        ownerSessionId: task.sessionId,
-      })
-    }
-
+    const task = this.requireTask(request.taskId, request.sessionId)
+    const taskId = task.id
     const signal = request.force ? 'SIGKILL' : 'SIGTERM'
     const statusBefore = this.resolveTaskStatus(task)
     let terminated = false
@@ -170,8 +172,61 @@ export class SystemCommandRunner implements SystemCommandRunnerApi {
     }
   }
 
+  public async writeConsoleInput(request: SystemConsoleInputRequest): Promise<SystemConsoleControlResult> {
+    const task = this.requireTask(request.taskId, request.sessionId)
+    const status = this.resolveTaskStatus(task)
+    if (!task.console) return { taskId: task.id, accepted: false, status, message: '这条后台任务不是交互式的，没有可以写的控制台。' }
+
+    const stdin = this.executions.get(task.id)?.child.stdin
+    if (status !== 'running' || !stdin?.writable) return { taskId: task.id, accepted: false, status, message: '控制台已经关闭：进程不在运行，或输入通道已经断开。' }
+
+    // 缺省补一个换行，相当于用户按回车；只想写半行（例如单个按键）时传 submit: false。
+    const payload = isFalse(request.submit) ? request.text : `${request.text}\n`
+    const failure = await new Promise<Nullable<Error>>((resolve) => {
+      stdin.write(payload, (error) => resolve(toNullable(error)))
+    })
+    return {
+      taskId: task.id,
+      accepted: !failure,
+      status: this.resolveTaskStatus(task),
+      message: failure ? `写入控制台失败：${failure.message}` : '输入已写进控制台。',
+    }
+  }
+
+  public async readConsoleOutput(request: SystemConsoleOutputRequest): Promise<SystemConsoleOutputChunk> {
+    const task = this.requireTask(request.taskId, request.sessionId)
+    const status = this.resolveTaskStatus(task)
+    const acceptsInput = !!task.console?.acceptsInput && status === 'running'
+    const buffered = this.consoles.get(task.id)
+    if (!buffered) return { taskId: task.id, text: '', cursor: 0, droppedChars: 0, status, acceptsInput }
+
+    const since = readBoundedOutputSince(buffered.buffer, buffered.produced, request.cursor ?? 0)
+    return { taskId: task.id, ...since, status, acceptsInput }
+  }
+
+  public async interruptConsole(request: SystemConsoleInterruptRequest): Promise<SystemConsoleControlResult> {
+    const task = this.requireTask(request.taskId, request.sessionId)
+    const status = this.resolveTaskStatus(task)
+    if (!task.console) return { taskId: task.id, accepted: false, status, message: '这条后台任务不是交互式的，没有可以中断的控制台。' }
+    if (status !== 'running') return { taskId: task.id, accepted: false, status, message: '进程已经不在运行，不用再中断。' }
+
+    // 只中断自己启动的那个进程：pid 可能已经被系统复用，身份对不上就什么都不发。
+    const owned = this.executions.get(task.id)
+    if (owned?.child.pid !== task.pid) return { taskId: task.id, accepted: false, status, message: '无法确认后台进程的受管身份，没有发送中断。' }
+
+    // POSIX 向整个进程组发 SIGINT；Windows 没有 SIGINT，退回按进程树终止。
+    const delivered = await terminateSystemProcessTree(task.pid, 'SIGINT', { platform: this.options.platform })
+    return {
+      taskId: task.id,
+      accepted: delivered,
+      status: this.resolveTaskStatus(task),
+      message: delivered ? '已发送中断（Ctrl+C）。' : '中断信号没能送到进程。',
+    }
+  }
+
   public async dispose(): Promise<void> {
     await Promise.allSettled([...this.executions.values()].filter((entry) => !entry.exited).map((entry) => entry.stop('SIGKILL')))
+    this.consoles.clear()
   }
 
   /** 准备一条命令：选出经过自检的 shell（原生调用则按 argv 生成规格）→ 加进程约束 → Windows 上包进原生进程宿主。 */
@@ -250,20 +305,24 @@ export class SystemCommandRunner implements SystemCommandRunnerApi {
     })
   }
 
-  /** 后台启动：等进程确认拉起后登记成任务，持续记下最近的输出；进程收尾时把退出码写回任务。拉不起来就停掉并抛错。 */
+  /**
+   * 后台启动：等进程确认拉起后登记成任务，持续记下最近的输出；进程收尾时把退出码写回任务。拉不起来就停掉并抛错。
+   * 交互式任务另外留一根打开的 stdin 管道和一份控制台输出缓冲，回执里带上控制台。
+   */
   private async startInBackground(
     command: string,
     cwd: string,
     prepared: PreparedSystemCommand,
-    sessionId: Optional<string>,
+    options: SystemRunCommandOptions,
     startedAt: number,
     abortSignal?: AbortSignal
   ): Promise<SystemBackgroundProcessInfo> {
     const { platform, platformTools, processes } = this.options
+    const { sessionId, interactive } = options
     const taskId = randomUUID()
     const child = spawn(prepared.spec.file, prepared.spec.args, {
       cwd, detached: platformTools.shouldUseDetachedProcessGroup(),
-      stdio: ['ignore', 'pipe', 'pipe'], env: prepared.env, windowsHide: true,
+      stdio: [interactive ? 'pipe' : 'ignore', 'pipe', 'pipe'], env: prepared.env, windowsHide: true,
       windowsVerbatimArguments: prepared.spec.windowsVerbatimArguments,
     })
     const owned = processes.manage(child, { platform, abortSignal })
@@ -271,20 +330,31 @@ export class SystemCommandRunner implements SystemCommandRunnerApi {
     const decoders = { stdout: new SystemOutputDecoder(), stderr: new SystemOutputDecoder() }
     const append = (text: string): void => {
       recentOutput = appendBoundedOutput(recentOutput, text, BackgroundRecentOutputChars)
+      this.appendConsoleOutput(taskId, text)
       const task = this.tasks.get(taskId)
       if (task) this.tasks.set(taskId, { ...task, recentOutput, updatedAt: Date.now() })
     }
-    for (const stream of ['stdout', 'stderr'] as const) child[stream].on('data', (chunk: Buffer) => append(decoders[stream].write(chunk)))
+    // 交互式任务的 stdin 是管道，非交互式是 ignore，所以这里的输出管道按可空处理。
+    for (const stream of ['stdout', 'stderr'] as const) child[stream]?.on('data', (chunk: Buffer) => append(decoders[stream].write(chunk)))
     try { await waitForSystemProcessSpawn(child); abortSignal?.throwIfAborted() } catch (error) {
       await owned.stop('SIGKILL')
       throw error
     }
     const pid = child.pid!
+    // 本机只有管道，没有 PTY：真正的终端由宿主在自己的端口实现里提供，那时 channel 报成 pty。
+    const consoleSession: Optional<SystemConsoleSessionInfo> = optionalWhen(interactive, {
+      taskId, channel: 'pipe' as const, acceptsInput: true, note: ConsoleStartedNote,
+    })
+    // 进程收尾后控制台还留在任务上，只是不再接受输入。
+    const closedConsole: Optional<SystemConsoleSessionInfo> = consoleSession
+      ? { ...consoleSession, acceptsInput: false }
+      : undefined
+    if (consoleSession) this.consoles.set(taskId, { buffer: '', produced: 0 })
     const backgroundProcess: SystemBackgroundProcessInfo = {
       taskId, sessionId: toNullable(sessionId), pid, logPath: null, ports: [],
       reason: null, terminateCommand: platformTools.getTerminateCommand(pid, false, prepared.shell),
       forceTerminateCommand: platformTools.getTerminateCommand(pid, true, prepared.shell), fallbackTerminateCommand: null,
-      requested: true, autoStarted: false,
+      requested: true, autoStarted: false, console: consoleSession,
     }
     const task: SystemBackgroundTaskRecord = {
       id: taskId, runId: taskId, sessionId: toNullable(sessionId), command,
@@ -292,7 +362,7 @@ export class SystemCommandRunner implements SystemCommandRunnerApi {
       terminateCommand: backgroundProcess.terminateCommand,
       forceTerminateCommand: backgroundProcess.forceTerminateCommand, fallbackTerminateCommand: null,
       requested: true, autoStarted: false, startedAt, updatedAt: startedAt,
-      status: 'running', recentOutput: null,
+      status: 'running', recentOutput: null, console: consoleSession,
     }
     this.tasks.set(taskId, task)
     this.executions.set(taskId, owned)
@@ -300,7 +370,8 @@ export class SystemCommandRunner implements SystemCommandRunnerApi {
       for (const stream of ['stdout', 'stderr'] as const) append(decoders[stream].end())
       this.tasks.set(taskId, { ...task, status: result.cleanupIncomplete ? 'unknown' : 'exited',
         recentOutput, exitCode: result.exitCode, signal: result.signal,
-        cleanupIncomplete: result.cleanupIncomplete, finishedAt: Date.now(), updatedAt: Date.now() })
+        cleanupIncomplete: result.cleanupIncomplete, finishedAt: Date.now(), updatedAt: Date.now(),
+        console: closedConsole })
       this.pruneFinishedTasks()
     }).catch((error) => log.warn('后台进程完成记录失败', { taskId, error }))
     return backgroundProcess
@@ -314,7 +385,36 @@ export class SystemCommandRunner implements SystemCommandRunnerApi {
     for (const task of finished.slice(0, Math.max(0, finished.length - MaxFinishedTasks))) {
       this.tasks.delete(task.id)
       this.executions.delete(task.id)
+      this.consoles.delete(task.id)
     }
+  }
+
+  /** 把一段输出并进控制台缓冲区；不是交互式任务就什么都不做。 */
+  private appendConsoleOutput(taskId: string, text: string): void {
+    const buffered = this.consoles.get(taskId)
+    if (!buffered || !text) return
+    this.consoles.set(taskId, {
+      buffer: appendBoundedOutput(buffered.buffer, text, ConsoleOutputBufferChars),
+      produced: buffered.produced + text.length,
+    })
+  }
+
+  /** 取出一条任务并核对会话归属：任务不存在、不属于请求里的会话时抛错。 */
+  private requireTask(requestedTaskId: string, sessionId: LooseOptional<string>): SystemBackgroundTaskRecord {
+    const taskId = requestedTaskId.trim()
+    if (!taskId) throw new AppError('VALIDATION', '后台任务 id 不能为空。')
+
+    const task = this.tasks.get(taskId)
+    if (!task) throw new AppError('NOT_FOUND', `未找到后台任务：${taskId}`)
+
+    if (sessionId && task.sessionId !== sessionId) {
+      throw new AppError('PERMISSION', '后台任务不属于当前会话。', undefined, {
+        taskId,
+        sessionId,
+        ownerSessionId: task.sessionId,
+      })
+    }
+    return task
   }
 
   /** 后台任务此刻的状态：受管进程还在就看它是否退出、收尾是否完整；已经不在登记里时看任务有没有记下结束时间。 */

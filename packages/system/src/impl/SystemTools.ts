@@ -181,6 +181,7 @@ const runTool = defineSystemTool<{
   cwd?: string
   timeoutMs?: number
   background?: boolean
+  interactive?: boolean
   maxOutputChars?: number
   parallel?: boolean
   allowRepeat?: boolean
@@ -205,6 +206,7 @@ const runTool = defineSystemTool<{
   ],
   usage: [
     '传 command；需要特定目录时传 cwd。',
+    '命令会问用户口令、y/n 或选项时传 interactive=true：命令在控制台里跑，用户在卡片里输入，本次调用立刻返回，之后用 system:list-tasks 或 outputContinuation 看结果。',
     '停后台任务时执行 system:list-tasks 条目里的 terminateCommand 或 forceTerminateCommand，不要自己拼 pid。',
   ],
   examples: [{ command: 'git --version', maxOutputChars: 2000 }],
@@ -214,6 +216,7 @@ const runTool = defineSystemTool<{
     cwd: z.string().optional().describe('命令的工作目录；不传用宿主给的默认目录。'),
     timeoutMs: z.number().int().positive().max(600000).optional().describe('命令超时时间，单位毫秒。'),
     background: z.boolean().optional().describe('后台启动，立即返回后台任务；长驻服务传 true。'),
+    interactive: z.boolean().optional().describe('命令需要用户输入时传 true：命令在控制台里跑，用户在卡片里输入。'),
     maxOutputChars: z.number().int().positive().max(50000).optional().describe('stdout/stderr 返回字符上限。'),
     parallel: z.boolean().optional().describe('命令只读、可以和别的命令同时跑时传 true，调度器会并发执行。'),
     allowRepeat: z.boolean().optional().describe('要故意再跑一遍完全相同的命令时传 true，否则同样的调用会被拦。'),
@@ -229,17 +232,19 @@ const runTool = defineSystemTool<{
     reason: 'system shell command execution',
   },
   isConcurrencySafe: isParallelCommandExecutionSafe,
-  execute: async ({ command, cwd, timeoutMs, background, maxOutputChars }, ctx) => {
+  execute: async ({ command, cwd, timeoutMs, background, interactive, maxOutputChars }, ctx) => {
     ctx.abortSignal.throwIfAborted()
 
     // 执行前分类
     const plan = systemCommandPolicy.analyze(command)
     const commandCwd = ctx.system.resolveCommandCwd?.(cwd) ?? cwd
 
-    // 前台还是后台
-    const shouldRunInBackground = background ?? plan.shouldStartInBackground
+    // 前台还是后台。交互式命令一定跑在后台：它要一直开着等用户在控制台里输入
+    const shouldRunInBackground = !!interactive || (background ?? plan.shouldStartInBackground)
     if (shouldRunInBackground && !ctx.system.canStartBackgroundCommands()) {
-      throw new AppError('PERMISSION', '当前未允许模型启动长期运行的命令。')
+      throw new AppError('PERMISSION', interactive
+        ? '当前宿主未允许模型启动交互式命令。'
+        : '当前未允许模型启动长期运行的命令。')
     }
 
     // 审批。危险命令必须每次由用户亲自裁决：审批端口覆盖 riskScope 后 `:dangerous` 后缀不再可见，
@@ -270,15 +275,21 @@ const runTool = defineSystemTool<{
     // 交给宿主执行
     const result = await ctx.system.runCommand(
       command,
-      { cwd: commandCwd, timeoutMs, background: shouldRunInBackground, maxOutputChars },
+      { cwd: commandCwd, timeoutMs, background: shouldRunInBackground, interactive, maxOutputChars },
       plan.isDangerous,
       ctx.abortSignal
     )
 
-    // 整形
-    if (!result.backgroundProcess) return exposeCommandOutputWindow(result)
+    // 整形。要了控制台却没拿到，说明这个宿主跑不了交互式命令，直说，别让模型干等用户输入
+    const shaped = exposeCommandOutputWindow(result)
+    const note = optionalWhen(
+      !!interactive && !result.backgroundProcess?.console,
+      '当前宿主没有把它跑成控制台任务，用户无法输入：改成不需要输入的写法（答案用管道喂进去、加 --yes 这类参数），并用 system:list-tasks 里的 terminateCommand 停掉可能已经起来的任务。'
+    )
+    if (!result.backgroundProcess) return { ...shaped, note }
     return {
-      ...exposeCommandOutputWindow(result),
+      ...shaped,
+      note,
       backgroundProcess: {
         ...result.backgroundProcess,
         ports: plan.ports,

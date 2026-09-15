@@ -49,7 +49,13 @@ export interface SystemToolSystemApi {
   ) => Promise<SystemBackgroundTaskRecord[]>
   /** 重新选定能用的 shell 并读取它的环境变量，返回刷新后的 shell 描述和变量个数。 */
   refreshShellEnvironment: () => Promise<SystemShellEnvironmentRefreshResult>
-  /** 在系统层运行一条命令：前台等它结束并返回输出；background 为真时登记成后台任务后立即返回。命令自己失败不抛错，如实写进结果。 */
+  /**
+   * 在系统层运行一条命令：前台等它结束并返回输出；background 为真时登记成后台任务后立即返回。命令自己失败不抛错，如实写进结果。
+   *
+   * `options.interactive` 为真（一定和 background 一起来）时，任务要能接受用户输入：宿主有 PTY 就用 PTY，
+   * 没有就让 stdin 保持打开的管道；启动成功后在回执的 `backgroundProcess.console` 里给出这个控制台，
+   * 用户经产品面 `LocalSystemKernelApi` 的三个控制台方法与它打交道。宿主做不到交互式时不报错，只是回执里没有 console。
+   */
   runCommand: (
     command: string,
     options?: SystemRunCommandOptions,

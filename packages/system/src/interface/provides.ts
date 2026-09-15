@@ -12,6 +12,7 @@ import type { SystemCommandExecutionPlan } from '../contract/commands.js'
 import type { VelarOSSharedResourceStoreOptions } from '../contract/platform.js'
 import type { BackgroundShellLaunchOptions, CommandSpec, DefaultAppDataPathOptions, DirectorySymlinkType, EditorCommandDefinition, PathTextSeparator, RuntimePlatform, ShellCommandSpecOptions } from '../contract/platform.js'
 import type { SystemBackgroundTaskTerminateRequest, SystemBackgroundTaskTerminateResult, SystemGlobalSearchOptions, SystemGlobalSearchResult, SystemOpenPortInfo, SystemOpenPortQueryOptions, SystemProcessInfo, SystemProcessQueryOptions } from '../contract/system.js'
+import type { SystemConsoleControlResult, SystemConsoleInputRequest, SystemConsoleInterruptRequest, SystemConsoleOutputChunk, SystemConsoleOutputRequest } from '../contract/system.js'
 import type { SystemModId, SystemShellKind, SystemToolCategoryId, SystemToolName } from '../contract/system.js'
 import type { SystemCommandRunQueryOptions, SystemCommandRunRecord, SystemEnvironmentInspection, SystemMetricsSnapshot } from '../contract/system.js'
 
@@ -68,8 +69,9 @@ export interface SystemCapabilityService extends KernelCallableCapabilityService
  *
  * 实现是 `LocalSystemKernel`，只做转接：命令与后台任务交给命令执行器，搜索交给全局搜索，
  * 进程、端口、指标跑平台命令读出来。相对路径都相对构造时给的 cwd，`~` 展开到家目录。
- * 宿主端口本身的方法见 `requires.ts` 的 `SystemToolSystemApi`；这里另给产品壳八个方法：环境检查、指标、运行记录、释放，
- * 以及全局搜索、进程、端口、终止后台任务。后四个工具不再用（模型改用 `system:run` 跑系统命令），宿主自己的界面还要。由 `createLocalSystemKernel(options)` 创建。
+ * 宿主端口本身的方法见 `requires.ts` 的 `SystemToolSystemApi`；这里另给产品壳十一个方法：环境检查、指标、运行记录、释放，
+ * 全局搜索、进程、端口、终止后台任务，以及交互式任务的控制台三件事（写输入、读增量输出、发中断）。
+ * 这些方法都没有工具在调（模型改用 `system:run` 跑系统命令，控制台归用户），是宿主自己的界面要的。由 `createLocalSystemKernel(options)` 创建。
  */
 export interface LocalSystemKernelApi extends SystemToolSystemApi {
   /** 环境检查：操作系统、经过自检的 shell 和它的 PATH，以及给定的每个命令在不在、在哪。 */
@@ -88,6 +90,21 @@ export interface LocalSystemKernelApi extends SystemToolSystemApi {
   listOpenPorts(options?: SystemOpenPortQueryOptions): Promise<SystemOpenPortInfo[]>
   /** 终止一个后台任务：核对任务存在、属于请求里的会话、进程确实是自己启动的那个，再发信号并等它退出；返回终止前后的状态。 */
   terminateBackgroundTask(request: SystemBackgroundTaskTerminateRequest): Promise<SystemBackgroundTaskTerminateResult>
+  /**
+   * 往交互式任务的控制台写一段用户输入，缺省在末尾补一个换行（相当于用户按回车）。
+   * 任务不存在、不属于请求里的会话时抛错；进程已经退出或这条任务不是交互式的，不抛错，结果里 `accepted` 为 false 并说明原因。
+   */
+  writeConsoleInput(request: SystemConsoleInputRequest): Promise<SystemConsoleControlResult>
+  /**
+   * 读控制台从 `cursor` 起的增量输出，返回新文本和下一次的 cursor；不给 cursor 就从缓冲区里留着的最早一段开始。
+   * 缓冲区只留最近的一段，被挤掉的字符数如实写在 `droppedChars` 里，不假装输出是连续的。任务不存在或不属于该会话时抛错。
+   */
+  readConsoleOutput(request: SystemConsoleOutputRequest): Promise<SystemConsoleOutputChunk>
+  /**
+   * 给控制台发中断，相当于用户按 Ctrl+C：POSIX 上向整个进程组发 SIGINT，Windows 上退回按进程树终止。
+   * 任务不存在、不属于请求里的会话时抛错；进程已经退出时不抛错，结果里 `accepted` 为 false。
+   */
+  interruptConsole(request: SystemConsoleInterruptRequest): Promise<SystemConsoleControlResult>
 }
 
 // ── 命令策略 ────────────────────────────────────────────────────
