@@ -36,7 +36,23 @@ async function readOne(file: { path: string; offset?: number; maxChars?: number;
 
 /** 写一个文件的快捷方式，一律批准。 */
 async function editOne(file: { path: string; newText?: string; edits?: Array<{ range: { offset: number; end: number }; oldText?: string; newText: string }>; restore?: string }) {
-  return entryOf(await systemFileOperations.edit({ files: [file] }, approvingContext))
+  const result = await systemFileOperations.edit({ files: [file] }, approvingContext)
+  const entry = result.files[0]
+  if (!entry) throw new Error('no entry')
+  return entry
+}
+
+/** 整批失败时回执里的问题清单，顺便核对什么都没写的标记。 */
+async function problemsOf(call: Promise<unknown>) {
+  try {
+    await call
+  } catch (error) {
+    const failure = error as { context?: { executionOutcome?: string }; cause?: { reason?: string; details?: { executionOutcome?: string; problems?: Array<Record<string, unknown>> } } }
+    expect(failure.context?.executionOutcome).toBe('not-applied')
+    expect(failure.cause?.details?.executionOutcome).toBe('not-applied')
+    return { reason: failure.cause?.reason, problems: failure.cause?.details?.problems ?? [] }
+  }
+  throw new Error('expected the edit to fail')
 }
 
 describe('System capability', () => {
@@ -262,30 +278,34 @@ describe('System capability', () => {
       expect(written.version).toMatch(/^[0-9a-f]{12}$/)
       expect(await readFile(path, 'utf8')).toBe('name = "a"\nport = 80\nport = 80\n')
 
+      // 多处匹配：整批不写，回执里给出是第几处和每处的锚点。
       const whole = await readOne({ path })
-      const ambiguous = await editOne({ path, edits: [{ range: whole.range, oldText: 'port = 80', newText: 'port = 8080' }] })
-      if (ambiguous.action !== 'ambiguous') throw new Error('expected anchors')
-      expect(ambiguous).toMatchObject({ edit: 0, matchCount: 2 })
-      expect(ambiguous.anchors.map((anchor) => anchor.range)).toEqual([{ offset: 11, end: 20 }, { offset: 21, end: 30 }])
-      expect(ambiguous.anchors[1]!.context).toContain('port = 80\n')
+      const ambiguous = await problemsOf(editOne({ path, edits: [{ range: whole.range, oldText: 'port = 80', newText: 'port = 8080' }] }))
+      expect(ambiguous.reason).toBe('SYSTEM_EDIT_UNRESOLVED')
+      expect(ambiguous.problems).toHaveLength(1)
+      expect(ambiguous.problems[0]).toMatchObject({ file: 0, edit: 0, reason: 'ambiguous', matchCount: 2 })
+      const anchors = ambiguous.problems[0]!.anchors as Array<{ range: { offset: number; end: number }; context: string }>
+      expect(anchors.map((anchor) => anchor.range)).toEqual([{ offset: 11, end: 20 }, { offset: 21, end: 30 }])
+      expect(anchors[1]!.context).toContain('port = 80\n')
       expect(await readFile(path, 'utf8')).toBe('name = "a"\nport = 80\nport = 80\n')
 
       // 同一个文件两处一起改：一处按锚点确认，一处在整段里唯一；返回盖住两处那段的新内容。
       const confirmed = await editOne({
         path,
         edits: [
-          { range: ambiguous.anchors[1]!.range, oldText: 'port = 80', newText: 'port = 8080' },
+          { range: anchors[1]!.range, oldText: 'port = 80', newText: 'port = 8080' },
           { range: whole.range, oldText: 'name = "a"', newText: 'name = "ab"' },
         ],
       })
       expect(confirmed).toMatchObject({ action: 'replaced', edits: 2, content: 'name = "ab"\nport = 80\nport = 8080\n', range: { offset: 0, end: 34 }, hasMore: false, previousVersion: written.version })
       expect(await readFile(path, 'utf8')).toBe('name = "ab"\nport = 80\nport = 8080\n')
 
-      // 任何一处定不下来整个文件就不动：第二处多处匹配，第一处也没套上。
-      const untouched = await editOne({ path, edits: [{ range: { offset: 0, end: 12 }, oldText: 'name = "ab"', newText: 'name = "c"' }, { range: { offset: 0, end: 33 }, oldText: 'port = ', newText: 'p = ' }] })
-      expect(untouched).toMatchObject({ action: 'ambiguous', edit: 1, matchCount: 2 })
+      // 任何一处定不下来整个文件就不动，而且所有问题一次报完：第一处找不到，第二处多处匹配。
+      const twoProblems = await problemsOf(editOne({ path, edits: [{ range: { offset: 0, end: 12 }, oldText: 'name = "zz"', newText: 'name = "c"' }, { range: { offset: 0, end: 34 }, oldText: 'port = ', newText: 'p = ' }] }))
+      expect(twoProblems.problems.map((problem) => [problem.edit, problem.reason])).toEqual([[0, 'not-found'], [1, 'ambiguous']])
       expect(await readFile(path, 'utf8')).toBe('name = "ab"\nport = 80\nport = 8080\n')
-      await expect(editOne({ path, edits: [{ range: { offset: 0, end: 12 }, newText: 'x' }, { range: { offset: 5, end: 20 }, newText: 'y' }] })).rejects.toThrow('overlap')
+      const overlap = await problemsOf(editOne({ path, edits: [{ range: { offset: 0, end: 12 }, newText: 'x' }, { range: { offset: 5, end: 20 }, newText: 'y' }] }))
+      expect(overlap.problems[0]).toMatchObject({ reason: 'overlap', edit: 1, with: 0 })
       expect(await readFile(path, 'utf8')).toBe('name = "ab"\nport = 80\nport = 8080\n')
 
       const recalled = await readOne({ path, version: written.version })
@@ -314,45 +334,63 @@ describe('System capability', () => {
       const restored = await editOne({ path, restore: written.version })
       expect(restored).toMatchObject({ action: 'restored', version: written.version, previousVersion: overwritten.version })
       expect(await readFile(path, 'utf8')).toBe('name = "a"\nport = 80\nport = 80\n')
-      await expect(editOne({ path, restore: 'nope' })).rejects.toThrow('not in history')
+      expect((await problemsOf(editOne({ path, restore: 'nope' }))).problems[0]).toMatchObject({ reason: 'not-found' })
       await expect(editOne({ path, restore: written.version, newText: 'x' })).rejects.toThrow('each go alone')
-      await expect(editOne({ path })).rejects.toThrow('Give newText')
+      await expect(editOne({ path })).rejects.toThrow('give newText')
       await expect(editOne({ path, edits: [{ range: { offset: 0, end: 6 }, oldText: 'missing', newText: 'x' }] })).rejects.toThrow('not found within range')
     } finally {
       await rm(root, { recursive: true, force: true })
     }
   })
 
-  test('edit takes a batch: writes, edits and rollbacks per file, a failing file only marks its own entry', async () => {
+  test('edit takes a batch that succeeds or fails as a whole: writes, edits and rollbacks per file', async () => {
     const root = await mkdtemp(join(tmpdir(), 'velaros-system-edit-batch-'))
     const a = join(root, 'a.txt')
     const b = join(root, 'b.txt')
     try {
       const created = await systemFileOperations.edit({ files: [{ path: a, newText: 'alpha\n' }, { path: b, newText: 'beta\n' }] }, approvingContext)
-      expect(created.files.map((entry) => ('error' in entry ? entry.error.code : entry.action))).toEqual(['written', 'written'])
-      const versionA = entryOf(created, 0).version
-      const versionB = entryOf(created, 1).version
+      expect(created.files.map((entry) => entry.action)).toEqual(['written', 'written'])
+      const versionA = created.files[0]!.version
+      const versionB = created.files[1]!.version
 
-      const changed = await systemFileOperations.edit({
+      // 一批里有一个文件定不下来：整批不写，回执指出是哪个文件；修好那一项再发就全部成功。
+      const failed = await problemsOf(systemFileOperations.edit({
         files: [
           { path: a, edits: [{ range: { offset: 0, end: 6 }, oldText: 'alpha', newText: 'ALPHA' }] },
           { path: join(root, 'missing.txt'), edits: [{ range: { offset: 0, end: 1 }, newText: 'x' }] },
           { path: b, newText: 'BETA\n' },
         ],
+      }, approvingContext))
+      expect(failed.problems).toEqual([expect.objectContaining({ file: 1, reason: 'not-found' })])
+      expect(await readFile(a, 'utf8')).toBe('alpha\n')
+      expect(await readFile(b, 'utf8')).toBe('beta\n')
+      const changed = await systemFileOperations.edit({
+        files: [
+          { path: a, edits: [{ range: { offset: 0, end: 6 }, oldText: 'alpha', newText: 'ALPHA' }] },
+          { path: b, newText: 'BETA\n' },
+        ],
       }, approvingContext)
-      expect(changed.files.map((entry) => ('error' in entry ? entry.error.code : entry.action))).toEqual(['replaced', 'NOT_FOUND', 'written'])
+      expect(changed.files.map((entry) => entry.action)).toEqual(['replaced', 'written'])
       expect(await readFile(a, 'utf8')).toBe('ALPHA\n')
       expect(await readFile(b, 'utf8')).toBe('BETA\n')
 
       const rolledBack = await systemFileOperations.edit({ files: [{ path: a, restore: versionA }, { path: b, restore: versionB }] }, approvingContext)
-      expect(rolledBack.files.map((entry) => ('error' in entry ? entry.error.code : entry.action))).toEqual(['restored', 'restored'])
+      expect(rolledBack.files.map((entry) => entry.action)).toEqual(['restored', 'restored'])
       expect(await readFile(a, 'utf8')).toBe('alpha\n')
       expect(await readFile(b, 'utf8')).toBe('beta\n')
 
-      const recalled = await systemFileOperations.read({ files: [{ path: a, version: entryOf(rolledBack, 0).previousVersion! }, { path: b, version: entryOf(rolledBack, 1).previousVersion! }] })
+      const recalled = await systemFileOperations.read({ files: [{ path: a, version: rolledBack.files[0]!.previousVersion! }, { path: b, version: rolledBack.files[1]!.previousVersion! }] })
       expect(recalled.files.map((entry) => ('error' in entry ? entry.error.code : entry.content))).toEqual(['ALPHA\n', 'BETA\n'])
 
-      await expect(systemFileOperations.edit({ files: [{ path: join(root, 'x.txt'), restore: 'nope' }, { path: join(root, 'y.txt'), restore: 'nope' }] }, approvingContext)).rejects.toThrow('not in history')
+      // 敏感路径被拒：整批不写，问题标 denied。
+      const denying: SystemToolContext = { ...approvingContext, approval: { requestApproval: async () => ({ approved: true }), awaitConfirmation: async () => { throw new Error('user said no') } } } as SystemToolContext
+      // 临时目录一律豁免，所以拿 /etc 下一个不存在的文件当敏感路径；被拒就不会真的写。
+      const sensitive = '/etc/velaros-system-edit-test-never-written.conf'
+      const denied = await problemsOf(systemFileOperations.edit({ files: [{ path: a, newText: 'never\n' }, { path: sensitive, newText: 'Host x\n' }] }, denying))
+      expect(denied.reason).toBe('SYSTEM_EDIT_DENIED')
+      expect(await readFile(a, 'utf8')).toBe('alpha\n')
+      expect(existsSync(sensitive)).toBe(false)
+
       await expect(systemFileOperations.edit({ files: [] }, approvingContext)).rejects.toThrow('files is empty')
     } finally {
       await rm(root, { recursive: true, force: true })

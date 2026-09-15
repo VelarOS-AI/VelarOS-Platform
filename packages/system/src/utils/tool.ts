@@ -6,7 +6,7 @@ import { z } from 'zod'
 
 import type { ToolPermission } from '@velaros-ai/agent/protocol'
 import type { DefineToolRuntimeSpecInput } from '@velaros-ai/agent/tool-contract'
-import { defineToolRuntimeSpec } from '@velaros-ai/agent/tool-contract'
+import { defineToolRuntimeSpec, withToolInputReuse } from '@velaros-ai/agent/tool-contract'
 import { isFalse, isPlainObject } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import type { KernelCallableCapabilityOperation } from '@velaros-ai/kernel/contracts/abi'
@@ -19,16 +19,23 @@ import type { SystemToolContext, SystemToolContextResolver } from '../interface/
 type DefineSystemToolInput<TInput extends Record<string, unknown>> = Omit<
   DefineToolRuntimeSpecInput<TInput, SystemToolContext, unknown, ToolPermission>,
   'category'
-> & { name: SystemToolName }
+> & {
+  name: SystemToolName
+  /** 失败后入参可复用：失败回执带 inputReuse，下一次用 reuse + changes 只改出问题的字段。执行器在 execute 之前把复用请求还原成完整入参。 */
+  inputReuse?: boolean
+}
 
-/** 定义一个系统工具：类别按工具名自动查表填上，保证一个工具只属于一个类别。 */
+/** 定义一个系统工具：类别按工具名自动查表填上，保证一个工具只属于一个类别；声明了 inputReuse 的工具，示例按原 schema 校验后再套上复用信封。 */
 export function defineSystemTool<TInput extends Record<string, unknown>>(
   input: DefineSystemToolInput<TInput>
 ): VelaTool<TInput> {
-  return defineToolRuntimeSpec({
-    ...input,
+  const { inputReuse, ...spec } = input
+  const defined = defineToolRuntimeSpec({
+    ...spec,
     category: SystemToolCategoryByName[input.name],
   })
+  if (!inputReuse) return defined
+  return Object.freeze({ ...defined, schema: withToolInputReuse(defined.schema) }) as VelaTool<TInput>
 }
 
 /** 生成「能力调用入参不合法」的错误。 */

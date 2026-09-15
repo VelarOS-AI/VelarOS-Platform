@@ -1,10 +1,11 @@
 /**
- * 读和看都是一批文件：核对一批的条数，造失败条目。
+ * 读、看、写都是一批文件：核对一批的条数，造读和看的失败条目，造写的整批失败。
  */
 
+import { isPresent } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import type { SystemFileFailure } from '../contract/files.js'
+import type { SystemEditFailureDetails, SystemEditProblem, SystemFileFailure } from '../contract/files.js'
 
 /** 一批最多几个文件：空的和超过 max 个的都拒绝，operation 只用来写进报错。 */
 export function assertFileBatchSize(count: number, max: number, operation: string): void {
@@ -15,4 +16,23 @@ export function assertFileBatchSize(count: number, max: number, operation: strin
 /** 一批里某个文件失败时的条目：路径照传入的原样，错误只留代码和说明。 */
 export function failureEntry(path: string, failure: AppError): SystemFileFailure {
   return { path, error: { code: failure.code, message: failure.message } }
+}
+
+/** 一批里最多放进回执的问题数：Agent 边界的失败回执每个数组只保留 10 项。 */
+const MaxReportedProblems = 10
+
+/**
+ * edit 整批定不下来时抛的错误：什么都没写。problems 放在 cause 的 details 里让 Agent 边界原样交给模型，
+ * context 里标 executionOutcome 为 not-applied，模型就能用 reuse + changes 只改出问题的那一处再发一次。
+ */
+export function unresolvedEditFailure(problems: readonly SystemEditProblem[]): AppError {
+  const denied = problems.some((problem) => problem.reason === 'denied')
+  const summary = problems.slice(0, MaxReportedProblems).map((problem) => `files[${problem.file}]${isPresent(problem.edit) ? `.edits[${problem.edit}]` : ''}: ${problem.message}`).join('; ')
+  const details: SystemEditFailureDetails = { executionOutcome: 'not-applied', problems: problems.slice(0, MaxReportedProblems) }
+  const cause = {
+    reason: denied ? 'SYSTEM_EDIT_DENIED' : 'SYSTEM_EDIT_UNRESOLVED',
+    details,
+    suggestedNextAction: 'Nothing was written. Fix only the listed places with reuse + changes (for example path ["files", 0, "edits", 1, "range"] set to the chosen anchor range) and call system:edit again; unchanged files and edits are kept as they were.',
+  }
+  return new AppError(denied ? 'PERMISSION' : problems.every((problem) => problem.reason === 'not-found') ? 'NOT_FOUND' : 'VALIDATION', `${problems.length} problem(s) kept the edit from being applied; nothing was written. ${summary}`, cause, { executionOutcome: 'not-applied' })
 }

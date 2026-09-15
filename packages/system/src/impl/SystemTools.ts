@@ -118,7 +118,7 @@ const viewTool = defineSystemTool<{
 /**
  * system:edit —— 写文件，files 每项一个：整个写入、改几处或回滚。
  *
- * 链路：敏感路径先向用户确认 → 改动前把原内容留成一个版本 → 只给 newText 就整个写入（不存在则新建） → 给了 edits 就先在原文上把每一处定下来，定不下来文件不动（oldText 多处匹配时返回第几处和锚点让它二次确认），定下来了从后往前一起套用，并把盖住所有改动那段的新内容和新版本号一起交回 → restore 回滚到留下的版本。保留编码与换行风格；某个文件失败只标记它那一项。
+ * 链路：先把一批里每个文件的每一处在原文上定下来，什么都不写；定不下来就整批失败，回执的 details.problems 列出第几个文件第几处出了什么问题（多处匹配带锚点），入参可复用，只改那一处再发 → 敏感路径逐个向用户确认 → 按顺序写：改动前把原内容留成一个版本；newText 整个写入（不存在则新建），edits 从后往前一起套用并把盖住所有改动那段的新内容交回，restore 回滚到留下的版本。保留编码与换行风格。
  */
 const editTool = defineSystemTool<{
   files: Array<{
@@ -134,15 +134,15 @@ const editTool = defineSystemTool<{
 }>({
   name: SystemToolNames.edit,
   role: 'edit',
-  summary: '写文件：files 每项一个文件；newText 整个写入，edits 改文件里的几处，restore 回滚到某个版本。改完返回改动那段的新内容和新版本号，不用再读。',
+  summary: '写文件：files 每项一个文件；newText 整个写入，edits 改文件里的几处，restore 回滚到某个版本。一批全成或全不成；改完返回改动那段的新内容和新版本号，不用再读。',
   suitable: ['新建脚本、配置、笔记等文本文件。', '改配置或脚本里的一处或几处。', '一次改一批文件。'],
   forbidden: ['复制、移动、删除、改权限用 system:run。'],
   usage: [
-    '先用 system:read 读到要改的那段；edits 每项一处，把返回的 range 原样传回来，oldText 和原文一字不差，只在这段里找。同一个文件的几处放在一个 edits 里，全成或全不成，各处不能重叠。',
-    'oldText 匹配到多处时这个文件不会动，会返回是第几处和每处的锚点；把选中锚点的 range 填回那一处再调一次。',
+    '先用 system:read 读到要改的那段；edits 每项一处，把返回的 range 原样传回来，oldText 和原文一字不差，只在这段里找。同一个文件的几处放在一个 edits 里，各处不能重叠。',
+    '一批全成或全不成：任何一处定不下来就什么都不写，失败回执的 details.problems 列出每个问题是第几个文件第几处、什么原因，oldText 多处匹配时带每处的锚点。',
+    '失败回执带 inputReuse 时，用 reuse + changes 只改出问题的那一处再调一次，比如 path 为 ["files", 0, "edits", 1, "range"] 设成选中锚点的 range，其余参数原样保留，不要整个重发。',
     'edits 里只给 range 不给 oldText，就是把这段整个换成 newText；range 是空段就是在那个位置插入。',
     '改错了用 restore 传结果里的 previousVersion 回滚；想先看旧内容就用 system:read 传 version。',
-    '结果的 files 与传入的一一对应，某个文件失败只有它那一项是 error。',
   ],
   examples: [
     { files: [{ path: '~/notes/todo.md', newText: '- 买牛奶\n' }] },
@@ -160,6 +160,7 @@ const editTool = defineSystemTool<{
     },
   ],
   notes: ['写系统敏感路径会先向用户确认。'],
+  inputReuse: true,
   schema: z.object({
     files: z.array(z.object({
       path: z.string().min(1).describe('文件路径，支持 ~。'),

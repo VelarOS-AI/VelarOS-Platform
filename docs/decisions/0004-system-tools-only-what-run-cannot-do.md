@@ -38,11 +38,15 @@
 
 - `system:read { files: [{ path, offset?, maxChars?, version? }] }`：只读文本，files 每项一个文件，一个文件就一项、一批最多 20 项，各自带各自的选项；每个文件返回 `content` 和它的 `range { offset, end }`，`maxChars` 默认就是上限 20 万，尽量一次读完，`hasMore` 时把 `range.end` 当下一次的 `offset`；一次调用总共最多 20 万字符，按顺序分给各文件，分完的文件只带位置不带内容。结果的 `files` 一一对应，某个文件读不了只把它那一项换成 `{ path, error: { code, message } }`，全部失败才整个报错。工具入参在协议上必须是一个对象，列表只能挂在一个键下，单个和一批用同一种形状，不另设顶层字段。
 - `system:view { files: [{ path, pages? }] }`：files 每项一个文件，一个文件就一项、一批最多 10 项。图片（PNG、JPEG、GIF、WebP）整张作为模型可见的内容块交给模型，没有字符上限，只有 5 MB 的字节上限；PDF 用各自的 `pages` 指定看哪几页（从 1 起，默认第 1 页，一次最多 20 页），用 pdf-lib 把这几页抽成一份文档交给模型，结果里给出实际的 `pages` 和 `pageCount`。内容块放在结果的 `modelContent` 里按 files 的顺序排，每块前面一行文字说明是哪个文件；某个文件看不了同样只标记它那一项。
-- `system:edit { files: [{ path, newText?, edits?, restore? }] }`：files 每项一个文件，一个文件就一项、一批最多 20 项，每项三种改法只用一种：只给 `newText` 整个写入（不存在就新建）；给 `edits` 在文件里改几处（一次最多 50 处），每处 `{ range, oldText?, newText }` 在自己的 `range` 里改，给 `oldText` 就只换这段里唯一的那一处，不给就把整段换成 `newText`，空段就是插入；同一个文件的几处一起改，全成或全不成，各处不能重叠，任何一处的 `oldText` 多处匹配就整个文件不动，返回是第几处和每处的锚点；只给 `restore` 回滚到那个版本。改了几处的结果返回盖住所有改动那段的新内容和新位置，超过 20 万字符截到上限。结果的 `files` 一一对应，某个文件失败只标记它那一项。
+- `system:edit { files: [{ path, newText?, edits?, restore? }] }`：files 每项一个文件，一个文件就一项、一批最多 20 项，每项三种改法只用一种：只给 `newText` 整个写入（不存在就新建）；给 `edits` 在文件里改几处（一次最多 50 处），每处 `{ range, oldText?, newText }` 在自己的 `range` 里改，给 `oldText` 就只换这段里唯一的那一处，不给就把整段换成 `newText`，空段就是插入；只给 `restore` 回滚到那个版本。一批全成或全不成：先把所有文件所有改动在原文上定下来，再逐个确认敏感路径，最后按顺序写；任何一处定不下来（找不到、多处匹配、重叠、被拒）就整批不写，失败回执的 `details.problems` 列出每个问题是第几个文件第几处、什么原因，多处匹配带每处的锚点。改了几处的结果返回盖住所有改动那段的新内容和新位置，超过 20 万字符截到上限。
 
 **版本、召回、回滚。** 都按文件走，一批就各自带各自的 `version` 或 `restore`。每次 read 和 edit 的结果都带内容的版本号（字节哈希前 12 位）；edit 改动前把原内容留成一个版本，结果里给出 `previousVersion`。旧状态可以召回：`read { path, version }` 读回那份内容；可以回滚：`edit { path, restore: version }` 一步写回，回滚前的内容也留成版本，回滚本身能再回滚。历史只在内存里，每个文件留最近 10 份，单份不超过 2 MB，总量不超过 64 MB。
 
 「二选一」不再出现在参数面上：可选字段不给就是默认做法。
+
+### 失败后在原参数上修，不整个重发
+
+`system:edit` 接上 agent 包已有的入参复用：schema 用 `withToolInputReuse` 套上复用信封，失败时抛出的错误把 `executionOutcome` 标成 `not-applied`（整批什么都没写，所以入参可以安全复用），问题清单放在错误 cause 的 `details.problems` 里由 Agent 边界原样交给模型。模型拿到带 `inputReuse` 的失败回执后，用 `reuse + changes` 只改出问题的那一处（比如把 `["files", 0, "edits", 1, "range"]` 设成选中锚点的 range），其余参数由执行器从上一次调用恢复，不用整个重发。写到一半出错不标 `not-applied`，已写的文件在 `context.applied` 里点名，避免重放已经生效的改动。
 
 ### 改完自动载入、旧的读结果失效
 

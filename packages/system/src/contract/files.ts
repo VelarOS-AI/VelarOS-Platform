@@ -117,9 +117,8 @@ export interface SystemTextEdit {
 
 /**
  * 改一个文件，三种改法各自一项、只用一种：
- * 只给 newText：把它当整个文件写进去，不存在就新建；给 edits：在 read 读到的范围里改这几处，同一个文件的几处一起改，全成或全不成，各处不能重叠；
- * 只给 restore：回到改动前留下的那个版本。
- * 某处的 oldText 在范围里匹配到多处时这个文件不动，返回是第几处和每处的锚点，把选中锚点的 range 填回那一处就是二次确认。
+ * 只给 newText：把它当整个文件写进去，不存在就新建；给 edits：在 read 读到的范围里改这几处，各处不能重叠；只给 restore：回到改动前留下的那个版本。
+ * 一批里所有文件所有改动先一起定下来再一起写，全成或全不成；某处的 oldText 在范围里匹配到多处时整批不写，失败回执里给出是第几处和每处的锚点，把选中锚点的 range 填回那一处就是二次确认。
  */
 export interface SystemEditFileInput {
   path: string
@@ -128,7 +127,7 @@ export interface SystemEditFileInput {
   restore?: string
 }
 
-/** 写文件的入参：files 每项一个文件，一个文件就一项，一批就多项，各自带各自的改法。 */
+/** 写文件的入参：files 每项一个文件，一个文件就一项，一批就多项，各自带各自的改法；一批全成或全不成。 */
 export interface SystemEditInput {
   files: SystemEditFileInput[]
 }
@@ -174,22 +173,30 @@ export interface SystemEditAnchor {
   context: string
 }
 
-/** 某处的 oldText 匹配到多处时的结果：文件没动，edit 是 edits 里的第几处（从 0 起），anchors 列出每处（最多 20 个），matchCount 是总数；选一个把它的 range 填回那一处再来一次。 */
-export interface SystemEditAmbiguousResult {
+/** 一处定不下来的问题：file 是 files 里第几个（从 0 起），edit 是它 edits 里第几处（从 0 起，整个文件的问题没有）；多处匹配时 anchors 列出每处（最多 10 个），选一个把它的 range 填回那一处；重叠时 with 是和它重叠的那一处。 */
+export interface SystemEditProblem {
+  file: number
   path: string
-  action: 'ambiguous'
-  edit: number
-  anchors: SystemEditAnchor[]
-  matchCount: number
-  totalChars: number
+  reason: 'ambiguous' | 'not-found' | 'overlap' | 'invalid' | 'denied'
+  message: string
+  edit?: number
+  anchors?: SystemEditAnchor[]
+  matchCount?: number
+  with?: number
+}
+
+/** edit 失败回执的 details：什么都没写（executionOutcome 固定是 not-applied，所以入参可以复用），problems 列出每个问题；用 reuse + changes 只改出问题的那一处再发。 */
+export interface SystemEditFailureDetails {
+  executionOutcome: 'not-applied'
+  problems: SystemEditProblem[]
 }
 
 /** 一个文件写完的结果。 */
-export type SystemEditFileResult = SystemEditWrittenResult | SystemEditReplacedResult | SystemEditRestoredResult | SystemEditAmbiguousResult
+export type SystemEditFileResult = SystemEditWrittenResult | SystemEditReplacedResult | SystemEditRestoredResult
 
-/** 写文件的结果：files 与入参的 files 一一对应，每项是这个文件的结果或它的失败；某个文件失败不影响其他文件，全部失败时整个调用报错。 */
+/** 写文件的结果：files 与入参的 files 一一对应。一批全成或全不成：任何一处定不下来整个调用报错、什么都不写，问题列在失败回执的 details.problems 里。 */
 export interface SystemEditResult {
-  files: Array<SystemEditFileResult | SystemFileFailure>
+  files: SystemEditFileResult[]
 }
 
 // ── 文本文件的编码与内容 ────────────────────────────────────────
