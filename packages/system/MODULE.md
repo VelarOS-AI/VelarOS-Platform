@@ -164,4 +164,4 @@ src/
 
 `SystemTools.ts` 改了要在差量报告里点名，人复核；`contract/` 的三个文件改了等于改对外契约，也要点名。其余代码由 agent 维护。以上分工、分层、接口与数据的边界、导出规则、环境变量登记都由门禁机械核对。
 
-规模截至 2026-09-15：`src/contract/` 3 个文件约 320 行；`src/types/` 6 个文件约 1200 行，其中 `system.ts` 约 640 行；`src/impl/` 15 个文件约 3130 行，其中 `SystemTools.ts` 约 480 行、`SystemFileOperations.ts` 约 430 行；`src/utils/` 14 个文件约 3140 行。
+规模截至 2026-09-15：`src/contract/` 3 个文件约 370 行；`src/types/` 6 个文件约 1200 行，其中 `system.ts` 约 640 行；`src/impl/` 15 个文件约 3140 行，其中 `SystemTools.ts` 约 480 行、`SystemFileOperations.ts` 约 430 行；`src/utils/` 15 个文件约 3760 行。
