@@ -13,7 +13,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 
 import { FileStore } from "../src/impl/files/FileStore";
-import { createProjectKernel } from "../src/impl/kernel/project-kernel";
+import { createProjectKernel } from "../src/impl/kernel/LocalProjectKernel";
 import { FileProjectTransactionStateStore } from "../src/impl/persistence/FileProjectTransactionStateStore";
 import { readBoundedProjectBytes } from "../src/utils/files/private-byte-io";
 import {

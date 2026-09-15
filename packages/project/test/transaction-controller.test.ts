@@ -4,11 +4,9 @@ import { join } from 'node:path'
 
 import { describe, expect, test } from 'bun:test'
 
-import {
-  createProjectTransactionController,
-  type ProjectTransactionController,
-} from '../src/exports/transaction-controller'
-import { createProjectKernel } from '../src/impl/kernel/project-kernel'
+import type { ProjectTransactionController } from '../src/contract/provides.js'
+import { createProjectTransactionController } from '../src/exports/transaction-controller'
+import { createProjectKernel } from '../src/impl/kernel/LocalProjectKernel'
 import {
   FileProjectChangeFeed,
   MemoryProjectChangeFeed,

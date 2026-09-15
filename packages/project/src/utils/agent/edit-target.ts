@@ -4,8 +4,8 @@ import { isNotUndefined } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import type { ProjectToolContext } from '../../contract/requires'
+import type { AgentProjectReadResult } from '../../types/agent-port.js'
 
-import type { AgentProjectReadResult } from './kernel-port'
 
 interface EditTarget {
   kind: 'project-edit-target'

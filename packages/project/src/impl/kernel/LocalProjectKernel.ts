@@ -68,7 +68,7 @@ import {
 } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import type { FileAdapterFactory, ProjectSymbol } from '../../types/adapter.js'
+import type { ProjectSymbol } from '../../types/adapter.js'
 import type { BatchInput, BatchMetrics, BatchResult } from '../../types/batch.js'
 import type { DiffResult, ProjectStatus } from '../../types/common.js'
 import type { BuildEvidencePackInput, EvidencePack, TaskContext } from '../../types/context.js'
@@ -83,8 +83,7 @@ import type {
   RollbackInput,
   RollbackResult,
 } from '../../types/edit.js'
-import type { FixInput, FixResult, ProjectFixer } from '../../types/fix.js'
-import type { ProjectHook } from '../../types/hook.js'
+import type { FixInput, FixResult } from '../../types/fix.js'
 import type {
   FileListEntry,
   FileStatInput,
@@ -95,14 +94,11 @@ import type {
   SearchInput,
   SearchResult,
 } from '../../types/io.js'
-import type { PatchStrategy } from '../../types/patch.js'
-import type { PipelineStage } from '../../types/pipeline.js'
-import type { ProjectPlugin } from '../../types/plugin.js'
 import type { CorePolicy, PolicyDecisionInput } from '../../types/policy.js'
 import type { FileAttributes, FileSnapshot, ProjectSnapshot } from '../../types/snapshot.js'
 import type { ResolveTargetInput, ResolveTargetResult } from '../../types/target.js'
 import type { StoredTransaction } from '../../types/transaction.js'
-import type { ProjectValidator, ValidateInput, ValidationResult } from '../../types/validation.js'
+import type { ValidateInput, ValidationResult } from '../../types/validation.js'
 import { combineDiffs } from '../../utils/diff.js'
 import { ProjectError } from '../../utils/errors.js'
 import { patchFileAttributes, withPatchFileAttributes } from '../../utils/transactions/patch-attributes.js'
@@ -136,11 +132,8 @@ import { createNodeCommandProvider } from './providers.js'
 
 export type { StoredTransaction } from '../../types/transaction.js'
 
-import type {
-  CreateProjectKernelOptions,
-  ProjectKernel,
-  ProjectRuntimeProviders,
-} from '../../types/kernel.js'
+import type { CreateProjectKernelOptions, FileAdapterFactory, PatchStrategy, PipelineStage,ProjectFixer, ProjectHook, ProjectPlugin, ProjectValidator } from '../../contract/requires.js'
+import type { ProjectRuntimeProviders } from '../../types/provider.js'
 import {
   canRevertToOriginal,
   createsMissingFile,
@@ -167,6 +160,41 @@ import { TransactionValidation } from '../transactions/TransactionValidation.js'
 
 import { DEFAULT_CORE_POLICY } from './defaults.js'
 
+/** Project Agent 与 Kernel capability 共用的项目内核接口。 */
+export interface ProjectKernel {
+  prepareContextSnapshot(input: { path: string; content: string }): Promise<{ content: string; redacted: boolean }>
+  readonly root: string
+  readonly policy: CorePolicy
+  readonly providers: ProjectRuntimeProviders
+  readonly changeFeed: ProjectChangeFeed
+  observe(input?: ObserveInput): Promise<ProjectSnapshot>
+  /** 列出相对工作区根目录的文件和目录。 */
+  listFiles(input?: ObserveInput): Promise<FileListEntry[]>
+  stat(input: FileStatInput): Promise<FileStatResult>
+  read(input: ReadInput): Promise<ReadResult>
+  search(input: SearchInput): Promise<SearchResult>
+  listSymbols(path: string): Promise<ProjectSymbol[]>
+  resolveTarget(input: ResolveTargetInput): Promise<ResolveTargetResult>
+  createTaskContext(input: Omit<TaskContext, 'taskId' | 'createdAt'>): TaskContext
+  buildEvidencePack(input: BuildEvidencePackInput): Promise<EvidencePack>
+  prepareEdit(input: PrepareEditInput): Promise<PreparedTransaction>
+  /** 丢弃一个尚未应用的已暂存事务（dryRun 预览用）；已应用的事务请用 rollback。 */
+  discardTransaction(transactionId: string): { discarded: boolean }
+  amendEdit(input: AmendEditInput): Promise<PreparedTransaction>
+  fixTransaction(input: FixInput): Promise<FixResult>
+  applyEdit(input: ApplyEditInput): Promise<ApplyResult>
+  validate(input: ValidateInput): Promise<ValidationResult>
+  rollback(input: RollbackInput): Promise<RollbackResult>
+  diff(input?: { transactionId?: string }): Promise<DiffResult>
+  /** 读取内存中已暂存/已应用事务；apply 前预检与 amend 路径使用。 */
+  getTransaction(transactionId: string): StoredTransaction | undefined
+  status(): Promise<ProjectStatus>
+  getJournal(): AuditEvent[]
+  runBatch(input: BatchInput): Promise<BatchResult>
+  /** 注册监听内核生命周期事件的 hook。 */
+  registerHook(hook: ProjectHook): void
+}
+
 function cloneStoredTransaction(transaction: StoredTransaction): StoredTransaction {
   return structuredClone(transaction)
 }
@@ -180,7 +208,7 @@ function metadataPaths(value: unknown): string[] {
 }
 
 /** 事务安全的项目内核实现，统一协调 IO、适配器、校验和审计 hook。 */
-class ProjectKernelImpl implements ProjectKernel, RegistrySink {
+class LocalProjectKernel implements ProjectKernel, RegistrySink {
   readonly root: string
   readonly policy: CorePolicy
   readonly providers: ProjectRuntimeProviders
@@ -1380,11 +1408,11 @@ class ProjectKernelImpl implements ProjectKernel, RegistrySink {
 export async function createProjectKernel(
   options: CreateProjectKernelOptions,
 ): Promise<ProjectKernel> {
-  const project = new ProjectKernelImpl(options)
+  const project = new LocalProjectKernel(options)
   await project.initializeTransactionState()
   if (options.includeBuiltinPlugins ?? true) await project.install(corePlugin())
   for (const plugin of options.plugins ?? []) await project.install(plugin)
   return project
 }
 
-export type { CreateProjectKernelOptions, ProjectKernel } from '../../types/kernel.js'
+export type { CreateProjectKernelOptions } from '../../contract/requires.js'

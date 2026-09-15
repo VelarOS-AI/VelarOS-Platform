@@ -4,7 +4,8 @@ import type { ApprovalPort } from '@velaros-ai/agent/tool-contract'
 import { createApprovalOperationKey } from '@velaros-ai/agent/tool-contract'
 import { isEmpty } from '@velaros-ai/core'
 
-import type { ApprovalProvider } from '../../types/policy.js'
+import type { ApprovalProvider } from '../../contract/requires.js'
+
 
 interface ProjectApprovalContext {
   approval: ApprovalPort

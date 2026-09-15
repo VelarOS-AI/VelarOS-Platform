@@ -1,30 +1,17 @@
 import { isString } from '@velaros-ai/core'
 
-import type { ProjectKernel } from '../impl/kernel/project-kernel.js'
+import type { ProjectTransactionController } from '../contract/provides.js'
+import type { ProjectKernel } from '../impl/kernel/LocalProjectKernel.js'
 import type {
-  ProjectChangeFeed,
   ProjectChangeListener,
   ProjectChangeListOptions,
   ProjectChangeRecord,
 } from '../impl/persistence/change-feed.js'
 import type { ApplyResult, RollbackResult } from '../types/edit.js'
+import type { ProjectTransactionInput } from '../types/transaction.js'
 import { ProjectError } from '../utils/errors.js'
 
 const MaximumTransactionIdBytes = 512
-
-export interface ProjectTransactionInput {
-  readonly transactionId: string
-}
-
-/**
- * The complete transaction surface intended for Desktop and Editor consumers.
- * Root paths, persistence paths, policies, providers and edit preparation stay
- * on the host-owned ProjectKernel and cannot cross this boundary by accident.
- */
-export interface ProjectTransactionController extends ProjectChangeFeed {
-  apply(input: ProjectTransactionInput): Promise<ApplyResult>
-  rollback(input: ProjectTransactionInput): Promise<RollbackResult>
-}
 
 function transactionId(input: ProjectTransactionInput): string {
   if (!isString(input?.transactionId)

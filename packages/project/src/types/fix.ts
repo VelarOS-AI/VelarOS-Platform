@@ -1,5 +1,7 @@
+import type { CommandProvider, ProjectProviders } from '../contract/requires.js'
+
 import type { Diagnostic } from "./common.js";
-import type { CommandProvider, CommandToolRequirement, ProjectProviders } from "./provider.js";
+import type { CommandToolRequirement } from "./provider.js";
 import type { StoredTransaction } from "./transaction.js";
 
 /** 在应用 prepared transaction 前请求自动修复。 */
@@ -36,9 +38,3 @@ export interface ProjectFixContext {
   providers: ProjectProviders & { command: CommandProvider };
 }
 
-export interface ProjectFixer {
-  id: string;
-  /** 运行潜在昂贵 fixer 前的低成本适用性检查。 */
-  canFix(input: FixInput, ctx: ProjectFixContext): Promise<boolean> | boolean;
-  fix(input: FixInput, ctx: ProjectFixContext): Promise<FixResult> | FixResult;
-}

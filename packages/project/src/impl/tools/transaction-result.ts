@@ -1,6 +1,7 @@
 import { isString, isTrue } from '@velaros-ai/core'
 
-import type { AgentProjectPreparedPatch } from '../../utils/agent/kernel-port.js'
+import type { AgentProjectPreparedPatch } from '../../types/agent-port.js'
+
 
 interface PathEffect {
   first: AgentProjectPreparedPatch

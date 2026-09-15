@@ -1,6 +1,6 @@
 import { isNull, isNumber, isPresent, isString, isUndefined, numberOrNull, toOptional } from '@velaros-ai/core'
 
-import type { FileAdapter } from '../../types/adapter.js'
+import type { FileAdapter, PatchStrategy } from '../../contract/requires.js'
 import type { RiskLevel } from '../../types/common.js'
 import type { ReplaceLinesOperation } from '../../types/edit.js'
 import type {
@@ -11,7 +11,6 @@ import type {
   PrepareEditInput,
 } from '../../types/edit.js'
 import type { ProjectFileAccess } from '../../types/file-access.js'
-import type { PatchStrategy } from '../../types/patch.js'
 import type { PatchStrategyInput } from '../../types/patch.js'
 import type { CorePolicy } from '../../types/policy.js'
 import type { FileAttributes, FileSnapshot } from '../../types/snapshot.js'

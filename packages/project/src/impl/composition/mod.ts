@@ -1,7 +1,8 @@
-import type { ToolCategoryDefinition } from '@velaros-ai/agent/protocol'
+import type { AgentModManifest, ToolCategoryDefinition } from '@velaros-ai/agent/protocol'
 import { optionalWhen } from '@velaros-ai/core'
 
-import { ProjectToolNames } from '../../contract/constants.js'
+import { ProjectModId, ProjectSpaceId, ProjectToolNames } from '../../contract/constants.js'
+import type { ProjectBundledModDefinition } from '../../contract/provides.js'
 import { PROJECT_PACKAGE_VERSION } from '../kernel/defaults.js'
 import {
   projectChangeTools,
@@ -10,9 +11,6 @@ import {
   projectFileTools,
   projectTools,
 } from '../ProjectTools.js'
-
-const ProjectModId = 'velaros.project' as const
-const ProjectSpaceId = 'project' as const
 
 const ProjectToolCategories = Object.freeze({
   'project-files': Object.freeze<ToolCategoryDefinition>({
@@ -68,7 +66,7 @@ function projectCategoryForTool(name: string): keyof typeof ProjectCategoryTools
   throw new Error(`Project tool「${name}」没有职责类别。`)
 }
 
-const ProjectAgentModManifest = Object.freeze({
+const ProjectAgentModManifest = Object.freeze<AgentModManifest>({
   id: ProjectModId,
   version: PROJECT_PACKAGE_VERSION,
   publisher: 'VelarOS',
@@ -103,17 +101,6 @@ const ProjectAgentModManifest = Object.freeze({
   },
 })
 
-interface ProjectBundledModDefinition {
-  readonly id: typeof ProjectModId
-  readonly specifier: string
-  readonly defaultEnabled: true
-  readonly manifest: typeof ProjectAgentModManifest
-  readonly bindings: {
-    readonly tools: typeof projectTools
-    readonly toolCategories: typeof ProjectToolCategories
-  }
-}
-
 function createProjectBundledModDefinition(): ProjectBundledModDefinition {
   return Object.freeze({
     id: ProjectModId,
@@ -130,4 +117,4 @@ export {
   ProjectSpaceId,
   ProjectToolCategories,
 }
-export type { ProjectBundledModDefinition }
+export type { ProjectBundledModDefinition } from '../../contract/provides.js'

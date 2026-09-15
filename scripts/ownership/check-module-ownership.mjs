@@ -1039,7 +1039,7 @@ for (const module of GovernedModules) {
     ts.forEachChild(node, visitTable)
   }
   if (constantsSourceFile) visitTable(constantsSourceFile)
-  if (registeredVariables.size === 0) fail(`${label}: 常量表里没有环境变量表 ${module.environmentTable}`)
+  if (module.environmentTable && registeredVariables.size === 0) fail(`${label}: 常量表里没有环境变量表 ${module.environmentTable}`)
   const usedVariables = new Set()
   for (const file of sourceFiles) {
     if (file === constantsPath) continue
@@ -1050,7 +1050,7 @@ for (const module of GovernedModules) {
       if (isText || ts.isIdentifier(node)) {
         for (const token of node.text.match(/VELAROS_[A-Z0-9_]*/gu) ?? []) {
           const matches = [...registeredVariables].filter((name) => name === token || (token.endsWith('_') && name.startsWith(token)))
-          if (matches.length === 0) fail(`${label}: ${shortPath(file)} 用到了环境变量 ${token}，但它不在 ${module.environmentTable} 里；环境变量也是注入，先登记再用`)
+          if (matches.length === 0) fail(`${label}: ${shortPath(file)} 用到了环境变量 ${token}，但${module.environmentTable ? `它不在 ${module.environmentTable} 里` : '本包没有登记环境变量表'}；环境变量也是注入，先登记再用`)
           for (const name of matches) if (name === token) usedVariables.add(name)
         }
       }

@@ -1,6 +1,6 @@
 import { isEmpty, isTrue } from '@velaros-ai/core'
 
-import type { FileAdapter, FileAdapterFactory } from '../../types/adapter.js'
+import type { FileAdapter, FileAdapterFactory } from '../../contract/requires.js'
 import type { FileSnapshot } from '../../types/snapshot.js'
 import type { ResolvedTarget, ResolveTargetInput, ResolveTargetResult } from '../../types/target.js'
 import { id } from '../../utils/id.js'

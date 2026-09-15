@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { isArray, isPresent, isUndefined, Log } from '@velaros-ai/core'
 
 import { LegacyProjectToolNames as ProjectToolNames } from '../../contract/constants'
+import type { ProjectToolCollection } from '../../contract/provides.js'
 import { resolveProjectEditTarget, saveProjectEditTarget } from '../../utils/agent/edit-target'
 import { registerProjectFileContext, snapshotFromRead } from '../../utils/agent/file-context'
 import { executeAgentProjectRead, executeAgentProjectSearch } from '../../utils/agent/kernel-port'
@@ -14,7 +15,7 @@ import { ProjectReadCapability, ProjectWriteCapability } from './capabilities'
 import { runWithProjectExecutionGate } from './execution-gate'
 import { projectList } from './list'
 import { projectRun } from './run'
-import { defineProjectTool, type ProjectToolCollection } from './shared'
+import { defineProjectTool } from './shared'
 import { applyProjectEditTransaction } from './transaction'
 
 const ProjectRangeSchema = z

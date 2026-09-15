@@ -1,4 +1,5 @@
-import type { PatchStrategy, PatchStrategyInput } from "../../types/patch.js";
+import type { PatchStrategy } from '../../contract/requires.js'
+import type { PatchStrategyInput } from "../../types/patch.js";
 import { ProjectError } from "../../utils/errors.js";
 
 /** 管理补丁策略，并为每次编辑选择优先级最高的可用策略。 */

@@ -1,5 +1,9 @@
 import type { PreparedTransaction } from "./edit.js";
 
+export interface ProjectTransactionInput {
+  readonly transactionId: string
+}
+
 /** Project 持久化、运行时与公开查询共享的稳定事务生命周期状态。 */
 export type ProjectTransactionStatus =
   | PreparedTransaction["status"]

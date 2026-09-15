@@ -156,7 +156,7 @@ function validationContextViolations(source, path, sourcePath) {
     if (name === 'ProjectValidationContext') hasProjectValidationContext = true
 
     if (
-      sourcePath === 'types/validation.ts'
+      sourcePath === 'contract/requires.ts'
       && ts.isInterfaceDeclaration(node)
       && name === 'ProjectValidator'
     ) {
@@ -181,11 +181,11 @@ function validationContextViolations(source, path, sourcePath) {
     }
   }
 
-  if (sourcePath === 'types/validation.ts') {
-    if (!hasProjectValidationContext) violations.push('ProjectValidationContext declaration is required')
-    if (projectValidatorContextType !== 'ProjectValidationContext') {
-      violations.push('ProjectValidator.validate must use ProjectValidationContext')
-    }
+  if (sourcePath === 'types/validation.ts' && !hasProjectValidationContext) {
+    violations.push('ProjectValidationContext declaration is required')
+  }
+  if (sourcePath === 'contract/requires.ts' && projectValidatorContextType !== 'ProjectValidationContext') {
+    violations.push('ProjectValidator.validate must use ProjectValidationContext')
   }
   return violations
 }
@@ -281,12 +281,12 @@ const ForbiddenInternalDependencies = [
   },
   {
     source: (sourcePath) => /^(impl\/tools|utils\/agent)\//.test(sourcePath),
-    targets: ['impl/kernel/project-kernel'],
+    targets: ['impl/kernel/LocalProjectKernel'],
     label: 'Agent adapters must not depend on the ProjectKernel implementation',
   },
   {
     source: (sourcePath) => /^impl\/(persistence|transactions)\//.test(sourcePath),
-    targets: ['impl/kernel/project-kernel'],
+    targets: ['impl/kernel/LocalProjectKernel'],
     label: 'persistence and transaction repositories must depend on transaction domain types, not ProjectKernel',
   },
   {
@@ -374,7 +374,7 @@ for (const path of walk(SourceRoot)) {
   for (const violation of validationContextViolations(source, path, sourcePath)) {
     fail(`${violation} in ${sourcePath}`)
   }
-  if (sourcePath === 'impl/kernel/project-kernel.ts' && hasUnmanagedTransactionStatusAssignment(source, path)) {
+  if (sourcePath === 'impl/kernel/LocalProjectKernel.ts' && hasUnmanagedTransactionStatusAssignment(source, path)) {
     fail('ProjectKernel transaction status changes must go through TransactionStateMachine')
   }
   const importedSpecifiers = ts.preProcessFile(source, true, true).importedFiles

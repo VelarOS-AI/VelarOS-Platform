@@ -1,10 +1,9 @@
 import { describe, expect, test } from 'bun:test'
 
+import type { CommandProvider, FileAdapter,ProjectProviders } from '../src/contract/requires.js'
 import { DEFAULT_CORE_POLICY } from '../src/impl/kernel/defaults'
 import { TransactionValidation } from '../src/impl/transactions/TransactionValidation'
-import type { FileAdapter } from '../src/types/adapter'
 import type { Diagnostic } from '../src/types/common'
-import type { CommandProvider, ProjectProviders } from '../src/types/provider'
 import type { FileSnapshot } from '../src/types/snapshot'
 import type { StoredTransaction } from '../src/types/transaction'
 import type { ValidationResult } from '../src/types/validation'

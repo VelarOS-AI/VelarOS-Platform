@@ -1,12 +1,8 @@
 import { isArray,isEmpty, isPlainObject, isString } from "@velaros-ai/core";
 
-import type { FixInput, FixResult, ProjectFixContext, ProjectFixer } from "../../types/fix.js";
-import type {
-  ProjectValidationContext,
-  ProjectValidator,
-  ValidateInput,
-  ValidationResult,
-} from "../../types/validation.js";
+import type { ProjectFixer,ProjectValidator } from '../../contract/requires.js'
+import type { FixInput, FixResult, ProjectFixContext } from "../../types/fix.js";
+import type { ProjectValidationContext, ValidateInput, ValidationResult } from "../../types/validation.js";
 
 export interface CommandValidatorOptions {
   id: string;

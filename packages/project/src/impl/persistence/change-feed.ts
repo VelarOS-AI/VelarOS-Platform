@@ -13,9 +13,10 @@ import { isArray, isNumber, isObject, isString } from '@velaros-ai/core'
 
 import type { PreparedPatch } from '../../types/edit.js'
 
-export type { ProjectChangeFeed, ProjectChangeFeedWriter,ProjectChangeLifecycle, ProjectChangeListener, ProjectChangeListOptions, ProjectChangePatch, ProjectChangeRecord, ProjectChangeRecordInput, ProjectChangeRevision } from '../../types/change-feed.js'
+export type { ProjectChangeLifecycle, ProjectChangeListener, ProjectChangeListOptions, ProjectChangePatch, ProjectChangeRecord, ProjectChangeRecordInput, ProjectChangeRevision } from '../../types/change-feed.js'
 
-import type { ProjectChangeFeedWriter, ProjectChangeListener, ProjectChangeListOptions, ProjectChangePatch, ProjectChangeRecord, ProjectChangeRecordInput } from '../../types/change-feed.js'
+import type { ProjectChangeFeedWriter } from '../../contract/requires.js'
+import type { ProjectChangeListener, ProjectChangeListOptions, ProjectChangePatch, ProjectChangeRecord, ProjectChangeRecordInput } from '../../types/change-feed.js'
 
 function cloneChange(change: ProjectChangeRecord): ProjectChangeRecord {
   return structuredClone(change)
@@ -160,3 +161,5 @@ export function projectChangePatches(
     operation: isString(patch.metadata?.op) ? patch.metadata.op : undefined,
   }))
 }
+export type { ProjectChangeFeed } from '../../contract/provides.js'
+export type { ProjectChangeFeedWriter } from '../../contract/requires.js'

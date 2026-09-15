@@ -1,7 +1,8 @@
 import { isEmpty, isPresent, isString, isTrue, optionalWhen } from '@velaros-ai/core'
 
+import type { PatchStrategy } from '../../contract/requires.js'
 import type { CreateFileOperation, PreparedPatch } from '../../types/edit.js'
-import type { PatchStrategy, PatchStrategyInput } from '../../types/patch.js'
+import type { PatchStrategyInput } from '../../types/patch.js'
 import type { FileSnapshot } from '../../types/snapshot.js'
 import { replaceSnapshotLines } from '../../utils/editing/line-edit.js'
 import { createTextPatch as patch } from '../../utils/editing/prepared-patch.js'

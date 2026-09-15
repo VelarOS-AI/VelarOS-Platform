@@ -1,6 +1,6 @@
 import { AppError } from "@velaros-ai/core/error";
 
-import type { FileAdapter, FileAdapterFactory } from "../../types/adapter.js";
+import type { FileAdapter, FileAdapterFactory } from '../../contract/requires.js'
 import type { FileSnapshot } from "../../types/snapshot.js";
 import { ext } from "../../utils/path.js";
 

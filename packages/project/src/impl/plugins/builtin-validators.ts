@@ -1,10 +1,7 @@
 import { isEmpty,isPresent } from "@velaros-ai/core";
 
-import type {
-  ProjectValidator,
-  ValidateInput,
-  ValidationResult,
-} from "../../types/validation.js";
+import type { ProjectValidator } from '../../contract/requires.js'
+import type { ValidateInput, ValidationResult } from "../../types/validation.js";
 import { matchesAny } from "../../utils/glob.js";
 
 export function scopeValidator(): ProjectValidator {

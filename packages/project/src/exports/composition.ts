@@ -1,4 +1,5 @@
-import { createProjectKernel, type CreateProjectKernelOptions, type ProjectKernel } from '../impl/kernel/project-kernel.js'
+import type { ProjectSpace } from '../contract/provides.js'
+import { createProjectKernel, type CreateProjectKernelOptions } from '../impl/kernel/LocalProjectKernel.js'
 import { projectTools } from '../impl/ProjectTools.js'
 
 export * from '../impl/composition/approval.js'
@@ -6,12 +7,6 @@ export * from '../impl/composition/code-analysis.js'
 export * from '../impl/composition/mod.js'
 
 type CreateProjectSpaceOptions = CreateProjectKernelOptions
-
-interface ProjectSpace {
-  readonly id: 'project'
-  readonly kernel: ProjectKernel
-  readonly tools: typeof projectTools
-}
 
 async function createProjectSpace(
   options: CreateProjectSpaceOptions
@@ -25,4 +20,6 @@ async function createProjectSpace(
 }
 
 export { createProjectSpace }
-export type { CreateProjectSpaceOptions, ProjectSpace }
+export type { CreateProjectSpaceOptions }
+export type { ProjectSpace } from '../contract/provides.js'
+export type { ProjectBundledModDefinition } from '../contract/provides.js'

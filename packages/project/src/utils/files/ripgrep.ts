@@ -1,8 +1,9 @@
 import { isEmpty, isFalse, isNumber, isTrue, optionalWhen } from '@velaros-ai/core'
 
+import type { CommandProvider } from '../../contract/requires.js'
 import type { SearchHit } from '../../types/io.js'
 import type { CorePolicy } from '../../types/policy.js'
-import type { CommandProvider, CommandToolRequirement } from '../../types/provider.js'
+import type { CommandToolRequirement } from '../../types/provider.js'
 import { matchesAny } from '../glob.js'
 
 export interface RipgrepSearchContext {

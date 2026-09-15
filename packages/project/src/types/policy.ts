@@ -41,21 +41,12 @@ export interface PolicyDecision {
   requireApproval?: boolean;
 }
 
-/** 宿主应用可选的动态策略决策 hook。 */
-export interface PolicyProvider {
-  decide(input: PolicyDecisionInput): Promise<PolicyDecision> | PolicyDecision;
-}
-
 export interface PolicyDecisionInput {
   /** 当前正在授权的内核动作。 */
   action: "read" | "search" | "resolve" | "prepare_edit" | "amend_edit" | "apply_edit" | "validate" | "rollback";
   paths?: string[];
   risk?: RiskLevel;
   data?: any;
-}
-
-export interface ApprovalProvider {
-  approve(input: ApprovalRequest): Promise<boolean> | boolean;
 }
 
 /** 策略判断需要更多确认后发出的人类或宿主审批请求。 */

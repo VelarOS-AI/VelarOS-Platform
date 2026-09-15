@@ -1,8 +1,7 @@
 import { isEmpty, isFunction, isNull, isString, optionalWhen } from '@velaros-ai/core'
 
-import type { FileAdapter } from '../../types/adapter.js'
+import type { CommandProvider, FileAdapter,ProjectProviders } from '../../contract/requires.js'
 import type { CorePolicy } from '../../types/policy.js'
-import type { CommandProvider, ProjectProviders } from '../../types/provider.js'
 import type { FileSnapshot } from '../../types/snapshot.js'
 import type { StoredTransaction } from '../../types/transaction.js'
 import type {

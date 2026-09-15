@@ -1,12 +1,11 @@
 import type { ToolCategoryId } from '@velaros-ai/agent/protocol'
 import { defineToolRuntimeSpec, resolveToolInputReuse, withToolInputReuse } from '@velaros-ai/agent/tool-contract'
 
-import type { ProjectToolApi, ProjectToolContext, VelaTool } from '../../contract/requires'
+import type { VelaTool } from '../../contract/provides.js'
+import type { ProjectToolApi, ProjectToolContext } from '../../contract/requires'
 
 import { runWithProjectExecutionGate } from './execution-gate'
 import { migrateProjectReusedInput, ProjectInputContractVersion, projectInputReuseSourceTools } from './legacy-input-migration'
-
-export type ProjectToolCollection = Readonly<Record<string, VelaTool<any>>>
 
 export function defineProjectTool<TInput extends Record<string, any>>(input: {
   name: string

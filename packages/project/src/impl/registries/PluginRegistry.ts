@@ -1,10 +1,4 @@
-import type { FileAdapterFactory } from "../../types/adapter.js";
-import type { ProjectFixer } from "../../types/fix.js";
-import type { ProjectHook } from "../../types/hook.js";
-import type { PatchStrategy } from "../../types/patch.js";
-import type { PipelineStage } from "../../types/pipeline.js";
-import type { ProjectPlugin, ProjectPluginContext } from "../../types/plugin.js";
-import type { ProjectValidator } from "../../types/validation.js";
+import type { FileAdapterFactory, PatchStrategy, PipelineStage,ProjectFixer, ProjectHook, ProjectPlugin, ProjectPluginContext, ProjectValidator } from '../../contract/requires.js'
 
 /** plugin 安装时可写入的注册入口，由 Project 实例实现。 */
 export interface RegistrySink {

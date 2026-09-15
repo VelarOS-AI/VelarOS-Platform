@@ -1,4 +1,5 @@
-import type { PipelineStage } from "../../types/pipeline.js";
+
+import type { PipelineStage } from '../../contract/requires.js'
 
 export class PipelineRegistry {
   private stages: PipelineStage[] = [];

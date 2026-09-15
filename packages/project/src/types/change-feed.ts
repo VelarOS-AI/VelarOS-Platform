@@ -62,16 +62,5 @@ export interface ProjectChangeListOptions {
 
 export type ProjectChangeListener = (change: ProjectChangeRecord) => void
 
-/** Read-only consumer contract used by Editors, Workbenches and audit views. */
-export interface ProjectChangeFeed {
-  list(options?: ProjectChangeListOptions): readonly ProjectChangeRecord[]
-  get(transactionId: string): ProjectChangeRecord | undefined
-  subscribe(listener: ProjectChangeListener): () => void
-}
-
 export type ProjectChangeRecordInput = Omit<ProjectChangeRecord, 'sequence' | 'updatedAt'>
 
-/** Producer contract retained by ProjectKernel; UI consumers only receive ProjectChangeFeed. */
-export interface ProjectChangeFeedWriter extends ProjectChangeFeed {
-  record(change: ProjectChangeRecordInput): ProjectChangeRecord
-}

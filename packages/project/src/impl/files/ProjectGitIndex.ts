@@ -1,6 +1,7 @@
 import { isEmpty, isPresent } from '@velaros-ai/core'
 
-import type { ProjectRuntimeProviders } from '../../types/kernel.js'
+import type { ProjectRuntimeProviders } from '../../types/provider.js'
+
 
 /** `git … -z` 的路径输出：每条以 NUL 结尾，切开后去掉末尾空段。 */
 function splitNulTerminatedPaths(output: string): string[] {

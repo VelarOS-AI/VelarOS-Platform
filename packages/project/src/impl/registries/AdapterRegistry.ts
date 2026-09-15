@@ -1,4 +1,4 @@
-import type { FileAdapter, FileAdapterFactory } from "../../types/adapter.js";
+import type { FileAdapter, FileAdapterFactory } from '../../contract/requires.js'
 import type { FileSnapshot } from "../../types/snapshot.js";
 
 /** 管理文件 adapter factory，并按 priority 创建适合某个 snapshot 的 adapter。 */

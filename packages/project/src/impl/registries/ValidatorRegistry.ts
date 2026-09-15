@@ -1,11 +1,7 @@
 import { isEmpty, isUndefined, optionalWhen } from '@velaros-ai/core'
 
-import type {
-  ProjectValidationContext,
-  ProjectValidator,
-  ValidateInput,
-  ValidationResult,
-} from '../../types/validation.js'
+import type { ProjectValidator } from '../../contract/requires.js'
+import type { ProjectValidationContext, ValidateInput, ValidationResult } from '../../types/validation.js'
 
 function isSelectedValidator(validator: ProjectValidator, checks?: readonly string[]): boolean {
   if (!checks || isEmpty(checks)) return true

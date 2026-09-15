@@ -24,6 +24,7 @@ import * as path from 'node:path'
 
 import { isNull, isObject, isPresent, isUndefined, optionalWhen, toOptional } from '@velaros-ai/core'
 
+import type { CommandProvider, FileFilterProvider } from '../../contract/requires.js'
 import type { ProjectFileAccess } from '../../types/file-access.js'
 import type {
   FileListEntry,
@@ -34,7 +35,6 @@ import type {
   ReadResult,
 } from '../../types/io.js'
 import type { CorePolicy } from '../../types/policy.js'
-import type { CommandProvider, FileFilterProvider } from '../../types/provider.js'
 import type { FileSnapshot, ProjectSnapshot } from '../../types/snapshot.js'
 import { ProjectError, RevisionMismatchSuggestedNextAction } from '../../utils/errors.js'
 import { atomicWriteProjectBytes, atomicWriteProjectText, type ProjectExpectedBytes } from '../../utils/files/atomic-writer.js'

@@ -1,6 +1,7 @@
 import { isEmpty,isNonBlankString, optionalWhen } from '@velaros-ai/core'
 
-import type { FixInput, FixResult, ProjectFixContext, ProjectFixer } from '../../types/fix.js'
+import type { ProjectFixer } from '../../contract/requires.js'
+import type { FixInput, FixResult, ProjectFixContext } from '../../types/fix.js'
 import { toErrorObject } from '../../utils/errors.js'
 
 function emptyResult(transactionId: string): FixResult {

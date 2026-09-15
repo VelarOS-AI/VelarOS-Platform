@@ -1,4 +1,4 @@
-import type { ProjectPlugin } from "../../types/plugin.js";
+import type { ProjectPlugin } from '../../contract/requires.js'
 import { codeAdapterFactory } from "../adapters/code-adapter.js";
 import { jsonAdapterFactory } from "../adapters/json-adapter.js";
 import { jsTsAdapterFactory } from "../adapters/jsts-adapter.js";

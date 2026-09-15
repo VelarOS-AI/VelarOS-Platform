@@ -11,24 +11,8 @@ import {
   toOptional,
 } from '@velaros-ai/core'
 
-import type { ProjectSymbol } from '../../types/adapter.js'
-import type {
-  ApplyEditInput,
-  PrepareEditInput,
-  RollbackInput,
-  RollbackResult,
-} from '../../types/edit.js'
-import type { FixInput } from '../../types/fix.js'
-import type {
-  FileStatInput,
-  FileStatResult,
-  ObserveInput,
-  ReadInput,
-  SearchInput,
-} from '../../types/io.js'
-import type { ResolveTargetInput } from '../../types/target.js'
-import type { ProjectTransactionStatus } from '../../types/transaction.js'
-import type { ValidateInput } from '../../types/validation.js'
+import type { AgentProjectKernelPort } from '../../contract/requires.js'
+import type { AgentProjectErrorLike,AgentProjectKernelReadResult, AgentProjectReadContinuation, AgentProjectReadIssue, AgentProjectReadRequest, AgentProjectReadResult, AgentProjectSearchHit, AgentProjectSearchRequest, AgentProjectSearchResult } from '../../types/agent-port.js'
 import { ProjectError } from '../errors.js'
 import { validateReadBounds } from '../files/read-bounds.js'
 
@@ -36,230 +20,6 @@ import { validateReadBounds } from '../files/read-bounds.js'
  * 项目空间拥有的 Agent 能力面。宿主注入实现，参数结构与校验留在项目领域内；
  * 返回契约只包含 Agent 编排读取和事务编辑时真正观察的字段。
  */
-
-export interface AgentProjectCommandToolRequirement {
-  kind: string
-  command: string
-  reason?: string
-}
-
-export interface AgentProjectDiagnostic {
-  severity: 'info' | 'warning' | 'error'
-  message: string
-  path?: string
-  line?: number
-  column?: number
-  source?: string
-  data?: unknown
-}
-
-export interface AgentProjectPreparedPatch {
-  /** 提交快照归档使用内核实际补丁内容，避免写入后重读时外部变更吞掉中间版本。 */
-  oldContent?: string
-  newContent?: string
-  path: string
-  baseRevision?: string
-  diff: string
-  changedLines: number
-  /** 策略写入的补丁说明；Agent 边界只读取其中给模型看的 matchNote。 */
-  metadata?: Readonly<Record<string, unknown>>
-}
-
-export interface AgentProjectPreparedTransaction {
-  transactionId: string
-  status: 'prepared'
-  patches: AgentProjectPreparedPatch[]
-  changedFiles: string[]
-  diff: string
-  changedLines: number
-  risk: 'low' | 'medium' | 'high'
-  createdAt: number
-  /** 计划元数据原样保存在事务上，例如编码转换的 recode 回执。 */
-  metadata?: Record<string, unknown>
-}
-
-export interface AgentProjectStoredTransaction extends Omit<AgentProjectPreparedTransaction, 'status'> {
-  status: ProjectTransactionStatus
-  appliedAt?: number
-}
-
-export interface AgentProjectApplyResult {
-  transactionId: string
-  changedFiles: string[]
-  oldRevisions: Record<string, string>
-  newRevisions: Record<string, string>
-  rebasedFiles?: string[]
-  gitTrackedFiles?: string[]
-  gitUntrackedFiles?: string[]
-}
-
-export interface AgentProjectValidationResult {
-  ok: boolean
-  diagnostics: AgentProjectDiagnostic[]
-  checks: Array<{
-    id: string
-    ok: boolean
-    diagnostics?: AgentProjectDiagnostic[]
-    metadata?: unknown
-  }>
-  toolRequirements?: AgentProjectCommandToolRequirement[]
-}
-
-export interface AgentProjectFixResult {
-  ok: boolean
-  changed: boolean
-  transactionId: string
-  changedFiles: string[]
-  fixes: Array<{
-    path: string
-    content: string
-    source: string
-  }>
-  diagnostics: AgentProjectDiagnostic[]
-  toolRequirements?: AgentProjectCommandToolRequirement[]
-}
-
-export interface AgentProjectFileSnapshot {
-  path: string
-  exists: boolean
-  isDirectory: boolean
-  isBinary: boolean
-  revision?: string
-}
-
-export interface AgentProjectReadResult {
-  redacted?: boolean
-  snapshot: AgentProjectFileSnapshot
-  content?: string
-  range?: {
-    startLine: number
-    endLine: number
-    startColumn?: number
-    endColumn?: number
-    startOffset?: number
-    endOffset?: number
-  }
-  totalLines?: number
-  truncated?: boolean
-  nextStartLine?: number
-  remainingLines?: number
-  hasMore?: boolean
-  continuation?: AgentProjectReadContinuation
-  /** 范围被钳制或起始行越界时的说明；此时读取仍算成功。 */
-  note?: string
-}
-
-export interface AgentProjectReadContinuation {
-  path: string
-  range: {
-    startLine: number
-    startColumn?: number
-    endLine?: number
-    endColumn?: number
-  }
-  maxChars?: number
-  baseRevisions?: Record<string, string>
-}
-
-interface AgentProjectKernelReadResult extends Omit<AgentProjectReadResult, 'continuation'> {
-  continuation?: {
-    path: string
-    range?: {
-      startLine?: number
-      endLine?: number
-      startColumn?: number
-      endColumn?: number
-    }
-    maxChars?: number
-    baseRevision?: string
-  }
-}
-
-export interface AgentProjectReadIssue {
-  path: string
-  reason: 'directory' | 'not_found' | 'binary' | 'failed'
-  message: string
-  /** reason=failed 时的 Project 错误码。 */
-  code?: string
-}
-
-export interface AgentProjectSearchResult {
-  query: string
-  hits: AgentProjectSearchHit[]
-  truncated?: boolean
-  toolRequirements?: AgentProjectCommandToolRequirement[]
-  nextAction?: string
-}
-
-export interface AgentProjectSearchHit {
-  path: string
-  revision?: string
-  range?: {
-    startLine: number
-    startColumn?: number
-    endLine: number
-    endColumn?: number
-  }
-  snippet?: string
-}
-
-export interface AgentProjectDiffResult {
-  diff: string
-  changedFiles: string[]
-  changedLines: number
-}
-
-export type AgentProjectResolveTargetResult =
-  | {
-      status: 'resolved'
-      target: {
-        range?: { startLine?: number; endLine?: number }
-      }
-    }
-  | {
-      status: 'ambiguous' | 'not_found'
-    }
-
-export interface AgentProjectKernelPort {
-  prepareContextSnapshot?(input: { path: string; content: string }): Promise<{ content: string; redacted: boolean }>
-  listFiles(input?: ObserveInput): Promise<Array<{ path: string; type: 'file' | 'directory' }>>
-  stat(input: FileStatInput): Promise<FileStatResult>
-  read(input: ReadInput): Promise<AgentProjectKernelReadResult>
-  search(input: SearchInput): Promise<AgentProjectSearchResult>
-  listSymbols(path: string): Promise<ProjectSymbol[]>
-  resolveTarget(input: ResolveTargetInput): Promise<AgentProjectResolveTargetResult>
-  prepareEdit(input: PrepareEditInput): Promise<AgentProjectPreparedTransaction>
-  discardTransaction(transactionId: string): { discarded: boolean }
-  getTransaction(
-    transactionId: string
-  ): AgentProjectStoredTransaction | undefined
-  fixTransaction(input: FixInput): Promise<AgentProjectFixResult>
-  applyEdit(input: ApplyEditInput): Promise<AgentProjectApplyResult>
-  validate(input: ValidateInput): Promise<AgentProjectValidationResult>
-  rollback(input: RollbackInput): Promise<RollbackResult>
-  diff(input?: { transactionId?: string }): Promise<AgentProjectDiffResult>
-  status(): Promise<{ root: string; validators: string[] }>
-}
-
-export interface AgentProjectReadRequest {
-  path: string | string[]
-  range?: {
-    startLine?: number
-    endLine?: number
-    startColumn?: number
-    endColumn?: number
-    startOffset?: number
-    endOffset?: number
-  }
-  maxBytes?: number
-  maxChars?: number
-  allowUnbounded?: boolean
-  baseRevisions?: Record<string, string>
-  trust?: {
-    source: 'system' | 'user' | 'project' | 'tool' | 'external'
-    trust: 'trusted' | 'untrusted'
-  }
-}
 
 const DefaultAgentReadMaxChars = 500_000
 const DefaultAgentSearchLimit = 30
@@ -426,16 +186,6 @@ function readIssuesNextAction(issues: readonly AgentProjectReadIssue[]): Optiona
   return undefined
 }
 
-export interface AgentProjectSearchRequest {
-  query: string
-  path?: string
-  include?: string[]
-  exclude?: string[]
-  regex?: boolean
-  caseSensitive?: boolean
-  limit?: number
-}
-
 function projectAgentSearchHit(hit: AgentProjectSearchHit): AgentProjectSearchHit {
   return {
     path: hit.path,
@@ -515,12 +265,6 @@ export async function executeAgentProjectSearch(
       reason: requirement.reason,
     })),
   }
-}
-
-export interface AgentProjectErrorLike extends Error {
-  reason: string
-  details?: unknown
-  suggestedNextAction?: string
 }
 
 export function isAgentProjectError(

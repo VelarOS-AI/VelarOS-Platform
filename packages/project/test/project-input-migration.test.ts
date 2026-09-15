@@ -9,7 +9,7 @@ import { resolveToolInputReuse } from '@velaros-ai/agent/tool-contract'
 
 import { saveToolAttemptInput, saveToolAttemptOutcome } from '../../agent/src/tools/recovery/ToolInputReuse'
 import type { ProjectToolContext } from '../src/contract/requires'
-import { createProjectKernel } from '../src/impl/kernel/project-kernel'
+import { createProjectKernel } from '../src/impl/kernel/LocalProjectKernel'
 import { projectTools } from '../src/impl/ProjectTools'
 import { migrateProjectReusedInput } from '../src/impl/tools/legacy-input-migration'
 import { registerProjectFileContext } from '../src/utils/agent/file-context'

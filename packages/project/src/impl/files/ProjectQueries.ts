@@ -7,8 +7,8 @@ import {
   optionalWhen,
 } from '@velaros-ai/core'
 
+import type { FileAdapter } from '../../contract/requires.js'
 import type { ProjectSymbol } from '../../types/adapter.js'
-import type { FileAdapter } from '../../types/adapter.js'
 import type { Range } from '../../types/common.js'
 import type { BuildEvidencePackInput, EvidencePack, TaskContext } from '../../types/context.js'
 import type { ProjectFileAccess } from '../../types/file-access.js'
@@ -24,8 +24,8 @@ import type {
   SearchInput,
   SearchResult,
 } from '../../types/io.js'
-import type { ProjectRuntimeProviders } from '../../types/kernel.js'
 import type { CorePolicy, PolicyDecisionInput } from '../../types/policy.js'
+import type { ProjectRuntimeProviders } from '../../types/provider.js'
 import type { FileSnapshot, ProjectSnapshot } from '../../types/snapshot.js'
 import type { ResolvedTarget, ResolveTargetInput, ResolveTargetResult } from '../../types/target.js'
 import { searchWithRipgrep } from '../../utils/files/ripgrep.js'

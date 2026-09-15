@@ -4,10 +4,3 @@ export interface PipelineContext {
   phase: string;
 }
 
-/** 针对指定内核 phase 的有序输入/输出转换 hook。 */
-export interface PipelineStage<I = any, O = any> {
-  id: string;
-  phase: string;
-  order?: number;
-  run(input: I, ctx: PipelineContext): Promise<O> | O;
-}

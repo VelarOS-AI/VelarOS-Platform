@@ -9,8 +9,8 @@ import {
 import { isEmpty, isUndefined } from '@velaros-ai/core'
 
 import type { ProjectToolApi } from '../../contract/requires'
+import type { AgentProjectPreparedPatch, AgentProjectReadResult } from '../../types/agent-port.js'
 
-import type { AgentProjectPreparedPatch, AgentProjectReadResult } from './kernel-port'
 import { projectAgentReadResult } from './kernel-port'
 import { finalizeProjectModelResult, presentProjectRead } from './source-window.js'
 

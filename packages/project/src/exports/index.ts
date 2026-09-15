@@ -1,14 +1,11 @@
 /** Project 聚合入口。职责边界可通过 files、changes、execution、contracts、composition 与 kernel 子路径单独消费。 */
+export type { ProjectCapabilityService } from '../contract/provides.js'
+export type { ProjectSpace } from '../contract/provides.js'
+export type { CreateProjectKernelModuleOptions, ProjectToolContextResolver } from '../contract/requires.js'
 export * from './changes.js'
 export * from './composition.js'
 export * from './contracts.js'
 export * from './execution.js'
 export * from './files.js'
-export {
-  createProjectKernelModule,
-  type CreateProjectKernelModuleOptions,
-  ProjectCapability,
-  type ProjectCapabilityService,
-  type ProjectToolContextResolver,
-} from './kernel.js'
+export { createProjectKernelModule, ProjectCapability } from './kernel.js'
 export * from './runtime.js'

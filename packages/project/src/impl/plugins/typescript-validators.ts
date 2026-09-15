@@ -2,7 +2,8 @@ import { createHash } from 'node:crypto'
 
 import { isEmpty } from '@velaros-ai/core'
 
-import type { ProjectValidator, ValidateInput, ValidationResult } from '../../types/validation.js'
+import type { ProjectValidator } from '../../contract/requires.js'
+import type { ValidateInput, ValidationResult } from '../../types/validation.js'
 import { isJsTsPath, jsTsSyntaxDiagnostics } from '../../utils/jsts-ast.js'
 
 export function typescriptSyntaxValidator(): ProjectValidator {

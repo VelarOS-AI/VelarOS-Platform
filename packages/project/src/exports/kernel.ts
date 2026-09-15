@@ -7,29 +7,15 @@ import {
   createKernelCallableCapability,
   defineKernelModule,
   type KernelCallableCapabilityOperation,
-  type KernelCallableCapabilityService,
   KernelModuleApiVersion,
   type KernelModuleDefinition,
-  type ScopeRef,
 } from '@velaros-ai/kernel/contracts/abi'
 
-import type { ProjectToolContext, VelaTool } from '../contract/requires.js'
+import type { ProjectCapabilityService, VelaTool } from '../contract/provides.js'
+import type { CreateProjectKernelModuleOptions,ProjectToolContext, ProjectToolContextResolver } from '../contract/requires.js'
 import { PROJECT_PACKAGE_VERSION } from '../impl/kernel/defaults.js'
 import { projectTools } from '../impl/ProjectTools.js'
 import { ProjectError, toErrorObject } from '../utils/errors.js'
-
-export type ProjectToolContextResolver = (
-  scope: LooseOptional<ScopeRef>,
-  signal: AbortSignal,
-) => ProjectToolContext | Promise<ProjectToolContext>
-
-export interface CreateProjectKernelModuleOptions {
-  readonly resolveContext: ProjectToolContextResolver
-}
-
-export interface ProjectCapabilityService extends KernelCallableCapabilityService {
-  readonly tools: Readonly<typeof projectTools>
-}
 
 export const ProjectCapability =
   createCapabilityToken<ProjectCapabilityService>('velaros.project')

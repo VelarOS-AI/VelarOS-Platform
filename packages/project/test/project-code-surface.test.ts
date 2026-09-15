@@ -8,7 +8,7 @@ import { InMemoryContextPayloadStore } from '@velaros-ai/agent'
 import { AppError } from '@velaros-ai/core/error'
 
 import type { ProjectToolContext } from '../src/contract/requires'
-import { createProjectKernel } from '../src/impl/kernel/project-kernel'
+import { createProjectKernel } from '../src/impl/kernel/LocalProjectKernel'
 import { typescriptPlugin } from '../src/impl/plugins/typescript-plugin'
 import { executeProjectCode, executeProjectCodeAnalysis, executeProjectCodeIndex } from '../src/impl/tools/code-query'
 import { ProjectCodeAnalysisSchema, ProjectCodeSchema } from '../src/utils/schemas/code'

@@ -22,9 +22,3 @@ export interface HookContext {
   data: any;
 }
 
-export interface ProjectHook {
-  id: string;
-  event: HookEvent;
-  /** 有副作用的 hook；抛错会中止触发该事件的操作。 */
-  run(ctx: HookContext): Promise<void> | void;
-}

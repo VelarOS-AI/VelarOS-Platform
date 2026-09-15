@@ -1,4 +1,4 @@
-import type { ProjectPlugin } from "../../types/plugin.js";
+import type { ProjectPlugin } from '../../contract/requires.js'
 import { PROJECT_PACKAGE_VERSION } from "../kernel/defaults.js";
 
 import { typescriptAdapterFactory } from "./typescript-adapter.js";

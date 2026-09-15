@@ -1,8 +1,9 @@
 import { isEmpty, isPresent } from '@velaros-ai/core'
 
+import type { PatchStrategy } from '../../contract/requires.js'
 import type { OffsetRange } from '../../types/common.js'
 import type { EditOperation, PreparedPatch } from '../../types/edit.js'
-import type { PatchStrategy, PatchStrategyInput } from '../../types/patch.js'
+import type { PatchStrategyInput } from '../../types/patch.js'
 import type { FileSnapshot } from '../../types/snapshot.js'
 import { unifiedDiff } from '../../utils/diff.js'
 import { planAddImport, planRemoveImport, type SourceSplice } from '../../utils/editing/import-mutation.js'

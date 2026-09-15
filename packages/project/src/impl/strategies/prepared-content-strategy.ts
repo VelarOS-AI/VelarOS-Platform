@@ -1,6 +1,6 @@
 import { isString } from '@velaros-ai/core'
 
-import type { PatchStrategy } from '../../types/patch.js'
+import type { PatchStrategy } from '../../contract/requires.js'
 import { createTextPatch } from '../../utils/editing/prepared-patch.js'
 import { ProjectError } from '../../utils/errors.js'
 import { isProjectTextEncoding } from '../../utils/text.js'

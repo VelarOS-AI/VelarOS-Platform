@@ -11,9 +11,10 @@ import {
   stringifyPretty,
 } from '@velaros-ai/core'
 
+import type { PatchStrategy } from '../../contract/requires.js'
 import type { JsonValue } from '../../types/common.js'
 import type { PreparedPatch } from '../../types/edit.js'
-import type { PatchStrategy, PatchStrategyInput } from '../../types/patch.js'
+import type { PatchStrategyInput } from '../../types/patch.js'
 import { unifiedDiff } from '../../utils/diff.js'
 import { ProjectError } from '../../utils/errors.js'
 import { id } from '../../utils/id.js'

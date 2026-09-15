@@ -1,3 +1,5 @@
+import type { ProjectToolCollection } from '../contract/provides.js'
+
 import { projectChange } from './tools/change'
 import { projectCode } from './tools/code'
 import { projectEdit } from './tools/edit'
@@ -7,7 +9,6 @@ import { projectRead } from './tools/read'
 import { projectRun } from './tools/run'
 import { projectSandbox } from './tools/sandbox'
 import { projectSearch } from './tools/search'
-import type { ProjectToolCollection } from './tools/shared'
 
 export { defineProjectTool, runInProjectDirectory, scopeProjectListPatterns } from './tools/shared'
 

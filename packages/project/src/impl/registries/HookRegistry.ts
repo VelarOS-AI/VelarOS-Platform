@@ -1,4 +1,5 @@
-import type { HookEvent, ProjectHook } from "../../types/hook.js";
+import type { ProjectHook } from '../../contract/requires.js'
+import type { HookEvent } from "../../types/hook.js";
 
 export class HookRegistry {
   private hooks: ProjectHook[] = [];

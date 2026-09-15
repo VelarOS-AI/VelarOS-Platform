@@ -1,8 +1,6 @@
 import type { Diagnostic, Range } from './common.js'
-import type { PreparedPatch,PrepareEditInput } from './edit.js'
+import type {PrepareEditInput } from './edit.js'
 import type { FileSnapshot } from './snapshot.js'
-import type { ResolveTargetInput, ResolveTargetResult } from './target.js'
-import type { ValidationResult } from './validation.js'
 
 /** 文件快照的粗粒度内容类型，用来选择最安全的 adapter。 */
 export type AdapterKind =
@@ -95,24 +93,3 @@ export interface AdapterValidateInput {
   changedContent?: string
 }
 
-export interface FileAdapter {
-  id: string
-  kind: AdapterKind
-  /** 搜索、目标解析和编辑时优先尝试 priority 更高的 adapter。 */
-  priority?: number
-  capabilities: AdapterCapability[]
-  parse?(input: ParseInput): Promise<ParseResult> | ParseResult
-  search?(input: AdapterSearchInput): Promise<AdapterSearchHit[]> | AdapterSearchHit[]
-  resolveTarget?(
-    input: ResolveTargetInput & { snapshot: FileSnapshot }
-  ): Promise<ResolveTargetResult> | ResolveTargetResult
-  prepareEdit?(input: AdapterPrepareEditInput): Promise<PreparedPatch[]> | PreparedPatch[]
-  validate?(input: AdapterValidateInput): Promise<ValidationResult> | ValidationResult
-}
-
-export interface FileAdapterFactory {
-  id: string
-  /** 创建 adapter 前对每个文件快照执行的快速适配性检查。 */
-  canHandle(snapshot: FileSnapshot): Promise<boolean> | boolean
-  create(input: { snapshot: FileSnapshot; kernel: any }): Promise<FileAdapter> | FileAdapter
-}

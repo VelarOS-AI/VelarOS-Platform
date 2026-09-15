@@ -6,8 +6,8 @@ import { execa } from "execa";
 import { isEmpty,isString, isTrue } from "@velaros-ai/core";
 import { AppError } from "@velaros-ai/core/error";
 
-import type { PolicyDecision, PolicyProvider } from "../../types/policy.js";
-import type { CommandProvider, FileFilterProvider, SecretRedactionProvider } from "../../types/provider.js";
+import type { CommandProvider, FileFilterProvider, PolicyProvider,SecretRedactionProvider } from '../../contract/requires.js'
+import type { PolicyDecision } from "../../types/policy.js";
 import { matchesAny } from "../../utils/glob.js";
 
 import { createMissingCommandRequirement, detectCommandRunToolRequirements } from "./command-requirements.js";

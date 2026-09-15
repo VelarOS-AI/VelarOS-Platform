@@ -1,6 +1,8 @@
+import type { CommandProvider, ProjectProviders } from '../contract/requires.js'
+
 import type { Diagnostic } from "./common.js";
 import type { CorePolicy } from "./policy.js";
-import type { CommandProvider, CommandToolRequirement, ProjectProviders } from "./provider.js";
+import type { CommandToolRequirement } from "./provider.js";
 
 export type ProjectValidationPolicy = Omit<
   Readonly<CorePolicy>,
@@ -81,16 +83,3 @@ export interface Postcondition {
   value: any;
 }
 
-export interface ProjectValidator {
-  id: string;
-  /** 除 validator id 外可用于 ValidateInput.checks 选择本 validator 的稳定别名。 */
-  readonly checkIds?: readonly string[];
-  /** 快速过滤器，让 registry 跳过与本次请求无关的 validator。 */
-  canValidate(input: ValidateInput): boolean;
-  /** 由校验器声明完整依赖指纹；必须覆盖源码、配置和环境。缺省或返回 undefined 时每次执行。 */
-  cacheKey?(input: ValidateInput, context: ProjectValidationContext): Promise<string | undefined> | string | undefined;
-  validate(
-    input: ValidateInput,
-    context: ProjectValidationContext,
-  ): Promise<ValidationResult> | ValidationResult;
-}

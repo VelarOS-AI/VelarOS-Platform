@@ -4,9 +4,9 @@ import * as path from 'node:path'
 
 import { isEmpty, isTrue } from '@velaros-ai/core'
 
+import type { CommandProvider } from '../../contract/requires.js'
 import type { ProjectFileAccess } from '../../types/file-access.js'
 import type { FileListEntry, ObserveInput } from '../../types/io.js'
-import type { CommandProvider } from '../../types/provider.js'
 import type { FileFilterInput } from '../../types/provider.js'
 import {
   type GitignoreRule,

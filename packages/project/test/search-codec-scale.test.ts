@@ -4,7 +4,7 @@ import { join } from 'node:path'
 
 import { expect, test } from 'bun:test'
 
-import { createProjectKernel } from '../src/impl/kernel/project-kernel'
+import { createProjectKernel } from '../src/impl/kernel/LocalProjectKernel'
 import { createNodeCommandProvider } from '../src/impl/kernel/providers'
 import { encodeProjectTextBuffer } from '../src/utils/text'
 

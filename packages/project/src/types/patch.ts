@@ -1,4 +1,4 @@
-import type { EditIntent, PreparedPatch } from "./edit.js";
+import type { EditIntent } from "./edit.js";
 import type { CorePolicy } from "./policy.js";
 import type { FileSnapshot } from "./snapshot.js";
 import type { ResolvedTarget } from "./target.js";
@@ -11,10 +11,3 @@ export interface PatchStrategyInput {
   policy: CorePolicy;
 }
 
-export interface PatchStrategy {
-  id: string;
-  /** 多个 strategy 都能处理同一 intent 时，priority 更高者优先。 */
-  priority?: number;
-  canHandle(input: PatchStrategyInput): boolean;
-  prepare(input: PatchStrategyInput): Promise<PreparedPatch[]> | PreparedPatch[];
-}
