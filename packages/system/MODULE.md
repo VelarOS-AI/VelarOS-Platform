@@ -60,7 +60,7 @@
 | `system:run` | ① 执行前分类（只读 / 危险 / 后台）→ ② 显式 background 优先，否则按命令形态推断；`interactive` 为真时一定走后台，命令跑在控制台里等用户输入 → ③ 审批：危险命令高风险手动确认，长驻服务低风险确认 → ④ 宿主执行 → ⑤ 整形：输出窗口、召回续接、后台状态续接；要了控制台却没拿到就在 note 里说清楚宿主不支持 |
 | `system:refresh-environment` | Windows 上重读用户与系统环境变量写回宿主进程 → 重新选定并自检 shell → 返回 shell 描述与 revision |
 | `system:list-tasks` | 给了 taskId 精确查一条，否则按 limit / onlyRunning 列表 → 附 count |
-| `system:sandbox` | create：源目录解开链接后镜像到临时区（写时复制；gitignore 忽略的目录链接过去、忽略的文件不复制）→ 先探测约束后端，没有就拒绝、不留目录 → 剪断镜像仓库的推送 → 清单落盘、登记专属执行器，之后 cwd 落在镜像根内的 `system:run` 一律约束到镜像根 → diff：扫描镜像印记对比清单，新增、修改、删除三列加有界文本差量，.git 只汇总 → apply：先算差量、向用户确认（列出删除、覆盖与敏感路径）→ 逐个核对源文件自建沙箱以来没变过，冲突整批不落 → 新建、覆盖、删除写回，.git 不落 → discard：核对路径在基目录之下再递归删除 |
+| `system:sandbox` | create：源目录解开链接后镜像到临时区（写时复制；gitignore 忽略的目录链接过去、忽略的文件不复制）→ 先探测约束后端，没有就拒绝、不留目录 → 剪断镜像仓库的推送 → 清单落盘、登记专属执行器，之后 cwd 落在镜像根内的 `system:run` 一律约束到镜像根 → diff：扫描镜像印记对比清单，新增、修改、删除三列加有界文本差量，.git 只汇总 → apply：先算完整差量（不截断；paths 里没变化的路径在问用户之前就拒绝）、向用户确认（条数、删除、覆盖与敏感路径都按完整三列）→ 宿主拿确认时的差量指纹核对镜像之后没再变，变了整批不落 → 逐个核对源文件自建沙箱以来没变过、上级路径不是符号链接，冲突整批不落 → 新增与覆盖先暂存进源目录里的临时目录，拷不全什么都不落 → 挪到位（镜像把文件换成同名目录的先删那个文件）、按删除列删掉、清掉删空而镜像里也没有的目录，.git 不落 → discard：核对路径在基目录之下再递归删除 |
 
 七个工具按两个类别分组、作为内置 mod 挂进产品、作为能力服务挂进内核，也在 `SystemTools.ts` 的末尾；挂进内核后每次调用先严格解析入参，再向宿主解析上下文。
 
@@ -103,12 +103,12 @@
 - **危险命令没有审批通道就拒绝。** 审批事实与约束事实分开记录，谁也不能冒充谁。
 - **输出过长不是错误。** 截尾、标记 `truncated`、给出可执行的召回续接。
 - 完整错误码语义见 `src/contract/constants.ts` 里的 `SystemErrorCodes`；外面按错误码判断，不按错误类。
-- 演练沙箱：没有约束后端建不出（`SYSTEM_PROCESS_CONFINEMENT_UNAVAILABLE`）；落回时源文件自建沙箱以来变过整批不落（`SYSTEM_SANDBOX_CONFLICT`，not-applied，cause.details.conflicts 列出每处）；丢弃时 id 不合形状或路径不在基目录之下拒绝。
+- 演练沙箱：没有约束后端建不出（`SYSTEM_PROCESS_CONFINEMENT_UNAVAILABLE`）；落回时源文件自建沙箱以来变过、或上级路径是符号链接（会写到源目录外）整批不落（`SYSTEM_SANDBOX_CONFLICT`，not-applied，cause.details.conflicts 列出每处）；确认之后镜像又变过整批不落（`SYSTEM_SANDBOX_CHANGED`，not-applied）；暂存拷不全什么都不落（not-applied），挪到位的途中失败不回滚，已落回的路径在 context.applied 里点名；丢弃时 id 不合形状或路径不在基目录之下拒绝。
 
 ## 不变量
 
-共 25 条，登记在 `spec/invariants.md`，验收用例在 `spec/acceptance.test.ts`。编号只增不重排，INV-1 已移出为仓库级跨包约束。
-按检验方式：测试 22 条、类型 1 条、门禁 1 条、文字 1 条。未验证 1 条（INV-18，只有文字，没有机器检验）。
+共 27 条，登记在 `spec/invariants.md`，验收用例在 `spec/acceptance.test.ts`。编号只增不重排，INV-1 已移出为仓库级跨包约束。
+按检验方式：测试 24 条、类型 1 条、门禁 1 条、文字 1 条。未验证 1 条（INV-18，只有文字，没有机器检验）。
 
 ## 非目标
 

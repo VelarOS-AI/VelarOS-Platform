@@ -2,16 +2,16 @@
  * 演练沙箱：镜像一棵目录树、记印记、算差量、落回源目录、剪断镜像仓库的推送，以及只许删沙箱基目录之下东西的守卫。
  */
 
-import { randomBytes } from 'node:crypto'
+import { createHash, randomBytes } from 'node:crypto'
 import type { Stats } from 'node:fs'
 import { constants } from 'node:fs'
-import { chmod, copyFile, lstat, mkdir, readdir, readFile, readlink, rename, rm, symlink, unlink, writeFile } from 'node:fs/promises'
+import { chmod, copyFile, lstat, mkdir, mkdtemp, readdir, readFile, readlink, rename, rm, rmdir, symlink, unlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join, posix, sep } from 'node:path'
 
 import { createTwoFilesPatch } from 'diff'
 
-import { isEmpty, isNull, isPresent } from '@velaros-ai/core'
+import { isEmpty, isFalse, isNull, isPresent } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import { SystemErrorCodes, SystemFailureLimits, SystemSandboxLimits } from '../contract/constants.js'
@@ -20,6 +20,7 @@ import type { SystemSandboxApplyFailureDetails, SystemSandboxConflict, SystemSan
 import type { SystemSandboxApplyResult, SystemSandboxDiff, SystemSandboxIgnoredMode, SystemSandboxTextDiff } from '../types/system.js'
 
 import { realPathForSafety } from './file-safety.js'
+import { readErrnoCode } from './fs.js'
 import { isBinaryBuffer } from './text-file.js'
 import { SystemTuning } from './tuning.js'
 
@@ -199,12 +200,13 @@ export function renderTextDiff(path: string, oldText: string, newText: string, m
 
 /**
  * 比较镜像现在的印记和创建时的清单，算出新增、修改、删除三列（.git 里的东西只汇总成 gitChanged）。
- * 大小相同只是修改时间变了的文件，再和源目录里没变过的那份比内容，内容一样就不算修改。文本差量按预算附上，超出只列路径。
+ * 大小和权限位相同、只是修改时间变了的文件，再和源目录里没变过的那份比内容，内容一样就不算修改。
+ * 指纹按截断前的完整三列和镜像印记算，落回时拿它核对镜像在确认之后有没有再变。文本差量按预算附上（textDiffs 为 false 时不附），超出只列路径。
  */
 export async function diffMirror(
   manifest: SystemSandboxManifest,
   current: SystemSandboxStampTable,
-  options: { maxFiles: number }
+  options: { maxFiles: number; textDiffs?: boolean }
 ): Promise<Omit<SystemSandboxDiff, 'sandboxId' | 'source'>> {
   const { root, source } = manifest.record
   const created: string[] = []
@@ -224,8 +226,8 @@ export async function diffMirror(
     }
     const after = current[path]!
     if (sameStamp(before, after)) continue
-    if (before.size === after.size && before.link === after.link && !isPresent(after.link)) {
-      // 大小没变只是时间变了：和源目录里没动过的那份比内容，内容一样不算改。
+    if (before.size === after.size && before.mode === after.mode && before.link === after.link && !isPresent(after.link)) {
+      // 大小和权限位没变、只是时间变了：和源目录里没动过的那份比内容，内容一样不算改。只改了权限位的算修改。
       const sourceStats = await lstat(join(source, path)).catch(() => null)
       const sourceBefore = manifest.files[path]
       if (sourceStats?.isFile() && sourceBefore && sameStamp(stampOfEntry(sourceStats), sourceBefore)) {
@@ -240,10 +242,15 @@ export async function diffMirror(
     if (!noteGit(path)) deleted.push(path)
   }
   const truncated = created.length > options.maxFiles || modified.length > options.maxFiles
+  const fingerprint = createHash('sha256')
+    .update(JSON.stringify({ created: created.map((path) => [path, current[path]]), modified: modified.map((path) => [path, current[path]]), deleted }))
+    .digest('hex')
+    .slice(0, 16)
   const textDiffs: SystemSandboxTextDiff[] = []
   let omittedDiffs = 0
   let budget = SystemSandboxLimits.diffTotalChars
-  for (const path of [...modified.slice(0, options.maxFiles), ...created.slice(0, options.maxFiles)]) {
+  const candidates = isFalse(options.textDiffs) ? [] : [...modified.slice(0, options.maxFiles), ...created.slice(0, options.maxFiles)]
+  for (const path of candidates) {
     if (budget <= 0 || textDiffs.length >= SystemSandboxLimits.textDiffs) { omittedDiffs += 1; continue }
     const after = await readTextForDiff(join(root, path), SystemSandboxLimits.diffFileChars)
     if (isNull(after)) { omittedDiffs += 1; continue }
@@ -269,6 +276,7 @@ export async function diffMirror(
     gitChanged,
     textDiffs,
     omittedDiffs,
+    fingerprint,
   }
   if (omittedDiffs > 0) result.note = `${omittedDiffs} 个文件没附差量（二进制、太大、超过预算，或源目录里那份也变了没有基线）；用 system:read 直接看镜像里的文件。`
   return result
@@ -314,6 +322,16 @@ export function sandboxApplyConflict(conflicts: readonly SystemSandboxConflict[]
   )
 }
 
+/** 落回时镜像跟用户确认时看到的不一样了：什么都没写，cause.reason 是 SYSTEM_SANDBOX_CHANGED，context.executionOutcome 是 not-applied。 */
+export function sandboxChangedSinceConfirmation(): AppError {
+  return new AppError(
+    'VALIDATION',
+    '确认之后沙箱里的改动又变了（镜像里可能还有命令在跑），什么都没写；停掉镜像里的任务，重新 diff 再落回。',
+    { reason: SystemErrorCodes.sandboxChanged, suggestedNextAction: '什么都没写。先用 system:list-tasks 找到并停掉镜像里还在跑的任务，再 diff、apply。' },
+    { executionOutcome: 'not-applied' }
+  )
+}
+
 /** 核对一处变化落回时源目录的状态：改过、丢了、凭空出现都算冲突；没冲突返回 null。 */
 async function conflictOf(source: string, manifest: SystemSandboxManifest, path: string, kind: 'created' | 'modified' | 'deleted'): Promise<Nullable<SystemSandboxConflict>> {
   const stats = await lstat(join(source, path)).catch(() => null)
@@ -325,25 +343,67 @@ async function conflictOf(source: string, manifest: SystemSandboxManifest, path:
   return null
 }
 
-/** 把镜像里的一个文件（或符号链接）原子地写到源目录的同一相对路径，保留权限位。 */
-async function copyBack(root: string, source: string, path: string): Promise<void> {
-  const mirrorPath = join(root, path)
-  const targetPath = join(source, path)
-  const stats = await lstat(mirrorPath)
-  await mkdir(dirname(targetPath), { recursive: true })
+/** 源目录里一条相对路径的各级上级中，第一个已经存在却不是真目录的（符号链接或文件）；都是目录或还不存在时返回 null。 */
+async function blockingAncestor(source: string, path: string): Promise<Nullable<{ path: string; link: boolean }>> {
+  const segments = path.split('/')
+  for (let depth = 1; depth < segments.length; depth += 1) {
+    const ancestor = segments.slice(0, depth).join('/')
+    const stats = await lstat(join(source, ancestor)).catch(() => null)
+    if (!stats) return null
+    if (stats.isSymbolicLink()) return { path: ancestor, link: true }
+    if (!stats.isDirectory()) return { path: ancestor, link: false }
+  }
+  return null
+}
+
+/** 把镜像里的一个文件或符号链接复制到暂存路径：文件按写时复制并保留权限位，符号链接照原样再建一个。 */
+async function stageEntry(from: string, to: string): Promise<void> {
+  const stats = await lstat(from)
   if (stats.isSymbolicLink()) {
-    await rm(targetPath, { force: true })
-    await symlink(await readlink(mirrorPath), targetPath)
+    await symlink(await readlink(from), to)
     return
   }
-  const temporary = `${targetPath}.velaros-sandbox-${process.pid}.tmp`
-  await copyFile(mirrorPath, temporary, constants.COPYFILE_FICLONE)
-  await chmod(temporary, stats.mode & 0o777)
-  await rename(temporary, targetPath)
+  await copyFile(from, to, constants.COPYFILE_FICLONE)
+  await chmod(to, stats.mode & 0o777)
+}
+
+/** 把暂存好的条目原子地挪到目标位置（缺的上级目录补建）；隔着挂载点挪不动时，就在目标旁边复制一份再原子替换。 */
+async function moveIntoPlace(staged: string, target: string): Promise<void> {
+  await mkdir(dirname(target), { recursive: true })
+  try {
+    await rename(staged, target)
+  } catch (error) {
+    if (readErrnoCode(error) !== 'EXDEV') throw error
+    const nearby = `${target}.velaros-sandbox-${process.pid}.tmp`
+    await stageEntry(staged, nearby)
+    await rename(nearby, target)
+  }
+}
+
+/** 删除之后，源目录里变空、镜像里也已经没有的上级目录自底向上一并删掉；镜像里还在的、不空的目录照留。 */
+async function removeEmptiedDirectories(root: string, source: string, deleted: readonly string[]): Promise<void> {
+  const directories = new Set<string>()
+  for (const path of deleted) {
+    for (let directory = posix.dirname(path); directory !== '.' && !directories.has(directory); directory = posix.dirname(directory)) directories.add(directory)
+  }
+  for (const directory of [...directories].sort((a, b) => b.split('/').length - a.split('/').length)) {
+    if (await lstat(join(root, directory)).catch(() => null)) continue
+    await rmdir(join(source, directory)).catch(() => null)
+  }
+}
+
+/** 落回途中出错时的报错：一条都还没落回就标 not-applied；落回了一部分就在 context.applied 里点名已经落回的路径。 */
+function sandboxApplyFailure(error: unknown, applied: readonly string[]): AppError {
+  const failure = AppError.from(error)
+  if (isEmpty(applied)) return new AppError(failure.code, `落回时出错，源目录里什么都没改：${failure.message}`, error, { executionOutcome: 'not-applied' })
+  return new AppError(failure.code, `已经落回了 ${applied.length} 个路径，后面的没落：${failure.message}`, error, { applied: [...applied] })
 }
 
 /**
- * 把镜像里选中的变化落回源目录：先把每一处都核对一遍（任何冲突整批不落），再按新增、覆盖、删除的顺序写；.git 里的东西永远不落。
+ * 把镜像里选中的变化落回源目录，只写在源目录之内，要么全落、要么如实报出落了哪些：
+ * 先把每一处核对一遍——源目录里改过、丢了、凭空出现，或者上级路径是符号链接、是文件（又不在这次删除之列），都算冲突，整批不落；
+ * 再把新增与覆盖的内容拷进源目录里的暂存目录，拷不全就什么都不落；最后挪到位（镜像把文件换成了同名目录的，先删那个文件），按删除列删掉，
+ * 删空、镜像里也已经没有的目录一并删掉。挪到位的途中出错，已经落回的路径在 context.applied 里点名。`.git` 里的东西永远不落。
  */
 export async function applyMirrorChanges(
   manifest: SystemSandboxManifest,
@@ -355,16 +415,59 @@ export async function applyMirrorChanges(
   const modified = outside(selection.modified)
   const deleted = outside(selection.deleted)
   const skippedGit = created.length + modified.length + deleted.length < selection.created.length + selection.modified.length + selection.deleted.length
+  const deletedSet = new Set(deleted)
+  const removeFirst = new Set<string>()
   const conflicts: SystemSandboxConflict[] = []
+  // 上级路径：源目录里已经存在的每一级都必须是真目录。是这次要删的文件或链接（镜像把它换成了目录）就先删；否则落回会穿过它写到别处，算冲突。
+  for (const path of [...created, ...modified]) {
+    const blocker = await blockingAncestor(source, path)
+    if (!blocker) continue
+    if (deletedSet.has(blocker.path)) removeFirst.add(blocker.path)
+    else conflicts.push(blocker.link
+      ? { path, reason: 'link', message: `上级路径 ${blocker.path} 在源目录里是符号链接，落回会写到源目录外` }
+      : { path, reason: 'changed', message: `上级路径 ${blocker.path} 在源目录里是文件，不是目录` })
+  }
+  const underRemoved = (path: string): boolean => [...removeFirst].some((ancestor) => path.startsWith(`${ancestor}/`))
   for (const [kind, list] of [['created', created], ['modified', modified], ['deleted', deleted]] as const) {
     for (const path of list) {
+      // 上级要先删掉的新增路径，落回时是一个全新的目录，不看源目录里经过那个链接或文件能找到什么。
+      if (kind === 'created' && underRemoved(path)) continue
       const conflict = await conflictOf(source, manifest, path, kind)
       if (conflict) conflicts.push(conflict)
     }
   }
   if (!isEmpty(conflicts)) throw sandboxApplyConflict(conflicts)
-  for (const path of created) await copyBack(root, source, path)
-  for (const path of modified) await copyBack(root, source, path)
-  for (const path of deleted) await unlink(join(source, path))
+
+  // 暂存：新增与覆盖的内容先拷进源目录里的临时目录（同一个文件系统，最后一步是原子的改名），拷不全就什么都不落。
+  const writes = [...created, ...modified]
+  const applied: string[] = []
+  let stage: Nullable<string> = null
+  try {
+    const staged: Array<{ path: string; staged: string }> = []
+    if (!isEmpty(writes)) stage = await mkdtemp(join(source, '.velaros-sandbox-'))
+    for (const [index, path] of writes.entries()) {
+      const stagedPath = join(stage!, String(index))
+      await stageEntry(join(root, path), stagedPath)
+      staged.push({ path, staged: stagedPath })
+    }
+    for (const path of removeFirst) {
+      await unlink(join(source, path))
+      applied.push(path)
+    }
+    for (const entry of staged) {
+      await moveIntoPlace(entry.staged, join(source, entry.path))
+      applied.push(entry.path)
+    }
+    for (const path of deleted) {
+      if (removeFirst.has(path)) continue
+      await unlink(join(source, path))
+      applied.push(path)
+    }
+  } catch (error) {
+    throw sandboxApplyFailure(error, applied)
+  } finally {
+    if (stage) await rm(stage, { recursive: true, force: true })
+  }
+  await removeEmptiedDirectories(root, source, deleted)
   return { created, modified, deleted, skippedGit }
 }

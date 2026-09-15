@@ -1,10 +1,11 @@
 import { existsSync } from 'node:fs'
-import { lstat, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises'
+import { chmod, lstat, mkdir, mkdtemp, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import { describe, expect, test } from 'bun:test'
 
+import { SystemSandboxLimits } from '../src/contract/constants.js'
 import type { SystemToolContext } from '../src/contract/requires.js'
 import type { LocalSystemKernelApi } from '../src/impl/LocalSystemKernel.js'
 import { createLocalSystemKernel } from '../src/impl/LocalSystemKernel.js'
@@ -36,6 +37,18 @@ function contextFor(kernel: LocalSystemKernelApi, approve: boolean): SystemToolC
     approval: {
       requestApproval: async () => ({ approved: true }),
       awaitConfirmation: async () => { if (!approve) throw new Error('user said no') },
+    },
+    system: kernel,
+  } as unknown as SystemToolContext
+}
+
+/** 工具上下文：宿主端口就是本地内核，每次确认都交给 onConfirm（记下文案、或者趁机改镜像），然后放行。 */
+function recordingContext(kernel: LocalSystemKernelApi, onConfirm: (message: string) => void): SystemToolContext {
+  return {
+    abortSignal: new AbortController().signal,
+    approval: {
+      requestApproval: async () => ({ approved: true }),
+      awaitConfirmation: async (message: string) => { onConfirm(message) },
     },
     system: kernel,
   } as unknown as SystemToolContext
@@ -165,6 +178,91 @@ describe('rehearsal sandbox', () => {
       await kernel.dispose()
       await rm(source, { recursive: true, force: true })
     }
+  })
+
+  test.skipIf(!canConfine)('apply asks with the full change set: counts past the diff cap are shown, and paths that did not change are refused before asking', async () => {
+    const source = await makeSource()
+    const kernel = createLocalSystemKernel({ cwd: source })
+    const record = await kernel.createSandbox({})
+    try {
+      const count = SystemSandboxLimits.diffFilesMax + 100
+      await mkdir(join(record.root, 'many'))
+      for (let index = 0; index < count; index += 1) await writeFile(join(record.root, 'many', `f${index}.txt`), 'x')
+      const messages: string[] = []
+      const applied = await sandboxTool.execute({ action: 'apply', sandboxId: record.id }, recordingContext(kernel, (message) => { messages.push(message) })) as { created: string[] }
+      expect(messages[0]).toContain(`新增 ${count} 个`)
+      expect(applied.created.length).toBe(count)
+
+      const asked: string[] = []
+      await expect(sandboxTool.execute({ action: 'apply', sandboxId: record.id, paths: ['never-changed.txt'] }, recordingContext(kernel, (message) => { asked.push(message) })))
+        .rejects.toMatchObject({ code: 'VALIDATION' })
+      expect(asked).toEqual([])
+    } finally {
+      await kernel.discardSandbox(record.id)
+      await kernel.dispose()
+      await rm(source, { recursive: true, force: true })
+    }
+  })
+
+  test.skipIf(!canConfine)('apply replaces a file with a same-named directory the mirror created in its place', async () => {
+    const source = await makeSource()
+    await writeFile(join(source, 'docs'), 'old docs file\n')
+    const kernel = createLocalSystemKernel({ cwd: source })
+    const record = await kernel.createSandbox({})
+    try {
+      await rm(join(record.root, 'docs'))
+      await mkdir(join(record.root, 'docs'))
+      await writeFile(join(record.root, 'docs', 'index.md'), '# docs\n')
+      await writeFile(join(record.root, 'b.txt'), 'new b\n')
+      const applied = await sandboxTool.execute({ action: 'apply', sandboxId: record.id }, contextFor(kernel, true)) as { created: string[]; deleted: string[] }
+      expect(applied).toMatchObject({ created: ['b.txt', 'docs/index.md'], deleted: ['docs'] })
+      expect((await lstat(join(source, 'docs'))).isDirectory()).toBe(true)
+      expect(await readFile(join(source, 'docs', 'index.md'), 'utf8')).toBe('# docs\n')
+      expect(await readFile(join(source, 'b.txt'), 'utf8')).toBe('new b\n')
+    } finally {
+      await kernel.discardSandbox(record.id)
+      await kernel.dispose()
+      await rm(source, { recursive: true, force: true })
+    }
+  })
+
+  test.skipIf(!canConfine)('a permission-only change counts as modified, and a directory removed in the mirror leaves no empty shell behind', async () => {
+    const source = await makeSource()
+    await mkdir(join(source, 'build', 'nested'), { recursive: true })
+    await writeFile(join(source, 'build', 'nested', 'out.js'), 'x')
+    await writeFile(join(source, 'build', 'top.js'), 'y')
+    await chmod(join(source, 'README.md'), 0o644)
+    const kernel = createLocalSystemKernel({ cwd: source })
+    const record = await kernel.createSandbox({})
+    try {
+      await chmod(join(record.root, 'README.md'), 0o755)
+      await rm(join(record.root, 'build'), { recursive: true })
+      // src 目录镜像里还在（只是空了）：源目录里也留着。
+      await rm(join(record.root, 'src', 'a.txt'))
+      const changes = await kernel.diffSandbox({ sandboxId: record.id })
+      expect(changes.modified).toEqual(['README.md'])
+      await sandboxTool.execute({ action: 'apply', sandboxId: record.id }, contextFor(kernel, true))
+      expect(((await stat(join(source, 'README.md'))).mode & 0o777).toString(8)).toBe('755')
+      expect(existsSync(join(source, 'build'))).toBe(false)
+      expect(existsSync(join(source, 'src'))).toBe(true)
+    } finally {
+      await kernel.discardSandbox(record.id)
+      await kernel.dispose()
+      await rm(source, { recursive: true, force: true })
+    }
+  })
+
+  test('apply leaves the host receipt untouched and adds the note on a new object', async () => {
+    const receipt = Object.freeze({ sandboxId: '20260915-183000-3fa2c1', created: ['a.txt'], modified: [], deleted: [], skippedGit: false })
+    const system = {
+      resolvePath: (path?: string) => path ?? '/',
+      diffSandbox: async () => ({ sandboxId: receipt.sandboxId, source: '/src', created: ['a.txt'], modified: [], deleted: [], truncated: false, gitChanged: false, textDiffs: [], omittedDiffs: 0, fingerprint: 'f' }),
+      applySandbox: async () => receipt,
+    }
+    const context = { abortSignal: new AbortController().signal, approval: { awaitConfirmation: async () => {} }, system } as unknown as SystemToolContext
+    const result = await sandboxTool.execute({ action: 'apply', sandboxId: receipt.sandboxId, paths: ['a.txt'] }, context)
+    expect(result).toMatchObject({ created: ['a.txt'], note: '只落了指定的 1 个路径。' })
+    expect(receipt).not.toHaveProperty('note')
   })
 
   test.skipIf(!canConfine)('a sandbox root survives a kernel restart: another kernel still confines commands there, and discard removes it', async () => {

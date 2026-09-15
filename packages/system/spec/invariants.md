@@ -44,3 +44,5 @@
 | INV-24 | 落回只写清单记过的文件：源目录里任何一处自建沙箱以来变过就整批不落，按 not-applied 报出冲突；`.git` 永远不落 | 测试 | `spec/acceptance.test.ts` |
 | INV-25 | 丢弃沙箱只删沙箱基目录之下的目录：id 不合形状或路径解开链接后不在基目录之下，一律拒绝 | 测试 | `spec/acceptance.test.ts` |
 | INV-26 | 镜像仓库推不出去：镜像里 `.git` 的每个远端都被改成无效的推送地址，网络缺省切断 | 测试 | `spec/acceptance.test.ts` |
+| INV-27 | 落回只落用户确认过的那份差量：确认按完整差量计数、列出删除与覆盖、扫敏感路径，确认之后镜像又变过就整批不落（`SYSTEM_SANDBOX_CHANGED`，not-applied） | 测试 | `spec/acceptance.test.ts` |
+| INV-28 | 落回只写在源目录之内、要么全落要么报清落了哪些：上级路径是符号链接或文件（又不在这次删除之列）按冲突整批不落；内容先暂存，拷不全什么都不落；挪到位途中失败在 context.applied 里点名已落回的路径 | 测试 | `spec/acceptance.test.ts` |

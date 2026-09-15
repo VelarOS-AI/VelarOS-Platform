@@ -6,7 +6,7 @@
 import { mkdir, rm, stat, writeFile } from 'node:fs/promises'
 import { join, relative, sep } from 'node:path'
 
-import { isEmpty, Log } from '@velaros-ai/core'
+import { isEmpty, isPresent, Log } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import type { PlatformCompatibilityApi } from '@velaros-ai/platform'
 
@@ -16,7 +16,7 @@ import type { SystemSandboxManifest } from '../types/sandbox.js'
 import type { SystemSandboxApplyOptions, SystemSandboxApplyResult, SystemSandboxDiff, SystemSandboxDiffOptions, SystemSandboxDiscardResult, SystemSandboxIgnoredMode, SystemSandboxRecord } from '../types/system.js'
 import { buildSystemProcessConfinementSpawnSpec } from '../utils/confinement.js'
 import { realPathForSafety } from '../utils/file-safety.js'
-import { applyMirrorChanges, assertInsideSandboxBase, diffMirror, disableGitPush, isSandboxId, mirrorTree, newSandboxId, readSandboxManifest, sandboxBaseDirectory, sandboxConfinementPolicy, scanTree, selectSandboxChanges } from '../utils/sandbox.js'
+import { applyMirrorChanges, assertInsideSandboxBase, diffMirror, disableGitPush, isSandboxId, mirrorTree, newSandboxId, readSandboxManifest, sandboxBaseDirectory, sandboxChangedSinceConfirmation, sandboxConfinementPolicy, scanTree, selectSandboxChanges } from '../utils/sandbox.js'
 
 import { GitIgnoreSystemSearchPolicy } from './GitIgnoreSystemSearchPolicy.js'
 import type { SystemCommandRunnerApi } from './SystemCommandRunner.js'
@@ -42,8 +42,9 @@ export interface SystemSandboxesApi {
   /** 镜像相对创建时的变化：新增、修改、删除三列（删除列永远完整），文本文件附有界的差量，.git 里的变化只汇总成一个布尔。 */
   diff(options: SystemSandboxDiffOptions): Promise<SystemSandboxDiff>
   /**
-   * 把镜像里的文件变化落回源目录：先核对每一处在源目录里自镜像以来没被改过，任何冲突整批不落并抛错（cause.details.conflicts）；
-   * 然后按新增、覆盖、删除写。.git 永远不落。审批由工具在调用前完成。
+   * 把镜像里的文件变化落回源目录：给了确认时的差量指纹就先核对，镜像在确认之后又变过整批不落（SYSTEM_SANDBOX_CHANGED）；
+   * 再核对每一处在源目录里自镜像以来没被改过、上级路径不是符号链接，任何冲突整批不落并抛错（cause.details.conflicts）；
+   * 内容先暂存再挪到位，暂存不全什么都不落，挪到位途中失败在 context.applied 里点名已落回的路径。.git 永远不落。审批由工具在调用前完成。
    */
   apply(options: SystemSandboxApplyOptions): Promise<SystemSandboxApplyResult>
   /** 删掉镜像并注销：路径不在基目录之下就拒绝；沙箱不存在时 removed 为 false。 */
@@ -145,14 +146,17 @@ export class SystemSandboxes implements SystemSandboxesApi {
     const entry = await this.resolveEntry(options.sandboxId)
     const manifest = await readSandboxManifest(entry.directory)
     const current = await scanTree(entry.record.root)
-    const changes = await diffMirror(manifest, current, { maxFiles: options.maxFiles ?? SystemSandboxLimits.diffFiles })
+    const changes = await diffMirror(manifest, current, { maxFiles: options.maxFiles ?? SystemSandboxLimits.diffFiles, textDiffs: options.textDiffs })
     return { sandboxId: entry.record.id, source: entry.record.source, ...changes }
   }
 
   public async apply(options: SystemSandboxApplyOptions): Promise<SystemSandboxApplyResult> {
     const entry = await this.resolveEntry(options.sandboxId)
     const manifest = await readSandboxManifest(entry.directory)
-    const changes = await diffMirror(manifest, await scanTree(entry.record.root), { maxFiles: SystemSandboxLimits.files })
+    // 落回永远按完整差量算，不截断、不附文本差量。
+    const changes = await diffMirror(manifest, await scanTree(entry.record.root), { maxFiles: Number.MAX_SAFE_INTEGER, textDiffs: false })
+    // 用户确认时看到的差量和现在的对不上（确认之后镜像又被改过）：整批不落，让调用方重新 diff、重新确认。
+    if (isPresent(options.fingerprint) && options.fingerprint !== changes.fingerprint) throw sandboxChangedSinceConfirmation()
     const selection = selectSandboxChanges(changes, options.paths)
     if (!isEmpty(selection.unknown)) throw new AppError('VALIDATION', `这些路径在沙箱里没有变化：${selection.unknown.slice(0, SystemFailureLimits.listItems).join('、')}`)
     const applied = await applyMirrorChanges(manifest, selection)

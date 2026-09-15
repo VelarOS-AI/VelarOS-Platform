@@ -26,10 +26,10 @@ export interface SystemSandboxManifest {
   mirror: SystemSandboxStampTable
 }
 
-/** 落回时的一处冲突：源目录里这个文件自镜像以来被改过、丢了，或凭空出现了。 */
+/** 落回时的一处冲突：源目录里这个文件自镜像以来被改过、丢了、凭空出现了，或者它的上级路径是符号链接（落回会写到源目录外）。 */
 export interface SystemSandboxConflict {
   path: string
-  reason: 'changed' | 'missing' | 'appeared'
+  reason: 'changed' | 'missing' | 'appeared' | 'link'
   message: string
 }
 

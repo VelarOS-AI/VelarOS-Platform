@@ -7,13 +7,13 @@
 import { join } from 'node:path'
 
 import { createApprovalOperationKey, createManualApprovalOptions } from '@velaros-ai/agent/tool-contract'
-import { isEmpty } from '@velaros-ai/core'
+import { isEmpty, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import { SystemSandboxLimits, SystemToolNames } from '../contract/constants.js'
+import { SystemFailureLimits, SystemToolNames } from '../contract/constants.js'
 import type { SystemToolContext } from '../contract/requires.js'
 import type { SystemRunInput, SystemRunResult } from '../types/commands.js'
-import type { SystemSandboxApplied, SystemSandboxInput, SystemSandboxResult } from '../types/sandbox.js'
+import type { SystemSandboxInput, SystemSandboxResult } from '../types/sandbox.js'
 import { buildBackgroundCommandConfirmationMessage } from '../utils/command-policy.js'
 import { exposeCommandOutputWindow } from '../utils/command-result.js'
 import { isCredentialPath, isSensitiveSystemMutationPath } from '../utils/file-safety.js'
@@ -37,7 +37,8 @@ export interface SystemExecutionOperationsApi {
   run(input: SystemRunInput, ctx: SystemToolContext): Promise<SystemRunResult>
   /**
    * 演练沙箱的四个动作，除 create 外都要 sandboxId：create 建镜像并提醒怎么用；diff 看镜像相对创建时的变化；discard 删镜像。
-   * apply 先算全部差量，把删除、覆盖和其中的敏感路径摆给用户确认（高风险、每次都问），确认了才让宿主落回；镜像里没有文件变化就什么都不落，只落指定路径时 note 说明。
+   * apply 先算完整差量（不截断），paths 里有没变化的路径就在问用户之前拒绝；把删除、覆盖的条数与路径和其中的敏感路径摆给用户确认（高风险、每次都问），
+   * 确认了才让宿主落回，并把确认时的差量指纹一起交过去，镜像在确认之后又变过就整批不落；镜像里没有文件变化就什么都不落，只落指定路径时 note 说明。
    */
   sandbox(input: SystemSandboxInput, ctx: SystemToolContext): Promise<SystemSandboxResult>
 }
@@ -115,9 +116,12 @@ export class SystemExecutionOperations implements SystemExecutionOperationsApi {
     if (input.action === 'diff') return ctx.system.diffSandbox({ sandboxId, maxFiles: input.maxFiles })
     if (input.action === 'discard') return ctx.system.discardSandbox(sandboxId)
 
-    // 落回：先算差量，把删除、覆盖、敏感路径都摆给用户看，确认了才写。
-    const changes = await ctx.system.diffSandbox({ sandboxId, maxFiles: SystemSandboxLimits.diffFilesMax })
+    // 落回：先算完整差量（不截断、不附文本差量），把删除、覆盖、敏感路径都摆给用户看，确认了才写。
+    // 条数、敏感路径都按完整的三列算；确认时的差量指纹交给宿主，镜像在确认之后又变过就整批不落。
+    const changes = await ctx.system.diffSandbox({ sandboxId, maxFiles: Number.MAX_SAFE_INTEGER, textDiffs: false })
+    if (changes.truncated) throw new AppError('VALIDATION', '宿主给的差量被截断了，没法对着完整的改动向用户确认，什么都没写。')
     const selection = selectSandboxChanges(changes, input.paths)
+    if (!isEmpty(selection.unknown)) throw new AppError('VALIDATION', `这些路径在沙箱里没有变化，什么都没写：${selection.unknown.slice(0, SystemFailureLimits.listItems).join('、')}`)
     if (isEmpty(selection.created) && isEmpty(selection.modified) && isEmpty(selection.deleted)) return { sandboxId, created: [], modified: [], deleted: [], skippedGit: changes.gitChanged, note: '镜像里没有文件变化，什么都没落。' }
     const targets = [...selection.created, ...selection.modified, ...selection.deleted].map((path) => join(changes.source, path))
     const sensitive = targets.filter((path) => isSensitiveSystemMutationPath(path) || isCredentialPath(path))
@@ -128,15 +132,15 @@ export class SystemExecutionOperations implements SystemExecutionOperationsApi {
         approvalRisk: 'high',
         riskScope: 'system-sandbox:apply',
         operation: {
-          key: createApprovalOperationKey('sandbox-apply', { sandboxId, created: selection.created.length, modified: selection.modified.length, deleted: selection.deleted.length }),
+          key: createApprovalOperationKey('sandbox-apply', { sandboxId, fingerprint: toNullable(changes.fingerprint), created: selection.created.length, modified: selection.modified.length, deleted: selection.deleted.length }),
           label: `把演练沙箱的改动落回 ${changes.source}`,
           target: changes.source,
         },
       })
     )
-    const applied: SystemSandboxApplied = await ctx.system.applySandbox({ sandboxId, paths: input.paths })
-    if (input.paths) applied.note = `只落了指定的 ${input.paths.length} 个路径。`
-    return applied
+    const applied = await ctx.system.applySandbox({ sandboxId, paths: input.paths, fingerprint: changes.fingerprint })
+    // 宿主的回执原样不动，note 放进新对象里。
+    return input.paths ? { ...applied, note: `只落了指定的 ${input.paths.length} 个路径。` } : applied
   }
 }
 

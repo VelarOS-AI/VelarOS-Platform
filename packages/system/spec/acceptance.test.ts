@@ -6,7 +6,7 @@
  */
 
 import { existsSync } from 'node:fs'
-import { lstat, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises'
+import { chmod, lstat, mkdir, mkdtemp, readdir, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 
@@ -765,6 +765,78 @@ describe('演练沙箱', () => {
       if (sandboxId) await kernel.discardSandbox(sandboxId)
       await kernel.dispose()
       await rm(source, { recursive: true, force: true })
+    }
+  })
+
+  test.skipIf(!canConfine)('INV-27 落回只落用户确认过的那份差量：确认之后镜像又变了就整批不落', async () => {
+    const source = await makeSource()
+    const kernel = createLocalSystemKernel({ cwd: source })
+    let sandboxId = ''
+    try {
+      const record = await kernel.createSandbox({})
+      sandboxId = record.id
+      await writeFile(join(record.root, 'b.txt'), 'beta\n')
+      const messages: string[] = []
+      // 用户看确认卡的时候镜像里还有命令在写（这里直接写一个新文件）：确认的是一份，镜像里已经是另一份。
+      const context = {
+        abortSignal: new AbortController().signal,
+        system: kernel,
+        approval: {
+          requestApproval: async () => ({ approved: true }),
+          awaitConfirmation: async (message: string) => {
+            messages.push(message)
+            await writeFile(join(record.root, 'c.txt'), 'late\n')
+          },
+        },
+      }
+      const failure = await systemTools[SystemToolNames.sandbox].execute({ action: 'apply', sandboxId }, context as never)
+        .then(() => null, (error: unknown) => error as { context?: { executionOutcome?: string }; cause?: { reason?: string } })
+      expect(messages[0]).toContain('新增 1 个')
+      expect(failure?.context?.executionOutcome).toBe('not-applied')
+      expect(failure?.cause?.reason).toBe('SYSTEM_SANDBOX_CHANGED')
+      expect(existsSync(join(source, 'b.txt'))).toBe(false)
+      expect(existsSync(join(source, 'c.txt'))).toBe(false)
+    } finally {
+      if (sandboxId) await kernel.discardSandbox(sandboxId)
+      await kernel.dispose()
+      await rm(source, { recursive: true, force: true })
+    }
+  })
+
+  test.skipIf(!canConfine)('INV-28 落回只写在源目录之内：上级路径是符号链接就整批不落，暂存拷不全什么都不落', async () => {
+    const source = await makeSource()
+    const outside = await mkdtemp(join(tmpdir(), 'velaros-inv-outside-'))
+    await symlink(outside, join(source, 'ext'))
+    const kernel = createLocalSystemKernel({ cwd: source })
+    let sandboxId = ''
+    try {
+      const record = await kernel.createSandbox({})
+      sandboxId = record.id
+      // 镜像里把指向源目录外的链接换成真目录，只落里面的新文件：源目录里的链接还在，落回会穿过它写到外面。
+      await rm(join(record.root, 'ext'))
+      await mkdir(join(record.root, 'ext'))
+      await writeFile(join(record.root, 'ext', 'evil.txt'), 'evil\n')
+      const escaped = await kernel.applySandbox({ sandboxId, paths: ['ext/evil.txt'] })
+        .then(() => null, (error: unknown) => error as { cause?: { details?: { conflicts?: Array<{ path: string; reason: string }> } } })
+      expect(escaped?.cause?.details?.conflicts?.[0]).toMatchObject({ path: 'ext/evil.txt', reason: 'link' })
+      expect(existsSync(join(outside, 'evil.txt'))).toBe(false)
+
+      // 暂存拷不全（镜像里有个文件读不出来）：别的文件也一个都不落，源目录里不留暂存目录。
+      await writeFile(join(record.root, 'a.txt'), 'ALPHA\n')
+      await writeFile(join(record.root, 'b.txt'), 'beta\n')
+      await chmod(join(record.root, 'a.txt'), 0o000)
+      const staged = await kernel.applySandbox({ sandboxId, paths: ['a.txt', 'b.txt'] })
+        .then(() => null, (error: unknown) => error as { context?: { executionOutcome?: string } })
+      await chmod(join(record.root, 'a.txt'), 0o644)
+      expect(staged?.context?.executionOutcome).toBe('not-applied')
+      expect(existsSync(join(source, 'b.txt'))).toBe(false)
+      expect(await readFile(join(source, 'a.txt'), 'utf8')).toBe('alpha\n')
+      expect((await readdir(source)).filter((name) => name.startsWith('.velaros-sandbox-'))).toEqual([])
+    } finally {
+      if (sandboxId) await kernel.discardSandbox(sandboxId)
+      await kernel.dispose()
+      await rm(source, { recursive: true, force: true })
+      await rm(outside, { recursive: true, force: true })
     }
   })
 })

@@ -588,10 +588,11 @@ export interface SystemSandboxRecord {
   git: boolean
 }
 
-/** 看差量的选项：maxFiles 限制新增与修改各列最多列多少条（默认 200），删除列不受限。 */
+/** 看差量的选项：maxFiles 限制新增与修改各列最多列多少条（默认 200），删除列不受限；textDiffs 为 false 时不附文本差量（落回前算完整差量用）。 */
 export interface SystemSandboxDiffOptions {
   sandboxId: string
   maxFiles?: number
+  textDiffs?: boolean
 }
 
 /** 一个文本文件的统一差量；超过预算时 truncated 为真、diff 被截断。 */
@@ -613,12 +614,15 @@ export interface SystemSandboxDiff {
   textDiffs: SystemSandboxTextDiff[]
   omittedDiffs: number
   note?: string
+  /** 这份差量的指纹：三列的完整路径与镜像里对应文件的印记算出来的摘要，不受 maxFiles 截断影响；落回时交回来，镜像在确认之后又变过就整批不落。 */
+  fingerprint?: string
 }
 
-/** 落回源目录的选项：paths 只落这些相对路径，不给就全部。 */
+/** 落回源目录的选项：paths 只落这些相对路径，不给就全部；fingerprint 是确认时看到的差量指纹，给了就先核对，镜像又变过就整批不落。 */
 export interface SystemSandboxApplyOptions {
   sandboxId: string
   paths?: string[]
+  fingerprint?: string
 }
 
 /** 落回的结果：三列是真正写进源目录的相对路径；skippedGit 表示 .git 里的变化没有落（永远不落）。 */

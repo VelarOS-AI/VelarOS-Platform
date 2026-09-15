@@ -60,8 +60,10 @@ export const SystemErrorCodes = Object.freeze({
   editUnresolved: 'SYSTEM_EDIT_UNRESOLVED',
   /** system:edit 里有文件的写入被用户拒绝：什么都没写。 */
   editDenied: 'SYSTEM_EDIT_DENIED',
-  /** system:sandbox 落回时源目录里的文件自建沙箱以来变过：什么都没写，错误 cause.details.conflicts 列出每处冲突。 */
+  /** system:sandbox 落回时源目录里的文件自建沙箱以来变过，或者上级路径是符号链接、会写到源目录外：什么都没写，错误 cause.details.conflicts 列出每处冲突。 */
   sandboxConflict: 'SYSTEM_SANDBOX_CONFLICT',
+  /** system:sandbox 落回时镜像在用户确认之后又变过（镜像里可能还有命令在跑）：什么都没写，重新 diff、重新确认。 */
+  sandboxChanged: 'SYSTEM_SANDBOX_CHANGED',
 } as const)
 
 export type SystemErrorCode = (typeof SystemErrorCodes)[keyof typeof SystemErrorCodes]
@@ -156,7 +158,7 @@ export const SystemSandboxLimits = Object.freeze({
   bytes: 2 * 1024 * 1024 * 1024,
   /** diff 新增与修改两列缺省各列多少条。 */
   diffFiles: 200,
-  /** diff 新增与修改两列最多各列多少条；apply 前算差量也按它。 */
+  /** diff 新增与修改两列最多各列多少条；apply 前向用户确认用的是不截断的完整差量，不受它限制。 */
   diffFilesMax: 2000,
   /** 一次 diff 最多附多少个文本差量。 */
   textDiffs: 200,
