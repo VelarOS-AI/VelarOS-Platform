@@ -23,6 +23,36 @@ describe('PlatformCompatibility', () => {
     )
   })
 
+  test('路径文本包含判断：按平台规整、不越过根、给出相对路径', () => {
+    const linux = createPlatform({ platform: 'linux' })
+    expect(linux.relativePathTextInside('/work/app', '/work/app')).toBe('.')
+    expect(linux.relativePathTextInside('/work/app/src/./a.ts', '/work/app/')).toBe('src/a.ts')
+    expect(linux.isPathTextInside('/work/app/..foo/a', '/work/app')).toBe(true)
+    expect(linux.isPathTextInside('/work/app/../etc', '/work/app')).toBe(false)
+    expect(linux.isPathTextInside('/work/application', '/work/app')).toBe(false)
+    expect(linux.isPathTextInside('/../../work/app/x', '/work/app')).toBe(true)
+    expect(linux.isPathTextInside('/anything', '/')).toBe(true)
+    expect(linux.isPathTextInside('work/app/x', '/work/app')).toBe(false)
+    expect(linux.isPathTextInside('/work/App/x', '/work/app')).toBe(false)
+    // POSIX 上反斜杠是文件名字符：这是根目录下一个名字很怪的文件，不是 /work/app
+    expect(linux.isPathTextInside('/etc\\..\\work\\app\\x', '/work/app')).toBe(false)
+
+    const macOS = createPlatform({ platform: 'darwin' })
+    expect(macOS.relativePathTextInside('/Users/Example/Project/Src', '/users/example/project')).toBe('Src')
+    expect(macOS.isPathTextInside('/Users/Example/Project', '/users/example/project', { caseSensitive: true })).toBe(false)
+
+    const windows = createPlatform({ platform: 'win32' })
+    expect(windows.relativePathTextInside('c:\\Work\\App\\src\\a.ts', 'C:/work/app')).toBe('src/a.ts')
+    expect(windows.isPathTextInside('C:\\work\\app\\..\\..\\Windows', 'C:\\work\\app')).toBe(false)
+    expect(windows.isPathTextInside('D:\\work\\app', 'C:\\work\\app')).toBe(false)
+    expect(windows.relativePathTextInside('\\\\server\\share\\team\\doc.md', '\\\\SERVER\\share')).toBe('team/doc.md')
+    expect(windows.relativePathTextInside('\\\\?\\C:\\work\\app\\a', 'C:\\work\\app')).toBe('a')
+    expect(windows.relativePathTextInside('\\\\?\\UNC\\server\\share\\a', '\\\\server\\share')).toBe('a')
+    expect(windows.isPathTextInside('C:', 'C:\\')).toBe(true)
+    expect(windows.isPathTextInside('C:foo', 'C:\\')).toBe(false)
+    expect(windows.isPathTextInside('\\work\\app', '\\work')).toBe(false)
+  })
+
   test('owns shell and executable selection across platforms', () => {
     const windows = createPlatform({
       platform: 'win32',

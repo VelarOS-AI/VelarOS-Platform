@@ -46,6 +46,34 @@ export function isWindowsAbsolutePathText(path: string): boolean {
   return normalized.startsWith('\\\\') || /^[A-Za-z]:[\\/]/.test(normalized)
 }
 
+/**
+ * 按平台把绝对路径文本拆成根与各级名字，折叠 `.` 与 `..`（到根为止）。win32 认 `\` 与 `/`、盘符（`C:\`）、UNC（`\\server\share`）与
+ * `\\?\` 长路径前缀；其他平台只认 `/`——反斜杠在 POSIX 上是文件名里的普通字符，不能当分隔符，否则 `/etc\..\root` 会被误算成 `/root`。
+ * 不是完整的绝对路径（相对路径、win32 上的 `C:foo` 与只有 `\foo` 的根相对写法）返回 null。
+ */
+export function splitAbsolutePathText(path: string, platform: RuntimePlatform): Nullable<{ root: string; segments: string[] }> {
+  if (platform !== 'win32') return path.startsWith('/') ? { root: '/', segments: collapsePathTextSegments(path.split('/')) } : null
+  let text = path.replace(/\\/g, '/')
+  if (text.startsWith('//?/') || text.startsWith('//./')) text = text.slice(4)
+  if (/^unc\//iu.test(text)) text = `//${text.slice(4)}`
+  const drive = /^([A-Za-z]):(?:\/|$)/u.exec(text)
+  if (drive) return { root: `${drive[1]}:/`, segments: collapsePathTextSegments(text.slice(drive[0].length).split('/')) }
+  const share = /^\/\/([^/]+)\/([^/]+)(?:\/|$)/u.exec(text)
+  if (!share) return null
+  return { root: `//${share[1]}/${share[2]}/`, segments: collapsePathTextSegments(text.slice(share[0].length).split('/')) }
+}
+
+/** 折叠路径的各级名字：丢掉空段与 `.`，`..` 退回上一级，退到根就停在根。 */
+function collapsePathTextSegments(parts: readonly string[]): string[] {
+  const segments: string[] = []
+  for (const part of parts) {
+    if (part === '' || part === '.') continue
+    if (part === '..') segments.pop()
+    else segments.push(part)
+  }
+  return segments
+}
+
 /** 去掉路径文本首尾的分隔符。 */
 export function stripWrappingPathSeparators(path: string): string {
   let start = 0

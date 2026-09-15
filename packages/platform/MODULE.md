@@ -37,7 +37,7 @@ VelarOS 各产品在不同操作系统上共用的约定：路径文本怎么比
 
 | 能力 | 链路 |
 | --- | --- |
-| 跨平台兼容层 | `createPlatform(options)` 记下平台与环境变量（缺省读当前进程，浏览器里没有就当 linux）→ 每个方法只按记下的平台回答：路径文本按 Windows / POSIX 两种写法比较、shell 命令按种类拼参数并统一 UTF-8、终止命令与系统信息命令按平台给规格、应用数据目录按平台惯例算 → 不读写磁盘、不启动进程 |
+| 跨平台兼容层 | `createPlatform(options)` 记下平台与环境变量（缺省读当前进程，浏览器里没有就当 linux）→ 每个方法只按记下的平台回答：路径文本按 Windows / POSIX 两种写法比较、包含判断按实例的平台规整（`isPathTextInside`、`relativePathTextInside`：折叠 `..` 不越过根，POSIX 只认 `/`）、shell 命令按种类拼参数并统一 UTF-8、终止命令与系统信息命令按平台给规格、应用数据目录按平台惯例算 → 不读写磁盘、不启动进程 |
 | 共享资源目录 | `velarosSharedResources.dataRoot(options)`：`VELAROS_SHARED_DATA_ROOT` 设了就整体覆盖，否则 Windows 用 LOCALAPPDATA（退回 APPDATA），macOS 用 ~/Library/Application Support，Linux 用 XDG_DATA_HOME（退回 ~/.local/share）→ `resourcesRoot` 与 `accountRoot` 固定接在它下面 |
 
 ## 依赖什么
@@ -63,8 +63,8 @@ VelarOS 各产品在不同操作系统上共用的约定：路径文本怎么比
 
 ## 不变量
 
-共 3 条，登记在 `spec/invariants.md`，验收用例在 `spec/acceptance.test.ts`。编号只增不重排。
-按检验方式：测试 2 条、门禁 1 条。未验证 0 条。
+共 4 条，登记在 `spec/invariants.md`，验收用例在 `spec/acceptance.test.ts`。编号只增不重排。
+按检验方式：测试 3 条、门禁 1 条。未验证 0 条。
 
 ## 非目标
 

@@ -27,6 +27,19 @@ describe('跨平台兼容层', () => {
 
     expect(currentPlatform.getPlatform()).toBe(process.platform)
   })
+
+  test('INV-4 路径文本包含判断按平台规整，不越过根，相对路径和不完整的绝对路径判不在里面', () => {
+    const linux = createPlatform({ platform: 'linux' })
+    expect(linux.relativePathTextInside('/work/app/src/../lib/a.ts', '/work/app')).toBe('lib/a.ts')
+    expect(linux.isPathTextInside('/work/app/../secret', '/work/app')).toBe(false)
+    expect(linux.isPathTextInside('/etc\\..\\work\\app', '/work/app')).toBe(false)
+    expect(linux.isPathTextInside('./work/app', '/work/app')).toBe(false)
+
+    const windows = createPlatform({ platform: 'win32' })
+    expect(windows.relativePathTextInside('c:\\WORK\\app\\a', 'C:/work/app')).toBe('a')
+    expect(windows.isPathTextInside('C:work\\app', 'C:\\')).toBe(false)
+    expect(createPlatform({ platform: 'darwin' }).isPathTextInside('/Work/App', '/work/app', { caseSensitive: true })).toBe(false)
+  })
 })
 
 describe('共享资源目录', () => {

@@ -1,11 +1,11 @@
 /**
- * 跨平台兼容层：`PlatformCompatibility`、按当前进程创建的 `currentPlatform` 与工厂 `createPlatform`。接口见 `interface/provides.ts` 的 `PlatformCompatibilityApi`。不 import 任何 Node 模块，渲染进程也会加载。
- * 接口见 `interface/provides.ts` 的 `PlatformCompatibilityApi`。不 import 任何 Node 模块，渲染进程也会加载。
+ * 跨平台兼容层：`PlatformCompatibility`、按当前进程创建的 `currentPlatform` 与工厂 `createPlatform`。接口 `PlatformCompatibilityApi` 在类上方，由 `contract/provides.ts` 登记。
+ * 不 import 任何 Node 模块，渲染进程也会加载。
  */
 
 import { isEmpty, isPlainObject } from '@velaros-ai/core'
 
-import type { DefaultAppDataPathOptions, PlatformCompatibilityOptions, ShellCommandSpecOptions } from '../types/options.js'
+import type { DefaultAppDataPathOptions, PathTextContainmentOptions, PlatformCompatibilityOptions, ShellCommandSpecOptions } from '../types/options.js'
 import type { BackgroundShellLaunchOptions, CommandSpec, DirectorySymlinkType, EditorCommandDefinition, PathTextSeparator, RuntimePlatform, ShellKind } from '../types/platform.js'
 import {
   buildShellCommandSpec,
@@ -19,6 +19,7 @@ import {
   quoteShellArgument,
   readCurrentProcess,
   readPathEnvironmentValue,
+  splitAbsolutePathText,
   stripWrappingPathSeparators,
   WindowsCommandShellPath,
 } from '../utils/platform.js'
@@ -63,6 +64,13 @@ export interface PlatformCompatibilityApi {
   joinPathText(rootPath: string, ...segments: string[]): string
   /** 规整用户输入的路径：特殊空格换成普通空格、去掉开头的 `@`、给了 homeDir 时把 `~` 和 `~/…` 展开。 */
   normalizeUserPathInput(inputPath: string, homeDir?: string): string
+  /**
+   * candidate 是否在 root 之内（含 root 本身）。两边按本实例的平台规整：折叠 `.` 与 `..`、win32 认两种分隔符而其他平台只认 `/`；
+   * 大小写按 options（缺省 Windows、macOS 不区分）；任一不是完整的绝对路径返回 false。只算文本，符号链接由调用方先解开。
+   */
+  isPathTextInside(candidate: string, root: string, options?: PathTextContainmentOptions): boolean
+  /** 同 isPathTextInside；在里面时返回相对 root 的路径（各级名字保持 candidate 的写法、用 `/` 连接，root 本身是 `.`），不在返回 null。 */
+  relativePathTextInside(candidate: string, root: string, options?: PathTextContainmentOptions): Nullable<string>
 
   // 可执行文件与 shell
 
@@ -211,6 +219,21 @@ export class PlatformCompatibility implements PlatformCompatibilityApi {
       .join(separator)
 
     return suffix ? `${root}${separator}${suffix}` : root
+  }
+
+  public isPathTextInside(candidate: string, root: string, options?: PathTextContainmentOptions): boolean {
+    return this.relativePathTextInside(candidate, root, options) !== null
+  }
+
+  public relativePathTextInside(candidate: string, root: string, options?: PathTextContainmentOptions): Nullable<string> {
+    const target = splitAbsolutePathText(candidate, this.platform)
+    const base = splitAbsolutePathText(root, this.platform)
+    if (!target || !base || target.segments.length < base.segments.length) return null
+    const caseSensitive = options?.caseSensitive ?? !(this.platform === 'win32' || this.platform === 'darwin')
+    const same = (left: string, right: string): boolean => (caseSensitive ? left === right : left.toLowerCase() === right.toLowerCase())
+    if (!same(target.root, base.root) || base.segments.some((segment, index) => !same(segment, target.segments[index]))) return null
+    const rest = target.segments.slice(base.segments.length)
+    return isEmpty(rest) ? '.' : rest.join('/')
   }
 
   public normalizeUserPathInput(inputPath: string, homeDir?: string): string {
