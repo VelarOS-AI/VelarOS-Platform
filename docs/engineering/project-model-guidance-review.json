@@ -138,11 +138,11 @@
     },
     {
       "path": "packages/agent/src/tools/recovery/ToolInputReuse.ts",
-      "fingerprint": "c4aab80b7f4a20c0dcc069f2aa3e865e554f965754aecfea2de453abadaf2404"
+      "fingerprint": "1d2dc837e285e6c3782c4e6019178b707e94a46a6a4ef1167eb3380a2c89dedb"
     },
     {
       "path": "packages/agent/src/tools/recovery/TransientRecoveryProjection.ts",
-      "fingerprint": "d6bc87ab0f193da88c4b2c8f7252171754e075defb2223c1118c3feb23adbd6a"
+      "fingerprint": "85f19e7bbe5f7f6885f877204fdbadf75a43e96edf62522dc3a033aeca29d9a4"
     },
     {
       "path": "packages/agent/src/tools/toolInputHistoryProjection.ts",
