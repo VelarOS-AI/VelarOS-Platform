@@ -96,6 +96,12 @@
       "@velaros-ai/shell-command/*": [
         "./packages/shell-command/src/exports/*"
       ],
+      "@velaros-ai/text-files": [
+        "./packages/text-files/src/exports/index.ts"
+      ],
+      "@velaros-ai/text-files/*": [
+        "./packages/text-files/src/exports/*"
+      ],
       "@velaros-ai/surface-protocol": [
         "./packages/surface-protocol/src/index.ts"
       ],

@@ -53,3 +53,12 @@ Desktop、Workbench、Termel 为了 `analyzeCommandExecution`、`isShellCommandR
 
 project 改用两个公共件：命令判定、危险命令审批请求走 `@velaros-ai/shell-command`（project 那份判定与兜底正则删除，仓库级命令一致性测试删除，语料并进公共包的测试）；沙箱数据、上限与落回规则走 `@velaros-ai/rehearsal-sandbox`（`ProjectSandbox*` 九个镜像类型与 `ProjectSandboxLimits` 删除，`ProjectSandboxPort` 扩展 `RehearsalSandboxHostPort`，落回前要完整差量并带指纹）。
 
+## Addendum（2026-09-16）：`@velaros-ai/text-files`
+
+第三个公共件：磁盘文本的无损读写——编码识别（BOM → 无 BOM 的 UTF-16 → 读到 NUL 算二进制 → 严格 UTF-8 → GB18030）、严格解码、按原编码无损编码、GB18030 下沿用未改片段原字节的 `encodePreserving`、同目录临时文件加改名的原子替换（写完 fsync、权限位精确恢复、符号链接写到目标、拒绝多硬链接）、有界读、流式读。实现以 project 那份为底，它在 GB18030、严格解码、fsync、权限位、硬链接上全面比 system 那份健壮。
+
+- 产品面：`textCodec`（`TextCodecApi`）、`textFileIo`（`TextFileIoApi`），以及它们造的 `TextEncodingProbeApi`（流式识别）、`TextStreamDecoderApi`（按块严格解码）；可移植数据 `TextEncoding`、`DecodedText`、`ExpectedBytes`、`TextChunk`，常量 `TextEncodings`、`TextFileErrorCodes`，从 `./contracts` 取。
+- 报错一律 `AppError`，`code` 就是本包的码（`TEXT_FILE_NOT_TEXT`、`TEXT_FILE_LOSSY`、`TEXT_FILE_EXTERNAL_EDIT`、`TEXT_FILE_NOT_REGULAR`、`TEXT_FILE_TOO_LARGE`、`TEXT_FILE_INVALID_MODE`），文件系统的 errno 错误原样抛出；各空间在自己的边界按码翻译一次，不在包里掺空间语义。
+- 按块解码不用运行时 TextDecoder 的 GB18030 流式状态：Bun 1.3 的实现会把被块边界切开的字丢掉、末尾没凑齐的字节也不报错，本包自己把没凑齐的字节接到下一块；Node 与 Bun 结果一致。
+- 换行适配、行号偏移、文本匹配不进本包：两个空间的编辑语义不同，各自保留。
+

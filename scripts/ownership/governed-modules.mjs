@@ -149,6 +149,33 @@ export const GovernedModules = [
     invariants: 'spec/invariants.md',
     acceptance: 'spec/acceptance.test.ts',
   },
+  {
+    directory: 'text-files',
+    name: '@velaros-ai/text-files',
+    // 没有工具：不登记 toolsFile、toolDefiner、hostPort
+    contract: 'src/contract',
+    types: 'src/types',
+    portable: 'text-files.ts',
+    impl: 'src/impl',
+    utils: 'src/utils',
+    tuning: 'tuning.ts',
+    exports: 'src/exports',
+    // 根入口读写磁盘，只给 Node；渲染进程只能加载可移植数据
+    browserSafeEntries: ['contracts.ts'],
+    layers: [
+      // 文件读写：原子替换、有界读、流式读，编解码交给下一层
+      ['TextFileIo.ts'],
+      // 编解码：认编码、严格解码、无损写回
+      ['TextCodec.ts'],
+      // 一次流式编码识别
+      ['TextEncodingProbe.ts'],
+      // 按块严格解码一段字节流
+      ['TextStreamDecoder.ts'],
+    ],
+    card: 'MODULE.md',
+    invariants: 'spec/invariants.md',
+    acceptance: 'spec/acceptance.test.ts',
+  },
 ]
 
 /** 模块卡片必须有的十节标题，顺序不限。 */

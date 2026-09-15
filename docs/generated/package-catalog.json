@@ -202,6 +202,18 @@
       "repositoryDirectory": "packages/shell-command"
     },
     {
+      "domain": "foundations",
+      "directory": "packages/text-files",
+      "name": "@velaros-ai/text-files",
+      "version": "0.1.0",
+      "description": "Lossless text files on disk for capability spaces: encoding detection (UTF-8, UTF-16 with or without BOM, GB18030), strict decoding, encoding back to the original bytes, atomic replacement that keeps permissions and links, and bounded or streaming reads.",
+      "exportSubpaths": [
+        ".",
+        "./contracts"
+      ],
+      "repositoryDirectory": "packages/text-files"
+    },
+    {
       "domain": "html-artifacts",
       "directory": "packages/html-artifacts",
       "name": "@velaros-ai/html-artifacts",

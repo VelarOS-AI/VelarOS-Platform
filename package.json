@@ -31,7 +31,8 @@
       ],
       "foundations": [
         "shell-command",
-        "rehearsal-sandbox"
+        "rehearsal-sandbox",
+        "text-files"
       ],
       "model": [
         "model"
@@ -151,6 +152,7 @@
     "@velaros-ai/arch-guard": "github:VelarOS-AI/VelarOS-Arch-Guard#ce2b221d99c1b93736568f281a180ad3593f086f",
     "@velaros-ai/rehearsal-sandbox": "workspace:*",
     "@velaros-ai/shell-command": "workspace:*",
+    "@velaros-ai/text-files": "workspace:*",
     "@vitejs/plugin-react": "^6.0.5",
     "brace-expansion": "1.1.18",
     "chrome-devtools-frontend": "1.0.1652307",
