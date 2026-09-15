@@ -10,6 +10,10 @@
 
 （按时间追加。每条写：改了什么、为什么、影响谁。）
 
+- **新包 `@velaros-ai/text-files`：文本文件的编码识别、编解码与原子读写合成一份，system 的读写行为因此变了几处（09-16 00:30，b9c2746e、6b6bbf2a、d769bfad、95bcd6ca，ADR 0008 附录）。** 以 project 那份为底。system 看得到的变化：① GBK/GB18030 文件能读能改（原来读成乱码，整份写入还会把 GBK 文件悄悄改存成 UTF-8），读结果的 `encoding` 可能是 `gb18030`；② 既不是合法 UTF-8 也解不成 GB18030 的文件按二进制报错，不再「读成功带替换字符」，全局搜索跳过它们、沙箱差量不附文本；③ 新文本里有孤立代理项整批拒写（原来悄悄写成替换字符）；④ **多硬链接的文件拒改**（原来原子替换会让它和其余链接悄悄分家）；⑤ 写入 fsync，已有文件的权限位原样保留（原来会被 umask 收掉位），新建文件按 umask（022 下仍是 0644）；⑥ 回滚到认不出是文本的版本，改为计划期拒绝（原来先写进去再报失败）。project：根入口不再导出 `ProjectTextEncoding`（宿主改用 `@velaros-ai/text-files/contracts` 的 `TextEncoding`），三句报错文字变了、两处 reason 变了（读事务原字节时路径变成目录或管道：CONFLICT_WITH_EXTERNAL_EDIT → NOT_SUPPORTED；流式解码中途文件被改坏：裸 TypeError → NOT_SUPPORTED）。顺带修掉 Bun 下 GB18030 流式解码在 64 KiB 块边界丢字的问题。
+
+- **浏览器提取的修复并回主线（09-16 00:40，6cb36d4e）。** 原在未合并分支 `fix-browser-extract-save`（10f3f726）：`browser:extract` 与 `export_page` 把求值信封当载荷，save 从不落盘、表格截到 100 行、长正文整份丢。补丁原样打到 main，browser 测试 94 条过，分支按「用完即删」删掉（原提交在 reflog 里）。配方步骤里的同类问题由 browser 修复这一路一起修。
+
 - **agent 改造的方向与几处结构裁决（09-15 23:45，方案在第 1 步之后执行）。** 目标与 system、project 同一套：src 收成 contract/types/impl/utils/exports，impl 按域分 19 个子目录、13 层；**对外入口从 23 个收成 4 个**（`.`、`./contracts`、`./chat`、`./tool-contract`），这一步删入口与大量没人用的导出，按 `check:agent-public-api` 的规矩是破坏性变更，agent 升 1.0.0，放在第 6 步一次做，并附逐符号迁移表；前 5 步只动包内，Desktop、Workbench、Termel 不受影响。我替你拍的板：① 协议里 70 个 `z.infer` 推导的类型改成手写类型、schema 用 `satisfies z.ZodType<…>` 编译期对齐（不给门禁开 schema 例外）；② 可移植数据全部进 `types/agent.ts` 一个文件，core 的 `SerializedError`、`ErrorCode` 放同形副本、仓库层一致性测试守；③ **工具契约（`./tool-contract` 与工具相关的协议类型）是否拆成独立包 `@velaros-ai/tool-contract`，第 6 步收口时再定，我倾向拆**——六个空间包现在只为写工具就把整个 agent 运行时列为 peer 依赖；④ 发请求字节会变的「空间知识搬家」（源码视图、验证账本搬进 project）单独放第 8 步，不和搬家混；⑤ agent 工具面的删改（删 `context:distill`、合并 `goal:get`/`plan:get`、删 `tooling:map` 的 `op=read` 等候选）在第 5 步单独一个提交，届时逐条写进这里。第 1 步已完成（18ad853f、da737f17）：去掉 213 条包名自引用与 29 个中间 barrel，入口改成逐个名字的显式转发，导出名一个不变（agent 0.6.32，基线按「只增不删」重绑：85 个符号的声明文本因 tsc 输出的成员顺序、import 路径不同而变，逐个核过语义等价）。
 
 - **project 迁入两个公共件，修掉三个缺陷（09-15 23:11，ADR 0008 附录）。** ① 沙箱落回：原来确认用的是截断到 2000 条的差量、落回却全部落，也不核对确认之后镜像有没有再变；现在向宿主要完整差量（`diffSandbox({ maxFiles: Number.MAX_SAFE_INTEGER, textDiffs: false })`），确认文案按完整三列算，`applySandbox` 带上差量指纹。**宿主契约变化**：`ProjectSandboxPort` 改为扩展 `RehearsalSandboxHostPort`，`diffSandbox` 要认 `textDiffs`、差量要带 `fingerprint`，`applySandbox` 要认 `fingerprint`（Desktop 用系统本地内核实现时这些已经支持）；`ProjectSandbox*` 九个数据类型改从 `@velaros-ai/rehearsal-sandbox/contracts` 取。② 经内核按名调用 project 工具时，原来先解析宿主上下文、后校验入参（和它自己的注释相反），现在先校验；入参不合法报 `VALIDATION`（和 system、office 一样），不再伪装成项目领域的 `INVALID_INPUT`。③ 沙箱 source 写 `..cache` 这类以 `..` 开头的项目内目录不再被误拒。
@@ -50,6 +54,9 @@
 
 | 时间 | 决策 | 理由 |
 | --- | --- | --- |
+| 09-16 00:40 | memory、browser 的实现层缺陷在改造之前先修（memory 三条 P0 是路径穿越与凭据注入），model、office、computer 的实测缺陷排在它们之后 | 缺陷修复不动入口与导出名，和后面的搬家互不影响；安全问题不该等结构改完 |
+| 09-16 00:30 | text-files 的 system 新建文件不传 mode、按 umask 建（没按我原先说的 0644） | 传 mode 会绕过 umask 精确设上，umask 077 的用户会建出所有人可读的文件；022 下结果相同 |
+| 09-16 00:30 | text-files 的按块解码用本包自己的解码器，不直接用 `TextDecoder` | 实测 Bun 1.3 的 `TextDecoder` 流式解 GB18030 会丢块边界上的字、末尾残缺不报错 |
 | 09-16 00:15 | project 复查的两份评审（实现层 14 条加 1 条疑似、产品层 49 条）分三路修：① 路径规则公共包加路径身份类问题（别名、大小写、沙箱源目录、`.git` 默认禁写）；② 持久化与执行类问题；③ 契约与提示词，放在前两路之后 | ①② 改的文件基本不相交可以并行；③ 和 ② 都要改执行类与回执，串行免冲突；路径身份问题的根因（按字面判断路径）正好用新加的 core `RealPath` 与 platform 包含判断修 |
 | 09-16 00:15 | 产品层评审建议的「project:read 只收 files」不做，只记下来 | 你说过 project 的工具面不简化；这条是形状统一（与 system:read 一致），牵涉宿主，留给你定 |
 | 09-16 00:10 | `check:host-contract-consumer` 的打包表从写死八个包改成沿依赖递归补齐第一方包 | project 迁入两个公共件后闭包缺包就红了；以后新增公共件不必回来改表 |
@@ -92,5 +99,5 @@
 
 - [x] ① system 结构复查（386ea2d、114a6c3、d692e79）
 - [ ] ② system 复查修 bug（已完成：18 条，9 个提交 21fcb91…c8a2983）、定为仓库标准（已完成）；project 改造（已完成：工具面 8d7513e、入口 bc93fd0、错误码 1ea639d、实现层四路、卡片与不变量，门禁零条）；project 复查修 bug（两份评审已回，修复排队中）
-- [ ] ③ 公共逻辑抽取（已完成：shell-command、rehearsal-sandbox、内核可调用操作表进 agent/tool-contract、project 迁入；进行中：text-files；待做：path-rules、路径包含判断进 platform、真实路径进 core、工具失败构造器）
+- [ ] ③ 公共逻辑抽取（已完成：shell-command、rehearsal-sandbox、内核可调用操作表进 agent/tool-contract、project 迁入、text-files、platform 路径包含判断 c9564d45、core 真实路径 7c39d5c9；进行中：path-rules 与两边迁移；待做：工具定义辅助与内核模块样板、工具失败构造器）
 - [ ] 其余包（agent 第 1 步 18ad853f/da737f17、第 2 步 540de0e6 完成，第 3 步前半「类型归位」进行中；browser、memory、kernel、model/office/computer、七个小包的方案编写中）：agent → browser → memory → kernel → model → office → agent-lab → development → core → html-artifacts → computer → cli → document-renderer → surface-protocol
