@@ -3,20 +3,21 @@
  * 登记每个沙箱和它专属的命令执行器（约束钉死在镜像根），镜像、清单、差量、落回的纯函数在 `utils/sandbox.ts`。
  */
 
-import { mkdir, rm, stat, writeFile } from 'node:fs/promises'
+import { lstat, mkdir, rm, stat } from 'node:fs/promises'
 import { join, relative, sep } from 'node:path'
 
 import { isEmpty, isPresent, Log } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import type { PlatformCompatibilityApi } from '@velaros-ai/platform'
 
-import { SystemFailureLimits, SystemSandboxLimits } from '../contract/constants.js'
+import { SystemErrorCodes, SystemFailureLimits, SystemSandboxLimits } from '../contract/constants.js'
 import type { SystemProcessConfinementProvider } from '../contract/requires.js'
 import type { SystemSandboxManifest } from '../types/sandbox.js'
 import type { SystemSandboxApplyOptions, SystemSandboxApplyResult, SystemSandboxDiff, SystemSandboxDiffOptions, SystemSandboxDiscardResult, SystemSandboxIgnoredMode, SystemSandboxRecord } from '../types/system.js'
 import { buildSystemProcessConfinementSpawnSpec } from '../utils/confinement.js'
-import { realPathForSafety } from '../utils/file-safety.js'
-import { applyMirrorChanges, assertInsideSandboxBase, diffMirror, disableGitPush, isSandboxId, mirrorTree, newSandboxId, readSandboxManifest, sandboxBaseDirectory, sandboxChangedSinceConfirmation, sandboxConfinementPolicy, scanTree, selectSandboxChanges } from '../utils/sandbox.js'
+import { isPathInsideRoot, realPathForSafety } from '../utils/file-safety.js'
+import { writeSystemFileAtomically } from '../utils/fs.js'
+import { applyMirrorChanges, diffMirror, disableGitPush, isSandboxId, mirrorTree, newSandboxId, readSandboxManifest, sandboxBaseDirectory, sandboxChangedSinceConfirmation, sandboxConfinementPolicy, sandboxDirectoryOf, scanTree, selectSandboxChanges, stampOfEntry } from '../utils/sandbox.js'
 
 import { GitIgnoreSystemSearchPolicy } from './GitIgnoreSystemSearchPolicy.js'
 import type { SystemCommandRunnerApi } from './SystemCommandRunner.js'
@@ -35,8 +36,9 @@ const log = Log.tag('SystemSandboxes')
 export interface SystemSandboxesApi {
   /**
    * 建沙箱：源目录解开符号链接后镜像到基目录下的新目录（文件按写时复制，gitignore 忽略的目录按 ignored 处理，忽略的文件不复制），
-   * 镜像仓库的推送地址改成无效值，清单落盘，登记专属执行器。先探测约束后端，没有就抛 `SYSTEM_PROCESS_CONFINEMENT_UNAVAILABLE` 并不留目录。
-   * 源目录不能在基目录之内，基目录也不能在源目录之内；最多同时 5 个沙箱。
+   * 镜像里每个仓库（含嵌套仓库、子模块）的推送地址改成无效值，指向源目录外真实仓库的 `.git` 链接文件不进镜像，清单原子落盘，登记专属执行器。
+   * 先探测约束后端，没有就抛 `SYSTEM_PROCESS_CONFINEMENT_UNAVAILABLE` 并不留目录。源目录不能在基目录之内，基目录也不能在源目录之内（源是 `/` 也算）；
+   * 最多同时 5 个沙箱。
    */
   create(source: string, options: { network: boolean; ignored: SystemSandboxIgnoredMode }): Promise<SystemSandboxRecord>
   /** 镜像相对创建时的变化：新增、修改、删除三列（删除列永远完整），文本文件附有界的差量，.git 里的变化只汇总成一个布尔。 */
@@ -51,7 +53,10 @@ export interface SystemSandboxesApi {
   discard(sandboxId: string): Promise<SystemSandboxDiscardResult>
   /** 登记着的沙箱。 */
   list(): SystemSandboxRecord[]
-  /** cwd 落在哪个沙箱根之内，就返回那个沙箱的专属执行器（内核重启后从清单重新登记）；不在任何沙箱里返回 null。 */
+  /**
+   * cwd 落在哪个沙箱根之内，就返回那个沙箱的专属执行器（内核重启后从清单重新登记）；不在任何沙箱里返回 null。
+   * cwd 落在某个沙箱的镜像根里、清单却读不出来时抛 `SYSTEM_PROCESS_CONFINEMENT_UNAVAILABLE`，不退回裸进程。
+   */
   runnerFor(cwd: string): Promise<Nullable<SystemCommandRunnerApi>>
   /** 所有登记着的沙箱执行器，宿主合并后台任务表用。 */
   runners(): SystemCommandRunnerApi[]
@@ -89,6 +94,7 @@ export interface SystemSandboxesEntry {
 
 export class SystemSandboxes implements SystemSandboxesApi {
   private readonly entries = new Map<string, SystemSandboxesEntry>()
+  private readonly loading = new Map<string, Promise<SystemSandboxesEntry>>()
   private readonly options: SystemSandboxesOptions
   private readonly baseDir: string
 
@@ -104,8 +110,8 @@ export class SystemSandboxes implements SystemSandboxesApi {
     if (!sourceStats?.isDirectory()) throw new AppError('NOT_FOUND', `沙箱的源不是目录：${source}`)
     await mkdir(this.baseDir, { recursive: true, mode: 0o700 })
     const realBase = await realPathForSafety(this.baseDir)
-    if (realSource === realBase || realSource.startsWith(realBase + sep)) throw new AppError('VALIDATION', '沙箱的源不能在沙箱基目录之内')
-    if (realBase.startsWith(realSource + sep)) throw new AppError('VALIDATION', '沙箱的源包含了沙箱基目录；换一个范围小一点的目录')
+    if (isPathInsideRoot(realSource, realBase)) throw new AppError('VALIDATION', '沙箱的源不能在沙箱基目录之内')
+    if (isPathInsideRoot(realBase, realSource)) throw new AppError('VALIDATION', '沙箱的源包含了沙箱基目录；换一个范围小一点的目录')
 
     const id = newSandboxId()
     const directory = join(this.baseDir, id)
@@ -126,13 +132,16 @@ export class SystemSandboxes implements SystemSandboxesApi {
         shouldSkip: (absolutePath, isDirectory) => ignorePolicy.shouldSkip(absolutePath, isDirectory),
         limits: { files: SystemSandboxLimits.files, bytes: SystemSandboxLimits.bytes },
       })
-      const git = await disableGitPush(root)
+      // 剪断镜像里每个仓库的推送；改过的配置文件在清单里记改完的印记，刚建好的沙箱差量才是干净的。
+      for (const path of await disableGitPush(root, mirrored.gitConfigs)) mirrored.mirror[path] = stampOfEntry(await lstat(join(root, path)))
       const record: SystemSandboxRecord = {
         id, root, source: realSource, createdAt: Date.now(), network: options.network, ignored: options.ignored,
-        fileCount: Object.keys(mirrored.files).length, bytes: mirrored.bytes, linkedDirectories: mirrored.linkedDirectories, git,
+        fileCount: Object.keys(mirrored.files).length, bytes: mirrored.bytes, linkedDirectories: mirrored.linkedDirectories,
+        git: mirrored.gitConfigs.includes('.git/config'), detachedGitLinks: mirrored.detachedGitLinks,
       }
       const manifest: SystemSandboxManifest = { version: 1, record, files: mirrored.files, mirror: mirrored.mirror }
-      await writeFile(join(directory, 'manifest.json'), JSON.stringify(manifest))
+      // 清单原子落盘：写到一半崩溃不会留下读不出来的清单。
+      await writeSystemFileAtomically(join(directory, 'manifest.json'), Buffer.from(JSON.stringify(manifest)))
       this.entries.set(id, { record, directory, realRoot: await realPathForSafety(root), runner: this.createRunner(root, temp, options.network) })
       log.info('sandbox created', { id, source: realSource, files: record.fileCount, bytes: record.bytes })
       return record
@@ -166,10 +175,8 @@ export class SystemSandboxes implements SystemSandboxesApi {
   }
 
   public async discard(sandboxId: string): Promise<SystemSandboxDiscardResult> {
-    if (!isSandboxId(sandboxId)) throw new AppError('VALIDATION', `不是沙箱 id：${sandboxId}`)
-    const directory = join(this.baseDir, sandboxId)
-    // 递归删除只许删基目录之下的东西：路径核对不过就拒绝，这是整仓误删事故的直接教训。
-    const real = await assertInsideSandboxBase(directory, this.baseDir)
+    // 递归删除只许删基目录下面正好一层、不是符号链接的沙箱目录：核对不过就拒绝，这是整仓误删事故的直接教训。
+    const real = await sandboxDirectoryOf(this.baseDir, sandboxId)
     const entry = this.entries.get(sandboxId)
     if (entry) {
       await entry.runner.dispose()
@@ -196,7 +203,13 @@ export class SystemSandboxes implements SystemSandboxesApi {
     const candidate = relative(realBase, realCwd).split(sep)[0] ?? ''
     if (!isSandboxId(candidate)) return null
     const entry = await this.resolveEntry(candidate).catch(() => null)
-    return entry && inside(entry) ? entry.runner : null
+    if (entry) return inside(entry) ? entry.runner : null
+    // 清单读不出来（写坏了、被清理掉了）：cwd 落在这个沙箱的镜像根里就拒绝执行，绝不退回没有约束的执行器。
+    const tree = join(realBase, candidate, 'tree')
+    if (realCwd === tree || realCwd.startsWith(tree + sep)) {
+      throw new AppError(SystemErrorCodes.processConfinementUnavailable, `沙箱 ${candidate} 的清单读不出来，镜像里的命令没法约束，已拒绝执行；discard 这个沙箱后重建`)
+    }
+    return null
   }
 
   public runners(): SystemCommandRunnerApi[] {
@@ -221,13 +234,26 @@ export class SystemSandboxes implements SystemSandboxesApi {
     })
   }
 
-  /** 按 id 取登记项；没登记的从基目录下的清单加载并登记（内核重启过），清单也没有就报 NOT_FOUND。 */
+  /**
+   * 按 id 取登记项；没登记的从基目录下的清单加载并登记（内核重启过），清单也没有就报 NOT_FOUND。
+   * 同一个沙箱同时被几处第一次用到（界面看差量、模型跑命令）时共用同一次加载，只建一个执行器，谁起的后台任务都列得到、停得掉。
+   */
   private async resolveEntry(sandboxId: string): Promise<SystemSandboxesEntry> {
     const registered = this.entries.get(sandboxId)
     if (registered) return registered
-    if (!isSandboxId(sandboxId)) throw new AppError('VALIDATION', `不是沙箱 id：${sandboxId}`)
+    const pending = this.loading.get(sandboxId) ?? this.loadEntry(sandboxId)
+    this.loading.set(sandboxId, pending)
+    try {
+      return await pending
+    } finally {
+      this.loading.delete(sandboxId)
+    }
+  }
+
+  /** 从基目录下的清单加载一个沙箱并登记：目录先过 sandboxDirectoryOf 的核对，再读清单、建专属执行器。 */
+  private async loadEntry(sandboxId: string): Promise<SystemSandboxesEntry> {
+    await sandboxDirectoryOf(this.baseDir, sandboxId)
     const directory = join(this.baseDir, sandboxId)
-    await assertInsideSandboxBase(directory, this.baseDir)
     const manifest = await readSandboxManifest(directory)
     const root = join(directory, 'tree')
     const temp = join(directory, 'tmp')

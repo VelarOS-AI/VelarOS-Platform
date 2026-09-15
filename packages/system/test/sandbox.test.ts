@@ -10,6 +10,7 @@ import type { SystemToolContext } from '../src/contract/requires.js'
 import type { LocalSystemKernelApi } from '../src/impl/LocalSystemKernel.js'
 import { createLocalSystemKernel } from '../src/impl/LocalSystemKernel.js'
 import { systemTools } from '../src/impl/SystemTools.js'
+import { isPathInsideRoot } from '../src/utils/file-safety.js'
 import { assertInsideSandboxBase, isSandboxId, sandboxBaseDirectory, selectSandboxChanges } from '../src/utils/sandbox.js'
 
 /** 本机有没有进程约束后端：macOS 的 sandbox-exec 或 Linux 的 bubblewrap；没有就跳过要真跑命令的用例。 */
@@ -65,6 +66,18 @@ describe('rehearsal sandbox', () => {
     await expect(assertInsideSandboxBase('/etc', base)).rejects.toMatchObject({ code: 'PERMISSION' })
     await expect(assertInsideSandboxBase(join(base, '..', 'elsewhere'), base)).rejects.toMatchObject({ code: 'PERMISSION' })
     expect(selectSandboxChanges({ created: ['a'], modified: ['b'], deleted: ['c'] }, ['./b', 'zzz'])).toEqual({ created: [], modified: ['b'], deleted: [], unknown: ['zzz'] })
+  })
+
+  test('a filesystem root as the source is refused before anything is mirrored; containment is right for roots that end in a separator', async () => {
+    expect(isPathInsideRoot('/private/var/folders/x', '/', 'darwin')).toBe(true)
+    expect(isPathInsideRoot('C:\\Users\\me\\AppData\\Local\\Temp', 'C:\\', 'win32')).toBe(true)
+    expect(isPathInsideRoot('/tmpfoo', '/tmp', 'linux')).toBe(false)
+    const kernel = createLocalSystemKernel({ cwd: tmpdir() })
+    try {
+      await expect(kernel.createSandbox({ source: '/' })).rejects.toMatchObject({ code: 'VALIDATION' })
+    } finally {
+      await kernel.dispose()
+    }
   })
 
   test('create refuses when there is no confinement backend and leaves no directory behind', async () => {
@@ -263,6 +276,28 @@ describe('rehearsal sandbox', () => {
     const result = await sandboxTool.execute({ action: 'apply', sandboxId: receipt.sandboxId, paths: ['a.txt'] }, context)
     expect(result).toMatchObject({ created: ['a.txt'], note: '只落了指定的 1 个路径。' })
     expect(receipt).not.toHaveProperty('note')
+  })
+
+  test.skipIf(!canConfine)('after a restart, simultaneous first uses of one sandbox share a single runner, so every background task stays listed and stoppable', async () => {
+    const source = await makeSource()
+    const first = createLocalSystemKernel({ cwd: source })
+    const record = await first.createSandbox({})
+    await first.dispose()
+    const second = createLocalSystemKernel({ cwd: source })
+    try {
+      const started = await Promise.all([
+        second.runCommand('sleep 20', { cwd: record.root, background: true }),
+        second.runCommand('sleep 20', { cwd: record.root, background: true }),
+        second.diffSandbox({ sandboxId: record.id }),
+      ])
+      const taskIds = started.slice(0, 2).map((result) => (result as { backgroundProcess?: { taskId?: string } }).backgroundProcess?.taskId)
+      const listed = (await second.listBackgroundTasks()).map((task) => task.id)
+      expect(listed).toEqual(expect.arrayContaining(taskIds as string[]))
+    } finally {
+      await second.discardSandbox(record.id)
+      await second.dispose()
+      await rm(source, { recursive: true, force: true })
+    }
   })
 
   test.skipIf(!canConfine)('a sandbox root survives a kernel restart: another kernel still confines commands there, and discard removes it', async () => {

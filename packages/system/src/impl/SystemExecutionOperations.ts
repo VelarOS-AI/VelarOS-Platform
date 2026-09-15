@@ -108,9 +108,11 @@ export class SystemExecutionOperations implements SystemExecutionOperationsApi {
     if (input.action !== 'create' && !sandboxId) throw new AppError('VALIDATION', `${input.action} 需要 create 返回的 sandboxId`)
     if (input.action === 'create') {
       const record = await ctx.system.createSandbox({ source: input.source, network: input.network, ignored: input.ignored })
+      const detached = record.detachedGitLinks ?? []
+      const detachedNote = isEmpty(detached) ? '' : `这些目录的 .git 指向源目录外的真实仓库（git worktree、子模块），没有放进镜像，镜像里它们不是 git 仓库：${detached.join('、')}。`
       return {
         ...record,
-        note: `镜像根是 ${record.root}：脚本用 system:edit 写进去，system:run 传 cwd=${record.root} 跑，跑完用 diff 看变化；镜像里的命令写不到镜像外，${record.network ? '可以联网' : '连不上网'}。用完 discard。`,
+        note: `镜像根是 ${record.root}：脚本用 system:edit 写进去，system:run 传 cwd=${record.root} 跑，跑完用 diff 看变化；镜像里的命令写不到镜像外，${record.network ? '可以联网' : '连不上网'}。用完 discard。${detachedNote}`,
       }
     }
     if (input.action === 'diff') return ctx.system.diffSandbox({ sandboxId, maxFiles: input.maxFiles })

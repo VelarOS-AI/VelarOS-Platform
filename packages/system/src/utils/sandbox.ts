@@ -7,7 +7,7 @@ import type { Stats } from 'node:fs'
 import { constants } from 'node:fs'
 import { chmod, copyFile, lstat, mkdir, mkdtemp, readdir, readFile, readlink, rename, rm, rmdir, symlink, unlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { dirname, join, posix, sep } from 'node:path'
+import { dirname, join, posix, resolve, sep } from 'node:path'
 
 import { createTwoFilesPatch } from 'diff'
 
@@ -19,9 +19,9 @@ import type { SystemProcessConfinementPolicy } from '../types/commands.js'
 import type { SystemSandboxApplyFailureDetails, SystemSandboxConflict, SystemSandboxFileStamp, SystemSandboxManifest, SystemSandboxStampTable } from '../types/sandbox.js'
 import type { SystemSandboxApplyResult, SystemSandboxDiff, SystemSandboxIgnoredMode, SystemSandboxTextDiff } from '../types/system.js'
 
-import { realPathForSafety } from './file-safety.js'
+import { isPathInsideRoot, realPathForSafety } from './file-safety.js'
 import { readErrnoCode } from './fs.js'
-import { isBinaryBuffer } from './text-file.js'
+import { isBinaryBuffer, readFileHead } from './text-file.js'
 import { SystemTuning } from './tuning.js'
 
 /** 沙箱都放在临时区的这个基目录之下；删除前核对路径确实在它之下。 */
@@ -41,13 +41,27 @@ export function isSandboxId(value: string): boolean {
   return /^\d{8}-\d{6}-[a-f0-9]{6}$/.test(value)
 }
 
-/** 核对一个路径确实在沙箱基目录之下（两边都解开符号链接再比），不在就抛 PERMISSION——递归删除只许删这里面的东西。 */
+/** 核对一个路径确实在沙箱基目录之下（两边都解开符号链接再比；基目录本身不算），不在就抛 PERMISSION——递归删除只许删这里面的东西。 */
 export async function assertInsideSandboxBase(path: string, base: string): Promise<string> {
   const real = await realPathForSafety(path)
   const realBase = await realPathForSafety(base)
-  if (real !== realBase && !real.startsWith(realBase + sep)) {
+  if (!real.startsWith(realBase + sep)) {
     throw new AppError('PERMISSION', `拒绝操作 ${path}：它不在沙箱基目录 ${base} 之下`)
   }
+  return real
+}
+
+/**
+ * 按 id 取沙箱目录并核对：id 合形状（VALIDATION）；这一项本身不是符号链接、解开链接后正好是基目录下面一层，
+ * 不是基目录本身也不在更深处（PERMISSION）。返回解开链接后的真实路径；递归删除和按清单重新登记都先过它。
+ */
+export async function sandboxDirectoryOf(base: string, sandboxId: string): Promise<string> {
+  if (!isSandboxId(sandboxId)) throw new AppError('VALIDATION', `不是沙箱 id：${sandboxId}`)
+  const directory = join(base, sandboxId)
+  const stats = await lstat(directory).catch(() => null)
+  if (stats?.isSymbolicLink()) throw new AppError('PERMISSION', `拒绝操作 ${directory}：它是符号链接，不是沙箱目录`)
+  const real = await assertInsideSandboxBase(directory, base)
+  if (dirname(real) !== await realPathForSafety(base)) throw new AppError('PERMISSION', `拒绝操作 ${directory}：它不是沙箱基目录下面一层的目录`)
   return real
 }
 
@@ -56,12 +70,18 @@ export function sandboxConfinementPolicy(root: string, temp: string, network: bo
   return { mode: 'workspace-write', workspaceRoot: root, writeRoots: [temp], network }
 }
 
-/** 读一个沙箱目录下的清单；读不到或形状不对就报 NOT_FOUND。镜像根永远按当前目录算，清单里的绝对路径只作记录。 */
+/** 读一个沙箱目录下的清单；读不到、不是合法 JSON 或形状不对都报 NOT_FOUND。镜像根永远按当前目录算，清单里的绝对路径只作记录。 */
 export async function readSandboxManifest(directory: string): Promise<SystemSandboxManifest> {
   const raw = await readFile(join(directory, 'manifest.json'), 'utf8').catch(() => null)
   if (isNull(raw)) throw new AppError('NOT_FOUND', `${directory} 下没有沙箱清单：这个沙箱已经丢弃，或者从来没建过`)
-  const manifest = JSON.parse(raw) as SystemSandboxManifest
-  if (manifest.version !== 1 || !manifest.record || !manifest.files || !manifest.mirror) throw new AppError('NOT_FOUND', `${directory} 下的沙箱清单读不出来`)
+  let parsed: unknown = null
+  try {
+    parsed = JSON.parse(raw)
+  } catch {
+    // arch-guard:silent-catch-ok 写了一半的清单按读不出来处理，下面统一报 NOT_FOUND。
+  }
+  const manifest = parsed as Nullable<SystemSandboxManifest>
+  if (!manifest || manifest.version !== 1 || !manifest.record || !manifest.files || !manifest.mirror) throw new AppError('NOT_FOUND', `${directory} 下的沙箱清单读不出来`)
   manifest.record.root = join(directory, 'tree')
   return manifest
 }
@@ -78,9 +98,24 @@ export function sameStamp(a: SystemSandboxFileStamp, b: SystemSandboxFileStamp):
   return a.size === b.size && a.mtimeMs === b.mtimeMs && a.mode === b.mode && a.link === b.link
 }
 
+/** 一个相对路径是不是某个仓库的配置文件：任意一层 `.git` 目录里（含子模块的 `.git/modules/…`）名叫 config 或 config.worktree 的文件。 */
+function isGitConfigPath(relativePath: string): boolean {
+  const segments = relativePath.split('/')
+  return segments.slice(0, -1).includes('.git') && ['config', 'config.worktree'].includes(segments.at(-1) ?? '')
+}
+
+/** 一个 `.git` 链接文件（内容是 `gitdir: <路径>`，git worktree 与子模块用它）指向的仓库目录是否落在 root 之外；不是链接文件返回 false。 */
+async function gitLinkPointsOutside(linkFile: string, root: string): Promise<boolean> {
+  const head = await readFileHead(linkFile, SystemTuning.files.textSniffBytes).catch(() => null)
+  const target = head ? /^gitdir:[ \t]*(.+?)[ \t]*\r?$/mu.exec(head.toString('utf8'))?.[1] : undefined
+  if (!target) return false
+  return !isPathInsideRoot(await realPathForSafety(resolve(dirname(linkFile), target)), root)
+}
+
 /**
  * 递归镜像源目录到镜像根：文件按写时复制（不支持的文件系统退回普通复制），忽略的目录按 ignored 处理，忽略的文件不复制。
- * 返回两张印记表：files 是源目录里每个文件与符号链接的印记，mirror 是镜像里每个条目（含链接过去的忽略目录）的印记。
+ * 返回两张印记表：files 是源目录里每个文件与符号链接的印记，mirror 是镜像里每个条目（含链接过去的忽略目录）的印记；
+ * 另外给出镜像里每个仓库的配置文件（剪推送用），以及没放进镜像的 `.git` 链接文件——它们指向源目录外的真实仓库，放进来镜像里的 git 就会直接读写那个仓库。
  */
 export async function mirrorTree(
   source: string,
@@ -90,10 +125,12 @@ export async function mirrorTree(
     shouldSkip: (absolutePath: string, isDirectory: boolean) => Promise<boolean>
     limits: { files: number; bytes: number }
   }
-): Promise<{ files: SystemSandboxStampTable; mirror: SystemSandboxStampTable; bytes: number; linkedDirectories: string[] }> {
+): Promise<{ files: SystemSandboxStampTable; mirror: SystemSandboxStampTable; bytes: number; linkedDirectories: string[]; gitConfigs: string[]; detachedGitLinks: string[] }> {
   const files: SystemSandboxStampTable = {}
   const mirror: SystemSandboxStampTable = {}
   const linkedDirectories: string[] = []
+  const gitConfigs: string[] = []
+  const detachedGitLinks: string[] = []
   let bytes = 0
   let count = 0
   const pending: string[] = ['']
@@ -131,6 +168,10 @@ export async function mirrorTree(
         continue
       }
       if (!entry.isFile() || ignored) continue
+      if (entry.name === '.git' && await gitLinkPointsOutside(sourcePath, source)) {
+        detachedGitLinks.push(relativePath)
+        continue
+      }
       count += 1
       bytes += stats.size
       if (count > options.limits.files) throw new AppError('VALIDATION', `源目录的文件超过 ${options.limits.files} 个；换一个小一点的目录，或者加 .gitignore 让构建产物不进镜像`)
@@ -139,9 +180,10 @@ export async function mirrorTree(
       await chmod(mirrorPath, stats.mode & 0o777)
       files[relativePath] = stampOfEntry(stats)
       mirror[relativePath] = stampOfEntry(await lstat(mirrorPath))
+      if (isGitConfigPath(relativePath)) gitConfigs.push(relativePath)
     }
   }
-  return { files, mirror, bytes, linkedDirectories }
+  return { files, mirror, bytes, linkedDirectories, gitConfigs, detachedGitLinks }
 }
 
 /** 遍历一棵树得到每个文件与符号链接的印记，不跟随符号链接（链接过去的忽略目录因此不会被翻）。 */
@@ -167,19 +209,34 @@ export async function scanTree(root: string): Promise<SystemSandboxStampTable> {
   return files
 }
 
-/** 一个相对路径是不是 .git 里面的东西。 */
+/** 一个相对路径是不是某个仓库 .git 里面的东西（任意一层，嵌套仓库、子模块的也算）。 */
 export function isGitInternalPath(relativePath: string): boolean {
-  return relativePath === '.git' || relativePath.startsWith('.git/')
+  return /(?:^|\/)\.git(?:\/|$)/u.test(relativePath)
 }
 
-/** 把镜像仓库的推送地址改成无效值：.git/config 里每个 remote 段加 `pushurl = DISABLED`，push 会失败而 fetch 照常。没有 .git/config 返回 false。 */
-export async function disableGitPush(root: string): Promise<boolean> {
-  const configPath = join(root, '.git', 'config')
-  const config = await readFile(configPath, 'utf8').catch(() => null)
-  if (isNull(config)) return false
-  const rewritten = config.replace(/^\[remote "[^"]*"\]\n/gm, (header) => `${header}\tpushurl = DISABLED-BY-VELAROS-SANDBOX\n`)
-  await writeFile(configPath, rewritten)
-  return true
+/** git 配置里一个 remote 段的开头：`[remote "名字"]`，节名大小写、括号内外的空白随意，也认旧式的 `[remote.名字]`。 */
+const RemoteSectionHeader = /^\s*\[\s*remote(?:\s+"(?:[^"\\]|\\.)*"|\.[^\]\s]+)\s*\]/iu
+
+/**
+ * 把镜像里每个仓库的推送地址改成无效值：给出的每个配置文件里，每个 remote 段开头下面紧跟着加一行 `pushurl = DISABLED-BY-VELAROS-SANDBOX`
+ * （沿用那一行的换行符，CRLF 也认），git 按 pushurl 的顺序推、第一个就失败，fetch 照常。返回真正改过的文件。
+ */
+export async function disableGitPush(root: string, configPaths: readonly string[]): Promise<string[]> {
+  const changed: string[] = []
+  for (const relativePath of configPaths) {
+    const path = join(root, relativePath)
+    const config = await readFile(path, 'utf8').catch(() => null)
+    if (isNull(config)) continue
+    const rewritten = config.split(/(?<=\n)/u).map((line) => {
+      if (!RemoteSectionHeader.test(line)) return line
+      const eol = line.endsWith('\r\n') ? '\r\n' : '\n'
+      return `${line.endsWith('\n') ? line : `${line}${eol}`}\tpushurl = DISABLED-BY-VELAROS-SANDBOX${eol}`
+    }).join('')
+    if (rewritten === config) continue
+    await writeFile(path, rewritten)
+    changed.push(relativePath)
+  }
+  return changed
 }
 
 /** 读一个文件当文本（不像二进制且不超过上限）；不是就返回 null。 */

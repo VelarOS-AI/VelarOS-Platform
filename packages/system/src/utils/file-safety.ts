@@ -23,7 +23,7 @@ export function comparisonPath(value: string, platform: NodeJS.Platform): string
   return platform === 'win32' || platform === 'darwin' ? resolved.toLowerCase() : resolved
 }
 
-/** 判断一个路径是否在某个根目录之内（含根目录本身），Windows 上不区分大小写。 */
+/** 判断一个路径是否在某个根目录之内（含根目录本身），Windows 上不区分大小写；根是 `/`、`C:\` 这种本身以分隔符结尾的也对。 */
 export function isPathInsideRoot(
   candidatePath: string,
   rootPath: string,
@@ -33,7 +33,7 @@ export function isPathInsideRoot(
   const resolvedRoot = comparisonPath(rootPath, platform)
   const separator = pathApi(platform).sep
   if (resolvedCandidate === resolvedRoot) return true
-  return resolvedCandidate.startsWith(`${resolvedRoot}${separator}`)
+  return resolvedCandidate.startsWith(resolvedRoot.endsWith(separator) ? resolvedRoot : `${resolvedRoot}${separator}`)
 }
 
 // scratch/临时目录永远豁免确认（与 bash 默认 sandbox cwd 一致）。

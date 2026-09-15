@@ -584,8 +584,10 @@ export interface SystemSandboxRecord {
   bytes: number
   /** 链接到真实目录的忽略目录（相对路径）。 */
   linkedDirectories: string[]
-  /** 源目录是 git 仓库：镜像里的 .git 已把推送地址改掉。 */
+  /** 源目录是 git 仓库：镜像里的 .git 已把推送地址改掉（嵌套仓库、子模块的也改）。 */
   git: boolean
+  /** 没放进镜像的 `.git` 链接文件（相对路径）：它们指向源目录外的真实仓库（git worktree、单独镜像的子模块），放进来镜像里的 git 会直接读写那个仓库。 */
+  detachedGitLinks?: string[]
 }
 
 /** 看差量的选项：maxFiles 限制新增与修改各列最多列多少条（默认 200），删除列不受限；textDiffs 为 false 时不附文本差量（落回前算完整差量用）。 */

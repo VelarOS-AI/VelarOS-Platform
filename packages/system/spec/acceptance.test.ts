@@ -741,14 +741,72 @@ describe('演练沙箱', () => {
     }
   })
 
+  test.skipIf(!canConfine)('INV-23 清单读不出来时镜像根里的命令拒绝执行，不退回裸进程', async () => {
+    const source = await makeSource()
+    const first = createLocalSystemKernel({ cwd: source })
+    const record = await first.createSandbox({})
+    await first.dispose()
+    // 清单写坏了（写到一半崩溃、临时区清理只删了它）：重启后的内核认不出这是沙箱。
+    await writeFile(join(sandboxBaseDirectory(), record.id, 'manifest.json'), '{"version":1,')
+    const second = createLocalSystemKernel({ cwd: source })
+    try {
+      await expect(second.runCommand(`printf clobbered > "${join(source, 'a.txt')}"`, { cwd: record.root })).rejects.toMatchObject({ code: 'SYSTEM_PROCESS_CONFINEMENT_UNAVAILABLE' })
+      expect(await readFile(join(source, 'a.txt'), 'utf8')).toBe('alpha\n')
+      await expect(second.diffSandbox({ sandboxId: record.id })).rejects.toMatchObject({ code: 'NOT_FOUND' })
+    } finally {
+      await second.discardSandbox(record.id)
+      await second.dispose()
+      await rm(source, { recursive: true, force: true })
+    }
+  })
+
+  test.skipIf(!canConfine)('INV-24 嵌套仓库的 .git 也永远不落', async () => {
+    const source = await makeSource()
+    await mkdir(join(source, 'vendor-repo', '.git'), { recursive: true })
+    await writeFile(join(source, 'vendor-repo', '.git', 'HEAD'), 'ref: refs/heads/main\n')
+    await writeFile(join(source, 'vendor-repo', 'lib.txt'), 'lib\n')
+    const kernel = createLocalSystemKernel({ cwd: source })
+    let sandboxId = ''
+    try {
+      const record = await kernel.createSandbox({})
+      sandboxId = record.id
+      await writeFile(join(record.root, 'vendor-repo', '.git', 'HEAD'), 'ref: refs/heads/rehearsal\n')
+      await writeFile(join(record.root, 'vendor-repo', 'lib.txt'), 'LIB\n')
+      const changes = await kernel.diffSandbox({ sandboxId })
+      expect(changes).toMatchObject({ modified: ['vendor-repo/lib.txt'], gitChanged: true })
+      const applied = await kernel.applySandbox({ sandboxId })
+      expect(applied).toMatchObject({ modified: ['vendor-repo/lib.txt'], skippedGit: true })
+      expect(await readFile(join(source, 'vendor-repo', '.git', 'HEAD'), 'utf8')).toBe('ref: refs/heads/main\n')
+    } finally {
+      if (sandboxId) await kernel.discardSandbox(sandboxId)
+      await kernel.dispose()
+      await rm(source, { recursive: true, force: true })
+    }
+  })
+
   test('INV-25 丢弃只删沙箱基目录之下的东西，别的路径一律拒绝', async () => {
     const base = sandboxBaseDirectory()
     await expect(assertInsideSandboxBase('/etc', base)).rejects.toMatchObject({ code: 'PERMISSION' })
     await expect(assertInsideSandboxBase(join(base, '..'), base)).rejects.toMatchObject({ code: 'PERMISSION' })
+    // 基目录本身不在「之下」：删它等于删掉所有沙箱。
+    await mkdir(base, { recursive: true })
+    await expect(assertInsideSandboxBase(base, base)).rejects.toMatchObject({ code: 'PERMISSION' })
     const kernel = createLocalSystemKernel({ cwd: tmpdir() })
     await expect(kernel.discardSandbox('../../etc')).rejects.toMatchObject({ code: 'VALIDATION' })
     await expect(kernel.discardSandbox('20260101-000000-zzzzzz/..')).rejects.toMatchObject({ code: 'VALIDATION' })
-    await kernel.dispose()
+    // 合形状的 id 却是符号链接（指向别处）：拒绝，链接指向的东西一个字节都不动。
+    const victim = await mkdtemp(join(tmpdir(), 'velaros-inv-victim-'))
+    await writeFile(join(victim, 'keep.txt'), 'keep\n')
+    const linked = join(base, '20260101-000000-abcdef')
+    await symlink(victim, linked)
+    try {
+      await expect(kernel.discardSandbox('20260101-000000-abcdef')).rejects.toMatchObject({ code: 'PERMISSION' })
+      expect(await readFile(join(victim, 'keep.txt'), 'utf8')).toBe('keep\n')
+    } finally {
+      await rm(linked, { force: true })
+      await rm(victim, { recursive: true, force: true })
+      await kernel.dispose()
+    }
   })
 
   test.skipIf(!canConfine)('INV-26 镜像仓库推不出去：每个远端的推送地址都被改掉', async () => {
@@ -765,6 +823,52 @@ describe('演练沙箱', () => {
       if (sandboxId) await kernel.discardSandbox(sandboxId)
       await kernel.dispose()
       await rm(source, { recursive: true, force: true })
+    }
+  })
+
+  test.skipIf(!canConfine)('INV-26 嵌套仓库、子模块和各种节头写法的远端也推不出去，指向源目录外的 .git 链接不进镜像', async () => {
+    const source = await makeSource()
+    // 顶层配置：CRLF 换行、节名大写且节头后带空白、旧式 [remote.x] 写法，git 都照常认。
+    await writeFile(join(source, '.git', 'config'), '[remote "origin"]\r\n\turl = git@github.com:example/demo.git\r\n[Remote "UP"] \n\turl = /tmp/up.git\n[remote.legacy]\n\turl = /tmp/legacy.git\n')
+    // 子模块：.git 是指向顶层 .git/modules/mod 的链接文件，那份配置也有远端。
+    await mkdir(join(source, '.git', 'modules', 'mod'), { recursive: true })
+    await writeFile(join(source, '.git', 'modules', 'mod', 'config'), '[remote "origin"]\n\turl = /tmp/mod.git\n')
+    await mkdir(join(source, 'mod'))
+    await writeFile(join(source, 'mod', '.git'), 'gitdir: ../.git/modules/mod\n')
+    // 嵌套的独立仓库。
+    await mkdir(join(source, 'nested', '.git'), { recursive: true })
+    await writeFile(join(source, 'nested', '.git', 'config'), '[remote "origin"]\n\turl = /tmp/nested.git\n')
+    // git worktree：.git 指向源目录外的真实仓库，放进镜像的话镜像里的 git 会直接读写它。
+    const elsewhere = await mkdtemp(join(tmpdir(), 'velaros-inv-worktree-'))
+    await mkdir(join(source, 'wt'))
+    await writeFile(join(source, 'wt', '.git'), `gitdir: ${elsewhere}\n`)
+    const kernel = createLocalSystemKernel({ cwd: source })
+    let sandboxId = ''
+    try {
+      const record = await kernel.createSandbox({})
+      sandboxId = record.id
+      const disabled = (text: string, count: number) => expect(text.split('pushurl = DISABLED-BY-VELAROS-SANDBOX').length - 1).toBe(count)
+      disabled(await readFile(join(record.root, '.git', 'config'), 'utf8'), 3)
+      expect(await readFile(join(record.root, '.git', 'config'), 'utf8')).toContain('[remote "origin"]\r\n\tpushurl = DISABLED-BY-VELAROS-SANDBOX\r\n')
+      disabled(await readFile(join(record.root, '.git', 'modules', 'mod', 'config'), 'utf8'), 1)
+      disabled(await readFile(join(record.root, 'nested', '.git', 'config'), 'utf8'), 1)
+      expect(existsSync(join(record.root, 'mod', '.git'))).toBe(true)
+      expect(existsSync(join(record.root, 'wt', '.git'))).toBe(false)
+      expect(record.detachedGitLinks).toEqual(['wt/.git'])
+      // 剪推送改的配置不算镜像里的变化：刚建好的沙箱差量是干净的。
+      expect((await kernel.diffSandbox({ sandboxId })).gitChanged).toBe(false)
+      // 本机有 git 就让 git 自己读一遍：三种写法的远端都认出了那条无效推送地址。
+      if (Bun.which('git')) {
+        for (const name of ['origin', 'UP', 'legacy']) {
+          const read = Bun.spawnSync(['git', 'config', '--file', join(record.root, '.git', 'config'), '--get-all', `remote.${name}.pushurl`])
+          expect({ name, pushurl: read.stdout.toString().trim() }).toEqual({ name, pushurl: 'DISABLED-BY-VELAROS-SANDBOX' })
+        }
+      }
+    } finally {
+      if (sandboxId) await kernel.discardSandbox(sandboxId)
+      await kernel.dispose()
+      await rm(source, { recursive: true, force: true })
+      await rm(elsewhere, { recursive: true, force: true })
     }
   })
 
