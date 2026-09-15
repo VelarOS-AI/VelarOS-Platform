@@ -3,7 +3,7 @@
  * 不 import 任何 Node 模块，渲染进程也会加载。
  */
 
-import { isEmpty, isPlainObject } from '@velaros-ai/core'
+import { isEmpty, isNotNull, isPlainObject } from '@velaros-ai/core'
 
 import type { DefaultAppDataPathOptions, PathTextContainmentOptions, PlatformCompatibilityOptions, ShellCommandSpecOptions } from '../types/options.js'
 import type { BackgroundShellLaunchOptions, CommandSpec, DirectorySymlinkType, EditorCommandDefinition, PathTextSeparator, RuntimePlatform, ShellKind } from '../types/platform.js'
@@ -222,7 +222,7 @@ export class PlatformCompatibility implements PlatformCompatibilityApi {
   }
 
   public isPathTextInside(candidate: string, root: string, options?: PathTextContainmentOptions): boolean {
-    return this.relativePathTextInside(candidate, root, options) !== null
+    return isNotNull(this.relativePathTextInside(candidate, root, options))
   }
 
   public relativePathTextInside(candidate: string, root: string, options?: PathTextContainmentOptions): Nullable<string> {

@@ -3,7 +3,7 @@
  * 不 import 任何 Node 模块：跨平台兼容层靠它，渲染进程也会加载。
  */
 
-import { toNullable } from '@velaros-ai/core'
+import { isEmpty, toNullable } from '@velaros-ai/core'
 
 import type { CommandSpec, RuntimePlatform, ShellKind } from '../types/platform.js'
 
@@ -67,7 +67,7 @@ export function splitAbsolutePathText(path: string, platform: RuntimePlatform): 
 function collapsePathTextSegments(parts: readonly string[]): string[] {
   const segments: string[] = []
   for (const part of parts) {
-    if (part === '' || part === '.') continue
+    if (isEmpty(part) || part === '.') continue
     if (part === '..') segments.pop()
     else segments.push(part)
   }

@@ -5,6 +5,10 @@
 import { readlink, realpath } from 'node:fs/promises'
 import { basename, dirname, join, resolve } from 'node:path'
 
+import { isNotNull } from '../typeGuards.js'
+
+import { isEmpty } from './array.js'
+
 /** 悬空符号链接最多追几跳；超过（多半是链接成环）就不再追。 */
 const MaxDanglingLinkHops = 40
 
@@ -20,9 +24,9 @@ export async function resolveRealPath(path: string): Promise<string> {
   let hops = 0
   while (true) {
     const real = await realpath(current).catch(() => null)
-    if (real !== null) return trailing.length === 0 ? real : join(real, ...[...trailing].reverse())
+    if (isNotNull(real)) return isEmpty(trailing) ? real : join(real, ...[...trailing].reverse())
     const target = await readlink(current).catch(() => null)
-    if (target !== null) {
+    if (isNotNull(target)) {
       hops += 1
       if (hops > MaxDanglingLinkHops) return literal
       current = resolve(dirname(current), target)

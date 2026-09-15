@@ -6,7 +6,6 @@ import { DefaultToolContractExampleRegistry, schemaToInputSchema } from '@velaro
 
 import { ToolArgsSchemaValidator } from '../../agent/src/utils/tools/tool-args-schema-validator'
 import { ProjectChangeSchema, ProjectEditSchema, projectTools } from '../src/impl/ProjectTools'
-import { ProjectChangeSchema, ProjectEditSchema, projectTools } from '../src/impl/ProjectTools'
 
 const ProjectReadInputSchema = projectTools['project:read']!.schema
 
