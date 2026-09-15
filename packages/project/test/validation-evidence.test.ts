@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
 
-import { typescriptSyntaxValidator } from '../src/impl/plugins/typescript-validators'
+import { TypeScriptSyntaxValidator } from '../src/impl/plugins/TypeScriptSyntaxValidator'
 import { ValidatorRegistry } from '../src/impl/registries/ValidatorRegistry'
 import type { ProjectValidationContext } from '../src/types/validation'
 
@@ -20,7 +20,7 @@ function fixture() {
 test('syntax evidence survives unrelated changes, invalidates source changes and returns isolated results', async () => {
   const { files, context } = fixture()
   const registry = new ValidatorRegistry()
-  const validator = typescriptSyntaxValidator()
+  const validator = new TypeScriptSyntaxValidator()
   let runs = 0
   const validate = validator.validate
   validator.validate = (input, ctx) => {

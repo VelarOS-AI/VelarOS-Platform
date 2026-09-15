@@ -2,9 +2,10 @@ import { describe, expect, test } from 'bun:test'
 
 import type { ProjectProviders, ProjectValidator } from '../src/contract/requires.js'
 import { DEFAULT_CORE_POLICY } from '../src/impl/kernel/policy-defaults'
-import { postconditionValidator, scopeValidator } from '../src/impl/plugins/builtin-validators'
-import { commandValidator } from '../src/impl/plugins/command-validators'
-import { typescriptSyntaxValidator } from '../src/impl/plugins/typescript-validators'
+import { CommandValidator } from '../src/impl/plugins/CommandValidator'
+import { PostconditionValidator } from '../src/impl/plugins/PostconditionValidator'
+import { ScopeValidator } from '../src/impl/plugins/ScopeValidator'
+import { TypeScriptSyntaxValidator } from '../src/impl/plugins/TypeScriptSyntaxValidator'
 import { ValidatorRegistry } from '../src/impl/registries/ValidatorRegistry'
 import type { CommandRunInput } from '../src/types/provider'
 import type { ProjectValidationContext, ProjectValidationTransaction } from '../src/types/validation'
@@ -86,11 +87,11 @@ describe('ProjectValidationContext', () => {
       readFile: async () => 'future content',
     })
 
-    const scope = await scopeValidator().validate(
+    const scope = await new ScopeValidator().validate(
       { transactionId: tx.transactionId },
       validationContext,
     )
-    const postcondition = await postconditionValidator().validate(
+    const postcondition = await new PostconditionValidator().validate(
       {
         transactionId: tx.transactionId,
         postconditions: [{ type: 'must_contain', value: 'future content' }],
@@ -118,7 +119,7 @@ describe('ProjectValidationContext', () => {
         },
       },
     })
-    const validator = commandValidator({
+    const validator = new CommandValidator({
       id: 'external.custom',
       command: 'custom-check',
       args: ['--verify'],
@@ -146,7 +147,7 @@ describe('ProjectValidationContext', () => {
       },
     })
 
-    const result = await typescriptSyntaxValidator().validate(
+    const result = await new TypeScriptSyntaxValidator().validate(
       { transactionId: tx.transactionId },
       validationContext,
     )
@@ -165,7 +166,7 @@ describe('ProjectValidationContext', () => {
     ]) {
       const reads: string[] = []
       const registry = new ValidatorRegistry()
-      registry.register(typescriptSyntaxValidator())
+      registry.register(new TypeScriptSyntaxValidator())
       const result = await registry.validate(
         { paths: ['valid.ts'], checks: [check] },
         context({
@@ -187,7 +188,7 @@ describe('ProjectValidationContext', () => {
 
     const emptyChecksReads: string[] = []
     const emptyChecksRegistry = new ValidatorRegistry()
-    emptyChecksRegistry.register(typescriptSyntaxValidator())
+    emptyChecksRegistry.register(new TypeScriptSyntaxValidator())
     const emptyChecksResult = await emptyChecksRegistry.validate(
       { paths: ['valid.ts'], checks: [] },
       context({
@@ -201,7 +202,7 @@ describe('ProjectValidationContext', () => {
     expect(emptyChecksResult.checks).toHaveLength(1)
 
     const registry = new ValidatorRegistry()
-    registry.register(typescriptSyntaxValidator())
+    registry.register(new TypeScriptSyntaxValidator())
     const skipped = await registry.validate(
       { paths: ['valid.ts'], checks: ['unrelated'] },
       context(),

@@ -10,7 +10,7 @@ import { AppError } from '@velaros-ai/core/error'
 import type { ProjectToolContext } from '../src/contract/requires'
 import { createProjectKernel } from '../src/impl/kernel/LocalProjectKernel'
 import { projectCodeOperations } from '../src/impl/operations/ProjectCodeOperations'
-import { typescriptPlugin } from '../src/impl/plugins/typescript-plugin'
+import { typescriptPlugin } from '../src/impl/plugins/TypeScriptProjectPlugin'
 import { createProjectCodeAnalysisTools, projectTools } from '../src/impl/ProjectTools'
 
 const ProjectCodeSchema = projectTools['project:code']!.schema

@@ -21,7 +21,7 @@ export type { ProjectFileContextApi } from '../impl/operations/ProjectFileContex
 export { projectFileContext } from '../impl/operations/ProjectFileContext.js'
 export type { FileProjectChangeFeedApi } from '../impl/persistence/FileProjectChangeFeed.js'
 export { createFileProjectChangeFeed } from '../impl/persistence/FileProjectChangeFeed.js'
-export { typescriptPlugin } from '../impl/plugins/typescript-plugin.js'
+export { typescriptPlugin } from '../impl/plugins/TypeScriptProjectPlugin.js'
 export { createProjectBundledModDefinition, createProjectCodeAnalysisContribution, createProjectCodeAnalysisTools, createProjectKernelModule, createProjectSpace, ProjectCapability, projectTools } from '../impl/ProjectTools.js'
 
 // ── 注入面：宿主要给的东西，以及插件与扩展点 ─────────────────────────

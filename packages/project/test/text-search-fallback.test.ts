@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { describe, expect, test } from 'bun:test'
 
 import { createProjectKernel } from '../src/exports/index'
-import { createTextAdapter } from '../src/impl/adapters/text-adapter'
+import { TextFileAdapter } from '../src/impl/adapters/TextFileAdapter'
 import type { FileSnapshot } from '../src/types/snapshot'
 import { encodeProjectTextBuffer } from '../src/utils/text'
 
@@ -32,7 +32,7 @@ function matchedText(content: string, range: { startOffset?: number; endOffset?:
 describe('text search fallback', () => {
   test.each(['[', ']', '{', '}', '(', ')', '*', '+', '?', '.', '^', '$', '|', String.fromCharCode(92)])('treats isolated %s literally', (query) => {
     const content = `before ${query} after`
-    const hits = createTextAdapter().search!({ snapshot: snapshot(content), query, regex: false })
+    const hits = new TextFileAdapter().search!({ snapshot: snapshot(content), query, regex: false })
     expect(hits).toHaveLength(1)
     expect(matchedText(content, hits[0]!.range!)).toBe(query)
   })
@@ -40,13 +40,13 @@ describe('text search fallback', () => {
   test.each([String.raw`\_`, String.raw`\a`, '{', ']'])('preserves legacy regex syntax %s', (query) => {
     const content = '_a{]'
     const expected = new RegExp(query, 'g').exec(content)!
-    const hits = createTextAdapter().search!({ snapshot: snapshot(content), query, regex: true, caseSensitive: true })
+    const hits = new TextFileAdapter().search!({ snapshot: snapshot(content), query, regex: true, caseSensitive: true })
     expect(hits).toHaveLength(1)
     expect(hits[0]!.range).toMatchObject({ startOffset: expected.index, endOffset: expected.index + expected[0].length })
   })
 
   test('preserves whole-string lowercase semantics and maps matches within expanded characters', () => {
-    const search = (content: string, query: string) => createTextAdapter().search!({ snapshot: snapshot(content), query, regex: false, caseSensitive: false })
+    const search = (content: string, query: string) => new TextFileAdapter().search!({ snapshot: snapshot(content), query, regex: false, caseSensitive: false })
     expect(search('ΟΣ', 'σ')).toEqual([])
     expect(search('ΟΣ', 'ς')[0]!.range).toMatchObject({ startOffset: 1, endOffset: 2 })
     for (const query of ['i', '\u0307', 'İ']) {
@@ -59,7 +59,7 @@ describe('text search fallback', () => {
   })
 
   test('preserves case sensitivity, non-overlap, and result limits', () => {
-    const adapter = createTextAdapter()
+    const adapter = new TextFileAdapter()
     const source = snapshot('AaAA')
     expect(adapter.search!({ snapshot: source, query: 'aa', caseSensitive: true })).toEqual([])
     expect(adapter.search!({ snapshot: source, query: 'aa', caseSensitive: false }).map((hit) => hit.range!.startOffset)).toEqual([0, 2])
@@ -68,7 +68,7 @@ describe('text search fallback', () => {
   })
 
   test.each([false, true])('bounds empty queries and code-point advancement with regex=%s', (regex) => {
-    const adapter = createTextAdapter()
+    const adapter = new TextFileAdapter()
     const search = (content: string, query: string, maxResults = 20) => adapter.search!({ snapshot: snapshot(content), query, regex, maxResults })
     expect(search('😀', '').map((hit) => [hit.range!.startOffset, hit.range!.endOffset])).toEqual([[0, 0], [2, 2]])
     expect(search('😀', '', 1).map((hit) => hit.range!.startOffset)).toEqual([0])
@@ -78,7 +78,7 @@ describe('text search fallback', () => {
 
   test('treats backslashes and square brackets literally when regex is disabled', () => {
     const content = String.raw`prefix C:\work [needle] suffix`
-    const adapter = createTextAdapter()
+    const adapter = new TextFileAdapter()
 
     const backslashHits = adapter.search!({
       snapshot: snapshot(content),
@@ -101,7 +101,7 @@ describe('text search fallback', () => {
 
   test('returns each real zero-width position once and preserves the result cap', () => {
     const content = '😀needle 😀needle'
-    const adapter = createTextAdapter()
+    const adapter = new TextFileAdapter()
     const search = (query: string, maxResults = 20) =>
       adapter.search!({
         snapshot: snapshot(content),
@@ -120,7 +120,7 @@ describe('text search fallback', () => {
 
   test('keeps case-insensitive Unicode match ranges aligned with the original text', () => {
     const content = 'İ needle'
-    const hits = createTextAdapter().search!({
+    const hits = new TextFileAdapter().search!({
       snapshot: snapshot(content),
       query: 'needle',
       regex: false,

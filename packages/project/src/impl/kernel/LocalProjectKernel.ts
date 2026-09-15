@@ -108,7 +108,7 @@ import { patchFileAttributes, withPatchFileAttributes } from '../../utils/transa
 import { diagnosticsEnvelope } from '../../utils/transactions/transaction-errors.js'
 import { type AuditEvent, AuditJournal } from '../persistence/AuditJournal.js'
 import { FileProjectTransactionStateStore } from '../persistence/FileProjectTransactionStateStore.js'
-import { corePlugin } from '../plugins/core-plugin.js'
+import { corePlugin } from '../plugins/CoreProjectPlugin.js'
 import { AdapterRegistry } from '../registries/AdapterRegistry.js'
 import { FixerRegistry } from '../registries/FixerRegistry.js'
 import { HookRegistry } from '../registries/HookRegistry.js'
@@ -1397,7 +1397,7 @@ export async function createProjectKernel(
 ): Promise<ProjectKernel> {
   const project = new LocalProjectKernel(options)
   await project.initializeTransactionState()
-  if (options.includeBuiltinPlugins ?? true) await project.install(corePlugin())
+  if (options.includeBuiltinPlugins ?? true) await project.install(corePlugin)
   for (const plugin of options.plugins ?? []) await project.install(plugin)
   return project
 }

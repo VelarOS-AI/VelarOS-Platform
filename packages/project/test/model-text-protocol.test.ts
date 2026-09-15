@@ -8,7 +8,7 @@ import { InMemoryContextPayloadStore } from '@velaros-ai/agent'
 
 import type { ProjectToolContext } from '../src/contract/requires'
 import { createProjectKernel } from '../src/exports/index'
-import { typescriptPlugin } from '../src/impl/plugins/typescript-plugin'
+import { typescriptPlugin } from '../src/impl/plugins/TypeScriptProjectPlugin'
 import { projectPlannerResolver } from '../src/utils/agent/planner-resolver'
 import { readProjectSource as executeProjectRead } from '../src/utils/agent/project-files'
 import { finalizeProjectModelResult } from '../src/utils/agent/source-window'
