@@ -1,9 +1,8 @@
 import type { ProjectChangeRecordInput } from './change-feed.js'
-import type { ProjectTextEncoding } from './text.js'
-
 import type { Diagnostic } from './common.js'
 import type { PreparedTransaction } from "./edit.js";
 import type { FileAttributes } from './snapshot.js'
+import type { ProjectTextEncoding } from './text.js'
 
 export type ProjectTransactionCommand = 'amend' | 'validate' | 'apply' | 'rollback' | 'discard'
 

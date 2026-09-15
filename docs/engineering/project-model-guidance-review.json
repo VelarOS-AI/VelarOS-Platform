@@ -196,14 +196,6 @@
       "fingerprint": "4d9f26832b11d0ceeea74ac8bfa0fefa5fe86f0d4a0e498274df13a4340192d7"
     },
     {
-      "path": "packages/project/src/impl/tools/legacy-input-migration.ts",
-      "fingerprint": "a2c1fd204776c4a4e743c21a043565691e0fd98ea0a68ce55ca6123e37c2cb9a"
-    },
-    {
-      "path": "packages/project/src/impl/tools/legacy-tools.ts",
-      "fingerprint": "53a94f638671227f3b236b468ea384e13269215fd2ef5ae3aab458ab248249de"
-    },
-    {
       "path": "packages/project/src/impl/tools/list.ts",
       "fingerprint": "2342c6ae5b4b7a224e6b368b4fd7379687f9a7a9a7f7600bae2faeb4546c9c8f"
     },
@@ -233,7 +225,7 @@
     },
     {
       "path": "packages/project/src/impl/tools/shared.ts",
-      "fingerprint": "374cd6081050bcdbb1f4ad79afed5d89894991bbe1d5e1f41c4fa82ddf2cc5f7"
+      "fingerprint": "a4f72b4d68df1c74180003b76a8e431b6fb1b9de4395b767d0db61c34915098e"
     },
     {
       "path": "packages/project/src/impl/tools/transaction-result.ts",

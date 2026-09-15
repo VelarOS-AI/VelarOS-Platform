@@ -3,16 +3,18 @@ import { z } from 'zod'
 
 import { isCanonicalToolId, schemaToInputSchema } from '@velaros-ai/agent/tool-contract'
 
-import { LegacyProjectToolNames, ProjectToolNames } from '../src/contract/constants'
+import { ProjectToolNames } from '../src/contract/constants'
 import type { AgentProjectKernelPort } from '../src/contract/requires.js'
 import {
   defineProjectTool,
   projectTools,
   scopeProjectListPatterns,
 } from '../src/impl/ProjectTools'
-import { legacyProjectTools } from '../src/impl/tools/legacy-tools'
 import { executeAgentProjectRead, executeAgentProjectSearch } from '../src/utils/agent/kernel-port'
 import { ProjectEditOperationSchema } from '../src/utils/schemas/edit-intent'
+
+import { LegacyProjectToolNames } from './support/legacy-tools'
+import { legacyProjectTools } from './support/legacy-tools'
 
 const ModelToolSchemaCharacterBudget = 40_000
 

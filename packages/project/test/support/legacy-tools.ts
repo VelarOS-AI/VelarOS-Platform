@@ -1,22 +1,36 @@
-/** 历史会话保留的第 1 版模型契约；新会话使用当前工具集合。 */
+/**
+ * 测试驱动器：第 1 版模型工具（project:write、project:rollback、按行号改的 project:edit 等）。生产包已经不再提供它们；
+ * 这里保留，是因为不少测试借它们驱动内核、事务与文件上下文，测的仍是生产行为。
+ */
 import { z } from 'zod'
 
 import { isArray, isPresent, isUndefined, Log } from '@velaros-ai/core'
 
-import { LegacyProjectToolNames as ProjectToolNames } from '../../contract/constants'
-import type { ProjectToolCollection } from '../../contract/provides.js'
-import { resolveProjectEditTarget, saveProjectEditTarget } from '../../utils/agent/edit-target'
-import { registerProjectFileContext, snapshotFromRead } from '../../utils/agent/file-context'
-import { executeAgentProjectRead, executeAgentProjectSearch } from '../../utils/agent/kernel-port'
-import { type ProjectCodeQuery, ProjectCodeQuerySchema } from '../../utils/schemas/code-query'
-import { type ProjectEditOperationsSchema, type ProjectModelEditInput, ProjectModelEditSchema } from '../../utils/schemas/edit-intent'
+import type { ProjectToolCollection } from '../../src/contract/provides.js'
+import { ProjectReadCapability, ProjectWriteCapability } from '../../src/impl/tools/capabilities'
+import { runWithProjectExecutionGate } from '../../src/impl/tools/execution-gate'
+import { projectList } from '../../src/impl/tools/list'
+import { projectRun } from '../../src/impl/tools/run'
+import { defineProjectTool } from '../../src/impl/tools/shared'
+import { applyProjectEditTransaction } from '../../src/impl/tools/transaction'
+import { resolveProjectEditTarget, saveProjectEditTarget } from '../../src/utils/agent/edit-target'
+import { registerProjectFileContext, snapshotFromRead } from '../../src/utils/agent/file-context'
+import { executeAgentProjectRead, executeAgentProjectSearch } from '../../src/utils/agent/kernel-port'
+import { type ProjectCodeQuery, ProjectCodeQuerySchema } from '../../src/utils/schemas/code-query'
+import { type ProjectEditOperationsSchema, type ProjectModelEditInput, ProjectModelEditSchema } from '../../src/utils/schemas/edit-intent'
+/** 第 1 版工具名；只在测试里用。 */
+export const LegacyProjectToolNames = Object.freeze({
+  read: 'project:read',
+  list: 'project:list',
+  search: 'project:search',
+  queryCode: 'project:query-code',
+  write: 'project:write',
+  edit: 'project:edit',
+  rollback: 'project:rollback',
+  run: 'project:run',
+} as const)
 
-import { ProjectReadCapability, ProjectWriteCapability } from './capabilities'
-import { runWithProjectExecutionGate } from './execution-gate'
-import { projectList } from './list'
-import { projectRun } from './run'
-import { defineProjectTool } from './shared'
-import { applyProjectEditTransaction } from './transaction'
+const ProjectToolNames = LegacyProjectToolNames
 
 const ProjectRangeSchema = z
   .strictObject({

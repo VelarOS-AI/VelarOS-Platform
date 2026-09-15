@@ -5,9 +5,10 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
 import { createProjectKernel } from '../src/exports/index'
-import { legacyProjectTools as projectTools } from '../src/impl/tools/legacy-tools'
 import type { ReplaceLinesOperation } from '../src/types/edit'
 import { ProjectEditOperationSchema } from '../src/utils/schemas/edit-intent'
+
+import { legacyProjectTools as projectTools } from './support/legacy-tools'
 
 let root = ''
 beforeEach(async () => { root = await mkdtemp(join(tmpdir(), 'project-line-edit-')) })

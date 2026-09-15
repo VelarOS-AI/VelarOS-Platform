@@ -15,8 +15,9 @@ import { fileContextFor } from '@velaros-ai/agent/tool-contract'
 
 import type { ProjectToolContext } from '../src/contract/requires'
 import { createProjectKernel } from '../src/exports/index'
-import { legacyProjectTools as projectTools } from '../src/impl/tools/legacy-tools'
 import { registerProjectFileContext } from '../src/utils/agent/file-context'
+
+import { legacyProjectTools as projectTools } from './support/legacy-tools'
 
 let root = ''
 beforeEach(async () => {

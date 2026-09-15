@@ -7,12 +7,13 @@ import * as ts from 'typescript'
 import { schemaToInputSchema } from '@velaros-ai/agent/tool-contract'
 
 import disposition from '../../../docs/engineering/project-tool-operation-disposition.json'
-import { LegacyProjectToolNames } from '../src/contract/constants'
 import { projectTools } from '../src/impl/ProjectTools'
-import { LegacyProjectWriteModeSchema } from '../src/impl/tools/legacy-tools'
 import { ProjectCodeAnalysisSchema } from '../src/utils/schemas/code'
 import { ProjectCodeQuerySchema } from '../src/utils/schemas/code-query'
 import { ProjectModelEditSchema } from '../src/utils/schemas/edit-intent'
+
+import { LegacyProjectToolNames } from './support/legacy-tools'
+import { LegacyProjectWriteModeSchema } from './support/legacy-tools'
 
 const root = resolve(import.meta.dir, '..')
 

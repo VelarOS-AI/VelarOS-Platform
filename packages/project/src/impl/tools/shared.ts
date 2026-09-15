@@ -1,11 +1,11 @@
 import type { ToolCategoryId } from '@velaros-ai/agent/protocol'
 import { defineToolRuntimeSpec, resolveToolInputReuse, withToolInputReuse } from '@velaros-ai/agent/tool-contract'
 
+import { ProjectToolContract } from '../../contract/constants.js'
 import type { VelaTool } from '../../contract/provides.js'
 import type { ProjectToolApi, ProjectToolContext } from '../../contract/requires'
 
 import { runWithProjectExecutionGate } from './execution-gate'
-import { migrateProjectReusedInput, ProjectInputContractVersion, projectInputReuseSourceTools } from './legacy-input-migration'
 
 export function defineProjectTool<TInput extends Record<string, any>>(input: {
   name: string
@@ -41,11 +41,7 @@ export function defineProjectTool<TInput extends Record<string, any>>(input: {
     notes,
     ...tool
   } = input
-  const inputContractVersion = input.inputContractVersion ?? ProjectInputContractVersion
-  const inputReuseSourceTools = inputContractVersion === 2 ? projectInputReuseSourceTools(name) : undefined
-  const migrateReusedInput = inputContractVersion === 2 && inputReuseSourceTools
-    ? (request: Parameters<typeof migrateProjectReusedInput>[1], context: ProjectToolContext) => migrateProjectReusedInput(name, request, context)
-    : undefined
+  const inputContractVersion = input.inputContractVersion ?? ProjectToolContract.inputVersion
   const defined = defineToolRuntimeSpec({
     name,
     category,
@@ -58,13 +54,12 @@ export function defineProjectTool<TInput extends Record<string, any>>(input: {
     examples,
     notes: notes ?? ['返回值是当前操作的权威结果。'],
     ...tool,
-    inputContractVersion, inputReuseSourceTools, migrateReusedInput,
+    inputContractVersion,
   })
   const execute = (args: Record<string, unknown>, context: ProjectToolContext) => {
     const run = async () =>
       tool.execute(tool.schema.parse(await resolveToolInputReuse(context, name, args, context.toolCallId, {
-        inputContractVersion, inputReuseSourceTools,
-        migrateReusedInput: migrateReusedInput ? (request) => migrateReusedInput(request, context) : undefined,
+        inputContractVersion,
       })), context)
     // 后台命令的进程生命周期由宿主 job manager 管理，不能将启动回执当作任务结束。
     if (role !== 'inspect') return run()

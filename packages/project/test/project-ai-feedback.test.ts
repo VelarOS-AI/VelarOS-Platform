@@ -6,15 +6,16 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
 import { defaultDenyApprovalPort } from '@velaros-ai/agent/tool-contract'
 
-import { LegacyProjectToolNames as ProjectToolNames } from '../src/contract/constants'
 import type { ProjectToolContext } from '../src/contract/requires'
 import type { AgentProjectKernelPort } from '../src/contract/requires.js'
 import { createProjectKernel, type EditOperation, typescriptPlugin } from '../src/exports/index'
-import { legacyProjectTools as projectTools } from '../src/impl/tools/legacy-tools'
 import { executeAgentProjectRead, executeAgentProjectSearch } from '../src/utils/agent/kernel-port'
 import { diagnoseTextMatchMiss, findLineWhitespaceTolerantMatches } from '../src/utils/editing/text-match-feedback'
 import { ProjectEditOperationSchema } from '../src/utils/schemas/edit-intent'
 import { includesLineEndingAware } from '../src/utils/text'
+
+import { LegacyProjectToolNames as ProjectToolNames } from './support/legacy-tools'
+import { legacyProjectTools as projectTools } from './support/legacy-tools'
 
 let root = ''
 
