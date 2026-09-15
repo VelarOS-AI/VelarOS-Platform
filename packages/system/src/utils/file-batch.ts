@@ -5,7 +5,8 @@
 import { isPresent, toOptional } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import type { SystemEditFailureDetails, SystemEditProblem, SystemFileFailure } from '../contract/files.js'
+import type { SystemEditFailureDetails, SystemEditFileResult, SystemEditProblem, SystemFileFailure } from '../contract/files.js'
+import { SystemErrorCodes } from '../contract/system.js'
 
 /** 一批最多几个文件：空的和超过 max 个的都拒绝，operation 只用来写进报错。 */
 export function assertFileBatchSize(count: number, max: number, operation: string): void {
@@ -30,7 +31,7 @@ export function unresolvedEditFailure(problems: readonly SystemEditProblem[]): A
   const summary = problems.slice(0, MaxReportedProblems).map((problem) => `files[${problem.file}]${isPresent(problem.edit) ? `.edits[${problem.edit}]` : ''}: ${problem.message}`).join('; ')
   const details: SystemEditFailureDetails = { executionOutcome: 'not-applied', problems: problems.slice(0, MaxReportedProblems) }
   const cause = {
-    reason: denied ? 'SYSTEM_EDIT_DENIED' : 'SYSTEM_EDIT_UNRESOLVED',
+    reason: denied ? SystemErrorCodes.editDenied : SystemErrorCodes.editUnresolved,
     details,
     suggestedNextAction: 'Nothing was written. Fix only the listed places with reuse + changes (for example path ["files", 0, "edits", 1, "range"] set to the chosen anchor range) and call system:edit again; unchanged files and edits are kept as they were.',
   }
@@ -47,4 +48,10 @@ export function staleProblem(expected: Optional<string>, current: Nullable<strin
       : `version ${expected} was given but the file does not exist`,
     currentVersion: toOptional(current),
   }
+}
+
+/** 路径是符号链接时把真正被写的目标记进结果；不是链接就原样返回。 */
+export function withLinkTarget<T extends SystemEditFileResult>(result: T, path: string, target: string): T {
+  if (target !== path) result.target = target
+  return result
 }

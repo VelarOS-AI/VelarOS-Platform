@@ -185,15 +185,12 @@ export class SystemCommandRunner implements SystemCommandRunnerApi {
         terminated = await owned.stop(signal)
         if (!terminated && !owned.exited) throw new AppError('PLATFORM', '后台进程未在期限内确认退出。')
       } catch (error) {
-        if (this.options.platformTools.isProcessMissingError(error)) {
-          message = '后台进程已经退出。'
-        } else {
-          throw new AppError('PLATFORM', '终止后台进程失败。', error, {
-            taskId,
-            pid: task.pid,
-            signal,
-          })
+        if (!this.options.platformTools.isProcessMissingError(error)) {
+          // 身份核对失败（PERMISSION）和期限内没退出（PLATFORM）各有自己的错误码，原样抛出，调用方才分得开。
+          if (error instanceof AppError) throw error
+          throw new AppError('PLATFORM', '终止后台进程失败。', error, { taskId, pid: task.pid, signal })
         }
+        message = '后台进程已经退出。'
       }
     }
 
@@ -370,6 +367,8 @@ export class SystemCommandRunner implements SystemCommandRunnerApi {
       windowsVerbatimArguments: prepared.spec.windowsVerbatimArguments,
     })
     const owned = processes.manage(child, { platform, abortSignal })
+    // 控制台缓冲在挂输出监听之前就建好，进程一启动就吐的输出不会丢。
+    if (interactive) this.consoles.set(taskId, { buffer: '', produced: 0 })
     let recentOutput = ''
     const decoders = { stdout: new SystemOutputDecoder(), stderr: new SystemOutputDecoder() }
     const append = (text: string): void => {
@@ -381,6 +380,7 @@ export class SystemCommandRunner implements SystemCommandRunnerApi {
     // 交互式任务的 stdin 是管道，非交互式是 ignore，所以这里的输出管道按可空处理。
     for (const stream of ['stdout', 'stderr'] as const) child[stream]?.on('data', (chunk: Buffer) => append(decoders[stream].write(chunk)))
     try { await waitForSystemProcessSpawn(child); abortSignal?.throwIfAborted() } catch (error) {
+      this.consoles.delete(taskId)
       await owned.stop('SIGKILL')
       throw error
     }
@@ -393,7 +393,6 @@ export class SystemCommandRunner implements SystemCommandRunnerApi {
     const closedConsole: Optional<SystemConsoleSessionInfo> = consoleSession
       ? { ...consoleSession, acceptsInput: false }
       : undefined
-    if (consoleSession) this.consoles.set(taskId, { buffer: '', produced: 0 })
     const backgroundProcess: SystemBackgroundProcessInfo = {
       taskId, sessionId: toNullable(sessionId), pid, logPath: null, ports: [],
       reason: null, terminateCommand: platformTools.getTerminateCommand(pid, false, prepared.shell),
@@ -406,7 +405,7 @@ export class SystemCommandRunner implements SystemCommandRunnerApi {
       terminateCommand: backgroundProcess.terminateCommand,
       forceTerminateCommand: backgroundProcess.forceTerminateCommand, fallbackTerminateCommand: null,
       requested: true, autoStarted: false, startedAt, updatedAt: startedAt,
-      status: 'running', recentOutput: null, console: consoleSession,
+      status: 'running', recentOutput: recentOutput || null, console: consoleSession,
     }
     this.tasks.set(taskId, task)
     this.executions.set(taskId, owned)

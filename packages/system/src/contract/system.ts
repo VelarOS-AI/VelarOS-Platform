@@ -612,6 +612,10 @@ export const SystemErrorCodes = Object.freeze({
   shellUnavailable: 'SYSTEM_SHELL_UNAVAILABLE',
   /** 请求了受约束的进程模式，但当前宿主没有可用后端。实现必须拒绝执行，不得退回裸进程。 */
   processConfinementUnavailable: 'SYSTEM_PROCESS_CONFINEMENT_UNAVAILABLE',
+  /** system:edit 整批定不下来（找不到、多处匹配、重叠、版本过期）：什么都没写，错误 cause.details.problems 列出每个问题，入参可复用。 */
+  editUnresolved: 'SYSTEM_EDIT_UNRESOLVED',
+  /** system:edit 里有文件的写入被用户拒绝：什么都没写。 */
+  editDenied: 'SYSTEM_EDIT_DENIED',
 } as const)
 
 export type SystemErrorCode = (typeof SystemErrorCodes)[keyof typeof SystemErrorCodes]

@@ -234,7 +234,10 @@ function readInvocation(tokens: readonly string[]): Nullable<ShellInvocation> {
     }
     const name = commandName(token)
     if (!CommandPrefixes.has(name)) return { name, args: tokens.slice(index + 1) }
-    index = skipPrefixArguments(name, tokens, index + 1)
+    const next = skipPrefixArguments(name, tokens, index + 1)
+    // 前缀命令后面没有别的命令词（`env`、`env -u FOO`），这次调用就是前缀命令本身。
+    if (next >= tokens.length) return { name, args: tokens.slice(index + 1) }
+    index = next
   }
   return null
 }

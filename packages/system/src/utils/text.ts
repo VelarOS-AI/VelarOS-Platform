@@ -61,12 +61,12 @@ function toCrlf(value: string): string {
   return value.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n')
 }
 
-/** 在 range 这段范围里找 needle 出现的每个位置，按出现顺序返回起点；不重叠计数，needle 为空返回空列表。 */
-export function findOccurrences(value: string, needle: string, range: { offset: number; end: number }): number[] {
-  if (isEmpty(needle)) return []
+/** 在 range 这段范围里找 needle 出现的位置，按出现顺序返回起点，允许重叠；最多找 limit 个就停（调用方只需要「唯一吗」和前几个锚点），needle 为空返回空列表。 */
+export function findOccurrences(value: string, needle: string, range: { offset: number; end: number }, limit: number): number[] {
+  if (isEmpty(needle) || limit <= 0) return []
   const found: number[] = []
   let index = range.offset
-  while (index < range.end) {
+  while (index < range.end && found.length < limit) {
     const at = value.indexOf(needle, index)
     if (at === -1 || at + needle.length > range.end) break
     found.push(at)

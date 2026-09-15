@@ -46,7 +46,7 @@ export interface SystemFileFailure {
   }
 }
 
-/** 读文本文件的结果：files 与入参的 files 一一对应，每项是读到的内容或这个文件的失败；一次调用的字符预算在某个文件用完时，note 说明从第几个文件起只带位置没有内容。 */
+/** 读文本文件的结果：files 与入参的 files 一一对应，每项是读到的内容或这个文件的失败；一次调用的字符预算不够时，被截短的文件 hasMore 为真，预算用完后的文件不读盘、那一项换成失败条目，note 说明从第几个文件起。 */
 export interface SystemReadResult {
   files: Array<SystemReadFileResult | SystemFileFailure>
   note?: string
@@ -120,9 +120,10 @@ export interface SystemEditInput {
   files: SystemEditFileInput[]
 }
 
-/** 整个文件写入的结果：version 是写完后的版本号，previousVersion 是改动前留下的版本，新建或没留下时为 null。 */
+/** 整个文件写入的结果：version 是写完后的版本号，previousVersion 是改动前留下的版本，新建或没留下时为 null；path 是按传入路径解析出的绝对路径，它是符号链接时 target 是真正被写的那个文件。 */
 export interface SystemEditWrittenResult {
   path: string
+  target?: string
   action: 'written'
   created: boolean
   version: string
@@ -141,6 +142,7 @@ export interface SystemEditWindow {
 /** 改了几处的结果：edits 是改了几处，windows 每处一段新文本前后各 200 字符；盖住所有改动那段（各处 range 的并集）不超过 2 万字符时，content 和 range 整段给出，不用再读一遍确认；超过就只有 windows。 */
 export interface SystemEditReplacedResult {
   path: string
+  target?: string
   action: 'replaced'
   edits: number
   version: string
@@ -155,6 +157,7 @@ export interface SystemEditReplacedResult {
 /** 回滚的结果：文件回到 version 那个版本，回滚前的内容留成 previousVersion，回滚本身也能再回滚。 */
 export interface SystemEditRestoredResult {
   path: string
+  target?: string
   action: 'restored'
   version: string
   previousVersion: Nullable<string>
@@ -168,7 +171,7 @@ export interface SystemEditAnchor {
   context: string
 }
 
-/** 一处定不下来的问题：file 是 files 里第几个（从 0 起），edit 是它 edits 里第几处（从 0 起，整个文件的问题没有）；多处匹配时 anchors 列出每处（最多 10 个），选一个把它的 range 填回那一处；重叠时 with 是和它重叠的那一处；文件被改过时 currentVersion 是它现在的版本。 */
+/** 一处定不下来的问题：file 是 files 里第几个（从 0 起），edit 是它 edits 里第几处（从 0 起，整个文件的问题没有）；多处匹配时 anchors 列出前 10 处、matchCount 是找到几处（超过 10 处只数到 11 为止），选一个把它的 range 填回那一处；重叠时 with 是和它重叠的那一处；文件被改过时 currentVersion 是它现在的版本。 */
 export interface SystemEditProblem {
   file: number
   path: string
@@ -252,8 +255,17 @@ export interface SystemEditTarget {
   newText: string
 }
 
-/** 一个文件定下来的写入计划：回滚、整个写入、或改几处；baseVersion 是计划时文件的版本（不存在为 null），写之前再核一次。第一段只做计划，第二段照计划写。 */
+/** 文件的印记：修改时间与大小。写之前再 stat 一次，印记没变的大文件不用重读核版本。 */
+export interface SystemFileStamp {
+  mtimeMs: number
+  size: number
+}
+
+/**
+ * 一个文件定下来的写入计划：回滚、整个写入、或改几处。path 是按传入路径解析出的绝对路径，target 是解开符号链接后真正要写的文件，
+ * baseVersion 与 stamp 是计划时文件的版本和印记（不存在为 null），写之前再核一次。第一段只做计划，第二段照计划写。
+ */
 export type SystemEditPlan =
-  | { kind: 'restore'; index: number; path: string; exists: boolean; snapshot: { version: string; buffer: Buffer }; baseVersion: Nullable<string> }
-  | { kind: 'write'; index: number; path: string; created: boolean; previous: Nullable<{ buffer: Buffer; encoding: SystemTextEncoding }>; newText: string; baseVersion: Nullable<string> }
-  | { kind: 'edits'; index: number; path: string; textFile: { buffer: Buffer; content: string; encoding: SystemTextEncoding }; ordered: SystemEditTarget[]; scopes: SystemTextRange[]; baseVersion: Nullable<string> }
+  | { kind: 'restore'; index: number; path: string; target: string; current: Nullable<Buffer>; snapshot: { version: string; buffer: Buffer }; baseVersion: Nullable<string>; stamp: Nullable<SystemFileStamp> }
+  | { kind: 'write'; index: number; path: string; target: string; created: boolean; previous: Nullable<{ buffer: Buffer; encoding: SystemTextEncoding }>; newText: string; baseVersion: Nullable<string>; stamp: Nullable<SystemFileStamp> }
+  | { kind: 'edits'; index: number; path: string; target: string; textFile: { buffer: Buffer; content: string; encoding: SystemTextEncoding }; ordered: SystemEditTarget[]; scopes: SystemTextRange[]; baseVersion: Nullable<string>; stamp: Nullable<SystemFileStamp> }

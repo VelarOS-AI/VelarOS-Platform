@@ -5,6 +5,10 @@
  * 这里只测对外承诺的行为，不测实现细节；实现细节的测试在 test/ 目录。
  */
 
+import { lstat, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join, resolve } from 'node:path'
+
 import { describe, expect, test } from 'bun:test'
 
 import type { SystemCommandResult } from '../src/exports/contracts'
@@ -485,5 +489,121 @@ describe('进程生命周期', () => {
     expect(signals).toEqual(['SIGTERM', 'SIGKILL'])
     expect(child.stdout!.destroyed).toBe(true)
     expect(await owned.stop('SIGKILL')).toBe(false)
+  })
+})
+
+describe('文件工具', () => {
+  const approving: SystemToolContext = {
+    abortSignal: new AbortController().signal,
+    approval: { requestApproval: async () => ({ approved: true }), awaitConfirmation: async () => undefined },
+    system: { resolvePath: (path = process.cwd()) => resolve(path) } as never,
+  } as SystemToolContext
+  const denying: SystemToolContext = {
+    ...approving,
+    approval: { requestApproval: async () => ({ approved: true }), awaitConfirmation: async () => { throw new Error('user said no') } },
+  } as SystemToolContext
+  const edit = systemTools[SystemToolNames.edit]
+  const read = systemTools[SystemToolNames.read]
+  const failureOf = async (call: Promise<unknown>): Promise<{ code: string; outcome: unknown; problems: Array<Record<string, unknown>> }> => {
+    try {
+      await call
+    } catch (error) {
+      const failure = error as { code: string; context?: { executionOutcome?: unknown }; cause?: { details?: { problems?: Array<Record<string, unknown>> } } }
+      return { code: failure.code, outcome: failure.context?.executionOutcome, problems: failure.cause?.details?.problems ?? [] }
+    }
+    throw new Error('expected the call to fail')
+  }
+
+  test('INV-19 写系统敏感路径与凭证文件前经审批端口确认，按真实路径判定，被拒整批不写，临时目录不打扰用户', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'velaros-inv19-'))
+    try {
+      const key = join(root, 'deploy.pem')
+      await writeFile(key, '-----BEGIN PRIVATE KEY-----\nabc\n')
+      const alias = join(root, 'notes.txt')
+      await symlink(key, alias)
+      const plain = join(root, 'plain.txt')
+      await writeFile(plain, 'alpha\n')
+      // 临时目录里的普通文件：拒绝一切确认的端口也能写，说明没有去问用户。
+      const written = await edit.execute({ files: [{ path: plain, newText: 'beta\n' }] }, denying) as { files: Array<{ action: string }> }
+      expect(written.files[0]!.action).toBe('written')
+      // 凭证文件藏在符号链接后面也要问；被拒时整批不写。
+      const denied = await failureOf(edit.execute({ files: [{ path: plain, newText: 'gamma\n' }, { path: alias, newText: 'x\n' }] }, denying))
+      expect(denied.code).toBe('PERMISSION')
+      expect(denied.problems[0]).toMatchObject({ file: 1, reason: 'denied' })
+      expect(await readFile(plain, 'utf8')).toBe('beta\n')
+      expect(await readFile(key, 'utf8')).toContain('PRIVATE KEY')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('INV-20 一批全成或全不成：定不下来或核对后被改，什么都不写并按 not-applied 报告', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'velaros-inv20-'))
+    try {
+      const a = join(root, 'a.txt')
+      const b = join(root, 'b.txt')
+      await writeFile(a, 'alpha\n')
+      await writeFile(b, 'beta\n')
+      const unresolved = await failureOf(edit.execute({ files: [
+        { path: a, edits: [{ range: { offset: 0, end: 6 }, oldText: 'nope', newText: 'x' }] },
+        { path: b, newText: 'never\n' },
+      ] }, approving))
+      expect(unresolved.outcome).toBe('not-applied')
+      expect(unresolved.problems).toEqual([expect.objectContaining({ file: 0, edit: 0, reason: 'not-found' })])
+      expect(await readFile(a, 'utf8')).toBe('alpha\n')
+      expect(await readFile(b, 'utf8')).toBe('beta\n')
+      const before = await read.execute({ files: [{ path: a }] }, approving) as { files: Array<{ version: string; range: { offset: number; end: number } }> }
+      await writeFile(a, 'changed outside\n')
+      const stale = await failureOf(edit.execute({ files: [
+        { path: a, version: before.files[0]!.version, edits: [{ range: before.files[0]!.range, newText: 'x' }] },
+        { path: b, newText: 'never\n' },
+      ] }, approving))
+      expect(stale.outcome).toBe('not-applied')
+      expect(stale.problems[0]).toMatchObject({ file: 0, reason: 'stale' })
+      expect(await readFile(b, 'utf8')).toBe('beta\n')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('INV-21 文本改动无损：二进制文件不许整个覆盖，符号链接写到它指向的文件而链接不变', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'velaros-inv21-'))
+    try {
+      const png = join(root, 'logo.png')
+      const bytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 1, 2, 3])
+      await writeFile(png, bytes)
+      const refused = await failureOf(edit.execute({ files: [{ path: png, newText: 'oops\n' }] }, approving))
+      expect(refused.outcome).toBe('not-applied')
+      expect(refused.problems[0]).toMatchObject({ file: 0, reason: 'invalid' })
+      expect(Buffer.from(await readFile(png)).equals(bytes)).toBe(true)
+
+      const real = join(root, 'real.conf')
+      await writeFile(real, 'Host a\n')
+      const link = join(root, 'link.conf')
+      await symlink(real, link)
+      const result = await edit.execute({ files: [{ path: link, edits: [{ range: { offset: 0, end: 7 }, oldText: 'Host a', newText: 'Host b' }] }] }, approving) as { files: Array<{ path: string; target?: string; action: string }> }
+      expect(result.files[0]).toMatchObject({ path: link, action: 'replaced', target: await realpath(real) })
+      expect((await lstat(link)).isSymbolicLink()).toBe(true)
+      expect(await readFile(real, 'utf8')).toBe('Host b\n')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('INV-22 一次 read 最多 20 万字符，预算用完后的文件不读盘也不问用户', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'velaros-inv22-'))
+    try {
+      const big = join(root, 'big.txt')
+      await writeFile(big, `${'a'.repeat(200_000)  }tail`)
+      const key = join(root, 'id_rsa')
+      await writeFile(key, 'secret\n')
+      const result = await read.execute({ files: [{ path: big }, { path: key }] }, denying) as { files: Array<Record<string, unknown>>; note?: string }
+      expect(result.files[0]).toMatchObject({ hasMore: true, totalChars: 200_004 })
+      expect(result.files[1]).toMatchObject({ path: key, error: { code: 'VALIDATION' } })
+      expect(result.files[1]).not.toHaveProperty('version')
+      expect(result.note).toContain('从第 2 个文件起没有读')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
   })
 })

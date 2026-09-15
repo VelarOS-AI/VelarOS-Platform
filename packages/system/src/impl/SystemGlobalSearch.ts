@@ -90,10 +90,9 @@ export class SystemGlobalSearch implements SystemGlobalSearchApi {
       const relativePath = relative(rootPath, absolutePath) || '.'
       if (!matchesSearchPath(relativePath, query, options.pathMatchMode ?? 'contains')) return false
       matched += 1
-      if (entries.length < limit) {
-        entries.push({ path: relativePath, type })
-      }
-      return entries.length >= limit
+      if (entries.length < limit) entries.push({ path: relativePath, type })
+      // 多找到一条就足以说明还有更多，truncated 才可能为真；再往下遍历只是白费。
+      return matched > limit
     })
 
     entries.sort((left, right) => left.path.localeCompare(right.path, 'en'))

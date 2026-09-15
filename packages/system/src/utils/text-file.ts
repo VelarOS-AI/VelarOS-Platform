@@ -3,11 +3,12 @@
  */
 
 import { createHash } from 'node:crypto'
+import type { Stats } from 'node:fs'
 import { readFile, stat } from 'node:fs/promises'
 
 import { AppError } from '@velaros-ai/core/error'
 
-import type { SystemMediaType, SystemReadFileResult, SystemTextEncoding, SystemTextFileContent, SystemTextRange, SystemTextSlice } from '../contract/files.js'
+import type { SystemFileStamp, SystemMediaType, SystemReadFileResult, SystemTextEncoding, SystemTextFileContent, SystemTextRange, SystemTextSlice } from '../contract/files.js'
 
 import { readErrnoCode } from './fs.js'
 
@@ -34,6 +35,21 @@ export const SystemFileLimits = Object.freeze({
   fileBytes: 20 * 1024 * 1024,
   editableBytes: 2 * 1024 * 1024,
 })
+
+/** 小于这个字节数的文件写前一律重读核版本：印记的时间精度不够时，小文件重读几乎不花钱。 */
+const AlwaysRehashBytes = 64 * 1024
+
+/** 从 stat 结果取文件印记（修改时间与大小）；不存在或不是普通文件时为 null。 */
+export function stampOf(stats: Nullable<Stats>): Nullable<SystemFileStamp> {
+  if (!stats?.isFile()) return null
+  return { mtimeMs: stats.mtimeMs, size: stats.size }
+}
+
+/** 写之前能不能只凭印记断定文件没变：两边印记相同，且文件大到重读不划算；小文件和不存在的文件都回答不能，让调用方重读核版本。 */
+export function stampProvesUnchanged(before: Nullable<SystemFileStamp>, now: Nullable<SystemFileStamp>): boolean {
+  if (!before || !now) return false
+  return before.mtimeMs === now.mtimeMs && before.size === now.size && before.size > AlwaysRehashBytes
+}
 
 /** 文件现在的版本号：不存在或不是普通文件就是 null。 */
 export async function currentFileVersion(resolvedPath: string): Promise<Nullable<string>> {

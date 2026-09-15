@@ -17,8 +17,8 @@ function pathApi(platform: NodeJS.Platform): typeof path.posix | typeof path.win
   return platform === 'win32' ? path.win32 : path.posix
 }
 
-/** 把路径解析成可比较的形式：Windows 和 macOS 的卷默认不区分大小写，统一小写比较。 */
-function comparisonPath(value: string, platform: NodeJS.Platform): string {
+/** 把路径解析成可比较的形式：Windows 和 macOS 的卷默认不区分大小写，统一小写比较；解开符号链接后的真实路径经它就是文件的身份键。 */
+export function comparisonPath(value: string, platform: NodeJS.Platform): string {
   const resolved = pathApi(platform).resolve(value)
   return platform === 'win32' || platform === 'darwin' ? resolved.toLowerCase() : resolved
 }
@@ -106,14 +106,15 @@ export function isSensitiveSystemMutationPath(
           .startsWith('appdata\\roaming\\microsoft\\windows\\start menu\\programs\\startup')
       )
         return true
-    } else if (
-      relativeSegments[0] === 'Library' &&
-      (relativeSegments[1] === 'LaunchAgents' || relativeSegments[1] === 'LaunchDaemons')
-    )
-      return true
+    } else if (platform === 'darwin') {
+      // macOS 上比较前已经统一小写，这里也用小写常量，登录项目录才拦得住。
+      const [first = '', second = ''] = relativeSegments.map((segment) => segment.toLowerCase())
+      if (first === 'library' && (second === 'launchagents' || second === 'launchdaemons')) return true
+    }
   }
   return false
 }
+
 
 /** 写入或修改系统敏感路径前向用户要确认；先把符号链接解开再判定，没有审批通道的宿主会直接拒绝。 */
 export async function confirmSensitiveSystemMutation(
@@ -121,7 +122,8 @@ export async function confirmSensitiveSystemMutation(
   resolvedPath: string,
   action: 'write' | 'edit'
 ): Promise<void> {
-  if (!isSensitiveSystemMutationPath(await realPathForSafety(resolvedPath))) return
+  // 临时目录本身也要解开符号链接（macOS 的 /var 是 /private/var 的链接），不然临时文件会被误当成系统敏感路径。
+  if (!isSensitiveSystemMutationPath(await realPathForSafety(resolvedPath), { tempDir: await realPathForSafety(tmpdir()) })) return
 
   // 审批统一走宿主注入的 ApprovalPort；本包不假设具体确认 UI 或运行模式。
   // autonomous 与后台 never-ask 的自动批准；execution 为空的宿主（web 桥/无人值守）得到设计式
@@ -160,7 +162,9 @@ export function isCredentialPath(resolvedPath: string, options: SensitiveSystemM
   const paths = pathApi(platform)
   const abs = paths.resolve(resolvedPath)
   const name = paths.basename(abs)
-  if (CredentialFileNames.has(name) || CredentialExtensions.has(paths.extname(name).toLowerCase())) return true
+  // 目录那一半按大小写不敏感比较，文件名这一半也要：macOS 与 Windows 上 ID_RSA 和 id_rsa 是同一个文件。
+  const comparableName = platform === 'win32' || platform === 'darwin' ? name.toLowerCase() : name
+  if (CredentialFileNames.has(comparableName) || CredentialExtensions.has(paths.extname(name).toLowerCase())) return true
   if (platform !== 'win32' && isWithinAnyRoot(abs, CredentialSystemPaths, platform)) return true
   const home = options.homeDir ?? homedir()
   if (!home || !isPathInsideRoot(abs, home, platform)) return false

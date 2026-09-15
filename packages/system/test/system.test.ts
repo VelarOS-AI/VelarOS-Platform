@@ -1,16 +1,19 @@
 import { spawnSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { chmod, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
+import { chmod, lstat, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises'
 import { homedir, tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 
 import { describe, expect, test } from 'bun:test'
 
+import { systemCommandPolicy } from '../src/impl/SystemCommandPolicy.js'
 import { systemFileOperations } from '../src/impl/SystemFileOperations.js'
+import { SystemGlobalSearch } from '../src/impl/SystemGlobalSearch.js'
 import { systemTools } from '../src/impl/SystemTools.js'
 import type { SystemToolContext } from '../src/interface/requires.js'
 import { buildSystemProcessConfinementSpawnSpec, buildSystemSeatbeltProfile } from '../src/utils/confinement.js'
-import { isCredentialPath } from '../src/utils/file-safety.js'
+import { isCredentialPath, isSensitiveSystemMutationPath } from '../src/utils/file-safety.js'
+import { findOccurrences } from '../src/utils/text.js'
 
 /** 一律批准的工具上下文：写入测试只关心内容，不走真实的用户确认。 */
 const approvingContext: SystemToolContext = {
@@ -210,9 +213,11 @@ describe('System capability', () => {
       await writeFile(smallPath, 'small')
       const budget = await readAll({ files: [{ path: bigPath }, { path: smallPath }] })
       expect(entryOf(budget, 0)).toMatchObject({ totalChars: 200_000, hasMore: false, range: { offset: 0, end: 200_000 } })
-      expect(entryOf(budget, 1)).toMatchObject({ content: '', range: { offset: 0, end: 0 }, totalChars: 5, hasMore: true })
+      // 预算在第一个文件用完，第二个文件不读盘，那一项是失败条目，note 说明从它起没读。
+      expect(budget.files[1]).toMatchObject({ path: smallPath, error: { code: 'VALIDATION' } })
+      expect(budget.note).toContain('从第 2 个文件起没有读')
 
-      const continued = await readAll({ files: [{ path: bigPath, offset: 199_998 }, { path: smallPath, offset: entryOf(budget, 1).range.end, maxChars: 3 }] })
+      const continued = await readAll({ files: [{ path: bigPath, offset: 199_998 }, { path: smallPath, offset: 0, maxChars: 3 }] })
       expect(entryOf(continued, 0)).toMatchObject({ content: 'aa', hasMore: false })
       expect(entryOf(continued, 1)).toMatchObject({ content: 'sma', range: { offset: 0, end: 3 }, hasMore: true })
 
@@ -246,8 +251,8 @@ describe('System capability', () => {
       // 预算用完：结果说明从第几个文件起没内容。
       await writeFile(join(root, 'big.txt'), 'a'.repeat(200_000))
       const budget = await readAll({ files: [{ path: join(root, 'big.txt') }, { path: join(root, 'note.txt') }] })
-      expect(budget.note).toContain('第 2 个文件')
-      expect(entryOf(budget, 1)).toMatchObject({ content: '', hasMore: true })
+      expect(budget.note).toContain('从第 2 个文件起没有读')
+      expect(budget.files[1]).toMatchObject({ error: { code: 'VALIDATION' } })
     } finally {
       await rm(root, { recursive: true, force: true })
     }
@@ -493,11 +498,17 @@ describe('System capability', () => {
       expect(isCredentialPath('/users/someone/.aws/config', { homeDir: '/Users/someone', platform: 'darwin' })).toBe(true)
       expect(isCredentialPath('/home/someone/.SSH/config', { homeDir: '/home/someone', platform: 'linux' })).toBe(false)
       expect(isCredentialPath('/home/someone/work/id_ed25519', { homeDir: '/home/someone', platform: 'linux' })).toBe(true)
+      // 文件名那一半也按平台大小写规则比：macOS 上 ID_RSA、.NETRC 是同一个文件，Linux 上不是。
+      expect(isCredentialPath('/Users/someone/work/ID_RSA', { homeDir: '/Users/someone', platform: 'darwin' })).toBe(true)
+      expect(isCredentialPath('/Users/someone/.NETRC', { homeDir: '/Users/someone', platform: 'darwin' })).toBe(true)
+      expect(isCredentialPath('/home/someone/work/ID_RSA', { homeDir: '/home/someone', platform: 'linux' })).toBe(false)
 
-      // 预算已经用完的文件不会为了一个空条目去打扰用户。
+      // 预算已经用完的文件根本不读盘：不问用户，也不把版本号、字符数交出去。
       await writeFile(join(root, 'big.txt'), 'a'.repeat(200_000))
       const exhausted = await systemFileOperations.read({ files: [{ path: join(root, 'big.txt') }, { path: keyPath }] }, denying)
-      expect(entryOf(exhausted, 1)).toMatchObject({ content: '', hasMore: true })
+      expect(exhausted.files[1]).toMatchObject({ path: keyPath, error: { code: 'VALIDATION' } })
+      expect(exhausted.files[1]).not.toHaveProperty('version')
+      expect(exhausted.note).toContain('从第 2 个文件起没有读')
 
       // 参数对象里的未知字段在 schema 这一层就被拒绝，拼错的 version 不会被静默丢掉。
       expect(systemTools['system:read']!.schema.safeParse({ files: [{ path: keyPath, Version: 'x' }] }).success).toBe(false)
@@ -520,4 +531,104 @@ describe('System capability', () => {
     }
   })
 
+  test('sensitive-path judgement: macOS login items are caught after case folding, temp dirs never ask, Linux has no LaunchAgents', () => {
+    expect(isSensitiveSystemMutationPath('/Users/someone/Library/LaunchAgents/com.evil.plist', { homeDir: '/Users/someone', platform: 'darwin' })).toBe(true)
+    expect(isSensitiveSystemMutationPath('/Users/someone/Library/LaunchDaemons/com.evil.plist', { homeDir: '/Users/someone', platform: 'darwin' })).toBe(true)
+    expect(isSensitiveSystemMutationPath('/Users/someone/Library/Preferences/x.plist', { homeDir: '/Users/someone', platform: 'darwin' })).toBe(false)
+    expect(isSensitiveSystemMutationPath('/home/someone/Library/LaunchAgents/x', { homeDir: '/home/someone', platform: 'linux' })).toBe(false)
+    expect(isSensitiveSystemMutationPath('/private/var/folders/ab/T/velaros-x/note.txt', { homeDir: '/Users/someone', platform: 'darwin', tempDir: '/private/var/folders/ab/T' })).toBe(false)
+  })
+
+  test('edit works on the real file behind a link, refuses the same file twice in a batch, and stops asking after the first denial', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'velaros-system-link-'))
+    try {
+      const real = join(root, 'real.conf')
+      await writeFile(real, 'Host a\n')
+      const link = join(root, 'link.conf')
+      await symlink(real, link)
+      const twice = await problemsOf(systemFileOperations.edit({ files: [{ path: real, newText: 'x\n' }, { path: link, newText: 'y\n' }] }, approvingContext))
+      expect(twice.problems).toEqual([expect.objectContaining({ file: 1, reason: 'invalid' })])
+      expect(await readFile(real, 'utf8')).toBe('Host a\n')
+
+      const result = await systemFileOperations.edit({ files: [{ path: link, newText: 'Host b\n' }] }, approvingContext)
+      expect(result.files[0]).toMatchObject({ path: link, target: await realpath(real), action: 'written' })
+      expect((await lstat(link)).isSymbolicLink()).toBe(true)
+      expect(await readFile(real, 'utf8')).toBe('Host b\n')
+      // 通过链接改的版本，从真实路径和链接路径都能召回。
+      const previous = (result.files[0] as { previousVersion: string }).previousVersion
+      expect(entryOf(await readAll({ files: [{ path: real, version: previous }] })).content).toBe('Host a\n')
+
+      // 第一次被拒就停：第二个凭证文件不再弹确认。
+      let asked = 0
+      const countingDenial: SystemToolContext = { ...approvingContext, approval: { requestApproval: async () => ({ approved: true }), awaitConfirmation: async () => { asked += 1; throw new Error('no') } } } as SystemToolContext
+      const key1 = join(root, 'a.pem')
+      const key2 = join(root, 'b.pem')
+      await writeFile(key1, 'k1\n')
+      await writeFile(key2, 'k2\n')
+      const denied = await problemsOf(systemFileOperations.edit({ files: [{ path: key1, newText: 'x\n' }, { path: key2, newText: 'y\n' }] }, countingDenial))
+      expect(denied.reason).toBe('SYSTEM_EDIT_DENIED')
+      expect(asked).toBe(1)
+      expect(denied.problems).toHaveLength(1)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('edit refuses to overwrite a binary file with newText and stops counting matches after the anchor limit', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'velaros-system-binary-'))
+    try {
+      const png = join(root, 'logo.png')
+      const bytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 1, 2, 3])
+      await writeFile(png, bytes)
+      const refused = await problemsOf(systemFileOperations.edit({ files: [{ path: png, newText: 'oops\n' }] }, approvingContext))
+      expect(refused.problems[0]).toMatchObject({ file: 0, reason: 'invalid' })
+      expect(Buffer.from(await readFile(png)).equals(bytes)).toBe(true)
+
+      const many = join(root, 'many.txt')
+      await writeFile(many, 'a'.repeat(5_000))
+      const ambiguous = await problemsOf(systemFileOperations.edit({ files: [{ path: many, edits: [{ range: { offset: 0, end: 5_000 }, oldText: 'aa', newText: 'b' }] }] }, approvingContext))
+      expect(ambiguous.problems[0]).toMatchObject({ reason: 'ambiguous', matchCount: 11 })
+      expect(String(ambiguous.problems[0]!.message)).toContain('at least 11')
+      expect(findOccurrences('aaaa', 'aa', { offset: 0, end: 4 }, 2)).toEqual([0, 1])
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('read notes a budget that only shortened a file, and top-level unknown fields are rejected by the schema', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'velaros-system-budget-'))
+    try {
+      const first = join(root, 'first.txt')
+      const second = join(root, 'second.txt')
+      await writeFile(first, 'a'.repeat(150_000))
+      await writeFile(second, 'b'.repeat(100_000))
+      const result = await readAll({ files: [{ path: first }, { path: second }] })
+      expect(entryOf(result, 1)).toMatchObject({ hasMore: true, range: { offset: 0, end: 50_000 } })
+      expect(result.note).toContain('第 2 个文件只拿到预算剩下的部分')
+      expect(systemTools['system:read']!.schema.safeParse({ files: [{ path: first }], maxChars: 5 }).success).toBe(false)
+      expect(systemTools['system:view']!.schema.safeParse({ files: [{ path: first }], extra: 1 }).success).toBe(false)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('global path search reports truncated only when more matches exist, and env alone is read-only', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'velaros-system-search-'))
+    try {
+      for (const name of ['file1.txt', 'file2.txt', 'file3.txt']) await writeFile(join(root, name), name)
+      const search = new SystemGlobalSearch({ platform: process.platform, homeDir: root })
+      const capped = await search.search(root, { query: 'file', limit: 2 })
+      expect(capped.count).toBe(2)
+      expect(capped.truncated).toBe(true)
+      const complete = await search.search(root, { query: 'file', limit: 3 })
+      expect(complete.count).toBe(3)
+      expect(complete.truncated).toBe(false)
+      expect(systemCommandPolicy.isReadOnly('env')).toBe(true)
+      expect(systemCommandPolicy.isReadOnly('env -u FOO')).toBe(true)
+      expect(systemCommandPolicy.isReadOnly('time ls')).toBe(true)
+      expect(systemCommandPolicy.isReadOnly('env rm -rf x')).toBe(false)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
 })

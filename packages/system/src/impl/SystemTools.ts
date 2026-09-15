@@ -42,12 +42,12 @@ const readTool = defineSystemTool<{
   suitable: ['看日志、配置、脚本、临时文件等文本，一个或一批。'],
   forbidden: ['图片用 system:view；PDF 和其他文档不在这里读；列目录、搜文本用 system:run。'],
   usage: [
-    '只传 path 就默认一次读到上限；没读完的文件把它返回的 range.end 当 offset 接着读，一次调用总共最多 200000 字符。',
+    '只传 path 就默认一次读到上限；没读完的文件把它返回的 range.end 当 offset 接着读。一次调用总共最多 200000 字符，预算在前面的文件用完后，后面的文件不读、那一项是 error，note 会说明。',
     '结果的 files 与传入的一一对应，某个文件读不了只有它那一项是 error；version 是这份内容的版本号，传回去可以读旧内容。',
   ],
   examples: [{ files: [{ path: '~/build.log' }] }, { files: [{ path: '~/.zshrc' }, { path: '~/build.log', offset: 200000 }] }],
   notes: ['其他二进制文件读不了。读私钥、云凭证这类文件会先向用户确认。'],
-  schema: z.object({
+  schema: z.strictObject({
     files: z.array(z.strictObject({
       path: z.string().min(1).describe('文件路径，支持 ~；相对路径相对 system:run 的默认目录。'),
       offset: z.number().int().nonnegative().optional().describe('从第几个字符开始读，默认 0。'),
@@ -82,7 +82,7 @@ const viewTool = defineSystemTool<{
   usage: ['结果的 files 与传入的一一对应，内容块按同样的顺序排；某个文件看不了只有它那一项是 error。'],
   examples: [{ files: [{ path: '~/Desktop/screenshot.png' }] }, { files: [{ path: '~/Desktop/before.png' }, { path: '~/Desktop/after.png' }] }],
   notes: ['只认 PNG、JPEG、GIF、WebP，最大 5 MB；别的格式或太大的先用 system:run 转换、缩小。'],
-  schema: z.object({
+  schema: z.strictObject({
     files: z.array(z.strictObject({
       path: z.string().min(1).describe('图片路径，支持 ~；相对路径相对 system:run 的默认目录。'),
     })).min(1).max(10).describe('要看的图片，每项一张，一次最多 10 张。'),
@@ -140,9 +140,9 @@ const editTool = defineSystemTool<{
       ],
     },
   ],
-  notes: ['写系统敏感路径会先向用户确认。改完之后 windows 每处带新位置，改动那段不超过 20000 字符时 content 和 range 整段给出；旧的 range 已经作废，再改同一个文件用新的。'],
+  notes: ['写系统敏感路径、私钥和云凭证这类文件会先向用户确认；路径是符号链接时改的是它指向的文件，结果里 target 给出那个文件。newText 只能写到文本文件或新文件上，已有的二进制文件用 system:run 换。改完之后 windows 每处带新位置，改动那段不超过 20000 字符时 content 和 range 整段给出；旧的 range 已经作废，再改同一个文件用新的。'],
   inputReuse: true,
-  schema: z.object({
+  schema: z.strictObject({
     files: z.array(z.strictObject({
       path: z.string().min(1).describe('文件路径，支持 ~；相对路径相对 system:run 的默认目录。'),
       newText: z.string().optional().describe('整个文件写入的内容，不存在就新建；改几处时不用给，改动写在 edits 里。'),
@@ -154,7 +154,7 @@ const editTool = defineSystemTool<{
         oldText: z.string().optional().describe('要换掉的原文，只在 range 里找、必须只出现一次；不给就把整段换成 newText。'),
         newText: z.string().describe('换成的新文本。'),
       })).min(1).max(50).optional().describe('要改的地方，每项一处；同一个文件的几处一起改，全成或全不成，各处不能重叠。'),
-      restore: z.string().min(1).optional().describe('回滚到这个版本，版本号来自 read 或 edit 结果里的 version 或 previousVersion；单独用。'),
+      restore: z.string().min(1).optional().describe('回滚到这个版本，版本号来自 read 或 edit 结果里的 version 或 previousVersion；不和 newText、edits 同用，可以带 version 先核对文件没被改过。'),
       version: z.string().min(1).optional().describe('read 返回的这个文件的版本号；给了就先核对文件没被改过，改过就整批不写并给出当前版本。'),
     })).min(1).max(20).describe('要写的文件，每项一个，一次最多 20 个；每项只用 newText、edits、restore 中的一种。'),
   }),
@@ -210,7 +210,7 @@ const runTool = defineSystemTool<{
   ],
   examples: [{ command: 'git --version', maxOutputChars: 2000 }],
   notes: ['实际 shell 由宿主平台决定；cwd 只影响本次命令。'],
-  schema: z.object({
+  schema: z.strictObject({
     command: z.string().min(1).describe('要执行的 shell 命令。'),
     cwd: z.string().optional().describe('命令的工作目录；不传用宿主给的默认目录。'),
     timeoutMs: z.number().int().positive().max(600000).optional().describe('命令超时时间，单位毫秒。'),
@@ -354,7 +354,7 @@ const listTasksTool = defineSystemTool<{
     { taskId: 'task-abc123' },
   ],
   notes: ['taskId 只在这里和 system:run 之间流转，不交给 job:*。', '要停掉任务，用 system:run 执行条目里的 terminateCommand；强制停用 forceTerminateCommand。'],
-  schema: z.object({
+  schema: z.strictObject({
     limit: z.number().int().positive().max(100).optional().describe('最多返回数量。'),
     onlyRunning: z.boolean().optional().describe('是否只返回运行中任务。'),
     taskId: z.string().min(1).max(120).optional().describe('精确后台任务 id；取自 system:run 的 backgroundProcess.taskId。'),
