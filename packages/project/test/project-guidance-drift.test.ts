@@ -4,7 +4,7 @@ import { expect, test } from 'bun:test'
 import { z } from 'zod'
 
 import { assertGuidanceReviewed, collectGuidanceReview, ProjectGuidanceReviewPath, registeredGuidanceTools, validateGuidanceExamples } from '../scripts/model-guidance-audit'
-import { projectTools } from '../src/agent/Project.tool'
+import { projectTools } from '../src/impl/ProjectTools'
 
 const tools = registeredGuidanceTools(Object.values(projectTools))
 

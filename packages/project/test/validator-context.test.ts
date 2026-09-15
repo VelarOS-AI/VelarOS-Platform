@@ -1,16 +1,16 @@
 import { describe, expect, test } from 'bun:test'
 
-import { typescriptSyntaxValidator } from '../src/plugins/typescript/validators'
-import { ValidatorRegistry } from '../src/registry/validator-registry'
-import { DEFAULT_CORE_POLICY } from '../src/runtime/defaults'
+import { DEFAULT_CORE_POLICY } from '../src/impl/kernel/defaults'
+import { postconditionValidator, scopeValidator } from '../src/impl/plugins/builtin-validators'
+import { commandValidator } from '../src/impl/plugins/command-validators'
+import { typescriptSyntaxValidator } from '../src/impl/plugins/typescript-validators'
+import { ValidatorRegistry } from '../src/impl/registries/ValidatorRegistry'
 import type { CommandRunInput, ProjectProviders } from '../src/types/provider'
 import type {
   ProjectValidationContext,
   ProjectValidationTransaction,
   ProjectValidator,
 } from '../src/types/validation'
-import { postconditionValidator, scopeValidator } from '../src/validation/builtin'
-import { commandValidator } from '../src/validation/command'
 
 function transaction(overrides: Partial<ProjectValidationTransaction> = {}): ProjectValidationTransaction {
   return {

@@ -2,9 +2,9 @@ import { join } from 'node:path'
 
 import { describe, expect, test } from 'bun:test'
 
-import { projectTools } from '../src/agent/Project.tool'
-import type { ProjectSandboxPort, ProjectToolContext } from '../src/agent/Types'
-import type { ProjectSandboxDiff, ProjectSandboxRecord } from '../src/project-contracts'
+import type { ProjectSandboxPort, ProjectToolContext } from '../src/contract/requires'
+import { projectTools } from '../src/impl/ProjectTools'
+import type { ProjectSandboxDiff, ProjectSandboxRecord } from '../src/types/project'
 
 const root = '/projects/demo'
 

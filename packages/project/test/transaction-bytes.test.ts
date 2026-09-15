@@ -12,15 +12,15 @@ import { join } from "node:path";
 
 import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 
-import { FileStore } from "../src/files/file-store";
-import { readBoundedProjectBytes } from "../src/files/private-byte-io";
-import { FileProjectTransactionStateStore } from "../src/persistence/transaction-state";
-import { createProjectKernel } from "../src/runtime/project-kernel";
-import { encodePreservingProjectBytes } from "../src/transactions/byte-codec";
+import { FileStore } from "../src/impl/files/FileStore";
+import { createProjectKernel } from "../src/impl/kernel/project-kernel";
+import { FileProjectTransactionStateStore } from "../src/impl/persistence/FileProjectTransactionStateStore";
+import { readBoundedProjectBytes } from "../src/utils/files/private-byte-io";
 import {
   decodeProjectTextBuffer,
   encodeProjectTextBuffer,
 } from "../src/utils/text";
+import { encodePreservingProjectBytes } from "../src/utils/transactions/byte-codec";
 
 let root: string;
 beforeEach(async () => {

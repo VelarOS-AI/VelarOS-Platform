@@ -7,11 +7,11 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
 import { defaultDenyApprovalPort } from '@velaros-ai/agent/tool-contract'
 
-import { projectTools } from '../src/agent/Project.tool'
-import type { ProjectToolContext } from '../src/agent/Types'
-import { createProjectKernel, type ProjectKernel } from '../src/index'
-import { ProjectToolNames } from '../src/project-tool-names'
-import { createNodeCommandProvider } from '../src/providers/index'
+import { ProjectToolNames } from '../src/contract/constants'
+import type { ProjectToolContext } from '../src/contract/requires'
+import { createProjectKernel, type ProjectKernel } from '../src/exports/index'
+import { createNodeCommandProvider } from '../src/impl/kernel/providers'
+import { projectTools } from '../src/impl/ProjectTools'
 import type { CommandRunResult } from '../src/types/provider'
 
 // 根 .gitignore 忽略任意层级的 dist/；中间目录 pkg 的 .gitignore 再忽略 *.log。

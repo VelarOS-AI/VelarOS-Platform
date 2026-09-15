@@ -2,9 +2,10 @@ import * as iconv from 'iconv-lite'
 
 import { isEmpty, isPresent, isString } from '@velaros-ai/core'
 
-import { ProjectError } from '../errors.js'
 import type { Range } from '../types/common.js'
 import type { ProjectTextEncoding } from '../types/text.js'
+
+import { ProjectError } from './errors.js'
 
 export type { ProjectTextEncoding } from '../types/text.js'
 

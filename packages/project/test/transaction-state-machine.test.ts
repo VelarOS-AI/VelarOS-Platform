@@ -1,15 +1,15 @@
 import { describe, expect, test } from 'bun:test'
 
-import { ProjectError } from '../src/errors'
 import {
   type ProjectTransactionCommand,
   ProjectTransactionCommandTable,
   TransactionStateMachine,
-} from '../src/transactions/transaction-state-machine'
+} from '../src/impl/transactions/TransactionStateMachine'
 import type {
   ProjectTransactionStatus,
   StoredTransaction,
 } from '../src/types/transaction'
+import { ProjectError } from '../src/utils/errors'
 
 const StableStatuses = [
   'prepared',

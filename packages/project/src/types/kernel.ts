@@ -1,8 +1,7 @@
-import { type AuditEvent } from '../persistence/audit-journal.js'
-import { type ProjectChangeFeed, type ProjectChangeFeedWriter } from '../persistence/change-feed.js'
-
 import type { ProjectSymbol } from './adapter.js'
+import type { AuditEvent } from './audit.js'
 import type { BatchInput, BatchResult } from './batch.js'
+import type { ProjectChangeFeed, ProjectChangeFeedWriter } from './change-feed.js'
 import type { DiffResult, ProjectStatus } from './common.js'
 import type { BuildEvidencePackInput, EvidencePack, TaskContext } from './context.js'
 import type {

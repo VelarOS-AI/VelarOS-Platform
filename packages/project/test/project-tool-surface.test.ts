@@ -8,13 +8,13 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
 import { InMemoryContextPayloadStore } from '@velaros-ai/agent'
 
-import { finalizeProjectModelResult } from '../src/agent/presentation/source-window'
-import { projectTools } from '../src/agent/Project.tool'
-import { registerProjectFileContext } from '../src/agent/ProjectFileContext'
-import type { ProjectToolContext } from '../src/agent/Types'
-import { resolveProjectFileRef } from '../src/context/file-refs'
-import { createProjectKernel } from '../src/index'
+import type { ProjectToolContext } from '../src/contract/requires'
+import { createProjectKernel } from '../src/exports/index'
+import { projectTools } from '../src/impl/ProjectTools'
 import type { ProjectProviders } from '../src/types/provider'
+import { registerProjectFileContext } from '../src/utils/agent/file-context'
+import { resolveProjectFileRef } from '../src/utils/agent/file-refs'
+import { finalizeProjectModelResult } from '../src/utils/agent/source-window'
 
 const execute = promisify(execFile)
 let root = ''

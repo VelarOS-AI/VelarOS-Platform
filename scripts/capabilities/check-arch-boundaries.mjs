@@ -42,13 +42,13 @@ const PortableContracts = [
     packageDirectory: "project",
     packageName: "@velaros-ai/project",
     exportKey: "./contracts",
-    contractsFile: "src/contracts.ts",
+    contractsFile: "src/exports/contracts.ts",
     modules: new Set([
-      "./project-code-query.js",
-      "./project-code-contracts.js",
-      "./project-contracts.js",
-      "./project-root-source.js",
-      "./project-tool-names.js",
+      "../utils/schemas/code-query.js",
+      "../utils/schemas/code.js",
+      "../types/project.js",
+      "../impl/kernel/root-source.js",
+      "../contract/constants.js",
     ]),
   },
   {
@@ -79,9 +79,10 @@ const PortableContracts = [
     packageName: "@velaros-ai/system",
     exportKey: "./contracts",
     contractsFile: "src/exports/contracts.ts",
-    // 可移植入口只许转发可移植数据文件；它零依赖，错误码与环境变量表也在里面（见 packages/system/MODULE.md）。
+    // 可移植入口只许转发可移植数据文件与常量表；两者零依赖（见 packages/system/MODULE.md）。
     modules: new Set([
-      "../contract/system.js",
+      "../types/system.js",
+      "../contract/constants.js",
     ]),
   },
 ];
@@ -542,9 +543,9 @@ requirePublicTypeContracts(
 );
 requirePublicTypeContracts(
   "project",
-  "src/index.ts",
-  "src/contracts.ts",
-  "src/project-contracts.ts",
+  "src/exports/index.ts",
+  "src/exports/contracts.ts",
+  "src/types/project.ts",
   ["ProjectGitRemoteActionOptions", "ProjectRootEntry"],
 );
 requirePublicTypeContracts(

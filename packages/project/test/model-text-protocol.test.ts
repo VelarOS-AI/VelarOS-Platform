@@ -6,13 +6,13 @@ import { expect, test } from 'bun:test'
 
 import { InMemoryContextPayloadStore } from '@velaros-ai/agent'
 
-import { finalizeProjectModelResult } from '../src/agent/presentation/source-window'
-import { projectPlannerResolver } from '../src/agent/tools/planner-resolver'
-import { executeProjectRead } from '../src/agent/tools/read'
-import type { ProjectToolContext } from '../src/agent/Types'
-import { compileProjectEdit } from '../src/editing/planner/index'
-import { createProjectKernel } from '../src/index'
-import { typescriptPlugin } from '../src/plugins/typescript'
+import type { ProjectToolContext } from '../src/contract/requires'
+import { createProjectKernel } from '../src/exports/index'
+import { typescriptPlugin } from '../src/impl/plugins/typescript-plugin'
+import { projectPlannerResolver } from '../src/impl/tools/planner-resolver'
+import { executeProjectRead } from '../src/impl/tools/read'
+import { finalizeProjectModelResult } from '../src/utils/agent/source-window'
+import { compileProjectEdit } from '../src/utils/editing/planner-index'
 import { encodeProjectTextBuffer } from '../src/utils/text'
 
 test.each(['utf8', 'utf8-bom', 'utf16le', 'utf16be', 'utf16le-nobom', 'utf16be-nobom', 'gb18030'] as const)(

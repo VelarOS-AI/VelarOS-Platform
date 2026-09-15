@@ -4,9 +4,9 @@ import { join } from 'node:path'
 
 import { describe, expect, test } from 'bun:test'
 
-import type { EditOperation } from '../src/index'
-import { createProjectKernel, FileProjectChangeFeed, ProjectEditOperationSchema } from '../src/index'
-import { ProjectToolNames } from '../src/project-tool-names'
+import { ProjectToolNames } from '../src/contract/constants'
+import type { EditOperation } from '../src/exports/index'
+import { createProjectKernel, FileProjectChangeFeed, ProjectEditOperationSchema } from '../src/exports/index'
 
 describe('Project capability', () => {
   test('publishes only canonical project tool ids', () => {

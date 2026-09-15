@@ -5,16 +5,16 @@ import { join } from 'node:path'
 import { describe, expect, test } from 'bun:test'
 
 import {
+  createProjectTransactionController,
+  type ProjectTransactionController,
+} from '../src/exports/transaction-controller'
+import { createProjectKernel } from '../src/impl/kernel/project-kernel'
+import {
   FileProjectChangeFeed,
   MemoryProjectChangeFeed,
   type ProjectChangeFeedWriter,
-} from '../src/persistence/change-feed'
-import { FileProjectTransactionStateStore } from '../src/persistence/transaction-state'
-import { createProjectKernel } from '../src/runtime/project-kernel'
-import {
-  createProjectTransactionController,
-  type ProjectTransactionController,
-} from '../src/transaction-controller'
+} from '../src/impl/persistence/change-feed'
+import { FileProjectTransactionStateStore } from '../src/impl/persistence/FileProjectTransactionStateStore'
 
 interface DurableHarness {
   readonly controller: ProjectTransactionController

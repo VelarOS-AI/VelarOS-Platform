@@ -4,9 +4,9 @@ import { join } from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
-import { ProjectModelEditSchema } from '../src/edits/schema'
-import { createProjectKernel } from '../src/index'
+import { createProjectKernel } from '../src/exports/index'
 import type { EditIntent } from '../src/types/edit'
+import { ProjectModelEditSchema } from '../src/utils/schemas/edit-intent'
 
 let root = ''
 beforeEach(async () => {

@@ -11,7 +11,7 @@ import path from 'node:path';
 
 import { test } from 'bun:test';
 
-import { createProjectKernel, typescriptPlugin } from '../dist/index.js';
+import { createProjectKernel, typescriptPlugin } from '../dist/exports/index.js';
 
 test('typescript plugin resolves methods and replaces symbols with AST ranges', async () => {
   const root = await mkdtemp(path.join(tmpdir(), 'velaros-ts-'));

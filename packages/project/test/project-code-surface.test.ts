@@ -7,12 +7,12 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { InMemoryContextPayloadStore } from '@velaros-ai/agent'
 import { AppError } from '@velaros-ai/core/error'
 
-import type { ProjectToolContext } from '../src/agent/Types'
-import { executeProjectCode, executeProjectCodeAnalysis, executeProjectCodeIndex } from '../src/code/query'
-import { typescriptPlugin } from '../src/plugins/typescript'
-import { ProjectCodeAnalysisSchema, ProjectCodeSchema } from '../src/project-code-contracts'
-import type { ProjectCodeQuery } from '../src/project-code-query'
-import { createProjectKernel } from '../src/runtime/project-kernel'
+import type { ProjectToolContext } from '../src/contract/requires'
+import { createProjectKernel } from '../src/impl/kernel/project-kernel'
+import { typescriptPlugin } from '../src/impl/plugins/typescript-plugin'
+import { executeProjectCode, executeProjectCodeAnalysis, executeProjectCodeIndex } from '../src/impl/tools/code-query'
+import { ProjectCodeAnalysisSchema, ProjectCodeSchema } from '../src/utils/schemas/code'
+import type { ProjectCodeQuery } from '../src/utils/schemas/code-query'
 
 let root: string
 beforeEach(async () => {

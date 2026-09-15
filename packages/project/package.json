@@ -12,48 +12,48 @@
   "engines": {
     "node": ">=20.0.0"
   },
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "main": "./dist/exports/index.js",
+  "types": "./dist/exports/index.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "types": "./dist/exports/index.d.ts",
+      "import": "./dist/exports/index.js"
     },
     "./files": {
-      "types": "./dist/files.d.ts",
-      "import": "./dist/files.js"
+      "types": "./dist/exports/files.d.ts",
+      "import": "./dist/exports/files.js"
     },
     "./changes": {
-      "types": "./dist/changes.d.ts",
-      "import": "./dist/changes.js"
+      "types": "./dist/exports/changes.d.ts",
+      "import": "./dist/exports/changes.js"
     },
     "./execution": {
-      "types": "./dist/execution.d.ts",
-      "import": "./dist/execution.js"
+      "types": "./dist/exports/execution.d.ts",
+      "import": "./dist/exports/execution.js"
     },
     "./runtime": {
-      "types": "./dist/runtime.d.ts",
-      "import": "./dist/runtime.js"
+      "types": "./dist/exports/runtime.d.ts",
+      "import": "./dist/exports/runtime.js"
     },
     "./agent": {
-      "types": "./dist/agent/index.d.ts",
-      "import": "./dist/agent/index.js"
+      "types": "./dist/exports/agent.d.ts",
+      "import": "./dist/exports/agent.js"
     },
     "./composition": {
-      "types": "./dist/composition/index.d.ts",
-      "import": "./dist/composition/index.js"
+      "types": "./dist/exports/composition.d.ts",
+      "import": "./dist/exports/composition.js"
     },
     "./contracts": {
-      "types": "./dist/contracts.d.ts",
-      "import": "./dist/contracts.js"
+      "types": "./dist/exports/contracts.d.ts",
+      "import": "./dist/exports/contracts.js"
     },
     "./kernel": {
-      "types": "./dist/kernel-module.d.ts",
-      "import": "./dist/kernel-module.js"
+      "types": "./dist/exports/kernel.d.ts",
+      "import": "./dist/exports/kernel.js"
     },
     "./transaction-controller": {
-      "types": "./dist/transaction-controller.d.ts",
-      "import": "./dist/transaction-controller.js"
+      "types": "./dist/exports/transaction-controller.d.ts",
+      "import": "./dist/exports/transaction-controller.js"
     }
   },
   "files": [

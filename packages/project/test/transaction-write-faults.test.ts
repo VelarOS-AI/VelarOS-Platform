@@ -4,8 +4,8 @@ import { join } from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test'
 
-import { FileStore } from '../src/files/file-store'
-import { createProjectKernel } from '../src/index'
+import { createProjectKernel } from '../src/exports/index'
+import { FileStore } from '../src/impl/files/FileStore'
 
 let root = ''
 beforeEach(async () => {

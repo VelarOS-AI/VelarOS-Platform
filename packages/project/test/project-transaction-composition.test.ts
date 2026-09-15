@@ -10,11 +10,11 @@ import {
   type ProjectKernel,
   type ProjectPlugin,
   typescriptPlugin,
-} from '../src/index'
+} from '../src/exports/index'
 import {
   FileProjectTransactionStateStore,
   type ProjectTransactionPendingOperation,
-} from '../src/persistence/transaction-state'
+} from '../src/impl/persistence/FileProjectTransactionStateStore'
 import type { Diagnostic } from '../src/types/common'
 import { unifiedDiff } from '../src/utils/diff'
 

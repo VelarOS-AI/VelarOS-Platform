@@ -2,9 +2,9 @@ import { describe, expect, test } from 'bun:test'
 
 import { canonicalizeProviderInputSchema, createToolSchemaBundle, schemaToInputSchema } from '@velaros-ai/agent/tool-contract'
 
-import { projectTools } from '../src/agent/Project.tool'
-import { projectCode } from '../src/agent/tools/code'
-import { ProjectCodeSchema } from '../src/project-code-contracts'
+import { projectTools } from '../src/impl/ProjectTools'
+import { projectCode } from '../src/impl/tools/code'
+import { ProjectCodeSchema } from '../src/utils/schemas/code'
 
 const validDependencies = [
   { direction: 'incoming', path: 'src/cache.ts' },

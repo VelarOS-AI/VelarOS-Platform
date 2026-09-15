@@ -1,0 +1,27 @@
+import type { ProjectPlugin } from "../../types/plugin.js";
+import { PROJECT_PACKAGE_VERSION } from "../kernel/defaults.js";
+
+import { typescriptAdapterFactory } from "./typescript-adapter.js";
+import { typescriptPatchStrategy } from "./typescript-strategy.js";
+import { typescriptSyntaxValidator } from "./typescript-validators.js";
+
+export { findJsTsSymbols as findTsSymbols, parseJsTs as parseTs } from "../../utils/jsts-ast.js";
+export { typescriptAdapterFactory } from "./typescript-adapter.js";
+export { typescriptPatchStrategy } from "./typescript-strategy.js";
+export { typescriptSyntaxValidator } from "./typescript-validators.js";
+
+export interface TypeScriptPluginOptions {
+  syntaxValidator?: boolean;
+}
+
+export function typescriptPlugin(options: TypeScriptPluginOptions = {}): ProjectPlugin {
+  return {
+    name: "@velaros-ai/project-typescript",
+    version: PROJECT_PACKAGE_VERSION,
+    setup(ctx) {
+      ctx.registerAdapterFactory(typescriptAdapterFactory());
+      ctx.registerPatchStrategy(typescriptPatchStrategy());
+      if (options.syntaxValidator ?? true) ctx.registerValidator(typescriptSyntaxValidator());
+    },
+  };
+}

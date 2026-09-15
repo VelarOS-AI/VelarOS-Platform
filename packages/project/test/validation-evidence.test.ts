@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test'
 
-import { typescriptSyntaxValidator } from '../src/plugins/typescript/validators'
-import { ValidatorRegistry } from '../src/registry/validator-registry'
+import { typescriptSyntaxValidator } from '../src/impl/plugins/typescript-validators'
+import { ValidatorRegistry } from '../src/impl/registries/ValidatorRegistry'
 import type { ProjectValidationContext } from '../src/types/validation'
 
 function fixture() {

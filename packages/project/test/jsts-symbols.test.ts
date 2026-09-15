@@ -4,9 +4,9 @@ import { join } from 'node:path'
 
 import { describe, expect, test } from 'bun:test'
 
-import { findJsTsSymbols, type JsTsSymbol } from '../src/adapters/jsts-ast'
-import type { EditOperation, ProjectPlugin } from '../src/index'
-import { createProjectKernel, typescriptPlugin } from '../src/index'
+import type { EditOperation, ProjectPlugin } from '../src/exports/index'
+import { createProjectKernel, typescriptPlugin } from '../src/exports/index'
+import { findJsTsSymbols, type JsTsSymbol } from '../src/utils/jsts-ast'
 
 // 符号范围一律来自 TypeScript AST：这些形态都曾让「正则 + 朴素括号计数」把范围截断在签名或
 // 函数体中间，replace_symbol 于是只替换半个声明——语法恰好还合法时就是静默改坏代码。

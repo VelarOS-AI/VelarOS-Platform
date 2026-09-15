@@ -6,11 +6,11 @@ import { describe, expect, test } from 'bun:test'
 
 import { defaultDenyApprovalPort } from '@velaros-ai/agent/tool-contract'
 
-import type { ProjectToolContext } from '../src/agent/Types'
-import { legacyProjectTools as projectTools } from '../src/compatibility/agent-tools'
-import { createProjectKernel, type EditIntent } from '../src/index'
-import { FileProjectTransactionStateStore } from '../src/persistence/transaction-state'
-import { LegacyProjectToolNames as ProjectToolNames } from '../src/project-tool-names'
+import { LegacyProjectToolNames as ProjectToolNames } from '../src/contract/constants'
+import type { ProjectToolContext } from '../src/contract/requires'
+import { createProjectKernel, type EditIntent } from '../src/exports/index'
+import { FileProjectTransactionStateStore } from '../src/impl/persistence/FileProjectTransactionStateStore'
+import { legacyProjectTools as projectTools } from '../src/impl/tools/legacy-tools'
 
 const Precious = 'precious\n'
 

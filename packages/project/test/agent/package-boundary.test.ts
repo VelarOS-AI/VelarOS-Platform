@@ -3,11 +3,11 @@ import { relative, resolve } from 'node:path'
 
 import { describe, expect, test } from 'bun:test'
 
-import { projectTools } from '../../src/agent'
-import { ProjectToolNames } from '../../src/project-tool-names'
+import { ProjectToolNames } from '../../src/contract/constants'
+import { projectTools } from '../../src/exports/agent'
 
 const PackageRoot = resolve(import.meta.dir, '../..')
-const SourceRoot = resolve(PackageRoot, 'src/agent')
+const SourceRoot = resolve(PackageRoot, 'src')
 const PackageManifest = JSON.parse(
   readFileSync(resolve(PackageRoot, 'package.json'), 'utf8'),
 ) as Record<string, Record<string, string> | undefined>
@@ -44,7 +44,7 @@ describe('Project Agent boundary', () => {
   })
 
   test('tool context exposes only the ports used by the Project tool surface', () => {
-    const source = readFileSync(resolve(SourceRoot, 'Types.ts'), 'utf8')
+    const source = readFileSync(resolve(SourceRoot, 'contract/requires.ts'), 'utf8')
     for (const field of [
       'getRootPath',
       'runInDirectory',

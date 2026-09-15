@@ -4,10 +4,10 @@ import { join } from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
-import { legacyProjectTools as projectTools } from '../src/compatibility/agent-tools'
-import { ProjectEditOperationSchema } from '../src/edits/schema'
-import { createProjectKernel } from '../src/index'
+import { createProjectKernel } from '../src/exports/index'
+import { legacyProjectTools as projectTools } from '../src/impl/tools/legacy-tools'
 import type { ReplaceLinesOperation } from '../src/types/edit'
+import { ProjectEditOperationSchema } from '../src/utils/schemas/edit-intent'
 
 let root = ''
 beforeEach(async () => { root = await mkdtemp(join(tmpdir(), 'project-line-edit-')) })

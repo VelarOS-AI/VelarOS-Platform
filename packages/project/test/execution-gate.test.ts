@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
 
-import { runWithProjectExecutionGate } from '../src/agent/ProjectExecutionGate'
+import { runWithProjectExecutionGate } from '../src/impl/tools/execution-gate'
 const signal = () => new AbortController().signal
 function deferred() {
   let done!: () => void

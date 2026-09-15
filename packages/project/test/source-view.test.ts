@@ -8,13 +8,13 @@ import { AgentTurnHistoryHelper, compileProviderSendRequest, ContextGovernanceSe
 import { fileContextFor } from '@velaros-ai/agent/tool-contract'
 
 import { fitProjectReadsForModel } from '../../agent/src/tools/projectReadSerialization'
-import { ProjectReadInputSchema } from '../src/agent/contracts/read'
-import { finalizeProjectModelResult, projectSourceLines } from '../src/agent/presentation/source-window'
-import { executeProjectRead } from '../src/agent/tools/read'
-import { executeProjectSearch } from '../src/agent/tools/search'
-import type { ProjectToolContext } from '../src/agent/Types'
-import { resolveProjectFileRef, saveProjectFileSource } from '../src/context/file-refs'
-import { createProjectKernel } from '../src/index'
+import type { ProjectToolContext } from '../src/contract/requires'
+import { createProjectKernel } from '../src/exports/index'
+import { executeProjectRead } from '../src/impl/tools/read'
+import { executeProjectSearch } from '../src/impl/tools/search'
+import { resolveProjectFileRef, saveProjectFileSource } from '../src/utils/agent/file-refs'
+import { finalizeProjectModelResult, projectSourceLines } from '../src/utils/agent/source-window'
+import { ProjectReadInputSchema } from '../src/utils/schemas/read'
 
 let root = ''
 beforeEach(async () => { root = await mkdtemp(join(tmpdir(), 'project-source-view-')) })

@@ -124,10 +124,10 @@
         "./packages/ui/src/*"
       ],
       "@velaros-ai/project": [
-        "./packages/project/src/index.ts"
+        "./packages/project/src/exports/index.ts"
       ],
       "@velaros-ai/project/*": [
-        "./packages/project/src/*"
+        "./packages/project/src/exports/*"
       ]
     }
   },

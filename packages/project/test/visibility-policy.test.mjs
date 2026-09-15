@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 
 import { test } from 'bun:test'
 
-const packageEntryPath = new URL('../dist/index.js', import.meta.url)
+const packageEntryPath = new URL('../dist/exports/index.js', import.meta.url)
 
 test('Project owns tool and project visibility policy', async () => {
   const project = await import(packageEntryPath.href)

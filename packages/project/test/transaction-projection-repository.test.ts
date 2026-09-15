@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 
-import type { ProjectChangeRecordInput } from '../src/persistence/change-feed'
-import { TransactionProjectionRepository } from '../src/transactions/transaction-projection-repository'
+import type { ProjectChangeRecordInput } from '../src/impl/persistence/change-feed'
+import { TransactionProjectionRepository } from '../src/impl/transactions/TransactionProjectionRepository'
 
 function projection(
   transactionId: string,

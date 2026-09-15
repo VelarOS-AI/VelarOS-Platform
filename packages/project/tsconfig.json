@@ -16,7 +16,7 @@
     "baseUrl": ".",
     "paths": {
       "@velaros-ai/project": [
-        "./src/index.ts"
+        "./src/exports/index.ts"
       ]
     }
   },

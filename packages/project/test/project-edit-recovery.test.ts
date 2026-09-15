@@ -6,13 +6,13 @@ import { expect, test } from 'bun:test'
 
 import { InMemoryContextPayloadStore } from '@velaros-ai/agent'
 
-import { finalizeProjectModelResult } from '../src/agent/presentation/source-window'
-import { projectTools } from '../src/agent/Project.tool'
-import type { ProjectToolContext } from '../src/agent/Types'
-import { completeProjectCoverage } from '../src/editing/planner/coverage'
-import { suggestProjectEditLocations } from '../src/editing/recovery/stale-location'
-import { ProjectError } from '../src/errors'
-import { createProjectKernel } from '../src/index'
+import type { ProjectToolContext } from '../src/contract/requires'
+import { createProjectKernel } from '../src/exports/index'
+import { projectTools } from '../src/impl/ProjectTools'
+import { finalizeProjectModelResult } from '../src/utils/agent/source-window'
+import { completeProjectCoverage } from '../src/utils/editing/planner-coverage'
+import { suggestProjectEditLocations } from '../src/utils/editing/stale-location'
+import { ProjectError } from '../src/utils/errors'
 
 function view(content: string) {
   return { path: 'a.txt', revision: 'A', content, coverage: completeProjectCoverage(content) }

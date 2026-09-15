@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 
-import { DEFAULT_CORE_POLICY } from '../src/runtime/defaults'
-import { TransactionValidation } from '../src/transactions/transaction-validation'
+import { DEFAULT_CORE_POLICY } from '../src/impl/kernel/defaults'
+import { TransactionValidation } from '../src/impl/transactions/TransactionValidation'
 import type { FileAdapter } from '../src/types/adapter'
 import type { Diagnostic } from '../src/types/common'
 import type { CommandProvider, ProjectProviders } from '../src/types/provider'

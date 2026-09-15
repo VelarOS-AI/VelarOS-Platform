@@ -13,10 +13,10 @@ import {
 } from '@velaros-ai/agent'
 import { fileContextFor } from '@velaros-ai/agent/tool-contract'
 
-import { registerProjectFileContext } from '../src/agent/ProjectFileContext'
-import type { ProjectToolContext } from '../src/agent/Types'
-import { legacyProjectTools as projectTools } from '../src/compatibility/agent-tools'
-import { createProjectKernel } from '../src/index'
+import type { ProjectToolContext } from '../src/contract/requires'
+import { createProjectKernel } from '../src/exports/index'
+import { legacyProjectTools as projectTools } from '../src/impl/tools/legacy-tools'
+import { registerProjectFileContext } from '../src/utils/agent/file-context'
 
 let root = ''
 beforeEach(async () => {

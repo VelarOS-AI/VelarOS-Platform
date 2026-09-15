@@ -16,7 +16,7 @@ export const CapabilityOwners = [
         sourceRoots: [''],
         electronRoots: [],
         schemaExports: ['projectTools'],
-        schemaEntry: 'dist/agent/index.js',
+        schemaEntry: 'dist/exports/agent.js',
       },
       {
         directory: 'development',
@@ -61,7 +61,7 @@ export const CapabilityOwners = [
       {
         directory: 'system',
         name: '@velaros-ai/system',
-        entrySubpaths: ['.', './contracts', './platform-compatibility', './shared-resources'],
+        entrySubpaths: ['.', './contracts'],
         sourceRoots: [''],
         electronRoots: [],
         schemaExports: ['systemTools'],

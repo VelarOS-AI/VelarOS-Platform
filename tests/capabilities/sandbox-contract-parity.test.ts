@@ -6,8 +6,8 @@
 
 import { describe, expect, test } from 'bun:test'
 
-import { projectTools } from '../../packages/project/src/agent/Project.tool'
-import type { ProjectSandboxApplyResult, ProjectSandboxDiff, ProjectSandboxRecord } from '../../packages/project/src/project-contracts'
+import { projectTools } from '../../packages/project/src/impl/ProjectTools'
+import type { ProjectSandboxApplyResult, ProjectSandboxDiff, ProjectSandboxRecord } from '../../packages/project/src/types/project'
 import type { SystemSandboxApplyResult, SystemSandboxDiff, SystemSandboxRecord } from '../../packages/system/src/exports/index'
 import { systemTools } from '../../packages/system/src/exports/index'
 

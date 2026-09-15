@@ -4,8 +4,8 @@ import { join } from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
-import { atomicWriteProjectText } from '../src/files/atomic-writer'
-import { createProjectKernel } from '../src/index'
+import { createProjectKernel } from '../src/exports/index'
+import { atomicWriteProjectText } from '../src/utils/files/atomic-writer'
 import { decodeProjectTextBuffer, encodeProjectTextBuffer } from '../src/utils/text'
 
 let root = ''

@@ -4,8 +4,8 @@ import { join } from 'node:path'
 
 import { expect, test } from 'bun:test'
 
-import { createNodeCommandProvider } from '../src/providers'
-import { createProjectKernel } from '../src/runtime/project-kernel'
+import { createProjectKernel } from '../src/impl/kernel/project-kernel'
+import { createNodeCommandProvider } from '../src/impl/kernel/providers'
 import { encodeProjectTextBuffer } from '../src/utils/text'
 
 test('real search reaches every encoding beyond the listing page and retains a bounded cache through repeated full scans', async () => {

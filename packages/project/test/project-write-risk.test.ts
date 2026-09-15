@@ -4,8 +4,8 @@ import { join } from 'node:path'
 
 import { describe, expect, test } from 'bun:test'
 
-import { createProjectKernel, type EditIntent, type ProjectKernel, type ProjectPlugin } from '../src/index'
-import { FileProjectTransactionStateStore, type ProjectTransactionPendingOperation } from '../src/persistence/transaction-state'
+import { createProjectKernel, type EditIntent, type ProjectKernel, type ProjectPlugin } from '../src/exports/index'
+import { FileProjectTransactionStateStore, type ProjectTransactionPendingOperation } from '../src/impl/persistence/FileProjectTransactionStateStore'
 import type { ApprovalRequest } from '../src/types/policy'
 import { encodeProjectTextBuffer } from '../src/utils/text'
 

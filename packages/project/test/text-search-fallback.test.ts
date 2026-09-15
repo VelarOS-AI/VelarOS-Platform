@@ -4,8 +4,8 @@ import { join } from 'node:path'
 
 import { describe, expect, test } from 'bun:test'
 
-import { createTextAdapter } from '../src/adapters/text-adapter'
-import { createProjectKernel } from '../src/index'
+import { createProjectKernel } from '../src/exports/index'
+import { createTextAdapter } from '../src/impl/adapters/text-adapter'
 import type { FileSnapshot } from '../src/types/snapshot'
 import { encodeProjectTextBuffer } from '../src/utils/text'
 

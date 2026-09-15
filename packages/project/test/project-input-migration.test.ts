@@ -8,12 +8,12 @@ import { InMemoryContextPayloadStore } from '@velaros-ai/agent'
 import { resolveToolInputReuse } from '@velaros-ai/agent/tool-contract'
 
 import { saveToolAttemptInput, saveToolAttemptOutcome } from '../../agent/src/tools/recovery/ToolInputReuse'
-import { finalizeProjectModelResult } from '../src/agent/presentation/source-window'
-import { projectTools } from '../src/agent/Project.tool'
-import { registerProjectFileContext } from '../src/agent/ProjectFileContext'
-import type { ProjectToolContext } from '../src/agent/Types'
-import { migrateProjectReusedInput } from '../src/compatibility/input-migration'
-import { createProjectKernel } from '../src/runtime/project-kernel'
+import type { ProjectToolContext } from '../src/contract/requires'
+import { createProjectKernel } from '../src/impl/kernel/project-kernel'
+import { projectTools } from '../src/impl/ProjectTools'
+import { migrateProjectReusedInput } from '../src/impl/tools/legacy-input-migration'
+import { registerProjectFileContext } from '../src/utils/agent/file-context'
+import { finalizeProjectModelResult } from '../src/utils/agent/source-window'
 
 let root: string
 beforeEach(async () => { root = await mkdtemp(join(tmpdir(), 'project-input-migration-')) })

@@ -6,11 +6,11 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
 import { InMemoryContextPayloadStore } from '@velaros-ai/agent'
 
-import { finalizeProjectModelResult } from '../src/agent/presentation/source-window'
-import { projectTools } from '../src/agent/Project.tool'
-import { registerProjectFileContext } from '../src/agent/ProjectFileContext'
-import type { ProjectToolContext } from '../src/agent/Types'
-import { createProjectKernel } from '../src/index'
+import type { ProjectToolContext } from '../src/contract/requires'
+import { createProjectKernel } from '../src/exports/index'
+import { projectTools } from '../src/impl/ProjectTools'
+import { registerProjectFileContext } from '../src/utils/agent/file-context'
+import { finalizeProjectModelResult } from '../src/utils/agent/source-window'
 import { encodeProjectTextBuffer } from '../src/utils/text'
 
 let root = ''

@@ -4,10 +4,10 @@ import { join } from 'node:path'
 
 import { afterEach, beforeEach, expect, spyOn, test } from 'bun:test'
 
-import { atomicWriteProjectText } from '../src/files/atomic-writer'
-import { FileStore } from '../src/files/file-store'
-import { createProjectKernel, type EditIntent } from '../src/index'
-import { FileProjectTransactionStateStore } from '../src/persistence/transaction-state'
+import { createProjectKernel, type EditIntent } from '../src/exports/index'
+import { FileStore } from '../src/impl/files/FileStore'
+import { FileProjectTransactionStateStore } from '../src/impl/persistence/FileProjectTransactionStateStore'
+import { atomicWriteProjectText } from '../src/utils/files/atomic-writer'
 import { encodeProjectTextBuffer } from '../src/utils/text'
 
 let root = ''

@@ -4,11 +4,11 @@ import { join } from 'node:path'
 
 import { afterEach, beforeEach, expect, test } from 'bun:test'
 
-import { compileProjectFile } from '../src/file-operations/planner'
-import { atomicWriteProjectText } from '../src/files/atomic-writer'
-import { detectBinaryByPrefix, hashFileAndDetectBinary, limitContent, readLimitedTextPrefix, readTextLineWindow } from '../src/files/file-reader'
-import { readProjectTextFile } from '../src/files/text-stream'
-import { createProjectKernel } from '../src/index'
+import { createProjectKernel } from '../src/exports/index'
+import { compileProjectFile } from '../src/utils/editing/file-planner'
+import { atomicWriteProjectText } from '../src/utils/files/atomic-writer'
+import { detectBinaryByPrefix, hashFileAndDetectBinary, limitContent, readLimitedTextPrefix, readTextLineWindow } from '../src/utils/files/file-reader'
+import { readProjectTextFile } from '../src/utils/files/text-stream'
 import { detectProjectTextEncoding, encodeProjectTextBuffer, ProjectTextEncodingProbe } from '../src/utils/text'
 
 let root = ''

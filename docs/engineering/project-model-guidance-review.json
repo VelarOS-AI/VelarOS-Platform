@@ -16,10 +16,9 @@
     {
       "entry": "Project 工具注册与 schema",
       "sources": [
-        "packages/project/src/agent/Project.tool.ts",
-        "packages/project/src/agent/tools",
-        "packages/project/src/agent/contracts",
-        "packages/project/src/project-code-contracts.ts"
+        "packages/project/src/impl/ProjectTools.ts",
+        "packages/project/src/impl/tools",
+        "packages/project/src/utils/schemas"
       ]
     },
     {
@@ -48,7 +47,7 @@
         "packages/agent/src/tools/recovery/ToolInputReuse.ts",
         "packages/agent/src/tools/recovery/TransientRecoveryProjection.ts",
         "packages/agent/src/agent/context/resources/FileContextProjection.ts",
-        "packages/project/src/transactions/transaction-errors.ts"
+        "packages/project/src/utils/transactions/transaction-errors.ts"
       ]
     },
     {
@@ -56,8 +55,8 @@
       "sources": [
         "packages/agent/src/tools/Executor.ts",
         "packages/agent/src/tools/toolInputHistoryProjection.ts",
-        "packages/project/src/agent/presentation/source-window.ts",
-        "packages/project/src/agent/ProjectKernelPort.ts"
+        "packages/project/src/utils/agent/source-window.ts",
+        "packages/project/src/utils/agent/kernel-port.ts"
       ]
     },
     {
@@ -153,120 +152,152 @@
       "fingerprint": "d18d840c28eaa69d13dfc53583ad78d61e842bf01ad2a675b0fa8aceedd0d54a"
     },
     {
-      "path": "packages/project/src/agent/Project.tool.ts",
+      "path": "packages/project/src/impl/ProjectTools.ts",
       "fingerprint": "15ae48d2e1f216a3ff2cf4fe0de2759c271e28aeba506dd99fb2631ed2a09e1e"
     },
     {
-      "path": "packages/project/src/agent/ProjectKernelPort.ts",
-      "fingerprint": "c7c0931f591f94e68df13b4f068d83cd5dd214879f03bac55abbf0251b1375cb"
+      "path": "packages/project/src/impl/tools/capabilities.ts",
+      "fingerprint": "38fa45f5431a0cb271278564ca54eebdf716f6995639d17d203ae778c133d60a"
     },
     {
-      "path": "packages/project/src/agent/contracts/change.ts",
-      "fingerprint": "afa93ce4c60bca33b5cba512940786fb9c56d02de1915a1cf9663d8414f1c612"
+      "path": "packages/project/src/impl/tools/change.ts",
+      "fingerprint": "32d49826e82be53bfdb09392f61de8e0094d9f591c5ae5dcf2d97731f2877b69"
     },
     {
-      "path": "packages/project/src/agent/contracts/edit.ts",
-      "fingerprint": "9b301c9332581bd17065d95997716d094575f3390eed844e78b7ac6c5791204b"
+      "path": "packages/project/src/impl/tools/code-analysis.ts",
+      "fingerprint": "8644c8296c82c00d8e25b36cdcd3df926614789436ae895f7e036d35a889ce05"
     },
     {
-      "path": "packages/project/src/agent/contracts/file.ts",
-      "fingerprint": "92f0e8a2b2c51e24f258b7ffdb3501ba61419b4ab43b61f7ed2cd435955c0145"
+      "path": "packages/project/src/impl/tools/code-index.ts",
+      "fingerprint": "5dbd7fdc8e9b67a23ae5a52fc6d2a9b3600fc1439d32aa76e01b522cd554c65f"
     },
     {
-      "path": "packages/project/src/agent/contracts/list.ts",
-      "fingerprint": "caafd58c8020bc60f61e44e7d2bc68da904b5873e6a40a1418cc110eb7fffc53"
+      "path": "packages/project/src/impl/tools/code-query.ts",
+      "fingerprint": "d67494d562a2c24d1ec14589da9a8ebeffb6c60dc663b9dbd61872849d24e89e"
     },
     {
-      "path": "packages/project/src/agent/contracts/range.ts",
-      "fingerprint": "bac93e8cb93d36b720b849cc4f97b78b4877f9291268ffd854aacaef9919b854"
+      "path": "packages/project/src/impl/tools/code.ts",
+      "fingerprint": "9f5b45056f43a6d278243b3aeb1baf2df67bc077f04a546e37d96cf54d8e4e94"
     },
     {
-      "path": "packages/project/src/agent/contracts/read.ts",
-      "fingerprint": "8d074241e83e05b4531015ebe9f2421c973d9c121194ed1230174601dec2b572"
+      "path": "packages/project/src/impl/tools/edit-recovery.ts",
+      "fingerprint": "438f93927c94977ce511532642c551f7eee3aae977dd847b7f848dcd07b8b0d3"
     },
     {
-      "path": "packages/project/src/agent/contracts/reference.ts",
-      "fingerprint": "9bc453ee98caa870164d82fd3f1b257dcd408cc175e7731ee16b52b3b6239fa4"
+      "path": "packages/project/src/impl/tools/edit.ts",
+      "fingerprint": "50529950f1b74e583c21017588293e2807d28f43260996d28c3af8ddac53b63a"
     },
     {
-      "path": "packages/project/src/agent/contracts/search.ts",
-      "fingerprint": "8612656199ec40d5064c93b1f6286f7785e853d36c5eb926ec92ac230f178eb3"
+      "path": "packages/project/src/impl/tools/execution-gate.ts",
+      "fingerprint": "e11865a96773fd811142104ae78b434ce6f67efdc272d397c26c38b4c4e4820a"
     },
     {
-      "path": "packages/project/src/agent/presentation/source-window.ts",
-      "fingerprint": "e446f999dae146e1116d7906faa97bbe831dbfccc17342495b0df184ec11ebc4"
+      "path": "packages/project/src/impl/tools/file.ts",
+      "fingerprint": "4d9f26832b11d0ceeea74ac8bfa0fefa5fe86f0d4a0e498274df13a4340192d7"
     },
     {
-      "path": "packages/project/src/agent/tools/change.ts",
-      "fingerprint": "5fe7a78fd000e0e97cf5702b646cb75feabf321e3c759a522f1ccd40351a582b"
+      "path": "packages/project/src/impl/tools/legacy-input-migration.ts",
+      "fingerprint": "a2c1fd204776c4a4e743c21a043565691e0fd98ea0a68ce55ca6123e37c2cb9a"
     },
     {
-      "path": "packages/project/src/agent/tools/code-analysis.ts",
-      "fingerprint": "90946b52e25984e9f51f0b3727dcf9d5a62b81fcb46a41c8fe03b01a8c5895f4"
+      "path": "packages/project/src/impl/tools/legacy-tools.ts",
+      "fingerprint": "0086041af4296f365dcaedbdc111e313bc83abd2f720024c9398d1310a882b63"
     },
     {
-      "path": "packages/project/src/agent/tools/code.ts",
-      "fingerprint": "4db2c469e88c8e33aa6abfd5cb1ad15ae80491599c696cbdfa09eb19bb5965fc"
+      "path": "packages/project/src/impl/tools/list.ts",
+      "fingerprint": "65cc6157504e16e410ab8d76124efbc9267ef56e698b433297181db38709a073"
     },
     {
-      "path": "packages/project/src/agent/tools/edit-recovery.ts",
-      "fingerprint": "4a820da14dc2acfa0aec79a7d528b45406f2768cf96477e8834de3069889ca1b"
+      "path": "packages/project/src/impl/tools/planner-resolver.ts",
+      "fingerprint": "f4aec542cdfe1d6193a0a26dec70a82c9fb95c7e899ae7c2e8054a8db30a15d8"
     },
     {
-      "path": "packages/project/src/agent/tools/edit.ts",
-      "fingerprint": "59de2c1af9a5f9b05a12eb9ccfb067d4122cdde7228b3045a9352e7cabb713cc"
+      "path": "packages/project/src/impl/tools/read.ts",
+      "fingerprint": "da6fb1d1ed7c6bc10a213986f8ba3c96c8b2d62079cf6c2c19ad0f8e2d3f04e6"
     },
     {
-      "path": "packages/project/src/agent/tools/file.ts",
-      "fingerprint": "1b956c8c307c128c6014d640c6293900f4b14d0bfafb73f9ae4a118455cfde7f"
+      "path": "packages/project/src/impl/tools/receipts.ts",
+      "fingerprint": "66c97030ff5ad8cbe10c99cf6d9da5a1265a3251554cdf89d7d126ebcefd1c65"
     },
     {
-      "path": "packages/project/src/agent/tools/list.ts",
-      "fingerprint": "ee5b1fe5a2390b6f1f19179f9b2ca9270402b7960ca1023735f71ffe998465f3"
+      "path": "packages/project/src/impl/tools/run.ts",
+      "fingerprint": "d06ee75f4b04ff2067386876bd859a2e4854264cc242063ff3d99564ab3cb54a"
     },
     {
-      "path": "packages/project/src/agent/tools/planner-resolver.ts",
-      "fingerprint": "91a46b81c86173f45b4b889a4b72be607e836b588be7956a70ed1971463156da"
+      "path": "packages/project/src/impl/tools/sandbox.ts",
+      "fingerprint": "ab107122614f8ae4c68000086fa45a3d439d125ede97bdc3ed51714bbb8b24c6"
     },
     {
-      "path": "packages/project/src/agent/tools/read.ts",
-      "fingerprint": "5075e4b98d0ac98860fd833fcf667114250f6496211421b539d73e2677fa48ee"
+      "path": "packages/project/src/impl/tools/search.ts",
+      "fingerprint": "53b7759950db1fb9fb0c3229faaa30f113ae3acaa6baee7be8205106ffe8e789"
     },
     {
-      "path": "packages/project/src/agent/tools/receipts.ts",
-      "fingerprint": "23ad7c040bdf1067a59538771fcd05397dcc1f4ab2cba3cbe08070c71e9edd1a"
+      "path": "packages/project/src/impl/tools/shared.ts",
+      "fingerprint": "371c03ed559c7b9b1d65425ac30e00eaa1e8469b180238cf3816ef140b40e3ca"
     },
     {
-      "path": "packages/project/src/agent/tools/run.ts",
-      "fingerprint": "43794cc8f2698c76d63d2e4019a28d363a25c60e50c2225b517e2da1f2089606"
+      "path": "packages/project/src/impl/tools/transaction-result.ts",
+      "fingerprint": "9a97ada9bac457aae245c73ded650c866a636655e511715ba589473b23592a41"
     },
     {
-      "path": "packages/project/src/agent/tools/sandbox.ts",
-      "fingerprint": "efa1da9ed8dd95a9186b4e65afec5dfc24c41b5f937542930b7336fd434d27af"
+      "path": "packages/project/src/impl/tools/transaction.ts",
+      "fingerprint": "c43ec5947ee566c82666c704ff6713f7a485449c6e484e32a3541d4ae3db58c2"
     },
     {
-      "path": "packages/project/src/agent/tools/search.ts",
-      "fingerprint": "b4ba7bac3bab82ee9262660c964ee5ffe8a90342eacf495775e7290d55baac13"
+      "path": "packages/project/src/utils/agent/kernel-port.ts",
+      "fingerprint": "69341d4e398ee174c74b24753f3eeca034f4ff0a5d409715780279ad7e7e0a2b"
     },
     {
-      "path": "packages/project/src/agent/tools/shared.ts",
-      "fingerprint": "aed83b0b35f74c7149e6319d0301b8bd2a02f6b40b7c3323a88d00f25a7a8fd4"
+      "path": "packages/project/src/utils/agent/source-window.ts",
+      "fingerprint": "81459ffe08230f45dde952f62c34e06acc80dc105868fa5a46408560fc12fa84"
     },
     {
-      "path": "packages/project/src/agent/tools/transaction-result.ts",
-      "fingerprint": "6a94293e44c5946de6a82cd2f86a6b57e56948a2e1cde36e8d447d419aed3fe8"
+      "path": "packages/project/src/utils/schemas/change.ts",
+      "fingerprint": "68ddcfccbdd34cad4253dfb7e885a9d77b7c11d113db74d7690f6efc87a61fdb"
     },
     {
-      "path": "packages/project/src/agent/tools/transaction.ts",
-      "fingerprint": "d9ae97a990243dcf78b6ff8da4511af35091445d1f66ca787059cf8e7ea2bba6"
+      "path": "packages/project/src/utils/schemas/code-query.ts",
+      "fingerprint": "9383f0f16528665f6ced7bf2d5305e30007ddc1f5de9cce934413f5d85960cb9"
     },
     {
-      "path": "packages/project/src/project-code-contracts.ts",
+      "path": "packages/project/src/utils/schemas/code.ts",
       "fingerprint": "722938390dfde3f97e3954adcf0350801747cc8e8609ecbb8afd22be2f566915"
     },
     {
-      "path": "packages/project/src/transactions/transaction-errors.ts",
-      "fingerprint": "f7ef84ce5b9d3aabd9ed34903ebe962dc149cb1bffac5000759c50db7aaf862a"
+      "path": "packages/project/src/utils/schemas/edit-intent.ts",
+      "fingerprint": "256c8ca74348dcca94ed49b1fedf54883b2664efcb137d1c630684f6073fd653"
+    },
+    {
+      "path": "packages/project/src/utils/schemas/edit.ts",
+      "fingerprint": "9b301c9332581bd17065d95997716d094575f3390eed844e78b7ac6c5791204b"
+    },
+    {
+      "path": "packages/project/src/utils/schemas/file.ts",
+      "fingerprint": "92f0e8a2b2c51e24f258b7ffdb3501ba61419b4ab43b61f7ed2cd435955c0145"
+    },
+    {
+      "path": "packages/project/src/utils/schemas/list.ts",
+      "fingerprint": "caafd58c8020bc60f61e44e7d2bc68da904b5873e6a40a1418cc110eb7fffc53"
+    },
+    {
+      "path": "packages/project/src/utils/schemas/range.ts",
+      "fingerprint": "bac93e8cb93d36b720b849cc4f97b78b4877f9291268ffd854aacaef9919b854"
+    },
+    {
+      "path": "packages/project/src/utils/schemas/read.ts",
+      "fingerprint": "c4e484428884df15c6f8bfa5bfff88220581c40dd2a923422893b0a1beaea296"
+    },
+    {
+      "path": "packages/project/src/utils/schemas/reference.ts",
+      "fingerprint": "9bc453ee98caa870164d82fd3f1b257dcd408cc175e7731ee16b52b3b6239fa4"
+    },
+    {
+      "path": "packages/project/src/utils/schemas/search.ts",
+      "fingerprint": "8612656199ec40d5064c93b1f6286f7785e853d36c5eb926ec92ac230f178eb3"
+    },
+    {
+      "path": "packages/project/src/utils/transactions/transaction-errors.ts",
+      "fingerprint": "e234e0e7510f1a60745c0f2485eb4c9689296d49057d1c573ed23493329ff655"
     }
   ]
 }

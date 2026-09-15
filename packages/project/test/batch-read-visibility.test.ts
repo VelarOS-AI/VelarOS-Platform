@@ -17,10 +17,10 @@ import {
 } from '@velaros-ai/agent'
 import { logRuntime } from '@velaros-ai/core/logger'
 
-import { projectTools } from '../src/agent/Project.tool'
-import { registerProjectFileContext } from '../src/agent/ProjectFileContext'
-import type { ProjectToolContext } from '../src/agent/Types'
-import { createProjectKernel } from '../src/index'
+import type { ProjectToolContext } from '../src/contract/requires'
+import { createProjectKernel } from '../src/exports/index'
+import { projectTools } from '../src/impl/ProjectTools'
+import { registerProjectFileContext } from '../src/utils/agent/file-context'
 
 let root = ''
 beforeEach(async () => { root = await mkdtemp(join(tmpdir(), 'project-batch-visibility-')) })

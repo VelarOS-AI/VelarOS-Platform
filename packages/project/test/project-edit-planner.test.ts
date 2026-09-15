@@ -4,17 +4,17 @@ import { join } from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test'
 
-import { ProjectChangeSchema } from '../src/agent/contracts/change'
-import { ProjectEditSchema } from '../src/agent/contracts/edit'
-import { ProjectFileSchema } from '../src/agent/contracts/file'
-import { ProjectLineRangeSchema } from '../src/agent/contracts/range'
-import { completeProjectCoverage } from '../src/editing/planner/coverage'
-import { compileProjectChange, compileProjectEdit, compileProjectFile, planProjectFileEdits } from '../src/editing/planner/index'
-import { normalizeProjectLineRange } from '../src/editing/selectors/range'
-import type { ProjectContentEdit, ProjectEditView, ProjectPlannerResolver } from '../src/editing/types'
-import { ProjectModelEditSchema } from '../src/edits/schema'
-import { FileStore } from '../src/files/file-store'
-import { createProjectKernel } from '../src/index'
+import { createProjectKernel } from '../src/exports/index'
+import { FileStore } from '../src/impl/files/FileStore'
+import type { ProjectContentEdit, ProjectEditView, ProjectPlannerResolver } from '../src/types/editing'
+import { normalizeProjectLineRange } from '../src/utils/editing/line-range'
+import { completeProjectCoverage } from '../src/utils/editing/planner-coverage'
+import { compileProjectChange, compileProjectEdit, compileProjectFile, planProjectFileEdits } from '../src/utils/editing/planner-index'
+import { ProjectChangeSchema } from '../src/utils/schemas/change'
+import { ProjectEditSchema } from '../src/utils/schemas/edit'
+import { ProjectModelEditSchema } from '../src/utils/schemas/edit-intent'
+import { ProjectFileSchema } from '../src/utils/schemas/file'
+import { ProjectLineRangeSchema } from '../src/utils/schemas/range'
 
 function view(content: string, coverage = completeProjectCoverage(content)): ProjectEditView {
   return { path: 'sample.txt', revision: 'version-a', content, coverage }

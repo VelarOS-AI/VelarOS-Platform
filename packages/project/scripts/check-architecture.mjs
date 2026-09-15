@@ -245,88 +245,67 @@ function registeredValidatorContextViolations() {
 
 const ForbiddenInternalDependencies = [
   {
-    source: (sourcePath) => /^(files|transactions|edits|editing|file-operations|context|compatibility|persistence)\//.test(sourcePath),
-    targets: ['runtime/', 'composition/'],
+    source: (sourcePath) => /^(impl\/(files|transactions|strategies|persistence|registries)|utils\/(files|transactions|editing))\//.test(sourcePath),
+    targets: ['impl/kernel/', 'impl/composition/'],
     label: 'services must use domain ports instead of runtime composition',
   },
   {
-    source: (sourcePath) => sourcePath.startsWith('files/'),
-    targets: ['transactions/', 'edits/', 'editing/', 'file-operations/', 'context/', 'compatibility/'],
+    source: (sourcePath) => /^(impl|utils)\/files\//.test(sourcePath),
+    targets: ['impl/transactions/', 'utils/transactions/', 'impl/strategies/', 'utils/editing/', 'utils/agent/', 'impl/tools/'],
     label: 'file access must not depend on transaction or edit implementation',
   },
   {
-    source: (sourcePath) => sourcePath.startsWith('transactions/'),
-    targets: ['files/'],
+    source: (sourcePath) => /^(impl|utils)\/transactions\//.test(sourcePath),
+    targets: ['impl/files/', 'utils/files/'],
     label: 'transactions must use injected file access ports',
   },
   {
-    source: (sourcePath) => sourcePath.startsWith('edits/'),
-    targets: ['files/', 'transactions/', 'persistence/'],
+    source: (sourcePath) => sourcePath.startsWith('impl/strategies/'),
+    targets: ['impl/files/', 'utils/files/', 'impl/transactions/', 'utils/transactions/', 'impl/persistence/'],
     label: 'edit strategies must produce patches without persistence',
   },
   {
-    source: (sourcePath) => /^(editing|file-operations)\//.test(sourcePath),
-    targets: ['files/', 'transactions/', 'persistence/', 'context/', 'agent/', 'compatibility/'],
+    source: (sourcePath) => sourcePath.startsWith('utils/editing/'),
+    targets: ['impl/', 'utils/files/', 'utils/transactions/', 'utils/agent/'],
     label: 'pure edit and file planners must use resolved source and injected ports',
   },
   {
-    source: (sourcePath) => sourcePath.startsWith('context/'),
-    targets: ['files/', 'transactions/', 'persistence/', 'agent/tools/', 'agent/presentation/', 'compatibility/'],
-    label: 'file context references must use capability ports without tool execution or storage implementation',
-  },
-  {
-    source: (sourcePath) => sourcePath.startsWith('compatibility/'),
-    targets: ['files/', 'transactions/', 'persistence/'],
-    label: 'compatibility adapters must preserve the governed public transaction boundary',
-  },
-  {
     source: (sourcePath) => sourcePath.startsWith('types/'),
-    targets: ['runtime/', 'files/', 'transactions/', 'edits/', 'editing/', 'file-operations/', 'context/', 'compatibility/', 'agent/', 'composition/', 'infrastructure/'],
-    label: 'domain types must not depend on runtime, files, transactions, edits, Agent, or composition',
+    targets: ['impl/', 'utils/'],
+    label: 'domain types must not depend on implementation or helpers',
   },
   {
-    source: (sourcePath) => /^(runtime|files|transactions|edits|editing|file-operations|persistence)\//.test(sourcePath),
-    targets: ['agent/', 'compatibility/'],
+    source: (sourcePath) => /^(impl\/(kernel|files|transactions|strategies|persistence|registries)|utils\/(files|transactions|editing))\//.test(sourcePath),
+    targets: ['impl/tools/', 'utils/agent/', 'impl/ProjectTools'],
     label: 'Project implementation must not depend on Agent adapters',
   },
   {
-    source: (sourcePath) => sourcePath.startsWith('agent/'),
-    targets: ['runtime/project-kernel'],
+    source: (sourcePath) => /^(impl\/tools|utils\/agent)\//.test(sourcePath),
+    targets: ['impl/kernel/project-kernel'],
     label: 'Agent adapters must not depend on the ProjectKernel implementation',
   },
   {
-    source: (sourcePath) => sourcePath === 'persistence/transaction-state.ts',
-    targets: ['runtime/project-kernel'],
-    label: 'persistence/transaction-state must depend on transaction domain types, not ProjectKernel',
+    source: (sourcePath) => /^impl\/(persistence|transactions)\//.test(sourcePath),
+    targets: ['impl/kernel/project-kernel'],
+    label: 'persistence and transaction repositories must depend on transaction domain types, not ProjectKernel',
   },
   {
-    source: (sourcePath) => sourcePath === 'transactions/transaction-repository.ts',
-    targets: ['runtime/project-kernel'],
-    label: 'transaction repository must not depend on ProjectKernel',
-  },
-  {
-    source: (sourcePath) => sourcePath === 'transactions/transaction-projection-repository.ts',
-    targets: ['runtime/project-kernel'],
-    label: 'transaction projection repository must not depend on ProjectKernel',
-  },
-  {
-    source: (sourcePath) => sourcePath === 'transactions/transaction-overlay.ts',
-    targets: ['runtime/', 'files/', 'registry/', 'persistence/transaction-state'],
+    source: (sourcePath) => sourcePath === 'impl/transactions/TransactionOverlay.ts',
+    targets: ['impl/kernel/', 'impl/files/', 'utils/files/', 'impl/registries/', 'impl/persistence/'],
     label: 'transaction overlay must depend only on domain types and injected callbacks',
   },
   {
-    source: (sourcePath) => sourcePath === 'transactions/transaction-validation.ts',
+    source: (sourcePath) => sourcePath === 'impl/transactions/TransactionValidation.ts',
     targets: [
-      'runtime/defaults',
-      'files/file-store',
-      'transactions/lock-manager',
-      'runtime/project-kernel',
-      'transactions/transaction-coordinator',
-      'transactions/transaction-projection-repository',
-      'transactions/transaction-repository',
-      'transactions/transaction-state-machine',
-      'registry/',
-      'persistence/transaction-state',
+      'impl/kernel/',
+      'impl/files/',
+      'impl/transactions/LockManager',
+      'impl/transactions/TransactionCoordinator',
+      'impl/transactions/TransactionProjectionRepository',
+      'impl/transactions/TransactionRepository',
+      'impl/transactions/TransactionStateMachine',
+      'impl/registries/',
+      'impl/persistence/',
     ],
     label: 'transaction validation must use domain types, TransactionOverlay views, and injected callbacks',
   },
@@ -339,7 +318,7 @@ if (manifest.name !== '@velaros-ai/project') {
 // module manifest 与全部内置插件的 version 字段，与 package.json 漂移时，宿主看到的是一个
 // 不存在的版本。钉字面量的旧写法让这条门在每次正常升版时变红（实测已卡在 1.2.3 而包已到
 // 1.2.5），红成常态的门等于没有门。
-const versionConstantSource = readFileSync(resolve(SourceRoot, 'runtime/defaults.ts'), 'utf8')
+const versionConstantSource = readFileSync(resolve(SourceRoot, 'impl/kernel/defaults.ts'), 'utf8')
 const versionConstant = /PROJECT_PACKAGE_VERSION\s*=\s*["']([^"']+)["']/.exec(versionConstantSource)?.[1]
 if (versionConstant !== manifest.version) {
   fail(
@@ -353,8 +332,8 @@ if (manifest.repository?.directory !== 'packages/project') {
   fail('repository.directory must be packages/project')
 }
 if (
-  manifest.exports?.['./agent']?.import !== './dist/agent/index.js'
-  || manifest.exports?.['./agent']?.types !== './dist/agent/index.d.ts'
+  manifest.exports?.['./agent']?.import !== './dist/exports/agent.js'
+  || manifest.exports?.['./agent']?.types !== './dist/exports/agent.d.ts'
 ) {
   fail('@velaros-ai/project/agent must expose the integrated Agent adapter')
 }
@@ -395,12 +374,12 @@ for (const path of walk(SourceRoot)) {
   for (const violation of validationContextViolations(source, path, sourcePath)) {
     fail(`${violation} in ${sourcePath}`)
   }
-  if (sourcePath === 'runtime/project-kernel.ts' && hasUnmanagedTransactionStatusAssignment(source, path)) {
+  if (sourcePath === 'impl/kernel/project-kernel.ts' && hasUnmanagedTransactionStatusAssignment(source, path)) {
     fail('ProjectKernel transaction status changes must go through TransactionStateMachine')
   }
   const importedSpecifiers = ts.preProcessFile(source, true, true).importedFiles
     .map((reference) => reference.fileName)
-  if (/^(editing|file-operations)\//.test(sourcePath)) {
+  if (sourcePath.startsWith('utils/editing/')) {
     for (const specifier of importedSpecifiers) {
       if (/^(?:node:)?(?:fs(?:\/promises)?|child_process|worker_threads)$/.test(specifier)) {
         fail(`pure planner must not perform filesystem or process IO in ${sourcePath}: ${specifier}`)

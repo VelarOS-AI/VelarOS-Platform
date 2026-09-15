@@ -10,14 +10,14 @@ import type {
   KernelModuleActivateContext,
 } from '@velaros-ai/kernel/contracts/abi'
 
-import { finalizeProjectModelResult } from '../src/agent/presentation/source-window'
-import type { ProjectToolContext } from '../src/agent/Types'
+import type { ProjectToolContext } from '../src/contract/requires'
 import {
   createProjectKernel,
   createProjectKernelModule,
   ProjectCapability,
   type ProjectCapabilityService,
-} from '../src/index'
+} from '../src/exports/index'
+import { finalizeProjectModelResult } from '../src/utils/agent/source-window'
 
 function captureService(
   capture: (tokenId: string, service: object) => void,

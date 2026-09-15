@@ -5,7 +5,7 @@
  */
 import { describe, expect, test } from 'bun:test'
 
-import { analyzeCommandExecution as analyzeProjectCommand } from '../../packages/project/src/execution'
+import { analyzeCommandExecution as analyzeProjectCommand } from '../../packages/project/src/exports/execution'
 import { systemCommandPolicy } from '../../packages/system/src/exports/index'
 
 const DangerousCommands = [

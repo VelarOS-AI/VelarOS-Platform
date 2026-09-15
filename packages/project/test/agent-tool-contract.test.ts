@@ -3,19 +3,19 @@ import { z } from 'zod'
 
 import { isCanonicalToolId, schemaToInputSchema } from '@velaros-ai/agent/tool-contract'
 
+import { LegacyProjectToolNames, ProjectToolNames } from '../src/contract/constants'
 import {
   defineProjectTool,
   projectTools,
   scopeProjectListPatterns,
-} from '../src/agent/Project.tool'
+} from '../src/impl/ProjectTools'
+import { legacyProjectTools } from '../src/impl/tools/legacy-tools'
 import {
   type AgentProjectKernelPort,
   executeAgentProjectRead,
   executeAgentProjectSearch,
-} from '../src/agent/ProjectKernelPort'
-import { legacyProjectTools } from '../src/compatibility/agent-tools'
-import { ProjectEditOperationSchema } from '../src/edits/schema'
-import { LegacyProjectToolNames, ProjectToolNames } from '../src/project-tool-names'
+} from '../src/utils/agent/kernel-port'
+import { ProjectEditOperationSchema } from '../src/utils/schemas/edit-intent'
 
 const ModelToolSchemaCharacterBudget = 40_000
 

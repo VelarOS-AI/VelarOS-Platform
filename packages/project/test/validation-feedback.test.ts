@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test'
 
-import { jsTsSyntaxDiagnostics } from '../src/adapters/jsts-ast'
-import { validationFailed } from '../src/transactions/transaction-errors'
+import { jsTsSyntaxDiagnostics } from '../src/utils/jsts-ast'
+import { validationFailed } from '../src/utils/transactions/transaction-errors'
 
 test('failed candidate syntax shows both sides of the edit boundary in candidate coordinates', () => {
   const candidate = 'export const adapter = {\n  search() { return [] },\n  },\n  resolveTarget() { return 1 },\n}\n'

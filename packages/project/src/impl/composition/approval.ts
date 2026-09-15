@@ -1,0 +1,57 @@
+import { AsyncLocalStorage } from 'node:async_hooks'
+
+import type { ApprovalPort } from '@velaros-ai/agent/tool-contract'
+import { createApprovalOperationKey } from '@velaros-ai/agent/tool-contract'
+import { isEmpty } from '@velaros-ai/core'
+
+import type { ApprovalProvider } from '../../types/policy.js'
+
+interface ProjectApprovalContext {
+  approval: ApprovalPort
+  abortSignal: AbortSignal
+}
+
+const ProjectApprovalStore = new AsyncLocalStorage<ProjectApprovalContext>()
+
+function withProjectApproval<T>(
+  context: ProjectApprovalContext,
+  action: () => Promise<T>
+): Promise<T> {
+  return ProjectApprovalStore.run(context, action)
+}
+
+function installProjectApprovalProvider(kernel: {
+  providers: { approval?: ApprovalProvider }
+}): void {
+  kernel.providers.approval = {
+    async approve(request) {
+      const context = ProjectApprovalStore.getStore()
+      if (!context) return false
+
+      const paths = request.paths && !isEmpty(request.paths)
+        ? `\n${request.paths.map((path) => `  - ${path}`).join('\n')}`
+        : ''
+      const decision = await context.approval.awaitConfirmationDecision(
+        [
+          `${request.risk === 'high' ? '高风险项目操作' : '项目操作审批'}：${request.action}`,
+          request.reason ? `原因：${request.reason}` : '',
+          paths,
+        ].filter(Boolean).join('\n'),
+        context.abortSignal,
+        {
+          approvalRisk: request.risk === 'high' ? 'high' : 'low',
+          riskScope: `project:${request.risk}:${request.action}`,
+          operation: {
+            key: createApprovalOperationKey('project-operation', { action: request.action, paths: [...(request.paths ?? [])].sort() }),
+            label: request.action,
+            target: request.paths?.join(', '),
+          },
+        }
+      )
+      return decision.approved
+    },
+  }
+}
+
+export { installProjectApprovalProvider, withProjectApproval }
+export type { ProjectApprovalContext }
