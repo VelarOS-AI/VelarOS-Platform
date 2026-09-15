@@ -364,7 +364,7 @@ function gitSubcommandDanger(subcommand: string, args: readonly string[]): Nulla
     case 'push':
       return hasGitOption(args, 'f', '--force') || hasGitOption(args, null, '--force-with-lease') || hasGitOption(args, null, '--force-if-includes') ? GitForcePushReason : null
     case 'branch':
-      return hasGitOption(args, 'D', null) || (hasGitOption(args, 'd', '--delete') && hasGitOption(args, 'f', '--force')) ? GitForceBranchDeleteReason : null
+      return args.some((argument) => /^-[A-Za-z]*D[A-Za-z]*$/.test(argument)) || (hasGitOption(args, 'd', '--delete') && hasGitOption(args, 'f', '--force')) ? GitForceBranchDeleteReason : null
     default:
       return null
   }

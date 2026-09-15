@@ -262,7 +262,7 @@ export interface SystemFileOperationsApi {
    * 抛出的错误 cause.details 里列出每个问题（第几个文件、第几处、原因；多处匹配带锚点，重叠标明另一处），context.executionOutcome 是 not-applied，调用方可以只改出问题的那一处再来一次。
    * 匹配只在各自的 range 里做，不在整个文件里找。
    * 只给 restore：把文件回到那个版本；回滚前的内容也留成一个版本，回滚本身能再回滚。
-   * 每次改动前把原内容留成一个版本，结果里给出新版本号和改动前的版本号；改了几处的结果还返回盖住所有改动那段的新内容和它的新位置，不用再读一遍确认。
+   * 每次改动前把原内容留成一个版本，结果里给出新版本号和改动前的版本号；改了几处的结果还返回每处新文本前后各 200 字符的小段，盖住所有改动那段不超过 2 万字符时整段也给，不用再读一遍确认。
    * 自动适配文件的换行风格，沿用原编码。写到一半出错原样报错，不标 not-applied，已写的文件在 context.applied 里点名。
    */
   edit(input: SystemEditInput, ctx: SystemToolContext): Promise<SystemEditResult>

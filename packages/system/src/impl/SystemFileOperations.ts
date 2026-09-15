@@ -10,7 +10,7 @@ import { dirname, isAbsolute, resolve } from 'node:path'
 import { isArray, isEmpty, isNotNull, isNull, isPresent, Log } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import type { SystemEditFileInput, SystemEditFileResult, SystemEditInput, SystemEditProblem, SystemEditResult, SystemReadFileInput, SystemReadFileResult, SystemReadInput, SystemReadResult, SystemTextEncoding, SystemTextRange, SystemViewFileInput, SystemViewFileResult, SystemViewInput, SystemViewResult } from '../contract/files.js'
+import type { SystemEditFileInput, SystemEditFileResult, SystemEditInput, SystemEditProblem, SystemEditReplacedResult, SystemEditResult, SystemEditWindow, SystemReadFileInput, SystemReadFileResult, SystemReadInput, SystemReadResult, SystemTextEncoding, SystemTextRange, SystemViewFileInput, SystemViewFileResult, SystemViewInput, SystemViewResult } from '../contract/files.js'
 import type { SystemFileHistoryApi, SystemFileOperationsApi } from '../interface/internal.js'
 import type { SystemPlatformCompatibilityApi } from '../interface/provides.js'
 import type { SystemToolContext } from '../interface/requires.js'
@@ -246,11 +246,19 @@ class SystemFileOperations implements SystemFileOperationsApi {
     const buffer = encodeSystemTextContent(updated, plan.textFile.encoding)
     const previousVersion = this.history.remember(plan.path, plan.textFile.buffer)
     await writeSystemFileAtomically(plan.path, buffer)
-    // 改完把盖住所有改动那段（各处 range 的并集）的新样子一起交回去，位置按改动前后的长度差挪；太长就截到读的上限。
-    const delta = plan.ordered.reduce((sum, target) => sum + target.newText.length - (target.range.end - target.range.offset), 0)
-    const union = { offset: Math.min(...plan.scopes.map((scope) => scope.offset)), end: Math.max(...plan.scopes.map((scope) => scope.end)) + delta }
-    const window = clampTextRange(updated, { offset: union.offset, end: Math.min(union.end, union.offset + SystemFileLimits.readChars) })
-    return {
+    // 改完每处都交回新文本前后各一小段；盖住所有改动那段（各处 range 的并集）不长时整段也给，位置按改动前后的长度差挪。
+    const windows: SystemEditWindow[] = []
+    let shift = 0
+    for (const target of plan.ordered) {
+      const start = target.range.offset + shift
+      const end = start + target.newText.length
+      const around = clampTextRange(updated, { offset: start - SystemFileLimits.editContextChars, end: end + SystemFileLimits.editContextChars })
+      windows.push({ edit: target.edit, range: around, content: updated.slice(around.offset, around.end) })
+      shift += target.newText.length - (target.range.end - target.range.offset)
+    }
+    windows.sort((a, b) => a.edit - b.edit)
+    const union = clampTextRange(updated, { offset: Math.min(...plan.scopes.map((scope) => scope.offset)), end: Math.max(...plan.scopes.map((scope) => scope.end)) + shift })
+    const result: SystemEditReplacedResult = {
       path: plan.path,
       action: 'replaced',
       edits: plan.ordered.length,
@@ -258,10 +266,13 @@ class SystemFileOperations implements SystemFileOperationsApi {
       previousVersion,
       bytes: buffer.byteLength,
       totalChars: updated.length,
-      content: updated.slice(window.offset, window.end),
-      range: window,
-      hasMore: window.end < updated.length,
+      windows,
     }
+    if (union.end - union.offset <= SystemFileLimits.editWholeChars) {
+      result.content = updated.slice(union.offset, union.end)
+      result.range = union
+    }
+    return result
   }
 
   /** 读一个文件：按字符取一段，最多 remaining 个（还受文件自己的 maxChars 和总上限约束）；给 version 就读改动前留下的那个版本。 */

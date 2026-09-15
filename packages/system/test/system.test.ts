@@ -306,7 +306,9 @@ describe('System capability', () => {
           { range: whole.range, oldText: 'name = "a"', newText: 'name = "ab"' },
         ],
       })
-      expect(confirmed).toMatchObject({ action: 'replaced', edits: 2, content: 'name = "ab"\nport = 80\nport = 8080\n', range: { offset: 0, end: 34 }, hasMore: false, previousVersion: written.version })
+      expect(confirmed).toMatchObject({ action: 'replaced', edits: 2, content: 'name = "ab"\nport = 80\nport = 8080\n', range: { offset: 0, end: 34 }, previousVersion: written.version })
+      if (confirmed.action !== 'replaced') throw new Error('expected replaced')
+      expect(confirmed.windows.map((window) => [window.edit, window.range, window.content])).toEqual([[0, { offset: 0, end: 34 }, 'name = "ab"\nport = 80\nport = 8080\n'], [1, { offset: 0, end: 34 }, 'name = "ab"\nport = 80\nport = 8080\n']])
       expect(await readFile(path, 'utf8')).toBe('name = "ab"\nport = 80\nport = 8080\n')
 
       // 任何一处定不下来整个文件就不动，而且所有问题一次报完：第一处找不到，第二处多处匹配。
@@ -325,14 +327,14 @@ describe('System capability', () => {
       const window = await readOne({ path, offset: 12, maxChars: 10 })
       expect(window.content).toBe('port = 80\n')
       const replaced = await editOne({ path, edits: [{ range: window.range, oldText: 'port = 80', newText: 'port = 8080' }] })
-      expect(replaced).toMatchObject({ action: 'replaced', edits: 1, content: 'port = 8080\n', range: { offset: 12, end: 24 } })
+      expect(replaced).toMatchObject({ action: 'replaced', edits: 1, content: 'port = 8080\n', range: { offset: 12, end: 24 }, windows: [{ edit: 0, range: { offset: 0, end: 36 } }] })
       expect(await readFile(path, 'utf8')).toBe('name = "ab"\nport = 8080\nport = 8080\n')
 
       const swapped = await editOne({ path, edits: [{ range: { offset: 0, end: 12 }, newText: 'name = "b"\n' }] })
       expect(swapped).toMatchObject({ action: 'replaced', content: 'name = "b"\n' })
       expect(await readFile(path, 'utf8')).toBe('name = "b"\nport = 8080\nport = 8080\n')
       const inserted = await editOne({ path, edits: [{ range: { offset: 0, end: 0 }, newText: '# top\n' }] })
-      expect(inserted).toMatchObject({ action: 'replaced', content: '# top\n', range: { offset: 0, end: 6 } })
+      expect(inserted).toMatchObject({ action: 'replaced', content: '# top\n', range: { offset: 0, end: 6 }, windows: [{ edit: 0, range: { offset: 0, end: 41 } }] })
       expect(await readFile(path, 'utf8')).toBe('# top\nname = "b"\nport = 8080\nport = 8080\n')
 
       const overwritten = await editOne({ path, newText: 'fresh\n' })
@@ -412,6 +414,24 @@ describe('System capability', () => {
       expect(applied.files[0]).toMatchObject({ action: 'written' })
 
       await expect(systemFileOperations.edit({ files: [] }, approvingContext)).rejects.toThrow('files is empty')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('a long edited span only comes back as per-edit windows', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'velaros-system-edit-long-'))
+    const path = join(root, 'long.txt')
+    try {
+      await writeFile(path, `${'x'.repeat(30_000)  }NEEDLE${  'y'.repeat(30_000)}`)
+      const whole = await readOne({ path })
+      const replaced = await editOne({ path, edits: [{ range: whole.range, oldText: 'NEEDLE', newText: 'THREAD' }] })
+      if (replaced.action !== 'replaced') throw new Error('expected replaced')
+      expect(replaced.content).toBeUndefined()
+      expect(replaced.range).toBeUndefined()
+      expect(replaced.windows).toHaveLength(1)
+      expect(replaced.windows[0]).toMatchObject({ edit: 0, range: { offset: 29_800, end: 30_206 } })
+      expect(replaced.windows[0]!.content).toBe(`${'x'.repeat(200)  }THREAD${  'y'.repeat(200)}`)
     } finally {
       await rm(root, { recursive: true, force: true })
     }

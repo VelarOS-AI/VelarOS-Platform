@@ -131,7 +131,14 @@ export interface SystemEditWrittenResult {
   totalChars: number
 }
 
-/** 改了几处的结果：edits 是改了几处；content 是盖住所有改动那段（各处 range 的并集）改后的新内容，range 是它在新文件里的位置，不用再读一遍确认；这段超过 20 万字符时截到上限，hasMore 为真。 */
+/** 一处改动改完后的样子：edit 是 edits 里第几处，content 是新文本前后各带 200 字符的原文，range 是这段在新文件里的位置。 */
+export interface SystemEditWindow {
+  edit: number
+  range: SystemTextRange
+  content: string
+}
+
+/** 改了几处的结果：edits 是改了几处，windows 每处一段新文本前后各 200 字符；盖住所有改动那段（各处 range 的并集）不超过 2 万字符时，content 和 range 整段给出，不用再读一遍确认；超过就只有 windows。 */
 export interface SystemEditReplacedResult {
   path: string
   action: 'replaced'
@@ -140,9 +147,9 @@ export interface SystemEditReplacedResult {
   previousVersion: Nullable<string>
   bytes: number
   totalChars: number
-  content: string
-  range: SystemTextRange
-  hasMore: boolean
+  windows: SystemEditWindow[]
+  content?: string
+  range?: SystemTextRange
 }
 
 /** 回滚的结果：文件回到 version 那个版本，回滚前的内容留成 previousVersion，回滚本身也能再回滚。 */

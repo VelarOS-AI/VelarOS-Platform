@@ -117,7 +117,7 @@ const editTool = defineSystemTool<{
 }>({
   name: SystemToolNames.edit,
   role: 'edit',
-  summary: '写文件：files 每项一个文件；newText 整个写入，edits 改文件里的几处，restore 回滚到某个版本。一批全成或全不成；改完返回改动那段的新内容和新版本号，不用再读。',
+  summary: '写文件：files 每项一个文件；newText 整个写入，edits 改文件里的几处，restore 回滚到某个版本。一批全成或全不成；改完返回每处的新样子和新版本号，不用再读。',
   suitable: ['新建脚本、配置、笔记等文本文件。', '改配置或脚本里的一处或几处。', '一次改一批文件。'],
   forbidden: ['复制、移动、删除、改权限用 system:run。'],
   usage: [
@@ -141,7 +141,7 @@ const editTool = defineSystemTool<{
       ],
     },
   ],
-  notes: ['写系统敏感路径会先向用户确认。改完之后 range 都以新内容为准，别再拿旧的 range 改同一个文件。'],
+  notes: ['写系统敏感路径会先向用户确认。改完之后 windows 每处带新位置，改动那段不超过 20000 字符时 content 和 range 整段给出；旧的 range 已经作废，再改同一个文件用新的。'],
   inputReuse: true,
   schema: z.object({
     files: z.array(z.object({
