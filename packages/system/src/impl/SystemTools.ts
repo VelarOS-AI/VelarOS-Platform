@@ -200,12 +200,12 @@ const runTool = defineSystemTool<{
     '生成命令前读取当前运行环境报告的 shell.kind/name；Windows 按 Git Bash、PowerShell 7、Windows PowerShell、CMD 的可用性选择，并推荐安装 Git for Windows。',
     '严格使用实际 shell 的语法：Git Bash/POSIX 使用 command -v 和 $NAME；PowerShell 使用 Get-Command 和 $env:NAME；CMD 使用 where 和 %NAME%。刷新环境后按新的 shell 重新生成命令。',
     '命令执行失败后先诊断原始退出码和输出；切换 shell 需要重新生成匹配语法的命令，避免重复执行副作用。',
-    '长期服务传 background=true；危险命令会走确认流程。后台命令的状态用返回的 statusContinuation 查；回执里有 outputContinuation 时用它取完整输出，没有就只有结尾窗口。不要用 job:*，也不要把内部 logPath 当普通文件读。',
+    '长期服务传 background=true；危险命令会走确认流程。后台命令的状态用返回的 statusContinuation 查；回执里有 outputContinuation 时用它取更多输出，没有就用 system:list-tasks 条目里的 recentOutput（末尾 4000 字符）。不要用 job:*，也不要把内部 logPath 当普通文件读。',
     '输出可能很长时设置 maxOutputChars；返回窗口固定保留结尾，outputWindow.endPreserved=true 时可直接信任末尾内容。',
   ],
   usage: [
     '传 command；需要特定目录时传 cwd。',
-    '命令会问用户口令、y/n 或选项时传 interactive=true：命令在控制台里跑，用户在卡片里输入，本次调用立刻返回，之后用 system:list-tasks 或 outputContinuation 看结果。',
+    '命令会问用户口令、y/n 或选项时传 interactive=true：命令在控制台里跑，用户在卡片里输入，本次调用立刻返回，之后用 system:list-tasks 看结果（recentOutput 是末尾 4000 字符）。',
     '停后台任务时执行 system:list-tasks 条目里的 terminateCommand 或 forceTerminateCommand，不要自己拼 pid。',
   ],
   examples: [{ command: 'git --version', maxOutputChars: 2000 }],
@@ -269,7 +269,7 @@ const runTool = defineSystemTool<{
     // 交给宿主执行
     const result = await ctx.system.runCommand(
       command,
-      { cwd: commandCwd, timeoutMs, background: shouldRunInBackground, interactive, maxOutputChars },
+      { cwd: commandCwd, timeoutMs, background: shouldRunInBackground, interactive, maxOutputChars, sessionId: ctx.sessionId },
       plan.isDangerous,
       ctx.abortSignal
     )
@@ -301,16 +301,16 @@ const runTool = defineSystemTool<{
 const refreshEnvironmentTool = defineSystemTool<Record<string, unknown>>({
   name: SystemToolNames.refreshEnvironment,
   role: 'control',
-  summary: '刷新登录 shell 环境缓存。',
-  suitable: ['刚安装 CLI、改了 shell 配置或发现 PATH 里缺命令时重新加载环境，让后续命令看到最新的 PATH 和环境变量。'],
+  summary: '刷新宿主进程的 shell 环境：Windows 上重读用户与系统环境变量并写回本进程；其他平台重新选定 shell（每条命令本来就经登录 shell 重读配置）。',
+  suitable: ['Windows 上刚安装 CLI、改了环境变量后 PATH 里还缺命令时刷新一次，让后续命令看到新的 PATH。'],
   forbidden: [
       '不要把它当作命令存在性检查；检查命令可用性用 system:run（Windows 用 where，macOS/Linux 用 command -v）。',
-      '不要在宿主环境未允许刷新 shell 时反复调用。',
+      '同一个问题只刷新一次；刷新后还缺就是没装，不要反复调用。',
     ],
   protocol: [
       '先确认缺失命令或 PATH 变化，再刷新；刷新后用 system:run 按宿主 shell 语法验证目标命令是否可见。',
     ],
-  notes: ['只重新加载宿主进程的环境，不会改用户的 shell 配置文件。'],
+  notes: ['只改宿主进程的环境，不会改用户的 shell 配置文件；结果里的 reason 说明 Windows 上为什么没刷新成功。'],
   // 没有参数就不校验：传了什么都不报错，只在结果里提醒一句。
   schema: z.record(z.string(), z.unknown()),
   permissions: [],
@@ -351,7 +351,7 @@ const listTasksTool = defineSystemTool<{
     // 只看还在运行的
     { onlyRunning: true },
     // 精确查询 system:run 返回的后台任务
-    { taskId: 'task-abc123' },
+    { taskId: '3f6c2c2e-8a1d-4b7e-9c2a-6f1e0d2b4a55' },
   ],
   notes: ['taskId 只在这里和 system:run 之间流转，不交给 job:*。', '要停掉任务，用 system:run 执行条目里的 terminateCommand；强制停用 forceTerminateCommand。'],
   schema: z.strictObject({
@@ -375,6 +375,7 @@ const listTasksTool = defineSystemTool<{
       limit: taskId ? undefined : limit,
       onlyRunning,
       taskId,
+      sessionId: ctx.sessionId,
     })
 
     return {

@@ -6,6 +6,7 @@ import { join, resolve } from 'node:path'
 
 import { describe, expect, test } from 'bun:test'
 
+import { createLocalSystemKernel } from '../src/impl/LocalSystemKernel.js'
 import { systemCommandPolicy } from '../src/impl/SystemCommandPolicy.js'
 import { systemFileOperations } from '../src/impl/SystemFileOperations.js'
 import { SystemGlobalSearch } from '../src/impl/SystemGlobalSearch.js'
@@ -457,9 +458,9 @@ describe('System capability', () => {
       expect(duplicated.problems[0]).toMatchObject({ file: 1, reason: 'invalid', message: expect.stringContaining('more than once') })
       expect(await readFile(path, 'utf8')).toBe('two\n')
 
-      // range 落在文件外：不静默追加，按 stale 报。
+      // range 的起点落在文件外：不静默追加，按 stale 报（终点越界只是钳到文件末尾）。
       const outside = await problemsOf(editOne({ path, edits: [{ range: { offset: 5000, end: 5010 }, newText: 'APPENDED' }] }))
-      expect(outside.problems[0]).toMatchObject({ edit: 0, reason: 'stale', message: expect.stringContaining('outside the file') })
+      expect(outside.problems[0]).toMatchObject({ edit: 0, reason: 'stale', message: expect.stringContaining('read it again') })
       expect(await readFile(path, 'utf8')).toBe('two\n')
 
       // 重叠出现也算多处：'aaa' 里找 'aa' 有两处。
@@ -628,6 +629,105 @@ describe('System capability', () => {
       expect(systemCommandPolicy.isReadOnly('time ls')).toBe(true)
       expect(systemCommandPolicy.isReadOnly('env rm -rf x')).toBe(false)
     } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('edit clamps a range end past the file, rejects a reversed range, adapts line endings within the range, and writes through dangling links', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'velaros-system-range-'))
+    try {
+      const short = join(root, 'short.txt')
+      await writeFile(short, 'export EDITOR=vim\n')
+      const clamped = await editOne({ path: short, edits: [{ range: { offset: 0, end: 1200 }, oldText: 'vim', newText: 'code' }] })
+      expect(clamped.action).toBe('replaced')
+      expect(await readFile(short, 'utf8')).toBe('export EDITOR=code\n')
+      const reversed = await problemsOf(systemFileOperations.edit({ files: [{ path: short, edits: [{ range: { offset: 4, end: 2 }, newText: 'x' }] }] }, approvingContext))
+      expect(reversed.problems[0]).toMatchObject({ edit: 0, reason: 'invalid' })
+      const beyond = await problemsOf(systemFileOperations.edit({ files: [{ path: short, edits: [{ range: { offset: 999, end: 1000 }, newText: 'x' }] }] }, approvingContext))
+      expect(beyond.problems[0]).toMatchObject({ edit: 0, reason: 'stale' })
+
+      // 换行风格只看 range 里那一段：前半段 LF、后半段 CRLF 时，用 LF 写的 oldText 也能匹配 CRLF 那一段。
+      const mixed = join(root, 'mixed.txt')
+      await writeFile(mixed, 'P\nQ\n#####\nP\r\nQ\r\n')
+      const adapted = await editOne({ path: mixed, edits: [{ range: { offset: 10, end: 16 }, oldText: 'P\nQ', newText: 'X\nY' }] })
+      expect(adapted.action).toBe('replaced')
+      expect(await readFile(mixed, 'utf8')).toBe('P\nQ\n#####\nX\r\nY\r\n')
+
+      // 悬空的符号链接：写到它指向的路径，链接还是链接。
+      const dangling = join(root, 'dead.link')
+      await symlink(join(root, 'never-existed.txt'), dangling)
+      const created = await systemFileOperations.edit({ files: [{ path: dangling, newText: 'born\n' }] }, approvingContext)
+      expect(created.files[0]).toMatchObject({ action: 'written', created: true, target: join(await realpath(root), 'never-existed.txt') })
+      expect((await lstat(dangling)).isSymbolicLink()).toBe(true)
+      expect(await readFile(join(root, 'never-existed.txt'), 'utf8')).toBe('born\n')
+
+      // 父路径是文件：计划期就报出来，入参可复用。
+      const blocker = join(root, 'file.txt')
+      await writeFile(blocker, 'x')
+      const blocked = await problemsOf(systemFileOperations.edit({ files: [{ path: join(blocker, 'child.txt'), newText: 'y' }] }, approvingContext))
+      expect(blocked.problems[0]).toMatchObject({ file: 0, reason: 'invalid' })
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('edit refuses oversized files before reading them, and whole-file writes above the snapshot limit keep the encoding but no version', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'velaros-system-large-'))
+    try {
+      const big = join(root, 'big.txt')
+      await writeFile(big, 'x'.repeat(3 * 1024 * 1024))
+      const tooBigToEdit = await problemsOf(systemFileOperations.edit({ files: [{ path: big, edits: [{ range: { offset: 0, end: 1 }, newText: 'y' }] }] }, approvingContext))
+      expect(String(tooBigToEdit.problems[0]!.message)).toContain('too large for edit')
+      const rewritten = await editOne({ path: big, newText: 'small again\n' })
+      expect(rewritten).toMatchObject({ action: 'written', previousVersion: null })
+      expect(await readFile(big, 'utf8')).toBe('small again\n')
+
+      const huge = join(root, 'huge.txt')
+      await writeFile(huge, Buffer.alloc(21 * 1024 * 1024, 0x61))
+      const refused = await problemsOf(systemFileOperations.edit({ files: [{ path: huge, newText: 'nope' }] }, approvingContext))
+      expect(String(refused.problems[0]!.message)).toContain('too large to overwrite')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('sensitive-path judgement covers /Applications and files directly under the root', () => {
+    expect(isSensitiveSystemMutationPath('/Applications/Foo.app/Contents/MacOS/foo', { homeDir: '/Users/someone', platform: 'darwin' })).toBe(true)
+    expect(isSensitiveSystemMutationPath('/velaros-root-file', { homeDir: '/Users/someone', platform: 'darwin' })).toBe(true)
+    expect(isSensitiveSystemMutationPath('/tmp/velaros-x/file', { homeDir: '/Users/someone', platform: 'darwin' })).toBe(false)
+    expect(isSensitiveSystemMutationPath('/Users/someone/Documents/notes.txt', { homeDir: '/Users/someone', platform: 'darwin' })).toBe(false)
+  })
+
+  test('run and list-tasks hand the session id to the host port', async () => {
+    const seen: Array<Record<string, unknown>> = []
+    const port = {
+      resolvePath: (path = process.cwd()) => resolve(path),
+      runCommand: async (_command: string, options: Record<string, unknown>) => { seen.push({ run: options }); return { stdout: '', stderr: '', exitCode: 0, truncated: false, success: true, verification: {} } },
+      listBackgroundTasks: async (options: Record<string, unknown>) => { seen.push({ list: options }); return [] },
+    }
+    const session: SystemToolContext = { ...approvingContext, sessionId: 'session-42', system: port as never } as SystemToolContext
+    await systemTools['system:run']!.execute({ command: 'true' }, session)
+    await systemTools['system:list-tasks']!.execute({}, session)
+    expect(seen[0]!.run).toMatchObject({ sessionId: 'session-42' })
+    expect(seen[1]!.list).toMatchObject({ sessionId: 'session-42' })
+  })
+
+  test.skipIf(process.platform === 'win32')('background tasks belong to their session, a missing cwd is reported as such, and dispose empties the task table', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'velaros-system-session-'))
+    const kernel = createLocalSystemKernel({ cwd: root })
+    try {
+      await expect(kernel.runCommand('true', { cwd: join(root, 'missing') })).rejects.toMatchObject({ code: 'NOT_FOUND' })
+      const started = await kernel.runCommand('sleep 30', { background: true, sessionId: 'owner' })
+      const taskId = started.backgroundProcess!.taskId!
+      expect(await kernel.listBackgroundTasks({ sessionId: 'someone-else' })).toEqual([])
+      expect((await kernel.listBackgroundTasks({ sessionId: 'owner' })).map((task) => task.id)).toEqual([taskId])
+      await expect(kernel.terminateBackgroundTask({ taskId, sessionId: 'someone-else' })).rejects.toMatchObject({ code: 'PERMISSION' })
+      const stopped = await kernel.terminateBackgroundTask({ taskId, sessionId: 'owner', force: true })
+      expect(stopped.statusAfter).not.toBe('running')
+      await kernel.dispose()
+      expect(await kernel.listBackgroundTasks({})).toEqual([])
+    } finally {
+      await kernel.dispose()
       await rm(root, { recursive: true, force: true })
     }
   })

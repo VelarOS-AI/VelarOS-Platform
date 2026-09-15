@@ -4,7 +4,7 @@
 
 import { createHash } from 'node:crypto'
 import type { Stats } from 'node:fs'
-import { readFile, stat } from 'node:fs/promises'
+import { open, readFile, stat } from 'node:fs/promises'
 
 import { AppError } from '@velaros-ai/core/error'
 
@@ -49,6 +49,18 @@ export function stampOf(stats: Nullable<Stats>): Nullable<SystemFileStamp> {
 export function stampProvesUnchanged(before: Nullable<SystemFileStamp>, now: Nullable<SystemFileStamp>): boolean {
   if (!before || !now) return false
   return before.mtimeMs === now.mtimeMs && before.size === now.size && before.size > AlwaysRehashBytes
+}
+
+/** 只读文件开头的一段字节（认编码、判二进制用），不把整个文件读进来。 */
+export async function readFileHead(resolvedPath: string, bytes: number): Promise<Buffer> {
+  const handle = await open(resolvedPath, 'r')
+  try {
+    const buffer = Buffer.alloc(bytes)
+    const { bytesRead } = await handle.read(buffer, 0, bytes, 0)
+    return buffer.subarray(0, bytesRead)
+  } finally {
+    await handle.close()
+  }
 }
 
 /** 文件现在的版本号：不存在或不是普通文件就是 null。 */

@@ -9,12 +9,12 @@ import { dirname } from 'node:path'
 import { isArray, isEmpty, isNotNull, isNull, isPresent, Log, toOptional } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import type { SystemEditFileInput, SystemEditFileResult, SystemEditInput, SystemEditPlan, SystemEditProblem, SystemEditReplacedResult, SystemEditResult, SystemEditTarget, SystemEditWindow, SystemReadFileInput, SystemReadFileResult, SystemReadInput, SystemReadResult, SystemTextFileContent, SystemTextRange, SystemViewFileInput, SystemViewFileResult, SystemViewInput, SystemViewResult } from '../contract/files.js'
+import type { SystemEditFileInput, SystemEditFileResult, SystemEditInput, SystemEditPlan, SystemEditProblem, SystemEditReplacedResult, SystemEditResult, SystemEditTarget, SystemEditWindow, SystemReadFileInput, SystemReadFileResult, SystemReadInput, SystemReadResult, SystemTextEncoding, SystemTextFileContent, SystemTextRange, SystemViewFileInput, SystemViewFileResult, SystemViewInput, SystemViewResult } from '../contract/files.js'
 import type { SystemPlatformCompatibilityApi } from '../interface/provides.js'
 import type { SystemToolContext } from '../interface/requires.js'
 import { assertFileBatchSize, failureEntry, staleProblem, unresolvedEditFailure, withLinkTarget } from '../utils/file-batch.js'
 import { comparisonPath, confirmCredentialAccess, confirmSensitiveSystemMutation, realPathForSafety } from '../utils/file-safety.js'
-import { writeSystemFileAtomically } from '../utils/fs.js'
+import { readErrnoCode, writeSystemFileAtomically } from '../utils/fs.js'
 import { adaptReplacementLineEndings, findOccurrences } from '../utils/text.js'
 import {
   clampTextRange,
@@ -24,6 +24,7 @@ import {
   encodeSystemTextContent,
   fileVersionOf,
   readBoundedFile,
+  readFileHead,
   readRawSystemFileBuffer,
   readSystemTextFile,
   readTextWindow,
@@ -42,6 +43,8 @@ const log = Log.tag('SystemFileOperations')
 const AnchorContextChars = 80
 /** 多处匹配时最多列出多少个锚点：失败回执里每个数组只保留 10 项。 */
 const MaxAnchors = 10
+/** 超过可编辑上限的文件整个写入前只读开头这么多字节，认编码、拒二进制。 */
+const TextSniffBytes = 8192
 
 /**
  * 三个文件操作：读文本、看图片与 PDF、写。`system:read`、`system:view`、`system:edit` 各调一个方法；列目录和搜文本由 `system:run` 用系统命令做。
@@ -212,10 +215,14 @@ class SystemFileOperations implements SystemFileOperationsApi {
     const existing = await stat(target).catch(() => null)
     if (existing?.isDirectory()) return problem(`path is a directory, not a file: ${resolvedPath}`)
     const stamp = stampOf(existing)
+    // 父路径已经存在却不是目录，写入注定失败，在计划期就报出来（缺失的父目录写的时候会补建）。
+    const parentCode = await stat(dirname(target)).then((parent) => (parent.isDirectory() ? null : 'ENOTDIR')).catch((error: unknown) => readErrnoCode(error))
+    if (parentCode === 'ENOTDIR') return problem(`the parent path is not a directory: ${dirname(target)}`)
 
     if (isPresent(file.restore)) {
       const snapshot = this.history.recall(target, file.restore)
       if (!snapshot) return problem(`version ${file.restore} is not in history; only the last few versions before edits are kept, in memory`, { reason: 'not-found' })
+      if (existing?.isFile() && existing.size > SystemFileLimits.fileBytes) return problem(`the existing file is too large to restore over here: ${existing.size} bytes > ${SystemFileLimits.fileBytes} bytes`)
       const current = existing?.isFile() ? await readRawSystemFileBuffer(target) : null
       const baseVersion = current ? fileVersionOf(current) : null
       const stale = staleProblem(file.version, baseVersion)
@@ -225,27 +232,36 @@ class SystemFileOperations implements SystemFileOperationsApi {
 
     if (isPresent(file.newText)) {
       if (file.newText.includes('\0')) return problem('newText contains binary data and cannot be written as text')
+      if (existing?.isFile() && existing.size > SystemFileLimits.fileBytes) return problem(`the existing file is too large to overwrite here: ${existing.size} bytes > ${SystemFileLimits.fileBytes} bytes; replace it with system:run`)
       let previous: Nullable<SystemTextFileContent> = null
+      let encoding: SystemTextEncoding = 'utf8'
       if (existing?.isFile()) {
         // 已有的文件必须是文本才许整个覆盖：二进制文件被 newText 盖掉就没了，也留不下能回滚的版本。
+        // 不超过可编辑上限的整个读进来留版本；更大的留不下版本，只读开头一段认编码、拒二进制。
         try {
-          previous = await readSystemTextFile(target)
+          if (existing.size <= SystemFileLimits.editableBytes) {
+            previous = await readSystemTextFile(target)
+            encoding = previous.encoding
+          } else {
+            encoding = decodeSystemTextBuffer(await readFileHead(target, TextSniffBytes), target).encoding
+          }
         } catch (error) {
           const failure = AppError.from(error)
           log.debug('an existing file cannot be overwritten as text', { path: target, code: failure.code })
           return problem(`the existing file cannot be rewritten as text (${failure.message}); replace binary files with system:run`, { reason: failure.code === 'PERMISSION' ? 'denied' : 'invalid' })
         }
       }
-      const baseVersion = previous ? fileVersionOf(previous.buffer) : null
+      const baseVersion = previous ? fileVersionOf(previous.buffer) : existing?.isFile() ? await currentFileVersion(target) : null
       const stale = staleProblem(file.version, baseVersion)
       if (stale) return problem(stale.message, stale)
-      return { kind: 'write', index, path: resolvedPath, target, created: !existing, previous, newText: file.newText, baseVersion, stamp }
+      return { kind: 'write', index, path: resolvedPath, target, created: !existing, previous, encoding, newText: file.newText, baseVersion, stamp }
     }
 
     const edits = file.edits ?? []
     if (isEmpty(edits)) return problem('edits is empty; give at least one place to change')
     if (edits.length > SystemFileLimits.editsPerFile) return problem(`at most ${SystemFileLimits.editsPerFile} edits per file; got ${edits.length}, split them`)
     if (!existing) return problem(`file not found: ${resolvedPath}`, { reason: 'not-found' })
+    if (existing.size > SystemFileLimits.editableBytes) return problem(`file is too large for edit: ${existing.size} bytes > ${SystemFileLimits.editableBytes} bytes; change it with system:run`)
     let textFile: SystemTextFileContent
     try {
       textFile = await readSystemTextFile(target)
@@ -254,7 +270,6 @@ class SystemFileOperations implements SystemFileOperationsApi {
       log.debug('a file in an edit batch could not be read', { path: target, code: failure.code })
       return problem(failure.message, { reason: failure.code === 'NOT_FOUND' ? 'not-found' : failure.code === 'PERMISSION' ? 'denied' : 'invalid' })
     }
-    if (textFile.buffer.byteLength > SystemFileLimits.editableBytes) return problem(`file is too large for edit: ${textFile.buffer.byteLength} bytes > ${SystemFileLimits.editableBytes} bytes`)
     const baseVersion = fileVersionOf(textFile.buffer)
     const stale = staleProblem(file.version, baseVersion)
     if (stale) return problem(stale.message, stale)
@@ -269,15 +284,17 @@ class SystemFileOperations implements SystemFileOperationsApi {
     for (const [edit, change] of edits.entries()) {
       const at = (message: string, extra: Partial<SystemEditProblem> = {}): void => { problems.push({ file: index, path: resolvedPath, reason: 'invalid', message, edit, ...extra }) }
       if (change.newText.includes('\0')) { at('newText contains binary data and cannot be written as text'); continue }
-      if (change.range.end < change.range.offset || change.range.offset > content.length || change.range.end > content.length) {
-        at(`range ${change.range.offset}-${change.range.end} lies outside the file, which has ${content.length} characters; read it again`, { reason: 'stale', currentVersion: baseVersion })
+      if (change.range.end < change.range.offset) { at(`range ${change.range.offset}-${change.range.end} is reversed; end must not be before offset`); continue }
+      // 起点已经落在文件外，说明位置来自过期的内容；终点越界只是读到的段比现在长，收进文件长度即可。
+      if (change.range.offset > content.length) {
+        at(`range starts at ${change.range.offset} but the file only has ${content.length} characters; read it again`, { reason: 'stale', currentVersion: baseVersion })
         continue
       }
       const scope = clampTextRange(content, change.range)
       scopes.push(scope)
       if (!isPresent(change.oldText)) { targets.push({ edit, range: scope, newText: change.newText }); continue }
       if (isEmpty(change.oldText)) { at('oldText is empty; leave it out to replace the whole range'); continue }
-      const replacement = adaptReplacementLineEndings(content, change.oldText, change.newText)
+      const replacement = adaptReplacementLineEndings(content.slice(scope.offset, scope.end), change.oldText, change.newText)
       // 只需要知道唯一不唯一和前 MaxAnchors 个锚点，多找一个就停，大文件里的短 oldText 不会扫出百万个匹配。
       const matches = findOccurrences(content, replacement.oldText, scope, MaxAnchors + 1)
       if (isEmpty(matches)) { at(`oldText was not found within range ${scope.offset}-${scope.end}; read that range again`, { reason: 'not-found' }); continue }
@@ -318,7 +335,7 @@ class SystemFileOperations implements SystemFileOperationsApi {
     }
     if (plan.kind === 'write') {
       const previousVersion = plan.previous ? this.history.remember(plan.target, plan.previous.buffer) : null
-      const buffer = encodeSystemTextContent(plan.newText, plan.previous?.encoding ?? 'utf8')
+      const buffer = encodeSystemTextContent(plan.newText, plan.encoding)
       await mkdir(dirname(plan.target), { recursive: true })
       await writeSystemFileAtomically(plan.target, buffer)
       return { path: plan.path, action: 'written', created: plan.created, version: fileVersionOf(buffer), previousVersion, bytes: buffer.byteLength, totalChars: plan.newText.length }
@@ -384,8 +401,9 @@ class SystemFileOperations implements SystemFileOperationsApi {
   /** 看一张图片：整张作为内容块交给模型，返回元数据、内容块和一行说明；不是模型认得的图片就报错。 */
   private async viewOne(file: SystemViewFileInput, ctx: SystemToolContext): Promise<{ entry: SystemViewFileResult; part: SystemViewResult['modelContent'][number]; label: string }> {
     const resolvedPath = this.resolvePath(file.path, ctx)
-    await confirmCredentialAccess(ctx, resolvedPath, 'read')
-    const buffer = await readBoundedFile(resolvedPath, SystemFileLimits.fileBytes)
+    const target = await realPathForSafety(resolvedPath)
+    await confirmCredentialAccess(ctx, target, 'read')
+    const buffer = await readBoundedFile(target, SystemFileLimits.fileBytes)
     const media = detectMediaType(buffer)
     if (media?.kind !== 'image') {
       throw new AppError('VALIDATION', media

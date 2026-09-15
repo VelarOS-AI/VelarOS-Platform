@@ -13,7 +13,8 @@ import {
 describe('project approval context', () => {
   test('finds git subcommands after global options and fails closed for unknown forms', () => {
     expect(isShellCommandReadOnly('git -C repo status')).toBe(true)
-    expect(isShellCommandReadOnly('git -c core.fileMode=false log -1')).toBe(true)
+    // 任何 -c 都不算只读：值可能就是要执行的程序，判据不区分 key。
+    expect(isShellCommandReadOnly('git -c core.fileMode=false log -1')).toBe(false)
     expect(isShellCommandReadOnly('git --git-dir repo/.git status')).toBe(true)
     expect(isShellCommandReadOnly('git --git-dir=repo/.git status')).toBe(true)
     expect(isShellCommandReadOnly('git -C --output=repo status')).toBe(true)

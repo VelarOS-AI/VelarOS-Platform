@@ -22,7 +22,7 @@ system:list-tasks
 ```
 
 只留 `system:run` 替代不了的：读和写把文件内容和精确匹配绕开 shell 引号，并过敏感路径审批（整个文件的重写并在 `system:edit` 里）；看图片要把内容当图交给模型（PDF 与其他文档归别的 mod）；
-后台任务表只在本包；刷新环境改的是宿主进程的环境，子进程做不到。能由普通命令稳定完成的操作直接用 `system:run`：
+后台任务表只在本包；刷新环境要把 Windows 上重读到的环境变量写回宿主进程，子进程做不到。能由普通命令稳定完成的操作直接用 `system:run`：
 列目录、搜文本、看进程和端口、终止进程、打开文件和应用。原来的 `system:list`、`system:search`、`system:processes`、
 `system:terminate-task`、`system:open`，以及更早的项目发现、开发环境摘要、诊断快捷工具，都已从模型面删除。
 

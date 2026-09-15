@@ -27,6 +27,8 @@ import type { SystemBackgroundTaskQueryOptions, SystemBackgroundTaskRecord, Syst
 export interface SystemToolContext {
   /** 本次调用的取消信号；用户取消或上层超时时触发，工具和宿主都要尽快收手。 */
   abortSignal: AbortSignal
+  /** 本次调用所属会话的标识。宿主给了，后台任务与交互式控制台就按会话登记与核对归属，别的会话列不到也停不了；不给就不隔离。 */
+  sessionId?: string
   /** 宿主端口：工具经它向宿主要系统能力。 */
   system: SystemToolSystemApi
   /** 审批端口（来自 agent 包）：写敏感路径、跑危险命令前经它向用户确认。 */

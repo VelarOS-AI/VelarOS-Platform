@@ -24,7 +24,7 @@
 | INV-4 | 危险命令的审批是高风险、手动、不可按类记忆的确认，并标明精确命令；真正的授权门在宿主的 ApprovalPort | 测试 | `spec/acceptance.test.ts` |
 | INV-5 | 受约束的进程模式没有可用后端时失败关闭，拒绝执行而不是退回裸进程 | 测试 | `spec/acceptance.test.ts` |
 | INV-6 | 约束证据如实上报：审批事实与约束事实分开记录，未受约束就写 `enforcement: none`，不冒充隔离 | 测试 | `spec/acceptance.test.ts` |
-| INV-7 | wire 面入参用严格 schema，未知字段在解析宿主上下文之前就被拒绝，并带出字段路径 | 测试 | `spec/acceptance.test.ts` |
+| INV-7 | wire 面入参用严格 schema，未知字段在解析宿主上下文之前就被拒绝，并带出字段路径；唯一例外是无参的 `system:refresh-environment`，多余字段不报错、只在结果里提醒 | 测试 | `spec/acceptance.test.ts` |
 | INV-8 | 对外只发布 canonical 的 `system:` 工具，不发布项目发现或诊断快捷工具 | 测试 | `spec/acceptance.test.ts` |
 | INV-9 | 每个工具声明权威的副作用种类，只读工具与副作用一致，一个工具只属于一个职责类别 | 测试 | `spec/acceptance.test.ts` |
 | INV-10 | 输出被截断时返回窗口保留末尾且末尾真实，并给出可执行的召回续接；后台命令的状态续接指向 `system:list-tasks`，不交给内核 `job:*` | 测试 | `spec/acceptance.test.ts` |

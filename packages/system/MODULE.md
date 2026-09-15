@@ -1,7 +1,7 @@
 # @velaros-ai/system 模块卡片
 
 > 这一页是本模块的压缩表示：读完就知道它是什么、给了外面什么、骨干链路怎么走、靠什么、状态在哪、失败什么样、哪些承诺不能破。
-> 六个工具都在 `src/impl/SystemTools.ts` 一个文件里，是最先看的地方；其次是 `src/contract/` 各文件顶部「类的接口」，每个类做什么、每个方法做什么都写在那里。代码怎么分层见最后一节「结构」。
+> 六个工具都在 `src/impl/SystemTools.ts` 一个文件里，是最先看的地方；其次是 `src/interface/` 的三个文件和各实现文件类上方的接口，每个类做什么、每个方法做什么都写在那里。代码怎么分层见最后一节「结构」。
 > 门禁：`bun run check:module-ownership`。
 
 ## 这是什么
@@ -31,7 +31,7 @@
 
 | 注入点 | 必须 | 谁给、什么时候 |
 | --- | --- | --- |
-| `SystemToolContext`，里面是宿主端口 `SystemToolSystemApi` 与上游审批端口 `ApprovalPort` | 必须 | 宿主每次调工具时给。端口只有六个方法，每个都有工具在调，门禁核对 |
+| `SystemToolContext`，里面是宿主端口 `SystemToolSystemApi` 与上游审批端口 `ApprovalPort` | 必须 | 宿主每次调工具时给。端口只有四个方法，每个都有工具在调，门禁核对 |
 | `SystemToolContextResolver`，放在 `CreateSystemKernelModuleOptions` 里 | 挂进内核且要按名调用时必须 | 创建内核模块时给 |
 | `LocalSystemKernelOptions` | 用本地内核时必须 | 创建本地内核时给 |
 | `SystemProcessConfinementProvider` | 可选 | 放在本地内核配置里，没有内置约束后端的平台靠它 |
@@ -62,12 +62,12 @@
 | `system:view` | files 每项一张图：整张作为模型可见的内容块交给模型，和用户上传一样 → 内容块按 files 的顺序排，每块前面一行说明是哪个文件；某个文件看不了只标记它那一项。PDF 与其他文档归别的 mod |
 | `system:edit` | files 每项一个文件，一批全成或全不成：路径先解开符号链接，同一文件（按真实路径）只能出现一次 → 每个文件先过审批（系统敏感路径、凭证文件，按真实路径判定），第一次被拒就整批不写、不再问后面的 → 再把每一处在原文上定下来、什么都不写（带 version 的先核对；不是合法文本的字节拒改；各处只在 read 读到的 range 里找，越界的 range 按过期报，多处匹配给锚点），定不下来就整批失败，回执 details.problems 列出第几个文件第几处出了什么问题、入参可复用 → 写之前再 stat 一次，印记变了或文件不大就重读核版本 → 按顺序写到真实路径（链接不会被换成普通文件，结果里 target 给出）：改动前把原内容留成一个版本，newText 整个写入（已有的二进制文件拒改），edits 从后往前一起套用并交回每处的新样子，restore 回滚到留下的版本 |
 | `system:run` | ① 执行前分类（只读 / 危险 / 后台）→ ② 显式 background 优先，否则按命令形态推断；`interactive` 为真时一定走后台，命令跑在控制台里等用户输入 → ③ 审批：危险命令高风险手动确认，长驻服务低风险确认 → ④ 宿主执行 → ⑤ 整形：输出窗口、召回续接、后台状态续接；要了控制台却没拿到就在 note 里说清楚宿主不支持 |
-| `system:refresh-environment` | 宿主重载 PATH 与环境变量 |
+| `system:refresh-environment` | Windows 上重读用户与系统环境变量写回宿主进程 → 重新选定并自检 shell → 返回 shell 描述与 revision |
 | `system:list-tasks` | 给了 taskId 精确查一条，否则按 limit / onlyRunning 列表 → 附 count |
 
 六个工具按两个类别分组、作为内置 mod 挂进产品、作为能力服务挂进内核，也在 `SystemTools.ts` 的末尾；挂进内核后每次调用先严格解析入参，再向宿主解析上下文。
 
-宿主侧的第二段链路（`system:run` 的 ④ 里面发生的事）：本地内核解析 cwd，交给命令执行器 `SystemCommandRunner.run` → 选 shell（宿主给了 nativeCommand 就走原生 argv，否则按实际 shell 语法）→ 进程约束 → 受管进程启动 → 采集解码 → 超时 / 取消收敛 → 验证摘要 → 后台登记。每一步做什么见 `src/contract/commands.ts` 顶部 `SystemCommandRunnerApi` 的说明。
+宿主侧的第二段链路（`system:run` 的 ④ 里面发生的事）：本地内核解析 cwd，交给命令执行器 `SystemCommandRunner.run` → 选 shell（宿主给了 nativeCommand 就走原生 argv，否则按实际 shell 语法）→ 进程约束 → 受管进程启动 → 采集解码 → 超时 / 取消收敛 → 验证摘要 → 后台登记。每一步做什么见 `src/impl/SystemCommandRunner.ts` 类上方的 `SystemCommandRunnerApi` 的说明。
 
 ## 依赖什么
 
@@ -86,7 +86,7 @@
 - **交互式任务的控制台缓冲**：和任务表一起归命令执行器，在内存里，每个控制台留最近 10 万字符，更早的输出被挤掉时读取方会拿到 `droppedChars`；随 `dispose()` 清空。
 - **受管子进程登记表**：整个进程一份（`systemProcessManager`），已结束的进程最多保留 512 条回执，供状态查询和 pid 身份核对。
 - **文件版本历史**：文件操作持有一份，只在内存里，每个文件留最近 10 份改动前的内容、单份不超过 2 MB、总量不超过 64 MB；随进程消失，持久化的本地历史是宿主的事。
-- **shell 选择缓存**：进程级；`refreshWindowsEnvironment` 会清空并给出新的 `revision`。
+- **shell 选择**：不缓存，每次运行前重新自检。`system:refresh-environment` 在 Windows 上重读用户与系统环境变量写回本进程并给出新的 `revision`，其他平台只重新选 shell。
 - **审批记忆**：不归本模块。本模块只发起确认，记不记、记多久由宿主的 `ApprovalPort` 决定。
 - **共享资源根目录**：只算路径，不建目录、不写盘。
 
@@ -116,7 +116,7 @@
 
 - 不做项目感知：不发现项目、不读项目配置、不做开发环境诊断，工具描述里也不提项目空间。这些工具曾经有过，已从模型面删除。空间之间的切换和协作是宿主的事。
 - 不做授权决策与权限记忆：只发起审批，决定权在宿主。
-- 不给 `system:run` 能做的事单独开工具：列目录、搜文本、看进程和端口、终止进程、打开文件和应用都用 `system:run` 跑系统命令。原来的 `system:list`、`system:search`、`system:processes`、`system:terminate-task`、`system:open` 已删除。留下的工具各有 run 做不到的理由：读和写把内容和精确匹配绕开 shell 引号并过敏感路径审批，看图片和 PDF 要把内容当图交给模型，后台任务表只在本包，刷新环境改的是宿主进程。整个文件的重写并在 `system:edit` 里，不单开 write。
+- 不给 `system:run` 能做的事单独开工具：列目录、搜文本、看进程和端口、终止进程、打开文件和应用都用 `system:run` 跑系统命令。原来的 `system:list`、`system:search`、`system:processes`、`system:terminate-task`、`system:open` 已删除。留下的工具各有 run 做不到的理由：读和写把内容和精确匹配绕开 shell 引号并过敏感路径审批，看图片要把内容当图交给模型，后台任务表只在本包，刷新环境改的是宿主进程。整个文件的重写并在 `system:edit` 里，不单开 write。
 - 不提供 Electron 专属能力：通知、安装建议界面由产品壳用 `extends` 扩展服务接口。
 - 不内置 Windows 的进程约束后端：需要受约束执行的 Windows 宿主自己注入 provider，否则明确失败。
 
@@ -164,4 +164,4 @@ src/
 
 `SystemTools.ts` 改了要在差量报告里点名，人复核；`interface/provides.ts` 与 `interface/requires.ts` 改了等于改对外契约，也要点名。其余代码由 agent 维护。以上分工、分层、接口与数据的边界、导出规则、环境变量登记都由门禁机械核对。
 
-规模截至 2026-09-15：`src/interface/` 3 个文件约 680 行；`src/contract/` 4 个文件约 1110 行，其中 `system.ts` 约 710 行；`src/impl/` 15 个文件约 2830 行，其中 `SystemTools.ts` 约 540 行、13 个类各一个文件加一个错误类；`src/utils/` 14 个文件约 2780 行；`src/exports/` 4 个文件约 80 行。
+规模截至 2026-09-15：`src/interface/` 3 个文件约 440 行；`src/contract/` 4 个文件约 1140 行，其中 `system.ts` 约 670 行；`src/impl/` 15 个文件约 3110 行，其中 `SystemTools.ts` 约 530 行、`SystemFileOperations.ts` 约 410 行；`src/utils/` 14 个文件约 2920 行。

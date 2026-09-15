@@ -9,6 +9,14 @@ import { analyzeCommandExecution as analyzeProjectCommand } from '../../packages
 import { systemCommandPolicy } from '../../packages/system/src/exports/index'
 
 const DangerousCommands = [
+  'dd of=/dev/disk2 if=/dev/zero bs=1m',
+  "git -c core.pager='rm -rf x' log",
+  'git worktree remove --force ../wt',
+  'git update-ref -d refs/heads/main',
+  'git reflog expire --expire=now --all',
+  'git filter-branch -f --index-filter "git rm --cached secrets" HEAD',
+  'node -e "require(\'fs\').rmSync(\'build\', { recursive: true })"',
+  'diskutil eraseDisk JHFS+ New disk2',
   'rm -r ./directory',
   'rm -R ./directory',
   'rm --recursive ./directory',
@@ -54,6 +62,11 @@ const DangerousCommands = [
 ]
 
 const RoutineCommands = [
+  'git worktree list',
+  'git reflog',
+  'git -c core.pager=cat log -1',
+  'diskutil list',
+  'tree -L 2',
   'rm ./file',
   'rm -f ./file',
   'rm ./file -Force',

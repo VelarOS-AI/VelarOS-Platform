@@ -41,9 +41,24 @@ describe('命令安全门', () => {
     expect(systemCommandPolicy.isReadOnly('sed --in-place=.bak s/a/b/ file.txt')).toBe(false)
   })
 
+  test('INV-2 git 全局选项能让只读子命令执行别的程序，一律判非只读；tree -o 写盘', () => {
+    expect(systemCommandPolicy.isReadOnly("git -c core.pager='rm -rf x' log")).toBe(false)
+    expect(systemCommandPolicy.isReadOnly('git -c diff.external=/tmp/evil diff')).toBe(false)
+    expect(systemCommandPolicy.isReadOnly('git -ccore.fsmonitor=/tmp/evil.sh status')).toBe(false)
+    expect(systemCommandPolicy.isReadOnly('git --config-env=core.pager=EVIL log')).toBe(false)
+    expect(systemCommandPolicy.isReadOnly('git --exec-path=/tmp/evil status')).toBe(false)
+    expect(systemCommandPolicy.isReadOnly('git -p log')).toBe(false)
+    expect(systemCommandPolicy.isReadOnly('git --paginate log')).toBe(false)
+    expect(systemCommandPolicy.isReadOnly('git --no-pager log -1')).toBe(true)
+    expect(systemCommandPolicy.isReadOnly('tree -o out.txt')).toBe(false)
+    expect(systemCommandPolicy.isReadOnly('tree -H . -o report.html')).toBe(false)
+    expect(systemCommandPolicy.isReadOnly('tree -L 2')).toBe(true)
+  })
+
   test('INV-2 git 只认全局选项之后的已知只读子命令，未知形态一律判非只读', () => {
     expect(systemCommandPolicy.isReadOnly('git -C repo status')).toBe(true)
-    expect(systemCommandPolicy.isReadOnly('git -c core.fileMode=false log -1')).toBe(true)
+    // 任何 -c 都不算只读：值可能就是要执行的程序，判据不区分 key。
+    expect(systemCommandPolicy.isReadOnly('git -c core.fileMode=false log -1')).toBe(false)
     expect(systemCommandPolicy.isReadOnly('git --git-dir repo/.git status')).toBe(true)
     expect(systemCommandPolicy.isReadOnly('git --git-dir=repo/.git status')).toBe(true)
     expect(systemCommandPolicy.isReadOnly('git -C --output=repo status')).toBe(true)
@@ -205,6 +220,21 @@ describe('进程约束', () => {
 })
 
 describe('工具面', () => {
+  test('INV-7 五个有参工具的 schema 都拒绝顶层未知字段，refresh-environment 是唯一例外', () => {
+    const minimal: Record<string, Record<string, unknown>> = {
+      [SystemToolNames.read]: { files: [{ path: 'x' }] },
+      [SystemToolNames.view]: { files: [{ path: 'x' }] },
+      [SystemToolNames.edit]: { files: [{ path: 'x', newText: '' }] },
+      [SystemToolNames.run]: { command: 'true' },
+      [SystemToolNames.listTasks]: {},
+    }
+    for (const [name, input] of Object.entries(minimal)) {
+      expect(systemTools[name as keyof typeof systemTools].schema.safeParse(input).success).toBe(true)
+      expect(systemTools[name as keyof typeof systemTools].schema.safeParse({ ...input, unknownField: 1 }).success).toBe(false)
+    }
+    expect(systemTools[SystemToolNames.refreshEnvironment].schema.safeParse({ unknownField: 1 }).success).toBe(true)
+  })
+
   test('INV-7 wire 面用严格 schema，未知字段在解析宿主上下文之前就被拒绝', async () => {
     let service: SystemCapabilityService | undefined
     let resolverCalls = 0

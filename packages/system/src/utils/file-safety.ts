@@ -2,7 +2,7 @@
  * 文件安全：判断路径是否在根目录内、是否属于系统敏感区、是否是凭证文件，写入敏感路径和读凭证之前向用户要确认。
  */
 
-import { realpath } from 'node:fs/promises'
+import { readlink, realpath } from 'node:fs/promises'
 import { homedir, tmpdir } from 'node:os'
 import * as path from 'node:path'
 
@@ -48,6 +48,7 @@ const SensitiveSystemRootPrefixes = [
   '/sbin',
   '/System',
   '/Library',
+  '/Applications',
   '/opt',
   '/boot',
   '/var',
@@ -91,7 +92,7 @@ export function isSensitiveSystemMutationPath(
       return true
     if (isWithinAnyRoot(abs, windowsSensitiveRoots(options.env ?? process.env), platform))
       return true
-  } else if (isWithinAnyRoot(abs, SensitiveSystemRootPrefixes, platform)) return true
+  } else if (isWithinAnyRoot(abs, SensitiveSystemRootPrefixes, platform) || paths.dirname(abs) === '/') return true // 直接放在根目录下的文件也算系统级
 
   const home = options.homeDir ?? homedir()
   if (home && isPathInsideRoot(abs, home, platform)) {
@@ -195,16 +196,23 @@ export async function confirmCredentialAccess(ctx: SystemToolContext, resolvedPa
   )
 }
 
-/** 判定安全用的真实路径：解开符号链接；文件还不存在就解开最近的那层已存在的目录，再把剩下的段接回去。 */
+/** 判定安全用的真实路径：解开符号链接（悬空的链接照它指向的路径继续解）；文件还不存在就解开最近的那层已存在的目录，再把剩下的段接回去。 */
 export async function realPathForSafety(resolvedPath: string): Promise<string> {
   const trailing: string[] = []
   let current = resolvedPath
-  for (;;) {
+  for (let hops = 0; hops < 40; hops += 1) {
     const real = await realpath(current).catch(() => null)
     if (real) return isEmpty(trailing) ? real : path.join(real, ...trailing.reverse())
+    // 悬空的符号链接 realpath 解不开：照它指向的路径继续，写入才会落到目标，而不是把链接换成普通文件。
+    const linkTarget = await readlink(current).catch(() => null)
+    if (linkTarget) {
+      current = path.resolve(path.dirname(current), linkTarget)
+      continue
+    }
     const parent = path.dirname(current)
     if (parent === current) return resolvedPath
     trailing.push(path.basename(current))
     current = parent
   }
+  return resolvedPath
 }

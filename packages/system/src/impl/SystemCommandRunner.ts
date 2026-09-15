@@ -6,6 +6,7 @@
 
 import { spawn } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
+import { stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 
 import { isFalse, Log, optionalWhen, toNullable } from '@velaros-ai/core'
@@ -129,6 +130,9 @@ export class SystemCommandRunner implements SystemCommandRunnerApi {
     abortSignal?: AbortSignal
   ): Promise<SystemCommandResult> {
     abortSignal?.throwIfAborted()
+    // 工作目录不存在时 spawn 会报成找不到 shell，先核对一次，报错才指向真正的原因。
+    const directory = await stat(cwd).catch(() => null)
+    if (!directory?.isDirectory()) throw new AppError('NOT_FOUND', `工作目录不存在或不是目录：${cwd}`)
     const command = options.nativeCommand ? describeSystemNativeCommand(options.nativeCommand) : commandInput
     const startedAt = Date.now()
     const prepared = await this.prepare(command, options.nativeCommand)
@@ -267,6 +271,8 @@ export class SystemCommandRunner implements SystemCommandRunnerApi {
 
   public async dispose(): Promise<void> {
     await Promise.allSettled([...this.executions.values()].filter((entry) => !entry.exited).map((entry) => entry.stop('SIGKILL')))
+    this.tasks.clear()
+    this.executions.clear()
     this.consoles.clear()
   }
 

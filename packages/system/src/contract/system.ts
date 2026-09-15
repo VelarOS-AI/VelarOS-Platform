@@ -564,6 +564,8 @@ export interface SystemShellEnvironmentRefreshResult {
   refreshedAt: number
   runtime?: SystemShellDescriptor
   revision?: string
+  /** Windows 上重读用户与系统环境变量失败时的原因；成功或不是 Windows 时没有。 */
+  reason?: string
 }
 
 /** 某个命令在当前 shell 下是否可用，以及它是原生程序、脚本、批处理还是内置命令。 */

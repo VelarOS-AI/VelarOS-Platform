@@ -215,13 +215,22 @@ export class LocalSystemKernel implements LocalSystemKernelApi {
   }
 
   public async refreshShellEnvironment(): Promise<SystemShellEnvironmentRefreshResult> {
+    // Windows 上重读用户与系统环境变量并写回本进程，之后起的子进程才看得到新装的命令；其他平台每条命令都经登录 shell 重读配置，这里只重新选 shell。
+    const refreshed = await this.shells.refreshWindowsEnvironment(process.env, this.hostPlatform)
+    if (this.hostPlatform === 'win32' && refreshed.refreshed) {
+      for (const key of Object.keys(process.env)) if (!(key in refreshed.env)) delete process.env[key]
+      Object.assign(process.env, refreshed.env)
+    }
     const shell = await this.resolveShell()
-    return {
+    const result: SystemShellEnvironmentRefreshResult = {
       shell: shell.shellPath,
       runtime: toShellDescriptor(shell),
       variableCount: Object.keys(shell.env).length,
       refreshedAt: Date.now(),
+      revision: refreshed.revision,
     }
+    if (refreshed.reason) result.reason = refreshed.reason
+    return result
   }
 
   public runCommand(

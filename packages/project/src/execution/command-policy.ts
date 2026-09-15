@@ -53,6 +53,18 @@ const GitForcePushReason = '该命令会强制覆盖远端分支的历史，别�
 
 const GitForceBranchDeleteReason = '该命令会强制删除分支，分支上没合并的提交会丢失。'
 
+/** `git worktree remove --force`：连同工作树里未提交的改动一起删。 */
+const GitForceWorktreeRemoveReason = '该命令会强制删除工作树目录，其中未提交的改动会永久丢失。'
+
+/** `git update-ref -d`：直接删引用，指向的提交可能再也找不回来。 */
+const GitRefDeleteReason = '该命令会直接删除 Git 引用，它指向的提交可能再也找不回来。'
+
+/** `git reflog expire --expire=now`：立刻清掉 reflog，丢失的提交没法再靠它找回。 */
+const GitReflogExpireReason = '该命令会立即清空 reflog，之后丢失的提交将无法通过 reflog 找回。'
+
+/** `git filter-branch -f`：强制改写整个分支历史。 */
+const GitHistoryRewriteReason = '该命令会强制改写整个分支历史，原来的提交会被替换。'
+
 const RemoteScriptReason = '该命令把网上下载的脚本不经检查直接交给 shell 执行。'
 
 const DestructiveCommandReason = '该命令可能删除数据、破坏文件系统或终止关键进程。'
@@ -82,6 +94,7 @@ const remoteScriptPatterns: readonly RegExp[] = [
 const scriptedRecursiveRemovePatterns: readonly RegExp[] = [
   /\brmtree\s*\(/i,
   /\brimraf\b/i,
+  /\brm(?:Sync)?\s*\((?=[^)]*\brecursive\s*:\s*true)/i,
   /\b(?:rd|rmdir)\b[^&|;\r\n]*\s\/s(?=\s|$)/i,
   /\bdel\b[^&|;\r\n]*\s\/s(?=\s|$)/i,
 ]
@@ -130,6 +143,14 @@ function findGitSubcommandIndex(args: readonly string[]): number {
 
 function hasMutatingGitArguments(args: readonly string[]): boolean {
   return args.some((argument) => argument === '--output' || argument.startsWith('--output='))
+}
+
+/** 判断一个 git 全局选项能不能让 git 去执行别的程序：`-c key=value`、`--config-env`、`--exec-path`、`-p` / `--paginate` 都能（pager、diff.external、fsmonitor 这类配置就是命令）。 */
+function isExecutableGitGlobalOption(argument: string): boolean {
+  return argument === '-c' || (argument.startsWith('-c') && argument.includes('='))
+    || argument === '--config-env' || argument.startsWith('--config-env=')
+    || argument === '--exec-path' || argument.startsWith('--exec-path=')
+    || argument === '-p' || argument === '--paginate'
 }
 
 /**
@@ -368,6 +389,14 @@ function gitSubcommandDanger(subcommand: string, args: readonly string[]): Nulla
       return hasGitOption(args, 'f', '--force') || hasGitOption(args, null, '--force-with-lease') || hasGitOption(args, null, '--force-if-includes') ? GitForcePushReason : null
     case 'branch':
       return args.some((argument) => /^-[A-Za-z]*D[A-Za-z]*$/.test(argument)) || (hasGitOption(args, 'd', '--delete') && hasGitOption(args, 'f', '--force')) ? GitForceBranchDeleteReason : null
+    case 'worktree':
+      return args[0] === 'remove' && hasGitOption(args, 'f', '--force') ? GitForceWorktreeRemoveReason : null
+    case 'update-ref':
+      return hasGitOption(args, 'd', '--delete') ? GitRefDeleteReason : null
+    case 'reflog':
+      return args[0] === 'expire' && args.some((argument) => /^--expire(?:-unreachable)?=(?:now|all)$/.test(argument)) ? GitReflogExpireReason : null
+    case 'filter-branch':
+      return hasGitOption(args, 'f', '--force') ? GitHistoryRewriteReason : null
     default:
       return null
   }
@@ -394,6 +423,14 @@ function invocationDanger(invocation: ShellInvocation): Nullable<string> {
   }
   if (name === 'git') {
     const subcommandIndex = findGitSubcommandIndex(args)
+    // -c key=value 的值可能就是要执行的程序（core.pager、diff.external、core.fsmonitor…），把值当命令再查一遍。
+    for (const [index, argument] of args.entries()) {
+      if (subcommandIndex >= 0 && index >= subcommandIndex) break
+      const assignment = argument === '-c' ? args[index + 1] : argument.startsWith('-c') && argument.includes('=') ? argument.slice(2) : null
+      const configured = assignment?.slice(assignment.indexOf('=') + 1) ?? ''
+      const reason = /\s/.test(configured) ? describeInvocationDanger(configured) : null
+      if (reason) return reason
+    }
     return subcommandIndex < 0 ? null : gitSubcommandDanger(args[subcommandIndex] ?? '', args.slice(subcommandIndex + 1))
   }
   if (name === 'find') {
@@ -454,7 +491,7 @@ function describeDangerousCommand(command: string): Nullable<string> {
   if (remoteScriptPatterns.some((pattern) => pattern.test(command))) return RemoteScriptReason
   if (scriptedRecursiveRemovePatterns.some((pattern) => pattern.test(command))) return RecursiveRemoveReason
   if (
-    /\bmkfs\b|\bdd\s+if=|\bshutdown\b|\breboot\b|\bkill\s+-9\s+-1\b/i.test(command)
+    /\bmkfs\b|\bdd\b[^&|;\r\n]*\b(?:if|of)=|\bdiskutil\s+(?:erase(?:disk|volume)|reformat|partitiondisk|secureerase|zerodisk|randomdisk)\b|\bshutdown\b|\breboot\b|\bkill\s+-9\s+-1\b/i.test(command)
     || windowsDestructivePatterns.some((pattern) => pattern.test(command))
   ) return DestructiveCommandReason
   if (
@@ -487,6 +524,8 @@ export function isShellCommandReadOnly(command: string): boolean {
       const args = invocation.args
       const subcommandIndex = findGitSubcommandIndex(args)
       if (subcommandIndex < 0) return false
+      // -c key=value、--config-env、--exec-path、-p 能让 log/diff/status 这类只读子命令去执行别的程序（core.pager、diff.external、core.fsmonitor…），一律不算只读。
+      if (args.slice(0, subcommandIndex).some((argument) => isExecutableGitGlobalOption(argument))) return false
       const subcommand = args[subcommandIndex]
       return !!subcommand
         && readOnlyGitCommands.has(subcommand)
@@ -494,6 +533,8 @@ export function isShellCommandReadOnly(command: string): boolean {
     }
     // sed 的 -i 就地改写、脚本里的 w/W 命令和 s///w 标志都写盘，拿不准一律算写。
     if (executable === 'sed' && invocation.args.some((argument) => /^-[^-]*i|^--in-place|(?:^|[;{}\n/])\s*[wW]\s+\S/u.test(argument))) return false
+    // `tree -o file` 把目录树写进文件。
+    if (executable === 'tree' && invocation.args.some((argument) => argument === '-o' || argument.startsWith('--output'))) return false
     return !/\b(?:delete|exec|okdir|remove|write)\b/i.test(segment)
   })
 }

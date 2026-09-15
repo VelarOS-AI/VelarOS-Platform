@@ -263,9 +263,9 @@ export interface SystemFileStamp {
 
 /**
  * 一个文件定下来的写入计划：回滚、整个写入、或改几处。path 是按传入路径解析出的绝对路径，target 是解开符号链接后真正要写的文件，
- * baseVersion 与 stamp 是计划时文件的版本和印记（不存在为 null），写之前再核一次。第一段只做计划，第二段照计划写。
+ * baseVersion 与 stamp 是计划时文件的版本和印记（不存在为 null），写之前再核一次。整个写入时 previous 只在文件不超过可编辑上限时保留（留版本用），encoding 是写回用的编码。第一段只做计划，第二段照计划写。
  */
 export type SystemEditPlan =
   | { kind: 'restore'; index: number; path: string; target: string; current: Nullable<Buffer>; snapshot: { version: string; buffer: Buffer }; baseVersion: Nullable<string>; stamp: Nullable<SystemFileStamp> }
-  | { kind: 'write'; index: number; path: string; target: string; created: boolean; previous: Nullable<{ buffer: Buffer; encoding: SystemTextEncoding }>; newText: string; baseVersion: Nullable<string>; stamp: Nullable<SystemFileStamp> }
+  | { kind: 'write'; index: number; path: string; target: string; created: boolean; previous: Nullable<{ buffer: Buffer; encoding: SystemTextEncoding }>; encoding: SystemTextEncoding; newText: string; baseVersion: Nullable<string>; stamp: Nullable<SystemFileStamp> }
   | { kind: 'edits'; index: number; path: string; target: string; textFile: { buffer: Buffer; content: string; encoding: SystemTextEncoding }; ordered: SystemEditTarget[]; scopes: SystemTextRange[]; baseVersion: Nullable<string>; stamp: Nullable<SystemFileStamp> }
