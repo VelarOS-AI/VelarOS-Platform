@@ -75,6 +75,7 @@ export interface LocalSystemKernelApi extends SystemToolSystemApi {
   /**
    * 往交互式任务的控制台写一段用户输入，缺省在末尾补一个换行（相当于用户按回车）。
    * 任务不存在、不属于请求里的会话时抛错；进程已经退出或这条任务不是交互式的，不抛错，结果里 `accepted` 为 false 并说明原因。
+   * 写入有时限：进程到期还没读走就如实报「已排队」，上一笔还压在管道里时拒绝再写；输入管道断开不会让宿主进程崩溃。
    */
   writeConsoleInput(request: SystemConsoleInputRequest): Promise<SystemConsoleControlResult>
   /**

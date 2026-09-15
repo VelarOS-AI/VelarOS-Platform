@@ -19,7 +19,7 @@ import type { PreparedSystemCommand, SystemConsoleOutputBuffer, SystemProcessCon
 import type { SystemBackgroundProcessInfo, SystemBackgroundTaskQueryOptions, SystemBackgroundTaskRecord, SystemBackgroundTaskStatus, SystemBackgroundTaskTerminateRequest, SystemBackgroundTaskTerminateResult, SystemCommandOutputCapture, SystemCommandResult, SystemConsoleControlResult, SystemConsoleInputRequest, SystemConsoleInterruptRequest, SystemConsoleOutputChunk, SystemConsoleOutputRequest, SystemConsoleSessionInfo, SystemProcessConfinementEvidence, SystemRunCommandOptions } from '../types/system.js'
 import { buildSystemCommandResult } from '../utils/command-result.js'
 import { buildSystemProcessConfinementSpawnSpec } from '../utils/confinement.js'
-import { buildSystemOwnedProcessSpec, terminateSystemProcessTree, waitForSystemProcessSpawn } from '../utils/process.js'
+import { buildSystemOwnedProcessSpec, terminateSystemProcessTree, waitForSystemProcessSpawn, writeToChildInput } from '../utils/process.js'
 import { buildSystemNativeCommandSpec, describeSystemNativeCommand, toShellDescriptor } from '../utils/shell.js'
 import { selectBackgroundTasks } from '../utils/system-info.js'
 import { appendBoundedOutput, readBoundedOutputSince } from '../utils/text.js'
@@ -63,6 +63,8 @@ export interface SystemCommandRunnerApi {
   /**
    * 往交互式任务的控制台写一段输入，缺省补一个换行。
    * 先核对任务存在、属于请求里的会话；进程已经退出、这条任务不是交互式的、stdin 已经关掉时不抛错，结果里 `accepted` 为 false。
+   * 写入最多等 `SystemTuning.command.consoleWriteTimeoutMs`：进程到期还没读走就如实报「已排队」；上一笔还压在管道里时拒绝再写。
+   * stdin 管道断开（进程关了输入、写到一半进程退出）的错误在启动时就接住了，不会变成宿主进程的未捕获异常。
    */
   writeConsoleInput(request: SystemConsoleInputRequest): Promise<SystemConsoleControlResult>
   /** 读控制台从 cursor 起的增量输出；缓冲区只留最近一段，挤掉的字符数如实给出。任务不存在或不属于该会话时抛错。 */
@@ -194,17 +196,18 @@ export class SystemCommandRunner implements SystemCommandRunnerApi {
 
     const stdin = this.executions.get(task.id)?.child.stdin
     if (status !== 'running' || !stdin?.writable) return { taskId: task.id, accepted: false, status, message: '控制台已经关闭：进程不在运行，或输入通道已经断开。' }
+    // 上一笔输入还压在管道里没被读走：进程多半没在读输入，再写只会越积越多。
+    if (stdin.writableNeedDrain) return { taskId: task.id, accepted: false, status, message: '进程还没读走之前写进去的输入（它可能没在读输入），这次没有写；等它读完再写。' }
 
     // 缺省补一个换行，相当于用户按回车；只想写半行（例如单个按键）时传 submit: false。
     const payload = isFalse(request.submit) ? request.text : `${request.text}\n`
-    const failure = await new Promise<Nullable<Error>>((resolve) => {
-      stdin.write(payload, (error) => resolve(toNullable(error)))
-    })
+    const outcome = await writeToChildInput(stdin, payload, SystemTuning.command.consoleWriteTimeoutMs)
+    const failed = outcome instanceof Error
     return {
       taskId: task.id,
-      accepted: !failure,
+      accepted: !failed,
       status: this.resolveTaskStatus(task),
-      message: failure ? `写入控制台失败：${failure.message}` : '输入已写进控制台。',
+      message: failed ? `写入控制台失败：${outcome.message}` : outcome === 'written' ? '输入已写进控制台。' : '输入已经排进控制台，进程还没读走。',
     }
   }
 
@@ -343,6 +346,8 @@ export class SystemCommandRunner implements SystemCommandRunnerApi {
       stdio: [interactive ? 'pipe' : 'ignore', 'pipe', 'pipe'], env: prepared.env, windowsHide: true,
       windowsVerbatimArguments: prepared.spec.windowsVerbatimArguments,
     })
+    // stdin 管道断开（进程关了输入、写到一半进程退出）时流上会报 error；不接住就成了宿主进程的未捕获异常。写入结果由写的一方从回调里拿，这里只记日志。
+    child.stdin?.on('error', (error) => log.debug('控制台的输入管道断开', { taskId, error }))
     const owned = processes.manage(child, { platform, abortSignal })
     // 控制台缓冲在挂输出监听之前就建好，进程一启动就吐的输出不会丢。
     if (interactive) this.consoles.set(taskId, { buffer: '', produced: 0 })

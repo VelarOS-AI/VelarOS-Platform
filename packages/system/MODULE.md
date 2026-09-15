@@ -93,7 +93,7 @@
 - 本地内核由宿主创建；`dispose()` 停掉它管理的后台执行。
 - 内核模块 `createSystemKernelModule` 在 `activate` 时注册能力服务；每次调用先严格解析入参，再向宿主解析一次上下文。
 - 后台任务由 `system:run` 的后台模式创建，`system:list-tasks` 查询，模型要停它就用 `system:run` 执行任务条目里的 `terminateCommand`；宿主自己的界面经本地内核的 `terminateBackgroundTask` 终止。进程退出后状态变 `exited`，拿不准时报 `unknown` 而不是猜。
-- 交互式任务（`system:run` 的 `interactive`）就是一条带控制台的后台任务：启动时 stdin 留一根打开的管道，用户经本地内核的 `writeConsoleInput`、`readConsoleOutput`、`interruptConsole` 与它打交道；进程退出后控制台还在任务上，只是 `acceptsInput` 变成 false。
+- 交互式任务（`system:run` 的 `interactive`）就是一条带控制台的后台任务：启动时 stdin 留一根打开的管道，用户经本地内核的 `writeConsoleInput`、`readConsoleOutput`、`interruptConsole` 与它打交道；进程退出后控制台还在任务上，只是 `acceptsInput` 变成 false。输入管道断开（进程关了输入，或写到一半退出）的错误在启动时就接住，不会变成宿主进程的未捕获异常；写入最多等 `SystemTuning.command.consoleWriteTimeoutMs`，进程没读走就如实报「已排队」，上一笔还压在管道里时拒绝再写。
 - 前台命令：超时或取消后一定在期限内收敛，清理没做完就如实标 `cleanupIncomplete`。
 
 ## 失败语义

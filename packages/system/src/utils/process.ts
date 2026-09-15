@@ -6,6 +6,7 @@ import type { ChildProcess } from 'node:child_process'
 import { execFile } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { isAbsolute, join, win32 } from 'node:path'
+import type { Writable } from 'node:stream'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 
@@ -115,6 +116,25 @@ export async function terminateSystemProcessTree(
     // arch-guard:silent-catch-ok 返回 false 明确表示未确认终止，调用方等待实际清理回执。
     return false
   }
+}
+
+/**
+ * 往子进程的 stdin 写一段文本，最多等 timeoutMs：写完返回 'written'，写失败返回那个错误，
+ * 到期还没写完（进程没在读输入）返回 'pending'，数据留在管道缓冲里等进程来读。
+ */
+export function writeToChildInput(stdin: Writable, payload: string, timeoutMs: number): Promise<'written' | 'pending' | Error> {
+  return new Promise((resolve) => {
+    let settled = false
+    const timers = new TimerScope({ name: 'SystemConsoleInput' })
+    const finish = (outcome: 'written' | 'pending' | Error): void => {
+      if (settled) return
+      settled = true
+      timers.dispose()
+      resolve(outcome)
+    }
+    timers.after(timeoutMs, () => finish('pending'))
+    stdin.write(payload, (error) => finish(error ?? 'written'))
+  })
 }
 
 /** 等待子进程确认启动成功；超时或启动失败时报错。 */

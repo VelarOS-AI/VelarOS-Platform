@@ -1,12 +1,14 @@
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 
 import { describe, expect, test } from 'bun:test'
 
 import type { LocalSystemKernelApi } from '../src/impl/LocalSystemKernel.js'
 import { createLocalSystemKernel } from '../src/impl/LocalSystemKernel.js'
+import { systemProcessManager } from '../src/impl/SystemProcessManager.js'
 import { readBoundedOutputSince } from '../src/utils/text.js'
+import { SystemTuning } from '../src/utils/tuning.js'
 
 /** 等一小会儿，给子进程写输出、响应信号的时间。 */
 const tick = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -131,5 +133,61 @@ describe('交互式命令的控制台', () => {
       }
     },
     30_000
+  )
+
+  test.skipIf(process.platform === 'win32')(
+    '控制台的输入管道挂着 error 监听，进程不读输入时大段写入在时限内返回',
+    async () => {
+      const workingDirectory = await mkdtemp(join(tmpdir(), 'velaros-console-'))
+      const kernel = createLocalSystemKernel({ cwd: workingDirectory })
+      try {
+        const started = await kernel.runCommand('sleep 30', { background: true, interactive: true })
+        const taskId = started.backgroundProcess!.taskId!
+        // 结构断言：管道断开时的 EPIPE 有人接，不会变成宿主进程的未捕获异常（bun 下 EPIPE 不抛，下一条用例在 Node 里实跑）。
+        const stdin = systemProcessManager.find(started.backgroundProcess!.pid!)?.child.stdin
+        expect(stdin?.listenerCount('error')).toBeGreaterThan(0)
+
+        // 进程一直不读输入：写 1 MB 也在时限内返回，不会让调用方一直挂着。
+        const began = Date.now()
+        const pasted = await kernel.writeConsoleInput({ taskId, text: 'x'.repeat(1024 * 1024) })
+        expect(Date.now() - began).toBeLessThan(SystemTuning.command.consoleWriteTimeoutMs + 1_500)
+        expect(pasted.accepted).toBe(true)
+      } finally {
+        await kernel.dispose()
+        await rm(workingDirectory, { recursive: true, force: true })
+      }
+    },
+    30_000
+  )
+
+  test.skipIf(process.platform === 'win32' || !Bun.which('node'))(
+    '在 Node 里实跑：进程关了输入后再写、写到一半进程被停，宿主进程都不崩',
+    async () => {
+      const workingDirectory = await mkdtemp(join(tmpdir(), 'velaros-console-node-'))
+      try {
+        // 宿主跑在 Node（Electron 主进程）里，EPIPE 没人接会直接抛成未捕获异常；bun 下复现不了，所以打包后交给 node 跑。
+        await writeFile(join(workingDirectory, 'entry.ts'), `export { createLocalSystemKernel } from ${JSON.stringify(resolve(import.meta.dir, '../src/impl/LocalSystemKernel.ts'))}\n`)
+        const built = await Bun.build({ entrypoints: [join(workingDirectory, 'entry.ts')], outdir: workingDirectory, target: 'node', format: 'esm', naming: '[name].mjs' })
+        expect(built.success).toBe(true)
+        await writeFile(join(workingDirectory, 'scenario.mjs'), [
+          "import { createLocalSystemKernel } from './entry.mjs'",
+          "process.on('uncaughtException', (error) => { console.log('UNCAUGHT', error.code); process.exit(3) })",
+          'const kernel = createLocalSystemKernel({ cwd: process.cwd() })',
+          "const closed = await kernel.runCommand('exec 0<&-; sleep 5', { background: true, interactive: true })",
+          'await new Promise((done) => setTimeout(done, 400))',
+          "const refused = await kernel.writeConsoleInput({ taskId: closed.backgroundProcess.taskId, text: 'y' })",
+          "const idle = await kernel.runCommand('sleep 20', { background: true, interactive: true })",
+          "await kernel.writeConsoleInput({ taskId: idle.backgroundProcess.taskId, text: 'x'.repeat(1024 * 1024) })",
+          'await kernel.dispose()',
+          'await new Promise((done) => setTimeout(done, 300))',
+          "console.log('survived', refused.accepted)",
+        ].join('\n'))
+        const run = Bun.spawnSync(['node', join(workingDirectory, 'scenario.mjs')], { cwd: workingDirectory, timeout: 30_000 })
+        expect({ code: run.exitCode, stdout: run.stdout.toString().trim() }).toEqual({ code: 0, stdout: 'survived false' })
+      } finally {
+        await rm(workingDirectory, { recursive: true, force: true })
+      }
+    },
+    60_000
   )
 })

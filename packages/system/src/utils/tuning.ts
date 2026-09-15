@@ -20,6 +20,8 @@ export const SystemTuning = Object.freeze({
     finishedTasks: 200,
     /** 交互式任务的控制台缓冲区保留多少字符；再往前的输出被挤掉，读的时候如实报告丢了多少。 */
     consoleBufferChars: 100_000,
+    /** 往控制台写输入最多等多少毫秒：进程到期还没读走就报「已排队」返回，不让调用方一直挂着。 */
+    consoleWriteTimeoutMs: 2_000,
     /** 列后台任务没给 limit 时返回多少条；上限是 SystemCommandLimits.taskListItems。 */
     taskListItems: 50,
     /** 验证摘要里从失败输出末尾摘多少字符。 */
