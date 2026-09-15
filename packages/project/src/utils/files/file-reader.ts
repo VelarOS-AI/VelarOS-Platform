@@ -2,16 +2,30 @@ import { createHash } from 'node:crypto'
 import { open } from 'node:fs/promises'
 
 import { isEmpty, isUndefined, mapDefined, optionalWhen } from '@velaros-ai/core'
+import { textCodec, textFileIo } from '@velaros-ai/text-files'
+import type { TextChunk, TextEncoding } from '@velaros-ai/text-files/contracts'
 
 import type { ByteLimitedContent, LineWindowReadResult, ReadCursor } from '../../types/files.js'
 import type { ReadInput, ReadResult } from '../../types/io.js'
 import type { FileSnapshot } from '../../types/snapshot.js'
-import type { ProjectTextEncoding } from '../../types/text.js'
-import { ProjectError } from '../errors.js'
-import { createProjectTextEncodingProbe, detectProjectTextEncoding, finishProjectTextEncodingProbe, pushProjectTextEncodingProbe } from '../text.js'
+import { ProjectError, projectErrorFromTextFile } from '../errors.js'
 import { ProjectTuning } from '../tuning.js'
 
-import { readProjectTextChunks } from './text-stream.js'
+/** 流式读正文（公共件 text-files 的分块读）：没给编码就先流式认完整个文件再严格逐块解；失败翻成项目错误，提前结束也关句柄。 */
+async function* readProjectTextChunks(absPath: string, encoding?: TextEncoding): AsyncGenerator<TextChunk> {
+  try {
+    yield* textFileIo.readTextChunks(absPath, encoding)
+  } catch (error) {
+    throw projectErrorFromTextFile(error)
+  }
+}
+
+/** 整读正文，与流式读、窗口读同一条解码路径；失败翻成项目错误。 */
+export function readProjectTextFile(absPath: string, encoding?: TextEncoding): Promise<string> {
+  return textFileIo.readText(absPath, encoding).catch((error: unknown) => {
+    throw projectErrorFromTextFile(error)
+  })
+}
 
 /** 按逻辑 UTF-8 字节数和 Unicode 字符数截断；CRLF 计一个换行，续读仍保存原始 UTF-16 offset。 */
 export function limitContent(
@@ -252,7 +266,7 @@ export async function readLimitedTextPrefix(
   absPath: string,
   fileSize: number,
   limits: { maxBytes?: number; maxChars?: number },
-  encoding?: ProjectTextEncoding,
+  encoding?: TextEncoding,
 ): Promise<{ content: string; truncated: boolean }> {
   const parts: string[] = []
   let characters = 0
@@ -272,7 +286,7 @@ export async function readTextLineWindow(
   absPath: string,
   range: { startLine?: number; endLine?: number; startColumn?: number; endColumn?: number },
   limits: { maxBytes?: number; maxChars?: number } = {},
-  encoding?: ProjectTextEncoding,
+  encoding?: TextEncoding,
 ): Promise<LineWindowReadResult> {
   const startLine = Math.max(1, Math.floor(range.startLine ?? 1))
   const requestedEndLine = Math.max(startLine, range.endLine ?? Number.MAX_SAFE_INTEGER)
@@ -322,11 +336,11 @@ export async function readTextLineWindow(
 /** 流式读完整个文件：一边算 sha256 内容哈希，一边判定文本编码；认不出无损编码的算二进制。 */
 export async function hashFileAndDetectBinary(
   absPath: string,
-): Promise<{ hash: string; binary: boolean; textEncoding: Nullable<ProjectTextEncoding> }> {
+): Promise<{ hash: string; binary: boolean; textEncoding: Nullable<TextEncoding> }> {
   const handle = await open(absPath, 'r')
   const hash = createHash('sha256')
   const chunk = new Uint8Array(ProjectTuning.files.readChunkBytes)
-  const probe = createProjectTextEncodingProbe()
+  const probe = textCodec.createProbe()
 
   try {
     while (true) {
@@ -334,24 +348,21 @@ export async function hashFileAndDetectBinary(
       if (bytesRead === 0) break
       const view = chunk.subarray(0, bytesRead)
       hash.update(view)
-      pushProjectTextEncodingProbe(probe, view)
+      probe.push(view)
     }
   } finally {
     await handle.close()
   }
 
-  const textEncoding = finishProjectTextEncodingProbe(probe)
+  const textEncoding = probe.finish()
   return { hash: hash.digest('hex'), binary: !textEncoding, textEncoding }
 }
 
-/** metadata 模式下只读文件头部样本判定是否二进制，避免为算哈希整文件读取。 */
+/** metadata 模式下只读文件头部样本判定是否二进制，避免为算哈希整文件读取；多读一个字节，读得到就说明样本末尾截断的字符不算错。 */
 export async function detectBinaryByPrefix(absPath: string): Promise<boolean> {
-  const handle = await open(absPath, 'r')
-  try {
-    const chunk = new Uint8Array(ProjectTuning.files.binarySampleBytes)
-    const { bytesRead } = await handle.read(chunk, 0, chunk.length, null)
-    return !detectProjectTextEncoding(chunk.subarray(0, bytesRead), bytesRead < Number((await handle.stat()).size))
-  } finally {
-    await handle.close()
-  }
+  const sample = ProjectTuning.files.binarySampleBytes
+  const head = await textFileIo.readHead(absPath, sample + 1).catch((error: unknown) => {
+    throw projectErrorFromTextFile(error)
+  })
+  return !textCodec.detect(head.subarray(0, sample), { partial: head.length > sample })
 }

@@ -1,11 +1,11 @@
 // 域：project:file 与 project:change 的编译。计划是一份按步骤推进的「未来视图」：每个路径在计划里的文件身份、
 // fileRef / sourceRef 绑定到的身份，以及排好的事务操作。只生成计划，不读写磁盘，读取都经过 resolver。
 import { isEmpty, isUndefined, toOptional } from '@velaros-ai/core'
+import type { TextEncoding } from '@velaros-ai/text-files/contracts'
 
 import { ProjectChangeLimits } from '../../contract/constants.js'
 import type { PrepareEditInput } from '../../types/edit.js'
 import type { FileIdentity, ProjectChangeApplyInput, ProjectContentEdit, ProjectEditView, ProjectFileInput, ProjectFilePlanState, ProjectPlanFileAction, ProjectPlannerResolver, ProjectPlanSource, ProjectRecodeAction, ProjectRecodeNewline, ProjectResolvedMutation, SourceSelection } from '../../types/editing.js'
-import type { ProjectTextEncoding } from '../../types/text.js'
 import { ProjectError } from '../errors.js'
 import { normalizeProjectInputText } from '../text.js'
 
@@ -15,7 +15,7 @@ import { selectProjectMutations } from './select.js'
 import { createProjectSourceCoordinates, normalizePhysicalNewlines, sourceNewlineAt } from './source.js'
 
 /** recode 动作要的目标磁盘编码；gb18030 没有 BOM，要求带 BOM 时拒绝。 */
-function recodeTargetEncoding(action: ProjectRecodeAction): ProjectTextEncoding {
+function recodeTargetEncoding(action: ProjectRecodeAction): TextEncoding {
   const encoding = action.encoding ?? 'utf-8'
   const bom = !!action.bom
   if (encoding === 'gb18030') {
@@ -35,7 +35,7 @@ function convertNewlines(content: string, newline?: ProjectRecodeNewline): strin
 }
 
 /** 回执里给模型看的格式名：编码、带不带 BOM、换行写法（lf、crlf、mixed、none）。 */
-function describeTextFormat(encoding: ProjectTextEncoding, content: string): string {
+function describeTextFormat(encoding: TextEncoding, content: string): string {
   const label = encoding === 'gb18030' ? 'gb18030'
     : encoding.startsWith('utf16le') ? 'utf-16le'
       : encoding.startsWith('utf16be') ? 'utf-16be' : 'utf-8'

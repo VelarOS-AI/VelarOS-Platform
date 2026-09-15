@@ -1,6 +1,7 @@
+import type { TextEncoding } from "@velaros-ai/text-files/contracts";
+
 import type { JsonValue, RiskLevel } from "./common.js";
 import type { FileSnapshot } from "./snapshot.js";
-import type { ProjectTextEncoding } from "./text.js";
 
 /** project 内核可转换为补丁的所有编辑原语联合类型。 */
 export type EditOperation =
@@ -33,7 +34,7 @@ export interface ReplaceContentOperation {
   /** 显式的整体覆盖和编译出来的局部编辑分开记，审计与审批按它区分。 */
   mode?: 'edit' | 'overwrite' | 'guard' | 'recode';
   /** mode=recode 时的目标磁盘编码；正文之外的字节表示由事务字节计划按它重建。 */
-  targetEncoding?: ProjectTextEncoding;
+  targetEncoding?: TextEncoding;
 }
 
 /** 行号绑定到已读取的磁盘 revision；新正文按行传递，不需要复述旧文本。 */

@@ -6,8 +6,10 @@
 // `new Error` 只有一句英文，模型看到只能重试。新增失败形态时先往合同常量表 `ProjectErrorCodes`
 // 加一项，别用 `INVALID_INPUT` 兜底掉真实原因。
 import { isNull, isUndefined } from "@velaros-ai/core";
+import { AppError } from '@velaros-ai/core/error'
+import { TextFileErrorCodes } from '@velaros-ai/text-files/contracts'
 
-import type { ProjectErrorCode } from "../contract/constants.js";
+import { type ProjectErrorCode, ProjectErrorCodes } from "../contract/constants.js";
 
 /**
  * 版本过期时的下一步。内核同时服务领域 SDK 与模型工具，只说「重读当前内容」，
@@ -37,6 +39,29 @@ export class ProjectError extends Error {
     this.details = details
     this.suggestedNextAction = suggestedNextAction
   }
+}
+
+/**
+ * 公共件 text-files 的错误码对到项目的错误原因。tooLarge 在项目里只出现在事务核对原字节的有界读上，
+ * 超出预期长度就是文件被外部改过，所以和 externalEdit 一样按外部修改冲突处理。
+ */
+const TextFileErrorReasons: ReadonlyMap<string, ProjectErrorCode> = new Map([
+  [TextFileErrorCodes.notText, ProjectErrorCodes.notSupported],
+  [TextFileErrorCodes.lossy, ProjectErrorCodes.invalidInput],
+  [TextFileErrorCodes.externalEdit, ProjectErrorCodes.conflictWithExternalEdit],
+  [TextFileErrorCodes.notRegular, ProjectErrorCodes.notSupported],
+  [TextFileErrorCodes.tooLarge, ProjectErrorCodes.conflictWithExternalEdit],
+  [TextFileErrorCodes.invalidMode, ProjectErrorCodes.invalidInput],
+])
+
+/**
+ * 公共件 `@velaros-ai/text-files` 的失败按错误码翻成 `ProjectError`（文字照搬成 message，context 照搬成 details）；别的错误原样返回。
+ * 调 text-files 的地方都在失败时 `throw projectErrorFromTextFile(error)`，按 `ProjectError` 分支的现有逻辑因此一处不用改。
+ */
+export function projectErrorFromTextFile(error: unknown): unknown {
+  if (!(error instanceof AppError)) return error
+  const reason = TextFileErrorReasons.get(error.code)
+  return isUndefined(reason) ? error : new ProjectError(reason, error.message, { ...error.context })
 }
 
 /**

@@ -4,11 +4,11 @@ import { join } from 'node:path'
 
 import { afterEach, beforeEach, expect, spyOn, test } from 'bun:test'
 
+import { textCodec } from '@velaros-ai/text-files'
+
 import { createProjectKernel, type EditIntent } from '../src/exports/index'
 import { FileStore } from '../src/impl/files/FileStore'
 import { FileProjectTransactionStateStore } from '../src/impl/persistence/FileProjectTransactionStateStore'
-import { atomicWriteProjectText } from '../src/utils/files/atomic-writer'
-import { encodeProjectTextBuffer } from '../src/utils/text'
 
 let root = ''
 beforeEach(async () => {
@@ -23,7 +23,7 @@ function rename(from: string, to: string): EditIntent {
 }
 
 async function seed(path = 'source.sh', mode = 0o751) {
-  const bytes = encodeProjectTextBuffer('#!/bin/sh\n# 中文🙂\necho original\n', 'utf16le')
+  const bytes = textCodec.encode('#!/bin/sh\n# 中文🙂\necho original\n', 'utf16le')
   await writeFile(join(root, path), bytes)
   await chmod(join(root, path), mode)
   return bytes
@@ -195,19 +195,3 @@ test.each([-1, 0o1000, 0o4755, 1.5, '0755', null])(
     ).toThrow('file mode')
   },
 )
-
-test('captured mode bypasses restrictive umask while default creation respects it', async () => {
-  const mask = process.umask(0o077)
-  try {
-    await atomicWriteProjectText(join(root, 'restored.sh'), 'original', undefined, 0o751)
-    await atomicWriteProjectText(join(root, 'new.txt'), 'new')
-    expect((await stat(join(root, 'restored.sh'))).mode & 0o777).toBe(0o751)
-    expect((await stat(join(root, 'new.txt'))).mode & 0o777).toBe(0o600)
-    await expect(
-      atomicWriteProjectText(join(root, 'invalid.txt'), 'bad', undefined, 0o4755),
-    ).rejects.toMatchObject({ reason: 'INVALID_INPUT' })
-    expect(await Bun.file(join(root, 'invalid.txt')).exists()).toBe(false)
-  } finally {
-    process.umask(mask)
-  }
-})

@@ -3,20 +3,13 @@
  */
 
 import { isString, isUndefined } from "@velaros-ai/core";
+import { textCodec } from "@velaros-ai/text-files";
 
 import type { PreparedPatch } from "../../types/edit.js";
 import type { StoredTransaction, TransactionBytePatch, TransactionBytePlan } from "../../types/transaction.js";
-import { ProjectError } from "../errors.js";
-import {
-  decodeProjectTextBuffer,
-  detectProjectTextEncoding,
-  encodeProjectTextBuffer,
-} from "../text.js";
+import { ProjectError, projectErrorFromTextFile } from "../errors.js";
 
-import {
-  decodeStoredBytes,
-  encodePreservingProjectBytes,
-} from "./byte-codec.js";
+import { decodeStoredBytes } from "./byte-codec.js";
 import { patchFileAttributes, patchTargetEncoding } from "./patch-attributes.js";
 import { isDeletePatch } from "./patch-chain.js";
 
@@ -40,7 +33,7 @@ export function prepareTransactionBytePlan(
     if (
       !isUndefined(before) &&
       isString(patch.oldContent) &&
-      decodeProjectTextBuffer(before) !== patch.oldContent
+      textCodec.decode(before)?.content !== patch.oldContent
     )
       throw new ProjectError(
         "CONFLICT_WITH_EXTERNAL_EDIT",
@@ -62,7 +55,7 @@ export function prepareTransactionBytePlan(
       const encoding =
         target ??
         (source
-          ? detectProjectTextEncoding(source)
+          ? textCodec.detect(source)
           : (patchFileAttributes(patch).textEncoding ?? "utf8"));
       if (!encoding)
         throw new ProjectError(
@@ -70,26 +63,30 @@ export function prepareTransactionBytePlan(
           "原文件无法无损解码，拒绝构造字节计划。",
           { path: patch.path },
         );
-      after =
-        source && !target
-          ? encodePreservingProjectBytes(
-              source,
-              decodeProjectTextBuffer(source)!,
-              content,
-              encoding,
-            )
-          : encodeProjectTextBuffer(content, encoding);
-      // 无 BOM UTF-16 改为短文本后可能失去可识别性，由框架加同字节序 BOM。
-      if (
-        (encoding === "utf16le-nobom" || encoding === "utf16be-nobom") &&
-        decodeProjectTextBuffer(after) !== content
-      )
-        after = encodeProjectTextBuffer(
-          content,
-          encoding === "utf16le-nobom" ? "utf16le" : "utf16be",
-        );
+      try {
+        after =
+          source && !target
+            ? textCodec.encodePreserving(
+                source,
+                textCodec.decode(source)!.content,
+                content,
+                encoding,
+              )
+            : textCodec.encode(content, encoding);
+        // 无 BOM UTF-16 改为短文本后可能失去可识别性，由框架加同字节序 BOM。
+        if (
+          (encoding === "utf16le-nobom" || encoding === "utf16be-nobom") &&
+          textCodec.decode(after)?.content !== content
+        )
+          after = textCodec.encode(
+            content,
+            encoding === "utf16le-nobom" ? "utf16le" : "utf16be",
+          );
+      } catch (error) {
+        throw projectErrorFromTextFile(error);
+      }
     }
-    if (after && decodeProjectTextBuffer(after) !== (patch.newContent ?? ""))
+    if (after && textCodec.decode(after)?.content !== (patch.newContent ?? ""))
       throw new ProjectError(
         "INVALID_INPUT",
         "框架无法生成可无损回读的目标字节，事务尚未写入。",

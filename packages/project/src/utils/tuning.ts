@@ -60,7 +60,7 @@ export const ProjectTuning = Object.freeze({
     /** 编译好的 glob 匹配器最多缓存多少个，超过从最久没用的淘汰；pattern 来自模型与用户，缓存不能无界增长。 */
     matcherCacheEntries: 256,
   }),
-  /** 事务：编辑失败的回读建议、校验失败回执、保留原字节的差异计算、校验结果复用。 */
+  /** 事务：编辑失败的回读建议、校验失败回执、校验结果复用。 */
   transactions: Object.freeze({
     /** 编辑在 prepare 失败时，回执里建议模型回读出错文件用的 project:read maxChars（字符）。 */
     recoveryReadMaxChars: 12_000,
@@ -74,10 +74,6 @@ export const ProjectTuning = Object.freeze({
     diagnosticMessageChars: 2_000,
     /** 失败消息里那行摘要（第一条诊断的第一行）最多多少字符。 */
     headlineChars: 200,
-    /** GB18030 文件保留原字节时，字符级差异最多找多长的编辑距离；超过就退回按前后缀对齐。 */
-    byteDiffMaxEditLength: 4_096,
-    /** 同上，字符级差异最多算多少毫秒；超时同样退回按前后缀对齐。 */
-    byteDiffTimeoutMs: 50,
     /** 每个带 cacheKey 的 validator 最多缓存多少份通过的结果；超过从最早的删起。 */
     validationCacheEntries: 128,
     /** 一份校验结果序列化成 JSON 超过多少字符就不缓存。 */
@@ -115,7 +111,7 @@ export const ProjectTuning = Object.freeze({
   }),
   /** 文件访问：FileStore、ProjectGitIndex，以及列目录、读文件的工具函数。 */
   files: Object.freeze({
-    /** 流式读文件（算内容哈希、解码正文）时每块读多少字节。 */
+    /** 流式读文件算内容哈希、顺带认编码时每块读多少字节；解码正文的分块在公共件 @velaros-ai/text-files。 */
     readChunkBytes: 64 * 1024,
     /** 版本按 metadata 算时，判断是不是二进制只看文件开头多少字节。 */
     binarySampleBytes: 8_000,
@@ -214,10 +210,5 @@ export const ProjectTuning = Object.freeze({
     syntaxExcerptChars: 160,
     /** 一个文件的前几条语法诊断附带出错行前后几行的源码预览。 */
     syntaxPreviewDiagnostics: 10,
-  }),
-  /** 文本编码判定（utils/text.ts）。 */
-  encoding: Object.freeze({
-    /** 判定编码时留多少字节的文件头：BOM 与无 BOM 的 UTF-16（按 NUL 字节的奇偶分布）只看这一段。 */
-    headBytes: 8 * 1024,
   }),
 })

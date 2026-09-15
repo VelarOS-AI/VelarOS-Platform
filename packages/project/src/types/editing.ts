@@ -1,7 +1,8 @@
 import type * as ts from 'typescript'
 
+import type { TextEncoding } from '@velaros-ai/text-files/contracts'
+
 import type { EditIntent } from './edit.js'
-import type { ProjectTextEncoding } from './text.js'
 
 export type TextMismatchCause =
   | 'line_ending'
@@ -247,7 +248,7 @@ export interface ProjectPlannerPath {
 /** 现有文本文件的完整正文与磁盘编码；无 BOM 的 UTF-8 报告为 utf8。 */
 export interface ProjectPlannerText extends ProjectPlannerPath {
   content: string
-  textEncoding: ProjectTextEncoding
+  textEncoding: TextEncoding
 }
 
 export interface ProjectPlannerResolver {

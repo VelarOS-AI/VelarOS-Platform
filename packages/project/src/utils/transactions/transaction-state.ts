@@ -4,11 +4,11 @@
  */
 
 import { isArray, isBoolean, isFiniteNumber, isNumber, isRecord, isString, isTrue, isUndefined } from '@velaros-ai/core'
+import { textCodec } from '@velaros-ai/text-files'
 
 import type { ProjectChangeRecordInput } from '../../types/change-feed.js'
 import type { ProjectTransactionFileState, ProjectTransactionPendingOperation, ProjectTransactionStateSnapshot, StoredTransaction } from '../../types/transaction.js'
 import { ProjectError } from '../errors.js'
-import { decodeProjectTextBuffer, isProjectTextEncoding } from '../text.js'
 import { ProjectTuning } from '../tuning.js'
 
 import { isDeletePatch } from './patch-chain.js'
@@ -185,7 +185,7 @@ function assertStoredBytes(value: unknown, content: unknown): void {
   if (isUndefined(value)) return
   boundedString(value, Math.ceil(ProjectTuning.persistence.stateContentBytes / 3) * 4, 'raw bytes size')
   const bytes = Buffer.from(value, 'base64')
-  if (bytes.toString('base64') !== value || decodeProjectTextBuffer(bytes) !== content) invalidTransactionState('raw bytes do not match text')
+  if (bytes.toString('base64') !== value || textCodec.decode(bytes)?.content !== content) invalidTransactionState('raw bytes do not match text')
 }
 
 /**
@@ -233,7 +233,7 @@ function assertPending(value: unknown): asserts value is ProjectTransactionPendi
     assertFileState(entry, 'pending restore entry')
     assertOptionalFileMode((entry as { mode?: unknown }).mode)
     const encoding = (entry as { encoding?: unknown }).encoding
-    if (!isUndefined(encoding) && !isProjectTextEncoding(encoding)) invalidTransactionState('pending restore encoding')
+    if (!isUndefined(encoding) && !textCodec.isEncoding(encoding)) invalidTransactionState('pending restore encoding')
     const pathValue = (entry as { path?: unknown }).path
     boundedString(pathValue, ProjectTuning.persistence.statePathBytes, 'pending restore path')
     if (restorePaths.has(pathValue)) invalidTransactionState('duplicate pending restore path')

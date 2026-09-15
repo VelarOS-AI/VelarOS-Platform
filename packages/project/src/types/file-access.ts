@@ -1,3 +1,5 @@
+import type { TextEncoding } from '@velaros-ai/text-files/contracts'
+
 import type {
   FileListEntry,
   FileStatInput,
@@ -8,7 +10,6 @@ import type {
 } from './io.js'
 import type { FileFilterInput } from './provider.js'
 import type { FileSnapshot, ProjectSnapshot } from './snapshot.js'
-import type { ProjectTextEncoding } from './text.js'
 
 /** 文件访问端口；所有实现均负责根目录约束和 deny 规则。 */
 export interface ProjectFileAccess {
@@ -30,7 +31,7 @@ export interface ProjectFileAccess {
   write(
     path: string,
     content: string,
-    options?: FileAccessOptions & { encoding?: ProjectTextEncoding; mode?: number },
+    options?: FileAccessOptions & { encoding?: TextEncoding; mode?: number },
   ): Promise<FileSnapshot>
   remove(path: string, options?: FileAccessOptions): Promise<void>
 }

@@ -10,7 +10,7 @@
 每一次改动都是一个带版本防护的事务：几个文件、几处编辑全成或全不成，可以查看、可以撤销，撤销遇到外部修改拒绝覆盖。
 模型编辑只认框架签发的 fileRef：它绑定路径、版本和模型实际看到的那段源码，看不到的行改不了。
 
-它不知道系统空间，也不知道界面长什么样；系统空间是另一个独立的包，两边互不引用。命令判定、沙箱契约这些两个空间共用的东西在能力公共件里（`@velaros-ai/shell-command`、`@velaros-ai/rehearsal-sandbox`，ADR 0008）。
+它不知道系统空间，也不知道界面长什么样；系统空间是另一个独立的包，两边互不引用。命令判定、沙箱契约、磁盘文本的编解码与原子读写这些两个空间共用的东西在能力公共件里（`@velaros-ai/shell-command`、`@velaros-ai/rehearsal-sandbox`、`@velaros-ai/text-files`，ADR 0008）。
 
 ## 提供什么
 
@@ -76,7 +76,8 @@
 - `@velaros-ai/agent` 的 `protocol` 与 `tool-contract` 子路径（peer）：工具运行时规格、mod 清单、审批端口、文件上下文协调器、入参复用、挂进内核时的可调用操作表。
 - `@velaros-ai/shell-command`：命令的只读、危险、长驻判定，确认文案，危险命令的审批请求。
 - `@velaros-ai/rehearsal-sandbox`：沙箱数据形状、公开上限、宿主沙箱端口形状，落回前的核对与确认请求。
-- `zod`（入参 schema）、`typescript`（JS/TS 解析）、`iconv-lite`（GB18030）、`picomatch`（glob）、`diff`（差量）、`execa`（子进程）。
+- `@velaros-ai/text-files`：磁盘文本的编码识别、严格解码、按原编码无损写回（GB18030 下保留没改片段的原字节）、原子替换写入、有界读与流式读；它的失败在 `utils/errors.ts` 的 `projectErrorFromTextFile` 一处按错误码翻成 `ProjectError`。
+- `zod`（入参 schema）、`typescript`（JS/TS 解析）、`picomatch`（glob）、`diff`（差量）、`execa`（子进程）。
 - 不读环境变量。
 
 ## 状态归谁

@@ -4,13 +4,13 @@
  */
 
 import { isString } from '@velaros-ai/core'
+import { textCodec } from '@velaros-ai/text-files'
 
 import type { PatchStrategy } from '../../contract/requires.js'
 import type { PreparedPatch } from '../../types/edit.js'
 import type { PatchStrategyInput } from '../../types/patch.js'
 import { createTextPatch } from '../../utils/editing/prepared-patch.js'
 import { ProjectError } from '../../utils/errors.js'
-import { isProjectTextEncoding } from '../../utils/text.js'
 
 export class PreparedContentStrategy implements PatchStrategy {
   public readonly id = 'core.prepared-content'
@@ -27,7 +27,7 @@ export class PreparedContentStrategy implements PatchStrategy {
     if (operation.mode === 'guard' && operation.content !== operation.expectedContent) {
       throw new ProjectError('INVALID_INPUT', '只读内容守卫不能携带正文修改。', { path: operation.path })
     }
-    if (operation.mode === 'recode' && !isProjectTextEncoding(operation.targetEncoding)) {
+    if (operation.mode === 'recode' && !textCodec.isEncoding(operation.targetEncoding)) {
       throw new ProjectError('INVALID_INPUT', '编码转换缺少目标编码。', { path: operation.path })
     }
     if (!snapshot?.exists || snapshot.isDirectory || snapshot.isBinary || !isString(snapshot.content)) {

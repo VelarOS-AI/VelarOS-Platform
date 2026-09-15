@@ -4,10 +4,11 @@ import { join } from 'node:path'
 
 import { describe, expect, test } from 'bun:test'
 
+import { textCodec } from '@velaros-ai/text-files'
+
 import { createProjectKernel } from '../src/exports/index'
 import { TextFileAdapter } from '../src/impl/adapters/TextFileAdapter'
 import type { FileSnapshot } from '../src/types/snapshot'
-import { encodeProjectTextBuffer } from '../src/utils/text'
 
 function snapshot(content: string): FileSnapshot {
   return {
@@ -146,7 +147,7 @@ describe('text search fallback', () => {
       for (const encoding of encodings) {
         await writeFile(
           join(root, 'encoded', `${encoding}.txt`),
-          encodeProjectTextBuffer(content, encoding),
+          textCodec.encode(content, encoding),
         )
       }
 

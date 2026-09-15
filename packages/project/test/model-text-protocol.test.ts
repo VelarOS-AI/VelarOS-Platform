@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { expect, test } from 'bun:test'
 
 import { InMemoryContextPayloadStore } from '@velaros-ai/agent'
+import { textCodec } from '@velaros-ai/text-files'
 
 import type { ProjectToolContext } from '../src/contract/requires'
 import { createProjectKernel } from '../src/exports/index'
@@ -13,14 +14,13 @@ import { projectPlannerResolver } from '../src/utils/agent/planner-resolver'
 import { readProjectSource as executeProjectRead } from '../src/utils/agent/project-files'
 import { finalizeProjectModelResult } from '../src/utils/agent/source-window'
 import { compileProjectEdit } from '../src/utils/editing/planner-index'
-import { encodeProjectTextBuffer } from '../src/utils/text'
 
 test.each(['utf8', 'utf8-bom', 'utf16le', 'utf16be', 'utf16le-nobom', 'utf16be-nobom', 'gb18030'] as const)(
   '%s uses the same visible lines, semantic parsing, literal edit and byte-exact undo', async (encoding) => {
     const root = await mkdtemp(join(tmpdir(), 'project-model-text-'))
     try {
       const original = 'export const message = "中文🙂\\n";\r\nexport const count = 1;\n'
-      const bytes = encodeProjectTextBuffer(original, encoding)
+      const bytes = textCodec.encode(original, encoding)
       await writeFile(join(root, 'source.ts'), bytes)
       const kernel = await createProjectKernel({ root, plugins: [typescriptPlugin()] })
       const context: ProjectToolContext = {
@@ -43,7 +43,7 @@ test.each(['utf8', 'utf8-bom', 'utf16le', 'utf16be', 'utf16le-nobom', 'utf16be-n
       const tx = await kernel.prepareEdit(plan)
       await kernel.applyEdit({ transactionId: tx.transactionId })
       expect((await visible()).files[0].lines).toEqual([[1, 'export const message = "中文🙂\\n";'], [2, 'export const count = 2;'], [3, '']])
-      expect(await readFile(join(root, 'source.ts'))).toEqual(encodeProjectTextBuffer(original.replace('count = 1', 'count = 2'), encoding))
+      expect(await readFile(join(root, 'source.ts'))).toEqual(textCodec.encode(original.replace('count = 1', 'count = 2'), encoding))
       await kernel.rollback({ transactionId: tx.transactionId })
       expect(await readFile(join(root, 'source.ts'))).toEqual(bytes)
     } finally { await rm(root, { recursive: true, force: true }) }

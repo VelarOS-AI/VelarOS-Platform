@@ -4,15 +4,14 @@
  */
 
 import { isString, isUndefined, optionalWhen } from "@velaros-ai/core";
+import { textCodec } from "@velaros-ai/text-files";
+import type { ExpectedBytes, TextEncoding } from "@velaros-ai/text-files/contracts";
 
 import type { PreparedPatch } from "../../types/edit.js";
 import type { ProjectFileAccess } from "../../types/file-access.js";
-import type { ProjectExpectedBytes } from "../../types/files.js";
 import type { FileSnapshot } from "../../types/snapshot.js";
-import type { ProjectTextEncoding } from "../../types/text.js";
 import type { ApplyRestoreState, ProjectTransactionPendingOperation, ProjectTransactionRestoreEntry, StoredTransaction, TransactionBytePlan } from "../../types/transaction.js";
 import { ProjectError } from "../../utils/errors.js";
-import { decodeProjectTextBuffer } from "../../utils/text.js";
 import { bytesEqual, decodeStoredBytes } from "../../utils/transactions/byte-codec.js";
 import { bytePatchFor, plannedBytes, prepareTransactionBytePlan } from "../../utils/transactions/byte-plan.js";
 import { patchFileAttributes, patchTargetEncoding } from "../../utils/transactions/patch-attributes.js";
@@ -25,7 +24,7 @@ export interface TransactionRecoveryStore extends Pick<ProjectFileAccess, "snaps
     path: string,
     options?: {
       skipFileFilter?: boolean;
-      expectedBytes?: ProjectExpectedBytes;
+      expectedBytes?: ExpectedBytes;
     },
   ): Promise<void>;
   /** 读文件的原始字节（受读取上限约束）；文件不存在返回 undefined。 */
@@ -36,10 +35,10 @@ export interface TransactionRecoveryStore extends Pick<ProjectFileAccess, "snaps
     content: string,
     options?: {
       skipFileFilter?: boolean;
-      encoding?: ProjectTextEncoding;
+      encoding?: TextEncoding;
       mode?: number;
       transactionBytes?: Uint8Array;
-      expectedBytes?: ProjectExpectedBytes;
+      expectedBytes?: ExpectedBytes;
     },
   ): Promise<FileSnapshot>;
 }
@@ -258,7 +257,7 @@ export class TransactionRecovery implements TransactionRecoveryApi {
       if (
         bytes &&
         isString(before.content) &&
-        decodeProjectTextBuffer(bytes) !== before.content
+        textCodec.decode(bytes)?.content !== before.content
       )
         throw new ProjectError(
           "CONFLICT_WITH_EXTERNAL_EDIT",

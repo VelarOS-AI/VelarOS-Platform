@@ -12,15 +12,11 @@ import { join } from "node:path";
 
 import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 
+import { textCodec } from "@velaros-ai/text-files";
+
 import { FileStore } from "../src/impl/files/FileStore";
 import { createProjectKernel } from "../src/impl/kernel/LocalProjectKernel";
 import { FileProjectTransactionStateStore } from "../src/impl/persistence/FileProjectTransactionStateStore";
-import { readBoundedProjectBytes } from "../src/utils/files/private-byte-io";
-import {
-  decodeProjectTextBuffer,
-  encodeProjectTextBuffer,
-} from "../src/utils/text";
-import { encodePreservingProjectBytes } from "../src/utils/transactions/byte-codec";
 
 let root: string;
 beforeEach(async () => {
@@ -160,8 +156,8 @@ test("preflight byte CAS rejects a same-text external encoding change without ov
   const { kernel } = await fixture(false);
   const tx = await kernel.prepareEdit({ operations: [replace()] });
   const write = FileStore.prototype.write;
-  const external = encodeProjectTextBuffer(
-    decodeProjectTextBuffer(original)!,
+  const external = textCodec.encode(
+    textCodec.decode(original)!.content,
     "gb18030",
   );
   let changed = false;
@@ -191,8 +187,8 @@ test("undo rejects external same-Unicode byte changes before touching any file",
     operations: [replace(), replace("b.txt")],
   });
   await kernel.applyEdit({ transactionId: tx.transactionId });
-  const external = encodeProjectTextBuffer(
-    decodeProjectTextBuffer(modified)!,
+  const external = textCodec.encode(
+    textCodec.decode(modified)!.content,
     "gb18030",
   );
   await writeFile(join(root, "a.txt"), external);
@@ -252,7 +248,7 @@ test("interrupted apply restores raw backups from the private write-ahead state"
 
 test("the framework adds a same-endian BOM when short UTF16 loses encoding evidence", async () => {
   const path = join(root, "a.txt");
-  const bytes = encodeProjectTextBuffer(
+  const bytes = textCodec.encode(
     "ascii enough source 中文\n",
     "utf16le-nobom",
   );
@@ -273,26 +269,10 @@ test("the framework adds a same-endian BOM when short UTF16 loses encoding evide
   await kernel.applyEdit({ transactionId: tx.transactionId });
   expect((await kernel.read({ path: "a.txt" })).content).toBe("中文");
   expect(await readFile(path)).toEqual(
-    encodeProjectTextBuffer("中文", "utf16le"),
+    textCodec.encode("中文", "utf16le"),
   );
   await kernel.rollback({ transactionId: tx.transactionId });
   expect(await readFile(path)).toEqual(bytes);
-});
-
-test("large disjoint byte edits have a bounded fallback and retain edge aliases", () => {
-  const before = `€${"a".repeat(120000)}龴`;
-  const after = `€${"b".repeat(120000)}龴`;
-  const bytes = Buffer.concat([
-    Buffer.from([0x80]),
-    Buffer.from("a".repeat(120000)),
-    Buffer.from([0xfe, 0x59]),
-  ]);
-  const started = Date.now();
-  const output = encodePreservingProjectBytes(bytes, before, after, "gb18030");
-  expect(Date.now() - started).toBeLessThan(2000);
-  expect(output[0]).toBe(0x80);
-  expect(output.subarray(-2)).toEqual(Buffer.from([0xfe, 0x59]));
-  expect(decodeProjectTextBuffer(output)).toBe(after);
 });
 
 test("delete checks bytes inside the final mutation port", async () => {
@@ -450,7 +430,6 @@ test("private raw reads reject external growth before allocating an oversized bo
   const path = join(root, "large.txt");
   await writeFile(path, "old");
   await truncate(path, 64 * 1024 * 1024);
-  await expect(readBoundedProjectBytes(path, 3)).rejects.toThrow("字节长度");
   const store = new FileStore(root, {
     ...((await createProjectKernel({ root })) as any).policy,
     maxFileSizeToReadBytes: 3,
@@ -458,5 +437,8 @@ test("private raw reads reject external growth before allocating an oversized bo
   await expect(store.readTransactionBytes("large.txt")).rejects.toThrow(
     "字节长度",
   );
+  await expect(store.readTransactionBytes("large.txt")).rejects.toMatchObject({
+    reason: "CONFLICT_WITH_EXTERNAL_EDIT",
+  });
   expect((await stat(path)).size).toBe(64 * 1024 * 1024);
 });

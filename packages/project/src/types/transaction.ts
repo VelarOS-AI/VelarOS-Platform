@@ -1,8 +1,9 @@
+import type { TextEncoding } from '@velaros-ai/text-files/contracts'
+
 import type { ProjectChangeRecordInput } from './change-feed.js'
 import type { Diagnostic } from './common.js'
 import type { PreparedTransaction } from "./edit.js";
 import type { FileAttributes } from './snapshot.js'
-import type { ProjectTextEncoding } from './text.js'
 
 export type ProjectTransactionCommand = 'amend' | 'validate' | 'apply' | 'rollback' | 'discard'
 
@@ -55,7 +56,7 @@ export interface ProjectTransactionFileState {
 export interface ProjectTransactionRestoreEntry extends ProjectTransactionFileState {
   readonly path: string
   /** 原文件的文本编码（非无 BOM UTF-8 时记下）；恢复时文件已被删掉就按它重建。 */
-  readonly encoding?: ProjectTextEncoding
+  readonly encoding?: TextEncoding
   readonly mode?: number
   readonly ownedStates: readonly ProjectTransactionFileState[]
 }
@@ -83,7 +84,7 @@ export interface ApplyRestoreState {
   oldContent?: string
   bytes?: string
   /** 原文件的文本编码；还原时文件若已被删掉，按它重建而不是写成 UTF-8。 */
-  encoding?: ProjectTextEncoding
+  encoding?: TextEncoding
   mode?: number
   restorable: boolean
 }

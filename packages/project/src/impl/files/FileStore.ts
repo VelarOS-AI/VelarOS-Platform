@@ -23,10 +23,11 @@ import { lstat, mkdir, readFile, rename, rm, stat } from 'node:fs/promises'
 import * as path from 'node:path'
 
 import { isNull, isObject, isPresent, isUndefined, optionalWhen, toOptional } from '@velaros-ai/core'
+import { textCodec, textFileIo } from '@velaros-ai/text-files'
+import type { ExpectedBytes, TextEncoding } from '@velaros-ai/text-files/contracts'
 
 import type { CommandProvider, FileFilterProvider } from '../../contract/requires.js'
 import type { FileAccessOptions } from '../../types/file-access.js'
-import type { ProjectExpectedBytes } from '../../types/files.js'
 import type {
   FileListEntry,
   FileStatInput,
@@ -38,9 +39,7 @@ import type {
 import type { CorePolicy } from '../../types/policy.js'
 import type { FileFilterInput } from '../../types/provider.js'
 import type { FileSnapshot, ProjectSnapshot } from '../../types/snapshot.js'
-import type { ProjectTextEncoding } from '../../types/text.js'
-import { ProjectError, RevisionMismatchSuggestedNextAction } from '../../utils/errors.js'
-import { atomicWriteProjectBytes, atomicWriteProjectText } from '../../utils/files/atomic-writer.js'
+import { ProjectError, projectErrorFromTextFile, RevisionMismatchSuggestedNextAction } from '../../utils/errors.js'
 import { listProjectFiles } from '../../utils/files/file-listing.js'
 import {
   advanceReadCursor,
@@ -53,21 +52,16 @@ import {
   limitContent,
   readLimitedTextPrefix,
   readPastEnd,
+  readProjectTextFile,
   readTextLineWindow,
   sliceWindowColumns,
 } from '../../utils/files/file-reader.js'
 import { assertConfinedToRoot, realPathPreservingMissing } from '../../utils/files/path-containment.js'
-import { readBoundedProjectBytes } from '../../utils/files/private-byte-io.js'
 import { validateReadBounds } from '../../utils/files/read-bounds.js'
-import { readProjectTextFile } from '../../utils/files/text-stream.js'
 import { matchesAny } from '../../utils/glob.js'
 import { metadataFingerprint, metadataRevisionFor, revisionFor, sha256 } from '../../utils/hash.js'
 import { toAbs, toRel } from '../../utils/path.js'
-import {
-  decodeProjectTextBuffer,
-  detectProjectTextEncoding,
-  sliceLines,
-} from '../../utils/text.js'
+import { sliceLines } from '../../utils/text.js'
 import { ProjectTuning } from '../../utils/tuning.js'
 
 /**
@@ -89,11 +83,11 @@ export interface FileStoreApi {
   /** 轻量的文件状态：类型、大小、估算 token、行数（不太大的文本文件才数）、版本、编码和建议的首个读取窗口；不存在时返回 kind 为 missing。 */
   stat(input: FileStatInput, options?: FileAccessOptions): Promise<FileStatResult>
   /** 原子写入文本并返回写后的快照：已有文本文件沿用自己的编码与权限，encoding、mode 只在路径上还没有文件时生效；给了 transactionBytes 就原样写这些字节，给了 expectedBytes 时磁盘上的字节对不上就抛 CONFLICT_WITH_EXTERNAL_EDIT。 */
-  write(pathInput: string, content: string, options?: FileAccessOptions & { encoding?: ProjectTextEncoding; mode?: number; transactionBytes?: Uint8Array; expectedBytes?: ProjectExpectedBytes }): Promise<FileSnapshot>
+  write(pathInput: string, content: string, options?: FileAccessOptions & { encoding?: TextEncoding; mode?: number; transactionBytes?: Uint8Array; expectedBytes?: ExpectedBytes }): Promise<FileSnapshot>
   /** 事务捕获原字节用：跳过宿主过滤器但仍执行根内约束和拒读名单，最多读 maximumBytes（缺省是整读上限）；文件不存在返回 undefined，类型或长度变了抛 CONFLICT_WITH_EXTERNAL_EDIT。 */
   readTransactionBytes(pathInput: string, maximumBytes?: number): Promise<Buffer | undefined>
   /** 删除工作区里的单个文件（不存在也不报错）；给了 expectedBytes 时先核对磁盘字节，对不上抛 CONFLICT_WITH_EXTERNAL_EDIT。 */
-  remove(pathInput: string, options?: FileAccessOptions & { expectedBytes?: ProjectExpectedBytes }): Promise<void>
+  remove(pathInput: string, options?: FileAccessOptions & { expectedBytes?: ExpectedBytes }): Promise<void>
   /** 在工作区里改名或移动文件，目标目录不存在就建；两端都要过写入授权。 */
   rename(from: string, to: string): Promise<void>
   /** 按路径、include、exclude、深度和条数列出文件与目录，默认排除 gitignore 的条目（优先问 git，git 不可用时按本地规则判断）。 */
@@ -111,7 +105,7 @@ export class FileStore implements FileStoreApi {
   private realRoot?: Promise<string>
   private readonly searchTextKinds = new Map<string, { token: string; kind: 'native' | 'decoded' | 'excluded'; lastUsedAt: number }>()
   private searchTextKindNextSweep = 0
-  private readonly snapshotEncodings = new WeakMap<FileSnapshot, ProjectTextEncoding>()
+  private readonly snapshotEncodings = new WeakMap<FileSnapshot, TextEncoding>()
 
   constructor(
     root: string,
@@ -213,19 +207,20 @@ export class FileStore implements FileStoreApi {
       }
     }
     let content: string | undefined
-    let textEncoding: Nullable<ProjectTextEncoding> = null
+    let textEncoding: Nullable<TextEncoding> = null
     let binary: boolean
     // contentHash 仅在 content 模式下参与计算；metadata 模式整文件读取/哈希都被跳过。
     let contentHash = ''
     if (includeContent && size <= this.policy.maxFileSizeToReadBytes) {
       const data = await readFile(abs)
-      textEncoding = detectProjectTextEncoding(data)
-      binary = isNull(textEncoding)
+      const decoded = textCodec.decode(data)
+      binary = isNull(decoded)
       if (!metadataMode) {
         contentHash = sha256(data)
       }
-      if (!binary) {
-        content = decodeProjectTextBuffer(data) ?? ''
+      if (decoded) {
+        textEncoding = decoded.encoding
+        content = decoded.content
       }
     } else if (metadataMode) {
       // 轻量路径：不读全文，仅取头部样本判定二进制。
@@ -491,7 +486,7 @@ export class FileStore implements FileStoreApi {
     const now = Date.now()
     if (cached) cached.lastUsedAt = now
     if (cached?.token === token) return cached.kind
-    const encoding = detectProjectTextEncoding(await readFile(abs))
+    const encoding = textCodec.detect(await readFile(abs))
     const kind = !encoding ? 'excluded' : encoding === 'utf8' || encoding === 'utf8-bom' ? 'native' : 'decoded'
     if (now >= this.searchTextKindNextSweep) {
       // 只回收近期不再参与查询的条目，容量外扫描不会把仍活跃的整批条目逐项顶出。
@@ -620,28 +615,35 @@ export class FileStore implements FileStoreApi {
   public async write(
     pathInput: string,
     content: string,
-    options?: { skipFileFilter?: boolean; encoding?: ProjectTextEncoding; mode?: number; transactionBytes?: Uint8Array; expectedBytes?: ProjectExpectedBytes },
+    options?: { skipFileFilter?: boolean; encoding?: TextEncoding; mode?: number; transactionBytes?: Uint8Array; expectedBytes?: ExpectedBytes },
   ): Promise<FileSnapshot> {
     const { abs, rel } = await this.authorize(pathInput, 'write', '写入', options)
     await mkdir(path.dirname(abs), { recursive: true })
-    if (options?.transactionBytes) await atomicWriteProjectBytes(abs, options.transactionBytes, options.mode, options.expectedBytes)
-    else await atomicWriteProjectText(abs, content, options?.encoding, options?.mode)
+    const written = options?.transactionBytes
+      ? textFileIo.writeBytes(abs, options.transactionBytes, { mode: options.mode, expected: options.expectedBytes })
+      : textFileIo.writeText(abs, content, { fallbackEncoding: options?.encoding, mode: options?.mode })
+    await written.catch((error: unknown) => {
+      throw projectErrorFromTextFile(error)
+    })
     return this.snapshot(rel, true, { skipFileFilter: true })
   }
 
   /** 私有事务捕获；根目录与 deny 规则始终执行。 */
   public async readTransactionBytes(pathInput: string, maximumBytes = this.policy.maxFileSizeToReadBytes): Promise<Buffer | undefined> {
     const { abs } = await this.authorize(pathInput, 'read', '读取事务原字节', { skipFileFilter: true })
-    return readBoundedProjectBytes(abs, maximumBytes)
+    return textFileIo.readBounded(abs, maximumBytes).catch((error: unknown) => {
+      throw projectErrorFromTextFile(error)
+    })
   }
 
-  /** 删除工作区内的单个文件。 */
-  public async remove(pathInput: string, options?: { skipFileFilter?: boolean; expectedBytes?: ProjectExpectedBytes }): Promise<void> {
+  /** 删除工作区内的单个文件；给了 expectedBytes 时先核对磁盘字节（同读取事务原字节，照样执行根内约束与拒读名单）。 */
+  public async remove(pathInput: string, options?: { skipFileFilter?: boolean; expectedBytes?: ExpectedBytes }): Promise<void> {
     const { abs } = await this.authorize(pathInput, 'write', '删除', options)
     if (options?.expectedBytes) {
-      const expected = options.expectedBytes
-      const current = await this.readTransactionBytes(pathInput, expected.bytes?.length ?? 0)
-      if (expected.exists !== !isUndefined(current) || (expected.exists && (!expected.bytes || !current || current.length !== expected.bytes.length || !current.every((byte, index) => byte === expected.bytes![index])))) throw new ProjectError('CONFLICT_WITH_EXTERNAL_EDIT', '删除前检测到外部字节修改。', { path: pathInput })
+      await this.authorize(pathInput, 'read', '读取事务原字节', { skipFileFilter: true })
+      await textFileIo.assertUnchanged(abs, options.expectedBytes).catch((error: unknown) => {
+        throw projectErrorFromTextFile(error)
+      })
     }
     await rm(abs, { force: true, recursive: false })
   }

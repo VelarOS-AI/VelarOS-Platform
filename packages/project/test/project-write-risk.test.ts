@@ -4,11 +4,12 @@ import { join } from 'node:path'
 
 import { describe, expect, test } from 'bun:test'
 
+import { textCodec } from '@velaros-ai/text-files'
+
 import { createProjectKernel, type EditIntent, type ProjectKernel, type ProjectPlugin } from '../src/exports/index'
 import { FileProjectTransactionStateStore } from '../src/impl/persistence/FileProjectTransactionStateStore'
 import type { ApprovalRequest } from '../src/types/policy'
 import type { ProjectTransactionPendingOperation } from '../src/types/transaction.js'
-import { encodeProjectTextBuffer } from '../src/utils/text'
 
 // 风险按「能否恢复」划线：能完整回滚的覆盖、删除、重命名不打扰用户；
 // 只有回滚恢复不了原文的写入（二进制或超限文件）才请宿主审批。
@@ -269,8 +270,8 @@ describe('读不到正文的文件上不做局部编辑', () => {
 })
 
 describe('删除与重命名按原样重建文件', () => {
-  const Utf16Bytes = encodeProjectTextBuffer('hello\nworld\n', 'utf16le')
-  const Gb18030Bytes = encodeProjectTextBuffer('中文注释\n第二行\n', 'gb18030')
+  const Utf16Bytes = textCodec.encode('hello\nworld\n', 'utf16le')
+  const Gb18030Bytes = textCodec.encode('中文注释\n第二行\n', 'gb18030')
 
   test('删除 UTF-16 文件：low，不审批，回滚按原编码逐字节恢复', async () => {
     await withRoot(async (root) => {

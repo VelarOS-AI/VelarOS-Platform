@@ -5,13 +5,13 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
 import { InMemoryContextPayloadStore } from '@velaros-ai/agent'
+import { textCodec } from '@velaros-ai/text-files'
 
 import type { ProjectToolContext } from '../src/contract/requires'
 import { createProjectKernel } from '../src/exports/index'
 import { projectTools } from '../src/impl/ProjectTools'
 import { registerProjectFileContext } from '../src/utils/agent/file-context'
 import { finalizeProjectModelResult } from '../src/utils/agent/source-window'
-import { encodeProjectTextBuffer } from '../src/utils/text'
 
 let root = ''
 beforeEach(async () => { root = await mkdtemp(join(tmpdir(), 'project-file-recode-')) })
@@ -50,9 +50,9 @@ const bytes = (path: string) => readFile(join(root, path))
 
 describe('project:file recode', () => {
   test('converts mixed encodings to UTF-8 LF, keeps the text, reports formats, and undo restores the original bytes', async () => {
-    await writeFile(join(root, 'gb.txt'), encodeProjectTextBuffer(text, 'gb18030'))
-    await writeFile(join(root, 'u16.txt'), encodeProjectTextBuffer(text, 'utf16le'))
-    await writeFile(join(root, 'bom.txt'), encodeProjectTextBuffer(text, 'utf8-bom'))
+    await writeFile(join(root, 'gb.txt'), textCodec.encode(text, 'gb18030'))
+    await writeFile(join(root, 'u16.txt'), textCodec.encode(text, 'utf16le'))
+    await writeFile(join(root, 'bom.txt'), textCodec.encode(text, 'utf8-bom'))
     await writeFile(join(root, 'plain.txt'), 'already unicode\n')
     const { call } = await fixture()
     const result = await call('project:file', { actions: [{ op: 'recode', paths: ['gb.txt', 'u16.txt', 'bom.txt', 'plain.txt', 'gb.txt'], newline: 'lf' }] })
@@ -73,9 +73,9 @@ describe('project:file recode', () => {
     // 撤销恢复原始字节，包括 BOM 与 CRLF。
     const undone = await call('project:change', { action: 'undo', changeRef: result.changeRef })
     expect(undone.error).toBeUndefined()
-    expect((await bytes('gb.txt')).equals(encodeProjectTextBuffer(text, 'gb18030'))).toBe(true)
-    expect((await bytes('u16.txt')).equals(encodeProjectTextBuffer(text, 'utf16le'))).toBe(true)
-    expect((await bytes('bom.txt')).equals(encodeProjectTextBuffer(text, 'utf8-bom'))).toBe(true)
+    expect((await bytes('gb.txt')).equals(textCodec.encode(text, 'gb18030'))).toBe(true)
+    expect((await bytes('u16.txt')).equals(textCodec.encode(text, 'utf16le'))).toBe(true)
+    expect((await bytes('bom.txt')).equals(textCodec.encode(text, 'utf8-bom'))).toBe(true)
   })
 
   test('targets UTF-16 with BOM and CRLF, skips files already in the target format, and rejects a BOM for gb18030', async () => {
@@ -85,7 +85,7 @@ describe('project:file recode', () => {
     const result = await call('project:file', { actions: [{ op: 'recode', paths: ['a.ts'], encoding: 'utf-16le', bom: true, newline: 'crlf' }] })
     expect(result.changed).toBe(true)
     expect(result.recode.converted).toEqual([{ path: 'a.ts', from: 'utf-8 lf', to: 'utf-16le+bom crlf' }])
-    expect((await bytes('a.ts')).equals(encodeProjectTextBuffer('const a = "中文"\r\nconst b = 2\r\n', 'utf16le'))).toBe(true)
+    expect((await bytes('a.ts')).equals(textCodec.encode('const a = "中文"\r\nconst b = 2\r\n', 'utf16le'))).toBe(true)
     const again = await call('project:file', { actions: [{ op: 'recode', paths: ['a.ts'], encoding: 'utf-16le', bom: true, newline: 'crlf' }] })
     expect(again).toMatchObject({ changed: false, changedFiles: [], recode: { converted: [], unchanged: ['a.ts'] } })
     const noop = await call('project:file', { actions: [{ op: 'recode', paths: ['keep.txt'] }] })
@@ -98,7 +98,7 @@ describe('project:file recode', () => {
   })
 
   test('recode inside a change plan converts a disk file next to other steps and undo restores everything', async () => {
-    await writeFile(join(root, 'legacy.txt'), encodeProjectTextBuffer('legacy 内容\r\n', 'gb18030'))
+    await writeFile(join(root, 'legacy.txt'), textCodec.encode('legacy 内容\r\n', 'gb18030'))
     const { call } = await fixture()
     const result = await call('project:change', { action: 'apply', steps: [
       { tool: 'file', actions: [{ op: 'create', path: 'new.txt', text: 'created\n' }, { op: 'recode', paths: ['legacy.txt'], newline: 'lf' }] },
@@ -108,6 +108,6 @@ describe('project:file recode', () => {
     expect(await readFile(join(root, 'legacy.txt'), 'utf8')).toBe('legacy 内容\n')
     expect(await readFile(join(root, 'new.txt'), 'utf8')).toBe('created\n')
     await call('project:change', { action: 'undo', changeRef: result.changeRef })
-    expect((await bytes('legacy.txt')).equals(encodeProjectTextBuffer('legacy 内容\r\n', 'gb18030'))).toBe(true)
+    expect((await bytes('legacy.txt')).equals(textCodec.encode('legacy 内容\r\n', 'gb18030'))).toBe(true)
   })
 })

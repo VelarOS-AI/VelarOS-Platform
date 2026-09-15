@@ -4,9 +4,10 @@ import { join } from 'node:path'
 
 import { expect, test } from 'bun:test'
 
+import { textCodec } from '@velaros-ai/text-files'
+
 import { createProjectKernel } from '../src/impl/kernel/LocalProjectKernel'
 import { NodeCommandProvider } from '../src/impl/kernel/NodeCommandProvider'
-import { encodeProjectTextBuffer } from '../src/utils/text'
 
 test('real search reaches every encoding beyond the listing page and retains a bounded cache through repeated full scans', async () => {
   const root = await mkdtemp(join(tmpdir(), 'project-search-scale-'))
@@ -23,7 +24,7 @@ test('real search reaches every encoding beyond the listing page and retains a b
     expect(omitted).toHaveLength(7)
     const encodings = ['utf8', 'utf8-bom', 'utf16le', 'utf16be', 'utf16le-nobom', 'utf16be-nobom', 'gb18030'] as const
     for (const [index, entry] of omitted.entries()) {
-      await writeFile(join(root, entry.path), encodeProjectTextBuffer('source 中文🙂 needle literal \\n\n', encodings[index]!))
+      await writeFile(join(root, entry.path), textCodec.encode('source 中文🙂 needle literal \\n\n', encodings[index]!))
     }
 
     // Observe actual cache misses on this isolated kernel; no global FS mocks or timing threshold.
@@ -60,7 +61,7 @@ test('search traversal reaches encoded files below twenty directory levels', asy
     const directory = Array.from({ length: 24 }, (_, index) => `level-${index}`).join('/')
     await mkdir(join(root, directory), { recursive: true })
     const path = `${directory}/legacy.txt`
-    await writeFile(join(root, path), encodeProjectTextBuffer('source 中文 deep-needle\n', 'gb18030'))
+    await writeFile(join(root, path), textCodec.encode('source 中文 deep-needle\n', 'gb18030'))
     const project = await createProjectKernel({ root })
     for (const useRipgrep of [true, false]) {
       const result = await project.search({ query: '中文', useRipgrep, excludeGitignored: false })
@@ -77,7 +78,7 @@ test('native and decoded search respect search-only filters before counting visi
   const root = await mkdtemp(join(tmpdir(), 'project-search-filter-'))
   try {
     for (const [path, encoding] of [['a-hidden.txt', 'utf8'], ['b-hidden.txt', 'gb18030'], ['z-visible.txt', 'utf8'], ['zz-visible.txt', 'gb18030']] as const) {
-      await writeFile(join(root, path), encodeProjectTextBuffer('source 中文 needle\n', encoding))
+      await writeFile(join(root, path), textCodec.encode('source 中文 needle\n', encoding))
     }
     const command = new NodeCommandProvider()
     const project = await createProjectKernel({ root, providers: {

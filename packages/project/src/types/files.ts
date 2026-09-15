@@ -107,8 +107,3 @@ export interface ListedDirectory {
   readonly rules: readonly GitignoreRule[]
   readonly entries: ReadonlyArray<{ entry: Dirent; abs: string; rel: string }>
 }
-
-export interface ProjectExpectedBytes {
-  readonly exists: boolean;
-  readonly bytes?: Uint8Array;
-}

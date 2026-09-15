@@ -61,4 +61,5 @@ project 改用两个公共件：命令判定、危险命令审批请求走 `@vel
 - 报错一律 `AppError`，`code` 就是本包的码（`TEXT_FILE_NOT_TEXT`、`TEXT_FILE_LOSSY`、`TEXT_FILE_EXTERNAL_EDIT`、`TEXT_FILE_NOT_REGULAR`、`TEXT_FILE_TOO_LARGE`、`TEXT_FILE_INVALID_MODE`），文件系统的 errno 错误原样抛出；各空间在自己的边界按码翻译一次，不在包里掺空间语义。
 - 按块解码不用运行时 TextDecoder 的 GB18030 流式状态：Bun 1.3 的实现会把被块边界切开的字丢掉、末尾没凑齐的字节也不报错，本包自己把没凑齐的字节接到下一块；Node 与 Bun 结果一致。
 - 换行适配、行号偏移、文本匹配不进本包：两个空间的编辑语义不同，各自保留。
+- project 已改用它：`utils/files/atomic-writer.ts`、`private-byte-io.ts`、`text-stream.ts` 删除，`utils/text.ts` 的编码部分与 `byte-codec.ts` 的字节保留编码删除，`ProjectTextEncoding`、`ProjectTextEncodingProbe`、`ProjectExpectedBytes` 删除改用 `TextEncoding`、`ExpectedBytes`（根入口不再导出 `ProjectTextEncoding`，宿主改从 `@velaros-ai/text-files/contracts` 取 `TextEncoding`）；本包的码在 `utils/errors.ts` 的 `projectErrorFromTextFile` 一处翻成 `ProjectError`（notText、notRegular → NOT_SUPPORTED，lossy、invalidMode → INVALID_INPUT，externalEdit、tooLarge → CONFLICT_WITH_EXTERNAL_EDIT），按 `ProjectError` 分支的逻辑一处未改。
 

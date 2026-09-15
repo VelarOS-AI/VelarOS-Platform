@@ -74,6 +74,5 @@ export type { ApprovalRequest, CorePolicy, PolicyDecision, PolicyDecisionInput }
 export type { CommandRunInput, CommandRunResult, CommandToolRequirement, CommandToolRequirementKind, FileFilterInput, ProjectIntelligenceLocation, ProjectIntelligenceSymbol, ProjectRuntimeProviders, RedactionInput, RedactionResult } from '../types/provider.js'
 export type { FileAttributes, FileSnapshot, ProjectSnapshot } from '../types/snapshot.js'
 export type { ResolvedTarget,ResolveTargetInput, ResolveTargetResult } from '../types/target.js'
-export type { ProjectTextEncoding } from '../types/text.js'
 export type { ProjectTransactionInput, ProjectTransactionStatus, StoredTransaction } from '../types/transaction.js'
 export type { Postcondition, ProjectValidationContext, ProjectValidationPolicy, ProjectValidationProviders, ProjectValidationTransaction, ReadonlyProvider, ValidateInput, ValidationCheckResult, ValidationResult } from '../types/validation.js'

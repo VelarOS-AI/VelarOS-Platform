@@ -4,12 +4,11 @@ import { join } from 'node:path'
 
 import { afterEach, beforeEach, expect, test } from 'bun:test'
 
+import { textCodec } from '@velaros-ai/text-files'
+
 import { createProjectKernel } from '../src/exports/index'
 import { compileProjectFile } from '../src/utils/editing/file-planner'
-import { atomicWriteProjectText } from '../src/utils/files/atomic-writer'
-import { detectBinaryByPrefix, hashFileAndDetectBinary, limitContent, readLimitedTextPrefix, readTextLineWindow } from '../src/utils/files/file-reader'
-import { readProjectTextFile } from '../src/utils/files/text-stream'
-import { createProjectTextEncodingProbe, detectProjectTextEncoding, encodeProjectTextBuffer, finishProjectTextEncodingProbe, pushProjectTextEncodingProbe } from '../src/utils/text'
+import { detectBinaryByPrefix, hashFileAndDetectBinary, limitContent, readLimitedTextPrefix, readProjectTextFile, readTextLineWindow } from '../src/utils/files/file-reader'
 
 let root = ''
 beforeEach(async () => { root = await mkdtemp(join(tmpdir(), 'project-text-stream-')) })
@@ -17,19 +16,11 @@ afterEach(async () => { await rm(root, { recursive: true, force: true }) })
 
 const encodings = ['utf8', 'utf8-bom', 'utf16le', 'utf16be', 'utf16le-nobom', 'utf16be-nobom', 'gb18030'] as const
 
-test.each(encodings)('complete and one-byte streaming probes agree for %s', (encoding) => {
-  const original = 'long ascii source\r\n中文🙂e\u0301\\n\\uD800\r\n'
-  const bytes = encodeProjectTextBuffer(original, encoding)
-  const probe = createProjectTextEncodingProbe()
-  for (const byte of bytes) pushProjectTextEncodingProbe(probe, Uint8Array.of(byte))
-  expect(finishProjectTextEncodingProbe(probe)).toBe(encoding)
-  expect(detectProjectTextEncoding(bytes)).toBe(encoding)
-})
-
+// 编码识别、流式识别、极短无 BOM UTF-16、拒绝覆盖认不出编码的文件这些纯编解码用例在 @velaros-ai/text-files 的测试里；这里是项目读取层的用例。
 test.each(encodings)('bounded reads keep complete characters and literal escapes for %s', async (encoding) => {
   const content = 'long ascii source\r\n中文🙂\\n\\uD800\r\n'
   const path = join(root, 'source.txt')
-  const bytes = encodeProjectTextBuffer(content, encoding)
+  const bytes = textCodec.encode(content, encoding)
   await writeFile(path, bytes)
   expect(await readProjectTextFile(path)).toBe(content)
   for (let maxBytes = 1; maxBytes <= 45; maxBytes += 1) {
@@ -54,7 +45,7 @@ test('a budget inside a Chinese UTF-8 character cannot turn it into GB18030', as
 test.each(encodings)('64 KiB decoder boundaries and far line windows remain exact for %s', async (encoding) => {
   const content = `${'a'.repeat(65534)  }中文🙂\n${  'skip this line\n'.repeat(10000)  }last 中文🙂\\n\n`
   const path = join(root, 'source.txt')
-  await writeFile(path, encodeProjectTextBuffer(content, encoding))
+  await writeFile(path, textCodec.encode(content, encoding))
   expect(await readProjectTextFile(path)).toBe(content)
   const first = await readTextLineWindow(path, { startLine: 1 }, { maxChars: 65534 })
   expect(limitContent(first.content, undefined, 65534).content).toBe('a'.repeat(65534))
@@ -76,19 +67,11 @@ test('binary metadata samples allow pending UTF-8 while complete hash probes val
 test('long ASCII prefixes do not commit a legacy file to UTF-8 prematurely', async () => {
   const path = join(root, 'legacy.txt')
   const content = `${'a'.repeat(100000)  }中文\n`
-  await writeFile(path, encodeProjectTextBuffer(content, 'gb18030'))
+  await writeFile(path, textCodec.encode(content, 'gb18030'))
   expect(await readProjectTextFile(path)).toBe(content)
   const project = await createProjectKernel({ root, corePolicy: { maxFileSizeToReadBytes: 8 } })
   const read = await project.read({ path: 'legacy.txt', range: { startLine: 1, startColumn: 100001 }, maxChars: 2 })
   expect(read.content).toBe('中文')
-})
-
-test('an invalid existing encoding cannot be silently overwritten even with a fallback', async () => {
-  const path = join(root, 'invalid.txt')
-  const bytes = Buffer.from([0xff, 0xfe, 0x00, 0xd8])
-  await writeFile(path, bytes)
-  await expect(atomicWriteProjectText(path, 'replacement', 'utf8')).rejects.toThrow()
-  expect(await readFile(path)).toEqual(bytes)
 })
 
 test('model file creation centralizes UTF-8 without BOM and LF while preserving source escapes', async () => {
@@ -106,7 +89,7 @@ test('model file creation centralizes UTF-8 without BOM and LF while preserving 
 
 test('real ripgrep and adapter searches expose the same decoded source across physical encodings', async () => {
   const content = 'long ascii source\r\n中文🙂 needle 中文\\n\r\n'
-  for (const encoding of encodings) await writeFile(join(root, `${encoding}.txt`), encodeProjectTextBuffer(content, encoding))
+  for (const encoding of encodings) await writeFile(join(root, `${encoding}.txt`), textCodec.encode(content, encoding))
   const project = await createProjectKernel({ root })
   for (const query of ['needle', '中文', '🙂']) {
     const fast = await project.search({ query, maxResults: 100, useRipgrep: true })
@@ -120,7 +103,7 @@ test('real ripgrep and adapter searches expose the same decoded source across ph
     }
   }
   // 相同长度的新编码仍必须使格式缓存失效。
-  await writeFile(join(root, 'utf8.txt'), encodeProjectTextBuffer(content, 'gb18030'))
+  await writeFile(join(root, 'utf8.txt'), textCodec.encode(content, 'gb18030'))
   expect((await project.search({ query: '中文', maxResults: 100 })).hits.some((hit) => hit.path === 'utf8.txt')).toBe(true)
 })
 
@@ -136,16 +119,6 @@ test.each([4, 1000000])('explicit column ranges preserve Unicode and validate th
     await expect(project.read({ path: 'unicode.txt', range: { startLine: 1, endLine: 1, startColumn, endColumn } })).rejects.toMatchObject({ reason: 'INVALID_INPUT' })
   }
   expect((await project.read({ path: 'unicode.txt', range: { startLine: 1, endLine: 1, startColumn: 2, endColumn: 4 } })).content).toBe('🙂')
-})
-
-test.each(['utf16le-nobom', 'utf16be-nobom'] as const)('short ASCII %s uses explicit byte-order evidence', async (encoding) => {
-  for (const text of ['a', 'a\n', '\r\n', 'x = 1\n']) {
-    const path = join(root, 'short.txt')
-    const bytes = encodeProjectTextBuffer(text, encoding)
-    await writeFile(path, bytes)
-    expect(detectProjectTextEncoding(bytes)).toBe(encoding)
-    expect(await readProjectTextFile(path)).toBe(text)
-  }
 })
 
 test('logical newline budgets keep CRLF atomic and continuation offsets physical', async () => {
