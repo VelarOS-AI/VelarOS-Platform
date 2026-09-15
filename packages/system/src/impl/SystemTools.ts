@@ -49,7 +49,7 @@ const readTool = defineSystemTool<{
   examples: [{ files: [{ path: '~/build.log' }] }, { files: [{ path: '~/.zshrc' }, { path: '~/build.log', offset: 200000 }] }],
   notes: ['其他二进制文件读不了。读私钥、云凭证这类文件会先向用户确认。'],
   schema: z.object({
-    files: z.array(z.object({
+    files: z.array(z.strictObject({
       path: z.string().min(1).describe('文件路径，支持 ~；相对路径相对 system:run 的默认目录。'),
       offset: z.number().int().nonnegative().optional().describe('从第几个字符开始读，默认 0。'),
       maxChars: z.number().int().positive().max(200_000).optional().describe('最多返回多少字符，默认也是上限 200000。'),
@@ -84,7 +84,7 @@ const viewTool = defineSystemTool<{
   examples: [{ files: [{ path: '~/Desktop/screenshot.png' }] }, { files: [{ path: '~/Desktop/before.png' }, { path: '~/Desktop/after.png' }] }],
   notes: ['只认 PNG、JPEG、GIF、WebP，最大 5 MB；别的格式或太大的先用 system:run 转换、缩小。'],
   schema: z.object({
-    files: z.array(z.object({
+    files: z.array(z.strictObject({
       path: z.string().min(1).describe('图片路径，支持 ~；相对路径相对 system:run 的默认目录。'),
     })).min(1).max(10).describe('要看的图片，每项一张，一次最多 10 张。'),
   }),
@@ -144,11 +144,11 @@ const editTool = defineSystemTool<{
   notes: ['写系统敏感路径会先向用户确认。改完之后 windows 每处带新位置，改动那段不超过 20000 字符时 content 和 range 整段给出；旧的 range 已经作废，再改同一个文件用新的。'],
   inputReuse: true,
   schema: z.object({
-    files: z.array(z.object({
+    files: z.array(z.strictObject({
       path: z.string().min(1).describe('文件路径，支持 ~；相对路径相对 system:run 的默认目录。'),
       newText: z.string().optional().describe('整个文件写入的内容，不存在就新建；改几处时不用给，改动写在 edits 里。'),
-      edits: z.array(z.object({
-        range: z.object({
+      edits: z.array(z.strictObject({
+        range: z.strictObject({
           offset: z.number().int().nonnegative().describe('起点字符位置。'),
           end: z.number().int().nonnegative().describe('终点字符位置，不含。'),
         }).describe('system:read 返回的 range，只在这段里改。'),
@@ -409,7 +409,7 @@ const systemExecutionTools = structureToolDescriptionsForCategory({
   [SystemToolNames.listTasks]: listTasksTool,
 }, 'system-execution')
 
-/** 系统空间的十个模型面工具，按工具名索引。 */
+/** 系统空间的六个模型面工具，按工具名索引。 */
 export const systemTools: SystemToolCollection = Object.freeze({
   ...systemFileTools,
   ...systemExecutionTools,
@@ -496,7 +496,7 @@ export function createSystemBundledModDefinition(): SystemBundledModDefinition {
 export const SystemCapability: CapabilityToken<SystemCapabilityService> =
   createCapabilityToken<SystemCapabilityService>(SystemModId)
 
-/** 创建系统空间的内核模块：激活时把十个工具登记成能力服务；宿主给了上下文解析器，工具才能被按名调用。 */
+/** 创建系统空间的内核模块：激活时把六个工具登记成能力服务；宿主给了上下文解析器，工具才能被按名调用。 */
 export function createSystemKernelModule(
   options: CreateSystemKernelModuleOptions = {},
 ): KernelModuleDefinition {

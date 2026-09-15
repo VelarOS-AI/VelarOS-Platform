@@ -54,7 +54,7 @@ export function findOccurrences(value: string, needle: string, range: { offset: 
     const at = value.indexOf(needle, index)
     if (at === -1 || at + needle.length > range.end) break
     found.push(at)
-    index = at + needle.length
+    index = at + 1
   }
   return found
 }

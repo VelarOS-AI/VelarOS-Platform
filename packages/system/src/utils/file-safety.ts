@@ -2,10 +2,12 @@
  * 文件安全：判断路径是否在根目录内、是否属于系统敏感区、是否是凭证文件，写入敏感路径和读凭证之前向用户要确认。
  */
 
+import { realpath } from 'node:fs/promises'
 import { homedir, tmpdir } from 'node:os'
 import * as path from 'node:path'
 
 import { createApprovalOperationKey } from '@velaros-ai/agent/tool-contract'
+import { isEmpty } from '@velaros-ai/core'
 
 import type { SystemToolContext } from '../interface/requires.js'
 
@@ -25,10 +27,10 @@ function pathApi(platform: NodeJS.Platform): typeof path.posix | typeof path.win
   return platform === 'win32' ? path.win32 : path.posix
 }
 
-/** 把路径解析成可比较的形式，Windows 上统一小写。 */
+/** 把路径解析成可比较的形式：Windows 和 macOS 的卷默认不区分大小写，统一小写比较。 */
 function comparisonPath(value: string, platform: NodeJS.Platform): string {
   const resolved = pathApi(platform).resolve(value)
-  return platform === 'win32' ? resolved.toLowerCase() : resolved
+  return platform === 'win32' || platform === 'darwin' ? resolved.toLowerCase() : resolved
 }
 
 /** 判断一个路径是否在某个根目录之内（含根目录本身），Windows 上不区分大小写。 */
@@ -103,7 +105,7 @@ export function isSensitiveSystemMutationPath(
 
   const home = options.homeDir ?? homedir()
   if (home && isPathInsideRoot(abs, home, platform)) {
-    const relativeSegments = paths.relative(home, abs).split(paths.sep)
+    const relativeSegments = paths.relative(comparisonPath(home, platform), comparisonPath(abs, platform)).split(paths.sep)
     const firstSegment = relativeSegments[0] ?? ''
     if (firstSegment.startsWith('.')) return true
     if (platform === 'win32') {
@@ -123,13 +125,13 @@ export function isSensitiveSystemMutationPath(
   return false
 }
 
-/** 写入或修改系统敏感路径前向用户要确认；没有审批通道的宿主会直接拒绝。 */
+/** 写入或修改系统敏感路径前向用户要确认；先把符号链接解开再判定，没有审批通道的宿主会直接拒绝。 */
 export async function confirmSensitiveSystemMutation(
   ctx: SystemToolContext,
   resolvedPath: string,
   action: 'write' | 'edit'
 ): Promise<void> {
-  if (!isSensitiveSystemMutationPath(resolvedPath)) return
+  if (!isSensitiveSystemMutationPath(await realPathForSafety(resolvedPath))) return
 
   // 审批统一走宿主注入的 ApprovalPort；本包不假设具体确认 UI 或运行模式。
   // autonomous 与后台 never-ask 的自动批准；execution 为空的宿主（web 桥/无人值守）得到设计式
@@ -172,24 +174,43 @@ export function isCredentialPath(resolvedPath: string, options: SensitiveSystemM
   if (platform !== 'win32' && isWithinAnyRoot(abs, CredentialSystemPaths, platform)) return true
   const home = options.homeDir ?? homedir()
   if (!home || !isPathInsideRoot(abs, home, platform)) return false
-  const relative = paths.relative(home, abs).split(paths.sep).join('/')
-  return CredentialHomeDirectories.some((directory) => relative === directory || relative.startsWith(`${directory}/`))
+  const relative = paths.relative(comparisonPath(home, platform), comparisonPath(abs, platform)).split(paths.sep).join('/')
+  return CredentialHomeDirectories.some((directory) => {
+    const expected = platform === 'win32' || platform === 'darwin' ? directory.toLowerCase() : directory
+    return relative === expected || relative.startsWith(`${expected}/`)
+  })
 }
 
-/** 读凭证文件前向用户要确认；没有审批通道的宿主会直接拒绝。 */
-export async function confirmCredentialRead(ctx: SystemToolContext, resolvedPath: string): Promise<void> {
-  if (!isCredentialPath(resolvedPath)) return
+/** 读或改凭证文件前向用户要确认；先把符号链接解开再判定，没有审批通道的宿主会直接拒绝。 */
+export async function confirmCredentialAccess(ctx: SystemToolContext, resolvedPath: string, action: 'read' | 'write'): Promise<void> {
+  const target = await realPathForSafety(resolvedPath)
+  if (!isCredentialPath(target)) return
+  const verb = action === 'read' ? '读取' : '改写'
   await ctx.approval.awaitConfirmation(
-    `即将读取凭证文件：\n${resolvedPath}\n\n该文件可能包含私钥、令牌或口令，读取后内容会进入模型上下文。确认继续？`,
+    `即将${verb}凭证文件：\n${resolvedPath}\n\n该文件可能包含私钥、令牌或口令，${action === 'read' ? '读取后内容会进入模型上下文' : '改坏会影响登录与访问'}。确认继续？`,
     ctx.abortSignal,
     {
       approvalRisk: 'high',
       riskScope: 'system-read:credential',
       operation: {
-        key: createApprovalOperationKey('file-read', { path: resolvedPath }),
-        label: '读取凭证文件',
+        key: createApprovalOperationKey('file-read', { path: resolvedPath, action }),
+        label: action === 'read' ? '读取凭证文件' : '改写凭证文件',
         target: resolvedPath,
       },
     }
   )
+}
+
+/** 判定安全用的真实路径：解开符号链接；文件还不存在就解开最近的那层已存在的目录，再把剩下的段接回去。 */
+export async function realPathForSafety(resolvedPath: string): Promise<string> {
+  const trailing: string[] = []
+  let current = resolvedPath
+  for (;;) {
+    const real = await realpath(current).catch(() => null)
+    if (real) return isEmpty(trailing) ? real : path.join(real, ...trailing.reverse())
+    const parent = path.dirname(current)
+    if (parent === current) return resolvedPath
+    trailing.push(path.basename(current))
+    current = parent
+  }
 }

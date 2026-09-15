@@ -35,6 +35,13 @@ export const SystemFileLimits = Object.freeze({
   editableBytes: 2 * 1024 * 1024,
 })
 
+/** 文件现在的版本号：不存在或不是普通文件就是 null。 */
+export async function currentFileVersion(resolvedPath: string): Promise<Nullable<string>> {
+  const existing = await stat(resolvedPath).catch(() => null)
+  if (!existing?.isFile()) return null
+  return fileVersionOf(await readRawSystemFileBuffer(resolvedPath))
+}
+
 /** 读取一个文本文件，识别编码后返回原始字节、文本内容与编码；二进制文件报错。 */
 export async function readSystemTextFile(resolvedPath: string): Promise<SystemTextFileContent> {
   const buffer = await readRawSystemFileBuffer(resolvedPath)

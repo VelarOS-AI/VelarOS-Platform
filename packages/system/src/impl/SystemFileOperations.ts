@@ -7,19 +7,20 @@ import { mkdir, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { dirname, isAbsolute, resolve } from 'node:path'
 
-import { isArray, isEmpty, isNotNull, isNull, isPresent, Log } from '@velaros-ai/core'
+import { isArray, isEmpty, isNotNull, isNull, isPresent, Log, toOptional } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import type { SystemEditFileInput, SystemEditFileResult, SystemEditInput, SystemEditProblem, SystemEditReplacedResult, SystemEditResult, SystemEditWindow, SystemReadFileInput, SystemReadFileResult, SystemReadInput, SystemReadResult, SystemTextEncoding, SystemTextRange, SystemViewFileInput, SystemViewFileResult, SystemViewInput, SystemViewResult } from '../contract/files.js'
+import type { SystemEditFileInput, SystemEditFileResult, SystemEditInput, SystemEditProblem, SystemEditReplacedResult, SystemEditResult, SystemEditWindow, SystemReadFileInput, SystemReadFileResult, SystemReadInput, SystemReadResult, SystemTextEncoding, SystemTextFileContent, SystemTextRange, SystemViewFileInput, SystemViewFileResult, SystemViewInput, SystemViewResult } from '../contract/files.js'
 import type { SystemFileHistoryApi, SystemFileOperationsApi } from '../interface/internal.js'
 import type { SystemPlatformCompatibilityApi } from '../interface/provides.js'
 import type { SystemToolContext } from '../interface/requires.js'
 import { assertFileBatchSize, failureEntry, staleProblem, unresolvedEditFailure } from '../utils/file-batch.js'
-import { confirmCredentialRead, confirmSensitiveSystemMutation } from '../utils/file-safety.js'
+import { confirmCredentialAccess, confirmSensitiveSystemMutation } from '../utils/file-safety.js'
 import { writeSystemFileAtomically } from '../utils/fs.js'
 import { adaptReplacementLineEndings, findOccurrences } from '../utils/text.js'
 import {
   clampTextRange,
+  currentFileVersion,
   decodeSystemTextBuffer,
   detectMediaType,
   encodeSystemTextContent,
@@ -43,11 +44,11 @@ interface EditTarget {
   newText: string
 }
 
-/** 一个文件定下来的写入计划：回滚、整个写入、或改几处；第一段只做计划，第二段照计划写。 */
+/** 一个文件定下来的写入计划：回滚、整个写入、或改几处；baseVersion 是计划时文件的版本（不存在为 null），写之前再核一次。第一段只做计划，第二段照计划写。 */
 type EditPlan =
-  | { kind: 'restore'; index: number; path: string; exists: boolean; snapshot: { version: string; buffer: Buffer } }
-  | { kind: 'write'; index: number; path: string; created: boolean; previous: Nullable<{ buffer: Buffer; encoding: SystemTextEncoding }>; newText: string }
-  | { kind: 'edits'; index: number; path: string; textFile: { buffer: Buffer; content: string; encoding: SystemTextEncoding }; ordered: EditTarget[]; scopes: SystemTextRange[] }
+  | { kind: 'restore'; index: number; path: string; exists: boolean; snapshot: { version: string; buffer: Buffer }; baseVersion: Nullable<string> }
+  | { kind: 'write'; index: number; path: string; created: boolean; previous: Nullable<{ buffer: Buffer; encoding: SystemTextEncoding }>; newText: string; baseVersion: Nullable<string> }
+  | { kind: 'edits'; index: number; path: string; textFile: { buffer: Buffer; content: string; encoding: SystemTextEncoding }; ordered: EditTarget[]; scopes: SystemTextRange[]; baseVersion: Nullable<string> }
 
 /** 多处匹配时每个锚点前后各带多少字符原文。 */
 const AnchorContextChars = 80
@@ -113,23 +114,36 @@ class SystemFileOperations implements SystemFileOperationsApi {
   public async edit(input: SystemEditInput, ctx: SystemToolContext): Promise<SystemEditResult> {
     if (!isArray(input.files)) throw new AppError('VALIDATION', 'files is required: one entry per file to write')
     assertFileBatchSize(input.files.length, SystemFileLimits.editFiles, 'edit')
-    // 第一段：把每个文件的每一处都定下来，什么都不写；有任何问题就整批失败，问题全部列出来让调用方一次改完。
+    // 第一段：每个文件先过审批（敏感路径、凭证文件），再把每一处定下来，什么都不写；有任何问题就整批失败，问题全部列出来让调用方一次改完。
     const plans: EditPlan[] = []
     const problems: SystemEditProblem[] = []
+    const seen = new Set<string>()
     for (const [index, file] of input.files.entries()) {
-      const planned = await this.planOne(index, file, ctx)
+      const resolvedPath = this.resolvePath(file.path, ctx)
+      if (seen.has(resolvedPath)) {
+        problems.push({ file: index, path: resolvedPath, reason: 'invalid', message: 'the same file appears more than once in this batch; put all of its edits in one entry' })
+        continue
+      }
+      seen.add(resolvedPath)
+      try {
+        await confirmSensitiveSystemMutation(ctx, resolvedPath, isPresent(file.edits) ? 'edit' : 'write')
+        await confirmCredentialAccess(ctx, resolvedPath, 'write')
+      } catch (error) {
+        const failure = AppError.from(error)
+        log.debug('sensitive path write was not approved', { path: resolvedPath, code: failure.code })
+        problems.push({ file: index, path: resolvedPath, reason: 'denied', message: failure.message })
+        continue
+      }
+      const planned = await this.planOne(index, resolvedPath, file)
       if (isArray(planned)) problems.push(...planned)
       else plans.push(planned)
     }
     if (!isEmpty(problems)) throw unresolvedEditFailure(problems)
-    // 敏感路径逐个向用户确认，也在写之前；有一个被拒就整批不写。
+    // 审批期间文件可能又被别人改了：写之前再核一次字节，变了就整批不写。
     for (const plan of plans) {
-      try {
-        await confirmSensitiveSystemMutation(ctx, plan.path, plan.kind === 'edits' ? 'edit' : 'write')
-      } catch (error) {
-        const failure = AppError.from(error)
-        log.debug('sensitive path write was not approved', { path: plan.path, code: failure.code })
-        problems.push({ file: plan.index, path: plan.path, reason: 'denied', message: failure.message })
+      const current = await currentFileVersion(plan.path)
+      if (current !== plan.baseVersion) {
+        problems.push({ file: plan.index, path: plan.path, reason: 'stale', message: 'the file changed while the edit was being confirmed; read it again', currentVersion: toOptional(current) })
       }
     }
     if (!isEmpty(problems)) throw unresolvedEditFailure(problems)
@@ -146,8 +160,7 @@ class SystemFileOperations implements SystemFileOperationsApi {
   }
 
   /** 把一个文件的改法定下来但不写：返回写入计划，或者这个文件的问题清单。 */
-  private async planOne(index: number, file: SystemEditFileInput, ctx: SystemToolContext): Promise<EditPlan | SystemEditProblem[]> {
-    const resolvedPath = this.resolvePath(file.path, ctx)
+  private async planOne(index: number, resolvedPath: string, file: SystemEditFileInput): Promise<EditPlan | SystemEditProblem[]> {
     const problem = (message: string, extra: Partial<SystemEditProblem> = {}): SystemEditProblem[] => [{ file: index, path: resolvedPath, reason: 'invalid', message, ...extra }]
     const restoring = isPresent(file.restore)
     const wholeFile = isPresent(file.newText)
@@ -161,25 +174,39 @@ class SystemFileOperations implements SystemFileOperationsApi {
     if (isPresent(file.restore)) {
       const snapshot = this.history.recall(resolvedPath, file.restore)
       if (!snapshot) return problem(`version ${file.restore} is not in history; only the last few versions before edits are kept, in memory`, { reason: 'not-found' })
-      return { kind: 'restore', index, path: resolvedPath, exists: !!existing?.isFile(), snapshot }
+      const baseVersion = existing?.isFile() ? fileVersionOf(await readRawSystemFileBuffer(resolvedPath)) : null
+      const stale = staleProblem(file.version, baseVersion)
+      if (stale) return problem(stale.message, stale)
+      return { kind: 'restore', index, path: resolvedPath, exists: !!existing?.isFile(), snapshot, baseVersion }
     }
 
     if (isPresent(file.newText)) {
       if (file.newText.includes('\0')) return problem('newText contains binary data and cannot be written as text')
       const previous = existing?.isFile() ? await readSystemTextFile(resolvedPath).catch(() => null) : null
-      const stale = staleProblem(file.version, previous ? fileVersionOf(previous.buffer) : null)
+      const baseVersion = existing?.isFile() ? fileVersionOf(previous?.buffer ?? await readRawSystemFileBuffer(resolvedPath)) : null
+      const stale = staleProblem(file.version, baseVersion)
       if (stale) return problem(stale.message, stale)
-      return { kind: 'write', index, path: resolvedPath, created: !existing, previous, newText: file.newText }
+      return { kind: 'write', index, path: resolvedPath, created: !existing, previous, newText: file.newText, baseVersion }
     }
 
     const edits = file.edits ?? []
     if (isEmpty(edits)) return problem('edits is empty; give at least one place to change')
     if (edits.length > SystemFileLimits.editsPerFile) return problem(`at most ${SystemFileLimits.editsPerFile} edits per file; got ${edits.length}, split them`)
     if (!existing) return problem(`file not found: ${resolvedPath}`, { reason: 'not-found' })
-    const textFile = await readSystemTextFile(resolvedPath)
+    let textFile: SystemTextFileContent
+    try {
+      textFile = await readSystemTextFile(resolvedPath)
+    } catch (error) {
+      const failure = AppError.from(error)
+      log.debug('a file in an edit batch could not be read', { path: resolvedPath, code: failure.code })
+      return problem(failure.message, { reason: failure.code === 'NOT_FOUND' ? 'not-found' : failure.code === 'PERMISSION' ? 'denied' : 'invalid' })
+    }
     if (textFile.buffer.byteLength > SystemFileLimits.editableBytes) return problem(`file is too large for edit: ${textFile.buffer.byteLength} bytes > ${SystemFileLimits.editableBytes} bytes`)
-    const stale = staleProblem(file.version, fileVersionOf(textFile.buffer))
+    const baseVersion = fileVersionOf(textFile.buffer)
+    const stale = staleProblem(file.version, baseVersion)
     if (stale) return problem(stale.message, stale)
+    // 解码再编码必须得到原来的字节，否则改动区间之外的字节也会被改写；这种文件让 system:run 去改。
+    if (!encodeSystemTextContent(textFile.content, textFile.encoding).equals(textFile.buffer)) return problem(`file has bytes that are not valid ${textFile.encoding} text and cannot be rewritten losslessly; change it with system:run`)
     const content = textFile.content
 
     // 每一处都在改动前的原文上定目标；多处匹配给锚点，找不到、重叠也都记下来，一次报完。
@@ -189,6 +216,10 @@ class SystemFileOperations implements SystemFileOperationsApi {
     for (const [edit, change] of edits.entries()) {
       const at = (message: string, extra: Partial<SystemEditProblem> = {}): void => { problems.push({ file: index, path: resolvedPath, reason: 'invalid', message, edit, ...extra }) }
       if (change.newText.includes('\0')) { at('newText contains binary data and cannot be written as text'); continue }
+      if (change.range.end < change.range.offset || change.range.offset > content.length || change.range.end > content.length) {
+        at(`range ${change.range.offset}-${change.range.end} lies outside the file, which has ${content.length} characters; read it again`, { reason: 'stale', currentVersion: baseVersion })
+        continue
+      }
       const scope = clampTextRange(content, change.range)
       scopes.push(scope)
       if (!isPresent(change.oldText)) { targets.push({ edit, range: scope, newText: change.newText }); continue }
@@ -218,7 +249,7 @@ class SystemFileOperations implements SystemFileOperationsApi {
       if (overlapping) problems.push({ file: index, path: resolvedPath, reason: 'overlap', message: `edits[${before.edit}] and edits[${after.edit}] overlap; merge them into one edit`, edit: after.edit, with: before.edit })
     }
     if (!isEmpty(problems)) return problems
-    return { kind: 'edits', index, path: resolvedPath, textFile, ordered, scopes }
+    return { kind: 'edits', index, path: resolvedPath, textFile, ordered, scopes, baseVersion }
   }
 
   /** 按计划写一个文件：改动前把原内容留成一个版本。 */
@@ -278,8 +309,9 @@ class SystemFileOperations implements SystemFileOperationsApi {
   /** 读一个文件：按字符取一段，最多 remaining 个（还受文件自己的 maxChars 和总上限约束）；给 version 就读改动前留下的那个版本。 */
   private async readOne(file: SystemReadFileInput, remaining: number, ctx: SystemToolContext): Promise<SystemReadFileResult> {
     const resolvedPath = this.resolvePath(file.path, ctx)
-    await confirmCredentialRead(ctx, resolvedPath)
     const maxChars = Math.max(0, Math.min(SystemFileLimits.readChars, file.maxChars ?? SystemFileLimits.readChars, remaining))
+    // 预算已经用完的文件只带位置回去，不为它打扰用户。
+    if (maxChars > 0) await confirmCredentialAccess(ctx, resolvedPath, 'read')
     if (isPresent(file.version)) {
       const snapshot = this.history.recall(resolvedPath, file.version)
       if (!snapshot) {
@@ -298,7 +330,7 @@ class SystemFileOperations implements SystemFileOperationsApi {
   /** 看一张图片：整张作为内容块交给模型，返回元数据、内容块和一行说明；不是模型认得的图片就报错。 */
   private async viewOne(file: SystemViewFileInput, ctx: SystemToolContext): Promise<{ entry: SystemViewFileResult; part: SystemViewResult['modelContent'][number]; label: string }> {
     const resolvedPath = this.resolvePath(file.path, ctx)
-    await confirmCredentialRead(ctx, resolvedPath)
+    await confirmCredentialAccess(ctx, resolvedPath, 'read')
     const buffer = await readBoundedFile(resolvedPath, SystemFileLimits.fileBytes)
     const media = detectMediaType(buffer)
     if (media?.kind !== 'image') {

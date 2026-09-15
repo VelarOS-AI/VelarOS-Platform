@@ -1,15 +1,17 @@
 import { spawnSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { chmod, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import { describe, expect, test } from 'bun:test'
 
 import { systemFileOperations } from '../src/impl/SystemFileOperations.js'
+import { systemTools } from '../src/impl/SystemTools.js'
 import type { SystemToolContext } from '../src/interface/requires.js'
 import { shouldReapForegroundProcessGroupAfterExit } from '../src/utils/command-policy.js'
 import { buildSystemProcessConfinementSpawnSpec, buildSystemSeatbeltProfile } from '../src/utils/confinement.js'
+import { isCredentialPath } from '../src/utils/file-safety.js'
 
 /** 一律批准的工具上下文：写入测试只关心内容，不走真实的用户确认。 */
 const approvingContext: SystemToolContext = {
@@ -432,6 +434,85 @@ describe('System capability', () => {
       expect(replaced.windows).toHaveLength(1)
       expect(replaced.windows[0]).toMatchObject({ edit: 0, range: { offset: 29_800, end: 30_206 } })
       expect(replaced.windows[0]!.content).toBe(`${'x'.repeat(200)  }THREAD${  'y'.repeat(200)}`)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('edit refuses what it cannot do losslessly or safely: bad bytes, stale restores, duplicates, out-of-range ranges', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'velaros-system-edit-guard-'))
+    try {
+      // 不是合法 UTF-8 的字节：解码再编码对不上原字节，拒绝改，文件一个字节都不动。
+      const latin = join(root, 'latin1.conf')
+      const bytes = Buffer.from([0x6e, 0x61, 0x6d, 0x65, 0x3d, 0x63, 0x61, 0x66, 0xe9, 0x0a, 0x6d, 0x6f, 0x64, 0x65, 0x3d, 0x6f, 0x6c, 0x64, 0x0a])
+      await writeFile(latin, bytes)
+      const lossy = await problemsOf(editOne({ latin: 'x', path: latin, edits: [{ range: { offset: 0, end: 19 }, oldText: 'mode=old', newText: 'mode=new' }] } as never))
+      expect(lossy.problems[0]).toMatchObject({ file: 0, reason: 'invalid' })
+      expect(Buffer.compare(await readFile(latin), bytes)).toBe(0)
+
+      // restore 也核对 version。
+      const path = join(root, 'a.txt')
+      const first = await editOne({ path, newText: 'one\n' })
+      await editOne({ path, newText: 'two\n' })
+      const staleRestore = await problemsOf(editOne({ path, restore: first.version, version: 'deadbeef0000' }))
+      expect(staleRestore.problems[0]).toMatchObject({ reason: 'stale', currentVersion: expect.any(String) })
+      expect(await readFile(path, 'utf8')).toBe('two\n')
+
+      // 同一批里同一个文件出现两次：整批不写。
+      const duplicated = await problemsOf(systemFileOperations.edit({ files: [{ path, newText: 'x\n' }, { path, newText: 'y\n' }] }, approvingContext))
+      expect(duplicated.problems[0]).toMatchObject({ file: 1, reason: 'invalid', message: expect.stringContaining('more than once') })
+      expect(await readFile(path, 'utf8')).toBe('two\n')
+
+      // range 落在文件外：不静默追加，按 stale 报。
+      const outside = await problemsOf(editOne({ path, edits: [{ range: { offset: 5000, end: 5010 }, newText: 'APPENDED' }] }))
+      expect(outside.problems[0]).toMatchObject({ edit: 0, reason: 'stale', message: expect.stringContaining('outside the file') })
+      expect(await readFile(path, 'utf8')).toBe('two\n')
+
+      // 重叠出现也算多处：'aaa' 里找 'aa' 有两处。
+      const overlapping = join(root, 'aaa.txt')
+      await writeFile(overlapping, 'aaa')
+      const ambiguous = await problemsOf(editOne({ path: overlapping, edits: [{ range: { offset: 0, end: 3 }, oldText: 'aa', newText: 'X' }] }))
+      expect(ambiguous.problems[0]).toMatchObject({ reason: 'ambiguous', matchCount: 2 })
+
+      // 读不了的文件变成这个文件的问题，而不是裸错。
+      if (process.platform !== 'win32' && process.getuid?.() !== 0) {
+        const locked = join(root, 'locked.txt')
+        await writeFile(locked, 'secret\n')
+        await chmod(locked, 0o000)
+        const unreadable = await problemsOf(editOne({ path: locked, edits: [{ range: { offset: 0, end: 7 }, newText: 'x' }] }))
+        expect(unreadable.problems[0]).toMatchObject({ file: 0, reason: expect.stringMatching(/denied|invalid/) })
+        await chmod(locked, 0o600)
+      }
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('credential checks see through symlinks and case, edit asks too, and exhausted reads do not ask', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'velaros-system-credential-'))
+    try {
+      const keyPath = join(root, 'deploy.pem')
+      await writeFile(keyPath, '-----BEGIN PRIVATE KEY-----\nabc\n')
+      const alias = join(root, 'notes.txt')
+      await symlink(keyPath, alias)
+      const denying: SystemToolContext = { ...approvingContext, approval: { requestApproval: async () => ({ approved: true }), awaitConfirmation: async () => { throw new Error('user said no') } } } as SystemToolContext
+      await expect(systemFileOperations.read({ files: [{ path: alias }] }, denying)).rejects.toThrow('user said no')
+      const write = await problemsOf(systemFileOperations.edit({ files: [{ path: alias, newText: 'clobbered\n' }] }, denying))
+      expect(write.reason).toBe('SYSTEM_EDIT_DENIED')
+      expect(await readFile(keyPath, 'utf8')).toContain('PRIVATE KEY')
+      expect(isCredentialPath('/Users/someone/.SSH/config', { homeDir: '/Users/someone', platform: 'darwin' })).toBe(true)
+      expect(isCredentialPath('/users/someone/.aws/config', { homeDir: '/Users/someone', platform: 'darwin' })).toBe(true)
+      expect(isCredentialPath('/home/someone/.SSH/config', { homeDir: '/home/someone', platform: 'linux' })).toBe(false)
+      expect(isCredentialPath('/home/someone/work/id_ed25519', { homeDir: '/home/someone', platform: 'linux' })).toBe(true)
+
+      // 预算已经用完的文件不会为了一个空条目去打扰用户。
+      await writeFile(join(root, 'big.txt'), 'a'.repeat(200_000))
+      const exhausted = await systemFileOperations.read({ files: [{ path: join(root, 'big.txt') }, { path: keyPath }] }, denying)
+      expect(entryOf(exhausted, 1)).toMatchObject({ content: '', hasMore: true })
+
+      // 参数对象里的未知字段在 schema 这一层就被拒绝，拼错的 version 不会被静默丢掉。
+      expect(systemTools['system:read']!.schema.safeParse({ files: [{ path: keyPath, Version: 'x' }] }).success).toBe(false)
+      expect(systemTools['system:edit']!.schema.safeParse({ files: [{ path: keyPath, edits: [{ range: { offset: 0, end: 1 }, newText: 'x', oldtext: 'y' }] }] }).success).toBe(false)
     } finally {
       await rm(root, { recursive: true, force: true })
     }
