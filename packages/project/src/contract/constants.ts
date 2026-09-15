@@ -34,6 +34,44 @@ export const ProjectCodeAnalysisModId = 'velaros.project.code-analysis' as const
 /** 项目空间自己的身份，mod 清单里声明的空间用它。 */
 export const ProjectSpaceId = 'project' as const
 
+/**
+ * 项目空间对外承诺的错误原因：`ProjectError` 的 reason，模型和宿主按它分支处理。码本身是契约，不得改名；
+ * 新的失败形态先在这里加一项，不要拿 INVALID_INPUT 兜底。
+ */
+export const ProjectErrorCodes = Object.freeze({
+  /** 路径或操作被项目策略、授权或脱敏规则拒绝。 */
+  permissionDenied: 'PERMISSION_DENIED',
+  /** 文件在读取之后被改过，编辑用的版本已经过期；重读再改。 */
+  baseRevisionMismatch: 'BASE_REVISION_MISMATCH',
+  /** 要读、要改的文件、符号或原文片段找不到。 */
+  targetNotFound: 'TARGET_NOT_FOUND',
+  /** 定位条件匹配到不止一处，定不下改哪一处。 */
+  ambiguousTarget: 'AMBIGUOUS_TARGET',
+  /** 要新建的路径已经存在。 */
+  targetExists: 'TARGET_EXISTS',
+  /** 补丁套不上当前内容。 */
+  patchApplyError: 'PATCH_APPLY_ERROR',
+  /** 超出了允许的范围：路径出了项目或 fileRef 的可见范围，或者事务的文件数、行数超过预算。 */
+  scopeViolation: 'SCOPE_VIOLATION',
+  /** 目标在项目策略的受保护文件里。 */
+  protectedFile: 'PROTECTED_FILE',
+  /** 目标匹配项目策略的生成文件；改生成器的输入再重新生成。 */
+  generatedFile: 'GENERATED_FILE',
+  /** 校验器没通过，改动没有提交。 */
+  validationFailed: 'VALIDATION_FAILED',
+  /** 提交或撤销时发现文件被外部改过，拒绝覆盖。 */
+  conflictWithExternalEdit: 'CONFLICT_WITH_EXTERNAL_EDIT',
+  /** 重启后恢复中断的事务时遇到无法归属的外部改动，保留现场、拒绝覆盖。 */
+  transactionRecoveryConflict: 'TRANSACTION_RECOVERY_CONFLICT',
+  /** 当前环境、文件类型或宿主不支持这个操作。 */
+  notSupported: 'NOT_SUPPORTED',
+  /** 入参不合法。 */
+  invalidInput: 'INVALID_INPUT',
+} as const)
+
+/** 项目空间的错误原因之一。 */
+export type ProjectErrorCode = (typeof ProjectErrorCodes)[keyof typeof ProjectErrorCodes]
+
 /** 模型面工具入参契约的版本：失败调用的入参复用只在同一版本内进行。 */
 export const ProjectToolContract = Object.freeze({
   /** 当前模型面工具入参的契约版本。 */

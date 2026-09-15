@@ -265,8 +265,6 @@ export interface ProjectToolApi {
   ) => Promise<ProjectCommandResult>
   /** Project 内置代码理解入口；宿主可用 CodeGraph 覆盖同一 action 面的增强查询。 */
   queryCode: (input: ProjectCodeQuery, context: ProjectToolContext) => Promise<unknown>
-  /** Optional graph analysis backend; ordinary code queries remain available independently. */
-  codeAnalysisAvailable?: () => boolean
   /** 演练沙箱端口；宿主用系统能力实现（Desktop 用本地内核）。没接的宿主没有 project:sandbox。 */
   sandbox?: ProjectSandboxPort
 }

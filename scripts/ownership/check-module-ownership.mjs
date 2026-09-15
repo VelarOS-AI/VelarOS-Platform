@@ -683,7 +683,11 @@ for (const module of GovernedModules) {
     const functionNames = new Set()
     for (const statement of sourceFile.statements) {
       if (ts.isClassDeclaration(statement)) {
-        fail(`${label}: ${shortPath(file)} 里有类 ${statement.name?.text ?? ''}；utils 只放函数和常量，类放进 ${module.impl}/ 并在类上方写接口`)
+        // 只有字段和构造函数的错误类可以放 utils：工具函数要抛它，而 utils 不许引 impl。
+        const extendsError = (statement.heritageClauses ?? []).some((clause) => clause.token === ts.SyntaxKind.ExtendsKeyword && clause.types.some((type) => /Error$/u.test(type.expression.getText(sourceFile))))
+        const fieldsOnly = statement.members.every((member) => ts.isPropertyDeclaration(member) || ts.isConstructorDeclaration(member))
+        if (extendsError && fieldsOnly && ChinesePattern.test(jsDocText(statement, sourceFile))) continue
+        fail(`${label}: ${shortPath(file)} 里有类 ${statement.name?.text ?? ''}；utils 只放函数和常量（只有字段、写了中文说明的错误类除外），类放进 ${module.impl}/ 并在类上方写接口`)
       } else if (ts.isEnumDeclaration(statement)) {
         fail(`${label}: ${shortPath(file)} 里有枚举 ${statement.name.text}；常量表放进 ${module.contract}/constants.ts`)
       } else if (ts.isInterfaceDeclaration(statement) || ts.isTypeAliasDeclaration(statement)) {
@@ -1073,17 +1077,26 @@ for (const module of GovernedModules) {
   }
   const calledPortMembers = new Set()
   if (toolsSourceFile) {
+    const portField = module.hostPortField ?? 'system'
     const visitCalls = (node) => {
-      if (ts.isPropertyAccessExpression(node) && ts.isPropertyAccessExpression(node.expression) && node.expression.name.text === 'system') {
+      if (ts.isPropertyAccessExpression(node) && ts.isPropertyAccessExpression(node.expression) && node.expression.name.text === portField) {
         calledPortMembers.add(node.name.text)
       }
       ts.forEachChild(node, visitCalls)
     }
-    // 工具文件自己调的，加上它委托的 impl 类里调的（execute 一行交给类时，端口调用在类里）。
-    const delegated = relativeSpecifiers(toolsSourceFile)
-      .map(({ specifier }) => resolveRelativeImport(toolsFilePath, specifier))
-      .filter((target) => target && inside(target, implRoot))
-    for (const file of [toolsFilePath, ...delegated]) visitCalls(parse(file))
+    // 工具文件自己调的，加上从它出发、沿相对 import 能走到的 impl 与 utils 文件里调的（execute 一行交给类、类再交给工具函数时，端口调用在更深处）。
+    const reachable = new Set([toolsFilePath])
+    const queue = [toolsFilePath]
+    while (queue.length > 0) {
+      const file = queue.pop()
+      for (const { specifier } of relativeSpecifiers(parse(file))) {
+        const target = resolveRelativeImport(file, specifier)
+        if (!target || reachable.has(target) || !(inside(target, implRoot) || inside(target, utilsRoot))) continue
+        reachable.add(target)
+        queue.push(target)
+      }
+    }
+    for (const file of reachable) visitCalls(parse(file))
   }
   const hostPortDeclaration = module.hostPort ? publicDeclarations.find((statement) => statement.name.text === module.hostPort) : null
   if (module.hostPort && !hostPortDeclaration) {

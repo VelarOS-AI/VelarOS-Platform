@@ -177,7 +177,7 @@
     },
     {
       "path": "packages/project/src/impl/operations/ProjectFileContext.ts",
-      "fingerprint": "6a0fccf3dcf0f45aa7cd88f9cde0170192f90f84f7a78e273e24ecb1353cbc5f"
+      "fingerprint": "c912d6e6dee3993ed352d661a69b163af163dd90395e9258a1c31aca3f992d0c"
     },
     {
       "path": "packages/project/src/impl/operations/ProjectFileOperations.ts",
