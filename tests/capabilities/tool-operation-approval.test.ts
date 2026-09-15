@@ -1,14 +1,19 @@
+/**
+ * 跨空间的工具操作身份：system:run 与 project:run 共用任务级审批端口，同一条危险命令换个工具也不能绕过用户的拒绝，
+ * 批准也不会进任务记忆（危险命令每次都要人点头）。两个空间互不引用，这条约束属于仓库层，所以测试放在这里。
+ */
+
 import { resolve } from 'node:path'
 
 import { describe, expect, test } from 'bun:test'
 
-import { projectTools } from '../../project/src/agent/Project.tool'
-import type { ProjectToolContext } from '../../project/src/agent/Types'
-import { systemTools } from '../../system/src/impl/SystemTools'
-import type { SystemToolContext } from '../../system/src/interface/requires'
-import { CodingSessionTracker } from '../src/agent/CodingSessionTracker'
-import type { ApprovalPort } from '../src/tool-contract/approval'
-import { createTaskApprovalPort } from '../src/tool-contract/task-approval'
+import { CodingSessionTracker } from '../../packages/agent/src/agent/CodingSessionTracker'
+import type { ApprovalPort } from '../../packages/agent/src/tool-contract/approval'
+import { createTaskApprovalPort } from '../../packages/agent/src/tool-contract/task-approval'
+import { projectTools } from '../../packages/project/src/agent/Project.tool'
+import type { ProjectToolContext } from '../../packages/project/src/agent/Types'
+import type { SystemToolContext } from '../../packages/system/src/exports/index'
+import { systemTools } from '../../packages/system/src/exports/index'
 
 function tools(approved: boolean) {
   const workspaceRoot = resolve('/workspace')
@@ -32,14 +37,18 @@ function tools(approved: boolean) {
   const system: SystemToolContext = {
     abortSignal: new AbortController().signal, approval,
     system: {
-      resolveCommandCwd: (cwd) => resolve(workspaceRoot, cwd ?? '.'),
-      canStartBackgroundCommands: () => true, runCommand: run,
+      resolvePath: (path) => resolve(workspaceRoot, path ?? '.'),
+      runCommand: run,
       listBackgroundTasks: unused,
-      refreshShellEnvironment: unused, canRefreshShellEnvironment: () => false,
+      refreshShellEnvironment: unused,
+      createSandbox: unused,
+      diffSandbox: unused,
+      applySandbox: unused,
+      discardSandbox: unused,
     },
   }
   const project: ProjectToolContext = {
-    abortSignal: system.abortSignal, approval, system: system.system,
+    abortSignal: system.abortSignal, approval, system: { canStartBackgroundCommands: () => true },
     project: {
       getRootPath: () => workspaceRoot, runCommand: run,
       runInDirectory: async (_path, action) => action(), runWithApproval: async (action) => action(),
