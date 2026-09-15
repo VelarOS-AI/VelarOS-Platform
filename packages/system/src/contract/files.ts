@@ -51,39 +51,24 @@ export interface SystemReadResult {
   files: Array<SystemReadFileResult | SystemFileFailure>
 }
 
-/** 看一个图片或 PDF：pages 是 PDF 看哪几页，从 1 起，不给就是第 1 页。 */
+/** 看一张图片。 */
 export interface SystemViewFileInput {
   path: string
-  pages?: number[]
 }
 
-/** 看图片或 PDF 的入参：files 里每项一个文件，一个文件就一项，一批就多项。 */
+/** 看图片的入参：files 每项一个文件，一个文件就一项，一批就多项。 */
 export interface SystemViewInput {
   files: SystemViewFileInput[]
 }
 
-/** 看到的一张图片。 */
-export interface SystemViewImageResult {
+/** 看到的一张图片的元数据。 */
+export interface SystemViewFileResult {
   path: string
-  kind: 'image'
   mediaType: string
   bytes: number
 }
 
-/** 看到的一份 PDF：pages 是实际抽出的页，pageCount 是原文件的总页数。 */
-export interface SystemViewDocumentResult {
-  path: string
-  kind: 'document'
-  mediaType: string
-  pages: number[]
-  pageCount: number
-  bytes: number
-}
-
-/** 看到的一个文件的元数据。 */
-export type SystemViewFileResult = SystemViewImageResult | SystemViewDocumentResult
-
-/** 看图片或 PDF 的结果：files 与入参的 files 一一对应；modelContent 按同样的顺序放每个文件的内容块（图片整张、PDF 是抽出的那几页，效果和用户上传一样），每块前面一行文字说明是哪个文件，失败的文件没有内容块。 */
+/** 看图片的结果：files 与入参的 files 一一对应；modelContent 按同样的顺序放每张图的内容块（整张交给模型，效果和用户上传一样），每块前面一行文字说明是哪个文件，失败的文件没有内容块。 */
 export interface SystemViewResult {
   files: Array<SystemViewFileResult | SystemFileFailure>
   modelContent: ToolResultModelContentPart[]
@@ -96,7 +81,7 @@ export interface SystemFileSnapshot {
   savedAt: number
 }
 
-/** 读文件时认出的媒体类型。 */
+/** 读文件时认出的媒体类型：模型认得的图片，或 PDF 这类文档（本包不看，只用来把错误说清楚）。 */
 export interface SystemMediaType {
   kind: 'image' | 'document'
   mediaType: string

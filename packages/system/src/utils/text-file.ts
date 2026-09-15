@@ -1,5 +1,5 @@
 /**
- * 文本与媒体文件：识别编码、读文本文件、认出图片与 PDF、按字符取段。
+ * 文本与媒体文件：识别编码、读文本文件、认出图片（和 PDF，只为把错误说清楚）、按字符取段。
  */
 
 import { createHash } from 'node:crypto'
@@ -19,7 +19,7 @@ const UTF16BE_BOM = Buffer.from([0xFE, 0xFF])
 
 /**
  * 读、看、写的上限：readChars 是文本一次调用总共最多返回的字符数（每个文件也是它，默认就读到上限，edit 返回的改后内容也截到它）；
- * readFiles、viewFiles、editFiles 是一次最多几个文件；editsPerFile 是一个文件一次最多改几处；pdfPages 是一份 PDF 一次最多几页；
+ * readFiles、viewFiles、editFiles 是一次最多几个文件；editsPerFile 是一个文件一次最多改几处；
  * imageBytes 是交给模型的图片上限；fileBytes 是读进来的文件上限，再大就让模型用系统命令截取；editableBytes 是能做精确替换的文件上限。
  */
 export const SystemFileLimits = Object.freeze({
@@ -28,7 +28,6 @@ export const SystemFileLimits = Object.freeze({
   viewFiles: 10,
   editFiles: 20,
   editsPerFile: 50,
-  pdfPages: 20,
   imageBytes: 5 * 1024 * 1024,
   fileBytes: 20 * 1024 * 1024,
   editableBytes: 2 * 1024 * 1024,

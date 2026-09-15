@@ -1,11 +1,11 @@
 /**
  * 三个文件操作：`SystemFileOperations` 与整个进程唯一的 `systemFileOperations`。接口见 `interface/internal.ts` 的 `SystemFileOperationsApi`。
- * `system:read`、`system:view`、`system:edit` 各调一个方法；三个都是一批文件（一个文件就一项），一批里某个文件失败只标记它那一项，全部失败才整个报错；列目录和搜文本由 `system:run` 用系统命令做。
+ * `system:read`、`system:view`、`system:edit` 各调一个方法；三个都是一批文件（一个文件就一项），读和看里某个文件失败只标记它那一项、全部失败才整个报错，写是整批同成败；列目录和搜文本由 `system:run` 用系统命令做。PDF 与其他文档不在这里看。
  */
 
 import { mkdir, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
-import { basename, dirname, extname, isAbsolute, resolve } from 'node:path'
+import { dirname, isAbsolute, resolve } from 'node:path'
 
 import { isArray, isEmpty, isPresent, Log } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
@@ -17,7 +17,6 @@ import type { SystemToolContext } from '../interface/requires.js'
 import { assertFileBatchSize, failureEntry, unresolvedEditFailure } from '../utils/file-batch.js'
 import { confirmSensitiveSystemMutation } from '../utils/file-safety.js'
 import { writeSystemFileAtomically } from '../utils/fs.js'
-import { extractPdfPages, pdfPagesFilename } from '../utils/pdf.js'
 import { adaptReplacementLineEndings, findOccurrences } from '../utils/text.js'
 import {
   clampTextRange,
@@ -271,35 +270,28 @@ class SystemFileOperations implements SystemFileOperationsApi {
     const buffer = await readBoundedFile(resolvedPath, SystemFileLimits.fileBytes)
     const media = detectMediaType(buffer)
     if (media) {
-      throw new AppError('VALIDATION', `${resolvedPath} is ${media.kind === 'image' ? 'an image' : 'a PDF'}; use system:view to look at it`)
+      throw new AppError('VALIDATION', media.kind === 'image' ? `${resolvedPath} is an image; use system:view to look at it` : `${resolvedPath} is a PDF, not text; documents are read elsewhere`)
     }
     return readTextWindow(resolvedPath, buffer, file.offset ?? 0, maxChars)
   }
 
-  /** 看一个文件：图片整张、PDF 抽出 pages 这几页成一份文档，返回元数据、交给模型的内容块和一行说明。 */
+  /** 看一张图片：整张作为内容块交给模型，返回元数据、内容块和一行说明；不是模型认得的图片就报错。 */
   private async viewOne(file: SystemViewFileInput): Promise<{ entry: SystemViewFileResult; part: SystemViewResult['modelContent'][number]; label: string }> {
     const resolvedPath = this.resolvePath(file.path)
     const buffer = await readBoundedFile(resolvedPath, SystemFileLimits.fileBytes)
     const media = detectMediaType(buffer)
-    if (!media) {
-      throw new AppError('VALIDATION', `${resolvedPath} is not an image or PDF; text files go through system:read`)
+    if (media?.kind !== 'image') {
+      throw new AppError('VALIDATION', media
+        ? `${resolvedPath} is a PDF; this tool only shows images, documents are read elsewhere`
+        : `${resolvedPath} is not an image the model can see (PNG, JPEG, GIF, WebP); text files go through system:read, other formats need converting first`)
     }
-    if (media.kind === 'image') {
-      if (buffer.byteLength > SystemFileLimits.imageBytes) {
-        throw new AppError('VALIDATION', `Image is too large to hand to the model: ${buffer.byteLength} bytes > ${SystemFileLimits.imageBytes} bytes; shrink it with system:run first`)
-      }
-      return {
-        entry: { path: resolvedPath, kind: 'image', mediaType: media.mediaType, bytes: buffer.byteLength },
-        part: { type: 'image-data', data: buffer.toString('base64'), mediaType: media.mediaType },
-        label: resolvedPath,
-      }
+    if (buffer.byteLength > SystemFileLimits.imageBytes) {
+      throw new AppError('VALIDATION', `Image is too large to hand to the model: ${buffer.byteLength} bytes > ${SystemFileLimits.imageBytes} bytes; shrink it with system:run first`)
     }
-    const extracted = await extractPdfPages(buffer, file.pages ?? [1], SystemFileLimits.pdfPages)
-    const filename = pdfPagesFilename(basename(resolvedPath, extname(resolvedPath)), extracted.pages)
     return {
-      entry: { path: resolvedPath, kind: 'document', mediaType: media.mediaType, pages: extracted.pages, pageCount: extracted.pageCount, bytes: extracted.bytes.byteLength },
-      part: { type: 'file-data', data: extracted.bytes.toString('base64'), mediaType: media.mediaType, filename },
-      label: `${resolvedPath}（第 ${extracted.pages.join('、')} 页，共 ${extracted.pageCount} 页）`,
+      entry: { path: resolvedPath, mediaType: media.mediaType, bytes: buffer.byteLength },
+      part: { type: 'image-data', data: buffer.toString('base64'), mediaType: media.mediaType },
+      label: resolvedPath,
     }
   }
 

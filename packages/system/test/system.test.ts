@@ -5,7 +5,6 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import { describe, expect, test } from 'bun:test'
-import { PDFDocument } from 'pdf-lib'
 
 import { systemFileOperations } from '../src/impl/SystemFileOperations.js'
 import type { SystemToolContext } from '../src/interface/requires.js'
@@ -170,57 +169,35 @@ describe('System capability', () => {
     }
   })
 
-  test('view hands images to the model whole and PDFs a few pages at a time, files one or many', async () => {
+  test('view hands images to the model whole, files one or many, and refuses everything else', async () => {
     const root = await mkdtemp(join(tmpdir(), 'velaros-system-view-'))
     try {
       const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52])
       const imagePath = join(root, 'shot.png')
       await writeFile(imagePath, png)
       const viewedImage = await systemFileOperations.view({ files: [{ path: imagePath }] })
-      expect(entryOf(viewedImage)).toEqual({ path: imagePath, kind: 'image', mediaType: 'image/png', bytes: png.byteLength })
+      expect(entryOf(viewedImage)).toEqual({ path: imagePath, mediaType: 'image/png', bytes: png.byteLength })
       expect(viewedImage.modelContent).toEqual([
         { type: 'text', text: `文件 1/1：${imagePath}` },
         { type: 'image-data', data: png.toString('base64'), mediaType: 'image/png' },
       ])
       await expect(systemFileOperations.read({ files: [{ path: imagePath }] })).rejects.toThrow('system:view')
 
-      const source = await PDFDocument.create()
-      source.addPage([200, 100]).drawText('one')
-      source.addPage([200, 100]).drawText('two')
-      source.addPage([200, 100]).drawText('three')
       const pdfPath = join(root, 'report.pdf')
-      await writeFile(pdfPath, Buffer.from(await source.save()))
-      const pageCountOf = async (part: unknown): Promise<number> => (await PDFDocument.load(Buffer.from((part as { data: string }).data, 'base64'))).getPageCount()
-
-      const secondOnly = await systemFileOperations.view({ files: [{ path: pdfPath, pages: [2] }] })
-      expect(entryOf(secondOnly)).toEqual({ path: pdfPath, kind: 'document', mediaType: 'application/pdf', pages: [2], pageCount: 3, bytes: expect.any(Number) })
-      expect(secondOnly.modelContent[0]).toEqual({ type: 'text', text: `文件 1/1：${pdfPath}（第 2 页，共 3 页）` })
-      expect(secondOnly.modelContent[1]).toMatchObject({ type: 'file-data', mediaType: 'application/pdf', filename: 'report.p2.pdf' })
-      expect(await pageCountOf(secondOnly.modelContent[1])).toBe(1)
-
-      const several = await systemFileOperations.view({ files: [{ path: pdfPath, pages: [3, 1, 3] }] })
-      expect(entryOf(several)).toMatchObject({ pages: [1, 3], pageCount: 3 })
-      expect(several.modelContent[1]).toMatchObject({ filename: 'report.p1+3.pdf' })
-      expect(await pageCountOf(several.modelContent[1])).toBe(2)
-      const contiguous = await systemFileOperations.view({ files: [{ path: pdfPath, pages: [1, 2, 3] }] })
-      expect(contiguous.modelContent[1]).toMatchObject({ filename: 'report.p1-3.pdf' })
-      expect(await pageCountOf(contiguous.modelContent[1])).toBe(3)
-
-      const defaulted = await systemFileOperations.view({ files: [{ path: pdfPath }] })
-      expect(entryOf(defaulted)).toMatchObject({ pages: [1], pageCount: 3 })
-      await expect(systemFileOperations.view({ files: [{ path: pdfPath, pages: [4] }] })).rejects.toThrow('out of range')
-
+      await writeFile(pdfPath, Buffer.from('%PDF-1.4\n%fake\n'))
+      await expect(systemFileOperations.view({ files: [{ path: pdfPath }] })).rejects.toThrow('only shows images')
+      await expect(systemFileOperations.read({ files: [{ path: pdfPath }] })).rejects.toThrow('not text')
       const textPath = join(root, 'plain.txt')
       await writeFile(textPath, 'hello')
       await expect(systemFileOperations.view({ files: [{ path: textPath }] })).rejects.toThrow('system:read')
 
-      // 一批里混着图片、PDF 和一个不存在的文件：失败的只标记它那一项，内容块按顺序排，每份 PDF 各自的 pages。
-      const batch = await systemFileOperations.view({ files: [{ path: imagePath }, { path: join(root, 'missing.png') }, { path: pdfPath, pages: [2, 3] }] })
-      expect(batch.files.map((entry) => ('error' in entry ? entry.error.code : entry.kind))).toEqual(['image', 'NOT_FOUND', 'document'])
-      expect(entryOf(batch, 2)).toMatchObject({ pages: [2, 3], pageCount: 3 })
-      expect(batch.modelContent.map((part) => part.type)).toEqual(['text', 'image-data', 'text', 'file-data'])
-      expect(batch.modelContent[0]).toEqual({ type: 'text', text: `文件 1/3：${imagePath}` })
-      expect(batch.modelContent[2]).toEqual({ type: 'text', text: `文件 3/3：${pdfPath}（第 2、3 页，共 3 页）` })
+      // 一批里混着图片和一个不存在的文件：失败的只标记它那一项，内容块按顺序排。
+      const secondPath = join(root, 'again.png')
+      await writeFile(secondPath, png)
+      const batch = await systemFileOperations.view({ files: [{ path: imagePath }, { path: join(root, 'missing.png') }, { path: secondPath }] })
+      expect(batch.files.map((entry) => ('error' in entry ? entry.error.code : entry.mediaType))).toEqual(['image/png', 'NOT_FOUND', 'image/png'])
+      expect(batch.modelContent.map((part) => part.type)).toEqual(['text', 'image-data', 'text', 'image-data'])
+      expect(batch.modelContent[2]).toEqual({ type: 'text', text: `文件 3/3：${secondPath}` })
       await expect(systemFileOperations.view({ files: [{ path: join(root, 'a.png') }, { path: join(root, 'b.png') }] })).rejects.toThrow('not found')
     } finally {
       await rm(root, { recursive: true, force: true })

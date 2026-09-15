@@ -59,7 +59,7 @@
 | 工具 | 链路 |
 | --- | --- |
 | `system:read` | files 每项一个文件：按字符取一段，默认一次读到上限，返回它的 range 和内容的版本号；给 version 就读改动前留下的旧版本 → 一次调用总共最多 20 万字符，按顺序分给各文件 → 结果的 files 一一对应，某个文件读不了只标记它那一项，全部失败才报错 |
-| `system:view` | files 每项一个文件：图片整张作为模型可见的内容块交给模型，和用户上传一样 → PDF 把 pages 这几页抽成一份文档交给模型，附上总页数 → 内容块按 files 的顺序排，每块前面一行说明是哪个文件；某个文件看不了只标记它那一项 |
+| `system:view` | files 每项一张图：整张作为模型可见的内容块交给模型，和用户上传一样 → 内容块按 files 的顺序排，每块前面一行说明是哪个文件；某个文件看不了只标记它那一项。PDF 与其他文档归别的 mod |
 | `system:edit` | files 每项一个文件，一批全成或全不成：先把每个文件的每一处在原文上定下来、什么都不写（各自只在 read 读到的 range 里找，多处匹配给锚点），定不下来就整批失败，回执 details.problems 列出第几个文件第几处出了什么问题、入参可复用（reuse + changes 只改那一处再发） → 敏感路径逐个向用户确认，有一个被拒整批不写 → 按顺序写：改动前把原内容留成一个版本，newText 整个写入，edits 从后往前一起套用并把盖住所有改动那段的新内容和新版本号交回，restore 回滚到留下的版本 |
 | `system:run` | ① 执行前分类（只读 / 危险 / 后台）→ ② 显式 background 优先，否则按命令形态推断 → ③ 审批：危险命令高风险手动确认，长驻服务低风险确认 → ④ 宿主执行 → ⑤ 整形：输出窗口、召回续接、后台状态续接 |
 | `system:refresh-environment` | 宿主允许刷新才继续 → 宿主重载 PATH 与环境变量 |
@@ -149,7 +149,7 @@ src/
 | `SystemProcessManager.ts` | `SystemProcessManagerApi`（internal） | 受管子进程登记表 |
 | `SystemManagedProcess.ts` | `ManagedSystemProcess`（internal） | 单个受管子进程的超时、取消、有界终止与收尾 |
 | `SystemOutputDecoder.ts` | `SystemOutputDecoderApi`（internal） | 子进程输出的 UTF-8 解码 |
-| `SystemFileOperations.ts` | `SystemFileOperationsApi`（internal） | 读文本、看图片与 PDF、写三个文件操作，位置按字符算 |
+| `SystemFileOperations.ts` | `SystemFileOperationsApi`（internal） | 读文本、看图片、写三个文件操作，位置按字符算 |
 | `SystemFileHistory.ts` | `SystemFileHistoryApi`（internal） | 改动前留下的文件版本，供召回与回滚；只在内存里 |
 | `SystemGlobalSearch.ts` | `SystemGlobalSearchApi`（internal） | 全局搜索：按路径或按内容遍历目录树，给宿主界面用 |
 | `GitIgnoreSystemSearchPolicy.ts` | `SystemSearchIgnorePolicy`（internal） | 遍历时按各级 .gitignore 判断跳过哪些条目 |

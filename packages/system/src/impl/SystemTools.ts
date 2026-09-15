@@ -1,7 +1,7 @@
 /**
  * 系统空间的六个模型面工具。每个工具的说明就是它的定义：摘要、适用与禁用场景、协议、用法、示例、参数、权限、能力声明、审批语义
  * 和 execute 都在定义里，上方不再另写一遍；按文件、执行两类排列，文件末尾是它们怎么分组、作为内置 mod 挂进产品、作为能力服务挂进内核。
- * 只留 `system:run` 替代不了的：读和写要把内容和精确匹配绕开 shell 引号，看图片和 PDF 要把内容当图交给模型，后台任务表只在本包，刷新环境改的是宿主进程。
+ * 只留 `system:run` 替代不了的：读和写要把内容和精确匹配绕开 shell 引号，看图片要把内容当图交给模型，后台任务表只在本包，刷新环境改的是宿主进程。PDF 与其他文档归别的 mod。
  * 读、看、写都是 files 每项一个文件，一个文件就一项。列目录、搜文本、看进程和端口、终止进程都用 `system:run` 跑系统命令。
  * 这是人最先看的文件，改了要在差量报告里点名。
  */
@@ -26,7 +26,7 @@ import { createSystemCallableOperations, defineSystemTool } from '../utils/tool.
 import { systemCommandPolicy } from './SystemCommandPolicy.js'
 import { systemFileOperations } from './SystemFileOperations.js'
 
-// ── 文件：读文本、看图片与 PDF、写（都是 files 每项一个；PDF 多页；写可以一次改几处）──────────────────────────
+// ── 文件：读文本、看图片、写（都是 files 每项一个；写可以一次改几处）──────────────────────────
 
 /** system:read —— 读文本文件。 */
 const readTool = defineSystemTool<{
@@ -41,7 +41,7 @@ const readTool = defineSystemTool<{
   role: 'inspect',
   summary: '读文本文件：files 每项一个文件，按字符取一段，返回它的 range 和版本号。',
   suitable: ['看日志、配置、脚本、临时文件等文本。', '一次读一批相关的文件。'],
-  forbidden: ['图片和 PDF 用 system:view；列目录、搜文本用 system:run。'],
+  forbidden: ['图片用 system:view；PDF 和其他文档不在这里读；列目录、搜文本用 system:run。'],
   usage: [
     'files 每项一个文件，只传 path 就默认一次读到上限；没读完的文件把它返回的 range.end 当 offset 接着读。',
     '一次调用总共最多 200000 字符；结果的 files 与传入的一一对应，某个文件读不了只有它那一项是 error。',
@@ -70,29 +70,24 @@ const readTool = defineSystemTool<{
   execute: async (input) => systemFileOperations.read(input),
 })
 
-/** system:view —— 看图片或 PDF。 */
+/** system:view —— 看图片。 */
 const viewTool = defineSystemTool<{
   files: Array<{
     path: string
-    pages?: number[]
   }>
 }>({
   name: SystemToolNames.view,
   role: 'inspect',
-  summary: '看图片或 PDF：files 每项一个文件，图片整张交给模型，PDF 按 pages 一次看几页。',
-  suitable: ['看截图、照片、图表等图片的内容。', '按页看 PDF，一次几页。'],
-  forbidden: ['文本文件用 system:read。'],
-  usage: [
-    'files 每项一个文件；PDF 用 pages 指定看哪几页，从 1 起，不传就是第 1 页，一次最多 20 页，结果里的 pageCount 是总页数。',
-    '结果的 files 与传入的一一对应，内容块按同样的顺序排、每块前面一行写明是哪个文件；某个文件看不了只有它那一项是 error。',
-  ],
-  examples: [{ files: [{ path: '~/Desktop/screenshot.png' }] }, { files: [{ path: '~/Downloads/report.pdf', pages: [1, 2, 3] }, { path: '~/Desktop/chart.png' }] }],
-  notes: ['图片最大 5 MB，超过先用 system:run 缩小。'],
+  summary: '看图片：files 每项一张图，整张交给模型，效果和用户上传一样。',
+  suitable: ['看截图、照片、图表等图片的内容。'],
+  forbidden: ['文本文件用 system:read；PDF 和其他文档不在这里看。'],
+  usage: ['结果的 files 与传入的一一对应，内容块按同样的顺序排、每块前面一行写明是哪个文件；某个文件看不了只有它那一项是 error。'],
+  examples: [{ files: [{ path: '~/Desktop/screenshot.png' }] }, { files: [{ path: '~/Desktop/before.png' }, { path: '~/Desktop/after.png' }] }],
+  notes: ['只认 PNG、JPEG、GIF、WebP，最大 5 MB；别的格式或太大的先用 system:run 转换、缩小。'],
   schema: z.object({
     files: z.array(z.object({
-      path: z.string().min(1).describe('图片或 PDF 的路径，支持 ~。'),
-      pages: z.array(z.number().int().positive()).min(1).max(20).optional().describe('PDF 看哪几页，从 1 起，默认只看第 1 页。'),
-    })).min(1).max(10).describe('要看的文件，每项一个，一次最多 10 个。'),
+      path: z.string().min(1).describe('图片路径，支持 ~。'),
+    })).min(1).max(10).describe('要看的图片，每项一张，一次最多 10 张。'),
   }),
   permissions: ['fs:read'],
   capabilities: {
@@ -101,7 +96,7 @@ const viewTool = defineSystemTool<{
     filesystem: { read: 'any', write: 'none' },
     canReadArbitrarySource: true,
     concurrency: 'safe',
-    reason: 'system image and document view primitive',
+    reason: 'system image view primitive',
   },
   isConcurrencySafe: () => true,
   execute: async (input) => systemFileOperations.view(input),
