@@ -19,9 +19,10 @@
 //                   数字缺省值不许散在 impl 与 utils。对外承诺的上限不在这里，在 contract/constants.ts
 //   exports         对外入口所在目录，package.json 的 exports 指向这里编译出来的文件
 //   browserSafeEntries  会被渲染进程加载的入口（exports 下的文件名）：整条引用链不许出现 Node 内置模块
-//   environmentTable    可移植数据文件里登记环境变量的常量表名
+//   environmentTable    常量表里登记环境变量的表名（不读环境变量的包不填；不填时代码里出现环境变量名就拦）
 //   hostPort            注入面里的宿主端口接口名；端口只放工具真会调的方法，门禁从工具文件出发沿 import 核对
 //   hostPortField       工具上下文里放宿主端口的字段名（ctx.<字段>.方法），缺省 system
+//   status              'migrating' 表示正在按标准改造：问题照查照报条数，不计入失败（改造完删掉这一项）
 //   layers          实现文件的分层（文件名），从上到下；上层可以引下层与同层，下层不许引上层；每个实现文件都要登记在某一层
 //   toolDefiner     定义工具的函数名；它只许在工具文件里被调用，保证工具定义一个不漏都在那里
 //   card            模块卡片（相对包根）
@@ -60,6 +61,33 @@ export const GovernedModules = [
       ['SystemShellUnavailableError.ts'],
     ],
     toolDefiner: 'defineSystemTool',
+    card: 'MODULE.md',
+    invariants: 'spec/invariants.md',
+    acceptance: 'spec/acceptance.test.ts',
+  },
+  {
+    directory: 'project',
+    name: '@velaros-ai/project',
+    status: 'migrating',
+    toolsFile: 'src/impl/ProjectTools.ts',
+    contract: 'src/contract',
+    types: 'src/types',
+    portable: 'project.ts',
+    impl: 'src/impl',
+    utils: 'src/utils',
+    tuning: 'tuning.ts',
+    exports: 'src/exports',
+    browserSafeEntries: ['contracts.ts'],
+    hostPort: 'ProjectToolApi',
+    hostPortField: 'project',
+    layers: [
+      ['ProjectTools.ts'],
+      ['operations/'],
+      ['kernel/'],
+      ['plugins/'],
+      ['transactions/', 'files/', 'strategies/', 'adapters/', 'registries/', 'persistence/'],
+    ],
+    toolDefiner: 'defineProjectTool',
     card: 'MODULE.md',
     invariants: 'spec/invariants.md',
     acceptance: 'spec/acceptance.test.ts',

@@ -253,7 +253,20 @@ function membersDeep(members) {
   return result
 }
 
-for (const module of GovernedModules) {
+// 命令行：--only <包目录> 只查这一个包；--list 把迁移中的包的每一条问题都列出来（默认只报条数）。
+const cliArgs = process.argv.slice(2)
+const onlyIndex = cliArgs.indexOf('--only')
+const onlyDirectory = onlyIndex >= 0 ? cliArgs[onlyIndex + 1] : null
+const listMigrating = cliArgs.includes('--list') || !!onlyDirectory
+const selectedModules = onlyDirectory ? GovernedModules.filter((module) => module.directory === onlyDirectory) : GovernedModules
+if (onlyDirectory && selectedModules.length === 0) {
+  console.error(`--only ${onlyDirectory}：登记表里没有这个包目录`)
+  process.exit(2)
+}
+const migratingReports = []
+
+for (const module of selectedModules) {
+  const failuresBefore = failures.length
   const packageRoot = join(PackagesRoot, module.directory)
   const label = module.name
   if (!existsSync(packageRoot)) {
@@ -1221,11 +1234,21 @@ for (const module of GovernedModules) {
   }
   if (!(manifest.scripts?.test ?? '').includes(module.acceptance)) fail(`${label}: package.json 的 test 脚本没有跑 ${module.acceptance}`)
 
-  if (failures.length === 0) {
+  if (module.status === 'migrating') {
+    // 迁移中的包：问题照查照报，但不计入失败，改造期间也能登记、看燃尽。
+    migratingReports.push({ label, problems: failures.splice(failuresBefore) })
+    continue
+  }
+  if (failures.length === failuresBefore) {
     const kinds = InvariantCheckKinds.filter((kind) => counts[kind] > 0).map((kind) => `${kind} ${counts[kind]}`).join('、')
     const exportedValues = [...exported.values()].filter((record) => record.isValue).length
     console.info(`✓ ${label}: ${module.toolsFile ? `${basename(module.toolsFile)} 里 ${toolNames.length} 个工具` : '没有工具'}；实现 ${implFiles.length} 个文件，${classCount} 个类都有接口（另有 ${errorClassCount} 个错误类）；公开接口 ${publicDeclarations.length} 个，对外的值 ${exportedValues} 个，公开签名用到的数据 ${closure.size} 个；${subpaths.length} 个入口；环境变量 ${registeredVariables.size} 个；不变量 ${seenIds.size} 条（${kinds}）`)
   }
+}
+
+for (const { label, problems } of migratingReports) {
+  console.info(`… ${label}: 迁移中，还有 ${problems.length} 条问题（不计入失败${listMigrating ? '' : '；--list 或 --only 列出每一条'}）`)
+  if (listMigrating) for (const problem of problems) console.info(`  - ${problem}`)
 }
 
 if (failures.length > 0) {
