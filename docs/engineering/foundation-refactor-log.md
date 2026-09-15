@@ -10,6 +10,8 @@
 
 （按时间追加。每条写：改了什么、为什么、影响谁。）
 
+- **agent 改造的方向与几处结构裁决（09-15 23:45，方案在第 1 步之后执行）。** 目标与 system、project 同一套：src 收成 contract/types/impl/utils/exports，impl 按域分 19 个子目录、13 层；**对外入口从 23 个收成 4 个**（`.`、`./contracts`、`./chat`、`./tool-contract`），这一步删入口与大量没人用的导出，按 `check:agent-public-api` 的规矩是破坏性变更，agent 升 1.0.0，放在第 6 步一次做，并附逐符号迁移表；前 5 步只动包内，Desktop、Workbench、Termel 不受影响。我替你拍的板：① 协议里 70 个 `z.infer` 推导的类型改成手写类型、schema 用 `satisfies z.ZodType<…>` 编译期对齐（不给门禁开 schema 例外）；② 可移植数据全部进 `types/agent.ts` 一个文件，core 的 `SerializedError`、`ErrorCode` 放同形副本、仓库层一致性测试守；③ **工具契约（`./tool-contract` 与工具相关的协议类型）是否拆成独立包 `@velaros-ai/tool-contract`，第 6 步收口时再定，我倾向拆**——六个空间包现在只为写工具就把整个 agent 运行时列为 peer 依赖；④ 发请求字节会变的「空间知识搬家」（源码视图、验证账本搬进 project）单独放第 8 步，不和搬家混；⑤ agent 工具面的删改（删 `context:distill`、合并 `goal:get`/`plan:get`、删 `tooling:map` 的 `op=read` 等候选）在第 5 步单独一个提交，届时逐条写进这里。第 1 步已完成（18ad853f、da737f17）：去掉 213 条包名自引用与 29 个中间 barrel，入口改成逐个名字的显式转发，导出名一个不变（agent 0.6.32，基线按「只增不删」重绑：85 个符号的声明文本因 tsc 输出的成员顺序、import 路径不同而变，逐个核过语义等价）。
+
 - **project 迁入两个公共件，修掉三个缺陷（09-15 23:11，ADR 0008 附录）。** ① 沙箱落回：原来确认用的是截断到 2000 条的差量、落回却全部落，也不核对确认之后镜像有没有再变；现在向宿主要完整差量（`diffSandbox({ maxFiles: Number.MAX_SAFE_INTEGER, textDiffs: false })`），确认文案按完整三列算，`applySandbox` 带上差量指纹。**宿主契约变化**：`ProjectSandboxPort` 改为扩展 `RehearsalSandboxHostPort`，`diffSandbox` 要认 `textDiffs`、差量要带 `fingerprint`，`applySandbox` 要认 `fingerprint`（Desktop 用系统本地内核实现时这些已经支持）；`ProjectSandbox*` 九个数据类型改从 `@velaros-ai/rehearsal-sandbox/contracts` 取。② 经内核按名调用 project 工具时，原来先解析宿主上下文、后校验入参（和它自己的注释相反），现在先校验；入参不合法报 `VALIDATION`（和 system、office 一样），不再伪装成项目领域的 `INVALID_INPUT`。③ 沙箱 source 写 `..cache` 这类以 `..` 开头的项目内目录不再被误拒。
 - **project:run 的判定改用公共判定，行为有两处变化（09-15 23:11）。** project 原来那份只读判定多一道兜底正则：命令里出现 delete、exec、remove、write、okdir 这几个词就判「会改项目」，所以 `grep -rn delete src` 这类只读命令也要过项目修改授权、不能并发；公共判定按参数逐条否决，这类命令现在判只读。危险命令确认文案在递归删除时多一句「如果目标是一个项目或仓库目录（含 .git），未推送的提交和未提交的改动会一起没掉，无法找回」（ADR 0004 的承诺，system 早就有）。
 - **project 工具的「适用」一节不再是占位句（09-15 23:11）。** `defineProjectTool` 原来给没写的说明节塞通用句（「需要完成该工具职责所描述的项目操作。」「目标不属于当前项目边界。」等五句），它们原样进了 read、list、search、file、edit、change、run、code-analysis 八个工具的提示词。现在只写真有内容的节：这八个工具各补了一句真正的适用场景，其余占位句删掉。提示词审核指纹要等 agent 第 1 步提交后在干净工作区重算（指纹也登记了 agent 源文件）。
@@ -48,6 +50,12 @@
 
 | 时间 | 决策 | 理由 |
 | --- | --- | --- |
+| 09-15 23:45 | 文本文件的编解码、原子写、有界读、流式读抽成新包 `@velaros-ai/text-files`（以 project 的实现为底），报错用本包自己的码当 `AppError.code`；project 在一处把它翻成 `ProjectError`，现有 `instanceof ProjectError` 的分支一个不改 | project 那份全面更健壮（GB18030、严格解码、fsync、权限位精确恢复、拒绝多硬链接）；project 里 190 处按 `ProjectError` 分支，边界翻译最小改动 |
+| 09-15 23:45 | 换行适配（CRLF 文件里的匹配与替换）不合并，各空间保留自己的 | 语义不同：system 按原文主流风格统一新文本，project 只在匹配时适配，合并会改两边的编辑行为 |
+| 09-15 23:45 | agent 方案 3.5 节的 8 处结构冲突按方案建议走（类型手写 + satisfies、可移植单文件、入口平铺四个、1.0.0 放第 6 步、空间知识搬家放第 8 步、工具面删改单独提交）；工具契约拆不拆包第 6 步再定 | 用户授权自行决策；拆包牵动六个空间包与产品的 import，放到入口收口时一次改 |
+| 09-15 23:40 | agent 第 1 步不按「脚本 / 自引用 / barrel」拆三个提交 | 中间状态的 public-api 基线哈希各不相同，每拆一个提交就要多升一次版本 |
+| 09-15 23:40 | agent 测试加 `standaloneModuleImport.test.ts`：每个入口和每个源文件在全新进程里单独 import | 原代码有 4 个模块单独加载时报 TDZ（循环引用），去 barrel 后归零，靠它防回潮；代价是测试从约 3 秒变成 5.5 秒 |
+| 09-15 23:30 | browser、memory、kernel 三个包先出只读改造方案（同 agent 方案的格式），执行时照方案分步推 | 这三个包合计 8 万行，先摸清消费方与耦合再动，和 agent 并行不冲突 |
 | 09-15 20:05 | 收编此前会话留下的 9 个未提交文件（agent 的失败调用原参数还原 + 两个测试），单独提交 5df228b | 用户确认没有会话在跑；改动完整、测试通过，丢掉会损失一个已做完的功能 |
 | 09-15 20:05 | 模型看到的文字（工具说明、报错、建议的下一步）统一中文，命令、路径、错误码、字段名保持原样 | 工具说明已是中文，报错中英混杂读起来割裂；用户未反对默认做法 |
 | 09-15 20:05 | 其他包的工具面按 system 的判据简化：别的工具替代得了、只剩仪式感的才删；模型没用过但有独特能力的不删 | 用户要求简化工具面；判据沿用已定的 system 做法 |
@@ -80,5 +88,5 @@
 
 - [x] ① system 结构复查（386ea2d、114a6c3、d692e79）
 - [ ] ② system 复查修 bug（已完成：18 条，9 个提交 21fcb91…c8a2983）、定为仓库标准（已完成）；project 改造（已完成：工具面 8d7513e、入口 bc93fd0、错误码 1ea639d、实现层四路、卡片与不变量，门禁零条）；project 复查修 bug
-- [ ] ③ 公共逻辑抽取
-- [ ] 其余包：agent → browser → memory → kernel → model → office → agent-lab → development → core → html-artifacts → computer → cli → document-renderer → surface-protocol
+- [ ] ③ 公共逻辑抽取（已完成：shell-command、rehearsal-sandbox、内核可调用操作表进 agent/tool-contract、project 迁入；进行中：text-files；待做：path-rules、路径包含判断进 platform、真实路径进 core、工具失败构造器）
+- [ ] 其余包（agent 第 1 步完成 18ad853f/da737f17，第 2 步整文件搬家进行中；browser、memory、kernel 方案编写中）：agent → browser → memory → kernel → model → office → agent-lab → development → core → html-artifacts → computer → cli → document-renderer → surface-protocol
