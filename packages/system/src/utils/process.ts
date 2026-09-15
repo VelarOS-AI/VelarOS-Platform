@@ -14,8 +14,8 @@ import { AppError } from '@velaros-ai/core/error'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 import type { CommandSpec } from '@velaros-ai/platform/contracts'
 
-import type { SystemProcessOwnership } from '../contract/system.js'
-import type { SystemProcessHostOptions } from '../interface/internal.js'
+import type { SystemProcessHostOptions } from '../types/commands.js'
+import type { SystemProcessOwnership } from '../types/system.js'
 
 /** 找到 Windows 原生进程宿主的可执行文件：先看显式配置，再看应用资源目录，最后看包里的 native 目录；非 Windows 或找不到返回 null。 */
 export function getSystemProcessHostPath(options: SystemProcessHostOptions = {}): Nullable<string> {

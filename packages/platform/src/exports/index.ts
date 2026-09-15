@@ -3,7 +3,8 @@
  * 共享资源目录只给 Node 用，在 `./shared-resources`；可移植数据单独在 `./contracts`。
  */
 
-export type { DefaultAppDataPathOptions, PlatformCompatibilityOptions, ShellCommandSpecOptions, VelarOSSharedResourceStoreOptions } from '../contract/options.js'
+export type { PlatformCompatibilityApi } from '../impl/PlatformCompatibility.js'
 export { createPlatform, currentPlatform } from '../impl/PlatformCompatibility.js'
-export type { PlatformCompatibilityApi, VelarOSSharedResourcesApi } from '../interface/provides.js'
+export type { VelarOSSharedResourcesApi } from '../impl/VelarOSSharedResources.js'
+export type { DefaultAppDataPathOptions, PlatformCompatibilityOptions, ShellCommandSpecOptions, VelarOSSharedResourceStoreOptions } from '../types/options.js'
 export * from './contracts.js'

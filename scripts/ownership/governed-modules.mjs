@@ -5,16 +5,15 @@
 //   directory       相对 packages/ 的目录
 //   name            包名
 //   toolsFile       工具文件（相对包根，没有工具的包不填）：全部工具定义都在这一个文件里，外加它们的分组与挂载。人最先看的地方，改了要在差量报告里点名
-//   contract        数据契约目录：扁平文件，只放数据（字段、类型、常量表），不许出现函数类型和方法
-//   portable        可移植数据文件：不 import 任何东西、不用 Node 专属类型，浏览器也能用；`./contracts` 入口就是它
-//   interface       接口目录：只放带中文说明的类型声明，文件就是下面登记的几个
-//   publicInterfaces   公开接口文件：provides 是产品面（交给外面的整件能力），requires 是注入面（宿主要塞进来的东西）；
-//                   这两个文件里的每个声明都从根入口导出，对外导出的值也只能按它们标注类型
-//   internalInterfaces 内部接口文件：不属于某个类的内部接口（utils 函数的选项、工具定义的入参），不出包，公开接口也不许引用它；
-//                   包内部类的接口不在这里，写在类文件里、紧挨在类的上方
+//   contract        对外合同目录：只有三个文件——provides.ts 产品面（交出去的整件能力；类实现的 API 定义在类上方，这里 re-export 登记，
+//                   没有类的公开接口直接声明在这里）、requires.ts 注入面（宿主要塞进来的东西）、constants.ts 约定的常量表（工具身份、错误码、
+//                   环境变量表、公开上限）。改这三个文件等于改对外契约
+//   types           类型目录：扁平，只放类型、一个值都没有，按域分文件；哪些出包由合同的签名闭包决定。
+//                   可移植文件 = types/<portable> + contract/constants.ts：不 import（可移植类型文件只许从常量表 import type）、不用 Node 类型、不带函数成员
+//   portable        可移植数据类型文件（相对 types）；`./contracts` 入口 = 它 + contract/constants.ts
 //   impl            实现目录：扁平，不分子目录。一个类一个文件，文件名就是类名（工具文件除外，它不放类）；
-//                   每个类实现一个接口（公开的在 interface/，内部的就写在类上方一起导出），公开成员不超出接口，私有方法必须用到实例状态
-//   utils           纯工具函数目录：扁平，按类别分文件；只放函数和常量，每个函数上方一句中文说明，只引 utils 与契约
+//                   每个类实现一个接口（公开的定义在类上方并在 provides.ts 登记，注入面的在 requires.ts），公开成员不超出接口，私有方法必须用到实例状态
+//   utils           纯工具函数目录：扁平，按类别分文件；只放函数和常量，每个函数上方一句中文说明，只引 utils、types 与合同
 //   exports         对外入口所在目录，package.json 的 exports 指向这里编译出来的文件
 //   browserSafeEntries  会被渲染进程加载的入口（exports 下的文件名）：整条引用链不许出现 Node 内置模块
 //   environmentTable    可移植数据文件里登记环境变量的常量表名
@@ -30,10 +29,8 @@ export const GovernedModules = [
     name: '@velaros-ai/system',
     toolsFile: 'src/impl/SystemTools.ts',
     contract: 'src/contract',
+    types: 'src/types',
     portable: 'system.ts',
-    interface: 'src/interface',
-    publicInterfaces: ['provides.ts', 'requires.ts'],
-    internalInterfaces: ['internal.ts'],
     impl: 'src/impl',
     utils: 'src/utils',
     exports: 'src/exports',
@@ -66,10 +63,8 @@ export const GovernedModules = [
     name: '@velaros-ai/platform',
     // 没有工具：不登记 toolsFile、toolDefiner、hostPort
     contract: 'src/contract',
+    types: 'src/types',
     portable: 'platform.ts',
-    interface: 'src/interface',
-    publicInterfaces: ['provides.ts'],
-    internalInterfaces: [],
     impl: 'src/impl',
     utils: 'src/utils',
     exports: 'src/exports',

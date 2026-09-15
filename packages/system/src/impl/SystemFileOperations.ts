@@ -11,8 +11,9 @@ import { AppError } from '@velaros-ai/core/error'
 import type { PlatformCompatibilityApi } from '@velaros-ai/platform'
 import { currentPlatform } from '@velaros-ai/platform'
 
-import type { SystemEditFileInput, SystemEditFileResult, SystemEditInput, SystemEditPlan, SystemEditProblem, SystemEditReplacedResult, SystemEditResult, SystemEditTarget, SystemEditWindow, SystemReadFileInput, SystemReadFileResult, SystemReadInput, SystemReadResult, SystemTextEncoding, SystemTextFileContent, SystemTextRange, SystemViewFileInput, SystemViewFileResult, SystemViewInput, SystemViewResult } from '../contract/files.js'
-import type { SystemToolContext } from '../interface/requires.js'
+import { SystemFileLimits } from '../contract/constants.js'
+import type { SystemToolContext } from '../contract/requires.js'
+import type { SystemEditFileInput, SystemEditFileResult, SystemEditInput, SystemEditPlan, SystemEditProblem, SystemEditReplacedResult, SystemEditResult, SystemEditTarget, SystemEditWindow, SystemReadFileInput, SystemReadFileResult, SystemReadInput, SystemReadResult, SystemTextEncoding, SystemTextFileContent, SystemTextRange, SystemViewFileInput, SystemViewFileResult, SystemViewInput, SystemViewResult } from '../types/files.js'
 import { assertFileBatchSize, failureEntry, staleProblem, unresolvedEditFailure, withLinkTarget } from '../utils/file-batch.js'
 import { comparisonPath, confirmCredentialAccess, confirmSensitiveSystemMutation, realPathForSafety } from '../utils/file-safety.js'
 import { readErrnoCode, writeSystemFileAtomically } from '../utils/fs.js'
@@ -31,7 +32,6 @@ import {
   readTextWindow,
   stampOf,
   stampProvesUnchanged,
-  SystemFileLimits,
 } from '../utils/text-file.js'
 
 import type { SystemFileHistoryApi } from './SystemFileHistory.js'

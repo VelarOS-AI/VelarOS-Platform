@@ -3,22 +3,22 @@
 //
 // 这里不拦编辑，只核对：
 //   1. 工具文件：全部工具定义都在登记的那一个文件里，定义工具的函数只在那里被调用（没有工具的包不登记 toolsFile / toolDefiner / hostPort）。
-//   2. contract：扁平；只放数据（接口字段、类型、常量表），不许出现函数类型、方法签名、类和函数；只用 type import，只引契约。
-//      可移植数据文件不 import 任何东西、不用 Node 专属类型。
-//   3. interface：只有登记的几个文件；只放类型声明，只用 type import，只引 interface 与 contract；
-//      每个接口、类型别名和它们的每个成员都有中文说明。provides 是产品面、requires 是注入面、internal 是不属于某个类的内部接口。
+//   2. types：扁平；只放类型，一个值都不许有；只用 type import，只引 types 与合同；哪些类型出包由合同的签名闭包决定。
+//      可移植文件（types/<portable> 与 contract/constants.ts）不 import、不用 Node 类型，可移植数据不带函数成员。
+//   3. contract：只有 provides.ts、requires.ts、constants.ts 三个文件。provides / requires 只放带中文说明的接口声明（每个成员也有说明），
+//      或者 export type { X } from '../impl/<类文件>.js' 登记类上方的接口；constants.ts 只放 Object.freeze 的常量表、字符串身份和由它们派生的类型别名。
 //   4. impl：扁平，一个类一个文件、文件名即类名（工具文件不放类）；只许声明并导出本文件的类实现的接口和以类名开头的配套接口，
 //      都要有中文说明，其余类型不许写在这里（带 typeof 的除外）；每个类 implements 一个接口：公开的在 interface 里、内部的写在类上方（继承 Error 的错误类除外），公开成员都在接口里，没有公开静态成员，
 //      私有方法必须用到实例状态；模块级函数只许是对外入口要的工厂。按 layers 分层，下层不许引上层。
 //   5. utils：扁平；只放函数和常量，不放类、不声明类型、没有模块级 let；每个函数上方一句中文说明；只引 utils、contract 与 interface。
-//   6. 对外入口由接口控制：入口文件只有转发语句；导出的类型只能来自 provides、requires 与 contract；
+//   6. 对外入口由合同控制：入口文件只有转发语句；导出的类型只能来自 provides、requires、公开的 types 文件、常量表派生的别名，或 provides 登记的类上方接口；
 //      导出的值要么是 contract 的常量表，要么是 impl 里显式标注了公开接口类型的实例或工厂，不许导出类、utils 函数和内部接口；
 //      provides 与 requires 里的每个声明都从根入口导出；公开接口引用到的数据类型都导出，导出的数据类型都被公开接口用到；
-//      可移植数据文件里没有公开接口用不到的类型；公开接口不许引用内部接口。package.json 的 exports 与入口文件一一对应。
+//      可移植数据文件里没有公开接口用不到的类型。package.json 的 exports 与入口文件一一对应。
 //   7. 会被渲染进程加载的入口，整条值引用链里不许出现 Node 内置模块。
-//   8. 环境变量：代码里出现的每个 VELAROS_* 名字都登记在可移植数据文件的环境变量表里，登记了的都有人用。
+//   8. 环境变量：代码里出现的每个 VELAROS_* 名字都登记在常量表的环境变量表里，登记了的都有人用。
 //      宿主端口：登记的端口接口里的每个方法，工具文件里都有工具在调；没人调的方法不许留在注入面。
-//   9. src 下只有登记的五个目录，src 根上不放源文件；依赖只许写在文件头，不许用内联 import 类型和动态 import。
+//   9. src 下只有 contract、types、impl、utils、exports 五个目录，src 根上不放源文件；依赖只许写在文件头，不许用内联 import 类型和动态 import。
 //  10. 模块卡片十节齐全；「提供什么」列出全部入口、导出的每个值和每个公开接口；「骨干链路」点到每个工具；「结构」写明目录树。
 //  11. 不变量登记表每行编号唯一、检验方式合法、检验器真的存在；卡片里的条数如实。包的 test 脚本跑验收测试。
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
@@ -176,16 +176,17 @@ for (const module of GovernedModules) {
   const srcRoot = join(packageRoot, 'src')
   const toolsFilePath = module.toolsFile ? join(packageRoot, module.toolsFile) : null
   const contractRoot = join(packageRoot, module.contract)
-  const interfaceRoot = join(packageRoot, module.interface)
+  const typesRoot = join(packageRoot, module.types)
   const implRoot = join(packageRoot, module.impl)
   const exportsRoot = join(packageRoot, module.exports)
   const utilsRoot = join(packageRoot, module.utils)
-  const portablePath = join(contractRoot, module.portable)
-  const publicInterfacePaths = module.publicInterfaces.map((name) => join(interfaceRoot, name))
-  const internalInterfacePaths = module.internalInterfaces.map((name) => join(interfaceRoot, name))
+  const providesPath = join(contractRoot, 'provides.ts')
+  const requiresPath = join(contractRoot, 'requires.ts')
+  const constantsPath = join(contractRoot, 'constants.ts')
+  const portablePath = join(typesRoot, module.portable)
+  const publicInterfacePaths = [providesPath, requiresPath].filter((path) => existsSync(path))
   const inside = (file, root) => file.startsWith(`${root}/`)
   const isPublicInterfaceFile = (file) => publicInterfacePaths.includes(file)
-  const isInternalInterfaceFile = (file) => internalInterfacePaths.includes(file)
   const shortPath = (file) => relative(packageRoot, file)
   const sourceFiles = walkSources(srcRoot)
 
@@ -249,73 +250,108 @@ for (const module of GovernedModules) {
     }
   }
 
-  // ── 2. contract：只放数据 ───────────────────────────────────────────────
-  for (const directory of childDirectories(contractRoot)) {
-    fail(`${label}: ${module.contract}/${directory}/ 是子目录；契约是扁平文件，不分子目录`)
+  // ── 2. types：只放类型 ──────────────────────────────────────────────
+  for (const directory of childDirectories(typesRoot)) {
+    fail(`${label}: ${module.types}/${directory}/ 是子目录；类型文件扁平，不分子目录`)
   }
-  const contractFiles = sourceFiles.filter((path) => inside(path, contractRoot))
-  if (existsSync(portablePath)) {
-    const portableSource = readFileSync(portablePath, 'utf8')
-    if (/^\s*import\s/mu.test(portableSource)) fail(`${label}: 可移植数据文件 ${shortPath(portablePath)} 不许 import 任何东西`)
-    if (/\bNodeJS\.|\bBuffer\b|\bChildProcess\b/u.test(portableSource)) fail(`${label}: 可移植数据文件 ${shortPath(portablePath)} 用了 Node 专属类型`)
-  } else {
-    fail(`${label}: 缺少可移植数据文件 ${module.contract}/${module.portable}`)
+  for (const path of [portablePath, constantsPath]) {
+    if (!existsSync(path)) {
+      fail(`${label}: 缺少可移植文件 ${shortPath(path)}`)
+      continue
+    }
+    const source = readFileSync(path, 'utf8')
+    for (const line of source.split('\n')) {
+      if (!/^\s*import\s/u.test(line)) continue
+      if (path === portablePath && /^import type \{[^}]*\} from '\.\.\/contract\/constants\.js'$/u.test(line.trim())) continue
+      fail(`${label}: 可移植文件 ${shortPath(path)} 不许 import（可移植类型文件只许从常量表 import type）：${line.trim().slice(0, 60)}`)
+    }
+    if (/\bNodeJS\.|\bBuffer\b|\bChildProcess\b/u.test(source)) fail(`${label}: 可移植文件 ${shortPath(path)} 用了 Node 专属类型`)
   }
-  for (const file of contractFiles) {
+  for (const file of sourceFiles.filter((path) => inside(path, typesRoot))) {
     const sourceFile = parse(file)
     for (const statement of sourceFile.statements) {
       if (ts.isImportDeclaration(statement)) {
-        if (!isTypeOnlyStatement(statement)) fail(`${label}: 契约文件 ${shortPath(file)} 用了值 import；契约只放数据，只许 import type`)
-      } else if (ts.isFunctionDeclaration(statement) || ts.isClassDeclaration(statement)) {
-        fail(`${label}: 契约文件 ${shortPath(file)} 里有函数或类 ${statement.name?.text ?? ''}；契约只放数据，实现放进 ${module.impl}/`)
-      } else if (ts.isVariableStatement(statement) && !(statement.declarationList.flags & ts.NodeFlags.Const)) {
-        fail(`${label}: 契约文件 ${shortPath(file)} 里有可变变量；契约里只许常量表`)
+        if (!isTypeOnlyStatement(statement)) fail(`${label}: 类型文件 ${shortPath(file)} 用了值 import；类型文件只许 import type`)
+      } else if (ts.isFunctionDeclaration(statement) || ts.isClassDeclaration(statement) || ts.isVariableStatement(statement) || ts.isEnumDeclaration(statement)) {
+        fail(`${label}: 类型文件 ${shortPath(file)} 里有值（${statement.getText(sourceFile).split('\n')[0].slice(0, 60)}）；types 里一个值都不许有，常量表放 ${module.contract}/constants.ts，实现放 ${module.impl}/`)
       } else if (ts.isInterfaceDeclaration(statement) || ts.isTypeAliasDeclaration(statement)) {
+        if (!isExported(statement)) fail(`${label}: 类型文件 ${shortPath(file)} 的 ${statement.name.text} 没有导出；类型文件里的声明都给别处用`)
+        if (file !== portablePath) continue
         for (const node of behaviorNodes(statement)) {
-          fail(`${label}: 契约文件 ${shortPath(file)} 的 ${statement.name.text} 里有函数或方法（${node.getText(sourceFile).split('\n')[0].slice(0, 60)}）；契约只放数据，带行为的接口放进 ${module.interface}/`)
+          fail(`${label}: 可移植数据文件 ${shortPath(file)} 的 ${statement.name.text} 里有函数或方法（${node.getText(sourceFile).split('\n')[0].slice(0, 60)}）；可移植数据不带行为，带回调的选项放进别的 types 文件，带行为的接口放进 ${module.contract}/`)
           break
         }
       }
     }
     for (const { specifier } of relativeSpecifiers(sourceFile)) {
       const target = resolveRelativeImport(file, specifier)
-      if (target && !inside(target, contractRoot)) fail(`${label}: 契约文件 ${shortPath(file)} 引用了契约之外的 ${shortPath(target)}；契约只引契约`)
+      if (target && !inside(target, typesRoot) && !inside(target, contractRoot)) fail(`${label}: 类型文件 ${shortPath(file)} 引用了 ${shortPath(target)}；types 只引 types 与合同`)
     }
   }
 
-  // ── 3. interface：只放带说明的类型声明 ──────────────────────────────────
-  for (const directory of childDirectories(interfaceRoot)) fail(`${label}: ${module.interface}/${directory}/ 是子目录；接口目录保持扁平`)
-  const registeredInterfaceFiles = new Set([...publicInterfacePaths, ...internalInterfacePaths])
-  for (const file of walkAll(interfaceRoot)) {
-    if (!registeredInterfaceFiles.has(file)) fail(`${label}: ${shortPath(file)} 不是登记的接口文件；接口只放进 ${[...module.publicInterfaces, ...module.internalInterfaces].join('、')}`)
+  // ── 3. contract：对外合同，三个文件 ─────────────────────────────────────
+  for (const directory of childDirectories(contractRoot)) fail(`${label}: ${module.contract}/${directory}/ 是子目录；合同目录保持扁平`)
+  const contractFileNames = new Set(['provides.ts', 'requires.ts', 'constants.ts'])
+  for (const file of walkAll(contractRoot)) {
+    if (!contractFileNames.has(basename(file))) fail(`${label}: ${shortPath(file)} 不是合同文件；${module.contract}/ 只有 provides.ts、requires.ts、constants.ts`)
   }
-  for (const file of registeredInterfaceFiles) if (!existsSync(file)) fail(`${label}: 缺少登记的接口文件 ${shortPath(file)}`)
-  for (const file of sourceFiles.filter((path) => inside(path, interfaceRoot))) {
+  if (!existsSync(providesPath)) fail(`${label}: 缺少产品面文件 ${shortPath(providesPath)}`)
+  const providesRegistered = new Map() // 类上方接口的声明 → 登记它的名字
+  for (const file of publicInterfacePaths) {
     const sourceFile = parse(file)
     for (const statement of sourceFile.statements) {
       if (ts.isImportDeclaration(statement)) {
-        if (!isTypeOnlyStatement(statement)) fail(`${label}: 接口文件 ${shortPath(file)} 用了值 import；接口文件只许 import type`)
+        if (!isTypeOnlyStatement(statement)) fail(`${label}: 合同文件 ${shortPath(file)} 用了值 import；合同文件只许 import type`)
+        continue
+      }
+      if (ts.isExportDeclaration(statement)) {
+        const target = statement.moduleSpecifier && ts.isStringLiteral(statement.moduleSpecifier) ? resolveRelativeImport(file, statement.moduleSpecifier.text) : null
+        if (!statement.isTypeOnly || !target || !inside(target, implRoot) || !statement.exportClause || !ts.isNamedExports(statement.exportClause)) {
+          fail(`${label}: 合同文件 ${shortPath(file)} 里的转发只许是 export type { … } from '../impl/<类文件>.js'，登记类上方的接口`)
+          continue
+        }
+        for (const element of statement.exportClause.elements) providesRegistered.set(`${target}::${(element.propertyName ?? element.name).text}`, element.name.text)
         continue
       }
       if (!(ts.isInterfaceDeclaration(statement) || ts.isTypeAliasDeclaration(statement))) {
-        fail(`${label}: 接口文件 ${shortPath(file)} 里有类型声明以外的东西（${statement.getText(sourceFile).split('\n')[0].slice(0, 60)}）；值和实现放进 ${module.impl}/`)
+        fail(`${label}: 合同文件 ${shortPath(file)} 里有类型声明以外的东西（${statement.getText(sourceFile).split('\n')[0].slice(0, 60)}）；值放常量表，实现放 ${module.impl}/`)
         continue
       }
-      if (!isExported(statement)) fail(`${label}: 接口文件 ${shortPath(file)} 的 ${statement.name.text} 没有导出；接口文件里的声明都给别处用`)
-      if (!ChinesePattern.test(jsDocText(statement, sourceFile))) fail(`${label}: 接口文件 ${shortPath(file)} 的 ${statement.name.text} 缺中文说明；每个接口都要写清楚它负责什么`)
+      if (!isExported(statement)) fail(`${label}: 合同文件 ${shortPath(file)} 的 ${statement.name.text} 没有导出；合同里的声明都给别处用`)
+      if (!ChinesePattern.test(jsDocText(statement, sourceFile))) fail(`${label}: 合同文件 ${shortPath(file)} 的 ${statement.name.text} 缺中文说明；每个接口都要写清楚它负责什么`)
       const members = ts.isInterfaceDeclaration(statement)
         ? statement.members
         : statement.type && ts.isTypeLiteralNode(statement.type) ? statement.type.members : []
       for (const member of membersDeep(members)) {
         if (!ChinesePattern.test(jsDocText(member, sourceFile))) {
-          fail(`${label}: 接口文件 ${shortPath(file)} 的 ${statement.name.text}.${member.name?.getText(sourceFile) ?? '(签名)'} 缺中文说明；接口的每个成员都要写清楚做什么`)
+          fail(`${label}: 合同文件 ${shortPath(file)} 的 ${statement.name.text}.${member.name?.getText(sourceFile) ?? '(签名)'} 缺中文说明；接口的每个成员都要写清楚做什么`)
         }
       }
     }
-    for (const { specifier } of relativeSpecifiers(sourceFile)) {
+    for (const { statement, specifier } of relativeSpecifiers(sourceFile)) {
       const target = resolveRelativeImport(file, specifier)
-      if (target && !inside(target, interfaceRoot) && !inside(target, contractRoot)) {
-        fail(`${label}: 接口文件 ${shortPath(file)} 引用了 ${shortPath(target)}；接口只引接口与契约`)
+      if (!target) continue
+      if (ts.isExportDeclaration(statement)) continue
+      if (!inside(target, contractRoot) && !inside(target, typesRoot)) fail(`${label}: 合同文件 ${shortPath(file)} 引用了 ${shortPath(target)}；合同只引合同与 types`)
+    }
+  }
+  if (existsSync(constantsPath)) {
+    const sourceFile = parse(constantsPath)
+    for (const statement of sourceFile.statements) {
+      if (ts.isVariableStatement(statement)) {
+        if (!(statement.declarationList.flags & ts.NodeFlags.Const)) fail(`${label}: 常量表 ${shortPath(constantsPath)} 里有可变变量`)
+        if (!isExported(statement)) fail(`${label}: 常量表 ${shortPath(constantsPath)} 里的 ${statement.declarationList.declarations[0]?.name.getText(sourceFile)} 没有导出`)
+        if (!ChinesePattern.test(jsDocText(statement, sourceFile))) fail(`${label}: 常量表 ${shortPath(constantsPath)} 里的 ${statement.declarationList.declarations[0]?.name.getText(sourceFile)} 缺中文说明`)
+        for (const declaration of statement.declarationList.declarations) {
+          const initializer = declaration.initializer?.getText(sourceFile) ?? ''
+          if (!/^Object\.freeze\(/u.test(initializer) && !/^'[^']*' as const$/u.test(initializer)) {
+            fail(`${label}: 常量表里的 ${declaration.name.getText(sourceFile)} 不是 Object.freeze 的表或 as const 的字符串身份；别的值不进合同`)
+          }
+        }
+      } else if (ts.isTypeAliasDeclaration(statement)) {
+        if (!/\btypeof\b/u.test(statement.type.getText(sourceFile))) fail(`${label}: 常量表文件里的类型 ${statement.name.text} 不是由常量表派生（typeof）；数据类型放进 ${module.types}/`)
+      } else {
+        fail(`${label}: 常量表 ${shortPath(constantsPath)} 里有常量与派生别名以外的东西（${statement.getText(sourceFile).split('\n')[0].slice(0, 60)}）`)
       }
     }
   }
@@ -340,7 +376,7 @@ for (const module of GovernedModules) {
         ? statement.exportClause.elements.map((element) => element.name.text)
         : []))
     // 类的接口和类放在同一个文件里：实现文件只许声明并导出本文件的类实现的接口，以及以类名或接口主名开头的配套接口（构造参数、回调、收尾策略），
-    // 每个都要有中文说明。其余类型一律不许写在这里：数据放进 contract/，不属于某个类的内部接口放进 interface/ 的内部接口文件。
+    // 每个都要有中文说明。其余类型一律不许写在这里：都放进 types/。
     const ownClass = classes[0]
     const ownNames = new Set(ownClass?.name ? [ownClass.name.text] : [])
     for (const clause of ownClass?.heritageClauses ?? []) {
@@ -356,7 +392,7 @@ for (const module of GovernedModules) {
       if (/\btypeof\b/u.test(statement.getText(sourceFile))) continue
       const name = statement.name.text
       if (!ts.isInterfaceDeclaration(statement) || ![...ownNames].some((own) => name === own || name.startsWith(own))) {
-        fail(`${label}: 实现文件 ${shortPath(file)} 里声明了类型 ${name}；数据放进 ${module.contract}/，不属于某个类的内部接口放进 ${module.interface}/，类自己的接口要以类名开头并写在类上方`)
+        fail(`${label}: 实现文件 ${shortPath(file)} 里声明了类型 ${name}；类型放进 ${module.types}/，类自己的接口要以类名开头并写在类上方`)
         continue
       }
       if (!isExported(statement) && !tailExported.has(name)) fail(`${label}: 实现文件 ${shortPath(file)} 的接口 ${name} 没有导出；类的接口写在类上方，给别处用`)
@@ -431,7 +467,7 @@ for (const module of GovernedModules) {
       classCount += 1
       const implementsClause = heritage.find((clause) => clause.token === ts.SyntaxKind.ImplementsKeyword)
       if (!implementsClause) {
-        fail(`${label}: ${shortPath(file)} 的类 ${className} 没有 implements 接口；每个类有一个接口：公开的在 ${module.interface}/，内部的写在类上方，写清它的每个方法`)
+        fail(`${label}: ${shortPath(file)} 的类 ${className} 没有 implements 接口；每个类有一个接口，定义在类上方（注入面的在 ${module.contract}/requires.ts），写清它的每个方法`)
         continue
       }
       const interfaceMembers = new Set()
@@ -442,8 +478,8 @@ for (const module of GovernedModules) {
           const declaredIn = declaration.getSourceFile().fileName
           return inside(declaredIn, implRoot) && basename(declaredIn) === basename(file)
         }
-        if (!declarations.some((declaration) => declaredHere(declaration) || inside(declaration.getSourceFile().fileName, interfaceRoot))) {
-          fail(`${label}: ${shortPath(file)} 的类 ${className} 实现的 ${typeNode.getText(sourceFile)} 既不在本文件的类上方，也不在 ${module.interface}/ 里`)
+        if (!declarations.some((declaration) => declaredHere(declaration) || inside(declaration.getSourceFile().fileName, contractRoot))) {
+          fail(`${label}: ${shortPath(file)} 的类 ${className} 实现的 ${typeNode.getText(sourceFile)} 既不在本文件的类上方，也不在 ${module.contract}/ 里`)
           continue
         }
         for (const property of checker.getPropertiesOfType(type)) interfaceMembers.add(property.name)
@@ -492,11 +528,11 @@ for (const module of GovernedModules) {
     const functionNames = new Set()
     for (const statement of sourceFile.statements) {
       if (ts.isClassDeclaration(statement)) {
-        fail(`${label}: ${shortPath(file)} 里有类 ${statement.name?.text ?? ''}；utils 只放函数和常量，类放进 ${module.impl}/ 并写接口`)
+        fail(`${label}: ${shortPath(file)} 里有类 ${statement.name?.text ?? ''}；utils 只放函数和常量，类放进 ${module.impl}/ 并在类上方写接口`)
       } else if (ts.isEnumDeclaration(statement)) {
-        fail(`${label}: ${shortPath(file)} 里有枚举 ${statement.name.text}；常量表放进 ${module.contract}/`)
+        fail(`${label}: ${shortPath(file)} 里有枚举 ${statement.name.text}；常量表放进 ${module.contract}/constants.ts`)
       } else if (ts.isInterfaceDeclaration(statement) || ts.isTypeAliasDeclaration(statement)) {
-        fail(`${label}: ${shortPath(file)} 里声明了类型 ${statement.name.text}；数据放进 ${module.contract}/，带回调的选项放进 ${module.interface}/ 的内部接口文件，utils 只放函数和常量`)
+        fail(`${label}: ${shortPath(file)} 里声明了类型 ${statement.name.text}；类型放进 ${module.types}/，utils 只放函数和常量`)
       } else if (ts.isFunctionDeclaration(statement) && statement.name) {
         functionNames.add(statement.name.text)
         if (ChinesePattern.test(jsDocText(statement, sourceFile))) documentedFunctions.add(statement.name.text)
@@ -517,9 +553,9 @@ for (const module of GovernedModules) {
     for (const { statement, specifier } of relativeSpecifiers(sourceFile)) {
       const target = resolveRelativeImport(file, specifier)
       if (!target) continue
-      if (inside(target, interfaceRoot) && !isTypeOnlyStatement(statement)) fail(`${label}: ${shortPath(file)} 从 ${shortPath(target)} 做了值 import；接口只能 import type`)
-      if (!inside(target, utilsRoot) && !inside(target, contractRoot) && !inside(target, interfaceRoot)) {
-        fail(`${label}: ${shortPath(file)} 引用了 ${shortPath(target)}；utils 只引 utils、契约与接口，要用类就在参数里收接口`)
+      if ((inside(target, typesRoot) || (inside(target, contractRoot) && target !== constantsPath)) && !isTypeOnlyStatement(statement)) fail(`${label}: ${shortPath(file)} 从 ${shortPath(target)} 做了值 import；类型与接口只能 import type，值只能来自常量表`)
+      if (!inside(target, utilsRoot) && !inside(target, contractRoot) && !inside(target, typesRoot)) {
+        fail(`${label}: ${shortPath(file)} 引用了 ${shortPath(target)}；utils 只引 utils、types 与合同，要用类就在参数里收接口`)
       }
     }
   }
@@ -552,7 +588,7 @@ for (const module of GovernedModules) {
         continue
       }
       const target = resolveRelativeImport(file, statement.moduleSpecifier.text)
-      if (!statement.exportClause && target && !inside(target, exportsRoot) && target !== portablePath) {
+      if (!statement.exportClause && target && !inside(target, exportsRoot) && target !== portablePath && target !== constantsPath) {
         fail(`${label}: 入口 ${shortPath(file)} 通配转发了 ${statement.moduleSpecifier.text}；通配只许指向别的入口或可移植数据文件，其余逐个列名`)
       }
     }
@@ -566,14 +602,14 @@ for (const module of GovernedModules) {
       exported.set(declaration, record)
     }
   }
-  const allowedTypeSource = (file) => isPublicInterfaceFile(file) || inside(file, contractRoot)
+  const allowedTypeSource = (file, declaration, name) => isPublicInterfaceFile(file) || file === constantsPath || inside(file, typesRoot) || (inside(file, implRoot) && providesRegistered.get(`${file}::${name}`) !== undefined)
   const rootReferences = [] // 公开面的根：公开接口声明 + 导出值的类型标注
   for (const [declaration, record] of exported) {
     const file = declaration.getSourceFile().fileName
     if (!inside(file, srcRoot)) continue
     if (!record.isValue) {
-      if (!allowedTypeSource(file)) {
-        fail(`${label}: 对外导出了类型 ${record.name}，它声明在 ${shortPath(file)}；导出的类型只能来自 ${module.publicInterfaces.map((name) => `${module.interface}/${name}`).join('、')} 或 ${module.contract}/`)
+      if (!allowedTypeSource(file, declaration, record.name)) {
+        fail(`${label}: 对外导出了类型 ${record.name}，它声明在 ${shortPath(file)}；导出的类型只能来自 ${module.contract}/ 的 provides、requires、constants，${module.types}/，或 provides.ts 登记的类上方接口`)
       }
       continue
     }
@@ -584,12 +620,12 @@ for (const module of GovernedModules) {
     if (inside(file, contractRoot)) {
       const statement = topLevelOf(declaration)
       if (!ts.isVariableStatement(statement) || !(statement.declarationList.flags & ts.NodeFlags.Const)) {
-        fail(`${label}: 对外导出了契约里的 ${record.name}；契约只导出常量表`)
+        fail(`${label}: 对外导出了合同里的 ${record.name}；合同里只有常量表能作为值导出`)
       }
       continue
     }
     if (!inside(file, implRoot)) {
-      fail(`${label}: 对外导出了 ${record.name}，它声明在 ${shortPath(file)}；对外的值只能是 impl 里按公开接口标注的实例、工厂或契约常量表，utils 的函数不出包`)
+      fail(`${label}: 对外导出了 ${record.name}，它声明在 ${shortPath(file)}；对外的值只能是 impl 里按公开接口标注的实例、工厂或合同里的常量表，utils 的函数不出包`)
       continue
     }
     const annotations = []
@@ -609,6 +645,7 @@ for (const module of GovernedModules) {
     rootReferences.push(...annotations.map((node) => ({ node, owner: record.name })))
   }
   const publicDeclarations = []
+  const registeredStatements = new Set()
   for (const file of publicInterfacePaths) {
     const sourceFile = program.getSourceFile(file)
     for (const statement of sourceFile?.statements ?? []) {
@@ -620,6 +657,21 @@ for (const module of GovernedModules) {
       }
       rootReferences.push({ node: statement, owner: statement.name.text })
     }
+  }
+  // provides.ts 登记的类上方接口也是公开面的根
+  for (const [key, exportedName] of providesRegistered) {
+    const [file, name] = key.split('::')
+    const sourceFile = program.getSourceFile(file)
+    const statement = (sourceFile?.statements ?? []).find((candidate) => ts.isInterfaceDeclaration(candidate) && candidate.name.text === name)
+    if (!statement) {
+      fail(`${label}: provides.ts 登记的 ${exportedName} 在 ${shortPath(file)} 里没有对应的接口声明`)
+      continue
+    }
+    publicDeclarations.push(statement)
+    registeredStatements.add(statement)
+    const record = exported.get(statement)
+    if (!record || !record.entries.has(rootEntryPath)) fail(`${label}: provides.ts 登记的 ${exportedName} 没有从根入口导出`)
+    rootReferences.push({ node: statement, owner: exportedName })
   }
   // 从公开面的根出发，求它们引用到的契约数据的闭包；顺带拦住公开接口引用内部接口
   const closure = new Set()
@@ -635,12 +687,15 @@ for (const module of GovernedModules) {
         const resolved = declarationOf(ts.isQualifiedName(nameNode) ? nameNode.left : nameNode)
         if (resolved) {
           const top = topLevelOf(resolved.declaration)
-          if (isInternalInterfaceFile(resolved.file)) {
-            fail(`${label}: 公开面的 ${owner} 引用了内部接口 ${resolved.symbol.name}（${shortPath(resolved.file)}）；内部接口不出包，公开接口只能引用公开接口与契约数据`)
+          if (inside(resolved.file, implRoot) && registeredStatements.has(top)) {
+            if (!visitedDeclarations.has(top)) {
+              visitedDeclarations.add(top)
+              queue.push({ node: top, owner })
+            }
           } else if (inside(resolved.file, implRoot) || inside(resolved.file, utilsRoot)) {
-            fail(`${label}: 公开面的 ${owner} 引用了 ${shortPath(resolved.file)} 里的 ${resolved.symbol.name}；公开签名只能用公开接口与契约数据`)
-          } else if (inside(resolved.file, contractRoot) || isPublicInterfaceFile(resolved.file)) {
-            if (inside(resolved.file, contractRoot)) closure.add(top)
+            fail(`${label}: 公开面的 ${owner} 引用了 ${shortPath(resolved.file)} 里的 ${resolved.symbol.name}；公开签名只能用合同、登记过的类上方接口与公开数据`)
+          } else if (inside(resolved.file, typesRoot) || inside(resolved.file, contractRoot)) {
+            if (inside(resolved.file, typesRoot) || resolved.file === constantsPath) closure.add(top)
             if (!visitedDeclarations.has(top)) {
               visitedDeclarations.add(top)
               queue.push({ node: top, owner })
@@ -662,7 +717,7 @@ for (const module of GovernedModules) {
   }
   for (const [declaration, record] of exported) {
     const file = declaration.getSourceFile().fileName
-    if (!inside(file, contractRoot) || file === portablePath || record.isValue) continue
+    if (!inside(file, typesRoot) || file === portablePath || record.isValue) continue
     if (!closure.has(topLevelOf(declaration))) {
       fail(`${label}: 对外导出了 ${shortPath(file)} 的 ${record.name}，但没有任何公开接口用到它；不是公开签名需要的数据不出包`)
     }
@@ -673,7 +728,7 @@ for (const module of GovernedModules) {
     if (ts.isVariableStatement(statement)) continue
     if (closure.has(statement)) continue
     if (ts.isTypeAliasDeclaration(statement) && /\btypeof\b/u.test(statement.type.getText(portableSourceFile))) continue
-    fail(`${label}: 可移植数据文件里的 ${statement.name.text} 没有任何公开接口用到；契约里不放包内外都没人用的数据`)
+    fail(`${label}: 可移植数据文件里的 ${statement.name.text} 没有任何公开接口用到；可移植文件里不放包内外都没人用的数据`)
   }
 
   // ── 7. 会被渲染进程加载的入口 ─────────────────────────────────────────
@@ -706,21 +761,22 @@ for (const module of GovernedModules) {
 
   // ── 8. 环境变量都登记 ───────────────────────────────────────────────────
   const registeredVariables = new Set()
+  const constantsSourceFile = program.getSourceFile(constantsPath)
   const visitTable = (node) => {
-    if (ts.isVariableDeclaration(node) && node.name.getText(portableSourceFile) === module.environmentTable) {
+    if (ts.isVariableDeclaration(node) && node.name.getText(constantsSourceFile) === module.environmentTable) {
       const collect = (child) => {
-        if (ts.isPropertyAssignment(child) && child.name.getText(portableSourceFile) === 'name' && ts.isStringLiteral(child.initializer)) registeredVariables.add(child.initializer.text)
+        if (ts.isPropertyAssignment(child) && child.name.getText(constantsSourceFile) === 'name' && ts.isStringLiteral(child.initializer)) registeredVariables.add(child.initializer.text)
         ts.forEachChild(child, collect)
       }
       collect(node)
     }
     ts.forEachChild(node, visitTable)
   }
-  if (portableSourceFile) visitTable(portableSourceFile)
-  if (registeredVariables.size === 0) fail(`${label}: 可移植数据文件里没有环境变量表 ${module.environmentTable}`)
+  if (constantsSourceFile) visitTable(constantsSourceFile)
+  if (registeredVariables.size === 0) fail(`${label}: 常量表里没有环境变量表 ${module.environmentTable}`)
   const usedVariables = new Set()
   for (const file of sourceFiles) {
-    if (file === portablePath) continue
+    if (file === constantsPath) continue
     const sourceFile = parse(file)
     const visitStrings = (node) => {
       // 字符串里写的变量名，和 env.VELAROS_X 这样按属性读的变量名，都算用到
@@ -775,9 +831,9 @@ for (const module of GovernedModules) {
     visitImports(sourceFile)
   }
   for (const file of sourceFiles) {
-    if (dirname(file) === srcRoot) fail(`${label}: ${shortPath(file)} 放在 src 根上；对外入口放进 ${module.exports}/，其余放进 contract、interface、impl 或 utils`)
+    if (dirname(file) === srcRoot) fail(`${label}: ${shortPath(file)} 放在 src 根上；对外入口放进 ${module.exports}/，其余放进 contract、types、impl 或 utils`)
   }
-  const allowedSourceDirectories = [module.contract, module.interface, module.impl, module.utils, module.exports].map((path) => basename(path))
+  const allowedSourceDirectories = [module.contract, module.types, module.impl, module.utils, module.exports].map((path) => basename(path))
   for (const directory of childDirectories(srcRoot)) {
     if (!allowedSourceDirectories.includes(directory)) {
       fail(`${label}: src/${directory}/ 不是登记的目录；src 下只有 ${allowedSourceDirectories.join('、')} 五个目录`)

@@ -8,7 +8,7 @@ import { open, readFile, stat } from 'node:fs/promises'
 
 import { AppError } from '@velaros-ai/core/error'
 
-import type { SystemFileStamp, SystemMediaType, SystemReadFileResult, SystemTextEncoding, SystemTextFileContent, SystemTextRange, SystemTextSlice } from '../contract/files.js'
+import type { SystemFileStamp, SystemMediaType, SystemReadFileResult, SystemTextEncoding, SystemTextFileContent, SystemTextRange,SystemTextSlice } from '../types/files.js'
 
 import { readErrnoCode } from './fs.js'
 
@@ -17,24 +17,6 @@ const UTF8_BOM = Buffer.from([0xEF, 0xBB, 0xBF])
 const UTF16LE_BOM = Buffer.from([0xFF, 0xFE])
 
 const UTF16BE_BOM = Buffer.from([0xFE, 0xFF])
-
-/**
- * 读、看、写的上限：readChars 是文本一次调用总共最多返回的字符数（每个文件也是它，默认就读到上限）；editWholeChars 是 edit 整段返回改后内容的上限，editContextChars 是每处改动前后各带多少字符；
- * readFiles、viewFiles、editFiles 是一次最多几个文件；editsPerFile 是一个文件一次最多改几处；
- * imageBytes 是交给模型的图片上限；fileBytes 是读进来的文件上限，再大就让模型用系统命令截取；editableBytes 是能做精确替换的文件上限。
- */
-export const SystemFileLimits = Object.freeze({
-  readChars: 200_000,
-  readFiles: 20,
-  viewFiles: 10,
-  editFiles: 20,
-  editsPerFile: 50,
-  editWholeChars: 20_000,
-  editContextChars: 200,
-  imageBytes: 5 * 1024 * 1024,
-  fileBytes: 20 * 1024 * 1024,
-  editableBytes: 2 * 1024 * 1024,
-})
 
 /** 小于这个字节数的文件写前一律重读核版本：印记的时间精度不够时，小文件重读几乎不花钱。 */
 const AlwaysRehashBytes = 64 * 1024

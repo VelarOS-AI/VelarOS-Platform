@@ -13,9 +13,8 @@
 import type { ApprovalPort } from '@velaros-ai/agent/tool-contract'
 import type { ScopeRef } from '@velaros-ai/kernel/contracts/abi'
 
-import type { SystemProcessConfinementRequest, SystemProcessConfinementResult } from '../contract/commands.js'
-import type { SystemBackgroundTaskQueryOptions, SystemBackgroundTaskRecord, SystemCommandResult, SystemProcessConfinementMode, SystemRunCommandOptions, SystemShellEnvironmentRefreshResult } from '../contract/system.js'
-import type { SystemSandboxApplyOptions, SystemSandboxApplyResult, SystemSandboxCreateOptions, SystemSandboxDiff, SystemSandboxDiffOptions, SystemSandboxDiscardResult, SystemSandboxRecord } from '../contract/system.js'
+import type { SystemProcessConfinementRequest, SystemProcessConfinementResult } from '../types/commands.js'
+import type { SystemBackgroundTaskQueryOptions, SystemBackgroundTaskRecord, SystemCommandResult, SystemProcessConfinementMode, SystemRunCommandOptions, SystemSandboxApplyOptions, SystemSandboxApplyResult, SystemSandboxCreateOptions, SystemSandboxDiff, SystemSandboxDiffOptions, SystemSandboxDiscardResult, SystemSandboxRecord,SystemShellEnvironmentRefreshResult } from '../types/system.js'
 
 // ── 工具上下文与宿主端口 ────────────────────────────────────────
 

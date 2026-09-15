@@ -1,10 +1,10 @@
 /**
  * 命令分类：执行前判断一条 shell 命令是否只读、是否危险、是否该转入后台。
  */
-
 import { isEmpty, isNull, isString, isTrue, toNullable } from '@velaros-ai/core'
 
-import type { ShellInvocation, SystemCommandExecutionPlan } from '../contract/commands.js'
+import type { ShellInvocation, SystemCommandExecutionPlan } from '../types/commands.js'
+
 
 const readOnlyCommands = new Set([
   'cat', 'cut', 'date', 'df', 'du', 'env', 'find', 'git', 'grep', 'head', 'id', 'ls',

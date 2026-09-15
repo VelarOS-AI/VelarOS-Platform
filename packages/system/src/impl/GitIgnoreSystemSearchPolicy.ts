@@ -8,7 +8,7 @@ import { dirname, resolve } from 'node:path'
 
 import { isEmpty } from '@velaros-ai/core'
 
-import type { GitIgnoreRule, SystemSearchIgnorePolicyOptions } from '../contract/files.js'
+import type { GitIgnoreRule, SystemSearchIgnorePolicyOptions } from '../types/files.js'
 import {
   findSystemSearchRepoRoot,
   isInsidePath,

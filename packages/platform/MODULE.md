@@ -1,7 +1,7 @@
 # @velaros-ai/platform 模块卡片
 
 > 这一页是本模块的压缩表示：读完就知道它是什么、给了外面什么、骨干链路怎么走、靠什么、状态在哪、失败什么样、哪些承诺不能破。
-> 先看 `src/interface/provides.ts` 的两个接口，再看 `src/impl/` 两个类；utils 里每个函数上方有一句说明。
+> 先看 `src/impl/` 两个类上方的接口（`contract/provides.ts` 登记它们），utils 里每个函数上方有一句说明。
 > 门禁：`bun run check:module-ownership`。
 
 ## 这是什么
@@ -11,7 +11,7 @@ VelarOS 各产品在不同操作系统上共用的约定：路径文本怎么比
 
 ## 提供什么
 
-**产品面**，写在 `interface/provides.ts`，每件能力一个接口，对外的值都按接口标注类型：
+**产品面**，登记在 `contract/provides.ts`：两件能力的 API 定义在各自类的上方，这里 re-export；对外的值都按接口标注类型：
 
 | 值 | 接口 | 做什么 |
 | --- | --- | --- |
@@ -19,8 +19,7 @@ VelarOS 各产品在不同操作系统上共用的约定：路径文本怎么比
 | `velarosSharedResources` | `VelarOSSharedResourcesApi` | 产品家族共享资源目录 |
 | `PlatformEnvironmentVariables` | 契约常量表 | 本包读的环境变量 |
 
-**数据面**是 `contract/`。可移植数据文件 `contract/platform.ts` 整个就是 `./contracts` 入口：`ShellKind`、`RuntimePlatform`、`CommandSpec`、编辑器与后台启动的定义、`PlatformEnvironmentVariables`；
-带 `NodeJS.ProcessEnv` 的选项在 `contract/options.ts`，从根入口导出。
+**数据面**是 `types/`，只放类型；**常量表**是 `contract/constants.ts`。`./contracts` 入口就是常量表加可移植数据类型文件 `types/platform.ts`：`ShellKind`、`RuntimePlatform`、`CommandSpec`、编辑器与后台启动的定义、`PlatformEnvironmentVariables`；带进程环境变量类型的选项在 `types/options.ts`，从根入口导出。
 
 三个入口对应 `package.json` 的 `exports`，源文件在 `src/exports/`，只有转发语句：
 
@@ -30,7 +29,7 @@ VelarOS 各产品在不同操作系统上共用的约定：路径文本怎么比
 | `./contracts` | 任何进程，含浏览器 | 可移植数据 |
 | `./shared-resources` | Node 宿主 | 共享资源目录 |
 
-没有注入面：本包不需要宿主塞任何东西，环境变量表登记在 `PlatformEnvironmentVariables`。
+没有注入面：本包不需要宿主塞任何东西，环境变量表登记在 `contract/constants.ts` 的 `PlatformEnvironmentVariables`。
 
 ## 骨干链路
 
@@ -77,8 +76,8 @@ VelarOS 各产品在不同操作系统上共用的约定：路径文本怎么比
 
 ```text
 src/
-  interface/    接口：只有 provides 一个产品面文件；没有注入面，也没有内部接口
-  contract/     数据：platform.ts 是可移植文件，options.ts 放带 Node 类型的选项
+  contract/     对外合同：provides.ts 登记两件能力的 API（定义在各自类上方，这里 re-export），constants.ts 是环境变量表；没有注入面
+  types/        只放类型：platform.ts 是可移植数据文件，options.ts 放带 Node 类型的选项
   impl/         一个类一个文件：PlatformCompatibility.ts、VelarOSSharedResources.ts
   utils/        platform.ts：shell 种类、命令规格、路径文本与 PATH 的小函数，每个上方一句说明
   exports/      三个对外入口，只转发，package.json 的 exports 指向这里
@@ -86,7 +85,7 @@ src/
 
 | 实现文件 | 接口 | 做什么 |
 | --- | --- | --- |
-| `PlatformCompatibility.ts` | `PlatformCompatibilityApi`（provides） | 跨平台兼容层，外加 `currentPlatform` 与工厂 `createPlatform` |
-| `VelarOSSharedResources.ts` | `VelarOSSharedResourcesApi`（provides） | 产品家族共享资源目录 |
+| `PlatformCompatibility.ts` | `PlatformCompatibilityApi`（同文件，provides 登记） | 跨平台兼容层，外加 `currentPlatform` 与工厂 `createPlatform` |
+| `VelarOSSharedResources.ts` | `VelarOSSharedResourcesApi`（同文件，provides 登记） | 产品家族共享资源目录 |
 
-两个实现文件在同一层，互不依赖。`interface/provides.ts` 改了等于改对外契约，差量报告要点名。
+两个实现文件在同一层，互不依赖。`contract/` 的两个文件改了等于改对外契约，差量报告要点名。

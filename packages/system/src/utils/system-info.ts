@@ -6,13 +6,8 @@ import { basename } from 'node:path'
 
 import { isNotNull, isNull, isPresent, toNullable } from '@velaros-ai/core'
 
-import type { ByteStats, ParsedProcessRow, RawPortEntry } from '../contract/process-info.js'
-import type {
-  SystemOpenPortInfo,
-  SystemOpenPortQueryOptions,
-  SystemProcessInfo,
-  SystemProcessQueryOptions,
-} from '../contract/system.js'
+import type { ByteStats, ParsedProcessRow, RawPortEntry } from '../types/processes.js'
+import type { SystemOpenPortInfo, SystemOpenPortQueryOptions, SystemProcessInfo, SystemProcessQueryOptions } from '../types/system.js'
 
 /** 把进程行转成对外的进程信息，再按查询条件筛选：过滤词、pid、名字、命令行片段、用户、只看当前用户、CPU 与内存下限；最多 limit 条（默认 50）。 */
 export function selectSystemProcesses(rows: ParsedProcessRow[], options: SystemProcessQueryOptions): SystemProcessInfo[] {

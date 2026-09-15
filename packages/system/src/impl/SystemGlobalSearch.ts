@@ -8,12 +8,7 @@ import { basename, extname, join, relative } from 'node:path'
 
 import { AppError } from '@velaros-ai/core/error'
 
-import type {
-  SystemFileEntry,
-  SystemGlobalSearchOptions,
-  SystemGlobalSearchResult,
-  SystemSearchMatch,
-} from '../contract/system.js'
+import type { SystemFileEntry, SystemGlobalSearchOptions, SystemGlobalSearchResult, SystemSearchMatch } from '../types/system.js'
 import {
   buildLineMatcher,
   matchesSearchPath,

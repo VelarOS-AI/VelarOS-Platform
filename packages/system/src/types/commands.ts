@@ -1,13 +1,14 @@
 /**
- * 命令数据：执行前分类的结果、进程约束的策略与请求结果、受管进程的收尾结果、shell 的解析与自检结果、刷新后的 Windows 环境。
- * 只放数据；带行为的接口在 `interface/`。
+ * 命令数据：执行前分类的结果、进程约束的策略与请求结果，以及命令执行、shell 选择、进程约束实现自己的工作类型（受管进程的收尾结果、选中的 shell 与自检结果、
+ * 刷新后的环境、准备好的命令、控制台缓冲、命令调用、带回调的选项）。只放类型；后一部分只在包内用，不出包。
  */
 
+import type { ShellCommandSpecOptions } from '@velaros-ai/platform'
 import type { CommandSpec } from '@velaros-ai/platform/contracts'
 
-import type { SystemProcessConfinementEvidence, SystemProcessConfinementMode, SystemProcessOwnership, SystemShellDescriptor } from './system.js'
+import type { SystemProcessConfinementProvider } from '../contract/requires.js'
 
-// ── 执行前分类 ──────────────────────────────────────────────────
+import type { SystemProcessConfinementEvidence, SystemProcessConfinementMode, SystemProcessOwnership, SystemShellDescriptor } from './system.js'
 
 /**
  * shell 命令的**执行前分类**：只读？要确认？该丢后台？
@@ -36,8 +37,6 @@ export interface SystemCommandExecutionPlan {
   ports: number[]
 }
 
-// ── 进程约束 ────────────────────────────────────────────────────
-
 export interface SystemProcessConfinementPolicy {
   mode: SystemProcessConfinementMode
   /** `workspace-write` 的主要写边界；其余模式仍携带它，便于一次解析后统一审计。 */
@@ -60,7 +59,7 @@ export interface SystemProcessConfinementResult {
   profile?: string
 }
 
-// ── 受管子进程 ──────────────────────────────────────────────────
+// ── 实现自己的工作类型，不出包 ─────────────────────────────────────
 
 export interface SystemProcessCompletion {
   exitCode: Nullable<number>
@@ -70,8 +69,6 @@ export interface SystemProcessCompletion {
   spawnError: Nullable<Error>
   cleanupIncomplete: boolean
 }
-
-// ── shell 选择与自检 ──────────────────────────────────────
 
 export interface ResolvedSystemShell extends SystemShellDescriptor {
   env: NodeJS.ProcessEnv
@@ -89,8 +86,6 @@ export interface RefreshedWindowsEnvironment {
   refreshed: boolean
   reason?: string
 }
-
-// ── 命令执行器与命令分类内部的数据 ──────────────────────────────
 
 /** 准备好的一条命令：可以直接 spawn 的规格和环境，外加约束、归属、shell 三份证据。 */
 export interface PreparedSystemCommand {
@@ -111,4 +106,48 @@ export interface SystemConsoleOutputBuffer {
 export interface ShellInvocation {
   name: string
   args: string[]
+}
+
+/** 选 shell 时的选项；平台、环境变量、指定的 shell 路径与种类见继承的 `ShellCommandSpecOptions`。 */
+export interface ResolveSystemShellOptions extends ShellCommandSpecOptions {
+  /** 判断文件存在的方式；缺省用真实文件系统，测试时可以换成假的。 */
+  isFile?: (path: string) => boolean
+  /** 每个候选试跑的超时毫秒数，默认 2500。 */
+  timeoutMs?: number
+  /** 自定义就绪自检；缺省让 shell 打印带中文的标记和版本。 */
+  probe?: (shell: ResolvedSystemShell, timeoutMs: number) => Promise<SystemShellProbeResult>
+}
+
+/** 找 Windows 原生进程宿主、把命令包进宿主时的选项。 */
+export interface SystemProcessHostOptions {
+  /** 按哪个平台判断；只有 Windows 才用原生宿主。 */
+  platform?: NodeJS.Platform
+  /** 读 VELAROS_PROCESS_HOST 用的环境变量。 */
+  env?: NodeJS.ProcessEnv
+  /** 显式指定原生宿主的路径，优先于环境变量和默认位置。 */
+  hostPath?: string
+  /** 子进程要跟随的父进程 pid；缺省是当前进程。 */
+  parentPid?: number
+  /** 判断文件存在的方式；缺省用真实文件系统，测试时可以换。 */
+  isFile?: (path: string) => boolean
+}
+
+/** 给命令加进程约束时的选项。 */
+export interface SystemProcessConfinementBuildOptions {
+  /** 按哪个平台选约束后端：macOS 用 sandbox-exec，Linux 用 bubblewrap。 */
+  platform?: NodeJS.Platform
+  /** 找约束工具可执行文件用的环境变量。 */
+  env?: NodeJS.ProcessEnv
+  /** 宿主注入的约束后端，给了就优先用它。 */
+  provider?: SystemProcessConfinementProvider
+  /** sandbox-exec 的路径，缺省是系统自带的那个。 */
+  sandboxExecPath?: string
+  /** sandbox-exec 是否可用；缺省按路径探测。 */
+  sandboxExecAvailable?: boolean
+  /** bubblewrap 的路径，缺省在 PATH 里找。 */
+  bubblewrapPath?: string
+  /** bubblewrap 是否可用；缺省按路径探测。 */
+  bubblewrapAvailable?: boolean
+  /** 临时目录，约束里一律允许写它。 */
+  tempDir?: string
 }

@@ -1,9 +1,6 @@
 /**
- * 进程与端口数据：ps、lsof、netstat、tasklist 等平台命令输出的解析结果，以及字节统计。
- * 只放数据；解析函数在 `utils/system-info.ts`。
+ * 进程与端口解析结果：ps、lsof、netstat、tasklist 等平台命令输出解析出来的行，以及字节统计。只在包内用，不出包。
  */
-
-// ── 进程与端口：平台命令输出的解析结果 ──────────────────────────
 
 export interface ParsedProcessRow {
   pid: number

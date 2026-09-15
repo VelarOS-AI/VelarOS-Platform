@@ -11,38 +11,9 @@ import type { PlatformCompatibilityApi } from '@velaros-ai/platform'
 import { createPlatform } from '@velaros-ai/platform'
 import type { CommandSpec } from '@velaros-ai/platform/contracts'
 
-import type { ResolvedSystemShell } from '../contract/commands.js'
-import type {
-  SystemBackgroundTaskQueryOptions,
-  SystemBackgroundTaskRecord,
-  SystemBackgroundTaskTerminateRequest,
-  SystemBackgroundTaskTerminateResult,
-  SystemCommandResult,
-  SystemConsoleControlResult,
-  SystemConsoleInputRequest,
-  SystemConsoleInterruptRequest,
-  SystemConsoleOutputChunk,
-  SystemConsoleOutputRequest,
-  SystemEnvironmentInspection,
-  SystemGlobalSearchOptions,
-  SystemGlobalSearchResult,
-  SystemMetricsSnapshot,
-  SystemOpenPortInfo,
-  SystemOpenPortQueryOptions,
-  SystemProcessInfo,
-  SystemProcessQueryOptions,
-  SystemRunCommandOptions,
-  SystemSandboxApplyOptions,
-  SystemSandboxApplyResult,
-  SystemSandboxCreateOptions,
-  SystemSandboxDiff,
-  SystemSandboxDiffOptions,
-  SystemSandboxDiscardResult,
-  SystemSandboxRecord,
-  SystemShellEnvironmentRefreshResult,
-} from '../contract/system.js'
-import type { LocalSystemKernelApi } from '../interface/provides.js'
-import type { LocalSystemKernelOptions } from '../interface/requires.js'
+import type { LocalSystemKernelOptions, SystemToolSystemApi } from '../contract/requires.js'
+import type { ResolvedSystemShell } from '../types/commands.js'
+import type { SystemBackgroundTaskQueryOptions, SystemBackgroundTaskRecord, SystemBackgroundTaskTerminateRequest, SystemBackgroundTaskTerminateResult, SystemCommandResult, SystemConsoleControlResult, SystemConsoleInputRequest, SystemConsoleInterruptRequest, SystemConsoleOutputChunk, SystemConsoleOutputRequest, SystemEnvironmentInspection, SystemGlobalSearchOptions, SystemGlobalSearchResult, SystemMetricsSnapshot, SystemOpenPortInfo, SystemOpenPortQueryOptions, SystemProcessInfo, SystemProcessQueryOptions, SystemRunCommandOptions, SystemSandboxApplyOptions, SystemSandboxApplyResult, SystemSandboxCreateOptions, SystemSandboxDiff, SystemSandboxDiffOptions, SystemSandboxDiscardResult, SystemSandboxRecord, SystemShellEnvironmentRefreshResult } from '../types/system.js'
 import { runPlatformCommand } from '../utils/process.js'
 import { toShellDescriptor } from '../utils/shell.js'
 import {
@@ -72,6 +43,49 @@ const log = Log.tag('LocalSystemKernel')
 /** 按构造选项创建一个本地内核。 */
 export function createLocalSystemKernel(options: LocalSystemKernelOptions): LocalSystemKernelApi {
   return new LocalSystemKernel(options)
+}
+
+/**
+ * 本地内核：宿主端口 `ctx.system` 在本机上的实现，产品壳创建一个交给工具用。
+ *
+ * 实现是 `LocalSystemKernel`，只做转接：命令与后台任务交给命令执行器，搜索交给全局搜索，
+ * 进程、端口、指标跑平台命令读出来。相对路径都相对构造时给的 cwd，`~` 展开到家目录。
+ * 宿主端口本身的方法见 `requires.ts` 的 `SystemToolSystemApi`；这里另给产品壳十一个方法：环境检查、指标、释放、沙箱列表，
+ * 全局搜索、进程、端口、终止后台任务，以及交互式任务的控制台三件事（写输入、读增量输出、发中断）。
+ * 这些方法都没有工具在调（模型改用 `system:run` 跑系统命令，控制台归用户），是宿主自己的界面要的。由 `createLocalSystemKernel(options)` 创建。
+ */
+export interface LocalSystemKernelApi extends SystemToolSystemApi {
+  /** 环境检查：操作系统、经过自检的 shell 和它的 PATH，以及给定的每个命令在不在、在哪。 */
+  inspectEnvironment(commands?: string[]): Promise<SystemEnvironmentInspection>
+  /** 系统指标快照：CPU、内存、交换区、系统盘、负载各自的用量和告警级别，外加占用最高的 5 个进程；读不到的项为 null。 */
+  getSystemMetrics(): Promise<SystemMetricsSnapshot>
+  /** 释放：停掉这个内核启动过、还没退出的全部后台进程。 */
+  dispose(): Promise<void>
+  /** 在一棵目录树里按路径名或文件内容搜索，跳过隐藏项、依赖目录、gitignore 忽略项和受保护目录，最多 limit 条。 */
+  globalSearch(options: SystemGlobalSearchOptions, abortSignal?: AbortSignal): Promise<SystemGlobalSearchResult>
+  /** 列出本机进程（名称、命令行、用户、CPU、内存），可按 pid、名字、命令行片段、用户、资源占用筛选，最多 limit 条（默认 50）。 */
+  listProcesses(options?: SystemProcessQueryOptions): Promise<SystemProcessInfo[]>
+  /** 列出正在监听的 TCP 端口和占用它们的进程，可按端口、端口范围、进程筛选，最多 limit 条（默认 50）。 */
+  listOpenPorts(options?: SystemOpenPortQueryOptions): Promise<SystemOpenPortInfo[]>
+  /** 登记着的演练沙箱，给宿主界面列沙箱、展示差量用。 */
+  listSandboxes(): SystemSandboxRecord[]
+  /** 终止一个后台任务：核对任务存在、属于请求里的会话、进程确实是自己启动的那个，再发信号并等它退出；返回终止前后的状态。 */
+  terminateBackgroundTask(request: SystemBackgroundTaskTerminateRequest): Promise<SystemBackgroundTaskTerminateResult>
+  /**
+   * 往交互式任务的控制台写一段用户输入，缺省在末尾补一个换行（相当于用户按回车）。
+   * 任务不存在、不属于请求里的会话时抛错；进程已经退出或这条任务不是交互式的，不抛错，结果里 `accepted` 为 false 并说明原因。
+   */
+  writeConsoleInput(request: SystemConsoleInputRequest): Promise<SystemConsoleControlResult>
+  /**
+   * 读控制台从 `cursor` 起的增量输出，返回新文本和下一次的 cursor；不给 cursor 就从缓冲区里留着的最早一段开始。
+   * 缓冲区只留最近的一段，被挤掉的字符数如实写在 `droppedChars` 里，不假装输出是连续的。任务不存在或不属于该会话时抛错。
+   */
+  readConsoleOutput(request: SystemConsoleOutputRequest): Promise<SystemConsoleOutputChunk>
+  /**
+   * 给控制台发中断，相当于用户按 Ctrl+C：POSIX 上向整个进程组发 SIGINT，Windows 上退回按进程树终止。
+   * 任务不存在、不属于请求里的会话时抛错；进程已经退出时不抛错，结果里 `accepted` 为 false。
+   */
+  interruptConsole(request: SystemConsoleInterruptRequest): Promise<SystemConsoleControlResult>
 }
 
 export class LocalSystemKernel implements LocalSystemKernelApi {

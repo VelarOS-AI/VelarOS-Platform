@@ -5,7 +5,7 @@
 
 import { isEmpty, toNullable } from '@velaros-ai/core'
 
-import type { SystemFileSnapshot } from '../contract/files.js'
+import type { SystemFileSnapshot } from '../types/files.js'
 import { fileVersionOf } from '../utils/text-file.js'
 
 /** 每个文件最多留几份。 */

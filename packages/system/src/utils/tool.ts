@@ -9,10 +9,10 @@ import { isFalse, isPlainObject } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import type { KernelCallableCapabilityOperation } from '@velaros-ai/kernel/contracts/abi'
 
-import { SystemToolCategoryByName } from '../contract/system.js'
-import type { DefineSystemToolInput } from '../interface/internal.js'
-import type { VelaTool } from '../interface/provides.js'
-import type { SystemToolContext, SystemToolContextResolver } from '../interface/requires.js'
+import { SystemToolCategoryByName } from '../contract/constants.js'
+import type { VelaTool } from '../contract/provides.js'
+import type { SystemToolContext, SystemToolContextResolver } from '../contract/requires.js'
+import type { DefineSystemToolInput } from '../types/tool.js'
 
 /** 定义一个系统工具：类别按工具名自动查表填上，保证一个工具只属于一个类别；声明了 inputReuse 的工具，示例按原 schema 校验后再套上复用信封。 */
 export function defineSystemTool<TInput extends Record<string, unknown>>(

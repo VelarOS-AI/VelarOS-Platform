@@ -1,8 +1,8 @@
 /**
  * 系统空间根入口（`@velaros-ai/system`），给 Node 宿主。
  *
- * 只出三样东西：产品面（`interface/provides.ts` 的接口和它们的实例）、注入面（`interface/requires.ts` 的接口）、
- * 以及它们用到的数据（`contract/`）。另一个入口 `./contracts` 是它的子集，只有可移植数据。
+ * 只出三样东西：产品面（`contract/provides.ts` 登记的接口和它们的实例）、注入面（`contract/requires.ts` 的接口）、
+ * 以及它们用到的数据（`types/`）与常量表（`contract/constants.ts`）。另一个入口 `./contracts` 是它的子集，只有可移植数据。
  * 跨平台兼容层与共享资源目录在 `@velaros-ai/platform`。
  */
 
@@ -10,32 +10,15 @@
 export * from './contracts.js'
 
 // ── 产品面：工具、内置 mod、内核挂载、本地内核、命令策略 ─────────
+export type { SystemBundledModDefinition, SystemCapabilityService, SystemToolCollection, VelaTool } from '../contract/provides.js'
+export type { LocalSystemKernelApi } from '../impl/LocalSystemKernel.js'
 export { createLocalSystemKernel } from '../impl/LocalSystemKernel.js'
+export type { SystemCommandPolicyApi } from '../impl/SystemCommandPolicy.js'
 export { systemCommandPolicy } from '../impl/SystemCommandPolicy.js'
 export { createSystemBundledModDefinition, createSystemKernelModule, SystemCapability, systemTools } from '../impl/SystemTools.js'
-export type {
-  LocalSystemKernelApi,
-  SystemBundledModDefinition,
-  SystemCapabilityService,
-  SystemCommandPolicyApi,
-  SystemToolCollection,
-  VelaTool,
-} from '../interface/provides.js'
 
 // ── 注入面：宿主要给的东西 ──────────────────────────────────────
-export type {
-  CreateSystemKernelModuleOptions,
-  LocalSystemKernelOptions,
-  SystemProcessConfinementProvider,
-  SystemToolContext,
-  SystemToolContextResolver,
-  SystemToolSystemApi,
-} from '../interface/requires.js'
+export type { CreateSystemKernelModuleOptions, LocalSystemKernelOptions, SystemProcessConfinementProvider, SystemToolContext, SystemToolContextResolver, SystemToolSystemApi } from '../contract/requires.js'
 
 // ── 上面两面用到、又不在可移植文件里的数据 ───────────────────────
-export type {
-  SystemCommandExecutionPlan,
-  SystemProcessConfinementPolicy,
-  SystemProcessConfinementRequest,
-  SystemProcessConfinementResult,
-} from '../contract/commands.js'
+export type { SystemCommandExecutionPlan, SystemProcessConfinementPolicy, SystemProcessConfinementRequest, SystemProcessConfinementResult } from '../types/commands.js'

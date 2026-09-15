@@ -5,8 +5,8 @@
 import { isPresent, toOptional } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import type { SystemEditFailureDetails, SystemEditFileResult, SystemEditProblem, SystemFileFailure } from '../contract/files.js'
-import { SystemErrorCodes } from '../contract/system.js'
+import { SystemErrorCodes } from '../contract/constants.js'
+import type { SystemEditFailureDetails, SystemEditFileResult, SystemEditProblem, SystemFileFailure } from '../types/files.js'
 
 /** 一批最多几个文件：空的和超过 max 个的都拒绝，operation 只用来写进报错。 */
 export function assertFileBatchSize(count: number, max: number, operation: string): void {

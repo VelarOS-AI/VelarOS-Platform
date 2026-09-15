@@ -9,10 +9,9 @@ import { isEmpty, isFalse, isTrue } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import type { CommandSpec } from '@velaros-ai/platform/contracts'
 
-import type { SystemProcessConfinementPolicy, SystemProcessConfinementRequest, SystemProcessConfinementResult } from '../contract/commands.js'
-import type { SystemProcessConfinementBackend, SystemProcessConfinementEnforcement, SystemProcessConfinementEvidence, SystemProcessConfinementMode } from '../contract/system.js'
-import { SystemErrorCodes } from '../contract/system.js'
-import type { SystemProcessConfinementBuildOptions } from '../interface/internal.js'
+import { SystemErrorCodes } from '../contract/constants.js'
+import type { SystemProcessConfinementBuildOptions, SystemProcessConfinementPolicy, SystemProcessConfinementRequest, SystemProcessConfinementResult } from '../types/commands.js'
+import type { SystemProcessConfinementBackend, SystemProcessConfinementEnforcement, SystemProcessConfinementEvidence, SystemProcessConfinementMode } from '../types/system.js'
 
 const DefaultSandboxExecPath = '/usr/bin/sandbox-exec'
 

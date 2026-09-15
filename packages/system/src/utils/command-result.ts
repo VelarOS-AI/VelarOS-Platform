@@ -4,13 +4,7 @@
 
 import { isNull } from '@velaros-ai/core'
 
-import type {
-  SystemCommandOutputCapture,
-  SystemCommandResult,
-  SystemProcessConfinementEvidence,
-  SystemProcessOwnership,
-  SystemShellDescriptor,
-} from '../contract/system.js'
+import type { SystemCommandOutputCapture, SystemCommandResult, SystemProcessConfinementEvidence, SystemProcessOwnership, SystemShellDescriptor } from '../types/system.js'
 
 import { takeUnicodeSafeTail } from './text.js'
 

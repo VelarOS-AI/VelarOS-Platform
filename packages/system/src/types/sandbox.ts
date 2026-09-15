@@ -1,5 +1,5 @@
 /**
- * 演练沙箱内部的数据：镜像清单与文件印记、落回时的冲突与失败回执。只放数据；行为在 `impl/SystemSandboxes.ts` 类上方的接口，对外的数据在 `system.ts`。
+ * 演练沙箱实现自己的工作类型：镜像清单与文件印记、落回时的冲突与失败回执。只在包内用，不出包；对外的沙箱数据在 `system.ts`。
  */
 
 import type { SystemSandboxRecord } from './system.js'

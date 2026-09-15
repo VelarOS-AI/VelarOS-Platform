@@ -5,10 +5,10 @@ import { join } from 'node:path'
 
 import { describe, expect, test } from 'bun:test'
 
+import type { SystemToolContext } from '../src/contract/requires.js'
+import type { LocalSystemKernelApi } from '../src/impl/LocalSystemKernel.js'
 import { createLocalSystemKernel } from '../src/impl/LocalSystemKernel.js'
 import { systemTools } from '../src/impl/SystemTools.js'
-import type { LocalSystemKernelApi } from '../src/interface/provides.js'
-import type { SystemToolContext } from '../src/interface/requires.js'
 import { assertInsideSandboxBase, isSandboxId, sandboxBaseDirectory, selectSandboxChanges } from '../src/utils/sandbox.js'
 
 /** 本机有没有进程约束后端：macOS 的 sandbox-exec 或 Linux 的 bubblewrap；没有就跳过要真跑命令的用例。 */

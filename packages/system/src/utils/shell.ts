@@ -9,9 +9,8 @@ import { Log } from '@velaros-ai/core'
 import { createPlatform, currentPlatform } from '@velaros-ai/platform'
 import type { CommandSpec } from '@velaros-ai/platform/contracts'
 
-import type { ResolvedSystemShell } from '../contract/commands.js'
-import type { SystemShellDescriptor, SystemShellKind, SystemShellRecommendation } from '../contract/system.js'
-import type { ResolveSystemShellOptions } from '../interface/internal.js'
+import type { ResolvedSystemShell, ResolveSystemShellOptions } from '../types/commands.js'
+import type { SystemShellDescriptor, SystemShellKind, SystemShellRecommendation } from '../types/system.js'
 
 
 const shellNames: Record<SystemShellKind, string> = {

@@ -9,7 +9,7 @@ import { randomUUID } from 'node:crypto'
 import { isNumber } from '@velaros-ai/core'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
-import type { SystemProcessCompletion } from '../contract/commands.js'
+import type { SystemProcessCompletion } from '../types/commands.js'
 import { terminateSystemProcessTree } from '../utils/process.js'
 
 /** 一个受管子进程，由 `SystemProcessManagerApi.manage` 返回。 */

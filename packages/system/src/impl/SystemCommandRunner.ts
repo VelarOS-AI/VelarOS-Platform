@@ -13,26 +13,9 @@ import { isFalse, Log, optionalWhen, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import type { PlatformCompatibilityApi } from '@velaros-ai/platform'
 
-import type { PreparedSystemCommand, SystemConsoleOutputBuffer, SystemProcessConfinementPolicy } from '../contract/commands.js'
-import type {
-  SystemBackgroundProcessInfo,
-  SystemBackgroundTaskQueryOptions,
-  SystemBackgroundTaskRecord,
-  SystemBackgroundTaskStatus,
-  SystemBackgroundTaskTerminateRequest,
-  SystemBackgroundTaskTerminateResult,
-  SystemCommandOutputCapture,
-  SystemCommandResult,
-  SystemConsoleControlResult,
-  SystemConsoleInputRequest,
-  SystemConsoleInterruptRequest,
-  SystemConsoleOutputChunk,
-  SystemConsoleOutputRequest,
-  SystemConsoleSessionInfo,
-  SystemProcessConfinementEvidence,
-  SystemRunCommandOptions,
-} from '../contract/system.js'
-import type { SystemProcessConfinementProvider } from '../interface/requires.js'
+import type { SystemProcessConfinementProvider } from '../contract/requires.js'
+import type { PreparedSystemCommand, SystemConsoleOutputBuffer, SystemProcessConfinementPolicy } from '../types/commands.js'
+import type { SystemBackgroundProcessInfo, SystemBackgroundTaskQueryOptions, SystemBackgroundTaskRecord, SystemBackgroundTaskStatus, SystemBackgroundTaskTerminateRequest, SystemBackgroundTaskTerminateResult, SystemCommandOutputCapture, SystemCommandResult, SystemConsoleControlResult, SystemConsoleInputRequest, SystemConsoleInterruptRequest, SystemConsoleOutputChunk, SystemConsoleOutputRequest, SystemConsoleSessionInfo, SystemProcessConfinementEvidence, SystemRunCommandOptions } from '../types/system.js'
 import { buildSystemCommandResult } from '../utils/command-result.js'
 import { buildSystemProcessConfinementSpawnSpec } from '../utils/confinement.js'
 import { buildSystemOwnedProcessSpec, terminateSystemProcessTree, waitForSystemProcessSpawn } from '../utils/process.js'

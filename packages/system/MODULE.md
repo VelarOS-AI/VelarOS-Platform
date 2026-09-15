@@ -1,7 +1,7 @@
 # @velaros-ai/system 模块卡片
 
 > 这一页是本模块的压缩表示：读完就知道它是什么、给了外面什么、骨干链路怎么走、靠什么、状态在哪、失败什么样、哪些承诺不能破。
-> 七个工具都在 `src/impl/SystemTools.ts` 一个文件里，是最先看的地方；其次是 `src/interface/` 的三个文件和各实现文件类上方的接口，每个类做什么、每个方法做什么都写在那里。代码怎么分层见最后一节「结构」。
+> 七个工具都在 `src/impl/SystemTools.ts` 一个文件里，是最先看的地方；其次是 `src/contract/` 的三个文件（产品面登记、注入面、常量表）和各实现文件类上方的接口，每个类做什么、每个方法做什么都写在那里。代码怎么分层见最后一节「结构」。
 > 门禁：`bun run check:module-ownership`。
 
 ## 这是什么
@@ -12,9 +12,9 @@
 
 ## 提供什么
 
-本包对外只有三个面，都由接口控制：导出的类型只能来自 `src/interface/provides.ts`、`src/interface/requires.ts` 和 `src/contract/`，导出的值必须标注成公开接口；类、工具函数和包内部的接口一律不出包。门禁机械核对，没写进这一节的值导不出去。
+本包对外只有三个面，都由接口控制：导出的类型只能来自 `src/contract/`（provides 登记的接口、requires、constants）和 `src/types/` 的公开数据文件，导出的值必须标注成公开接口；类、工具函数和包内部的接口一律不出包。门禁机械核对，没写进这一节的值导不出去。
 
-**产品面**，写在 `interface/provides.ts`，是交给外面的整件能力：
+**产品面**，登记在 `contract/provides.ts`：类实现的 API 定义在各自类的上方、这里 re-export，没有类的公开接口直接声明在这里。交给外面的整件能力：
 
 | 值 | 接口 | 做什么 |
 | --- | --- | --- |
@@ -25,7 +25,7 @@
 | `createLocalSystemKernel` | `LocalSystemKernelApi` | 宿主端口的本机实现，外加宿主界面要的搜索、进程、端口、终止任务，以及交互式任务控制台的写输入、读增量输出、发中断 |
 | `systemCommandPolicy` | `SystemCommandPolicyApi` | 执行前给命令分类，和 `system:run` 用同一份判定 |
 
-**注入面**，写在 `interface/requires.ts`，是宿主要塞进来的东西。本包只从这些口子接收外部能力，别处不留钩子：
+**注入面**，写在 `contract/requires.ts`，是宿主要塞进来的东西。本包只从这些口子接收外部能力，别处不留钩子：
 
 | 注入点 | 必须 | 谁给、什么时候 |
 | --- | --- | --- |
@@ -35,7 +35,7 @@
 | `SystemProcessConfinementProvider` | 可选 | 放在本地内核配置里，没有内置约束后端的平台靠它 |
 | 环境变量，全部登记在 `SystemEnvironmentVariables` | 可选 | 四个输入变量由宿主设，三个标记变量由本包写给子进程 |
 
-**数据面**是 `contract/`。可移植数据文件 `contract/system.ts` 整个就是 `./contracts` 入口：工具身份表 `SystemToolNames`、`SystemToolCategoryByName`，身份常量 `SystemModId`、`SystemSpaceId`，错误码 `SystemErrorCodes`，环境变量表 `SystemEnvironmentVariables`，以及经过宿主端口流动的全部数据结构。其余数据只有被公开签名用到时才出包。
+**数据面**是 `types/`，只放类型；**常量表**是 `contract/constants.ts`，只放值。`./contracts` 入口就是常量表加可移植数据类型文件 `types/system.ts`：工具身份表 `SystemToolNames`、`SystemToolCategoryByName`，身份常量 `SystemModId`、`SystemSpaceId`，错误码 `SystemErrorCodes`，环境变量表 `SystemEnvironmentVariables`，公开上限 `SystemFileLimits`、`SystemSandboxLimits`，以及经宿主端口流动的全部数据结构。`types/` 里实现自己的工作类型（写入计划、准备好的命令、清单印记、带回调的选项）没有公开签名用到，所以不出包。
 
 两个入口对应 `package.json` 的 `exports`，源文件在 `src/exports/`，只有转发语句：
 
@@ -73,7 +73,7 @@
 - `@velaros-ai/agent` 的 `protocol` 与 `tool-contract` 子路径：工具运行时规格、mod 清单、审批端口类型、入参描述辅助。
 - `zod`：wire 面入参校验。
 
-运行时要宿主给的东西全部列在上一节的注入面里，由 `interface/requires.ts` 定义。
+运行时要宿主给的东西全部列在上一节的注入面里，由 `contract/requires.ts` 定义。
 
 不依赖 `@velaros-ai/project`，两边互不引用。两个包各有一份命令危险判定；它们是否一致由仓库级测试 `tests/capabilities/command-danger-parity.test.ts` 守着，它经本包的 `systemCommandPolicy` 取判定，不属于本模块。
 
@@ -102,7 +102,7 @@
 - **命令本身失败不是模块错误。** 退出码、超时、取消都如实进 `SystemCommandResult`，`success` 为 false，`verification` 摘要输出末尾。
 - **危险命令没有审批通道就拒绝。** 审批事实与约束事实分开记录，谁也不能冒充谁。
 - **输出过长不是错误。** 截尾、标记 `truncated`、给出可执行的召回续接。
-- 完整错误码语义见 `src/contract/system.ts` 末尾的 `SystemErrorCodes`；外面按错误码判断，不按错误类。
+- 完整错误码语义见 `src/contract/constants.ts` 里的 `SystemErrorCodes`；外面按错误码判断，不按错误类。
 - 演练沙箱：没有约束后端建不出（`SYSTEM_PROCESS_CONFINEMENT_UNAVAILABLE`）；落回时源文件自建沙箱以来变过整批不落（`SYSTEM_SANDBOX_CONFLICT`，not-applied，cause.details.conflicts 列出每处）；丢弃时 id 不合形状或路径不在基目录之下拒绝。
 
 ## 不变量
@@ -122,27 +122,26 @@
 
 ```text
 src/
-  interface/    接口：provides 是产品面，requires 是注入面，internal 是不属于某个类的内部接口（utils 函数的选项、工具定义的入参）；每个方法都有中文说明
-                包内部类的接口不在这里：写在类文件里、紧挨在类的上方
-  contract/     数据：字段、类型、常量表，不含任何函数和方法；命令规格与 shell 种类这类平台数据来自 `@velaros-ai/platform`
+  contract/     对外合同：provides.ts 登记产品面（类实现的 API 定义在类上方，这里 re-export；没有类的公开接口声明在这里），requires.ts 注入面，constants.ts 约定的常量表
+  types/        只放类型，按域分文件：system.ts 是可移植数据文件，files.ts、commands.ts、sandbox.ts、processes.ts、tool.ts 各管一域；哪些出包由合同的签名决定；平台数据来自 `@velaros-ai/platform`
   impl/         扁平：SystemTools.ts 放七个工具，其余一个类一个文件，文件名就是类名
   utils/        纯工具函数，按类别分文件；每个函数上方一句中文说明
   exports/      两个对外入口，只转发，package.json 的 exports 指向这里
 ```
 
-**看代码的顺序**：`SystemTools.ts` → `interface/` 的三个文件 → 需要时看 utils 里函数上方的一句说明。类的实现、数据字段、工具函数的内部一般不用看。
+**看代码的顺序**：`SystemTools.ts` → `contract/` 的三个文件 → 需要时看 utils 里函数上方的一句说明。类的实现、数据字段、工具函数的内部一般不用看。
 
-**接口与数据分开。** `interface/` 放行为：谁能做什么，每个方法做什么、返回什么、什么时候失败。`contract/` 放数据：流过边界的东西长什么样，里面不许出现函数类型和方法。带回调或注入对象的选项算行为，放 `interface/`。
+**合同、类型、常量分开。** `contract/` 是对外合同：provides 登记产品面、requires 定义注入面、constants 放约定的常量表。`types/` 只放类型，一个值都没有，按域分文件；出不出包不看文件，看合同的签名有没有用到。
 
 **文件怎么分。** 不拆碎文件：一个文件一个职责，内容多没关系。七个工具的定义连同分组与挂载是一个职责，都在 `SystemTools.ts`；每个类一个文件，文件名就是类名；纯函数按类别进 utils。
 
-**类与接口。** 每个类实现一个接口：公开接口在 `interface/provides.ts`，包内部类的接口写在类文件里、紧挨在类的上方，一起导出。类的公开方法只能是接口里的方法；私有方法只放用得到实例状态、没法提出去的公共逻辑，用不到的一律进 utils。整个进程只需要一份的类，文件末尾给出那一份，对外的那几份按公开接口标注类型。继承 `Error` 的错误类没有方法，不写接口，也不出包，外面按错误码判断。
+**类与接口。** 每个类实现一个接口，定义在类文件里、紧挨在类的上方并导出；公开的在 `contract/provides.ts` 登记，注入面的在 `contract/requires.ts`。类的公开方法只能是接口里的方法；私有方法只放用得到实例状态、没法提出去的公共逻辑，用不到的一律进 utils。整个进程只需要一份的类，文件末尾给出那一份，对外的那几份按公开接口标注类型。继承 `Error` 的错误类没有方法，不写接口，也不出包，外面按错误码判断。
 
 | 实现文件 | 接口 | 做什么 |
 | --- | --- | --- |
 | `SystemTools.ts` | 没有类 | 七个工具的定义、分组、内置 mod、内核挂载 |
-| `LocalSystemKernel.ts` | `LocalSystemKernelApi`（provides），扩展宿主端口 `SystemToolSystemApi`（requires） | 宿主端口的本机实现，只做转接 |
-| `SystemCommandPolicy.ts` | `SystemCommandPolicyApi`（provides） | 执行前给命令分类的唯一出口 |
+| `LocalSystemKernel.ts` | `LocalSystemKernelApi`（同文件，provides 登记），扩展宿主端口 `SystemToolSystemApi`（requires） | 宿主端口的本机实现，只做转接 |
+| `SystemCommandPolicy.ts` | `SystemCommandPolicyApi`（同文件，provides 登记） | 执行前给命令分类的唯一出口 |
 | `SystemSandboxes.ts` | `SystemSandboxesApi`（同文件） | 演练沙箱登记表：镜像、差量、落回、丢弃，每个沙箱一个约束到镜像根的执行器 |
 | `SystemCommandRunner.ts` | `SystemCommandRunnerApi`（同文件） | 跑命令：前台采集，后台登记成任务、可查可停；交互式任务另带控制台，可写输入、读增量输出、发中断 |
 | `SystemShellResolver.ts` | `SystemShellResolverApi`（同文件） | 找 shell、自检、判断命令在不在、刷新 Windows 环境变量 |
@@ -159,6 +158,6 @@ src/
 
 `./contracts` 入口会被渲染进程加载，它的整条引用链不碰 Node 模块；跨平台兼容层与共享资源目录在 `@velaros-ai/platform`。
 
-`SystemTools.ts` 改了要在差量报告里点名，人复核；`interface/provides.ts` 与 `interface/requires.ts` 改了等于改对外契约，也要点名。其余代码由 agent 维护。以上分工、分层、接口与数据的边界、导出规则、环境变量登记都由门禁机械核对。
+`SystemTools.ts` 改了要在差量报告里点名，人复核；`contract/` 的三个文件改了等于改对外契约，也要点名。其余代码由 agent 维护。以上分工、分层、接口与数据的边界、导出规则、环境变量登记都由门禁机械核对。
 
-规模截至 2026-09-15：`src/interface/` 3 个文件约 440 行；`src/contract/` 4 个文件约 1140 行，其中 `system.ts` 约 670 行；`src/impl/` 15 个文件约 3110 行，其中 `SystemTools.ts` 约 530 行、`SystemFileOperations.ts` 约 410 行；`src/utils/` 14 个文件约 2920 行。
+规模截至 2026-09-15：`src/contract/` 3 个文件约 330 行；`src/types/` 8 个文件约 1160 行，其中 `system.ts` 约 640 行；`src/impl/` 14 个文件约 3140 行，其中 `SystemTools.ts` 约 620 行、`SystemFileOperations.ts` 约 430 行；`src/utils/` 14 个文件约 3150 行。

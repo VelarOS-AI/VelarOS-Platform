@@ -14,23 +14,13 @@ import { createTwoFilesPatch } from 'diff'
 import { isEmpty, isNull, isPresent } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import type { SystemProcessConfinementPolicy } from '../contract/commands.js'
-import type { SystemSandboxApplyFailureDetails, SystemSandboxConflict, SystemSandboxFileStamp, SystemSandboxManifest, SystemSandboxStampTable } from '../contract/sandbox.js'
-import type { SystemSandboxApplyResult, SystemSandboxDiff, SystemSandboxIgnoredMode, SystemSandboxTextDiff } from '../contract/system.js'
-import { SystemErrorCodes } from '../contract/system.js'
+import { SystemErrorCodes, SystemSandboxLimits } from '../contract/constants.js'
+import type { SystemProcessConfinementPolicy } from '../types/commands.js'
+import type { SystemSandboxApplyFailureDetails, SystemSandboxConflict, SystemSandboxFileStamp, SystemSandboxManifest, SystemSandboxStampTable } from '../types/sandbox.js'
+import type { SystemSandboxApplyResult, SystemSandboxDiff, SystemSandboxIgnoredMode, SystemSandboxTextDiff } from '../types/system.js'
 
 import { realPathForSafety } from './file-safety.js'
 import { isBinaryBuffer } from './text-file.js'
-
-/** 沙箱的上限：每个内核几个、源目录几个文件几个字节、文本差量单个与总共几个字符。 */
-export const SystemSandboxLimits = Object.freeze({
-  sandboxes: 5,
-  files: 200_000,
-  bytes: 2 * 1024 * 1024 * 1024,
-  diffFileChars: 200_000,
-  diffTotalChars: 2_000_000,
-  diffFiles: 200,
-})
 
 /** 沙箱都放在临时区的这个基目录之下；删除前核对路径确实在它之下。 */
 export function sandboxBaseDirectory(tempDir: string = tmpdir()): string {

@@ -4,8 +4,8 @@ import { join } from 'node:path'
 
 import { describe, expect, test } from 'bun:test'
 
+import type { LocalSystemKernelApi } from '../src/impl/LocalSystemKernel.js'
 import { createLocalSystemKernel } from '../src/impl/LocalSystemKernel.js'
-import type { LocalSystemKernelApi } from '../src/interface/provides.js'
 import { readBoundedOutputSince } from '../src/utils/text.js'
 
 /** 等一小会儿，给子进程写输出、响应信号的时间。 */

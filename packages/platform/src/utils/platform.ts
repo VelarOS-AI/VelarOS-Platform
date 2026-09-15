@@ -5,7 +5,7 @@
 
 import { toNullable } from '@velaros-ai/core'
 
-import type { CommandSpec, RuntimePlatform, ShellKind } from '../contract/platform.js'
+import type { CommandSpec, RuntimePlatform, ShellKind } from '../types/platform.js'
 
 /** Windows 上可信的 CMD 路径；打开文件、启动应用都用它，不信任 PATH 或 ComSpec 里的值。 */
 export const WindowsCommandShellPath = 'C:\\Windows\\System32\\cmd.exe'

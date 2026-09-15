@@ -1,11 +1,9 @@
 /**
- * 文件数据：读、看、写的输入与结果、文本文件的编码与内容、搜索可见性的判定输入、gitignore 规则。
- * 只放数据；带行为的接口在 `interface/`。
+ * 文件数据：读、看、写的输入与结果、文本编码，以及文件操作与搜索实现自己的工作类型（文本内容与切片、媒体类型、版本快照、gitignore 规则、敏感路径判定的环境、写入计划与印记）。
+ * 只放类型；后一部分只在包内用，公开签名不引用它们，所以不出包。
  */
 
 import type { ToolResultModelContentPart } from '@velaros-ai/agent/protocol'
-
-// ── 读与看的输入与结果 ────────────────────────────────────────
 
 /** 文件里的一段字符范围：从 offset 起到 end 止，end 不含。read 返回它，edit 收它。 */
 export interface SystemTextRange {
@@ -73,25 +71,6 @@ export interface SystemViewFileResult {
 export interface SystemViewResult {
   files: Array<SystemViewFileResult | SystemFileFailure>
   modelContent: ToolResultModelContentPart[]
-}
-
-/** 文件改动前留下的一个版本：版本号是内容的哈希，buffer 是当时的原始字节。 */
-export interface SystemFileSnapshot {
-  version: string
-  buffer: Buffer
-  savedAt: number
-}
-
-/** 读文件时认出的媒体类型：模型认得的图片，或 PDF 这类文档（本包不看，只用来把错误说清楚）。 */
-export interface SystemMediaType {
-  kind: 'image' | 'document'
-  mediaType: string
-}
-
-/** 按字符取出的一段文本，以及它实际落在的范围。 */
-export interface SystemTextSlice {
-  content: string
-  range: SystemTextRange
 }
 
 /** 一处改动：在 range 这段里改；给 oldText 就只换这段里唯一的那一处，不给就把整段换成 newText，range 是空段就是在那个位置插入。 */
@@ -198,8 +177,6 @@ export interface SystemEditResult {
   files: SystemEditFileResult[]
 }
 
-// ── 文本文件的编码与内容 ────────────────────────────────────────
-
 export type SystemTextEncoding =
   | 'utf8'
   | 'utf8-bom'
@@ -208,13 +185,32 @@ export type SystemTextEncoding =
   | 'utf16le-nobom'
   | 'utf16be-nobom'
 
+// ── 实现自己的工作类型，不出包 ─────────────────────────────────────
+
+/** 文件改动前留下的一个版本：版本号是内容的哈希，buffer 是当时的原始字节。 */
+export interface SystemFileSnapshot {
+  version: string
+  buffer: Buffer
+  savedAt: number
+}
+
+/** 读文件时认出的媒体类型：模型认得的图片，或 PDF 这类文档（本包不看，只用来把错误说清楚）。 */
+export interface SystemMediaType {
+  kind: 'image' | 'document'
+  mediaType: string
+}
+
+/** 按字符取出的一段文本，以及它实际落在的范围。 */
+export interface SystemTextSlice {
+  content: string
+  range: SystemTextRange
+}
+
 export interface SystemTextFileContent {
   buffer: Buffer
   content: string
   encoding: SystemTextEncoding
 }
-
-// ── 搜索可见性 ──────────────────────────────────────────────────
 
 export interface SystemSearchIgnorePolicyOptions {
   unrestricted?: boolean
@@ -227,8 +223,6 @@ export interface SystemSearchProtectedDirectoryInput {
   candidatePath: string
 }
 
-// ── gitignore 规则 ────────────────────────────────────
-
 /** 一条解析后的 gitignore 规则：相对哪个目录生效、是否取反、是否只匹配目录、是否锚定、按 `/` 切开的模式片段。 */
 export interface GitIgnoreRule {
   baseRelativePath: string
@@ -237,8 +231,6 @@ export interface GitIgnoreRule {
   anchored: boolean
   segments: string[]
 }
-
-// ── 安全判定与写入计划的内部数据 ────────────────────────────────
 
 /** 判断敏感路径、凭证文件时的环境：平台、家目录、临时目录、环境变量，缺省取当前进程的。临时目录不触发敏感路径审批；Windows 与 macOS 的路径按大小写不敏感比较。 */
 export interface SensitiveSystemMutationPathOptions {

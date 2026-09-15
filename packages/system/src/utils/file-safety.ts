@@ -9,8 +9,8 @@ import * as path from 'node:path'
 import { createApprovalOperationKey } from '@velaros-ai/agent/tool-contract'
 import { isEmpty } from '@velaros-ai/core'
 
-import type { SensitiveSystemMutationPathOptions } from '../contract/files.js'
-import type { SystemToolContext } from '../interface/requires.js'
+import type { SystemToolContext } from '../contract/requires.js'
+import type { SensitiveSystemMutationPathOptions } from '../types/files.js'
 
 /** 按平台取 posix 或 win32 的路径工具。 */
 function pathApi(platform: NodeJS.Platform): typeof path.posix | typeof path.win32 {

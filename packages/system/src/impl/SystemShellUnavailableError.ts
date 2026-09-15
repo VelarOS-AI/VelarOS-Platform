@@ -3,7 +3,7 @@
  * 不 import 任何 Node 模块，跨平台兼容层入口也导出它，渲染进程会加载。
  */
 
-import { SystemErrorCodes } from '../contract/system.js'
+import { SystemErrorCodes } from '../contract/constants.js'
 
 /** 本机找不到任何能用的 shell。错误文本已是公开契约，消费者按其中的英文片段断言。 */
 export class SystemShellUnavailableError extends Error {

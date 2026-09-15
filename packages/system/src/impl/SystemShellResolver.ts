@@ -11,9 +11,8 @@ import { isPlainObject, isString, Log, toNullable } from '@velaros-ai/core'
 import { currentPlatform } from '@velaros-ai/platform'
 import type { CommandSpec } from '@velaros-ai/platform/contracts'
 
-import type { RefreshedWindowsEnvironment, ResolvedSystemShell, SystemShellProbeResult } from '../contract/commands.js'
-import type { SystemEnvironmentCommandAvailability } from '../contract/system.js'
-import type { ResolveSystemShellOptions } from '../interface/internal.js'
+import type { RefreshedWindowsEnvironment, ResolvedSystemShell, ResolveSystemShellOptions,SystemShellProbeResult } from '../types/commands.js'
+import type { SystemEnvironmentCommandAvailability } from '../types/system.js'
 import { buildSystemOwnedProcessSpec } from '../utils/process.js'
 import { detectSystemShells, readWindowsEnv, uniquePaths } from '../utils/shell.js'
 

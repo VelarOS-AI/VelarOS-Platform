@@ -6,12 +6,12 @@ import { join, resolve } from 'node:path'
 
 import { describe, expect, test } from 'bun:test'
 
+import type { SystemToolContext } from '../src/contract/requires.js'
 import { createLocalSystemKernel } from '../src/impl/LocalSystemKernel.js'
 import { systemCommandPolicy } from '../src/impl/SystemCommandPolicy.js'
 import { systemFileOperations } from '../src/impl/SystemFileOperations.js'
 import { SystemGlobalSearch } from '../src/impl/SystemGlobalSearch.js'
 import { systemTools } from '../src/impl/SystemTools.js'
-import type { SystemToolContext } from '../src/interface/requires.js'
 import { buildSystemProcessConfinementSpawnSpec, buildSystemSeatbeltProfile } from '../src/utils/confinement.js'
 import { isCredentialPath, isSensitiveSystemMutationPath } from '../src/utils/file-safety.js'
 import { findOccurrences } from '../src/utils/text.js'
