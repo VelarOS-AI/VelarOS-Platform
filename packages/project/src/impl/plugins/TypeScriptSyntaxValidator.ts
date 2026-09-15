@@ -10,6 +10,7 @@ import { isEmpty } from '@velaros-ai/core'
 
 import type { ProjectValidator } from '../../contract/requires.js'
 import type { ProjectValidationContext, ValidateInput, ValidationResult } from '../../types/validation.js'
+import { isSelectedValidator } from '../../utils/checks.js'
 import { isJsTsPath, jsTsSyntaxDiagnostics } from '../../utils/jsts-ast.js'
 
 export class TypeScriptSyntaxValidator implements ProjectValidator {
@@ -17,11 +18,7 @@ export class TypeScriptSyntaxValidator implements ProjectValidator {
   public readonly checkIds: readonly string[] = ['typescript.syntax', 'parse', 'syntax']
 
   public canValidate(input: ValidateInput): boolean {
-    return (
-      !input.checks ||
-      isEmpty(input.checks) ||
-      input.checks.some((check) => check === this.id || this.checkIds.includes(check))
-    )
+    return isSelectedValidator(this, input.checks)
   }
 
   public async cacheKey(input: ValidateInput, context: ProjectValidationContext): Promise<string> {

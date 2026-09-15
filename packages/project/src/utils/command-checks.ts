@@ -1,6 +1,6 @@
 // 域：外部命令检查（prettier、eslint、tsc）当校验器或修复器跑时共用的规则数据与小工具。
 // 命令都经宿主注入的命令提供者执行；超时在 ProjectTuning.plugins。
-import type { FixInput, FixResult, ProjectFixContext } from '../types/fix.js'
+import type { ProjectFixContext } from '../types/fix.js'
 import type { CommandValidatorOptions } from '../types/plugins.js'
 import type { CommandRunResult } from '../types/provider.js'
 
@@ -33,18 +33,6 @@ export function tscCheck(args: string[] = ['tsc', '--noEmit']): CommandValidator
 /** 路径是不是以其中一个扩展名结尾。 */
 export function pathMatchesExtensions(pathValue: string, extensions: readonly string[]): boolean {
   return extensions.some((ext) => pathValue.endsWith(ext))
-}
-
-/** 什么都没改的修复结果，修复器从它开始累积。 */
-export function emptyFixResult(input: FixInput): FixResult {
-  return {
-    ok: true,
-    changed: false,
-    transactionId: input.transactionId,
-    changedFiles: [],
-    fixes: [],
-    diagnostics: [],
-  }
 }
 
 /** 在项目根上跑一条修复命令，文件正文从 stdin 喂进去。 */

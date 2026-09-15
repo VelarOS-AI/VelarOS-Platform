@@ -8,7 +8,8 @@ import { isArray, isEmpty, isPlainObject, isString } from '@velaros-ai/core'
 
 import type { ProjectFixer } from '../../contract/requires.js'
 import type { FixInput, FixResult, ProjectFixContext } from '../../types/fix.js'
-import { emptyFixResult, EslintExtensions, pathMatchesExtensions, runFixCommand } from '../../utils/command-checks.js'
+import { emptyFixResult } from '../../utils/checks.js'
+import { EslintExtensions, pathMatchesExtensions, runFixCommand } from '../../utils/command-checks.js'
 import { ProjectTuning } from '../../utils/tuning.js'
 
 export class EslintFixer implements ProjectFixer {
@@ -26,7 +27,7 @@ export class EslintFixer implements ProjectFixer {
 
   public async fix(input: FixInput, ctx: ProjectFixContext): Promise<FixResult> {
     const paths = input.paths?.filter((pathValue) => pathMatchesExtensions(pathValue, EslintExtensions)) ?? []
-    const result = emptyFixResult(input)
+    const result = emptyFixResult(input.transactionId)
     for (const pathValue of paths) {
       const content = await ctx.readFile(pathValue)
       if (!isString(content)) continue
