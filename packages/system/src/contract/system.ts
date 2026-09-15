@@ -1,5 +1,5 @@
 /**
- * 可移植数据：工具与 mod 的身份、错误码、环境变量表，以及经过宿主端口流动的全部数据结构（命令、进程与端口、后台任务、搜索、shell 与运行环境）。
+ * 可移植数据：工具与 mod 的身份、错误码、环境变量表，以及经过宿主端口流动的全部数据结构（命令、进程与端口、后台任务、交互式任务的控制台、搜索、shell 与运行环境）。
  * 本文件不依赖任何别的文件，没有 Node 专属类型，浏览器也能用；`./contracts` 入口就是它。这里的每个类型都被公开接口用到。
  */
 
@@ -103,6 +103,12 @@ export interface SystemRunCommandOptions {
   cwd?: string
   timeoutMs?: number
   background?: boolean
+  /**
+   * 交互式：命令要向用户要输入（口令、y/n、菜单选项）时为真，必须和 `background` 一起用。
+   * 宿主把它跑成一个接受输入的后台任务（有 PTY 就用 PTY，没有就用保持打开的 stdin 管道），
+   * 回执里的 `backgroundProcess.console` 就是那个控制台；宿主不支持时回执里没有 console。
+   */
+  interactive?: boolean
   maxOutputChars?: number
   sessionId?: string
   /** 宿主生成的可执行调用；永远不出现在模型工具 schema 中。 */
@@ -126,6 +132,8 @@ export interface SystemBackgroundProcessInfo {
   fallbackTerminateCommand: Nullable<string>
   requested: boolean
   autoStarted: boolean
+  /** 交互式任务的控制台：命令正在等用户输入，用户在聊天里的控制台卡片里打字。不是交互式任务时缺席。 */
+  console?: SystemConsoleSessionInfo
   /** 精确查询该系统后台任务状态；不能交给内核 job:* 工具。 */
   statusContinuation?: {
     tool: 'system:list-tasks'
@@ -369,6 +377,8 @@ export interface SystemBackgroundTaskRecord {
   updatedAt: number
   status: SystemBackgroundTaskStatus
   recentOutput: Nullable<string>
+  /** 交互式任务的控制台；不是交互式任务时缺席。 */
+  console?: SystemConsoleSessionInfo
 }
 
 /** 查询后台任务的过滤条件；给了 `taskId` 就精确匹配那一条。 */
@@ -399,6 +409,76 @@ export interface SystemBackgroundTaskTerminateResult {
   statusBefore: SystemBackgroundTaskStatus
   statusAfter: SystemBackgroundTaskStatus
   terminated: boolean
+  message: string
+}
+
+// ── 交互式任务的控制台 ──────────────────────────────────────────
+
+/**
+ * 交互式后台任务的控制台数据：命令在控制台里跑，用户在界面上看输出、往里打字、发中断。
+ *
+ * 命令用 `interactive` 启动后就是一条普通的后台任务，只是多了一个控制台：
+ * 任务表、状态查询、终止都照旧走后台任务那套，这里只多出「写输入、读增量输出、发中断」三件事。
+ */
+
+/** 控制台后面接的是什么：真正的终端（宿主提供 PTY，有回显和终端尺寸）还是一根保持打开的 stdin 管道。 */
+export type SystemConsoleChannel = 'pty' | 'pipe'
+
+/** 一个交互式任务的控制台。 */
+export interface SystemConsoleSessionInfo {
+  /** 控制台归哪个后台任务，和 `backgroundProcess.taskId` 是同一个。 */
+  taskId: string
+  /** 后面接的是终端还是管道。管道下没有回显，只读 tty 的密码提示可能根本不出现。 */
+  channel: SystemConsoleChannel
+  /** 现在还能不能往里写输入；进程退出后为 false。 */
+  acceptsInput: boolean
+  /** 一句给模型看的说明：任务正在控制台里等用户，不要再等这次工具调用的输出。 */
+  note: string
+}
+
+/** 读控制台增量输出的请求；`cursor` 是上一次返回的位置，不给就从留着的最早一段开始读。 */
+export interface SystemConsoleOutputRequest {
+  taskId: string
+  sessionId?: string
+  cursor?: number
+}
+
+/** 控制台的一段增量输出。 */
+export interface SystemConsoleOutputChunk {
+  taskId: string
+  /** 从请求的 cursor 起新产生的输出。 */
+  text: string
+  /** 下一次请求把这个值当 cursor 传回来。 */
+  cursor: number
+  /** 缓冲区放不下、已经丢掉的字符数；大于 0 表示中间有一段永远看不到了。 */
+  droppedChars: number
+  /** 任务此刻的状态。 */
+  status: SystemBackgroundTaskStatus
+  /** 现在还能不能写输入。 */
+  acceptsInput: boolean
+}
+
+/** 往控制台写一段输入的请求。 */
+export interface SystemConsoleInputRequest {
+  taskId: string
+  sessionId?: string
+  /** 写进去的文本。 */
+  text: string
+  /** 是否在末尾补一个换行，相当于用户按回车；缺省为真。 */
+  submit?: boolean
+}
+
+/** 给控制台发中断（SIGINT，相当于用户按 Ctrl+C）的请求。 */
+export interface SystemConsoleInterruptRequest {
+  taskId: string
+  sessionId?: string
+}
+
+/** 写输入或发中断的结果：`accepted` 为 false 时看 `message`，不猜原因。 */
+export interface SystemConsoleControlResult {
+  taskId: string
+  accepted: boolean
+  status: SystemBackgroundTaskStatus
   message: string
 }
 

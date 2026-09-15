@@ -22,6 +22,22 @@ export function appendBoundedOutput(previous: string, next: string, maxChars: nu
   return takeUnicodeSafeTail(previous + next, maxChars)
 }
 
+/**
+ * 从只留末尾一段的输出缓冲区里，取出 cursor 之后还看得到的那部分。
+ * `produced` 是这路输出从头到现在一共产生过多少字符，cursor 就是同一把尺子上的位置；
+ * cursor 落在缓冲区已经丢掉的那一段里时，如实给出丢了多少字符，不假装输出是连续的。
+ */
+export function readBoundedOutputSince(
+  buffer: string,
+  produced: number,
+  cursor: number
+): { text: string; cursor: number; droppedChars: number } {
+  const retainedFrom = produced - buffer.length
+  const readFrom = Math.min(Math.max(cursor, 0), produced)
+  if (readFrom < retainedFrom) return { text: buffer, cursor: produced, droppedChars: retainedFrom - readFrom }
+  return { text: buffer.slice(readFrom - retainedFrom), cursor: produced, droppedChars: 0 }
+}
+
 /** 文件用 CRLF 换行而替换文本用 LF 时，把替换前后的文本都换成 CRLF，保证能匹配上。 */
 export function adaptReplacementLineEndings(
   content: string,
