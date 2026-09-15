@@ -1,5 +1,5 @@
 /**
- * 常量表：工具与 mod 的身份、工具在目录里的排位、各工具的公开上限、入参契约版本、宿主代码查询的语言服务动作。
+ * 常量表：工具与 mod 的身份、工具在目录里的排位、各工具的公开上限、入参契约版本、宿主代码查询的语言服务动作、内核缺省策略。
  * 工具说明和 schema 都引这里的数字，改一处模型看到的跟着变。不 import 任何东西，浏览器和渲染进程都能用（从 `@velaros-ai/project/contracts` 取）。
  */
 
@@ -220,6 +220,48 @@ export const ProjectTransactionLimits = Object.freeze({
   /** 事务号最长多少字节（UTF-8）。 */
   transactionIdBytes: 512,
 })
+
+/**
+ * 内核缺省策略：宿主建内核时不给 `corePolicy` 就用这些值，给了就按字段覆盖（`approval` 按子字段合并）。
+ * 取向保守：整文件读取有上限、编辑要带读取时的版本、事务有规模预算、回滚恢复不了原文的写入要人审。README 写的事务预算就是这里的数。
+ */
+export const ProjectPolicyDefaults = Object.freeze({
+  /** 编辑必须带读取时拿到的版本（baseRevision），证明是在最新内容上改的。 */
+  requireBaseRevision: true,
+  /** 定位目标必须唯一：匹配到多处时拒绝，不猜。 */
+  requireUniqueTarget: true,
+  /** 整个文件读进内存的上限，字节；更大的文件只能按行范围或 maxBytes 读。 */
+  maxFileSizeToReadBytes: 5 * 1024 * 1024,
+  /** 搜索时跳过大于这么多字节的文件。 */
+  maxSearchFileSizeBytes: 1024 * 1024,
+  /** 版本号按内容指纹算：同样长度、修改时间又被保留的外部改动也能发现。 */
+  revisionStrategy: 'content',
+  /** 有 ripgrep 时先用它搜，失败了回退到适配器逐文件扫描。 */
+  enableRipgrepSearch: true,
+  /** ripgrep 子进程的超时，毫秒。 */
+  ripgrepTimeoutMs: 120_000,
+  /** 一个事务最多改几个文件。 */
+  maxChangedFilesPerTransaction: 100,
+  /** 一个事务里单个文件最多净变更多少行。 */
+  maxChangedLinesPerFile: 20_000,
+  /** 一个事务最多净变更多少行。 */
+  maxChangedLinesPerTransaction: 50_000,
+  /** 批处理同时最多跑几个任务；调用方给的并发只能比它小。 */
+  maxConcurrentBatchTasks: 8,
+  /** 不许读的路径 glob。 */
+  readDeny: Object.freeze([]),
+  /** 不许写的路径 glob。 */
+  writeDeny: Object.freeze([]),
+  /** 能读、但没有策略明确允许时不改的文件 glob。 */
+  protectedFiles: Object.freeze([]),
+  /** 当作生成文件的 glob：改生成器的输入再重新生成，不直接改。 */
+  generatedFiles: Object.freeze(['**/*.generated.*', '**/*.gen.*', '**/generated/**']),
+  /** 审批。 */
+  approval: Object.freeze({
+    /** 回滚恢复不了原文的高风险写入，必须经宿主审批。 */
+    requireForHighRiskPatch: true,
+  }),
+} as const)
 
 /** 宿主代码查询里由语言服务执行的七个动作；其余动作属于代码索引，宿主有代码图谱时执行。 */
 export const ProjectCodeLanguageActions = Object.freeze([

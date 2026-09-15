@@ -10,7 +10,7 @@ import { defaultDenyApprovalPort } from '@velaros-ai/agent/tool-contract'
 import { ProjectToolNames } from '../src/contract/constants'
 import type { ProjectToolContext } from '../src/contract/requires'
 import { createProjectKernel, type ProjectKernel } from '../src/exports/index'
-import { createNodeCommandProvider } from '../src/impl/kernel/providers'
+import { NodeCommandProvider } from '../src/impl/kernel/NodeCommandProvider'
 import { projectTools } from '../src/impl/ProjectTools'
 import type { CommandRunResult } from '../src/types/provider'
 
@@ -40,7 +40,7 @@ afterEach(async () => {
 
 /** 记录每次 git check-ignore 的退出码，确认本轮走的是 git 引擎还是本地解析回退。 */
 function kernelRecordingCheckIgnore(exitCodes: number[]): Promise<ProjectKernel> {
-  const node = createNodeCommandProvider()
+  const node = new NodeCommandProvider()
   return createProjectKernel({
     root,
     providers: {

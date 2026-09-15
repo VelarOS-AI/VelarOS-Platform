@@ -14,6 +14,7 @@ import {
 
 import { readBoundedProjectBytes } from "./private-byte-io.js";
 
+/** 是不是「文件不存在」（ENOENT）的错误。 */
 function isMissing(error: unknown): boolean {
   return isObject(error) && "code" in error && error.code === "ENOENT";
 }
@@ -51,6 +52,10 @@ export async function atomicWriteProjectText(
   );
 }
 
+/**
+ * 原子替换一个文件：沿软链找到真实目标，只接受普通文件（多硬链接的不行）；在同目录写完整临时文件、落盘后改名覆盖，再同步目录。
+ * 已有文件沿用它的权限，新文件用 fallbackMode；给了 expected 时写前、改名前各核对一次磁盘字节，对不上抛 CONFLICT_WITH_EXTERNAL_EDIT。
+ */
 async function atomicWrite(
   path: string,
   encode: (bytes?: Buffer) => Buffer,
@@ -110,7 +115,8 @@ async function atomicWrite(
   const encoded = encode(bytes);
   const temporary = join(dirname(target), `.velaros-write-${randomUUID()}.tmp`);
   const mode = existing ? existing.mode & 0o777 : fallbackMode;
-  const handle = await open(temporary, "wx", mode ?? 0o666);
+  // 没有要恢复的权限时不传 mode：open 按 0o666 建文件，再由 umask 收紧。
+  const handle = await open(temporary, "wx", mode);
   try {
     // 已捕获的权限必须精确恢复；新文件的默认权限仍由 umask 收紧。
     if (isPresent(mode)) await handle.chmod(mode);

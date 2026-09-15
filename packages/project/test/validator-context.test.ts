@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 
+import { ProjectPolicyDefaults } from '../src/contract/constants'
 import type { ProjectProviders, ProjectValidator } from '../src/contract/requires.js'
-import { DEFAULT_CORE_POLICY } from '../src/impl/kernel/policy-defaults'
 import { CommandValidator } from '../src/impl/plugins/CommandValidator'
 import { PostconditionValidator } from '../src/impl/plugins/PostconditionValidator'
 import { ScopeValidator } from '../src/impl/plugins/ScopeValidator'
@@ -9,6 +9,7 @@ import { TypeScriptSyntaxValidator } from '../src/impl/plugins/TypeScriptSyntaxV
 import { ValidatorRegistry } from '../src/impl/registries/ValidatorRegistry'
 import type { CommandRunInput } from '../src/types/provider'
 import type { ProjectValidationContext, ProjectValidationTransaction } from '../src/types/validation'
+import { createCorePolicy } from '../src/utils/kernel/policy'
 
 function transaction(overrides: Partial<ProjectValidationTransaction> = {}): ProjectValidationTransaction {
   return {
@@ -30,14 +31,7 @@ function context(options: {
   }
   return {
     root: '/workspace',
-    policy: {
-      ...DEFAULT_CORE_POLICY,
-      approval: { ...DEFAULT_CORE_POLICY.approval },
-      readDeny: [...DEFAULT_CORE_POLICY.readDeny],
-      writeDeny: [...DEFAULT_CORE_POLICY.writeDeny],
-      protectedFiles: [...(options.protectedFiles ?? DEFAULT_CORE_POLICY.protectedFiles)],
-      generatedFiles: [...DEFAULT_CORE_POLICY.generatedFiles],
-    },
+    policy: createCorePolicy({ protectedFiles: [...(options.protectedFiles ?? ProjectPolicyDefaults.protectedFiles)] }),
     providers: { ...options.providers, command },
     getTransaction: (transactionId) =>
       transactionId === options.transaction?.transactionId ? options.transaction : undefined,
@@ -79,7 +73,7 @@ describe('ProjectValidationContext', () => {
   test('built-in validators consume the minimal transaction projection and overlay reader', async () => {
     const tx = transaction({
       changedFiles: ['protected.ts'],
-      changedLines: DEFAULT_CORE_POLICY.maxChangedLinesPerTransaction + 1,
+      changedLines: ProjectPolicyDefaults.maxChangedLinesPerTransaction + 1,
     })
     const validationContext = context({
       transaction: tx,

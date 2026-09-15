@@ -8,6 +8,7 @@ import { isUndefined } from '@velaros-ai/core'
 import type { ReadInput } from '../../types/io.js'
 import { ProjectError } from '../errors.js'
 
+/** 校验读取参数本身（与读哪个文件无关）：maxBytes 是正整数、maxChars 是非负整数、行列号从 1 起、结束不早于开始；不合法抛 INVALID_INPUT。 */
 export function validateReadBounds(
   input: Pick<ReadInput, 'range' | 'maxBytes' | 'maxChars'>,
 ): void {

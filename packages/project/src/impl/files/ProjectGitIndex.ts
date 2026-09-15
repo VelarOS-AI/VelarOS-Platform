@@ -1,29 +1,49 @@
+/**
+ * 事务与 git 索引的衔接：`ProjectGitIndex`。接口 `ProjectGitIndexApi` 在本文件的类上方。
+ */
 import { isEmpty, isPresent } from '@velaros-ai/core'
 
 import type { ProjectRuntimeProviders } from '../../types/provider.js'
+import { splitNulTerminatedPaths } from '../../utils/files/git-index.js'
+import { ProjectTuning } from '../../utils/tuning.js'
 
-
-/** `git … -z` 的路径输出：每条以 NUL 结尾，切开后去掉末尾空段。 */
-function splitNulTerminatedPaths(output: string): string[] {
-  return output.split('\0').filter(Boolean)
+/**
+ * 让事务新建、删除的文件在 git 里看得见：应用时给新建文件挂 intent-to-add（`git add -N`，只进 diff 视野、不暂存内容），
+ * 回滚时撤掉；被删路径上只剩 intent-to-add 的条目一并撤掉。项目根不在 git 工作区里时什么都不做。
+ * git 失败只记告警、返回空，永远不动用户真实暂存的内容。实例归一个内核所有。
+ */
+export interface ProjectGitIndexApi {
+  /** 给还在的新建文件挂 intent-to-add；返回挂上的路径，git 失败或不在 git 工作区里时返回空。 */
+  trackCreatedFilesInGit(paths: string[]): Promise<string[]>
+  /** 把之前挂的 intent-to-add 撤掉（`git rm --cached`），回滚新建文件时用；返回撤掉的路径，失败返回空。 */
+  untrackCreatedFilesFromGit(paths: string[]): Promise<string[]>
+  /** 被删路径在索引里只剩 intent-to-add 条目时把条目撤掉；带真实内容的索引项不动。返回撤掉的路径，失败返回空。 */
+  untrackDeletedIntentToAddFromGit(paths: string[]): Promise<string[]>
 }
-const IntentToAddProbeArgs = [
-  'diff',
-  '--cached',
-  '--name-only',
-  '-z',
-  '--relative',
-  '--no-renames',
-] as const
-interface ProjectGitIndexDependencies {
+
+/** git 索引衔接要内核交进来的东西。 */
+export interface ProjectGitIndexDependencies {
+  /** 工作区根目录的绝对路径，git 命令在这里跑。 */
   readonly root: string
+  /** 宿主提供者：跑 git 用的命令提供者，记告警用的日志。 */
   readonly providers: Pick<ProjectRuntimeProviders, 'command' | 'logger'>
 }
-export class ProjectGitIndex {
+
+export class ProjectGitIndex implements ProjectGitIndexApi {
+  /** 查 intent-to-add 条目用的 `git diff --cached` 参数：只要路径、NUL 分隔、相对路径、不认重命名。 */
+  private static readonly IntentToAddProbeArgs = [
+    'diff',
+    '--cached',
+    '--name-only',
+    '-z',
+    '--relative',
+    '--no-renames',
+  ] as const
+
   private gitWorkTreeCache?: boolean
   constructor(private readonly dependencies: ProjectGitIndexDependencies) {}
 
-  private async runGit(args: string[], timeoutMs = 10_000) {
+  private async runGit(args: string[], timeoutMs: number = ProjectTuning.files.gitTimeoutMs) {
     return this.dependencies.providers.command.run({
       command: 'git',
       args,
@@ -44,7 +64,7 @@ export class ProjectGitIndex {
   private async isInsideGitWorkTree(): Promise<boolean> {
     // 工作区根目录的 git 仓库归属在会话内是恒定的；缓存结果避免每次 apply/rollback 都新起 git 子进程。
     if (isPresent(this.gitWorkTreeCache)) return this.gitWorkTreeCache
-    const result = await this.runGit(['rev-parse', '--is-inside-work-tree'], 5_000)
+    const result = await this.runGit(['rev-parse', '--is-inside-work-tree'], ProjectTuning.files.gitProbeTimeoutMs)
     this.gitWorkTreeCache = result.exitCode === 0 && result.stdout.trim() === 'true'
     return this.gitWorkTreeCache
   }
@@ -108,10 +128,10 @@ export class ProjectGitIndex {
    * 开关被文档标注为实验性；将来若被移除，git 以未知参数失败，这里只记告警、返回空——失败方向永远
    * 是留下残留，而不是误动真实暂存。
    */
-  public async listIntentToAddFiles(files: readonly string[]): Promise<string[]> {
+  private async listIntentToAddFiles(files: readonly string[]): Promise<string[]> {
     const [visible, invisible] = await Promise.all([
-      this.runGitOnPaths([...IntentToAddProbeArgs, '--ita-visible-in-index'], files),
-      this.runGitOnPaths([...IntentToAddProbeArgs, '--ita-invisible-in-index'], files),
+      this.runGitOnPaths([...ProjectGitIndex.IntentToAddProbeArgs, '--ita-visible-in-index'], files),
+      this.runGitOnPaths([...ProjectGitIndex.IntentToAddProbeArgs, '--ita-invisible-in-index'], files),
     ])
     if (visible.exitCode !== 0 || invisible.exitCode !== 0) {
       this.dependencies.providers.logger?.warn?.('project.git.listIntentToAdd.failed', {

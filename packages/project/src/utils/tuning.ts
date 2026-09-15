@@ -107,6 +107,55 @@ export const ProjectTuning = Object.freeze({
     /** 一条路径最多多少字节（UTF-8）。 */
     statePathBytes: 16 * 1024,
   }),
+  /** 内核：内存里保留多少事务（LocalProjectKernel），宿主没给命令提供者时本地子进程怎么跑（NodeCommandProvider）。 */
+  kernel: Object.freeze({
+    /** 内存里最多留多少个事务（含准备好还没应用的），超过从最早的淘汰，落盘的变更投影跟着同一上限；正常的准备→应用不会淘汰到刚写的事务。persistence.stateTransactions 不能比它小。 */
+    retainedTransactions: 1_000,
+    /** 已结束（已应用、已回滚）的事务最多留多少个；回滚要用它们记下的原文，所以只按最久没用的淘汰。 */
+    retainedTerminalTransactions: 200,
+    /** 本地子进程命令没给 timeoutMs 时的超时，毫秒。 */
+    commandTimeoutMs: 30_000,
+    /** 本地子进程命令的 stdout、stderr 各最多收多少字符（execa 的 maxBuffer），到了就按输出截断返回。 */
+    commandOutputChars: 8 * 1024 * 1024,
+  }),
+  /** 文件访问：FileStore、ProjectGitIndex，以及列目录、读文件的工具函数。 */
+  files: Object.freeze({
+    /** 流式读文件（算内容哈希、解码正文）时每块读多少字节。 */
+    readChunkBytes: 64 * 1024,
+    /** 版本按 metadata 算时，判断是不是二进制只看文件开头多少字节。 */
+    binarySampleBytes: 8_000,
+    /** stat 给的建议读取窗口最多多少行。 */
+    statRecommendedLines: 120,
+    /** stat 只给不超过这么多字节的文本文件数行数，更大的只报大小。 */
+    statLineCountBytes: 1024 * 1024,
+    /** 搜索前的文件格式分类（能不能交给 ripgrep 直接搜）最多缓存多少个文件。 */
+    searchTextKindEntries: 4_096,
+    /** 格式分类缓存里超过这么久没被查到的条目会被清掉，毫秒；两次清理之间也至少隔这么久。 */
+    searchTextKindIdleMs: 60_000,
+    /** 列目录没给 maxFiles 时最多列多少条。 */
+    listMaxFiles: 5_000,
+    /** 递归列目录没给 maxDepth 时往下走几层。 */
+    listRecursiveDepth: 3,
+    /** observe 扫描工作区没给 maxDepth 时往下走几层。 */
+    observeDepth: 20,
+    /** 文件层跑的 git 子命令（check-ignore、add --intent-to-add、rm --cached、diff --cached）的超时，毫秒。 */
+    gitTimeoutMs: 10_000,
+    /** 探测项目根在不在 git 工作区里（git rev-parse）的超时，毫秒。 */
+    gitProbeTimeoutMs: 5_000,
+  }),
+  /** 内核的查询面：搜索、目标解析、证据包（ProjectQueries）。 */
+  queries: Object.freeze({
+    /** 内核搜索没给 maxResults 时最多返回几处命中。 */
+    searchResults: 50,
+    /** 解析出的目标最多留多少个，超过从最早的淘汰。 */
+    retainedTargets: 500,
+    /** 证据包最多留多少个，超过从最早的淘汰。 */
+    retainedEvidence: 500,
+    /** 证据包的新鲜窗口没给前后行数时，目标前后各带几行。 */
+    evidenceWindowLines: 5,
+    /** 证据包的新鲜窗口最多读多少字节。 */
+    evidenceWindowBytes: 80_000,
+  }),
   /** 编辑定位失败时回给模型的线索（utils/editing 与 JS/TS 补丁策略）：候选几个、摘录多长、模糊定位的门槛；全都有上限，不把整个文件塞回上下文。 */
   editing: Object.freeze({
     /** project:edit 的 match 零命中或多处命中时最多回几个候选；多处命中时也只收集这么多处精确匹配。 */

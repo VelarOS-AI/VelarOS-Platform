@@ -4,6 +4,7 @@ import type { RgMessage, RipgrepSearchContext, RipgrepSearchResult } from '../..
 import type { SearchHit } from '../../types/io.js'
 import { matchesAny } from '../glob.js'
 
+/** 整理 glob 名单：去掉首尾空白、空项和重复，保留原来的顺序。 */
 function normalizeGlobList(values: readonly string[]): string[] {
   const seen = new Set<string>()
   const globs: string[] = []
@@ -16,22 +17,25 @@ function normalizeGlobList(values: readonly string[]): string[] {
   return globs
 }
 
+/** 把排除用的 glob 写成 ripgrep 的排除形式（前面加 !，已有的不重复加）。 */
 function toRipgrepExcludeGlob(pattern: string): string {
   const glob = pattern.trim()
   return glob.startsWith('!') ? glob : `!${glob}`
 }
 
+/** `dir/**` 这类目录排除同时排除目录本身（`dir`），ripgrep 才不会进这个目录。 */
 function expandDirectoryExcludeGlob(pattern: string): string[] {
   if (!pattern.endsWith('/**')) return [pattern]
   const base = pattern.slice(0, -3)
   return base ? [base, pattern] : [pattern]
 }
 
+/** ripgrep 超时时附在搜索结果里的诊断：已拿到的命中照样返回，但可能不全。 */
 function buildRipgrepTimeoutDiagnostic(timeoutMs: number): string {
-  return `ripgrep timed out after ${timeoutMs}ms; returned matches may be incomplete. Narrow root/include/query or retry after increasing the project ripgrep timeout.`
+  return `ripgrep 搜索超过 ${timeoutMs} 毫秒超时，返回的命中可能不完整；请缩小 root、include 或 query，或调大项目的 ripgrep 超时后重试。`
 }
 
-/** 暴露给测试使用（`dist/search/ripgrep.js`）。 */
+/** 解析 `rg --json` 的输出：只取 match 行，列号从 UTF-8 字节位置换算成 UTF-16 坐标，片段截到 400 字符，满 maxResults 即止。 */
 export function parseRipgrepJsonLines(stdout: string, maxResults: number, filterPath?: (path: string) => boolean): SearchHit[] {
   const hits: SearchHit[] = []
   for (const line of stdout.split(/\r?\n/)) {

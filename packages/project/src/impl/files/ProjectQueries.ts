@@ -1,15 +1,16 @@
+/**
+ * 内核的查询面：`ProjectQueries`。接口 `ProjectQueriesApi` 与构造参数 `ProjectQueriesDependencies` 在本文件的类上方。
+ */
 import {
   isEmpty,
   isNotNull,
   isObject,
-  isPresent,
   isUndefined,
   optionalWhen,
 } from '@velaros-ai/core'
 
 import type { FileAdapter } from '../../contract/requires.js'
 import type { ProjectSymbol } from '../../types/adapter.js'
-import type { Range } from '../../types/common.js'
 import type { BuildEvidencePackInput, EvidencePack, TaskContext } from '../../types/context.js'
 import type { ProjectFileAccess } from '../../types/file-access.js'
 import type { HookEvent } from '../../types/hook.js'
@@ -28,98 +29,85 @@ import type { CorePolicy, PolicyDecisionInput } from '../../types/policy.js'
 import type { ProjectRuntimeProviders } from '../../types/provider.js'
 import type { FileSnapshot, ProjectSnapshot } from '../../types/snapshot.js'
 import type { ResolvedTarget, ResolveTargetInput, ResolveTargetResult } from '../../types/target.js'
+import {
+  capInsertionOrderedMap,
+  defaultExcludeGitignoredForRoot,
+  resolveEvidenceTargetRange,
+  resolveSearchExcludeGlobs,
+  uniqueSymbols,
+} from '../../utils/files/queries.js'
 import { searchWithRipgrep } from '../../utils/files/ripgrep.js'
 import { matchesAny } from '../../utils/glob.js'
 import { id } from '../../utils/id.js'
-import { type AuditJournal } from '../persistence/AuditJournal.js'
+import { ProjectTuning } from '../../utils/tuning.js'
+import type { AuditJournalApi } from '../persistence/AuditJournal.js'
 
-interface ProjectQueriesDependencies {
+/**
+ * 内核的查询面：扫描、列举、读取、搜索、列符号、解析目标、建证据包。查询先过内核的策略门（多数还过一遍管线），读到的正文经宿主的脱敏再交出去；
+ * 解析出的目标与证据包在内存里按上限保留，供之后的编辑按 targetId、evidenceId 引用。实例归一个内核所有，内核的同名方法直接交给它。
+ */
+export interface ProjectQueriesApi {
+  /** 扫描工作区，返回文件快照列表（不读正文）；先过策略门的 search 动作和 observe.input 管线。 */
+  observe(input?: ObserveInput): Promise<ProjectSnapshot>
+  /** 列出工作区里符合条件的文件和目录；先过策略门的 search 动作。 */
+  listFiles(input?: ObserveInput): Promise<FileListEntry[]>
+  /** 单个路径的轻量状态和建议读取范围；路径先授权、再过策略门的 read 动作，被拒时抛 PERMISSION_DENIED。 */
+  stat(input: FileStatInput): Promise<FileStatResult>
+  /** 读文件：授权、策略门、read.input 管线之后读取，正文经宿主脱敏；前后各发一次 BeforeRead、AfterRead hook。 */
+  read(input: ReadInput): Promise<ReadResult>
+  /** 在工作区里搜文本：能用 ripgrep 就先用它（旧编码文件交给适配器），失败或不可用时回退到适配器逐文件扫描；命中片段经宿主脱敏。 */
+  search(input: SearchInput): Promise<SearchResult>
+  /** 列出文件里的符号：宿主开了代码智能就先问它，拿不到再用本地适配器解析；同一个符号只留一份。 */
+  listSymbols(path: string): Promise<ProjectSymbol[]>
+  /** 把路径、符号或文本线索解析成可复用的目标；解析到的目标记下来，之后按 targetId 引用。多个候选时返回 ambiguous，找不到返回 not_found。 */
+  resolveTarget(input: ResolveTargetInput): Promise<ResolveTargetResult>
+  /** 给一次任务建上下文：补上唯一的 taskId 和创建时间。 */
+  createTaskContext(input: Omit<TaskContext, 'taskId' | 'createdAt'>): TaskContext
+  /** 按目标或路径范围建证据包：带目标附近的新鲜窗口（经脱敏）和前后续读建议，再交给宿主的上下文提供者补充、清洗。 */
+  buildEvidencePack(input: BuildEvidencePackInput): Promise<EvidencePack>
+  /** 内存里现存的目标个数（内核状态快照用）。 */
+  readonly targetCount: number
+  /** 按 targetId 取之前解析出的目标；没给或已被淘汰时返回 undefined。 */
+  getTarget(targetId?: string): ResolvedTarget | undefined
+}
+
+/** 查询面要内核交进来的东西：根目录、策略、宿主提供者、文件访问，以及策略门、快照补全、适配器、hook 与管线这几个回调。 */
+export interface ProjectQueriesDependencies {
+  /** 工作区根目录的绝对路径。 */
   readonly root: string
+  /** 内核生效的策略：读、搜的上限，拒读名单，要不要先用 ripgrep。 */
   readonly policy: CorePolicy
+  /** 宿主提供者：命令（跑 ripgrep）、脱敏、代码智能、上下文。 */
   readonly providers: ProjectRuntimeProviders
+  /** 文件访问：授权、快照、读取、stat、列举与扫描都经它，根目录约束和拒读名单在那一层执行。 */
   readonly store: Pick<
     ProjectFileAccess,
     'snapshot' | 'read' | 'stat' | 'listFiles' | 'observe' | 'authorize'
   >
+  /** 给搜索的文件分类：UTF-8 文本交给 ripgrep（native），旧编码文本解码后交给适配器（decoded），其余跳过（excluded）；不给时全交给 ripgrep。 */
   readonly searchTextKind?: (path: string) => Promise<'native' | 'decoded' | 'excluded'>
-  readonly journal: Pick<AuditJournal, 'record'>
+  /** 审计日志：每次查询记一条。 */
+  readonly journal: Pick<AuditJournalApi, 'record'>
+  /** 内核的策略门：宿主的策略提供者可以拒绝或要求审批，被拒时抛 PERMISSION_DENIED。 */
   readonly decide: (
     action: PolicyDecisionInput['action'],
     paths?: string[],
     data?: unknown,
   ) => Promise<void>
+  /** 给文件快照补上能处理它的适配器 id。 */
   readonly enrichSnapshot: (snapshot: FileSnapshot) => Promise<FileSnapshot>
+  /** 为一个文件快照创建能处理它的适配器，按优先级排好。 */
   readonly createAdapters: (snapshot: FileSnapshot) => Promise<FileAdapter[]>
+  /** 发一个内核生命周期 hook 事件；hook 抛错会中止这次查询。 */
   readonly emit: (event: HookEvent, data: unknown) => Promise<void>
+  /** 让入参过一遍某个阶段（如 read.input）的管线，返回改写后的入参。 */
   readonly transform: <T>(phase: string, input: T) => Promise<T>
 }
 
-function resolveEvidenceTargetRange(
-  storedTarget?: ResolvedTarget,
-  inputRange?: Partial<Range>,
-): Range | undefined {
-  if (storedTarget?.range) return storedTarget.range
-  if (!inputRange || !isPresent(inputRange.startLine) || !isPresent(inputRange.endLine))
-    return undefined
-  const range: Range = {
-    startLine: inputRange.startLine,
-    endLine: inputRange.endLine,
-  }
-  if (isPresent(inputRange.startColumn)) range.startColumn = inputRange.startColumn
-  if (isPresent(inputRange.endColumn)) range.endColumn = inputRange.endColumn
-  if (isPresent(inputRange.startOffset)) range.startOffset = inputRange.startOffset
-  if (isPresent(inputRange.endOffset)) range.endOffset = inputRange.endOffset
-  return range
-}
-
-function symbolIdentityKey(symbol: ProjectSymbol): string {
-  const start = isPresent(symbol.range.startOffset)
-    ? String(symbol.range.startOffset)
-    : `${symbol.range.startLine}:${symbol.range.startColumn ?? ''}`
-  return [symbol.path, symbol.kind, symbol.container ?? '', symbol.name, start].join('\u0000')
-}
-
-function uniqueSymbols(symbols: ProjectSymbol[]): ProjectSymbol[] {
-  const seen = new Set<string>()
-  const unique: ProjectSymbol[] = []
-  for (const symbol of symbols) {
-    const key = symbolIdentityKey(symbol)
-    if (seen.has(key)) continue
-    seen.add(key)
-    unique.push(symbol)
-  }
-  return unique
-}
-
-// 内存治理上限：长会话内核常驻时，避免 target/evidence/已结束事务无界增长。
-const MaxRetainedTargets = 500
-const MaxRetainedEvidence = 500
-const DefaultImplicitSearchExcludeGlobs = [
-  'node_modules/**',
-  '.git/**',
-  'dist/**',
-  'coverage/**',
-] as const
-export class ProjectQueries {
+export class ProjectQueries implements ProjectQueriesApi {
   private targets = new Map<string, ResolvedTarget>()
   private evidence = new Map<string, EvidencePack>()
   constructor(private readonly dependencies: ProjectQueriesDependencies) {}
-
-  private defaultExcludeGitignoredForRoot(root?: string): boolean | undefined {
-    const normalizedRoot = root?.trim()
-    // 显式搜索子目录时默认保留 ignored 子项，避免用户点名的目录被整体跳过。
-    return optionalWhen(normalizedRoot && normalizedRoot !== '.', false)
-  }
-
-  private resolveSearchExcludeGlobs(input: SearchInput): string[] {
-    return [...this.defaultImplicitSearchExcludeGlobs(input.root), ...(input.exclude ?? [])]
-  }
-
-  private defaultImplicitSearchExcludeGlobs(root?: string): string[] {
-    const normalizedRoot = root?.trim()
-    if (normalizedRoot && normalizedRoot !== '.') return []
-    return [...DefaultImplicitSearchExcludeGlobs]
-  }
 
   /** 扫描工作区并返回文件快照列表。 */
   public async observe(input: ObserveInput = {}): Promise<ProjectSnapshot> {
@@ -186,7 +174,7 @@ export class ProjectQueries {
         })
       : null
     const authorizedProcessed = rootAccess ? { ...processed, root: rootAccess.rel } : processed
-    const maxResults = processed.maxResults ?? 50
+    const maxResults = processed.maxResults ?? ProjectTuning.queries.searchResults
 
     let backend: SearchResult['backend']
     let hits: SearchHit[] = []
@@ -205,10 +193,10 @@ export class ProjectQueries {
           regex: !!processed.regex,
           caseSensitive: processed.caseSensitive,
           include: processed.include,
-          exclude: this.resolveSearchExcludeGlobs(authorizedProcessed),
+          exclude: resolveSearchExcludeGlobs(authorizedProcessed),
           excludeGitignored:
             processed.excludeGitignored ??
-            this.defaultExcludeGitignoredForRoot(authorizedProcessed.root),
+            defaultExcludeGitignoredForRoot(authorizedProcessed.root),
           maxResults,
           filterPath: optionalWhen(!!this.dependencies.searchTextKind, (path: string) => textKinds.get(path) === 'native'),
           command: this.dependencies.providers.command,
@@ -333,8 +321,8 @@ export class ProjectQueries {
     const entries = await this.dependencies.store.listFiles({
       path: processed.root,
       include: processed.include,
-      exclude: this.resolveSearchExcludeGlobs(processed),
-      excludeGitignored: processed.excludeGitignored ?? this.defaultExcludeGitignoredForRoot(processed.root),
+      exclude: resolveSearchExcludeGlobs(processed),
+      excludeGitignored: processed.excludeGitignored ?? defaultExcludeGitignoredForRoot(processed.root),
       recursive: true,
       // 搜索必须遍历完整候选集；公开 list 的展示页长不能静默裁掉旧编码文件。
       maxFiles: Number.MAX_SAFE_INTEGER,
@@ -538,7 +526,7 @@ export class ProjectQueries {
       const result = await adapter.resolveTarget({ ...authorizedInput, snapshot: snap })
       if (result.status === 'resolved') {
         this.targets.set(result.target.targetId, result.target)
-        this.capInsertionOrderedMap(this.targets, MaxRetainedTargets)
+        capInsertionOrderedMap(this.targets, ProjectTuning.queries.retainedTargets)
         await this.dependencies.emit('AfterResolve', result)
         this.dependencies.journal.record({
           actor: 'system',
@@ -578,15 +566,15 @@ export class ProjectQueries {
 
     if (includeCurrentWindow && targetPath && targetRange) {
       // Evidence 只截取目标附近的新鲜窗口，不把整文件塞进上下文。
-      const before = Math.max(0, input.include?.windowLinesBefore ?? 5)
-      const after = Math.max(0, input.include?.windowLinesAfter ?? 5)
+      const before = Math.max(0, input.include?.windowLinesBefore ?? ProjectTuning.queries.evidenceWindowLines)
+      const after = Math.max(0, input.include?.windowLinesAfter ?? ProjectTuning.queries.evidenceWindowLines)
       const contextStart = Math.max(1, targetRange.startLine - before)
       const contextEnd = Math.max(contextStart, targetRange.endLine + after)
       const read = await this.read({
         path: targetPath,
         baseRevision: targetBaseRevision,
         range: { startLine: contextStart, endLine: contextEnd },
-        maxBytes: 80_000,
+        maxBytes: ProjectTuning.queries.evidenceWindowBytes,
       })
       const revision = read.snapshot.revision ?? targetBaseRevision
       const contextRange = read.range ?? { startLine: contextStart, endLine: contextEnd }
@@ -676,7 +664,7 @@ export class ProjectQueries {
       }
     }
     this.evidence.set(evidenceId, pack)
-    this.capInsertionOrderedMap(this.evidence, MaxRetainedEvidence)
+    capInsertionOrderedMap(this.evidence, ProjectTuning.queries.retainedEvidence)
     this.dependencies.journal.record({
       actor: 'system',
       action: 'build_evidence',
@@ -692,14 +680,5 @@ export class ProjectQueries {
 
   public getTarget(targetId?: string): ResolvedTarget | undefined {
     return targetId ? this.targets.get(targetId) : undefined
-  }
-
-  /** 按插入顺序淘汰最旧的条目，把 Map 体积约束在上限内（Map 保留插入顺序）。 */
-  private capInsertionOrderedMap(map: Map<string, unknown>, maxSize: number): void {
-    while (map.size > maxSize) {
-      const oldest = map.keys().next().value
-      if (isUndefined(oldest)) break
-      map.delete(oldest)
-    }
   }
 }

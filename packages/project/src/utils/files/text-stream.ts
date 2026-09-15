@@ -3,13 +3,12 @@ import { type FileHandle, open } from 'node:fs/promises'
 import type { ProjectTextEncoding } from '../../types/text.js'
 import { ProjectError } from '../errors.js'
 import { createProjectTextDecoder, createProjectTextEncodingProbe, finishProjectTextEncodingProbe, pushProjectTextEncodingProbe } from '../text.js'
-
-const ChunkBytes = 64 * 1024
+import { ProjectTuning } from '../tuning.js'
 
 /** 对同一文件句柄做常量内存的完整判定，避免长 ASCII 前缀掩盖后续旧编码字符。 */
 async function inspectEncoding(handle: FileHandle): Promise<ProjectTextEncoding> {
   const probe = createProjectTextEncodingProbe()
-  const bytes = new Uint8Array(ChunkBytes)
+  const bytes = new Uint8Array(ProjectTuning.files.readChunkBytes)
   let position = 0
   while (true) {
     const { bytesRead } = await handle.read(bytes, 0, bytes.length, position)
@@ -30,7 +29,7 @@ export async function* readProjectTextChunks(
   const handle = await open(path, 'r')
   try {
     const decoder = createProjectTextDecoder(knownEncoding ?? await inspectEncoding(handle))
-    const bytes = new Uint8Array(ChunkBytes)
+    const bytes = new Uint8Array(ProjectTuning.files.readChunkBytes)
     let position = 0
     while (true) {
       const { bytesRead } = await handle.read(bytes, 0, bytes.length, position)

@@ -1,12 +1,12 @@
 import { describe, expect, test } from 'bun:test'
 
 import type { CommandProvider, FileAdapter,ProjectProviders } from '../src/contract/requires.js'
-import { DEFAULT_CORE_POLICY } from '../src/impl/kernel/policy-defaults'
 import { TransactionValidation } from '../src/impl/transactions/TransactionValidation'
 import type { Diagnostic } from '../src/types/common'
 import type { FileSnapshot } from '../src/types/snapshot'
 import type { StoredTransaction } from '../src/types/transaction'
 import type { ValidationResult } from '../src/types/validation'
+import { createCorePolicy } from '../src/utils/kernel/policy'
 
 function snapshot(path: string, content?: string): FileSnapshot {
   return {
@@ -49,14 +49,7 @@ function validationResult(options: {
   }
 }
 
-const policy = {
-  ...DEFAULT_CORE_POLICY,
-  approval: { ...DEFAULT_CORE_POLICY.approval },
-  generatedFiles: [...DEFAULT_CORE_POLICY.generatedFiles],
-  protectedFiles: [...DEFAULT_CORE_POLICY.protectedFiles],
-  readDeny: [...DEFAULT_CORE_POLICY.readDeny],
-  writeDeny: [...DEFAULT_CORE_POLICY.writeDeny],
-}
+const policy = createCorePolicy()
 const command: CommandProvider = {
   run: async () => ({ exitCode: 0, stdout: '', stderr: '' }),
 }

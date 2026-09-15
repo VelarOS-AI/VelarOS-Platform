@@ -9,19 +9,25 @@ import type { FileListEntry, ObserveInput } from '../../types/io.js'
 import { isGitignored, readAncestorGitignoreRules, readGitignoreRules } from '../gitignore.js'
 import { matchesAny } from '../glob.js'
 import { normalizeRel } from '../path.js'
+import { ProjectTuning } from '../tuning.js'
 
+/** 整理 include、exclude 名单：去掉首尾空白、空项和重复。 */
 export function normalizeFilterList(values: LooseOptional<readonly string[]>): string[] {
   return [...new Set((values ?? []).map((value) => value.trim()).filter(Boolean))]
 }
 
+/**
+ * 按路径、include、exclude、深度与条数列出文件和目录：一层层读目录，每层条目的 gitignore 判定合成一次 git check-ignore
+ * （git 不可用时按逐级累积的本地 .gitignore 规则判断）；被忽略、被排除或不可见的目录不再深入，输出按深度优先、满 maxFiles 即止。
+ */
 export async function listProjectFiles(
   input: ObserveInput,
   dependencies: ListingDependencies,
 ): Promise<FileListEntry[]> {
   const out: FileListEntry[] = []
-  const max = input.maxFiles ?? 5000
+  const max = input.maxFiles ?? ProjectTuning.files.listMaxFiles
   const recursive = !!input.recursive
-  const maxDepth = input.maxDepth ?? (recursive ? 3 : 1)
+  const maxDepth = input.maxDepth ?? (recursive ? ProjectTuning.files.listRecursiveDepth : 1)
   const include = normalizeFilterList(input.include)
   const exclude = normalizeFilterList(input.exclude)
   const startPathInput = input.path?.trim()
@@ -45,7 +51,7 @@ export async function listProjectFiles(
         args: ['check-ignore', '--no-index', '--stdin', '-z'],
         cwd: dependencies.root,
         stdin: candidates.join('\0'),
-        timeoutMs: 10_000,
+        timeoutMs: ProjectTuning.files.gitTimeoutMs,
       })
 
       // 退出码 1 表示没有任何路径被忽略，不是失败。

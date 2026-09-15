@@ -8,9 +8,9 @@ import assert from 'node:assert/strict'
 
 import { test } from 'bun:test'
 
-import { createNodeCommandProvider } from '../dist/impl/kernel/providers.js'
 import { parseRipgrepJsonLines, searchWithRipgrep } from '../dist/utils/files/ripgrep.js'
-import { DEFAULT_CORE_POLICY } from '../src/impl/kernel/policy-defaults.ts'
+import { NodeCommandProvider } from '../src/impl/kernel/NodeCommandProvider.ts'
+import { createCorePolicy } from '../src/utils/kernel/policy.ts'
 
 test('parseRipgrepJsonLines extracts path, line, columns from rg --json match line', () => {
   const line = JSON.stringify({
@@ -70,7 +70,7 @@ test('searchWithRipgrep preserves partial matches when the command times out', a
         timedOut: true,
       }),
     },
-    policy: DEFAULT_CORE_POLICY,
+    policy: createCorePolicy(),
   })
 
   assert.equal(result.timedOut, true)
@@ -79,7 +79,7 @@ test('searchWithRipgrep preserves partial matches when the command times out', a
 })
 
 test('node command provider reports a missing ripgrep executable for adapter fallback', async () => {
-  const provider = createNodeCommandProvider()
+  const provider = new NodeCommandProvider()
   const missingCommand = `velaros-missing-ripgrep-${process.pid}`
   const commandResult = await provider.run({
     command: missingCommand,
@@ -102,7 +102,7 @@ test('node command provider reports a missing ripgrep executable for adapter fal
     command: {
       run: (input) => provider.run({ ...input, command: missingCommand }),
     },
-    policy: DEFAULT_CORE_POLICY,
+    policy: createCorePolicy(),
   })
 
   assert.equal(searchResult.hits, null)

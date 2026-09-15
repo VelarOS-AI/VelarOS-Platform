@@ -9,12 +9,9 @@ import type { FileSnapshot } from '../../types/snapshot.js'
 import type { ProjectTextEncoding } from '../../types/text.js'
 import { ProjectError } from '../errors.js'
 import { createProjectTextEncodingProbe, detectProjectTextEncoding, finishProjectTextEncodingProbe, pushProjectTextEncodingProbe } from '../text.js'
+import { ProjectTuning } from '../tuning.js'
 
 import { readProjectTextChunks } from './text-stream.js'
-
-export const ReadPrefixChunkBytes = 64 * 1024
-
-export const BinaryDetectionSampleBytes = 8000
 
 /** 按逻辑 UTF-8 字节数和 Unicode 字符数截断；CRLF 计一个换行，续读仍保存原始 UTF-16 offset。 */
 export function limitContent(
@@ -90,10 +87,12 @@ export function limitContent(
   }
 }
 
+/** 按每 4 字节约 1 个 token 粗估文件的 token 数，至少 1。 */
 export function estimateTokensFromBytes(sizeBytes: number): number {
   return Math.max(1, Math.ceil(sizeBytes / 4))
 }
 
+/** 数文本有几行：按 \n 切分，末尾的换行不多算一行，空文本是 0 行。 */
 export function countTextLines(content: string): number {
   if (isEmpty(content)) return 0
   const newlineMatches = content.match(/\n/g)?.length ?? 0
@@ -149,6 +148,7 @@ function assertCharacterBoundary(text: string, offset: number, path: string, lin
   }
 }
 
+/** 在按行切好的窗口里再按起止列裁剪（列是 UTF-16 坐标）：列越过行长、同一行结束列早于起始列、或列边界切开 Unicode 字符时抛 INVALID_INPUT。 */
 export function sliceWindowColumns(
   filePath: string,
   content: string,
@@ -213,6 +213,7 @@ export function sliceWindowColumns(
   }
 }
 
+/** 读完一段文本后光标停在哪：从起点往后数换行，得到下一个要读的行与列。 */
 export function advanceReadCursor(start: ReadCursor, consumed: string): ReadCursor {
   const lastNewline = consumed.lastIndexOf('\n')
   if (lastNewline === -1) return { line: start.line, column: start.column + consumed.length }
@@ -223,6 +224,7 @@ export function advanceReadCursor(start: ReadCursor, consumed: string): ReadCurs
   }
 }
 
+/** 生成续读参数：从光标处接着读、钉住这次的版本，沿用字节与字符上限；preserveRequestedEnd 为真时保留原来请求的结束行列。 */
 export function continuationInput(
   input: ReadInput,
   pathValue: string,
@@ -317,12 +319,13 @@ export async function readTextLineWindow(
   }
 }
 
+/** 流式读完整个文件：一边算 sha256 内容哈希，一边判定文本编码；认不出无损编码的算二进制。 */
 export async function hashFileAndDetectBinary(
   absPath: string,
 ): Promise<{ hash: string; binary: boolean; textEncoding: Nullable<ProjectTextEncoding> }> {
   const handle = await open(absPath, 'r')
   const hash = createHash('sha256')
-  const chunk = new Uint8Array(ReadPrefixChunkBytes)
+  const chunk = new Uint8Array(ProjectTuning.files.readChunkBytes)
   const probe = createProjectTextEncodingProbe()
 
   try {
@@ -345,7 +348,7 @@ export async function hashFileAndDetectBinary(
 export async function detectBinaryByPrefix(absPath: string): Promise<boolean> {
   const handle = await open(absPath, 'r')
   try {
-    const chunk = new Uint8Array(BinaryDetectionSampleBytes)
+    const chunk = new Uint8Array(ProjectTuning.files.binarySampleBytes)
     const { bytesRead } = await handle.read(chunk, 0, chunk.length, null)
     return !detectProjectTextEncoding(chunk.subarray(0, bytesRead), bytesRead < Number((await handle.stat()).size))
   } finally {

@@ -19,13 +19,13 @@
 //    能逃逸。修它要 `openat` + `O_NOFOLLOW` 逐级打开（Node 无跨平台原语），代价远高于收益：
 //    本包的威胁模型是「模型给出坏路径」，不是「攻击者与我们竞速」。
 import type { BigIntStats } from 'node:fs'
-import { lstat, mkdir, readFile, realpath, rename, rm, stat } from 'node:fs/promises'
+import { lstat, mkdir, readFile, rename, rm, stat } from 'node:fs/promises'
 import * as path from 'node:path'
 
 import { isNull, isObject, isPresent, isUndefined, optionalWhen, toOptional } from '@velaros-ai/core'
 
 import type { CommandProvider, FileFilterProvider } from '../../contract/requires.js'
-import type { ProjectFileAccess } from '../../types/file-access.js'
+import type { FileAccessOptions } from '../../types/file-access.js'
 import type { ProjectExpectedBytes } from '../../types/files.js'
 import type {
   FileListEntry,
@@ -36,7 +36,9 @@ import type {
   ReadResult,
 } from '../../types/io.js'
 import type { CorePolicy } from '../../types/policy.js'
+import type { FileFilterInput } from '../../types/provider.js'
 import type { FileSnapshot, ProjectSnapshot } from '../../types/snapshot.js'
+import type { ProjectTextEncoding } from '../../types/text.js'
 import { ProjectError, RevisionMismatchSuggestedNextAction } from '../../utils/errors.js'
 import { atomicWriteProjectBytes, atomicWriteProjectText } from '../../utils/files/atomic-writer.js'
 import { listProjectFiles } from '../../utils/files/file-listing.js'
@@ -54,66 +56,54 @@ import {
   readTextLineWindow,
   sliceWindowColumns,
 } from '../../utils/files/file-reader.js'
+import { assertConfinedToRoot, realPathPreservingMissing } from '../../utils/files/path-containment.js'
 import { readBoundedProjectBytes } from '../../utils/files/private-byte-io.js'
 import { validateReadBounds } from '../../utils/files/read-bounds.js'
 import { readProjectTextFile } from '../../utils/files/text-stream.js'
 import { matchesAny } from '../../utils/glob.js'
 import { metadataFingerprint, metadataRevisionFor, revisionFor, sha256 } from '../../utils/hash.js'
-import { isInsideRoot, toAbs, toRel } from '../../utils/path.js'
+import { toAbs, toRel } from '../../utils/path.js'
 import {
   decodeProjectTextBuffer,
   detectProjectTextEncoding,
-  type ProjectTextEncoding,
   sliceLines,
 } from '../../utils/text.js'
-
-const StatRecommendedMaxLines = 120
-const StatMaxLineCountBytes = 1024 * 1024
-const MaxCachedSearchTextKinds = 4096
-const SearchTextKindIdleMs = 60_000
-
-type FileStoreAction = 'read' | 'write' | 'search' | 'observe'
+import { ProjectTuning } from '../../utils/tuning.js'
 
 /**
- * 把路径解析到「最近一个真实存在的祖先」的 realpath，再把尚不存在的尾巴拼回去。
- *
- * 为什么不能直接 `realpath(abs)`：写入路径在检查时通常还不存在（create_file），realpath 会
- * 直接抛 ENOENT——那样要么放行未检查的路径（失败方向不安全），要么写不了新文件。逐级上溯
- * 保证「祖先目录里有软链指向 root 外」也能被下面的根内判定抓到。
+ * 工作区的文件网关：内核的读、写、删、改名、列举都经它，没有第二条通往文件系统的路。每个公开方法先过 authorize：
+ * 根内约束（字面上的 `../` 与经符号链接的逃逸都拦）→ 策略的拒读、拒写名单 → 宿主的可见性过滤器（只有它能按 skipFileFilter 跳过）。
+ * 快照带版本号（按策略用内容指纹或 metadata 算）与文本编码判定；写入是同目录临时文件加改名的原子替换，沿用原文件的编码与权限。实例归一个内核所有。
  */
-async function realPathPreservingMissing(absPath: string): Promise<string> {
-  let current = path.resolve(absPath)
-  let tail = ''
-  while (true) {
-    try {
-      return path.resolve(await realpath(current), tail)
-    } catch {
-      // arch-guard:silent-catch-ok 路径可能尚未存在；继续向上寻找可 realpath 的祖先。
-      const parent = path.dirname(current)
-      if (parent === current) return path.resolve(absPath)
-      tail = tail ? path.join(path.basename(current), tail) : path.basename(current)
-      current = parent
-    }
-  }
-}
-
-async function assertConfinedToRoot(
-  realRoot: string,
-  abs: string,
-  inputPath: string,
-): Promise<void> {
-  const realTarget = await realPathPreservingMissing(abs)
-  if (isInsideRoot(realRoot, realTarget)) return
-  throw new ProjectError(
-    'PERMISSION_DENIED',
-    `路径解析后越出工作区根目录：${inputPath}`,
-    { inputPath },
-    '该路径或其祖先通过符号链接指向当前工作区外部。请切换到目标包的真实工作区，或只检查当前工作区源码；不要改搜该路径的父目录。',
-  )
+export interface FileStoreApi {
+  /** 工作区根目录的绝对路径。 */
+  readonly root: string
+  /** 只规范化路径并判断能不能做这个动作，不碰正文：返回绝对路径和相对根的路径；出了根或被名单、过滤器拒绝时抛 PERMISSION_DENIED（报错里写 deniedActionLabel）。 */
+  authorize(pathInput: string, action: FileFilterInput['action'], deniedActionLabel: string, options?: FileAccessOptions): Promise<{ abs: string; rel: string }>
+  /** 取文件或目录的快照：是否存在、大小、版本、是不是二进制、文本编码与权限；includeContent 为真且文件不超读取上限时带正文。路径不存在时返回 exists 为假的快照，不抛错。 */
+  snapshot(pathInput: string, includeContent?: boolean, options?: FileAccessOptions): Promise<FileSnapshot>
+  /** 按行范围、字节数或字符数有界读取文本，带续读参数；给了 baseRevision 而版本对不上时抛 BASE_REVISION_MISMATCH，超出整读上限又没给范围或上限时抛 NOT_SUPPORTED。 */
+  read(input: ReadInput, options?: FileAccessOptions): Promise<ReadResult>
+  /** 搜索前给文件分类：UTF-8 文本能交给 ripgrep 直接搜（native），旧编码文本要解码后再搜（decoded），二进制、超搜索上限的跳过（excluded）；按文件身份与修改时间缓存。 */
+  searchTextKind(pathInput: string): Promise<'native' | 'decoded' | 'excluded'>
+  /** 轻量的文件状态：类型、大小、估算 token、行数（不太大的文本文件才数）、版本、编码和建议的首个读取窗口；不存在时返回 kind 为 missing。 */
+  stat(input: FileStatInput, options?: FileAccessOptions): Promise<FileStatResult>
+  /** 原子写入文本并返回写后的快照：已有文本文件沿用自己的编码与权限，encoding、mode 只在路径上还没有文件时生效；给了 transactionBytes 就原样写这些字节，给了 expectedBytes 时磁盘上的字节对不上就抛 CONFLICT_WITH_EXTERNAL_EDIT。 */
+  write(pathInput: string, content: string, options?: FileAccessOptions & { encoding?: ProjectTextEncoding; mode?: number; transactionBytes?: Uint8Array; expectedBytes?: ProjectExpectedBytes }): Promise<FileSnapshot>
+  /** 事务捕获原字节用：跳过宿主过滤器但仍执行根内约束和拒读名单，最多读 maximumBytes（缺省是整读上限）；文件不存在返回 undefined，类型或长度变了抛 CONFLICT_WITH_EXTERNAL_EDIT。 */
+  readTransactionBytes(pathInput: string, maximumBytes?: number): Promise<Buffer | undefined>
+  /** 删除工作区里的单个文件（不存在也不报错）；给了 expectedBytes 时先核对磁盘字节，对不上抛 CONFLICT_WITH_EXTERNAL_EDIT。 */
+  remove(pathInput: string, options?: FileAccessOptions & { expectedBytes?: ProjectExpectedBytes }): Promise<void>
+  /** 在工作区里改名或移动文件，目标目录不存在就建；两端都要过写入授权。 */
+  rename(from: string, to: string): Promise<void>
+  /** 按路径、include、exclude、深度和条数列出文件与目录，默认排除 gitignore 的条目（优先问 git，git 不可用时按本地规则判断）。 */
+  listFiles(input?: ObserveInput): Promise<FileListEntry[]>
+  /** 递归扫描工作区，返回每个文件的快照（不读正文）；读不了的文件跳过。 */
+  observe(input?: ObserveInput): Promise<ProjectSnapshot>
 }
 
 /** 底层文件系统网关，统一执行根目录约束、策略、过滤器和 revision 管理。 */
-export class FileStore implements ProjectFileAccess {
+export class FileStore implements FileStoreApi {
   readonly root: string
   private fileFilter?: FileFilterProvider
   private command: CommandProvider
@@ -137,7 +127,7 @@ export class FileStore implements ProjectFileAccess {
 
   private async allowed(
     rel: string,
-    action: FileStoreAction,
+    action: FileFilterInput['action'],
     options?: { skipFileFilter?: boolean },
   ): Promise<boolean> {
     // 顺序是安全语义的一部分：deny glob 是硬策略，必须先判且 skipFileFilter 关不掉；
@@ -156,7 +146,7 @@ export class FileStore implements ProjectFileAccess {
   /** 只做路径规范化和可见性判断，不读取或写入文件内容。 */
   public async authorize(
     pathInput: string,
-    action: FileStoreAction,
+    action: FileFilterInput['action'],
     deniedActionLabel: string,
     options?: { skipFileFilter?: boolean },
   ): Promise<{ abs: string; rel: string }> {
@@ -506,11 +496,11 @@ export class FileStore implements ProjectFileAccess {
     if (now >= this.searchTextKindNextSweep) {
       // 只回收近期不再参与查询的条目，容量外扫描不会把仍活跃的整批条目逐项顶出。
       for (const [path, entry] of this.searchTextKinds) {
-        if (now - entry.lastUsedAt >= SearchTextKindIdleMs) this.searchTextKinds.delete(path)
+        if (now - entry.lastUsedAt >= ProjectTuning.files.searchTextKindIdleMs) this.searchTextKinds.delete(path)
       }
-      this.searchTextKindNextSweep = now + SearchTextKindIdleMs
+      this.searchTextKindNextSweep = now + ProjectTuning.files.searchTextKindIdleMs
     }
-    if (cached || this.searchTextKinds.size < MaxCachedSearchTextKinds) {
+    if (cached || this.searchTextKinds.size < ProjectTuning.files.searchTextKindEntries) {
       this.searchTextKinds.set(rel, { token, kind, lastUsedAt: now })
     }
     return kind
@@ -593,7 +583,7 @@ export class FileStore implements ProjectFileAccess {
     }
 
     let lineCount: Nullable<number> = null
-    if (sizeBytes <= StatMaxLineCountBytes) {
+    if (sizeBytes <= ProjectTuning.files.statLineCountBytes) {
       // 优先复用 snapshot 已读到的正文；仅当宿主把读取上限调得比行数上限更小时才回退到再读一次。
       const text = snap.content ?? (await readProjectTextFile(snap.absPath, this.snapshotEncodings.get(snap)))
       lineCount = countTextLines(text)
@@ -602,8 +592,8 @@ export class FileStore implements ProjectFileAccess {
     }
 
     const endLine = isNull(lineCount)
-      ? StatRecommendedMaxLines
-      : Math.min(lineCount, StatRecommendedMaxLines)
+      ? ProjectTuning.files.statRecommendedLines
+      : Math.min(lineCount, ProjectTuning.files.statRecommendedLines)
 
     return {
       path: snap.path,
@@ -678,7 +668,7 @@ export class FileStore implements ProjectFileAccess {
     const entries = await this.listFiles({
       ...input,
       recursive: input.recursive ?? true,
-      maxDepth: input.maxDepth ?? 20,
+      maxDepth: input.maxDepth ?? ProjectTuning.files.observeDepth,
     })
     const snapshots: ProjectSnapshot['files'] = []
     for (const entry of entries) {

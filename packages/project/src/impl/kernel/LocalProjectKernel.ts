@@ -50,13 +50,12 @@
 //    `policy.approval.requireForHighRiskPatch` 再走一次人审。绕过 `decide` 直接调 `store` = 无审批写盘。
 //    `rollback` 本身不走高风险审批：它有外部修改保护，且回滚后可以重做，属于可恢复操作。
 //
-// ## 内存治理（为什么有一堆 Max* 常量）
-// 内核在长会话里常驻，`targets` / `evidence` / `transactions` 都是只增 Map。四个上限按插入顺序
-// 淘汰最旧项；正常 prepare→apply 流程永远不会淘汰到刚写入的事务。
+// ## 内存治理（为什么有一堆保留上限）
+// 内核在长会话里常驻，`targets` / `evidence` / `transactions` 都是只增 Map。四个上限（ProjectTuning 的
+// kernel、queries 两组）按插入顺序淘汰最旧项；正常 prepare→apply 流程永远不会淘汰到刚写入的事务。
 import * as path from 'node:path'
 
 import {
-  isArray,
   isEmpty,
   isFalse,
   isNull,
@@ -69,8 +68,20 @@ import {
 import { AppError } from '@velaros-ai/core/error'
 
 import type { ProjectChangeFeed } from '../../contract/provides.js'
-import type { ProjectChangeFeedWriter } from '../../contract/requires.js'
+import type {
+  CreateProjectKernelOptions,
+  FileAdapterFactory,
+  PatchStrategy,
+  PipelineStage,
+  ProjectChangeFeedWriter,
+  ProjectFixer,
+  ProjectHook,
+  ProjectPlugin,
+  ProjectPluginContext,
+  ProjectValidator,
+} from '../../contract/requires.js'
 import type { ProjectSymbol } from '../../types/adapter.js'
+import type { AuditEvent } from '../../types/audit.js'
 import type { BatchInput, BatchMetrics, BatchResult } from '../../types/batch.js'
 import type { ProjectChangeLifecycle, ProjectChangeRecordInput, ProjectChangeRevision } from '../../types/change-feed.js'
 import type { DiffResult, ProjectStatus } from '../../types/common.js'
@@ -98,16 +109,31 @@ import type {
   SearchResult,
 } from '../../types/io.js'
 import type { CorePolicy, PolicyDecisionInput } from '../../types/policy.js'
+import type { ProjectRuntimeProviders } from '../../types/provider.js'
 import type { FileAttributes, FileSnapshot, ProjectSnapshot } from '../../types/snapshot.js'
 import type { ResolveTargetInput, ResolveTargetResult } from '../../types/target.js'
 import type { ApplyRestoreState, ProjectTransactionPendingOperation, StagedFileContent,StoredTransaction } from '../../types/transaction.js'
 import type { ValidateInput, ValidationResult } from '../../types/validation.js'
 import { combineDiffs } from '../../utils/diff.js'
 import { ProjectError } from '../../utils/errors.js'
+import { metadataPaths } from '../../utils/files/git-index.js'
+import { runBatch } from '../../utils/kernel/batch.js'
+import { createCorePolicy } from '../../utils/kernel/policy.js'
+import { projectChangePatches } from '../../utils/transactions/change-records.js'
 import { patchFileAttributes, withPatchFileAttributes } from '../../utils/transactions/patch-attributes.js'
-import { diagnosticsEnvelope } from '../../utils/transactions/transaction-errors.js'
-import { type AuditEvent, AuditJournal } from '../persistence/AuditJournal.js'
+import { isCreatePatch, isDeletePatch, stagedContentAfter } from '../../utils/transactions/patch-chain.js'
+import {
+  canRevertToOriginal,
+  createsMissingFile,
+} from '../../utils/transactions/patch-ownership.js'
+import { diagnosticsEnvelope, rethrowNotApplied, revisionMismatch, validationFailed, withNotAppliedOutcome } from '../../utils/transactions/transaction-errors.js'
+import { ProjectTuning } from '../../utils/tuning.js'
+import { FileStore } from '../files/FileStore.js'
+import { ProjectGitIndex } from '../files/ProjectGitIndex.js'
+import { ProjectQueries } from '../files/ProjectQueries.js'
+import { AuditJournal } from '../persistence/AuditJournal.js'
 import { FileProjectTransactionStateStore } from '../persistence/FileProjectTransactionStateStore.js'
+import { MemoryProjectChangeFeed } from '../persistence/MemoryProjectChangeFeed.js'
 import { corePlugin } from '../plugins/CoreProjectPlugin.js'
 import { AdapterRegistry } from '../registries/AdapterRegistry.js'
 import { FixerRegistry } from '../registries/FixerRegistry.js'
@@ -116,112 +142,116 @@ import { PatchStrategyRegistry } from '../registries/PatchStrategyRegistry.js'
 import { PipelineRegistry } from '../registries/PipelineRegistry.js'
 import { PluginRegistry } from '../registries/PluginRegistry.js'
 import { ValidatorRegistry } from '../registries/ValidatorRegistry.js'
-import { TransactionPlanner } from '../transactions/TransactionPlanner.js'
-
-import { runBatch } from './batch-runner.js'
-import { createNodeCommandProvider } from './providers.js'
-
-export type { StoredTransaction } from '../../types/transaction.js'
-
-import type { CreateProjectKernelOptions, FileAdapterFactory, PatchStrategy, PipelineStage,ProjectFixer, ProjectHook, ProjectPlugin, ProjectValidator } from '../../contract/requires.js'
-import type { ProjectRuntimeProviders } from '../../types/provider.js'
-import { projectChangePatches } from '../../utils/transactions/change-records.js'
-import { isCreatePatch, isDeletePatch, stagedContentAfter } from '../../utils/transactions/patch-chain.js'
-import {
-  canRevertToOriginal,
-  createsMissingFile,
-} from '../../utils/transactions/patch-ownership.js'
-import { rethrowNotApplied, revisionMismatch, validationFailed, withNotAppliedOutcome } from '../../utils/transactions/transaction-errors.js'
-import { FileStore } from '../files/FileStore.js'
-import { ProjectGitIndex } from '../files/ProjectGitIndex.js'
-import { ProjectQueries } from '../files/ProjectQueries.js'
-import { MemoryProjectChangeFeed } from '../persistence/MemoryProjectChangeFeed.js'
 import { LockManager } from '../transactions/LockManager.js'
 import { TransactionCoordinator } from '../transactions/TransactionCoordinator.js'
 import { TransactionOverlay } from '../transactions/TransactionOverlay.js'
+import { TransactionPlanner, type TransactionPlannerPrepareOptions } from '../transactions/TransactionPlanner.js'
 import { TransactionProjectionRepository } from '../transactions/TransactionProjectionRepository.js'
 import { TransactionRecovery } from '../transactions/TransactionRecovery.js'
 import { TransactionRepository } from '../transactions/TransactionRepository.js'
 import { TransactionStateMachine } from '../transactions/TransactionStateMachine.js'
 import { TransactionValidation } from '../transactions/TransactionValidation.js'
 
-import { DEFAULT_CORE_POLICY } from './policy-defaults.js'
+import { NodeCommandProvider } from './NodeCommandProvider.js'
 
-/** Project Agent 与 Kernel capability 共用的项目内核接口。 */
+/**
+ * 项目内核：一个工作区根上的读写、事务、校验与撤销。把「一次编辑意图」变成可预览、可校验、可回滚的磁盘写入：
+ * 准备不碰磁盘，应用在写锁里核对版本、写盘失败逆序还原，回滚前先确认文件仍是应用后的样子。读写都先过文件网关的根内约束与名单，
+ * 再过策略门（宿主的策略提供者可以拒绝或要求审批）。由 `createProjectKernel(options)` 创建，实例归宿主；项目工具、宿主界面与内核能力服务共用它。
+ */
 export interface ProjectKernel {
+  /** 对一段已经提交过的历史正文重新做读取授权与脱敏（文件上下文恢复时用），不重读可能已经变了的磁盘；路径被拒时抛 PERMISSION_DENIED。 */
   prepareContextSnapshot(input: { path: string; content: string }): Promise<{ content: string; redacted: boolean }>
+  /** 工作区根目录的绝对路径。 */
   readonly root: string
+  /** 生效的策略：内核缺省策略（ProjectPolicyDefaults）按宿主给的 corePolicy 覆盖后的结果。 */
   readonly policy: CorePolicy
+  /** 宿主提供者；宿主没给命令提供者时补上本地子进程命令。 */
   readonly providers: ProjectRuntimeProviders
+  /** 变更记录的只读视图：每个事务的准备、修订、校验、应用、回滚、丢弃都记在这里。 */
   readonly changeFeed: ProjectChangeFeed
+  /** 扫描工作区，返回文件快照列表（不读正文）。 */
   observe(input?: ObserveInput): Promise<ProjectSnapshot>
   /** 列出相对工作区根目录的文件和目录。 */
   listFiles(input?: ObserveInput): Promise<FileListEntry[]>
+  /** 单个路径的轻量状态和建议的读取窗口。 */
   stat(input: FileStatInput): Promise<FileStatResult>
+  /** 有界读取文件（按行范围、字节数或字符数），正文经宿主脱敏；给了 baseRevision 而版本对不上时抛 BASE_REVISION_MISMATCH。 */
   read(input: ReadInput): Promise<ReadResult>
+  /** 在工作区里搜文本：先试 ripgrep，不可用或失败时回退到适配器逐文件扫描；命中片段经宿主脱敏。 */
   search(input: SearchInput): Promise<SearchResult>
+  /** 列出文件里的符号：宿主开了代码智能就先问它，否则用本地适配器解析。 */
   listSymbols(path: string): Promise<ProjectSymbol[]>
+  /** 把路径、符号或文本线索解析成可复用的目标，之后的编辑可以按 targetId 引用；多个候选返回 ambiguous，找不到返回 not_found。 */
   resolveTarget(input: ResolveTargetInput): Promise<ResolveTargetResult>
+  /** 给一次任务建上下文，补上 taskId 和创建时间。 */
   createTaskContext(input: Omit<TaskContext, 'taskId' | 'createdAt'>): TaskContext
+  /** 按目标或路径范围建证据包：目标附近的新鲜窗口加前后续读建议。 */
   buildEvidencePack(input: BuildEvidencePackInput): Promise<EvidencePack>
+  /** 把编辑意图准备成事务：生成补丁、diff 与风险等级，不碰磁盘；版本已变、规模超出策略预算、改到受保护或生成的文件时拒绝。 */
   prepareEdit(input: PrepareEditInput): Promise<PreparedTransaction>
   /** 丢弃一个尚未应用的已暂存事务（dryRun 预览用）；已应用的事务请用 rollback。 */
   discardTransaction(transactionId: string): { discarded: boolean }
+  /** 在还没应用的事务上追加编辑：新补丁接在已暂存的内容之后并刷新摘要；事务已应用、暂存补丁不能干净重放时拒绝。 */
   amendEdit(input: AmendEditInput): Promise<PreparedTransaction>
+  /** 在事务的暂存内容上跑修复器，把真实的改动转成一次修订；暂存补丁不能干净重放时返回 ok 为假和诊断，什么都不改。 */
   fixTransaction(input: FixInput): Promise<FixResult>
+  /** 应用事务：先校验、过写入授权与审批，在写锁里逐个路径核对版本（允许的操作先 rebase 再复核校验）后写盘，任一文件失败就把已写的逆序还原；返回新旧版本。 */
   applyEdit(input: ApplyEditInput): Promise<ApplyResult>
+  /** 校验事务的暂存内容（不给事务时校验当前工作区），合并校验器与适配器的诊断。 */
   validate(input: ValidateInput): Promise<ValidationResult>
+  /** 回滚已应用的事务：先确认每个文件仍是应用后的样子、每个补丁都能还原，再逆序写回；文件被外部改过时抛 CONFLICT_WITH_EXTERNAL_EDIT，不覆盖。 */
   rollback(input: RollbackInput): Promise<RollbackResult>
+  /** 单个事务或全部事务合并后的 diff、改动文件与变更行数；事务号不存在时抛 INVALID_INPUT。 */
   diff(input?: { transactionId?: string }): Promise<DiffResult>
   /** 读取内存中已暂存/已应用事务；apply 前预检与 amend 路径使用。 */
   getTransaction(transactionId: string): StoredTransaction | undefined
+  /** 内核状态快照：事务数、目标数、审计事件数、锁、插件、适配器、校验器与批处理指标。 */
   status(): Promise<ProjectStatus>
+  /** 内存审计日志里还保留着的事件（超过上限的旧事件已被淘汰）。 */
   getJournal(): AuditEvent[]
+  /** 按依赖图与并发上限跑一批内核操作；atomic 的批次失败时回滚本批已应用的事务。 */
   runBatch(input: BatchInput): Promise<BatchResult>
   /** 注册监听内核生命周期事件的 hook。 */
   registerHook(hook: ProjectHook): void
 }
 
-function cloneStoredTransaction(transaction: StoredTransaction): StoredTransaction {
-  return structuredClone(transaction)
-}
-const MaxRetainedTerminalTransactions = 200
-// 全部事务（含已准备未应用的）总量兜底；正常 prepare→apply 不受影响。
-const MaxRetainedTransactions = 1000
-
-/** 事务 metadata 里记下的 git 索引路径清单；它随事务状态持久化，读回时只认字符串项。 */
-function metadataPaths(value: unknown): string[] {
-  return isArray(value) ? value.filter(isString) : []
+/** 内核启动的两步，只给工厂 `createProjectKernel` 用：先恢复上次中断的事务，再装插件。 */
+export interface LocalProjectKernelStartup {
+  /** 宿主给了 transactionStatePath 时，把上次中断在写盘中途的应用或回滚按落盘的恢复计划还原，再把变更记录补齐到落盘状态；恢复不了时抛错（如 TRANSACTION_RECOVERY_CONFLICT）。 */
+  initializeTransactionState(): Promise<void>
+  /** 装一个插件：插件在 setup 里注册适配器、补丁策略、校验器、修复器、hook 与管线阶段；同名插件只装一次。记一条审计。 */
+  install(plugin: ProjectPlugin): Promise<void>
 }
 
-/** 事务安全的项目内核实现，统一协调 IO、适配器、校验和审计 hook。 */
-class LocalProjectKernel implements ProjectKernel {
+/** 事务安全的项目内核实现，统一协调 IO、适配器、校验和审计 hook；安装插件时自己就是插件拿到的注册上下文。 */
+class LocalProjectKernel implements ProjectKernel, ProjectPluginContext, LocalProjectKernelStartup {
   readonly root: string
   readonly policy: CorePolicy
   readonly providers: ProjectRuntimeProviders
   readonly changeFeed: ProjectChangeFeed
 
-  readonly journal = new AuditJournal()
-  readonly hooks = new HookRegistry()
-  readonly pipelines = new PipelineRegistry()
-  readonly plugins = new PluginRegistry()
-  readonly adapters = new AdapterRegistry()
-  readonly patchStrategies = new PatchStrategyRegistry()
-  readonly validators = new ValidatorRegistry()
-  readonly fixers = new FixerRegistry()
-  readonly locks = new LockManager()
-  readonly transactionCoordinator = new TransactionCoordinator()
-  readonly transactionStateMachine = new TransactionStateMachine()
-  readonly transactionOverlay: TransactionOverlay
-  readonly transactionValidation: TransactionValidation
-  readonly transactionRepository = new TransactionRepository({
-    maxTransactions: MaxRetainedTransactions,
-    maxTerminalTransactions: MaxRetainedTerminalTransactions,
+  private readonly journal = new AuditJournal()
+  private readonly hooks = new HookRegistry()
+  private readonly pipelines = new PipelineRegistry()
+  private readonly plugins = new PluginRegistry()
+  private readonly adapters = new AdapterRegistry()
+  private readonly patchStrategies = new PatchStrategyRegistry()
+  private readonly validators = new ValidatorRegistry()
+  private readonly fixers = new FixerRegistry()
+  private readonly locks = new LockManager()
+  private readonly transactionCoordinator = new TransactionCoordinator()
+  private readonly transactionStateMachine = new TransactionStateMachine()
+  private readonly transactionOverlay: TransactionOverlay
+  private readonly transactionValidation: TransactionValidation
+  private readonly transactionRepository = new TransactionRepository({
+    maxTransactions: ProjectTuning.kernel.retainedTransactions,
+    maxTerminalTransactions: ProjectTuning.kernel.retainedTerminalTransactions,
   })
-  readonly transactionProjectionRepository = new TransactionProjectionRepository({
-    maxProjections: MaxRetainedTransactions,
+  private readonly transactionProjectionRepository = new TransactionProjectionRepository({
+    maxProjections: ProjectTuning.kernel.retainedTransactions,
   })
-  readonly store: FileStore
+  private readonly store: FileStore
   private readonly planner: TransactionPlanner
   private readonly queries: ProjectQueries
   private readonly gitIndex: ProjectGitIndex
@@ -234,14 +264,10 @@ class LocalProjectKernel implements ProjectKernel {
 
   constructor(options: CreateProjectKernelOptions) {
     this.root = path.resolve(options.root)
-    this.policy = {
-      ...DEFAULT_CORE_POLICY,
-      ...(options.corePolicy ?? {}),
-      approval: { ...DEFAULT_CORE_POLICY.approval, ...(options.corePolicy?.approval ?? {}) },
-    }
+    this.policy = createCorePolicy(options.corePolicy)
     this.providers = {
       ...(options.providers ?? {}),
-      command: options.providers?.command ?? createNodeCommandProvider(),
+      command: options.providers?.command ?? new NodeCommandProvider(),
     }
     this.changeFeedWriter = options.changeFeed ?? new MemoryProjectChangeFeed()
     this.changeFeed = this.changeFeedWriter
@@ -598,12 +624,7 @@ class LocalProjectKernel implements ProjectKernel {
 
   private async prepareTransaction(
     input: PrepareEditInput,
-    options: {
-      contentOverlay?: Map<string, StagedFileContent>
-      attributeOverlay?: Map<string, FileAttributes>
-      forcePatchBaseRevision?: 'none'
-      store?: boolean
-    } = {},
+    options: TransactionPlannerPrepareOptions & { store?: boolean } = {},
   ): Promise<PreparedTransaction> {
     const transaction = await this.planner.prepareTransaction(input, options)
     if (options.store ?? true) this.addTransaction(transaction)
@@ -705,7 +726,7 @@ class LocalProjectKernel implements ProjectKernel {
       },
     )
 
-    const transactionBeforeAmend = cloneStoredTransaction(tx)
+    const transactionBeforeAmend = structuredClone(tx)
     const bytesBeforeAmend = this.transactionRecovery.captureBytePlans()
     try {
       preparedTx.patches.push(
@@ -883,7 +904,7 @@ class LocalProjectKernel implements ProjectKernel {
       const newRevisions: Record<string, string> = {}
       const rebasedFiles = new Set<string>()
       const createdFiles: string[] = []
-      const transactionBeforePreflight = cloneStoredTransaction(tx)
+      const transactionBeforePreflight = structuredClone(tx)
       const bytesBeforePreflight = this.transactionRecovery.captureBytePlans()
       let restoreByPath: Map<string, ApplyRestoreState>
       let pending: ProjectTransactionPendingOperation | undefined
@@ -1401,5 +1422,3 @@ export async function createProjectKernel(
   for (const plugin of options.plugins ?? []) await project.install(plugin)
   return project
 }
-
-export type { CreateProjectKernelOptions } from '../../contract/requires.js'

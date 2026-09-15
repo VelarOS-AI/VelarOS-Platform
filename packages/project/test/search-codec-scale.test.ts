@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { expect, test } from 'bun:test'
 
 import { createProjectKernel } from '../src/impl/kernel/LocalProjectKernel'
-import { createNodeCommandProvider } from '../src/impl/kernel/providers'
+import { NodeCommandProvider } from '../src/impl/kernel/NodeCommandProvider'
 import { encodeProjectTextBuffer } from '../src/utils/text'
 
 test('real search reaches every encoding beyond the listing page and retains a bounded cache through repeated full scans', async () => {
@@ -79,7 +79,7 @@ test('native and decoded search respect search-only filters before counting visi
     for (const [path, encoding] of [['a-hidden.txt', 'utf8'], ['b-hidden.txt', 'gb18030'], ['z-visible.txt', 'utf8'], ['zz-visible.txt', 'gb18030']] as const) {
       await writeFile(join(root, path), encodeProjectTextBuffer('source 中文 needle\n', encoding))
     }
-    const command = createNodeCommandProvider()
+    const command = new NodeCommandProvider()
     const project = await createProjectKernel({ root, providers: {
       fileFilter: { shouldInclude: ({ path, action }) => action !== 'search' || !path.includes('hidden') },
       command: { run: (input) => command.run(input.command === 'rg'
@@ -103,7 +103,7 @@ test('native and decoded search respect search-only filters before counting visi
 test('real command output overflow remains an incomplete search even when every retained hit is filtered', async () => {
   const root = await mkdtemp(join(tmpdir(), 'project-search-output-limit-'))
   try {
-    const command = createNodeCommandProvider()
+    const command = new NodeCommandProvider()
     const row = `${JSON.stringify({ type: 'match', data: {
       path: { text: 'not-listed.txt' }, lines: { text: 'needle\n' }, line_number: 1,
       submatches: [{ start: 0, end: 6 }],

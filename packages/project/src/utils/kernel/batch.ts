@@ -1,19 +1,26 @@
-import { first, isEmpty, isFalse,isPresent } from '@velaros-ai/core'
+/**
+ * 批处理调度：按依赖图和并发上限把一批读、搜、准备、应用、校验、回滚任务交给内核执行，内核的 runBatch 交给这里。
+ * 只经参数里的内核接口（BatchKernelLike）干活，不持有状态；工作池指标随结果返回，由内核记下。
+ */
+import { first, isEmpty, isFalse, isPresent } from '@velaros-ai/core'
 
-import type { BatchConflict, BatchInput, BatchKernelLike,BatchResult, BatchTask, BatchTaskResult, DagPoolMetrics } from "../../types/batch.js";
-import type { PreparedTransaction } from "../../types/edit.js";
-import { ProjectError,toErrorObject } from "../../utils/errors.js";
+import { ProjectPolicyDefaults } from '../../contract/constants.js'
+import type { BatchConflict, BatchInput, BatchKernelLike, BatchResult, BatchTask, BatchTaskResult, DagPoolMetrics } from '../../types/batch.js'
+import type { PreparedTransaction } from '../../types/edit.js'
+import { ProjectError, toErrorObject } from '../errors.js'
 
+/** 任务的依赖是不是都已经结束（跑完或已标记结束）。 */
 function depsDone(task: BatchTask, done: Set<string>): boolean {
   return (task.dependsOn ?? []).every((id) => done.has(id));
 }
 
+/** 任务的依赖里有没有失败的。 */
 function depsFailed(task: BatchTask, failed: Set<string>): boolean {
   return (task.dependsOn ?? []).some((id) => failed.has(id));
 }
 
-/** 将批处理任务映射到内核公开方法；custom 任务由调用方提供执行函数。 */
-async function execute(kernel: BatchKernelLike, task: BatchTask): Promise<any> {
+/** 把一个任务交给内核对应的公开方法执行；custom 任务直接调它自带的 run。 */
+async function executeBatchTask(kernel: BatchKernelLike, task: BatchTask): Promise<any> {
   const op = task.op;
   switch (op.kind) {
     case "read": return kernel.read(op.input);
@@ -28,17 +35,19 @@ async function execute(kernel: BatchKernelLike, task: BatchTask): Promise<any> {
   }
 }
 
-/** 从 prepared transaction 元数据中提取单文件补丁范围，用于冲突检测。 */
+/** 取事务里某个文件各补丁的偏移范围（补丁元数据里的 startOffset、endOffset），给冲突检测用。 */
 function patchRange(tx: PreparedTransaction, file: string): Array<{ start?: number; end?: number }> {
   return tx.patches.filter((p) => p.path === file).map((p) => ({ start: p.metadata?.startOffset as number | undefined, end: p.metadata?.endOffset as number | undefined }));
 }
 
+/** 两段补丁范围重不重叠；任一边缺偏移时按重叠算，宁可报冲突也不放过。 */
 function overlaps(a: { start?: number; end?: number }, b: { start?: number; end?: number }): boolean {
   if (!isPresent(a.start) || !isPresent(a.end) || !isPresent(b.start) || !isPresent(b.end)) return true;
   return a.start <= b.end && b.start <= a.end;
 }
 
-export function detectBatchConflicts(items: Array<{ taskId: string; tx: PreparedTransaction }>): BatchConflict[] {
+/** 找出同一批里改到同一个文件、补丁范围又重叠的两两事务，prepare-then-apply 据此在应用前停下。 */
+function detectBatchConflicts(items: Array<{ taskId: string; tx: PreparedTransaction }>): BatchConflict[] {
   const conflicts: BatchConflict[] = [];
   for (let i = 0; i < items.length; i++) {
     for (let j = i + 1; j < items.length; j++) {
@@ -56,15 +65,18 @@ export function detectBatchConflicts(items: Array<{ taskId: string; tx: Prepared
   return conflicts;
 }
 
-/** 按 DAG 依赖和并发上限执行任务，并记录 apply/prepare 的事务结果。 */
+/**
+ * 按依赖图和并发上限跑一批里选中的任务：槽位一空就补下一个就绪任务；依赖失败的连带标成 DEPENDENCY_FAILED，
+ * 剩下跑不动的报未满足或循环依赖。返回各任务结果、已应用与已准备的事务、失败的任务和工作池指标。
+ */
 async function runDag(
   kernel: BatchKernelLike,
   input: BatchInput,
   only?: (task: BatchTask) => boolean,
   options?: { failedDependencyIds?: Set<string> },
 ): Promise<{ results: BatchTaskResult[]; appliedTransactions: string[]; prepared: Array<{ taskId: string; tx: PreparedTransaction }>; failed: boolean; failedTaskIds: Set<string>; metrics: DagPoolMetrics }> {
-  // 默认并发取策略配置的上限（默认 8），调用方仍可显式调小；硬上限始终是 maxConcurrentBatchTasks。
-  const cap = kernel.policy?.maxConcurrentBatchTasks ?? 8;
+  // 默认并发取策略配置的上限（缺省策略见 ProjectPolicyDefaults），调用方仍可显式调小；硬上限始终是 maxConcurrentBatchTasks。
+  const cap = kernel.policy?.maxConcurrentBatchTasks ?? ProjectPolicyDefaults.maxConcurrentBatchTasks;
   const concurrency = Math.max(1, Math.min(input.concurrency ?? cap, cap));
   const stopOnError = input.stopOnError ?? true;
   const selected = input.tasks.filter((task) => !only || only(task));
@@ -110,7 +122,7 @@ async function runDag(
       const startedAt = Date.now();
       // 用 Promise.resolve().then 包一层，保证 custom 任务的「同步抛错」也走 rejection 分支。
       void Promise.resolve()
-        .then(() => execute(kernel, task))
+        .then(() => executeBatchTask(kernel, task))
         .then(
           (result) => {
             if (task.op.kind === "apply" && (result)?.transactionId) appliedTransactions.push((result).transactionId);
@@ -186,6 +198,10 @@ async function runDag(
   return { results, appliedTransactions, prepared, failed, failedTaskIds, metrics: { concurrency, peakActive, maxQueuedReady } };
 }
 
+/**
+ * 跑一批任务：dag 模式依赖满足就跑；prepare-then-apply 先跑完非 apply 任务、查补丁冲突，没冲突再跑 apply。
+ * atomic 的批次失败时按逆序回滚本批已应用的事务，回滚失败的另列在 rollbackFailures 里。
+ */
 export async function runBatch(kernel: BatchKernelLike, input: BatchInput): Promise<BatchResult> {
   const startedAt = Date.now();
   const rolledBackTransactions: string[] = [];

@@ -9,6 +9,7 @@ import { createApprovalOperationKey, createManualApprovalOptions } from '@velaro
 import { isEmpty } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
+import { ProjectSandboxLimits } from '../../contract/constants.js'
 import type { ProjectToolContext } from '../../contract/requires.js'
 import type { ProjectRunInput, ProjectSandboxInput } from '../../types/tools.js'
 import { requireSandboxPort, resolveSourceInsideProject, sandboxApplyConfirmationMessage, selectSandboxChanges } from '../../utils/agent/sandbox.js'
@@ -148,8 +149,8 @@ export class ProjectExecutionOperations implements ProjectExecutionOperationsApi
     if (input.action === 'diff') return port.diffSandbox({ sandboxId, maxFiles: input.maxFiles })
     if (input.action === 'discard') return port.discardSandbox(sandboxId)
 
-    // 落回：先算差量摆给用户看，过项目的修改授权和用户确认，才写。
-    const changes = await port.diffSandbox({ sandboxId, maxFiles: 2000 })
+    // 落回：先算差量摆给用户看，过项目的修改授权和用户确认，才写。差量按 diff 的公开上限取。
+    const changes = await port.diffSandbox({ sandboxId, maxFiles: ProjectSandboxLimits.diffFilesMax })
     const selection = selectSandboxChanges(changes, input.paths)
     if (!isEmpty(selection.unknown)) throw new AppError('VALIDATION', `这些路径在沙箱里没有变化：${selection.unknown.slice(0, 10).join('、')}`)
     if (isEmpty(selection.created) && isEmpty(selection.modified) && isEmpty(selection.deleted)) return { sandboxId, created: [], modified: [], deleted: [], skippedGit: changes.gitChanged, note: '镜像里没有文件变化，什么都没落。' }

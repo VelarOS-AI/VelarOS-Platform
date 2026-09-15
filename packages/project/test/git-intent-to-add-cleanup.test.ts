@@ -7,7 +7,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
 import { createProjectKernel, type EditIntent, type ProjectKernel } from '../src/exports/index'
-import { createNodeCommandProvider } from '../src/impl/kernel/providers'
+import { NodeCommandProvider } from '../src/impl/kernel/NodeCommandProvider'
 import type { CommandRunResult } from '../src/types/provider'
 
 type Operation = EditIntent['operation']
@@ -63,7 +63,7 @@ interface RecordingKernel {
 // 删除、重命名文本文件都能完整回滚，不需要宿主审批，所以不装审批通道；只记下每次 git 调用。
 async function kernelAt(root: string): Promise<RecordingKernel> {
   const gitCalls: string[][] = []
-  const node = createNodeCommandProvider()
+  const node = new NodeCommandProvider()
   const project = await createProjectKernel({
     root,
     providers: {
