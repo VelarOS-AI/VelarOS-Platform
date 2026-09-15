@@ -1,19 +1,17 @@
 /**
- * 系统空间的七个模型面工具。每个工具的说明就是它的定义：摘要、适用与禁用场景、协议、用法、示例、参数、权限、能力声明、审批语义
- * 和 execute 都在定义里，上方不再另写一遍；按文件、执行两类排列，文件末尾是它们怎么分组、作为内置 mod 挂进产品、作为能力服务挂进内核。
+ * 系统空间的七个模型面工具。每个工具的说明就是它的定义：摘要、适用与禁用场景、协议、用法、示例、参数、权限和能力声明都在定义里，上方不再另写一遍；
+ * execute 只放简单的一两步（直接调一次宿主端口），实现多的交给 impl 里的类：读、看、写交给 `SystemFileOperations`，跑命令和演练沙箱交给 `SystemExecutionOperations`。
+ * 按文件、执行两类排列，文件末尾是它们怎么分组、作为内置 mod 挂进产品、作为能力服务挂进内核。
  * 只留 `system:run` 替代不了的：读和写要把内容和精确匹配绕开 shell 引号，看图片要把内容当图交给模型，后台任务表只在本包，刷新环境改的是宿主进程，演练沙箱要把命令钉在镜像里。PDF 与其他文档归别的 mod。
  * 读、看、写都是 files 每项一个文件，一个文件就一项。列目录、搜文本、看进程和端口、终止进程都用 `system:run` 跑系统命令。
  * 这是人最先看的文件，改了要在差量报告里点名。
  */
 
-import { join } from 'node:path'
-
 import { z } from 'zod'
 
 import type { AgentModManifest, ToolCategoryDefinition } from '@velaros-ai/agent/protocol'
-import { createApprovalOperationKey, createManualApprovalOptions, structureToolDescriptionsForCategory } from '@velaros-ai/agent/tool-contract'
-import { isEmpty, isNull, optionalWhen } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
+import { structureToolDescriptionsForCategory } from '@velaros-ai/agent/tool-contract'
+import { isEmpty, optionalWhen } from '@velaros-ai/core'
 import type { CapabilityToken, KernelModuleDefinition } from '@velaros-ai/kernel/contracts/abi'
 import { createCapabilityToken, createKernelCallableCapability, defineKernelModule, KernelModuleApiVersion } from '@velaros-ai/kernel/contracts/abi'
 
@@ -21,26 +19,19 @@ import type { SystemToolCategoryId } from '../contract/constants.js'
 import { SystemModId, SystemSpaceId, SystemToolCategoryByName, SystemToolNames } from '../contract/constants.js'
 import type { SystemBundledModDefinition, SystemCapabilityService, SystemToolCollection } from '../contract/provides.js'
 import type { CreateSystemKernelModuleOptions } from '../contract/requires.js'
-import { buildBackgroundCommandConfirmationMessage, isParallelCommandExecutionSafe } from '../utils/command-policy.js'
-import { exposeCommandOutputWindow } from '../utils/command-result.js'
-import { isCredentialPath, isSensitiveSystemMutationPath } from '../utils/file-safety.js'
-import { buildSandboxApplyConfirmationMessage, selectSandboxChanges } from '../utils/sandbox.js'
+import type { SystemListTasksInput, SystemRefreshEnvironmentInput, SystemRunInput } from '../types/commands.js'
+import type { SystemEditInput, SystemReadInput, SystemViewInput } from '../types/files.js'
+import type { SystemSandboxInput } from '../types/sandbox.js'
+import { isParallelCommandExecutionSafe } from '../utils/command-policy.js'
 import { createSystemCallableOperations, defineSystemTool } from '../utils/tool.js'
 
-import { systemCommandPolicy } from './SystemCommandPolicy.js'
+import { systemExecutionOperations } from './SystemExecutionOperations.js'
 import { systemFileOperations } from './SystemFileOperations.js'
 
 // ── 文件：读文本、看图片、写（都是 files 每项一个；写可以一次改几处）──────────────────────────
 
 /** system:read —— 读文本文件。 */
-const readTool = defineSystemTool<{
-  files: Array<{
-    path: string
-    offset?: number
-    maxChars?: number
-    version?: string
-  }>
-}>({
+const readTool = defineSystemTool<SystemReadInput>({
   name: SystemToolNames.read,
   role: 'inspect',
   summary: '读文本文件：files 每项一个文件，按字符取一段，返回它的 range 和版本号。',
@@ -70,15 +61,11 @@ const readTool = defineSystemTool<{
     reason: 'system text file read primitive',
   },
   isConcurrencySafe: () => true,
-  execute: async (input, ctx) => systemFileOperations.read(input, ctx),
+  execute: (input, ctx) => systemFileOperations.read(input, ctx),
 })
 
 /** system:view —— 看图片。 */
-const viewTool = defineSystemTool<{
-  files: Array<{
-    path: string
-  }>
-}>({
+const viewTool = defineSystemTool<SystemViewInput>({
   name: SystemToolNames.view,
   role: 'inspect',
   summary: '看图片：files 每项一张图，整张交给模型，效果和用户上传一样。',
@@ -102,23 +89,11 @@ const viewTool = defineSystemTool<{
     reason: 'system image view primitive',
   },
   isConcurrencySafe: () => true,
-  execute: async (input, ctx) => systemFileOperations.view(input, ctx),
+  execute: (input, ctx) => systemFileOperations.view(input, ctx),
 })
 
 /** system:edit —— 写文件：整个写入、改几处、回滚。 */
-const editTool = defineSystemTool<{
-  files: Array<{
-    path: string
-    newText?: string
-    edits?: Array<{
-      range: { offset: number; end: number }
-      oldText?: string
-      newText: string
-    }>
-    restore?: string
-    version?: string
-  }>
-}>({
+const editTool = defineSystemTool<SystemEditInput>({
   name: SystemToolNames.edit,
   role: 'edit',
   summary: '写文件：files 每项一个文件；newText 整个写入，edits 改文件里的几处，restore 回滚到某个版本。一批全成或全不成；改完返回每处的新样子和新版本号，不用再读。',
@@ -174,22 +149,13 @@ const editTool = defineSystemTool<{
     reason: 'system file write primitive',
   },
   isConcurrencySafe: () => false,
-  execute: async (input, ctx) => systemFileOperations.edit(input, ctx),
+  execute: (input, ctx) => systemFileOperations.edit(input, ctx),
 })
 
 // ── 执行：跑命令、刷新环境 ──────────────────────────────────
 
 /** system:run —— 在宿主报告的系统 shell 中执行命令。 */
-const runTool = defineSystemTool<{
-  command: string
-  cwd?: string
-  timeoutMs?: number
-  background?: boolean
-  interactive?: boolean
-  maxOutputChars?: number
-  parallel?: boolean
-  allowRepeat?: boolean
-}>({
+const runTool = defineSystemTool<SystemRunInput>({
   name: SystemToolNames.run,
   role: 'execute',
   summary: '在宿主已检测并报告的系统 shell 中执行命令。',
@@ -236,74 +202,11 @@ const runTool = defineSystemTool<{
     reason: 'system shell command execution',
   },
   isConcurrencySafe: isParallelCommandExecutionSafe,
-  execute: async ({ command, cwd, timeoutMs, background, interactive, maxOutputChars }, ctx) => {
-    ctx.abortSignal.throwIfAborted()
-
-    // 执行前分类
-    const plan = systemCommandPolicy.analyze(command)
-    const commandCwd = ctx.system.resolvePath(cwd)
-
-    // 前台还是后台。交互式命令一定跑在后台：它要一直开着等用户在控制台里输入
-    const shouldRunInBackground = !!interactive || (background ?? plan.shouldStartInBackground)
-
-    // 审批。危险命令必须每次由用户亲自裁决：审批端口覆盖 riskScope 后 `:dangerous` 后缀不再可见，
-    //    只有 requireManualApproval 能让宿主在任何档位都弹卡。
-    if (plan.shouldRequestConfirmation) {
-      await ctx.approval.awaitConfirmation(
-        buildBackgroundCommandConfirmationMessage(
-          command,
-          plan,
-          cwd ?? '系统运行环境',
-          shouldRunInBackground
-        ),
-        ctx.abortSignal,
-        plan.isDangerous
-          ? createManualApprovalOptions({
-              approvalRisk: 'high',
-              riskScope: 'system-command:dangerous',
-              operation: {
-                key: createApprovalOperationKey('shell-command', { command: command.trim(), cwd: commandCwd, background: shouldRunInBackground }),
-                label: command,
-                target: commandCwd,
-              },
-            })
-          : { approvalRisk: 'low' }
-      )
-    }
-
-    // 交给宿主执行
-    const result = await ctx.system.runCommand(
-      command,
-      { cwd: commandCwd, timeoutMs, background: shouldRunInBackground, interactive, maxOutputChars, sessionId: ctx.sessionId },
-      plan.isDangerous,
-      ctx.abortSignal
-    )
-
-    // 整形。要了控制台却没拿到，说明这个宿主跑不了交互式命令，直说，别让模型干等用户输入
-    const shaped = exposeCommandOutputWindow(result)
-    const note = optionalWhen(
-      !!interactive && !result.backgroundProcess?.console,
-      '当前宿主没有把它跑成控制台任务，用户无法输入：改成不需要输入的写法（答案用管道喂进去、加 --yes 这类参数），并用 system:list-tasks 里的 terminateCommand 停掉可能已经起来的任务。'
-    )
-    if (!result.backgroundProcess) return { ...shaped, note }
-    return {
-      ...shaped,
-      note,
-      backgroundProcess: {
-        ...result.backgroundProcess,
-        ports: plan.ports,
-        reason: plan.reason,
-        autoStarted: plan.shouldStartInBackground && !background,
-        statusContinuation: result.backgroundProcess.taskId
-          ? { tool: SystemToolNames.listTasks, args: { taskId: result.backgroundProcess.taskId } }
-          : result.backgroundProcess.statusContinuation,
-      },
-    }
-  },
+  execute: (input, ctx) => systemExecutionOperations.run(input, ctx),
 })
 
 /** system:refresh-environment —— 刷新宿主进程的 shell 环境。 */
-const refreshEnvironmentTool = defineSystemTool<Record<string, unknown>>({
+const refreshEnvironmentTool = defineSystemTool<SystemRefreshEnvironmentInput>({
   name: SystemToolNames.refreshEnvironment,
   role: 'control',
   summary: '刷新宿主进程的 shell 环境：Windows 上重读用户与系统环境变量并写回本进程；其他平台重新选定 shell（每条命令本来就经登录 shell 重读配置）。',
@@ -339,11 +242,7 @@ const refreshEnvironmentTool = defineSystemTool<Record<string, unknown>>({
 // ── 后台任务：列出 run 启动的后台任务 ────────────────────────
 
 /** system:list-tasks —— 列出本产品启动过的后台任务。 */
-const listTasksTool = defineSystemTool<{
-  limit?: number
-  onlyRunning?: boolean
-  taskId?: string
-}>({
+const listTasksTool = defineSystemTool<SystemListTasksInput>({
   name: SystemToolNames.listTasks,
   role: 'inspect',
   summary: '列出后台任务。',
@@ -394,15 +293,7 @@ const listTasksTool = defineSystemTool<{
 // ── 演练沙箱：把目录镜像到临时区，脚本先在镜像里跑 ────────────
 
 /** system:sandbox —— 演练沙箱：建镜像、看差量、落回、丢弃。 */
-const sandboxTool = defineSystemTool<{
-  action: 'create' | 'diff' | 'apply' | 'discard'
-  source?: string
-  network?: boolean
-  ignored?: 'link' | 'copy' | 'skip'
-  sandboxId?: string
-  paths?: string[]
-  maxFiles?: number
-}>({
+const sandboxTool = defineSystemTool<SystemSandboxInput>({
   name: SystemToolNames.sandbox,
   role: 'edit',
   summary: '演练沙箱：把一个目录镜像到临时区，脚本先在镜像里跑（写不到镜像外），diff 看变了什么，确认后 apply 落回源目录。',
@@ -441,41 +332,7 @@ const sandboxTool = defineSystemTool<{
     reason: 'rehearsal sandbox lifecycle',
   },
   isConcurrencySafe: () => false,
-  execute: async (input, ctx) => {
-    const sandboxId = input.sandboxId ?? ''
-    if (input.action !== 'create' && !sandboxId) throw new AppError('VALIDATION', `${input.action} needs the sandboxId that create returned`)
-    if (input.action === 'create') {
-      const record = await ctx.system.createSandbox({ source: input.source, network: input.network, ignored: input.ignored })
-      return {
-        ...record,
-        note: `镜像根是 ${record.root}：脚本用 system:edit 写进去，system:run 传 cwd=${record.root} 跑，跑完用 diff 看变化；镜像里的命令写不到镜像外，${record.network ? '可以联网' : '连不上网'}。用完 discard。`,
-      }
-    }
-    if (input.action === 'diff') return ctx.system.diffSandbox({ sandboxId, maxFiles: input.maxFiles })
-    if (input.action === 'discard') return ctx.system.discardSandbox(sandboxId)
-
-    // 落回：先算差量，把删除、覆盖、敏感路径都摆给用户看，确认了才写。
-    const changes = await ctx.system.diffSandbox({ sandboxId, maxFiles: 2000 })
-    const selection = selectSandboxChanges(changes, input.paths)
-    if (isEmpty(selection.created) && isEmpty(selection.modified) && isEmpty(selection.deleted)) return { sandboxId, created: [], modified: [], deleted: [], skippedGit: changes.gitChanged, note: '镜像里没有文件变化，什么都没落。' }
-    const targets = [...selection.created, ...selection.modified, ...selection.deleted].map((path) => join(changes.source, path))
-    const sensitive = targets.filter((path) => isSensitiveSystemMutationPath(path) || isCredentialPath(path))
-    await ctx.approval.awaitConfirmation(
-      buildSandboxApplyConfirmationMessage(changes.source, selection, sensitive),
-      ctx.abortSignal,
-      createManualApprovalOptions({
-        approvalRisk: 'high',
-        riskScope: 'system-sandbox:apply',
-        operation: {
-          key: createApprovalOperationKey('sandbox-apply', { sandboxId, created: selection.created.length, modified: selection.modified.length, deleted: selection.deleted.length }),
-          label: `把演练沙箱的改动落回 ${changes.source}`,
-          target: changes.source,
-        },
-      })
-    )
-    const applied = await ctx.system.applySandbox({ sandboxId, paths: input.paths })
-    return isNull(input.paths) || !input.paths ? applied : { ...applied, note: `只落了指定的 ${input.paths.length} 个路径。` }
-  },
+  execute: (input, ctx) => systemExecutionOperations.sandbox(input, ctx),
 })
 
 // ── 工具集合：按职责类别分组 ────────────────────────────────────

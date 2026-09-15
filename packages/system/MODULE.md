@@ -44,13 +44,13 @@
 | `.` | Node 宿主 | 三个面的全部 |
 | `./contracts` | 任何进程，含浏览器 | 可移植数据 |
 
-模型面的七个工具是本模块的主产品。它们都在 `src/impl/SystemTools.ts`，按文件、执行两类排列，每个工具的定义就是模型看到的全部信息面：一句话摘要、适用与禁用场景、协议、用法、示例、参数说明、权限、能力声明、审批语义，以及 execute 里的执行链路。schema 由 `check:capabilities-schemas` 冻结。
+模型面的七个工具是本模块的主产品。它们都在 `src/impl/SystemTools.ts`，按文件、执行两类排列，每个工具的定义就是模型看到的全部信息面：一句话摘要、适用与禁用场景、协议、用法、示例、参数说明、权限、能力声明。execute 只放简单的一两步（直接调一次宿主端口）；实现多的交给 impl 的类：读、看、写交给 `SystemFileOperations`，跑命令与演练沙箱（含执行前分类、向用户确认、结果整形）交给 `SystemExecutionOperations`。schema 由 `check:capabilities-schemas` 冻结。
 
 截至 2026-09-15，Desktop 和 Workbench 还在用收口前的入口和零件，要随下一次升级迁到上面这三个面上。
 
 ## 骨干链路
 
-七个工具都在 `SystemTools.ts`，每个工具定义上方是它的说明。下表每条链路是该工具 execute 的样子，箭头右边是类的方法或宿主端口 `ctx.system`。
+七个工具都在 `SystemTools.ts`，每个工具定义上方是它的说明。下表每条链路是该工具执行的样子：read / view / edit 在 `SystemFileOperations`，run / sandbox 在 `SystemExecutionOperations`，refresh-environment 与 list-tasks 简单，直接写在 execute 里；箭头右边是类的方法或宿主端口 `ctx.system`。
 
 | 工具 | 链路 |
 | --- | --- |
@@ -148,16 +148,17 @@ src/
 | `SystemProcessManager.ts` | `SystemProcessManagerApi`（同文件） | 受管子进程登记表 |
 | `SystemManagedProcess.ts` | `ManagedSystemProcess`（同文件） | 单个受管子进程的超时、取消、有界终止与收尾 |
 | `SystemOutputDecoder.ts` | `SystemOutputDecoderApi`（同文件） | 子进程输出的 UTF-8 解码 |
+| `SystemExecutionOperations.ts` | `SystemExecutionOperationsApi`（同文件） | system:run 与 system:sandbox 的执行：执行前分类、向用户确认、交给宿主、结果整形 |
 | `SystemFileOperations.ts` | `SystemFileOperationsApi`（同文件） | 读文本、看图片、写三个文件操作，位置按字符算 |
 | `SystemFileHistory.ts` | `SystemFileHistoryApi`（同文件） | 改动前留下的文件版本，供召回与回滚；只在内存里 |
 | `SystemGlobalSearch.ts` | `SystemGlobalSearchApi`（同文件） | 全局搜索：按路径或按内容遍历目录树，给宿主界面用 |
 | `GitIgnoreSystemSearchPolicy.ts` | `SystemSearchIgnorePolicy`（同文件） | 遍历时按各级 .gitignore 判断跳过哪些条目 |
 | `SystemShellUnavailableError.ts` | 错误类，不写接口 | 找不到能用的 shell |
 
-实现分四层，上层可以调下层，下层不调上层：工具（`SystemTools.ts`）→ 宿主（`LocalSystemKernel.ts`）→ 能力（命令、策略、进程、shell、文件操作、文件版本、搜索）→ shell 错误类（`SystemShellUnavailableError.ts`）。每个文件属于哪一层登记在 `scripts/ownership/governed-modules.mjs`。utils 在最底下，谁都可以用，它只引 utils、契约与接口。
+实现分四层，上层可以调下层，下层不调上层：工具（`SystemTools.ts`）→ 宿主（`LocalSystemKernel.ts`）→ 能力（命令、策略、进程、shell、执行操作、文件操作、文件版本、搜索）→ shell 错误类（`SystemShellUnavailableError.ts`）。每个文件属于哪一层登记在 `scripts/ownership/governed-modules.mjs`。utils 在最底下，谁都可以用，它只引 utils、types 与合同。
 
 `./contracts` 入口会被渲染进程加载，它的整条引用链不碰 Node 模块；跨平台兼容层与共享资源目录在 `@velaros-ai/platform`。
 
 `SystemTools.ts` 改了要在差量报告里点名，人复核；`contract/` 的三个文件改了等于改对外契约，也要点名。其余代码由 agent 维护。以上分工、分层、接口与数据的边界、导出规则、环境变量登记都由门禁机械核对。
 
-规模截至 2026-09-15：`src/contract/` 3 个文件约 330 行；`src/types/` 8 个文件约 1160 行，其中 `system.ts` 约 640 行；`src/impl/` 14 个文件约 3140 行，其中 `SystemTools.ts` 约 620 行、`SystemFileOperations.ts` 约 430 行；`src/utils/` 14 个文件约 3150 行。
+规模截至 2026-09-15：`src/contract/` 3 个文件约 320 行；`src/types/` 6 个文件约 1200 行，其中 `system.ts` 约 640 行；`src/impl/` 15 个文件约 3130 行，其中 `SystemTools.ts` 约 480 行、`SystemFileOperations.ts` 约 430 行；`src/utils/` 14 个文件约 3140 行。

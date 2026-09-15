@@ -4,7 +4,8 @@
 // 字段：
 //   directory       相对 packages/ 的目录
 //   name            包名
-//   toolsFile       工具文件（相对包根，没有工具的包不填）：全部工具定义都在这一个文件里，外加它们的分组与挂载。人最先看的地方，改了要在差量报告里点名
+//   toolsFile       工具文件（相对包根，没有工具的包不填）：全部工具定义都在这一个文件里，外加它们的分组与挂载。人最先看的地方，改了要在差量报告里点名；
+//                   execute 只放简单的一两步，语句多了就交给 impl 里的类
 //   contract        对外合同目录：只有三个文件——provides.ts 产品面（交出去的整件能力；类实现的 API 定义在类上方，这里 re-export 登记，
 //                   没有类的公开接口直接声明在这里）、requires.ts 注入面（宿主要塞进来的东西）、constants.ts 约定的常量表（工具身份、错误码、
 //                   环境变量表、公开上限）。改这三个文件等于改对外契约
@@ -41,14 +42,14 @@ export const GovernedModules = [
     hostPort: 'SystemToolSystemApi',
     // 实现文件的分层，从上到下；上层可以引下层与同层，下层不许引上层
     layers: [
-      // 工具：六个工具的定义与挂载
+      // 工具：七个工具的定义与挂载
       ['SystemTools.ts'],
       // 宿主：宿主端口的本机实现
       ['LocalSystemKernel.ts'],
       // 能力：命令、受管子进程、shell；文件操作与搜索
       [
         'SystemCommandRunner.ts', 'SystemSandboxes.ts', 'SystemCommandPolicy.ts', 'SystemShellResolver.ts', 'SystemProcessManager.ts', 'SystemManagedProcess.ts',
-        'SystemOutputDecoder.ts', 'SystemFileOperations.ts', 'SystemFileHistory.ts', 'SystemGlobalSearch.ts', 'GitIgnoreSystemSearchPolicy.ts',
+        'SystemOutputDecoder.ts', 'SystemExecutionOperations.ts', 'SystemFileOperations.ts', 'SystemFileHistory.ts', 'SystemGlobalSearch.ts', 'GitIgnoreSystemSearchPolicy.ts',
       ],
       // shell 错误类
       ['SystemShellUnavailableError.ts'],

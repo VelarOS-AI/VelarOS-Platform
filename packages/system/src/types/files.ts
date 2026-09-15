@@ -20,7 +20,7 @@ export interface SystemReadFileInput {
 }
 
 /** 读文本文件的入参：files 里每项一个文件，一个文件就一项，一批就多项；一次调用总共最多返回 20 万字符。 */
-export interface SystemReadInput {
+export type SystemReadInput = {
   files: SystemReadFileInput[]
 }
 
@@ -56,7 +56,7 @@ export interface SystemViewFileInput {
 }
 
 /** 看图片的入参：files 每项一个文件，一个文件就一项，一批就多项。 */
-export interface SystemViewInput {
+export type SystemViewInput = {
   files: SystemViewFileInput[]
 }
 
@@ -95,7 +95,7 @@ export interface SystemEditFileInput {
 }
 
 /** 写文件的入参：files 每项一个文件，一个文件就一项，一批就多项，各自带各自的改法；一批全成或全不成。 */
-export interface SystemEditInput {
+export type SystemEditInput = {
   files: SystemEditFileInput[]
 }
 

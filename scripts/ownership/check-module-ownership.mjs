@@ -3,21 +3,22 @@
 //
 // 这里不拦编辑，只核对：
 //   1. 工具文件：全部工具定义都在登记的那一个文件里，定义工具的函数只在那里被调用（没有工具的包不登记 toolsFile / toolDefiner / hostPort）。
+//      工具文件只放定义：execute 只许简单的一两步（最多 ExecuteStatementLimit 条语句），实现多的交给 impl 里的类。
 //   2. types：扁平；只放类型，一个值都不许有；只用 type import，只引 types 与合同；哪些类型出包由合同的签名闭包决定。
 //      可移植文件（types/<portable> 与 contract/constants.ts）不 import、不用 Node 类型，可移植数据不带函数成员。
 //   3. contract：只有 provides.ts、requires.ts、constants.ts 三个文件。provides / requires 只放带中文说明的接口声明（每个成员也有说明），
 //      或者 export type { X } from '../impl/<类文件>.js' 登记类上方的接口；constants.ts 只放 Object.freeze 的常量表、字符串身份和由它们派生的类型别名。
 //   4. impl：扁平，一个类一个文件、文件名即类名（工具文件不放类）；只许声明并导出本文件的类实现的接口和以类名开头的配套接口，
-//      都要有中文说明，其余类型不许写在这里（带 typeof 的除外）；每个类 implements 一个接口：公开的在 interface 里、内部的写在类上方（继承 Error 的错误类除外），公开成员都在接口里，没有公开静态成员，
+//      都要有中文说明，其余类型不许写在这里（带 typeof 的除外）；每个类 implements 一个接口：写在类上方（公开的在 provides.ts 登记，注入面的在 requires.ts；继承 Error 的错误类除外），公开成员都在接口里，没有公开静态成员，
 //      私有方法必须用到实例状态；模块级函数只许是对外入口要的工厂。按 layers 分层，下层不许引上层。
-//   5. utils：扁平；只放函数和常量，不放类、不声明类型、没有模块级 let；每个函数上方一句中文说明；只引 utils、contract 与 interface。
+//   5. utils：扁平；只放函数和常量，不放类、不声明类型、没有模块级 let；每个函数上方一句中文说明；只引 utils、types 与合同。
 //   6. 对外入口由合同控制：入口文件只有转发语句；导出的类型只能来自 provides、requires、公开的 types 文件、常量表派生的别名，或 provides 登记的类上方接口；
 //      导出的值要么是 contract 的常量表，要么是 impl 里显式标注了公开接口类型的实例或工厂，不许导出类、utils 函数和内部接口；
 //      provides 与 requires 里的每个声明都从根入口导出；公开接口引用到的数据类型都导出，导出的数据类型都被公开接口用到；
 //      可移植数据文件里没有公开接口用不到的类型。package.json 的 exports 与入口文件一一对应。
 //   7. 会被渲染进程加载的入口，整条值引用链里不许出现 Node 内置模块。
 //   8. 环境变量：代码里出现的每个 VELAROS_* 名字都登记在常量表的环境变量表里，登记了的都有人用。
-//      宿主端口：登记的端口接口里的每个方法，工具文件里都有工具在调；没人调的方法不许留在注入面。
+//      宿主端口：登记的端口接口里的每个方法，都有工具在调（工具文件自己调，或它委托的 impl 类在调）；没人调的方法不许留在注入面。
 //   9. src 下只有 contract、types、impl、utils、exports 五个目录，src 根上不放源文件；依赖只许写在文件头，不许用内联 import 类型和动态 import。
 //  10. 模块卡片十节齐全；「提供什么」列出全部入口、导出的每个值和每个公开接口；「骨干链路」点到每个工具；「结构」写明目录树。
 //  11. 不变量登记表每行编号唯一、检验方式合法、检验器真的存在；卡片里的条数如实。包的 test 脚本跑验收测试。
@@ -57,6 +58,33 @@ function walkSources(directory) {
 function childDirectories(directory) {
   if (!existsSync(directory)) return []
   return readdirSync(directory).filter((entry) => statSync(join(directory, entry)).isDirectory())
+}
+
+/** 工具文件里一个 execute 最多几条语句（含嵌套函数里的）；再多就算有实现，要搬进 impl 的类。 */
+const ExecuteStatementLimit = 4
+
+/** 语句节点的种类：块本身不算，块里的每条语句各算一条。 */
+const StatementKinds = new Set([
+  ts.SyntaxKind.VariableStatement, ts.SyntaxKind.ExpressionStatement, ts.SyntaxKind.ReturnStatement, ts.SyntaxKind.IfStatement,
+  ts.SyntaxKind.ForStatement, ts.SyntaxKind.ForOfStatement, ts.SyntaxKind.ForInStatement, ts.SyntaxKind.WhileStatement, ts.SyntaxKind.DoStatement,
+  ts.SyntaxKind.TryStatement, ts.SyntaxKind.ThrowStatement, ts.SyntaxKind.SwitchStatement, ts.SyntaxKind.FunctionDeclaration,
+])
+
+/** 数一个函数里一共有几条语句（含嵌套函数）；表达式体的箭头函数算一条。 */
+function countStatements(node) {
+  if (ts.isArrowFunction(node) && !ts.isBlock(node.body)) return 1 + countNested(node.body)
+  return countNested(node)
+}
+
+/** 数节点之下的语句节点。 */
+function countNested(node) {
+  let count = 0
+  const visit = (child) => {
+    if (StatementKinds.has(child.kind)) count += 1
+    ts.forEachChild(child, visit)
+  }
+  ts.forEachChild(node, visit)
+  return count
 }
 
 /** 按「## 标题」把卡片切成小节。 */
@@ -232,6 +260,13 @@ for (const module of GovernedModules) {
         const nameType = nameProperty ? checker.getTypeAtLocation(nameProperty.initializer) : undefined
         if (nameType?.isStringLiteral()) toolNames.push(nameType.value)
         else fail(`${label}: ${module.toolsFile} 里有一个工具的 name 不是常量字面量，门禁认不出它叫什么`)
+        const executeProperty = spec && ts.isObjectLiteralExpression(spec)
+          ? spec.properties.find((property) => ts.isPropertyAssignment(property) && property.name.getText(toolsSourceFile) === 'execute')
+          : undefined
+        const statements = executeProperty ? countStatements(executeProperty.initializer) : 0
+        if (statements > ExecuteStatementLimit) {
+          fail(`${label}: ${module.toolsFile} 里工具 ${nameType?.isStringLiteral() ? nameType.value : '(未知)'} 的 execute 有 ${statements} 条语句；工具文件只放定义，execute 只写简单的一两步（最多 ${ExecuteStatementLimit} 条），实现多的放进 ${module.impl}/ 的类，这里一行交给它`)
+        }
       }
       ts.forEachChild(node, visitTools)
     }
@@ -803,7 +838,11 @@ for (const module of GovernedModules) {
       }
       ts.forEachChild(node, visitCalls)
     }
-    visitCalls(toolsSourceFile)
+    // 工具文件自己调的，加上它委托的 impl 类里调的（execute 一行交给类时，端口调用在类里）。
+    const delegated = relativeSpecifiers(toolsSourceFile)
+      .map(({ specifier }) => resolveRelativeImport(toolsFilePath, specifier))
+      .filter((target) => target && inside(target, implRoot))
+    for (const file of [toolsFilePath, ...delegated]) visitCalls(parse(file))
   }
   const hostPortDeclaration = module.hostPort ? publicDeclarations.find((statement) => statement.name.text === module.hostPort) : null
   if (module.hostPort && !hostPortDeclaration) {

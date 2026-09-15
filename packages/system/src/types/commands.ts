@@ -8,7 +8,7 @@ import type { CommandSpec } from '@velaros-ai/platform/contracts'
 
 import type { SystemProcessConfinementProvider } from '../contract/requires.js'
 
-import type { SystemProcessConfinementEvidence, SystemProcessConfinementMode, SystemProcessOwnership, SystemShellDescriptor } from './system.js'
+import type { SystemCommandResult, SystemProcessConfinementEvidence, SystemProcessConfinementMode, SystemProcessOwnership, SystemShellDescriptor } from './system.js'
 
 /**
  * shell 命令的**执行前分类**：只读？要确认？该丢后台？
@@ -150,4 +150,33 @@ export interface SystemProcessConfinementBuildOptions {
   bubblewrapAvailable?: boolean
   /** 临时目录，约束里一律允许写它。 */
   tempDir?: string
+}
+
+// ── 执行类工具的入参与结果 ──────────────────────────────────────
+
+/** system:run 的入参：命令、工作目录（不传用宿主给的默认目录）、超时、是否后台、是否交互式、输出上限，以及只给调度器看的 parallel 与 allowRepeat。 */
+export type SystemRunInput = {
+  command: string
+  cwd?: string
+  timeoutMs?: number
+  background?: boolean
+  interactive?: boolean
+  maxOutputChars?: number
+  parallel?: boolean
+  allowRepeat?: boolean
+}
+
+/** system:run 的结果：带输出窗口说明的命令结果；要了控制台却没拿到时 note 说明怎么改写命令。 */
+export interface SystemRunResult extends SystemCommandResult {
+  note?: string
+}
+
+/** system:refresh-environment 的入参：这个工具不要参数，传了什么都忽略。 */
+export type SystemRefreshEnvironmentInput = Record<string, unknown>
+
+/** system:list-tasks 的入参：taskId 精确查一个；不给就按 limit、onlyRunning 列。 */
+export type SystemListTasksInput = {
+  limit?: number
+  onlyRunning?: boolean
+  taskId?: string
 }
