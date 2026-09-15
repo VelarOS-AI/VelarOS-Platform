@@ -50,6 +50,10 @@
 
 | 时间 | 决策 | 理由 |
 | --- | --- | --- |
+| 09-16 00:15 | project 复查的两份评审（实现层 14 条加 1 条疑似、产品层 49 条）分三路修：① 路径规则公共包加路径身份类问题（别名、大小写、沙箱源目录、`.git` 默认禁写）；② 持久化与执行类问题；③ 契约与提示词，放在前两路之后 | ①② 改的文件基本不相交可以并行；③ 和 ② 都要改执行类与回执，串行免冲突；路径身份问题的根因（按字面判断路径）正好用新加的 core `RealPath` 与 platform 包含判断修 |
+| 09-16 00:15 | 产品层评审建议的「project:read 只收 files」不做，只记下来 | 你说过 project 的工具面不简化；这条是形状统一（与 system:read 一致），牵涉宿主，留给你定 |
+| 09-16 00:10 | `check:host-contract-consumer` 的打包表从写死八个包改成沿依赖递归补齐第一方包 | project 迁入两个公共件后闭包缺包就红了；以后新增公共件不必回来改表 |
+| 09-16 00:05 | agent 第 2 步整文件搬家合成一个提交；`AppRuntimeFacts`、`StatefulToolResults` 这类方案要删的文件先保留到 utils | 公开 API 基线的声明哈希对搬家敏感，拆提交就要多升版本；删文件会让导出名消失，属于第 6 步的破坏性变更 |
 | 09-15 23:45 | 文本文件的编解码、原子写、有界读、流式读抽成新包 `@velaros-ai/text-files`（以 project 的实现为底），报错用本包自己的码当 `AppError.code`；project 在一处把它翻成 `ProjectError`，现有 `instanceof ProjectError` 的分支一个不改 | project 那份全面更健壮（GB18030、严格解码、fsync、权限位精确恢复、拒绝多硬链接）；project 里 190 处按 `ProjectError` 分支，边界翻译最小改动 |
 | 09-15 23:45 | 换行适配（CRLF 文件里的匹配与替换）不合并，各空间保留自己的 | 语义不同：system 按原文主流风格统一新文本，project 只在匹配时适配，合并会改两边的编辑行为 |
 | 09-15 23:45 | agent 方案 3.5 节的 8 处结构冲突按方案建议走（类型手写 + satisfies、可移植单文件、入口平铺四个、1.0.0 放第 6 步、空间知识搬家放第 8 步、工具面删改单独提交）；工具契约拆不拆包第 6 步再定 | 用户授权自行决策；拆包牵动六个空间包与产品的 import，放到入口收口时一次改 |
@@ -87,6 +91,6 @@
 ## 进度
 
 - [x] ① system 结构复查（386ea2d、114a6c3、d692e79）
-- [ ] ② system 复查修 bug（已完成：18 条，9 个提交 21fcb91…c8a2983）、定为仓库标准（已完成）；project 改造（已完成：工具面 8d7513e、入口 bc93fd0、错误码 1ea639d、实现层四路、卡片与不变量，门禁零条）；project 复查修 bug
+- [ ] ② system 复查修 bug（已完成：18 条，9 个提交 21fcb91…c8a2983）、定为仓库标准（已完成）；project 改造（已完成：工具面 8d7513e、入口 bc93fd0、错误码 1ea639d、实现层四路、卡片与不变量，门禁零条）；project 复查修 bug（两份评审已回，修复排队中）
 - [ ] ③ 公共逻辑抽取（已完成：shell-command、rehearsal-sandbox、内核可调用操作表进 agent/tool-contract、project 迁入；进行中：text-files；待做：path-rules、路径包含判断进 platform、真实路径进 core、工具失败构造器）
-- [ ] 其余包（agent 第 1 步完成 18ad853f/da737f17，第 2 步整文件搬家进行中；browser、memory、kernel 方案编写中）：agent → browser → memory → kernel → model → office → agent-lab → development → core → html-artifacts → computer → cli → document-renderer → surface-protocol
+- [ ] 其余包（agent 第 1 步 18ad853f/da737f17、第 2 步 540de0e6 完成，第 3 步前半「类型归位」进行中；browser、memory、kernel、model/office/computer、七个小包的方案编写中）：agent → browser → memory → kernel → model → office → agent-lab → development → core → html-artifacts → computer → cli → document-renderer → surface-protocol
