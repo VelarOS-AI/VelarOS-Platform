@@ -18,7 +18,7 @@
 | `system:read` | 留，改成通用型 | 和 `edit` 配对：按字符取一段并返回它的 range 供精确匹配，识别 UTF-16 与 BOM；一次一批文件；`run` 的输出窗口保留末尾，读文件要的是开头 |
 | `system:view` | 新增 | 图片整张、PDF 按页（一次几页）作为模型可见的内容块交给模型，效果和用户上传一样，一次一批文件；文本工具不该背图片的规则，二进制单独一个工具 |
 | `system:edit` | 留，改成通用型 | 任意内容和精确替换文本走结构化参数，不经过 shell 引号；三种 Windows shell 引号规则各不相同，heredoc 也会被内容撞坏。写敏感路径前过用户确认，`run` 的危险判定管不到 |
-| `system:write` | 删 | 整个文件的写入并进 `system:edit`：不给 oldText 和 range 就是整个写入 |
+| `system:write` | 删 | 整个文件的写入并进 `system:edit`：只给 newText 就是整个写入 |
 | `system:list-tasks` | 留 | 后台任务表只在本包，命令看不到 |
 | `system:refresh-environment` | 留 | 改的是宿主进程的环境变量，子进程做不到 |
 | `system:list` | 删 | `ls` / `find` / `dir` / `Get-ChildItem` |
@@ -38,9 +38,9 @@
 
 - `system:read { files: [{ path, offset?, maxChars?, version? }] }`：只读文本，files 每项一个文件，一个文件就一项、一批最多 20 项，各自带各自的选项；每个文件返回 `content` 和它的 `range { offset, end }`，`maxChars` 默认就是上限 20 万，尽量一次读完，`hasMore` 时把 `range.end` 当下一次的 `offset`；一次调用总共最多 20 万字符，按顺序分给各文件，分完的文件只带位置不带内容。结果的 `files` 一一对应，某个文件读不了只把它那一项换成 `{ path, error: { code, message } }`，全部失败才整个报错。工具入参在协议上必须是一个对象，列表只能挂在一个键下，单个和一批用同一种形状，不另设顶层字段。
 - `system:view { files: [{ path, pages? }] }`：files 每项一个文件，一个文件就一项、一批最多 10 项。图片（PNG、JPEG、GIF、WebP）整张作为模型可见的内容块交给模型，没有字符上限，只有 5 MB 的字节上限；PDF 用各自的 `pages` 指定看哪几页（从 1 起，默认第 1 页，一次最多 20 页），用 pdf-lib 把这几页抽成一份文档交给模型，结果里给出实际的 `pages` 和 `pageCount`。内容块放在结果的 `modelContent` 里按 files 的顺序排，每块前面一行文字说明是哪个文件；某个文件看不了同样只标记它那一项。
-- `system:edit { path, newText?, oldText?, range?, restore? }`，四种组合覆盖全部改法：都不给是整个写入（不存在就新建）；只给 `range` 把 read 读到的那段整个换成 `newText`；`range` 加 `oldText` 只在那段里找唯一的一处换掉。匹配只在 read 读到的范围里做，给了 `oldText` 没给 `range` 直接报错，不在整个文件里找。范围里出现多处时不改文件，返回每处的锚点（位置加前后原文），模型选一个把它的 `range` 传回来就是二次确认，不用重写 `oldText`。替换后返回那段的新内容和新位置，模型不用再读一遍确认。只给 `restore` 就回滚到某个版本。
+- `system:edit { files: [{ path, newText?, edits?, restore? }] }`：files 每项一个文件，一个文件就一项、一批最多 20 项，每项三种改法只用一种：只给 `newText` 整个写入（不存在就新建）；给 `edits` 在文件里改几处（一次最多 50 处），每处 `{ range, oldText?, newText }` 在自己的 `range` 里改，给 `oldText` 就只换这段里唯一的那一处，不给就把整段换成 `newText`，空段就是插入；同一个文件的几处一起改，全成或全不成，各处不能重叠，任何一处的 `oldText` 多处匹配就整个文件不动，返回是第几处和每处的锚点；只给 `restore` 回滚到那个版本。改了几处的结果返回盖住所有改动那段的新内容和新位置，超过 20 万字符截到上限。结果的 `files` 一一对应，某个文件失败只标记它那一项。
 
-**版本、召回、回滚。** 每次 read 和 edit 的结果都带内容的版本号（字节哈希前 12 位）；edit 改动前把原内容留成一个版本，结果里给出 `previousVersion`。旧状态可以召回：`read { path, version }` 读回那份内容；可以回滚：`edit { path, restore: version }` 一步写回，回滚前的内容也留成版本，回滚本身能再回滚。历史只在内存里，每个文件留最近 10 份，单份不超过 2 MB，总量不超过 64 MB。
+**版本、召回、回滚。** 都按文件走，一批就各自带各自的 `version` 或 `restore`。每次 read 和 edit 的结果都带内容的版本号（字节哈希前 12 位）；edit 改动前把原内容留成一个版本，结果里给出 `previousVersion`。旧状态可以召回：`read { path, version }` 读回那份内容；可以回滚：`edit { path, restore: version }` 一步写回，回滚前的内容也留成版本，回滚本身能再回滚。历史只在内存里，每个文件留最近 10 份，单份不超过 2 MB，总量不超过 64 MB。
 
 「二选一」不再出现在参数面上：可选字段不给就是默认做法。
 

@@ -1,7 +1,7 @@
 /**
  * 系统空间的六个模型面工具。每个工具的全部信息面（摘要、适用与禁用场景、协议、用法、示例、参数、权限、能力声明、审批语义）
  * 和 execute 里的执行链路都在这里，按文件、执行两类排列；文件末尾是它们怎么分组、作为内置 mod 挂进产品、作为能力服务挂进内核。
- * 只留 `system:run` 替代不了的：读和写要把内容和精确匹配绕开 shell 引号，看图片和 PDF 要把内容当图交给模型，后台任务表只在本包，刷新环境改的是宿主进程。
+ * 只留 `system:run` 替代不了的：读和写要把内容和精确匹配绕开 shell 引号，看图片和 PDF 要把内容当图交给模型，后台任务表只在本包，刷新环境改的是宿主进程。读、看、写都是 files 每项一个文件，一个文件就一项。
  * 列目录、搜文本、看进程和端口、终止进程都用 `system:run` 跑系统命令。
  * 这是人最先看的文件，改了要在差量报告里点名。
  */
@@ -26,7 +26,7 @@ import { createSystemCallableOperations, defineSystemTool } from '../utils/tool.
 import { systemCommandPolicy } from './SystemCommandPolicy.js'
 import { systemFileOperations } from './SystemFileOperations.js'
 
-// ── 文件：读文本、看图片与 PDF（files 每项一个，PDF 多页）、写 ──────────────────────────
+// ── 文件：读文本、看图片与 PDF、写（都是 files 每项一个；PDF 多页；写可以一次改几处）──────────────────────────
 
 /**
  * system:read —— 读文本文件，files 每项一个。
@@ -116,37 +116,64 @@ const viewTool = defineSystemTool<{
 })
 
 /**
- * system:edit —— 写文件：整个写入，或替换一段。
+ * system:edit —— 写文件，files 每项一个：整个写入、改几处或回滚。
  *
- * 链路：敏感路径先向用户确认 → 改动前把原内容留成一个版本 → 只给 newText 就整个写入（不存在则新建） → 给了 range 就只在 read 读到的这段里改，并把改后的新内容和新版本号一起交回；oldText 多处匹配时返回锚点让它二次确认 → restore 回滚到留下的版本。保留编码与换行风格。
+ * 链路：敏感路径先向用户确认 → 改动前把原内容留成一个版本 → 只给 newText 就整个写入（不存在则新建） → 给了 edits 就先在原文上把每一处定下来，定不下来文件不动（oldText 多处匹配时返回第几处和锚点让它二次确认），定下来了从后往前一起套用，并把盖住所有改动那段的新内容和新版本号一起交回 → restore 回滚到留下的版本。保留编码与换行风格；某个文件失败只标记它那一项。
  */
 const editTool = defineSystemTool<{
-  path: string
-  newText?: string
-  oldText?: string
-  range?: { offset: number; end: number }
-  restore?: string
+  files: Array<{
+    path: string
+    newText?: string
+    edits?: Array<{
+      range: { offset: number; end: number }
+      oldText?: string
+      newText: string
+    }>
+    restore?: string
+  }>
 }>({
   name: SystemToolNames.edit,
   role: 'edit',
-  summary: '写文件：只给 newText 就整个写入；加 range 就把 read 读到的那段换成 newText；再加 oldText 就只换这段里的那一处；只给 restore 就回滚到那个版本。改完返回那段的新内容和新版本号，不用再读。',
-  suitable: ['新建脚本、配置、笔记等文本文件。', '改配置或脚本里的某一段。'],
+  summary: '写文件：files 每项一个文件；newText 整个写入，edits 改文件里的几处，restore 回滚到某个版本。改完返回改动那段的新内容和新版本号，不用再读。',
+  suitable: ['新建脚本、配置、笔记等文本文件。', '改配置或脚本里的一处或几处。', '一次改一批文件。'],
   forbidden: ['复制、移动、删除、改权限用 system:run。'],
-  usage: ['先用 system:read 读到要改的那段，把返回的 range 原样传回来，oldText 和原文一字不差；只在这段里找，不给 range 不做匹配。', 'oldText 匹配到多处时文件不会动，会返回每处的锚点；选一个把它的 range 传回来再调一次。', '只给 range 不给 oldText，就是把这段整个换成 newText。', '改错了用 restore 传结果里的 previousVersion 回滚；想先看旧内容就用 system:read 传 version。'],
+  usage: [
+    '先用 system:read 读到要改的那段；edits 每项一处，把返回的 range 原样传回来，oldText 和原文一字不差，只在这段里找。同一个文件的几处放在一个 edits 里，全成或全不成，各处不能重叠。',
+    'oldText 匹配到多处时这个文件不会动，会返回是第几处和每处的锚点；把选中锚点的 range 填回那一处再调一次。',
+    'edits 里只给 range 不给 oldText，就是把这段整个换成 newText；range 是空段就是在那个位置插入。',
+    '改错了用 restore 传结果里的 previousVersion 回滚；想先看旧内容就用 system:read 传 version。',
+    '结果的 files 与传入的一一对应，某个文件失败只有它那一项是 error。',
+  ],
   examples: [
-    { path: '~/notes/todo.md', newText: '- 买牛奶\n' },
-    { path: '~/.zshrc', range: { offset: 0, end: 1200 }, oldText: 'export EDITOR=vim', newText: 'export EDITOR=code' },
+    { files: [{ path: '~/notes/todo.md', newText: '- 买牛奶\n' }] },
+    {
+      files: [
+        {
+          path: '~/.zshrc',
+          edits: [
+            { range: { offset: 0, end: 1200 }, oldText: 'export EDITOR=vim', newText: 'export EDITOR=code' },
+            { range: { offset: 0, end: 1200 }, oldText: 'alias ll=', newText: 'alias l=' },
+          ],
+        },
+        { path: '~/.gitconfig', restore: '3f2a9c1d0e7b' },
+      ],
+    },
   ],
   notes: ['写系统敏感路径会先向用户确认。'],
   schema: z.object({
-    path: z.string().min(1).describe('文件路径，支持 ~。'),
-    newText: z.string().optional().describe('要写进去的文本；回滚时不用给。'),
-    oldText: z.string().optional().describe('要换掉的原文，只在 range 里找、必须只出现一次；不给就整段或整个文件写入。'),
-    range: z.object({
-      offset: z.number().int().nonnegative().describe('起点字符位置。'),
-      end: z.number().int().nonnegative().describe('终点字符位置，不含。'),
-    }).optional().describe('system:read 返回的 range，只在这段里改；给了 oldText 就必须给。'),
-    restore: z.string().min(1).optional().describe('回滚到这个版本，版本号来自 read 或 edit 结果里的 version 或 previousVersion；单独用。'),
+    files: z.array(z.object({
+      path: z.string().min(1).describe('文件路径，支持 ~。'),
+      newText: z.string().optional().describe('整个文件写入的内容，不存在就新建；改几处时不用给，改动写在 edits 里。'),
+      edits: z.array(z.object({
+        range: z.object({
+          offset: z.number().int().nonnegative().describe('起点字符位置。'),
+          end: z.number().int().nonnegative().describe('终点字符位置，不含。'),
+        }).describe('system:read 返回的 range，只在这段里改。'),
+        oldText: z.string().optional().describe('要换掉的原文，只在 range 里找、必须只出现一次；不给就把整段换成 newText。'),
+        newText: z.string().describe('换成的新文本。'),
+      })).min(1).max(50).optional().describe('要改的地方，每项一处；同一个文件的几处一起改，全成或全不成，各处不能重叠。'),
+      restore: z.string().min(1).optional().describe('回滚到这个版本，版本号来自 read 或 edit 结果里的 version 或 previousVersion；单独用。'),
+    })).min(1).max(20).describe('要写的文件，每项一个，一次最多 20 个；每项只用 newText、edits、restore 中的一种。'),
   }),
   permissions: ['fs:read', 'fs:write'],
   capabilities: {

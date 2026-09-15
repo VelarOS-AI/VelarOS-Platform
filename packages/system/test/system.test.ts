@@ -34,6 +34,11 @@ async function readOne(file: { path: string; offset?: number; maxChars?: number;
   return entryOf(await systemFileOperations.read({ files: [file] }))
 }
 
+/** 写一个文件的快捷方式，一律批准。 */
+async function editOne(file: { path: string; newText?: string; edits?: Array<{ range: { offset: number; end: number }; oldText?: string; newText: string }>; restore?: string }) {
+  return entryOf(await systemFileOperations.edit({ files: [file] }, approvingContext))
+}
+
 describe('System capability', () => {
 
   test('builds deterministic platform confinement profiles with an observable backend', () => {
@@ -247,68 +252,108 @@ describe('System capability', () => {
     }
   })
 
-  test('edit writes whole files, replaces within the read range, and hands back the new text', async () => {
+  test('edit writes whole files, changes several places at once within read ranges, and hands back the new text', async () => {
     const root = await mkdtemp(join(tmpdir(), 'velaros-system-edit-'))
     const path = join(root, 'nested', 'config.toml')
     try {
-      const written = await systemFileOperations.edit({ path, newText: 'name = "a"\nport = 80\nport = 80\n' }, approvingContext)
+      const written = await editOne({ path, newText: 'name = "a"\nport = 80\nport = 80\n' })
       expect(written).toMatchObject({ action: 'written', created: true, previousVersion: null })
       if (written.action !== 'written') throw new Error('expected written')
       expect(written.version).toMatch(/^[0-9a-f]{12}$/)
       expect(await readFile(path, 'utf8')).toBe('name = "a"\nport = 80\nport = 80\n')
 
-      await expect(
-        systemFileOperations.edit({ path, oldText: 'port = 80', newText: 'port = 8080' }, approvingContext)
-      ).rejects.toThrow('read the file first')
-
       const whole = await readOne({ path })
-      const ambiguous = await systemFileOperations.edit({ path, range: whole.range, oldText: 'port = 80', newText: 'port = 8080' }, approvingContext)
+      const ambiguous = await editOne({ path, edits: [{ range: whole.range, oldText: 'port = 80', newText: 'port = 8080' }] })
       if (ambiguous.action !== 'ambiguous') throw new Error('expected anchors')
-      expect(ambiguous.matchCount).toBe(2)
+      expect(ambiguous).toMatchObject({ edit: 0, matchCount: 2 })
       expect(ambiguous.anchors.map((anchor) => anchor.range)).toEqual([{ offset: 11, end: 20 }, { offset: 21, end: 30 }])
       expect(ambiguous.anchors[1]!.context).toContain('port = 80\n')
       expect(await readFile(path, 'utf8')).toBe('name = "a"\nport = 80\nport = 80\n')
 
-      const confirmed = await systemFileOperations.edit(
-        { path, range: ambiguous.anchors[1]!.range, oldText: 'port = 80', newText: 'port = 8080' },
-        approvingContext
-      )
-      expect(confirmed).toMatchObject({ action: 'replaced', content: 'port = 8080', range: { offset: 21, end: 32 }, previousVersion: written.version })
-      expect(await readFile(path, 'utf8')).toBe('name = "a"\nport = 80\nport = 8080\n')
+      // 同一个文件两处一起改：一处按锚点确认，一处在整段里唯一；返回盖住两处那段的新内容。
+      const confirmed = await editOne({
+        path,
+        edits: [
+          { range: ambiguous.anchors[1]!.range, oldText: 'port = 80', newText: 'port = 8080' },
+          { range: whole.range, oldText: 'name = "a"', newText: 'name = "ab"' },
+        ],
+      })
+      expect(confirmed).toMatchObject({ action: 'replaced', edits: 2, content: 'name = "ab"\nport = 80\nport = 8080\n', range: { offset: 0, end: 34 }, hasMore: false, previousVersion: written.version })
+      expect(await readFile(path, 'utf8')).toBe('name = "ab"\nport = 80\nport = 8080\n')
+
+      // 任何一处定不下来整个文件就不动：第二处多处匹配，第一处也没套上。
+      const untouched = await editOne({ path, edits: [{ range: { offset: 0, end: 12 }, oldText: 'name = "ab"', newText: 'name = "c"' }, { range: { offset: 0, end: 33 }, oldText: 'port = ', newText: 'p = ' }] })
+      expect(untouched).toMatchObject({ action: 'ambiguous', edit: 1, matchCount: 2 })
+      expect(await readFile(path, 'utf8')).toBe('name = "ab"\nport = 80\nport = 8080\n')
+      await expect(editOne({ path, edits: [{ range: { offset: 0, end: 12 }, newText: 'x' }, { range: { offset: 5, end: 20 }, newText: 'y' }] })).rejects.toThrow('overlap')
+      expect(await readFile(path, 'utf8')).toBe('name = "ab"\nport = 80\nport = 8080\n')
 
       const recalled = await readOne({ path, version: written.version })
       expect(recalled.content).toBe('name = "a"\nport = 80\nport = 80\n')
       expect(recalled.version).toBe(written.version)
       await expect(systemFileOperations.read({ files: [{ path, version: 'nope' }] })).rejects.toThrow('not in history')
 
-      const window = await readOne({ path, offset: 11, maxChars: 10 })
+      const window = await readOne({ path, offset: 12, maxChars: 10 })
       expect(window.content).toBe('port = 80\n')
-      const replaced = await systemFileOperations.edit(
-        { path, range: window.range, oldText: 'port = 80', newText: 'port = 8080' },
-        approvingContext
-      )
-      expect(replaced).toMatchObject({ action: 'replaced', content: 'port = 8080\n', range: { offset: 11, end: 23 } })
-      expect(await readFile(path, 'utf8')).toBe('name = "a"\nport = 8080\nport = 8080\n')
+      const replaced = await editOne({ path, edits: [{ range: window.range, oldText: 'port = 80', newText: 'port = 8080' }] })
+      expect(replaced).toMatchObject({ action: 'replaced', edits: 1, content: 'port = 8080\n', range: { offset: 12, end: 24 } })
+      expect(await readFile(path, 'utf8')).toBe('name = "ab"\nport = 8080\nport = 8080\n')
 
-      const swapped = await systemFileOperations.edit({ path, range: { offset: 0, end: 11 }, newText: 'name = "b"\n' }, approvingContext)
+      const swapped = await editOne({ path, edits: [{ range: { offset: 0, end: 12 }, newText: 'name = "b"\n' }] })
       expect(swapped).toMatchObject({ action: 'replaced', content: 'name = "b"\n' })
       expect(await readFile(path, 'utf8')).toBe('name = "b"\nport = 8080\nport = 8080\n')
+      const inserted = await editOne({ path, edits: [{ range: { offset: 0, end: 0 }, newText: '# top\n' }] })
+      expect(inserted).toMatchObject({ action: 'replaced', content: '# top\n', range: { offset: 0, end: 6 } })
+      expect(await readFile(path, 'utf8')).toBe('# top\nname = "b"\nport = 8080\nport = 8080\n')
 
-      const overwritten = await systemFileOperations.edit({ path, newText: 'fresh\n' }, approvingContext)
+      const overwritten = await editOne({ path, newText: 'fresh\n' })
       expect(overwritten).toMatchObject({ action: 'written', created: false })
       if (overwritten.action !== 'written') throw new Error('expected written')
       expect(await readFile(path, 'utf8')).toBe('fresh\n')
 
-      const restored = await systemFileOperations.edit({ path, restore: written.version }, approvingContext)
+      const restored = await editOne({ path, restore: written.version })
       expect(restored).toMatchObject({ action: 'restored', version: written.version, previousVersion: overwritten.version })
       expect(await readFile(path, 'utf8')).toBe('name = "a"\nport = 80\nport = 80\n')
-      await expect(systemFileOperations.edit({ path, restore: 'nope' }, approvingContext)).rejects.toThrow('not in history')
-      await expect(systemFileOperations.edit({ path, restore: written.version, newText: 'x' }, approvingContext)).rejects.toThrow('restore goes alone')
-      await expect(systemFileOperations.edit({ path }, approvingContext)).rejects.toThrow('newText is required')
+      await expect(editOne({ path, restore: 'nope' })).rejects.toThrow('not in history')
+      await expect(editOne({ path, restore: written.version, newText: 'x' })).rejects.toThrow('each go alone')
+      await expect(editOne({ path })).rejects.toThrow('Give newText')
+      await expect(editOne({ path, edits: [{ range: { offset: 0, end: 6 }, oldText: 'missing', newText: 'x' }] })).rejects.toThrow('not found within range')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
 
-      await expect(
-        systemFileOperations.edit({ path, range: { offset: 0, end: 6 }, oldText: 'missing', newText: 'x' }, approvingContext)
-      ).rejects.toThrow('not found within range')
+  test('edit takes a batch: writes, edits and rollbacks per file, a failing file only marks its own entry', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'velaros-system-edit-batch-'))
+    const a = join(root, 'a.txt')
+    const b = join(root, 'b.txt')
+    try {
+      const created = await systemFileOperations.edit({ files: [{ path: a, newText: 'alpha\n' }, { path: b, newText: 'beta\n' }] }, approvingContext)
+      expect(created.files.map((entry) => ('error' in entry ? entry.error.code : entry.action))).toEqual(['written', 'written'])
+      const versionA = entryOf(created, 0).version
+      const versionB = entryOf(created, 1).version
+
+      const changed = await systemFileOperations.edit({
+        files: [
+          { path: a, edits: [{ range: { offset: 0, end: 6 }, oldText: 'alpha', newText: 'ALPHA' }] },
+          { path: join(root, 'missing.txt'), edits: [{ range: { offset: 0, end: 1 }, newText: 'x' }] },
+          { path: b, newText: 'BETA\n' },
+        ],
+      }, approvingContext)
+      expect(changed.files.map((entry) => ('error' in entry ? entry.error.code : entry.action))).toEqual(['replaced', 'NOT_FOUND', 'written'])
+      expect(await readFile(a, 'utf8')).toBe('ALPHA\n')
+      expect(await readFile(b, 'utf8')).toBe('BETA\n')
+
+      const rolledBack = await systemFileOperations.edit({ files: [{ path: a, restore: versionA }, { path: b, restore: versionB }] }, approvingContext)
+      expect(rolledBack.files.map((entry) => ('error' in entry ? entry.error.code : entry.action))).toEqual(['restored', 'restored'])
+      expect(await readFile(a, 'utf8')).toBe('alpha\n')
+      expect(await readFile(b, 'utf8')).toBe('beta\n')
+
+      const recalled = await systemFileOperations.read({ files: [{ path: a, version: entryOf(rolledBack, 0).previousVersion! }, { path: b, version: entryOf(rolledBack, 1).previousVersion! }] })
+      expect(recalled.files.map((entry) => ('error' in entry ? entry.error.code : entry.content))).toEqual(['ALPHA\n', 'BETA\n'])
+
+      await expect(systemFileOperations.edit({ files: [{ path: join(root, 'x.txt'), restore: 'nope' }, { path: join(root, 'y.txt'), restore: 'nope' }] }, approvingContext)).rejects.toThrow('not in history')
+      await expect(systemFileOperations.edit({ files: [] }, approvingContext)).rejects.toThrow('files is empty')
     } finally {
       await rm(root, { recursive: true, force: true })
     }
@@ -319,7 +364,7 @@ describe('System capability', () => {
     const path = join(root, 'lines.txt')
     try {
       await writeFile(path, 'a\r\nb\r\nc\r\n')
-      const result = await systemFileOperations.edit({ path, range: { offset: 0, end: 9 }, oldText: 'a\nb', newText: 'x\ny' }, approvingContext)
+      const result = await editOne({ path, edits: [{ range: { offset: 0, end: 9 }, oldText: 'a\nb', newText: 'x\ny' }] })
       expect(result.action).toBe('replaced')
       expect(await readFile(path, 'utf8')).toBe('x\r\ny\r\nc\r\n')
     } finally {

@@ -108,19 +108,29 @@ export interface SystemTextSlice {
   range: SystemTextRange
 }
 
+/** 一处改动：在 range 这段里改；给 oldText 就只换这段里唯一的那一处，不给就把整段换成 newText，range 是空段就是在那个位置插入。 */
+export interface SystemTextEdit {
+  range: SystemTextRange
+  oldText?: string
+  newText: string
+}
+
 /**
- * 写文件的入参，四种组合覆盖全部改法：
- * 只给 newText：把它当整个文件写进去；加 range：把 read 读到的这段整个换成 newText；
- * 再加 oldText：只在这段里找 oldText 换掉，匹配只在 read 读到的范围里做，没有 range 就不做匹配；
+ * 改一个文件，三种改法各自一项、只用一种：
+ * 只给 newText：把它当整个文件写进去，不存在就新建；给 edits：在 read 读到的范围里改这几处，同一个文件的几处一起改，全成或全不成，各处不能重叠；
  * 只给 restore：回到改动前留下的那个版本。
- * oldText 在范围里匹配到多处时不改文件，返回每处的锚点，把选中锚点的 range 传回来就是二次确认。
+ * 某处的 oldText 在范围里匹配到多处时这个文件不动，返回是第几处和每处的锚点，把选中锚点的 range 填回那一处就是二次确认。
  */
-export interface SystemEditInput {
+export interface SystemEditFileInput {
   path: string
   newText?: string
-  oldText?: string
-  range?: SystemTextRange
+  edits?: SystemTextEdit[]
   restore?: string
+}
+
+/** 写文件的入参：files 每项一个文件，一个文件就一项，一批就多项，各自带各自的改法。 */
+export interface SystemEditInput {
+  files: SystemEditFileInput[]
 }
 
 /** 整个文件写入的结果：version 是写完后的版本号，previousVersion 是改动前留下的版本，新建或没留下时为 null。 */
@@ -134,10 +144,11 @@ export interface SystemEditWrittenResult {
   totalChars: number
 }
 
-/** 替换的结果：content 是改动后那一段的新内容，不用再读一遍确认；range 是它在新文件里的位置。 */
+/** 改了几处的结果：edits 是改了几处；content 是盖住所有改动那段（各处 range 的并集）改后的新内容，range 是它在新文件里的位置，不用再读一遍确认；这段超过 20 万字符时截到上限，hasMore 为真。 */
 export interface SystemEditReplacedResult {
   path: string
   action: 'replaced'
+  edits: number
   version: string
   previousVersion: Nullable<string>
   bytes: number
@@ -163,16 +174,23 @@ export interface SystemEditAnchor {
   context: string
 }
 
-/** oldText 匹配到多处时的结果：文件没动，anchors 列出每处（最多 20 个），matchCount 是总数；选一个把它的 range 传回来确认。 */
+/** 某处的 oldText 匹配到多处时的结果：文件没动，edit 是 edits 里的第几处（从 0 起），anchors 列出每处（最多 20 个），matchCount 是总数；选一个把它的 range 填回那一处再来一次。 */
 export interface SystemEditAmbiguousResult {
   path: string
   action: 'ambiguous'
+  edit: number
   anchors: SystemEditAnchor[]
   matchCount: number
   totalChars: number
 }
 
-export type SystemEditResult = SystemEditWrittenResult | SystemEditReplacedResult | SystemEditRestoredResult | SystemEditAmbiguousResult
+/** 一个文件写完的结果。 */
+export type SystemEditFileResult = SystemEditWrittenResult | SystemEditReplacedResult | SystemEditRestoredResult | SystemEditAmbiguousResult
+
+/** 写文件的结果：files 与入参的 files 一一对应，每项是这个文件的结果或它的失败；某个文件失败不影响其他文件，全部失败时整个调用报错。 */
+export interface SystemEditResult {
+  files: Array<SystemEditFileResult | SystemFileFailure>
+}
 
 // ── 文本文件的编码与内容 ────────────────────────────────────────
 

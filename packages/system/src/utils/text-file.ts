@@ -18,16 +18,20 @@ const UTF16LE_BOM = Buffer.from([0xFF, 0xFE])
 const UTF16BE_BOM = Buffer.from([0xFE, 0xFF])
 
 /**
- * 读与看的上限：readChars 是文本一次调用总共最多返回的字符数（每个文件也是它，默认就读到上限）；readFiles、viewFiles 是一次最多几个文件；
- * pdfPages 是一份 PDF 一次最多几页；imageBytes 是交给模型的图片上限；fileBytes 是读进来的文件上限，再大就让模型用系统命令截取。
+ * 读、看、写的上限：readChars 是文本一次调用总共最多返回的字符数（每个文件也是它，默认就读到上限，edit 返回的改后内容也截到它）；
+ * readFiles、viewFiles、editFiles 是一次最多几个文件；editsPerFile 是一个文件一次最多改几处；pdfPages 是一份 PDF 一次最多几页；
+ * imageBytes 是交给模型的图片上限；fileBytes 是读进来的文件上限，再大就让模型用系统命令截取；editableBytes 是能做精确替换的文件上限。
  */
-export const SystemFileReadLimits = Object.freeze({
+export const SystemFileLimits = Object.freeze({
   readChars: 200_000,
   readFiles: 20,
   viewFiles: 10,
+  editFiles: 20,
+  editsPerFile: 50,
   pdfPages: 20,
   imageBytes: 5 * 1024 * 1024,
   fileBytes: 20 * 1024 * 1024,
+  editableBytes: 2 * 1024 * 1024,
 })
 
 /** 读取一个文本文件，识别编码后返回原始字节、文本内容与编码；二进制文件报错。 */
