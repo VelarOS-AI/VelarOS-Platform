@@ -17,13 +17,9 @@ import {
   shouldSkipSystemSearchProtectedDirectory,
 } from '../utils/search.js'
 import { readSystemTextFile } from '../utils/text-file.js'
+import { SystemTuning } from '../utils/tuning.js'
 
 import { GitIgnoreSystemSearchPolicy } from './GitIgnoreSystemSearchPolicy.js'
-
-const DefaultSearchLimit = 60
-const DefaultSearchMaxDepth = 6
-/** 内容搜索跳过大于这个字节数的文件。 */
-const MaxSearchFileBytes = 1024 * 1024
 
 /**
  * 全局搜索：在一棵目录树里按路径名或按文件内容找东西，是本地内核 `globalSearch` 的实现，给宿主自己的界面用。
@@ -72,7 +68,7 @@ export class SystemGlobalSearch implements SystemGlobalSearchApi {
     abortSignal?: AbortSignal
   ): Promise<SystemGlobalSearchResult> {
     const query = options.query.trim()
-    const limit = options.limit ?? DefaultSearchLimit
+    const limit = options.limit ?? SystemTuning.search.limit
     const entries: SystemFileEntry[] = []
     const extensions = normalizeExtensions(options.extensions)
     const entryTypes = new Set(options.entryTypes ?? ['file', 'directory'])
@@ -106,8 +102,8 @@ export class SystemGlobalSearch implements SystemGlobalSearchApi {
     options: SystemGlobalSearchOptions,
     abortSignal?: AbortSignal
   ): Promise<SystemGlobalSearchResult> {
-    const limit = options.limit ?? DefaultSearchLimit
-    const maxResultsPerFile = options.maxResultsPerFile ?? 5
+    const limit = options.limit ?? SystemTuning.search.limit
+    const maxResultsPerFile = options.maxResultsPerFile ?? SystemTuning.search.resultsPerFile
     const extensions = normalizeExtensions(options.extensions)
     const matches: SystemSearchMatch[] = []
     const matcher = buildLineMatcher({
@@ -120,7 +116,7 @@ export class SystemGlobalSearch implements SystemGlobalSearchApi {
       if (type !== 'file') return false
       if (extensions.size > 0 && !extensions.has(extname(absolutePath).toLowerCase())) return false
       const stats = await lstat(absolutePath).catch(() => null)
-      if (!stats || stats.size > MaxSearchFileBytes) return false
+      if (!stats || stats.size > SystemTuning.search.fileBytes) return false
 
       abortSignal?.throwIfAborted()
       const textFile = await readSystemTextFile(absolutePath).catch(() => null)
@@ -167,7 +163,7 @@ export class SystemGlobalSearch implements SystemGlobalSearchApi {
     onEntry: (absolutePath: string, type: SystemFileEntry['type']) => Promise<boolean>
   ): Promise<boolean> {
     abortSignal?.throwIfAborted()
-    const maxDepth = options.maxDepth ?? DefaultSearchMaxDepth
+    const maxDepth = options.maxDepth ?? SystemTuning.search.maxDepth
     const ignorePolicy = new GitIgnoreSystemSearchPolicy(rootPath, { unrestricted: options.unrestricted })
     const visit = async (currentPath: string, depth: number): Promise<boolean> => {
       abortSignal?.throwIfAborted()

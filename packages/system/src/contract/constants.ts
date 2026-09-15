@@ -1,6 +1,7 @@
 /**
  * 约定的常量表（对外合同的一部分）：工具身份与类别、mod 与空间身份、错误码、环境变量表、公开的上限。
- * 宿主按这里的名字登记工具、按错误码判断失败、按环境变量表配置本包；数字上限写进了工具说明。
+ * 宿主按这里的名字登记工具、按错误码判断失败、按环境变量表配置本包；上限直接被工具说明与 schema 引用，是模型看到的数字。
+ * 包内可调、不对外承诺的参数不在这里，在 `utils/tuning.ts`。
  * 不 import 任何东西、不用 Node 专属类型，整个文件随 `./contracts` 入口出包。
  */
 
@@ -107,30 +108,70 @@ export const SystemEnvironmentVariables = Object.freeze({
 /** 环境变量表里的一项。 */
 export type SystemEnvironmentVariable = (typeof SystemEnvironmentVariables)[keyof typeof SystemEnvironmentVariables]
 
-/**
- * 读、看、写的上限：readChars 是文本一次调用总共最多返回的字符数（每个文件也是它，默认就读到上限）；editWholeChars 是 edit 整段返回改后内容的上限，editContextChars 是每处改动前后各带多少字符；
- * readFiles、viewFiles、editFiles 是一次最多几个文件；editsPerFile 是一个文件一次最多改几处；
- * imageBytes 是交给模型的图片上限；fileBytes 是读进来的文件上限，再大就让模型用系统命令截取；editableBytes 是能做精确替换的文件上限。
- */
+/** 读、看、写的上限；读看写三个工具的说明与 schema 直接引用这里，改了模型看到的数字跟着变。 */
 export const SystemFileLimits = Object.freeze({
+  /** 文本一次调用总共最多返回多少字符；每个文件的 maxChars 上限与缺省值也是它。 */
   readChars: 200_000,
+  /** read 一次最多几个文件。 */
   readFiles: 20,
+  /** view 一次最多几张图片。 */
   viewFiles: 10,
+  /** edit 一次最多几个文件。 */
   editFiles: 20,
+  /** edit 一个文件一次最多改几处。 */
   editsPerFile: 50,
+  /** edit 改完后改动那段不超过这么多字符时，结果整段给出新内容。 */
   editWholeChars: 20_000,
+  /** edit 改完后每处前后各带多少字符的新样子。 */
   editContextChars: 200,
+  /** 交给模型的一张图片最大多少字节。 */
   imageBytes: 5 * 1024 * 1024,
+  /** 读进来的文件最大多少字节，再大就让模型用系统命令截取。 */
   fileBytes: 20 * 1024 * 1024,
+  /** 能做精确替换的文件最大多少字节。 */
   editableBytes: 2 * 1024 * 1024,
 })
 
-/** 沙箱的上限：每个内核几个、源目录几个文件几个字节、文本差量单个与总共几个字符。 */
+/** run 与 list-tasks 的上限；两个工具的说明与 schema 直接引用这里。 */
+export const SystemCommandLimits = Object.freeze({
+  /** run 的超时最多给多少毫秒。 */
+  timeoutMs: 600_000,
+  /** run 的 stdout、stderr 各最多返回多少字符。 */
+  outputChars: 50_000,
+  /** 后台任务条目里的 recentOutput 保留输出末尾多少字符。 */
+  recentOutputChars: 4_000,
+  /** list-tasks 一次最多列多少条。 */
+  taskListItems: 100,
+  /** 后台任务 id 最长多少字符。 */
+  taskIdChars: 120,
+})
+
+/** 沙箱的上限；sandbox 工具的说明与 schema 直接引用这里。 */
 export const SystemSandboxLimits = Object.freeze({
+  /** 一个内核同时最多几个沙箱。 */
   sandboxes: 5,
+  /** 源目录最多多少个文件，再多建不出。 */
   files: 200_000,
+  /** 源目录最多多少字节，再多建不出。 */
   bytes: 2 * 1024 * 1024 * 1024,
-  diffFileChars: 200_000,
-  diffTotalChars: 2_000_000,
+  /** diff 新增与修改两列缺省各列多少条。 */
   diffFiles: 200,
+  /** diff 新增与修改两列最多各列多少条；apply 前算差量也按它。 */
+  diffFilesMax: 2000,
+  /** 一次 diff 最多附多少个文本差量。 */
+  textDiffs: 200,
+  /** 单个文本差量最多多少字符。 */
+  diffFileChars: 200_000,
+  /** 一次 diff 的文本差量总共最多多少字符。 */
+  diffTotalChars: 2_000_000,
+  /** apply 一次最多指定多少个路径。 */
+  applyPaths: 500,
+  /** 沙箱 id 最长多少字符。 */
+  idChars: 64,
+})
+
+/** 失败回执的上限：agent 工具契约约定失败回执里每个列表最多列几项，本包各工具都按它截。 */
+export const SystemFailureLimits = Object.freeze({
+  /** 失败回执里每个列表最多列几项：edit 的问题清单与多处匹配的锚点、沙箱落回的冲突与没有变化的路径。 */
+  listItems: 10,
 })

@@ -11,7 +11,7 @@ import { AppError } from '@velaros-ai/core/error'
 import type { PlatformCompatibilityApi } from '@velaros-ai/platform'
 import { currentPlatform } from '@velaros-ai/platform'
 
-import { SystemFileLimits } from '../contract/constants.js'
+import { SystemFailureLimits, SystemFileLimits } from '../contract/constants.js'
 import type { SystemToolContext } from '../contract/requires.js'
 import type { SystemEditFileInput, SystemEditFileResult, SystemEditInput, SystemEditPlan, SystemEditProblem, SystemEditReplacedResult, SystemEditResult, SystemEditTarget, SystemEditWindow, SystemReadFileInput, SystemReadFileResult, SystemReadInput, SystemReadResult, SystemTextEncoding, SystemTextFileContent, SystemTextRange, SystemViewFileInput, SystemViewFileResult, SystemViewInput, SystemViewResult } from '../types/files.js'
 import { assertFileBatchSize, failureEntry, staleProblem, unresolvedEditFailure, withLinkTarget } from '../utils/file-batch.js'
@@ -33,18 +33,12 @@ import {
   stampOf,
   stampProvesUnchanged,
 } from '../utils/text-file.js'
+import { SystemTuning } from '../utils/tuning.js'
 
 import type { SystemFileHistoryApi } from './SystemFileHistory.js'
 import { SystemFileHistory } from './SystemFileHistory.js'
 
 const log = Log.tag('SystemFileOperations')
-
-/** 多处匹配时每个锚点前后各带多少字符原文。 */
-const AnchorContextChars = 80
-/** 多处匹配时最多列出多少个锚点：失败回执里每个数组只保留 10 项。 */
-const MaxAnchors = 10
-/** 超过可编辑上限的文件整个写入前只读开头这么多字节，认编码、拒二进制。 */
-const TextSniffBytes = 8192
 
 /**
  * 三个文件操作：读文本、看图片与 PDF、写。`system:read`、`system:view`、`system:edit` 各调一个方法；列目录和搜文本由 `system:run` 用系统命令做。
@@ -243,7 +237,7 @@ class SystemFileOperations implements SystemFileOperationsApi {
             previous = await readSystemTextFile(target)
             encoding = previous.encoding
           } else {
-            encoding = decodeSystemTextBuffer(await readFileHead(target, TextSniffBytes), target).encoding
+            encoding = decodeSystemTextBuffer(await readFileHead(target, SystemTuning.files.textSniffBytes), target).encoding
           }
         } catch (error) {
           const failure = AppError.from(error)
@@ -295,17 +289,17 @@ class SystemFileOperations implements SystemFileOperationsApi {
       if (!isPresent(change.oldText)) { targets.push({ edit, range: scope, newText: change.newText }); continue }
       if (isEmpty(change.oldText)) { at('oldText is empty; leave it out to replace the whole range'); continue }
       const replacement = adaptReplacementLineEndings(content.slice(scope.offset, scope.end), change.oldText, change.newText)
-      // 只需要知道唯一不唯一和前 MaxAnchors 个锚点，多找一个就停，大文件里的短 oldText 不会扫出百万个匹配。
-      const matches = findOccurrences(content, replacement.oldText, scope, MaxAnchors + 1)
+      // 只需要知道唯一不唯一和前 SystemFailureLimits.listItems 个锚点，多找一个就停，大文件里的短 oldText 不会扫出百万个匹配。
+      const matches = findOccurrences(content, replacement.oldText, scope, SystemFailureLimits.listItems + 1)
       if (isEmpty(matches)) { at(`oldText was not found within range ${scope.offset}-${scope.end}; read that range again`, { reason: 'not-found' }); continue }
       if (matches.length > 1) {
-        const count = matches.length > MaxAnchors ? `at least ${matches.length}` : `${matches.length}`
+        const count = matches.length > SystemFailureLimits.listItems ? `at least ${matches.length}` : `${matches.length}`
         at(`oldText matches ${count} places within range ${scope.offset}-${scope.end}; pick one anchor and put its range here`, {
           reason: 'ambiguous',
           matchCount: matches.length,
-          anchors: matches.slice(0, MaxAnchors).map((offset) => {
+          anchors: matches.slice(0, SystemFailureLimits.listItems).map((offset) => {
             const range = { offset, end: offset + replacement.oldText.length }
-            const around = clampTextRange(content, { offset: range.offset - AnchorContextChars, end: range.end + AnchorContextChars })
+            const around = clampTextRange(content, { offset: range.offset - SystemTuning.files.anchorContextChars, end: range.end + SystemTuning.files.anchorContextChars })
             return { range, context: content.slice(around.offset, around.end) }
           }),
         })

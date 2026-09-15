@@ -23,9 +23,6 @@ import {
   WindowsCommandShellPath,
 } from '../utils/platform.js'
 
-const UnicodeSpacesPattern = /[\u00A0\u2000-\u200A\u202F\u205F\u3000]/g
-
-
 /**
  * 跨平台兼容层：同一个问题按平台给出统一答案——路径文本怎么比、shell 怎么调、进程怎么查怎么杀、应用和数据目录在哪。
  *
@@ -135,6 +132,9 @@ export interface PlatformCompatibilityApi {
 }
 
 export class PlatformCompatibility implements PlatformCompatibilityApi {
+  /** 各种 Unicode 空格（不换行空格、窄空格、全角空格等）：规整用户输入的路径时换成普通空格。 */
+  private static readonly UnicodeSpacesPattern = /[\u00A0\u2000-\u200A\u202F\u205F\u3000]/g
+
   private readonly platform: RuntimePlatform
   private readonly env: NodeJS.ProcessEnv
 
@@ -214,7 +214,7 @@ export class PlatformCompatibility implements PlatformCompatibilityApi {
   }
 
   public normalizeUserPathInput(inputPath: string, homeDir?: string): string {
-    const normalizedPath = inputPath.replace(UnicodeSpacesPattern, ' ').replace(/^@/, '')
+    const normalizedPath = inputPath.replace(PlatformCompatibility.UnicodeSpacesPattern, ' ').replace(/^@/, '')
     const normalizedHome = homeDir?.trim()
     if (!normalizedHome) return normalizedPath
     if (normalizedPath === '~') return normalizedHome

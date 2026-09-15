@@ -16,7 +16,7 @@ import type { CapabilityToken, KernelModuleDefinition } from '@velaros-ai/kernel
 import { createCapabilityToken, createKernelCallableCapability, defineKernelModule, KernelModuleApiVersion } from '@velaros-ai/kernel/contracts/abi'
 
 import type { SystemToolCategoryId } from '../contract/constants.js'
-import { SystemModId, SystemSpaceId, SystemToolCategoryByName, SystemToolNames } from '../contract/constants.js'
+import { SystemCommandLimits, SystemFileLimits, SystemModId, SystemSandboxLimits, SystemSpaceId, SystemToolCategoryByName, SystemToolNames } from '../contract/constants.js'
 import type { SystemBundledModDefinition, SystemCapabilityService, SystemToolCollection } from '../contract/provides.js'
 import type { CreateSystemKernelModuleOptions } from '../contract/requires.js'
 import type { SystemListTasksInput, SystemRefreshEnvironmentInput, SystemRunInput } from '../types/commands.js'
@@ -38,18 +38,18 @@ const readTool = defineSystemTool<SystemReadInput>({
   suitable: ['看日志、配置、脚本、临时文件等文本，一个或一批。'],
   forbidden: ['图片用 system:view；PDF 和其他文档不在这里读；列目录、搜文本用 system:run。'],
   usage: [
-    '只传 path 就默认一次读到上限；没读完的文件把它返回的 range.end 当 offset 接着读。一次调用总共最多 200000 字符，预算在前面的文件用完后，后面的文件不读、那一项是 error，note 会说明。',
+    `只传 path 就默认一次读到上限；没读完的文件把它返回的 range.end 当 offset 接着读。一次调用总共最多 ${SystemFileLimits.readChars} 字符，预算在前面的文件用完后，后面的文件不读、那一项是 error，note 会说明。`,
     '结果的 files 与传入的一一对应，某个文件读不了只有它那一项是 error；version 是这份内容的版本号，传回去可以读旧内容。',
   ],
-  examples: [{ files: [{ path: '~/build.log' }] }, { files: [{ path: '~/.zshrc' }, { path: '~/build.log', offset: 200000 }] }],
+  examples: [{ files: [{ path: '~/build.log' }] }, { files: [{ path: '~/.zshrc' }, { path: '~/build.log', offset: SystemFileLimits.readChars }] }],
   notes: ['其他二进制文件读不了。读私钥、云凭证这类文件会先向用户确认。'],
   schema: z.strictObject({
     files: z.array(z.strictObject({
       path: z.string().min(1).describe('文件路径，支持 ~；相对路径相对 system:run 的默认目录。'),
       offset: z.number().int().nonnegative().optional().describe('从第几个字符开始读，默认 0。'),
-      maxChars: z.number().int().positive().max(200_000).optional().describe('最多返回多少字符，默认也是上限 200000。'),
+      maxChars: z.number().int().positive().max(SystemFileLimits.readChars).optional().describe(`最多返回多少字符，默认也是上限 ${SystemFileLimits.readChars}。`),
       version: z.string().min(1).optional().describe('读改动前留下的某个版本，版本号来自 read 或 edit 的结果；只有本次运行里 edit 留下的版本能召回。'),
-    })).min(1).max(20).describe('要读的文件，每项一个，一次最多 20 个。'),
+    })).min(1).max(SystemFileLimits.readFiles).describe(`要读的文件，每项一个，一次最多 ${SystemFileLimits.readFiles} 个。`),
   }),
   permissions: ['fs:read'],
   capabilities: {
@@ -73,11 +73,11 @@ const viewTool = defineSystemTool<SystemViewInput>({
   forbidden: ['文本文件用 system:read；PDF 和其他文档不在这里看。'],
   usage: ['结果的 files 与传入的一一对应，内容块按同样的顺序排；某个文件看不了只有它那一项是 error。'],
   examples: [{ files: [{ path: '~/Desktop/screenshot.png' }] }, { files: [{ path: '~/Desktop/before.png' }, { path: '~/Desktop/after.png' }] }],
-  notes: ['只认 PNG、JPEG、GIF、WebP，最大 5 MB；别的格式或太大的先用 system:run 转换、缩小。'],
+  notes: [`只认 PNG、JPEG、GIF、WebP，最大 ${SystemFileLimits.imageBytes / 1024 / 1024} MB；别的格式或太大的先用 system:run 转换、缩小。`],
   schema: z.strictObject({
     files: z.array(z.strictObject({
       path: z.string().min(1).describe('图片路径，支持 ~；相对路径相对 system:run 的默认目录。'),
-    })).min(1).max(10).describe('要看的图片，每项一张，一次最多 10 张。'),
+    })).min(1).max(SystemFileLimits.viewFiles).describe(`要看的图片，每项一张，一次最多 ${SystemFileLimits.viewFiles} 张。`),
   }),
   permissions: ['fs:read'],
   capabilities: {
@@ -120,7 +120,7 @@ const editTool = defineSystemTool<SystemEditInput>({
       ],
     },
   ],
-  notes: ['写系统敏感路径、私钥和云凭证这类文件会先向用户确认；路径是符号链接时改的是它指向的文件，结果里 target 给出那个文件。newText 只能写到文本文件或新文件上，已有的二进制文件用 system:run 换。改完之后 windows 每处带新位置，改动那段不超过 20000 字符时 content 和 range 整段给出；旧的 range 已经作废，再改同一个文件用新的。'],
+  notes: [`写系统敏感路径、私钥和云凭证这类文件会先向用户确认；路径是符号链接时改的是它指向的文件，结果里 target 给出那个文件。newText 只能写到文本文件或新文件上，已有的二进制文件用 system:run 换。改完之后 windows 每处带新位置，改动那段不超过 ${SystemFileLimits.editWholeChars} 字符时 content 和 range 整段给出；旧的 range 已经作废，再改同一个文件用新的。`],
   inputReuse: true,
   schema: z.strictObject({
     files: z.array(z.strictObject({
@@ -133,10 +133,10 @@ const editTool = defineSystemTool<SystemEditInput>({
         }).describe('system:read 返回的 range，只在这段里改。'),
         oldText: z.string().optional().describe('要换掉的原文，只在 range 里找、必须只出现一次；不给就把整段换成 newText。'),
         newText: z.string().describe('换成的新文本。'),
-      })).min(1).max(50).optional().describe('要改的地方，每项一处；同一个文件的几处一起改，全成或全不成，各处不能重叠。'),
+      })).min(1).max(SystemFileLimits.editsPerFile).optional().describe('要改的地方，每项一处；同一个文件的几处一起改，全成或全不成，各处不能重叠。'),
       restore: z.string().min(1).optional().describe('回滚到这个版本，版本号来自 read 或 edit 结果里的 version 或 previousVersion；不和 newText、edits 同用，可以带 version 先核对文件没被改过。'),
       version: z.string().min(1).optional().describe('read 返回的这个文件的版本号；给了就先核对文件没被改过，改过就整批不写并给出当前版本。'),
-    })).min(1).max(20).describe('要写的文件，每项一个，一次最多 20 个；每项只用 newText、edits、restore 中的一种。'),
+    })).min(1).max(SystemFileLimits.editFiles).describe(`要写的文件，每项一个，一次最多 ${SystemFileLimits.editFiles} 个；每项只用 newText、edits、restore 中的一种。`),
   }),
   permissions: ['fs:read', 'fs:write'],
   capabilities: {
@@ -171,12 +171,12 @@ const runTool = defineSystemTool<SystemRunInput>({
     '生成命令前读取当前运行环境报告的 shell.kind/name；Windows 按 Git Bash、PowerShell 7、Windows PowerShell、CMD 的可用性选择，并推荐安装 Git for Windows。',
     '严格使用实际 shell 的语法：Git Bash/POSIX 使用 command -v 和 $NAME；PowerShell 使用 Get-Command 和 $env:NAME；CMD 使用 where 和 %NAME%。刷新环境后按新的 shell 重新生成命令。',
     '命令执行失败后先诊断原始退出码和输出；切换 shell 需要重新生成匹配语法的命令，避免重复执行副作用。',
-    '长期服务传 background=true；危险命令会走确认流程。后台命令的状态用返回的 statusContinuation 查；回执里有 outputContinuation 时用它取更多输出，没有就用 system:list-tasks 条目里的 recentOutput（末尾 4000 字符）。不要用 job:*，也不要把内部 logPath 当普通文件读。',
+    `长期服务传 background=true；危险命令会走确认流程。后台命令的状态用返回的 statusContinuation 查；回执里有 outputContinuation 时用它取更多输出，没有就用 system:list-tasks 条目里的 recentOutput（末尾 ${SystemCommandLimits.recentOutputChars} 字符）。不要用 job:*，也不要把内部 logPath 当普通文件读。`,
     '输出可能很长时设置 maxOutputChars；返回窗口固定保留结尾，outputWindow.endPreserved=true 时可直接信任末尾内容。',
   ],
   usage: [
     '传 command；需要特定目录时传 cwd。',
-    '命令会问用户口令、y/n 或选项时传 interactive=true：命令在控制台里跑，用户在卡片里输入，本次调用立刻返回，之后用 system:list-tasks 看结果（recentOutput 是末尾 4000 字符）。',
+    `命令会问用户口令、y/n 或选项时传 interactive=true：命令在控制台里跑，用户在卡片里输入，本次调用立刻返回，之后用 system:list-tasks 看结果（recentOutput 是末尾 ${SystemCommandLimits.recentOutputChars} 字符）。`,
     '停后台任务时执行 system:list-tasks 条目里的 terminateCommand 或 forceTerminateCommand，不要自己拼 pid。',
   ],
   examples: [{ command: 'git --version', maxOutputChars: 2000 }],
@@ -184,10 +184,10 @@ const runTool = defineSystemTool<SystemRunInput>({
   schema: z.strictObject({
     command: z.string().min(1).describe('要执行的 shell 命令。'),
     cwd: z.string().optional().describe('命令的工作目录；不传用宿主给的默认目录。'),
-    timeoutMs: z.number().int().positive().max(600000).optional().describe('命令超时时间，单位毫秒。'),
+    timeoutMs: z.number().int().positive().max(SystemCommandLimits.timeoutMs).optional().describe('命令超时时间，单位毫秒。'),
     background: z.boolean().optional().describe('后台启动，立即返回后台任务；长驻服务传 true。'),
     interactive: z.boolean().optional().describe('命令需要用户输入时传 true：命令在控制台里跑，用户在卡片里输入。'),
-    maxOutputChars: z.number().int().positive().max(50000).optional().describe('stdout/stderr 返回字符上限。'),
+    maxOutputChars: z.number().int().positive().max(SystemCommandLimits.outputChars).optional().describe('stdout/stderr 返回字符上限。'),
     parallel: z.boolean().optional().describe('命令只读、可以和别的命令同时跑时传 true，调度器会并发执行。'),
     allowRepeat: z.boolean().optional().describe('要故意再跑一遍完全相同的命令时传 true，否则同样的调用会被拦。'),
   }),
@@ -259,9 +259,9 @@ const listTasksTool = defineSystemTool<SystemListTasksInput>({
   ],
   notes: ['taskId 只在这里和 system:run 之间流转，不交给 job:*。', '要停掉任务，用 system:run 执行条目里的 terminateCommand；强制停用 forceTerminateCommand。'],
   schema: z.strictObject({
-    limit: z.number().int().positive().max(100).optional().describe('最多返回数量。'),
+    limit: z.number().int().positive().max(SystemCommandLimits.taskListItems).optional().describe('最多返回数量。'),
     onlyRunning: z.boolean().optional().describe('是否只返回运行中任务。'),
-    taskId: z.string().min(1).max(120).optional().describe('精确后台任务 id；取自 system:run 的 backgroundProcess.taskId。'),
+    taskId: z.string().min(1).max(SystemCommandLimits.taskIdChars).optional().describe('精确后台任务 id；取自 system:run 的 backgroundProcess.taskId。'),
   }),
   permissions: [],
   capabilities: {
@@ -317,9 +317,9 @@ const sandboxTool = defineSystemTool<SystemSandboxInput>({
     source: z.string().min(1).optional().describe('create：要镜像的目录，支持 ~；不传就是 system:run 的默认目录。'),
     network: z.boolean().optional().describe('create：镜像里的命令能不能联网，默认不能。'),
     ignored: z.enum(['link', 'copy', 'skip']).optional().describe('create：gitignore 忽略的目录怎么处理：link 链接到真实目录（能读不能写，默认）、copy 复制、skip 不要；忽略的文件一律不复制。'),
-    sandboxId: z.string().min(1).max(64).optional().describe('diff / apply / discard：create 返回的沙箱 id。'),
-    paths: z.array(z.string().min(1)).max(500).optional().describe('apply：只落这些相对路径；不传就全部。'),
-    maxFiles: z.number().int().positive().max(2000).optional().describe('diff：新增与修改各列最多列多少条，默认 200；删除列永远完整。'),
+    sandboxId: z.string().min(1).max(SystemSandboxLimits.idChars).optional().describe('diff / apply / discard：create 返回的沙箱 id。'),
+    paths: z.array(z.string().min(1)).max(SystemSandboxLimits.applyPaths).optional().describe('apply：只落这些相对路径；不传就全部。'),
+    maxFiles: z.number().int().positive().max(SystemSandboxLimits.diffFilesMax).optional().describe(`diff：新增与修改各列最多列多少条，默认 ${SystemSandboxLimits.diffFiles}；删除列永远完整。`),
   }),
   permissions: ['fs:read', 'fs:write'],
   capabilities: {

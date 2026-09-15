@@ -11,15 +11,13 @@ import { AppError } from '@velaros-ai/core/error'
 import type { SystemFileStamp, SystemMediaType, SystemReadFileResult, SystemTextEncoding, SystemTextFileContent, SystemTextRange,SystemTextSlice } from '../types/files.js'
 
 import { readErrnoCode } from './fs.js'
+import { SystemTuning } from './tuning.js'
 
 const UTF8_BOM = Buffer.from([0xEF, 0xBB, 0xBF])
 
 const UTF16LE_BOM = Buffer.from([0xFF, 0xFE])
 
 const UTF16BE_BOM = Buffer.from([0xFE, 0xFF])
-
-/** 小于这个字节数的文件写前一律重读核版本：印记的时间精度不够时，小文件重读几乎不花钱。 */
-const AlwaysRehashBytes = 64 * 1024
 
 /** 从 stat 结果取文件印记（修改时间与大小）；不存在或不是普通文件时为 null。 */
 export function stampOf(stats: Nullable<Stats>): Nullable<SystemFileStamp> {
@@ -30,7 +28,7 @@ export function stampOf(stats: Nullable<Stats>): Nullable<SystemFileStamp> {
 /** 写之前能不能只凭印记断定文件没变：两边印记相同，且文件大到重读不划算；小文件和不存在的文件都回答不能，让调用方重读核版本。 */
 export function stampProvesUnchanged(before: Nullable<SystemFileStamp>, now: Nullable<SystemFileStamp>): boolean {
   if (!before || !now) return false
-  return before.mtimeMs === now.mtimeMs && before.size === now.size && before.size > AlwaysRehashBytes
+  return before.mtimeMs === now.mtimeMs && before.size === now.size && before.size > SystemTuning.files.alwaysRehashBytes
 }
 
 /** 只读文件开头的一段字节（认编码、判二进制用），不把整个文件读进来。 */
@@ -127,9 +125,9 @@ export function encodeSystemTextContent(
   }
 }
 
-/** 判断字节像不像二进制：前 8KB 内出现 NUL 字节即视为二进制。 */
+/** 判断字节像不像二进制：开头 SystemTuning.files.textSniffBytes 字节内出现 NUL 字节即视为二进制。 */
 export function isBinaryBuffer(buf: Buffer): boolean {
-  const checkLength = Math.min(buf.length, 8192)
+  const checkLength = Math.min(buf.length, SystemTuning.files.textSniffBytes)
   for (let i = 0; i < checkLength; i++) {
     if (buf[i] === 0) return true
   }
@@ -151,7 +149,7 @@ function detectSystemTextEncoding(buffer: Buffer): Nullable<SystemTextEncoding> 
 
 /** 按 NUL 字节的分布猜测无 BOM 的 UTF-16 字节序；猜不出返回 null。 */
 function detectUtf16NoBom(buffer: Buffer): Nullable<SystemTextEncoding> {
-  let checkLength = Math.min(buffer.length, 8192)
+  let checkLength = Math.min(buffer.length, SystemTuning.files.textSniffBytes)
   checkLength -= checkLength % 2
   if (checkLength < 16) return null
 

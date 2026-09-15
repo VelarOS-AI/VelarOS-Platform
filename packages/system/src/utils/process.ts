@@ -17,6 +17,8 @@ import type { CommandSpec } from '@velaros-ai/platform/contracts'
 import type { SystemProcessHostOptions } from '../types/commands.js'
 import type { SystemProcessOwnership } from '../types/system.js'
 
+import { SystemTuning } from './tuning.js'
+
 /** 找到 Windows 原生进程宿主的可执行文件：先看显式配置，再看应用资源目录，最后看包里的 native 目录；非 Windows 或找不到返回 null。 */
 export function getSystemProcessHostPath(options: SystemProcessHostOptions = {}): Nullable<string> {
   if ((options.platform ?? process.platform) !== 'win32') return null
@@ -54,7 +56,7 @@ export function buildSystemOwnedProcessSpec(
 }
 
 /** 在期限内执行一条短命令并返回 stdout，超时强制结束。 */
-export function execBounded(file: string, args: string[], timeoutMs = 2_000): Promise<string> {
+export function execBounded(file: string, args: string[], timeoutMs: number = SystemTuning.process.controlTimeoutMs): Promise<string> {
   return new Promise((resolve, reject) => {
     let settled = false
     const timers = new TimerScope({ name: 'SystemProcessControl' })
@@ -73,10 +75,11 @@ export function execBounded(file: string, args: string[], timeoutMs = 2_000): Pr
         timeout: timeoutMs,
         killSignal: 'SIGKILL',
         windowsHide: true,
-        maxBuffer: 32 * 1024,
+        maxBuffer: SystemTuning.process.controlOutputBytes,
       },
       (error, stdout) => finish(error, stdout)
     )
+    // execFile 自己的超时先到；看门狗晚 100 毫秒兜底，防它没收住子进程。
     timers.after(timeoutMs + 100, () => {
       child.kill('SIGKILL')
       child.stdout?.destroy()
@@ -115,7 +118,7 @@ export async function terminateSystemProcessTree(
 }
 
 /** 等待子进程确认启动成功；超时或启动失败时报错。 */
-export function waitForSystemProcessSpawn(child: ChildProcess, timeoutMs = 2_000): Promise<void> {
+export function waitForSystemProcessSpawn(child: ChildProcess, timeoutMs: number = SystemTuning.process.spawnTimeoutMs): Promise<void> {
   return new Promise((resolve, reject) => {
     const timers = new TimerScope({ name: 'SystemProcessSpawn' })
     const cleanup = (): void => {
@@ -140,11 +143,8 @@ export function waitForSystemProcessSpawn(child: ChildProcess, timeoutMs = 2_000
   })
 }
 
-/** 平台命令（ps、lsof、netstat 等）的输出上限。 */
-const MaxPlatformCommandBuffer = 8 * 1024 * 1024
-
 /**
- * 跑一条读系统信息的平台命令（ps、lsof、netstat 等），2 秒超时，返回 stdout；失败时抛 PLATFORM 错误。
+ * 跑一条读系统信息的平台命令（ps、lsof、netstat 等），超时与输出上限见 SystemTuning.systemInfo，返回 stdout；失败时抛 PLATFORM 错误。
  * tolerateLsofEmptyResult 为真时，lsof 以退出码 1、stderr 为空结束算作「没有匹配」，返回空结果而不是报错。
  */
 export async function runPlatformCommand(
@@ -154,8 +154,8 @@ export async function runPlatformCommand(
   try {
     return await promisify(execFile)(commandSpec.file, commandSpec.args, {
       env: process.env,
-      maxBuffer: MaxPlatformCommandBuffer,
-      timeout: 2_000, killSignal: 'SIGKILL', windowsHide: true,
+      maxBuffer: SystemTuning.systemInfo.commandOutputBytes,
+      timeout: SystemTuning.systemInfo.commandTimeoutMs, killSignal: 'SIGKILL', windowsHide: true,
     })
   } catch (error) {
     // lsof 在"没有任何匹配"时以 exit 1 且空 stderr 结束——这不是失败，是空结果集。

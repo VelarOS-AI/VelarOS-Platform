@@ -35,7 +35,7 @@
 | `SystemProcessConfinementProvider` | 可选 | 放在本地内核配置里，没有内置约束后端的平台靠它 |
 | 环境变量，全部登记在 `SystemEnvironmentVariables` | 可选 | 四个输入变量由宿主设，三个标记变量由本包写给子进程 |
 
-**数据面**是 `types/`，只放类型；**常量表**是 `contract/constants.ts`，只放值。`./contracts` 入口就是常量表加可移植数据类型文件 `types/system.ts`：工具身份表 `SystemToolNames`、`SystemToolCategoryByName`，身份常量 `SystemModId`、`SystemSpaceId`，错误码 `SystemErrorCodes`，环境变量表 `SystemEnvironmentVariables`，公开上限 `SystemFileLimits`、`SystemSandboxLimits`，以及经宿主端口流动的全部数据结构。`types/` 里实现自己的工作类型（写入计划、准备好的命令、清单印记、带回调的选项）没有公开签名用到，所以不出包。
+**数据面**是 `types/`，只放类型；**常量表**是 `contract/constants.ts`，只放值。`./contracts` 入口就是常量表加可移植数据类型文件 `types/system.ts`：工具身份表 `SystemToolNames`、`SystemToolCategoryByName`，身份常量 `SystemModId`、`SystemSpaceId`，错误码 `SystemErrorCodes`，环境变量表 `SystemEnvironmentVariables`，公开上限 `SystemFileLimits`、`SystemCommandLimits`、`SystemSandboxLimits`、`SystemFailureLimits`（工具说明与 schema 里的数字都引它们），以及经宿主端口流动的全部数据结构。`types/` 里实现自己的工作类型（写入计划、准备好的命令、清单印记、带回调的选项）没有公开签名用到，所以不出包。
 
 两个入口对应 `package.json` 的 `exports`，源文件在 `src/exports/`，只有转发语句：
 
@@ -125,13 +125,15 @@ src/
   contract/     对外合同：provides.ts 登记产品面（类实现的 API 定义在类上方，这里 re-export；没有类的公开接口声明在这里），requires.ts 注入面，constants.ts 约定的常量表
   types/        只放类型，按域分文件：system.ts 是可移植数据文件，files.ts、commands.ts、sandbox.ts、processes.ts、tool.ts 各管一域；哪些出包由合同的签名决定；平台数据来自 `@velaros-ai/platform`
   impl/         扁平：SystemTools.ts 放七个工具，其余一个类一个文件，文件名就是类名
-  utils/        纯工具函数，按类别分文件；每个函数上方一句中文说明
+  utils/        纯工具函数，按类别分文件；每个函数上方一句中文说明；tuning.ts 是全包的可调参数表
   exports/      两个对外入口，只转发，package.json 的 exports 指向这里
 ```
 
 **看代码的顺序**：`SystemTools.ts` → `contract/` 的三个文件 → 需要时看 utils 里函数上方的一句说明。类的实现、数据字段、工具函数的内部一般不用看。
 
 **合同、类型、常量分开。** `contract/` 是对外合同：provides 登记产品面、requires 定义注入面、constants 放约定的常量表。`types/` 只放类型，一个值都没有，按域分文件；出不出包不看文件，看合同的签名有没有用到。
+
+**常量分四处。** 对外承诺的（工具名、错误码、环境变量、写进工具说明与 schema 的上限）在 `contract/constants.ts`，每个数字一句说明，工具说明里的数字用模板字符串引它，改一处模型看到的跟着变。包内可调的（超时、缓冲、保留条数、缺省条数、阈值）都在 `utils/tuning.ts` 的 `SystemTuning`，按用途分组、每项一句说明，实现里不再散写数字缺省值。某个类里固定用的文案与名单写成那个类的 `private static readonly`。规则本身的数据（危险命令名单、敏感路径名单、搜索跳过的目录）跟着规则留在各自的 utils 文件里；算法与格式里的数字（哈希取几位、编码判定的比例）就地写。跨包的同名常量不共享代码：system 与 project 的命令策略、沙箱契约各持一份，由仓库层的一致性测试守着。以上由门禁核对。
 
 **文件怎么分。** 不拆碎文件：一个文件一个职责，内容多没关系。七个工具的定义连同分组与挂载是一个职责，都在 `SystemTools.ts`；每个类一个文件，文件名就是类名；纯函数按类别进 utils。
 

@@ -7,6 +7,7 @@ import { isNull } from '@velaros-ai/core'
 import type { SystemCommandOutputCapture, SystemCommandResult, SystemProcessConfinementEvidence, SystemProcessOwnership, SystemShellDescriptor } from '../types/system.js'
 
 import { takeUnicodeSafeTail } from './text.js'
+import { SystemTuning } from './tuning.js'
 
 /** 从内部日志路径取出召回用的查询词：只取文件名，最长 240 个字符。 */
 function commandLogQuery(logPath: string): string {
@@ -36,15 +37,13 @@ export function exposeCommandOutputWindow(result: SystemCommandResult): SystemCo
   }
 }
 
-const MAX_VERIFICATION_ISSUE_CHARS = 1_000
-
 /** 从失败命令的 stdout 与 stderr 各取末尾一段，作为验证摘要里的问题描述。 */
 export function summarizeFailureOutput(stdout: string, stderr: string): string[] {
   return (['stdout', 'stderr'] as const).flatMap((stream) => {
     const output = (stream === 'stdout' ? stdout : stderr).trim()
     if (!output) return []
     const prefix = `${stream}:\n`
-    return [`${prefix}${takeUnicodeSafeTail(output, MAX_VERIFICATION_ISSUE_CHARS - prefix.length)}`]
+    return [`${prefix}${takeUnicodeSafeTail(output, SystemTuning.command.verificationIssueChars - prefix.length)}`]
   })
 }
 

@@ -5,7 +5,7 @@
 import { isPresent, toOptional } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import { SystemErrorCodes } from '../contract/constants.js'
+import { SystemErrorCodes, SystemFailureLimits } from '../contract/constants.js'
 import type { SystemEditFailureDetails, SystemEditFileResult, SystemEditProblem, SystemFileFailure } from '../types/files.js'
 
 /** 一批最多几个文件：空的和超过 max 个的都拒绝，operation 只用来写进报错。 */
@@ -19,17 +19,14 @@ export function failureEntry(path: string, failure: AppError): SystemFileFailure
   return { path, error: { code: failure.code, message: failure.message } }
 }
 
-/** 一批里最多放进回执的问题数：Agent 边界的失败回执每个数组只保留 10 项。 */
-const MaxReportedProblems = 10
-
 /**
  * edit 整批定不下来时抛的错误：什么都没写。problems 放在 cause 的 details 里让 Agent 边界原样交给模型，
  * context 里标 executionOutcome 为 not-applied，模型就能用 reuse + changes 只改出问题的那一处再发一次。
  */
 export function unresolvedEditFailure(problems: readonly SystemEditProblem[]): AppError {
   const denied = problems.some((problem) => problem.reason === 'denied')
-  const summary = problems.slice(0, MaxReportedProblems).map((problem) => `files[${problem.file}]${isPresent(problem.edit) ? `.edits[${problem.edit}]` : ''}: ${problem.message}`).join('; ')
-  const details: SystemEditFailureDetails = { executionOutcome: 'not-applied', problems: problems.slice(0, MaxReportedProblems) }
+  const summary = problems.slice(0, SystemFailureLimits.listItems).map((problem) => `files[${problem.file}]${isPresent(problem.edit) ? `.edits[${problem.edit}]` : ''}: ${problem.message}`).join('; ')
+  const details: SystemEditFailureDetails = { executionOutcome: 'not-applied', problems: problems.slice(0, SystemFailureLimits.listItems) }
   const cause = {
     reason: denied ? SystemErrorCodes.editDenied : SystemErrorCodes.editUnresolved,
     details,

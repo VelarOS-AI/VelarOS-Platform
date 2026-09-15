@@ -11,6 +11,7 @@ import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
 import type { SystemProcessCompletion } from '../types/commands.js'
 import { terminateSystemProcessTree } from '../utils/process.js'
+import { SystemTuning } from '../utils/tuning.js'
 
 /** 一个受管子进程，由 `SystemProcessManagerApi.manage` 返回。 */
 export interface ManagedSystemProcess {
@@ -47,11 +48,11 @@ export interface SystemManagedProcessLifecycleOptions {
   timeoutMs?: number
   /** 取消信号，触发后开始终止。 */
   abortSignal?: AbortSignal
-  /** 直接子进程退出后，等后代放开管道的最长毫秒数，默认 1000。 */
+  /** 直接子进程退出后，等后代放开管道的最长毫秒数；不给用 SystemTuning.process.drainTimeoutMs。 */
   drainTimeoutMs?: number
-  /** 发出终止信号后，补发 SIGKILL 之前的宽限毫秒数，默认 500。 */
+  /** 发出终止信号后，补发 SIGKILL 之前的宽限毫秒数；不给用 SystemTuning.process.terminateGraceMs。 */
   terminateGraceMs?: number
-  /** 从开始终止到放弃等待、按 cleanupIncomplete 收尾的最长毫秒数，默认 5000。 */
+  /** 从开始终止到放弃等待、按 cleanupIncomplete 收尾的最长毫秒数；不给用 SystemTuning.process.terminationDeadlineMs。 */
   terminationDeadlineMs?: number
   /** 自定义终止方式；不给就按平台终止整棵进程树。 */
   terminate?: (signal: NodeJS.Signals) => Promise<boolean>
@@ -101,7 +102,7 @@ export class SystemManagedProcess implements ManagedSystemProcess {
       if (this.platform !== 'win32' && child.pid)
         void terminateSystemProcessTree(child.pid, 'SIGKILL', { platform: this.platform })
       // 后代进程可能在直接子进程退出后继续持有继承的管道句柄。
-      this.later(() => this.finish(null, true), options.drainTimeoutMs ?? 1_000)
+      this.later(() => this.finish(null, true), options.drainTimeoutMs ?? SystemTuning.process.drainTimeoutMs)
     })
     child.once('close', (code, exitSignal) => {
       this.exited = true
@@ -131,7 +132,7 @@ export class SystemManagedProcess implements ManagedSystemProcess {
     if (this.finished) {
       const retryTimers = new TimerScope({ name: 'SystemProcessStopRetry' })
       try {
-        await retryTimers.withTimeout(this.options.terminationDeadlineMs ?? 5_000, () => this.terminate(requestedSignal))
+        await retryTimers.withTimeout(this.options.terminationDeadlineMs ?? SystemTuning.process.terminationDeadlineMs, () => this.terminate(requestedSignal))
       } catch {
         // arch-guard:silent-catch-ok 重试结果只由已观察到的进程退出事实决定。
       } finally {
@@ -173,12 +174,12 @@ export class SystemManagedProcess implements ManagedSystemProcess {
   private requestStop(requestedSignal: NodeJS.Signals = 'SIGTERM'): void {
     if (this.stopping || this.finished) return
     this.stopping = true
-    this.later(() => this.finish(null, true), this.options.terminationDeadlineMs ?? 5_000)
+    this.later(() => this.finish(null, true), this.options.terminationDeadlineMs ?? SystemTuning.process.terminationDeadlineMs)
     void this.kill(requestedSignal)
     if (requestedSignal !== 'SIGKILL')
       this.later(() => {
         void this.kill('SIGKILL')
-      }, this.options.terminateGraceMs ?? 500)
+      }, this.options.terminateGraceMs ?? SystemTuning.process.terminateGraceMs)
   }
 
   /** 进程还在时发一次信号；失败不抛，结果交给 completion 如实反映。 */

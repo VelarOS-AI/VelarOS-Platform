@@ -9,9 +9,11 @@ import { isNotNull, isNull, isPresent, toNullable } from '@velaros-ai/core'
 import type { ByteStats, ParsedProcessRow, RawPortEntry } from '../types/processes.js'
 import type { SystemOpenPortInfo, SystemOpenPortQueryOptions, SystemProcessInfo, SystemProcessQueryOptions } from '../types/system.js'
 
+import { SystemTuning } from './tuning.js'
+
 /** 把进程行转成对外的进程信息，再按查询条件筛选：过滤词、pid、名字、命令行片段、用户、只看当前用户、CPU 与内存下限；最多 limit 条（默认 50）。 */
 export function selectSystemProcesses(rows: ParsedProcessRow[], options: SystemProcessQueryOptions): SystemProcessInfo[] {
-  const limit = options.limit ?? 50
+  const limit = options.limit ?? SystemTuning.systemInfo.listItems
   const filter = options.filter?.trim().toLowerCase()
   const pids = new Set(options.pids ?? [])
   const currentUser = toNullable(process.env.USER ?? process.env.LOGNAME ?? process.env.USERNAME)
@@ -48,7 +50,7 @@ export function selectOpenPorts(
   processInfoByPid: Map<number, SystemProcessInfo>,
   options: SystemOpenPortQueryOptions
 ): SystemOpenPortInfo[] {
-  const limit = options.limit ?? 50
+  const limit = options.limit ?? SystemTuning.systemInfo.listItems
   const filter = options.filter?.trim().toLowerCase()
   const ports = new Set(options.ports ?? [])
 
@@ -79,15 +81,14 @@ export function selectOpenPorts(
     .slice(0, limit)
 }
 
-/** 按阈值给一个百分比指标定级：到 highThreshold 为 high，到 warnThreshold 为 warn，否则 normal；没有数值时为 unknown。 */
+/** 按阈值给一个百分比指标定级：到 high 为 high，到 warn 为 warn，否则 normal；没有数值时为 unknown。各项指标的阈值在 SystemTuning.systemInfo.levels。 */
 export function metricLevel(
   value: Nullable<number>,
-  warnThreshold = 75,
-  highThreshold = 90
+  thresholds: { warn: number; high: number }
 ): 'unknown' | 'normal' | 'warn' | 'high' {
   if (!isPresent(value) || !Number.isFinite(value)) return 'unknown'
-  if (value >= highThreshold) return 'high'
-  if (value >= warnThreshold) return 'warn'
+  if (value >= thresholds.high) return 'high'
+  if (value >= thresholds.warn) return 'warn'
   return 'normal'
 }
 

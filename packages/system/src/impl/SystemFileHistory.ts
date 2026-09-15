@@ -7,13 +7,7 @@ import { isEmpty, toNullable } from '@velaros-ai/core'
 
 import type { SystemFileSnapshot } from '../types/files.js'
 import { fileVersionOf } from '../utils/text-file.js'
-
-/** 每个文件最多留几份。 */
-const MaxSnapshotsPerFile = 10
-/** 单份最大字节数，再大不留。 */
-const MaxSnapshotBytes = 2 * 1024 * 1024
-/** 全部历史加起来的上限，超了从最早的删起。 */
-const MaxHistoryBytes = 64 * 1024 * 1024
+import { SystemTuning } from '../utils/tuning.js'
 
 /**
  * 文件版本历史：每次改动前把原内容留一份，供召回旧状态和回滚。只在内存里，每个文件留最近 10 份，单份不超过 2 MB，总量不超过 64 MB，超了从最早的删起。
@@ -32,7 +26,7 @@ export class SystemFileHistory implements SystemFileHistoryApi {
   private totalBytes = 0
 
   public remember(path: string, buffer: Buffer): Nullable<string> {
-    if (buffer.byteLength > MaxSnapshotBytes) return null
+    if (buffer.byteLength > SystemTuning.files.snapshotBytes) return null
     const version = fileVersionOf(buffer)
     const snapshots = this.snapshotsByPath.get(path) ?? []
     const existing = snapshots.find((snapshot) => snapshot.version === version)
@@ -43,7 +37,7 @@ export class SystemFileHistory implements SystemFileHistoryApi {
     snapshots.push({ version, buffer, savedAt: Date.now() })
     this.snapshotsByPath.set(path, snapshots)
     this.totalBytes += buffer.byteLength
-    while (snapshots.length > MaxSnapshotsPerFile) this.drop(path, snapshots, 0)
+    while (snapshots.length > SystemTuning.files.snapshotsPerFile) this.drop(path, snapshots, 0)
     this.trimToBudget()
     return version
   }
@@ -54,7 +48,7 @@ export class SystemFileHistory implements SystemFileHistoryApi {
 
   /** 总量超预算时，从所有文件里最早留下的那份开始删。 */
   private trimToBudget(): void {
-    while (this.totalBytes > MaxHistoryBytes) {
+    while (this.totalBytes > SystemTuning.files.historyBytes) {
       let oldestPath: Nullable<string> = null
       let oldestAt = Number.POSITIVE_INFINITY
       for (const [path, snapshots] of this.snapshotsByPath) {

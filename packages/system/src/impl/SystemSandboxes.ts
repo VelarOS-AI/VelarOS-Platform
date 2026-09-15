@@ -10,7 +10,7 @@ import { isEmpty, Log } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import type { PlatformCompatibilityApi } from '@velaros-ai/platform'
 
-import { SystemSandboxLimits } from '../contract/constants.js'
+import { SystemFailureLimits, SystemSandboxLimits } from '../contract/constants.js'
 import type { SystemProcessConfinementProvider } from '../contract/requires.js'
 import type { SystemSandboxManifest } from '../types/sandbox.js'
 import type { SystemSandboxApplyOptions, SystemSandboxApplyResult, SystemSandboxDiff, SystemSandboxDiffOptions, SystemSandboxDiscardResult, SystemSandboxIgnoredMode, SystemSandboxRecord } from '../types/system.js'
@@ -154,7 +154,7 @@ export class SystemSandboxes implements SystemSandboxesApi {
     const manifest = await readSandboxManifest(entry.directory)
     const changes = await diffMirror(manifest, await scanTree(entry.record.root), { maxFiles: SystemSandboxLimits.files })
     const selection = selectSandboxChanges(changes, options.paths)
-    if (!isEmpty(selection.unknown)) throw new AppError('VALIDATION', `These paths did not change in the sandbox: ${selection.unknown.slice(0, 10).join(', ')}`)
+    if (!isEmpty(selection.unknown)) throw new AppError('VALIDATION', `These paths did not change in the sandbox: ${selection.unknown.slice(0, SystemFailureLimits.listItems).join(', ')}`)
     const applied = await applyMirrorChanges(manifest, selection)
     log.info('sandbox applied', { id: entry.record.id, created: applied.created.length, modified: applied.modified.length, deleted: applied.deleted.length })
     // .git 里的变化差量阶段就已经只汇总不列出，所以这里按差量的 gitChanged 如实报「没落」。

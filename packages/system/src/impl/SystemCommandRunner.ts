@@ -13,6 +13,7 @@ import { isFalse, Log, optionalWhen, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import type { PlatformCompatibilityApi } from '@velaros-ai/platform'
 
+import { SystemCommandLimits } from '../contract/constants.js'
 import type { SystemProcessConfinementProvider } from '../contract/requires.js'
 import type { PreparedSystemCommand, SystemConsoleOutputBuffer, SystemProcessConfinementPolicy } from '../types/commands.js'
 import type { SystemBackgroundProcessInfo, SystemBackgroundTaskQueryOptions, SystemBackgroundTaskRecord, SystemBackgroundTaskStatus, SystemBackgroundTaskTerminateRequest, SystemBackgroundTaskTerminateResult, SystemCommandOutputCapture, SystemCommandResult, SystemConsoleControlResult, SystemConsoleInputRequest, SystemConsoleInterruptRequest, SystemConsoleOutputChunk, SystemConsoleOutputRequest, SystemConsoleSessionInfo, SystemProcessConfinementEvidence, SystemRunCommandOptions } from '../types/system.js'
@@ -21,22 +22,13 @@ import { buildSystemProcessConfinementSpawnSpec } from '../utils/confinement.js'
 import { buildSystemOwnedProcessSpec, terminateSystemProcessTree, waitForSystemProcessSpawn } from '../utils/process.js'
 import { buildSystemNativeCommandSpec, describeSystemNativeCommand, toShellDescriptor } from '../utils/shell.js'
 import { appendBoundedOutput, readBoundedOutputSince } from '../utils/text.js'
+import { SystemTuning } from '../utils/tuning.js'
 
 import type { ManagedSystemProcess } from './SystemManagedProcess.js'
 import { SystemOutputDecoder } from './SystemOutputDecoder.js'
 import type { SystemProcessManagerApi } from './SystemProcessManager.js'
 import type { SystemShellResolverApi } from './SystemShellResolver.js'
 
-const DefaultCommandTimeoutMs = 120_000
-const DefaultOutputChars = 50_000
-/** 后台任务记录里保留的最近输出字符数。 */
-const BackgroundRecentOutputChars = 4_000
-/** 已结束的后台任务最多留多少条，超过从最早结束的删起，进程句柄一起释放。 */
-const MaxFinishedTasks = 200
-/** 交互式任务的控制台缓冲区保留的字符数；再往前的输出会被挤掉，读的时候如实报告丢了多少。 */
-const ConsoleOutputBufferChars = 100_000
-/** 交互式任务启动后给模型的一句话：别在这次工具调用里等输出。 */
-const ConsoleStartedNote = '命令在控制台里跑，正在等用户输入；用户在聊天里的控制台卡片中打字，本次调用不再有输出。'
 const log = Log.tag('SystemCommandRunner')
 
 /**
@@ -101,6 +93,9 @@ export interface SystemCommandRunnerOptions {
 }
 
 export class SystemCommandRunner implements SystemCommandRunnerApi {
+  /** 交互式任务启动后给模型的一句话：别在这次工具调用里等输出。 */
+  private static readonly ConsoleStartedNote = '命令在控制台里跑，正在等用户输入；用户在聊天里的控制台卡片中打字，本次调用不再有输出。'
+
   private readonly tasks = new Map<string, SystemBackgroundTaskRecord>()
   private readonly executions = new Map<string, ManagedSystemProcess>()
   private readonly consoles = new Map<string, SystemConsoleOutputBuffer>()
@@ -132,8 +127,8 @@ export class SystemCommandRunner implements SystemCommandRunnerApi {
       })
     }
     const result = await this.runInForeground(prepared, cwd, {
-      timeoutMs: options.timeoutMs ?? DefaultCommandTimeoutMs,
-      maxOutputChars: options.maxOutputChars ?? DefaultOutputChars,
+      timeoutMs: options.timeoutMs ?? SystemTuning.command.timeoutMs,
+      maxOutputChars: options.maxOutputChars ?? SystemTuning.command.outputChars,
       abortSignal,
     })
     return buildSystemCommandResult(command, cwd, startedAt, { ...result, ownership: prepared.ownership, shell: prepared.shell })
@@ -158,7 +153,7 @@ export class SystemCommandRunner implements SystemCommandRunnerApi {
         if (options.onlyRunning && task.status !== 'running') return false
         return true
       })
-      .slice(0, options.limit ?? 50)
+      .slice(0, options.limit ?? SystemTuning.command.taskListItems)
   }
 
   public async terminateTask(request: SystemBackgroundTaskTerminateRequest): Promise<SystemBackgroundTaskTerminateResult> {
@@ -366,7 +361,7 @@ export class SystemCommandRunner implements SystemCommandRunnerApi {
     let recentOutput = ''
     const decoders = { stdout: new SystemOutputDecoder(), stderr: new SystemOutputDecoder() }
     const append = (text: string): void => {
-      recentOutput = appendBoundedOutput(recentOutput, text, BackgroundRecentOutputChars)
+      recentOutput = appendBoundedOutput(recentOutput, text, SystemCommandLimits.recentOutputChars)
       this.appendConsoleOutput(taskId, text)
       const task = this.tasks.get(taskId)
       if (task) this.tasks.set(taskId, { ...task, recentOutput, updatedAt: Date.now() })
@@ -381,7 +376,7 @@ export class SystemCommandRunner implements SystemCommandRunnerApi {
     const pid = child.pid!
     // 本机只有管道，没有 PTY：真正的终端由宿主在自己的端口实现里提供，那时 channel 报成 pty。
     const consoleSession: Optional<SystemConsoleSessionInfo> = optionalWhen(interactive, {
-      taskId, channel: 'pipe' as const, acceptsInput: true, note: ConsoleStartedNote,
+      taskId, channel: 'pipe' as const, acceptsInput: true, note: SystemCommandRunner.ConsoleStartedNote,
     })
     // 进程收尾后控制台还留在任务上，只是不再接受输入。
     const closedConsole: Optional<SystemConsoleSessionInfo> = consoleSession
@@ -414,12 +409,12 @@ export class SystemCommandRunner implements SystemCommandRunnerApi {
     return backgroundProcess
   }
 
-  /** 已结束的任务只留最近 MaxFinishedTasks 条：最早结束的先删，它们的进程句柄一起释放。 */
+  /** 已结束的任务只留最近 SystemTuning.command.finishedTasks 条：最早结束的先删，它们的进程句柄一起释放。 */
   private pruneFinishedTasks(): void {
     const finished = [...this.tasks.values()]
       .filter((task) => task.status !== 'running')
       .sort((a, b) => (a.finishedAt ?? a.updatedAt) - (b.finishedAt ?? b.updatedAt))
-    for (const task of finished.slice(0, Math.max(0, finished.length - MaxFinishedTasks))) {
+    for (const task of finished.slice(0, Math.max(0, finished.length - SystemTuning.command.finishedTasks))) {
       this.tasks.delete(task.id)
       this.executions.delete(task.id)
       this.consoles.delete(task.id)
@@ -431,7 +426,7 @@ export class SystemCommandRunner implements SystemCommandRunnerApi {
     const buffered = this.consoles.get(taskId)
     if (!buffered || !text) return
     this.consoles.set(taskId, {
-      buffer: appendBoundedOutput(buffered.buffer, text, ConsoleOutputBufferChars),
+      buffer: appendBoundedOutput(buffered.buffer, text, SystemTuning.command.consoleBufferChars),
       produced: buffered.produced + text.length,
     })
   }

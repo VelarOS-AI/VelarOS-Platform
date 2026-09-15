@@ -15,6 +15,8 @@
 //   impl            实现目录：扁平，不分子目录。一个类一个文件，文件名就是类名（工具文件除外，它不放类）；
 //                   每个类实现一个接口（公开的定义在类上方并在 provides.ts 登记，注入面的在 requires.ts），公开成员不超出接口，私有方法必须用到实例状态
 //   utils           纯工具函数目录：扁平，按类别分文件；只放函数和常量，每个函数上方一句中文说明，只引 utils、types 与合同
+//   tuning          可调参数文件（相对 utils，没有可调参数的包不填）：超时、缓冲、保留条数、缺省条数、阈值集中在这一个冻结表里，每项一句说明、每项有人用；
+//                   数字缺省值不许散在 impl 与 utils。对外承诺的上限不在这里，在 contract/constants.ts
 //   exports         对外入口所在目录，package.json 的 exports 指向这里编译出来的文件
 //   browserSafeEntries  会被渲染进程加载的入口（exports 下的文件名）：整条引用链不许出现 Node 内置模块
 //   environmentTable    可移植数据文件里登记环境变量的常量表名
@@ -34,6 +36,8 @@ export const GovernedModules = [
     portable: 'system.ts',
     impl: 'src/impl',
     utils: 'src/utils',
+    // 包内可调参数：超时、缓冲、保留条数、缺省条数、阈值，一处改全包生效
+    tuning: 'tuning.ts',
     exports: 'src/exports',
     browserSafeEntries: ['contracts.ts'],
     // 可移植数据文件里的环境变量表：代码里出现的每个 VELAROS_* 名字都要登记在这里

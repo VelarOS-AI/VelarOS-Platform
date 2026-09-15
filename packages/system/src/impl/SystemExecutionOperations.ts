@@ -10,7 +10,7 @@ import { createApprovalOperationKey, createManualApprovalOptions } from '@velaro
 import { isEmpty } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import { SystemToolNames } from '../contract/constants.js'
+import { SystemSandboxLimits, SystemToolNames } from '../contract/constants.js'
 import type { SystemToolContext } from '../contract/requires.js'
 import type { SystemRunInput, SystemRunResult } from '../types/commands.js'
 import type { SystemSandboxApplied, SystemSandboxInput, SystemSandboxResult } from '../types/sandbox.js'
@@ -116,7 +116,7 @@ export class SystemExecutionOperations implements SystemExecutionOperationsApi {
     if (input.action === 'discard') return ctx.system.discardSandbox(sandboxId)
 
     // 落回：先算差量，把删除、覆盖、敏感路径都摆给用户看，确认了才写。
-    const changes = await ctx.system.diffSandbox({ sandboxId, maxFiles: 2000 })
+    const changes = await ctx.system.diffSandbox({ sandboxId, maxFiles: SystemSandboxLimits.diffFilesMax })
     const selection = selectSandboxChanges(changes, input.paths)
     if (isEmpty(selection.created) && isEmpty(selection.modified) && isEmpty(selection.deleted)) return { sandboxId, created: [], modified: [], deleted: [], skippedGit: changes.gitChanged, note: '镜像里没有文件变化，什么都没落。' }
     const targets = [...selection.created, ...selection.modified, ...selection.deleted].map((path) => join(changes.source, path))

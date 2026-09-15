@@ -22,6 +22,10 @@
 //   9. src 下只有 contract、types、impl、utils、exports 五个目录，src 根上不放源文件；依赖只许写在文件头，不许用内联 import 类型和动态 import。
 //  10. 模块卡片十节齐全；「提供什么」列出全部入口、导出的每个值和每个公开接口；「骨干链路」点到每个工具；「结构」写明目录树。
 //  11. 不变量登记表每行编号唯一、检验方式合法、检验器真的存在；卡片里的条数如实。包的 test 脚本跑验收测试。
+//  12. 常量分四处：对外承诺的在 contract/constants.ts，每个数字上限有中文说明；可调参数只在登记的 utils/<tuning>：导出的冻结表，只放数字，每项有说明、每项有人用；
+//      impl 的模块级只放日志与导出的实例，类里固定用的写成 private static readonly；impl 与 utils 里不许散写数字缺省值
+//      （模块级数字常量、`?? 数字`、参数缺省写数字、名字像超时/上限/缓冲的属性写数字；0 与 1 除外）；
+//      工具定义里的数字引常量表（示例与 1000、1024 这类单位换算除外），说明文字里不写两位以上的裸数字。
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { builtinModules } from 'node:module'
 import { basename, dirname, extname, join, relative, resolve } from 'node:path'
@@ -74,6 +78,46 @@ const StatementKinds = new Set([
 function countStatements(node) {
   if (ts.isArrowFunction(node) && !ts.isBlock(node.body)) return 1 + countNested(node.body)
   return countNested(node)
+}
+
+/** 数字表达式的值：数字字面量、负号、括号，以及它们的加减乘除与乘方；不是纯数字表达式返回 null。 */
+function numericValue(node) {
+  if (!node) return null
+  if (ts.isNumericLiteral(node)) return Number(node.text.replace(/_/gu, ''))
+  if (ts.isParenthesizedExpression(node)) return numericValue(node.expression)
+  if (ts.isPrefixUnaryExpression(node) && node.operator === ts.SyntaxKind.MinusToken) {
+    const value = numericValue(node.operand)
+    return value === null ? null : -value
+  }
+  if (!ts.isBinaryExpression(node)) return null
+  const left = numericValue(node.left)
+  const right = numericValue(node.right)
+  if (left === null || right === null) return null
+  switch (node.operatorToken.kind) {
+    case ts.SyntaxKind.PlusToken: return left + right
+    case ts.SyntaxKind.MinusToken: return left - right
+    case ts.SyntaxKind.AsteriskToken: return left * right
+    case ts.SyntaxKind.SlashToken: return left / right
+    case ts.SyntaxKind.AsteriskAsteriskToken: return left ** right
+    default: return null
+  }
+}
+
+/** 0 与 1 不算缺省值：起点、步长、布尔一样的数字到处都是。 */
+const isTrivialNumber = (value) => value === 0 || value === 1
+
+/** 单位换算用的数字，工具定义里可以直接写。 */
+const UnitFactors = new Set([1000, 1024])
+
+/** 名字像超时、上限、缓冲、阈值的属性：这类属性写成数字就是散落的缺省值。 */
+const KnobPropertyPattern = /(?:Ms|Bytes|Chars|Items|Files|Depth|Limit|Timeout|Buffer|Threshold)$|^(?:limit|timeout|maxBuffer|depth)$/u
+
+/** `Object.freeze({…})`（参数可以带 as const）里的对象字面量；不是这种写法返回 null。 */
+function frozenObjectLiteral(node) {
+  if (!node || !ts.isCallExpression(node) || node.expression.getText() !== 'Object.freeze') return null
+  let argument = node.arguments[0]
+  while (argument && (ts.isAsExpression(argument) || ts.isSatisfiesExpression(argument) || ts.isParenthesizedExpression(argument))) argument = argument.expression
+  return argument && ts.isObjectLiteralExpression(argument) ? argument : null
 }
 
 /** 数节点之下的语句节点。 */
@@ -264,6 +308,22 @@ for (const module of GovernedModules) {
           ? spec.properties.find((property) => ts.isPropertyAssignment(property) && property.name.getText(toolsSourceFile) === 'execute')
           : undefined
         const statements = executeProperty ? countStatements(executeProperty.initializer) : 0
+        const toolName = nameType?.isStringLiteral() ? nameType.value : '(未知)'
+        for (const property of spec && ts.isObjectLiteralExpression(spec) ? spec.properties : []) {
+          if (ts.isPropertyAssignment(property) && property.name.getText(toolsSourceFile) === 'examples') continue
+          const visitNumbers = (child) => {
+            if (ts.isNumericLiteral(child)) {
+              const value = numericValue(child)
+              if (!isTrivialNumber(value) && !UnitFactors.has(value)) {
+                fail(`${label}: ${module.toolsFile} 里工具 ${toolName} 的定义写了数字 ${child.getText(toolsSourceFile)}；上限放进 ${module.contract}/constants.ts 的常量表再引用（示例除外）`)
+              }
+            } else if ((ts.isStringLiteral(child) || ts.isNoSubstitutionTemplateLiteral(child) || ts.isTemplateHead(child) || ts.isTemplateMiddle(child) || ts.isTemplateTail(child)) && /\d{2,}/u.test(child.text)) {
+              fail(`${label}: ${module.toolsFile} 里工具 ${toolName} 的说明写了数字「${child.text.match(/\d{2,}/u)[0]}」；说明里的上限用模板字符串引常量表，改一处模型看到的跟着变`)
+            }
+            ts.forEachChild(child, visitNumbers)
+          }
+          visitNumbers(property)
+        }
         if (statements > ExecuteStatementLimit) {
           fail(`${label}: ${module.toolsFile} 里工具 ${nameType?.isStringLiteral() ? nameType.value : '(未知)'} 的 execute 有 ${statements} 条语句；工具文件只放定义，execute 只写简单的一两步（最多 ${ExecuteStatementLimit} 条），实现多的放进 ${module.impl}/ 的类，这里一行交给它`)
         }
@@ -382,6 +442,19 @@ for (const module of GovernedModules) {
           if (!/^Object\.freeze\(/u.test(initializer) && !/^'[^']*' as const$/u.test(initializer)) {
             fail(`${label}: 常量表里的 ${declaration.name.getText(sourceFile)} 不是 Object.freeze 的表或 as const 的字符串身份；别的值不进合同`)
           }
+          const walkLimits = (objectLiteral, prefix) => {
+            for (const property of objectLiteral.properties) {
+              if (!ts.isPropertyAssignment(property)) continue
+              const path = `${prefix}.${property.name.getText(sourceFile)}`
+              const nested = frozenObjectLiteral(property.initializer) ?? (ts.isObjectLiteralExpression(property.initializer) ? property.initializer : null)
+              if (nested) walkLimits(nested, path)
+              else if (numericValue(property.initializer) !== null && !ChinesePattern.test(jsDocText(property, sourceFile))) {
+                fail(`${label}: 常量表里的上限 ${path} 缺中文说明；每个数字写清楚它限的是什么`)
+              }
+            }
+          }
+          const table = frozenObjectLiteral(declaration.initializer)
+          if (table) walkLimits(table, declaration.name.getText(sourceFile))
         }
       } else if (ts.isTypeAliasDeclaration(statement)) {
         if (!/\btypeof\b/u.test(statement.type.getText(sourceFile))) fail(`${label}: 常量表文件里的类型 ${statement.name.text} 不是由常量表派生（typeof）；数据类型放进 ${module.types}/`)
@@ -484,6 +557,13 @@ for (const module of GovernedModules) {
       }
       if (ts.isVariableStatement(statement)) {
         for (const declaration of statement.declarationList.declarations) {
+          if (file !== toolsFilePath && !isFunctionLiteral(declaration.initializer)) {
+            const isLogger = /^Log\.tag\(/u.test(declaration.initializer?.getText(sourceFile) ?? '')
+            const isSharedInstance = isExported(statement) && !!declaration.type
+            if (!isLogger && !isSharedInstance) {
+              fail(`${label}: ${shortPath(file)} 有模块级常量 ${declaration.name.getText(sourceFile)}；实现文件的模块级只放日志和导出的实例：类里固定用的写成 private static readonly，可调的放进 ${module.tuning ? `${module.utils}/${module.tuning}` : `${module.utils}/ 的可调参数文件（在 governed-modules.mjs 登记 tuning）`}，对外约定放进 ${module.contract}/constants.ts`)
+            }
+          }
           if (!isFunctionLiteral(declaration.initializer) || !ts.isIdentifier(declaration.name)) continue
           if (!publicFactories.has(`${file}::${declaration.name.text}`)) {
             fail(`${label}: ${shortPath(file)} 有模块级函数 ${declaration.name.text}；实现里的逻辑放进类，用不到实例状态的放进 ${module.utils}/，模块级函数只许是对外入口要的工厂`)
@@ -592,6 +672,93 @@ for (const module of GovernedModules) {
       if (!inside(target, utilsRoot) && !inside(target, contractRoot) && !inside(target, typesRoot)) {
         fail(`${label}: ${shortPath(file)} 引用了 ${shortPath(target)}；utils 只引 utils、types 与合同，要用类就在参数里收接口`)
       }
+    }
+  }
+
+  // ── 5b. 数字缺省值只在可调参数文件里 ─────────────────────────────────
+  const tuningPath = module.tuning ? join(utilsRoot, module.tuning) : null
+  const tuningHint = tuningPath ? shortPath(tuningPath) : `${module.utils}/ 的可调参数文件（在 governed-modules.mjs 登记 tuning）`
+  for (const file of sourceFiles.filter((path) => (inside(path, implRoot) || inside(path, utilsRoot)) && path !== toolsFilePath && path !== tuningPath)) {
+    const sourceFile = parse(file)
+    const report = (node, what) => {
+      const { line } = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile))
+      fail(`${label}: ${shortPath(file)}:${line + 1} ${what}；可调的数字放进 ${tuningHint}，对外约定的放进 ${module.contract}/constants.ts，这里引用它`)
+    }
+    if (inside(file, utilsRoot)) {
+      for (const statement of sourceFile.statements) {
+        if (!ts.isVariableStatement(statement)) continue
+        for (const declaration of statement.declarationList.declarations) {
+          if (numericValue(declaration.initializer) !== null) report(declaration, `有模块级数字常量 ${declaration.name.getText(sourceFile)}`)
+        }
+      }
+    }
+    const visitDefaults = (node) => {
+      if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken) {
+        const value = numericValue(node.right)
+        if (value !== null && !isTrivialNumber(value)) report(node, `用 ?? ${node.right.getText(sourceFile)} 写数字缺省值`)
+      } else if (ts.isParameter(node) && node.initializer) {
+        const value = numericValue(node.initializer)
+        if (value !== null && !isTrivialNumber(value)) report(node, `参数 ${node.name.getText(sourceFile)} 的缺省值写成数字 ${node.initializer.getText(sourceFile)}`)
+      } else if (ts.isPropertyAssignment(node) && KnobPropertyPattern.test(node.name.getText(sourceFile))) {
+        const value = numericValue(node.initializer)
+        if (value !== null && !isTrivialNumber(value)) report(node, `属性 ${node.name.getText(sourceFile)} 写成数字 ${node.initializer.getText(sourceFile)}`)
+      }
+      ts.forEachChild(node, visitDefaults)
+    }
+    visitDefaults(sourceFile)
+  }
+  if (tuningPath && !existsSync(tuningPath)) {
+    fail(`${label}: 登记的可调参数文件 ${shortPath(tuningPath)} 不存在`)
+  } else if (tuningPath) {
+    const sourceFile = parse(tuningPath)
+    const tableNames = []
+    const leaves = []
+    const walkTuning = (objectLiteral, prefix) => {
+      for (const property of objectLiteral.properties) {
+        if (!ts.isPropertyAssignment(property)) {
+          fail(`${label}: 可调参数文件里 ${prefix} 下有属性赋值以外的写法`)
+          continue
+        }
+        const path = `${prefix}.${property.name.getText(sourceFile)}`
+        if (!ChinesePattern.test(jsDocText(property, sourceFile))) fail(`${label}: 可调参数 ${path} 缺中文说明；每一项写清楚它管什么、单位是什么`)
+        const nested = frozenObjectLiteral(property.initializer)
+        if (nested) walkTuning(nested, path)
+        else if (numericValue(property.initializer) === null) fail(`${label}: 可调参数 ${path} 不是数字；可调参数文件只放数字，名单跟着规则写在各自的 utils 文件里`)
+        else leaves.push(path)
+      }
+    }
+    for (const statement of sourceFile.statements) {
+      const isExportedConst = ts.isVariableStatement(statement) && isExported(statement) && (statement.declarationList.flags & ts.NodeFlags.Const) !== 0
+      if (!isExportedConst) {
+        fail(`${label}: 可调参数文件 ${shortPath(tuningPath)} 里有导出的冻结表以外的东西（${statement.getText(sourceFile).split('\n')[0].slice(0, 60)}）；它不 import、不放函数，只放表`)
+        continue
+      }
+      if (!ChinesePattern.test(jsDocText(statement, sourceFile))) fail(`${label}: 可调参数文件里的 ${statement.declarationList.declarations[0]?.name.getText(sourceFile)} 缺中文说明`)
+      for (const declaration of statement.declarationList.declarations) {
+        const table = frozenObjectLiteral(declaration.initializer)
+        if (!table) {
+          fail(`${label}: 可调参数文件里的 ${declaration.name.getText(sourceFile)} 不是 Object.freeze 的表`)
+          continue
+        }
+        tableNames.push(declaration.name.getText(sourceFile))
+        walkTuning(table, declaration.name.getText(sourceFile))
+      }
+    }
+    // 每一项都得有人用：引用链（如 SystemTuning.systemInfo.levels.cpu）盖住它下面的全部项。
+    const referenced = new Set()
+    for (const file of sourceFiles.filter((path) => path !== tuningPath)) {
+      const visitReferences = (node) => {
+        const isOutermost = !(node.parent && ts.isPropertyAccessExpression(node.parent) && node.parent.expression === node)
+        if (ts.isPropertyAccessExpression(node) && isOutermost) {
+          const chain = node.getText().replace(/\s+/gu, '').replace(/\?\./gu, '.')
+          if (tableNames.some((name) => chain.startsWith(`${name}.`))) referenced.add(chain)
+        }
+        ts.forEachChild(node, visitReferences)
+      }
+      visitReferences(parse(file))
+    }
+    for (const leaf of leaves) {
+      if (![...referenced].some((chain) => leaf === chain || leaf.startsWith(`${chain}.`))) fail(`${label}: 可调参数 ${leaf} 没有人用；不用的删掉`)
     }
   }
 

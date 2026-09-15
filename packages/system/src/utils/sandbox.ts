@@ -14,13 +14,14 @@ import { createTwoFilesPatch } from 'diff'
 import { isEmpty, isNull, isPresent } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import { SystemErrorCodes, SystemSandboxLimits } from '../contract/constants.js'
+import { SystemErrorCodes, SystemFailureLimits, SystemSandboxLimits } from '../contract/constants.js'
 import type { SystemProcessConfinementPolicy } from '../types/commands.js'
 import type { SystemSandboxApplyFailureDetails, SystemSandboxConflict, SystemSandboxFileStamp, SystemSandboxManifest, SystemSandboxStampTable } from '../types/sandbox.js'
 import type { SystemSandboxApplyResult, SystemSandboxDiff, SystemSandboxIgnoredMode, SystemSandboxTextDiff } from '../types/system.js'
 
 import { realPathForSafety } from './file-safety.js'
 import { isBinaryBuffer } from './text-file.js'
+import { SystemTuning } from './tuning.js'
 
 /** 沙箱都放在临时区的这个基目录之下；删除前核对路径确实在它之下。 */
 export function sandboxBaseDirectory(tempDir: string = tmpdir()): string {
@@ -243,7 +244,7 @@ export async function diffMirror(
   let omittedDiffs = 0
   let budget = SystemSandboxLimits.diffTotalChars
   for (const path of [...modified.slice(0, options.maxFiles), ...created.slice(0, options.maxFiles)]) {
-    if (budget <= 0 || textDiffs.length >= SystemSandboxLimits.diffFiles) { omittedDiffs += 1; continue }
+    if (budget <= 0 || textDiffs.length >= SystemSandboxLimits.textDiffs) { omittedDiffs += 1; continue }
     const after = await readTextForDiff(join(root, path), SystemSandboxLimits.diffFileChars)
     if (isNull(after)) { omittedDiffs += 1; continue }
     let before = ''
@@ -291,7 +292,8 @@ export function buildSandboxApplyConfirmationMessage(
   selection: { created: readonly string[]; modified: readonly string[]; deleted: readonly string[] },
   sensitivePaths: readonly string[]
 ): string {
-  const preview = (list: readonly string[]): string => list.slice(0, 20).join('、') + (list.length > 20 ? ` 等 ${list.length} 个` : '')
+  const shown = SystemTuning.sandbox.confirmationPreviewItems
+  const preview = (list: readonly string[]): string => list.slice(0, shown).join('、') + (list.length > shown ? ` 等 ${list.length} 个` : '')
   const lines = [`即将把演练沙箱里的改动落回 ${source}：新增 ${selection.created.length} 个、覆盖 ${selection.modified.length} 个、删除 ${selection.deleted.length} 个文件。`]
   if (!isEmpty(selection.deleted)) lines.push(`删除：${preview(selection.deleted)}`)
   if (!isEmpty(selection.modified)) lines.push(`覆盖：${preview(selection.modified)}`)
@@ -303,10 +305,10 @@ export function buildSandboxApplyConfirmationMessage(
 
 /** 落回时整批不落的错误：什么都没写，cause.details.conflicts 列出每处冲突，context.executionOutcome 是 not-applied。 */
 export function sandboxApplyConflict(conflicts: readonly SystemSandboxConflict[]): AppError {
-  const details: SystemSandboxApplyFailureDetails = { executionOutcome: 'not-applied', conflicts: conflicts.slice(0, 10) }
+  const details: SystemSandboxApplyFailureDetails = { executionOutcome: 'not-applied', conflicts: conflicts.slice(0, SystemFailureLimits.listItems) }
   return new AppError(
     'VALIDATION',
-    `${conflicts.length} file(s) in the source changed since the sandbox was created; nothing was written. ${conflicts.slice(0, 10).map((conflict) => `${conflict.path}: ${conflict.message}`).join('; ')}`,
+    `${conflicts.length} file(s) in the source changed since the sandbox was created; nothing was written. ${conflicts.slice(0, SystemFailureLimits.listItems).map((conflict) => `${conflict.path}: ${conflict.message}`).join('; ')}`,
     { reason: SystemErrorCodes.sandboxConflict, details, suggestedNextAction: 'Nothing was written. Re-create the sandbox from the current source, or apply only the paths that did not conflict.' },
     { executionOutcome: 'not-applied' }
   )

@@ -15,15 +15,13 @@ import type { RefreshedWindowsEnvironment, ResolvedSystemShell, ResolveSystemShe
 import type { SystemEnvironmentCommandAvailability } from '../types/system.js'
 import { buildSystemOwnedProcessSpec } from '../utils/process.js'
 import { detectSystemShells, readWindowsEnv, uniquePaths } from '../utils/shell.js'
+import { SystemTuning } from '../utils/tuning.js'
 
 import type { SystemProcessManagerApi } from './SystemProcessManager.js'
 import { systemProcessManager } from './SystemProcessManager.js'
 import { SystemShellUnavailableError } from './SystemShellUnavailableError.js'
 
 const log = Log.tag('SystemShell')
-
-/** CMD 的内建命令：它们不是文件，`where` 找不到，要直接认。 */
-const CmdBuiltins = new Set('assoc break call cd chdir cls color copy date del dir echo endlocal erase exit for ftype goto if md mkdir mklink move path pause popd prompt pushd rd rem ren rename rmdir set setlocal shift start time title type ver verify vol'.split(' '))
 
 /**
  * shell 选择与自检：在本机找能用的 shell、试跑确认它真能工作、按它的查找规则判断命令在不在、在 Windows 上刷新环境变量。
@@ -49,6 +47,9 @@ export interface SystemShellResolverApi {
 }
 
 class SystemShellResolver implements SystemShellResolverApi {
+  /** CMD 的内建命令：它们不是文件，`where` 找不到，要直接认。 */
+  private static readonly CmdBuiltins: ReadonlySet<string> = new Set('assoc break call cd chdir cls color copy date del dir echo endlocal erase exit for ftype goto if md mkdir mklink move path pause popd prompt pushd rd rem ren rename rmdir set setlocal shift start time title type ver verify vol'.split(' '))
+
   private readonly processes: SystemProcessManagerApi
 
   constructor(processes: SystemProcessManagerApi) {
@@ -65,7 +66,7 @@ class SystemShellResolver implements SystemShellResolverApi {
     const failures: string[] = []
     for (const shell of detectSystemShells(options)) {
       let health: SystemShellProbeResult
-      try { health = await (options.probe ?? ((candidate, timeoutMs) => this.probe(candidate, timeoutMs)))(shell, options.timeoutMs ?? 2_500) }
+      try { health = await (options.probe ?? ((candidate, timeoutMs) => this.probe(candidate, timeoutMs)))(shell, options.timeoutMs ?? SystemTuning.shell.probeTimeoutMs) }
       catch (error) {
         log.debug('shell readiness probe failed', { shell: shell.shellPath, error })
         health = { ready: false, reason: error instanceof Error ? error.message : 'Shell startup failed.' }
@@ -80,7 +81,7 @@ class SystemShellResolver implements SystemShellResolverApi {
   }
 
   public async resolveCommand(name: string, shell: ResolvedSystemShell): Promise<SystemEnvironmentCommandAvailability> {
-    if (shell.kind === 'cmd' && CmdBuiltins.has(name.trim().toLowerCase())) return { name, available: true, path: name.trim(), kind: 'builtin' }
+    if (shell.kind === 'cmd' && SystemShellResolver.CmdBuiltins.has(name.trim().toLowerCase())) return { name, available: true, path: name.trim(), kind: 'builtin' }
     const quoted = currentPlatform.quoteShellArg(name.replace(/\\/g, shell.kind === 'git-bash' ? '/' : '\\'), { kind: shell.kind })
     // @arch-guard:suspend code-style/require-chinese-comments 理由：下方字符串是发送给各 Shell 的命令，不是说明文案。
     const command = shell.kind === 'cmd' ? `where ${quoted}`
@@ -89,7 +90,7 @@ class SystemShellResolver implements SystemShellResolverApi {
         : shell.kind === 'git-bash'
           ? `p=$(command -v ${quoted}) || exit $?; case "$p" in /*) cygpath -w -- "$p" ;; *) printf '%s\\n' "$p" ;; esac`
           : `command -v ${quoted}`
-    const result = await this.capture(currentPlatform.getShellCommandSpec(command, { shellPath: shell.shellPath, kind: shell.kind }), shell.env, 2_500)
+    const result = await this.capture(currentPlatform.getShellCommandSpec(command, { shellPath: shell.shellPath, kind: shell.kind }), shell.env, SystemTuning.shell.probeTimeoutMs)
     const path = result.exitCode === 0 ? result.stdout.trim().split(/\r?\n/)[0] || null : null
     return {
       name, available: !!path, path,
@@ -116,7 +117,7 @@ class SystemShellResolver implements SystemShellResolverApi {
       const captured = await this.capture({
         file: win32.join(root, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'),
         args: ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', script],
-      }, env, 3_000)
+      }, env, SystemTuning.shell.environmentRefreshTimeoutMs)
       if (captured.exitCode === 0) {
         try {
           const source = JSON.parse(captured.stdout) as { machine: Record<string, string>; user: Record<string, string> }
@@ -186,14 +187,17 @@ class SystemShellResolver implements SystemShellResolverApi {
       windowsVerbatimArguments: ownedSpec.ownership.backend === 'process-tree' && spec.windowsVerbatimArguments,
     })
     const managed = this.processes.manage(child, {
-      timeoutMs, drainTimeoutMs: 250, terminateGraceMs: 100, terminationDeadlineMs: 1_000,
+      timeoutMs,
+      drainTimeoutMs: SystemTuning.shell.captureDrainTimeoutMs,
+      terminateGraceMs: SystemTuning.shell.captureTerminateGraceMs,
+      terminationDeadlineMs: SystemTuning.shell.captureTerminationDeadlineMs,
     })
     let stdout = ''
     let stderr = ''
     child.stdout.setEncoding('utf8')
     child.stderr.setEncoding('utf8')
-    child.stdout.on('data', (value: string) => { stdout = (stdout + value).slice(0, 65_536) })
-    child.stderr.on('data', (value: string) => { stderr = (stderr + value).slice(0, 8_192) })
+    child.stdout.on('data', (value: string) => { stdout = (stdout + value).slice(0, SystemTuning.shell.captureStdoutChars) })
+    child.stderr.on('data', (value: string) => { stderr = (stderr + value).slice(0, SystemTuning.shell.captureStderrChars) })
     const result = await managed.completion
     return {
       exitCode: result.cleanupIncomplete ? null : result.exitCode,

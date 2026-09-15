@@ -7,12 +7,10 @@ import type { ChildProcess } from 'node:child_process'
 import { win32 } from 'node:path'
 
 import { execBounded } from '../utils/process.js'
+import { SystemTuning } from '../utils/tuning.js'
 
 import type { ManagedSystemProcess, SystemManagedProcessLifecycleOptions } from './SystemManagedProcess.js'
 import { SystemManagedProcess } from './SystemManagedProcess.js'
-
-/** 已结束的进程最多保留多少条回执。 */
-const MaxCompletedProcesses = 512
 
 /**
  * 受管子进程登记表：本包启动的每个子进程都在这里登记，从启动、退出、管道排空到有界终止都有人收尾。
@@ -124,11 +122,11 @@ class SystemProcessManager implements SystemProcessManagerApi {
   private pruneCompleted(): void {
     let completed = 0
     for (const entry of this.processes.values()) if (entry.result && entry.exited) completed++
-    if (completed <= MaxCompletedProcesses) return
+    if (completed <= SystemTuning.process.completedProcesses) return
     for (const [pid, entry] of this.processes) {
       if (entry.result && entry.exited) {
         this.processes.delete(pid)
-        if (--completed <= MaxCompletedProcesses) break
+        if (--completed <= SystemTuning.process.completedProcesses) break
       }
     }
   }

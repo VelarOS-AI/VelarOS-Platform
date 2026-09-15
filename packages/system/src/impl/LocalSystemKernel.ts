@@ -27,6 +27,7 @@ import {
   selectOpenPorts,
   selectSystemProcesses,
 } from '../utils/system-info.js'
+import { SystemTuning } from '../utils/tuning.js'
 
 import type { SystemCommandRunnerApi } from './SystemCommandRunner.js'
 import { SystemCommandRunner } from './SystemCommandRunner.js'
@@ -162,7 +163,7 @@ export class LocalSystemKernel implements LocalSystemKernelApi {
       this.readPlatformStat(this.platformTools.getCpuUsageCommandSpec(), parseCpuUsagePercent, 'CPU usage'),
       this.readPlatformStat(this.platformTools.getDiskStatsCommandSpec(), parseDiskStats, 'disk stats'),
       this.readPlatformStat(this.platformTools.getSwapStatsCommandSpec(), parseSwapStats, 'swap stats'),
-      this.listProcesses({ limit: 5 }),
+      this.listProcesses({ limit: SystemTuning.systemInfo.topProcesses }),
     ])
     const swapUsagePercent = swapStats && swapStats.totalBytes > 0
       ? (swapStats.usedBytes / swapStats.totalBytes) * 100
@@ -186,11 +187,11 @@ export class LocalSystemKernel implements LocalSystemKernelApi {
       diskUsagePercent,
       loadAverage: { oneMinute, fiveMinutes, fifteenMinutes },
       levels: {
-        cpu: metricLevel(cpuUsagePercent, 60, 85),
-        memory: metricLevel(totalMemory > 0 ? (usedMemory / totalMemory) * 100 : 0),
-        swap: metricLevel(swapUsagePercent, 35, 60),
-        disk: metricLevel(diskUsagePercent, 80, 90),
-        load: metricLevel((oneMinute / cpuCoreCount) * 100, 80, 120),
+        cpu: metricLevel(cpuUsagePercent, SystemTuning.systemInfo.levels.cpu),
+        memory: metricLevel(totalMemory > 0 ? (usedMemory / totalMemory) * 100 : 0, SystemTuning.systemInfo.levels.memory),
+        swap: metricLevel(swapUsagePercent, SystemTuning.systemInfo.levels.swap),
+        disk: metricLevel(diskUsagePercent, SystemTuning.systemInfo.levels.disk),
+        load: metricLevel((oneMinute / cpuCoreCount) * 100, SystemTuning.systemInfo.levels.load),
       },
       topProcesses,
     }
@@ -227,7 +228,7 @@ export class LocalSystemKernel implements LocalSystemKernelApi {
 
   public async listBackgroundTasks(options: SystemBackgroundTaskQueryOptions = {}): Promise<SystemBackgroundTaskRecord[]> {
     const tasks = [this.commands, ...this.sandboxes.runners()].flatMap((runner) => runner.listTasks(options))
-    return tasks.sort((a, b) => b.startedAt - a.startedAt).slice(0, options.limit ?? 50)
+    return tasks.sort((a, b) => b.startedAt - a.startedAt).slice(0, options.limit ?? SystemTuning.command.taskListItems)
   }
 
   public terminateBackgroundTask(request: SystemBackgroundTaskTerminateRequest): Promise<SystemBackgroundTaskTerminateResult> {
