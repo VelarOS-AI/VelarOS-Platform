@@ -7,7 +7,7 @@ import { readFile, stat } from 'node:fs/promises'
 
 import { AppError } from '@velaros-ai/core/error'
 
-import type { SystemMediaType, SystemReadResult, SystemTextEncoding, SystemTextFileContent, SystemTextRange, SystemTextSlice } from '../contract/files.js'
+import type { SystemMediaType, SystemReadFileResult, SystemTextEncoding, SystemTextFileContent, SystemTextRange, SystemTextSlice } from '../contract/files.js'
 
 import { readErrnoCode } from './fs.js'
 
@@ -16,6 +16,19 @@ const UTF8_BOM = Buffer.from([0xEF, 0xBB, 0xBF])
 const UTF16LE_BOM = Buffer.from([0xFF, 0xFE])
 
 const UTF16BE_BOM = Buffer.from([0xFE, 0xFF])
+
+/**
+ * 读与看的上限：readChars 是文本一次调用总共最多返回的字符数（每个文件也是它，默认就读到上限）；readFiles、viewFiles 是一次最多几个文件；
+ * pdfPages 是一份 PDF 一次最多几页；imageBytes 是交给模型的图片上限；fileBytes 是读进来的文件上限，再大就让模型用系统命令截取。
+ */
+export const SystemFileReadLimits = Object.freeze({
+  readChars: 200_000,
+  readFiles: 20,
+  viewFiles: 10,
+  pdfPages: 20,
+  imageBytes: 5 * 1024 * 1024,
+  fileBytes: 20 * 1024 * 1024,
+})
 
 /** 读取一个文本文件，识别编码后返回原始字节、文本内容与编码；二进制文件报错。 */
 export async function readSystemTextFile(resolvedPath: string): Promise<SystemTextFileContent> {
@@ -212,9 +225,9 @@ export function clampTextRange(content: string, range: SystemTextRange): SystemT
   return { offset, end }
 }
 
-/** 从 offset 起取最多 maxChars 个字符，返回这段和它实际落在的范围；越过末尾就返回空段。 */
+/** 按字符取一段：从 offset 起最多 maxChars 个，不切开代理对，返回内容和它实际落在的范围；maxChars 为 0 时返回空段。 */
 export function sliceTextChars(content: string, offset: number, maxChars: number): SystemTextSlice {
-  const range = clampTextRange(content, { offset, end: offset + Math.max(1, maxChars) })
+  const range = clampTextRange(content, { offset, end: offset + Math.max(0, maxChars) })
   return { content: content.slice(range.offset, range.end), range }
 }
 
@@ -228,7 +241,7 @@ export async function readBoundedFile(resolvedPath: string, maxBytes: number): P
 }
 
 /** 把一份字节按文本解码后从 offset 起取最多 maxChars 个字符，连同范围与版本号一起组成读取结果。 */
-export function readTextWindow(resolvedPath: string, buffer: Buffer, offset: number, maxChars: number): SystemReadResult {
+export function readTextWindow(resolvedPath: string, buffer: Buffer, offset: number, maxChars: number): SystemReadFileResult {
   const { content, encoding } = decodeSystemTextBuffer(buffer, resolvedPath)
   const slice = sliceTextChars(content, offset, maxChars)
   return {

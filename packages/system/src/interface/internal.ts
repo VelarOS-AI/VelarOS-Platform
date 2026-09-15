@@ -239,16 +239,19 @@ export interface ResolveSystemShellOptions extends ShellCommandSpecOptions {
  */
 export interface SystemFileOperationsApi {
   /**
-   * 读一个文本文件。按字符取一段：从 offset 起最多 maxChars 个（默认也是上限 20 万，尽量一次读完），返回这段的原文、它的 range 和内容的版本号，hasMore 时把 range.end 当下一次的 offset；不切开代理对。
-   * 给 version 就读改动前留下的那个版本，用来召回旧状态；版本只在内存里留最近几份，找不到报错。
-   * 图片和 PDF 报错并指向 view；其他二进制文件、目录、设备文件、超过 20 MB 的文件报错。
+   * 读文本文件，files 里每项一个，一个文件就一项，一批最多 20 项；返回与 files 一一对应的 files。
+   * 每个文件按字符取一段：从 offset 起最多 maxChars 个（默认也是上限 20 万，尽量一次读完），返回这段的原文、它的 range 和内容的版本号，hasMore 时把 range.end 当下一次的 offset；不切开代理对。
+   * 一次调用总共最多返回 20 万字符，按顺序分给各文件，分完的文件只带位置不带内容。
+   * 给 version 就读改动前留下的那个版本，用来召回旧状态；版本只在内存里留最近几份，找不到算这个文件失败。
+   * 图片和 PDF 算失败并指向 view；其他二进制文件、目录、设备文件、超过 20 MB 的文件也算失败。
+   * 某个文件失败只把它那一项换成失败条目，其余文件照常返回；全部失败时整个调用报错。
    */
   read(input: SystemReadInput): Promise<SystemReadResult>
   /**
-   * 看一个图片或 PDF，内容作为模型可见的内容块交给模型，效果和用户上传一样。
-   * 图片（PNG、JPEG、GIF、WebP）整张给，没有字符上限，只有 5 MB 的字节上限，超过报错让调用方先缩小。
-   * PDF 一次一页：把 page 那一页抽成单页文档交给模型，结果里给出 pageCount；page 从 1 起，不给就是第 1 页，越界报错。
-   * 文本文件、其他二进制文件、目录、设备文件、超过 20 MB 的文件报错。
+   * 看图片或 PDF，files 里每项一个，一个文件就一项，一批最多 10 项；返回与 files 一一对应的 files，内容作为模型可见的内容块按同样的顺序放在 modelContent 里交给模型，效果和用户上传一样，每块前面一行文字说明是哪个文件。
+   * 图片（PNG、JPEG、GIF、WebP）整张给，没有字符上限，只有 5 MB 的字节上限，超过算失败让调用方先缩小。
+   * PDF 按 pages 看哪几页：把这几页（去重、按页码排序）抽成一份文档交给模型，结果里给出实际的 pages 和 pageCount；页码从 1 起，不给就是第 1 页，一次最多 20 页，越界算失败。
+   * 文本文件、其他二进制文件、目录、设备文件、超过 20 MB 的文件算失败。某个文件失败只把它那一项换成失败条目，全部失败时整个调用报错。
    */
   view(input: SystemViewInput): Promise<SystemViewResult>
   /**

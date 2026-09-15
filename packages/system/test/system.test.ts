@@ -21,6 +21,19 @@ const approvingContext: SystemToolContext = {
   system: {} as never,
 } as SystemToolContext
 
+/** 结果里取一项，是失败条目就抛出来，让断言直接看到原因。 */
+function entryOf<T extends { path: string }>(result: { files: Array<T | { path: string; error: { code: string; message: string } }> }, index = 0): T {
+  const entry = result.files[index]
+  if (!entry) throw new Error(`no entry ${index}`)
+  if ('error' in entry) throw new Error(`entry ${index} failed: ${entry.error.code} ${entry.error.message}`)
+  return entry
+}
+
+/** 读一个文件的快捷方式。 */
+async function readOne(file: { path: string; offset?: number; maxChars?: number; version?: string }) {
+  return entryOf(await systemFileOperations.read({ files: [file] }))
+}
+
 describe('System capability', () => {
 
   test('builds deterministic platform confinement profiles with an observable backend', () => {
@@ -107,14 +120,14 @@ describe('System capability', () => {
     try {
       const text = 'héllo 中文😀 tail'
       await writeFile(path, text)
-      const first = await systemFileOperations.read({ path, maxChars: 8 })
+      const first = await readOne({ path, maxChars: 8 })
       expect(first.content).toBe('héllo 中文')
       expect(first.range).toEqual({ offset: 0, end: 8 })
       expect(first.hasMore).toBe(true)
-      const second = await systemFileOperations.read({ path, offset: first.range.end, maxChars: 1 })
+      const second = await readOne({ path, offset: first.range.end, maxChars: 1 })
       expect(second.content).toBe('😀')
       expect(second.range).toEqual({ offset: 8, end: 10 })
-      const rest = await systemFileOperations.read({ path, offset: second.range.end })
+      const rest = await readOne({ path, offset: second.range.end })
       expect(rest.content).toBe(' tail')
       expect(rest.hasMore).toBe(false)
       expect(rest.totalChars).toBe(text.length)
@@ -128,7 +141,7 @@ describe('System capability', () => {
     const path = join(root, 'utf16.txt')
     try {
       await writeFile(path, Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from('a\r\nb', 'utf16le')]))
-      const result = await systemFileOperations.read({ path })
+      const result = await readOne({ path })
       expect(result.content).toBe('a\r\nb')
       expect(result.encoding).toBe('utf16le')
     } finally {
@@ -136,40 +149,84 @@ describe('System capability', () => {
     }
   })
 
-  test('view hands images to the model whole and PDFs one page at a time', async () => {
+  test('view hands images to the model whole and PDFs a few pages at a time, files one or many', async () => {
     const root = await mkdtemp(join(tmpdir(), 'velaros-system-view-'))
     try {
       const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52])
       const imagePath = join(root, 'shot.png')
       await writeFile(imagePath, png)
-      const image = await systemFileOperations.view({ path: imagePath })
-      expect(image.kind).toBe('image')
-      if (image.kind !== 'image') throw new Error('expected image')
-      expect(image.mediaType).toBe('image/png')
-      expect(image.bytes).toBe(png.byteLength)
-      expect(image.modelContent).toEqual([{ type: 'image-data', data: png.toString('base64'), mediaType: 'image/png' }])
-      await expect(systemFileOperations.read({ path: imagePath })).rejects.toThrow('system:view')
+      const viewedImage = await systemFileOperations.view({ files: [{ path: imagePath }] })
+      expect(entryOf(viewedImage)).toEqual({ path: imagePath, kind: 'image', mediaType: 'image/png', bytes: png.byteLength })
+      expect(viewedImage.modelContent).toEqual([
+        { type: 'text', text: `文件 1/1：${imagePath}` },
+        { type: 'image-data', data: png.toString('base64'), mediaType: 'image/png' },
+      ])
+      await expect(systemFileOperations.read({ files: [{ path: imagePath }] })).rejects.toThrow('system:view')
 
       const source = await PDFDocument.create()
       source.addPage([200, 100]).drawText('one')
       source.addPage([200, 100]).drawText('two')
+      source.addPage([200, 100]).drawText('three')
       const pdfPath = join(root, 'report.pdf')
       await writeFile(pdfPath, Buffer.from(await source.save()))
-      const second = await systemFileOperations.view({ path: pdfPath, page: 2 })
-      expect(second.kind).toBe('document')
-      if (second.kind !== 'document') throw new Error('expected document')
-      expect(second).toMatchObject({ page: 2, pageCount: 2, mediaType: 'application/pdf' })
-      expect(second.modelContent[0]).toMatchObject({ type: 'file-data', mediaType: 'application/pdf', filename: 'report.page2.pdf' })
-      const extracted = await PDFDocument.load(Buffer.from((second.modelContent[0] as { data: string }).data, 'base64'))
-      expect(extracted.getPageCount()).toBe(1)
-      const first = await systemFileOperations.view({ path: pdfPath })
-      if (first.kind !== 'document') throw new Error('expected document')
-      expect(first.page).toBe(1)
-      await expect(systemFileOperations.view({ path: pdfPath, page: 3 })).rejects.toThrow('out of range')
+      const pageCountOf = async (part: unknown): Promise<number> => (await PDFDocument.load(Buffer.from((part as { data: string }).data, 'base64'))).getPageCount()
+
+      const secondOnly = await systemFileOperations.view({ files: [{ path: pdfPath, pages: [2] }] })
+      expect(entryOf(secondOnly)).toEqual({ path: pdfPath, kind: 'document', mediaType: 'application/pdf', pages: [2], pageCount: 3, bytes: expect.any(Number) })
+      expect(secondOnly.modelContent[0]).toEqual({ type: 'text', text: `文件 1/1：${pdfPath}（第 2 页，共 3 页）` })
+      expect(secondOnly.modelContent[1]).toMatchObject({ type: 'file-data', mediaType: 'application/pdf', filename: 'report.p2.pdf' })
+      expect(await pageCountOf(secondOnly.modelContent[1])).toBe(1)
+
+      const several = await systemFileOperations.view({ files: [{ path: pdfPath, pages: [3, 1, 3] }] })
+      expect(entryOf(several)).toMatchObject({ pages: [1, 3], pageCount: 3 })
+      expect(several.modelContent[1]).toMatchObject({ filename: 'report.p1+3.pdf' })
+      expect(await pageCountOf(several.modelContent[1])).toBe(2)
+      const contiguous = await systemFileOperations.view({ files: [{ path: pdfPath, pages: [1, 2, 3] }] })
+      expect(contiguous.modelContent[1]).toMatchObject({ filename: 'report.p1-3.pdf' })
+      expect(await pageCountOf(contiguous.modelContent[1])).toBe(3)
+
+      const defaulted = await systemFileOperations.view({ files: [{ path: pdfPath }] })
+      expect(entryOf(defaulted)).toMatchObject({ pages: [1], pageCount: 3 })
+      await expect(systemFileOperations.view({ files: [{ path: pdfPath, pages: [4] }] })).rejects.toThrow('out of range')
 
       const textPath = join(root, 'plain.txt')
       await writeFile(textPath, 'hello')
-      await expect(systemFileOperations.view({ path: textPath })).rejects.toThrow('system:read')
+      await expect(systemFileOperations.view({ files: [{ path: textPath }] })).rejects.toThrow('system:read')
+
+      // 一批里混着图片、PDF 和一个不存在的文件：失败的只标记它那一项，内容块按顺序排，每份 PDF 各自的 pages。
+      const batch = await systemFileOperations.view({ files: [{ path: imagePath }, { path: join(root, 'missing.png') }, { path: pdfPath, pages: [2, 3] }] })
+      expect(batch.files.map((entry) => ('error' in entry ? entry.error.code : entry.kind))).toEqual(['image', 'NOT_FOUND', 'document'])
+      expect(entryOf(batch, 2)).toMatchObject({ pages: [2, 3], pageCount: 3 })
+      expect(batch.modelContent.map((part) => part.type)).toEqual(['text', 'image-data', 'text', 'file-data'])
+      expect(batch.modelContent[0]).toEqual({ type: 'text', text: `文件 1/3：${imagePath}` })
+      expect(batch.modelContent[2]).toEqual({ type: 'text', text: `文件 3/3：${pdfPath}（第 2、3 页，共 3 页）` })
+      await expect(systemFileOperations.view({ files: [{ path: join(root, 'a.png') }, { path: join(root, 'b.png') }] })).rejects.toThrow('not found')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('read takes a batch: one budget for the whole call, per-file offsets, and a failing file only marks its own entry', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'velaros-system-read-batch-'))
+    try {
+      const bigPath = join(root, 'big.txt')
+      const smallPath = join(root, 'small.txt')
+      await writeFile(bigPath, 'a'.repeat(200_000))
+      await writeFile(smallPath, 'small')
+      const budget = await systemFileOperations.read({ files: [{ path: bigPath }, { path: smallPath }] })
+      expect(entryOf(budget, 0)).toMatchObject({ totalChars: 200_000, hasMore: false, range: { offset: 0, end: 200_000 } })
+      expect(entryOf(budget, 1)).toMatchObject({ content: '', range: { offset: 0, end: 0 }, totalChars: 5, hasMore: true })
+
+      const continued = await systemFileOperations.read({ files: [{ path: bigPath, offset: 199_998 }, { path: smallPath, offset: entryOf(budget, 1).range.end, maxChars: 3 }] })
+      expect(entryOf(continued, 0)).toMatchObject({ content: 'aa', hasMore: false })
+      expect(entryOf(continued, 1)).toMatchObject({ content: 'sma', range: { offset: 0, end: 3 }, hasMore: true })
+
+      const mixed = await systemFileOperations.read({ files: [{ path: smallPath }, { path: join(root, 'missing.txt') }] })
+      expect(entryOf(mixed, 0).content).toBe('small')
+      expect(mixed.files[1]).toEqual({ path: join(root, 'missing.txt'), error: { code: 'NOT_FOUND', message: expect.stringContaining('not found') } })
+      await expect(systemFileOperations.read({ files: [{ path: join(root, 'x.txt') }, { path: join(root, 'y.txt') }] })).rejects.toThrow('not found')
+      await expect(systemFileOperations.read({ files: [] })).rejects.toThrow('files is empty')
+      await expect(systemFileOperations.read({ files: Array.from({ length: 21 }, () => ({ path: smallPath })) })).rejects.toThrow('At most 20 files')
     } finally {
       await rm(root, { recursive: true, force: true })
     }
@@ -178,12 +235,12 @@ describe('System capability', () => {
   test('rejects directories, other binaries and device files', async () => {
     const root = await mkdtemp(join(tmpdir(), 'velaros-system-read-reject-'))
     try {
-      await expect(systemFileOperations.read({ path: root })).rejects.toThrow('is a directory')
+      await expect(systemFileOperations.read({ files: [{ path: root }] })).rejects.toThrow('is a directory')
       const binaryPath = join(root, 'blob.bin')
       await writeFile(binaryPath, Buffer.from([0x00, 0x01, 0x02, 0xff]))
-      await expect(systemFileOperations.read({ path: binaryPath })).rejects.toThrow('binary')
+      await expect(systemFileOperations.read({ files: [{ path: binaryPath }] })).rejects.toThrow('binary')
       if (process.platform !== 'win32') {
-        await expect(systemFileOperations.read({ path: '/dev/null' })).rejects.toThrow('not a regular file')
+        await expect(systemFileOperations.read({ files: [{ path: '/dev/null' }] })).rejects.toThrow('not a regular file')
       }
     } finally {
       await rm(root, { recursive: true, force: true })
@@ -204,7 +261,7 @@ describe('System capability', () => {
         systemFileOperations.edit({ path, oldText: 'port = 80', newText: 'port = 8080' }, approvingContext)
       ).rejects.toThrow('read the file first')
 
-      const whole = await systemFileOperations.read({ path })
+      const whole = await readOne({ path })
       const ambiguous = await systemFileOperations.edit({ path, range: whole.range, oldText: 'port = 80', newText: 'port = 8080' }, approvingContext)
       if (ambiguous.action !== 'ambiguous') throw new Error('expected anchors')
       expect(ambiguous.matchCount).toBe(2)
@@ -219,12 +276,12 @@ describe('System capability', () => {
       expect(confirmed).toMatchObject({ action: 'replaced', content: 'port = 8080', range: { offset: 21, end: 32 }, previousVersion: written.version })
       expect(await readFile(path, 'utf8')).toBe('name = "a"\nport = 80\nport = 8080\n')
 
-      const recalled = await systemFileOperations.read({ path, version: written.version })
+      const recalled = await readOne({ path, version: written.version })
       expect(recalled.content).toBe('name = "a"\nport = 80\nport = 80\n')
       expect(recalled.version).toBe(written.version)
-      await expect(systemFileOperations.read({ path, version: 'nope' })).rejects.toThrow('not in history')
+      await expect(systemFileOperations.read({ files: [{ path, version: 'nope' }] })).rejects.toThrow('not in history')
 
-      const window = await systemFileOperations.read({ path, offset: 11, maxChars: 10 })
+      const window = await readOne({ path, offset: 11, maxChars: 10 })
       expect(window.content).toBe('port = 80\n')
       const replaced = await systemFileOperations.edit(
         { path, range: window.range, oldText: 'port = 80', newText: 'port = 8080' },

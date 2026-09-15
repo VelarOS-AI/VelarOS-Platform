@@ -26,32 +26,40 @@ import { createSystemCallableOperations, defineSystemTool } from '../utils/tool.
 import { systemCommandPolicy } from './SystemCommandPolicy.js'
 import { systemFileOperations } from './SystemFileOperations.js'
 
-// ── 文件：读文本、看图片与 PDF、写 ──────────────────────────
+// ── 文件：读文本、看图片与 PDF（files 每项一个，PDF 多页）、写 ──────────────────────────
 
 /**
- * system:read —— 读文本文件。
+ * system:read —— 读文本文件，files 每项一个。
  *
- * 链路：按字符取一段，连同它的 range 和版本号一起返回；传 version 就读改动前留下的旧版本。
+ * 链路：每个文件按字符取一段，连同它的 range 和版本号一起返回；一次调用总共最多 20 万字符，按顺序分给各文件；传 version 就读改动前留下的旧版本；某个文件读不了只标记它那一项。
  */
 const readTool = defineSystemTool<{
-  path: string
-  offset?: number
-  maxChars?: number
-  version?: string
+  files: Array<{
+    path: string
+    offset?: number
+    maxChars?: number
+    version?: string
+  }>
 }>({
   name: SystemToolNames.read,
   role: 'inspect',
-  summary: '读文本文件，按字符取一段并返回它的 range 和版本号。',
-  suitable: ['看日志、配置、脚本、临时文件等文本。'],
+  summary: '读文本文件：files 每项一个文件，按字符取一段，返回它的 range 和版本号。',
+  suitable: ['看日志、配置、脚本、临时文件等文本。', '一次读一批相关的文件。'],
   forbidden: ['图片和 PDF 用 system:view；列目录、搜文本用 system:run。'],
-  usage: ['传 path，默认一次读到上限，没读完时把返回的 range.end 当 offset 接着读。', '结果里的 version 是这份内容的版本号；传 version 可以读回某次改动前的旧内容。'],
-  examples: [{ path: '~/build.log' }],
+  usage: [
+    'files 每项一个文件，只传 path 就默认一次读到上限；没读完的文件把它返回的 range.end 当 offset 接着读。',
+    '一次调用总共最多 200000 字符；结果的 files 与传入的一一对应，某个文件读不了只有它那一项是 error。',
+    '结果里的 version 是这份内容的版本号；传 version 可以读回某次改动前的旧内容。',
+  ],
+  examples: [{ files: [{ path: '~/build.log' }] }, { files: [{ path: '~/.zshrc' }, { path: '~/build.log', offset: 200000 }] }],
   notes: ['其他二进制文件读不了。'],
   schema: z.object({
-    path: z.string().min(1).describe('文件路径，支持 ~。'),
-    offset: z.number().int().nonnegative().optional().describe('从第几个字符开始读，默认 0。'),
-    maxChars: z.number().int().positive().max(200_000).optional().describe('最多返回多少字符，默认也是上限 200000。'),
-    version: z.string().min(1).optional().describe('读改动前留下的某个版本，版本号来自 read 或 edit 的结果。'),
+    files: z.array(z.object({
+      path: z.string().min(1).describe('文件路径，支持 ~。'),
+      offset: z.number().int().nonnegative().optional().describe('从第几个字符开始读，默认 0。'),
+      maxChars: z.number().int().positive().max(200_000).optional().describe('最多返回多少字符，默认也是上限 200000。'),
+      version: z.string().min(1).optional().describe('读改动前留下的某个版本，版本号来自 read 或 edit 的结果。'),
+    })).min(1).max(20).describe('要读的文件，每项一个，一次最多 20 个。'),
   }),
   permissions: ['fs:read'],
   capabilities: {
@@ -67,25 +75,32 @@ const readTool = defineSystemTool<{
 })
 
 /**
- * system:view —— 看图片或 PDF。
+ * system:view —— 看图片或 PDF，files 每项一个。
  *
- * 链路：图片整张作为模型可见的内容块交给模型，和用户上传一样 → PDF 抽出 page 那一页交给模型，附上总页数。
+ * 链路：图片整张作为模型可见的内容块交给模型，和用户上传一样 → PDF 把 pages 这几页抽成一份文档交给模型，附上总页数 → 内容块按 files 的顺序排，每块前面一行说明是哪个文件；某个文件看不了只标记它那一项。
  */
 const viewTool = defineSystemTool<{
-  path: string
-  page?: number
+  files: Array<{
+    path: string
+    pages?: number[]
+  }>
 }>({
   name: SystemToolNames.view,
   role: 'inspect',
-  summary: '看图片或 PDF：图片整张交给模型，PDF 一次一页。',
-  suitable: ['看截图、照片、图表等图片的内容。', '逐页看 PDF。'],
+  summary: '看图片或 PDF：files 每项一个文件，图片整张交给模型，PDF 按 pages 一次看几页。',
+  suitable: ['看截图、照片、图表等图片的内容。', '按页看 PDF，一次几页。'],
   forbidden: ['文本文件用 system:read。'],
-  usage: ['传 path；PDF 传 page 指定看第几页，不传就是第 1 页，结果里的 pageCount 是总页数。'],
-  examples: [{ path: '~/Desktop/screenshot.png' }, { path: '~/Downloads/report.pdf', page: 2 }],
+  usage: [
+    'files 每项一个文件；PDF 用 pages 指定看哪几页，从 1 起，不传就是第 1 页，一次最多 20 页，结果里的 pageCount 是总页数。',
+    '结果的 files 与传入的一一对应，内容块按同样的顺序排、每块前面一行写明是哪个文件；某个文件看不了只有它那一项是 error。',
+  ],
+  examples: [{ files: [{ path: '~/Desktop/screenshot.png' }] }, { files: [{ path: '~/Downloads/report.pdf', pages: [1, 2, 3] }, { path: '~/Desktop/chart.png' }] }],
   notes: ['图片最大 5 MB，超过先用 system:run 缩小。'],
   schema: z.object({
-    path: z.string().min(1).describe('图片或 PDF 的路径，支持 ~。'),
-    page: z.number().int().positive().optional().describe('PDF 看第几页，从 1 起，默认 1。'),
+    files: z.array(z.object({
+      path: z.string().min(1).describe('图片或 PDF 的路径，支持 ~。'),
+      pages: z.array(z.number().int().positive()).min(1).max(20).optional().describe('PDF 看哪几页，从 1 起，默认只看第 1 页。'),
+    })).min(1).max(10).describe('要看的文件，每项一个，一次最多 10 个。'),
   }),
   permissions: ['fs:read'],
   capabilities: {

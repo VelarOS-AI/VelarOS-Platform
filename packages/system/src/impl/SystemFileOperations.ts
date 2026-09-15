@@ -1,22 +1,23 @@
 /**
  * 三个文件操作：`SystemFileOperations` 与整个进程唯一的 `systemFileOperations`。接口见 `interface/internal.ts` 的 `SystemFileOperationsApi`。
- * `system:read`、`system:view`、`system:edit` 各调一个方法；列目录和搜文本由 `system:run` 用系统命令做。
+ * `system:read`、`system:view`、`system:edit` 各调一个方法；读和看都是一批文件（一个文件就一项），一批里某个文件失败只标记它那一项，全部失败才整个报错；列目录和搜文本由 `system:run` 用系统命令做。
  */
 
 import { mkdir, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { basename, dirname, extname, isAbsolute, resolve } from 'node:path'
 
-import { isEmpty, isPresent } from '@velaros-ai/core'
+import { isEmpty, isPresent, Log } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import type { SystemEditInput, SystemEditResult, SystemReadInput, SystemReadResult, SystemTextRange, SystemViewInput, SystemViewResult } from '../contract/files.js'
+import type { SystemEditInput, SystemEditResult, SystemReadFileInput, SystemReadFileResult, SystemReadInput, SystemReadResult, SystemTextRange, SystemViewFileInput, SystemViewFileResult, SystemViewInput, SystemViewResult } from '../contract/files.js'
 import type { SystemFileHistoryApi, SystemFileOperationsApi } from '../interface/internal.js'
 import type { SystemPlatformCompatibilityApi } from '../interface/provides.js'
 import type { SystemToolContext } from '../interface/requires.js'
+import { assertFileBatchSize, failureEntry } from '../utils/file-batch.js'
 import { confirmSensitiveSystemMutation } from '../utils/file-safety.js'
 import { writeSystemFileAtomically } from '../utils/fs.js'
-import { extractPdfPage } from '../utils/pdf.js'
+import { extractPdfPages, pdfPagesFilename } from '../utils/pdf.js'
 import { adaptReplacementLineEndings, findOccurrences } from '../utils/text.js'
 import {
   clampTextRange,
@@ -28,17 +29,14 @@ import {
   readRawSystemFileBuffer,
   readSystemTextFile,
   readTextWindow,
+  SystemFileReadLimits,
 } from '../utils/text-file.js'
 
 import { SystemFileHistory } from './SystemFileHistory.js'
 import { currentSystemPlatform } from './SystemPlatformCompatibility.js'
 
-/** 文本一次最多返回多少字符，默认也是它：尽量让模型一次读完。 */
-const MaxReadChars = 200_000
-/** 读文件的字节上限，再大就让模型用系统命令截取。 */
-const MaxReadBytes = 20 * 1024 * 1024
-/** 交给模型的图片上限，超过要先缩小。 */
-const MaxImageBytes = 5 * 1024 * 1024
+const log = Log.tag('SystemFileOperations')
+
 /** 能做精确替换的文件上限。 */
 const MaxEditableBytes = 2 * 1024 * 1024
 /** 多处匹配时每个锚点前后各带多少字符原文。 */
@@ -56,54 +54,46 @@ class SystemFileOperations implements SystemFileOperationsApi {
   }
 
   public async read(input: SystemReadInput): Promise<SystemReadResult> {
-    const resolvedPath = this.resolvePath(input.path)
-    const maxChars = Math.min(MaxReadChars, input.maxChars ?? MaxReadChars)
-    if (isPresent(input.version)) {
-      const snapshot = this.history.recall(resolvedPath, input.version)
-      if (!snapshot) {
-        throw new AppError('NOT_FOUND', `Version ${input.version} of ${resolvedPath} is not in history; only the last few versions before edits are kept, in memory`)
+    assertFileBatchSize(input.files.length, SystemFileReadLimits.readFiles, 'read')
+    const files: SystemReadResult['files'] = []
+    const failures: AppError[] = []
+    // 一次调用总共最多 readChars 个字符：按顺序分给每个文件，分完后面的文件只带位置不带内容，hasMore 告诉调用方接着读。
+    let remaining = SystemFileReadLimits.readChars
+    for (const file of input.files) {
+      try {
+        const result = await this.readOne(file, remaining)
+        remaining -= result.content.length
+        files.push(result)
+      } catch (error) {
+        const failure = AppError.from(error)
+        log.debug('one file in a read batch failed', { path: file.path, code: failure.code, message: failure.message })
+        failures.push(failure)
+        files.push(failureEntry(file.path, failure))
       }
-      return readTextWindow(resolvedPath, snapshot.buffer, input.offset ?? 0, maxChars)
     }
-    const buffer = await readBoundedFile(resolvedPath, MaxReadBytes)
-    const media = detectMediaType(buffer)
-    if (media) {
-      throw new AppError('VALIDATION', `${resolvedPath} is ${media.kind === 'image' ? 'an image' : 'a PDF'}; use system:view to look at it`)
-    }
-    return readTextWindow(resolvedPath, buffer, input.offset ?? 0, maxChars)
+    if (failures.length === input.files.length) throw failures[0]
+    return { files }
   }
 
   public async view(input: SystemViewInput): Promise<SystemViewResult> {
-    const resolvedPath = this.resolvePath(input.path)
-    const buffer = await readBoundedFile(resolvedPath, MaxReadBytes)
-    const media = detectMediaType(buffer)
-    if (!media) {
-      throw new AppError('VALIDATION', `${resolvedPath} is not an image or PDF; text files go through system:read`)
-    }
-    if (media.kind === 'image') {
-      if (buffer.byteLength > MaxImageBytes) {
-        throw new AppError('VALIDATION', `Image is too large to hand to the model: ${buffer.byteLength} bytes > ${MaxImageBytes} bytes; shrink it with system:run first`)
-      }
-      return {
-        path: resolvedPath,
-        kind: 'image',
-        mediaType: media.mediaType,
-        bytes: buffer.byteLength,
-        modelContent: [{ type: 'image-data', data: buffer.toString('base64'), mediaType: media.mediaType }],
+    assertFileBatchSize(input.files.length, SystemFileReadLimits.viewFiles, 'view')
+    const files: SystemViewResult['files'] = []
+    const modelContent: SystemViewResult['modelContent'] = []
+    const failures: AppError[] = []
+    for (const [index, file] of input.files.entries()) {
+      try {
+        const viewed = await this.viewOne(file)
+        files.push(viewed.entry)
+        modelContent.push({ type: 'text', text: `文件 ${index + 1}/${input.files.length}：${viewed.label}` }, viewed.part)
+      } catch (error) {
+        const failure = AppError.from(error)
+        log.debug('one file in a view batch failed', { path: file.path, code: failure.code, message: failure.message })
+        failures.push(failure)
+        files.push(failureEntry(file.path, failure))
       }
     }
-    const page = input.page ?? 1
-    const extracted = await extractPdfPage(buffer, page)
-    const stem = basename(resolvedPath, extname(resolvedPath))
-    return {
-      path: resolvedPath,
-      kind: 'document',
-      mediaType: media.mediaType,
-      page,
-      pageCount: extracted.pageCount,
-      bytes: extracted.bytes.byteLength,
-      modelContent: [{ type: 'file-data', data: extracted.bytes.toString('base64'), mediaType: media.mediaType, filename: `${stem}.page${page}.pdf` }],
-    }
+    if (failures.length === input.files.length) throw failures[0]
+    return { files, modelContent }
   }
 
   public async edit(input: SystemEditInput, ctx: SystemToolContext): Promise<SystemEditResult> {
@@ -208,6 +198,52 @@ class SystemFileOperations implements SystemFileOperationsApi {
       content: updated.slice(window.offset, window.end),
       range: window,
       hasMore: window.end < updated.length,
+    }
+  }
+
+  /** 读一个文件：按字符取一段，最多 remaining 个（还受文件自己的 maxChars 和总上限约束）；给 version 就读改动前留下的那个版本。 */
+  private async readOne(file: SystemReadFileInput, remaining: number): Promise<SystemReadFileResult> {
+    const resolvedPath = this.resolvePath(file.path)
+    const maxChars = Math.max(0, Math.min(SystemFileReadLimits.readChars, file.maxChars ?? SystemFileReadLimits.readChars, remaining))
+    if (isPresent(file.version)) {
+      const snapshot = this.history.recall(resolvedPath, file.version)
+      if (!snapshot) {
+        throw new AppError('NOT_FOUND', `Version ${file.version} of ${resolvedPath} is not in history; only the last few versions before edits are kept, in memory`)
+      }
+      return readTextWindow(resolvedPath, snapshot.buffer, file.offset ?? 0, maxChars)
+    }
+    const buffer = await readBoundedFile(resolvedPath, SystemFileReadLimits.fileBytes)
+    const media = detectMediaType(buffer)
+    if (media) {
+      throw new AppError('VALIDATION', `${resolvedPath} is ${media.kind === 'image' ? 'an image' : 'a PDF'}; use system:view to look at it`)
+    }
+    return readTextWindow(resolvedPath, buffer, file.offset ?? 0, maxChars)
+  }
+
+  /** 看一个文件：图片整张、PDF 抽出 pages 这几页成一份文档，返回元数据、交给模型的内容块和一行说明。 */
+  private async viewOne(file: SystemViewFileInput): Promise<{ entry: SystemViewFileResult; part: SystemViewResult['modelContent'][number]; label: string }> {
+    const resolvedPath = this.resolvePath(file.path)
+    const buffer = await readBoundedFile(resolvedPath, SystemFileReadLimits.fileBytes)
+    const media = detectMediaType(buffer)
+    if (!media) {
+      throw new AppError('VALIDATION', `${resolvedPath} is not an image or PDF; text files go through system:read`)
+    }
+    if (media.kind === 'image') {
+      if (buffer.byteLength > SystemFileReadLimits.imageBytes) {
+        throw new AppError('VALIDATION', `Image is too large to hand to the model: ${buffer.byteLength} bytes > ${SystemFileReadLimits.imageBytes} bytes; shrink it with system:run first`)
+      }
+      return {
+        entry: { path: resolvedPath, kind: 'image', mediaType: media.mediaType, bytes: buffer.byteLength },
+        part: { type: 'image-data', data: buffer.toString('base64'), mediaType: media.mediaType },
+        label: resolvedPath,
+      }
+    }
+    const extracted = await extractPdfPages(buffer, file.pages ?? [1], SystemFileReadLimits.pdfPages)
+    const filename = pdfPagesFilename(basename(resolvedPath, extname(resolvedPath)), extracted.pages)
+    return {
+      entry: { path: resolvedPath, kind: 'document', mediaType: media.mediaType, pages: extracted.pages, pageCount: extracted.pageCount, bytes: extracted.bytes.byteLength },
+      part: { type: 'file-data', data: extracted.bytes.toString('base64'), mediaType: media.mediaType, filename },
+      label: `${resolvedPath}（第 ${extracted.pages.join('、')} 页，共 ${extracted.pageCount} 页）`,
     }
   }
 

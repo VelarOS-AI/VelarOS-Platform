@@ -1,11 +1,11 @@
 /**
- * 文件数据：读与写的输入与结果、文本文件的编码与内容、搜索可见性的判定输入、gitignore 规则。
+ * 文件数据：读、看、写的输入与结果、文本文件的编码与内容、搜索可见性的判定输入、gitignore 规则。
  * 只放数据；带行为的接口在 `interface/`。
  */
 
 import type { ToolResultModelContentPart } from '@velaros-ai/agent/protocol'
 
-// ── 读与写的输入与结果 ────────────────────────────────────────
+// ── 读与看的输入与结果 ────────────────────────────────────────
 
 /** 文件里的一段字符范围：从 offset 起到 end 止，end 不含。read 返回它，edit 收它。 */
 export interface SystemTextRange {
@@ -13,16 +13,21 @@ export interface SystemTextRange {
   end: number
 }
 
-/** 读文本文件的入参：从第几个字符起、最多多少字符，都可省；给 version 就读改动前留下的那个版本。 */
-export interface SystemReadInput {
+/** 读一个文本文件：从第几个字符起、最多多少字符，都可省；给 version 就读改动前留下的那个版本。 */
+export interface SystemReadFileInput {
   path: string
   offset?: number
   maxChars?: number
   version?: string
 }
 
-/** 读文本文件的结果：content 是 range 这段的原文，hasMore 时把 range.end 当下一次的 offset 接着读；version 是这份内容的版本号。 */
-export interface SystemReadResult {
+/** 读文本文件的入参：files 里每项一个文件，一个文件就一项，一批就多项；一次调用总共最多返回 20 万字符。 */
+export interface SystemReadInput {
+  files: SystemReadFileInput[]
+}
+
+/** 一个文件读到的内容：content 是 range 这段的原文，hasMore 时把 range.end 当下一次的 offset 接着读；version 是这份内容的版本号。 */
+export interface SystemReadFileResult {
   path: string
   version: string
   content: string
@@ -32,33 +37,57 @@ export interface SystemReadResult {
   encoding: SystemTextEncoding
 }
 
-/** 看图片或 PDF 的入参：PDF 一次一页，page 从 1 起，不给就是第 1 页。 */
-export interface SystemViewInput {
+/** 一批里某个文件读不了或看不了：只有它自己失败，其余文件照常返回；全部失败时整个调用报错。path 照传入的原样。 */
+export interface SystemFileFailure {
   path: string
-  page?: number
+  error: {
+    code: string
+    message: string
+  }
 }
 
-/** 看图片的结果：整张图作为模型可见的内容块交给模型，效果和用户上传一样。 */
+/** 读文本文件的结果：files 与入参的 files 一一对应，每项是读到的内容或这个文件的失败。 */
+export interface SystemReadResult {
+  files: Array<SystemReadFileResult | SystemFileFailure>
+}
+
+/** 看一个图片或 PDF：pages 是 PDF 看哪几页，从 1 起，不给就是第 1 页。 */
+export interface SystemViewFileInput {
+  path: string
+  pages?: number[]
+}
+
+/** 看图片或 PDF 的入参：files 里每项一个文件，一个文件就一项，一批就多项。 */
+export interface SystemViewInput {
+  files: SystemViewFileInput[]
+}
+
+/** 看到的一张图片。 */
 export interface SystemViewImageResult {
   path: string
   kind: 'image'
   mediaType: string
   bytes: number
-  modelContent: ToolResultModelContentPart[]
 }
 
-/** 看 PDF 的结果：只有 page 这一页作为文档内容块交给模型，pageCount 告诉调用方一共几页。 */
+/** 看到的一份 PDF：pages 是实际抽出的页，pageCount 是原文件的总页数。 */
 export interface SystemViewDocumentResult {
   path: string
   kind: 'document'
   mediaType: string
-  page: number
+  pages: number[]
   pageCount: number
   bytes: number
-  modelContent: ToolResultModelContentPart[]
 }
 
-export type SystemViewResult = SystemViewImageResult | SystemViewDocumentResult
+/** 看到的一个文件的元数据。 */
+export type SystemViewFileResult = SystemViewImageResult | SystemViewDocumentResult
+
+/** 看图片或 PDF 的结果：files 与入参的 files 一一对应；modelContent 按同样的顺序放每个文件的内容块（图片整张、PDF 是抽出的那几页，效果和用户上传一样），每块前面一行文字说明是哪个文件，失败的文件没有内容块。 */
+export interface SystemViewResult {
+  files: Array<SystemViewFileResult | SystemFileFailure>
+  modelContent: ToolResultModelContentPart[]
+}
 
 /** 文件改动前留下的一个版本：版本号是内容的哈希，buffer 是当时的原始字节。 */
 export interface SystemFileSnapshot {
