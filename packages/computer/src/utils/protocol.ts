@@ -1,12 +1,3 @@
-import { isFalse, isPlainObject, isString, isTrue, numberOrNull } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
-
-import type {
-  ComputerCommand,
-  ComputerHelperRequest,
-  ComputerHelperResponse,
-} from './types'
-
 /**
  * Python 桌面控制 helper 的 stdio 线协议（行分隔 JSON）编解码。
  *
@@ -20,9 +11,19 @@ import type {
  *   `code`/`message` 缺失则**补占位**：这一帧的判别式已经确定是失败，缺的只是诊断文本，
  *   为文案缺失把整帧作废没有价值。
  * - **`result` 是断言不是校验**：`TResult` 由调用方指定，这里不认识各命令的返回形状，也不该认识
- *   （否则协议层要跟着每个新命令改）。形状约束归 `types.ts` 的命令表，运行期不二次校验。
+ *   （否则协议层要跟着每个新命令改）。形状约束归 `types/protocol.ts` 的命令表，运行期不二次校验。
  * - 全文件无副作用，所以线格式可以脱离真实 sidecar 单测。
  */
+
+import { isFalse, isPlainObject, isString, isTrue, numberOrNull } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
+
+import { ComputerErrorCodes } from '../contract/constants.js'
+import type {
+  ComputerCommand,
+  ComputerHelperRequest,
+  ComputerHelperResponse,
+} from '../types/protocol.js'
 
 /** 把一次请求编码成单行、以换行结尾的 JSON。 */
 export function encodeComputerRequest(
@@ -39,21 +40,21 @@ export function decodeComputerResponse<TResult = unknown>(
   line: string
 ): ComputerHelperResponse<TResult> {
   const trimmed = line.trim()
-  if (!trimmed) throw new AppError('COMPUTER_PROTOCOL_INVALID', 'Empty computer-helper response line')
+  if (!trimmed) throw new AppError(ComputerErrorCodes.protocolInvalid, 'Empty computer-helper response line')
 
   let parsed: unknown
   try {
     parsed = JSON.parse(trimmed)
   } catch (error) {
     throw new AppError(
-      'COMPUTER_PROTOCOL_INVALID',
+      ComputerErrorCodes.protocolInvalid,
       `Invalid computer-helper response JSON: ${AppError.getMessage(error)}`,
       error
     )
   }
 
   if (!isPlainObject(parsed))
-    throw new AppError('COMPUTER_PROTOCOL_INVALID', 'Computer-helper response is not an object')
+    throw new AppError(ComputerErrorCodes.protocolInvalid, 'Computer-helper response is not an object')
 
   const id = numberOrNull(parsed.id)
 
@@ -72,7 +73,7 @@ export function decodeComputerResponse<TResult = unknown>(
   }
 
   throw new AppError(
-    'COMPUTER_PROTOCOL_INVALID',
+    ComputerErrorCodes.protocolInvalid,
     'Computer-helper response missing boolean "ok" field'
   )
 }

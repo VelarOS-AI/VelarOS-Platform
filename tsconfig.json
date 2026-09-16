@@ -37,22 +37,22 @@
         "./packages/browser/src/exports/tools.ts"
       ],
       "@velaros-ai/cli": [
-        "./packages/cli/src/index.ts"
+        "./packages/cli/src/exports/index.ts"
       ],
       "@velaros-ai/cli/*": [
-        "./packages/cli/src/*"
+        "./packages/cli/src/exports/*"
       ],
       "@velaros-ai/computer/runtime": [
-        "./packages/computer/src/runtime/index.ts"
+        "./packages/computer/src/exports/runtime.ts"
       ],
       "@velaros-ai/computer/runtime/*": [
-        "./packages/computer/src/runtime/*"
+        "./packages/computer/src/exports/*"
       ],
       "@velaros-ai/computer/tools": [
-        "./packages/computer/src/tools/index.ts"
+        "./packages/computer/src/exports/tools.ts"
       ],
       "@velaros-ai/computer/tools/*": [
-        "./packages/computer/src/tools/*"
+        "./packages/computer/src/exports/*"
       ],
       "@velaros-ai/ui/conversation": [
         "./packages/ui/src/conversation/index.ts"
@@ -137,6 +137,12 @@
       ],
       "@velaros-ai/surface-protocol/*": [
         "./packages/surface-protocol/src/exports/*"
+      ],
+      "@velaros-ai/document-renderer": [
+        "./packages/document-renderer/src/exports/index.ts"
+      ],
+      "@velaros-ai/document-renderer/*": [
+        "./packages/document-renderer/src/exports/*"
       ],
       "@velaros-ai/knowledge": [
         "./packages/knowledge/src/exports/index.ts"

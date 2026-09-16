@@ -1,101 +1,71 @@
-import { type ChildProcessWithoutNullStreams, spawn } from 'node:child_process'
-
 import { isFalse, isNull } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { type TimerLease, TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
-import { type ComputerHelperLaunchSpec, resolveComputerHelper } from './ComputerHelperResolver'
-import {
-  decodeComputerResponse,
-  drainResponseLines,
-  encodeComputerRequest,
-} from './ComputerSidecarProtocol'
-import { ComputerTuning } from './tuning'
+import { ComputerErrorCodes, ComputerHelperErrorCodes } from '../contract/constants.js'
+import type {
+  ComputerSidecarManagerOptions,
+  ComputerSidecarProcess,
+  ComputerSidecarSpawner,
+} from '../contract/requires.js'
 import type {
   ComputerAvailability,
   ComputerClickOptions,
   ComputerClickResult,
-  ComputerCommand,
+  ComputerHelperLaunchSpec,
   ComputerKeyResult,
   ComputerMoveResult,
   ComputerPermissionStatus,
   ComputerScreenshot,
   ComputerScreenSize,
   ComputerTypeResult,
-} from './types'
+} from '../types/computer.js'
+import type { ComputerCommand } from '../types/protocol.js'
+import { classifyStartError, permissionMissingDetail } from '../utils/availability.js'
+import { spawnComputerHelperProcess } from '../utils/process.js'
+import {
+  decodeComputerResponse,
+  drainResponseLines,
+  encodeComputerRequest,
+} from '../utils/protocol.js'
+import { ComputerTuning } from '../utils/tuning.js'
 
-/** manager 依赖的最小子进程接口，测试中可注入替身。 */
-export interface ComputerSidecarProcess {
-  stdin: {
-    write(chunk: string): void
-    end(): void
-    /**
-     * 管道写错误（helper 关掉 stdin 或已退出时的 `EPIPE`）只经这个事件异步到达：
-     * `write()` 外面的 try/catch 接不住它，没有监听者就是**宿主进程的未捕获异常**
-     * （Electron 主进程会弹错误框）。替身可以不实现，真实 child 一定有。
-     */
-    on?(event: 'error', listener: (error: Error) => void): void
-  }
-  stdout: { on(event: 'data', listener: (chunk: Buffer | string) => void): void }
-  stderr: { on(event: 'data', listener: (chunk: Buffer | string) => void): void }
-  on(event: 'error', listener: (error: Error) => void): void
-  on(event: 'exit', listener: (code: Nullable<number>) => void): void
-  kill(signal?: NodeJS.Signals): void
-}
-
-export type ComputerSidecarSpawner = (
-  spec: ComputerHelperLaunchSpec
-) => ComputerSidecarProcess
-
-export interface ComputerSidecarManagerOptions {
-  /** 覆盖 helper 解析逻辑，用于测试或自定义打包。 */
-  resolveHelper?: () => Nullable<ComputerHelperLaunchSpec>
-  /** 覆盖子进程创建逻辑，测试中注入假 duplex。 */
-  spawnProcess?: ComputerSidecarSpawner
-  /** 单个请求超时时间，单位毫秒，默认见 ComputerTuning.requestTimeoutMs。 */
-  requestTimeoutMs?: number
-  /** 启动握手超时时间，单位毫秒，默认见 ComputerTuning.startupTimeoutMs。 */
-  startupTimeoutMs?: number
-  /** 可选诊断日志接收器。 */
-  onLog?: (message: string) => void
-}
-
-interface PendingRequest {
-  resolve: (value: unknown) => void
-  reject: (error: Error) => void
-  timer: TimerLease
-}
-
-/** helper 启动完成时主动发来的握手行用 id=0，与任何真实请求 id（从 1 递增）不冲突。 */
-const READY_HANDSHAKE_ID = 0
-const SnapshotValidationErrorCodes = new Set([
-  'screen_snapshot_required',
-  'screen_snapshot_stale',
-  'screen_snapshot_unexpected',
-  'screen_coordinate_out_of_bounds',
-  'screen_coordinate_space_invalid',
-  'screen_state_invalid',
-])
+import { createComputerHelperLocator } from './ComputerHelperLocator.js'
 
 /**
- * 默认辅助进程启动器。两项行为是刻意设计：
- * - **参数数组直传，不经过命令解释器**：解释器和脚本路径由 `ComputerHelperResolver` 从固定布局
- *   解析，不拼接命令行字符串，因而不产生命令注入面。
- * - **继承父进程环境**：辅助程序是随插件分发的自包含虚拟环境，需要 `PATH`、`HOME` 等信息定位
- *   系统接口与显示会话。这里只额外固定两个 Python 行为开关，关闭缓冲并禁止写入 `.pyc`，保证
- *   标准输入输出协议实时且不在插件目录生成编译产物。
+ * 桌面控制运行时：宿主持有的那一份，管着 Python helper 子进程的整个生命周期。
+ *
+ * 每个动作方法都可能懒启动 sidecar；`ensureAvailable` 永不抛，其余方法一律抛——动作类调用没有「降级」这一说。
  */
-function defaultSpawner(spec: ComputerHelperLaunchSpec): ComputerSidecarProcess {
-  const child: ChildProcessWithoutNullStreams = spawn(
-    spec.pythonCommand,
-    [spec.helperScript],
-    {
-      cwd: spec.runtimeDir,
-      stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env, PYTHONUNBUFFERED: '1', PYTHONDONTWRITEBYTECODE: '1' },
-    }
-  )
-  return child
+export interface ComputerRuntimeApi {
+  /** sidecar 是否完成了 ready 握手。 */
+  isReady(): boolean
+  /** 探测桌面控制是否可用（解析 helper、启动进程、执行 check），永不抛错，一切失败都在结果里。 */
+  ensureAvailable(): Promise<ComputerAvailability>
+  /** 主显示器的逻辑几何。 */
+  screenSize(): Promise<ComputerScreenSize>
+  /** 截取主显示器，始终按逻辑分辨率，保证图上量出的像素与点击坐标 1:1。 */
+  screenshot(): Promise<ComputerScreenshot>
+  /** 把指针移动到虚拟桌面的全局逻辑坐标；`durationMs` 给需要平滑移动的宿主用。 */
+  mouseMove(x: number, y: number, options?: { durationMs?: number }): Promise<ComputerMoveResult>
+  /** 在指定坐标空间点击；主屏坐标要带截图绑定，helper 在按下前再校验一次。 */
+  leftClick(x: number, y: number, options?: ComputerClickOptions): Promise<ComputerClickResult>
+  /** 在当前焦点处原样输入文本。 */
+  typeText(text: string): Promise<ComputerTypeResult>
+  /** 按下一个键或组合键。 */
+  key(keys: string): Promise<ComputerKeyResult>
+  /** 终止 sidecar 并拒绝在飞请求；置位后不再有任何状态迁移。 */
+  dispose(): void
+}
+
+/** 一条在飞请求的账：应答到了怎么交回去，超时了怎么拒绝，以及它自己的超时租约。 */
+export interface ComputerSidecarManagerPendingRequest {
+  /** 应答到达时把结果交回调用方。 */
+  resolve: (value: unknown) => void
+  /** 超时、进程死亡或管道断开时拒绝调用方。 */
+  reject: (error: Error) => void
+  /** 这条请求的超时租约；应答到达或提前失败时要取消。 */
+  timer: TimerLease
 }
 
 /**
@@ -138,13 +108,22 @@ function defaultSpawner(spec: ComputerHelperLaunchSpec): ComputerSidecarProcess 
  * `write()` 外的 try/catch 接不住；没有 `'error'` 监听者它就是宿主进程的未捕获异常，在 Electron
  * 主进程会直接弹错误框。`start()` 给 stdin 装了监听器，按「写失败」拒掉在飞请求并 teardown。
  *
- * **失败方向**：`ensureAvailable()` 永不抛，把一切失败翻译成结构化 `ComputerAvailability`
- * （上层据此引导用户装插件或授权）；`request()` 则一律抛——动作类调用没有「降级」这一说。
- *
  * **妥协**：不做重启退避/自动重连。sidecar 死了就回 idle，等下一次调用重新拉起；桌面控制是
  * 低频人工触发的能力，重试策略留给调用方比在这里内建一套更可预期。
  */
-export class ComputerSidecarManager {
+export class ComputerSidecarManager implements ComputerRuntimeApi {
+  /** helper 启动完成时主动发来的握手行用这个 id，与任何真实请求 id（从 1 递增）不冲突。 */
+  private static readonly ReadyHandshakeId = 0
+  /** 这些 helper 错误码属于「入参/截图绑定不对」，报 VALIDATION 让模型重新截图；其余是运行时故障。 */
+  private static readonly SnapshotValidationErrorCodes: ReadonlySet<string> = new Set([
+    ComputerHelperErrorCodes.snapshotRequired,
+    ComputerHelperErrorCodes.snapshotStale,
+    ComputerHelperErrorCodes.snapshotUnexpected,
+    ComputerHelperErrorCodes.coordinateOutOfBounds,
+    ComputerHelperErrorCodes.coordinateSpaceInvalid,
+    ComputerHelperErrorCodes.screenStateInvalid,
+  ])
+
   private readonly resolveHelper: () => Nullable<ComputerHelperLaunchSpec>
   private readonly spawnProcess: ComputerSidecarSpawner
   private readonly requestTimeoutMs: number
@@ -159,26 +138,21 @@ export class ComputerSidecarManager {
   private ready = false
   private disposed = false
   private nextRequestId = 1
-  private readonly pending = new Map<number, PendingRequest>()
+  private readonly pending = new Map<number, ComputerSidecarManagerPendingRequest>()
 
   constructor(options: ComputerSidecarManagerOptions = {}) {
-    this.resolveHelper = options.resolveHelper ?? (() => resolveComputerHelper())
-    this.spawnProcess = options.spawnProcess ?? defaultSpawner
+    const locator = createComputerHelperLocator()
+    this.resolveHelper = options.resolveHelper ?? (() => locator.resolve())
+    this.spawnProcess = options.spawnProcess ?? spawnComputerHelperProcess
     this.requestTimeoutMs = options.requestTimeoutMs ?? ComputerTuning.requestTimeoutMs
     this.startupTimeoutMs = options.startupTimeoutMs ?? ComputerTuning.startupTimeoutMs
     this.onLog = options.onLog
   }
 
-  /** sidecar ready 握手完成后返回 true。 */
   public isReady(): boolean {
     return this.ready
   }
 
-  /**
-   * 探测桌面控制是否可用：解析 helper、启动进程并执行 check。
-   *
-   * 该方法不向外抛错，而是返回结构化可用性结果。
-   */
   public async ensureAvailable(): Promise<ComputerAvailability> {
     const spec = this.resolveHelper()
     if (!spec) return {
@@ -192,7 +166,7 @@ export class ComputerSidecarManager {
     } catch (error) {
       return {
         available: false,
-        reason: this.classifyStartError(error),
+        reason: classifyStartError(error),
         detail: AppError.getMessage(error),
       }
     }
@@ -204,7 +178,7 @@ export class ComputerSidecarManager {
       return {
         available: !permissionMissing,
         reason: permissionMissing ? 'permission-missing' : 'available',
-        detail: permissionMissing ? this.permissionMissingDetail(permissions) : null,
+        detail: permissionMissing ? permissionMissingDetail(permissions) : null,
         permissions,
       }
     } catch (error) {
@@ -249,12 +223,22 @@ export class ComputerSidecarManager {
     return this.request<ComputerKeyResult>('key', { keys })
   }
 
+  /** 终止 sidecar，并拒绝仍在进行中的请求。 */
+  public dispose(): void {
+    this.disposed = true
+    this.rejectAllPending(
+      new AppError(ComputerErrorCodes.sidecarDisposed, 'Computer sidecar disposed.')
+    )
+    this.timers.dispose()
+    this.teardown()
+  }
+
   /** 发送命令并等待关联响应；必要时会懒启动 sidecar。 */
-  public async request<TResult>(
+  private async request<TResult>(
     command: ComputerCommand,
     payload: Record<string, unknown>
   ): Promise<TResult> {
-    if (this.disposed) throw new AppError('COMPUTER_SIDECAR_DISPOSED', '桌面控制 sidecar 已释放，无法继续使用。')
+    if (this.disposed) throw new AppError(ComputerErrorCodes.sidecarDisposed, '桌面控制 sidecar 已释放，无法继续使用。')
     await this.start()
 
     const id = this.nextRequestId++
@@ -279,7 +263,7 @@ export class ComputerSidecarManager {
       const failWrite = (message: string, cause?: unknown) => {
         timer.cancel()
         this.pending.delete(id)
-        rejectPromise(new AppError('COMPUTER_SIDECAR_WRITE_FAILED', message, cause))
+        rejectPromise(new AppError(ComputerErrorCodes.sidecarWriteFailed, message, cause))
       }
 
       const child = this.child
@@ -300,10 +284,10 @@ export class ComputerSidecarManager {
   }
 
   /** 幂等启动 sidecar，并等待 ready 握手。 */
-  public start(): Promise<void> {
+  private start(): Promise<void> {
     if (this.disposed)
       return Promise.reject(
-        new AppError('COMPUTER_SIDECAR_DISPOSED', '桌面控制 sidecar 已释放，无法继续使用。')
+        new AppError(ComputerErrorCodes.sidecarDisposed, '桌面控制 sidecar 已释放，无法继续使用。')
       )
     if (this.ready) return Promise.resolve()
     if (this.startPromise) return this.startPromise
@@ -313,7 +297,7 @@ export class ComputerSidecarManager {
       if (!spec) {
         // 消息文本被 classifyStartError 按关键字分类，改词会改可用性判定，别润色。
         rejectPromise(
-          new AppError('COMPUTER_HELPER_MISSING', 'Desktop-control helper script was not found.')
+          new AppError(ComputerErrorCodes.helperMissing, 'Desktop-control helper script was not found.')
         )
         return
       }
@@ -323,7 +307,7 @@ export class ComputerSidecarManager {
         child = this.spawnProcess(spec)
       } catch (error) {
         // arch-guard:silent-catch-ok 启动失败会通过 rejectPromise 作为启动错误返回调用方。
-        rejectPromise(AppError.from(error, 'COMPUTER_SIDECAR_SPAWN_FAILED'))
+        rejectPromise(AppError.from(error, ComputerErrorCodes.sidecarSpawnFailed))
         return
       }
       this.child = child
@@ -349,7 +333,7 @@ export class ComputerSidecarManager {
       startupTimer = this.timers.after(this.startupTimeoutMs, () => {
         onFail(
           new AppError(
-            'COMPUTER_SIDECAR_STARTUP_TIMEOUT',
+            ComputerErrorCodes.sidecarStartupTimeout,
             `桌面控制 helper 在 ${this.startupTimeoutMs} 毫秒内没有完成启动握手，已终止本次启动。`,
             undefined,
             { timeoutMs: this.startupTimeoutMs }
@@ -376,7 +360,7 @@ export class ComputerSidecarManager {
         if (this.child !== child) return
         this.log(`sidecar stdin error: ${error.message}`)
         const writeError = new AppError(
-          'COMPUTER_SIDECAR_WRITE_FAILED',
+          ComputerErrorCodes.sidecarWriteFailed,
           `桌面控制 helper 的输入管道已断开：${error.message}`,
           error
         )
@@ -393,9 +377,9 @@ export class ComputerSidecarManager {
         const reason =
           this.stderrBuffer.trim() ||
           `Computer sidecar exited before becoming ready (code ${code ?? 'null'}).`
-        onFail(new AppError('COMPUTER_SIDECAR_EXITED', reason, undefined, { exitCode: code }))
+        onFail(new AppError(ComputerErrorCodes.sidecarExited, reason, undefined, { exitCode: code }))
         this.rejectAllPending(
-          new AppError('COMPUTER_SIDECAR_EXITED', 'Computer sidecar exited.', undefined, {
+          new AppError(ComputerErrorCodes.sidecarExited, 'Computer sidecar exited.', undefined, {
             exitCode: code,
           })
         )
@@ -417,16 +401,6 @@ export class ComputerSidecarManager {
     return startPromise
   }
 
-  /** 终止 sidecar，并拒绝仍在进行中的请求。 */
-  public dispose(): void {
-    this.disposed = true
-    this.rejectAllPending(
-      new AppError('COMPUTER_SIDECAR_DISPOSED', 'Computer sidecar disposed.')
-    )
-    this.timers.dispose()
-    this.teardown()
-  }
-
   private handleStdout(chunk: string, onReady: () => void): void {
     this.stdoutBuffer += chunk
     const { lines, rest } = drainResponseLines(this.stdoutBuffer)
@@ -444,7 +418,7 @@ export class ComputerSidecarManager {
         continue
       }
 
-      if (response.id === READY_HANDSHAKE_ID) {
+      if (response.id === ComputerSidecarManager.ReadyHandshakeId) {
         onReady()
         continue
       }
@@ -460,9 +434,10 @@ export class ComputerSidecarManager {
       if (response.ok) {
         pending.resolve(response.result)
       } else {
-        const errorCode = SnapshotValidationErrorCodes.has(response.error.code)
-          ? 'VALIDATION'
-          : 'COMPUTER_HELPER_ERROR'
+        const errorCode =
+          ComputerSidecarManager.SnapshotValidationErrorCodes.has(response.error.code)
+            ? 'VALIDATION'
+            : ComputerErrorCodes.helperError
         pending.reject(
           new AppError(errorCode, `${response.error.code}: ${response.error.message}`, undefined, {
             helperErrorCode: response.error.code,
@@ -470,20 +445,6 @@ export class ComputerSidecarManager {
         )
       }
     }
-  }
-
-  private classifyStartError(error: unknown): ComputerAvailability['reason'] {
-    const message = AppError.getMessage(error).toLowerCase()
-    if (message.includes('enoent') || message.includes('not found')) return 'python-missing'
-    if (message.includes('modulenotfounderror') || message.includes('no module named'))
-      return 'dependencies-missing'
-    return 'spawn-failed'
-  }
-
-  private permissionMissingDetail(permissions: ComputerPermissionStatus): string {
-    if (permissions.platform === 'linux') return 'Linux desktop control requires a graphical display session with screenshot and input access.'
-
-    return 'Desktop control requires Accessibility and Screen Recording permissions.'
   }
 
   private rejectAllPending(error: Error): void {
@@ -520,4 +481,11 @@ export class ComputerSidecarManager {
   private log(message: string): void {
     this.onLog?.(`[computer-sidecar] ${message}`)
   }
+}
+
+/** 创建一份桌面控制运行时；宿主整个进程持有一份，用完 `dispose()`。 */
+export function createComputerRuntime(
+  options: ComputerSidecarManagerOptions = {}
+): ComputerRuntimeApi {
+  return new ComputerSidecarManager(options)
 }

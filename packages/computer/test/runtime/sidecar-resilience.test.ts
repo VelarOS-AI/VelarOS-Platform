@@ -2,8 +2,8 @@ import { spawn } from 'node:child_process'
 
 import { describe, expect, test } from 'bun:test'
 
-import type { ComputerHelperLaunchSpec, ComputerSidecarProcess } from '../../src/runtime'
-import { ComputerSidecarManager } from '../../src/runtime'
+import type { ComputerHelperLaunchSpec, ComputerSidecarProcess } from '../../src/exports/runtime'
+import { ComputerSidecarManager } from '../../src/exports/runtime'
 
 /** 假 helper 用 `sh` 扮演：EPIPE、半行崩溃、卡在启动这三种故障都要真管道才复现得出来。 */
 const posixTest = process.platform === 'win32' ? test.skip : test
@@ -46,11 +46,11 @@ describe('computer sidecar 韧性', () => {
     })
 
     try {
-      await manager.start()
+      // 先让 sidecar 完成握手；这一次请求本身就会拉起它。
+      await expect(manager.screenSize()).rejects.toBeDefined()
       await delay(100)
-      await expect(
-        manager.request('screen_size', { pad: 'x'.repeat(200_000) })
-      ).rejects.toBeDefined()
+      // 一次够大的写入才会真的撞上已经关掉的管道。
+      await expect(manager.typeText('x'.repeat(200_000))).rejects.toBeDefined()
       // 管道错误是异步事件，留一个窗口让它到达；到达时若无人接管就会进 uncaughtException。
       await delay(300)
       expect(uncaught).toEqual([])
@@ -75,9 +75,9 @@ describe('computer sidecar 韧性', () => {
     })
 
     try {
-      await expect(manager.request('screen_size', {})).rejects.toBeDefined()
+      await expect(manager.screenSize()).rejects.toBeDefined()
       // 残片若留在行缓冲里，会粘在第二个 helper 的握手行前面，整行被当坏帧丢掉 → 永远挂起。
-      expect(await manager.request('screen_size', {})).toMatchObject({ width: 1 })
+      expect(await manager.screenSize()).toMatchObject({ width: 1 })
       expect(launches).toBe(2)
     } finally {
       manager.dispose()
@@ -93,7 +93,7 @@ describe('computer sidecar 韧性', () => {
     })
 
     try {
-      await expect(manager.request('screen_size', {})).rejects.toMatchObject({
+      await expect(manager.screenSize()).rejects.toMatchObject({
         code: 'COMPUTER_SIDECAR_STARTUP_TIMEOUT',
       })
       const availability = await manager.ensureAvailable()

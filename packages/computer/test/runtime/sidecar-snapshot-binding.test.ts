@@ -1,11 +1,12 @@
 import { describe, expect, test } from 'bun:test'
 
 import type {
+  ComputerClickOptions,
   ComputerHelperRequest,
   ComputerHelperResponse,
   ComputerSidecarProcess,
-} from '../../src/runtime'
-import { ComputerSidecarManager } from '../../src/runtime'
+} from '../../src/exports/runtime'
+import { ComputerSidecarManager } from '../../src/exports/runtime'
 
 class FakeOutput {
   private readonly listeners: Array<(chunk: Buffer | string) => void> = []
@@ -145,12 +146,11 @@ describe('computer sidecar screenshot binding', () => {
 
     try {
       await expect(
-        harness.manager.request('left_click', {
-          x: 120,
-          y: 40,
+        // 协议违规是调用方造出来的：全局坐标不许带 snapshotId，类型层面就拦着，这里故意绕过去看 helper 的裁决。
+        harness.manager.leftClick(120, 40, {
           coordinateSpace: 'global',
           snapshotId: 'screen_test_snapshot_01',
-        })
+        } as unknown as ComputerClickOptions)
       ).rejects.toMatchObject({
         code: 'VALIDATION',
         context: { helperErrorCode: 'screen_snapshot_unexpected' },

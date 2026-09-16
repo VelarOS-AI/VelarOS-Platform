@@ -2,9 +2,9 @@ import { describe, expect, test } from 'bun:test'
 
 import { AppError } from '@velaros-ai/core/error'
 
-import type { ComputerClickOptions } from '../../src/runtime'
-import type { ComputerToolContext, ToolComputerApi } from '../../src/tools'
-import { computerTools } from '../../src/tools'
+import type { ComputerClickOptions } from '../../src/exports/runtime'
+import type { ComputerToolContext, ToolComputerApi } from '../../src/exports/tools'
+import { computerTools } from '../../src/exports/tools'
 
 const SnapshotId = 'screen_test_snapshot_01'
 
@@ -78,7 +78,7 @@ function createContext(options: HarnessOptions = {}) {
   const context: ComputerToolContext = {
     abortSignal: new AbortController().signal,
     computer,
-    execution: null,
+    
   }
   return { clicks, context, moves, readScreenSizeReads: () => screenSizeReads }
 }

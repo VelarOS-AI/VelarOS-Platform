@@ -25,16 +25,16 @@
   "type": "module",
   "exports": {
     "./runtime": {
-      "types": "./dist/runtime/index.d.ts",
-      "import": "./dist/runtime/index.js"
+      "types": "./dist/exports/runtime.d.ts",
+      "import": "./dist/exports/runtime.js"
     },
     "./tools": {
-      "types": "./dist/tools/index.d.ts",
-      "import": "./dist/tools/index.js"
+      "types": "./dist/exports/tools.d.ts",
+      "import": "./dist/exports/tools.js"
     },
     "./contracts": {
-      "types": "./dist/contracts/index.d.ts",
-      "import": "./dist/contracts/index.js"
+      "types": "./dist/exports/contracts.d.ts",
+      "import": "./dist/exports/contracts.js"
     }
   },
   "files": [
