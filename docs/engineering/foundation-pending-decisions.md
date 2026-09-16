@@ -125,6 +125,7 @@
 | --- | --- | --- | --- |
 | X1 | VelarScript-Libraries 的 `packages/contract-codegen/tests/support/platform.mjs:20` 读 `packages/kernel/dist/contracts/protocol/index.js` | kernel 搬家后该产物路径不存在，新位置是 `dist/exports/contracts-protocol.js`（53 个 schema、内容一致）；kernel 入口收口后还会再变一次 | 那个仓：改这一行并重生成已提交的 `kernel.manifest.json`、`kernel.report.json`。**建议等 kernel 收口到 0.3.0 之后一次改到位** |
 | X2 | Desktop 的 `arch-guard-velaros` 两处按 dist 布局钉路径（memory 三切片、`memory/dist/memory-tree/v2/storage/AtomicFile.js`），以及 browser 的 `dist/composition/`、`dist/tools/` | 三个包的 dist 布局都变了 | Desktop：随升级重写这几处检查 |
+| X4 | browser 工具面 40→32 之后，Desktop 与 Workbench 里点名了被删工具的地方 | Desktop：`UnattendedTaskToolPolicy.ts` 的名单、两份技能文档（a11y-debugging、debug-optimize-lcp）、`docs/modules/infrastructure-browser.md`；Workbench：`WorkbenchBrowserToolHost.ts` 的初始可见工具名单含 `browser:site_context` 及其测试 | 两个产品：随升级改名或删名 |
 | X3 | Desktop 14 个文件 + 两份 package.json 把 `@velaros-ai/memory/knowledge` 换成 `@velaros-ai/knowledge`（导出名不变） | knowledge 已独立成包 | Desktop：随升级机械替换 |
 
 ## 八、产品层接线（本仓不改，列给你排期）
