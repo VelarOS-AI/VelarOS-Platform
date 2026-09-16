@@ -9,6 +9,7 @@ import {
   isNonBlankString,
   isPlainObject,
   isPresent,
+  isString,
   isTrue,
   toNullable,
 } from '@velaros-ai/core'
@@ -105,6 +106,34 @@ interface PooledTypeScriptProject {
 const projectCache = new Map<string, TypeScriptProjectCacheEntry>()
 const pooledProjects = new Map<string, PooledTypeScriptProject>()
 let configuredLibraryDirectory: Nullable<string> = null
+
+/**
+ * 池里最多留几个活的 `ts.LanguageService`（按最近使用淘汰）。
+ *
+ * 每个（项目根，tsconfig）常驻一个服务，里面是最多 2,000 个文件的全文；monorepo 里每个子包一个
+ * tsconfig，长跑的宿主打开的项目越多占用越大——原来这个池只增不减。超出上限就把最久没用的那个
+ * dispose 掉，连同它的配置与源码快照一起丢；下次用到时重建（调用方本来就按 `isCurrent()` 处理
+ * 服务被回收的情况）。
+ */
+const MaxPooledTypeScriptProjects = 8
+
+/** 把刚用到的项目挪到队尾，并淘汰超出上限的最久未用项目。 */
+function touchPooledProject(poolKey: string): void {
+  const project = pooledProjects.get(poolKey)
+  if (project) {
+    // Map 按插入序遍历：删掉再放回去就是「移到队尾」。
+    pooledProjects.delete(poolKey)
+    pooledProjects.set(poolKey, project)
+  }
+
+  while (pooledProjects.size > MaxPooledTypeScriptProjects) {
+    const oldestKey = pooledProjects.keys().next().value
+    if (!isString(oldestKey) || oldestKey === poolKey) return
+    pooledProjects.get(oldestKey)?.service.dispose()
+    pooledProjects.delete(oldestKey)
+    projectCache.delete(oldestKey)
+  }
+}
 
 function extensionWithDot(path: string): string {
   const index = path.lastIndexOf('.')
@@ -729,6 +758,7 @@ export function acquireTypeScriptLanguageService(
     }
     pooledProjects.set(poolKey, project)
   }
+  touchPooledProject(poolKey)
 
   // 只对账脏文件（overlay）：磁盘文件保持原版本号不动，TS 的增量缓存才留得住。
   const nextOverlayPaths = preserveExistingOverlays

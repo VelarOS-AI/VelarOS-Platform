@@ -177,13 +177,17 @@ async function resolveProjectPath(
   }
 }
 
+/**
+ * 行列直接问诊断自带的 `SourceFile` 要。
+ *
+ * 原先为了算行列**每条诊断新建一个 `SourceFile`**——而 `diagnostic.file` 本来就是 TS 程序解析好的
+ * 那一个。一个文件几百条诊断就是几百次整文件解析，跟 20 秒的目录诊断预算抢时间。
+ */
 function rangeFromTypeScriptDiagnostic(
-  fileName: string,
-  content: string,
+  sourceFile: ts.SourceFile,
   start: number,
   length: number
 ): Pick<LanguageDiagnosticRecord, 'line' | 'column' | 'endLine' | 'endColumn'> {
-  const sourceFile = ts.createSourceFile(fileName, content, ts.ScriptTarget.Latest, true)
   const startPosition = sourceFile.getLineAndCharacterOfPosition(start)
   const endPosition = sourceFile.getLineAndCharacterOfPosition(start + length)
   return {
@@ -219,12 +223,7 @@ function mapTypeScriptDiagnostic(
     message: ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n'),
     source: 'typescript',
     code: toOptional(numberOrNull(diagnostic.code)),
-    ...rangeFromTypeScriptDiagnostic(
-      absolutePath,
-      content,
-      diagnostic.start,
-      diagnostic.length ?? 1
-    ),
+    ...rangeFromTypeScriptDiagnostic(diagnostic.file, diagnostic.start, diagnostic.length ?? 1),
   }
 }
 
@@ -481,15 +480,45 @@ function extractExportsFromContent(path: string, content: string): JsTsExportRec
   })
 }
 
-function isSymbolExported(symbol: KernelSymbol, content: string): boolean {
+/** 一个文件里所有导出名（含 `export { local as name }` 的本地名）。 */
+function collectExportedNames(path: string, content: string): ReadonlySet<string> {
+  const names = new Set<string>()
+  for (const record of extractExportsFromContent(path, content)) {
+    names.add(record.name)
+    if (record.localName) names.add(record.localName)
+  }
+  return names
+}
+
+/**
+ * 一个文件只解析一次导出名，解析结果记在闭包里按需取。
+ *
+ * 原先每个「内核没标 exported 的符号」都整文件重解析一次：900 行的文件单次解析约 1.3 ms、
+ * 声明约 220 个，一个文件就要约 290 ms，而 find_symbols 缺省最多扫 2,500 个文件。
+ */
+function createExportedNamesReader(path: string, content: string): () => ReadonlySet<string> {
+  let names: Nullable<ReadonlySet<string>> = null
+  return () => {
+    names ??= collectExportedNames(path, content)
+    return names
+  }
+}
+
+function isSymbolExported(
+  symbol: KernelSymbol,
+  readExportedNames: () => ReadonlySet<string>
+): boolean {
   if (symbol.exported || isTrue(symbol.metadata?.exported)) return true
   if (symbol.kind === 'import') return false
 
-  const exports = extractExportsFromContent(symbol.path ?? '', content)
-  return exports.some((record) => record.name === symbol.name || record.localName === symbol.name)
+  return readExportedNames().has(symbol.name)
 }
 
-function toSymbolRecord(path: string, symbol: KernelSymbol, content: string): JsTsSymbolRecord {
+function toSymbolRecord(
+  path: string,
+  symbol: KernelSymbol,
+  readExportedNames: () => ReadonlySet<string>
+): JsTsSymbolRecord {
   return {
     path,
     name: symbol.name,
@@ -497,7 +526,7 @@ function toSymbolRecord(path: string, symbol: KernelSymbol, content: string): Js
     container: symbol.container,
     line: symbol.range?.startLine ?? symbol.line ?? 1,
     column: symbol.range?.startColumn ?? symbol.column ?? 1,
-    exported: isSymbolExported({ ...symbol, path }, content),
+    exported: isSymbolExported({ ...symbol, path }, readExportedNames),
     adapterId: symbol.adapterId,
   }
 }
@@ -538,11 +567,12 @@ async function collectSymbolRecords(
   for (const file of selection.files) {
     const content = await readSourceFile(ctx, file)
     if (!isPresent(content)) continue
+    const readExportedNames = createExportedNamesReader(file, content)
     const rawSymbols = (await kernel.listSymbols(file)) as KernelSymbol[]
     for (const raw of rawSymbols) {
       if (!raw.name) continue
       scannedSymbols += 1
-      const symbol = toSymbolRecord(file, raw, content)
+      const symbol = toSymbolRecord(file, raw, readExportedNames)
       if (symbol.kind === 'import' && !kinds.has('import')) continue
       if (input.exportedOnly && !symbol.exported) continue
       if (kinds.size && !kinds.has(symbol.kind.toLowerCase())) continue
@@ -620,6 +650,7 @@ async function collectExportRecords(
     maxFiles: Math.min(5000, Math.max(limit * 30, 500)),
   })
   const records: JsTsExportRecord[] = []
+  const kernel = await ctx.project.kernel()
 
   for (const file of selection.files) {
     const content = await readSourceFile(ctx, file)
@@ -631,13 +662,18 @@ async function collectExportRecords(
       records.push(record)
     }
 
-    const symbols = await collectSymbolRecords(ctx, {
-      path: file,
-      exportedOnly: true,
-      limit: 1000,
-      exact: false,
-    })
-    for (const symbol of symbols.symbols) {
+    // 内核的符号表补上语法层看不出来的导出（适配器标了 exported 的声明）。这里直接问内核要这个文件的
+    // 符号：原先走的是 `collectSymbolRecords(ctx, { path: file })`，那会为每个文件再列一次目录、
+    // 再读一次文件，整份目录扫描因此被做了 N+1 遍。
+    const exportedNames = new Set(syntaxExports.flatMap(
+      (record) => [record.name, ...(record.localName ? [record.localName] : [])]
+    ))
+    const readExportedNames = (): ReadonlySet<string> => exportedNames
+    const rawSymbols = (await kernel.listSymbols(file)) as KernelSymbol[]
+    for (const raw of rawSymbols) {
+      if (!raw.name) continue
+      const symbol = toSymbolRecord(file, raw, readExportedNames)
+      if (symbol.kind === 'import' || !symbol.exported) continue
       if (input.query && !symbol.name.toLowerCase().includes(input.query.toLowerCase())) continue
       records.push({
         path: symbol.path,

@@ -89,4 +89,13 @@ export { createProjectCodeQuery, executeProjectCodeLanguageQuery }
 export type { ProjectCodeIndexApi, ProjectCodeIndexQuery }
 export * from './ExternalLanguageService'
 export type { LanguageReadPort, LanguageToolContext } from './LanguageService'
-export { configureTypeScriptLibraryDirectory } from './TypeScriptProjectHost'
+export {
+  /**
+   * 宿主关闭项目时释放它的 TypeScript 语言服务（不传项目根则整池释放）。
+   *
+   * 池里每个（项目根，tsconfig）常驻一个服务、内含最多 2,000 个文件的全文；不出包的话长跑的
+   * 宿主只能眼看着它随打开的项目数一路涨。池本身另有按最近使用的淘汰上限。
+   */
+  clearTypeScriptProjectCache,
+  configureTypeScriptLibraryDirectory,
+} from './TypeScriptProjectHost'

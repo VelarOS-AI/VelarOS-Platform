@@ -129,6 +129,8 @@ export async function analyzeImpactWithService(
   definitionCount: number
   references: LanguageReferenceRecord[]
   referenceCount: number
+  referenceCountIsLowerBound?: boolean
+  referenceNote?: string
   importers: LanguageImportRecord[]
   importerCount: number
   relatedTestPaths: string[]
@@ -199,6 +201,8 @@ export async function analyzeImpactWithService(
     definitionCount: definitions.symbolCount,
     references: references.references,
     referenceCount: references.referenceCount,
+    referenceCountIsLowerBound: references.referenceCountIsLowerBound,
+    referenceNote: references.note,
     importers: importers.slice(0, limit),
     importerCount: importers.length,
     relatedTestPaths,

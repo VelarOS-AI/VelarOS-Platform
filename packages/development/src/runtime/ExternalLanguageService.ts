@@ -35,6 +35,16 @@ export interface ExternalLanguageStatus {
   readonly server: string
   readonly openFiles: number
   readonly error: Nullable<string>
+  /**
+   * 最近一次 `diagnostics()` 里有几个文件等到超时也没收到语言服务的诊断。
+   *
+   * 大于 0 时那几个文件的「0 条诊断」**不代表没有问题**：rust-analyzer 这类先发语法诊断、
+   * 再发 check 结果的服务，以及 URI 写法与发出去的不完全一致时（Windows 盘符大小写与编码是
+   * 常见来源），等不到结果与真的没问题在线上长得一模一样。
+   */
+  readonly diagnosticsTimedOutFiles: number
+  /** 最近一次 `diagnostics()` 的结果是否完整（每个文件都等到了语言服务的答复）。 */
+  readonly diagnosticsComplete: boolean
 }
 
 export interface ExternalLanguageLocation {
@@ -87,6 +97,12 @@ interface PendingDiagnostics {
   readonly timer: TimerLease
 }
 
+/** 一个文件的诊断结果 + 它是不是「等到超时都没等到」的空结果。 */
+interface DiagnosticsOutcome {
+  readonly diagnostics: readonly ExternalLanguageDiagnostic[]
+  readonly timedOut: boolean
+}
+
 interface OpenDocument {
   readonly languageId: string
   version: number
@@ -96,6 +112,8 @@ interface OpenDocument {
 export class ExternalLanguageService {
   private readonly clients = new Map<string, ExternalLanguageServerClient>()
   private readonly unavailable = new Map<string, string>()
+  /** 最近一次 diagnostics() 里等到超时的文件数：结果是否完整全看它。 */
+  private diagnosticsTimedOutFiles = 0
 
   public constructor(
     private readonly projectRoot: string,
@@ -116,16 +134,35 @@ export class ExternalLanguageService {
       server: clients.map((client) => client.spec.id).join(', ') || 'external',
       openFiles: clients.reduce((total, client) => total + client.status().openFiles, 0),
       error: ready ? null : toNullable(errors.at(-1)),
+      diagnosticsTimedOutFiles: this.diagnosticsTimedOutFiles,
+      diagnosticsComplete: this.diagnosticsTimedOutFiles === 0,
     }
   }
 
+  /**
+   * 收集这批文件的诊断。
+   *
+   * 「等到超时也没收到」与「真的一条问题都没有」在返回值里长得一样，所以超时的文件数记进
+   * `status()`（`diagnosticsComplete` / `diagnosticsTimedOutFiles`）并留一条警告日志：
+   * 调用方据此判断这次的空结果能不能当成「没问题」。
+   */
   public async diagnostics(paths: readonly string[], signal?: AbortSignal): Promise<readonly ExternalLanguageDiagnostic[]> {
     const files = await this.resolveFiles(paths)
     const results: ExternalLanguageDiagnostic[] = []
+    const timedOutFiles: string[] = []
     for (const file of files) {
       const client = await this.clientFor(file, signal)
       if (!client) continue
-      results.push(...await client.diagnostics(file, signal))
+      const outcome = await client.diagnostics(file, signal)
+      results.push(...outcome.diagnostics)
+      if (outcome.timedOut) timedOutFiles.push(file)
+    }
+    this.diagnosticsTimedOutFiles = timedOutFiles.length
+    if (!isEmpty(timedOutFiles)) {
+      log.warn('语言服务在超时前没有发回这些文件的诊断，这次的空结果不代表它们没有问题。', {
+        files: timedOutFiles.slice(0, 10),
+        timedOutFiles: timedOutFiles.length,
+      })
     }
     return results
   }
@@ -157,8 +194,8 @@ export class ExternalLanguageService {
     const client = await this.clientFor(file, signal)
     if (client) return client
     const extension = extname(file).toLowerCase()
-    if (!this.supports(file)) throw new Error(`No language-server adapter is registered for ${extension || 'this file type'}.`)
-    throw new Error(`No installed language server is available for ${extension}.`)
+    if (!this.supports(file)) throw new Error(`没有为 ${extension || '这种文件类型'} 登记语言服务适配器。`)
+    throw new Error(`本机没有装可用于 ${extension} 的语言服务。`)
   }
 
   private async clientFor(file: string, signal?: AbortSignal): Promise<Nullable<ExternalLanguageServerClient>> {
@@ -202,7 +239,7 @@ export class ExternalLanguageService {
     const candidate = await realpath(resolve(root, path))
     const rel = relative(root, candidate)
     if (rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel)) {
-      throw new Error(`Language diagnostics path escapes the project boundary: ${path}`)
+      throw new Error(`诊断路径越出了项目边界：${path}`)
     }
     return candidate
   }
@@ -225,7 +262,15 @@ class ExternalLanguageServerClient {
   ) {}
 
   public status(): ExternalLanguageStatus {
-    return { state: this.state, server: this.spec.id, openFiles: this.documents.size, error: this.error }
+    return {
+      state: this.state,
+      server: this.spec.id,
+      openFiles: this.documents.size,
+      error: this.error,
+      // 单个客户端不汇总超时，完整性由上层 ExternalLanguageService 按整批文件统计。
+      diagnosticsTimedOutFiles: 0,
+      diagnosticsComplete: true,
+    }
   }
 
   public async start(signal?: AbortSignal): Promise<void> {
@@ -268,8 +313,10 @@ class ExternalLanguageServerClient {
     this.error = null
   }
 
-  public async diagnostics(file: string, signal?: AbortSignal): Promise<readonly ExternalLanguageDiagnostic[]> {
+  /** 返回诊断以及「是不是等到超时才收摊」：空结果与「没问题」必须分得开。 */
+  public async diagnostics(file: string, signal?: AbortSignal): Promise<DiagnosticsOutcome> {
     const uri = pathToFileURL(file).href
+    let timedOut = false
     const waiting = new Promise<readonly ExternalLanguageDiagnostic[]>((resolveDone, reject) => {
       if (signal?.aborted) {
         reject(abortError())
@@ -289,7 +336,10 @@ class ExternalLanguageServerClient {
       const onAbort = () => finish([], abortError())
       const pending: PendingDiagnostics = {
         resolve: finish,
-        timer: this.timers.after(8_000, () => finish([]), {
+        timer: this.timers.after(8_000, () => {
+          timedOut = true
+          finish([])
+        }, {
           label: `${this.spec.id}.diagnostics`,
         }),
       }
@@ -299,7 +349,7 @@ class ExternalLanguageServerClient {
       signal?.addEventListener('abort', onAbort, { once: true })
     })
     await this.open(file)
-    return waiting
+    return { diagnostics: await waiting, timedOut }
   }
 
   public async hover(file: string, line: number, column: number, signal?: AbortSignal): Promise<Nullable<ExternalLanguageHover>> {
@@ -374,7 +424,7 @@ class ExternalLanguageServerClient {
 
   private request(method: string, params: unknown, signal?: AbortSignal): Promise<unknown> {
     const child = this.child
-    if (!child) return Promise.reject(new Error(`${this.spec.id} is not running.`))
+    if (!child) return Promise.reject(new Error(`${this.spec.id} 没有在运行。`))
     return this.requestWithChild(child, method, params, signal)
   }
 
@@ -415,7 +465,7 @@ class ExternalLanguageServerClient {
 
   private notify(method: string, params: unknown): void {
     const child = this.child
-    if (!child) throw new Error(`${this.spec.id} is not running.`)
+    if (!child) throw new Error(`${this.spec.id} 没有在运行。`)
     this.notifyWithChild(child, method, params)
   }
 

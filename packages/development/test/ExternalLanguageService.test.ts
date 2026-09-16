@@ -29,8 +29,14 @@ describe('ExternalLanguageService', () => {
     }])
     expect(service.supports('sample.foo')).toBe(true)
     expect(await service.diagnostics(['sample.foo'])).toEqual([])
-    expect(service.status()).toMatchObject({ state: 'unavailable', server: 'external' })
-    await expect(service.hover(outsideFile, 1, 1)).rejects.toThrow('project boundary')
+    expect(service.status()).toMatchObject({
+      state: 'unavailable',
+      server: 'external',
+      // 语言服务根本没启动起来，不算「等到超时」：结果仍然是完整的（就是没有诊断能力）。
+      diagnosticsComplete: true,
+      diagnosticsTimedOutFiles: 0,
+    })
+    await expect(service.hover(outsideFile, 1, 1)).rejects.toThrow('越出了项目边界')
     await service.stop()
   })
 })

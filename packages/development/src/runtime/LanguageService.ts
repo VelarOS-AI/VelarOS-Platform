@@ -1,4 +1,4 @@
-import { isEmpty, isPresent, optionalWhenLazy, toNullable } from '@velaros-ai/core'
+import { isEmpty, isPresent, optionalWhen, optionalWhenLazy, toNullable } from '@velaros-ai/core'
 import type { AgentProjectKernelPort } from '@velaros-ai/project'
 
 /** Source inspection consumes no project mutation, execution, or approval capability. */
@@ -114,8 +114,13 @@ export interface LanguageImporterResult {
 
 export interface LanguageReferenceResult {
   references: LanguageReferenceRecord[]
+  /** 找到的引用数。**扫描提前停止时这是下限**，此时 `referenceCountIsLowerBound` 为真、`note` 里写明。 */
   referenceCount: number
+  /** 真为「至少这么多」：凑够 limit+1 条就停了扫，项目里的实际引用只会更多。 */
+  referenceCountIsLowerBound?: boolean
   scannedFiles: number
+  /** 给调用方与模型读的一句话说明（目前只在提前停扫时给）。 */
+  note?: string
   truncated?: boolean
 }
 
@@ -409,18 +414,31 @@ export async function scanReferences(
     defaultExtensions
   )
   const references: LanguageReferenceRecord[] = []
+  let scannedFiles = 0
+  let stoppedEarly = false
 
   for (const file of selection.files) {
     const content = await readSourceFile(ctx, file)
     if (!isPresent(content)) continue
+    scannedFiles += 1
     references.push(...collectFileMatches(file, content, isMatch, limit + 1 - references.length))
-    if (references.length > limit) break
+    if (references.length > limit) {
+      stoppedEarly = true
+      break
+    }
   }
 
+  // 凑够 limit+1 条就不再往下扫，所以此时的 referenceCount 是下限而不是总数；
+  // 它和真实总数的 importerCount 并排交给模型，不标出来模型会当成「全项目只有这么多处引用」。
   return {
     references: references.slice(0, limit),
     referenceCount: references.length,
-    scannedFiles: selection.files.length,
+    referenceCountIsLowerBound: optionalWhen(stoppedEarly, true),
+    scannedFiles,
+    note: optionalWhen(
+      stoppedEarly,
+      `引用数是下限：扫到 ${scannedFiles} 个文件、凑够 ${references.length} 处后就停了扫描（上限 ${limit}），项目里实际引用只会更多。`
+    ),
     truncated: references.length > limit || selection.truncated,
   }
 }

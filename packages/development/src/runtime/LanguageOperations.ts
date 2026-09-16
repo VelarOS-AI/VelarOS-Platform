@@ -1,4 +1,4 @@
-import { isEmpty, isFunction, isNonBlankString, optionalWhen, unique } from '@velaros-ai/core'
+import { isEmpty, isFunction, isNonBlankString, isTrue, optionalWhen, unique } from '@velaros-ai/core'
 
 import {
   analyzeImpactWithService,
@@ -111,6 +111,12 @@ async function findReferences(
       services: summarizeServices(services),
       references: references.slice(0, input.limit ?? DefaultLimit),
       referenceCount: results.reduce((sum, result) => sum + result.referenceCount, 0),
+      // 任一语言服务提前停扫，合计数就只是下限；说明一并转给调用方。
+      referenceCountIsLowerBound: optionalWhen(
+        results.some((result) => isTrue(result.referenceCountIsLowerBound)),
+        true
+      ),
+      note: joinDiagnosticReasons(results.map((result) => result.note)),
       scannedFiles: results.reduce((sum, result) => sum + result.scannedFiles, 0),
       truncated: references.length > (input.limit ?? DefaultLimit) || mergeTruncated(results),
     }
@@ -170,6 +176,11 @@ async function analyzeSymbolImpact(
         .flatMap((impact) => impact.references)
         .slice(0, input.limit ?? DefaultLimit),
       referenceCount: impacts.reduce((sum, impact) => sum + impact.referenceCount, 0),
+      referenceCountIsLowerBound: optionalWhen(
+        impacts.some((impact) => isTrue(impact.referenceCountIsLowerBound)),
+        true
+      ),
+      referenceNote: joinDiagnosticReasons(impacts.map((impact) => impact.referenceNote)),
       importers: impacts
         .flatMap((impact) => impact.importers)
         .slice(0, input.limit ?? DefaultLimit),
