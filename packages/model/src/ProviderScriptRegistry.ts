@@ -158,6 +158,13 @@ export interface ProviderScriptDefinition {
   }) => Promise<unknown>
 }
 
+/** `registerSource` 收下的内存来源；重载时按原样重新求值，不落盘。 */
+interface RegisteredProviderScriptSource {
+  source: string
+  scriptPath: string
+  configPath: string
+}
+
 export interface LoadedProviderScript {
   providerId: ChatProviderId
   label: string
@@ -199,7 +206,8 @@ function resolveProviderScriptDevConfigCandidates(
  * **加载生命周期**：`loaded` 是一次性闸（懒加载，首次公开方法触发 `ensureLoaded`）；
  * 任何会改变来源的操作（`configureHost` / `configureSources` / `reload`）都必须走
  * `resetLoadedState()` 把 `loaded`、`activeConfigPath`、`scripts` 三者一起清零——只清其中一个会留下
- * "指向旧 config 的已加载脚本"这种半态。
+ * "指向旧 config 的已加载脚本"这种半态。**`memorySources` 不在清零范围内**：它是另一条生命周期
+ * （见该字段上方），只随 `registerSource` / `unregisterProvider` 增删，重载时在磁盘来源之后重放。
  *
  * **失败方向**：加载期任一脚本抛错即整体抛（§2.8 判据边界——provider script 是显式登记的，
  * 静默跳过会让"我明明配了却没生效"变成不可诊断）；而运行期的 host bridge 缺席只降级记账
@@ -215,6 +223,13 @@ class ProviderScriptRegistry implements ProviderScriptRegistryPort {
   private loaded = false
   private activeConfigPath: Nullable<string> = null
   private scripts = new Map<ChatProviderId, LoadedProviderScript>()
+  /**
+   * 内存来源是**另一条生命周期**：磁盘来源由 config 决定，重配一次就该整批重来；
+   * `registerSource()` 注册的来源只由调用方（插件安装链）增删，重配宿主不能把它清掉——
+   * 它没有落盘，清了就只能重装。所以 `resetLoadedState()` 只清 `scripts`，这张表留着，
+   * 由 `ensureLoaded()` 在磁盘来源之后重放。
+   */
+  private readonly memorySources = new Map<ChatProviderId, RegisteredProviderScriptSource>()
 
   constructor(options: ProviderScriptRegistryOptions = {}) {
     this.cwd = options.cwd ?? process.cwd()
@@ -249,7 +264,7 @@ class ProviderScriptRegistry implements ProviderScriptRegistryPort {
 
   /**
    * 注册只存在于内存中的受信 provider 源码。调用方负责来源鉴权、密文校验与解密；
-   * 本方法不会把明文写回磁盘。
+   * 本方法不会把明文写回磁盘，注册结果由 `unregisterProvider` 之外的任何重配保留。
    */
   public registerSource(input: {
     source: string
@@ -258,38 +273,21 @@ class ProviderScriptRegistry implements ProviderScriptRegistryPort {
   }): ChatProviderId {
     this.ensureLoaded()
     const scriptPath = resolve(input.scriptPath)
-    const configPath = input.configPath ? resolve(input.configPath) : scriptPath
-    try {
-      const scriptRequire = createRequire(scriptPath)
-      const module = { exports: {} as unknown }
-      const wrapper = runInThisContext(
-        `(function (exports, require, module, __filename, __dirname) {\n${input.source}\n})`,
-        { filename: scriptPath }
-      ) as (
-        exports: unknown,
-        require: NodeRequire,
-        module: { exports: unknown },
-        filename: string,
-        directory: string
-      ) => void
-      wrapper(module.exports, scriptRequire, module, scriptPath, dirname(scriptPath))
-      return this.registerExportedDefinition({
-        exported: module.exports,
-        configPath,
-        velarosDir: dirname(configPath),
-        scriptPath,
-      })
-    } catch (error) {
-      throw new AppError(
-        'VALIDATION',
-        `加载内存 provider script 失败：${scriptPath}: ${AppError.getMessage(error)}`
-      )
+    const entry: RegisteredProviderScriptSource = {
+      source: input.source,
+      scriptPath,
+      configPath: input.configPath ? resolve(input.configPath) : scriptPath,
     }
+    const providerId = this.evaluateRegisteredSource(entry)
+    this.memorySources.set(providerId, entry)
+    return providerId
   }
 
   public unregisterProvider(provider: ChatProviderId): boolean {
     this.ensureLoaded()
-    return this.scripts.delete(provider)
+    // 内存来源必须一起删：只删 `scripts` 的话，下一次重配会把它重放回来。
+    const removedSource = this.memorySources.delete(provider)
+    return this.scripts.delete(provider) || removedSource
   }
 
   public supportsProvider(provider: ChatProviderId): boolean {
@@ -425,12 +423,46 @@ class ProviderScriptRegistry implements ProviderScriptRegistryPort {
 
     this.loaded = true
     const configPath = this.configPaths.find((candidate) => existsSync(candidate))
-    if (!configPath) return
+    if (configPath) {
+      this.activeConfigPath = configPath
+      const config = this.readConfig(configPath)
+      const scriptEntries = this.readEnabledScriptEntries(config)
+      scriptEntries.forEach((entry) => this.loadScript(configPath, entry))
+    }
 
-    this.activeConfigPath = configPath
-    const config = this.readConfig(configPath)
-    const scriptEntries = this.readEnabledScriptEntries(config)
-    scriptEntries.forEach((entry) => this.loadScript(configPath, entry))
+    // 内存来源排在磁盘来源之后重放：同一个 provider id 上，后到的显式注册覆盖 config 里的条目；
+    // 重新求值（而不是留住旧对象）是为了让 helpers 拿到这次重配后的 cwd/homeDir 与宿主桥。
+    this.memorySources.forEach((entry) => this.evaluateRegisteredSource(entry))
+  }
+
+  /** 求值一份内存来源并登记；失败与磁盘脚本同口径：显式登记的来源加载不了就抛，不静默跳过。 */
+  private evaluateRegisteredSource(entry: RegisteredProviderScriptSource): ChatProviderId {
+    try {
+      const scriptRequire = createRequire(entry.scriptPath)
+      const module = { exports: {} as unknown }
+      const wrapper = runInThisContext(
+        `(function (exports, require, module, __filename, __dirname) {\n${entry.source}\n})`,
+        { filename: entry.scriptPath }
+      ) as (
+        exports: unknown,
+        require: NodeRequire,
+        module: { exports: unknown },
+        filename: string,
+        directory: string
+      ) => void
+      wrapper(module.exports, scriptRequire, module, entry.scriptPath, dirname(entry.scriptPath))
+      return this.registerExportedDefinition({
+        exported: module.exports,
+        configPath: entry.configPath,
+        velarosDir: dirname(entry.configPath),
+        scriptPath: entry.scriptPath,
+      })
+    } catch (error) {
+      throw new AppError(
+        'VALIDATION',
+        `加载内存 provider script 失败：${entry.scriptPath}: ${AppError.getMessage(error)}`
+      )
+    }
   }
 
   private resetLoadedState(): void {

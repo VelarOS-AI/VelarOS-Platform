@@ -1,6 +1,7 @@
 import { AppError } from '@velaros-ai/core/error'
 
 import type { ChatProviderId } from './ModelContracts'
+import { trimTrailingPathSeparators } from './ModelEndpointUrl'
 
 export const VelarCloudManagedProviderIds = [
   'velar',
@@ -38,10 +39,7 @@ export class VelarCloudModelRuntime {
     providerId: VelarCloudManagedProviderId,
     binding: VelarCloudModelRuntimeBinding
   ): void {
-    const trimmed = binding.baseURL.trim()
-    let end = trimmed.length
-    while (end > 0 && trimmed[end - 1] === '/') end -= 1
-    const baseURL = trimmed.slice(0, end)
+    const baseURL = trimTrailingPathSeparators(binding.baseURL)
     if (!baseURL) {
       throw new AppError('VALIDATION', `${providerId} Cloud 模型服务地址不能为空。`)
     }

@@ -417,14 +417,15 @@ export class ProviderModelCatalogService {
   ): ProviderModelCatalogEntry[] {
     const seen = new Set<string>()
     const models: ProviderModelCatalogEntry[] = []
+    // preset 取一次就够：`getProviderPreset` 每次都重建全部 provider 预设与目录，
+    // 放在循环里时 OpenRouter 的几百条 `/models` 会把它重建几百遍。
+    const presetModels = this.getProviderPreset(provider).providerScript?.models
 
     for (const value of values) {
       const id = value.id.trim()
       if (!id || seen.has(id)) continue
       seen.add(id)
-      const presetModel = this.getProviderPreset(provider).providerScript?.models.find(
-        (candidate) => candidate.id === id
-      )
+      const presetModel = presetModels?.find((candidate) => candidate.id === id)
       models.push({
         id,
         label: value.label?.trim() || presetModel?.label || id,

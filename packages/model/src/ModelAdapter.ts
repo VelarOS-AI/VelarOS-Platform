@@ -1,6 +1,5 @@
 import type { LanguageModel } from 'ai'
 
-import { isBlank } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import type {
@@ -78,18 +77,14 @@ abstract class ModelAdapter {
     return this.providers.resolveApiKey(config)
   }
 
-  /** 获取必需 API key；可选 key provider 允许返回空字符串。 */
+  /**
+   * 获取必需 API key；可选 key provider 允许返回空字符串。
+   *
+   * 判据与文案都收在 `ModelProviderCollection.requireApiKey` 一处：同一个"缺 key"以前在这里和
+   * provider 集合里各写一遍，文案不一样，产品按文字分支时会漏掉其中一条。
+   */
   protected requireApiKey(config: ModelAdapterConfig): string {
-    const apiKey = this.resolveApiKey(config)
-    if (!isBlank(apiKey)) return apiKey
-
-    const preset = this.providers.requireOperationalManifest(config.provider)
-    if (preset.apiKeyOptional) return ''
-
-    throw new AppError(
-      'VALIDATION',
-      `${preset.label} 的 API Key 未配置，请由宿主提供凭证。`
-    )
+    return this.providers.requireApiKey(config)
   }
 
   /** 按 provider preset 解析最终 baseURL。 */

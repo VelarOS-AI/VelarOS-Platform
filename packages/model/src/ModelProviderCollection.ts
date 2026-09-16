@@ -13,6 +13,7 @@ import type {
   ModelSelection,
   ProviderScriptManifest,
 } from './ModelContracts'
+import { trimTrailingPathSeparators } from './ModelEndpointUrl'
 import {
   getModelProviderOperationalManifest,
   type ModelProviderAdapterKind,
@@ -185,8 +186,8 @@ export class ModelProviderCollection {
     const raw = isBlank(selection.baseURL)
       ? this.requireOperationalManifest(selection.provider).defaultBaseURL
       : selection.baseURL
-    const trimmed = raw.trim()
-    return trimmed.endsWith('/') ? trimmed.slice(0, -1) : trimmed
+
+    return trimTrailingPathSeparators(raw)
   }
 
   public getDefaultRuntimeConfig(provider: ChatProviderId): AgentProviderRuntimeConfig {

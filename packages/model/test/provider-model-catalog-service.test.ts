@@ -93,6 +93,38 @@ describe('ProviderModelCatalogService', () => {
     }])
   })
 
+  test('归一化远端目录的开销不随模型条数增长', async () => {
+    class CountingProviderCollection extends ModelProviderCollection {
+      public presetLookups = 0
+
+      public override listPresets(): ReturnType<ModelProviderCollection['listPresets']> {
+        this.presetLookups += 1
+        return super.listPresets()
+      }
+    }
+
+    async function countPresetLookups(modelCount: number): Promise<number> {
+      const providerCollection = new CountingProviderCollection(EmptyProviderScripts)
+      const service = new ProviderModelCatalogService({
+        providerCollection,
+        providerScriptRegistry: EmptyProviderScripts,
+        fetch: async () =>
+          Response.json({
+            data: Array.from({ length: modelCount }, (_value, index) => ({
+              id: `model-${index}`,
+            })),
+          }),
+      })
+      await service.listProviderModels({ provider: 'openai', apiKey: 'secret', baseURL: '' })
+
+      return providerCollection.presetLookups
+    }
+
+    // listPresets 每次都重建全部 provider 预设与目录；放进 per-model 循环时
+    // OpenRouter 的几百条模型会把它重建几百遍（M4）。
+    expect(await countPresetLookups(200)).toBe(await countPresetLookups(2))
+  })
+
   test('parses Google model names and authenticates through the query string', async () => {
     let capturedUrl = ''
     const service = createService(async (input) => {

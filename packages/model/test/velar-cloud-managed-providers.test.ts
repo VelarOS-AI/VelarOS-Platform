@@ -47,6 +47,20 @@ function createChatCompletionFetch(captured: CapturedRequest[]): typeof fetch {
   }) as typeof fetch
 }
 
+/** 只有宿主注入的 fetch 才带账户认证，这个替身用来证明 embedding 走的是它。 */
+function createEmbeddingFetch(captured: CapturedRequest[]): typeof fetch {
+  return (async (input, init) => {
+    captured.push({
+      body: JSON.parse(String(init?.body)) as Record<string, unknown>,
+      url: String(input),
+    })
+    return new Response(JSON.stringify({ data: [{ embedding: [0.5] }] }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  }) as typeof fetch
+}
+
 const ChatCallOptions = {
   prompt: [
     {
@@ -242,16 +256,91 @@ describe('Velar Cloud managed providers', () => {
       baseURL: 'https://cloud.test/v1/model',
       fetch: createChatCompletionFetch([]),
     })
+    const embeddingRequest = composition.modelAdapterRegistry.createEmbeddingRequest(
+      { provider: 'velar', apiKey: '', baseURL: '' },
+      'ignored-model',
+      ['hello']
+    )
+    expect({
+      url: embeddingRequest.url,
+      headers: embeddingRequest.headers,
+      body: embeddingRequest.body,
+    }).toEqual({
+      url: 'https://cloud.test/v1/model/embeddings',
+      headers: { Authorization: 'Bearer velar-managed' },
+      body: { model: 'velar/embedding', input: ['hello'] },
+    })
+    expect(typeof embeddingRequest.execute).toBe('function')
+  })
+
+  test('embedding 走宿主注入的带账户认证 fetch', async () => {
+    const requests: CapturedRequest[] = []
+    const composition = createModelRuntimeComposition({
+      providerScripts: { configPaths: [] },
+    })
+    composition.velarCloudRuntime.register({
+      baseURL: 'https://cloud.test/v1/model',
+      fetch: createEmbeddingFetch(requests),
+    })
+
+    const request = composition.modelAdapterRegistry.createEmbeddingRequest(
+      { provider: 'velar', apiKey: '', baseURL: '' },
+      'ignored-model',
+      ['hello']
+    )
+    const payload = await request.execute?.()
+
+    expect(requests).toEqual([
+      {
+        url: 'https://cloud.test/v1/model/embeddings',
+        body: { model: 'velar/embedding', input: ['hello'] },
+      },
+    ])
+    expect(payload).toEqual({ data: [{ embedding: [0.5] }] })
+  })
+
+  test('embedding 失败时给出带状态码的中文原因', async () => {
+    const composition = createModelRuntimeComposition({
+      providerScripts: { configPaths: [] },
+    })
+    composition.velarCloudRuntime.register({
+      baseURL: 'https://cloud.test/v1/model',
+      fetch: (async () =>
+        new Response('{"error":"quota"}', { status: 402 })) as unknown as typeof fetch,
+    })
+
+    const request = composition.modelAdapterRegistry.createEmbeddingRequest(
+      { provider: 'velar', apiKey: '', baseURL: '' },
+      'ignored-model',
+      ['hello']
+    )
+
+    expect(request.execute?.()).rejects.toThrow(
+      'Velar embedding 请求失败（HTTP 402）：{"error":"quota"}'
+    )
+  })
+
+  test('服务地址末尾的多余分隔符被去干净', () => {
+    const composition = createModelRuntimeComposition({
+      providerScripts: { configPaths: [] },
+    })
+    composition.velarCloudRuntime.register({
+      baseURL: 'https://cloud.test/v1/model//',
+      fetch: createChatCompletionFetch([]),
+    })
+
     expect(
       composition.modelAdapterRegistry.createEmbeddingRequest(
         { provider: 'velar', apiKey: '', baseURL: '' },
         'ignored-model',
         ['hello']
-      )
-    ).toEqual({
-      url: 'https://cloud.test/v1/model/embeddings',
-      headers: { Authorization: 'Bearer velar-managed' },
-      body: { model: 'velar/embedding', input: ['hello'] },
-    })
+      ).url
+    ).toBe('https://cloud.test/v1/model/embeddings')
+    expect(
+      composition.providerCollection.resolveBaseURL({
+        provider: 'openai',
+        baseURL: 'https://proxy.test/v1//',
+      })
+    ).toBe('https://proxy.test/v1')
   })
 })
