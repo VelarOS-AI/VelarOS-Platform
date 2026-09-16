@@ -6,6 +6,7 @@ import { afterEach, describe, expect, test } from 'bun:test'
 
 import ExcelJS from '../../office/node_modules/exceljs'
 import { PDFDocument, rgb } from '../../office/node_modules/pdf-lib'
+import { runDocumentRendererCli } from '../src/cli'
 import { executeRendererRequest } from '../src/service'
 
 const ProtocolVersion = 1 as const
@@ -176,5 +177,69 @@ describe('independent document renderer capability pack', () => {
     expect(response).toMatchObject({ status: 'success' })
     expect((await stat(join(temporaryRoot, '..cache', 'out', 'page-1.png'))).size)
       .toBeGreaterThan(100)
+  })
+
+  test('INVALID_REQUEST 给的是可读的中文说明，不是 zod 原始 issue', async () => {
+    const unknownOperation = await executeRendererRequest({
+      protocolVersion: 1,
+      requestId: 'bad-operation',
+      operation: 'render-everything',
+    })
+
+    expect(unknownOperation).toMatchObject({
+      status: 'error',
+      requestId: 'bad-operation',
+      error: {
+        code: 'INVALID_REQUEST',
+        message: '请求不合法：operation 应为 describe、render-office 或 render-pdf-page',
+      },
+    })
+
+    const missingFields = await executeRendererRequest({
+      protocolVersion: 1,
+      requestId: 'missing',
+      operation: 'render-office',
+    })
+
+    expect(missingFields).toMatchObject({ status: 'error', error: { code: 'INVALID_REQUEST' } })
+    const message = (missingFields as { error: { message: string } }).error.message
+    expect(message).toBe('请求不合法：projectRoot 应为字符串；inputPath 应为字符串；outputPath 应为字符串')
+    expect(message).not.toContain('"code"')
+  })
+
+  test('非法 JSON 输入也回一条 JSON 回执', async () => {
+    const brokenArgument = await runDocumentRendererCli(['--request-json', '{bad'])
+    expect(brokenArgument.exitCode).toBe(1)
+    expect(JSON.parse(brokenArgument.text)).toMatchObject({
+      status: 'error',
+      requestId: 'invalid-request',
+      error: { code: 'INVALID_REQUEST' },
+    })
+    expect(JSON.parse(brokenArgument.text).error.message).toContain('--request-json 的值')
+
+    const missingArgument = await runDocumentRendererCli(['--request-json'])
+    expect(missingArgument.exitCode).toBe(1)
+    expect(JSON.parse(missingArgument.text)).toMatchObject({
+      status: 'error',
+      error: { code: 'INVALID_REQUEST' },
+    })
+
+    const brokenStandardInput = await runDocumentRendererCli([], 'not json at all')
+    expect(brokenStandardInput.exitCode).toBe(1)
+    expect(JSON.parse(brokenStandardInput.text)).toMatchObject({
+      status: 'error',
+      error: { code: 'INVALID_REQUEST' },
+    })
+    expect(JSON.parse(brokenStandardInput.text).error.message).toContain('标准输入')
+  })
+
+  test('describe 走命令行也回同一条回执', async () => {
+    const result = await runDocumentRendererCli(['describe'])
+
+    expect(result.exitCode).toBe(0)
+    expect(JSON.parse(result.text)).toMatchObject({
+      status: 'success',
+      result: { product: 'velar-document-renderer' },
+    })
   })
 })

@@ -65,12 +65,12 @@ export async function renderOfficeDocument(input: {
   const kind = OfficeInputKinds.get(inputExtension)
   if (!kind) {
     throw new UnsupportedRendererFormatError(
-      `render-office supports .docx, .pptx, and .xlsx; received ${inputExtension || 'no extension'}.`,
+      `render-office 只接受 .docx、.pptx、.xlsx，收到的是 ${inputExtension || '没有扩展名'}。`,
     )
   }
   if (outputExtension !== '.html' && outputExtension !== '.png') {
     throw new UnsupportedRendererFormatError(
-      `render-office output must be .html or .png; received ${outputExtension || 'no extension'}.`,
+      `render-office 的输出只能是 .html 或 .png，收到的是 ${outputExtension || '没有扩展名'}。`,
     )
   }
 
@@ -121,10 +121,10 @@ export async function renderPdfPage(input: {
 }): Promise<Record<string, unknown>> {
   const paths = await resolveRendererPaths(input)
   if (extname(paths.inputPath).toLowerCase() !== '.pdf') {
-    throw new UnsupportedRendererFormatError('render-pdf-page input must be a .pdf file.')
+    throw new UnsupportedRendererFormatError('render-pdf-page 的输入必须是 .pdf 文件。')
   }
   if (extname(paths.outputPath).toLowerCase() !== '.png') {
-    throw new UnsupportedRendererFormatError('render-pdf-page output must be a .png file.')
+    throw new UnsupportedRendererFormatError('render-pdf-page 的输出必须是 .png 文件。')
   }
 
   try {
