@@ -5,11 +5,11 @@
 import { homedir, tmpdir } from 'node:os'
 import * as path from 'node:path'
 
-import { createApprovalOperationKey } from '@velaros-ai/agent/tool-contract'
 import { isNotNull, isNull } from '@velaros-ai/core'
 import { resolveRealPath } from '@velaros-ai/core/utils/RealPath'
 import type { PlatformCompatibilityApi } from '@velaros-ai/platform'
 import { createPlatform, currentPlatform } from '@velaros-ai/platform'
+import { toolIdentity } from '@velaros-ai/tool-contract'
 
 import type { SystemToolContext } from '../contract/requires.js'
 import type { SensitiveSystemMutationPathOptions } from '../types/files.js'
@@ -146,7 +146,7 @@ export async function confirmSensitiveSystemMutation(
       approvalRisk: 'high',
       riskScope: 'system-mutation:sensitive-path',
       operation: {
-        key: createApprovalOperationKey('file-mutation', { path: resolvedPath }),
+        key: toolIdentity.approvalOperationKey('file-mutation', { path: resolvedPath }),
         label: '修改系统敏感文件',
         target: resolvedPath,
       },
@@ -199,7 +199,7 @@ export async function confirmCredentialAccess(ctx: SystemToolContext, resolvedPa
       approvalRisk: 'high',
       riskScope: 'system-read:credential',
       operation: {
-        key: createApprovalOperationKey('file-read', { path: resolvedPath, action }),
+        key: toolIdentity.approvalOperationKey('file-read', { path: resolvedPath, action }),
         label: action === 'read' ? '读取凭证文件' : '改写凭证文件',
         target: resolvedPath,
       },

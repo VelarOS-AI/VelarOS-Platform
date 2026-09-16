@@ -9,7 +9,7 @@ import { join } from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
-import { DefaultToolContractExampleRegistry } from '@velaros-ai/agent/tool-contract'
+import { toolExamples } from '@velaros-ai/tool-contract'
 
 import { ProjectExecutionGate } from '../src/impl/operations/ProjectExecutionGate'
 import { ProjectToolNames, projectTools } from '../src/index'
@@ -27,7 +27,7 @@ describe('工具面', () => {
   test('INV-1 只有七个工具，名字来自 ProjectToolNames，每个工具的 schema 拒收未知字段', () => {
     expect(Object.keys(projectTools).sort()).toEqual(Object.values(ProjectToolNames).sort())
     for (const tool of Object.values(projectTools)) {
-      const example = DefaultToolContractExampleRegistry.get(tool.name ?? '')?.[0]
+      const example = toolExamples.get(tool.name ?? '')?.[0]
       expect({ tool: tool.name, example: !!example }).toEqual({ tool: tool.name, example: true })
       expect(tool.schema.safeParse(example).success).toBe(true)
       expect(tool.schema.safeParse({ ...example, unexpectedField: 1 }).success).toBe(false)

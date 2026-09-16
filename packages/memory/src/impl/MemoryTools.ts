@@ -2,8 +2,8 @@ import { z } from 'zod'
 
 import {
   renderParameterDescription as parameterDescription,
-  structureToolDescriptionsForCategory,
-} from '@velaros-ai/agent/tool-contract'
+  toolDescriptions,
+} from '@velaros-ai/tool-contract'
 
 import {
   MemoryEvidenceCategories,
@@ -208,7 +208,7 @@ const forgetMemory = defineMemoryTool<ForgetMemoryInput>({
 })
 
 /** 四个记忆工具连同分组与挂载：说明按类别渲染一次，宿主拿到的就是模型看到的字节。 */
-const memoryTools: MemoryToolCollection = structureToolDescriptionsForCategory({
+const memoryTools: MemoryToolCollection = toolDescriptions.forCategory({
   [MemoryToolNames.save]: saveMemory,
   [MemoryToolNames.search]: searchMemories,
   [MemoryToolNames.get]: getMemory,

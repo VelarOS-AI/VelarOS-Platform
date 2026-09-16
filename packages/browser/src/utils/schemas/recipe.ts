@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import { renderParameterDescription as parameterDescription } from '@velaros-ai/agent/tool-contract'
+import { renderParameterDescription as parameterDescription } from '@velaros-ai/tool-contract'
 
 const recipeTemplateSchema = z.enum(['login', 'search', 'pagination', 'form_submit'])
 const browserRecipeActionSchema = z.enum([

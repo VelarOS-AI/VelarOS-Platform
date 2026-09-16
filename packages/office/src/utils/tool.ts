@@ -1,7 +1,7 @@
-/** 工具：定义 office 工具。类别固定填 office，其余交给 `@velaros-ai/agent/tool-contract` 的公共实现。 */
+/** 工具：定义 office 工具。类别固定填 office，其余交给 `@velaros-ai/tool-contract` 的公共实现。 */
 
 import type { ToolPermission } from '@velaros-ai/agent/protocol'
-import { defineToolRuntimeSpec, type DefineToolRuntimeSpecInput } from '@velaros-ai/agent/tool-contract'
+import { type DefineToolRuntimeSpecInput, toolContracts } from '@velaros-ai/tool-contract'
 
 import { OfficeToolCategoryId } from '../contract/constants.js'
 import type { VelaTool } from '../contract/provides.js'
@@ -14,5 +14,5 @@ export function defineOfficeTool<TInput extends Record<string, unknown>>(
     'category'
   >
 ): VelaTool<TInput> {
-  return defineToolRuntimeSpec({ ...input, category: OfficeToolCategoryId })
+  return toolContracts.defineRuntime({ ...input, category: OfficeToolCategoryId })
 }

@@ -4,8 +4,8 @@
  */
 
 import type { ToolPermission } from '@velaros-ai/agent/protocol'
-import type { ToolContractRuntimeSpec } from '@velaros-ai/agent/tool-contract'
 import type { KernelCallableCapabilityService } from '@velaros-ai/kernel/contracts/abi'
+import type { ToolContractRuntimeSpec } from '@velaros-ai/tool-contract'
 
 import type { ComputerToolName } from './constants.js'
 import type { ComputerRuntimePort, ComputerToolContext } from './requires.js'

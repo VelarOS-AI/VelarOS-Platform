@@ -56,6 +56,7 @@
     "@velaros-ai/core": "workspace:*",
     "@velaros-ai/kernel": "workspace:*",
     "@velaros-ai/platform": "workspace:*",
+    "@velaros-ai/tool-contract": "workspace:*",
     "zod": "^4.3.6"
   },
   "peerDependencies": {

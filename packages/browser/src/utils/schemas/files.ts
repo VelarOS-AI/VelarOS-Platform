@@ -1,6 +1,5 @@
 import { z } from 'zod'
 
-import { renderParameterDescription as parameterDescription } from '@velaros-ai/agent/tool-contract'
 import {
   applyDefaultRecursiveMaxDepth,
   optionalReadEndLine,
@@ -9,6 +8,7 @@ import {
   refineBoundedReadInput,
   requiredResultLimit,
 } from '@velaros-ai/agent/tool-contract'
+import { renderParameterDescription as parameterDescription } from '@velaros-ai/tool-contract'
 
 import { BrowserFileLimits } from '../../contract/constants'
 

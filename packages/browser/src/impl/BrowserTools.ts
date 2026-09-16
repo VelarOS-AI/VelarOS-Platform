@@ -9,11 +9,11 @@
 import { z } from 'zod'
 
 import type { ToolCategoryDefinition } from '@velaros-ai/agent/protocol'
+import { isNull, optionalWhen } from '@velaros-ai/core'
 import {
   renderParameterDescription as parameterDescription,
-  structureToolDescriptionsForCategory,
-} from '@velaros-ai/agent/tool-contract'
-import { isNull, optionalWhen } from '@velaros-ai/core'
+  toolDescriptions,
+} from '@velaros-ai/tool-contract'
 
 import {
   BrowserCaptureLimits,
@@ -2048,7 +2048,7 @@ const rawBrowserTools = {
 }
 
 /** Browser Use 工具集合：说明按 browser 类别统一结构化之后的那一份。 */
-const browserTools = structureToolDescriptionsForCategory(rawBrowserTools, 'browser')
+const browserTools = toolDescriptions.forCategory(rawBrowserTools, 'browser')
 
 // @arch-guard:suspend code-style/require-chinese-comments 理由：本块为中文说明，技术标识符（availableInSpaces/localhost/composeAgentModSpaces 等）密度触发启发式误报。
 /**

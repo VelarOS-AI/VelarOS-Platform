@@ -10,12 +10,12 @@
 import { z } from 'zod'
 
 import type { AgentModManifest, ToolCategoryDefinition } from '@velaros-ai/agent/protocol'
-import { createToolCallableOperations, structureToolDescriptionsForCategory } from '@velaros-ai/agent/tool-contract'
 import { isEmpty, optionalWhen } from '@velaros-ai/core'
 import type { CapabilityToken, KernelModuleDefinition } from '@velaros-ai/kernel/contracts/abi'
 import { createCapabilityToken, createKernelCallableCapability, defineKernelModule, KernelModuleApiVersion } from '@velaros-ai/kernel/contracts/abi'
 import { RehearsalSandboxLimits } from '@velaros-ai/rehearsal-sandbox/contracts'
 import { shellCommandPolicy } from '@velaros-ai/shell-command'
+import { toolDescriptions, toolKernelModules } from '@velaros-ai/tool-contract'
 
 import type { SystemToolCategoryId } from '../contract/constants.js'
 import { SystemCommandLimits, SystemFileLimits, SystemModId, SystemSpaceId, SystemToolCategoryByName, SystemToolNames } from '../contract/constants.js'
@@ -345,13 +345,13 @@ const sandboxTool = defineSystemTool<SystemSandboxInput>({
  * 类别 id 与 `contract/system.ts` 里的表一致。
  */
 
-const systemFileTools = structureToolDescriptionsForCategory({
+const systemFileTools = toolDescriptions.forCategory({
   [SystemToolNames.read]: readTool,
   [SystemToolNames.view]: viewTool,
   [SystemToolNames.edit]: editTool,
 }, 'system-files')
 
-const systemExecutionTools = structureToolDescriptionsForCategory({
+const systemExecutionTools = toolDescriptions.forCategory({
   [SystemToolNames.run]: runTool,
   [SystemToolNames.refreshEnvironment]: refreshEnvironmentTool,
   [SystemToolNames.listTasks]: listTasksTool,
@@ -466,7 +466,7 @@ export function createSystemKernelModule(
     },
     activate(context) {
       const callable = createKernelCallableCapability(
-        createToolCallableOperations(systemTools, options.resolveContext, { label: '系统' }),
+        toolKernelModules.callableOperations(systemTools, options.resolveContext, { label: '系统' }),
       )
       const service: SystemCapabilityService = Object.freeze({
         ...callable,

@@ -43,8 +43,6 @@ export interface ToolDescriptionsApi {
   readonly budgetChars: number
   /** 按七节语法渲染一段工具说明：描述压成单行，没给的分节整节不出现。 */
   renderTool(spec: StructuredToolDescriptionSpec): string
-  /** 按四节语法渲染单个参数的说明；参数的合法取值与边界写进「取值」，模型才看得见。 */
-  renderParameter(spec: StructuredParameterDescriptionSpec): string
   /** 声明了 companion skill 时追加到说明末尾的那一行指路（进「注意」分节的最后一条）。 */
   renderUsageSkillNote(usageSkillId: string): string
   /** 这段工具说明是不是完全结构化的（七节语法，`适合` 必填）。 */
@@ -98,18 +96,6 @@ class ToolDescriptions implements ToolDescriptionsApi {
       spec.protocol ? renderListSection('强制流程', spec.protocol) : null,
       spec.usage ? renderListSection('用法', spec.usage) : null,
       spec.examples ? renderListSection('示例', spec.examples) : null,
-      spec.notes ? renderListSection('注意', spec.notes) : null,
-    ].filter((section): section is string => Boolean(section))
-
-    return sections.join('\n\n')
-  }
-
-  public renderParameter(spec: StructuredParameterDescriptionSpec): string {
-    const description = normalizeDescriptionText(spec.description)
-    const sections = [
-      `${DescriptionSectionPrefix}${description}`,
-      spec.values ? renderListSection('取值', spec.values) : null,
-      spec.usage ? renderListSection('用法', spec.usage) : null,
       spec.notes ? renderListSection('注意', spec.notes) : null,
     ].filter((section): section is string => Boolean(section))
 
@@ -281,3 +267,20 @@ class ToolDescriptions implements ToolDescriptionsApi {
 
 /** 整个进程只有一份的工具说明渲染与判定处。 */
 export const toolDescriptions: ToolDescriptionsApi = new ToolDescriptions()
+
+/**
+ * 按四节语法渲染**单个参数**的说明：`描述` → `取值` → `用法` → `注意`，只有描述必填、没给的节不出现。
+ * 参数的合法取值与边界必须写进「取值」——入参 schema 经 transform 之后 JSON Schema 里不再带
+ * minimum/maximum，模型只能从这里看到边界。各空间的 schema 文件按参数逐个调它，故留成模块级函数。
+ */
+export function renderParameterDescription(spec: StructuredParameterDescriptionSpec): string {
+  const description = normalizeDescriptionText(spec.description)
+  const sections = [
+    `${DescriptionSectionPrefix}${description}`,
+    spec.values ? renderListSection('取值', spec.values) : null,
+    spec.usage ? renderListSection('用法', spec.usage) : null,
+    spec.notes ? renderListSection('注意', spec.notes) : null,
+  ].filter((section): section is string => Boolean(section))
+
+  return sections.join('\n\n')
+}

@@ -4,11 +4,10 @@ import { createHash } from 'node:crypto'
 import { readdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 
-import { DefaultToolContractExampleRegistry } from '@velaros-ai/agent/tool-contract'
+import { toolExamples } from '@velaros-ai/tool-contract'
 
 import { categoriesTools, contextRetrievalTools, plansTools } from '../../agent/src/impl/AgentTools'
 import { PromptRegistry } from '../../agent/src/impl/guidance/PromptRegistry'
-import { DefaultToolContractExampleRegistry as SourceToolExamples } from '../../agent/src/impl/tools/ToolContractExampleRegistry'
 import type { RuntimePromptSnapshot } from '../../agent/src/types/guidance.js'
 import { projectFileContext } from '../../agent/src/utils/context/file-context-projection'
 import { createBuiltInPromptSegments } from '../../agent/src/utils/guidance/catalog'
@@ -16,6 +15,7 @@ import { createRuntimePromptSegments } from '../../agent/src/utils/guidance/runt
 import { configureAppRuntimeFacts, readAppRuntimeFacts } from '../../agent/src/utils/runner/app-runtime-facts'
 import { schemaToInputSchema } from '../../agent/src/utils/toolkit/schema-bundle'
 import { ToolArgsSchemaValidator } from '../../agent/src/utils/tools/tool-args-schema-validator'
+import { toolExamples as sourceToolExamples } from '../../tool-contract/src/impl/ToolExampleRegistry'
 import { projectTools } from '../src/impl/ProjectTools'
 
 const root = resolve(import.meta.dir, '../../..')
@@ -29,7 +29,7 @@ export interface GuidanceTool {
 }
 
 export function registeredGuidanceTools(tools: ReadonlyArray<Omit<GuidanceTool, 'examples'>>): GuidanceTool[] {
-  return tools.map((tool) => ({ ...tool, examples: [DefaultToolContractExampleRegistry, SourceToolExamples]
+  return tools.map((tool) => ({ ...tool, examples: [toolExamples, sourceToolExamples]
     .map((registry) => registry.get(tool.name)).find((examples) => examples?.every((example) => tool.description.includes(JSON.stringify(example)))) }))
 }
 

@@ -5,8 +5,8 @@
 
 import { AsyncLocalStorage } from 'node:async_hooks'
 
-import { createApprovalOperationKey } from '@velaros-ai/agent/tool-contract'
 import { isEmpty } from '@velaros-ai/core'
+import { toolIdentity } from '@velaros-ai/tool-contract'
 
 import type { ApprovalProvider } from '../../contract/requires.js'
 import type { ProjectApprovalContext } from '../../types/agent.js'
@@ -59,7 +59,7 @@ export class ProjectApprovalBridge implements ProjectApprovalBridgeApi {
         approvalRisk: request.risk === 'high' ? 'high' : 'low',
         riskScope: `project:${request.risk}:${request.action}`,
         operation: {
-          key: createApprovalOperationKey('project-operation', { action: request.action, paths: [...(request.paths ?? [])].sort() }),
+          key: toolIdentity.approvalOperationKey('project-operation', { action: request.action, paths: [...(request.paths ?? [])].sort() }),
           label: request.action,
           target: request.paths?.join(', '),
         },

@@ -1,7 +1,7 @@
 import { z } from "zod";
 
-import { renderParameterDescription as parameterDescription } from "@velaros-ai/agent/tool-contract";
 import { requiredResultLimit } from "@velaros-ai/agent/tool-contract";
+import { renderParameterDescription as parameterDescription } from "@velaros-ai/tool-contract";
 
 import { encodeBrowserScriptStringLiteral } from "../../utils/page-scripts/literal";
 

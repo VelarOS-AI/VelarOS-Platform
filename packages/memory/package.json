@@ -78,6 +78,7 @@
     "@types/better-sqlite3": "^7.6.13",
     "@velaros-ai/core": "workspace:*",
     "@velaros-ai/kernel": "workspace:*",
+    "@velaros-ai/tool-contract": "workspace:*",
     "better-sqlite3": "^13.0.3",
     "zod": "^4.3.6"
   },

@@ -3,7 +3,7 @@
  */
 
 import type { ToolPermission } from '@velaros-ai/agent/protocol'
-import type { DefineToolRuntimeSpecInput } from '@velaros-ai/agent/tool-contract'
+import type { DefineToolRuntimeSpecInput } from '@velaros-ai/tool-contract'
 
 import type { SystemToolName } from '../contract/constants.js'
 import type { SystemToolContext } from '../contract/requires.js'

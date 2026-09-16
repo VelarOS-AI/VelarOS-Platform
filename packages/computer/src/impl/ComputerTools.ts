@@ -8,11 +8,6 @@
 import { z } from 'zod'
 
 import type { ToolCapabilitySchema } from '@velaros-ai/agent/protocol'
-import {
-  createToolCallableOperations,
-  renderParameterDescription as parameterDescription,
-  structureToolDescriptionsForCategory,
-} from '@velaros-ai/agent/tool-contract'
 import { isPresent } from '@velaros-ai/core'
 import {
   type CapabilityToken,
@@ -22,6 +17,11 @@ import {
   KernelModuleApiVersion,
   type KernelModuleDefinition,
 } from '@velaros-ai/kernel/contracts/abi'
+import {
+  renderParameterDescription as parameterDescription,
+  toolDescriptions,
+  toolKernelModules,
+} from '@velaros-ai/tool-contract'
 
 import {
   ComputerCapabilityId,
@@ -271,7 +271,7 @@ const computerKey = defineComputerTool<{ keys: string }>({
  *
  * 截图与屏幕尺寸是只读档；移动、点击、输入、按键是高风险控制档。整组类别默认关闭，需要显式打开。
  */
-export const computerTools: ComputerToolCollection = structureToolDescriptionsForCategory(
+export const computerTools: ComputerToolCollection = toolDescriptions.forCategory(
   {
     'computer:screenshot': computerScreenshot,
     'computer:screen_size': computerScreenSize,
@@ -319,7 +319,7 @@ export function createComputerKernelModule(
           computer: computerHostPortFromRuntime(runtime),
         }))
       const callable = createKernelCallableCapability(
-        createToolCallableOperations(computerTools, resolveContext, { label: '桌面控制' }),
+        toolKernelModules.callableOperations(computerTools, resolveContext, { label: '桌面控制' }),
       )
       const service: ComputerCapabilityService = Object.freeze({
         ...callable,

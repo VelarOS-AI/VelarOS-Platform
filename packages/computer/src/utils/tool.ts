@@ -1,6 +1,6 @@
 /** 定义桌面控制工具的小壳子：只补上固定的类别，其余按上游工具契约。 */
 
-import { defineToolRuntimeSpec } from '@velaros-ai/agent/tool-contract'
+import { toolContracts } from '@velaros-ai/tool-contract'
 
 import { ComputerToolCategoryId } from '../contract/constants.js'
 import type { VelaTool } from '../contract/provides.js'
@@ -14,7 +14,7 @@ import type { DefineComputerToolInput } from '../types/tool.js'
 export function defineComputerTool<TInput extends Record<string, unknown>>(
   input: DefineComputerToolInput<TInput>
 ): VelaTool<TInput> {
-  return defineToolRuntimeSpec({ ...input, category: ComputerToolCategoryId })
+  return toolContracts.defineRuntime({ ...input, category: ComputerToolCategoryId })
 }
 
 /**

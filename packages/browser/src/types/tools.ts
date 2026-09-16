@@ -2,7 +2,7 @@
 
 /** 一个站点在本次会话里的登录门控状态；`origin` 解析失败时退化为整串 URL。 */
 import type { ToolCapabilitySchema,ToolPermission } from '@velaros-ai/agent/protocol'
-import type { DefineToolRuntimeSpecInput } from '@velaros-ai/agent/tool-contract'
+import type { DefineToolRuntimeSpecInput } from '@velaros-ai/tool-contract'
 
 import type { BrowserToolContext } from '../contract/requires.js'
 

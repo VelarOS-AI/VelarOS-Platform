@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { z } from 'zod'
 
-import { isCanonicalToolId, schemaToInputSchema } from '@velaros-ai/agent/tool-contract'
+import { toolIdentity, toolSchemas } from '@velaros-ai/tool-contract'
 
 import { ProjectToolNames } from '../src/contract/constants'
 import type { AgentProjectKernelPort } from '../src/contract/requires.js'
@@ -40,14 +40,14 @@ describe('Project model-facing tool contract', () => {
 
   test('keeps the public tool surface precise and canonical', () => {
     expect(Object.keys(projectTools)).toEqual(Object.values(ProjectToolNames))
-    expect(Object.keys(projectTools).every(isCanonicalToolId)).toBe(true)
+    expect(Object.keys(projectTools).every((name) => toolIdentity.isCanonical(name))).toBe(true)
   })
 
   test('keeps the complete model schema below the request budget', () => {
     const schema = Object.entries(projectTools).map(([name, tool]) => ({
       name,
       description: tool.description,
-      inputSchema: schemaToInputSchema(tool.schema),
+      inputSchema: toolSchemas.toInputSchema(tool.schema),
     }))
 
     expect(JSON.stringify(schema).length).toBeLessThanOrEqual(ModelToolSchemaCharacterBudget)
@@ -84,7 +84,7 @@ describe('Project model-facing tool contract', () => {
 
   test('preserves the version 1 shallow write contract for saved calls', () => {
     const writeTool = legacyProjectTools[LegacyProjectToolNames.write]
-    const writeSchema = schemaToInputSchema(writeTool.schema)
+    const writeSchema = toolSchemas.toInputSchema(writeTool.schema)
     const serialized = JSON.stringify(writeSchema)
 
     const nativeProperties = { ...writeSchema.properties }

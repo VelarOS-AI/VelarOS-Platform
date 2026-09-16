@@ -4,7 +4,7 @@
  * 全部工具定义都写在 `impl/MemoryTools.ts` 里，这里只放定义用的那一个函数。
  */
 
-import { defineToolRuntimeSpec } from '@velaros-ai/agent/tool-contract'
+import { toolContracts } from '@velaros-ai/tool-contract'
 
 import type { DefineMemoryToolInput, VelaTool } from '../contract/requires'
 
@@ -14,5 +14,5 @@ export function defineMemoryTool<
 >(
   input: DefineMemoryToolInput<TInput>
 ): VelaTool<TInput> {
-  return defineToolRuntimeSpec(input)
+  return toolContracts.defineRuntime(input)
 }

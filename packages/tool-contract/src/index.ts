@@ -13,7 +13,7 @@ export type { ToolContextResolver } from './contract/requires.js'
 export type { ToolContractDefinitionApi } from './impl/ToolContractDefinition.js'
 export { toolContracts } from './impl/ToolContractDefinition.js'
 export type { ToolDescriptionsApi } from './impl/ToolDescriptions.js'
-export { toolDescriptions } from './impl/ToolDescriptions.js'
+export { renderParameterDescription, toolDescriptions } from './impl/ToolDescriptions.js'
 export type { ToolExampleRegistryApi } from './impl/ToolExampleRegistry.js'
 export {
   createToolExampleRegistry,

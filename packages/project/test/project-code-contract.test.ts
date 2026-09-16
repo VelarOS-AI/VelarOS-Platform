@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import { canonicalizeProviderInputSchema, createToolSchemaBundle, schemaToInputSchema } from '@velaros-ai/agent/tool-contract'
+import { toolSchemas } from '@velaros-ai/tool-contract'
 
 import { projectTools } from '../src/impl/ProjectTools'
 
@@ -81,10 +81,10 @@ describe('code query intent contract', () => {
   })
 
   test('每种呈现都是同一个平对象：九个 intent 在一个 intent 枚举里，字段都有说明，宿主扁平化时丢不掉分支', () => {
-    const publicSchema = schemaToInputSchema(projectCode.schema)
-    const bundle = createToolSchemaBundle([projectCode])
-    const presentations = [publicSchema, canonicalizeProviderInputSchema(publicSchema), bundle.tools[0]!.inputSchema] as Array<Record<string, any>>
-    for (const schema of [publicSchema, canonicalizeProviderInputSchema(publicSchema)] as Array<Record<string, any>>)
+    const publicSchema = toolSchemas.toInputSchema(projectCode.schema)
+    const bundle = toolSchemas.bundle([projectCode])
+    const presentations = [publicSchema, toolSchemas.canonicalizeProviderInput(publicSchema), bundle.tools[0]!.inputSchema] as Array<Record<string, any>>
+    for (const schema of [publicSchema, toolSchemas.canonicalizeProviderInput(publicSchema)] as Array<Record<string, any>>)
       expect(schema.properties.intent.enum).toEqual(['outline', 'definition', 'references', 'callers', 'callees', 'imports', 'importers', 'impact', 'diagnostics'])
 
     for (const schema of presentations) {

@@ -1,6 +1,6 @@
 /** 定义一个知识工具：把类别、上下文与权限类型钉死，工具文件只管填内容。 */
 
-import { defineToolRuntimeSpec } from '@velaros-ai/agent/tool-contract'
+import { toolContracts } from '@velaros-ai/tool-contract'
 
 import type { DefineKnowledgeToolInput, KnowledgeTool } from '../types/tool.js'
 
@@ -8,5 +8,5 @@ import type { DefineKnowledgeToolInput, KnowledgeTool } from '../types/tool.js'
 export function defineKnowledgeTool<TInput extends Record<string, unknown>>(
   input: DefineKnowledgeToolInput<TInput>
 ): KnowledgeTool<TInput> {
-  return defineToolRuntimeSpec(input)
+  return toolContracts.defineRuntime(input)
 }

@@ -1,6 +1,6 @@
 /** 模型面工具说明的渲染、判定、解析、压缩与两道长度闸：实现在 `@velaros-ai/tool-contract`，这里按原名转发。 */
 
-import { toolDescriptions } from '@velaros-ai/tool-contract'
+import { renderParameterDescription as renderParameter, toolDescriptions } from '@velaros-ai/tool-contract'
 
 import type { ToolCategoryId } from '../../types/agent.js'
 import type {
@@ -43,7 +43,7 @@ function renderToolDescription(spec: StructuredToolDescriptionSpec): string {
 
 /** 渲染**单个参数**的结构化描述，语法比工具描述窄：只有 `描述` → `取值` → `用法` → `注意` 四节。 */
 function renderParameterDescription(spec: StructuredParameterDescriptionSpec): string {
-  return toolDescriptions.renderParameter(spec)
+  return renderParameter(spec)
 }
 
 /** 判定一段**工具**描述是否结构化：七节语法，其中 `适合` 必填。 */

@@ -1,8 +1,9 @@
 /**
- * 工具：定义系统工具。严格解析线上入参、包装成内核可调用操作用 `@velaros-ai/agent/tool-contract` 的公共实现。
+ * 工具：定义系统工具。工具契约、严格解析线上入参、包装成内核可调用操作都用 `@velaros-ai/tool-contract` 的公共实现。
  */
 
-import { defineToolRuntimeSpec, withToolInputReuse } from '@velaros-ai/agent/tool-contract'
+import { withToolInputReuse } from '@velaros-ai/agent/tool-contract'
+import { toolContracts } from '@velaros-ai/tool-contract'
 
 import { SystemToolCategoryByName } from '../contract/constants.js'
 import type { VelaTool } from '../contract/provides.js'
@@ -13,7 +14,7 @@ export function defineSystemTool<TInput extends Record<string, unknown>>(
   input: DefineSystemToolInput<TInput>
 ): VelaTool<TInput> {
   const { inputReuse, ...spec } = input
-  const defined = defineToolRuntimeSpec({
+  const defined = toolContracts.defineRuntime({
     ...spec,
     category: SystemToolCategoryByName[input.name],
   })

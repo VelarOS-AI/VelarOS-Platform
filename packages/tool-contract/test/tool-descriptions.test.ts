@@ -2,7 +2,7 @@
 
 import { describe, expect, test } from 'bun:test'
 
-import { toolDescriptions } from '../src/impl/ToolDescriptions'
+import { renderParameterDescription, toolDescriptions } from '../src/impl/ToolDescriptions'
 
 describe('ToolDescriptions', () => {
   test('描述正文压成单行，条目逐条 trim 并丢掉空条目', () => {
@@ -15,7 +15,7 @@ describe('ToolDescriptions', () => {
   })
 
   test('参数说明只有四节，没有必填分节', () => {
-    const rendered = toolDescriptions.renderParameter({ description: '一次最多返回几条', values: ['1 到 50'] })
+    const rendered = renderParameterDescription({ description: '一次最多返回几条', values: ['1 到 50'] })
     expect(rendered).toBe('描述：一次最多返回几条\n\n取值：\n- 1 到 50')
     expect(toolDescriptions.isParameterDescription('描述：只有描述')).toBe(true)
     expect(toolDescriptions.isParameterDescription('取值：\n- 1')).toBe(false)

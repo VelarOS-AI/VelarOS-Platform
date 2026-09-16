@@ -73,6 +73,7 @@
     "@velaros-ai/core": "workspace:*",
     "@velaros-ai/kernel": "workspace:*",
     "@velaros-ai/platform": "workspace:*",
+    "@velaros-ai/tool-contract": "workspace:*",
     "docx": "^9.6.1",
     "exceljs": "^4.4.0",
     "jszip": "^3.10.1",

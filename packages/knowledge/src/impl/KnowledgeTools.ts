@@ -8,7 +8,7 @@
 
 import { z } from 'zod'
 
-import { renderParameterDescription as parameterDescription, structureToolDescriptionsForCategory } from '@velaros-ai/agent/tool-contract'
+import { renderParameterDescription as parameterDescription, toolDescriptions } from '@velaros-ai/tool-contract'
 
 import {
   KnowledgeSourceKinds,
@@ -214,7 +214,7 @@ const searchKnowledge = defineKnowledgeTool<KnowledgeToolOperationsSearchInput>(
 
 /** knowledge 类别的三个公开工具，按工具名索引。 */
 export const knowledgeTools: Readonly<Record<string, KnowledgeTool<any>>> =
-  structureToolDescriptionsForCategory(
+  toolDescriptions.forCategory(
     {
       [KnowledgeToolNames.diagnostics]: getKnowledgeDiagnostics,
       [KnowledgeToolNames.sync]: syncKnowledgeWorkspace,

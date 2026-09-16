@@ -1,5 +1,5 @@
-import { defineToolRuntimeSpec } from '@velaros-ai/agent/tool-contract'
 import { AppError } from '@velaros-ai/core/error'
+import { toolContracts } from '@velaros-ai/tool-contract'
 
 import type { VelaTool } from '../contract/provides.js'
 import type { BrowserToolContext } from '../contract/requires.js'
@@ -47,5 +47,5 @@ export function getActiveBrowserContext(ctx: BrowserToolContext) {
 export function defineBrowserTool<TInput extends Record<string, unknown>>(
   input: DefineBrowserToolInput<TInput>
 ): VelaTool<TInput> {
-  return defineToolRuntimeSpec({ ...input, category: 'browser' })
+  return toolContracts.defineRuntime({ ...input, category: 'browser' })
 }

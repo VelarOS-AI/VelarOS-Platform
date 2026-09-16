@@ -4,8 +4,8 @@
  */
 import { z } from 'zod'
 
-import { DefaultToolContractExampleRegistry } from '@velaros-ai/agent/tool-contract'
 import { isArray, isPresent, isUndefined, Log } from '@velaros-ai/core'
+import { toolExamples } from '@velaros-ai/tool-contract'
 
 import type { ProjectToolCollection } from '../../src/contract/provides.js'
 import { projectApprovalBridge } from '../../src/impl/kernel/ProjectApprovalBridge'
@@ -25,7 +25,7 @@ import { resolveProjectEditTarget, saveProjectEditTarget } from './edit-target'
 type ProjectModelEditInput = z.input<typeof ProjectModelEditSchema>
 
 // 旧版工具有几个和现行工具同名：定义旧版时会覆盖全局示例表里现行工具的示例。先记下现行的，文件末尾还原，别的测试读到的永远是现行示例。
-const CurrentToolExamples = new Map(Object.keys(projectTools).map((name) => [name, DefaultToolContractExampleRegistry.get(name)]))
+const CurrentToolExamples = new Map(Object.keys(projectTools).map((name) => [name, toolExamples.get(name)]))
 
 /** 第 1 版工具名；只在测试里用。 */
 export const LegacyProjectToolNames = Object.freeze({
@@ -464,4 +464,4 @@ export const legacyProjectTools: ProjectToolCollection = Object.freeze({
 })
 export { ProjectWriteModeSchema as LegacyProjectWriteModeSchema }
 
-for (const [name, examples] of CurrentToolExamples) if (examples) DefaultToolContractExampleRegistry.set(name, examples)
+for (const [name, examples] of CurrentToolExamples) if (examples) toolExamples.set(name, examples)

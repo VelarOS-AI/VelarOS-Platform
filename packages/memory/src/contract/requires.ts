@@ -7,11 +7,11 @@
 
 import type BetterSqlite3 from 'better-sqlite3'
 
+import type { CapabilityToken } from '@velaros-ai/kernel/contracts/abi'
 import type {
   DefineToolRuntimeSpecInput,
   ToolContractRuntimeSpec,
-} from '@velaros-ai/agent/tool-contract'
-import type { CapabilityToken } from '@velaros-ai/kernel/contracts/abi'
+} from '@velaros-ai/tool-contract'
 
 import type { MemoryHostScope, MemoryHostScopeInput } from '../types/host'
 import type {

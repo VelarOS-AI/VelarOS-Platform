@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises'
 
 import { describe, expect, test } from 'bun:test'
 
-import { DefaultToolContractExampleRegistry, schemaToInputSchema } from '@velaros-ai/agent/tool-contract'
+import { toolExamples, toolSchemas } from '@velaros-ai/tool-contract'
 
 import { ToolArgsSchemaValidator } from '../../agent/src/utils/tools/tool-args-schema-validator'
 import { ProjectEditSchema, projectTools } from '../src/impl/ProjectTools'
@@ -22,10 +22,10 @@ describe('model-facing Project examples and normalization', () => {
   test('all seven tool examples survive wire encoding and satisfy their actual schema', () => {
     expect(Object.keys(projectTools)).toHaveLength(7)
     for (const tool of Object.values(projectTools)) {
-      const inputSchema = schemaToInputSchema(tool.schema)
+      const inputSchema = toolSchemas.toInputSchema(tool.schema)
       expect(inputSchema.type === 'object' || Array.isArray(inputSchema.oneOf)).toBe(true)
       expect(JSON.stringify(inputSchema)).not.toBe('{"type":"object"}')
-      const examples = DefaultToolContractExampleRegistry.get(tool.name)
+      const examples = toolExamples.get(tool.name)
       expect(examples?.length).toBeGreaterThan(0)
       for (const example of examples ?? []) {
         const wire = JSON.stringify(example)

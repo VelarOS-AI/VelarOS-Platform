@@ -21,7 +21,8 @@ system、project、browser、office、memory、computer、knowledge 七个空间
 | 值 | 接口 | 做什么 |
 | --- | --- | --- |
 | `toolContracts` | `ToolContractDefinitionApi` | 定义一条工具（`define` / `defineRuntime`）、编译它的模型面说明（`describe`）、鸭子判定与只读判定、造各空间那一行 `createDefiner` |
-| `toolDescriptions` | `ToolDescriptionsApi` | 说明的渲染、判定、解析、精简、两道长度闸，以及各空间共用的约束句 |
+| `toolDescriptions` | `ToolDescriptionsApi` | 工具说明的渲染、判定、解析、精简、两道长度闸，以及各空间共用的约束句 |
+| `renderParameterDescription` | 工厂 | 按四节语法渲染单个参数的说明；各空间的 schema 文件按参数逐个调它 |
 | `toolExamples` | `ToolExampleRegistryApi` | 进程内共享的示例登记表：定义端写入，说明渲染端与离线审核端读出 |
 | `toolSchemas` | `ToolSchemasApi` | zod schema → JSON Schema、发给 provider 前的稳定化、一整批工具的紧凑 schema 包 |
 | `toolIdentity` | `ToolIdentityApi` | canonical 工具 id 的判定与断言、跨工具共享的审批操作身份 |

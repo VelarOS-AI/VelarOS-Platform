@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
-import { renderParameterDescription as parameterDescription } from '@velaros-ai/agent/tool-contract'
 import { isNonBlankString, isNumber, isPlainObject, isPresent, isString, toOptional } from '@velaros-ai/core'
+import { renderParameterDescription as parameterDescription } from '@velaros-ai/tool-contract'
 
 import type { ParsedBrowserActInput } from '../../types/tools'
 

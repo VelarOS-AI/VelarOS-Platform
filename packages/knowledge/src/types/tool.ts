@@ -1,6 +1,6 @@
 /** 工具面的数据形状：一个知识工具的运行时规格、定义工具的入参，以及回执里的索引问题汇总。 */
 
-import type { DefineToolRuntimeSpecInput, ToolContractRuntimeSpec } from '@velaros-ai/agent/tool-contract'
+import type { DefineToolRuntimeSpecInput, ToolContractRuntimeSpec } from '@velaros-ai/tool-contract'
 
 import type { KnowledgeToolCategoryId } from '../contract/constants.js'
 import type { KnowledgeToolContext } from '../contract/requires.js'

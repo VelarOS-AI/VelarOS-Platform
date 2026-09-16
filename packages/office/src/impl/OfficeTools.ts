@@ -7,11 +7,6 @@
 
 import { z } from 'zod'
 
-import {
-  createToolCallableOperations,
-  renderParameterDescription as parameterDescription,
-  structureToolDescriptionsForCategory,
-} from '@velaros-ai/agent/tool-contract'
 import { isNonBlankString, isPresent } from '@velaros-ai/core'
 import {
   type CapabilityToken,
@@ -21,6 +16,11 @@ import {
   KernelModuleApiVersion,
   type KernelModuleDefinition,
 } from '@velaros-ai/kernel/contracts/abi'
+import {
+  renderParameterDescription as parameterDescription,
+  toolDescriptions,
+  toolKernelModules,
+} from '@velaros-ai/tool-contract'
 
 import {
   OfficeInputLimits,
@@ -1262,7 +1262,7 @@ const convertDocumentToMarkdown = defineOfficeTool<ConvertDocumentToMarkdownInpu
 // ── 工具集合 ──────────────────────────────────────────────────
 
 /** office 空间公开的十个工具，按工具名索引。 */
-export const officeTools: OfficeToolCollection = structureToolDescriptionsForCategory(
+export const officeTools: OfficeToolCollection = toolDescriptions.forCategory(
   {
     [OfficeToolNames.createWordDocument]: createWordDocument,
     [OfficeToolNames.createPresentation]: createPresentation,
@@ -1301,7 +1301,7 @@ export function createOfficeKernelModule(
     },
     activate(context) {
       const callable = createKernelCallableCapability(
-        createToolCallableOperations(officeTools, options.resolveContext, { label: '办公' }),
+        toolKernelModules.callableOperations(officeTools, options.resolveContext, { label: '办公' }),
       )
       const service: OfficeCapabilityService = Object.freeze({
         ...callable,

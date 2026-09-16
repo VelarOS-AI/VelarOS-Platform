@@ -1,7 +1,7 @@
 /** 六个工具自己的工作类型：模型给的入参形状、坐标解析的中间结果、能力声明的形状。 */
 
 import type { ToolCapabilitySchema, ToolPermission } from '@velaros-ai/agent/protocol'
-import type { DefineToolRuntimeSpecInput } from '@velaros-ai/agent/tool-contract'
+import type { DefineToolRuntimeSpecInput } from '@velaros-ai/tool-contract'
 
 import type { ComputerToolContext } from '../contract/requires.js'
 

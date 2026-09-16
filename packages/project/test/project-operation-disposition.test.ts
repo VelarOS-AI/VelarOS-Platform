@@ -4,7 +4,7 @@ import { resolve } from 'node:path'
 import { describe, expect, test } from 'bun:test'
 import * as ts from 'typescript'
 
-import { schemaToInputSchema } from '@velaros-ai/agent/tool-contract'
+import { toolSchemas } from '@velaros-ai/tool-contract'
 
 import disposition from '../../../docs/engineering/project-tool-operation-disposition.json'
 import { projectTools } from '../src/impl/ProjectTools'
@@ -46,9 +46,9 @@ describe('operation disposition is tied to executable contracts', () => {
   test('enumerates each legacy tool, model edit, write mode and code query exactly once', () => {
     const groups = {
       tool: Object.values(LegacyProjectToolNames).sort(),
-      edit: discriminants(schemaToInputSchema(ProjectModelEditSchema), 'type'),
+      edit: discriminants(toolSchemas.toInputSchema(ProjectModelEditSchema), 'type'),
       write: [...LegacyProjectWriteModeSchema.options].sort(),
-      query: discriminants(schemaToInputSchema(ProjectCodeQuerySchema), 'action'),
+      query: discriminants(toolSchemas.toInputSchema(ProjectCodeQuerySchema), 'action'),
     }
     for (const [group, actual] of Object.entries(groups)) {
       const listed = disposition.rows.filter((row) => row.group === group).map((row) => row.operation).sort()

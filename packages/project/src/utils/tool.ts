@@ -1,13 +1,14 @@
 /**
  * 定义项目工具与挂进内核的辅助：defineProjectTool 把工具说明、schema、权限与 execute 组装成运行时规格，声明了 inputReuse 的工具接入入参复用
- * （只在工具文件里调用）；只写真有内容的说明节，缺的节不补占位句。挂进内核时的调用表用 agent 的 createToolCallableOperations，这里只给领域错误的翻译。
+ * （只在工具文件里调用）；只写真有内容的说明节，缺的节不补占位句。挂进内核时的调用表用 `@velaros-ai/tool-contract` 的 toolKernelModules，这里只给领域错误的翻译。
  */
 
 
 import type { ToolCategoryId } from '@velaros-ai/agent/protocol'
-import { defineToolRuntimeSpec, resolveToolInputReuse, withToolInputReuse } from '@velaros-ai/agent/tool-contract'
+import { resolveToolInputReuse, withToolInputReuse } from '@velaros-ai/agent/tool-contract'
 import { isUndefined } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
+import { toolContracts } from '@velaros-ai/tool-contract'
 
 import { ProjectToolContract } from '../contract/constants.js'
 import type { VelaTool } from '../contract/provides.js'
@@ -57,7 +58,7 @@ export function defineProjectTool<TInput extends Record<string, any>>(input: {
     ...tool
   } = input
   const inputContractVersion = input.inputContractVersion ?? ProjectToolContract.inputVersion
-  const defined = defineToolRuntimeSpec({
+  const defined = toolContracts.defineRuntime({
     name,
     category,
     role,

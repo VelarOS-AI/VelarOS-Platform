@@ -8,7 +8,7 @@ import assert from 'node:assert/strict'
 
 import { test } from 'bun:test'
 
-import { DefaultToolContractExampleRegistry } from '@velaros-ai/agent/tool-contract'
+import { toolExamples } from '@velaros-ai/tool-contract'
 
 /** 曾经用工具定义器完整定义、却从不交给模型的 21 个名字。 */
 const RetiredShadowToolNames = [
@@ -42,7 +42,7 @@ void test('影子工具名既不在工具集合里，也不再写进全局示例
     assert.equal(browserTools[name], undefined, `${name} 不应该出现在工具集合里`)
   }
 
-  const registered = [...DefaultToolContractExampleRegistry.snapshot().keys()].filter((name) =>
+  const registered = [...toolExamples.snapshot().keys()].filter((name) =>
     name.startsWith('browser:')
   )
   const leaked = registered.filter((name) => {

@@ -10,7 +10,7 @@
  * 出包的值改成工厂与实例（`createBrowserUserScriptStore` 等），类不再出包。
  */
 import type { ToolPermission } from '@velaros-ai/agent/protocol'
-import type { ToolContractRuntimeSpec, ToolContractSurface } from '@velaros-ai/agent/tool-contract'
+import type { ToolContractRuntimeSpec, ToolContractSurface } from '@velaros-ai/tool-contract'
 
 import type { BrowserToolContext } from './requires.js'
 
