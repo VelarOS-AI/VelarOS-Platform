@@ -10,6 +10,10 @@
 
 （按时间追加。每条写：改了什么、为什么、影响谁。）
 
+- **kernel 的实现层缺陷修完（09-16 15:30，a18219f3 等 8 个提交，测试 144→168）。** 两条要紧的：① **宿主桥（HostBridge/sidecar）此前对未登记的操作一律放行**（当成零权限操作），权限闸等于被绕过；现在按探测清单拒绝表外操作，拒绝发生在权限判定之前。② **独立守护进程 `velaros-kernel-daemon` 的默认装配根本起不来**（无条件注册了三个需要隔离适配器的桩），现在缺适配器的模块跳过并记成装载失败，进程起得来。其余你会看到的：宿主的 semver 判定变严（预发布版本不再满足正式版范围，同时开始接受 `+build`）；Linux/macOS 上运行目录若不是本人所有或不是 0700，守护进程拒绝启动；更新锁读不出属主时按被占用报错（原来会抢锁）；启动器停机补 SIGKILL 且不再把父进程吊住；远程配对码接受即作废、清单修订号算法改了（升级前后同一份清单的值不同）；私钥与桥 socket 的缺省路径从 `$HOME || /tmp` 改成系统家目录（Windows 上路径会变）。
+
+- **browser 与 memory 开始包内改造（09-16 15:30，e26130c6、95da3970、db85e3e5）。** browser 删掉 **21 个「影子工具」**（有完整说明、示例、schema，却从不交给模型，只被三个公开工具内部调用，约 1600 行）改成普通函数，另删三处死代码；源码整文件搬进五个目录，入口子路径名一个没变、模型面 schema 逐字节不变。memory 删掉 13 个纯转发文件、132 处 import 改指声明处，8 个入口改成逐个名字显式转发，518 个导出名零增零删。两件事都不改模型看得到的东西。**产品侧要知道**：Desktop 的两处架构检查按老路径钉着 browser 的 dist（`dist/composition/`、`dist/tools/`），升级 browser 之后会报错，需要跟着改。
+
 - **新包 `@velaros-ai/path-rules`，路径身份类漏洞修完（09-16 14:40，3831ee71、134e1d51、417616a4、cec39e4d，ADR 0008 附录）。** gitignore 解析与判定、glob 匹配、遍历默认跳过的 23 个目录名合成一份，system 与 project 各删掉自己那套（净删约 1300 行重复实现）。你会看到的变化：① project 在 macOS/Windows 上 glob **不再区分大小写**（策略名单与 include/exclude 都是）——盘本来就不区分，原来能用 `.ENV` 绕开禁读 `.env`；② **`.git` 缺省不许写**（原来写 `.git/config` 或 hooks，内核下次自己跑 git 就会执行注入的命令），宿主要写版本库得自己放宽；③ system 搜索与沙箱镜像的 gitignore 判定变强（`/build*`、`docs/*.md`、`**/tmp`、`a/**/b`、`[Dd]ist`、转义尾随空格现在都认）——搜索结果会变少，沙箱镜像里这些目录改为链接或跳过，更快也不再把忽略目录整份复制成可写；④ `build/` 这类目录限定规则不再命中同名**文件**；⑤ 一次事务里两个别名路径（符号链接或大小写变体指向同一文件）从「写一半再失败」变成「写之前整批拒绝」；⑥ `project:sandbox` 源目录越界的错误码从 VALIDATION 改成 PERMISSION_DENIED。
 
 - **project 的持久化与执行缺陷修完（09-16 14:10，6d4e1d82、9c9011cd）。** 你会看到的变化：① **`project:run` 的输出现在会脱敏**（原来完全不脱敏，模型 `cat .env` 就能绕开读取治理；副作用是构建日志里出现 `access_token=` 这类赋值也会被遮）；② **沙箱落回先拒绝**：完整差量里只要有一条项目不许写（写禁止名单、受保护文件、生成文件、越界、宿主隐藏），整批不落、也不问用户；③ **撤销历史有 48 MiB 字节预算**，被淘汰的改动撤销时如实说「没有留下撤销记录」（diff 仍可查）——换来的是历史再大也不会让 apply 失败（原来改 3 MB 的文件第 11 次就把工作区锁死）；④ 超过 5 MiB 的文件只给只读窗口，不再签发注定失败的可编辑引用；⑤ 事务状态文件升到版本 3（支持并发事务各自的恢复计划），旧版自动升级但降级读不了；⑥ 宿主端口多两个必需方法（批量写授权、脱敏），Desktop 直接传内核不用改，手搓端口的宿主要补。
@@ -123,4 +127,4 @@
 - [x] ① system 结构复查（386ea2d、114a6c3、d692e79）
 - [ ] ② system 复查修 bug（已完成：18 条，9 个提交 21fcb91…c8a2983）、定为仓库标准（已完成）；project 改造（已完成：工具面 8d7513e、入口 bc93fd0、错误码 1ea639d、实现层四路、卡片与不变量，门禁零条）；project 复查修 bug（两份评审已回，修复排队中）
 - [ ] ③ 公共逻辑抽取（已完成：shell-command、rehearsal-sandbox、内核可调用操作表进 agent/tool-contract、project 迁入、text-files、platform 路径包含判断 c9564d45、core 真实路径 7c39d5c9；进行中：path-rules 与两边迁移；待做：工具定义辅助与内核模块样板、工具失败构造器）
-- [ ] 其余包（agent 第 1 步 18ad853f/da737f17、第 2 步 540de0e6 完成，第 3 步前半「类型归位」进行中；browser、memory、kernel、model/office/computer、七个小包的方案编写中）：agent → browser → memory → kernel → model → office → agent-lab → development → core → html-artifacts → computer → cli → document-renderer → surface-protocol
+- [ ] 其余包：方案全部写完并归档在 `refactor-plans/`；缺陷修复已完成 model、memory、office、computer、browser、kernel、project（七小包在跑）；agent 第 1–3a 步完成、3b 在跑；browser、memory 包内改造第一段完成。等你拍板的项汇总在 `foundation-pending-decisions.md`：agent → browser → memory → kernel → model → office → agent-lab → development → core → html-artifacts → computer → cli → document-renderer → surface-protocol
