@@ -2,8 +2,9 @@ import { isFiniteNumber, isNotNull, isPlainObject, isString, toNullable } from '
 
 import type { BrowserListConsoleEventsInput, BrowserListNetworkEventsInput, BrowserListPageErrorsInput } from '../impl/tools/Inspection.js'
 import type { BrowserPageDiagnosticEntry, BrowserPageDiagnosticsSummary } from '../types/browser'
-import type { BrowserPageDiagnosticKind,BrowserPageDiagnosticLevel, BrowserPageDiagnostics } from '../types/browser.js'
+import type { BrowserPageDiagnosticKind, BrowserPageDiagnostics } from '../types/browser.js'
 import type { BrowserPageDriverNetworkCaptureState } from '../types/driver.js'
+import type { BrowserConsoleEventFilters, BrowserConsoleEventsResult, BrowserNetworkEventFilters, BrowserNetworkEventsResult, BrowserPageErrorsResult } from '../types/tools.js'
 
 /**
  * 诊断按种类取窗口：**先按种类过滤，再取最近 limit 条**。
@@ -56,16 +57,7 @@ export function clearBrowserDiagnosticEntries<Entry extends { kind: BrowserPageD
   buffer.splice(0, buffer.length, ...kept)
 }
 
-export interface BrowserPageErrorsResult {
-  url: string
-  title: Nullable<string>
-  entries: BrowserPageDiagnosticEntry[]
-  summary: BrowserPageDiagnosticsSummary
-  diagnosticTotal: number
-  pageErrorTotal: number
-  capturedAt: number
-}
-
+/** 从诊断缓冲里挑出页面未处理异常。 */
 export function buildBrowserPageErrorsResult(
   diagnostics: BrowserPageDiagnostics,
   _input: BrowserListPageErrorsInput
@@ -83,25 +75,7 @@ export function buildBrowserPageErrorsResult(
   }
 }
 
-export interface BrowserNetworkEventFilters {
-  status: Nullable<number>
-  resourceType: Nullable<string>
-  failedOnly: boolean
-}
-
-export interface BrowserNetworkEventsResult {
-  url: string
-  title: Nullable<string>
-  entries: BrowserPageDiagnosticEntry[]
-  summary: BrowserPageDiagnosticsSummary
-  filters: BrowserNetworkEventFilters
-  diagnosticTotal: number
-  networkTotal: number
-  /** 网络采集刚在这次调用建立时的说明（内嵌页面）；没有要说的就是 null。 */
-  networkCaptureNotice: Nullable<string>
-  capturedAt: number
-}
-
+/** 从诊断缓冲里挑出网络事件并按状态码、资源类型、失败与否过滤。 */
 export function buildBrowserNetworkEventsResult(
   diagnostics: BrowserPageDiagnostics,
   input: BrowserListNetworkEventsInput
@@ -123,6 +97,7 @@ export function buildBrowserNetworkEventsResult(
   }
 }
 
+/** 把网络过滤入参归一化成确定的形状。 */
 export function normalizeBrowserNetworkEventFilters(
   input: BrowserListNetworkEventsInput
 ): BrowserNetworkEventFilters {
@@ -133,6 +108,7 @@ export function normalizeBrowserNetworkEventFilters(
   }
 }
 
+/** 判一条网络事件过不过网络过滤条件。 */
 export function matchesBrowserNetworkEventFilters(
   entry: BrowserPageDiagnosticEntry,
   filters: BrowserNetworkEventFilters
@@ -144,27 +120,13 @@ export function matchesBrowserNetworkEventFilters(
   return true
 }
 
+/** 判一条网络事件算不算失败：级别是错误 / 警告，或状态码不小于 400。 */
 export function isFailedBrowserNetworkEvent(entry: BrowserPageDiagnosticEntry): boolean {
   const status = readBrowserDiagnosticStatus(entry)
   return entry.level === 'error' || entry.level === 'warning' || (isNotNull(status) && status >= 400)
 }
 
-export interface BrowserConsoleEventFilters {
-  level: Nullable<BrowserPageDiagnosticLevel>
-  errorsOnly: boolean
-}
-
-export interface BrowserConsoleEventsResult {
-  url: string
-  title: Nullable<string>
-  entries: BrowserPageDiagnosticEntry[]
-  summary: BrowserPageDiagnosticsSummary
-  filters: BrowserConsoleEventFilters
-  diagnosticTotal: number
-  consoleTotal: number
-  capturedAt: number
-}
-
+/** 从诊断缓冲里挑出 console 事件并按 level / errorsOnly 过滤，回一份带汇总的回执。 */
 export function buildBrowserConsoleEventsResult(
   diagnostics: BrowserPageDiagnostics,
   input: BrowserListConsoleEventsInput
@@ -185,6 +147,7 @@ export function buildBrowserConsoleEventsResult(
   }
 }
 
+/** 把 console 过滤入参归一化成确定的形状。 */
 export function normalizeBrowserConsoleEventFilters(
   input: BrowserListConsoleEventsInput
 ): BrowserConsoleEventFilters {
@@ -194,6 +157,7 @@ export function normalizeBrowserConsoleEventFilters(
   }
 }
 
+/** 判一条 console 事件过不过 console 过滤条件。 */
 export function matchesBrowserConsoleEventFilters(
   entry: BrowserPageDiagnosticEntry,
   filters: BrowserConsoleEventFilters
@@ -204,6 +168,7 @@ export function matchesBrowserConsoleEventFilters(
   return true
 }
 
+/** 把一批诊断按级别、种类、来源、状态码、资源类型各汇总一份。 */
 export function summarizeBrowserDiagnosticEntries(
   entries: BrowserPageDiagnosticEntry[]
 ): BrowserPageDiagnosticsSummary {
@@ -237,6 +202,7 @@ export function summarizeBrowserDiagnosticEntries(
   }
 }
 
+/** 从一条诊断里读出 HTTP 状态码；没有就是 null。 */
 export function readBrowserDiagnosticStatus(entry: BrowserPageDiagnosticEntry): Nullable<number> {
   const detailStatus = isPlainObject(entry.details) ? entry.details.status : null
   const status = isFiniteNumber(detailStatus) ? detailStatus : entry.code
@@ -245,6 +211,7 @@ export function readBrowserDiagnosticStatus(entry: BrowserPageDiagnosticEntry): 
   return Math.round(status)
 }
 
+/** 从一条诊断里读出资源类型（Document、XHR、Image…）。 */
 export function readBrowserDiagnosticResourceType(
   entry: BrowserPageDiagnosticEntry
 ): Nullable<string> {
@@ -256,6 +223,7 @@ export function readBrowserDiagnosticResourceType(
   return resourceType.trim() || null
 }
 
+/** 从一条诊断的 URL 里取出来源；地址不合法时返回 null。 */
 function resolveBrowserDiagnosticOrigin(url: Nullable<string>): Nullable<string> {
   if (!url) return null
   if (!URL.canParse(url)) return null
@@ -263,10 +231,12 @@ function resolveBrowserDiagnosticOrigin(url: Nullable<string>): Nullable<string>
   return new URL(url).origin
 }
 
+/** 计数表上某个键加一。 */
 function incrementCount(record: Record<string, number>, key: string): void {
   record[key] = (record[key] ?? 0) + 1
 }
 
+/** 把计数表按键排序，回执里顺序稳定。 */
 function sortCountRecord(record: Record<string, number>): Record<string, number> {
   return Object.fromEntries(
     Object.entries(record).sort(([left], [right]) => left.localeCompare(right))

@@ -3,14 +3,15 @@ import { dirname } from 'node:path'
 
 import { isArray, isBoolean, isEmpty, isFalse, isFiniteNumber, isNonBlankString, isNotNull, isPlainObject, isString, isTrue, optionalWhen, toNullable, toOptional } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
-import { logRuntime } from '@velaros-ai/core/logger'
+import { Log } from '@velaros-ai/core/logger'
 
+import { BrowserFetchLimits } from '../../contract/constants'
 import type { BrowserElementQueryOptions, BrowserElementQueryResult, BrowserEmulationOptions, BrowserEmulationResult, BrowserEvaluateScriptOptions, BrowserEvaluateScriptResult, BrowserExportPagePdfOptions, BrowserExportPagePdfResult, BrowserFetchResourceOptions, BrowserFetchResourceResult, BrowserInspectPageOptions, BrowserListMediaSourcesOptions, BrowserListMediaSourcesResult, BrowserListPageResourcesOptions, BrowserListPageResourcesResult, BrowserMediaSourceItem, BrowserNetworkControlOptions, BrowserNetworkControlResult, BrowserNetworkRequestDetailsOptions, BrowserNetworkRequestDetailsResult, BrowserNetworkResponseBodyOptions, BrowserNetworkResponseBodyResult, BrowserOriginStorage, BrowserPageDiagnostics, BrowserPageDiagnosticsOptions, BrowserPageInspection, BrowserPageStorageOptions, BrowserPageStorageResult, BrowserPageWaitOptions, BrowserPageWaitResult, BrowserSiteContext, BrowserStorageEntry, BrowserUploadFileOptions, BrowserUploadFileResult, BrowserWaitForSelectorOptions, BrowserWaitForSelectorResult } from '../../types/browser.js'
 import type {
   BrowserPageDriverCookie,
   BrowserPageDriverState,
 } from '../../types/driver'
-import type { BrowserPageDriverKernel, ExternalBrowserPageSession } from '../../types/runtime.js'
+import type { BrowserDiagnosticsLimits,BrowserPageDriverKernel, ExternalBrowserPageSession } from '../../types/runtime.js'
 import { clampInteger, readBoundedString, readFiniteNumber } from '../../utils/numbers.js'
 import { buildElementQueryScript } from '../../utils/page-scripts/element-query'
 import { buildEvaluateScript } from '../../utils/page-scripts/evaluate'
@@ -21,18 +22,12 @@ import { buildListMediaSourcesScript } from '../../utils/page-scripts/media-sour
 import { buildPageWaitScript } from '../../utils/page-scripts/page-wait'
 import { buildPageStorageScript } from '../../utils/page-scripts/storage'
 import { buildWaitForSelectorScript } from '../../utils/page-scripts/wait-for-selector'
+import { BrowserTuning } from '../../utils/tuning'
 import { resolveExternalPageUrl } from '../../utils/url.js'
 import { resolveWorkspaceFilePath } from '../../utils/workspace-paths.js'
 import type { BrowserTargetRefStore } from '../session/BrowserTargetRefStore'
 
-const DefaultFetchResourceMaxBytes = 50 * 1024 * 1024
 
-const DefaultListMediaSourcesLimit = 80
-
-/** 诊断窗口上限的窄面（宿主的 BrowserDiagnosticsRecorder 结构满足它）。 */
-export interface BrowserDiagnosticsLimits {
-  maxEntries: number
-}
 
 /**
  * 页面数据域执行体的 host 无关外部核（走 CDP driver）。
@@ -43,8 +38,43 @@ export interface BrowserDiagnosticsLimits {
  *
  * 方法默认在 runtime 的 actionQueue 内被调用。
  */
-export class CdpPageDataEngine {
-  protected readonly log = logRuntime.tag('BrowserPageDataEngine')
+export interface CdpPageDataEngineApi {
+  /** 读页面：正文、标题结构、链接、可交互元素与它们的 ref。 */
+  inspectPage(sessionId: string, _context: BrowserSiteContext, options?: BrowserInspectPageOptions, _abortSignal?: AbortSignal): Promise<BrowserPageInspection>
+  /** 按 CSS selector 查元素的文本、属性与可点击目标。 */
+  queryElements(sessionId: string, context: BrowserSiteContext, options: BrowserElementQueryOptions, _abortSignal?: AbortSignal): Promise<BrowserElementQueryResult>
+  /** 在页面上下文里跑一段受控脚本并取回结果。 */
+  evaluateScript(sessionId: string, context: BrowserSiteContext, options: BrowserEvaluateScriptOptions, _abortSignal?: AbortSignal): Promise<BrowserEvaluateScriptResult>
+  /** 读 localStorage、sessionStorage 与 cookie。 */
+  readPageStorage(sessionId: string, context: BrowserSiteContext, options?: BrowserPageStorageOptions, _abortSignal?: AbortSignal): Promise<BrowserPageStorageResult>
+  /** 带页面会话的 cookie 下载一个 http(s) 资源到站点工作区。 */
+  fetchResource(sessionId: string, context: BrowserSiteContext, options: BrowserFetchResourceOptions, _abortSignal?: AbortSignal): Promise<BrowserFetchResourceResult>
+  /** 列页面上的图片、视频、音频地址，并说明能不能直接下载。 */
+  listMediaSources(sessionId: string, context: BrowserSiteContext, options?: BrowserListMediaSourcesOptions, _abortSignal?: AbortSignal): Promise<BrowserListMediaSourcesResult>
+  /** 列页面的链接、iframe 与媒体概览。 */
+  listPageResources(sessionId: string, context: BrowserSiteContext, options?: BrowserListPageResourcesOptions, _abortSignal?: AbortSignal): Promise<BrowserListPageResourcesResult>
+  /** 读最近的 console、加载错误与网络诊断，并给一份汇总。 */
+  getPageDiagnostics(sessionId: string, context: BrowserSiteContext, options?: BrowserPageDiagnosticsOptions, _abortSignal?: AbortSignal): Promise<BrowserPageDiagnostics>
+  /** 把站点工作区里的文件放进页面的 file input。 */
+  uploadFile(sessionId: string, context: BrowserSiteContext, options: BrowserUploadFileOptions, _abortSignal?: AbortSignal): Promise<BrowserUploadFileResult>
+  /** 把当前页面导出成 PDF 存进站点工作区。 */
+  exportPagePdf(sessionId: string, context: BrowserSiteContext, options?: BrowserExportPagePdfOptions, _abortSignal?: AbortSignal): Promise<BrowserExportPagePdfResult>
+  /** 配置页面网络：离线、请求头、拦截与 mock。 */
+  configureNetwork(sessionId: string, context: BrowserSiteContext, options: BrowserNetworkControlOptions, abortSignal?: AbortSignal): Promise<BrowserNetworkControlResult>
+  /** 按 requestId 读响应体；不在缓存里就如实回报读不到。 */
+  readNetworkResponseBody(sessionId: string, context: BrowserSiteContext, options: BrowserNetworkResponseBodyOptions, abortSignal?: AbortSignal): Promise<BrowserNetworkResponseBodyResult>
+  /** 按 requestId 读请求、响应与 timing 详情。 */
+  readNetworkRequestDetails(sessionId: string, context: BrowserSiteContext, options: BrowserNetworkRequestDetailsOptions, abortSignal?: AbortSignal): Promise<BrowserNetworkRequestDetailsResult>
+  /** 配置环境模拟：色彩方案、时区、地理位置、CPU 与网络节流。 */
+  configureEmulation(sessionId: string, context: BrowserSiteContext, options: BrowserEmulationOptions, abortSignal?: AbortSignal): Promise<BrowserEmulationResult>
+  /** 等某个选择器出现或消失。 */
+  waitForSelector(sessionId: string, context: BrowserSiteContext, options: BrowserWaitForSelectorOptions, _abortSignal?: AbortSignal): Promise<BrowserWaitForSelectorResult>
+  /** 等页面加载状态稳定，或等一小段时间。 */
+  waitForPage(sessionId: string, context: BrowserSiteContext, options: BrowserPageWaitOptions, _abortSignal?: AbortSignal): Promise<BrowserPageWaitResult>
+}
+
+export class CdpPageDataEngine implements CdpPageDataEngineApi {
+  protected readonly log = Log.tag('BrowserPageDataEngine')
 
   constructor(
     protected readonly kernel: BrowserPageDriverKernel,
@@ -104,9 +134,9 @@ export class CdpPageDataEngine {
     const inspection = await externalSession.driver.executeJavaScript<BrowserPageInspection>(
       buildInspectionScript({
         includeHtml: !!options.includeHtml,
-        maxTextChars: options.maxTextChars ?? 20_000,
-        maxHtmlChars: options.maxHtmlChars ?? 30_000,
-        maxElements: options.maxElements ?? 80,
+        maxTextChars: options.maxTextChars ?? BrowserTuning.page.inspectTextChars,
+        maxHtmlChars: options.maxHtmlChars ?? BrowserTuning.page.inspectHtmlChars,
+        maxElements: options.maxElements ?? BrowserTuning.page.inspectElements,
         ignoreSelectors: options.ignoreSelectors,
       }),
       true
@@ -320,19 +350,19 @@ export class CdpPageDataEngine {
     }
     if (
       isFiniteNumber(response.contentLength) &&
-      response.contentLength > DefaultFetchResourceMaxBytes
+      response.contentLength > BrowserFetchLimits.fileBytes
     ) {
       throw new AppError(
         'VALIDATION',
-        `资源过大（${response.contentLength} 字节），超过 ${DefaultFetchResourceMaxBytes} 字节上限。`,
+        `资源过大（${response.contentLength} 字节），超过 ${BrowserFetchLimits.fileBytes} 字节上限。`,
         undefined,
         { url: targetUrl, bytes: response.contentLength }
       )
     }
-    if (response.bytes.byteLength > DefaultFetchResourceMaxBytes) {
+    if (response.bytes.byteLength > BrowserFetchLimits.fileBytes) {
       throw new AppError(
         'VALIDATION',
-        `资源过大（${response.bytes.byteLength} 字节），超过 ${DefaultFetchResourceMaxBytes} 字节上限。`,
+        `资源过大（${response.bytes.byteLength} 字节），超过 ${BrowserFetchLimits.fileBytes} 字节上限。`,
         undefined,
         { url: targetUrl, bytes: response.bytes.byteLength }
       )
@@ -382,7 +412,7 @@ export class CdpPageDataEngine {
   ): Promise<BrowserListMediaSourcesResult> {
     _abortSignal?.throwIfAborted()
     const externalSession = this.requireExternalPageSession(sessionId)
-    const limit = clampInteger(options.limit, 1, 200, DefaultListMediaSourcesLimit)
+    const limit = clampInteger(options.limit, 1, 200, BrowserTuning.lists.mediaSources)
     const includeDataUrls = !!options.includeDataUrls
     const includeBlobUrls = !!options.includeBlobUrls
     const result = await externalSession.driver.executeJavaScript<{
@@ -852,8 +882,8 @@ export class CdpPageDataEngine {
         throw new AppError('VALIDATION', '当前外部浏览器 driver 不支持 networkidle 等待。')
       }
       await externalSession.driver.waitForNetworkIdle({
-        idleMs: 500,
-        timeoutMs: options.timeoutMs ?? 5000,
+        idleMs: BrowserTuning.page.networkIdleMs,
+        timeoutMs: options.timeoutMs ?? BrowserTuning.page.networkIdleTimeoutMs,
       })
     }
     const result = await externalSession.driver.executeJavaScript<BrowserPageWaitResult>(

@@ -6,7 +6,7 @@ import electron from 'electron'
 
 import { isArray, isFalse, isNumber, isObject, isPlainObject, isPresent, isString, isTrue,optionalWhenLazy, toNullable, toOptional } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
-import { logRuntime } from '@velaros-ai/core/logger'
+import { Log } from '@velaros-ai/core/logger'
 
 import type { BrowserPageDriver } from '../../contract/requires.js'
 import type {
@@ -34,37 +34,22 @@ import type {
   BrowserScreenshotRegionOptions,
   BrowserSiteContext,
 } from '../../types/browser'
+import type { ScreencastCapturedFrame, ScreencastFrameDecoder } from '../../types/cdp.js'
 import type { BrowserPageDriverScreenshotOptions } from '../../types/driver'
 import { type BrowserSession } from '../../types/electron'
-import type { BrowserRuntimeKernel } from '../../types/electron.js'
+import type { BrowserRuntimeKernel, BrowserScreenshotDiffFrame, BrowserScreenshotImageCapture } from '../../types/electron.js'
 import type { ExternalBrowserPageSession } from '../../types/runtime.js'
+import type { BrowserWorkspacePath } from '../../types/workspace.js'
 import { evaluateInWebContents } from '../../utils/electron/evaluate'
 import { clampInteger, clampNumber, clampZoomFactor, readBoundedString, readFiniteNumber } from '../../utils/numbers.js'
 import { browserLoginDetectionScriptFragment } from '../../utils/page-scripts/login-detection'
+import { BrowserTuning } from '../../utils/tuning'
 import { DEFAULT_BROWSER_VIEWPORT } from '../../utils/viewport.js'
-import {
-  type BrowserWorkspacePath,
-  resolveBrowserWorkspacePath,
-} from '../../utils/workspace-paths'
-import {
-  DefaultScreencastStartOptions,
-  encodeScreencastFramesToGif,
-  type ScreencastCapturedFrame,
-  type ScreencastFrameDecoder,
-} from '../cdp/CdpScreencastRecorder'
+import { resolveBrowserWorkspacePath } from '../../utils/workspace-paths'
+import { DefaultScreencastStartOptions, encodeScreencastFramesToGif } from '../cdp/CdpScreencastRecorder'
 import type { BrowserTargetRefStore } from '../session/BrowserTargetRefStore'
 
 import type { BrowserPageWaiter } from './BrowserPageWaiter'
-
-interface BrowserScreenshotDiffFrame {
-  fingerprint: string
-  sample: Buffer
-}
-
-interface BrowserScreenshotImageCapture {
-  image: Electron.NativeImage
-  capture: BrowserScreenshotCaptureRegion
-}
 
 /** 录屏帧解码：JPEG → RGBA（electron nativeImage,toBitmap 为 BGRA 需换序）。 */
 function createElectronScreencastFrameDecoder(): ScreencastFrameDecoder {
@@ -86,44 +71,43 @@ function createElectronScreencastFrameDecoder(): ScreencastFrameDecoder {
   }
 }
 
-const DefaultScreenshotModelImageMaxWidth = 1280
-
-const DefaultScreenshotModelImageMaxHeight = 900
-
-const DefaultScreenshotModelImageQuality = 72
-
-/**
- * 模型图编码字节预算。
- *
- * 模型图会以 base64 进对话历史,超预算的图（曾出现 425×900 q72 却 166KB 的高熵页面）
- * 会显著抬高上下文占用；超预算时按质量阶梯降质,仍超则整体再缩一档。
- */
-const ModelImageByteBudget = 96_000
-
-const ModelImageQualityLadder = [60, 45, 32]
-
-const DefaultScreenshotFullPageMaxWidth = 10_000
-
-const DefaultScreenshotFullPageMaxHeight = 16_000
-
-const DefaultScreenshotElementLabelLimit = 40
-
-const DefaultPreviewMaxWidth = 720
-
-const DefaultPreviewJpegQuality = 68
-
-const DefaultPreviewStreamMaxWidth = 960
-
-const DefaultPreviewStreamMaxHeight = 1_600
-
 /**
  * 截图域执行体：视口/全页/区域截图、元素标注与图例、模型压缩图、diff 采样、
  * 页面元数据脚本与登录态启发检测。
  *
  * 方法默认在 runtime 的 actionQueue 内被调用。
  */
-export class BrowserScreenshotEngine {
-  private readonly log = logRuntime.tag('BrowserScreenshotEngine')
+export interface BrowserScreenshotEngineApi {
+  /**
+   * 捕获仅供宿主 UI 短时展示的轻量页面帧。
+   *
+   * 预览不写入 browser workspace，也不更新截图 diff/legend 等模型侧状态；关闭观察窗后
+   * renderer 会停止调用，因此不会给后台浏览器留下 artifact 垃圾。
+   */
+  capturePreviewFrame(sessionId: string, context: BrowserSiteContext, options: { maxWidth?: number; quality?: number }, abortSignal?: AbortSignal): Promise<BrowserPagePreviewFrame>
+  /**
+   * 用 CDP Page.startScreencast 向宿主画中画持续推帧。
+   *
+   * 与 capturePreviewFrame 不同，这里不轮询截图、不进入 actionQueue，也不在主进程保存帧；
+   * 页面每次合成的新画面会直接交给 renderer，关闭窗口时由 stopPreviewFrameStream 释放。
+   */
+  startPreviewFrameStream(sessionId: string, context: BrowserSiteContext, options: { maxWidth?: number; quality?: number }, onEvent: (event: BrowserPagePreviewStreamEvent) => void, abortSignal?: AbortSignal): Promise<void>
+  /** 高频指针更新沿现有画中画通道发送，避免为了移动光标重复编码整张页面。 */
+  notifyPreviewPointer(sessionId: string, pointer: BrowserPagePreviewPointerEvent): void
+  /** 停止画中画的 CDP 实时流；重复调用安全。 */
+  stopPreviewFrameStream(sessionId: string): Promise<void>
+  /** 开始页面录屏（GIF 产物）。 */
+  startScreencast(sessionId: string, context: BrowserSiteContext, options: BrowserScreencastStartOptions, abortSignal?: AbortSignal): Promise<BrowserScreencastStartResult>
+  /** 停止录屏，合成 GIF 并落盘 artifacts/recordings/。 */
+  stopScreencast(sessionId: string, context: BrowserSiteContext, options: BrowserScreencastStopOptions, abortSignal?: AbortSignal): Promise<BrowserScreencastStopResult>
+  /** 截图并把图片存进站点工作区，可标注元素、等页面稳定、与上一张比对。 */
+  captureScreenshot(sessionId: string, context: BrowserSiteContext, options?: BrowserCaptureScreenshotOptions, abortSignal?: AbortSignal): Promise<BrowserScreenshotArtifact>
+}
+
+export class BrowserScreenshotEngine implements BrowserScreenshotEngineApi {
+  private static readonly ModelImageQualityLadder = [60, 45, 32]
+
+  private readonly log = Log.tag('BrowserScreenshotEngine')
   /** 记录上一次截图采样，用于返回轻量 diff 元数据。 */
   private readonly screenshotDiffFrames = new Map<string, BrowserScreenshotDiffFrame>()
   /** 录屏中的会话（sessionId → 开始信息）。 */
@@ -183,11 +167,11 @@ export class BrowserScreenshotEngine {
       throw new AppError('EXECUTION_FAILED', '浏览器页面预览不是有效图像。')
     }
 
-    const maxWidth = clampInteger(options.maxWidth, 240, 1_280, DefaultPreviewMaxWidth)
+    const maxWidth = clampInteger(options.maxWidth, 240, 1_280, BrowserTuning.screenshot.previewMaxWidth)
     if (image.getSize().width > maxWidth) {
       image = image.resize({ width: maxWidth })
     }
-    const quality = clampInteger(options.quality, 35, 90, DefaultPreviewJpegQuality)
+    const quality = clampInteger(options.quality, 35, 90, BrowserTuning.screenshot.previewJpegQuality)
     const jpeg = image.toJPEG(quality)
     const { width, height } = image.getSize()
 
@@ -236,13 +220,13 @@ export class BrowserScreenshotEngine {
       { driver, externalSession },
       context.url
     )
-    const maxWidth = clampInteger(options.maxWidth, 240, 1_280, DefaultPreviewStreamMaxWidth)
+    const maxWidth = clampInteger(options.maxWidth, 240, 1_280, BrowserTuning.screenshot.previewStreamMaxWidth)
     const quality = clampInteger(options.quality, 35, 90, 62)
 
     await driver.startScreencast(
       {
         maxWidth,
-        maxHeight: DefaultPreviewStreamMaxHeight,
+        maxHeight: BrowserTuning.screenshot.previewStreamMaxHeight,
         everyNthFrame: 1,
         maxFrames: Number.MAX_SAFE_INTEGER,
       },
@@ -255,7 +239,7 @@ export class BrowserScreenshotEngine {
           const scale = Math.min(
             1,
             maxWidth / sourceWidth,
-            DefaultPreviewStreamMaxHeight / sourceHeight
+            BrowserTuning.screenshot.previewStreamMaxHeight / sourceHeight
           )
           onEvent({
             kind: 'frame',
@@ -584,7 +568,7 @@ export class BrowserScreenshotEngine {
     )
     return {
       enabled: true,
-      maxElements: clampInteger(rawMaxElements, 1, 120, DefaultScreenshotElementLabelLimit),
+      maxElements: clampInteger(rawMaxElements, 1, 120, BrowserTuning.screenshot.elementLabelLimit),
     }
   }
 
@@ -609,12 +593,12 @@ export class BrowserScreenshotEngine {
 
     const rawOptions = isObject(options) ? options : {}
     return {
-      maxWidth: clampInteger(rawOptions.maxWidth, 320, 32_000, DefaultScreenshotFullPageMaxWidth),
+      maxWidth: clampInteger(rawOptions.maxWidth, 320, 32_000, BrowserTuning.screenshot.fullPageMaxWidth),
       maxHeight: clampInteger(
         rawOptions.maxHeight,
         240,
         32_000,
-        DefaultScreenshotFullPageMaxHeight
+        BrowserTuning.screenshot.fullPageMaxHeight
       ),
     }
   }
@@ -626,14 +610,14 @@ export class BrowserScreenshotEngine {
 
     const rawOptions = isObject(options) ? options : {}
     return {
-      maxWidth: clampInteger(rawOptions.maxWidth, 320, 3840, DefaultScreenshotModelImageMaxWidth),
+      maxWidth: clampInteger(rawOptions.maxWidth, 320, 3840, BrowserTuning.screenshot.modelImageMaxWidth),
       maxHeight: clampInteger(
         rawOptions.maxHeight,
         240,
         2160,
-        DefaultScreenshotModelImageMaxHeight
+        BrowserTuning.screenshot.modelImageMaxHeight
       ),
-      quality: clampInteger(rawOptions.quality, 1, 100, DefaultScreenshotModelImageQuality),
+      quality: clampInteger(rawOptions.quality, 1, 100, BrowserTuning.screenshot.modelImageQuality),
       highlightViewport: !isFalse(rawOptions.highlightViewport),
     }
   }
@@ -970,12 +954,12 @@ export class BrowserScreenshotEngine {
       let effectiveWidth = targetWidth
       let effectiveHeight = targetHeight
       // 高熵页面（密集小字）在既定质量下可能远超字节预算,先降质、再整体缩一档。
-      for (const quality of ModelImageQualityLadder) {
-        if (bytes.byteLength <= ModelImageByteBudget || quality >= effectiveQuality) continue
+      for (const quality of BrowserScreenshotEngine.ModelImageQualityLadder) {
+        if (bytes.byteLength <= BrowserTuning.screenshot.modelImageByteBudget || quality >= effectiveQuality) continue
         bytes = effectiveImage.toJPEG(quality)
         effectiveQuality = quality
       }
-      if (bytes.byteLength > ModelImageByteBudget) {
+      if (bytes.byteLength > BrowserTuning.screenshot.modelImageByteBudget) {
         effectiveWidth = Math.max(1, Math.round(effectiveWidth * 0.75))
         effectiveHeight = Math.max(1, Math.round(effectiveHeight * 0.75))
         effectiveImage = effectiveImage.resize({
@@ -1300,7 +1284,7 @@ export class BrowserScreenshotEngine {
       const labels = await evaluateInWebContents(
         session.webContents,
         this.buildScreenshotElementLabelsScript(
-          options.maxElements ?? DefaultScreenshotElementLabelLimit
+          options.maxElements ?? BrowserTuning.screenshot.elementLabelLimit
         ),
         true
       )
@@ -1669,7 +1653,7 @@ ${browserLoginDetectionScriptFragment}
 
   private buildScreenshotElementLabelsScript(maxElements: number): string {
     const payload = JSON.stringify({
-      maxElements: clampInteger(maxElements, 1, 120, DefaultScreenshotElementLabelLimit),
+      maxElements: clampInteger(maxElements, 1, 120, BrowserTuning.screenshot.elementLabelLimit),
     })
 
     return `(() => {

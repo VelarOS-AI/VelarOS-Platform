@@ -1,22 +1,8 @@
 import { isNotNull } from '@velaros-ai/core'
 
 import type { BrowserActionPolicyConfig } from '../../types/browser'
+import type { BrowserActionPolicyDecision, BrowserActionPolicyRequest } from '../../types/browser.js'
 
-
-export interface BrowserActionPolicyRequest {
-  action: string
-  aliases?: readonly string[]
-  label?: string
-}
-
-export type BrowserActionPolicyDecisionKind = 'allow' | 'deny'
-
-export interface BrowserActionPolicyDecision {
-  kind: BrowserActionPolicyDecisionKind
-  action: string
-  matchedAction: Nullable<string>
-  reason: Nullable<string>
-}
 
 function normalizePolicyAction(value: LooseOptional<string>): Nullable<string> {
   const normalized = value?.trim().toLowerCase()

@@ -13,29 +13,40 @@ import {
   isString,
 } from "@velaros-ai/core";
 import { AppError } from "@velaros-ai/core/error";
-import { logRuntime } from "@velaros-ai/core/logger";
+import { Log } from "@velaros-ai/core/logger";
 import { type TimerLease, TimerScope } from "@velaros-ai/core/utils/TimerScope";
 
 import type { BrowserDomStabilityOptions, BrowserPageStabilityResult } from "../../types/browser";
+import type { SharedWebContentsEvent, WebContentsListener } from '../../types/electron.js'
 import { clampInteger } from '../../utils/numbers.js'
+import { BrowserTuning } from '../../utils/tuning'
 
 /** Electron 导航被取消时的错误码。 */
-const BrowserNavigationAbortErrorCode = -3;
-const log = logRuntime.tag("BrowserPageWaiter");
-type WebContentsListener = (...args: any[]) => void;
-
-interface SharedWebContentsEvent {
-  readonly dispatch: WebContentsListener;
-  readonly subscribers: Set<WebContentsListener>;
-}
-
+const log = Log.tag("BrowserPageWaiter");
 /**
  * 浏览器页面等待器。
  *
  * 封装 WebContents 的加载、导航 settle、动作后等待和 network idle 等待，
  * 统一处理窗口关闭、abortSignal、超时和 ERR_ABORTED。
  */
-class BrowserPageWaiter {
+export interface BrowserPageWaiterApi {
+  /** 加载指定 URL，直到 did-finish-load 或可接受的 abort/stop。 */
+  loadUrl(webContents: WebContents, url: string, abortSignal?: AbortSignal, loadOptions?: LoadURLOptions): Promise<void>
+  /** 点击/填充等动作后等待页面可能发生的导航或短暂稳定窗口。 */
+  waitForTargetActionToSettle(webContents: WebContents, abortSignal?: AbortSignal): Promise<void>
+  /** 等待普通导航稳定。 */
+  waitForNavigationToSettle(webContents: WebContents, abortSignal?: AbortSignal): Promise<void>
+  /** E1: network idle 等待 — SPA 渲染完成后再操作，避免报到旧 DOM
+   * 在 idleMs 内没有新的网络请求，则认为 idle
+   */
+  waitForNetworkIdle(webContents: WebContents, idleMs?: number, maxWaitMs?: number): Promise<void>
+  /** 等待 DOM 和主要布局连续多帧稳定，适合 SPA、骨架屏和短动画后的截图。 */
+  waitForDomAndLayoutStable(webContents: WebContents, options?: BrowserDomStabilityOptions, abortSignal?: AbortSignal): Promise<BrowserPageStabilityResult>
+}
+
+class BrowserPageWaiter implements BrowserPageWaiterApi {
+  private static readonly BrowserNavigationAbortErrorCode = -3;
+
   private readonly sharedEvents = new WeakMap<
     WebContents,
     Map<string, SharedWebContentsEvent>
@@ -532,11 +543,11 @@ class BrowserPageWaiter {
 
   /** 判断错误是否是 Electron 导航取消。 */
   private isNavigationAbort(errorCodeOrError: unknown): boolean {
-    if (errorCodeOrError === BrowserNavigationAbortErrorCode) return true;
+    if (errorCodeOrError === BrowserPageWaiter.BrowserNavigationAbortErrorCode) return true;
 
     const appError = AppError.from(errorCodeOrError);
     return (
-      appError.context.errorCode === BrowserNavigationAbortErrorCode ||
+      appError.context.errorCode === BrowserPageWaiter.BrowserNavigationAbortErrorCode ||
       /\bERR_ABORTED\b|\(-3\)/.test(appError.message)
     );
   }
@@ -546,8 +557,8 @@ class BrowserPageWaiter {
    */
   public waitForNetworkIdle(
     webContents: WebContents,
-    idleMs = 500,
-    maxWaitMs = 5000,
+    idleMs: number = BrowserTuning.page.networkIdleMs,
+    maxWaitMs: number = BrowserTuning.page.networkIdleTimeoutMs,
   ): Promise<void> {
     return new Promise<void>((resolve) => {
       if (!this.isLiveWebContents(webContents)) {

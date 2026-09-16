@@ -6,6 +6,7 @@ import electron from 'electron'
 import { isFalse, isNumber, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
+import { BrowserFetchLimits } from '../../contract/constants'
 import type { BrowserPageDriver } from '../../contract/requires.js'
 import type {
   BrowserElementQueryOptions,
@@ -48,6 +49,7 @@ import { buildListMediaSourcesScript } from '../../utils/page-scripts/media-sour
 import { buildPageWaitScript } from '../../utils/page-scripts/page-wait'
 import { buildPageStorageScript } from '../../utils/page-scripts/storage'
 import { buildWaitForSelectorScript } from '../../utils/page-scripts/wait-for-selector'
+import { BrowserTuning } from '../../utils/tuning'
 import { resolveWorkspaceFilePath } from '../../utils/workspace-paths.js'
 import { CdpPageDataEngine } from '../engines/CdpPageDataEngine'
 import type { BrowserTargetRefStore } from '../session/BrowserTargetRefStore'
@@ -60,7 +62,6 @@ type ElectronNetFetchOptions = Parameters<typeof electron.net.fetch>[1] & {
   session?: Electron.Session
 }
 
-const DefaultFetchResourceMaxBytes = 50 * 1024 * 1024
 
 /**
  * 页面数据域执行体（Electron 宿主）：embedded 分支（webContents 脚本执行、electron.net.fetch、
@@ -69,7 +70,34 @@ const DefaultFetchResourceMaxBytes = 50 * 1024 * 1024
  * 每个 public 方法先探 external 会话：命中 → `super`（driver 路径）；否则跑 embedded 分支。
  * 方法默认在 runtime 的 actionQueue 内被调用。
  */
-export class BrowserPageDataEngine extends CdpPageDataEngine {
+export interface BrowserPageDataEngineApi {
+  /** 读页面：正文、标题结构、链接、可交互元素与它们的 ref。 */
+  inspectPage(sessionId: string, context: BrowserSiteContext, options?: BrowserInspectPageOptions, abortSignal?: AbortSignal): Promise<BrowserPageInspection>
+  /** 按 CSS selector 查元素的文本、属性与可点击目标。 */
+  queryElements(sessionId: string, context: BrowserSiteContext, options: BrowserElementQueryOptions, abortSignal?: AbortSignal): Promise<BrowserElementQueryResult>
+  /** 在页面上下文里跑一段受控脚本并取回结果。 */
+  evaluateScript(sessionId: string, context: BrowserSiteContext, options: BrowserEvaluateScriptOptions, abortSignal?: AbortSignal): Promise<BrowserEvaluateScriptResult>
+  /** 读 localStorage、sessionStorage 与 cookie。 */
+  readPageStorage(sessionId: string, context: BrowserSiteContext, options?: BrowserPageStorageOptions, abortSignal?: AbortSignal): Promise<BrowserPageStorageResult>
+  /** 带页面会话的 cookie 下载一个 http(s) 资源到站点工作区。 */
+  fetchResource(sessionId: string, context: BrowserSiteContext, options: BrowserFetchResourceOptions, abortSignal?: AbortSignal): Promise<BrowserFetchResourceResult>
+  /** 列页面上的图片、视频、音频地址，并说明能不能直接下载。 */
+  listMediaSources(sessionId: string, context: BrowserSiteContext, options?: BrowserListMediaSourcesOptions, abortSignal?: AbortSignal): Promise<BrowserListMediaSourcesResult>
+  /** 列页面的链接、iframe 与媒体概览。 */
+  listPageResources(sessionId: string, context: BrowserSiteContext, options?: BrowserListPageResourcesOptions, abortSignal?: AbortSignal): Promise<BrowserListPageResourcesResult>
+  /** 读最近的 console、加载错误与网络诊断，并给一份汇总。 */
+  getPageDiagnostics(sessionId: string, context: BrowserSiteContext, options?: BrowserPageDiagnosticsOptions, abortSignal?: AbortSignal): Promise<BrowserPageDiagnostics>
+  /** 把站点工作区里的文件放进页面的 file input。 */
+  uploadFile(sessionId: string, context: BrowserSiteContext, options: BrowserUploadFileOptions, abortSignal?: AbortSignal): Promise<BrowserUploadFileResult>
+  /** 把当前页面导出成 PDF 存进站点工作区。 */
+  exportPagePdf(sessionId: string, context: BrowserSiteContext, options?: BrowserExportPagePdfOptions, abortSignal?: AbortSignal): Promise<BrowserExportPagePdfResult>
+  /** 等某个选择器出现或消失。 */
+  waitForSelector(sessionId: string, context: BrowserSiteContext, options: BrowserWaitForSelectorOptions, abortSignal?: AbortSignal): Promise<BrowserWaitForSelectorResult>
+  /** 等页面加载状态稳定，或等一小段时间。 */
+  waitForPage(sessionId: string, context: BrowserSiteContext, options: BrowserPageWaitOptions, abortSignal?: AbortSignal): Promise<BrowserPageWaitResult>
+}
+
+export class BrowserPageDataEngine extends CdpPageDataEngine implements BrowserPageDataEngineApi {
   constructor(
     private readonly electronKernel: BrowserRuntimeKernel,
     private readonly pageWaiter: BrowserPageWaiter,
@@ -114,9 +142,9 @@ export class BrowserPageDataEngine extends CdpPageDataEngine {
         isNumber(options.waitForNetworkIdle) ? options.waitForNetworkIdle : 500
       )
     }
-    const maxTextChars = options.maxTextChars ?? 20_000
-    const maxHtmlChars = options.maxHtmlChars ?? 30_000
-    const maxElements = options.maxElements ?? 80
+    const maxTextChars = options.maxTextChars ?? BrowserTuning.page.inspectTextChars
+    const maxHtmlChars = options.maxHtmlChars ?? BrowserTuning.page.inspectHtmlChars
+    const maxElements = options.maxElements ?? BrowserTuning.page.inspectElements
 
     // 检查脚本在页面上下文中执行，返回纯 JSON 结构。
     const driver = this.getPageDriver(sessionId, session)
@@ -254,10 +282,10 @@ export class BrowserPageDataEngine extends CdpPageDataEngine {
     const contentLengthHeader = response.headers.get('content-length')
     if (contentLengthHeader) {
       const contentLength = Number(contentLengthHeader)
-      if (Number.isFinite(contentLength) && contentLength > DefaultFetchResourceMaxBytes) {
+      if (Number.isFinite(contentLength) && contentLength > BrowserFetchLimits.fileBytes) {
         throw new AppError(
           'VALIDATION',
-          `资源过大（${contentLength} 字节），超过 ${DefaultFetchResourceMaxBytes} 字节上限。`,
+          `资源过大（${contentLength} 字节），超过 ${BrowserFetchLimits.fileBytes} 字节上限。`,
           undefined,
           { url: targetUrl, bytes: contentLength }
         )
@@ -265,10 +293,10 @@ export class BrowserPageDataEngine extends CdpPageDataEngine {
     }
 
     const bytes = Buffer.from(await response.arrayBuffer())
-    if (bytes.byteLength > DefaultFetchResourceMaxBytes) {
+    if (bytes.byteLength > BrowserFetchLimits.fileBytes) {
       throw new AppError(
         'VALIDATION',
-        `资源过大（${bytes.byteLength} 字节），超过 ${DefaultFetchResourceMaxBytes} 字节上限。`,
+        `资源过大（${bytes.byteLength} 字节），超过 ${BrowserFetchLimits.fileBytes} 字节上限。`,
         undefined,
         { url: targetUrl, bytes: bytes.byteLength }
       )
@@ -551,7 +579,7 @@ export class BrowserPageDataEngine extends CdpPageDataEngine {
       await this.pageWaiter.waitForNetworkIdle(
         session.webContents,
         500,
-        options.timeoutMs ?? 5000
+        options.timeoutMs ?? BrowserTuning.page.networkIdleTimeoutMs
       )
     }
 

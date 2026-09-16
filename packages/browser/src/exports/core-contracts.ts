@@ -224,6 +224,7 @@ export type {
   WorkspaceWriteFileOptions,
   WorkspaceWriteFileResult,
 } from '../types/browser'
+export type { BrowserScreenshotPolicyDefaults, BrowserScreenshotPolicyOptions } from '../types/browser.js'
 export {
   getBrowserSiteHost,
   getBrowserUrlCandidate,
@@ -247,10 +248,6 @@ export {
   resolveBrowserAutomationMode,
   resolveBrowserSearchEngineId,
 } from '../utils/preferences'
-export type {
-  BrowserScreenshotPolicyDefaults,
-  BrowserScreenshotPolicyOptions,
-} from '../utils/screenshot-options'
 export {
   BrowserScreenshotDefaultDomStable,
   BrowserScreenshotDefaultModelImage,

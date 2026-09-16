@@ -1,8 +1,9 @@
 
 
 
-import type { CdpExternalBrowserLaunchOptions, CdpExternalBrowserSession } from '../impl/cdp/CdpExternalBrowserLauncher.js'
-import type { CdpScreencastConsumerOptions, CdpScreencastStartOptions, ScreencastCapturedFrame } from '../impl/cdp/CdpScreencastRecorder.js'
+import type { ReactNode } from 'react'
+
+import type { BrowserElementSelection, ControlledBrowserSurfaceInput } from '../types/browser'
 import type {
   BrowserCaptureScreenshotOptions,
   BrowserClickCoordinatesOptions,
@@ -91,10 +92,17 @@ import type {
   WorkspaceWriteFileResult,
 } from '../types/browser'
 import type { BrowserLoginDetection, BrowserOriginStorage, BrowserPageDiagnosticEntry, BrowserPageState,BrowserPageTargetInfo } from '../types/browser.js'
+import type { CdpExternalBrowserLaunchOptions, CdpExternalBrowserSession, CdpScreencastConsumerOptions, CdpScreencastStartOptions, ScreencastCapturedFrame } from '../types/cdp.js'
 import type { BrowserPageDriverClickCoordinatesOptions, BrowserPageDriverCookie, BrowserPageDriverCookieOptions, BrowserPageDriverDiagnosticsOptions, BrowserPageDriverDownloadListener, BrowserPageDriverDragCoordinatesOptions, BrowserPageDriverEmulationState,BrowserPageDriverFetchResourceOptions, BrowserPageDriverFetchResourceResult, BrowserPageDriverFileInputOptions, BrowserPageDriverKind, BrowserPageDriverMoveMouseOptions, BrowserPageDriverNetworkCaptureState, BrowserPageDriverNetworkControlState, BrowserPageDriverNetworkIdleOptions, BrowserPageDriverNetworkRequestDetailsResult, BrowserPageDriverNetworkResponseBodyResult, BrowserPageDriverPdfOptions, BrowserPageDriverScreenshot, BrowserPageDriverScreenshotOptions, BrowserPageDriverState, BrowserPageDriverStorageOriginOptions, BrowserSystemPointerMoveOptions } from '../types/driver.js'
 
 /** 启动/接入外部浏览器并返回 page-level CDP driver 的 host 无关 launcher 面。 */
+/**
+ * 外部浏览器启动器：**接远程浏览器或容器的扩展点**。
+ *
+ * 谁给、什么时候：不给就用内置的本机 Chrome 启动器；要接别处的浏览器时由宿主创建运行时时传进来。
+ */
 export interface BrowserExternalPageLauncher {
+  /** 拉起（或接上）一个外部浏览器，回一个可用的 page 级 CDP 会话。 */
   launch(options?: CdpExternalBrowserLaunchOptions): Promise<CdpExternalBrowserSession>
 }
 
@@ -103,45 +111,91 @@ export interface BrowserExternalPageLauncher {
  *
  * 返回 false 表示当前环境、权限或可见性不允许使用系统指针，浏览器运行时随即改画统一兜底箭头。
  */
+/**
+ * 系统级指针：**接真实鼠标的扩展点**。
+ *
+ * 谁给、什么时候：不给就用页面内画的兜底指针；要让用户看到真的鼠标在动时由宿主传进来。
+ */
 export interface BrowserSystemPointerDriver {
+  /** 把系统指针移到某个屏幕坐标；做不到时返回 false，调用方退回页面内指针。 */
   move(options: BrowserSystemPointerMoveOptions): Promise<boolean>
 }
 
+/**
+ * 一次下载：**驱动交给宿主处置的句柄**，形状照 Electron 的 DownloadItem，好让两条路共用同一段处理逻辑。
+ *
+ * 谁给、什么时候：由页面驱动在下载事件里给；宿主只读它、决定存哪或取消。
+ */
 export interface BrowserPageDriverDownloadItem {
+  /** 服务端给的文件名。 */
   getFilename(): string
+  /** 服务端给的 MIME 类型。 */
   getMimeType(): string
+  /** 总字节数；服务端没给就是 0。 */
   getTotalBytes(): number
+  /** 已经收到多少字节。 */
   getReceivedBytes(): number
+  /** 当前的落盘路径。 */
   getSavePath(): string
+  /** 暂停下载。 */
   pause(): void
+  /** 取消下载。 */
   cancel(): void
+  /** 指定落盘路径；必须在开始写之前定。 */
   setSavePath(path: string): void
+  /** 继续下载。 */
   resume(): void
+  /** 订阅一次结束事件（完成、取消或失败）。 */
   once(event: 'done', listener: (_event: unknown, state: string) => void): unknown
 }
 
+/**
+ * 页面驱动：**接新浏览器后端的扩展点**。
+ *
+ * 谁给、什么时候：不给也能跑——内嵌页面与外部 CDP 浏览器各有一份内置实现；要接别的后端（远程浏览器、
+ * 容器里的 Chrome）时由宿主经 `ElectronBrowserRuntimeOptions.createPageDriver` 传进来。
+ * 可选成员表示「这个后端做不到」：调用方必须先判存在，做不到就如实回报不支持，不许伪造结果。
+ */
 export interface BrowserPageDriver {
+  /** 这条驱动接的是内嵌页面还是外部浏览器。 */
   kind: BrowserPageDriverKind
+  /** 在页面上下文里跑一段脚本并取回结果；`userGesture` 让带用户手势门槛的 API 也能用。 */
   executeJavaScript<T = unknown>(script: string, userGesture?: boolean): Promise<T>
+  /** 导航到一个地址，回新的页面状态。 */
   navigateTo(url: string): Promise<BrowserPageDriverState>
+  /** 重新读一次当前页面的 URL 与标题。 */
   refreshPageState(): Promise<BrowserPageDriverState>
+  /** 把这一页提到最前面（外部浏览器里就是切到它那个标签页）。 */
   bringToFront(): Promise<void>
+  /** 截一张图；不支持的驱动可以不实现。 */
   captureScreenshot?(
     options: BrowserPageDriverScreenshotOptions
   ): Promise<BrowserPageDriverScreenshot>
+  /** 往当前焦点或指定目标输入文本。 */
   typeText?(options: BrowserTypeTextOptions): Promise<void>
+  /** 发一次键盘按键。 */
   pressKey?(options: BrowserPressKeyOptions): Promise<void>
+  /** 把鼠标移到某个坐标（用于 hover）。 */
   moveMouse?(options: BrowserPageDriverMoveMouseOptions): Promise<void>
+  /** 在某个坐标点一下。 */
   clickCoordinates?(options: BrowserPageDriverClickCoordinatesOptions): Promise<void>
+  /** 按一条坐标路径拖拽。 */
   dragCoordinates?(options: BrowserPageDriverDragCoordinatesOptions): Promise<void>
+  /** 改受控页面的视口尺寸与设备像素比。 */
   setViewport?(options: BrowserViewportOptions): Promise<void>
+  /** 给 file input 塞文件；找不到目标时返回 false。 */
   setFileInputFiles?(options: BrowserPageDriverFileInputOptions): Promise<boolean>
+  /** 把当前页面打印成 PDF 字节。 */
   printToPdf?(options: BrowserPageDriverPdfOptions): Promise<Buffer>
+  /** 带页面会话的 cookie 去取一个远程资源。 */
   fetchResource?(
     options: BrowserPageDriverFetchResourceOptions
   ): Promise<BrowserPageDriverFetchResourceResult>
+  /** 读当前页面缩放系数。 */
   getPageZoomFactor?(): number
+  /** 设置页面缩放系数。 */
   setPageZoomFactor?(zoomFactor: number): Promise<void>
+  /** 同步读页面诊断缓冲（console、加载错误、网络事件）。 */
   readDiagnostics?(options: BrowserPageDriverDiagnosticsOptions): BrowserPageDiagnosticEntry[]
   /**
    * 确保网络采集已经在跑（读诊断前调用）。
@@ -150,32 +204,45 @@ export interface BrowserPageDriver {
    * 并如实回报「这次才开始」，回执才能告诉模型之前的请求看不到。
    */
   ensureNetworkCapture?(): Promise<BrowserPageDriverNetworkCaptureState>
+  /** 列出这个浏览器里的页面（内嵌页面只有当前这一页）。 */
   listPageTargets?(): Promise<BrowserPageTargetInfo[]>
+  /** 切到另一页，返回那一页的驱动。 */
   switchPageTarget?(options: BrowserSwitchPageTargetOptions): Promise<BrowserPageDriver>
+  /** 订阅下载事件；返回取消订阅的函数。 */
   onDownload?(listener: BrowserPageDriverDownloadListener): () => void
+  /** 预先授予一组权限，省掉页面弹权限框。 */
   grantPermissions?(permissions: string[], origin?: LooseOptional<string>): Promise<void>
+  /** 读 cookie。 */
   readCookies?(options?: BrowserPageDriverCookieOptions): Promise<BrowserPageDriverCookie[]>
+  /** 按来源读 localStorage / sessionStorage。 */
   readStorageOrigins?(
     options: BrowserPageDriverStorageOriginOptions
   ): Promise<BrowserOriginStorage[]>
+  /** 配置页面网络：离线、请求头、拦截与 mock。 */
   configureNetwork?(
     options: BrowserNetworkControlOptions
   ): Promise<BrowserPageDriverNetworkControlState>
+  /** 按 requestId 读响应体。 */
   readNetworkResponseBody?(
     options: BrowserNetworkResponseBodyOptions
   ): Promise<BrowserPageDriverNetworkResponseBodyResult>
+  /** 按 requestId 读请求、响应与 timing 详情。 */
   readNetworkRequestDetails?(
     options: BrowserNetworkRequestDetailsOptions
   ): Promise<BrowserPageDriverNetworkRequestDetailsResult>
+  /** 等页面网络空闲。 */
   waitForNetworkIdle?(options: BrowserPageDriverNetworkIdleOptions): Promise<void>
+  /** 配置环境模拟：色彩方案、时区、地理位置、CPU 与网络节流。 */
   configureEmulation?(
     options: BrowserEmulationOptions
   ): Promise<BrowserPageDriverEmulationState>
+  /** 读当前生效的环境模拟状态。 */
   getEmulationState?(): BrowserPageDriverEmulationState
   /** 开始录制性能 trace（CDP Tracing domain）。 */
   startTracing?(): Promise<void>
   /** 停止录制并返回全部 trace 事件。 */
   stopTracing?(): Promise<unknown[]>
+  /** 现在是不是正在录 trace。 */
   isTracing?(): boolean
   /** 采集 V8 堆快照，流式写入 sink。 */
   captureHeapSnapshot?(sink: (chunk: string) => void): Promise<{ chunks: number; bytes: number }>
@@ -186,13 +253,19 @@ export interface BrowserPageDriver {
   ): Promise<void>
   /** 停止录屏并取回帧序列。 */
   stopScreencast?(): Promise<{ frames: ScreencastCapturedFrame[]; frameLimitReached: boolean }>
+  /** 现在是不是正在录屏。 */
   isScreencasting?(): boolean
+  /** 读当前 URL（同步，取缓存态）。 */
   getURL(): string
+  /** 读当前标题（同步，取缓存态）。 */
   getTitle(): string
+  /** 这一页是不是已经销毁了。 */
   isDestroyed(): boolean
+  /** 拆掉这条驱动占用的资源（debugger、监听器、临时目录）。 */
   dispose?(): void
 }
 
+/** 用户对一次登录墙征询的裁决。 */
 export interface BrowserLoginGateDecision {
   /** 用户是否表示「已完成登录，继续」。 */
   approved: boolean
@@ -200,6 +273,12 @@ export interface BrowserLoginGateDecision {
   message?: LooseOptional<string>
 }
 
+/**
+ * 登录墙的人工确认口。
+ *
+ * 谁给、什么时候：用登录墙门控的宿主在装配工具端口时给（Desktop 走 ApprovalPort 的手动审批）。
+ * 没有审批通道的宿主必须返回 `approved: false`，不能静默放行。
+ */
 export interface BrowserLoginGatePort {
   /**
    * 阻塞当前工具调用并请用户人工完成登录/验证。
@@ -367,10 +446,58 @@ export interface ToolBrowserApi {
   ) => Promise<BrowserUserScriptMutationResult>
 }
 
+/**
+ * 工具 execute 拿到的上下文。
+ *
+ * 谁给、什么时候：宿主每次调工具时给，必须给。
+ */
 export interface BrowserToolContext {
+  /** 本次调用的取消信号：用户中止时要尽快停下并如实回报已经做了什么。 */
   abortSignal: AbortSignal
+  /** 已经绑好当前会话与站点的浏览器能力。 */
   browser: ToolBrowserApi
 }
 
+/** {@link BrowserToolContext} 的旧名字，留着不动消费方；收口那一轮删掉。 */
 export type ToolContext = BrowserToolContext
 
+
+/**
+ * React 合成适配器：宿主用它把「受控浏览器页面」交给产品树。
+ *
+ * 谁给、什么时候：用 React 合成的宿主在渲染进程装 Provider 时给；不用 React 的宿主可以不给。
+ */
+export interface BrowserCompositionAdapter {
+  /** Provider 安装后必须保持实现引用稳定，保证 hook 拓扑固定。 */
+  useControlledSurface: (input: ControlledBrowserSurfaceInput) => ControlledBrowserSurface
+}
+
+/** 渲染受控页面时的语义回调。 */
+export interface ControlledBrowserSurfaceRenderOptions {
+  /** 用户在页面上挑中一个元素。 */
+  onElementPicked: (selection: BrowserElementSelection) => void
+  /** 用户要求关掉这个受控页面。 */
+  onRequestClose: () => void
+}
+
+/** 宿主交回来的受控浏览器页面。 */
+export interface ControlledBrowserSurface {
+  /** 浏览器会话 id。 */
+  readonly sessionId: string
+  /** 页面是不是活的。 */
+  readonly active: boolean
+  /** 激活令牌；未激活时是 null。 */
+  readonly activationToken: Nullable<string>
+  /** 页面当前的地址与标题。 */
+  readonly page: {
+    /** 当前 URL；还没导航时是 null。 */
+    readonly url: Nullable<string>
+    /** 当前标题。 */
+    readonly title: string
+  }
+  /**
+   * 宿主拥有具体 Browser stage；产品只请求渲染并提供语义回调。
+   * 返回节点不得要求消费方理解 Electron、WebView 或宿主 controller。
+   */
+  readonly render: (options: ControlledBrowserSurfaceRenderOptions) => ReactNode
+}

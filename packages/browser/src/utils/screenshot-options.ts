@@ -1,18 +1,16 @@
 import { isFalse, isTrue } from '@velaros-ai/core'
 import { optionalWhen } from '@velaros-ai/core/utils/optionalWhen'
 
-import type {
-  BrowserCaptureScreenshotOptions,
-  BrowserDomStabilityOptions,
-  BrowserScreenshotModelImageOptions,
-} from '../types/browser.js'
+import type { BrowserCaptureScreenshotOptions, BrowserDomStabilityOptions, BrowserScreenshotModelImageOptions, BrowserScreenshotPolicyDefaults, BrowserScreenshotPolicyOptions } from '../types/browser.js'
 
-export const BrowserScreenshotDefaultNetworkIdleMs = 700
+import { BrowserTuning } from './tuning'
+
+export const BrowserScreenshotDefaultNetworkIdleMs = BrowserTuning.screenshot.networkIdleMs
 
 export const BrowserScreenshotDefaultDomStable: Required<BrowserDomStabilityOptions> = {
-  stableFrames: 5,
-  sampleIntervalMs: 80,
-  maxWaitMs: 2500,
+  stableFrames: BrowserTuning.screenshot.domStableFrames,
+  sampleIntervalMs: BrowserTuning.screenshot.domStableSampleIntervalMs,
+  maxWaitMs: BrowserTuning.screenshot.domStableMaxWaitMs,
 }
 
 export const BrowserScreenshotDefaultModelImage: Required<BrowserScreenshotModelImageOptions> = {
@@ -22,24 +20,7 @@ export const BrowserScreenshotDefaultModelImage: Required<BrowserScreenshotModel
   highlightViewport: true,
 }
 
-export interface BrowserScreenshotPolicyOptions extends BrowserCaptureScreenshotOptions {
-  /**
-   * 面向模型的截图会额外携带压缩后的标记图片，用作供应商输入。
-   * 保存到磁盘的制品路径仍指向干净的原始截图。
-   */
-  modelFacing?: boolean
-}
-
-export interface BrowserScreenshotPolicyDefaults {
-  compareWithPrevious?: boolean
-  fullPage?: BrowserCaptureScreenshotOptions['fullPage']
-  includeModelImage?: BrowserCaptureScreenshotOptions['includeModelImage']
-  modelFacing?: boolean
-  path?: string
-  waitForDomStable?: BrowserCaptureScreenshotOptions['waitForDomStable']
-  waitForNetworkIdle?: BrowserCaptureScreenshotOptions['waitForNetworkIdle']
-}
-
+/** 把模型图选项与缺省值合成一份完整的选项。 */
 function mergeModelImageOptions(
   input: BrowserCaptureScreenshotOptions['includeModelImage'],
   modelFacing: boolean
@@ -57,6 +38,7 @@ function mergeModelImageOptions(
   }
 }
 
+/** 把宿主与调用方给的截图选项合成一份完整的选项。 */
 export function buildBrowserScreenshotOptions(
   input: BrowserScreenshotPolicyOptions = {},
   defaults: BrowserScreenshotPolicyDefaults = {}

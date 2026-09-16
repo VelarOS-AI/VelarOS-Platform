@@ -1,37 +1,18 @@
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
 import type {
-  BrowserPendingEventKind,
-  BrowserPendingEventsResult,
   BrowserPendingEventSummary,
 } from '../types/browser'
+import type { BrowserPendingEventWaitOptions, BrowserPendingEventWaitResult } from '../types/tools.js'
 
-const DefaultPendingEventWaitTimeoutMs = 5000
-const PendingEventPollIntervalMs = 50
+import { BrowserTuning } from './tuning'
 
-interface BrowserPendingEventWaitOptions {
-  kind?: BrowserPendingEventKind
-  timeoutMs?: number
-  abortSignal: AbortSignal
-  listPendingEvents: () => Promise<BrowserPendingEventsResult>
-}
-
-interface BrowserPendingEventWaitResult {
-  matched: boolean
-  timedOut: boolean
-  kind: BrowserPendingEventKind
-  event: Nullable<BrowserPendingEventSummary>
-  pending: BrowserPendingEventSummary[]
-  timeoutMs: number
-  elapsedMs: number
-  capturedAt: number
-}
-
+/** 轮询等某一类挂起事件出现；到期没等到就如实回报超时。 */
 async function waitForPendingEvent(
   options: BrowserPendingEventWaitOptions
 ): Promise<BrowserPendingEventWaitResult> {
   const kind = options.kind ?? 'download'
-  const timeoutMs = options.timeoutMs ?? DefaultPendingEventWaitTimeoutMs
+  const timeoutMs = options.timeoutMs ?? BrowserTuning.session.pendingEventWaitTimeoutMs
   const startedAt = Date.now()
   let latestPending: BrowserPendingEventSummary[] = []
 
@@ -51,7 +32,7 @@ async function waitForPendingEvent(
         capturedAt: Date.now(),
       }
 
-    await TimerScope.sleep(PendingEventPollIntervalMs, {
+    await TimerScope.sleep(BrowserTuning.session.pendingEventPollIntervalMs, {
       label: 'browser.waitForPendingEvent',
       signal: options.abortSignal,
     })
@@ -70,4 +51,4 @@ async function waitForPendingEvent(
 }
 
 export { waitForPendingEvent }
-export type { BrowserPendingEventWaitOptions, BrowserPendingEventWaitResult }
+export type { BrowserPendingEventWaitOptions, BrowserPendingEventWaitResult } from '../types/tools.js'

@@ -1,8 +1,85 @@
 /** 外部浏览器页面会话；通过 CDP driver 接入，不依赖任何 host 的内嵌 WebContents。 */
+import type { DevtoolsParsedTrace } from '../../vendor/devtools-performance-engine/devtoolsPerformanceEngine.mjs'
 import type { BrowserPageDriver } from '../contract/requires.js'
 
-import type { BrowserViewportOptions } from './browser.js'
+import type { BrowserTargetActionEffectSnapshot, BrowserViewportOptions, ProjectReadFileResult, WorkspaceFileEntry, WorkspaceListOptions, WorkspaceWriteFileOptions, WorkspaceWriteFileResult } from './browser.js'
 import type { BrowserPageDriverState } from './driver.js'
+
+export interface BrowserViewportDeviceMetrics {
+  width: number
+  height: number
+  screenWidth: number
+  screenHeight: number
+  deviceScaleFactor: number
+  mobile: boolean
+}
+
+/**
+ * 浏览器工作区文件访问（宿主按 member/site 注入数据根 browser 分区）。
+ * 使用 Browser 领域自己的 artifact DTO，与 `ToolBrowserApi` 的
+ * listFiles/readFile/writeFile 单源一致。
+ */
+export interface CdpWorkspaceFileAccess {
+  listFiles(options?: WorkspaceListOptions): Promise<WorkspaceFileEntry[]>
+  readFile(
+    path: string,
+    startLine?: number,
+    endLine?: number,
+    maxChars?: number
+  ): Promise<ProjectReadFileResult>
+  writeFile(
+    path: string,
+    content: string,
+    options?: WorkspaceWriteFileOptions
+  ): Promise<WorkspaceWriteFileResult>
+}
+
+/** 诊断窗口上限的窄面（宿主的 BrowserDiagnosticsRecorder 结构满足它）。 */
+export interface BrowserDiagnosticsLimits {
+  maxEntries: number
+}
+
+export interface BrowserPointerPoint {
+  x: number
+  y: number
+}
+
+export interface BrowserTargetActionInternalEffectSnapshot extends BrowserTargetActionEffectSnapshot {
+  textSampleLines: string[]
+  textSampleTruncated: boolean
+}
+
+export type BrowserTargetActionClickMode = 'dom' | 'coordinate'
+
+export interface BrowserViewportScreenMetrics {
+  focused: boolean
+  screenX: number
+  screenY: number
+  outerWidth: number
+  outerHeight: number
+  innerWidth: number
+  innerHeight: number
+}
+
+/** 一次 trace 录制的解析产物；rawEvents 供落盘，parsedTrace 供 insight 查询。 */
+export interface BrowserParsedTraceRecording {
+  parsedTrace: DevtoolsParsedTrace
+  insightSetIds: string[]
+  rawEvents: unknown[]
+}
+
+export interface BrowserTraceParseMetadata {
+  cpuThrottling?: number
+  networkThrottling?: string
+}
+
+/** 每个 session 的性能 trace 状态：录制中 / 最近一次录制的解析产物。 */
+export interface BrowserPerformanceTraceState {
+  running: boolean
+  startedAt: number
+  url: string
+  recording?: LooseOptional<BrowserParsedTraceRecording>
+}
 
 export interface ExternalBrowserPageSession {
   driver: BrowserPageDriver

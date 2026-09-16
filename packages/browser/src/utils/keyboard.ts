@@ -15,6 +15,7 @@ const KeyModifierAliases = new Map<string, BrowserKeyModifier>([
 
 const KeyModifierOrder: BrowserKeyModifier[] = ['shift', 'control', 'alt', 'meta']
 
+/** 把按键入参归一化：键名大小写、修饰键去重、次数夹进区间。 */
 export function normalizeBrowserPressKeyOptions(
   options: BrowserPressKeyOptions
 ): BrowserPressKeyOptions {

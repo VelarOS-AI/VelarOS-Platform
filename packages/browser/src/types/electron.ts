@@ -1,12 +1,9 @@
 import type electron from 'electron'
 
+import type { KernelCallableCapabilityService } from '@velaros-ai/kernel/contracts/abi'
+
 import type { BrowserPageDriver, BrowserSystemPointerDriver } from '../contract/requires.js'
-import type {
-  CdpExternalBrowserLaunchOptions,
-  CdpExternalBrowserSession,
-} from '../impl/cdp/CdpExternalBrowserLauncher'
-import type { BrowserPageDriverFactory } from '../impl/electron/ElectronWebContentsBrowserPageDriver'
-import { DEFAULT_BROWSER_VIEWPORT } from '../utils/viewport.js'
+import type { ElectronBrowserRuntime } from '../impl/electron/ElectronBrowserRuntime.js'
 
 import type {
   BrowserNavigationHistoryRestore,
@@ -15,7 +12,104 @@ import type {
   BrowserUserActivitySummary,
   BrowserViewportOptions,
 } from './browser'
+import type { BrowserScreenshotCaptureRegion, BrowserSiteContext } from './browser.js'
+import type { CdpExternalBrowserLaunchOptions, CdpExternalBrowserSession } from './cdp.js'
 import type { BrowserPageDriverKernel,BrowserPageDriverSession } from './runtime.js'
+
+export interface BrowserRuntimeCapabilityService
+  extends KernelCallableCapabilityService {
+  /**
+   * Product-local runtime. Electron WebContents cannot be transferred into a
+   * daemon, so in-process consumers receive the injected runtime explicitly.
+   */
+  readonly runtime: ElectronBrowserRuntime
+}
+
+export interface CreateBrowserKernelModuleOptions {
+  /** Reuse the product composition root's only Browser runtime instance. */
+  readonly runtime: ElectronBrowserRuntime
+  /** Injected runtimes remain product-owned unless this is explicitly true. */
+  readonly disposeInjectedRuntime?: boolean
+}
+
+/** 在内嵌页面里求值时的期限参数。 */
+export interface BrowserEvaluateDeadlineOptions {
+  /** 覆盖默认上限；页内脚本自带更长等待时才需要传。 */
+  readonly timeoutMs?: number
+  /** 超时正文里的调用名，用来把死结定位到具体路径。 */
+  readonly label?: string
+}
+
+/** 建一条内嵌页面驱动要的输入。 */
+export interface BrowserPageDriverFactoryInput {
+  /** 浏览器会话 id。 */
+  sessionId: string
+  /** 这条会话接管的 WebContents。 */
+  webContents: electron.WebContents
+}
+
+/** 建内嵌页面驱动的工厂：宿主可以换成自己的实现。 */
+export type BrowserPageDriverFactory = (input: BrowserPageDriverFactoryInput) => BrowserPageDriver
+
+export interface BrowserPagePresentationTarget {
+  context: BrowserSiteContext
+  webContentsId: number
+  navigationHistory?: BrowserNavigationHistoryRestore
+}
+
+export interface BrowserSessionLookup {
+  sessionId: string
+  session: BrowserSession
+}
+
+export interface BrowserPopupBootstrapLease {
+  release: () => void
+}
+
+export interface BrowserScreenshotDiffFrame {
+  fingerprint: string
+  sample: Buffer
+}
+
+export interface BrowserScreenshotImageCapture {
+  image: Electron.NativeImage
+  capture: BrowserScreenshotCaptureRegion
+}
+
+export type WebContentsListener = (...args: any[]) => void;
+
+export interface SharedWebContentsEvent {
+  readonly dispatch: WebContentsListener;
+  readonly subscribers: Set<WebContentsListener>;
+}
+
+export interface BrowserJavaScriptDialogDetails {
+  type?: string
+  message?: string
+  title?: string
+  defaultPromptText?: string
+}
+
+export interface BrowserDialogEventSource {
+  on(
+    eventName: 'dialog',
+    listener: (
+      event: electron.Event,
+      details: BrowserJavaScriptDialogDetails,
+      callback: (response: boolean, input?: string) => void
+    ) => void
+  ): void
+}
+
+export type BrowserPopupNavigationResolution =
+  | { kind: 'route'; url: string; loadOptions?: electron.LoadURLOptions }
+  | { kind: 'bootstrap' }
+  | { kind: 'deny'; reason: string }
+
+export type BrowserPopupUrlResolution =
+  | { kind: 'route'; url: string }
+  | { kind: 'bootstrap' }
+  | { kind: 'deny'; reason: string }
 
 /** 统一的页面 driver 会话：webview 与外部 CDP 二选一，driver 面向多态调用。 */
 export interface BrowserRuntimePageDriverSession extends BrowserPageDriverSession {
@@ -41,8 +135,6 @@ export interface BrowserRuntimeKernel extends BrowserPageDriverKernel {
   /** 把 webview 会话包成 BrowserPageDriver（多态调用面）。 */
   wrapPageDriver(sessionId: string, session: BrowserSession): BrowserPageDriver
 }
-
-export { DEFAULT_BROWSER_VIEWPORT }
 
 /** 单个浏览器会话的主进程状态。 */
 export interface BrowserSession {

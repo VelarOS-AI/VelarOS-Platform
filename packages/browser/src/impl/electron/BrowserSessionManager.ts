@@ -22,7 +22,7 @@ import type electron from 'electron'
 
 import { isEmpty, isNumber, isPlainObject, isString, isTrue, numberOrNull, toNullable, toOptional } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
-import { logRuntime } from '@velaros-ai/core/logger'
+import { Log } from '@velaros-ai/core/logger'
 import { type TimerLease, TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
 import type {
@@ -40,256 +40,26 @@ import {
   type BrowserWebAuthnAccountSelectionRequest,
   type ElectronBrowserRuntimeOptions,
 } from '../../types/electron'
+import type { BrowserPopupBootstrapLease, BrowserSessionLookup } from '../../types/electron.js'
+import { browserUserActivityConsolePrefix } from '../../utils/electron/sessions'
+import { asBrowserDialogEventSource, buildBrowserPopupWindowOptions, buildBrowserUserActivityBridgeScript,isNamedPopupFrame, resolveBrowserPopupNavigation, resolveBrowserPopupUrl } from '../../utils/electron/sessions.js'
 import { BrowserViewNotAttachedReason } from '../../utils/errors'
+import { BrowserTuning } from '../../utils/tuning'
 import { BrowserPendingEventsBroker } from '../session/BrowserPendingEventsBroker'
 
 import { type BrowserDiagnosticsRecorder } from './BrowserDiagnosticsRecorder'
 import { type BrowserPageWaiter } from './BrowserPageWaiter'
 
+/** 建会话管理器要的协作件，由运行时装配时给。 */
 export interface BrowserSessionManagerOptions {
+  /** 诊断记录器：console、加载错误都写进它。 */
   diagnostics: BrowserDiagnosticsRecorder
+  /** 页面等待器：导航与动作之后等页面稳定。 */
   pageWaiter: BrowserPageWaiter
+  /** 地址归一化：把用户或模型给的输入变成可导航的 URL。 */
   normalizeUrl: (rawUrl: string) => string
+  /** 宿主的回调集合（站点变化、页面就绪、权限裁决等）；不给就都不通知。 */
   callbacks?: ElectronBrowserRuntimeOptions
-}
-
-interface BrowserSessionLookup {
-  sessionId: string
-  session: BrowserSession
-}
-
-interface BrowserJavaScriptDialogDetails {
-  type?: string
-  message?: string
-  title?: string
-  defaultPromptText?: string
-}
-
-interface BrowserDialogEventSource {
-  on(
-    eventName: 'dialog',
-    listener: (
-      event: electron.Event,
-      details: BrowserJavaScriptDialogDetails,
-      callback: (response: boolean, input?: string) => void
-    ) => void
-  ): void
-}
-
-type BrowserPopupNavigationResolution =
-  | { kind: 'route'; url: string; loadOptions?: electron.LoadURLOptions }
-  | { kind: 'bootstrap' }
-  | { kind: 'deny'; reason: string }
-
-type BrowserPopupUrlResolution =
-  | { kind: 'route'; url: string }
-  | { kind: 'bootstrap' }
-  | { kind: 'deny'; reason: string }
-
-interface BrowserPopupBootstrapLease {
-  release: () => void
-}
-
-const BrowserUserActivityConsolePrefix = '__VELAROS_BROWSER_USER_ACTIVITY__:'
-const BrowserPopupBootstrapLifetimeMs = 30_000
-const BrowserPopupBootstrapRetryDelayMs = 250
-const MaxBrowserPopupBootstrapsPerSession = 4
-const ControlledNamedPopupWidth = 900
-const ControlledNamedPopupHeight = 700
-const ControlledNamedPopupMinWidth = 480
-const ControlledNamedPopupMinHeight = 320
-const ControlledNamedPopupMaxWidth = 1_600
-const ControlledNamedPopupMaxHeight = 1_200
-
-function buildBrowserPopupLoadOptions(
-  details: electron.HandlerDetails
-): electron.LoadURLOptions | undefined {
-  const loadOptions: electron.LoadURLOptions = {}
-  let hasOptions = false
-
-  if (details.referrer?.url) {
-    loadOptions.httpReferrer = details.referrer
-    hasOptions = true
-  }
-
-  if (details.postBody) {
-    const rawContentType = details.postBody.contentType.replace(/[\r\n]+/g, '').trim()
-    const rawBoundary = details.postBody.boundary?.replace(/[\r\n]+/g, '').trim()
-    const contentType =
-      rawBoundary && /^multipart\/form-data\b/i.test(rawContentType) && !/;\s*boundary=/i.test(rawContentType)
-        ? `${rawContentType}; boundary=${rawBoundary}`
-        : rawContentType
-
-    loadOptions.postData = details.postBody.data
-    if (contentType) loadOptions.extraHeaders = `Content-Type: ${contentType}\n`
-    hasOptions = true
-  }
-
-  return hasOptions ? loadOptions : undefined
-}
-
-function buildBrowserPopupWindowOptions(
-  openerWebContents: electron.WebContents,
-  interactive: boolean
-): electron.BrowserWindowConstructorOptions {
-  return {
-    show: false,
-    focusable: interactive,
-    skipTaskbar: !interactive,
-    ...(interactive
-      ? {
-          width: ControlledNamedPopupWidth,
-          height: ControlledNamedPopupHeight,
-          minWidth: ControlledNamedPopupMinWidth,
-          minHeight: ControlledNamedPopupMinHeight,
-          maxWidth: ControlledNamedPopupMaxWidth,
-          maxHeight: ControlledNamedPopupMaxHeight,
-          center: true,
-          frame: true,
-          titleBarStyle: 'default' as const,
-          transparent: false,
-          opacity: 1,
-          modal: false,
-          fullscreen: false,
-          kiosk: false,
-          alwaysOnTop: false,
-          resizable: true,
-          movable: true,
-          minimizable: true,
-          maximizable: true,
-          closable: true,
-          fullscreenable: true,
-        }
-      : {}),
-    webPreferences: {
-      session: openerWebContents.session,
-      preload: undefined,
-      zoomFactor: 1,
-      javascript: true,
-      nodeIntegration: false,
-      nodeIntegrationInSubFrames: false,
-      nodeIntegrationInWorker: false,
-      contextIsolation: true,
-      sandbox: true,
-      webviewTag: false,
-      webSecurity: true,
-      allowRunningInsecureContent: false,
-      disableDialogs: true,
-    },
-  }
-}
-
-function isNamedPopupFrame(frameName: LooseOptional<string>): boolean {
-  const value = frameName?.trim()
-  return Boolean(value && !value.startsWith('_'))
-}
-
-function resolveBrowserPopupUrl(
-  rawUrl: LooseOptional<string>,
-  disposition: LooseOptional<string>,
-  openerUrl?: LooseOptional<string>
-): BrowserPopupUrlResolution {
-  if (disposition === 'save-to-disk') return { kind: 'deny', reason: 'download-disposition' }
-
-  const value = rawUrl?.trim()
-  if (!value) return { kind: 'bootstrap' }
-
-  try {
-    const url = new URL(value)
-    if (url.protocol === 'about:' && url.pathname === 'blank') return { kind: 'bootstrap' }
-    if (url.protocol === 'blob:') {
-      try {
-        const opener = new URL(openerUrl ?? '')
-        if (url.origin === opener.origin && url.origin !== 'null')
-          return { kind: 'route', url: url.toString() }
-      } catch {
-        // arch-guard:silent-catch-ok opener 不是标准 URL 时，blob 按不受支持协议拒绝。
-      }
-      return { kind: 'deny', reason: 'unsupported-blob-origin' }
-    }
-    if (url.protocol === 'file:') {
-      try {
-        if (new URL(openerUrl ?? '').protocol === 'file:')
-          return { kind: 'route', url: url.toString() }
-      } catch {
-        // arch-guard:silent-catch-ok 发起页来源不合法时按跨信任域 file 导航拒绝。
-      }
-      return { kind: 'deny', reason: 'untrusted-file-navigation' }
-    }
-    if (url.protocol !== 'http:' && url.protocol !== 'https:')
-      return { kind: 'deny', reason: `unsupported-protocol:${url.protocol}` }
-
-    return {
-      kind: 'route',
-      url: url.toString(),
-    }
-  } catch {
-    return { kind: 'deny', reason: 'invalid-url' }
-  }
-}
-
-function resolveBrowserPopupNavigation(
-  details: electron.HandlerDetails,
-  openerUrl?: LooseOptional<string>
-): BrowserPopupNavigationResolution {
-  const initiatorUrl = details.referrer?.url || openerUrl
-  const resolution = resolveBrowserPopupUrl(
-    details.url,
-    String(details.disposition),
-    initiatorUrl
-  )
-  if (resolution.kind !== 'route') return resolution
-
-  return {
-    ...resolution,
-    loadOptions: buildBrowserPopupLoadOptions(details),
-  }
-}
-
-/**
- * Electron 的 `WebContents` 类型里没有 `dialog` 事件（它是运行时存在、d.ts 未声明的一条），
- * 这里把断言收在**一个具名点**上（§1.4 白名单②：无泛型的原生驱动面）。
- * 不做运行时校验是刻意的：真缺这个事件时页面会因 alert 卡死，那是必须暴露的故障，
- * 不该被一个"看起来能跑"的降级掩盖。
- */
-function asBrowserDialogEventSource(value: unknown): BrowserDialogEventSource {
-  return value as BrowserDialogEventSource
-}
-
-function buildBrowserUserActivityBridgeScript(): string {
-  return `
-(() => {
-  const key = '__velarosBrowserUserActivityBridgeInstalled';
-  if (window[key]) return true;
-  window[key] = true;
-  const prefix = '${BrowserUserActivityConsolePrefix}';
-  const emit = (kind, event) => {
-    try {
-      const target = event && event.target;
-      const tagName = target && target.tagName ? String(target.tagName).toLowerCase() : null;
-      const role = target && target.getAttribute ? target.getAttribute('role') : null;
-      const type = target && target.getAttribute ? target.getAttribute('type') : null;
-      const detailParts = [];
-      if (tagName) detailParts.push(tagName);
-      if (role) detailParts.push('role=' + role);
-      if (type) detailParts.push('type=' + type);
-      console.info(prefix + JSON.stringify({
-        kind,
-        url: window.location.href,
-        detail: detailParts.join(' ')
-      }));
-    } catch (_error) {
-      console.info(prefix + JSON.stringify({ kind: 'unknown', url: window.location.href }));
-    }
-  };
-  document.addEventListener('pointerdown', (event) => emit('click', event), true);
-  document.addEventListener('wheel', (event) => emit('scroll', event), { capture: true, passive: true });
-  document.addEventListener('input', (event) => emit('input', event), true);
-  document.addEventListener('change', (event) => emit('input', event), true);
-  document.addEventListener('focusin', (event) => emit('focus', event), true);
-  return true;
-})()
-`
 }
 
 /**
@@ -298,7 +68,35 @@ function buildBrowserUserActivityBridgeScript(): string {
  * 负责接管 renderer 提供的 WebContents、绑定导航/console/崩溃事件、
  * 同步 session URL 上下文，并让等待 attach 的操作在页面出现后继续。
  */
-class BrowserSessionManager {
+export interface BrowserSessionManagerApi {
+  /** 更新运行时回调，通常在服务组合重新绑定 session 回调时调用。 */
+  setCallbacks(callbacks: ElectronBrowserRuntimeOptions): void
+  /** viewport 属于运行时会话状态，同时要推给固定外框内的 renderer 投影。 */
+  notifyViewportChanged(sessionId: string, viewport: BrowserViewportOptions): void
+  /** 暴露待处理浏览器事件 broker，供 runtime 工具层处理 dialog/download/permission。 */
+  getPendingEventsBroker(): BrowserPendingEventsBroker
+  /** 获取未销毁的会话。 */
+  getSession(sessionId: string): BrowserSession | undefined
+  /** 等待会话 WebContents attach 完成。 */
+  waitForSession(sessionId: string, timeoutMs?: number): Promise<BrowserSession>
+  /** 接管 renderer 创建的 WebContents。 */
+  attachWebContents(sessionId: string, webContents: electron.WebContents): BrowserSession
+  /** 关闭并清理某个浏览器会话。 */
+  closeSession(sessionId: string): void
+  /** 关闭当前窗口的全部会话，保留 manager 以便 macOS 重开主窗口时复用。 */
+  closeAllSessions(): void
+  /** 释放全部会话和等待者。 */
+  dispose(): void
+  /** 同步页面 URL 到上层 workspace/session context。 */
+  syncSessionSiteContext(sessionId: string, rawUrl: string): void
+  /** 同步外部浏览器 driver 的页面 URL 到上层 workspace/session context。 */
+  syncExternalSessionSiteContext(sessionId: string, rawUrl: string): void
+  /** 通知上层页面 ready，通常触发自动快照。 */
+  notifyPageReady(sessionId: string, rawUrl: string): void
+}
+
+class BrowserSessionManager implements BrowserSessionManagerApi {
+
   /** 当前活跃浏览器会话。 */
   private readonly sessions = new Map<string, BrowserSession>()
   /** 主框架加载失败记录，用于过滤失败后紧跟的 did-finish-load 噪音。 */
@@ -333,7 +131,7 @@ class BrowserSessionManager {
   private readonly pageWaiter: BrowserPageWaiter
   private readonly pendingEvents: BrowserPendingEventsBroker
   private readonly normalizeUrl: (rawUrl: string) => string
-  private readonly log = logRuntime.tag('BrowserSessionManager')
+  private readonly log = Log.tag('BrowserSessionManager')
   private callbacks: ElectronBrowserRuntimeOptions
 
   constructor(options: BrowserSessionManagerOptions) {
@@ -368,7 +166,7 @@ class BrowserSessionManager {
   }
 
   /** 等待会话 WebContents attach 完成。 */
-  public waitForSession(sessionId: string, timeoutMs = 5_000): Promise<BrowserSession> {
+  public waitForSession(sessionId: string, timeoutMs: number = BrowserTuning.session.attachTimeoutMs): Promise<BrowserSession> {
     const existing = this.getSession(sessionId)
     if (existing) return Promise.resolve(existing)
 
@@ -629,7 +427,7 @@ class BrowserSessionManager {
 
     if (resolution.kind === 'bootstrap') {
       const nativeNamedPopup = isNamedPopupFrame(details.frameName)
-      if ((this.popupBootstraps.get(sessionId)?.size ?? 0) >= MaxBrowserPopupBootstrapsPerSession) {
+      if ((this.popupBootstraps.get(sessionId)?.size ?? 0) >= BrowserTuning.popup.maxBootstrapsPerSession) {
         this.recordBrowserEvent(session, {
           kind: 'popup',
           level: 'warning',
@@ -786,7 +584,7 @@ class BrowserSessionManager {
         })
         if (releaseRetryCount < 2) {
           releaseRetryCount += 1
-          timeout = this.timers.after(BrowserPopupBootstrapRetryDelayMs, release, {
+          timeout = this.timers.after(BrowserTuning.popup.bootstrapRetryDelayMs, release, {
             label: 'browser.popup-bootstrap.release-retry',
           })
         }
@@ -897,16 +695,16 @@ class BrowserSessionManager {
         if (!nativePopupActivated) {
           try {
             popupWindow.setMaximumSize(
-              ControlledNamedPopupMaxWidth,
-              ControlledNamedPopupMaxHeight
+              BrowserTuning.popup.maxWidth,
+              BrowserTuning.popup.maxHeight
             )
             popupWindow.setMinimumSize(
-              ControlledNamedPopupMinWidth,
-              ControlledNamedPopupMinHeight
+              BrowserTuning.popup.minWidth,
+              BrowserTuning.popup.minHeight
             )
             popupWindow.setSize(
-              ControlledNamedPopupWidth,
-              ControlledNamedPopupHeight,
+              BrowserTuning.popup.width,
+              BrowserTuning.popup.height,
               false
             )
             popupWindow.center()
@@ -982,7 +780,7 @@ class BrowserSessionManager {
       return { action: 'deny' }
     })
     popupWebContents.on('destroyed', release)
-    timeout = this.timers.after(BrowserPopupBootstrapLifetimeMs, release, {
+    timeout = this.timers.after(BrowserTuning.popup.bootstrapLifetimeMs, release, {
       label: 'browser.popup-bootstrap.expire',
     })
   }
@@ -1493,9 +1291,9 @@ class BrowserSessionManager {
     message: LooseOptional<string>,
     sourceId: LooseOptional<string>
   ): boolean {
-    if (!message?.startsWith(BrowserUserActivityConsolePrefix)) return false
+    if (!message?.startsWith(browserUserActivityConsolePrefix)) return false
 
-    const rawPayload = message.slice(BrowserUserActivityConsolePrefix.length)
+    const rawPayload = message.slice(browserUserActivityConsolePrefix.length)
     try {
       const payload = JSON.parse(rawPayload)
       const kind = this.readUserActivityKind(payload)

@@ -44,31 +44,21 @@ import { AppError } from '@velaros-ai/core/error'
 
 import type { BrowserPageDriver } from '../../contract/requires.js'
 import type { BrowserEmulationOptions, BrowserGeolocationOptions, BrowserGeolocationState, BrowserKeyModifier, BrowserMouseButton, BrowserNetworkControlOptions, BrowserNetworkRequestDetailsOptions, BrowserNetworkResponseBodyOptions, BrowserNetworkThrottlingPreset, BrowserOriginStorage, BrowserPageDiagnosticEntry, BrowserPageDiagnosticLevel, BrowserPageTargetInfo, BrowserPressKeyOptions, BrowserStorageEntry, BrowserSwitchPageTargetOptions, BrowserTypeTextOptions, BrowserViewportOptions } from '../../types/browser.js'
-import type { CdpDownloadProgressEvent } from '../../types/cdp.js'
+import type { CdpBrowserPageDriverTransport, CdpCaptureScreenshotResponse, CdpDomDocumentResponse, CdpDomQuerySelectorResponse, CdpDomStorageItemsResponse, CdpDownloadProgressEvent, CdpDownloadWillBeginEvent, CdpFetchResourcePayload, CdpJavascriptDialogOpeningEvent, CdpLayoutMetricsResponse, CdpNetworkCookie, CdpNetworkGetCookiesResponse, CdpPageFrame, CdpPageFrameTree, CdpPageGetFrameTreeResponse, CdpPageTargetDescription, CdpPrintToPdfResponse, CdpRuntimeConsoleAPICalledEvent, CdpRuntimeEvaluateResponse, CdpRuntimeExceptionDetails, CdpRuntimeExceptionThrownEvent, CdpRuntimeRemoteObject, CdpScreencastConsumerOptions, CdpScreencastStartOptions, CdpTargetListEntry, ScreencastCapturedFrame } from '../../types/cdp.js'
 import type { BrowserPageDriverClickCoordinatesOptions, BrowserPageDriverCookie, BrowserPageDriverCookieOptions, BrowserPageDriverDiagnosticsOptions, BrowserPageDriverDownloadEvent, BrowserPageDriverDownloadListener, BrowserPageDriverDragCoordinatesOptions, BrowserPageDriverEmulationState, BrowserPageDriverFetchResourceOptions, BrowserPageDriverFetchResourceResult, BrowserPageDriverFileInputOptions, BrowserPageDriverMoveMouseOptions, BrowserPageDriverNetworkControlState, BrowserPageDriverNetworkIdleOptions, BrowserPageDriverNetworkRequestDetailsResult, BrowserPageDriverNetworkResponseBodyResult, BrowserPageDriverPdfOptions, BrowserPageDriverScreenshot, BrowserPageDriverScreenshotOptions, BrowserPageDriverState, BrowserPageDriverStorageOriginOptions } from '../../types/driver'
 import { clearBrowserDiagnosticEntries, takeBrowserDiagnosticWindow } from '../../utils/diagnostics.js'
 import { normalizeBrowserPressKeyOptions } from '../../utils/keyboard'
+import { BrowserTuning } from '../../utils/tuning'
 import { buildBrowserViewportDeviceMetrics } from '../../utils/viewport'
 
 import { BrowserCdpNetworkController } from './BrowserCdpNetworkController'
 import { CdpBrowserPageDownloadItem } from './CdpBrowserPageDownloadItem.js'
-import {
-  type CdpScreencastConsumerOptions,
-  CdpScreencastRecorder,
-  type CdpScreencastStartOptions,
-  type ScreencastCapturedFrame,
-} from './CdpScreencastRecorder'
+import { CdpScreencastRecorder } from './CdpScreencastRecorder'
 import { captureCdpHeapSnapshot, CdpTraceCollector } from './CdpTraceCollector'
 import {
   CdpWebSocketTransport,
   type CdpWebSocketTransportConnectOptions,
 } from './CdpWebSocketTransport'
-
-export interface CdpBrowserPageDriverTransport {
-  send<T = unknown>(method: string, params?: Record<string, unknown>): Promise<T>
-  onEvent?<T = unknown>(method: string, listener: (params: T) => void): () => void
-  onClose?(listener: () => void): () => void
-}
 
 export interface CdpBrowserPageDriverOptions {
   transport: CdpBrowserPageDriverTransport
@@ -95,160 +85,15 @@ export interface CdpBrowserPageDriverConnectOptions extends CdpWebSocketTranspor
   onDispose?: LooseOptional<() => void>
 }
 
-interface CdpTargetListEntry {
-  id?: unknown
-  type?: unknown
-  url?: unknown
-  title?: unknown
-  webSocketDebuggerUrl?: unknown
-}
-
-interface CdpPageTargetDescription {
-  id: string
-  url: string
-  title: string
-  webSocketDebuggerUrl: string
-}
-
-interface CdpRuntimeEvaluateResponse {
-  result?: {
-    type?: string
-    value?: unknown
-    unserializableValue?: string
-    description?: string
-  }
-  exceptionDetails?: {
-    text?: string
-    exception?: {
-      description?: string
-      value?: unknown
-    }
-  }
-}
-
-interface CdpCaptureScreenshotResponse {
-  data?: unknown
-}
-
-interface CdpPrintToPdfResponse {
-  data?: unknown
-}
-
-interface CdpLayoutMetricsResponse {
-  cssContentSize?: {
-    x?: unknown
-    y?: unknown
-    width?: unknown
-    height?: unknown
-  }
-  contentSize?: {
-    x?: unknown
-    y?: unknown
-    width?: unknown
-    height?: unknown
-  }
-}
-
-interface CdpDomDocumentResponse {
-  root?: {
-    nodeId?: unknown
-  }
-}
-
-interface CdpDomQuerySelectorResponse {
-  nodeId?: unknown
-}
-
-interface CdpFetchResourcePayload {
-  ok?: unknown
-  status?: unknown
-  mimeType?: unknown
-  contentLength?: unknown
-  data?: unknown
-}
-
-interface CdpNetworkCookie {
-  name?: unknown
-  value?: unknown
-  domain?: unknown
-  path?: unknown
-  expires?: unknown
-  size?: unknown
-  httpOnly?: unknown
-  secure?: unknown
-  session?: unknown
-  sameSite?: unknown
-}
-
-interface CdpNetworkGetCookiesResponse {
-  cookies?: unknown
-}
-
-interface CdpPageFrame {
-  url?: unknown
-}
-
-interface CdpPageFrameTree {
-  frame?: unknown
-  childFrames?: unknown
-}
-
-interface CdpPageGetFrameTreeResponse {
-  frameTree?: unknown
-}
-
-interface CdpDomStorageItemsResponse {
-  entries?: unknown
-}
-
-interface CdpJavascriptDialogOpeningEvent {
-  type?: unknown
-  message?: unknown
-  url?: unknown
-}
-
-interface CdpRuntimeConsoleAPICalledEvent {
-  type?: unknown
-  args?: unknown
-  stackTrace?: unknown
-  timestamp?: unknown
-}
-
-interface CdpRuntimeExceptionThrownEvent {
-  timestamp?: unknown
-  exceptionDetails?: unknown
-}
-
-interface CdpRuntimeExceptionDetails {
-  text?: unknown
-  url?: unknown
-  lineNumber?: unknown
-  columnNumber?: unknown
-  exception?: unknown
-}
-
-interface CdpRuntimeRemoteObject {
-  type?: unknown
-  value?: unknown
-  unserializableValue?: unknown
-  description?: unknown
-}
-
-interface CdpDownloadWillBeginEvent {
-  guid?: unknown
-  url?: unknown
-  suggestedFilename?: unknown
-}
-
-const CDP_KEY_MODIFIER_MASKS: Record<BrowserKeyModifier, number> = {
-  alt: 1,
-  control: 2,
-  meta: 4,
-  shift: 8,
-}
-const MaxCdpDiagnosticEntries = 300
 
 class CdpBrowserPageDriver implements BrowserPageDriver {
+  private static readonly CDP_KEY_MODIFIER_MASKS: Record<BrowserKeyModifier, number> = {
+    alt: 1,
+    control: 2,
+    meta: 4,
+    shift: 8,
+  }
+
   public readonly kind = 'external'
   private currentUrl: string
   private currentTitle: string
@@ -830,7 +675,7 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
    */
   public readDiagnostics(options: BrowserPageDriverDiagnosticsOptions): BrowserPageDiagnosticEntry[] {
     const limit = Math.min(
-      MaxCdpDiagnosticEntries,
+      BrowserTuning.cdp.diagnosticEntries,
       this.clampPositiveInteger(options.limit, 100)
     )
     // 先按种类挑，再取窗口；clear 只清这次读的种类，别顺手吃掉别人的证据。
@@ -1393,8 +1238,8 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
 
   private appendDiagnostic(entry: BrowserPageDiagnosticEntry): void {
     this.diagnostics.push(entry)
-    if (this.diagnostics.length > MaxCdpDiagnosticEntries) {
-      this.diagnostics.splice(0, this.diagnostics.length - MaxCdpDiagnosticEntries)
+    if (this.diagnostics.length > BrowserTuning.cdp.diagnosticEntries) {
+      this.diagnostics.splice(0, this.diagnostics.length - BrowserTuning.cdp.diagnosticEntries)
     }
   }
 
@@ -1850,7 +1695,7 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
   }
 
   private resolveKeyboardModifiers(modifiers: BrowserKeyModifier[]): number {
-    return modifiers.reduce((mask, modifier) => mask | CDP_KEY_MODIFIER_MASKS[modifier], 0)
+    return modifiers.reduce((mask, modifier) => mask | CdpBrowserPageDriver.CDP_KEY_MODIFIER_MASKS[modifier], 0)
   }
 
   private resolveKeyCode(key: string): string {

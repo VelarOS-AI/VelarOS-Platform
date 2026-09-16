@@ -24,10 +24,12 @@ export const BrowserAutomationModes = [
 export const DefaultBrowserSearchEngine: BrowserSearchEngineId = 'google'
 export const DefaultBrowserAutomationMode: BrowserAutomationMode = 'webview'
 
+/** 判一个字符串是不是合法的搜索引擎 id。 */
 export function isBrowserSearchEngineId(value: unknown): value is BrowserSearchEngineId {
   return (BrowserSearchEngineIds as readonly unknown[]).includes(value)
 }
 
+/** 判一个字符串是不是合法的自动化模式。 */
 export function isBrowserAutomationMode(value: unknown): value is BrowserAutomationMode {
   return (BrowserAutomationModes as readonly unknown[]).includes(value)
 }

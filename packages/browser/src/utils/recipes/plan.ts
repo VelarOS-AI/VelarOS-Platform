@@ -1,13 +1,10 @@
 import { isPresent, toOptional } from '@velaros-ai/core'
 
 import type {
-  BrowserPageNavigationOptions,
-  BrowserPageScrollOptions,
   BrowserRecipeSkeleton,
   BrowserRecipeSkeletonStep,
-  BrowserTargetActionOptions,
-  BrowserWaitForSelectorOptions,
 } from '../../types/browser'
+import type { BrowserRecipeRunStepResult, BrowserRecipeStepOperation, BrowserRecipeStepPlan } from '../../types/recipes.js'
 
 const ExecutableRecipeStepKinds = new Set<BrowserRecipeSkeletonStep['kind']>([
   'click_action',
@@ -28,75 +25,17 @@ function isExecutableRecipeStep(step: BrowserRecipeSkeletonStep): boolean {
   return ExecutableRecipeStepKinds.has(step.kind)
 }
 
-/** recipe 步骤在预览/执行过程中的状态。 */
-export type BrowserRecipeRunStepStatus =
-  | 'ready'
-  | 'executed'
-  | 'skipped'
-  | 'not_found'
-  | 'missing_input'
-
-/** 单个 recipe 步骤的预览或执行结果。 */
-export interface BrowserRecipeRunStepResult {
-  /** recipe step id。 */
-  id: string
-  /** step 类型。 */
-  kind: BrowserRecipeSkeletonStep['kind']
-  /** 当前步骤状态。 */
-  status: BrowserRecipeRunStepStatus
-  /** 实际要执行的浏览器动作。 */
-  action: Nullable<'click' | 'fill'>
-  /** 给模型/用户看的状态说明。 */
-  message: string
-  /** fill_field 对应的 input.name。 */
-  inputName?: string
-  /** target CSS，便于调试未命中。 */
-  targetCss?: LooseOptional<string>
-  /** target role，便于调试未命中。 */
-  targetRole?: LooseOptional<string>
-  /** target text，便于调试未命中。 */
-  targetText?: LooseOptional<string>
-  /** runtime 返回的原始执行结果。 */
-  result?: unknown
-  /** 执行错误信息。 */
-  error?: string
-}
-
-export type BrowserRecipeTargetActionOptions = BrowserTargetActionOptions & {
-  action: 'click' | 'fill'
-}
-
-export type BrowserRecipeStepOperation =
-  | { kind: 'target_action'; action: BrowserRecipeTargetActionOptions }
-  | { kind: 'inspect_page' }
-  | { kind: 'navigate'; options: BrowserPageNavigationOptions }
-  | { kind: 'scroll'; options: BrowserPageScrollOptions }
-  | { kind: 'wait_for_selector'; options: BrowserWaitForSelectorOptions }
-  | { kind: 'extract_table'; selector?: string; tableIndex?: number; maxRows?: number }
-  | { kind: 'extract_list'; selector?: string; maxItems?: number }
-
-/** 单个步骤的执行计划：是否 ready、动作是什么、缺什么输入。 */
-export interface BrowserRecipeStepPlan {
-  /** 原始 recipe step。 */
-  step: BrowserRecipeSkeletonStep
-  /** 预执行状态。 */
-  status: Extract<BrowserRecipeRunStepStatus, 'ready' | 'skipped' | 'missing_input'>
-  /** 可直接交给 browser runtime 的操作。 */
-  operation: Nullable<BrowserRecipeStepOperation>
-  /** 计划说明。 */
-  message: string
-  /** 该步骤使用的 input.name。 */
-  inputName?: string
-}
-
+/** 从一步 recipe 里读出选择器。 */
 function readRecipeStepSelector(step: BrowserRecipeSkeletonStep): Nullable<string> {
   return step.selector?.trim() || step.target?.css?.trim() || null
 }
 
+/** 判这一步要不要目标元素。 */
 function requiresRecipeStepTarget(step: BrowserRecipeSkeletonStep): boolean {
   return step.kind === 'click_action' || step.kind === 'fill_field' || step.kind === 'follow_link'
 }
 
+/** 把一步 recipe 变成一次目标动作的执行计划。 */
 function buildTargetActionPlan(
   step: BrowserRecipeSkeletonStep,
   inputs: Record<string, string>
@@ -300,6 +239,7 @@ function buildRecipeStepPlan(
   }
 }
 
+/** 给一步 recipe 拼一句人能看懂的预览。 */
 function previewActionForOperation(
   operation: Nullable<BrowserRecipeStepOperation>
 ): Nullable<'click' | 'fill'> {
@@ -403,4 +343,3 @@ export function buildRecipeExecutionPlan(
   }
 }
 
-export type BrowserRecipeExecutionPlan = ReturnType<typeof buildRecipeExecutionPlan>

@@ -10,44 +10,60 @@ import type {
   BrowserUserActivityEvent,
   BrowserUserActivityItem,
 } from '../../types/browser.js'
+import type { BrowserActivitySessionState, BrowserUserActivityWaitResult, BrowserUserActivityWaitState } from '../../types/session.js'
+import { BrowserTuning } from '../../utils/tuning'
 
-type BrowserUserActivityWaitState = 'waiting' | 'idle'
-
+/** 建用户活动协调器要的参数，都有缺省。 */
 interface BrowserActivityCoordinatorOptions {
+  /** 用户最近一次操作之后多少毫秒之内仍算「正在操作」；不给用 `BrowserTuning.session.userIdleWindowMs`。 */
   idleWindowMs?: number
+  /** 取当前时间的口子，测试用；不给用 `Date.now`。 */
   now?: () => number
+  /** 等待的口子，测试用；不给用计时器。 */
   sleep?: (ms: number) => Promise<void>
+  /** agent 开始等 / 等完用户时的通知，宿主用来在界面上说明「正在让路」。 */
   onWaitStateChange?: (sessionId: string, state: BrowserUserActivityWaitState) => void
   /** 可见活动写入广播总线（每宿主一个实例，由宿主装配注入）；缺省则不通知 renderer。 */
   turnContextAppendHub?: TurnContextAppendBus
 }
 
-interface BrowserUserActivityWaitResult {
-  waited: boolean
-  waitedMs: number
+/**
+ * 用户活动协调：用户刚动过页面时，让 agent 的动作等一等，别和人抢同一个页面。
+ *
+ * 记一条活动就把这条会话的「忙」窗口往后推；agent 的动作包在 `withModelAction` 里跑，自己不算成用户操作。
+ * 等待期间把状态通知宿主，界面上能说明「正在让路」。
+ *
+ * 状态归会话：一个运行时一份，按 sessionId 分格。
+ */
+export interface BrowserActivityCoordinatorApi {
+  /** 记一次用户操作：之后的一小段时间里 agent 要给用户让路。 */
+  recordUserActivity(input: BrowserUserActivityEvent): void
+  /** 环境回合上下文 source adapter：只捕获内存账本，peek 同步零 IO。 */
+  createTurnContextSource(): BrowserTurnContextDeltaSource
+  /** 等用户停手；等待期间把状态通知宿主，中止信号到了就立刻返回。 */
+  waitForUserIdle(sessionId: string, abortSignal?: AbortSignal, onWaitStateChange?: BrowserActivityCoordinatorOptions['onWaitStateChange']): Promise<BrowserUserActivityWaitResult>
+  /** 把一次模型动作包起来跑：先等用户停手，跑的过程中不把自己算成用户操作。 */
+  withModelAction<T>(sessionId: string, action: () => Promise<T>): Promise<T>
+  /** 清掉这条会话的活动记录。 */
+  clearSession(sessionId: string): void
+  /** 清掉全部会话的状态；运行时收尾时调。 */
+  clearAll(): void
 }
 
-interface BrowserActivitySessionState {
-  lastUserActivityAt: Nullable<number>
-  modelActionDepth: number
-}
+class BrowserActivityCoordinator implements BrowserActivityCoordinatorApi {
+  private static readonly BrowserActivityKindLabels: Record<BrowserUserActivityEvent['kind'], string> = {
+    click: '点击',
+    keyboard: '键盘',
+    scroll: '滚动',
+    input: '输入',
+    navigation: '导航',
+    dialog: '弹窗',
+    download: '下载',
+    permission: '权限',
+    focus: '聚焦',
+    unknown: '操作',
+  }
 
-const DefaultIdleWindowMs = 1_200
-
-const BrowserActivityKindLabels: Record<BrowserUserActivityEvent['kind'], string> = {
-  click: '点击',
-  keyboard: '键盘',
-  scroll: '滚动',
-  input: '输入',
-  navigation: '导航',
-  dialog: '弹窗',
-  download: '下载',
-  permission: '权限',
-  focus: '聚焦',
-  unknown: '操作',
-}
-
-class BrowserActivityCoordinator {
   private readonly idleWindowMs: number
   private readonly now: () => number
   private readonly sleep: (ms: number) => Promise<void>
@@ -56,7 +72,7 @@ class BrowserActivityCoordinator {
   private readonly turnContextLedgers: TurnContextSessionLedgers
 
   constructor(options: BrowserActivityCoordinatorOptions = {}) {
-    this.idleWindowMs = options.idleWindowMs ?? DefaultIdleWindowMs
+    this.idleWindowMs = options.idleWindowMs ?? BrowserTuning.session.userIdleWindowMs
     this.now = options.now ?? (() => Date.now())
     this.sleep = options.sleep ?? ((ms) => TimerScope.sleep(ms))
     this.onWaitStateChange = options.onWaitStateChange
@@ -83,7 +99,7 @@ class BrowserActivityCoordinator {
     }
     this.turnContextLedgers.append(sessionId, {
       occurredAt,
-      label: BrowserActivityKindLabels[input.kind],
+      label: BrowserActivityCoordinator.BrowserActivityKindLabels[input.kind],
       summaryText: this.formatSummaryItem(item).replace(/^- /, ''),
     })
   }
@@ -212,8 +228,5 @@ class BrowserActivityCoordinator {
 }
 
 export { BrowserActivityCoordinator }
-export type {
-  BrowserActivityCoordinatorOptions,
-  BrowserUserActivityWaitResult,
-  BrowserUserActivityWaitState,
-}
+export type { BrowserActivityCoordinatorOptions }
+export type { BrowserUserActivityWaitResult, BrowserUserActivityWaitState } from '../../types/session.js'

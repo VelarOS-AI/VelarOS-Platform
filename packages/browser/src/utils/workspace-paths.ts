@@ -4,6 +4,8 @@ import { AppError } from '@velaros-ai/core/error'
 import { resolveRealPath } from '@velaros-ai/core/utils/RealPath'
 import { currentPlatform } from '@velaros-ai/platform'
 
+import type { BrowserWorkspacePath } from '../types/workspace.js'
+
 /**
  * 解析站点工作区内的相对保存路径，防目录穿越。
  *
@@ -16,16 +18,6 @@ export async function resolveWorkspaceFilePath(
   label = '路径'
 ): Promise<BrowserWorkspacePath> {
   return resolveBrowserWorkspacePath(workspaceRoot, requestedPath, label)
-}
-
-/** 站点工作区里的一条路径。 */
-export interface BrowserWorkspacePath {
-  /** 解开符号链接后的真实绝对路径：包含判定与落盘都用它。 */
-  path: string
-  /** 相对工作区根的可移植相对路径（各级用 `/` 连接；根本身是 `.`）。 */
-  relativePath: string
-  /** 没解链接、只把相对路径接到根上的字面绝对路径：判「这一段本身是不是符号链接」时用。 */
-  literalPath: string
 }
 
 /**
@@ -42,6 +34,7 @@ export function getRelativePathInsideRoot(
   return currentPlatform.relativePathTextInside(resolve(candidatePath), resolve(rootPath))
 }
 
+/** 把相对路径转成各级用 `/` 连接的可移植写法。 */
 export function toPortableRelativePath(relativePath: string): string {
   return currentPlatform.toPortablePathText(relativePath)
 }

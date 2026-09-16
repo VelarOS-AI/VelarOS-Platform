@@ -6,31 +6,32 @@ import { AppError } from '@velaros-ai/core/error'
 
 import type { BrowserHeapSnapshotOptions, BrowserHeapSnapshotResult, BrowserPerformanceInsightOptions, BrowserPerformanceInsightResult, BrowserPerformanceTraceStartOptions, BrowserPerformanceTraceStartResult, BrowserPerformanceTraceStopResult, BrowserSiteContext } from '../../types/browser.js'
 import type { BrowserPageDriverEmulationState } from '../../types/driver'
-import type { BrowserPageDriverKernel } from '../../types/runtime.js'
+import type { BrowserPageDriverKernel,BrowserPerformanceTraceState } from '../../types/runtime.js'
+import { serializeBrowserTraceToGzip } from '../../utils/performance'
+import { BrowserTuning } from '../../utils/tuning'
 import { resolveBrowserWorkspacePath } from '../../utils/workspace-paths'
 
-import {
-  type BrowserParsedTraceRecording,
-  BrowserPerformanceTraceEngine,
-  serializeBrowserTraceToGzip,
-} from './BrowserPerformanceTraceEngine'
-
-/** 每个 session 的性能 trace 状态：录制中 / 最近一次录制的解析产物。 */
-interface BrowserPerformanceTraceState {
-  running: boolean
-  startedAt: number
-  url: string
-  recording?: LooseOptional<BrowserParsedTraceRecording>
-}
-
-const DefaultTraceAutoStopMs = 5_000
+import { BrowserPerformanceTraceEngine } from './BrowserPerformanceTraceEngine'
 
 /**
  * 性能域执行体：trace 录制/分析与堆快照。
  *
  * 方法默认在 runtime 的 actionQueue 内被调用（analyzeInsight 除外，纯内存读）。
  */
-export class BrowserPerformanceOrchestrator {
+export interface BrowserPerformanceOrchestratorApi {
+  /** 开始录性能 trace。 */
+  startTrace(sessionId: string, context: BrowserSiteContext, options: BrowserPerformanceTraceStartOptions, abortSignal?: AbortSignal): Promise<BrowserPerformanceTraceStartResult>
+  /** 停止 + 解析 + 落盘。 */
+  stopTrace(sessionId: string, context: BrowserSiteContext, abortSignal?: AbortSignal): Promise<BrowserPerformanceTraceStopResult>
+  /** 对最近一次 trace 的指定 insight 输出详细分析（纯内存读，不进队列）。 */
+  analyzeInsight(sessionId: string, options: BrowserPerformanceInsightOptions, abortSignal?: AbortSignal): Promise<BrowserPerformanceInsightResult>
+  /** 采集 V8 堆快照并落盘（分析建议交给 memlab 等外部工具）。 */
+  captureHeapSnapshot(sessionId: string, context: BrowserSiteContext, options: BrowserHeapSnapshotOptions, abortSignal?: AbortSignal): Promise<BrowserHeapSnapshotResult>
+  /** 应用退出/运行时重建时清理登记表；录制中的 collector 随 driver/webContents 销毁而终止。 */
+  dispose(): void
+}
+
+export class BrowserPerformanceOrchestrator implements BrowserPerformanceOrchestratorApi {
   private readonly traces = new Map<string, BrowserPerformanceTraceState>()
 
   constructor(
@@ -78,7 +79,10 @@ export class BrowserPerformanceOrchestrator {
       try {
         await driver.navigateTo(originUrl)
         await driver
-          .waitForNetworkIdle?.({ idleMs: 800, timeoutMs: 10_000 })
+          .waitForNetworkIdle?.({
+            idleMs: BrowserTuning.performance.reloadNetworkIdleMs,
+            timeoutMs: BrowserTuning.performance.reloadNetworkIdleTimeoutMs,
+          })
           ?.catch(() => {
             // arch-guard:silent-catch-ok 网络空闲等待是 trace 质量提示，不改变导航已经成功的事实。
           })
@@ -243,8 +247,8 @@ export class BrowserPerformanceOrchestrator {
 
   private resolveAutoStopMs(value: LooseOptional<number>): number {
     if (isNull(value) || value === 0) return 0
-    if (!isPresent(value)) return DefaultTraceAutoStopMs
-    if (!isFiniteNumber(value) || value < 0) return DefaultTraceAutoStopMs
+    if (!isPresent(value)) return BrowserTuning.performance.traceAutoStopMs
+    if (!isFiniteNumber(value) || value < 0) return BrowserTuning.performance.traceAutoStopMs
     return Math.min(60_000, Math.max(1_000, Math.round(value)))
   }
 }

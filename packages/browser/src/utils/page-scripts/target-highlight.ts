@@ -1,6 +1,7 @@
 import { toNullable } from '@velaros-ai/core'
 
 import type { BrowserElementTargetHint } from '../../types/browser'
+import { BrowserTuning } from '../tuning'
 
 /** 构造短暂高亮目标元素的页面脚本（agent 操作反馈）。 */
 
@@ -12,7 +13,7 @@ export function buildHighlightScript(input: {
   const payload = JSON.stringify({
     selector: toNullable(input.selector),
     label: input.label ?? 'Agent target',
-    durationMs: input.durationMs ?? 1600,
+    durationMs: input.durationMs ?? BrowserTuning.page.highlightDurationMs,
   })
 
   return `(() => {
@@ -87,6 +88,7 @@ export function buildHighlightScript(input: {
   })()`
 }
 
+/** 按目标元素描述拼高亮脚本。 */
 export function buildHighlightFromTargetScript(target: BrowserElementTargetHint, label?: string): string {
   const selectors: string[] = []
   if (target.css) selectors.push(target.css)

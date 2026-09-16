@@ -7,99 +7,9 @@ import type {
   BrowserSiteContext,
   BrowserWorkspaceArtifactRecord,
 } from '../../types/browser'
+import type { BrowserRecipeExecutionPlan, BrowserRecipeRunArtifactFields, BrowserRecipeRunInputFields, BrowserRecipeRunRecipeFields, BrowserRecipeRunRecordArtifact, BrowserRecipeRunSnapshotArtifacts, BrowserRecipeRunStepResult, BrowserRecipeRunStepSummaryFields, BrowserRecipeRunWindowFields, BrowserRecipeVariableResolution } from '../../types/recipes.js'
 
 import { isSameBrowserOrigin } from './paths'
-import type { BrowserRecipeExecutionPlan, BrowserRecipeRunStepResult } from './plan'
-import type { BrowserRecipeVariableResolution } from './variables'
-
-/** run record 中记录的 before/after snapshot artifact。 */
-interface BrowserRecipeRunSnapshotArtifacts {
-  before: LooseOptional<BrowserWorkspaceArtifactRecord>
-  after: LooseOptional<BrowserWorkspaceArtifactRecord>
-}
-
-/** 写入 runs/ 的 recipe 执行记录。 */
-interface BrowserRecipeRunRecordArtifact {
-  /** recipe artifact 路径。 */
-  recipePath: string
-  /** recipe 关联页面 URL。 */
-  recipeUrl: string
-  /** recipe 标题。 */
-  recipeTitle: string
-  /** 是否只是 dryRun。 */
-  dryRun: boolean
-  /** 执行开始时间。 */
-  startedAt: number
-  /** 执行结束时间。 */
-  finishedAt: number
-  /** 执行结束时的 browser context。 */
-  activeBrowserContext: LooseOptional<BrowserSiteContext>
-  /** 可执行步骤总数。 */
-  executableStepCount: number
-  /** 已执行步骤数。 */
-  executedStepCount: number
-  /** ready 但未执行的步骤数，通常来自 dryRun。 */
-  readyStepCount: number
-  /** 缺失输入数。 */
-  missingInputCount: number
-  /** 跳过/未命中步骤数。 */
-  skippedStepCount: number
-  /** 必填输入名。 */
-  requiredInputNames: string[]
-  /** 可选输入名。 */
-  optionalInputNames: string[]
-  /** 未被 recipe 使用的输入名。 */
-  unusedInputNames: string[]
-  /** 缺失输入详情。 */
-  missingInputs: BrowserRecipeExecutionPlan['missingInputs']
-  /** 本次输入中实际引用的变量占位符名，不包含变量值。 */
-  usedVariableNames: string[]
-  /** 调用方传入但未被输入占位符使用的变量名。 */
-  unusedVariableNames: string[]
-  /** dryRun 中发现、真实执行前会要求补齐的变量名。 */
-  missingVariableNames: string[]
-  /** before/after 快照 artifact。 */
-  snapshotArtifacts: BrowserRecipeRunSnapshotArtifacts
-  /** 快照未保存的原因。 */
-  snapshotSaveSkippedReason: LooseOptional<string>
-  /** 每一步结果。 */
-  stepResults: BrowserRecipeRunStepResult[]
-}
-
-type BrowserRecipeRunRecipeFields = Pick<
-  BrowserRecipeRunRecordArtifact,
-  'recipePath' | 'recipeUrl' | 'recipeTitle' | 'dryRun'
->
-
-type BrowserRecipeRunWindowFields = Pick<
-  BrowserRecipeRunRecordArtifact,
-  'startedAt' | 'finishedAt' | 'activeBrowserContext'
->
-
-type BrowserRecipeRunStepSummaryFields = Pick<
-  BrowserRecipeRunRecordArtifact,
-  | 'executableStepCount'
-  | 'executedStepCount'
-  | 'readyStepCount'
-  | 'missingInputCount'
-  | 'skippedStepCount'
->
-
-type BrowserRecipeRunInputFields = Pick<
-  BrowserRecipeRunRecordArtifact,
-  | 'requiredInputNames'
-  | 'optionalInputNames'
-  | 'unusedInputNames'
-  | 'missingInputs'
-  | 'usedVariableNames'
-  | 'unusedVariableNames'
-  | 'missingVariableNames'
->
-
-type BrowserRecipeRunArtifactFields = Pick<
-  BrowserRecipeRunRecordArtifact,
-  'snapshotArtifacts' | 'snapshotSaveSkippedReason' | 'stepResults'
->
 
 /** 根据执行计划和步骤结果生成可持久化 run record。 */
 export function buildBrowserRecipeRunRecord(input: {
@@ -214,4 +124,5 @@ export async function writeBrowserRecipeRunRecord(input: {
   }
 }
 
-export type { BrowserRecipeRunRecordArtifact, BrowserRecipeRunSnapshotArtifacts }
+export type { BrowserRecipeRunSnapshotArtifacts } from '../../types/recipes.js'
+export type { BrowserRecipeRunRecordArtifact } from '../../types/recipes.js'

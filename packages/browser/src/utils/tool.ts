@@ -43,6 +43,7 @@ export function getActiveBrowserContext(ctx: BrowserToolContext) {
   return ctx.browser.getContext()!
 }
 
+/** 定义一个浏览器工具：补上 category，其余原样交给工具契约。 */
 export function defineBrowserTool<TInput extends Record<string, unknown>>(
   input: DefineBrowserToolInput<TInput>
 ): VelaTool<TInput> {

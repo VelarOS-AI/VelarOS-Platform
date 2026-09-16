@@ -1,6 +1,9 @@
 import { AppError } from '@velaros-ai/core/error'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
+import type { BrowserSessionActionOptions, BrowserSessionQueueSlot } from '../../types/session.js'
+import { BrowserTuning } from '../../utils/tuning'
+
 /**
  * 单个动作允许独占一条会话队列的上限 —— **最后一道网，不是主超时**。
  *
@@ -14,28 +17,6 @@ import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
  * 14 分钟不返回，abort 也救不回来（信号只在排队闭包**内部**被检查，闭包压根没被调度），
  * 只有重启应用。**一个永不 settle 的 promise 不许换来一条永久瘫痪的会话。**
  */
-const DefaultActionHoldCapMs = 150_000
-
-export interface BrowserSessionActionOptions {
-  /** 排队期间的取消信号：还没轮到就中止时立刻退出排队，不再执行动作。 */
-  readonly signal?: AbortSignal
-  /** 覆盖 {@link DefaultActionHoldCapMs}；只在调用方确知本动作更短/更长时才传。 */
-  readonly holdCapMs?: number
-  /** 超时正文里的动作名，便于把死结定位到具体调用点。 */
-  readonly label?: string
-}
-
-/**
- * 队列名额 —— **把「动作 settle 了」与「名额释放了」拆成两件事**。
- *
- * 这正是本文件的核心判决：上一版拿动作自己的 promise 当队列链，于是
- * 「动作永不 settle」在结构上等价于「会话永久瘫痪」，没有任何一层能插手。
- * 名额独立之后，超时与中止都能在动作还挂着的时候把队伍放行。
- */
-interface BrowserSessionQueueSlot {
-  readonly released: Promise<void>
-  readonly release: () => void
-}
 
 function createQueueSlot(): BrowserSessionQueueSlot {
   let release: () => void = () => undefined
@@ -49,9 +30,31 @@ function createQueueSlot(): BrowserSessionQueueSlot {
  * 浏览器会话队列
  * - 同一 session 的所有 WebContents 操作串行执行，避免导航与快照/读取互相打断。
  * - 不同 session 仍可并发。
- * - **任何一个动作都不能永久占住队列**：见 {@link DefaultActionHoldCapMs} 与 {@link BrowserSessionQueueSlot}。
+ * - **任何一个动作都不能永久占住队列**：见 {@link BrowserTuning.session.actionHoldCapMs} 与 {@link BrowserSessionQueueSlot}。
  */
-class BrowserSessionActionQueue {
+export interface BrowserSessionActionQueueApi {
+  /** 写操作：串行排队执行 */
+  run<T>(sessionId: string, action: () => Promise<T>, options?: BrowserSessionActionOptions): Promise<T>
+  /**
+   * 只读操作仍会访问共享 WebContents，需要跟导航/点击保持顺序。
+   *
+   * 当前实现与 run 行为完全一致；保留独立方法是给未来扩展（如读写锁、并行读）留接口。
+   * 现阶段不要把它当成“可以并发”的标志。
+   */
+  runReadOnly<T>(sessionId: string, action: () => Promise<T>, options?: BrowserSessionActionOptions): Promise<T>
+  /**
+   * 丢掉这条会话现有的排队链，**下一次 `run` 立刻开跑**。
+   *
+   * 拆卸路径（`closeSession`）必须走它：清理绝不能排在死结后面，否则「会话卡住 → 关不掉 →
+   * 重开还是那条卡住的队列」，只剩重启应用一条路。已经在排队的旧动作不受影响，
+   * 它们仍按原链等待，并各自被名额上限兜底。
+   */
+  clear(sessionId: string): void
+  /** 清掉全部会话的状态；运行时收尾时调。 */
+  clearAll(): void
+}
+
+class BrowserSessionActionQueue implements BrowserSessionActionQueueApi {
   /** 每个 session 一条 Promise 链；链上排的是**名额**，不是动作本身。 */
   private readonly writeQueues = new Map<string, Promise<unknown>>()
 
@@ -154,7 +157,7 @@ class BrowserSessionActionQueue {
     action: () => Promise<T>,
     options: BrowserSessionActionOptions
   ): Promise<T> {
-    const holdCapMs = options.holdCapMs ?? DefaultActionHoldCapMs
+    const holdCapMs = options.holdCapMs ?? BrowserTuning.session.actionHoldCapMs
     const label = options.label ?? 'browser-session-action'
     const timers = new TimerScope({ name: 'BrowserSessionActionQueue' })
     try {

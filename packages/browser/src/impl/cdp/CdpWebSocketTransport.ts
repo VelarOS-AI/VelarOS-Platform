@@ -13,44 +13,27 @@
 //    会话（失败方向：降级且可查，而不是整体消失）。
 import { isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
-import { type TimerLease, TimerScope } from '@velaros-ai/core/utils/TimerScope'
+import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
-import type { CdpBrowserPageDriverTransport } from './CdpBrowserPageDriver'
+import type { CdpBrowserPageDriverTransport, CdpJsonRpcMessage, CdpPendingRequest, CdpWebSocketLike } from '../../types/cdp.js'
+import { BrowserTuning } from '../../utils/tuning'
 
-export interface CdpWebSocketLike {
-  send(data: string): void
-  close(): void
-  addEventListener(type: string, listener: (event: Event) => void): void
-  removeEventListener(type: string, listener: (event: Event) => void): void
-}
 
+/** 用一条已经连上的 WebSocket 建传输时的参数。 */
 export interface CdpWebSocketTransportOptions {
+  /** 已经连上的 socket。 */
   socket: CdpWebSocketLike
+  /** 单条命令等回包的毫秒数；不给用 `BrowserTuning.cdp.commandTimeoutMs`。 */
   timeoutMs?: LooseOptional<number>
 }
 
+/** 现连一条 WebSocket 建传输时的参数。 */
 export interface CdpWebSocketTransportConnectOptions {
+  /** 自己造 socket 的口子；不给就用运行环境的 WebSocket。 */
   createSocket?: LooseOptional<(url: string) => CdpWebSocketLike>
+  /** 连接与单条命令的毫秒超时；不给用 `BrowserTuning.cdp.commandTimeoutMs`。 */
   timeoutMs?: LooseOptional<number>
 }
-
-interface CdpPendingRequest {
-  resolve: (value: unknown) => void
-  reject: (error: Error) => void
-  timeout: TimerLease
-}
-
-interface CdpJsonRpcMessage {
-  id?: unknown
-  method?: unknown
-  params?: unknown
-  result?: unknown
-  error?: {
-    message?: unknown
-  }
-}
-
-const DefaultCdpCommandTimeoutMs = 10_000
 
 class CdpWebSocketTransport implements CdpBrowserPageDriverTransport {
   private nextId = 1
@@ -67,7 +50,7 @@ class CdpWebSocketTransport implements CdpBrowserPageDriverTransport {
   ): Promise<CdpWebSocketTransport> {
     const createSocket = options.createSocket ?? this.createDefaultSocket
     const socket = createSocket(url)
-    const timeoutMs = options.timeoutMs ?? DefaultCdpCommandTimeoutMs
+    const timeoutMs = options.timeoutMs ?? BrowserTuning.cdp.commandTimeoutMs
     const timers = new TimerScope({ name: 'CdpWebSocketTransport.connect' })
 
     return new Promise((resolve, reject) => {
@@ -105,7 +88,7 @@ class CdpWebSocketTransport implements CdpBrowserPageDriverTransport {
   }
 
   constructor(private readonly options: CdpWebSocketTransportOptions) {
-    this.timeoutMs = options.timeoutMs ?? DefaultCdpCommandTimeoutMs
+    this.timeoutMs = options.timeoutMs ?? BrowserTuning.cdp.commandTimeoutMs
     options.socket.addEventListener('message', this.handleMessage)
     options.socket.addEventListener('close', this.handleClose)
     options.socket.addEventListener('error', this.handleError)

@@ -11,37 +11,18 @@ import { join } from 'node:path'
 
 import { isArray, isEmpty, isNonBlankString, isPlainObject, isPresent, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
-import { logRuntime } from '@velaros-ai/core/logger'
+import { Log } from '@velaros-ai/core/logger'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
 import type { BrowserPageDriver } from '../../contract/requires.js'
+import type { CdpChromeStderrDiagnostics, CdpDevToolsActivePort, CdpExternalBrowserChildProcess, CdpExternalBrowserLaunchEnv, CdpExternalBrowserLaunchOptions, CdpExternalBrowserSession, CdpExternalBrowserSpawn, CdpTargetDescription } from '../../types/cdp.js'
+import { BrowserTuning } from '../../utils/tuning'
 
 import { BrowserPlatformCompatibility } from './BrowserPlatformCompatibility'
 import {
   CdpBrowserPageDriver,
   type CdpBrowserPageDriverConnectOptions,
 } from './CdpBrowserPageDriver'
-
-export interface CdpExternalBrowserLaunchOptions {
-  executablePath?: LooseOptional<string>
-  userDataDir?: LooseOptional<string>
-  profileDirectory?: LooseOptional<string>
-  useRealKeychain?: LooseOptional<boolean>
-  downloadPath?: LooseOptional<string>
-  url?: LooseOptional<string>
-  args?: LooseOptional<string[]>
-  env?: LooseOptional<Record<string, string | undefined>>
-  platform?: LooseOptional<NodeJS.Platform>
-  timeoutMs?: LooseOptional<number>
-}
-
-export interface CdpExternalBrowserSession {
-  driver: BrowserPageDriver
-  port: number
-  userDataDir: string
-  webSocketDebuggerUrl: string
-  dispose(): void
-}
 
 export interface CdpExternalBrowserLauncherDependencies {
   spawn?: LooseOptional<CdpExternalBrowserSpawn>
@@ -62,54 +43,19 @@ export interface CdpExternalBrowserLauncherDependencies {
   sleep?: LooseOptional<(ms: number) => Promise<void>>
 }
 
-interface CdpExternalBrowserSpawnOptions {
-  detached: boolean
-  env: Record<string, string | undefined>
-  stdio: ['ignore', 'ignore', 'pipe']
+/**
+ * 外部浏览器启动器：找到本机的 Chrome / Chromium，用独立的用户数据目录把它拉起来，读出调试端口，
+ * 连上之后交回一个 page 级的 CDP 会话。
+ *
+ * 实例归运行时：一个运行时一份，它记着自己拉起来的进程与临时目录，收尾时负责杀进程、删目录。
+ */
+export interface CdpExternalBrowserLauncherApi {
+  /** 拉起（或接上）一个外部浏览器，回一个可用的 page 级 CDP 会话。 */
+  launch(options?: CdpExternalBrowserLaunchOptions): Promise<CdpExternalBrowserSession>
 }
 
-interface CdpExternalBrowserChildProcess {
-  pid?: LooseOptional<number>
-  exitCode?: LooseOptional<number>
-  signalCode?: LooseOptional<string>
-  killed?: boolean
-  stderr?: LooseOptional<NodeJS.ReadableStream>
-  kill(signal?: NodeJS.Signals | number): boolean
-}
-
-type CdpExternalBrowserSpawn = (
-  command: string,
-  args: string[],
-  options: CdpExternalBrowserSpawnOptions
-) => CdpExternalBrowserChildProcess
-
-interface CdpDevToolsActivePort {
-  port: number
-  browserWebSocketPath: string
-}
-
-interface CdpTargetDescription {
-  type: string
-  url: string
-  title: string
-  webSocketDebuggerUrl: string
-}
-
-interface CdpChromeStderrDiagnostics {
-  lines: string[]
-  pending: string
-}
-
-type CdpExternalBrowserLaunchEnv = Record<string, string | undefined>
-
-const DefaultCdpExternalBrowserLaunchTimeoutMs = 30_000
-const CdpExternalBrowserPollIntervalMs = 50
-const CdpExternalBrowserLaunchMaxAttempts = 3
-const CdpExternalBrowserLaunchRetryDelayMs = 500
-const CdpChromeStderrMaxLines = 20
-
-class CdpExternalBrowserLauncher {
-  private readonly log = logRuntime.tag('CdpExternalBrowserLauncher')
+class CdpExternalBrowserLauncher implements CdpExternalBrowserLauncherApi {
+  private readonly log = Log.tag('CdpExternalBrowserLauncher')
   private readonly spawn: CdpExternalBrowserSpawn
   private readonly existsSync: (path: string) => boolean
   private readonly mkdtemp: (prefix: string) => Promise<string>
@@ -150,10 +96,10 @@ class CdpExternalBrowserLauncher {
     const executablePath = this.resolveExecutablePath(options.executablePath, platform)
     const ownsUserDataDir = !options.userDataDir?.trim()
     const configuredUserDataDir = options.userDataDir?.trim()
-    const timeoutMs = options.timeoutMs ?? DefaultCdpExternalBrowserLaunchTimeoutMs
+    const timeoutMs = options.timeoutMs ?? BrowserTuning.externalBrowser.launchTimeoutMs
     let lastError: unknown = null
 
-    for (let attempt = 1; attempt <= CdpExternalBrowserLaunchMaxAttempts; attempt += 1) {
+    for (let attempt = 1; attempt <= BrowserTuning.externalBrowser.launchMaxAttempts; attempt += 1) {
       const userDataDir = ownsUserDataDir
         ? await this.mkdtemp(join(tmpdir(), 'velaros-cdp-browser-'))
         : configuredUserDataDir!
@@ -173,10 +119,10 @@ class CdpExternalBrowserLauncher {
         const appError = AppError.from(error)
         this.log.debug('外部浏览器启动早退，准备重试', {
           attempt,
-          maxAttempts: CdpExternalBrowserLaunchMaxAttempts,
+          maxAttempts: BrowserTuning.externalBrowser.launchMaxAttempts,
           error: appError.message,
         })
-        await this.sleep(CdpExternalBrowserLaunchRetryDelayMs)
+        await this.sleep(BrowserTuning.externalBrowser.launchRetryDelayMs)
       }
     }
 
@@ -247,7 +193,7 @@ class CdpExternalBrowserLauncher {
   }
 
   private shouldRetryLaunchAttempt(error: unknown, attempt: number): boolean {
-    if (attempt >= CdpExternalBrowserLaunchMaxAttempts) return false
+    if (attempt >= BrowserTuning.externalBrowser.launchMaxAttempts) return false
 
     const appError = AppError.from(error)
     return appError.code === 'EXECUTION_FAILED'
@@ -389,7 +335,7 @@ class CdpExternalBrowserLauncher {
       const activePort = await this.readDevToolsActivePort(path)
       if (activePort) return activePort
 
-      await this.sleep(CdpExternalBrowserPollIntervalMs)
+      await this.sleep(BrowserTuning.externalBrowser.pollIntervalMs)
     }
 
     throw new AppError('TIMEOUT', '等待外部浏览器 DevToolsActivePort 超时。')
@@ -433,7 +379,7 @@ class CdpExternalBrowserLauncher {
     if (!trimmed) return
 
     diagnostics.lines.push(trimmed)
-    if (diagnostics.lines.length > CdpChromeStderrMaxLines) {
+    if (diagnostics.lines.length > BrowserTuning.externalBrowser.stderrMaxLines) {
       diagnostics.lines.shift()
     }
   }
@@ -517,7 +463,7 @@ class CdpExternalBrowserLauncher {
       const target = await this.fetchPageTarget(port, targetUrl)
       if (target) return target
 
-      await this.sleep(CdpExternalBrowserPollIntervalMs)
+      await this.sleep(BrowserTuning.externalBrowser.pollIntervalMs)
     }
 
     throw new AppError('TIMEOUT', '等待外部浏览器 page target 超时。')

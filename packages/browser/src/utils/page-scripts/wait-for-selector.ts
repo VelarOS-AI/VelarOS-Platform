@@ -175,6 +175,7 @@ export function buildWaitForSelectorScript(options: BrowserWaitForSelectorOption
   })()`
 }
 
+/** 把等待结果归一成「出现了 / 消失了 / 超时了」。 */
 function resolveWaitState(
   options: BrowserWaitForSelectorOptions
 ): NonNullable<BrowserWaitForSelectorOptions['state']> {

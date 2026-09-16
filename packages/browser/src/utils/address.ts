@@ -22,6 +22,7 @@ const BrowserMultiPartPublicSuffixes = new Set([
   'org.cn',
 ])
 
+/** 按选定的搜索引擎把一段关键词拼成搜索地址。 */
 export function buildBrowserSearchUrl(
   query: string,
   searchEngine: BrowserSearchEngineId = DefaultBrowserSearchEngine

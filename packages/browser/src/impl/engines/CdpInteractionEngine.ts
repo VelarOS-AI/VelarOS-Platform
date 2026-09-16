@@ -1,11 +1,11 @@
 import { isArray, isBoolean, isEmpty, isFiniteNumber, isNumber, isPlainObject, isString, toNullable, toOptional } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
-import { logRuntime } from '@velaros-ai/core/logger'
+import { Log } from '@velaros-ai/core/logger'
 
 import type { BrowserPageDriver, BrowserSystemPointerDriver } from '../../contract/requires.js'
 import type { BrowserClickCoordinatesOptions, BrowserClickCoordinatesResult, BrowserDragOptions, BrowserDragResult, BrowserElementTargetHint, BrowserMoveMouseOptions, BrowserMoveMouseResult, BrowserPageInspection, BrowserPagePreviewPointerEvent, BrowserPageScrollOptions, BrowserPageScrollResult, BrowserPageZoomOptions, BrowserPageZoomResult, BrowserPressKeyOptions, BrowserPressKeyResult, BrowserSiteContext, BrowserTargetActionEffect, BrowserTargetActionEffectSnapshot, BrowserTargetActionOptions, BrowserTargetActionResult, BrowserTargetActionTextDiff, BrowserTypeTextOptions, BrowserTypeTextResult, BrowserViewportOptions, BrowserViewportResult } from '../../types/browser.js'
 import type { BrowserPageDriverPointerListener, BrowserPageDriverState } from '../../types/driver'
-import type { BrowserPageDriverKernel, BrowserPageDriverSession, ExternalBrowserPageSession } from '../../types/runtime.js'
+import type { BrowserPageDriverKernel, BrowserPageDriverSession, BrowserPointerPoint, BrowserTargetActionClickMode, BrowserTargetActionInternalEffectSnapshot, BrowserViewportScreenMetrics,ExternalBrowserPageSession } from '../../types/runtime.js'
 import { normalizeBrowserPressKeyOptions } from '../../utils/keyboard'
 import { clampInteger, clampZoomFactor } from '../../utils/numbers.js'
 import { buildActionEffectSnapshotScript } from '../../utils/page-scripts/action-effect'
@@ -13,45 +13,9 @@ import { buildDragTargetScript } from '../../utils/page-scripts/drag'
 import { buildInspectionScript } from '../../utils/page-scripts/inspection'
 import { buildScrollScript } from '../../utils/page-scripts/scroll'
 import { buildTargetActionScript } from '../../utils/page-scripts/target-action'
+import { BrowserTuning } from '../../utils/tuning'
 import { DEFAULT_BROWSER_VIEWPORT } from '../../utils/viewport.js'
 import type { BrowserTargetRefStore } from '../session/BrowserTargetRefStore'
-
-export interface BrowserPointerPoint {
-  x: number
-  y: number
-}
-
-export interface BrowserTargetActionInternalEffectSnapshot extends BrowserTargetActionEffectSnapshot {
-  textSampleLines: string[]
-  textSampleTruncated: boolean
-}
-
-export type BrowserTargetActionClickMode = 'dom' | 'coordinate'
-
-interface BrowserViewportScreenMetrics {
-  focused: boolean
-  screenX: number
-  screenY: number
-  outerWidth: number
-  outerHeight: number
-  innerWidth: number
-  innerHeight: number
-}
-
-const BrowserTargetActionEffectSampleLineLimit = 200
-const BrowserSelfHealingStableAttributeWeights: Readonly<Record<string, number>> = {
-  id: 12,
-  'data-testid': 12,
-  'data-test': 12,
-  'data-qa': 12,
-  controlId: 12,
-  href: 10,
-  'aria-labelledby': 10,
-  'aria-label': 9,
-  name: 9,
-  title: 8,
-  placeholder: 8,
-}
 
 /**
  * 交互域执行体的 host 无关外部核（走 CDP driver）。
@@ -63,8 +27,45 @@ const BrowserSelfHealingStableAttributeWeights: Readonly<Record<string, number>>
  *
  * 方法默认在 runtime 的 actionQueue 内被调用。
  */
-export class CdpInteractionEngine {
-  protected readonly log = logRuntime.tag('BrowserInteractionEngine')
+export interface CdpInteractionEngineApi {
+  /** 宿主可在装配完成或运行期设置变化后替换系统指针驱动。 */
+  setSystemPointerDriver(driver: LooseOptional<BrowserSystemPointerDriver>): void
+  /** 按目标元素描述执行动作（点击、填值、选项），比坐标点击稳。 */
+  performTargetAction(sessionId: string, context: BrowserSiteContext, options: BrowserTargetActionOptions, abortSignal?: AbortSignal): Promise<BrowserTargetActionResult>
+  /** 往当前焦点或指定目标输入文本。 */
+  typeText(sessionId: string, context: BrowserSiteContext, options: BrowserTypeTextOptions, _abortSignal?: AbortSignal): Promise<BrowserTypeTextResult>
+  /** 发一次键盘按键。 */
+  pressKey(sessionId: string, context: BrowserSiteContext, options: BrowserPressKeyOptions, _abortSignal?: AbortSignal): Promise<BrowserPressKeyResult>
+  /** 在视口坐标上点一下，作为目标点击失败后的兜底。 */
+  clickCoordinates(sessionId: string, context: BrowserSiteContext, options: BrowserClickCoordinatesOptions, _abortSignal?: AbortSignal): Promise<BrowserClickCoordinatesResult>
+  /** 把一个目标拖到另一个目标上。 */
+  dragTargets(sessionId: string, context: BrowserSiteContext, options: BrowserDragOptions, _abortSignal?: AbortSignal): Promise<BrowserDragResult>
+  /** 把鼠标移到某个位置（用于 hover）。 */
+  moveMouse(sessionId: string, context: BrowserSiteContext, options: BrowserMoveMouseOptions, _abortSignal?: AbortSignal): Promise<BrowserMoveMouseResult>
+  /** 改受控页面的视口尺寸与设备像素比。 */
+  setViewport(sessionId: string, context: BrowserSiteContext, options: BrowserViewportOptions, abortSignal?: AbortSignal): Promise<BrowserViewportResult>
+  /** 改页面缩放比例。 */
+  setPageZoom(sessionId: string, context: BrowserSiteContext, options: BrowserPageZoomOptions, abortSignal?: AbortSignal): Promise<BrowserPageZoomResult>
+  /** 滚动页面。 */
+  scrollPage(sessionId: string, context: BrowserSiteContext, options?: BrowserPageScrollOptions, _abortSignal?: AbortSignal): Promise<BrowserPageScrollResult>
+}
+
+export class CdpInteractionEngine implements CdpInteractionEngineApi {
+  private static readonly BrowserSelfHealingStableAttributeWeights: Readonly<Record<string, number>> = {
+    id: 12,
+    'data-testid': 12,
+    'data-test': 12,
+    'data-qa': 12,
+    controlId: 12,
+    href: 10,
+    'aria-labelledby': 10,
+    'aria-label': 9,
+    name: 9,
+    title: 8,
+    placeholder: 8,
+  }
+
+  protected readonly log = Log.tag('BrowserInteractionEngine')
   private systemPointerDriver: Nullable<BrowserSystemPointerDriver> = null
 
   constructor(
@@ -259,9 +260,9 @@ export class CdpInteractionEngine {
     const inspection = await input.driver.executeJavaScript<BrowserPageInspection>(
       buildInspectionScript({
         includeHtml: false,
-        maxTextChars: 2_000,
-        maxHtmlChars: 1_000,
-        maxElements: 120,
+        maxTextChars: BrowserTuning.page.selfHealTextChars,
+        maxHtmlChars: BrowserTuning.page.selfHealHtmlChars,
+        maxElements: BrowserTuning.page.selfHealElements,
       }),
       true
     )
@@ -365,7 +366,7 @@ export class CdpInteractionEngine {
     if (staleName && freshName && staleName !== freshName) return null
     if (staleName && freshName && staleName === freshName) identityScore += 9
 
-    for (const [key, weight] of Object.entries(BrowserSelfHealingStableAttributeWeights)) {
+    for (const [key, weight] of Object.entries(CdpInteractionEngine.BrowserSelfHealingStableAttributeWeights)) {
       const value = staleTarget.attributes?.[key]
       const staleValue = this.normalizeTargetIdentityValue(value)
       const freshValue = this.normalizeTargetIdentityValue(freshTarget.attributes?.[key])
@@ -456,7 +457,7 @@ export class CdpInteractionEngine {
     if (!isString(value.textHash)) return null
     if (!isNumber(value.textLength)) return null
     const textSampleLines = isArray(value.textSampleLines)
-      ? value.textSampleLines.filter(isString).slice(0, BrowserTargetActionEffectSampleLineLimit)
+      ? value.textSampleLines.filter(isString).slice(0, BrowserTuning.page.actionEffectSampleLines)
       : []
 
     return {

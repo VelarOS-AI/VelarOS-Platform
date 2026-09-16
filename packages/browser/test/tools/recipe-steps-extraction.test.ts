@@ -6,8 +6,8 @@ import assert from 'node:assert/strict'
 import { describe, test } from 'bun:test'
 
 import type { ToolContext } from '../../src/contract/requires.js'
+import type { BrowserRecipeStepPlan } from '../../src/types/recipes.js'
 import { simplifyBrowserEvaluatedValue } from '../../src/utils/page-scripts/evaluate.js'
-import type { BrowserRecipeStepPlan } from '../../src/utils/recipes/plan.js'
 import { executeBrowserRecipeSteps } from '../../src/utils/recipes/steps.js'
 
 /** 只属于求值信封的键：recipe 步骤结果里一个都不许出现。 */

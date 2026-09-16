@@ -1,100 +1,83 @@
 import { isNumber, isObject,isString, stringifyPretty, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
-import { logRuntime } from '@velaros-ai/core/logger'
+import { Log } from '@velaros-ai/core/logger'
 
+import { BrowserWorkspaceArtifactDirectoryMap, BrowserWorkspaceArtifactFormatExtensionMap } from '../../contract/constants'
 import type {
-  BrowserPageInspection,
   BrowserRecipeSkeleton,
   BrowserSiteContext,
   BrowserWorkspaceArtifactFormat,
   BrowserWorkspaceArtifactKind,
   BrowserWorkspaceArtifactRecord,
   BrowserWorkspaceManifest,
-  ProjectReadFileResult,
   WorkspaceFileEntry,
-  WorkspaceListOptions,
-  WorkspaceWriteFileOptions,
-  WorkspaceWriteFileResult,
 } from '../../types/browser'
+import type { BrowserWorkspaceArtifactAccess, SaveBrowserPageSnapshotInput, SaveBrowserRecipeSkeletonInput, WriteBrowserArtifactInput } from '../../types/workspace.js'
 import {
   applyBrowserRecipeTemplate,
-  type BrowserRecipeTemplate,
   buildBrowserRecipeSkeleton,
 } from '../../utils/recipes/skeleton'
+import { BrowserTuning } from '../../utils/tuning'
+const log = Log.tag('BrowserWorkspaceArtifactManager')
 
-const BrowserWorkspaceManifestVersion = 1 as const
-const BrowserWorkspaceManifestPath = 'manifest.json'
-const log = logRuntime.tag('BrowserWorkspaceArtifactManager')
 
-/** browser workspace 内不同 artifact 类型的目录。 */
-const BrowserWorkspaceArtifactDirectoryMap: Record<BrowserWorkspaceArtifactKind, string> = {
-  page: 'pages',
-  recipe: 'recipes',
-  extract: 'extracts',
-  note: 'notes',
-  run: 'runs',
-  download: 'downloads',
-}
-
-/** artifact 格式到文件扩展名的映射。 */
-const BrowserWorkspaceArtifactFormatExtensionMap: Record<BrowserWorkspaceArtifactFormat, string> = {
-  json: 'json',
-  text: 'txt',
-  markdown: 'md',
-  html: 'html',
-}
-
-/** BrowserWorkspaceArtifactManager 需要的文件系统访问接口。 */
-interface BrowserWorkspaceArtifactAccess {
-  readFile: (
-    path: string,
-    startLine?: number,
-    endLine?: number,
-    maxChars?: number
-  ) => Promise<ProjectReadFileResult>
-  writeFile: (
-    path: string,
-    content: string,
-    options?: WorkspaceWriteFileOptions
-  ) => Promise<WorkspaceWriteFileResult>
-  listFiles: (options?: WorkspaceListOptions) => Promise<WorkspaceFileEntry[]>
-}
-
-/** 写入通用浏览器 artifact 的输入。 */
-interface WriteBrowserArtifactInput {
-  context: BrowserSiteContext
-  kind: BrowserWorkspaceArtifactKind
-  format: BrowserWorkspaceArtifactFormat
-  content: string
-  name?: string
-  overwrite?: boolean
-}
-
-/** 保存页面快照输入。 */
-interface SaveBrowserPageSnapshotInput {
-  context: BrowserSiteContext
-  inspection: BrowserPageInspection
-  name?: string
-  overwrite?: boolean
-}
-
-/** 保存 recipe skeleton 输入。 */
-interface SaveBrowserRecipeSkeletonInput {
-  context: BrowserSiteContext
-  inspection: BrowserPageInspection
-  sourceSnapshotPath?: LooseOptional<string>
-  name?: string
-  overwrite?: boolean
-  /** C3: 预设模板名，自动在 suggestedSteps 前插入常用操作步骤骨架 */
-  template?: BrowserRecipeTemplate
-}
 
 /**
  * 浏览器工作区 artifact 管理器。
  *
  * 负责维护 manifest，并把页面快照、recipe、抽取结果等写入浏览器工作区目录。
  */
-class BrowserWorkspaceArtifactManager {
+export interface BrowserWorkspaceArtifactManagerApi {
+  /**
+   * 确保 manifest 存在且是当前站点的；**已经对得上就原样返回，不写盘**。
+   *
+   * 这个方法在每次 listArtifacts / writeArtifact / space_manifest 前都会被调用。老写法每次
+   * 整份重写（只为刷新 lastActivatedAt），于是声明 `effectKind: 'read'`、可并发的
+   * `browser:space_manifest` 每调一次就改一次盘，两个并发的 list_artifacts 还会同时整份写
+   * 同一个文件。真正的「进入站点」刷新走 {@link activateManifest}。
+   */
+  ensureManifest(context: BrowserSiteContext): Promise<BrowserWorkspaceManifest>
+  /** 读取 manifest；缺失、损坏或不是当前站点的才重建。 */
+  getManifest(context: BrowserSiteContext): Promise<BrowserWorkspaceManifest>
+  /** 进入站点：整份写一次 manifest，刷新 lastActivatedAt。只有 browser:enter_site 该调它。 */
+  activateManifest(context: BrowserSiteContext): Promise<BrowserWorkspaceManifest>
+  /** 列出浏览器工作区 artifact。 */
+  listArtifacts(args: {
+    context: BrowserSiteContext
+    kind?: BrowserWorkspaceArtifactKind
+    limit: number
+  }): Promise<WorkspaceFileEntry[]>
+  /** 写入任意类型 artifact。 */
+  writeArtifact(input: WriteBrowserArtifactInput): Promise<BrowserWorkspaceArtifactRecord>
+  /** 保存页面检查结果快照。 */
+  savePageSnapshot(input: SaveBrowserPageSnapshotInput): Promise<{
+    artifact: BrowserWorkspaceArtifactRecord
+    page: {
+      url: string
+      title: string
+      capturedAt: number
+      headings: number
+      links: number
+      textChars: number
+    }
+  }>
+  /** 根据页面检查结果保存 recipe skeleton。 */
+  saveRecipeSkeleton(input: SaveBrowserRecipeSkeletonInput): Promise<{
+    artifact: BrowserWorkspaceArtifactRecord
+    recipe: {
+      url: string
+      title: string
+      stepCount: number
+      linkCount: number
+    }
+    skeleton: BrowserRecipeSkeleton
+  }>
+}
+
+class BrowserWorkspaceArtifactManager implements BrowserWorkspaceArtifactManagerApi {
+  private static readonly BrowserWorkspaceManifestVersion = 1 as const
+  private static readonly BrowserWorkspaceManifestPath = 'manifest.json'
+
   constructor(private readonly access: BrowserWorkspaceArtifactAccess) {}
 
   /**
@@ -139,7 +122,7 @@ class BrowserWorkspaceArtifactManager {
   ): Promise<BrowserWorkspaceManifest> {
     const savedAt = Date.now()
     const manifest: BrowserWorkspaceManifest = {
-      version: BrowserWorkspaceManifestVersion,
+      version: BrowserWorkspaceArtifactManager.BrowserWorkspaceManifestVersion,
       siteUrl: context.url,
       siteOrigin: getBrowserSiteOrigin(context.url),
       workspaceRoot: context.workspaceRoot,
@@ -150,7 +133,7 @@ class BrowserWorkspaceArtifactManager {
     }
 
     await this.access.writeFile(
-      BrowserWorkspaceManifestPath,
+      BrowserWorkspaceArtifactManager.BrowserWorkspaceManifestPath,
       `${stringifyPretty(manifest)}\n`,
       {
         overwrite: true,
@@ -176,7 +159,7 @@ class BrowserWorkspaceArtifactManager {
           return await this.access.listFiles({
             path,
             recursive: true,
-            maxDepth: 4,
+            maxDepth: BrowserTuning.lists.artifactDepth,
             limit: args.limit,
           })
         } catch (error) {
@@ -288,10 +271,10 @@ class BrowserWorkspaceArtifactManager {
   /** 尝试读取已有 manifest。 */
   private async tryLoadManifest(): Promise<Nullable<BrowserWorkspaceManifest>> {
     try {
-      const file = await this.access.readFile(BrowserWorkspaceManifestPath, 1, undefined, 200000)
+      const file = await this.access.readFile(BrowserWorkspaceArtifactManager.BrowserWorkspaceManifestPath, 1, undefined, 200000)
       const parsed = JSON.parse(file.content) as Partial<BrowserWorkspaceManifest>
       if (
-        parsed.version === BrowserWorkspaceManifestVersion && isString(parsed.siteUrl) && isString(parsed.workspaceRoot) && isNumber(parsed.createdAt) && isNumber(parsed.lastActivatedAt) &&
+        parsed.version === BrowserWorkspaceArtifactManager.BrowserWorkspaceManifestVersion && isString(parsed.siteUrl) && isString(parsed.workspaceRoot) && isNumber(parsed.createdAt) && isNumber(parsed.lastActivatedAt) &&
         parsed.directories && isObject(parsed.directories)
       ) return parsed as BrowserWorkspaceManifest
     } catch (error) {
@@ -377,15 +360,11 @@ function createBrowserWorkspaceArtifactAccess(
 }
 
 export {
-  BrowserWorkspaceArtifactDirectoryMap,
-  BrowserWorkspaceArtifactFormatExtensionMap,
   BrowserWorkspaceArtifactManager,
-  BrowserWorkspaceManifestPath,
-  BrowserWorkspaceManifestVersion,
   buildBrowserArtifactRelativePath,
   buildBrowserPageSnapshotName,
   buildBrowserRecipeSkeleton,
   buildBrowserRecipeSkeletonName,
   createBrowserWorkspaceArtifactAccess,
 }
-export type { BrowserWorkspaceArtifactAccess }
+export type { BrowserWorkspaceArtifactAccess } from '../../types/workspace.js'

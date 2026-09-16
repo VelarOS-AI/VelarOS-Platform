@@ -7,28 +7,16 @@ import type {
   BrowserObservedActionInput,
   BrowserObservedActionKind,
   BrowserObservedActionPreview,
-  BrowserObservedActionSource,
   BrowserPageAction,
   BrowserPageFormField,
   BrowserPageInspection,
 } from '../types/browser'
+import type { ObserveActionDraft } from '../types/tools.js'
 
 import { clampInteger } from './numbers.js'
 
 
-interface ObserveActionDraft {
-  method: BrowserObservedActionKind
-  description: string
-  source: BrowserObservedActionSource
-  target: BrowserElementTargetHint
-  twoStep: boolean
-  priority: number
-  requiresValue: boolean
-  arguments: string[]
-  searchableText: string
-  index: number
-}
-
+/** 按意图给候选动作排序、截断，拼成回执。 */
 export function buildObserveActionsResult(
   inspection: BrowserPageInspection,
   instruction: Optional<string>,
@@ -59,6 +47,7 @@ export function clampObserveActionLimit(limit: LooseOptional<number>): number {
   return clampInteger(limit, 1, 80, 20)
 }
 
+/** 把一次页面检查的可交互元素变成候选动作草稿。 */
 function buildObserveActionDrafts(inspection: BrowserPageInspection): ObserveActionDraft[] {
   const drafts: ObserveActionDraft[] = []
   let index = 0
@@ -146,12 +135,14 @@ function buildObserveActionDrafts(inspection: BrowserPageInspection): ObserveAct
   return drafts
 }
 
+/** 判一个候选是不是下拉里的某一项。 */
 function isDropdownOptionAction(action: BrowserPageAction): boolean {
   const target = action.target
   const role = target?.role?.toLowerCase() || action.role.toLowerCase()
   return role === 'option' || role === 'menuitem'
 }
 
+/** 判一个候选是不是自定义下拉（不是原生 select）。 */
 function isCustomDropdownAction(action: BrowserPageAction): boolean {
   const target = action.target
   if (!target) return false
@@ -161,6 +152,7 @@ function isCustomDropdownAction(action: BrowserPageAction): boolean {
   return role === 'combobox' || popup === 'listbox' || popup === 'menu'
 }
 
+/** 按字段类型决定该用填值、点击还是选项。 */
 function resolveFormFieldActionMethod(field: BrowserPageFormField): BrowserObservedActionKind {
   const type = field.type.toLowerCase()
   if (type === 'file' || field.target?.attributes.type?.toLowerCase() === 'file') return 'upload'
@@ -170,6 +162,7 @@ function resolveFormFieldActionMethod(field: BrowserPageFormField): BrowserObser
   return 'fill'
 }
 
+/** 把动作方式（点击、填值、选项）翻成一句人话。 */
 function describeTargetActionMethod(method: BrowserObservedActionKind): string {
   switch (method) {
     case 'upload':
@@ -191,6 +184,7 @@ function describeTargetActionMethod(method: BrowserObservedActionKind): string {
   }
 }
 
+/** 用一句话描述一个表单字段，供候选列表显示。 */
 function describeFormField(field: BrowserPageFormField): string {
   return (
     field.label ||
@@ -202,6 +196,7 @@ function describeFormField(field: BrowserPageFormField): string {
   )
 }
 
+/** 把意图切成词，用来给候选动作打分。 */
 function tokenizeObserveInstruction(instruction: Optional<string>): string[] {
   return String(instruction ?? '')
     .toLowerCase()
@@ -210,6 +205,7 @@ function tokenizeObserveInstruction(instruction: Optional<string>): string[] {
     .filter(isNonBlankString)
 }
 
+/** 按意图里的词给候选动作打分，分高的排前面。 */
 function scoreObserveActionDraft(draft: ObserveActionDraft, tokens: string[]): number {
   if (isEmpty(tokens)) return draft.priority
 
@@ -220,6 +216,7 @@ function scoreObserveActionDraft(draft: ObserveActionDraft, tokens: string[]): n
   return tokenScore + draft.priority
 }
 
+/** 把一个候选动作格式化成回执里的一行。 */
 function formatObservedActionCandidate(
   draft: ObserveActionDraft,
   score: number
@@ -276,6 +273,7 @@ function formatObservedActionCandidate(
   }
 }
 
+/** 给候选动作编一个稳定的短 id。 */
 function formatObservedActionId(draft: ObserveActionDraft): string {
   return [
     `${draft.source}-${draft.index}`,
@@ -284,6 +282,7 @@ function formatObservedActionId(draft: ObserveActionDraft): string {
   ].join(':')
 }
 
+/** 给一个候选动作拼出「照着填就能跑」的预览命令。 */
 function buildObservedActionPreview(
   draft: ObserveActionDraft,
   fallbackTarget: string
@@ -301,6 +300,7 @@ function buildObservedActionPreview(
   }
 }
 
+/** 用一句话描述候选动作的目标元素。 */
 function describeObservedActionTarget(
   target: BrowserElementTargetHint,
   fallback: string
@@ -315,6 +315,7 @@ function describeObservedActionTarget(
   )
 }
 
+/** 把元素文本压成单行、去掉多余空白，便于比对与显示。 */
 function normalizeObservedActionText(value: LooseOptional<string>): string {
   return value?.replace(/\s+/g, ' ').trim() || ''
 }

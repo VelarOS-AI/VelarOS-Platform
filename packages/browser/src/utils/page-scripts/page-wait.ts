@@ -228,6 +228,7 @@ export function buildPageWaitScript(options: BrowserPageWaitOptions): string {
 }
 
 
+/** 去掉首尾空白；空串按缺席处理。 */
 function normalizeString(value: Optional<string>): Nullable<string> {
   if (!isString(value)) return null
   const trimmed = value.trim()

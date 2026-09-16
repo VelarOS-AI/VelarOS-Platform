@@ -1,9 +1,11 @@
 import { isFiniteNumber, isString,optionalWhen } from '@velaros-ai/core'
 
+/** 是有限数就原样返回，否则返回 undefined。 */
 export function readFiniteNumber(value: unknown): number | undefined {
   return optionalWhen(isFiniteNumber, value)
 }
 
+/** 把一段文本压成单行并截到上限；空串返回 null。 */
 export function readBoundedString(value: unknown, maxLength: number): Nullable<string> {
   if (!isString(value)) return null
 
@@ -32,6 +34,7 @@ export function clampNumber(
   return Math.min(Math.max(value, min), max)
 }
 
+/** 把整数入参夹进区间；缺席或不是有限数时用 fallback。 */
 export function clampInteger(
   value: LooseOptional<number>,
   min: number,

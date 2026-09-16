@@ -1,10 +1,7 @@
 import type { BrowserTargetActionOptions } from '../../types/browser'
+import type { BrowserTargetActionClickMode } from '../../types/runtime.js'
+import type { BrowserTargetActionScriptBuildOptions } from '../../types/tools.js'
 
-type BrowserTargetActionClickMode = 'dom' | 'coordinate'
-
-export interface BrowserTargetActionScriptBuildOptions {
-  clickMode?: BrowserTargetActionClickMode
-}
 
 /** 构造点击/填充目标元素的页面脚本。 */
 

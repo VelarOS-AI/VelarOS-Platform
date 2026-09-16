@@ -6,6 +6,44 @@
  * 一律消费导出的清单与守卫，不再各写一份字面量。
  */
 /** 浏览器页面的轻量状态快照。 */
+export interface BrowserScreenshotPolicyOptions extends BrowserCaptureScreenshotOptions {
+  /**
+   * 面向模型的截图会额外携带压缩后的标记图片，用作供应商输入。
+   * 保存到磁盘的制品路径仍指向干净的原始截图。
+   */
+  modelFacing?: boolean
+}
+
+export interface BrowserScreenshotPolicyDefaults {
+  compareWithPrevious?: boolean
+  fullPage?: BrowserCaptureScreenshotOptions['fullPage']
+  includeModelImage?: BrowserCaptureScreenshotOptions['includeModelImage']
+  modelFacing?: boolean
+  path?: string
+  waitForDomStable?: BrowserCaptureScreenshotOptions['waitForDomStable']
+  waitForNetworkIdle?: BrowserCaptureScreenshotOptions['waitForNetworkIdle']
+}
+
+export interface BrowserActionPolicyRequest {
+  action: string
+  aliases?: readonly string[]
+  label?: string
+}
+
+export type BrowserActionPolicyDecisionKind = 'allow' | 'deny'
+
+export interface BrowserActionPolicyDecision {
+  kind: BrowserActionPolicyDecisionKind
+  action: string
+  matchedAction: Nullable<string>
+  reason: Nullable<string>
+}
+
+export interface BrowserCommandSpec {
+  file: string
+  args: string[]
+}
+
 export interface BrowserPageState {
   /** 当前 URL。 */
   url: string
@@ -1818,4 +1856,14 @@ export interface WorkspaceWriteFileResult {
 
 export interface WorkspaceWriteFileOptions {
   overwrite?: boolean
+}
+
+/** 请求一个受控浏览器页面时给的输入：哪个会话、工作区刷新键、激活令牌。 */
+export interface ControlledBrowserSurfaceInput {
+  /** 浏览器会话 id。 */
+  sessionId: string
+  /** 工作区刷新键：变了就重取一次页面状态。 */
+  workspaceRefreshKey: number
+  /** 激活令牌；未激活时是 null。 */
+  activationToken: Nullable<string>
 }

@@ -1,41 +1,22 @@
 import { isString, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
-import { logRuntime } from '@velaros-ai/core/logger'
+import { Log } from '@velaros-ai/core/logger'
 
+import type { ToolBrowserApi } from '../contract/requires'
 import type { BrowserExternalPageLauncher,BrowserPageDriver } from '../contract/requires.js'
-import type { BrowserCaptureScreenshotOptions, BrowserClickCoordinatesOptions, BrowserDragOptions, BrowserElementQueryOptions, BrowserEmulationOptions, BrowserEvaluateScriptOptions, BrowserExportPagePdfOptions, BrowserFetchResourceOptions, BrowserHandleDialogOptions, BrowserHandleDownloadOptions, BrowserHandlePermissionOptions, BrowserHeapSnapshotOptions, BrowserInspectPageOptions, BrowserListMediaSourcesOptions, BrowserListPageResourcesOptions, BrowserMoveMouseOptions, BrowserNetworkControlOptions, BrowserNetworkRequestDetailsOptions, BrowserNetworkResponseBodyOptions, BrowserPageDiagnosticsOptions, BrowserPageNavigationOptions, BrowserPageNavigationResult, BrowserPageScrollOptions, BrowserPageStorageOptions, BrowserPageTargetsResult, BrowserPageWaitOptions, BrowserPageWindowState, BrowserPageZoomOptions, BrowserPerformanceInsightOptions, BrowserPerformanceTraceStartOptions, BrowserPressKeyOptions, BrowserScreencastStartOptions, BrowserScreencastStopOptions, BrowserSiteContext, BrowserSwitchPageTargetOptions, BrowserSwitchPageTargetResult, BrowserTargetActionOptions, BrowserTypeTextOptions, BrowserUploadFileOptions, BrowserUserScriptManageRequest, BrowserUserScriptMutationResult, BrowserViewportOptions, BrowserWaitForSelectorOptions, ProjectReadFileResult, WorkspaceFileEntry, WorkspaceListOptions, WorkspaceWriteFileOptions, WorkspaceWriteFileResult } from '../types/browser.js'
+import type { BrowserCaptureScreenshotOptions, BrowserClickCoordinatesOptions, BrowserDragOptions, BrowserElementQueryOptions, BrowserEmulationOptions, BrowserEvaluateScriptOptions, BrowserExportPagePdfOptions, BrowserFetchResourceOptions, BrowserHandleDialogOptions, BrowserHandleDownloadOptions, BrowserHandlePermissionOptions, BrowserHeapSnapshotOptions, BrowserInspectPageOptions, BrowserListMediaSourcesOptions, BrowserListPageResourcesOptions, BrowserMoveMouseOptions, BrowserNetworkControlOptions, BrowserNetworkRequestDetailsOptions, BrowserNetworkResponseBodyOptions, BrowserPageDiagnosticsOptions, BrowserPageNavigationOptions, BrowserPageNavigationResult, BrowserPageScrollOptions, BrowserPageStorageOptions, BrowserPageTargetsResult, BrowserPageWaitOptions, BrowserPageWindowState, BrowserPageZoomOptions, BrowserPerformanceInsightOptions, BrowserPerformanceTraceStartOptions, BrowserPressKeyOptions, BrowserScreencastStartOptions, BrowserScreencastStopOptions, BrowserSiteContext, BrowserSwitchPageTargetOptions, BrowserSwitchPageTargetResult, BrowserTargetActionOptions, BrowserTypeTextOptions, BrowserUploadFileOptions, BrowserUserScriptManageRequest, BrowserUserScriptMutationResult, BrowserViewportOptions, BrowserWaitForSelectorOptions, WorkspaceListOptions, WorkspaceWriteFileOptions } from '../types/browser.js'
 import type { BrowserPageDriverState } from '../types/driver'
-import type { BrowserPageDriverKernel, BrowserPageDriverSession, ExternalBrowserPageSession } from '../types/runtime.js'
+import type { BrowserDiagnosticsLimits, BrowserPageDriverKernel, BrowserPageDriverSession, CdpWorkspaceFileAccess,ExternalBrowserPageSession } from '../types/runtime.js'
+import { BrowserTuning } from '../utils/tuning'
 
 import { BrowserPerformanceOrchestrator } from './engines/BrowserPerformanceOrchestrator'
 import { CdpInteractionEngine } from './engines/CdpInteractionEngine'
-import { type BrowserDiagnosticsLimits, CdpPageDataEngine } from './engines/CdpPageDataEngine'
+import { CdpPageDataEngine } from './engines/CdpPageDataEngine'
 import { CdpScreenshotEngine } from './engines/CdpScreenshotEngine'
 import { BrowserPendingEventsBroker } from './session/BrowserPendingEventsBroker'
 import { BrowserSessionActionQueue } from './session/BrowserSessionActionQueue'
 import { BrowserTargetRefStore } from './session/BrowserTargetRefStore'
 
-const CdpBrowserRuntimeMaxDiagnosticEntries = 300
-
-/**
- * 浏览器工作区文件访问（宿主按 member/site 注入数据根 browser 分区）。
- * 使用 Browser 领域自己的 artifact DTO，与 `ToolBrowserApi` 的
- * listFiles/readFile/writeFile 单源一致。
- */
-export interface CdpWorkspaceFileAccess {
-  listFiles(options?: WorkspaceListOptions): Promise<WorkspaceFileEntry[]>
-  readFile(
-    path: string,
-    startLine?: number,
-    endLine?: number,
-    maxChars?: number
-  ): Promise<ProjectReadFileResult>
-  writeFile(
-    path: string,
-    content: string,
-    options?: WorkspaceWriteFileOptions
-  ): Promise<WorkspaceWriteFileResult>
-}
 
 /** host-injected 依赖:工作区文件访问、脚本构建与外部浏览器 launcher。 */
 export interface CdpBrowserRuntimeOptions {
@@ -58,8 +39,28 @@ export interface CdpBrowserRuntimeOptions {
  * CDP 侧诚实缺席能力(见 `CdpScreenshotEngine` 与 README 能力矩阵):截图标注/模型图/diff、
  * 录屏 GIF 合成、隐藏 BrowserWindow 模型视图叠加——均无栅格编解码器等价物,不硬造。
  */
-export class CdpBrowserRuntime {
-  private readonly log = logRuntime.tag('CdpBrowserRuntime')
+export interface CdpBrowserRuntimeApi {
+  /** 注册一个已由 launcher 建立的外部 CDP 页面会话（enterSite 落地点）。 */
+  registerSession(sessionId: string, session: ExternalBrowserPageSession, context: BrowserSiteContext): void
+  /** 回收会话:释放外部浏览器 host 与缓存态。 */
+  disposeSession(sessionId: string): void
+  /** 拆掉这个实例占用的资源（监听器、计时器、debugger 会话）。 */
+  dispose(): void
+  /** 暴露外部浏览器 launcher 供宿主启动会话。 */
+  getLaunchers(): {
+    foreground: LooseOptional<BrowserExternalPageLauncher>
+  }
+  /**
+   * 会话绑定的浏览器能力面:结构上满足 `@velaros-ai/browser/tools` 的 `ToolBrowserApi`
+   * （`BrowserToolContext.browser`）。不 import 该类型以免与 browser-tools 形成包环——
+   * 与 `ElectronBrowserRuntime` 同款结构实现,契约一致性由 browser 40 工具 schema 基线 +
+   * 构造冒烟的方法面校验守护。
+   */
+  bindBrowserApi(sessionId: string, context: BrowserSiteContext): ToolBrowserApi
+}
+
+export class CdpBrowserRuntime implements CdpBrowserRuntimeApi {
+  private readonly log = Log.tag('CdpBrowserRuntime')
   private readonly actionQueue = new BrowserSessionActionQueue()
   private readonly targetRefs = new BrowserTargetRefStore()
   private readonly pendingEvents = new BrowserPendingEventsBroker()
@@ -108,7 +109,7 @@ export class CdpBrowserRuntime {
     this.foregroundBrowserLauncher = options.foregroundBrowserLauncher
     this.interaction = new CdpInteractionEngine(this.kernel, this.targetRefs)
     const diagnosticsLimits: BrowserDiagnosticsLimits = {
-      maxEntries: CdpBrowserRuntimeMaxDiagnosticEntries,
+      maxEntries: BrowserTuning.cdp.runtimeDiagnosticEntries,
     }
     this.pageData = new CdpPageDataEngine(
       this.kernel,
@@ -181,7 +182,7 @@ export class CdpBrowserRuntime {
    * 与 `ElectronBrowserRuntime` 同款结构实现,契约一致性由 browser 40 工具 schema 基线 +
    * 构造冒烟的方法面校验守护。
    */
-  public bindBrowserApi(sessionId: string, context: BrowserSiteContext) {
+  public bindBrowserApi(sessionId: string, context: BrowserSiteContext): ToolBrowserApi {
     const run = <T>(action: () => Promise<T>): Promise<T> => this.actionQueue.run(sessionId, action)
     const readOnly = <T>(action: () => Promise<T>): Promise<T> =>
       this.actionQueue.runReadOnly(sessionId, action)

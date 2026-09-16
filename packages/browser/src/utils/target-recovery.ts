@@ -13,22 +13,12 @@ import type {
   BrowserTargetActionOptions,
   BrowserTargetActionResult,
 } from '../types/browser'
+import type { CoordinateClickPoint, TargetActionEffectRecovery } from '../types/tools.js'
 
 import { buildBrowserScreenshotOptions } from './screenshot-options'
 
-interface CoordinateClickPoint {
-  x: number
-  y: number
-}
-
 /** 坐标恢复的探针截图路径：固定一份、每次覆盖写。 */
 const BrowserTargetRecoveryScreenshotPath = 'artifacts/screenshots/recovery/target-action.png'
-
-interface TargetActionEffectRecovery {
-  source: 'target-action-effect'
-  reason: 'no-observable-change'
-  recommendedNextActions: Array<'inspect_page' | 'observe_actions'>
-}
 
 /**
  * selector 未命中时，尝试通过截图标注或 bounds 查询做坐标点击恢复。
@@ -78,6 +68,7 @@ export async function performTargetActionWithRecovery(
   }
 }
 
+/** 点击没命中时，按效果指纹判断要不要再试一次、怎么试。 */
 function buildTargetActionEffectRecovery(
   action: BrowserTargetActionOptions,
   result: BrowserTargetActionResult
@@ -94,6 +85,7 @@ function buildTargetActionEffectRecovery(
   }
 }
 
+/** 按坐标做一次兜底点击；只在身份确定的唯一匹配上做，零尺寸元素一律不做。 */
 async function tryCoordinateRecovery(
   target: BrowserElementTargetHint,
   ctx: ToolContext
@@ -132,6 +124,7 @@ async function tryCoordinateRecovery(
   }
 }
 
+/** 从标注图的标签里找回目标元素的位置。 */
 function findClickPointFromLabels(
   labels: BrowserScreenshotElementLabel[],
   target: BrowserElementTargetHint
@@ -158,6 +151,7 @@ function findClickPointFromLabels(
   }
 }
 
+/** 给一个候选标签打分，判断它是不是同一个元素。 */
 function scoreElementLabel(
   label: BrowserScreenshotElementLabel,
   target: BrowserElementTargetHint
@@ -187,6 +181,7 @@ function scoreElementLabel(
   return identityScore >= 10 ? identityScore + contextScore : null
 }
 
+/** 给一个稳定属性选择器打分：越能唯一定位分越高。 */
 function scoreStableLabelSelector(
   selector: LooseOptional<string>,
   attributes: LooseOptional<BrowserElementTargetHint['attributes']>
@@ -207,6 +202,7 @@ function scoreStableLabelSelector(
   return 0
 }
 
+/** 判目标身上有没有稳定的身份属性（id、data-testid 之类）。 */
 function hasStableTargetAttribute(
   attributes: LooseOptional<BrowserElementTargetHint['attributes']>
 ): boolean {
@@ -215,10 +211,12 @@ function hasStableTargetAttribute(
   )
 }
 
+/** 把属性值转义成能安全放进 CSS selector 的形式。 */
 function quoteSelectorAttribute(value: string): string {
   return value.replace(/["\\]/gu, '\\$&')
 }
 
+/** 从元素矩形算一个可点的中心点；零尺寸或不在视口里就不给。 */
 async function findClickPointFromBounds(
   target: BrowserElementTargetHint,
   ctx: ToolContext
@@ -276,10 +274,12 @@ function isInsideViewport(x: number, y: number, payload: Record<string, unknown>
   return !(isPresent(viewportHeight) && viewportHeight > 0 && y >= viewportHeight)
 }
 
+/** 把用于比对的文本压成单行小写，去掉多余空白。 */
 function normalizeMatchText(value: Optional<Nullable<string>>): string {
   return value?.replace(/\s+/gu, ' ').trim().toLowerCase() ?? ''
 }
 
+/** 是有限数就原样返回，否则返回 undefined。 */
 function readFiniteNumber(value: unknown): Nullable<number> {
   return isFiniteNumber(value) ? value : null
 }

@@ -1,4 +1,9 @@
 import type { ToolContext } from '../../contract/requires'
+import type {
+  BrowserPageSnapshotRead,
+  BrowserRecipeRunRead,
+  BrowserRecipeSkeletonRead,
+} from '../../types/recipes'
 import {
   parseBrowserPageSnapshot,
   parseBrowserRecipeRunRecord,
@@ -13,8 +18,17 @@ import {
 import { getActiveBrowserContext } from '../../utils/tool.js'
 
 /** 读取当前站点 browser artifact（recipes/pages/runs）并做同源校验。 */
-class BrowserRecipeReader {
-  public async readRecipeSkeleton(inputPath: string, ctx: ToolContext) {
+export interface BrowserRecipeReaderApi {
+  /** 读一份 recipe 骨架；路径不在 recipes/ 下或与当前站点不同源时报错。 */
+  readRecipeSkeleton(inputPath: string, ctx: ToolContext): Promise<BrowserRecipeSkeletonRead>
+  /** 读一份页面快照；路径不在 pages/ 下或与当前站点不同源时报错。 */
+  readPageSnapshot(inputPath: string, ctx: ToolContext): Promise<BrowserPageSnapshotRead>
+  /** 读一份 recipe 运行记录；路径不在 runs/ 下或与当前站点不同源时报错。 */
+  readRecipeRunRecord(inputPath: string, ctx: ToolContext): Promise<BrowserRecipeRunRead>
+}
+
+class BrowserRecipeReader implements BrowserRecipeReaderApi {
+  public async readRecipeSkeleton(inputPath: string, ctx: ToolContext): Promise<BrowserRecipeSkeletonRead> {
     const recipePath = requireRecipePath(inputPath)
     const file = await ctx.browser.readFile(recipePath, 1, undefined, 200000)
     const recipe = parseRecipeSkeleton(recipePath, file.content)
@@ -28,7 +42,7 @@ class BrowserRecipeReader {
     }
   }
 
-  public async readPageSnapshot(inputPath: string, ctx: ToolContext) {
+  public async readPageSnapshot(inputPath: string, ctx: ToolContext): Promise<BrowserPageSnapshotRead> {
     const snapshotPath = requirePageSnapshotPath(inputPath)
     const file = await ctx.browser.readFile(snapshotPath, 1, undefined, 500000)
     const inspection = parseBrowserPageSnapshot(snapshotPath, file.content)
@@ -42,7 +56,7 @@ class BrowserRecipeReader {
     }
   }
 
-  public async readRecipeRunRecord(inputPath: string, ctx: ToolContext) {
+  public async readRecipeRunRecord(inputPath: string, ctx: ToolContext): Promise<BrowserRecipeRunRead> {
     const runPath = requireRunPath(inputPath)
     const file = await ctx.browser.readFile(runPath, 1, undefined, 500000)
     const run = parseBrowserRecipeRunRecord(runPath, file.content)
@@ -57,6 +71,5 @@ class BrowserRecipeReader {
   }
 }
 
-const browserRecipeReader = new BrowserRecipeReader()
+export const browserRecipeReader: BrowserRecipeReaderApi = new BrowserRecipeReader()
 
-export { BrowserRecipeReader,browserRecipeReader }

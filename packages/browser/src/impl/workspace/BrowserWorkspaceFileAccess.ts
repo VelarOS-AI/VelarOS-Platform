@@ -13,6 +13,7 @@ import { dirname, isAbsolute, resolve } from 'node:path'
 import { isEmpty, isNotNull, isNull, isObject } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
+import { BrowserFileLimits } from '../../contract/constants'
 import type {
   BrowserSiteContext,
   ProjectReadFileResult,
@@ -21,20 +22,13 @@ import type {
   WorkspaceWriteFileOptions,
   WorkspaceWriteFileResult,
 } from '../../types/browser.js'
+import type { BrowserWorkspaceResolvedPath } from '../../types/workspace.js'
+import { BrowserTuning } from '../../utils/tuning'
 import {
   getRelativePathInsideRoot,
   resolveBrowserWorkspacePath,
 } from '../../utils/workspace-paths.js'
 
-const DefaultListLimit = 200
-const DefaultListMaxDepth = 4
-const MaxListLimit = 1000
-const MaxListDepth = 16
-
-interface BrowserWorkspaceResolvedPath {
-  path: string
-  root: string
-}
 
 function clampInteger(
   value: LooseOptional<number>,
@@ -66,7 +60,27 @@ function normalizeRelativePath(path: LooseOptional<string>): string {
  * 浏览器快照、方案和提取结果属于运行时制品，不是模型写入的工作区编辑。
  * 这个适配器把它们限制在浏览器工作区根目录下，不经过工作区编辑事务和改动行策略。
  */
-class BrowserWorkspaceFileAccess {
+export interface BrowserWorkspaceFileAccessApi {
+  /**
+   * 列目录：主根与历史根**取并集**，同名相对路径以主根为准。
+   *
+   * 只列主根会让「换粒度」在界面上等价于「资产没了」——制品面板是用户确认自己东西还在的
+   * 唯一入口。上限按合并后的总数算，不给历史根额外配额。
+   */
+  listFiles(options?: WorkspaceListOptions): Promise<WorkspaceFileEntry[]>
+  /** 读站点工作区里的一个文件；不给上限时最多读到约定的字符上限。 */
+  readFile(path: string, startLine?: number, endLine?: number, maxChars?: number): Promise<ProjectReadFileResult>
+  /** 同时接受相对路径和当前站点根内的绝对路径，供 Host 预览已有 browser artifact。 */
+  readWorkspacePath(path: string, startLine?: number, endLine?: number, maxChars?: number): Promise<ProjectReadFileResult>
+  /** 往站点工作区写一个二进制文件。 */
+  writeBinaryFile(path: string, content: Buffer, options?: WorkspaceWriteFileOptions): Promise<WorkspaceWriteFileResult>
+  /** 往站点工作区写一个文本文件。 */
+  writeFile(path: string, content: string, options?: WorkspaceWriteFileOptions): Promise<WorkspaceWriteFileResult>
+  /** 删除工作区内的普通文件；拒绝目录、符号链接与越界路径。 */
+  deleteFile(path: string): Promise<{ path: string; deleted: boolean }>
+}
+
+class BrowserWorkspaceFileAccess implements BrowserWorkspaceFileAccessApi {
   private readonly workspaceRoot: string
   /**
    * 只读的历史根，按新→旧排列。
@@ -102,12 +116,12 @@ class BrowserWorkspaceFileAccess {
     options: WorkspaceListOptions = {},
   ): Promise<WorkspaceFileEntry[]> {
     const recursive = !!options.recursive
-    const limit = clampInteger(options.limit, 1, MaxListLimit, DefaultListLimit)
+    const limit = clampInteger(options.limit, 1, BrowserFileLimits.listItems, BrowserTuning.lists.workspaceFiles)
     const maxDepth = clampInteger(
       options.maxDepth,
       0,
-      MaxListDepth,
-      recursive ? DefaultListMaxDepth : 1,
+      BrowserFileLimits.listDepth,
+      recursive ? BrowserTuning.lists.workspaceDepth : 1,
     )
     const entries: WorkspaceFileEntry[] = []
     const seenRelativePaths = new Set<string>()

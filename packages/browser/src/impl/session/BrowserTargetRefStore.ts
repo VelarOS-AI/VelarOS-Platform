@@ -2,16 +2,7 @@ import { isPresent } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import type { BrowserDragOptions, BrowserElementTargetHint, BrowserPageInspection, BrowserScreenshotElementLegendItem, BrowserTargetActionOptions } from '../../types/browser.js'
-
-interface BrowserTargetRefSession {
-  generation: number
-  refs: Map<string, BrowserElementTargetHint>
-}
-
-interface StoredBrowserTargetRefs {
-  generation: number
-  aliases: Map<string, string>
-}
+import type { BrowserTargetRefSession, StoredBrowserTargetRefs } from '../../types/session.js'
 
 /**
  * 页面元素 ref 定位表（`@e1:g3` 风格短引用 → 完整定位线索）。
@@ -20,7 +11,33 @@ interface StoredBrowserTargetRefs {
  * 完整 target hint。每次观察都会分配新 generation；旧 ref 永远不会被同名的
  * `@e1` 静默重绑定到另一个元素。截图与交互两个域共享此状态，因此独立成协作对象。
  */
-export class BrowserTargetRefStore {
+export interface BrowserTargetRefStoreApi {
+  /** 记录页面检查产出的 links/actions/formFields 定位线索。 */
+  storeInspection(sessionId: string, inspection: BrowserPageInspection): void
+  /** 记录标注截图产出的元素图例定位线索。 */
+  storeScreenshotLegend(sessionId: string, legend: BrowserScreenshotElementLegendItem[]): void
+  /** 把这次观察产出的目标登记成新一代 ref；旧 ref 随之失效。 */
+  storeTargets(sessionId: string, targets: Array<Nullable<BrowserElementTargetHint>>): StoredBrowserTargetRefs
+  /** 用存储的 ref 线索补全 target action 的定位字段。 */
+  hydrate(sessionId: string, options: BrowserTargetActionOptions): BrowserTargetActionOptions
+  /** 用同一份 ref 解析规则补全拖拽起点与终点。 */
+  hydrateDrag(sessionId: string, options: BrowserDragOptions): BrowserDragOptions
+  /**
+   * 解析一个模型返回的 target。
+   *
+   * 显式 ref 必须命中当前 observation，且命中后以存储的 target 为唯一权威来源。
+   * 独立 selector/text/attributes 定位必须省略 ref，避免失效 ref 被附带字段绕过。
+   */
+  hydrateTarget(sessionId: string, target: BrowserElementTargetHint, field?: 'source' | 'target'): BrowserElementTargetHint
+  /** 归一化 ref 写法（e1 / @e1 / ref=e1:g2 → @e1 / @e1:g2）；非法 ref 返回 null。 */
+  normalizeRef(ref: LooseOptional<string>): Nullable<string>
+  /** 清掉这条会话的状态。 */
+  clear(sessionId: string): void
+  /** 清掉全部会话的状态；运行时收尾时调。 */
+  clearAll(): void
+}
+
+export class BrowserTargetRefStore implements BrowserTargetRefStoreApi {
   private readonly refsBySession = new Map<string, BrowserTargetRefSession>()
   private readonly generationBySession = new Map<string, number>()
 

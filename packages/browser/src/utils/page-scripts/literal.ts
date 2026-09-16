@@ -1,7 +1,7 @@
 /**
- * Encodes untrusted text as a JavaScript string literal without leaving any
- * source-code metacharacters in the generated script. Encoding every UTF-16
- * code unit also preserves lone surrogates exactly.
+ * 把不可信文本编成 JavaScript 字符串字面量，生成的脚本里不留任何源码元字符。
+ *
+ * 逐个 UTF-16 码元编码，孤立代理项也原样保住。
  */
 export function encodeBrowserScriptStringLiteral(value: string): string {
   let literal = "'"

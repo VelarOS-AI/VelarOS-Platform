@@ -4,7 +4,8 @@ import gifenc from 'gifenc'
 import { isEmpty, isFalse, isNumber, isPresent, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import type { CdpTraceTransport } from './CdpTraceCollector'
+import type { CdpScreencastConsumerOptions, CdpScreencastFrameEvent, CdpScreencastStartOptions, CdpTraceTransport,EncodeScreencastGifOptions, ScreencastCapturedFrame } from '../../types/cdp.js'
+import { BrowserTuning } from '../../utils/tuning'
 
 /**
  * 页面录屏（CDP Page.startScreencast）。
@@ -14,47 +15,6 @@ import type { CdpTraceTransport } from './CdpTraceCollector'
  * 产物合成走 GIF：聊天/文件系统里点开即播，不依赖播放器。
  */
 
-export interface ScreencastCapturedFrame {
-  /** JPEG 帧字节。 */
-  bytes: Buffer
-  /** CDP 帧时间戳（epoch 秒）。 */
-  timestamp: number
-  /** CDP 报告的页面画面宽度。 */
-  width: number
-  /** CDP 报告的页面画面高度。 */
-  height: number
-}
-
-export interface CdpScreencastConsumerOptions {
-  /** false 时不在主进程累计帧，只把最新画面交给消费者。 */
-  retainFrames?: boolean
-  /** 实时帧消费者；异常与 CDP ack 隔离，不能阻断后续画面。 */
-  onFrame?: (frame: ScreencastCapturedFrame) => void
-  /** CDP JPEG 编码质量。 */
-  quality?: number
-}
-
-export interface CdpScreencastStartOptions {
-  /** 帧最大宽度（CDP 侧缩放）。 */
-  maxWidth: number
-  /** 帧最大高度。 */
-  maxHeight: number
-  /** 每 N 帧取 1 帧，降低帧率与体积。 */
-  everyNthFrame: number
-  /** 帧数上限；达到后自动停止采集（防忘 stop 撑爆内存）。 */
-  maxFrames: number
-}
-
-interface CdpScreencastFrameEvent {
-  data?: string
-  sessionId?: number
-  metadata?: {
-    timestamp?: number
-    deviceWidth?: number
-    deviceHeight?: number
-  }
-}
-
 export const DefaultScreencastStartOptions: CdpScreencastStartOptions = {
   maxWidth: 800,
   maxHeight: 1200,
@@ -62,7 +22,23 @@ export const DefaultScreencastStartOptions: CdpScreencastStartOptions = {
   maxFrames: 600,
 }
 
-export class CdpScreencastRecorder {
+/**
+ * 录屏采集器：经 CDP `Page.startScreencast` 收帧，停录时把帧序列交出去合成 GIF。
+ *
+ * 一次录制一个实例；帧只在内存里攒，超过上限就停下来如实回报「帧数到顶了」，不悄悄丢中间的帧。
+ */
+export interface CdpScreencastRecorderApi {
+  /** 现在是不是正在录。 */
+  isRunning(): boolean
+  /** 开始录。 */
+  start(options: CdpScreencastStartOptions): Promise<void>
+  /** 停止录制并取回全部帧。 */
+  stop(): Promise<{ frames: ScreencastCapturedFrame[]; frameLimitReached: boolean }>
+  /** 尽力终止（会话关闭/dispose 清理用）。 */
+  abort(): Promise<void>
+}
+
+export class CdpScreencastRecorder implements CdpScreencastRecorderApi {
   private frames: ScreencastCapturedFrame[] = []
   private capturedFrameCount = 0
   private unsubscribe: Nullable<() => void> = null
@@ -99,7 +75,7 @@ export class CdpScreencastRecorder {
     try {
       await this.transport.send('Page.startScreencast', {
         format: 'jpeg',
-        quality: this.consumer.quality ?? 60,
+        quality: this.consumer.quality ?? BrowserTuning.screencast.frameQuality,
         maxWidth: options.maxWidth,
         maxHeight: options.maxHeight,
         everyNthFrame: options.everyNthFrame,
@@ -189,22 +165,6 @@ export class CdpScreencastRecorder {
  * GIF 合成
  * ------------------------------------------------------------------ */
 
-/** 帧图像解码器：把 JPEG 帧解成 RGBA。实现端负责等比缩到 maxWidth 内。 */
-export type ScreencastFrameDecoder = (
-  bytes: Buffer,
-  maxWidth: number
-) => Nullable<{ width: number; height: number; rgba: Buffer }>
-
-export interface EncodeScreencastGifOptions {
-  decode: ScreencastFrameDecoder
-  /** 输出 GIF 最大宽度。 */
-  maxWidth?: number
-}
-
-const MinFrameDelayMs = 30
-const MaxFrameDelayMs = 2_000
-const LastFrameDelayMs = 800
-
 /** 把录屏帧序列合成 GIF；帧间延迟按真实时间戳还原（clamp 防极端值）。 */
 export function encodeScreencastFramesToGif(
   frames: readonly ScreencastCapturedFrame[],
@@ -214,7 +174,7 @@ export function encodeScreencastFramesToGif(
     throw new AppError('EXECUTION_FAILED', '录屏没有采集到任何帧（页面无变化或已隐藏）。')
   }
 
-  const maxWidth = options.maxWidth ?? 800
+  const maxWidth = options.maxWidth ?? BrowserTuning.screencast.gifMaxWidth
   const gif = gifenc.GIFEncoder()
   let encodedFrames = 0
   let canvasWidth = 0
@@ -235,10 +195,10 @@ export function encodeScreencastFramesToGif(
     const delayMs =
       isPresent(nextTimestamp)
         ? Math.min(
-            MaxFrameDelayMs,
-            Math.max(MinFrameDelayMs, Math.round((nextTimestamp - frame.timestamp) * 1000))
+            BrowserTuning.screencast.maxFrameDelayMs,
+            Math.max(BrowserTuning.screencast.minFrameDelayMs, Math.round((nextTimestamp - frame.timestamp) * 1000))
           )
-        : LastFrameDelayMs
+        : BrowserTuning.screencast.lastFrameDelayMs
 
     const rgba = new Uint8ClampedArray(
       decoded.rgba.buffer,

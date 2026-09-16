@@ -4,28 +4,13 @@ import {
   createCapabilityToken,
   createKernelCallableCapability,
   defineKernelModule,
-  type KernelCallableCapabilityService,
   KernelModuleApiVersion,
   type KernelModuleDefinition,
+  type ScopeRef,
 } from '@velaros-ai/kernel/contracts/abi'
 
-import { type ElectronBrowserRuntime } from './ElectronBrowserRuntime'
+import type { BrowserRuntimeCapabilityService, CreateBrowserKernelModuleOptions } from '../../types/electron.js'
 
-export interface BrowserRuntimeCapabilityService
-  extends KernelCallableCapabilityService {
-  /**
-   * Product-local runtime. Electron WebContents cannot be transferred into a
-   * daemon, so in-process consumers receive the injected runtime explicitly.
-   */
-  readonly runtime: ElectronBrowserRuntime
-}
-
-export interface CreateBrowserKernelModuleOptions {
-  /** Reuse the product composition root's only Browser runtime instance. */
-  readonly runtime: ElectronBrowserRuntime
-  /** Injected runtimes remain product-owned unless this is explicitly true. */
-  readonly disposeInjectedRuntime?: boolean
-}
 
 export const BrowserRuntimeCapability =
   createCapabilityToken<BrowserRuntimeCapabilityService>('velaros.browser')
@@ -110,8 +95,16 @@ export function createBrowserKernelModule(
           },
         },
       })
+      // 逐个转发而不是 `...callable` 展开：可调用能力是内核给的**实例**，方法挂在原型上，
+      // 展开只会拿到自有属性，`getOperationMetadata` 等会静默丢成 undefined。
       const service: BrowserRuntimeCapabilityService = Object.freeze({
-        ...callable,
+        getOperationMetadata: (operation: string) => callable.getOperationMetadata(operation),
+        invoke: (
+          operation: string,
+          scope: LooseOptional<ScopeRef>,
+          input: unknown,
+          signal: AbortSignal
+        ) => callable.invoke(operation, scope, input, signal),
         runtime: options.runtime,
       })
       context.registerService(BrowserRuntimeCapability, service)

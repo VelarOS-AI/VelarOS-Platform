@@ -3,57 +3,34 @@ import { AppError } from '@velaros-ai/core/error'
 
 import type { ToolContext } from '../../contract/requires'
 import type { BrowserRecipeDryRunSummary, BrowserRecipeSkeleton } from '../../types/browser'
+import type { BrowserRecipeRunOutcome } from '../../types/recipes'
+import type { BrowserRecipeRunSnapshot, BrowserRecipeRunStepResult,RunBrowserRecipeSkeletonInput } from '../../types/recipes.js'
 import { isSameBrowserOrigin } from '../../utils/recipes/paths'
-import {
-  type BrowserRecipeRunStepResult,
-  buildRecipeExecutionPlan,
-} from '../../utils/recipes/plan'
+import { buildRecipeExecutionPlan } from '../../utils/recipes/plan'
 import {
   buildBrowserRecipeRunRecord,
   writeBrowserRecipeRunRecord,
 } from '../../utils/recipes/records'
 import { executeBrowserRecipeSteps } from '../../utils/recipes/steps'
-import {
-  type BrowserRecipeRunVariables,
-  resolveBrowserRecipeInputVariables,
-} from '../../utils/recipes/variables'
+import { resolveBrowserRecipeInputVariables } from '../../utils/recipes/variables'
 import { getActiveBrowserContext } from '../../utils/tool.js'
-import type { BrowserWorkspaceArtifactManager } from '../workspace/BrowserWorkspaceArtifactManager'
 
 import { createArtifactManager } from './Artifacts.js'
 import { browserRecipeReader } from './RecipeReader'
 
-/** 执行 recipe skeleton 的入参。 */
-export interface RunBrowserRecipeSkeletonInput {
-  /** recipes/xxx.json 路径。 */
-  path: string
-  /** recipe input.name -> 输入值。 */
-  inputs?: Record<string, string>
-  /** %variableName% -> 真实执行值；不会写入 run record。 */
-  variables?: BrowserRecipeRunVariables
-  /** 最多执行多少个可执行步骤。 */
-  maxSteps?: number
-  /** 只预检，不执行页面动作、不写 run record。 */
-  dryRun?: boolean
-  /** target 未命中时是否立即停止。 */
-  stopOnMiss?: boolean
-  /** 是否保存 runs/ 运行记录。 */
-  saveRun?: boolean
-  /** 是否保存 before/after 页面快照。 */
-  saveSnapshots?: boolean
-  /** run/snapshot artifact 名称前缀。 */
-  runName?: string
+/** 读取、预检并执行 browser recipe skeleton。 */
+export interface BrowserRecipeRunnerApi {
+  /** 按 recipe 骨架逐步执行，落盘运行记录与页面快照。 */
+  runSkeleton(input: RunBrowserRecipeSkeletonInput, ctx: ToolContext): Promise<BrowserRecipeRunOutcome>
 }
 
-type BrowserRecipeRunSnapshot = Awaited<
-  ReturnType<BrowserWorkspaceArtifactManager['savePageSnapshot']>
->
-
-/** 读取、预检并执行 browser recipe skeleton。 */
-class BrowserRecipeRunner {
+class BrowserRecipeRunner implements BrowserRecipeRunnerApi {
   private readonly inspectMaxTextChars = 20_000
 
-  public async runSkeleton(input: RunBrowserRecipeSkeletonInput, ctx: ToolContext) {
+  public async runSkeleton(
+    input: RunBrowserRecipeSkeletonInput,
+    ctx: ToolContext
+  ): Promise<BrowserRecipeRunOutcome> {
     ctx.abortSignal.throwIfAborted()
 
     const {
@@ -257,7 +234,7 @@ class BrowserRecipeRunner {
   }
 }
 
-const browserRecipeRunner = new BrowserRecipeRunner()
+export const browserRecipeRunner: BrowserRecipeRunnerApi = new BrowserRecipeRunner()
 
 /**
  * 干跑一份 recipe skeleton 并返回结构化结论。
@@ -266,7 +243,7 @@ const browserRecipeRunner = new BrowserRecipeRunner()
  * `browser:recipe action=run_skeleton dryRun=true` 共用同一个执行器：干跑的语义只有一处实现，
  * 按钮与工具不会各自漂移。刻意不写 run record、不存快照——预检就该零副作用。
  */
-async function runBrowserRecipeDryRun(
+export async function runBrowserRecipeDryRun(
   input: { path: string },
   ctx: ToolContext
 ): Promise<BrowserRecipeDryRunSummary> {
@@ -301,4 +278,3 @@ async function runBrowserRecipeDryRun(
   }
 }
 
-export { BrowserRecipeRunner, browserRecipeRunner, runBrowserRecipeDryRun }

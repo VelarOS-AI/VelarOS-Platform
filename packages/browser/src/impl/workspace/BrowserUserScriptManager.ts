@@ -3,35 +3,11 @@ import { randomUUID } from 'node:crypto'
 import { isArray, isBoolean, isEmpty, isFiniteNumber, isNonBlankString, isNotNull, isPlainObject,isPresent, isString, Log, optionalWhen, stringifyPretty,toOptional } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import type { BrowserSiteContext, BrowserUserScriptDraft, BrowserUserScriptLastRun, BrowserUserScriptOverview, BrowserUserScriptPatch, BrowserUserScriptRecord, ProjectReadFileResult, WorkspaceWriteFileOptions, WorkspaceWriteFileResult } from '../../types/browser.js'
+import { BrowserUserScriptLimits } from '../../contract/constants'
+import type { BrowserSiteContext, BrowserUserScriptDraft, BrowserUserScriptLastRun, BrowserUserScriptOverview, BrowserUserScriptPatch, BrowserUserScriptRecord } from '../../types/browser.js'
+import type { BrowserUserScriptAccess, BrowserUserScriptStore, BrowserUserScriptValidatedPatch } from '../../types/workspace.js'
 
 const log = Log.tag('BrowserUserScriptManager')
-
-const BrowserUserScriptIndexPath = 'scripts/index.json'
-const BrowserUserScriptStoreVersion = 1 as const
-const MaxUserScriptBytes = 1_000_000
-const MaxPatternCount = 64
-
-interface BrowserUserScriptAccess {
-  readFile: (
-    path: string,
-    startLine?: number,
-    endLine?: number,
-    maxChars?: number
-  ) => Promise<ProjectReadFileResult>
-  writeFile: (
-    path: string,
-    content: string,
-    options?: WorkspaceWriteFileOptions
-  ) => Promise<WorkspaceWriteFileResult>
-  deleteFile: (path: string) => Promise<{ path: string; deleted: boolean }>
-}
-
-interface BrowserUserScriptStore {
-  version: typeof BrowserUserScriptStoreVersion
-  globalEnabled: boolean
-  scripts: BrowserUserScriptRecord[]
-}
 
 function sortScripts(scripts: BrowserUserScriptRecord[]): BrowserUserScriptRecord[] {
   return [...scripts].sort(
@@ -56,8 +32,8 @@ function normalizeDescription(description: LooseOptional<string>): LooseOptional
 
 function normalizePatterns(patterns: LooseOptional<string[]>, field: string): string[] {
   if (!patterns) return []
-  if (patterns.length > MaxPatternCount) {
-    throw new AppError('VALIDATION', `${field} 最多允许 ${MaxPatternCount} 条规则。`)
+  if (patterns.length > BrowserUserScriptLimits.matchRules) {
+    throw new AppError('VALIDATION', `${field} 最多允许 ${BrowserUserScriptLimits.matchRules} 条规则。`)
   }
   const normalized = [...new Set(patterns.map((item) => item.trim()).filter(Boolean))]
   normalized.forEach((pattern) => validateUrlPattern(pattern, field))
@@ -84,7 +60,7 @@ function validateUrlPattern(pattern: string, field: string): void {
 
 function normalizeCode(code: string): string {
   if (!code.trim()) throw new AppError('VALIDATION', '脚本内容不能为空。')
-  if (Buffer.byteLength(code, 'utf8') > MaxUserScriptBytes) {
+  if (Buffer.byteLength(code, 'utf8') > BrowserUserScriptLimits.codeBytes) {
     throw new AppError('VALIDATION', '单个用户脚本不能超过 1 MB。')
   }
   return code.endsWith('\n') ? code : `${code}\n`
@@ -283,18 +259,52 @@ function validateUserScriptPatch(patch: BrowserUserScriptPatch): BrowserUserScri
   }
 }
 
-/** updateScript 校验完成后、写盘之前的最终值；`null` 表示这次不改这个字段。 */
-interface BrowserUserScriptValidatedPatch {
-  code: Nullable<string>
-  name: Nullable<string>
-  /** 用一层包装区分「不改」（null）与「改成空」（{ value: undefined }）。 */
-  description: Nullable<{ value: LooseOptional<string> }>
-  match: Nullable<string[]>
-  excludeMatch: Nullable<string[]>
-  version: Nullable<string>
+/**
+ * 站点用户脚本的存储：索引与代码都落在站点工作区里，负责增删改查、启停、排序与执行记录。
+ *
+ * 安全语义写在这里：agent 建的脚本一律先停用；改代码或改执行范围之后自动停用，必须用户重新确认才能再启用；
+ * 所有校验都在写盘之前做完，校验失败不留半截（代码换了、索引没换）。
+ *
+ * 实例归运行时：无会话状态，一份就够；站点由每次调用传进来的上下文决定。
+ */
+export interface BrowserUserScriptManagerApi {
+  /** 读这个站点的用户脚本总览：全局开关与每个脚本的状态。 */
+  getOverview(context: BrowserSiteContext): Promise<BrowserUserScriptOverview>
+  /** 读一个用户脚本的代码与元信息。 */
+  readScript(context: BrowserSiteContext, id: string): Promise<{
+    overview: BrowserUserScriptOverview
+    script: BrowserUserScriptRecord
+    code: string
+  }>
+  /** 新建一个用户脚本；agent 建的一律先停用，要用户确认后才启用。 */
+  createScript(context: BrowserSiteContext, draft: BrowserUserScriptDraft, defaults: { source: 'agent' | 'user' | 'user-import'; enabled: boolean }): Promise<{ overview: BrowserUserScriptOverview; script: BrowserUserScriptRecord; }>
+  /**
+   * 修改用户脚本：**先把全部字段校验成最终值，再写代码，最后写索引**。
+   *
+   * 老写法把 `patch.code` 第一个写盘，之后才校验 name / match / excludeMatch：校验失败抛错时
+   * 索引里的 revision、enabled 一个没动，磁盘上的代码却已经换成新的——已启用的脚本下次注入
+   * 就跑这份没经用户确认的代码，绕开了「改代码或执行范围后自动停用、重新确认才能启用」。
+   * 现在校验失败时盘上什么都没动；索引写失败时把代码回滚回去，不留半截状态。
+   */
+  updateScript(context: BrowserSiteContext, id: string, patch: BrowserUserScriptPatch, options: { disableAfterExecutionChange?: boolean }): Promise<{ overview: BrowserUserScriptOverview; script: BrowserUserScriptRecord; refreshRequired: boolean; }>
+  /** 启用或停用一个用户脚本。 */
+  setScriptEnabled(context: BrowserSiteContext, id: string, enabled: boolean): Promise<{ overview: BrowserUserScriptOverview; script: BrowserUserScriptRecord; refreshRequired: boolean; }>
+  /** 打开或关掉这个站点的用户脚本总开关。 */
+  setGlobalEnabled(context: BrowserSiteContext, enabled: boolean): Promise<{ overview: BrowserUserScriptOverview; refreshRequired: boolean; }>
+  /** 调整一个用户脚本的注入顺序。 */
+  moveScript(context: BrowserSiteContext, id: string, direction: 'up' | 'down'): Promise<{ overview: BrowserUserScriptOverview; script: BrowserUserScriptRecord; }>
+  /** 删掉一个用户脚本，连同它的代码文件。 */
+  deleteScript(context: BrowserSiteContext, id: string): Promise<{ overview: BrowserUserScriptOverview; script: BrowserUserScriptRecord; refreshRequired: boolean; }>
+  /** 按 URL 挑出这一页该注入的脚本，连同代码一起给出。 */
+  listRunnable(url: string): Promise<Array<{ script: BrowserUserScriptRecord; code: string }>>
+  /** 记一次脚本执行的结果，供总览里显示「上次跑得怎么样」。 */
+  recordRun(id: string, run: BrowserUserScriptLastRun): Promise<void>
 }
 
-class BrowserUserScriptManager {
+class BrowserUserScriptManager implements BrowserUserScriptManagerApi {
+  private static readonly BrowserUserScriptIndexPath = 'scripts/index.json'
+  private static readonly BrowserUserScriptStoreVersion = 1 as const
+
   /**
    * 索引的读改写回串行化队列。
    *
@@ -579,9 +589,9 @@ class BrowserUserScriptManager {
       script.relativePath,
       1,
       undefined,
-      MaxUserScriptBytes + 1
+      BrowserUserScriptLimits.codeBytes + 1
     )
-    if (result.truncated || Buffer.byteLength(result.content, 'utf8') > MaxUserScriptBytes) {
+    if (result.truncated || Buffer.byteLength(result.content, 'utf8') > BrowserUserScriptLimits.codeBytes) {
       throw new AppError('VALIDATION', '用户脚本文件超过 1 MB，已拒绝执行。', undefined, {
         scriptId: script.id,
       })
@@ -591,13 +601,13 @@ class BrowserUserScriptManager {
 
   private async loadStore(): Promise<BrowserUserScriptStore> {
     try {
-      const result = await this.access.readFile(BrowserUserScriptIndexPath, 1, undefined, 2_000_000)
+      const result = await this.access.readFile(BrowserUserScriptManager.BrowserUserScriptIndexPath, 1, undefined, 2_000_000)
       const parsed = JSON.parse(result.content) as {
         version?: number
         globalEnabled?: boolean
         scripts?: unknown
       }
-      if (parsed.version !== BrowserUserScriptStoreVersion || !isArray(parsed.scripts)) {
+      if (parsed.version !== BrowserUserScriptManager.BrowserUserScriptStoreVersion || !isArray(parsed.scripts)) {
         throw new AppError('VALIDATION', '浏览器用户脚本索引版本无效。')
       }
       if (!isBoolean(parsed.globalEnabled)) {
@@ -605,26 +615,22 @@ class BrowserUserScriptManager {
       }
       const scripts = parsed.scripts.map(requireStoredScript)
       return {
-        version: BrowserUserScriptStoreVersion,
+        version: BrowserUserScriptManager.BrowserUserScriptStoreVersion,
         globalEnabled: parsed.globalEnabled,
         scripts: sortScripts(scripts),
       }
     } catch (error) {
       if (AppError.from(error).code !== 'NOT_FOUND') throw error
-      return { version: BrowserUserScriptStoreVersion, globalEnabled: true, scripts: [] }
+      return { version: BrowserUserScriptManager.BrowserUserScriptStoreVersion, globalEnabled: true, scripts: [] }
     }
   }
 
   private async saveStore(store: BrowserUserScriptStore): Promise<void> {
-    await this.access.writeFile(BrowserUserScriptIndexPath, `${stringifyPretty(store)}\n`, {
+    await this.access.writeFile(BrowserUserScriptManager.BrowserUserScriptIndexPath, `${stringifyPretty(store)}\n`, {
       overwrite: true,
     })
   }
 }
 
-export {
-  type BrowserUserScriptAccess,
-  BrowserUserScriptIndexPath,
-  BrowserUserScriptManager,
-  BrowserUserScriptStoreVersion,
-}
+export { BrowserUserScriptManager }
+export type { BrowserUserScriptAccess } from '../../types/workspace.js'

@@ -27,6 +27,7 @@ import type {
 } from '../../types/browser'
 import type { BrowserSession } from '../../types/electron'
 import type { BrowserRuntimeKernel, BrowserRuntimePageDriverSession } from '../../types/electron.js'
+import type { BrowserPointerPoint } from '../../types/runtime.js'
 import { evaluateInWebContents } from '../../utils/electron/evaluate'
 import { normalizeBrowserPressKeyOptions } from '../../utils/keyboard'
 import { clampInteger, clampZoomFactor } from '../../utils/numbers.js'
@@ -39,7 +40,7 @@ import {
   buildBrowserFallbackVirtualPointerSvg,
 } from '../../utils/pointer'
 import { DEFAULT_BROWSER_VIEWPORT } from '../../utils/viewport.js'
-import { type BrowserPointerPoint, CdpInteractionEngine } from '../engines/CdpInteractionEngine'
+import { CdpInteractionEngine } from '../engines/CdpInteractionEngine'
 import type { BrowserTargetRefStore } from '../session/BrowserTargetRefStore'
 
 import type { BrowserPageWaiter } from './BrowserPageWaiter'
@@ -52,7 +53,34 @@ import type { BrowserPageWaiter } from './BrowserPageWaiter'
  * DUAL 分支逻辑逐字节原样保留，只把 external 半迁进 core。方法默认在 runtime 的
  * actionQueue 内被调用。
  */
-export class BrowserInteractionEngine extends CdpInteractionEngine {
+export interface BrowserInteractionEngineApi {
+  /** 会话关闭时清理该 WebContents 的指针轨迹状态。 */
+  clearPointerState(webContentsId: number): void
+  /** 运行时销毁时清空全部指针状态。 */
+  dispose(): void
+  /** 按目标元素描述执行动作（点击、填值、选项），比坐标点击稳。 */
+  performTargetAction(sessionId: string, context: BrowserSiteContext, options: BrowserTargetActionOptions, abortSignal?: AbortSignal): Promise<BrowserTargetActionResult>
+  /** 往当前焦点或指定目标输入文本。 */
+  typeText(sessionId: string, context: BrowserSiteContext, options: BrowserTypeTextOptions, abortSignal?: AbortSignal): Promise<BrowserTypeTextResult>
+  /** 发一次键盘按键。 */
+  pressKey(sessionId: string, context: BrowserSiteContext, options: BrowserPressKeyOptions, abortSignal?: AbortSignal): Promise<BrowserPressKeyResult>
+  /** 在视口坐标上点一下，作为目标点击失败后的兜底。 */
+  clickCoordinates(sessionId: string, context: BrowserSiteContext, options: BrowserClickCoordinatesOptions, abortSignal?: AbortSignal): Promise<BrowserClickCoordinatesResult>
+  /** 把一个目标拖到另一个目标上。 */
+  dragTargets(sessionId: string, context: BrowserSiteContext, options: BrowserDragOptions, abortSignal?: AbortSignal): Promise<BrowserDragResult>
+  /** 把鼠标移到某个位置（用于 hover）。 */
+  moveMouse(sessionId: string, context: BrowserSiteContext, options: BrowserMoveMouseOptions, abortSignal?: AbortSignal): Promise<BrowserMoveMouseResult>
+  /** 在页面上给目标元素画一个短暂的高亮框，方便用户看清 agent 在操作哪里。 */
+  highlightTarget(session: BrowserSession, target: BrowserElementTargetHint, label?: LooseOptional<string>): Promise<void>
+  /** 把输入焦点交给受控页面。 */
+  focusWebContents(session: BrowserSession): void
+  /** 改页面缩放比例。 */
+  setPageZoom(sessionId: string, context: BrowserSiteContext, options: BrowserPageZoomOptions, abortSignal?: AbortSignal): Promise<BrowserPageZoomResult>
+  /** 滚动页面。 */
+  scrollPage(sessionId: string, context: BrowserSiteContext, options?: BrowserPageScrollOptions, abortSignal?: AbortSignal): Promise<BrowserPageScrollResult>
+}
+
+export class BrowserInteractionEngine extends CdpInteractionEngine implements BrowserInteractionEngineApi {
   /** 记录每个 WebContents 的最新页面内指针位置，用于平滑移动虚拟指针。 */
   private readonly pointerPositions = new Map<number, BrowserPointerPoint>()
 

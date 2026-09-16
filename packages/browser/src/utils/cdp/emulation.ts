@@ -2,6 +2,7 @@ import { isFiniteNumber, isNonBlankString, isNotNull, isPresent } from '@velaros
 import { AppError } from '@velaros-ai/core/error'
 
 import type { BrowserEmulationOptions, BrowserGeolocationOptions, BrowserGeolocationState, BrowserNetworkThrottlingPreset } from '../../types/browser.js'
+import type { CdpSend } from '../../types/cdp.js'
 import type { BrowserPageDriverEmulationState } from '../../types/driver'
 
 /**
@@ -40,8 +41,7 @@ export const CdpNetworkThrottlingPresets: Record<
   },
 }
 
-export type CdpSend = (method: string, params?: Record<string, unknown>) => Promise<unknown>
-
+/** 给出「什么都没模拟」的初始状态。 */
 export function createDefaultCdpEmulationState(): BrowserPageDriverEmulationState {
   return {
     colorScheme: 'no-preference',
@@ -54,16 +54,19 @@ export function createDefaultCdpEmulationState(): BrowserPageDriverEmulationStat
   }
 }
 
+/** 去掉首尾空白；空串按「不设置」处理。 */
 function normalizeNullableEmulationString(value: string): Nullable<string> {
   const normalized = value.trim()
   return isNonBlankString(normalized) ? normalized : null
 }
 
+/** 把 CPU 节流倍率夹进 CDP 认的区间。 */
 function normalizeCpuThrottlingRate(rate: number): number {
   if (!Number.isFinite(rate)) return 1
   return Math.min(20, Math.max(1, rate))
 }
 
+/** 校验并归一化地理位置入参；给 null 表示清掉覆盖。 */
 function normalizeGeolocation(options: BrowserGeolocationOptions): BrowserGeolocationState {
   if (!isFiniteNumber(options.latitude) || options.latitude < -90 || options.latitude > 90) {
     throw new AppError('VALIDATION', '地理位置 latitude 必须在 -90 到 90 之间。')
@@ -75,6 +78,7 @@ function normalizeGeolocation(options: BrowserGeolocationOptions): BrowserGeoloc
   return { latitude: options.latitude, longitude: options.longitude, accuracy }
 }
 
+/** 复制一份地理位置，避免调用方改到共享的状态对象。 */
 function cloneGeolocation(
   geolocation: Nullable<BrowserGeolocationState>
 ): Nullable<BrowserGeolocationState> {

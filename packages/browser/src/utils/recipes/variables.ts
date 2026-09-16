@@ -1,14 +1,8 @@
-export type BrowserRecipeRunVariables = Record<string, string>
-
-export interface BrowserRecipeVariableResolution {
-  resolvedInputs: Record<string, string>
-  usedVariableNames: string[]
-  unusedVariableNames: string[]
-  missingVariableNames: string[]
-}
+import type { BrowserRecipeRunVariables, BrowserRecipeVariableResolution } from '../../types/recipes.js'
 
 const RecipeVariableTokenPattern = /%([A-Za-z_][A-Za-z0-9_-]*)%/g
 
+/** 判变量表里有没有这个名字（只看自己的属性）。 */
 function hasOwnVariable(
   variables: BrowserRecipeRunVariables,
   name: string

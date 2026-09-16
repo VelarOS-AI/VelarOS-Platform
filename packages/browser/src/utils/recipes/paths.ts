@@ -1,9 +1,9 @@
 import { AppError } from '@velaros-ai/core/error'
-import { logRuntime } from '@velaros-ai/core/logger'
+import { Log } from '@velaros-ai/core/logger'
 
 import { normalizeBrowserArtifactJsonPath } from '../artifacts'
 
-const log = logRuntime.tag('BrowserRecipePaths')
+const log = Log.tag('BrowserRecipePaths')
 
 /** 校验并规范化 recipes/ 下的 JSON recipe 路径。 */
 export function requireRecipePath(path: string): string {

@@ -1,12 +1,8 @@
 import { randomBytes } from 'node:crypto'
 
-interface BrowserPageContentBoundary {
-  source: 'browser-page-content'
-  origin: string
-  nonce: string
-  fields: ['content']
-}
+import type { BrowserPageContentBoundary } from '../types/tools.js'
 
+/** 给一段页面内容包上带 nonce 的边界，标明它来自哪个页面。 */
 function createBrowserPageContentBoundary(url: string): BrowserPageContentBoundary {
   return {
     source: 'browser-page-content',
@@ -16,6 +12,7 @@ function createBrowserPageContentBoundary(url: string): BrowserPageContentBounda
   }
 }
 
+/** 从地址里取出来源；地址不合法时退回整串。 */
 function resolveOrigin(url: string): string {
   if (!URL.canParse(url)) return url
 
@@ -23,4 +20,4 @@ function resolveOrigin(url: string): string {
 }
 
 export { createBrowserPageContentBoundary }
-export type { BrowserPageContentBoundary }
+export type { BrowserPageContentBoundary } from '../types/tools.js'

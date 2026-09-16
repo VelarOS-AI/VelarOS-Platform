@@ -1,91 +1,45 @@
 import { isFalse, toNullable } from '@velaros-ai/core'
 
 import type { ToolContext } from '../../contract/requires'
-import type { BrowserRecipeSkeleton } from '../../types/browser'
-import { type BrowserRecipeRunStepResult, buildRecipeExecutionPlan } from '../../utils/recipes/plan'
-import type { BrowserRecipeRunVariables } from '../../utils/recipes/variables'
+import type {
+  BrowserRecipeRunOutcome,
+  BrowserRecipeRunReview,
+  BrowserRecipeSkeletonGenerate,
+  BrowserRecipeSkeletonSave,
+} from '../../types/recipes'
+import type {GenerateBrowserRecipeSkeletonFromSnapshotInput, GenerateBrowserRecipeSkeletonInput, ReadBrowserRecipeRunInput, ReadBrowserRecipeSkeletonInput, ReadBrowserRecipeSkeletonResult, RerunBrowserRecipeFromRunInput } from '../../types/recipes.js'
+import { buildRecipeExecutionPlan } from '../../utils/recipes/plan'
 
 import { createArtifactManager } from './Artifacts.js'
 import { browserRecipeReader } from './RecipeReader'
 import { browserRecipeRunner } from './RecipeRun'
 
-/** recipe skeleton 可选预设模板。 */
-type BrowserRecipeTemplate = 'login' | 'search' | 'pagination' | 'form_submit'
-
-/** 从当前页面生成 recipe skeleton 的入参。 */
-export interface GenerateBrowserRecipeSkeletonInput {
-  name?: string
-  saveSnapshot?: boolean
-  snapshotName?: string
-  overwriteSnapshot?: boolean
-  maxTextChars?: number
-  overwrite?: boolean
-  template?: BrowserRecipeTemplate
+/**
+ * recipe 产物操作：生成骨架、读骨架与运行记录、照记录重跑。
+ *
+ * 无实例状态，文件末尾给出进程唯一的一份；每次调用要的东西都从工具上下文取。
+ */
+export interface BrowserRecipeArtifactsApi {
+  /** 按当前页面生成一份 recipe 骨架并落盘，顺手存一张页面快照。 */
+  generateSkeleton(input: GenerateBrowserRecipeSkeletonInput, ctx: ToolContext): Promise<BrowserRecipeSkeletonGenerate>
+  /** 按一张已有的页面快照生成 recipe 骨架。 */
+  generateSkeletonFromSnapshot(
+    input: GenerateBrowserRecipeSkeletonFromSnapshotInput,
+    ctx: ToolContext
+  ): Promise<BrowserRecipeSkeletonSave>
+  /** 读一份 recipe 骨架，并核对它与当前站点同源。 */
+  readSkeleton(input: ReadBrowserRecipeSkeletonInput, ctx: ToolContext): Promise<ReadBrowserRecipeSkeletonResult>
+  /** 读一份运行记录，并算出输入与变量的对账概要。 */
+  readRun(input: ReadBrowserRecipeRunInput, ctx: ToolContext): Promise<BrowserRecipeRunReview>
+  /** 照一份运行记录再跑一次同一个 recipe。 */
+  rerunFromRun(input: RerunBrowserRecipeFromRunInput, ctx: ToolContext): Promise<BrowserRecipeRunOutcome>
 }
 
-/** 从已保存 snapshot 生成 recipe skeleton 的入参。 */
-export interface GenerateBrowserRecipeSkeletonFromSnapshotInput {
-  path: string
-  name?: string
-  overwrite?: boolean
-  template?: BrowserRecipeTemplate
-}
-
-/** 读取并预览 recipe skeleton 的入参。 */
-export interface ReadBrowserRecipeSkeletonInput {
-  path: string
-  inputs?: Record<string, string>
-  maxSteps?: number
-}
-
-/** recipe skeleton 的读取结果及可执行性摘要。 */
-export interface ReadBrowserRecipeSkeletonResult {
-  path: string
-  recipe: BrowserRecipeSkeleton
-  summary: {
-    url: string
-    title: string
-    sourceSnapshotPath: Nullable<string>
-    inputCount: number
-    requiredInputNames: string[]
-    optionalInputNames: string[]
-    executableStepCount: number
-    previewStepCount: number
-    readyStepCount: number
-    missingInputCount: number
-    skippedStepCount: number
-    unusedInputNames: string[]
-    missingInputs: Array<{
-      stepId: string
-      name: string
-      label: string
-      type: string
-      required: boolean
-    }>
-  }
-  stepResults: BrowserRecipeRunStepResult[]
-}
-
-/** 读取 run record 的入参。 */
-export interface ReadBrowserRecipeRunInput {
-  path: string
-}
-
-/** 基于历史 run record 重跑 recipe 的入参。 */
-export interface RerunBrowserRecipeFromRunInput {
-  path: string
-  inputs?: Record<string, string>
-  variables?: BrowserRecipeRunVariables
-  maxSteps?: number
-  dryRun?: boolean
-  stopOnMiss?: boolean
-  saveRun?: boolean
-  saveSnapshots?: boolean
-  runName?: string
-}
-
-class BrowserRecipeArtifacts {
-  public async generateSkeleton(input: GenerateBrowserRecipeSkeletonInput, ctx: ToolContext) {
+class BrowserRecipeArtifacts implements BrowserRecipeArtifactsApi {
+  public async generateSkeleton(
+    input: GenerateBrowserRecipeSkeletonInput,
+    ctx: ToolContext
+  ): Promise<BrowserRecipeSkeletonGenerate> {
     ctx.abortSignal.throwIfAborted()
 
     const inspection = await ctx.browser.inspectPage({
@@ -119,7 +73,7 @@ class BrowserRecipeArtifacts {
   public async generateSkeletonFromSnapshot(
     input: GenerateBrowserRecipeSkeletonFromSnapshotInput,
     ctx: ToolContext
-  ) {
+  ): Promise<BrowserRecipeSkeletonSave> {
     ctx.abortSignal.throwIfAborted()
 
     const {
@@ -171,7 +125,10 @@ class BrowserRecipeArtifacts {
     }
   }
 
-  public async readRun(input: ReadBrowserRecipeRunInput, ctx: ToolContext) {
+  public async readRun(
+    input: ReadBrowserRecipeRunInput,
+    ctx: ToolContext
+  ): Promise<BrowserRecipeRunReview> {
     ctx.abortSignal.throwIfAborted()
 
     const { path: runPath, run } = await browserRecipeReader.readRecipeRunRecord(input.path, ctx)
@@ -202,7 +159,10 @@ class BrowserRecipeArtifacts {
     }
   }
 
-  public async rerunFromRun(input: RerunBrowserRecipeFromRunInput, ctx: ToolContext) {
+  public async rerunFromRun(
+    input: RerunBrowserRecipeFromRunInput,
+    ctx: ToolContext
+  ): Promise<BrowserRecipeRunOutcome> {
     ctx.abortSignal.throwIfAborted()
 
     const { run } = await browserRecipeReader.readRecipeRunRecord(input.path, ctx)
@@ -224,6 +184,5 @@ class BrowserRecipeArtifacts {
   }
 }
 
-const browserRecipeArtifacts = new BrowserRecipeArtifacts()
+export const browserRecipeArtifacts: BrowserRecipeArtifactsApi = new BrowserRecipeArtifacts()
 
-export { BrowserRecipeArtifacts, browserRecipeArtifacts }

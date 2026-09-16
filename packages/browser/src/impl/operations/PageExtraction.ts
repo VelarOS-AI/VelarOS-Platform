@@ -9,53 +9,15 @@ import { AppError } from '@velaros-ai/core/error'
 
 import type { ToolContext } from '../../contract/requires'
 import type { BrowserWorkspaceArtifactFormat } from '../../types/browser'
+import type { BrowserExtractionPayload, BrowserExtractionSaveOptions, BrowserListExtractionInput, BrowserPageContentExtractionInput, BrowserTableExtractionInput } from '../../types/tools.js'
+import { BrowserPageContentArtifactFormats } from '../../utils/artifacts.js'
 import { createBrowserPageContentBoundary } from '../../utils/page-content'
 import { BrowserEvaluateMaxResultChars } from '../../utils/page-scripts/evaluate'
 import { buildListExtractionScript, buildPageContentExtractionScript, buildTableExtractionScript } from '../../utils/page-scripts/extraction'
 import { getActiveBrowserContext } from '../../utils/tool.js'
+import { BrowserTuning } from '../../utils/tuning'
 
 import { createArtifactManager } from './Artifacts.js'
-
-/** 页面提取脚本返回的载荷：页面侧构造的纯 JSON 对象。 */
-type BrowserExtractionPayload = Record<string, unknown>
-
-type BrowserPageContentFormat = 'plain' | 'markdown' | 'html'
-
-/** 提取结果的落盘选项。 */
-interface BrowserExtractionSaveOptions {
-  /** 是否把提取结果写入当前站点 extracts/。 */
-  save: boolean
-  /** 产物名称；省略时由 artifact manager 生成。 */
-  name?: string
-}
-
-interface BrowserTableExtractionInput extends BrowserExtractionSaveOptions {
-  selector?: string
-  tableIndex: number
-  maxRows: number
-}
-
-interface BrowserListExtractionInput extends BrowserExtractionSaveOptions {
-  selector?: string
-  maxItems: number
-}
-
-interface BrowserPageContentExtractionInput extends BrowserExtractionSaveOptions {
-  format: BrowserPageContentFormat
-  selector?: string
-  ignoreSelectors?: string[]
-  maxChars: number
-}
-
-const BrowserStructuredExtractionTimeoutMs = 10_000
-const BrowserPageContentExtractionTimeoutMs = 15_000
-
-/** 正文格式到 extract 产物格式（决定 .txt / .md / .html 扩展名）的映射。 */
-const BrowserPageContentArtifactFormats: Record<BrowserPageContentFormat, BrowserWorkspaceArtifactFormat> = {
-  plain: 'text',
-  markdown: 'markdown',
-  html: 'html',
-}
 
 /**
  * 在页面上下文执行宿主自建的提取脚本，完整取回它返回的对象。
@@ -146,7 +108,7 @@ async function extractBrowserTable(
       tableIndex: input.tableIndex,
       maxRows: input.maxRows,
     }),
-    BrowserStructuredExtractionTimeoutMs
+    BrowserTuning.extraction.structuredTimeoutMs
   )
   return saveStructuredExtraction(ctx, payload, input)
 }
@@ -162,7 +124,7 @@ async function extractBrowserList(
       selector: input.selector,
       maxItems: input.maxItems,
     }),
-    BrowserStructuredExtractionTimeoutMs
+    BrowserTuning.extraction.structuredTimeoutMs
   )
   return saveStructuredExtraction(ctx, payload, input)
 }
@@ -185,7 +147,7 @@ async function extractBrowserPageContent(
       ignoreSelectors: input.ignoreSelectors,
       maxChars: input.maxChars,
     }),
-    BrowserPageContentExtractionTimeoutMs
+    BrowserTuning.extraction.contentTimeoutMs
   )
   const result = { ...payload, contentBoundary: createBrowserPageContentBoundary(context.url) }
   if (!input.save || !isTrue(payload.ok) || !isNonBlankString(payload.content)) return result

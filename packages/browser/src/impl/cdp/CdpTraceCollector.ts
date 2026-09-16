@@ -2,48 +2,8 @@ import { isArray, isEmpty, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
-/**
- * CDP Tracing 采集器：与传输层解耦，供外部 CDP driver（WebSocket transport）
- * 和嵌入 webview（webContents.debugger）两条路径复用。
- *
- * trace 类别清单吸收自 chrome-devtools-mcp（与 DevTools Performance 面板 /
- * Lighthouse 保持同步），保证录出来的 trace 能被 DevTools trace 引擎完整解析。
- */
-
-export const BrowserPerformanceTraceCategories = [
-  '-*',
-  'blink.console',
-  'blink.user_timing',
-  'devtools.timeline',
-  'disabled-by-default-devtools.screenshot',
-  'disabled-by-default-devtools.timeline',
-  'disabled-by-default-devtools.timeline.invalidationTracking',
-  'disabled-by-default-devtools.timeline.frame',
-  'disabled-by-default-devtools.timeline.stack',
-  'disabled-by-default-v8.cpu_profiler',
-  'disabled-by-default-v8.cpu_profiler.hires',
-  'latencyInfo',
-  'loading',
-  'disabled-by-default-lighthouse',
-  'v8.execute',
-  'v8',
-] as const
-
-/** 采集器需要的最小 CDP 会话面。 */
-export interface CdpTraceTransport {
-  send<T = unknown>(method: string, params?: Record<string, unknown>): Promise<T>
-  /** 订阅 CDP 事件；返回退订函数。 */
-  onEvent<T = unknown>(method: string, listener: (params: T) => void): () => void
-}
-
-/** electron.WebContents 的最小 debugger 面（避免此文件依赖 electron 类型）。 */
-interface WebContentsDebuggerLike {
-  debugger: {
-    sendCommand(method: string, params?: Record<string, unknown>): Promise<unknown>
-    on(event: 'message', listener: (event: unknown, method: string, params: unknown) => void): void
-    off(event: 'message', listener: (event: unknown, method: string, params: unknown) => void): void
-  }
-}
+import type { CdpHeapSnapshotChunkEvent, CdpIoReadResult, CdpTraceTransport, CdpTracingCompleteEvent, WebContentsDebuggerLike } from '../../types/cdp.js'
+import { BrowserTuning } from '../../utils/tuning'
 
 /** 把 webContents.debugger 适配成采集器需要的 CDP 会话面。 */
 export function createWebContentsCdpTraceTransport(
@@ -64,21 +24,49 @@ export function createWebContentsCdpTraceTransport(
   }
 }
 
-interface CdpTracingCompleteEvent {
-  stream?: string
-  dataLossOccurred?: boolean
+/**
+ * 性能 trace 采集器：开 CDP Tracing、等 `Tracing.tracingComplete`、把数据流读回来。
+ *
+ * 一次录制一个实例；只负责采，解析交给性能引擎。
+ */
+export interface CdpTraceCollectorApi {
+  /** 现在是不是正在录。 */
+  isRunning(): boolean
+  /** 开始录。 */
+  start(): Promise<void>
+  /** 结束录制并读回全部 trace 事件。 */
+  stop(): Promise<unknown[]>
+  /** 尽力终止录制（abort/dispose 清理用），不读数据。 */
+  abort(): Promise<void>
 }
 
-interface CdpIoReadResult {
-  data: string
-  base64Encoded?: boolean
-  eof: boolean
-}
+export class CdpTraceCollector implements CdpTraceCollectorApi {
+  /**
+   * CDP Tracing 采集器：与传输层解耦，供外部 CDP driver（WebSocket transport）
+   * 和嵌入 webview（webContents.debugger）两条路径复用。
+   *
+   * trace 类别清单吸收自 chrome-devtools-mcp（与 DevTools Performance 面板 /
+   * Lighthouse 保持同步），保证录出来的 trace 能被 DevTools trace 引擎完整解析。
+   */
+  private static readonly BrowserPerformanceTraceCategories = [
+    '-*',
+    'blink.console',
+    'blink.user_timing',
+    'devtools.timeline',
+    'disabled-by-default-devtools.screenshot',
+    'disabled-by-default-devtools.timeline',
+    'disabled-by-default-devtools.timeline.invalidationTracking',
+    'disabled-by-default-devtools.timeline.frame',
+    'disabled-by-default-devtools.timeline.stack',
+    'disabled-by-default-v8.cpu_profiler',
+    'disabled-by-default-v8.cpu_profiler.hires',
+    'latencyInfo',
+    'loading',
+    'disabled-by-default-lighthouse',
+    'v8.execute',
+    'v8',
+  ] as const
 
-const TraceStreamReadChunkSize = 1024 * 1024
-const TraceCompleteTimeoutMs = 30_000
-
-export class CdpTraceCollector {
   private tracingCompleteEvent: Nullable<Promise<CdpTracingCompleteEvent>> = null
   private unsubscribe: Nullable<() => void> = null
   private started = false
@@ -104,7 +92,7 @@ export class CdpTraceCollector {
 
     try {
       await this.transport.send('Tracing.start', {
-        categories: BrowserPerformanceTraceCategories.join(','),
+        categories: CdpTraceCollector.BrowserPerformanceTraceCategories.join(','),
         transferMode: 'ReturnAsStream',
         streamFormat: 'json',
       })
@@ -161,7 +149,7 @@ export class CdpTraceCollector {
     const timers = new TimerScope({ name: 'CdpTraceCollector.waitForComplete' })
     try {
       return await timers.withTimeout(
-        TraceCompleteTimeoutMs,
+        BrowserTuning.cdp.traceCompleteTimeoutMs,
         () => this.tracingCompleteEvent!,
         { timeoutMessage: '等待 trace 结束事件超时。', unref: true }
       )
@@ -176,7 +164,7 @@ export class CdpTraceCollector {
       for (;;) {
         const chunk = await this.transport.send<CdpIoReadResult>('IO.read', {
           handle,
-          size: TraceStreamReadChunkSize,
+          size: BrowserTuning.cdp.traceStreamChunkBytes,
         })
         chunks.push(
           chunk.base64Encoded ? Buffer.from(chunk.data, 'base64').toString('utf8') : chunk.data
@@ -211,10 +199,6 @@ export class CdpTraceCollector {
     this.tracingCompleteEvent = null
     this.started = false
   }
-}
-
-interface CdpHeapSnapshotChunkEvent {
-  chunk?: string
 }
 
 /**

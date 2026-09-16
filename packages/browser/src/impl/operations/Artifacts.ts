@@ -1,9 +1,9 @@
+import { BrowserFileLimits } from '../../contract/constants'
 import type { BrowserToolContext } from '../../contract/requires'
 import type {
-  BrowserWorkspaceArtifactFormat,
-  BrowserWorkspaceArtifactKind,
   WorkspaceWriteFileResult,
 } from '../../types/browser'
+import type { BrowserListArtifactsInput, BrowserListFilesInput, BrowserReadFileInput, BrowserSavePageSnapshotInput, BrowserWriteArtifactInput, BrowserWriteFileInput } from '../../types/tools.js'
 import { getActiveBrowserContext, requireActiveBrowserSite } from '../../utils/tool.js'
 import { getRelativePathInsideRoot, toPortableRelativePath } from '../../utils/workspace-paths'
 import { BrowserWorkspaceArtifactManager } from '../workspace/BrowserWorkspaceArtifactManager.js'
@@ -25,48 +25,6 @@ export function createArtifactManager(ctx: BrowserToolContext): BrowserWorkspace
   })
 }
 
-const BrowserReadDefaultMaxChars = 200_000
-
-type BrowserListFilesInput = {
-  path?: string
-  recursive?: boolean
-  maxDepth?: number
-  limit: number
-}
-
-type BrowserReadFileInput = {
-  path: string
-  startLine?: number
-  endLine?: number
-  maxChars?: number
-}
-
-type BrowserWriteFileInput = {
-  path: string
-  content: string
-  overwrite?: boolean
-}
-
-type BrowserListArtifactsInput = {
-  kind?: BrowserWorkspaceArtifactKind
-  limit: number
-}
-
-type BrowserWriteArtifactInput = {
-  kind: BrowserWorkspaceArtifactKind
-  format: BrowserWorkspaceArtifactFormat
-  content: string
-  name?: string
-  overwrite?: boolean
-}
-
-type BrowserSavePageSnapshotInput = {
-  name?: string
-  includeHtml?: boolean
-  maxTextChars?: number
-  maxHtmlChars?: number
-  overwrite?: boolean
-}
 
 async function listBrowserWorkspaceFiles(
   { path, recursive, maxDepth, limit }: BrowserListFilesInput,
@@ -88,7 +46,7 @@ async function readBrowserWorkspaceFile(
   ctx: BrowserToolContext
 ) {
   ctx.abortSignal.throwIfAborted()
-  const readMaxChars = endLine || maxChars ? maxChars : BrowserReadDefaultMaxChars
+  const readMaxChars = endLine || maxChars ? maxChars : BrowserFileLimits.readChars
   requireActiveBrowserSite(ctx)
 
   return ctx.browser.readFile(path, startLine, endLine, readMaxChars)

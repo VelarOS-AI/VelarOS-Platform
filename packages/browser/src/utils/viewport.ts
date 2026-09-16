@@ -1,19 +1,13 @@
 import type { BrowserViewportOptions } from '../types/browser.js'
+import type { BrowserViewportDeviceMetrics } from '../types/runtime.js'
+
+import { BrowserTuning } from './tuning'
 
 /** 内嵌浏览器默认视口，和桌面常见窗口比例接近。 */
 export const DEFAULT_BROWSER_VIEWPORT = {
-  width: 1365,
-  height: 768,
+  width: BrowserTuning.page.viewportWidth,
+  height: BrowserTuning.page.viewportHeight,
 } as const
-
-export interface BrowserViewportDeviceMetrics {
-  width: number
-  height: number
-  screenWidth: number
-  screenHeight: number
-  deviceScaleFactor: number
-  mobile: boolean
-}
 
 /**
  * 把公开 viewport 契约归一成两种 driver 共用的 CDP 设备指标。

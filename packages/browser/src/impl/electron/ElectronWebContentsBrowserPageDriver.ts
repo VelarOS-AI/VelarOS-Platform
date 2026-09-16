@@ -2,7 +2,7 @@ import type electron from 'electron'
 
 import { isPresent } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
-import { logRuntime } from '@velaros-ai/core/logger'
+import { Log } from '@velaros-ai/core/logger'
 
 import type { BrowserPageDriver } from '../../contract/requires.js'
 import type {
@@ -14,80 +14,26 @@ import type {
   BrowserPageDiagnosticEntry,
   BrowserViewportOptions,
 } from '../../types/browser'
+import type { CdpScreencastConsumerOptions, CdpScreencastStartOptions, CdpSend,ScreencastCapturedFrame } from '../../types/cdp.js'
 import type { BrowserPageDriverClickCoordinatesOptions, BrowserPageDriverDiagnosticsOptions, BrowserPageDriverDragCoordinatesOptions, BrowserPageDriverEmulationState, BrowserPageDriverMoveMouseOptions, BrowserPageDriverNetworkCaptureState, BrowserPageDriverNetworkControlState, BrowserPageDriverNetworkIdleOptions, BrowserPageDriverNetworkRequestDetailsResult, BrowserPageDriverNetworkResponseBodyResult, BrowserPageDriverState } from '../../types/driver'
-import {
-  applyCdpEmulation,
-  type CdpSend,
-  createDefaultCdpEmulationState,
-} from '../../utils/cdp/emulation'
+import type { BrowserPageDriverFactory } from '../../types/electron.js'
+import { applyCdpEmulation, createDefaultCdpEmulationState } from '../../utils/cdp/emulation'
 import { clearBrowserDiagnosticEntries, takeBrowserDiagnosticWindow } from '../../utils/diagnostics.js'
+import { BrowserTuning } from '../../utils/tuning'
 import { buildBrowserViewportDeviceMetrics } from '../../utils/viewport'
 import { BrowserCdpNetworkController } from '../cdp/BrowserCdpNetworkController'
-import {
-  type CdpScreencastConsumerOptions,
-  CdpScreencastRecorder,
-  type CdpScreencastStartOptions,
-  type ScreencastCapturedFrame,
-} from '../cdp/CdpScreencastRecorder'
+import { CdpScreencastRecorder } from '../cdp/CdpScreencastRecorder'
 import {
   captureCdpHeapSnapshot,
   CdpTraceCollector,
   createWebContentsCdpTraceTransport,
 } from '../cdp/CdpTraceCollector'
 
-export interface BrowserPageDriverFactoryInput {
-  sessionId: string
-  webContents: electron.WebContents
-}
-
-export type BrowserPageDriverFactory = (input: BrowserPageDriverFactoryInput) => BrowserPageDriver
-
-/**
- * 嵌入式页面的 trace 状态。
- *
- * driver 实例按调用临时创建，而录制跨多次工具调用，所以状态挂在 WebContents 上。
- */
-const webContentsTraceSessions = new WeakMap<
-  electron.WebContents,
-  { collector: CdpTraceCollector; detachAfterStop: boolean }
->()
-
-/** 嵌入式页面的录屏状态（同 trace：状态随 WebContents,不随瞬时 driver 实例）。 */
-const webContentsScreencastSessions = new WeakMap<
-  electron.WebContents,
-  { recorder: CdpScreencastRecorder; detachAfterStop: boolean }
->()
-
-/**
- * 嵌入式页面的环境模拟状态。
- *
- * CDP Emulation override 在 debugger detach 后失效,所以模拟一旦配置就需要**持久
- * attach** —— 有此登记项即表示 debugger 由模拟持有,trace/截图等临时操作不得 detach。
- */
-const webContentsEmulationHolds = new WeakMap<
-  electron.WebContents,
-  { state: BrowserPageDriverEmulationState; networkEnabled: boolean }
->()
-
-/**
- * 嵌入式页面的网络采集状态(同 emulation:随 WebContents 持久,不随瞬时 driver 实例)。
- *
- * driver 实例按调用临时创建,而网络记录 / Fetch 拦截规则要跨多次工具调用累积,所以控制器与
- * 诊断缓冲挂在 WebContents 上。采集从首次网络操作起惰性建立(在此之前发生的请求不回填)。
- */
-const webContentsNetworkHolds = new WeakMap<
-  electron.WebContents,
-  {
-    controller: BrowserCdpNetworkController
-    diagnostics: BrowserPageDiagnosticEntry[]
-    messageListener: (event: electron.Event, method: string, params: unknown) => void
-  }
->()
+import { electronDebuggerHolds } from './ElectronDebuggerHolds'
 
 /** 嵌入式网络诊断缓冲上限,与外部 CDP driver 的诊断窗口一致。 */
-const MaxEmbeddedNetworkDiagnostics = 300
 
-const embeddedDriverLog = logRuntime.tag('ElectronWebContentsBrowserPageDriver')
+const embeddedDriverLog = Log.tag('ElectronWebContentsBrowserPageDriver')
 
 /** CDP MouseEvent buttons 位掩码：left=1、right=2、middle=4。 */
 function cdpMouseButtonsMask(button: BrowserMouseButton): number {
@@ -100,7 +46,7 @@ function clampEmbeddedDiagnosticLimit(value: unknown): number {
   const numberValue = Number(value)
   if (!Number.isFinite(numberValue)) return 100
 
-  return Math.max(1, Math.min(MaxEmbeddedNetworkDiagnostics, Math.round(numberValue)))
+  return Math.max(1, Math.min(BrowserTuning.cdp.embeddedNetworkDiagnostics, Math.round(numberValue)))
 }
 
 class ElectronWebContentsBrowserPageDriver implements BrowserPageDriver {
@@ -120,8 +66,8 @@ class ElectronWebContentsBrowserPageDriver implements BrowserPageDriver {
   private detachDebugger(shouldDetach: boolean): void {
     if (!shouldDetach || this.webContents.isDestroyed()) return
     // 模拟或网络采集持有 debugger 时,临时操作不得 detach(否则 override / 事件订阅失效)。
-    if (webContentsEmulationHolds.has(this.webContents)) return
-    if (webContentsNetworkHolds.has(this.webContents)) return
+    if (electronDebuggerHolds.hasEmulation(this.webContents)) return
+    if (electronDebuggerHolds.hasNetwork(this.webContents)) return
     if (!this.webContents.debugger.isAttached()) return
     try {
       this.webContents.debugger.detach()
@@ -142,10 +88,10 @@ class ElectronWebContentsBrowserPageDriver implements BrowserPageDriver {
     if (!this.webContents.debugger.isAttached()) {
       this.webContents.debugger.attach('1.3')
     }
-    let hold = webContentsEmulationHolds.get(this.webContents)
+    let hold = electronDebuggerHolds.getEmulation(this.webContents)
     if (!hold) {
       hold = { state: createDefaultCdpEmulationState(), networkEnabled: false }
-      webContentsEmulationHolds.set(this.webContents, hold)
+      electronDebuggerHolds.setEmulation(this.webContents, hold)
     }
     // Network.emulateNetworkConditions 需要 Network domain;只 enable 一次。
     if (isPresent(options.networkThrottling) && !hold.networkEnabled) {
@@ -158,7 +104,7 @@ class ElectronWebContentsBrowserPageDriver implements BrowserPageDriver {
   }
 
   public getEmulationState(): BrowserPageDriverEmulationState {
-    return webContentsEmulationHolds.get(this.webContents)?.state ?? createDefaultCdpEmulationState()
+    return electronDebuggerHolds.getEmulation(this.webContents)?.state ?? createDefaultCdpEmulationState()
   }
 
   /**
@@ -173,7 +119,7 @@ class ElectronWebContentsBrowserPageDriver implements BrowserPageDriver {
     if (!this.webContents.debugger.isAttached()) {
       this.webContents.debugger.attach('1.3')
     }
-    const existing = webContentsNetworkHolds.get(this.webContents)
+    const existing = electronDebuggerHolds.getNetwork(this.webContents)
     if (existing) return existing
 
     const diagnostics: BrowserPageDiagnosticEntry[] = []
@@ -181,13 +127,13 @@ class ElectronWebContentsBrowserPageDriver implements BrowserPageDriver {
       send: this.debuggerSend,
       appendDiagnostic: (entry) => {
         diagnostics.push(entry)
-        if (diagnostics.length > MaxEmbeddedNetworkDiagnostics) {
-          diagnostics.splice(0, diagnostics.length - MaxEmbeddedNetworkDiagnostics)
+        if (diagnostics.length > BrowserTuning.cdp.embeddedNetworkDiagnostics) {
+          diagnostics.splice(0, diagnostics.length - BrowserTuning.cdp.embeddedNetworkDiagnostics)
         }
       },
       getCurrentUrl: () => this.webContents.getURL(),
       getNetworkThrottling: () =>
-        webContentsEmulationHolds.get(this.webContents)?.state.networkThrottling ?? 'none',
+        electronDebuggerHolds.getEmulation(this.webContents)?.state.networkThrottling ?? 'none',
     })
     const messageListener = (
       _event: electron.Event,
@@ -198,7 +144,7 @@ class ElectronWebContentsBrowserPageDriver implements BrowserPageDriver {
     }
     this.webContents.debugger.on('message', messageListener)
     const hold = { controller, diagnostics, messageListener }
-    webContentsNetworkHolds.set(this.webContents, hold)
+    electronDebuggerHolds.setNetwork(this.webContents, hold)
     await controller.enableNetworkCapture()
     return hold
   }
@@ -236,7 +182,7 @@ class ElectronWebContentsBrowserPageDriver implements BrowserPageDriver {
    * 那是一次「看看有什么」的读操作;把原因带回去,让回执说清楚为什么列不到网络事件。
    */
   public async ensureNetworkCapture(): Promise<BrowserPageDriverNetworkCaptureState> {
-    if (webContentsNetworkHolds.has(this.webContents))
+    if (electronDebuggerHolds.hasNetwork(this.webContents))
       return { startedNow: false, unavailableReason: null }
 
     try {
@@ -258,7 +204,7 @@ class ElectronWebContentsBrowserPageDriver implements BrowserPageDriver {
   public readDiagnostics(
     options: BrowserPageDriverDiagnosticsOptions
   ): BrowserPageDiagnosticEntry[] {
-    const hold = webContentsNetworkHolds.get(this.webContents)
+    const hold = electronDebuggerHolds.getNetwork(this.webContents)
     if (!hold) return []
 
     const limit = clampEmbeddedDiagnosticLimit(options.limit)
@@ -270,7 +216,7 @@ class ElectronWebContentsBrowserPageDriver implements BrowserPageDriver {
   }
 
   public async startTracing(): Promise<void> {
-    if (webContentsTraceSessions.get(this.webContents)?.collector.isRunning()) {
+    if (electronDebuggerHolds.getTrace(this.webContents)?.collector.isRunning()) {
       throw new AppError('VALIDATION', '性能 trace 已在录制中，请先 stop_trace。')
     }
 
@@ -282,24 +228,24 @@ class ElectronWebContentsBrowserPageDriver implements BrowserPageDriver {
       this.detachDebugger(detachAfterStop)
       throw error
     }
-    webContentsTraceSessions.set(this.webContents, { collector, detachAfterStop })
+    electronDebuggerHolds.setTrace(this.webContents, { collector, detachAfterStop })
   }
 
   public async stopTracing(): Promise<unknown[]> {
-    const session = webContentsTraceSessions.get(this.webContents)
+    const session = electronDebuggerHolds.getTrace(this.webContents)
     if (!session) {
       throw new AppError('VALIDATION', '当前没有正在录制的性能 trace。')
     }
     try {
       return await session.collector.stop()
     } finally {
-      webContentsTraceSessions.delete(this.webContents)
+      electronDebuggerHolds.deleteTrace(this.webContents)
       this.detachDebugger(session.detachAfterStop)
     }
   }
 
   public isTracing(): boolean {
-    return !!webContentsTraceSessions.get(this.webContents)?.collector.isRunning()
+    return !!electronDebuggerHolds.getTrace(this.webContents)?.collector.isRunning()
   }
 
   public async captureHeapSnapshot(
@@ -320,7 +266,7 @@ class ElectronWebContentsBrowserPageDriver implements BrowserPageDriver {
     options: CdpScreencastStartOptions,
     consumer: CdpScreencastConsumerOptions = {}
   ): Promise<void> {
-    if (webContentsScreencastSessions.get(this.webContents)?.recorder.isRunning()) {
+    if (electronDebuggerHolds.getScreencast(this.webContents)?.recorder.isRunning()) {
       throw new AppError('VALIDATION', '页面录屏已在进行中，请先 stop。')
     }
 
@@ -335,27 +281,27 @@ class ElectronWebContentsBrowserPageDriver implements BrowserPageDriver {
       this.detachDebugger(detachAfterStop)
       throw error
     }
-    webContentsScreencastSessions.set(this.webContents, { recorder, detachAfterStop })
+    electronDebuggerHolds.setScreencast(this.webContents, { recorder, detachAfterStop })
   }
 
   public async stopScreencast(): Promise<{
     frames: ScreencastCapturedFrame[]
     frameLimitReached: boolean
   }> {
-    const session = webContentsScreencastSessions.get(this.webContents)
+    const session = electronDebuggerHolds.getScreencast(this.webContents)
     if (!session) {
       throw new AppError('VALIDATION', '当前没有正在进行的页面录屏。')
     }
     try {
       return await session.recorder.stop()
     } finally {
-      webContentsScreencastSessions.delete(this.webContents)
+      electronDebuggerHolds.deleteScreencast(this.webContents)
       this.detachDebugger(session.detachAfterStop)
     }
   }
 
   public isScreencasting(): boolean {
-    return !!webContentsScreencastSessions.get(this.webContents)?.recorder.isRunning()
+    return !!electronDebuggerHolds.getScreencast(this.webContents)?.recorder.isRunning()
   }
 
   public executeJavaScript<T = unknown>(script: string, userGesture?: boolean): Promise<T> {
@@ -474,7 +420,7 @@ class ElectronWebContentsBrowserPageDriver implements BrowserPageDriver {
     const startY = Math.round(options.startY)
     const endX = Math.round(options.endX)
     const endY = Math.round(options.endY)
-    const steps = Math.max(1, Math.round(options.steps ?? 10))
+    const steps = Math.max(1, Math.round(options.steps ?? BrowserTuning.page.dragSteps))
 
     const path: Array<{ x: number; y: number }> = []
     for (let index = 1; index <= steps; index += 1) {
@@ -545,8 +491,8 @@ class ElectronWebContentsBrowserPageDriver implements BrowserPageDriver {
     if (!this.webContents.debugger.isAttached()) {
       this.webContents.debugger.attach('1.3')
     }
-    if (!webContentsEmulationHolds.has(this.webContents)) {
-      webContentsEmulationHolds.set(this.webContents, {
+    if (!electronDebuggerHolds.hasEmulation(this.webContents)) {
+      electronDebuggerHolds.setEmulation(this.webContents, {
         state: createDefaultCdpEmulationState(),
         networkEnabled: false,
       })

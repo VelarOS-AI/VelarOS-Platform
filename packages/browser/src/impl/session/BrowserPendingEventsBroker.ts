@@ -1,61 +1,78 @@
 import { toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
-import { logRuntime } from '@velaros-ai/core/logger'
+import { Log } from '@velaros-ai/core/logger'
 import { type TimerLease, TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
 import type { BrowserPageDriverDownloadItem } from '../../contract/requires.js'
 import type { BrowserPendingEventSummary } from '../../types/browser.js'
+import type { BrowserJavaScriptDialogDetails } from '../../types/electron'
+import type { PendingDialogEntry, PendingDownloadEntry, PendingPermissionEntry } from '../../types/session.js'
+import { BrowserTuning } from '../../utils/tuning'
 
-const DefaultDialogTimeoutMs = 30_000
-const DefaultPermissionTimeoutMs = 15_000
-const DefaultDownloadTimeoutMs = 60_000
-
-interface PendingDialogEntry {
-  id: string
-  sessionId: string
-  type: string
-  message: Nullable<string>
-  title: Nullable<string>
-  defaultPromptText: Nullable<string>
-  createdAt: number
-  resolve: (response: { accept: boolean; promptText: string }) => void
-}
-
-interface PendingDownloadEntry {
-  id: string
-  sessionId: string
-  filename: string
-  url: Nullable<string>
-  mimeType: string
-  totalBytes: number
-  item: BrowserPageDriverDownloadItem
-  createdAt: number
-  settled: boolean
-}
-
-interface PendingPermissionEntry {
-  id: string
-  sessionId: string
-  permission: string
-  url: Nullable<string>
-  requestingUrl: Nullable<string>
-  embeddingOrigin: Nullable<string>
-  createdAt: number
-  resolve: (granted: boolean) => void
-}
-
-interface BrowserJavaScriptDialogDetails {
-  type?: string
-  message?: string
-  title?: string
-  defaultPromptText?: string
-}
 
 /**
  * 管理浏览器阻塞事件（dialog / download / permission）的待处理队列与超时回退。
  */
-class BrowserPendingEventsBroker {
-  private readonly log = logRuntime.tag('BrowserPendingEventsBroker')
+export interface BrowserPendingEventsBrokerApi {
+  /** 清理某个页面会话的阻塞事件，但保留 broker 供后续窗口继续复用。 */
+  clearSession(sessionId: string): void
+  /** 清空当前窗口留下的全部阻塞事件，但不终止 broker 生命周期。 */
+  clearAll(): void
+  /** 拆掉这个实例占用的资源（监听器、计时器、debugger 会话）。 */
+  dispose(): void
+  /** 列这条会话当前挂着的弹窗、下载与权限请求。 */
+  listPendingEvents(sessionId: string): BrowserPendingEventSummary[]
+  /** 接住页面弹出的 JS 弹窗，登记成待处理事件并按缺省超时结算（取消）。 */
+  handleIncomingDialog(input: {
+    sessionId: string
+    details: BrowserJavaScriptDialogDetails
+    callback: (response: boolean, promptText?: string) => void
+  }): void
+  /** 接住页面发起的下载，登记成待处理事件并按缺省超时结算（取消）。 */
+  handleIncomingDownload(input: {
+    sessionId: string
+    item: BrowserPageDriverDownloadItem
+    url: Nullable<string>
+  }): void
+  /** 接住页面的权限请求，登记成待处理事件并按缺省超时结算（拒绝）。 */
+  handleIncomingPermission(input: {
+    sessionId: string
+    permission: string
+    url: Nullable<string>
+    requestingUrl: Nullable<string>
+    embeddingOrigin: Nullable<string>
+    callback: (granted: boolean) => void
+  }): void
+  /** 按用户或模型的裁决结算一个挂起弹窗。 */
+  resolveDialog(input: {
+    sessionId: string
+    eventId?: string
+    accept: boolean
+    promptText?: string
+  }): { handled: boolean; eventId: string; accept: boolean; promptText: string }
+  /** 按裁决结算一个挂起下载：接受就存进工作区，取消就丢掉。 */
+  resolveDownload(input: {
+    sessionId: string
+    eventId?: string
+    action: 'accept' | 'cancel'
+    savePath?: string
+  }): {
+    handled: boolean
+    eventId: string
+    action: 'accept' | 'cancel'
+    savePath: Nullable<string>
+    state: Nullable<string>
+  }
+  /** 按裁决结算一个挂起的权限请求。 */
+  resolvePermission(input: { sessionId: string; eventId?: string; grant: boolean }): {
+    handled: boolean
+    eventId: string
+    granted: boolean
+  }
+}
+
+class BrowserPendingEventsBroker implements BrowserPendingEventsBrokerApi {
+  private readonly log = Log.tag('BrowserPendingEventsBroker')
   private readonly timers = new TimerScope({ name: 'BrowserPendingEventsBroker' })
   private readonly pendingDialogs = new Map<string, PendingDialogEntry>()
   private readonly pendingDownloads = new Map<string, PendingDownloadEntry>()
@@ -165,7 +182,7 @@ class BrowserPendingEventsBroker {
       input.callback(response.accept, response.promptText)
     }
 
-    const timeout = this.scheduleTimeout(DefaultDialogTimeoutMs, () => {
+    const timeout = this.scheduleTimeout(BrowserTuning.session.dialogTimeoutMs, () => {
       if (!this.pendingDialogs.has(id)) return
       this.log.info('dialog pending timeout, applying default response', {
         sessionId: input.sessionId,
@@ -216,7 +233,7 @@ class BrowserPendingEventsBroker {
 
     this.pendingDownloads.set(id, entry)
 
-    this.scheduleTimeout(DefaultDownloadTimeoutMs, () => {
+    this.scheduleTimeout(BrowserTuning.session.downloadTimeoutMs, () => {
       const pending = this.pendingDownloads.get(id)
       if (!pending || pending.settled) return
       this.cancelPendingDownload(pending, '下载超时取消失败')
@@ -239,7 +256,7 @@ class BrowserPendingEventsBroker {
       input.callback(granted)
     }
 
-    const timeout = this.scheduleTimeout(DefaultPermissionTimeoutMs, () => {
+    const timeout = this.scheduleTimeout(BrowserTuning.session.permissionTimeoutMs, () => {
       if (!this.pendingPermissions.has(id)) return
       this.log.info('permission pending timeout, default deny', {
         sessionId: input.sessionId,

@@ -3,18 +3,10 @@ export { BrowserPageWaiter } from '../impl/electron/BrowserPageWaiter'
 export type { BrowserSessionManagerOptions } from '../impl/electron/BrowserSessionManager'
 export { BrowserSessionManager } from '../impl/electron/BrowserSessionManager'
 export { ElectronBrowserRuntime } from '../impl/electron/ElectronBrowserRuntime'
-export type {
-  BrowserPageDriverFactory,
-  BrowserPageDriverFactoryInput,
-} from '../impl/electron/ElectronWebContentsBrowserPageDriver'
 export {
   createElectronWebContentsBrowserPageDriver,
   ElectronWebContentsBrowserPageDriver,
 } from '../impl/electron/ElectronWebContentsBrowserPageDriver'
-export type {
-  BrowserRuntimeCapabilityService,
-  CreateBrowserKernelModuleOptions,
-} from '../impl/electron/kernel-module'
 export { BrowserRuntimeCapability, createBrowserKernelModule } from '../impl/electron/kernel-module'
 export type { BrowserUserActivityEvent, BrowserUserActivitySummary } from '../types/browser'
 export type {
@@ -29,6 +21,8 @@ export type {
   BrowserWebAuthnAccountSelectionRequest,
   ElectronBrowserRuntimeOptions,
 } from '../types/electron'
+export type { BrowserPageDriverFactory, BrowserPageDriverFactoryInput } from '../types/electron.js'
+export type { BrowserRuntimeCapabilityService, CreateBrowserKernelModuleOptions } from '../types/electron.js'
 export type {
   BrowserPageDriverKernel,
   BrowserPageDriverSession,

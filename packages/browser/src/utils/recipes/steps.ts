@@ -4,22 +4,12 @@ import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
 import type { ToolContext } from '../../contract/requires'
 import { extractBrowserList, extractBrowserTable } from '../../impl/operations/PageExtraction'
+import type { BrowserRecipeRunStepResult, BrowserRecipeStepOperation, BrowserRecipeStepPlan, ExecuteBrowserRecipeStepsInput } from '../../types/recipes.js'
 import { performTargetActionWithRecovery } from '../target-recovery'
+import { BrowserTuning } from '../tuning'
 
-import type {
-  BrowserRecipeRunStepResult,
-  BrowserRecipeStepOperation,
-  BrowserRecipeStepPlan,
-} from './plan'
 
-/** 执行 recipe 步骤列表的入参。 */
-interface ExecuteBrowserRecipeStepsInput {
-  /** 已经由 plan helper 编译好的步骤计划。 */
-  stepPlan: BrowserRecipeStepPlan[]
-  /** target 未命中时是否立即抛错停止。 */
-  stopOnMiss?: boolean
-}
-
+/** 给一步 recipe 拼一句人能看懂的预览（干跑时用）。 */
 function previewActionForOperation(
   operation: Nullable<BrowserRecipeStepOperation>
 ): Nullable<'click' | 'fill'> {
@@ -28,6 +18,7 @@ function previewActionForOperation(
   return operation.action.action
 }
 
+/** 从一步 recipe 里读出目标元素的线索。 */
 function readTargetHints(operation: BrowserRecipeStepOperation, stepId: string) {
   if (operation.kind !== 'target_action') return {
       targetCss: null,
@@ -49,6 +40,7 @@ function readTargetHints(operation: BrowserRecipeStepOperation, stepId: string) 
   }
 }
 
+/** 判这一步算不算「没命中」（目标找不到、等待超时）。 */
 function isOperationMiss(operation: BrowserRecipeStepOperation, result: unknown): boolean {
   if (!result || !isPlainObject(result) ) return false
 
@@ -58,6 +50,7 @@ function isOperationMiss(operation: BrowserRecipeStepOperation, result: unknown)
   return false
 }
 
+/** 执行一步 recipe：按操作种类分派到对应的宿主端口方法。 */
 async function executeRecipeStepOperation(
   operation: BrowserRecipeStepOperation,
   stepKind: BrowserRecipeStepPlan['step']['kind'],
@@ -67,7 +60,7 @@ async function executeRecipeStepOperation(
     case 'target_action':
       return performTargetActionWithRecovery(operation.action, ctx)
     case 'inspect_page': {
-      const inspection = await ctx.browser.inspectPage({ maxTextChars: 20_000 })
+      const inspection = await ctx.browser.inspectPage({ maxTextChars: BrowserTuning.extraction.recipeInspectTextChars })
       if (stepKind === 'extract_links') return {
           url: inspection.url,
           title: inspection.title,
@@ -90,13 +83,13 @@ async function executeRecipeStepOperation(
       return extractBrowserTable(ctx, {
         selector: operation.selector,
         tableIndex: operation.tableIndex ?? 0,
-        maxRows: operation.maxRows ?? 200,
+        maxRows: operation.maxRows ?? BrowserTuning.extraction.recipeTableRows,
         save: false,
       })
     case 'extract_list':
       return extractBrowserList(ctx, {
         selector: operation.selector,
-        maxItems: operation.maxItems ?? 50,
+        maxItems: operation.maxItems ?? BrowserTuning.extraction.recipeListItems,
         save: false,
       })
   }

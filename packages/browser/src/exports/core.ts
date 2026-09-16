@@ -1,98 +1,48 @@
+export { BrowserWorkspaceArtifactDirectoryMap, BrowserWorkspaceArtifactFormatExtensionMap } from '../contract/constants'
 export type { BrowserCdpNetworkControllerDeps } from '../impl/cdp/BrowserCdpNetworkController'
 export { BrowserCdpNetworkController } from '../impl/cdp/BrowserCdpNetworkController'
-export type { BrowserCommandSpec } from '../impl/cdp/BrowserPlatformCompatibility'
 export { BrowserPlatformCompatibility } from '../impl/cdp/BrowserPlatformCompatibility'
-export type {
-  CdpBrowserPageDriverConnectOptions,
-  CdpBrowserPageDriverOptions,
-  CdpBrowserPageDriverTransport,
-} from '../impl/cdp/CdpBrowserPageDriver'
+export type { CdpBrowserPageDriverConnectOptions, CdpBrowserPageDriverOptions } from '../impl/cdp/CdpBrowserPageDriver'
 export { CdpBrowserPageDriver } from '../impl/cdp/CdpBrowserPageDriver'
-export type { CdpExternalBrowserLauncherDependencies, CdpExternalBrowserLaunchOptions, CdpExternalBrowserSession } from '../impl/cdp/CdpExternalBrowserLauncher'
+export type { CdpExternalBrowserLauncherDependencies } from '../impl/cdp/CdpExternalBrowserLauncher'
 export { CdpExternalBrowserLauncher } from '../impl/cdp/CdpExternalBrowserLauncher'
-export type {
-  CdpScreencastConsumerOptions,
-  CdpScreencastStartOptions,
-  EncodeScreencastGifOptions,
-  ScreencastCapturedFrame,
-  ScreencastFrameDecoder,
-} from '../impl/cdp/CdpScreencastRecorder'
 export {
   CdpScreencastRecorder,
   DefaultScreencastStartOptions,
   encodeScreencastFramesToGif,
 } from '../impl/cdp/CdpScreencastRecorder'
-export type { CdpTraceTransport } from '../impl/cdp/CdpTraceCollector'
 export {
-  BrowserPerformanceTraceCategories,
   captureCdpHeapSnapshot,
   CdpTraceCollector,
   createWebContentsCdpTraceTransport,
 } from '../impl/cdp/CdpTraceCollector'
-export type {
-  CdpWebSocketLike,
-  CdpWebSocketTransportConnectOptions,
-  CdpWebSocketTransportOptions,
-} from '../impl/cdp/CdpWebSocketTransport'
+export type { CdpWebSocketTransportConnectOptions, CdpWebSocketTransportOptions } from '../impl/cdp/CdpWebSocketTransport'
 export { CdpWebSocketTransport } from '../impl/cdp/CdpWebSocketTransport'
-export type { CdpBrowserRuntimeOptions, CdpWorkspaceFileAccess } from '../impl/CdpBrowserRuntime'
+export type { CdpBrowserRuntimeOptions } from '../impl/CdpBrowserRuntime'
 export { CdpBrowserRuntime } from '../impl/CdpBrowserRuntime'
 export {
   BrowserPerformanceOrchestrator,
   extractKeyMetricsFromSummary,
 } from '../impl/engines/BrowserPerformanceOrchestrator'
-export type {
-  BrowserParsedTraceRecording,
-  BrowserTraceParseMetadata,
-} from '../impl/engines/BrowserPerformanceTraceEngine'
 export {
   BrowserPerformanceTraceEngine,
-  formatBrowserTraceInsight,
-  formatBrowserTraceSummary,
-  serializeBrowserTraceToGzip,
 } from '../impl/engines/BrowserPerformanceTraceEngine'
-export type {
-  BrowserPointerPoint,
-  BrowserTargetActionClickMode,
-  BrowserTargetActionInternalEffectSnapshot,
-} from '../impl/engines/CdpInteractionEngine'
 export { CdpInteractionEngine } from '../impl/engines/CdpInteractionEngine'
-export type { BrowserDiagnosticsLimits } from '../impl/engines/CdpPageDataEngine'
 export { CdpPageDataEngine } from '../impl/engines/CdpPageDataEngine'
 export { CdpScreenshotEngine } from '../impl/engines/CdpScreenshotEngine'
-export type {
-  BrowserActionPolicyDecision,
-  BrowserActionPolicyDecisionKind,
-  BrowserActionPolicyRequest,
-} from '../impl/policies/BrowserActionPolicy'
 export { checkBrowserActionPolicy } from '../impl/policies/BrowserActionPolicy'
-export type {
-  BrowserActivityCoordinatorOptions,
-  BrowserUserActivityWaitResult,
-  BrowserUserActivityWaitState,
-} from '../impl/session/BrowserActivityCoordinator'
+export type { BrowserActivityCoordinatorOptions } from '../impl/session/BrowserActivityCoordinator'
 export { BrowserActivityCoordinator } from '../impl/session/BrowserActivityCoordinator'
 export { BrowserPendingEventsBroker } from '../impl/session/BrowserPendingEventsBroker'
-export type { BrowserSessionActionOptions } from '../impl/session/BrowserSessionActionQueue'
 export { BrowserSessionActionQueue } from '../impl/session/BrowserSessionActionQueue'
 export { BrowserTargetRefStore } from '../impl/session/BrowserTargetRefStore'
-export type { BrowserUserScriptAccess } from '../impl/workspace/BrowserUserScriptManager'
 export {
-  BrowserUserScriptIndexPath,
   BrowserUserScriptManager,
   browserUserScriptMatchesUrl,
   browserUserScriptPatternMatches,
-  BrowserUserScriptStoreVersion,
 } from '../impl/workspace/BrowserUserScriptManager'
-export type {
-  BrowserWorkspaceArtifactAccess,
-} from '../impl/workspace/BrowserWorkspaceArtifactManager'
 export {
-  BrowserWorkspaceArtifactDirectoryMap,
-  BrowserWorkspaceArtifactFormatExtensionMap,
   BrowserWorkspaceArtifactManager,
-  BrowserWorkspaceManifestPath,
-  BrowserWorkspaceManifestVersion,
   buildBrowserArtifactRelativePath,
   buildBrowserPageSnapshotName,
   buildBrowserRecipeSkeletonName,
@@ -339,7 +289,6 @@ export {
   resolveBrowserSearchOrNavigationInput,
 } from '../utils/address'
 export { normalizeBrowserArtifactJsonPath, normalizeBrowserRecipePath } from '../utils/artifacts'
-export type { CdpSend } from '../utils/cdp/emulation'
 export {
   applyCdpEmulation,
   CdpNetworkThrottlingPresets,
@@ -385,10 +334,10 @@ export { buildListMediaSourcesScript } from '../utils/page-scripts/media-sources
 export { buildPageWaitScript } from '../utils/page-scripts/page-wait'
 export { buildScrollScript } from '../utils/page-scripts/scroll'
 export { buildPageStorageScript } from '../utils/page-scripts/storage'
-export type { BrowserTargetActionScriptBuildOptions } from '../utils/page-scripts/target-action'
 export { buildTargetActionScript } from '../utils/page-scripts/target-action'
 export { buildHighlightFromTargetScript, buildHighlightScript } from '../utils/page-scripts/target-highlight'
 export { buildWaitForSelectorScript } from '../utils/page-scripts/wait-for-selector'
+export { serializeBrowserTraceToGzip } from '../utils/performance'
 export {
   BrowserFallbackVirtualPointer,
   buildBrowserFallbackVirtualPointerSvg,
@@ -406,10 +355,6 @@ export {
 export { assertSameBrowserOrigin, buildRecipeSkeletonPreview } from '../utils/recipes/preview'
 export type { BrowserRecipeTemplate } from '../utils/recipes/skeleton'
 export { applyBrowserRecipeTemplate, buildBrowserRecipeSkeleton } from '../utils/recipes/skeleton'
-export type {
-  BrowserScreenshotPolicyDefaults,
-  BrowserScreenshotPolicyOptions,
-} from '../utils/screenshot-options'
 export {
   BrowserScreenshotDefaultDomStable,
   BrowserScreenshotDefaultModelImage,
@@ -417,9 +362,7 @@ export {
   buildBrowserScreenshotOptions,
 } from '../utils/screenshot-options'
 export { resolveExternalPageUrl } from '../utils/url'
-export type { BrowserViewportDeviceMetrics } from '../utils/viewport'
 export { buildBrowserViewportDeviceMetrics, DEFAULT_BROWSER_VIEWPORT } from '../utils/viewport'
-export type { BrowserWorkspacePath } from '../utils/workspace-paths'
 export {
   getRelativePathInsideRoot,
   resolveBrowserWorkspacePath,
@@ -430,3 +373,23 @@ export {
 export type { BrowserPageDriver, BrowserPageDriverDownloadItem, BrowserSystemPointerDriver } from '../contract/requires.js'
 export type { BrowserExternalPageLauncher } from '../contract/requires.js'
 export { BrowserLoginGate as BrowserLoginGateLedger } from '../impl/workspace/BrowserLoginGate.js'
+export type { BrowserCommandSpec } from '../types/browser.js'
+export type { BrowserActionPolicyDecision, BrowserActionPolicyDecisionKind, BrowserActionPolicyRequest } from '../types/browser.js'
+export type { BrowserScreenshotPolicyDefaults, BrowserScreenshotPolicyOptions } from '../types/browser.js'
+export type { CdpBrowserPageDriverTransport } from '../types/cdp.js'
+export type { CdpExternalBrowserLaunchOptions, CdpExternalBrowserSession } from '../types/cdp.js'
+export type { CdpScreencastConsumerOptions, CdpScreencastStartOptions, EncodeScreencastGifOptions, ScreencastCapturedFrame, ScreencastFrameDecoder } from '../types/cdp.js'
+export type { CdpTraceTransport } from '../types/cdp.js'
+export type { CdpWebSocketLike } from '../types/cdp.js'
+export type { CdpSend } from '../types/cdp.js'
+export type { BrowserParsedTraceRecording, BrowserTraceParseMetadata } from '../types/runtime.js'
+export type { BrowserPointerPoint, BrowserTargetActionClickMode, BrowserTargetActionInternalEffectSnapshot } from '../types/runtime.js'
+export type { BrowserDiagnosticsLimits } from '../types/runtime.js'
+export type { CdpWorkspaceFileAccess } from '../types/runtime.js'
+export type { BrowserViewportDeviceMetrics } from '../types/runtime.js'
+export type { BrowserUserActivityWaitResult, BrowserUserActivityWaitState } from '../types/session.js'
+export type { BrowserSessionActionOptions } from '../types/session.js'
+export type { BrowserTargetActionScriptBuildOptions } from '../types/tools.js'
+export type { BrowserUserScriptAccess } from '../types/workspace.js'
+export type { BrowserWorkspaceArtifactAccess } from '../types/workspace.js'
+export type { BrowserWorkspacePath } from '../types/workspace.js'

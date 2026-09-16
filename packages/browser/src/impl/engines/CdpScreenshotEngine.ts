@@ -3,15 +3,15 @@ import { dirname } from 'node:path'
 
 import { isFiniteNumber, isObject, isPlainObject } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
-import { logRuntime } from '@velaros-ai/core/logger'
+import { Log } from '@velaros-ai/core/logger'
 
 import type { BrowserCaptureScreenshotOptions, BrowserScreencastStartResult, BrowserScreencastStopResult, BrowserScreenshotArtifact, BrowserScreenshotCaptureRegion, BrowserScreenshotMetadata } from '../../types/browser.js'
 import type {
   BrowserPageDriverScreenshotOptions,
 } from '../../types/driver'
 import type { BrowserPageDriverKernel, ExternalBrowserPageSession } from '../../types/runtime.js'
+import type { BrowserWorkspacePath } from '../../types/workspace.js'
 import { DEFAULT_BROWSER_VIEWPORT } from '../../utils/viewport.js'
-import type { BrowserWorkspacePath } from '../../utils/workspace-paths'
 import { resolveBrowserWorkspacePath } from '../../utils/workspace-paths'
 
 /**
@@ -29,8 +29,17 @@ import { resolveBrowserWorkspacePath } from '../../utils/workspace-paths'
  *
  * 本降级实现仍需通过完整浏览器旅程电池后，才能声明与 Electron 富截图路径等价。
  */
-export class CdpScreenshotEngine {
-  protected readonly log = logRuntime.tag('BrowserScreenshotEngine')
+export interface CdpScreenshotEngineApi {
+  /** 截图并把图片存进站点工作区，可标注元素、等页面稳定、与上一张比对。 */
+  captureScreenshot(sessionId: string, context: { url: string; workspaceRoot: string }, options?: BrowserCaptureScreenshotOptions, abortSignal?: AbortSignal): Promise<BrowserScreenshotArtifact>
+  /** 开始录屏。 */
+  startScreencast(sessionId: string, context: { url: string }, _abortSignal?: AbortSignal): Promise<BrowserScreencastStartResult>
+  /** 停止录屏并把帧合成 GIF 落盘。 */
+  stopScreencast(sessionId: string, _context: { url: string }, _abortSignal?: AbortSignal): Promise<BrowserScreencastStopResult>
+}
+
+export class CdpScreenshotEngine implements CdpScreenshotEngineApi {
+  protected readonly log = Log.tag('BrowserScreenshotEngine')
 
   private readonly screencasts = new Map<string, { startedAt: number; url: string }>()
 

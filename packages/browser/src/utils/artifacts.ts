@@ -1,5 +1,15 @@
 import { AppError } from '@velaros-ai/core/error'
 
+import type { BrowserWorkspaceArtifactFormat } from '../types/browser.js'
+import type { BrowserPageContentFormat } from '../types/tools.js'
+
+/** 正文格式到 extract 产物格式（决定 .txt / .md / .html 扩展名）的映射。 */
+export const BrowserPageContentArtifactFormats: Record<BrowserPageContentFormat, BrowserWorkspaceArtifactFormat> = {
+  plain: 'text',
+  markdown: 'markdown',
+  html: 'html',
+}
+
 /**
  * 站点工作区产物路径（recipes/、pages/、runs/ 下的 JSON）的**唯一规则**。
  *

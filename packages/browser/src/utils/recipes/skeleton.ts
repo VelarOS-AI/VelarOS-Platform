@@ -6,8 +6,8 @@ import type {
   BrowserRecipeSkeletonLink,
   BrowserRecipeSkeletonStep,
 } from '../../types/browser'
+import type { BrowserRecipeTemplate } from '../../types/recipes.js'
 
-type BrowserRecipeTemplate = 'login' | 'search' | 'pagination' | 'form_submit'
 
 /** C3: Recipe 模板库 — 预设步骤骨架，避免模型每次从零推导 */
 const RecipeTemplates: Record<BrowserRecipeTemplate, BrowserRecipeSkeletonStep[]> = {

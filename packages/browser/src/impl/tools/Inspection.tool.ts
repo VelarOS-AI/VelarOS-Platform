@@ -9,7 +9,7 @@ import type {
   BrowserObserveActionsResult,
   BrowserPageDiagnostics,
 } from '../../types/browser'
-import type { BrowserConsoleEventsResult, BrowserNetworkEventsResult, BrowserPageErrorsResult } from '../../utils/diagnostics.js'
+import type { BrowserConsoleEventsResult, BrowserNetworkEventsResult, BrowserPageErrorsResult } from '../../types/tools.js'
 import { buildBrowserConsoleEventsResult, buildBrowserNetworkEventsResult, buildBrowserPageErrorsResult } from '../../utils/diagnostics.js'
 import { buildObserveActionsResult, clampObserveActionLimit } from '../../utils/observe-actions'
 import { buildBrowserScreenshotOptions } from '../../utils/screenshot-options'

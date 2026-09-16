@@ -16,13 +16,15 @@ import { AppError } from '@velaros-ai/core/error'
 import { type TimerLease, TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
 import type { BrowserNetworkControlOptions, BrowserNetworkMockResponse, BrowserNetworkRequestDetailsOptions, BrowserNetworkResponseBodyOptions, BrowserNetworkThrottlingPreset, BrowserPageDiagnosticEntry, BrowserPageDiagnosticLevel } from '../../types/browser.js'
+import type { CdpFetchRequestPausedEvent, CdpNetworkGetResponseBodyResponse, CdpNetworkLoadingFailedEvent, CdpNetworkLoadingFinishedEvent, CdpNetworkRequestPayload, CdpNetworkRequestRecord, CdpNetworkRequestWillBeSentEvent, CdpNetworkResponsePayload, CdpNetworkResponseReceivedEvent, CdpSend } from '../../types/cdp.js'
 import type {
   BrowserPageDriverNetworkControlState,
   BrowserPageDriverNetworkIdleOptions,
   BrowserPageDriverNetworkRequestDetailsResult,
   BrowserPageDriverNetworkResponseBodyResult,
 } from '../../types/driver'
-import { type CdpSend, syncCdpNetworkConditions } from '../../utils/cdp/emulation'
+import { syncCdpNetworkConditions } from '../../utils/cdp/emulation'
+import { BrowserTuning } from '../../utils/tuning'
 
 /**
  * CDP 网络子系统的共享控制器。
@@ -36,118 +38,7 @@ import { type CdpSend, syncCdpNetworkConditions } from '../../utils/cdp/emulatio
  * 两者通过 `getNetworkThrottling` 回调合流，避免互相覆盖。
  */
 
-interface CdpNetworkRequestPayload {
-  headers?: unknown
-  method?: unknown
-  postData?: unknown
-  url?: unknown
-}
-
-interface CdpFetchRequestPausedEvent {
-  requestId?: unknown
-  resourceType?: unknown
-  request?: unknown
-}
-
-interface CdpNetworkRequestWillBeSentEvent {
-  requestId?: unknown
-  type?: unknown
-  request?: unknown
-  timestamp?: unknown
-  wallTime?: unknown
-}
-
-interface CdpNetworkResponsePayload {
-  encodedDataLength?: unknown
-  headers?: unknown
-  protocol?: unknown
-  remoteIPAddress?: unknown
-  remotePort?: unknown
-  url?: unknown
-  status?: unknown
-  statusText?: unknown
-  mimeType?: unknown
-  fromDiskCache?: unknown
-  fromServiceWorker?: unknown
-  timing?: unknown
-}
-
-interface CdpNetworkResponseReceivedEvent {
-  requestId?: unknown
-  type?: unknown
-  response?: unknown
-}
-
-interface CdpNetworkLoadingFinishedEvent {
-  requestId?: unknown
-  encodedDataLength?: unknown
-  timestamp?: unknown
-}
-
-interface CdpNetworkLoadingFailedEvent {
-  requestId?: unknown
-  type?: unknown
-  errorText?: unknown
-  canceled?: unknown
-  timestamp?: unknown
-}
-
-interface CdpNetworkGetResponseBodyResponse {
-  body?: unknown
-  base64Encoded?: unknown
-}
-
-interface CdpNetworkRequestRecord {
-  requestId: string
-  method: string
-  url: string
-  headers: Record<string, string>
-  postData: Nullable<string>
-  resourceType: string
-  timestamp: Nullable<number>
-  wallTime: Nullable<number>
-  response: Nullable<{
-    status: number
-    statusText: string
-    headers: Record<string, string>
-    mimeType: Nullable<string>
-    protocol: Nullable<string>
-    fromDiskCache: boolean
-    fromServiceWorker: boolean
-    encodedDataLength: Nullable<number>
-    remoteIPAddress: Nullable<string>
-    remotePort: Nullable<number>
-    timing: Nullable<Record<string, unknown>>
-  }>
-  failure: Nullable<{
-    errorText: string
-    canceled: boolean
-  }>
-  finishedTimestamp: Nullable<number>
-}
-
-const CdpNetworkResourceTypeByKey: Record<string, string> = {
-  cspviolationreport: 'CSPViolationReport',
-  document: 'Document',
-  eventsource: 'EventSource',
-  fetch: 'Fetch',
-  font: 'Font',
-  image: 'Image',
-  manifest: 'Manifest',
-  media: 'Media',
-  other: 'Other',
-  ping: 'Ping',
-  preflight: 'Preflight',
-  script: 'Script',
-  signedexchange: 'SignedExchange',
-  stylesheet: 'Stylesheet',
-  texttrack: 'TextTrack',
-  websocket: 'WebSocket',
-  xhr: 'XHR',
-}
-
 /** 网络请求记录表上限:超出按写入顺序淘汰最旧,防止长会话无界增长。 */
-const MaxNetworkRequestRecords = 300
 
 function clampPositiveInteger(value: unknown, fallback: number): number {
   const numberValue = Number(value)
@@ -156,6 +47,7 @@ function clampPositiveInteger(value: unknown, fallback: number): number {
   return Math.max(1, Math.round(numberValue))
 }
 
+/** 网络控制器要的协作件：内嵌页面与外部 CDP 各自把自己的传输与诊断缓冲塞进来。 */
 export interface BrowserCdpNetworkControllerDeps {
   /** 下发 CDP 命令(外部 WebSocket transport 或嵌入式 webContents.debugger)。 */
   send: CdpSend
@@ -167,7 +59,62 @@ export interface BrowserCdpNetworkControllerDeps {
   getNetworkThrottling: () => BrowserNetworkThrottlingPreset
 }
 
-export class BrowserCdpNetworkController {
+/**
+ * 网络控制器：离线、改请求头、拦截与 mock，以及按 requestId 读请求详情与响应体。
+ *
+ * 内嵌页面（webContents.debugger）与外部 CDP 浏览器（WebSocket）共用这一份——两条路下发的是同一套
+ * CDP Network / Fetch 命令，只差传输，所以记账、详情读取与拦截规则只写一遍。
+ *
+ * 状态归调用方：一条页面一个实例，请求明细按写入顺序淘汰最旧的，长会话不会无界增长。
+ */
+export interface BrowserCdpNetworkControllerApi {
+  /** 启用网络事件采集(两条 transport 都要先 enable 才有事件)。 */
+  enableNetworkCapture(): Promise<void>
+  /** 统一 CDP 事件入口:两条 transport 的网络/Fetch 事件都路由到这里。 */
+  handleCdpEvent(method: string, params: unknown): void
+  /** 当前是否处于离线态(供 emulation 合成网络条件时读取)。 */
+  isOffline(): boolean
+  /** 配置页面网络：离线、请求头、拦截与 mock。 */
+  configureNetwork(options: BrowserNetworkControlOptions): Promise<BrowserPageDriverNetworkControlState>
+  /** 按 requestId 读响应体；不在缓存里就如实回报读不到。 */
+  readNetworkResponseBody(options: BrowserNetworkResponseBodyOptions): Promise<BrowserPageDriverNetworkResponseBodyResult>
+  /** 按 requestId 读请求、响应与 timing 详情。 */
+  readNetworkRequestDetails(options: BrowserNetworkRequestDetailsOptions): Promise<BrowserPageDriverNetworkRequestDetailsResult>
+  /** 等页面网络空闲（一段时间内没有新请求）。 */
+  waitForNetworkIdle(options: BrowserPageDriverNetworkIdleOptions): Promise<void>
+  /**
+   * offline 与网络节流共用 Network.emulateNetworkConditions,统一按当前状态合成下发。
+   * throttling 由宿主 emulation 状态提供(getNetworkThrottling),offline 归本控制器。
+   */
+  syncNetworkConditions(): Promise<void>
+  /** 会话重置/销毁时清空记录表与待结请求。 */
+  reset(): void
+}
+
+export class BrowserCdpNetworkController implements BrowserCdpNetworkControllerApi {
+  /** mock 响应没写状态码时按 200 返回。 */
+  private static readonly DefaultMockResponseStatus = 200
+
+  private static readonly CdpNetworkResourceTypeByKey: Record<string, string> = {
+    cspviolationreport: 'CSPViolationReport',
+    document: 'Document',
+    eventsource: 'EventSource',
+    fetch: 'Fetch',
+    font: 'Font',
+    image: 'Image',
+    manifest: 'Manifest',
+    media: 'Media',
+    other: 'Other',
+    ping: 'Ping',
+    preflight: 'Preflight',
+    script: 'Script',
+    signedexchange: 'SignedExchange',
+    stylesheet: 'Stylesheet',
+    texttrack: 'TextTrack',
+    websocket: 'WebSocket',
+    xhr: 'XHR',
+  }
+
   private readonly networkRequests = new Map<string, CdpNetworkRequestRecord>()
   private readonly pendingNetworkRequestIds = new Set<string>()
   private readonly networkIdleStateListeners = new Set<() => void>()
@@ -433,7 +380,7 @@ export class BrowserCdpNetworkController {
     void this.deps
       .send('Fetch.fulfillRequest', {
         requestId,
-        responseCode: mockResponse.status ?? 200,
+        responseCode: mockResponse.status ?? BrowserCdpNetworkController.DefaultMockResponseStatus,
         responseHeaders: this.buildMockResponseHeaders(mockResponse),
         body: Buffer.from(mockResponse.body ?? '', 'utf8').toString('base64'),
       })
@@ -450,7 +397,7 @@ export class BrowserCdpNetworkController {
           details: {
             requestId,
             mocked: true,
-            status: mockResponse.status ?? 200,
+            status: mockResponse.status ?? BrowserCdpNetworkController.DefaultMockResponseStatus,
           },
         })
       })
@@ -556,7 +503,7 @@ export class BrowserCdpNetworkController {
     })
     this.trackPendingNetworkRequest(event.requestId)
 
-    if (this.networkRequests.size > MaxNetworkRequestRecords) {
+    if (this.networkRequests.size > BrowserTuning.cdp.networkRequestRecords) {
       const oldestRequestId = this.networkRequests.keys().next().value
       this.clearNetworkRequest(oldestRequestId)
     }
@@ -765,7 +712,7 @@ export class BrowserCdpNetworkController {
 
   private normalizeNetworkResourceTypeValue(resourceType: string): string {
     const normalizedKey = resourceType.trim().replace(/[-_\s]/g, '').toLowerCase()
-    return CdpNetworkResourceTypeByKey[normalizedKey] ?? resourceType
+    return BrowserCdpNetworkController.CdpNetworkResourceTypeByKey[normalizedKey] ?? resourceType
   }
 
   private resolveNetworkEventUrl(
@@ -827,7 +774,7 @@ export class BrowserCdpNetworkController {
     const normalizedKey = resourceType.trim().replace(/[-_\s]/g, '').toLowerCase()
     if (!isNonBlankString(normalizedKey)) return ''
 
-    const normalizedResourceType = CdpNetworkResourceTypeByKey[normalizedKey]
+    const normalizedResourceType = BrowserCdpNetworkController.CdpNetworkResourceTypeByKey[normalizedKey]
     if (isNonBlankString(normalizedResourceType)) return normalizedResourceType
 
     throw new AppError('VALIDATION', `不支持的网络资源类型：${resourceType}`)
