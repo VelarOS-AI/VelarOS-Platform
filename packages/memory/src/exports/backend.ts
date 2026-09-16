@@ -1,33 +1,14 @@
-export type {
-  MemoryBackendAwaitable,
-  MemoryBackendCaptureBatchOptions,
-  MemoryBackendDescriptor,
-  MemoryBackendRole,
-  MemoryBackendStats,
-  MemoryBackendVerb,
-  MemoryStoreBackend,
-} from '../contract/backend'
-export {
-  listMissingAuthorityMemoryVerbs,
-  RequiredAuthorityMemoryVerbs,
-  supportsMemoryBackendVerb,
-} from '../contract/backend'
-export type {
-  MemoryAuthorityEnumeration,
-  MemoryDerivedIndexBackend,
-  MemoryDerivedIndexRebuildResult,
-  MemoryDerivedIndexVersion,
-} from '../contract/derived-index'
-export {
-  formatMemoryDerivedIndexVersion,
-  isMemoryDerivedIndexBackend,
-  resolveAuthorityEnumeration,
-} from '../contract/derived-index'
-export type {
-  LayeredMemoryStoreBackend,
-  LayeredMemoryStoreBackendOptions,
-  MemoryDerivedIndexFailure,
-} from '../impl/backends/LayeredMemoryStore'
+export type { MemoryBackendVerb } from '../contract/constants'
+export { RequiredAuthorityMemoryVerbs } from '../contract/constants'
+export { MemoryTreeBackendId } from '../contract/constants'
+export type { LayeredMemoryStoreBackend, LayeredMemoryStoreBackendOptions } from '../contract/provides'
+export type { MemoryStoreBackend } from '../contract/requires'
+export type { MemoryAuthorityEnumeration, MemoryDerivedIndexBackend } from '../contract/requires'
+export type { MemoryTreeStoreDomain } from '../contract/requires'
 export { createLayeredMemoryStoreBackend } from '../impl/backends/LayeredMemoryStore'
-export type { MemoryTreeStoreDomain } from '../impl/backends/MemoryTreeStoreBackend'
-export { createMemoryTreeStoreBackend, MemoryTreeBackendId } from '../impl/backends/MemoryTreeStoreBackend'
+export { createMemoryTreeStoreBackend } from '../impl/backends/MemoryTreeStoreBackend'
+export type { MemoryDerivedIndexFailure } from '../types/backends'
+export type { MemoryBackendAwaitable, MemoryBackendCaptureBatchOptions, MemoryBackendDescriptor, MemoryBackendRole, MemoryBackendStats } from '../types/memory'
+export type { MemoryDerivedIndexRebuildResult, MemoryDerivedIndexVersion } from '../types/memory'
+export { listMissingAuthorityMemoryVerbs, supportsMemoryBackendVerb } from '../utils/backends'
+export { formatMemoryDerivedIndexVersion, isMemoryDerivedIndexBackend, resolveAuthorityEnumeration } from '../utils/backends'

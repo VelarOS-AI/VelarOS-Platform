@@ -197,7 +197,7 @@ token 是 mod 轴机制；主干只该持有与实现无关的窄动词契约。
 
 ### 5.3 窄端口
 
-`packages/memory/src/contract/backend.ts` 只描述**动词**，不假设后端是树、是文件还是向量库：
+`packages/memory/src/contract/requires.ts` 只描述**动词**，不假设后端是树、是文件还是向量库：
 
 ```ts
 export type MemoryBackendRole = "authority" | "derived-index";

@@ -37,7 +37,7 @@ already assembled layered storage can pass it directly as `backend`.
 
 ## Backend contract
 
-The implementation-neutral contract lives in `packages/memory/src/contract/backend.ts`.
+The implementation-neutral contract lives in `packages/memory/src/contract/requires.ts`.
 
 An authority backend must provide:
 

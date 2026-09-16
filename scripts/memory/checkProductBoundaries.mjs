@@ -64,10 +64,16 @@ const PortableContractRules = [
     exportKey: './contracts',
     contractsFile: 'src/exports/contracts.ts',
     // 键是入口里 import 的原文（含 .js），不是磁盘路径：搬家时两者必须一起改，否则这道门必红。
+    // `valueExport` 的那一条是常量表：它随 ./contracts 出包，入口里写成 `export *`（不是 type-only）。
     sourceModules: new Map([
       ['../types/memory.js', {
         path: 'src/types/memory.ts',
+        allowedImports: new Set(['../contract/constants.js']),
+      }],
+      ['../contract/constants.js', {
+        path: 'src/contract/constants.ts',
         allowedImports: new Set(),
+        valueExport: true,
       }],
     ]),
     requiredTypes: [
@@ -187,18 +193,24 @@ export function collectPortableContractViolations(
     for (const statement of contractsFile.statements) {
       if (
         !ts.isExportDeclaration(statement)
-        || !statement.isTypeOnly
         || !statement.moduleSpecifier
         || !ts.isStringLiteralLike(statement.moduleSpecifier)
       ) {
         violations.push(
-          `${rule.packageName}/contracts：入口只能包含显式 type-only 模块导出。`,
+          `${rule.packageName}/contracts：入口只能包含显式模块导出。`,
         )
         continue
       }
-      if (!rule.sourceModules.has(statement.moduleSpecifier.text)) {
+      const sourceRule = rule.sourceModules.get(statement.moduleSpecifier.text)
+      if (!sourceRule) {
         violations.push(
           `${rule.packageName}/contracts：禁止导出实现模块 ${statement.moduleSpecifier.text}。`,
+        )
+        continue
+      }
+      if (!statement.isTypeOnly && !sourceRule.valueExport) {
+        violations.push(
+          `${rule.packageName}/contracts：${statement.moduleSpecifier.text} 只能 type-only 导出。`,
         )
       }
     }
@@ -217,6 +229,10 @@ export function collectPortableContractViolations(
       )
       for (const statement of sourceFile.statements) {
         if (ts.isInterfaceDeclaration(statement) || ts.isTypeAliasDeclaration(statement)) {
+          continue
+        }
+        // 常量表本身就是运行时值（Object.freeze 的表与 as const 字符串身份），它随 ./contracts 出包。
+        if (sourceRule.valueExport && ts.isVariableStatement(statement)) {
           continue
         }
         if (

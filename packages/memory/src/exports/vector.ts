@@ -5,13 +5,14 @@
  * 卸了只掉索引。这个切片是它的全部代码——包的其余部分对它零引用，`./vector` 不被 import
  * 就一行都不加载。
  */
-export type { MemoryEmbedder, MemoryVectorIndexRecord, MemoryVectorIndexStore } from '../contract/vector'
-export { MemoryVectorBackendId } from '../contract/vector'
-export type { MemoryVectorBackendOptions } from '../impl/vector/MemoryVectorBackend'
-export { createMemoryVectorBackend, MemoryVectorIndexSchemaVersion } from '../impl/vector/MemoryVectorBackend'
-export type { FileVectorIndexStoreOptions, InMemoryVectorIndexStore } from '../impl/vector/VectorIndexStores'
-export {
-  createFileVectorIndexStore,
-  createInMemoryVectorIndexStore,
-  MemoryVectorIndexFileName,
-} from '../impl/vector/VectorIndexStores'
+export { MemoryVectorBackendId } from '../contract/constants'
+export { MemoryVectorIndexFileName } from '../contract/constants'
+export type { MemoryVectorBackendOptions } from '../contract/provides'
+export type { FileVectorIndexStoreOptions } from '../contract/provides'
+export type { MemoryEmbedder, MemoryVectorIndexStore } from '../contract/requires'
+export { createFileVectorIndexStore } from '../impl/vector/FileVectorIndexStore'
+export type { InMemoryVectorIndexStoreApi as InMemoryVectorIndexStore } from '../impl/vector/InMemoryVectorIndexStore'
+export { createInMemoryVectorIndexStore } from '../impl/vector/InMemoryVectorIndexStore'
+export { createMemoryVectorBackend } from '../impl/vector/MemoryVectorBackend'
+export type { MemoryVectorIndexRecord } from '../types/memory'
+export { MemoryVectorIndexSchemaVersion } from '../utils/vector'
