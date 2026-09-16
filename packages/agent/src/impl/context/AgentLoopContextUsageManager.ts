@@ -17,17 +17,14 @@ import type { ModelMessage } from 'ai'
 
 import { isFiniteNumber, isNumber } from '@velaros-ai/core'
 
-import type { AgentModelRequestOptions } from '../../types/model-contracts'
-import type { ToolCategoryId } from '../../types/tool'
+import type { AgentModelRequestOptions } from '../../contract/requires.js'
+import type { ContextUsageEstimate } from '../../types/agent.js'
+import type { AgentLoopToolRegistry, EstimateContextUsageOptions } from '../../types/context.js'
 import {
   DefaultContextSafetyMarginPercent,
   resolveReservedOutputTokens,
 } from '../../utils/context/context-budget'
-import {
-  type ContextUsageEstimate,
-  estimateContextUsage,
-  type EstimateContextUsageOptions,
-} from '../../utils/context/context-usage'
+import { estimateContextUsage } from '../../utils/context/context-usage'
 
 import { ContextUsageCalibrator } from './ContextUsageCalibrator'
 
@@ -41,21 +38,6 @@ function resolveModelContextUsageOptions(
   const maxOutputTokens = modelRequestOptions?.requestPolicy?.maxOutputTokens
   if (!isFiniteNumber(maxOutputTokens) || maxOutputTokens < 0) return options
   return { ...options, reservedOutputTokens: maxOutputTokens }
-}
-
-interface AgentLoopToolDescriptor {
-  name: string
-  description: string
-  categoryId?: LooseOptional<ToolCategoryId>
-}
-
-interface AgentLoopToolRegistry<TToolContext> {
-  listAvailable(toolContext: TToolContext, allowedTools: string[]): AgentLoopToolDescriptor[]
-  /**
-   * 可选实现：返回当前可见工具集 JSON Schema 总字节数（含 name/description/wrapper）。
-   * 提供时用它精确扣留上下文预算；缺省时回落到 `tools.length * 800` 启发值。
-   */
-  estimateToolsSerializedChars?(toolContext: TToolContext, allowedTools: string[]): number
 }
 
 class AgentLoopContextUsageManager<TToolContext> {
@@ -147,4 +129,3 @@ class AgentLoopContextUsageManager<TToolContext> {
 }
 
 export { AgentLoopContextUsageManager, resolveModelContextUsageOptions }
-export type { AgentLoopToolDescriptor, AgentLoopToolRegistry }

@@ -1,14 +1,10 @@
 import { AppError } from '@velaros-ai/core/error'
 
-import type { StreamFinishReasonDiagnostic } from '../../types/stream'
+import type { OutputTruncationErrorContext,StreamFinishReasonDiagnostic } from '../../types/loop.js'
+
 
 const RecoverableOutputTruncationFinishReasons = new Set(['length', 'repetition_truncation'])
 const ModelOutputTruncatedErrorCode = 'MODEL_OUTPUT_TRUNCATED'
-
-interface OutputTruncationErrorContext {
-  model: string
-  turn: Nullable<number>
-}
 
 export function isRecoverableOutputTruncationDiagnostic(
   diagnostic: Nullable<StreamFinishReasonDiagnostic>

@@ -26,206 +26,22 @@ import {
   toOptional,
 } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
-import type { ScopedLog } from '@velaros-ai/core/logger'
 import { logRuntime } from '@velaros-ai/core/logger'
 
+import type { AgentRuntimeCapabilityPorts } from '../../contract/requires.js'
 import type { ToolConfirmationDecisionOptions } from '../../types/agent'
-import type { RunProfileSelectionId } from '../../types/run-profile'
-import type { AgentRoleId } from '../../types/system'
-import type {
-  AgentModelInputModality,
-  CapabilityAutoApprovalNotice,
-  CapabilityScopeId,
-  ToolAvailabilityScope,
-  ToolCapabilityEffectKind,
-  ToolCapabilitySchema,
-  ToolCategoryId,
-  ToolPermission,
-  ToolRole,
-  ToolSurfaceProfileId,
-} from '../../types/tool'
-import type { ToolInputReuseContract } from '../../types/tool-contract'
-import {
-  type AgentRuntimeCapabilityPorts,
-  resolveCapabilityCategoryDefinitions,
-  resolveToolAliases,
-  resolveToolValidationHintProviders,
-} from '../../utils/capabilities'
+import type {CapabilityAutoApprovalNotice, ToolCapabilityEffectKind, ToolCategoryId, ToolRole } from '../../types/agent.js'
+import type { ToolInputReuseContract } from '../../types/toolkit.js'
+import type { AnyVelaTool, ToolArgsValidationResult, ToolExecutionDecision, ToolExecutionFailureInput, ToolExecutionPolicyContext, ToolExecutionPolicyRegistry, ToolExecutionPolicySurface, ToolExecutionPrepared, ToolExecutionRequest, ToolExecutionSuccessInput, ToolFailureResult } from '../../types/tools.js'
+import { resolveCapabilityCategoryDefinitions, resolveToolAliases, resolveToolValidationHintProviders } from '../../utils/capabilities'
 import { getToolSurfaceFallbackChain } from '../../utils/runner/runtime-profiles'
 import { createApprovalOperationKey } from '../../utils/toolkit/task-approval'
 import { decideToolCategoryAccess } from '../../utils/tools/access-policy'
-import {
-  buildExecutionFailureResult,
-  buildToolFailureResult,
-  type ToolFailureResult,
-} from '../../utils/tools/execution-policy-failures'
-import {
-  toolArgsSchemaValidator,
-  type ToolArgsValidationResult,
-  type ToolSchema,
-} from '../../utils/tools/tool-args-schema-validator'
+import { buildExecutionFailureResult, buildToolFailureResult } from '../../utils/tools/execution-policy-failures'
+import { toolArgsSchemaValidator } from '../../utils/tools/tool-args-schema-validator'
 import { buildToolSpaceRecoveryGuide } from '../../utils/tools/tool-space-recovery'
 
-import type { ApprovalPort } from './DefaultDenyApprovalPort'
 import { supportsToolInputReuse } from './ToolInputReuseStore'
-
-type ToolVisibleSurfaceProfileId = ToolSurfaceProfileId | 'base'
-
-interface ToolExecutionPolicySurface<TSurfaceInput = any, TBaseInput = any> {
-  schema: ToolSchema<TSurfaceInput>
-  normalize?: (input: TSurfaceInput, context: any) => TBaseInput
-}
-
-interface ToolExecutionPolicyTool<TInput = any> extends ToolInputReuseContract<any> {
-  schema: ToolSchema<TInput>
-  surfaces?: Partial<Record<ToolSurfaceProfileId, ToolExecutionPolicySurface<any, TInput>>>
-  permissions?: readonly ToolPermission[]
-  capabilities?: ToolCapabilitySchema
-  execute(input: TInput, context: ToolExecutionPolicyContext): Promise<unknown> | unknown
-  isConcurrencySafe?: (input: Record<string, unknown>) => boolean
-}
-
-interface ToolExecutionPolicyRegistry {
-  get(toolName: string): LooseOptional<ToolExecutionPolicyTool<any>>
-  getRegistrationSignature?: (toolName: string) => LooseOptional<string>
-  /**
-   * 从 turn 快照背后的可变注册表读取当前签名。
-   * getRegistrationSignature 保留 provider 曝光时的冻结值；此方法在执行前检测替换/卸载。
-   */
-  getCurrentRegistrationSignature?: (toolName: string) => LooseOptional<string>
-  listAvailable(
-    toolContext: unknown,
-    allowList?: string[],
-    scope?: ToolAvailabilityScope
-  ): Array<{ name: string }>
-  getDescriptor(
-    toolName: string
-  ): LooseOptional<{
-    categoryId?: ToolCategoryId
-    capabilities?: ToolCapabilitySchema
-    role?: ToolRole
-    outputInline?: boolean
-    requiredModelInputModalities?: readonly AgentModelInputModality[]
-  }>
-}
-
-interface ToolExecutionPolicyCodingSession {
-  recordToolResult(toolName: string, output: unknown): void
-  recordToolCallResult?: (toolName: string, args: Record<string, unknown>, output: unknown) => void
-  recordInvisibleToolCall?: (toolName: string) => void
-  getRedundantToolCallMessage: (
-    toolName: string,
-    args: Record<string, unknown>
-  ) => LooseOptional<string>
-  consumePendingAutoApprovalNotice: (
-    categoryId: ToolCategoryId
-  ) => LooseOptional<CapabilityAutoApprovalNotice>
-  hasSessionToolCategoryApproval: (categoryId: ToolCategoryId) => boolean
-  grantSessionToolCategoryApproval?: (categoryId: ToolCategoryId) => unknown
-  getToolSurfaceProfile: () => ToolSurfaceProfileId
-  setToolSurfaceProfile: (profile: ToolSurfaceProfileId, reason?: string) => ToolSurfaceProfileId
-  getRunProfile: () => RunProfileSelectionId
-  setRunProfile: (profile: RunProfileSelectionId, reason?: string) => RunProfileSelectionId
-  /** 会话声明/切换后的当前能力作用域；可选——缺失时回退运行态推断。 */
-  getActiveCapabilityScope?: () => CapabilityScopeId
-}
-
-interface ToolExecutionPolicyExecution {
-  awaitConfirmation?: ApprovalPort['awaitConfirmation']
-  awaitConfirmationDecision(
-    message: string,
-    abortSignal: AbortSignal,
-    options?: ToolConfirmationDecisionOptions
-  ): Promise<{
-    approved: boolean
-    message?: LooseOptional<string>
-  }>
-}
-
-interface ToolExecutionPolicyContext {
-  /** Original model call identity for host approval and durable tool execution. */
-  toolCallId?: string
-  abortSignal: AbortSignal
-  log: ScopedLog
-  planningMode?: boolean
-  codingSession: ToolExecutionPolicyCodingSession
-  /** Concrete capability behavior is supplied by the composition root. */
-  capabilityPorts?: AgentRuntimeCapabilityPorts
-  role: { id: AgentRoleId }
-  getCurrentVisibleToolSurfaceProfile: (
-    toolName: string
-  ) => LooseOptional<ToolVisibleSurfaceProfileId>
-  getCurrentVisibleToolNames?: () => string[]
-  resolveCurrentVisibleCanonicalToolName?: (providerToolName: string) => LooseOptional<string>
-  getCurrentVisibleToolRegistrationSignature?: (toolName: string) => LooseOptional<string>
-  execution: LooseOptional<ToolExecutionPolicyExecution>
-  approval?: ApprovalPort
-  emitProgress?: (chunk: string) => void
-  updateMetadata?: (payload: { title?: string; metadata?: Record<string, unknown> }) => void
-}
-
-type AnyVelaTool = ToolExecutionPolicyTool<any>
-
-interface ToolExecutionRequest {
-  /** 模型生成的 tool call id。 */
-  toolCallId: string
-  /** 工具名。 */
-  toolName: string
-  /** 模型生成的工具参数。 */
-  args?: Record<string, unknown>
-  /** 本轮基础 ToolContext。 */
-  baseContext: ToolExecutionPolicyContext
-  /** 当前工具独立的取消信号。 */
-  abortSignal: AbortSignal
-  /** 当前 tool call 的进度回调，由 ToolExecutor 按 toolCallId 绑定。 */
-  emitProgress?: (chunk: string) => void
-  /** 当前 tool call 的结构化展示元数据回调，由 ToolExecutor 按 toolCallId 绑定。 */
-  updateMetadata?: (payload: { title?: string; metadata?: Record<string, unknown> }) => void
-  /** Registry 可用性过滤范围；普通调用只允许 enabled，反射代理可请求 all 以覆盖 loadable 工具。 */
-  availabilityScope?: ToolAvailabilityScope
-}
-
-interface ToolExecutionPrepared {
-  /** Registry 中实际执行的 canonical 工具名。 */
-  toolName: string
-  /** 通过 Registry 找到的工具定义。 */
-  tool: AnyVelaTool
-  /** 模型发出调用时激活的工具表面；为空则使用主 schema。 */
-  selectedSurface?: LooseOptional<ToolExecutionPolicySurface<any, any>>
-  /** schema 与 surface normalize 之后的实际工具参数；旧的外部 prepared 调用方可省略。 */
-  effectiveArgs?: Record<string, unknown>
-  /** prepare 阶段的校验结果；旧调用方省略时 executePrepared 会兼容性补算。 */
-  validationResult?: ToolArgsValidationResult<any>
-  /** prepare 时绑定的注册签名；实际准入时用于识别等待期间的替换或卸载。 */
-  registrationSignature?: LooseOptional<string>
-  /** 为当前工具覆写过 log/abortSignal 的上下文。 */
-  toolContext: ToolExecutionPolicyContext
-}
-
-type ToolExecutionDecision =
-  | {
-      allowed: true
-      prepared: ToolExecutionPrepared
-    }
-  | {
-      allowed: false
-      error: string
-      /** 若模型工具名已修复为 canonical 名，这里用于失败结果继续使用同一个名字。 */
-      toolName?: string
-    }
-
-interface ToolExecutionSuccessInput {
-  toolName: string
-  args: Record<string, unknown>
-  output: unknown
-  toolContext: ToolExecutionPolicyContext
-}
-
-interface ToolExecutionFailureInput {
-  toolName: string
-  error: AppError
-  isConcurrencySafe: boolean
-}
 
 /**
  * 工具执行策略。
@@ -957,13 +773,5 @@ class ToolExecutionPolicy {
 }
 
 export { ToolExecutionPolicy }
-export type {
-  ToolExecutionDecision,
-  ToolExecutionPolicyContext,
-  ToolExecutionPolicyExecution,
-  ToolExecutionPolicyRegistry,
-  ToolExecutionPolicyTool,
-  ToolExecutionPrepared,
-  ToolFailureResult,
-}
-export type { ToolArgsValidationResult, ToolSchemaIssueDetail } from '../../utils/tools/tool-args-schema-validator'
+export type { ToolFailureResult }
+export type { ToolArgsValidationResult, ToolSchemaIssueDetail } from '../../types/tools.js'

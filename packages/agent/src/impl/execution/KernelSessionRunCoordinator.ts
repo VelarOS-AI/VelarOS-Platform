@@ -34,73 +34,9 @@
 import { isPresent, toOptional } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
+import type { KernelSessionInputStore } from '../../contract/requires.js'
+import type { AdmitKernelSessionInput, KernelAdmittedInput, KernelInputDelivery, KernelInputRole, KernelSessionDemandSettlement,KernelSessionDrainMode, KernelSessionDrainRunner, KernelSessionDrainTarget, KernelSessionInputSnapshot, KernelSessionInputSnapshotPersistence, KernelSessionRunDeferred, KernelSessionRunDemand, KernelSessionRunEntry, PromoteKernelInputOptions } from '../../types/execution.js'
 import { compareStableStrings } from '../../utils/residency/determinism'
-export type KernelInputDelivery = 'queue' | 'steer'
-export type KernelInputRole = 'user' | 'system' | 'assistant' | 'tool'
-export type KernelInputStatus = 'admitted' | 'promoted' | 'cancelled'
-
-export interface AdmitKernelSessionInput {
-  id?: string
-  sessionId: string
-  role?: KernelInputRole
-  content: string
-  delivery?: KernelInputDelivery
-  createdAt?: number
-  metadata?: Record<string, unknown>
-}
-
-export interface KernelAdmittedInput {
-  id: string
-  sessionId: string
-  seq: number
-  role: KernelInputRole
-  content: string
-  delivery: KernelInputDelivery
-  status: KernelInputStatus
-  createdAt: number
-  promotedAt?: number
-  cancelledAt?: number
-  metadata?: Record<string, unknown>
-}
-
-export type KernelSessionDrainMode = 'run' | 'wake'
-
-export interface KernelSessionDrainTarget {
-  sessionId: string
-  mode: KernelSessionDrainMode
-  seq?: number
-}
-
-export interface PromoteKernelInputOptions {
-  cutoffSeq?: number
-  inputId?: string
-}
-
-export type KernelSessionDrainRunner = (target: KernelSessionDrainTarget) => Promise<void> | void
-export type KernelSessionInputStoreResult<T> = T | Promise<T>
-
-export interface KernelSessionInputSnapshot {
-  inputs: KernelAdmittedInput[]
-}
-
-export interface KernelSessionInputSnapshotPersistence {
-  loadSnapshot(): KernelSessionInputStoreResult<LooseOptional<KernelSessionInputSnapshot>>
-  saveSnapshot(snapshot: KernelSessionInputSnapshot): KernelSessionInputStoreResult<void>
-}
-
-export interface KernelSessionInputStore {
-  admit(input: AdmitKernelSessionInput): KernelSessionInputStoreResult<KernelAdmittedInput>
-  list(sessionId: string): KernelSessionInputStoreResult<KernelAdmittedInput[]>
-  countPending(sessionId: string): KernelSessionInputStoreResult<number>
-  promoteSteers(
-    sessionId: string,
-    options?: PromoteKernelInputOptions
-  ): KernelSessionInputStoreResult<KernelAdmittedInput[]>
-  promoteNextQueued(sessionId: string): KernelSessionInputStoreResult<Nullable<KernelAdmittedInput>>
-  cancel(sessionId: string, inputId?: string): KernelSessionInputStoreResult<number>
-  dropSession(sessionId: string): KernelSessionInputStoreResult<number>
-}
-
 function cloneInput(input: KernelAdmittedInput): KernelAdmittedInput {
   const cloned: KernelAdmittedInput = { ...input }
   if (input.metadata) cloned.metadata = { ...input.metadata }
@@ -378,36 +314,6 @@ export class PersistentKernelSessionInputStore implements KernelSessionInputStor
     return next
   }
 }
-
-interface KernelSessionRunDeferred {
-  promise: Promise<void>
-  resolve: () => void
-  reject: (error: unknown) => void
-}
-
-interface KernelSessionRunWaiter {
-  deferred: KernelSessionRunDeferred
-  rejectWhenSuppressed: boolean
-}
-
-interface KernelSessionRunDemand {
-  mode: KernelSessionDrainMode
-  drain: KernelSessionDrainRunner
-  waiters: KernelSessionRunWaiter[]
-  seq?: number
-}
-
-interface KernelSessionRunEntry {
-  current: KernelSessionRunDemand
-  idle: KernelSessionRunDeferred
-  pending?: KernelSessionRunDemand
-  interruptSeq?: number
-  stopping: boolean
-}
-
-type KernelSessionDemandSettlement =
-  | { status: 'resolved' }
-  | { status: 'rejected'; error: unknown }
 
 const KernelSessionDemandResolved: KernelSessionDemandSettlement = { status: 'resolved' }
 

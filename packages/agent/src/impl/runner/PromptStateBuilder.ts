@@ -4,38 +4,12 @@ import { isArray, isEmpty, isObject, isString, isTrue, toNullable, truncate } fr
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 
-import type {
-  AgentContextPhase,
-  AgentDeveloperContext,
-  AgentSurfaceId,
-  ChatPromptFeatureId,
-  ExecutionModeId,
-} from '../../types/agent'
-import type {
-  ExecutionTaskPlanStep,
-  ExecutionTaskPlanStepStatus,
-} from '../../types/execution'
-import type { RunProfileId, RunProfileSelectionId } from '../../types/run-profile'
-import type { AgentSkillDescriptor } from '../../types/skill'
-import type { AgentRoleId, WorkflowType } from '../../types/system'
-import type { ThinkingDepth } from '../../types/team'
-import type {
-  CapabilityScopeId,
-  ToolAvailabilityScope,
-  ToolCategoryOverview,
-  ToolDescriptor,
-  ToolSurfaceProfileId,
-} from '../../types/tool'
-import {
-  type AgentRuntimeCapabilityPorts,
-  resolveCapabilityPromptSegments,
-} from '../../utils/capabilities'
-import type { SubAgentDispatchCatalog } from '../../utils/delegation/sub-agent-type-registry'
+import type {RuntimePromptFeaturePolicy } from '../../contract/requires.js'
+import type { ExecutionTaskPlanStep, ExecutionTaskPlanStepStatus, RunProfileId, RunProfileSelectionId, ToolCategoryOverview, ToolDescriptor } from '../../types/agent.js'
+import type { RuntimePromptSnapshot, RuntimePromptToolCategorySummary } from '../../types/guidance.js'
+import type { BuildRuntimePromptStateArgs, HtmlArtifactPromptTurnInput,PromptStatePreparedToolCategories, PromptStateToolContext } from '../../types/runner.js'
+import { resolveCapabilityPromptSegments } from '../../utils/capabilities'
 import { createRuntimePromptSegments } from '../../utils/guidance/runtime'
-import type {
-  RuntimePromptSnapshot,
-  RuntimePromptToolCategorySummary,
-} from '../../utils/guidance/shared'
 import { CompactionSummaryMarker } from '../../utils/history/context-os-message'
 import { isInternalFollowUpMessage } from '../../utils/history/internal-messages'
 import {
@@ -44,79 +18,13 @@ import {
   stripExecutionModePromptFeatures,
 } from '../../utils/runner/execution-mode-registry'
 import { isRunProfileId } from '../../utils/wire/typed-field-asserts'
-import {
-  defaultRuntimePromptFeaturePolicy,
-  type RuntimePromptFeaturePolicy,
-} from '../tools/DefaultPromptFeaturePolicy'
-
-interface PromptStateRoleResolution {
-  id: AgentRoleId
-  label: string
-  workflowType: WorkflowType
-  allowedTools: string[]
-  skillDescriptors?: AgentSkillDescriptor[]
-}
-
-interface PromptStateCodingSession {
-  getEnabledPromptFeatures: () => ChatPromptFeatureId[]
-  getActiveCapabilityScope(): CapabilityScopeId
-  getToolSurfaceProfile: () => ToolSurfaceProfileId
-  getRunProfile: () => Nullable<RunProfileSelectionId>
-}
-
-interface PromptStateExecutionApi {
-  getCurrentPlan(): ExecutionTaskPlanStep[]
-  getCurrentExecutionAdvice(): Nullable<{ mode: string; title: string }>
-}
-
-interface PromptStateSkillsApi {
-  listRoleSkills(): AgentSkillDescriptor[]
-}
-
-interface PromptStateToolContext {
-  locale: RuntimePromptSnapshot['locale']
-  sessionId?: string
-  developerContext?: LooseOptional<AgentDeveloperContext>
-  agentSurfaceId?: LooseOptional<AgentSurfaceId>
-  capabilityPorts?: AgentRuntimeCapabilityPorts
-  codingSession: PromptStateCodingSession
-  skills?: PromptStateSkillsApi
-  execution: PromptStateExecutionApi
-  listToolCategories(scope: ToolAvailabilityScope): ToolCategoryOverview[]
-  canDispatchSubAgents?: boolean
-  getSubAgentDispatchCatalog?: () => SubAgentDispatchCatalog
-}
-
-interface BuildRuntimePromptStateArgs {
-  toolContext: PromptStateToolContext
-  roleResolution: PromptStateRoleResolution
-  messages: ModelMessage[]
-  selectedPromptFeatures?: ChatPromptFeatureId[]
-  preparedToolCategories?: PromptStatePreparedToolCategories
-  /** 执行模式轴；缺席时由旧形态（selectedPromptFeatures 里的模式 id / goalMode）折算。 */
-  executionModes?: readonly ExecutionModeId[]
-  goalMode?: boolean
-  thinkingDepth?: LooseOptional<ThinkingDepth>
-  runProfile?: LooseOptional<RunProfileId>
-  contextPhase?: AgentContextPhase
-}
-
-interface PromptStatePreparedToolCategories {
-  enabled: ToolCategoryOverview[]
-  all: ToolCategoryOverview[]
-}
+import { defaultRuntimePromptFeaturePolicy } from '../tools/DefaultPromptFeaturePolicy'
 
 interface RuntimeStateContextResult {
   facts: Record<string, unknown>
   segments: ReturnType<typeof createRuntimePromptSegments>
   /** Deprecated compatibility field; domain environment context is a capability contribution. */
   devEnvironmentContext: Nullable<string>
-}
-
-interface HtmlArtifactPromptTurnInput {
-  selectedPromptFeatureSet: ReadonlySet<ChatPromptFeatureId>
-  messages: ModelMessage[]
-  workflowType: WorkflowType
 }
 
 const HtmlArtifactVisualSignal =
@@ -432,13 +340,5 @@ class PromptStateBuilder {
 }
 
 export { PromptStateBuilder, shouldInjectHtmlArtifactPromptForTurn }
-export type {
-  BuildRuntimePromptStateArgs,
-  PromptStateCodingSession,
-  PromptStateExecutionApi,
-  PromptStatePreparedToolCategories,
-  PromptStateRoleResolution,
-  PromptStateToolContext,
-  RuntimeStateContextResult,
-}
+export type { RuntimeStateContextResult }
 export { PromptStateBuilder as AgentRuntimePromptStateBuilder }

@@ -20,24 +20,12 @@ import { isArray, isEmpty, isNotNull, isPlainObject, isString } from '@velaros-a
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 
+import type { ContextUsageEstimate } from '../../types/agent.js'
+import type { CompiledProviderRequest, CompileProviderRequestInput, ContextGovernanceRuler,EstimateContextUsageOptions, ProviderHistoryRewriteSignal } from '../../types/context.js'
+import type { ContextProjectionStats, GovernanceEpochReport,GovernanceWindowDerivation } from '../../types/residency.js'
 import { estimateProviderRequestUsage, resolveToolSchemaReserve, runBudgetStage } from '../../utils/context/budget-stage'
-import type { ContextLedgerEntry } from '../../utils/context/context-ledger'
-import {
-  type ContextUsageEstimate,
-  estimateContextUsage,
-  type EstimateContextUsageOptions,
-} from '../../utils/context/context-usage'
-import {
-  type ContextActiveTaskInput,
-  type ContextPinnedEvidenceInput,
-  type ContextResourceStateInput,
-  ContextWorkingSetOS,
-  type ContextWorkingSetRetrievalHandleInput,
-} from '../../utils/context/context-working-set-os'
-import type {
-  ContextWorkingSetReclaimAction,
-  ContextWorkingSetZoneId,
-} from '../../utils/context/context-working-set-zones'
+import { estimateContextUsage } from '../../utils/context/context-usage'
+import { ContextWorkingSetOS } from '../../utils/context/context-working-set-os'
 import {
   assertProviderRequestInvariants,
   buildProviderRequestFingerprint,
@@ -48,11 +36,7 @@ import {
   createProviderRequestScratch,
   resolveSharedToolReferenceScan,
 } from '../../utils/context/pipeline'
-import {
-  buildProviderRequestSnapshot,
-  type ProviderRequestSnapshot,
-  type ProviderToolDefinitionSnapshotInput,
-} from '../../utils/context/provider-request-snapshot'
+import { buildProviderRequestSnapshot } from '../../utils/context/provider-request-snapshot'
 import {
   buildRetainedContextRewriteSignals,
   withProviderVisibleRetainedContext,
@@ -61,19 +45,11 @@ import { assertValidModelHistory } from '../../utils/history/validate'
 import { markLatestUserMessagePromptCacheBreakpoint } from '../../utils/model/prompt-cache'
 import { DefaultResidencyCharsPerToken } from '../../utils/residency/context-record'
 import { buildContextDashboardMessage } from '../../utils/residency/dashboard'
-import { type GovernanceEpochReport, resolveProjectionBudget } from '../../utils/residency/governance-epoch'
-import {
-  type GovernanceWindowDerivation,
-  resolveGovernanceWindow,
-} from '../../utils/residency/governance-window'
+import { resolveProjectionBudget } from '../../utils/residency/governance-epoch'
+import { resolveGovernanceWindow } from '../../utils/residency/governance-window'
 import { estimateMessageBudgetChars } from '../../utils/residency/message-facts'
-import { type ContextProjectionStats, projectContextLedger } from '../../utils/residency/projection'
-import type { ProviderRequestFingerprint } from '../records/ProviderTurnEventReducer'
-import {
-  type ContextGovernanceSession,
-  ContextGovernanceSessionRegistry,
-  type ContextHandoffSignal,
-} from '../residency/ContextGovernanceSession'
+import { projectContextLedger } from '../../utils/residency/projection'
+import { type ContextGovernanceSession, ContextGovernanceSessionRegistry } from '../residency/ContextGovernanceSession'
 import { rewriteCanonicalToolReferences } from '../tools/ProviderToolReferenceCanonicalizer'
 
 export {
@@ -85,107 +61,6 @@ const log = logRuntime.tag('ProviderRequestCompiler')
 
 /** 无 sessionId 时的一次性治理会话键：账本仍生效，只是不与任何真实会话共享跨回合状态。 */
 const EphemeralGovernanceSessionId = '__ephemeral-governance-session__'
-
-export interface CompileProviderRequestInput {
-  model: string
-  systemPrompt: string
-  messages: ModelMessage[]
-  /** 会话标识；提供后治理账本跨回合存活（缺省则本轮一次性账本，治理退化为纯准入）。 */
-  sessionId?: string
-  /**
-   * 治理账本键（缺省 = `sessionId`）。
-   *
-   * 只有一种情况要与 `sessionId` 分开：子 agent 与父会话共用 sessionId（`sessionId` 还要给
-   * PayloadStore 当分区，改不得），但它们是两条完全不同的消息序列，共用一本账本会让父子交替编译
-   * 每次都在第 0 条指纹分叉 → 整本重建（审计 U12）。
-   */
-  governanceSessionId?: LooseOptional<string>
-  /**
-   * 是否贴发送面传输装饰（prompt-cache 断点）。
-   *
-   * 只有**真的要发出去**的编译才开。默认关：`compile()` 因此保持"账本进、投影出"的纯粹形态，
-   * 治理未触发时出口与摄入逐字等价这条断言锁不受装饰干扰。
-   */
-  applySendTransportDecorations?: LooseOptional<boolean>
-  availableToolNames?: readonly string[]
-  toolChoiceName?: LooseOptional<string>
-  toolSchemaChars?: Record<string, number>
-  toolSchemaHashes?: Record<string, string>
-  providerTools?: readonly ProviderToolDefinitionSnapshotInput[]
-  providerToolChoice?: unknown
-  toolPayloadRefsByToolCallId?: Record<string, string>
-  /** 发送路径为紧接失败的那一次决策还原了完整参数的调用；编译期结构自愈不再压缩它们。 */
-  preserveToolCallInputIds?: ReadonlySet<string>
-  /** 超长 user 正文的内容哈希 → 持久 payloadRef；准入信封用它跨进程精确召回。 */
-  userTextPayloadRefsByHash?: Readonly<Record<string, string>>
-  retrievalHandles?: ContextWorkingSetRetrievalHandleInput[]
-  activeTask?: LooseOptional<ContextActiveTaskInput>
-  pinnedEvidence?: readonly ContextPinnedEvidenceInput[]
-  resourceState?: LooseOptional<ContextResourceStateInput>
-  contextUsageOptions?: EstimateContextUsageOptions
-  contextWindow?: LooseOptional<number>
-  reservedOutputTokens?: LooseOptional<number>
-  safetyMarginPercent?: LooseOptional<number>
-  calibrationFactor?: LooseOptional<number>
-  /**
-   * 活动尾块：系统提示词 dynamic 层、turn-context 增量等**逐轮易变**的注入内容。
-   * 排在账本投影之后，永不进稳定前缀（P7-1）。
-   */
-  tailBlocks?: readonly ModelMessage[]
-  historyRewriteSignals?: readonly ProviderHistoryRewriteSignal[]
-  /** canonical tool id → provider-safe request-local name. Persistent history remains canonical. */
-  toolNameAliases?: Readonly<Record<string, string>>
-}
-
-export type ProviderRequestPressureKind =
-  | 'none'
-  | 'tokens'
-  | 'payload'
-  | 'tool-schema'
-  | 'mixed'
-
-export interface ProviderRequestCompileDecision {
-  okToSend: boolean
-  pressureKind: ProviderRequestPressureKind
-  reason: string
-  zoneDiagnostics: ProviderRequestZoneDiagnostic[]
-}
-
-export interface ProviderRequestZoneDiagnostic {
-  zone: ContextWorkingSetZoneId
-  usedTokens: number
-  effectiveLimitTokens: number
-  overBudgetTokens: number
-  reclaimOrder: ContextWorkingSetReclaimAction[]
-}
-
-export interface CompiledProviderRequest {
-  system: string
-  messages: ModelMessage[]
-  ledger: ContextLedgerEntry[]
-  estimate: ContextUsageEstimate
-  decision: ProviderRequestCompileDecision
-  requestFingerprint: ProviderRequestFingerprint
-  /** 真实组装终点的可持久化请求快照；发送前由 turn 路径校验完整性。 */
-  providerRequest: ProviderRequestSnapshot
-  /** 本轮跑过的治理 epoch 报告；未触发时为 null。 */
-  governanceEpoch?: LooseOptional<GovernanceEpochReport>
-  /** 会话累计已应用的 epoch 代数（跳过的 epoch 不计代，与 dashboard 上的号同源）。 */
-  governanceEpochSeq?: LooseOptional<number>
-  /** 治理后的投影占用（token）与驻留态计数，供调试面与 scoreboard 消费。 */
-  governanceOccupancyPercent?: LooseOptional<number>
-  /**
-   * 转交信号（设计 §4）。B1 起送核门失去回收阶梯的二次挽救，**压力的唯一出路是转交**，
-   * 所以这条信号必须沿编译结果一路出到壳侧的布防看门，不能只留在治理器内部。
-   */
-  governanceHandoff?: LooseOptional<ContextHandoffSignal>
-  historyRewriteFingerprint?: string
-}
-
-export interface ProviderHistoryRewriteSignal {
-  kind: string
-  details: unknown
-}
 
 interface ProviderMessageProjection {
   projection: ReturnType<typeof projectContextLedger>
@@ -481,14 +356,6 @@ function applySendTransportDecorations(
   if (!input.applySendTransportDecorations) return messages
 
   return markLatestUserMessagePromptCacheBreakpoint(messages)
-}
-
-/** 本轮治理量纲：历史密度 + 账本正文之外的固定开销。 */
-interface ContextGovernanceRuler {
-  /** 字符/token 密度（账本正文字符 → token 的换算尺）。 */
-  charsPerToken: number
-  /** 系统提示词 + 工具清单/schema + 稳定前缀 + 活动尾 + 保留上下文折成的 token 数。 */
-  fixedOverheadTokens: number
 }
 
 /** 密度的合法区间：极端 tokenizer / 异常样本也不得把治理器推到无穷敏感或完全失明。 */

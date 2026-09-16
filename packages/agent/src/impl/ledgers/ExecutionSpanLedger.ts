@@ -10,14 +10,12 @@ import { dirname } from 'node:path'
 
 import { AppError } from '@velaros-ai/core/error'
 
+import type { ExecutionSpan } from '../../types/agent.js'
+import type { SpanLedgerWarn } from '../../types/ledgers.js'
 import { readSpanLedgerFile, serializeSpanLine } from '../../utils/ledgers/execution-ledger-file'
 import { truncateJsonlToLineCount } from '../../utils/ledgers/jsonl-file'
-import type { ExecutionSpan } from '../../utils/wire/observability'
 
 import { SerialWriteQueue } from './SerialWriteQueue'
-
-/** 非致命恢复事件回落（尾行截断 / 开档修复等）。缺省时事件仅进账本 handle 的内存 warnings。 */
-export type SpanLedgerWarn = (message: string, detail: Record<string, unknown>) => void
 
 /**
  * 一个打开的执行账本 handle。

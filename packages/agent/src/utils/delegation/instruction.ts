@@ -1,22 +1,8 @@
 // 域：子 Agent 派发的**出站指令拼装**（纯函数，把派发输入 + 类型配置拼成子 Agent 任务指令）。
 import { last, toNullable, truncate } from '@velaros-ai/core'
 
-import type { SubAgentStructuredOutputContract } from '../../types/agent-workflow'
-import type { SubAgentDispatchInput } from '../../types/dispatch-host-ports'
-import type {
-  SubAgentSessionRecord,
-  SubAgentSessionStatus,
-} from '../../types/sub-agent-task'
-import type { ToolCategoryId } from '../../types/tool'
-
-import type { ResolvedSubAgentTypeConfig } from './sub-agent-type-registry'
-
-/** 续跑时上一次运行的结局：异常结束的线程要提醒子 Agent 先核对现状再接着做。 */
-interface SubAgentResumeBriefing {
-  previousStatus: SubAgentSessionStatus
-  /** 上一次运行的失败原因摘要；上一次不是 failed 时为 null。 */
-  previousFailure: Nullable<string>
-}
+import type { SubAgentSessionRecord,SubAgentStructuredOutputContract, ToolCategoryId } from '../../types/agent.js'
+import type { ResolvedSubAgentTypeConfig,SubAgentDispatchInput, SubAgentResumeBriefing } from '../../types/delegation.js'
 
 const ResumeFailureReasonMaxChars = 200
 
@@ -125,4 +111,3 @@ function buildSubAgentResumeBriefing(session: SubAgentSessionRecord): SubAgentRe
 }
 
 export { buildSubAgentDispatchInstruction, buildSubAgentResumeBriefing, buildSubAgentResumeInstruction }
-export type { SubAgentResumeBriefing }

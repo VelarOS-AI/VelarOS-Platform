@@ -31,125 +31,18 @@ import type { ModelMessage } from 'ai'
 import { isArray, isBlank, isEmpty, isPresent, isString, Log, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import type {
-  ExecutionPendingInteractionKind,
-  ExecutionPendingInteractionSnapshot,
-  ExecutionProvideInputRequest,
-  ExecutionResolveConfirmationRequest,
-} from '../../types/execution'
-import type { ChatSendRequest, ExecutionProvideGuidanceRequest } from '../../types/protocol'
-import type { UserActionCardResult } from '../../types/tool'
-import type { KernelRuntimeStatus } from '../../utils/execution/policy'
+import type { KernelSessionInputStore } from '../../contract/requires.js'
+import type { ChatSendRequest, ExecutionPendingInteractionKind, ExecutionPendingInteractionSnapshot, ExecutionProvideGuidanceRequest, ExecutionProvideInputRequest, ExecutionResolveConfirmationRequest,UserActionCardResult } from '../../types/agent.js'
+import type { KernelCancelResult, KernelChatExecutionCoordinator, KernelChatExecutionService, KernelChatRunOptions, KernelChatSubmission, KernelChatSubmissionDeferred, KernelControllerAnswerInput, KernelControllerApprovalInput, KernelControllerSendInput, KernelRuntimeStatus,KernelSessionAuthorization, PendingKernelChatRun } from '../../types/execution.js'
 import { KernelSessionPolicy } from '../../utils/execution/policy'
-import type { KernelSessionInputStore } from '../execution/KernelSessionRunCoordinator'
 import { InMemoryKernelSessionInputStore, KernelSessionRunCoordinator } from '../execution/KernelSessionRunCoordinator'
-import type {
-  KernelBackgroundJobManager,
-  KernelBackgroundJobOutputSnapshot,
-  WaitForKernelBackgroundJobsInput,
-} from '../records/KernelBackgroundJobManager'
+import type { KernelBackgroundJobManager } from '../records/KernelBackgroundJobManager'
 import {
   InMemoryKernelBackgroundJobOutputStore,
   KernelBackgroundJobManager as DefaultKernelBackgroundJobManager,
 } from '../records/KernelBackgroundJobManager'
 
-import type {
-  KernelCancelResult,
-  KernelControllerAnswerInput,
-  KernelControllerApprovalInput,
-  KernelControllerSendInput,
-} from './KernelSessionController'
 import { KernelSessionController } from './KernelSessionController'
-
-/** 读取内核后台 job 输出的入参（宿主执行协调器消费）。 */
-interface KernelChatBackgroundJobReadInput {
-  jobId: string
-  mode: 'incremental' | 'snapshot'
-}
-
-/** 取消内核后台 job 的入参。 */
-interface KernelChatBackgroundJobCancelInput {
-  jobId: string
-}
-
-interface KernelImplicitBackgroundWaitInput {
-  signal?: AbortSignal
-  onWaiting?: () => void
-}
-
-/**
- * 一轮聊天执行的运行选项：桥把后台 job 生命周期以闭包形式递给宿主执行协调器。
- * 是本桥与注入的 {@link KernelChatExecutionCoordinator} 之间的端口契约。
- */
-interface KernelChatRunOptions {
-  awaitPendingBackgroundJobs?: (input?: KernelImplicitBackgroundWaitInput) => Promise<boolean>
-  readBackgroundJobOutput?: (
-    input: KernelChatBackgroundJobReadInput
-  ) => Promise<Nullable<KernelBackgroundJobOutputSnapshot>>
-  waitBackgroundJobs?: (
-    input: WaitForKernelBackgroundJobsInput
-  ) => Promise<KernelBackgroundJobOutputSnapshot[]>
-  cancelBackgroundJob?: (
-    input: KernelChatBackgroundJobCancelInput
-  ) => Promise<Nullable<KernelBackgroundJobOutputSnapshot>>
-}
-
-/**
- * 宿主执行协调器窄接口：桥只需要 `run` 一个动词。
- * `TRenderTarget` 是传输/渲染目标句柄，对桥完全不透明——桥从不检查它，只原样透传给宿主。
- */
-interface KernelChatExecutionCoordinator<TRenderTarget> {
-  run(
-    renderTarget: TRenderTarget,
-    payload: ChatSendRequest,
-    options?: KernelChatRunOptions
-  ): Promise<void>
-}
-
-/** 宿主执行服务窄接口：桥消费的 source-session 生命周期动词。 */
-interface KernelChatExecutionService {
-  abortSourceSession(sourceSessionId: string): boolean
-  provideGuidanceForSourceSession(
-    request: { sessionId: string; message: ModelMessage; inputId?: string },
-    authorization?: { assertCurrent(): void }
-  ): Promise<void>
-  provideInputForSourceSession(request: ExecutionProvideInputRequest): void
-  resolveConfirmationForSourceSession(request: ExecutionResolveConfirmationRequest): void
-  hasPendingInteractionForSourceSession(
-    sessionId: string,
-    kind: ExecutionPendingInteractionKind
-  ): boolean
-  getPendingInteractionForSourceSession(
-    sessionId: string,
-    kind: ExecutionPendingInteractionKind
-  ): Nullable<ExecutionPendingInteractionSnapshot>
-  isRunningForSourceSession(sessionId: string): boolean
-  takeRetainedGuidanceInputIdsForSourceSession?(sessionId: string): string[]
-  awaitSourceSessionSettled?(sessionId: string): Promise<void>
-}
-
-interface PendingKernelChatRun<TRenderTarget> {
-  renderTarget: TRenderTarget
-  payload: ChatSendRequest
-  admission: KernelChatSubmissionDeferred
-  completion: KernelChatSubmissionDeferred
-  cancelled: boolean
-  started?: boolean
-  onAccepted?: () => void
-}
-
-/** 每条输入自己的准入与执行收尾；合并 wake 不合并这些回执。 */
-interface KernelChatSubmission {
-  accepted: Promise<void>
-  /** 本条执行已收尾；准入失败、排队取消或宿主执行抛错时拒绝。 */
-  completed: Promise<void>
-}
-
-interface KernelChatSubmissionDeferred {
-  promise: Promise<void>
-  resolve: () => void
-  reject: (error: unknown) => void
-}
 
 function createSubmissionDeferred(): KernelChatSubmissionDeferred {
   let resolve!: () => void
@@ -162,10 +55,6 @@ function createSubmissionDeferred(): KernelChatSubmissionDeferred {
     // arch-guard:silent-catch-ok send 调用者只观察 accepted；原 promise 的拒绝仍供 submit 调用者读取。
   })
   return { promise, resolve, reject }
-}
-
-interface KernelSessionAuthorization {
-  assertCurrent(): void
 }
 
 const DefaultKernelBackgroundJobStalledAfterMs = 120_000
@@ -632,10 +521,4 @@ class ChatKernelSessionBridge<TRenderTarget = unknown> {
 }
 
 export { ChatKernelSessionBridge }
-export type {
-  ChatKernelSessionBridgeOptions,
-  KernelChatExecutionCoordinator,
-  KernelChatExecutionService,
-  KernelChatRunOptions,
-  KernelChatSubmission,
-}
+export type { ChatKernelSessionBridgeOptions }

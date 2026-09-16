@@ -3,37 +3,10 @@ import type { ModelMessage } from 'ai'
 import { isEmpty, isPresent } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import type { ProviderRequestFingerprint } from '../../impl/records/ProviderTurnEventReducer'
+import type { ProviderRequestSnapshot,ProviderToolDefinitionSnapshotInput } from '../../types/context.js'
+import type { ProviderRequestFingerprint } from '../../types/records.js'
 
-import {
-  encodeProviderRequestAuditValue,
-  type ProviderRequestAuditValue,
-} from './serialization'
-
-export interface ProviderToolDefinitionSnapshotInput {
-  name: string
-  canonicalName: string
-  description: string
-  inputSchema: unknown
-  schemaChars: number
-  schemaHash: Nullable<string>
-}
-
-export interface ProviderToolDefinitionSnapshot
-  extends Omit<ProviderToolDefinitionSnapshotInput, 'inputSchema'> {
-  inputSchema: ProviderRequestAuditValue
-}
-
-/** 模型请求组装终点的可持久化事实；不含密钥、provider client 或执行函数。 */
-export interface ProviderRequestSnapshot {
-  schemaVersion: 1
-  model: string
-  system: string
-  messages: ProviderRequestAuditValue
-  tools: ProviderToolDefinitionSnapshot[]
-  toolChoice: ProviderRequestAuditValue
-  requestFingerprint: ProviderRequestFingerprint
-}
+import { encodeProviderRequestAuditValue } from './serialization'
 
 export function buildProviderRequestSnapshot(input: {
   model: string

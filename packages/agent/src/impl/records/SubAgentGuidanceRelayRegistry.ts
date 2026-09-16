@@ -1,29 +1,6 @@
 import { isBlank, isEmpty,toNullable } from '@velaros-ai/core'
-interface SubAgentGuidanceRelayWorkerSnapshot {
-  threadId: string
-  title: string
-  description: Nullable<string>
-  prompt: string
-  agentName: string
-  subagentType: string
-}
 
-interface SubAgentGuidanceRelayWorkerHandle {
-  consumeRelayedGuidance: () => Nullable<string>
-  enqueueRelayedGuidance: (message: string) => void
-  abortSignal: AbortSignal
-  abort: (reason?: string) => void
-}
-
-interface RegisterSubAgentGuidanceRelayWorkerInput extends SubAgentGuidanceRelayWorkerSnapshot {
-  executionId: string
-}
-
-interface ActiveSubAgentGuidanceRelayWorker extends SubAgentGuidanceRelayWorkerSnapshot {
-  relayQueue: string[]
-  abortController: AbortController
-}
-
+import type { ActiveSubAgentGuidanceRelayWorker,RegisterSubAgentGuidanceRelayWorkerInput, SubAgentGuidanceRelayWorkerHandle, SubAgentGuidanceRelayWorkerSnapshot } from '../../types/records.js'
 /**
  * 跟踪单次 execution 内正在运行的子 Agent，并为运行中引导 relay 提供 FIFO 队列。
  */
@@ -128,8 +105,3 @@ class SubAgentGuidanceRelayRegistry {
 }
 
 export { SubAgentGuidanceRelayRegistry }
-export type {
-  RegisterSubAgentGuidanceRelayWorkerInput,
-  SubAgentGuidanceRelayWorkerHandle,
-  SubAgentGuidanceRelayWorkerSnapshot,
-}

@@ -1,11 +1,11 @@
-import type { ModelMessage } from 'ai'
 
 import { isEmpty, toNullable } from '@velaros-ai/core'
 
+import type { CompiledProviderSendRequest,CompileProviderSendRequestInput } from '../../types/context.js'
+import type { SanitizeModelHistoryOptions, UserTextPayloadReference } from '../../types/history.js'
 import { estimateProviderRequestUsage } from '../../utils/context/budget-stage'
 import { projectFileContext } from '../../utils/context/file-context-projection'
-import { type AgentHistoryToolContext, sanitizeHistoryForProvider } from '../../utils/history/request'
-import type { SanitizeModelHistoryOptions, UserTextPayloadReference } from '../../utils/history/sanitize'
+import { sanitizeHistoryForProvider } from '../../utils/history/request'
 import {
   projectTransientRecoveryHistory,
   restoreReusableInputsForNextDecision,
@@ -13,44 +13,12 @@ import {
 import { readReusableAttemptInput } from '../tools/ToolInputReuseStore'
 
 import { fileContextFor } from './FileContextCoordinator'
-import type { ContextPayloadStore } from './InMemoryContextPayloadStore'
-import type {
-  CompiledProviderRequest,
-  CompileProviderRequestInput,
-  ProviderRequestCompiler,
-} from './ProviderRequestCompiler'
+import type { ProviderRequestCompiler } from './ProviderRequestCompiler'
 import { buildToolPayloadRefsForProviderMessages } from './ToolPayloadReferencePlanner'
 import {
   OversizedUserTextSafetyValveChars,
   UserTextPayloadPlanner,
 } from './UserTextPayloadPlanner'
-
-export interface CompileProviderSendRequestInput
-  extends Omit<
-    CompileProviderRequestInput,
-    'messages' | 'toolPayloadRefsByToolCallId' | 'userTextPayloadRefsByHash'
-  > {
-  sessionId: string
-  rawHistoryMessages: ModelMessage[]
-  /** 稳定前缀消息（系统提示词稳定层 + 缓存断点）。逐轮字节不变，账本不摄入它们之外的东西。 */
-  leadingMessages?: readonly ModelMessage[]
-  phase: 'stream' | 'query'
-  turn?: LooseOptional<number>
-  payloadStore?: LooseOptional<ContextPayloadStore>
-  toolContext?: AgentHistoryToolContext
-  sanitizeOptions?: SanitizeModelHistoryOptions
-  /** 为 true 时跳过异步 user-text 持久化，主要用于测试。 */
-  skipUserTextPersistence?: boolean
-  buildToolPayloadRefs?: (
-    providerMessages: ModelMessage[]
-  ) => Promise<LooseOptional<Record<string, string>>>
-}
-
-export interface CompiledProviderSendRequest extends CompiledProviderRequest {
-  sanitizedHistoryMessages: ModelMessage[]
-  providerMessages: ModelMessage[]
-  userTextPayloadRefs: number
-}
 
 /**
  * 统一模型请求发送路径：先持久化超大用户文本，再清洗历史消息，再按需构建工具引用，最后编译可发送请求。

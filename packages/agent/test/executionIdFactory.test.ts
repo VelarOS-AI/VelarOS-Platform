@@ -1,9 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 
-import {
-  type ExecutionClock,
-  MonotonicExecutionIdFactory,
-} from '../src/impl/records/MonotonicExecutionIdFactory'
+import type { ExecutionClock } from '../src/contract/requires.js'
+import { MonotonicExecutionIdFactory } from '../src/impl/records/MonotonicExecutionIdFactory'
 
 class FixedClock implements ExecutionClock {
   public constructor(private readonly timestamp: number) {}

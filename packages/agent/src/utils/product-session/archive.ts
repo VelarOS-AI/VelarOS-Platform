@@ -1,29 +1,9 @@
 import { isArray, isBoolean, isNumber, isPlainObject, isString } from '@velaros-ai/core'
 
-export const VelarosAgentSessionArchiveFormat = 'velaros.agent-session' as const
-export const VelarosAgentSessionArchiveSchemaVersion = 1 as const
+import type { AgentSessionArchiveEnvelope,AgentSessionArchiveEvent } from '../../types/product-session.js'
 
-export interface AgentSessionArchiveEvent<TPayload = unknown> {
-  readonly type: string
-  readonly payload: TPayload
-  readonly createdAt: number
-}
-
-/**
- * Product-neutral portable Session envelope. Product schema remains an explicit inner version and
- * payload; Platform owns identity, sanitation provenance, timestamp, and bounded collection shape.
- */
-export interface AgentSessionArchiveEnvelope<TSession, TResource = unknown, TEvent = AgentSessionArchiveEvent> {
-  readonly format: typeof VelarosAgentSessionArchiveFormat
-  readonly schemaVersion: typeof VelarosAgentSessionArchiveSchemaVersion
-  readonly productId: string
-  readonly productSchemaVersion: number
-  readonly exportedAt: string
-  readonly sanitized: boolean
-  readonly session: TSession
-  readonly resources: readonly TResource[]
-  readonly events: readonly TEvent[]
-}
+export const VelarosAgentSessionArchiveFormat = 'velaros.agent-session' as const satisfies AgentSessionArchiveEnvelope<never, never, never>['format']
+export const VelarosAgentSessionArchiveSchemaVersion = 1 as const satisfies AgentSessionArchiveEnvelope<never, never, never>['schemaVersion']
 
 export function createAgentSessionArchiveEnvelope<TSession, TResource, TEvent>(input: {
   readonly productId: string

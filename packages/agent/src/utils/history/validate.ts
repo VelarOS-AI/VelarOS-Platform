@@ -4,27 +4,7 @@ import { isArray, isEmpty,toOptional } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { coerceTrimmedString, isRecord } from '@velaros-ai/core/utils/unknownJsonRecord'
 
-interface ToolCallReference {
-  messageIndex: number
-  toolName: string
-}
-
-export interface ModelHistoryValidationIssue {
-  messageIndex: number
-  role: string
-  message: string
-  toolCallId?: string
-}
-
-export interface ModelHistoryValidationResult {
-  valid: boolean
-  issues: ModelHistoryValidationIssue[]
-}
-
-export interface AssertValidModelHistoryOptions {
-  phase: 'stream' | 'query' | 'compile'
-  turn: Nullable<number>
-}
+import type { AssertValidModelHistoryOptions,ModelHistoryValidationIssue, ModelHistoryValidationResult, ToolCallReference } from '../../types/history.js'
 
 function addIssue(
   issues: ModelHistoryValidationIssue[],

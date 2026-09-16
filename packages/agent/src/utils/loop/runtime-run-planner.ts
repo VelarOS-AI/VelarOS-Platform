@@ -1,13 +1,9 @@
 import { isEmpty,isFiniteNumber } from '@velaros-ai/core'
 
-import type { ProviderRequestPressureKind } from '../../impl/context/ProviderRequestCompiler'
-import type { ContextRunPlan, PromptRunPlan, RecoveryRunPlan, ToolPageFault } from '../../types/agent-run-plan'
-import type { RunProfileId } from '../../types/run-profile'
+import type { ContextWorkingSetBudgetLedgerEntry,ProviderRequestPressureKind } from '../../types/context.js'
+import type { BuildPromptRunPlanInput,CapabilityEvidenceSnapshot, ContextRunPlan, PlanContextRunInput, PlanRecoveryRunInput, PromptRunPlan, RecoveryRunPlan, ToolPageFault } from '../../types/loop.js'
 import { estimateBlockTokens } from '../context/context-ledger'
-import {
-  ContextWorkingSetBudgetGovernor,
-  type ContextWorkingSetBudgetLedgerEntry,
-} from '../context/context-working-set-budget-governor'
+import { ContextWorkingSetBudgetGovernor } from '../context/context-working-set-budget-governor'
 import { RunProfileDefinitions } from '../runner/runtime-profiles'
 
 import {
@@ -16,13 +12,6 @@ import {
 } from './context-degrade-ladder'
 
 const DefaultAgentContextWindow = 128_000
-
-export interface PlanContextRunInput {
-  model: string
-  contextWindow?: number
-  toolSchemaChars?: Readonly<Record<string, number>>
-  toolSchemaBudgetScale?: number
-}
 
 class ContextRunPlanner {
   public plan(input: PlanContextRunInput): ContextRunPlan {
@@ -90,18 +79,6 @@ class ContextRunPlanner {
   }
 }
 
-export interface PlanRecoveryRunInput {
-  forcedToolChoice?: { type: 'tool'; toolName: string }
-  pageFaults?: readonly ToolPageFault[]
-  requiresCapabilityEvidence?: boolean
-  capabilityEvidenceSnapshot?: CapabilityEvidenceSnapshot
-}
-
-export interface CapabilityEvidenceSnapshot {
-  hasEvidence: boolean
-  isStale: boolean
-}
-
 class RecoveryRunPlanner {
   public plan(input: PlanRecoveryRunInput): RecoveryRunPlan {
     const forced = Boolean(input.forcedToolChoice)
@@ -162,13 +139,6 @@ class RecoveryRunPlanner {
 
     return input.capabilityEvidenceSnapshot.isStale ? 'refresh-capability-context' : 'none'
   }
-}
-
-export interface BuildPromptRunPlanInput {
-  runProfile: RunProfileId
-  bootstrapReminder?: string
-  pageFaults?: readonly ToolPageFault[]
-  recovery?: RecoveryRunPlan
 }
 
 class PromptRunPlanner {

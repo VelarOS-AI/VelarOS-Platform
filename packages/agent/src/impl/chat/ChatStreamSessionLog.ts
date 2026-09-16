@@ -1,10 +1,6 @@
-import type { ChatStreamLogEntry } from '../../types/chat-stream'
-import type {
-  ChatStreamDeltaEnvelope,
-  ChatStreamEvent,
-  ChatStreamEventEnvelope,
-  ChatStreamSnapshot,
-} from '../../types/protocol'
+
+import type { ChatStreamDeltaEnvelope, ChatStreamEvent, ChatStreamEventEnvelope, ChatStreamSnapshot } from '../../types/agent.js'
+import type { ChatStreamLogEntry } from '../../types/chat.js'
 
 import { type ChatStreamProtocol,chatStreamProtocol } from './ChatStreamProtocol'
 

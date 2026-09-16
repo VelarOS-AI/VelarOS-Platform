@@ -24,57 +24,16 @@
 import { isFiniteNumber, isString, toNullable, toOptional } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import { buildContextRefEnvelope, type ContextRefEnvelope } from '../../utils/context/context-ref-envelope'
+import type { ContextPayloadStore,KernelToolOutputStore } from '../../contract/requires.js'
+import type { ContextPayloadRecord } from '../../types/context.js'
+import type { ContextPayloadKernelToolOutputStoreOptions,KernelStoredToolOutput, ProjectKernelToolOutputInput, ProjectKernelToolOutputResult } from '../../types/tools.js'
+import { buildContextRefEnvelope } from '../../utils/context/context-ref-envelope'
 import { resolveGovernanceSessionKey } from '../../utils/residency/session-key'
 import { fitProjectReadsForModel, hasProjectSourceWindows } from '../../utils/tools/project-read-serialization'
 import { ModelToolResultMaxSerializedLength } from '../../utils/tools/tool-result-serialization'
-import type {
-  ContextPayloadRecord,
-  ContextPayloadStore,
-} from '../context/InMemoryContextPayloadStore'
 import { ToolResultCanonicalizer } from '../context/ToolResultCanonicalizer'
 
-// B3:kernel 页出桩统一为 ContextRefEnvelope(唯一持久化桩;旧 __kernelRef 归档由
-// isFoldStubText/normalizeLegacyFoldStub 永久只读兼容)。outputId/hash 归 meta。
-export type KernelToolOutputProjection = ContextRefEnvelope
-
-export interface KernelStoredToolOutput {
-  outputId: string
-  payloadRef?: string
-  hash?: string
-  sessionId: string
-  toolCallId: string
-  toolName: string
-  output: unknown
-  serialized: string
-  chars: number
-  createdAt: number
-  sameAsToolCallId?: string
-}
-
-export interface ProjectKernelToolOutputInput {
-  sessionId?: LooseOptional<string>
-  toolCallId: string
-  toolName: string
-  output: unknown
-}
-
-export interface ProjectKernelToolOutputResult {
-  output: unknown
-  stored: Nullable<KernelStoredToolOutput>
-}
-
-export interface KernelToolOutputStore {
-  project(
-    input: ProjectKernelToolOutputInput
-  ): ProjectKernelToolOutputResult | Promise<ProjectKernelToolOutputResult>
-}
-
 export interface InMemoryKernelToolOutputStoreOptions {
-  projectionChars?: number
-}
-
-export interface ContextPayloadKernelToolOutputStoreOptions {
   projectionChars?: number
 }
 

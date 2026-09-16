@@ -14,44 +14,13 @@
 //  - **压缩/转交只在回合边界触发**：轮内触发会让上下文在同一轮内变形，模型看到的前后不一致。
 import { randomUUID } from 'node:crypto'
 
-import type { ModelMessage } from 'ai'
-
 import { isNull, isTrue, toNullable, toOptional } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
-import { logRuntime, type ScopedLog } from '@velaros-ai/core/logger'
+import { logRuntime } from '@velaros-ai/core/logger'
 
-import type {
-  AgentContextPhase,
-  PromptSegmentTrace,
-  RunProfileRuntimePolicy,
-  SkippedPromptSegmentTrace,
-  StreamTurnContextPayload,
-  ToolLayerTelemetryMetrics,
-} from '../../types/agent'
-import { ChatRuntimeEvents } from '../../types/chat-runtime'
-import type { AgentModelRequestOptions } from '../../types/model-contracts'
-import type {
-  ActiveContextArtifact,
-  ActiveContextArtifactKind,
-  ActiveContextArtifactStatus,
-  ActiveContextUpsertInput,
-} from '../../types/protocol'
-import type { AgentRoleResolution } from '../../types/role-types'
-import type { AgentModelRetryPolicy,AgentRunLifecycle } from '../../types/run-lifecycle'
-import type { RunProfileId } from '../../types/run-profile'
-import type {
-  AgentChatRuntimeConfig,
-  AgentExecutionConfig,
-  AgentSystemRuntimeConfig,
-} from '../../types/runtime-configuration'
-import type {
-  AgentModelInputModality,
-  ToolCategoryId,
-  ToolCategoryOverview,
-  ToolSurfaceProfileId,
-} from '../../types/tool'
+import type {ExecutionSpanScopeFactory } from '../../contract/requires.js'
+import type { AgentExecutionLimitOverrides, AgentExecutionLimits, AgentLoopSurface, ExecuteSoloModeStreamLoopArgs, LoopTurnVerdict, SoloInterruptedToolCallRecoveryKind, SoloLoopEvents, SoloLoopRoleRuntime, SoloLoopRunContext, SoloLoopRuntime, SoloLoopToolContext, SoloLoopToolRegistry, SoloLoopTurnRunner, SoloModeStreamLoopResult, StreamTurnResult, ToolSpaceBootstrapState } from '../../types/loop.js'
 import { createInternalFollowUpMessage } from '../../utils/history/internal-messages'
-import type { AgentTurnToolExecutor, AgentTurnToolResult } from '../../utils/history/turn'
 import {
   beginLoopTurnSpans,
   endLoopTurnSpansError,
@@ -61,17 +30,10 @@ import {
   runAgentLoop,
 } from '../../utils/loop/agent-loop'
 import { resolveAgentContextPhase } from '../../utils/loop/context-phase'
-import {
-  type AgentExecutionLimitOverrides,
-  type AgentExecutionLimits,
-  resolveAgentExecutionLimits,
-} from '../../utils/loop/execution-limits'
+import { resolveAgentExecutionLimits } from '../../utils/loop/execution-limits'
 import { extractLatestUserTextFromMessages } from '../../utils/loop/intent-signals'
 import { recoveryRunPlanner } from '../../utils/loop/runtime-run-planner'
-import {
-  runSoloBackgroundCompletionGate,
-  type SoloAwaitPendingBackgroundJobs,
-} from '../../utils/loop/solo-background-completion-gate'
+import { runSoloBackgroundCompletionGate } from '../../utils/loop/solo-background-completion-gate'
 import { applySoloContextDegradeAction } from '../../utils/loop/solo-context-degrade-action-executor'
 import {
   createSoloFinishingGateBlockTracker,
@@ -93,251 +55,21 @@ import { consumeSoloRuntimeGuidance } from '../../utils/loop/solo-runtime-guidan
 import { runSoloToolSpaceBootstrapFallback } from '../../utils/loop/solo-tool-space-bootstrap-fallback'
 import { runSoloToolUseContinuation } from '../../utils/loop/solo-tool-use-continuation'
 import { runSoloTurnWindDown } from '../../utils/loop/solo-turn-wind-down'
-import type { ToolSpaceBootstrapState } from '../../utils/loop/tool-space-bootstrap-planner'
-import {
-  type AgentTurnCapabilitySnapshotSource,
-  captureAgentTurnCapabilitySnapshot,
-} from '../../utils/loop/turn-capability-snapshot'
+import { captureAgentTurnCapabilitySnapshot } from '../../utils/loop/turn-capability-snapshot'
 import { resolveGovernanceSessionKey } from '../../utils/residency/session-key'
-import type { AgentRuntimeInputPort } from '../../utils/runner/runtime-input-port'
 import { createAgentRuntimeInputInterruptScope } from '../../utils/runner/runtime-input-port'
-import {
-  type AutoVerificationEvents,
-  type AutoVerificationToolContext,
-  runAutomaticVerification,
-  tickLoopReminders,
-} from '../../utils/session/auto-verification'
-import {
-  AgentLoopContextUsageManager,
-  type AgentLoopToolRegistry,
-} from '../context/AgentLoopContextUsageManager'
-import type { ExecutionSpanScopeFactory } from '../ledgers/LedgerExecutionSpanScopeFactory'
+import { runAutomaticVerification, tickLoopReminders } from '../../utils/session/auto-verification'
+import { ChatRuntimeEvents } from '../../utils/wire/chat-runtime.js'
+import { AgentLoopContextUsageManager } from '../context/AgentLoopContextUsageManager'
 import type { AgentModSeamDispatcher } from '../mods/AgentModSeamDispatcher'
 import type { ContextGovernanceSessionRegistry } from '../residency/ContextGovernanceSession'
-import type { PromptStatePreparedToolCategories } from '../runner/PromptStateBuilder'
 import { KernelToolLoopGuard } from '../tools/KernelToolLoopGuard'
-import {
-  SessionToolAllocator,
-  type ToolAllocatorRequest,
-} from '../tools/SessionToolAllocator'
-import {
-  ToolExecutionPolicy,
-  type ToolExecutionPolicyContext,
-  type ToolExecutionPolicyRegistry,
-} from '../tools/ToolExecutionPolicy'
-import { ToolExecutor, type ToolExecutorEvents } from '../tools/ToolExecutor'
+import { SessionToolAllocator } from '../tools/SessionToolAllocator'
+import { ToolExecutionPolicy } from '../tools/ToolExecutionPolicy'
+import { ToolExecutor } from '../tools/ToolExecutor'
 
-import {
-  type AgentLoopSurface,
-  loopContinue,
-  loopFinish,
-  type LoopTurnVerdict,
-  LoopWindDownGuard,
-} from './LoopWindDownGuard'
+import { loopContinue, loopFinish, LoopWindDownGuard } from './LoopWindDownGuard'
 import { SoloGoalLifecycle } from './SoloGoalLifecycle'
-import type {
-  ExecuteStreamTurnArgs,
-  StreamTurnEvents,
-  StreamTurnProvider,
-  StreamTurnResult,
-  StreamTurnToolContext,
-  StreamTurnToolRegistry,
-} from './StreamTurn'
-
-interface SoloLoopRoleRuntime {
-  provider: StreamTurnProvider
-  providerId: string
-  model: string
-  providerModel?: string
-  contextWindow?: number
-  supportedInputModalities: readonly AgentModelInputModality[]
-  modelRequestOptions?: AgentModelRequestOptions
-  runProfilePolicy?: RunProfileRuntimePolicy
-  resolutionSource: string
-  resolutionTrace: readonly unknown[]
-  fallbackReason?: LooseOptional<string>
-}
-
-interface SoloLoopEvents extends StreamTurnEvents, ToolExecutorEvents, AutoVerificationEvents {
-  emitTurnContext(payload: StreamTurnContextPayload): void
-}
-
-type SoloLoopToolContext = StreamTurnToolContext &
-  ToolExecutionPolicyContext &
-  AutoVerificationToolContext & {
-    codingSession: StreamTurnToolContext['codingSession'] & {
-      enableToolCategories: (categories: ToolCategoryId[], reason?: string) => ToolCategoryId[]
-      enableToolNames: (toolNames: string[], reason?: string) => string[]
-      drainToolAllocatorRequests?: () => ToolAllocatorRequest[]
-      getEnabledToolCategories: () => ToolCategoryId[]
-      getBudgetOverrideToolCategories: () => ToolCategoryId[]
-      getBudgetOverrideToolNames: () => string[]
-      isToolCategoryAllowed: (category: ToolCategoryId) => boolean
-      getToolUsageScores?: () => Readonly<Record<string, number>>
-      getToolLayerTelemetryMetrics?: (turnsPerCompletedTask?: number) => ToolLayerTelemetryMetrics
-      setUsableContextWindowTokens?: (tokens: Nullable<number>) => void
-      getLastTurnPlanningTelemetry?: () => StreamTurnContextPayload['turnPlanningTelemetry']
-      collectNewlyEvictedPagedInTools?: (evictedToolNames: readonly string[]) => string[]
-    }
-    activeContext: {
-      listActiveContextArtifacts(options?: {
-        status?: ActiveContextArtifactStatus | 'all'
-        kinds?: ActiveContextArtifactKind[]
-      }): Promise<ActiveContextArtifact[]>
-      upsertActiveContextArtifact(input: ActiveContextUpsertInput): Promise<ActiveContextArtifact>
-    }
-    getCurrentVisibleToolNames: () => string[]
-    setCurrentVisibleToolNames: (toolNames: string[]) => void
-    setSupportedModelInputModalities: (
-      modalities: readonly AgentModelInputModality[]
-    ) => void
-    listToolCategories(
-      scope?: 'enabled' | 'all' | 'system-enabled' | 'catalog'
-    ): ToolCategoryOverview[]
-  }
-
-interface SoloLoopRuntime<TEvents extends SoloLoopEvents> {
-  resolveRoleRuntime(
-    selection: unknown,
-    runtimeContext?: unknown,
-    signal?: AbortSignal
-  ): Promise<SoloLoopRoleRuntime>
-  handleStreamError(
-    error: unknown,
-    turn: number,
-    abortSignal: AbortSignal,
-    events: TEvents,
-    log: ScopedLog
-  ): void
-  emitAbort(events: TEvents, message?: string): void
-}
-
-interface SoloLoopTurnRunner<TContext extends SoloLoopToolContext, TEvents extends SoloLoopEvents> {
-  executeStreamTurn(
-    args: Omit<ExecuteStreamTurnArgs<TContext>, 'toolContext' | 'events'> & {
-      toolContext: TContext
-      events: TEvents
-    }
-  ): Promise<StreamTurnResult>
-  appendToolResultsToHistory(
-    history: ModelMessage[],
-    executor: AgentTurnToolExecutor
-  ): Promise<AgentTurnToolResult[]>
-}
-
-interface SoloLoopRunContext<TContext extends SoloLoopToolContext> {
-  buildPrimaryAgentSystemPrompt(args: {
-    chatConfig: AgentChatRuntimeConfig
-    systemConfig: AgentSystemRuntimeConfig
-    messages: ModelMessage[]
-    roleResolution: AgentRoleResolution
-    toolContext: TContext
-    capabilityContext?: unknown
-    thinkingDepth?: LooseOptional<AgentSystemRuntimeConfig['thinkingDepth']>
-    promptFeatures?: AgentExecutionConfig['promptFeatures']
-    preparedToolCategories?: PromptStatePreparedToolCategories
-    executionModes?: AgentExecutionConfig['executionModes']
-    goalMode?: AgentExecutionConfig['goalMode']
-    runProfile?: RunProfileId
-    promptBudget?: LooseOptional<{
-      profile: RunProfileId
-      maxChars: number
-    }>
-    contextPhase: AgentContextPhase
-  }): Promise<{
-    systemPrompt: string
-    devEnvironmentContext: Nullable<string>
-    stableCutoff: number
-    promptSegments: PromptSegmentTrace[]
-    skippedPromptSegments: SkippedPromptSegmentTrace[]
-  }>
-  buildTurnContextPayload(args: {
-    turn: number
-    roleResolution: AgentRoleResolution
-    roleRuntimeModel: StreamTurnContextPayload['roleRuntimeModel']
-    systemPrompt: string
-    devEnvironmentContext: Nullable<string>
-    stableCutoff: number
-    promptSegments: PromptSegmentTrace[]
-    skippedPromptSegments: SkippedPromptSegmentTrace[]
-    history: ModelMessage[]
-    toolContext: TContext
-    allowedTools: string[]
-    toolSchemaTelemetry?: StreamTurnContextPayload['toolSchemaTelemetry']
-    runProfileTelemetry?: StreamTurnContextPayload['runProfileTelemetry']
-    toolAllocatorTelemetry?: StreamTurnContextPayload['toolAllocatorTelemetry']
-    turnPlanningTelemetry?: StreamTurnContextPayload['turnPlanningTelemetry']
-    contextPhaseTelemetry: StreamTurnContextPayload['contextPhaseTelemetry']
-  }): StreamTurnContextPayload
-}
-
-type SoloLoopToolRegistry<TContext extends SoloLoopToolContext> = AgentLoopToolRegistry<TContext> &
-  StreamTurnToolRegistry<TContext> &
-  ToolExecutionPolicyRegistry & {
-    listCategories?(
-      toolContext: TContext,
-      allowList?: string[],
-      scope?: 'enabled' | 'all' | 'system-enabled' | 'catalog'
-    ): ToolCategoryOverview[]
-    getDescriptor(toolName: string): LooseOptional<{ categoryId?: LooseOptional<ToolCategoryId> }>
-    estimateToolsSerializedCharsForProfile?: (
-      toolContext: TContext,
-      profile: ToolSurfaceProfileId,
-      allowedTools: string[]
-    ) => number
-    estimateToolSerializedCharsByName?: (
-      toolContext: TContext,
-      allowedTools: string[]
-    ) => Record<string, number>
-  } & Partial<AgentTurnCapabilitySnapshotSource<SoloLoopToolRegistry<TContext>>>
-
-interface ExecuteSoloModeStreamLoopArgs<
-  TContext extends SoloLoopToolContext = SoloLoopToolContext,
-  TEvents extends SoloLoopEvents = SoloLoopEvents,
-> {
-  lifecycle?: AgentRunLifecycle<TContext>
-  modelRetry?: AgentModelRetryPolicy
-  /** 会被循环原地追加 assistant/tool/system reminder 消息的历史。 */
-  history: ModelMessage[]
-  /** 本次 Agent 执行配置。 */
-  config: AgentExecutionConfig
-  /** 聊天模型配置快照。 */
-  chatConfig: AgentChatRuntimeConfig
-  /** 系统配置快照。 */
-  systemConfig: AgentSystemRuntimeConfig
-  /** 外层 ExecutionService 传入的取消控制器。 */
-  abortController: AbortController
-  /** 工具能力上下文。 */
-  toolContext: TContext
-  /** 当前 solo profile 解析出的角色和工具能力。 */
-  resolution: AgentRoleResolution
-  /** 本次任务由能力扩展注入的上下文信号。 */
-  capabilityContext?: unknown
-  /**
-   * 在长会话中按节奏刷新 codingSignals 的回调；缺省时使用初始 codingSignals 直至 loop 结束。
-   * 当前轮无法刷新时保留上一份信号继续使用。
-   */
-  refreshCapabilityContext?: (history: ModelMessage[]) => Promise<unknown>
-  /** 原子运行时输入端口；在最终收尾边界 drain 后 seal。 */
-  runtimeInput?: AgentRuntimeInputPort
-  /** 读取并移除运行中用户引导；有结果时作为下一轮 user message 追加到 history。 */
-  consumeGuidance?: () => Nullable<ModelMessage> | Promise<Nullable<ModelMessage>>
-  /**
-   * 环境回合上下文 mid-run 投递点：每轮开头 peek 本会话新 delta（后台任务完成/失败、
-   * 宿主能力活动、外部资源变化等），渲染成 user note 追加到 history 并立即提交 cursor。
-   * 与 pre-send chips 共享同一 cursor——事件到模型恰好一次，走时间上先到的投递点。
-   */
-  consumeTurnContextNote?: () => Nullable<string>
-  /**
-   * 隐式停泊：模型申请收尾时 wait-any，任意一个后台子 Agent 收敛就唤醒主循环。
-   * signal 同时覆盖 execution abort 与新 runtime input，确保停泊可中断、用户 steer 可立即被接管。
-   */
-  awaitPendingBackgroundJobs?: SoloAwaitPendingBackgroundJobs
-  /** 向 UI 输出 agent/state/debug 事件的总线。 */
-  events: TEvents
-}
-
-type SoloModeStreamLoopResult = { status: 'completed' } | { status: 'aborted' | 'error' }
 
 /**
  * 主 Agent 面（B5 单引擎双面：装配 AgentLoop 引擎的 UI 投影面）。
@@ -350,11 +82,6 @@ type SoloModeStreamLoopResult = { status: 'completed' } | { status: 'aborted' | 
  * 5. 若有工具调用，把 tool result 追加回 history 后进入下一轮。
  * 6. 若没有工具调用，运行自动验证 gate，通过后结束。
  */
-
-type SoloInterruptedToolCallRecoveryKind =
-  | 'output-truncation'
-  | 'invalid-input'
-  | 'invalid-identity'
 
 const SoloInterruptedToolCallRecoveryLimits = {
   'output-truncation': 2,
@@ -1046,14 +773,3 @@ class SoloStreamLoop<
 
 export { SoloStreamLoop }
 export { SoloStreamLoop as AgentSoloModeStreamLoop }
-export type {
-  ExecuteSoloModeStreamLoopArgs,
-  SoloLoopEvents,
-  SoloLoopRoleRuntime,
-  SoloLoopRunContext,
-  SoloLoopRuntime,
-  SoloLoopToolContext,
-  SoloLoopToolRegistry,
-  SoloLoopTurnRunner,
-  SoloModeStreamLoopResult,
-}

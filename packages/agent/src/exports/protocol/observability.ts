@@ -1,15 +1,4 @@
-export type {
-  CapabilitySpan,
-  ExecutionSpan,
-  ExecutionSpanCategory,
-  ExecutionSpanMetrics,
-  ExecutionSpanStatus,
-  ModelSpan,
-  PolicySpan,
-  RunSpan,
-  ToolSpan,
-  TurnSpan,
-} from '../../utils/wire/observability'
+export type { CapabilitySpan, ExecutionSpan, ExecutionSpanCategory, ExecutionSpanMetrics, ExecutionSpanStatus, ModelSpan, PolicySpan, RunSpan, ToolSpan, TurnSpan } from '../../types/agent.js'
 export {
   CapabilitySpanSchema,
   emptyExecutionSpanMetrics,

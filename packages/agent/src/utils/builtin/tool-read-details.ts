@@ -1,11 +1,6 @@
-import type { KernelToolContext as ToolContext } from '../../types/kernel-tool-context'
-import type { ToolSpacePage } from '../tools/tool-space-resolver'
-
-interface ResolvedToolInputSchema {
-  profileId: string
-  description: string
-  schema: unknown
-}
+import type { ResolvedToolInputSchema } from '../../types/builtin.js'
+import type { KernelToolContext as ToolContext } from '../../types/tool-context.js'
+import type { ToolSpacePage } from '../../types/tools.js'
 
 /**
  * 解析工具页的真实 inputSchema，仅用于 tooling:map(op:"find") 的 schema 搜索文本索引。
@@ -23,4 +18,3 @@ function readToolInputSchema(
 }
 
 export { readToolInputSchema }
-export type { ResolvedToolInputSchema }

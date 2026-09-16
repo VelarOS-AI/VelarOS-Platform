@@ -2,7 +2,7 @@ import { isArray, isBoolean, isNonBlankString, isPresent, isString } from '@vela
 import { AppError } from '@velaros-ai/core/error'
 
 import type { ChatPromptFeatureId } from '../../types/agent'
-import type { StoredChatSession } from '../../types/protocol'
+import type { StoredChatSession } from '../../types/agent.js'
 import {
   isExecutionModeActive,
   resolveExecutionModes,

@@ -1,7 +1,8 @@
 import { isArray, isBoolean, isString,Log } from '@velaros-ai/core'
 
-import { type ContextPayloadStore, createContextPayloadRef } from '../../impl/context/InMemoryContextPayloadStore'
-import type { FileSnapshotArchive } from '../../types/resource-contracts'
+import type { ContextPayloadStore } from '../../contract/requires.js'
+import { createContextPayloadRef } from '../../impl/context/InMemoryContextPayloadStore'
+import type { FileRenameArchive,FileSnapshotArchive } from '../../types/context.js'
 
 export const FileSnapshotToolName = '__file_snapshot__'
 export const FileObservationToolName = '__file_observation__'
@@ -125,16 +126,6 @@ export function sliceFileSnapshot(text: string, offset: number, maxChars: number
   let end = Math.min(text.length, offset + Math.max(2, maxChars))
   if (splitsPair(end)) end -= 1
   return { content: text.slice(offset, end), offset, nextOffset: end < text.length ? end : null }
-}
-
-export interface FileRenameArchive {
-  kind: 'file-rename'
-  workspaceId: string
-  from: string
-  to: string
-  beforeRevision: string
-  afterRevision: string
-  refs: string[]
 }
 
 export function tryParseFileRename(text: string): FileRenameArchive | undefined {

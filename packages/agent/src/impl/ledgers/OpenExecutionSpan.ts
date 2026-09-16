@@ -10,40 +10,9 @@ import { randomUUID } from 'node:crypto'
 
 import { AppError } from '@velaros-ai/core/error'
 
-import type { DistributiveOmit } from '../../types/session-store-ports'
-import {
-  emptyExecutionSpanMetrics,
-  type ExecutionSpan,
-  type ExecutionSpanMetrics,
-  ExecutionSpanSchema,
-  type ExecutionSpanStatus,
-} from '../../utils/wire/observability'
-
-/** 引擎负责分配、开 span 时不得携带的字段。 */
-type EngineAssignedSpanField = 'spanId' | 'startedAt' | 'endedAt' | 'status' | 'metrics'
-
-/**
- * 开 span 输入：{@link ExecutionSpan} 去掉引擎分配字段。
- *
- * 类别特有的**收敛期字段**（tool 的 `errorCode` / model 的 `finishReason`）开 span 时
- * 先置 null 占位，收敛时经 `end` 的 patch 补上——形状恒全、消费面无需分支。
- */
-export type ExecutionSpanStart = DistributiveOmit<ExecutionSpan, EngineAssignedSpanField>
-
-/** 收敛一条 span 的产出：状态（缺省 ok）+ 度量增补 + 类别收敛期字段 patch。 */
-export interface ExecutionSpanOutcome {
-  status?: ExecutionSpanStatus
-  metrics?: Partial<ExecutionSpanMetrics>
-  /** 类别收敛期字段（errorCode / finishReason / found 等）；未知键由 strictObject 校验拦截。 */
-  patch?: Record<string, unknown>
-}
-
-/** 录制器装配依赖。除 emit 外均可缺省；缺省用系统时钟 / randomUUID。 */
-export interface ExecutionSpanRecorderDeps {
-  emit: (span: ExecutionSpan) => void
-  now?: () => number
-  nextSpanId?: () => string
-}
+import type { ExecutionSpan, ExecutionSpanMetrics } from '../../types/agent.js'
+import type { ExecutionSpanOutcome, ExecutionSpanRecorderDeps,ExecutionSpanStart } from '../../types/ledgers.js'
+import { emptyExecutionSpanMetrics, ExecutionSpanSchema } from '../../utils/wire/observability'
 
 /**
  * 一条进行中的 span handle。

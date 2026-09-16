@@ -56,20 +56,4 @@ class Semaphore {
   }
 }
 
-/**
- * 一次执行此刻的真实派发配额快照（`SubAgentDispatcher.describeExecutionLimits` 的返回形状）。
- *
- * 三个数**全是运行态真值**，不是任何一方的声明值。消费方（目前只有 `agent:run_workflow`）
- * 拿它当自己的上限，并原样回显给模型——回显的必须是"你实际能拿到多少"，不是"你申请了多少"。
- */
-interface SubAgentDispatchLimitsSnapshot {
-  /** 该执行的并发信号量上限（同时能有几个子 Agent 在跑）。 */
-  maxConcurrentSubAgents: number
-  /** 该执行的子 Agent 派发总量帽。 */
-  maxSubAgentsPerExecution: number
-  /** 总量帽还剩多少次可派发（已扣除本执行此前的派发）。 */
-  remainingDispatchBudget: number
-}
-
 export { Semaphore }
-export type { SubAgentDispatchLimitsSnapshot }

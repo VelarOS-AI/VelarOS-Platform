@@ -1,14 +1,6 @@
 import { randomUUID } from 'node:crypto'
 
-export interface ExecutionClock {
-  now(): number
-}
-
-export interface ExecutionIdFactory {
-  createExecutionId(): string
-  createTaskId(): string
-  createPlanStepId(): string
-}
+import type { ExecutionClock, ExecutionIdFactory } from '../../contract/requires.js'
 
 const SystemExecutionClock: ExecutionClock = Object.freeze({
   now: () => Date.now(),

@@ -1,4 +1,4 @@
-type ToolConceptRegistry = Record<string, string>
+import type { ToolConceptRegistry } from '../../types/toolkit.js'
 
 const GlobalToolConcepts = {
   boundedRead: '读取必须有界：提供范围、字节数、字符数上限，或显式选择无界读取。',
@@ -26,4 +26,3 @@ export {
   globalToolConcept,
   GlobalToolConcepts,
 }
-export type { ToolConceptRegistry }

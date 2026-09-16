@@ -1,52 +1,8 @@
 import { AppError } from '@velaros-ai/core/error'
 
-import type { CustomSubAgentDefinition, SubAgentTypeId } from '../../types/sub-agent-task'
-import type { AgentRoleId } from '../../types/system'
-import type {
-  TeamExecutionPhase,
-  TeamModelRouteCategory,
-  TeamWorkerType,
-} from '../../types/team'
-import type { ToolCategoryId } from '../../types/tool'
-
-/** Product-owned declaration of one delegatable agent shape. */
-interface SubAgentTypeDescriptor {
-  id: SubAgentTypeId
-  /** 给主 Agent 选择派发类型的一句话用途，与该类型的实际能力声明同源。 */
-  description?: string
-  workerType: TeamWorkerType
-  roleId: AgentRoleId
-  routeCategory: TeamModelRouteCategory
-  workerPhase: TeamExecutionPhase
-  toolCategories: readonly ToolCategoryId[]
-  toolNames: readonly string[]
-  resourceLeaseScope: Nullable<string>
-  readonlyDefault: boolean
-  promptAppend: Nullable<string>
-}
-
-/** 本轮可派发类型的轻量目录；不承载授权或工具能力声明。 */
-interface SubAgentDispatchCatalog {
-  defaultTypeId: SubAgentTypeId
-  types: ReadonlyArray<{
-    id: SubAgentTypeId
-    description?: string
-    readonlyDefault: boolean
-  }>
-}
-
-/** Agent Runtime has no built-in worker taxonomy. Hosts inject a complete catalog. */
-interface SubAgentTypeProvider {
-  readonly defaultTypeId: SubAgentTypeId
-  listDescriptors(): readonly SubAgentTypeDescriptor[]
-  getDescriptor(id: SubAgentTypeId): Nullable<SubAgentTypeDescriptor>
-}
-
-interface ResolvedSubAgentTypeConfig extends Omit<SubAgentTypeDescriptor, 'id'> {
-  subagentType: SubAgentTypeId
-  customAgentId?: string
-  customAgentName?: string
-}
+import type { SubAgentTypeProvider } from '../../contract/requires.js'
+import type {CustomSubAgentDefinition, SubAgentTypeId } from '../../types/agent.js'
+import type { ResolvedSubAgentTypeConfig } from '../../types/delegation.js'
 
 function resolveSubAgentTypeConfig(
   provider: SubAgentTypeProvider,
@@ -77,9 +33,3 @@ function resolveCustomSubAgentTypeConfig(
 }
 
 export { resolveCustomSubAgentTypeConfig, resolveSubAgentTypeConfig }
-export type {
-  ResolvedSubAgentTypeConfig,
-  SubAgentDispatchCatalog,
-  SubAgentTypeDescriptor,
-  SubAgentTypeProvider,
-}

@@ -1,11 +1,8 @@
-import { ChatRuntimeEvents,type StreamStatePayload } from '../../types/chat-runtime'
-import type { ExecutionRecord } from '../../types/execution'
+import type { ExecutionRecord,StreamStatePayload } from '../../types/agent.js'
+import type { ExecutionAbortOptions } from '../../types/execution.js'
+import { ChatRuntimeEvents } from '../../utils/wire/chat-runtime.js'
 import type { ExecutionInteractions } from '../records/ExecutionInteractions'
 import type { ExecutionRecords } from '../records/ExecutionRecords'
-
-interface ExecutionAbortOptions {
-  emitStreamState?: boolean
-}
 
 /** 负责终态执行状态流转（completed/aborted/failed）及相关清理副作用。 */
 class ExecutionStateFacade {
@@ -61,4 +58,3 @@ class ExecutionStateFacade {
 }
 
 export { ExecutionStateFacade }
-export type { ExecutionAbortOptions }

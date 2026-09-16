@@ -11,7 +11,7 @@ import { contextRetrievalTools } from '../src/impl/builtin/ContextRetrieval.tool
 import { dispatchAgentTools } from '../src/impl/builtin/DispatchAgent.tool'
 import { goalTools } from '../src/impl/builtin/Goals.tool'
 import { plansTools } from '../src/impl/builtin/Plans.tool'
-import type { VelaTool } from '../src/utils/builtin/define-agent-tool'
+import type { VelaTool } from '../src/types/builtin.js'
 import { pageToolDiscoveryCards } from '../src/utils/builtin/tool-space-queries'
 
 const tools = {

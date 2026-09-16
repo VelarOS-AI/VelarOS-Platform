@@ -1,9 +1,7 @@
 import { isFiniteNumber } from '@velaros-ai/core'
 
-import type {
-  ChatContextRetrievalQueryKind,
-  ChatContextRetrievalQueryTraceEntry,
-} from '../../types/protocol'
+import type { ChatContextRetrievalQueryKind, ChatContextRetrievalQueryTraceEntry } from '../../types/agent.js'
+import type { RetrievalQueryRegistration } from '../../types/retrieval.js'
 import { chatSearchRanking } from '../../utils/retrieval/ranking'
 
 import { ContextRetrievalBoundedCounter } from './ContextRetrievalBoundedRecentMap'
@@ -14,21 +12,6 @@ const DefaultMaxQueryCountEntries = 4_096
 interface ContextRetrievalQueryTraceStoreOptions {
   maxQueryCountEntries?: LooseOptional<number>
   maxRecentQueryTracesPerSession?: LooseOptional<number>
-}
-
-/**
- * {@link ContextRetrievalQueryTraceStore.register} 的返回值。
- * 由 search* 方法持有并传入 {@link ContextRetrievalQueryTraceStore.record}。
- */
-interface RetrievalQueryRegistration {
-  /** 与 register 入参一致，回传便于 record 写 trace。 */
-  retrievalScopeId: string
-  /** normalizeQuerySignature 结果，用于 trace 展示与去重键。 */
-  normalizedQuery: string
-  /** 本 scope 内该 query 第几次搜索（从 1 起）。 */
-  retrievalCount: number
-  /** retrievalCount > 1。 */
-  repeated: boolean
 }
 
 /**
@@ -166,8 +149,4 @@ class ContextRetrievalQueryTraceStore {
   }
 }
 
-export {
-  ContextRetrievalQueryTraceStore,
-  type ContextRetrievalQueryTraceStoreOptions,
-  type RetrievalQueryRegistration,
-}
+export { ContextRetrievalQueryTraceStore, type ContextRetrievalQueryTraceStoreOptions }

@@ -1,6 +1,7 @@
 import { isArray, isEmpty,isPlainObject } from '@velaros-ai/core'
 
-import type { ToolCapabilitySchema } from '../../types/tool'
+import type { ToolCapabilitySchema } from '../../types/agent.js'
+import type { KernelToolFailureBatchEntry } from '../../types/tools.js'
 import { compareStableStrings } from '../../utils/residency/determinism'
 
 import { ExecutionProgress } from './ExecutionProgress'
@@ -9,13 +10,6 @@ export interface KernelToolLoopGuardInput {
   toolName: string
   args: Record<string, unknown>
   writeLike: boolean
-}
-
-export interface KernelToolFailureBatchEntry {
-  toolName: string
-  /** 使用实际执行参数，区分相同错误下对不同目标的探索。 */
-  args?: Record<string, unknown>
-  error: string
 }
 
 function stableStringify(value: unknown): string {

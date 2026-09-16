@@ -3,12 +3,9 @@ import { describe, expect, test } from 'bun:test'
 
 import { ToolCapabilityRegistry } from '../src/impl/tools/ToolCapabilityRegistry'
 import { ToolRegistry } from '../src/impl/tools/ToolRegistry'
-import type {
-  RegisteredToolMap,
-  ToolCapabilityRegistryContext,
-} from '../src/types/capability-types'
-import type { AgentModelInputModality, ToolDescriptor } from '../src/types/tool'
+import type { AgentModelInputModality, ToolDescriptor } from '../src/types/agent.js'
 import type { RegistryTool } from '../src/types/tools'
+import type { RegisteredToolMap, ToolCapabilityRegistryContext } from '../src/types/tools.js'
 import { filterToolCategoriesForModelInputs } from '../src/utils/loop/solo-run-plan-preparer'
 import {
   assertModelInputCompatibility,

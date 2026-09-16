@@ -1,4 +1,4 @@
-import type { ContextPayloadStore } from '../../impl/context/InMemoryContextPayloadStore'
+import type { ContextPayloadStore } from '../../contract/requires.js'
 import { createContextPayloadRef } from '../../impl/context/InMemoryContextPayloadStore'
 import { sha256 } from '../context/content-hash'
 

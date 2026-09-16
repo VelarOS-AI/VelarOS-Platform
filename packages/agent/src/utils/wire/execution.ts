@@ -1,6 +1,8 @@
 // 域：Agent 执行动词；由 Agent capability 拥有，Kernel 只路由其不透明信封。
 import { z } from 'zod'
 
+import type { DescribeToolSchemaRequest, DescribeToolSchemaResponse, ExecuteToolRequest, ExecuteToolResponse, HostProjection, ResolveCatalogRequest, RunTurnOptions, RunTurnRequest, RunTurnResponse } from '../../types/agent.js'
+
 import {
   ToolCatalogEntrySchema,
   VelarToolCallEnvelopeSchema,
@@ -17,9 +19,7 @@ export const HostProjectionSchema = z.strictObject({
   hostId: z.string(),
   includeCategories: z.array(z.string()).nullable(),
   excludeToolNames: z.array(z.string()).nullable(),
-})
-export type HostProjection = z.infer<typeof HostProjectionSchema>
-
+}) satisfies z.ZodType<HostProjection>
 /**
  * `resolveCatalog(hostProjection)` 请求。
  *
@@ -29,40 +29,29 @@ export type HostProjection = z.infer<typeof HostProjectionSchema>
  */
 export const ResolveCatalogRequestSchema = z.strictObject({
   hostProjection: HostProjectionSchema,
-})
-export type ResolveCatalogRequest = z.infer<typeof ResolveCatalogRequestSchema>
-
+}) satisfies z.ZodType<ResolveCatalogRequest>
 /** `describeToolSchema(name)` 请求。 */
 export const DescribeToolSchemaRequestSchema = z.strictObject({
   name: z.string(),
-})
-export type DescribeToolSchemaRequest = z.infer<typeof DescribeToolSchemaRequestSchema>
-
+}) satisfies z.ZodType<DescribeToolSchemaRequest>
 /** `describeToolSchema` 响应：单个工具的精确描述符 + 目录修订号（供 schema 自恢复）。 */
 export const DescribeToolSchemaResponseSchema = z.strictObject({
   tool: ToolCatalogEntrySchema,
   catalogRevision: z.string(),
-})
-export type DescribeToolSchemaResponse = z.infer<typeof DescribeToolSchemaResponseSchema>
-
+}) satisfies z.ZodType<DescribeToolSchemaResponse>
 /**
  * `executeTool(envelope) → result 信封`。
  *
  * 请求即工具调用信封，响应即工具结果信封——执行层是**全内核唯一工具执行路径**，
  * ApprovalPort 检查点只存在于这一层（宪章 §3）。
  */
-export const ExecuteToolRequestSchema = VelarToolCallEnvelopeSchema
-export type ExecuteToolRequest = z.infer<typeof ExecuteToolRequestSchema>
-export const ExecuteToolResponseSchema = VelarToolResultEnvelopeSchema
-export type ExecuteToolResponse = z.infer<typeof ExecuteToolResponseSchema>
-
+export const ExecuteToolRequestSchema = VelarToolCallEnvelopeSchema satisfies z.ZodType<ExecuteToolRequest>
+export const ExecuteToolResponseSchema = VelarToolResultEnvelopeSchema satisfies z.ZodType<ExecuteToolResponse>
 /** `runTurn` 可选项：无状态单轮 loop 的模型与轮次上限（缺省用可选属性表达"未提供"）。 */
 export const RunTurnOptionsSchema = z.strictObject({
   modelId: z.string().optional(),
   maxToolTurns: z.number().int().optional(),
-})
-export type RunTurnOptions = z.infer<typeof RunTurnOptionsSchema>
-
+}) satisfies z.ZodType<RunTurnOptions>
 /**
  * `runTurn(messages, tools, opts)` 请求。
  *
@@ -72,12 +61,9 @@ export const RunTurnRequestSchema = z.strictObject({
   messages: z.array(ModelMessageSchema),
   tools: z.array(ToolCatalogEntrySchema),
   options: RunTurnOptionsSchema.optional(),
-})
-export type RunTurnRequest = z.infer<typeof RunTurnRequestSchema>
-
+}) satisfies z.ZodType<RunTurnRequest>
 /** `runTurn` 响应：本轮追加的消息与本轮产生的工具结果信封。 */
 export const RunTurnResponseSchema = z.strictObject({
   messages: z.array(ModelMessageSchema),
   toolResults: z.array(VelarToolResultEnvelopeSchema),
-})
-export type RunTurnResponse = z.infer<typeof RunTurnResponseSchema>
+}) satisfies z.ZodType<RunTurnResponse>

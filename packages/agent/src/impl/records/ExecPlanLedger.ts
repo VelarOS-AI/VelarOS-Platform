@@ -1,30 +1,12 @@
 import { isEmpty } from '@velaros-ai/core'
 
+import type { ExecutionIdFactory } from '../../contract/requires.js'
 import type { ToolExecutionPlanItemStatus, ToolExecutionPlanUpdate } from '../../types/agent'
-import type {
-  ExecutionTaskPlanStep,
-  ExecutionTaskPlanStepStatus,
-  ExecutionTaskRecord,
-} from '../../types/execution'
-import type { AgentRoleId } from '../../types/system'
+import type { AgentRoleId,ExecutionTaskPlanStep, ExecutionTaskRecord } from '../../types/agent.js'
+import type { PlanChangePayload } from '../../types/records.js'
 
 import type { ExecRouting } from './ExecWorkflowRoute'
-import {
-  type ExecutionIdFactory,
-  MonotonicExecutionIdFactory,
-} from './MonotonicExecutionIdFactory'
-
-type PlanChangePayload = Record<string, unknown> & {
-  stepCount: number
-  addedStepIds: string[]
-  removedStepIds: string[]
-  statusChangedSteps: Array<{
-    id: string
-    title: string
-    previousStatus: ExecutionTaskPlanStepStatus
-    status: ExecutionTaskPlanStepStatus
-  }>
-}
+import { MonotonicExecutionIdFactory } from './MonotonicExecutionIdFactory'
 
 /**
  * 执行计划账本辅助器。
@@ -210,5 +192,4 @@ class ExecPlanLedger {
 }
 
 export { ExecPlanLedger }
-export type { PlanChangePayload }
 export { ExecPlanLedger as ExecutionPlanLedgerHelper }

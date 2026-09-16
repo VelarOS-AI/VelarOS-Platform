@@ -7,12 +7,9 @@ import type {
   ScopeRef,
 } from '@velaros-ai/kernel/contracts/abi'
 
-import {
-  AgentCapability,
-  type AgentCapabilityRuntime,
-  type AgentCapabilityService,
-  createAgentKernelModule,
-} from '../src/impl/assembly/AgentKernelModule'
+import type { AgentCapabilityRuntime } from '../src/contract/requires.js'
+import { AgentCapability, createAgentKernelModule } from '../src/impl/assembly/AgentKernelModule'
+import type { AgentCapabilityService } from '../src/types/execution.js'
 
 function createCaptureContext(
   signal: AbortSignal,

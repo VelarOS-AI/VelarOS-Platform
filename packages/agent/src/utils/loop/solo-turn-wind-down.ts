@@ -1,20 +1,12 @@
-import type { ModelMessage } from 'ai'
 
-import type { ScopedLog } from '@velaros-ai/core/logger'
 
+import type { RunSoloTurnWindDownInput } from '../../types/loop.js'
 import { createInternalFollowUpMessage } from '../history/internal-messages'
 
 /**
  * 主面轮次上限收尾的**注入动作**（文案 + 日志）。触发判定与 margin 记账是护栏 1 机制，
  * 单源在 LoopSurface 的 LoopWindDownGuard——本文件只保留主 agent 面的装配差异（提醒措辞）。
  */
-
-interface RunSoloTurnWindDownInput {
-  turn: number
-  hardCap: number
-  history: ModelMessage[]
-  log: Pick<ScopedLog, 'warn'>
-}
 
 function buildSoloTurnCapWindDownReminder(): string {
   return [
@@ -34,4 +26,3 @@ function runSoloTurnWindDown(input: RunSoloTurnWindDownInput): void {
 }
 
 export { buildSoloTurnCapWindDownReminder, runSoloTurnWindDown }
-export type { RunSoloTurnWindDownInput }

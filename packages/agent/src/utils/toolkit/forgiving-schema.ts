@@ -3,6 +3,8 @@ import { z } from 'zod'
 import { isArray, isBlank, isEmpty, isPlainObject, isPresent, isString } from '@velaros-ai/core'
 import { clampRounded } from '@velaros-ai/core/utils/number'
 
+import type { AppliedAdjustment } from '../../types/toolkit.js'
+
 /**
  * 可选的宽容 schema 原语；工具必须先明确哪些调整保持用户意图。
  *
@@ -80,13 +82,6 @@ export function inferActionFromFields(
     fields.some((field) => isPresent(input[field]))
   )
   return hits.length === 1 ? hits[0]![0] : undefined
-}
-
-/** 铁律⑧:系统替模型做过的调整(钳制/缺省/别名采用)统一回显形状。 */
-export interface AppliedAdjustment {
-  field: string
-  action: 'clamped' | 'defaulted' | 'aliased' | 'ignored' | 'coerced' | 'normalized'
-  detail: string
 }
 
 export function buildAppliedAdjustments(

@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 
-import type { ToolCategoryId, ToolDescriptor } from '../src/types/tool'
-import type { AgentRuntimeCapabilityPorts } from '../src/utils/capabilities'
+import type { AgentRuntimeCapabilityPorts } from '../src/contract/requires.js'
+import type { ToolCategoryId, ToolDescriptor } from '../src/types/agent.js'
 import { CapabilityRunPlanner } from '../src/utils/loop/capability-run-planner'
 
 const GeneralCategory = 'general' as ToolCategoryId

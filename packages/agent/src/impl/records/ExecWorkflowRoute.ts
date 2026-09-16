@@ -1,17 +1,7 @@
 import type { AgentTurnRouteIdentity, StreamTurnContextPayload } from '../../types/agent'
-import type {
-  ExecutionTaskExecutionAdvice,
-  ExecutionTaskPlanStep,
-  ExecutionTaskRecommendedAction,
-  ExecutionTaskRecord,
-} from '../../types/execution'
-import type { ResolvedTaskRoute } from '../../types/routing-types'
-import type { AgentRoleId } from '../../types/system'
+import type { AgentRoleId,ExecutionTaskExecutionAdvice, ExecutionTaskPlanStep, ExecutionTaskRecommendedAction, ExecutionTaskRecord } from '../../types/agent.js'
+import type { ExecutionRouteProvider,ResolvedTaskRoute } from '../../types/records.js'
 import { ExecPlanState } from '../../utils/records/plan-state'
-
-interface ExecutionRouteProvider {
-  resolve(identity: AgentTurnRouteIdentity): ResolvedTaskRoute
-}
 
 function emptyRoute(identity: AgentTurnRouteIdentity): ResolvedTaskRoute {
   return {
@@ -91,12 +81,4 @@ function resolveTurnRouteIdentity(
   }
 }
 
-export {
-  ExecRouting,
-  type ExecutionRouteProvider,
-  ExecRouting as ExecutionRoutingCoordinator,
-  ExecWorkflowRoute as ExecutionWorkflowRouteHelper,
-  ExecWorkflowRoute,
-  type ResolvedTaskRoute,
-  resolveTurnRouteIdentity,
-}
+export { ExecRouting, ExecRouting as ExecutionRoutingCoordinator, ExecWorkflowRoute as ExecutionWorkflowRouteHelper, ExecWorkflowRoute, type ResolvedTaskRoute, resolveTurnRouteIdentity }

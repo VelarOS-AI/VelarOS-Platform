@@ -3,14 +3,10 @@ import { basename } from "node:path";
 
 import { isEmpty } from "@velaros-ai/core";
 
+import type { ArtifactManifestSnippet, LogReadSnippet, ReferencedArtifactPath, ReferencedLogPath } from '../../types/retrieval.js'
+
 import { chatSearchRanking } from "./ranking";
-import {
-  type ArtifactManifestSnippet,
-  contextRetrievalReferences,
-  type LogReadSnippet,
-  type ReferencedArtifactPath,
-  type ReferencedLogPath,
-} from "./references";
+import { contextRetrievalReferences } from "./references";
 import { chatSearchText } from "./text";
 
 /**

@@ -6,13 +6,9 @@ import {
 } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-const MaxProviderErrorBodyChars = 64 * 1024
+import type { ProviderResponseFailure } from '../../types/loop.js'
 
-interface ProviderResponseFailure {
-  readonly code: Nullable<string>
-  readonly message: Nullable<string>
-  readonly statusCode: Nullable<number>
-}
+const MaxProviderErrorBodyChars = 64 * 1024
 
 function nonBlankString(value: unknown): Nullable<string> {
   if (!isString(value)) return null

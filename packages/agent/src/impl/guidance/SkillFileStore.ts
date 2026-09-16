@@ -14,38 +14,8 @@ import { isArray, isBlank, isEmpty,isString, stringifyPretty, trimmedStringOrEmp
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 
+import type { SkillFileRecord, SkillFrontmatter } from '../../types/guidance.js'
 import { compareStableStrings } from '../../utils/residency/determinism'
-
-/** 单个技能文件的解析结果（frontmatter + 正文）。 */
-interface SkillFileRecord {
-  /** slug = 文件名（不含 .md），也是全链路引用的 skill id。 */
-  id: string
-  name: string
-  description: string
-  version: Nullable<string>
-  filePath: string
-  updatedAt: number
-  enabled: boolean
-  /** 去掉 frontmatter 的正文。 */
-  markdown: string
-  /** 可见能力作用域（frontmatter `spaces: [scope-a, scope-b]`）；必填且非空。 */
-  spaces: string[]
-  /** 索引排序优先级（frontmatter `priority: 60`）；越小越靠前，空用 provider 默认。 */
-  priority: Nullable<number>
-  /** 调用提示（frontmatter `argument-hint`）：告诉模型/用户这个技能期望怎样的输入。 */
-  argumentHint: Nullable<string>
-  /** 每技能工具门控（frontmatter `allowed-tools: [a, b]`）；空 = 不限制。 */
-  allowedTools: string[]
-  /** 目录式技能（<id>/SKILL.md）的根目录；平铺单文件为 null。 */
-  baseDir: Nullable<string>
-  /** 目录式技能的捆绑资源相对路径（不含 SKILL.md/隐藏文件；有限深度与数量）。 */
-  resourcePaths: string[]
-}
-
-interface SkillFrontmatter {
-  data: Record<string, string>
-  body: string
-}
 
 interface SkillFileStoreDependencies {
   /** 技能目录解析器由宿主递入；桌面和 headless 宿主可使用各自的数据根。 */
@@ -536,5 +506,5 @@ class SkillFileStore {
   }
 }
 
-export { formatSkillDisplayMarkdown, listSkillDirResources, parseFrontmatter, parseFrontmatterList, type SkillFileRecord, SkillFileStore }
+export { formatSkillDisplayMarkdown, listSkillDirResources, parseFrontmatter, parseFrontmatterList, SkillFileStore }
 export type { SkillFileStoreDependencies }

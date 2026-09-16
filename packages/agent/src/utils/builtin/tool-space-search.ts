@@ -31,68 +31,15 @@ import {
   isString,
 } from '@velaros-ai/core'
 
-import type { KernelToolContext as ToolContext } from '../../types/kernel-tool-context'
-import type { ToolCategoryId, ToolOsState } from '../../types/tool'
+import type { ToolActivationGuide, ToolDiscoveryCard, ToolMatchSignal, ToolSearchScoreContext } from '../../types/builtin.js'
+import type { KernelToolContext as ToolContext } from '../../types/tool-context.js'
 import { parseStructuredToolDescription } from '../toolkit/tool-description'
 
 import { readToolInputSchema } from './tool-read-details'
 import { matchedTermsForField, splitIdentifierSearchTerm } from './tool-search-terms'
-import {
-  buildToolActivationGuide,
-  type ToolActivationGuide,
-  type ToolActivationRef,
-  type ToolAvailability,
-  type ToolDiscoveryCard,
-  type ToolDiscoveryKind,
-  type ToolDiscoveryRisk,
-  type ToolNextAction,
-  type ToolSchemaPolicy,
-  type ToolSchemaState,
-} from './tool-space-activation'
+import { buildToolActivationGuide } from './tool-space-activation'
 
 export const ToolFindLowConfidenceScoreRatio = 0.3
-
-export interface ToolSearchResultEntry {
-  id: string
-  kind: ToolDiscoveryKind
-  name: string
-  categoryId: ToolCategoryId
-  summary: string
-  usageSkillId: Nullable<string>
-  score: number
-  availability: ToolAvailability
-  toolOsState: ToolOsState
-  risk: ToolDiscoveryRisk
-  schemaState: ToolSchemaState
-  schemaPolicy: ToolSchemaPolicy
-  nextAction: ToolNextAction
-  resident: boolean
-  activation: Pick<ToolActivationRef, 'method' | 'pageIn' | 'capabilityId' | 'nextTool'>
-  matchedFields: Array<ToolMatchSignal['field']>
-}
-
-export interface ToolMatchSignal {
-  field:
-    | 'id'
-    | 'name'
-    | 'category'
-    | 'aliases'
-    | 'search_hints'
-    | 'summary'
-    | 'description'
-    | 'suitable'
-    | 'forbidden'
-    | 'schema'
-    | 'activation'
-    | 'reverse_activation'
-  terms: string[]
-}
-
-interface ToolSearchScoreContext {
-  schemaTextById: ReadonlyMap<string, string>
-  activationTextById: ReadonlyMap<string, string>
-  reverseActivationTextByName: ReadonlyMap<string, string>
-}
 
 function scoreField(value: string, terms: readonly string[], weight: number): number {
   return matchedTermsForField(value, terms).length * weight

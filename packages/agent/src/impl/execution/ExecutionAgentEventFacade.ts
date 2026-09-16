@@ -1,11 +1,10 @@
 import type { AgentEvent, StreamTurnContextPayload } from '../../types/agent'
-import type { ExecutionRecord } from '../../types/execution'
+import type { ExecutionRecord } from '../../types/agent.js'
+import type { ExecutionAbortOptions } from '../../types/execution.js'
 import { chatStreamProtocol } from '../chat/ChatStreamProtocol'
 import { ExecutionAgentEventLedger } from '../records/ExecAgentEvents'
 import type { ExecutionRecords } from '../records/ExecutionRecords'
 import type { ExecutionStore } from '../records/ExecutionStore'
-
-import type { ExecutionAbortOptions } from './ExecutionStateFacade'
 
 interface ExecutionAgentEventFacadeDependencies {
   records: ExecutionRecords

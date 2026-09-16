@@ -32,20 +32,9 @@
 //
 import { AppError } from '@velaros-ai/core/error'
 
-import type { AgentChatRuntimeConfig } from '../../types/runtime-configuration'
-import type { PromptSegmentOverride } from '../../types/system'
+import type { PromptSegmentOverride } from '../../types/agent.js'
+import type { PromptCompositionResult,PromptContribution, PromptRenderContext, PromptSegmentDefinition, PromptSegmentProvider, PromptSegmentStability, PromptSegmentTier, PromptSuppression } from '../../types/guidance.js'
 import { compareStableStrings } from '../../utils/residency/determinism'
-/** Prompt 段稳定性：stable 适合缓存，dynamic 每轮可能变化。由 tier 派生，不再由段自报。 */
-type PromptSegmentStability = 'stable' | 'dynamic'
-/**
- * 行为知识三层。
- *
- * - `core`：Tier0，身份 / 安全 / 不可变纪律。进稳定前缀，逐字不变，极小。
- * - `runtime`：Tier1，按会话状态装配的运行态指导（空间、执行模式、工具面、能力协议）。
- * - `skill`：Tier2，工艺知识（怎么做好某类任务）。descriptor 常驻、选中才注入全文。
- */
-type PromptSegmentTier = 'core' | 'runtime' | 'skill'
-
 /** 层序即块序：Tier0 在稳定前缀，Tier1/Tier2 在活动尾且 Tier2 恒排 Tier1 之后。 */
 const PromptSegmentTierRank: Readonly<Record<PromptSegmentTier, number>> = {
   core: 0,
@@ -84,85 +73,6 @@ function assertCorePromptSegmentHasNoPredicate(definition: PromptSegmentDefiniti
  * （overrides 落在宿主的系统配置里，包这边够不着）。
  */
 const PromptSegmentIdAliases: Readonly<Record<string, string | undefined>> = {}
-
-/** protected 段属于上下文保护区，不允许被运行配置的 prompt 预算裁剪。 */
-type PromptSegmentRetention = 'normal' | 'protected'
-/** Prompt 段来源，用于调试面板解释每段从哪里来。 */
-type PromptSegmentSource = string
-
-interface PromptBudgetOptions {
-  profile: string
-  maxChars: number
-}
-
-interface PromptRenderContext {
-  /** 聊天配置，主要读取用户追加 system prompt。 */
-  chatConfig?: Pick<AgentChatRuntimeConfig, 'systemPromptAppend'>
-  /** 运行时事实，供 when/render 判断。 */
-  facts?: Record<string, unknown>
-  /** 持久化 prompt 段启停覆盖。 */
-  overrides?: PromptSegmentOverride[]
-}
-
-interface PromptSegmentDefinition {
-  /** 段 id，要求全局稳定唯一。 */
-  id: string
-  /** 人类可读标签。 */
-  label?: string
-  /** 行为知识层；stable/dynamic 由它派生，段不得自报稳定性。 */
-  tier: PromptSegmentTier
-  /** 段来源。 */
-  source: PromptSegmentSource
-  /** 排序优先级，越小越靠前。 */
-  priority: number
-  /** protected 表示该段必须逐轮保留，由独立生命周期负责控制容量。 */
-  retention?: PromptSegmentRetention
-  /** 可选标签，便于未来筛选。 */
-  tags?: string[]
-  /** 激活谓词，返回 false 时跳过该段。 */
-  when?: (context: PromptRenderContext) => boolean
-  /** 渲染段文本；空值会被跳过。 */
-  render: (context: PromptRenderContext) => Nullable<string>
-}
-
-interface PromptSegmentProvider {
-  /** provider id。 */
-  id: string
-  /** 根据当前渲染上下文动态加载段定义。 */
-  load: (context: PromptRenderContext) => PromptSegmentDefinition[]
-}
-
-interface PromptContribution {
-  id: string
-  label?: string
-  tier: PromptSegmentTier
-  stability: PromptSegmentStability
-  source: PromptSegmentSource
-  priority: number
-  retention: PromptSegmentRetention
-  text: string
-}
-
-interface PromptSuppression {
-  /** 跳过原因。 */
-  reason: string
-}
-
-interface PromptCompositionResult {
-  /** stable 段，最终放在 prompt 前半部分。 */
-  stableParts: PromptContribution[]
-  /** dynamic 段，最终放在 prompt 后半部分。 */
-  dynamicParts: PromptContribution[]
-  /** 被禁用、谓词不满足或渲染为空的段。 */
-  skipped: Array<{
-    id: string
-    label?: string
-    stability: PromptSegmentStability
-    source: PromptSegmentSource
-    priority: number
-    reason: string
-  }>
-}
 
 /**
  * Prompt 段注册表。
@@ -333,15 +243,3 @@ class PromptRegistry {
 }
 
 export { PromptRegistry, PromptSegmentTierRank, resolvePromptSegmentStability }
-export type {
-  PromptBudgetOptions,
-  PromptCompositionResult,
-  PromptContribution,
-  PromptRenderContext,
-  PromptSegmentDefinition,
-  PromptSegmentProvider,
-  PromptSegmentRetention,
-  PromptSegmentSource,
-  PromptSegmentStability,
-  PromptSegmentTier,
-}

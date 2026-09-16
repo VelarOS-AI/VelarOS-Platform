@@ -1,48 +1,8 @@
-import type { ScopedLog } from '@velaros-ai/core/logger'
 
-import type { ContextGovernanceSessionRegistry } from '../../impl/residency/ContextGovernanceSession'
-import type { ToolDescriptor } from '../../types/tool'
-import {
-  type ContextWorkingSetBudgetAllocation,
-  ContextWorkingSetBudgetGovernor,
-} from '../context/context-working-set-budget-governor'
+import type { ApplySoloContextDegradeActionContext, ContextDegradeAction,SoloContextDegradeToolContext } from '../../types/loop.js'
+import { ContextWorkingSetBudgetGovernor } from '../context/context-working-set-budget-governor'
 import { resolveGovernanceSessionKey } from '../residency/session-key'
 import { applyRunProfileToolExposure } from '../runner/run-profile'
-
-import type { ContextDegradeAction } from './context-degrade-ladder'
-
-interface SoloContextDegradeToolContext {
-  sessionId?: LooseOptional<string>
-  setCurrentVisibleToolNames: (toolNames: string[]) => void
-  codingSession: {
-    getToolUsageScores?: () => Readonly<Record<string, number>>
-  }
-}
-
-interface SoloContextDegradeToolRegistry<TContext> {
-  estimateToolSerializedCharsByName?: (
-    toolContext: TContext,
-    allowedTools: string[]
-  ) => Record<string, number>
-}
-
-interface ApplySoloContextDegradeActionContext<
-  TContext extends SoloContextDegradeToolContext = SoloContextDegradeToolContext,
-> {
-  /** 治理会话登记处：`govern-epoch` 级的落点（缺页 = 强开一次 epoch）。 */
-  governanceSessions: ContextGovernanceSessionRegistry
-  toolRegistry: SoloContextDegradeToolRegistry<TContext>
-  log: Pick<ScopedLog, 'warn'>
-  roleRuntime: { model: string; contextWindow?: LooseOptional<number> }
-  turn: number
-  baseAllowedTools: string[]
-  protectedTools: string[]
-  enabledToolDescriptors: ToolDescriptor[]
-  zoneAllocation: ContextWorkingSetBudgetAllocation
-  toolContext: TContext
-  currentAllowedTools: string[]
-  onToolsNarrowed: (next: string[]) => void
-}
 
 /**
  * 执行一级 solo 缺页降级动作；返回 true 表示该级真正改变了状态（可以重试本轮），
@@ -111,8 +71,3 @@ function applySoloContextDegradeAction<TContext extends SoloContextDegradeToolCo
 }
 
 export { applySoloContextDegradeAction }
-export type {
-  ApplySoloContextDegradeActionContext,
-  SoloContextDegradeToolContext,
-  SoloContextDegradeToolRegistry,
-}

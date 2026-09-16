@@ -9,65 +9,7 @@ import {
 } from "@velaros-ai/core";
 import { AppError } from "@velaros-ai/core/error";
 
-export interface ProviderToolInputDraft {
-  id: string;
-  toolName: string;
-  providerToolName: string;
-  requestAdvertised: boolean;
-  inputText: string;
-  inputEnded: boolean;
-}
-
-export interface ProviderToolNameResolution {
-  toolName: string;
-  providerToolName: string;
-  requestAdvertised: boolean;
-}
-
-export interface ProviderFinalToolCallIdentity {
-  toolNameResolution: ProviderToolNameResolution;
-  streamedInput: Nullable<ProviderToolInputDraft>;
-}
-
-export type ProviderFinalToolInputResolution =
-  | { ok: true; input: Record<string, unknown>; reparsedString: boolean }
-  | {
-      ok: false;
-      reason:
-        "final_tool_input_json_parse_failed" | "final_tool_input_not_object";
-      receivedType: string;
-      inputChars: number;
-    };
-
-export type ProviderExecutableToolInputResolution =
-  | {
-      ok: true;
-      input: Record<string, unknown>;
-      source: "final" | "ended-stream-draft";
-    }
-  | Extract<ProviderFinalToolInputResolution, { ok: false }>;
-
-export interface ProviderJsonTextDiagnostic {
-  inputChars: number;
-  trimmedChars: number;
-  startsWithObject: boolean;
-  endsWithObject: boolean;
-  objectDepth: number;
-  arrayDepth: number;
-  terminatedInString: boolean;
-  danglingEscape: boolean;
-  mismatchedDelimiter: boolean;
-  rawControlCharactersInString: number;
-  parseStatus: "object" | "json-non-object" | "invalid-json";
-}
-
-export interface RejectedProviderToolInputDiagnostic {
-  final?: ProviderJsonTextDiagnostic;
-  streamDraft?: ProviderJsonTextDiagnostic & {
-    inputEnded: boolean;
-    identicalToFinal: boolean;
-  };
-}
+import type { ProviderExecutableToolInputResolution, ProviderFinalToolCallIdentity, ProviderFinalToolInputResolution, ProviderJsonTextDiagnostic, ProviderToolInputDraft, ProviderToolInputPartLike,ProviderToolNameResolution, RejectedProviderToolInputDiagnostic } from '../../types/loop.js'
 
 /**
  * 只记录 JSON 的结构事实，不记录正文、路径或任何可逆摘要。
@@ -433,11 +375,6 @@ export function resolveProviderFinalToolCallIdentity(
   drafts.delete(input.toolCallId);
   return { toolNameResolution, streamedInput: draft };
 }
-
-type ProviderToolInputPartLike =
-  | { type: "tool-input-start"; id: string; toolName: string }
-  | { type: "tool-input-delta"; id: string; delta: string }
-  | { type: "tool-input-end"; id: string };
 
 export function applyProviderToolInputStreamPart(
   part: { type: string },

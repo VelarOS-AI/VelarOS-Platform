@@ -1,6 +1,6 @@
 import { type z } from 'zod'
 
-import type { ToolCapabilitySchema } from '../../types/tool'
+import type { ToolCapabilitySchema } from '../../types/agent.js'
 import { defineVelaTool } from '../../utils/builtin/define-agent-tool'
 import {
   parseToolSpaceQueryMethodInput,

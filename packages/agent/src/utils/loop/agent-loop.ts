@@ -12,19 +12,10 @@
 //    下一轮 provider 校验拒收整条会话（曾导致会话永久锁死，见 history-orphan 自愈判决）。
 //  - **surface 不得持有回合状态**：状态归引擎，壳只做 IO 与投影；壳存状态 = 两份真相。
 import { toNullable } from '@velaros-ai/core'
-import type { ScopedLog } from '@velaros-ai/core/logger'
 
-import type {
-  ModelSpanHandle,
-  RunSpanScope,
-  TurnSpanScope,
-} from '../../impl/ledgers/LedgerExecutionSpanScopeFactory'
-import type { AgentLoopSurface } from '../../impl/loop/LoopWindDownGuard'
 import { isContextOverflowError, isContextOverflowReplayUnsafe } from '../../impl/loop/RetryPolicy'
-import type { PromptSegmentTrace, SkippedPromptSegmentTrace } from '../../types/agent'
-import type { ProviderRequestSnapshot } from '../context/provider-request-snapshot'
-
-import type { ContextDegradeAction } from './context-degrade-ladder'
+import type { RunSpanScope } from '../../types/ledgers.js'
+import type { AgentLoopSurface, ExecuteLoopTurnWithContextOverflowRecoveryInput, LoopTurnPromptAudit, LoopTurnSpanFailure,LoopTurnSpans, LoopTurnSpanUsage } from '../../types/loop.js'
 
 /**
  * AgentLoop —— 全内核唯一的 agent 循环引擎（B5 单引擎双面）。
@@ -56,22 +47,6 @@ async function runAgentLoop<TFinish>(surface: AgentLoopSurface<TFinish>): Promis
 }
 
 // ─── 护栏 2：上下文溢出降级恢复（单源机制，双面装配） ─────────────────────────
-
-interface ExecuteLoopTurnWithContextOverflowRecoveryInput<TTurnResult> {
-  turn: number
-  abortSignal: AbortSignal
-  /** 发起一次单轮模型调用；溢出恢复后会用同一轮重试。 */
-  executeTurn(): Promise<TTurnResult>
-  /** 第 attempt 次缺页（从 0 起）应采取的降级动作（面提供阶梯：solo=RecoveryRunPlan，query=chain 表）。 */
-  resolveAction(attempt: number): ContextDegradeAction
-  /** 执行一级降级动作；true = 状态真变（可重试），false = 走下一级。 */
-  applyAction(action: ContextDegradeAction): Promise<boolean>
-  /** 每次真正重试前的面装配点（主面在此重建 ToolExecutor 保证干净重放）。 */
-  onBeforeRetry?(): void
-  /** 阶梯耗尽日志（面各自措辞；载荷统一 turn/attempts）。 */
-  surrenderLogMessage: string
-  log: Pick<ScopedLog, 'error'>
-}
 
 /**
  * 用降级阶梯包住一次单轮调用：溢出（缺页）→ 沿阶梯逐级释放压力 → 同一轮重试；
@@ -116,15 +91,6 @@ async function executeLoopTurnWithContextOverflowRecovery<TTurnResult>(
 
 // ─── 护栏 4：turn/model span 生命周期收敛（单源机制，双面装配） ────────────────
 
-interface LoopTurnSpans {
-  turnScope: Nullable<TurnSpanScope>
-  modelSpan: Nullable<ModelSpanHandle>
-  modelIdentity: {
-    provider: string
-    model: string
-  }
-}
-
 /**
  * 开本轮观测 span：turn span（run 的子）+ model span（turn 的子，usage 收敛在此——
  * D5 确定 turn，无 null turn）。turn scope 兼作 tool span 开启器注入本轮 ToolExecutor
@@ -158,27 +124,6 @@ function beginLoopTurnSpans(
       model: input.providerModel?.trim() || input.model,
     },
   }
-}
-
-/** 双面 turn 结果的观测富化子面（StreamTurnResult / QueryTurnResult 结构上都满足）。 */
-interface LoopTurnSpanUsage {
-  inputTokens?: LooseOptional<number>
-  outputTokens?: LooseOptional<number>
-  costUsd?: LooseOptional<number>
-  finishReason?: LooseOptional<string>
-  requestFingerprint?: LooseOptional<string>
-  providerRequestSnapshot?: LooseOptional<ProviderRequestSnapshot>
-}
-
-interface LoopTurnPromptAudit {
-  systemPrompt: string
-  promptSegments: readonly PromptSegmentTrace[]
-  skippedPromptSegments: readonly SkippedPromptSegmentTrace[]
-}
-
-interface LoopTurnSpanFailure {
-  code: string
-  message: string
 }
 
 /**
@@ -267,10 +212,4 @@ export {
   executeLoopTurnWithContextOverflowRecovery,
   restartLoopTurnModelSpanAfterRetry,
   runAgentLoop,
-}
-export type {
-  ExecuteLoopTurnWithContextOverflowRecoveryInput,
-  LoopTurnPromptAudit,
-  LoopTurnSpans,
-  LoopTurnSpanUsage,
 }

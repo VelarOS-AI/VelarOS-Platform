@@ -2,40 +2,8 @@ import { isArray, isBigInt, isEmpty, isFunction,isNonBlankString, isObject, isPl
 import { type AppError } from '@velaros-ai/core/error'
 import { readStringScalar } from '@velaros-ai/core/utils/unknownJsonRecord'
 
-import type { ToolSpaceRecoveryGuide } from './tool-space-recovery'
+import type { ErrorCauseRecord, RuntimeToolIssue, ToolFailureBuildOptions,ToolFailureResult, ToolSpaceRecoveryGuide } from '../../types/tools.js'
 
-interface ErrorCauseRecord {
-  reason?: unknown
-  details?: unknown
-  suggestedNextAction?: unknown
-  cause?: unknown
-}
-
-interface RuntimeToolIssue {
-  severity: 'requires_diagnosis'
-  action: 'model_report_diagnosis_then_continue_or_stop'
-  requiredClassification: Array<'system_or_runtime_bug' | 'model_decision_issue'>
-  systemBugBehavior: string
-  modelDecisionBehavior: string
-}
-
-interface ToolFailureResult {
-  error: string
-  reason: string
-  toolName: string
-  code?: string
-  details?: Record<string, unknown>
-  nextActions?: string[]
-  toolSpaceRecovery?: ToolSpaceRecoveryGuide
-  runtimeToolIssue?: RuntimeToolIssue
-}
-
-interface ToolFailureBuildOptions {
-  code?: string
-  details?: Record<string, unknown>
-  nextActions?: string[]
-  recovery?: ToolSpaceRecoveryGuide
-}
 
 function extractNestedErrorReason(error: unknown): LooseOptional<string> {
   const seen = new Set<unknown>()
@@ -309,4 +277,3 @@ export {
   extractNestedErrorDetails,
   extractNestedErrorReason,
 }
-export type { RuntimeToolIssue, ToolFailureBuildOptions, ToolFailureResult }

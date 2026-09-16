@@ -4,17 +4,14 @@ import { isArray, isBlank, isEmpty,isObject, isPresent, isString, toNullable, tr
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 
+import type { ExecutionIdFactory } from '../../contract/requires.js'
 import type {
   ConfirmationRequestDetail,
   StreamTurnContextPayload,
   ToolExecutionPlanUpdate,
 } from '../../types/agent'
-import type {
-  ExecutionRecord,
-  ExecutionTaskPlanStep,
-  ExecutionTaskRecord,
-} from '../../types/execution'
-import type { UserActionCard } from '../../types/tool'
+import type { ExecutionRecord, ExecutionTaskPlanStep, ExecutionTaskRecord,UserActionCard } from '../../types/agent.js'
+import type { CreateExecutionArgs,ExecutionResourceProvider } from '../../types/records.js'
 import { type ExecutionStateMachine } from '../../utils/records/state-machine'
 
 import { ExecutionPlanLedgerHelper } from './ExecPlanLedger'
@@ -24,21 +21,7 @@ import {
 } from './ExecTaskLedger'
 import { type ExecutionStore } from './ExecutionStore'
 import { type ExecutionRoutingCoordinator } from './ExecWorkflowRoute'
-import {
-  type ExecutionIdFactory,
-  MonotonicExecutionIdFactory,
-} from './MonotonicExecutionIdFactory'
-
-interface ExecutionResourceProvider {
-  getActiveResourceId: (sessionId: string) => Nullable<string>
-}
-
-interface CreateExecutionArgs {
-  /** 宿主来源会话 id（member=session）。 */
-  sourceSessionId: string
-  /** 创建执行摘要时使用的原始消息。 */
-  messages: ModelMessage[]
-}
+import { MonotonicExecutionIdFactory } from './MonotonicExecutionIdFactory'
 
 /** 从模型消息序列提取最近一条用户消息作为 execution summary。 */
 class ExecutionRecordSummaryHelper {
@@ -562,5 +545,4 @@ class ExecutionRecords {
 }
 
 export { ExecutionRecords, ExecutionRecordSummaryHelper }
-export type { ExecutionResourceProvider }
 export { ExecutionRecordSummaryHelper as ExecRecordSummary }

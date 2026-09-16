@@ -12,20 +12,12 @@ import {
 import { AppError } from "@velaros-ai/core/error";
 import type { ScopedLog } from "@velaros-ai/core/logger";
 
-import {
-  type ChatRuntimeEvent,
-  ChatRuntimeEvents,
-  type StreamContextGovernanceState,
-} from "../../types/chat-runtime";
-import type {
-  ContextActiveTaskInput,
-  ContextPinnedEvidenceInput,
-} from "../../utils/context/context-working-set-os";
+import type { StreamContextGovernanceState } from '../../types/agent.js'
+import type { CompiledProviderRequest, ContextPinnedEvidenceInput, ProviderToolDefinitionSnapshotInput } from '../../types/context.js'
+import type { ContextUsageEmitTarget, ProviderToolNamePlan, ProviderToolTransportContext, ProviderToolTransportPlan,ProviderTurnActiveContext, ProviderTurnActiveContextProvider, ProviderTurnContextWorkingSetInputs, ProviderTurnPayloadContext, ToolSchemaCharEstimatorRegistry, ToolSchemaHashEstimatorRegistry } from '../../types/loop.js'
 import { collectProviderRequestHistoryToolNames } from "../../utils/context/message-scan";
-import type { ProviderToolDefinitionSnapshotInput } from "../../utils/context/provider-request-snapshot";
 import { compareStableStrings } from "../../utils/residency/determinism";
-import type { ContextPayloadStore } from "../context/InMemoryContextPayloadStore";
-import type { CompiledProviderRequest } from "../context/ProviderRequestCompiler";
+import { ChatRuntimeEvents } from '../../utils/wire/chat-runtime.js'
 import { buildToolPayloadRefsForProviderMessages } from "../context/ToolPayloadReferencePlanner";
 import { completeToolTransportNameAliases } from "../tools/ProviderToolReferenceCanonicalizer";
 
@@ -36,39 +28,6 @@ import { completeToolTransportNameAliases } from "../tools/ProviderToolReference
  * 漂移风险已经显现（见 docs/agent-pipeline-review.md §1）。这里统一为单一来源，
  * 仅以 `label` 区分日志文案，其余行为对两条链路严格一致。
  */
-
-interface ProviderTurnPayloadContext {
-  sessionId?: string;
-  contextPayloadStore?: ContextPayloadStore;
-}
-
-interface ProviderTurnActiveContextArtifact {
-  id: string;
-  kind: "plan" | "decision" | "requirement";
-  title?: LooseOptional<string>;
-  content: string;
-  status?: LooseOptional<string>;
-  updatedAt?: LooseOptional<number>;
-  metadata?: LooseOptional<Record<string, unknown>>;
-}
-
-interface ProviderTurnActiveContextProvider {
-  activeContext?: {
-    listActiveContextArtifacts(options?: {
-      status?: "active" | "completed" | "archived" | "all";
-      kinds?: Array<"plan" | "decision" | "requirement">;
-    }): Promise<ProviderTurnActiveContextArtifact[]>;
-  };
-}
-
-interface ProviderTurnContextWorkingSetInputs {
-  activeTask?: ContextActiveTaskInput;
-  pinnedEvidence?: ContextPinnedEvidenceInput[];
-}
-
-type ProviderTurnActiveContext = NonNullable<
-  ProviderTurnActiveContextProvider["activeContext"]
->;
 
 function resolveActiveContextProvider(
   value: unknown,
@@ -83,43 +42,6 @@ function resolveActiveContextProvider(
           listActiveContextArtifacts as ProviderTurnActiveContext["listActiveContextArtifacts"],
       }
     : null;
-}
-
-interface ToolSchemaCharEstimatorRegistry<TContext> {
-  estimateToolSerializedCharsByName?: (
-    toolContext: TContext,
-    allowedTools?: string[],
-  ) => Record<string, number>;
-}
-
-interface ToolSchemaHashEstimatorRegistry<TContext> {
-  estimateToolSchemaHashesByName?: (
-    toolContext: TContext,
-    allowedTools?: string[],
-  ) => Record<string, string>;
-}
-
-interface ProviderToolTransportContext {
-  /** canonical tool id 到供应方安全的请求内名称。 */
-  getCurrentVisibleToolTransportNames?: () => Readonly<Record<string, string>>;
-}
-
-interface ContextUsageEmitTarget {
-  events?: { emitRuntime?: (event: ChatRuntimeEvent) => void };
-  turn: LooseOptional<number>;
-  model: string;
-}
-
-interface ProviderToolNamePlan {
-  providerToolNames?: string[];
-  historyToolNames: string[];
-}
-
-interface ProviderToolTransportPlan {
-  /** canonical tool id -> provider request name for exactly one provider request. */
-  canonicalToProvider: Readonly<Record<string, string>>;
-  /** provider request name -> canonical tool id for exactly the matching response stream. */
-  providerToCanonical: Readonly<Record<string, string>>;
 }
 
 class ProviderTurnRequestHelper {
@@ -502,8 +424,3 @@ function buildStreamGovernanceState(
 }
 
 export { ProviderTurnRequestHelper };
-export type {
-  ProviderToolNamePlan,
-  ProviderToolTransportPlan,
-  ProviderTurnPayloadContext,
-};

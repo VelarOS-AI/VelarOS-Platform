@@ -1,36 +1,8 @@
 import { AppError } from '@velaros-ai/core/error'
 
 import type { ToolConfirmationDecisionOptions } from '../../types/agent'
-import { ChatRuntimeEvents,type StreamStatePayload } from '../../types/chat-runtime'
-import type { ExecutionRecord } from '../../types/execution'
 
 import { type ExecutionRecords } from './ExecutionRecords'
-
-interface PendingInputResolver {
-  /** 用户输入文本后唤醒 awaitUserInput。 */
-  resolve: (answer: string) => void
-  /** 执行失败/中断时拒绝等待中的 Promise。 */
-  reject: (error: unknown) => void
-}
-
-interface ConfirmationDecision {
-  /** 用户是否同意。 */
-  approved: boolean
-  /** 用户拒绝时可选填写的原因。 */
-  message: Nullable<string>
-}
-
-interface PendingConfirmationResolver {
-  confirmationId: string
-  /** 用户做出确认选择后唤醒 awaitConfirmationDecision。 */
-  resolve: (decision: ConfirmationDecision) => void
-  /** 执行失败/中断时拒绝等待中的 Promise。 */
-  reject: (error: unknown) => void
-}
-
-type PendingInputResolvers = Map<string, PendingInputResolver>
-type PendingConfirmationResolvers = Map<string, PendingConfirmationResolver>
-type PendingInteractionKind = 'confirmation' | 'input'
 
 /** 拒绝确认时给模型/执行账的那句话：固定前缀 + 用户理由（有才拼）。 */
 function buildConfirmationDenialMessage(rejectionMessage: Nullable<string>): string {
@@ -272,5 +244,8 @@ class ExecutionInteractions {
 }
 
 export { ExecutionInteractions }
-export type { PendingConfirmationResolvers, PendingInputResolvers }
 import { randomUUID } from 'node:crypto'
+
+import type { ExecutionRecord,StreamStatePayload } from '../../types/agent.js'
+import type { ConfirmationDecision, PendingConfirmationResolvers, PendingInputResolvers, PendingInteractionKind } from '../../types/records.js'
+import { ChatRuntimeEvents } from '../../utils/wire/chat-runtime.js'

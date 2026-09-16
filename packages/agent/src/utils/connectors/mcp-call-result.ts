@@ -8,18 +8,13 @@ import { isArray, isBoolean, isPresent, isRecord } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { asRecord, readString } from '@velaros-ai/core/utils/unknownJsonRecord'
 
-import type { McpRawCallResult } from '../../impl/connectors/McpClientConnection'
 import type { ToolResultModelContentPart } from '../../types/agent'
+import type { McpRawCallResult, ParsedMcpContent } from '../../types/connectors.js'
 import { withToolResultModelContent } from '../tools/model-image-lift'
 
 /** MCP result 的 isError 标志（unknown 边界字段）；仅 boolean true 视为失败。 */
 function isErrorResult(raw: McpRawCallResult): boolean {
   return isBoolean(raw.isError) && raw.isError
-}
-
-interface ParsedMcpContent {
-  text: string
-  modelContent: ToolResultModelContentPart[]
 }
 
 function describeResource(uri: Nullable<string>): string {

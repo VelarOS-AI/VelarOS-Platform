@@ -1,5 +1,7 @@
 import { isPresent } from '@velaros-ai/core'
 
+import type { LoopTurnVerdict, LoopWindDownTriggerReason } from '../../types/loop.js'
+
 const AgentTurnCapWindDownMargin = 2
 
 /**
@@ -15,9 +17,6 @@ const AgentTurnCapWindDownMargin = 2
  * 面只提供文案、日志与收敛动作——装配差异是真差异要保，机制分裂是形态债要禁。
  */
 
-/** 单轮裁决：继续下一轮，或以面自己的完成值收束整个 loop。 */
-type LoopTurnVerdict<TFinish> = { kind: 'continue' } | { kind: 'finish'; value: TFinish }
-
 function loopContinue<TFinish>(): LoopTurnVerdict<TFinish> {
   return { kind: 'continue' }
 }
@@ -25,8 +24,6 @@ function loopContinue<TFinish>(): LoopTurnVerdict<TFinish> {
 function loopFinish<TFinish>(value: TFinish): LoopTurnVerdict<TFinish> {
   return { kind: 'finish', value }
 }
-
-type LoopWindDownTriggerReason = 'turn-cap' | 'time-deadline'
 
 interface LoopWindDownGuardOptions {
   /** 硬上限（轮数）；软上限 = 硬上限 - AgentTurnCapWindDownMargin。 */
@@ -77,36 +74,5 @@ class LoopWindDownGuard {
   }
 }
 
-/**
- * 引擎驱动的装配面。每次 execute 由面新建（闭包捕获本次执行的全部局部状态），
- * 引擎不持有跨执行状态。
- */
-interface AgentLoopSurface<TFinish> {
-  /** 护栏 3（中止门）判定：每轮开场先查。 */
-  isAborted(): boolean
-  /**
-   * 护栏 3（中止门）收敛：主面发 emitAbort 并返回 aborted 状态；
-   * 子面收敛 run span 后抛 EXECUTION_ABORTED（允许 throw）。
-   */
-  onAborted(turn: number): TFinish
-  /** 每轮开场注入点（运行中引导 / relay / 环境回合 note），面自装配。 */
-  beforeTurn(turn: number): Promise<void>
-  /** 护栏 1 装配：共享 guard + 面自己的提醒文案与触发日志。 */
-  windDown: {
-    guard: LoopWindDownGuard
-    onTriggered(reason: LoopWindDownTriggerReason, turn: number): void
-  }
-  /**
-   * 单轮全部内容（准备 / 请求 / 后续处置）。护栏 2（溢出恢复）与护栏 4（turn span 收敛）
-   * 经 AgentLoop 的共享机制在面内装配；异常收敛策略（状态化 vs 冒泡）是面的真装配差异。
-   */
-  runTurn(turn: number): Promise<LoopTurnVerdict<TFinish>>
-}
-
 export { loopContinue, loopFinish, LoopWindDownGuard }
-export type {
-  AgentLoopSurface,
-  LoopTurnVerdict,
-  LoopWindDownGuardOptions,
-  LoopWindDownTriggerReason,
-}
+export type { LoopWindDownGuardOptions }

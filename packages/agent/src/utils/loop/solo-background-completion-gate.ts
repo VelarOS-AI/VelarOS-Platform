@@ -1,44 +1,7 @@
-import type { ModelMessage } from 'ai'
 
-import type { ScopedLog } from '@velaros-ai/core/logger'
 
-import {
-  type AgentRuntimeInputPort,
-  createAgentRuntimeInputInterruptScope,
-} from '../runner/runtime-input-port'
-
-interface SoloBackgroundWaitInput {
-  signal?: AbortSignal
-  onWaiting?: () => void
-}
-
-type SoloAwaitPendingBackgroundJobs = (
-  input?: SoloBackgroundWaitInput
-) => Promise<boolean>
-
-interface RunSoloBackgroundCompletionGateInput {
-  turn: number
-  history: ModelMessage[]
-  executionAbortSignal: AbortSignal
-  runtimeInput?: AgentRuntimeInputPort
-  consumeTurnContextNote?: () => Nullable<string>
-  awaitPendingBackgroundJobs?: SoloAwaitPendingBackgroundJobs
-  emitWaitingPhase(): void
-  log: Pick<ScopedLog, 'info'>
-}
-
-type SoloBackgroundCompletionGateResult =
-  | { status: 'ready' }
-  | {
-      status: 'continue'
-      reason: 'late-context' | 'background-terminal'
-    }
-  | { status: 'interrupted' }
-
-interface AbortSignalScope {
-  signal: AbortSignal
-  dispose(): void
-}
+import type { AbortSignalScope,RunSoloBackgroundCompletionGateInput, SoloAwaitPendingBackgroundJobs, SoloBackgroundCompletionGateResult } from '../../types/loop.js'
+import { createAgentRuntimeInputInterruptScope } from '../runner/runtime-input-port'
 
 /**
  * 主 Agent 真正提交收尾前的后台任务门。
@@ -164,9 +127,3 @@ function injectTurnContextNote(
 }
 
 export { runSoloBackgroundCompletionGate }
-export type {
-  RunSoloBackgroundCompletionGateInput,
-  SoloAwaitPendingBackgroundJobs,
-  SoloBackgroundCompletionGateResult,
-  SoloBackgroundWaitInput,
-}

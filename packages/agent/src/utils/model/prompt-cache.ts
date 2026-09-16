@@ -7,7 +7,8 @@ import {
   isString,
 } from '@velaros-ai/core'
 
-import type { AgentModelRequestOptions } from '../../types/model-contracts'
+import type { AgentModelRequestOptions } from '../../contract/requires.js'
+import type { CoreProviderOptions, ModelMessageProviderOptions } from '../../types/loop.js'
 import { UnknownGovernanceSessionId } from '../residency/session-key'
 
 const SessionPromptCacheKeyHashSeed = 0x811c9dc5
@@ -20,9 +21,6 @@ const PromptCacheKeyField = 'promptCacheKey'
 const AnthropicProviderKey = 'anthropic'
 const OpenAiProviderKey = 'openai'
 const CacheControlField = 'cacheControl'
-
-type CoreProviderOptions = AgentModelRequestOptions['providerOptions']
-type ModelMessageProviderOptions = NonNullable<ModelMessage['providerOptions']>
 
 function createPromptCacheSystemMessage(content: string): ModelMessage {
   return {

@@ -13,19 +13,10 @@ import {
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 
-import type { SubAgentStructuredOutputContract } from '../../types/agent-workflow'
-import { ChatRuntimeEvents } from '../../types/chat-runtime'
-import type { AgentModelProvider, AgentModelRequestOptions } from '../../types/model-contracts'
-import type { AgentRoleResolution, ResolveAgentRoleOptions } from '../../types/role-types'
-import type { AgentModelRetryPolicy,AgentRunLifecycle } from '../../types/run-lifecycle'
-import type { RunProfileSelectionId } from '../../types/run-profile'
-import type {
-  AgentChatRuntimeConfig,
-  AgentSystemRuntimeConfig,
-} from '../../types/runtime-configuration'
-import type { SubAgentUsage } from '../../types/sub-agent-task'
-import type { ThinkingDepth } from '../../types/team'
-import type { AgentModelInputModality, ToolCategoryId } from '../../types/tool'
+import type { AgentChatRuntimeConfig, AgentModelRequestOptions, AgentSystemRuntimeConfig,ExecutionSpanScopeFactory } from '../../contract/requires.js'
+import type { AgentModelInputModality } from '../../types/agent.js'
+import type { AgentExecutionLimitOverrides, AgentExecutionLimits, AgentLoopSurface, ExecuteQueryLoopArgs, ExecuteQueryTurnArgs, LoopTurnVerdict, QueryLoopRoleEngine, QueryLoopToolCategoryResolver, QueryLoopToolContext, QueryLoopToolRegistry, QueryTurnEvents, QueryTurnProvider } from '../../types/loop.js'
+import type { AgentRoleResolution } from '../../types/runner.js'
 import { resolveCapabilityDelegationPolicy } from '../../utils/capabilities'
 import { resolveContextWindowBudget } from '../../utils/context/context-budget'
 import {
@@ -34,7 +25,6 @@ import {
   parseSubAgentStructuredOutput,
 } from '../../utils/delegation/structured-output'
 import { createInternalFollowUpMessage } from '../../utils/history/internal-messages'
-import type { AgentHistoryToolContext } from '../../utils/history/request'
 import {
   beginLoopTurnSpans,
   endLoopTurnSpansError,
@@ -44,54 +34,23 @@ import {
   runAgentLoop,
 } from '../../utils/loop/agent-loop'
 import { resolveContextDegradeAction } from '../../utils/loop/context-degrade-ladder'
-import {
-  type AgentExecutionLimitOverrides,
-  type AgentExecutionLimits,
-  resolveAgentExecutionLimits,
-} from '../../utils/loop/execution-limits'
-import {
-  buildSubAgentInstruction,
-  createSubAgentContext,
-  resolveSubAgentDelegation,
-  resolveSubAgentToolScope,
-  type SubAgentContextBase,
-  type SubAgentOptionsLike,
-} from '../../utils/loop/loop-runtime'
-import {
-  type AgentTurnCapabilitySnapshotSource,
-  captureAgentTurnCapabilityContext,
-  captureAgentTurnCapabilitySnapshot,
-} from '../../utils/loop/turn-capability-snapshot'
+import { resolveAgentExecutionLimits } from '../../utils/loop/execution-limits'
+import { buildSubAgentInstruction, createSubAgentContext, resolveSubAgentDelegation, resolveSubAgentToolScope } from '../../utils/loop/loop-runtime'
+import { captureAgentTurnCapabilityContext, captureAgentTurnCapabilitySnapshot } from '../../utils/loop/turn-capability-snapshot'
 import { resolveGovernanceSessionKey } from '../../utils/residency/session-key'
 import { applyRunProfileToolExposure } from '../../utils/runner/run-profile'
 import { resolveRunProfilePolicyForRuntime } from '../../utils/runner/runtime-profiles'
-import { type AutoVerificationToolContext, tickLoopReminders } from '../../utils/session/auto-verification'
+import { tickLoopReminders } from '../../utils/session/auto-verification'
 import { isReasoningOnlyEmptyResponseError } from '../../utils/stream/empty-stream-recovery'
 import { DefaultModelInputModalities } from '../../utils/tools/model-input-policy'
-import {
-  AgentLoopContextUsageManager,
-  type AgentLoopToolRegistry,
-} from '../context/AgentLoopContextUsageManager'
-import type { ExecutionSpanScopeFactory } from '../ledgers/LedgerExecutionSpanScopeFactory'
+import { ChatRuntimeEvents } from '../../utils/wire/chat-runtime.js'
+import { AgentLoopContextUsageManager } from '../context/AgentLoopContextUsageManager'
 import type { AgentModSeamDispatcher } from '../mods/AgentModSeamDispatcher'
 import type { ContextGovernanceSessionRegistry } from '../residency/ContextGovernanceSession'
 import { KernelToolLoopGuard } from '../tools/KernelToolLoopGuard'
 
-import {
-  type AgentLoopSurface,
-  loopContinue,
-  loopFinish,
-  type LoopTurnVerdict,
-  LoopWindDownGuard,
-} from './LoopWindDownGuard'
-import type {
-  ExecuteQueryTurnArgs,
-  QueryTurnEvents,
-  QueryTurnProvider,
-  QueryTurnResult,
-  QueryTurnToolContext,
-  QueryTurnToolRegistry,
-} from './QueryTurn'
+import { loopContinue, loopFinish, LoopWindDownGuard } from './LoopWindDownGuard'
+import type { QueryTurnResult } from './QueryTurn'
 
 const MaxQueryLoopReasoningOnlyVisibleAnswerRecoveryAttempts = 2
 const MaxSubAgentStructuredOutputRepairAttempts = 2
@@ -100,59 +59,6 @@ const MaxSubAgentStructuredOutputRepairAttempts = 2
  * 编辑预算与运行档判档共用它——两处各写一个数就是两本账。
  */
 const SubAgentFallbackContextWindow = 128_000
-
-interface QueryLoopSubAgentRuntimeOverride {
-  provider: AgentModelProvider
-  providerId: string
-  model: string
-  supportedInputModalities?: readonly AgentModelInputModality[]
-  modelRequestOptions?: AgentModelRequestOptions
-  thinkingDepth?: LooseOptional<ThinkingDepth>
-}
-
-interface QueryLoopSubAgentOptions<TEvents extends QueryTurnEvents> extends SubAgentOptionsLike {
-  runtimeOverride?: QueryLoopSubAgentRuntimeOverride
-  events?: TEvents
-  /**
-   * 软上限时间戳（epoch ms）。到点后注入一次收尾提醒让子 Agent 汇报进展并结束，
-   * 而非硬杀；未设置则不施加软上限。
-   */
-  softDeadlineAt?: number
-  /** 主 Agent relay 的运行中引导；每条消息只在子 Agent 某一轮 turn 开始时消费一次。 */
-  consumeRelayedGuidance?: () => Nullable<string> | Promise<Nullable<string>>
-  /**
-   * 续跑：注入已有对话历史，跳过从零构造的首条 user 消息。此时 `task` 是派发器拼好的追加指令，
-   * 原样作为一条内部跟进消息接在历史后，不再套委派合约外壳（外壳已在历史的首条消息里）。
-   */
-  initialHistory?: ModelMessage[]
-  /** 每轮结束后回写 history，供 session store 持久化。 */
-  onHistoryUpdate?: (history: ModelMessage[]) => void
-  /** 单 worker 中断信号（与父 abort 合并生效）。 */
-  workerAbortSignal?: AbortSignal
-  structuredOutputContract?: SubAgentStructuredOutputContract
-  onStructuredOutput?: (value: unknown) => void
-  /** 子 Agent 运行结束时回报本次 token/成本用量汇总（D9 usage 回传）。 */
-  onUsage?: (usage: SubAgentUsage) => void
-}
-
-type QueryLoopToolContext = QueryTurnToolContext &
-  AgentHistoryToolContext &
-  AutoVerificationToolContext &
-  SubAgentContextBase & {
-    selectedSkillIds?: string[]
-    codingSession: {
-      setUsableContextWindowTokens?: (tokens: Nullable<number>) => void
-      /**
-       * 父会话选定的运行档（`'auto'` = 按模型窗口自动判档）。子 Agent 继承它做工具面预算——
-       * 档位承诺的是「本次运行允许长期携带多少」，不是「只约束主会话」。
-       */
-      getRunProfile?: () => RunProfileSelectionId
-    }
-  }
-
-interface QueryLoopRoleEngine {
-  resolve(options: ResolveAgentRoleOptions): AgentRoleResolution
-}
 
 interface QueryLoopRunContext<TContext extends QueryLoopToolContext, TSignals> {
   buildSystemPrompt(args: {
@@ -201,41 +107,6 @@ interface QueryLoopTurnRunner<
     }
   ): Promise<QueryTurnResult>
   getAllowedSubAgentTools(tools?: string[]): string[]
-}
-
-type QueryLoopToolRegistry<
-  TContext extends QueryLoopToolContext,
-> = AgentLoopToolRegistry<TContext> &
-  QueryTurnToolRegistry<TContext> & {
-  names: string[]
-  estimateToolSerializedCharsByName?: (
-    toolContext: TContext,
-    allowedTools?: string[]
-  ) => Record<string, number>
-  getDescriptor(toolName: string): LooseOptional<{ categoryId?: LooseOptional<ToolCategoryId> }>
-} & Partial<AgentTurnCapabilitySnapshotSource<QueryLoopToolRegistry<TContext>>>
-
-type QueryLoopToolCategoryResolver = (categories: ToolCategoryId[]) => string[]
-
-interface ExecuteQueryLoopArgs<
-  TContext extends QueryLoopToolContext = QueryLoopToolContext,
-  TEvents extends QueryTurnEvents = QueryTurnEvents,
-  TSignals = unknown,
-> {
-  lifecycle?: AgentRunLifecycle<TContext>
-  modelRetry?: AgentModelRetryPolicy
-  /** 父 Agent 委派给子 Agent 的任务文本。 */
-  task: string
-  /** 子 Agent 运行选项，可限制工具类别、角色和最大步数。 */
-  opts: QueryLoopSubAgentOptions<TEvents>
-  /** 父工具上下文，子 Agent 会继承大部分能力并收窄工具。 */
-  parentCtx: TContext
-  /** 聊天模型配置快照。 */
-  chatConfig: AgentChatRuntimeConfig
-  /** 系统配置快照。 */
-  systemConfig: AgentSystemRuntimeConfig
-  /** Collect capability-owned context. Agent Runtime treats the snapshot as opaque. */
-  collectCapabilityContext: (messages: ModelMessage[]) => Promise<Nullable<TSignals>>
 }
 
 /**
@@ -932,16 +803,4 @@ async function consumeQueryLoopRelayedGuidance(input: {
 
 export { QueryLoop }
 export { QueryLoop as AgentQueryLoop }
-export type {
-  ExecuteQueryLoopArgs,
-  QueryLoopRoleEngine,
-  QueryLoopRoleRuntime,
-  QueryLoopRunContext,
-  QueryLoopRuntime,
-  QueryLoopSubAgentOptions,
-  QueryLoopSubAgentRuntimeOverride,
-  QueryLoopToolCategoryResolver,
-  QueryLoopToolContext,
-  QueryLoopToolRegistry,
-  QueryLoopTurnRunner,
-}
+export type { QueryLoopRoleRuntime, QueryLoopRunContext, QueryLoopRuntime, QueryLoopTurnRunner }

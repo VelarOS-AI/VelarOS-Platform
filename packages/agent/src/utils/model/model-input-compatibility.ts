@@ -3,7 +3,7 @@ import type { ModelMessage } from 'ai'
 import { isArray, isEmpty, isRecord, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import type { AgentModelInputModality } from '../../types/tool'
+import type { AgentModelInputModality } from '../../types/agent.js'
 import { DefaultModelInputModalities } from '../tools/model-input-policy'
 
 function mediaTypeModality(value: unknown): AgentModelInputModality | undefined {

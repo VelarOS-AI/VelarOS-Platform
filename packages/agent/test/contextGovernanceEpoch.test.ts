@@ -20,7 +20,7 @@ import {
 } from '../src/impl/residency/ContextGovernanceSession'
 import { ContextResidencyLedger } from '../src/impl/residency/ContextResidencyLedger'
 import { InMemoryContextMigrationEventSink } from '../src/impl/residency/InMemoryContextMigrationEventSink'
-import type { ContextRecordClassifier } from '../src/utils/residency/admission'
+import type { ContextRecordClassifier } from '../src/types/residency.js'
 import { isContextDashboardText } from '../src/utils/residency/dashboard'
 import { stableStringify } from '../src/utils/residency/determinism'
 import {

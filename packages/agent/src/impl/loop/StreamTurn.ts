@@ -1,23 +1,15 @@
-import type { LanguageModel, ModelMessage, TextStreamPart, ToolChoice, ToolSet } from 'ai'
+import type { ModelMessage, TextStreamPart, ToolChoice, ToolSet } from 'ai'
 
 import { isBlank, isEmpty, isObject, isPositiveNumber, isString, isTrue, toNullable, toOptional } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 
-import type { StreamAssistantRawPayload } from '../../types/agent'
-import { type ChatRuntimeEvent, ChatRuntimeEvents } from '../../types/chat-runtime'
-import type { AgentModelRequestOptions } from '../../types/model-contracts'
-import type { AgentModelRetryPolicy } from '../../types/run-lifecycle'
-import type { AppLocale } from '../../types/system'
-import type { AgentModelInputModality } from '../../types/tool'
-import type { EstimateContextUsageOptions } from '../../utils/context/context-usage'
-import {
-  assertProviderRequestSnapshotReconstructable,
-  type ProviderRequestSnapshot,
-} from '../../utils/context/provider-request-snapshot'
+import type {ProviderRequestSnapshot } from '../../types/context.js'
+import type { AssistantContentPart } from '../../types/history.js'
+import type { AgentModelRequestPort, AgentModelStreamInput, ConsumeAssistantStreamArgs, ExecuteStreamTurnArgs, InterruptedStreamPartial,StreamTurnResult, StreamTurnToolContext, StreamTurnToolRegistry, SystemPromptDelivery } from '../../types/loop.js'
+import { assertProviderRequestSnapshotReconstructable } from '../../utils/context/provider-request-snapshot'
 import { createInternalFollowUpMessage } from '../../utils/history/internal-messages'
-import type { AgentHistoryToolContext } from '../../utils/history/request'
-import type { AgentTurnHistoryHelper, AssistantContentPart } from '../../utils/history/turn'
+import type { AgentTurnHistoryHelper } from '../../utils/history/turn'
 import { assertModelInputCompatibility } from '../../utils/model/model-input-compatibility'
 import { normalizeModelRequestError } from '../../utils/model/model-request-error'
 import {
@@ -31,29 +23,15 @@ import {
   buildOutputTruncationContinuationPrompt,
   isOutputTruncationError,
 } from '../../utils/stream/output-truncation-recovery'
+import { ChatRuntimeEvents } from '../../utils/wire/chat-runtime.js'
 import { resolveModelContextUsageOptions } from '../context/AgentLoopContextUsageManager'
-import type { ContextPayloadStore } from '../context/InMemoryContextPayloadStore'
 import { ProviderRequestCompiler } from '../context/ProviderRequestCompiler'
 import { compileProviderSendRequest } from '../context/ProviderSendRequest'
-import {
-  emitCompletedProviderTurnSnapshot,
-  ProviderTurnEventReducer,
-  type ProviderTurnSnapshot,
-} from '../records/ProviderTurnEventReducer'
+import { emitCompletedProviderTurnSnapshot, ProviderTurnEventReducer } from '../records/ProviderTurnEventReducer'
 import type { ContextGovernanceSessionRegistry } from '../residency/ContextGovernanceSession'
-import type { ToolExecutionPolicyRegistry } from '../tools/ToolExecutionPolicy'
 
-import {
-  type AgentModelRequestPort,
-  type AgentModelStreamInput,
-  AiSdkAgentModelRequestPort,
-  applyModelRequestPolicy,
-} from './AiSdkAgentModelRequestPort'
-import {
-  buildKernelContextEpoch,
-  type KernelContextEpochGuardLike,
-  recordKernelContextEpochDiagnostic,
-} from './KernelContextEpochGuard'
+import { AiSdkAgentModelRequestPort, applyModelRequestPolicy } from './AiSdkAgentModelRequestPort'
+import { buildKernelContextEpoch, recordKernelContextEpochDiagnostic } from './KernelContextEpochGuard'
 import {
   buildKernelPrefixShape,
   KernelPrefixShapeTracker,
@@ -68,14 +46,7 @@ import {
   markContextOverflowReplayUnsafe,
   MaxConnectionRetryAttempts,
 } from './RetryPolicy'
-import {
-  type ConsumeAssistantStreamArgs,
-  type InterruptedStreamPartial,
-  StreamConsumer,
-  type StreamConsumerEvents,
-  type StreamConsumerToolExecutor,
-  type StreamConsumerTurnState,
-} from './StreamConsumer'
+import { StreamConsumer, type StreamConsumerTurnState } from './StreamConsumer'
 
 const PromptCacheMinStableSystemChars = 2000
 /** 系统提示词 dynamic 层尾块的固定标签（逐轮同形，只有正文变）。 */
@@ -83,13 +54,6 @@ const DynamicPromptLayerMarker = '[system prompt · dynamic layer (current turn)
 const MaxStreamContinuationRecoveryAttempts = 1
 const MaxOutputTruncationRecoveryAttempts = 2
 const MaxReasoningOnlyVisibleAnswerRecoveryAttempts = 2
-
-interface SystemPromptDelivery {
-  system?: string
-  leadingMessages: ModelMessage[]
-  /** 系统提示词 dynamic 层：排在历史**之后**的活动尾块（P7-1）。 */
-  tailBlocks: ModelMessage[]
-}
 
 /**
  * 系统提示词投递（P7-1 的修复点）。
@@ -131,121 +95,6 @@ function buildDynamicPromptLayerMessage(dynamicPart: string): ModelMessage {
     role: 'user',
     content: [DynamicPromptLayerMarker, dynamicPart].join('\n'),
   }
-}
-
-type StreamTurnProvider = (modelId: string, options?: AgentModelRequestOptions) => LanguageModel
-
-type StreamTurnToolContext = AgentHistoryToolContext & {
-  abortSignal: AbortSignal
-  locale?: AppLocale
-  sessionId?: string
-  contextPayloadStore?: ContextPayloadStore
-}
-
-interface StreamTurnToolRegistry<
-  TToolContext extends StreamTurnToolContext = StreamTurnToolContext,
-> extends ToolExecutionPolicyRegistry {
-  toAiTools(
-    toolContext: TToolContext,
-    allowList?: string[],
-    options?: {
-      toolSchemaChars?: Readonly<Record<string, number>>
-      historyToolNames?: readonly string[]
-    }
-  ): ToolSet
-  estimateToolSerializedCharsByName?: (
-    toolContext: TToolContext,
-    allowedTools?: string[]
-  ) => Record<string, number>
-  estimateToolSchemaHashesByName?: (
-    toolContext: TToolContext,
-    allowedTools?: string[]
-  ) => Record<string, string>
-}
-
-interface StreamTurnEvents extends StreamConsumerEvents {
-  emitRuntime(event: ChatRuntimeEvent): void
-  emitAssistantRaw(payload: StreamAssistantRawPayload): void
-}
-
-export interface ExecuteStreamTurnArgs<
-  TToolContext extends StreamTurnToolContext = StreamTurnToolContext,
-> {
-  /** 当前 provider 的 LanguageModel factory。 */
-  provider: StreamTurnProvider
-  /** 具体模型 id。 */
-  model: string
-  /** 温度、推理强度等模型请求选项。 */
-  modelRequestOptions?: AgentModelRequestOptions
-  /** 本轮 system prompt。 */
-  systemPrompt: string
-  /**
-   * 系统提示词内「稳定层 / 动态层」的字符分界偏移（来自 ContextBuilder）。
-   * 提供且稳定层足够大时，会把系统提示词拆块并在稳定块上打 provider-neutral 缓存断点；缺省则原样下发。
-   */
-  stableCutoff?: LooseOptional<number>
-  /** 当前消息历史；本 helper 会在成功后追加 assistant 消息。 */
-  history: ModelMessage[]
-  /** 当前模型上下文窗口；用于最终 provider payload send gate。 */
-  contextWindow?: LooseOptional<number>
-  /** Concrete inputs accepted by the selected model. Missing means unknown, not unsupported. */
-  supportedInputModalities?: readonly AgentModelInputModality[]
-  /** loop 侧已经带上输出预留、安全余量和校准系数的估算配置。 */
-  contextUsageOptions?: EstimateContextUsageOptions
-  /** 工具执行上下文。 */
-  toolContext: TToolContext
-  /** 本轮开始时捕获的工具能力快照；缺省兼容使用构造时注册表。 */
-  toolRegistry?: StreamTurnToolRegistry<TToolContext>
-  /** 本轮允许暴露给模型的工具名。 */
-  allowTools?: string[]
-  /** 本轮 run planner 已经测得的工具 schema 字符数，避免 provider request 阶段重复估算。 */
-  toolSchemaChars?: Readonly<Record<string, number>>
-  /** 本轮工具选择策略；缺省时由模型自动决定是否调用工具。 */
-  toolChoice?: ToolChoice<ToolSet>
-  /** 本轮工具执行器。 */
-  executor: StreamConsumerToolExecutor
-  /** 向 UI 输出事件。 */
-  events: StreamTurnEvents
-  /** 取消信号。 */
-  abortSignal: AbortSignal
-  /** 新运行时输入到达时只抢占当前 provider 回合，不取消整个 execution。 */
-  runtimeInputInterruptSignal?: AbortSignal
-  /** 模型流连续无任何活动时的超时；缺省使用统一运行时策略。 */
-  idleStallTimeoutMs?: LooseOptional<number>
-  /** 当前轮次。 */
-  turn: number
-  contextEpochScope?: LooseOptional<string>
-  contextEpochGuard?: LooseOptional<KernelContextEpochGuardLike>
-  onProviderTurnSnapshot?: LooseOptional<(snapshot: ProviderTurnSnapshot) => void>
-  /** 每次真实 provider 请求将被连接重试替换前，记录该失败尝试。 */
-  modelRetry?: AgentModelRetryPolicy
-  onModelRequestRetry?: LooseOptional<(error: AppError, attempt: number) => void>
-}
-
-export interface StreamTurnResult {
-  /** 本轮 assistant 是否产生过 tool call。 */
-  hasToolUse: boolean
-  /** 本轮是否向用户输出过非空正文；reasoning 和 tool call 不计入。 */
-  hasVisibleText?: boolean
-  /** 当前 provider 回合在派发任何工具副作用前为新运行时输入让路。 */
-  interruptedByRuntimeInput?: boolean
-  /** 供应方返回的真实输入 token 数（若有）；用于 MMU 用量校准反馈。 */
-  inputTokens?: LooseOptional<number>
-  /** 与 inputTokens 同一次成功请求的编译后估算，含治理投影和实际工具面。 */
-  predictedInputTokens?: LooseOptional<number>
-  /**
-   * 供应方回合收敛后的执行观测富化（#37 阶段 C 片 1）：输出 token / 成本 / 结束原因 / 请求指纹。
-   * 与 inputTokens 走同一回传通道，交由 SoloLoop 挂到本确定 turn 的 model span（D5）。缺席用 null。
-   */
-  outputTokens?: LooseOptional<number>
-  costUsd?: LooseOptional<number>
-  /** 推理 token（含在 outputTokens 里）与输入中命中 / 写入缓存的 token；子 Agent 用量据此分项计价。 */
-  reasoningTokens?: LooseOptional<number>
-  cacheReadInputTokens?: LooseOptional<number>
-  cacheWriteInputTokens?: LooseOptional<number>
-  finishReason?: LooseOptional<string>
-  requestFingerprint?: LooseOptional<string>
-  providerRequestSnapshot?: LooseOptional<ProviderRequestSnapshot>
 }
 
 /**
@@ -880,4 +729,3 @@ class StreamTurn<TToolContext extends StreamTurnToolContext = StreamTurnToolCont
 
 export { buildSystemPromptDelivery, PromptCacheMinStableSystemChars, StreamTurn }
 export { StreamTurn as AgentStreamTurnHelper }
-export type { StreamTurnEvents, StreamTurnProvider, StreamTurnToolContext, StreamTurnToolRegistry }

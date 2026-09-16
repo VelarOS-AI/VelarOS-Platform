@@ -7,24 +7,10 @@
 
 import { isEmpty } from '@velaros-ai/core'
 
+import type { ProviderToolReferenceCanonicalizer,ToolTransportNamePlan, ToolTransportProjection } from '../../types/tools.js'
 import { assertCanonicalToolId, isCanonicalToolId } from '../../utils/toolkit/identity'
 
 const ProviderToolNamePattern = /^[a-zA-Z0-9_-]{1,64}$/
-
-interface ToolTransportNamePlan {
-  readonly canonicalToProvider: Readonly<Record<string, string>>
-  readonly providerToCanonical: Readonly<Record<string, string>>
-}
-
-interface ToolTransportProjection {
-  readonly plan: ToolTransportNamePlan
-  readonly visibleCanonicalToProvider: Readonly<Record<string, string>>
-}
-
-interface ProviderToolReferenceCanonicalizer {
-  push(text: string): string
-  flush(): string
-}
 
 function stableToolNameHash(value: string): string {
   let hash = 0x811c9dc5
@@ -255,9 +241,4 @@ export {
   ProviderToolNamePattern,
   rewriteCanonicalToolReferences,
   rewriteProviderToolReferences,
-}
-export type {
-  ProviderToolReferenceCanonicalizer,
-  ToolTransportNamePlan,
-  ToolTransportProjection,
 }

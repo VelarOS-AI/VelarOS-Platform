@@ -1,31 +1,15 @@
 import { isEmpty } from '@velaros-ai/core'
 
-import type { RegisteredToolMap } from '../../types/capability-types'
-import type {
-  ToolAvailabilityScope,
-  ToolCategoryDefinition,
-  ToolCategoryId,
-  ToolCategoryOverview,
-  ToolDescriptor,
-} from '../../types/tool'
+import type { AgentRuntimeCapabilityPorts,RuntimePromptFeaturePolicy } from '../../contract/requires.js'
+import type { ToolAvailabilityScope, ToolCategoryDefinition, ToolCategoryId, ToolCategoryOverview, ToolDescriptor } from '../../types/agent.js'
 import type { RegisteredTool, RegistryTool, ToolRegistryContext } from '../../types/tools'
-import {
-  type AgentRuntimeCapabilityPorts,
-  resolveCapabilityCategoryDefinitions,
-} from '../../utils/capabilities'
+import type { OverriddenToolMap,RegisteredToolMap } from '../../types/tools.js'
+import { resolveCapabilityCategoryDefinitions } from '../../utils/capabilities'
 import { compareStableStrings } from '../../utils/residency/determinism'
 import { isToolCategoryAvailable } from '../../utils/tools/access-policy'
 import { isToolCompatibleWithModelInputs } from '../../utils/tools/model-input-policy'
 
-import {
-  defaultRuntimePromptFeaturePolicy,
-  type RuntimePromptFeaturePolicy,
-} from './DefaultPromptFeaturePolicy'
-
-type OverriddenToolMap<TTool extends RegistryTool<any> = RegistryTool<any>> = Map<
-  string,
-  Array<RegisteredTool<TTool>>
->
+import { defaultRuntimePromptFeaturePolicy } from './DefaultPromptFeaturePolicy'
 
 function resolveCategoryDefinition(
   categoryId: ToolCategoryId,

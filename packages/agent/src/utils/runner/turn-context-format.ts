@@ -1,8 +1,9 @@
-import type { TurnContextAnchor, TurnContextDelta } from '../../types/turn-context'
 
 // 环境回合上下文的唯一渲染实现：pre-send 冻结块（renderer 调用）与 mid-run
 // history note（main 调用）共用，保证同输入同输出、冻结后逐字稳定。
 // 模板刻意只做行拼接，不含 locale/相对时间等任何非确定性成分。
+
+import type { TurnContextBlockInput } from '../../types/runner.js'
 
 export const TurnContextBlockOpenTag = '<environment-context>'
 export const TurnContextBlockCloseTag = '</environment-context>'
@@ -44,14 +45,6 @@ export function stripTurnContextBlocks(text: string): string {
 
 export function formatTurnContextOmittedNote(count: number): string {
   return `较早的 ${count} 条环境变化已因容量限制省略，以下仅包含最新变化。`
-}
-
-export interface TurnContextBlockInput {
-  /** 空数组表示本次不重发 anchors。顺序由 fan-in 定死（sourceId,key），不得重排。 */
-  anchors: readonly TurnContextAnchor[]
-  overflowNotes: readonly string[]
-  /** 已过滤 dismissed、已确定性排序；不得重排。 */
-  deltas: readonly TurnContextDelta[]
 }
 
 /** 无内容时返回 null（护栏：附加 0 字符）。 */

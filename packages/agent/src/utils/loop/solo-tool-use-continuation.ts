@@ -1,67 +1,10 @@
-import type { ModelMessage } from 'ai'
 
-import type { ScopedLog } from '@velaros-ai/core/logger'
 
-import { ChatRuntimeEvents,type StreamTurnEndPayload } from '../../types/chat-runtime'
+import type { RunSoloToolUseContinuationInput, SoloToolUseContinuationEvents, SoloToolUseContinuationResult } from '../../types/loop.js'
 import { createInternalFollowUpMessage } from '../history/internal-messages'
+import { ChatRuntimeEvents } from '../wire/chat-runtime.js'
 
-import {
-  markToolSpaceBootstrapDiscoverySatisfied,
-  type ToolSpaceBootstrapState,
-} from './tool-space-bootstrap-planner'
-
-interface SoloToolUseContinuationEvents {
-  emitRuntime(payload: StreamTurnEndPayload): void
-}
-
-interface SoloToolUseContinuationToolChoice {
-  type: 'tool'
-  toolName: string
-}
-
-interface SoloToolUseContinuationToolResult {
-  toolName: string
-  error?: LooseOptional<string>
-}
-
-interface RunSoloToolUseContinuationInput<
-  TExecutor,
-  TToolContext,
-  TEvents extends SoloToolUseContinuationEvents = SoloToolUseContinuationEvents,
-> {
-  turn: number
-  history: ModelMessage[]
-  executor: TExecutor
-  bootstrapToolChoice: LooseOptional<SoloToolUseContinuationToolChoice>
-  getBootstrapState(): ToolSpaceBootstrapState
-  setBootstrapState(state: ToolSpaceBootstrapState): void
-  appendToolResultsToHistory(
-    history: ModelMessage[],
-    executor: TExecutor
-  ): Promise<SoloToolUseContinuationToolResult[]>
-  toolContext: TToolContext
-  tickLoopReminders(input: {
-    mode: 'solo'
-    phase: 'after-tool'
-    toolContext: TToolContext
-  }): Promise<string[]>
-  /**
-   * 护栏 1（轮次上限）margin 记账：本轮是收尾提醒后的又一次工具调用时返回 true = 强制收尾。
-   * 机制单源在 LoopWindDownGuard（面装配为 guard.recordToolUseTurn）。
-   */
-  shouldForceStopAfterToolTurn(): boolean
-  hardCap: number
-  events: TEvents
-  log: Pick<ScopedLog, 'debug' | 'warn'>
-}
-
-type SoloToolUseContinuationResult =
-  | { status: 'continue'; toolResults: SoloToolUseContinuationToolResult[] }
-  | {
-      status: 'completed'
-      reason: 'wind-down-cap'
-      toolResults: SoloToolUseContinuationToolResult[]
-    }
+import { markToolSpaceBootstrapDiscoverySatisfied } from './tool-space-bootstrap-planner'
 
 async function runSoloToolUseContinuation<
   TExecutor,
@@ -102,8 +45,3 @@ async function runSoloToolUseContinuation<
 }
 
 export { runSoloToolUseContinuation }
-export type {
-  RunSoloToolUseContinuationInput,
-  SoloToolUseContinuationEvents,
-  SoloToolUseContinuationResult,
-}

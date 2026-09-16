@@ -48,8 +48,6 @@
 //  - 历史为空或超出体积上限的线程不可续跑，结果里 `resumable=false`，父 Agent 据此改为新派。
 import { randomUUID } from 'node:crypto'
 
-import type { ModelMessage } from 'ai'
-
 import {
   isArray,
   isBoolean,
@@ -64,36 +62,14 @@ import {
 } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
+import type { AgentRuntimeCapabilityPorts, CustomSubAgentRegistry, SubAgentConfigPort, SubAgentQueryRunner, SubAgentTypeProvider } from '../../contract/requires.js'
 import type { AgentEvent } from '../../types/agent'
-import {
-  type CustomSubAgentRegistry,
-  type SubAgentConfigPort,
-  type SubAgentDispatchInput,
-  type SubAgentQueryRunner,
-  type SubAgentToolCategoryRequestResult,
-  type SubAgentToolContext,
-} from '../../types/dispatch-host-ports'
-import type { ExecutionTaskStatus } from '../../types/execution'
-import type {
-  AgentExecutionConfig,
-} from '../../types/runtime-configuration'
-import type { SubAgentTaskResult, SubAgentUsage } from '../../types/sub-agent-task'
-import type {
-  TeamModelRouteCategory,
-  TeamModelSelectionTrace,
-  ThinkingDepth,
-} from '../../types/team'
-import type { ToolCategoryId, UserActionCard } from '../../types/tool'
-import {
-  type AgentRuntimeCapabilityPorts,
-  resolveCapabilityDelegationPolicy,
-} from '../../utils/capabilities'
-import {
-  buildSubAgentDispatchInstruction,
-  buildSubAgentResumeBriefing,
-  buildSubAgentResumeInstruction,
-  type SubAgentResumeBriefing,
-} from '../../utils/delegation/instruction'
+import type {SubAgentTaskResult, SubAgentUsage, TeamModelRouteCategory, TeamModelSelectionTrace, ThinkingDepth, ToolCategoryId, UserActionCard } from '../../types/agent.js'
+import type { DangerousConfirmationStatusSink, DispatchPlan, ResolvedDispatchPlan, ResolvedSubAgentTypeConfig, SubAgentDispatchCatalog, SubAgentDispatchLimitsSnapshot, SubAgentDispatchRequest, SubAgentModelChoice, SubAgentResumeBriefing, SubAgentRetryState, SubAgentThreadRetention, SubAgentToolCategoryRequestResult, SubAgentToolContext, SubAgentWorkerExecutionOutput, TeamModelRouteResult, WorkerStatusArgs } from '../../types/delegation.js'
+import type { AgentExecutionLimitOverrides, AgentExecutionLimits } from '../../types/loop.js'
+import type { SubAgentGuidanceRelayWorkerHandle } from '../../types/records.js'
+import { resolveCapabilityDelegationPolicy } from '../../utils/capabilities'
+import { buildSubAgentDispatchInstruction, buildSubAgentResumeBriefing, buildSubAgentResumeInstruction } from '../../utils/delegation/instruction'
 import {
   formatSubAgentBackgroundArtifact,
   formatSubAgentFailureRedispatchGuidance,
@@ -106,165 +82,23 @@ import {
 } from '../../utils/delegation/result-format'
 import { resolveReadonlyMode } from '../../utils/delegation/sub-agent-readonly-policy'
 import { buildSubAgentTaskResult } from '../../utils/delegation/sub-agent-result-builder'
-import {
-  resolveCustomSubAgentTypeConfig,
-  type ResolvedSubAgentTypeConfig,
-  resolveSubAgentTypeConfig,
-  type SubAgentDispatchCatalog,
-  type SubAgentTypeProvider,
-} from '../../utils/delegation/sub-agent-type-registry'
-import {
-  type AgentExecutionLimitOverrides,
-  type AgentExecutionLimits,
-  resolveAgentExecutionLimits,
-} from '../../utils/loop/execution-limits'
+import { resolveCustomSubAgentTypeConfig, resolveSubAgentTypeConfig } from '../../utils/delegation/sub-agent-type-registry'
+import { resolveAgentExecutionLimits } from '../../utils/loop/execution-limits'
 import { AgentConnectionRetryHelper } from '../loop/RetryPolicy'
 import type { ExecutionEventBus } from '../records/ExecutionEventBus'
 import type { KernelBackgroundJobManager } from '../records/KernelBackgroundJobManager'
-import type {
-  SubAgentGuidanceRelayRegistry,
-  SubAgentGuidanceRelayWorkerHandle,
-} from '../records/SubAgentGuidanceRelayRegistry'
+import type { SubAgentGuidanceRelayRegistry } from '../records/SubAgentGuidanceRelayRegistry'
 import { createUnattendedSubAgentApprovalPort } from '../tools/DefaultDenyApprovalPort'
 
-import { Semaphore, type SubAgentDispatchLimitsSnapshot } from './Semaphore'
+import { Semaphore } from './Semaphore'
 import { SubAgentProgressDigestRecorder } from './SubAgentProgressDigestRecorder'
 import { SubAgentProgressLedger } from './SubAgentProgressLedger'
-import {
-  SubAgentSessionStore,
-  type SubAgentThreadRetention,
-} from './SubAgentSessionStore'
-import type { TeamModelRouter, TeamModelRouteResult } from './TeamModelRouter'
+import { SubAgentSessionStore } from './SubAgentSessionStore'
+import type { TeamModelRouter } from './TeamModelRouter'
 import type { WriteLeaseCoordinator } from './WriteLeaseCoordinator'
-
-interface SubAgentDispatchRequest {
-  input: SubAgentDispatchInput
-  parentCtx: SubAgentToolContext
-  events: ExecutionEventBus
-  config: AgentExecutionConfig
-  /**
-   * 本次顶层执行的 id；缺省取 `config.execution.executionId`，再缺省回退父会话 id。
-   * 给没有 ToolExecutionApi 的宿主按轮区分执行用——执行结束时把同一个值交给 `clearExecution`。
-   */
-  executionId?: LooseOptional<string>
-}
-
-/** 派发身份分片：一次子 Agent 运行的稳定标识。 */
-interface DispatchIdentityScope {
-  threadId: string
-  activationId: string
-  title: string
-}
-
-/** 派发类型分片：解析后的类型配置与只读模式。 */
-interface DispatchTypeScope {
-  typeConfig: ResolvedSubAgentTypeConfig
-  readonlyMode: boolean
-}
-
-/** 派发提示分片：拼装子 Agent 指令所需的输入。 */
-interface DispatchPromptScope {
-  toolCategories: ToolCategoryId[]
-  priorFindingsBriefing: Nullable<string>
-  /** 续跑时上一次运行的结局；新派为 null（此时拼完整委派指令，续跑只拼追加任务）。 */
-  resumeBriefing: Nullable<SubAgentResumeBriefing>
-}
-
-/** 派发控制分片：运行编排所需的事件面 / 重试 / 中继 / 模型覆盖 / effort 覆盖。 */
-interface DispatchControlScope {
-  workerEvents: ExecutionEventBus
-  retryState: SubAgentRetryState
-  relayHandle: Nullable<SubAgentGuidanceRelayWorkerHandle>
-  resolvedModelOverride: Nullable<string>
-  /** reasoning effort 覆盖（D7）；null 表示继承会话 effort（由模型路由填 systemConfig.thinkingDepth）。 */
-  resolvedEffortOverride: Nullable<ThinkingDepth>
-  onTransientRetry?: (error: AppError, attempt: number) => void
-}
-
-/**
- * 派发计划：一次子 Agent 派发的全部输入，**按域分片**，由 runWorker 构造一次、贯穿写租约与路由
- * 执行全链（宪章 §12.7「两表示最多一个转换器」/ §12.8「对象按域分片」）。取代旧
- * `runWithOptionalWriteLease` 14 位置参数列 → `ExecuteWorkerRouteArgs` re-bag → `ExecuteWithRouteArgs`
- * 摊平的三态转换链。
- */
-interface DispatchPlan {
-  request: SubAgentDispatchRequest
-  /** 已通过父线程授权、运行期自动放行确认的工具上下文（尚未做沙箱作用域）。 */
-  parentCtx: SubAgentToolContext
-  identity: DispatchIdentityScope
-  type: DispatchTypeScope
-  prompt: DispatchPromptScope
-  control: DispatchControlScope
-}
-
-/**
- * 执行相位分片：路由解析时一次性派生的字段（路由 / 已解析模型 / 资源作用域 / 指令 / 软上限 /
- * 续跑历史 / 输出汇）。由 runWithOptionalWriteLease（**唯一转换器**）解析后附加到派发计划。
- */
-interface DispatchExecutionScope {
-  route: TeamModelRouteResult
-  resolvedModel: Nullable<string>
-  resourceId: Nullable<string>
-  instruction: string
-  /** 子智能体软上限时间戳（毫秒）；到点收尾返回而非硬杀。null 表示不施加时间上限。 */
-  softDeadlineAt: Nullable<number>
-  initialHistory: ModelMessage[]
-  onStructuredOutput: (value: unknown) => void
-  onUsage: (usage: SubAgentUsage) => void
-  onHistoryUpdate: (history: ModelMessage[]) => void
-}
-
-/**
- * 解析后的派发计划：基础计划 + 沙箱作用域后的 `parentCtx` + 执行相位分片。是
- * executeWithRoute / 瞬态重试相位的唯一入参。
- */
-interface ResolvedDispatchPlan extends DispatchPlan {
-  execution: DispatchExecutionScope
-}
-
-interface WorkerStatusArgs {
-  request: SubAgentDispatchRequest
-  threadId: string
-  activationId: string
-  executionKey: string
-  title: string
-  agentName: string
-  typeConfig: ResolvedSubAgentTypeConfig
-  status: ExecutionTaskStatus
-  dispatchMode: 'sync' | 'async'
-  resolvedModel?: LooseOptional<string>
-  result?: SubAgentTaskResult
-  summary?: string
-  error?: string
-}
-
-interface SubAgentRetryState {
-  hasVisibleOutput: boolean
-  hasToolUse: boolean
-}
-
-interface SubAgentWorkerExecutionOutput {
-  text: string
-  structuredOutput?: unknown
-  usage?: SubAgentUsage
-  modelTrace?: TeamModelSelectionTrace
-}
-
-/** 子 Agent 模型的决定结果：沿用主模型，或采用主 Agent 指定的同厂商模型。 */
-interface SubAgentModelChoice {
-  model: Nullable<string>
-  reason: 'inherited-main-model' | 'requested-model' | 'requested-model-unavailable'
-  requestedModel?: LooseOptional<string>
-  selectableModelIds?: LooseOptional<readonly string[]>
-}
 
 /** 回报给主 Agent 的同厂商可选模型上限：自定义/聚合厂商的目录可能很长，结果里只放前若干个。 */
 const MaxReportedSelectableModels = 24
-
-type DangerousConfirmationStatusSink = (
-  status: Extract<ExecutionTaskStatus, 'awaiting_confirmation' | 'running'>,
-  summary: string
-) => void
 
 const SubAgentTransientRetryMaxAttempts = 2
 const DefaultMaxConcurrentSubAgents = 4
@@ -1833,4 +1667,3 @@ class SubAgentDispatcher {
 }
 
 export { resolveSubAgentExecutionKey, SubAgentDispatcher }
-export type { SubAgentDispatchRequest }

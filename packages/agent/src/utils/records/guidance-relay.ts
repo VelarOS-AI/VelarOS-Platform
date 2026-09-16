@@ -3,7 +3,8 @@ import { z } from 'zod'
 
 import { isArray, isBlank, isEmpty, isNonBlankString, isObject, isString, optionalWhen, optionalWhenLazy, truncate } from '@velaros-ai/core'
 
-import type { SubAgentGuidanceRelayWorkerSnapshot } from '../../impl/records/SubAgentGuidanceRelayRegistry'
+import type { BuildGuidanceRelayPromptInput, GuidanceRelayPlan, MainAgentGuidanceDelivery,SubAgentGuidanceRelayWorkerSnapshot } from '../../types/records.js'
+
 
 const GuidanceRelayTargetSchema = z.object({
   threadId: z.string().min(1),
@@ -31,14 +32,7 @@ const GuidanceRelayPlanSchema = z
     relays: z.array(GuidanceRelayTargetSchema).default([]),
     mainAgent: GuidanceRelayMainAgentSchema.optional(),
   })
-  .passthrough()
-
-type GuidanceRelayPlan = z.infer<typeof GuidanceRelayPlanSchema>
-
-interface BuildGuidanceRelayPromptInput {
-  userGuidance: string
-  workers: readonly SubAgentGuidanceRelayWorkerSnapshot[]
-}
+  .passthrough() satisfies z.ZodType<GuidanceRelayPlan>
 
 function extractGuidanceUserText(message: ModelMessage): Nullable<string> {
   if (message.role !== 'user') return null
@@ -123,12 +117,6 @@ function resolveMainAgentGuidanceMessage(plan: GuidanceRelayPlan): Nullable<stri
   if (isEmpty(plan.relays)) return `[主控补充] ${understanding}`
 
   return `[主控补充] ${understanding}\n\n（已向 ${plan.relays.length} 个子任务 relay 引导，子 Agent 会按主控理解继续执行。）`
-}
-
-/** 主控这一侧本次收到的是规划改写还是用户原文。 */
-interface MainAgentGuidanceDelivery {
-  message: ModelMessage
-  kind: 'planned-rewrite' | 'verbatim'
 }
 
 /**
@@ -274,4 +262,3 @@ export {
   resolveMainAgentGuidanceDelivery,
   resolveMainAgentGuidanceMessage,
 }
-export type { GuidanceRelayPlan, MainAgentGuidanceDelivery }

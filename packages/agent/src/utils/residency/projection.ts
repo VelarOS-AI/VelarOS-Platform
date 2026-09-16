@@ -15,6 +15,7 @@ import type { ModelMessage } from 'ai'
 
 import { isArray, isEmpty, isFiniteNumber, isNull, isRecord, isString } from '@velaros-ai/core'
 
+import type { ContextProjectionBudget, ContextProjectionMeasurement, ContextProjectionResult, ContextRecord, ContextRecordToolPart, ContextResidency, ContextResidencyVector,ProjectContextLedgerInput, RenderedRecord } from '../../types/residency.js'
 import { buildContextRefEnvelope } from '../context/context-ref-envelope'
 
 import {
@@ -23,66 +24,9 @@ import {
   hasExcerptRenderMaterial,
 } from './admission'
 import { toContextAnchorTexts } from './anchors'
-import {
-  type ContextRecord,
-  type ContextRecordToolPart,
-  type ContextResidency,
-  type ContextResidencyVector,
-  estimateResidencyTokens,
-} from './context-record'
+import { estimateResidencyTokens } from './context-record'
 import { stableFingerprint } from './determinism'
 import { estimateMessageBudgetChars } from './message-facts'
-
-export interface ContextProjectionBudget {
-  /** 尾保护轮数：最近若干轮的记录治理器永不选中（投影落在活动尾）。 */
-  tailProtectTurns: number
-  /**
-   * 尾保护条数：最近若干**条记录**。与轮数取**交集**——两条判据都满足才受保护。
-   *
-   * 只按对话轮算尾保护有一个致命形态：一次长自主运行（用户发一条指令后 agent 连跑几十轮工具）
-   * 整本账本只有 1 个对话轮，于是每条记录都在窗口内，治理器一条候选都收不到、100% 空转（审计
-   * V1）。轮是"模型正在聊哪件事"的量纲，条数是"模型手边还需要看多少东西"的量纲，压力来自后者。
-   * 缺省视为不限条数（只按轮），0 = 与 `tailProtectTurns: 0` 同义（尾保护关闭）。
-   */
-  tailProtectMaxRecords?: LooseOptional<number>
-  /** 治理窗口 G（token）。给出即产出占用率，缺省则占用率为 null。 */
-  budgetTokens?: LooseOptional<number>
-  /** token 估算口径，默认 4 字符 1 token。 */
-  charsPerToken?: LooseOptional<number>
-}
-
-export interface ProjectContextLedgerInput {
-  records: readonly ContextRecord[]
-  residency: ContextResidencyVector
-  budget: ContextProjectionBudget
-  /** 稳定前缀：调用方产出并保证逐轮字节不变。 */
-  stablePrefix?: readonly ModelMessage[]
-  /** 活动尾的外部注入块挂载点（context-dashboard / turn-context delta）。 */
-  tailBlocks?: readonly ModelMessage[]
-}
-
-export interface ContextProjectionStats {
-  recordCount: number
-  byResidency: Record<ContextResidency, number>
-  /** 真正从投影里消失的记录数（被 summary 代表的非工具成员）。 */
-  hiddenCount: number
-  /** 渲染成墓碑的记录数。 */
-  tombstoneCount: number
-  excerptCount: number
-  /** 落在尾保护窗口、治理器不得选中的记录 id（账本序）。 */
-  tailProtectedRecordIds: string[]
-  projectedChars: number
-  projectedTokens: number
-  budgetTokens: Nullable<number>
-  occupancyPercent: Nullable<number>
-  /** 账本段的内容指纹：前缀是否漂移一眼可判（缓存回归的探针）。 */
-  ledgerFingerprint: string
-}
-
-export interface ContextProjectionResult {
-  messages: ModelMessage[]
-  stats: ContextProjectionStats
-}
 
 /** 账本投影：唯一的 prompt 组装口。 */
 export function projectContextLedger(
@@ -156,13 +100,6 @@ export function projectContextLedger(
       ledgerFingerprint: stableFingerprint(ledgerMessages),
     },
   }
-}
-
-export interface ContextProjectionMeasurement {
-  projectedChars: number
-  projectedTokens: number
-  /** 尾保护窗口内（治理器不得选中）的记录 id。 */
-  tailProtectedRecordIds: Set<string>
 }
 
 /**
@@ -305,10 +242,6 @@ function isHiddenInProjection(record: ContextRecord, residency: ContextResidency
 
   return residency === 'SUMMARIZED'
 }
-
-type RenderedRecord =
-  | { kind: 'inline' | 'excerpt' | 'tombstone'; message: ModelMessage }
-  | { kind: 'hidden'; message: null }
 
 function renderRecord(record: ContextRecord, residency: ContextResidency): RenderedRecord {
   const message = record.message

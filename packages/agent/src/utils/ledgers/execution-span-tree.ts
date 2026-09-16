@@ -6,22 +6,9 @@
 // 而非丢弃，让消费面拿到尽力而为的部分树而非崩溃。
 import { isNotNull, isNull } from '@velaros-ai/core'
 
-import type { ExecutionSpan } from '../wire/observability'
+import type { ExecutionSpan } from '../../types/agent.js'
+import type { ExecutionSpanTree,ExecutionSpanTreeNode } from '../../types/ledgers.js'
 
-/** 树节点：一条 span + 其子 span id（按 startedAt 升序，tie-break spanId）。 */
-export interface ExecutionSpanTreeNode {
-  span: ExecutionSpan
-  childIds: string[]
-}
-
-/** 执行 span 树投影：根集合、按 id 索引的节点、孤儿集合。 */
-export interface ExecutionSpanTree {
-  /** parentSpanId 为 null 的顶层 span（通常是 run span），按 startedAt 升序。 */
-  rootIds: string[]
-  nodesById: Record<string, ExecutionSpanTreeNode>
-  /** parentSpanId 指向账本中不存在 span 的孤儿（活读时父未落盘），按 startedAt 升序。 */
-  orphanIds: string[]
-}
 
 /** 稳定比较器：先 startedAt 升序，等值按 spanId 字典序，保证投影确定性。 */
 function compareSpans(

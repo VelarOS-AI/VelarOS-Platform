@@ -1,11 +1,8 @@
 import { isEmpty, isFalse, isNotNull, isUndefined } from '@velaros-ai/core'
 
-import type {
-  TurnContextDelta,
-  TurnContextInspectHint,
-  TurnContextSourceId,
-  TurnContextSourcePeekInput,
-} from '../../types/turn-context'
+import type { TurnContextDelta, TurnContextInspectHint, TurnContextSourceId, TurnContextSourcePeekInput } from '../../types/agent.js'
+import type { TurnContextAppendBus,TurnContextAppendListener } from '../../types/records.js'
+
 
 /** 进程代次：重启后与持久化旧 cursor 不匹配，消费方不回放旧 delta 只重发 anchors。 */
 export const TurnContextProcessGeneration = `g_${Date.now().toString(36)}_${Math.random()
@@ -131,20 +128,6 @@ export class TurnContextLedger {
 
 const DefaultLedgerMaxEntries = 100
 const DefaultMaxSessions = 64
-
-export type TurnContextAppendListener = (sessionId: string, sourceId: TurnContextSourceId) => void
-
-/**
- * 宿主与能力包之间的写入通知窄接口。
- *
- * 能力包只依赖这个结构契约，不依赖 {@link TurnContextAppendHub} 的具体类身份。这样宿主升级
- * Agent 包时，即使能力包仍由另一个兼容版本构建，也不会因为类的 private 字段变成名义类型
- * 而在装配边界产生两份互不兼容的声明。
- */
-export interface TurnContextAppendBus {
-  subscribe(listener: TurnContextAppendListener): () => void
-  emit(sessionId: string, sourceId: TurnContextSourceId): void
-}
 
 /**
  * 环境 delta 写入通知总线（每宿主一个实例，经 composition 注入给账本与订阅方）。

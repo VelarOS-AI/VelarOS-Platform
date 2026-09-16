@@ -1,24 +1,6 @@
-import type { ChatPromptFeatureId } from '../../types/agent'
-import type { AgentRoleDefinition } from '../../types/role-types'
-import type { AgentRoleId } from '../../types/system'
-import type { CapabilityScopeId, ToolCategoryId } from '../../types/tool'
-
-export interface AgentRoleToolBindings {
-  getToolCategoryId: (toolName: string) => ToolCategoryId
-  getToolNamesForCategories: (categories: ToolCategoryId[]) => string[]
-  conversationToolNames: readonly string[]
-}
-
-export interface AgentRoleDescriptorProviderContext {
-  selectedSkillIds: readonly string[]
-  promptFeatures: readonly ChatPromptFeatureId[]
-  capabilityScope?: CapabilityScopeId
-}
-
-/** Product composition owns concrete roles, skills and category bindings. */
-export interface AgentRoleDescriptorProvider {
-  listRoles(context: AgentRoleDescriptorProviderContext): readonly AgentRoleDefinition[]
-}
+import type { AgentRoleDescriptorProvider } from '../../contract/requires.js'
+import type { AgentRoleId } from '../../types/agent.js'
+import type { AgentRoleDefinition, AgentRoleDescriptorProviderContext } from '../../types/runner.js'
 
 class AgentRoleRegistry {
   constructor(

@@ -8,9 +8,8 @@ import type {
   ExecutionModeId,
   ToolExecutionPlanUpdate,
 } from '../src/types/agent'
-import type { ExecutionTaskPlanStep } from '../src/types/execution'
-import type { ActiveContextArtifact, ActiveContextUpsertInput } from '../src/types/protocol'
-import type { RuntimePromptSnapshot } from '../src/utils/guidance/shared'
+import type { ActiveContextArtifact, ActiveContextUpsertInput, ExecutionTaskPlanStep } from '../src/types/agent.js'
+import type { RuntimePromptSnapshot } from '../src/types/guidance.js'
 
 function createPlanToolContext(features: ChatPromptFeatureId[] = []) {
   const codingSession = new CodingSessionTracker([], features)

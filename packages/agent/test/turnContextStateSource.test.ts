@@ -1,10 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 
-import {
-  type TurnContextAppendBus,
-  TurnContextLedger,
-  TurnContextSessionLedgers,
-} from '../src/impl/records/TurnContextLedger'
+import { TurnContextLedger, TurnContextSessionLedgers } from '../src/impl/records/TurnContextLedger'
+import type { TurnContextAppendBus } from '../src/types/records.js'
 
 /**
  * 状态型 source 的「后来者取代」语义。

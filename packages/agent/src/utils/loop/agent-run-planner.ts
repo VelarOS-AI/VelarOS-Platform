@@ -1,40 +1,17 @@
-import type { ModelMessage } from 'ai'
 
 import { isEmpty } from '@velaros-ai/core'
 
 import { agentRunPlanLedgerFactory } from '../../impl/loop/AgentRunPlanLedgerFactory'
-import type {
-  AgentIntentDomain,
-  AgentIntentPlan,
-  AgentRunPlan,
-  AgentRunPlanLedgerEntry,
-  AgentRuntimePlan,
-  CapabilityRunPlan,
-  ContextRunPlan,
-  RecoveryRunPlan,
-} from '../../types/agent-run-plan'
-import type { RunProfileSelectionId } from '../../types/run-profile'
-import type { AgentRuntimeCapabilityPorts } from '../capabilities'
+import type { AgentIntentDomain, AgentIntentPlan, AgentRunPlan, AgentRunPlanLedgerEntry, BuildAgentRunPlanInput,BuildAgentRunPlanLedgerInput, PlanAgentIntentInput } from '../../types/loop.js'
 
-import { capabilityRunPlanner, type PlanCapabilityRunInput } from './capability-run-planner'
+import { capabilityRunPlanner } from './capability-run-planner'
 import {
   detectAgentIntentSignals,
   extractLatestUserTextFromMessages,
   isLowSignalIntentText,
   normalizeIntentText,
 } from './intent-signals'
-import {
-  type CapabilityEvidenceSnapshot,
-  contextRunPlanner,
-  promptRunPlanner,
-  recoveryRunPlanner,
-} from './runtime-run-planner'
-
-export interface PlanAgentIntentInput {
-  messages: ModelMessage[]
-  capabilityPorts?: AgentRuntimeCapabilityPorts
-  capabilityScopeId?: string
-}
+import { contextRunPlanner, promptRunPlanner, recoveryRunPlanner } from './runtime-run-planner'
 
 class AgentIntentPlanner {
   public plan(input: PlanAgentIntentInput): AgentIntentPlan {
@@ -92,14 +69,6 @@ class AgentIntentPlanner {
     if (isEmpty(domains)) return 'low'
     return domains.length === 1 ? 'single-domain' : 'multi-domain'
   }
-}
-
-export interface BuildAgentRunPlanLedgerInput {
-  intent: AgentIntentPlan
-  context: ContextRunPlan
-  capabilities: CapabilityRunPlan
-  recovery: RecoveryRunPlan
-  capabilityEvidenceSnapshot?: CapabilityEvidenceSnapshot
 }
 
 class AgentRunPlanLedgerComposer {
@@ -160,15 +129,6 @@ class AgentRunPlanLedgerComposer {
         : []),
     ]
   }
-}
-
-export interface BuildAgentRunPlanInput
-  extends Omit<PlanCapabilityRunInput, 'messages' | 'runProfile' | 'toolSchemaCharBudget'> {
-  history: ModelMessage[]
-  roleRuntime: AgentRuntimePlan
-  requestedRunProfile: RunProfileSelectionId
-  capabilityEvidenceSnapshot?: CapabilityEvidenceSnapshot
-  toolSchemaBudgetScale?: number
 }
 
 class AgentRunPlanComposer {

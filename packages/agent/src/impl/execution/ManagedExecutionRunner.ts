@@ -4,57 +4,14 @@ import { isBlank, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import type { Logger } from '@velaros-ai/core/logger'
 
-import type { AgentEvent, ToolExecutionApi } from '../../types/agent'
-import { ChatRuntimeEvents,type StreamStatePayload } from '../../types/chat-runtime'
-import type { ExecutionRecord } from '../../types/execution'
-import type {
-  ExecutionActivitySignalsPort,
-  ExecutionCollaborationPort,
-  ExecutionResourcePort,
-} from '../../types/execution-host-ports'
-import type { AgentRuntimeInputPort } from '../../utils/runner/runtime-input-port'
-import type { ExecutionEventBus } from '../records/ExecutionEventBus'
+import type { AgentRuntimeInputPort,ExecutionActivitySignalsPort, ExecutionCollaborationPort, ExecutionResourcePort, ToolExecutionApi } from '../../contract/requires.js'
+import type { AgentEvent } from '../../types/agent'
+import type { ExecutionRecord,StreamStatePayload } from '../../types/agent.js'
+import type { ExecutionAbortOptions, RunManagedExecutionParams } from '../../types/execution.js'
+import { ChatRuntimeEvents } from '../../utils/wire/chat-runtime.js'
 import type { ExecutionRecords } from '../records/ExecutionRecords'
 import type { ExecutionStore } from '../records/ExecutionStore'
 import type { SourceSessionGuard } from '../records/SourceSessionGuard'
-
-import type { ExecutionAbortOptions } from './ExecutionStateFacade'
-
-interface ManagedExecutionController {
-  /** 已创建并写入 store 的执行记录。 */
-  execution: ExecutionRecord
-  /** 当前执行的取消控制器，会透传给 Agent 和工具。 */
-  abortController: AbortController
-  /** 工具可调用的执行 API，用于创建任务、等待确认、更新计划等。 */
-  executionApi: ToolExecutionApi
-  /** 已加上 agent tap 的事件总线。 */
-  events: ExecutionEventBus
-  /** 手动刷新 debug payload，供计划/任务变化后立即同步 UI。 */
-  emitDebug: () => void
-  /** 读取并移除本执行下一条运行中引导消息。 */
-  consumeGuidance: () => Nullable<ModelMessage>
-  /** 原子运行时输入端口；final drain 后 seal。 */
-  runtimeInput: AgentRuntimeInputPort
-}
-
-interface RunManagedExecutionParams {
-  /** renderer/source 会话 id。 */
-  sourceSessionId: string
-  /** 同一 source session 内的宿主 scope。 */
-  sourceScopeMetadata?: LooseOptional<Record<string, unknown>>
-  /** 原始模型消息。 */
-  messages: ModelMessage[]
-  /** 调用方提供的事件总线。 */
-  events: ExecutionEventBus
-  /** 需要被宿主协作层观察的执行者；纯聊天不需要声明。 */
-  collaborationActor?: {
-    kind: 'main-agent'
-    operation: string
-    summary?: string
-  }
-  /** 真正执行业务的回调，由具体 execution host 注入。 */
-  run: (controller: ManagedExecutionController) => Promise<void>
-}
 
 interface ManagedExecutionRunnerDependencies {
   log: Pick<Logger, 'info' | 'warn'>
@@ -331,8 +288,4 @@ function resolveAbortReason(reason: unknown): string {
 }
 
 export { ManagedExecutionRunner }
-export type {
-  ManagedExecutionController,
-  ManagedExecutionRunnerDependencies,
-  RunManagedExecutionParams,
-}
+export type { ManagedExecutionRunnerDependencies }

@@ -6,11 +6,8 @@ import { z } from 'zod'
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 
-import {
-  type AgentExecutionStackToolContext,
-  type AgentExecutionStackToolRegistry,
-  createAgentExecutionStack,
-} from '../src/impl/assembly/AgentExecutionStack'
+import type { AgentExecutionStackToolRegistry,AgentSystemRuntimeConfig } from '../src/contract/requires.js'
+import { createAgentExecutionStack } from '../src/impl/assembly/AgentExecutionStack'
 import { AgentLoopContextUsageManager } from '../src/impl/context/AgentLoopContextUsageManager'
 import { SubAgentDispatcher } from '../src/impl/delegation/SubAgentDispatcher'
 import { TeamModelRouter } from '../src/impl/delegation/TeamModelRouter'
@@ -27,10 +24,10 @@ import { RunContext } from '../src/impl/runner/RunContext'
 import { CodingSessionTracker } from '../src/impl/session/CodingSessionTracker'
 import { defaultRuntimePromptFeaturePolicy } from '../src/impl/tools/DefaultPromptFeaturePolicy'
 import type { AgentEvent } from '../src/types/agent'
-import type { AgentSystemRuntimeConfig } from '../src/types/runtime-configuration'
-import type { AgentModelInputModality } from '../src/types/tool'
+import type { AgentModelInputModality } from '../src/types/agent.js'
+import type { SubAgentTypeDescriptor } from '../src/types/delegation.js'
+import type { AgentExecutionStackToolContext } from '../src/types/runner.js'
 import { parseSubAgentToolResult } from '../src/utils/delegation/sub-agent-result-builder'
-import type { SubAgentTypeDescriptor } from '../src/utils/delegation/sub-agent-type-registry'
 import { createBuiltInPromptRegistry } from '../src/utils/guidance/catalog'
 import { AgentTurnHistoryHelper } from '../src/utils/history/turn'
 import { executeLoopTurnWithContextOverflowRecovery } from '../src/utils/loop/agent-loop'

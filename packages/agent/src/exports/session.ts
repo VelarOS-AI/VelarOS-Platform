@@ -13,49 +13,28 @@ export type {
   AgentSessionResourceReference,
   CreateAgentSessionMetadataInput,
 } from '../contract/requires'
-export {
-  AgentBackgroundAgentStateSchema,
-  AgentSessionLifecycleStatusSchema,
-} from '../contract/requires'
+export type { AgentSessionEventPort } from '../contract/requires.js'
 export {
   AgentSessionLeaseConflictError,
   isTerminalAgentBackgroundState,
   normalizeAgentSessionListLimit,
   resolveAgentSessionLeaseClaim,
 } from '../impl/errors/AgentSessionLeaseConflictError'
-export type { AgentGoal, AgentGoalStatus } from '../impl/product-session/AgentGoalService'
 export { AgentGoalService } from '../impl/product-session/AgentGoalService'
-export type {
-  AgentPlan,
-  AgentPlanStatus,
-  AgentPlanStep,
-  AgentPlanStepStatus,
-} from '../impl/product-session/AgentPlanService'
 export { AgentPlanService } from '../impl/product-session/AgentPlanService'
-export type {
-  AgentQuestionRequest,
-  AskAgentQuestionInput,
-} from '../impl/product-session/AgentQuestionService'
 export { AgentQuestionService } from '../impl/product-session/AgentQuestionService'
-export type { AgentSessionApplicationEvent, AgentSessionEventPort } from '../types/event-port'
-export type {
-  AgentSessionArchiveEnvelope,
-  AgentSessionArchiveEvent,
-} from '../utils/product-session/archive'
+export type { AgentSessionApplicationEvent } from '../types/product-session.js'
+export type { AgentPlan, AgentPlanStatus, AgentPlanStep, AgentPlanStepStatus } from '../types/product-session.js'
+export type { AgentGoal, AgentGoalStatus } from '../types/product-session.js'
+export type { AgentQuestionRequest, AskAgentQuestionInput } from '../types/product-session.js'
+export type { AgentSessionArchiveEnvelope, AgentSessionArchiveEvent } from '../types/product-session.js'
+export type { AgentPermissionAction, AgentPermissionReply, AgentPermissionRequest, AgentPermissionRisk, AgentPermissionRule, RequestAgentPermissionInput } from '../types/product-session.js'
 export {
   createAgentSessionArchiveEnvelope,
   parseAgentSessionArchiveEnvelope,
   VelarosAgentSessionArchiveFormat,
   VelarosAgentSessionArchiveSchemaVersion,
 } from '../utils/product-session/archive'
-export type {
-  AgentPermissionAction,
-  AgentPermissionReply,
-  AgentPermissionRequest,
-  AgentPermissionRisk,
-  AgentPermissionRule,
-  RequestAgentPermissionInput,
-} from '../utils/product-session/permissions'
 export {
   agentPermissionWildcardMatch,
   evaluateAgentPermissionRules,
@@ -63,3 +42,4 @@ export {
   normalizeAgentPermissionPatterns,
   normalizeAgentPermissionRequest,
 } from '../utils/product-session/permissions'
+export { AgentBackgroundAgentStateSchema, AgentSessionLifecycleStatusSchema } from '../utils/wire/product-session.js'

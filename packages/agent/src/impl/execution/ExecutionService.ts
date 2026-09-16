@@ -17,46 +17,33 @@ import type { ModelMessage } from 'ai'
 import { isBlank, isEmpty, Log, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
+import type { AuthGatePort, ExecutionActivitySignalsPort, ExecutionCollaborationPort, ExecutionGuidanceRelayPlanner, ExecutionIdFactory,ExecutionRecordsPathPort, ExecutionResourcePort } from '../../contract/requires.js'
 import type {
   StreamTurnContextPayload,
   ToolConfirmationDecisionOptions,
   ToolExecutionPlanUpdate,
 } from '../../types/agent'
-import { ChatRuntimeEvents,type StreamStatePayload } from '../../types/chat-runtime'
-import type {
-  ExecutionProvideInputRequest,
-  ExecutionRecord,
-  ExecutionResolveConfirmationRequest,
-  ExecutionTaskExecutionAdvice,
-  ExecutionTaskRecord,
-} from '../../types/execution'
-import type {
-  AuthGatePort,
-  ExecutionActivitySignalsPort,
-  ExecutionCollaborationPort,
-  ExecutionGuidanceRelayPlanInput,
-  ExecutionGuidanceRelayPlanner,
-  ExecutionRecordsPathPort,
-  ExecutionResourcePort,
-} from '../../types/execution-host-ports'
+import type { ExecutionProvideInputRequest, ExecutionRecord, ExecutionResolveConfirmationRequest, ExecutionTaskExecutionAdvice, ExecutionTaskRecord,StreamStatePayload } from '../../types/agent.js'
+import type { ExecutionAbortOptions, ExecutionGuidanceRelayPlanInput, RunManagedExecutionParams } from '../../types/execution.js'
+import type { ExecutionRouteProvider } from '../../types/records.js'
 import { extractGuidanceUserText } from '../../utils/records/guidance-relay'
 import { ExecutionStateMachine } from '../../utils/records/state-machine'
+import { ChatRuntimeEvents } from '../../utils/wire/chat-runtime.js'
 import type { AgentModSeamDispatcher } from '../mods/AgentModSeamDispatcher'
 import { ExecutionGuidanceQueue } from '../records/ExecutionGuidanceQueue'
 import { ExecutionInteractions } from '../records/ExecutionInteractions'
 import { ExecutionRecords } from '../records/ExecutionRecords'
 import { ExecutionStore } from '../records/ExecutionStore'
-import { type ExecutionRouteProvider, ExecutionRoutingCoordinator } from '../records/ExecWorkflowRoute'
-import type { ExecutionIdFactory } from '../records/MonotonicExecutionIdFactory'
+import { ExecutionRoutingCoordinator } from '../records/ExecWorkflowRoute'
 import { SourceSessionGuard } from '../records/SourceSessionGuard'
 import { SubAgentGuidanceRelayRegistry } from '../records/SubAgentGuidanceRelayRegistry'
 import { createToolExecutionApi } from '../tools/ToolExecutionApiBinding'
 
 import { ExecutionAgentEventFacade } from './ExecutionAgentEventFacade'
 import { ExecutionInteractionFacade } from './ExecutionInteractionFacade'
-import { type ExecutionAbortOptions, ExecutionStateFacade } from './ExecutionStateFacade'
+import { ExecutionStateFacade } from './ExecutionStateFacade'
 import { ExecutionTaskFacade } from './ExecutionTaskFacade'
-import { ManagedExecutionRunner, type RunManagedExecutionParams } from './ManagedExecutionRunner'
+import { ManagedExecutionRunner } from './ManagedExecutionRunner'
 
 interface ExecutionServiceOptions {
   /** 准入断言端口：托管执行启动前由产品宿主确认当前运行态已获授权。 */

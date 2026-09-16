@@ -2,16 +2,12 @@ import type { ModelMessage } from 'ai'
 
 import { isString } from '@velaros-ai/core'
 
+import type { InternalFollowUpModelMessage } from '../../types/history.js'
+
 import { isContextOSGeneratedAssistantMessage } from './context-os-message'
 
 const InternalFollowUpPrefix = '[VelarOS internal follow-up]\n'
 const InternalFollowUpTagName = 'sys_note'
-
-type InternalFollowUpModelMessage = ModelMessage & {
-  velarosInternal?: {
-    kind: 'follow-up'
-  }
-}
 
 function createInternalFollowUpMessage(content: string): ModelMessage {
   return {

@@ -18,6 +18,8 @@
 import { isFiniteNumber } from '@velaros-ai/core'
 import { clamp } from '@velaros-ai/core/utils/number'
 
+import type { ContextWindowBudget, ResolveContextWindowBudgetInput } from '../../types/context.js'
+
 /** 默认安全余量百分比：吸收本地估算与供应方计费口径的偏差。 */
 export const DefaultContextSafetyMarginPercent = 4
 
@@ -35,25 +37,6 @@ export const MaxOutputReserveTokens = 32_000
  * 比常规压缩目标更激进：真正撞墙时要一次性腾出足够空间，避免重试又立刻溢出。
  */
 export const ContextOverflowRecoveryTargetPercent = 60
-
-export interface ContextWindowBudget {
-  /** 模型上下文窗口原始大小（token）。 */
-  contextWindow: number
-  /** 扣除输出预留与安全余量后，输入侧真正可用的额度（token）。 */
-  usableContextWindow: number
-  /** 为模型本轮输出预留的 token 数。 */
-  reservedOutputTokens: number
-  /** 实际采用的安全余量百分比。 */
-  safetyMarginPercent: number
-}
-
-export interface ResolveContextWindowBudgetInput {
-  contextWindow: number
-  /** 显式输出预留；缺省时按窗口比例自动推导并夹在上下限之间。 */
-  reservedOutputTokens?: LooseOptional<number>
-  /** 显式安全余量百分比；缺省采用默认值。 */
-  safetyMarginPercent?: LooseOptional<number>
-}
 
 /** 按窗口比例推导输出预留 token，并夹在上下限之间；显式值优先。 */
 export function resolveReservedOutputTokens(

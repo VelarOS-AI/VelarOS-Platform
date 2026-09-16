@@ -1,36 +1,6 @@
-import type { ToolExecutionApi, ToolExecutionPlanUpdate } from '../../types/agent'
-import type { ExecutionRecord, ExecutionTaskRecord } from '../../types/execution'
-
-interface ToolExecutionApiHost {
-  awaitConfirmation: (
-    executionId: string,
-    ...args: Parameters<ToolExecutionApi['awaitConfirmation']>
-  ) => ReturnType<ToolExecutionApi['awaitConfirmation']>
-  awaitConfirmationDecision: (
-    executionId: string,
-    ...args: Parameters<ToolExecutionApi['awaitConfirmationDecision']>
-  ) => ReturnType<ToolExecutionApi['awaitConfirmationDecision']>
-  awaitUserInput: (
-    executionId: string,
-    ...args: Parameters<ToolExecutionApi['awaitUserInput']>
-  ) => ReturnType<ToolExecutionApi['awaitUserInput']>
-  startTask: (executionId: string, taskId: string) => void
-  completeTask: (executionId: string, taskId: string, result?: LooseOptional<string>) => void
-  failTask: (executionId: string, taskId: string, error: string) => void
-  getExecution: (executionId: string) => ExecutionRecord
-  getCurrentTask: (executionId: string) => ExecutionTaskRecord
-  getCurrentPlan: (executionId: string) => ReturnType<ToolExecutionApi['getCurrentPlan']>
-  updateCurrentPlan: (
-    executionId: string,
-    input: ToolExecutionPlanUpdate
-  ) => ReturnType<ToolExecutionApi['updateCurrentPlan']>
-  getCurrentRecommendedAction: (
-    executionId: string
-  ) => ExecutionTaskRecord['recommendedAction']
-  getCurrentExecutionAdvice: (
-    executionId: string
-  ) => ReturnType<ToolExecutionApi['getCurrentExecutionAdvice']>
-}
+import type { ToolExecutionApi } from '../../contract/requires.js'
+import type { ExecutionRecord } from '../../types/agent.js'
+import type { ToolExecutionApiHost } from '../../types/tools.js'
 
 /** 将公开执行域方法绑定到当前执行，供工具调用。 */
 function createToolExecutionApi(
@@ -58,4 +28,3 @@ function createToolExecutionApi(
 }
 
 export { createToolExecutionApi }
-export type { ToolExecutionApiHost }

@@ -1,63 +1,14 @@
-import type { ModelMessage } from 'ai'
 
 import { isEmpty, isNumber, optionalWhen,toNullable, truncate } from '@velaros-ai/core'
 
-import type { ToolCategoryId } from '../../types/tool'
-import type { AgentRuntimeCapabilityPorts } from '../capabilities'
+import type { AgentRuntimeCapabilityPorts } from '../../contract/requires.js'
+import type { ToolCategoryId } from '../../types/agent.js'
+import type { IntentDomainMatch,ToolSpaceBootstrapDecisionKind, ToolSpaceBootstrapPlan, ToolSpaceBootstrapPlannerInput, ToolSpaceBootstrapState, ToolSpaceForcedToolChoice } from '../../types/loop.js'
 
-import {
-  type AgentIntentSignalDomain,
-  detectAgentIntentSignals,
-  extractLatestUserTextFromMessages,
-  isLowSignalIntentText,
-  normalizeIntentText,
-} from './intent-signals'
+import { detectAgentIntentSignals, extractLatestUserTextFromMessages, isLowSignalIntentText, normalizeIntentText } from './intent-signals'
 
 const KernelDiscoveryTools = new Set(['tooling:map'])
 const MaxForcedDiscoveryPerFingerprint = 2
-
-type ToolSpaceBootstrapDecisionKind = 'none' | 'preload' | 'discover'
-
-interface ToolSpaceBootstrapState {
-  lastDecisionFingerprint?: string
-  forcedDiscoveryCount?: number
-  suppressedUntilTurn?: number
-}
-
-interface ToolSpaceBootstrapDecision {
-  kind: ToolSpaceBootstrapDecisionKind
-  reason?: string
-}
-
-interface ToolSpaceForcedToolChoice {
-  type: 'tool'
-  toolName: 'tooling:map'
-}
-
-interface ToolSpaceBootstrapPlannerInput {
-  messages: ModelMessage[]
-  currentVisibleToolNames: readonly string[]
-  enabledToolCategories: readonly ToolCategoryId[]
-  allowedToolCategories?: readonly ToolCategoryId[]
-  capabilityPorts?: AgentRuntimeCapabilityPorts
-  turn?: number
-  state?: ToolSpaceBootstrapState
-}
-
-interface ToolSpaceBootstrapPlan {
-  decision: ToolSpaceBootstrapDecision
-  pageInCategories: ToolCategoryId[]
-  pageInTools: string[]
-  forcedToolChoice: Nullable<ToolSpaceForcedToolChoice>
-  internalReminder: Nullable<string>
-  nextState: ToolSpaceBootstrapState
-}
-
-interface IntentDomainMatch {
-  id: AgentIntentSignalDomain
-  categories: ToolCategoryId[]
-  requiresDiscovery: boolean
-}
 
 function detectIntentDomains(
   text: string,
@@ -246,9 +197,3 @@ function planToolSpaceBootstrap(input: ToolSpaceBootstrapPlannerInput): ToolSpac
 
 export { planToolSpaceBootstrap }
 export { markToolSpaceBootstrapDiscoverySatisfied }
-export type {
-  ToolSpaceBootstrapDecision,
-  ToolSpaceBootstrapPlan,
-  ToolSpaceBootstrapPlannerInput,
-  ToolSpaceBootstrapState,
-}

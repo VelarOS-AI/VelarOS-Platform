@@ -2,12 +2,9 @@ import assert from 'node:assert/strict'
 
 import { describe, test } from 'bun:test'
 
-import {
-  InMemoryKernelBackgroundJobOutputStore,
-  KernelBackgroundJobManager,
-  type KernelBackgroundJobOutputStore,
-  type KernelBackgroundJobStoredOutput,
-} from '../src/impl/records/KernelBackgroundJobManager'
+import type { KernelBackgroundJobOutputStore } from '../src/contract/requires.js'
+import { InMemoryKernelBackgroundJobOutputStore, KernelBackgroundJobManager } from '../src/impl/records/KernelBackgroundJobManager'
+import type { KernelBackgroundJobStoredOutput } from '../src/types/records.js'
 import { formatSubAgentBackgroundArtifact } from '../src/utils/delegation/result-format'
 
 class ReadFailingOutputStore implements KernelBackgroundJobOutputStore {

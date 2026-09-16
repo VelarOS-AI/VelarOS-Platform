@@ -1,24 +1,6 @@
 import { isArray, isEmpty, isString, isUndefined } from '@velaros-ai/core'
 
-export interface PaginatedJsonPathSelection {
-  offset: number
-  returnedItems: number
-  totalItems: number
-  nextOffset: Nullable<number>
-  serialized: string
-  oversizedItemIndex?: number
-}
-
-/** 正文及非数组 JSON 子树的 UTF-16 字符窗口。 */
-export interface PaginatedTextWindow {
-  offset: number
-  totalChars: number
-  returnedChars: number
-  nextOffset: Nullable<number>
-  text: string
-  /** offset 已越过正文末尾：模型多半在原地打转，必须显式告知而不是静默回第一页。 */
-  beyondEnd: boolean
-}
+import type { PaginatedJsonPathSelection, PaginatedTextWindow } from '../../types/retrieval.js'
 
 /**
  * 正文按 offset 开窗（**字符**语义）。

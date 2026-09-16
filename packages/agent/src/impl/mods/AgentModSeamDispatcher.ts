@@ -14,182 +14,16 @@
 import { isEmpty, isFunction, isObject, isString, optionalWhen, toNullable } from '@velaros-ai/core'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
+import type { AgentModDiagnostic, AgentModHookMatcher, AgentModSeamKind } from '../../types/agent.js'
+import type { AgentModHookContext, AgentModSeamDispatchMethodName,AgentModSeamHandler, AgentModSeamRegistration, AgentModSeamRegistrationInput, AgentModSessionLifecycleEvent, AgentModToolCallBeforeEvent, AgentModToolCallBeforeOutcome, AgentModToolResultAfterEvent, AgentModToolResultAfterOutcome, AgentModTurnContextAppendage, AgentModTurnContextAssembleEvent, AgentModTurnContextAssembleOutcome } from '../../types/mods.js'
 import { compareStableStrings } from '../../utils/residency/determinism'
-import type {
-  AgentModDiagnostic,
-  AgentModHookExecutionMode,
-  AgentModHookMatcher,
-  AgentModSeamKind,
-} from '../../utils/wire/mods'
 
 // ─── 已接线 seam 的事件/结果契约 ──────────────────────────────────────────────
-
-/** 工具调用前（策略门之前）。 */
-interface AgentModToolCallBeforeEvent {
-  readonly toolCallId: string
-  readonly toolName: string
-  readonly args: Readonly<Record<string, unknown>>
-  readonly sessionId: Nullable<string>
-}
-
-/**
- * 工具调用前结果。
- *
- * `block` 只能**减少**可执行面；没有任何「允许」语义的字段（性质②）。
- * `args` 改写后仍要过完整策略门与参数校验。
- */
-interface AgentModToolCallBeforeOutcome {
-  block?: { reason: string }
-  args?: Record<string, unknown>
-}
-
-/** 工具结果收敛后（结果已产生，尚未交回调用方）。 */
-interface AgentModToolResultAfterEvent {
-  readonly toolCallId: string
-  readonly toolName: string
-  readonly args: Readonly<Record<string, unknown>>
-  readonly result: unknown
-  readonly error: Nullable<string>
-  readonly sessionId: Nullable<string>
-}
-
-interface AgentModToolResultAfterOutcome {
-  result?: unknown
-  error?: string
-}
-
-/** 回合上下文组装：段已排序、预算裁剪之前。 */
-interface AgentModTurnContextSegmentView {
-  readonly id: string
-  readonly stability: 'stable' | 'dynamic'
-  readonly source: string
-  readonly priority: number
-}
-
-interface AgentModTurnContextAssembleEvent {
-  readonly stableSegments: readonly AgentModTurnContextSegmentView[]
-  readonly dynamicSegments: readonly AgentModTurnContextSegmentView[]
-}
-
-/** 追加的动态段；与内置段同样计入预算裁剪（不得绕过治理预算）。 */
-interface AgentModTurnContextAppendage {
-  id: string
-  text: string
-  label?: string
-  priority?: number
-}
-
-interface AgentModTurnContextAssembleOutcome {
-  append?: readonly AgentModTurnContextAppendage[]
-}
-
-/** 会话生命周期（托管执行的进入/离开）。 */
-interface AgentModSessionLifecycleEvent {
-  readonly phase: 'start' | 'end'
-  readonly executionId: Nullable<string>
-  readonly sessionId: Nullable<string>
-  readonly status: Nullable<string>
-}
-
-interface AgentModSeamGenericEvent {
-  readonly payload: unknown
-}
-
-interface AgentModSeamEventMap {
-  'session:start': AgentModSessionLifecycleEvent
-  'session:end': AgentModSessionLifecycleEvent
-  'turn:start': AgentModSeamGenericEvent
-  'turn:end': AgentModSeamGenericEvent
-  'turn-context:assemble': AgentModTurnContextAssembleEvent
-  'prompt:compose': AgentModSeamGenericEvent
-  'tool-call:before': AgentModToolCallBeforeEvent
-  'tool-call:after': AgentModSeamGenericEvent
-  'tool-result:after': AgentModToolResultAfterEvent
-  'model-request:before': AgentModSeamGenericEvent
-  'model-response:after': AgentModSeamGenericEvent
-  'sub-agent:dispatch': AgentModSeamGenericEvent
-  'compaction:before': AgentModSeamGenericEvent
-  'skill:select': AgentModSeamGenericEvent
-  'diagnostic:publish': AgentModSeamGenericEvent
-}
-
-interface AgentModSeamOutcomeMap {
-  'session:start': void
-  'session:end': void
-  'turn:start': void
-  'turn:end': void
-  'turn-context:assemble': AgentModTurnContextAssembleOutcome
-  'prompt:compose': void
-  'tool-call:before': AgentModToolCallBeforeOutcome
-  'tool-call:after': void
-  'tool-result:after': AgentModToolResultAfterOutcome
-  'model-request:before': void
-  'model-response:after': void
-  'sub-agent:dispatch': void
-  'compaction:before': void
-  'skill:select': void
-  'diagnostic:publish': void
-}
-
-/**
- * 所有 Hook 载体共用的上下文。
- *
- * `signal` 在超时时会 abort；编译期 binding 可以直接响应，外部 command 适配器则用它
- * 终止子进程。这个第二参数不破坏现有的单参函数 binding。
- */
-interface AgentModHookContext {
-  readonly modId: string
-  readonly hookId: string
-  readonly event: AgentModSeamKind
-  readonly signal: AbortSignal
-}
-
-type AgentModSeamHandler<TKind extends AgentModSeamKind = AgentModSeamKind> = (
-  event: AgentModSeamEventMap[TKind],
-  context: AgentModHookContext
-) =>
-  | AgentModSeamOutcomeMap[TKind]
-  | void
-  | Promise<AgentModSeamOutcomeMap[TKind] | void>
-
-interface AgentModSeamRegistrationInput<
-  TKind extends AgentModSeamKind = AgentModSeamKind,
-> {
-  readonly modId: string
-  readonly id: string
-  readonly event: TKind
-  readonly priority?: number
-  readonly matcher?: AgentModHookMatcher
-  readonly mode?: AgentModHookExecutionMode
-  readonly timeoutMs?: number
-  readonly handler: AgentModSeamHandler<TKind>
-}
-
-interface AgentModSeamRegistration {
-  readonly modId: string
-  readonly id: string
-  readonly event: AgentModSeamKind
-  readonly priority: number
-  readonly matcher?: AgentModHookMatcher
-  readonly mode: AgentModHookExecutionMode
-  readonly timeoutMs: number
-  readonly handler: AgentModSeamHandler
-}
 
 const MaxSeamDiagnostics = 200
 const DefaultHookTimeoutMs = 5_000
 const MinimumHookTimeoutMs = 100
 const MaximumHookTimeoutMs = 30_000
-
-/**
- * `AgentModSeamDispatcher` 上每个真实派发方法的名字（类型层派生，不手写）。
- *
- * 下面的 {@link WiredSeamKindsByDispatcher} 对本联合保持穷举：新增一个 `dispatch*` 方法却忘了
- * 登记它派发哪些 kind = 编译红，而不是又长出一条「注册得进、永远不触发」的哑接缝。
- */
-type AgentModSeamDispatchMethodName = {
-  [K in keyof AgentModSeamDispatcher]: K extends `dispatch${string}` ? K : never
-}[keyof AgentModSeamDispatcher]
 
 /**
  * 派发方法 → 它真正读取 handlers 的 kind（**已接线名单的唯一来源**）。
@@ -589,27 +423,4 @@ export {
   WiredSeamKinds,
   WiredSeamKindsByDispatcher,
 }
-export type {
-  AgentModHookContext,
-  AgentModSeamEventMap as AgentModHookEventMap,
-  AgentModSeamGenericEvent as AgentModHookGenericEvent,
-  AgentModSeamHandler as AgentModHookHandler,
-  AgentModSeamOutcomeMap as AgentModHookOutcomeMap,
-  AgentModSeamRegistration as AgentModHookRegistration,
-  AgentModSeamRegistrationInput as AgentModHookRegistrationInput,
-  AgentModSeamEventMap,
-  AgentModSeamGenericEvent,
-  AgentModSeamHandler,
-  AgentModSeamOutcomeMap,
-  AgentModSeamRegistration,
-  AgentModSeamRegistrationInput,
-  AgentModSessionLifecycleEvent,
-  AgentModToolCallBeforeEvent,
-  AgentModToolCallBeforeOutcome,
-  AgentModToolResultAfterEvent,
-  AgentModToolResultAfterOutcome,
-  AgentModTurnContextAppendage,
-  AgentModTurnContextAssembleEvent,
-  AgentModTurnContextAssembleOutcome,
-  AgentModTurnContextSegmentView,
-}
+export type { AgentModSeamEventMap as AgentModHookEventMap, AgentModSeamGenericEvent as AgentModHookGenericEvent, AgentModSeamHandler as AgentModHookHandler, AgentModSeamOutcomeMap as AgentModHookOutcomeMap, AgentModSeamRegistration as AgentModHookRegistration, AgentModSeamRegistrationInput as AgentModHookRegistrationInput } from '../../types/mods.js'

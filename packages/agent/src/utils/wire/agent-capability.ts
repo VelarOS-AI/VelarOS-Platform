@@ -11,7 +11,10 @@ import {
 } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-export const AgentCapabilityProtocolVersion = 1 as const
+import type { AgentCapabilityExecutionChannel, AgentCapabilityExecutionDescriptorV1, AgentCapabilityExecutionEventEnvelopeV1,AgentCapabilityExecutionSource } from '../../types/agent.js'
+import type { AgentCapabilityExecuteEnvelopeV1 } from '../../types/execution.js'
+
+export const AgentCapabilityProtocolVersion = 1 as const satisfies AgentCapabilityExecuteEnvelopeV1['protocolVersion']
 
 /** Semver axis advertised to mod manifests as `engines.agent`. */
 export const AgentCapabilityApiVersion = '1.0.0'
@@ -25,44 +28,6 @@ const EnvelopeKeys = new Set(['protocolVersion', 'execution', 'messages', 'confi
 const ExecutionKeys = new Set(['id', 'source', 'scopeMetadata'])
 const SourceKeys = new Set(['productId', 'sessionId', 'correlationId'])
 const ForbiddenRuntimeConfigKeys = new Set(['abortController', 'execution'])
-
-export type AgentCapabilityExecutionChannel = 'agent' | 'state' | 'debug'
-
-export interface AgentCapabilityExecutionSource {
-  readonly productId: string
-  readonly sessionId: string
-  readonly correlationId?: string
-}
-
-export interface AgentCapabilityExecutionDescriptorV1 {
-  readonly id: string
-  readonly source: AgentCapabilityExecutionSource
-  readonly scopeMetadata?: Readonly<Record<string, unknown>>
-}
-
-/**
- * `velaros.agent` capability 的公开 v1 请求信封。
- *
- * `config` 保持产品不透明，但禁止注入只应由 Host 创建的运行时对象。各 Host 在这层通用
- * 边界之后，再解析自己的模型选择、权限、空间与 hook 配置。
- */
-export interface AgentCapabilityExecuteEnvelopeV1 {
-  readonly protocolVersion: typeof AgentCapabilityProtocolVersion
-  readonly execution: AgentCapabilityExecutionDescriptorV1
-  readonly messages: readonly ModelMessage[]
-  readonly config: Readonly<Record<string, unknown>>
-}
-
-/** renderer/Host 订阅的统一 Agent 执行事件信封。 */
-export interface AgentCapabilityExecutionEventEnvelopeV1 {
-  readonly protocolVersion: typeof AgentCapabilityProtocolVersion
-  readonly executionId: string
-  readonly sourceProductId: string
-  readonly sourceSessionId: string
-  readonly sessionCorrelationId?: string
-  readonly channel: AgentCapabilityExecutionChannel
-  readonly payload: unknown
-}
 
 function invalidAgentCapabilityInput(): AppError {
   return new AppError('VALIDATION', 'Agent capability execution input is invalid')

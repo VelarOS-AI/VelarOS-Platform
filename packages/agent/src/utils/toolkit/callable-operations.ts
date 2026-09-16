@@ -6,31 +6,9 @@ import { z } from 'zod'
 
 import { isArray, isFalse, isFunction, isPlainObject, isPresent } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
-import type { KernelCallableCapabilityOperation, ScopeRef } from '@velaros-ai/kernel/contracts/abi'
+import type { KernelCallableCapabilityOperation } from '@velaros-ai/kernel/contracts/abi'
 
-/** 内核按名调用一个工具之前，按作用域给出这次调用的工具上下文；上下文里的 abortSignal 会被换成内核给的那个。 */
-export type ToolContextResolver<TContext> = (
-  scope: LooseOptional<ScopeRef>,
-  signal: AbortSignal,
-) => TContext | Promise<TContext>
-
-/** 把工具集合包装成内核可调用操作表时的选项。 */
-export interface ToolCallableOperationsOptions {
-  /** 报错与缺省理由里称呼这组能力的中文名，比如「系统」「项目」「办公」。 */
-  label: string
-  /** 工具抛出的领域错误怎么翻成对外的错误；不给就原样抛出。 */
-  mapError?: (error: unknown) => unknown
-}
-
-/** 能包装成内核操作的工具要有的那几样：名字、入参 schema、权限、能力声明里的理由、可用性判断和 execute。 */
-interface CallableToolSpec<TContext> {
-  name?: string
-  schema: z.ZodType
-  permissions: readonly string[]
-  capabilities?: { reason?: string }
-  isAvailable?: (context: TContext) => boolean
-  execute: (input: Record<string, unknown>, context: TContext) => unknown
-}
+import type { CallableToolSpec,ToolCallableOperationsOptions, ToolContextResolver } from '../../types/toolkit.js'
 
 /** 判断集合里的一项是不是能执行的工具规格：有 execute、权限表和 schema。 */
 function isCallableToolSpec<TContext>(value: unknown): value is CallableToolSpec<TContext> {

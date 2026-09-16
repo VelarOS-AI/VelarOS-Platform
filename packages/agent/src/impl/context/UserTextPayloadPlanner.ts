@@ -3,23 +3,17 @@ import type { ModelMessage } from 'ai'
 import { isEmpty } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
+import type { ContextPayloadStore } from '../../contract/requires.js'
+import type { ContextUserTextRecord, PersistUserTextPayloadsResult } from '../../types/context.js'
+import type { UserTextPayloadReference } from '../../types/history.js'
 import { hashUserMessageText, readUserMessageText } from '../../utils/context/user-message-text'
-import type { UserTextPayloadReference } from '../../utils/history/sanitize'
 
-import {
-  type ContextPayloadStore,
-  type ContextUserTextRecord,
-  createContextUserTextRef,
-} from './InMemoryContextPayloadStore'
+import { createContextUserTextRef } from './InMemoryContextPayloadStore'
 
 export type { UserTextPayloadReference }
 
 /** 超过该字符数时为用户全文建立持久化引用；发送驻留形态由完整请求的容量治理决定。 */
 export const OversizedUserTextSafetyValveChars = 48_000
-
-export interface PersistUserTextPayloadsResult {
-  references: UserTextPayloadReference[]
-}
 
 function buildUserTextMessageKey(sessionId: string, messageIndex: number, hash: string): string {
   return `${sessionId}:user:${messageIndex}:${hash.slice(0, 12)}`

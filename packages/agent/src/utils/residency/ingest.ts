@@ -13,46 +13,12 @@ import type { ModelMessage } from 'ai'
 
 import { toNullable } from '@velaros-ai/core'
 
-import type { ContextLedgerAppendResult, ContextResidencyLedger } from '../../impl/residency/ContextResidencyLedger'
+import type { ContextResidencyLedger } from '../../impl/residency/ContextResidencyLedger'
+import type { ContextAdmissionInput, ContextLedgerAppendResult, ContextRecordKind, HistoryIngestPlan,IngestHistoryOptions } from '../../types/residency.js'
 import { hashUserMessageText } from '../context/user-message-text'
 import { isInternalFollowUpMessage } from '../history/internal-messages'
 
-import type { ContextAdmissionInput } from './admission'
-import type { ContextRecordKind } from './context-record'
 import { hasToolCallParts, readMessageText, readToolCallFacts, readToolResultFacts } from './message-facts'
-
-export interface IngestHistoryOptions {
-  /**
-   * 记录时刻。历史消息没有时间戳，投影又禁取时钟，所以由调用方给一个**确定的**基准：
-   * 缺省 0 = 归档重放（同一份历史两次摄入产出逐字相同的账本）。
-   */
-  baseCreatedAt?: LooseOptional<number>
-  /** 每条消息的时间步进（毫秒），用于让 fault 年龄有单调序。 */
-  createdAtStepMs?: LooseOptional<number>
-  /** 起始轮序。 */
-  startTurn?: LooseOptional<number>
-  /**
-   * 上一批摄入是否已经见过轮边界（增量摄入的续跑状态）。
-   *
-   * 轮序自增发生在**第二个及以后**的边界上，这个"见过没有"是跨批状态。不带着它走，一批以 user
-   * 消息结尾时下一批就得从 turn+1 起（预支），于是同一份历史逐条增量摄入与一次性整批摄入给出
-   * 两套轮序：`[0,1,1,2]` vs `[0,0,1,1]`，尾保护窗口跟着错位，离线重放与在线运行的账本不可比
-   * （审计 V8 / U22）。
-   */
-  turnBoundarySeen?: LooseOptional<boolean>
-  /** 全保真层引用：toolCallId → payloadRef（PayloadStore 已存的原文）。 */
-  payloadRefsByToolCallId?: LooseOptional<Readonly<Record<string, string>>>
-  /** 超长 user 正文的内容哈希 → payloadRef。 */
-  userTextPayloadRefsByHash?: LooseOptional<Readonly<Record<string, string>>>
-}
-
-export interface HistoryIngestPlan {
-  inputs: ContextAdmissionInput[]
-  /** 摄入后的下一个轮序（增量摄入用）：**当前轮**，不预支。 */
-  nextTurn: number
-  /** 本批结束时是否已见过轮边界（下一批的 `turnBoundarySeen` 入参）。 */
-  turnBoundarySeen: boolean
-}
 
 /**
  * 历史 → 准入输入清单（纯函数）。

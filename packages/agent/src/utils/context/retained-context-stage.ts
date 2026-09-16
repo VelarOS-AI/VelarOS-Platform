@@ -12,10 +12,9 @@ import type { ModelMessage } from 'ai'
 
 import { isBlank, isEmpty, stringifyPretty } from '@velaros-ai/core'
 
-import type { ProviderHistoryRewriteSignal } from '../../impl/context/ProviderRequestCompiler'
+import type { ContextWorkingSetBlock,ProviderHistoryRewriteSignal, ProviderVisibleRetainedContextResult } from '../../types/context.js'
 
 import { shortHash } from './content-hash'
-import type { ContextWorkingSetBlock } from './context-ledger'
 
 /** provider 可见的保留区：仅 active-task 与 pinned-evidence 硬保留进请求。 */
 function isProviderVisibleRetainedBlock(block: ContextWorkingSetBlock): boolean {
@@ -56,12 +55,6 @@ function buildProviderVisibleRetainedContextMessage(
       stringifyPretty(retainedBlocks),
     ].join('\n'),
   }
-}
-
-export interface ProviderVisibleRetainedContextResult {
-  messages: ModelMessage[]
-  /** 追加的保留上下文消息；无保留块则 null。追加不移动既有 `message:<index>`，故无需 offset。 */
-  retainedMessage: Nullable<ModelMessage>
 }
 
 /** 在尾部追加保留上下文消息；无保留块则原样返回。 */

@@ -12,76 +12,13 @@ import type { ModelMessage, ToolCallPart, ToolResultPart } from 'ai'
 import { isArray, isBlank, isEmpty, isNonBlankString, isNumber, isPresent, isString,toNullable } from '@velaros-ai/core'
 import { isRecord } from '@velaros-ai/core/utils/unknownJsonRecord'
 
+import type { AssistantToolCallNameCandidate, ModelHistorySanitizationResult, ModelMessageSanitizationOptions, ModelMessageSanitizationResult, PositionalToolCallReference, PositionalToolResultReference, ProviderSpecificMetadataCarrier,SanitizeModelHistoryOptions, ToolResultNameReference } from '../../types/history.js'
 import {
   compactToolInputForModel,
   deserializeSerializedToolResult,
   ModelToolResultMaxSerializedLength,
   serializeToolResultForModel,
 } from '../tools/tool-result-serialization'
-
-/**
- * 超大 user 正文的全保真层引用（`UserTextPayloadPlanner` 落盘后回填给清洗层，
- * 截断信封才能指向 payloadRef 而不是只留一句"已截断"）。
- *
- * 原住 v1 `history/microCompaction.ts`；该文件随治理 v2 拆除，此形状是
- * {@link SanitizeModelHistoryOptions} 的一部分，跟着清洗层走。
- */
-interface UserTextPayloadReference {
-  messageIndex: number
-  payloadRef: string
-  hash: string
-  originalChars: number
-}
-
-interface ModelHistorySanitizationResult {
-  history: ModelMessage[]
-  changedMessages: number
-}
-
-interface ModelMessageSanitizationResult {
-  message: ModelMessage
-  changed: boolean
-}
-
-interface ModelMessageSanitizationOptions {
-  skipToolResultBudget?: boolean
-  /** 本次发送刻意展示完整参数的调用（紧接失败的那一次决策）；结构清洗不再把它们压回省略形态。 */
-  preserveToolCallInputIds?: ReadonlySet<string>
-}
-
-interface AssistantToolCallNameCandidate {
-  partIndex: number
-  toolCallId: string
-  toolName: Nullable<string>
-}
-
-interface ToolResultNameReference {
-  toolCallId: string
-  toolName: string
-}
-
-interface PositionalToolCallReference {
-  messageIndex: number
-  partIndex: number
-  toolCallId: Nullable<string>
-  toolName: Nullable<string>
-}
-
-interface PositionalToolResultReference extends PositionalToolCallReference {}
-
-/** `sanitizeModelHistory` 的选项。 */
-export interface SanitizeModelHistoryOptions {
-  /**
-   * 供应方回放前必须替换工具结果正文的工具调用标识。
-   * 编码编排器用它避免原始发现阶段输出流入变更、验证和综合阶段。
-   */
-  /** 已持久化的超大 user 正文 payload 引用，按 messageIndex 索引（准入层的 payloadRef 来源）。 */
-  userTextPayloadRefs?: readonly UserTextPayloadReference[]
-  /** 已持久化的工具结果 payload 引用，按 toolCallId 或 message/part occurrence key 索引。 */
-  toolResultPayloadRefs?: Readonly<Record<string, string>>
-  /** 切换供应商/模型回放历史时，移除供应商私有的 part metadata。 */
-  stripProviderSpecificMetadata?: boolean
-}
 
 const MaxRecentToolResultContentMessagesToKeep = 1
 
@@ -479,12 +416,6 @@ function backfillAssistantToolCallNamesFromResults(
     history: changedMessages > 0 ? nextHistory : history,
     changedMessages,
   }
-}
-
-/** provider 运行时会在消息/片段上私挂的未声明键;泛型剥离用的解析后桥接形状(§12.5)。 */
-interface ProviderSpecificMetadataCarrier {
-  providerMetadata?: unknown
-  callProviderMetadata?: unknown
 }
 
 function stripProviderSpecificMetadataRecord<T extends object>(record: T): {
@@ -1227,4 +1158,3 @@ export function sanitizeModelHistory(
 }
 export { sanitizeModelHistory as sanitizeModelHistoryForProvider }
 export { sanitizeModelMessage as sanitizeModelMessageForProvider }
-export type { UserTextPayloadReference }

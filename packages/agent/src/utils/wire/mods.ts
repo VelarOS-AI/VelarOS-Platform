@@ -21,20 +21,10 @@ import {
 } from '@velaros-ai/core'
 import { VelarosModManifestFileName } from '@velaros-ai/kernel/contracts/protocol'
 
+import type { AgentModCommandHandler, AgentModContributes, AgentModContributionAxisName, AgentModDiagnostic, AgentModEngines, AgentModExecutionModeContribution, AgentModHookContribution, AgentModHookEvent, AgentModHookExecutionMode, AgentModHookMatcher, AgentModManifest, AgentModManifestParseResult, AgentModPromptSegmentContribution, AgentModSkillContribution, AgentModSpaceContribution, AgentModSubAgentTypeContribution, AgentModToolCategoryContribution, AgentModToolContribution, AgentModTrustLevel, AgentModTurnContextSourceContribution, ParseAgentModManifestOptions,SemverComparator, SemverVersion } from '../../types/agent.js'
 import { isCanonicalToolId } from '../toolkit/identity'
 
 // ─── semver：manifest 兼容轴的最小判定器（单源，Loader 复用） ──────────────────
-
-interface SemverVersion {
-  major: number
-  minor: number
-  patch: number
-}
-
-type SemverComparator =
-  | { kind: 'any' }
-  | { kind: '=' | '>' | '>=' | '<' | '<='; version: SemverVersion }
-  | { kind: '^' | '~'; version: SemverVersion }
 
 const SemverVersionPattern = /^(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$/u
 
@@ -146,9 +136,7 @@ const AgentModContributionAxisNames = [
   'turnContextSources',
   'executionModes',
   'hooks',
-] as const
-
-type AgentModContributionAxisName = (typeof AgentModContributionAxisNames)[number]
+] as const satisfies readonly AgentModContributionAxisName[]
 
 const AgentModContributionAxisNameSchema = z.enum(AgentModContributionAxisNames)
 
@@ -178,16 +166,12 @@ const AgentModHookEvents = [
   'compaction:before',
   'skill:select',
   'diagnostic:publish',
-] as const
-
-type AgentModHookEvent = (typeof AgentModHookEvents)[number]
+] as const satisfies readonly AgentModHookEvent[]
 
 const AgentModHookEventSchema = z.enum(AgentModHookEvents)
 
 /** @deprecated 只为现有调用方保留；新代码使用 HookEvent 命名。 */
 const AgentModSeamKinds = AgentModHookEvents
-/** @deprecated 只为现有调用方保留；新代码使用 HookEvent 命名。 */
-type AgentModSeamKind = AgentModHookEvent
 /** @deprecated 只为现有调用方保留；新代码使用 HookEvent 命名。 */
 const AgentModSeamKindSchema = AgentModHookEventSchema
 
@@ -238,9 +222,7 @@ const AgentModCommandHandlerSchema = z.strictObject({
   type: z.literal('command'),
   entry: TrimmedIdSchema,
   permissions: tolerantNonEmptyArray(TrimmedIdSchema).optional(),
-})
-type AgentModCommandHandler = z.infer<typeof AgentModCommandHandlerSchema>
-
+}) satisfies z.ZodType<AgentModCommandHandler>
 /** 工具贡献：`name` 是全宿主唯一键，冲突时拒载。 */
 const AgentModToolContributionSchema = z.strictObject({
   name: CanonicalToolIdSchema,
@@ -279,19 +261,13 @@ const AgentModToolContributionSchema = z.strictObject({
       message: 'command 工具必须声明职责类别 categoryId',
     })
   }
-})
-type AgentModToolContribution = z.infer<typeof AgentModToolContributionSchema>
-
+}) satisfies z.ZodType<AgentModToolContribution>
 const AgentModToolCategoryContributionSchema = z.strictObject({
   id: TrimmedIdSchema,
   label: z.string(),
   description: z.string().optional(),
   order: z.number().int().optional(),
-})
-type AgentModToolCategoryContribution = z.infer<
-  typeof AgentModToolCategoryContributionSchema
->
-
+}) satisfies z.ZodType<AgentModToolCategoryContribution>
 /**
  * 提示词段贡献。
  *
@@ -305,11 +281,7 @@ const AgentModPromptSegmentContributionSchema = z.strictObject({
   priority: z.number().int(),
   retention: z.enum(['normal', 'protected']).optional(),
   text: z.string().optional(),
-})
-type AgentModPromptSegmentContribution = z.infer<
-  typeof AgentModPromptSegmentContributionSchema
->
-
+}) satisfies z.ZodType<AgentModPromptSegmentContribution>
 const AgentModSkillContributionSchema = z.strictObject({
   id: TrimmedIdSchema,
   name: z.string(),
@@ -319,9 +291,7 @@ const AgentModSkillContributionSchema = z.strictObject({
     message: 'Skill 必须显式声明至少一个 spaces',
   }),
   priority: z.number().int().optional(),
-})
-type AgentModSkillContribution = z.infer<typeof AgentModSkillContributionSchema>
-
+}) satisfies z.ZodType<AgentModSkillContribution>
 /**
  * space 贡献只包含数据：图标使用语义标识符，manifest 不接受组件或函数引用。
  *
@@ -360,9 +330,7 @@ const AgentModSpaceContributionSchema = z.strictObject({
   turnContextSourceIds: tolerantArray(TrimmedIdSchema).optional(),
   /** 宿主可为此空间投影的提示词段标识符。 */
   promptSegmentIds: tolerantArray(TrimmedIdSchema).optional(),
-})
-type AgentModSpaceContribution = z.infer<typeof AgentModSpaceContributionSchema>
-
+}) satisfies z.ZodType<AgentModSpaceContribution>
 const AgentModSubAgentTypeContributionSchema = z.strictObject({
   id: TrimmedIdSchema,
   label: z.string().optional(),
@@ -370,11 +338,7 @@ const AgentModSubAgentTypeContributionSchema = z.strictObject({
   toolCategoryIds: tolerantArray(TrimmedIdSchema).optional(),
   toolNames: tolerantArray(TrimmedIdSchema).optional(),
   readonlyDefault: z.boolean().optional(),
-})
-type AgentModSubAgentTypeContribution = z.infer<
-  typeof AgentModSubAgentTypeContributionSchema
->
-
+}) satisfies z.ZodType<AgentModSubAgentTypeContribution>
 /** per-turn 上下文源声明；`spaces` 为空数组表示不限 space。 */
 const AgentModTurnContextSourceContributionSchema = z.strictObject({
   id: TrimmedIdSchema,
@@ -382,21 +346,13 @@ const AgentModTurnContextSourceContributionSchema = z.strictObject({
   spaces: tolerantArray(TrimmedIdSchema).optional(),
   rendererVisible: z.boolean().optional(),
   priority: z.number().int().optional(),
-})
-type AgentModTurnContextSourceContribution = z.infer<
-  typeof AgentModTurnContextSourceContributionSchema
->
-
+}) satisfies z.ZodType<AgentModTurnContextSourceContribution>
 const AgentModExecutionModeContributionSchema = z.strictObject({
   id: TrimmedIdSchema,
   label: z.string(),
   promptFeatureId: TrimmedIdSchema.nullable().optional(),
   sessionSticky: z.boolean().optional(),
-})
-type AgentModExecutionModeContribution = z.infer<
-  typeof AgentModExecutionModeContributionSchema
->
-
+}) satisfies z.ZodType<AgentModExecutionModeContribution>
 /**
  * Hook 匹配器。字段之间是 AND，字段内列表是 OR；事件不具备声明字段时匹配失败。
  * 闭合形状是刻意的：新匹配维度必须经过协议版本演进，外部 Mod 不能自定义解释器。
@@ -405,17 +361,10 @@ const AgentModHookMatcherSchema = z.strictObject({
   toolNames: tolerantNonEmptyArray(CanonicalToolIdSchema).optional(),
   phases: tolerantNonEmptyArray(TrimmedIdSchema).optional(),
   statuses: tolerantNonEmptyArray(TrimmedIdSchema).optional(),
-})
-type AgentModHookMatcher = z.infer<typeof AgentModHookMatcherSchema>
-
+}) satisfies z.ZodType<AgentModHookMatcher>
 /** @deprecated 新代码使用通用 AgentModCommandHandlerSchema。 */
 const AgentModCommandHookHandlerSchema = AgentModCommandHandlerSchema
-/** @deprecated 新代码使用通用 AgentModCommandHandler。 */
-type AgentModCommandHookHandler = AgentModCommandHandler
-
-const AgentModHookExecutionModes = ['blocking', 'background'] as const
-type AgentModHookExecutionMode = (typeof AgentModHookExecutionModes)[number]
-
+const AgentModHookExecutionModes = ['blocking', 'background'] as const satisfies readonly AgentModHookExecutionMode[]
 /**
  * Hook 挂接声明。
  *
@@ -454,9 +403,7 @@ const AgentModHookContributionSchema = z.strictObject({
 }).transform(({ seam, ...value }) => ({
   ...value,
   event: value.event ?? seam!,
-}))
-type AgentModHookContribution = z.infer<typeof AgentModHookContributionSchema>
-
+})) satisfies z.ZodType<AgentModHookContribution>
 const AgentModContributesSchema = z.strictObject({
   tools: tolerantArray(AgentModToolContributionSchema).optional(),
   toolCategories: tolerantArray(AgentModToolCategoryContributionSchema).optional(),
@@ -469,9 +416,7 @@ const AgentModContributesSchema = z.strictObject({
   ).optional(),
   executionModes: tolerantArray(AgentModExecutionModeContributionSchema).optional(),
   hooks: tolerantArray(AgentModHookContributionSchema).optional(),
-})
-type AgentModContributes = z.infer<typeof AgentModContributesSchema>
-
+}) satisfies z.ZodType<AgentModContributes>
 // ─── manifest 龙骨 ───────────────────────────────────────────────────────────
 
 /** manifest 自身 schema 版本：新增字段和兼容迁移必须通过此版本演进。 */
@@ -481,9 +426,7 @@ const AgentModTrustLevels = [
   'bundled-official',
   'marketplace-signed',
   'local-dev',
-] as const
-type AgentModTrustLevel = (typeof AgentModTrustLevels)[number]
-
+] as const satisfies readonly AgentModTrustLevel[]
 /**
  * 兼容双轴 + 领域轴。
  *
@@ -495,9 +438,7 @@ const AgentModEnginesSchema = z.strictObject({
   velaros: SemverRangeSchema,
   agent: SemverRangeSchema.optional(),
   shell: z.record(TrimmedIdSchema, SemverRangeSchema).optional(),
-})
-type AgentModEngines = z.infer<typeof AgentModEnginesSchema>
-
+}) satisfies z.ZodType<AgentModEngines>
 const AgentModManifestSchema = z.strictObject({
   id: TrimmedIdSchema,
   version: SemverVersionSchema,
@@ -524,28 +465,8 @@ const AgentModManifestSchema = z.strictObject({
   /** i18n 文案包：v1 固定字段形状，是否合并及回退顺序由产品宿主公开。 */
   locale: z.record(TrimmedIdSchema, z.record(TrimmedIdSchema, z.string())).optional(),
   contributes: AgentModContributesSchema.default({}),
-})
-type AgentModManifest = z.infer<typeof AgentModManifestSchema>
-
+}) satisfies z.ZodType<AgentModManifest>
 // ─── 诊断与解析 ──────────────────────────────────────────────────────────────
-
-/** 可读诊断：拒载/缺席/跳过一律经此上报，绝不静默。 */
-interface AgentModDiagnostic {
-  code: string
-  message: string
-  path?: string
-  modId?: string
-  origin?: string
-}
-
-type AgentModManifestParseResult =
-  | { ok: true; manifest: AgentModManifest }
-  | { ok: false; diagnostics: readonly AgentModDiagnostic[] }
-
-interface ParseAgentModManifestOptions {
-  /** 诊断里回显的来源（pack 目录 / bundled id）。 */
-  origin?: string
-}
 
 function readOptionalModId(input: unknown) {
   if (!isPlainObject(input)) return undefined
@@ -687,29 +608,4 @@ export {
   parseAgentModManifest,
   readAgentModContributionKey,
   satisfiesSemverRange,
-}
-export type {
-  AgentModCommandHandler,
-  AgentModCommandHookHandler,
-  AgentModContributes,
-  AgentModContributionAxisName,
-  AgentModDiagnostic,
-  AgentModEngines,
-  AgentModExecutionModeContribution,
-  AgentModHookContribution,
-  AgentModHookEvent,
-  AgentModHookExecutionMode,
-  AgentModHookMatcher,
-  AgentModManifest,
-  AgentModManifestParseResult,
-  AgentModPromptSegmentContribution,
-  AgentModSeamKind,
-  AgentModSkillContribution,
-  AgentModSpaceContribution,
-  AgentModSubAgentTypeContribution,
-  AgentModToolCategoryContribution,
-  AgentModToolContribution,
-  AgentModTrustLevel,
-  AgentModTurnContextSourceContribution,
-  ParseAgentModManifestOptions,
 }

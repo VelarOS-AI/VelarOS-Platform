@@ -13,19 +13,10 @@ import { AppError } from "@velaros-ai/core/error";
 import { logRuntime } from "@velaros-ai/core/logger";
 import { TimerScope } from "@velaros-ai/core/utils/TimerScope";
 
-import type {
-  StreamAssistantGeneratedFilePayload,
-  StreamAssistantSourcePayload,
-} from "../../types/agent";
-import { type ChatRuntimeEvent, ChatRuntimeEvents } from "../../types/chat-runtime";
-import type {
-  StreamReasoningPayload,
-  StreamToolCallPayload,
-  StreamToolMetadataPayload,
-} from "../../types/protocol";
-import type { StreamDiagnostics } from "../../types/stream";
-import type { AppLocale } from "../../types/system";
-import type { AssistantContentPart } from "../../utils/history/turn";
+import type { AssistantContentPart } from '../../types/history.js'
+import type { ConsumeAssistantStreamArgs, InlineReasoningSegment, PendingStreamToolCall, ProviderToolInputDraft, ProviderToolNameResolution,StreamConsumerEvents, StreamDiagnostics, StreamIdleThinkingNotifier } from '../../types/loop.js'
+import type { ProviderTurnUsage } from '../../types/records.js'
+import type { ToolExecutionPolicyRegistry } from '../../types/tools.js'
 import { normalizeModelRequestError } from "../../utils/model/model-request-error";
 import {
   buildEmptyAssistantStreamError,
@@ -39,12 +30,7 @@ import {
   readNextStreamPartWithIdleTimeout,
   returnStreamIteratorQuietly,
 } from "../../utils/stream/idle-read";
-import {
-  createInlineReasoningTagSplitState,
-  flushInlineReasoningTagTail,
-  type InlineReasoningSegment,
-  splitInlineReasoningTagDelta,
-} from "../../utils/stream/inline-reasoning-tags";
+import { createInlineReasoningTagSplitState, flushInlineReasoningTagTail, splitInlineReasoningTagDelta } from "../../utils/stream/inline-reasoning-tags";
 import {
   createLeakedToolMarkupFilterState,
   filterLeakedToolMarkupDelta,
@@ -55,31 +41,13 @@ import {
   isRecoverableOutputTruncationDiagnostic,
 } from "../../utils/stream/output-truncation-recovery";
 import { createProviderTurnToolCallIdAllocator } from "../../utils/stream/tool-call-id";
-import {
-  applyProviderToolInputStreamPart,
-  buildToolInputReadyMetadata,
-  diagnoseRejectedProviderToolInput,
-  parseRecoverableProviderToolInputDraft,
-  type ProviderToolInputDraft,
-  type ProviderToolNameResolution,
-  resolveProviderExecutableToolInput,
-  resolveProviderFinalToolCallIdentity,
-  summarizeProviderToolInputDraft,
-} from "../../utils/stream/tool-input";
-import type {
-  ProviderTurnEventReducer,
-  ProviderTurnSnapshot,
-  ProviderTurnUsage,
-} from "../records/ProviderTurnEventReducer";
+import { applyProviderToolInputStreamPart, buildToolInputReadyMetadata, diagnoseRejectedProviderToolInput, parseRecoverableProviderToolInputDraft, resolveProviderExecutableToolInput, resolveProviderFinalToolCallIdentity, summarizeProviderToolInputDraft } from "../../utils/stream/tool-input";
+import { ChatRuntimeEvents } from '../../utils/wire/chat-runtime.js'
+import type { ProviderTurnEventReducer } from "../records/ProviderTurnEventReducer";
 import { createProviderToolReferenceCanonicalizer } from "../tools/ProviderToolReferenceCanonicalizer";
-import { ToolExecutionPolicy, type ToolExecutionPolicyRegistry } from "../tools/ToolExecutionPolicy";
+import { ToolExecutionPolicy } from "../tools/ToolExecutionPolicy";
 
-import {
-  type KernelContextEpoch,
-  type KernelContextEpochClaim,
-  type KernelContextEpochGuardLike,
-  recordKernelContextEpochDiagnostic,
-} from "./KernelContextEpochGuard";
+import { recordKernelContextEpochDiagnostic } from "./KernelContextEpochGuard";
 import { AgentStreamDiagnosticHelper } from "./StreamDiagnosticsHelper";
 
 const StreamIdleThinkingNoticeDelayMs = 15_000;
@@ -120,89 +88,6 @@ interface StreamConsumerTurnState {
   requestFingerprint?: LooseOptional<string>;
 }
 
-interface StreamConsumerToolExecutor {
-  configureProviderTurnReducer?(
-    input: ProviderTurnEventReducer,
-    onSnapshot?: LooseOptional<(snapshot: ProviderTurnSnapshot) => void>,
-  ): void;
-  enqueue(
-    toolCallId: string,
-    toolName: string,
-    input: Record<string, unknown>,
-    isConcurrencySafe: boolean,
-    authorization?: {
-      requestAdvertised: boolean;
-      providerToolName: string;
-    },
-  ): void;
-}
-
-interface StreamConsumerEvents {
-  emitRuntime?(event: ChatRuntimeEvent): void;
-  emitReasoningDelta(payload: StreamReasoningPayload): void;
-  emitTextDelta(text: string): void;
-  emitGeneratedFile(payload: StreamAssistantGeneratedFilePayload): void;
-  emitSource(payload: StreamAssistantSourcePayload): void;
-  emitToolStart(payload: StreamToolCallPayload): void;
-  emitToolMetadata?(payload: StreamToolMetadataPayload): void;
-}
-
-interface InterruptedStreamPartial {
-  assistantContent: AssistantContentPart[];
-  hasPendingToolCalls: boolean;
-}
-
-interface ConsumeAssistantStreamArgs {
-  abortSignal: AbortSignal;
-  executor: StreamConsumerToolExecutor;
-  events: StreamConsumerEvents;
-  /**
-   * 模型流静默多久后把状态拉回「思考中」（毫秒）。字段名沿用历史叫法以保持公开 API 兼容；
-   * 静默期早已不再上报重连。
-   */
-  idleReconnectDelayMs?: number;
-  idleStallTimeoutMs?: number;
-  model: string;
-  contextPressure?: {
-    percent: number;
-    usableContextWindow: number;
-  };
-  requestFingerprint?: unknown;
-  /** Immutable provider name -> canonical id map captured for this exact request. */
-  providerToCanonicalToolNames?: Readonly<Record<string, string>>;
-  contextEpoch?: KernelContextEpoch;
-  contextEpochClaim?: LooseOptional<KernelContextEpochClaim>;
-  contextEpochGuard?: LooseOptional<KernelContextEpochGuardLike>;
-  providerTurnReducer?: ProviderTurnEventReducer;
-  toolContext?: {
-    locale?: AppLocale;
-    resolveCurrentVisibleCanonicalToolName?: (
-      providerToolName: string,
-    ) => LooseOptional<string>;
-    resolveKnownCanonicalToolName?: (
-      providerToolName: string,
-    ) => LooseOptional<string>;
-  };
-  /**
-   * 空流恢复错误的来源标签（装配面差异）：主 Agent 流 = 'stream'，子 Agent 装配 = 'query'。
-   * 它决定 reasoning-only 空响应的 `context.source`，QueryLoop 的 reasoning-only 恢复靠这个标签匹配，
-   * 不能一律写死 'stream'，否则子 Agent 丢掉 reasoning-only 空流恢复抗体。缺省 'stream'。
-   */
-  emptyStreamSource?: "stream" | "query";
-  onInterruptedPartial?: (partial: InterruptedStreamPartial) => void;
-}
-
-interface PendingStreamToolCall {
-  toolCallId: string;
-  toolName: string;
-  input: Record<string, unknown>;
-  providerToolName: string;
-  requestAdvertised: boolean;
-  streamedInput?: {
-    inputText: string;
-  };
-}
-
 interface RejectedStreamToolCall {
   toolCallId: string;
   toolName: string;
@@ -210,11 +95,6 @@ interface RejectedStreamToolCall {
   receivedType: string;
   inputChars: number;
   diagnostic: ReturnType<typeof diagnoseRejectedProviderToolInput>;
-}
-
-interface StreamIdleThinkingNotifier {
-  dispose(): void;
-  markChunkReceived(): void;
 }
 
 /**
@@ -1115,11 +995,5 @@ function readRequestFingerprintId(fingerprint: unknown): Nullable<string> {
 }
 
 export { StreamConsumer };
-export type {
-  ConsumeAssistantStreamArgs,
-  InterruptedStreamPartial,
-  StreamConsumerEvents,
-  StreamConsumerToolExecutor,
-  StreamConsumerTurnState,
-};
+export type { StreamConsumerTurnState };
 export { StreamConsumer as AgentStreamConsumerHelper };

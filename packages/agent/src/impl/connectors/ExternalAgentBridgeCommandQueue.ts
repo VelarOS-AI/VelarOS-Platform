@@ -1,6 +1,7 @@
 import { timingSafeEqual } from 'node:crypto'
 
-import type { ExternalAgentBridgeCommand } from '../../utils/wire/external-agent-bridge'
+import type { ExternalAgentBridgeCommand } from '../../types/agent.js'
+
 
 export const ExternalAgentBridgePairingLifetimeMs = 5 * 60_000
 export const ExternalAgentBridgeMaxCommands = 100

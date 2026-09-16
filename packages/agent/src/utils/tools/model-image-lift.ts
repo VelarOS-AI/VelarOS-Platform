@@ -1,14 +1,8 @@
 import { isArray, isBlank, isEmpty, isString, toOptional } from '@velaros-ai/core'
 import { isRecord } from '@velaros-ai/core/utils/unknownJsonRecord'
 
-import type { ToolResult } from '../../impl/tools/ToolExecutor'
 import type { ToolResultModelContentPart } from '../../types/agent'
-
-/** A tool can use this envelope when its ordinary result is not itself an object. */
-export interface ToolResultModelContentEnvelope {
-  result: unknown
-  modelContent: readonly ToolResultModelContentPart[]
-}
+import type { ToolResult, ToolResultModelContentEnvelope } from '../../types/tools.js'
 
 export function withToolResultModelContent(
   result: unknown,

@@ -1,12 +1,8 @@
 import type { ScopedLog } from '@velaros-ai/core/logger'
 import { asRecord } from '@velaros-ai/core/utils/unknownJsonRecord'
 
-import type {
-  RunnerAgentProvider,
-  RunnerModelCapabilityPort,
-  RunnerModelRuntimePort,
-  RunnerResolvedAgentRuntime,
-} from '../../types/runner-host-ports'
+import type { RunnerModelRuntimePort } from '../../contract/requires.js'
+import type { RunnerAgentProvider, RunnerModelCapabilityPort, RunnerResolvedAgentRuntime } from '../../types/runner.js'
 import { AgentRuntimeEvents } from '../../utils/runner/runtime-events'
 import type { ExecutionEventBus } from '../records/ExecutionEventBus'
 

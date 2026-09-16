@@ -6,7 +6,7 @@ import {
   isConversationTurnInputMessage as isAgentTurnInput,
   isRunGuidanceMessage as isAgentRunGuidance,
   resolveChatMessageConversationKind as resolveAgentKind,
-} from '../../packages/agent/src/types/protocol.ts'
+} from '../../packages/agent/src/utils/wire/conversation-kind.ts'
 import {
   isConversationTurnInputMessage as isUiTurnInput,
   isRunGuidanceMessage as isUiRunGuidance,

@@ -1,37 +1,17 @@
-import type { ModelMessage } from 'ai'
 
 import { isEmpty, toNullable } from '@velaros-ai/core'
-import type { ScopedLog } from '@velaros-ai/core/logger'
 
-import type { PromptStatePreparedToolCategories } from '../../impl/runner/PromptStateBuilder'
-import type {
-  SessionToolAllocatorPlan,
-  ToolAllocatorRequest,
-} from '../../impl/tools/SessionToolAllocator'
+import type { AgentRuntimeCapabilityPorts } from '../../contract/requires.js'
 import type {
   AgentContextPhase,
-  AgentSurfaceId,
   ChatPromptFeatureId,
   ExecutionModeId,
-  RunProfileRuntimePolicy,
-  TurnPlanningTelemetryPayload,
 } from '../../types/agent'
-import type { AgentRunPlan } from '../../types/agent-run-plan'
-import type { AgentModelRequestOptions } from '../../types/model-contracts'
-import type { RunProfileId, RunProfileSelectionId } from '../../types/run-profile'
-import type { ThinkingDepth } from '../../types/team'
-import type {
-  AgentModelInputModality,
-  CapabilityScopeId,
-  ToolCategoryId,
-  ToolCategoryOverview,
-  ToolDescriptor,
-  ToolSurfaceProfileId,
-} from '../../types/tool'
-import {
-  type AgentRuntimeCapabilityPorts,
-  resolveToolAllocationMetadata,
-} from '../capabilities'
+import type { AgentModelInputModality, RunProfileId, RunProfileSelectionId, ToolCategoryId, ToolDescriptor } from '../../types/agent.js'
+import type { BuildAgentRunPlanInput,PrepareSoloRunPlanForTurnInput, PrepareSoloRunPlanForTurnResult, SoloRunPlanToolCategory, SoloRunPlanToolContext, SoloTurnPlanningSnapshot } from '../../types/loop.js'
+import type { PromptStatePreparedToolCategories } from '../../types/runner.js'
+import type { SessionToolAllocatorPlan } from '../../types/tools.js'
+import { resolveToolAllocationMetadata } from '../capabilities'
 import { createInternalFollowUpMessage } from '../history/internal-messages'
 import { compareStableStrings } from '../residency/determinism'
 import {
@@ -44,148 +24,9 @@ import {
   RunProfileDefinitions,
 } from '../runner/runtime-profiles'
 
-import { agentRunPlanComposer, type BuildAgentRunPlanInput } from './agent-run-planner'
+import { agentRunPlanComposer } from './agent-run-planner'
 import { extractLatestUserTextFromMessages, isLowSignalIntentText } from './intent-signals'
 import { resolveSoloLoopTools } from './loop-runtime'
-import type { ToolSpaceBootstrapState } from './tool-space-bootstrap-planner'
-
-interface SoloRunPlanToolCategory<TTool extends ToolDescriptor = ToolDescriptor> {
-  category: ToolCategoryOverview['category']
-  enabled: boolean
-  tools: TTool[]
-}
-
-interface SoloRunPlanCodingSession {
-  getRunProfile(): RunProfileSelectionId
-  enableToolCategories(categories: ToolCategoryId[], reason?: string): ToolCategoryId[]
-  enableToolNames?(toolNames: string[], reason?: string): string[]
-  getEnabledToolCategories(): ToolCategoryId[]
-  getBudgetOverrideToolCategories(): ToolCategoryId[]
-  getBudgetOverrideToolNames(): string[]
-  drainToolAllocatorRequests?(): ToolAllocatorRequest[]
-  isToolCategoryAllowed(categoryId: ToolCategoryId): boolean
-  setThinkingDepth?(thinkingDepth: ThinkingDepth): ThinkingDepth
-  setToolSurfaceProfile?(profile: ToolSurfaceProfileId, reason?: string): ToolSurfaceProfileId
-  getToolUsageScores?: () => Readonly<Record<string, number>>
-  getToolSchemaBudgetScale?: () => number
-  setUsableContextWindowTokens?: (tokens: Nullable<number>) => void
-  pruneExpiredToolNameLeases?: (turn: number) => string[]
-  pruneExpiredToolCategoryLeases?: (turn: number) => ToolCategoryId[]
-  getTurnPlanningSnapshot?: <TSnapshot = unknown>(signature: string) => Nullable<TSnapshot>
-  setTurnPlanningSnapshot?: (signature: string, snapshot: unknown) => void
-  recordTurnPlanningTelemetry?: (entry: TurnPlanningTelemetryPayload) => void
-  collectNewlyEvictedPagedInTools?: (evictedToolNames: readonly string[]) => string[]
-  getCapabilityEvidenceSnapshot?(): BuildAgentRunPlanInput['capabilityEvidenceSnapshot']
-}
-
-interface SoloRunPlanToolContext {
-  capabilityPorts?: AgentRuntimeCapabilityPorts
-  codingSession: SoloRunPlanCodingSession
-  getCurrentVisibleToolNames(): string[]
-  setCurrentVisibleToolNames(toolNames: string[]): void
-  listToolCategories(
-    scope?: 'enabled' | 'all' | 'system-enabled' | 'catalog'
-  ): Array<SoloRunPlanToolCategory<ToolDescriptor>>
-}
-
-interface SoloRunPlanToolRegistry<TContext extends SoloRunPlanToolContext> {
-  getCapabilityRevision?(): string | number
-  listCategories?(
-    toolContext: TContext,
-    allowList?: string[],
-    scope?: 'enabled' | 'all' | 'system-enabled' | 'catalog'
-  ): Array<SoloRunPlanToolCategory<ToolDescriptor>>
-  estimateToolSerializedCharsByName?: (
-    toolContext: TContext,
-    allowedTools: string[]
-  ) => Record<string, number>
-}
-
-interface SoloRunPlanRoleRuntime {
-  providerId: string
-  model: string
-  providerModel?: string
-  contextWindow?: number
-  supportedInputModalities: readonly AgentModelInputModality[]
-  modelRequestOptions?: AgentModelRequestOptions
-  runProfilePolicy?: RunProfileRuntimePolicy
-}
-
-interface SoloRunPlanToolAllocator {
-  plan(input: {
-    turn: number
-    latestUserText: string
-    requests: readonly ToolAllocatorRequest[]
-    runtimeToolCategories: Array<SoloRunPlanToolCategory<ToolDescriptor>>
-    catalogToolCategories?: Array<SoloRunPlanToolCategory<ToolDescriptor>>
-    enabledToolCategoryIds: readonly ToolCategoryId[]
-    allowedToolCategoryIds: readonly ToolCategoryId[]
-    satisfiedPrerequisiteIds?: readonly string[]
-  }): SessionToolAllocatorPlan | Promise<SessionToolAllocatorPlan>
-}
-
-interface PrepareSoloRunPlanForTurnInput<TContext extends SoloRunPlanToolContext> {
-  turn: number
-  history: ModelMessage[]
-  configuredTools?: readonly string[]
-  roleAllowedTools: readonly string[]
-  /** 显式选中技能声明的工具门控并集（allowed-tools）；null/空 = 不限制。 */
-  skillAllowedToolNames?: LooseOptional<readonly string[]>
-  promptFeatures?: readonly ChatPromptFeatureId[]
-  /**
-   * 本次运行的思考深度，**由调用方一次算定**（`AgentExecutionConfig.thinkingDepth` ?? 系统设置）。
-   *
-   * 这里不再有第二个写者：档位默认只在宿主组装 run config 时作为**缺席默认**参与
-   * （例如宿主可读取 `runProfilePolicy.defaults.thinkingDepth`），
-   * 进了 loop 就是既定事实。
-   */
-  thinkingDepth: ThinkingDepth
-  /** 执行模式轴；缺席时由旧形态（promptFeatures 里的模式 id / goalMode）折算。 */
-  executionModes?: readonly ExecutionModeId[]
-  goalMode?: boolean
-  contextPhase: AgentContextPhase
-  activeCapabilityScopeId: CapabilityScopeId
-  agentSurfaceId?: LooseOptional<AgentSurfaceId>
-  roleRuntime: SoloRunPlanRoleRuntime
-  toolContext: TContext
-  toolRegistry: SoloRunPlanToolRegistry<TContext>
-  bootstrapState: ToolSpaceBootstrapState
-  setBootstrapState(state: ToolSpaceBootstrapState): void
-  log: Pick<ScopedLog, 'info'>
-  toolAllocator?: SoloRunPlanToolAllocator
-  toolAllocatorRequests?: readonly ToolAllocatorRequest[]
-}
-
-interface PrepareSoloRunPlanForTurnResult {
-  resolvedRunProfile: RunProfileRuntimePolicy
-  runProfile: RunProfileId
-  runProfileDefinition: (typeof RunProfileDefinitions)[RunProfileId]
-  runPlan: AgentRunPlan
-  zoneAllocation: AgentRunPlan['context']['zoneAllocation']
-  allowedTools: string[]
-  toolSchemaChars?: Readonly<Record<string, number>>
-  bootstrapToolChoice: Nullable<AgentRunPlan['capabilities']['forcedToolChoice']>
-  enabledToolDescriptors: ToolDescriptor[]
-  baseAllowedTools: string[]
-  protectedTools: string[]
-  toolExposure: {
-    allowedTools: string[]
-    droppedTools: string[]
-    maxToolCount: Nullable<number>
-  }
-  promptToolCategories: PromptStatePreparedToolCategories
-  promptBudget: Nullable<AgentRunPlan['prompt']['promptBudget']>
-  toolAllocatorPlan: Nullable<SessionToolAllocatorPlan>
-}
-
-interface SoloTurnPlanningSnapshot {
-  runtimeToolCategories: Array<SoloRunPlanToolCategory<ToolDescriptor>>
-  allocatorCatalogToolCategories: Array<SoloRunPlanToolCategory<ToolDescriptor>>
-  allowedToolCategoryIds: ToolCategoryId[]
-  visibleEnabledToolCategories: Array<SoloRunPlanToolCategory<ToolDescriptor>>
-  toolSchemaCandidateTools: string[]
-  toolSchemaChars?: Readonly<Record<string, number>>
-}
 
 const PlanModeRequiredToolNames = ['plan:update', 'interaction:show_action_cards'] as const
 const GoalModeRequiredToolNames = ['goal:get', 'goal:create', 'goal:update'] as const
@@ -784,13 +625,4 @@ export {
   filterToolCategoriesForModelInputs,
   filterToolsForContextPhase,
   prepareSoloRunPlanForTurn,
-}
-export type {
-  PrepareSoloRunPlanForTurnInput,
-  PrepareSoloRunPlanForTurnResult,
-  SoloRunPlanCodingSession,
-  SoloRunPlanRoleRuntime,
-  SoloRunPlanToolCategory,
-  SoloRunPlanToolContext,
-  SoloRunPlanToolRegistry,
 }

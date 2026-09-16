@@ -12,49 +12,20 @@
  * 刻意不做的事：不按工具名单分类。具体能力的工具名不属于 agent 包（与 `StatefulToolResults`
  * 同教义），"可重取 / 快照目标"一律走**结构信号 + 注入分类器**两条路。
  */
-import type { ModelMessage } from 'ai'
 
 import { isEmpty, isNotNull, isPresent, toNullable, toOptional } from '@velaros-ai/core'
 
-import type { ContextMigrationCause } from '../../impl/residency/InMemoryContextMigrationEventSink'
+import type { ContextRefEnvelope } from '../../types/context.js'
+import type { AdmitContextRecordOptions, ContextAdmissionDecision, ContextAdmissionInput, ContextClassificationInput, ContextGovernanceConfig, ContextRecord, ContextRecordClassifier, ContextRecordExcerpt, ContextRecordKind, ContextRecordToolPart, ContextResidency, ToolResultFact } from '../../types/residency.js'
 import { hasFailureSignal } from '../context/context-ledger'
-import { buildContextRefEnvelope, type ContextRefEnvelope } from '../context/context-ref-envelope'
+import { buildContextRefEnvelope } from '../context/context-ref-envelope'
 
 import { extractContextAnchors } from './anchors'
-import {
-  type ContextRecord,
-  type ContextRecordExcerpt,
-  type ContextRecordKind,
-  type ContextRecordToolPart,
-  type ContextResidency,
-  createContextRecordId,
-} from './context-record'
-import type { ContextGovernanceConfig } from './governance-config'
+import { createContextRecordId } from './context-record'
 import { DefaultContextGovernanceConfig } from './governance-config'
-import {
-  estimateMessageBudgetChars,
-  estimateMessageChars,
-  extractResourceLocator,
-  readMessageText,
-  readToolCallFacts,
-  readToolResultFacts,
-  type ToolResultFact,
-} from './message-facts'
+import { estimateMessageBudgetChars, estimateMessageChars, extractResourceLocator, readMessageText, readToolCallFacts, readToolResultFacts } from './message-facts'
 
 const ExcerptTruncationMarker = '...'
-
-/** 分类器可见的准入事实（注入方只读，不得改写）。 */
-export interface ContextClassificationInput {
-  kind: ContextRecordKind
-  toolName: Nullable<string>
-  toolCallId: Nullable<string>
-  /** 工具调用参数（若调用方给了配对的 tool-call）。 */
-  toolArgs: unknown
-  text: string
-  chars: number
-  /** 工具错误形态或正文失败信号。 */
-  failureEvidence: boolean
-}
 
 /**
  * `resolveDedupeTarget` 的**否决**哨兵：这条记录一律不参与去重。
@@ -66,66 +37,6 @@ export interface ContextClassificationInput {
  * 取一个不可能是 url/path 的字面量，避免与结构信号撞车。
  */
 export const ContextDedupeVetoTarget = '@@velaros/no-dedupe@@'
-
-/**
- * 记录分类器端口：能力包/宿主注入领域语义的唯一入口。
- * 每个方法都可缺省；返回 nullish 表示"我不表态"，回落结构默认。
- * `resolveDedupeTarget` 另有 {@link ContextDedupeVetoTarget} 一态表示"否决去重"。
- */
-export interface ContextRecordClassifier {
-  isRefetchable?(input: ContextClassificationInput): LooseOptional<boolean>
-  resolveDedupeTarget?(input: ContextClassificationInput): LooseOptional<string>
-  isPinned?(input: ContextClassificationInput): LooseOptional<boolean>
-  /** 在尾保护之外继续保持直接驻留的额外轮数。 */
-  resolveWarmLeaseTurns?(input: ContextClassificationInput): LooseOptional<number>
-}
-
-export interface ContextAdmissionInput {
-  kind: ContextRecordKind
-  /** 运行时先保留新消息全文，只有完整请求超容量后才应用已准备的摘录。 */
-  deferOversizeExcerpt?: boolean
-  message: ModelMessage
-  /** 记录创建时刻，由调用方给（准入是纯函数，不取时钟）。 */
-  createdAt: number
-  turn: number
-  /** 配对的工具调用参数：tool-result 记录靠它拿"目标"。 */
-  toolArgs?: unknown
-  /** 全保真层引用（PayloadStore）。 */
-  payloadRef?: LooseOptional<string>
-  /**
-   * 并行工具结果的全保真层引用：toolCallId → payloadRef。
-   *
-   * 一条 `role:'tool'` 消息可装 N 份结果，只给第一份填 ref 会让第 2..N 份的墓碑指向别人的
-   * payload（审计 V12）。给整张表，per-part 各取各的。
-   */
-  payloadRefsByToolCallId?: LooseOptional<Readonly<Record<string, string>>>
-  /** 显式覆盖：P6 护栏类记录。 */
-  pinned?: LooseOptional<boolean>
-  /** 显式覆盖：可重取。 */
-  refetchable?: LooseOptional<boolean>
-  /** 显式覆盖：语义去重的目标定位符。 */
-  dedupeTarget?: LooseOptional<string>
-  /** 显式覆盖：准入后的额外升温租约。 */
-  warmLeaseTurns?: LooseOptional<number>
-  /** summary 专用：被折叠的成员记录 id。 */
-  memberIds?: readonly string[]
-}
-
-export interface ContextAdmissionDecision {
-  record: ContextRecord
-  /** 准入事件的因果（`admission` / `admission-oversize`）。 */
-  cause: ContextMigrationCause
-  /** 本次准入令其失效的旧记录 id（只标记，不迁移）。 */
-  supersededIds: string[]
-}
-
-export interface AdmitContextRecordOptions {
-  seq: number
-  config?: LooseOptional<ContextGovernanceConfig>
-  classifier?: LooseOptional<ContextRecordClassifier>
-  /** 账本内既有记录（按账本序），用于语义去重比对。 */
-  priorRecords?: readonly ContextRecord[]
-}
 
 /**
  * 准入判决：给一条新消息定初始驻留、抽锚点、算字节、标失效旧快照。

@@ -1,5 +1,7 @@
 import { isArray, isBoolean, isEmpty, isFiniteNumber, isNull, isNumber, isObject, isPlainObject, isString, isTrue } from '@velaros-ai/core'
 
+import type { Omission } from '../../types/tools.js'
+
 import { HistoryPreviewPlaceholderHeaderPattern } from './history-preview-placeholder'
 
 const MaximumChars = 12_000
@@ -9,14 +11,6 @@ const MaximumOmissions = 100
 const LargeFields = new Set(['content', 'data', 'image', 'base64', 'latexSource', 'widget_code', 'html', 'svg', 'source', 'newContent', 'replacement', 'replace'])
 const MetadataKeys = new Set(['__historyInputOmissions', '__historyInputRef', '__historyInputRecall', '__historyInputPreview', '__toolReceivedFullInput'])
 const Omitted = Symbol('omitted historical input')
-interface Omission {
-  path: Array<string | number>
-  jsonPath: string
-  chars?: number
-  items?: number
-  ref?: string
-}
-
 function jsonPath(path: Array<string | number>): string {
   return path.reduce<string>((result, key) => isNumber(key)
     ? `${result}[${key}]` : /^[A-Za-z_$][A-Za-z0-9_$]*$/u.test(key)

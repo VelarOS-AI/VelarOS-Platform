@@ -1,72 +1,22 @@
 import type { ModelMessage } from 'ai'
 
+import type { AgentChatRuntimeConfig, AgentSystemRuntimeConfig, RuntimePromptFeaturePolicy } from '../../contract/requires.js'
 import type {
   AgentContextPhase,
   ChatPromptFeatureId,
   ExecutionModeId,
-  PromptSegmentTrace,
-  SkippedPromptSegmentTrace,
 } from '../../types/agent'
-import type { AgentRoleResolution } from '../../types/role-types'
-import type { RunContextToolContext } from '../../types/run-context-host-ports'
-import type { RunProfileId } from '../../types/run-profile'
-import type {
-  AgentChatRuntimeConfig,
-  AgentSystemRuntimeConfig,
-} from '../../types/runtime-configuration'
+import type { RunProfileId } from '../../types/agent.js'
+import type { PromptSegmentDefinition } from '../../types/guidance.js'
+import type { AgentRoleResolution, AssembledSystemPrompt, BuildSystemPromptArgs, BuildTurnContextPayloadArgs,PromptStatePreparedToolCategories, PromptStateToolContext, RunContextToolContext } from '../../types/runner.js'
 import {
   createSelectedSkillPromptSegment,
   createSkillPromptSegment,
 } from '../../utils/guidance/shared'
-import { type BuildTurnContextPayloadArgs, TurnPayload } from '../../utils/runner/turn-payload'
-import type { PromptSegmentDefinition } from '../guidance/PromptRegistry'
-import type { RuntimePromptFeaturePolicy } from '../tools/DefaultPromptFeaturePolicy'
+import { TurnPayload } from '../../utils/runner/turn-payload'
 
 import type { ContextBuilder } from './ContextBuilder'
-import {
-  PromptStateBuilder,
-  type PromptStatePreparedToolCategories,
-  type PromptStateToolContext,
-} from './PromptStateBuilder'
-
-interface BuildSystemPromptArgs<TContext extends RunContextToolContext> {
-  /** 聊天模型配置。 */
-  chatConfig: AgentChatRuntimeConfig
-  /** 系统配置。 */
-  systemConfig: AgentSystemRuntimeConfig
-  /** 当前消息历史。 */
-  messages: ModelMessage[]
-  /** 已解析角色。 */
-  roleResolution: AgentRoleResolution
-  /** 工具上下文。 */
-  toolContext: TContext
-  /** 可选身份覆盖，常用于子智能体。 */
-  identity?: string
-  /** 代码上下文信号。 */
-  capabilityContext?: unknown
-  /** 用户选择的提示词特性（能力轴）。 */
-  promptFeatures?: ChatPromptFeatureId[]
-  preparedToolCategories?: PromptStatePreparedToolCategories
-  /** 执行模式轴；缺席时读取点从旧形态折算。 */
-  executionModes?: readonly ExecutionModeId[]
-  goalMode?: boolean
-  /** 本次请求使用的运行策略。 */
-  thinkingDepth?: LooseOptional<AgentSystemRuntimeConfig['thinkingDepth']>
-  runProfile?: LooseOptional<RunProfileId>
-  promptBudget?: LooseOptional<{
-    profile: RunProfileId
-    maxChars: number
-  }>
-}
-
-/** 系统提示词装配结果（常规/子智能体与主 Agent 两条入口共用的返回形状）。 */
-interface AssembledSystemPrompt {
-  systemPrompt: string
-  devEnvironmentContext: Nullable<string>
-  stableCutoff: number
-  promptSegments: PromptSegmentTrace[]
-  skippedPromptSegments: SkippedPromptSegmentTrace[]
-}
+import { PromptStateBuilder } from './PromptStateBuilder'
 
 /**
  * 智能体运行上下文构建器。

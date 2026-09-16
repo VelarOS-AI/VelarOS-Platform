@@ -1,12 +1,9 @@
 import { AppError } from '@velaros-ai/core/error'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
-import type { ApprovalDecision, ToolConfirmationDecisionOptions } from '../../types/agent'
-
-export type ManualApprovalOptions = Omit<
-  ToolConfirmationDecisionOptions,
-  'requireManualApproval' | 'rememberRiskScope'
->
+import type { ApprovalPort } from '../../contract/requires.js'
+import type { ToolConfirmationDecisionOptions } from '../../types/agent'
+import type { ManualApprovalOptions, UnattendedApprovalEscalationHooks } from '../../types/toolkit.js'
 
 /**
  * 构造一次必须由用户亲自裁决、且永不复用历史答案的审批请求。
@@ -23,54 +20,6 @@ export function createManualApprovalOptions(
     requireManualApproval: true,
     rememberRiskScope: false,
   }
-}
-
-/**
- * 审批通道端口。
- *
- * 把「要不要问、问谁、答案是什么」抽象成一个通道：工具只管请求审批，
- * 具体如何征询（确认卡 / 策略自动放行 / 无通道时设计式拒绝）由宿主注入的实现决定。
- * 决策形状与风险分类复用现有确认机制（{@link ToolConfirmationDecisionOptions} /
- * {@link ApprovalDecision}），不引入平行的第二套风险模型。
- *
- * 两种征询形态对齐现有 execution 确认机制：{@link ApprovalPort.awaitConfirmation}
- * 被拒会抛出仅取消当前操作的错误，{@link ApprovalPort.awaitConfirmationDecision} 是非终止型
- * （被拒返回结构化决策）。二者都只表达「审批」，不承载计划/任务/用户输入等交互会话能力。
- */
-export interface ApprovalPort {
-  /**
-   * 请求一次工具执行审批；被拒或无审批通道时**抛出**，由工具执行器记录跳过，任务继续。
-   *
-   * @param message 面向用户的确认文案。
-   * @param abortSignal 取消信号；征询被中止时应视为拒绝。
-   * @param options 风险分类与复用/手动确认策略（approvalRisk / riskScope / requireManualApproval 等）。
-   */
-  awaitConfirmation(
-    message: string,
-    abortSignal?: AbortSignal,
-    options?: ToolConfirmationDecisionOptions
-  ): Promise<void>
-  /**
-   * 请求一次工具执行审批，返回**结构化决策**（非终止型）。
-   *
-   * @returns approved 是否放行、message 拒绝原因或批注、autoApproved 是否策略自动放行。
-   */
-  awaitConfirmationDecision(
-    message: string,
-    abortSignal?: AbortSignal,
-    options?: ToolConfirmationDecisionOptions
-  ): Promise<ApprovalDecision>
-}
-
-/**
- * 无人值守审批升级的生命周期钩子：升级挂起 / 升级返回。
- *
- * 供宿主把「子 Agent 正等父线程裁决高风险操作」投影成 UI 状态（如 worker 线程状态卡）；
- * 端口本体不承载任何宿主文案，钩子只回传原始 message，格式化归宿主。
- */
-export interface UnattendedApprovalEscalationHooks {
-  onEscalationPending?: (message: string) => void
-  onEscalationResolved?: () => void
 }
 
 /**

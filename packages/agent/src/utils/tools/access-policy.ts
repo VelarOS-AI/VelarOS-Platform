@@ -1,28 +1,9 @@
 import { toNullable } from '@velaros-ai/core'
 
-import type { AgentRoleId } from '../../types/system'
-import type { CapabilityScopeId, ToolCategoryId } from '../../types/tool'
-import {
-  type AgentRuntimeCapabilityPorts,
-  decideCapabilityScopeCategory,
-  resolveCapabilityScopeId,
-} from '../capabilities'
+import type {CapabilityScopeId, ToolCategoryId } from '../../types/agent.js'
+import type { ToolAccessRuntimeState, ToolCategoryAccessDecision } from '../../types/tools.js'
+import { decideCapabilityScopeCategory, resolveCapabilityScopeId } from '../capabilities'
 
-
-type ToolCategoryUnavailableReason = string
-
-interface ToolAccessRuntimeState {
-  roleId: AgentRoleId
-  activeCapabilityScope?: CapabilityScopeId
-  capabilityPorts?: AgentRuntimeCapabilityPorts
-  satisfiedScopeFactIds?: readonly string[]
-}
-
-interface ToolCategoryAccessDecision {
-  allowed: boolean
-  reason: Nullable<ToolCategoryUnavailableReason>
-  message?: string
-}
 
 function resolveActiveCapabilityScope(state: ToolAccessRuntimeState): CapabilityScopeId {
   return resolveCapabilityScopeId(state.capabilityPorts, {
@@ -57,9 +38,4 @@ export {
   decideToolCategoryAccess,
   isToolCategoryAvailable,
   resolveActiveCapabilityScope,
-}
-export type {
-  ToolAccessRuntimeState,
-  ToolCategoryAccessDecision,
-  ToolCategoryUnavailableReason,
 }

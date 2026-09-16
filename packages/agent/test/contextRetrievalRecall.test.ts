@@ -14,26 +14,15 @@ import assert from 'node:assert/strict'
 import type { ModelMessage } from 'ai'
 import { describe, test } from 'bun:test'
 
+import type { RetrievalPayloadStorePort, RetrievalStateStorePort } from '../src/contract/requires.js'
 import { InMemoryContextPayloadStore } from '../src/impl/context/InMemoryContextPayloadStore'
 import { ProviderRequestCompiler } from '../src/impl/context/ProviderRequestCompiler'
 import { compileProviderSendRequest } from '../src/impl/context/ProviderSendRequest'
 import { ContextGovernanceSessionRegistry } from '../src/impl/residency/ContextGovernanceSession'
 import { ChatContextRetrievalService } from '../src/impl/retrieval/ChatContextRetrievalService'
-import type {
-  ChatContextRetrievalIndexSourceFingerprint,
-  ChatSessionPayloadSnapshot,
-  ChatSessionToolResultPayload,
-} from '../src/types/protocol'
-import type {
-  RetrievalPayloadStorePort,
-  RetrievalStateStorePort,
-} from '../src/types/retrieval-session-store-ports'
+import type { ChatContextRetrievalIndexSourceFingerprint, ChatSessionPayloadSnapshot, ChatSessionToolResultPayload } from '../src/types/agent.js'
+import type { ChatContextRetrievalIndexSaveOptions, ChatContextRetrievalIndexSnapshot, ChatContextRetrievalIndexStore } from '../src/types/retrieval.js'
 import { inferRecallRefKind } from '../src/utils/builtin/context-retrieval'
-import type {
-  ChatContextRetrievalIndexSaveOptions,
-  ChatContextRetrievalIndexSnapshot,
-  ChatContextRetrievalIndexStore,
-} from '../src/utils/retrieval/index-snapshot'
 
 const SessionId = 'session-s3'
 

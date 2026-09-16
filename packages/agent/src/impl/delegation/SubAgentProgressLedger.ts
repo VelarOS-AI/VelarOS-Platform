@@ -1,39 +1,11 @@
 import { isBlank, isEmpty,isPresent, truncate } from '@velaros-ai/core'
 
+import type { DispatchDecision, DispatchSignature, FindingRecord,LedgerEntry, SubAgentTypeKey } from '../../types/delegation.js'
+
 const SubAgentFindingsMaxCharsEach = 480
 const SubAgentFindingsMaxRecords = 8
 const SubAgentMaxIdenticalDispatches = 3
 const SubAgentMaxRoundsPerTarget = 4
-
-/** 类型键：内置类型名或自定义 agent id。 */
-type SubAgentTypeKey = string
-
-/** 一次派发的归一化指纹，用于"无进展"判定与目标分组。 */
-interface DispatchSignature {
-  type: SubAgentTypeKey
-  /** 归一化提示词指纹（type:hash），用于硬拦截「完全冗余的重复派发」。 */
-  promptFingerprint: string
-  /** 目标归一化键（description 优先，否则归一化提示词），用于探测同目标反复横跳。 */
-  targetKey: string
-}
-
-/** 派发判定：直接放行 / 放行但追加收口提醒 / 直接拒跑。 */
-type DispatchDecision =
-  | { kind: 'run'; note: null }
-  | { kind: 'soft-nudge'; note: string }
-  | { kind: 'hard-stop'; note: string }
-
-interface LedgerEntry {
-  type: SubAgentTypeKey
-  promptFingerprint: string
-  targetKey: string
-}
-
-interface FindingRecord {
-  type: SubAgentTypeKey
-  title: string
-  summary: string
-}
 
 /** 账本条目上限（远大于派发硬上限 16，仅作内存安全兜底）。 */
 const MaxLedgerEntries = 32
@@ -167,4 +139,3 @@ class SubAgentProgressLedger {
 }
 
 export { SubAgentProgressLedger }
-export type { DispatchDecision, DispatchSignature }

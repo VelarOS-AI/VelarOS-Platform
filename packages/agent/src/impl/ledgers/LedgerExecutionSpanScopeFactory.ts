@@ -11,145 +11,18 @@ import { toNullable, toOptional } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 
-import type { ProviderRequestSnapshot } from '../../utils/context/provider-request-snapshot'
-import type {
-  ExecutionSpan,
-  ExecutionSpanStatus,
-  ModelSpan,
-  ToolSpan,
-} from '../../utils/wire/observability'
+import type { ExecutionSpanScopeFactory } from '../../contract/requires.js'
+import type { ExecutionSpan, ExecutionSpanStatus, ModelSpan, ToolSpan } from '../../types/agent.js'
+import type { ProviderRequestSnapshot } from '../../types/context.js'
+import type { CapabilitySpanInput, ExecutionCapabilitySpanRecorder, LedgerTurnSpanScopeDeps, ModelSpanHandle, PromptAuditRecord, RunSpanScope, SpanLedgerWarn,ToolSpanHandle, ToolSpanOpener, TurnSpanScope } from '../../types/ledgers.js'
 
-import { ExecutionSpanLedger, type SpanLedgerWarn } from './ExecutionSpanLedger'
+import { ExecutionSpanLedger } from './ExecutionSpanLedger'
 import { ExecutionSpanRecorder } from './OpenExecutionSpan'
-import { PromptAuditLedger, type PromptAuditRecord } from './PromptAuditLedger'
+import { PromptAuditLedger } from './PromptAuditLedger'
 
 const log = logRuntime.tag('ExecutionSpanScope')
 
-/** 宿主能力的会话级观测输入；领域字段全部收进不透明 metadata。 */
-export interface CapabilitySpanInput {
-  name: string
-  capabilityId: string
-  operationId: string
-  metadata?: Readonly<Record<string, unknown>>
-}
-
-/** 非 run 作用域的通用能力观测端口，由宿主按需注入。 */
-export interface ExecutionCapabilitySpanRecorder {
-  recordCapabilitySpan(
-    sessionId: string,
-    input: CapabilitySpanInput
-  ): void
-}
-
 // ── 生产侧端口契约（Ring0 接缝形状） ─────────────────────────────────────────────────
-
-/** 一条 tool span 的收敛产出。`errorCode` 成功用 null。 */
-export interface ToolSpanOutcome {
-  status: ExecutionSpanStatus
-  errorCode: Nullable<string>
-}
-
-/** 一条进行中 tool span 的 handle。`end` 契约上**绝不抛出**（默认实现内部隔离）。 */
-export interface ToolSpanHandle {
-  end(outcome: ToolSpanOutcome): void
-}
-
-/**
- * tool span 开启器——注入执行三件套（ToolExecutor）的**窄端口**。
- *
- * ToolExecutor 只依赖这一个动词：不认 runId / parentSpanId（那些由绑定本开启器的 turn scope 内部持有），
- * 令执行器与观测账本的树形记账解耦。缺省（`undefined`）= 该执行器不产 tool span。
- */
-export interface ToolSpanOpener {
-  /** 开一条挂在当前 turn 下的 tool span；观测停用或开启失败返回 null（执行器据此跳过收敛）。 */
-  beginToolSpan(input: {
-    toolCallId: string
-    toolName: string
-    toolCategoryId: Nullable<string>
-    toolEffectKind: Nullable<string>
-  }): Nullable<ToolSpanHandle>
-}
-
-/** 一条 model span 的收敛产出（D5：usage 挂在此确定 turn 的 model span 上，无 null turn）。 */
-export interface ModelSpanOutcome {
-  status: ExecutionSpanStatus
-  finishReason: Nullable<string>
-  errorCode: Nullable<string>
-  errorMessage: Nullable<string>
-  tokensIn: Nullable<number>
-  tokensOut: Nullable<number>
-  costUsd: Nullable<number>
-  /**
-   * 请求指纹（Ring0 `ProviderRequestFingerprint.id`，与 context-replays 对齐）。仅在回合收敛后才可知
-   * （拼装期计算），故 open 时置 null、收敛时 patch 补上。缺席用 null。
-   */
-  requestFingerprint: Nullable<string>
-}
-
-/** 一条进行中 model span 的 handle。`end` 契约上绝不抛出。 */
-export interface ModelSpanHandle {
-  end(outcome: ModelSpanOutcome): void
-}
-
-/**
- * turn 级 scope：一次 provider 生成回合内 model / tool / capability / policy span 的来源。
- *
- * 继承 {@link ToolSpanOpener} 令其可直接注入 ToolExecutor 作 tool span 开启器。
- */
-export interface TurnSpanScope extends ToolSpanOpener {
-  /** 开本轮 provider 请求的 model span（挂本确定 turn；usage 在 end 时补上）。 */
-  beginModelSpan(input: {
-    provider: string
-    model: string
-    requestFingerprint: Nullable<string>
-  }): Nullable<ModelSpanHandle>
-  /** 记一条 policy 点事件 span（收编 control-plane ledger 决策）。 */
-  recordPolicySpan(input: { name: string; source: string; action: string; reason: string }): void
-  /** 记一条宿主注入能力的点事件 span；Kernel 不解释 operationId/metadata。 */
-  recordCapabilitySpan(input: CapabilitySpanInput): void
-  /**
-   * D3：把本回合的**重内容**（系统提示词全文 / promptSegments / capabilityContextAudit）写进 prompt 审计侧信道
-   * （独立文件，靠 `requestFingerprint` 关联回本回合 model span）。span 侧只留指标 + 指纹保持轻/高频；
-   * 无 sidecar 装配（`resolvePromptAuditPath` 缺席）时 no-op。**绝不进会话账本**。
-   */
-  recordPromptAudit(input: {
-    requestFingerprint: Nullable<string>
-    systemPrompt: string
-    promptSegments: readonly unknown[]
-    skippedPromptSegments: readonly unknown[]
-    capabilityContextAudit: readonly unknown[]
-    providerRequest: Nullable<ProviderRequestSnapshot>
-  }): void
-  /** 收敛本 turn span。 */
-  end(outcome: { status: ExecutionSpanStatus }): void
-}
-
-/** run 级 scope：一次完整 agent 执行的根，派生 turn scope。 */
-export interface RunSpanScope {
-  beginTurn(input: {
-    turn: number
-    roleId: Nullable<string>
-    model: Nullable<string>
-  }): TurnSpanScope
-  end(outcome: { status: ExecutionSpanStatus }): void
-}
-
-/**
- * 注入 runner 的可选 span 端口（`spanRecorder?`）。缺省 = 无观测（零付费）。
- *
- * runner（SoloLoop）每次执行 `beginRun` 得到一个 run scope；其余生产侧只经 scope 派生，不碰账本/recorder。
- */
-export interface ExecutionSpanScopeFactory {
-  beginRun(input: {
-    runId: string
-    sessionId: string
-    rootInputId: Nullable<string>
-    /** 子 Agent 身份/角色名（主 Agent 根 run 用 null）——令独立顶层 run 在同会话多 run 树里可辨识。 */
-    agentName: Nullable<string>
-    /** 派发来源（子 Agent 的父角色/派发链；主 Agent 根 run 用 null）。 */
-    dispatchSource: Nullable<string>
-  }): RunSpanScope
-}
 
 // ── 默认实现：账本落盘 scope 工厂（Ring1，宿主装配） ──────────────────────────────────
 
@@ -383,14 +256,6 @@ class LedgerRunSpanScope implements RunSpanScope {
   private safe<T>(fn: () => T, label: string): Nullable<T> {
     return runIsolatedSpanOp(this.warn, fn, label)
   }
-}
-
-interface LedgerTurnSpanScopeDeps {
-  /** 本 turn 的元数据，供 D3 prompt 审计记录带上（span 侧已单独记，此处审计侧信道复用）。 */
-  turnMeta: { turn: number; roleId: Nullable<string>; model: Nullable<string> }
-  now: () => number
-  /** D3：prompt 审计写入器（fire-and-forget）；null → recordPromptAudit no-op。 */
-  promptAuditAppend: Nullable<(record: PromptAuditRecord) => void>
 }
 
 class LedgerTurnSpanScope implements TurnSpanScope {

@@ -8,66 +8,14 @@ import { resolveToolReadOnly } from '../../utils/toolkit/define-tool-contract'
 import { readToolSchemaDiscoveryNames, ToolContractDiscoveryDescriptors } from '../../utils/toolkit/discovery'
 export { ToolContractDiscoveryDescriptors } from '../../utils/toolkit/discovery'
 
-import { AgentProtocolVersion } from '../../contract/version'
-import type { ToolDescriptor as RegistryToolDescriptor } from '../../types/tool'
+import { AgentProtocolVersion } from '../../contract/constants.js'
+import type { DescribeToolSchemaResponse,LeaseDenialReason, LeaseDeniedResponse, ToolCatalogEntry, ToolCatalogSnapshot, ToolDescriptor as RegistryToolDescriptor, VelarToolCallEnvelope, VelarToolResultEnvelope } from '../../types/agent.js'
+import type { ToolContractExecutionBinding,ToolContractExecutionContext, ToolContractExecutionRegistry } from '../../types/execution.js'
+import type { ToolExecutionPolicyRegistry, ToolExecutorEvents, ToolResult } from '../../types/tools.js'
 import { buildExecutionFailureResult } from '../../utils/tools/execution-policy-failures'
-import type { DescribeToolSchemaResponse, HostProjection } from '../../utils/wire/execution'
-import {
-  type LeaseDenialReason,
-  type LeaseDeniedResponse,
-  ToolCatalogDiscoveryToolName,
-  type ToolCatalogEntry,
-  type ToolCatalogSnapshot,
-  ToolSchemaDiscoveryToolName,
-  type VelarToolCallEnvelope,
-  type VelarToolResultEnvelope,
-} from '../../utils/wire/lease'
-import {
-  ToolExecutionPolicy,
-  type ToolExecutionPolicyContext,
-  type ToolExecutionPolicyRegistry,
-} from '../tools/ToolExecutionPolicy'
-import {
-  ToolExecutor,
-  type ToolExecutorEvents,
-  type ToolResult,
-} from '../tools/ToolExecutor'
-
-export interface ToolContractExecutionContext extends ToolExecutionPolicyContext {
-  setCurrentVisibleToolNames(toolNames: string[]): void
-  setCurrentVisibleToolRegistrationSignatures?(
-    signatures: Record<string, string>,
-  ): void
-}
-
-export interface ToolContractCatalogRegistry<TContext extends ToolContractExecutionContext> {
-  listAvailable(
-    context: TContext,
-    allowList?: string[],
-  ): RegistryToolDescriptor[]
-  describeToolInputSchema(
-    context: TContext,
-    toolName: string,
-  ): Nullable<{ description: string; schema: unknown }>
-  getRegistrationSignature(toolName: string): Nullable<string>
-}
-
-export type ToolContractExecutionRegistry<TContext extends ToolContractExecutionContext> =
-  Omit<ToolExecutionPolicyRegistry, 'listAvailable'> & ToolContractCatalogRegistry<TContext>
-
-/**
- * Host 组装的每会话工具契约绑定。
- *
- * Agent 对会话状态零所有权：Host 注入上下文、可见工具与 session scope；目录租约、schema
- * 自恢复、安全校验顺序和结果信封由本门面统一拥有。
- */
-export interface ToolContractExecutionBinding<TContext extends ToolContractExecutionContext> {
-  readonly toolContext: TContext
-  readonly allowedToolNames: string[]
-  readonly hostProjection: HostProjection
-  readonly projectDescriptor: (descriptor: ToolCatalogEntry) => ToolCatalogEntry
-  readonly runInSessionScope: <T>(run: () => Promise<T>) => Promise<T>
-}
+import { ToolCatalogDiscoveryToolName, ToolSchemaDiscoveryToolName } from '../../utils/wire/lease'
+import { ToolExecutionPolicy } from '../tools/ToolExecutionPolicy'
+import { ToolExecutor } from '../tools/ToolExecutor'
 
 function normalizeSchema(value: unknown): Record<string, unknown> {
   return isPlainObject(value) ? value : {}

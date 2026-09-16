@@ -10,27 +10,8 @@ import {
   isString,
 } from '@velaros-ai/core'
 
-import type { AgentSessionEventPort } from '../../types/event-port'
-
-export type AgentPlanStatus = 'draft' | 'approved' | 'complete' | 'cancelled'
-export type AgentPlanStepStatus = 'pending' | 'in_progress' | 'complete' | 'skipped'
-
-export interface AgentPlanStep {
-  readonly id: string
-  readonly text: string
-  readonly status: AgentPlanStepStatus
-}
-
-export interface AgentPlan {
-  readonly id: string
-  readonly sessionId: string
-  readonly objective: string
-  readonly steps: readonly AgentPlanStep[]
-  readonly status: AgentPlanStatus
-  readonly reviewFeedback: Nullable<string>
-  readonly createdAt: number
-  readonly updatedAt: number
-}
+import type { AgentSessionEventPort } from '../../contract/requires.js'
+import type { AgentPlan,AgentPlanStep, AgentPlanStepStatus } from '../../types/product-session.js'
 
 export class AgentPlanService {
   public constructor(private readonly sessions: AgentSessionEventPort) {}

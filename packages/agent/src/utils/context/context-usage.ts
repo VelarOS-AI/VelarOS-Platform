@@ -2,51 +2,11 @@ import { isArray, isBoolean, isFiniteNumber, isNumber, isObject, isPlainObject, 
 import { mapDefined } from '@velaros-ai/core/utils/mapDefined'
 import { clamp } from '@velaros-ai/core/utils/number'
 
+import type { ContextUsageEstimate } from '../../types/agent.js'
+import type { ContextUsageWindow, EstimateContextUsageOptions } from '../../types/context.js'
+
 import { resolveUsableContextWindow } from './context-budget'
 import { countTokensTiktoken, resolveTokenizerEngine } from './tokenizer'
-
-export interface ContextUsageEstimate {
-  /** 本地仅估算文本；图片、音频、文档的供应方专用计量不在此口径内。 */
-  mediaTokenCoverage?: 'none' | 'unknown'
-  mediaPartCount?: number
-  estimatedTokens: number
-  estimatedChars: number
-  contextWindow: number
-  /** 扣除输出预留与安全余量后的可用窗口；未启用预算调优时等于 contextWindow。 */
-  usableContextWindow: number
-  /** 本次计量采用的输出预留 token 数（未启用时为 0）。 */
-  reservedOutputTokens: number
-  tokenPercent: number
-  payloadPercent: number
-  percent: number
-}
-
-/** 送核门的窗口口径（{@link resolveContextUsageWindow} 的产物）。 */
-export interface ContextUsageWindow {
-  contextWindow: number
-  usableContextWindow: number
-  reservedOutputTokens: number
-  safetyMarginPercent: number
-}
-
-export interface EstimateContextUsageOptions {
-  contextWindow?: LooseOptional<number>
-  extraContext?: unknown
-  extraEstimatedTokens?: LooseOptional<number>
-  extraEstimatedChars?: LooseOptional<number>
-  /**
-   * 为模型本轮输出预留的 token 数；提供后 tokenPercent 改对“可用窗口”计量。
-   * 不提供时退化为旧行为（usable == contextWindow），保持向后兼容。
-   */
-  reservedOutputTokens?: LooseOptional<number>
-  /** 安全余量百分比，吸收本地估算与供应方计费口径偏差；与 reservedOutputTokens 同为可选。 */
-  safetyMarginPercent?: LooseOptional<number>
-  /**
-   * MMU 校准系数：由 ContextUsageCalibrator 依据“估算↔真实”残差学习得到，
-   * 乘到 estimatedTokens 上以贴近供应方真实输入用量。缺省/非法时按 1 处理。
-   */
-  calibrationFactor?: LooseOptional<number>
-}
 
 /** 界面提醒线，只表达接近容量，不触发压缩。 */
 export const ContextUsageHighWatermarkPercent = 90

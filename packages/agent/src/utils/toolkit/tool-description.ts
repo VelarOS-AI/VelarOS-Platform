@@ -1,40 +1,9 @@
 import { isBlank, isNumber, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import type { ToolCategoryId } from '../../types/tool'
+import type { ToolCategoryId } from '../../types/agent.js'
+import type { StructuredDescriptionGrammar,StructuredParameterDescriptionSpec, StructuredToolDescriptionParts, StructuredToolDescriptionSpec, ToolDescriptionBudgetWaiver, ToolDescriptionBudgetWaiverReason, ToolDescriptionLike } from '../../types/toolkit.js'
 
-type NonEmptyDescriptionItems = readonly [string, ...string[]]
-
-interface StructuredToolDescriptionSpec {
-  description: string
-  suitable: NonEmptyDescriptionItems
-  forbidden?: NonEmptyDescriptionItems
-  protocol?: NonEmptyDescriptionItems
-  usage?: NonEmptyDescriptionItems
-  examples?: NonEmptyDescriptionItems
-  notes?: NonEmptyDescriptionItems
-}
-
-interface StructuredToolDescriptionParts {
-  description: string
-  suitable: string[]
-  forbidden: string[]
-  protocol: string[]
-  usage: string[]
-  examples: string[]
-  notes: string[]
-}
-
-interface StructuredParameterDescriptionSpec {
-  description: string
-  values?: NonEmptyDescriptionItems
-  usage?: NonEmptyDescriptionItems
-  notes?: NonEmptyDescriptionItems
-}
-
-interface ToolDescriptionLike {
-  description: string
-}
 
 const StructuredToolDescriptionSections = [
   '描述',
@@ -98,19 +67,6 @@ function assertToolDescriptionWithinLimit(name: string, description: string): vo
  *  2. 显式豁免 `descriptionBudgetWaiver`，理由只认 `safety-protocol` / `meta-tool` 两种。
  */
 const ToolDescriptionBudgetChars = 1_800
-
-/** 软预算豁免理由；只有这两种，别加第三种（加之前先改 §8 判决）。 */
-type ToolDescriptionBudgetWaiverReason =
-  /** 强制流程本身就是防损坏的安全约束，拆进技能等于拆护栏（技能可能没装、可能没被读）。 */
-  | 'safety-protocol'
-  /** `tooling:*` 这类自举工具——模型靠它才找得到技能，没有「先读技能」的余地。 */
-  | 'meta-tool'
-
-interface ToolDescriptionBudgetWaiver {
-  reason: ToolDescriptionBudgetWaiverReason
-  /** 为什么这个工具属于该档；必填，空白视同没写。写给下一个想砍它的人看。 */
-  note: string
-}
 
 const ToolDescriptionBudgetWaiverReasons: ReadonlySet<string> = new Set<
   ToolDescriptionBudgetWaiverReason
@@ -204,18 +160,6 @@ function isStructuredListSection(block: string): boolean {
   if (lines.length < 2) return false
 
   return lines.slice(1).every((line) => line.startsWith('- ') && !isBlank(line.slice(2).trim()))
-}
-
-/**
- * 结构化描述的语法（分节顺序 / 允许分节 / 必需分节）。
- *
- * 工具描述与参数描述用同一部语法、只换这三张表；此前两份校验各写一遍 28 行，
- * 语法改一处必漏另一处，故收成单一校验器 + 两张语法表。
- */
-interface StructuredDescriptionGrammar {
-  sectionOrder: ReadonlyMap<string, number>
-  allowedSections: ReadonlyArray<ReadonlySet<string>>
-  requiredSections: ReadonlySet<string>
 }
 
 const ToolDescriptionGrammar: StructuredDescriptionGrammar = {
@@ -348,13 +292,6 @@ function structureToolDescriptionForModel(
 }
 
 /**
- * 工具描述详细程度（渐进式披露 / progressive disclosure）。
- * - full：保留作者写下的全部条目。
- * - compact：保留结构与每个分节的首条要点，作为 tier-1 精简描述，降低 token 成本。
- */
-type ToolDescriptionDetail = 'full' | 'compact'
-
-/**
  * 渐进式披露的压缩内核：保留 `描述：` 段落与分节顺序，逐节只留首条要点。
  *
  * `keepInFullSection` 是**不许压缩的那一节**——它承载模型做对事所必需的硬信息
@@ -429,12 +366,4 @@ export {
   structureToolDescriptionsForCategory,
   ToolDescriptionBudgetChars,
   ToolDescriptionMaxChars,
-}
-export type {
-  StructuredParameterDescriptionSpec,
-  StructuredToolDescriptionParts,
-  StructuredToolDescriptionSpec,
-  ToolDescriptionBudgetWaiver,
-  ToolDescriptionBudgetWaiverReason,
-  ToolDescriptionDetail,
 }

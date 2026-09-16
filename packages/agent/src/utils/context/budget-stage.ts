@@ -9,29 +9,14 @@ import type { ModelMessage } from 'ai'
 
 import { logRuntime } from '@velaros-ai/core/logger'
 
-import type {
-  CompileProviderRequestInput,
-  ProviderRequestCompileDecision,
-  ProviderRequestPressureKind,
-  ProviderRequestZoneDiagnostic,
-} from '../../impl/context/ProviderRequestCompiler'
+import type { ContextUsageEstimate } from '../../types/agent.js'
+import type { CompileProviderRequestInput, ContextLedgerEntry, ContextWorkingSetBlock, ContextWorkingSetBudgetAllocation,ProviderRequestCompileDecision, ProviderRequestPressureKind, ProviderRequestZoneDiagnostic } from '../../types/context.js'
+import type { GovernanceWindowDerivation } from '../../types/residency.js'
 import { compareStableStrings } from '../residency/determinism'
-import type { GovernanceWindowDerivation } from '../residency/governance-window'
 
-import {
-  type ContextLedgerEntry,
-  type ContextWorkingSetBlock,
-  estimateBlockTokens,
-} from './context-ledger'
-import {
-  ContextUsageCompactionPercent,
-  type ContextUsageEstimate,
-  estimateContextUsage,
-} from './context-usage'
-import {
-  type ContextWorkingSetBudgetAllocation,
-  ContextWorkingSetBudgetGovernor,
-} from './context-working-set-budget-governor'
+import { estimateBlockTokens } from './context-ledger'
+import { ContextUsageCompactionPercent, estimateContextUsage } from './context-usage'
+import { ContextWorkingSetBudgetGovernor } from './context-working-set-budget-governor'
 import { sumPositive } from './message-scan'
 
 const log = logRuntime.tag('ProviderRequestBudget')

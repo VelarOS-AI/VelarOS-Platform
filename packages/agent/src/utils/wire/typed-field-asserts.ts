@@ -3,17 +3,8 @@ import { AppError } from '@velaros-ai/core/error'
 import { isBlank } from '@velaros-ai/core/utils/string'
 
 import type { ChatPromptFeatureId } from '../../types/agent'
-import type { RunProfileId, RunProfileSelectionId } from '../../types/run-profile'
-import type { ReasoningLevel, ThinkingDepth } from '../../types/team'
-import type { ToolSurfaceProfileId } from '../../types/tool'
-
-interface TypedEnumAsserts<T extends string> {
-  values: readonly T[]
-  is: (value: unknown) => value is T
-  assert: (value: unknown, field?: string) => T
-  parseOptional: (value: unknown, field?: string) => T | undefined
-  resolve: (value: unknown, fallback: T, field?: string) => T
-}
+import type { ReasoningLevel, RunProfileId, RunProfileSelectionId,ThinkingDepth, ToolSurfaceProfileId } from '../../types/agent.js'
+import type { TypedEnumAsserts } from '../../types/runner.js'
 
 function createTypedEnumAsserts<const T extends string>(
   values: readonly T[],
@@ -168,4 +159,3 @@ export {
   ToolSurfaceProfileIdValues,
 }
 
-export type { TypedEnumAsserts }

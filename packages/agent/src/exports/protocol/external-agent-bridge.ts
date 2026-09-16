@@ -1,9 +1,4 @@
-export type {
-  ExternalAgentBridgeClientMessage,
-  ExternalAgentBridgeCommand,
-  ExternalAgentBridgeHostMessage,
-  ExternalAgentBridgeMessage,
-} from '../../utils/wire/external-agent-bridge'
+export type { ExternalAgentBridgeClientMessage, ExternalAgentBridgeCommand, ExternalAgentBridgeHostMessage, ExternalAgentBridgeMessage } from '../../types/agent.js'
 export {
   ExternalAgentBridgeAckSchema,
   ExternalAgentBridgeClientMessageSchema,

@@ -2,18 +2,8 @@ import { randomUUID } from 'node:crypto'
 
 import { isNumber, isPlainObject, isString } from '@velaros-ai/core'
 
-import type { AgentSessionEventPort } from '../../types/event-port'
-
-export type AgentGoalStatus = 'active' | 'complete' | 'blocked' | 'cancelled'
-
-export interface AgentGoal {
-  readonly id: string
-  readonly sessionId: string
-  readonly objective: string
-  readonly status: AgentGoalStatus
-  readonly createdAt: number
-  readonly updatedAt: number
-}
+import type { AgentSessionEventPort } from '../../contract/requires.js'
+import type { AgentGoal,AgentGoalStatus } from '../../types/product-session.js'
 
 export class AgentGoalService {
   public constructor(

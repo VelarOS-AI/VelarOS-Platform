@@ -2,11 +2,8 @@ import { AppError } from '@velaros-ai/core/error'
 import type { ScopedLog } from '@velaros-ai/core/logger'
 import { readFirstString } from '@velaros-ai/core/utils/unknownJsonRecord'
 
-import { type ChatRuntimeEvent, ChatRuntimeEvents } from '../../types/chat-runtime'
-
-interface AgentRuntimeEventBus {
-  emitRuntime(event: ChatRuntimeEvent): void
-}
+import type { AgentRuntimeEventBus } from '../../types/runner.js'
+import { ChatRuntimeEvents } from '../wire/chat-runtime.js'
 
 /**
  * 智能体循环运行时事件辅助器。
@@ -70,4 +67,3 @@ class AgentRuntimeEvents {
 }
 
 export { AgentRuntimeEvents }
-export type { AgentRuntimeEventBus }

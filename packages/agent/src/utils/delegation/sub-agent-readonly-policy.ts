@@ -1,6 +1,7 @@
 import { isBoolean } from '@velaros-ai/core'
 
-import type { ToolCategoryId } from '../../types/tool'
+import type { ToolCategoryId } from '../../types/agent.js'
+
 
 function resolveReadonlyMode(readonlyDefault: boolean, override?: boolean): boolean {
   return isBoolean(override) ? override : readonlyDefault

@@ -1,23 +1,6 @@
-import type { ModelMessage } from 'ai'
 
-import type { ScopedLog } from '@velaros-ai/core/logger'
 
-import type { AgentRuntimeInputPort } from '../runner/runtime-input-port'
-
-type SoloRuntimeGuidancePhase = 'turn-start' | 'before-goal-check' | 'before-complete'
-
-interface ConsumeSoloRuntimeGuidanceInput {
-  turn: number
-  phase: SoloRuntimeGuidancePhase
-  history: ModelMessage[]
-  runtimeInput?: AgentRuntimeInputPort
-  consumeGuidance?: () => Nullable<ModelMessage> | Promise<Nullable<ModelMessage>>
-  log: Pick<ScopedLog, 'info' | 'warn'>
-}
-
-type SoloRuntimeGuidanceResult =
-  | { consumed: true; reason: 'user-guidance' }
-  | { consumed: false; reason: 'none' | 'non-user-message' }
+import type { ConsumeSoloRuntimeGuidanceInput, SoloRuntimeGuidanceResult } from '../../types/loop.js'
 
 async function consumeSoloRuntimeGuidance(
   input: ConsumeSoloRuntimeGuidanceInput
@@ -49,8 +32,3 @@ async function consumeSoloRuntimeGuidance(
 }
 
 export { consumeSoloRuntimeGuidance }
-export type {
-  ConsumeSoloRuntimeGuidanceInput,
-  SoloRuntimeGuidancePhase,
-  SoloRuntimeGuidanceResult,
-}

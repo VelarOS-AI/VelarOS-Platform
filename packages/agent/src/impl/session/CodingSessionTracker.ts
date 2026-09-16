@@ -7,14 +7,6 @@ import type {
   ToolLayerTelemetryMetrics,
   TurnPlanningTelemetryPayload,
 } from '../../types/agent'
-import type { RunProfileSelectionId } from '../../types/run-profile'
-import type { ThinkingDepth } from '../../types/team'
-import type {
-  CapabilityAutoApprovalNotice,
-  CapabilityScopeId,
-  ToolCategoryId,
-  ToolSurfaceProfileId,
-} from '../../types/tool'
 import {
   assertRunProfileSelectionId,
   assertToolSurfaceProfileId,
@@ -23,43 +15,23 @@ import {
 } from '../../utils/wire/typed-field-asserts'
 
 const DefaultEnabledPromptFeatures: readonly ChatPromptFeatureId[] = []
-import type {
-  CapabilityValidationRunResult,
-  CapabilityValidationStatus,
-} from '../../types/capability-validation'
-import type {
-  CapabilityValidationFailure,
-  CodingSessionSnapshot,
-  ReminderCapabilityResolver,
-  RuntimeReminderInput,
-  RuntimeReminderProducer,
-} from '../../types/reminders'
-import type { CapabilityValidationInterpreter } from '../../utils/capabilities'
+import type { CapabilityValidationInterpreter,ReminderCapabilityResolver, RuntimePromptFeaturePolicy, RuntimeReminderProducer } from '../../contract/requires.js'
+import type { CapabilityAutoApprovalNotice, CapabilityScopeId, RunProfileSelectionId,ThinkingDepth, ToolCategoryId, ToolSurfaceProfileId } from '../../types/agent.js'
+import type { CapabilityValidationRunResult, CapabilityValidationStatus } from '../../types/capabilities.js'
+import type { CapabilityValidationFailure, CodingSessionSnapshot, CodingSessionToolCategoryToolNames, CodingSessionToolContext, RuntimeReminderConsumeResult,RuntimeReminderInput } from '../../types/session.js'
+import type { ToolAllocatorRequest } from '../../types/tools.js'
 import {
   DefaultRunProfileSelectionId,
   DefaultToolSurfaceProfileId,
 } from '../../utils/runner/runtime-profiles'
-import {
-  defaultRuntimePromptFeaturePolicy,
-  type RuntimePromptFeaturePolicy,
-} from '../tools/DefaultPromptFeaturePolicy'
-import type { ToolAllocatorRequest } from '../tools/SessionToolAllocator'
+import { defaultRuntimePromptFeaturePolicy } from '../tools/DefaultPromptFeaturePolicy'
 
 import { CodingSessionEditResultHelper } from './CodingSessionEditResultHelper'
 import { CodingSessionVerificationHelper } from './CodingSessionVerificationHelper'
 import { CodingToolCallDeduper } from './CodingToolCallDeduper'
-import { type RuntimeReminderConsumeResult, RuntimeReminderScheduler } from './RuntimeReminderScheduler'
+import { RuntimeReminderScheduler } from './RuntimeReminderScheduler'
 import { SessionTelemetryCounters } from './SessionTelemetryCounters'
 import { TaskApprovalState } from './TaskApprovalState'
-
-type CodingSessionToolCategoryToolNames = Partial<Record<ToolCategoryId, readonly string[]>>
-
-interface CodingSessionToolContext {
-  listTools(scope?: string): Array<{
-    name: string
-    categoryId?: LooseOptional<ToolCategoryId>
-  }>
-}
 
 interface CodingSessionTrackerOptions {
   taskApprovals?: TaskApprovalState
@@ -1410,9 +1382,5 @@ class CodingSessionTracker {
   }
 }
 
-export type {
-  CodingSessionToolCategoryToolNames,
-  CodingSessionToolContext,
-  CodingSessionTrackerOptions,
-}
+export type { CodingSessionTrackerOptions }
 export { CodingSessionTracker }

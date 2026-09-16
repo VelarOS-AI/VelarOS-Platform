@@ -1,12 +1,6 @@
 import { isEmpty,toNullable } from '@velaros-ai/core'
 
-import type {
-  ExecutionTaskExecutionAdvice,
-  ExecutionTaskPlanStep,
-  ExecutionTaskRecommendedAction,
-  ExecutionTaskRecord,
-} from '../../types/execution'
-import type { AgentRoleId } from '../../types/system'
+import type { AgentRoleId,ExecutionTaskExecutionAdvice, ExecutionTaskPlanStep, ExecutionTaskRecommendedAction, ExecutionTaskRecord } from '../../types/agent.js'
 
 /**
  * 执行计划状态辅助器。

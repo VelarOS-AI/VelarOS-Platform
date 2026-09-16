@@ -2,80 +2,12 @@ import type { ModelMessage } from 'ai'
 
 import { isArray, isBlank, isPresent,isRecord, isString, Log, toOptional } from '@velaros-ai/core'
 
-import {
-  type ContextWorkingSetBlock,
-  type ContextWorkingSetBlockLifecycle,
-  type ContextWorkingSetBlockProvenance,
-  type ContextWorkingSetBlockSafety,
-  estimateBlockChars,
-  estimateBlockTokens,
-  hasFailureSignal,
-} from './context-ledger'
-import {
-  type ContextWorkingSetZoneId,
-  DefaultContextWorkingSetZonePolicies,
-} from './context-working-set-zones'
+import type { ClassifiedContextWorkingSet, ClassifyContextWorkingSetInput, ContextActiveTaskInput, ContextPinnedEvidenceInput, ContextResourceStateInput, ContextWorkingSetBlock, ContextWorkingSetBlockLifecycle, ContextWorkingSetBlockProvenance, ContextWorkingSetBlockSafety, ContextWorkingSetZoneId } from '../../types/context.js'
+
+import { estimateBlockChars, estimateBlockTokens, hasFailureSignal } from './context-ledger'
+import { DefaultContextWorkingSetZonePolicies } from './context-working-set-zones'
 import { readVerbatimString } from './message-scan'
 import { isStatefulToolResultName } from './stateful-tool-results'
-
-export interface ContextWorkingSetRetrievalHandleInput {
-  id: string
-  summary: string
-  estimatedChars?: number
-  payloadRef?: string
-  stale?: boolean
-}
-
-export interface ContextActiveTaskInput {
-  id?: LooseOptional<string>
-  title?: LooseOptional<string>
-  summary?: LooseOptional<string>
-  state?: LooseOptional<string>
-  latestFailure?: LooseOptional<string>
-  updatedAt?: LooseOptional<number>
-  metadata?: LooseOptional<Record<string, unknown>>
-}
-
-export interface ContextPinnedEvidenceInput {
-  id: string
-  kind?: LooseOptional<'evidence' | 'user-constraint'>
-  content: string
-  summary?: LooseOptional<string>
-  source?: LooseOptional<string>
-  payloadRef?: LooseOptional<string>
-  filePath?: LooseOptional<string>
-  contentHash?: LooseOptional<string>
-  resourceRevision?: LooseOptional<string>
-  recoverable?: LooseOptional<boolean>
-  stale?: LooseOptional<boolean>
-  verified?: LooseOptional<boolean>
-}
-
-export interface ContextResourceItemStateInput {
-  path: string
-  hash?: LooseOptional<string>
-  revision?: LooseOptional<string>
-  mtimeMs?: LooseOptional<number>
-}
-
-export interface ContextResourceStateInput {
-  revision?: LooseOptional<string>
-  files?: readonly ContextResourceItemStateInput[]
-}
-
-export interface ClassifyContextWorkingSetInput {
-  systemPrompt: string
-  messages: ModelMessage[]
-  toolSchemaChars?: Record<string, number>
-  retrievalHandles?: ContextWorkingSetRetrievalHandleInput[]
-  activeTask?: LooseOptional<ContextActiveTaskInput>
-  pinnedEvidence?: readonly ContextPinnedEvidenceInput[]
-  resourceState?: LooseOptional<ContextResourceStateInput>
-}
-
-export interface ClassifiedContextWorkingSet {
-  blocks: ContextWorkingSetBlock[]
-}
 
 function createBlock(
   id: string,

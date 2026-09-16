@@ -3,58 +3,7 @@ import { basename, extname, isAbsolute, normalize } from 'node:path'
 import { isArray, isNotNull, isPresent,isString, Log } from '@velaros-ai/core'
 import { asRecord } from '@velaros-ai/core/utils/unknownJsonRecord'
 
-/**
- * 扫描阶段发现的内部命令日志绝对路径。
- * `source` 记录该 path 在工具结果 JSON 中的逻辑位置，便于 debug。
- */
-interface ReferencedLogPath {
-  /** 绝对路径，须通过 {@link ContextRetrievalReferences.isInternalCommandLogPath}。 */
-  path: string
-  /** 如 `serializedResult`、`displayResult.foo.logPath`。 */
-  source: string
-}
-
-/**
- * 扫描阶段发现的内部 artifact 绝对路径。
- */
-interface ReferencedArtifactPath {
-  /** 绝对路径，须含 `/.velaros/artifacts/`。 */
-  path: string
-  source: string
-}
-
-/**
- * {@link ContextRetrievalReferenceReader.readReferencedLog} 的读盘结果。
- * content 为 null 时表示未读到有效文本（不存在、二进制、非内部路径等）。
- */
-interface LogReadSnippet {
-  path: string
-  source: string
-  /** UTF-8 文本内容，经 truncate；null 表示不可用。 */
-  content: LooseOptional<string>
-  /** 文件字节大小；未知时为 null。 */
-  size: LooseOptional<number>
-  /** 是否因文件过大而 head+tail 采样。 */
-  truncated: boolean
-  /** 非致命问题说明（文件消失、二进制等）；null 表示正常。 */
-  warning: LooseOptional<string>
-}
-
-/**
- * {@link ContextRetrievalReferenceReader.readReferencedArtifactManifest} 的结果。
- * 非文本 artifact 仅有 metadata，preview 为 null。
- */
-interface ArtifactManifestSnippet {
-  path: string
-  source: string
-  filename: string
-  /** 由 {@link ContextRetrievalReferences.inferArtifactType} 推断。 */
-  type: string
-  size: LooseOptional<number>
-  /** 文本类 artifact 的文件头 preview；二进制为 null。 */
-  preview: LooseOptional<string>
-  warning: LooseOptional<string>
-}
+import type { ReferencedArtifactPath,ReferencedLogPath } from '../../types/retrieval.js'
 
 /**
  * 从工具结果的 `serializedResult` / `displayResult` 中**扫描**内部日志与 `artifact` 路径引用。
@@ -406,4 +355,4 @@ class ContextRetrievalReferences {
 /** 全进程唯一的路径扫描实例。 */
 const contextRetrievalReferences = new ContextRetrievalReferences()
 
-export { type ArtifactManifestSnippet, ContextRetrievalReferences, contextRetrievalReferences, type LogReadSnippet, type ReferencedArtifactPath, type ReferencedLogPath }
+export { ContextRetrievalReferences, contextRetrievalReferences }

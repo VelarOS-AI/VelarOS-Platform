@@ -2,7 +2,8 @@ import { z } from 'zod'
 
 import { isEmpty, isPresent } from '@velaros-ai/core'
 
-import type { SubAgentTypeId } from '../../types/sub-agent-task'
+import type { SubAgentTypeId } from '../../types/agent.js'
+import type { DispatchAgentInput } from '../../types/builtin.js'
 import {
   renderParameterDescription as parameterDescription,
 } from '../toolkit/tool-description'
@@ -218,8 +219,6 @@ const dispatchAgentSchema = z.object({
       tool_scope: value.tool_scope ?? 'type_default',
       tool_categories: value.tool_categories ?? [],
     }
-})
+}) satisfies z.ZodType<DispatchAgentInput>
 
-type DispatchAgentInput = z.infer<typeof dispatchAgentSchema>
-
-export { type DispatchAgentInput, dispatchAgentSchema, type SubAgentTypeId }
+export { dispatchAgentSchema, type SubAgentTypeId }

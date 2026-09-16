@@ -9,20 +9,16 @@
 //  ② 绑定直接引用原实体，Loader 与投影全程不复制不包装，载荷对象同一性逐项保持。
 import { optionalWhen, toOptional } from '@velaros-ai/core'
 
-import type { ExecutionModeDescriptor } from '../../types/execution-mode-descriptor'
-import type { VelaTool } from '../../utils/builtin/define-agent-tool'
-import { type BuiltInPromptOptions, createBuiltInPromptSegments } from '../../utils/guidance/catalog'
+import type { AgentModExecutionModeContribution, AgentModManifest, AgentModPromptSegmentContribution, AgentModToolContribution } from '../../types/agent.js'
+import type { BuiltinAgentModOptions, BuiltinAgentModPackage, VelaTool } from '../../types/builtin.js'
+import type {PromptSegmentDefinition } from '../../types/guidance.js'
+import type { AgentModBindings } from '../../types/mods.js'
+import type { ExecutionModeDescriptor } from '../../types/runner.js'
+import { createBuiltInPromptSegments } from '../../utils/guidance/catalog'
 import { listExecutionModes } from '../../utils/runner/execution-mode-registry'
 import { resolveToolReadOnly } from '../../utils/toolkit/define-tool-contract'
-import {
-  type AgentModExecutionModeContribution,
-  type AgentModManifest,
-  AgentModManifestSchemaVersion,
-  type AgentModPromptSegmentContribution,
-  type AgentModToolContribution,
-} from '../../utils/wire/mods'
-import { type PromptSegmentDefinition, resolvePromptSegmentStability } from '../guidance/PromptRegistry'
-import type { AgentModBindings, AgentModPackage } from '../mods/AgentModLoader'
+import { AgentModManifestSchemaVersion } from '../../utils/wire/mods'
+import { resolvePromptSegmentStability } from '../guidance/PromptRegistry'
 
 import { activeDirectiveTools } from './ActiveDirectives.tool'
 import { agentWorkflowTools } from './AgentWorkflow.tool'
@@ -101,18 +97,6 @@ function toExecutionModeContribution(
   }
 }
 
-interface BuiltinAgentModOptions {
-  /** 透传给内置提示词段构造（宿主身份说明）。 */
-  promptOptions?: BuiltInPromptOptions
-  /** 随主包版本流转；缺省与 manifest schema 同档的保守值。 */
-  version?: string
-}
-
-interface BuiltinAgentModPackage extends AgentModPackage {
-  readonly manifest: AgentModManifest
-  readonly bindings: AgentModBindings
-}
-
 /**
  * 构造随包官方 Agent mod。
  *
@@ -170,4 +154,3 @@ export {
   collectBuiltinAgentModTools,
   createBuiltinAgentModPackage,
 }
-export type { BuiltinAgentModOptions, BuiltinAgentModPackage }

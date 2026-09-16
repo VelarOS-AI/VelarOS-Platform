@@ -7,11 +7,11 @@ import assert from 'node:assert/strict'
 
 import { describe, test } from 'bun:test'
 
-import type { SubAgentDispatchLimitsSnapshot } from '../src/impl/delegation/Semaphore'
 import { Semaphore } from '../src/impl/delegation/Semaphore'
 import { SubAgentDispatcher } from '../src/impl/delegation/SubAgentDispatcher'
 import { AgentWorkflowRuntime } from '../src/impl/runner/AgentWorkflowRuntime'
-import type { AgentWorkflowAgentResult, AgentWorkflowDefinition } from '../src/types/agent-workflow'
+import type { AgentWorkflowAgentResult, AgentWorkflowDefinition } from '../src/types/agent.js'
+import type { SubAgentDispatchLimitsSnapshot } from '../src/types/delegation.js'
 
 /** 只喂 `describeExecutionLimits` 真正读到的那一格配置；其余依赖不参与本条判定。 */
 function dispatcherWithConcurrency(maxConcurrentSubAgents?: number): SubAgentDispatcher {

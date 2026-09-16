@@ -1,5 +1,5 @@
-import type { StreamVerificationSummary } from '../../types/chat-runtime'
-import type { CodingSessionSnapshot } from '../../types/reminders'
+import type { StreamVerificationSummary } from '../../types/agent.js'
+import type { CodingSessionSnapshot } from '../../types/session.js'
 import { hasVerificationRelevantModifiedPaths } from '../session/paths'
 
 /** 展示已有验证事实；没有实际验证结果时不从正常返回推导通过。 */

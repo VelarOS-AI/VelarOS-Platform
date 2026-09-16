@@ -5,16 +5,13 @@ export { ChatStreamConsumer } from '../impl/chat/ChatStreamConsumer'
 export { ChatStreamProtocol,chatStreamProtocol } from '../impl/chat/ChatStreamProtocol'
 export { ChatStreamSessionLog } from '../impl/chat/ChatStreamSessionLog'
 export type { ExecutionModeId } from '../types/agent'
-export type {
-  AgentBridgeDispatch,
-  AgentBridgeOutput,
-  ChatStreamLifecyclePhase,
-  ChatStreamLogEntry,
-  ChatStreamTerminationReason,
-  StreamObservabilityEntry,
-  TerminalRuntimeExecutionAction,
-} from '../types/chat-stream'
-export type { ResolvedChatSendRequestOptions } from '../utils/chat/resolve-chat-send-request'
+export type { ContextUsageEstimate } from '../types/agent.js'
+export type { AgentBridgeDispatch, AgentBridgeOutput, ChatStreamLifecyclePhase, ChatStreamLogEntry, ChatStreamTerminationReason, StreamObservabilityEntry, TerminalRuntimeExecutionAction } from '../types/chat.js'
+export type { ResolvedChatSendRequestOptions } from '../types/chat.js'
+export type { ContextUsageWindow, EstimateContextUsageOptions } from '../types/context.js'
+export type { TurnContextBlockInput } from '../types/runner.js'
+export type { GoalDockAction, GoalDockPrimaryAction, GoalDockTone, GoalDockViewModel, GoalLifecycleAction, GoalLifecycleStatus } from '../types/runner.js'
+export type { SerializationHints } from '../types/tools.js'
 export { resolveChatSendRequestOptions } from '../utils/chat/resolve-chat-send-request'
 export { resolveStoredChatSessionFields } from '../utils/chat/resolve-stored-chat-session'
 export {
@@ -25,11 +22,6 @@ export {
   extractSessionSearchTerms,
   normalizeSessionSearchText,
 } from '../utils/chat/session-search-text'
-export type {
-  ContextUsageEstimate,
-  ContextUsageWindow,
-  EstimateContextUsageOptions,
-} from '../utils/context/context-usage'
 export {
   ContextUsageCompactionPercent,
   ContextUsageHighWatermarkPercent,
@@ -46,14 +38,6 @@ export {
   resolveExecutionModes,
   stripExecutionModePromptFeatures,
 } from '../utils/runner/execution-mode-registry'
-export type {
-  GoalDockAction,
-  GoalDockPrimaryAction,
-  GoalDockTone,
-  GoalDockViewModel,
-  GoalLifecycleAction,
-  GoalLifecycleStatus,
-} from '../utils/runner/goal-lifecycle-projection'
 export {
   buildGoalDockViewModel,
   findCurrentGoalArtifact,
@@ -62,7 +46,6 @@ export {
   goalLifecycleToUpsertInput,
   isGoalArtifact,
 } from '../utils/runner/goal-lifecycle-projection'
-export type { TurnContextBlockInput } from '../utils/runner/turn-context-format'
 export {
   formatTurnContextOmittedNote,
   renderTurnContextBlock,
@@ -71,7 +54,6 @@ export {
   TurnContextBlockOpenTag,
   TurnContextMidRunNoteLead,
 } from '../utils/runner/turn-context-format'
-export type { SerializationHints } from '../utils/tools/tool-result-serialization'
 export {
   compactToolInputForModel,
   compactToolResultForDisplay,

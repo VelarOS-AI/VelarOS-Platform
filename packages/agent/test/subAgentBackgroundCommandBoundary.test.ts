@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 
-import { createSubAgentContext, type SubAgentContextBase } from '../src/utils/loop/loop-runtime'
+import type { SubAgentContextBase } from '../src/types/loop.js'
+import { createSubAgentContext } from '../src/utils/loop/loop-runtime'
 
 type CommandPort = {
   runCommand: (command: string, options?: { background?: boolean }) => Promise<string>

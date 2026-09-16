@@ -2,31 +2,8 @@ import { randomUUID } from 'node:crypto'
 
 import { isArray, isPlainObject, isString } from '@velaros-ai/core'
 
-import type { AgentSessionEventPort } from '../../types/event-port'
-
-export interface AgentQuestionRequest {
-  readonly id: string
-  readonly sessionId: string
-  readonly question: string
-  readonly options: readonly string[]
-  readonly allowCustom: boolean
-  readonly createdAt: number
-}
-
-export interface AskAgentQuestionInput {
-  readonly sessionId: string
-  readonly question: string
-  readonly options: readonly string[]
-  readonly allowCustom?: boolean
-}
-
-interface PendingQuestion {
-  readonly request: AgentQuestionRequest
-  readonly resolve: (answer: string) => void
-  readonly reject: (error: Error) => void
-}
-
-type QuestionListener = (questions: readonly AgentQuestionRequest[]) => void
+import type { AgentSessionEventPort } from '../../contract/requires.js'
+import type { AgentQuestionRequest, AskAgentQuestionInput, PendingQuestion, QuestionListener } from '../../types/product-session.js'
 
 /** One durable, session-scoped model-to-user question channel for the TUI. */
 export class AgentQuestionService {

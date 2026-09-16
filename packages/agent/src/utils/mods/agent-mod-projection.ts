@@ -5,37 +5,12 @@
 // 不改写运行态载荷，这是「官方内置经同一 Loader 装载后行为零变化」的结构性保证。
 import { isNotNull } from '@velaros-ai/core'
 
-import type { PromptSegmentDefinition } from '../../impl/guidance/PromptRegistry'
-import type { AgentModRegistrySnapshot } from '../../impl/mods/AgentModRegistry'
-import type { ExecutionModeDescriptor } from '../../types/execution-mode-descriptor'
-import type { ToolCategoryDefinition } from '../../types/tool'
-import type { VelaTool } from '../builtin/define-agent-tool'
-import type { SubAgentTypeDescriptor } from '../delegation/sub-agent-type-registry'
-import type { AgentSkillDefinition } from '../guidance/agent-skill-provider'
-import type {
-  AgentModSpaceContribution,
-  AgentModTurnContextSourceContribution,
-} from '../wire/mods'
-
-/**
- * 一代 Mod 注册表对应的一份完整 Agent Surface。
- *
- * 宿主只消费这一份原子快照，不再分别读取九条贡献轴后自行拼接，避免同一回合混入
- * 不同 generation 的工具、空间或策略。
- */
-interface AgentModSurfaceSnapshot {
-  readonly generation: number
-  readonly tools: Readonly<Record<string, VelaTool<any, any>>>
-  readonly toolCategoryByName: Readonly<Record<string, string>>
-  readonly toolCategories: Readonly<Record<string, ToolCategoryDefinition>>
-  readonly promptSegments: readonly PromptSegmentDefinition[]
-  readonly skills: readonly AgentSkillDefinition[]
-  readonly spaces: readonly AgentModSpaceContribution[]
-  readonly subAgentTypes: readonly SubAgentTypeDescriptor[]
-  readonly turnContextSources: readonly AgentModTurnContextSourceContribution[]
-  readonly executionModes: readonly ExecutionModeDescriptor[]
-  readonly hooks: AgentModRegistrySnapshot['hooks']
-}
+import type { AgentModSpaceContribution, AgentModTurnContextSourceContribution,ToolCategoryDefinition } from '../../types/agent.js'
+import type { VelaTool } from '../../types/builtin.js'
+import type { SubAgentTypeDescriptor } from '../../types/delegation.js'
+import type { AgentSkillDefinition,PromptSegmentDefinition } from '../../types/guidance.js'
+import type { AgentModRegistrySnapshot, AgentModSurfaceSnapshot } from '../../types/mods.js'
+import type { ExecutionModeDescriptor } from '../../types/runner.js'
 
 /** 工具名 → 工具实体（主键即工具名，全宿主唯一由 Loader 保证）。 */
 function projectAgentModTools(
@@ -245,4 +220,3 @@ export {
   projectAgentModTools,
   projectAgentModTurnContextSources,
 }
-export type { AgentModSurfaceSnapshot }

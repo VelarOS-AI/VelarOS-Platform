@@ -22,105 +22,12 @@
 //
 import { isEmpty,isPresent, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
-export type ProviderTurnStatus = 'pending' | 'completed'
-export type ProviderTurnToolStatus = 'pending' | 'succeeded' | 'failed'
 
+import type { CompleteProviderTurnSnapshotOptions, CompleteProviderTurnSnapshotResult, EmitCompletedProviderTurnSnapshotInput,ProviderRequestFingerprint, ProviderTurnEvent, ProviderTurnRequestSnapshot, ProviderTurnSnapshot, ProviderTurnStatus, ProviderTurnToolSnapshot, ProviderTurnUsage } from '../../types/records.js'
 export const ProviderTurnInterruptedToolError = 'Tool execution interrupted'
-
-export interface ProviderTurnUsage {
-  inputTokens?: number
-  outputTokens?: number
-  totalTokens?: number
-}
-
-/**
- * Ring 0 出核请求指纹（`assertProviderRequestInvariants` 同层地板产物）。
- * 定义住 kernel 层:请求事件/快照与观测域都以它为契约,agent 层编译器只是生产者。
- */
-export interface ProviderRequestFingerprint {
-  id: string
-  systemHash: string
-  toolSurfaceHash: string
-  prefixHash: string
-  /** 最终 provider-visible messages 的规范内容哈希；角色序列相同不再被误判成同一请求。 */
-  messageHash: string
-  toolSchemaCharsTotal: number
-  messageCount: number
-  roleSequence: string[]
-  availableToolNames: string[]
-  historyToolNames: string[]
-  missingHistoryToolNames: string[]
-  toolChoiceName: Nullable<string>
-  toolChoiceVisible: Nullable<boolean>
-  contextRefCount: number
-  historyToolCallIds: string[]
-  historyToolResultIds: string[]
-}
-
-export interface ProviderTurnRequestSnapshot {
-  availableToolNames: string[]
-  toolChoiceName: Nullable<string>
-  requestFingerprint?: ProviderRequestFingerprint
-  toolSchemaChars?: Record<string, number>
-  toolSchemaHashes?: Record<string, string>
-  contextUsage?: {
-    estimatedTokens: number
-    tokenPercent: number
-    usableContextWindow: number
-  }
-}
-
-export type ProviderTurnEvent =
-  | { type: 'turn-started' }
-  | {
-      type: 'request'
-      availableToolNames: string[]
-      toolChoiceName?: LooseOptional<string>
-      requestFingerprint?: ProviderRequestFingerprint
-      toolSchemaChars?: Record<string, number>
-      toolSchemaHashes?: Record<string, string>
-      contextUsage?: ProviderTurnRequestSnapshot['contextUsage']
-    }
-  | { type: 'assistant-text-delta'; text: string }
-  | { type: 'assistant-reasoning-delta'; text: string }
-  | { type: 'tool-started'; toolCallId: string; toolName: string; args?: unknown }
-  | { type: 'tool-succeeded'; toolCallId: string; output: unknown }
-  | { type: 'tool-failed'; toolCallId: string; error: string }
-  | { type: 'usage'; inputTokens?: number; outputTokens?: number; totalTokens?: number }
-  | { type: 'diagnostic'; code: string; message: string; details?: Record<string, unknown> }
-
-export interface ProviderTurnToolSnapshot {
-  toolCallId: string
-  toolName: string
-  status: ProviderTurnToolStatus
-  args?: unknown
-  output?: unknown
-  error?: string
-}
-
-export interface ProviderTurnSnapshot {
-  turnId: string
-  status: ProviderTurnStatus
-  assistantText: string
-  reasoningText: string
-  request?: ProviderTurnRequestSnapshot
-  tools: ProviderTurnToolSnapshot[]
-  diagnostics: Array<{ code: string; message: string; details?: Record<string, unknown> }>
-  usage?: ProviderTurnUsage
-}
 
 export interface ProviderTurnEventReducerOptions {
   turnId: string
-}
-
-export interface CompleteProviderTurnSnapshotOptions {
-  interruptPendingTools?: boolean
-  interruptedToolError?: string
-}
-
-export interface CompleteProviderTurnSnapshotResult {
-  snapshot: ProviderTurnSnapshot
-  interruptedToolCallIds: string[]
 }
 
 function cloneTool(tool: ProviderTurnToolSnapshot): ProviderTurnToolSnapshot {
@@ -367,21 +274,6 @@ export function completeProviderTurnSnapshot(
       interruptedToolCallIds,
     }
   }
-}
-
-export interface EmitCompletedProviderTurnSnapshotInput {
-  reducer: LooseOptional<ProviderTurnEventReducer>
-  onSnapshot: LooseOptional<(snapshot: ProviderTurnSnapshot) => void>
-  /**
-   * 仅当回合有未收敛工具或诊断时才发（错误/中止分支用）；缺省无条件发（正常收敛分支用）。
-   */
-  requirePendingTools?: boolean
-  /** 调用方的作用域日志（StreamTurn / QueryTurn 各带自己的 tag）。 */
-  log: ProviderTurnSnapshotLog
-}
-
-interface ProviderTurnSnapshotLog {
-  warn(message: string, data?: Record<string, unknown>): void
 }
 
 /**

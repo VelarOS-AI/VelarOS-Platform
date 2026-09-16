@@ -1,20 +1,8 @@
 import { isEmpty, truncate } from "@velaros-ai/core";
 
-import type { PromptSegmentDefinition } from "../../impl/guidance/PromptRegistry";
+import type { PromptSegmentDefinition, RuntimePromptSnapshot, RuntimePromptToolCategorySummary } from '../../types/guidance.js'
 
-import {
-  createCorePromptSegment,
-  createSelectedSkillPromptSegment,
-  createSkillPromptSegment,
-  createTextPromptSegment,
-  formatLabelList,
-  hasAnyRuntimeTool,
-  hasAnyRuntimeToolAvailable,
-  hasRuntimeTool,
-  PromptSegmentPriority,
-  type RuntimePromptSnapshot,
-  type RuntimePromptToolCategorySummary,
-} from "./shared";
+import { createCorePromptSegment, createSelectedSkillPromptSegment, createSkillPromptSegment, createTextPromptSegment, formatLabelList, hasAnyRuntimeTool, hasAnyRuntimeToolAvailable, hasRuntimeTool, PromptSegmentPriority } from "./shared";
 import { createTaskRuntimePromptSegments } from "./task";
 
 const MaxCustomSubAgentPromptEntries = 12;

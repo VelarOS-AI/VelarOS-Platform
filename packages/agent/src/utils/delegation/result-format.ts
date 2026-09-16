@@ -4,8 +4,8 @@
 // 子 Agent 时让父可靠区分各自结果、避免把 A 的结论错标成 B（实测防护，语义一字不动）。
 import { truncate } from '@velaros-ai/core'
 
-import type { SubAgentThreadUnresumableReason } from '../../impl/delegation/SubAgentSessionStore'
-import type { SubAgentTaskResult } from '../../types/sub-agent-task'
+import type { SubAgentTaskResult } from '../../types/agent.js'
+import type { SubAgentBackgroundArtifactFormatResult,SubAgentThreadUnresumableReason } from '../../types/delegation.js'
 
 import { formatSubAgentToolResult } from './sub-agent-result-builder'
 
@@ -52,10 +52,6 @@ function formatSubAgentTaskResultForParent(
   const name = agentName?.trim()
   return name ? `【子 agent「${name}」的返回】\n${formatted}` : formatted
 }
-
-type SubAgentBackgroundArtifactFormatResult =
-  | { artifact: string; degraded: false }
-  | { artifact: string; degraded: true; error: unknown }
 
 /** 后台制品序列化是可降级的旁路，不得反向改写子 Agent 已收敛的终态。 */
 function formatSubAgentBackgroundArtifact(
@@ -160,4 +156,3 @@ export {
   formatSubAgentThreadUnresumableMessage,
   resolveSubAgentAgentName,
 }
-export type { SubAgentBackgroundArtifactFormatResult }

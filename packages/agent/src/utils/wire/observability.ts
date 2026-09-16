@@ -8,6 +8,8 @@
 // 内不改。协议面一律 `z.strictObject`（§6 wire 裁决 ⑥：Forgiving 是模型输入边界的宽容，协议是版本化契约）。
 import { z } from 'zod'
 
+import type { CapabilitySpan, ExecutionSpan,ExecutionSpanCategory, ExecutionSpanMetrics, ExecutionSpanStatus, ModelSpan, PolicySpan, RunSpan, ToolSpan, TurnSpan } from '../../types/agent.js'
+
 /** span 类别：通用执行面 model/tool/capability/policy + run/turn 两个结构容器。判别字段。 */
 export const ExecutionSpanCategorySchema = z.enum([
   'run',
@@ -16,13 +18,9 @@ export const ExecutionSpanCategorySchema = z.enum([
   'tool',
   'capability',
   'policy',
-])
-export type ExecutionSpanCategory = z.infer<typeof ExecutionSpanCategorySchema>
-
+]) satisfies z.ZodType<ExecutionSpanCategory>
 /** span 收敛态：成功 / 出错 / 中止。只落已完成 span，故无 in-progress 态。 */
-export const ExecutionSpanStatusSchema = z.enum(['ok', 'error', 'aborted'])
-export type ExecutionSpanStatus = z.infer<typeof ExecutionSpanStatusSchema>
-
+export const ExecutionSpanStatusSchema = z.enum(['ok', 'error', 'aborted']) satisfies z.ZodType<ExecutionSpanStatus>
 /**
  * span 度量四元组（宪章 §11「token/cost/latency 指标」）。
  *
@@ -34,9 +32,7 @@ export const ExecutionSpanMetricsSchema = z.strictObject({
   tokensIn: z.number().int().nullable(),
   tokensOut: z.number().int().nullable(),
   costUsd: z.number().nullable(),
-})
-export type ExecutionSpanMetrics = z.infer<typeof ExecutionSpanMetricsSchema>
-
+}) satisfies z.ZodType<ExecutionSpanMetrics>
 /** 全 span 公共字段：身份 + 树形指针 + 时序 + 收敛态 + 度量。 */
 const executionSpanBaseFields = {
   spanId: z.string(),
@@ -75,9 +71,7 @@ export const RunSpanSchema = z.strictObject({
   agentName: z.string().nullable(),
   /** 派发来源（子 Agent 由哪个父角色/派发链发起；主 Agent 根 run 用 null）。 */
   dispatchSource: z.string().nullable(),
-})
-export type RunSpan = z.infer<typeof RunSpanSchema>
-
+}) satisfies z.ZodType<RunSpan>
 /** turn span：run 内一次 provider 生成回合的结构容器（D5：usage 挂在此确定 turn 的 model 子 span 上）。 */
 export const TurnSpanSchema = z.strictObject({
   ...executionSpanBaseFields,
@@ -85,9 +79,7 @@ export const TurnSpanSchema = z.strictObject({
   turn: z.number().int(),
   roleId: z.string().nullable(),
   model: z.string().nullable(),
-})
-export type TurnSpan = z.infer<typeof TurnSpanSchema>
-
+}) satisfies z.ZodType<TurnSpan>
 /** model span：一次 provider 请求/响应（承载 token/cost/latency 的主要来源）。 */
 export const ModelSpanSchema = z.strictObject({
   ...executionSpanBaseFields,
@@ -103,9 +95,7 @@ export const ModelSpanSchema = z.strictObject({
    */
   errorCode: z.string().nullable().optional(),
   errorMessage: z.string().nullable().optional(),
-})
-export type ModelSpan = z.infer<typeof ModelSpanSchema>
-
+}) satisfies z.ZodType<ModelSpan>
 /** tool span：一次工具调用（从执行三件套生命周期发出）。 */
 export const ToolSpanSchema = z.strictObject({
   ...executionSpanBaseFields,
@@ -117,9 +107,7 @@ export const ToolSpanSchema = z.strictObject({
   toolEffectKind: z.string().nullable().optional(),
   /** 失败时的结构化错误码（成功用 null）。 */
   errorCode: z.string().nullable(),
-})
-export type ToolSpan = z.infer<typeof ToolSpanSchema>
-
+}) satisfies z.ZodType<ToolSpan>
 /**
  * capability span：宿主注入能力的一次通用观测。
  *
@@ -132,9 +120,7 @@ export const CapabilitySpanSchema = z.strictObject({
   capabilityId: z.string().min(1),
   operationId: z.string().min(1),
   metadata: z.record(z.string(), z.unknown()),
-})
-export type CapabilitySpan = z.infer<typeof CapabilitySpanSchema>
-
+}) satisfies z.ZodType<CapabilitySpan>
 /** policy span：一次控制面/审批决策（收编 control-plane ledger entry 的 source/action/reason 形状）。 */
 export const PolicySpanSchema = z.strictObject({
   ...executionSpanBaseFields,
@@ -142,9 +128,7 @@ export const PolicySpanSchema = z.strictObject({
   source: z.string(),
   action: z.string(),
   reason: z.string(),
-})
-export type PolicySpan = z.infer<typeof PolicySpanSchema>
-
+}) satisfies z.ZodType<PolicySpan>
 /**
  * 执行 span 判别联合（判别字段 `category`）。
  *
@@ -158,9 +142,7 @@ export const ExecutionSpanSchema = z.discriminatedUnion('category', [
   ToolSpanSchema,
   CapabilitySpanSchema,
   PolicySpanSchema,
-])
-export type ExecutionSpan = z.infer<typeof ExecutionSpanSchema>
-
+]) satisfies z.ZodType<ExecutionSpan>
 /** 全 null 度量（无任何指标的 span 起手值）。 */
 export function emptyExecutionSpanMetrics(): ExecutionSpanMetrics {
   return { latencyMs: null, tokensIn: null, tokensOut: null, costUsd: null }

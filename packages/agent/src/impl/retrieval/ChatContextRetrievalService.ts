@@ -8,52 +8,23 @@ import {
   toNullable,
 } from "@velaros-ai/core";
 
-import type {
-  ChatContextReadEvidenceRequest,
-  ChatContextReadEvidenceResult,
-  ChatContextReadToolPayloadRequest,
-  ChatContextRetrievalIndexDiagnostics,
-  ChatContextRetrievalIndexLoadSource,
-  ChatContextRetrievalIndexSourceFingerprint,
-  ChatContextRetrievedPayload,
-  ChatContextRetrievePayloadRequest,
-  ChatContextSearchConversationHistoryItem,
-  ChatContextSearchConversationHistoryRequest,
-  ChatContextSearchConversationHistoryResult,
-  ChatContextSearchTerminalOutputItem,
-  ChatContextSearchTerminalOutputRequest,
-  ChatContextSearchTerminalOutputResult,
-} from "../../types/protocol";
-import type {
-  RetrievalPayloadStorePort,
-  RetrievalStateStorePort,
-} from "../../types/retrieval-session-store-ports";
-import type { SessionLineageContext } from "../../types/storage";
+import type { RetrievalPayloadStorePort, RetrievalStateStorePort } from '../../contract/requires.js'
+import type { ChatContextReadEvidenceRequest, ChatContextReadEvidenceResult, ChatContextReadToolPayloadRequest, ChatContextRetrievalIndexDiagnostics, ChatContextRetrievalIndexSourceFingerprint, ChatContextRetrievedPayload, ChatContextRetrievePayloadRequest, ChatContextSearchConversationHistoryItem, ChatContextSearchConversationHistoryRequest, ChatContextSearchConversationHistoryResult, ChatContextSearchTerminalOutputItem, ChatContextSearchTerminalOutputRequest, ChatContextSearchTerminalOutputResult,SessionLineageContext } from '../../types/agent.js'
+import type { CachedRetrievalIndex, ChatContextRetrievalIndexSnapshot, ChatContextRetrievalIndexStore, ChatContextRetrievalIndexToolPayload, LogReadSnippet, ReferencedLogPath,ResolvedLedgerRecord, RetrievalIndexBuildTelemetry } from '../../types/retrieval.js'
 import {
   normalizeSessionLineageId,
   normalizeSessionLineageIdList,
 } from "../../utils/chat/session-lineage";
-import type { ContextRecord } from "../../utils/residency/context-record";
 import { compareStableStrings } from "../../utils/residency/determinism";
 import {
   readMessageText,
   readToolResultFacts,
 } from "../../utils/residency/message-facts";
-import {
-  type ChatContextRetrievalIndexSnapshot,
-  type ChatContextRetrievalIndexStore,
-  ChatContextRetrievalIndexVersion,
-  contextRetrievalFingerprintIsComparable,
-  contextRetrievalFingerprintsEqual,
-} from "../../utils/retrieval/index-snapshot";
+import { ChatContextRetrievalIndexVersion, contextRetrievalFingerprintIsComparable, contextRetrievalFingerprintsEqual } from "../../utils/retrieval/index-snapshot";
 import { paginateJsonPathSelection, paginateSerializedText } from "../../utils/retrieval/pagination";
 import { chatSearchRanking } from "../../utils/retrieval/ranking";
 import { ContextRetrievalReferenceReader } from "../../utils/retrieval/reference-reader";
-import {
-  contextRetrievalReferences,
-  type LogReadSnippet,
-  type ReferencedLogPath,
-} from "../../utils/retrieval/references";
+import { contextRetrievalReferences } from "../../utils/retrieval/references";
 import { chatSearchText } from "../../utils/retrieval/text";
 import type { ContextGovernanceSessionRegistry } from "../residency/ContextGovernanceSession";
 import type { ContextResidencyLedger } from "../residency/ContextResidencyLedger";
@@ -83,41 +54,12 @@ const DefaultTerminalOutputPayloadCandidateLimit = 64;
  */
 const DefaultCachedIndexSessionLimit = 8;
 
-type ChatContextRetrievalIndexToolPayload =
-  ChatContextRetrievalIndexSnapshot["toolPayloads"][number];
-
 interface ChatContextRetrievalServiceOptions {
   maxRetrievalCountEntries?: LooseOptional<number>;
   maxIndexBuildTelemetrySessions?: LooseOptional<number>;
   maxTerminalOutputPayloadCandidates?: LooseOptional<number>;
   maxCachedIndexSessions?: LooseOptional<number>;
   queryTrace?: ContextRetrievalQueryTraceStoreOptions;
-}
-
-/** 账本 ref 解析结果：命中的记录 + 该 ref 对应的全保真层引用（per-part 优先）。 */
-interface ResolvedLedgerRecord {
-  record: ContextRecord;
-  payloadRef: Nullable<string>;
-  toolCallId: Nullable<string>;
-  toolName: Nullable<string>;
-}
-
-/** 内存索引缓存条目：快照 + 它成立时的源指纹。 */
-interface CachedRetrievalIndex {
-  fingerprint: ChatContextRetrievalIndexSourceFingerprint;
-  snapshot: ChatContextRetrievalIndexSnapshot;
-}
-
-/**
- * 单次 loadRetrievalIndex 的构建遥测，合并进 diagnostics。
- */
-interface RetrievalIndexBuildTelemetry {
-  /** 本次命中 fresh 磁盘索引还是内存 rebuild。 */
-  lastLoadSource: ChatContextRetrievalIndexLoadSource;
-  /** rebuild 耗时 ms；loadFresh 命中时为 null。 */
-  lastBuildDurationMs: LooseOptional<number>;
-  /** 索引 snapshot.builtAt。 */
-  lastBuiltAt: LooseOptional<number>;
 }
 
 /**

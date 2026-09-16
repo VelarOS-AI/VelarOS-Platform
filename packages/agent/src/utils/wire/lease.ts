@@ -1,7 +1,9 @@
 // 域：Agent 工具契约租约；属于 Agent capability protocol，不属于 Kernel protocol。
 import { z } from 'zod'
 
-import { AgentProtocolVersion } from '../../contract/version'
+import { AgentProtocolVersion } from '../../contract/constants.js'
+import type { ContractLease, LeaseDenialReason, LeaseDeniedResponse,ToolCatalogEntry, ToolCatalogSnapshot, VelarToolCallEnvelope, VelarToolResultEnvelope, VelarToolResultStatus } from '../../types/agent.js'
+
 
 /**
  * 租约强制续租时间窗口：10 分钟。
@@ -34,9 +36,7 @@ export const ToolCatalogEntrySchema = z.strictObject({
   inputSchema: z.record(z.string(), z.unknown()),
   category: z.string().optional(),
   readOnly: z.boolean().optional(),
-})
-export type ToolCatalogEntry = z.infer<typeof ToolCatalogEntrySchema>
-
+}) satisfies z.ZodType<ToolCatalogEntry>
 /**
  * 工具目录快照：`catalogRevision` 绑定精确的可见工具集。
  *
@@ -46,9 +46,7 @@ export const ToolCatalogSnapshotSchema = z.strictObject({
   protocolVersion: z.literal(AgentProtocolVersion),
   catalogRevision: z.string(),
   tools: z.array(ToolCatalogEntrySchema),
-})
-export type ToolCatalogSnapshot = z.infer<typeof ToolCatalogSnapshotSchema>
-
+}) satisfies z.ZodType<ToolCatalogSnapshot>
 /**
  * 契约租约的**跨边界 wire 面**（收敛到消费者跨信任边界真正需要的字段）。
  *
@@ -67,9 +65,7 @@ export const ContractLeaseSchema = z.strictObject({
   catalogRevision: z.string(),
   needsRefresh: z.boolean(),
   expiresInMs: z.number().int().nullable(),
-})
-export type ContractLease = z.infer<typeof ContractLeaseSchema>
-
+}) satisfies z.ZodType<ContractLease>
 /**
  * 工具调用信封（远端大脑 → kernel）。
  *
@@ -83,13 +79,9 @@ export const VelarToolCallEnvelopeSchema = z.strictObject({
   toolCallId: z.string().trim().min(1),
   toolName: z.string().trim().min(1),
   input: z.record(z.string(), z.unknown()),
-})
-export type VelarToolCallEnvelope = z.infer<typeof VelarToolCallEnvelopeSchema>
-
+}) satisfies z.ZodType<VelarToolCallEnvelope>
 /** 工具结果状态：成功 / 执行出错 / 权限拒绝。 */
-export const VelarToolResultStatusSchema = z.enum(['success', 'error', 'denied'])
-export type VelarToolResultStatus = z.infer<typeof VelarToolResultStatusSchema>
-
+export const VelarToolResultStatusSchema = z.enum(['success', 'error', 'denied']) satisfies z.ZodType<VelarToolResultStatus>
 /**
  * 工具结果信封（kernel → 远端大脑）。
  *
@@ -105,9 +97,7 @@ export const VelarToolResultEnvelopeSchema = z.strictObject({
   status: VelarToolResultStatusSchema,
   output: z.unknown().optional(),
   error: z.string().optional(),
-})
-export type VelarToolResultEnvelope = z.infer<typeof VelarToolResultEnvelopeSchema>
-
+}) satisfies z.ZodType<VelarToolResultEnvelope>
 /**
  * 租约拒绝原因。
  *
@@ -119,9 +109,7 @@ export const LeaseDenialReasonSchema = z.enum([
   'unknown-tool',
   'out-of-scope',
   'malformed',
-])
-export type LeaseDenialReason = z.infer<typeof LeaseDenialReasonSchema>
-
+]) satisfies z.ZodType<LeaseDenialReason>
 /**
  * 目录修订失配时的拒绝响应。
  *
@@ -138,5 +126,4 @@ export const LeaseDeniedResponseSchema = z.strictObject({
   reason: LeaseDenialReasonSchema,
   contractId: z.string().nullable(),
   latestCatalogRevision: z.string(),
-})
-export type LeaseDeniedResponse = z.infer<typeof LeaseDeniedResponseSchema>
+}) satisfies z.ZodType<LeaseDeniedResponse>

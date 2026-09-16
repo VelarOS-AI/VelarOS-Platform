@@ -22,7 +22,7 @@ import { dirname } from 'node:path'
 import { isArray, isFiniteNumber, isPlainObject, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import type { ProviderRequestSnapshot } from '../../utils/context/provider-request-snapshot'
+import type { PromptAuditReadResult, PromptAuditRecord, SpanLedgerWarn } from '../../types/ledgers.js'
 import {
   JSONL_LINE_SEPARATOR,
   parseJsonlWithTailTolerance,
@@ -30,44 +30,13 @@ import {
 } from '../../utils/ledgers/jsonl-file'
 import { canonicalJsonStringify } from '../../utils/ledgers/ledger-file'
 
-import type { SpanLedgerWarn } from './ExecutionSpanLedger'
 import { SerialWriteQueue } from './SerialWriteQueue'
 
 const PROMPT_AUDIT_LINE_SEPARATOR = JSONL_LINE_SEPARATOR
 
-/**
- * 一条 prompt 审计记录：一次 provider 请求的重内容快照，靠 `requestFingerprint` 关联回同回合的 model span。
- * 全字段落盘保形（缺席用 null / 空数组），读侧无需分支。
- */
-export interface PromptAuditRecord {
-  capturedAt: number
-  sessionId: string
-  runId: string
-  /** 关联键：与 model span 的 `requestFingerprint` 同值（缺席用 null）。 */
-  requestFingerprint: Nullable<string>
-  /** 子 Agent 无界面轮次轴时为 null（对齐 span 侧的确定 turn 语义，此处按调用方传入）。 */
-  turn: Nullable<number>
-  roleId: Nullable<string>
-  model: Nullable<string>
-  /** 系统提示词全文（重内容之家；span 侧只留 chars 指标）。 */
-  systemPrompt: string
-  /** 逐段提示词轨迹（含文本）；内容态由调用方原样传入，审计侧不解释。 */
-  promptSegments: readonly unknown[]
-  skippedPromptSegments: readonly unknown[]
-  capabilityContextAudit: readonly unknown[]
-  /** 最终 provider-visible system/messages/tools/toolChoice；旧记录缺席。 */
-  providerRequest?: LooseOptional<ProviderRequestSnapshot>
-}
-
 /** 序列化一条审计记录成 JSONL 行（规范键序 + 行尾分隔符）。 */
 export function serializePromptAuditLine(record: PromptAuditRecord): string {
   return `${canonicalJsonStringify(record)}${PROMPT_AUDIT_LINE_SEPARATOR}`
-}
-
-/** 读取审计侧信道文件的结果：记录序列 + 是否发生过尾行截断修复。 */
-export interface PromptAuditReadResult {
-  records: PromptAuditRecord[]
-  truncatedTail: boolean
 }
 
 /**

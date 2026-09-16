@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { describe, test } from 'bun:test'
 
 import { hasRunningOwnSelfStep } from '../src/impl/records/ExecTaskLedger'
-import type { ExecutionTaskPlanStep } from '../src/types/execution'
+import type { ExecutionTaskPlanStep } from '../src/types/agent.js'
 
 function step(id: string, status: ExecutionTaskPlanStep['status']): ExecutionTaskPlanStep {
   return {

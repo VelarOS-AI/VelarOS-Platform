@@ -2,6 +2,8 @@ import type { ModelMessage } from 'ai'
 
 import { isEmpty,isString, trimmedStringOrEmpty } from '@velaros-ai/core'
 
+import type { ParsedContextOSGeneratedMessage } from '../../types/history.js'
+
 /**
  * 上下文系统压缩流水线产物的中文标记常量。
  *
@@ -63,22 +65,6 @@ export const PinnedEvidenceInstruction =
  */
 export const DynamicHandlesInstruction =
   '较早的对话与工具结果已被折叠为下列句柄。需要细节时优先用上下文检索分类下的工具按需取回；不要重复取同一个句柄。'
-
-/**
- * 解析后的合成消息结构。
- *
- * 每段都是"含标记的完整原文"，可以直接拼回新的合成消息，
- * 不需要再次手工拼前缀和说明，避免标记常量散落在多处定义。
- *
- * - `summarySegment`：从压缩摘要标记到下一段标记之前的整段原文。
- * - `evidenceSegment`：从置顶证据标记到下一段标记之前的整段原文。
- * - `handlesSegment`：从动态句柄标记到消息末尾的整段原文。
- */
-export interface ParsedContextOSGeneratedMessage {
-  summarySegment: Nullable<string>
-  evidenceSegment: Nullable<string>
-  handlesSegment: Nullable<string>
-}
 
 /**
  * 标记是否出现在**行首**（内容起始或紧跟换行）。

@@ -13,35 +13,14 @@ import { dirname } from 'node:path'
 import { isEmpty } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import type { SessionEntryDraft, SessionLedgerLocator, SessionLedgerWarn, SessionStoreDeps } from '../../types/session-store-ports'
+import type { SessionLedgerLocator, SessionStoreDeps } from '../../contract/requires.js'
+import type { SessionEntry } from '../../types/agent.js'
+import type { SessionEntryDraft, SessionLedgerContext, SessionLedgerWarn, SessionTree } from '../../types/ledgers.js'
 import { readLedgerFile, serializeLedgerLine, truncateLedgerToEntryCount } from '../../utils/ledgers/ledger-file'
-import {
-  buildContextEntries,
-  buildSessionTree,
-  pathRootToLeaf,
-  resolveCurrentLeafId,
-  type SessionTree,
-} from '../../utils/ledgers/session-tree'
-import { type SessionEntry, SessionEntrySchema } from '../../utils/wire/session'
+import { buildContextEntries, buildSessionTree, pathRootToLeaf, resolveCurrentLeafId } from '../../utils/ledgers/session-tree'
+import { SessionEntrySchema } from '../../utils/wire/session'
 
 import { SerialWriteQueue } from './SerialWriteQueue'
-
-/** fork 出新会话账本的工厂：把当前叶谱系原样播种进新文件并打开 handle。 */
-type ForkFactory = (newSessionId: string, lineage: readonly SessionEntry[]) => Promise<SessionLedger>
-
-/** 打开一个账本 handle 所需的内部上下文（引擎装配，调用方不见）。 */
-interface SessionLedgerContext {
-  sessionId: string
-  path: string
-  entries: SessionEntry[]
-  warnings: string[]
-  now: () => number
-  nextEntryId: () => string
-  warn: SessionLedgerWarn
-  forkFactory: ForkFactory
-  /** 关闭 handle 时回落给工厂，撤销该 path 的「已开档」登记（双开断言用，P1-10）。 */
-  releaseHandle: () => void
-}
 
 /**
  * 多会话账本工厂。

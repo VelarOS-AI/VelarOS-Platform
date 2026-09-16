@@ -28,20 +28,15 @@ import { type z } from 'zod'
 
 import { isEmpty, optionalWhen, toNullable } from '@velaros-ai/core'
 
-import type { KernelToolContext as ToolContext } from '../../types/kernel-tool-context'
-import type { ToolCategoryDomainId, ToolCategoryId, ToolOsState } from '../../types/tool'
+import type { ToolCategoryDomainId, ToolCategoryId, ToolOsState } from '../../types/agent.js'
+import type { ToolCategoryFilterResolution, ToolDiscoveryCard, ToolMapCategoryKind, ToolSearchResultEntry } from '../../types/builtin.js'
+import type { KernelToolContext as ToolContext } from '../../types/tool-context.js'
 import { compareStableStrings } from '../residency/determinism'
 import { ToolDiscoveryAvailabilityValues } from '../tools/discovery-availability'
 import { PluginBackedToolCategoryIds } from '../tools/tool-space-resolver'
 
 import { splitSearchTerms } from './tool-search-terms'
-import {
-  activationCapabilityIdForCategory,
-  buildToolActivationRef,
-  buildToolDiscoveryCards,
-  summarizeReasonRef,
-  type ToolDiscoveryCard,
-} from './tool-space-activation'
+import { activationCapabilityIdForCategory, buildToolActivationRef, buildToolDiscoveryCards, summarizeReasonRef } from './tool-space-activation'
 import {
   ToolDiscoveryKindValues,
   type toolSpaceFindSchema,
@@ -49,13 +44,7 @@ import {
   type toolSpacePageSchema,
   ToolSpaceQueryPageLimitMax,
 } from './tool-space-schemas'
-import {
-  buildMatchSignals,
-  buildToolSearchScoreContext,
-  scoreCard,
-  ToolFindLowConfidenceScoreRatio,
-  type ToolSearchResultEntry,
-} from './tool-space-search'
+import { buildMatchSignals, buildToolSearchScoreContext, scoreCard, ToolFindLowConfidenceScoreRatio } from './tool-space-search'
 
 const ToolMapTargetToolRows = 32
 
@@ -65,15 +54,6 @@ const ToolOsStateValues = [
   'needs_setup',
   'unavailable',
 ] as const satisfies readonly ToolOsState[]
-
-type ToolMapCategoryKind = 'bundle' | 'leaf'
-
-interface ToolCategoryFilterResolution {
-  expandedCategoryIds: ToolCategoryId[]
-  validDomainIds: ToolCategoryDomainId[]
-  unknownDomainIds: ToolCategoryDomainId[]
-  categoryFilter: Nullable<Set<ToolCategoryId>>
-}
 
 /**
  * 分类过滤输入 → 实际分类集 + 可对账的域校验结果。

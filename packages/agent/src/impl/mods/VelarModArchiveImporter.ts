@@ -20,6 +20,8 @@ import {
   VelarosModManifestFileName,
 } from '@velaros-ai/kernel/contracts/protocol'
 
+import type { VelarModArchiveSignatureVerifier } from '../../contract/requires.js'
+import type { InstallScannedVelarModArchiveRequest, PreparedVelarModInstall, ScannedArchive, ScanSession,VelarModArchiveEntry, VelarModArchiveFinding, VelarModArchiveInstallFailureReason, VelarModArchiveScanReport, VelarModPermissionDescriptor, ZipSizeData } from '../../types/mods.js'
 import { parseAgentModManifest } from '../../utils/wire/mods'
 
 const VelarModArchiveExtension = '.velarmod'
@@ -33,102 +35,12 @@ const MaxPathDepth = 8
 const MaxCompressionRatio = 100
 const DefaultScanSessionTtlMs = 10 * 60 * 1000
 
-export interface VelarModArchiveEntry {
-  readonly path: string
-  readonly bytes: Buffer
-}
-
-export interface VelarModPermissionDescriptor {
-  readonly id: string
-  readonly label: string
-  readonly description: string
-  readonly risk: 'standard' | 'sensitive' | 'high'
-}
-
-export interface VelarModArchiveFinding {
-  readonly severity: 'info' | 'warning' | 'blocking'
-  readonly code: string
-  readonly message: string
-}
-
-export interface VelarModArchiveScanReport {
-  readonly scanId: string
-  readonly digest: string
-  readonly fileName: string
-  readonly archiveBytes: number
-  readonly expandedBytes: number
-  readonly fileCount: number
-  readonly mod: {
-    readonly id: string
-    readonly version: string
-    readonly displayName: string
-    readonly description: string
-    readonly publisher: string
-  }
-  readonly trust: {
-    readonly kind: 'marketplace-signed' | 'user-imported'
-    readonly label: string
-    readonly signatureKeyId: Nullable<string>
-  }
-  readonly permissions: readonly VelarModPermissionDescriptor[]
-  readonly contributions: Readonly<Record<string, number>>
-  readonly findings: readonly VelarModArchiveFinding[]
-  readonly installable: boolean
-}
-
-export interface InstallScannedVelarModArchiveRequest {
-  readonly scanId: string
-  readonly digest: string
-  readonly trustConfirmed: boolean
-  readonly grantedPermissions: readonly string[]
-}
-
-export type VelarModArchiveInstallFailureReason =
-  | 'archive.changed'
-  | 'archive.path-escapes-root'
-  | 'archive.path-unsafe'
-  | 'permissions.not-declared'
-  | 'trust.confirmation-required'
-
-export interface PreparedVelarModInstall {
-  readonly report: VelarModArchiveScanReport
-  readonly stagingDirectory: string
-  readonly grantedPermissions: readonly string[]
-  cleanup(): Promise<void>
-}
-
-export interface VelarModArchiveSignatureVerifier {
-  readonly fileName?: string
-  verify(input: {
-    readonly signature: unknown
-    readonly modId: string
-    readonly version: string
-    readonly entries: readonly VelarModArchiveEntry[]
-  }): { readonly ok: true; readonly keyId: string } | { readonly ok: false; readonly reason: string }
-}
-
 export interface VelarModArchiveImporterOptions {
   readonly resolvePermission: (permission: string) => Nullable<VelarModPermissionDescriptor>
   readonly signatureVerifier?: VelarModArchiveSignatureVerifier
   readonly scanSessionTtlMs?: number
   readonly now?: () => number
   readonly nextScanId?: () => string
-}
-
-interface ZipSizeData {
-  compressedSize?: number
-  uncompressedSize?: number
-}
-
-interface ScannedArchive {
-  report: VelarModArchiveScanReport
-  path: string
-  entries: readonly VelarModArchiveEntry[]
-  manifest: Record<string, unknown>
-}
-
-interface ScanSession extends ScannedArchive {
-  expiresAt: number
 }
 
 function hasControlCharacter(value: string): boolean {

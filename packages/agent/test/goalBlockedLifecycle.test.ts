@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 
 import { goalTools } from '../src/impl/builtin/Goals.tool'
-import type { ActiveContextArtifact, ActiveContextUpsertInput } from '../src/types/protocol'
+import type { ActiveContextArtifact, ActiveContextUpsertInput } from '../src/types/agent.js'
 import { createTaskRuntimePromptSegments } from '../src/utils/guidance/task'
 
 function createGoalToolContext() {

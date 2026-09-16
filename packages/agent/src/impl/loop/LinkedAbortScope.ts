@@ -1,10 +1,6 @@
-interface LinkedAbortScope {
-  signal: AbortSignal
-  abort(reason?: unknown): void
-  dispose(): void
-}
+import type { LinkedAbortScope } from '../../types/loop.js'
 
-/** Each provider attempt owns its cancellation; disposing only detaches parent listeners. */
+/** 每次向模型提供方发起的尝试各自持有自己的取消控制；dispose 只摘掉父信号的监听，不取消自身。 */
 function createLinkedAbortScope(...parentSignals: AbortSignal[]): LinkedAbortScope {
   const controller = new AbortController()
   const abort = (reason?: unknown): void => {
@@ -31,4 +27,3 @@ function createLinkedAbortScope(...parentSignals: AbortSignal[]): LinkedAbortSco
 }
 
 export { createLinkedAbortScope }
-export type { LinkedAbortScope }

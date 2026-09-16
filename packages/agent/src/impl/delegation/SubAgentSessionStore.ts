@@ -16,89 +16,16 @@ import type { ModelMessage } from 'ai'
 
 import { isEmpty, isNotNull, isNull, sum, toNullable, toOptional } from '@velaros-ai/core'
 
-import type {
-  SubAgentSessionRecord,
-  SubAgentSessionStatus,
-  SubAgentTaskMode,
-  SubAgentTaskRequest,
-  SubAgentTaskResult,
-  SubAgentTypeId,
-} from '../../types/sub-agent-task'
-import type { TeamModelRouteCategory } from '../../types/team'
-import type { ToolCategoryId } from '../../types/tool'
-import { type AgentExecutionLimits, resolveAgentExecutionLimits } from '../../utils/loop/execution-limits'
+import type { SubAgentSessionRecord, SubAgentSessionStatus, SubAgentTaskRequest, SubAgentTaskResult } from '../../types/agent.js'
+import type { CreateSubAgentSessionInput, DetachedThreadCandidate,SubAgentReleasedThread, SubAgentThreadRetention, SubAgentThreadRetentionLimits, ThreadRetentionState } from '../../types/delegation.js'
+import { resolveAgentExecutionLimits } from '../../utils/loop/execution-limits'
 import { estimateMessageChars } from '../../utils/residency/message-facts'
-
-interface CreateSubAgentSessionInput {
-  threadId: string
-  executionId: string
-  parentSessionId: string
-  /** 派发时父上下文的资源标识（resourceId）；续跑须在同一资源上。 */
-  resourceId?: LooseOptional<string>
-  subagentType: SubAgentTypeId
-  prompt: string
-  description?: LooseOptional<string>
-  mode?: SubAgentTaskMode
-  readonly?: boolean
-  toolScope?: SubAgentTaskRequest['tool_scope']
-  toolCategories?: readonly ToolCategoryId[]
-  model?: LooseOptional<string>
-  routeCategory?: LooseOptional<TeamModelRouteCategory>
-  agentName?: string
-  request?: Partial<Omit<SubAgentTaskRequest, 'subagent_type' | 'prompt'>>
-}
-
-/** 线程保留相关的执行上限（单一数据源在 AgentExecutionLimits）。 */
-type SubAgentThreadRetentionLimits = Pick<
-  AgentExecutionLimits,
-  | 'subAgentRetainedThreadsPerSession'
-  | 'subAgentRetainedThreadsTotal'
-  | 'subAgentRetainedThreadIdleTtlMs'
-  | 'subAgentRetainedHistoryMaxChars'
->
 
 interface SubAgentSessionStoreOptions {
   /** 保留上限；缺省取 `resolveAgentExecutionLimits()` 的默认值。 */
   limits?: SubAgentThreadRetentionLimits
   /** 时钟（epoch 毫秒），供测试注入；缺省 `Date.now()`。 */
   now?: () => number
-}
-
-/** 线程不能续跑的原因。 */
-type SubAgentThreadUnresumableReason = 'not-found' | 'empty-history' | 'history-too-large'
-
-/** 线程此刻能否续跑，以及大约能留到什么时候。 */
-type SubAgentThreadRetention =
-  | {
-      resumable: true
-      /** 保留期限估计（epoch 毫秒）；关闭了跨执行保留（条数上限为 0）时为 null。 */
-      retainedUntil: Nullable<number>
-    }
-  | { resumable: false; reason: SubAgentThreadUnresumableReason }
-
-/** `releaseParentSession` 丢掉的线程；`executionId` 为它仍挂靠的执行，已脱离执行时为 null。 */
-interface SubAgentReleasedThread {
-  threadId: string
-  executionId: Nullable<string>
-}
-
-/** 每条线程的保留簿记（不进协议记录）。 */
-interface ThreadRetentionState {
-  /** 最近一次使用（创建、续跑挂靠、运行收尾）的时刻；空闲 TTL 的起点之一。 */
-  lastUsedAt: number
-  /** 最近一次使用的单调序号：按它淘汰最久未用的线程，不受时钟精度影响（同一毫秒内的并行派发）。 */
-  lastUseSequence: number
-  /** 脱离执行的时刻；null = 仍挂在 `record.execution_id` 那次执行上。 */
-  detachedAt: Nullable<number>
-  /** 历史序列化字符数缓存；历史被改写即作废。 */
-  historyChars: Nullable<number>
-}
-
-/** 已脱离执行、等待按条数上限裁决的线程。 */
-interface DetachedThreadCandidate {
-  threadId: string
-  parentSessionId: string
-  lastUseSequence: number
 }
 
 const TerminalThreadStatuses: ReadonlySet<SubAgentSessionStatus> = new Set<SubAgentSessionStatus>([
@@ -416,11 +343,4 @@ class SubAgentSessionStore {
 }
 
 export { SubAgentSessionStore }
-export type {
-  CreateSubAgentSessionInput,
-  SubAgentReleasedThread,
-  SubAgentSessionStoreOptions,
-  SubAgentThreadRetention,
-  SubAgentThreadRetentionLimits,
-  SubAgentThreadUnresumableReason,
-}
+export type { SubAgentSessionStoreOptions }

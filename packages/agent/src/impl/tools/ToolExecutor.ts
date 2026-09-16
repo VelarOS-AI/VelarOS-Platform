@@ -38,57 +38,24 @@ import { AppError } from "@velaros-ai/core/error";
 import { logRuntime } from "@velaros-ai/core/logger";
 import { TimerScope } from "@velaros-ai/core/utils/TimerScope";
 
-import type {
-  AgentEvent,
-  StreamToolResultEffects,
-  ToolResultModelContentPart,
-} from "../../types/agent";
-import type { ChatRuntimeEvent } from "../../types/chat-runtime";
-import type {
-  StreamToolCallPayload,
-  StreamToolMetadataPayload,
-  StreamToolProgressPayload,
-  StreamToolResultPayload,
-} from "../../types/protocol";
-import {
-  resolveToolResultMiddlewares,
-  type ToolResultMiddleware,
-  type ToolResultModelImage,
-} from "../../utils/capabilities";
-import {
-  buildToolFailureResult as buildStructuredToolFailureResult,
-  type ToolFailureBuildOptions,
-  type ToolFailureResult,
-} from "../../utils/tools/execution-policy-failures";
+import type { ContextPayloadStore, KernelToolOutputStore, ToolResultMiddleware } from '../../contract/requires.js'
+import type { ExecutionSpanStatus } from '../../types/agent.js'
+import type { ToolSpanOpener } from '../../types/ledgers.js'
+import type { ProviderTurnSnapshot } from '../../types/records.js'
+import type { ActiveToolExecutionContext, KernelToolFailureBatchEntry, ScheduledTool, ToolExecutionPolicyContext, ToolExecutionPrepared, ToolExecutionSettlement, ToolExecutorEvents, ToolFailureBuildOptions, ToolFailureResult,ToolInputReuseContext, ToolResult } from '../../types/tools.js'
+import { resolveToolResultMiddlewares } from "../../utils/capabilities";
+import { buildToolFailureResult as buildStructuredToolFailureResult } from "../../utils/tools/execution-policy-failures";
 import { findHistoryPreviewPlaceholderArgumentPaths } from "../../utils/tools/history-preview-placeholder";
 import { liftGenericModelContent } from "../../utils/tools/model-image-lift";
 import { persistToolInputForRecall } from "../../utils/tools/tool-input-recall";
-import type { ExecutionSpanStatus } from "../../utils/wire/observability";
-import type { ContextPayloadStore } from "../context/InMemoryContextPayloadStore";
-import type { ToolSpanHandle, ToolSpanOpener } from "../ledgers/LedgerExecutionSpanScopeFactory";
 import type { AgentModSeamDispatcher } from "../mods/AgentModSeamDispatcher";
-import {
-  completeProviderTurnSnapshot,
-  type ProviderTurnEventReducer,
-  type ProviderTurnSnapshot,
-} from "../records/ProviderTurnEventReducer";
+import { completeProviderTurnSnapshot, type ProviderTurnEventReducer } from "../records/ProviderTurnEventReducer";
 
-import {
-  ContextPayloadKernelToolOutputStore,
-  type KernelToolOutputStore,
-} from "./InMemoryKernelToolOutputStore";
-import {
-  isKernelWriteLikeTool,
-  type KernelToolFailureBatchEntry,
-  KernelToolLoopGuard,
-} from "./KernelToolLoopGuard";
+import { ContextPayloadKernelToolOutputStore } from "./InMemoryKernelToolOutputStore";
+import { isKernelWriteLikeTool, KernelToolLoopGuard } from "./KernelToolLoopGuard";
 import { KernelToolResultMaterializer } from "./KernelToolResultMaterializer";
-import type {
-  ToolExecutionPolicy,
-  ToolExecutionPolicyContext,
-  ToolExecutionPrepared,
-} from "./ToolExecutionPolicy";
-import { resolveToolInputReuse, saveToolAttemptInput, saveToolAttemptOutcome, type ToolInputReuseContext, ToolInputReuseError, ToolInputReuseNote } from './ToolInputReuseStore';
+import type { ToolExecutionPolicy } from "./ToolExecutionPolicy";
+import { resolveToolInputReuse, saveToolAttemptInput, saveToolAttemptOutcome, ToolInputReuseError, ToolInputReuseNote } from './ToolInputReuseStore';
 
 const log = logRuntime.tag("ToolExecutor");
 const ToolAbortSettlementGraceMs = 250;
@@ -122,62 +89,8 @@ function buildHistoryPlaceholderArgsFailure(
   };
 }
 
-interface ToolExecutorEvents {
-  emitRuntime(event: ChatRuntimeEvent): void;
-  emitNotice(event: Extract<AgentEvent, { type: "notice" }>): void;
-  emitToolStart(payload: StreamToolCallPayload): void;
-  emitToolProgress?(payload: StreamToolProgressPayload): void;
-  emitToolMetadata?(payload: StreamToolMetadataPayload): void;
-  emitToolDone(payload: StreamToolResultPayload): void;
-}
-
-interface ActiveToolExecutionContext {
-  toolName: string;
-  args: Record<string, unknown>;
-  isConcurrencySafe: boolean;
-  toolContext: ToolExecutionPolicyContext;
-}
-
 interface ToolExecutorPayloadContext {
   contextPayloadStore?: LooseOptional<ContextPayloadStore>;
-}
-
-interface ToolEffectiveAdmission {
-  state: "pending" | "waiting" | "active" | "released";
-  isConcurrencySafe?: boolean;
-  resolve?: (admitted: boolean) => void;
-  abortSignal?: AbortSignal;
-  abortListener?: () => void;
-}
-
-export interface PendingTool {
-  toolCallId: string;
-  toolName: string;
-  args: Record<string, unknown>;
-  /** 是否可与其他工具并发执行 */
-  isConcurrencySafe: boolean;
-  status: "queued" | "executing" | "done";
-  promise?: Promise<ToolResult>;
-  result?: ToolResult;
-  /**
-   * 本工具的观测 tool span handle（可选端口装配时才有；缺省 = 不产 span）。
-   * 在 {@link ToolExecutor.runOne} 开工时开启，在 {@link ToolExecutor.finalizeResult}（唯一终结点）
-   * 收敛后置空——单开单闭、纯旁路，span 失败不冒泡进执行主路。
-   */
-  spanHandle?: LooseOptional<ToolSpanHandle>;
-}
-
-interface ScheduledTool extends PendingTool {
-  /** before/schema/surface normalize 后，按接收顺序授予的实际调用槽。 */
-  effectiveAdmission: ToolEffectiveAdmission;
-  attemptSaved?: boolean;
-  requestedInputChars?: number;
-  inputReused?: boolean;
-  operationStarted?: boolean;
-  /** 拿到调用槽、真正开始执行的时刻；同一批里排队等其他工具的时间不算在这个工具头上。 */
-  executionStartedAt?: number;
-  /** 最近一次转发给宿主的工具元数据：宿主可能整份替换元数据，补发执行开始时刻时连同它一起发。 */
-  lastMetadata?: Record<string, unknown>;
 }
 
 /**
@@ -185,24 +98,6 @@ interface ScheduledTool extends PendingTool {
  * 界面算单个工具耗时时优先用它。
  */
 const ToolExecutionStartedAtMetadataKey = "executionStartedAt";
-
-export interface ToolResult {
-  toolCallId: string;
-  toolName: string;
-  args?: Record<string, unknown>;
-  result: unknown;
-  modelResult?: unknown;
-  error?: string;
-  modelContent?: ToolResultModelContentPart[];
-  modelImage?: ToolResultModelImage;
-  effects?: StreamToolResultEffects;
-  notices?: Array<Extract<AgentEvent, { type: "notice" }>>;
-}
-
-type ToolExecutionSettlement =
-  | { status: "completed"; result: ToolResult }
-  | { status: "failed"; error: unknown }
-  | { status: "aborted" };
 
 /**
  * 工具执行编排器。
@@ -1619,4 +1514,3 @@ export function emitToolMetadataEvent(
   });
 }
 
-export type { ToolExecutorEvents };

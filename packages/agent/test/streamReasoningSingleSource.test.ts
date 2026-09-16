@@ -3,7 +3,8 @@ import assert from 'node:assert/strict'
 import type { TextStreamPart, ToolSet } from 'ai'
 import { describe, test } from 'bun:test'
 
-import { type InterruptedStreamPartial, StreamConsumer } from '../src/impl/loop/StreamConsumer'
+import { StreamConsumer } from '../src/impl/loop/StreamConsumer'
+import type { InterruptedStreamPartial } from '../src/types/loop.js'
 
 type StreamPart = TextStreamPart<ToolSet>
 type AssistantContent = Awaited<ReturnType<StreamConsumer['consumeAssistantStream']>>

@@ -15,14 +15,9 @@
  * delta 之间时连 `<` 一起承接、不漏残渣。全宽竖线在正常正文/代码里几乎不可能出现，误伤极低
  * （普通 `<` 只有恰好落在 delta 末尾时才被 hold 一拍，下一个字符非 `｜` 立即释放）。
  */
-const LeakedToolMarkupAnchor = '<｜DSML｜'
+import type { LeakedToolMarkupFilterState } from '../../types/loop.js'
 
-export interface LeakedToolMarkupFilterState {
-  /** 已进入抑制态：锚点已出现，其后一切文本都丢弃。 */
-  suppressing: boolean
-  /** 跨 delta 承接可能是锚点前缀的尾巴。 */
-  tail: string
-}
+const LeakedToolMarkupAnchor = '<｜DSML｜'
 
 export function createLeakedToolMarkupFilterState(): LeakedToolMarkupFilterState {
   return { suppressing: false, tail: '' }

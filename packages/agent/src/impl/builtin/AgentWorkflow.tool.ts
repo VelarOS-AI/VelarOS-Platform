@@ -1,13 +1,10 @@
 import { AppError } from '@velaros-ai/core/error'
 
-import { defineVelaTool, type VelaTool } from '../../utils/builtin/define-agent-tool'
-import { agentWorkflowSchema, type RunAgentWorkflowInput } from '../../utils/builtin/workflow-schemas'
+import type { AgentWorkflowToolCollection, RunAgentWorkflowInput,VelaTool } from '../../types/builtin.js'
+import { defineVelaTool } from '../../utils/builtin/define-agent-tool'
+import { agentWorkflowSchema } from '../../utils/builtin/workflow-schemas'
 
 import { AgentWorkflowCapability } from './Capabilities'
-
-interface AgentWorkflowToolCollection {
-  readonly 'agent:run_workflow': VelaTool<RunAgentWorkflowInput>
-}
 
 const runAgentWorkflow: VelaTool<RunAgentWorkflowInput> = defineVelaTool({
   name: 'agent:run_workflow',
@@ -87,4 +84,3 @@ const agentWorkflowTools: AgentWorkflowToolCollection = {
 }
 
 export { agentWorkflowTools }
-export type { AgentWorkflowToolCollection }

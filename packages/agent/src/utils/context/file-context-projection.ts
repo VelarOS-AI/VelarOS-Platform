@@ -2,13 +2,12 @@ import type { ModelMessage } from 'ai'
 
 import { isArray, isEmpty, isFalse, isNumber, isPlainObject, isString, Log, optionalWhen } from '@velaros-ai/core'
 
-import type { FileContextProjection, FileContextView } from '../../types/resource-contracts'
+import type { FileContextProjection, FileContextView, SourceFragment } from '../../types/context.js'
 import { fitProjectReadsForModel, hasProjectSourceWindows } from '../tools/project-read-serialization'
 
 /** 当前视图列出被省略文件路径的上限；总数仍由 omittedFiles 给出。 */
 const MaxListedOmittedPaths = 40
 
-interface SourceFragment { line: number; columns: number[]; text: string }
 function isSourceFragment(value: unknown): value is SourceFragment {
   return isPlainObject(value) && isNumber(value.line) && isString(value.text)
     && isArray(value.columns) && value.columns.length === 2 && value.columns.every(isNumber)

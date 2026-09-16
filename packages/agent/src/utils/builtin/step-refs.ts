@@ -1,52 +1,8 @@
 import { isArray, isEmpty,isNumber } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import type { UserPlanStatus } from './plans'
+import type { StepCompletionResult, StepEngineOptions, StepRef,UserPlanStatus, UserStep } from '../../types/builtin.js'
 
-/**
- * 计划/目标共享的步骤引擎。
- *
- * Plans 与 Goals 的步骤形状完全同构(`{id?, step, objective?, status}`),此前
- * 匹配/完成/晋升/引用清单四套逻辑是两份近拷贝(修 scaffold-clobber 时逐行比对过)。
- * 本模块收敛为单一实现;两侧语义差异(已解决状态集/晋升回退策略)显式参数化,
- * 不做静默行为漂移。匹配器统一采用更宽容的版本(NFKC/全角冒号归一/唯一子串命中)。
- */
-interface UserStep {
-  /** 稳定步骤 id;通常没有(创建时未指定),引用优先用序号。 */
-  id?: string
-  /** 步骤标题。 */
-  step: string
-  /** 可选步骤目标。 */
-  objective?: string
-  /** 当前状态。 */
-  status: UserPlanStatus
-}
-
-interface StepEngineOptions {
-  /** 错误文案里的种类名(plan/goal),保持与历史报错逐字一致。 */
-  kindLabel: 'plan' | 'goal'
-  /** 匹配失败时清单前缀,如「当前计划步骤」/「当前目标步骤」。 */
-  listLabel: string
-  /** 空列表报错文案。 */
-  emptyMessage: string
-  /** 计入 allStepsResolved 的终态集合。 */
-  resolvedStatuses: readonly UserPlanStatus[]
-  /**
-   * 晋升回退策略:完成一步后若无 in_progress,优先晋升「完成位之后的第一个 pending」;
-   * true 时找不到则回退「任意位置的第一个 pending」(goal 语义),false 则不晋升(plan 语义)。
-   */
-  promoteFallbackAnywhere: boolean
-}
-
-interface StepCompletionResult<T extends UserStep> {
-  steps: T[]
-  completedStep: T
-  completedSteps: T[]
-  promotedStep: Nullable<T>
-  allStepsResolved: boolean
-}
-
-type StepRef = string | number
 
 /** 把步骤格式化成可引用清单:"1. 标题 (id:x) [状态]; …",供匹配失败时回给模型自纠。 */
 function describeStepRefs(steps: readonly UserStep[]): string {
@@ -244,4 +200,3 @@ function allResolved(steps: readonly UserStep[], options: StepEngineOptions): bo
 }
 
 export { completeSteps, describeStepRefs, describeStepRefsForModel, findStepIndex }
-export type { StepCompletionResult, StepEngineOptions, StepRef, UserStep }

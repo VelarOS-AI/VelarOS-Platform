@@ -2,15 +2,8 @@ import type { ModelMessage } from 'ai'
 
 import { isArray, isEmpty, isPlainObject, isString,Log } from '@velaros-ai/core'
 
-import type {
-  FileContextCarrier,
-  FileContextRange,
-  FileContextSnapshot,
-  FileContextSource,
-  FileContextView,
-  FileContextViewTier,
-  FileSnapshotRecallInput,
-} from '../../types/resource-contracts'
+import type { ContextPayloadStore } from '../../contract/requires.js'
+import type { FileContextCarrier, FileContextRange, FileContextSnapshot, FileContextSource, FileContextView, FileContextViewTier, FileSnapshotRecallInput } from '../../types/context.js'
 import {
   FileObservationToolName,
   FileSnapshotToolName,
@@ -21,8 +14,6 @@ import {
   tryParseFileRename,
   tryParseFileSnapshot,
 } from '../../utils/context/file-snapshot-archive'
-
-import type { ContextPayloadStore } from './InMemoryContextPayloadStore'
 
 function key(workspaceId: string, path: string): string {
   return JSON.stringify([workspaceId, path])

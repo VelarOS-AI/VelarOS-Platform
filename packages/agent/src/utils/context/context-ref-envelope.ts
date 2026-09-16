@@ -11,51 +11,7 @@
 
 import { isNumber, isPlainObject, isString,isTrue } from '@velaros-ai/core'
 
-export type ContextRefKind =
-  | 'tool-output'
-  | 'micro-compacted-tool-result'
-  | 'attention-context-handle'
-  | 'attention-code-pruned-context-handle'
-  | 'attention-grounded-summary'
-  | 'tool-payload-ref'
-  | 'duplicate-tool-result'
-  | 'history-budget-truncated'
-
-export interface ContextRefRetrieval {
-  tool: 'context:recall'
-  args: {
-    ref: string
-    refKind: 'tool-payload' | 'payload-ref' | 'context-handle' | 'evidence'
-    reason?: string
-    maxChars?: number
-    jsonPath?: string
-  }
-}
-
-export interface ContextRefEnvelope {
-  /** 唯一判别键;嗅探恒用 '"__contextRef"' 字符串。 */
-  __contextRef: ContextRefKind
-  /** 信封版本。 */
-  v: 1
-  /** 规范召回引用,恒等于 retrieval.args.ref。 */
-  ref: string
-  toolCallId?: string
-  toolName?: string
-  /** ctx-payload:* 内容寻址引用。 */
-  payloadRef?: string
-  payloadHash?: string
-  excerpt?: string
-  excerptKind?: 'structured' | 'head' | 'facts' | 'code' | 'text' | 'json'
-  /** false=摘录未截断(内容已完整可见,不必召回);true/缺省=可能需要召回。 */
-  excerptTruncated?: boolean
-  originalLength?: number
-  /** 折叠原因。 */
-  reason?: string
-  /** 恒存在恒同形;excerptTruncated:false 时仍带(供一致解析),但模型不应对未截断内容空转召回。 */
-  retrieval: ContextRefRetrieval
-  /** kind 扩展字段(如 attention-code-pruned 的 meta.codePruning)。 */
-  meta?: Record<string, unknown>
-}
+import type { ContextRefEnvelope } from '../../types/context.js'
 
 export function buildContextRefEnvelope(
   input: Omit<ContextRefEnvelope, 'v'>

@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import type { ActiveDirectiveType } from '../../types/protocol'
+import type { ActiveDirectiveType } from '../../types/agent.js'
 import { defineVelaTool } from '../../utils/builtin/define-agent-tool'
 import {
   renderParameterDescription as parameterDescription,

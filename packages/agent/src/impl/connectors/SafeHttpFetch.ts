@@ -27,11 +27,9 @@ import { isIP } from 'node:net'
 
 import { AppError } from '@velaros-ai/core/error'
 
-const MaxSafeFetchRedirects = 10
+import type { SafeFetchOptions } from '../../types/connectors.js'
 
-interface SafeFetchOptions {
-  lookupIpAddresses?: (hostname: string) => Promise<readonly string[]>
-}
+const MaxSafeFetchRedirects = 10
 
 function normalizeIpLiteral(value: string): string {
   const trimmed = value.trim()
@@ -201,4 +199,3 @@ async function safeFetch(
 }
 
 export { assertSafeHttpFetchUrl, isBlockedFetchIpAddress, safeFetch }
-export type { SafeFetchOptions }

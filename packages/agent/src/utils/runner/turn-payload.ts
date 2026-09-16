@@ -3,36 +3,14 @@ import type { ModelMessage } from 'ai'
 import { isArray, isObject,isPresent, isString, toNullable } from '@velaros-ai/core'
 
 import type {
-  PromptSegmentTrace,
-  SkippedPromptSegmentTrace,
   StreamTurnContextPayload,
 } from '../../types/agent'
-import type { AgentRoleResolution } from '../../types/role-types'
-import type { RunContextToolContext } from '../../types/run-context-host-ports'
+import type { BuildTurnContextPayloadArgs } from '../../types/runner.js'
 import { isInternalFollowUpMessage } from '../history/internal-messages'
 import { isToolCategoryAvailable } from '../tools/access-policy'
 
 const RepeatedDebugUserPromptElideChars = 2_000
 const RepeatedDebugUserPromptPreviewChars = 120
-
-interface BuildTurnContextPayloadArgs {
-  turn: number
-  roleResolution: AgentRoleResolution
-  roleRuntimeModel: StreamTurnContextPayload['roleRuntimeModel']
-  systemPrompt: string
-  devEnvironmentContext: Nullable<string>
-  stableCutoff: number
-  promptSegments: PromptSegmentTrace[]
-  skippedPromptSegments: SkippedPromptSegmentTrace[]
-  history: ModelMessage[]
-  toolContext: RunContextToolContext
-  allowedTools?: string[]
-  toolSchemaTelemetry?: StreamTurnContextPayload['toolSchemaTelemetry']
-  runProfileTelemetry?: StreamTurnContextPayload['runProfileTelemetry']
-  toolAllocatorTelemetry?: StreamTurnContextPayload['toolAllocatorTelemetry']
-  turnPlanningTelemetry?: StreamTurnContextPayload['turnPlanningTelemetry']
-  contextPhaseTelemetry: StreamTurnContextPayload['contextPhaseTelemetry']
-}
 
 /**
  * 单轮 turn 的调试上下文载荷构造器。
@@ -180,5 +158,4 @@ class TurnPayload {
 }
 
 export { TurnPayload }
-export type { BuildTurnContextPayloadArgs }
 export { TurnPayload as AgentTurnContextPayloadBuilder }

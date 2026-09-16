@@ -1,7 +1,7 @@
 import { AppError } from '@velaros-ai/core/error'
 
+import type { DispatchAgentInput } from '../../types/builtin.js'
 import { defineVelaTool } from '../../utils/builtin/define-agent-tool'
-import type { DispatchAgentInput } from '../../utils/builtin/dispatch-schemas'
 import { dispatchAgentSchema } from '../../utils/builtin/dispatch-schemas'
 
 import { AgentDispatchCapability } from './Capabilities'

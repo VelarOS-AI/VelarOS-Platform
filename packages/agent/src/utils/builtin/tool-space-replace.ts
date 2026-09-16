@@ -32,37 +32,13 @@ import { isEmpty, isPresent } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import type { ChatPromptFeatureId } from '../../types/agent'
-import type { KernelToolContext as ToolContext } from '../../types/kernel-tool-context'
-import type { ToolCategoryId } from '../../types/tool'
+import type { ToolCategoryId } from '../../types/agent.js'
+import type { ToolDiscoveryCard,ToolSpaceReplacePageDetail } from '../../types/builtin.js'
+import type { KernelToolContext as ToolContext } from '../../types/tool-context.js'
 import { expandCapabilityCategoryIds } from '../capabilities'
 
-import {
-  buildToolActivationRef,
-  buildToolDiscoveryCards,
-  summarizeReasonRef,
-  type ToolActivationRef,
-  type ToolDiscoveryCard,
-  type ToolReasonRef,
-} from './tool-space-activation'
+import { buildToolActivationRef, buildToolDiscoveryCards, summarizeReasonRef } from './tool-space-activation'
 import { type toolSpaceReplaceSchema } from './tool-space-schemas'
-
-type ToolSpaceReplacePageDetail = Pick<
-  ToolDiscoveryCard,
-  | 'id'
-  | 'kind'
-  | 'name'
-  | 'categoryId'
-  | 'summary'
-  | 'availability'
-  | 'toolOsState'
-  | 'schemaState'
-  | 'schemaPolicy'
-  | 'nextAction'
-  | 'resident'
-> & {
-  reasons: ToolReasonRef[]
-  activation: ToolActivationRef
-}
 
 function findPluginEntryTool(
   card: ToolDiscoveryCard,

@@ -16,16 +16,10 @@ import { toOptional } from "@velaros-ai/core/utils/nullish";
 import { optionalWhenLazy } from "@velaros-ai/core/utils/optionalWhen";
 import { readFirstString } from "@velaros-ai/core/utils/unknownJsonRecord";
 
+import type { SerializationHints,ToolResultCompactionLimits } from '../../types/tools.js'
+
 import { fitProjectReadsForModel, hasProjectSourceWindows } from './project-read-serialization';
 import { projectToolInputForHistory } from './tool-input-history-projection';
-
-interface ToolResultCompactionLimits {
-  maxSerializedLength: number;
-  maxStringLength: number;
-  maxDepth: number;
-  maxArrayItems: number;
-  preserveLargeContent: boolean;
-}
 
 // 2026-07 真机取证（Downloads 整理会话 9 轮空转）后校准：8_000/50 会把一次 137 条目录列表
 // 裁成 50 条,模型被迫 grep 分批+三连 recall 补查,一个 ls 级任务烧 9 轮。上限对齐业界
@@ -558,21 +552,6 @@ function fixReadFilesMetadata(result: unknown, contentBudget: number): unknown {
     ...r,
     files: r["files"].map((f) => fixReadFileMetadata(f, contentBudget)),
   };
-}
-
-/**
- * 工具序列化提示：允许调用方传入工具输入参数中的大内容上限，
- * 序列化层据此动态放大 maxSerializedLength 并豁免大内容字段的字符串长度截断。
- */
-export interface SerializationHints {
-  /**
-   * bash 的 maxOutputChars 参数；指定后序列化上限动态扩展到该值加 JSON 封装开销。
-   */
-  maxOutputChars?: number;
-  /**
-   * read_file / project:read 的 maxChars 或 maxBytes；指定后内容预算随之扩展。
-   */
-  maxChars?: number;
 }
 
 export function extractSerializationHintsFromToolInput(

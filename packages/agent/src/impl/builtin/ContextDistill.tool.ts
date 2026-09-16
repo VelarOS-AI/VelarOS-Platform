@@ -2,6 +2,7 @@ import { z } from 'zod'
 
 import { toNullable } from '@velaros-ai/core'
 
+import type { DistillContextInput } from '../../types/builtin.js'
 import { defineVelaTool } from '../../utils/builtin/define-agent-tool'
 import {
   renderParameterDescription as parameterDescription,
@@ -14,11 +15,6 @@ import { AgentContextSignalCapability } from './Capabilities'
 const DistilledFactMaxChars = 240
 const DistilledFactMaxCount = 20
 const DistillNoteMaxChars = 300
-
-export interface DistillContextInput extends Record<string, unknown> {
-  facts: string[]
-  note?: string
-}
 
 const distillContextSchema = z.object({
   facts: z

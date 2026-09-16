@@ -2,10 +2,9 @@ import type { ModelMessage } from 'ai'
 
 import { isBlank, isEmpty, isNonEmptyArray, isString, toNullable } from '@velaros-ai/core'
 
-import type {
-  AgentRuntimeInputPort,
-  AgentRuntimeInputResult,
-} from '../../utils/runner/runtime-input-port'
+import type { AgentRuntimeInputPort } from '../../contract/requires.js'
+import type { ExecutionGuidanceClearResult, ExecutionGuidanceEnqueueResult, ExecutionGuidanceFinalizationResult, ExecutionGuidanceLane } from '../../types/records.js'
+import type { AgentRuntimeInputResult } from '../../types/runner.js'
 
 function hasUserVisibleGuidance(message: ModelMessage): boolean {
   if (message.role !== 'user') return false
@@ -13,26 +12,6 @@ function hasUserVisibleGuidance(message: ModelMessage): boolean {
   if (isString(message.content)) return !isBlank(message.content.trim())
 
   return isNonEmptyArray(message.content)
-}
-
-type ExecutionGuidanceEnqueueResult =
-  | { status: 'accepted' }
-  | { status: 'closed'; reason: 'execution-settled' }
-  | { status: 'invalid'; reason: 'empty-or-non-user-message' }
-
-type ExecutionGuidanceFinalizationResult =
-  | { status: 'sealed' }
-  | { status: 'pending'; pendingCount: number }
-
-type ExecutionGuidanceClearResult =
-  | { status: 'cleared' }
-  | { status: 'retained'; pendingCount: number }
-
-interface ExecutionGuidanceLane {
-  messages: ModelMessage[]
-  receipts: Array<{ inputId?: string; sourceSessionId?: string; onConsumed?: () => void }>
-  inputAcceptedListeners: Set<() => void>
-  sealed: boolean
 }
 
 class ExecutionGuidanceQueue {
@@ -150,8 +129,3 @@ class ExecutionGuidanceQueue {
 }
 
 export { ExecutionGuidanceQueue }
-export type {
-  ExecutionGuidanceClearResult,
-  ExecutionGuidanceEnqueueResult,
-  ExecutionGuidanceFinalizationResult,
-}

@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'bun:test'
 
-import type { McpToolDescriptor } from '../src/impl/connectors/McpClientConnection'
 import { isKernelWriteLikeTool } from '../src/impl/tools/KernelToolLoopGuard'
 import type { ToolConfirmationDecisionOptions } from '../src/types/agent'
-import type { KernelToolContext } from '../src/types/kernel-tool-context'
+import type { McpToolDescriptor } from '../src/types/connectors.js'
+import type { KernelToolContext } from '../src/types/tool-context.js'
 import { describeMcpApprovalArguments } from '../src/utils/connectors/mcp-approval-arguments'
 import {
   buildMcpToolName,

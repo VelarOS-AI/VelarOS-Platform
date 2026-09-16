@@ -23,16 +23,8 @@ import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
-import {
-  buildDistillProduct,
-  buildSkeletonFallbackProduct,
-  type ContextDistiller,
-  type ContextDistillProduct,
-  type ContextDistillRequest,
-  type ContextDistillTotals,
-  createEmptyDistillTotals,
-} from '../../utils/residency/distill'
-import type { ContextGovernanceConfig } from '../../utils/residency/governance-config'
+import type { ContextDistiller, ContextDistillProduct, ContextDistillRequest, ContextDistillTotals, ContextGovernanceConfig } from '../../types/residency.js'
+import { buildDistillProduct, buildSkeletonFallbackProduct, createEmptyDistillTotals } from '../../utils/residency/distill'
 
 const log = logRuntime.tag('ContextDistillRunner')
 

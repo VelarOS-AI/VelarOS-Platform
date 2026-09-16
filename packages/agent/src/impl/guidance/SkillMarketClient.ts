@@ -7,23 +7,10 @@ import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 import { asRecord, readString } from '@velaros-ai/core/utils/unknownJsonRecord'
 
-import type { SkillMarketCatalog, SkillMarketEntry } from '../../types/skill'
+import type { SkillMarketCatalog, SkillMarketEntry } from '../../types/agent.js'
+import type { RemoteSkillEntry, SkillMarketAvailability } from '../../types/guidance.js'
 
 import type { SkillFileStore } from './SkillFileStore'
-
-/**
- * 远端 manifest 条目：
- * `{ skills: [{ id, name, description, version, file, sha256? }] }`
- * 由 scripts/build/packageSkillMarket.mjs 生成，托管在 market base 下。
- */
-interface RemoteSkillEntry {
-  id: string
-  name: string
-  description: string
-  version: string
-  file: string
-  sha256?: string
-}
 
 interface SkillMarketClientDependencies {
   store: SkillFileStore
@@ -34,10 +21,6 @@ interface SkillMarketClientDependencies {
   fetchImpl?: typeof fetch
   now?: () => number
 }
-
-type SkillMarketAvailability =
-  | Readonly<{ available: true }>
-  | Readonly<{ available: false; reason: 'endpoint-not-configured' }>
 
 /**
  * 技能市场客户端：拉 skills-manifest.json，合成本地安装状态；
@@ -224,8 +207,4 @@ class SkillMarketClient {
   }
 }
 
-export {
-  type SkillMarketAvailability,
-  SkillMarketClient,
-  type SkillMarketClientDependencies,
-}
+export { SkillMarketClient, type SkillMarketClientDependencies }

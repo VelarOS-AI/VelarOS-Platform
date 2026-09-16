@@ -1,5 +1,6 @@
 import { z } from 'zod'
 
+import type { RecallContextInput } from '../../types/builtin.js'
 import {
   renderParameterDescription as parameterDescription,
 } from '../toolkit/tool-description'
@@ -138,9 +139,7 @@ export const recallContextSchema = z
         message: '搜索召回必须提供 query；精确取回必须提供 ref。',
       })
     }
-  })
-
-export type RecallContextInput = z.infer<typeof recallContextSchema>
+  }) satisfies z.ZodType<RecallContextInput>
 
 /** recall 精确取回的 refKind 前缀判别:模型可省略 refKind,系统按 ref 形状推断。 */
 export function inferRecallRefKind(

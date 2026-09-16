@@ -1,58 +1,13 @@
 import { isEmpty } from '@velaros-ai/core'
 
-import type { CapabilityRunPlan, ToolPageFault } from '../../types/agent-run-plan'
-import type { RunProfileId } from '../../types/run-profile'
-import type { CapabilityScopeId, ToolCategoryId, ToolDescriptor } from '../../types/tool'
-import {
-  type AgentRuntimeCapabilityPorts,
-  expandCapabilityCategoryIds,
-  resolveCapabilityScopePolicy,
-  resolveCapabilityScopeResidency,
-} from '../capabilities'
+import type { AgentRuntimeCapabilityPorts } from '../../contract/requires.js'
+import type {ToolCategoryId, ToolDescriptor } from '../../types/agent.js'
+import type { CapabilityRunPlan, PlanCapabilityRunInput, ResolveCapabilityPageFaultsInput,ToolCategory, ToolPageFault } from '../../types/loop.js'
+import { expandCapabilityCategoryIds, resolveCapabilityScopePolicy, resolveCapabilityScopeResidency } from '../capabilities'
 import { applyRunProfileToolExposure } from '../runner/run-profile'
 
 import { resolveSoloLoopTools } from './loop-runtime'
-import {
-  planToolSpaceBootstrap,
-  type ToolSpaceBootstrapState,
-} from './tool-space-bootstrap-planner'
-
-interface ToolCategory<TTool extends { name: string } = ToolDescriptor> {
-  category: { id: ToolCategoryId }
-  tools: TTool[]
-}
-
-export interface PlanCapabilityRunInput {
-  messages: Parameters<typeof planToolSpaceBootstrap>[0]['messages']
-  runProfile: RunProfileId
-  configuredTools?: string[]
-  roleAllowedTools: string[]
-  currentVisibleToolNames: readonly string[]
-  enabledToolCategoryIds: readonly ToolCategoryId[]
-  budgetOverrideToolCategoryIds: readonly ToolCategoryId[]
-  budgetOverrideToolNames: readonly string[]
-  visibleEnabledToolCategories: Array<ToolCategory<ToolDescriptor>>
-  runtimeToolCategories: Array<ToolCategory<ToolDescriptor>>
-  allowedToolCategoryIds: readonly ToolCategoryId[]
-  capabilityPorts?: AgentRuntimeCapabilityPorts
-  capabilityScopeId?: CapabilityScopeId
-  turn: number
-  toolSchemaChars?: Readonly<Record<string, number>>
-  toolSchemaCharBudget: number
-  toolUsageScores?: Readonly<Record<string, number>>
-  bootstrapState?: ToolSpaceBootstrapState
-  collectNewlyEvictedPagedInTools?: (evictedToolNames: readonly string[]) => readonly string[]
-}
-
-export interface ResolveCapabilityPageFaultsInput {
-  requestedForcedToolChoice?: LooseOptional<{ type: 'tool'; toolName: string }>
-  resolvedForcedToolChoice?: LooseOptional<{ type: 'tool'; toolName: string }>
-  enabledToolDescriptors: readonly ToolDescriptor[]
-  baseAllowedToolNames: readonly string[]
-  droppedToolNames: readonly string[]
-  budgetOverrideToolNames: readonly string[]
-  collectNewlyEvictedPagedInTools?: (evictedToolNames: readonly string[]) => readonly string[]
-}
+import { planToolSpaceBootstrap } from './tool-space-bootstrap-planner'
 
 class CapabilityRunPlanner {
   public plan(input: PlanCapabilityRunInput): CapabilityRunPlan {

@@ -1,26 +1,7 @@
-import type { ToolCategoryId } from '../../types/tool'
+
+import type { ResolveSoloLoopProtectedToolsArgs, ResolveSoloLoopToolCategoriesForExposureArgs,SoloLoopToolCategory } from '../../types/loop.js'
 
 import { capabilityRunPlanner } from './capability-run-planner'
-
-interface SoloLoopToolCategory<TTool extends { name: string } = { name: string }> {
-  category: { id: ToolCategoryId }
-  tools: TTool[]
-}
-
-type SoloLoopProtectedToolCategory = SoloLoopToolCategory
-
-interface ResolveSoloLoopProtectedToolsArgs {
-  enabledToolCategories: SoloLoopProtectedToolCategory[]
-  budgetOverrideToolCategories: ReadonlySet<ToolCategoryId> | readonly ToolCategoryId[]
-  budgetOverrideToolNames: readonly string[]
-}
-
-interface ResolveSoloLoopToolCategoriesForExposureArgs<TTool extends { name: string }> {
-  visibleEnabledToolCategories: Array<SoloLoopToolCategory<TTool>>
-  runtimeToolCategories: Array<SoloLoopToolCategory<TTool>>
-  enabledToolCategoryIds: readonly ToolCategoryId[]
-  budgetOverrideToolCategories: ReadonlySet<ToolCategoryId> | readonly ToolCategoryId[]
-}
 
 function resolveSoloLoopToolCategoriesForExposure<TTool extends { name: string }>({
   visibleEnabledToolCategories,
@@ -59,9 +40,3 @@ function resolveSoloLoopProtectedTools({
 }
 
 export { resolveSoloLoopProtectedTools, resolveSoloLoopToolCategoriesForExposure }
-export type {
-  ResolveSoloLoopProtectedToolsArgs,
-  ResolveSoloLoopToolCategoriesForExposureArgs,
-  SoloLoopProtectedToolCategory,
-  SoloLoopToolCategory,
-}

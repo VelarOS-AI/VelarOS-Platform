@@ -25,90 +25,10 @@
 
 import { isEmpty } from '@velaros-ai/core'
 
-import type { KernelToolContext as ToolContext } from '../../types/kernel-tool-context'
-import type { ToolCategoryId } from '../../types/tool'
-import type {
-  ToolDiscoveryAvailability,
-  ToolDiscoveryNextAction,
-  ToolDiscoverySchemaState,
-} from '../tools/discovery-availability'
-import {
-  buildToolSpacePages,
-  type ToolSpacePage,
-  type ToolSpacePageKind,
-  type ToolSpacePageRisk,
-  type ToolSpaceReason,
-  type ToolSpaceSchemaPolicy,
-} from '../tools/tool-space-resolver'
-
-export type ToolAvailability = ToolDiscoveryAvailability
-export type ToolDiscoveryKind = ToolSpacePageKind
-export type ToolDiscoveryRisk = ToolSpacePageRisk
-export type ToolSchemaState = ToolDiscoverySchemaState
-export type ToolNextAction = ToolDiscoveryNextAction
-export type ToolSchemaPolicy = ToolSpaceSchemaPolicy
-type ToolDiscoveryReason = ToolSpaceReason
-
-export type ToolDiscoveryCard = ToolSpacePage
-
-type ToolActivationMethod =
-  | 'direct_call'
-  | 'page_in_only'
-  | 'request_approval'
-  | 'request_user_action'
-  | 'inspect_reasons'
-
-type ToolDependencyKind =
-  | 'capability'
-  | 'plugin'
-  | 'runtime'
-  | 'residency'
-
-type ToolDependencyState =
-  | 'satisfied'
-  | 'loadable'
-  | 'requires_approval'
-  | 'requires_user_action'
-  | 'blocked'
-
-interface ToolDependencyGuide {
-  id: string
-  kind: ToolDependencyKind
-  state: ToolDependencyState
-  required: boolean
-  summary: string
-  pageId: Nullable<string>
-  pageIn: string[]
-  nextTool: Nullable<string>
-  reasonKeys: string[]
-  activationHint: string
-}
-
-export interface ToolActivationGuide {
-  method: ToolActivationMethod
-  summary: string
-  pageIn: string[]
-  capabilityId: Nullable<string>
-  nextTool: Nullable<string>
-  notes: string[]
-  dependencies: ToolDependencyGuide[]
-  activationFlow: string[]
-}
-
-export type ToolReasonRef = Pick<ToolDiscoveryReason, 'layer' | 'code' | 'message'>
-
-type ToolDependencyRef = Pick<
-  ToolDependencyGuide,
-  'id' | 'kind' | 'state' | 'required' | 'pageId' | 'pageIn' | 'nextTool' | 'reasonKeys'
->
-
-export interface ToolActivationRef {
-  method: ToolActivationMethod
-  pageIn: string[]
-  capabilityId: Nullable<string>
-  nextTool: Nullable<string>
-  dependencies: ToolDependencyRef[]
-}
+import type { ToolCategoryId } from '../../types/agent.js'
+import type { ToolActivationGuide, ToolActivationMethod, ToolActivationRef,ToolDependencyGuide, ToolDependencyRef, ToolDiscoveryCard, ToolDiscoveryReason, ToolReasonRef } from '../../types/builtin.js'
+import type { KernelToolContext as ToolContext } from '../../types/tool-context.js'
+import { buildToolSpacePages } from '../tools/tool-space-resolver'
 
 export function buildToolDiscoveryCards(ctx: ToolContext): ToolDiscoveryCard[] {
   return buildToolSpacePages(ctx)

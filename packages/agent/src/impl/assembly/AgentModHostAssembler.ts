@@ -20,58 +20,11 @@ import {
   VelarosModManifestFileName,
 } from '@velaros-ai/kernel/contracts/protocol'
 
-import type { AgentModDiagnostic } from '../../utils/wire/mods'
+import type { AgentModPackReader } from '../../contract/requires.js'
+import type { AgentModDiagnostic } from '../../types/agent.js'
+import type { AgentModAssembly, AgentModDiscoveryResult, AgentModPackage,AgentModPackDescriptorLike, AssembleAgentModsInput } from '../../types/mods.js'
 import { createBuiltinAgentModPackage } from '../builtin/BuiltinAgentMod'
-import type {
-  AgentModBindings,
-  AgentModHostProfile,
-  AgentModLoadReport,
-  AgentModPackage,
-} from '../mods/AgentModLoader'
 import { AgentModLoader } from '../mods/AgentModLoader'
-
-/**
- * Kernel pack 描述符的结构化契约。
- *
- * 与 Kernel client 的 `KernelModPackDescriptor` 同形：`specifier` 指向 pack 包目录，
- * `provides` 列出该 pack 贡献的能力 id。
- */
-interface AgentModPackDescriptorLike {
-  readonly id: string
-  readonly version: string
-  readonly enabled: boolean
-  readonly provides: readonly string[]
-  readonly specifier: string
-  readonly kind?: string
-}
-
-/** pack 读取端口：宿主实现 IO，主干只负责编排与判定。 */
-interface AgentModPackReader {
-  /**
-   * 读 pack 目录下的分节单文件 manifest（整份 `velaros.mod.json`，不是某一节）；
-   * 不存在或读失败应抛错（拒载而非静默跳过）。取 agent 节是本主干的事。
-   */
-  readManifest(input: {
-    packDirectory: string
-    manifestFileName: string
-    descriptor: AgentModPackDescriptorLike
-  }): Promise<unknown> | unknown
-  /**
-   * 装载 pack 的运行态绑定（工具实体 / 钩子 handler 等）；纯数据 mod 可不实现。
-   *
-   * `manifest` 是**整份信封**（宿主装载代码时可能要用 `module` 节的寻址字段），不是 agent 节。
-   */
-  loadBindings?(input: {
-    packDirectory: string
-    manifest: unknown
-    descriptor: AgentModPackDescriptorLike
-  }): Promise<AgentModBindings | undefined> | AgentModBindings | undefined
-}
-
-interface AgentModDiscoveryResult {
-  readonly packages: readonly AgentModPackage[]
-  readonly diagnostics: readonly AgentModDiagnostic[]
-}
 
 function readErrorMessage(error: unknown): string {
   if (error instanceof Error) return error.message
@@ -167,22 +120,6 @@ async function discoverAgentModPackages(input: {
   return { packages, diagnostics }
 }
 
-interface AssembleAgentModsInput {
-  readonly host: AgentModHostProfile
-  /** 随包官方 mod；缺省 = 内置轴 mod（恒加载）。传空数组可显式关掉。 */
-  readonly bundled?: readonly AgentModPackage[]
-  /** Kernel 报上来的 pack 清单；缺省不做 pack 发现。 */
-  readonly packs?: readonly AgentModPackDescriptorLike[]
-  readonly reader?: AgentModPackReader
-  readonly loader?: AgentModLoader
-  readonly onDiagnostic?: (diagnostic: AgentModDiagnostic) => void
-}
-
-interface AgentModAssembly {
-  readonly loader: AgentModLoader
-  readonly report: AgentModLoadReport
-}
-
 /**
  * 宿主组装入口：bundled 先、pack 后（bundled 有序数组，pack 平铺）。
  *
@@ -211,10 +148,3 @@ async function assembleAgentMods(input: AssembleAgentModsInput): Promise<AgentMo
 }
 
 export { assembleAgentMods, discoverAgentModPackages }
-export type {
-  AgentModAssembly,
-  AgentModDiscoveryResult,
-  AgentModPackDescriptorLike,
-  AgentModPackReader,
-  AssembleAgentModsInput,
-}

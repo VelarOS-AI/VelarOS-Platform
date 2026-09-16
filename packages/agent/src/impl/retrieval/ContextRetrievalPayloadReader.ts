@@ -2,18 +2,9 @@
 import { isArray, isEmpty, isNonBlankString, isNotNull,isNumber, isPlainObject, isPresent, isString, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import type { ChatContextEvidenceRecord } from '../../types/chat-runtime'
-import type {
-  ChatContextRetrievedPayload,
-  ChatMessage,
-  ChatSessionPayloadSnapshot,
-  ChatSessionToolResultPayload,
-  SerializedMessage,
-} from '../../types/protocol'
-import type {
-  RetrievalPayloadStorePort,
-  RetrievalStateStorePort,
-} from '../../types/retrieval-session-store-ports'
+import type { RetrievalPayloadStorePort, RetrievalStateStorePort } from '../../contract/requires.js'
+import type { ChatContextEvidenceRecord, ChatContextRetrievedPayload, ChatMessage, ChatSessionPayloadSnapshot, SerializedMessage } from '../../types/agent.js'
+import type { DirectToolPayloadLookupResult, JsonPathSegment, JsonPathSelection,ResolvedToolPayload } from '../../types/retrieval.js'
 import { normalizeLegacyFoldStub } from '../../utils/context/context-ref-envelope'
 import { isPrivateFileContextRecord } from '../../utils/context/private-file-records'
 import { chatSearchMessages } from '../../utils/retrieval/messages'
@@ -21,30 +12,6 @@ import { paginateJsonPathValue, paginateSerializedText } from '../../utils/retri
 import { type ContextRetrievalReferenceReader } from '../../utils/retrieval/reference-reader'
 import { contextRetrievalReferences } from '../../utils/retrieval/references'
 import { chatSearchText } from '../../utils/retrieval/text'
-
-/**
- * resolveToolPayload 成功后的内部结构。
- */
-interface ResolvedToolPayload {
-  payload: ChatSessionToolResultPayload
-  /** toolResults 对象中的键（可能是 toolCallId 或 ctx-payload:…）。 */
-  storageKey: string
-  toolCallId: Nullable<string>
-  payloadRef: Nullable<string>
-}
-
-interface DirectToolPayloadLookupResult {
-  checked: boolean
-  payload: Nullable<ChatSessionToolResultPayload>
-}
-
-type JsonPathSegment = string | number
-
-export interface JsonPathSelection {
-  found: boolean
-  value: unknown
-  reason?: string
-}
 
 function readJsonPathIdentifier(path: string, start: number): Nullable<{ key: string; next: number }> {
   let index = start
@@ -769,4 +736,5 @@ export {
   ContextRetrievalPayloadReader,
 }
 
-export { type PaginatedJsonPathSelection,type PaginatedTextWindow, paginateJsonPathSelection, paginateSerializedText } from '../../utils/retrieval/pagination'
+export type { PaginatedJsonPathSelection, PaginatedTextWindow } from '../../types/retrieval.js'
+export { paginateJsonPathSelection, paginateSerializedText } from '../../utils/retrieval/pagination'

@@ -18,111 +18,21 @@
 //  - **隔离按类别不按名字**：类别是唯一隔离单位；逐名例外会随工具增加而腐坏。
 import { isEmpty, isFunction, isPresent, isString, truncate } from '@velaros-ai/core'
 
+import type { AgentRuntimeCapabilityPorts } from '../../contract/requires.js'
 import type { ChatPromptFeatureId } from '../../types/agent'
-import type { ToolCapabilityPage } from '../../types/capability-types'
-import type { AgentRoleId } from '../../types/system'
-import type {
-  CapabilityScopeId,
-  ToolAvailabilityScope,
-  ToolCategoryId,
-  ToolCategoryOverview,
-  ToolDescriptor,
-  ToolOsState,
-} from '../../types/tool'
-import {
-  type AgentRuntimeCapabilityPorts,
-  resolveCapabilityCategoryDefinitions,
-} from '../capabilities'
-import {
-  parseStructuredToolDescription,
-  type StructuredToolDescriptionParts,
-} from '../toolkit/tool-description'
+import type { ToolCategoryId, ToolCategoryOverview, ToolDescriptor } from '../../types/agent.js'
+import type { StructuredToolDescriptionParts } from '../../types/toolkit.js'
+import type { PluginEntry, ToolAccessRuntimeState, ToolCapabilityPage, ToolCategoryAccessDecision, ToolCategoryUnavailableReason, ToolDiscoveryAvailability, ToolSpacePage, ToolSpacePageKind, ToolSpacePageRisk, ToolSpaceReason, ToolSpaceResolverContext, ToolSpaceSchemaPolicy } from '../../types/tools.js'
+import { resolveCapabilityCategoryDefinitions } from '../capabilities'
+import { parseStructuredToolDescription } from '../toolkit/tool-description'
 
-import { buildToolAccessDecision, type ToolAccessDecision } from './access-decision'
-import {
-  decideToolCategoryAccess,
-  type ToolAccessRuntimeState,
-  type ToolCategoryAccessDecision,
-  type ToolCategoryUnavailableReason,
-} from './access-policy'
-import {
-  nextActionForDiscoveryAvailability,
-  resolveCapabilityDiscoveryAvailability,
-  resolveToolDiscoveryAvailability,
-  schemaStateForDiscoveryAvailability,
-  type ToolDiscoveryAvailability,
-  type ToolDiscoveryNextAction,
-  type ToolDiscoverySchemaState,
-  toolOsStateForDiscoveryAvailability,
-} from './discovery-availability'
+import { buildToolAccessDecision } from './access-decision'
+import { decideToolCategoryAccess } from './access-policy'
+import { nextActionForDiscoveryAvailability, resolveCapabilityDiscoveryAvailability, resolveToolDiscoveryAvailability, schemaStateForDiscoveryAvailability, toolOsStateForDiscoveryAvailability } from './discovery-availability'
 
-const ToolSpacePageKindValues = ['tool', 'capability', 'plugin'] as const
+const ToolSpacePageKindValues = ['tool', 'capability', 'plugin'] as const satisfies readonly ToolSpacePageKind[]
 function normalizePromptFeatures(features: readonly ChatPromptFeatureId[]): ChatPromptFeatureId[] {
   return [...new Set(features.filter((feature) => feature.trim()))]
-}
-
-type ToolSpacePageKind = (typeof ToolSpacePageKindValues)[number]
-type ToolSpacePageRisk = 'none' | 'read' | 'write' | 'execute' | 'external' | 'destructive'
-type ToolSpaceSchemaPolicy = 'full' | 'preview' | 'hidden' | 'none'
-
-interface ToolSpaceReason {
-  layer: string
-  code: string
-  message: string
-  details?: Record<string, unknown>
-}
-
-interface ToolSpacePage {
-  id: string
-  kind: ToolSpacePageKind
-  name: string
-  categoryId: ToolCategoryId
-  summary: string
-  suitable: string[]
-  forbidden: string[]
-  aliases: string[]
-  searchHints: string[]
-  permissions: string[]
-  risk: ToolSpacePageRisk
-  availability: ToolDiscoveryAvailability
-  toolOsState: ToolOsState
-  schemaState: ToolDiscoverySchemaState
-  schemaPolicy: ToolSpaceSchemaPolicy
-  nextAction: ToolDiscoveryNextAction
-  resident: boolean
-  access: ToolAccessDecision
-  reasons: ToolSpaceReason[]
-  description?: string
-  /** companion skill id：这张页的深度用法住在哪个技能里（`tooling:map` 卡片透出）。 */
-  usageSkillId?: string
-}
-
-interface ToolSpaceResolverCodingSession {
-  hasToolCategoryAccess(categoryId: ToolCategoryId): boolean
-  isToolCategoryAllowed?: (categoryId: ToolCategoryId) => boolean
-  getEnabledPromptFeatures(): ChatPromptFeatureId[]
-  /** 会话声明/切换后的当前能力作用域。 */
-  getActiveCapabilityScope?: () => CapabilityScopeId
-}
-
-interface ToolSpaceResolverContext {
-  capabilityPorts?: AgentRuntimeCapabilityPorts
-  role?: { id?: AgentRoleId }
-  codingSession: ToolSpaceResolverCodingSession
-  requiresToolCategoryApproval?: (categoryId: ToolCategoryId) => boolean
-  requestToolCategoryAccess?: unknown
-  getCurrentVisibleToolNames(): string[]
-  listCapabilityPages?: () => ToolCapabilityPage[]
-  listTools?: (scope?: ToolAvailabilityScope) => ToolDescriptor[]
-  listToolCategories(scope?: ToolAvailabilityScope): ToolCategoryOverview[]
-}
-
-interface PluginEntry {
-  id: ChatPromptFeatureId
-  label: string
-  description: string
-  toolCategoryIds: readonly ToolCategoryId[]
-  enabled: boolean
 }
 
 const PluginBackedToolCategoryIds = new Set<ToolCategoryId>()
@@ -780,13 +690,4 @@ export {
   PluginBackedToolCategoryIds,
   PluginFeatureDescriptions,
   ToolSpacePageKindValues,
-}
-export type {
-  PluginEntry,
-  ToolSpacePage,
-  ToolSpacePageKind,
-  ToolSpacePageRisk,
-  ToolSpaceReason,
-  ToolSpaceResolverContext,
-  ToolSpaceSchemaPolicy,
 }

@@ -1,9 +1,7 @@
-import type { RetrievalPayloadStorePort, RetrievalStateStorePort } from '../../types/retrieval-session-store-ports'
+import type { RetrievalPayloadStorePort, RetrievalStateStorePort } from '../../contract/requires.js'
+import type { ChatContextRetrievalIndexSnapshot } from '../../types/retrieval.js'
 import { isPrivateFileContextRecord } from '../../utils/context/private-file-records'
-import {
-  type ChatContextRetrievalIndexSnapshot,
-  ChatContextRetrievalIndexVersion,
-} from '../../utils/retrieval/index-snapshot'
+import { ChatContextRetrievalIndexVersion } from '../../utils/retrieval/index-snapshot'
 import { chatSearchMessages } from '../../utils/retrieval/messages'
 import { contextRetrievalReferences } from '../../utils/retrieval/references'
 import { chatSearchText } from '../../utils/retrieval/text'

@@ -1,10 +1,6 @@
 import type { TextStreamPart, ToolSet } from 'ai'
 
-import type {
-  StreamDiagnostics,
-  StreamDiagnosticsSummary,
-  StreamFinishReasonDiagnostic,
-} from '../../types/stream'
+import type { StreamDiagnostics, StreamDiagnosticsSummary, StreamFinishReasonDiagnostic } from '../../types/loop.js'
 import { RawStreamText } from '../../utils/stream/raw-text'
 import { StreamDiagnosticRecorder } from '../../utils/stream/recorder'
 
@@ -49,10 +45,5 @@ class StreamDiagnosticsHelper {
 }
 
 export { StreamDiagnosticsHelper }
-export type {
-  StreamDiagnostics,
-  StreamDiagnosticsSummary,
-  StreamFinishReasonDiagnostic,
-  StreamRawChunkDiagnostic,
-} from '../../types/stream'
 export { StreamDiagnosticsHelper as AgentStreamDiagnosticHelper }
+export type { StreamDiagnostics, StreamDiagnosticsSummary, StreamFinishReasonDiagnostic, StreamRawChunkDiagnostic } from '../../types/loop.js'

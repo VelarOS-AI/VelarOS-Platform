@@ -3,7 +3,9 @@ import { z } from 'zod'
 import { isArray, isBoolean, isEmpty, isRecord, isString,isUndefined } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import type { AgentOutputJsonSchema } from '../../types/agent-workflow'
+import type { AgentOutputJsonSchema } from '../../types/agent.js'
+import type { CompiledSubAgentOutputSchema, StructuredOutputParseResult } from '../../types/delegation.js'
+
 
 const MaxStructuredOutputSchemaBytes = 16 * 1024
 const MaxStructuredOutputBytes = 64 * 1024
@@ -39,15 +41,6 @@ const AllowedSchemaTypes = new Set([
   'boolean',
   'null',
 ])
-
-interface CompiledSubAgentOutputSchema {
-  schema: z.ZodType
-  serialized: string
-}
-
-type StructuredOutputParseResult =
-  | { success: true; data: unknown }
-  | { success: false; issues: string[] }
 
 function assertIntegerBound(
   value: unknown,
@@ -242,4 +235,3 @@ export {
   MaxStructuredOutputSchemaBytes,
   parseSubAgentStructuredOutput,
 }
-export type { CompiledSubAgentOutputSchema, StructuredOutputParseResult }

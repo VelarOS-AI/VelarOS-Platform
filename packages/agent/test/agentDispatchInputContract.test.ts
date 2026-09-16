@@ -6,9 +6,9 @@ import { TeamModelRouter } from '../src/impl/delegation/TeamModelRouter'
 import { WriteLeaseCoordinator } from '../src/impl/delegation/WriteLeaseCoordinator'
 import { ExecutionEventBus } from '../src/impl/records/ExecutionEventBus'
 import { SubAgentGuidanceRelayRegistry } from '../src/impl/records/SubAgentGuidanceRelayRegistry'
+import type { SubAgentTypeDescriptor } from '../src/types/delegation.js'
 import { dispatchAgentSchema } from '../src/utils/builtin/dispatch-schemas'
 import { parseSubAgentToolResult } from '../src/utils/delegation/sub-agent-result-builder'
-import type { SubAgentTypeDescriptor } from '../src/utils/delegation/sub-agent-type-registry'
 
 describe('agent dispatch input contract', () => {
   test('leaves the type default to its host and adds scope defaults only for a new worker', async () => {

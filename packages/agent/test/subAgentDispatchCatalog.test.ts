@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
+import type { CustomSubAgentRegistry, SubAgentTypeProvider } from '../src/contract/requires.js'
 import { SubAgentDispatcher } from '../src/impl/delegation/SubAgentDispatcher'
 import { ContextBuilder } from '../src/impl/runner/ContextBuilder'
 import { PrimaryAgentProfile } from '../src/impl/runner/PrimaryAgentProfile'
@@ -7,15 +8,10 @@ import { RunContext } from '../src/impl/runner/RunContext'
 import { CodingSessionTracker } from '../src/impl/session/CodingSessionTracker'
 import { defaultRuntimePromptFeaturePolicy } from '../src/impl/tools/DefaultPromptFeaturePolicy'
 import type { ExecutionModeId } from '../src/types/agent'
-import type { CustomSubAgentRegistry } from '../src/types/dispatch-host-ports'
-import type { RunContextToolContext } from '../src/types/run-context-host-ports'
-import type { CustomSubAgentDefinition } from '../src/types/sub-agent-task'
-import type { ToolCategoryOverview } from '../src/types/tool'
+import type { CustomSubAgentDefinition,ToolCategoryOverview } from '../src/types/agent.js'
+import type { SubAgentTypeDescriptor } from '../src/types/delegation.js'
+import type { RunContextToolContext } from '../src/types/runner.js'
 import { agentWorkflowSchema } from '../src/utils/builtin/workflow-schemas'
-import type {
-  SubAgentTypeDescriptor,
-  SubAgentTypeProvider,
-} from '../src/utils/delegation/sub-agent-type-registry'
 import { createBuiltInPromptRegistry } from '../src/utils/guidance/catalog'
 
 function descriptor(id: string, readonlyDefault = true): SubAgentTypeDescriptor {

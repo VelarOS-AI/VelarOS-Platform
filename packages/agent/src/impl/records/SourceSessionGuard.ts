@@ -1,21 +1,3 @@
-interface ActiveSourceSessionExecution {
-  /** 当前活跃 execution id。 */
-  executionId: string
-  /** 同一 session 每次 start 都递增，用于 finally 防串扰。 */
-  generation: number
-  /** 当前执行的取消控制器。 */
-  abortController: AbortController
-}
-
-interface StartSourceSessionExecutionResult {
-  /** 新执行的取消控制器。 */
-  abortController: AbortController
-  /** 新执行的 generation。 */
-  generation: number
-  /** 被取代的旧 execution id。 */
-  supersededExecutionId: Nullable<string>
-}
-
 /**
  * 来源作用域执行互斥守卫。
  *
@@ -99,4 +81,6 @@ class SourceSessionGuard {
 
 export { SourceSessionGuard }
 import { toNullable } from '@velaros-ai/core'
+
+import type { ActiveSourceSessionExecution, StartSourceSessionExecutionResult } from '../../types/records.js'
 

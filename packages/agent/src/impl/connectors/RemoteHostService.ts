@@ -1,47 +1,16 @@
 import { isPresent, Log, toOptional } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
-import type {
-  RemoteNodeManifest,
-} from '@velaros-ai/kernel/contracts/protocol'
 import {
   RemoteNodeClient,
-  type RemoteNodeCredentialStore,
 } from '@velaros-ai/kernel/remote/client'
 
-import {
-  type RemoteHostDefinition,
-  RemoteHostToolCategoryId,
-} from '../../types/remote-contracts.js'
+import type { RemoteHostServicePorts } from '../../contract/requires.js'
+import type { ConnectedHost,RemoteHostDefinition, RemoteHostToolEntry, RemoteHostToolInvoker } from '../../types/connectors.js'
+import { RemoteHostToolCategoryId } from '../../utils/connectors/remote-identity.js'
 
-import { createRemoteHostTool, type RemoteHostToolInvoker } from './RemoteHostToolFactory.js'
+import { createRemoteHostTool } from './RemoteHostToolFactory.js'
 
 const log = Log.tag('RemoteHostService')
-
-/** 一条已投影好的工具贡献；宿主按结构注册,不需要认识本包的任何类型。 */
-export interface RemoteHostToolEntry {
-  readonly name: string
-  readonly categoryId: string
-  readonly tool: ReturnType<typeof createRemoteHostTool>
-}
-
-export interface RemoteHostServicePorts {
-  /**
-   * 工具面整批替换。
-   *
-   * 是 sink 而不是「拿 provider 再自己刷」:宿主的注册表形状(provider / 覆盖栈 / 类别门)
-   * 属于宿主,本包不该认识它。宿主实现这一个方法即可,本包不持有任何宿主对象。
-   */
-  readonly publishTools: (entries: readonly RemoteHostToolEntry[]) => void
-  readonly createCredentialStore: (hostId: string) => RemoteNodeCredentialStore
-  readonly clientName: string
-}
-
-interface ConnectedHost {
-  readonly definition: RemoteHostDefinition
-  readonly client: RemoteNodeClient
-  manifest: Nullable<RemoteNodeManifest>
-  dispose: () => void
-}
 
 /**
  * 远程能力节点的领域服务。

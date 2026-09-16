@@ -1,27 +1,4 @@
-export type {
-  AdmitReceipt,
-  AdmitRequest,
-  AnswerRequest,
-  ApproveRequest,
-  BranchSummaryEntry,
-  CancelRequest,
-  CancelResult,
-  CompactionEntry,
-  CustomEntry,
-  CustomMessageEntry,
-  MessageEntry,
-  ModelChangeEntry,
-  RuntimeStatusRequest,
-  RuntimeStatusResponse,
-  SessionEntry,
-  SessionEventEnvelope,
-  SessionEventPayload,
-  SessionInfoEntry,
-  SessionInputDelivery,
-  SessionTarget,
-  SteerRequest,
-  WakeRequest,
-} from '../../utils/wire/session'
+export type { AdmitReceipt, AdmitRequest, AnswerRequest, ApproveRequest, BranchSummaryEntry, CancelRequest, CancelResult, CompactionEntry, CustomEntry, CustomMessageEntry, MessageEntry, ModelChangeEntry, RuntimeStatusRequest, RuntimeStatusResponse, SessionEntry, SessionEventEnvelope, SessionEventPayload, SessionInfoEntry, SessionInputDelivery, SessionTarget, SteerRequest, WakeRequest } from '../../types/agent.js'
 export {
   AdmitReceiptSchema,
   AdmitRequestSchema,

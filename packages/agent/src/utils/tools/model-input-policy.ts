@@ -1,12 +1,6 @@
-import type { AgentModelInputModality } from '../../types/tool'
 
-interface ToolModelInputRequirements {
-  requiredModelInputModalities?: readonly AgentModelInputModality[]
-}
-
-interface ToolModelInputContext {
-  getSupportedModelInputModalities?: () => readonly AgentModelInputModality[]
-}
+import type { AgentModelInputModality } from '../../types/agent.js'
+import type { ToolModelInputContext,ToolModelInputRequirements } from '../../types/tools.js'
 
 const DefaultModelInputModalities = [
   'text',
@@ -31,4 +25,3 @@ function isToolCompatibleWithModelInputs(
 }
 
 export { DefaultModelInputModalities, isToolCompatibleWithModelInputs }
-export type { ToolModelInputContext, ToolModelInputRequirements }

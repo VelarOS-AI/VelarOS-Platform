@@ -18,118 +18,13 @@ import {
   toNullable,
 } from '@velaros-ai/core'
 
-import type { ExecutionModeDescriptor } from '../../types/execution-mode-descriptor'
-import type { ToolCategoryDefinition } from '../../types/tool'
-import type { VelaTool } from '../../utils/builtin/define-agent-tool'
-import type { SubAgentTypeDescriptor } from '../../utils/delegation/sub-agent-type-registry'
-import type { AgentSkillDefinition } from '../../utils/guidance/agent-skill-provider'
-import {
-  type AgentModContributionAxisName,
-  AgentModContributionAxisNames,
-  type AgentModDiagnostic,
-  type AgentModManifest,
-  type AgentModTrustLevel,
-  listAgentModDeclaredAxes,
-  parseAgentModManifest,
-  readAgentModContributionKey,
-  satisfiesSemverRange,
-} from '../../utils/wire/mods'
-import type { PromptSegmentDefinition } from '../guidance/PromptRegistry'
+import type { AgentModContributionAxisName, AgentModDiagnostic, AgentModManifest, AgentModTrustLevel } from '../../types/agent.js'
+import type { AgentModActivationState, AgentModAxisRecord, AgentModBindings, AgentModHostProfile, AgentModLoadReport, AgentModPackage, AgentModRegistrySnapshot, AgentModRejection, ValidatedAgentMod } from '../../types/mods.js'
+import { AgentModContributionAxisNames, listAgentModDeclaredAxes, parseAgentModManifest, readAgentModContributionKey, satisfiesSemverRange } from '../../utils/wire/mods'
 
-import type { AgentModAxisRecord, AgentModRegistrySnapshot } from './AgentModRegistry'
 import { AgentModRegistry } from './AgentModRegistry'
 import type { AgentModHookHandler } from './AgentModSeamDispatcher'
 import { AgentModHookDispatcher } from './AgentModSeamDispatcher'
-
-/**
- * 运行态绑定：manifest 条目主键 → 该条目的运行态载荷。
- *
- * Loader 只校验、登记和投影工具对象，不执行它；工具上下文由最终宿主的 ToolRegistry 决定。
- * 因此这里刻意不把动态 pack 的工具钉成 KernelToolContext，否则带宿主扩展槽的官方工具只能
- * 靠不安全强转进来。
- */
-interface AgentModBindings {
-  readonly tools?: Readonly<Record<string, VelaTool<any, any>>>
-  readonly toolCategories?: Readonly<Record<string, ToolCategoryDefinition>>
-  readonly promptSegments?: Readonly<Record<string, PromptSegmentDefinition>>
-  readonly skills?: Readonly<Record<string, AgentSkillDefinition>>
-  readonly subAgentTypes?: Readonly<Record<string, SubAgentTypeDescriptor>>
-  readonly executionModes?: Readonly<Record<string, ExecutionModeDescriptor>>
-  readonly hooks?: Readonly<Record<string, AgentModHookHandler>>
-}
-
-type AgentModSourceKind = 'bundled' | 'pack'
-
-/** 一个待装载的候选包：未校验 manifest + 运行态绑定。 */
-interface AgentModPackage {
-  readonly source: AgentModSourceKind
-  /** 诊断回显用的来源（pack 目录或 bundled 标识）。 */
-  readonly origin: string
-  readonly manifest: unknown
-  readonly bindings?: AgentModBindings
-}
-
-/** 宿主自述：兼容轴事实 + 本宿主支持的贡献轴落点集合。 */
-interface AgentModHostProfile {
-  readonly hostId: string
-  /** 对应 `engines.velaros`（Kernel module API 兼容轴）。 */
-  readonly velarosVersion: string
-  /** 对应 `engines.agent`（Agent capability API 兼容轴）。 */
-  readonly agentApiVersion: string
-  /** 壳级第二轴；headless 宿主不声明。 */
-  readonly shellId?: string
-  readonly shellVersion?: string
-  readonly supportedAxes: readonly AgentModContributionAxisName[]
-  /** 允许装载的信任级；缺省只放行随包官方 mod（fail-closed）。 */
-  readonly allowedTrustLevels?: readonly AgentModTrustLevel[]
-}
-
-type AgentModActivationStatus = 'active' | 'partial'
-
-interface AgentModActivationState {
-  readonly modId: string
-  readonly version: string
-  /**
-   * manifest 的展示元数据，缺省为空串。
-   *
-   * 装载态若只返回 id 与 version，宿主就无法在注册表中展示可读名称。这三个字段本来就在
-   * manifest 中，装载时一并带出；它们是装载事实的一部分，不应要求每个宿主再次读取 manifest。
-   */
-  readonly displayName: string
-  readonly description: string
-  readonly publisher: string
-  readonly trust: AgentModTrustLevel
-  /** 由信封 `module.permissions` 投影而来的已声明权限闭集。 */
-  readonly permissions: readonly string[]
-  readonly source: AgentModSourceKind
-  readonly origin: string
-  readonly status: AgentModActivationStatus
-  readonly activeAxes: readonly AgentModContributionAxisName[]
-  /** 本宿主无落点、被裁剪掉的轴（partial 态的原因）。 */
-  readonly absentAxes: readonly AgentModContributionAxisName[]
-  readonly contributionCount: number
-  /**
-   * 逐轴贡献条目数（只含**真落地**的轴；缺席轴不出现，不记 0）。
-   *
-   * 总数早就有了，但「16 项贡献」这一个数字说不清一个 mod 到底带来了什么。宿主要按
-   * 「工具 6 · 工具类别 4 · 空间 1」这样铺清单，就得有逐轴的账——它在这里是**顺手**的，
-   * 注册循环本来就逐轴逐条走了一遍。
-   */
-  readonly contributionsByAxis: Readonly<Partial<Record<AgentModContributionAxisName, number>>>
-}
-
-interface AgentModRejection {
-  readonly modId: Nullable<string>
-  readonly origin: string
-  readonly diagnostics: readonly AgentModDiagnostic[]
-}
-
-interface AgentModLoadReport {
-  readonly generation: number
-  readonly activated: readonly AgentModActivationState[]
-  readonly rejected: readonly AgentModRejection[]
-  readonly diagnostics: readonly AgentModDiagnostic[]
-}
 
 const DefaultAllowedTrustLevels: readonly AgentModTrustLevel[] = ['bundled-official']
 
@@ -141,16 +36,6 @@ const DataOnlyAxes: ReadonlySet<AgentModContributionAxisName> = new Set([
   'spaces',
   'turnContextSources',
 ])
-
-interface ValidatedAgentMod {
-  readonly manifest: AgentModManifest
-  readonly bindings: AgentModBindings
-  readonly source: AgentModSourceKind
-  readonly origin: string
-  readonly declaredAxes: readonly AgentModContributionAxisName[]
-  readonly activeAxes: readonly AgentModContributionAxisName[]
-  readonly absentAxes: readonly AgentModContributionAxisName[]
-}
 
 function readBindingRecord(
   bindings: AgentModBindings,
@@ -549,13 +434,3 @@ class AgentModLoader {
 }
 
 export { AgentModLoader, DataOnlyAxes, PayloadRequiredAxes }
-export type {
-  AgentModActivationState,
-  AgentModActivationStatus,
-  AgentModBindings,
-  AgentModHostProfile,
-  AgentModLoadReport,
-  AgentModPackage,
-  AgentModRejection,
-  AgentModSourceKind,
-}

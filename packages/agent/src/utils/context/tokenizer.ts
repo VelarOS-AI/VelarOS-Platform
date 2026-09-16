@@ -13,7 +13,7 @@
 
 import { countTokens as o200kCountTokens } from 'gpt-tokenizer/encoding/o200k_base'
 
-export type TokenizerEngine = 'heuristic' | 'tiktoken'
+import type { TokenizerEngine } from '../../types/context.js'
 
 /**
  * 根据当前 `process.env.VELAROS_TOKENIZER_ENGINE` 决定使用哪种分词器。

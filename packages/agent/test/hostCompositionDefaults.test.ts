@@ -9,9 +9,9 @@ import { AppError } from '@velaros-ai/core/error'
 import { SkillFileStore } from '../src/impl/guidance/SkillFileStore'
 import { SkillMarketClient } from '../src/impl/guidance/SkillMarketClient'
 import { ContextBuilder } from '../src/impl/runner/ContextBuilder'
+import type { RuntimePromptSnapshot } from '../src/types/guidance.js'
 import { createBuiltInPromptRegistry } from '../src/utils/guidance/catalog'
 import { createRuntimePromptSegments } from '../src/utils/guidance/runtime'
-import type { RuntimePromptSnapshot } from '../src/utils/guidance/shared'
 
 describe('host-owned Agent identity', () => {
   test('uses a product-neutral identity when the host does not provide one', () => {

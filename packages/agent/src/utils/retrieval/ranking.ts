@@ -1,6 +1,7 @@
 import { isEmpty, isPresent } from "@velaros-ai/core";
 
-import type { ChatContextRetrievalScoreStats } from "../../types/protocol";
+import type { ChatContextRetrievalScoreStats } from '../../types/agent.js'
+import type { RankingSignals } from '../../types/retrieval.js'
 import { extractSessionSearchTerms } from "../chat/session-search-text";
 
 import { chatSearchText } from "./text";
@@ -57,27 +58,6 @@ function hasCompletePathHintExtension(value: string): boolean {
   const extensionStart = value.lastIndexOf(".");
   if (extensionStart <= basenameStart || extensionStart === value.length - 1) return false;
   return PathHintExtensions.has(value.slice(extensionStart + 1).toLowerCase());
-}
-
-/**
- * {@link chatSearchRanking.rankContextText} 的完整打分输出。
- * 供会话搜索、history 搜索、terminal 搜索与 query trace 共用。
- */
-interface RankingSignals {
-  /** 最终排序分 = semanticScore +（命中时）recency 微调；用于结果排序。 */
-  score: number;
-  /** 纯语义相关分（词项/路径/符号/错误/计划等加权之和），≤0 表示未命中。 */
-  semanticScore: number;
-  /** 人类可读命中原因，如「词项匹配」「路径重合」；空数组表示无有效信号。 */
-  matchReasons: string[];
-  /** 与 query 路径 hint 重合的路径；无重合时退回正文内提取的前 4 条路径 hint。 */
-  pathHints: string[];
-  /** 与 query 符号 hint 重合的标识符；无重合时退回正文内提取的前 4 条。 */
-  symbolHints: string[];
-  /** 消息在会话中的时间序位置，0=最早，1=最新；仅传入 index/total 时有意义。 */
-  recencyScore: number;
-  /** 正文中命中的错误关键词（最多 4 个逗号拼接）；用于 agent 收窄「同类报错」检索。 */
-  errorFingerprint: LooseOptional<string>;
 }
 
 /**
@@ -493,4 +473,4 @@ class ChatSearchRanking {
 /** 全进程唯一的打分实例；见 {@link ChatSearchRanking}。 */
 const chatSearchRanking = new ChatSearchRanking();
 
-export { chatSearchRanking, type RankingSignals };
+export { chatSearchRanking };

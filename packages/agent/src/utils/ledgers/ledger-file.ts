@@ -9,7 +9,9 @@ import { readFile } from 'node:fs/promises'
 
 import { isArray, isRecord } from '@velaros-ai/core'
 
-import { type SessionEntry, SessionEntrySchema } from '../wire/session'
+import type { SessionEntry } from '../../types/agent.js'
+import type { LedgerReadResult } from '../../types/ledgers.js'
+import { SessionEntrySchema } from '../wire/session'
 
 import {
   JSONL_LINE_SEPARATOR,
@@ -19,13 +21,6 @@ import {
 
 /** 账本行分隔符：始终以 `\n` 结尾写入，便于崩溃时区分「完整行」与「半截尾行」。 */
 export const LEDGER_LINE_SEPARATOR = JSONL_LINE_SEPARATOR
-
-/** 读取账本的结果：解析出的 entry 序列 + 是否发生过尾行截断修复。 */
-export interface LedgerReadResult {
-  entries: SessionEntry[]
-  /** 是否检测到并跳过了半截尾行（调用方据此决定是否回写修复）。 */
-  truncatedTail: boolean
-}
 
 /** 规范 JSON 序列化：递归按键名排序，保证同一 entry 落盘字节稳定（跨进程、跨重放一致）。 */
 export function canonicalJsonStringify(value: unknown): string {

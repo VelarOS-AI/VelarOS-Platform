@@ -1,10 +1,7 @@
 import type { ChatPromptFeatureId } from '../../types/agent'
-import type { AgentRoleDefinition, AgentRoleResolution } from '../../types/role-types'
-import type { AgentSkillDescriptor } from '../../types/skill'
-import type { AgentRoleId } from '../../types/system'
-import type { CapabilityScopeId } from '../../types/tool'
+import type { AgentRoleId, AgentSkillDescriptor,CapabilityScopeId } from '../../types/agent.js'
+import type { AgentRoleDefinition, AgentRoleResolution, AgentRoleToolCategoryResolver } from '../../types/runner.js'
 
-import type { AgentRoleToolCategoryResolver } from './AgentRolePolicy'
 import { AgentRolePolicy } from './AgentRolePolicy'
 
 interface PrimaryAgentProfileSkillRepository {

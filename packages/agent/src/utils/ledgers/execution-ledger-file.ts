@@ -6,20 +6,15 @@
 import { existsSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 
-import { type ExecutionSpan, ExecutionSpanSchema } from '../wire/observability'
+import type { ExecutionSpan } from '../../types/agent.js'
+import type { SpanLedgerReadResult } from '../../types/ledgers.js'
+import { ExecutionSpanSchema } from '../wire/observability'
 
 import { JSONL_LINE_SEPARATOR, parseJsonlWithTailTolerance } from './jsonl-file'
 import { canonicalJsonStringify } from './ledger-file'
 
 /** 账本行分隔符：始终以 `\n` 结尾写入，便于崩溃时区分「完整行」与「半截尾行」。 */
 export const SPAN_LEDGER_LINE_SEPARATOR = JSONL_LINE_SEPARATOR
-
-/** 读取账本的结果：解析出的 span 序列 + 是否发生过尾行截断修复。 */
-export interface SpanLedgerReadResult {
-  spans: ExecutionSpan[]
-  /** 是否检测到并跳过了半截尾行（调用方据此决定是否回写修复）。 */
-  truncatedTail: boolean
-}
 
 /** 把一条 span 序列化成账本行（含行尾分隔符）。复用会话账本的规范序列化，保证跨账本字节稳定。 */
 export function serializeSpanLine(span: ExecutionSpan): string {

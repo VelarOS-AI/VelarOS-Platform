@@ -2,44 +2,7 @@ import { randomUUID } from 'node:crypto'
 
 import { isEmpty } from '@velaros-ai/core'
 
-export type AgentPermissionReply = 'once' | 'session' | 'always' | 'reject'
-export type AgentPermissionAction = 'allow' | 'deny' | 'ask'
-export type AgentPermissionRisk = 'low' | 'high'
-
-export interface AgentPermissionRule {
-  readonly permission: string
-  readonly pattern: string
-  readonly action: AgentPermissionAction
-}
-
-export interface AgentPermissionRequest<TMode extends string = string> {
-  readonly id: string
-  readonly sessionId: string
-  readonly projectRoot: string
-  readonly mode: TMode
-  readonly permission: string
-  readonly toolName: string
-  readonly patterns: readonly string[]
-  readonly alwaysPatterns: readonly string[]
-  readonly readOnly: boolean
-  readonly risk: AgentPermissionRisk
-  readonly metadata: Readonly<Record<string, unknown>>
-  readonly createdAt: number
-}
-
-export interface RequestAgentPermissionInput<TMode extends string = string> {
-  readonly id?: string
-  readonly sessionId: string
-  readonly projectRoot: string
-  readonly mode: TMode
-  readonly permission: string
-  readonly toolName: string
-  readonly patterns?: readonly string[]
-  readonly alwaysPatterns?: readonly string[]
-  readonly readOnly: boolean
-  readonly risk?: AgentPermissionRisk
-  readonly metadata?: Readonly<Record<string, unknown>>
-}
+import type { AgentPermissionAction, AgentPermissionRequest, AgentPermissionRule, RequestAgentPermissionInput } from '../../types/product-session.js'
 
 export function normalizeAgentPermissionRequest<TMode extends string>(
   input: RequestAgentPermissionInput<TMode>,

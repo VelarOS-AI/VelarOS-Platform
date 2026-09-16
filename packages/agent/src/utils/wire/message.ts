@@ -1,10 +1,10 @@
 // 域：Agent 转录 wire 形状；由 Agent capability 拥有，不进入 Kernel protocol。
 import { z } from 'zod'
 
-/** 转录角色枚举：执行层与会话层共享的最小消息角色集（对齐 KernelSessionController 输入角色）。 */
-export const ModelMessageRoleSchema = z.enum(['system', 'user', 'assistant', 'tool'])
-export type ModelMessageRole = z.infer<typeof ModelMessageRoleSchema>
+import type { ModelMessage,ModelMessagePart, ModelMessageRole } from '../../types/agent.js'
 
+/** 转录角色枚举：执行层与会话层共享的最小消息角色集（对齐 KernelSessionController 输入角色）。 */
+export const ModelMessageRoleSchema = z.enum(['system', 'user', 'assistant', 'tool']) satisfies z.ZodType<ModelMessageRole>
 /** 纯文本片段。 */
 export const TextPartSchema = z.strictObject({
   type: z.literal('text'),
@@ -36,9 +36,7 @@ export const ModelMessagePartSchema = z.discriminatedUnion('type', [
   TextPartSchema,
   ToolCallPartSchema,
   ToolResultPartSchema,
-])
-export type ModelMessagePart = z.infer<typeof ModelMessagePartSchema>
-
+]) satisfies z.ZodType<ModelMessagePart>
 /**
  * 转录消息 wire 形状。
  *
@@ -47,5 +45,4 @@ export type ModelMessagePart = z.infer<typeof ModelMessagePartSchema>
 export const ModelMessageSchema = z.strictObject({
   role: ModelMessageRoleSchema,
   content: z.union([z.string(), z.array(ModelMessagePartSchema)]),
-})
-export type ModelMessage = z.infer<typeof ModelMessageSchema>
+}) satisfies z.ZodType<ModelMessage>

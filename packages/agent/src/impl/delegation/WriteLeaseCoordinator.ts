@@ -1,10 +1,6 @@
 import { toNullable } from '@velaros-ai/core'
 
-interface CapabilityWriteLease {
-  scope: string
-  holderTaskId: string
-  acquiredAt: number
-}
+import type { CapabilityWriteLease } from '../../types/delegation.js'
 
 /**
  * Team 写租约协调器。
@@ -67,5 +63,4 @@ class WriteLeaseCoordinator {
   }
 }
 
-export type { CapabilityWriteLease }
 export { WriteLeaseCoordinator }

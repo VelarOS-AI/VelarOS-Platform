@@ -15,19 +15,13 @@
  */
 import { isArray, isEmpty, isFiniteNumber, isObject, isString } from '@velaros-ai/core'
 
-import {
-  compareContextAnchors,
-  type ContextAnchor,
-  normalizeAnchorText,
-  toContextAnchorTexts,
-} from './anchors'
-import type { ContextRecord } from './context-record'
+import type { ContextAnchor, ContextRecord, ContextSkeletonField, ContextSkeletonInput, ContextSkeletonResult } from '../../types/residency.js'
+
+import { compareContextAnchors, normalizeAnchorText, toContextAnchorTexts } from './anchors'
 import { DefaultContextGovernanceConfig } from './governance-config'
 
 /** 骨架的六个内容字段（顺序即渲染顺序，逐字沿用 v1 的标签语义）。 */
-const SkeletonFieldOrder = ['goal', 'decisions', 'files', 'commands', 'openIssues', 'verification'] as const
-
-export type ContextSkeletonField = (typeof SkeletonFieldOrder)[number]
+const SkeletonFieldOrder = ['goal', 'decisions', 'files', 'commands', 'openIssues', 'verification'] as const satisfies readonly ContextSkeletonField[]
 
 const SkeletonFieldLabels: Record<ContextSkeletonField, string> = {
   goal: '目标',
@@ -108,23 +102,6 @@ const VerificationMarkers = [
   'all tests',
   'typecheck',
 ]
-
-export interface ContextSkeletonInput {
-  /** 被折叠的成员记录（账本序）。 */
-  members: readonly ContextRecord[]
-  /** 本次 epoch 号（进骨架头，便于在转录里定位是哪一次折叠产生的）。 */
-  epoch: number
-  /** 锚点行条数上限；缺省取 `distillation.maxRequiredAnchors` 的默认值。 */
-  maxAnchors?: LooseOptional<number>
-}
-
-export interface ContextSkeletonResult {
-  text: string
-  /** 逐字并入骨架的锚点（去重，按类别优先序）。 */
-  anchors: ContextAnchor[]
-  /** 骨架代表的成员记录 id（无损指针的账本侧身份）。 */
-  memberIds: string[]
-}
 
 /**
  * 生成规则骨架。members 为空或抽不出任何字段时返回 null —— 空骨架比没有骨架更糟：

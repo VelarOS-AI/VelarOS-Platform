@@ -1,46 +1,7 @@
 import { toNullable } from '@velaros-ai/core'
-export interface ContextPayloadRecord {
-  sessionId: string
-  hash: string
-  payloadRef: string
-  toolCallId: string
-  toolName: string
-  serializedResult: string
-  chars: number
-  createdAt: number
-}
 
-export interface ContextUserTextRecord {
-  sessionId: string
-  hash: string
-  payloadRef: string
-  messageKey: string
-  text: string
-  chars: number
-  createdAt: number
-}
-
-export interface ContextPayloadStore {
-  findByHash(sessionId: string, hash: string): Promise<Nullable<ContextPayloadRecord>>
-  findManyByHash?(
-    sessionId: string,
-    hashes: readonly string[]
-  ): Promise<Map<string, ContextPayloadRecord>>
-  put(record: ContextPayloadRecord): Promise<ContextPayloadRecord>
-  putMany?(records: readonly ContextPayloadRecord[]): Promise<ContextPayloadRecord[]>
-  listForSession(sessionId: string): Promise<ContextPayloadRecord[]>
-  findUserTextByHash?(
-    sessionId: string,
-    hash: string
-  ): Promise<Nullable<ContextUserTextRecord>>
-  findUserTextsByHash?(
-    sessionId: string,
-    hashes: readonly string[]
-  ): Promise<Map<string, ContextUserTextRecord>>
-  putUserText?(record: ContextUserTextRecord): Promise<ContextUserTextRecord>
-  putUserTextMany?(records: readonly ContextUserTextRecord[]): Promise<ContextUserTextRecord[]>
-}
-
+import type { ContextPayloadStore } from '../../contract/requires.js'
+import type { ContextPayloadRecord, ContextUserTextRecord } from '../../types/context.js'
 function createStoreKey(sessionId: string, hash: string): string {
   return `${sessionId}:${hash}`
 }

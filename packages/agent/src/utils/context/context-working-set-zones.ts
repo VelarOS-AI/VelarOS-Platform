@@ -1,14 +1,4 @@
-export type ContextWorkingSetZoneId =
-  | 'kernel'
-  | 'tool-schemas'
-  | 'active-task'
-  | 'pinned-evidence'
-  | 'recent-turns'
-  | 'semantic-summary'
-  | 'retrieval-index'
-  | 'recall'
-  | 'tool-payloads'
-  | 'diagnostics'
+import type { ContextWorkingSetZoneId, ContextWorkingSetZonePolicy } from '../../types/context.js'
 
 export const ContextWorkingSetZoneIds: readonly ContextWorkingSetZoneId[] = [
   'kernel',
@@ -22,21 +12,6 @@ export const ContextWorkingSetZoneIds: readonly ContextWorkingSetZoneId[] = [
   'tool-payloads',
   'diagnostics',
 ]
-
-export type ContextWorkingSetReclaimAction =
-  | 'keep'
-  | 'summarize'
-  | 'reference'
-  | 'evict'
-  | 'page-out'
-
-export interface ContextWorkingSetZonePolicy {
-  zone: ContextWorkingSetZoneId
-  reservedRatio: number
-  limitRatio: number
-  priority: number
-  reclaimOrder: ContextWorkingSetReclaimAction[]
-}
 
 export const DefaultContextWorkingSetZonePolicies: Record<
   ContextWorkingSetZoneId,

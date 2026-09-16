@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 
 import { describe, test } from 'bun:test'
 
-import type { ToolDescriptor } from '../src/types/tool'
+import type { ToolDescriptor } from '../src/types/agent.js'
 import {
   applyRunProfileToolExposure,
 } from '../src/utils/runner/run-profile'

@@ -1,18 +1,9 @@
 import { AppError } from '@velaros-ai/core/error'
 
+import type { CancelBackgroundJobInput, ReadBackgroundJobOutputInput, WaitBackgroundJobsInput } from '../../types/builtin.js'
 import { defineVelaTool } from '../../utils/builtin/define-agent-tool'
 
-import {
-  type CancelBackgroundJobInput,
-  cancelBackgroundJobSchema,
-  filterBackgroundJobOutput,
-  formatBackgroundJobOutput,
-  formatBackgroundJobWaitResults,
-  type ReadBackgroundJobOutputInput,
-  readBackgroundJobOutputSchema,
-  type WaitBackgroundJobsInput,
-  waitBackgroundJobsSchema,
-} from './BackgroundJobOperations'
+import { cancelBackgroundJobSchema, filterBackgroundJobOutput, formatBackgroundJobOutput, formatBackgroundJobWaitResults, readBackgroundJobOutputSchema, waitBackgroundJobsSchema } from './BackgroundJobOperations'
 import {
   AgentBackgroundJobCancelCapability,
   AgentBackgroundJobReadCapability,

@@ -20,54 +20,10 @@
 //
 import { isFiniteNumber, isPresent } from '@velaros-ai/core'
 
+import type { BuildKernelContextEpochInput, KernelContextEpoch, KernelContextEpochClaim, KernelContextEpochGuardLike, RecordKernelContextEpochDiagnosticOptions } from '../../types/loop.js'
 import { compareStableStrings } from '../../utils/residency/determinism'
 import { UnknownGovernanceSessionId } from '../../utils/residency/session-key'
 import type { ProviderTurnEventReducer } from '../records/ProviderTurnEventReducer'
-
-export type KernelContextEpochPhase = 'stream' | 'query'
-
-export interface KernelContextUsageSnapshot {
-  estimatedTokens: number
-  tokenPercent: number
-  usableContextWindow: number
-}
-
-export interface BuildKernelContextEpochInput {
-  sessionId: string
-  scope?: LooseOptional<string>
-  phase: KernelContextEpochPhase
-  turn?: LooseOptional<number>
-  model: string
-  messageCount: number
-  availableToolNames: readonly string[]
-  requestFingerprint?: unknown
-  contextUsage: KernelContextUsageSnapshot
-  createdAt?: number
-}
-
-export interface KernelContextEpoch {
-  sessionId: string
-  scope: Nullable<string>
-  phase: KernelContextEpochPhase
-  turn: Nullable<number>
-  model: string
-  messageCount: number
-  availableToolNames: string[]
-  requestFingerprint?: unknown
-  contextUsage: KernelContextUsageSnapshot
-  createdAt: number
-}
-
-export interface KernelContextEpochClaim {
-  key: string
-  revision: number
-  epoch: KernelContextEpoch
-}
-
-export interface KernelContextEpochGuardLike {
-  claim(epoch: KernelContextEpoch): KernelContextEpochClaim
-  assertCurrent(claim: KernelContextEpochClaim): void
-}
 
 export class KernelContextEpochStaleError extends Error {
   public readonly code = 'KERNEL_CONTEXT_EPOCH_STALE'
@@ -106,11 +62,6 @@ export class KernelContextEpochGuard implements KernelContextEpochGuardLike {
   private keyFor(epoch: KernelContextEpoch): string {
     return [epoch.scope ?? epoch.sessionId, epoch.phase].join(':')
   }
-}
-
-export interface RecordKernelContextEpochDiagnosticOptions {
-  claim?: LooseOptional<KernelContextEpochClaim>
-  current?: LooseOptional<boolean>
 }
 
 /** P7-2：epoch 指纹里的清单序必须 locale 无关（码元序），否则同一份上下文跨机器判成"变了"。 */

@@ -1,65 +1,13 @@
 import { isArray, isEmpty,isFiniteNumber, isObject, isString, isTrue, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import type {
-  ActiveContextArtifact,
-  ActiveContextUpsertInput,
-  ActiveDirectiveType,
-} from '../../types/protocol'
+import type { ActiveContextArtifact, ActiveContextUpsertInput } from '../../types/agent.js'
+import type { GoalConstraint, GoalMetadata, GoalSnapshot, GoalStatus, GoalStep, GoalStepCompletionResult,StepEngineOptions } from '../../types/builtin.js'
 
-import type { UserPlanStatus } from './plans'
-import type { StepEngineOptions } from './step-refs'
 import { completeSteps } from './step-refs'
 
 const GoalArtifactId = 'active-goal'
 
-type GoalStatus = 'active' | 'paused' | 'complete' | 'blocked' | 'cancelled' | 'removed'
-
-interface GoalStep {
-  id?: string
-  step: string
-  objective?: string
-  status: UserPlanStatus
-}
-
-interface GoalConstraint {
-  id?: string
-  title: string
-  content: string
-  directiveType: ActiveDirectiveType
-  sourceMessageId?: string
-}
-
-interface GoalMetadata extends Record<string, unknown> {
-  goal: true
-  goalStatus: GoalStatus
-  tokenBudget?: number
-  blockedAuditTurns: number
-  createdAt: number
-  terminalAt?: number
-  steps?: GoalStep[]
-  constraints?: GoalConstraint[]
-}
-
-interface GoalSnapshot {
-  id: string
-  objective: string
-  status: GoalStatus
-  steps: GoalStep[]
-  constraints: GoalConstraint[]
-  tokenBudget: Nullable<number>
-  blockedAuditTurns: number
-  createdAt: number
-  updatedAt: number
-  terminalAt: Nullable<number>
-}
-
-interface GoalStepCompletionResult {
-  steps: GoalStep[]
-  completedStep: GoalStep
-  promotedStep: Nullable<GoalStep>
-  allStepsResolved: boolean
-}
 function isGoalArtifact(artifact: ActiveContextArtifact): boolean {
   return artifact.kind === 'requirement' && isTrue(artifact.metadata?.goal)
 }
@@ -312,10 +260,4 @@ export {
   GoalArtifactId,
   isGoalArtifact,
   toGoalSnapshot,
-}
-export type {
-  GoalConstraint,
-  GoalSnapshot,
-  GoalStatus,
-  GoalStep,
 }

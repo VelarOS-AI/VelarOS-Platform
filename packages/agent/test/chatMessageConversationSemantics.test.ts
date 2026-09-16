@@ -1,10 +1,7 @@
 import { describe, expect, it } from 'bun:test'
 
-import {
-  isConversationTurnInputMessage,
-  isRunGuidanceMessage,
-  resolveChatMessageConversationKind,
-} from '../src/types/protocol'
+import { isConversationTurnInputMessage, isRunGuidanceMessage, resolveChatMessageConversationKind } from '../src/utils/wire/conversation-kind.js'
+
 
 describe('chat message conversation semantics', () => {
   it('keeps guidance and interaction replies inside the current run', () => {

@@ -6,9 +6,11 @@ import {
   collectBuiltinAgentModTools,
   createBuiltinAgentModPackage,
 } from '../src/impl/builtin/BuiltinAgentMod'
-import { type AgentModHostProfile, AgentModLoader } from '../src/impl/mods/AgentModLoader'
+import { AgentModLoader } from '../src/impl/mods/AgentModLoader'
 import { AgentModRegistry, AgentModStaleSnapshotError } from '../src/impl/mods/AgentModRegistry'
 import { AgentModSeamDispatcher } from '../src/impl/mods/AgentModSeamDispatcher'
+import type { AgentModContributionAxisName, AgentModManifest } from '../src/types/agent.js'
+import type { AgentModHostProfile } from '../src/types/mods.js'
 import { createBuiltInPromptSegments } from '../src/utils/guidance/catalog'
 import {
   composeAgentModSpaces,
@@ -17,12 +19,7 @@ import {
   projectAgentModTools,
 } from '../src/utils/mods/agent-mod-projection'
 import { listExecutionModes } from '../src/utils/runner/execution-mode-registry'
-import {
-  type AgentModContributionAxisName,
-  type AgentModManifest,
-  AgentModManifestSchemaVersion,
-  parseAgentModManifest,
-} from '../src/utils/wire/mods'
+import { AgentModManifestSchemaVersion, parseAgentModManifest } from '../src/utils/wire/mods'
 
 const AllAxes: readonly AgentModContributionAxisName[] = [
   'tools',

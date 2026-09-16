@@ -40,26 +40,12 @@ import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 import { type TimerLease, TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
-import type { CapabilityScopeId } from '../../types/tool'
-import type { TurnContextDeltaSource } from '../../types/turn-context'
+import type { KernelBackgroundJobOutputStore } from '../../contract/requires.js'
+import type { CapabilityScopeId } from '../../types/agent.js'
+import type { KernelBackgroundJob, KernelBackgroundJobOutputSnapshot, KernelBackgroundJobStatus, KernelBackgroundJobStoredOutput, StartKernelBackgroundJobInput, TurnContextAppendBus, TurnContextDeltaSource, WaitForKernelBackgroundJobsInput, WaitForNextKernelBackgroundJobInput } from '../../types/records.js'
 import { compareStableStrings } from '../../utils/residency/determinism'
 
-import {
-  type TurnContextAppendBus,
-  TurnContextSessionLedgers,
-} from './TurnContextLedger'
-
-export type KernelBackgroundJobStatus = 'running' | 'completed' | 'failed' | 'cancelled'
-
-export interface StartKernelBackgroundJobInput {
-  sessionId: string
-  parentSessionId?: string
-  kind: string
-  label: string
-  id?: string
-  startedAt?: number
-  onCancel?: (job: KernelBackgroundJob) => void
-}
+import { TurnContextSessionLedgers } from './TurnContextLedger'
 
 export interface KernelBackgroundJobManagerOptions {
   now?: () => number
@@ -71,65 +57,6 @@ export interface KernelBackgroundJobManagerOptions {
   onTerminal?: (job: KernelBackgroundJob) => void
   /** task.lifecycle 可见 delta 的写入广播总线（每宿主一个实例，由宿主装配注入）；缺省则不通知 renderer。 */
   turnContextAppendHub?: TurnContextAppendBus
-}
-
-export interface KernelBackgroundJob {
-  id: string
-  sessionId: string
-  parentSessionId?: string
-  kind: string
-  label: string
-  status: KernelBackgroundJobStatus
-  startedAt: number
-  lastVisibleOutputAt: number
-  stalledWarningQueued: boolean
-  completedAt?: number
-  result?: string
-  error?: string
-}
-
-export interface KernelBackgroundJobOutputSnapshot {
-  id: string
-  sessionId: string
-  parentSessionId?: string
-  kind: string
-  label: string
-  status: KernelBackgroundJobStatus
-  truncated?: boolean
-  omittedChars?: number
-  artifactError?: string
-  output: string
-}
-
-export interface KernelBackgroundJobStoredOutput {
-  output: string
-  chars: number
-  nextOffset: number
-}
-
-export interface KernelBackgroundJobOutputStore {
-  append(input: {
-    jobId: string
-    sessionId: string
-    parentSessionId?: string
-    chunk: string
-  }): void
-  read(input: { jobId: string; offset: number }): Nullable<KernelBackgroundJobStoredOutput>
-  readAll(input: { jobId: string }): Nullable<KernelBackgroundJobStoredOutput>
-  dropJob(jobId: string): void
-  dropSession(sessionId: string): void
-}
-
-export interface WaitForKernelBackgroundJobsInput {
-  jobIds?: readonly string[]
-  timeoutMs?: number
-}
-
-export interface WaitForNextKernelBackgroundJobInput {
-  timeoutMs?: number
-  signal?: AbortSignal
-  /** 只在已注册等待者且确认至少一个选中任务仍在运行时调用。 */
-  onWaiting?: () => void
 }
 
 function cloneJob(job: KernelBackgroundJob): KernelBackgroundJob {

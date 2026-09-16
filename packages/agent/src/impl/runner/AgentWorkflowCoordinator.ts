@@ -1,20 +1,11 @@
 import { randomUUID } from 'node:crypto'
 
-import type {
-  AgentWorkflowAgentResult,
-  AgentWorkflowDefinition,
-  AgentWorkflowRunResult,
-} from '../../types/agent-workflow'
-import type { RunnerSubAgentDispatcher, RunnerToolContext } from '../../types/runner-host-ports'
-import type { AgentExecutionConfig } from '../../types/runtime-configuration'
-import type { ToolCategoryId } from '../../types/tool'
+import type {RunnerSubAgentDispatcher } from '../../contract/requires.js'
+import type { AgentWorkflowAgentResult, AgentWorkflowRunResult,ToolCategoryId } from '../../types/agent.js'
+import type { AgentWorkflowDispatchContext, AgentWorkflowRunRequest,RunnerToolContext } from '../../types/runner.js'
 import { parseSubAgentToolResult } from '../../utils/delegation/sub-agent-result-builder'
-import type { ExecutionEventBus } from '../records/ExecutionEventBus'
 
-import {
-  type AgentWorkflowDispatchContext,
-  AgentWorkflowRuntime,
-} from './AgentWorkflowRuntime'
+import { AgentWorkflowRuntime } from './AgentWorkflowRuntime'
 
 const WorkflowAgentCodenames = [
   'Atlas',
@@ -26,13 +17,6 @@ const WorkflowAgentCodenames = [
   'Harbor',
   'Iris',
 ] as const
-
-interface AgentWorkflowRunRequest<TToolContext extends RunnerToolContext> {
-  input: AgentWorkflowDefinition
-  parentCtx: TToolContext
-  events: ExecutionEventBus
-  config: AgentExecutionConfig
-}
 
 class AgentWorkflowCoordinator<TToolContext extends RunnerToolContext> {
   constructor(
@@ -129,4 +113,3 @@ class AgentWorkflowCoordinator<TToolContext extends RunnerToolContext> {
 }
 
 export { AgentWorkflowCoordinator }
-export type { AgentWorkflowRunRequest }

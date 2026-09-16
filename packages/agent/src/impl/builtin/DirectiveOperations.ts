@@ -5,17 +5,9 @@ import { z } from 'zod'
 import { isArray, isEmpty, isPlainObject, isString, isTrue } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import type {
-  ActiveContextArchiveFilter,
-  ActiveContextArtifact,
-  ActiveContextArtifactKind,
-  ActiveContextArtifactStatus,
-  ActiveContextListOptions,
-  ActiveContextUpsertInput,
-  ActiveDirectiveArchiveInput,
-  ActiveDirectiveType,
-  ActiveDirectiveUpsertInput,
-} from '../../types/protocol'
+import type { ActiveContextArtifact, ActiveContextArtifactKind, ActiveContextArtifactStatus, ActiveDirectiveArchiveInput, ActiveDirectiveType, ActiveDirectiveUpsertInput } from '../../types/agent.js'
+import type { ActiveDirectiveContext, ActiveDirectiveMetadata, GoalConstraintReference } from '../../types/builtin.js'
+
 
 const directiveTypeSchema = z.enum(['prohibition', 'preference', 'process', 'requirement', 'other'])
 
@@ -23,30 +15,11 @@ const ActiveDirectiveLimits = {
   maxActive: 8,
 } as const
 
-interface ActiveDirectiveContext {
-  listActiveContextArtifacts(options?: ActiveContextListOptions): Promise<ActiveContextArtifact[]>
-  upsertActiveContextArtifact(input: ActiveContextUpsertInput): Promise<ActiveContextArtifact>
-  archiveActiveContextArtifacts(
-    filter: ActiveContextArchiveFilter
-  ): Promise<ActiveContextArtifact[]>
-}
-
 interface ActiveDirectiveArchiveResult {
   archivedIds: string[]
   archivedCount: number
   directives: ActiveContextArtifact[]
   diagnostic?: ReturnType<typeof buildNoArchiveDiagnostic>
-}
-
-interface ActiveDirectiveMetadata {
-  directive?: unknown
-  directiveType?: unknown
-}
-
-interface GoalConstraintReference {
-  goalId: string
-  constraintId: string
-  title: Nullable<string>
 }
 
 function getDirectiveMetadata(artifact: ActiveContextArtifact): ActiveDirectiveMetadata {
@@ -268,19 +241,4 @@ async function archiveActiveDirectives(
   }
 }
 
-export {
-  type ActiveDirectiveArchiveResult,
-  type ActiveDirectiveContext,
-  ActiveDirectiveLimits,
-  type ActiveDirectiveType,
-  archiveActiveDirectives,
-  buildNoArchiveDiagnostic,
-  createDirectiveArtifactId,
-  directiveTypeSchema,
-  getDirectiveType,
-  isActiveDirectiveArtifact,
-  listActiveDirectives,
-  matchesDirectiveTitle,
-  resolveDirectiveArtifactId,
-  upsertActiveDirective,
-}
+export { type ActiveDirectiveArchiveResult, ActiveDirectiveLimits, type ActiveDirectiveType, archiveActiveDirectives, buildNoArchiveDiagnostic, createDirectiveArtifactId, directiveTypeSchema, getDirectiveType, isActiveDirectiveArtifact, listActiveDirectives, matchesDirectiveTitle, resolveDirectiveArtifactId, upsertActiveDirective }

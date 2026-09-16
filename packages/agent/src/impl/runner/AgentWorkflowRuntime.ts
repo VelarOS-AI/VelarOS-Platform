@@ -61,52 +61,15 @@ import {
 } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import type {
-  AgentWorkflowAgentCall,
-  AgentWorkflowAgentResult,
-  AgentWorkflowDedupeStep,
-  AgentWorkflowDefinition,
-  AgentWorkflowMajorityVoteStep,
-  AgentWorkflowPredicate,
-  AgentWorkflowRepeatConvergence,
-  AgentWorkflowRunResult,
-  AgentWorkflowStep,
-  AgentWorkflowStepResult,
-  AgentWorkflowValuePath,
-  AgentWorkflowValueRef,
-} from '../../types/agent-workflow'
+import type { AgentWorkflowAgentCall, AgentWorkflowAgentResult, AgentWorkflowDedupeStep, AgentWorkflowDefinition, AgentWorkflowMajorityVoteStep, AgentWorkflowPredicate, AgentWorkflowRepeatConvergence, AgentWorkflowRunResult, AgentWorkflowStep, AgentWorkflowStepResult, AgentWorkflowValuePath, AgentWorkflowValueRef } from '../../types/agent.js'
+import type { AgentWorkflowDispatchPort, AgentWorkflowRunOptions } from '../../types/runner.js'
 import { compareStableStrings } from '../../utils/residency/determinism'
-import type { SubAgentDispatchLimitsSnapshot } from '../delegation/Semaphore'
 
 const MaxWorkflowAgents = 8
 const MaxWorkflowRounds = 6
 const MaxWorkflowValueBytes = 32 * 1024
 const Utf8ByteCounter = new TextEncoder()
 const log = Log.tag('AgentWorkflowRuntime')
-
-interface AgentWorkflowDispatchContext {
-  stepId: string
-  call: AgentWorkflowAgentCall
-  input?: unknown
-  itemIndex?: number
-  round?: number
-}
-
-interface AgentWorkflowDispatchPort {
-  dispatch: (context: AgentWorkflowDispatchContext) => Promise<AgentWorkflowAgentResult>
-  /**
-   * 本次 run 的真实派发配额（派发器信号量上限 + 该执行剩余的总量帽）。
-   *
-   * 在 `run` 开始时取一次快照即可：并发上限是那把闸的属性、总量帽剩余只会因本 workflow 自己
-   * 的派发而减少，而那部分由 `maxAgents` 同步扣减。**本文件不自己发明这两个数。**
-   */
-  limits: SubAgentDispatchLimitsSnapshot
-}
-
-interface AgentWorkflowRunOptions {
-  runId: string
-  abortSignal?: AbortSignal
-}
 
 class WorkflowBudgetExhaustedError extends Error {}
 class WorkflowAbortedError extends Error {}
@@ -601,4 +564,3 @@ export {
   MaxWorkflowRounds,
   MaxWorkflowValueBytes,
 }
-export type { AgentWorkflowDispatchContext, AgentWorkflowDispatchPort, AgentWorkflowRunOptions }

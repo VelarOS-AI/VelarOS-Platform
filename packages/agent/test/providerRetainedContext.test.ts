@@ -7,7 +7,7 @@ import { createContextPayloadRef } from '../src/impl/context/InMemoryContextPayl
 import { ProviderRequestCompiler } from '../src/impl/context/ProviderRequestCompiler'
 import { ContextGovernanceSessionRegistry } from '../src/impl/residency/ContextGovernanceSession'
 import { ChatContextRetrievalService } from '../src/impl/retrieval/ChatContextRetrievalService'
-import type { ChatSessionToolResultPayload } from '../src/types/protocol'
+import type { ChatSessionToolResultPayload } from '../src/types/agent.js'
 
 /** 可回收的旧文件读取，保留最近用户轮，避免把固定证据超限误当不可恢复压力。 */
 function createHistory(): ModelMessage[] {

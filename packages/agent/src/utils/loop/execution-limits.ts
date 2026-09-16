@@ -1,4 +1,6 @@
 import { isNull, isUndefined } from '@velaros-ai/core'
+
+import type { AgentExecutionLimitOverrides,AgentExecutionLimits } from '../../types/loop.js'
 // 域：Agent 执行的**收尾闸门**（什么时候必须停下来）。
 //
 // ## 为什么轮数上限默认是 null（不是漏配）
@@ -22,31 +24,6 @@ import { isNull, isUndefined } from '@velaros-ai/core'
 // 已脱离执行的线程；执行中的线程由单次执行的派发总量帽约束。计数设 0 即关闭跨执行保留（执行结束
 // 即丢，回到旧行为）；空闲期从脱离执行起算，不用计时器，由派发与执行收尾时顺手清理。
 const MaxNativeTimerDelayMs = 2_147_483_647
-
-interface AgentExecutionLimits {
-  /** 普通主 Agent 单次执行的墙钟硬上限。 */
-  standardExecutionWallClockTimeoutMs: number
-  /** Goal 模式或已建立活动目标的主 Agent 墙钟硬上限。 */
-  goalExecutionWallClockTimeoutMs: number
-  /** 主 Agent 轮次上限；null 表示不按轮次收尾。 */
-  primaryMaxTurns: Nullable<number>
-  /** 单个子 Agent 到点后的软收尾时间。 */
-  subAgentSoftDeadlineMs: number
-  /** 子 Agent 轮次上限；null 表示不按轮次收尾。 */
-  subAgentMaxTurns: Nullable<number>
-  /** 单次模型流连续没有任何新数据时的判死时间。 */
-  modelStreamIdleTimeoutMs: number
-  /** 执行结束后，每个父会话最多保留多少条子 Agent 线程供续跑（超出按最近使用淘汰）；0 = 不保留。 */
-  subAgentRetainedThreadsPerSession: number
-  /** 全进程最多保留多少条已脱离执行的子 Agent 线程（跨父会话，超出按最近使用淘汰）；0 = 不保留。 */
-  subAgentRetainedThreadsTotal: number
-  /** 已脱离执行的子 Agent 线程空闲多久后释放。 */
-  subAgentRetainedThreadIdleTtlMs: number
-  /** 子 Agent 线程历史的序列化字符上限；超过即不可续跑、执行结束后不保留。 */
-  subAgentRetainedHistoryMaxChars: number
-}
-
-type AgentExecutionLimitOverrides = Partial<AgentExecutionLimits>
 
 const DefaultAgentExecutionLimits = Object.freeze({
   standardExecutionWallClockTimeoutMs: 24 * 60 * 60_000,
@@ -151,4 +128,3 @@ function resolveAgentExecutionLimits(
 }
 
 export { DefaultAgentExecutionLimits, MaxNativeTimerDelayMs, resolveAgentExecutionLimits }
-export type { AgentExecutionLimitOverrides, AgentExecutionLimits }

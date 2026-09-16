@@ -3,7 +3,7 @@
 // 这一层只拥有 MCP 协议连接、工具/资源枚举、调用与关闭；server 配置存储、凭据存储、
 // OAuth 用户授权/回调交互、自动批准策略和产品状态文案继续由具体宿主负责。
 
-import { type OAuthClientProvider, UnauthorizedError } from '@modelcontextprotocol/sdk/client/auth.js'
+import { UnauthorizedError } from '@modelcontextprotocol/sdk/client/auth.js'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js'
 import { getDefaultEnvironment, StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
@@ -24,6 +24,9 @@ import {
 import { AppError } from '@velaros-ai/core/error'
 import { asRecord, readString } from '@velaros-ai/core/utils/unknownJsonRecord'
 
+import type { McpAuthorizationProvider } from '../../contract/requires.js'
+import type { McpConnectionSpec, McpPendingAuthorization, McpPendingConnection,McpRawCallResult, McpRemoteTransport, McpResourceContent, McpResourceDescriptor, McpToolDescriptor, McpTransportKind } from '../../types/connectors.js'
+
 /** 连接超时（ms）——server 起不来时不无限挂起。 */
 export const McpConnectTimeoutMs = 30_000
 /** 单次工具调用/资源读取超时（ms）。 */
@@ -31,87 +34,12 @@ export const McpCallTimeoutMs = 120_000
 
 const log = Log.tag('McpClientConnection')
 
-export type McpTransportKind = 'stdio' | 'http' | 'sse' | 'auto'
-
-/**
- * OAuth provider 仍由产品实现和持久化。可选 authorizationUrl 只用于把 SDK 的 401
- * 归一化成可展示、可恢复的协议错误，不授予 Platform 发起授权交互或写入凭据的权限。
- */
-export interface McpAuthorizationProvider extends OAuthClientProvider {
-  readonly authorizationUrl?: LooseOptional<URL>
-}
-
-/** host 无关的 MCP 连接规格；enabled/autoApprove/retry 等宿主策略不在此层。 */
-export interface McpConnectionSpec {
-  /** 缺省保持历史行为：stdio。auto 按 Streamable HTTP -> SSE 回退。 */
-  transport?: McpTransportKind
-  command: string
-  args: readonly string[]
-  env: Readonly<Record<string, string>>
-  cwd: Nullable<string>
-  url?: LooseOptional<string>
-  headers?: Readonly<Record<string, string>>
-  authProvider?: OAuthClientProvider
-  client?: {
-    readonly name: string
-    readonly version: string
-  }
-}
-
-/** MCP 工具行为提示（annotations），用于推断 riskClass/角色/并发安全。 */
-export interface McpToolAnnotations {
-  title: Nullable<string>
-  readOnlyHint: boolean
-  destructiveHint: boolean
-  idempotentHint: boolean
-}
-
-/** 从 MCP server 列出的单个工具描述符（已在边界解析成受控形状）。 */
-export interface McpToolDescriptor {
-  name: string
-  description: Nullable<string>
-  /** JSON Schema（MCP inputSchema，type:'object'）；翻译层经 z.fromJSONSchema 转 zod。 */
-  inputSchema: Record<string, unknown>
-  annotations: McpToolAnnotations
-}
-
-export interface McpResourceDescriptor {
-  uri: string
-  name: string
-  description: Nullable<string>
-  mimeType: Nullable<string>
-}
-
-export interface McpResourceContent {
-  uri: string
-  mimeType: Nullable<string>
-  text: Nullable<string>
-  blob: Nullable<string>
-}
-
-/** MCP callTool 的原始返回（SDK result 对象）；结果翻译在 mcpCallResult.ts。 */
-export type McpRawCallResult = Record<string, unknown>
-
 /** 远程 MCP 明确要求 OAuth 时抛出；登录流程仍由产品宿主拥有。 */
 export class McpAuthorizationRequiredError extends Error {
   public constructor(readonly authorizationUrl: Nullable<string>) {
     super('MCP OAuth authorization is required.')
     this.name = 'McpAuthorizationRequiredError'
   }
-}
-
-type McpRemoteTransport = SSEClientTransport | StreamableHTTPClientTransport
-
-interface McpPendingAuthorization {
-  readonly client: Client
-  readonly transport: McpRemoteTransport
-}
-
-interface McpPendingConnection {
-  controller: AbortController
-  client: Nullable<Client>
-  transport: Nullable<Transport>
-  promise: Promise<void>
 }
 
 /** 单个 MCP 服务器的 host 无关协议连接。 */

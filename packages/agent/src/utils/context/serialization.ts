@@ -15,13 +15,7 @@ import {
 } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-export type ProviderRequestAuditValue = Nullable<
-  boolean
-  | number
-  | string
-  | ProviderRequestAuditValue[]
-  | { [key: string]: ProviderRequestAuditValue }
->
+import type { ProviderRequestAuditValue } from '../../types/context.js'
 
 function tagged(type: string, value: string): ProviderRequestAuditValue {
   return { $velarosType: type, value }

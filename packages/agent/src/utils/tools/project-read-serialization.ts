@@ -1,8 +1,6 @@
 import { isArray, isEmpty, isNumber, isPlainObject, isString } from '@velaros-ai/core'
 
-type RecordValue = Record<string, unknown>
-type Line = [number, string]
-type Fragment = { line: number; columns: [number, number]; text: string }
+import type { Fragment,Line, RecordValue } from '../../types/tools.js'
 
 function isWindow(value: unknown): boolean {
   return isPlainObject(value) && value.kind === 'project-source-window'

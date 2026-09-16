@@ -2,10 +2,9 @@ import { z } from 'zod'
 
 import { isArray, isEmpty, isPresent, toNullable } from '@velaros-ai/core'
 
-import type { ExecutionTaskPlanStep } from '../../types/execution'
-import type { ActiveContextArtifact } from '../../types/protocol'
+import type { ActiveContextArtifact, ExecutionTaskPlanStep } from '../../types/agent.js'
+import type { PlanLifecycle, UpdatePlanInput } from '../../types/builtin.js'
 import { defineVelaTool } from '../../utils/builtin/define-agent-tool'
-import type { PlanLifecycle, UpdatePlanInput } from '../../utils/builtin/plans'
 import {
   completePlanSteps,
   formatActivePlanContent,

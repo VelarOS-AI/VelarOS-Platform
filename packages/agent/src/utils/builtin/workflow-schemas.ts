@@ -2,11 +2,7 @@ import { z } from 'zod'
 
 import { isEmpty } from '@velaros-ai/core'
 
-import type {
-  AgentWorkflowAgentCall,
-  AgentWorkflowDefinition,
-  AgentWorkflowStep,
-} from '../../types/agent-workflow'
+import type { AgentWorkflowAgentCall, AgentWorkflowDefinition, AgentWorkflowStep } from '../../types/agent.js'
 import {
   clampedInt,
   inferActionFromFields,
@@ -235,11 +231,4 @@ const agentWorkflowSchema: z.ZodType<AgentWorkflowDefinition> = z.object({
   steps: z.array(workflowStepSchema).min(1).max(12),
 }).strip()
 
-type RunAgentWorkflowInput = AgentWorkflowDefinition
-
-export {
-  agentWorkflowSchema,
-  type RunAgentWorkflowInput,
-  workflowAgentCallSchema,
-  workflowStepSchema,
-}
+export { agentWorkflowSchema, workflowAgentCallSchema, workflowStepSchema }

@@ -1,26 +1,11 @@
 import { isFiniteNumber, isString, isTrue } from '@velaros-ai/core'
 import { toNullable } from '@velaros-ai/core/utils/nullish'
 
-import type { ActiveContextArtifact, ActiveContextUpsertInput } from '../../types/protocol'
+import type { ActiveContextArtifact, ActiveContextUpsertInput } from '../../types/agent.js'
+import type { GoalDockPrimaryAction, GoalDockTone, GoalDockViewModel,GoalLifecycleAction, GoalLifecycleStatus } from '../../types/runner.js'
+
 
 const GoalArtifactId = 'active-goal'
-
-type GoalLifecycleStatus = 'active' | 'paused' | 'complete' | 'blocked' | 'cancelled' | 'removed'
-type GoalLifecycleAction = 'resume' | 'pause' | 'block' | 'complete' | 'cancel' | 'remove'
-type GoalDockTone = 'active' | 'paused' | 'blocked' | 'complete' | 'cancelled'
-type GoalDockPrimaryAction = 'pause' | 'continue'
-type GoalDockAction = GoalDockPrimaryAction | 'remove'
-
-interface GoalDockViewModel {
-  id: string
-  objective: string
-  status: GoalLifecycleStatus
-  tone: GoalDockTone
-  primaryAction: GoalDockPrimaryAction
-  actions: readonly GoalDockAction[]
-  blockedAuditTurns: number
-  updatedAt: number
-}
 
 function isGoalArtifact(artifact: ActiveContextArtifact): boolean {
   return artifact.kind === 'requirement' && isTrue(artifact.metadata?.goal)
@@ -215,12 +200,4 @@ export {
   GoalArtifactId,
   goalLifecycleToUpsertInput,
   isGoalArtifact,
-}
-export type {
-  GoalDockAction,
-  GoalDockPrimaryAction,
-  GoalDockTone,
-  GoalDockViewModel,
-  GoalLifecycleAction,
-  GoalLifecycleStatus,
 }

@@ -4,21 +4,12 @@ import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
+import type { ReadNextStreamPartIdleTimeoutOptions } from '../../types/loop.js'
 import { DefaultAgentExecutionLimits } from '../loop/execution-limits'
 
 const DefaultStreamIdleStallTimeoutMs =
   DefaultAgentExecutionLimits.modelStreamIdleTimeoutMs
 const log = logRuntime.tag('StreamIdleReader')
-
-interface ReadNextStreamPartIdleTimeoutOptions {
-  abortSignal: AbortSignal
-  idleStallTimeoutMs?: LooseOptional<number>
-  model: string
-  requestFingerprint?: unknown
-  source: string
-  timerName: string
-  turn: Nullable<number>
-}
 
 async function readNextStreamPartWithIdleTimeout<TPart = TextStreamPart<ToolSet>>(
   iterator: AsyncIterator<TPart>,
@@ -101,4 +92,3 @@ export {
   readNextStreamPartWithIdleTimeout,
   returnStreamIteratorQuietly,
 }
-export type { ReadNextStreamPartIdleTimeoutOptions }

@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test'
 
 import { ExecutionSpanRecorder } from '../src/impl/ledgers/OpenExecutionSpan'
+import type { ExecutionSpan } from '../src/types/agent.js'
 import { projectExecutionSpanDebug } from '../src/utils/ledgers/execution-span-debug'
-import type { ExecutionSpan } from '../src/utils/wire/observability'
 
 describe('capability observability', () => {
   test('records and projects opaque capability observations without product semantics', () => {

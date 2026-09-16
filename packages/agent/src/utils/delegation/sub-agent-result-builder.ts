@@ -1,30 +1,8 @@
 import { isEmpty, toOptional } from '@velaros-ai/core'
 
-import type { SubAgentThreadRetention } from '../../impl/delegation/SubAgentSessionStore'
-import type { CodingSessionSnapshot } from '../../types/reminders'
-import type {
-  SubAgentTaskArtifacts,
-  SubAgentTaskResult,
-  SubAgentTaskResultStatus,
-  SubAgentToolDigestEntry,
-  SubAgentUsage,
-  SubAgentWindDownReason,
-} from '../../types/sub-agent-task'
-import type { TeamModelSelectionTrace } from '../../types/team'
-
-interface BuildSubAgentTaskResultInput {
-  threadId: string
-  text: string
-  status: SubAgentTaskResultStatus
-  windDownReason?: SubAgentWindDownReason
-  codingSnapshot?: CodingSessionSnapshot
-  modelTrace?: TeamModelSelectionTrace
-  toolDigest?: SubAgentToolDigestEntry[]
-  structuredOutput?: unknown
-  usage?: SubAgentUsage
-  /** 线程能否续跑；给出时落成结果里的 resumable / retained_until，缺省表示本结果不作判断。 */
-  retention?: SubAgentThreadRetention
-}
+import type { SubAgentTaskArtifacts, SubAgentTaskResult } from '../../types/agent.js'
+import type { BuildSubAgentTaskResultInput,SubAgentThreadRetention } from '../../types/delegation.js'
+import type { CodingSessionSnapshot } from '../../types/session.js'
 
 function buildArtifactsFromSnapshot(
   snapshot: Optional<CodingSessionSnapshot>
@@ -103,4 +81,3 @@ export {
   formatSubAgentToolResult,
   parseSubAgentToolResult,
 }
-export type { BuildSubAgentTaskResultInput }

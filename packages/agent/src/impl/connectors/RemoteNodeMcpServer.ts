@@ -24,17 +24,12 @@ import {
 } from '@velaros-ai/core'
 import type { RemoteNodeToolDescriptor } from '@velaros-ai/kernel/contracts/protocol'
 import {
-  type RemoteNodeClient,
   RemoteNodeClientError,
 } from '@velaros-ai/kernel/remote/client'
 
-const log = Log.tag('RemoteNodeMcpBridge')
+import type { RemoteNodeMcpBridgeOptions } from '../../types/connectors.js'
 
-export interface RemoteNodeMcpBridgeOptions {
-  readonly client: RemoteNodeClient
-  readonly serverName?: string
-  readonly serverVersion?: string
-}
+const log = Log.tag('RemoteNodeMcpBridge')
 
 /**
  * MCP 工具名的合法字符面比我们的 canonical id 窄,且各家客户端宽严不一。

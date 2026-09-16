@@ -3,6 +3,8 @@ import { z } from 'zod'
 import { isArray, isNumber, isPlainObject, isString } from '@velaros-ai/core'
 import { clampRounded } from '@velaros-ai/core/utils/number'
 
+import type { BoundedReadInput, JsonSchemaObject,RecursiveTraversalInput } from '../../types/toolkit.js'
+
 import {
   isStructuredParameterDescription,
   renderParameterDescription as parameterDescription,
@@ -22,26 +24,6 @@ const ToolInputBoundMessages = {
   readUpperBoundRequired: '必须提供 endLine 或 maxChars，用于限制读取范围',
   lineRangeOrder: 'endLine 必须大于或等于 startLine',
 } as const
-
-/** 带上界的文件读取输入。 */
-interface BoundedReadInput {
-  /** 可选起始行。 */
-  startLine?: number
-  /** 读取结束行。 */
-  endLine?: number
-  /** 读取字符上限。 */
-  maxChars?: number
-}
-
-/** 递归目录遍历输入。 */
-interface RecursiveTraversalInput {
-  /** 是否递归进入子目录。 */
-  recursive?: boolean
-  /** 递归最大深度。 */
-  maxDepth?: number
-}
-
-type JsonSchemaObject = Record<string, unknown>
 
 const ReadBoundJsonSchemaAnyOf = [
   {

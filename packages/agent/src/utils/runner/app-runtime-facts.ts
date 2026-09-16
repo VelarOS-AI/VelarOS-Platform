@@ -9,22 +9,7 @@
  */
 import { isNotUndefined, isPresent } from '@velaros-ai/core'
 
-export interface AppRuntimeFacts {
-  /** 应用版本号，如 "0.3.1"。 */
-  appVersion: Nullable<string>
-  /** 平台标识，如 "darwin" / "win32" / "linux"。 */
-  platform: Nullable<string>
-  /** CPU 架构，如 "arm64" / "x64"。 */
-  arch?: LooseOptional<string>
-  /** 操作系统版本，如 Darwin kernel release 或 Windows release。 */
-  osRelease?: LooseOptional<string>
-  /** 实际承载命令执行的 shell 路径。 */
-  shell?: LooseOptional<string>
-  /** 当前用户主目录。 */
-  homeDir?: LooseOptional<string>
-  /** userData 存储根目录（会话数据与本地索引等落盘位置的父目录）。 */
-  userDataRoot: Nullable<string>
-}
+import type { AppRuntimeFacts } from '../../contract/requires.js'
 
 const facts: AppRuntimeFacts = {
   appVersion: null,

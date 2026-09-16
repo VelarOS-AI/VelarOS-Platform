@@ -12,27 +12,12 @@ import type { ModelMessage } from 'ai'
 
 import { isArray, isEmpty, isRecord, isString, Log, toNullable } from '@velaros-ai/core'
 
+import type { ToolCallFact, ToolResultFact } from '../../types/residency.js'
 import { estimateContextValueChars } from '../context/context-usage'
 import { readVerbatimString } from '../context/message-scan'
 import { readUserMessageText } from '../context/user-message-text'
 
 const log = Log.tag('ContextResidencyMessageFacts')
-
-export interface ToolCallFact {
-  toolCallId: string
-  toolName: string
-  args: unknown
-}
-
-export interface ToolResultFact {
-  toolCallId: string
-  toolName: string
-  /** 结果正文（文本档）；结构化输出为 null。 */
-  value: Nullable<string>
-  /** 结果正文的保真文本投影：文本档即原文，结构化档退化为稳定 JSON（per-part 摘录的素材）。 */
-  text: string
-  isError: boolean
-}
 
 /** URL 定位符：去 hash（同页锚点不是不同目标），保留 query（`?page=2` 是不同目标）。 */
 const UrlPattern = /\bhttps?:\/\/[^\s"'<>)\]}]+/i

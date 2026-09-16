@@ -1,12 +1,7 @@
 import { isBoolean, isEmpty,isNumber, isPresent, isTrue, numberOrNull } from '@velaros-ai/core'
 
-import type { RunProfileId } from '../../types/run-profile'
-import type {
-  ToolDescriptor,
-  ToolExposurePolicy,
-  ToolExposureProfilePolicy,
-  ToolExposureTier,
-} from '../../types/tool'
+import type { RunProfileId,ToolDescriptor, ToolExposurePolicy, ToolExposureProfilePolicy, ToolExposureTier } from '../../types/agent.js'
+import type { ResolvedToolExposure } from '../../types/runner.js'
 import { compareStableStrings } from '../residency/determinism'
 
 import {
@@ -16,13 +11,6 @@ import {
   resolveRunProfileWorkingSetContextWindow,
   RunProfileDefinitions,
 } from './runtime-profiles'
-
-interface ResolvedToolExposure {
-  tier: ToolExposureTier
-  rank: number
-  rankBoost: number
-  alwaysResident: boolean
-}
 
 const ToolExposureTierRank: Record<ToolExposureTier, number> = {
   essential: 0,
@@ -334,4 +322,4 @@ export {
   resolveRunProfileWorkingSetContextWindow,
   RunProfileDefinitions,
 }
-export type { AgentRunProfileCatalogSnapshot } from './runtime-profiles'
+export type { AgentRunProfileCatalogSnapshot } from '../../types/runner.js'

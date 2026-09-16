@@ -1,10 +1,7 @@
 import { isArray, isString } from '@velaros-ai/core'
 
-import {
-  ToolCatalogDiscoveryToolName,
-  type ToolCatalogEntry,
-  ToolSchemaDiscoveryToolName,
-} from '../wire/lease'
+import type { ToolCatalogEntry } from '../../types/agent.js'
+import { ToolCatalogDiscoveryToolName, ToolSchemaDiscoveryToolName } from '../wire/lease'
 
 /** 两条自恢复工具随每份目录常驻，避免模型在 schema 漂移后失去恢复路径。 */
 export const ToolContractDiscoveryDescriptors: readonly ToolCatalogEntry[] = Object.freeze([

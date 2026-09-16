@@ -1,50 +1,9 @@
 import { isEmpty } from '@velaros-ai/core'
 
-import type { ToolCategoryId, ToolDescriptor } from '../../types/tool'
-import {
-  type AgentRuntimeCapabilityPorts,
-  resolveToolAllocationMetadata,
-  type ToolAllocationMetadata,
-} from '../../utils/capabilities'
-
-type ToolAllocatorOperation = string
-interface ToolAllocatorRequest {
-  intent: string
-  operations: readonly ToolAllocatorOperation[]
-  targets?: readonly string[]
-  reason: string
-}
-
-interface ToolAllocatorCategory<TTool extends { name: string } = ToolDescriptor> {
-  category: { id: ToolCategoryId }
-  tools: readonly TTool[]
-}
-
-type ToolAllocatorDenialCode =
-  | 'not_implemented'
-  | 'role_blocked'
-  | 'request_fuse_tripped'
-  | 'prerequisite_missing'
-  | 'delegated'
-  | (string & {})
-
-interface ToolAllocatorDeniedRequest {
-  operation: ToolAllocatorOperation
-  categoryId: ToolCategoryId
-  code: ToolAllocatorDenialCode
-  message: string
-}
-
-interface ToolAllocatorFuseState {
-  tripped: boolean
-  message?: string
-}
-
-interface ToolAllocatorAdvisorState {
-  called: boolean
-  message?: string
-  error?: string
-}
+import type { AgentRuntimeCapabilityPorts, ToolAllocationMetadata } from '../../contract/requires.js'
+import type { ToolCategoryId, ToolDescriptor } from '../../types/agent.js'
+import type { SessionToolAllocatorPlan, ToolAllocatorAdvisorState, ToolAllocatorCategory, ToolAllocatorDenialCode, ToolAllocatorDeniedRequest, ToolAllocatorFuseState, ToolAllocatorOperation, ToolAllocatorRequest, ToolAllocatorRuntimeIndex } from '../../types/tools.js'
+import { resolveToolAllocationMetadata } from '../../utils/capabilities'
 
 interface SessionToolAllocatorPlanInput<TTool extends { name: string } = ToolDescriptor> {
   turn: number
@@ -55,21 +14,6 @@ interface SessionToolAllocatorPlanInput<TTool extends { name: string } = ToolDes
   enabledToolCategoryIds: readonly ToolCategoryId[]
   allowedToolCategoryIds: readonly ToolCategoryId[]
   satisfiedPrerequisiteIds?: readonly string[]
-}
-
-interface SessionToolAllocatorPlan {
-  baselineToolNames: string[]
-  grantedCategoryIds: ToolCategoryId[]
-  grantedToolNames: string[]
-  deniedRequests: ToolAllocatorDeniedRequest[]
-  fuse: ToolAllocatorFuseState
-  advisor: ToolAllocatorAdvisorState
-  message: string
-}
-
-interface ToolAllocatorRuntimeIndex<TTool extends { name: string }> {
-  categoryMap: Map<ToolCategoryId, TTool[]>
-  toolNames: Set<string>
 }
 
 interface SessionToolAllocatorOptions {
@@ -356,12 +300,4 @@ export {
   SessionToolAllocator,
   sessionToolAllocator,
 }
-export type {
-  SessionToolAllocatorOptions,
-  SessionToolAllocatorPlan,
-  SessionToolAllocatorPlanInput,
-  ToolAllocatorAdvisorState,
-  ToolAllocatorDeniedRequest,
-  ToolAllocatorOperation,
-  ToolAllocatorRequest,
-}
+export type { SessionToolAllocatorOptions, SessionToolAllocatorPlanInput }

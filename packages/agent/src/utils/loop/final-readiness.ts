@@ -1,32 +1,11 @@
 import { isPresent } from '@velaros-ai/core'
 
-import type { CodingSessionSnapshot } from '../../types/reminders'
+import type { EvaluateKernelFinalReadinessInput,KernelFinalReadinessAudit, KernelFinalReadinessReason, KernelFinalReadinessResult } from '../../types/loop.js'
+import type { CodingSessionSnapshot } from '../../types/session.js'
 import {
   hasVerificationRelevantModifiedPaths,
   isVerificationRelevantPath,
 } from '../session/paths'
-
-export type KernelFinalReadinessReason = 'missing-verification' | 'failed-verification'
-export type KernelFinalReadinessAuditResult = 'allowed' | 'blocked' | 'errored'
-
-export interface KernelFinalReadinessAudit {
-  result: KernelFinalReadinessAuditResult
-  recovered: boolean
-  missingVerification: number
-  failedVerification: number
-  verificationRelevantPaths: number
-}
-
-export interface KernelFinalReadinessResult {
-  allowed: boolean
-  reason: Nullable<KernelFinalReadinessReason>
-  followupMessage: Nullable<string>
-  audit: KernelFinalReadinessAudit
-}
-
-export interface EvaluateKernelFinalReadinessInput {
-  snapshot?: LooseOptional<CodingSessionSnapshot>
-}
 
 function buildBaseAudit(snapshot?: LooseOptional<CodingSessionSnapshot>): KernelFinalReadinessAudit {
   const verificationRelevantPaths =

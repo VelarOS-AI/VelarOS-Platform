@@ -1,9 +1,9 @@
 // 域：主 Agent 执行的**目标生命周期**（宿主限制下的墙钟判定 + 自主目标探测）。
 import { isTrue } from '@velaros-ai/core'
 
-import type { RunnerToolContext } from '../../types/runner-host-ports'
-import type { AgentExecutionConfig } from '../../types/runtime-configuration'
-import type { AgentExecutionLimits } from '../loop/execution-limits'
+import type { AgentExecutionConfig } from '../../contract/requires.js'
+import type { AgentExecutionLimits } from '../../types/loop.js'
+import type { RunnerToolContext } from '../../types/runner.js'
 
 import { findCurrentGoalArtifact, getGoalLifecycleStatus } from './goal-lifecycle-projection'
 

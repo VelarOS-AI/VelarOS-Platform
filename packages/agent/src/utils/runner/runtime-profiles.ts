@@ -1,8 +1,8 @@
 import { isNotUndefined, isNumber } from '@velaros-ai/core'
 
 import type { RunProfileDefinition, RunProfileRuntimePolicy } from '../../types/agent'
-import type { RunProfileId, RunProfileSelectionId } from '../../types/run-profile'
-import type { ToolSurfaceProfileId } from '../../types/tool'
+import type { RunProfileId, RunProfileSelectionId,ToolSurfaceProfileId } from '../../types/agent.js'
+import type { AgentRunProfileCatalogSnapshot } from '../../types/runner.js'
 import {
   assertRunProfileId,
   parseOptionalRunProfileSelectionId,
@@ -14,17 +14,6 @@ const DefaultToolSurfaceProfileId = 'guided' as const satisfies ToolSurfaceProfi
 const UnknownContextWindowFallback = 128_000
 const BalancedContextWindowThreshold = 192_000
 const ExpandedContextWindowThreshold = 1_000_000
-
-export interface AgentRunProfileCatalogSnapshot {
-  readonly schemaVersion: 1
-  readonly defaultSelection: RunProfileSelectionId
-  readonly automaticSelection: {
-    readonly unknownContextWindowFallback: number
-    readonly balancedAtOrAbove: number
-    readonly expandedAtOrAbove: number
-  }
-  readonly profiles: readonly RunProfileDefinition[]
-}
 
 const RunProfileDefinitions: Record<RunProfileId, RunProfileDefinition> = {
   compact: {

@@ -1,16 +1,8 @@
 import { describe, expect, test } from 'bun:test'
 
+import type { AgentRuntimeCapabilityPorts } from '../src/contract/requires.js'
 import { SessionToolAllocator } from '../src/impl/tools/SessionToolAllocator'
-import {
-  type AgentRuntimeCapabilityPorts,
-  decideCapabilityScopeCategory,
-  resolveCapabilityDelegationPolicy,
-  resolveCapabilityPromptSegments,
-  resolveCapabilityScopeId,
-  resolveToolAllocationMetadata,
-  resolveToolResultMiddlewares,
-  resolveToolValidationHintProviders,
-} from '../src/utils/capabilities'
+import { decideCapabilityScopeCategory, resolveCapabilityDelegationPolicy, resolveCapabilityPromptSegments, resolveCapabilityScopeId, resolveToolAllocationMetadata, resolveToolResultMiddlewares, resolveToolValidationHintProviders } from '../src/utils/capabilities'
 import { ToolArgsSchemaValidator } from '../src/utils/tools/tool-args-schema-validator'
 
 describe('Agent Runtime capability injection', () => {

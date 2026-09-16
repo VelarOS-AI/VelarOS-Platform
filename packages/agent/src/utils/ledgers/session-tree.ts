@@ -4,18 +4,9 @@
 // CompactionEntry 边界拼出发给 provider 的上下文序列。纯函数、无 IO——供引擎 handle 与 harness 共用。
 import { isEmpty, isNotNull, isNull } from '@velaros-ai/core'
 
-import type { CompactionEntry, SessionEntry } from '../wire/session'
+import type { CompactionEntry, SessionEntry } from '../../types/agent.js'
+import type { SessionEntryClass, SessionTree,SessionTreeNode } from '../../types/ledgers.js'
 
-/**
- * entry 分类（宪章 §6 entry 类型学的**语义单源**，P1-5）。三类派生出全仓所有「entry 该不该进某序列」的判定：
- *   - `transcript`：真实对话转录（message / custom-message），进 provider 上下文、是 renderer 快照投影的产物；
- *   - `governance`：治理产物（compaction / branch-summary），在 provider 上下文里**顶替**被折叠的转录段；
- *   - `metadata`：会话级元数据（session-info / model-change）与开放数据面 custom——**落盘不进上下文**。
- *
- * 单源杜绝散落的 `type !== 'compaction' && type !== 'session-info'` 硬编码副本（曾让 session-info 头 entry
- * 漏进 provider 序列 / 让镜像与直投对账假 drift）。buildContextEntries / ReadAssembler 影子 diff / lab 过滤全部派生此表。
- */
-export type SessionEntryClass = 'transcript' | 'governance' | 'metadata'
 
 /** entry → 分类（判别联合穷举，新增 entry 类型时此处编译期强制补分类）。 */
 export function classifySessionEntry(entry: SessionEntry): SessionEntryClass {
@@ -55,21 +46,6 @@ export function isSnapshotComparableEntry(entry: SessionEntry): boolean {
   // metadata 里只有 custom 是快照投影会产出的（thinking/html-artifact 等非 wire 块）；session-info/model-change 是账本独有。
   if (cls === 'metadata') return entry.type === 'custom'
   return true
-}
-
-/** 树节点：一条 entry + 其子 entry id（按追加序）。 */
-export interface SessionTreeNode {
-  entry: SessionEntry
-  childIds: string[]
-}
-
-/** 会话树投影：根、按 id 索引的节点、叶子集合。 */
-export interface SessionTree {
-  /** 根 entry id（parentId 为 null 的那条）；空账本为 null。 */
-  rootId: Nullable<string>
-  nodesById: Record<string, SessionTreeNode>
-  /** 没有子节点的 entry id 集合（追加序）。 */
-  leafIds: string[]
 }
 
 /** 从 entry 序列构建树投影。 */

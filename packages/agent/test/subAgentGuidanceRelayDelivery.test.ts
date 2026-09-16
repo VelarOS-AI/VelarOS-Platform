@@ -6,11 +6,10 @@ import { describe, test } from 'bun:test'
 import { AppError } from '@velaros-ai/core/error'
 
 import { ExecutionService } from '../src/impl/execution/ExecutionService'
-import type { ManagedExecutionController } from '../src/impl/execution/ManagedExecutionRunner'
 import { ExecutionEventBus } from '../src/impl/records/ExecutionEventBus'
 import { ExecutionStore } from '../src/impl/records/ExecutionStore'
 import { SubAgentGuidanceRelayRegistry } from '../src/impl/records/SubAgentGuidanceRelayRegistry'
-import type { ExecutionGuidanceRelayPlan } from '../src/types/execution-host-ports'
+import type { ExecutionGuidanceRelayPlan, ManagedExecutionController } from '../src/types/execution.js'
 import {
   parseGuidanceRelayPlan,
   resolveMainAgentGuidanceDelivery,

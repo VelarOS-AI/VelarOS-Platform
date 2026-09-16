@@ -2,15 +2,11 @@ import assert from 'node:assert/strict'
 
 import { describe, test } from 'bun:test'
 
-import {
-  ChatKernelSessionBridge,
-  type KernelChatExecutionService,
-} from '../src/impl/assembly/ChatKernelSessionBridge'
-import {
-  InMemoryKernelSessionInputStore,
-  type KernelSessionInputStore,
-} from '../src/impl/execution/KernelSessionRunCoordinator'
-import type { ChatSendRequest } from '../src/types/protocol'
+import type { KernelSessionInputStore } from '../src/contract/requires.js'
+import { ChatKernelSessionBridge } from '../src/impl/assembly/ChatKernelSessionBridge'
+import { InMemoryKernelSessionInputStore } from '../src/impl/execution/KernelSessionRunCoordinator'
+import type { ChatSendRequest } from '../src/types/agent.js'
+import type { KernelChatExecutionService } from '../src/types/execution.js'
 
 function gate(): { promise: Promise<void>; resolve(): void } {
   let resolve!: () => void

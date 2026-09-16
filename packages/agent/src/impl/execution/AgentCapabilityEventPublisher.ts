@@ -1,19 +1,11 @@
 import { Log } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import {
-  type AgentCapabilityExecutionChannel,
-  type AgentCapabilityExecutionDescriptorV1,
-  AgentCapabilityExecutionEventType,
-  createAgentCapabilityExecutionEventEnvelopeV1,
-} from '../../utils/wire/agent-capability'
+import type { AgentCapabilityExecutionChannel, AgentCapabilityExecutionDescriptorV1 } from '../../types/agent.js'
+import type { AgentCapabilityKernelEventDelivery } from '../../types/execution.js'
+import { AgentCapabilityExecutionEventType, createAgentCapabilityExecutionEventEnvelopeV1 } from '../../utils/wire/agent-capability'
 
 const log = Log.tag('AgentCapabilityEventPublisher')
-
-export type AgentCapabilityKernelEventDelivery = (
-  type: string,
-  payload: unknown,
-) => Promise<void>
 
 /**
  * 把 Agent 的同步多通道事件总线接到 Kernel 的异步事件发布口。

@@ -1,33 +1,9 @@
 import { isEmpty, isPresent,isString } from '@velaros-ai/core'
 
+import type { KernelPrefixShape, KernelPrefixShapeDiagnostic, KernelPrefixShapeInput, KernelPrefixShapePhase, RecordKernelPrefixShapeDiagnosticInput } from '../../types/loop.js'
 import { compareStableStrings, stableStringify } from '../../utils/residency/determinism'
 import { UnknownGovernanceSessionId } from '../../utils/residency/session-key'
 import type { ProviderTurnEventReducer } from '../records/ProviderTurnEventReducer'
-
-export interface KernelPrefixShapeInput {
-  systemPrompt: string
-  availableToolNames: readonly string[]
-  toolSchemaChars?: Readonly<Record<string, number>>
-  toolSchemaHashes?: Readonly<Record<string, string>>
-  historyRewriteFingerprint?: LooseOptional<string>
-}
-
-export interface KernelPrefixShape {
-  prefixHash: string
-  systemHash: string
-  toolsHash: string
-  toolSchemaTokens: number
-  historyRewriteFingerprint?: string
-}
-
-export interface KernelPrefixShapeDiagnostic extends KernelPrefixShape {
-  prefixChanged: boolean
-  prefixChangeReasons: string[]
-  cacheHitTokens?: number
-  cacheMissTokens?: number
-}
-
-export type KernelPrefixShapePhase = 'stream' | 'query'
 
 export interface KernelPrefixShapeTrackerRecordInput {
   sessionId?: LooseOptional<string>
@@ -39,15 +15,6 @@ export interface KernelPrefixShapeTrackerRecordInput {
 export interface KernelPrefixShapeTrackerRecord {
   current: KernelPrefixShape
   previous?: KernelPrefixShape
-}
-
-export interface RecordKernelPrefixShapeDiagnosticInput {
-  previous?: LooseOptional<KernelPrefixShape>
-  current: KernelPrefixShape
-  cache?: {
-    cacheHitTokens?: LooseOptional<number>
-    cacheMissTokens?: LooseOptional<number>
-  }
 }
 
 /**

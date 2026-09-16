@@ -1,7 +1,8 @@
 import { isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import type { NonEmptyToolContractList } from '../../types/tool-contract'
+import type { NonEmptyToolContractList } from '../../types/toolkit.js'
+
 
 function serializeToolExampleInput(value: unknown): string {
   try {

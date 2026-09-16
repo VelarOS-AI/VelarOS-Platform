@@ -1,7 +1,6 @@
 import { isFiniteNumber } from '@velaros-ai/core'
 
-import type { AgentModelRequestOptions } from '../../types/model-contracts'
-import type { AgentExecutionConfig } from '../../types/runtime-configuration'
+import type { AgentExecutionConfig,AgentModelRequestOptions } from '../../contract/requires.js'
 
 /**
  * HTML 实时预览会在单条回复中连续输出完整 HTML/CSS/JS；普通 compact 的 8k 输出预算

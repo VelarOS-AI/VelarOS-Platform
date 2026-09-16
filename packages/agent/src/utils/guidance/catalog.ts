@@ -5,20 +5,12 @@
 // 任何「按开关或按本轮输入注入」的内容（能力协议、当前时间、用户附加提示词）一律 Tier1，落活动尾。
 import { isArray, isEmpty, isTrue } from '@velaros-ai/core'
 
-import type { PromptRenderContext, PromptSegmentDefinition } from '../../impl/guidance/PromptRegistry'
+import type { AppRuntimeFacts } from '../../contract/requires.js'
 import { PromptRegistry } from '../../impl/guidance/PromptRegistry'
-import { type AppRuntimeFacts, readAppRuntimeFacts } from '../runner/app-runtime-facts'
+import type { BuiltInPromptOptions,PromptRenderContext, PromptSegmentDefinition } from '../../types/guidance.js'
+import { readAppRuntimeFacts } from '../runner/app-runtime-facts'
 
 import { createCorePromptSegment, PromptSegmentPriority } from './shared'
-
-export interface BuiltInPromptOptions {
-  /**
-   * 宿主为主 Agent 提供的身份说明。
-   *
-   * 身份由应用装配；未提供时使用产品中性的默认身份。
-   */
-  primaryAgentIdentity?: string
-}
 
 const NeutralPrimaryAgentIdentity =
   '你是宿主应用提供的 AI Agent。请使用当前已注入的能力完成用户目标。'

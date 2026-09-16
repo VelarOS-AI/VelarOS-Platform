@@ -1,10 +1,5 @@
-export type {
-  AgentCapabilityExecuteEnvelopeV1,
-  AgentCapabilityExecutionChannel,
-  AgentCapabilityExecutionDescriptorV1,
-  AgentCapabilityExecutionEventEnvelopeV1,
-  AgentCapabilityExecutionSource,
-} from '../../utils/wire/agent-capability'
+export type { AgentCapabilityExecutionChannel, AgentCapabilityExecutionDescriptorV1, AgentCapabilityExecutionEventEnvelopeV1, AgentCapabilityExecutionSource } from '../../types/agent.js'
+export type { AgentCapabilityExecuteEnvelopeV1 } from '../../types/execution.js'
 export {
   AgentCapabilityApiVersion,
   AgentCapabilityExecutionEventType,

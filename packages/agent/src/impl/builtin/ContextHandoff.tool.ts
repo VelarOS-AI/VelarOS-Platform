@@ -1,5 +1,6 @@
 import { z } from 'zod'
 
+import type { HandoffContextInput } from '../../types/builtin.js'
 import { defineVelaTool } from '../../utils/builtin/define-agent-tool'
 import {
   renderParameterDescription as parameterDescription,
@@ -8,10 +9,6 @@ import {
 import { AgentUserInteractionCapability } from './Capabilities'
 
 const HandoffReasonMaxChars = 400
-
-export interface HandoffContextInput extends Record<string, unknown> {
-  reason: string
-}
 
 export const handoffContextSchema = z.object({
   reason: z

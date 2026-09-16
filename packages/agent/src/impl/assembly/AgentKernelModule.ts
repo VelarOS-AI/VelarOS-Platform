@@ -3,64 +3,14 @@ import {
   createCapabilityToken,
   createKernelCallableCapability,
   defineKernelModule,
-  type KernelCallableCapabilityService,
   KernelModuleApiVersion,
   type KernelModuleDefinition,
   type KernelModuleHealth,
   type ScopeRef,
 } from '@velaros-ai/kernel/contracts/abi'
 
-/**
- * Product-owned Agent runtime injected at composition time.
- *
- * The Kernel adapter deliberately treats execution input and output as opaque.
- * Agent session, prompt, tool, and capability semantics remain owned by
- * Agent 运行时及其宿主装配，而不是 Kernel 契约。
- *
- * Two-tier registration boundary: this adapter is tier one and never parses a
- * domain manifest. Hosts pass the Kernel pack listing to the tier-two Agent
- * loader through `assembleAgentMods` (see `mods/AgentModHostAssembly.ts`) and
- * inject the assembled runtime here, so the Kernel keeps seeing only the narrow
- * module descriptor.
- */
-export interface AgentCapabilityRuntime {
-  start?(signal: AbortSignal): void | Promise<void>
-  execute(
-    scope: LooseOptional<ScopeRef>,
-    input: unknown,
-    context: AgentCapabilityExecutionContext,
-  ): unknown | Promise<unknown>
-  health?(): KernelModuleHealth | Promise<KernelModuleHealth>
-  suspend?(): void | Promise<void>
-  dispose?(): void | Promise<void>
-}
-
-/**
- * Narrow execution context exposed to the injected Agent runtime.
- *
- * Products publish execution progress through this module-attributed event
- * bridge and never receive the Kernel host or its registries.
- */
-export interface AgentCapabilityExecutionContext {
-  readonly signal: AbortSignal
-  publish<TPayload>(type: string, payload: TPayload): Promise<void>
-}
-
-export interface AgentCapabilityService
-  extends KernelCallableCapabilityService {
-  isReady(): boolean
-  execute(
-    scope: LooseOptional<ScopeRef>,
-    input: unknown,
-    signal: AbortSignal,
-  ): Promise<unknown>
-  health(): Promise<KernelModuleHealth>
-}
-
-export interface CreateAgentKernelModuleOptions {
-  /** Agent implementation assembled by a product host. */
-  readonly runtime: AgentCapabilityRuntime
-}
+import type { CreateAgentKernelModuleOptions } from '../../contract/requires.js'
+import type { AgentCapabilityExecutionContext, AgentCapabilityService } from '../../types/execution.js'
 
 /** Stable identity for an independently injected Agent execution capability. */
 export const AgentCapability =

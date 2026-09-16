@@ -2,13 +2,10 @@ import type { ModelMessage } from 'ai'
 
 import { isArray, isObject, isString } from '@velaros-ai/core'
 
-import type { ToolCategoryId } from '../../types/tool'
-import {
-  type AgentRuntimeCapabilityPorts,
-  type CapabilityIntentClassifierContext,
-  type CapabilityIntentSignal,
-  resolveCapabilityIntentClassifiers,
-} from '../capabilities'
+import type { AgentRuntimeCapabilityPorts } from '../../contract/requires.js'
+import type { CapabilityIntentClassifierContext, CapabilityIntentSignal } from '../../types/capabilities.js'
+import type { AgentIntentDomainSignal, AgentIntentSignals } from '../../types/loop.js'
+import { resolveCapabilityIntentClassifiers } from '../capabilities'
 import { stripTurnContextBlocks } from '../runner/turn-context-format'
 
 const GreetingOnlyPattern =
@@ -17,25 +14,6 @@ const ContinuationOnlyPattern =
   /^(继续|继续吧|继续一下|接着|接着来|往下|往下做|go on|continue|keep going)[!！。.\s]*$/i
 const CapabilityUncertaintyPattern =
   /(不确定.*(怎么|如何|工具|能力|处理|做)|不知道.*(怎么|如何|工具|能力|处理|做)|需要哪个工具|用什么工具|哪些工具|复杂(任务|问题|场景)|uncertain|not\s+sure|which\s+tool|what\s+tool|complex\s+(task|problem|issue))/i
-
-export type AgentIntentSignalDomain = string
-
-export interface AgentIntentDomainSignal {
-  id: AgentIntentSignalDomain
-  categories: ToolCategoryId[]
-  requiresDiscovery: boolean
-  requiresEvidence: boolean
-  requiresMutation: boolean
-  requiresValidation: boolean
-}
-
-export interface AgentIntentSignals {
-  domains: AgentIntentDomainSignal[]
-  requiresEvidence: boolean
-  requiresMutation: boolean
-  requiresValidation: boolean
-  hasCapabilityUncertainty: boolean
-}
 
 function normalizeIntentText(text: string): string {
   return text.replace(/\s+/g, ' ').trim()

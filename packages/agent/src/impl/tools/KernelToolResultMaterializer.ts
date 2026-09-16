@@ -1,31 +1,8 @@
-import type { AgentEvent, StreamToolResultEffects } from '../../types/agent'
-
-import type { KernelStoredToolOutput, KernelToolOutputStore } from './InMemoryKernelToolOutputStore'
+import type { KernelToolOutputStore } from '../../contract/requires.js'
+import type {MaterializedKernelToolResult, MaterializeKernelToolResultInput } from '../../types/tools.js'
 
 export interface KernelToolResultMaterializerOptions {
   outputStore?: LooseOptional<KernelToolOutputStore>
-}
-
-export interface MaterializeKernelToolResultInput {
-  sessionId?: LooseOptional<string>
-  localInstructionClaimScope?: LooseOptional<string>
-  toolCallId: string
-  toolName: string
-  args: Record<string, unknown>
-  result: unknown
-  error?: LooseOptional<string>
-  effects?: StreamToolResultEffects
-  notices?: Array<Extract<AgentEvent, { type: 'notice' }>>
-  /** 工具声明 outputInline：跳过 page-out，输出始终内联（不卸载为 payload 引用）。 */
-  keepOutputInline?: boolean
-}
-
-export interface MaterializedKernelToolResult {
-  displayResult: unknown
-  modelResult: unknown
-  effects: StreamToolResultEffects
-  notices: Array<Extract<AgentEvent, { type: 'notice' }>>
-  storedOutput: Nullable<KernelStoredToolOutput>
 }
 
 export class KernelToolResultMaterializer {

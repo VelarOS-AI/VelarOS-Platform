@@ -1,6 +1,7 @@
 import { AppError } from '@velaros-ai/core/error'
 
-import type { ExecutionStatus } from '../../types/execution'
+import type { ExecutionStatus } from '../../types/agent.js'
+
 
 /**
  * 合法状态迁移表。

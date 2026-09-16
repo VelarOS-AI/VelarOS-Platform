@@ -3,49 +3,12 @@ import type { ModelMessage } from 'ai'
 import { isEmpty, isFalse, toNullable } from '@velaros-ai/core'
 
 import type { ToolResultModelContentPart } from '../../types/agent'
+import type { AgentTurnToolExecutor, AgentTurnToolResult, AssistantContentPart, AssistantModelContentPart, AssistantRawContentPart } from '../../types/history.js'
 import {
   compactToolInputForModel,
   extractSerializationHintsFromToolInput,
   serializeToolResultForModel,
 } from '../tools/tool-result-serialization'
-
-interface AgentTurnToolResult {
-  toolCallId: string
-  toolName: string
-  args?: Record<string, unknown>
-  result?: unknown
-  modelResult?: unknown
-  error?: LooseOptional<string>
-  modelImage?: {
-    data: string
-    mediaType: string
-  }
-  modelContent?: ToolResultModelContentPart[]
-}
-
-interface AgentTurnToolExecutor {
-  collectAll(): Promise<AgentTurnToolResult[]>
-  getTerminalError(): unknown
-}
-
-export type AssistantContentPart =
-  | { type: 'text'; text: string; replayable?: boolean }
-  | { type: 'reasoning'; text: string }
-  | {
-      type: 'tool-call'
-      toolCallId: string
-      toolName: string
-      input: Record<string, unknown>
-    }
-
-type AssistantModelContentPart =
-  | { type: 'text'; text: string }
-  | { type: 'tool-call'; toolCallId: string; toolName: string; input: Record<string, unknown> }
-
-type AssistantRawContentPart =
-  | { type: 'text'; text: string }
-  | { type: 'reasoning'; text: string }
-  | { type: 'tool-call'; toolCallId: string; toolName: string; input: Record<string, unknown> }
 
 class ToolResults {
   public serializeForModel(result: unknown, toolInput?: unknown): string {
@@ -202,5 +165,4 @@ class TurnHistory {
 }
 
 export { agentToolResultHelper, ToolResults, TurnHistory }
-export type { AgentTurnToolExecutor, AgentTurnToolResult }
 export { ToolResults as AgentToolResultHelper, TurnHistory as AgentTurnHistoryHelper }

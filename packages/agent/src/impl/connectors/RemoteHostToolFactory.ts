@@ -1,44 +1,7 @@
-import type { RemoteNodeToolDescriptor } from '@velaros-ai/kernel/contracts/protocol'
 import { RemoteNodeClientError } from '@velaros-ai/kernel/remote/client'
 
-import type { ToolContractRuntimeSpec } from '../../types/tool-contract'
+import type { RemoteHostTool, RemoteHostToolContext, RemoteHostToolInput } from '../../types/connectors.js'
 import { convertMcpInputSchema } from '../../utils/connectors/mcp-tool-translation'
-import type { ApprovalPort } from '../tools/DefaultDenyApprovalPort'
-
-/**
- * 本包用到的最小工具上下文。
- *
- * 只声明真正读到的两格:审批端口与中止信号。宿主的完整 ToolContext 比这宽得多,但把它整个
- * 拉进来等于让本包认识宿主——逆变兼容让窄上下文在宿主注册面上装配无摩擦。
- */
-export interface RemoteHostToolContext {
-  readonly abortSignal: AbortSignal
-  readonly approval: ApprovalPort
-}
-
-/** 与宿主工具形状同构;宿主注册面按结构消费,不需要认识本包。 */
-export type RemoteHostTool = ToolContractRuntimeSpec<
-  Record<string, unknown>,
-  RemoteHostToolContext
->
-
-/** 一次远端调用的最小执行面；由 RemoteHostService 绑定到具体节点的 client。 */
-export interface RemoteHostToolInvoker {
-  invoke(
-    descriptor: RemoteNodeToolDescriptor,
-    input: Record<string, unknown>,
-    signal: LooseOptional<AbortSignal>,
-  ): Promise<unknown>
-}
-
-export interface RemoteHostToolInput {
-  readonly canonicalName: string
-  readonly hostLabel: string
-  /** 已由装配层收窄过的类别归属；无类别的描述符在投影时就被拒了，不会走到这里。 */
-  readonly categoryId: string
-  readonly descriptor: RemoteNodeToolDescriptor
-  readonly invoker: RemoteHostToolInvoker
-}
 
 /**
  * 把节点广播的一条工具描述翻成标准 VelaTool。

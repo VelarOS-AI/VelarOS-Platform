@@ -1,21 +1,8 @@
 import { isFiniteNumber,isTrue } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import type { StreamDiagnostics } from '../../types/stream'
+import type { EmptyAssistantStreamErrorInput,EmptyStreamContextPressure, StreamDiagnostics } from '../../types/loop.js'
 
-export interface EmptyStreamContextPressure {
-  percent: number
-  usableContextWindow: number
-}
-
-export interface EmptyAssistantStreamErrorInput {
-  diagnostics: StreamDiagnostics
-  contextPressure?: EmptyStreamContextPressure
-  fallbackText?: string
-  requestFingerprint?: unknown
-  source: 'stream' | 'query'
-  turn: Nullable<number>
-}
 
 function isReasoningOnlyEmptyStream(diagnostics: StreamDiagnostics): boolean {
   if (diagnostics.textDeltaChars > 0) return false

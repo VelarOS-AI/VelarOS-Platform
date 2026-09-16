@@ -1,16 +1,7 @@
 import { toNullable } from '@velaros-ai/core'
 
-import type { AgentRoleDefinition, ResolveAgentRoleOptions } from '../../types/role-types'
-import type { AgentRoleId, WorkflowType } from '../../types/system'
-
-interface RoutedAgentRoleResult {
-  /** 选中的角色定义。 */
-  role: AgentRoleDefinition
-  /** 选择原因，写入调试信息。 */
-  routeNote: string
-  /** 角色主 workflow。 */
-  workflowType: WorkflowType
-}
+import type { AgentRoleId } from '../../types/agent.js'
+import type { AgentRoleDefinition, ResolveAgentRoleOptions, RoutedAgentRoleResult } from '../../types/runner.js'
 
 /**
  * 解析子 Agent 锁定角色（B4/D5 死枝清除后的唯一路由形态）。
@@ -39,4 +30,3 @@ function resolveLockedAgentRole(
 }
 
 export { resolveLockedAgentRole }
-export type { RoutedAgentRoleResult }

@@ -1,12 +1,8 @@
 import { logRuntime } from '@velaros-ai/core/logger'
 
-import type { AgentRoleDefinition } from '../../types/role-types'
-import type { ToolCategoryId } from '../../types/tool'
+import type { ToolCategoryId } from '../../types/agent.js'
+import type { AgentRoleDefinition, AgentRoleToolCategoryResolver } from '../../types/runner.js'
 import { compareStableStrings } from '../../utils/residency/determinism'
-
-interface AgentRoleToolCategoryResolver {
-  getToolCategoryId(toolName: string): ToolCategoryId
-}
 
 /** 角色策略：按宿主作用域和工具分类计算角色可用能力。 */
 class AgentRolePolicy {
@@ -65,4 +61,3 @@ class AgentRolePolicy {
 }
 
 export { AgentRolePolicy }
-export type { AgentRoleToolCategoryResolver }

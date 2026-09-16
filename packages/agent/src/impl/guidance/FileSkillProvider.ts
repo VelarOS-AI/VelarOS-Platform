@@ -1,9 +1,7 @@
-import type { AgentRoleId } from '../../types/system'
-import {
-  type AgentSkillDefinition,
-  type AgentSkillProvider,
-  createSkillDefinition,
-} from '../../utils/guidance/agent-skill-provider'
+import type { AgentSkillProvider } from '../../contract/requires.js'
+import type { AgentRoleId } from '../../types/agent.js'
+import type { AgentSkillDefinition } from '../../types/guidance.js'
+import { createSkillDefinition } from '../../utils/guidance/agent-skill-provider'
 
 import type { SkillFileStore } from './SkillFileStore'
 

@@ -16,175 +16,16 @@ import { isEmpty, isNotNull, isPresent, isString, toNullable } from '@velaros-ai
 import { logRuntime } from '@velaros-ai/core/logger'
 
 import type { ContextResidencyLedger } from '../../impl/residency/ContextResidencyLedger'
-import type { ContextMigrationCause } from '../../impl/residency/InMemoryContextMigrationEventSink'
+import type { AppliedDistillOutcome, ContextGovernanceConfig, ContextMigrationCause, ContextProjectionBudget, ContextProjectionMeasurement, ContextRecord, ContextResidency, EpochCandidate, EpochCandidateTier, GovernanceEpochReport, GovernanceEpochSkipReason, RunGovernanceEpochInput } from '../../types/residency.js'
 
 import { hasExcerptRenderMaterial } from './admission'
 import { anchorDensityPerKiloChar } from './anchors'
-import type { ContextRecord, ContextResidency } from './context-record'
 import { estimateResidencyTokens } from './context-record'
-import {
-  type ContextDistillGateSignals,
-  type ContextDistillProduct,
-  type ContextDistillSkipReason,
-  type ContextDistillTotals,
-  createEmptyDistillTotals,
-  isContextSummaryText,
-} from './distill'
-import type { ContextDistillInstrument, ContextGovernanceConfig } from './governance-config'
-import type { GovernanceWindowDerivation } from './governance-window'
-import {
-  type ContextProjectionBudget,
-  type ContextProjectionMeasurement,
-  measureLedgerProjection,
-  residentChars,
-} from './projection'
+import { createEmptyDistillTotals, isContextSummaryText } from './distill'
+import { measureLedgerProjection, residentChars } from './projection'
 import { buildContextSkeleton, MaxContextSummaryMembers } from './skeleton'
 
 const log = logRuntime.tag('GovernanceEpoch')
-
-/** epoch 未执行的原因。 */
-export type GovernanceEpochSkipReason =
-  /** 占用未到触发水位，且模型也没请求。 */
-  | 'below-trigger'
-  /** 反空转：预计节省低于 `minEpochSavingPercent`。 */
-  | 'insufficient-saving'
-  /** 无可降级候选（全在尾保护窗口 / 全是治理类 / 已降到底）。 */
-  | 'no-candidates'
-
-/**
- * epoch 报告里的 I2 分账。
- *
- * 分成"本 epoch 落地了什么"（epoch 纯函数填）与"本 epoch 规划了什么 + 会话累计"（会话填）两半：
- * 前者是账本事实，后者要问运行态。B3 电池两半都要读——接受率与拒收原因是 RQ3 的因变量。
- */
-export interface GovernanceEpochDistillReport {
-  mode: ContextDistillInstrument
-  /** 本 epoch 应用的产物条数。 */
-  appliedProducts: number
-  /** 应用产物的器械分布：`distill` = 模型产物过验证，`skeleton` = 拒收后的规则回落。 */
-  appliedByInstrument: { distill: number; skeleton: number }
-  /** 跨代作废（账本重建后 id 已失效）而丢弃的产物条数。 */
-  staleProducts: number
-  /** 本 epoch 之后是否规划了新的蒸馏（会话填）。 */
-  planned: boolean
-  /** 未规划的原因（会话填）。 */
-  skipReason: Nullable<ContextDistillSkipReason>
-  /** adaptive 三判据取值（会话填；非 adaptive 档恒 passed）。 */
-  gate: Nullable<ContextDistillGateSignals>
-  /** 会话累计计数（会话填）。 */
-  totals: ContextDistillTotals
-}
-
-/**
- * 谁请求了这次 epoch。
- *
- * 当前运行时区分容量预判与供应方溢出恢复；旧来源值保留用于解析已有报告和低层回放。
- */
-export type GovernanceEpochSource =
-  /** 占用越过 `epochTriggerPercent`。 */
-  | 'watermark'
-  /** 完整请求超过可用输入容量。 */
-  | 'capacity'
-  /** 历史兼容来源：已有模型治理请求报告。 */
-  | 'model-tool'
-  /** 历史兼容来源：已有宿主请求报告。 */
-  | 'host-request'
-  /** 缺页降级阶梯的 `govern-epoch` 级。 */
-  | 'overflow-recovery'
-
-/** 每次 epoch 的完整账（P8 测量原生：直接进 scoreboard，也是离线重放的输入）。 */
-export interface GovernanceEpochReport {
-  epoch: number
-  /** 是否真正应用了迁移。 */
-  applied: boolean
-  skipReason: Nullable<GovernanceEpochSkipReason>
-  /** 当前容量触发或内部强制恢复；watermark/model-request 字面量兼容已有报告。 */
-  trigger: Nullable<'watermark' | 'capacity' | 'model-request'>
-  /**
-   * 请求来源（比 `trigger` 细一格）。未触发的轮次也照记——"谁问了但没开"同样是重放输入。
-   */
-  source: GovernanceEpochSource
-  budgetTokens: number
-  beforeTokens: number
-  afterTokens: number
-  savedTokens: number
-  /** 相对 epoch 前占用的节省率（百分比，一位小数）。 */
-  savingPercent: number
-  beforePercent: number
-  afterPercent: number
-  /** 是否达到 `epochTargetPercent`。 */
-  reachedTarget: boolean
-  migrationCount: number
-  /** 器械分布：各档实际迁移了几条记录。 */
-  byInstrument: Record<'evict' | 'skeleton' | 'distill', number>
-  /** I2 分账。 */
-  distill: GovernanceEpochDistillReport
-  /**
-   * 本次记账用的字符/token 密度。
-   *
-   * 同一本账本用不同密度跑出来的 before/after/savingPercent 完全不同；报告里读不出量纲，离线重放
-   * 就无法复现，扫参时也分不清"阈值改了"还是"量纲变了"（审计 V9/U11 的记账落点）。
-   */
-  charsPerToken: number
-  /**
-   * 本次 G 的推导（送核门口径 → 固定开销 → 余量 → G）。
-   *
-   * `budgetTokens` 只答"分母是多少"，这里答"分母凭什么是这个数"：离线重放与扫参要靠它把
-   * 「阈值动了」和「送核门余量动了」分开。调用方没给推导（纯 epoch 单测）时为 null。
-   */
-  window: Nullable<GovernanceWindowDerivation>
-  /** 本次 epoch 所在的账本代数：账本一重建就换代，跨代报告不可比（审计 U34）。 */
-  ledgerGeneration: number
-  durationMs: number
-  at: number
-}
-
-export interface RunGovernanceEpochInput {
-  ledger: ContextResidencyLedger
-  config: ContextGovernanceConfig
-  /** 治理窗口 G（token）：由 `resolveGovernanceWindow` 从送核门口径导出。 */
-  budgetTokens: number
-  /** G 的推导（记账用，原样进报告）；缺省时报告里为 null。 */
-  window?: LooseOptional<GovernanceWindowDerivation>
-  /** 本次 epoch 号（从 1 起，由会话维护）。 */
-  epoch: number
-  /** 时刻（迁移事件的 `at`）。epoch 自身不取时钟。 */
-  at: number
-  /** 兼容原参数名；内部溢出恢复用它绕过容量预判，低层回放也可显式提供。 */
-  modelRequested?: LooseOptional<boolean>
-  /** 完整请求容量结论优先于低层历史水位；缺席时维持回放接口的原参数语义。 */
-  capacityExceeded?: LooseOptional<boolean>
-  /** 请求来源（记账用；缺省按 `modelRequested` 推断）。 */
-  source?: LooseOptional<GovernanceEpochSource>
-  /** 消息字符/token 的本轮实测密度；缺省保持历史上的 4 字符/token。 */
-  charsPerToken?: LooseOptional<number>
-  /** 耗时（毫秒）。调用方测量，本函数不取时钟。 */
-  durationMs?: LooseOptional<number>
-  /** 上一个 epoch 之后异步跑完、等本次边界落地的蒸馏产物（B2 起）。 */
-  pendingDistills?: LooseOptional<readonly ContextDistillProduct[]>
-  /** 当前账本代数：与产物代数不符即作废（重建后 id 会指向另一条消息）。 */
-  ledgerGeneration?: LooseOptional<number>
-}
-
-/** 候选来源档（越靠前越机械、越该先降）。 */
-type EpochCandidateTier =
-  | 'superseded'
-  | 'stale-refetchable'
-  | 'payload-backed'
-  | 'low-density'
-  | 'oversize-excerpt'
-
-interface EpochCandidate {
-  record: ContextRecord
-  residency: ContextResidency
-  tier: EpochCandidateTier
-  /** 准入期已被同工具同目标的新快照取代（迁移因果记 `superseded` 而非 `evict`）。 */
-  superseded: boolean
-  /** 排序分：越小越先降。 */
-  score: number
-  /** 当前驻留态下可省的字符数（降到 EVICTED / SUMMARIZED 的净收益）。 */
-  reclaimableChars: number
-}
 
 /** 跑一次治理 epoch。纯粹由 (账本, 配置, 预算, 待落地产物) 决定 —— 同输入必同输出，可离线重放。 */
 export function runGovernanceEpoch(input: RunGovernanceEpochInput): GovernanceEpochReport {
@@ -351,13 +192,6 @@ export function runGovernanceEpoch(input: RunGovernanceEpochInput): GovernanceEp
     input.charsPerToken
   )
   return buildReport(input, budgetTokens, before, after, trigger, null, byInstrument, distillOutcome)
-}
-
-interface AppliedDistillOutcome {
-  appliedProducts: number
-  appliedByInstrument: { distill: number; skeleton: number }
-  archivedSummaries: number
-  staleProducts: number
 }
 
 /**

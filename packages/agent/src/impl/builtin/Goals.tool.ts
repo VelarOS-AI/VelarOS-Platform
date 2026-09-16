@@ -3,18 +3,9 @@ import { z } from 'zod'
 import { isPresent, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
+import type { GoalConstraint, GoalStep } from '../../types/builtin.js'
 import { defineVelaTool } from '../../utils/builtin/define-agent-tool'
-import {
-  assertGoalCanComplete,
-  buildGoalLifecycleUpsertInput,
-  buildGoalStateUpsertInput,
-  buildGoalUpsertInput,
-  completeGoalStep,
-  findCurrentGoalArtifact,
-  type GoalConstraint,
-  type GoalStep,
-  toGoalSnapshot,
-} from '../../utils/builtin/goals'
+import { assertGoalCanComplete, buildGoalLifecycleUpsertInput, buildGoalStateUpsertInput, buildGoalUpsertInput, completeGoalStep, findCurrentGoalArtifact, toGoalSnapshot } from '../../utils/builtin/goals'
 import { planStatusSchema } from '../../utils/builtin/plans'
 import { describeStepRefsForModel } from '../../utils/builtin/step-refs'
 import {

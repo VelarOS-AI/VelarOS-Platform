@@ -21,18 +21,13 @@ import { open, readFile } from 'node:fs/promises'
 import { isEmpty, isNull } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
+import type { JsonlParseResult } from '../../types/ledgers.js'
+
 /** JSONL 行分隔符的字节值(`\n` = 0x0A)；用于字节级偏移计算(canonical JSON 内部的换行已转义成 `\\n`，不会撞到)。 */
 const LINE_FEED_BYTE = 0x0a
 
 /** JSONL 行分隔符：写入恒以此结尾，便于崩溃时区分「完整行」与「半截尾行」。 */
 export const JSONL_LINE_SEPARATOR = '\n'
-
-/** 逐行解析结果：解析出的记录序列 + 是否检测到并跳过了半截尾行。 */
-export interface JsonlParseResult<T> {
-  records: T[]
-  /** 调用方据此决定是否 `truncateJsonlToLineCount` 回写修复。 */
-  truncatedTail: boolean
-}
 
 /**
  * 尾行容忍的 JSONL 逐行解析（三个账本的**单源**实现；判据见文件头）。

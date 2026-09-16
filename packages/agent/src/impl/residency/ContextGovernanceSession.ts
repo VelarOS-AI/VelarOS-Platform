@@ -20,34 +20,18 @@ import type { ModelMessage } from 'ai'
 
 import { isEmpty, isNotNull, isNull, isPresent, toNullable } from '@velaros-ai/core'
 
-import type { ContextRecordClassifier } from '../../utils/residency/admission'
-import type { ContextRecord } from '../../utils/residency/context-record'
+import type { ContextMigrationEventSink } from '../../contract/requires.js'
+import type { ContextDistiller, ContextGovernanceConfig, ContextGovernanceConfigInput, ContextGovernanceSyncInput, ContextGovernanceSyncResult, ContextHandoffSignal, ContextRecord, ContextRecordClassifier, GovernanceEpochReport, GovernanceEpochSource,GovernanceWindowDerivation, GovernanceWindowInput } from '../../types/residency.js'
 import { stableFingerprint } from '../../utils/residency/determinism'
-import { type ContextDistiller, planContextDistillation } from '../../utils/residency/distill'
-import {
-  type ContextGovernanceConfig,
-  type ContextGovernanceConfigInput,
-  resolveContextGovernanceConfig,
-} from '../../utils/residency/governance-config'
-import {
-  type GovernanceEpochReport,
-  type GovernanceEpochSource,
-  measureProjectedTokens,
-  resolveProjectionBudget,
-  runGovernanceEpoch,
-  shouldOpenGovernanceEpoch,
-} from '../../utils/residency/governance-epoch'
-import {
-  type GovernanceWindowDerivation,
-  type GovernanceWindowInput,
-  resolveGovernanceWindow,
-} from '../../utils/residency/governance-window'
+import { planContextDistillation } from '../../utils/residency/distill'
+import { resolveContextGovernanceConfig } from '../../utils/residency/governance-config'
+import { measureProjectedTokens, resolveProjectionBudget, runGovernanceEpoch, shouldOpenGovernanceEpoch } from '../../utils/residency/governance-epoch'
+import { resolveGovernanceWindow } from '../../utils/residency/governance-window'
 import { planHistoryIngest } from '../../utils/residency/ingest'
 import { measureLedgerProjection } from '../../utils/residency/projection'
 
 import { ContextDistillRunner } from './ContextDistillRunner'
 import { ContextResidencyLedger } from './ContextResidencyLedger'
-import type { ContextMigrationEventSink } from './InMemoryContextMigrationEventSink'
 
 /** @deprecated 兼容旧历史工具身份；当前运行时不将其作为治理入口。 */
 export const ContextEpochRequestToolName = 'context:distill'
@@ -55,17 +39,6 @@ export const ContextEpochRequestToolName = 'context:distill'
 /** 每会话保留的 epoch 报告条数（转交信号只看最近若干次，无限留等于内存泄漏）。 */
 const MaxRetainedEpochReports = 32
 const DefaultMaxTrackedSessions = 128
-
-/** 转交信号（设计 §4）：连续 2 次 epoch 节省率不足且 post-epoch 占用仍高 → 建议开新会话。 */
-export interface ContextHandoffSignal {
-  /** 是否建议布防 handoff 卡。 */
-  armed: boolean
-  /** 最近若干次 epoch 的节省率序列（新→旧）。 */
-  recentSavingPercents: number[]
-  /** 最近一次 epoch 之后的预算占用百分比；从未跑过 epoch 时为 null。 */
-  lastEpochAfterPercent: Nullable<number>
-  reason: Nullable<'low-saving-streak'>
-}
 
 /**
  * 消息 → 指纹的对象身份缓存。
@@ -87,34 +60,6 @@ function cachedStableFingerprint(message: ModelMessage): string {
   const fingerprint = stableFingerprint(message)
   fingerprintByMessage.set(message, fingerprint)
   return fingerprint
-}
-
-export interface ContextGovernanceSyncInput {
-  /** 新摄入消息先全文驻留；不提升已压缩的旧记录。 */
-  deferOversizeExcerpt?: boolean
-  messages: readonly ModelMessage[]
-  at: number
-  /**
-   * 全保真层引用：toolCallId → payloadRef（PayloadStore 已存的原文）。
-   * 准入期把它落进记录，EXCERPT / 墓碑信封的召回引用才能用内容寻址的 payloadRef
-   * 而不是只能退回 toolCallId。
-   */
-  payloadRefsByToolCallId?: LooseOptional<Readonly<Record<string, string>>>
-  /** 超长 user 正文的内容哈希 → 持久 payloadRef。 */
-  userTextPayloadRefsByHash?: LooseOptional<Readonly<Record<string, string>>>
-  /**
-   * 本轮编译期实测的字符/token 密度。
-   *
-   * 摄入期就要拿到它：准入事件的 `tokensDelta` 是账本自己出的账，它按 4 记而治理器按实测记，
-   * 同一本账本就有了两个数（§16.5 挂账「stats() 密度」的同一根）。
-   */
-  charsPerToken?: LooseOptional<number>
-}
-
-export interface ContextGovernanceSyncResult {
-  /** 本次同步是否整本重建了账本（历史前缀分叉）。 */
-  rebuilt: boolean
-  appendedCount: number
 }
 
 export interface ContextGovernanceSessionOptions {

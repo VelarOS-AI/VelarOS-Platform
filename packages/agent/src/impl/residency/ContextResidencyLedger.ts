@@ -16,29 +16,12 @@
 import { isFiniteNumber, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import {
-  admitContextRecord,
-  type ContextAdmissionInput,
-  type ContextRecordClassifier,
-} from '../../utils/residency/admission'
-import {
-  clampResidencyForRecord,
-  type ContextRecord,
-  type ContextResidency,
-  type ContextResidencyVector,
-  DefaultResidencyCharsPerToken,
-  estimateResidencyTokens,
-  isResidencyDowngrade,
-  residencyRank,
-} from '../../utils/residency/context-record'
-import { type ContextGovernanceConfig, DefaultContextGovernanceConfig } from '../../utils/residency/governance-config'
+import type { ContextMigrationEventSink } from '../../contract/requires.js'
+import type { ContextAdmissionInput, ContextGovernanceConfig,ContextLedgerAppendResult, ContextLedgerStats, ContextMigrationCause, ContextMigrationOutcome, ContextRecord, ContextRecordClassifier, ContextResidency, ContextResidencyMigrationEvent, ContextResidencyVector } from '../../types/residency.js'
+import { admitContextRecord } from '../../utils/residency/admission'
+import { clampResidencyForRecord, DefaultResidencyCharsPerToken, estimateResidencyTokens, isResidencyDowngrade, residencyRank } from '../../utils/residency/context-record'
+import { DefaultContextGovernanceConfig } from '../../utils/residency/governance-config'
 import { residentChars } from '../../utils/residency/projection'
-
-import type {
-  ContextMigrationCause,
-  ContextMigrationEventSink,
-  ContextResidencyMigrationEvent,
-} from './InMemoryContextMigrationEventSink'
 
 export interface ContextResidencyLedgerOptions {
   config?: LooseOptional<ContextGovernanceConfig>
@@ -56,44 +39,6 @@ export interface ContextResidencyLedgerOptions {
    * 「dashboard 说占了 3 万 token、epoch 报告说 8 万」这种同一本账两个数（§16.5 挂账）。
    */
   charsPerToken?: LooseOptional<number>
-}
-
-export interface ContextLedgerAppendResult {
-  record: ContextRecord
-  event: ContextResidencyMigrationEvent
-  /** 被本次追加标为 pending-EVICT 的旧记录 id（只标记，逐出归 epoch）。 */
-  supersededIds: string[]
-}
-
-export interface ContextLedgerStats {
-  recordCount: number
-  byResidency: Record<ContextResidency, number>
-  pendingEvictCount: number
-  pinnedCount: number
-  refetchableCount: number
-  totalFaults: number
-  /** 当前轮仍受准入/缺页升温租约保护的记录数。 */
-  warmProtectedCount: number
-  /** 因重复缺页而在当前账本代保持驻留的记录数。 */
-  stickyFaultCount: number
-  /** 当前驻留态下的字符与 token 占用。 */
-  residentChars: number
-  residentTokens: number
-  /** 全部记录以 INLINE 计的字符占用（省下多少的分母）。 */
-  fullChars: number
-  /** 本次统计用的字符/token 密度（读不出量纲的 token 数没法和别处对账）。 */
-  charsPerToken: number
-}
-
-/** 迁移被拒的原因（拒绝不抛异常——治理器可能批量试探，返回诊断更好用）。 */
-export type ContextMigrationRejection = 'no-op' | 'upgrade-not-allowed' | 'pinned-floor'
-
-export interface ContextMigrationOutcome {
-  applied: boolean
-  event: Nullable<ContextResidencyMigrationEvent>
-  /** 因 pinned 地板被夹住时的实际落点。 */
-  residency: ContextResidency
-  rejection: Nullable<ContextMigrationRejection>
 }
 
 export class ContextResidencyLedger {

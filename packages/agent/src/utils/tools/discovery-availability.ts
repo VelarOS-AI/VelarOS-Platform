@@ -1,6 +1,6 @@
-import type { ToolCategoryId, ToolOsState } from '../../types/tool'
 
-import type { ToolCategoryUnavailableReason } from './access-policy'
+import type { ToolCategoryId, ToolOsState } from '../../types/agent.js'
+import type { ToolCategoryUnavailableReason, ToolDiscoveryAvailability, ToolDiscoveryCategoryAvailabilityInput, ToolDiscoveryNextAction, ToolDiscoverySchemaState, ToolDiscoveryToolAvailabilityInput } from '../../types/tools.js'
 
 const ToolDiscoveryAvailabilityValues = [
   'visible',
@@ -8,35 +8,7 @@ const ToolDiscoveryAvailabilityValues = [
   'requires_approval',
   'requires_user_action',
   'unavailable',
-] as const
-
-type ToolDiscoveryAvailability = (typeof ToolDiscoveryAvailabilityValues)[number]
-type ToolDiscoverySchemaState = 'visible' | 'hidden' | 'not_applicable'
-type ToolDiscoveryNextAction =
-  | 'call_tool'
-  | 'describe'
-  | 'replace_page'
-  | 'request_approval'
-  | 'request_user_action'
-  | 'none'
-
-interface ToolDiscoveryCategoryAvailabilityInput {
-  categoryId: ToolCategoryId
-  categoryEnabled: boolean
-  categoryAllowed: boolean
-  categoryAccessAllowed: boolean
-  categoryUnavailableReason: Nullable<ToolCategoryUnavailableReason>
-  pluginBacked: boolean
-  hasRuntimeAvailableTool: boolean
-  requiresApproval: boolean
-}
-
-interface ToolDiscoveryToolAvailabilityInput extends ToolDiscoveryCategoryAvailabilityInput {
-  toolName?: string
-  systemEnabled: boolean
-  visible: boolean
-  runtimeAvailable: boolean
-}
+] as const satisfies readonly ToolDiscoveryAvailability[]
 
 function blockedCategoryAvailability(
   _reason: Nullable<ToolCategoryUnavailableReason>
@@ -121,11 +93,4 @@ export {
   schemaStateForDiscoveryAvailability,
   ToolDiscoveryAvailabilityValues,
   toolOsStateForDiscoveryAvailability,
-}
-export type {
-  ToolDiscoveryAvailability,
-  ToolDiscoveryCategoryAvailabilityInput,
-  ToolDiscoveryNextAction,
-  ToolDiscoverySchemaState,
-  ToolDiscoveryToolAvailabilityInput,
 }

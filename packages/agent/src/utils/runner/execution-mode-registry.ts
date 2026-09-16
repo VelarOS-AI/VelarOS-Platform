@@ -19,7 +19,7 @@
 import { isNotNull, isString, isTrue, toNullable } from '@velaros-ai/core'
 
 import type { ChatPromptFeatureId, ExecutionModeId } from '../../types/agent'
-import type { ExecutionModeDescriptor } from '../../types/execution-mode-descriptor'
+import type { ExecutionModeDescriptor } from '../../types/runner.js'
 
 /**
  * 目标模式（goal）。

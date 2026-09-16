@@ -16,7 +16,7 @@
 
 import { type z } from 'zod'
 
-import type { KernelToolContext as ToolContext } from '../../types/kernel-tool-context'
+import type { KernelToolContext as ToolContext } from '../../types/tool-context.js'
 import {
   mapToolDiscoveryCards,
   pageToolDiscoveryCards,

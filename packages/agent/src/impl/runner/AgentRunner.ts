@@ -4,48 +4,19 @@ import { isEmpty, isTrue, Log, optionalWhen } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
+import type { AgentExecutionConfig, AgentRuntimeCapabilityPorts, AgentSurfaceProfileProvider, RunnerConfigService, RunnerExecutionEnvironmentPort, RunnerSubAgentDispatcher, RunnerToolContextBuilder, RunnerToolRegistry } from '../../contract/requires.js'
 import type { ChatPromptFeatureId } from '../../types/agent'
-import type {
-  AgentRunnerComponents,
-  AgentRunnerDomainServices,
-  AgentRunnerInfrastructure,
-} from '../../types/agent-runner-types'
-import type { AgentSurfaceProfile, AgentSurfaceProfileProvider } from '../../types/agent-surface-profile'
-import { ChatRuntimeEvents } from '../../types/chat-runtime'
-import type {
-  RunnerCancelBackgroundJob,
-  RunnerCodingSessionPolicyBundle,
-  RunnerConfigService,
-  RunnerExecutionEnvironmentPort,
-  RunnerExecutionScope,
-  RunnerReadBackgroundJobOutput,
-  RunnerSubAgentDispatcher,
-  RunnerSubAgentOptions,
-  RunnerToolContext,
-  RunnerToolContextBuilder,
-  RunnerToolRegistry,
-  RunnerWaitBackgroundJobs,
-} from '../../types/runner-host-ports'
-import type { AgentExecutionConfig } from '../../types/runtime-configuration'
-import type { ToolCategoryId } from '../../types/tool'
+import type { ToolCategoryId } from '../../types/agent.js'
+import type { AgentExecutionLimits, SoloAwaitPendingBackgroundJobs } from '../../types/loop.js'
+import type { AgentRunnerComponents, AgentRunnerDomainServices, AgentRunnerInfrastructure, AgentSurfaceProfile, RunnerCancelBackgroundJob, RunnerCodingSessionPolicyBundle, RunnerExecutionScope, RunnerReadBackgroundJobOutput, RunnerSubAgentOptions, RunnerToolContext, RunnerWaitBackgroundJobs, StreamSoloWorkerOptions } from '../../types/runner.js'
 import { findCurrentGoalArtifact, toGoalSnapshot } from '../../utils/builtin/goals'
-import {
-  type AgentRuntimeCapabilityPorts,
-  collectCapabilityContext,
-  resolveCapabilityCategoryDefinitions,
-  resolveCapabilityContextCollectors,
-  resolveCapabilityValidationInterpreters,
-} from '../../utils/capabilities'
+import { collectCapabilityContext, resolveCapabilityCategoryDefinitions, resolveCapabilityContextCollectors, resolveCapabilityValidationInterpreters } from '../../utils/capabilities'
 import { resolveAgentContextPhase } from '../../utils/loop/context-phase'
-import {
-  type AgentExecutionLimits,
-  resolveAgentExecutionLimits,
-} from '../../utils/loop/execution-limits'
+import { resolveAgentExecutionLimits } from '../../utils/loop/execution-limits'
 import { buildRunVerificationSummary } from '../../utils/loop/run-completion'
-import type { SoloAwaitPendingBackgroundJobs } from '../../utils/loop/solo-background-completion-gate'
 import { buildApprovalRegistryKey, resolveSubAgentExecutionKey } from '../../utils/runner/coding-tracking'
 import { hasActiveExecutionGoal, resolveExecutionWallClockDeadlineMs } from '../../utils/runner/goal-lifecycle'
-import type { AgentRuntimeInputPort } from '../../utils/runner/runtime-input-port'
+import { ChatRuntimeEvents } from '../../utils/wire/chat-runtime.js'
 import { forkFileContext } from '../context/FileContextCoordinator'
 import type { QueryLoop } from '../loop/QueryLoop'
 import type { SoloStreamLoop } from '../loop/SoloStreamLoop'
@@ -63,11 +34,6 @@ interface AgentRunnerConfig extends AgentExecutionConfig {
   readBackgroundJobOutput?: RunnerReadBackgroundJobOutput
   waitBackgroundJobs?: RunnerWaitBackgroundJobs
   cancelBackgroundJob?: RunnerCancelBackgroundJob
-}
-
-interface StreamSoloWorkerOptions {
-  consumeGuidance?: () => Nullable<ModelMessage>
-  runtimeInput?: AgentRuntimeInputPort
 }
 
 const passthroughExecutionEnvironment: RunnerExecutionEnvironmentPort = {

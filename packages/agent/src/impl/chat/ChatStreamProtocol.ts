@@ -2,32 +2,9 @@ import type { SerializedError } from '@velaros-ai/core/error'
 import { toOptional } from '@velaros-ai/core/utils/nullish'
 
 import type { AgentEvent } from '../../types/agent'
-import {
-  ALL_STREAM_RUNTIME_STATE_KINDS,
-  STREAM_FAILURE_RUNTIME_STATE_KINDS,
-  type StreamDonePayload,
-  type StreamErrorPayload,
-  type StreamFailureRuntimeStateKind,
-  type StreamStateKind,
-  type StreamStatePayload,
-  TERMINAL_STREAM_RUNTIME_STATE_KINDS,
-  type TerminalStreamRuntimeStateKind,
-} from '../../types/chat-runtime'
-import type {
-  AgentBridgeDispatch,
-  AgentBridgeOutput,
-  StreamObservabilityEntry,
-  TerminalRuntimeExecutionAction,
-} from '../../types/chat-stream'
-import type {
-  ChatStreamEvent,
-  StreamDebugPayload,
-  StreamReasoningPayload,
-  StreamToolCallPayload,
-  StreamToolMetadataPayload,
-  StreamToolProgressPayload,
-  StreamToolResultPayload,
-} from '../../types/protocol'
+import type { ChatStreamEvent, StreamDebugPayload, StreamDonePayload, StreamErrorPayload, StreamFailureRuntimeStateKind, StreamReasoningPayload, StreamStateKind, StreamStatePayload, StreamToolCallPayload, StreamToolMetadataPayload, StreamToolProgressPayload, StreamToolResultPayload,TerminalStreamRuntimeStateKind } from '../../types/agent.js'
+import type { AgentBridgeDispatch, AgentBridgeOutput, StreamObservabilityEntry, TerminalRuntimeExecutionAction } from '../../types/chat.js'
+import { ALL_STREAM_RUNTIME_STATE_KINDS, STREAM_FAILURE_RUNTIME_STATE_KINDS, TERMINAL_STREAM_RUNTIME_STATE_KINDS } from '../../utils/wire/chat-runtime.js'
 
 /**
  * Chat stream 协议：终态判定、runtime 物化、AgentEvent → IPC 翻译。

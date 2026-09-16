@@ -12,6 +12,8 @@
  *
  * 依赖纪律：不 import v1 压缩模块（B1 判死），正则在本文件单源。
  */
+import type { ContextAnchor,ContextAnchorKind } from '../../types/residency.js'
+
 import { compareStableStrings } from './determinism'
 
 /** 单条记录保留的锚点上限：超过即噪声，且锚点本身也占预算。 */
@@ -26,14 +28,6 @@ export const MaxContextAnchors = 24
  */
 const MaxAnchorScanChars = 128_000
 
-/**
- * 锚点类别（抽取顺序即信息密度降序）。
- *
- * 类别在准入期就已知（是哪条正则抽出来的），过去却在记录上退化成无类型字符串，骨架只好用一条更
- * 弱的正则二次分类——`0.24.0` 因此被当成文件路径塞进「文件」栏，把真实路径全顶掉（审计 V13）。
- */
-export type ContextAnchorKind = 'path' | 'command' | 'identifier' | 'number'
-
 /** 类别优先序：截断与分栏一律按它，不按 UTF-16 码元序（数字恒排在字母前是纯偶然）。 */
 export const ContextAnchorKindOrder: readonly ContextAnchorKind[] = [
   'path',
@@ -41,12 +35,6 @@ export const ContextAnchorKindOrder: readonly ContextAnchorKind[] = [
   'identifier',
   'number',
 ]
-
-export interface ContextAnchor {
-  /** 归一后的锚点正文（比对与去重都在归一形上做）。 */
-  text: string
-  kind: ContextAnchorKind
-}
 
 /** 类别位次（越小越该保住）。 */
 export function contextAnchorKindRank(kind: ContextAnchorKind): number {

@@ -2,6 +2,7 @@ import type { ModelMessage } from 'ai'
 
 import { isArray, isFalse, isPlainObject, isString, Log, optionalWhen } from '@velaros-ai/core'
 
+import type { RestoredReusableInputs } from '../../types/tools.js'
 import { isContextRefEnvelope } from '../context/context-ref-envelope'
 
 const RecoveryToolNames = new Set(['project:edit', 'project:file', 'project:change'])
@@ -101,17 +102,6 @@ function isReusableFailure(receipt: Record<string, unknown>, toolCallId: string)
 
 function hasHistoryOmissions(input: unknown): boolean {
   return isPlainObject(input) && (Object.hasOwn(input, '__historyInputOmissions') || Object.hasOwn(input, '__historyInputPreview'))
-}
-
-/**
- * 紧接失败之后的那一次决策要看清被复用的原参数：历史视图会省略大段正文，模型只能先召回才能判断该改
- * 范围还是改正文。只还原最近一次决策里、确证未写入且可复用的修改调用；越过下一次决策边界后恢复省略形态，
- * 持久历史不变。原参数取自执行器保存的 attempt 记录，读取失败时保持原样。
- */
-export interface RestoredReusableInputs {
-  messages: ModelMessage[]
-  /** 本次还原了完整参数的调用；编译期结构清洗据此不再压缩它们。 */
-  restoredToolCallIds: ReadonlySet<string>
 }
 
 export async function restoreReusableInputsForNextDecision(

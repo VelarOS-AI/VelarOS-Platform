@@ -12,11 +12,9 @@ import type { ModelMessage } from 'ai'
 
 import { isEmpty } from '@velaros-ai/core'
 
-import type { ContextLedgerStats } from '../../impl/residency/ContextResidencyLedger'
+import type { ContextDashboardInput, ContextResidency, DashboardHolding } from '../../types/residency.js'
 
-import type { ContextRecord, ContextResidency } from './context-record'
 import { compareStableStrings } from './determinism'
-import type { GovernanceEpochReport } from './governance-epoch'
 import { residentChars, resolveEffectiveResidency } from './projection'
 
 /** 最大持仓榜的条数。 */
@@ -26,27 +24,6 @@ const LatestHoldingCount = 3
 const LatestParallelToolPartCount = 4
 
 const DashboardMarker = '[context-dashboard]'
-
-export interface ContextDashboardInput {
-  epoch: number
-  stats: ContextLedgerStats
-  records: readonly ContextRecord[]
-  residency: ReadonlyMap<string, ContextResidency>
-  projectedTokens: number
-  budgetTokens: number
-  /**
-   * 当前账本最近一次治理尝试。
-   *
-   * `epoch` 只在真正迁移后递增；模型请求被消费但因无候选/收益不足而跳过时仍是 0。把尝试结果
-   * 单列，模型才能区分“仍在排队”和“已经执行但无需压缩”。
-   */
-  lastEpochAttempt?: LooseOptional<
-    Pick<
-      GovernanceEpochReport,
-      'source' | 'applied' | 'skipReason' | 'migrationCount' | 'byInstrument'
-    >
-  >
-}
 
 /** 渲染 dashboard 尾块；无记录时返回 null（空账本不值得占一条消息）。 */
 export function buildContextDashboardMessage(
@@ -104,14 +81,6 @@ function renderLastEpochAttempt(
 /** dashboard 尾块的识别谓词（转录/调试面共用，避免各写各的前缀嗅探）。 */
 export function isContextDashboardText(value: string): boolean {
   return value.trimStart().startsWith(DashboardMarker)
-}
-
-interface DashboardHolding {
-  id: string
-  label: string
-  residency: ContextResidency
-  chars: number
-  toolParts: ReadonlyArray<{ toolCallId: string; toolName: string }>
 }
 
 /**

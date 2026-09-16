@@ -1,6 +1,7 @@
-import type { AgentRunPlanLedgerEntry, AgentRunPlanLedgerSource } from '../../types/agent-run-plan'
 
 /** control-plane ledger 条目工厂；维护递增 id，保证条目稳定可追踪。 */
+import type { AgentRunPlanLedgerEntry, AgentRunPlanLedgerSource } from '../../types/loop.js'
+
 class AgentRunPlanLedgerFactory {
   private nextEntryId = 0
 

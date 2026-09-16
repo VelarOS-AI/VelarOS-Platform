@@ -1,14 +1,4 @@
-export type {
-  DescribeToolSchemaRequest,
-  DescribeToolSchemaResponse,
-  ExecuteToolRequest,
-  ExecuteToolResponse,
-  HostProjection,
-  ResolveCatalogRequest,
-  RunTurnOptions,
-  RunTurnRequest,
-  RunTurnResponse,
-} from '../../utils/wire/execution'
+export type { DescribeToolSchemaRequest, DescribeToolSchemaResponse, ExecuteToolRequest, ExecuteToolResponse, HostProjection, ResolveCatalogRequest, RunTurnOptions, RunTurnRequest, RunTurnResponse } from '../../types/agent.js'
 export {
   DescribeToolSchemaRequestSchema,
   DescribeToolSchemaResponseSchema,

@@ -14,11 +14,10 @@ import { z } from 'zod'
 
 import { isBoolean, optionalWhen } from '@velaros-ai/core'
 
-import type { McpClientConnection, McpToolDescriptor } from '../../impl/connectors/McpClientConnection'
-import type { KernelToolContext } from '../../types/kernel-tool-context'
-import type { ToolApprovalRiskLevel } from '../../types/system'
-import type { ToolCapabilitySchema, ToolCategoryId, ToolRole } from '../../types/tool'
-import type { VelaTool } from '../builtin/define-agent-tool'
+import type { ToolApprovalRiskLevel,ToolCapabilitySchema, ToolCategoryId, ToolRole } from '../../types/agent.js'
+import type { VelaTool } from '../../types/builtin.js'
+import type { McpAutoApprovePolicy, McpToolDescriptor, TranslatedMcpTool, TranslateMcpToolInput } from '../../types/connectors.js'
+import type { KernelToolContext } from '../../types/tool-context.js'
 import { schemaToInputSchema } from '../toolkit/schema-bundle'
 import { createApprovalOperationKey } from '../toolkit/task-approval'
 
@@ -31,27 +30,6 @@ import { translateMcpCallResult } from './mcp-call-result'
  * 宿主可用 {@link TranslateMcpToolInput.categoryId} 显式覆盖成自己的分类。
  */
 const DefaultMcpToolCategoryId: ToolCategoryId = 'agent-control'
-
-/** config 的自动放行策略：true=全部免确认；string[]=仅这些（原始）工具名免确认。 */
-export type McpAutoApprovePolicy = boolean | readonly string[]
-
-/** 翻译产物：注册进 ToolRegistry 所需的三元组 + 原始工具名（用于 autoApprove 匹配）。 */
-export interface TranslatedMcpTool {
-  /** MCP 工具的 canonical id。 */
-  name: string
-  /** MCP server 上的原始工具名。 */
-  originalName: string
-  categoryId: ToolCategoryId
-  tool: VelaTool
-}
-
-export interface TranslateMcpToolInput {
-  connection: Pick<McpClientConnection, 'callTool'>
-  serverName: string
-  descriptor: McpToolDescriptor
-  autoApprove: McpAutoApprovePolicy
-  categoryId?: ToolCategoryId
-}
 
 function stableExternalNameHash(value: string): string {
   return createHash('sha256').update(value).digest('hex').slice(0, 8)

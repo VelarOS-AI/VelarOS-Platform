@@ -23,8 +23,9 @@ import { type z } from 'zod'
 
 import { isEmpty, optionalWhenLazy } from '@velaros-ai/core'
 
-import type { KernelToolContext as ToolContext } from '../../types/kernel-tool-context'
-import type { AgentSkillDescriptor } from '../../types/skill'
+import type { AgentSkillDescriptor } from '../../types/agent.js'
+import type { SkillReadPage } from '../../types/builtin.js'
+import type { KernelToolContext as ToolContext } from '../../types/tool-context.js'
 
 import {
   confirmAutoLoadedSkillPages,
@@ -32,22 +33,6 @@ import {
   SkillPagePrefix,
 } from './skill-load-confirmation'
 import { type toolSpaceReadSchema } from './tool-space-schemas'
-
-interface SkillReadPage {
-  id: string
-  kind: 'skill'
-  name: string
-  label: string
-  description: string
-  sourceKind: AgentSkillDescriptor['sourceKind']
-  sourceId: string
-  roleIds: AgentSkillDescriptor['roleIds']
-  priority: number
-  markdown: string
-  fullDetails?: {
-    readGuidance: string[]
-  }
-}
 
 function buildSkillReadPage(
   descriptor: AgentSkillDescriptor,

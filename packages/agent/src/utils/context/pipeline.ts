@@ -7,40 +7,10 @@
  */
 import type { ModelMessage } from 'ai'
 
-import type { ProviderHistoryRewriteSignal } from '../../impl/context/ProviderRequestCompiler'
+import type { ProviderHistoryRewriteSignal, ProviderRequestScratch,ToolReferenceScan } from '../../types/context.js'
 
 import { shortHash } from './content-hash'
-import { scanProviderMessages, type ToolReferenceScan } from './message-scan'
-
-/** 管线内流转的请求草稿：当前 provider 消息序列。 */
-export interface ProviderRequestDraft {
-  messages: ModelMessage[]
-}
-
-/** stage 输出：改写后的草稿消息 + 本 stage 贡献的历史改写签名。 */
-export interface ProviderRequestStageOutput {
-  messages: ModelMessage[]
-  rewriteSignals: readonly ProviderHistoryRewriteSignal[]
-}
-
-/**
- * 跨 stage 共享上下文。每次编译单开一份（编译 pass 局部），承载会被多 stage 复用的
- * 中间扫描结果，避免各 stage 各扫一遍。
- */
-export interface ProviderRequestScratch {
-  /** provider 消息单次扫描结果，懒填充一次后复用（出核地板指纹与诊断共享）。 */
-  toolReferenceScan: Nullable<ToolReferenceScan>
-}
-
-/**
- * stage 统一契约类型：治理管线的可插拔 seam。四个消息改写 stage
- * （tool-result-rewrite / history-sanitize / attention / retained-context）语义贴合此形态；
- * compaction 的回收阶梯是 pass 间驱动、budget 是出核前的终态装配，签名各自贴合数据流。
- */
-export type ProviderRequestStage = (
-  draft: ProviderRequestDraft,
-  scratch: ProviderRequestScratch
-) => ProviderRequestStageOutput
+import { scanProviderMessages } from './message-scan'
 
 /** 新建一份编译 pass 局部 scratch。 */
 export function createProviderRequestScratch(): ProviderRequestScratch {

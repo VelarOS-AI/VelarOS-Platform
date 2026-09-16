@@ -15,47 +15,7 @@
 //  - `cancel` 把适配器可能返回的 void 归一成 `{ aborted: false }`——缺席回落到「没中止成功」
 //    是安全方向（§0.1 之三），反过来谎报中止成功会让上层错误地清理运行态。
 //
-import type { KernelRuntimeStatus } from '../../utils/execution/policy'
-import type { KernelInputDelivery } from '../execution/KernelSessionRunCoordinator'
-
-export interface KernelControllerTarget {
-  sessionId: string
-  seq?: number
-}
-
-export interface KernelControllerSendInput {
-  id: string
-  sessionId: string
-  role?: 'user' | 'system' | 'assistant' | 'tool'
-  content: string
-  delivery?: KernelInputDelivery
-  metadata?: Record<string, unknown>
-}
-
-export interface KernelInputReceipt {
-  inputId: string
-  sessionId: string
-  seq: number
-}
-
-export interface KernelCancelResult {
-  aborted: boolean
-  /** 已接收但尚未执行的用户消息；宿主按这些身份保留为暂停输入。 */
-  retainedInputIds?: string[]
-}
-
-export interface KernelControllerAnswerInput extends KernelControllerTarget {
-  answer: string
-}
-
-// 审批载荷对内核控制器是不透明的：默认 unknown，宿主适配器用类型参数声明正式类型，
-// 从而消除派发点的强转。
-export interface KernelControllerApprovalInput<TApproval = unknown> extends KernelControllerTarget {
-  confirmationId?: string
-  approved: boolean
-  rejectionMessage?: LooseOptional<string>
-  approvalPayload?: LooseOptional<TApproval>
-}
+import type { KernelCancelResult, KernelControllerAnswerInput, KernelControllerApprovalInput, KernelControllerSendInput, KernelControllerTarget, KernelInputReceipt, KernelRuntimeStatus } from '../../types/execution.js'
 
 export interface KernelSessionControllerAdapter<TApproval = unknown> {
   admit(input: KernelControllerSendInput): Promise<KernelInputReceipt>

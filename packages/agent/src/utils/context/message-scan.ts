@@ -9,17 +9,10 @@ import { isArray, isObject, isPlainObject, isString,isTrue } from '@velaros-ai/c
 import { logRuntime } from '@velaros-ai/core/logger'
 import { isRecord, readString } from '@velaros-ai/core/utils/unknownJsonRecord'
 
+import type { ToolReferenceScan } from '../../types/context.js'
 import { compareStableStrings } from '../residency/determinism'
 
 const log = logRuntime.tag('ProviderRequestMessageScan')
-
-/** 单次扫描的中间结果：工具引用面 + 折叠句柄计数，作为共享 scratch 的扫描位。 */
-export interface ToolReferenceScan {
-  toolNames: Set<string>
-  toolCallIds: Set<string>
-  toolResultIds: Set<string>
-  contextRefCount: number
-}
 
 /** 累加非负数（负值截 0），指纹与预算的 toolSchemaChars 汇总共用。 */
 export function sumPositive(values: Iterable<number>): number {

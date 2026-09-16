@@ -2,12 +2,8 @@ import type { TextStreamPart, ToolSet } from 'ai'
 
 import { isArray, isEmpty, isFiniteNumber,isPlainObject, isPresent, isString, toNullable } from '@velaros-ai/core'
 
-import type {
-  StreamDiagnostics,
-  StreamDiagnosticsSummary,
-  StreamFinishReasonDiagnostic,
-  StreamRawChunkDiagnostic,
-} from '../../types/stream'
+import type { StreamActivityDiagnostics, StreamDiagnostics, StreamDiagnosticsSummary, StreamFinishDiagnostics, StreamFinishReasonDiagnostic, StreamRawChunkDiagnostic, StreamUsageDiagnostics } from '../../types/loop.js'
+
 
 const ProviderCacheWriteInputTokenPaths = [
   ['providerMetadata', 'anthropic', 'cacheCreationInputTokens'],
@@ -49,32 +45,6 @@ const ProviderFinishReasonAliases: Record<string, string> = {
 // 不在 Silent/Abnormal 两表内的未知 finish 原因不再静默丢弃(曾致截断事故完全无痕、事后不可诊断)。
 const UnknownProviderFinishReasonMessage =
   'Provider reported an unrecognized finish reason; the response may have ended abnormally.'
-
-type StreamActivityDiagnostics = Pick<
-  StreamDiagnostics,
-  | 'totalChunks'
-  | 'partTypes'
-  | 'textDeltaChars'
-  | 'reasoningDeltaChars'
-  | 'rawVisibleChars'
-  | 'rawReasoningChars'
-  | 'toolCallCount'
->
-
-type StreamFinishDiagnostics = Pick<StreamDiagnostics, 'finishReasons' | 'rawFinishReasons'>
-
-type StreamUsageDiagnostics = Pick<
-  StreamDiagnostics,
-  | 'inputTokens'
-  | 'outputTokens'
-  | 'visibleOutputTokens'
-  | 'totalTokens'
-  | 'reasoningTokens'
-  | 'cachedInputTokens'
-  | 'cacheReadInputTokens'
-  | 'cacheWriteInputTokens'
-  | 'costUsd'
->
 
 class StreamDiagnosticRecorder {
   public createStreamDiagnostics(): StreamDiagnostics {

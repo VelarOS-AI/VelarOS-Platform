@@ -1,6 +1,6 @@
 import { isPlainObject, isString, toNullable } from '@velaros-ai/core'
 
-import type { RecallContextInput } from '../../utils/builtin/context-retrieval'
+import type { RecallContextInput } from '../../types/builtin.js'
 import { inferRecallRefKind, recallContextSchema } from '../../utils/builtin/context-retrieval'
 import { defineVelaTool } from '../../utils/builtin/define-agent-tool'
 import { FileSnapshotToolName } from '../../utils/context/file-snapshot-archive'

@@ -2,34 +2,7 @@ import { z } from 'zod'
 
 import { isArray, isEmpty, isRecord, isString } from '@velaros-ai/core'
 
-export interface ToolSchemaSource {
-  name: string
-  description: string
-  schema: z.ZodType
-}
-
-export interface ToolSchemaBundle {
-  schemaVersion: 1
-  $defs: Record<string, unknown>
-  tools: Array<{
-    name: string
-    description: string
-    inputSchema: Record<string, unknown>
-  }>
-}
-
-export interface CreateToolSchemaBundleOptions {
-  schemaVersion?: 1
-  sharedSchemaId?: string
-  sharedSchemaExternalUri?: string
-  maxInlineSharedDefChars?: number
-}
-
-interface SchemaBundleContext {
-  sharedSchemaRefPrefix: string
-  bundleSharedSchemaRefPrefix: string
-  inlineSharedDefMaxChars: number
-}
+import type { CreateToolSchemaBundleOptions, SchemaBundleContext,ToolSchemaBundle, ToolSchemaSource } from '../../types/toolkit.js'
 
 const BundleSharedSchemaRefPrefix = '#/$defs/'
 

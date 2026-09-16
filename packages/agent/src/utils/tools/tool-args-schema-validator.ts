@@ -8,61 +8,9 @@ import {
   isString,
 } from '@velaros-ai/core'
 
-import type {
-  ToolValidationHintContext,
-  ToolValidationHintProvider,
-  ToolValidationIssueDetail,
-} from '../capabilities'
-import type { AppliedAdjustment } from '../toolkit/forgiving-schema'
-
-interface ToolSchemaIssue {
-  path: PropertyKey[]
-  message: string
-  expected?: unknown
-  code?: unknown
-  errors?: ToolSchemaIssue[][]
-  /** unrecognized_keys 的多余字段。 */
-  keys?: unknown
-  /** invalid_value 的可选值。 */
-  values?: unknown
-}
-
-type ToolSchemaResult<TInput> =
-  | {
-      success: true
-      data: TInput
-    }
-  | {
-      success: false
-      error: {
-        issues: ToolSchemaIssue[]
-      }
-    }
-
-type ToolSchema<TInput> = {
-  safeParse(input: unknown): ToolSchemaResult<TInput>
-}
-
-type ToolSchemaIssueDetail = ToolValidationIssueDetail
-
-export type ToolInputAdjustment = AppliedAdjustment
-
-type ToolArgsValidationResult<TInput> =
-  | {
-      success: true
-      data: TInput
-      /** 真正交给工具执行、写入历史和去重账本的参数。 */
-      args: Record<string, unknown>
-      /** 模型最初提交的参数快照，仅用于诊断调整，不进入工具执行。 */
-      requestedArgs: Record<string, unknown>
-      normalized: boolean
-      adjustments: ToolInputAdjustment[]
-    }
-  | {
-      success: false
-      error: { issues: ToolSchemaIssue[] }
-      issues: ToolSchemaIssueDetail[]
-    }
+import type { ToolValidationHintProvider } from '../../contract/requires.js'
+import type { ToolValidationHintContext } from '../../types/capabilities.js'
+import type { ToolArgsValidationResult, ToolInputAdjustment, ToolInputAdjustmentCollector,ToolSchema, ToolSchemaIssue, ToolSchemaIssueDetail } from '../../types/tools.js'
 
 const DefaultToolArgsValidationHint =
   'If the argument JSON looks incomplete (cut off mid-field), the model stream may have been truncated and retrying may help; ' +
@@ -71,11 +19,6 @@ const DefaultToolArgsValidationHint =
 const MaxToolInputAdjustments = 50
 const MaxToolInputAdjustmentDepth = 32
 const MaxToolInputAdjustmentPathLength = 256
-
-interface ToolInputAdjustmentCollector {
-  adjustments: ToolInputAdjustment[]
-  truncated: boolean
-}
 
 /**
  * 工具参数 schema 校验与轻量归一化。
@@ -594,4 +537,3 @@ export {
   toolArgsSchemaValidator,
   validateToolArgsWithNormalization,
 }
-export type { ToolArgsValidationResult, ToolSchema, ToolSchemaIssueDetail }

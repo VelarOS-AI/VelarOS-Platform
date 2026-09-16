@@ -2,43 +2,19 @@ import type { ModelMessage, TextStreamPart, ToolSet } from 'ai'
 
 import { type AppError } from '@velaros-ai/core/error'
 
+import type { AgentTurnToolExecutor, AgentTurnToolResult, AssistantContentPart } from '../../types/history.js'
+import type { ExecuteQueryTurnArgs, ExecuteStreamTurnArgs, StreamTurnResult, TurnRunnerToolContext, TurnRunnerToolRegistry } from '../../types/loop.js'
 import { sanitizeHistoryForProvider } from '../../utils/history/request'
-import {
-  AgentTurnHistoryHelper,
-  type AgentTurnToolExecutor,
-  type AgentTurnToolResult,
-  type AssistantContentPart,
-} from '../../utils/history/turn'
+import { AgentTurnHistoryHelper } from '../../utils/history/turn'
 import type { ContextGovernanceSessionRegistry } from '../residency/ContextGovernanceSession'
 
 import { KernelContextEpochGuard } from './KernelContextEpochGuard'
-import {
-  type ExecuteQueryTurnArgs,
-  QueryTurn,
-  type QueryTurnResult,
-  type QueryTurnToolContext,
-  type QueryTurnToolRegistry,
-} from './QueryTurn'
+import { QueryTurn, type QueryTurnResult } from './QueryTurn'
 import { AgentConnectionRetryHelper } from './RetryPolicy'
 import type { StreamConsumerTurnState } from './StreamConsumer'
-import {
-  type ExecuteStreamTurnArgs,
-  StreamTurn,
-  type StreamTurnResult,
-  type StreamTurnToolContext,
-  type StreamTurnToolRegistry,
-} from './StreamTurn'
+import { StreamTurn } from './StreamTurn'
 
 export type { ExecuteQueryTurnArgs, ExecuteStreamTurnArgs, QueryTurnResult, StreamTurnResult }
-
-type TurnRunnerToolContext = QueryTurnToolContext & StreamTurnToolContext
-
-type TurnRunnerToolRegistry<
-  TToolContext extends TurnRunnerToolContext = TurnRunnerToolContext,
-> = QueryTurnToolRegistry<TToolContext> &
-  StreamTurnToolRegistry<TToolContext> & {
-    names: Iterable<string>
-  }
 
 /**
  * Agent turn 门面。
@@ -185,4 +161,3 @@ class TurnRunner<TToolContext extends TurnRunnerToolContext = TurnRunnerToolCont
 
 export { TurnRunner }
 export { TurnRunner as AgentTurnHelper }
-export type { TurnRunnerToolRegistry }

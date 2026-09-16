@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+import type { ExternalAgentBridgeClientMessage, ExternalAgentBridgeCommand, ExternalAgentBridgeHostMessage, ExternalAgentBridgeMessage } from '../../types/agent.js'
+
 /**
  * External Agent Bridge transport version.
  *
@@ -69,9 +71,7 @@ export const ExternalAgentBridgeCommandSchema = z.strictObject({
   sequence: NonNegativeIntegerSchema,
   type: z.string().min(1),
   payload: JsonRecordSchema,
-})
-export type ExternalAgentBridgeCommand = z.infer<typeof ExternalAgentBridgeCommandSchema>
-
+}) satisfies z.ZodType<ExternalAgentBridgeCommand>
 export const ExternalAgentBridgeProbeSchema = z.strictObject({
   version: VersionSchema,
   type: z.literal(ExternalAgentBridgeMessageType.Probe),
@@ -180,11 +180,7 @@ export const ExternalAgentBridgeClientMessageSchema = z.discriminatedUnion('type
   ExternalAgentBridgeAckSchema,
   ExternalAgentBridgeEventSchema,
   ExternalAgentBridgeDisconnectSchema,
-])
-export type ExternalAgentBridgeClientMessage = z.infer<
-  typeof ExternalAgentBridgeClientMessageSchema
->
-
+]) satisfies z.ZodType<ExternalAgentBridgeClientMessage>
 export const ExternalAgentBridgeHostMessageSchema = z.discriminatedUnion('type', [
   ExternalAgentBridgeHelloSchema,
   ExternalAgentBridgePairedSchema,
@@ -194,15 +190,11 @@ export const ExternalAgentBridgeHostMessageSchema = z.discriminatedUnion('type',
   ExternalAgentBridgeCommandMessageSchema,
   ExternalAgentBridgeDisconnectedSchema,
   ExternalAgentBridgeErrorSchema,
-])
-export type ExternalAgentBridgeHostMessage = z.infer<typeof ExternalAgentBridgeHostMessageSchema>
-
+]) satisfies z.ZodType<ExternalAgentBridgeHostMessage>
 export const ExternalAgentBridgeMessageSchema = z.union([
   ExternalAgentBridgeClientMessageSchema,
   ExternalAgentBridgeHostMessageSchema,
-])
-export type ExternalAgentBridgeMessage = z.infer<typeof ExternalAgentBridgeMessageSchema>
-
+]) satisfies z.ZodType<ExternalAgentBridgeMessage>
 export function parseExternalAgentBridgeClientMessage(
   value: unknown
 ): ExternalAgentBridgeClientMessage {

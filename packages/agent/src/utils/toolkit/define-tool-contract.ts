@@ -7,14 +7,7 @@ import {
   serializeToolExampleInput,
   type ToolContractExampleRegistry,
 } from '../../impl/tools/ToolContractExampleRegistry'
-import type {
-  DefineToolContractInput,
-  DefineToolRuntimeSpecInput,
-  ToolContractDescriptionSpec,
-  ToolContractRuntimeSpec,
-  ToolContractSpec,
-  ToolContractSurface,
-} from '../../types/tool-contract'
+import type { DefineToolContractInput, DefineToolRuntimeSpecInput, ToolContractDescriptionSpec, ToolContractRuntimeSpec, ToolContractSpec, ToolContractSurface, ToolReadOnlyClassification } from '../../types/toolkit.js'
 
 import { assertCanonicalToolId } from './identity'
 import {
@@ -23,12 +16,6 @@ import {
   renderUsageSkillNote,
   structureToolDescriptionForModel,
 } from './tool-description'
-
-interface ToolReadOnlyClassification {
-  readOnly?: boolean
-  role?: string
-  capabilities?: { effectKind?: string }
-}
 
 /** 行为 effect 是只读真值；缺席时才采用显式声明，旧工具最后回退 role。 */
 function resolveToolReadOnly(tool: ToolReadOnlyClassification): boolean {

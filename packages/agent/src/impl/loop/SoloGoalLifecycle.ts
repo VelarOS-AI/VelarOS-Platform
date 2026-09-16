@@ -1,20 +1,6 @@
-import type {
-  ActiveContextArtifact,
-  ActiveContextArtifactKind,
-  ActiveContextArtifactStatus,
-  ActiveContextUpsertInput,
-} from '../../types/protocol'
-import {
-  assertGoalCanComplete,
-  buildGoalTerminalUpsertInput,
-  buildGoalUpsertInput,
-  findCurrentGoalArtifact,
-  type GoalStatus,
-  toGoalSnapshot,
-} from '../../utils/builtin/goals'
-import type { SoloGoalFinishingState } from '../../utils/loop/solo-finishing-gate'
-
-type SoloGoalLifecycleStatus = GoalStatus
+import type { ActiveContextArtifact, ActiveContextArtifactKind, ActiveContextArtifactStatus, ActiveContextUpsertInput } from '../../types/agent.js'
+import type { SoloGoalFinishingState,SoloGoalLifecycleStatus } from '../../types/loop.js'
+import { assertGoalCanComplete, buildGoalTerminalUpsertInput, buildGoalUpsertInput, findCurrentGoalArtifact, toGoalSnapshot } from '../../utils/builtin/goals'
 
 /** goal 生命周期所需的最小 activeContext 端口（读全量 requirement + upsert 单条目标）。 */
 interface SoloGoalLifecycleActiveContext {
@@ -177,4 +163,4 @@ class SoloGoalLifecycle {
 }
 
 export { SoloGoalLifecycle }
-export type { SoloGoalLifecycleActiveContext, SoloGoalLifecycleStatus }
+export type { SoloGoalLifecycleActiveContext }

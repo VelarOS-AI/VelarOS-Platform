@@ -1,9 +1,10 @@
 import { describe, expect, test } from 'bun:test'
 
+import type { AgentSessionEventPort } from '../src/contract/requires.js'
 import { AgentGoalService } from '../src/impl/product-session/AgentGoalService'
 import { AgentPlanService } from '../src/impl/product-session/AgentPlanService'
 import { AgentQuestionService } from '../src/impl/product-session/AgentQuestionService'
-import type { AgentSessionApplicationEvent, AgentSessionEventPort } from '../src/types/event-port'
+import type { AgentSessionApplicationEvent } from '../src/types/product-session.js'
 import {
   evaluateAgentPermissionRules,
   normalizeAgentPermissionRequest,

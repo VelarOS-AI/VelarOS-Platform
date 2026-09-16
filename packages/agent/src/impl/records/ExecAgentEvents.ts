@@ -1,9 +1,8 @@
 import { isArray, isBlank, isObject, isString, toNullable, toOptional, truncate } from '@velaros-ai/core'
 
 import type { AgentEvent } from '../../types/agent'
-import type { StreamStatePayload } from '../../types/chat-runtime'
-import type { ExecutionEventSeverity } from '../../types/execution'
-import type { ExecutionAgentEventLedgerStore } from '../../types/store-types'
+import type { ExecutionEventSeverity,StreamStatePayload } from '../../types/agent.js'
+import type { ExecutionAgentEventLedgerStore } from '../../types/records.js'
 import { compactToolResultForDisplay } from '../../utils/tools/tool-result-serialization'
 
 const MaxAssistantOutputSummaryChars = 500

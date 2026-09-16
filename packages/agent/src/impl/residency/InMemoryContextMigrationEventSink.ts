@@ -11,72 +11,9 @@
  */
 import { Log } from '@velaros-ai/core'
 
-import type { ContextResidency } from '../../utils/residency/context-record'
+import type { ContextMigrationEventSink } from '../../contract/requires.js'
+import type { ContextFaultEvent, ContextMigrationEventLineWriter,ContextResidencyMigrationEvent } from '../../types/residency.js'
 import { stableStringify } from '../../utils/residency/determinism'
-
-/** 迁移因果。准入期只会产生 `admission` / `admission-oversize`；其余归 B1 起的 epoch。 */
-export type ContextMigrationCause =
-  /** 准入：常规入账。 */
-  | 'admission'
-  /** 准入：超 `inlineMaxChars`，直接以 EXCERPT 入账。 */
-  | 'admission-oversize'
-  /** epoch I0：机械逐出。 */
-  | 'evict'
-  /** epoch I1：规则骨架折叠。 */
-  | 'skeleton'
-  /** epoch I2：LLM 蒸馏折叠。 */
-  | 'distill'
-  /** 冷归档 GC：原文不再可取。 */
-  | 'expire'
-  /** 语义去重：同工具同目标的旧快照被新的取代。 */
-  | 'superseded'
-  /** 缺页召回：把冷记录重新升温，避免同一内容反复召回。 */
-  | 'fault-page-in'
-  /** 摘要驻留上限：旧摘要退到隐藏冷层，原始成员继续由检索面提供。 */
-  | 'summary-archive'
-
-/**
- * 账本代数：整本重建（用户回滚/编辑历史/结构自愈）一次 +1。
- *
- * 记录 id 是按序号发的（`ctx-r000001`），账本一重建同一个 id 就指向另一条消息。事件流里不带代数，
- * B4 离线重放拿到的是同一 id 跨两段历史的混合流，结论不可信（审计 desktop-wiring 优化 6）。
- */
-export interface ContextLedgerGenerationStamp {
-  ledgerGeneration: number
-}
-
-/** 缺页（fault）事件：`context:recall` 命中非 INLINE 记录。 */
-export interface ContextFaultEvent extends ContextLedgerGenerationStamp {
-  recordId: string
-  residency: ContextResidency
-  /** 该记录累计被召回次数（含本次）。 */
-  faultCount: number
-  /** 记录年龄（毫秒），由调用方的时钟差算出，事件自身不取时钟。 */
-  ageMs: number
-  at: number
-}
-
-export interface ContextResidencyMigrationEvent extends ContextLedgerGenerationStamp {
-  recordId: string
-  /** null = 准入（此前不存在驻留态）。 */
-  from: Nullable<ContextResidency>
-  to: ContextResidency
-  cause: ContextMigrationCause
-  /** 本次迁移的 token 变化量（负值 = 省下）。 */
-  tokensDelta: number
-  at: number
-}
-
-/** 事件汇（sink）端口。实现必须自行吞掉自己的 IO 失败——治理链路不因日志写失败而中断。 */
-export interface ContextMigrationEventSink {
-  recordMigration(event: ContextResidencyMigrationEvent): void
-  recordFault(event: ContextFaultEvent): void
-}
-
-/** JSONL 行写入器端口：宿主注入（文件 / 流 / 内存皆可）。 */
-export interface ContextMigrationEventLineWriter {
-  write(line: string): void | Promise<void>
-}
 
 /** 内存汇：测试、离线重放与 headless 实验用。 */
 export class InMemoryContextMigrationEventSink implements ContextMigrationEventSink {

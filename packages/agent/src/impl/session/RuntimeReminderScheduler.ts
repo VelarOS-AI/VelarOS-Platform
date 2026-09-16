@@ -1,17 +1,7 @@
 import { isNull, toNullable } from '@velaros-ai/core'
 
-import type {
-  ReminderScope,
-  ReminderTrigger,
-  RuntimeReminderInput,
-  RuntimeReminderProducer,
-} from '../../types/reminders'
-
-/** consume 命中 producer 时的元信息，便于调用方同步 CodingSessionTracker 等旁路状态。 */
-export interface RuntimeReminderConsumeResult {
-  producerId: string
-  text: string
-}
+import type { RuntimeReminderProducer } from '../../contract/requires.js'
+import type { ReminderScope, ReminderTrigger, RuntimeReminderConsumeResult,RuntimeReminderInput } from '../../types/session.js'
 
 /**
  * 运行时提醒调度器：**每触发点最多注入一条**提醒的仲裁者。

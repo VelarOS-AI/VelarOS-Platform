@@ -1,4 +1,4 @@
-export type { ModelMessage, ModelMessagePart, ModelMessageRole } from '../../utils/wire/message'
+export type { ModelMessage, ModelMessagePart, ModelMessageRole } from '../../types/agent.js'
 export {
   ModelMessagePartSchema,
   ModelMessageRoleSchema,

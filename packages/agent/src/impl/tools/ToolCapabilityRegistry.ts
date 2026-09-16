@@ -1,20 +1,10 @@
 import { toNullable } from '@velaros-ai/core'
 
-import type {
-  RegisteredToolMap,
-  ToolCapabilityPage,
-  ToolCapabilityReason,
-  ToolCapabilityRegistryContext,
-  ToolCapabilityRegistryListOptions,
-  ToolCapabilitySchemaPolicy,
-} from '../../types/capability-types'
-import type { ToolDescriptor } from '../../types/tool'
+import type { RuntimePromptFeaturePolicy } from '../../contract/requires.js'
+import type { ToolDescriptor } from '../../types/agent.js'
 import type { RegisteredTool, RegistryTool, ToolRegistryContext } from '../../types/tools'
-import { decideToolCategoryAccess, type ToolCategoryUnavailableReason } from '../../utils/tools/access-policy'
-import type {
-  ToolDiscoveryAvailability,
-  ToolDiscoveryToolAvailabilityInput,
-} from '../../utils/tools/discovery-availability'
+import type { RegisteredToolMap, ToolCapabilityPage, ToolCapabilityReason, ToolCapabilityRegistryContext, ToolCapabilityRegistryListOptions, ToolCapabilitySchemaPolicy, ToolCategoryUnavailableReason, ToolDiscoveryAvailability, ToolDiscoveryToolAvailabilityInput } from '../../types/tools.js'
+import { decideToolCategoryAccess } from '../../utils/tools/access-policy'
 import {
   nextActionForDiscoveryAvailability,
   resolveToolDiscoveryAvailability,
@@ -23,10 +13,7 @@ import {
 import { isToolCompatibleWithModelInputs } from '../../utils/tools/model-input-policy'
 import { isPluginBackedToolCategory } from '../../utils/tools/tool-space-resolver'
 
-import {
-  defaultRuntimePromptFeaturePolicy,
-  type RuntimePromptFeaturePolicy,
-} from './DefaultPromptFeaturePolicy'
+import { defaultRuntimePromptFeaturePolicy } from './DefaultPromptFeaturePolicy'
 import { ToolRegistryHelper } from './ToolRegistry'
 
 function schemaPolicyForAvailability(

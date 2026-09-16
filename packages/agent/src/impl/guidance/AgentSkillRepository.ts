@@ -1,10 +1,9 @@
 import { isEmpty,isFalse, isPresent, toNullable } from '@velaros-ai/core'
 
+import type { AgentSkillProvider } from '../../contract/requires.js'
 import type { ChatPromptFeatureId } from '../../types/agent'
-import type { AgentSkillDescriptor } from '../../types/skill'
-import type { AgentRoleId } from '../../types/system'
-import type { CapabilityScopeId } from '../../types/tool'
-import type { AgentSkillDefinition, AgentSkillProvider } from '../../utils/guidance/agent-skill-provider'
+import type { AgentRoleId, AgentSkillDescriptor,CapabilityScopeId } from '../../types/agent.js'
+import type { AgentSkillDefinition } from '../../types/guidance.js'
 import { compareStableStrings } from '../../utils/residency/determinism'
 
 /**

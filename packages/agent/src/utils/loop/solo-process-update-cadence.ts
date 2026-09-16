@@ -1,15 +1,4 @@
-interface SoloProcessUpdateCadenceState {
-  consecutiveToolOnlyTurns: number
-}
-
-interface AdvanceSoloProcessUpdateCadenceInput {
-  hasVisibleText: boolean
-}
-
-interface AdvanceSoloProcessUpdateCadenceResult {
-  state: SoloProcessUpdateCadenceState
-  reminder: Nullable<string>
-}
+import type { AdvanceSoloProcessUpdateCadenceInput, AdvanceSoloProcessUpdateCadenceResult,SoloProcessUpdateCadenceState } from '../../types/loop.js'
 
 const SilentToolTurnThreshold = 2
 
@@ -50,4 +39,3 @@ export {
   createSoloProcessUpdateCadenceState,
   VisibleProcessUpdateReminder,
 }
-export type { SoloProcessUpdateCadenceState }

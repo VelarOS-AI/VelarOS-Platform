@@ -3,7 +3,8 @@ import { z } from 'zod'
 import { isBlank, isEmpty } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import type { ToolBackgroundJobOutputSnapshot } from '../../types/kernel-tool-context'
+import type { BackgroundJobOutputFilterResult, CancelBackgroundJobInput,ReadBackgroundJobOutputInput, WaitBackgroundJobsInput } from '../../types/builtin.js'
+import type { ToolBackgroundJobOutputSnapshot } from '../../types/tool-context.js'
 import {
   renderParameterDescription as parameterDescription,
 } from '../../utils/toolkit/tool-description'
@@ -32,9 +33,7 @@ const readBackgroundJobOutputSchema = z.object({
         '可选正则表达式；只保留匹配的输出行。正则非法时忽略 filter 返回全量输出并说明原因，不报错。返回里会带「命中 K/N 行」，0 命中不等于没有新增输出。',
     })
   ),
-})
-
-type ReadBackgroundJobOutputInput = z.input<typeof readBackgroundJobOutputSchema>
+}) satisfies z.ZodType<unknown, ReadBackgroundJobOutputInput>
 
 const waitBackgroundJobsSchema = z.object({
   job_ids: z
@@ -72,9 +71,7 @@ const waitBackgroundJobsSchema = z.object({
         '可选正则表达式；只保留匹配的输出行。正则非法时忽略 filter 返回全量输出并说明原因，不报错。返回里会带「命中 K/N 行」，0 命中不等于没有新增输出。',
     })
   ),
-})
-
-type WaitBackgroundJobsInput = z.input<typeof waitBackgroundJobsSchema>
+}) satisfies z.ZodType<unknown, WaitBackgroundJobsInput>
 
 const cancelBackgroundJobSchema = z.object({
   job_id: z.string().trim().min(1).max(180).describe(
@@ -82,23 +79,7 @@ const cancelBackgroundJobSchema = z.object({
       description: '要取消的后台 job id。',
     })
   ),
-})
-
-type CancelBackgroundJobInput = z.input<typeof cancelBackgroundJobSchema>
-
-/** 一次 filter 应用的结果：输出本身 + 让模型能自己判断「是没输出还是没命中」的账。 */
-interface BackgroundJobOutputFilterResult {
-  /** 呈现给模型的输出正文（filter 未生效时 = 原始输出）。 */
-  output: string
-  /** filter 是否真的施加了。给了非法正则时为 false（fail-open）。 */
-  applied: boolean
-  /** 过滤前的行数。 */
-  totalLines: number
-  /** filter 命中的行数；`applied` 为 false 时等于 totalLines。 */
-  matchedLines: number
-  /** filter 被忽略的原因（非法正则）。 */
-  ignoredReason: Nullable<string>
-}
+}) satisfies z.ZodType<unknown, CancelBackgroundJobInput>
 
 /**
  * filter 是**可用性**功能，不是校验边界：三个失败方向一律 fail-open。
@@ -180,15 +161,4 @@ function formatBackgroundJobWaitResults(
     .join('\n\n')
 }
 
-export {
-  type BackgroundJobOutputFilterResult,
-  type CancelBackgroundJobInput,
-  cancelBackgroundJobSchema,
-  filterBackgroundJobOutput,
-  formatBackgroundJobOutput,
-  formatBackgroundJobWaitResults,
-  type ReadBackgroundJobOutputInput,
-  readBackgroundJobOutputSchema,
-  type WaitBackgroundJobsInput,
-  waitBackgroundJobsSchema,
-}
+export { cancelBackgroundJobSchema, filterBackgroundJobOutput, formatBackgroundJobOutput, formatBackgroundJobWaitResults, readBackgroundJobOutputSchema, waitBackgroundJobsSchema }

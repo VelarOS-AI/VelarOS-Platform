@@ -13,29 +13,11 @@ import type { ModelMessage } from 'ai'
 
 import { isEmpty } from '@velaros-ai/core'
 
-import { HistoryMessages, type HistoryToolCallReference } from './messages'
+import type { HistorySanitizationIssue, HistorySanitizationResult, HistoryStructureRepairOptions,HistoryToolCallReference } from '../../types/history.js'
+
+import { HistoryMessages } from './messages'
 import { isReplayUnsafeAssistantMessage, sanitizeModelMessage } from './sanitize'
 import { stripOrphanToolResultParts } from './validate'
-
-interface HistorySanitizationIssue {
-  kind:
-    | 'orphan-tool-result'
-    | 'unsafe-assistant-message'
-    | 'missing-tool-results'
-  messageIndex: number
-  role: ModelMessage['role']
-  removedMessages: number
-  reason: string
-  toolCallIds?: string[]
-  missingToolCallIds?: string[]
-}
-
-interface HistorySanitizationResult {
-  history: ModelMessage[]
-  removedMessages: number
-  changedMessages: number
-  issues: HistorySanitizationIssue[]
-}
 
 const InterruptedToolResultValue =
   '[no result: the previous turn was interrupted before this tool call completed]'
@@ -79,17 +61,6 @@ function buildInterruptedToolResultMessage(
       },
     })),
   }
-}
-
-/**
- * 逐条扫描历史，修复三类结构损坏：
- *  - 无前驱 assistant tool-call 的整条 tool 消息 → 丢弃；
- *  - 回放不安全的 assistant 消息 → 丢弃；
- *  - 缺结果的 tool-call 组 → 能回填就补「被中断」占位结果，不能回填就整组移除。
- */
-interface HistoryStructureRepairOptions {
-  /** 本次发送刻意展示完整参数的调用；结构自愈不压缩它们的参数。 */
-  preserveToolCallInputIds?: ReadonlySet<string>
 }
 
 function repairHistoryStructure(
@@ -246,4 +217,3 @@ function repairHistoryStructureForProvider(
 }
 
 export { InterruptedToolResultValue, repairHistoryStructureForProvider }
-export type { HistorySanitizationIssue, HistorySanitizationResult }

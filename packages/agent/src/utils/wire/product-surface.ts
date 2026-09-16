@@ -1,6 +1,6 @@
 import { isEmpty } from '@velaros-ai/core'
 
-import type { AgentSurfaceId } from '../../types/agent'
+import type { AgentSurfaceContextSnapshot } from '../../types/agent.js'
 
 const MaxContextEntries = 24
 const MaxRevisionCharacters = 128
@@ -9,31 +9,6 @@ const MaxEntryLabelCharacters = 160
 const MaxEntrySourceCharacters = 256
 const MaxEntryContentCharacters = 4_000
 const MaxTotalContentCharacters = 24_000
-
-/**
- * A product-level Agent surface is a host-neutral composition contract.
- *
- * It selects existing capability Skills by default. The selected Skills remain
- * subject to host enablement, scope, entitlement and pure-chat policies; this
- * contract does not grant tools, permissions or workflow authority.
- */
-export interface AgentProductSurfaceDefinition {
-  readonly id: AgentSurfaceId
-  readonly defaultSkillIds: readonly string[]
-}
-
-export interface AgentSurfaceContextEntry {
-  readonly id: string
-  readonly label: string
-  readonly content: string
-  readonly source?: string
-}
-
-/** Immutable domain-data snapshot captured by a product surface for one turn. */
-export interface AgentSurfaceContextSnapshot {
-  readonly revision: string
-  readonly entries: readonly AgentSurfaceContextEntry[]
-}
 
 function truncate(value: string, maxCharacters: number): string {
   const normalized = value.trim()

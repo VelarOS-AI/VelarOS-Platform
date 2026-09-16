@@ -1,13 +1,9 @@
 import { isArray, isBoolean, isFalse, isNull, isNumber, isObject, isString, isUndefined } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import type { ApprovalPort } from '../../impl/tools/DefaultDenyApprovalPort'
+import type { ApprovalPort } from '../../contract/requires.js'
 import type { ApprovalDecision, ToolConfirmationDecisionOptions } from '../../types/agent'
-import type { ToolCodingSessionApi } from '../../types/coding-session-types'
-
-type ApprovalSession = Pick<ToolCodingSessionApi,
-  'recordConfirmationCard' | 'recordTaskApproval' | 'getTaskApprovalDenial' |
-  'hasConfirmedRiskScope' | 'grantConfirmedRiskScope'>
+import type { ApprovalSession } from '../../types/toolkit.js'
 
 /** 参数身份保留完整值和确定顺序；只用于内部比较，不作为界面预览。 */
 export function createApprovalOperationKey(kind: string, value: unknown): string {

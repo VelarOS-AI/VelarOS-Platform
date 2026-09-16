@@ -22,19 +22,9 @@ import {
 } from '../src/impl/residency/ContextGovernanceSession'
 import { ContextResidencyLedger } from '../src/impl/residency/ContextResidencyLedger'
 import { InMemoryContextMigrationEventSink } from '../src/impl/residency/InMemoryContextMigrationEventSink'
-import {
-  type ContextDistiller,
-  type ContextDistillInput,
-  extractDistilledBody,
-  isContextDistillText,
-  planContextDistillation,
-  resolveDistillGate,
-  validateDistilledBody,
-} from '../src/utils/residency/distill'
-import {
-  type ContextGovernanceConfigInput,
-  resolveContextGovernanceConfig,
-} from '../src/utils/residency/governance-config'
+import type { ContextDistiller, ContextDistillInput, ContextGovernanceConfigInput } from '../src/types/residency.js'
+import { extractDistilledBody, isContextDistillText, planContextDistillation, resolveDistillGate, validateDistilledBody } from '../src/utils/residency/distill'
+import { resolveContextGovernanceConfig } from '../src/utils/residency/governance-config'
 import { ingestHistoryIntoLedger } from '../src/utils/residency/ingest'
 import { measureLedgerProjection } from '../src/utils/residency/projection'
 

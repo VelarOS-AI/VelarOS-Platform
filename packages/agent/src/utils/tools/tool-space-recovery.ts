@@ -1,11 +1,6 @@
-import type { ToolCategoryId } from '../../types/tool'
 
-interface ToolSpaceRecoveryGuide {
-  query: string
-  pageId: string
-  capabilityId: Nullable<string>
-  nextActions: string[]
-}
+import type { ToolCategoryId } from '../../types/agent.js'
+import type { ToolSpaceRecoveryGuide } from '../../types/tools.js'
 
 function buildToolSpaceRecoveryGuide(input: {
   toolName: string
@@ -38,4 +33,3 @@ function buildToolSpaceRecoveryGuide(input: {
 }
 
 export { buildToolSpaceRecoveryGuide }
-export type { ToolSpaceRecoveryGuide }

@@ -1,26 +1,5 @@
-import type { KernelInputDelivery } from '../../impl/execution/KernelSessionRunCoordinator'
 
-export type KernelSessionInputKind = 'chat-send' | 'guidance'
-
-export interface KernelRuntimeStatus {
-  hasPendingConfirmation: boolean
-  hasPendingInput: boolean
-  running: boolean
-  pendingPrompt: boolean
-  cancelRequested: boolean
-  cancellable: boolean
-  queuedInputs: number
-  backgroundJobs: number
-}
-
-export interface ResolveKernelRuntimeStatusInput {
-  hasPendingConfirmation?: boolean
-  hasPendingInput?: boolean
-  running?: boolean
-  cancelRequested?: boolean
-  queuedInputs?: number
-  backgroundJobs?: number
-}
+import type { KernelInputDelivery, KernelRuntimeStatus, KernelSessionInputKind, ResolveKernelRuntimeStatusInput } from '../../types/execution.js'
 
 export class KernelSessionPolicy {
   public resolveDelivery(input: { kind: KernelSessionInputKind }): KernelInputDelivery {

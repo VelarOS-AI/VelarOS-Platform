@@ -1,25 +1,11 @@
 import type { ModelMessage } from 'ai'
 
-import type { ContextPayloadStore } from '../../impl/context/InMemoryContextPayloadStore'
+import type { ModelHistoryRequestPhase,SanitizeModelHistoryOptions } from '../../types/history.js'
 
 import { mapInternalFollowUpsForProvider } from './internal-messages'
 import { repairHistoryStructureForProvider } from './repair'
-import {
-  sanitizeModelHistory,
-  type SanitizeModelHistoryOptions,
-} from './sanitize'
+import { sanitizeModelHistory } from './sanitize'
 import { assertValidModelHistory } from './validate'
-
-type ModelHistoryRequestPhase = 'stream' | 'query'
-
-interface AgentHistoryToolContext {
-  /** Opaque execution-session state carried through generic history preparation. */
-  codingSession: unknown
-  sessionId?: string
-  contextPayloadStore?: ContextPayloadStore
-  /** canonical tool id → provider transport name for the current request. */
-  getCurrentVisibleToolTransportNames?: () => Readonly<Record<string, string>>
-}
 
 function sanitizeHistoryForProvider(
   history: ModelMessage[],
@@ -46,5 +32,4 @@ function sanitizeHistoryForProvider(
 }
 
 export { sanitizeHistoryForProvider }
-export type { ModelHistoryRequestPhase, SanitizeModelHistoryOptions }
-export type { AgentHistoryToolContext }
+export type { SanitizeModelHistoryOptions }

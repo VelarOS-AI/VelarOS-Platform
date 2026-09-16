@@ -1,4 +1,5 @@
-import type { KernelToolContext as ToolContext } from '../../types/kernel-tool-context'
+
+import type { KernelToolContext as ToolContext } from '../../types/tool-context.js'
 
 const SkillPagePrefix = 'skill:'
 

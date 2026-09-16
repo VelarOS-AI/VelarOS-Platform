@@ -24,6 +24,7 @@ import { z } from 'zod'
 
 import { isEmpty,isNotUndefined } from '@velaros-ai/core'
 
+import type { ToolSpaceFindInput, ToolSpaceInput, ToolSpaceMapInput, ToolSpaceOperationInput,ToolSpacePageInput, ToolSpaceReadInput, ToolSpaceReplaceInput } from '../../types/builtin.js'
 import {
   renderParameterDescription as parameterDescription,
 } from '../toolkit/tool-description'
@@ -135,7 +136,7 @@ export const toolSpaceFindSchema = toolSpaceBaseSchema.extend({
         description: '搜索结果游标；第一页省略，后续使用上一次返回的 nextCursor。',
       })
     ),
-}).strip()
+}).strip() satisfies z.ZodType<ToolSpaceFindInput>
 export const toolSpaceFindMethodSchema = toolSpaceFindSchema.omit({ op: true }).strip()
 
 export const toolSpacePageSchema = toolSpaceBaseSchema.extend({
@@ -176,7 +177,7 @@ export const toolSpacePageSchema = toolSpaceBaseSchema.extend({
     .nullable()
     .optional()
     .describe(parameterDescription({ description: '上一页返回的 nextCursor；第一页省略。' })),
-}).strip()
+}).strip() satisfies z.ZodType<ToolSpacePageInput>
 export const toolSpacePageMethodSchema = toolSpacePageSchema.omit({ op: true }).strip()
 
 export const toolSpaceMapSchema = toolSpaceBaseSchema.extend({
@@ -239,7 +240,7 @@ export const toolSpaceMapSchema = toolSpaceBaseSchema.extend({
           '每个分类最多展开多少个工具页，避免一次返回过大；map 会按 category_row_budget 动态降低实际值，并在返回 filters.parameterAdjusted/parameterAdjustments 中说明。',
       })
     ),
-}).strip()
+}).strip() satisfies z.ZodType<ToolSpaceMapInput>
 export const toolSpaceMapMethodSchema = toolSpaceMapSchema.omit({ op: true }).strip()
 
 export const toolSpaceReadSchema = toolSpaceBaseSchema.extend({
@@ -264,7 +265,7 @@ export const toolSpaceReadSchema = toolSpaceBaseSchema.extend({
         description: '详情级别。full 时技能页额外返回按需读取说明。',
       })
     ),
-}).strip()
+}).strip() satisfies z.ZodType<ToolSpaceReadInput>
 export const toolSpaceReadMethodSchema = toolSpaceReadSchema.omit({ op: true }).strip()
 
 const toolSpaceMapQueryMethodSchema = toolSpaceMapMethodSchema
@@ -443,7 +444,7 @@ export const toolSpaceReplaceSchema = toolSpaceBaseSchema.extend({
     .min(1)
     .max(240)
     .describe(parameterDescription({ description: '为什么需要这次工具页替换。' })),
-}).strip()
+}).strip() satisfies z.ZodType<ToolSpaceReplaceInput>
 export const toolSpaceReplaceMethodSchema = toolSpaceReplaceSchema
   .omit({ op: true })
   .strip()
@@ -472,12 +473,5 @@ export const toolSpaceSchema = z.discriminatedUnion('op', [
   toolSpaceMapSchema,
   toolSpaceReadSchema,
   toolSpaceReplaceSchema,
-])
+]) satisfies z.ZodType<ToolSpaceOperationInput, ToolSpaceInput>
 
-export type ToolSpaceInput = z.input<typeof toolSpaceSchema>
-export type ToolSpaceFindInput = z.output<typeof toolSpaceFindSchema>
-export type ToolSpacePageInput = z.output<typeof toolSpacePageSchema>
-export type ToolSpaceMapInput = z.output<typeof toolSpaceMapSchema>
-export type ToolSpaceReadInput = z.output<typeof toolSpaceReadSchema>
-export type ToolSpaceReplaceInput = z.output<typeof toolSpaceReplaceSchema>
-export type ToolSpaceOperationInput = z.output<typeof toolSpaceSchema>

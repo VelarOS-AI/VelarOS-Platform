@@ -1,10 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import type {
-  ModelSpanOutcome,
-  RunSpanScope,
-  TurnSpanScope,
-} from '../src/impl/ledgers/LedgerExecutionSpanScopeFactory'
+import type { ModelSpanOutcome, RunSpanScope, TurnSpanScope } from '../src/types/ledgers.js'
 import {
   beginLoopTurnSpans,
   endLoopTurnSpansError,

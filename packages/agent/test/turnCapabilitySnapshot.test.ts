@@ -2,10 +2,8 @@ import assert from 'node:assert/strict'
 
 import { describe, test } from 'bun:test'
 
-import {
-  ToolExecutionPolicy,
-  type ToolExecutionPolicyRegistry,
-} from '../src/impl/tools/ToolExecutionPolicy'
+import { ToolExecutionPolicy } from '../src/impl/tools/ToolExecutionPolicy'
+import type { ToolExecutionPolicyRegistry } from '../src/types/tools.js'
 import {
   captureAgentTurnCapabilityContext,
   captureAgentTurnCapabilitySnapshot,

@@ -3,9 +3,9 @@ import assert from 'node:assert/strict'
 import type { ModelMessage } from 'ai'
 import { describe, test } from 'bun:test'
 
+import type { AgentRuntimeInputPort } from '../src/contract/requires.js'
 import { KernelBackgroundJobManager } from '../src/impl/records/KernelBackgroundJobManager'
 import { runSoloBackgroundCompletionGate } from '../src/utils/loop/solo-background-completion-gate'
-import type { AgentRuntimeInputPort } from '../src/utils/runner/runtime-input-port'
 
 const log = { info: () => undefined }
 

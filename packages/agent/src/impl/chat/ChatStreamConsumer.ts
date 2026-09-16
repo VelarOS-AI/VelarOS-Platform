@@ -1,9 +1,6 @@
-import type {
-  ChatStreamLifecyclePhase,
-  ChatStreamLogEntry,
-  ChatStreamTerminationReason,
-} from '../../types/chat-stream'
-import type { ChatStreamEvent } from '../../types/protocol'
+
+import type { ChatStreamEvent } from '../../types/agent.js'
+import type { ChatStreamLifecyclePhase, ChatStreamLogEntry, ChatStreamTerminationReason } from '../../types/chat.js'
 
 import { type ChatStreamProtocol,chatStreamProtocol } from './ChatStreamProtocol'
 

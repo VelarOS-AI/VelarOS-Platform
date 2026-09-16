@@ -3,12 +3,9 @@ import type { ModelMessage, ToolCallPart, ToolResultPart } from 'ai'
 import { isArray, isBoolean,isNonBlankString,isNumber, isObject, isPresent, isString } from '@velaros-ai/core'
 import { logRuntime } from '@velaros-ai/core/logger'
 
-const log = logRuntime.tag('AgentHistoryMessages')
+import type { HistoryToolCallReference } from '../../types/history.js'
 
-export interface HistoryToolCallReference {
-  toolCallId: string
-  toolName: string
-}
+const log = logRuntime.tag('AgentHistoryMessages')
 
 class HistoryMessages {
   public extractAssistantToolCalls(message: ModelMessage): HistoryToolCallReference[] {

@@ -6,21 +6,9 @@ import { logRuntime } from '@velaros-ai/core/logger'
 import { writeJsonFileAtomically } from '@velaros-ai/core/utils/FilePersistence'
 import { type TimerLease, TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
-import type { StreamStatePayload } from '../../types/chat-runtime'
-import type {
-  ExecutionEventRecord,
-  ExecutionPlanView,
-  ExecutionRecord,
-  ExecutionTaskExecutionAdvice,
-  ExecutionTaskPlanStepStatus,
-  ExecutionTaskRecord,
-} from '../../types/execution'
-import type { StreamExecutionGraphPayload } from '../../types/protocol'
-import type { AppendExecutionEventInput } from '../../types/store-types'
+import type { ExecutionEventRecord, ExecutionPlanView, ExecutionRecord, ExecutionTaskExecutionAdvice, ExecutionTaskPlanStepStatus, ExecutionTaskRecord,StreamExecutionGraphPayload, StreamStatePayload } from '../../types/agent.js'
+import type { AppendExecutionEventInput, ExecutionDebugListener, ExecutionStateListener, ExecutionStoreOptions, PersistedExecutionStoreFile } from '../../types/records.js'
 import { compareStableStrings } from '../../utils/residency/determinism'
-
-type ExecutionStateListener = (payload: StreamStatePayload) => void
-type ExecutionDebugListener = (payload: StreamExecutionGraphPayload) => void
 
 const DEFAULT_EXECUTION_EVENT_RETENTION_LIMIT = 500
 const DEFAULT_EXECUTION_RECORD_RETENTION_LIMIT = 200
@@ -217,27 +205,6 @@ class ExecDebugPayload {
       }
     )
   }
-}
-
-interface ExecutionStoreOptions {
-  /** 是否将执行记录写入磁盘。 */
-  persist?: boolean
-  /** 自定义持久化文件路径，测试可覆盖。 */
-  persistencePath?: string
-  /** 启动时是否把未完成执行恢复为 aborted。 */
-  recoverInterruptedExecutions?: boolean
-  /** 可注入时间函数，方便测试稳定 id/timestamp。 */
-  now?: () => number
-  /** 每个 execution 最多保留的事件数；超出后保留最新事件。 */
-  eventRetentionLimit?: number
-  /** 最多保留的终态 execution 数；非终态记录永远保留。 */
-  recordRetentionLimit?: number
-}
-
-interface PersistedExecutionStoreFile {
-  version: 1
-  savedAt: number
-  executions: ExecutionRecord[]
 }
 
 /**
@@ -840,4 +807,3 @@ export {
   ExecDebugPayload as ExecutionDebugPayloadBuilder,
   ExecutionStore,
 }
-export type { ExecutionStoreOptions }

@@ -5,61 +5,8 @@ import type {
   ToolLayerTelemetryMetrics,
   ToolSchemaTelemetryPayload,
 } from '../../types/agent'
-import type { RunProfileId } from '../../types/run-profile'
-import type { ToolCategoryId, ToolSurfaceProfileId } from '../../types/tool'
-
-interface SoloToolSchemaTelemetryContext {
-  codingSession: {
-    getToolSurfaceProfile: () => ToolSurfaceProfileId
-  }
-}
-
-interface BuildSoloToolSchemaTelemetryInput<TContext extends SoloToolSchemaTelemetryContext> {
-  toolContext: TContext
-  allowedTools: string[]
-  estimateCurrentSerializedChars?: (
-    toolContext: TContext,
-    allowedTools: string[]
-  ) => LooseOptional<number>
-  estimateBaselineSerializedChars?: (
-    toolContext: TContext,
-    profile: ToolSurfaceProfileId,
-    allowedTools: string[]
-  ) => LooseOptional<number>
-}
-
-interface BuildSoloRunProfileTelemetryInput {
-  profile: RunProfileId
-  reason: string
-  contextWindow: Nullable<number>
-  physicalContextWindow: Nullable<number>
-  maxInputWorkingSetTokens: Nullable<number>
-  maxToolCount: Nullable<number>
-  maxSystemPromptChars: Nullable<number>
-  baseAllowedToolCount: number
-  exposedToolCount: number
-  droppedTools: string[]
-  systemPromptChars: number
-  skippedPromptSegments: StreamTurnContextPayload['skippedPromptSegments']
-}
-
-interface SoloToolAllocatorTelemetryPlan {
-  baselineToolNames?: string[]
-  grantedCategoryIds: ToolCategoryId[]
-  grantedToolNames: string[]
-  deniedRequests: NonNullable<StreamTurnContextPayload['toolAllocatorTelemetry']>['deniedRequests']
-  fuse: {
-    tripped: boolean
-    message?: LooseOptional<string>
-  }
-  advisor: {
-    called: boolean
-    message?: LooseOptional<string>
-    error?: LooseOptional<string>
-  }
-  toolLayerMetrics?: LooseOptional<Partial<ToolLayerTelemetryMetrics>>
-  message?: LooseOptional<string>
-}
+import type { ToolSurfaceProfileId } from '../../types/agent.js'
+import type { BuildSoloRunProfileTelemetryInput, BuildSoloToolSchemaTelemetryInput, SoloToolAllocatorTelemetryPlan,SoloToolSchemaTelemetryContext } from '../../types/loop.js'
 
 function normalizeToolLayerMetrics(
   metrics?: LooseOptional<Partial<ToolLayerTelemetryMetrics>>
@@ -170,10 +117,4 @@ export {
   buildSoloRunProfileTelemetry,
   buildSoloToolAllocatorTelemetry,
   buildSoloToolSchemaTelemetry,
-}
-export type {
-  BuildSoloRunProfileTelemetryInput,
-  BuildSoloToolSchemaTelemetryInput,
-  SoloToolAllocatorTelemetryPlan,
-  SoloToolSchemaTelemetryContext,
 }

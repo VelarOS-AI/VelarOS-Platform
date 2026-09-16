@@ -1,48 +1,16 @@
 import { createHash } from 'node:crypto'
 
+import type { ContextPayloadStore } from '../../contract/requires.js'
+import type { CanonicalizeToolResultInput, CanonicalToolResult, ContextPayloadRecord, HashedToolResultInput } from '../../types/context.js'
 import { isStatefulToolResultName } from '../../utils/context/stateful-tool-results'
 
-import {
-  type ContextPayloadRecord,
-  type ContextPayloadStore,
-  createContextPayloadRef,
-} from './InMemoryContextPayloadStore'
-
-export interface CanonicalizeToolResultInput {
-  sessionId: string
-  toolCallId: string
-  toolName: string
-  serializedResult: string
-}
-
-export interface CanonicalToolResultVisibleReference {
-  type: 'tool-payload-ref'
-  toolCallId: string
-  toolName: string
-  payloadRef: string
-  hash: string
-  chars: number
-  sameAsToolCallId?: string
-}
-
-export interface CanonicalToolResult {
-  action: 'inline' | 'reference' | 'dedupe-reference'
-  hash: string
-  payloadRef: string
-  record: ContextPayloadRecord
-  visible: CanonicalToolResultVisibleReference
-}
+import { createContextPayloadRef } from './InMemoryContextPayloadStore'
 
 export interface ToolResultCanonicalizerOptions {
   inlineBudgetChars?: number
 }
 
 const DefaultInlineBudgetChars = 8_000
-
-interface HashedToolResultInput {
-  input: CanonicalizeToolResultInput
-  hash: string
-}
 
 function sha256(text: string): string {
   return createHash('sha256').update(text).digest('hex')

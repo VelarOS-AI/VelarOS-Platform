@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test'
 
 import { SoloGoalLifecycle } from '../src/impl/loop/SoloGoalLifecycle'
 import { ExecutionGuidanceQueue } from '../src/impl/records/ExecutionGuidanceQueue'
-import type { ActiveContextArtifact, ActiveContextUpsertInput } from '../src/types/protocol'
+import type { ActiveContextArtifact, ActiveContextUpsertInput } from '../src/types/agent.js'
 import { buildGoalStateUpsertInput } from '../src/utils/builtin/goals'
 import { runSoloFinishingGate } from '../src/utils/loop/solo-finishing-gate'
 

@@ -1,4 +1,3 @@
-import type { TextStreamPart, ToolSet } from 'ai'
 
 import { isNonBlankString, Log, optionalWhen } from '@velaros-ai/core'
 
@@ -6,11 +5,10 @@ import type {
   StreamAssistantGeneratedFilePayload,
   StreamAssistantSourcePayload,
 } from '../../types/agent'
+import type { ProviderStreamPart } from '../../types/loop.js'
 
 const MaxGeneratedFileBytes = 20 * 1024 * 1024
 const generatedArtifactsLog = Log.tag('GeneratedArtifacts')
-
-type ProviderStreamPart = TextStreamPart<ToolSet>
 
 function estimateBase64Bytes(value: string): number {
   const padding = value.endsWith('==') ? 2 : value.endsWith('=') ? 1 : 0

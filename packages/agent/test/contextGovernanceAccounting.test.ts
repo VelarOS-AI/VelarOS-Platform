@@ -13,7 +13,7 @@ import type { ModelMessage } from 'ai'
 import { describe, test } from 'bun:test'
 
 import { ContextResidencyLedger } from '../src/impl/residency/ContextResidencyLedger'
-import type { ContextRecordClassifier } from '../src/utils/residency/admission'
+import type { ContextRecordClassifier } from '../src/types/residency.js'
 import { renderContextDashboardText } from '../src/utils/residency/dashboard'
 import {
   DefaultContextGovernanceConfig,

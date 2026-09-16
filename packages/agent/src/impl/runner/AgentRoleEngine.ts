@@ -1,13 +1,10 @@
-import type { AgentRoleResolution, ResolveAgentRoleOptions } from '../../types/role-types'
+import type { AgentRoleDescriptorProvider } from '../../contract/requires.js'
+import type { AgentRoleResolution, AgentRoleToolBindings,ResolveAgentRoleOptions } from '../../types/runner.js'
 import { resolveLockedAgentRole } from '../../utils/runner/role-router'
 import type { AgentSkillRepository } from '../guidance/AgentSkillRepository'
 
 import { AgentRolePolicy } from './AgentRolePolicy'
-import {
-  type AgentRoleDescriptorProvider,
-  AgentRoleRegistry,
-  type AgentRoleToolBindings,
-} from './AgentRoleRegistry'
+import { AgentRoleRegistry } from './AgentRoleRegistry'
 
 /**
  * 智能体角色解析引擎。

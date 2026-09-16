@@ -6,7 +6,7 @@ import {
   filterBackgroundJobOutput,
   formatBackgroundJobOutput,
 } from '../src/impl/builtin/BackgroundJobOperations'
-import type { ToolBackgroundJobOutputSnapshot } from '../src/types/kernel-tool-context'
+import type { ToolBackgroundJobOutputSnapshot } from '../src/types/tool-context.js'
 
 function snapshot(
   overrides: Partial<ToolBackgroundJobOutputSnapshot> = {}

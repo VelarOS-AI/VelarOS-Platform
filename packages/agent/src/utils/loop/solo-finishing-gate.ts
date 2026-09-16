@@ -1,92 +1,15 @@
-import type { ModelMessage } from 'ai'
 
 import { isFunction, isPlainObject } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import type { ScopedLog } from '@velaros-ai/core/logger'
 
-import { ChatRuntimeEvents,type StreamTurnEndPayload } from '../../types/chat-runtime'
-import type { CodingSessionSnapshot } from '../../types/reminders'
+import type { RunSoloFinishingGateInput, SoloFinishingGateBlockTracker, SoloFinishingGateContinueReason, SoloFinishingGateEvents, SoloFinishingGateRepeatableReason, SoloFinishingGateResult, SoloGoalFinishingState } from '../../types/loop.js'
+import type { CodingSessionSnapshot } from '../../types/session.js'
 import { createInternalFollowUpMessage } from '../history/internal-messages'
-import type { AgentRuntimeInputPort } from '../runner/runtime-input-port'
-import type { AutoVerificationGateResult } from '../session/auto-verification'
+import { ChatRuntimeEvents } from '../wire/chat-runtime.js'
 
 import { evaluateKernelFinalReadiness } from './final-readiness'
-import type { SoloBackgroundCompletionGateResult } from './solo-background-completion-gate'
 import { consumeSoloRuntimeGuidance } from './solo-runtime-guidance'
-
-interface SoloFinishingGateEvents {
-  emitRuntime(payload: StreamTurnEndPayload): void
-}
-
-interface RunSoloFinishingGateInput<
-  TToolContext,
-  TEvents extends SoloFinishingGateEvents = SoloFinishingGateEvents,
-> {
-  turn: number
-  history: ModelMessage[]
-  toolContext: TToolContext
-  events: TEvents
-  abortSignal: AbortSignal
-  emitAbort(): void
-  tickLoopReminders(input: {
-    mode: 'solo'
-    phase: 'finishing'
-    toolContext: TToolContext
-  }): Promise<string[]>
-  runAutomaticVerification(input: {
-    toolContext: TToolContext
-  }): Promise<AutoVerificationGateResult>
-  runtimeInput?: AgentRuntimeInputPort
-  consumeGuidance?: () => Nullable<ModelMessage> | Promise<Nullable<ModelMessage>>
-  /** 在 runtime input takeOrSeal 之前，处理后台任务通知或停泊 wait-any。 */
-  settlePendingBackgroundJobs?: () => Promise<SoloBackgroundCompletionGateResult>
-  goalMode?: boolean
-  inspectGoalState?: () => Promise<SoloGoalFinishingState>
-  recordGoalCompletionAttempt?: (state: SoloGoalFinishingState) => Promise<void>
-  finishingGateBlockTracker?: SoloFinishingGateBlockTracker
-  log: Pick<ScopedLog, 'debug' | 'info' | 'warn'>
-}
-
-type SoloFinishingGateContinueReason =
-  | 'finishing-reminder'
-  | 'verification-followup'
-  | 'final-readiness'
-  | 'background-task'
-  | 'user-guidance'
-  | 'goal-status-required'
-
-type SoloFinishingGateRepeatableReason = Extract<
-  SoloFinishingGateContinueReason,
-  'verification-followup' | 'final-readiness' | 'goal-status-required'
->
-
-interface SoloFinishingGateBlockTracker {
-  reason: Nullable<SoloFinishingGateRepeatableReason>
-  count: number
-}
-
-type SoloFinishingGateResult =
-  | {
-      status: 'continue'
-      reason: SoloFinishingGateContinueReason
-    }
-  | { status: 'aborted' }
-  | { status: 'completed' }
-  | {
-      status: 'error'
-      reason: 'repeated-finishing-gate'
-      blockedReason: SoloFinishingGateRepeatableReason
-    }
-
-type SoloGoalFinishingStatus = 'missing' | 'active' | 'complete' | 'blocked'
-
-interface SoloGoalFinishingState {
-  exists: boolean
-  terminal: boolean
-  status: SoloGoalFinishingStatus
-  objective?: LooseOptional<string>
-  blockedAuditTurns?: LooseOptional<number>
-}
 
 const RepeatedFinishingGateBlockLimit = 3
 
@@ -313,13 +236,4 @@ export {
   createSoloFinishingGateBlockTracker,
   resetSoloFinishingGateBlockTracker,
   runSoloFinishingGate,
-}
-export type {
-  RunSoloFinishingGateInput,
-  SoloFinishingGateBlockTracker,
-  SoloFinishingGateContinueReason,
-  SoloFinishingGateEvents,
-  SoloFinishingGateRepeatableReason,
-  SoloFinishingGateResult,
-  SoloGoalFinishingState,
 }

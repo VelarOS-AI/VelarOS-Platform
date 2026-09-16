@@ -1,13 +1,7 @@
 import { toNullable } from '@velaros-ai/core'
 
-import type {
-  ExecutionEventSeverity,
-  ExecutionRecord,
-  ExecutionTaskPlanStep,
-  ExecutionTaskPlanStepStatus,
-  ExecutionTaskRecord,
-} from '../../types/execution'
-import type { ExecutionTaskLedgerStore } from '../../types/store-types'
+import type { ExecutionEventSeverity, ExecutionRecord, ExecutionTaskPlanStep, ExecutionTaskPlanStepStatus, ExecutionTaskRecord } from '../../types/agent.js'
+import type { ExecutionTaskLedgerStore } from '../../types/records.js'
 
 import { type ExecRouting } from './ExecWorkflowRoute'
 

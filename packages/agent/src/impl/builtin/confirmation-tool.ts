@@ -1,23 +1,13 @@
 import { z } from 'zod'
 
-import type { ToolCapabilitySchema, ToolPermission } from '../../types/tool'
-import type { ToolContractRuntimeSpec } from '../../types/tool-contract'
+import type { ToolCapabilitySchema, ToolPermission } from '../../types/agent.js'
+import type { RequestConfirmationToolContext } from '../../types/builtin.js'
+import type { ToolContractRuntimeSpec } from '../../types/toolkit.js'
 import {
   renderParameterDescription as parameterDescription,
   renderToolDescription,
 } from '../../utils/toolkit/tool-description'
-import { type ApprovalPort, createManualApprovalOptions } from '../tools/DefaultDenyApprovalPort'
-
-/**
- * interaction:confirm 的最小执行上下文：只需审批通道与取消信号。
- *
- * 声明成 host ToolContext 的**超集**（字段更少），故本工具可赋给宿主更宽的 VelaTool 契约
- * （TContext 逆变），无需把宿主 ToolContext 拖进内核。
- */
-interface RequestConfirmationToolContext {
-  approval: ApprovalPort
-  abortSignal: AbortSignal
-}
+import { createManualApprovalOptions } from '../tools/DefaultDenyApprovalPort'
 
 const UserConfirmationCapability = {
   effectKind: 'external',

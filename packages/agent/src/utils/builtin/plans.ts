@@ -1,28 +1,9 @@
 import { z } from 'zod'
 
-import type { ToolExecutionPlanItemStatus } from '../../types/agent'
-import type { ExecutionTaskPlanStep } from '../../types/execution'
+import type { ExecutionTaskPlanStep } from '../../types/agent.js'
+import type { PlanLifecycle, PlanStepCompletionResult, PlanStepRef, StepEngineOptions,UpdatePlanInput, UserPlanStatus, UserPlanStep } from '../../types/builtin.js'
 
-import type { StepEngineOptions } from './step-refs'
 import { completeSteps } from './step-refs'
-
-export type UserPlanStatus = Extract<
-  ToolExecutionPlanItemStatus,
-  'pending' | 'in_progress' | 'completed' | 'failed' | 'skipped'
->
-
-export interface UserPlanStep {
-  /** 稳定步骤 id；已有步骤可复用。 */
-  id?: string
-  /** 步骤标题。 */
-  step: string
-  /** 可选步骤目标。 */
-  objective?: string
-  /** 当前步骤状态。 */
-  status: UserPlanStatus
-}
-
-type PlanStepRef = string | number
 
 /** 对模型开放的计划步骤状态，收窄为用户能理解的几种状态。 */
 export const planStatusSchema = z.enum([
@@ -33,29 +14,7 @@ export const planStatusSchema = z.enum([
   'skipped',
 ] satisfies [UserPlanStatus, ...UserPlanStatus[]])
 
-export type PlanLifecycle = 'active' | 'paused' | 'completed' | 'archived'
-
 export const planLifecycleSchema = z.enum(['active', 'paused', 'completed', 'archived'])
-
-/** plan:update 工具入参。 */
-export type UpdatePlanInput = {
-  /** 本次计划变更的简短说明。 */
-  explanation?: LooseOptional<string>
-  /** 计划生命周期；可暂停/恢复，完成或用户改变目标时应显式收尾。 */
-  lifecycle?: PlanLifecycle
-  /** 当前完整计划列表，而不是增量 patch。 */
-  plan?: UserPlanStep[]
-  /** 标记当前计划中的一个或多个步骤已完成；传步骤 id、标题或 1-based 序号。 */
-  complete_step?: PlanStepRef | PlanStepRef[]
-}
-
-interface PlanStepCompletionResult {
-  plan: UserPlanStep[]
-  completedStep: UserPlanStep
-  completedSteps: UserPlanStep[]
-  promotedStep: Nullable<UserPlanStep>
-  allStepsResolved: boolean
-}
 
 export function resolvePlanLifecycle(input: UpdatePlanInput): PlanLifecycle {
   if (input.lifecycle) return input.lifecycle

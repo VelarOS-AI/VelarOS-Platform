@@ -1,40 +1,8 @@
-import type { ChatMessage, TextBlock, ToolCallBlock } from '../../types/protocol'
+
+import type { ChatMessage, TextBlock, ToolCallBlock } from '../../types/agent.js'
+import type { IndexedSessionMessage,MessageSearchIndex } from '../../types/retrieval.js'
 
 import { chatSearchText } from './text'
-
-/**
- * 单条 {@link ChatMessage} 的扁平搜索索引。
- * `searchableText` 是 {@link chatSearchRanking.rankContextText} 的实际输入。
- */
-interface MessageSearchIndex {
-  /** 仅 text block 合并后的可见正文（不含 tool 结果）。 */
-  text: string
-  /** 本条消息内出现过的工具名（去重）。 */
-  toolNames: string[]
-  /**
-   * 打分用拼接串：`text` + role + id + toolNames + 各 tool args 序列化。
-   * 换行分隔，全部 lowerCase 匹配在 Ranking 内完成。
-   */
-  searchableText: string
-}
-
-/**
- * 带会话内序号的消息索引行。
- * {@link SessionSearchService} 用 messageIndex 参与 recency；
- * messageIndex=-1 表示「仅标题命中」的合成行。
- */
-interface IndexedSessionMessage {
-  /** 消息 id；标题占位行为 `{sessionId}:title`。 */
-  messageId: string
-  /** 在 session.messages 中的下标；标题占位为 -1。 */
-  messageIndex: number
-  role: ChatMessage['role']
-  timestamp: number
-  /** 可见正文，snippet 优先取此字段。 */
-  text: string
-  /** 完整搜索面，见 {@link MessageSearchIndex.searchableText}。 */
-  searchableText: string
-}
 
 /**
  * 从 {@link ChatMessage} 提取可搜索文本并构建索引字段。
@@ -123,4 +91,4 @@ class ChatSearchMessages {
 /** 全进程唯一的消息索引实例。 */
 const chatSearchMessages = new ChatSearchMessages()
 
-export { chatSearchMessages, type IndexedSessionMessage, type MessageSearchIndex }
+export { chatSearchMessages }

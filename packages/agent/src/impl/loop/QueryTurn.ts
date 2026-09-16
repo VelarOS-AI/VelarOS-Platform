@@ -1,33 +1,14 @@
-import type { LanguageModel, ModelMessage, ToolSet } from 'ai'
+import type { ModelMessage, ToolSet } from 'ai'
 
 import { isEmpty, toNullable, toOptional } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 
-import type {
-  AgentEvent,
-  StreamAssistantGeneratedFilePayload,
-  StreamAssistantSourcePayload,
-} from '../../types/agent'
-import { type ChatRuntimeEvent, ChatRuntimeEvents } from '../../types/chat-runtime'
-import type { AgentModelRequestOptions } from '../../types/model-contracts'
-import type {
-  StreamReasoningPayload,
-  StreamToolCallPayload,
-  StreamToolMetadataPayload,
-  StreamToolProgressPayload,
-  StreamToolResultPayload,
-} from '../../types/protocol'
-import type { AgentModelRetryPolicy } from '../../types/run-lifecycle'
-import type { AppLocale } from '../../types/system'
-import type { AgentModelInputModality } from '../../types/tool'
-import type { EstimateContextUsageOptions } from '../../utils/context/context-usage'
-import {
-  assertProviderRequestSnapshotReconstructable,
-  type ProviderRequestSnapshot,
-} from '../../utils/context/provider-request-snapshot'
+import type {ProviderRequestSnapshot } from '../../types/context.js'
+import type { AgentModelRequestPort, AgentModelStreamInput, ExecuteQueryTurnArgs, InterruptedStreamPartial, QueryTurnToolContext, QueryTurnToolRegistry, StreamConsumerEvents } from '../../types/loop.js'
+import type { ToolExecutorEvents } from '../../types/tools.js'
+import { assertProviderRequestSnapshotReconstructable } from '../../utils/context/provider-request-snapshot'
 import { createInternalFollowUpMessage } from '../../utils/history/internal-messages'
-import type { AgentHistoryToolContext } from '../../utils/history/request'
 import type { AgentTurnHistoryHelper } from '../../utils/history/turn'
 import { assertModelInputCompatibility } from '../../utils/model/model-input-compatibility'
 import { normalizeModelRequestError } from '../../utils/model/model-request-error'
@@ -38,37 +19,18 @@ import {
   buildOutputTruncationContinuationPrompt,
   isOutputTruncationError,
 } from '../../utils/stream/output-truncation-recovery'
+import { ChatRuntimeEvents } from '../../utils/wire/chat-runtime.js'
 import { resolveModelContextUsageOptions } from '../context/AgentLoopContextUsageManager'
-import type { ContextPayloadStore } from '../context/InMemoryContextPayloadStore'
 import { ProviderRequestCompiler } from '../context/ProviderRequestCompiler'
 import { compileProviderSendRequest } from '../context/ProviderSendRequest'
-import type { ToolSpanOpener } from '../ledgers/LedgerExecutionSpanScopeFactory'
-import type { AgentModSeamDispatcher } from '../mods/AgentModSeamDispatcher'
-import {
-  emitCompletedProviderTurnSnapshot,
-  ProviderTurnEventReducer,
-  type ProviderTurnSnapshot,
-} from '../records/ProviderTurnEventReducer'
+import { emitCompletedProviderTurnSnapshot, ProviderTurnEventReducer } from '../records/ProviderTurnEventReducer'
 import type { ContextGovernanceSessionRegistry } from '../residency/ContextGovernanceSession'
 import { KernelToolLoopGuard } from '../tools/KernelToolLoopGuard'
-import {
-  ToolExecutionPolicy,
-  type ToolExecutionPolicyContext,
-  type ToolExecutionPolicyRegistry,
-} from '../tools/ToolExecutionPolicy'
-import { ToolExecutor, type ToolExecutorEvents } from '../tools/ToolExecutor'
+import { ToolExecutionPolicy } from '../tools/ToolExecutionPolicy'
+import { ToolExecutor } from '../tools/ToolExecutor'
 
-import {
-  type AgentModelRequestPort,
-  type AgentModelStreamInput,
-  AiSdkAgentModelRequestPort,
-  applyModelRequestPolicy,
-} from './AiSdkAgentModelRequestPort'
-import {
-  buildKernelContextEpoch,
-  type KernelContextEpochGuardLike,
-  recordKernelContextEpochDiagnostic,
-} from './KernelContextEpochGuard'
+import { AiSdkAgentModelRequestPort, applyModelRequestPolicy } from './AiSdkAgentModelRequestPort'
+import { buildKernelContextEpoch, recordKernelContextEpochDiagnostic } from './KernelContextEpochGuard'
 import {
   buildKernelPrefixShape,
   KernelPrefixShapeTracker,
@@ -83,112 +45,7 @@ import {
   markContextOverflowReplayUnsafe,
   MaxConnectionRetryAttempts,
 } from './RetryPolicy'
-import {
-  type InterruptedStreamPartial,
-  StreamConsumer,
-  type StreamConsumerEvents,
-  type StreamConsumerTurnState,
-} from './StreamConsumer'
-
-type QueryTurnProvider = (modelId: string, options?: AgentModelRequestOptions) => LanguageModel
-
-type QueryTurnToolContext = ToolExecutionPolicyContext &
-  AgentHistoryToolContext & {
-    abortSignal: AbortSignal
-    sessionId?: string
-    /** 非可展示响应兜底文案的语言；缺省时 StreamConsumer 回落 zh-CN。 */
-    locale?: AppLocale
-    contextPayloadStore?: ContextPayloadStore
-  }
-
-interface QueryTurnToolRegistry<
-  TToolContext extends QueryTurnToolContext = QueryTurnToolContext,
-> extends ToolExecutionPolicyRegistry {
-  toAiTools(
-    toolContext: TToolContext,
-    allowList: string[],
-    options?: {
-      toolSchemaChars?: Readonly<Record<string, number>>
-      historyToolNames?: readonly string[]
-    }
-  ): ToolSet
-  estimateToolSerializedCharsByName?: (
-    toolContext: TToolContext,
-    allowedTools?: string[]
-  ) => Record<string, number>
-  estimateToolSchemaHashesByName?: (
-    toolContext: TToolContext,
-    allowedTools?: string[]
-  ) => Record<string, string>
-}
-
-interface QueryTurnEvents {
-  emitRuntime(event: ChatRuntimeEvent): void
-  emitTextDelta?(text: string): void
-  emitGeneratedFile?(payload: StreamAssistantGeneratedFilePayload): void
-  emitSource?(payload: StreamAssistantSourcePayload): void
-  /**
-   * 可选：推理模型的增量内容转发入口。
-   * 子智能体默认不向界面投影推理内容，但调试面板可以注册监听器，
-   * 否则推理 token 会"只付费、看不见"。
-   */
-  emitReasoningDelta?(payload: StreamReasoningPayload): void
-  emitToolStart?(payload: StreamToolCallPayload): void
-  emitToolProgress?(payload: StreamToolProgressPayload): void
-  emitToolMetadata?(payload: StreamToolMetadataPayload): void
-  emitToolDone?(payload: StreamToolResultPayload): void
-  emitNotice?(event: Extract<AgentEvent, { type: 'notice' }>): void
-}
-
-export interface ExecuteQueryTurnArgs<
-  TToolContext extends QueryTurnToolContext = QueryTurnToolContext,
-> {
-  provider: QueryTurnProvider
-  model: string
-  turn?: number
-  modelRequestOptions?: AgentModelRequestOptions
-  systemPrompt: string
-  history: ModelMessage[]
-  contextWindow?: LooseOptional<number>
-  /** Concrete inputs accepted by the selected model. Missing means unknown, not unsupported. */
-  supportedInputModalities?: readonly AgentModelInputModality[]
-  contextUsageOptions?: EstimateContextUsageOptions
-  toolSchemaChars?: Readonly<Record<string, number>>
-  toolContext: TToolContext
-  /** 本轮开始时捕获的工具能力快照；缺省兼容使用构造时注册表。 */
-  toolRegistry?: QueryTurnToolRegistry<TToolContext>
-  allowedTools: string[]
-  events?: QueryTurnEvents
-  streamTextDeltas?: boolean
-  /** 测试/运行时覆盖：模型流多久没有新 chunk 就判定 provider 半开停滞。 */
-  idleStallTimeoutMs?: LooseOptional<number>
-  contextEpochScope?: LooseOptional<string>
-  /**
-   * 治理账本键（缺省 = 会话 id）。
-   *
-   * 子 agent 的 `toolContext` 是父 ctx 的展开，sessionId 与父会话逐字相同，但它跑的是另一条消息
-   * 序列——共用一本账本会让父子交替编译每次都在第 0 条指纹分叉、整本重建（审计 U12）。派发面
-   * 传一个"每次派发唯一、跨该子 agent 全部轮次稳定"的键进来。
-   */
-  governanceSessionId?: LooseOptional<string>
-  contextEpochGuard?: LooseOptional<KernelContextEpochGuardLike>
-  onProviderTurnSnapshot?: LooseOptional<(snapshot: ProviderTurnSnapshot) => void>
-  /** 每次真实 provider 请求将被连接重试替换前，记录该失败尝试。 */
-  modelRetry?: AgentModelRetryPolicy
-  onModelRequestRetry?: LooseOptional<(error: AppError, attempt: number) => void>
-  /**
-   * 可选观测 tool span 开启器（#37 阶段 C 片 2）。子 Agent 的 QueryLoop 每轮把 turn scope 作开启器注入，
-   * 令本轮内 ToolExecutor 产 tool span（挂在子 Agent 自己的 turn span 下）；缺省 no-op（零观测零付费）。
-   */
-  toolSpanOpener?: LooseOptional<ToolSpanOpener>
-  toolLoopGuard?: KernelToolLoopGuard
-  /**
-   * 可选 mod 拦截 seam 派发器（裁决 9 机制②）；由 QueryLoop 逐轮透传。缺省 null → 本轮
-   * ToolExecutor 全链 no-op，行为逐字节不变。子面与主面共用同一派发器，钩子的「拦下/改写」
-   * 才不会在委派边界上出现盲区。
-   */
-  seams?: LooseOptional<AgentModSeamDispatcher>
-}
+import { StreamConsumer, type StreamConsumerTurnState } from './StreamConsumer'
 
 export interface QueryTurnResult {
   hasToolUse: boolean
@@ -775,4 +632,3 @@ class QueryTurn<TToolContext extends QueryTurnToolContext = QueryTurnToolContext
 
 export { QueryTurn }
 export { QueryTurn as AgentQueryTurnHelper }
-export type { QueryTurnEvents, QueryTurnProvider, QueryTurnToolContext, QueryTurnToolRegistry }

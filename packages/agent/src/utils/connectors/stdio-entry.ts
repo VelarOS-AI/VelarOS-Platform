@@ -18,13 +18,7 @@ import {
 } from '@velaros-ai/kernel/remote/client'
 
 import { createRemoteNodeMcpServer } from '../../impl/connectors/RemoteNodeMcpServer'
-
-interface EntryArguments {
-  readonly url: string
-  readonly hostSlug: string
-  readonly clientName: string
-  readonly pairingCode: Nullable<string>
-}
+import type { EntryArguments } from '../../types/connectors.js'
 
 function readArguments(argv: readonly string[]): EntryArguments {
   const values = new Map<string, string>()

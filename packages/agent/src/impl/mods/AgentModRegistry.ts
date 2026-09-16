@@ -9,84 +9,10 @@
 // 明确不做：全局 registry 即时修改、加载顺序覆盖、giant context 注入。
 import { isTrue,toNullable } from '@velaros-ai/core'
 
-import type { ExecutionModeDescriptor } from '../../types/execution-mode-descriptor'
-import type { ToolCategoryDefinition } from '../../types/tool'
-import type { VelaTool } from '../../utils/builtin/define-agent-tool'
-import type { SubAgentTypeDescriptor } from '../../utils/delegation/sub-agent-type-registry'
-import type { AgentSkillDefinition } from '../../utils/guidance/agent-skill-provider'
-import {
-  type AgentModContributionAxisName,
-  AgentModContributionAxisNames,
-  type AgentModExecutionModeContribution,
-  type AgentModHookContribution,
-  type AgentModPromptSegmentContribution,
-  type AgentModSkillContribution,
-  type AgentModSpaceContribution,
-  type AgentModSubAgentTypeContribution,
-  type AgentModToolCategoryContribution,
-  type AgentModToolContribution,
-  type AgentModTurnContextSourceContribution,
-} from '../../utils/wire/mods'
-import type { PromptSegmentDefinition } from '../guidance/PromptRegistry'
+import type { AgentModContributionAxisName } from '../../types/agent.js'
+import type { AgentModAxisRecord, AgentModContributionRecord, AgentModRegistryPhase, AgentModRegistrySnapshot } from '../../types/mods.js'
+import { AgentModContributionAxisNames } from '../../utils/wire/mods'
 
-import type { AgentModSeamHandler } from './AgentModSeamDispatcher'
-
-
-/** 一条贡献记录：声明（manifest 条目）+ 运行态载荷（缺席即纯数据轴）。 */
-interface AgentModContributionRecord<TDeclaration = unknown, TPayload = unknown> {
-  readonly axis: AgentModContributionAxisName
-  readonly modId: string
-  /** 轴内稳定主键（工具用 name，其余用 id）。 */
-  readonly key: string
-  readonly declaration: TDeclaration
-  readonly payload: Nullable<TPayload>
-}
-
-/** 各轴的运行态载荷类型；纯数据轴为 `never`（payload 恒 null）。 */
-interface AgentModAxisPayloadMap {
-  tools: VelaTool<any, any>
-  toolCategories: ToolCategoryDefinition
-  promptSegments: PromptSegmentDefinition
-  skills: AgentSkillDefinition
-  spaces: never
-  subAgentTypes: SubAgentTypeDescriptor
-  turnContextSources: never
-  executionModes: ExecutionModeDescriptor
-  hooks: AgentModSeamHandler
-}
-
-interface AgentModAxisDeclarationMap {
-  tools: AgentModToolContribution
-  toolCategories: AgentModToolCategoryContribution
-  promptSegments: AgentModPromptSegmentContribution
-  skills: AgentModSkillContribution
-  spaces: AgentModSpaceContribution
-  subAgentTypes: AgentModSubAgentTypeContribution
-  turnContextSources: AgentModTurnContextSourceContribution
-  executionModes: AgentModExecutionModeContribution
-  hooks: AgentModHookContribution
-}
-
-type AgentModAxisRecord<TAxis extends AgentModContributionAxisName> = AgentModContributionRecord<
-  AgentModAxisDeclarationMap[TAxis],
-  AgentModAxisPayloadMap[TAxis]
->
-
-/** 一份按 generation 冻结的注册表投影；跨 generation 使用即 stale。 */
-interface AgentModRegistrySnapshot {
-  readonly generation: number
-  readonly tools: ReadonlyArray<AgentModAxisRecord<'tools'>>
-  readonly toolCategories: ReadonlyArray<AgentModAxisRecord<'toolCategories'>>
-  readonly promptSegments: ReadonlyArray<AgentModAxisRecord<'promptSegments'>>
-  readonly skills: ReadonlyArray<AgentModAxisRecord<'skills'>>
-  readonly spaces: ReadonlyArray<AgentModAxisRecord<'spaces'>>
-  readonly subAgentTypes: ReadonlyArray<AgentModAxisRecord<'subAgentTypes'>>
-  readonly turnContextSources: ReadonlyArray<AgentModAxisRecord<'turnContextSources'>>
-  readonly executionModes: ReadonlyArray<AgentModAxisRecord<'executionModes'>>
-  readonly hooks: ReadonlyArray<AgentModAxisRecord<'hooks'>>
-}
-
-type AgentModRegistryPhase = 'registration' | 'runtime'
 
 /** 快照失效（generation 已推进）；stale-reject 走它，绝不静默回退到旧值。 */
 class AgentModStaleSnapshotError extends Error {
@@ -222,11 +148,3 @@ class AgentModRegistry {
 }
 
 export { AgentModRegistry, AgentModStaleSnapshotError }
-export type {
-  AgentModAxisDeclarationMap,
-  AgentModAxisPayloadMap,
-  AgentModAxisRecord,
-  AgentModContributionRecord,
-  AgentModRegistryPhase,
-  AgentModRegistrySnapshot,
-}

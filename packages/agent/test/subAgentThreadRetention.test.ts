@@ -11,23 +11,19 @@ import { AppError } from '@velaros-ai/core/error'
 
 import { dispatchAgentTools } from '../src/impl/builtin/DispatchAgent.tool'
 import { SubAgentDispatcher } from '../src/impl/delegation/SubAgentDispatcher'
-import {
-  SubAgentSessionStore,
-  type SubAgentThreadRetentionLimits,
-} from '../src/impl/delegation/SubAgentSessionStore'
+import { SubAgentSessionStore } from '../src/impl/delegation/SubAgentSessionStore'
 import { TeamModelRouter } from '../src/impl/delegation/TeamModelRouter'
 import { WriteLeaseCoordinator } from '../src/impl/delegation/WriteLeaseCoordinator'
 import { ExecutionEventBus } from '../src/impl/records/ExecutionEventBus'
 import { SubAgentGuidanceRelayRegistry } from '../src/impl/records/SubAgentGuidanceRelayRegistry'
-import type { SubAgentDispatchInput, SubAgentQueryOptions } from '../src/types/dispatch-host-ports'
-import type { SubAgentSessionStatus, SubAgentTaskResult } from '../src/types/sub-agent-task'
+import type { SubAgentSessionStatus, SubAgentTaskResult } from '../src/types/agent.js'
+import type { SubAgentDispatchInput, SubAgentQueryOptions, SubAgentThreadRetentionLimits, SubAgentTypeDescriptor } from '../src/types/delegation.js'
+import type { RuntimePromptSnapshot } from '../src/types/guidance.js'
+import type { AgentExecutionLimitOverrides } from '../src/types/loop.js'
 import { dispatchAgentSchema } from '../src/utils/builtin/dispatch-schemas'
 import { formatSubAgentFailureRedispatchGuidance } from '../src/utils/delegation/result-format'
 import { parseSubAgentToolResult } from '../src/utils/delegation/sub-agent-result-builder'
-import type { SubAgentTypeDescriptor } from '../src/utils/delegation/sub-agent-type-registry'
 import { createRuntimePromptSegments } from '../src/utils/guidance/runtime'
-import type { RuntimePromptSnapshot } from '../src/utils/guidance/shared'
-import type { AgentExecutionLimitOverrides } from '../src/utils/loop/execution-limits'
 
 interface WorkerCall {
   task: string

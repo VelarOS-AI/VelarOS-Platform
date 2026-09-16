@@ -1,13 +1,4 @@
-export type {
-  ContractLease,
-  LeaseDenialReason,
-  LeaseDeniedResponse,
-  ToolCatalogEntry,
-  ToolCatalogSnapshot,
-  VelarToolCallEnvelope,
-  VelarToolResultEnvelope,
-  VelarToolResultStatus,
-} from '../../utils/wire/lease'
+export type { ContractLease, LeaseDenialReason, LeaseDeniedResponse, ToolCatalogEntry, ToolCatalogSnapshot, VelarToolCallEnvelope, VelarToolResultEnvelope, VelarToolResultStatus } from '../../types/agent.js'
 export {
   ContractLeaseSchema,
   LeaseDenialReasonSchema,

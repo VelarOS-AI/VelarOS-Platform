@@ -20,22 +20,11 @@
  * 由调用方（SoloLoop / QueryLoop）落地。
  */
 
-export type ContextDegradeActionKind =
-  | 'govern-epoch'
-  | 'narrow-tools'
-  | 'surrender'
-
-export interface ContextDegradeAction {
-  kind: ContextDegradeActionKind
-  /** 当前处于阶梯第几级（从 1 开始）。 */
-  level: number
-  /** 收窄工具时降到的运行档（仅 narrow-tools 有意义）。 */
-  narrowToProfile?: 'compact'
-}
-
 /**
  * 完整阶梯（solo 链路：工具可收窄）。
  */
+import type { ContextDegradeAction, ContextDegradeChain } from '../../types/loop.js'
+
 const SoloDegradeStaircase: readonly ContextDegradeAction[] = [
   { kind: 'govern-epoch', level: 1 },
   { kind: 'narrow-tools', level: 2, narrowToProfile: 'compact' },
@@ -49,8 +38,6 @@ const QueryDegradeStaircase: readonly ContextDegradeAction[] = [
   { kind: 'govern-epoch', level: 1 },
   { kind: 'surrender', level: 2 },
 ]
-
-export type ContextDegradeChain = 'solo' | 'query'
 
 /**
  * 取第 attempt 次缺页（从 0 开始计数）应采取的降级动作。

@@ -3,9 +3,9 @@ import { describe, expect, test } from 'bun:test'
 import { createBuiltinAgentModPackage } from '../src/impl/builtin/BuiltinAgentMod'
 import { contextDistillTools } from '../src/impl/builtin/ContextDistill.tool'
 import { contextHandoffTools } from '../src/impl/builtin/ContextHandoff.tool'
-import type { KernelToolContext } from '../src/types/kernel-tool-context'
+import type { RuntimePromptSnapshot } from '../src/types/guidance.js'
+import type { KernelToolContext } from '../src/types/tool-context.js'
 import { createRuntimePromptSegments } from '../src/utils/guidance/runtime'
-import type { RuntimePromptSnapshot } from '../src/utils/guidance/shared'
 
 function buildContextPrompt(): string {
   const toolNames = ['context:distill', 'context:recall', 'context:handoff']

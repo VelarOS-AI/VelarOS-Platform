@@ -3,7 +3,7 @@ import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
-import type { AgentModelRetryPolicy } from '../../types/run-lifecycle'
+import type { ConnectionRetryBlockReason,ConnectionRetryOptions, ContextOverflowReplayUnsafeDetails, NonConnectionApiErrorMatcher } from '../../types/loop.js'
 
 /** 第一次重试的基础延迟。 */
 const ConnectionRetryBaseDelayMs = 3_000
@@ -46,11 +46,6 @@ const NonConnectionApiErrorCodes = new Set([
 
 const TransientApiErrorCodes = new Set(['rate_limit_error', 'rate_limit_exceeded'])
 
-interface NonConnectionApiErrorMatcher {
-  pattern: RegExp
-  reason: string
-}
-
 /** 上下文超限专用错误码：与 NonConnectionApiErrorCodes 的“context”子集对应。 */
 const ContextOverflowErrorCodes = new Set(['context_length_exceeded'])
 
@@ -65,11 +60,6 @@ const ContextOverflowMessageMatchers: RegExp[] = [
   /input is too long/i,
   /string too long/i,
 ]
-
-interface ContextOverflowReplayUnsafeDetails {
-  hasVisibleOutput: boolean
-  hasToolUse: boolean
-}
 
 const ContextOverflowReplayUnsafeSymbol = Symbol.for('velaros.contextOverflowReplayUnsafe')
 
@@ -104,26 +94,6 @@ const NonConnectionApiErrorMessageMatchers: NonConnectionApiErrorMatcher[] = [
   { pattern: /too many tokens/i, reason: 'context-length' },
   { pattern: /unauthorized/i, reason: 'unauthorized' },
 ]
-
-interface ConnectionRetryOptions {
-  policy?: AgentModelRetryPolicy
-  phase: 'stream' | 'query'
-  turn: Nullable<number>
-  abortSignal: AbortSignal
-  hasVisibleOutput?: () => boolean
-  hasToolUse?: () => boolean
-  onRetry?: (error: AppError, attempt: number) => void
-}
-
-type ConnectionRetryBlockReason =
-  | 'abort_error'
-  | 'abort_signal'
-  | 'max_attempts'
-  | 'non_connection_api_error'
-  | 'not_transient_connection_error'
-  | 'stalled_retry_exhausted'
-  | 'tool_use_emitted'
-  | 'visible_output_emitted'
 
 /**
  * 重试策略：模型调用层的“瞬态网络错误”重试器。
@@ -702,13 +672,5 @@ function isContextOverflowReplayUnsafeDetails(
   return isBoolean(record.hasVisibleOutput) && isBoolean(record.hasToolUse)
 }
 
-export {
-  AiSdkMaxRetries,
-  type ConnectionRetryOptions,
-  isContextOverflowError,
-  isContextOverflowReplayUnsafe,
-  markContextOverflowReplayUnsafe,
-  MaxConnectionRetryAttempts,
-  RetryPolicy,
-}
+export { AiSdkMaxRetries, isContextOverflowError, isContextOverflowReplayUnsafe, markContextOverflowReplayUnsafe, MaxConnectionRetryAttempts, RetryPolicy }
 export { RetryPolicy as AgentConnectionRetryHelper }

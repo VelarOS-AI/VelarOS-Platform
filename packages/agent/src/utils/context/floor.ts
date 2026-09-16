@@ -10,17 +10,14 @@ import type { ModelMessage } from 'ai'
 import { isBlank, isEmpty, isFalse, isPlainObject, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import type { CompileProviderRequestInput } from '../../impl/context/ProviderRequestCompiler'
-import type { ProviderRequestFingerprint } from '../../impl/records/ProviderTurnEventReducer'
 import { ProviderToolNamePattern } from '../../impl/tools/ProviderToolReferenceCanonicalizer'
+import type { AssertProviderRequestInvariantPhase,CompileProviderRequestInput, ToolReferenceScan } from '../../types/context.js'
+import type { ProviderRequestFingerprint } from '../../types/records.js'
 import { compareStableStrings } from '../residency/determinism'
 
 import { shortHash } from './content-hash'
-import { sortedStrings, sumPositive, type ToolReferenceScan } from './message-scan'
+import { sortedStrings, sumPositive } from './message-scan'
 import { encodeProviderRequestAuditValue } from './serialization'
-
-/** 校验相位标记：目前仅编译期一处出核，保留类型以备未来 seam 扩展。 */
-export type AssertProviderRequestInvariantPhase = 'compile'
 
 /** 解析本轮暴露的工具名：优先显式 availableToolNames，否则退回 toolSchemaChars 键集。 */
 export function resolveAvailableToolNames(input: CompileProviderRequestInput): string[] {

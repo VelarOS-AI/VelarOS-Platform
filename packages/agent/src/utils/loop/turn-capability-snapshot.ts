@@ -1,25 +1,9 @@
 import { isObject, isString,toNullable } from '@velaros-ai/core'
 
-import type { ToolAvailabilityScope } from '../../types/tool'
+import type { AgentTurnCapabilitySnapshotSource } from '../../contract/requires.js'
+import type { ToolAvailabilityScope } from '../../types/agent.js'
+import type { AgentTurnCapabilityContextView,AgentTurnCapabilitySnapshot } from '../../types/loop.js'
 
-/**
- * 单个 Agent turn 开始时捕获的只读注册表视图。
- *
- * 具体快照由宿主实现；Agent Runtime 只依赖这个消费侧端口。注册表变化因此只能在
- * 下一轮生效，不会改写已经开始构建的 provider request。
- */
-type AgentTurnCapabilitySnapshot<TRegistry> = TRegistry
-
-interface AgentTurnCapabilitySnapshotSource<TRegistry> {
-  captureTurnCapabilitySnapshot(): AgentTurnCapabilitySnapshot<TRegistry>
-}
-
-interface AgentTurnCapabilityContextView {
-  listTools(scope?: ToolAvailabilityScope): unknown[]
-  listToolCategories(scope?: ToolAvailabilityScope): unknown[]
-  listCapabilityPages?(): unknown[]
-  describeToolInputSchema?(toolName: string): unknown
-}
 
 const ToolAvailabilityScopes: readonly ToolAvailabilityScope[] = [
   'enabled',
@@ -93,4 +77,3 @@ function captureAgentTurnCapabilityContext<
 }
 
 export { captureAgentTurnCapabilityContext, captureAgentTurnCapabilitySnapshot }
-export type { AgentTurnCapabilitySnapshot, AgentTurnCapabilitySnapshotSource }

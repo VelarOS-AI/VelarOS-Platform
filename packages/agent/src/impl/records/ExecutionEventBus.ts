@@ -8,15 +8,8 @@ import type {
   StreamTurnContextPayload,
   StreamWorkerThreadPayload,
 } from '../../types/agent'
-import type { ChatRuntimeEvent, StreamStatePayload } from '../../types/chat-runtime'
-import type {
-  StreamExecutionGraphPayload,
-  StreamReasoningPayload,
-  StreamToolCallPayload,
-  StreamToolMetadataPayload,
-  StreamToolProgressPayload,
-  StreamToolResultPayload,
-} from '../../types/protocol'
+import type { ChatRuntimeEvent, StreamExecutionGraphPayload, StreamReasoningPayload, StreamStatePayload, StreamToolCallPayload, StreamToolMetadataPayload, StreamToolProgressPayload, StreamToolResultPayload } from '../../types/agent.js'
+import type { WorkerExecutionStreamOptions, WorkerThreadProjection } from '../../types/records.js'
 
 interface ExecutionEventBusHandlers {
   /** Agent 文本、工具、runtime、turn context 等流式事件。 */
@@ -26,23 +19,6 @@ interface ExecutionEventBusHandlers {
   /** 执行图和调试面板需要的结构化快照。 */
   debug?: (payload: StreamExecutionGraphPayload) => void
 }
-
-interface WorkerExecutionStreamOptions {
-  threadId: string
-  activationId?: LooseOptional<string>
-  taskId?: LooseOptional<string>
-  nodeId?: LooseOptional<string>
-  title: string
-  agentName?: LooseOptional<string>
-  roleId?: LooseOptional<StreamWorkerThreadPayload['roleId']>
-  phase?: LooseOptional<StreamWorkerThreadPayload['phase']>
-  capabilityTarget?: LooseOptional<StreamWorkerThreadPayload['capabilityTarget']>
-  dag?: LooseOptional<StreamWorkerThreadPayload['dag']>
-}
-
-/** worker 线程事件里随事件类型变化的那几个字段；其余字段全部由线程身份信封给定。 */
-type WorkerThreadProjection = Pick<StreamWorkerThreadPayload, 'event'> &
-  Partial<Pick<StreamWorkerThreadPayload, 'timestamp' | 'text' | 'summary' | 'chatEvent'>>
 
 /**
  * 线程身份信封：worker 线程事件里**与事件类型无关**的那部分。
@@ -364,4 +340,4 @@ class ExecutionEventBus {
 }
 
 export { ExecutionEventBus }
-export type { ExecutionEventBusHandlers, WorkerExecutionStreamOptions }
+export type { ExecutionEventBusHandlers }

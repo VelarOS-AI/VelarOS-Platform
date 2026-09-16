@@ -3,10 +3,8 @@ import assert from 'node:assert/strict'
 import type { ModelMessage } from 'ai'
 import { describe, test } from 'bun:test'
 
-import {
-  type ContextPayloadStore,
-  InMemoryContextPayloadStore,
-} from '../src/impl/context/InMemoryContextPayloadStore'
+import type { ContextPayloadStore } from '../src/contract/requires.js'
+import { InMemoryContextPayloadStore } from '../src/impl/context/InMemoryContextPayloadStore'
 import { ProviderRequestCompiler } from '../src/impl/context/ProviderRequestCompiler'
 import { compileProviderSendRequest } from '../src/impl/context/ProviderSendRequest'
 import { UserTextPayloadPlanner } from '../src/impl/context/UserTextPayloadPlanner'

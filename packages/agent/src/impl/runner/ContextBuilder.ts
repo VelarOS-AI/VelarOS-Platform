@@ -15,60 +15,16 @@
 //  - **组装是纯函数**：同一输入恒得同一提示词（金标轨迹逐字节比对依赖它）。
 import { isEmpty } from '@velaros-ai/core'
 
-import type { AgentChatRuntimeConfig } from '../../types/runtime-configuration'
+import type { AgentChatRuntimeConfig } from '../../contract/requires.js'
+import type { PromptBudgetOptions, PromptCompositionResult, PromptContribution, PromptRenderContext, PromptSegmentDefinition, PromptSegmentProvider } from '../../types/guidance.js'
+import type { AgentModTurnContextAppendage } from '../../types/mods.js'
+import type { BuiltContext } from '../../types/runner.js'
 import { createBuiltInPromptRegistry, createIdentityPromptSegment } from '../../utils/guidance/catalog'
-import type {
-  PromptBudgetOptions,
-  PromptCompositionResult,
-  PromptContribution,
-  PromptRegistry,
-  PromptRenderContext,
-  PromptSegmentDefinition,
-  PromptSegmentProvider,
-  PromptSegmentStability,
-} from '../guidance/PromptRegistry'
-import type {
-  AgentModSeamDispatcher,
-  AgentModTurnContextAppendage,
-} from '../mods/AgentModSeamDispatcher'
+import type { PromptRegistry } from '../guidance/PromptRegistry'
+import type { AgentModSeamDispatcher } from '../mods/AgentModSeamDispatcher'
 
 /** mod 追加段的缺省优先级：排在内置 dynamic 段之后、便于识别来源。 */
 const ModTurnContextDefaultPriority = 9_000
-
-export interface BuiltContext {
-  /** 组装好的完整 system prompt */
-  systemPrompt: string
-  /**
-   * stable 段的结束索引（在 systemPrompt 中）
-   * 可用于向 LLM SDK 提示 cache 边界（未来接入 Anthropic cache_control 时用）
-   */
-  stableCutoff: number
-  /** 参与本轮装配的 prompt 段，供 debug 和后续可视化使用 */
-  segments: Array<{
-    id: string
-    label?: string
-    stability: PromptSegmentStability
-    source: string
-    priority: number
-    retention: 'normal' | 'protected'
-    text: string
-  }>
-  skippedSegments: Array<{
-    id: string
-    label?: string
-    stability: PromptSegmentStability
-    source: string
-    priority: number
-    reason: string
-  }>
-  promptBudget: Nullable<{
-    profile: string
-    maxChars: number
-    charsBefore: number
-    charsAfter: number
-    trimmedSegmentCount: number
-  }>
-}
 
 class ContextBuilderParts {
   public createDefaultRegistry(): PromptRegistry {

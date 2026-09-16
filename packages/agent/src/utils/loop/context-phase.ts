@@ -3,31 +3,10 @@ import type { ModelMessage } from 'ai'
 import { isEmpty, isTrue } from '@velaros-ai/core'
 
 import type {
-  AgentContextPhase,
   AgentContextPhaseReason,
-  AgentSurfaceId,
-  ChatPromptFeatureId,
-  ExecutionModeId,
 } from '../../types/agent'
+import type { AgentContextPhaseDecision, ResolveAgentContextPhaseInput } from '../../types/loop.js'
 import { resolveExecutionModes } from '../runner/execution-mode-registry'
-
-interface AgentContextPhaseDecision {
-  phase: AgentContextPhase
-  reason: AgentContextPhaseReason
-}
-
-interface ResolveAgentContextPhaseInput {
-  turn: number
-  history: readonly ModelMessage[]
-  agentSurfaceId?: LooseOptional<AgentSurfaceId>
-  unattended?: boolean
-  /** 执行模式轴；缺席时由旧形态（promptFeatures 里的模式 id / goalMode）折算。 */
-  executionModes?: readonly ExecutionModeId[]
-  goalMode?: boolean
-  selectedSkillIds?: readonly string[]
-  promptFeatures?: readonly ChatPromptFeatureId[]
-  hasActiveContext?: boolean
-}
 
 function operational(reason: AgentContextPhaseReason): AgentContextPhaseDecision {
   return { phase: 'operational', reason }
@@ -66,4 +45,3 @@ function resolveAgentContextPhase(input: ResolveAgentContextPhaseInput): AgentCo
 }
 
 export { resolveAgentContextPhase }
-export type { AgentContextPhaseDecision, ResolveAgentContextPhaseInput }

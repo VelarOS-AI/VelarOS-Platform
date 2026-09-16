@@ -1,6 +1,8 @@
 // 域：Agent 会话动词与会话树 entry；不进入 Kernel protocol。
 import { z } from 'zod'
 
+import type { AdmitReceipt, AdmitRequest, AnswerRequest, ApproveRequest, BranchSummaryEntry, CancelRequest, CancelResult, CompactionEntry, CustomEntry, CustomMessageEntry, MessageEntry, ModelChangeEntry, RuntimeStatusRequest, RuntimeStatusResponse, SessionEntry, SessionEventEnvelope,SessionEventPayload, SessionInfoEntry, SessionInputDelivery, SessionTarget, SteerRequest, WakeRequest } from '../../types/agent.js'
+
 import { ModelMessagePartSchema, ModelMessageRoleSchema, ModelMessageSchema } from './message'
 
 /**
@@ -9,9 +11,7 @@ import { ModelMessagePartSchema, ModelMessageRoleSchema, ModelMessageSchema } fr
  * 对齐控制器 `KernelInputDelivery`（`'queue' | 'steer'`）。子字段枚举不单列进快照注册表
  * （贴 `ModelMessageRole` / `LeaseDenialReason` 惯例——sub-field 枚举随载它的帧一起序列化）。
  */
-export const SessionInputDeliverySchema = z.enum(['queue', 'steer'])
-export type SessionInputDelivery = z.infer<typeof SessionInputDeliverySchema>
-
+export const SessionInputDeliverySchema = z.enum(['queue', 'steer']) satisfies z.ZodType<SessionInputDelivery>
 /**
  * 会话树 entry 公共字段。
  *
@@ -35,26 +35,20 @@ export const SessionInfoEntrySchema = z.strictObject({
   ...sessionEntryBaseFields,
   type: z.literal('session-info'),
   spaceId: z.string(),
-})
-export type SessionInfoEntry = z.infer<typeof SessionInfoEntrySchema>
-
+}) satisfies z.ZodType<SessionInfoEntry>
 /** 普通消息 entry：承载一条转录消息。 */
 export const MessageEntrySchema = z.strictObject({
   ...sessionEntryBaseFields,
   type: z.literal('message'),
   message: ModelMessageSchema,
-})
-export type MessageEntry = z.infer<typeof MessageEntrySchema>
-
+}) satisfies z.ZodType<MessageEntry>
 /** 压缩 entry：压缩/handoff/蒸馏折叠的治理产物即会话数据，记录被替换的 entry。 */
 export const CompactionEntrySchema = z.strictObject({
   ...sessionEntryBaseFields,
   type: z.literal('compaction'),
   summary: z.string(),
   replacedEntryIds: z.array(z.string()),
-})
-export type CompactionEntry = z.infer<typeof CompactionEntrySchema>
-
+}) satisfies z.ZodType<CompactionEntry>
 /**
  * 自定义 entry：落盘但不进上下文的开放数据面（宪章 §6 `appendEntry(customType, data)`）。
  *
@@ -65,9 +59,7 @@ export const CustomEntrySchema = z.strictObject({
   type: z.literal('custom'),
   customType: z.string(),
   data: z.unknown(),
-})
-export type CustomEntry = z.infer<typeof CustomEntrySchema>
-
+}) satisfies z.ZodType<CustomEntry>
 /** 自定义消息 entry：进上下文参与推理的开放数据面（宪章 §6 `sendMessage({customType})`）。 */
 export const CustomMessageEntrySchema = z.strictObject({
   ...sessionEntryBaseFields,
@@ -75,27 +67,21 @@ export const CustomMessageEntrySchema = z.strictObject({
   customType: z.string(),
   message: ModelMessageSchema,
   data: z.unknown(),
-})
-export type CustomMessageEntry = z.infer<typeof CustomMessageEntrySchema>
-
+}) satisfies z.ZodType<CustomMessageEntry>
 /** 模型切换 entry：记录会话中途更换模型。 */
 export const ModelChangeEntrySchema = z.strictObject({
   ...sessionEntryBaseFields,
   type: z.literal('model-change'),
   fromModelId: z.string().nullable(),
   toModelId: z.string(),
-})
-export type ModelChangeEntry = z.infer<typeof ModelChangeEntrySchema>
-
+}) satisfies z.ZodType<ModelChangeEntry>
 /** 分支摘要 entry：fork/branch 出的旁支归纳，指向被摘要的分支 entry。 */
 export const BranchSummaryEntrySchema = z.strictObject({
   ...sessionEntryBaseFields,
   type: z.literal('branch-summary'),
   summary: z.string(),
   branchEntryId: z.string(),
-})
-export type BranchSummaryEntry = z.infer<typeof BranchSummaryEntrySchema>
-
+}) satisfies z.ZodType<BranchSummaryEntry>
 /**
  * 会话树 entry 判别联合（判别字段 `type`，贴仓内内容片段惯例）。
  *
@@ -110,16 +96,12 @@ export const SessionEntrySchema = z.discriminatedUnion('type', [
   CustomMessageEntrySchema,
   ModelChangeEntrySchema,
   BranchSummaryEntrySchema,
-])
-export type SessionEntry = z.infer<typeof SessionEntrySchema>
-
+]) satisfies z.ZodType<SessionEntry>
 /** 会话目标：`sessionId` + 可选序号锚点（缺席用 Nullable）。 */
 export const SessionTargetSchema = z.strictObject({
   sessionId: z.string(),
   seq: z.number().int().nullable(),
-})
-export type SessionTarget = z.infer<typeof SessionTargetSchema>
-
+}) satisfies z.ZodType<SessionTarget>
 /**
  * 动词 `admit`：接纳一条输入进会话（六动词之一）。
  *
@@ -138,21 +120,15 @@ export const AdmitRequestSchema = z.strictObject({
   metadata: z.record(z.string(), z.unknown()).nullable(),
   /** 多段输入预留（forward-compat，纯可选）；当前 `content` 为权威载荷。 */
   parts: z.array(ModelMessagePartSchema).optional(),
-})
-export type AdmitRequest = z.infer<typeof AdmitRequestSchema>
-
+}) satisfies z.ZodType<AdmitRequest>
 /** `admit` 回执：分配的输入序号。 */
 export const AdmitReceiptSchema = z.strictObject({
   inputId: z.string(),
   sessionId: z.string(),
   seq: z.number().int(),
-})
-export type AdmitReceipt = z.infer<typeof AdmitReceiptSchema>
-
+}) satisfies z.ZodType<AdmitReceipt>
 /** 动词 `wake`：唤醒会话推进当前回合（六动词之一）。 */
-export const WakeRequestSchema = SessionTargetSchema
-export type WakeRequest = z.infer<typeof WakeRequestSchema>
-
+export const WakeRequestSchema = SessionTargetSchema satisfies z.ZodType<WakeRequest>
 /**
  * 动词 `steer`：会话运行中插入引导输入（六动词之一）。
  *
@@ -164,17 +140,13 @@ export const SteerRequestSchema = z.strictObject({
   inputId: z.string(),
   role: ModelMessageRoleSchema.nullable(),
   content: z.string(),
-})
-export type SteerRequest = z.infer<typeof SteerRequestSchema>
-
+}) satisfies z.ZodType<SteerRequest>
 /** 动词 `answer`：回答会话抛出的提问（六动词之一）。 */
 export const AnswerRequestSchema = z.strictObject({
   sessionId: z.string(),
   seq: z.number().int().nullable(),
   answer: z.string(),
-})
-export type AnswerRequest = z.infer<typeof AnswerRequestSchema>
-
+}) satisfies z.ZodType<AnswerRequest>
 /**
  * 动词 `approve`：审批一次待确认动作，批准或带理由拒绝（六动词之一，经 ApprovalPort）。
  *
@@ -187,27 +159,19 @@ export const ApproveRequestSchema = z.strictObject({
   approved: z.boolean(),
   rejectionMessage: z.string().nullable(),
   approvalPayload: z.unknown().nullable(),
-})
-export type ApproveRequest = z.infer<typeof ApproveRequestSchema>
-
+}) satisfies z.ZodType<ApproveRequest>
 /** 动词 `cancel`：中止当前回合（六动词之一）。 */
-export const CancelRequestSchema = SessionTargetSchema
-export type CancelRequest = z.infer<typeof CancelRequestSchema>
-
+export const CancelRequestSchema = SessionTargetSchema satisfies z.ZodType<CancelRequest>
 /** `cancel` 结果：是否成功中止。 */
 export const CancelResultSchema = z.strictObject({
   aborted: z.boolean(),
-})
-export type CancelResult = z.infer<typeof CancelResultSchema>
-
+}) satisfies z.ZodType<CancelResult>
 /**
  * 读动词 `runtimeStatus` 请求：读取会话运行态（对齐控制器 `runtimeStatus(target)`）。
  *
  * 请求形状 = {@link SessionTarget}（贴 `wake` / `cancel` 复用 target 的惯例，不单列进快照注册表）。
  */
-export const RuntimeStatusRequestSchema = SessionTargetSchema
-export type RuntimeStatusRequest = z.infer<typeof RuntimeStatusRequestSchema>
-
+export const RuntimeStatusRequestSchema = SessionTargetSchema satisfies z.ZodType<RuntimeStatusRequest>
 /**
  * 读动词 `runtimeStatus` 响应：会话运行态快照（对齐控制器 `KernelRuntimeStatus`，协议侧独立再声明）。
  *
@@ -226,9 +190,7 @@ export const RuntimeStatusResponseSchema = z.strictObject({
   cancellable: z.boolean(),
   queuedInputs: z.number().int(),
   backgroundJobs: z.number().int(),
-})
-export type RuntimeStatusResponse = z.infer<typeof RuntimeStatusResponseSchema>
-
+}) satisfies z.ZodType<RuntimeStatusResponse>
 /**
  * 会话事件占位负载联合（判别字段 `kind`）。
  *
@@ -248,9 +210,7 @@ export const SessionEventPayloadSchema = z.discriminatedUnion('kind', [
     customType: z.string(),
     data: z.unknown(),
   }),
-])
-export type SessionEventPayload = z.infer<typeof SessionEventPayloadSchema>
-
+]) satisfies z.ZodType<SessionEventPayload>
 /**
  * `subscribe(sessionId)` 事件信封。
  *
@@ -260,5 +220,4 @@ export const SessionEventEnvelopeSchema = z.strictObject({
   sessionId: z.string(),
   sequence: z.number().int(),
   event: SessionEventPayloadSchema,
-})
-export type SessionEventEnvelope = z.infer<typeof SessionEventEnvelopeSchema>
+}) satisfies z.ZodType<SessionEventEnvelope>

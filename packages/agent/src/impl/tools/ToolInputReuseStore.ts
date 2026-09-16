@@ -3,8 +3,8 @@ import { z } from 'zod'
 import { isArray, isEmpty, isNumber, isObject, isPlainObject, isString, isUndefined, Log, optionalWhen } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import type { ToolInputReuseMigrationRequest } from '../../types/tool-contract'
-import type { ContextPayloadStore } from '../context/InMemoryContextPayloadStore'
+import type { ContextPayloadStore } from '../../contract/requires.js'
+import type { AttemptInput, ToolAttemptOutcome, ToolInputChange,ToolInputReuse, ToolInputReuseContext, ToolInputReuseOptions } from '../../types/tools.js'
 import { createContextPayloadRef } from '../context/InMemoryContextPayloadStore'
 
 export const ToolInputReuseSchema = z.strictObject({
@@ -32,7 +32,7 @@ export const ToolInputReuseSchema = z.strictObject({
     .min(1)
     .max(100)
     .describe('路径按数组给出，如 ["items", 0, "name"]；使用原参数的实际字段路径，其他参数原样保留。'),
-})
+}) satisfies z.ZodType<ToolInputReuse>
 /** 失败回执 inputReuse.note：执行器给新失败和「复用请求本身有误」两处回执共用同一句说明。 */
 export const ToolInputReuseNote =
   'Retry the same tool with reuse and changes only. Each change uses op set/remove and the actual saved field path as an array; set also requires the corrected value. Unchanged fields are restored and revalidated.'
@@ -82,30 +82,6 @@ export function withToolInputReuse<T extends z.ZodType>(schema: T) {
 }
 export function supportsToolInputReuse(schema: object): boolean {
   return reusableSchemas.has(schema)
-}
-
-export type ToolInputReuse = z.infer<typeof ToolInputReuseSchema>
-export type ToolAttemptOutcome = 'not-applied' | 'completed' | 'unknown'
-export interface ToolInputReuseContext {
-  sessionId?: string
-  resourceId?: string
-  contextPayloadStore?: ContextPayloadStore
-  project?: { getRootPath(): string }
-}
-interface AttemptInput {
-  kind: 'tool-attempt-input'
-  version: 1
-  contractVersion?: number
-  toolName: string
-  scope?: string
-  args: Record<string, unknown>
-}
-export interface ToolInputReuseOptions {
-  inputContractVersion?: number
-  inputReuseSourceTools?: readonly string[]
-  migrateReusedInput?: (
-    request: ToolInputReuseMigrationRequest
-  ) => Promise<Record<string, unknown>> | Record<string, unknown>
 }
 
 function inputScope(context: ToolInputReuseContext): string | undefined {
@@ -213,8 +189,6 @@ export class ToolInputReuseError extends AppError {
     this.name = 'ToolInputReuseError'
   }
 }
-
-type ToolInputChange = ToolInputReuse['changes'][number]
 
 /** 按 JSON 路径的写法描述参数位置，如 files[0].edits；空前缀即参数根。 */
 function describeParameterPath(segments: ReadonlyArray<string | number>): string {

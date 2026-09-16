@@ -4,8 +4,8 @@ import { describe, test } from 'bun:test'
 
 import { ManagedExecutionRunner } from '../src/impl/execution/ManagedExecutionRunner'
 import { ExecutionEventBus } from '../src/impl/records/ExecutionEventBus'
-import { ChatRuntimeEvents } from '../src/types/chat-runtime'
-import type { ExecutionRecord } from '../src/types/execution'
+import type { ExecutionRecord } from '../src/types/agent.js'
+import { ChatRuntimeEvents } from '../src/utils/wire/chat-runtime.js'
 
 function executionRecord(): ExecutionRecord {
   return {

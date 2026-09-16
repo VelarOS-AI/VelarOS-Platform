@@ -17,15 +17,14 @@
 import { isArray, isEmpty, isNonBlankString, isRecord, isString, toNullable } from '@velaros-ai/core'
 
 import type { ContextResidencyLedger } from '../../impl/residency/ContextResidencyLedger'
+import type { ContextDistillGateSignals, ContextDistillInstrument, ContextDistillPlan, ContextDistillProduct, ContextDistillRejection, ContextDistillRequest, ContextDistillSkipReason, ContextDistillTotals, ContextGovernanceConfig,ContextRecord, ContextResidency, DistillSegment, PlanContextDistillationInput } from '../../types/residency.js'
 
 import {
   anchorDensityPerKiloChar,
   normalizeAnchorText,
   toContextAnchorTexts,
 } from './anchors'
-import type { ContextRecord, ContextResidency } from './context-record'
 import { estimateResidencyTokens } from './context-record'
-import type { ContextDistillInstrument, ContextGovernanceConfig } from './governance-config'
 import { residentChars } from './projection'
 import {
   buildContextSkeleton,
@@ -52,154 +51,8 @@ export function isContextSummaryText(value: string): boolean {
   return isContextSkeletonText(value) || isContextDistillText(value)
 }
 
-/**
- * 蒸馏器端口：宿主注入的一次辅助模型调用。
- *
- * 返回**摘要正文**即可——锚点行与召回行由本模块机械补齐，调用方不必也不该自己拼。
- * 失败一律抛错（调度器会算成拒收并回落骨架），不要返回空串装成功。
- */
-export type ContextDistiller = (input: ContextDistillInput) => Promise<string>
-
-export interface ContextDistillInput {
-  /** 待蒸馏的成员记录（账本序，最老的在前）。 */
-  members: readonly ContextRecord[]
-  /** 当前任务目标（目标条件化压缩 [R6]）；账本里没有 user 记录时为 null。 */
-  goalHint: Nullable<string>
-  /** 期望正文字符上限。 */
-  targetChars: number
-  /**
-   * 整段输入的字符预算（规划期切段用的同一个数）。
-   *
-   * 宿主按它给成员分配预览额度。写死一个 per-message 常量会让"规划期按 48K 切段"与"实际只喂
-   * 2400 字符/条"两套预算互不知情：单条超大记录独占一段时，模型看到的不足全文的 5%，却被要求
-   * 逐字保留它没看过的锚点（审计 V14）。
-   */
-  maxInputChars: number
-  /** 必须逐字保留的锚点：提示词里明示，产物按此逐条验证。 */
-  requiredAnchors: readonly string[]
-  /** 档位（宿主据此选辅助模型还是主模型）。 */
-  mode: ContextDistillInstrument
-  /** 会话标识（宿主的模型请求遥测上下文）；无身份编译时为 null。 */
-  sessionId: Nullable<string>
-  /** 超时/中止信号。端口实现应当透传给模型请求。 */
-  signal?: LooseOptional<AbortSignal>
-}
-
-/** 规划出的一次蒸馏请求（交给异步调度器）。 */
-export interface ContextDistillRequest {
-  /** 规划它的 epoch 号。 */
-  epoch: number
-  /**
-   * 账本代数。账本一旦整本重建（历史前缀分叉）代数就 +1，跨代产物一律作废——
-   * 记录 id 是按序号生成的，重建后同一个 id 会指向**另一条消息**，不设代数护栏就会张冠李戴。
-   */
-  generation: number
-  members: readonly ContextRecord[]
-  memberIds: string[]
-  requiredAnchors: string[]
-  goalHint: Nullable<string>
-  targetChars: number
-  /** 段落当前占用的字符数（收益估算的分子）。 */
-  segmentChars: number
-  /** 每次请求省下的 token（经常性收益）。 */
-  savingTokensPerRequest: number
-  /** 按摊销窗口折算后的总节省 token。 */
-  estimatedSavingTokens: number
-  /** 一次蒸馏调用的 token 成本（输入 + 输出，一次性）。 */
-  estimatedCostTokens: number
-}
-
-/** 蒸馏未发生的原因（进 epoch 报告，B3 电池消费）。 */
-export type ContextDistillSkipReason =
-  /** 档位 off（A0/A1 臂）。 */
-  | 'off'
-  /** 宿主没注入蒸馏器（headless / 测试 / 模型不可用）。 */
-  | 'no-distiller'
-  /** 并发上限 1：上一次还没落地。 */
-  | 'in-flight'
-  /** 待应用产物已达上限。 */
-  | 'pending-full'
-  /** 机械器械已达标——没到"非花这一跳不可"的地步。 */
-  | 'target-reached'
-  /** 没有够格的叙事段（全在尾保护 / 全是摘要 / 太短）。 */
-  | 'no-segment'
-  /** adaptive 判据未过。 */
-  | 'not-worth'
-
-/** adaptive 三判据的取值（进报告：RQ3 的机制本体必须可观测）。 */
-export interface ContextDistillGateSignals {
-  /** ① 机械器械跑完后距目标水位还差几个百分点（占 G）。 */
-  shortfallPercent: number
-  /** ② 段落叙事字符量。 */
-  narrativeChars: number
-  /** ② 段落锚点密度（每千字符）。 */
-  anchorDensityPerKiloChar: number
-  /** ③ 摊销后的预计节省 token / 一次调用的成本 token。 */
-  savingToCostRatio: number
-  passed: boolean
-}
-
-export interface ContextDistillPlan {
-  requests: ContextDistillRequest[]
-  skipReason: Nullable<ContextDistillSkipReason>
-  gate: Nullable<ContextDistillGateSignals>
-}
-
-/** 蒸馏产物：已验证（或已回落骨架）的摘要记录素材，等下一个 epoch 边界应用。 */
-export interface ContextDistillProduct {
-  epoch: number
-  generation: number
-  memberIds: string[]
-  text: string
-  /** `distill` = 模型产物过了锚点验证；`skeleton` = 拒收/超时/异常后的规则回落。 */
-  instrument: 'distill' | 'skeleton'
-  rejection: Nullable<ContextDistillRejection>
-}
-
-/** 模型产物被拒的原因。 */
-export type ContextDistillRejection =
-  /** 产物为空 / 全空白。 */
-  | 'empty'
-  /** 锚点验证不过：成员记录的关键场没有逐字出现。 */
-  | 'missing-anchors'
-  /** 产物不比原段落短——摘要不省钱就不叫摘要。 */
-  | 'not-smaller'
-  /** 超时。 */
-  | 'timeout'
-  /** 端口抛错。 */
-  | 'error'
-
-export interface ContextDistillTotals {
-  requested: number
-  accepted: number
-  rejected: number
-  timedOut: number
-  failed: number
-  /** 跨代作废的产物数（账本重建时丢弃）。 */
-  staleDropped: number
-}
-
 export function createEmptyDistillTotals(): ContextDistillTotals {
   return { requested: 0, accepted: 0, rejected: 0, timedOut: 0, failed: 0, staleDropped: 0 }
-}
-
-export interface PlanContextDistillationInput {
-  ledger: ContextResidencyLedger
-  config: ContextGovernanceConfig
-  budgetTokens: number
-  /** 机械器械跑完后的投影占用（token）。 */
-  projectedTokens: number
-  /** 尾保护窗口内的记录 id（治理器永不选中，蒸馏同样不碰）。 */
-  tailProtectedRecordIds: ReadonlySet<string>
-  epoch: number
-  generation: number
-  /** 宿主是否注入了蒸馏器。 */
-  hasDistiller: boolean
-  /** 是否已有在跑/排队的请求（并发 1）。 */
-  busy: boolean
-  /** 已排队等应用的产物数。 */
-  pendingCount: number
-  maxPendingProducts: number
 }
 
 /**
@@ -400,11 +253,6 @@ function extractDistillFenceBody(value: string): Nullable<string> {
   }
 
   return body
-}
-
-interface DistillSegment {
-  members: ContextRecord[]
-  chars: number
 }
 
 /**

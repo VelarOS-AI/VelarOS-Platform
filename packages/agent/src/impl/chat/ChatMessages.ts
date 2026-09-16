@@ -1,9 +1,10 @@
-import type { ModelMessage, ToolCallPart, ToolResultPart } from 'ai'
+import type { ModelMessage, ToolResultPart } from 'ai'
 
 import { isEmpty, isNonBlankString, isNumber, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import type { SerializedMessage } from '../../types/protocol'
+import type { SerializedMessage } from '../../types/agent.js'
+import type { AssistantModelContentPart, UserModelContentPart } from '../../types/chat.js'
 import { buildInternalFollowUpContent } from '../../utils/history/internal-messages'
 import { compactToolInputForModel } from '../../utils/tools/tool-result-serialization'
 
@@ -25,11 +26,6 @@ function buildUserModelMessage(
 
   return { role: 'user', content: buildInternalFollowUpContent(content) }
 }
-
-type AssistantModelContentPart = { type: 'text'; text: string } | ToolCallPart
-type UserModelContentPart =
-  | { type: 'text'; text: string }
-  | { type: 'image'; image: string; mediaType?: string }
 
 /**
  * 折叠形如 [a,b,a,b,a,b] 的整体重复序列为 [a,b]。

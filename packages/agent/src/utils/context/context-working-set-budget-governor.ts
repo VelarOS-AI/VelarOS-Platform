@@ -1,49 +1,9 @@
 import { isFiniteNumber } from '@velaros-ai/core'
 
+import type { ContextLedgerEntry, ContextWorkingSetBudgetAllocation,ContextWorkingSetBudgetGovernorInput, ContextWorkingSetBudgetLedgerEntry, ContextWorkingSetZoneBudgetSnapshot, ContextWorkingSetZoneId, ContextWorkingSetZonePolicy } from '../../types/context.js'
+
 import { resolveContextWindowBudget } from './context-budget'
-import type { ContextLedgerEntry } from './context-ledger'
-import {
-  type ContextWorkingSetReclaimAction,
-  type ContextWorkingSetZoneId,
-  ContextWorkingSetZoneIds,
-  type ContextWorkingSetZonePolicy,
-  DefaultContextWorkingSetZonePolicies,
-} from './context-working-set-zones'
-
-export interface ContextWorkingSetBudgetLedgerEntry {
-  zone: string
-  estimatedTokens: number
-}
-
-export interface ContextWorkingSetBudgetGovernorInput {
-  contextWindow: number
-  usableContextWindow?: LooseOptional<number>
-  reservedOutputTokens?: LooseOptional<number>
-  safetyMarginPercent?: LooseOptional<number>
-  ledger: readonly ContextWorkingSetBudgetLedgerEntry[]
-  policies?: LooseOptional<Record<ContextWorkingSetZoneId, ContextWorkingSetZonePolicy>>
-}
-
-export interface ContextWorkingSetZoneBudgetSnapshot {
-  zone: ContextWorkingSetZoneId
-  reservedTokens: number
-  limitTokens: number
-  effectiveLimitTokens: number
-  usedTokens: number
-  overBudgetTokens: number
-  priority: number
-  reclaimOrder: ContextWorkingSetReclaimAction[]
-}
-
-export interface ContextWorkingSetBudgetAllocation {
-  contextWindow: number
-  usableContextWindow: number
-  reservedOutputTokens: number
-  safetyMarginPercent: number
-  totalUsedTokens: number
-  totalOverBudgetTokens: number
-  zones: Record<ContextWorkingSetZoneId, ContextWorkingSetZoneBudgetSnapshot>
-}
+import { ContextWorkingSetZoneIds, DefaultContextWorkingSetZonePolicies } from './context-working-set-zones'
 
 function positiveFloor(value: unknown): number {
   return isFiniteNumber(value) ? Math.max(0, Math.floor(value)) : 0

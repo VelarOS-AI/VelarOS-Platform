@@ -9,26 +9,12 @@
  */
 
 /** 支持的开标签及其对应闭标签（`<think>` / `<thinking>` 两种常见写法）。 */
+import type { InlineReasoningSegment, InlineReasoningSegmentKind, InlineReasoningTagSplitState } from '../../types/loop.js'
+
 const InlineReasoningOpenTags = ['<think>', '<thinking>'] as const
 
 function closeTagFor(openTag: string): string {
   return openTag === '<thinking>' ? '</thinking>' : '</think>'
-}
-
-export type InlineReasoningSegmentKind = 'visible' | 'reasoning'
-
-export interface InlineReasoningSegment {
-  kind: InlineReasoningSegmentKind
-  text: string
-}
-
-export interface InlineReasoningTagSplitState {
-  /** 当前是否处在思考标签内部。 */
-  inReasoning: boolean
-  /** 处在思考标签内部时，正在等待的闭标签。 */
-  activeCloseTag: string
-  /** 跨 delta 承接的、可能是标签前缀的尾巴。 */
-  tail: string
 }
 
 export function createInlineReasoningTagSplitState(): InlineReasoningTagSplitState {

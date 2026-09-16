@@ -1,10 +1,7 @@
-import type { PromptSegmentDefinition } from '../../impl/guidance/PromptRegistry'
 
-import {
-  createTextPromptSegment,
-  PromptSegmentPriority,
-  type RuntimePromptSnapshot,
-} from './shared'
+import type { PromptSegmentDefinition, RuntimePromptSnapshot } from '../../types/guidance.js'
+
+import { createTextPromptSegment, PromptSegmentPriority } from './shared'
 
 /**
  * Kernel owns only execution-mode guidance. Capability packages contribute

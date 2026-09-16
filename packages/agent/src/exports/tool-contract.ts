@@ -1,9 +1,6 @@
+export type { ApprovalPort } from '../contract/requires.js'
+export type { InteractionPort } from '../contract/requires.js'
 export { fileContextFor } from '../impl/context/FileContextCoordinator'
-export type {
-  ApprovalPort,
-  ManualApprovalOptions,
-  UnattendedApprovalEscalationHooks,
-} from '../impl/tools/DefaultDenyApprovalPort'
 export {
   createManualApprovalOptions,
   createUnattendedSubAgentApprovalPort,
@@ -15,43 +12,25 @@ export {
   serializeToolExampleInput,
   ToolContractExampleRegistry,
 } from '../impl/tools/ToolContractExampleRegistry'
-export type { ToolInputReuseOptions } from '../impl/tools/ToolInputReuseStore'
 export {
   resolveToolInputReuse,
   ToolInputReuseSchema,
   withToolInputReuse,
 } from '../impl/tools/ToolInputReuseStore'
-export type { InteractionPort } from '../impl/tools/UnsupportedInteractionPort'
 export { defaultUnsupportedInteractionPort } from '../impl/tools/UnsupportedInteractionPort'
-export type {
-  FileContextCarrier,
-  FileContextRange,
-  FileContextSnapshot,
-  FileContextSource,
-} from '../types/resource-contracts'
-export type {
-  DefineToolContractInput,
-  DefineToolContractSurfaceInput,
-  DefineToolRuntimeSpecInput,
-  NonEmptyToolContractList,
-  ToolContractDescriptionSpec,
-  ToolContractExecute,
-  ToolContractRole,
-  ToolContractRuntimeSpec,
-  ToolContractSpec,
-  ToolContractSurface,
-  ToolInputReuseContract,
-  ToolInputReuseMigrationRequest,
-} from '../types/tool-contract'
-export type {
-  ToolCallableOperationsOptions,
-  ToolContextResolver,
-} from '../utils/toolkit/callable-operations'
+export type { FileContextCarrier, FileContextRange, FileContextSnapshot, FileContextSource } from '../types/context.js'
+export type { DefineToolContractInput, DefineToolContractSurfaceInput, DefineToolRuntimeSpecInput, NonEmptyToolContractList, ToolContractDescriptionSpec, ToolContractExecute, ToolContractRole, ToolContractRuntimeSpec, ToolContractSpec, ToolContractSurface, ToolInputReuseContract, ToolInputReuseMigrationRequest } from '../types/toolkit.js'
+export type { ManualApprovalOptions, UnattendedApprovalEscalationHooks } from '../types/toolkit.js'
+export type { AppliedAdjustment } from '../types/toolkit.js'
+export type { ToolConceptRegistry } from '../types/toolkit.js'
+export type { ToolCallableOperationsOptions, ToolContextResolver } from '../types/toolkit.js'
+export type { CreateToolSchemaBundleOptions, ToolSchemaBundle, ToolSchemaSource } from '../types/toolkit.js'
+export type { StructuredParameterDescriptionSpec, StructuredToolDescriptionParts, StructuredToolDescriptionSpec, ToolDescriptionBudgetWaiver, ToolDescriptionBudgetWaiverReason, ToolDescriptionDetail } from '../types/toolkit.js'
+export type { ToolInputReuseOptions } from '../types/tools.js'
 export {
   createToolCallableOperations,
   parseToolWireInput,
 } from '../utils/toolkit/callable-operations'
-export type { ToolConceptRegistry } from '../utils/toolkit/concepts'
 export {
   createToolConceptLookup,
   defineToolConcepts,
@@ -69,7 +48,6 @@ export {
   readToolSchemaDiscoveryNames,
   ToolContractDiscoveryDescriptors,
 } from '../utils/toolkit/discovery'
-export type { AppliedAdjustment } from '../utils/toolkit/forgiving-schema'
 export {
   buildAppliedAdjustments,
   buildValidItemsHint,
@@ -84,25 +62,12 @@ export {
   CanonicalToolIdPattern,
   isCanonicalToolId,
 } from '../utils/toolkit/identity'
-export type {
-  CreateToolSchemaBundleOptions,
-  ToolSchemaBundle,
-  ToolSchemaSource,
-} from '../utils/toolkit/schema-bundle'
 export {
   canonicalizeProviderInputSchema,
   createToolSchemaBundle,
   schemaToInputSchema,
 } from '../utils/toolkit/schema-bundle'
 export { createApprovalOperationKey, createTaskApprovalPort } from '../utils/toolkit/task-approval'
-export type {
-  StructuredParameterDescriptionSpec,
-  StructuredToolDescriptionParts,
-  StructuredToolDescriptionSpec,
-  ToolDescriptionBudgetWaiver,
-  ToolDescriptionBudgetWaiverReason,
-  ToolDescriptionDetail,
-} from '../utils/toolkit/tool-description'
 export {
   assertToolDescriptionWithinBudget,
   assertToolDescriptionWithinLimit,
