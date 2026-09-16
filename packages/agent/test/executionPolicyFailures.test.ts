@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 
 import { AppError } from '@velaros-ai/core/error'
+import { ToolDomainErrorContextKey } from '@velaros-ai/tool-contract/contracts'
 
 import {
   buildExecutionFailureResult,
@@ -190,7 +191,7 @@ describe('tool execution failure projection', () => {
     }
     const domainError = new FakeProjectError()
     const appError = new AppError(domainError.reason, domainError.message, domainError, {
-      projectError: {
+      [ToolDomainErrorContextKey]: {
         name: domainError.name,
         reason: domainError.reason,
         message: domainError.message,
@@ -208,7 +209,7 @@ describe('tool execution failure projection', () => {
     expect(result.nextActions).toEqual(['按 diagnostics 逐条修复。'])
   })
 
-  test('recovers diagnostics from context.projectError after an AppError JSON round trip drops cause (cross-Kernel boundary)', () => {
+  test('recovers diagnostics from the domain error mirror after an AppError JSON round trip drops cause (cross-Kernel boundary)', () => {
     // AppError.toJSON 不携带 cause，fromJSON 重建的错误 cause 恒为 undefined——这正是
     // 一次跨 Kernel/IPC 边界（例如通过消息通道转发）之后的真实形态。上一条用例只覆盖了
     // 进程内 cause 链完好的情况，从未真正触发过 context.projectError 回退路径。
@@ -225,7 +226,7 @@ describe('tool execution failure projection', () => {
     }
     const domainError = new FakeProjectError()
     const appError = new AppError(domainError.reason, domainError.message, domainError, {
-      projectError: {
+      [ToolDomainErrorContextKey]: {
         name: domainError.name,
         reason: domainError.reason,
         message: domainError.message,

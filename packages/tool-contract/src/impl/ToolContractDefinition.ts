@@ -5,6 +5,7 @@
  */
 
 import { isObject, isPresent } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 
 import type {
   ToolContractDescriptionSpec,
@@ -210,9 +211,12 @@ class ToolContractDefinition implements ToolContractDefinitionApi {
       }
     ): ToolContractRuntimeSpec<TInput, TContext, unknown, ToolPermission> => {
       const { inputReuse, category, ...spec } = input
+      const resolvedCategory = category ?? options.categoryOf?.(input.name)
+      if (!resolvedCategory)
+        throw new AppError('INVARIANT', `工具 ${input.name} 没有类别：定义时给 category，或者给 createDefiner 一张按工具名查类别的表。`)
       const defined = this.defineRuntime<TInput, TContext, unknown, ToolPermission>({
         ...spec,
-        category: category ?? options.categoryOf(input.name),
+        category: resolvedCategory,
         inputContractVersion: input.inputContractVersion ?? options.contractVersion,
       })
       const wrapped = Boolean(inputReuse) && Boolean(options.inputReuse)

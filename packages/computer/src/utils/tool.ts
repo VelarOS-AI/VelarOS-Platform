@@ -7,15 +7,16 @@ import type { VelaTool } from '../contract/provides.js'
 import type {
   ComputerRuntimePort,
   ComputerToolComputerApi,
+  ComputerToolContext,
 } from '../contract/requires.js'
 import type { DefineComputerToolInput } from '../types/tool.js'
 
 /** 定义一个桌面控制工具：类别固定是 computer-control，上下文固定是 `ComputerToolContext`。 */
-export function defineComputerTool<TInput extends Record<string, unknown>>(
+export const defineComputerTool: <TInput extends Record<string, unknown>>(
   input: DefineComputerToolInput<TInput>
-): VelaTool<TInput> {
-  return toolContracts.defineRuntime({ ...input, category: ComputerToolCategoryId })
-}
+) => VelaTool<TInput> = toolContracts.createDefiner<ComputerToolContext>({
+  categoryOf: () => ComputerToolCategoryId,
+})
 
 /**
  * 把一份运行时薄映射成工具的宿主端口。

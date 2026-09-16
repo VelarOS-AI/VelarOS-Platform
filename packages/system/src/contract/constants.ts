@@ -148,8 +148,3 @@ export const SystemCommandLimits = Object.freeze({
   taskIdChars: 120,
 })
 
-/** 失败回执的上限：agent 工具契约约定失败回执里每个列表最多列几项，本包各工具都按它截。 */
-export const SystemFailureLimits = Object.freeze({
-  /** 失败回执里每个列表最多列几项：edit 的问题清单与多处匹配的锚点、沙箱落回的冲突与没有变化的路径。 */
-  listItems: 10,
-})

@@ -18,8 +18,9 @@ import { currentPlatform } from '@velaros-ai/platform'
 import type { SandboxApplyResult, SandboxDiff, SandboxIgnoredMode, SandboxTextDiff } from '@velaros-ai/rehearsal-sandbox/contracts'
 import { RehearsalSandboxLimits } from '@velaros-ai/rehearsal-sandbox/contracts'
 import { textCodec, textFileIo } from '@velaros-ai/text-files'
+import { toolFailures } from '@velaros-ai/tool-contract'
 
-import { SystemErrorCodes, SystemFailureLimits } from '../contract/constants.js'
+import { SystemErrorCodes } from '../contract/constants.js'
 import type { SystemProcessConfinementPolicy } from '../types/commands.js'
 import type { SystemSandboxApplyFailureDetails, SystemSandboxConflict, SystemSandboxFileStamp, SystemSandboxManifest, SystemSandboxStampTable } from '../types/sandbox.js'
 
@@ -373,22 +374,22 @@ export async function diffMirror(
 
 /** 落回时整批不落的错误：什么都没写，cause.details.conflicts 列出每处冲突，context.executionOutcome 是 not-applied。 */
 export function sandboxApplyConflict(conflicts: readonly SystemSandboxConflict[]): AppError {
-  const details: SystemSandboxApplyFailureDetails = { executionOutcome: 'not-applied', conflicts: conflicts.slice(0, SystemFailureLimits.listItems) }
-  return new AppError(
+  const details: SystemSandboxApplyFailureDetails = { executionOutcome: 'not-applied', conflicts: toolFailures.listed(conflicts) }
+  return toolFailures.create(
     'VALIDATION',
-    `源目录里有 ${conflicts.length} 个文件自建沙箱以来变过，什么都没写。${conflicts.slice(0, SystemFailureLimits.listItems).map((conflict) => `${conflict.path}：${conflict.message}`).join('；')}`,
+    `源目录里有 ${conflicts.length} 个文件自建沙箱以来变过，什么都没写。${toolFailures.listed(conflicts).map((conflict) => `${conflict.path}：${conflict.message}`).join('；')}`,
     { reason: SystemErrorCodes.sandboxConflict, details, suggestedNextAction: '什么都没写。从现在的源目录重建沙箱，或者只落回没有冲突的路径。' },
-    { executionOutcome: 'not-applied' }
+    { notApplied: true }
   )
 }
 
 /** 落回时镜像跟用户确认时看到的不一样了：什么都没写，cause.reason 是 SYSTEM_SANDBOX_CHANGED，context.executionOutcome 是 not-applied。 */
 export function sandboxChangedSinceConfirmation(): AppError {
-  return new AppError(
+  return toolFailures.create(
     'VALIDATION',
     '确认之后沙箱里的改动又变了（镜像里可能还有命令在跑），什么都没写；停掉镜像里的任务，重新 diff 再落回。',
     { reason: SystemErrorCodes.sandboxChanged, suggestedNextAction: '什么都没写。先用 system:list-tasks 找到并停掉镜像里还在跑的任务，再 diff、apply。' },
-    { executionOutcome: 'not-applied' }
+    { notApplied: true }
   )
 }
 
@@ -455,8 +456,8 @@ async function removeEmptiedDirectories(root: string, source: string, deleted: r
 /** 落回途中出错时的报错：一条都还没落回就标 not-applied；落回了一部分就在 context.applied 里点名已经落回的路径。 */
 function sandboxApplyFailure(error: unknown, applied: readonly string[]): AppError {
   const failure = AppError.from(error)
-  if (isEmpty(applied)) return new AppError(failure.code, `落回时出错，源目录里什么都没改：${failure.message}`, error, { executionOutcome: 'not-applied' })
-  return new AppError(failure.code, `已经落回了 ${applied.length} 个路径，后面的没落：${failure.message}`, error, { applied: [...applied] })
+  if (isEmpty(applied)) return toolFailures.create(failure.code, `落回时出错，源目录里什么都没改：${failure.message}`, error, { notApplied: true })
+  return toolFailures.create(failure.code, `已经落回了 ${applied.length} 个路径，后面的没落：${failure.message}`, error, { applied })
 }
 
 /**

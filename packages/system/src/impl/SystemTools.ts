@@ -12,7 +12,7 @@ import { z } from 'zod'
 import type { AgentModManifest, ToolCategoryDefinition } from '@velaros-ai/agent/protocol'
 import { isEmpty, optionalWhen } from '@velaros-ai/core'
 import type { CapabilityToken, KernelModuleDefinition } from '@velaros-ai/kernel/contracts/abi'
-import { createCapabilityToken, createKernelCallableCapability, defineKernelModule, KernelModuleApiVersion } from '@velaros-ai/kernel/contracts/abi'
+import { createCapabilityToken } from '@velaros-ai/kernel/contracts/abi'
 import { RehearsalSandboxLimits } from '@velaros-ai/rehearsal-sandbox/contracts'
 import { shellCommandPolicy } from '@velaros-ai/shell-command'
 import { toolDescriptions, toolKernelModules } from '@velaros-ai/tool-contract'
@@ -20,7 +20,7 @@ import { toolDescriptions, toolKernelModules } from '@velaros-ai/tool-contract'
 import type { SystemToolCategoryId } from '../contract/constants.js'
 import { SystemCommandLimits, SystemFileLimits, SystemModId, SystemSpaceId, SystemToolCategoryByName, SystemToolNames } from '../contract/constants.js'
 import type { SystemBundledModDefinition, SystemCapabilityService, SystemToolCollection } from '../contract/provides.js'
-import type { CreateSystemKernelModuleOptions } from '../contract/requires.js'
+import type { CreateSystemKernelModuleOptions, SystemToolContext } from '../contract/requires.js'
 import type { SystemListTasksInput, SystemRefreshEnvironmentInput, SystemRunInput } from '../types/commands.js'
 import type { SystemEditInput, SystemReadInput, SystemViewInput } from '../types/files.js'
 import type { SystemSandboxInput } from '../types/sandbox.js'
@@ -449,30 +449,13 @@ export const SystemCapability: CapabilityToken<SystemCapabilityService> =
 export function createSystemKernelModule(
   options: CreateSystemKernelModuleOptions = {},
 ): KernelModuleDefinition {
-  return defineKernelModule({
-    manifest: {
-      id: SystemModId,
-      version: '1.0.0',
-      apiVersion: KernelModuleApiVersion,
-      provides: [SystemCapability],
-      requires: [],
-      optionalRequires: [],
-      permissions: [
-        'fs:read',
-        'fs:write',
-        'process:exec',
-      ],
-      isolation: 'in-process',
-    },
-    activate(context) {
-      const callable = createKernelCallableCapability(
-        toolKernelModules.callableOperations(systemTools, options.resolveContext, { label: '系统' }),
-      )
-      const service: SystemCapabilityService = Object.freeze({
-        ...callable,
-        tools: Object.freeze({ ...systemTools }),
-      })
-      context.registerService(SystemCapability, service)
-    },
+  return toolKernelModules.define<SystemToolContext, SystemCapabilityService>({
+    id: SystemModId,
+    version: '1.0.0',
+    permissions: ['fs:read', 'fs:write', 'process:exec'],
+    token: SystemCapability,
+    tools: systemTools,
+    resolveContext: options.resolveContext,
+    label: '系统',
   })
 }

@@ -13,8 +13,9 @@ import type { PlatformCompatibilityApi } from '@velaros-ai/platform'
 import { currentPlatform } from '@velaros-ai/platform'
 import { textCodec } from '@velaros-ai/text-files'
 import type { TextEncoding } from '@velaros-ai/text-files/contracts'
+import { ToolFailureLimits } from '@velaros-ai/tool-contract/contracts'
 
-import { SystemFailureLimits, SystemFileLimits } from '../contract/constants.js'
+import { SystemFileLimits } from '../contract/constants.js'
 import type { SystemToolContext } from '../contract/requires.js'
 import type { SystemEditFileInput, SystemEditFileResult, SystemEditInput, SystemEditPlan, SystemEditProblem, SystemEditReplacedResult, SystemEditResult, SystemEditTarget, SystemEditWindow, SystemReadFileInput, SystemReadFileResult, SystemReadInput, SystemReadResult, SystemTextFileContent, SystemTextRange, SystemViewFileInput, SystemViewFileResult, SystemViewInput, SystemViewResult } from '../types/files.js'
 import { assertFileBatchSize, failureEntry, staleProblem, unresolvedEditFailure, withLinkTarget } from '../utils/file-batch.js'
@@ -312,15 +313,15 @@ class SystemFileOperations implements SystemFileOperationsApi {
       if (!isPresent(change.oldText)) { targets.push({ edit, range: scope, newText: withLineEndingStyle(change.newText, style) }); continue }
       if (isEmpty(change.oldText)) { at('oldText 是空的；要整段替换就不给 oldText'); continue }
       const replacement = adaptReplacementLineEndings(scopeText, change.oldText, change.newText, style)
-      // 只需要知道唯一不唯一和前 SystemFailureLimits.listItems 个锚点，多找一个就停，大文件里的短 oldText 不会扫出百万个匹配。
-      const matches = findOccurrences(content, replacement.oldText, scope, SystemFailureLimits.listItems + 1)
+      // 只需要知道唯一不唯一和前 ToolFailureLimits.listItems 个锚点，多找一个就停，大文件里的短 oldText 不会扫出百万个匹配。
+      const matches = findOccurrences(content, replacement.oldText, scope, ToolFailureLimits.listItems + 1)
       if (isEmpty(matches)) { at(`在 range ${scope.offset}-${scope.end} 里没找到 oldText；重新读这一段`, { reason: 'not-found' }); continue }
       if (matches.length > 1) {
-        const count = matches.length > SystemFailureLimits.listItems ? `至少匹配到 ${matches.length} 处` : `匹配到 ${matches.length} 处`
+        const count = matches.length > ToolFailureLimits.listItems ? `至少匹配到 ${matches.length} 处` : `匹配到 ${matches.length} 处`
         at(`oldText 在 range ${scope.offset}-${scope.end} 里${count}；从 anchors 里挑一处，把它的 range 填到这里`, {
           reason: 'ambiguous',
           matchCount: matches.length,
-          anchors: matches.slice(0, SystemFailureLimits.listItems).map((offset) => {
+          anchors: matches.slice(0, ToolFailureLimits.listItems).map((offset) => {
             const range = { offset, end: offset + replacement.oldText.length }
             const around = clampTextRange(content, { offset: range.offset - SystemTuning.files.anchorContextChars, end: range.end + SystemTuning.files.anchorContextChars })
             return { range, context: content.slice(around.offset, around.end) }

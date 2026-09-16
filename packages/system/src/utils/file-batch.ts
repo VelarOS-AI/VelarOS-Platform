@@ -4,8 +4,9 @@
 
 import { isPresent, toOptional } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
+import { toolFailures } from '@velaros-ai/tool-contract'
 
-import { SystemErrorCodes, SystemFailureLimits } from '../contract/constants.js'
+import { SystemErrorCodes } from '../contract/constants.js'
 import type { SystemEditFailureDetails, SystemEditFileResult, SystemEditProblem, SystemFileFailure } from '../types/files.js'
 
 /** 一批最多几个文件：空的和超过 max 个的都拒绝，operation 只用来写进报错。 */
@@ -25,14 +26,14 @@ export function failureEntry(path: string, failure: AppError): SystemFileFailure
  */
 export function unresolvedEditFailure(problems: readonly SystemEditProblem[]): AppError {
   const denied = problems.some((problem) => problem.reason === 'denied')
-  const summary = problems.slice(0, SystemFailureLimits.listItems).map((problem) => `files[${problem.file}]${isPresent(problem.edit) ? `.edits[${problem.edit}]` : ''}: ${problem.message}`).join('; ')
-  const details: SystemEditFailureDetails = { executionOutcome: 'not-applied', problems: problems.slice(0, SystemFailureLimits.listItems) }
+  const summary = toolFailures.listed(problems).map((problem) => `files[${problem.file}]${isPresent(problem.edit) ? `.edits[${problem.edit}]` : ''}: ${problem.message}`).join('; ')
+  const details: SystemEditFailureDetails = { executionOutcome: 'not-applied', problems: toolFailures.listed(problems) }
   const cause = {
     reason: denied ? SystemErrorCodes.editDenied : SystemErrorCodes.editUnresolved,
     details,
     suggestedNextAction: '什么都没写。用 reuse + changes 只改列出的那几处再调一次 system:edit（例如把 path ["files", 0, "edits", 1, "range"] 改成挑中的锚点 range），没列出的文件和改动原样保留。',
   }
-  return new AppError(denied ? 'PERMISSION' : problems.every((problem) => problem.reason === 'not-found') ? 'NOT_FOUND' : 'VALIDATION', `有 ${problems.length} 个问题，这一批改动没有应用，什么都没写。${summary}`, cause, { executionOutcome: 'not-applied' })
+  return toolFailures.create(denied ? 'PERMISSION' : problems.every((problem) => problem.reason === 'not-found') ? 'NOT_FOUND' : 'VALIDATION', `有 ${problems.length} 个问题，这一批改动没有应用，什么都没写。${summary}`, cause, { notApplied: true })
 }
 
 /** 核对调用方给的版本和文件现在的版本：给了且对不上就返回一条 stale 问题的字段，其余情况返回 null。文件不存在时当前版本为 null。 */

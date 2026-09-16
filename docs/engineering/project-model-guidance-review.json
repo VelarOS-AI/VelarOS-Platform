@@ -150,7 +150,7 @@
     },
     {
       "path": "packages/project/src/impl/ProjectTools.ts",
-      "fingerprint": "4a128a36a1d708fc720fbf7d85d49472ab7e220855718d3bcbd1c199bd780977"
+      "fingerprint": "1ecf47c371f9e37f7c3535ab5fa4ed9289af31266c7272e5da575f6248501742"
     },
     {
       "path": "packages/project/src/impl/operations/ProjectChangeOperations.ts",
@@ -230,7 +230,7 @@
     },
     {
       "path": "packages/project/src/utils/tool.ts",
-      "fingerprint": "0a5e887d91d9332cada480e7fc0522771b64feaa71ea14a890cb5c56843f72a4"
+      "fingerprint": "c9297cfa35e99e597187a2f5853b21119a9af6aad6c02f9dd5e7697eb7e83c92"
     },
     {
       "path": "packages/project/src/utils/transactions/transaction-errors.ts",

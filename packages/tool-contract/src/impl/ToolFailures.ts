@@ -7,7 +7,7 @@
 import type { ErrorCode, ErrorContext } from '@velaros-ai/core/error'
 import { AppError } from '@velaros-ai/core/error'
 
-import { ToolExecutionOutcomes, ToolFailureLimits } from '../contract/constants.js'
+import { ToolDomainErrorContextKey, ToolExecutionOutcomes, ToolFailureLimits } from '../contract/constants.js'
 import type { ToolFailureOptions } from '../types/tool-contract.js'
 
 /**
@@ -27,6 +27,11 @@ export interface ToolFailuresApi {
   create(code: ErrorCode, message: string, cause?: unknown, options?: ToolFailureOptions): AppError
   /** 把一份清单截到 `listItems` 项，失败回执里的每个列表都从这里过一道。 */
   listed<T>(items: readonly T[]): T[]
+  /**
+   * 把一个空间的领域错误翻成内核能力的 AppError：码与文字照搬，结构化详情镜像进
+   * `context` 的 `ToolDomainErrorContextKey` 一格。跨 IPC 丢了 cause 之后，那一格是唯一还在的诊断来源。
+   */
+  domain(code: ErrorCode, message: string, cause: unknown, details: unknown): AppError
 }
 
 class ToolFailures implements ToolFailuresApi {
@@ -51,6 +56,10 @@ class ToolFailures implements ToolFailuresApi {
 
   public listed<T>(items: readonly T[]): T[] {
     return items.slice(0, this.listItems)
+  }
+
+  public domain(code: ErrorCode, message: string, cause: unknown, details: unknown): AppError {
+    return new AppError(code, message, cause, { [ToolDomainErrorContextKey]: details })
   }
 }
 

@@ -1,6 +1,7 @@
 import { isArray, isBigInt, isEmpty, isFunction,isNonBlankString, isObject, isPlainObject, isString, optionalWhen } from '@velaros-ai/core'
 import { type AppError } from '@velaros-ai/core/error'
 import { readStringScalar } from '@velaros-ai/core/utils/unknownJsonRecord'
+import { ToolDomainErrorContextKey } from '@velaros-ai/tool-contract/contracts'
 
 import type { ErrorCauseRecord, RuntimeToolIssue, ToolFailureBuildOptions,ToolFailureResult, ToolSpaceRecoveryGuide } from '../../types/tools.js'
 import { AgentTuning } from '../tuning'
@@ -256,7 +257,7 @@ function buildToolFailureResult(
 
 /**
  * 把执行期抛出的 `AppError` 翻译成给模型看的 `ToolFailureResult`。
- * 优先直接取 `context.toolFailure` 里已成型的失败结果；否则沿 cause 链（外加 `context.projectError` 这个跨 IPC 往返后仍在的镜像）
+ * 优先直接取 `context.toolFailure` 里已成型的失败结果；否则沿 cause 链（外加工具契约约定的领域错误镜像，跨 IPC 往返后它仍在）
  * 捞 reason/details/suggestedNextAction，`code === 'UNKNOWN'` 时把领域 reason 提升成有效 code。
  * 有效 code 决定对外的 error 分类：EXECUTION_ABORTED→`tool_cancelled`、UNAVAILABLE→`tool_unavailable`、
  * EXECUTION_DENIED/PERMISSION_DENIED/PERMISSION→`tool_denied`、TOOL_RESULT_FINALIZATION_FAILED→同名，其余归 `tool_execution_failed`。
@@ -267,17 +268,16 @@ function buildExecutionFailureResult(toolName: string, error: AppError): ToolFai
   if (embeddedFailure) return withRuntimeToolIssue(embeddedFailure)
 
   // 跨 Kernel/IPC 边界一趟 AppError.toJSON → fromJSON 往返会丢掉 cause（context 不丢），
-  // 这时 cause 链上什么都读不到；镜像进 context 的领域错误对象（例如
-  // packages/project/src/kernel-module.ts 的 projectCapabilityError 写入的
-  // context.projectError）就是这种情况下唯一还在的诊断来源，作回退读取。
-  const projectErrorMirror = error.context.projectError
+  // 这时 cause 链上什么都读不到；各空间挂内核时经 `toolFailures.domain` 镜像进 context 的领域错误对象
+  // 就是这种情况下唯一还在的诊断来源，作回退读取。这一格由工具契约约定，Agent 不认识任何空间的名字。
+  const domainErrorMirror = error.context[ToolDomainErrorContextKey]
   const nestedReason =
-    extractNestedErrorReason(error) ?? extractNestedErrorReason(projectErrorMirror)
+    extractNestedErrorReason(error) ?? extractNestedErrorReason(domainErrorMirror)
   const nestedDetails =
-    extractNestedErrorDetails(error) ?? extractNestedErrorDetails(projectErrorMirror)
+    extractNestedErrorDetails(error) ?? extractNestedErrorDetails(domainErrorMirror)
   const nestedSuggestedNextAction =
     extractNestedSuggestedNextAction(error) ??
-    extractNestedSuggestedNextAction(projectErrorMirror)
+    extractNestedSuggestedNextAction(domainErrorMirror)
   // 独立领域包可能用 reason 承载稳定机器码。AppError.from 会保留 cause，但不会把领域 reason
   // 冒充 Core code；Agent 边界在 UNKNOWN 时显式提升，避免真正原因只躺在 details 里。
   const effectiveCode = error.code === 'UNKNOWN' && nestedReason ? nestedReason : error.code

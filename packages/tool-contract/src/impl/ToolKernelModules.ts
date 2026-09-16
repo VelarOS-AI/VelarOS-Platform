@@ -40,8 +40,11 @@ export interface ToolKernelModulesApi {
    * system、project、office 原来各写一份逐行同构的样板，现在都用这里；要额外挂运行时方法的空间
    * （computer）自己写 activate，只用 `callableOperations`。
    */
-  define<TContext extends { abortSignal: AbortSignal }, TTools>(
-    options: ToolKernelModuleOptions<TContext, TTools>
+  define<
+    TContext extends { abortSignal: AbortSignal },
+    TService extends ToolCapabilityService<unknown>,
+  >(
+    options: ToolKernelModuleOptions<TContext, TService>
   ): KernelModuleDefinition
 }
 
@@ -93,8 +96,11 @@ class ToolKernelModules implements ToolKernelModulesApi {
     return operations
   }
 
-  public define<TContext extends { abortSignal: AbortSignal }, TTools>(
-    options: ToolKernelModuleOptions<TContext, TTools>
+  public define<
+    TContext extends { abortSignal: AbortSignal },
+    TService extends ToolCapabilityService<unknown>,
+  >(
+    options: ToolKernelModuleOptions<TContext, TService>
   ): KernelModuleDefinition {
     return defineKernelModule({
       manifest: {
@@ -115,11 +121,14 @@ class ToolKernelModules implements ToolKernelModulesApi {
             { label: options.label, mapError: options.mapError },
           ),
         )
-        const service = Object.freeze({
+        const tools: Record<string, unknown> = options.tools as Record<string, unknown>
+        // 服务形状由内核可调用面加工具集合拼出来，各空间的服务接口都是它的子类型：
+        // 先按约束声明一次，再向下收成 TService，避免两段式断言。
+        const service: ToolCapabilityService<unknown> = Object.freeze({
           ...callable,
-          tools: Object.freeze({ ...options.tools }),
-        }) as ToolCapabilityService<TTools>
-        context.registerService(options.token, service)
+          tools: Object.freeze({ ...tools }),
+        })
+        context.registerService(options.token, service as TService)
       },
     })
   }

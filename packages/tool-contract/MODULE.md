@@ -28,11 +28,12 @@ system、project、browser、office、memory、computer、knowledge 七个空间
 | `toolIdentity` | `ToolIdentityApi` | canonical 工具 id 的判定与断言、跨工具共享的审批操作身份 |
 | `toolInputForgiveness` | `ToolInputForgivenessApi` | 宽容入参的原语：钳制、缺省、取首项、空输入 no-op、推断 action、调整回显 |
 | `toolKernelModules` | `ToolKernelModulesApi` | 严格解析线上入参、把工具集合包成内核可调用操作、做成内核模块（`define`） |
-| `toolFailures` | `ToolFailuresApi` | 统一的失败回执信封：`not-applied` / `skipped` / `failed` 三种结论与列表上限 |
+| `toolFailures` | `ToolFailuresApi` | 统一的失败回执信封：`not-applied` / `skipped` / `failed` 三种结论、列表上限、领域错误的中立镜像 |
 | `createToolExampleRegistry` | 工厂 | 造一张与进程共享表隔离的示例登记表，给测试与离线审核用 |
 | `renderToolExampleInputs` | 工厂 | 把一组示例渲染成「示例：」分节的条目 |
 | `serializeToolExampleInput` | 工厂 | 把一条示例编成模型实际会收到的那串 JSON，编不出来当场抛 |
 | `CanonicalToolIdPatternSource` | 契约常量 | canonical 工具 id 的正则源文本 |
+| `ToolDomainErrorContextKey` | 契约常量 | 领域错误镜像进 `AppError.context` 的键名 |
 | `ToolFailureLimits` | 契约常量 | 失败回执里每个列表最多列几项 |
 | `ToolExecutionOutcomes` | 契约常量 | 失败回执的三种结论 |
 | `GlobalToolConcepts` | 契约常量 | 各空间工具说明共用的约束句 |
@@ -60,7 +61,7 @@ system、project、browser、office、memory、computer、knowledge 七个空间
 | 编译模型面说明 | `toolContracts.describe` → 登记示例 → companion skill 指路追加到「注意」末尾 → `toolDescriptions.forModel`（已结构化就原样返回，否则按七节语法渲染）→ `assertWithinLimit` 硬上限 → `assertWithinBudget` 软预算（合法豁免可跳过） |
 | 出 schema | `toolSchemas.toInputSchema`（单条，`io:'input'` + 元组补长度界 + 剥元字段）；`toolSchemas.bundle`（整批：注册表出 schema → 共享定义归一成包内引用 → 内联单处引用的小定义 → 定义改短名 → 给引用点补回 description）；`toolSchemas.canonicalizeProviderInput`（发给 provider 前排键序、丢空 required） |
 | 挂进内核 | `toolKernelModules.define({ id, version, permissions, token, tools, resolveContext, label, mapError })` → `toolKernelModules.callableOperations` 按工具名登记 → 每次调用：`parseWireInput` 严格解析 → 向宿主解析上下文并换上内核的 abortSignal → 核可用性与取消 → execute → 领域错误交给 `mapError` |
-| 失败回执 | `toolFailures.create(code, message, cause, { notApplied?, applied? })` → 结论落进 `context.executionOutcome`（`not-applied` / `failed` / `skipped`）→ 已落地的部分经 `toolFailures.listed` 截到 `ToolFailureLimits.listItems` |
+| 失败回执 | `toolFailures.create(code, message, cause, { notApplied?, applied? })` → 结论落进 `context.executionOutcome`（`not-applied` / `failed` / `skipped`）→ 已落地的部分经 `toolFailures.listed` 截到 `ToolFailureLimits.listItems`；空间挂内核时的领域错误翻译走 `toolFailures.domain`，结构化详情镜像进 `ToolDomainErrorContextKey` 那一格 |
 
 ## 依赖什么
 

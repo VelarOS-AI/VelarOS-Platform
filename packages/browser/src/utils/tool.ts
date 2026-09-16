@@ -1,6 +1,7 @@
 import { AppError } from '@velaros-ai/core/error'
 import { toolContracts } from '@velaros-ai/tool-contract'
 
+import { BrowserSpaceId } from '../contract/constants.js'
 import type { VelaTool } from '../contract/provides.js'
 import type { BrowserToolContext } from '../contract/requires.js'
 import type { BrowserPendingEventKind } from '../types/browser.js'
@@ -44,8 +45,8 @@ export function getActiveBrowserContext(ctx: BrowserToolContext) {
 }
 
 /** 定义一个浏览器工具：补上 category，其余原样交给工具契约。 */
-export function defineBrowserTool<TInput extends Record<string, unknown>>(
+export const defineBrowserTool: <TInput extends Record<string, unknown>>(
   input: DefineBrowserToolInput<TInput>
-): VelaTool<TInput> {
-  return toolContracts.defineRuntime({ ...input, category: 'browser' })
-}
+) => VelaTool<TInput> = toolContracts.createDefiner<BrowserToolContext>({
+  categoryOf: () => BrowserSpaceId,
+})

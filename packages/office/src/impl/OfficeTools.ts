@@ -11,9 +11,6 @@ import { isNonBlankString, isPresent } from '@velaros-ai/core'
 import {
   type CapabilityToken,
   createCapabilityToken,
-  createKernelCallableCapability,
-  defineKernelModule,
-  KernelModuleApiVersion,
   type KernelModuleDefinition,
 } from '@velaros-ai/kernel/contracts/abi'
 import {
@@ -32,7 +29,7 @@ import {
   OfficeToolNames,
 } from '../contract/constants.js'
 import type { OfficeCapabilityService, OfficeToolCollection } from '../contract/provides.js'
-import type { CreateOfficeKernelModuleOptions } from '../contract/requires.js'
+import type { CreateOfficeKernelModuleOptions, OfficeToolContext } from '../contract/requires.js'
 import type {
   ConvertDocumentToMarkdownInput,
   ConvertPdfToWordInput,
@@ -1288,26 +1285,13 @@ export const OfficeCapability: CapabilityToken<OfficeCapabilityService> =
 export function createOfficeKernelModule(
   options: CreateOfficeKernelModuleOptions = {},
 ): KernelModuleDefinition {
-  return defineKernelModule({
-    manifest: {
-      id: OfficeModId,
-      version: OfficeKernelModuleVersion,
-      apiVersion: KernelModuleApiVersion,
-      provides: [OfficeCapability],
-      requires: [],
-      optionalRequires: [],
-      permissions: ['fs:read', 'fs:write', 'process:exec'],
-      isolation: 'in-process',
-    },
-    activate(context) {
-      const callable = createKernelCallableCapability(
-        toolKernelModules.callableOperations(officeTools, options.resolveContext, { label: '办公' }),
-      )
-      const service: OfficeCapabilityService = Object.freeze({
-        ...callable,
-        tools: Object.freeze({ ...officeTools }),
-      })
-      context.registerService(OfficeCapability, service)
-    },
+  return toolKernelModules.define<OfficeToolContext, OfficeCapabilityService>({
+    id: OfficeModId,
+    version: OfficeKernelModuleVersion,
+    permissions: ['fs:read', 'fs:write', 'process:exec'],
+    token: OfficeCapability,
+    tools: officeTools,
+    resolveContext: options.resolveContext,
+    label: '办公',
   })
 }

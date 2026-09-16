@@ -4,87 +4,42 @@
  */
 
 
-import type { ToolCategoryId } from '@velaros-ai/agent/protocol'
 import { resolveToolInputReuse, withToolInputReuse } from '@velaros-ai/agent/tool-contract'
 import { isUndefined } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
-import { toolContracts } from '@velaros-ai/tool-contract'
+import { toolContracts, toolFailures } from '@velaros-ai/tool-contract'
 
 import { ProjectToolContract } from '../contract/constants.js'
 import type { VelaTool } from '../contract/provides.js'
 import type { ProjectToolContext } from '../contract/requires.js'
+import type { DefineProjectToolInput } from '../types/tool.js'
 
 import { ProjectError, toErrorObject } from './errors.js'
 
 /**
- * 定义一个项目工具：把说明、schema、权限、能力声明与 execute 组装成运行时规格；execute 先还原入参复用再严格解析。
+ * 定义一个项目工具：类别每条工具自己写，参数契约版本缺省取本包的那一版；execute 先还原入参复用再按原 schema 严格解析。
  * 入参复用的信封（reuse、changes）只给显式声明 `inputReuse: true` 的工具：正文长、改一个字段就要整份重发的那几个。
  */
-export function defineProjectTool<TInput extends Record<string, any>>(input: {
-  name: string
-  inputContractVersion?: number
-  /** 失败后入参可复用：失败回执带 inputReuse，下一次用 reuse + changes 只改出问题的字段。执行器在 execute 之前把复用请求还原成完整入参。 */
-  inputReuse?: boolean
-  category: ToolCategoryId
-  role: 'inspect' | 'edit' | 'execute'
-  summary: string
-  suitable: readonly [string, ...string[]]
-  forbidden?: readonly [string, ...string[]]
-  protocol?: readonly [string, ...string[]]
-  usage?: readonly [string, ...string[]]
-  examples: readonly [Record<string, unknown>, ...Array<Record<string, unknown>>]
-  notes?: readonly [string, ...string[]]
-  schema: VelaTool<TInput>['schema']
-  permissions: VelaTool<TInput>['permissions']
-  capabilities?: VelaTool<TInput>['capabilities']
-  exposure?: VelaTool<TInput>['exposure']
-  hideWhenUnavailable?: VelaTool<TInput>['hideWhenUnavailable']
-  isAvailable?: VelaTool<TInput>['isAvailable']
-  isConcurrencySafe?: VelaTool<TInput>['isConcurrencySafe']
-  execute: VelaTool<TInput>['execute']
-}): VelaTool<any> {
-  const {
-    name,
-    category,
-    role,
-    summary,
-    suitable,
-    forbidden,
-    protocol,
-    usage,
-    examples,
-    notes,
-    inputReuse,
-    ...tool
-  } = input
-  const inputContractVersion = input.inputContractVersion ?? ProjectToolContract.inputVersion
-  const defined = toolContracts.defineRuntime({
-    name,
-    category,
-    role,
-    summary,
-    suitable,
-    forbidden,
-    protocol,
-    usage,
-    examples,
-    notes,
-    ...tool,
-    inputContractVersion,
-  })
-  // 先把入参复用请求还原成完整入参，再按 schema 严格解析；项目资源门由各执行类自己套。
-  const execute = async (args: Record<string, unknown>, context: ProjectToolContext) =>
-    tool.execute(tool.schema.parse(await resolveToolInputReuse(context, name, args, context.toolCallId, {
-      inputContractVersion,
-    })), context)
-  if (!inputReuse) return Object.freeze({ ...defined, execute })
-  return Object.freeze({ ...defined, schema: withToolInputReuse(tool.schema), execute })
-}
+export const defineProjectTool: <TInput extends Record<string, any>>(
+  input: DefineProjectToolInput<TInput>
+) => VelaTool<any> = toolContracts.createDefiner<ProjectToolContext>({
+  contractVersion: ProjectToolContract.inputVersion,
+  inputReuse: withToolInputReuse,
+  // 先把入参复用请求还原成完整入参，再按原 schema 严格解析；项目资源门由各执行类自己套。
+  wrapExecute: (tool) => async (args, context) =>
+    tool.execute(
+      tool.schema.parse(
+        await resolveToolInputReuse(context, tool.name, args, context.toolCallId, {
+          inputContractVersion: tool.inputContractVersion,
+        })
+      ),
+      context
+    ),
+})
 
-/** 挂进内核时的错误翻译：项目领域错误转成内核能力的 AppError，码与文字照搬，原错误的结构化详情放进 context.projectError；别的错误原样交出。 */
+/** 挂进内核时的错误翻译：项目领域错误转成内核能力的 AppError，码与文字照搬，原错误的结构化详情镜像进工具契约约定的那一格；别的错误原样交出。 */
 export function toProjectCapabilityError(error: unknown): unknown {
   if (!(error instanceof ProjectError)) return error
-  return new AppError(error.reason, error.message, error, { projectError: toErrorObject(error) })
+  return toolFailures.domain(error.reason, error.message, error, toErrorObject(error))
 }
 
 /** project:edit 的一步里，文件来源只能写一种：fileRef、sourceRef、path 恰好给了一个。 */

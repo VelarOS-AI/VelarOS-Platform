@@ -189,8 +189,11 @@ export interface ToolContractSpec<
  * 各空间只保留一行 `const defineXTool = createToolDefiner(…)`，不再各写一份同构的壳子。
  */
 export interface ToolDefinerOptions<TContext> {
-  /** 按工具名给出类别；固定一个类别的空间直接返回那个常量。 */
-  categoryOf: (name: string) => ToolCategoryId
+  /**
+   * 按工具名给出类别；固定一个类别的空间直接返回那个常量。
+   * 每条工具自己写 `category` 的空间不填这一格；两处都没有时定义期报 INVARIANT。
+   */
+  categoryOf?: (name: string) => ToolCategoryId
   /**
    * 给声明了 `inputReuse: true` 的工具套上入参复用信封。宿主没有复用账房时不填，
    * 这时 `inputReuse` 声明会被忽略（示例仍按原 schema 校验）。
@@ -234,14 +237,17 @@ export interface CallableToolSpec<TContext> {
   execute: (input: Record<string, unknown>, context: TContext) => unknown
 }
 
-/** 一个空间注册进内核的能力服务：内核可调用操作表之外，再把工具集合原样交出去。 */
-export type ToolCapabilityService<TTools> = {
+/** 一个空间注册进内核的能力服务至少要有的那一格：工具集合原样交出去；各空间的服务在这之上再加自己的。 */
+export interface ToolCapabilityService<TTools> {
   /** 本空间的工具集合，按工具名索引。 */
   readonly tools: TTools
-} & Readonly<Record<string, unknown>>
+}
 
 /** 把一个空间的工具集合做成内核模块时要填的东西。 */
-export interface ToolKernelModuleOptions<TContext extends { abortSignal: AbortSignal }, TTools> {
+export interface ToolKernelModuleOptions<
+  TContext extends { abortSignal: AbortSignal },
+  TService extends ToolCapabilityService<unknown>,
+> {
   /** 模块与能力令牌的身份 id。 */
   id: string
   /** 模块版本。 */
@@ -249,9 +255,9 @@ export interface ToolKernelModuleOptions<TContext extends { abortSignal: AbortSi
   /** 模块声明的内核权限。 */
   permissions: readonly string[]
   /** 能力服务在内核里的身份令牌。 */
-  token: CapabilityToken<ToolCapabilityService<TTools>>
+  token: CapabilityToken<TService>
   /** 本空间的工具集合，按工具名索引。 */
-  tools: TTools
+  tools: TService['tools']
   /** 宿主给的上下文解析器；不给时一个操作都不登记，只能读工具说明。 */
   resolveContext: LooseOptional<ToolContextResolver<TContext>>
   /** 报错与缺省理由里称呼这组能力的中文名。 */
