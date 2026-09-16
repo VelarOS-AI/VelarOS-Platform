@@ -139,10 +139,10 @@
         "./packages/surface-protocol/src/exports/*"
       ],
       "@velaros-ai/knowledge": [
-        "./packages/knowledge/src/index.ts"
+        "./packages/knowledge/src/exports/index.ts"
       ],
       "@velaros-ai/knowledge/*": [
-        "./packages/knowledge/src/*"
+        "./packages/knowledge/src/exports/*"
       ],
       "@velaros-ai/memory": [
         "./packages/memory/src/exports/index.ts"

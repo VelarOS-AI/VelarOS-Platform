@@ -3,10 +3,8 @@
 > 这一页是本模块的压缩表示：读完就知道它是什么、给了外面什么、骨干链路怎么走、靠什么、状态在哪、失败什么样、哪些承诺不能破。
 > 门禁：`bun run check:module-ownership`。
 >
-> **本模块正在按仓库标准改造中**（登记表里 `status: 'migrating'`）：源码目录还是从 `@velaros-ai/memory/knowledge`
-> 整体搬过来的原样，五个目录（`contract/ types/ impl/ utils/ exports/`）、类上方接口、可调参数表与工具执行类
-> 在收口那一轮落地（方案 `docs/engineering/refactor-plans/memory.md` §2.7、附录 B）。
-> 这一版卡片如实写现在的形状，不写还没做到的。
+> **本模块仍登记为改造中**（登记表里 `status: 'migrating'`）：五个目录、合同三件套、类上方接口、可调参数表与工具执行类都已经落地；
+> 还欠「入口收口」那一轮——把类与工具函数从对外入口收窄成按接口标注的实例与工厂（见文末「改造欠账」）。
 
 ## 这是什么
 
@@ -28,39 +26,60 @@
 | `.` | Node 宿主（Desktop 主进程） | 运行时、领域门面、嵌入客户端、存储、三个工具与全部注入端口 |
 | `./contracts` | 任何进程，含渲染进程与 IPC 契约 | **浏览器安全的纯类型** Knowledge DTO（运行时 JavaScript 为空） |
 
-主要对外的值：`knowledgeTools`（三个工具）、`createKnowledgeRuntime` 与 `KnowledgeRuntime`、
-`KnowledgeDomain`（同步 / 搜索 / 诊断 / 重建的门面）、`EmbeddingApi` 与 `Embeddings`、
-`KnowledgeVectors`、`VectorFailureMonitor`、`KnowledgeEmbeddingProfileIsolationMigration`（宿主存储迁移拼它）。
+### 导出的值
 
-注入端口：`KnowledgeRuntimeProviders` 把下面这些合成一份——
+| 分组 | 名字 |
+| --- | --- |
+| 工具集合 | `knowledgeTools` |
+| 运行时 | `createKnowledgeRuntime`、`KnowledgeRuntime`、`DefaultKnowledgeRuntime` |
+| 常量表 | `KnowledgeIndexConfig`、`KnowledgeIndexStatuses`、`KnowledgeMatchTypes`、`KnowledgeEmbeddingProfileIsolationMigration` |
+| 领域实现 | `KnowledgeDomain`、`KnowledgeQuery`、`KnowledgeMutation`、`KnowledgeMaintenance`、`KnowledgeIngestion`、`KnowledgeWorkspace`、`KnowledgeWorkspaceStore`、`KnowledgeChunkBuilder`、`KnowledgeChunks`、`KnowledgeContext`、`AgentKnowledgeHelper`、`KnowledgeQueryHelper` |
+| 存储实现 | `KnowledgeRepository`、`KnowledgeRepo`、`KnowledgeRows`、`KnowledgeRepositoryHelper`、`KnowledgeVectors`、`KnowledgeVectorStore`、`KnowledgeVectorQuery`、`KnowledgeVectorHelper`、`Embeddings`、`EmbeddingService`、`EmbeddingApi`、`EmbeddingApiHelper`、`VectorFailureMonitor`、`VectorFailureLogWindowMs` |
+| 索引与代码工具函数 | `buildIndexTextHash`、`buildDocumentRevisionKey`、`buildEmbeddingProfileIdentity`、`canReuseReadyContentIndex`、`buildVectorStoreStats`、`mergeHybridCandidates`、`extractSymbols`、`extractImports`、`createImportTargetCandidates`、`getCodeExtensions`、`isCodeFile`、`isLikelyTextFile`、`scorePathMatch` |
+
+### 产品面接口（`contract/provides.ts` 登记，定义在各自的类上方）
+
+`KnowledgeRuntimeApi`、`KnowledgeDomainApi`、`KnowledgeQueryApi`、`KnowledgeMutationApi`、`KnowledgeMaintenanceApi`、
+`KnowledgeIngestionApi`、`KnowledgeWorkspaceApi`、`KnowledgeChunkBuilderApi`、`KnowledgeContextApi`、`KnowledgeQueryHelperApi`、
+`KnowledgeRepositoryApi`、`KnowledgeRowsApi`、`KnowledgeVectorsApi`、`KnowledgeVectorQueryApi`、
+`KnowledgeEmbeddingsApi`、`KnowledgeEmbeddingClientApi`、`VectorFailureMonitorApi`、`VectorFailureMonitorOptions`。
+
+### 注入面接口（`contract/requires.ts`）
+
+`KnowledgeRuntimeProviders` 把下面这些合成一份——
 `KnowledgeDatabaseProvider`（关系库连接）、`KnowledgeStoragePathProvider`（向量库路径）、
 `KnowledgeEmbeddingConfigPort`（**已经解析好**的 provider / model / profile）、
 `EmbeddingRequestFactory` 与 `KnowledgeHttpClient`（嵌入协议与网络）、
-可选的 `KnowledgeCodeIntelligenceApi`（代码智能）与 `KnowledgeIndexingPolicy`（可见性策略）。
-工具经上下文里的 `ctx.knowledge`（`KnowledgeApi`）调宿主。
+可选的 `KnowledgeLanceDbLoader`（连带 `KnowledgeLanceDbModule`、`KnowledgeLanceDbConnection`）、
+`KnowledgeCodeIntelligenceApi`（代码智能）与 `KnowledgeIndexingPolicy`（可见性策略）。
+
+工具经上下文 `KnowledgeToolContext` 里的 `ctx.knowledge`（宿主端口 `KnowledgeToolApi`，旧名字 `KnowledgeApi` 是它的别名）
+与 `ctx.project`（`KnowledgeProjectApi`）调宿主。
 
 ## 骨干链路
 
-| 能力 | 链路 |
+三个工具的定义、能力声明、分组与挂载都在 `src/impl/KnowledgeTools.ts`；execute 只写一两步，实现交给 `KnowledgeToolOperations`。
+
+| 工具 | 链路 |
 | --- | --- |
-| `knowledge:sync` | 解析工作区根（入参或宿主当前激活的）→ `ctx.knowledge.ensureWorkspaceSynced(root, { force })` → 摄入层列根内文件 → 按内容哈希判断能不能复用已有索引 → 变了的重新分块、嵌入、写关系行与向量行 → 清理已删除或不可见的旧记录 |
-| `knowledge:search` | 解析工作区根 → `searchKnowledge(query, options)`：全文候选与向量候选并行，再按混合评分融合 → **零命中**时补一次 `ensureWorkspaceSynced` 再重搜一次，回执里写明同步跑过 → 把索引问题汇总成 `indexIssues` |
-| `knowledge:diagnostics` | `ctx.knowledge.getDiagnostics()` 原样透传：文档总量、内容策略过期、当前 profile 覆盖率、保留向量状态；只读 |
-| 显式重建 | `reindexKnowledge(options)` 只为**当前** profile 写新索引；旧 profile 与旧 revision 的数据保留但不可见，失败逐项报在 `KnowledgeReindexResult.failures` 里 |
+| `knowledge:sync` | `KnowledgeTools.ts` → `KnowledgeToolOperations.sync` → 解析工作区根（入参或宿主当前激活的）→ `ctx.knowledge.ensureWorkspaceSynced(root, { force })` → 摄入层列根内文件 → 按内容哈希判断能不能复用已有索引 → 变了的重新分块、嵌入、写关系行与向量行 → 清理已删除或不可见的旧记录 |
+| `knowledge:search` | `KnowledgeTools.ts` → `KnowledgeToolOperations.search` → 解析工作区根 → `searchKnowledge(query, options)`：全文候选与向量候选并行，再按混合评分融合 → **零命中**时补一次 `ensureWorkspaceSynced` 再重搜一次，回执里写明同步跑过 → 把索引问题汇总成 `indexIssues` |
+| `knowledge:diagnostics` | `KnowledgeTools.ts` → `KnowledgeToolOperations.diagnostics` → `ctx.knowledge.getDiagnostics()` 原样透传：文档总量、内容策略过期、当前 profile 覆盖率、保留向量状态；只读 |
+| 显式重建 | `KnowledgeDomain.reindexKnowledge(options)` 只为**当前** profile 写新索引；旧 profile 与旧 revision 的数据保留但不可见，失败逐项报在 `KnowledgeReindexResult.failures` 里 |
 
 ## 依赖什么
 
-- 上游包：`@velaros-ai/core`（类型守卫、`AppError`、`logRuntime`）；`@velaros-ai/agent/tool-contract` 是 peer，只用来写工具。
+- 上游包：`@velaros-ai/core`（类型守卫、`AppError`、`Log`）；`@velaros-ai/agent/tool-contract` 是 peer，只用来写工具。
 - `better-sqlite3`（**连接由宿主打开与关闭**，本包只用类型与已给的连接）、`zod`（工具入参 schema）。
 - `@lancedb/lancedb` 是**可选 peer**：装了才有向量通道，只用它的类型。
-- Node 内置：`node:crypto`、`node:fs`、`node:fs/promises`、`node:path`。`./contracts` 的整条引用链不碰它们。
+- Node 内置：`node:crypto`、`node:fs/promises`、`node:path`。`./contracts` 的整条引用链不碰它们。
 - 不读环境变量，不去发现 Desktop / Workbench / Workspace，不 import `@velaros-ai/memory`（门禁 `check:memory-boundaries` 守着）。
 
 ## 状态归谁
 
 一个数据目录或租户一个 `KnowledgeRuntime`，状态全在实例上：
 `KnowledgeIngestion` 记同步态与短时 TTL、`KnowledgeQuery` 记访问节流表、`KnowledgeVectors` 记表缓存、
-`Embeddings` 记查询向量的 LRU、`VectorFailureMonitor` 记故障抑制窗口（**不同实例之间不共享**）。
+`KnowledgeEmbeddings` 记查询向量的 LRU、`VectorFailureMonitor` 记故障抑制窗口（**不同实例之间不共享**）。
 没有模块级可变状态。索引本身住在宿主给的 SQLite 与 LanceDB 目录里。
 
 ## 生命周期
@@ -92,25 +111,43 @@
 
 ```text
 src/
-  index.ts            根入口（逐名转发 + 算出 knowledgeTools）
-  contracts.ts        可移植数据入口（只 export type）
-  Types.ts            注入端口、工具上下文与 defineKnowledgeTool
-  Constants.ts        索引状态、命中类型与索引参数表
-  Capabilities.ts     两份工具能力声明
-  Runtime.ts          DefaultKnowledgeRuntime 与工厂
-  VectorFailureLog.ts 向量故障抑制器
-  embedding/          嵌入请求客户端（EmbeddingApi）与嵌入服务（Embeddings）
-  knowledge/domain/   领域门面、查询、写入、维护、分块、代码智能、DTO
-  knowledge/ingestion/摄入、路径策略、工作区扫描
-  knowledge/storage/  关系仓、行映射、向量表与向量查询、profile 隔离迁移
-  shared/             索引复用判定、混合评分、向量统计
-  tools/knowledge/    三个工具的定义与执行、索引问题汇总
+  contract/      对外合同三件套
+    provides.ts    产品面：登记 18 个类上方接口
+    requires.ts    注入面：15 个宿主端口，含宿主端口 KnowledgeToolApi
+    constants.ts   约定的常量表：工具身份与上限、索引状态、命中类型、索引参数、存储迁移
+  types/         只放类型，按域分文件
+    knowledge.ts   可移植数据（随 ./contracts 出包）
+    host.ts        嵌入运行时、嵌入请求、日志口
+    code.ts        代码智能的节点、边、子图与请求
+    storage.ts     SQLite 行、向量行、profile 身份、检索候选
+    ingestion.ts   工作区文件快照、候选、路径平台与目录读取口
+    tool.ts        工具运行时规格与索引问题
+  impl/          实现：一个类一个文件，文件名即类名
+    KnowledgeTools.ts           三个工具的定义、能力声明、分组与挂载（人最先看这里）
+    KnowledgeToolOperations.ts  三个工具的执行体
+    KnowledgeRuntime.ts         对象图与工厂 createKnowledgeRuntime
+    domain/                     门面、查询、写入、维护、摄入、工作区、分块、召回拼装、评分门面
+    storage/                    关系仓、行映射、向量表、向量查询、嵌入服务、嵌入客户端、故障抑制器
+  utils/         纯工具函数，按类别分文件
+    tuning.ts      可调参数表 KnowledgeTuning
+    tool.ts        defineKnowledgeTool
+    tools.ts       工具入参的公共处理
+    index-issues.ts 索引问题汇总（guidance 中文）
+    code.ts chunks.ts query.ts indexing.ts vector-stats.ts paths.ts workspace.ts rows.ts vector-query.ts embedding.ts
+  exports/       对外入口，只转发
+    index.ts       根入口（`.`）
+    contracts.ts   可移植数据入口（`./contracts`）
+  velaros-globals.d.ts
 spec/                 不变量登记与验收测试
 test/                 实现细节测试与发布入口消费测试
 examples/minimal.ts   随包发布，发布门禁用 NodeNext 编译
 ```
 
-**改造欠账**（收口那一轮做，见方案附录 B）：五个目录与分层登记、每个类的上方接口、
-`utils/tuning.ts` 收拢约 40 个数字、无状态类改函数（`KnowledgeRows`、`KnowledgeVectorQuery`、`KnowledgeChunks`）、
-删死代码（`KnowledgeContext`、`KnowledgeQueryHelper`、`isCodeFile`）与 9 个类别名、
-`knowledge:search` 三句英文 `guidance` 改中文、`knowledge:sync` 的任意 `workspaceRoot` 是否限制在宿主登记过的根里。
+**分层**（登记在 `scripts/ownership/governed-modules.mjs`，上层可以引下层与同层，下层不许引上层）：
+`KnowledgeTools.ts` → `KnowledgeToolOperations.ts` → `KnowledgeRuntime.ts` → `domain/` → `storage/`；utils 在所有层下面。
+
+**改造欠账**（「入口收口」那一轮做）：把 17 个类与 13 个工具函数从对外入口收窄成按公开接口标注的实例与工厂，
+连带删掉只为它们出包的数据类型（`EmbeddingProfileIdentity`、`IndexedRecordIdentity`、`HybridCandidate`、
+`LanceIndexDescriptor`、`VectorStoreStatsInput`、`VectorStoreStatsOutput`、`RankedKnowledgeCandidate`、
+`KnowledgeCodeSymbol`、`KnowledgeCodeSymbolKind`）与 9 个类别名；
+以及 `knowledge:sync` 的任意 `workspaceRoot` 是否要限制在宿主登记过的根里。

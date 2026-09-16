@@ -9,6 +9,7 @@ import { join } from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
+import type { KnowledgeToolContext } from '../src/contract/requires'
 import {
   buildDocumentRevisionKey,
   buildEmbeddingProfileIdentity,
@@ -18,12 +19,11 @@ import {
   Embeddings,
   knowledgeTools,
   KnowledgeWorkspace,
-} from '../src/index'
+} from '../src/exports/index'
 import type {
   KnowledgeSearchResult,
   KnowledgeWorkspaceSyncResult,
-} from '../src/knowledge/domain/Types'
-import type { KnowledgeToolContext } from '../src/Types'
+} from '../src/types/knowledge'
 
 let root = ''
 beforeEach(async () => {

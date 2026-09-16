@@ -85,11 +85,12 @@ const PortableContractRules = [
     packageName: '@velaros-ai/knowledge',
     packageRoot: 'packages/knowledge',
     exportKey: './contracts',
-    contractsFile: 'src/contracts.ts',
+    contractsFile: 'src/exports/contracts.ts',
+    // 键是入口里 import 的原文（含 .js），不是磁盘路径：搬家时两者必须一起改，否则这道门必红。
     sourceModules: new Map([
-      ['./knowledge/domain/Types.js', {
-        path: 'src/knowledge/domain/Types.ts',
-        allowedImports: new Set(['../../Constants']),
+      ['../types/knowledge.js', {
+        path: 'src/types/knowledge.ts',
+        allowedImports: new Set(['../contract/constants.js']),
       }],
     ]),
     requiredTypes: [

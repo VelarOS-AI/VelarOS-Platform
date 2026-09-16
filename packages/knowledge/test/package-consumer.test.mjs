@@ -11,7 +11,7 @@ import {
   createKnowledgeRuntime,
   KnowledgeRuntime,
   VectorFailureMonitor,
-} from '../dist/index.js'
+} from '../dist/exports/index.js'
 
 test('package root exposes a class-first runtime while retaining the factory', () => {
   const databaseProvider = () => {

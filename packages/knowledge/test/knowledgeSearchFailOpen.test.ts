@@ -8,12 +8,12 @@
 
 import { describe, expect, test } from 'bun:test'
 
+import type { KnowledgeToolContext } from '../src/contract/requires'
+import { knowledgeTools } from '../src/impl/KnowledgeTools'
 import type {
   KnowledgeSearchResult,
   KnowledgeWorkspaceSyncResult,
-} from '../src/knowledge/domain/Types'
-import { knowledgeTools } from '../src/tools/knowledge/Knowledge.tool'
-import type { KnowledgeToolContext } from '../src/Types'
+} from '../src/types/knowledge'
 
 function createSyncResult(patch: Partial<KnowledgeWorkspaceSyncResult> = {}): KnowledgeWorkspaceSyncResult {
   return {

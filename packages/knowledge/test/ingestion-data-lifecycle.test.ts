@@ -4,9 +4,9 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test, type TestContext } from 'node:test'
 
-import type { KnowledgeRecord } from '../src/knowledge/domain/Types'
-import { KnowledgeIngestion } from '../src/knowledge/ingestion/Ingestion'
-import { KnowledgeWorkspace } from '../src/knowledge/ingestion/WorkspaceStore'
+import { KnowledgeIngestion } from '../src/impl/domain/KnowledgeIngestion'
+import { KnowledgeWorkspace } from '../src/impl/domain/KnowledgeWorkspace'
+import type { KnowledgeRecord } from '../src/types/knowledge'
 
 type DocumentFileSystem = NonNullable<ConstructorParameters<typeof KnowledgeWorkspace>[2]>
 const fileSystem: DocumentFileSystem = {
