@@ -1,6 +1,7 @@
 import { isBlank, isEmpty, isPlainObject, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import {
+  type CapabilityToken,
   createCapabilityToken,
   createKernelCallableCapability,
   defineKernelModule,
@@ -12,7 +13,8 @@ import {
 import type { BrowserRuntimeCapabilityService, CreateBrowserKernelModuleOptions } from '../../types/electron.js'
 
 
-export const BrowserRuntimeCapability =
+/** 浏览器运行时在内核里的能力令牌：宿主经它拿到本进程唯一的那份运行时。 */
+export const BrowserRuntimeCapability: CapabilityToken<BrowserRuntimeCapabilityService> =
   createCapabilityToken<BrowserRuntimeCapabilityService>('velaros.browser')
 
 /** 能力边界的入参一律拒绝而非纠正：这里收到的形状不对，意味着调用方与本版本 ABI 已不同步。 */
