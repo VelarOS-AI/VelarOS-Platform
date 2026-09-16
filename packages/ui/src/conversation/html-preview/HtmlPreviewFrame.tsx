@@ -1,13 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { useEventListener, useLatest, useMemoizedFn } from 'ahooks'
 
-import type { HtmlArtifactRenderPatch } from '@velaros-ai/html-artifacts/protocol'
 import {
-  HTML_ARTIFACT_WHEEL_MESSAGE_TYPE,
+  HtmlArtifactBridgeMessageTypes,
+  htmlArtifactDocuments,
   type HtmlArtifactFrameFit,
-  normalizeHtmlArtifactExternalUrl,
-  resolveHtmlArtifactFrameFit,
-} from '@velaros-ai/html-artifacts/sandbox'
+  type HtmlArtifactRenderPatch,
+} from '@velaros-ai/html-artifacts'
 import { StyleUtils } from '@velaros-ai/ui'
 
 import { useIntersectionObserver } from '../react-hooks/useIntersectionObserver'
@@ -104,7 +103,7 @@ export function HtmlPreviewFrame({
   const blobUrlRef = useRef<string>(null)
   const maxFrameWidthRef = useRef<Nullable<number>>(null)
   const frameFitRef = useRef<HtmlArtifactFrameFit>(
-    resolveHtmlArtifactFrameFit({ fallbackHeight: initialHeight })
+    htmlArtifactDocuments.resolveFrameFit({ fallbackHeight: initialHeight })
   )
   const frameFitFinalizedRef = useRef(false)
   const frameFitFinalizeTimerRef = useRef<Nullable<TimerLease>>(null)
@@ -203,7 +202,7 @@ export function HtmlPreviewFrame({
     maxFrameWidthRef.current = null
     frameFitFinalizedRef.current = false
     clearFrameFitFinalization()
-    setResolvedFrameFit(resolveHtmlArtifactFrameFit({ fallbackHeight: initialHeight }))
+    setResolvedFrameFit(htmlArtifactDocuments.resolveFrameFit({ fallbackHeight: initialHeight }))
   }, [clearFrameFitFinalization, initialHeight, reloadKey, setResolvedFrameFit])
 
   useEffect(() => {
@@ -316,7 +315,7 @@ export function HtmlPreviewFrame({
       const maxViewportWidth = readFrameMaxWidth(reportedNaturalWidth)
       const naturalWidth = reportedNaturalWidth ?? maxViewportWidth
 
-      const nextFit = resolveHtmlArtifactFrameFit({
+      const nextFit = htmlArtifactDocuments.resolveFrameFit({
         fallbackHeight: initialHeight,
         preferViewportWidth: fitViewportWidth,
         maxViewportWidth,
@@ -331,7 +330,7 @@ export function HtmlPreviewFrame({
       return
     }
 
-    if (data.type === HTML_ARTIFACT_WHEEL_MESSAGE_TYPE) {
+    if (data.type === HtmlArtifactBridgeMessageTypes.wheel) {
       const wheelData = data as { deltaY?: unknown; deltaX?: unknown }
       scrollHostContainer(
         isNumber(wheelData.deltaY) ? wheelData.deltaY : 0,
@@ -354,7 +353,7 @@ export function HtmlPreviewFrame({
 
     if (data.type === HTML_PREVIEW_MSG_OPEN_LINK) {
       const url = readString(data.url)
-      const externalUrl = normalizeHtmlArtifactExternalUrl(url)
+      const externalUrl = htmlArtifactDocuments.normalizeExternalUrl(url)
       if (externalUrl) {
         window.open(externalUrl, '_blank', 'noopener,noreferrer')
       }

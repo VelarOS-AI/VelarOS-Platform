@@ -1,24 +1,23 @@
 /**
- * Self-contained factory injected into generated iframe documents. Keeping the executable source as
- * an explicit string makes production bundling deterministic; tests execute this exact same source.
+ * 注入 iframe 的尺寸控制器源码。写成一段显式的字符串是故意的：生产打包因此是确定的，
+ * 测试跑的也正是这一份源码。脚本里的两个缺省值从常量表插进来，全包只有一处出处。
  *
- * The controller owns both axes of the size the iframe reports to its host, because both axes are
- * fed back into the iframe by the host (height becomes the frame height, width becomes the frame
- * width plus a scale factor). Any measurement that is itself a function of the viewport therefore
- * closes a loop, and the loop has to be broken here — the host cannot tell a runaway apart from a
- * genuinely growing document.
+ * 控制器管着 iframe 报给宿主的两个轴，因为两个轴都会被宿主反馈回 iframe（高变成 frame 高，
+ * 宽变成 frame 宽加一个缩放比）。任何「本身就是视口的函数」的测量都因此闭成一个环，环必须在这里断开
+ * ——宿主分不出跑飞和真的在长高。
  *
- * - Height: overflow-time `scrollHeight` is a monotone floor, two viewport-tracking growth steps
- *   freeze the report at the current client height, and `maxReportedHeight` is a hard cap.
- * - Width: `100vw` children, percentage-positioned decorations and anything clipped by an ancestor
- *   all make the measured content width grow whenever the host widens the frame. Two growth steps
- *   freeze the report at the first host width; `maxWidthRatio` is the hard cap. The width freeze is
- *   sticky across `invalidate()` — a document whose width tracks the viewport does not stop doing so
- *   because a patch changed its DOM, and un-freezing on every mutation would restart the runaway.
+ * - 高：溢出时的 `scrollHeight` 是单调地板，连续两轮随视口等量增长就冻结在当前 clientHeight，
+ *   `maxReportedHeight` 是硬上限。
+ * - 宽：`100vw` 子元素、百分比定位的装饰、被祖先裁掉的内容，都会在宿主加宽 frame 时跟着长。
+ *   连续两轮增长就冻结回宿主的首个可用宽；`maxWidthRatio` 是硬上限。宽的冻结对 `invalidate()`
+ *   是粘滞的——宽随视口长的文档不会因为一次 DOM 补丁就不再这么长，每次 mutation 解冻等于重启跑飞。
  */
+import { HtmlArtifactDefaults } from '../contract/constants.js'
+
+/** 尺寸控制器的工厂源码；`(maxReportedHeight, maxWidthRatio)` 两个参数缺省取常量表里的值。 */
 export const HTML_ARTIFACT_SIZE_CONTROLLER_FACTORY_SOURCE = `function(maxReportedHeight,maxWidthRatio){
-  var heightLimit=Number.isFinite(maxReportedHeight)&&maxReportedHeight>0?Math.max(1,Math.ceil(maxReportedHeight)):1200;
-  var widthRatioLimit=Number.isFinite(maxWidthRatio)&&maxWidthRatio>0?maxWidthRatio:3;
+  var heightLimit=Number.isFinite(maxReportedHeight)&&maxReportedHeight>0?Math.max(1,Math.ceil(maxReportedHeight)):${HtmlArtifactDefaults.maxReportedHeight};
+  var widthRatioLimit=Number.isFinite(maxWidthRatio)&&maxWidthRatio>0?maxWidthRatio:${HtmlArtifactDefaults.maxWidthRatio};
   var contentFloor=0;
   var feedbackFrozenHeight=0;
   var previousClientHeight=0;

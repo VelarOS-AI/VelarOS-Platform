@@ -11,7 +11,8 @@ export default createDomainConfig({
   rootDir,
   ignores: [
     'packages/html-artifacts/demo/**',
-    'packages/html-artifacts/tests/**',
+    'packages/html-artifacts/spec/**',
+    'packages/html-artifacts/test/**',
     'packages/html-artifacts/dist/**',
     'packages/html-artifacts/demo-dist/**',
   ],

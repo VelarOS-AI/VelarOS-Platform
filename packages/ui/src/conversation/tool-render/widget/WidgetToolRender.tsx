@@ -1,7 +1,7 @@
 import React, { memo, useCallback, useMemo, useState } from 'react'
 import { WarningCircleIcon } from '@phosphor-icons/react'
 
-import { normalizeHtmlArtifactSource } from '@velaros-ai/html-artifacts/sandbox'
+import { htmlArtifactDocuments } from '@velaros-ai/html-artifacts'
 import { Text } from '@velaros-ai/ui/primitives/display/Text'
 
 import { HtmlArtifactSourceCode } from '../../artifacts/HtmlArtifactSourceCode'
@@ -46,7 +46,7 @@ const WidgetToolRender = memo(function WidgetToolRender({
   // 快照可能来自剥壳修复前的历史会话,读取时也过一遍宽容剥壳(幂等)。
   const rawWidgetCode =
     readString(widgetArtifactSnapshot?.htmlSource) || readString(block.args.widget_code)
-  const widgetCode = rawWidgetCode ? normalizeHtmlArtifactSource(rawWidgetCode) : rawWidgetCode
+  const widgetCode = rawWidgetCode ? htmlArtifactDocuments.normalizeSource(rawWidgetCode) : rawWidgetCode
   const initialHeight = clampHeight(readNumber(block.args.height) ?? DEFAULT_WIDGET_HEIGHT)
   // 导出面(查看源码/复制/下载)用**纯净文档**:只含页面自身需要的 meta/视觉 CSS/模型内容,
   // 不带桥接与测量等宿主内部逻辑;快照 compiledHtml 是内部壳编译产物,不再用于导出。

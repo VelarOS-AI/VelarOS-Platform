@@ -56,7 +56,7 @@ const platformCodeStyle = definePlugin({
       // 零依赖的浏览器库 html-artifacts 自带一份守卫实现（不能 import core），
       // 守卫本体只能用 typeof 判定，不能套用「改用 isFunction」的自身 autofix。
       'code-style/forbid-raw-runtime-type-guards': {
-        allowFiles: ['packages/html-artifacts/src/internal-runtime.ts'],
+        allowFiles: ['packages/html-artifacts/src/utils/runtime-guards.ts'],
       },
       'code-style/forbid-console': {
         allowFiles: [

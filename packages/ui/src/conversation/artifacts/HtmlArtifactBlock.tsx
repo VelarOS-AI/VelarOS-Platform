@@ -9,7 +9,7 @@ import React, {
 } from 'react'
 import { useEventListener } from 'ahooks'
 
-import { normalizeHtmlArtifactSource } from '@velaros-ai/html-artifacts/sandbox'
+import { htmlArtifactDocuments } from '@velaros-ai/html-artifacts'
 import { Button } from '@velaros-ai/ui/primitives/buttons/Button'
 import { Text } from '@velaros-ai/ui/primitives/display/Text'
 
@@ -128,7 +128,7 @@ const HtmlArtifactBlock = memo(function HtmlArtifactBlock({
   const pendingScrollAnchorRef = useRef<Nullable<HtmlArtifactScrollAnchor>>(null)
   const title = block.title.trim() || t('chat.htmlArtifactDefaultTitle')
   // 与 Widget 并列消费同一个中立预览适配层:协议内容可能被 CDATA/代码围栏整体包裹。
-  const artifactHtml = normalizeHtmlArtifactSource(block.html)
+  const artifactHtml = htmlArtifactDocuments.normalizeSource(block.html)
   const artifactPatches = block.patches ?? []
   const hasRenderableArtifact = !!artifactHtml
   const presentation = resolveHtmlArtifactPresentation({

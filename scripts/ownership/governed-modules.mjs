@@ -258,6 +258,31 @@ export const GovernedModules = [
     acceptance: 'spec/acceptance.test.ts',
   },
   {
+    directory: 'html-artifacts',
+    name: '@velaros-ai/html-artifacts',
+    // 没有工具：这是一个浏览器库，不向模型交工具，不登记 toolsFile、toolDefiner、hostPort
+    contract: 'src/contract',
+    types: 'src/types',
+    portable: 'html-artifacts.ts',
+    impl: 'src/impl',
+    utils: 'src/utils',
+    tuning: 'tuning.ts',
+    exports: 'src/exports',
+    // 零运行时依赖的浏览器库：两个入口渲染进程与浏览器扩展都能加载
+    browserSafeEntries: ['index.ts', 'contracts.ts'],
+    layers: [
+      // 浏览器宿主：一个 iframe 接一条流，整条生命周期归它
+      ['HtmlArtifactRuntime.ts'],
+      // 三件能力的出口，加上注入面的缺省 DOM 实现
+      ['HtmlArtifactProtocol.ts', 'HtmlArtifactDocuments.ts', 'DomHtmlArtifactEnvironment.ts'],
+      // 自己管状态的解析器，由 htmlArtifactProtocol.createParser() 给出
+      ['HtmlArtifactProtocolParser.ts'],
+    ],
+    card: 'MODULE.md',
+    invariants: 'spec/invariants.md',
+    acceptance: 'spec/acceptance.test.ts',
+  },
+  {
     directory: 'document-renderer',
     name: '@velaros-ai/document-renderer',
     // 没有工具：宿主不 import 它，只按命令协议调打包出来的可执行文件

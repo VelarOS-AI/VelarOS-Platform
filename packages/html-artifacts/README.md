@@ -12,11 +12,11 @@
 
 | 入口 | 内容 |
 | --- | --- |
-| `@velaros-ai/html-artifacts` | 包根,绝大多数应用只需要它:`mountHtmlArtifact()` / `HtmlArtifactRuntime` + 协议 + 沙箱原语 |
-| `@velaros-ai/html-artifacts/protocol` | 与渲染器无关的增量协议解析器(自定义宿主用) |
-| `@velaros-ai/html-artifacts/sandbox` | iframe 文档构造、高度适配、URL 安全原语 |
-| `@velaros-ai/html-artifacts/browser` | 浏览器宿主实现(挂载 / 控制器 / DOM 环境) |
-| `@velaros-ai/html-artifacts/runtime` | `./sandbox` 的兼容别名,保留不动 |
+| `@velaros-ai/html-artifacts` | 包根,三件能力都在这里:增量协议 `htmlArtifactProtocol`、沙箱文档 `htmlArtifactDocuments`、浏览器宿主 `mountHtmlArtifact()` |
+| `@velaros-ai/html-artifacts/contracts` | 包根的子集,只有约定常量与可移植数据类型;只要数据不要能力时用它 |
+
+> 0.2.0 起入口收成这两个。原来的 `/protocol`、`/sandbox`、`/browser`、`/runtime` 已删除,
+> 里面的函数改成三件能力上的方法(对照表见 [MODULE.md](./MODULE.md) 与下文)。
 
 ## 安装
 
@@ -111,9 +111,13 @@ v1 线格式刻意保持很小:
 
 patch 载荷本身含有协议闭合标签时,用 `encoding="base64"`。
 
-解析器面(`/protocol`)提供两种形态:面向对象的 `HtmlArtifactProtocolParser`,
-以及函数式的 `createHtmlArtifactProtocolStreamState` / `applyHtmlArtifactProtocolChunk` /
-`finalizeHtmlArtifactProtocol`。`HtmlArtifactProtocolLimits` 用于给不可信或异常超长的流设资源上限。
+协议这件能力提供两种形态:自己管状态的 `htmlArtifactProtocol.createParser()`,
+以及宿主自己持久化状态的 `htmlArtifactProtocol.createState()` / `.applyChunk(state, chunk)` /
+`.finalize(state)`。`HtmlArtifactProtocolLimits` 用于给不可信或异常超长的流设资源上限。
+
+自己托管 iframe(不用 `mountHtmlArtifact`)的宿主拿 `htmlArtifactDocuments`:
+`buildDocument` / `buildShellDocument` / `normalizeSource` / `inferContentKind` /
+`resolveFrameFit` / `normalizeExternalUrl`。
 
 ## 边界:本包不负责什么
 
@@ -126,14 +130,19 @@ Widget、Memory 或 VelarOS Kernel 内部实现。
 ## 开发
 
 ```bash
-npm run check     # typecheck + Node 测试 + 生产 demo 构建 + 包契约
+npm run check     # typecheck + 验收与实现测试 + 生产 demo 构建 + 包契约
 npm run demo
 ```
 
+结构按仓库的模块所有权标准走:`src/` 下只有 `contract`、`types`、`impl`、`utils`、`exports` 五个目录,
+对外承诺登记在 [spec/invariants.md](./spec/invariants.md),模块卡片是 [MODULE.md](./MODULE.md);
+门是仓根的 `bun run check:module-ownership`。
+
 包级门:`check:package-contract`(元数据 / exports / 文档 / 运行时导入 / 严格外部类型),
 由仓根 `check:html-artifacts-package` 挂进 `check:gates`。产物一致性由它「逐个入口打包安装再
-import」那一步覆盖;本包独立成仓时代那个比对 `dist` 的 `check:dist` 已删除——仓根 `.gitignore`
-忽略 `dist/`,它两条断言恒为空,是一道空转的门。
+import」那一步覆盖;本包独立成仓时代那个比对 `dist` 的 `check:dist`、以及要 `v<version>` 标签的
+`scripts/prepare-release.mjs` 与包内 `release:dry-run` 脚本都已删除——仓根 `.gitignore` 忽略 `dist/`,
+前者两条断言恒为空;发版统一走仓根的 `release:local`,后者无人调用。
 
 ## 安全
 

@@ -229,14 +229,11 @@
       "domain": "html-artifacts",
       "directory": "packages/html-artifacts",
       "name": "@velaros-ai/html-artifacts",
-      "version": "0.1.7",
+      "version": "0.2.0",
       "description": "A framework-neutral streaming HTML artifact protocol and sandboxed iframe runtime.",
       "exportSubpaths": [
         ".",
-        "./browser",
-        "./protocol",
-        "./runtime",
-        "./sandbox"
+        "./contracts"
       ],
       "repositoryDirectory": "packages/html-artifacts"
     },

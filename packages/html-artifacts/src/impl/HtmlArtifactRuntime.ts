@@ -1,148 +1,68 @@
-import { isFiniteNumber, isFunction, isObject, isString, Log } from './internal-runtime.js'
+/**
+ * 浏览器宿主：一个 iframe 接一条流，从建桥到清理的整条生命周期都归它。
+ * 一份解析器、一份沙箱外壳、一套只属于这个实例的桥接消息名，加上宿主给的六个回调。
+ * 实例由 `mountHtmlArtifact()` 给出；类本身不出包。
+ */
 import {
-  DEFAULT_HTML_ARTIFACT_HEIGHT,
-  type HtmlArtifactProtocolEvent,
-  type HtmlArtifactProtocolLimits,
-  HtmlArtifactProtocolParser,
-  type HtmlArtifactSnapshot,
-} from './protocol.js'
-import { normalizeHtmlArtifactExternalUrl } from './security.js'
-import {
-  buildHtmlArtifactShellDocument,
-  DEFAULT_HTML_ARTIFACT_MAX_REPORTED_HEIGHT,
-  HTML_ARTIFACT_WHEEL_MESSAGE_TYPE,
-  type HtmlArtifactBridgeMessages,
-} from './shell.js'
+  HtmlArtifactBridgeMessageTypes,
+  HtmlArtifactDefaults,
+} from '../contract/constants.js'
+import type { HtmlArtifactBrowserEnvironment } from '../contract/requires.js'
+import type {
+  HtmlArtifactHostError,
+  HtmlArtifactMessagePayload,
+  MountHtmlArtifactOptions,
+} from '../types/browser.js'
+import type {
+  HtmlArtifactBridgeMessages,
+  HtmlArtifactProtocolEvent,
+  HtmlArtifactSnapshot,
+} from '../types/html-artifacts.js'
+import { normalizeHtmlArtifactExternalUrl } from '../utils/external-url.js'
+import { normalizeDimension, readMessagePayload, readString } from '../utils/host-bridge.js'
+import { isFunction } from '../utils/runtime-guards.js'
+import { Log } from '../utils/runtime-log.js'
+import { buildHtmlArtifactShellDocument } from '../utils/shell-document.js'
+
+import { DomHtmlArtifactEnvironment } from './DomHtmlArtifactEnvironment.js'
+import type { HtmlArtifactProtocolParserApi } from './HtmlArtifactProtocolParser.js'
+import { HtmlArtifactProtocolParser } from './HtmlArtifactProtocolParser.js'
 
 const log = Log.tag('HtmlArtifactBrowserHost')
 
-export type HtmlArtifactHostErrorPhase = 'host' | 'protocol' | 'runtime' | 'security'
-
-export interface HtmlArtifactHostError {
-  message: string
-  phase: HtmlArtifactHostErrorPhase
-  cause?: unknown
-  patchId?: string
-  patchType?: string
-}
-
 /**
- * Browser operations used by the artifact runtime.
- *
- * Applications can provide an implementation for alternate DOM hosts, tests, or embedded
- * webviews without patching browser globals.
+ * 挂载出来的一个制品：外面拿它喂流、取内容、复用同一个 iframe、最后清理干净。
+ * 六个方法都绑好了 this，解构出来单独用也没问题。`dispose()` 之后再调 `write` / `finish` / `reset` 会抛错。
  */
-export interface HtmlArtifactBrowserEnvironment {
-  createBridgeId(): string
-  createIframe(): HTMLIFrameElement
-  addMessageListener(listener: (event: MessageEvent<unknown>) => void): void
-  removeMessageListener(listener: (event: MessageEvent<unknown>) => void): void
-  scrollBy(deltaX: number, deltaY: number): void
-}
-
-export interface MountHtmlArtifactOptions {
-  /** Accessible title applied to the generated iframe. */
-  title?: string
-  /** Optional class name applied to the generated iframe. */
-  className?: string
-  /** iframe sandbox tokens. Defaults to the deliberately small `allow-scripts`. */
-  sandbox?: string
-  /** Height used before the runtime publishes its first measurement. */
-  initialHeight?: number
-  /** Smallest height the host will apply after a runtime measurement. */
-  minHeight?: number
-  /** Hard height cap. Taller content scrolls inside the iframe. */
-  maxHeight?: number
-  /** Product-neutral CSS injected before generated artifact styles. */
-  designCss?: string
-  /** Root element id inside the iframe shell. */
-  rootId?: string
-  /** Protocol resource limits for hostile or unexpectedly large streams. */
-  protocolLimits?: HtmlArtifactProtocolLimits
-  /** URL protocols handed to `onLink`. Defaults to HTTP and HTTPS. */
-  allowedLinkProtocols?: readonly string[]
-  /** Browser boundary used to create the iframe and subscribe to messages. */
-  environment?: HtmlArtifactBrowserEnvironment
-  onMarkdown?: (text: string) => void
-  onPrompt?: (prompt: string) => void
-  onLink?: (url: string) => void
-  onMessage?: (payload: unknown) => void
-  onWheel?: (deltaX: number, deltaY: number) => void
-  onEvent?: (event: HtmlArtifactProtocolEvent) => void
-  onError?: (error: HtmlArtifactHostError) => void
-}
-
 export interface HtmlArtifactController {
+  /** 挂载出来的那个 iframe；宿主可以自己再加样式，但别换它的 `srcdoc`。 */
   readonly iframe: HTMLIFrameElement
-  /** Resolves after the sandbox shell has loaded and queued render events have been delivered. */
+  /** 外壳加载完、排队的渲染消息都送进去之后落定；`dispose()` 也会让它落定。 */
   readonly ready: Promise<HTMLIFrameElement>
-  write(chunk: string): HtmlArtifactProtocolEvent[]
-  finish(): HtmlArtifactProtocolEvent[]
-  consume(chunks: AsyncIterable<string> | Iterable<string>): Promise<Nullable<HtmlArtifactSnapshot>>
-  getSnapshot(artifactId?: string): Nullable<HtmlArtifactSnapshot>
-  reset(): void
-  dispose(): void
+  /** 喂一段文本进来，返回这一段的协议事件，顺带把该渲染的送进 iframe。 */
+  write: (chunk: string) => HtmlArtifactProtocolEvent[]
+  /** 流结束时收尾，返回收尾产生的事件。 */
+  finish: () => HtmlArtifactProtocolEvent[]
+  /** 直接消费一条（异步）可迭代的文本流，跑完返回最后一个制品的内容。同一时刻只许消费一条。 */
+  consume: (
+    chunks: AsyncIterable<string> | Iterable<string>,
+  ) => Promise<Nullable<HtmlArtifactSnapshot>>
+  /** 按 id 取制品内容；不给 id 就取这条流里最近动过的那个。 */
+  getSnapshot: (artifactId?: string) => Nullable<HtmlArtifactSnapshot>
+  /** 换一份干净的外壳，复用同一个 iframe 接下一次回答；脚本、样式、计时器、监听器一并清掉。 */
+  reset: () => void
+  /** 移除 iframe 与全部宿主监听器；之后这个实例不能再用。 */
+  dispose: () => void
 }
 
-type MessagePayload = Record<string, unknown> & { type: string }
-
-/**
- * Default DOM implementation used by {@link HtmlArtifactRuntime}.
- *
- * Keeping browser access behind this object makes runtime ownership explicit and lets other
- * applications adapt the library to webviews or test environments.
- */
-export class DomHtmlArtifactEnvironment implements HtmlArtifactBrowserEnvironment {
-  private fallbackId = 0
-
-  constructor(
-    private readonly browserWindow: Window = window,
-    private readonly browserDocument: Document = document
-  ) {}
-
-  public createBridgeId(): string {
-    const cryptoApi = globalThis.crypto
-    if (cryptoApi && isFunction(cryptoApi.randomUUID)) return cryptoApi.randomUUID()
-
-    this.fallbackId += 1
-    return `${Date.now().toString(36)}-${this.fallbackId.toString(36)}`
-  }
-
-  public createIframe(): HTMLIFrameElement {
-    return this.browserDocument.createElement('iframe')
-  }
-
-  public addMessageListener(listener: (event: MessageEvent<unknown>) => void): void {
-    this.browserWindow.addEventListener('message', listener)
-  }
-
-  public removeMessageListener(listener: (event: MessageEvent<unknown>) => void): void {
-    this.browserWindow.removeEventListener('message', listener)
-  }
-
-  public scrollBy(deltaX: number, deltaY: number): void {
-    this.browserWindow.scrollBy({ left: deltaX, top: deltaY })
-  }
-}
-
-function normalizeDimension(value: Optional<number>, fallback: number): number {
-  return isFiniteNumber(value) && value > 0 ? Math.max(1, Math.ceil(value)) : fallback
-}
-
-function readMessagePayload(value: unknown): Nullable<MessagePayload> {
-  if (!value || !isObject(value)) return null
-  const type = (value as { type?: unknown }).type
-  return isString(type) ? (value as MessagePayload) : null
-}
-
-function readString(value: unknown): string {
-  return isString(value) ? value : ''
-}
-
-/**
- * Owns one artifact parser, iframe transport, host callbacks, and their complete lifecycle.
- */
 export class HtmlArtifactRuntime implements HtmlArtifactController {
+  /** iframe 的缺省无障碍标题，宿主可以用 `options.title` 覆盖。 */
+  private static readonly IframeTitle = 'HTML 制品预览'
+  /** iframe 的缺省 sandbox 令牌：刻意只给脚本，别的能力都要宿主显式授权。 */
+  private static readonly SandboxTokens = 'allow-scripts'
+  /** 这个实例专属的桥接消息名前缀，后面接一个随机 id，同页多个制品不串台。 */
+  private static readonly BridgePrefix = 'velaros:html-artifact'
+
   readonly iframe: HTMLIFrameElement
   readonly ready: Promise<HTMLIFrameElement>
 
@@ -150,34 +70,34 @@ export class HtmlArtifactRuntime implements HtmlArtifactController {
   private readonly minHeight: number
   private readonly maxHeight: number
   private readonly initialHeight: number
-  private readonly parser: HtmlArtifactProtocolParser
+  private readonly parser: HtmlArtifactProtocolParserApi
   private bridgeMessages: HtmlArtifactBridgeMessages
   private latestArtifactId: Nullable<string> = null
   private disposed = false
   private consuming = false
   private frameReady = false
-  private settleReady: (frame: HTMLIFrameElement) => void = () => undefined
-  private readonly pendingMessages: MessagePayload[] = []
+  private settleReady: Optional<(frame: HTMLIFrameElement) => void>
+  private readonly pendingMessages: HtmlArtifactMessagePayload[] = []
 
   constructor(
     target: HTMLElement,
     private readonly options: MountHtmlArtifactOptions = {}
   ) {
     if (!target || !isFunction(target.replaceChildren)) {
-      throw new TypeError('HtmlArtifactRuntime target must be an HTMLElement')
+      throw new TypeError('挂载目标不是元素：mountHtmlArtifact 要一个能 replaceChildren 的 HTMLElement。')
     }
 
     this.environment = options.environment ?? new DomHtmlArtifactEnvironment()
     this.minHeight = normalizeDimension(options.minHeight, 1)
     this.maxHeight = Math.max(
       this.minHeight,
-      normalizeDimension(options.maxHeight, DEFAULT_HTML_ARTIFACT_MAX_REPORTED_HEIGHT)
+      normalizeDimension(options.maxHeight, HtmlArtifactDefaults.maxReportedHeight)
     )
     this.initialHeight = Math.min(
       this.maxHeight,
       Math.max(
         this.minHeight,
-        normalizeDimension(options.initialHeight, DEFAULT_HTML_ARTIFACT_HEIGHT)
+        normalizeDimension(options.initialHeight, HtmlArtifactDefaults.initialHeight)
       )
     )
     this.parser = new HtmlArtifactProtocolParser({
@@ -209,7 +129,7 @@ export class HtmlArtifactRuntime implements HtmlArtifactController {
     chunks: AsyncIterable<string> | Iterable<string>
   ): Promise<Nullable<HtmlArtifactSnapshot>> => {
     this.assertActive()
-    if (this.consuming) throw new Error('HTML artifact runtime is already consuming a stream')
+    if (this.consuming) throw new Error('HTML 制品运行时已经在消费一条流了，先等它结束再开下一条。')
 
     this.consuming = true
     try {
@@ -249,24 +169,23 @@ export class HtmlArtifactRuntime implements HtmlArtifactController {
     this.iframe.removeEventListener('load', this.handleLoad)
     this.environment.removeMessageListener(this.handleMessage)
     this.iframe.remove()
-    this.settleReady(this.iframe)
+    this.settleReady?.(this.iframe)
   }
 
   private configureIframe(): void {
-    this.iframe.title = this.options.title ?? 'HTML artifact preview'
+    this.iframe.title = this.options.title ?? HtmlArtifactRuntime.IframeTitle
     if (this.options.className) this.iframe.className = this.options.className
-    this.iframe.setAttribute('sandbox', this.options.sandbox ?? 'allow-scripts')
+    this.iframe.setAttribute('sandbox', this.options.sandbox ?? HtmlArtifactRuntime.SandboxTokens)
     this.iframe.referrerPolicy = 'no-referrer'
     this.iframe.style.display = 'block'
     this.iframe.style.width = '100%'
     this.iframe.style.height = `${this.initialHeight}px`
-    this.iframe.style.border = '0'
     this.iframe.addEventListener('load', this.handleLoad, { once: true })
     this.iframe.srcdoc = this.createShellDocument()
   }
 
   private createBridgeMessages(): HtmlArtifactBridgeMessages {
-    const prefix = `velaros:html-artifact:${this.environment.createBridgeId()}`
+    const prefix = `${HtmlArtifactRuntime.BridgePrefix}:${this.environment.createBridgeId()}`
     return {
       render: `${prefix}:render`,
       patch: `${prefix}:patch`,
@@ -307,17 +226,17 @@ export class HtmlArtifactRuntime implements HtmlArtifactController {
       log.warn('HTML artifact 宿主回调执行失败。', { callbackName, cause })
       this.reportError({
         phase: 'host',
-        message: `${callbackName} callback failed`,
+        message: `宿主回调 ${callbackName} 执行失败。`,
         cause,
       })
     }
   }
 
   private assertActive(): void {
-    if (this.disposed) throw new Error('HTML artifact runtime has been disposed')
+    if (this.disposed) throw new Error('HTML 制品运行时已经 dispose，不能再用；要接下一条流请重新挂载。')
   }
 
-  private post(payload: MessagePayload): void {
+  private post(payload: HtmlArtifactMessagePayload): void {
     if (!this.frameReady) {
       this.pendingMessages.push(payload)
       return
@@ -327,7 +246,7 @@ export class HtmlArtifactRuntime implements HtmlArtifactController {
     if (!frameWindow) {
       this.reportError({
         phase: 'host',
-        message: 'HTML artifact iframe is not available',
+        message: 'HTML 制品的 iframe 不可用，这条消息没能送进沙箱。',
       })
       return
     }
@@ -376,7 +295,7 @@ export class HtmlArtifactRuntime implements HtmlArtifactController {
     return events
   }
 
-  private applyReportedHeight(payload: MessagePayload): void {
+  private applyReportedHeight(payload: HtmlArtifactMessagePayload): void {
     const candidate = Number(payload.naturalHeight ?? payload.height)
     if (!Number.isFinite(candidate) || candidate <= 0) return
 
@@ -410,7 +329,7 @@ export class HtmlArtifactRuntime implements HtmlArtifactController {
         } else {
           this.reportError({
             phase: 'security',
-            message: 'Blocked an invalid artifact URL',
+            message: '已拦下一个不合法的制品外链。',
           })
         }
         break
@@ -421,12 +340,12 @@ export class HtmlArtifactRuntime implements HtmlArtifactController {
       case this.bridgeMessages.error:
         this.reportError({
           phase: 'runtime',
-          message: readString(payload.message) || 'Artifact runtime error',
+          message: readString(payload.message) || '制品运行时出错。',
           patchId: readString(payload.patchId) || undefined,
           patchType: readString(payload.patchType) || undefined,
         })
         break
-      case HTML_ARTIFACT_WHEEL_MESSAGE_TYPE: {
+      case HtmlArtifactBridgeMessageTypes.wheel: {
         const deltaX = Number(payload.deltaX) || 0
         const deltaY = Number(payload.deltaY) || 0
         if (this.options.onWheel) {
@@ -449,13 +368,11 @@ export class HtmlArtifactRuntime implements HtmlArtifactController {
         frameWindow.postMessage(payload, '*')
       }
     }
-    this.settleReady(this.iframe)
+    this.settleReady?.(this.iframe)
   }
 }
 
-/**
- * Compatibility factory for applications that prefer a function entry point.
- */
+/** 在一个元素里挂一个 HTML 制品：造 iframe、建桥、接流，返回控制它的那个句柄。 */
 export function mountHtmlArtifact(
   target: HTMLElement,
   options: MountHtmlArtifactOptions = {}

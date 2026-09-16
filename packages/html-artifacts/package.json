@@ -1,6 +1,6 @@
 {
   "name": "@velaros-ai/html-artifacts",
-  "version": "0.1.7",
+  "version": "0.2.0",
   "velaros": {
     "platform": "0.6"
   },
@@ -25,28 +25,16 @@
   },
   "sideEffects": false,
   "type": "module",
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "main": "./dist/exports/index.js",
+  "types": "./dist/exports/index.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "types": "./dist/exports/index.d.ts",
+      "import": "./dist/exports/index.js"
     },
-    "./protocol": {
-      "types": "./dist/protocol.d.ts",
-      "import": "./dist/protocol.js"
-    },
-    "./browser": {
-      "types": "./dist/browser.d.ts",
-      "import": "./dist/browser.js"
-    },
-    "./sandbox": {
-      "types": "./dist/sandbox.d.ts",
-      "import": "./dist/sandbox.js"
-    },
-    "./runtime": {
-      "types": "./dist/runtime.d.ts",
-      "import": "./dist/runtime.js"
+    "./contracts": {
+      "types": "./dist/exports/contracts.d.ts",
+      "import": "./dist/exports/contracts.js"
     }
   },
   "files": [
@@ -59,12 +47,11 @@
     "clean": "node scripts/clean.mjs",
     "build": "npm run clean && tsc -p tsconfig.build.json && node ../../scripts/build/normalize-package-declarations.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "npm run build && node --test tests/*.test.mjs",
+    "test": "bun run build && bun test spec/acceptance.test.ts test/protocol.test.ts test/documents.test.ts test/runtime.test.ts",
     "demo": "npm run build && vite demo",
     "demo:build": "npm run build && vite build demo --outDir ../demo-dist --emptyOutDir",
     "check:package-contract": "npm run build && node scripts/check-package-contract.mjs",
     "check": "npm run typecheck && npm test && npm run demo:build && npm run check:package-contract",
-    "release:dry-run": "npm run check && node scripts/prepare-release.mjs --dry-run",
     "prepack": "npm run build"
   },
   "devDependencies": {

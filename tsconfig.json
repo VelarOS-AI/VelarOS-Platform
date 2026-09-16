@@ -63,6 +63,12 @@
       "@velaros-ai/core": [
         "./packages/core/src/index.ts"
       ],
+      "@velaros-ai/html-artifacts": [
+        "./packages/html-artifacts/src/exports/index.ts"
+      ],
+      "@velaros-ai/html-artifacts/contracts": [
+        "./packages/html-artifacts/src/exports/contracts.ts"
+      ],
       "@velaros-ai/core/*": [
         "./packages/core/src/*"
       ],

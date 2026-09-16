@@ -1,14 +1,9 @@
-import type { HtmlArtifactRenderPatch } from '@velaros-ai/html-artifacts/protocol'
 import type {
   HtmlArtifactContentKind,
   HtmlArtifactDocumentOptions,
-} from '@velaros-ai/html-artifacts/sandbox'
-import {
-  buildHtmlArtifactDocument,
-  buildHtmlArtifactShellDocument,
-  inferHtmlArtifactContentKind,
-  normalizeHtmlArtifactSource,
-} from '@velaros-ai/html-artifacts/sandbox'
+  HtmlArtifactRenderPatch,
+} from '@velaros-ai/html-artifacts'
+import { htmlArtifactDocuments } from '@velaros-ai/html-artifacts'
 
 import {
   HTML_PREVIEW_MAX_REPORTED_HEIGHT,
@@ -34,7 +29,7 @@ const HTML_PREVIEW_BRIDGE_MESSAGES = {
 } as const
 
 export function getHtmlPreviewCodeLanguage(source: string): string {
-  return inferHtmlArtifactContentKind(source) === 'svg' ? 'svg' : 'html'
+  return htmlArtifactDocuments.inferContentKind(source) === 'svg' ? 'svg' : 'html'
 }
 
 function resolveHtmlPreviewBodyStyle(kind: HtmlArtifactContentKind): string {
@@ -81,7 +76,7 @@ function buildBrandTokenRootCss(): string {
 }
 
 function buildHtmlPreviewDocumentOptions(source: string): HtmlArtifactDocumentOptions {
-  const contentKind = inferHtmlArtifactContentKind(source)
+  const contentKind = htmlArtifactDocuments.inferContentKind(source)
 
   return {
     contentKind,
@@ -98,14 +93,14 @@ export function buildHtmlPreviewDocument(
   source: string,
   patches: readonly HtmlArtifactRenderPatch[] = []
 ): string {
-  return buildHtmlArtifactDocument(source, {
+  return htmlArtifactDocuments.buildDocument(source, {
     ...buildHtmlPreviewDocumentOptions(source),
     initialPatches: patches,
   })
 }
 
 export function buildHtmlPreviewFrameShell(source: string): string {
-  return buildHtmlArtifactShellDocument({
+  return htmlArtifactDocuments.buildShellDocument({
     ...buildHtmlPreviewDocumentOptions(source),
     rootId: HTML_PREVIEW_ROOT_ID,
   })
@@ -161,8 +156,8 @@ export function buildPortableHtmlDocument(
   sourceHtml: string,
   patches: readonly HtmlArtifactRenderPatch[] = []
 ): string {
-  const source = normalizeHtmlArtifactSource(sourceHtml)
-  const contentKind = inferHtmlArtifactContentKind(source)
+  const source = htmlArtifactDocuments.normalizeSource(sourceHtml)
+  const contentKind = htmlArtifactDocuments.inferContentKind(source)
   const svgCss = contentKind === 'svg' ? HTML_PREVIEW_SVG_FIT_CSS : ''
 
   const doc = document.implementation.createHTMLDocument('')
