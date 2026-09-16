@@ -9,26 +9,20 @@ import { join } from 'node:path'
 
 import { afterEach, describe, expect, test } from 'bun:test'
 
-import { KernelClient, SocketKernelTransport } from '@velaros-ai/kernel/client'
-import {
-  createCapabilityToken,
-  createKernelCallableCapability,
-  type KernelModuleDefinition,
-} from '@velaros-ai/kernel/contracts/abi'
-import { KernelProtocolVersion } from '@velaros-ai/kernel/contracts/protocol'
-import { KernelHostBridgeRegistry,KernelModuleHost } from '@velaros-ai/kernel/runtime'
-import {
-  AllowLoadedKernelClientAccessBroker,
-  KernelService,
-} from '@velaros-ai/kernel/runtime'
-
-import {
-  installModPackFromDirectory,
-  KernelModLoader,
-  KernelModStore,
-} from '../../../src/serve/daemon'
-import { InProcessKernelTransport } from '../../../src/serve/internal'
-import { KernelLocalRpcServer } from '../../../src/serve/rpc'
+import { KernelClient } from '../../../src/client/KernelClient'
+import { SocketKernelTransport } from '../../../src/client/socket-transport'
+import { createKernelCallableCapability } from '../../../src/contracts/abi/callable'
+import { createCapabilityToken } from '../../../src/contracts/abi/capability'
+import type { KernelModuleDefinition } from '../../../src/contracts/abi/module'
+import { KernelProtocolVersion } from '../../../src/contracts/protocol/version'
+import { KernelHostBridgeRegistry } from '../../../src/runtime/host/host-bridge'
+import { KernelModuleHost } from '../../../src/runtime/host/KernelModuleHost'
+import { AllowLoadedKernelClientAccessBroker } from '../../../src/runtime/service/client-access'
+import { KernelService } from '../../../src/runtime/service/KernelService'
+import { installModPackFromDirectory, KernelModLoader } from '../../../src/serve/daemon/mod-loader'
+import { KernelModStore } from '../../../src/serve/daemon/mod-store'
+import { InProcessKernelTransport } from '../../../src/serve/internal/in-process-transport'
+import { KernelLocalRpcServer } from '../../../src/serve/rpc/local-rpc-server'
 
 const Token = createCapabilityToken('test.grants')
 const AuthToken = 'grant-auth-token-0123456789-abcdefgh'

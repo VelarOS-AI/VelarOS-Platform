@@ -12,15 +12,14 @@
 import { createHash } from 'node:crypto'
 
 import { isNonBlankString, isPresent, isUndefined } from '@velaros-ai/core'
-import {
-  createCapabilityToken,
-  KernelModuleApiVersion,
-  type KernelModuleDefinition,
-} from '@velaros-ai/kernel'
+
+import { createCapabilityToken } from '../contracts/abi/capability'
+import type { KernelModuleDefinition } from '../contracts/abi/module'
+import { KernelModuleApiVersion } from '../contracts/abi/version-axis'
 import type {
   RemoteNodeManifest,
   RemoteNodeOperationDescriptor,
-} from '@velaros-ai/kernel/contracts/protocol'
+} from '../contracts/protocol/remote-node'
 
 /**
  * 本机 Kernel 的 API 轴;远端代理模块与宿主同轴,不另立版本。

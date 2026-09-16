@@ -1,6 +1,6 @@
 import { isBlank,isUndefined } from '@velaros-ai/core';
 
-import type { KernelStateStore } from '../../contracts/abi'
+import type { KernelStateStore } from '../../contracts/abi/state'
 
 import { KernelHostError } from './errors'
 

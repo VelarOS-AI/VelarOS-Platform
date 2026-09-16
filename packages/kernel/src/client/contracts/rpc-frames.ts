@@ -1,4 +1,4 @@
-import type { KernelEvent } from '@velaros-ai/kernel/contracts/abi'
+import type { KernelEvent } from '../../contracts/abi/events'
 
 export const KernelRpcMethods = [
   'handshake',

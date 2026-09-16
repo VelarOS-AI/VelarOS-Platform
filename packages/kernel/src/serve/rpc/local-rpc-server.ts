@@ -28,21 +28,16 @@ import {
   Log,
   toNullable,
 } from '@velaros-ai/core'
+
+import type { KernelRpcEndpoint } from '../../client/contracts/endpoint'
 import type {
-  KernelRpcEndpoint,
   KernelRpcEventFrame,
   KernelRpcFailure,
   KernelRpcRequest,
   KernelRpcServerFrame,
   KernelRpcSuccess,
-} from '@velaros-ai/kernel/client/contracts'
-import type {
-  OpenKernelSessionInput,
-  StartKernelRunInput,
-} from '@velaros-ai/kernel/contracts'
-import type {
-  KernelRegistration,
-} from '@velaros-ai/kernel/contracts/abi'
+} from '../../client/contracts/rpc-frames'
+import type { KernelRegistration } from '../../contracts/abi/module'
 import {
   type CapabilityCallFailure,
   CapabilityCallRequestSchema,
@@ -50,20 +45,26 @@ import {
   CapabilitySessionCloseRequestSchema,
   type CapabilitySessionCloseResponse,
   type CapabilitySessionOpenResponse,
-  KernelProtocolVersion,
+  ScopeRefSchema,
+} from '../../contracts/protocol/capability'
+import {
   ModsInstallFromDirectoryRequestSchema,
   ModsListRequestSchema,
   ModsSetEnabledRequestSchema,
-  ScopeRefSchema,
-} from '@velaros-ai/kernel/contracts/protocol'
+} from '../../contracts/protocol/mods'
+import { KernelProtocolVersion } from '../../contracts/protocol/version'
+import type {
+  OpenKernelSessionInput,
+  StartKernelRunInput,
+} from '../../contracts/service/identity-inputs'
+import { CapabilitySessionLedger } from '../../runtime/service/capability-grants'
+import { KernelIdentityRegistryError } from '../../runtime/service/identity-registry'
 import {
-  CapabilitySessionLedger,
-  KernelIdentityRegistryError,
-  KernelModCatalogError,
   type KernelService,
   KernelServiceLifecycleError,
   KernelServiceStartFailedError,
-} from '@velaros-ai/kernel/runtime'
+} from '../../runtime/service/KernelService'
+import { KernelModCatalogError } from '../../runtime/service/mod-catalog'
 
 import {
   decodeKernelRpcRequest,

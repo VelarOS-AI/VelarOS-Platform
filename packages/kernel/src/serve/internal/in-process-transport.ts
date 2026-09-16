@@ -1,15 +1,11 @@
 import { isUndefined } from '@velaros-ai/core'
+
 import type {
   KernelClientEventHandler,
   KernelClientTransport,
   KernelEventSubscription,
-} from '@velaros-ai/kernel/client'
-import type {
-  KernelServiceHealth,
-  OpenKernelSessionInput,
-  StartKernelRunInput,
-} from '@velaros-ai/kernel/contracts'
-import type { KernelRegistration } from '@velaros-ai/kernel/contracts/abi'
+} from '../../client/transport'
+import type { KernelRegistration } from '../../contracts/abi/module'
 import type {
   CapabilityCallRequest,
   CapabilityCallResponse,
@@ -17,18 +13,24 @@ import type {
   CapabilitySessionCloseResponse,
   CapabilitySessionOpenRequest,
   CapabilitySessionOpenResponse,
-  KernelHandshake,
-  KernelRunIdentity,
-  KernelSessionIdentity,
+} from '../../contracts/protocol/capability'
+import type { KernelHandshake } from '../../contracts/protocol/handshake'
+import type { KernelRunIdentity, KernelSessionIdentity } from '../../contracts/protocol/identity'
+import type {
   ModsInstallFromDirectoryRequest,
   ModsInstallFromDirectoryResponse,
   ModsListRequest,
   ModsListResponse,
   ModsSetEnabledRequest,
   ModsSetEnabledResponse,
-} from '@velaros-ai/kernel/contracts/protocol'
-import { KernelProtocolVersion } from '@velaros-ai/kernel/contracts/protocol'
-import { CapabilitySessionLedger } from '@velaros-ai/kernel/runtime'
+} from '../../contracts/protocol/mods'
+import { KernelProtocolVersion } from '../../contracts/protocol/version'
+import type { KernelServiceHealth } from '../../contracts/service/health'
+import type {
+  OpenKernelSessionInput,
+  StartKernelRunInput,
+} from '../../contracts/service/identity-inputs'
+import { CapabilitySessionLedger } from '../../runtime/service/capability-grants'
 
 /**
  * Minimal server surface the in-process transport needs.

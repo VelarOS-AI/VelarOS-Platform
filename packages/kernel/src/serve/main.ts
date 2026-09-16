@@ -9,18 +9,16 @@
 // 外部产品通过 @velaros-ai/kernel/client：connect → openCapabilitySession → session.call。
 import { isArray, isEmpty, isNotUndefined, Log } from '@velaros-ai/core'
 
-import { KernelVersion as DefaultKernelVersion } from '../contracts/abi'
+import { KernelVersion as DefaultKernelVersion } from '../contracts/abi/version-axis'
 
+import { bootKernelDaemon, installKernelShutdownHandlers } from './daemon/boot'
+import { registerBundledPacks } from './daemon/bundled-packs'
+import { installModPackFromDirectory, loadModIndexIntoStore } from './daemon/mod-loader'
 import {
-  bootKernelDaemon,
   createDefaultKernelModStorePaths,
-  installKernelShutdownHandlers,
-  installModPackFromDirectory,
   KernelModStore,
-  loadModIndexIntoStore,
-  registerBundledPacks,
   registerSystemModPacks,
-} from './daemon'
+} from './daemon/mod-store'
 
 const log = Log.tag('KernelServe')
 

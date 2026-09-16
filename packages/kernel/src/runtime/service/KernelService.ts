@@ -11,12 +11,10 @@ import {
   toOptional,
 } from '@velaros-ai/core'
 
-import {
-  type KernelEventHandler,
-  type KernelRegistration,
-  type ScopeRef,
-  UnknownKernelCapabilityOperationError,
-} from '../../contracts/abi'
+import { UnknownKernelCapabilityOperationError } from '../../contracts/abi/callable'
+import type { KernelEventHandler } from '../../contracts/abi/events'
+import type { KernelRegistration } from '../../contracts/abi/module'
+import type { ScopeRef } from '../../contracts/abi/references'
 import {
   type CapabilityCallFailure,
   type CapabilityCallRequest,
@@ -26,18 +24,16 @@ import {
   type CapabilitySessionOpenFailure,
   type CapabilitySessionOpenRequest,
   CapabilitySessionOpenRequestSchema,
-  type KernelHandshake,
   type KernelModuleDescriptor,
-  KernelProtocolVersion,
-  type KernelRunIdentity,
-  type KernelSessionIdentity,
-} from '../../contracts/protocol'
+} from '../../contracts/protocol/capability'
+import type { KernelHandshake } from '../../contracts/protocol/handshake'
+import type { KernelRunIdentity, KernelSessionIdentity } from '../../contracts/protocol/identity'
+import { KernelProtocolVersion } from '../../contracts/protocol/version'
+import type { KernelServiceHealth, KernelServiceModuleHealth } from '../../contracts/service/health'
 import type {
-  KernelServiceHealth,
-  KernelServiceModuleHealth,
   OpenKernelSessionInput,
   StartKernelRunInput,
-} from '../../contracts/service'
+} from '../../contracts/service/identity-inputs'
 import {
   KernelCapabilityInvoker,
   KernelCapabilityNotCallableError,
@@ -50,7 +46,7 @@ import type {
   KernelCompositionSnapshot,
   KernelModuleHost,
   KernelModuleSnapshot,
-} from '../host'
+} from '../host/KernelModuleHost'
 
 import {
   DenyAllKernelClientAccessBroker,

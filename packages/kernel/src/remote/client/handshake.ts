@@ -7,13 +7,13 @@
 // 私钥出现在本文件的唯一形式是「进 signChallenge 产出一段签名」;新生成的密钥对随
 // `pair` 决定一起交还调用方,由调用方在 `paired` 到达后才落盘——配对没成就该被丢掉。
 import { isNonBlankString, isPresent } from '@velaros-ai/core'
-import type {
-  RemoteNodeAuthenticate,
-  RemoteNodeChallenge,
-  RemoteNodePair,
-} from '@velaros-ai/kernel/contracts/protocol'
-import { RemoteNodeProtocolVersion } from '@velaros-ai/kernel/contracts/protocol'
 
+import {
+  type RemoteNodeAuthenticate,
+  type RemoteNodeChallenge,
+  type RemoteNodePair,
+  RemoteNodeProtocolVersion,
+} from '../../contracts/protocol/remote-node'
 import {
   generateRemoteNodeKeyPair,
   type RemoteNodeKeyPair,

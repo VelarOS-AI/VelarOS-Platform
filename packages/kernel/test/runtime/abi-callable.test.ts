@@ -3,7 +3,7 @@ import { describe, expect, test } from 'bun:test'
 import {
   createKernelCallableCapability,
   UnknownKernelCapabilityOperationError,
-} from '../../src/contracts/abi'
+} from '../../src/contracts/abi/callable'
 
 describe('callable capability contract', () => {
   test('exposes immutable per-operation metadata and invokes declared operations', async () => {

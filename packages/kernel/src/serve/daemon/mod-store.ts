@@ -2,8 +2,9 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 
 import { isBlank,isUndefined } from '@velaros-ai/core';
-import type { KernelModuleDefinition } from '@velaros-ai/kernel/contracts/abi'
-import type { KernelModPackKind } from '@velaros-ai/kernel/contracts/protocol'
+
+import type { KernelModuleDefinition } from '../../contracts/abi/module'
+import type { KernelModPackKind } from '../../contracts/protocol/mods'
 
 export type { KernelModPackKind }
 

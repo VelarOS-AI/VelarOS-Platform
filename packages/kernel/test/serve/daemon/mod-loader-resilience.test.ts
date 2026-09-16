@@ -6,8 +6,8 @@ import { afterEach, describe, expect, test } from 'bun:test'
 
 import { Log } from '@velaros-ai/core'
 import { createCallbackTransport } from '@velaros-ai/core/logger'
-import { createDefaultKernelDaemonPaths } from '@velaros-ai/kernel/client/contracts'
 
+import { createDefaultKernelDaemonPaths } from '../../../src/client/contracts/descriptor'
 import { bootKernelDaemon } from '../../../src/serve/daemon/boot'
 import { KernelModLoader } from '../../../src/serve/daemon/mod-loader'
 import { type KernelModPackRecord, KernelModStore } from '../../../src/serve/daemon/mod-store'

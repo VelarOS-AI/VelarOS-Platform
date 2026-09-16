@@ -3,9 +3,9 @@ import { describe, expect, test } from 'bun:test'
 import {
   CapabilityCallRequestSchema,
   CapabilitySessionOpenRequestSchema,
-  KernelHandshakeSchema,
-  KernelProtocolVersion,
-} from '../../src/contracts/protocol'
+} from '../../src/contracts/protocol/capability'
+import { KernelHandshakeSchema } from '../../src/contracts/protocol/handshake'
+import { KernelProtocolVersion } from '../../src/contracts/protocol/version'
 
 const workspaceModule = {
   id: 'velaros.workspace',

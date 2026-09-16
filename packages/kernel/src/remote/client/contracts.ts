@@ -8,13 +8,14 @@
 // 构建、代码签名这类动作一旦落在后者,重试就不是无害动作——把两者混成一个"失败"上抛,
 // 等于让调用方在不知情的情况下做第二次签名。
 import { toNullable } from '@velaros-ai/core'
-import type { ScopeRef } from '@velaros-ai/kernel/contracts/abi'
+
+import type { ScopeRef } from '../../contracts/abi/references'
 import type {
   RemoteNodeError,
   RemoteNodeIdentity,
   RemoteNodeManifest,
   RemoteNodePlatform,
-} from '@velaros-ai/kernel/contracts/protocol'
+} from '../../contracts/protocol/remote-node'
 
 /**
  * 客户端兜底超时相对 wire `deadlineMs` 的宽限。

@@ -8,11 +8,8 @@ import { dirname, join } from 'node:path'
 
 import { afterEach, describe, expect, test } from 'bun:test'
 
-import {
-  KernelUpdateLock,
-  KernelUpdateLockError,
-  withKernelUpdateLock,
-} from '../../../src/serve/updater'
+import { KernelUpdateLockError } from '../../../src/serve/updater/errors'
+import { KernelUpdateLock, withKernelUpdateLock } from '../../../src/serve/updater/lock'
 
 import { createTemporaryDirectories } from './support'
 

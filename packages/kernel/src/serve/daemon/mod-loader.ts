@@ -16,15 +16,16 @@ import {
   stringifyPretty,
   toOptional,
 } from '@velaros-ai/core'
-import type { KernelModuleDefinition } from '@velaros-ai/kernel/contracts/abi'
+
+import type { KernelModuleDefinition } from '../../contracts/abi/module'
 import {
   parseVelarosModEnvelope,
   VelarosModManifestFileName,
-} from '@velaros-ai/kernel/contracts/protocol'
+} from '../../contracts/protocol/mod-manifest'
+import type { KernelModPackKind } from '../../contracts/protocol/mods'
 
 import {
   BundledSpecifierScheme,
-  type KernelModPackKind,
   type KernelModPackLoadFailure,
   type KernelModPackRecord,
   type KernelModStore,

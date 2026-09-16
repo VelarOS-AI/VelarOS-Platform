@@ -17,14 +17,15 @@ import {
   toNullable,
 } from '@velaros-ai/core'
 import type { TimerLease, TimerScope } from '@velaros-ai/core/utils/TimerScope'
-import type { ScopeRef } from '@velaros-ai/kernel/contracts/abi'
+
+import type { ScopeRef } from '../../contracts/abi/references'
 import type {
   RemoteNodeCancel,
   RemoteNodeError,
   RemoteNodeInvoke,
   RemoteNodeProgress,
   RemoteNodeResult,
-} from '@velaros-ai/kernel/contracts/protocol'
+} from '../../contracts/protocol/remote-node'
 
 import {
   RemoteNodeClientDeadlineGraceMs,

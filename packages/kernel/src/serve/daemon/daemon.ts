@@ -20,14 +20,14 @@ import {
   Log,
 } from '@velaros-ai/core'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
+
 import {
   createDefaultKernelDaemonPaths,
   type KernelDaemonEndpointDescriptor,
   type KernelDaemonPaths,
-  type KernelRpcEndpoint,
-} from '@velaros-ai/kernel/client/contracts'
-import type { KernelService } from '@velaros-ai/kernel/runtime'
-
+} from '../../client/contracts/descriptor'
+import type { KernelRpcEndpoint } from '../../client/contracts/endpoint'
+import type { KernelService } from '../../runtime/service/KernelService'
 import { KernelLocalRpcServer } from '../rpc/local-rpc-server'
 
 const log = Log.tag('KernelDaemon')

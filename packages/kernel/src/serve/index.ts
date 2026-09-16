@@ -5,6 +5,45 @@
 // ModStore + 进程内传输。完整宿主进程内装栈**不经本包**，直接 new 内核。
 //
 // 产品接入远端 Kernel 用 @velaros-ai/kernel/client；Mod 开发用 @velaros-ai/kernel/contracts/abi。
-export * from './daemon'
-export * from './internal'
-export * from './rpc'
+export type { KernelModPackKind } from '../contracts/protocol/mods'
+export type { BootedKernelDaemon, BootKernelDaemonOptions } from './daemon/boot'
+export { bootKernelDaemon, installKernelShutdownHandlers } from './daemon/boot'
+export type { KernelBundledPack } from './daemon/bundled-packs'
+export {
+  BundledKernelPacks,
+  bundledPackSpecifier,
+  createBundledModPack,
+  registerBundledPacks,
+  toBundledPackRecords,
+} from './daemon/bundled-packs'
+export type { KernelDaemonErrorCode, KernelLocalDaemonOptions } from './daemon/daemon'
+export { KernelDaemonError, KernelLocalDaemon } from './daemon/daemon'
+export type { LoadModsResult } from './daemon/mod-loader'
+export {
+  installModPackFromDirectory,
+  KernelModLoader,
+  loadModIndexIntoStore,
+  persistModIndex,
+} from './daemon/mod-loader'
+export type {
+  KernelModPackLoadFailure,
+  KernelModPackRecord,
+  KernelModStorePaths,
+} from './daemon/mod-store'
+export {
+  BundledSpecifierScheme,
+  createDefaultKernelModStorePaths,
+  KernelModStore,
+  registerSystemModPacks,
+} from './daemon/mod-store'
+export type { InProcessKernelService } from './internal/in-process-transport'
+export { InProcessKernelTransport } from './internal/in-process-transport'
+export type { KernelLocalRpcServerOptions } from './rpc/local-rpc-server'
+export { createDefaultKernelRpcEndpoint, KernelLocalRpcServer } from './rpc/local-rpc-server'
+export {
+  decodeKernelRpcRequest,
+  KernelRpcProtocolError,
+  requireNonEmptyString,
+  requireRecord,
+  rpcFailure,
+} from './rpc/server-frames'

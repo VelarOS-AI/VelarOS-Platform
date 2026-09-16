@@ -7,7 +7,7 @@ import {
   createDefaultKernelDaemonPaths,
   type KernelDaemonEndpointDescriptor,
   type KernelDaemonPaths,
-} from './contracts'
+} from './contracts/descriptor'
 import { type ConnectedKernelDaemon,connectToKernelDaemon, discoverKernelDaemon } from './discovery'
 import { KernelClientError, KernelRpcClientError } from './errors'
 

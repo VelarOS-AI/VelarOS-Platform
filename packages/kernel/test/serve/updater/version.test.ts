@@ -1,13 +1,13 @@
 import { describe, expect, test } from 'bun:test'
 
+import { KernelUpdaterError } from '../../../src/serve/updater/errors'
 import {
   assertKernelVersion,
   compareKernelVersions,
   isKernelVersion,
-  KernelUpdaterError,
   parseKernelVersion,
   satisfiesKernelVersionRange,
-} from '../../../src/serve/updater'
+} from '../../../src/serve/updater/version'
 
 describe('Kernel version matching', () => {
   test('parses semantic versions and rejects everything else', () => {

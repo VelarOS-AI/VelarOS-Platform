@@ -7,10 +7,11 @@
 // `Replaced` 归在停手一侧是照 remote-node 契约的判词(4003「不重连」):顶替我们的是同一个
 // clientId 的另一条连接,抢回来只会两边互踢。
 import { isUndefined } from '@velaros-ai/core'
+
 import {
   RemoteNodeCloseCode,
   type RemoteNodeCloseCodeValue,
-} from '@velaros-ai/kernel/contracts/protocol'
+} from '../../contracts/protocol/remote-node'
 
 import {
   RemoteNodeClientError,

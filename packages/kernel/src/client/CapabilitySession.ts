@@ -1,12 +1,12 @@
-import {
-  type CapabilityCallRequest,
-  type CapabilityCallResponse,
-  type CapabilityRequireItem,
-  type CapabilitySessionCloseResponse,
-  type CapabilitySessionOpenRequest,
-  type CapabilitySessionOpenResponse,
-  KernelProtocolVersion,
-} from '@velaros-ai/kernel/contracts/protocol'
+import type {
+  CapabilityCallRequest,
+  CapabilityCallResponse,
+  CapabilityRequireItem,
+  CapabilitySessionCloseResponse,
+  CapabilitySessionOpenRequest,
+  CapabilitySessionOpenResponse,
+} from '../contracts/protocol/capability'
+import { KernelProtocolVersion } from '../contracts/protocol/version'
 
 import type { KernelClientTransport } from './transport'
 

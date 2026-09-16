@@ -3,7 +3,7 @@ import { describe, expect, test } from 'bun:test'
 import {
   KernelIdentityRegistry,
   KernelIdentityRegistryError,
-} from '../../src/runtime/service'
+} from '../../src/runtime/service/identity-registry'
 
 describe('KernelIdentityRegistry', () => {
   test('owns generic session and run identity lifecycles', () => {

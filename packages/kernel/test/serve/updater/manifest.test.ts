@@ -3,15 +3,15 @@ import { join } from 'node:path'
 
 import { afterEach, describe, expect, test } from 'bun:test'
 
+import { KernelUpdaterError } from '../../../src/serve/updater/errors'
 import {
-  KernelUpdaterError,
   listKernelManifestVersions,
   loadKernelUpdateManifest,
   parseKernelUpdateManifest,
   resolveKernelArtifactTarget,
   selectKernelArtifact,
   selectKernelManifestVersion,
-} from '../../../src/serve/updater'
+} from '../../../src/serve/updater/manifest'
 
 import {
   artifactOf,

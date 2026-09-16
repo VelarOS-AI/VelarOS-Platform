@@ -1,20 +1,22 @@
 import { isEmpty, isTrue, isUndefined, Log } from '@velaros-ai/core'
 
+import type { CapabilityToken } from '../../contracts/abi/capability'
+import type { KernelEventHandler } from '../../contracts/abi/events'
 import type {
-  CapabilityToken,
-  KernelEventHandler,
   KernelModuleActivateContext,
   KernelModuleDefinition,
   KernelModuleHealth,
   KernelModuleLifecycle,
   KernelModuleManifest,
-  KernelModulePermissionRequest,
   KernelModuleStatus,
-  KernelPermissionBroker,
-  KernelPermissionDecision,
   KernelRegistration,
   KernelServiceHandle,
-} from '../../contracts/abi'
+} from '../../contracts/abi/module'
+import type {
+  KernelModulePermissionRequest,
+  KernelPermissionBroker,
+  KernelPermissionDecision,
+} from '../../contracts/abi/permissions'
 
 import {
   type KernelModulePlan,
@@ -46,7 +48,7 @@ import {
   type KernelStateBackend,
 } from './state-store'
 
-export type { KernelModuleStatus } from '../../contracts/abi'
+export type { KernelModuleStatus } from '../../contracts/abi/module'
 
 const log = Log.tag('KernelModuleHost')
 

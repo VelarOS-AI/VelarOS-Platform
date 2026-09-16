@@ -1,12 +1,13 @@
 // Platform Kernel 统一持有与宿主无关的远程节点实现。
 import { isString, isUndefined, Log } from '@velaros-ai/core'
+
 import {
   type RemoteNodeClientFrame,
   RemoteNodeClientFrameSchema,
   RemoteNodeMaxFrameBytes,
   type RemoteNodeServerFrame,
   RemoteNodeServerFrameSchema,
-} from '@velaros-ai/kernel/contracts/protocol'
+} from '../../contracts/protocol/remote-node'
 
 const log = Log.tag('RemoteNodeFrames')
 

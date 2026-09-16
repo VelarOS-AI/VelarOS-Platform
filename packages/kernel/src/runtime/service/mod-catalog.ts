@@ -1,4 +1,4 @@
-import type { KernelModPackDescriptor } from '../../contracts/protocol'
+import type { KernelModPackDescriptor } from '../../contracts/protocol/mods'
 
 export type KernelModCatalogErrorCode =
   /** 本 Kernel 没有接 ModStore（进程内装配常见），`mods.*` 无从谈起。 */

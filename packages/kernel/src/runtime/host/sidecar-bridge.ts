@@ -21,15 +21,17 @@ import {
 } from '@velaros-ai/core'
 
 import {
-  createCapabilityToken,
   createKernelCallableCapability,
   type KernelCapabilityOperationMetadata,
-  type KernelModuleActivateContext,
-  type KernelModuleDefinition,
-  type KernelModuleLifecycle,
-  type ScopeRef,
   UnknownKernelCapabilityOperationError,
-} from '../../contracts/abi'
+} from '../../contracts/abi/callable'
+import { createCapabilityToken } from '../../contracts/abi/capability'
+import type {
+  KernelModuleActivateContext,
+  KernelModuleDefinition,
+  KernelModuleLifecycle,
+} from '../../contracts/abi/module'
+import type { ScopeRef } from '../../contracts/abi/references'
 
 import type { KernelModuleIsolationAdapter } from './isolation'
 

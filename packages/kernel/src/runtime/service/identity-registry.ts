@@ -1,13 +1,10 @@
 import { isBlank,isNotNull } from '@velaros-ai/core';
 
-import type {
-  KernelRunIdentity,
-  KernelSessionIdentity,
-} from '../../contracts/protocol'
+import type { KernelRunIdentity, KernelSessionIdentity } from '../../contracts/protocol/identity'
 import type {
   OpenKernelSessionInput,
   StartKernelRunInput,
-} from '../../contracts/service'
+} from '../../contracts/service/identity-inputs'
 
 export type KernelIdentityRegistryErrorCode =
   | 'DUPLICATE_RUN'

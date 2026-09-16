@@ -10,29 +10,19 @@ import { join } from 'node:path'
 
 import { afterEach, describe, expect, test } from 'bun:test'
 
-import {
-  connectToKernelDaemon,
-  createDefaultKernelDaemonPaths,
-  discoverKernelDaemon,
-  SocketKernelTransport,
-} from '@velaros-ai/kernel/client'
-import {
-  createCapabilityToken,
-  createKernelCallableCapability,
-  type KernelModuleDefinition,
-} from '@velaros-ai/kernel/contracts/abi'
-import {
-  type CapabilityCallRequest,
-  KernelProtocolVersion,
-} from '@velaros-ai/kernel/contracts/protocol'
-import { KernelModuleHost } from '@velaros-ai/kernel/runtime'
-import {
-  AllowLoadedKernelClientAccessBroker,
-  KernelService,
-} from '@velaros-ai/kernel/runtime'
-
-import { KernelDaemonError, KernelLocalDaemon } from '../../../src/serve/daemon'
-import { KernelLocalRpcServer } from '../../../src/serve/rpc'
+import { createDefaultKernelDaemonPaths } from '../../../src/client/contracts/descriptor'
+import { connectToKernelDaemon, discoverKernelDaemon } from '../../../src/client/discovery'
+import { SocketKernelTransport } from '../../../src/client/socket-transport'
+import { createKernelCallableCapability } from '../../../src/contracts/abi/callable'
+import { createCapabilityToken } from '../../../src/contracts/abi/capability'
+import type { KernelModuleDefinition } from '../../../src/contracts/abi/module'
+import type { CapabilityCallRequest } from '../../../src/contracts/protocol/capability'
+import { KernelProtocolVersion } from '../../../src/contracts/protocol/version'
+import { KernelModuleHost } from '../../../src/runtime/host/KernelModuleHost'
+import { AllowLoadedKernelClientAccessBroker } from '../../../src/runtime/service/client-access'
+import { KernelService } from '../../../src/runtime/service/KernelService'
+import { KernelDaemonError, KernelLocalDaemon } from '../../../src/serve/daemon/daemon'
+import { KernelLocalRpcServer } from '../../../src/serve/rpc/local-rpc-server'
 
 const EchoToken = createCapabilityToken('test.rpc.echo')
 const RpcAuthToken = 'test-auth-token-0123456789-abcdefgh'

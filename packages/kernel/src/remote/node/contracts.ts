@@ -4,12 +4,12 @@
 // 宪章 §15 原则三:Node 零会话权威——它不认识会话、不持 Agent 主干,只把本机能力面摊开给
 // 唯一一台已配对的 Client。因此本文件的端口全是「被调」方向:没有任何允许 Node 主动向
 // Client 发起请求的回调形状,清单变更也只是单向推送而不是问答。
+import type { ScopeRef } from '../../contracts/protocol/capability'
 import type {
   RemoteNodeError,
   RemoteNodeIdentity,
   RemoteNodeManifest,
-  ScopeRef,
-} from '@velaros-ai/kernel/contracts/protocol'
+} from '../../contracts/protocol/remote-node'
 
 /**
  * WebSocket 升级路径。

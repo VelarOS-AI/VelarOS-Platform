@@ -9,13 +9,10 @@ import { join } from 'node:path'
 
 import { afterEach, describe, expect, test } from 'bun:test'
 
-import {
-  type KernelArtifactExtractor,
-  KernelUpdateLockError,
-  KernelUpdater,
-  type KernelUpdaterOptions,
-  readKernelActivePointer,
-} from '../../../src/serve/updater'
+import { KernelUpdateLockError } from '../../../src/serve/updater/errors'
+import type { KernelArtifactExtractor } from '../../../src/serve/updater/extraction'
+import { KernelUpdater, type KernelUpdaterOptions } from '../../../src/serve/updater/KernelUpdater'
+import { readKernelActivePointer } from '../../../src/serve/updater/pointer'
 
 import {
   artifactOf,

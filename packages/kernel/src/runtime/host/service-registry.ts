@@ -1,11 +1,11 @@
 import { isFalse, isFunction, isNotUndefined, isNull, isObject,isUndefined } from '@velaros-ai/core';
 
+import type { CapabilityToken } from '../../contracts/abi/capability'
 import type {
-  CapabilityToken,
   KernelRegistration,
   KernelServiceHandle,
   KernelServiceResolver,
-} from '../../contracts/abi'
+} from '../../contracts/abi/module'
 
 import { KernelHostError } from './errors'
 

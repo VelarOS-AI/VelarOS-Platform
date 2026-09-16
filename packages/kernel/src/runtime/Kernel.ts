@@ -1,29 +1,29 @@
 import { isUndefined } from '@velaros-ai/core'
 
 import {
-  type CapabilityToken,
   isKernelCallableCapabilityService,
   type KernelCallableCapabilityService,
-  type KernelEventHandler,
-  KernelModuleApiVersion,
-  type KernelModuleDefinition,
-  type KernelModulePermissionRequest,
-  type KernelPermissionDecision,
-  type KernelRegistration,
-  KernelVersion,
-} from '../contracts/abi'
+} from '../contracts/abi/callable'
+import type { CapabilityToken } from '../contracts/abi/capability'
+import type { KernelEventHandler } from '../contracts/abi/events'
+import type { KernelModuleDefinition, KernelRegistration } from '../contracts/abi/module'
+import type {
+  KernelModulePermissionRequest,
+  KernelPermissionDecision,
+} from '../contracts/abi/permissions'
+import { KernelModuleApiVersion, KernelVersion } from '../contracts/abi/version-axis'
 
-import {
-  type KernelCapabilityCall,
-  KernelCapabilityInvoker,
-} from './capability-invocation'
+import { toError } from './host/errors'
 import {
   type KernelCompositionSnapshot,
   KernelModuleHost,
   type KernelModuleHostOptions,
   type KernelModuleSnapshot,
-  toError,
-} from './host'
+} from './host/KernelModuleHost'
+import {
+  type KernelCapabilityCall,
+  KernelCapabilityInvoker,
+} from './capability-invocation'
 
 export type KernelStatus =
   | 'idle'

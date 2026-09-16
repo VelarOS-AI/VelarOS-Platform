@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 
-import { KernelModuleApiVersion } from '../../src/contracts/abi'
+import { KernelModuleApiVersion } from '../../src/contracts/abi/version-axis'
 import type {
   RemoteNodeCredentials,
   RemoteNodeCredentialStore,

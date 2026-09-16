@@ -6,9 +6,9 @@ import { join } from 'node:path'
 import type {
   KernelDaemonEndpointDescriptor,
   KernelDaemonPaths,
-  KernelRpcEndpoint,
-  KernelRpcServerFrame,
-} from '../../src/client/contracts'
+} from '../../src/client/contracts/descriptor'
+import type { KernelRpcEndpoint } from '../../src/client/contracts/endpoint'
+import type { KernelRpcServerFrame } from '../../src/client/contracts/rpc-frames'
 
 export interface ReceivedRequest {
   readonly requestId: string

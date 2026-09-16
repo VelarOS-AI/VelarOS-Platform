@@ -1,5 +1,5 @@
-import type { ScopeRef } from '../../contracts/protocol'
-import type { KernelModuleHost } from '../host'
+import type { ScopeRef } from '../../contracts/protocol/capability'
+import type { KernelModuleHost } from '../host/KernelModuleHost'
 
 export interface KernelClientCapabilityBindRequest {
   readonly capabilityId: string

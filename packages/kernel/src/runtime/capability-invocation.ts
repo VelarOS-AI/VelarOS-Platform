@@ -3,14 +3,16 @@ import { isUndefined } from '@velaros-ai/core'
 import {
   isKernelCallableCapabilityService,
   type KernelCapabilityOperationMetadata,
-  type KernelModulePermissionRequest,
-  type KernelPermissionDecision,
   resolveKernelCapabilityOperationReason,
-  type ScopeRef,
   UnknownKernelCapabilityOperationError,
-} from '../contracts/abi'
+} from '../contracts/abi/callable'
+import type {
+  KernelModulePermissionRequest,
+  KernelPermissionDecision,
+} from '../contracts/abi/permissions'
+import type { ScopeRef } from '../contracts/abi/references'
 
-import type { KernelModuleHost } from './host'
+import type { KernelModuleHost } from './host/KernelModuleHost'
 
 export interface KernelCapabilityCall {
   readonly capabilityId: string

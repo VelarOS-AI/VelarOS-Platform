@@ -6,7 +6,7 @@ import type {
   CapabilityCallRequest,
   CapabilityRequireItem,
   ScopeRef,
-} from '../../contracts/protocol'
+} from '../../contracts/protocol/capability'
 
 export interface BoundCapabilityRequirement {
   readonly capabilityId: string

@@ -5,12 +5,13 @@
 // 来取),runner 只负责执行、计时、去重与审计。
 import { isNotNull, isUndefined, Log, optionalWhen, toNullable } from '@velaros-ai/core'
 import type { TimerLease, TimerScope } from '@velaros-ai/core/utils/TimerScope'
+
 import type {
   RemoteNodeCancel,
   RemoteNodeError,
   RemoteNodeInvoke,
   RemoteNodeResult,
-} from '@velaros-ai/kernel/contracts/protocol'
+} from '../../contracts/protocol/remote-node'
 
 import type {
   RemoteNodeActivityEvent,

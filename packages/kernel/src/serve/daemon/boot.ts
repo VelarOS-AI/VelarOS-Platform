@@ -1,23 +1,19 @@
 import { isNotUndefined, Log } from '@velaros-ai/core'
 import { toOptional } from '@velaros-ai/core/utils/nullish'
-import type { KernelDaemonPaths } from '@velaros-ai/kernel/client/contracts'
-import {
-  KernelModuleApiVersion,
-  type KernelModuleDefinition,
-  type KernelPermissionBroker,
-} from '@velaros-ai/kernel/contracts/abi'
-import {
-  type KernelHostBridgeRegistry,
-  KernelModuleHost,
-  type KernelModuleIsolationAdapter,
-  parseHostBridgeEndpoint,
-  SidecarIsolationAdapter,
-} from '@velaros-ai/kernel/runtime'
+
+import type { KernelDaemonPaths } from '../../client/contracts/descriptor'
+import type { KernelModuleDefinition } from '../../contracts/abi/module'
+import type { KernelPermissionBroker } from '../../contracts/abi/permissions'
+import { KernelModuleApiVersion } from '../../contracts/abi/version-axis'
+import type { KernelHostBridgeRegistry } from '../../runtime/host/host-bridge'
+import type { KernelModuleIsolationAdapter } from '../../runtime/host/isolation'
+import { KernelModuleHost } from '../../runtime/host/KernelModuleHost'
+import { parseHostBridgeEndpoint, SidecarIsolationAdapter } from '../../runtime/host/sidecar-bridge'
 import {
   AllowLoadedKernelClientAccessBroker,
   type KernelClientAccessBroker,
-  KernelService,
-} from '@velaros-ai/kernel/runtime'
+} from '../../runtime/service/client-access'
+import { KernelService } from '../../runtime/service/KernelService'
 
 import { KernelLocalDaemon } from './daemon'
 import {

@@ -201,6 +201,35 @@ export const GovernedModules = [
     invariants: 'spec/invariants.md',
     acceptance: 'spec/acceptance.test.ts',
   },
+  {
+    directory: 'kernel',
+    name: '@velaros-ai/kernel',
+    // 没有模型面工具：不登记 toolsFile、toolDefiner、hostPort（同 platform）
+    contract: 'src/contract',
+    types: 'src/types',
+    portable: 'kernel.ts',
+    impl: 'src/impl',
+    utils: 'src/utils',
+    tuning: 'tuning.ts',
+    exports: 'src/exports',
+    // 根入口是进程内内核与模块 SDK，渲染进程要加载；serve、client、remote 三个入口是 Node 专用
+    browserSafeEntries: ['index.ts', 'contracts.ts'],
+    environmentTable: 'KernelEnvironmentVariables',
+    layers: [
+      // 进程侧装配：协议服务面、守护进程、本机 RPC、mod 仓库与装载、进程内传输、启动器
+      ['serve/'],
+      // 部署件：瘦客户端、更新器、远程节点两端，互不依赖
+      ['client/', 'updater/', 'remote-client/', 'remote-node/'],
+      // 进程内内核：模块宿主、唯一调用路径、模块 SDK、mod 信封解析；不碰 Node 模块
+      ['runtime/'],
+    ],
+    // 卡片与不变量登记是改造最后一段的事，这三份现在还不存在，照样登记，燃尽表里看得到
+    card: 'MODULE.md',
+    invariants: 'spec/invariants.md',
+    acceptance: 'spec/acceptance.test.ts',
+    // 按仓库标准改造中：问题照查照报条数，不计入失败（改造完删掉这一项）
+    status: 'migrating',
+  },
 ]
 
 /** 模块卡片必须有的十节标题，顺序不限。 */

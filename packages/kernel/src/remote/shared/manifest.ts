@@ -6,7 +6,7 @@ import type {
   RemoteNodeCapabilityDescriptor,
   RemoteNodeManifest,
   RemoteNodeToolDescriptor,
-} from '../../contracts/protocol'
+} from '../../contracts/protocol/remote-node'
 
 /**
  * 清单摘要 = 新鲜度门的单一真值。

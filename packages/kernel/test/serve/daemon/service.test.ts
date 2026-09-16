@@ -1,20 +1,15 @@
 import { describe, expect, test } from 'bun:test'
 
-import { KernelClient } from '@velaros-ai/kernel/client'
-import {
-  createCapabilityToken,
-  createKernelCallableCapability,
-  type KernelModuleDefinition,
-  type KernelPermissionBroker,
-} from '@velaros-ai/kernel/contracts/abi'
-import {
-  type CapabilityCallRequest,
-  KernelProtocolVersion,
-} from '@velaros-ai/kernel/contracts/protocol'
-import { KernelModuleHost } from '@velaros-ai/kernel/runtime'
-import { KernelService } from '@velaros-ai/kernel/runtime'
-
-import { InProcessKernelTransport } from '../../../src/serve/internal'
+import { KernelClient } from '../../../src/client/KernelClient'
+import { createKernelCallableCapability } from '../../../src/contracts/abi/callable'
+import { createCapabilityToken } from '../../../src/contracts/abi/capability'
+import type { KernelModuleDefinition } from '../../../src/contracts/abi/module'
+import type { KernelPermissionBroker } from '../../../src/contracts/abi/permissions'
+import type { CapabilityCallRequest } from '../../../src/contracts/protocol/capability'
+import { KernelProtocolVersion } from '../../../src/contracts/protocol/version'
+import { KernelModuleHost } from '../../../src/runtime/host/KernelModuleHost'
+import { KernelService } from '../../../src/runtime/service/KernelService'
+import { InProcessKernelTransport } from '../../../src/serve/internal/in-process-transport'
 
 const CallableToken = createCapabilityToken('test.callable', '1.2.0')
 const PlainToken = createCapabilityToken('test.plain')

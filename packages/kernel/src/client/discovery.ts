@@ -1,10 +1,8 @@
 import { readFile } from 'node:fs/promises'
 
-import {
-  type KernelHandshake,
-  KernelProtocolVersion,
-  negotiateKernelProtocol,
-} from '@velaros-ai/kernel/contracts/protocol'
+import type { KernelHandshake } from '../contracts/protocol/handshake'
+import { negotiateKernelProtocol } from '../contracts/protocol/negotiation'
+import { KernelProtocolVersion } from '../contracts/protocol/version'
 
 import {
   createDefaultKernelDaemonPaths,

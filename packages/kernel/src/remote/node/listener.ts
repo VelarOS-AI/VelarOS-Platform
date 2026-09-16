@@ -7,7 +7,8 @@ import type { WebSocket } from 'ws'
 import { WebSocketServer } from 'ws'
 
 import { isNull, isString } from '@velaros-ai/core'
-import { RemoteNodeMaxFrameBytes } from '@velaros-ai/kernel/contracts/protocol'
+
+import { RemoteNodeMaxFrameBytes } from '../../contracts/protocol/remote-node'
 
 import { RemoteNodeSocketPath } from './contracts'
 

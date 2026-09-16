@@ -6,18 +6,19 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, test } from 'bun:test'
 
 import {
-  connectToKernelDaemon,
   createDefaultKernelDaemonPaths,
   type KernelDaemonPaths,
+} from '../../../src/client/contracts/descriptor'
+import { connectToKernelDaemon } from '../../../src/client/discovery'
+import {
   KernelLauncher,
   KernelLauncherError,
   type KernelVersionTarget,
-} from '@velaros-ai/kernel/client'
-import { KernelProtocolVersion } from '@velaros-ai/kernel/contracts/protocol'
-import { KernelModuleHost } from '@velaros-ai/kernel/runtime'
-import { KernelService } from '@velaros-ai/kernel/runtime'
-
-import { KernelLocalDaemon } from '../../../src/serve/daemon'
+} from '../../../src/client/KernelLauncher'
+import { KernelProtocolVersion } from '../../../src/contracts/protocol/version'
+import { KernelModuleHost } from '../../../src/runtime/host/KernelModuleHost'
+import { KernelService } from '../../../src/runtime/service/KernelService'
+import { KernelLocalDaemon } from '../../../src/serve/daemon/daemon'
 
 const temporaryDirectories: string[] = []
 const runningDaemons: KernelLocalDaemon[] = []

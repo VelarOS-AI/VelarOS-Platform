@@ -4,7 +4,7 @@ import type {
   KernelModuleDefinition,
   KernelModuleIsolation,
   KernelModuleLifecycle,
-} from '../../contracts/abi'
+} from '../../contracts/abi/module'
 
 export type ExternalKernelModuleIsolation = Exclude<
   KernelModuleIsolation,

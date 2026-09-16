@@ -1,12 +1,11 @@
 import { isBlank, isEmpty,isNotUndefined, isUndefined } from '@velaros-ai/core';
 
+import type { CapabilityRequirement, CapabilityToken } from '../../contracts/abi/capability'
 import {
-  type CapabilityRequirement,
-  type CapabilityToken,
   type KernelModuleDefinition,
   KernelModuleIsolationValues,
   type KernelModuleManifest,
-} from '../../contracts/abi'
+} from '../../contracts/abi/module'
 
 import { KernelHostError } from './errors'
 import { assertSemanticVersion, satisfiesVersionRange } from './version'

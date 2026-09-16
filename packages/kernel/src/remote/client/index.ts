@@ -8,10 +8,38 @@
 //      作为 `isolationAdapters` 注入 Kernel,再注册 `projection.modules`;
 //   ④ `projection.tools` 交给 Agent 主干注册。
 // 清单变更(`client.onManifestChanged`)时从 ② 起整份重来:能力面变化必须走显式注册周期。
-export * from './close-policy'
-export * from './contracts'
-export * from './credential-store'
-export * from './handshake'
-export * from './pending-calls'
-export * from './RemoteNodeClient'
-export * from './ws-socket'
+export type { RemoteNodeCloseAction } from './close-policy'
+export { computeReconnectDelayMs, planRemoteNodeCloseAction } from './close-policy'
+export type {
+  RemoteNodeClientErrorCode,
+  RemoteNodeClientErrorInit,
+  RemoteNodeClientOptions,
+  RemoteNodeConnectionState,
+  RemoteNodeCredentials,
+  RemoteNodeCredentialStore,
+  RemoteNodeInvokeRequest,
+  RemoteNodeManifestListener,
+  RemoteNodeProgressListener,
+  RemoteNodeSession,
+  RemoteNodeSocket,
+  RemoteNodeSocketFactory,
+  RemoteNodeStateListener,
+  RemoteNodeStopListener,
+  RemoteNodeUnsubscribe,
+} from './contracts'
+export {
+  RemoteNodeClientDeadlineGraceMs,
+  RemoteNodeClientDefaultDeadlineMs,
+  RemoteNodeClientError,
+  RemoteNodeClientErrorCodes,
+  RemoteNodeReconnectInitialDelayMs,
+  RemoteNodeReconnectJitterRatio,
+  RemoteNodeReconnectMaxDelayMs,
+} from './contracts'
+export { defaultRemoteNodeCredentialsPath, FileRemoteNodeCredentialStore } from './credential-store'
+export type { RemoteNodeHandshakeInput, RemoteNodeHandshakeStep } from './handshake'
+export { planRemoteNodeHandshake } from './handshake'
+export type { RemoteNodePendingCallsHost } from './pending-calls'
+export { createAbortError, RemoteNodePendingCalls } from './pending-calls'
+export { RemoteNodeClient } from './RemoteNodeClient'
+export { createRemoteNodeWebSocket } from './ws-socket'

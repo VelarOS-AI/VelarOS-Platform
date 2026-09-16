@@ -4,14 +4,11 @@ import { join } from 'node:path'
 
 import { afterEach, describe, expect, test } from 'bun:test'
 
-import { connectToKernelDaemon } from '@velaros-ai/kernel/client'
-import {
-  createCapabilityToken,
-  createKernelCallableCapability,
-  defineKernelModule,
-} from '@velaros-ai/kernel/contracts/abi'
-import { KernelProtocolVersion } from '@velaros-ai/kernel/contracts/protocol'
-
+import { connectToKernelDaemon } from '../../../src/client/discovery'
+import { createKernelCallableCapability } from '../../../src/contracts/abi/callable'
+import { createCapabilityToken } from '../../../src/contracts/abi/capability'
+import { defineKernelModule } from '../../../src/contracts/abi/module'
+import { KernelProtocolVersion } from '../../../src/contracts/protocol/version'
 import { bootKernelDaemon } from '../../../src/serve/daemon/boot'
 import {
   createBundledModPack,

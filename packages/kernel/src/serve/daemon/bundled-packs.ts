@@ -1,9 +1,6 @@
-import {
-  createCapabilityToken,
-  defineKernelModule,
-  KernelModuleApiVersion,
-  type KernelModuleDefinition,
-} from '@velaros-ai/kernel/contracts/abi'
+import { createCapabilityToken } from '../../contracts/abi/capability'
+import { defineKernelModule, type KernelModuleDefinition } from '../../contracts/abi/module'
+import { KernelModuleApiVersion } from '../../contracts/abi/version-axis'
 
 import type { KernelModPackRecord } from './mod-store'
 import { type KernelModStore, registerSystemModPacks } from './mod-store'

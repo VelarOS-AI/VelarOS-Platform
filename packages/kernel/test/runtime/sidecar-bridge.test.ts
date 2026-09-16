@@ -5,12 +5,10 @@ import { join } from 'node:path'
 
 import { afterEach, describe, expect, test } from 'bun:test'
 
-import {
-  createCapabilityToken,
-  defineKernelModule,
-} from '../../src/contracts/abi'
+import { createCapabilityToken } from '../../src/contracts/abi/capability'
+import { defineKernelModule } from '../../src/contracts/abi/module'
 import { KernelCapabilityInvoker } from '../../src/runtime/capability-invocation'
-import { KernelModuleHost } from '../../src/runtime/host'
+import { KernelModuleHost } from '../../src/runtime/host/KernelModuleHost'
 import {
   HostBridgeClient,
   SidecarIsolationAdapter,

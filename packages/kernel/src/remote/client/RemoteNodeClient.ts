@@ -20,6 +20,7 @@ import {
   toNullable,
 } from '@velaros-ai/core'
 import { type TimerLease, TimerScope } from '@velaros-ai/core/utils/TimerScope'
+
 import {
   type RemoteNodeCancel,
   type RemoteNodeChallenge,
@@ -32,8 +33,7 @@ import {
   RemoteNodeProtocolVersion,
   type RemoteNodeReady,
   type RemoteNodeServerFrame,
-} from '@velaros-ai/kernel/contracts/protocol'
-
+} from '../../contracts/protocol/remote-node'
 import { createClientId, type RemoteNodeKeyPair } from '../shared/crypto'
 import { decodeServerFrame, sendFrame } from '../shared/frames'
 

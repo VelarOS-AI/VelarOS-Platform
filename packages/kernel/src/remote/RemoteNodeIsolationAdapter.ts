@@ -12,19 +12,22 @@
 // 有 epoch 判死。所以这里不做 `allowOfflineFallback` 那种"注册会抛的桩":远端不可达是常态,
 // 由 client 排队与重连吸收,而不是把一张假的能力面留在 Kernel 里。
 import { isNonBlankString, isNull, isPresent, Log } from '@velaros-ai/core'
+
 import {
-  createCapabilityToken,
   createKernelCallableCapability,
   type KernelCallableCapabilityOperation,
-  KernelCapabilityPermissionDeniedError,
-  type KernelModuleActivateContext,
-  type KernelModuleDefinition,
-  type KernelModuleHealth,
-  type KernelModuleIsolationAdapter,
-  type KernelModuleLifecycle,
-  type KernelRegistration,
-  type ScopeRef,
-} from '@velaros-ai/kernel'
+} from '../contracts/abi/callable'
+import { createCapabilityToken } from '../contracts/abi/capability'
+import type {
+  KernelModuleActivateContext,
+  KernelModuleDefinition,
+  KernelModuleHealth,
+  KernelModuleLifecycle,
+  KernelRegistration,
+} from '../contracts/abi/module'
+import type { ScopeRef } from '../contracts/abi/references'
+import { KernelCapabilityPermissionDeniedError } from '../runtime/capability-invocation'
+import type { KernelModuleIsolationAdapter } from '../runtime/host/isolation'
 
 import {
   RemoteNodeClientError,

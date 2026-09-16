@@ -14,7 +14,8 @@ import { z } from 'zod'
 
 import { isNonBlankString, isObject, Log } from '@velaros-ai/core'
 import { writeJsonFileAtomically } from '@velaros-ai/core/utils/FilePersistence'
-import { RemoteNodeIdentitySchema } from '@velaros-ai/kernel/contracts/protocol'
+
+import { RemoteNodeIdentitySchema } from '../../contracts/protocol/remote-node'
 
 import type {
   RemoteNodeCredentials,

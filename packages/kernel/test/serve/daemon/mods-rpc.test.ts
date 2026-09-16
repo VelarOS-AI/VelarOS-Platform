@@ -4,17 +4,16 @@ import { join } from 'node:path'
 
 import { afterEach, describe, expect, test } from 'bun:test'
 
-import { KernelClient, SocketKernelTransport } from '@velaros-ai/kernel/client'
-import {
-  createCapabilityToken,
-  defineKernelModule,
-} from '@velaros-ai/kernel/contracts/abi'
-import { KernelProtocolVersion } from '@velaros-ai/kernel/contracts/protocol'
-import { KernelModuleHost, KernelService } from '@velaros-ai/kernel/runtime'
-
+import { KernelClient } from '../../../src/client/KernelClient'
+import { SocketKernelTransport } from '../../../src/client/socket-transport'
+import { createCapabilityToken } from '../../../src/contracts/abi/capability'
+import { defineKernelModule } from '../../../src/contracts/abi/module'
+import { KernelProtocolVersion } from '../../../src/contracts/protocol/version'
+import { KernelModuleHost } from '../../../src/runtime/host/KernelModuleHost'
+import { KernelService } from '../../../src/runtime/service/KernelService'
 import { bootKernelDaemon } from '../../../src/serve/daemon/boot'
 import { InProcessKernelTransport } from '../../../src/serve/internal/in-process-transport'
-import { KernelLocalRpcServer } from '../../../src/serve/rpc'
+import { KernelLocalRpcServer } from '../../../src/serve/rpc/local-rpc-server'
 
 const directories: string[] = []
 

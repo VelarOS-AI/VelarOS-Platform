@@ -1,9 +1,4 @@
-import type {
-  KernelServiceHealth,
-  OpenKernelSessionInput,
-  StartKernelRunInput,
-} from '@velaros-ai/kernel/contracts'
-import type { KernelEvent } from '@velaros-ai/kernel/contracts/abi'
+import type { KernelEvent } from '../contracts/abi/events'
 import type {
   CapabilityCallRequest,
   CapabilityCallResponse,
@@ -11,16 +6,22 @@ import type {
   CapabilitySessionCloseResponse,
   CapabilitySessionOpenRequest,
   CapabilitySessionOpenResponse,
-  KernelHandshake,
-  KernelRunIdentity,
-  KernelSessionIdentity,
+} from '../contracts/protocol/capability'
+import type { KernelHandshake } from '../contracts/protocol/handshake'
+import type { KernelRunIdentity, KernelSessionIdentity } from '../contracts/protocol/identity'
+import type {
   ModsInstallFromDirectoryRequest,
   ModsInstallFromDirectoryResponse,
   ModsListRequest,
   ModsListResponse,
   ModsSetEnabledRequest,
   ModsSetEnabledResponse,
-} from '@velaros-ai/kernel/contracts/protocol'
+} from '../contracts/protocol/mods'
+import type { KernelServiceHealth } from '../contracts/service/health'
+import type {
+  OpenKernelSessionInput,
+  StartKernelRunInput,
+} from '../contracts/service/identity-inputs'
 
 export interface KernelEventSubscription {
   dispose(): void | Promise<void>

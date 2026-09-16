@@ -16,11 +16,7 @@ import {
   isUndefined,
   Log,
 } from '@velaros-ai/core'
-import type {
-  KernelServiceHealth,
-  OpenKernelSessionInput,
-  StartKernelRunInput,
-} from '@velaros-ai/kernel/contracts'
+
 import {
   type CapabilityCallRequest,
   type CapabilityCallResponse,
@@ -31,12 +27,15 @@ import {
   type CapabilitySessionOpenRequest,
   type CapabilitySessionOpenResponse,
   CapabilitySessionOpenResponseSchema,
-  type KernelHandshake,
-  KernelHandshakeSchema,
+} from '../contracts/protocol/capability'
+import { type KernelHandshake, KernelHandshakeSchema } from '../contracts/protocol/handshake'
+import {
   type KernelRunIdentity,
   KernelRunIdentitySchema,
   type KernelSessionIdentity,
   KernelSessionIdentitySchema,
+} from '../contracts/protocol/identity'
+import {
   type ModsInstallFromDirectoryRequest,
   type ModsInstallFromDirectoryResponse,
   ModsInstallFromDirectoryResponseSchema,
@@ -46,7 +45,12 @@ import {
   type ModsSetEnabledRequest,
   type ModsSetEnabledResponse,
   ModsSetEnabledResponseSchema,
-} from '@velaros-ai/kernel/contracts/protocol'
+} from '../contracts/protocol/mods'
+import type { KernelServiceHealth } from '../contracts/service/health'
+import type {
+  OpenKernelSessionInput,
+  StartKernelRunInput,
+} from '../contracts/service/identity-inputs'
 
 import type { KernelRpcEndpoint } from './contracts/endpoint'
 import type {

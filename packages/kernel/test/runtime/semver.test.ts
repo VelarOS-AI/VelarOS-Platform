@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import { parseVelarosModEnvelope } from '../../src/contracts/protocol'
+import { parseVelarosModEnvelope } from '../../src/contracts/protocol/mod-manifest'
 import {
   assertSemanticVersion,
   satisfiesVersionRange,

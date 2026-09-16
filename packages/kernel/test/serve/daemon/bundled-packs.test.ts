@@ -4,8 +4,7 @@ import { join } from 'node:path'
 
 import { afterEach, describe, expect, test } from 'bun:test'
 
-import { defineKernelModule } from '@velaros-ai/kernel/contracts/abi'
-
+import { defineKernelModule } from '../../../src/contracts/abi/module'
 import {
   BundledKernelPacks,
   createBundledModPack,

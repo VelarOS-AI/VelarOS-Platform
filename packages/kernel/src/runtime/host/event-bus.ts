@@ -2,8 +2,8 @@ import type {
   KernelEvent,
   KernelEventHandler,
   KernelModuleEventBus,
-  KernelRegistration,
-} from '../../contracts/abi'
+} from '../../contracts/abi/events'
+import type { KernelRegistration } from '../../contracts/abi/module'
 
 interface EventSubscription {
   readonly ownerModuleId: string

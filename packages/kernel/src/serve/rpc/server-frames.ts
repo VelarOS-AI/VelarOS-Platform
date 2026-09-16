@@ -1,10 +1,11 @@
 import { isBlank, isPlainObject, isString } from '@velaros-ai/core'
+
 import {
   type KernelRpcFailure,
   type KernelRpcMethod,
   KernelRpcMethods,
   type KernelRpcRequest,
-} from '@velaros-ai/kernel/client/contracts'
+} from '../../client/contracts/rpc-frames'
 
 
 export class KernelRpcProtocolError extends Error {

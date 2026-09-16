@@ -5,7 +5,7 @@ import type {
   KernelModuleActivateContext,
   KernelModuleDefinition,
   KernelModuleLifecycle,
-} from '../../contracts/abi'
+} from '../../contracts/abi/module'
 
 import { KernelHostError } from './errors'
 import type {

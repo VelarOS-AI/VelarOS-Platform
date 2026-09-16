@@ -1,11 +1,11 @@
+import type { KernelModuleManifest } from '../../contracts/abi/module'
 import type {
-  KernelModuleManifest,
   KernelModulePermissionBroker,
   KernelModulePermissionRequest,
   KernelPermissionBroker,
   KernelPermissionDecision,
   KernelPermissionRequest,
-} from '../../contracts/abi'
+} from '../../contracts/abi/permissions'
 
 /** Secure host default: no permission is granted without an injected policy. */
 export class DenyAllKernelPermissionBroker implements KernelPermissionBroker {

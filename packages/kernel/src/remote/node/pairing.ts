@@ -6,12 +6,12 @@ import { timingSafeEqual } from 'node:crypto'
 
 import { isPresent, toNullable } from '@velaros-ai/core'
 import type { TimerLease, TimerScope } from '@velaros-ai/core/utils/TimerScope'
+
 import {
   RemoteNodePairingLifetimeMs,
   RemoteNodePairingLockoutMs,
   RemoteNodePairingMaxFailures,
-} from '@velaros-ai/kernel/contracts/protocol'
-
+} from '../../contracts/protocol/remote-node'
 import { createPairingCode } from '../shared/crypto'
 
 /** 定长常数时间比较:长度不等直接判否,避免 `timingSafeEqual` 因长度差异抛出。 */

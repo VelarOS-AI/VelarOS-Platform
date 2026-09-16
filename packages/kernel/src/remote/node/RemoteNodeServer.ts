@@ -22,6 +22,7 @@ import {
   toNullable,
 } from '@velaros-ai/core'
 import { type TimerLease, TimerScope } from '@velaros-ai/core/utils/TimerScope'
+
 import {
   type RemoteNodeAuthenticate,
   RemoteNodeCloseCode,
@@ -35,8 +36,7 @@ import {
   RemoteNodePlatformSchema,
   RemoteNodeProtocolVersion,
   type RemoteNodeResult,
-} from '@velaros-ai/kernel/contracts/protocol'
-
+} from '../../contracts/protocol/remote-node'
 import {
   createChallenge,
   createEpoch,
