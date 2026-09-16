@@ -3,8 +3,9 @@ import { join } from 'node:path'
 
 import { isBlank, isFunction, isNotUndefined, isNull, isObject, isString } from '@velaros-ai/core';
 
+import { KernelClientErrorCodes } from '../../contract/constants'
 import type { KernelRpcEndpoint } from '../../types/client-endpoint'
-import { KernelClientError } from '../errors-client'
+import { KernelClientError } from '../errors'
 
 /** Filesystem locations of the single-instance local Kernel daemon. */
 export interface KernelDaemonPaths {
@@ -111,8 +112,8 @@ function parseEndpoint(input: unknown): KernelRpcEndpoint {
 }
 
 function invalidDescriptor(): KernelClientError {
-  return new KernelClientError(
-    'DAEMON_DESCRIPTOR_INVALID',
-    'Kernel daemon endpoint descriptor is invalid',
-  )
+  return new KernelClientError({
+    code: KernelClientErrorCodes.daemonDescriptorInvalid,
+    message: 'Kernel 守护进程的端点 descriptor 不合法',
+  })
 }

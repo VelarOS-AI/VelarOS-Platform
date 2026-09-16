@@ -7,8 +7,7 @@
 // 值得读两遍的只有 `resultUnknown`:它把「没执行」与「可能已半执行」分成两档。跨机调用里
 // 构建、代码签名这类动作一旦落在后者,重试就不是无害动作——把两者混成一个"失败"上抛,
 // 等于让调用方在不知情的情况下做第二次签名。
-import { toNullable } from '@velaros-ai/core'
-
+import type { RemoteNodeClientError } from '../utils/errors'
 import type {
   RemoteNodeError,
   RemoteNodeIdentity,
@@ -17,22 +16,6 @@ import type {
 } from '../utils/wire/remote-node'
 
 import type { ScopeRef } from './abi-references'
-
-/**
- * 客户端兜底超时相对 wire `deadlineMs` 的宽限。
- *
- * 有意让 Node 侧看门狗先到期:那一侧超时会回一帧确定的 `error`,而客户端超时只能给出
- * 「结果未知」。宽限存在的意义是让确定的判决正常胜出,客户端计时器只当链路彻底哑掉时的兜底。
- */
-export const RemoteNodeClientDeadlineGraceMs = 5_000
-
-/** 调用方未指定时的 wire 截止时长。 */
-export const RemoteNodeClientDefaultDeadlineMs = 120_000
-
-/** 重连退避:首跳、上限与抖动比例。 */
-export const RemoteNodeReconnectInitialDelayMs = 500
-export const RemoteNodeReconnectMaxDelayMs = 30_000
-export const RemoteNodeReconnectJitterRatio = 0.25
 
 /**
  * socket 端口。
@@ -143,28 +126,6 @@ export interface RemoteNodeClientErrorInit {
   readonly resultUnknown: boolean
   readonly nodeError?: LooseOptional<RemoteNodeError>
   readonly cause?: unknown
-}
-
-/**
- * Client 侧统一错误。
- *
- * 字段三元组(code / message / retryable)与 Kernel wire 错误信封同构,便于上层原样转投;
- * `resultUnknown` 是本传输独有的第四位,跨机链路上没有它就无法诚实描述"半执行"。
- */
-export class RemoteNodeClientError extends Error {
-  public readonly code: RemoteNodeClientErrorCode
-  public readonly retryable: boolean
-  public readonly resultUnknown: boolean
-  public readonly nodeError: Nullable<RemoteNodeError>
-
-  public constructor(init: RemoteNodeClientErrorInit) {
-    super(init.message, { cause: init.cause })
-    this.name = 'RemoteNodeClientError'
-    this.code = init.code
-    this.retryable = init.retryable
-    this.resultUnknown = init.resultUnknown
-    this.nodeError = toNullable(init.nodeError)
-  }
 }
 
 export interface RemoteNodeClientOptions {

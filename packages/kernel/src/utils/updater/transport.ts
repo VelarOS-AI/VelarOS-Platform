@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 
 import { isNotUndefined, isNull } from '@velaros-ai/core'
 
-import { KernelUpdaterError } from '../errors-updater'
+import { KernelUpdaterError } from '../errors'
 import { isNodeError } from '../fs'
 
 export interface KernelFetchRequest {

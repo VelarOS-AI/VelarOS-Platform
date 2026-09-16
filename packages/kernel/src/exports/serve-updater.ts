@@ -1,3 +1,4 @@
+export type { KernelUpdaterErrorCode } from '../contract/constants'
 export type { KernelUpdateLockOptions, KernelUpdateLockRecord } from '../impl/updater/KernelUpdateLock'
 export { KernelUpdateLock, withKernelUpdateLock } from '../impl/updater/KernelUpdateLock'
 export type {
@@ -20,16 +21,8 @@ export type {
   KernelArtifactSignatureVerifier,
 } from '../impl/updater/UnverifiedKernelArtifactSignatureVerifier'
 export { UnverifiedKernelArtifactSignatureVerifier } from '../impl/updater/UnverifiedKernelArtifactSignatureVerifier'
-export type {
-  KernelArtifactVerificationErrorCode,
-  KernelUpdaterErrorCode,
-  KernelUpdaterErrorDetails,
-} from '../utils/errors-updater'
-export {
-  KernelArtifactVerificationError,
-  KernelUpdateLockError,
-  KernelUpdaterError,
-} from '../utils/errors-updater'
+export type { KernelUpdaterErrorDetails } from '../utils/errors'
+export { KernelUpdaterError } from '../utils/errors'
 export type { KernelArtifactDownloadOptions, KernelArtifactDownloadResult } from '../utils/updater/download'
 export { downloadKernelArtifact } from '../utils/updater/download'
 export type { KernelInstalledVersion, KernelInstallRecord } from '../utils/updater/installation'

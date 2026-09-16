@@ -1,9 +1,15 @@
+import { Log } from '@velaros-ai/core'
+
 import type {
   KernelEvent,
   KernelEventHandler,
   KernelModuleEventBus,
 } from '../../types/abi-events'
 import type { KernelRegistration } from '../../types/abi-module'
+
+import { ScopedKernelEventBus } from './ScopedKernelEventBus'
+
+const log = Log.tag('KernelEventHub')
 
 interface EventSubscription {
   readonly ownerModuleId: string
@@ -22,31 +28,13 @@ export class KernelEventHub {
     assertActive: () => void,
     isDeliveryEnabled: () => boolean = () => true,
   ): KernelModuleEventBus {
-    return {
-      publish: <TPayload>(type: string, payload: TPayload) => {
-        assertActive()
-        return this.publish(
-          moduleId,
-          generation,
-          type,
-          payload,
-          isDeliveryEnabled(),
-        )
-      },
-      subscribe: <TPayload>(
-        type: string,
-        handler: KernelEventHandler<TPayload>,
-      ) => {
-        assertActive()
-        return this.subscribe(
-          moduleId,
-          generation,
-          type,
-          handler,
-          isDeliveryEnabled,
-        )
-      },
-    }
+    return new ScopedKernelEventBus(
+      this,
+      moduleId,
+      generation,
+      assertActive,
+      isDeliveryEnabled,
+    )
   }
 
   public async publish<TPayload>(
@@ -64,10 +52,21 @@ export class KernelEventHub {
       sequence: ++this.sequence,
     })
     if (!deliver) return event
+    // 订阅者之间相互隔离：一个回调抛错只记日志，后面的订阅者照收，发布方也不因此失败。
+    // 不隔离等于「任何一个模块的订阅回调都能让别的模块的 publish 失败」，是跨模块的故障传染。
     const subscriptions = [...(this.subscriptions.get(type) ?? [])]
     for (const subscription of subscriptions) {
       if (!subscription.isDeliveryEnabled()) continue
-      await subscription.handler(event)
+      try {
+        await subscription.handler(event)
+      } catch (error) {
+        log.warn('事件订阅者处理失败，已跳过该订阅者', {
+          error,
+          eventType: type,
+          sourceModuleId,
+          subscriberModuleId: subscription.ownerModuleId,
+        })
+      }
     }
     return event
   }

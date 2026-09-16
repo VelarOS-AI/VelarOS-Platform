@@ -20,13 +20,12 @@ import type { TimerLease, TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
 import type { ScopeRef } from '../../types/abi-references'
 import {
-  RemoteNodeClientDeadlineGraceMs,
-  RemoteNodeClientDefaultDeadlineMs,
-  RemoteNodeClientError,
   type RemoteNodeClientErrorCode,
   RemoteNodeClientErrorCodes,
   type RemoteNodeInvokeRequest,
 } from '../../types/remote-client'
+import { RemoteNodeClientError } from '../../utils/errors'
+import { KernelTuning } from '../../utils/tuning'
 import type {
   RemoteNodeCancel,
   RemoteNodeError,
@@ -88,7 +87,7 @@ export class RemoteNodePendingCalls {
         })
       }
       const deadline = this.timers.after(
-        resolveDeadlineMs(request) + RemoteNodeClientDeadlineGraceMs,
+        resolveDeadlineMs(request) + KernelTuning.remoteClientDeadlineGraceMs,
         () => this.settleTimeout(callId),
         { label: 'remote-node.call-deadline', unref: true },
       )
@@ -166,7 +165,7 @@ export class RemoteNodePendingCalls {
   }
 
   /** 连接进入终态时清空全簿;上过线的一律标成结果未知。 */
-  public failAll(code: RemoteNodeClientErrorCode, message: string): void {
+  public failAll(code: RemoteNodeClientErrorCode | string, message: string): void {
     for (const entry of [...this.entries.values()]) {
       this.settle(entry.callId, (pending) => {
         pending.reject(new RemoteNodeClientError({
@@ -234,7 +233,7 @@ function describeCall(pending: PendingCall): string {
 
 function resolveDeadlineMs(request: RemoteNodeInvokeRequest): number {
   const requested = request.deadlineMs
-  if (isUndefined(requested) || !Number.isFinite(requested) || requested <= 0) return RemoteNodeClientDefaultDeadlineMs
+  if (isUndefined(requested) || !Number.isFinite(requested) || requested <= 0) return KernelTuning.remoteClientDefaultDeadlineMs
   return Math.round(requested)
 }
 

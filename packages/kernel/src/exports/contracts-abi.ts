@@ -1,18 +1,7 @@
 export { KernelModuleApiVersion, KernelVersion } from '../contract/constants'
-export type {
-  KernelCallableCapabilityOperation,
-  KernelCallableCapabilityService,
-  KernelCapabilityOperationContext,
-  KernelCapabilityOperationMetadata,
-  KernelCapabilityOperationReason,
-} from '../impl/runtime/KernelCallableCapability'
-export {
-  createKernelCallableCapability,
-  isKernelCallableCapabilityService,
-  resolveKernelCapabilityOperationReason,
-  UnknownKernelCapabilityOperationError,
-} from '../impl/runtime/KernelCallableCapability'
+export { createKernelCallableCapability } from '../impl/runtime/KernelCallableCapability'
 export { createCapabilityToken, requireCapability } from '../impl/runtime/KernelModuleKit'
+export type { KernelCallableCapabilityOperation, KernelCallableCapabilityService, KernelCapabilityOperationContext, KernelCapabilityOperationMetadata, KernelCapabilityOperationReason } from '../types/abi-callable'
 export type { CapabilityRequirement, CapabilityToken } from '../types/abi-capability'
 export type { KernelEvent, KernelEventHandler, KernelModuleEventBus } from '../types/abi-events'
 export type {
@@ -39,3 +28,7 @@ export type {
 } from '../types/abi-permissions'
 export type { ResourceRef, ScopeRef } from '../types/abi-references'
 export type { KernelStateStore } from '../types/abi-state'
+export {
+  isKernelCallableCapabilityService,
+  resolveKernelCapabilityOperationReason,
+} from '../utils/runtime/callable'

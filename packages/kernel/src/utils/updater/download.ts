@@ -4,9 +4,8 @@ import { open, rm } from 'node:fs/promises'
 import { Log } from '@velaros-ai/core'
 
 import {
-  KernelArtifactVerificationError,
   KernelUpdaterError,
-} from '../errors-updater'
+} from '../errors'
 
 import type { KernelArtifact } from './manifest'
 import {
@@ -58,7 +57,7 @@ export async function downloadKernelArtifact(
     for await (const chunk of response.body) {
       size += chunk.byteLength
       if (size > artifact.size) {
-        throw new KernelArtifactVerificationError(
+        throw new KernelUpdaterError(
           'ARTIFACT_SIZE_MISMATCH',
           'Kernel artifact is larger than the manifest declares',
           { url: artifact.url, expected: String(artifact.size) },
@@ -87,7 +86,7 @@ export async function downloadKernelArtifact(
 
   if (size !== artifact.size) {
     await rm(destination, { force: true })
-    throw new KernelArtifactVerificationError(
+    throw new KernelUpdaterError(
       'ARTIFACT_SIZE_MISMATCH',
       `Kernel artifact size ${size} does not match the manifest`,
       {
@@ -101,7 +100,7 @@ export async function downloadKernelArtifact(
   const digest = hash.digest('hex')
   if (digest !== artifact.sha256) {
     await rm(destination, { force: true })
-    throw new KernelArtifactVerificationError(
+    throw new KernelUpdaterError(
       'DIGEST_MISMATCH',
       'Kernel artifact SHA-256 digest does not match the manifest',
       { url: artifact.url, expected: artifact.sha256, actual: digest },

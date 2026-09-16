@@ -8,8 +8,8 @@ import type { KernelModuleIsolationAdapter } from '../../types/runtime-isolation
 import type { KernelDaemonPaths } from '../../utils/rpc/descriptor'
 import { KernelModuleHost } from '../runtime/KernelModuleHost'
 
+import { AllowLoadedKernelClientAccessBroker } from './AllowLoadedKernelClientAccessBroker'
 import {
-  AllowLoadedKernelClientAccessBroker,
   type KernelClientAccessBroker,
 } from './DenyAllKernelClientAccessBroker'
 import { KernelLocalDaemon } from './KernelLocalDaemon'

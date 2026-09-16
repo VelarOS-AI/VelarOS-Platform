@@ -8,7 +8,7 @@ import { afterEach, describe, expect, test } from 'bun:test'
 
 import { kernelArtifactFileName } from '../../../src/impl/updater/PassthroughKernelArtifactExtractor'
 import { UnverifiedKernelArtifactSignatureVerifier } from '../../../src/impl/updater/UnverifiedKernelArtifactSignatureVerifier'
-import { KernelArtifactVerificationError } from '../../../src/utils/errors-updater'
+import { KernelUpdaterError } from '../../../src/utils/errors'
 import { downloadKernelArtifact } from '../../../src/utils/updater/download'
 import {
   parseKernelUpdateManifest,
@@ -76,7 +76,7 @@ describe('Kernel artifact download and verification', () => {
       fetch: createFakeFetch({ [artifact.descriptor.url]: artifact.bytes }),
     })
 
-    await expect(failure).rejects.toBeInstanceOf(KernelArtifactVerificationError)
+    await expect(failure).rejects.toBeInstanceOf(KernelUpdaterError)
     await expect(failure).rejects.toMatchObject({
       code: 'DIGEST_MISMATCH',
       details: { expected: '0'.repeat(64), actual: artifact.descriptor.sha256 },

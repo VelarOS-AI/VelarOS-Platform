@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises'
 
-import { KernelClientError } from '../../utils/errors-client'
+import { KernelClientErrorCodes } from '../../contract/constants'
+import { KernelClientError } from '../../utils/errors'
 import {
   createDefaultKernelDaemonPaths,
   type KernelDaemonEndpointDescriptor,
@@ -31,17 +32,17 @@ export async function discoverKernelDaemon(
     ) as unknown
   } catch (error) {
     if (isNodeError(error, 'ENOENT')) {
-      throw new KernelClientError(
-        'DAEMON_NOT_RUNNING',
-        'Kernel daemon endpoint is not available',
-        'Start the shared Kernel (or let the launcher start it) before connecting.',
-      )
+      throw new KernelClientError({
+        code: KernelClientErrorCodes.daemonNotRunning,
+        message: '本机没有可用的 Kernel 守护进程端点',
+        guidance: '先启动共享 Kernel（或交给启动器去起）再连接。',
+      })
     }
     if (error instanceof SyntaxError) {
-      throw new KernelClientError(
-        'DAEMON_DESCRIPTOR_INVALID',
-        'Kernel daemon endpoint descriptor is invalid',
-      )
+      throw new KernelClientError({
+        code: KernelClientErrorCodes.daemonDescriptorInvalid,
+        message: 'Kernel 守护进程的端点 descriptor 不合法',
+      })
     }
     throw error
   }
@@ -72,10 +73,10 @@ export async function connectToKernelDaemon(
     const handshake = await client.handshake()
     assertProtocolCompatible(handshake.protocolVersion)
     if (handshake.kernelVersion !== descriptor.kernelVersion) {
-      throw new KernelClientError(
-        'DAEMON_DESCRIPTOR_INVALID',
-        'Kernel daemon descriptor does not match the running endpoint',
-      )
+      throw new KernelClientError({
+        code: KernelClientErrorCodes.daemonDescriptorInvalid,
+        message: 'descriptor 与正在跑的 Kernel 端点对不上',
+      })
     }
     return { client, descriptor, handshake }
   } catch (error) {
@@ -87,11 +88,11 @@ export async function connectToKernelDaemon(
 function assertProtocolCompatible(peerVersion: number): void {
   if (peerVersion === KernelProtocolVersion) return
   const negotiation = negotiateKernelProtocol({ protocolVersion: peerVersion })
-  throw new KernelClientError(
-    'PROTOCOL_VERSION_MISMATCH',
-    `Kernel daemon speaks protocol v${peerVersion}; this client speaks v${KernelProtocolVersion}`,
-    negotiation.status === 'rejected' ? negotiation.guidance : undefined,
-  )
+  throw new KernelClientError({
+    code: KernelClientErrorCodes.protocolVersionMismatch,
+    message: `Kernel 守护进程说的是协议 v${peerVersion}，本客户端说的是 v${KernelProtocolVersion}`,
+    guidance: negotiation.status === 'rejected' ? negotiation.guidance : undefined,
+  })
 }
 
 function isNodeError(

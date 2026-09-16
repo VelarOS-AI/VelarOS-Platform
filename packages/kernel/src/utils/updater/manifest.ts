@@ -2,7 +2,7 @@ import { z } from 'zod'
 
 import { isNotUndefined, isUndefined } from '@velaros-ai/core'
 
-import { KernelUpdaterError } from '../errors-updater'
+import { KernelUpdaterError } from '../errors'
 
 import {
   fetchKernelText,

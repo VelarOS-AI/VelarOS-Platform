@@ -9,10 +9,10 @@
 import { isNonBlankString, isPresent } from '@velaros-ai/core'
 
 import {
-  RemoteNodeClientError,
   RemoteNodeClientErrorCodes,
   type RemoteNodeCredentials,
 } from '../../types/remote-client'
+import { RemoteNodeClientError } from '../errors'
 import {
   type RemoteNodeAuthenticate,
   type RemoteNodeChallenge,

@@ -9,7 +9,7 @@ import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, test } from 'bun:test'
 
 import { KernelUpdateLock, withKernelUpdateLock } from '../../../src/impl/updater/KernelUpdateLock'
-import { KernelUpdateLockError } from '../../../src/utils/errors-updater'
+import { KernelUpdaterError } from '../../../src/utils/errors'
 
 import { createTemporaryDirectories } from './support'
 
@@ -62,7 +62,7 @@ describe('Kernel update lock', () => {
         lockPath: path,
         holderId: 'product-b',
       })
-      await expect(contention).rejects.toBeInstanceOf(KernelUpdateLockError)
+      await expect(contention).rejects.toBeInstanceOf(KernelUpdaterError)
       await expect(contention).rejects.toMatchObject({
         code: 'UPDATE_LOCK_HELD',
         details: { path, ownerPid: process.pid },

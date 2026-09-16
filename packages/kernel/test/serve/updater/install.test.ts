@@ -11,7 +11,7 @@ import { afterEach, describe, expect, test } from 'bun:test'
 
 import { KernelUpdater, type KernelUpdaterOptions } from '../../../src/impl/updater/KernelUpdater'
 import type { KernelArtifactExtractor } from '../../../src/impl/updater/PassthroughKernelArtifactExtractor'
-import { KernelUpdateLockError } from '../../../src/utils/errors-updater'
+import { KernelUpdaterError } from '../../../src/utils/errors'
 import { readKernelActivePointer } from '../../../src/utils/updater/pointer'
 
 import {
@@ -242,7 +242,7 @@ describe('Kernel side-by-side installation', () => {
 
     const contender = createUpdater(root)
     const contention = contender.ensureInstalled('1.1.0')
-    await expect(contention).rejects.toBeInstanceOf(KernelUpdateLockError)
+    await expect(contention).rejects.toBeInstanceOf(KernelUpdaterError)
     await expect(contention).rejects.toMatchObject({
       code: 'UPDATE_LOCK_HELD',
       details: { ownerPid: process.pid },

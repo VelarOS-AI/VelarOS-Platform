@@ -6,7 +6,7 @@ import {
   KernelModuleIsolationValues,
   type KernelModuleManifest,
 } from '../../types/abi-module'
-import { KernelHostError } from '../errors'
+import { KernelError } from '../errors'
 
 import { assertSemanticVersion, satisfiesVersionRange } from './version'
 
@@ -32,7 +32,7 @@ function compareIdentifiers(left: string, right: string): number {
 function assertNonEmpty(value: string, label: string, moduleId?: string): void {
   if (!isBlank(value.trim())) return
 
-  throw new KernelHostError(
+  throw new KernelError(
     'INVALID_MANIFEST',
     `${label} must not be empty`,
     { moduleId },
@@ -48,7 +48,7 @@ function assertUniqueValues(
   for (const value of values) {
     assertNonEmpty(value, label, moduleId)
     if (seen.has(value)) {
-      throw new KernelHostError(
+      throw new KernelError(
         'INVALID_MANIFEST',
         `Module "${moduleId}" declares duplicate ${label} "${value}"`,
         { moduleId, capabilityId: value },
@@ -91,21 +91,21 @@ export function validateManifest(
   assertNonEmpty(manifest.id, 'module id')
   assertSemanticVersion(manifest.version)
   if (!Number.isInteger(manifest.apiVersion) || manifest.apiVersion <= 0) {
-    throw new KernelHostError(
+    throw new KernelError(
       'INVALID_MANIFEST',
       `Module "${manifest.id}" has an invalid apiVersion`,
       { moduleId: manifest.id },
     )
   }
   if (manifest.apiVersion !== apiVersion) {
-    throw new KernelHostError(
+    throw new KernelError(
       'API_VERSION_MISMATCH',
       `Module "${manifest.id}" requires kernel API ${manifest.apiVersion}, host provides ${apiVersion}`,
       { moduleId: manifest.id },
     )
   }
   if (!KernelModuleIsolationValues.includes(manifest.isolation)) {
-    throw new KernelHostError(
+    throw new KernelError(
       'INVALID_MANIFEST',
       `Module "${manifest.id}" has invalid isolation "${manifest.isolation}"`,
       { moduleId: manifest.id },
@@ -126,7 +126,7 @@ export function validateManifest(
   )
   for (const requirement of manifest.optionalRequires) {
     if (!requiredIds.has(requirement.id)) continue
-    throw new KernelHostError(
+    throw new KernelError(
       'INVALID_MANIFEST',
       `Module "${manifest.id}" declares capability "${requirement.id}" as both required and optional`,
       { moduleId: manifest.id, capabilityId: requirement.id },
@@ -157,7 +157,7 @@ function resolveRequirement(
   const provider = providers.get(requirement.id)
   if (isUndefined(provider)) {
     if (optional) return undefined
-    throw new KernelHostError(
+    throw new KernelError(
       'MISSING_CAPABILITY',
       `Module "${consumer.manifest.id}" requires missing capability "${requirement.id}"`,
       {
@@ -173,7 +173,7 @@ function resolveRequirement(
   )) return provider.moduleId
   if (optional) return undefined
 
-  throw new KernelHostError(
+  throw new KernelError(
     'VERSION_MISMATCH',
     `Capability "${requirement.id}" from module "${provider.moduleId}" at ${provider.capability.version} does not satisfy ${requirement.versionRange}`,
     {
@@ -202,7 +202,7 @@ export function resolveKernelModulePlan(
     for (const capability of module.manifest.provides) {
       const existingProvider = providers.get(capability.id)
       if (isNotUndefined(existingProvider)) {
-        throw new KernelHostError(
+        throw new KernelError(
           'DUPLICATE_CAPABILITY',
           `Capability "${capability.id}" is provided by both "${existingProvider.moduleId}" and "${module.manifest.id}"`,
           {
@@ -279,7 +279,7 @@ export function resolveKernelModulePlan(
       .filter(([, degree]) => degree > 0)
       .map(([moduleId]) => moduleId)
       .sort()
-    throw new KernelHostError(
+    throw new KernelError(
       'CYCLIC_DEPENDENCY',
       `Kernel module dependency cycle: ${cyclicModuleIds.join(', ')}`,
       { relatedModuleIds: cyclicModuleIds },

@@ -390,7 +390,7 @@ describe('kernel client socket transport', () => {
     })
     try {
       await expect(transport.health()).rejects.toMatchObject({
-        name: 'KernelRpcClientError',
+        name: 'KernelClientError',
         rpcError: { code: 'CAPABILITY_NOT_FOUND', retryable: false },
       })
     } finally {

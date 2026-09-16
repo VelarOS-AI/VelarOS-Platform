@@ -1,7 +1,7 @@
 import { isBlank,isUndefined } from '@velaros-ai/core';
 
 import type { KernelStateStore } from '../../types/abi-state'
-import { KernelHostError } from '../../utils/errors'
+import { KernelError } from '../../utils/errors'
 
 export interface KernelStateBackend {
   get(namespace: string, key: string): Promise<unknown>
@@ -45,7 +45,7 @@ export class InMemoryKernelStateBackend implements KernelStateBackend {
 
 function assertStateKey(key: string): void {
   if (!isBlank(key.trim())) return
-  throw new KernelHostError(
+  throw new KernelError(
     'MODULE_STATE',
     'Kernel module state key must not be empty',
   )

@@ -22,7 +22,6 @@ import {
 import { type TimerLease, TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
 import {
-  RemoteNodeClientError,
   RemoteNodeClientErrorCodes,
   type RemoteNodeClientOptions,
   type RemoteNodeConnectionState,
@@ -36,6 +35,7 @@ import {
   type RemoteNodeStopListener,
   type RemoteNodeUnsubscribe,
 } from '../../types/remote-client'
+import { RemoteNodeClientError } from '../../utils/errors'
 import {
   computeReconnectDelayMs,
   planRemoteNodeCloseAction,

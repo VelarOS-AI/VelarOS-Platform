@@ -11,11 +11,13 @@ import {
   toOptional,
 } from '@velaros-ai/core'
 
+import { KernelCallErrorCodes, KernelErrorCodes } from '../../contract/constants'
 import type { KernelEventHandler } from '../../types/abi-events'
 import type { KernelRegistration } from '../../types/abi-module'
 import type { ScopeRef } from '../../types/abi-references'
-import { type KernelModCatalog, KernelModCatalogError } from '../../types/serve-mod-catalog'
+import type { KernelModCatalog } from '../../types/serve-mod-catalog'
 import type { KernelServiceHealth, KernelServiceModuleHealth } from '../../types/service-health'
+import { KernelError, notStartedFailure, startFailedFailure } from '../../utils/errors'
 import {
   type CapabilityCallFailure,
   type CapabilityCallRequest,
@@ -29,15 +31,7 @@ import {
 } from '../../utils/wire/capability'
 import type { KernelHandshake } from '../../utils/wire/handshake'
 import { KernelProtocolVersion } from '../../utils/wire/version'
-import { UnknownKernelCapabilityOperationError } from '../runtime/KernelCallableCapability'
-import {
-  KernelCapabilityInvoker,
-  KernelCapabilityNotCallableError,
-  KernelCapabilityOperationMetadataError,
-  KernelCapabilityPermissionCheckError,
-  KernelCapabilityPermissionDeniedError,
-  KernelCapabilityUnavailableError,
-} from '../runtime/KernelCapabilityInvoker'
+import { KernelCapabilityInvoker } from '../runtime/KernelCapabilityInvoker'
 import type {
   KernelCompositionSnapshot,
   KernelModuleHost,
@@ -66,27 +60,6 @@ export interface KernelServiceOptions {
   readonly clientAccessBroker?: KernelClientAccessBroker
   /** Optional ModStore catalog for mods.* RPC. */
   readonly modCatalog?: KernelModCatalog
-}
-
-export class KernelServiceLifecycleError extends Error {
-  public readonly code = 'KERNEL_NOT_STARTED'
-
-  public constructor() {
-    super('Kernel service is not started')
-    this.name = 'KernelServiceLifecycleError'
-  }
-}
-
-/** 之前已经启动失败过；这不是可重试的状态，要换一个新的 host / service。 */
-export class KernelServiceStartFailedError extends Error {
-  public readonly code = 'KERNEL_START_FAILED'
-
-  public constructor(cause: unknown) {
-    super('Kernel service 已经启动失败过，不会重试；请重建 Kernel 再启动', {
-      cause,
-    })
-    this.name = 'KernelServiceStartFailedError'
-  }
 }
 
 function toCatalogRevision(snapshot: KernelModuleSnapshot): string {
@@ -198,7 +171,7 @@ export class KernelService {
         return Promise.reject(new Error('已回收的 Kernel service 不能再启动'))
       case 'failed':
         return Promise.reject(
-          new KernelServiceStartFailedError(this.startFailure),
+          startFailedFailure(this.startFailure),
         )
       case 'started':
         return Promise.resolve()
@@ -362,54 +335,67 @@ export class KernelService {
         output,
       }
     } catch (error) {
-      if (error instanceof KernelCapabilityUnavailableError) return failure(
-          request.callId,
-          'CAPABILITY_NOT_FOUND',
-          `Capability "${request.capabilityId}" is not available`,
-        )
-      if (error instanceof KernelCapabilityNotCallableError) return failure(
-          request.callId,
-          'CAPABILITY_NOT_CALLABLE',
-          `Capability "${request.capabilityId}" does not expose the call interface`,
-        )
-      if (error instanceof UnknownKernelCapabilityOperationError) return failure(
-          request.callId,
-          'OPERATION_NOT_FOUND',
-          `Operation "${request.operation}" is not available`,
-        )
-      if (error instanceof KernelCapabilityOperationMetadataError) {
-        log.warn('Capability operation metadata lookup failed', {
-          capabilityId: request.capabilityId,
-          error,
-          operation: request.operation,
-        })
-        return failure(
-          request.callId,
-          'OPERATION_METADATA_FAILED',
-          'Capability operation metadata could not be resolved',
-        )
-      }
-      // 进程内路径的错误消息就是 broker 给的原因；serve 路径不能把它丢掉，否则同一次拒绝
-      // 在两条路径上说的不是一回事，模型也拿不到「为什么被拒」。
-      if (error instanceof KernelCapabilityPermissionDeniedError) return failure(
-          request.callId,
-          'PERMISSION_DENIED',
-          `能力调用被权限策略拒绝：${error.reason}`,
-          false,
-          { permission: error.permission, reason: error.reason },
-        )
-      if (error instanceof KernelCapabilityPermissionCheckError) {
-        log.warn('Capability permission check failed', {
-          capabilityId: request.capabilityId,
-          error,
-          operation: request.operation,
-        })
-        return failure(
-          request.callId,
-          'PERMISSION_CHECK_FAILED',
-          'Capability call permission could not be resolved',
-          true,
-        )
+      // 调用路径抛的都是带码的 KernelError：wire 失败信封原样用同一个码，进程内与 serve
+      // 两条路径因此对同一件事给出同一个判断依据。
+      if (error instanceof KernelError) {
+        switch (error.code) {
+          case KernelCallErrorCodes.capabilityNotFound:
+            return failure(
+              request.callId,
+              KernelCallErrorCodes.capabilityNotFound,
+              `能力 "${request.capabilityId}" 当前不可用`,
+            )
+          case KernelCallErrorCodes.capabilityNotCallable:
+            return failure(
+              request.callId,
+              KernelCallErrorCodes.capabilityNotCallable,
+              `能力 "${request.capabilityId}" 没有可调用接口`,
+            )
+          case KernelCallErrorCodes.operationNotFound:
+            return failure(
+              request.callId,
+              KernelCallErrorCodes.operationNotFound,
+              `能力 "${request.capabilityId}" 上没有操作 "${request.operation}"`,
+            )
+          case KernelCallErrorCodes.operationMetadataFailed:
+            log.warn('取不到能力操作的元数据', {
+              capabilityId: request.capabilityId,
+              error,
+              operation: request.operation,
+            })
+            return failure(
+              request.callId,
+              KernelCallErrorCodes.operationMetadataFailed,
+              '取不到能力操作的元数据',
+            )
+          // 进程内路径的错误消息就是 broker 给的原因；serve 路径不能把它丢掉，否则同一次拒绝
+          // 在两条路径上说的不是一回事，模型也拿不到「为什么被拒」。
+          case KernelCallErrorCodes.permissionDenied:
+            return failure(
+              request.callId,
+              KernelCallErrorCodes.permissionDenied,
+              `能力调用被权限策略拒绝：${error.message}`,
+              false,
+              {
+                permission: error.details.permission,
+                reason: error.details.reason ?? error.message,
+              },
+            )
+          case KernelCallErrorCodes.permissionCheckFailed:
+            log.warn('判不出能力调用的授权结果', {
+              capabilityId: request.capabilityId,
+              error,
+              operation: request.operation,
+            })
+            return failure(
+              request.callId,
+              KernelCallErrorCodes.permissionCheckFailed,
+              '判不出能力调用的授权结果',
+              true,
+            )
+          default:
+            break
+        }
       }
       log.warn('Capability invocation failed', {
         aborted: signal.aborted,
@@ -477,11 +463,11 @@ export class KernelService {
     try {
       return await this.requireModCatalog().installFromDirectory(directory)
     } catch (error) {
-      if (error instanceof KernelModCatalogError) throw error
+      if (error instanceof KernelError) throw error
       const reason = error instanceof Error ? error.message : String(error)
       log.warn('Mod pack install failed', { directory, error })
-      throw new KernelModCatalogError(
-        'MOD_INSTALL_FAILED',
+      throw new KernelError(
+        KernelErrorCodes.modInstallFailed,
         `从目录安装 mod pack 失败：${reason}`,
         { directory, reason },
         { cause: error },
@@ -491,8 +477,8 @@ export class KernelService {
 
   private requireModCatalog(): KernelModCatalog {
     if (isUndefined(this.options.modCatalog)) {
-      throw new KernelModCatalogError(
-        'MODS_UNAVAILABLE',
+      throw new KernelError(
+        KernelErrorCodes.modsUnavailable,
         '本 Kernel 没有接 ModStore，mods.* 不可用',
       )
     }
@@ -501,7 +487,7 @@ export class KernelService {
 
   private assertStarted(): void {
     if (this.status === 'started') return
-    throw new KernelServiceLifecycleError()
+    throw notStartedFailure()
   }
 }
 

@@ -1,6 +1,7 @@
 import { isUndefined } from '@velaros-ai/core'
 
 import { KernelModuleApiVersion, KernelVersion } from '../../contract/constants'
+import type { KernelCallableCapabilityService } from '../../types/abi-callable'
 import type { CapabilityToken } from '../../types/abi-capability'
 import type { KernelEventHandler } from '../../types/abi-events'
 import type { KernelModuleDefinition, KernelRegistration } from '../../types/abi-module'
@@ -9,11 +10,8 @@ import type {
   KernelPermissionDecision,
 } from '../../types/abi-permissions'
 import { toError } from '../../utils/errors'
+import { isKernelCallableCapabilityService } from '../../utils/runtime/callable'
 
-import {
-  isKernelCallableCapabilityService,
-  type KernelCallableCapabilityService,
-} from './KernelCallableCapability'
 import {
   type KernelCapabilityCall,
   KernelCapabilityInvoker,
@@ -51,13 +49,6 @@ export interface KernelOptions
 }
 
 export type { KernelCapabilityCall } from './KernelCapabilityInvoker'
-export {
-  KernelCapabilityNotCallableError,
-  KernelCapabilityOperationMetadataError,
-  KernelCapabilityPermissionCheckError,
-  KernelCapabilityPermissionDeniedError,
-  KernelCapabilityUnavailableError,
-} from './KernelCapabilityInvoker'
 
 /**
  * Product-neutral, in-process VelarOS Kernel facade.

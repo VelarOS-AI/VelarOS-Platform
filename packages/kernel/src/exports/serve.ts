@@ -14,8 +14,8 @@ export type {
   KernelDaemonProcessEnvironment,
 } from '../impl/serve/KernelDaemonProcess'
 export { kernelDaemonProcess } from '../impl/serve/KernelDaemonProcess'
-export type { KernelDaemonErrorCode, KernelLocalDaemonOptions } from '../impl/serve/KernelLocalDaemon'
-export { KernelDaemonError, KernelLocalDaemon } from '../impl/serve/KernelLocalDaemon'
+export type { KernelLocalDaemonOptions } from '../impl/serve/KernelLocalDaemon'
+export { KernelLocalDaemon } from '../impl/serve/KernelLocalDaemon'
 export type { KernelLocalRpcServerOptions } from '../impl/serve/KernelLocalRpcServer'
 export { createDefaultKernelRpcEndpoint, KernelLocalRpcServer } from '../impl/serve/KernelLocalRpcServer'
 export type { LoadModsResult } from '../impl/serve/KernelModLoader'
@@ -38,7 +38,6 @@ export {
 } from '../impl/serve/KernelModStore'
 export {
   decodeKernelRpcRequest,
-  KernelRpcProtocolError,
   requireNonEmptyString,
   requireRecord,
   rpcFailure,

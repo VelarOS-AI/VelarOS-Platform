@@ -21,13 +21,13 @@ import {
 } from '@velaros-ai/core'
 
 import {
-  KernelArtifactVerificationError,
   KernelUpdaterError,
-} from '../../utils/errors-updater'
+} from '../../utils/errors'
 import {
   ignoreMissing,
   writeJsonFileAtomic,
 } from '../../utils/fs'
+import { KernelTuning } from '../../utils/tuning'
 import { downloadKernelArtifact } from '../../utils/updater/download'
 import {
   type KernelInstalledVersion,
@@ -136,7 +136,6 @@ export interface KernelUpdaterOptions {
   readonly isProcessAlive?: (pid: number) => boolean
 }
 
-const DefaultRetainedVersions = 3
 const log = Log.tag('KernelUpdater')
 
 /**
@@ -170,7 +169,7 @@ export class KernelUpdater {
     this.signatureVerifier = options.signatureVerifier
       ?? new UnverifiedKernelArtifactSignatureVerifier()
     this.requireSignature = !!options.requireSignature
-    this.retainedVersions = Math.max(1, options.retainedVersions ?? DefaultRetainedVersions)
+    this.retainedVersions = Math.max(1, options.retainedVersions ?? KernelTuning.updaterRetainedVersions)
     this.holderId = options.holderId ?? randomUUID()
     this.now = options.now ?? Date.now
     this.isProcessAlive = options.isProcessAlive
@@ -433,7 +432,7 @@ export class KernelUpdater {
         sha256: download.sha256,
       })
       if (this.requireSignature && !signature.verified) {
-        throw new KernelArtifactVerificationError(
+        throw new KernelUpdaterError(
           'SIGNATURE_REJECTED',
           `Kernel artifact signature was not verified: ${signature.reason ?? signature.method}`,
           { version, target: this.target, url: selection.artifact.url },

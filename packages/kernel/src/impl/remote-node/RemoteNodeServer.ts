@@ -23,6 +23,7 @@ import {
 } from '@velaros-ai/core'
 import { type TimerLease, TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
+import { RemoteNodeLimits } from '../../contract/constants'
 import type {
   RemoteNodePairedCredential,
   RemoteNodeServerOptions,
@@ -36,6 +37,7 @@ import {
 } from '../../utils/remote/crypto'
 import { decodeClientFrame, sendFrame } from '../../utils/remote/frames'
 import { listenRemoteNode } from '../../utils/remote/listener'
+import { KernelTuning } from '../../utils/tuning'
 import {
   type RemoteNodeAuthenticate,
   RemoteNodeCloseCode,
@@ -57,9 +59,6 @@ import { RemoteNodePairingGate } from './RemoteNodePairingGate'
 const log = Log.tag('RemoteNodeServer')
 
 const DefaultBindHost = '127.0.0.1'
-const DefaultPortStart = 43_180
-const DefaultPortEnd = 43_190
-const DefaultMaxConcurrentInvocations = 4
 /** WebSocket 关闭原因受帧头限制(< 123 字节),超长会被 `ws` 直接抛出。 */
 const MaxCloseReasonLength = 100
 
@@ -153,8 +152,8 @@ export class RemoteNodeServer {
     this.credential = await this.options.credentialStore.load()
     const listener = await listenRemoteNode({
       bindHost: this.options.bindHost ?? DefaultBindHost,
-      portStart: this.options.portStart ?? DefaultPortStart,
-      portEnd: this.options.portEnd ?? DefaultPortEnd,
+      portStart: this.options.portStart ?? RemoteNodeLimits.defaultPortStart,
+      portEnd: this.options.portEnd ?? RemoteNodeLimits.defaultPortEnd,
       onConnection: (socket) => this.accept(socket),
       onNetworkSocket: (socket) => {
         this.networkSockets.add(socket)
@@ -247,7 +246,7 @@ export class RemoteNodeServer {
       activity: this.options.activity,
       timers: this.timers,
       now: this.now,
-      maxConcurrent: this.options.maxConcurrentInvocations ?? DefaultMaxConcurrentInvocations,
+      maxConcurrent: this.options.maxConcurrentInvocations ?? KernelTuning.remoteNodeMaxConcurrentInvocations,
       deliver: (clientId, result) => this.deliver(clientId, result),
     })
   }

@@ -15,11 +15,12 @@ import { SocketKernelTransport } from '../../../src/impl/client/SocketKernelTran
 import { createKernelCallableCapability } from '../../../src/impl/runtime/KernelCallableCapability'
 import { KernelModuleHost } from '../../../src/impl/runtime/KernelModuleHost'
 import { createCapabilityToken } from '../../../src/impl/runtime/KernelModuleKit'
-import { AllowLoadedKernelClientAccessBroker } from '../../../src/impl/serve/DenyAllKernelClientAccessBroker'
-import { KernelDaemonError, KernelLocalDaemon } from '../../../src/impl/serve/KernelLocalDaemon'
+import { AllowLoadedKernelClientAccessBroker } from '../../../src/impl/serve/AllowLoadedKernelClientAccessBroker'
+import { KernelLocalDaemon } from '../../../src/impl/serve/KernelLocalDaemon'
 import { KernelLocalRpcServer } from '../../../src/impl/serve/KernelLocalRpcServer'
 import { KernelService } from '../../../src/impl/serve/KernelService'
 import type { KernelModuleDefinition } from '../../../src/types/abi-module'
+import { KernelClientError } from '../../../src/utils/errors'
 import { createDefaultKernelDaemonPaths } from '../../../src/utils/rpc/descriptor'
 import type { CapabilityCallRequest } from '../../../src/utils/wire/capability'
 import { KernelProtocolVersion } from '../../../src/utils/wire/version'
@@ -210,7 +211,7 @@ describe('Kernel local RPC', () => {
         await connected.client.dispose()
       }
       await expect(secondDaemon.start()).rejects.toBeInstanceOf(
-        KernelDaemonError,
+        KernelClientError,
       )
       expect(second.service.getStatus()).toBe('idle')
     } finally {
@@ -236,7 +237,7 @@ describe('Kernel local RPC', () => {
 
     try {
       await expect(daemon.start()).rejects.toMatchObject({
-        name: 'KernelDaemonError',
+        name: 'KernelClientError',
         code: 'DAEMON_LOCK_FAILED',
       })
       // 目录已存在时 mkdir 的 mode 不生效，所以拒绝之后它仍然是 0755，没有被悄悄改掉。

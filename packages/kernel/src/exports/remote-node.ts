@@ -8,14 +8,11 @@ export type { RemoteNodeFileAuditLogOptions } from '../impl/remote-node/FileRemo
 export { createRemoteNodeFileAuditLog } from '../impl/remote-node/FileRemoteNodeAuditLog'
 export { createRemoteNodeFileCredentialStore } from '../impl/remote-node/FileRemoteNodeServerCredentialStore'
 export type { RemoteNodeCallRunnerOptions } from '../impl/remote-node/RemoteNodeCallRunner'
-export {
-  RemoteNodeCallRunner,
-  RemoteNodeCompletedCallCapacity,
-  RemoteNodeInvocationPool,
-  RemoteNodeResultCache,
-} from '../impl/remote-node/RemoteNodeCallRunner'
+export { RemoteNodeCallRunner } from '../impl/remote-node/RemoteNodeCallRunner'
+export { RemoteNodeInvocationPool } from '../impl/remote-node/RemoteNodeInvocationPool'
 export type { RemoteNodePairingGateOptions } from '../impl/remote-node/RemoteNodePairingGate'
 export { RemoteNodePairingGate } from '../impl/remote-node/RemoteNodePairingGate'
+export { RemoteNodeResultCache } from '../impl/remote-node/RemoteNodeResultCache'
 export { RemoteNodeServer } from '../impl/remote-node/RemoteNodeServer'
 export type {
   RemoteNodeActivityEvent,

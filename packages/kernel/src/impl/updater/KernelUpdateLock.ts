@@ -11,11 +11,13 @@ import { dirname } from 'node:path'
 import { isNotUndefined, isNull, isNumber, isObject, Log } from '@velaros-ai/core'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
-import { KernelUpdateLockError } from '../../utils/errors-updater'
+import { KernelUpdaterErrorCodes } from '../../contract/constants'
+import { KernelUpdaterError } from '../../utils/errors'
 import {
   ignoreMissing,
   isNodeError,
 } from '../../utils/fs'
+import { KernelTuning } from '../../utils/tuning'
 
 const log = Log.tag('KernelUpdateLock')
 
@@ -37,14 +39,12 @@ export interface KernelUpdateLockOptions {
 }
 
 /** 读不出属主时的重读次数与间隔：够覆盖 open→write 这一小段，又不至于把调用方挂住。 */
-const defaultOwnerReadRetries = 5
-const defaultOwnerReadRetryMs = 20
 
 /**
  * Exclusive file lock guarding every mutation of `versions/` and
  * `current.json`, so two products updating the same shared Kernel serialise
  * instead of racing. A lock whose recorded pid is gone is reclaimed; a lock
- * held by a live process raises `KernelUpdateLockError` and changes nothing.
+ * held by a live process raises a KernelUpdaterError（码 UPDATE_LOCK_HELD） and changes nothing.
  */
 export class KernelUpdateLock {
   private released = false
@@ -75,20 +75,22 @@ export class KernelUpdateLock {
         if (!isNodeError(error, 'EEXIST')) throw error
         const owner = await resolveLockOwner(options.lockPath, {
           isAlive,
-          retries: options.ownerReadRetries ?? defaultOwnerReadRetries,
-          retryMs: options.ownerReadRetryMs ?? defaultOwnerReadRetryMs,
+          retries: options.ownerReadRetries ?? KernelTuning.lockOwnerReadRetries,
+          retryMs: options.ownerReadRetryMs ?? KernelTuning.lockOwnerReadRetryMs,
           sleep: options.sleep ?? sleep,
         })
         switch (owner.status) {
           case 'held':
-            throw new KernelUpdateLockError(
+            throw new KernelUpdaterError(
+              KernelUpdaterErrorCodes.updateLockHeld,
               `Kernel 更新锁正被进程 ${owner.pid} 持有`,
               { path: options.lockPath, ownerPid: owner.pid },
             )
           case 'unreadable':
             // 读不出属主：对方很可能刚 open('wx') 还没来得及写 pid。删掉它等于两个进程同时
             // 持锁，所以按「被占用」处理；真是崩溃残留时由人删掉这个文件。
-            throw new KernelUpdateLockError(
+            throw new KernelUpdaterError(
+              KernelUpdaterErrorCodes.updateLockHeld,
               `Kernel 更新锁存在但读不出属主，按被占用处理；若确认没有更新在跑，删掉 ${options.lockPath} 后重试`,
               { path: options.lockPath },
             )
@@ -99,8 +101,9 @@ export class KernelUpdateLock {
       }
     }
 
-    throw new KernelUpdateLockError(
-      'Kernel update lock could not be acquired',
+    throw new KernelUpdaterError(
+      KernelUpdaterErrorCodes.updateLockHeld,
+      '拿不到 Kernel 更新锁',
       { path: options.lockPath },
     )
   }

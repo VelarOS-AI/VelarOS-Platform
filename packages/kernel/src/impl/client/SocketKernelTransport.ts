@@ -28,7 +28,7 @@ import type {
   KernelEventSubscription,
 } from '../../types/client-transport'
 import type { KernelServiceHealth } from '../../types/service-health'
-import { KernelRpcClientError } from '../../utils/errors-client'
+import { fromKernelRpcError,type KernelClientError } from '../../utils/errors'
 import {
   type CapabilityCallRequest,
   type CapabilityCallResponse,
@@ -225,7 +225,7 @@ export class SocketKernelTransport implements KernelClientTransport {
     socket?.destroy()
     connectingSocket?.destroy()
     this.rejectPending(
-      new KernelRpcClientError({
+      fromKernelRpcError({
         code: 'TRANSPORT_CLOSED',
         message: 'Kernel RPC transport is closed',
         retryable: true,
@@ -240,7 +240,7 @@ export class SocketKernelTransport implements KernelClientTransport {
     signal?: AbortSignal,
   ): Promise<unknown> {
     if (this.disposed) {
-      throw new KernelRpcClientError({
+      throw fromKernelRpcError({
         code: 'TRANSPORT_CLOSED',
         message: 'Kernel RPC transport is closed',
         retryable: true,
@@ -275,7 +275,7 @@ export class SocketKernelTransport implements KernelClientTransport {
       } catch {
         this.pending.delete(requestId)
         cleanup()
-        reject(new KernelRpcClientError({
+        reject(fromKernelRpcError({
           code: 'TRANSPORT_WRITE_FAILED',
           message: 'Kernel RPC request could not be sent',
           retryable: true,
@@ -385,7 +385,7 @@ export class SocketKernelTransport implements KernelClientTransport {
     this.pending.delete(response.requestId)
     pending.cleanup()
     if (response.status === 'ok') pending.resolve(response.result)
-    else pending.reject(new KernelRpcClientError(response.error))
+    else pending.reject(fromKernelRpcError(response.error))
   }
 
   private handleEvent(frame: KernelRpcEventFrame): void {
@@ -421,7 +421,7 @@ export class SocketKernelTransport implements KernelClientTransport {
     // 服务端订阅 id 随连接作废，但本地记录留着：下次连上时照原样重建（restoreSubscriptions）。
     this.eventHandlers.clear()
     this.rejectPending(
-      new KernelRpcClientError({
+      fromKernelRpcError({
         code: 'TRANSPORT_DISCONNECTED',
         message: 'Kernel RPC connection closed',
         retryable: true,
@@ -521,8 +521,8 @@ function readSubscriptionId(input: unknown): string {
   throw invalidResponse('Subscription id is missing')
 }
 
-function invalidResponse(message: string): KernelRpcClientError {
-  return new KernelRpcClientError({
+function invalidResponse(message: string): KernelClientError {
+  return fromKernelRpcError({
     code: 'INVALID_RESPONSE',
     message,
     retryable: false,
@@ -538,8 +538,8 @@ function isSignalAborted(signal: LooseOptional<AbortSignal>): boolean {
   return isTrue(signal?.aborted)
 }
 
-function transportClosedError(): KernelRpcClientError {
-  return new KernelRpcClientError({
+function transportClosedError(): KernelClientError {
+  return fromKernelRpcError({
     code: 'TRANSPORT_CLOSED',
     message: 'Kernel RPC transport is closed',
     retryable: true,
@@ -547,8 +547,8 @@ function transportClosedError(): KernelRpcClientError {
   })
 }
 
-function transportConnectError(): KernelRpcClientError {
-  return new KernelRpcClientError({
+function transportConnectError(): KernelClientError {
+  return fromKernelRpcError({
     code: 'TRANSPORT_CONNECT_FAILED',
     message: 'Kernel RPC endpoint is unavailable',
     retryable: true,

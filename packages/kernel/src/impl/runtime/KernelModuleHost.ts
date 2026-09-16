@@ -22,9 +22,9 @@ import {
   type KernelModuleIsolationAdapter,
 } from '../../types/runtime-isolation'
 import {
-  KernelHostError,
-  KernelOperationError,
-  KernelStartupError,
+  KernelError,
+  lifecycleFailure,
+  startupFailure,
   toError,
 } from '../../utils/errors'
 import {
@@ -45,8 +45,8 @@ import {
 import { KernelEventHub } from './KernelEventHub'
 import {
   KernelServiceStore,
-  ScopedKernelServiceResolver,
 } from './KernelServiceStore'
+import { ScopedKernelServiceResolver } from './ScopedKernelServiceResolver'
 
 export type { KernelModuleStatus } from '../../types/abi-module'
 
@@ -151,7 +151,7 @@ export class KernelModuleHost {
 
   public constructor(private readonly options: KernelModuleHostOptions) {
     if (!Number.isInteger(options.apiVersion) || options.apiVersion <= 0) {
-      throw new KernelHostError(
+      throw new KernelError(
         'INVALID_MANIFEST',
         'Kernel host apiVersion must be a positive integer',
       )
@@ -162,7 +162,7 @@ export class KernelModuleHost {
       ?? new InMemoryKernelStateBackend()
     for (const adapter of options.isolationAdapters ?? []) {
       if (this.isolationAdapters.has(adapter.isolation)) {
-        throw new KernelHostError(
+        throw new KernelError(
           'INVALID_MANIFEST',
           `Duplicate isolation adapter for "${adapter.isolation}"`,
         )
@@ -174,7 +174,7 @@ export class KernelModuleHost {
   public registerModule(definition: KernelModuleDefinition): void {
     this.assertNotDisposed()
     if (!isUndefined(this.startPromise)) {
-      throw new KernelHostError(
+      throw new KernelError(
         'MODULE_STATE',
         'Kernel modules must be registered before host start',
       )
@@ -182,7 +182,7 @@ export class KernelModuleHost {
     const manifest = cloneManifest(definition.manifest)
     validateManifest(manifest, this.options.apiVersion)
     if (this.modules.has(manifest.id)) {
-      throw new KernelHostError(
+      throw new KernelError(
         'DUPLICATE_MODULE',
         `Kernel module "${manifest.id}" is already registered`,
         { moduleId: manifest.id },
@@ -236,7 +236,7 @@ export class KernelModuleHost {
         this.failRecord(record, error)
         this.cleanupModule(record)
         const rollbackErrors = await this.rollback(activatedModuleIds)
-        throw new KernelStartupError({
+        throw startupFailure({
           moduleId,
           phase: 'activate',
           cause: error,
@@ -258,7 +258,7 @@ export class KernelModuleHost {
           activatedModuleIds,
           moduleId,
         )
-        throw new KernelStartupError({
+        throw startupFailure({
           moduleId,
           phase: 'ready',
           cause: error,
@@ -284,7 +284,7 @@ export class KernelModuleHost {
     validateManifest(manifest, this.options.apiVersion)
     const previous = this.modules.get(manifest.id)
     if (isUndefined(previous)) {
-      throw new KernelHostError(
+      throw new KernelError(
         'MODULE_STATE',
         `Cannot replace unregistered module "${manifest.id}"`,
         { moduleId: manifest.id },
@@ -295,7 +295,7 @@ export class KernelModuleHost {
       && previous.status !== 'active'
       && previous.status !== 'suspended'
     ) {
-      throw new KernelHostError(
+      throw new KernelError(
         'MODULE_STATE',
         `Kernel module "${manifest.id}" cannot be replaced from state "${previous.status}"`,
         { moduleId: manifest.id },
@@ -351,7 +351,7 @@ export class KernelModuleHost {
         })
       }
       this.cleanupModule(replacement)
-      throw new KernelStartupError({
+      throw startupFailure({
         moduleId: manifest.id,
         phase: failedPhase,
         cause: error,
@@ -405,7 +405,7 @@ export class KernelModuleHost {
     }
 
     if (!isEmpty(failures)) {
-      throw new KernelOperationError('suspend', failures)
+      throw lifecycleFailure('suspend', failures)
     }
   }
 
@@ -455,7 +455,7 @@ export class KernelModuleHost {
     }
 
     if (!isEmpty(failures)) {
-      throw new KernelOperationError('dispose', failures)
+      throw lifecycleFailure('dispose', failures)
     }
   }
 
@@ -673,7 +673,7 @@ export class KernelModuleHost {
 
   private assertNotDisposed(): void {
     if (!this.disposed) return
-    throw new KernelHostError('HOST_DISPOSED', 'Kernel module host is disposed')
+    throw new KernelError('HOST_DISPOSED', 'Kernel module host is disposed')
   }
 
   private assertStartable(): void {
@@ -681,7 +681,7 @@ export class KernelModuleHost {
       (record) => record.status !== 'registered',
     )
     if (isUndefined(invalid)) return
-    throw new KernelHostError(
+    throw new KernelError(
       'MODULE_STATE',
       `Kernel module "${invalid.definition.manifest.id}" cannot start from state "${invalid.status}"`,
       { moduleId: invalid.definition.manifest.id },
@@ -742,7 +742,7 @@ export class KernelModuleHost {
           isUndefined(declaredCapability)
           || declaredCapability.version !== token.version
         ) {
-          throw new KernelHostError(
+          throw new KernelError(
             'UNDECLARED_CAPABILITY_PROVIDER',
             `Module "${manifest.id}" registered undeclared capability "${token.id}" at version "${token.version}"`,
             { moduleId: manifest.id, capabilityId: token.id },
@@ -761,7 +761,7 @@ export class KernelModuleHost {
 
   private assertModuleContextActive(record: ModuleRecord): void {
     if (record.contextActive) return
-    throw new KernelHostError(
+    throw new KernelError(
       'MODULE_STATE',
       `Kernel module context "${record.definition.manifest.id}" is no longer active`,
       { moduleId: record.definition.manifest.id },
@@ -859,7 +859,7 @@ export class KernelModuleHost {
 
     const adapter = this.isolationAdapters.get(isolation)
     if (isUndefined(adapter)) {
-      throw new KernelHostError(
+      throw new KernelError(
         'MISSING_ISOLATION_ADAPTER',
         `Module "${record.definition.manifest.id}" requires a "${isolation}" isolation adapter`,
         { moduleId: record.definition.manifest.id },

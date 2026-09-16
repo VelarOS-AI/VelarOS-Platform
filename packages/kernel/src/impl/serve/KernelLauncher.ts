@@ -3,33 +3,17 @@ import { type ChildProcess, spawn } from 'node:child_process'
 import { isNotNull, isNotUndefined, isObject, isUndefined, Log } from '@velaros-ai/core'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
-import { KernelClientError, KernelRpcClientError } from '../../utils/errors-client'
+import { KernelClientErrorCodes } from '../../contract/constants'
+import { KernelClientError } from '../../utils/errors'
 import {
   createDefaultKernelDaemonPaths,
   type KernelDaemonEndpointDescriptor,
   type KernelDaemonPaths,
 } from '../../utils/rpc/descriptor'
+import { KernelTuning } from '../../utils/tuning'
 import { type ConnectedKernelDaemon,connectToKernelDaemon, discoverKernelDaemon } from '../client/KernelDaemonDirectory'
 
 const log = Log.tag('KernelLauncher')
-
-export type KernelLauncherErrorCode =
-  | 'KERNEL_BINARY_MISSING'
-  | 'KERNEL_START_FAILED'
-  | 'KERNEL_START_TIMEOUT'
-  | 'KERNEL_UNHEALTHY'
-  | 'LAUNCHER_DISPOSED'
-
-export class KernelLauncherError extends Error {
-  public constructor(
-    public readonly code: KernelLauncherErrorCode,
-    message: string,
-    public readonly cause?: unknown,
-  ) {
-    super(message)
-    this.name = 'KernelLauncherError'
-  }
-}
 
 /**
  * Resolves which installed Kernel version the launcher should run.
@@ -72,10 +56,6 @@ export interface KernelLaunchResult extends ConnectedKernelDaemon {
   readonly started: boolean
 }
 
-const defaultStartTimeoutMs = 30_000
-const defaultPollIntervalMs = 100
-const defaultStopGraceMs = 5_000
-const defaultStopKillGraceMs = 2_000
 
 function hasExited(child: ChildProcess): boolean {
   return isNotNull(child.exitCode) || isNotNull(child.signalCode)
@@ -104,11 +84,11 @@ function isProcessAlive(pid: number): boolean {
  * `ensureRunning()` 直接把连接错误抛出去，一次都不 spawn，启动器被一份陈旧文件卡死。
  */
 function meansDaemonIsNotRunning(error: unknown): boolean {
-  if (error instanceof KernelClientError) return error.code === 'DAEMON_NOT_RUNNING'
-    || error.code === 'DAEMON_DESCRIPTOR_INVALID'
-  if (error instanceof KernelRpcClientError) return error.code === 'TRANSPORT_CONNECT_FAILED'
-    || error.code === 'TRANSPORT_DISCONNECTED'
-  return false
+  if (!(error instanceof KernelClientError)) return false
+  return error.code === KernelClientErrorCodes.daemonNotRunning
+    || error.code === KernelClientErrorCodes.daemonDescriptorInvalid
+    || error.code === KernelClientErrorCodes.transportConnectFailed
+    || error.code === KernelClientErrorCodes.transportDisconnected
 }
 
 /**
@@ -133,10 +113,10 @@ export class KernelLauncher {
 
   public constructor(private readonly options: KernelLauncherOptions) {
     this.paths = options.paths ?? createDefaultKernelDaemonPaths()
-    this.startTimeoutMs = options.startTimeoutMs ?? defaultStartTimeoutMs
-    this.pollIntervalMs = options.pollIntervalMs ?? defaultPollIntervalMs
-    this.stopGraceMs = options.stopGraceMs ?? defaultStopGraceMs
-    this.stopKillGraceMs = options.stopKillGraceMs ?? defaultStopKillGraceMs
+    this.startTimeoutMs = options.startTimeoutMs ?? KernelTuning.launcherStartTimeoutMs
+    this.pollIntervalMs = options.pollIntervalMs ?? KernelTuning.launcherPollIntervalMs
+    this.stopGraceMs = options.stopGraceMs ?? KernelTuning.launcherStopGraceMs
+    this.stopKillGraceMs = options.stopKillGraceMs ?? KernelTuning.launcherStopKillGraceMs
     this.spawnProcess = options.spawnProcess ?? spawn
     this.now = options.now ?? Date.now
     this.sleep = options.sleep ?? ((ms) => TimerScope.sleep(ms, { label: 'KernelLauncher.poll' }))
@@ -173,26 +153,26 @@ export class KernelLauncher {
     const child = this.spawnKernel(target)
     this.child = child
 
-    let exitFailure: KernelLauncherError | undefined
+    let exitFailure: KernelClientError | undefined
     child.once('exit', (code, signal) => {
       if (this.child !== child) return
       this.child = undefined
-      exitFailure = new KernelLauncherError(
-        'KERNEL_START_FAILED',
-        `Kernel process exited during startup (${signal ?? `code ${code}`})`,
-      )
+      exitFailure = new KernelClientError({
+        code: KernelClientErrorCodes.kernelStartFailed,
+        message: `Kernel 进程在启动过程中退出（${signal ?? `退出码 ${code}`}）`,
+      })
     })
 
     const deadline = this.now() + this.startTimeoutMs
     while (this.now() < deadline) {
       // 子进程可能在监听器挂载前退出，因此循环内也要检查退出状态。
       if (isUndefined(exitFailure) && hasExited(child)) {
-        exitFailure = new KernelLauncherError(
-          'KERNEL_START_FAILED',
-          `Kernel process exited during startup (${
-            child.signalCode ?? `code ${child.exitCode}`
-          })`,
-        )
+        exitFailure = new KernelClientError({
+          code: KernelClientErrorCodes.kernelStartFailed,
+          message: `Kernel 进程在启动过程中退出（${
+            child.signalCode ?? `退出码 ${child.exitCode}`
+          }）`,
+        })
       }
       if (isNotUndefined(exitFailure)) throw exitFailure
       const connected = await this.tryConnect()
@@ -201,10 +181,10 @@ export class KernelLauncher {
     }
 
     await this.stop()
-    throw new KernelLauncherError(
-      'KERNEL_START_TIMEOUT',
-      `Kernel did not publish an endpoint within ${this.startTimeoutMs}ms`,
-    )
+    throw new KernelClientError({
+      code: KernelClientErrorCodes.kernelStartTimeout,
+      message: `Kernel 在 ${this.startTimeoutMs}ms 内没有发布端点`,
+    })
   }
 
   /** Verifies the connected Kernel reports a usable health status. */
@@ -213,10 +193,10 @@ export class KernelLauncher {
   ): Promise<void> {
     const health = await connection.client.health()
     if (health.status === 'stopped') {
-      throw new KernelLauncherError(
-        'KERNEL_UNHEALTHY',
-        'Kernel reports a stopped runtime',
-      )
+      throw new KernelClientError({
+        code: KernelClientErrorCodes.kernelUnhealthy,
+        message: 'Kernel 自报运行时已停止',
+      })
     }
   }
 
@@ -299,19 +279,19 @@ export class KernelLauncher {
       child.unref()
       return child
     } catch (error) {
-      throw new KernelLauncherError(
-        'KERNEL_START_FAILED',
-        `Kernel ${target.version} could not be started`,
-        error,
-      )
+      throw new KernelClientError({
+        code: KernelClientErrorCodes.kernelStartFailed,
+        message: `Kernel ${target.version} 起不来`,
+        cause: error,
+      })
     }
   }
 
   private assertUsable(): void {
     if (!this.disposed) return
-    throw new KernelLauncherError(
-      'LAUNCHER_DISPOSED',
-      'Disposed Kernel launcher cannot start a Kernel',
-    )
+    throw new KernelClientError({
+      code: KernelClientErrorCodes.launcherDisposed,
+      message: '已回收的 Kernel 启动器不能再启动 Kernel',
+    })
   }
 }

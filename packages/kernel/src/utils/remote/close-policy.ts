@@ -9,19 +9,15 @@
 import { isUndefined } from '@velaros-ai/core'
 
 import {
-  RemoteNodeClientError,
   RemoteNodeClientErrorCodes,
-  RemoteNodeReconnectInitialDelayMs,
-  RemoteNodeReconnectJitterRatio,
-  RemoteNodeReconnectMaxDelayMs,
 } from '../../types/remote-client'
+import { RemoteNodeClientError } from '../errors'
+import { KernelTuning } from '../tuning'
 import {
   RemoteNodeCloseCode,
   type RemoteNodeCloseCodeValue,
 } from '../wire/remote-node'
 
-/** 退避指数上限:500ms << 6 已越过 30s 天花板,再涨只是让数字难看。 */
-const MaxBackoffExponent = 6
 
 export type RemoteNodeCloseAction =
   | { readonly kind: 'reconnect' }
@@ -75,10 +71,9 @@ export function planRemoteNodeCloseAction(
 /** 指数退避 + 抖动:多台 Client 同时掉线时不要在同一毫秒一起回来砸 Node。 */
 export function computeReconnectDelayMs(attempt: number): number {
   const base = Math.min(
-    RemoteNodeReconnectMaxDelayMs,
-    RemoteNodeReconnectInitialDelayMs
-      * 2 ** Math.min(Math.max(attempt, 0), MaxBackoffExponent),
+    KernelTuning.remoteClientReconnectInitialDelayMs
+      * 2 ** Math.min(Math.max(attempt, 0), KernelTuning.remoteClientReconnectMaxExponent),
   )
-  const jitter = base * RemoteNodeReconnectJitterRatio * (Math.random() * 2 - 1)
-  return Math.max(RemoteNodeReconnectInitialDelayMs, Math.round(base + jitter))
+  const jitter = base * KernelTuning.remoteClientReconnectJitterRatio * (Math.random() * 2 - 1)
+  return Math.max(KernelTuning.remoteClientReconnectInitialDelayMs, Math.round(base + jitter))
 }

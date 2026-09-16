@@ -9,7 +9,7 @@ import type {
   KernelModuleIsolation,
 } from '../../src/types/abi-module'
 import type { KernelPermissionBroker } from '../../src/types/abi-permissions'
-import { KernelHostError, KernelStartupError } from '../../src/utils/errors'
+import { KernelError } from '../../src/utils/errors'
 
 interface ValueService {
   read(): string
@@ -166,7 +166,7 @@ describe('KernelModuleHost', () => {
     const secondStart = host.start()
     expect(secondStart).toBe(firstStart)
     expect(() => host.registerModule(moduleDefinition({ id: 'module.late' })))
-      .toThrow(KernelHostError)
+      .toThrow(KernelError)
 
     const firstDispose = host.dispose()
     const secondDispose = host.dispose()
@@ -177,7 +177,7 @@ describe('KernelModuleHost', () => {
     expect(activationCount).toBe(1)
     expect(disposalCount).toBe(1)
     expect(host.getOptionalService(ValueCapability)).toBeUndefined()
-    expect(() => host.start()).toThrow(KernelHostError)
+    expect(() => host.start()).toThrow(KernelError)
   })
 
   test('uses optional capabilities when compatible and ignores them when absent', () => {
@@ -237,6 +237,49 @@ describe('KernelModuleHost', () => {
     expect(host.getOptionalService(ValueCapability)).toBeUndefined()
   })
 
+  test('一个订阅者抛错不连累其余订阅者与发布方', async () => {
+    const received: string[] = []
+    const host = new KernelModuleHost({ apiVersion: 1 })
+    let published = false
+    host.registerModules([
+      moduleDefinition({
+        id: 'module.broken-subscriber',
+        activate(context) {
+          context.events.subscribe('test.changed', () => {
+            throw new Error('订阅者自己炸了')
+          })
+        },
+      }),
+      moduleDefinition({
+        id: 'module.good-subscriber',
+        activate(context) {
+          context.events.subscribe<string>('test.changed', (event) => {
+            received.push(`${event.sourceModuleId}:${event.payload}`)
+          })
+        },
+      }),
+      moduleDefinition({
+        id: 'module.publisher',
+        provides: [ValueCapability],
+        requires: [],
+        activate(context) {
+          context.registerService(ValueCapability, { read: () => 'value' })
+          return {
+            ready: async () => {
+              await context.events.publish('test.changed', 'payload')
+              published = true
+            },
+          }
+        },
+      }),
+    ])
+
+    await host.start()
+    expect(published).toBeTrue()
+    expect(received).toEqual(['module.publisher:payload'])
+    await host.dispose()
+  })
+
   test('rolls a failed ready phase back in reverse dependency order', async () => {
     const disposalOrder: string[] = []
     const host = new KernelModuleHost({ apiVersion: 1 })
@@ -273,8 +316,8 @@ describe('KernelModuleHost', () => {
 
     const failure = await host.start().catch((error: unknown) => error)
 
-    expect(failure).toBeInstanceOf(KernelStartupError)
-    expect((failure as KernelStartupError).phase).toBe('ready')
+    expect(failure).toBeInstanceOf(KernelError)
+    expect((failure as KernelError).details.phase).toBe('ready')
     expect(disposalOrder).toEqual(['module.consumer', 'module.provider'])
     expect(host.getOptionalService(ValueCapability)).toBeUndefined()
     expect(host.getOptionalService(DerivedCapability)).toBeUndefined()
@@ -427,12 +470,12 @@ describe('KernelModuleHost', () => {
 
     const hiddenFailure = await hiddenConsumerHost.start()
       .catch((error: unknown) => error)
-    expect(hiddenFailure).toBeInstanceOf(KernelStartupError)
+    expect(hiddenFailure).toBeInstanceOf(KernelError)
     expect(
-      (hiddenFailure as KernelStartupError).cause,
-    ).toBeInstanceOf(KernelHostError)
+      (hiddenFailure as KernelError).cause,
+    ).toBeInstanceOf(KernelError)
     expect(
-      ((hiddenFailure as KernelStartupError).cause as KernelHostError).code,
+      ((hiddenFailure as KernelError).cause as KernelError).code,
     ).toBe('UNDECLARED_CAPABILITY_ACCESS')
 
     const undeclaredProviderHost = new KernelModuleHost({ apiVersion: 1 })
@@ -446,9 +489,9 @@ describe('KernelModuleHost', () => {
     )
     const providerFailure = await undeclaredProviderHost.start()
       .catch((error: unknown) => error)
-    expect(providerFailure).toBeInstanceOf(KernelStartupError)
+    expect(providerFailure).toBeInstanceOf(KernelError)
     expect(
-      ((providerFailure as KernelStartupError).cause as KernelHostError).code,
+      ((providerFailure as KernelError).cause as KernelError).code,
     ).toBe('UNDECLARED_CAPABILITY_PROVIDER')
 
     const wrongVersionToken = createCapabilityToken<ValueService>(
@@ -470,7 +513,7 @@ describe('KernelModuleHost', () => {
     const wrongVersionFailure = await wrongVersionHost.start()
       .catch((error: unknown) => error)
     expect(
-      ((wrongVersionFailure as KernelStartupError).cause as KernelHostError)
+      ((wrongVersionFailure as KernelError).cause as KernelError)
         .code,
     ).toBe('UNDECLARED_CAPABILITY_PROVIDER')
   })
@@ -528,7 +571,7 @@ describe('KernelModuleHost', () => {
       capturedContext?.registerService(
         ValueCapability,
         { read: () => 'resurrected' },
-      )).toThrow(KernelHostError)
+      )).toThrow(KernelError)
     await host.dispose()
 
     expect(disposeCount).toBe(1)
@@ -572,10 +615,10 @@ describe('KernelModuleHost', () => {
     expect(host.getModule('module.replaceable')?.generation).toBe(2)
     expect(host.getService(ValueCapability).read()).toBe('v2:1')
     expect(oldHandle.isActive()).toBe(false)
-    expect(() => oldHandle.get()).toThrow(KernelHostError)
-    expect(() => oldService.read()).toThrow(KernelHostError)
+    expect(() => oldHandle.get()).toThrow(KernelError)
+    expect(() => oldService.read()).toThrow(KernelError)
     await expect(originalContext!.state.get('counter')).rejects
-      .toBeInstanceOf(KernelHostError)
+      .toBeInstanceOf(KernelError)
   })
 
   test('module permission view cannot name a caller other than itself', async () => {
@@ -719,7 +762,7 @@ describe('KernelModuleHost', () => {
 
     await host.dispose()
     expect(handle.isActive()).toBeFalse()
-    expect(() => service.read()).toThrow(KernelHostError)
+    expect(() => service.read()).toThrow(KernelError)
   })
 
   test('keeps the current graph live when a staged replacement fails', async () => {
@@ -759,7 +802,7 @@ describe('KernelModuleHost', () => {
       }),
     ).catch((error: unknown) => error)
 
-    expect(failure).toBeInstanceOf(KernelStartupError)
+    expect(failure).toBeInstanceOf(KernelError)
     expect(host.getModule('module.atomic-replace')?.generation).toBe(1)
     expect(host.getModule('module.atomic-replace')?.status).toBe('ready')
     expect(host.getService(ValueCapability).read()).toBe('stable')
@@ -769,7 +812,7 @@ describe('KernelModuleHost', () => {
       replacementContext?.registerService(
         ValueCapability,
         { read: () => 'resurrected' },
-      )).toThrow(KernelHostError)
+      )).toThrow(KernelError)
   })
 
   test('rejects service resolution through the wrong capability version', async () => {
@@ -790,7 +833,7 @@ describe('KernelModuleHost', () => {
     )
 
     expect(host.getOptionalService(wrongVersion)).toBeUndefined()
-    expect(() => host.getService(wrongVersion)).toThrow(KernelHostError)
+    expect(() => host.getService(wrongVersion)).toThrow(KernelError)
   })
 
   test('denies permissions by default and binds broker identity in the host', async () => {
@@ -878,9 +921,9 @@ describe('KernelModuleHost', () => {
 
     const missingFailure = await missingAdapterHost.start()
       .catch((error: unknown) => error)
-    expect(missingFailure).toBeInstanceOf(KernelStartupError)
+    expect(missingFailure).toBeInstanceOf(KernelError)
     expect(
-      ((missingFailure as KernelStartupError).cause as KernelHostError).code,
+      ((missingFailure as KernelError).cause as KernelError).code,
     ).toBe('MISSING_ISOLATION_ADAPTER')
     expect(localActivateCalled).toBe(false)
 
@@ -917,13 +960,13 @@ describe('KernelModuleHost', () => {
 
 function expectHostError(
   host: KernelModuleHost,
-  code: KernelHostError['code'],
+  code: KernelError['code'],
 ): void {
   try {
     host.resolvePlan()
     throw new Error('Expected host plan to fail')
   } catch (error) {
-    expect(error).toBeInstanceOf(KernelHostError)
-    expect((error as KernelHostError).code).toBe(code)
+    expect(error).toBeInstanceOf(KernelError)
+    expect((error as KernelError).code).toBe(code)
   }
 }

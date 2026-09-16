@@ -14,7 +14,7 @@ import { SocketKernelTransport } from '../../../src/impl/client/SocketKernelTran
 import { createKernelCallableCapability } from '../../../src/impl/runtime/KernelCallableCapability'
 import { KernelModuleHost } from '../../../src/impl/runtime/KernelModuleHost'
 import { createCapabilityToken } from '../../../src/impl/runtime/KernelModuleKit'
-import { AllowLoadedKernelClientAccessBroker } from '../../../src/impl/serve/DenyAllKernelClientAccessBroker'
+import { AllowLoadedKernelClientAccessBroker } from '../../../src/impl/serve/AllowLoadedKernelClientAccessBroker'
 import { InProcessKernelTransport } from '../../../src/impl/serve/InProcessKernelTransport'
 import { KernelLocalRpcServer } from '../../../src/impl/serve/KernelLocalRpcServer'
 import { installModPackFromDirectory, KernelModLoader } from '../../../src/impl/serve/KernelModLoader'

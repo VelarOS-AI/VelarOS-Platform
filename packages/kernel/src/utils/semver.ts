@@ -6,9 +6,13 @@
 // 宿主的清单校验当场拒绝。
 //
 // 现在以更新器那份为准（预发布低于正式版），并补上 build 元数据：`+build` 合法，且按 SemVer
-// §10「比较时忽略 build」。本模块只抛中立的 {@link SemanticVersionError}，各自的领域错误由
-// 调用方包一层——宿主要 `KernelHostError`，更新器要 `KernelUpdaterError`。
+// §10「比较时忽略 build」。本模块只抛带码的 {@link KernelError}（INVALID_VERSION /
+// INVALID_VERSION_RANGE，原文在 `details.source`），各自的领域说法由调用方按码包一层。
 import { isBlank, isEmpty, isNull, isUndefined } from '@velaros-ai/core'
+
+import { KernelErrorCodes } from '../contract/constants'
+
+import { KernelError } from './errors'
 
 export interface SemanticVersion {
   readonly major: number
@@ -24,18 +28,20 @@ export interface SemanticVersion {
 export const SemanticVersionPattern =
   /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+([0-9A-Za-z.-]+))?$/
 
-export class SemanticVersionError extends Error {
-  public constructor(
-    public readonly kind: 'version' | 'range',
-    public readonly source: string,
-  ) {
-    super(
-      kind === 'version'
-        ? `无效的语义化版本 "${source}"`
-        : `无效的语义化版本范围 "${source}"`,
-    )
-    this.name = 'SemanticVersionError'
-  }
+/** 版本号或版本范围解析不了：带码抛出，原文放在 `details.source`，调用方按码翻译成自己的说法。 */
+function invalidSemanticVersion(
+  kind: 'version' | 'range',
+  source: string,
+): KernelError {
+  return new KernelError(
+    kind === 'version'
+      ? KernelErrorCodes.invalidVersion
+      : KernelErrorCodes.invalidVersionRange,
+    kind === 'version'
+      ? `无效的语义化版本 "${source}"`
+      : `无效的语义化版本范围 "${source}"`,
+    { source },
+  )
 }
 
 export function parseSemanticVersion(
@@ -43,7 +49,7 @@ export function parseSemanticVersion(
   kind: 'version' | 'range' = 'version',
 ): SemanticVersion {
   const match = SemanticVersionPattern.exec(source.trim().replace(/^v/, ''))
-  if (isNull(match)) throw new SemanticVersionError(kind, source)
+  if (isNull(match)) throw invalidSemanticVersion(kind, source)
   // 三个捕获组都是 `\d+`，按构造就是数字；边界只解析一次，调用方直接信任结果。
   return {
     major: Number(match[1]),
@@ -113,7 +119,7 @@ function satisfiesComparator(
   const operators = ['>=', '<=', '>', '<', '='] as const
   const operator = operators.find((candidate) => trimmed.startsWith(candidate))
   const versionText = trimmed.slice(operator?.length ?? 0).trim()
-  if (isEmpty(versionText)) throw new SemanticVersionError('range', comparator)
+  if (isEmpty(versionText)) throw invalidSemanticVersion('range', comparator)
   const comparison = compareParsedSemanticVersions(
     version,
     parseSemanticVersion(versionText, 'range'),

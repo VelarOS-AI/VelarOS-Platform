@@ -3,6 +3,7 @@
 //
 // 角色分工见 `@velaros-ai/kernel/contracts/protocol` 的 remote-node 契约:
 // `./node` 是无头能力提供者(被调),`./client` 是完整宿主侧的 isolation adapter(主调)。
+export { RemoteNodeProgressEventType } from '../contract/constants'
 export type {
   RemoteNodeBindingResolver,
   RemoteNodeIsolationAdapterOptions,
@@ -10,7 +11,6 @@ export type {
 } from '../impl/remote-client/RemoteNodeIsolationAdapter'
 export {
   RemoteNodeIsolationAdapter,
-  RemoteNodeProgressEventType,
 } from '../impl/remote-client/RemoteNodeIsolationAdapter'
 export type {
   RemoteNodeCapabilityBinding,

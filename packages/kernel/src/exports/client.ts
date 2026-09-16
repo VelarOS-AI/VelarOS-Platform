@@ -151,6 +151,8 @@ export * as KernelProtocol from './contracts-protocol'
  *
  * 每个版本只接受完全相同的 wire 版本。协议变化直接提升版本，旧数据不在运行时迁移。
  */
+export type { KernelClientErrorCode } from '../contract/constants'
+export { KernelClientErrorCodes } from '../contract/constants'
 export type { OpenCapabilitySessionInput } from '../impl/client/CapabilitySession'
 export { CapabilitySession, openCapabilitySessionOnTransport } from '../impl/client/CapabilitySession'
 export { KernelClient } from '../impl/client/KernelClient'
@@ -159,13 +161,12 @@ export { connectToKernelDaemon, discoverKernelDaemon } from '../impl/client/Kern
 export type { SocketKernelTransportOptions } from '../impl/client/SocketKernelTransport'
 export { SocketKernelTransport } from '../impl/client/SocketKernelTransport'
 export type {
-  KernelLauncherErrorCode,
   KernelLauncherOptions,
   KernelLaunchResult,
   KernelVersionResolver,
   KernelVersionTarget,
 } from '../impl/serve/KernelLauncher'
-export { KernelLauncher, KernelLauncherError } from '../impl/serve/KernelLauncher'
+export { KernelLauncher } from '../impl/serve/KernelLauncher'
 export type {
   KernelRpcEndpoint,
   TcpKernelRpcEndpoint,
@@ -188,8 +189,7 @@ export type {
   KernelEventSubscription,
 } from '../types/client-transport'
 export type { KernelServiceHealth, KernelServiceModuleHealth } from '../types/service-health'
-export type { KernelCapabilityGrantErrorCode, KernelClientErrorCode } from '../utils/errors-client'
-export { KernelCapabilityGrantErrorCodes, KernelClientError, KernelRpcClientError } from '../utils/errors-client'
+export { KernelClientError } from '../utils/errors'
 export type { KernelDaemonEndpointDescriptor, KernelDaemonPaths } from '../utils/rpc/descriptor'
 export {
   createDefaultKernelDaemonPaths,

@@ -316,7 +316,7 @@ describe('KernelService', () => {
     const service = new KernelService({ host, kernelVersion: '0.1.0' })
 
     const failure = await service.start().catch((error: unknown) => error)
-    expect(failure).toMatchObject({ name: 'KernelStartupError' })
+    expect(failure).toMatchObject({ name: 'KernelError' })
     expect(service.getStatus()).toBe('failed')
 
     // 会话打开与能力调用都不再标「可重试」。
@@ -339,7 +339,7 @@ describe('KernelService', () => {
 
     // 再 start() 说明白「不会重试」，而不是重放同一个启动失败。
     await expect(service.start()).rejects.toMatchObject({
-      name: 'KernelServiceStartFailedError',
+      name: 'KernelError',
       code: 'KERNEL_START_FAILED',
     })
   })

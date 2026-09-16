@@ -1,11 +1,8 @@
 import { describe, expect, test } from 'bun:test'
 
+import { KernelCallErrorCodes } from '../../src/contract/constants'
 import { Kernel } from '../../src/impl/runtime/Kernel'
 import { createKernelCallableCapability } from '../../src/impl/runtime/KernelCallableCapability'
-import {
-  KernelCapabilityPermissionDeniedError,
-  KernelCapabilityUnavailableError,
-} from '../../src/impl/runtime/KernelCapabilityInvoker'
 import { createCapabilityToken } from '../../src/impl/runtime/KernelModuleKit'
 import { defineKernelModule } from '../../src/types/abi-module'
 import type { KernelPermissionBroker } from '../../src/types/abi-permissions'
@@ -97,7 +94,7 @@ describe('Kernel', () => {
         input: {},
         signal: new AbortController().signal,
       }),
-    ).rejects.toBeInstanceOf(KernelCapabilityPermissionDeniedError)
+    ).rejects.toMatchObject({ code: KernelCallErrorCodes.permissionDenied })
     expect(invoked).toBe(0)
   })
 
@@ -138,13 +135,43 @@ describe('Kernel', () => {
         input: {},
         signal: new AbortController().signal,
       }),
-    ).rejects.toBeInstanceOf(KernelCapabilityUnavailableError)
+    ).rejects.toMatchObject({ code: KernelCallErrorCodes.capabilityNotFound })
+  })
+
+  test('把宿主给的调用方归属原样交给授权判定，模块自己伪造不了', async () => {
+    const seen: Array<string | undefined> = []
+    const permissionBroker: KernelPermissionBroker = {
+      request: (request) => {
+        seen.push(request.callerModuleId)
+        return Promise.resolve({ status: 'granted' })
+      },
+    }
+    const kernel = new Kernel({ permissionBroker })
+    kernel.registerModule(valueModule())
+    await kernel.start()
+
+    await kernel.invokeCapability({
+      capabilityId: ValueCapability.id,
+      operation: 'read',
+      input: {},
+      signal: new AbortController().signal,
+      attribution: { callerModuleId: 'shell.chat' },
+    })
+    // 不给归属时显式空着：宿主判不出调用方，就不该按提供方的身份记账。
+    await kernel.invokeCapability({
+      capabilityId: ValueCapability.id,
+      operation: 'read',
+      input: {},
+      signal: new AbortController().signal,
+    })
+
+    expect(seen).toEqual(['shell.chat', undefined])
   })
 
   test('keeps strict lifecycle by default and makes optional-host degradation explicit', async () => {
     const strict = new Kernel()
     strict.registerModule(valueModule({ failReady: true }))
-    await expect(strict.start()).rejects.toThrow('failed during ready')
+    await expect(strict.start()).rejects.toThrow('在 ready 阶段失败')
     expect(strict.getStatus()).toBe('degraded')
 
     const failures: string[] = []
@@ -156,6 +183,6 @@ describe('Kernel', () => {
     await expect(optional.start()).resolves.toBeUndefined()
     expect(optional.getStatus()).toBe('degraded')
     expect(optional.hasCapability(ValueCapability.id)).toBeFalse()
-    expect(failures).toEqual(['start:Kernel module "test.value.module" failed during ready'])
+    expect(failures).toEqual(['start:内核模块 "test.value.module" 在 ready 阶段失败'])
   })
 })

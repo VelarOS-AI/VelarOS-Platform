@@ -13,6 +13,8 @@
 // 由 client 排队与重连吸收,而不是把一张假的能力面留在 Kernel 里。
 import { isNonBlankString, isNull, isPresent, Log } from '@velaros-ai/core'
 
+import { RemoteNodeProgressEventType } from '../../contract/constants'
+import type { KernelCallableCapabilityOperation } from '../../types/abi-callable'
 import type {
   KernelModuleActivateContext,
   KernelModuleDefinition,
@@ -22,15 +24,12 @@ import type {
 } from '../../types/abi-module'
 import type { ScopeRef } from '../../types/abi-references'
 import {
-  RemoteNodeClientError,
   RemoteNodeClientErrorCodes,
 } from '../../types/remote-client'
 import type { KernelModuleIsolationAdapter } from '../../types/runtime-isolation'
-import {
-  createKernelCallableCapability,
-  type KernelCallableCapabilityOperation,
-} from '../runtime/KernelCallableCapability'
-import { KernelCapabilityPermissionDeniedError } from '../runtime/KernelCapabilityInvoker'
+import { RemoteNodeClientError } from '../../utils/errors'
+import { permissionDeniedFailure } from '../../utils/errors'
+import { createKernelCallableCapability } from '../runtime/KernelCallableCapability'
 import { createCapabilityToken } from '../runtime/KernelModuleKit'
 
 import type { RemoteNodeClient } from './RemoteNodeClient'
@@ -38,8 +37,6 @@ import type { RemoteNodeCapabilityBinding } from './RemoteNodeProjection'
 
 const log = Log.tag('RemoteNodeIsolation')
 
-/** 远端长任务的进度事件类型;载荷带本地能力 id,订阅方不必再查映射。 */
-export const RemoteNodeProgressEventType = 'remote-node.progress'
 
 export interface RemoteNodeProgressEvent {
   readonly capabilityId: string
@@ -181,12 +178,12 @@ export class RemoteNodeIsolationAdapter implements KernelModuleIsolationAdapter 
     const permission = isNonBlankString(nodeCode)
       ? nodeCode
       : (declared ?? binding.remoteCapabilityId)
-    return new KernelCapabilityPermissionDeniedError(
-      binding.localCapabilityId,
+    return permissionDeniedFailure({
+      capabilityId: binding.localCapabilityId,
       operation,
       permission,
-      error.message,
-    )
+      reason: error.message,
+    })
   }
 
   private describeHealth(): KernelModuleHealth {

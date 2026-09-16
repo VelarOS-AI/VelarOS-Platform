@@ -21,12 +21,15 @@ import {
 } from '@velaros-ai/core'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
+import { KernelClientErrorCodes } from '../../contract/constants'
 import type { KernelRpcEndpoint } from '../../types/client-endpoint'
+import { KernelClientError } from '../../utils/errors'
 import {
   createDefaultKernelDaemonPaths,
   type KernelDaemonEndpointDescriptor,
   type KernelDaemonPaths,
 } from '../../utils/rpc/descriptor'
+import { KernelTuning } from '../../utils/tuning'
 
 import { KernelLocalRpcServer } from './KernelLocalRpcServer'
 import type { KernelService } from './KernelService'
@@ -37,20 +40,6 @@ export interface KernelLocalDaemonOptions {
   readonly endpoint?: KernelRpcEndpoint
   readonly paths?: KernelDaemonPaths
   readonly service: KernelService
-}
-
-export type KernelDaemonErrorCode =
-  | 'DAEMON_ALREADY_RUNNING'
-  | 'DAEMON_LOCK_FAILED'
-
-export class KernelDaemonError extends Error {
-  public constructor(
-    public readonly code: KernelDaemonErrorCode,
-    message: string,
-  ) {
-    super(message)
-    this.name = 'KernelDaemonError'
-  }
 }
 
 /**
@@ -161,8 +150,6 @@ export class KernelLocalDaemon {
 }
 
 /** 读不出属主时的重读次数与间隔（见 {@link acquireDaemonLock}）。 */
-const lockOwnerReadRetries = 5
-const lockOwnerReadRetryMs = 20
 
 async function acquireDaemonLock(
   lockPath: string,
@@ -184,34 +171,34 @@ async function acquireDaemonLock(
       const ownerPid = await readLockOwnerPidWithRetry(lockPath)
       if (isNotUndefined(ownerPid)) {
         if (isProcessAlive(ownerPid)) {
-          throw new KernelDaemonError(
-            'DAEMON_ALREADY_RUNNING',
-            '本机端点已经被另一个 Kernel 守护进程占用',
-          )
+          throw new KernelClientError({
+            code: KernelClientErrorCodes.daemonAlreadyRunning,
+            message: '本机端点已经被另一个 Kernel 守护进程占用',
+          })
         }
         await unlink(lockPath).catch(ignoreMissing)
         continue
       }
-      throw new KernelDaemonError(
-        'DAEMON_LOCK_FAILED',
-        `Kernel 守护进程锁存在但读不出属主，按被占用处理；若确认没有 Kernel 在跑，删掉 ${lockPath} 后重试`,
-      )
+      throw new KernelClientError({
+        code: KernelClientErrorCodes.daemonLockFailed,
+        message: `Kernel 守护进程锁存在但读不出属主，按被占用处理；若确认没有 Kernel 在跑，删掉 ${lockPath} 后重试`,
+      })
     }
   }
-  throw new KernelDaemonError(
-    'DAEMON_LOCK_FAILED',
-    'Kernel 守护进程锁获取失败',
-  )
+  throw new KernelClientError({
+    code: KernelClientErrorCodes.daemonLockFailed,
+    message: 'Kernel 守护进程锁获取失败',
+  })
 }
 
 async function readLockOwnerPidWithRetry(
   path: string,
 ): Promise<number | undefined> {
-  for (let attempt = 0; attempt <= lockOwnerReadRetries; attempt += 1) {
+  for (let attempt = 0; attempt <= KernelTuning.lockOwnerReadRetries; attempt += 1) {
     const pid = await readLockOwnerPid(path)
     if (isNotUndefined(pid)) return pid
-    if (attempt < lockOwnerReadRetries) {
-      await TimerScope.sleep(lockOwnerReadRetryMs, {
+    if (attempt < KernelTuning.lockOwnerReadRetries) {
+      await TimerScope.sleep(KernelTuning.lockOwnerReadRetryMs, {
         label: 'KernelDaemon.lockOwnerRead',
       })
     }
@@ -233,17 +220,17 @@ async function assertRuntimeDirectoryIsPrivate(directory: string): Promise<void>
   const stats = await stat(directory)
   const uid = process.getuid()
   if (stats.uid !== uid) {
-    throw new KernelDaemonError(
-      'DAEMON_LOCK_FAILED',
-      `Kernel 运行目录 ${directory} 属于 uid ${stats.uid}，不是当前用户（uid ${uid}），拒绝使用`,
-    )
+    throw new KernelClientError({
+      code: KernelClientErrorCodes.daemonLockFailed,
+      message: `Kernel 运行目录 ${directory} 属于 uid ${stats.uid}，不是当前用户（uid ${uid}），拒绝使用`,
+    })
   }
   const groupAndOtherBits = stats.mode & 0o077
   if (groupAndOtherBits !== 0) {
-    throw new KernelDaemonError(
-      'DAEMON_LOCK_FAILED',
-      `Kernel 运行目录 ${directory} 的权限是 ${(stats.mode & 0o777).toString(8)}，对同机其他用户开放，拒绝使用（应为 700）`,
-    )
+    throw new KernelClientError({
+      code: KernelClientErrorCodes.daemonLockFailed,
+      message: `Kernel 运行目录 ${directory} 的权限是 ${(stats.mode & 0o777).toString(8)}，对同机其他用户开放，拒绝使用（应为 700）`,
+    })
   }
 }
 

@@ -4,9 +4,8 @@ import type { CapabilityToken } from '../../types/abi-capability'
 import type {
   KernelRegistration,
   KernelServiceHandle,
-  KernelServiceResolver,
 } from '../../types/abi-module'
-import { KernelHostError } from '../../utils/errors'
+import { KernelError } from '../../utils/errors'
 
 interface ServiceEntry {
   readonly ownerModuleId: string
@@ -66,7 +65,7 @@ export class KernelServiceStore {
     let proxy: TService | undefined
     const assertActive = () => {
       if (this.activeEntries.get(token.id) === entry) return
-      throw new KernelHostError(
+      throw new KernelError(
         'MODULE_STATE',
         `Service handle for capability "${token.id}" from generation ${entry.generation} is stale`,
         {
@@ -133,7 +132,7 @@ export class KernelServiceStore {
         || entry.generation === generation,
     )
     if (isNotUndefined(duplicate)) {
-      throw new KernelHostError(
+      throw new KernelError(
         'DUPLICATE_SERVICE',
         `A service is already registered for capability "${token.id}"`,
         { moduleId: ownerModuleId, capabilityId: token.id },
@@ -143,7 +142,7 @@ export class KernelServiceStore {
       isNull(service)
       || (!isObject(service) && !isNull(service) && !isFunction(service))
     ) {
-      throw new KernelHostError(
+      throw new KernelError(
         'INVALID_SERVICE',
         `Service for capability "${token.id}" must be an object`,
         { moduleId: ownerModuleId, capabilityId: token.id },
@@ -162,7 +161,7 @@ export class KernelServiceStore {
       if (this.activeEntries.has(token.id)) {
         entries.delete(entry)
         if (entries.size === 0) this.entries.delete(token.id)
-        throw new KernelHostError(
+        throw new KernelError(
           'DUPLICATE_SERVICE',
           `An active service is already registered for capability "${token.id}"`,
           { moduleId: ownerModuleId, capabilityId: token.id },
@@ -228,72 +227,20 @@ export class KernelServiceStore {
   private requireEntry(token: CapabilityToken): ServiceEntry {
     const entry = this.activeEntries.get(token.id)
     if (isUndefined(entry)) {
-      throw new KernelHostError(
+      throw new KernelError(
         'MISSING_SERVICE',
         `No service is registered for capability "${token.id}"`,
         { capabilityId: token.id },
       )
     }
     if (entry.capabilityVersion === token.version) return entry
-    throw new KernelHostError(
+    throw new KernelError(
       'VERSION_MISMATCH',
       `Capability "${token.id}" is active at version "${entry.capabilityVersion}", not "${token.version}"`,
       {
         moduleId: entry.ownerModuleId,
         capabilityId: token.id,
       },
-    )
-  }
-}
-
-export class ScopedKernelServiceResolver implements KernelServiceResolver {
-  private readonly allowedCapabilityIds: ReadonlySet<string>
-
-  public constructor(
-    private readonly moduleId: string,
-    allowedCapabilityIds: Iterable<string>,
-    private readonly store: KernelServiceStore,
-    private readonly assertActive: () => void,
-  ) {
-    this.allowedCapabilityIds = new Set(allowedCapabilityIds)
-  }
-
-  public has(token: CapabilityToken): boolean {
-    this.assertActive()
-    this.assertDeclared(token.id)
-    return this.store.has(token)
-  }
-
-  public get<TService extends object>(
-    token: CapabilityToken<TService>,
-  ): TService {
-    this.assertActive()
-    this.assertDeclared(token.id)
-    return this.store.get(token)
-  }
-
-  public getHandle<TService extends object>(
-    token: CapabilityToken<TService>,
-  ): KernelServiceHandle<TService> {
-    this.assertActive()
-    this.assertDeclared(token.id)
-    return this.store.getHandle(token)
-  }
-
-  public getOptional<TService extends object>(
-    token: CapabilityToken<TService>,
-  ): TService | undefined {
-    this.assertActive()
-    this.assertDeclared(token.id)
-    return this.store.getOptional(token)
-  }
-
-  private assertDeclared(capabilityId: string): void {
-    if (this.allowedCapabilityIds.has(capabilityId)) return
-    throw new KernelHostError(
-      'UNDECLARED_CAPABILITY_ACCESS',
-      `Module "${this.moduleId}" accessed undeclared capability "${capabilityId}"`,
-      { moduleId: this.moduleId, capabilityId },
     )
   }
 }

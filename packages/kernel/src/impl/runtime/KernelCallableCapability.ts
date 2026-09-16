@@ -1,94 +1,22 @@
-import { isBlank, isFunction, isObject, isUndefined } from '@velaros-ai/core'
+import { isBlank, isUndefined } from '@velaros-ai/core'
 
+import type {
+  KernelCallableCapabilityOperation,
+  KernelCallableCapabilityService,
+  KernelCapabilityOperationMetadata,
+} from '../../types/abi-callable'
 import type { ScopeRef } from '../../types/abi-references.js'
-
-export interface KernelCapabilityOperationContext {
-  readonly operation: string
-  readonly scope?: ScopeRef
-  readonly input: unknown
-}
-
-export type KernelCapabilityOperationReason =
-  | string
-  | ((context: KernelCapabilityOperationContext) => string)
-
-/** Permission policy declared by one callable capability operation. */
-export interface KernelCapabilityOperationMetadata {
-  readonly permissions: readonly string[]
-  readonly reason?: KernelCapabilityOperationReason
-}
-
-export interface KernelCallableCapabilityOperation {
-  readonly metadata: KernelCapabilityOperationMetadata
-  invoke(
-    scope: LooseOptional<ScopeRef>,
-    input: unknown,
-    signal: AbortSignal,
-  ): unknown | Promise<unknown>
-}
+import { unknownOperationFailure } from '../../utils/errors'
+import { normalizeKernelOperationMetadata } from '../../utils/runtime/callable'
 
 /**
- * Product-neutral call surface used by the Kernel service boundary.
+ * 一件能力的操作表。
  *
- * The service resolves operation metadata before requesting permissions.
- * Returning `undefined` therefore denies unknown operations before invocation.
+ * 表在构造时就闭合：只有静态声明过的自有操作能被调到，继承来的属性与任何别的字符串一律
+ * 在求权限之前失败。中止信号在进 provider 之前查一次，免得已经取消的调用还产生副作用。
  */
-export interface KernelCallableCapabilityService {
-  getOperationMetadata(
-    operation: string,
-  ): KernelCapabilityOperationMetadata | undefined
-  invoke(
-    operation: string,
-    scope: LooseOptional<ScopeRef>,
-    input: unknown,
-    signal: AbortSignal,
-  ): unknown | Promise<unknown>
-}
-
-export class UnknownKernelCapabilityOperationError extends Error {
-  public constructor(
-    public readonly capabilityId?: string,
-    public readonly operation?: string,
-  ) {
-    super(
-      isUndefined(capabilityId) || isUndefined(operation)
-        ? '该 Kernel 能力没有登记这个操作，已在求权限之前拒绝。'
-        : `Kernel 能力 "${capabilityId}" 没有登记操作 "${operation}"，已在求权限之前拒绝。`,
-    )
-    this.name = 'UnknownKernelCapabilityOperationError'
-  }
-}
-
-function normalizeMetadata(
-  operation: string,
-  metadata: KernelCapabilityOperationMetadata,
-): KernelCapabilityOperationMetadata {
-  const permissions = [...metadata.permissions]
-  if (permissions.some((permission) => isBlank(permission.trim()))) {
-    throw new Error(
-      `Callable capability operation "${operation}" declares an empty permission`,
-    )
-  }
-  if (new Set(permissions).size !== permissions.length) {
-    throw new Error(
-      `Callable capability operation "${operation}" declares duplicate permissions`,
-    )
-  }
-
-  return Object.freeze({
-    permissions: Object.freeze(permissions),
-    reason: metadata.reason,
-  })
-}
-
-/**
- * Builds a closed operation table. Only own, statically declared operations can
- * be invoked; inherited properties and unknown strings fail closed.
- */
-export function createKernelCallableCapability(
-  operations: Readonly<Record<string, KernelCallableCapabilityOperation>>,
-): KernelCallableCapabilityService {
-  const operationTable = new Map<
+export class KernelCallableCapability implements KernelCallableCapabilityService {
+  private readonly operations = new Map<
     string,
     {
       readonly metadata: KernelCapabilityOperationMetadata
@@ -96,58 +24,53 @@ export function createKernelCallableCapability(
     }
   >()
 
-  for (const [operation, definition] of Object.entries(operations)) {
-    if (isBlank(operation.trim())) {
-      throw new Error('Callable capability operation name must not be empty')
+  public constructor(
+    operations: Readonly<Record<string, KernelCallableCapabilityOperation>>,
+  ) {
+    for (const [operation, definition] of Object.entries(operations)) {
+      if (isBlank(operation.trim())) {
+        throw new Error('可调用能力的操作名不能为空')
+      }
+      this.operations.set(
+        operation,
+        Object.freeze({
+          metadata: normalizeKernelOperationMetadata(operation, definition.metadata),
+          invoke: definition.invoke,
+        }),
+      )
     }
-    operationTable.set(
-      operation,
-      Object.freeze({
-        metadata: normalizeMetadata(operation, definition.metadata),
-        invoke: definition.invoke,
-      }),
-    )
   }
 
-  return Object.freeze({
-    getOperationMetadata(
-      operation: string,
-    ): KernelCapabilityOperationMetadata | undefined {
-      return operationTable.get(operation)?.metadata
-    },
-    invoke(
-      operation: string,
-      scope: LooseOptional<ScopeRef>,
-      input: unknown,
-      signal: AbortSignal,
-    ): unknown | Promise<unknown> {
-      const definition = operationTable.get(operation)
-      if (isUndefined(definition)) {
-        throw new UnknownKernelCapabilityOperationError()
-      }
-      if (signal.aborted) {
-        throw new DOMException('Capability invocation aborted', 'AbortError')
-      }
-      return definition.invoke(scope, input, signal)
-    },
-  })
+  /**
+   * 取一条操作的权限声明；没登记过就返回 undefined，调用方据此在求权限之前拒绝。
+   *
+   * 写成实例字段而不是原型方法：能力包普遍用 `{ ...callable, 自己的方法 }` 把可调用面并进
+   * 自己的服务对象，展开只带得走自有属性；挂在原型上会让那一圈包当场丢掉这两个方法。
+   */
+  public readonly getOperationMetadata = (
+    operation: string,
+  ): KernelCapabilityOperationMetadata | undefined =>
+    this.operations.get(operation)?.metadata
+
+  /** 执行一条已登记的操作；未知操作与已中止的调用都不会进到 provider 代码。 */
+  public readonly invoke = (
+    operation: string,
+    scope: LooseOptional<ScopeRef>,
+    input: unknown,
+    signal: AbortSignal,
+  ): unknown | Promise<unknown> => {
+    const definition = this.operations.get(operation)
+    if (isUndefined(definition)) throw unknownOperationFailure()
+    if (signal.aborted) {
+      throw new DOMException('能力调用已被中止', 'AbortError')
+    }
+    return definition.invoke(scope, input, signal)
+  }
 }
 
-export function isKernelCallableCapabilityService(
-  value: unknown,
-): value is KernelCallableCapabilityService {
-  return (
-    isObject(value)
-    && isFunction((Reflect.get(value, 'getOperationMetadata')))
-    && isFunction((Reflect.get(value, 'invoke')))
-  )
-}
-
-export function resolveKernelCapabilityOperationReason(
-  metadata: KernelCapabilityOperationMetadata,
-  context: KernelCapabilityOperationContext,
-): string | undefined {
-  return isFunction(metadata.reason)
-    ? metadata.reason(context)
-    : metadata.reason
+/** 建一件可调用能力（模块 SDK 的入口，能力包写内核模块时用它）。 */
+export function createKernelCallableCapability(
+  operations: Readonly<Record<string, KernelCallableCapabilityOperation>>,
+): KernelCallableCapabilityService {
+  return new KernelCallableCapability(operations)
 }

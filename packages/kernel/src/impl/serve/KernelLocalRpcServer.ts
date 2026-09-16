@@ -27,6 +27,7 @@ import {
   Log,
 } from '@velaros-ai/core'
 
+import { KernelClientErrorCodes, KernelErrorCodes, KernelRpcLimits } from '../../contract/constants'
 import type { KernelRegistration } from '../../types/abi-module'
 import type { KernelRpcEndpoint } from '../../types/client-endpoint'
 import type {
@@ -36,10 +37,9 @@ import type {
   KernelRpcServerFrame,
   KernelRpcSuccess,
 } from '../../types/client-rpc-frames'
-import { KernelModCatalogError } from '../../types/serve-mod-catalog'
+import { KernelClientError, KernelError } from '../../utils/errors'
 import {
   decodeKernelRpcRequest,
-  KernelRpcProtocolError,
   requireNonEmptyString,
   requireRecord,
   rpcFailure,
@@ -62,8 +62,6 @@ import { KernelProtocolVersion } from '../../utils/wire/version'
 import { CapabilitySessionLedger } from './CapabilitySessionLedger'
 import {
   type KernelService,
-  KernelServiceLifecycleError,
-  KernelServiceStartFailedError,
 } from './KernelService'
 
 const log = Log.tag('KernelLocalRpcServer')
@@ -83,7 +81,6 @@ interface ConnectionContext {
   buffer: string
 }
 
-const defaultMaxFrameBytes = 4 * 1024 * 1024
 
 export function createDefaultKernelRpcEndpoint(
   name = 'velaros-kernel',
@@ -114,7 +111,7 @@ export class KernelLocalRpcServer {
     if (options.authToken.length < 32) {
       throw new Error('Kernel RPC auth token must contain at least 32 characters')
     }
-    this.maxFrameBytes = options.maxFrameBytes ?? defaultMaxFrameBytes
+    this.maxFrameBytes = options.maxFrameBytes ?? KernelRpcLimits.maxFrameBytes
     if (!Number.isInteger(this.maxFrameBytes) || this.maxFrameBytes <= 0) {
       throw new Error('maxFrameBytes must be a positive integer')
     }
@@ -351,10 +348,10 @@ export class KernelLocalRpcServer {
       protocolVersion: KernelProtocolVersion,
     })
     if (!parsed.success) {
-      throw new KernelRpcProtocolError(
-        'INVALID_PARAMS',
-        'Mods list request does not match kernel protocol v2',
-      )
+      throw new KernelClientError({
+        code: 'INVALID_PARAMS',
+        message: 'Mods list request does not match kernel protocol v2',
+      })
     }
     return {
       protocolVersion: KernelProtocolVersion,
@@ -365,10 +362,10 @@ export class KernelLocalRpcServer {
   private async setModEnabled(params: unknown) {
     const parsed = ModsSetEnabledRequestSchema.safeParse(params)
     if (!parsed.success) {
-      throw new KernelRpcProtocolError(
-        'INVALID_PARAMS',
-        'Mods setEnabled request does not match kernel protocol v2',
-      )
+      throw new KernelClientError({
+        code: 'INVALID_PARAMS',
+        message: 'Mods setEnabled request does not match kernel protocol v2',
+      })
     }
     const result = await this.options.service.setModEnabled(
       parsed.data.id,
@@ -383,10 +380,10 @@ export class KernelLocalRpcServer {
   private async installModFromDirectory(params: unknown) {
     const parsed = ModsInstallFromDirectoryRequestSchema.safeParse(params)
     if (!parsed.success) {
-      throw new KernelRpcProtocolError(
-        'INVALID_PARAMS',
-        'Mods installFromDirectory request does not match kernel protocol v2',
-      )
+      throw new KernelClientError({
+        code: 'INVALID_PARAMS',
+        message: 'Mods installFromDirectory request does not match kernel protocol v2',
+      })
     }
     const result = await this.options.service.installModFromDirectory(
       parsed.data.directory,
@@ -420,10 +417,10 @@ export class KernelLocalRpcServer {
   ): CapabilitySessionCloseResponse {
     const parsed = CapabilitySessionCloseRequestSchema.safeParse(params)
     if (!parsed.success) {
-      throw new KernelRpcProtocolError(
-        'INVALID_PARAMS',
-        'Capability session close request does not match kernel protocol v2',
-      )
+      throw new KernelClientError({
+        code: 'INVALID_PARAMS',
+        message: 'Capability session close request does not match kernel protocol v2',
+      })
     }
     return {
       protocolVersion: KernelProtocolVersion,
@@ -527,20 +524,19 @@ function toRpcFailure(
   requestId: string,
   error: unknown,
 ): KernelRpcFailure {
-  if (error instanceof KernelRpcProtocolError) return rpcFailure(requestId, error.code, error.message)
-  if (error instanceof KernelServiceLifecycleError) return rpcFailure(requestId, error.code, error.message, true)
-  if (error instanceof KernelModCatalogError) return rpcFailure(
+  if (error instanceof KernelClientError) return rpcFailure(requestId, error.code, error.message)
+  if (error instanceof KernelError) return rpcFailure(
     requestId,
     error.code,
     error.message,
-    false,
-    error.details,
+    // 「还没启动」是等一等就好的状态；别的带码失败重试也是同一个结果。
+    error.code === KernelErrorCodes.kernelNotStarted,
+    error.details as Readonly<Record<string, unknown>>,
   )
-  if (error instanceof KernelServiceStartFailedError) return rpcFailure(requestId, error.code, error.message)
   return rpcFailure(
     requestId,
-    'INTERNAL_ERROR',
-    'Kernel RPC request failed',
+    KernelClientErrorCodes.internalError,
+    'Kernel RPC 请求失败',
     true,
   )
 }

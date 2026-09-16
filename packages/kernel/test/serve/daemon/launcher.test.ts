@@ -9,11 +9,11 @@ import { connectToKernelDaemon } from '../../../src/impl/client/KernelDaemonDire
 import { KernelModuleHost } from '../../../src/impl/runtime/KernelModuleHost'
 import {
   KernelLauncher,
-  KernelLauncherError,
   type KernelVersionTarget,
 } from '../../../src/impl/serve/KernelLauncher'
 import { KernelLocalDaemon } from '../../../src/impl/serve/KernelLocalDaemon'
 import { KernelService } from '../../../src/impl/serve/KernelService'
+import { KernelClientError } from '../../../src/utils/errors'
 import {
   createDefaultKernelDaemonPaths,
   type KernelDaemonPaths,
@@ -137,7 +137,7 @@ describe('KernelLauncher', () => {
     })
 
     const failure = await launcher.ensureRunning().catch((error: unknown) => error)
-    expect(failure).toBeInstanceOf(KernelLauncherError)
+    expect(failure).toBeInstanceOf(KernelClientError)
     expect(failure).toMatchObject({ code: 'KERNEL_START_TIMEOUT' })
     expect(child.killed).toBe(true)
     await launcher.dispose()

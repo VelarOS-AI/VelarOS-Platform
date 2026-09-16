@@ -30,14 +30,9 @@ export type {
   RemoteNodeUnsubscribe,
 } from '../types/remote-client'
 export {
-  RemoteNodeClientDeadlineGraceMs,
-  RemoteNodeClientDefaultDeadlineMs,
-  RemoteNodeClientError,
   RemoteNodeClientErrorCodes,
-  RemoteNodeReconnectInitialDelayMs,
-  RemoteNodeReconnectJitterRatio,
-  RemoteNodeReconnectMaxDelayMs,
 } from '../types/remote-client'
+export { RemoteNodeClientError } from '../utils/errors'
 export type { RemoteNodeCloseAction } from '../utils/remote/close-policy'
 export { computeReconnectDelayMs, planRemoteNodeCloseAction } from '../utils/remote/close-policy'
 export type { RemoteNodeHandshakeInput, RemoteNodeHandshakeStep } from '../utils/remote/handshake'

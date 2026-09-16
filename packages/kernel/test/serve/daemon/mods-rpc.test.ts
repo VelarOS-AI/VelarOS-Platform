@@ -179,7 +179,7 @@ async function expectRpcFailure(
   })
   try {
     await expect(send(transport)).rejects.toMatchObject({
-      name: 'KernelRpcClientError',
+      name: 'KernelClientError',
       rpcError: expected,
     })
   } finally {

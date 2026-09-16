@@ -1,9 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 
-import {
-  createKernelCallableCapability,
-  UnknownKernelCapabilityOperationError,
-} from '../../src/impl/runtime/KernelCallableCapability'
+import { KernelCallErrorCodes } from '../../src/contract/constants'
+import { createKernelCallableCapability } from '../../src/impl/runtime/KernelCallableCapability'
 
 describe('callable capability contract', () => {
   test('exposes immutable per-operation metadata and invokes declared operations', async () => {
@@ -47,13 +45,15 @@ describe('callable capability contract', () => {
         undefined,
         {},
         new AbortController().signal,
-      )).toThrow(UnknownKernelCapabilityOperationError)
+      )).toThrow(
+      expect.objectContaining({ code: KernelCallErrorCodes.operationNotFound }),
+    )
 
     const controller = new AbortController()
     controller.abort()
     expect(() =>
       service.invoke('ping', undefined, {}, controller.signal)).toThrow(
-        'Capability invocation aborted',
+        '能力调用已被中止',
       )
   })
 
@@ -64,7 +64,7 @@ describe('callable capability contract', () => {
           metadata: { permissions: ['fs:read', 'fs:read'] },
           invoke: () => undefined,
         },
-      })).toThrow('duplicate permissions')
+      })).toThrow('重复的权限名')
 
     expect(() =>
       createKernelCallableCapability({
@@ -72,6 +72,6 @@ describe('callable capability contract', () => {
           metadata: { permissions: [''] },
           invoke: () => undefined,
         },
-      })).toThrow('empty permission')
+      })).toThrow('空的权限名')
   })
 })

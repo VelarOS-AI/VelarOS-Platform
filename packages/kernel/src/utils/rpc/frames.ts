@@ -6,27 +6,17 @@ import {
   KernelRpcMethods,
   type KernelRpcRequest,
 } from '../../types/client-rpc-frames'
-
-
-export class KernelRpcProtocolError extends Error {
-  public constructor(
-    public readonly code: string,
-    message: string,
-  ) {
-    super(message)
-    this.name = 'KernelRpcProtocolError'
-  }
-}
+import { KernelClientError } from '../errors'
 
 const methodSet: ReadonlySet<string> = new Set(KernelRpcMethods)
 
 export function decodeKernelRpcRequest(input: unknown): KernelRpcRequest {
   const record = requireRecord(input, 'RPC frame must be an object')
   if (record.type !== 'request') {
-    throw new KernelRpcProtocolError(
-      'INVALID_RPC_FRAME',
-      'RPC frame type must be "request"',
-    )
+    throw new KernelClientError({
+      code: 'INVALID_RPC_FRAME',
+      message: 'RPC frame type must be "request"',
+    })
   }
   const requestId = requireNonEmptyString(record.requestId, 'requestId')
   const method = requireNonEmptyString(record.method, 'method')
@@ -34,10 +24,10 @@ export function decodeKernelRpcRequest(input: unknown): KernelRpcRequest {
     ? record.authToken
     : ''
   if (!methodSet.has(method)) {
-    throw new KernelRpcProtocolError(
-      'METHOD_NOT_FOUND',
-      `RPC method "${method}" is not available`,
-    )
+    throw new KernelClientError({
+      code: 'METHOD_NOT_FOUND',
+      message: `RPC method "${method}" is not available`,
+    })
   }
   return {
     type: 'request',
@@ -53,7 +43,7 @@ export function requireRecord(
   message = 'RPC params must be an object',
 ): Readonly<Record<string, unknown>> {
   if (isPlainObject(input)) return input as Readonly<Record<string, unknown>>
-  throw new KernelRpcProtocolError('INVALID_PARAMS', message)
+  throw new KernelClientError({ code: 'INVALID_PARAMS', message })
 }
 
 export function requireNonEmptyString(
@@ -61,10 +51,10 @@ export function requireNonEmptyString(
   field: string,
 ): string {
   if (isString(input) && !isBlank(input.trim())) return input
-  throw new KernelRpcProtocolError(
-    'INVALID_PARAMS',
-    `RPC field "${field}" must be a non-empty string`,
-  )
+  throw new KernelClientError({
+    code: 'INVALID_PARAMS',
+    message: `RPC field "${field}" must be a non-empty string`,
+  })
 }
 
 export function rpcFailure(

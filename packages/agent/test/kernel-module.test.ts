@@ -157,7 +157,7 @@ describe('agent kernel module', () => {
         {},
         invocationController.signal,
       )
-    ).toThrow('Capability invocation aborted')
+    ).toThrow('能力调用已被中止')
     expect(executed).toBe(false)
   })
 })
