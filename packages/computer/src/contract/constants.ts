@@ -5,10 +5,9 @@
  * 不 import 任何东西、不用 Node 专属类型，整个文件随 `./contracts` 入口出包。
  */
 
-/** 六个桌面控制工具的 canonical 名字。 */
+/** 五个桌面控制工具的 canonical 名字。 */
 export const ComputerToolNames = Object.freeze({
   screenshot: 'computer:screenshot',
-  screenSize: 'computer:screen_size',
   move: 'computer:move',
   click: 'computer:click',
   type: 'computer:type',
@@ -17,7 +16,7 @@ export const ComputerToolNames = Object.freeze({
 
 export type ComputerToolName = (typeof ComputerToolNames)[keyof typeof ComputerToolNames]
 
-/** 六个工具共用的职责类别：桌面控制整组默认关闭，要用得显式打开。 */
+/** 五个工具共用的职责类别：桌面控制整组默认关闭，要用得显式打开。 */
 export const ComputerToolCategoryId = 'computer-control' as const
 
 /** 桌面控制能力服务在内核里的身份。 */
@@ -27,7 +26,7 @@ export const ComputerCapabilityId = 'velaros.computer' as const
 export const ComputerKernelModuleId = 'velaros.computer.sidecar' as const
 
 /** 内核模块清单里的版本号；宿主的安装器按它判断随包 helper 资产要不要重装。 */
-export const ComputerKernelModuleVersion = '0.2.8' as const
+export const ComputerKernelModuleVersion = '0.3.0' as const
 
 /**
  * 随插件分发的桌面控制平台包在磁盘上的布局。
@@ -56,10 +55,6 @@ export const ComputerOperationMetadata = Object.freeze({
     permissions: Object.freeze(['screen:capture']),
     reason: '观察桌面画面（截图与屏幕几何）。',
   }),
-  'computer:screen_size': Object.freeze({
-    permissions: Object.freeze(['screen:capture']),
-    reason: '观察桌面画面（截图与屏幕几何）。',
-  }),
   'computer:move': Object.freeze({
     permissions: Object.freeze(['input:control']),
     reason: '控制桌面输入（鼠标与键盘）。',
@@ -79,20 +74,6 @@ export const ComputerOperationMetadata = Object.freeze({
 } as const)
 
 export type ComputerOperation = keyof typeof ComputerOperationMetadata
-
-/**
- * 工具名到内核操作名的映射。内核已改成按工具名登记操作，两边逐一相同，这张表只为按它路由的老宿主留着。
- *
- * @deprecated 直接用工具名调内核操作；这张表在入口收口那一轮删除。
- */
-export const ComputerToolOperations = Object.freeze({
-  'computer:screenshot': 'computer:screenshot',
-  'computer:screen_size': 'computer:screen_size',
-  'computer:move': 'computer:move',
-  'computer:click': 'computer:click',
-  'computer:type': 'computer:type',
-  'computer:key': 'computer:key',
-} as const)
 
 /**
  * 桌面控制对外承诺的错误语义。

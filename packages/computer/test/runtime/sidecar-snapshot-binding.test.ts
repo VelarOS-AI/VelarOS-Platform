@@ -5,8 +5,8 @@ import type {
   ComputerHelperRequest,
   ComputerHelperResponse,
   ComputerSidecarProcess,
-} from '../../src/runtime'
-import { ComputerSidecarManager } from '../../src/runtime'
+} from '../../src/index'
+import { createComputerRuntime } from '../../src/index'
 
 class FakeOutput {
   private readonly listeners: Array<(chunk: Buffer | string) => void> = []
@@ -52,7 +52,7 @@ function createManager(
   respond: (request: ComputerHelperRequest) => ComputerHelperResponse,
 ) {
   let process: FakeProcess | undefined
-  const manager = new ComputerSidecarManager({
+  const manager = createComputerRuntime({
     resolveHelper: () => ({
       pythonCommand: 'python',
       helperScript: '/computer/helper.py',
@@ -89,7 +89,7 @@ describe('computer sidecar screenshot binding', () => {
     }))
 
     try {
-      await harness.manager.leftClick(120, 40, {
+      await harness.manager.click(120, 40, {
         coordinateSpace: 'primary-display',
         snapshotId: 'screen_test_snapshot_01',
       })
@@ -121,7 +121,7 @@ describe('computer sidecar screenshot binding', () => {
 
     try {
       await expect(
-        harness.manager.leftClick(120, 40, {
+        harness.manager.click(120, 40, {
           coordinateSpace: 'primary-display',
           snapshotId: 'screen_test_snapshot_01',
         })
@@ -149,7 +149,7 @@ describe('computer sidecar screenshot binding', () => {
     try {
       await expect(
         // 协议违规是调用方造出来的：全局坐标不许带 snapshotId，类型层面就拦着，这里故意绕过去看 helper 的裁决。
-        harness.manager.leftClick(120, 40, {
+        harness.manager.click(120, 40, {
           coordinateSpace: 'global',
           snapshotId: 'screen_test_snapshot_01',
         } as unknown as ComputerClickOptions)

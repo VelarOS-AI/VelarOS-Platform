@@ -4,8 +4,8 @@ import { join } from 'node:path'
 
 import { afterEach, describe, expect, test } from 'bun:test'
 
-import type { ComputerResourcePort } from '../../src/runtime'
-import { createComputerHelperLocator } from '../../src/runtime'
+import type { ComputerResourcePort } from '../../src/index'
+import { createComputerHelperLocator } from '../../src/index'
 
 const HelperScriptNames: Partial<Record<NodeJS.Platform, string>> = {
   darwin: 'mac_helper.py',

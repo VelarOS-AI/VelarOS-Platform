@@ -20,6 +20,7 @@ import type {
   ComputerClickResult,
   ComputerHelperLaunchSpec,
   ComputerKeyResult,
+  ComputerMoveOptions,
   ComputerMoveResult,
   ComputerScreenshot,
   ComputerScreenSize,
@@ -45,12 +46,17 @@ export interface ComputerToolContext {
 export interface ComputerToolComputerApi {
   /** 探测桌面控制是否可用（含操作系统权限），永不抛错，一切失败都在结果里。 */
   ensureAvailable: () => Promise<ComputerAvailability>
-  /** 主显示器的逻辑几何；主屏局部坐标换算成全局坐标要用它的原点。 */
-  screenSize: () => Promise<ComputerScreenSize>
   /** 截取主显示器，始终按逻辑分辨率，保证图上量出的像素与点击坐标 1:1。 */
   screenshot: () => Promise<ComputerScreenshot>
-  /** 把指针移动到虚拟桌面的全局逻辑坐标，不点击。 */
-  mouseMove: (x: number, y: number) => Promise<ComputerMoveResult>
+  /**
+   * 移动指针，不点击。与点击同一套坐标契约：主屏坐标必须带上给出这组坐标的那次截图的
+   * snapshotId，运行时在真正移动之前再校验一次绑定，布局变了就拒绝。
+   */
+  mouseMove: (
+    x: number,
+    y: number,
+    options?: ComputerMoveOptions
+  ) => Promise<ComputerMoveResult>
   /**
    * 在指定坐标空间点击。主屏坐标必须带上给出这组坐标的那次截图的 snapshotId，
    * 运行时在真正按下之前再校验一次绑定，布局变了就拒绝。
@@ -65,20 +71,6 @@ export interface ComputerToolComputerApi {
   /** 按下一个键或组合键（例如 `cmd+a`、`enter`）。 */
   key: (keys: string) => Promise<ComputerKeyResult>
 }
-
-/**
- * 宿主端口的旧名字。
- *
- * @deprecated 用 `ComputerToolComputerApi`；这个别名在入口收口那一轮删除。
- */
-export type ToolComputerApi = ComputerToolComputerApi
-
-/**
- * 工具上下文的旧名字。
- *
- * @deprecated 用 `ComputerToolContext`；这个别名在入口收口那一轮删除。
- */
-export type ToolContext = ComputerToolContext
 
 /**
  * 上下文解析器：内核按工具名调用时，先向宿主要一份工具上下文。
@@ -153,13 +145,6 @@ export interface ComputerHelperLocatorOptions {
   resources?: ComputerResourcePort
 }
 
-/**
- * helper 定位选项的旧名字。
- *
- * @deprecated 用 `ComputerHelperLocatorOptions`；这个别名在入口收口那一轮删除。
- */
-export type ComputerHelperResolverOptions = ComputerHelperLocatorOptions
-
 /** 宿主可以登记的资源 id，目前只有桌面控制插件自己。 */
 export type ComputerResourceId = 'computeruse'
 
@@ -200,14 +185,18 @@ export interface ComputerRuntimePort {
   isReady(): boolean
   /** 探测可用性，永不抛错。 */
   ensureAvailable(): Promise<ComputerAvailability>
-  /** 主显示器的逻辑几何。 */
+  /** 主显示器的逻辑几何；模型面不再有这个操作，宿主自己的界面还要用。 */
   screenSize(): Promise<ComputerScreenSize>
   /** 截取主显示器。 */
   screenshot(): Promise<ComputerScreenshot>
-  /** 把指针移动到全局逻辑坐标。 */
-  mouseMove(x: number, y: number): Promise<ComputerMoveResult>
-  /** 在指定坐标空间点击；主屏坐标要带截图绑定。 */
-  leftClick(
+  /** 在指定坐标空间移动指针；主屏坐标要带截图绑定。 */
+  mouseMove(
+    x: number,
+    y: number,
+    options?: ComputerMoveOptions,
+  ): Promise<ComputerMoveResult>
+  /** 在指定坐标空间点击；主屏坐标要带截图绑定。按哪个键由 `options.button` 决定，不只是左键。 */
+  click(
     x: number,
     y: number,
     options?: ComputerClickOptions,

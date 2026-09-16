@@ -10,23 +10,7 @@
     "requiredModelInputModalities": [
       "image"
     ],
-    "description": "描述：截取桌面主屏幕，用于定位原生应用 UI。\n\n适合：\n- 执行桌面点击/输入前确认界面并获取坐标。\n\n禁止：\n- 网页内容用 browser 工具，不要用桌面截图替代。\n\n用法：\n- 无需参数；返回的 snapshotId 要原样传给随后基于该截图坐标执行的 computer:click。\n\n示例：\n- 调用参数示例：{}。\n\n注意：\n- 返回屏幕几何，并把截图作为图片直接呈现给模型（base64 不进文本，避免上下文膨胀）。\n- 截图为主显示器局部逻辑坐标；图上量出的像素可直接用于 computer:click，同时必须携带本次返回的 snapshotId。\n- 点击前 helper 会校验 snapshotId 和当前主屏布局；主屏切换、分辨率、缩放或原点变化时会拒绝旧坐标并要求重新截图。",
-    "schema": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "properties": {},
-      "type": "object"
-    }
-  },
-  {
-    "key": "computer:screen_size",
-    "name": "computer:screen_size",
-    "category": "computer-control",
-    "role": "inspect",
-    "permissions": [
-      "screen:capture"
-    ],
-    "requiredModelInputModalities": null,
-    "description": "描述：查询主屏幕逻辑尺寸与缩放。\n\n适合：\n- 点击前需要屏幕宽高、缩放或原点。\n\n禁止：\n- 定位 UI 用 computer:screenshot，不要用它替代。\n\n用法：\n- 无需参数。\n\n示例：\n- 调用参数示例：{}。\n\n注意：\n- 返回逻辑宽高、scaleFactor 与原点。",
+    "description": "描述：截取桌面主屏幕，用于定位原生应用 UI。\n\n适合：\n- 执行桌面点击/输入前确认界面并获取坐标。\n\n禁止：\n- 网页内容用 browser 工具，不要用桌面截图替代。\n\n用法：\n- 无需参数；返回的 snapshotId 要原样传给随后基于该截图坐标执行的 computer:move 与 computer:click。\n\n示例：\n- 调用参数示例：{}。\n\n注意：\n- 返回屏幕几何与 snapshotId，截图本身作为图片交给你。\n- 截图为主显示器局部逻辑坐标；图上量出的像素可直接用于 computer:move、computer:click，同时必须携带本次返回的 snapshotId。\n- 动作执行前 helper 会校验 snapshotId 和当前主屏布局；主屏切换、分辨率、缩放或原点变化时会拒绝旧坐标并要求重新截图。",
     "schema": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {},
@@ -42,16 +26,24 @@
       "input:control"
     ],
     "requiredModelInputModalities": null,
-    "description": "描述：移动鼠标到屏幕坐标（不点击）。\n\n适合：\n- 需要悬停某处但不点击。\n\n禁止：\n- 点击用 computer:click。\n\n用法：\n- 截图定位传 x、y 即可；只有显式使用虚拟桌面全局坐标时传 coordinateSpace=global。\n\n示例：\n- 调用参数示例：{\"x\":640,\"y\":400}。\n\n注意：\n- 启用 Computer Use 即视为授权，执行不再逐次确认；仅受系统权限限制。",
+    "description": "描述：移动鼠标到屏幕坐标（不点击）。\n\n适合：\n- 需要悬停某处但不点击。\n\n禁止：\n- 点击用 computer:click；不要省略或复用其他截图的 snapshotId。\n\n用法：\n- 移动到截图内位置：传 x、y 和同一次 computer:screenshot 返回的 snapshotId。\n- 显式全局坐标传 coordinateSpace=global，且不要传 snapshotId。\n\n示例：\n- 调用参数示例：{\"x\":640,\"y\":400,\"snapshotId\":\"screen_example_snapshot_01\"}。\n\n注意：\n- helper 会在真实移动前校验截图绑定；主屏或布局变化后旧 snapshotId 会被拒绝，请重新截图。",
     "schema": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "anyOf": [
         {
+          "additionalProperties": false,
           "properties": {
             "coordinateSpace": {
               "const": "primary-display",
               "default": "primary-display",
               "description": "描述：默认 primary-display：坐标相对 computer:screenshot 左上角。",
+              "type": "string"
+            },
+            "snapshotId": {
+              "description": "描述：computer:screenshot 返回的不透明 snapshotId；必须原样传回。",
+              "maxLength": 128,
+              "minLength": 8,
+              "pattern": "^[A-Za-z0-9_-]+$",
               "type": "string"
             },
             "x": {
@@ -69,11 +61,13 @@
           },
           "required": [
             "x",
-            "y"
+            "y",
+            "snapshotId"
           ],
           "type": "object"
         },
         {
+          "additionalProperties": false,
           "properties": {
             "coordinateSpace": {
               "const": "global",
@@ -112,7 +106,7 @@
       "input:control"
     ],
     "requiredModelInputModalities": null,
-    "description": "描述：在屏幕坐标点击桌面或原生应用。\n\n适合：\n- 点击桌面按钮、菜单、输入框等元素。\n\n禁止：\n- 网页内点击用 browser 工具；不要省略或复用其他截图的 snapshotId。\n\n用法：\n- 点击截图内位置：传 x、y 和同一次 computer:screenshot 返回的 snapshotId。\n- 可选 button 和 count（双击传 2）；显式全局坐标传 coordinateSpace=global，且不要传 snapshotId。\n\n示例：\n- 调用参数示例：{\"x\":756,\"y\":342,\"snapshotId\":\"screen_example_snapshot_01\"}。\n\n注意：\n- helper 会在真实点击前校验截图绑定；主屏或布局变化后旧 snapshotId 会被拒绝，请重新截图。\n- 启用 Computer Use 即视为授权，执行不再逐次确认；仅受系统权限限制。",
+    "description": "描述：在屏幕坐标点击桌面或原生应用。\n\n适合：\n- 点击桌面按钮、菜单、输入框等元素。\n\n禁止：\n- 网页内点击用 browser 工具；不要省略或复用其他截图的 snapshotId。\n\n用法：\n- 点击截图内位置：传 x、y 和同一次 computer:screenshot 返回的 snapshotId。\n- 可选 button 和 count（双击传 2）；显式全局坐标传 coordinateSpace=global，且不要传 snapshotId。\n\n示例：\n- 调用参数示例：{\"x\":756,\"y\":342,\"snapshotId\":\"screen_example_snapshot_01\"}。\n\n注意：\n- helper 会在真实点击前校验截图绑定；主屏或布局变化后旧 snapshotId 会被拒绝，请重新截图。",
     "schema": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "anyOf": [
@@ -222,7 +216,7 @@
       "input:control"
     ],
     "requiredModelInputModalities": null,
-    "description": "描述：在当前焦点处输入文本。\n\n适合：\n- 向已聚焦的输入框/编辑器输入文字。\n\n禁止：\n- 组合键用 computer:key。\n\n用法：\n- 先点击获取焦点，再传 text。\n\n示例：\n- 调用参数示例：{\"text\":\"hello world\"}。\n\n注意：\n- 启用 Computer Use 即视为授权，执行不再逐次确认；仅受系统权限限制。",
+    "description": "描述：在当前焦点处输入文本。\n\n适合：\n- 向已聚焦的输入框/编辑器输入文字。\n\n禁止：\n- 组合键用 computer:key。\n\n用法：\n- 先点击获取焦点，再传 text。\n\n示例：\n- 调用参数示例：{\"text\":\"hello world\"}。",
     "schema": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -248,7 +242,7 @@
       "input:control"
     ],
     "requiredModelInputModalities": null,
-    "description": "描述：按下按键或组合键。\n\n适合：\n- 发送 Enter、Esc、Tab 或 cmd/ctrl 快捷键。\n\n禁止：\n- 普通文本用 computer:type。\n\n用法：\n- 传按键序列，用 + 连接。\n\n示例：\n- 调用参数示例：{\"keys\":\"enter\"}。\n- 调用参数示例：{\"keys\":\"cmd+a\"}。\n\n注意：\n- 启用 Computer Use 即视为授权，执行不再逐次确认；仅受系统权限限制。",
+    "description": "描述：按下按键或组合键。\n\n适合：\n- 发送 Enter、Esc、Tab 或 cmd/ctrl 快捷键。\n\n禁止：\n- 普通文本用 computer:type。\n\n用法：\n- 传按键序列，用 + 连接。\n\n示例：\n- 调用参数示例：{\"keys\":\"enter\"}。\n- 调用参数示例：{\"keys\":\"cmd+a\"}。",
     "schema": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {

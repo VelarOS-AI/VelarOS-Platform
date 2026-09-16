@@ -47,11 +47,11 @@ export const CapabilityOwners = [
       {
         directory: 'computer',
         name: '@velaros-ai/computer',
-        entrySubpaths: ['./runtime', './tools'],
+        entrySubpaths: ['.', './contracts'],
         sourceRoots: ['contract', 'types', 'impl', 'utils', 'exports'],
         electronRoots: [],
         schemaExports: ['computerTools'],
-        schemaEntry: 'dist/tools.js',
+        schemaEntry: 'dist/index.js',
       },
     ],
   },

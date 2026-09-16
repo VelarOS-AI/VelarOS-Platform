@@ -119,30 +119,3 @@ export function createComputerHelperLocator(
 ): ComputerHelperLocatorApi {
   return new ComputerHelperLocator(options)
 }
-
-/**
- * 进程级缺省定位器：只认平台约定的资源根，不知道宿主登记了什么。
- *
- * @deprecated 用 `createComputerHelperLocator({ resources })` 拿一份自己的；这个缺省实例在入口收口那一轮删除。
- */
-export const computerHelperResolver: ComputerHelperLocatorApi = createComputerHelperLocator()
-
-/**
- * 解析当前平台的 helper 脚本和解释器（尊重停用开关）。
- *
- * @deprecated 用 `createComputerHelperLocator(options).resolve()`；这个函数在入口收口那一轮删除。
- */
-export function resolveComputerHelper(
-  options: ComputerHelperLocatorOptions = {}
-): Nullable<ComputerHelperLaunchSpec> {
-  return createComputerHelperLocator(options).resolve()
-}
-
-/**
- * 随 `@velaros-ai/computer` 发布的 helper 资产目录，宿主的显式安装器用它取源。
- *
- * @deprecated 用 `createComputerHelperLocator().bundledSourceRoot()`；这个函数在入口收口那一轮删除。
- */
-export function resolveBundledComputerRuntimeSourceRoot(): string {
-  return bundledRuntimeSourceRoot()
-}

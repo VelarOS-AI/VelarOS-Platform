@@ -245,7 +245,7 @@ void describe('workbench, desktop and capability rows', () => {
     assert.equal(target('system:terminate-task', { taskId: 'task-abc' }), 'task-abc')
     assert.equal(target('computer:click', { x: 756, y: 342 }), '756, 342')
     assert.equal(target('computer:key', { keys: 'cmd+a' }), 'cmd+a')
-    assert.equal(target('computer:screen_size', {}, { width: 1440, height: 900 }), '1440×900')
+    assert.equal(target('computer:screenshot', {}, { width: 1440, height: 900 }), '1440×900')
     assert.equal(target('office:convert_pdf_to_word', { inputPath: 'paper.pdf', outputPath: 'paper.docx' }), 'paper.pdf → paper.docx')
     assert.equal(target('office:create_word_document', { outputPath: 'report.docx', title: '季度报告', content: '#' }), 'report.docx')
     assert.equal(target('memory:get', { id: 'project:/repo::entries/a.md' }, { memory: { title: '回复风格' } }), '回复风格')

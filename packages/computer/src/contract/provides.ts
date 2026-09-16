@@ -21,7 +21,7 @@ export type VelaTool<TInput extends Record<string, unknown> = Record<string, unk
   ToolContractRuntimeSpec<TInput, ComputerToolContext, unknown, ToolPermission>
 
 /**
- * 桌面控制的六个模型面工具，按工具名索引，实例是 `computerTools`。
+ * 桌面控制的五个模型面工具，按工具名索引，实例是 `computerTools`。
  * 集合层面不区分各工具的入参类型：宿主拿模型给的入参先用该工具的 schema 严格校验，再调它的 execute。
  */
 export type ComputerToolCollection = Readonly<Record<ComputerToolName, VelaTool<any>>>
@@ -34,13 +34,6 @@ export type ComputerToolCollection = Readonly<Record<ComputerToolName, VelaTool<
  */
 export interface ComputerCapabilityService
   extends ComputerRuntimePort, KernelCallableCapabilityService {
-  /** 六个工具的只读视图，给只想读工具说明的宿主用。 */
+  /** 五个工具的只读视图，给只想读工具说明的宿主用。 */
   readonly tools: ComputerToolCollection
 }
-
-/**
- * 能力服务的旧名字。
- *
- * @deprecated 用 `ComputerCapabilityService`；这个别名在入口收口那一轮删除。
- */
-export type ComputerRuntimeCapabilityService = ComputerCapabilityService

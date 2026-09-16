@@ -1,16 +1,15 @@
 import type { ComputerToolContext } from '../contract/requires.js'
 import type {
   ComputerKeyResult,
-  ComputerScreenSize,
   ComputerTypeResult,
 } from '../types/computer.js'
 import type { ComputerClickInput, ComputerPointInput } from '../types/tool.js'
 import { requireComputerAvailable } from '../utils/availability.js'
 import {
+  actionPointFromResult,
   clickOptionsFromInput,
-  clickPointFromResult,
+  moveOptionsFromInput,
   projectComputerPointResult,
-  resolveComputerPoint,
 } from '../utils/coordinates.js'
 
 /**
@@ -22,9 +21,7 @@ import {
 export interface ComputerInputOperationsApi {
   /** 截主屏：base64 提成模型可见图片，其余几何字段原样返回。 */
   screenshot(ctx: ComputerToolContext): Promise<object>
-  /** 读主屏的逻辑尺寸、缩放与原点。 */
-  screenSize(ctx: ComputerToolContext): Promise<ComputerScreenSize>
-  /** 移动指针：主屏坐标按当前屏幕几何换算成全局坐标，越界就拒绝。 */
+  /** 移动指针：主屏坐标连同截图绑定一起交给运行时，由 helper 在移动前再校验一次。 */
   move(input: ComputerPointInput, ctx: ComputerToolContext): Promise<object>
   /** 点击：主屏坐标连同截图绑定一起交给运行时，由 helper 在按下前再校验一次。 */
   click(input: ComputerClickInput, ctx: ComputerToolContext): Promise<object>
@@ -50,21 +47,14 @@ export class ComputerInputOperations implements ComputerInputOperationsApi {
     return { ...geometry, format, modelImage: { data: base64, mediaType: `image/${format}` as const } }
   }
 
-  public async screenSize(ctx: ComputerToolContext): Promise<ComputerScreenSize> {
-    ctx.abortSignal.throwIfAborted()
-    await requireComputerAvailable(ctx)
-    return ctx.computer.screenSize()
-  }
-
   public async move(
     input: ComputerPointInput,
     ctx: ComputerToolContext
   ): Promise<object> {
     ctx.abortSignal.throwIfAborted()
     await requireComputerAvailable(ctx)
-    const point = await resolveComputerPoint(input, ctx)
-    const result = await ctx.computer.mouseMove(point.x, point.y)
-    return projectComputerPointResult(result, point)
+    const result = await ctx.computer.mouseMove(input.x, input.y, moveOptionsFromInput(input))
+    return projectComputerPointResult(result, actionPointFromResult(input, result))
   }
 
   public async click(
@@ -74,7 +64,7 @@ export class ComputerInputOperations implements ComputerInputOperationsApi {
     ctx.abortSignal.throwIfAborted()
     await requireComputerAvailable(ctx)
     const result = await ctx.computer.click(input.x, input.y, clickOptionsFromInput(input))
-    return projectComputerPointResult(result, clickPointFromResult(input, result))
+    return projectComputerPointResult(result, actionPointFromResult(input, result))
   }
 
   public async typeText(text: string, ctx: ComputerToolContext): Promise<ComputerTypeResult> {

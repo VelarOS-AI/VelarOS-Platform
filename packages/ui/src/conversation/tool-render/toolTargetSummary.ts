@@ -881,7 +881,6 @@ const ToolTargetReaders: Readonly<Record<string, ToolTargetReader>> = {
   'computer:type': readTypedText,
   'computer:key': readKeys,
   'computer:screenshot': readScreenSize,
-  'computer:screen_size': readScreenSize,
   'system:processes': readSystemProcesses,
   'system:list-tasks': readTaskId,
   'system:terminate-task': readTaskId,

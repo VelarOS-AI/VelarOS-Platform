@@ -1,7 +1,7 @@
 /**
  * 模型面逐字节快照。
  *
- * 冻的是模型真正看到的那几样：六个工具的顺序与名字、类别、角色、权限、要求的模型输入模态、
+ * 冻的是模型真正看到的那几样：五个工具的顺序与名字、类别、角色、权限、要求的模型输入模态、
  * 渲染后的完整工具说明，以及入参 schema 的 JSON（每个参数的说明就在里面）。
  * `check:capabilities-schemas` 只核对 schema 生成得出来，不守字节；结构改造期间靠这条测试证明
  * 挪文件、抽常量没有动模型面——任何一个字节变了它就红。
@@ -14,7 +14,7 @@ import { join } from 'node:path'
 import { describe, expect, test } from 'bun:test'
 import { z } from 'zod'
 
-import { computerTools } from '../src/tools'
+import { computerTools } from '../src/index'
 
 /** 递归按键名排序，让快照与对象字面量里键的书写顺序无关。 */
 function sortDeep(value: unknown): unknown {
@@ -44,7 +44,7 @@ function renderToolSurface(): string {
 }
 
 describe('computer 工具的模型面', () => {
-  test('六个工具的说明与入参 schema 逐字节不变', () => {
+  test('五个工具的说明与入参 schema 逐字节不变', () => {
     const expected = readFileSync(join(import.meta.dir, 'tool-surface-snapshot.json'), 'utf8')
 
     expect(renderToolSurface()).toBe(expected)

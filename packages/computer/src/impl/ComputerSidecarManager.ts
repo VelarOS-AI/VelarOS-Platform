@@ -14,6 +14,7 @@ import type {
   ComputerClickResult,
   ComputerHelperLaunchSpec,
   ComputerKeyResult,
+  ComputerMoveOptions,
   ComputerMoveResult,
   ComputerPermissionStatus,
   ComputerScreenshot,
@@ -46,10 +47,13 @@ export interface ComputerRuntimeApi {
   screenSize(): Promise<ComputerScreenSize>
   /** 截取主显示器，始终按逻辑分辨率，保证图上量出的像素与点击坐标 1:1。 */
   screenshot(): Promise<ComputerScreenshot>
-  /** 把指针移动到虚拟桌面的全局逻辑坐标；`durationMs` 给需要平滑移动的宿主用。 */
-  mouseMove(x: number, y: number, options?: { durationMs?: number }): Promise<ComputerMoveResult>
-  /** 在指定坐标空间点击；主屏坐标要带截图绑定，helper 在按下前再校验一次。 */
-  leftClick(x: number, y: number, options?: ComputerClickOptions): Promise<ComputerClickResult>
+  /**
+   * 在指定坐标空间移动指针；主屏坐标要带截图绑定，helper 在移动前再校验一次。
+   * `durationMs` 给需要平滑移动的宿主用。
+   */
+  mouseMove(x: number, y: number, options?: ComputerMoveOptions): Promise<ComputerMoveResult>
+  /** 在指定坐标空间点击；主屏坐标要带截图绑定，helper 在按下前再校验一次。按哪个键由 `options.button` 决定。 */
+  click(x: number, y: number, options?: ComputerClickOptions): Promise<ComputerClickResult>
   /** 在当前焦点处原样输入文本。 */
   typeText(text: string): Promise<ComputerTypeResult>
   /** 按下一个键或组合键。 */
@@ -202,12 +206,12 @@ export class ComputerSidecarManager implements ComputerRuntimeApi {
   public async mouseMove(
     x: number,
     y: number,
-    options: { durationMs?: number } = {}
+    options: ComputerMoveOptions = {}
   ): Promise<ComputerMoveResult> {
     return this.request<ComputerMoveResult>('mouse_move', { x, y, ...options })
   }
 
-  public async leftClick(
+  public async click(
     x: number,
     y: number,
     options: ComputerClickOptions = {}

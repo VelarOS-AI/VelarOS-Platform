@@ -38,10 +38,13 @@ export interface ComputerScreenshot {
   scaleFactor: number
 }
 
-/** 指针移动后落在的全局坐标。 */
+/** 指针移动后落在的全局坐标，以及主屏坐标移动时的显示器与截图绑定。 */
 export interface ComputerMoveResult {
   x: number
   y: number
+  coordinateSpace?: ComputerCoordinateSpace
+  displayId?: number
+  snapshotId?: string
 }
 
 /** 点击结果：落点、按键、连击次数，以及主屏坐标点击时的显示器与截图绑定。 */
@@ -81,6 +84,29 @@ export interface ComputerPrimaryDisplayClickOptions extends ComputerClickModifie
 export type ComputerClickOptions =
   | ComputerGlobalClickOptions
   | ComputerPrimaryDisplayClickOptions
+
+/** 两种坐标空间共用的移动修饰：走多久（需要平滑移动的宿主用）。 */
+export interface ComputerMoveModifiers {
+  durationMs?: number
+}
+
+/** 全局坐标移动的选项：不带截图绑定。 */
+export interface ComputerGlobalMoveOptions extends ComputerMoveModifiers {
+  /** 省略时仍按全局坐标解释，直接持有运行时的调用方因此不受影响。 */
+  coordinateSpace?: 'global'
+  snapshotId?: never
+}
+
+/** 主屏截图局部坐标移动的选项：与点击同一套，必须带上那次截图的绑定标识。 */
+export interface ComputerPrimaryDisplayMoveOptions extends ComputerMoveModifiers {
+  coordinateSpace: 'primary-display'
+  /** 提供 x、y 的那次截图返回的不透明标识。 */
+  snapshotId: string
+}
+
+export type ComputerMoveOptions =
+  | ComputerGlobalMoveOptions
+  | ComputerPrimaryDisplayMoveOptions
 
 /** 输入文本的结果：实际输入了多少个字符。 */
 export interface ComputerTypeResult {

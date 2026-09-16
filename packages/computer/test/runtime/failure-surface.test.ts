@@ -7,12 +7,8 @@ import {
   ComputerHelperErrorCodes,
   ComputerResourceLayout,
 } from '../../src/contracts'
-import {
-  ComputerSidecarManager,
-  createComputerHelperLocator,
-  resolveBundledComputerRuntimeSourceRoot,
-} from '../../src/runtime'
-import { decodeComputerResponse } from '../../src/runtime'
+import { createComputerHelperLocator, createComputerRuntime } from '../../src/index'
+import { decodeComputerResponse } from '../../src/utils/protocol'
 
 const HelperScriptNames: Partial<Record<NodeJS.Platform, string>> = {
   darwin: 'mac_helper.py',
@@ -22,7 +18,7 @@ const HelperScriptNames: Partial<Record<NodeJS.Platform, string>> = {
 
 describe('桌面控制的失败面', () => {
   test('helper 没装时的可用性结果是中文，且原因是 helper-missing', async () => {
-    const manager = new ComputerSidecarManager({ resolveHelper: () => null })
+    const manager = createComputerRuntime({ resolveHelper: () => null })
 
     try {
       const availability = await manager.ensureAvailable()
@@ -35,7 +31,7 @@ describe('桌面控制的失败面', () => {
   })
 
   test('释放之后的调用报中文，错误码不变', async () => {
-    const manager = new ComputerSidecarManager({ resolveHelper: () => null })
+    const manager = createComputerRuntime({ resolveHelper: () => null })
     manager.dispose()
 
     await expect(manager.screenSize()).rejects.toMatchObject({
@@ -72,7 +68,7 @@ describe('桌面控制的失败面', () => {
   })
 
   test('随包 helper 资产目录真的存在，并且装着本平台的脚本', () => {
-    const root = resolveBundledComputerRuntimeSourceRoot()
+    const root = createComputerHelperLocator().bundledSourceRoot()
 
     expect(root.endsWith(ComputerResourceLayout.bundledRuntimeDirectory)).toBe(true)
     expect(existsSync(join(root, 'mac_helper.py'))).toBe(true)

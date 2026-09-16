@@ -608,7 +608,7 @@ export const GovernedModules = [
     hostPort: 'ComputerToolComputerApi',
     hostPortField: 'computer',
     layers: [
-      // 工具：六个桌面控制工具的定义、分组与挂载
+      // 工具：五个桌面控制工具的定义、分组与挂载
       ['ComputerTools.ts'],
       // 工具执行：可用性门禁、坐标解析、结果投影，经宿主端口 ctx.computer
       ['ComputerInputOperations.ts'],
@@ -618,11 +618,9 @@ export const GovernedModules = [
       ['ComputerHelperLocator.ts'],
     ],
     toolDefiner: 'defineComputerTool',
-    // 卡片与不变量登记是入口收口那一轮的事，这三份现在还不存在，照样登记，燃尽表里看得到
     card: 'MODULE.md',
     invariants: 'spec/invariants.md',
     acceptance: 'spec/acceptance.test.ts',
-    status: 'migrating',
   },
 ]
 

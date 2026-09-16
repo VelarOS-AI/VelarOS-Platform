@@ -41,10 +41,10 @@ class ComputerHelperError(Exception):
         self.code = code
 
 
-def parse_click_coordinate_binding(
+def parse_pointer_coordinate_binding(
     payload: "dict[str, Any]",
 ) -> "tuple[str, Any]":
-    """Validate the coordinate-space/snapshot discriminant shared by every helper."""
+    """Validate the coordinate-space/snapshot discriminant shared by move and click."""
     # Only omission preserves the legacy global-coordinate behavior. Treating other
     # falsy values (None, False, 0, or "") as global would let a malformed request
     # bypass the screenshot binding and turn local screenshot coordinates into a

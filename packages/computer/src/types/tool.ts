@@ -7,12 +7,20 @@ import type { ComputerToolContext } from '../contract/requires.js'
 
 import type { ComputerCoordinateSpace } from './computer.js'
 
-/** `computer:move` 的入参：一个点，外加它属于哪个坐标空间。 */
-export interface ComputerPointInput extends Record<string, unknown> {
+/** `computer:move` 的入参：与点击同一套坐标契约，主屏坐标必须带截图绑定，全局坐标必须不带。 */
+export type ComputerPointInput = Record<string, unknown> & {
   x: number
   y: number
-  coordinateSpace?: ComputerCoordinateSpace
-}
+} & (
+  | {
+      coordinateSpace?: 'primary-display'
+      snapshotId: string
+    }
+  | {
+      coordinateSpace: 'global'
+      snapshotId?: never
+    }
+)
 
 /** `computer:click` 的入参：主屏坐标必须带截图绑定，全局坐标必须不带。 */
 export type ComputerClickInput = Record<string, unknown> & {

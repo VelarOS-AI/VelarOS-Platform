@@ -2,9 +2,13 @@ import { describe, expect, test } from 'bun:test'
 
 import { AppError } from '@velaros-ai/core/error'
 
-import type { ComputerClickOptions } from '../../src/runtime'
-import type { ComputerToolContext, ToolComputerApi } from '../../src/tools'
-import { computerTools } from '../../src/tools'
+import type {
+  ComputerClickOptions,
+  ComputerMoveOptions,
+  ComputerToolComputerApi,
+  ComputerToolContext,
+} from '../../src/index'
+import { computerTools } from '../../src/index'
 
 const SnapshotId = 'screen_test_snapshot_01'
 
@@ -13,9 +17,8 @@ interface HarnessOptions {
 }
 
 function createContext(options: HarnessOptions = {}) {
-  const moves: Array<[number, number]> = []
+  const moves: Array<{ x: number; y: number; options?: ComputerMoveOptions }> = []
   const clicks: Array<{ x: number; y: number; options?: ComputerClickOptions }> = []
-  let screenSizeReads = 0
   const acceptedSnapshotId = options.acceptedSnapshotId ?? SnapshotId
   const display = {
     displayId: 7,
@@ -25,12 +28,8 @@ function createContext(options: HarnessOptions = {}) {
     originX: -1_920,
     originY: 120,
   }
-  const computer: ToolComputerApi = {
+  const computer: ComputerToolComputerApi = {
     ensureAvailable: async () => ({ available: true, reason: 'available', detail: null }),
-    screenSize: async () => {
-      screenSizeReads += 1
-      return display
-    },
     screenshot: async () => ({
       base64: 'image-bytes',
       format: 'jpeg',
@@ -41,9 +40,24 @@ function createContext(options: HarnessOptions = {}) {
       displayHeight: display.height,
       ...display,
     }),
-    mouseMove: async (x, y) => {
-      moves.push([x, y])
-      return { x, y }
+    mouseMove: async (x, y, moveOptions) => {
+      if (moveOptions?.coordinateSpace === 'primary-display') {
+        if (moveOptions.snapshotId !== acceptedSnapshotId)
+          throw new AppError(
+            'VALIDATION',
+            'screen_snapshot_stale: take a new computer:screenshot before moving',
+          )
+        moves.push({ x, y, options: moveOptions })
+        return {
+          x: display.originX + x,
+          y: display.originY + y,
+          coordinateSpace: 'primary-display',
+          displayId: display.displayId,
+          snapshotId: moveOptions.snapshotId,
+        }
+      }
+      moves.push({ x, y, options: moveOptions })
+      return { x, y, coordinateSpace: 'global' }
     },
     click: async (x, y, clickOptions) => {
       if (clickOptions?.coordinateSpace === 'primary-display') {
@@ -80,7 +94,7 @@ function createContext(options: HarnessOptions = {}) {
     computer,
     
   }
-  return { clicks, context, moves, readScreenSizeReads: () => screenSizeReads }
+  return { clicks, context, moves }
 }
 
 describe('computer input coordinate contract', () => {
@@ -134,7 +148,6 @@ describe('computer input coordinate contract', () => {
         snapshotId: SnapshotId,
       },
     }])
-    expect(harness.readScreenSizeReads()).toBe(0)
     expect(result).toMatchObject({
       x: 100,
       y: 50,
@@ -179,7 +192,6 @@ describe('computer input coordinate contract', () => {
         coordinateSpace: 'global',
       },
     }])
-    expect(harness.readScreenSizeReads()).toBe(0)
     expect(result).toMatchObject({
       x: -100,
       y: 40,
@@ -189,13 +201,33 @@ describe('computer input coordinate contract', () => {
     })
   })
 
-  test('keeps screenshot-local movement compatible with the current display geometry', async () => {
+  test('requires a screenshot binding for primary-display moves', () => {
+    expect(() => computerTools['computer:move'].schema.parse({ x: 100, y: 50 })).toThrow()
+    expect(() =>
+      computerTools['computer:move'].schema.parse({
+        x: 100,
+        y: 50,
+        coordinateSpace: 'global',
+        snapshotId: SnapshotId,
+      })
+    ).toThrow()
+  })
+
+  test('passes screenshot-local movement and binding to the runtime for atomic validation', async () => {
     const harness = createContext()
-    const input = computerTools['computer:move'].schema.parse({ x: 100, y: 50 })
+    const input = computerTools['computer:move'].schema.parse({
+      x: 100,
+      y: 50,
+      snapshotId: SnapshotId,
+    })
 
     const result = await computerTools['computer:move'].execute(input, harness.context)
 
-    expect(harness.moves).toEqual([[-1_820, 170]])
+    expect(harness.moves).toEqual([{
+      x: 100,
+      y: 50,
+      options: { coordinateSpace: 'primary-display', snapshotId: SnapshotId },
+    }])
     expect(result).toMatchObject({
       x: 100,
       y: 50,
@@ -206,9 +238,13 @@ describe('computer input coordinate contract', () => {
     })
   })
 
-  test('rejects a screenshot-local move outside the current display', async () => {
-    const harness = createContext()
-    const input = computerTools['computer:move'].schema.parse({ x: 1_920, y: 10 })
+  test('fails closed when the runtime rejects a stale screenshot binding on move', async () => {
+    const harness = createContext({ acceptedSnapshotId: 'screen_new_snapshot_02' })
+    const input = computerTools['computer:move'].schema.parse({
+      x: 100,
+      y: 50,
+      snapshotId: SnapshotId,
+    })
 
     await expect(
       computerTools['computer:move'].execute(input, harness.context)

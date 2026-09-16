@@ -14,7 +14,7 @@ pythonTest('helper binds screenshot ids to geometry and fails closed', () => {
 from computer_helper_common import (
     ComputerHelperError,
     ScreenSnapshotRegistry,
-    parse_click_coordinate_binding,
+    parse_pointer_coordinate_binding,
 )
 
 display = {
@@ -41,13 +41,13 @@ except ComputerHelperError as error:
 else:
     raise AssertionError("screenshot was bound after the primary display changed mid-capture")
 
-assert parse_click_coordinate_binding({}) == ("global", None)
-assert parse_click_coordinate_binding({
+assert parse_pointer_coordinate_binding({}) == ("global", None)
+assert parse_pointer_coordinate_binding({
     "coordinateSpace": "primary-display",
     "snapshotId": snapshot_id,
 }) == ("primary-display", snapshot_id)
 try:
-    parse_click_coordinate_binding({
+    parse_pointer_coordinate_binding({
         "coordinateSpace": "global",
         "snapshotId": snapshot_id,
     })
@@ -58,7 +58,7 @@ else:
 
 for invalid_coordinate_space in (None, "", 0, False):
     try:
-        parse_click_coordinate_binding({
+        parse_pointer_coordinate_binding({
             "coordinateSpace": invalid_coordinate_space,
         })
     except ComputerHelperError as error:

@@ -7,7 +7,7 @@ import { agentToolContracts, fileContextRegistry } from '@velaros-ai/agent/tool-
 import { ModelRequestClient } from '@velaros-ai/model'
 import { languageQueries, type LanguageReadPort, type LanguageToolContext } from '@velaros-ai/development'
 import { mountMemoryAdapter, type MountMemoryAdapterInput } from '@velaros-ai/memory/adapter-kernel'
-import { ComputerOperationMetadata, ComputerToolOperations, type ComputerOperation } from '@velaros-ai/computer/contracts'
+import { ComputerOperationMetadata, ComputerToolNames, type ComputerOperation } from '@velaros-ai/computer/contracts'
 import { projectFileContext, type ProjectFileContextCarrier } from '@velaros-ai/project'
 
 declare const projectContext: ProjectFileContextCarrier
@@ -37,6 +37,6 @@ const lifecycle: AgentRunLifecycle<object> = {
  beforeTurn: async ({ abortSignal }: { abortSignal: AbortSignal }) => { abortSignal.throwIfAborted() },
  onTurnSettled: async ({ history }: { history: readonly unknown[] }) => (history.length ? 'stop' : 'continue'),
 }
-const operation: ComputerOperation = ComputerToolOperations['computer:screenshot']
+const operation: ComputerOperation = ComputerToolNames.screenshot
 void [createAgentExecutionStack, ModelRequestClient, lifecycle, retry,
  agentToolContracts.discoveryDescriptors, agentToolContracts.readSchemaDiscoveryNames({names:['project:read']}), ComputerOperationMetadata[operation]]

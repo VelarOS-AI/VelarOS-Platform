@@ -1,6 +1,6 @@
 {
   "name": "@velaros-ai/computer",
-  "version": "0.2.16",
+  "version": "0.3.0",
   "velaros": {
     "platform": "0.6"
   },
@@ -24,13 +24,9 @@
   },
   "type": "module",
   "exports": {
-    "./runtime": {
-      "types": "./dist/runtime.d.ts",
-      "import": "./dist/runtime.js"
-    },
-    "./tools": {
-      "types": "./dist/tools.d.ts",
-      "import": "./dist/tools.js"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
     },
     "./contracts": {
       "types": "./dist/contracts.d.ts",
@@ -49,7 +45,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "clean": "rm -rf dist",
     "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/capabilities/build/fix-esm-extensions.mjs dist && node ../../scripts/build/normalize-package-declarations.mjs",
-    "test": "bun test test",
+    "test": "bun test test spec/acceptance.test.ts",
     "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/computer"
   },
   "dependencies": {

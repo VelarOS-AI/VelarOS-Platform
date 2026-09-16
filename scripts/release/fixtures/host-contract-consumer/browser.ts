@@ -1,1 +1,1 @@
-export { ComputerOperationMetadata, ComputerToolOperations } from '@velaros-ai/computer/contracts'
+export { ComputerOperationMetadata, ComputerToolNames } from '@velaros-ai/computer/contracts'

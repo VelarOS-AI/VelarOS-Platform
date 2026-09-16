@@ -29,7 +29,7 @@ from PIL import Image
 
 from computer_helper_common import (
     ScreenSnapshotRegistry,
-    parse_click_coordinate_binding,
+    parse_pointer_coordinate_binding,
     run_stdio_loop,
 )
 
@@ -236,15 +236,28 @@ def screenshot(payload: "dict[str, Any]") -> "dict[str, Any]":
 def mouse_move(payload: "dict[str, Any]") -> "dict[str, Any]":
     x = int(payload["x"])
     y = int(payload["y"])
+    coordinate_space, snapshot_id = parse_pointer_coordinate_binding(payload)
     duration = max(0.0, min(float(payload.get("durationMs") or 0) / 1000.0, 0.8))
+    display = None
+    if coordinate_space == "primary-display":
+        x, y, display = SCREEN_SNAPSHOTS.resolve_primary_point(
+            snapshot_id, x, y, primary_display()
+        )
+
+    # Keep snapshot validation and the actual event adjacent so the display
+    # state cannot be silently recomputed through a second coordinate path.
     load_pyautogui().moveTo(x, y, duration=duration)
-    return {"x": x, "y": y}
+    result = {"x": x, "y": y, "coordinateSpace": coordinate_space}
+    if display is not None:
+        result["displayId"] = display["displayId"]
+        result["snapshotId"] = snapshot_id
+    return result
 
 
 def left_click(payload: "dict[str, Any]") -> "dict[str, Any]":
     x = int(payload["x"])
     y = int(payload["y"])
-    coordinate_space, snapshot_id = parse_click_coordinate_binding(payload)
+    coordinate_space, snapshot_id = parse_pointer_coordinate_binding(payload)
     button = str(payload.get("button") or "left")
     count = int(payload.get("count") or 1)
     display = None

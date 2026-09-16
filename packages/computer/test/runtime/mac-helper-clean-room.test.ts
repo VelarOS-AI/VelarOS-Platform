@@ -181,8 +181,34 @@ assert len(input_calls) == click_count
 assert module.mouse_move({"x": -10, "y": 15, "durationMs": 5000}) == {
     "x": -10,
     "y": 15,
+    "coordinateSpace": "global",
 }
 assert input_calls[-1] == ("move", -10, 15, 0.8)
+
+move_shot = module.screenshot({})
+moved = module.mouse_move({
+    "x": 3,
+    "y": 4,
+    "coordinateSpace": "primary-display",
+    "snapshotId": move_shot["snapshotId"],
+})
+assert moved["coordinateSpace"] == "primary-display"
+assert moved["snapshotId"] == move_shot["snapshotId"]
+# 截图内坐标经绑定换算成全局坐标：(3, 4) + (origin_x, origin_y)。
+assert (moved["x"], moved["y"]) == (
+    3 + display_state["origin_x"],
+    4 + display_state["origin_y"],
+)
+assert moved["displayId"] == 42
+
+move_count = len(input_calls)
+try:
+    module.mouse_move({"x": 3, "y": 4, "coordinateSpace": "primary-display"})
+except Exception as error:
+    assert getattr(error, "code", None) == "screen_snapshot_required"
+else:
+    raise AssertionError("unbound primary-display move reached the input backend")
+assert len(input_calls) == move_count
 
 assert module.key_combo({"keys": "cmd+opt+A"}) == {
     "pressed": ["command", "option", "a"],

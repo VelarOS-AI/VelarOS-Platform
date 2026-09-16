@@ -7,19 +7,17 @@ import type {
   CapabilityToken,
 } from '@velaros-ai/kernel/contracts'
 
-import {
-  ComputerOperationMetadata,
-  ComputerToolOperations,
-} from '../../src/contracts'
+import { ComputerOperationMetadata } from '../../src/contracts'
 import {
   ComputerCapability,
   type ComputerCapabilityService,
   type ComputerClickOptions,
   ComputerKernelModuleVersion,
+  type ComputerMoveOptions,
   type ComputerRuntimePort,
   createComputerKernelModule,
-} from '../../src/runtime'
-import { computerTools } from '../../src/tools'
+} from '../../src/index'
+import { computerTools } from '../../src/index'
 
 function createCaptureContext(
   capture: (tokenId: string, service: object) => void,
@@ -38,7 +36,7 @@ function createCaptureContext(
 /** 假运行时：记下每次移动与点击，屏幕原点为负是多显示器的常态。 */
 function createRuntime() {
   const clicks: Array<{ x: number; y: number; options?: ComputerClickOptions }> = []
-  const moves: Array<{ x: number; y: number }> = []
+  const moves: Array<{ x: number; y: number; options?: ComputerMoveOptions }> = []
   let screenSizeCalls = 0
   let disposed = false
   const runtime = {
@@ -72,11 +70,11 @@ function createRuntime() {
       originY: 0,
       scaleFactor: 1,
     }),
-    mouseMove: async (x: number, y: number) => {
-      moves.push({ x, y })
+    mouseMove: async (x: number, y: number, options?: ComputerMoveOptions) => {
+      moves.push({ x, y, options })
       return { x, y }
     },
-    leftClick: async (x: number, y: number, options?: ComputerClickOptions) => {
+    click: async (x: number, y: number, options?: ComputerClickOptions) => {
       clicks.push({ x, y, options })
       return { x, y, button: options?.button ?? 'left', count: options?.count ?? 1 }
     },
@@ -110,13 +108,14 @@ describe('computer kernel module', () => {
     const harness = createRuntime()
     const { module, service } = await activate({ runtime: harness.runtime })
 
-    expect(Object.keys(ComputerToolOperations).sort()).toEqual(Object.keys(computerTools).sort())
-    for (const [toolName, operation] of Object.entries(ComputerToolOperations)) {
-      // D2 之后操作名就是工具名，合同表里的映射是恒等的。
-      expect(operation).toBe(toolName)
-      const metadata = service?.getOperationMetadata(operation)
+    expect(Object.keys(ComputerOperationMetadata).sort()).toEqual(Object.keys(computerTools).sort())
+    for (const toolName of Object.keys(ComputerOperationMetadata) as Array<
+      keyof typeof ComputerOperationMetadata
+    >) {
+      // 操作名就是工具名，合同表里的元数据是同一份事实的只读副本。
+      const metadata = service?.getOperationMetadata(toolName)
       expect(metadata?.permissions).toEqual([...computerTools[toolName].permissions])
-      expect(metadata).toEqual({ ...ComputerOperationMetadata[operation] })
+      expect(metadata).toEqual({ ...ComputerOperationMetadata[toolName] })
     }
     // 拉起 helper 子进程的权限声明在模块清单上，不再逐操作重复。
     expect(module.manifest.permissions).toEqual([
@@ -191,20 +190,36 @@ describe('computer kernel module', () => {
     ])
   })
 
-  test('工具形状的 move 经内核调用成功，并换算主屏坐标', async () => {
+  test('工具形状的 move 经内核调用成功，主屏坐标连同截图绑定一起下发', async () => {
     const harness = createRuntime()
     const { service } = await activate({ runtime: harness.runtime })
 
     // 工具 schema 会给 coordinateSpace 填上缺省值；按工具名路由的宿主原样把它交给内核操作。
-    const toolPayload = computerTools['computer:move'].schema.parse({ x: 120, y: 40 })
-    expect(toolPayload).toEqual({ x: 120, y: 40, coordinateSpace: 'primary-display' })
+    const toolPayload = computerTools['computer:move'].schema.parse({
+      x: 120,
+      y: 40,
+      snapshotId: 'screen_test_snapshot_01',
+    })
+    expect(toolPayload).toEqual({
+      x: 120,
+      y: 40,
+      coordinateSpace: 'primary-display',
+      snapshotId: 'screen_test_snapshot_01',
+    })
     await service?.invoke(
-      ComputerToolOperations['computer:move'],
+      'computer:move',
       undefined,
       toolPayload,
       new AbortController().signal,
     )
-    expect(harness.moves).toEqual([{ x: -1_680, y: 160 }])
+    // 换算归 helper：本包把截图内坐标与绑定原样交下去，自己不再按屏幕几何算一遍。
+    expect(harness.moves).toEqual([
+      {
+        x: 120,
+        y: 40,
+        options: { coordinateSpace: 'primary-display', snapshotId: 'screen_test_snapshot_01' },
+      },
+    ])
 
     await service?.invoke(
       'computer:move',
@@ -212,13 +227,18 @@ describe('computer kernel module', () => {
       { x: -30, y: 40, coordinateSpace: 'global' },
       new AbortController().signal,
     )
-    expect(harness.moves.at(-1)).toEqual({ x: -30, y: 40 })
+    expect(harness.moves.at(-1)).toEqual({
+      x: -30,
+      y: 40,
+      options: { coordinateSpace: 'global' },
+    })
 
+    // 主屏坐标缺 snapshotId 在 wire 面就被拒，不会走到运行时。
     await expect(
       service?.invoke(
         'computer:move',
         undefined,
-        { x: 1_500, y: 40 },
+        { x: 120, y: 40 },
         new AbortController().signal,
       ),
     ).rejects.toMatchObject({ code: 'VALIDATION' })
@@ -226,7 +246,7 @@ describe('computer kernel module', () => {
       service?.invoke(
         'computer:move',
         undefined,
-        { x: -1, y: 40 },
+        { x: -1, y: 40, snapshotId: 'screen_test_snapshot_01' },
         new AbortController().signal,
       ),
     ).rejects.toMatchObject({ code: 'VALIDATION' })
@@ -264,11 +284,11 @@ describe('computer kernel module', () => {
         abortSignal: signal,
         computer: {
           ensureAvailable: async () => ({ available: true, reason: 'available' as const, detail: null }),
-          screenSize: async () => harness.runtime.screenSize(),
           screenshot: async () => harness.runtime.screenshot(),
-          mouseMove: async (x: number, y: number) => harness.runtime.mouseMove(x, y),
+          mouseMove: async (x: number, y: number, options?: ComputerMoveOptions) =>
+            harness.runtime.mouseMove(x, y, options),
           click: async (x: number, y: number, options?: ComputerClickOptions) =>
-            harness.runtime.leftClick(x, y, options),
+            harness.runtime.click(x, y, options),
           typeText: async (text: string) => {
             typed.push(text)
             return { typed: text.length }

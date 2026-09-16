@@ -148,7 +148,7 @@
     },
     "packages/computer": {
       "name": "@velaros-ai/computer",
-      "version": "0.2.16",
+      "version": "0.3.0",
       "dependencies": {
         "@velaros-ai/core": "workspace:*",
         "@velaros-ai/kernel": "workspace:*",

@@ -48,12 +48,11 @@
       "domain": "capabilities",
       "directory": "packages/computer",
       "name": "@velaros-ai/computer",
-      "version": "0.2.16",
+      "version": "0.3.0",
       "description": "Computer-control capability package: the injectable OS-level sidecar runtime and the host-injected agent tool collection, each behind its own subpath.",
       "exportSubpaths": [
-        "./contracts",
-        "./runtime",
-        "./tools"
+        ".",
+        "./contracts"
       ],
       "repositoryDirectory": "packages/computer"
     },

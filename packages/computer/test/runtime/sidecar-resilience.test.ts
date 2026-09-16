@@ -2,8 +2,8 @@ import { spawn } from 'node:child_process'
 
 import { describe, expect, test } from 'bun:test'
 
-import type { ComputerHelperLaunchSpec, ComputerSidecarProcess } from '../../src/runtime'
-import { ComputerSidecarManager } from '../../src/runtime'
+import type { ComputerHelperLaunchSpec, ComputerSidecarProcess } from '../../src/index'
+import { createComputerRuntime } from '../../src/index'
 
 /** 假 helper 用 `sh` 扮演：EPIPE、半行崩溃、卡在启动这三种故障都要真管道才复现得出来。 */
 const posixTest = process.platform === 'win32' ? test.skip : test
@@ -37,7 +37,7 @@ describe('computer sidecar 韧性', () => {
       uncaught.push(error)
     }
     process.on('uncaughtException', onUncaught)
-    const manager = new ComputerSidecarManager({
+    const manager = createComputerRuntime({
       resolveHelper: () => HelperSpec,
       // 握手后关掉自己的输入仍存活：写请求触发的 EPIPE 只经 stdin 的 'error' 事件到达。
       spawnProcess: shellSpawner(() => `${Handshake}; exec 0<&-; sleep 5`),
@@ -62,7 +62,7 @@ describe('computer sidecar 韧性', () => {
 
   posixTest('helper 死在半行 JSON 上之后，下一次请求仍能完成握手', async () => {
     let launches = 0
-    const manager = new ComputerSidecarManager({
+    const manager = createComputerRuntime({
       resolveHelper: () => HelperSpec,
       spawnProcess: shellSpawner(() => {
         launches += 1
@@ -85,7 +85,7 @@ describe('computer sidecar 韧性', () => {
   })
 
   posixTest('helper 不打握手时按 startupTimeoutMs 失败，请求不会永远挂起', async () => {
-    const manager = new ComputerSidecarManager({
+    const manager = createComputerRuntime({
       resolveHelper: () => HelperSpec,
       spawnProcess: shellSpawner(() => 'sleep 5'),
       requestTimeoutMs: 5_000,

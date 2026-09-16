@@ -65,7 +65,7 @@ const portableContractsFixtures = new Map([
       bundleName: 'computer-contracts',
       source: `import {
   ComputerOperationMetadata,
-  ComputerToolOperations,
+  ComputerToolNames,
   type ComputerOperation,
 } from '@velaros-ai/computer/contracts'
 
@@ -75,7 +75,7 @@ export interface ComputerContractsTypeFixture {
 
 Object.assign(globalThis, { __velarosComputerContractsBrowserGate: {
   ComputerOperationMetadata,
-  ComputerToolOperations,
+  ComputerToolNames,
 } })
 `,
     },

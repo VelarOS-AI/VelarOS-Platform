@@ -21,18 +21,17 @@ export const defineComputerTool: <TInput extends Record<string, unknown>>(
 /**
  * 把一份运行时薄映射成工具的宿主端口。
  *
- * 宿主没给上下文解析器、只注入了运行时时，内核挂载用它兜底；两个宿主各自写的映射也是同一份，
- * 唯一的差别是运行时那边的方法叫 `leftClick`（它本来就接受右键、中键）。
+ * 宿主没给上下文解析器、只注入了运行时时，内核挂载用它兜底；两个宿主各自写的映射也是同一份。
+ * 端口比运行时窄：`screenSize`、`isReady`、`dispose` 是宿主自己界面的事，工具够不着。
  */
 export function computerHostPortFromRuntime(
   runtime: ComputerRuntimePort
 ): ComputerToolComputerApi {
   return {
     ensureAvailable: () => runtime.ensureAvailable(),
-    screenSize: () => runtime.screenSize(),
     screenshot: () => runtime.screenshot(),
-    mouseMove: (x, y) => runtime.mouseMove(x, y),
-    click: (x, y, options) => runtime.leftClick(x, y, options),
+    mouseMove: (x, y, options) => runtime.mouseMove(x, y, options),
+    click: (x, y, options) => runtime.click(x, y, options),
     typeText: (text) => runtime.typeText(text),
     key: (keys) => runtime.key(keys),
   }

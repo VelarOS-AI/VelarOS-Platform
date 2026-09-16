@@ -6,7 +6,7 @@ import { afterEach, describe, expect, test } from 'bun:test'
 
 import { velarosSharedResources } from '@velaros-ai/platform/shared-resources'
 
-import { resolveComputerHelper } from '../../src/runtime'
+import { createComputerHelperLocator } from '../../src/index'
 
 const HelperScriptNames: Partial<Record<NodeJS.Platform, string>> = {
   darwin: 'mac_helper.py',
@@ -57,7 +57,7 @@ describe('helper 定位的共享资源根', () => {
 
     // 不给任何 resourceRoots、也不往登记表里登记：宿主把安装根登记在自己的表里时本包看不到，
     // 共享资源根属于平台约定，必须由本包自己算出来。
-    const resolved = resolveComputerHelper()
+    const resolved = createComputerHelperLocator().resolve()
     expect(resolved?.packageRoot).toBe(packageRoot)
     expect(resolved?.pythonCommand).toBe(venvPython)
     expect(resolved?.version).toBe('9.9.9')
