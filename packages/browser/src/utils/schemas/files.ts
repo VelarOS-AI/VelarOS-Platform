@@ -17,6 +17,7 @@ const browserFilesActionSchema = z.enum([
   'list_artifacts',
   'write_artifact',
   'save_page_snapshot',
+  'save_pdf',
 ])
 
 const browserFilesExactSchema = z.discriminatedUnion('action', [
@@ -138,6 +139,15 @@ const browserFilesExactSchema = z.discriminatedUnion('action', [
       })
     ),
   }),
+  z.object({
+    action: z.literal('save_pdf'),
+    path: z.string().optional().describe(
+      parameterDescription({
+        description: '把整页 PDF 写到当前网站工作区里的哪个相对路径。',
+        notes: ['省略时写进默认的 pages 目录。'],
+      })
+    ),
+  }),
 ])
 
 const browserFilesSchema = z
@@ -152,6 +162,7 @@ const browserFilesSchema = z
           'list_artifacts：列出标准 artifact。',
           'write_artifact：写入标准 artifact。',
           'save_page_snapshot：保存当前页面快照。',
+          'save_pdf：把当前页面打印成整页 PDF 存进工作区（只有它能出 PDF）。',
         ],
       })
     ),

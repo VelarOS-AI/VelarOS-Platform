@@ -4,7 +4,7 @@ import { isEmpty } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import type { BrowserToolContext } from '../../contract/requires'
-import type { BrowserSiteContext, BrowserWorkspaceManifest } from '../../types/browser'
+import type { BrowserPageState,BrowserSiteContext, BrowserWorkspaceManifest } from '../../types/browser'
 import { buildBrowserArtifactAccess } from '../../utils/artifacts.js'
 import type { browserUserScriptsSchema } from '../../utils/schemas/user-scripts'
 import { getActiveBrowserContext, requireActiveBrowserSite } from '../../utils/tool.js'
@@ -26,6 +26,10 @@ export interface BrowserSiteOperationsApi {
   }>
   /** 读当前站点工作区清单；不存在或不是本站点的才补写一份。 */
   readWorkspaceManifest(): Promise<BrowserWorkspaceManifest>
+  /** 读当前页面状态；未进站点时也能调，回 active=false 与空的站点信息。 */
+  readPageState(): Promise<
+    { active: false; browserContext: null } | ({ active: true; browserContext: BrowserSiteContext } & BrowserPageState)
+  >
   /** 按收敛好的入参分派到用户脚本的九个动作。 */
   manageUserScripts(input: z.output<typeof browserUserScriptsSchema>): Promise<unknown>
 }
@@ -54,6 +58,16 @@ export class BrowserSiteOperations implements BrowserSiteOperationsApi {
 
     // 读操作：清单已经是当前站点的就原样返回，只有缺失、损坏或不是本站点的才补写。
     return this.artifacts().getManifest(getActiveBrowserContext(this.ctx))
+  }
+
+  public async readPageState() {
+    this.ctx.abortSignal.throwIfAborted()
+
+    // 未进站点时不报错：模型常拿它探测「现在能不能用浏览器」，这时候答案就是 active=false。
+    if (!this.ctx.browser.isActive()) return { active: false as const, browserContext: null }
+
+    const pageState = await this.ctx.browser.getPageState()
+    return { active: true as const, browserContext: getActiveBrowserContext(this.ctx), ...pageState }
   }
 
   public async manageUserScripts(input: z.output<typeof browserUserScriptsSchema>): Promise<unknown> {

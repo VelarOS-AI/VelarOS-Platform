@@ -175,12 +175,13 @@ void describe('browser rows', () => {
 
     assert.equal(target('browser:get_page_state', {}, page), '登录 - Demo')
     assert.deepEqual(getToolDetailItems(call('browser:inspect_page', {}, page)), ['http://localhost:3000/login'])
-    assert.equal(target('browser:site_context', {}, { browserContext: { url: 'http://localhost:3000' } }), 'http://localhost:3000')
+    assert.equal(target('browser:get_page_state', {}, { browserContext: { url: 'http://localhost:3000' } }), 'http://localhost:3000')
     assert.equal(
       target('browser:list_page_targets', {}, { targets: [{ title: '首页', active: true }, { title: '文档', active: false }] }),
       '首页'
     )
     assert.equal(target('browser:capture_screenshot', { fullPage: true }, { url: page.url, relativePath: 'shots/1.png' }), page.url)
+    assert.equal(target('browser:capture_screenshot', { region: { selector: '#cart' } }), '#cart')
   })
 
   void test('browser:act reads like its operation, and the composite tools name their action and subject', () => {
@@ -196,8 +197,11 @@ void describe('browser rows', () => {
     assert.equal(target('browser:handle_dialog', { accept: false, promptText: 'VelarOS' }), 'accept: false · VelarOS')
     assert.equal(target('browser:handle_permission', { grant: true }), 'grant: true')
     assert.equal(target('browser:handle_download', { action: 'accept', savePath: 'downloads/a.pdf' }), 'accept · downloads/a.pdf')
-    assert.equal(target('browser:list_console_events', { errorsOnly: true, level: 'error' }), 'error · errorsOnly')
-    assert.equal(target('browser:list_network_events', { status: 404 }), '404')
+    assert.equal(
+      target('browser:get_page_diagnostics', { kind: 'console', errorsOnly: true, level: 'error' }),
+      'console · error · errorsOnly'
+    )
+    assert.equal(target('browser:get_page_diagnostics', { kind: 'network', status: 404 }), 'network · 404')
     assert.equal(target('browser:query_elements', { selector: '[data-testid=price]' }), '[data-testid=price]')
     assert.equal(
       target('browser:get_network_request', { requestId: '1.2' }, { request: { method: 'GET', url: 'http://x/api' } }),

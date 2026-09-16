@@ -22,32 +22,20 @@ import {
 import type {
   BrowserElementQueryResult,
   BrowserEvaluateScriptResult,
-  BrowserPageDiagnostics,
   BrowserPageStorageResult,
   BrowserPendingEventKind,
 } from '../types/browser.js'
 import type {
-  BrowserConsoleEventsResult,
   BrowserEvaluateScriptInput,
   BrowserGetNetworkRequestInput,
   BrowserGetNetworkResponseBodyInput,
   BrowserGetPageDiagnosticsInput,
-  BrowserListConsoleEventsInput,
-  BrowserListNetworkEventsInput,
-  BrowserListPageErrorsInput,
-  BrowserNetworkEventsResult,
-  BrowserPageErrorsResult,
   BrowserQueryElementsInput,
   BrowserReadPageDataInput,
   BrowserReadPageStorageInput,
   BrowserTargetHintInput,
   BrowserToolCapabilitySchema,
 } from '../types/tools.js'
-import {
-  buildBrowserConsoleEventsResult,
-  buildBrowserNetworkEventsResult,
-  buildBrowserPageErrorsResult,
-} from '../utils/diagnostics.js'
 import { waitForPendingEvent } from '../utils/pending-events'
 import { browserActSchema, parseBrowserActInput } from '../utils/schemas/act'
 import { browserExtractSchema, parseBrowserExtractInput } from '../utils/schemas/extract'
@@ -59,20 +47,11 @@ import {
   browserGetNetworkResponseBodySchema,
   browserGetPageDiagnosticsGuidedSchema,
   browserGetPageDiagnosticsSchema,
-  browserListConsoleEventsGuidedSchema,
-  browserListConsoleEventsSchema,
-  browserListNetworkEventsGuidedSchema,
-  browserListNetworkEventsSchema,
-  browserListPageErrorsGuidedSchema,
-  browserListPageErrorsSchema,
   browserQueryElementsGuidedSchema,
   browserQueryElementsSchema,
   normalizeBrowserGetNetworkRequestGuided,
   normalizeBrowserGetNetworkResponseBodyGuided,
   normalizeBrowserGetPageDiagnosticsGuided,
-  normalizeBrowserListConsoleEventsGuided,
-  normalizeBrowserListNetworkEventsGuided,
-  normalizeBrowserListPageErrorsGuided,
   normalizeBrowserQueryElementsGuided,
 } from '../utils/schemas/inspection'
 import {
@@ -133,18 +112,6 @@ const BrowserControlCapability = {
     canMutateProject: false,
   },
   reason: 'browser page control',
-} satisfies BrowserToolCapabilitySchema
-
-const BrowserArtifactReadCapability = {
-  effectKind: 'read',
-  readScopes: ['browser'],
-  filesystem: { read: 'browser', write: 'none' },
-  canReadArbitrarySource: false,
-  concurrency: 'safe',
-  metadata: {
-    browserAccess: 'artifact',
-  },
-  reason: 'browser workspace artifact read',
 } satisfies BrowserToolCapabilitySchema
 
 const BrowserArtifactWriteCapability = {
@@ -264,27 +231,6 @@ const browserShowPage = defineBrowserTool<Record<string, never>>({
   },
 })
 
-/** 读取当前 browser mode 状态和绑定站点信息。 */
-const getBrowserSiteContext = defineBrowserTool<Record<string, never>>({
-  name: 'browser:site_context',
-  role: 'inspect',
-  summary: '查看当前浏览器会话状态。',
-  suitable: ['需要判断 browser mode 是否激活或查看绑定站点信息。'],
-  forbidden: ['不要用它打开或切换网站。'],
-  usage: ['可在 browser mode 未激活时调用。'],
-  examples: [{}],
-  notes: ['返回 active 和当前 browserContext。'],
-  schema: z.object({}),
-  permissions: [],
-  capabilities: BrowserObserveCapability,
-  isConcurrencySafe: () => true,
-  execute: async (_input, ctx) => ({
-    // 这个工具本身可在未激活时调用，用于探测状态。
-    active: ctx.browser.isActive(),
-    browserContext: ctx.browser.getContext(),
-  }),
-})
-
 /** 枚举当前受控浏览器页面 target。 */
 const browserListPageTargets = defineBrowserTool<Record<string, never>>({
   name: 'browser:list_page_targets',
@@ -356,48 +302,28 @@ const browserSwitchPageTarget = defineBrowserTool<{ targetId: string }>({
   },
 })
 
-/** 读取或创建当前站点工作区 manifest。 */
-const getBrowserWorkspaceManifest = defineBrowserTool<Record<string, never>>({
-  name: 'browser:space_manifest',
-  role: 'inspect',
-  summary: '读取当前站点浏览器工作区清单。',
-  suitable: ['需要确认站点工作区路径和标准 artifact 目录。'],
-  forbidden: ['不要在 browser mode 未激活时调用。'],
-  usage: ['调用前必须已有 active browser site。'],
-  examples: [{}],
-  notes: ['manifest 已经存在就原样返回；只有缺失或损坏时才补写一份。'],
-  schema: z.object({}),
-  permissions: ['fs:read', 'fs:write'],
-  capabilities: BrowserArtifactReadCapability,
-  isAvailable: (ctx) => ctx.browser.isActive(),
-  isConcurrencySafe: () => true,
-  execute: async (_input, ctx) => new BrowserSiteOperations(ctx).readWorkspaceManifest(),
-})
-
 /** session 类 browser 工具出口。 */
 
 // ── 来自 Inspection.tool.ts ──
-/** 读取当前页面轻量状态，不做完整 DOM 抽取。 */
+/** 读取当前浏览器会话与页面的轻量状态；未进站点时也能调。 */
 const browserGetPageState = defineBrowserTool<Record<string, never>>({
   name: 'browser:get_page_state',
   role: 'inspect',
-  summary: '轻量查询当前浏览器页面状态。',
-  suitable: ['需要在操作前快速确认 URL、标题、加载状态或最近导航错误。'],
-  forbidden: ['不要用它读取页面正文或元素列表；需要内容时用 browser:inspect_page。'],
-  usage: ['无需参数。'],
-  examples: [{}],
-  notes: ['比完整页面检查更轻。'],
+  summary: '查看浏览器会话状态与当前页面的 URL、标题、加载状态。',
+  suitable: [
+    '动作之前先确认现在是不是已经进了站点、在哪一页。',
+    '需要快速确认 URL、标题、加载状态或最近一次导航错误。',
+  ],
+  forbidden: ['不要用它读页面正文或元素列表；要内容用 browser:inspect_page。'],
+  notes: [
+    '未进站点时返回 active=false，此时其余浏览器工具都不可用，先调 browser:enter_site。',
+    '已进站点时返回 active=true、站点信息与页面状态。',
+  ],
   schema: z.object({}),
   permissions: ['network'],
   capabilities: BrowserObserveCapability,
-  isAvailable: (ctx) => ctx.browser.isActive(),
   isConcurrencySafe: () => true,
-  execute: async (_args, ctx) => {
-    ctx.abortSignal.throwIfAborted()
-    // 页面状态依赖当前站点 session，执行前统一确认 browser mode 仍激活。
-    requireActiveBrowserSite(ctx)
-    return ctx.browser.getPageState()
-  },
+  execute: async (_input, ctx) => new BrowserSiteOperations(ctx).readPageState(),
 })
 
 /** 检查当前页面正文、标题、链接和可交互元素。 */
@@ -552,6 +478,7 @@ const browserCaptureScreenshot = defineBrowserTool<{
   fullPage?: boolean | { enabled?: boolean; maxWidth?: number; maxHeight?: number }
   annotateElements?: boolean | { enabled?: boolean; maxElements?: number }
   compareWithPrevious?: boolean
+  region?: { selector: string } | { x: number; y: number; width: number; height: number }
 }>({
   name: 'browser:capture_screenshot',
   role: 'inspect',
@@ -655,6 +582,25 @@ const browserCaptureScreenshot = defineBrowserTool<{
           description: '是否返回与上一次截图的轻量 diff 元数据。',
         })
       ),
+    region: z
+      .union([
+        z.object({
+          selector: z.string().min(1).max(1000).describe('要截的那个元素的 CSS selector。'),
+        }),
+        z.object({
+          x: z.number().int().min(0).max(20000),
+          y: z.number().int().min(0).max(20000),
+          width: z.number().int().min(1).max(20000),
+          height: z.number().int().min(1).max(20000),
+        }),
+      ])
+      .optional()
+      .describe(
+        parameterDescription({
+          description: '只截页面上的一块：给 selector 或给完整的 x/y/width/height。',
+          notes: ['省略时截整个视口；与 fullPage 同时给时以 region 为准。'],
+        })
+      ),
   }),
   permissions: ['screen:capture', 'fs:write'],
   capabilities: BrowserArtifactWriteCapability,
@@ -670,6 +616,7 @@ const browserCaptureScreenshot = defineBrowserTool<{
       fullPage,
       annotateElements,
       compareWithPrevious,
+      region,
     },
     ctx
   ) => {
@@ -687,6 +634,7 @@ const browserCaptureScreenshot = defineBrowserTool<{
         fullPage,
         annotateElements,
         compareWithPrevious,
+        region,
         modelFacing: true,
       })
     )
@@ -750,39 +698,34 @@ const browserQueryElements = defineBrowserTool<BrowserQueryElementsInput>({
   },
 })
 
-/** 读取页面诊断事件，如 console、加载错误和渲染异常。 */
+/** 读取页面诊断事件：console、网络与未处理异常同一份缓存，按 kind 过滤。 */
 const browserGetPageDiagnostics = defineBrowserTool<BrowserGetPageDiagnosticsInput>({
   name: 'browser:get_page_diagnostics',
   role: 'inspect',
-  summary: '读取当前浏览器页面的诊断事件。',
-  suitable: ['需要调试网页功能、前端报错、加载失败或自动化失败。'],
-  forbidden: ['不要用它读取页面正文或网络响应体。'],
-  usage: ['传 limit；clear=true 会清空全部种类的诊断缓存。'],
-  examples: [{ limit: 100 }],
-  notes: ['包含近期 console、加载错误、网络诊断和按 level/kind/origin/status/resourceType 聚合的 summary。'],
+  summary: '读取当前页面的 console、网络与未处理异常诊断。',
+  suitable: ['调试网页报错、加载失败、接口异常或自动化失败。'],
+  forbidden: ['不要用它读页面正文；网络响应体用 browser:get_network_response_body。'],
+  examples: [
+    // 看整页最近出了什么问题
+    { kind: 'all' },
+    // 只看失败的请求（过滤先做，再取这么多条）
+    { kind: 'network', failedOnly: true, limit: 20 },
+    // 只看 console 报错，读完把 console 这一类清掉
+    { kind: 'console', errorsOnly: true, clear: true },
+  ],
+  notes: [
+    'kind 选种类；limit 是过滤之后最多返回几条；clear 只清所选的这一类，别的种类不受影响。',
+    'kind=network 的回执带 requestId，交给 browser:get_network_request 或 browser:get_network_response_body 读详情。',
+  ],
   schema: browserGetPageDiagnosticsSchema,
   surfaces: {
-    preset: {
-      role: 'inspect',
-      summary: '读取当前页面最近的诊断事件。',
-      suitable: ['需要快速查看默认数量的页面诊断。'],
-      forbidden: ['不要用它清空诊断缓存。'],
-      usage: ['无需参数。'],
-      examples: [{}],
-      notes: ['默认返回最近 50 条，并包含聚合 summary。'],
-      schema: z.object({}),
-      normalize: () => ({
-        limit: 50,
-      }),
-    },
     guided: {
       role: 'inspect',
       summary: '读取当前页面诊断事件。',
-      suitable: ['需要调整诊断数量或读取后清空缓存。'],
-      forbidden: ['不要用它调试非当前页面。'],
-      usage: ['可传 limit 和 clear。'],
-      examples: [{ limit: 80, clear: true }],
-      notes: ['省略 limit 时默认 50，并包含聚合 summary。'],
+      suitable: ['需要调整条数或读完清掉这一类缓存。'],
+      forbidden: ['不要用它调试别的页面。'],
+      examples: [{ kind: 'network', limit: 80, clear: true }],
+      notes: ['省略 limit 时默认 50。'],
       schema: browserGetPageDiagnosticsGuidedSchema,
       normalize: normalizeBrowserGetPageDiagnosticsGuided,
     },
@@ -790,87 +733,9 @@ const browserGetPageDiagnostics = defineBrowserTool<BrowserGetPageDiagnosticsInp
   permissions: ['network'],
   capabilities: BrowserObserveCapability,
   isAvailable: (ctx) => ctx.browser.isActive(),
-  // clear=true 会修改诊断缓存，因此不能并发。
+  // clear=true 会改诊断缓存，不能并发。
   isConcurrencySafe: ({ clear }) => !clear,
-  execute: async ({ limit, clear }, ctx): Promise<BrowserPageDiagnostics> => {
-    ctx.abortSignal.throwIfAborted()
-    // 诊断事件绑定当前受控页面。
-    requireActiveBrowserSite(ctx)
-
-    return ctx.browser.getPageDiagnostics({
-      limit,
-      clear,
-    })
-  },
-})
-
-/** 列出当前页面捕获到的网络诊断事件。 */
-const browserListNetworkEvents = defineBrowserTool<BrowserListNetworkEventsInput>({
-  name: 'browser:list_network_events',
-  role: 'inspect',
-  summary: '列出当前页面捕获的网络诊断事件。',
-  suitable: ['需要快速定位失败请求、HTTP 错误、被拦截资源或网络异常。'],
-  forbidden: ['不要把它当作完整 HAR 或响应体读取工具；这里只返回 diagnostics 中已捕获的网络事件。'],
-  usage: ['limit 是过滤之后最多返回几条；可用 status、resourceType 或 failedOnly 再缩小范围。'],
-  examples: [{ limit: 100, failedOnly: true }, { limit: 80, status: 404 }],
-  notes: [
-    '先按种类挑出网络事件、再取最近 limit 条，所以 console 刷屏的页面也不会把失败请求挤出窗口。',
-    'clear=true 只清网络事件，不动 console 与页面异常。',
-    '内嵌页面的网络采集在第一次读诊断时才建立：这种时候回执里的 networkCaptureNotice 会写明「之前的请求没有记录」，重新加载页面后再列一次即可。',
-  ],
-  schema: browserListNetworkEventsSchema,
-  surfaces: {
-    preset: {
-      role: 'inspect',
-      summary: '列出当前页面最近的网络诊断事件。',
-      suitable: ['需要快速查看近期网络错误。'],
-      forbidden: ['不要用它清空诊断缓存。'],
-      usage: ['无需参数。'],
-      examples: [{}],
-      notes: ['默认返回最近 50 条网络事件。'],
-      schema: z.object({}),
-      normalize: () => ({
-        limit: 50,
-      }),
-    },
-    guided: {
-      role: 'inspect',
-      summary: '列出当前页面网络诊断事件。',
-      suitable: ['需要按 HTTP status、resourceType 或失败状态过滤。'],
-      forbidden: ['不要用它读取完整请求/响应 payload。'],
-      usage: ['可传 limit、clear、status、resourceType、failedOnly。'],
-      examples: [{ limit: 100, resourceType: 'Fetch', failedOnly: true }],
-      notes: ['省略 limit 时默认 50。'],
-      schema: browserListNetworkEventsGuidedSchema,
-      normalize: normalizeBrowserListNetworkEventsGuided,
-    },
-  },
-  permissions: ['network'],
-  capabilities: BrowserObserveCapability,
-  isAvailable: (ctx) => ctx.browser.isActive(),
-  // clear=true 会修改诊断缓存，因此不能并发。
-  isConcurrencySafe: ({ clear }) => !clear,
-  execute: async ({ limit, clear, status, resourceType, failedOnly }, ctx): Promise<BrowserNetworkEventsResult> => {
-    ctx.abortSignal.throwIfAborted()
-    // 网络事件来自当前受控页面的 diagnostics 缓存。
-    requireActiveBrowserSite(ctx)
-
-    // 只读网络这一类：过滤在取窗口之前，console 刷屏的页面也不会把失败请求挤出去；
-    // clear 也只清网络事件。
-    const diagnostics = await ctx.browser.getPageDiagnostics({
-      limit,
-      kinds: ['network'],
-      clear,
-    })
-
-    return buildBrowserNetworkEventsResult(diagnostics, {
-      limit,
-      clear,
-      status,
-      resourceType,
-      failedOnly,
-    })
-  },
+  execute: async (input, ctx) => new BrowserInspectOperations(ctx).readDiagnostics(input),
 })
 
 /** 按网络诊断事件 requestId 读取外部 CDP 浏览器捕获的响应体。 */
@@ -967,221 +832,6 @@ const browserGetNetworkRequest = defineBrowserTool<BrowserGetNetworkRequestInput
 
     return ctx.browser.readNetworkRequestDetails(input)
   },
-})
-
-/** 列出当前页面捕获到的 console 诊断事件。 */
-const browserListConsoleEvents = defineBrowserTool<BrowserListConsoleEventsInput>({
-  name: 'browser:list_console_events',
-  role: 'inspect',
-  summary: '列出当前页面捕获的 console 诊断事件。',
-  suitable: ['需要快速定位 console error、warning 或前端运行时报错。'],
-  forbidden: ['不要把它当作页面正文读取工具；这里只有 diagnostics 中已捕获的 console 事件。'],
-  usage: ['limit 是过滤之后最多返回几条；可用 level 或 errorsOnly 再缩小范围。'],
-  examples: [{ limit: 100, errorsOnly: true }, { limit: 80, level: 'warning' }],
-  notes: [
-    '先按种类挑出 console 事件、再取最近 limit 条。',
-    'clear=true 只清 console 事件，不动网络事件与页面异常。',
-  ],
-  schema: browserListConsoleEventsSchema,
-  surfaces: {
-    preset: {
-      role: 'inspect',
-      summary: '列出当前页面最近的 console 诊断事件。',
-      suitable: ['需要快速查看近期 console 输出。'],
-      forbidden: ['不要用它清空诊断缓存。'],
-      usage: ['无需参数。'],
-      examples: [{}],
-      notes: ['默认返回最近 50 条 console 事件。'],
-      schema: z.object({}),
-      normalize: () => ({
-        limit: 50,
-      }),
-    },
-    guided: {
-      role: 'inspect',
-      summary: '列出当前页面 console 诊断事件。',
-      suitable: ['需要按 console level 或 error-only 过滤。'],
-      forbidden: ['不要用它读取非 console 诊断事件。'],
-      usage: ['可传 limit、clear、level、errorsOnly。'],
-      examples: [{ limit: 100, errorsOnly: true }],
-      notes: ['省略 limit 时默认 50。'],
-      schema: browserListConsoleEventsGuidedSchema,
-      normalize: normalizeBrowserListConsoleEventsGuided,
-    },
-  },
-  permissions: ['network'],
-  capabilities: BrowserObserveCapability,
-  isAvailable: (ctx) => ctx.browser.isActive(),
-  // clear=true 会修改诊断缓存，因此不能并发。
-  isConcurrencySafe: ({ clear }) => !clear,
-  execute: async ({ limit, clear, level, errorsOnly }, ctx): Promise<BrowserConsoleEventsResult> => {
-    ctx.abortSignal.throwIfAborted()
-    // Console 事件来自当前受控页面的 diagnostics 缓存。
-    requireActiveBrowserSite(ctx)
-
-    const diagnostics = await ctx.browser.getPageDiagnostics({
-      limit,
-      kinds: ['console'],
-      clear,
-    })
-
-    return buildBrowserConsoleEventsResult(diagnostics, {
-      limit,
-      clear,
-      level,
-      errorsOnly,
-    })
-  },
-})
-
-/** 列出当前页面捕获到的未处理异常诊断事件。 */
-const browserListPageErrors = defineBrowserTool<BrowserListPageErrorsInput>({
-  name: 'browser:list_page_errors',
-  role: 'inspect',
-  summary: '列出当前页面捕获的未处理异常。',
-  suitable: ['需要快速定位页面运行时异常、未捕获 JS 错误或自动化后页面报错。'],
-  forbidden: ['不要把它当作 console 输出列表；console 输出用 browser:list_console_events。'],
-  usage: ['limit 是过滤之后最多返回几条；clear=true 只清页面异常。'],
-  examples: [{ limit: 50, clear: true }],
-  notes: [
-    '先按种类挑出未处理异常、再取最近 limit 条。',
-    'clear=true 只清页面异常，不动 console 与网络事件。',
-  ],
-  schema: browserListPageErrorsSchema,
-  surfaces: {
-    preset: {
-      role: 'inspect',
-      summary: '列出当前页面最近的未处理异常。',
-      suitable: ['需要快速查看近期页面异常。'],
-      forbidden: ['不要用它清空诊断缓存。'],
-      usage: ['无需参数。'],
-      examples: [{}],
-      notes: ['默认返回最近 50 条未处理异常。'],
-      schema: z.object({}),
-      normalize: () => ({
-        limit: 50,
-      }),
-    },
-    guided: {
-      role: 'inspect',
-      summary: '列出当前页面未处理异常。',
-      suitable: ['需要调整诊断数量或读取后清空缓存。'],
-      forbidden: ['不要用它读取非 page-error 诊断事件。'],
-      usage: ['可传 limit 和 clear。'],
-      examples: [{ limit: 80, clear: true }],
-      notes: ['省略 limit 时默认 50。'],
-      schema: browserListPageErrorsGuidedSchema,
-      normalize: normalizeBrowserListPageErrorsGuided,
-    },
-  },
-  permissions: ['network'],
-  capabilities: BrowserObserveCapability,
-  isAvailable: (ctx) => ctx.browser.isActive(),
-  // clear=true 会修改诊断缓存，因此不能并发。
-  isConcurrencySafe: ({ clear }) => !clear,
-  execute: async ({ limit, clear }, ctx): Promise<BrowserPageErrorsResult> => {
-    ctx.abortSignal.throwIfAborted()
-    // 页面异常来自当前受控页面的 diagnostics 缓存。
-    requireActiveBrowserSite(ctx)
-
-    const diagnostics = await ctx.browser.getPageDiagnostics({
-      limit,
-      kinds: ['page-error'],
-      clear,
-    })
-
-    return buildBrowserPageErrorsResult(diagnostics, {
-      limit,
-      clear,
-    })
-  },
-})
-
-/** 查询 CSS selector 匹配的第一个元素的精确视口坐标（getBoundingClientRect）。 */
-const browserGetElementBounds = defineBrowserTool<{
-  selector: string
-}>({
-  name: 'browser:get_element_bounds',
-  role: 'inspect',
-  summary: '查询元素的精确视口坐标。',
-  suitable: ['需要在坐标点击前定位元素的边界和中心点。'],
-  forbidden: ['不要用它执行点击；点击用 browser:act action=click_coordinates 或 action=target。'],
-  usage: ['传 CSS selector。'],
-  examples: [{ selector: "button[type=submit]" }],
-  notes: ['未匹配时返回 found=false。'],
-  schema: z.object({
-    selector: z.string().min(1).max(1000).describe(
-      parameterDescription({
-        description: '要查询的 CSS selector。',
-      })
-    ),
-  }),
-  permissions: ['network'],
-  capabilities: BrowserObserveCapability,
-  isAvailable: (ctx) => ctx.browser.isActive(),
-  isConcurrencySafe: () => true,
-  execute: async ({ selector }, ctx) => new BrowserInspectOperations(ctx).elementBounds(selector),
-})
-
-/** 截取页面指定区域（selector 或 page-css 矩形）并保存 PNG。 */
-const browserCaptureRegion = defineBrowserTool<{
-  selector?: string
-  x?: number
-  y?: number
-  width?: number
-  height?: number
-  path?: string
-}>({
-  name: 'browser:capture_region',
-  role: 'inspect',
-  summary: '截取页面指定区域的 PNG 截图。',
-  suitable: [
-    '需要保存某个 DOM 区块、卡片或图表的所见即所得截图。',
-    'browser:capture_screenshot 全页/视口过大时使用。',
-  ],
-  forbidden: ['跨域 iframe 内区域无法截取。'],
-  usage: ['传 selector；或传 x/y/width/height（page CSS 坐标）。'],
-  examples: [{ selector: 'article.main', path: 'artifacts/screenshots/article.png' }],
-  notes: ['坐标系为 page-css-px（含 scroll）。'],
-  schema: z.object({
-    selector: z.string().optional().describe(
-      parameterDescription({
-        description: '要截取区域的 CSS selector。',
-        usage: ['与 x/y/width/height 二选一，优先 selector。'],
-      })
-    ),
-    x: z.number().optional().describe(
-      parameterDescription({
-        description: '区域左上角 page CSS x 坐标。',
-      })
-    ),
-    y: z.number().optional().describe(
-      parameterDescription({
-        description: '区域左上角 page CSS y 坐标。',
-      })
-    ),
-    width: z.number().positive().optional().describe(
-      parameterDescription({
-        description: '区域宽度（page CSS px）。',
-      })
-    ),
-    height: z.number().positive().optional().describe(
-      parameterDescription({
-        description: '区域高度（page CSS px）。',
-      })
-    ),
-    path: z.string().optional().describe(
-      parameterDescription({
-        description: '保存相对路径。',
-        notes: ['默认 artifacts/screenshots/region-<timestamp>.png。'],
-      })
-    ),
-  }),
-  permissions: ['screen:capture', 'fs:write'],
-  capabilities: BrowserArtifactWriteCapability,
-  isAvailable: (ctx) => ctx.browser.isActive(),
-  isConcurrencySafe: () => false,
-  execute: async (input, ctx) => new BrowserInspectOperations(ctx).captureRegion(input),
 })
 
 /** 页面检查类工具出口。 */
@@ -1499,7 +1149,7 @@ const browserExtract = defineBrowserTool<z.input<typeof browserExtractSchema>>({
   ],
   notes: [
     '这是 browser 页面结构化提取的唯一公开入口；内部仍按 action 复用有界提取实现。',
-    '返回：table 给 headers/rows/rowCount（没找到表格时 ok=false 并附 error）；list 给 items（title/href/description）；paginate 给 pagesVisited/totalItems/items；content 给 content/format/truncated 与 contentBoundary。',
+    '返回：table 给 headers/rows/rowCount（没找到表格时 ok=false 并附 error）；list 给 items（title/href/description）；paginate 给 pagesVisited/totalItems/items；content 给 content/format/truncated。',
     'save=true 且提取成功时写入 extracts/，并追加 savedPath/savedRelativePath；paginate 默认保存。',
     '单次提取结果按 JSON 计超过约 20 万字符时直接报错而不是截断；按提示调小 maxRows/maxItems/maxChars 或收窄 selector。',
   ],
@@ -1513,136 +1163,7 @@ const browserExtract = defineBrowserTool<z.input<typeof browserExtractSchema>>({
 })
 
 // ── 来自 Export.tool.ts ──
-const exportKindSchema = z.enum([
-  'content',
-  'screenshot',
-  'region',
-  'pdf',
-  'media',
-  'resources',
-  'table',
-  'snapshot',
-])
 
-/** 统一入口：按 kind 路由到对应 WYSIWYG 提取能力。 */
-const browserExportPage = defineBrowserTool<{
-  kind: z.infer<typeof exportKindSchema>
-  format?: 'plain' | 'markdown' | 'html'
-  selector?: string
-  savePath?: string
-  save?: boolean
-  name?: string
-  fullPage?: boolean
-  tableIndex?: number
-  maxRows?: number
-}>({
-  name: 'browser:export_page',
-  role: 'control',
-  summary: '统一导出当前页面可见内容（文本/截图/区域/PDF/媒体/表格/快照）。',
-  suitable: [
-    '用户要求「保存页面」「下载所见内容」但未指定具体工具时。',
-    '需要一次性归档页面多种形态产物。',
-  ],
-  forbidden: [
-    '不要用于 blob:/DRM/m3u8 流媒体；媒体需可直连 http(s)。',
-    '不要替代精细交互；先 scroll/wait 让懒加载内容可见。',
-  ],
-  usage: [
-    'kind=content 导出正文（format: plain/markdown/html）。',
-    'kind=screenshot 全页/视口 PNG；kind=region 需 selector。',
-    'kind=pdf 打印为 PDF；kind=media/resources 列出可下载资源。',
-    'kind=table 提取表格 JSON；kind=snapshot 保存结构化页面快照。',
-  ],
-  examples: [
-    // 导出正文为 markdown 并写入 extracts/
-    { kind: 'content', format: 'markdown', save: true },
-    // 全页截图
-    { kind: 'screenshot', fullPage: true },
-    // 区域截图：kind=region 必须给 selector
-    { kind: 'region', selector: '#invoice' },
-    // 打印为 PDF
-    { kind: 'pdf' },
-    // 列出可下载媒体 URL（再用 browser:fetch_resource 下载）
-    { kind: 'media' },
-    // 提取第 0 张表格为 JSON
-    { kind: 'table', tableIndex: 0, maxRows: 200 },
-    // 保存结构化页面快照
-    { kind: 'snapshot' },
-  ],
-  notes: [
-    '产物默认写入 extracts/、artifacts/screenshots/、artifacts/exports/ 或 pages/。',
-    'fetchable 媒体 URL 再用 browser:fetch_resource 下载。',
-    'kind=content/table 与 browser:extract 同源：返回 content（附 contentBoundary）或 headers/rows，默认写入 extracts/ 并追加 savedPath/savedRelativePath。',
-  ],
-  schema: z.object({
-    kind: exportKindSchema.describe(
-      parameterDescription({
-        description: '导出类型。',
-        values: [
-          'content：可见正文。',
-          'screenshot：页面截图 PNG。',
-          'region：selector 区域截图。',
-          'pdf：打印为 PDF。',
-          'media：媒体 URL 列表。',
-          'resources：链接/iframe 清单。',
-          'table：表格 JSON。',
-          'snapshot：结构化页面快照。',
-        ],
-      })
-    ),
-    format: z.enum(['plain', 'markdown', 'html']).optional().describe(
-      parameterDescription({
-        description: 'kind=content 时的文本格式。',
-        notes: ['默认 markdown。'],
-      })
-    ),
-    selector: z.string().optional().describe(
-      parameterDescription({
-        description: 'kind=content/region/table 时的 CSS selector。',
-      })
-    ),
-    savePath: z.string().optional().describe(
-      parameterDescription({
-        description: 'kind=screenshot/region/pdf 时的相对保存路径。',
-      })
-    ),
-    save: z.boolean().optional().describe(
-      parameterDescription({
-        description: 'kind=content/table 是否写入 extracts/。',
-        notes: ['默认 true。'],
-      })
-    ),
-    name: z.string().min(1).max(120).optional().describe(
-      parameterDescription({
-        description: '产物名称。',
-      })
-    ),
-    fullPage: z.boolean().optional().describe(
-      parameterDescription({
-        description: 'kind=screenshot 是否截取完整页面。',
-      })
-    ),
-    tableIndex: z.number().transform((value) => Math.min(50, Math.max(0, Math.round(value)))).optional().describe(
-      parameterDescription({
-        description: 'kind=table 时选择第几张表格。',
-        notes: ['范围 [0,50],超出自动钳制。'],
-      })
-    ),
-    maxRows: z.number().transform((value) => Math.min(2000, Math.max(1, Math.round(value)))).optional().describe(
-      parameterDescription({
-        description: 'kind=table 时最多提取行数。',
-        notes: ['上限 2000,超出自动钳制。'],
-      })
-    ),
-  }),
-  permissions: ['network', 'screen:capture', 'fs:read', 'fs:write'],
-  capabilities: BrowserControlCapability,
-  isAvailable: (ctx) => ctx.browser.isActive(),
-  isConcurrencySafe: () => false,
-  execute: async (input, ctx) => new BrowserFileOperations(ctx).exportPage(input),
-})
-
-// ── 来自 Artifacts.tool.ts ──
 /** 浏览器网站工作区文件与结构化 artifact 的统一原语入口。 */
 const browserFiles = defineBrowserTool<z.input<typeof browserFilesSchema>>({
   name: 'browser:files',
@@ -2425,10 +1946,8 @@ const browserSessionTools = {
   'browser:enter_site': enterBrowserSite,
   'browser:leave_site': leaveBrowserSite,
   'browser:show_page': browserShowPage,
-  'browser:site_context': getBrowserSiteContext,
   'browser:list_page_targets': browserListPageTargets,
   'browser:switch_page_target': browserSwitchPageTarget,
-  'browser:space_manifest': getBrowserWorkspaceManifest,
 }
 
 /** 页面观察类工具。 */
@@ -2439,13 +1958,8 @@ const browserInspectionTools = {
   'browser:capture_screenshot': browserCaptureScreenshot,
   'browser:query_elements': browserQueryElements,
   'browser:get_page_diagnostics': browserGetPageDiagnostics,
-  'browser:list_network_events': browserListNetworkEvents,
   'browser:get_network_response_body': browserGetNetworkResponseBody,
   'browser:get_network_request': browserGetNetworkRequest,
-  'browser:list_console_events': browserListConsoleEvents,
-  'browser:list_page_errors': browserListPageErrors,
-  'browser:get_element_bounds': browserGetElementBounds,
-  'browser:capture_region': browserCaptureRegion,
 }
 
 /** 页面交互类工具。 */
@@ -2463,11 +1977,6 @@ const browserPageDataTools = {
 /** 页面结构化抽取类工具。 */
 const browserExtractionTools = {
   'browser:extract': browserExtract,
-}
-
-/** 页面导出类工具。 */
-const browserExportTools = {
-  'browser:export_page': browserExportPage,
 }
 
 /** 站点工作区文件与产物类工具。 */
@@ -2526,7 +2035,6 @@ const rawBrowserTools = {
   ...browserFetchTools,
   ...browserPageDataTools,
   ...browserExtractionTools,
-  ...browserExportTools,
   ...browserPerformanceTools,
   ...browserScreencastTools,
   ...browserArtifactTools,
@@ -2559,11 +2067,13 @@ const BrowserGuestSpaceIds = ['project'] as const
 /**
  * 浏览器空间的常驻工具（每轮都带真实 schema 进请求）。
  *
- * 只钉「看 — 动 — 等 — 取」这条主回路：不看页面就无从动作，动作后要等事件、要取内容。
- * 其余三十多个工具（网络/控制台/媒体/录屏/下载/用户脚本/性能…）都是排障或特化场景，
- * 留在 loadable，由模型从 `tooling:map` 按名换入——常驻不是「装得下就都装」。
+ * 只钉「进站 — 看 — 动 — 等 — 取」这条主回路：不进站点其余工具全都隐身，所以
+ * `browser:enter_site` 必须常驻，否则模型得先换入一个工具才能开始。看页面是动作的前提，
+ * 动作后要等事件、要取内容。其余二十多个工具（网络/媒体/录屏/下载/用户脚本/性能…）都是
+ * 排障或特化场景，留在 loadable，由模型从 `tooling:map` 按名换入——常驻不是「装得下就都装」。
  */
 const BrowserResidentToolNames = new Set<string>([
+  'browser:enter_site',
   'browser:inspect_page',
   'browser:act',
   'browser:extract',
@@ -2575,15 +2085,16 @@ const BrowserResidentToolNames = new Set<string>([
 /**
  * 浏览器职责分类：一个分类 = 一个使用场景（4–8 个工具），不是一个实现文件。
  *
- * 41 个工具全压在一个 `browser` 分类里时，「按类换入」的粒度等于「全都换进来」——
+ * 32 个工具全压在一个 `browser` 分类里时，「按类换入」的粒度等于「全都换进来」——
  * 模型要一个 `browser:handle_dialog` 就得把网络、录屏、用户脚本一起拖进目录。
  * 拆成七页之后跨场景需求走**一次 pageIn 传多页**（协议本就收数组），不需要新机制。
  *
  * 分类归属是**唯一事实来源**：每个工具恰好落一页，七页并集 = `browserTools` 全集。
  */
 const BrowserToolNamesByCategory = {
-  /** 跑通一次自动化的最小回路：看 — 动 — 取 — 等。恰好等于常驻集。 */
+  /** 跑通一次自动化的最小回路：进站 — 看 — 动 — 取 — 等。恰好等于常驻集。 */
   'browser-core': [
+    'browser:enter_site',
     'browser:inspect_page',
     'browser:act',
     'browser:extract',
@@ -2593,10 +2104,7 @@ const BrowserToolNamesByCategory = {
   ],
   /** 站点工作区与页面（tab）的进出、显示与切换。 */
   'browser-session': [
-    'browser:enter_site',
     'browser:leave_site',
-    'browser:site_context',
-    'browser:space_manifest',
     'browser:show_page',
     'browser:switch_page_target',
     'browser:list_page_targets',
@@ -2604,19 +2112,15 @@ const BrowserToolNamesByCategory = {
   /** 页面结构、元素与本地状态的细粒度观察。 */
   'browser-observe': [
     'browser:query_elements',
-    'browser:get_element_bounds',
     'browser:observe_actions',
     'browser:get_page_diagnostics',
     'browser:read_page_data',
     'browser:read_page_storage',
   ],
-  /** 网络、控制台与性能信号——排障时才需要。 */
+  /** 网络与性能信号——排障时才需要。 */
   'browser-network': [
-    'browser:list_network_events',
     'browser:get_network_request',
     'browser:get_network_response_body',
-    'browser:list_console_events',
-    'browser:list_page_errors',
     'browser:performance',
   ],
   /** 弹窗、下载、权限等待用户裁决的页面事件。 */
@@ -2629,19 +2133,17 @@ const BrowserToolNamesByCategory = {
   /** 文件进出：站点产物、导出、上传与资源抓取。 */
   'browser-files': [
     'browser:files',
-    'browser:export_page',
     'browser:upload_file',
     'browser:fetch_resource',
     'browser:list_page_resources',
     'browser:list_media_sources',
   ],
-  /** 任意脚本、配方、录屏与区域截图等特化能力。 */
+  /** 任意脚本、配方与录屏等特化能力。 */
   'browser-advanced': [
     'browser:evaluate_script',
     'browser:user_scripts',
     'browser:recipe',
     'browser:screencast',
-    'browser:capture_region',
   ],
 } as const satisfies Record<string, readonly string[]>
 

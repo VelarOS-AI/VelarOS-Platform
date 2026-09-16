@@ -12,8 +12,7 @@
 - 外部浏览器启动器(`CdpExternalBrowserLauncher`);
 - 全部页面**脚本构建器**(`BrowserPageScriptBuilder` 一族);
 - CDP 网络 / 模拟 / 性能追踪控制器;
-- 挂起事件 broker、工作区产物管理器、共享纯函数;
-- 以及不依赖 Electron 的 `CdpBrowserRuntime` 装配件。
+- 挂起事件 broker、工作区产物管理器、共享纯函数。
 
 **这里没有任何一行 import Electron——连类型都不行。**
 
@@ -52,21 +51,6 @@ CDP profile 存储按 member / site 落在宿主注入的数据根下,**从不�
   (裁剪 / 标注 / 模型图 / 差分),而且靠隐藏 `BrowserWindow` 渲染模型视图——这些 CDP 没有等价物。
   本切片的 CDP 版经 `driver.captureScreenshot` 抓字节并保存,**富功能是诚实缺席,不是伪造**。
 
-## `CdpBrowserRuntime`
-
-把 host 无关的零件(动作队列 + 三个外部引擎核 + `BrowserPerformanceOrchestrator` +
-`BrowserPendingEventsBroker` + 工作区文件访问 + 前后台双启动器)装成一个**不需要 Electron 的
-浏览器自动化运行时**。
-
-`bindBrowserApi(sessionId, context)` 返回一个会话绑定对象,**结构上满足**
-`@velaros-ai/browser/tools` 的 `ToolBrowserApi`。这条一致性由
-`packages/browser/src/impl/CdpBrowserRuntimeContract.ts` 在**编译期**强制:
-方向是 browser-tools → browser-core(**无环**——core 刻意不 import `ToolBrowserApi`),
-返回面缺方法或签名漂移就在那里编译报错。
-
-`CdpBrowserRuntime` 在包级由 build / typecheck / lint / schema / 构造冒烟 / 发布 dry-run 各门覆盖;
-真机旅程电池、凭据、生命周期与生产装配仍归产品宿主。
-
 ## 领域契约住这里,不住 Kernel Core
 
 页面 / 交互 / 网络 / 截图 / 模拟契约,外加 `BrowserActionPolicy`、`BrowserAddressHelper`、
@@ -75,7 +59,7 @@ CDP profile 存储按 member / site 落在宿主注入的数据根下,**从不�
 
 ## CDP 侧「诚实缺席」能力矩阵
 
-| 能力 | Electron(runtime 切片) | CDP(本切片 / `CdpBrowserRuntime`) |
+| 能力 | Electron(runtime 切片) | CDP(本切片) |
 | --- | --- | --- |
 | 页面检查 / 查询 / evaluate / 存储 / 等待 | 完整(webview `executeJavaScript`) | 完整(driver `executeJavaScript`) |
 | 目标动作 / 自愈 / 效果指纹 | 完整 | 完整(driver) |
@@ -97,18 +81,20 @@ CDP profile 存储按 member / site 落在宿主注入的数据根下,**从不�
 
 ## 生命周期与并发
 
-每个装配根建**一个** `CdpBrowserRuntime`,每个真实页面登记唯一 `sessionId`。
-同会话动作经队列串行,跨会话并发。关单会话 `disposeSession()`,应用结束 `dispose()`。
+每个真实页面登记唯一 `sessionId`:同会话动作经队列串行,跨会话并发。
 
 `BrowserPerformanceTraceEngine` **不能在解析途中重置自己**,所以类内部会串行化并发 parse;
 不同 runtime 用不同实例,不共享可变解析状态。
 
 ## 依赖注入
 
-`CdpBrowserRuntime` 必须注入 `artifactAccess`(产物列举 / 读 / 写的最小文件端口)
-与 `scripts`(`BrowserPageScriptBuilder`);`BrowserExternalPageLauncher` 可选。
 `CdpExternalBrowserLauncher` 的进程、文件系统、网络、时钟与 driver 连接**都可替换**,
 方便测试与非标准宿主接入。
+
+> 这里曾经还有一个**不依赖 Electron 的装配件** `CdpBrowserRuntime`,把上面这些零件装成一个
+> 现成的运行时。它全仓与两个产品零消费、没有测试,而且 `browser:enter_site` 在它上面必然失败
+> (`bindBrowserApi().enterSite` 只记站点上下文、不建会话),所以整块删掉了——真要支持无 Electron
+> 的宿主时按当时的端口重写,比维护一个没人跑过的装配件诚实。
 
 ## 扩展点
 
@@ -123,7 +109,6 @@ import {
   BrowserPageScriptBuilder,
   type BrowserPageDriver,
   CdpBrowserPageDriver,
-  CdpBrowserRuntime,
   CdpExternalBrowserLauncher,
 } from '@velaros-ai/browser/core'
 ```

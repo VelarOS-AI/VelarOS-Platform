@@ -4,8 +4,18 @@ import type { BrowserToolContext } from '../../contract/requires'
 import type {
   BrowserEvaluateScriptResult,
   BrowserObserveActionsResult,
+  BrowserPageDiagnosticKind,
   BrowserScreenshotArtifact,
 } from '../../types/browser'
+import type {
+  BrowserGetPageDiagnosticsInput,
+  BrowserPageDiagnosticsReadResult,
+} from '../../types/tools'
+import {
+  buildBrowserConsoleEventsResult,
+  buildBrowserNetworkEventsResult,
+  buildBrowserPageErrorsResult,
+} from '../../utils/diagnostics.js'
 import { buildObserveActionsResult, clampObserveActionLimit } from '../../utils/observe-actions'
 import { buildElementBoundsScript } from '../../utils/page-scripts/element-bounds'
 import { buildBrowserScreenshotOptions } from '../../utils/screenshot-options'
@@ -27,6 +37,8 @@ export interface BrowserInspectOperationsApi {
   }): Promise<BrowserObserveActionsResult>
   /** 读第一个匹配元素在视口里的矩形。 */
   elementBounds(selector: string): Promise<BrowserEvaluateScriptResult>
+  /** 按 kind 读一类诊断事件：过滤在取窗口之前做，clear 只清所选的这一类。 */
+  readDiagnostics(input: BrowserGetPageDiagnosticsInput): Promise<BrowserPageDiagnosticsReadResult>
   /** 按 selector 或矩形截取页面上的一块。 */
   captureRegion(input: {
     selector?: string
@@ -39,6 +51,17 @@ export interface BrowserInspectOperationsApi {
 }
 
 export class BrowserInspectOperations implements BrowserInspectOperationsApi {
+  /** 模型选的 kind → 诊断缓冲里的种类名；`all` 不过滤，交给下面按 undefined 处理。 */
+  private static readonly DiagnosticKindsByReadKind: Record<
+    NonNullable<BrowserGetPageDiagnosticsInput['kind']>,
+    Optional<readonly BrowserPageDiagnosticKind[]>
+  > = {
+    all: undefined,
+    console: ['console'],
+    network: ['network'],
+    page_error: ['page-error'],
+  }
+
   constructor(private readonly ctx: BrowserToolContext) {}
 
   public async observeActions(input: {
@@ -57,6 +80,29 @@ export class BrowserInspectOperations implements BrowserInspectOperationsApi {
     })
 
     return buildObserveActionsResult(inspection, input.instruction, limit)
+  }
+
+  public async readDiagnostics(
+    input: BrowserGetPageDiagnosticsInput
+  ): Promise<BrowserPageDiagnosticsReadResult> {
+    this.begin()
+
+    const kinds = BrowserInspectOperations.DiagnosticKindsByReadKind[input.kind ?? 'all']
+    const diagnostics = await this.ctx.browser.getPageDiagnostics({
+      limit: input.limit,
+      kinds,
+      clear: input.clear,
+    })
+    switch (input.kind) {
+      case 'console':
+        return buildBrowserConsoleEventsResult(diagnostics, input)
+      case 'network':
+        return buildBrowserNetworkEventsResult(diagnostics, input)
+      case 'page_error':
+        return buildBrowserPageErrorsResult(diagnostics, input)
+      default:
+        return diagnostics
+    }
   }
 
   public async elementBounds(selector: string): Promise<BrowserEvaluateScriptResult> {

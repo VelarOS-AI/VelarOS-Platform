@@ -6,7 +6,7 @@ import type { DefineToolRuntimeSpecInput } from '@velaros-ai/agent/tool-contract
 
 import type { BrowserToolContext } from '../contract/requires.js'
 
-import type {BrowserElementTargetHint, BrowserEmulationOptions, BrowserNetworkControlOptions, BrowserObservedActionKind, BrowserObservedActionSource, BrowserPageDiagnosticEntry, BrowserPageDiagnosticLevel, BrowserPageDiagnosticsSummary, BrowserPageNavigationOptions, BrowserPageScrollOptions, BrowserPageWaitOptions, BrowserPageZoomOptions, BrowserPendingEventKind, BrowserPendingEventsResult, BrowserPendingEventSummary, BrowserPressKeyOptions, BrowserTargetActionKind, BrowserTargetActionValue, BrowserWorkspaceArtifactFormat, BrowserWorkspaceArtifactKind } from './browser.js'
+import type {BrowserElementTargetHint,BrowserEmulationOptions, BrowserNetworkControlOptions, BrowserObservedActionKind, BrowserObservedActionSource, BrowserPageDiagnosticEntry, BrowserPageDiagnosticLevel, BrowserPageDiagnostics, BrowserPageDiagnosticsSummary, BrowserPageNavigationOptions, BrowserPageScrollOptions, BrowserPageWaitOptions, BrowserPageZoomOptions, BrowserPendingEventKind, BrowserPendingEventsResult, BrowserPendingEventSummary, BrowserPressKeyOptions, BrowserTargetActionKind, BrowserTargetActionValue, BrowserWorkspaceArtifactFormat, BrowserWorkspaceArtifactKind } from './browser.js'
 import type { BrowserTargetActionClickMode } from './runtime.js'
 
 export interface BrowserTargetActionScriptBuildOptions {
@@ -40,13 +40,6 @@ export interface BrowserPendingEventWaitResult {
   timeoutMs: number
   elapsedMs: number
   capturedAt: number
-}
-
-export interface BrowserPageContentBoundary {
-  source: 'browser-page-content'
-  origin: string
-  nonce: string
-  fields: ['content']
 }
 
 export interface ObserveActionDraft {
@@ -316,27 +309,32 @@ export type ParsedBrowserActInput =
     }
 
 
-/** browser:get_page_diagnostics 的入参：读最近的诊断事件，可选择读完清缓存。 */
+/** 一次读诊断只看哪一类；`all` 是不过滤。 */
+export type BrowserPageDiagnosticsReadKind = 'all' | 'console' | 'network' | 'page_error'
+
+/**
+ * browser:get_page_diagnostics 的入参：按种类读最近的诊断事件，可选择读完清这一类的缓存。
+ *
+ * 过滤在取窗口之前做，`limit` 数的是过滤之后的条数——反过来的话，一个 console 刷屏的页面
+ * 读网络事件会一条都读不到，而失败的请求就在更早的诊断里。
+ */
 export type BrowserGetPageDiagnosticsInput = {
+  kind?: BrowserPageDiagnosticsReadKind
   limit: number
   clear?: boolean
-}
-
-/** browser:list_page_errors 的入参，和诊断总表一样。 */
-export type BrowserListPageErrorsInput = BrowserGetPageDiagnosticsInput
-
-/** browser:list_network_events 的入参：诊断总表再按网络维度过滤。 */
-export type BrowserListNetworkEventsInput = BrowserGetPageDiagnosticsInput & {
+  level?: BrowserPageDiagnosticLevel
+  errorsOnly?: boolean
   status?: number
   resourceType?: string
   failedOnly?: boolean
 }
 
-/** browser:list_console_events 的入参：诊断总表再按 console 维度过滤。 */
-export type BrowserListConsoleEventsInput = BrowserGetPageDiagnosticsInput & {
-  level?: BrowserPageDiagnosticLevel
-  errorsOnly?: boolean
-}
+/** 一次读诊断的回执：按 kind 给整份诊断、console、网络或页面异常四种形状之一。 */
+export type BrowserPageDiagnosticsReadResult =
+  | BrowserPageDiagnostics
+  | BrowserConsoleEventsResult
+  | BrowserNetworkEventsResult
+  | BrowserPageErrorsResult
 
 /** browser:query_elements 的入参。 */
 export type BrowserQueryElementsInput = {

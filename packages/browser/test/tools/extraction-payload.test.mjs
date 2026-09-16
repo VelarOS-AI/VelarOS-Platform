@@ -1,7 +1,7 @@
 /**
  * @test-meta
  * title: 浏览器结构化提取从求值信封取完整载荷并真正落盘
- * summary: browser:extract 与 browser:export_page 的 table/list/content/paginate 经真实 evaluate 包装取回完整载荷，save 写出 extracts 产物，超限与页面报错明确失败。
+ * summary: browser:extract 的 table/list/content/paginate 经真实 evaluate 包装取回完整载荷，save 写出 extracts 产物，超限与页面报错明确失败。
  * area: packages
  */
 import assert from 'node:assert/strict'
@@ -226,8 +226,6 @@ test('browser:extract content unwraps the envelope and saves an article longer t
   assert.equal(result.format, 'plain')
   assert.equal(result.truncated, false)
   assert.equal(result.content, articleText)
-  assert.equal(result.contentBoundary.source, 'browser-page-content')
-  assert.equal(result.contentBoundary.origin, 'https://example.test')
   assert.equal(result.savedPath, '/workspace/example.test/extracts/story.txt')
   assert.equal(result.savedRelativePath, 'extracts/story.txt')
   assert.equal(files.get('extracts/story.txt'), articleText)
@@ -294,37 +292,6 @@ test('a missing table reports ok=false and writes no artifact', async () => {
   assert.equal(result.error, '页面上没找到表格')
   assert.equal('savedPath' in result, false)
   assert.equal(files.size, 0)
-})
-
-test('browser:export_page content and table reuse the extraction and save by default', async () => {
-  const article = h(
-    'article',
-    { id: 'doc' },
-    h('h1', {}, 'Release notes'),
-    h('p', {}, 'Read the ', h('a', { href: 'https://example.test/changelog' }, 'changelog'), '.')
-  )
-  const table = h('table', {}, h('tr', {}, h('th', {}, 'version')), h('tr', {}, h('td', {}, '1.0.0')))
-  const { ctx, files } = createToolContext(createFakePage(h('body', {}, article, table)))
-  const exportPage = browserTools['browser:export_page']
-
-  const content = await exportPage.execute({ kind: 'content', selector: '#doc', name: 'notes' }, ctx)
-
-  assertNoEnvelopeKeys(content)
-  assert.equal(content.kind, 'content')
-  assert.equal(content.format, 'markdown')
-  assert.equal(content.content, '# Release notes\n\nRead the changelog.')
-  assert.equal(content.contentBoundary.source, 'browser-page-content')
-  assert.equal(content.savedRelativePath, 'extracts/notes.md')
-  assert.equal(files.get('extracts/notes.md'), content.content)
-
-  const exportedTable = await exportPage.execute({ kind: 'table', name: 'versions' }, ctx)
-
-  assertNoEnvelopeKeys(exportedTable)
-  assert.equal(exportedTable.kind, 'table')
-  assert.deepEqual(exportedTable.headers, ['version'])
-  assert.deepEqual(exportedTable.rows, [['1.0.0']])
-  assert.equal(exportedTable.savedRelativePath, 'extracts/versions.json')
-  assert.deepEqual(JSON.parse(files.get('extracts/versions.json')).rows, [['1.0.0']])
 })
 
 test('a payload beyond the evaluate transport ceiling fails instead of returning a partial result', async () => {

@@ -3,7 +3,7 @@ import { isFiniteNumber, isNotNull, isPlainObject, isString, toNullable } from '
 import type { BrowserPageDiagnosticEntry, BrowserPageDiagnosticsSummary } from '../types/browser'
 import type { BrowserPageDiagnosticKind, BrowserPageDiagnostics } from '../types/browser.js'
 import type { BrowserPageDriverNetworkCaptureState } from '../types/driver.js'
-import type { BrowserConsoleEventFilters, BrowserConsoleEventsResult, BrowserListConsoleEventsInput, BrowserListNetworkEventsInput, BrowserListPageErrorsInput, BrowserNetworkEventFilters, BrowserNetworkEventsResult, BrowserPageErrorsResult } from '../types/tools.js'
+import type { BrowserConsoleEventFilters, BrowserConsoleEventsResult, BrowserGetPageDiagnosticsInput, BrowserNetworkEventFilters, BrowserNetworkEventsResult, BrowserPageErrorsResult } from '../types/tools.js'
 
 /**
  * 诊断按种类取窗口：**先按种类过滤，再取最近 limit 条**。
@@ -59,7 +59,7 @@ export function clearBrowserDiagnosticEntries<Entry extends { kind: BrowserPageD
 /** 从诊断缓冲里挑出页面未处理异常。 */
 export function buildBrowserPageErrorsResult(
   diagnostics: BrowserPageDiagnostics,
-  _input: BrowserListPageErrorsInput
+  _input: BrowserGetPageDiagnosticsInput
 ): BrowserPageErrorsResult {
   const entries = diagnostics.entries.filter((entry) => entry.kind === 'page-error')
 
@@ -77,7 +77,7 @@ export function buildBrowserPageErrorsResult(
 /** 从诊断缓冲里挑出网络事件并按状态码、资源类型、失败与否过滤。 */
 export function buildBrowserNetworkEventsResult(
   diagnostics: BrowserPageDiagnostics,
-  input: BrowserListNetworkEventsInput
+  input: BrowserGetPageDiagnosticsInput
 ): BrowserNetworkEventsResult {
   const filters = normalizeBrowserNetworkEventFilters(input)
   const networkEntries = diagnostics.entries.filter((entry) => entry.kind === 'network')
@@ -98,7 +98,7 @@ export function buildBrowserNetworkEventsResult(
 
 /** 把网络过滤入参归一化成确定的形状。 */
 export function normalizeBrowserNetworkEventFilters(
-  input: BrowserListNetworkEventsInput
+  input: BrowserGetPageDiagnosticsInput
 ): BrowserNetworkEventFilters {
   return {
     status: toNullable(input.status),
@@ -128,7 +128,7 @@ export function isFailedBrowserNetworkEvent(entry: BrowserPageDiagnosticEntry): 
 /** 从诊断缓冲里挑出 console 事件并按 level / errorsOnly 过滤，回一份带汇总的回执。 */
 export function buildBrowserConsoleEventsResult(
   diagnostics: BrowserPageDiagnostics,
-  input: BrowserListConsoleEventsInput
+  input: BrowserGetPageDiagnosticsInput
 ): BrowserConsoleEventsResult {
   const filters = normalizeBrowserConsoleEventFilters(input)
   const consoleEntries = diagnostics.entries.filter((entry) => entry.kind === 'console')
@@ -148,7 +148,7 @@ export function buildBrowserConsoleEventsResult(
 
 /** 把 console 过滤入参归一化成确定的形状。 */
 export function normalizeBrowserConsoleEventFilters(
-  input: BrowserListConsoleEventsInput
+  input: BrowserGetPageDiagnosticsInput
 ): BrowserConsoleEventFilters {
   return {
     level: toNullable(input.level),

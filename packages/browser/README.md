@@ -58,26 +58,12 @@ Desktop 只注入站点根、Electron 会话和产品 IPC，不再各自维护�
 
 ## 典型用法
 
-host 无关的 CDP 路线(不需要 Electron):
+宿主拿 `@velaros-ai/browser/runtime` 的 Electron 运行时拼出 `ToolBrowserApi`,
+再把 `@velaros-ai/browser/tools` 的 `browserTools` 注册进 agent 运行时;
+renderer 只取 `@velaros-ai/browser/core/contracts`(纯类型 + 纯策略,进 bundle 安全)。
 
-```ts
-import {
-  BrowserPageScriptBuilder,
-  CdpBrowserRuntime,
-  CdpExternalBrowserLauncher,
-} from '@velaros-ai/browser/core'
-import { browserTools } from '@velaros-ai/browser/tools'
-
-const runtime = new CdpBrowserRuntime({
-  scripts: new BrowserPageScriptBuilder(),
-  artifactAccess: myFileAccess,          // 产物读写端口由宿主注入
-  foregroundBrowserLauncher: new CdpExternalBrowserLauncher(),
-})
-// runtime.bindBrowserApi(...) 得到的 ToolBrowserApi 即可喂给 browserTools
-```
-
-Electron 宿主在此之上叠 `@velaros-ai/browser/runtime`;renderer 只取
-`@velaros-ai/browser/core/contracts`(纯类型 + 纯策略,进 bundle 安全)。
+无 Electron 的宿主自己实现 `ToolBrowserApi` 即可——包里曾经带一个现成的 `CdpBrowserRuntime`
+装配件,零消费、没测试、`browser:enter_site` 在它上面必然失败,已经删掉。
 
 ## 边界:本包不负责什么
 

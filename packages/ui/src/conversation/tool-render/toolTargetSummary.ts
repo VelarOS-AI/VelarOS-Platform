@@ -714,8 +714,12 @@ function readObserveActions({ args, result }: TargetReadContext): Nullable<ToolT
 
 function readScreenshot(context: TargetReadContext): Nullable<ToolTargetSummary> {
   const { args, result } = context
+  const region = asRecord(args.region)
   return toSummary(
-    clipText(readString(args, 'selector')) ?? describeCoordinates(args) ?? clipText(result?.url),
+    clipText(readString(args, 'selector')) ??
+      clipText(readString(region ?? {}, 'selector')) ??
+      describeCoordinates(region ?? args) ??
+      clipText(result?.url),
     [readFirstString(result?.relativePath, result?.path), describeSize(result)]
   )
 }
@@ -724,11 +728,17 @@ function readSelectorTarget({ args }: TargetReadContext): Nullable<ToolTargetSum
   return toSummary(clipText(args.selector))
 }
 
-/** 诊断类列表：按什么过滤（级别、仅错误、状态码、资源类型、仅失败），没过滤时是哪个页面。 */
+/** 会话与页面状态：已进站点时是页面标题或 URL，未进站点时是那个站点的 URL。 */
+function readSiteState(context: TargetReadContext): Nullable<ToolTargetSummary> {
+  return readPageIdentity(context) ?? readSiteContext(context)
+}
+
+/** 诊断：看的是哪一类、按什么过滤（级别、仅错误、状态码、资源类型、仅失败），没过滤时是哪个页面。 */
 function readDiagnosticsFilter({ args, result }: TargetReadContext): Nullable<ToolTargetSummary> {
   const status = readNumber(args, 'status')
   return toSummary(
     joinParts([
+      readString(args, 'kind'),
       readString(args, 'level'),
       isTrue(args.errorsOnly) ? 'errorsOnly' : null,
       isPresent(status) ? String(status) : null,
@@ -902,21 +912,14 @@ const ToolTargetReaders: Readonly<Record<string, ToolTargetReader>> = {
   'workbench:get_problems': readWorkbenchProblems,
   // 浏览器
   'browser:show_page': readPageIdentity,
-  'browser:get_page_state': readPageIdentity,
+  'browser:get_page_state': readSiteState,
   'browser:inspect_page': readPageIdentity,
-  'browser:site_context': readSiteContext,
-  'browser:space_manifest': readSiteContext,
   'browser:list_page_targets': readPageTargets,
   'browser:switch_page_target': readSwitchPageTarget,
   'browser:observe_actions': readObserveActions,
   'browser:capture_screenshot': readScreenshot,
-  'browser:capture_region': readScreenshot,
   'browser:query_elements': readSelectorTarget,
-  'browser:get_element_bounds': readSelectorTarget,
   'browser:get_page_diagnostics': readDiagnosticsFilter,
-  'browser:list_page_errors': readDiagnosticsFilter,
-  'browser:list_console_events': readDiagnosticsFilter,
-  'browser:list_network_events': readDiagnosticsFilter,
   'browser:get_network_request': readNetworkRequest,
   'browser:get_network_response_body': readRequestId,
   'browser:act': readBrowserAct,
@@ -933,7 +936,6 @@ const ToolTargetReaders: Readonly<Record<string, ToolTargetReader>> = {
   'browser:read_page_data': readPageData,
   'browser:evaluate_script': readEvaluateScript,
   'browser:extract': readActionWithSubject('action', ['selector', 'format']),
-  'browser:export_page': readActionWithSubject('kind', ['selector', 'savePath', 'name']),
   'browser:performance': readActionWithSubject('action', ['insightName', 'insightSetId']),
   'browser:screencast': readActionWithSubject('action', ['name']),
   'browser:files': readActionWithSubject('action', ['path', 'name', 'kind']),

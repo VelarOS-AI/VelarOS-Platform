@@ -32,7 +32,7 @@ test('browser:act discovery summary names its primary navigation and interaction
 test('every browser tool declares effect truth and pending-event wait reports unsafe concurrency', async () => {
   const { browserTools } = await import(packagePath.href)
 
-  assert.equal(Object.keys(browserTools).length, 40)
+  assert.equal(Object.keys(browserTools).length, 32)
   for (const [name, tool] of Object.entries(browserTools)) {
     assert.ok(tool.capabilities, `${name} is missing capabilities`)
     assert.equal(tool.readOnly, tool.capabilities.effectKind === 'read', name)

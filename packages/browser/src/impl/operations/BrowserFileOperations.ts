@@ -1,6 +1,6 @@
 import type { z } from 'zod'
 
-import { isFalse } from '@velaros-ai/core'
+import { isFalse, toOptional } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import { BrowserExtractDefaults, BrowserFileLimits } from '../../contract/constants'
@@ -67,6 +67,8 @@ export class BrowserFileOperations implements BrowserFileOperationsApi {
         return this.writeArtifact(input)
       case 'save_page_snapshot':
         return this.savePageSnapshot(input)
+      case 'save_pdf':
+        return this.savePdf(input.path)
       default:
         input satisfies never
         throw new AppError('VALIDATION', 'browser:files 不认识这个 action。')
@@ -232,6 +234,13 @@ export class BrowserFileOperations implements BrowserFileOperationsApi {
       name: input.name,
       overwrite: input.overwrite,
     })
+  }
+
+  /** 把当前页面打印成整页 PDF 存进工作区：整个工具面里只有这一处出 PDF。 */
+  private async savePdf(path: LooseOptional<string>) {
+    this.begin()
+
+    return this.ctx.browser.exportPagePdf({ savePath: toOptional(path) })
   }
 
   /** 导出页面上的一块区域：必须给 selector，没给保存路径时按时间戳落到截图目录。 */

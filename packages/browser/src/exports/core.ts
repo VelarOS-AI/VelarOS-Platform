@@ -18,8 +18,6 @@ export {
 } from '../impl/cdp/CdpTraceCollector'
 export type { CdpWebSocketTransportConnectOptions, CdpWebSocketTransportOptions } from '../impl/cdp/CdpWebSocketTransport'
 export { CdpWebSocketTransport } from '../impl/cdp/CdpWebSocketTransport'
-export type { CdpBrowserRuntimeOptions } from '../impl/CdpBrowserRuntime'
-export { CdpBrowserRuntime } from '../impl/CdpBrowserRuntime'
 export {
   BrowserPerformanceOrchestrator,
   extractKeyMetricsFromSummary,

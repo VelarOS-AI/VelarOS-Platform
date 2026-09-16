@@ -1,7 +1,7 @@
-// 用途：钉住诊断的 limit 与 clear 按种类算。
+// 用途：钉住 browser:get_page_diagnostics 的 limit 与 clear 按 kind 算。
 // 历史事故：limit 先作用在「所有种类的最近 N 条」上、再在工具里过滤种类——一个 console
-// 刷屏的页面 list_network_events {failedOnly:true} 一条失败请求都拿不到（失败请求就在更早的
-// 诊断里）；clear=true 又会把 console 与页面异常一起清空。
+// 刷屏的页面读网络事件一条失败请求都拿不到（失败请求就在更早的诊断里）；clear=true 又会把
+// console 与页面异常一起清空。四个诊断工具合并成一个之后，种类由 kind 选。
 import assert from 'node:assert/strict'
 
 import { describe, test } from 'bun:test'
@@ -67,8 +67,8 @@ void describe('诊断按种类取窗口', () => {
     const buffer = createNoisyBuffer()
     const { ctx, calls } = createDiagnosticsContext(buffer)
 
-    const result = (await browserTools['browser:list_network_events']!.execute(
-      { limit: 50, failedOnly: true },
+    const result = (await browserTools['browser:get_page_diagnostics']!.execute(
+      { kind: 'network', limit: 50, failedOnly: true },
       ctx
     )) as { entries: BrowserPageDiagnosticEntry[]; networkTotal: number }
 
@@ -82,7 +82,10 @@ void describe('诊断按种类取窗口', () => {
     const buffer = createNoisyBuffer()
     const { ctx } = createDiagnosticsContext(buffer)
 
-    await browserTools['browser:list_network_events']!.execute({ limit: 50, clear: true }, ctx)
+    await browserTools['browser:get_page_diagnostics']!.execute(
+      { kind: 'network', limit: 50, clear: true },
+      ctx
+    )
 
     assert.equal(buffer.some((entry) => entry.kind === 'network'), false)
     assert.equal(buffer.filter((entry) => entry.kind === 'console').length, 200)
@@ -93,12 +96,12 @@ void describe('诊断按种类取窗口', () => {
     const buffer = createNoisyBuffer()
     const { ctx, calls } = createDiagnosticsContext(buffer)
 
-    const consoleResult = (await browserTools['browser:list_console_events']!.execute(
-      { limit: 5 },
+    const consoleResult = (await browserTools['browser:get_page_diagnostics']!.execute(
+      { kind: 'console', limit: 5 },
       ctx
     )) as { entries: BrowserPageDiagnosticEntry[] }
-    const errorResult = (await browserTools['browser:list_page_errors']!.execute(
-      { limit: 5 },
+    const errorResult = (await browserTools['browser:get_page_diagnostics']!.execute(
+      { kind: 'page_error', limit: 5 },
       ctx
     )) as { entries: BrowserPageDiagnosticEntry[]; pageErrorTotal: number }
 

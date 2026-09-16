@@ -9,8 +9,6 @@ import type {
   BrowserGetNetworkRequestInput,
   BrowserGetNetworkResponseBodyInput,
   BrowserGetPageDiagnosticsInput,
-  BrowserListConsoleEventsInput,
-  BrowserListNetworkEventsInput,
   BrowserQueryElementsInput,
 } from '../../types/tools'
 
@@ -97,14 +95,49 @@ export function normalizeBrowserQueryElementsGuided(
 }
 
 export const browserGetPageDiagnosticsSchema = z.object({
-  limit: requiredResultLimit(300, '最多返回多少条诊断事件'),
+  kind: z.enum(['all', 'console', 'network', 'page_error']).optional().describe(
+    parameterDescription({
+      description: '只看哪一类诊断。',
+      values: [
+        'all：console、网络与页面异常都要（默认）。',
+        'console：只看 console 输出。',
+        'network：只看网络请求。',
+        'page_error：只看未处理异常。',
+      ],
+    })
+  ),
+  limit: requiredResultLimit(300, '按 kind 过滤之后最多返回几条'),
   clear: z.boolean().optional().describe(
     parameterDescription({
-      description: '读取后是否清空诊断缓存；只清这次读取的种类。',
+      description: '读完是否清掉这次所选种类的诊断缓存；别的种类不受影响。',
+    })
+  ),
+  level: z.enum(['debug', 'info', 'warning', 'error']).optional().describe(
+    parameterDescription({
+      description: 'kind=console 时只看这个级别。',
+    })
+  ),
+  errorsOnly: z.boolean().optional().describe(
+    parameterDescription({
+      description: 'kind=console 时只看 error 级别。',
+    })
+  ),
+  status: z.number().int().positive().max(999).optional().describe(
+    parameterDescription({
+      description: 'kind=network 时只看这个 HTTP status。',
+    })
+  ),
+  resourceType: z.string().trim().min(1).max(80).optional().describe(
+    parameterDescription({
+      description: 'kind=network 时只看这个 resourceType，例如 Fetch、Script、Document。',
+    })
+  ),
+  failedOnly: z.boolean().optional().describe(
+    parameterDescription({
+      description: 'kind=network 时只看失败或异常级别的请求。',
     })
   ),
 })
-
 
 export const browserGetPageDiagnosticsGuidedSchema = browserGetPageDiagnosticsSchema.extend({
   limit: z
@@ -115,69 +148,16 @@ export const browserGetPageDiagnosticsGuidedSchema = browserGetPageDiagnosticsSc
     .optional()
     .describe(
       parameterDescription({
-        description: '最多返回多少条诊断事件。',
+        description: '按 kind 过滤之后最多返回几条。',
         notes: ['默认 50。'],
       })
     ),
 })
-
 
 /** guided 面的读诊断入参补上缺省条数，转成基础面的形状。 */
 export function normalizeBrowserGetPageDiagnosticsGuided(
   input: z.infer<typeof browserGetPageDiagnosticsGuidedSchema>
 ): BrowserGetPageDiagnosticsInput {
-  return {
-    ...input,
-    limit: input.limit ?? 50,
-  }
-}
-
-export const browserListNetworkEventsSchema = z.object({
-  limit: requiredResultLimit(300, '最多返回多少条网络事件（按种类过滤之后再取这么多条）'),
-  clear: z.boolean().optional().describe(
-    parameterDescription({
-      description: '读取后是否清空诊断缓存；只清这次读取的种类。',
-    })
-  ),
-  status: z.number().int().positive().max(999).optional().describe(
-    parameterDescription({
-      description: '只返回指定 HTTP status 的网络诊断事件。',
-    })
-  ),
-  resourceType: z.string().trim().min(1).max(80).optional().describe(
-    parameterDescription({
-      description: '只返回指定 resourceType 的网络诊断事件。',
-      notes: ['例如 Fetch、Script、Document。'],
-    })
-  ),
-  failedOnly: z.boolean().optional().describe(
-    parameterDescription({
-      description: '只返回失败或异常级别的网络诊断事件。',
-    })
-  ),
-})
-
-
-export const browserListNetworkEventsGuidedSchema = browserListNetworkEventsSchema.extend({
-  limit: z
-    .number()
-    .int()
-    .positive()
-    .max(300)
-    .optional()
-    .describe(
-      parameterDescription({
-        description: '最多返回多少条网络事件（按种类过滤之后再取这么多条）。',
-        notes: ['默认 50。'],
-      })
-    ),
-})
-
-
-/** guided 面的列网络事件入参补上缺省条数，转成基础面的形状。 */
-export function normalizeBrowserListNetworkEventsGuided(
-  input: z.infer<typeof browserListNetworkEventsGuidedSchema>
-): BrowserListNetworkEventsInput {
   return {
     ...input,
     limit: input.limit ?? 50,
@@ -270,57 +250,3 @@ export function normalizeBrowserGetNetworkRequestGuided(
     maxBodyChars: input.maxBodyChars ?? 20000,
   }
 }
-
-export const browserListConsoleEventsSchema = z.object({
-  limit: requiredResultLimit(300, '最多返回多少条 console 事件（按种类过滤之后再取这么多条）'),
-  clear: z.boolean().optional().describe(
-    parameterDescription({
-      description: '读取后是否清空诊断缓存；只清这次读取的种类。',
-    })
-  ),
-  level: z.enum(['debug', 'info', 'warning', 'error']).optional().describe(
-    parameterDescription({
-      description: '只返回指定 console level 的事件。',
-    })
-  ),
-  errorsOnly: z.boolean().optional().describe(
-    parameterDescription({
-      description: '只返回 error level 的 console 事件。',
-    })
-  ),
-})
-
-
-export const browserListConsoleEventsGuidedSchema = browserListConsoleEventsSchema.extend({
-  limit: z
-    .number()
-    .int()
-    .positive()
-    .max(300)
-    .optional()
-    .describe(
-      parameterDescription({
-        description: '最多返回多少条 console 事件（按种类过滤之后再取这么多条）。',
-        notes: ['默认 50。'],
-      })
-    ),
-})
-
-
-/** guided 面的列 console 事件入参补上缺省条数，转成基础面的形状。 */
-export function normalizeBrowserListConsoleEventsGuided(
-  input: z.infer<typeof browserListConsoleEventsGuidedSchema>
-): BrowserListConsoleEventsInput {
-  return {
-    ...input,
-    limit: input.limit ?? 50,
-  }
-}
-
-export const browserListPageErrorsSchema = browserGetPageDiagnosticsSchema
-
-
-export const browserListPageErrorsGuidedSchema = browserGetPageDiagnosticsGuidedSchema
-
-
-export const normalizeBrowserListPageErrorsGuided = normalizeBrowserGetPageDiagnosticsGuided

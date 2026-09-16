@@ -17,21 +17,21 @@
 
 ## 工具面覆盖什么
 
-四十个工具,分这些族(表里是族内代表,不是全部):
+三十二个工具,分这些族(表里是族内代表,不是全部):
 
-| 族                 | 代表工具                                                                                                                                |
-| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
-| 会话与站点         | `browser:enter_site` / `browser:leave_site` / `browser:site_context` / `browser:show_page` / `browser:switch_page_target`               |
-| 检查               | `browser:inspect_page` / `browser:read_page_data` / `browser:query_elements` / `browser:observe_actions` / `browser:get_element_bounds` |
-| 交互               | `browser:act`(点击、填写、键鼠、滚动、导航、等待、视口与缩放都是它的 action)                                                            |
-| 等待               | `browser:act` 的 wait 系 action / `browser:wait_for_pending_event`                                                                      |
-| 页面数据与抽取     | `browser:extract`(table / list / paginate / content 四个 action) / `browser:read_page_storage`                                          |
-| 网络与诊断         | `browser:list_network_events` / `browser:get_network_response_body` / `browser:list_console_events` / `browser:list_page_errors`        |
-| 挂起事件           | `browser:handle_dialog` / `browser:handle_download` / `browser:handle_permission` / `browser:list_pending_events`                       |
-| 截图 / 录屏 / 导出 | `browser:capture_screenshot` / `browser:capture_region` / `browser:screencast` / `browser:export_page`                                  |
-| 上传与取资源       | `browser:upload_file` / `browser:fetch_resource`                                                                                        |
-| 性能               | `browser:performance`                                                                                                                   |
-| recipe 与用户脚本  | `browser:recipe`(generate / read / run / rerun 都是它的 action) / `browser:user_scripts`                                                |
+| 族                | 代表工具                                                                                                       |
+| ----------------- | -------------------------------------------------------------------------------------------------------------- |
+| 会话与站点        | `browser:enter_site` / `browser:leave_site` / `browser:get_page_state` / `browser:show_page` / `browser:switch_page_target` |
+| 检查              | `browser:inspect_page` / `browser:read_page_data` / `browser:query_elements` / `browser:observe_actions`        |
+| 交互              | `browser:act`(点击、填写、键鼠、滚动、导航、等待、视口与缩放都是它的 action)                                    |
+| 等待              | `browser:act` 的 wait 系 action / `browser:wait_for_pending_event`                                              |
+| 页面数据与抽取    | `browser:extract`(table / list / paginate / content 四个 action) / `browser:read_page_storage`                  |
+| 网络与诊断        | `browser:get_page_diagnostics`(kind 选 console / network / page_error) / `browser:get_network_request` / `browser:get_network_response_body` |
+| 挂起事件          | `browser:handle_dialog` / `browser:handle_download` / `browser:handle_permission` / `browser:list_pending_events` |
+| 截图 / 录屏       | `browser:capture_screenshot`(region 可只截一块) / `browser:screencast`                                          |
+| 文件与产物        | `browser:files`(列读写、页面快照、`save_pdf` 都是它的 action) / `browser:upload_file` / `browser:fetch_resource` |
+| 性能              | `browser:performance`                                                                                           |
+| recipe 与用户脚本 | `browser:recipe`(generate / read / run / rerun 都是它的 action) / `browser:user_scripts`                        |
 
 ## 主要导出
 
@@ -42,8 +42,7 @@
 
 ## 依赖注入
 
-第三方宿主**只需实现 `ToolBrowserApi`**。可以用 `CdpBrowserRuntime.bindBrowserApi()`
-(其返回面由 `src/impl/CdpBrowserRuntimeContract.ts` 在**编译期**保证满足本契约),
+第三方宿主**只需实现 `ToolBrowserApi`**。
 也可以把 Playwright、远程浏览器服务或自研 runtime 适配成同一接口。
 
 ```ts

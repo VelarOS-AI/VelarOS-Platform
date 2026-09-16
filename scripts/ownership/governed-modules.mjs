@@ -279,8 +279,8 @@ export const GovernedModules = [
       ['BrowserTools.ts'],
       // 工具背后的执行：act / extract / recipe / files / user_scripts / performance 的动作分派
       ['operations/'],
-      // 运行时装配：Electron 运行时与无 Electron 的 CDP 运行时
-      ['electron/', 'CdpBrowserRuntime.ts', 'CdpBrowserRuntimeContract.ts'],
+      // 运行时装配：Electron 运行时
+      ['electron/'],
       // 领域引擎：交互、页面数据、截图、性能
       ['engines/'],
       // 协议、会话状态、站点工作区，互不依赖

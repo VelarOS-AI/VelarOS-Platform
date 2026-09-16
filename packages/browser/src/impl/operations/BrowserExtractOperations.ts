@@ -22,7 +22,6 @@ import type {
   BrowserTableExtractionInput,
 } from '../../types/tools.js'
 import { BrowserPageContentArtifactFormats, buildBrowserArtifactAccess } from '../../utils/artifacts.js'
-import { createBrowserPageContentBoundary } from '../../utils/page-content'
 import { BrowserEvaluateMaxResultChars } from '../../utils/page-scripts/evaluate'
 import {
   buildListExtractionScript,
@@ -188,7 +187,6 @@ export class BrowserExtractOperations implements BrowserExtractOperationsApi {
   public async extractPageContent(
     input: BrowserPageContentExtractionInput
   ): Promise<BrowserExtractionPayload> {
-    const context = getActiveBrowserContext(this.ctx)
     const payload = await this.evaluateExtractionScript(
       buildPageContentExtractionScript({
         format: input.format,
@@ -198,15 +196,14 @@ export class BrowserExtractOperations implements BrowserExtractOperationsApi {
       }),
       BrowserTuning.extraction.contentTimeoutMs
     )
-    const result = { ...payload, contentBoundary: createBrowserPageContentBoundary(context.url) }
-    if (!input.save || !isTrue(payload.ok) || !isNonBlankString(payload.content)) return result
+    if (!input.save || !isTrue(payload.ok) || !isNonBlankString(payload.content)) return payload
 
     const saved = await this.saveExtraction({
       format: BrowserPageContentArtifactFormats[input.format],
       content: payload.content,
       name: input.name,
     })
-    return { ...result, ...saved }
+    return { ...payload, ...saved }
   }
 
   /**
