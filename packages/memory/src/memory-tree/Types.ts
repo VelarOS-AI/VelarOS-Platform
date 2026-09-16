@@ -159,7 +159,8 @@ export interface MemoryRecallItem {
   activation: number
   updatedAt: number
   snapshotVersion: number
-  retrievalReason: 'text' | 'scope' | 'mainline' | 'recent' | 'deep'
+  /** `semantic` = 派生语义索引命中（内容仍逐字来自权威层）；`deep` = 把归档条目一并翻出来的深层召回。 */
+  retrievalReason: 'text' | 'scope' | 'mainline' | 'recent' | 'deep' | 'semantic'
   evidenceIds: string[]
   /** 当前有效 Evidence 的来源类型；旧索引或外部后端无法提供来源时允许缺席。 */
   sourceTypes?: MemoryEvidenceSourceType[]
