@@ -15,7 +15,7 @@ import { AppError } from '@velaros-ai/core/error'
 
 import type { SessionLedgerLocator, SessionStoreDeps } from '../../contract/requires.js'
 import type { SessionEntry } from '../../types/agent.js'
-import type { SessionEntryDraft, SessionLedgerContext, SessionLedgerWarn, SessionTree } from '../../types/ledgers.js'
+import type { SessionEntryDraft, SessionLedgerApi, SessionLedgerContext, SessionLedgerWarn, SessionTree } from '../../types/ledgers.js'
 import { readLedgerFile, serializeLedgerLine, truncateLedgerToEntryCount } from '../../utils/ledgers/ledger-file'
 import { buildContextEntries, buildSessionTree, pathRootToLeaf, resolveCurrentLeafId } from '../../utils/ledgers/session-tree'
 import { SessionEntrySchema } from '../../utils/wire/session'
@@ -215,7 +215,7 @@ export class SessionLedger {
    *
    * 谱系快照在写队列内捕获（P1-10）：与在途 append/branch 不交错，fork 出的历史与提交序一致。
    */
-  public fork(newSessionId: string): Promise<SessionLedger> {
+  public fork(newSessionId: string): Promise<SessionLedgerApi> {
     this.assertOpen()
     return this.writeQueue.enqueue(() => {
       const lineage = pathRootToLeaf(this.entries, this.currentLeaf)

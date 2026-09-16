@@ -4,11 +4,10 @@ import type { z } from 'zod'
 import type { AppError } from '@velaros-ai/core/error'
 
 import type { AgentExecutionConfig,AgentModelProvider, AgentModelRequestOptions, ToolExecutionApi } from '../contract/requires.js'
-import type { ExecutionEventBus } from '../impl/records/ExecutionEventBus.js'
 
 import type { AgentModelInputModality, AgentRoleId, ExecutionTaskStatus, SubAgentSessionStatus, SubAgentStructuredOutputContract, SubAgentTaskMode, SubAgentTaskRequest, SubAgentTaskResult, SubAgentTaskResultStatus, SubAgentToolDigestEntry, SubAgentTypeId, SubAgentUsage, SubAgentWindDownReason, TeamExecutionPhase,TeamModelRouteCategory, TeamModelSelectionTrace, TeamWorkerType, ThinkingDepth, ToolCategoryId } from './agent.js'
 import type { AgentExecutionLimits } from './loop.js'
-import type { SubAgentGuidanceRelayWorkerHandle } from './records.js'
+import type { ExecutionEventBusApi, SubAgentGuidanceRelayWorkerHandle } from './records.js'
 import type { CodingSessionSnapshot } from './session.js'
 
 export interface SubAgentQueryOptions {
@@ -20,7 +19,7 @@ export interface SubAgentQueryOptions {
     reason: string
   ) => Promise<SubAgentToolCategoryRequestResult>
   runtimeOverride?: SubAgentRuntimeOverride
-  events?: ExecutionEventBus
+  events?: ExecutionEventBusApi
   streamTextDeltas?: boolean
   identity?: string
   contextEpochScope?: string
@@ -143,7 +142,7 @@ export interface FindingRecord {
 export interface SubAgentDispatchRequest {
   input: SubAgentDispatchInput
   parentCtx: SubAgentToolContext
-  events: ExecutionEventBus
+  events: ExecutionEventBusApi
   config: AgentExecutionConfig
   /**
    * 本次顶层执行的 id；缺省取 `config.execution.executionId`，再缺省回退父会话 id。
@@ -175,7 +174,7 @@ export interface DispatchPromptScope {
 
 /** 派发控制分片：运行编排所需的事件面 / 重试 / 中继 / 模型覆盖 / effort 覆盖。 */
 export interface DispatchControlScope {
-  workerEvents: ExecutionEventBus
+  workerEvents: ExecutionEventBusApi
   retryState: SubAgentRetryState
   relayHandle: Nullable<SubAgentGuidanceRelayWorkerHandle>
   resolvedModelOverride: Nullable<string>

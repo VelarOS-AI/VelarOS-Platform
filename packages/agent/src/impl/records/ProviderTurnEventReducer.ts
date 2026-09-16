@@ -23,7 +23,7 @@
 import { isEmpty,isPresent, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import type { CompleteProviderTurnSnapshotOptions, CompleteProviderTurnSnapshotResult, EmitCompletedProviderTurnSnapshotInput,ProviderRequestFingerprint, ProviderTurnEvent, ProviderTurnRequestSnapshot, ProviderTurnSnapshot, ProviderTurnStatus, ProviderTurnToolSnapshot, ProviderTurnUsage } from '../../types/records.js'
+import type { CompleteProviderTurnSnapshotOptions, CompleteProviderTurnSnapshotResult, EmitCompletedProviderTurnSnapshotInput,ProviderRequestFingerprint, ProviderTurnEvent, ProviderTurnRecorder, ProviderTurnRequestSnapshot, ProviderTurnSnapshot, ProviderTurnStatus, ProviderTurnToolSnapshot, ProviderTurnUsage } from '../../types/records.js'
 export const ProviderTurnInterruptedToolError = 'Tool execution interrupted'
 
 export interface ProviderTurnEventReducerOptions {
@@ -255,7 +255,7 @@ export class ProviderTurnEventReducer {
 }
 
 export function completeProviderTurnSnapshot(
-  reducer: ProviderTurnEventReducer,
+  reducer: ProviderTurnRecorder,
   options: CompleteProviderTurnSnapshotOptions = {}
 ): CompleteProviderTurnSnapshotResult {
   try {

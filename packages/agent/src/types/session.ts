@@ -1,4 +1,4 @@
-import type { ReminderCapabilityResolver } from '../contract/requires.js'
+import type { ReminderCapabilityResolver, RuntimeReminderProducer } from '../contract/requires.js'
 
 import type { StreamToolCallPayload, StreamToolResultPayload,ThinkingDepth, ToolCategoryId } from './agent.js'
 import type { CapabilityValidationRunResult,CapabilityValidationStatus } from './capabilities.js'
@@ -85,6 +85,29 @@ export interface CapabilityValidationCollectionResult {
 export interface RuntimeReminderConsumeResult {
   producerId: string
   text: string
+}
+
+/**
+ * 运行期提醒调度台的最小形状：工具上下文只需要"按触发点取一条提醒"这一面。
+ * 类实现在 impl/session/RuntimeReminderScheduler.ts。
+ */
+export interface RuntimeReminderSchedulerApi {
+  /** 登记一个提醒生产者；同 id 重复登记时后来的覆盖先前的。 */
+  register(producer: RuntimeReminderProducer): void
+  /** 注销一个提醒生产者。 */
+  unregister(producerId: string): void
+  /** 取一条提醒并把它记成已发（同一轮不重复发）。 */
+  consume(trigger: ReminderTrigger, input: RuntimeReminderInput): Nullable<RuntimeReminderConsumeResult>
+  /** 只向指定生产者取一条提醒并记成已发。 */
+  consumeProducer(producerId: string, input: RuntimeReminderInput): Nullable<string>
+  /** 看一眼会发什么，不记成已发。 */
+  peek(trigger: ReminderTrigger, input: RuntimeReminderInput): Nullable<string>
+  /** 看一眼会发什么并带上生产者身份，不记成已发。 */
+  peekWithProducer(trigger: ReminderTrigger, input: RuntimeReminderInput): Nullable<RuntimeReminderConsumeResult>
+  /** 清掉某个生产者的"已发"记录，让它下一轮能再发。 */
+  resetScope(producerId: string): void
+  /** 列出已登记的生产者与它们认领的触发点。 */
+  listRegisteredProducers(): Array<{ id: string; triggers: readonly ReminderTrigger[] }>
 }
 
 export interface AutoVerificationCodingSession {

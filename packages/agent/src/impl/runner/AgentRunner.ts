@@ -7,8 +7,10 @@ import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 import type { AgentExecutionConfig, AgentRuntimeCapabilityPorts, AgentSurfaceProfileProvider, RunnerConfigService, RunnerExecutionEnvironmentPort, RunnerSubAgentDispatcher, RunnerToolContextBuilder, RunnerToolRegistry } from '../../contract/requires.js'
 import type { ChatPromptFeatureId } from '../../types/agent'
 import type { ToolCategoryId } from '../../types/agent.js'
-import type { AgentExecutionLimits, SoloAwaitPendingBackgroundJobs } from '../../types/loop.js'
-import type { AgentRunnerComponents, AgentRunnerDomainServices, AgentRunnerInfrastructure, AgentSurfaceProfile, RunnerCancelBackgroundJob, RunnerCodingSessionPolicyBundle, RunnerExecutionScope, RunnerReadBackgroundJobOutput, RunnerSubAgentOptions, RunnerToolContext, RunnerWaitBackgroundJobs, StreamSoloWorkerOptions } from '../../types/runner.js'
+import type { QueryLoopApi, SoloStreamLoopApi } from '../../types/loop.js'
+import type { AgentExecutionLimits } from '../../types/loop.js'
+import type { ExecutionEventBusApi } from '../../types/records.js'
+import type { AgentRunnerComponents, AgentRunnerConfig, AgentRunnerDomainServices, AgentRunnerInfrastructure, AgentSurfaceProfile, PrimaryAgentProfileApi, RunnerCodingSessionPolicyBundle, RunnerExecutionScope, RunnerSubAgentOptions, RunnerToolContext, StreamSoloWorkerOptions } from '../../types/runner.js'
 import { findCurrentGoalArtifact, toGoalSnapshot } from '../../utils/builtin/goals'
 import { collectCapabilityContext, resolveCapabilityCategoryDefinitions, resolveCapabilityContextCollectors, resolveCapabilityValidationInterpreters } from '../../utils/capabilities'
 import { resolveAgentContextPhase } from '../../utils/loop/context-phase'
@@ -18,23 +20,10 @@ import { buildApprovalRegistryKey, resolveSubAgentExecutionKey } from '../../uti
 import { hasActiveExecutionGoal, resolveExecutionWallClockDeadlineMs } from '../../utils/runner/goal-lifecycle'
 import { ChatRuntimeEvents } from '../../utils/wire/chat-runtime.js'
 import { forkFileContext } from '../context/FileContextCoordinator'
-import type { QueryLoop } from '../loop/QueryLoop'
-import type { SoloStreamLoop } from '../loop/SoloStreamLoop'
-import type { ExecutionEventBus } from '../records/ExecutionEventBus'
 import { CodingSessionTracker } from '../session/CodingSessionTracker'
 import { TaskApprovalState } from '../session/TaskApprovalState'
 
 import { AgentWorkflowCoordinator } from './AgentWorkflowCoordinator'
-import type { PrimaryAgentProfile } from './PrimaryAgentProfile'
-
-interface AgentRunnerConfig extends AgentExecutionConfig {
-  surfaceProfile?: AgentSurfaceProfile
-  consumeTurnContextNote?: () => Nullable<string>
-  awaitPendingBackgroundJobs?: SoloAwaitPendingBackgroundJobs
-  readBackgroundJobOutput?: RunnerReadBackgroundJobOutput
-  waitBackgroundJobs?: RunnerWaitBackgroundJobs
-  cancelBackgroundJob?: RunnerCancelBackgroundJob
-}
 
 const passthroughExecutionEnvironment: RunnerExecutionEnvironmentPort = {
   run: (_input, action) => action({}),
@@ -49,9 +38,9 @@ class AgentRunner<TToolContext extends RunnerToolContext = RunnerToolContext> {
   >()
   private readonly log = Log.tag('AgentRunner')
   private readonly contextHelper: RunnerToolContextBuilder<TToolContext>
-  private readonly primaryAgentStreamLoop: SoloStreamLoop<TToolContext, ExecutionEventBus>
-  private readonly queryLoop: QueryLoop<TToolContext, ExecutionEventBus>
-  private readonly primaryAgentProfile: PrimaryAgentProfile
+  private readonly primaryAgentStreamLoop: SoloStreamLoopApi<TToolContext, ExecutionEventBusApi>
+  private readonly queryLoop: QueryLoopApi<TToolContext, ExecutionEventBusApi>
+  private readonly primaryAgentProfile: PrimaryAgentProfileApi
   private readonly subAgentDispatcher: RunnerSubAgentDispatcher<TToolContext>
   private readonly workflowCoordinator: AgentWorkflowCoordinator<TToolContext>
   private readonly capabilityPorts?: AgentRuntimeCapabilityPorts
@@ -86,7 +75,7 @@ class AgentRunner<TToolContext extends RunnerToolContext = RunnerToolContext> {
   public async streamSoloWorker(
     messages: ModelMessage[],
     config: AgentRunnerConfig,
-    events: ExecutionEventBus,
+    events: ExecutionEventBusApi,
     options: StreamSoloWorkerOptions = {}
   ): Promise<void> {
     const systemConfig = this.configService.systemConfig
@@ -112,7 +101,7 @@ class AgentRunner<TToolContext extends RunnerToolContext = RunnerToolContext> {
     systemConfig: RunnerConfigService['systemConfig'],
     abortController: AbortController,
     sessionId: string,
-    events: ExecutionEventBus,
+    events: ExecutionEventBusApi,
     options: StreamSoloWorkerOptions,
     executionScope: RunnerExecutionScope
   ): Promise<void> {

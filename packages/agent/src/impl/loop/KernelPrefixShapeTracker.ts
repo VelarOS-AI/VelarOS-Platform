@@ -1,9 +1,9 @@
 import { isEmpty, isPresent,isString } from '@velaros-ai/core'
 
 import type { KernelPrefixShape, KernelPrefixShapeDiagnostic, KernelPrefixShapeInput, KernelPrefixShapePhase, RecordKernelPrefixShapeDiagnosticInput } from '../../types/loop.js'
+import type { ProviderTurnRecorder } from '../../types/records.js'
 import { compareStableStrings, stableStringify } from '../../utils/residency/determinism'
 import { UnknownGovernanceSessionId } from '../../utils/residency/session-key'
-import type { ProviderTurnEventReducer } from '../records/ProviderTurnEventReducer'
 
 export interface KernelPrefixShapeTrackerRecordInput {
   sessionId?: LooseOptional<string>
@@ -164,7 +164,7 @@ function compareKernelPrefixShape(
 }
 
 function recordKernelPrefixShapeDiagnostic(
-  reducer: ProviderTurnEventReducer,
+  reducer: ProviderTurnRecorder,
   input: RecordKernelPrefixShapeDiagnosticInput
 ): void {
   const diagnostic = compareKernelPrefixShape(input.previous, input.current, input.cache)

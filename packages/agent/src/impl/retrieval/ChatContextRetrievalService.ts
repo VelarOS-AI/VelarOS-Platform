@@ -10,6 +10,7 @@ import {
 
 import type { RetrievalPayloadStorePort, RetrievalStateStorePort } from '../../contract/requires.js'
 import type { ChatContextReadEvidenceRequest, ChatContextReadEvidenceResult, ChatContextReadToolPayloadRequest, ChatContextRetrievalIndexDiagnostics, ChatContextRetrievalIndexSourceFingerprint, ChatContextRetrievedPayload, ChatContextRetrievePayloadRequest, ChatContextSearchConversationHistoryItem, ChatContextSearchConversationHistoryRequest, ChatContextSearchConversationHistoryResult, ChatContextSearchTerminalOutputItem, ChatContextSearchTerminalOutputRequest, ChatContextSearchTerminalOutputResult,SessionLineageContext } from '../../types/agent.js'
+import type { ContextGovernanceSessionRegistryApi, ResidencyLedgerView } from '../../types/residency.js'
 import type { CachedRetrievalIndex, ChatContextRetrievalIndexSnapshot, ChatContextRetrievalIndexStore, ChatContextRetrievalIndexToolPayload, LogReadSnippet, ReferencedLogPath,ResolvedLedgerRecord, RetrievalIndexBuildTelemetry } from '../../types/retrieval.js'
 import {
   normalizeSessionLineageId,
@@ -26,8 +27,6 @@ import { chatSearchRanking } from "../../utils/retrieval/ranking";
 import { ContextRetrievalReferenceReader } from "../../utils/retrieval/reference-reader";
 import { contextRetrievalReferences } from "../../utils/retrieval/references";
 import { chatSearchText } from "../../utils/retrieval/text";
-import type { ContextGovernanceSessionRegistry } from "../residency/ContextGovernanceSession";
-import type { ContextResidencyLedger } from "../residency/ContextResidencyLedger";
 
 import {
   ContextRetrievalBoundedCounter,
@@ -126,7 +125,7 @@ class ChatContextRetrievalService {
      * 治理会话登记处；每次召回都是一次**缺页（fault）**，经此记进驻留账本。
      * fault 率是策略好坏的核心信号，也是 epoch 排序里"高者缓降"的输入（设计 §4C）。
      */
-    private readonly governanceSessions: ContextGovernanceSessionRegistry,
+    private readonly governanceSessions: ContextGovernanceSessionRegistryApi,
     /** 检索索引存储端口；宿主注入文件系统实现（落盘策略与新鲜度指纹在宿主侧）。 */
     private readonly indexStore: ChatContextRetrievalIndexStore,
     options: ChatContextRetrievalServiceOptions = {},
@@ -517,7 +516,7 @@ class ChatContextRetrievalService {
    * （那边认哪几种，这边就必须能取回哪几种，否则会出现"记了 fault 却取不回"的错位）。
    */
   private findLedgerRecordByRef(
-    ledger: ContextResidencyLedger,
+    ledger: ResidencyLedgerView,
     ref: string,
   ): Nullable<ResolvedLedgerRecord> {
     const key = ref.trim();
@@ -984,7 +983,7 @@ class ChatContextRetrievalService {
    * 缓存判据是"源指纹一致就复用"，而会话被删后目录消失、指纹多半读不出来，于是**大多数**情况会
    * 自然退化成重建 —— 但那是巧合不是保证：同一 sessionId 被复用、或目录被外部工具原样恢复到旧
    * mtime 时，进程内会继续供应上一段对话的索引，而 8 个槽位的 LRU 让它可以活很久（审计 R8）。
-   * 治理侧已经认了"会话没了状态就该没"（`ContextGovernanceSessionRegistry.invalidateSession`），
+   * 治理侧已经认了"会话没了状态就该没"（`ContextGovernanceSessionRegistryApi.invalidateSession`），
    * 检索侧跟上：宿主的会话删除路径两个都调。失效是幂等的，多调一次没有代价。
    */
   public invalidateSession(sessionId: LooseOptional<string>): void {

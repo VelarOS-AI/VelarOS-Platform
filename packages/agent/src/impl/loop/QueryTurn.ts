@@ -6,6 +6,7 @@ import { logRuntime } from '@velaros-ai/core/logger'
 
 import type {ProviderRequestSnapshot } from '../../types/context.js'
 import type { AgentModelRequestPort, AgentModelStreamInput, ExecuteQueryTurnArgs, InterruptedStreamPartial, QueryTurnToolContext, QueryTurnToolRegistry, StreamConsumerEvents } from '../../types/loop.js'
+import type { ContextGovernanceSessionRegistryApi } from '../../types/residency.js'
 import type { ToolExecutorEvents } from '../../types/tools.js'
 import { assertProviderRequestSnapshotReconstructable } from '../../utils/context/provider-request-snapshot'
 import { createInternalFollowUpMessage } from '../../utils/history/internal-messages'
@@ -24,7 +25,6 @@ import { resolveModelContextUsageOptions } from '../context/AgentLoopContextUsag
 import { ProviderRequestCompiler } from '../context/ProviderRequestCompiler'
 import { compileProviderSendRequest } from '../context/ProviderSendRequest'
 import { emitCompletedProviderTurnSnapshot, ProviderTurnEventReducer } from '../records/ProviderTurnEventReducer'
-import type { ContextGovernanceSessionRegistry } from '../residency/ContextGovernanceSession'
 import { KernelToolLoopGuard } from '../tools/KernelToolLoopGuard'
 import { ToolExecutionPolicy } from '../tools/ToolExecutionPolicy'
 import { ToolExecutor } from '../tools/ToolExecutor'
@@ -102,7 +102,7 @@ class QueryTurn<TToolContext extends QueryTurnToolContext = QueryTurnToolContext
     private readonly toolRegistry: QueryTurnToolRegistry<TToolContext>,
     private readonly turnHistoryHelper: AgentTurnHistoryHelper,
     /** 治理会话登记处（宿主级单实例，驻留账本与 epoch 状态跨回合共享一份，必传）。 */
-    private readonly governanceSessions: ContextGovernanceSessionRegistry,
+    private readonly governanceSessions: ContextGovernanceSessionRegistryApi,
     private readonly modelRequestService: AgentModelRequestPort =
       new AiSdkAgentModelRequestPort()
   ) {

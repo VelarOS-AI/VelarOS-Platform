@@ -63,4 +63,3 @@ class CodingSessionVerificationHelper {
 }
 
 export { CodingSessionVerificationHelper }
-export type { CapabilityValidationFailure } from '../../types/session.js'

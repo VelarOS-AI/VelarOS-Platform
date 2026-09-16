@@ -403,6 +403,16 @@ export interface ToolExecutionFailureInput {
   isConcurrencySafe: boolean
 }
 
+/** 工具死循环守卫的一次记账输入。 */
+export interface KernelToolLoopGuardInput {
+  /** 工具名。 */
+  toolName: string
+  /** 工具入参。 */
+  args: Record<string, unknown>
+  /** 这次调用是不是写类操作。 */
+  writeLike: boolean
+}
+
 export interface KernelToolFailureBatchEntry {
   toolName: string
   /** 使用实际执行参数，区分相同错误下对不同目标的探索。 */

@@ -15,8 +15,7 @@
 import { isEmpty, isNotNull, isPresent, isString, toNullable } from '@velaros-ai/core'
 import { logRuntime } from '@velaros-ai/core/logger'
 
-import type { ContextResidencyLedger } from '../../impl/residency/ContextResidencyLedger'
-import type { AppliedDistillOutcome, ContextGovernanceConfig, ContextMigrationCause, ContextProjectionBudget, ContextProjectionMeasurement, ContextRecord, ContextResidency, EpochCandidate, EpochCandidateTier, GovernanceEpochReport, GovernanceEpochSkipReason, RunGovernanceEpochInput } from '../../types/residency.js'
+import type { AppliedDistillOutcome, ContextGovernanceConfig, ContextMigrationCause, ContextProjectionBudget, ContextProjectionMeasurement, ContextRecord, ContextResidency, EpochCandidate, EpochCandidateTier, GovernanceEpochReport, GovernanceEpochSkipReason, ResidencyLedgerView, RunGovernanceEpochInput } from '../../types/residency.js'
 
 import { hasExcerptRenderMaterial } from './admission'
 import { anchorDensityPerKiloChar } from './anchors'
@@ -278,7 +277,7 @@ function applyPendingDistills(
  * 若错误挂到最新轮，它会落在活动尾并可能让 provider 历史以 assistant 收尾。
  */
 function appendSummaryRecord(
-  ledger: ContextResidencyLedger,
+  ledger: ResidencyLedgerView,
   input: { text: string; memberIds: readonly string[]; at: number },
   maxResidentSummaries: number
 ): number {
@@ -295,7 +294,7 @@ function appendSummaryRecord(
 }
 
 function archiveOldSummaries(
-  ledger: ContextResidencyLedger,
+  ledger: ResidencyLedgerView,
   maxResidentSummaries: number,
   at: number
 ): number {
@@ -316,7 +315,7 @@ function archiveOldSummaries(
 }
 
 function resolveSummaryTurn(
-  ledger: ContextResidencyLedger,
+  ledger: ResidencyLedgerView,
   memberIds: readonly string[]
 ): number {
   const turns = memberIds
@@ -333,7 +332,7 @@ function resolveSummaryTurn(
  * 只在会开的时候才把产物交出来。把判据抄一份到调用方是不行的：两份触发公式迟早会漂。
  */
 export function shouldOpenGovernanceEpoch(input: {
-  ledger: ContextResidencyLedger
+  ledger: ResidencyLedgerView
   config: ContextGovernanceConfig
   budgetTokens: number
   modelRequested?: LooseOptional<boolean>
@@ -356,7 +355,7 @@ export function shouldOpenGovernanceEpoch(input: {
 
 /** 当前投影占用（token）。与投影共用同一条尾保护规则。 */
 export function measureProjectedTokens(
-  ledger: ContextResidencyLedger,
+  ledger: ResidencyLedgerView,
   config: ContextGovernanceConfig,
   budgetTokens: number,
   charsPerToken?: LooseOptional<number>
@@ -394,7 +393,7 @@ export function resolveProjectionBudget(
  * **缓降**：被反复召回说明模型真的需要它，降了也会以 fault 的形式还回来（§4C 的回学闭环）。
  */
 function collectCandidates(
-  ledger: ContextResidencyLedger,
+  ledger: ResidencyLedgerView,
   config: ContextGovernanceConfig,
   budgetTokens: number,
   charsPerToken?: LooseOptional<number>,
@@ -523,7 +522,7 @@ function isSkeletonMember(record: ContextRecord): boolean {
   return record.kind === 'user' || record.kind === 'assistant'
 }
 
-function resolveLatestTurn(ledger: ContextResidencyLedger): number {
+function resolveLatestTurn(ledger: ResidencyLedgerView): number {
   return resolveLatestTurnOf(ledger.list())
 }
 

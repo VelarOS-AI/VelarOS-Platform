@@ -2,9 +2,9 @@ import type { ScopedLog } from '@velaros-ai/core/logger'
 import { asRecord } from '@velaros-ai/core/utils/unknownJsonRecord'
 
 import type { RunnerModelRuntimePort } from '../../contract/requires.js'
+import type { ExecutionEventBusApi } from '../../types/records.js'
 import type { RunnerAgentProvider, RunnerModelCapabilityPort, RunnerResolvedAgentRuntime } from '../../types/runner.js'
 import { AgentRuntimeEvents } from '../../utils/runner/runtime-events'
-import type { ExecutionEventBus } from '../records/ExecutionEventBus'
 
 /**
  * Agent 运行配置、运行事件与注入 Model capability 的唯一组合桥。
@@ -41,17 +41,17 @@ class ModelRuntime implements RunnerModelRuntimePort {
     error: unknown,
     turn: number,
     abortSignal: AbortSignal,
-    events: ExecutionEventBus,
+    events: ExecutionEventBusApi,
     log: ScopedLog
   ): void {
     this.runtimeEvents.handleStreamError(error, turn, abortSignal, events, log)
   }
 
-  public emitDone(events: ExecutionEventBus): void {
+  public emitDone(events: ExecutionEventBusApi): void {
     this.runtimeEvents.emitDone(events)
   }
 
-  public emitAbort(events: ExecutionEventBus, message = '运行被终止'): void {
+  public emitAbort(events: ExecutionEventBusApi, message = '运行被终止'): void {
     this.runtimeEvents.emitAbort(events, message)
   }
 }

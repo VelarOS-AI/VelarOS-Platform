@@ -2,7 +2,7 @@
  * `ProviderRequestCompiler` 是第一环治理管线的装配入口，也是 `ContextAssembler` 的正式实现。
  *
  * B1 将原先彼此独立的历史压缩路径统一为驻留账本：会话历史先由
- * `ContextGovernanceSession.syncHistory` 增量摄入，在轮边界由 `governTurn` 执行唯一治理，
+ * `ContextGovernanceSessionApi.syncHistory` 增量摄入，在轮边界由 `governTurn` 执行唯一治理，
  * 最后由 `projectContextLedger` 确定性投影。结构清洗、保留上下文和预算钳制仍各守原有职责。
  *
  * 治理未触发时，账本记录均为内联态，投影保持原消息对象与顺序，编译结果与清洗后的历史逐字节
@@ -22,6 +22,7 @@ import { logRuntime } from '@velaros-ai/core/logger'
 
 import type { ContextUsageEstimate } from '../../types/agent.js'
 import type { CompiledProviderRequest, CompileProviderRequestInput, ContextGovernanceRuler,EstimateContextUsageOptions, ProviderHistoryRewriteSignal } from '../../types/context.js'
+import type { ContextGovernanceSessionApi, ContextGovernanceSessionRegistryApi } from '../../types/residency.js'
 import type { ContextProjectionStats, GovernanceEpochReport,GovernanceWindowDerivation } from '../../types/residency.js'
 import { estimateProviderRequestUsage, resolveToolSchemaReserve, runBudgetStage } from '../../utils/context/budget-stage'
 import { estimateContextUsage } from '../../utils/context/context-usage'
@@ -49,7 +50,7 @@ import { resolveProjectionBudget } from '../../utils/residency/governance-epoch'
 import { resolveGovernanceWindow } from '../../utils/residency/governance-window'
 import { estimateMessageBudgetChars } from '../../utils/residency/message-facts'
 import { projectContextLedger } from '../../utils/residency/projection'
-import { type ContextGovernanceSession, ContextGovernanceSessionRegistry } from '../residency/ContextGovernanceSession'
+import { ContextGovernanceSessionRegistry } from '../residency/ContextGovernanceSession'
 import { rewriteCanonicalToolReferences } from '../tools/ProviderToolReferenceCanonicalizer'
 
 export {
@@ -76,7 +77,7 @@ export class ProviderRequestCompiler {
      * 治理会话登记处（宿主级单实例，账本跨回合的家）。缺省自建一份——单宿主进程里这等价于
      * 注入，多宿主同进程装配才需要显式共享同一份实例。
      */
-    private readonly governanceSessions: ContextGovernanceSessionRegistry = new ContextGovernanceSessionRegistry()
+    private readonly governanceSessions: ContextGovernanceSessionRegistryApi = new ContextGovernanceSessionRegistry()
   ) {}
 
   public compile(input: CompileProviderRequestInput): CompiledProviderRequest {
@@ -223,7 +224,7 @@ export class ProviderRequestCompiler {
     retainedMessages: readonly ModelMessage[],
     at: number
   ): {
-    session: ContextGovernanceSession
+    session: ContextGovernanceSessionApi
     report: Nullable<GovernanceEpochReport>
     window: GovernanceWindowDerivation
     ruler: ContextGovernanceRuler
@@ -286,7 +287,7 @@ export class ProviderRequestCompiler {
   /** 治理前容量预判与治理后发送复用同一条投影/活动尾/工具别名路径。 */
   private projectProviderMessages(
     input: CompileProviderRequestInput,
-    session: ContextGovernanceSession,
+    session: ContextGovernanceSessionApi,
     window: GovernanceWindowDerivation,
     stablePrefix: readonly ModelMessage[],
     retainedMessages: readonly ModelMessage[],
@@ -314,7 +315,7 @@ export class ProviderRequestCompiler {
   private buildTailBlocks(
     input: CompileProviderRequestInput,
     governance: {
-      session: ContextGovernanceSession
+      session: ContextGovernanceSessionApi
       window: GovernanceWindowDerivation
     },
     stats: ContextProjectionStats

@@ -15,7 +15,7 @@ import { TimerScope } from "@velaros-ai/core/utils/TimerScope";
 
 import type { AssistantContentPart } from '../../types/history.js'
 import type { ConsumeAssistantStreamArgs, InlineReasoningSegment, PendingStreamToolCall, ProviderToolInputDraft, ProviderToolNameResolution,StreamConsumerEvents, StreamDiagnostics, StreamIdleThinkingNotifier } from '../../types/loop.js'
-import type { ProviderTurnUsage } from '../../types/records.js'
+import type { ProviderTurnRecorder, ProviderTurnUsage } from '../../types/records.js'
 import type { ToolExecutionPolicyRegistry } from '../../types/tools.js'
 import { normalizeModelRequestError } from "../../utils/model/model-request-error";
 import {
@@ -43,7 +43,6 @@ import {
 import { createProviderTurnToolCallIdAllocator } from "../../utils/stream/tool-call-id";
 import { applyProviderToolInputStreamPart, buildToolInputReadyMetadata, diagnoseRejectedProviderToolInput, parseRecoverableProviderToolInputDraft, resolveProviderExecutableToolInput, resolveProviderFinalToolCallIdentity, summarizeProviderToolInputDraft } from "../../utils/stream/tool-input";
 import { ChatRuntimeEvents } from '../../utils/wire/chat-runtime.js'
-import type { ProviderTurnEventReducer } from "../records/ProviderTurnEventReducer";
 import { createProviderToolReferenceCanonicalizer } from "../tools/ProviderToolReferenceCanonicalizer";
 import { ToolExecutionPolicy } from "../tools/ToolExecutionPolicy";
 
@@ -874,7 +873,7 @@ class StreamConsumer {
 
   private recordAbnormalFinishReasonDiagnostic(
     diagnostics: StreamDiagnostics,
-    providerTurnReducer?: ProviderTurnEventReducer,
+    providerTurnReducer?: ProviderTurnRecorder,
   ): ReturnType<
     AgentStreamDiagnosticHelper["buildAbnormalFinishReasonDiagnostic"]
   > {
@@ -965,7 +964,7 @@ class StreamConsumer {
     turnState: StreamConsumerTurnState,
     events: Pick<StreamConsumerEvents, "emitTextDelta">,
     appendCurrentText: (text: string) => void,
-    providerTurnReducer?: ProviderTurnEventReducer,
+    providerTurnReducer?: ProviderTurnRecorder,
   ): void {
     if (!text) return;
 

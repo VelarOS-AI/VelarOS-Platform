@@ -208,7 +208,6 @@ export { TurnRunner } from '../impl/loop/TurnRunner'
 export { TurnRunner as AgentTurnHelper } from '../impl/loop/TurnRunner'
 export { AgentModLoader, DataOnlyAxes, PayloadRequiredAxes } from '../impl/mods/AgentModLoader'
 export { AgentModRegistry, AgentModStaleSnapshotError } from '../impl/mods/AgentModRegistry'
-export type { AgentModHookEventMap, AgentModHookGenericEvent, AgentModHookHandler, AgentModHookOutcomeMap, AgentModHookRegistration, AgentModHookRegistrationInput } from '../impl/mods/AgentModSeamDispatcher'
 export {
   AgentModHookDispatcher,
   AgentModSeamDispatcher,
@@ -334,6 +333,7 @@ export {
   contextBuilderHelper,
   ContextBuilderParts,
 } from '../impl/runner/ContextBuilder'
+export type { AgentModHookEventMap, AgentModHookGenericEvent, AgentModHookHandler, AgentModHookOutcomeMap, AgentModHookRegistration, AgentModHookRegistrationInput } from '../types/mods.js'
 /** @deprecated 请改用 `ContextBuilderParts`；该别名保留至 Agent 1.0。 */
 export { ContextBuilderParts as ContextBuilderHelper } from '../impl/runner/ContextBuilder'
 export type { AgentProvider, ResolvedAgentRuntime } from '../impl/runner/ModelRuntime'
@@ -367,7 +367,6 @@ export {
   ContextPayloadKernelToolOutputStore,
   InMemoryKernelToolOutputStore,
 } from '../impl/tools/InMemoryKernelToolOutputStore'
-export type { KernelToolLoopGuardInput } from '../impl/tools/KernelToolLoopGuard'
 export { isKernelWriteLikeTool, KernelToolLoopGuard } from '../impl/tools/KernelToolLoopGuard'
 export type { KernelToolResultMaterializerOptions } from '../impl/tools/KernelToolResultMaterializer'
 export { KernelToolResultMaterializer } from '../impl/tools/KernelToolResultMaterializer'
@@ -400,6 +399,7 @@ export {
 export { ToolRegistryHelper as ToolRegistry, ToolRegistryHelper } from '../impl/tools/ToolRegistry'
 export { defaultUnsupportedInteractionPort } from '../impl/tools/UnsupportedInteractionPort'
 export type { ExecutionModeId } from '../types/agent'
+export type { KernelToolLoopGuardInput } from '../types/tools'
 export type {
   RegisteredTool,
   RegistryTool,

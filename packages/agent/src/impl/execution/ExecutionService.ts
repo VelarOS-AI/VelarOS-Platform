@@ -25,11 +25,11 @@ import type {
 } from '../../types/agent'
 import type { ExecutionProvideInputRequest, ExecutionRecord, ExecutionResolveConfirmationRequest, ExecutionTaskExecutionAdvice, ExecutionTaskRecord,StreamStatePayload } from '../../types/agent.js'
 import type { ExecutionAbortOptions, ExecutionGuidanceRelayPlanInput, RunManagedExecutionParams } from '../../types/execution.js'
+import type { AgentModSeamDispatcherApi } from '../../types/mods.js'
 import type { ExecutionRouteProvider } from '../../types/records.js'
 import { extractGuidanceUserText } from '../../utils/records/guidance-relay'
 import { ExecutionStateMachine } from '../../utils/records/state-machine'
 import { ChatRuntimeEvents } from '../../utils/wire/chat-runtime.js'
-import type { AgentModSeamDispatcher } from '../mods/AgentModSeamDispatcher'
 import { ExecutionGuidanceQueue } from '../records/ExecutionGuidanceQueue'
 import { ExecutionInteractions } from '../records/ExecutionInteractions'
 import { ExecutionRecords } from '../records/ExecutionRecords'
@@ -63,7 +63,7 @@ interface ExecutionServiceOptions {
    * 会话生命周期钩子；缺省不注入 → 全链 no-op。钩子是纯通知：既不改执行入参，
    * 也不能否决执行（准入判定单源在 authGate 与策略门，钩子不可旁路）。
    */
-  seams?: AgentModSeamDispatcher
+  seams?: AgentModSeamDispatcherApi
 }
 
 /**
@@ -112,7 +112,7 @@ class ExecutionService {
   /** 准入断言端口；托管执行启动前校验已授权。 */
   private readonly authGate: AuthGatePort
   /** 可选 mod seam 派发器；缺省 null → 会话生命周期钩子全链 no-op。 */
-  private readonly seams: Nullable<AgentModSeamDispatcher>
+  private readonly seams: Nullable<AgentModSeamDispatcherApi>
 
   constructor(
     private readonly executionResource: ExecutionResourcePort,

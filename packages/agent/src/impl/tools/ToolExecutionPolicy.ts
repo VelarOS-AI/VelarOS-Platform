@@ -774,4 +774,3 @@ class ToolExecutionPolicy {
 
 export { ToolExecutionPolicy }
 export type { ToolFailureResult }
-export type { ToolArgsValidationResult, ToolSchemaIssueDetail } from '../../types/tools.js'

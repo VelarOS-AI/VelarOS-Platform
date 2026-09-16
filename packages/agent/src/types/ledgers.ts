@@ -1,7 +1,5 @@
 /** 引擎负责分配、追加输入不得携带的基字段。 */
 
-import type { SessionLedger } from '../impl/ledgers/SessionStore.js'
-
 import type { ExecutionSpan, ExecutionSpanMetrics,ExecutionSpanStatus, SessionEntry } from './agent.js'
 import type { ProviderRequestSnapshot } from './context.js'
 
@@ -51,7 +49,34 @@ export interface ExecutionSpanRecorderDeps {
 }
 
 /** fork 出新会话账本的工厂：把当前叶谱系原样播种进新文件并打开 handle。 */
-export type ForkFactory = (newSessionId: string, lineage: readonly SessionEntry[]) => Promise<SessionLedger>
+/**
+ * 会话账本的最小形状：谁拿到一份已开档的账本就能做这些事。
+ * 类实现在 impl/ledgers/SessionLedger.ts，这里只登记调用方看得到的那一面。
+ */
+export interface SessionLedgerApi {
+  /** 这份账本对应的会话 id。 */
+  readonly sessionId: string
+  /** 当前叶子 id（当前位置）；空账本为 null。 */
+  readonly currentLeafId: Nullable<string>
+  /** 开档以来累积的非致命告警（尾行修复等）。 */
+  readonly warnings: readonly string[]
+  /** 追加一条 entry：引擎在串行写内原子分配 id / parentId(=当前叶子) / createdAt，schema 校验后落盘并推进叶子。 */
+  append(draft: SessionEntryDraft): Promise<SessionEntry>
+  /** 把当前位置移到既有 entry 上，后续 append 就此分叉出旁支；entry 不存在时抛错。 */
+  branch(entryId: string): Promise<void>
+  /** 把当前叶子的谱系（根→当前叶）复制成一个新会话账本并打开其 handle。 */
+  fork(newSessionId: string): Promise<SessionLedgerApi>
+  /** 整棵会话树投影（根 / 按 id 节点 / 叶子集合）。 */
+  getTree(): SessionTree
+  /** 全部 entry（追加序快照拷贝）。 */
+  getEntries(): readonly SessionEntry[]
+  /** 从当前叶子回溯到根、尊重 CompactionEntry 边界拼出的上下文序列。 */
+  buildContextEntries(): SessionEntry[]
+  /** 排空写队列并关闭 FileHandle；幂等。 */
+  close(): Promise<void>
+}
+
+export type ForkFactory = (newSessionId: string, lineage: readonly SessionEntry[]) => Promise<SessionLedgerApi>
 
 /** 打开一个账本 handle 所需的内部上下文（引擎装配，调用方不见）。 */
 export interface SessionLedgerContext {

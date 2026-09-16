@@ -16,18 +16,16 @@
 import { isEmpty } from '@velaros-ai/core'
 
 import type { AgentChatRuntimeConfig } from '../../contract/requires.js'
-import type { PromptBudgetOptions, PromptCompositionResult, PromptContribution, PromptRenderContext, PromptSegmentDefinition, PromptSegmentProvider } from '../../types/guidance.js'
-import type { AgentModTurnContextAppendage } from '../../types/mods.js'
+import type { PromptBudgetOptions, PromptCompositionResult, PromptContribution, PromptRegistryApi, PromptRenderContext, PromptSegmentDefinition, PromptSegmentProvider } from '../../types/guidance.js'
+import type { AgentModSeamDispatcherApi, AgentModTurnContextAppendage } from '../../types/mods.js'
 import type { BuiltContext } from '../../types/runner.js'
 import { createBuiltInPromptRegistry, createIdentityPromptSegment } from '../../utils/guidance/catalog'
-import type { PromptRegistry } from '../guidance/PromptRegistry'
-import type { AgentModSeamDispatcher } from '../mods/AgentModSeamDispatcher'
 
 /** mod 追加段的缺省优先级：排在内置 dynamic 段之后、便于识别来源。 */
 const ModTurnContextDefaultPriority = 9_000
 
 class ContextBuilderParts {
-  public createDefaultRegistry(): PromptRegistry {
+  public createDefaultRegistry(): PromptRegistryApi {
     return createBuiltInPromptRegistry()
   }
 
@@ -197,17 +195,17 @@ function applyPromptBudget(args: {
  */
 class ContextBuilder {
   /** prompt 段注册表，负责排序、过滤和 tier 分组。 */
-  private readonly registry: PromptRegistry
+  private readonly registry: PromptRegistryApi
   /**
    * 可选 mod 拦截 seam 派发器；注入时在段排序后、预算裁剪前派发一次
    * `turn-context:assemble`。追加段与内置段同样计入预算，不得绕过上下文治理。
    * 缺省 null → 全链 no-op，组装结果逐字节不变。
    */
-  private readonly seams: Nullable<AgentModSeamDispatcher>
+  private readonly seams: Nullable<AgentModSeamDispatcherApi>
 
   constructor(
-    registry: PromptRegistry = contextBuilderHelper.createDefaultRegistry(),
-    seams: Nullable<AgentModSeamDispatcher> = null
+    registry: PromptRegistryApi = contextBuilderHelper.createDefaultRegistry(),
+    seams: Nullable<AgentModSeamDispatcherApi> = null
   ) {
     this.registry = registry
     this.seams = seams

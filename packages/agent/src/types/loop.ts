@@ -4,23 +4,71 @@ import type { AppError } from '@velaros-ai/core/error'
 import type { ScopedLog } from '@velaros-ai/core/logger'
 
 import type { AgentChatRuntimeConfig, AgentExecutionConfig, AgentModelProvider, AgentModelRequestOptions, AgentModelRetryPolicy, AgentRunLifecycle, AgentRuntimeCapabilityPorts, AgentRuntimeInputPort, AgentSystemRuntimeConfig, AgentTurnCapabilitySnapshotSource,ContextPayloadStore } from '../contract/requires.js'
-import type { LoopWindDownGuard } from '../impl/loop/LoopWindDownGuard.js'
-import type { AgentModSeamDispatcher } from '../impl/mods/AgentModSeamDispatcher.js'
-import type { ProviderTurnEventReducer } from '../impl/records/ProviderTurnEventReducer.js'
-import type { ContextGovernanceSessionRegistry } from '../impl/residency/ContextGovernanceSession.js'
-import type { KernelToolLoopGuard } from '../impl/tools/KernelToolLoopGuard.js'
 
 import type { ActiveContextArtifact, ActiveContextArtifactKind, ActiveContextArtifactStatus, ActiveContextUpsertInput, AgentContextPhase, AgentContextPhaseReason,AgentDelegationContract, AgentEvent, AgentModelInputModality, AgentRoleId, AgentSurfaceId, AppLocale, CapabilityScopeId, ChatPromptFeatureId, ChatRuntimeEvent, ControlPlaneLedgerEntry, ControlPlaneLedgerSource, ExecutionModeId, PromptSegmentTrace, RunProfileDefinition, RunProfileId, RunProfileRuntimePolicy, RunProfileSelectionId, SkippedPromptSegmentTrace, StreamAssistantGeneratedFilePayload, StreamAssistantRawPayload, StreamAssistantSourcePayload, StreamReasoningPayload, StreamToolCallPayload, StreamToolMetadataPayload, StreamToolProgressPayload, StreamToolResultPayload, StreamTurnContextPayload, StreamTurnEndPayload, SubAgentStructuredOutputContract, SubAgentUsage, ThinkingDepth, ToolAvailabilityScope, ToolCategoryId, ToolCategoryOverview, ToolDescriptor, ToolLayerTelemetryMetrics, ToolSurfaceProfileId, TurnPlanningTelemetryPayload } from './agent.js'
 import type { GoalStatus } from './builtin.js'
 import type { AgentLoopToolRegistry,ContextActiveTaskInput, ContextPinnedEvidenceInput, ContextWorkingSetBudgetAllocation, EstimateContextUsageOptions, ProviderRequestPressureKind, ProviderRequestSnapshot } from './context.js'
 import type { AgentHistoryToolContext, AgentTurnToolExecutor, AgentTurnToolResult, AssistantContentPart } from './history.js'
 import type { ModelSpanHandle,ToolSpanOpener, TurnSpanScope } from './ledgers.js'
-import type { ProviderTurnSnapshot } from './records.js'
+import type { AgentModSeamDispatcherApi } from './mods.js'
+import type { ProviderTurnRecorder, ProviderTurnSnapshot } from './records.js'
+import type { ContextGovernanceSessionRegistryApi } from './residency.js'
 import type { AgentRoleResolution, PromptStatePreparedToolCategories, ResolveAgentRoleOptions } from './runner.js'
 import type { AutoVerificationEvents, AutoVerificationGateResult,AutoVerificationToolContext, CodingSessionSnapshot } from './session.js'
+import type { KernelToolFailureBatchEntry, KernelToolLoopGuardInput } from './tools.js'
 import type { SessionToolAllocatorPlan, ToolAllocatorRequest, ToolExecutionPolicyContext, ToolExecutionPolicyRegistry, ToolExecutorEvents } from './tools.js'
 
 /** 产品自持的模型提供方集合解析出来的、可直接执行的模型运行时。 */
+
+/**
+ * 收尾守卫的最小形状：回合开始打点、记一次提醒后的工具调用。
+ * 类实现在 impl/loop/LoopWindDownGuard.ts。
+ */
+
+/**
+ * 子 Agent 回合循环的最小形状：外面只需要"执行一次委派任务"。
+ * 类实现在 impl/loop/QueryLoop.ts。
+ */
+export interface QueryLoopApi<TContext extends QueryLoopToolContext = QueryLoopToolContext, TEvents extends QueryTurnEvents = QueryTurnEvents, TSignals = unknown> {
+  /** 执行一次子 Agent 委派任务。 */
+  execute(args: ExecuteQueryLoopArgs<TContext, TEvents, TSignals>): Promise<string>
+}
+
+/**
+ * 主会话流式循环的最小形状：执行一次完整 solo loop，以及清会话缓存。
+ * 类实现在 impl/loop/SoloStreamLoop.ts。
+ */
+export interface SoloStreamLoopApi<TContext extends SoloLoopToolContext = SoloLoopToolContext, TEvents extends SoloLoopEvents = SoloLoopEvents> {
+  /** 清理指定会话在 loop 生命周期内缓存的工具空间和分配器状态。 */
+  clearSession(sessionId: string): void
+  /** 运行完整 solo loop，直到完成、失败、被中断、墙钟超时或触达隐藏步数熔断。 */
+  execute(args: ExecuteSoloModeStreamLoopArgs<TContext, TEvents>): Promise<SoloModeStreamLoopResult>
+}
+
+export interface LoopWindDownGuardApi {
+  /** 到点返回触发原因（并记账「已注入」）；未到点或已注入过返回 null。 */
+  tickTurnStart(turn: number): Nullable<LoopWindDownTriggerReason>
+  /** 记一轮提醒后的工具调用；返回 true = margin 用尽，面应强制收尾。 */
+  recordToolUseTurn(): boolean
+  /** 本轮是否已经注入过收尾提醒。 */
+  readonly windDownInjected: boolean
+}
+
+/**
+ * 工具死循环守卫的最小形状：回合只需要记结果、查重复。
+ * 类实现在 impl/tools/KernelToolLoopGuard.ts。
+ */
+export interface KernelToolLoopGuardApi {
+  /** 记一次工具结果；判定成环时返回给模型看的提示。 */
+  recordOutcome(input: { toolName: string; args: Record<string, unknown>; error?: string; result: unknown }): string | undefined
+  /** 查「同一写类工具重复成功」；命中时返回提示。 */
+  checkRepeatedWriteLikeSuccess(input: KernelToolLoopGuardInput): Nullable<string>
+  /** 记一次工具成功。 */
+  recordSuccess(input: KernelToolLoopGuardInput): void
+  /** 记一批工具失败；判定成环时返回提示。 */
+  recordFailureBatch(batch: readonly KernelToolFailureBatchEntry[]): Nullable<string>
+}
+
 export interface ResolvedAgentModelRuntime {
   provider: AgentModelProvider
   providerId: string
@@ -291,13 +339,13 @@ export interface ExecuteQueryTurnArgs<
    * 令本轮内 ToolExecutor 产 tool span（挂在子 Agent 自己的 turn span 下）；缺省 no-op（零观测零付费）。
    */
   toolSpanOpener?: LooseOptional<ToolSpanOpener>
-  toolLoopGuard?: KernelToolLoopGuard
+  toolLoopGuard?: KernelToolLoopGuardApi
   /**
    * 可选 mod 拦截 seam 派发器（裁决 9 机制②）；由 QueryLoop 逐轮透传。缺省 null → 本轮
    * ToolExecutor 全链 no-op，行为逐字节不变。子面与主面共用同一派发器，钩子的「拦下/改写」
    * 才不会在委派边界上出现盲区。
    */
-  seams?: LooseOptional<AgentModSeamDispatcher>
+  seams?: LooseOptional<AgentModSeamDispatcherApi>
 }
 
 export interface ProviderTurnPayloadContext {
@@ -515,7 +563,7 @@ export interface AgentLoopSurface<TFinish> {
   beforeTurn(turn: number): Promise<void>
   /** 护栏 1 装配：共享 guard + 面自己的提醒文案与触发日志。 */
   windDown: {
-    guard: LoopWindDownGuard
+    guard: LoopWindDownGuardApi
     onTriggered(reason: LoopWindDownTriggerReason, turn: number): void
   }
   /**
@@ -983,7 +1031,7 @@ export interface LinkedAbortScope {
 
 export interface StreamConsumerToolExecutor {
   configureProviderTurnReducer?(
-    input: ProviderTurnEventReducer,
+    input: ProviderTurnRecorder,
     onSnapshot?: LooseOptional<(snapshot: ProviderTurnSnapshot) => void>,
   ): void;
   enqueue(
@@ -1034,7 +1082,7 @@ export interface ConsumeAssistantStreamArgs {
   contextEpoch?: KernelContextEpoch;
   contextEpochClaim?: LooseOptional<KernelContextEpochClaim>;
   contextEpochGuard?: LooseOptional<KernelContextEpochGuardLike>;
-  providerTurnReducer?: ProviderTurnEventReducer;
+  providerTurnReducer?: ProviderTurnRecorder;
   toolContext?: {
     locale?: AppLocale;
     resolveCurrentVisibleCanonicalToolName?: (
@@ -1394,7 +1442,7 @@ export interface ApplySoloContextDegradeActionContext<
   TContext extends SoloContextDegradeToolContext = SoloContextDegradeToolContext,
 > {
   /** 治理会话登记处：`govern-epoch` 级的落点（缺页 = 强开一次 epoch）。 */
-  governanceSessions: ContextGovernanceSessionRegistry
+  governanceSessions: ContextGovernanceSessionRegistryApi
   toolRegistry: SoloContextDegradeToolRegistry<TContext>
   log: Pick<ScopedLog, 'warn'>
   roleRuntime: { model: string; contextWindow?: LooseOptional<number> }
@@ -2064,7 +2112,7 @@ export interface RunSoloToolUseContinuationInput<
   }): Promise<string[]>
   /**
    * 护栏 1（轮次上限）margin 记账：本轮是收尾提醒后的又一次工具调用时返回 true = 强制收尾。
-   * 机制单源在 LoopWindDownGuard（面装配为 guard.recordToolUseTurn）。
+   * 机制单源在 LoopWindDownGuardApi（面装配为 guard.recordToolUseTurn）。
    */
   shouldForceStopAfterToolTurn(): boolean
   hardCap: number

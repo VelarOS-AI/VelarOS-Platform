@@ -6,7 +6,6 @@ import type { ScopedLog } from '@velaros-ai/core/logger'
 import type { KernelModuleHealth,ScopeRef } from '@velaros-ai/kernel/contracts/abi'
 import type { RemoteNodeCredentialStore } from '@velaros-ai/kernel/remote/client'
 
-import type { ExecutionEventBus } from '../impl/records/ExecutionEventBus.js'
 import type { ActiveContextArchiveFilter, ActiveContextArtifact, ActiveContextGovernanceOptions, ActiveContextGovernanceReport, ActiveContextListOptions, ActiveContextUpsertInput, AgentDeveloperContext, AgentRoleId, AgentSkillDescriptor, AgentSkillSourceKind, AgentSurfaceId, AppLocale, ApprovalDecision, CapabilityScopeId, ChatContextReadEvidenceRequest, ChatContextReadEvidenceResult, ChatContextReadToolPayloadRequest, ChatContextRetrievedPayload, ChatContextRetrievePayloadRequest, ChatContextSearchConversationHistoryRequest, ChatContextSearchConversationHistoryResult, ChatContextSearchTerminalOutputRequest, ChatContextSearchTerminalOutputResult, ChatMessage, ChatPromptFeatureId, ChatSessionPayloadSnapshot, ChatSessionToolResultPayload, CustomSubAgentDefinition, CustomSubAgentDescriptor, ExecutionModeId, ExecutionTaskExecutionAdvice, ExecutionTaskPlanStep, ExecutionTaskRecommendedAction, ExecutionTaskRecord, PermissionConfirmationMode, PromptSegmentOverride, ReasoningLevel, RunProfileSelectionId, SessionLineageContext, SubAgentTypeId,ThinkingDepth, ToolCategoryId, ToolConfirmationDecisionOptions, ToolExecutionPlanUpdate, ToolSurfaceProfileId } from '../types/agent.js'
 import type { AgentRuntimeCapabilityExtension,CapabilityIntentClassifierContext, CapabilityIntentSignal, CapabilityScopeCategoryDecision, CapabilityScopeResidency, CapabilityScopeRuntimeFacts, CapabilityValidationInterpretation, ToolAllocationDelegation, ToolAllocationPrerequisite, ToolResultMiddlewareContext, ToolResultMiddlewareResult, ToolValidationHintContext, ToolValidationRecovery } from '../types/capabilities.js'
 import type { RemoteHostToolEntry } from '../types/connectors.js'
@@ -18,7 +17,7 @@ import type { RunSpanScope,SessionLedgerWarn } from '../types/ledgers.js'
 import type { AgentTurnCapabilitySnapshot,QueryLoopToolRegistry, ResolvedAgentModelRuntime, SoloLoopToolRegistry, TurnRunnerToolRegistry } from '../types/loop.js'
 import type { AgentModBindings, AgentModPackDescriptorLike, VelarModArchiveEntry } from '../types/mods.js'
 import type { AgentSessionApplicationEvent } from '../types/product-session.js'
-import type { ExecutionResourceProvider, KernelBackgroundJobStoredOutput } from '../types/records.js'
+import type { ExecutionEventBusApi, ExecutionResourceProvider, KernelBackgroundJobStoredOutput } from '../types/records.js'
 import type { ContextFaultEvent,ContextGovernanceConfigInput, ContextResidencyMigrationEvent } from '../types/residency.js'
 import type { AgentExecutionStackToolContext, AgentRoleDefinition, AgentRoleDescriptorProviderContext, AgentRuntimeInputResult,AgentSurfaceProfile, AgentTurnBoundary, AgentTurnSettlement, DerivedAgentSurfaceRunPolicy, DeriveSurfaceRunPolicyInput, ResolveAgentSurfaceInput, RunnerBuildToolContextArgs, RunnerExecutionScope, RunnerModelCapabilityPort, RunnerToolContext } from '../types/runner.js'
 import type { ReminderScope, ReminderTrigger, RuntimeReminderInput } from '../types/session.js'
@@ -197,11 +196,11 @@ export interface RunnerModelRuntimePort extends RunnerModelCapabilityPort {
     error: unknown,
     turn: number,
     abortSignal: AbortSignal,
-    events: ExecutionEventBus,
+    events: ExecutionEventBusApi,
     log: ScopedLog
   ): void
-  emitDone(events: ExecutionEventBus): void
-  emitAbort(events: ExecutionEventBus, message?: string): void
+  emitDone(events: ExecutionEventBusApi): void
+  emitAbort(events: ExecutionEventBusApi, message?: string): void
 }
 
 export interface RunnerConfigService {
@@ -218,7 +217,7 @@ export interface RunnerSubAgentDispatcher<TToolContext extends RunnerToolContext
   dispatch(request: {
     input: SubAgentDispatchInput
     parentCtx: TToolContext
-    events: ExecutionEventBus
+    events: ExecutionEventBusApi
     config: AgentExecutionConfig
   }): Promise<string>
   /**

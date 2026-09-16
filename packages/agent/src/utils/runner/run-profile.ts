@@ -322,4 +322,3 @@ export {
   resolveRunProfileWorkingSetContextWindow,
   RunProfileDefinitions,
 }
-export type { AgentRunProfileCatalogSnapshot } from '../../types/runner.js'

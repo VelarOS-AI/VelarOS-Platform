@@ -243,3 +243,24 @@ export interface BuiltInPromptOptions {
    */
   primaryAgentIdentity?: string
 }
+
+/**
+ * 提示词段注册表的最小形状：注册、屏蔽、组合这一面。
+ * 类实现在 impl/guidance/PromptRegistry.ts。
+ */
+export interface PromptRegistryApi {
+  /** 注册或覆盖单个 prompt 段（Tier0 带谓词即抛）。 */
+  register(definition: PromptSegmentDefinition): this
+  /** 批量注册 prompt 段。 */
+  registerMany(definitions: PromptSegmentDefinition[]): this
+  /** 注册动态段 provider。 */
+  registerProvider(provider: PromptSegmentProvider): this
+  /** 运行时禁用某个段。 */
+  suppress(id: string, reason: string): this
+  /** 恢复被 suppress 的段。 */
+  restore(id: string): this
+  /** 组合所有可用段，并返回 stable/dynamic/skipped 分组结果。 */
+  compose(context?: PromptRenderContext): PromptCompositionResult
+  /** 克隆注册表，供 ContextBuilder 链式变体隔离修改。 */
+  clone(): PromptRegistryApi
+}

@@ -1,8 +1,70 @@
 import type { ModelMessage } from 'ai'
 
-import type { ProviderTurnEventReducer } from '../impl/records/ProviderTurnEventReducer.js'
+import type { AgentEvent, AgentRoleExpectedOutputKind, AgentRoleId, AgentTurnRouteIdentity,CapabilityScopeId, ChatRuntimeEvent, ExecutionEventRecord, ExecutionRecord, ExecutionTaskPlanStep, ExecutionTaskPlanStepStatus, ExecutionTaskRecord, StreamAssistantGeneratedFilePayload, StreamAssistantRawPayload, StreamAssistantSourcePayload, StreamExecutionGraphPayload, StreamReasoningPayload, StreamStatePayload, StreamToolCallPayload, StreamToolMetadataPayload, StreamToolProgressPayload, StreamToolResultPayload, StreamTurnContextPayload, StreamWorkerThreadPayload, TurnContextSourceId, TurnContextSourcePeekInput, TurnContextSourcePeekResult, WorkflowType } from './agent.js'
 
-import type { AgentRoleExpectedOutputKind, AgentRoleId, AgentTurnRouteIdentity,CapabilityScopeId, ExecutionEventRecord, ExecutionRecord, ExecutionTaskPlanStep, ExecutionTaskPlanStepStatus, ExecutionTaskRecord, StreamExecutionGraphPayload, StreamStatePayload, StreamWorkerThreadPayload, TurnContextSourceId, TurnContextSourcePeekInput, TurnContextSourcePeekResult, WorkflowType } from './agent.js'
+/**
+ * 执行事件总线的最小形状：一次 run 里所有"往 UI 发事件"的出口。
+ * 类实现在 impl/records/ExecutionEventBus.ts，这里只登记调用方看得到的那一面。
+ */
+export interface ExecutionEventBusApi {
+  /** 在 agent 事件转发前插入旁路监听，ExecutionService 用它写入事件账本。 */
+  withAgentTap(tap: (event: AgentEvent) => void): ExecutionEventBusApi
+  /** 给团队 worker 内部模型循环使用的静默总线；options 缺席时只保留 contextInvalidated 上浮。 */
+  forWorkerExecution(options?: WorkerExecutionStreamOptions): ExecutionEventBusApi
+  /** 发送原始 agent 事件。 */
+  emitAgent(event: AgentEvent): void
+  /** 发送 runtime 级事件，如 done/error/aborted。 */
+  emitRuntime(payload: ChatRuntimeEvent): void
+  /** 发送助手文本增量。 */
+  emitTextDelta(text: string): void
+  /** 发送 reasoning 增量，供支持的 UI 展示思考流。 */
+  emitReasoningDelta(payload: StreamReasoningPayload): void
+  /** 发送模型生成的文件；renderer 统一负责展示与持久化。 */
+  emitGeneratedFile(payload: StreamAssistantGeneratedFilePayload): void
+  /** 发送模型实际使用的 URL 来源。 */
+  emitSource(payload: StreamAssistantSourcePayload): void
+  /** 发送当前轮角色/上下文信息，ExecutionService 会据此更新任务角色。 */
+  emitTurnContext(payload: StreamTurnContextPayload): void
+  /** 发送模型原始片段，主要用于调试和回放。 */
+  emitAssistantRaw(payload: StreamAssistantRawPayload): void
+  /** 发送团队 worker 线程生命周期事件，供主聊天页显示并行执行过程。 */
+  emitWorkerThread(payload: StreamWorkerThreadPayload): void
+  /** 工具开始执行时发给 UI，展示 tool call block。 */
+  emitToolStart(payload: StreamToolCallPayload): void
+  /** 工具执行期间的增量进度。 */
+  emitToolProgress(payload: StreamToolProgressPayload): void
+  /** 工具执行期间的结构化展示元数据。 */
+  emitToolMetadata(payload: StreamToolMetadataPayload): void
+  /** 工具执行完成或失败时发给 UI。 */
+  emitToolDone(payload: StreamToolResultPayload): void
+  /** 向 UI 推送独立 notice 事件，不嵌进工具结果。 */
+  emitNotice(event: Extract<AgentEvent, { type: 'notice' }>): void
+  /** 发送执行阶段/等待输入等状态。 */
+  emitState(payload: StreamStatePayload): void
+  /** 发送执行图调试快照。 */
+  emitDebug(payload: StreamExecutionGraphPayload): void
+}
+
+/**
+ * 回合事件归约器的最小形状：只列出账本与诊断函数真会用到的那几步。
+ * 类实现在 impl/records/ProviderTurnEventReducer.ts。
+ */
+export interface ProviderTurnRecorder {
+  /** 吃进一条 provider 回合事件。 */
+  apply(event: ProviderTurnEvent): void
+  /** 收束本回合并给出快照。 */
+  complete(): ProviderTurnSnapshot
+  /** 仍在等待结果的工具调用 id。 */
+  pendingToolCallIds(): string[]
+  /** 本回合是否已经开始（收到过任一事件）。 */
+  hasStarted(): boolean
+  /** 本回合是否攒下了诊断。 */
+  hasDiagnostics(): boolean
+  /** 把在途工具按"被打断"收束并给出快照。 */
+  completeWithInterruptedPendingTools(error?: string): ProviderTurnSnapshot
+  /** 当前快照（不收束）。 */
+  snapshot(): ProviderTurnSnapshot
+}
 
 export interface ResolvedTaskRoute {
   workflowType: Nullable<WorkflowType>
@@ -208,7 +270,7 @@ export interface CompleteProviderTurnSnapshotResult {
 }
 
 export interface EmitCompletedProviderTurnSnapshotInput {
-  reducer: LooseOptional<ProviderTurnEventReducer>
+  reducer: LooseOptional<ProviderTurnRecorder>
   onSnapshot: LooseOptional<(snapshot: ProviderTurnSnapshot) => void>
   /**
    * 仅当回合有未收敛工具或诊断时才发（错误/中止分支用）；缺省无条件发（正常收敛分支用）。

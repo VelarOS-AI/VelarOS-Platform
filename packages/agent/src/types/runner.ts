@@ -2,20 +2,70 @@
 import type { ModelMessage } from 'ai'
 
 import type { AgentChatRuntimeConfig, AgentExecutionConfig, AgentExecutionStackToolRegistry, AgentModelProvider, AgentModelResolverPort, AgentRuntimeCapabilityPorts,AgentRuntimeInputPort, AgentSurfaceProfileProvider, AgentSystemRuntimeConfig, CapabilityValidationInterpreter, ExecutionSpanScopeFactory, RunnerConfigService, RunnerExecutionEnvironmentPort, RunnerSubAgentDispatcher, RunnerToolContextBuilder, RunnerToolRegistry, RuntimePromptFeaturePolicy, RuntimeReminderProducer, ToolExecutionApi } from '../contract/requires.js'
-import type { PromptRegistry } from '../impl/guidance/PromptRegistry.js'
-import type { QueryLoop } from '../impl/loop/QueryLoop.js'
-import type { SoloStreamLoop } from '../impl/loop/SoloStreamLoop.js'
-import type { AgentModSeamDispatcher } from '../impl/mods/AgentModSeamDispatcher.js'
-import type { ExecutionEventBus } from '../impl/records/ExecutionEventBus.js'
-import type { ContextGovernanceSessionRegistry } from '../impl/residency/ContextGovernanceSession.js'
-import type { AgentRunner } from '../impl/runner/AgentRunner.js'
-import type { PrimaryAgentProfile } from '../impl/runner/PrimaryAgentProfile.js'
 
-import type { AgentContextPhase, AgentDeveloperContext, AgentRoleExpectedOutputKind, AgentRoleId, AgentRoleProfileConfig, AgentSkillDescriptor, AgentSurfaceId, AgentWorkflowAgentCall, AgentWorkflowAgentResult, AgentWorkflowDefinition, AgentWorkflowRunResult, AppLocale, CapabilityScopeId, ChatPromptFeatureId, ChatRuntimeEvent, ExecutionModeId, ExecutionTaskPlanStep, PermissionConfirmationMode, PromptSegmentTrace, ReasoningLevel, RunProfileDefinition, RunProfileId, RunProfileSelectionId, SessionLineageContext, SkippedPromptSegmentTrace, StreamTurnContextPayload,ThinkingDepth, ToolAvailabilityScope, ToolCategoryId, ToolCategoryOverview, ToolExposureTier, ToolSurfaceProfileId, TurnContextAnchor, TurnContextDelta, WorkflowType } from './agent.js'
+import type { AgentContextPhase, AgentDeveloperContext, AgentRoleExpectedOutputKind, AgentRoleId, AgentRoleProfileConfig, AgentSkillDescriptor, AgentSurfaceId, AgentWorkflowAgentCall, AgentWorkflowAgentResult, AgentWorkflowDefinition, AgentWorkflowRunResult, AppLocale, CapabilityScopeId, ChatPromptFeatureId, ChatRuntimeEvent, ExecutionModeId, ExecutionTaskPlanStep, PermissionConfirmationMode, PromptSegmentTrace, ReasoningLevel, RunProfileDefinition, RunProfileId, RunProfileSelectionId, SessionLineageContext, SkippedPromptSegmentTrace, StreamTurnContextPayload,TaskApprovalRecord, ThinkingDepth, ToolAvailabilityScope, ToolCategoryId, ToolCategoryOverview, ToolExposureTier, ToolSurfaceProfileId, TurnContextAnchor, TurnContextDelta, WorkflowType } from './agent.js'
 import type { SubAgentDispatchCatalog, SubAgentDispatchInput, SubAgentDispatchLimitsSnapshot } from './delegation.js'
 import type { PromptSegmentStability, RuntimePromptSnapshot } from './guidance.js'
-import type { AgentExecutionLimitOverrides,ExecuteQueryLoopArgs, ExecuteSoloModeStreamLoopArgs, QueryLoopRoleEngine, QueryLoopSubAgentOptions, QueryLoopToolCategoryResolver, QueryLoopToolContext, ResolvedAgentModelRuntime, SoloLoopToolContext, SoloModeStreamLoopResult } from './loop.js'
+import type { PromptRegistryApi } from './guidance.js'
+import type { AgentExecutionLimitOverrides, ExecuteQueryLoopArgs, ExecuteSoloModeStreamLoopArgs, QueryLoopApi, QueryLoopRoleEngine, QueryLoopSubAgentOptions, QueryLoopToolCategoryResolver, QueryLoopToolContext, ResolvedAgentModelRuntime, SoloAwaitPendingBackgroundJobs, SoloLoopToolContext, SoloModeStreamLoopResult, SoloStreamLoopApi } from './loop.js'
+import type { AgentModSeamDispatcherApi } from './mods.js'
+import type { ExecutionEventBusApi } from './records.js'
+import type { ContextGovernanceSessionRegistryApi } from './residency.js'
 import type { CodingSessionSnapshot, CodingSessionToolCategoryToolNames, CodingSessionToolContext } from './session.js'
+
+/**
+ * 主 Agent 角色画像的最小形状：一次解析出本轮角色、工具面与提示词特性。
+ * 类实现在 impl/runner/PrimaryAgentProfile.ts。
+ */
+
+/** Runner 一次运行的配置：执行配置加上本轮的 surface 与后台任务钩子。 */
+export interface AgentRunnerConfig extends AgentExecutionConfig {
+  /** 本轮 surface 画像。 */
+  surfaceProfile?: AgentSurfaceProfile
+  /** 取一条待注入的回合上下文便签。 */
+  consumeTurnContextNote?: () => Nullable<string>
+  /** 等在飞的后台任务落地。 */
+  awaitPendingBackgroundJobs?: SoloAwaitPendingBackgroundJobs
+  /** 读一个后台任务的输出。 */
+  readBackgroundJobOutput?: RunnerReadBackgroundJobOutput
+  /** 等一批后台任务。 */
+  waitBackgroundJobs?: RunnerWaitBackgroundJobs
+  /** 取消一个后台任务。 */
+  cancelBackgroundJob?: RunnerCancelBackgroundJob
+}
+
+export interface PrimaryAgentProfileApi {
+  /** 按已知工具名与本轮开关解析出角色结论。 */
+  resolve(options: {
+    knownToolNames: string[]
+    selectedSkillIds?: string[]
+    promptFeatures?: readonly ChatPromptFeatureId[]
+    activeCapabilityScope?: CapabilityScopeId
+    /** 当前 surface 必须从模型和发现面移除的工具。 */
+    hiddenToolNames?: readonly string[]
+    /** 是否允许模型把复杂任务继续派发给子 Agent。 */
+    allowSubAgents: boolean
+  }): AgentRoleResolution
+}
+
+/**
+ * Runner 的最小形状：宿主与执行栈看得到的那一面。
+ * 类实现在 impl/runner/AgentRunner.ts。
+ */
+export interface AgentRunnerApi<TToolContext extends RunnerToolContext = RunnerToolContext> {
+  /** 以 solo worker 身份跑一次模型循环，事件走传进来的总线。 */
+  streamSoloWorker(messages: ModelMessage[], config: AgentRunnerConfig, events: ExecutionEventBusApi, options?: StreamSoloWorkerOptions): Promise<void>
+  /** 列出某会话已登记的任务审批记录。 */
+  getTaskApprovalRecords(sessionId: string): TaskApprovalRecord[]
+  /** 撤销一条任务审批。 */
+  revokeTaskApproval(sessionId: string, id: string): boolean
+  /** 订阅任务审批变化；返回退订函数。 */
+  subscribeTaskApprovals(listener: (sessionId: string) => void): () => void
+  /** 清空某会话的任务审批记录。 */
+  clearTaskApprovals(sessionId: string): void
+  /** 以子 Agent 身份执行一次委派任务。 */
+  query(task: string, parentCtx: TToolContext, opts?: RunnerSubAgentOptions): Promise<string>
+}
 
 export interface AgentRoleContract extends AgentRoleProfileConfig {
   /** 角色可承接的 workflow 类型。 */
@@ -85,7 +135,7 @@ export interface RunnerCodingSessionPolicyBundle {
   }
 }
 
-export type RunnerSubAgentOptions = QueryLoopSubAgentOptions<ExecutionEventBus>
+export type RunnerSubAgentOptions = QueryLoopSubAgentOptions<ExecutionEventBusApi>
 
 export type RunnerReadBackgroundJobOutput = (input: {
   jobId: string
@@ -128,13 +178,13 @@ export interface RunnerBuildToolContextArgs {
   roleState: {
     getAllowedToolNames: () => string[]
     getEnabledToolCategories: () => ToolCategoryId[]
-    getResolution: () => ReturnType<PrimaryAgentProfile['resolve']>
+    getResolution: () => ReturnType<PrimaryAgentProfileApi['resolve']>
   }
   disabledToolNames: string[]
   capabilityPorts?: AgentRuntimeCapabilityPorts
   resourceId?: LooseOptional<string>
   execution?: LooseOptional<ToolExecutionApi>
-  events?: ExecutionEventBus
+  events?: ExecutionEventBusApi
   query(task: string, opts?: RunnerSubAgentOptions): Promise<string>
   dispatchSubAgent?(input: SubAgentDispatchInput): Promise<string>
   getSubAgentDispatchCatalog?: () => SubAgentDispatchCatalog
@@ -197,9 +247,9 @@ export interface AgentConfig {
 
 export interface AgentRunnerComponents<TToolContext extends RunnerToolContext> {
   contextHelper: RunnerToolContextBuilder<TToolContext>
-  primaryAgentStreamLoop: SoloStreamLoop<TToolContext, ExecutionEventBus>
-  queryLoop: QueryLoop<TToolContext, ExecutionEventBus>
-  primaryAgentProfile: PrimaryAgentProfile
+  primaryAgentStreamLoop: SoloStreamLoopApi<TToolContext, ExecutionEventBusApi>
+  queryLoop: QueryLoopApi<TToolContext, ExecutionEventBusApi>
+  primaryAgentProfile: PrimaryAgentProfileApi
   subAgentDispatcher: RunnerSubAgentDispatcher<TToolContext>
 }
 
@@ -340,14 +390,14 @@ export interface AgentExecutionStackOptions<TContext extends AgentExecutionStack
   model: AgentModelResolverPort
   toolRegistry: AgentExecutionStackToolRegistry<TContext>
   /** 共享宿主会话生命周期时注入；缺省为此栈独占登记处。 */
-  governanceSessions?: ContextGovernanceSessionRegistry
-  promptRegistry?: PromptRegistry
+  governanceSessions?: ContextGovernanceSessionRegistryApi
+  promptRegistry?: PromptRegistryApi
   promptFeaturePolicy?: RuntimePromptFeaturePolicy
   listCustomSubAgents?: () => Array<{ id: string; description: string; base: string }>
   spanScopeFactory?: LooseOptional<ExecutionSpanScopeFactory>
   executionLimitOverrides?: AgentExecutionLimitOverrides
-  seams?: LooseOptional<AgentModSeamDispatcher>
-  /** 只运行 Solo 的宿主省略此项；不会创建 QueryLoop 或默认启用子 Agent。 */
+  seams?: LooseOptional<AgentModSeamDispatcherApi>
+  /** 只运行 Solo 的宿主省略此项；不会创建 QueryLoopApi 或默认启用子 Agent。 */
   query?: {
     roleEngine: QueryLoopRoleEngine
     getToolNamesForCategories: QueryLoopToolCategoryResolver
@@ -361,9 +411,9 @@ export interface AgentExecutionStackRunnerOptions<
   'toolRegistry' | 'executionLimitOverrides' | 'codingSessionPolicy'
 > {
   contextHelper: RunnerToolContextBuilder<TContext>
-  primaryAgentProfile: PrimaryAgentProfile
+  primaryAgentProfile: PrimaryAgentProfileApi
   subAgentDispatcher: RunnerSubAgentDispatcher<TContext> & {
-    bindAgentRunner(runner: Pick<AgentRunner<TContext>, 'query'>): void
+    bindAgentRunner(runner: Pick<AgentRunnerApi<TContext>, 'query'>): void
   }
   executionEnvironment?: RunnerExecutionEnvironmentPort
   /** 提示词策略取自栈配置，避免两个执行面或 Runner 各持一份。 */
@@ -371,10 +421,10 @@ export interface AgentExecutionStackRunnerOptions<
 }
 
 export interface AgentExecutionStack<TContext extends AgentExecutionStackToolContext> {
-  readonly promptRegistry: PromptRegistry
-  readonly governanceSessions: ContextGovernanceSessionRegistry
+  readonly promptRegistry: PromptRegistryApi
+  readonly governanceSessions: ContextGovernanceSessionRegistryApi
   executeSolo(
-    args: ExecuteSoloModeStreamLoopArgs<TContext, ExecutionEventBus>
+    args: ExecuteSoloModeStreamLoopArgs<TContext, ExecutionEventBusApi>
   ): Promise<SoloModeStreamLoopResult>
   /** 删除/替换宿主会话时调用，释放本栈的会话状态及治理账本。 */
   clearSession(sessionId: string): void
@@ -383,8 +433,8 @@ export interface AgentExecutionStack<TContext extends AgentExecutionStackToolCon
 export interface AgentExecutionStackWithQuery<
   TContext extends AgentExecutionStackToolContext,
 > extends AgentExecutionStack<TContext> {
-  executeQuery(args: ExecuteQueryLoopArgs<TContext, ExecutionEventBus>): Promise<string>
-  createRunner(options: AgentExecutionStackRunnerOptions<TContext>): AgentRunner<TContext>
+  executeQuery(args: ExecuteQueryLoopArgs<TContext, ExecutionEventBusApi>): Promise<string>
+  createRunner(options: AgentExecutionStackRunnerOptions<TContext>): AgentRunnerApi<TContext>
 }
 
 export interface PromptStateRoleResolution {
@@ -572,7 +622,7 @@ export interface AgentWorkflowRunOptions {
 export interface AgentWorkflowRunRequest<TToolContext extends RunnerToolContext> {
   input: AgentWorkflowDefinition
   parentCtx: TToolContext
-  events: ExecutionEventBus
+  events: ExecutionEventBusApi
   config: AgentExecutionConfig
 }
 

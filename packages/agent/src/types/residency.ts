@@ -1,9 +1,108 @@
 /** 转交信号（设计 §4）：连续 2 次 epoch 节省率不足且 post-epoch 占用仍高 → 建议开新会话。 */
 import type { ModelMessage } from 'ai'
 
-import type { ContextResidencyLedger } from '../impl/residency/ContextResidencyLedger.js'
-
 import type { ContextRefRetrieval } from './context.js'
+
+
+/**
+ * 驻留账本的最小形状：蒸馏与 epoch 这两族纯函数真正用到的那几个方法。
+ * 类实现在 impl/residency/ContextResidencyLedger.ts；这里只列它们调得到的一面，
+ * 免得 utils 为了一个形参把整条实现链拖进来。
+ */
+export interface ResidencyLedgerView {
+  /** 收一条新记录进账本。 */
+  append(input: ContextAdmissionInput): ContextLedgerAppendResult
+  /** 按 id 取一条记录。 */
+  get(recordId: string): Nullable<ContextRecord>
+  /** 列出全部记录。 */
+  list(): readonly ContextRecord[]
+  /** 某条记录当前在哪一层。 */
+  residencyOf(recordId: string): ContextResidency
+  /** 各层的记录条数向量。 */
+  residencyVector(): ContextResidencyVector
+  /** 某条记录累计的缺页次数。 */
+  faultCountOf(recordId: string): number
+  /** 某条记录此刻是否受淘汰保护。 */
+  isEvictionProtected(recordId: string, currentTurn: number): boolean
+  /** 已排上待淘汰队列的记录 id。 */
+  pendingEvictions(): string[]
+  /** 把一条记录迁到另一层。 */
+  migrate(recordId: string, to: ContextResidency, cause: ContextMigrationCause, at: number): ContextMigrationOutcome
+  /** 账本统计（条数、各层占用、缺页率）。 */
+  stats(): ContextLedgerStats
+}
+
+
+/**
+ * 一个会话的上下文治理面最小形状：同步历史、算窗口、跑 epoch、记缺页。
+ * 类实现在 impl/residency/ContextGovernanceSession.ts。
+ */
+export interface ContextGovernanceSessionApi {
+  /** 本会话生效的治理配置。 */
+  readonly config: ContextGovernanceConfig
+  /** 本会话的驻留账本。 */
+  readonly ledger: ResidencyLedgerView
+  /** 当前 epoch 号（从 1 起）。 */
+  readonly epoch: number
+  /** 账本代数（每整本重建一次 +1）。 */
+  readonly generation: number
+  /** 本代账本内的 epoch 报告（新→旧）。 */
+  epochReports(): readonly GovernanceEpochReport[]
+  /** 把本轮的 provider 历史同步进账本：前缀一致则增量追加，分叉则整本重建。 */
+  syncHistory(input: ContextGovernanceSyncInput): ContextGovernanceSyncResult
+  /** 当前投影占用（token），与投影共用尾保护规则。 */
+  projectedTokens(budgetTokens: number, charsPerToken?: LooseOptional<number>): number
+  /** 当前治理窗口 G 的完整推导。 */
+  governanceWindow(): GovernanceWindowDerivation
+  /** 轮边界治理：按需跑一次 epoch；返回 null 表示本轮既未触发也未记账。 */
+  governTurn(input: GovernanceWindowInput & { at: number; charsPerToken?: LooseOptional<number>; capacityExceeded?: LooseOptional<boolean> }): Nullable<GovernanceEpochReport>
+  /** 强制治理入口，供 context overflow 后的自动恢复使用。 */
+  requestEpoch(input: GovernanceWindowInput & { at: number; charsPerToken?: LooseOptional<number>; source?: LooseOptional<GovernanceEpochSource> }): Nullable<GovernanceEpochReport>
+  /** 等在飞的蒸馏落地（测试与 headless 实验用）。 */
+  whenDistillSettled(): Promise<void>
+  /** 缺页记账：`context:recall` 命中账本记录时调用。 */
+  recordFault(ref: string, at: number): boolean
+  /** 转交信号：连续 N 次低收益 epoch 且 post-epoch 占用仍高。 */
+  handoffSignal(): ContextHandoffSignal
+  /** 最近一次更新时刻。 */
+  updatedAt: number
+}
+
+/**
+ * 治理会话登记处的最小形状：按会话 id 取治理面、配置与 epoch 报告。
+ * 类实现在 impl/residency/ContextGovernanceSessionRegistry.ts。
+ */
+export interface ContextGovernanceSessionRegistryApi {
+  /** 当前全局治理配置。 */
+  governanceConfig(): ContextGovernanceConfig
+  /** 注入/撤销蒸馏器。 */
+  setDistiller(distiller: LooseOptional<ContextDistiller>): void
+  /** 改写治理配置并返回生效值。 */
+  configure(input: LooseOptional<ContextGovernanceConfigInput>): ContextGovernanceConfig
+  /** 取（必要时新建）某会话的治理面。 */
+  resolve(sessionId: LooseOptional<string>): Nullable<ContextGovernanceSessionApi>
+  /** 只看已有的治理面，不新建。 */
+  peek(sessionId: LooseOptional<string>): Nullable<ContextGovernanceSessionApi>
+  /** 记一次缺页。 */
+  recordFault(sessionId: LooseOptional<string>, ref: string, at?: number): boolean
+  /** 取转交信号。 */
+  handoffSignal(sessionId: LooseOptional<string>): Nullable<ContextHandoffSignal>
+  /** 强制跑一次 epoch。 */
+  requestEpoch(sessionId: LooseOptional<string>, input?: { at?: LooseOptional<number>; modelWindowTokens?: LooseOptional<number>; charsPerToken?: LooseOptional<number>; source?: LooseOptional<GovernanceEpochSource> }): Nullable<GovernanceEpochReport>
+  /** 某会话本代账本内的 epoch 报告。 */
+  epochReports(sessionId: LooseOptional<string>): readonly GovernanceEpochReport[]
+  /** 丢弃某会话的治理面。 */
+  invalidateSession(sessionId: LooseOptional<string>): void
+}
+
+/**
+ * 治理会话查表面的最小形状：只要"按会话 id 找治理面"这一件事。
+ * 降级动作等纯函数收它，不必认识整张登记表。
+ */
+export interface GovernanceSessionLookup {
+  /** 取（必要时新建）某会话的治理面。 */
+  resolve(sessionId: LooseOptional<string>): Nullable<ContextGovernanceSessionApi>
+}
 
 export interface ContextHandoffSignal {
   /** 是否建议布防 handoff 卡。 */
@@ -545,7 +644,7 @@ export interface ContextDistillTotals {
 }
 
 export interface PlanContextDistillationInput {
-  ledger: ContextResidencyLedger
+  ledger: ResidencyLedgerView
   config: ContextGovernanceConfig
   budgetTokens: number
   /** 机械器械跑完后的投影占用（token）。 */
@@ -946,7 +1045,7 @@ export interface GovernanceEpochReport {
 }
 
 export interface RunGovernanceEpochInput {
-  ledger: ContextResidencyLedger
+  ledger: ResidencyLedgerView
   config: ContextGovernanceConfig
   /** 治理窗口 G（token）：由 `resolveGovernanceWindow` 从送核门口径导出。 */
   budgetTokens: number

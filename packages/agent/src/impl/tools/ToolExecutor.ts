@@ -41,6 +41,8 @@ import { TimerScope } from "@velaros-ai/core/utils/TimerScope";
 import type { ContextPayloadStore, KernelToolOutputStore, ToolResultMiddleware } from '../../contract/requires.js'
 import type { ExecutionSpanStatus } from '../../types/agent.js'
 import type { ToolSpanOpener } from '../../types/ledgers.js'
+import type { KernelToolLoopGuardApi } from '../../types/loop.js'
+import type { AgentModSeamDispatcherApi } from '../../types/mods.js'
 import type { ProviderTurnSnapshot } from '../../types/records.js'
 import type { ActiveToolExecutionContext, KernelToolFailureBatchEntry, ScheduledTool, ToolExecutionPolicyContext, ToolExecutionPrepared, ToolExecutionSettlement, ToolExecutorEvents, ToolFailureBuildOptions, ToolFailureResult,ToolInputReuseContext, ToolResult } from '../../types/tools.js'
 import { resolveToolResultMiddlewares } from "../../utils/capabilities";
@@ -48,7 +50,6 @@ import { buildToolFailureResult as buildStructuredToolFailureResult } from "../.
 import { findHistoryPreviewPlaceholderArgumentPaths } from "../../utils/tools/history-preview-placeholder";
 import { liftGenericModelContent } from "../../utils/tools/model-image-lift";
 import { persistToolInputForRecall } from "../../utils/tools/tool-input-recall";
-import type { AgentModSeamDispatcher } from "../mods/AgentModSeamDispatcher";
 import { completeProviderTurnSnapshot, type ProviderTurnEventReducer } from "../records/ProviderTurnEventReducer";
 
 import { ContextPayloadKernelToolOutputStore } from "./InMemoryKernelToolOutputStore";
@@ -120,7 +121,7 @@ export class ToolExecutor {
   private readonly executionPolicy: ToolExecutionPolicy;
   private readonly resultMiddlewares: ReadonlyArray<ToolResultMiddleware<any>>;
   private readonly materializer: KernelToolResultMaterializer;
-  private readonly loopGuard: KernelToolLoopGuard;
+  private readonly loopGuard: KernelToolLoopGuardApi;
   private failureBatchResultCursor = 0;
   private providerTurnReducer: LooseOptional<ProviderTurnEventReducer>;
   private onProviderTurnSnapshot: LooseOptional<
@@ -137,7 +138,7 @@ export class ToolExecutor {
    * 缺省 null → 全链 no-op。钩子只能拦下或改写，**不能放行**被策略门拒绝的调用：
    * 入参改写发生在 {@link ToolExecutionPolicy.prepareExecution} 之前，改写后照样过完整策略门。
    */
-  private readonly seams: LooseOptional<AgentModSeamDispatcher>;
+  private readonly seams: LooseOptional<AgentModSeamDispatcherApi>;
 
   constructor(
     ctx: ToolExecutionPolicyContext,
@@ -149,9 +150,9 @@ export class ToolExecutor {
         (snapshot: ProviderTurnSnapshot) => void
       >;
       outputStore?: LooseOptional<KernelToolOutputStore>;
-      loopGuard?: KernelToolLoopGuard;
+      loopGuard?: KernelToolLoopGuardApi;
       toolSpanOpener?: LooseOptional<ToolSpanOpener>;
-      seams?: LooseOptional<AgentModSeamDispatcher>;
+      seams?: LooseOptional<AgentModSeamDispatcherApi>;
     } = {},
   ) {
     this.ctx = ctx;

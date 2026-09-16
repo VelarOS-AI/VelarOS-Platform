@@ -16,8 +16,7 @@
  */
 import { isArray, isEmpty, isNonBlankString, isRecord, isString, toNullable } from '@velaros-ai/core'
 
-import type { ContextResidencyLedger } from '../../impl/residency/ContextResidencyLedger'
-import type { ContextDistillGateSignals, ContextDistillInstrument, ContextDistillPlan, ContextDistillProduct, ContextDistillRejection, ContextDistillRequest, ContextDistillSkipReason, ContextDistillTotals, ContextGovernanceConfig,ContextRecord, ContextResidency, DistillSegment, PlanContextDistillationInput } from '../../types/residency.js'
+import type { ContextDistillGateSignals, ContextDistillInstrument, ContextDistillPlan, ContextDistillProduct, ContextDistillRejection, ContextDistillRequest, ContextDistillSkipReason, ContextDistillTotals, ContextGovernanceConfig, ContextRecord, ContextResidency, DistillSegment, PlanContextDistillationInput, ResidencyLedgerView } from '../../types/residency.js'
 
 import {
   anchorDensityPerKiloChar,
@@ -374,7 +373,7 @@ function countSegmentAnchors(members: readonly ContextRecord[]): number {
  *
  * 取最后一条而不是第一条：条件化压缩要对齐的是"现在在干什么"，不是这个会话最初为什么开始。
  */
-function resolveGoalHint(ledger: ContextResidencyLedger): Nullable<string> {
+function resolveGoalHint(ledger: ResidencyLedgerView): Nullable<string> {
   const records = ledger.list()
   for (let index = records.length - 1; index >= 0; index -= 1) {
     const record = records[index]

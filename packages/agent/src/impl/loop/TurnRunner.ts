@@ -4,9 +4,9 @@ import { type AppError } from '@velaros-ai/core/error'
 
 import type { AgentTurnToolExecutor, AgentTurnToolResult, AssistantContentPart } from '../../types/history.js'
 import type { ExecuteQueryTurnArgs, ExecuteStreamTurnArgs, StreamTurnResult, TurnRunnerToolContext, TurnRunnerToolRegistry } from '../../types/loop.js'
+import type { ContextGovernanceSessionRegistryApi } from '../../types/residency.js'
 import { sanitizeHistoryForProvider } from '../../utils/history/request'
 import { AgentTurnHistoryHelper } from '../../utils/history/turn'
-import type { ContextGovernanceSessionRegistry } from '../residency/ContextGovernanceSession'
 
 import { KernelContextEpochGuard } from './KernelContextEpochGuard'
 import { QueryTurn, type QueryTurnResult } from './QueryTurn'
@@ -36,7 +36,7 @@ class TurnRunner<TToolContext extends TurnRunnerToolContext = TurnRunnerToolCont
   constructor(
     private readonly toolRegistry: TurnRunnerToolRegistry<TToolContext>,
     /** 治理会话登记处（宿主级单实例，驻留账本跨回合的家）。 */
-    private readonly governanceSessions: ContextGovernanceSessionRegistry
+    private readonly governanceSessions: ContextGovernanceSessionRegistryApi
   ) {
     this.queryTurnHelper = new QueryTurn(
       toolRegistry,

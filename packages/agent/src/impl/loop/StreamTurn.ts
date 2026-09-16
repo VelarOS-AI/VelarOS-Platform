@@ -7,6 +7,7 @@ import { logRuntime } from '@velaros-ai/core/logger'
 import type {ProviderRequestSnapshot } from '../../types/context.js'
 import type { AssistantContentPart } from '../../types/history.js'
 import type { AgentModelRequestPort, AgentModelStreamInput, ConsumeAssistantStreamArgs, ExecuteStreamTurnArgs, InterruptedStreamPartial,StreamTurnResult, StreamTurnToolContext, StreamTurnToolRegistry, SystemPromptDelivery } from '../../types/loop.js'
+import type { ContextGovernanceSessionRegistryApi } from '../../types/residency.js'
 import { assertProviderRequestSnapshotReconstructable } from '../../utils/context/provider-request-snapshot'
 import { createInternalFollowUpMessage } from '../../utils/history/internal-messages'
 import type { AgentTurnHistoryHelper } from '../../utils/history/turn'
@@ -28,7 +29,6 @@ import { resolveModelContextUsageOptions } from '../context/AgentLoopContextUsag
 import { ProviderRequestCompiler } from '../context/ProviderRequestCompiler'
 import { compileProviderSendRequest } from '../context/ProviderSendRequest'
 import { emitCompletedProviderTurnSnapshot, ProviderTurnEventReducer } from '../records/ProviderTurnEventReducer'
-import type { ContextGovernanceSessionRegistry } from '../residency/ContextGovernanceSession'
 
 import { AiSdkAgentModelRequestPort, applyModelRequestPolicy } from './AiSdkAgentModelRequestPort'
 import { buildKernelContextEpoch, recordKernelContextEpochDiagnostic } from './KernelContextEpochGuard'
@@ -119,7 +119,7 @@ class StreamTurn<TToolContext extends StreamTurnToolContext = StreamTurnToolCont
     /** assistant/tool 历史拼接工具。 */
     private readonly turnHistoryHelper: AgentTurnHistoryHelper,
     /** 治理会话登记处（宿主级单实例，驻留账本与 epoch 状态跨回合共享一份，必传）。 */
-    private readonly governanceSessions: ContextGovernanceSessionRegistry,
+    private readonly governanceSessions: ContextGovernanceSessionRegistryApi,
     /** 后端统一模型请求层。 */
     private readonly modelRequestService: AgentModelRequestPort =
       new AiSdkAgentModelRequestPort()

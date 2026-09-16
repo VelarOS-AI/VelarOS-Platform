@@ -11,7 +11,6 @@ export {
 } from '../impl/builtin/BuiltinAgentMod'
 export { AgentModLoader, DataOnlyAxes, PayloadRequiredAxes } from '../impl/mods/AgentModLoader'
 export { AgentModRegistry, AgentModStaleSnapshotError } from '../impl/mods/AgentModRegistry'
-export type { AgentModHookEventMap, AgentModHookGenericEvent, AgentModHookHandler, AgentModHookOutcomeMap, AgentModHookRegistration, AgentModHookRegistrationInput } from '../impl/mods/AgentModSeamDispatcher'
 export {
   AgentModHookDispatcher,
   AgentModSeamDispatcher,
@@ -25,6 +24,7 @@ export {
   VelarModSignatureFileName,
 } from '../impl/mods/VelarModArchiveImporter'
 export type { BuiltinAgentModOptions, BuiltinAgentModPackage } from '../types/builtin.js'
+export type { AgentModHookEventMap, AgentModHookGenericEvent, AgentModHookHandler, AgentModHookOutcomeMap, AgentModHookRegistration, AgentModHookRegistrationInput } from '../types/mods.js'
 export type { AgentModAssembly, AgentModDiscoveryResult, AgentModPackDescriptorLike, AssembleAgentModsInput } from '../types/mods.js'
 export type { InstallScannedVelarModArchiveRequest, PreparedVelarModInstall, VelarModArchiveEntry, VelarModArchiveFinding, VelarModArchiveInstallFailureReason, VelarModArchiveScanReport, VelarModPermissionDescriptor } from '../types/mods.js'
 export type { AgentModAxisDeclarationMap, AgentModAxisPayloadMap, AgentModAxisRecord, AgentModContributionRecord, AgentModRegistryPhase, AgentModRegistrySnapshot } from '../types/mods.js'

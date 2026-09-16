@@ -21,9 +21,9 @@
 import { isFiniteNumber, isPresent } from '@velaros-ai/core'
 
 import type { BuildKernelContextEpochInput, KernelContextEpoch, KernelContextEpochClaim, KernelContextEpochGuardLike, RecordKernelContextEpochDiagnosticOptions } from '../../types/loop.js'
+import type { ProviderTurnRecorder } from '../../types/records.js'
 import { compareStableStrings } from '../../utils/residency/determinism'
 import { UnknownGovernanceSessionId } from '../../utils/residency/session-key'
-import type { ProviderTurnEventReducer } from '../records/ProviderTurnEventReducer'
 
 export class KernelContextEpochStaleError extends Error {
   public readonly code = 'KERNEL_CONTEXT_EPOCH_STALE'
@@ -118,7 +118,7 @@ export function buildKernelContextEpoch(input: BuildKernelContextEpochInput): Ke
 }
 
 export function recordKernelContextEpochDiagnostic(
-  reducer: ProviderTurnEventReducer,
+  reducer: ProviderTurnRecorder,
   epoch: KernelContextEpoch,
   options: RecordKernelContextEpochDiagnosticOptions = {}
 ): void {

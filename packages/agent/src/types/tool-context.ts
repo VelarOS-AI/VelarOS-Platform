@@ -3,13 +3,12 @@ import type { ModelMessage } from 'ai'
 import type { Logger } from '@velaros-ai/core/logger'
 
 import type { AgentRuntimeCapabilityPorts,ApprovalPort, ContextPayloadStore, InteractionPort, ToolActiveContextApi, ToolConversationContextApi, ToolExecutionApi, ToolRoleApi, ToolRuntimeApi, ToolSkillsApi } from '../contract/requires.js'
-import type { ExecutionEventBus } from '../impl/records/ExecutionEventBus.js'
-import type { RuntimeReminderScheduler } from '../impl/session/RuntimeReminderScheduler.js'
 
 import type { AgentDelegationContract, AgentDeveloperContext, AgentModelInputModality, AgentRoleId, AgentSkillDescriptor, AgentSurfaceId, AgentWorkflowDefinition, AgentWorkflowRunResult, AppLocale, CapabilityAutoApprovalNotice, CapabilityScopeId, ChatPromptFeatureId, RunProfileSelectionId, SessionLineageContext, SubAgentStructuredOutputContract, SubAgentUsage,TaskApprovalRecord, ToolAvailabilityScope, ToolCategoryId, ToolCategoryOverview, ToolConfirmationDecisionOptions, ToolDescriptor, ToolSurfaceProfileId } from './agent.js'
 import type { CapabilityValidationRunResult, CapabilityValidationStatus } from './capabilities.js'
 import type { SubAgentDispatchCatalog,SubAgentDispatchInput, SubAgentRuntimeOverride, SubAgentToolCategoryRequestResult } from './delegation.js'
-import type { CodingSessionSnapshot, RuntimeReminderConsumeResult,RuntimeReminderInput } from './session.js'
+import type { ExecutionEventBusApi } from './records.js'
+import type { CodingSessionSnapshot, RuntimeReminderConsumeResult, RuntimeReminderInput, RuntimeReminderSchedulerApi } from './session.js'
 import type { ToolAllocatorRequest,ToolCapabilityPage } from './tools.js'
 
 export interface ToolConversationHandoffRequest {
@@ -45,7 +44,7 @@ export interface ToolCodingSessionApi {
   getTaskApprovalDenial?: (key: string) => Nullable<string>
   revokeTaskApproval?: (id: string) => boolean
   /** 运行时提醒调度器（声明式 producer）；调用方应配合 finalizeReminderConsumeResult 同步 tracker 标记。 */
-  getReminderScheduler: () => RuntimeReminderScheduler
+  getReminderScheduler: () => RuntimeReminderSchedulerApi
   /** 组装一次 producer 评估所需的输入。 */
   buildReminderInput: () => RuntimeReminderInput
   /**
@@ -289,7 +288,7 @@ export interface SubAgentOptions {
   roleId?: AgentRoleId
   delegation?: AgentDelegationContract
   runtimeOverride?: SubAgentRuntimeOverride
-  events?: ExecutionEventBus
+  events?: ExecutionEventBusApi
   requestToolCategories?: (
     categories: ToolCategoryId[],
     reason: string,

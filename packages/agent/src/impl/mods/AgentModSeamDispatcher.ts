@@ -423,4 +423,3 @@ export {
   WiredSeamKinds,
   WiredSeamKindsByDispatcher,
 }
-export type { AgentModSeamEventMap as AgentModHookEventMap, AgentModSeamGenericEvent as AgentModHookGenericEvent, AgentModSeamHandler as AgentModHookHandler, AgentModSeamOutcomeMap as AgentModHookOutcomeMap, AgentModSeamRegistration as AgentModHookRegistration, AgentModSeamRegistrationInput as AgentModHookRegistrationInput } from '../../types/mods.js'

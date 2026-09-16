@@ -14,8 +14,6 @@ import type { RemoteNodeManifest,RemoteNodeToolDescriptor } from '@velaros-ai/ke
 import type { RemoteNodeClient } from '@velaros-ai/kernel/remote/client'
 
 import type { ApprovalPort } from '../contract/requires.js'
-import type { McpClientConnection } from '../impl/connectors/McpClientConnection.js'
-import type { createRemoteHostTool } from '../impl/connectors/RemoteHostToolFactory.js'
 
 import type { ToolCategoryId, ToolResultModelContentPart } from './agent.js'
 import type { VelaTool } from './builtin.js'
@@ -102,6 +100,16 @@ export interface McpResourceContent {
 /** MCP callTool 的原始返回（SDK result 对象）；结果翻译在 mcpCallResult.ts。 */
 export type McpRawCallResult = Record<string, unknown>
 
+/** MCP 调用面的最小形状：翻译层只需要"能按名字调一次工具"，不需要认识整条连接。 */
+export interface McpToolCaller {
+  /** 调用一个工具；超时或 server 中断时抛 AppError。 */
+  callTool(
+    toolName: string,
+    args: Record<string, unknown>,
+    abortSignal?: AbortSignal,
+  ): Promise<McpRawCallResult>
+}
+
 export type McpRemoteTransport = SSEClientTransport | StreamableHTTPClientTransport
 
 export interface McpPendingAuthorization {
@@ -155,7 +163,7 @@ export interface RemoteHostToolInput {
 export interface RemoteHostToolEntry {
   readonly name: string
   readonly categoryId: string
-  readonly tool: ReturnType<typeof createRemoteHostTool>
+  readonly tool: RemoteHostTool
 }
 
 export interface ConnectedHost {
@@ -186,7 +194,7 @@ export interface TranslatedMcpTool {
 }
 
 export interface TranslateMcpToolInput {
-  connection: Pick<McpClientConnection, 'callTool'>
+  connection: McpToolCaller
   serverName: string
   descriptor: McpToolDescriptor
   autoApprove: McpAutoApprovePolicy

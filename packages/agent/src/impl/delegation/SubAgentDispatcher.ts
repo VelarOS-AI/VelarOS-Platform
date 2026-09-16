@@ -67,7 +67,7 @@ import type { AgentEvent } from '../../types/agent'
 import type {SubAgentTaskResult, SubAgentUsage, TeamModelRouteCategory, TeamModelSelectionTrace, ThinkingDepth, ToolCategoryId, UserActionCard } from '../../types/agent.js'
 import type { DangerousConfirmationStatusSink, DispatchPlan, ResolvedDispatchPlan, ResolvedSubAgentTypeConfig, SubAgentDispatchCatalog, SubAgentDispatchLimitsSnapshot, SubAgentDispatchRequest, SubAgentModelChoice, SubAgentResumeBriefing, SubAgentRetryState, SubAgentThreadRetention, SubAgentToolCategoryRequestResult, SubAgentToolContext, SubAgentWorkerExecutionOutput, TeamModelRouteResult, WorkerStatusArgs } from '../../types/delegation.js'
 import type { AgentExecutionLimitOverrides, AgentExecutionLimits } from '../../types/loop.js'
-import type { SubAgentGuidanceRelayWorkerHandle } from '../../types/records.js'
+import type { ExecutionEventBusApi, SubAgentGuidanceRelayWorkerHandle } from '../../types/records.js'
 import { resolveCapabilityDelegationPolicy } from '../../utils/capabilities'
 import { buildSubAgentDispatchInstruction, buildSubAgentResumeBriefing, buildSubAgentResumeInstruction } from '../../utils/delegation/instruction'
 import {
@@ -85,7 +85,6 @@ import { buildSubAgentTaskResult } from '../../utils/delegation/sub-agent-result
 import { resolveCustomSubAgentTypeConfig, resolveSubAgentTypeConfig } from '../../utils/delegation/sub-agent-type-registry'
 import { resolveAgentExecutionLimits } from '../../utils/loop/execution-limits'
 import { AgentConnectionRetryHelper } from '../loop/RetryPolicy'
-import type { ExecutionEventBus } from '../records/ExecutionEventBus'
 import type { KernelBackgroundJobManager } from '../records/KernelBackgroundJobManager'
 import type { SubAgentGuidanceRelayRegistry } from '../records/SubAgentGuidanceRelayRegistry'
 import { createUnattendedSubAgentApprovalPort } from '../tools/DefaultDenyApprovalPort'
@@ -566,7 +565,7 @@ class SubAgentDispatcher {
     request: SubAgentDispatchRequest
     autonomousParentCtx: SubAgentToolContext
     typeConfig: ResolvedSubAgentTypeConfig
-    workerEvents: ExecutionEventBus
+    workerEvents: ExecutionEventBusApi
     title: string
     threadId: string
     initialToolCategories: ToolCategoryId[]
@@ -1127,10 +1126,10 @@ class SubAgentDispatcher {
   }
 
   private attachWorkerProbes(
-    workerEvents: ExecutionEventBus,
+    workerEvents: ExecutionEventBusApi,
     retryState: SubAgentRetryState,
     progressDigest: SubAgentProgressDigestRecorder
-  ): ExecutionEventBus {
+  ): ExecutionEventBusApi {
     if (!isFunction(workerEvents.withAgentTap)) return workerEvents
 
     return workerEvents.withAgentTap((event: AgentEvent) => {
@@ -1165,7 +1164,7 @@ class SubAgentDispatcher {
    *
    * 状态事件必须走父总线（request.events）：worker 子总线只透传
    * 文本增量/重连/工具完成，worker 线程状态会被其智能体 handler 丢弃
-   * （详见 ExecutionEventBus.forWorkerExecution）。
+   * （详见 ExecutionEventBusApi.forWorkerExecution）。
    */
   private emitWorkerStatus(args: WorkerStatusArgs): void {
     const { threadId, activationId, title, agentName, status, summary, error, result } = args

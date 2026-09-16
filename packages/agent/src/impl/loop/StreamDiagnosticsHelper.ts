@@ -46,4 +46,3 @@ class StreamDiagnosticsHelper {
 
 export { StreamDiagnosticsHelper }
 export { StreamDiagnosticsHelper as AgentStreamDiagnosticHelper }
-export type { StreamDiagnostics, StreamDiagnosticsSummary, StreamFinishReasonDiagnostic, StreamRawChunkDiagnostic } from '../../types/loop.js'

@@ -5,8 +5,6 @@
  * `provides` 列出该 pack 贡献的能力 id。
  */
 import type { AgentModPackReader } from '../contract/requires.js'
-import type { AgentModLoader } from '../impl/mods/AgentModLoader.js'
-import type { AgentModHookHandler, AgentModSeamDispatcher } from '../impl/mods/AgentModSeamDispatcher.js'
 
 import type { AgentModContributionAxisName, AgentModDiagnostic, AgentModExecutionModeContribution, AgentModHookContribution, AgentModHookExecutionMode,AgentModHookMatcher, AgentModManifest, AgentModPromptSegmentContribution, AgentModSeamKind, AgentModSkillContribution, AgentModSpaceContribution, AgentModSubAgentTypeContribution, AgentModToolCategoryContribution, AgentModToolContribution, AgentModTrustLevel, AgentModTurnContextSourceContribution, ToolCategoryDefinition } from './agent.js'
 import type { VelaTool } from './builtin.js'
@@ -28,6 +26,91 @@ export interface AgentModDiscoveryResult {
   readonly diagnostics: readonly AgentModDiagnostic[]
 }
 
+/**
+ * Mod 注册表的最小形状：九条贡献轴的登记与快照这一面。
+ * 类实现在 impl/mods/AgentModRegistry.ts。
+ */
+export interface AgentModRegistryApi {
+  /** 当前代号；每次 endRegistration 递增，快照据此判新旧。 */
+  readonly generation: number
+  /** 当前处于注册阶段还是已封存。 */
+  getPhase(): AgentModRegistryPhase
+  /** 打开注册阶段。 */
+  beginRegistration(): void
+  /** 关闭注册阶段并返回新的代号。 */
+  endRegistration(): number
+  /** 某条轴上是否已登记这个主键。 */
+  has(axis: AgentModContributionAxisName, key: string): boolean
+  /** 某条轴上这个主键归谁。 */
+  findOwner(axis: AgentModContributionAxisName, key: string): Nullable<string>
+  /** 往某条轴上登记一条贡献。 */
+  register<TAxis extends AgentModContributionAxisName>(axis: TAxis, record: AgentModAxisRecord<TAxis>): void
+  /** 摘除某个 mod 在全部轴上的贡献，返回摘掉的条数。 */
+  removeMod(modId: string): number
+  /** 列出某条轴上的全部贡献。 */
+  listAxis<TAxis extends AgentModContributionAxisName>(axis: TAxis): ReadonlyArray<AgentModAxisRecord<TAxis>>
+  /** 取一份原子快照。 */
+  snapshot(): AgentModRegistrySnapshot
+  /** 快照是否已经过期。 */
+  isStale(snapshot: AgentModRegistrySnapshot): boolean
+  /** 快照过期即抛。 */
+  assertFresh(snapshot: AgentModRegistrySnapshot): void
+}
+
+/**
+ * Mod 装载机的最小形状：装载、停用、出报告这一面。
+ * 类实现在 impl/mods/AgentModLoader.ts。
+ */
+export interface AgentModLoaderApi {
+  /** 本次装载写进去的注册表。 */
+  readonly registry: AgentModRegistryApi
+  /** 钩子派发台。 */
+  readonly hooks: AgentModSeamDispatcherApi
+  /** @deprecated 新调用方使用 `hooks`。 */
+  readonly seams: AgentModSeamDispatcherApi
+  /** 装载一批候选包；重复调用会在既有注册表之上继续追加（id/主键冲突照样拒载）。 */
+  load(packages: readonly AgentModPackage[]): AgentModLoadReport
+  /** 停用一个 mod：摘除其全部贡献与钩子；用户数据一律保留。 */
+  deactivate(modId: string): boolean
+  /** 最近一次装载报告。 */
+  getReport(): AgentModLoadReport
+  /** 当前注册表快照。 */
+  snapshot(): AgentModRegistrySnapshot
+}
+
+/**
+ * Mod 钩子派发台的最小形状：登记、封存与四条派发通道。
+ * 类实现在 impl/mods/AgentModSeamDispatcher.ts。
+ */
+export interface AgentModSeamDispatcherApi {
+  /** 打开 registration 阶段（Loader 装载前调用）。 */
+  beginRegistration(): void
+  /** 关闭 registration 阶段；此后写入即抛。 */
+  seal(): void
+  /** 是否已封存。 */
+  isSealed(): boolean
+  /** 登记一个钩子。 */
+  register<TKind extends AgentModSeamKind>(input: AgentModSeamRegistrationInput<TKind>): void
+  /** 摘除某 mod 的全部钩子（deactivate 用），返回摘掉的条数。 */
+  removeMod(modId: string): number
+  /** 某类接缝上是否挂了钩子。 */
+  has(kind: AgentModSeamKind): boolean
+  /** 列出某类接缝上的钩子。 */
+  list(kind: AgentModSeamKind): readonly AgentModSeamRegistration[]
+  /** 列出派发期攒下的诊断。 */
+  listDiagnostics(): readonly AgentModDiagnostic[]
+  /** 工具调用前派发；第一个给出 block 的钩子即短路。 */
+  dispatchToolCallBefore(event: AgentModToolCallBeforeEvent): Promise<AgentModToolCallBeforeOutcome>
+  /** 工具结果派发；result/error 沿优先级顺序折叠。 */
+  dispatchToolResultAfter(event: AgentModToolResultAfterEvent): Promise<AgentModToolResultAfterOutcome>
+  /** 回合上下文组装派发（同步）；各钩子追加的段并集返回。 */
+  dispatchTurnContextAssemble(event: AgentModTurnContextAssembleEvent): AgentModTurnContextAssembleOutcome
+  /** 回合上下文组装的异步宿主入口；折叠顺序与同步入口一致。 */
+  dispatchTurnContextAssembleAsync(event: AgentModTurnContextAssembleEvent): Promise<AgentModTurnContextAssembleOutcome>
+  /** 会话生命周期派发（纯通知，无结果面）。 */
+  dispatchSessionLifecycle(event: AgentModSessionLifecycleEvent): Promise<void>
+}
+
 export interface AssembleAgentModsInput {
   readonly host: AgentModHostProfile
   /** 随包官方 mod；缺省 = 内置轴 mod（恒加载）。传空数组可显式关掉。 */
@@ -35,12 +118,12 @@ export interface AssembleAgentModsInput {
   /** Kernel 报上来的 pack 清单；缺省不做 pack 发现。 */
   readonly packs?: readonly AgentModPackDescriptorLike[]
   readonly reader?: AgentModPackReader
-  readonly loader?: AgentModLoader
+  readonly loader?: AgentModLoaderApi
   readonly onDiagnostic?: (diagnostic: AgentModDiagnostic) => void
 }
 
 export interface AgentModAssembly {
-  readonly loader: AgentModLoader
+  readonly loader: AgentModLoaderApi
   readonly report: AgentModLoadReport
 }
 
@@ -194,7 +277,7 @@ export interface AgentModBindings {
   readonly skills?: Readonly<Record<string, AgentSkillDefinition>>
   readonly subAgentTypes?: Readonly<Record<string, SubAgentTypeDescriptor>>
   readonly executionModes?: Readonly<Record<string, ExecutionModeDescriptor>>
-  readonly hooks?: Readonly<Record<string, AgentModHookHandler>>
+  readonly hooks?: Readonly<Record<string, AgentModSeamHandler>>
 }
 
 export type AgentModSourceKind = 'bundled' | 'pack'
@@ -433,14 +516,14 @@ export interface AgentModSeamRegistration {
 }
 
 /**
- * `AgentModSeamDispatcher` 上每个真实派发方法的名字（类型层派生，不手写）。
+ * `AgentModSeamDispatcherApi` 上每个真实派发方法的名字（类型层派生，不手写）。
  *
  * 下面的 {@link WiredSeamKindsByDispatcher} 对本联合保持穷举：新增一个 `dispatch*` 方法却忘了
  * 登记它派发哪些 kind = 编译红，而不是又长出一条「注册得进、永远不触发」的哑接缝。
  */
 export type AgentModSeamDispatchMethodName = {
-  [K in keyof AgentModSeamDispatcher]: K extends `dispatch${string}` ? K : never
-}[keyof AgentModSeamDispatcher]
+  [K in keyof AgentModSeamDispatcherApi]: K extends `dispatch${string}` ? K : never
+}[keyof AgentModSeamDispatcherApi]
 
 /**
  * 一代 Mod 注册表对应的一份完整 Agent Surface。
@@ -460,4 +543,14 @@ export interface AgentModSurfaceSnapshot {
   readonly turnContextSources: readonly AgentModTurnContextSourceContribution[]
   readonly executionModes: readonly ExecutionModeDescriptor[]
   readonly hooks: AgentModRegistrySnapshot['hooks']
+}
+
+// 兼容别名：外面按 Hook 叫这些名字，包内声明按 Seam 命名（第 6 步收口时统一）。
+export type {
+  AgentModSeamEventMap as AgentModHookEventMap,
+  AgentModSeamGenericEvent as AgentModHookGenericEvent,
+  AgentModSeamHandler as AgentModHookHandler,
+  AgentModSeamOutcomeMap as AgentModHookOutcomeMap,
+  AgentModSeamRegistration as AgentModHookRegistration,
+  AgentModSeamRegistrationInput as AgentModHookRegistrationInput,
 }

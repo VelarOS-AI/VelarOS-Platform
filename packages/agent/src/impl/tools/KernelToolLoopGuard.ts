@@ -1,16 +1,11 @@
 import { isArray, isEmpty,isPlainObject } from '@velaros-ai/core'
 
 import type { ToolCapabilitySchema } from '../../types/agent.js'
-import type { KernelToolFailureBatchEntry } from '../../types/tools.js'
+import type { KernelToolFailureBatchEntry, KernelToolLoopGuardInput } from '../../types/tools.js'
 import { compareStableStrings } from '../../utils/residency/determinism'
 
 import { ExecutionProgress } from './ExecutionProgress'
 
-export interface KernelToolLoopGuardInput {
-  toolName: string
-  args: Record<string, unknown>
-  writeLike: boolean
-}
 
 function stableStringify(value: unknown): string {
   if (isArray(value)) return `[${value.map(stableStringify).join(',')}]`

@@ -16,6 +16,8 @@ import { logRuntime } from '@velaros-ai/core/logger'
 import type { AgentChatRuntimeConfig, AgentModelRequestOptions, AgentSystemRuntimeConfig,ExecutionSpanScopeFactory } from '../../contract/requires.js'
 import type { AgentModelInputModality } from '../../types/agent.js'
 import type { AgentExecutionLimitOverrides, AgentExecutionLimits, AgentLoopSurface, ExecuteQueryLoopArgs, ExecuteQueryTurnArgs, LoopTurnVerdict, QueryLoopRoleEngine, QueryLoopToolCategoryResolver, QueryLoopToolContext, QueryLoopToolRegistry, QueryTurnEvents, QueryTurnProvider } from '../../types/loop.js'
+import type { AgentModSeamDispatcherApi } from '../../types/mods.js'
+import type { ContextGovernanceSessionRegistryApi } from '../../types/residency.js'
 import type { AgentRoleResolution } from '../../types/runner.js'
 import { resolveCapabilityDelegationPolicy } from '../../utils/capabilities'
 import { resolveContextWindowBudget } from '../../utils/context/context-budget'
@@ -45,8 +47,6 @@ import { isReasoningOnlyEmptyResponseError } from '../../utils/stream/empty-stre
 import { DefaultModelInputModalities } from '../../utils/tools/model-input-policy'
 import { ChatRuntimeEvents } from '../../utils/wire/chat-runtime.js'
 import { AgentLoopContextUsageManager } from '../context/AgentLoopContextUsageManager'
-import type { AgentModSeamDispatcher } from '../mods/AgentModSeamDispatcher'
-import type { ContextGovernanceSessionRegistry } from '../residency/ContextGovernanceSession'
 import { KernelToolLoopGuard } from '../tools/KernelToolLoopGuard'
 
 import { loopContinue, loopFinish, LoopWindDownGuard } from './LoopWindDownGuard'
@@ -137,7 +137,7 @@ class QueryLoop<
      * 治理会话登记处（宿主级单实例，与主面同一份）。
      * 本 loop 只在缺页降级时用它强开一次 epoch；常规治理在编译期由 `ProviderRequestCompiler` 完成。
      */
-    private readonly governanceSessions: ContextGovernanceSessionRegistry,
+    private readonly governanceSessions: ContextGovernanceSessionRegistryApi,
     /** 构建子 Agent system prompt。 */
     private readonly runContextHelper: QueryLoopRunContext<TContext, TSignals>,
     /** 解析目标角色能力。 */
@@ -159,7 +159,7 @@ class QueryLoop<
      * 可选 mod 拦截 seam 派发器（裁决 9 机制②）；与主面共用同一实例，逐轮透传给 QueryTurn 的
      * ToolExecutor。缺省 null → 全链 no-op，行为逐字节不变。
      */
-    private readonly seams: LooseOptional<AgentModSeamDispatcher> = null
+    private readonly seams: LooseOptional<AgentModSeamDispatcherApi> = null
   ) {
     this.executionLimits = resolveAgentExecutionLimits(executionLimitOverrides)
     this.contextUsage = new AgentLoopContextUsageManager(toolRegistry)

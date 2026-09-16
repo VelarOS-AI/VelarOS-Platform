@@ -3,10 +3,9 @@ import type { ModelMessage } from 'ai'
 import type { KernelCallableCapabilityService, KernelModuleHealth,ScopeRef } from '@velaros-ai/kernel/contracts/abi'
 
 import type { AgentExecutionConfig, AgentRuntimeInputPort,ToolExecutionApi } from '../contract/requires.js'
-import type { ExecutionEventBus } from '../impl/records/ExecutionEventBus.js'
 
 import type { AgentCapabilityExecutionDescriptorV1, ChatSendRequest, ExecutionPendingInteractionKind, ExecutionPendingInteractionSnapshot, ExecutionProvideInputRequest, ExecutionRecord, ExecutionResolveConfirmationRequest, HostProjection, ToolCatalogEntry, ToolDescriptor as RegistryToolDescriptor } from './agent.js'
-import type { GuidanceRelayPlan,KernelBackgroundJobOutputSnapshot, SubAgentGuidanceRelayWorkerSnapshot, WaitForKernelBackgroundJobsInput } from './records.js'
+import type { ExecutionEventBusApi, GuidanceRelayPlan, KernelBackgroundJobOutputSnapshot, SubAgentGuidanceRelayWorkerSnapshot, WaitForKernelBackgroundJobsInput } from './records.js'
 import type { ToolExecutionPolicyContext, ToolExecutionPolicyRegistry } from './tools.js'
 
 /** {@link ExecutionCollaborationPort.registerActor} 入参：主 Agent 执行者登记。 */
@@ -244,7 +243,7 @@ export interface SoloExecutionAgentRunner {
   streamSoloWorker(
     messages: ModelMessage[],
     config: AgentExecutionConfig,
-    events: ExecutionEventBus,
+    events: ExecutionEventBusApi,
     options: {
       consumeGuidance?: () => Nullable<ModelMessage>
       runtimeInput?: AgentRuntimeInputPort
@@ -267,7 +266,7 @@ export interface RunSoloExecutionParams {
   /** 调用方的取消信号；托管执行启动后会桥接到内部 abortController。 */
   abortSignal?: AbortSignal
   /** 事件出口；Coordinator 绑到 {@link ChatStreamBridge}。 */
-  events: ExecutionEventBus
+  events: ExecutionEventBusApi
 }
 
 export type KernelInputDelivery = 'queue' | 'steer'
@@ -368,7 +367,7 @@ export interface ManagedExecutionController {
   /** 工具可调用的执行 API，用于创建任务、等待确认、更新计划等。 */
   executionApi: ToolExecutionApi
   /** 已加上 agent tap 的事件总线。 */
-  events: ExecutionEventBus
+  events: ExecutionEventBusApi
   /** 手动刷新 debug payload，供计划/任务变化后立即同步 UI。 */
   emitDebug: () => void
   /** 读取并移除本执行下一条运行中引导消息。 */
@@ -385,7 +384,7 @@ export interface RunManagedExecutionParams {
   /** 原始模型消息。 */
   messages: ModelMessage[]
   /** 调用方提供的事件总线。 */
-  events: ExecutionEventBus
+  events: ExecutionEventBusApi
   /** 需要被宿主协作层观察的执行者；纯聊天不需要声明。 */
   collaborationActor?: {
     kind: 'main-agent'

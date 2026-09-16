@@ -13,8 +13,7 @@ import type { ModelMessage } from 'ai'
 
 import { toNullable } from '@velaros-ai/core'
 
-import type { ContextResidencyLedger } from '../../impl/residency/ContextResidencyLedger'
-import type { ContextAdmissionInput, ContextLedgerAppendResult, ContextRecordKind, HistoryIngestPlan,IngestHistoryOptions } from '../../types/residency.js'
+import type { ContextAdmissionInput, ContextLedgerAppendResult, ContextRecordKind, HistoryIngestPlan, IngestHistoryOptions, ResidencyLedgerView } from '../../types/residency.js'
 import { hashUserMessageText } from '../context/user-message-text'
 import { isInternalFollowUpMessage } from '../history/internal-messages'
 
@@ -73,7 +72,7 @@ export function planHistoryIngest(
 
 /** 把历史摄入一本账本（按序 append，每条都走准入钩子）。 */
 export function ingestHistoryIntoLedger(
-  ledger: ContextResidencyLedger,
+  ledger: ResidencyLedgerView,
   messages: readonly ModelMessage[],
   options: IngestHistoryOptions = {}
 ): ContextLedgerAppendResult[] {

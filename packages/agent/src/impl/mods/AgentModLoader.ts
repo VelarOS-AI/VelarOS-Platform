@@ -19,11 +19,10 @@ import {
 } from '@velaros-ai/core'
 
 import type { AgentModContributionAxisName, AgentModDiagnostic, AgentModManifest, AgentModTrustLevel } from '../../types/agent.js'
-import type { AgentModActivationState, AgentModAxisRecord, AgentModBindings, AgentModHostProfile, AgentModLoadReport, AgentModPackage, AgentModRegistrySnapshot, AgentModRejection, ValidatedAgentMod } from '../../types/mods.js'
+import type { AgentModActivationState, AgentModAxisRecord, AgentModBindings, AgentModHostProfile, AgentModLoadReport, AgentModPackage, AgentModRegistrySnapshot, AgentModRejection, AgentModSeamHandler, ValidatedAgentMod } from '../../types/mods.js'
 import { AgentModContributionAxisNames, listAgentModDeclaredAxes, parseAgentModManifest, readAgentModContributionKey, satisfiesSemverRange } from '../../utils/wire/mods'
 
 import { AgentModRegistry } from './AgentModRegistry'
-import type { AgentModHookHandler } from './AgentModSeamDispatcher'
 import { AgentModHookDispatcher } from './AgentModSeamDispatcher'
 
 const DefaultAllowedTrustLevels: readonly AgentModTrustLevel[] = ['bundled-official']
@@ -391,7 +390,7 @@ class AgentModLoader {
       const handler = Reflect.get(
         readBindingRecord(mod.bindings, 'hooks'),
         declaration.id
-      ) as AgentModHookHandler
+      ) as AgentModSeamHandler
       this.hooks.register({
         modId,
         id: declaration.id,

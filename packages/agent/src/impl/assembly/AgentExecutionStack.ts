@@ -1,10 +1,10 @@
+import type { ExecutionEventBusApi } from '../../types/records.js'
 import type { AgentExecutionStack, AgentExecutionStackOptions, AgentExecutionStackToolContext, AgentExecutionStackWithQuery } from '../../types/runner.js'
 import { createBuiltInPromptRegistry } from '../../utils/guidance/catalog'
 import { resolveAgentExecutionLimits } from '../../utils/loop/execution-limits'
 import { QueryLoop } from '../loop/QueryLoop'
 import { SoloStreamLoop } from '../loop/SoloStreamLoop'
 import { TurnRunner } from '../loop/TurnRunner'
-import type { ExecutionEventBus } from '../records/ExecutionEventBus'
 import { ContextGovernanceSessionRegistry } from '../residency/ContextGovernanceSession'
 import { AgentRunner } from '../runner/AgentRunner'
 import { ContextBuilder } from '../runner/ContextBuilder'
@@ -42,7 +42,7 @@ export function createAgentExecutionStack<
     promptFeaturePolicy,
     options.listCustomSubAgents
   )
-  const soloLoop = new SoloStreamLoop<TContext, ExecutionEventBus>(
+  const soloLoop = new SoloStreamLoop<TContext, ExecutionEventBusApi>(
     modelRuntime,
     turnRunner,
     governanceSessions,
@@ -53,7 +53,7 @@ export function createAgentExecutionStack<
     options.seams
   )
   const queryLoop = options.query
-    ? new QueryLoop<TContext, ExecutionEventBus>(
+    ? new QueryLoop<TContext, ExecutionEventBusApi>(
         modelRuntime,
         turnRunner,
         governanceSessions,

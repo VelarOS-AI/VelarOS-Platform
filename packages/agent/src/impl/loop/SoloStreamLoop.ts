@@ -20,6 +20,8 @@ import { logRuntime } from '@velaros-ai/core/logger'
 
 import type {ExecutionSpanScopeFactory } from '../../contract/requires.js'
 import type { AgentExecutionLimitOverrides, AgentExecutionLimits, AgentLoopSurface, ExecuteSoloModeStreamLoopArgs, LoopTurnVerdict, SoloInterruptedToolCallRecoveryKind, SoloLoopEvents, SoloLoopRoleRuntime, SoloLoopRunContext, SoloLoopRuntime, SoloLoopToolContext, SoloLoopToolRegistry, SoloLoopTurnRunner, SoloModeStreamLoopResult, StreamTurnResult, ToolSpaceBootstrapState } from '../../types/loop.js'
+import type { AgentModSeamDispatcherApi } from '../../types/mods.js'
+import type { ContextGovernanceSessionRegistryApi } from '../../types/residency.js'
 import { createInternalFollowUpMessage } from '../../utils/history/internal-messages'
 import {
   beginLoopTurnSpans,
@@ -61,8 +63,6 @@ import { createAgentRuntimeInputInterruptScope } from '../../utils/runner/runtim
 import { runAutomaticVerification, tickLoopReminders } from '../../utils/session/auto-verification'
 import { ChatRuntimeEvents } from '../../utils/wire/chat-runtime.js'
 import { AgentLoopContextUsageManager } from '../context/AgentLoopContextUsageManager'
-import type { AgentModSeamDispatcher } from '../mods/AgentModSeamDispatcher'
-import type { ContextGovernanceSessionRegistry } from '../residency/ContextGovernanceSession'
 import { KernelToolLoopGuard } from '../tools/KernelToolLoopGuard'
 import { SessionToolAllocator } from '../tools/SessionToolAllocator'
 import { ToolExecutionPolicy } from '../tools/ToolExecutionPolicy'
@@ -145,7 +145,7 @@ class SoloStreamLoop<
      * 治理会话登记处（宿主级单实例，驻留账本跨回合的家）。
      * 本 loop 只在缺页降级时用它强开一次 epoch；常规治理在编译期由 `ProviderRequestCompiler` 完成。
      */
-    private readonly governanceSessions: ContextGovernanceSessionRegistry,
+    private readonly governanceSessions: ContextGovernanceSessionRegistryApi,
     /** 构建 system prompt、turn context payload 和上下文片段。 */
     private readonly runContextHelper: SoloLoopRunContext<TContext>,
     /** 用于估算工具 schema 占用并生成 AI SDK tool set。 */
@@ -162,7 +162,7 @@ class SoloStreamLoop<
      * 依然是 null，主链行为逐字节不变；注入时本 loop 把它透传给每轮（含缺页重放时重建的那个）
      * ToolExecutor，`tool-call:before` / `tool-result:after` 才真正接得到主面的工具调用。
      */
-    private readonly seams: LooseOptional<AgentModSeamDispatcher> = null
+    private readonly seams: LooseOptional<AgentModSeamDispatcherApi> = null
   ) {
     this.executionLimits = resolveAgentExecutionLimits(executionLimitOverrides)
     this.contextUsage = new AgentLoopContextUsageManager(toolRegistry)

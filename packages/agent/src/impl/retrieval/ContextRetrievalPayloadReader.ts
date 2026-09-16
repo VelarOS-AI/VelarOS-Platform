@@ -736,5 +736,3 @@ export {
   ContextRetrievalPayloadReader,
 }
 
-export type { PaginatedJsonPathSelection, PaginatedTextWindow } from '../../types/retrieval.js'
-export { paginateJsonPathSelection, paginateSerializedText } from '../../utils/retrieval/pagination'

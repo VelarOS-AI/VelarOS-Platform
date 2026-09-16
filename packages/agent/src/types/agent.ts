@@ -13,6 +13,8 @@ export type ErrorCode =
   | 'VALIDATION'
   | 'NOT_FOUND'
   | 'TIMEOUT'
+  /** 能力当下不可用（后端没装、没就绪、被关掉）；调用方应当降级，而不是当成失败重试。 */
+  | 'UNAVAILABLE'
   | 'ASSERTION'
   | 'INVARIANT'
   | 'LOG_FAILURE'
