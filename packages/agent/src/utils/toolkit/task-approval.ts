@@ -1,5 +1,6 @@
-import { isArray, isBoolean, isFalse, isNull, isNumber, isObject, isString, isUndefined } from '@velaros-ai/core'
+import { isFalse } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
+import { toolIdentity } from '@velaros-ai/tool-contract'
 
 import type { ApprovalPort } from '../../contract/requires.js'
 import type { ApprovalDecision, ToolConfirmationDecisionOptions } from '../../types/agent'
@@ -7,26 +8,7 @@ import type { ApprovalSession } from '../../types/toolkit.js'
 
 /** 参数身份保留完整值和确定顺序；只用于内部比较，不作为界面预览。 */
 export function createApprovalOperationKey(kind: string, value: unknown): string {
-  const visited = new WeakSet<object>()
-  const encode = (input: unknown): string => {
-    if (isUndefined(input)) return 'undefined'
-    if (isNull(input) || isString(input) || isBoolean(input)) return JSON.stringify(input)
-    if (isNumber(input)) return String(input)
-    if (!isObject(input) || visited.has(input)) {
-      throw new AppError('VALIDATION', '审批参数必须是可序列化的数据。')
-    }
-    visited.add(input)
-    const keys = isArray(input) ? Array.from({ length: input.length }, (_, index) => String(index)) : Object.keys(input).sort()
-    const entries = keys.map((key) => {
-      const descriptor = Object.getOwnPropertyDescriptor(input, key)
-      if (descriptor && !('value' in descriptor)) throw new AppError('VALIDATION', '审批参数不能包含访问器。')
-      const encoded = encode(descriptor?.value)
-      return isArray(input) ? encoded : `${JSON.stringify(key)}:${encoded}`
-    }).join(',')
-    visited.delete(input)
-    return isArray(input) ? `[${entries}]` : `{${entries}}`
-  }
-  return `${kind}:${encode(value)}`
+  return toolIdentity.approvalOperationKey(kind, value)
 }
 
 /** 两种旧确认入口共用一条串行通道，任务拒绝优先于自动批准，拒绝只终止当前操作。 */

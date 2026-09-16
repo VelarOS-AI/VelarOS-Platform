@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'bun:test'
 import { z } from 'zod'
 
-import { ToolContractExampleRegistry } from '../src/impl/tools/ToolContractExampleRegistry'
+import { createToolExampleRegistry } from '@velaros-ai/tool-contract'
+
 import type { DefineToolRuntimeSpecInput } from '../src/types/toolkit.js'
 import { mapToolDiscoveryCards } from '../src/utils/builtin/tool-space-queries'
 import { defineToolRuntimeSpec } from '../src/utils/toolkit/define-tool-contract'
@@ -41,7 +42,7 @@ function defineProbeTool(
       ...contractOverrides,
     },
     // 每个用例用独立示例注册表，避免探针工具名污染进程级默认注册表。
-    new ToolContractExampleRegistry()
+    createToolExampleRegistry()
   )
 }
 

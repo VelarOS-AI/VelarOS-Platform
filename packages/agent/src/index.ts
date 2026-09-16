@@ -349,12 +349,6 @@ export { createProviderToolReferenceCanonicalizer } from './impl/tools/ProviderT
 export type { SessionToolAllocatorOptions, SessionToolAllocatorPlanInput } from './impl/tools/SessionToolAllocator'
 export { SessionToolAllocator,sessionToolAllocator } from './impl/tools/SessionToolAllocator'
 export { ToolCapabilityRegistry } from './impl/tools/ToolCapabilityRegistry'
-export {
-  DefaultToolContractExampleRegistry,
-  renderToolExampleInputs,
-  serializeToolExampleInput,
-  ToolContractExampleRegistry,
-} from './impl/tools/ToolContractExampleRegistry'
 export { createToolExecutionApi } from './impl/tools/ToolExecutionApiBinding'
 export { ToolExecutionPolicy } from './impl/tools/ToolExecutionPolicy'
 export { ToolExecutor } from './impl/tools/ToolExecutor'
@@ -377,6 +371,13 @@ export type {
 export { defineVelaTool } from './utils/builtin/define-agent-tool'
 export { buildToolFingerprint } from './utils/session/tool-dedupe'
 export { createManualApprovalOptions } from './utils/toolkit/approval'
+export type { ToolContractExampleRegistry } from './utils/toolkit/examples'
+export {
+  createToolExampleRegistry,
+  DefaultToolContractExampleRegistry,
+  renderToolExampleInputs,
+  serializeToolExampleInput,
+} from './utils/toolkit/examples'
 // agentWorkflowSchema：check-schemas.mjs 契约门消费的权威 schema（agent:run_workflow）。
 export type { AgentExecutionStack, AgentExecutionStackApi, AgentExecutionStackWithQuery, AgentExecutionStackWithQueryApi } from './contract/provides.js'
 export type { SessionLedgerLocator, SessionStoreDeps } from './contract/requires.js'

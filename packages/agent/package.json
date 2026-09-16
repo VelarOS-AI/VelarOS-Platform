@@ -1,6 +1,6 @@
 {
   "name": "@velaros-ai/agent",
-  "version": "0.6.42",
+  "version": "0.6.43",
   "velaros": {
     "platform": "0.6"
   },
@@ -128,6 +128,7 @@
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@velaros-ai/core": "workspace:*",
     "@velaros-ai/kernel": "workspace:*",
+    "@velaros-ai/tool-contract": "workspace:*",
     "gpt-tokenizer": "3.4.0",
     "jszip": "^3.10.1",
     "ai": "^6.0.168",

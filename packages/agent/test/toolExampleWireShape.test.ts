@@ -1,10 +1,8 @@
 import { expect, test } from 'bun:test'
 import { z } from 'zod'
 
-import {
-  serializeToolExampleInput,
-  ToolContractExampleRegistry,
-} from '../src/impl/tools/ToolContractExampleRegistry'
+import { createToolExampleRegistry, serializeToolExampleInput } from '@velaros-ai/tool-contract'
+
 import { defineToolRuntimeSpec } from '../src/utils/toolkit/define-tool-contract'
 
 function tool(schema: z.ZodType<any>, example: Record<string, unknown>) {
@@ -23,7 +21,7 @@ function tool(schema: z.ZodType<any>, example: Record<string, unknown>) {
       permissions: [],
       execute: async () => null,
     },
-    new ToolContractExampleRegistry()
+    createToolExampleRegistry()
   )
 }
 

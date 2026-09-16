@@ -6,7 +6,7 @@
       "domain": "agent",
       "directory": "packages/agent",
       "name": "@velaros-ai/agent",
-      "version": "0.6.42",
+      "version": "0.6.43",
       "description": "Host-agnostic agent loop, prompt, orchestration, team, execution, and tool runtime for VelarOS-compatible hosts, plus the versioned Agent wire contracts under ./protocol.",
       "exportSubpaths": [
         ".",
@@ -216,6 +216,18 @@
         "./contracts"
       ],
       "repositoryDirectory": "packages/text-files"
+    },
+    {
+      "domain": "foundations",
+      "directory": "packages/tool-contract",
+      "name": "@velaros-ai/tool-contract",
+      "version": "0.1.0",
+      "description": "The tool contract shared by capability spaces: declare a tool once (identity, category, role, permissions, capability schema, exposure), render and police its model-facing description, turn its zod schema into JSON Schema or a compact bundle, mount a whole space onto the kernel, and build the one failure envelope every space reports.",
+      "exportSubpaths": [
+        ".",
+        "./contracts"
+      ],
+      "repositoryDirectory": "packages/tool-contract"
     },
     {
       "domain": "html-artifacts",

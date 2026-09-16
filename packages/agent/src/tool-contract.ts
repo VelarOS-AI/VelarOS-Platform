@@ -3,12 +3,6 @@ export type { InteractionPort } from './contract/requires.js'
 export { fileContextFor } from './impl/context/FileContextCoordinator'
 export { defaultDenyApprovalPort } from './impl/tools/DefaultDenyApprovalPort'
 export {
-  DefaultToolContractExampleRegistry,
-  renderToolExampleInputs,
-  serializeToolExampleInput,
-  ToolContractExampleRegistry,
-} from './impl/tools/ToolContractExampleRegistry'
-export {
   resolveToolInputReuse,
   ToolInputReuseSchema,
   withToolInputReuse,
@@ -46,6 +40,13 @@ export {
   readToolSchemaDiscoveryNames,
   ToolContractDiscoveryDescriptors,
 } from './utils/toolkit/discovery'
+export type { ToolContractExampleRegistry } from './utils/toolkit/examples'
+export {
+  createToolExampleRegistry,
+  DefaultToolContractExampleRegistry,
+  renderToolExampleInputs,
+  serializeToolExampleInput,
+} from './utils/toolkit/examples'
 export {
   buildAppliedAdjustments,
   buildValidItemsHint,

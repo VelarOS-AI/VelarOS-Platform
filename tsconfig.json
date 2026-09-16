@@ -144,6 +144,12 @@
       "@velaros-ai/text-files/*": [
         "./packages/text-files/src/*"
       ],
+      "@velaros-ai/tool-contract": [
+        "./packages/tool-contract/src/index.ts"
+      ],
+      "@velaros-ai/tool-contract/*": [
+        "./packages/tool-contract/src/*"
+      ],
       "@velaros-ai/surface-protocol": [
         "./packages/surface-protocol/src/index.ts"
       ],

@@ -74,3 +74,14 @@ project 改用两个公共件：命令判定、危险命令审批请求走 `@vel
 - 「目录被忽略则里面的一切跟着被忽略」由判定时按各级上级目录推，不再给每条规则额外展开一条 `pattern/**`——那种展开会让名叫 `build` 的**文件**被 `build/` 命中。
 - 注释与取反判在还原转义之前：`\#foo`、`\!foo` 是字面量（project 那份先还原转义，`\#foo` 被当成注释整行丢掉）。
 - 真实路径与「在不在根里」不进本包：前者在 `@velaros-ai/core/utils/RealPath`，后者在 `@velaros-ai/platform` 的 `isPathTextInside`／`relativePathTextInside`（ADR 0005）。
+
+## Addendum（2026-09-16）：`@velaros-ai/tool-contract`
+
+第五个公共件，也是第一个不是从两个空间合并而来、而是**从 agent 拆出来**的：写一条工具要用到的全部契约。
+七个空间（system、project、browser、office、memory、computer、knowledge）原来只为「写工具」就把整个 agent 运行时列成 peerDependency，而工具契约本身与 agent 的回合循环没有关系。按「一包一义」与「出现独立消费者才成包」，它独立成包。
+
+- 产品面：`toolContracts`（`ToolContractDefinitionApi`：定义工具、编译模型面说明、鸭子判定与只读判定）、`toolDescriptions`（`ToolDescriptionsApi`：分节语法的渲染、判定、解析、精简与两道长度闸）、`toolSchemas`（`ToolSchemasApi`）、`toolIdentity`（`ToolIdentityApi`）、`toolInputForgiveness`（`ToolInputForgivenessApi`）、`toolKernelModules`（`ToolKernelModulesApi`）、`toolFailures`（`ToolFailuresApi`）、`toolExamples`（`ToolExampleRegistryApi`），以及模块级工厂 `createToolExampleRegistry`、`renderToolExampleInputs`、`serializeToolExampleInput`；注入面 `ToolContextResolver`；可移植数据与常量从 `./contracts` 取。
+- 三件到处重复的公共件随这一轮落进去：`toolContracts.createDefiner` 取代四份逐行同构的 `defineXTool`；`toolKernelModules.define` 与 `ToolCapabilityService` 取代 system、project、office 三份内核模块样板；`toolFailures.create` 与 `ToolFailureLimits` 统一 `not-applied` / `skipped` / `failed` 三种失败信封，各包只出自己的错误码。
+- 本轮**不搬**的三块，理由写在这里以免下一轮重开会：`ApprovalPort` / `InteractionPort` 与它们的缺省实现（`ToolConfirmationDecisionOptions` 的签名闭包要拖进 `UserActionCard` 一族 17 个类型，`InteractionPort` 要拖进整套执行记录，都是产品面而不是工具契约）；`withToolInputReuse` / `resolveToolInputReuse` 一族（账房绑着 agent 的 `ContextPayloadStore`）；`fileContextFor` 与文件上下文登记（同上）。它们仍从 `@velaros-ai/agent/tool-contract` 出，agent 收口那一轮再定去留。
+- 工具协议类型（`ToolPermission`、`ToolCategoryId`、`ToolCapabilitySchema`、`ToolExposurePolicy`、`ToolContractRole`、`ToolSurfaceProfileId`、`ToolModelInputModality` 一族）在本包的可移植文件里是**同形副本**：agent 的可移植数据文件按标准一个 import 都不许有，两边只能各持一份，由仓库级一致性测试 `tests/tool-contract/protocol-mirror.test.ts` 守着（同 `SystemShellKind` 的先例）。agent 收口那一轮若放宽可移植文件的 import 规则，这份副本删掉、agent 改从本包取。
+- `tool-input-bounds`（有界读与递归深度的那几个 zod 帮手）留在 agent：它们的返回类型是 zod 推出来的形状，写成显式接口会把 zod 版本钉进合同；browser 继续从 `@velaros-ai/agent/tool-contract` 取。

@@ -33,7 +33,8 @@
         "shell-command",
         "rehearsal-sandbox",
         "text-files",
-        "path-rules"
+        "path-rules",
+        "tool-contract"
       ],
       "model": [
         "model"
@@ -156,6 +157,7 @@
     "@velaros-ai/rehearsal-sandbox": "workspace:*",
     "@velaros-ai/shell-command": "workspace:*",
     "@velaros-ai/text-files": "workspace:*",
+    "@velaros-ai/tool-contract": "workspace:*",
     "@vitejs/plugin-react": "^6.0.5",
     "brace-expansion": "1.1.18",
     "chrome-devtools-frontend": "1.0.1652307",
