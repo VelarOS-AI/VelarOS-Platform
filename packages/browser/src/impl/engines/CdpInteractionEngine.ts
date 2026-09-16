@@ -1,0 +1,1014 @@
+import { isArray, isBoolean, isEmpty, isFiniteNumber, isNumber, isPlainObject, isString, toNullable, toOptional } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
+import { logRuntime } from '@velaros-ai/core/logger'
+
+import type { BrowserClickCoordinatesOptions, BrowserClickCoordinatesResult, BrowserDragOptions, BrowserDragResult, BrowserElementTargetHint, BrowserMoveMouseOptions, BrowserMoveMouseResult, BrowserPageInspection, BrowserPagePreviewPointerEvent, BrowserPageScrollOptions, BrowserPageScrollResult, BrowserPageZoomOptions, BrowserPageZoomResult, BrowserPressKeyOptions, BrowserPressKeyResult, BrowserSiteContext, BrowserTargetActionEffect, BrowserTargetActionEffectSnapshot, BrowserTargetActionOptions, BrowserTargetActionResult, BrowserTargetActionTextDiff, BrowserTypeTextOptions, BrowserTypeTextResult, BrowserViewportOptions, BrowserViewportResult } from '../../types/browser.js'
+import type {
+  BrowserPageDriver,
+  BrowserPageDriverPointerListener,
+  BrowserPageDriverState,
+  BrowserSystemPointerDriver,
+} from '../../types/driver'
+import { normalizeBrowserPressKeyOptions } from '../../utils/keyboard'
+import type { BrowserPageScriptBuilder } from '../../utils/page-scripts/builder'
+import {
+  type BrowserPageDriverKernel,
+  type BrowserPageDriverSession,
+  clampInteger,
+  clampZoomFactor,
+  DEFAULT_BROWSER_VIEWPORT,
+  type ExternalBrowserPageSession,
+} from '../../utils/runtime-internals'
+import type { BrowserTargetRefStore } from '../session/BrowserTargetRefStore'
+
+export interface BrowserPointerPoint {
+  x: number
+  y: number
+}
+
+export interface BrowserTargetActionInternalEffectSnapshot extends BrowserTargetActionEffectSnapshot {
+  textSampleLines: string[]
+  textSampleTruncated: boolean
+}
+
+export type BrowserTargetActionClickMode = 'dom' | 'coordinate'
+
+interface BrowserViewportScreenMetrics {
+  focused: boolean
+  screenX: number
+  screenY: number
+  outerWidth: number
+  outerHeight: number
+  innerWidth: number
+  innerHeight: number
+}
+
+const BrowserTargetActionEffectSampleLineLimit = 200
+const BrowserSelfHealingStableAttributeWeights: Readonly<Record<string, number>> = {
+  id: 12,
+  'data-testid': 12,
+  'data-test': 12,
+  'data-qa': 12,
+  controlId: 12,
+  href: 10,
+  'aria-labelledby': 10,
+  'aria-label': 9,
+  name: 9,
+  title: 8,
+  placeholder: 8,
+}
+
+/**
+ * 交互域执行体的 host 无关外部核（走 CDP driver）。
+ *
+ * 承载 target action 与自愈、动作效果指纹、坐标点击/拖拽/hover 的 driver 流程、
+ * viewport 与页面缩放，以及全部纯计算助手。Electron 宿主的
+ * `BrowserInteractionEngine` 继承本类：external 分支交给 `super`，embedded 分支
+ * （webContents 输入合成、虚拟指针浮层、HUD、高亮）由子类补齐。
+ *
+ * 方法默认在 runtime 的 actionQueue 内被调用。
+ */
+export class CdpInteractionEngine {
+  protected readonly log = logRuntime.tag('BrowserInteractionEngine')
+  private systemPointerDriver: Nullable<BrowserSystemPointerDriver> = null
+
+  constructor(
+    protected readonly kernel: BrowserPageDriverKernel,
+    protected readonly scripts: BrowserPageScriptBuilder,
+    protected readonly targetRefs: BrowserTargetRefStore,
+    protected readonly onPreviewPointer?: LooseOptional<(
+      sessionId: string,
+      pointer: BrowserPagePreviewPointerEvent
+    ) => void>
+  ) {}
+
+  /** 宿主可在装配完成或运行期设置变化后替换系统指针驱动。 */
+  public setSystemPointerDriver(driver: LooseOptional<BrowserSystemPointerDriver>): void {
+    this.systemPointerDriver = toNullable(driver)
+  }
+
+  // ---- kernel 桥接 ----
+  // 这些 protected 一行方法是 runtime 拆分期的搬运脚手架（“方法体零改写”地平移进 engine）。
+  // 现在拆分已定形，它们的**退场条件**是：把 engine 内的调用点直接改成 `this.kernel.X(...)`，
+  // 然后整段删除。在那之前别逐个删——半删会让同一个 engine 里两种取会话写法并存（§0.1 条 2）。
+  protected getExternalPageSession(sessionId: string): Nullable<ExternalBrowserPageSession> {
+    return this.kernel.getExternalPageSession(sessionId)
+  }
+
+  protected refreshPageDriverSessionState(
+    sessionId: string,
+    pageSession: BrowserPageDriverSession,
+    fallbackUrl: string
+  ): Promise<BrowserPageDriverState> {
+    return this.kernel.refreshPageDriverSessionState(sessionId, pageSession, fallbackUrl)
+  }
+
+  protected refreshExternalPageState(
+    sessionId: string,
+    session: ExternalBrowserPageSession,
+    fallbackUrl: string
+  ): Promise<BrowserPageDriverState> {
+    return this.kernel.refreshExternalPageState(sessionId, session, fallbackUrl)
+  }
+
+  protected updateExternalPageStateFromInspection(
+    sessionId: string,
+    session: ExternalBrowserPageSession,
+    inspection: BrowserPageInspection
+  ): void {
+    this.kernel.updateExternalPageStateFromInspection(sessionId, session, inspection)
+  }
+
+  protected syncExternalPageStateFromScriptResult(
+    sessionId: string,
+    session: ExternalBrowserPageSession,
+    result: unknown,
+    fallbackUrl: string
+  ): void {
+    this.kernel.syncExternalPageStateFromScriptResult(sessionId, session, result, fallbackUrl)
+  }
+
+  protected delay(ms: number): Promise<void> {
+    return this.kernel.delay(ms)
+  }
+
+  /**
+   * 把页面 CSS 坐标换算为桌面逻辑坐标并尝试移动原生系统指针。
+   *
+   * 外部浏览器需要扣除窗口边框和浏览器工具栏；Electron webview 的 screenX/screenY 已由
+   * Chromium 映射到 guest viewport 原点。任何探测或权限失败都返回 false，由调用方继续走
+   * 合成输入和统一兜底箭头，不能让可视化能力影响真实页面动作。
+   */
+  protected async tryMoveSystemPointer(
+    driver: BrowserPageDriver,
+    point: BrowserPointerPoint,
+    visible: boolean,
+    durationMs: number
+  ): Promise<boolean> {
+    const systemPointerDriver = this.systemPointerDriver
+    if (!visible || !systemPointerDriver) return false
+
+    try {
+      await driver.bringToFront()
+      const metrics = await driver.executeJavaScript<BrowserViewportScreenMetrics>(`(() => ({
+  focused: document.hasFocus(),
+  screenX: Number(window.screenX || window.screenLeft || 0),
+  screenY: Number(window.screenY || window.screenTop || 0),
+  outerWidth: Number(window.outerWidth || window.innerWidth || 0),
+  outerHeight: Number(window.outerHeight || window.innerHeight || 0),
+  innerWidth: Number(window.innerWidth || document.documentElement.clientWidth || 0),
+  innerHeight: Number(window.innerHeight || document.documentElement.clientHeight || 0),
+}))()`)
+      if (!metrics.focused) return false
+      if (
+        !isFiniteNumber(metrics.screenX) ||
+        !isFiniteNumber(metrics.screenY) ||
+        !isFiniteNumber(metrics.outerWidth) ||
+        !isFiniteNumber(metrics.outerHeight) ||
+        !isFiniteNumber(metrics.innerWidth) ||
+        !isFiniteNumber(metrics.innerHeight)
+      ) return false
+
+      const horizontalInset = driver.kind === 'external'
+        ? Math.max(0, (metrics.outerWidth - metrics.innerWidth) / 2)
+        : 0
+      const verticalInset = driver.kind === 'external'
+        ? Math.max(0, metrics.outerHeight - metrics.innerHeight - horizontalInset)
+        : 0
+
+      // 必须 await：不 await 就是把 promise 原样返回，异步拒绝会绕过下面的 catch，
+      // 「系统指针不可用 → 改用浏览器兜底指针」这条降级根本不会执行。
+      return await systemPointerDriver.move({
+        x: Math.round(metrics.screenX + horizontalInset + point.x),
+        y: Math.round(metrics.screenY + verticalInset + point.y),
+        durationMs: clampInteger(durationMs, 0, 800, 0),
+      })
+    } catch (error) {
+      this.log.debug('系统指针不可用，改用浏览器兜底指针', {
+        driverKind: driver.kind,
+        error: AppError.from(error).message,
+      })
+      return false
+    }
+  }
+
+  private requireExternalPageSession(sessionId: string): ExternalBrowserPageSession {
+    const externalSession = this.getExternalPageSession(sessionId)
+    if (!externalSession) {
+      throw new AppError('NOT_FOUND', `外部浏览器会话不存在：${sessionId}`)
+    }
+    return externalSession
+  }
+
+  public async performTargetAction(
+    sessionId: string,
+    context: BrowserSiteContext,
+    options: BrowserTargetActionOptions,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserTargetActionResult> {
+    abortSignal?.throwIfAborted()
+    const externalSession = this.requireExternalPageSession(sessionId)
+    const hydratedOptions = this.targetRefs.hydrate(sessionId, options)
+    const clickMode = this.resolveTargetActionClickMode(externalSession.driver, hydratedOptions)
+    const beforeEffectSnapshot = await this.captureTargetActionEffectSnapshot(
+      externalSession.driver
+    )
+    const initialActionResult =
+      await externalSession.driver.executeJavaScript<BrowserTargetActionResult>(
+        this.scripts.buildTargetActionScript(hydratedOptions, { clickMode }),
+        true
+      )
+    const healedActionResult = await this.selfHealTargetActionAfterNotFound({
+      sessionId,
+      driver: externalSession.driver,
+      options: hydratedOptions,
+      result: initialActionResult,
+      clickMode,
+      externalSession,
+    })
+    const actionResult = await this.dispatchCoordinateTargetActionIfNeeded({
+      sessionId,
+      externalSession,
+      driver: externalSession.driver,
+      options: hydratedOptions,
+      result: healedActionResult,
+    })
+    const state = await this.refreshExternalPageState(
+      sessionId,
+      externalSession,
+      actionResult.url || context.url
+    )
+    const afterEffectSnapshot = actionResult.matched
+      ? await this.captureTargetActionEffectSnapshot(externalSession.driver)
+      : null
+    const effect = this.buildTargetActionEffect(
+      beforeEffectSnapshot,
+      afterEffectSnapshot
+    )
+    if (actionResult.matched && options.action === 'click') {
+      this.targetRefs.clear(sessionId)
+    }
+
+    return {
+      ...actionResult,
+      url: state.url || actionResult.url || context.url,
+      effect: toOptional(effect),
+      capturedAt: Date.now(),
+    }
+  }
+
+  protected async inspectPageForTargetActionSelfHeal(input: {
+    sessionId: string
+    driver: BrowserPageDriver
+    externalSession?: LooseOptional<ExternalBrowserPageSession>
+  }): Promise<BrowserPageInspection> {
+    const inspection = await input.driver.executeJavaScript<BrowserPageInspection>(
+      this.scripts.buildInspectionScript({
+        includeHtml: false,
+        maxTextChars: 2_000,
+        maxHtmlChars: 1_000,
+        maxElements: 120,
+      }),
+      true
+    )
+    // 这是 action 失败后的内部探测，不会作为 observation 返回给模型。不得把它发布到
+    // ref store，否则模型仍持有的上一次 inspect refs 会被一个不可见 generation 换代。
+    if (input.externalSession) {
+      this.updateExternalPageStateFromInspection(input.sessionId, input.externalSession, inspection)
+    }
+
+    return inspection
+  }
+
+  protected async selfHealTargetActionAfterNotFound(input: {
+    sessionId: string
+    driver: BrowserPageDriver
+    options: BrowserTargetActionOptions
+    result: BrowserTargetActionResult
+    clickMode: BrowserTargetActionClickMode
+    externalSession?: LooseOptional<ExternalBrowserPageSession>
+  }): Promise<BrowserTargetActionResult> {
+    if (input.result.matched || input.result.failureReason !== 'not-found') return input.result
+
+    const inspection = await this.inspectPageForTargetActionSelfHeal({
+      sessionId: input.sessionId,
+      driver: input.driver,
+      externalSession: input.externalSession,
+    })
+    const healedTarget = this.findSelfHealingTarget(input.options, inspection)
+    if (!healedTarget) return input.result
+
+    return input.driver.executeJavaScript<BrowserTargetActionResult>(
+      this.scripts.buildTargetActionScript({
+        ...input.options,
+        target: healedTarget,
+      }, {
+        clickMode: input.clickMode,
+      }),
+      true
+    )
+  }
+
+  private findSelfHealingTarget(
+    options: BrowserTargetActionOptions,
+    inspection: BrowserPageInspection
+  ): Nullable<BrowserElementTargetHint> {
+    const candidates: Array<{
+      target: BrowserElementTargetHint
+      index: number
+    }> = []
+    let index = 0
+    const addTarget = (target: Nullable<BrowserElementTargetHint>): void => {
+      if (!target) return
+      candidates.push({ target, index })
+      index += 1
+    }
+
+    inspection.formFields.forEach((entry) => addTarget(entry.target))
+    inspection.actions.forEach((entry) => addTarget(entry.target))
+    inspection.links.forEach((entry) => addTarget(entry.target))
+
+    const ranked = candidates
+      .map((candidate) => {
+        const score = this.scoreSelfHealingTarget(options.target, candidate.target)
+        return score ? { ...candidate, ...score } : null
+      })
+      .filter((candidate): candidate is NonNullable<typeof candidate> => !!candidate)
+      .sort((left, right) => right.totalScore - left.totalScore || left.index - right.index)
+
+    const best = ranked[0]
+    if (!best || this.isSameBrowserTargetSelector(options.target, best.target)) return null
+
+    // 相同强度的身份信号命中多个不同元素时，页面类别或出现顺序都不能替 agent
+    // 猜目标。重复出现在 links/actions 的同一 selector 不算歧义。
+    const ambiguous = ranked.slice(1).some((candidate) =>
+      candidate.totalScore === best.totalScore &&
+      !this.isSameBrowserTargetSelector(best.target, candidate.target)
+    )
+    if (ambiguous) return null
+
+    return best.target
+  }
+
+  private scoreSelfHealingTarget(
+    staleTarget: BrowserElementTargetHint,
+    freshTarget: BrowserElementTargetHint
+  ): Nullable<{ identityScore: number; totalScore: number }> {
+    if (!this.isSelfHealingFrameCompatible(staleTarget, freshTarget)) return null
+
+    let identityScore = 0
+    let contextScore = 0
+    const staleRole = this.normalizeTargetMatchText(staleTarget.role)
+    const freshRole = this.normalizeTargetMatchText(freshTarget.role)
+    const staleText = this.normalizeTargetMatchText(staleTarget.text)
+    const freshText = this.normalizeTargetMatchText(freshTarget.text)
+    const staleName = this.normalizeTargetMatchText(staleTarget.name)
+    const freshName = this.normalizeTargetMatchText(freshTarget.name)
+
+    if (staleRole && freshRole && staleRole !== freshRole) return null
+    if (staleRole && freshRole && staleRole === freshRole) contextScore += 2
+    if (staleText && freshText && staleText === freshText) identityScore += 8
+    if (staleName && freshName && staleName !== freshName) return null
+    if (staleName && freshName && staleName === freshName) identityScore += 9
+
+    for (const [key, weight] of Object.entries(BrowserSelfHealingStableAttributeWeights)) {
+      const value = staleTarget.attributes?.[key]
+      const staleValue = this.normalizeTargetIdentityValue(value)
+      const freshValue = this.normalizeTargetIdentityValue(freshTarget.attributes?.[key])
+      // stable attribute 一旦由旧 observation 声明，就是身份约束而不是可选加分项。
+      // 新候选缺字段和字段冲突同样拒绝，不能再靠同名文本误点另一个元素。
+      if (staleValue && staleValue !== freshValue) return null
+      if (staleValue) identityScore += weight
+    }
+
+    // role、动作类型或候选所在列表只描述类别，不足以证明元素身份。
+    if (identityScore < 8) return null
+
+    return {
+      identityScore,
+      totalScore: identityScore + contextScore,
+    }
+  }
+
+  private isSelfHealingFrameCompatible(
+    staleTarget: BrowserElementTargetHint,
+    freshTarget: BrowserElementTargetHint
+  ): boolean {
+    if (!staleTarget.frame && !freshTarget.frame) return true
+    if (!staleTarget.frame || !freshTarget.frame) return false
+
+    let matched = false
+    for (const key of ['css', 'url'] as const) {
+      const staleValue = this.normalizeTargetIdentityValue(staleTarget.frame[key])
+      const freshValue = this.normalizeTargetIdentityValue(freshTarget.frame[key])
+      if (staleValue && staleValue !== freshValue) return false
+      if (staleValue) matched = true
+    }
+    for (const key of ['name', 'title'] as const) {
+      const staleValue = this.normalizeTargetMatchText(staleTarget.frame[key])
+      const freshValue = this.normalizeTargetMatchText(freshTarget.frame[key])
+      if (staleValue && staleValue !== freshValue) return false
+      if (staleValue) matched = true
+    }
+    return matched
+  }
+
+  private normalizeTargetMatchText(value: LooseOptional<string>): string {
+    return String(value ?? '').replace(/\s+/g, ' ').trim().toLowerCase()
+  }
+
+  private normalizeTargetIdentityValue(value: LooseOptional<string>): string {
+    return String(value ?? '').trim()
+  }
+
+  private isSameBrowserTargetSelector(
+    staleTarget: BrowserElementTargetHint,
+    freshTarget: BrowserElementTargetHint
+  ): boolean {
+    const staleCss = this.normalizeTargetIdentityValue(staleTarget.css)
+    const freshCss = this.normalizeTargetIdentityValue(freshTarget.css)
+    if (staleCss && freshCss && staleCss !== freshCss) return false
+
+    const staleRef = this.targetRefs.normalizeRef(staleTarget.ref)
+    const freshRef = this.targetRefs.normalizeRef(freshTarget.ref)
+    if (staleRef && freshRef && staleRef !== freshRef) return false
+
+    return !!staleCss && staleCss === freshCss
+  }
+
+  protected async captureTargetActionEffectSnapshot(
+    driver: BrowserPageDriver
+  ): Promise<Nullable<BrowserTargetActionInternalEffectSnapshot>> {
+    try {
+      const value = await driver.executeJavaScript<unknown>(
+        this.scripts.buildActionEffectSnapshotScript()
+      )
+
+      return this.normalizeTargetActionEffectSnapshot(value)
+    } catch (error) {
+      this.log.debug('读取浏览器动作效果指纹失败', {
+        error: AppError.from(error).message,
+      })
+      return null
+    }
+  }
+
+  private normalizeTargetActionEffectSnapshot(
+    value: unknown
+  ): Nullable<BrowserTargetActionInternalEffectSnapshot> {
+    if (!isPlainObject(value)) return null
+    if (!isString(value.url)) return null
+    if (!isString(value.title)) return null
+    if (!isString(value.textHash)) return null
+    if (!isNumber(value.textLength)) return null
+    const textSampleLines = isArray(value.textSampleLines)
+      ? value.textSampleLines.filter(isString).slice(0, BrowserTargetActionEffectSampleLineLimit)
+      : []
+
+    return {
+      url: value.url,
+      title: value.title,
+      textHash: value.textHash,
+      textLength: Math.max(0, Math.round(value.textLength)),
+      textSampleLines,
+      textSampleTruncated: isBoolean(value.textSampleTruncated) ? value.textSampleTruncated : false,
+    }
+  }
+
+  protected buildTargetActionEffect(
+    before: Nullable<BrowserTargetActionInternalEffectSnapshot>,
+    after: Nullable<BrowserTargetActionInternalEffectSnapshot>
+  ): Nullable<BrowserTargetActionEffect> {
+    if (!before || !after) return null
+
+    const textDiff = this.diffTargetActionTextSamples(before, after)
+
+    return {
+      observed: true,
+      urlChanged: before.url !== after.url,
+      titleChanged: before.title !== after.title,
+      textChanged: before.textHash !== after.textHash || before.textLength !== after.textLength,
+      textDiff,
+      before: this.toPublicTargetActionEffectSnapshot(before),
+      after: this.toPublicTargetActionEffectSnapshot(after),
+    }
+  }
+
+  private toPublicTargetActionEffectSnapshot(
+    snapshot: BrowserTargetActionInternalEffectSnapshot
+  ): BrowserTargetActionEffectSnapshot {
+    return {
+      url: snapshot.url,
+      title: snapshot.title,
+      textHash: snapshot.textHash,
+      textLength: snapshot.textLength,
+    }
+  }
+
+  private diffTargetActionTextSamples(
+    before: BrowserTargetActionInternalEffectSnapshot,
+    after: BrowserTargetActionInternalEffectSnapshot
+  ): BrowserTargetActionTextDiff {
+    const unchanged = this.countLongestCommonSubsequence(
+      before.textSampleLines,
+      after.textSampleLines
+    )
+    const additions = Math.max(0, after.textSampleLines.length - unchanged)
+    const removals = Math.max(0, before.textSampleLines.length - unchanged)
+
+    return {
+      changed: additions > 0 || removals > 0,
+      additions,
+      removals,
+      unchanged,
+      truncated: before.textSampleTruncated || after.textSampleTruncated,
+    }
+  }
+
+  private countLongestCommonSubsequence(before: string[], after: string[]): number {
+    if (isEmpty(before) || isEmpty(after)) return 0
+
+    let previous = Array.from({ length: after.length + 1 }, () => 0)
+    for (const beforeLine of before) {
+      const current = Array.from({ length: after.length + 1 }, () => 0)
+      after.forEach((afterLine, afterIndex) => {
+        current[afterIndex + 1] = beforeLine === afterLine
+          ? previous[afterIndex] + 1
+          : Math.max(previous[afterIndex + 1], current[afterIndex])
+      })
+      previous = current
+    }
+
+    return previous[after.length] ?? 0
+  }
+
+  protected resolveTargetActionClickMode(
+    driver: BrowserPageDriver,
+    options: BrowserTargetActionOptions
+  ): BrowserTargetActionClickMode {
+    if (options.action !== 'click') return 'dom'
+    if (!driver.clickCoordinates) return 'dom'
+
+    return 'coordinate'
+  }
+
+  protected async dispatchCoordinateTargetActionIfNeeded(input: {
+    sessionId: string
+    externalSession?: LooseOptional<ExternalBrowserPageSession>
+    driver: BrowserPageDriver
+    options: BrowserTargetActionOptions
+    result: BrowserTargetActionResult
+  }): Promise<BrowserTargetActionResult> {
+    if (input.options.action === 'hover') return this.dispatchCoordinateTargetHoverIfNeeded(input)
+    if (input.options.action !== 'click') return input.result
+    if (!input.result.matched || input.result.clickMethod !== 'coordinate') return input.result
+
+    const clickPoint = this.readTargetActionClickPoint(input.result.clickPoint)
+    if (!clickPoint || !input.driver.clickCoordinates) return {
+        ...input.result,
+        matched: false,
+        failureReason: 'not-interactable',
+      }
+
+    try {
+      if (input.externalSession) {
+        await this.tryMoveSystemPointer(
+          input.driver,
+          clickPoint,
+          input.externalSession.visible,
+          220
+        )
+      }
+      await input.driver.clickCoordinates({
+        x: clickPoint.x,
+        y: clickPoint.y,
+        button: 'left',
+        clickCount: 1,
+        waitForNavigation: false,
+        onPointerEvent: input.externalSession
+          ? this.createPreviewPointerListener(input.sessionId, input.externalSession, 'click')
+          : undefined,
+      })
+
+      return input.result
+    } catch (error) {
+      this.log.debug('坐标目标点击失败，回退 DOM click', {
+        error: AppError.from(error).message,
+      })
+
+      return input.driver.executeJavaScript<BrowserTargetActionResult>(
+        this.scripts.buildTargetActionScript(input.options, { clickMode: 'dom' }),
+        true
+      )
+    }
+  }
+
+  private async dispatchCoordinateTargetHoverIfNeeded(input: {
+    sessionId: string
+    externalSession?: LooseOptional<ExternalBrowserPageSession>
+    driver: BrowserPageDriver
+    result: BrowserTargetActionResult
+  }): Promise<BrowserTargetActionResult> {
+    if (!input.result.matched || input.result.clickMethod !== 'coordinate') return input.result
+
+    const hoverPoint = this.readTargetActionClickPoint(input.result.clickPoint)
+    if (!hoverPoint || !input.driver.moveMouse) return {
+        ...input.result,
+        matched: false,
+        failureReason: 'not-interactable',
+      }
+
+    if (input.externalSession) {
+      await this.tryMoveSystemPointer(
+        input.driver,
+        hoverPoint,
+        input.externalSession.visible,
+        220
+      )
+    }
+    await input.driver.moveMouse({
+      x: hoverPoint.x,
+      y: hoverPoint.y,
+      onPointerEvent: input.externalSession
+        ? this.createPreviewPointerListener(input.sessionId, input.externalSession, 'hover')
+        : undefined,
+    })
+
+    return input.result
+  }
+
+  private readTargetActionClickPoint(
+    value: BrowserTargetActionResult['clickPoint']
+  ): Nullable<{ x: number; y: number }> {
+    return this.readBrowserPointerPoint(value)
+  }
+
+  protected readBrowserPointerPoint(
+    value: Optional<Nullable<{ x: number; y: number }>>
+  ): Nullable<{ x: number; y: number }> {
+    if (!value) return null
+    if (!Number.isFinite(value.x) || !Number.isFinite(value.y)) return null
+
+    return {
+      x: Math.round(value.x),
+      y: Math.round(value.y),
+    }
+  }
+
+  public async typeText(
+    sessionId: string,
+    context: BrowserSiteContext,
+    options: BrowserTypeTextOptions,
+    _abortSignal?: AbortSignal
+  ): Promise<BrowserTypeTextResult> {
+    _abortSignal?.throwIfAborted()
+    const externalSession = this.requireExternalPageSession(sessionId)
+    if (!externalSession.driver.typeText) {
+      throw new AppError('VALIDATION', '当前外部浏览器 driver 不支持文本输入。')
+    }
+    await externalSession.driver.typeText(options)
+    const state = await this.refreshExternalPageState(sessionId, externalSession, context.url)
+    return {
+      url: state.url || context.url,
+      textLength: options.text.length,
+      capturedAt: Date.now(),
+    }
+  }
+
+  public async pressKey(
+    sessionId: string,
+    context: BrowserSiteContext,
+    options: BrowserPressKeyOptions,
+    _abortSignal?: AbortSignal
+  ): Promise<BrowserPressKeyResult> {
+    _abortSignal?.throwIfAborted()
+    const normalized = normalizeBrowserPressKeyOptions(options)
+    const externalSession = this.requireExternalPageSession(sessionId)
+    if (!externalSession.driver.pressKey) {
+      throw new AppError('VALIDATION', '当前外部浏览器 driver 不支持键盘输入。')
+    }
+    const repeat = clampInteger(normalized.repeat, 1, 50, 1)
+    await externalSession.driver.pressKey({
+      ...normalized,
+      repeat,
+    })
+    const state = await this.refreshExternalPageState(sessionId, externalSession, context.url)
+    return {
+      url: state.url || context.url,
+      key: options.key,
+      repeat,
+      capturedAt: Date.now(),
+    }
+  }
+
+  public async clickCoordinates(
+    sessionId: string,
+    context: BrowserSiteContext,
+    options: BrowserClickCoordinatesOptions,
+    _abortSignal?: AbortSignal
+  ): Promise<BrowserClickCoordinatesResult> {
+    _abortSignal?.throwIfAborted()
+    const externalSession = this.requireExternalPageSession(sessionId)
+    if (!externalSession.driver.clickCoordinates) {
+      throw new AppError('VALIDATION', '当前外部浏览器 driver 不支持坐标点击。')
+    }
+    const point = this.clampExternalViewportPoint(options.x, options.y)
+    const button = options.button ?? 'left'
+    const clickCount = clampInteger(options.clickCount, 1, 5, 1)
+    await this.tryMoveSystemPointer(
+      externalSession.driver,
+      point,
+      externalSession.visible,
+      220
+    )
+    await externalSession.driver.clickCoordinates({
+      ...options,
+      x: point.x,
+      y: point.y,
+      button,
+      clickCount,
+      onPointerEvent: this.createPreviewPointerListener(
+        sessionId,
+        externalSession,
+        'click'
+      ),
+    })
+    const state = await this.refreshExternalPageState(sessionId, externalSession, context.url)
+    return {
+      url: state.url || context.url,
+      x: point.x,
+      y: point.y,
+      button,
+      clickCount,
+      capturedAt: Date.now(),
+    }
+  }
+
+  public async dragTargets(
+    sessionId: string,
+    context: BrowserSiteContext,
+    options: BrowserDragOptions,
+    _abortSignal?: AbortSignal
+  ): Promise<BrowserDragResult> {
+    _abortSignal?.throwIfAborted()
+    const hydratedOptions = this.targetRefs.hydrateDrag(sessionId, options)
+    const steps = clampInteger(hydratedOptions.steps, 1, 60, 10)
+    const externalSession = this.requireExternalPageSession(sessionId)
+    return this.dragTargetsWithExternalDriver({
+      sessionId,
+      context,
+      driver: externalSession.driver,
+      options: hydratedOptions,
+      steps,
+      externalSession,
+    })
+  }
+
+  private async dragTargetsWithExternalDriver(input: {
+    sessionId: string
+    context: BrowserSiteContext
+    driver: BrowserPageDriver
+    options: BrowserDragOptions
+    steps: number
+    externalSession: ExternalBrowserPageSession
+  }): Promise<BrowserDragResult> {
+    if (!input.driver.dragCoordinates) {
+      throw new AppError('VALIDATION', '当前浏览器 driver 不支持拖拽。')
+    }
+
+    const resolved = await input.driver.executeJavaScript<BrowserDragResult>(
+      this.scripts.buildDragTargetScript(input.options),
+      true
+    )
+    if (!resolved.matched) return {
+        ...resolved,
+        steps: input.steps,
+        capturedAt: Date.now(),
+      }
+
+    const sourcePoint = this.readBrowserPointerPoint(resolved.source.point)
+    const targetPoint = this.readBrowserPointerPoint(resolved.target.point)
+    if (!sourcePoint || !targetPoint) return {
+        ...resolved,
+        matched: false,
+        startX: toNullable(sourcePoint?.x),
+        startY: toNullable(sourcePoint?.y),
+        endX: toNullable(targetPoint?.x),
+        endY: toNullable(targetPoint?.y),
+        steps: input.steps,
+        failureReason: 'not-interactable',
+        capturedAt: Date.now(),
+      }
+
+    const source = this.clampExternalViewportPoint(sourcePoint.x, sourcePoint.y)
+    const target = this.clampExternalViewportPoint(targetPoint.x, targetPoint.y)
+
+    const usesSystemPointer = await this.tryMoveSystemPointer(
+      input.driver,
+      source,
+      input.externalSession.visible,
+      180
+    )
+    await Promise.all([
+      input.driver.dragCoordinates({
+        startX: source.x,
+        startY: source.y,
+        endX: target.x,
+        endY: target.y,
+        steps: input.steps,
+        onPointerEvent: this.createPreviewPointerListener(input.sessionId, input.externalSession, 'drag'),
+      }),
+      usesSystemPointer
+        ? this.tryMoveSystemPointer(
+            input.driver,
+            target,
+            input.externalSession.visible,
+            Math.min(520, Math.max(180, input.steps * 24))
+          )
+        : Promise.resolve(false),
+    ])
+
+    const state = await this.refreshExternalPageState(
+      input.sessionId,
+      input.externalSession,
+      resolved.url || input.context.url
+    )
+    const finalUrl = state?.url || input.driver.getURL() || resolved.url || input.context.url
+
+    return {
+      ...resolved,
+      url: finalUrl,
+      startX: source.x,
+      startY: source.y,
+      endX: target.x,
+      endY: target.y,
+      steps: input.steps,
+      failureReason: null,
+      capturedAt: Date.now(),
+    }
+  }
+
+  public async moveMouse(
+    sessionId: string,
+    context: BrowserSiteContext,
+    options: BrowserMoveMouseOptions,
+    _abortSignal?: AbortSignal
+  ): Promise<BrowserMoveMouseResult> {
+    _abortSignal?.throwIfAborted()
+    const externalSession = this.requireExternalPageSession(sessionId)
+    if (!externalSession.driver.moveMouse) {
+      throw new AppError('VALIDATION', '当前外部浏览器 driver 不支持鼠标移动。')
+    }
+    const point = this.clampExternalViewportPoint(options.x, options.y)
+    await this.tryMoveSystemPointer(
+      externalSession.driver,
+      point,
+      externalSession.visible,
+      220
+    )
+    await externalSession.driver.moveMouse({
+      ...point,
+      onPointerEvent: this.createPreviewPointerListener(
+        sessionId,
+        externalSession,
+        'move'
+      ),
+    })
+    const state = await this.refreshExternalPageState(sessionId, externalSession, context.url)
+    return {
+      url: state.url || context.url,
+      x: point.x,
+      y: point.y,
+      capturedAt: Date.now(),
+    }
+  }
+
+  protected clampExternalViewportPoint(x: number, y: number): BrowserPointerPoint {
+    return {
+      x: clampInteger(x, 0, 32_000, 0),
+      y: clampInteger(y, 0, 32_000, 0),
+    }
+  }
+
+  protected createPreviewPointerListener(
+    sessionId: string,
+    externalSession: ExternalBrowserPageSession,
+    action: BrowserPagePreviewPointerEvent['action']
+  ): BrowserPageDriverPointerListener {
+    const viewport = externalSession.viewport ?? DEFAULT_BROWSER_VIEWPORT
+    const width = Math.max(1, viewport.width)
+    const height = Math.max(1, viewport.height)
+
+    return (event): void => {
+      const x = Math.max(0, Math.min(width - 1, Math.round(event.x)))
+      const y = Math.max(0, Math.min(height - 1, Math.round(event.y)))
+      this.onPreviewPointer?.(sessionId, {
+        x,
+        y,
+        xRatio: Math.min(1, Math.max(0, x / width)),
+        yRatio: Math.min(1, Math.max(0, y / height)),
+        action,
+        phase: event.phase,
+        button: toNullable(event.button),
+        capturedAt: Date.now(),
+      })
+    }
+  }
+
+  public async setViewport(
+    sessionId: string,
+    context: BrowserSiteContext,
+    options: BrowserViewportOptions,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserViewportResult> {
+    abortSignal?.throwIfAborted()
+    const width = clampInteger(options.width, 320, 3840, DEFAULT_BROWSER_VIEWPORT.width)
+    const height = clampInteger(options.height, 240, 2160, DEFAULT_BROWSER_VIEWPORT.height)
+    const mobile = Boolean(options.mobile)
+    const pageSession = await this.kernel.getLivePageDriverSession(sessionId, abortSignal)
+    if (!pageSession.driver.setViewport) {
+      throw new AppError('VALIDATION', '当前浏览器 driver 不支持 viewport 调整。')
+    }
+
+    await pageSession.driver.setViewport({ width, height, mobile })
+    const state = await this.refreshPageDriverSessionState(sessionId, pageSession, context.url)
+
+    return {
+      url: state.url || context.url,
+      width,
+      height,
+      mobile,
+      capturedAt: Date.now(),
+    }
+  }
+
+  public async setPageZoom(
+    sessionId: string,
+    context: BrowserSiteContext,
+    options: BrowserPageZoomOptions,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserPageZoomResult> {
+    abortSignal?.throwIfAborted()
+    const pageSession = await this.kernel.getLivePageDriverSession(sessionId, abortSignal)
+    if (!pageSession.driver.setPageZoomFactor) {
+      throw new AppError('VALIDATION', '当前浏览器 driver 不支持页面缩放。')
+    }
+
+    const previousZoomFactor = clampZoomFactor(pageSession.driver.getPageZoomFactor?.(), 1)
+    const zoomFactor = this.resolvePageZoomFactor(options, previousZoomFactor)
+    await pageSession.driver.setPageZoomFactor(zoomFactor)
+    // 缩放 HUD 是 webview 专属浮层，外部 CDP driver 无对应；Electron 子类覆盖时补 HUD。
+    const state = await this.refreshPageDriverSessionState(sessionId, pageSession, context.url)
+
+    return {
+      url: state.url || context.url,
+      zoomFactor,
+      previousZoomFactor,
+      capturedAt: Date.now(),
+    }
+  }
+
+  protected resolvePageZoomFactor(
+    options: BrowserPageZoomOptions,
+    currentZoomFactor: number
+  ): number {
+    const step = this.clampZoomStep(options.step, 0.1)
+
+    switch (options.action) {
+      case 'in':
+        return clampZoomFactor(currentZoomFactor + step, 1)
+      case 'out':
+        return clampZoomFactor(currentZoomFactor - step, 1)
+      case 'reset':
+        return 1
+      case 'set':
+        return clampZoomFactor(options.zoomFactor, 1)
+      default:
+        return currentZoomFactor
+    }
+  }
+
+  /** 缩放步长与 `clampZoomFactor` 同形不同界（步长 0.05–0.5，因子 0.25–3），刻意各自成立。 */
+  private clampZoomStep(value: LooseOptional<number>, fallback: number): number {
+    if (!isFiniteNumber(value)) return fallback
+
+    const normalized = Math.round(value * 100) / 100
+    return Math.min(Math.max(normalized, 0.05), 0.5)
+  }
+
+  public async scrollPage(
+    sessionId: string,
+    context: BrowserSiteContext,
+    options: BrowserPageScrollOptions = {},
+    _abortSignal?: AbortSignal
+  ): Promise<BrowserPageScrollResult> {
+    _abortSignal?.throwIfAborted()
+    const externalSession = this.requireExternalPageSession(sessionId)
+    const result = await externalSession.driver.executeJavaScript<BrowserPageScrollResult>(
+      this.scripts.buildScrollScript(options),
+      true
+    )
+    this.syncExternalPageStateFromScriptResult(sessionId, externalSession, result, context.url)
+    return result
+  }
+}

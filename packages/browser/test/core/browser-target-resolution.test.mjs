@@ -11,13 +11,13 @@ import { test } from 'bun:test'
 import {
   BrowserTargetRefStore,
   CdpInteractionEngine,
-} from '../../dist/core/index.js'
-import { BrowserInteractionEngine } from '../../dist/runtime/BrowserInteractionEngine.js'
+} from '../../dist/exports/core.js'
+import { BrowserInteractionEngine } from '../../dist/impl/electron/BrowserInteractionEngine.js'
 import {
   browserActSchema,
   parseBrowserActInput,
-} from '../../dist/tools/BrowserActSchema.js'
-import { performTargetActionWithRecovery } from '../../dist/tools/TargetActionRecovery.js'
+} from '../../dist/impl/tools/BrowserActSchema.js'
+import { performTargetActionWithRecovery } from '../../dist/utils/target-recovery.js'
 
 function target(overrides = {}) {
   return {

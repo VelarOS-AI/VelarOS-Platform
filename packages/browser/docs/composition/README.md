@@ -1,6 +1,6 @@
 # @velaros-ai/browser/composition
 
-> `@velaros-ai/browser` 的一个导入切片(`packages/browser/src/composition`)。包总览见
+> `@velaros-ai/browser` 的一个导入切片(入口 `packages/browser/src/exports/composition.ts`)。包总览见
 > [包 README](../../README.md)。
 
 ## 这个切片是什么

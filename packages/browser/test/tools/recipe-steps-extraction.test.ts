@@ -5,10 +5,10 @@ import assert from 'node:assert/strict'
 
 import { describe, test } from 'bun:test'
 
-import { simplifyBrowserEvaluatedValue } from '../../src/core/BrowserEvaluateScriptBuilder.js'
-import type { BrowserRecipeStepPlan } from '../../src/tools/RecipePlan.js'
-import { executeBrowserRecipeSteps } from '../../src/tools/RecipeSteps.js'
-import type { ToolContext } from '../../src/tools/Types.js'
+import type { ToolContext } from '../../src/contract/requires.js'
+import { simplifyBrowserEvaluatedValue } from '../../src/utils/page-scripts/evaluate.js'
+import type { BrowserRecipeStepPlan } from '../../src/utils/recipes/plan.js'
+import { executeBrowserRecipeSteps } from '../../src/utils/recipes/steps.js'
 
 /** 只属于求值信封的键：recipe 步骤结果里一个都不许出现。 */
 const EnvelopeOnlyKeys = ['mode', 'result', 'resultText', 'resultTruncated', 'durationMs']

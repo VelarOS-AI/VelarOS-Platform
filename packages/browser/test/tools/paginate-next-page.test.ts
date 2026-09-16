@@ -7,8 +7,8 @@ import assert from 'node:assert/strict'
 
 import { describe, test } from 'bun:test'
 
-import { browserTools } from '../../src/tools/index.js'
-import type { ToolContext } from '../../src/tools/Types.js'
+import type { ToolContext } from '../../src/contract/requires.js'
+import { browserTools } from '../../src/exports/tools.js'
 
 interface PaginationProbeOptions {
   /** 每次「下一页」点击是否命中。 */

@@ -7,8 +7,8 @@ import { describe, test } from 'bun:test'
 
 import { AppError } from '@velaros-ai/core/error'
 
-import { BrowserUserScriptManager } from '../../src/core/BrowserUserScriptManager.js'
-import type { BrowserSiteContext } from '../../src/core/types.js'
+import { BrowserUserScriptManager } from '../../src/impl/workspace/BrowserUserScriptManager.js'
+import type { BrowserSiteContext } from '../../src/types/browser.js'
 
 const context = {
   url: 'https://example.test/',

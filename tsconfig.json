@@ -19,28 +19,22 @@
         "./packages/agent/src/exports/*"
       ],
       "@velaros-ai/browser/composition": [
-        "./packages/browser/src/composition/index.ts"
+        "./packages/browser/src/exports/composition.ts"
       ],
-      "@velaros-ai/browser/composition/*": [
-        "./packages/browser/src/composition/*"
+      "@velaros-ai/browser/composition/mod": [
+        "./packages/browser/src/exports/composition-mod.ts"
       ],
       "@velaros-ai/browser/core": [
-        "./packages/browser/src/core/index.ts"
+        "./packages/browser/src/exports/core.ts"
       ],
-      "@velaros-ai/browser/core/*": [
-        "./packages/browser/src/core/*"
+      "@velaros-ai/browser/core/contracts": [
+        "./packages/browser/src/exports/core-contracts.ts"
       ],
       "@velaros-ai/browser/runtime": [
-        "./packages/browser/src/runtime/index.ts"
-      ],
-      "@velaros-ai/browser/runtime/*": [
-        "./packages/browser/src/runtime/*"
+        "./packages/browser/src/exports/runtime.ts"
       ],
       "@velaros-ai/browser/tools": [
-        "./packages/browser/src/tools/index.ts"
-      ],
-      "@velaros-ai/browser/tools/*": [
-        "./packages/browser/src/tools/*"
+        "./packages/browser/src/exports/tools.ts"
       ],
       "@velaros-ai/cli": [
         "./packages/cli/src/index.ts"

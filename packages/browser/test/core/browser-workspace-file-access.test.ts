@@ -9,7 +9,7 @@ import { basename, join } from 'node:path'
 
 import { describe, test } from 'bun:test'
 
-import { createBrowserSiteWorkspaceFileAccess } from '../../src/core/BrowserWorkspaceFileAccess.js'
+import { createBrowserSiteWorkspaceFileAccess } from '../../src/impl/workspace/BrowserWorkspaceFileAccess.js'
 
 async function createSiteRoots(): Promise<{
   siteRoot: string

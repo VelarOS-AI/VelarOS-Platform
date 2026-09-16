@@ -5,7 +5,7 @@ import assert from 'node:assert/strict'
 
 import { describe, test } from 'bun:test'
 
-import { BrowserEvaluateScriptBuilder } from '../../src/core/BrowserEvaluateScriptBuilder.js'
+import { BrowserEvaluateScriptBuilder } from '../../src/utils/page-scripts/evaluate.js'
 
 const builder = new BrowserEvaluateScriptBuilder()
 

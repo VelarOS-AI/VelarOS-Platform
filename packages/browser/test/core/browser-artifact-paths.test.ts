@@ -6,12 +6,12 @@ import assert from 'node:assert/strict'
 
 import { describe, test } from 'bun:test'
 
-import { normalizeBrowserRecipePath } from '../../src/core/BrowserArtifactPaths.js'
+import { normalizeBrowserRecipePath } from '../../src/utils/artifacts.js'
 import {
   requirePageSnapshotPath,
   requireRecipePath,
   requireRunPath,
-} from '../../src/tools/RecipePaths.js'
+} from '../../src/utils/recipes/paths.js'
 
 void describe('站点工区产物路径', () => {
   void test('工具与面板预览对同一个路径给同一个答案', () => {

@@ -6,8 +6,8 @@ import assert from 'node:assert/strict'
 
 import { describe, test } from 'bun:test'
 
-import { buildBrowserNetworkCaptureNotice } from '../../src/core/BrowserRuntimeInternals.js'
-import { ElectronWebContentsBrowserPageDriver } from '../../src/runtime/ElectronWebContentsBrowserPageDriver.js'
+import { ElectronWebContentsBrowserPageDriver } from '../../src/impl/electron/ElectronWebContentsBrowserPageDriver.js'
+import { buildBrowserNetworkCaptureNotice } from '../../src/utils/runtime-internals.js'
 
 /** 最小 webContents 替身：只提供 debugger 与 URL。 */
 function createWebContents(options: { attachThrows?: boolean } = {}) {

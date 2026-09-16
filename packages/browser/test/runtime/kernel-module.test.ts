@@ -6,7 +6,7 @@ import {
   BrowserRuntimeCapability,
   type BrowserRuntimeCapabilityService,
   createBrowserKernelModule,
-} from '../../src/runtime'
+} from '../../src/exports/runtime'
 
 function createContext() {
   let registered: object | undefined

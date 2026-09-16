@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url'
 
 import { createToolSchemaBundle } from '@velaros-ai/agent/tool-contract'
 
-import { browserTools } from '../src/tools/Collection'
+import { browserTools } from '../src/impl/tools/Collection'
 
 function buildCollectionArtifact(label, collection) {
   const sources = Object.entries(collection).map(([name, tool]) => ({
@@ -32,8 +32,8 @@ function buildCollectionArtifact(label, collection) {
 
 const artifact = {
   schemaVersion: 1,
-  package: '../src/tools',
-  generatedFrom: 'src/tools/Collection',
+  package: '../src/impl/tools',
+  generatedFrom: 'src/impl/tools/Collection',
   collections: [buildCollectionArtifact('browser-tools', browserTools)],
 }
 

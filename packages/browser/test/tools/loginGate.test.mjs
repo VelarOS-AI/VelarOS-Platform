@@ -8,8 +8,8 @@ import {
   buildBrowserLoginGateMessage,
   buildBrowserLoginGateRecord,
   resolveBrowserLoginGateOrigin,
-} from '../../dist/core/index.js'
-import { withBrowserLoginGate } from '../../dist/tools/index.js'
+} from '../../dist/exports/core.js'
+import { withBrowserLoginGate } from '../../dist/exports/tools.js'
 
 const requiresLoginDetection = {
   requiresLogin: true,

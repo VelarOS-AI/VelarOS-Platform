@@ -6,13 +6,13 @@ import assert from 'node:assert/strict'
 
 import { describe, test } from 'bun:test'
 
+import type { ToolContext } from '../../src/contract/requires.js'
+import { browserTools } from '../../src/exports/tools.js'
+import type { BrowserPageDiagnosticEntry } from '../../src/types/browser.js'
 import {
   clearBrowserDiagnosticEntries,
   takeBrowserDiagnosticWindow,
-} from '../../src/core/BrowserRuntimeInternals.js'
-import type { BrowserPageDiagnosticEntry } from '../../src/core/types.js'
-import { browserTools } from '../../src/tools/index.js'
-import type { ToolContext } from '../../src/tools/Types.js'
+} from '../../src/utils/runtime-internals.js'
 
 function createEntry(
   kind: BrowserPageDiagnosticEntry['kind'],

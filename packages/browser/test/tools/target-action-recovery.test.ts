@@ -5,9 +5,9 @@ import assert from 'node:assert/strict'
 
 import { describe, test } from 'bun:test'
 
-import type { BrowserElementTargetHint, BrowserTargetActionResult } from '../../src/core/types.js'
-import { performTargetActionWithRecovery } from '../../src/tools/TargetActionRecovery.js'
-import type { ToolContext } from '../../src/tools/Types.js'
+import type { ToolContext } from '../../src/contract/requires.js'
+import type { BrowserElementTargetHint, BrowserTargetActionResult } from '../../src/types/browser.js'
+import { performTargetActionWithRecovery } from '../../src/utils/target-recovery.js'
 
 interface RecoveryProbeInput {
   failureReason: BrowserTargetActionResult['failureReason']

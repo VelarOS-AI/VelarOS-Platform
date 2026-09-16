@@ -21,14 +21,15 @@ Electron 内嵌 WebContents,和外部 Chrome 的 CDP 连接。本包的答案是
 
 | 子路径 | 源码 | 运行面 |
 | --- | --- | --- |
-| `@velaros-ai/browser/core` | `src/core` | host 无关的 CDP 自动化运行时、驱动、策略、脚本构建器 |
-| `@velaros-ai/browser/core/contracts` | `src/core/contracts.ts` | 浏览器安全 DTO + 确定性策略(无 Node 内置模块) |
-| `@velaros-ai/browser/tools` | `src/tools` | 宿主注入式的 40 个 `browser:*` canonical agent 工具 |
-| `@velaros-ai/browser/composition` | `src/composition/BrowserCompositionProvider.tsx` | renderer-safe React 合成边界(peer `react`) |
-| `@velaros-ai/browser/composition/mod` | `src/composition/mod.ts` | 宿主侧 Mod Loader 定义；会绑定完整工具集合，renderer 不得导入 |
-| `@velaros-ai/browser/runtime` | `src/runtime` | Electron 会话 / 自动化运行时(peer `electron`) |
+| `@velaros-ai/browser/core` | `src/exports/core.ts` | host 无关的 CDP 自动化运行时、驱动、策略、脚本构建器 |
+| `@velaros-ai/browser/core/contracts` | `src/exports/core-contracts.ts` | 浏览器安全 DTO + 确定性策略(无 Node 内置模块) |
+| `@velaros-ai/browser/tools` | `src/exports/tools.ts` | 宿主注入式的 40 个 `browser:*` canonical agent 工具 |
+| `@velaros-ai/browser/composition` | `src/exports/composition.ts` | renderer-safe React 合成边界(peer `react`) |
+| `@velaros-ai/browser/composition/mod` | `src/exports/composition-mod.ts` | 宿主侧 Mod Loader 定义；会绑定完整工具集合，renderer 不得导入 |
+| `@velaros-ai/browser/runtime` | `src/exports/runtime.ts` | Electron 会话 / 自动化运行时(peer `electron`) |
 
 `react` 与 `electron` 都是**可选 peer**:只用 `./core` / `./tools` 的宿主两个都不用装。
+源码按 `contract` / `types` / `impl` / `utils` / `exports` 五个目录组织,子路径只是入口文件。
 切片细节各见 `docs/<slice>/README.md`。
 
 ## 核心概念
@@ -81,9 +82,9 @@ Electron 宿主在此之上叠 `@velaros-ai/browser/runtime`;renderer 只取
 ## 边界:本包不负责什么
 
 - **不注册产品 IPC、不拥有聊天 / 会话编排、不 import 渲染进程代码，也不私有安装 `@velaros-ai/agent`。**
-- **Electron 只许在 `src/runtime/**` 下 import**(值和类型都算)——capability 架构门机械执法。
-  另外三个切片保持 host 无关。
-- **跨切片访问走包内相对 import**(`src/tools` → `../core`),**永远不走包说明符**。
+- **Electron 只许在 `src/impl/electron/**`、`src/utils/electron/**` 与 `src/types/electron.ts` 里 import**(值和类型都算)
+  ——capability 架构门机械执法。其余目录保持 host 无关。
+- **包内访问一律走相对 import**(`src/impl/tools` → `../../utils`),**永远不走包说明符**。
 - 工具只定义自己与 context 契约;创建浏览器、保存会话、UI 都是宿主的事。
 - CDP 实现不了的 Electron 专属能力**明确返回不支持**,不用伪结果维持表面兼容。
 
@@ -92,7 +93,7 @@ Electron 宿主在此之上叠 `@velaros-ai/browser/runtime`;renderer 只取
 - 上游只有 `@velaros-ai/core` 与 `zod`(外加 `gifenc` 用于录屏编码)。
 - 与 `@velaros-ai/agent` 是**宿主 peer 关系**：本包只引用统一的工具契约，宿主在装配根把 `browserTools`
   注册进 agent 运行时。
-- `src/runtime/kernel-module.ts` 提供可选的 Kernel 模块适配器。
+- `src/impl/electron/kernel-module.ts` 提供可选的 Kernel 模块适配器。
 - `vendor/devtools-performance-engine` 是随包发布的性能分析引擎产物,由 `browser:performance` 消费。
 - 姐妹能力包:`@velaros-ai/computer`(OS 级桌面控制)、`@velaros-ai/project`(本地代码工作区)。
 

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import { BrowserDiagnosticsRecorder } from '../../src/runtime/BrowserDiagnosticsRecorder'
+import { BrowserDiagnosticsRecorder } from '../../src/impl/electron/BrowserDiagnosticsRecorder'
 
 describe('BrowserDiagnosticsRecorder', () => {
   test('drops Electron host security notices without suppressing site CSP warnings', () => {

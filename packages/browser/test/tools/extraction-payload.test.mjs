@@ -8,8 +8,8 @@ import assert from 'node:assert/strict'
 
 import { test } from 'bun:test'
 
-import { BrowserEvaluateScriptBuilder } from '../../dist/core/index.js'
-import { browserTools } from '../../dist/tools/index.js'
+import { BrowserEvaluateScriptBuilder } from '../../dist/exports/core.js'
+import { browserTools } from '../../dist/exports/tools.js'
 
 const TEXT_NODE = 3
 const ELEMENT_NODE = 1

@@ -1,6 +1,6 @@
 # @velaros-ai/browser/core
 
-> `@velaros-ai/browser` 的一个导入切片(`packages/browser/src/core`)。包总览见
+> `@velaros-ai/browser` 的一个导入切片(入口 `packages/browser/src/exports/core.ts`)。包总览见
 > [包 README](../../README.md)。
 
 ## 这个切片是什么
@@ -60,7 +60,7 @@ CDP profile 存储按 member / site 落在宿主注入的数据根下,**从不�
 
 `bindBrowserApi(sessionId, context)` 返回一个会话绑定对象,**结构上满足**
 `@velaros-ai/browser/tools` 的 `ToolBrowserApi`。这条一致性由
-`packages/browser/src/tools/CdpBrowserRuntimeContract.ts` 在**编译期**强制:
+`packages/browser/src/impl/CdpBrowserRuntimeContract.ts` 在**编译期**强制:
 方向是 browser-tools → browser-core(**无环**——core 刻意不 import `ToolBrowserApi`),
 返回面缺方法或签名漂移就在那里编译报错。
 

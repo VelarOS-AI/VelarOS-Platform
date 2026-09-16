@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 
 import { test } from 'bun:test'
 
-import { BrowserSessionActionQueue } from '../../dist/core/index.js'
+import { BrowserSessionActionQueue } from '../../dist/exports/core.js'
 
 /**
  * 会话串行队列的**不可协商契约**：一条永不 settle 的动作，不许换来一条永久瘫痪的会话。

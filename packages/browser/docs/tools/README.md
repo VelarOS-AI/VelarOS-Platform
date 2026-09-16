@@ -1,6 +1,6 @@
 # @velaros-ai/browser/tools
 
-> `@velaros-ai/browser` 的一个导入切片(`packages/browser/src/tools`)。包总览见
+> `@velaros-ai/browser` 的一个导入切片(入口 `packages/browser/src/exports/tools.ts`)。包总览见
 > [包 README](../../README.md)。
 
 ## 这个切片是什么
@@ -43,7 +43,7 @@
 ## 依赖注入
 
 第三方宿主**只需实现 `ToolBrowserApi`**。可以用 `CdpBrowserRuntime.bindBrowserApi()`
-(其返回面由 `src/tools/CdpBrowserRuntimeContract.ts` 在**编译期**保证满足本契约),
+(其返回面由 `src/impl/CdpBrowserRuntimeContract.ts` 在**编译期**保证满足本契约),
 也可以把 Playwright、远程浏览器服务或自研 runtime 适配成同一接口。
 
 ```ts

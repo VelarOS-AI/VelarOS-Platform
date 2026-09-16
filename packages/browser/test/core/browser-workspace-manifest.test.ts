@@ -7,8 +7,8 @@ import assert from 'node:assert/strict'
 
 import { describe, test } from 'bun:test'
 
-import { BrowserWorkspaceArtifactManager } from '../../src/core/BrowserWorkspaceArtifactManager.js'
-import type { BrowserSiteContext } from '../../src/core/types.js'
+import { BrowserWorkspaceArtifactManager } from '../../src/impl/workspace/BrowserWorkspaceArtifactManager.js'
+import type { BrowserSiteContext } from '../../src/types/browser.js'
 
 const context = {
   url: 'https://example.test/list',

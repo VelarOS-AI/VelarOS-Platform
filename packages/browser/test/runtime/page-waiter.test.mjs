@@ -9,7 +9,7 @@ import { EventEmitter } from "node:events";
 import { test } from "node:test";
 
 const packagePath = new URL(
-  "../../dist/runtime/BrowserPageWaiter.js",
+  "../../dist/impl/electron/BrowserPageWaiter.js",
   import.meta.url,
 );
 

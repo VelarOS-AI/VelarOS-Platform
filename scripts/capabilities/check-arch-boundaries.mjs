@@ -52,23 +52,23 @@ const PortableContracts = [
     packageDirectory: "browser",
     packageName: "@velaros-ai/browser/core",
     exportKey: "./core/contracts",
-    contractsFile: "src/core/contracts.ts",
+    contractsFile: "src/exports/core-contracts.ts",
     modules: new Set([
-      "./types.js",
-      "./BrowserAddressHelper.js",
-      "./BrowserScreenshotPolicy.js",
-      // 纯闭集/默认值/宽容守卫,零实现依赖——与 ScreenshotPolicy 同性质的契约级模块(2026-08-06 配置单源批)。
-      "./BrowserConfigDefaults.js",
+      "../types/browser.js",
+      "../utils/address.js",
+      "../utils/screenshot-options.js",
+      // 纯闭集/默认值/宽容守卫,零实现依赖——与 screenshot-options 同性质的契约级模块(2026-08-06 配置单源批)。
+      "../utils/preferences.js",
       // mod/空间身份常量:纯字符串,零运行时依赖。产品壳的空间门控声明(renderer 也读)只需要
       // 这一个字符串——从 composition/mod 取会把整条 Node 侧运行时依赖拖进渲染 bundle。
-      "./BrowserModIdentity.js",
+      "../contract/constants.js",
       // 「视图没接上」的跨层标记 + 纯判定函数:常量与零依赖 type guard,宿主用它把运行时事实
-      // 翻译成可执行指引(见 BrowserViewAttachment 文件头)。
-      "./BrowserViewAttachment.js",
+      // 翻译成可执行指引(见 utils/errors.ts 文件头)。
+      "../utils/errors.js",
       // 虚拟指针外观常量 + 纯 SVG 拼装函数:26 行、零 import,与上面两条同性质。补登记——
       // 3a864c7 把它从实现里劈出来时漏了登记,与 ModIdentity 是同一笔账。它必须能从契约入口
       // 取到:同一份常量要同时喂给页面注入脚本和宿主预览 UI(见文件头,两处各画一份必然漂移)。
-      "./BrowserVirtualPointer.js",
+      "../utils/pointer.js",
     ]),
   },
   {
@@ -113,13 +113,17 @@ function requirePublicTypeContracts(
     resolve(packageRoot, declarationFile),
     "utf8",
   );
-  const contractsSpecifier = `./${relative(
+  const contractsRelative = relative(
     dirname(rootSourcePath),
     resolve(packageRoot, contractsEntryFile),
   )
     .split("\\")
     .join("/")
-    .replace(/\.ts$/u, "")}`;
+    .replace(/\.ts$/u, "");
+  // 入口与被转发的文件不一定同目录:兄弟目录的说明符已经以 ".." 开头,再加 "./" 就对不上源码。
+  const contractsSpecifier = contractsRelative.startsWith("..")
+    ? contractsRelative
+    : `./${contractsRelative}`;
 
   if (
     !rootSource.includes(`export type * from '${contractsSpecifier}'`) &&
@@ -493,7 +497,9 @@ for (const expected of CapabilityPackages) {
     }
     if (
       ElectronImport.test(source) &&
-      !electronAllowedRoots.some((root) => path.startsWith(`${root}${sep}`))
+      !electronAllowedRoots.some(
+        (root) => path === root || path.startsWith(`${root}${sep}`),
+      )
     ) {
       fail(
         `${expected.name}: only ${expected.electronRoots.map((slice) => `src/${slice}`).join(" / ") || "(none)"} may import Electron (${relative(packageRoot, path)})`,
@@ -533,9 +539,9 @@ for (const contracts of PortableContracts) {
 
 requirePublicTypeContracts(
   "browser",
-  "src/core/index.ts",
-  "src/core/types.ts",
-  "src/core/types.ts",
+  "src/exports/core.ts",
+  "src/types/browser.ts",
+  "src/types/browser.ts",
   ["BrowserActionPolicyConfig", "BrowserAutomationMode"],
 );
 requirePublicTypeContracts(
