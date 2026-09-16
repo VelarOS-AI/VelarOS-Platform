@@ -42,9 +42,8 @@ export const GovernedModules = [
     impl: 'src/impl',
     utils: 'src/utils',
     tuning: 'tuning.ts',
-    browserSafeEntries: [],
+    browserSafeEntries: ['contracts.ts', 'chat.ts', 'tool-contract.ts'],
     environmentTable: 'AgentEnvironmentVariables',
-    status: 'migrating',
     layers: [
       ['AgentTools.ts'],
       ['builtin/'],
