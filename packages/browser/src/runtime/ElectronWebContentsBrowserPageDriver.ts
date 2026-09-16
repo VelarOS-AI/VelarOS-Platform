@@ -242,8 +242,10 @@ class ElectronWebContentsBrowserPageDriver implements BrowserPageDriver {
       await this.ensureNetworkHold()
       return { startedNow: true, unavailableReason: null }
     } catch (error) {
-      const reason = error instanceof Error ? error.message : String(error)
-      embeddedDriverLog.debug('内嵌页面的网络采集未能建立', { reason })
+      const reason = AppError.from(error).message
+      embeddedDriverLog.debug('内嵌页面的网络采集未能建立', {
+        error: AppError.from(error).message,
+      })
       return { startedNow: false, unavailableReason: reason }
     }
   }
