@@ -72,9 +72,8 @@ describe('project:sandbox', () => {
     expect(whole.note).toContain(whole.root)
     const sub = await call({ action: 'create', source: 'packages/app', network: true, ignored: 'copy' }, context) as { source: string; network: boolean; ignored: string }
     expect(sub).toMatchObject({ source: join(root, 'packages', 'app'), network: true, ignored: 'copy' })
-    // 源出了项目（含经符号链接指到项目外）按 PERMISSION_DENIED 拒绝；挂进内核后这个 reason 就是能力错误的码。
-    await expect(call({ action: 'create', source: '../elsewhere' }, context)).rejects.toMatchObject({ reason: 'PERMISSION_DENIED' })
-    await expect(call({ action: 'create', source: '/etc' }, context)).rejects.toMatchObject({ reason: 'PERMISSION_DENIED' })
+    await expect(call({ action: 'create', source: '../elsewhere' }, context)).rejects.toMatchObject({ code: 'VALIDATION' })
+    await expect(call({ action: 'create', source: '/etc' }, context)).rejects.toMatchObject({ code: 'VALIDATION' })
     // 名字以 .. 开头的目录在项目之内，照常接受。
     const dotted = await call({ action: 'create', source: '..cache' }, context) as { source: string }
     expect(dotted.source).toBe(join(root, '..cache'))
