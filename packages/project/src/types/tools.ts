@@ -70,30 +70,21 @@ export type ProjectSandboxInput = {
 export type ProjectCodeTarget = { symbolRef: string } | { path: string; symbol: string; container?: string }
 
 /**
- * project:code 的入参：symbols、references、dependencies（incoming / outgoing）、relations、impact、diagnostics 六类动作。
- * schema 的根是一个平对象加 action 枚举（宿主扁平化根级组合时不会丢分支），每个动作的必填与互斥由 superRefine 保证，解析之后就是下面这些形状。
+ * project:code 的入参：一个 intent 说明要知道什么，字段只有目标、范围与条数。
+ * schema 的根是一个平对象加 intent 枚举（宿主扁平化根级组合时不会丢分支），每个 intent 的必填与互斥由 superRefine 保证，解析之后就是下面这些形状。
  */
 export type ProjectCodeInput =
-  | (ProjectCodeScope & {
-    action: 'symbols'
-    query?: string
-    path?: string
-    kinds?: string[]
-    exact?: boolean
-    exportedOnly?: boolean
-    includeReExports?: boolean
-    target?: ProjectCodeTarget
-  })
-  | (ProjectCodeScope & { action: 'references'; target: ProjectCodeTarget; path?: string })
-  | (ProjectCodeScope & { action: 'dependencies'; direction: 'incoming'; path?: string; specifier?: string; within?: string; includeReExports?: boolean })
-  | (ProjectCodeScope & { action: 'dependencies'; direction: 'outgoing'; path?: string; specifier?: string; kind?: string; includeExternal?: boolean })
-  | (ProjectCodeScope & { action: 'relations'; target: ProjectCodeTarget; kind: 'calls' | 'types' | 'related'; direction?: 'incoming' | 'outgoing' | 'both'; depth?: number })
-  | (ProjectCodeScope & { action: 'impact'; target: ProjectCodeTarget; path?: string; kinds?: string[]; depth?: number })
-  | (ProjectCodeScope & { action: 'diagnostics'; path: string })
+  | (ProjectCodeScope & { intent: 'outline'; path: string })
+  | (ProjectCodeScope & { intent: 'definition'; target: ProjectCodeTarget })
+  | (ProjectCodeScope & { intent: 'references'; target: ProjectCodeTarget; path?: string })
+  | (ProjectCodeScope & { intent: 'callers' | 'callees'; target: ProjectCodeTarget })
+  | (ProjectCodeScope & { intent: 'imports' | 'importers'; path: string })
+  | (ProjectCodeScope & { intent: 'impact'; target: ProjectCodeTarget; path?: string })
+  | (ProjectCodeScope & { intent: 'diagnostics'; path: string })
 
-/** project:code-analysis 的入参：trace、cycles、deadcode、routing 四类图分析。 */
+/** project:code-analysis 的入参：trace、cycles、deadcode、routing 四类图分析，词表与 project:code 一样用 intent。 */
 export type ProjectCodeAnalysisInput =
-  | { action: 'trace'; from: ProjectCodeTarget; to: ProjectCodeTarget }
-  | { action: 'cycles'; maxFiles?: number }
-  | { action: 'deadcode'; limit?: number }
-  | { action: 'routing'; framework?: string }
+  | { intent: 'trace'; from: ProjectCodeTarget; to: ProjectCodeTarget }
+  | { intent: 'cycles'; maxFiles?: number }
+  | { intent: 'deadcode'; limit?: number }
+  | { intent: 'routing'; framework?: string }

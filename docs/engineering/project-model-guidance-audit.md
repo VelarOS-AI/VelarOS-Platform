@@ -1,6 +1,6 @@
 # Project 模型指导同步检查
 
-`packages/project/test/project-guidance-drift.test.ts` 属于 Project 默认测试和发布检查链。它校验当前注册的 9 个工具（`projectTools`，不含宿主单独登记的 `project:code-analysis`）的真实示例、完整 JSON Schema（包含每个字段的说明），并与人工审核记录 `project-model-guidance-review.json` 比较。
+`packages/project/test/project-guidance-drift.test.ts` 属于 Project 默认测试和发布检查链。它校验当前注册的 7 个工具（`projectTools`，不含宿主单独登记的 `project:code-analysis`）的真实示例、完整 JSON Schema（包含每个字段的说明），并与人工审核记录 `project-model-guidance-review.json` 比较。
 
 检查通过实际 `PromptRegistry` 组装 192 个组合：三种操作系统、两种语言、启动/执行阶段、计划进度、目标模式、视觉能力和技能可读状态。每个注册的内置段必须至少实际渲染一次。Agent 的 `promptRuntimeAvailability.test.ts` 另从 `RunContext → PromptState` 验证当前指导进入最终系统提示词。宿主身份、角色权限和宿主贡献段由 Workbench/Desktop 各自的真实 provider 请求测试覆盖。
 

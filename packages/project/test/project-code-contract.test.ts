@@ -6,31 +6,50 @@ import { projectTools } from '../src/impl/ProjectTools'
 
 const projectCode = projectTools['project:code']!
 
-const validDependencies = [
-  { direction: 'incoming', path: 'src/cache.ts' },
-  { direction: 'incoming', specifier: 'node:fs' },
-  { direction: 'incoming', path: 'src/cache.ts', specifier: './cache', within: 'test', includeReExports: true },
-  { direction: 'incoming', path: 'src/cache.ts', includeReExports: false },
-  { direction: 'outgoing' },
-  { direction: 'outgoing', path: 'src', specifier: 'node:fs', kind: 'import', includeExternal: true },
-  { direction: 'outgoing', path: 'src/cache.ts', includeExternal: false, language: 'typescript', extensions: ['.ts'], limit: 40, maxDepth: 3 },
+const validQueries = [
+  { intent: 'outline', path: 'src/cache.ts' },
+  { intent: 'outline', path: 'src', language: 'typescript', extensions: ['.ts'], limit: 40, maxDepth: 3 },
+  { intent: 'definition', target: { path: 'src/cache.ts', symbol: 'Cache' } },
+  { intent: 'definition', target: { symbolRef: 'symbol:abc' } },
+  { intent: 'references', target: { path: 'src/cache.ts', symbol: 'Cache' } },
+  { intent: 'references', target: { path: 'src/cache.ts', symbol: 'Cache', container: 'Store' }, path: 'test', limit: 40 },
+  { intent: 'callers', target: { symbolRef: 'symbol:abc' } },
+  { intent: 'callees', target: { symbolRef: 'symbol:abc' } },
+  { intent: 'imports', path: 'src' },
+  { intent: 'importers', path: 'src/cache.ts' },
+  { intent: 'impact', target: { symbolRef: 'symbol:abc' }, path: 'src' },
+  { intent: 'diagnostics', path: 'src/cache.ts' },
 ]
 
-const invalidDependencies = [
-  { direction: 'incoming' },
-  { direction: 'incoming', path: '' },
-  { direction: 'incoming', specifier: '' },
-  { direction: 'incoming', path: 'src/cache.ts', kind: 'import' },
-  { direction: 'incoming', path: 'src/cache.ts', includeExternal: false },
-  { direction: 'outgoing', within: 'test' },
-  { direction: 'outgoing', includeReExports: false },
-  { direction: 'both', path: 'src/cache.ts' },
-  { path: 'src/cache.ts' },
-  { direction: 'incoming', path: 'src/cache.ts', limit: 201 },
-  { direction: 'outgoing', path: 'src/cache.ts', unknown: true },
-  // 工作台里真实发生过的方向与开关组合。
-  { direction: 'outgoing', path: 'packages/project/src/utils/glob.ts', includeExternal: true, includeReExports: true, limit: 100 },
-  { direction: 'incoming', path: 'packages/project/src/utils/matcher-cache.ts', within: 'packages/project', includeExternal: true, includeReExports: true, limit: 100 },
+const invalidQueries = [
+  // 必填缺席
+  { intent: 'outline' },
+  { intent: 'imports' },
+  { intent: 'importers' },
+  { intent: 'diagnostics' },
+  { intent: 'references' },
+  { intent: 'callers' },
+  // 字段放错 intent：target 与 path 各归各的
+  { intent: 'outline', path: 'src', target: { symbolRef: 'symbol:abc' } },
+  { intent: 'diagnostics', path: 'src', target: { symbolRef: 'symbol:abc' } },
+  { intent: 'callers', target: { symbolRef: 'symbol:abc' }, path: 'src' },
+  { intent: 'definition', target: { symbolRef: 'symbol:abc' }, path: 'src' },
+  // 收掉的交叉旋钮一个都不认
+  { intent: 'imports', path: 'src', direction: 'outgoing' },
+  { intent: 'imports', path: 'src', includeExternal: true },
+  { intent: 'importers', path: 'src/cache.ts', within: 'test', includeReExports: true },
+  { intent: 'importers', path: 'src/cache.ts', specifier: 'node:fs' },
+  { intent: 'outline', path: 'src', query: 'Cache' },
+  { intent: 'outline', path: 'src', kinds: ['function'], exact: true },
+  { intent: 'outline', path: 'src', exportedOnly: true },
+  { intent: 'callers', target: { symbolRef: 'symbol:abc' }, kind: 'calls', depth: 3 },
+  // 旧词表与越界值
+  { action: 'dependencies', direction: 'incoming', path: 'src/cache.ts' },
+  { intent: 'relations', target: { symbolRef: 'symbol:abc' }, kind: 'calls' },
+  { intent: 'symbols', query: 'Cache' },
+  { intent: 'outline', path: '' },
+  { intent: 'outline', path: 'src', limit: 201 },
+  { intent: 'outline', path: 'src', unknown: true },
 ]
 
 /** 模型面的每个字段都要有说明：把没有 description 的字段名报出来。 */
@@ -40,27 +59,22 @@ function fieldsWithoutDescription(schema: Record<string, any>): string[] {
     .map(([name]) => name)
 }
 
-describe('dependency direction contract', () => {
-  test('preserves valid selectors, scope and flags without rewriting the caller intent', () => {
-    for (const fields of validDependencies) {
-      const input = { action: 'dependencies', ...fields }
-      expect(projectCode.schema.parse(input)).toEqual(input)
-    }
+describe('code query intent contract', () => {
+  test('preserves the caller intent, target and scope without rewriting them', () => {
+    for (const input of validQueries) expect(projectCode.schema.parse(input)).toEqual(input)
   })
 
-  test('rejects wrong-direction flags, missing selectors and unknown fields without discarding them', () => {
-    for (const fields of invalidDependencies) {
-      const input = { action: 'dependencies', ...fields }
-      expect(projectCode.schema.safeParse(input).success).toBe(false)
-    }
+  test('rejects missing requirements, misplaced fields, retired knobs and unknown fields without discarding them', () => {
+    for (const input of invalidQueries)
+      expect(projectCode.schema.safeParse(input).success, JSON.stringify(input)).toBe(false)
   })
 
-  test('每种呈现都是同一个平对象：六个动作在一个 action 枚举里，字段都有说明，宿主扁平化时丢不掉分支', () => {
+  test('每种呈现都是同一个平对象：九个 intent 在一个 intent 枚举里，字段都有说明，宿主扁平化时丢不掉分支', () => {
     const publicSchema = schemaToInputSchema(projectCode.schema)
     const bundle = createToolSchemaBundle([projectCode])
     const presentations = [publicSchema, canonicalizeProviderInputSchema(publicSchema), bundle.tools[0]!.inputSchema] as Array<Record<string, any>>
     for (const schema of [publicSchema, canonicalizeProviderInputSchema(publicSchema)] as Array<Record<string, any>>)
-      expect(schema.properties.action.enum).toEqual(['symbols', 'references', 'dependencies', 'relations', 'impact', 'diagnostics'])
+      expect(schema.properties.intent.enum).toEqual(['outline', 'definition', 'references', 'callers', 'callees', 'imports', 'importers', 'impact', 'diagnostics'])
 
     for (const schema of presentations) {
       // 根上不放组合：宿主（Desktop）把根级 oneOf 合成一个对象时只合并有 properties 的分支，嵌套的那一支会整支丢掉。
@@ -68,12 +82,11 @@ describe('dependency direction contract', () => {
       expect(schema.anyOf).toBeUndefined()
       expect(schema.type).toBe('object')
       expect(schema.additionalProperties).toBe(false)
-      expect(schema.required).toEqual(['action'])
+      expect(schema.required).toEqual(['intent'])
       // 打包呈现会把枚举收进 $defs 复用，这里只认「要么就地写枚举、要么指向同一份定义」。
-      expect(schema.properties.action.enum ?? schema.properties.action.$ref).toBeDefined()
+      expect(schema.properties.intent.enum ?? schema.properties.intent.$ref).toBeDefined()
       expect(Object.keys(schema.properties).sort()).toEqual([
-        'action', 'depth', 'direction', 'exact', 'exportedOnly', 'extensions', 'includeExternal', 'includeReExports',
-        'kind', 'kinds', 'language', 'limit', 'maxDepth', 'path', 'query', 'specifier', 'target', 'within',
+        'extensions', 'intent', 'language', 'limit', 'maxDepth', 'path', 'target',
       ])
       expect(fieldsWithoutDescription(schema)).toEqual([])
     }

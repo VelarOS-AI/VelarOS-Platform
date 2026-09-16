@@ -172,11 +172,7 @@ export const ProjectCodeLimits = Object.freeze({
   extensions: 20,
   /** 扫描目录时最多往下几层。 */
   scanDepth: 16,
-  /** 按符号种类过滤时最多给几种。 */
-  kinds: 12,
-  /** relations、impact 沿关系最多走几层。 */
-  relationDepth: 5,
-  /** relations、impact 不给 depth 时走几层。 */
+  /** callers、callees、impact 沿关系走几层。 */
   relationDepthDefault: 2,
   /** cycles 至少扫多少个文件。 */
   cycleFilesMin: 10,

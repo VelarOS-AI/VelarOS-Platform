@@ -81,9 +81,9 @@ describe('Project Kernel module', () => {
     await expect(service?.invoke(
       'project:code',
       undefined,
-      { action: 'symbols', query: 'UserService' },
+      { intent: 'outline', path: 'src/user.ts' },
       new AbortController().signal,
-    )).resolves.toMatchObject({ action: 'symbols', source: 'built-in-test' })
+    )).resolves.toMatchObject({ intent: 'outline', source: 'built-in-test' })
     await expect(service?.invoke(
       'project:list',
       undefined,

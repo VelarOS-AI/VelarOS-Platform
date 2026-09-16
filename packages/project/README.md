@@ -28,9 +28,12 @@ Provider 不支持冒号时，由 Agent Runtime 在请求编译阶段映射成�
 
 复杂迁移、批量改写、删目录的脚本先走演练沙箱 `project:sandbox`：`create` 把项目镜像到临时区，`run` 在镜像里跑命令（进程约束钉在镜像内，写到项目会直接失败），`diff` 看变了什么，`apply` 经用户确认后落回项目（项目文件变过整批不落），`discard` 丢弃；宿主没接沙箱端口时这个工具不出现。见 ADR 0006。
 
-普通命令使用 `project:run`；代码查询使用 `project:code` 的六类 action：
-`symbols/references/dependencies/relations/impact/diagnostics`。结果携带来源、覆盖与降级信息。
-高级 `trace/cycles/deadcode/routing` 由宿主按实际能力提供 `project:code-analysis`；代码索引的建与查是宿主自己的事，本包不发这类查询。
+普通命令使用 `project:run`；代码查询使用 `project:code` 的九个 `intent`，一个 intent 就是一句「要知道什么」：
+`outline`（这个文件里有什么）、`definition`（符号定义在哪）、`references`（谁在用它）、`callers`、`callees`、
+`imports`（这个文件引了谁）、`importers`（谁引它）、`impact`（改了会波及谁）、`diagnostics`（这个文件报什么错）。
+字段只有 `target`、`path`、`limit` 与宿主语言服务要的 `language`、`extensions`、`maxDepth`，方向、种类这些交叉旋钮由 intent 推导。
+结果携带来源、覆盖与降级信息。高级 `trace/cycles/deadcode/routing` 由宿主按实际能力提供 `project:code-analysis`（词表同样用 `intent`）；
+代码索引的建与查是宿主自己的事，本包不发这类查询。
 
 改文件只有 `project:edit` 一个入口，用 `action` 分辨做什么：`apply` 提交一次改动，`inspect` 查看，`undo` 撤销。
 `apply` 的 `steps` 一步一个目标，按动作分辨（`create/overwrite/move/delete/recode/edit`）：新建、整文件覆盖、移动、

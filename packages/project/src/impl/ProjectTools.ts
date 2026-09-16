@@ -334,95 +334,53 @@ const editTool = defineProjectTool<ProjectEditInput>({
 // ── 代码理解 ─────────────────────────────────────────────────────────────
 
 /**
- * project:code 的入参：一个平的对象加 action 枚举，每个动作的必填与互斥在 superRefine 里。
- * 根上不用 oneOf：宿主把根级组合扁平化之后整支会丢，模型就看不到这个动作了。
+ * project:code 的入参：一个平的对象加 intent 枚举，每个 intent 的必填与互斥在 superRefine 里。
+ * 根上不用 oneOf：宿主把根级组合扁平化之后整支会丢，模型就看不到这个 intent 了。
  */
 const ProjectCodeInputSchema: z.ZodTypeAny = z.strictObject({
-  action: z.enum(['symbols', 'references', 'dependencies', 'relations', 'impact', 'diagnostics'])
-    .describe('symbols 找符号、references 找引用、dependencies 查依赖、relations 查调用与类型关系、impact 看影响面、diagnostics 看诊断。'),
+  intent: z.enum(['outline', 'definition', 'references', 'callers', 'callees', 'imports', 'importers', 'impact', 'diagnostics'])
+    .describe('要知道什么：outline 这个文件里有什么、definition 符号定义在哪、references 谁在用它、callers 谁调用它、callees 它调用谁、imports 这个文件引了谁、importers 谁引它、impact 改了会波及谁、diagnostics 这个文件报什么错。'),
   ...CodeScope,
   target: ProjectCodeTargetSchema.optional()
-    .describe('references、relations、impact 必填：symbols 回执里的 symbolRef，或 {path, symbol, container?}；symbols 给了它就返回这个符号的声明、body 范围和当前源码。'),
+    .describe('要查的那个符号，definition、references、callers、callees、impact 必填：前一次查询回执里的 symbolRef，或 {path, symbol, container?}。'),
   path: z.string().min(1).optional()
-    .describe('symbols、references、impact：限定搜索范围；dependencies：outgoing 时是要查的文件或目录，incoming 时是被依赖的文件；diagnostics：要诊断的文件，必填。'),
-  query: z.string().min(1).optional().describe('symbols：按名字找符号，缺省是包含匹配。'),
-  kinds: z.array(z.string().min(1).describe('一种符号种类。')).max(ProjectCodeLimits.kinds).optional()
-    .describe(`symbols、impact：只要这些种类的符号，如 function、method、class、interface、type、enum、namespace、variable；最多 ${ProjectCodeLimits.kinds} 种。`),
-  exact: z.boolean().optional().describe('symbols：query 按全名精确匹配，缺省是包含匹配。'),
-  exportedOnly: z.boolean().optional().describe('symbols：只列导出的符号，缺省列全部。'),
-  includeReExports: z.boolean().optional()
-    .describe('symbols（配合 exportedOnly）：连重导出的也算；dependencies incoming：连重导出目标的文件也算。'),
-  direction: z.enum(['incoming', 'outgoing', 'both']).optional()
-    .describe('dependencies 必填：incoming 查谁依赖它、outgoing 查它依赖谁，不收 both；relations：往哪个方向展开，缺省 both。'),
-  specifier: z.string().min(1).optional()
-    .describe('dependencies：按 import 的模块名过滤或查找，如 node:fs；incoming 时 path、specifier 至少给一个。'),
-  within: z.string().min(1).optional().describe('dependencies incoming：只在这个目录里找调用方。'),
-  includeExternal: z.boolean().optional().describe('dependencies outgoing：连项目外的依赖（node_modules、内置模块）一起列，缺省不列。'),
-  kind: z.string().min(1).optional()
-    .describe('relations 必填，只收 calls（调用关系）、types（类型层级）、related（相关节点）；dependencies outgoing：按依赖种类过滤，取值由宿主的后端定。'),
-  depth: z.number().int().positive().max(ProjectCodeLimits.relationDepth).optional()
-    .describe(`relations、impact：沿关系走几层，缺省 ${ProjectCodeLimits.relationDepthDefault}、最多 ${ProjectCodeLimits.relationDepth}。`),
+    .describe('outline、imports、importers、diagnostics 必填：要看的那个文件（imports 也收目录）；references、impact：只看这个目录或文件里的结果，不给就是整个项目。'),
 }).superRefine((input, context) => {
-  const require = (field: 'target' | 'path' | 'kind' | 'direction', when: boolean, message: string) => {
-    if (when && isUndefined(input[field])) context.addIssue({ code: 'custom', path: [field], message })
-  }
-  const forbid = (field: keyof typeof input, allowed: boolean, message: string) => {
-    if (!allowed && isNotUndefined(input[field])) context.addIssue({ code: 'custom', path: [field], message })
-  }
-  require('target', input.action === 'references' || input.action === 'relations' || input.action === 'impact', `${input.action} 需要 target。`)
-  require('path', input.action === 'diagnostics', 'diagnostics 需要 path（要诊断的文件）。')
-  require('kind', input.action === 'relations', 'relations 需要 kind：calls、types 或 related。')
-  require('direction', input.action === 'dependencies', 'dependencies 需要 direction：incoming 或 outgoing。')
-  if (input.action === 'relations' && isNotUndefined(input.kind) && !['calls', 'types', 'related'].includes(input.kind))
-    context.addIssue({ code: 'custom', path: ['kind'], message: 'relations 的 kind 只能是 calls、types 或 related。' })
-  if (input.action === 'dependencies' && input.direction === 'both')
-    context.addIssue({ code: 'custom', path: ['direction'], message: 'dependencies 只查一个方向：incoming 或 outgoing。' })
-  if (input.action === 'dependencies' && input.direction === 'incoming' && isUndefined(input.path) && isUndefined(input.specifier))
-    context.addIssue({ code: 'custom', path: ['path'], message: 'dependencies incoming 需要 path 或 specifier。' })
-  if (input.action === 'symbols' && isNotUndefined(input.target) && [input.query, input.path, input.kinds, input.exact, input.exportedOnly, input.includeReExports].some(isNotUndefined))
-    context.addIssue({ code: 'custom', path: ['target'], message: 'symbols 给了 target 就是查这一个符号的详情，别再给搜索过滤。' })
-  if (isNotUndefined(input.includeReExports) && input.action === 'symbols' && !input.exportedOnly)
-    context.addIssue({ code: 'custom', path: ['includeReExports'], message: 'symbols 的 includeReExports 只配合 exportedOnly=true 使用。' })
-  const dependencies = input.action === 'dependencies'
-  forbid('query', input.action === 'symbols', 'query 只配合 action=symbols 使用。')
-  forbid('exact', input.action === 'symbols', 'exact 只配合 action=symbols 使用。')
-  forbid('exportedOnly', input.action === 'symbols', 'exportedOnly 只配合 action=symbols 使用。')
-  forbid('includeReExports', input.action === 'symbols' || (dependencies && input.direction === 'incoming'), 'includeReExports 只配合 symbols 或 dependencies incoming 使用。')
-  forbid('kinds', input.action === 'symbols' || input.action === 'impact', 'kinds 只配合 symbols 或 impact 使用。')
-  forbid('specifier', dependencies, 'specifier 只配合 action=dependencies 使用。')
-  forbid('within', dependencies && input.direction === 'incoming', 'within 只配合 dependencies incoming 使用。')
-  forbid('includeExternal', dependencies && input.direction === 'outgoing', 'includeExternal 只配合 dependencies outgoing 使用。')
-  forbid('kind', input.action === 'relations' || (dependencies && input.direction === 'outgoing'), 'kind 只配合 relations 或 dependencies outgoing 使用。')
-  forbid('direction', input.action === 'relations' || dependencies, 'direction 只配合 relations 或 dependencies 使用。')
-  forbid('depth', input.action === 'relations' || input.action === 'impact', 'depth 只配合 relations 或 impact 使用。')
-  forbid('target', input.action !== 'diagnostics', 'diagnostics 不收 target。')
+  const needsTarget = ['definition', 'references', 'callers', 'callees', 'impact'].includes(input.intent)
+  const needsPath = ['outline', 'imports', 'importers', 'diagnostics'].includes(input.intent)
+  if (needsTarget && isUndefined(input.target))
+    context.addIssue({ code: 'custom', path: ['target'], message: `${input.intent} 需要 target：symbolRef，或 {path, symbol}。` })
+  if (needsPath && isUndefined(input.path))
+    context.addIssue({ code: 'custom', path: ['path'], message: `${input.intent} 需要 path（要看的那个文件，相对项目根）。` })
+  if (!needsTarget && isNotUndefined(input.target))
+    context.addIssue({ code: 'custom', path: ['target'], message: `${input.intent} 不收 target，它按 path 查。` })
+  if (!needsPath && !['references', 'impact'].includes(input.intent) && isNotUndefined(input.path))
+    context.addIssue({ code: 'custom', path: ['path'], message: `${input.intent} 不收 path，范围由 target 决定。` })
 })
 
 /**
- * 六个动作的入参 schema：根是一个平对象，解析之后的形状按动作收窄成 `ProjectCodeInput`。
- * Zod 推不出「哪个动作带哪些字段」这层关系（它在 superRefine 里），所以在这里标一次类型。
+ * 九个 intent 的入参 schema：根是一个平对象，解析之后的形状按 intent 收窄成 `ProjectCodeInput`。
+ * Zod 推不出「哪个 intent 带哪些字段」这层关系（它在 superRefine 里），所以在这里标一次类型。
  */
 export const ProjectCodeSchema = ProjectCodeInputSchema as z.ZodType<ProjectCodeInput>
 
-/** project:code —— 查询符号、引用候选、依赖、关系、影响与诊断。 */
+/** project:code —— 按一个 intent 说明要知道什么：结构、定义、引用、调用、依赖、影响面、诊断。 */
 const codeTool = defineProjectTool<ProjectCodeInput>({
   name: ProjectToolNames.code,
   category: 'development-code',
   role: 'inspect',
-  summary: '查询符号、引用候选、依赖、调用/类型关系、影响范围与诊断；返回查询来源和覆盖范围。',
-  suitable: ['需要理解代码结构、定位声明、评估修改影响或检查诊断。'],
+  summary: '问代码：一个 intent 就是一句「要知道什么」——结构、定义、引用、调用方与被调方、依赖、影响面、诊断。',
+  suitable: ['要理解代码结构、定位声明、看清依赖与调用关系、评估改动波及面或检查诊断。'],
   usage: [
-    'symbols：按 query（名字）、path（范围）找符号；exportedOnly=true 只列导出，加 includeReExports=true 连重导出一起；给 target 时返回这个符号的声明、body 范围和带 fileRef 的当前源码，可以直接拿去 project:edit。',
-    'references、relations、impact 要 target：symbols 回执里的 symbolRef，或 {path, symbol, container?}。',
-    'dependencies：direction=outgoing 查 path 里的代码依赖谁；direction=incoming 查谁依赖 path 或 specifier，within 限定调用方范围。',
-    '回执的 degraded 不为空时结果只是候选；references 按名字收集候选，不等于精确绑定，空诊断也不等于没问题。',
+    'definition、references、callers、callees、impact 要 target：前一次查询回执里的 symbolRef，或 {path, symbol, container?}（同名符号多时用 container 区分）；不知道符号在哪先 outline 或 project:search。',
+    'outline、imports、importers、diagnostics 要 path；references、impact 的 path 只用来收窄范围。',
+    '回执的 degraded 不为空时结果只是候选：references、impact 按名字收集，不等于精确绑定；空诊断也不等于没问题。',
   ],
   notes: ['本轮有 project:code-analysis 时，trace、cycles、deadcode、routing 用它。'],
   examples: [
-    { action: 'symbols', query: 'UserService' },
-    { action: 'references', target: { path: 'src/user.ts', symbol: 'UserService' } },
-    { action: 'dependencies', direction: 'outgoing', path: 'src', includeExternal: true },
-    { action: 'dependencies', direction: 'incoming', path: 'src/user.ts', within: 'src', includeReExports: true },
+    { intent: 'outline', path: 'src/user.ts' },
+    { intent: 'references', target: { path: 'src/user.ts', symbol: 'UserService' } },
+    { intent: 'importers', path: 'src/user.ts' },
   ],
   schema: ProjectCodeSchema,
   permissions: ['fs:read'],
@@ -432,9 +390,9 @@ const codeTool = defineProjectTool<ProjectCodeInput>({
   execute: (input, ctx) => projectCodeOperations.code(input, ctx),
 })
 
-/** project:code-analysis 的入参：根同样是一个平对象加 action 枚举，每个动作的必填与互斥在 superRefine 里。 */
+/** project:code-analysis 的入参：根同样是一个平对象加 intent 枚举（词表与 project:code 一致），每个 intent 的必填与互斥在 superRefine 里。 */
 const ProjectCodeAnalysisInputSchema: z.ZodTypeAny = z.strictObject({
-  action: z.enum(['trace', 'cycles', 'deadcode', 'routing'])
+  intent: z.enum(['trace', 'cycles', 'deadcode', 'routing'])
     .describe('trace 追两个符号之间的调用路径、cycles 找依赖环、deadcode 找没用到的代码候选、routing 列框架路由。'),
   from: ProjectCodeTargetSchema.optional().describe('trace 必填：起点符号，symbolRef 或 {path, symbol}。'),
   to: ProjectCodeTargetSchema.optional().describe('trace 必填：终点符号，symbolRef 或 {path, symbol}。'),
@@ -444,21 +402,21 @@ const ProjectCodeAnalysisInputSchema: z.ZodTypeAny = z.strictObject({
     .describe(`deadcode：最多返回几个候选，缺省 ${ProjectCodeLimits.resultsDefault}、最多 ${ProjectCodeLimits.deadCodeCandidates}。`),
   framework: z.string().min(1).optional().describe('routing：只看这个框架的路由；不给就让后端自己认。'),
 }).superRefine((input, context) => {
-  if (input.action === 'trace' && (isUndefined(input.from) || isUndefined(input.to)))
+  if (input.intent === 'trace' && (isUndefined(input.from) || isUndefined(input.to)))
     context.addIssue({ code: 'custom', path: ['from'], message: 'trace 需要 from 和 to 两个符号。' })
   const scoped = [
-    { action: 'trace', fields: ['from', 'to'] },
-    { action: 'cycles', fields: ['maxFiles'] },
-    { action: 'deadcode', fields: ['limit'] },
-    { action: 'routing', fields: ['framework'] },
+    { intent: 'trace', fields: ['from', 'to'] },
+    { intent: 'cycles', fields: ['maxFiles'] },
+    { intent: 'deadcode', fields: ['limit'] },
+    { intent: 'routing', fields: ['framework'] },
   ] as const
-  for (const { action, fields } of scoped)
+  for (const { intent, fields } of scoped)
     for (const field of fields)
-      if (input.action !== action && isNotUndefined(input[field]))
-        context.addIssue({ code: 'custom', path: [field], message: `${field} 只配合 action=${action} 使用。` })
+      if (input.intent !== intent && isNotUndefined(input[field]))
+        context.addIssue({ code: 'custom', path: [field], message: `${field} 只配合 intent=${intent} 使用。` })
 })
 
-/** 四个图分析动作的入参：解析之后的形状按动作收窄成 `ProjectCodeAnalysisInput`。 */
+/** 四个图分析 intent 的入参：解析之后的形状按 intent 收窄成 `ProjectCodeAnalysisInput`。 */
 export const ProjectCodeAnalysisSchema = ProjectCodeAnalysisInputSchema as z.ZodType<ProjectCodeAnalysisInput>
 
 /**
@@ -473,7 +431,7 @@ export function createProjectCodeAnalysisTools(isAvailable: (context: ProjectToo
     summary: '按需查询代码路径追踪、依赖环、未使用代码候选和框架路由。',
     suitable: ['要追两个符号之间的调用路径、找依赖环、找没用到的代码候选或列出框架路由的时候。'],
     usage: ['trace 的 from/to 使用符号引用或 {path,symbol}。deadcode 返回候选，删除之前必须核验动态入口。'],
-    examples: [{ action: 'cycles' }, { action: 'deadcode', limit: 20 }],
+    examples: [{ intent: 'cycles' }, { intent: 'deadcode', limit: 20 }],
     schema: ProjectCodeAnalysisSchema,
     permissions: ['fs:read'],
     capabilities: ProjectReadCapability,

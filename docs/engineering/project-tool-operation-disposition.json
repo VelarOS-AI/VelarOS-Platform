@@ -65,8 +65,8 @@
         "kind": "tool",
         "name": "project:code",
         "input": {
-          "action": "symbols",
-          "query": "Service"
+          "intent": "outline",
+          "path": "src/service.ts"
         }
       }
     },
@@ -359,7 +359,7 @@
         "kind": "tool",
         "name": "project:code",
         "input": {
-          "action": "symbols",
+          "intent": "definition",
           "target": {
             "path": "src/service.ts",
             "symbol": "Service"
@@ -375,7 +375,7 @@
         "kind": "tool",
         "name": "project:code",
         "input": {
-          "action": "symbols",
+          "intent": "definition",
           "target": {
             "path": "src/service.ts",
             "symbol": "Service"
@@ -554,9 +554,8 @@
       "disposition": "merge",
       "destination": {
         "kind": "tool",
-        "name": "project:code",
+        "name": "project:search",
         "input": {
-          "action": "symbols",
           "query": "Service"
         }
       }
@@ -578,17 +577,15 @@
     {
       "group": "query",
       "operation": "explore",
-      "disposition": "merge",
+      "disposition": "host",
       "destination": {
-        "kind": "tool",
-        "name": "project:code",
+        "kind": "sdk",
+        "name": "explore",
         "input": {
-          "action": "relations",
-          "target": {
-            "path": "src/service.ts",
-            "symbol": "Service"
-          },
-          "kind": "related"
+          "action": "explore",
+          "nodeIds": [
+            "node:service"
+          ]
         }
       }
     },
@@ -600,7 +597,7 @@
         "kind": "tool",
         "name": "project:code-analysis",
         "input": {
-          "action": "trace",
+          "intent": "trace",
           "from": {
             "path": "src/service.ts",
             "symbol": "Service"
@@ -620,7 +617,7 @@
         "kind": "tool",
         "name": "project:code",
         "input": {
-          "action": "symbols",
+          "intent": "definition",
           "target": {
             "path": "src/service.ts",
             "symbol": "Service"
@@ -636,13 +633,11 @@
         "kind": "tool",
         "name": "project:code",
         "input": {
-          "action": "relations",
+          "intent": "callers",
           "target": {
             "path": "src/service.ts",
             "symbol": "Service"
-          },
-          "kind": "calls",
-          "direction": "incoming"
+          }
         }
       }
     },
@@ -654,13 +649,11 @@
         "kind": "tool",
         "name": "project:code",
         "input": {
-          "action": "relations",
+          "intent": "callees",
           "target": {
             "path": "src/service.ts",
             "symbol": "Service"
-          },
-          "kind": "calls",
-          "direction": "outgoing"
+          }
         }
       }
     },
@@ -672,7 +665,7 @@
         "kind": "tool",
         "name": "project:code",
         "input": {
-          "action": "impact",
+          "intent": "impact",
           "target": {
             "path": "src/service.ts",
             "symbol": "Service"
@@ -683,17 +676,13 @@
     {
       "group": "query",
       "operation": "type_hierarchy",
-      "disposition": "merge",
+      "disposition": "host",
       "destination": {
-        "kind": "tool",
-        "name": "project:code",
+        "kind": "sdk",
+        "name": "type_hierarchy",
         "input": {
-          "action": "relations",
-          "target": {
-            "path": "src/service.ts",
-            "symbol": "Service"
-          },
-          "kind": "types"
+          "action": "type_hierarchy",
+          "nodeId": "node:service"
         }
       }
     },
@@ -705,8 +694,7 @@
         "kind": "tool",
         "name": "project:code",
         "input": {
-          "action": "dependencies",
-          "direction": "outgoing",
+          "intent": "imports",
           "path": "src/service.ts"
         }
       }
@@ -719,7 +707,7 @@
         "kind": "tool",
         "name": "project:code-analysis",
         "input": {
-          "action": "cycles"
+          "intent": "cycles"
         }
       }
     },
@@ -731,7 +719,7 @@
         "kind": "tool",
         "name": "project:code-analysis",
         "input": {
-          "action": "deadcode"
+          "intent": "deadcode"
         }
       }
     },
@@ -743,7 +731,7 @@
         "kind": "tool",
         "name": "project:code-analysis",
         "input": {
-          "action": "routing"
+          "intent": "routing"
         }
       }
     },
@@ -780,7 +768,7 @@
         "kind": "tool",
         "name": "project:code",
         "input": {
-          "action": "symbols",
+          "intent": "outline",
           "path": "src"
         }
       }
@@ -793,9 +781,7 @@
         "kind": "tool",
         "name": "project:code",
         "input": {
-          "action": "symbols",
-          "exportedOnly": true,
-          "includeReExports": true,
+          "intent": "outline",
           "path": "src"
         }
       }
@@ -808,10 +794,8 @@
         "kind": "tool",
         "name": "project:code",
         "input": {
-          "action": "dependencies",
-          "direction": "outgoing",
-          "path": "src",
-          "includeExternal": true
+          "intent": "imports",
+          "path": "src"
         }
       }
     },
@@ -823,10 +807,8 @@
         "kind": "tool",
         "name": "project:code",
         "input": {
-          "action": "dependencies",
-          "direction": "incoming",
-          "path": "src/service.ts",
-          "includeReExports": true
+          "intent": "importers",
+          "path": "src/service.ts"
         }
       }
     },
@@ -838,7 +820,7 @@
         "kind": "tool",
         "name": "project:code",
         "input": {
-          "action": "references",
+          "intent": "references",
           "target": {
             "path": "src/service.ts",
             "symbol": "Service"
@@ -854,7 +836,7 @@
         "kind": "tool",
         "name": "project:code",
         "input": {
-          "action": "diagnostics",
+          "intent": "diagnostics",
           "path": "src"
         }
       }
@@ -867,7 +849,7 @@
         "kind": "tool",
         "name": "project:code",
         "input": {
-          "action": "impact",
+          "intent": "impact",
           "target": {
             "path": "src/service.ts",
             "symbol": "Service"

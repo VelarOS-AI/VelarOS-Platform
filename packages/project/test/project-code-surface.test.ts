@@ -46,13 +46,14 @@ async function fixture(handler: (input: ProjectCodeQuery) => unknown = () => ({}
 
 const target = { path: 'service.ts', symbol: 'Service' }
 
-describe('six-action semantic query surface', () => {
-  test('symbol discovery creates reusable identity and detail serves current AST ranges and raw lines', async () => {
-    const { run } = await fixture(() => ({ source: 'language-service', symbols: [{ path: 'service.ts', name: 'Service', kind: 'function', line: 1 }], scannedFiles: 1 }))
-    const found = await run({ action: 'symbols', query: 'Service' })
+describe('nine-intent semantic query surface', () => {
+  test('outline lists a file\'s symbols with reusable identities and definition serves current AST ranges and raw lines', async () => {
+    const { run, calls } = await fixture(() => ({ source: 'language-service', symbols: [{ path: 'service.ts', name: 'Service', kind: 'function', line: 1 }], scannedFiles: 1 }))
+    const found = await run({ intent: 'outline', path: 'service.ts' })
+    expect(calls[0]).toMatchObject({ action: 'find_symbols', path: 'service.ts' })
     const symbolRef = (found.symbols as any[])[0].symbolRef
     expect(symbolRef).toStartWith('symbol:')
-    const detail = await run({ action: 'symbols', target: { symbolRef } })
+    const detail = await run({ intent: 'definition', target: { symbolRef } })
     expect(detail.declaration).toMatchObject({ startLine: 1, endLine: 3 })
     expect(detail.body).toBeDefined()
     const file = (detail.source as any).files[0]
@@ -60,18 +61,36 @@ describe('six-action semantic query surface', () => {
     expect(file.content).toBeUndefined()
   })
 
-  test('exports retain re-export data and reject meaningless filter combinations', async () => {
-    const { run, calls } = await fixture(() => ({ source: 'language-service', exports: [{ path: 'service.ts', name: 'Service', kind: 'function', source: './impl', reExport: true }] }))
-    const output = await run({ action: 'symbols', exportedOnly: true, includeReExports: true, query: 'Service' })
-    expect(calls[0]).toMatchObject({ action: 'list_exports', includeReExports: true })
-    expect(output.symbols).toMatchObject([{ source: './impl', reExport: true }])
-    expect(ProjectCodeSchema.safeParse({ action: 'symbols', includeReExports: true }).success).toBe(false)
-    expect(ProjectCodeSchema.safeParse({ action: 'symbols', target, query: 'Other' }).success).toBe(false)
+  test('交叉旋钮都不再收：一个 intent 只认它自己的那两个字段', () => {
+    for (const input of [
+      { intent: 'outline', path: 'src', query: 'Service' },
+      { intent: 'outline', path: 'src', exportedOnly: true },
+      { intent: 'outline', path: 'src', kinds: ['function'] },
+      { intent: 'callers', target, depth: 3 },
+      { intent: 'imports', path: 'src', includeExternal: true },
+      { intent: 'importers', path: 'src/user.ts', within: 'src', includeReExports: true },
+      { intent: 'references', target, direction: 'incoming' },
+      { intent: 'definition', target, path: 'src' },
+      { intent: 'outline', path: 'src', action: 'symbols' },
+    ]) expect(ProjectCodeSchema.safeParse(input).success, JSON.stringify(input)).toBe(false)
+    // 必填缺了也说得出缺什么。
+    expect(ProjectCodeSchema.safeParse({ intent: 'outline' }).success).toBe(false)
+    expect(ProjectCodeSchema.safeParse({ intent: 'references' }).success).toBe(false)
+    expect(ProjectCodeSchema.safeParse({ intent: 'outline', path: 'src', language: 'typescript', extensions: ['.ts'], maxDepth: 2, limit: 10 }).success).toBe(true)
+  })
+
+  test('definition 在这个文件里找不到声明时给按名字找到的候选，而不是空手回去', async () => {
+    const { run } = await fixture((input) => input.action === 'find_symbols'
+      ? { source: 'language-service', symbols: [{ path: 'other.ts', name: 'Service', kind: 'function', line: 2 }] } : {})
+    const result = await run({ intent: 'definition', target: { path: 'empty.ts', symbol: 'Service' } })
+    expect((result.symbols as any[])[0]).toMatchObject({ path: 'other.ts', name: 'Service' })
+    expect((result.symbols as any[])[0].symbolRef).toStartWith('symbol:')
+    expect(result.degraded.join('')).toContain('候选')
   })
 
   test('references preserve search scope and state name matching limitations', async () => {
     const { run, calls } = await fixture(() => ({ source: 'language-service', references: [{ path: 'other.ts', line: 1, excerpt: 'Service()' }], scannedFiles: 2, truncated: true }))
-    const result = await run({ action: 'references', target, path: 'tests', limit: 10 })
+    const result = await run({ intent: 'references', target, path: 'tests', limit: 10 })
     expect(calls).toMatchObject([{ action: 'find_references', path: 'tests', symbol: 'Service', exactWord: true, limit: 10 }])
     // 「按名字收候选」在 degraded 里用中文说清楚，不再另给一个英文枚举。
     expect(result.resolution).toBeUndefined()
@@ -82,63 +101,45 @@ describe('six-action semantic query surface', () => {
   test('same name in different containers requires explicit disambiguation', async () => {
     await writeFile(join(root, 'service.ts'), 'class A { Service() {} }\nclass B { Service() {} }\n')
     const { run } = await fixture()
-    await expect(run({ action: 'symbols', target })).rejects.toMatchObject({ reason: 'AMBIGUOUS_TARGET' })
-    const detail = await run({ action: 'symbols', target: { ...target, container: 'B' } })
+    await expect(run({ intent: 'definition', target })).rejects.toMatchObject({ reason: 'AMBIGUOUS_TARGET' })
+    const detail = await run({ intent: 'definition', target: { ...target, container: 'B' } })
     expect(detail.declaration).toMatchObject({ startLine: 2 })
   })
 
-  test('dependency directions preserve target, scanning scope, external and re-export filters', async () => {
+  test('imports 与 importers 各自只发一个方向的查询，文件还带上编译器的模块邻接', async () => {
     const { run, calls } = await fixture(() => ({ source: 'language-service', imports: [], importers: [] }))
-    await run({ action: 'dependencies', direction: 'incoming', path: 'service.ts', within: 'tests', includeReExports: true })
-    await run({ action: 'dependencies', direction: 'outgoing', path: 'src', specifier: 'node:fs', kind: 'import', includeExternal: true })
-    expect(calls[0]).toMatchObject({ action: 'find_importers', targetPath: 'service.ts', path: 'tests', includeReExports: true })
-    expect(calls.find((input) => input.action === 'find_imports')).toMatchObject({ action: 'find_imports', path: 'src', specifier: 'node:fs', kind: 'import', includeExternal: true })
-    expect(ProjectCodeSchema.safeParse({ action: 'dependencies', direction: 'incoming' }).success).toBe(false)
-    expect(ProjectCodeSchema.safeParse({ action: 'dependencies', direction: 'outgoing', within: 'src' }).success).toBe(false)
+    await run({ intent: 'importers', path: 'service.ts' })
+    await run({ intent: 'imports', path: 'src' })
+    expect(calls[0]).toMatchObject({ action: 'find_importers', targetPath: 'service.ts' })
+    expect(calls.some((input) => input.action === 'file_dependencies')).toBe(true)
+    expect(calls.find((input) => input.action === 'find_imports')).toMatchObject({ action: 'find_imports', path: 'src' })
   })
 
-  test('relations resolve current backend identities and call only requested directions', async () => {
+  test('callers 与 callees 各走一个方向，层数由 intent 定死', async () => {
     const { run, calls } = await fixture((input) => input.action === 'search_symbols'
       ? { source: 'codegraph', results: [{ id: 'node:service', path: 'service.ts', name: 'Service', line: 1 }] }
       : { source: 'codegraph', callers: [{ name: 'caller', path: 'other.ts', line: 1 }] })
-    await run({ action: 'relations', kind: 'calls', direction: 'incoming', target, depth: 3 })
+    await run({ intent: 'callers', target })
     expect(calls.map((input) => input.action)).toEqual(['search_symbols', 'callers'])
-    expect(calls[1]).toEqual({ action: 'callers', nodeId: 'node:service', depth: 3 })
-  })
-
-  test('compiler graph nodes use zero-based locations and directed relations without leaking unrelated neighbors', async () => {
-    const nodes = [
-      { id: 'a', name: 'Service', path: 'service.ts', range: { start: { line: 0, character: 0 }, end: { line: 2, character: 1 } } },
-      { id: 'b', name: 'Base', path: 'base.ts' },
-      { id: 'c', name: 'Child', path: 'child.ts' },
-    ]
-    const { run } = await fixture((input) => input.action === 'find_symbols' ? { symbols: [] } : {
-      source: 'velar-compiler', revision: 'compiler:1', nodes,
-      relations: [{ from: 'a', to: 'b', kind: 'extends' }, { from: 'c', to: 'a', kind: 'extends' }],
-      coverage: { complete: false },
-    })
-    const discovered = await run({ action: 'symbols', query: 'Service' })
-    expect(discovered.symbols).toHaveLength(1)
-    expect((discovered.symbols as any[])[0].line).toBe(1)
-    const result = await run({ action: 'relations', kind: 'types', direction: 'outgoing', target })
-    expect((result.nodes as any[]).map((node) => node.id)).toEqual(['a', 'b'])
-    expect(result.coverage).toMatchObject({ complete: false, versioned: true })
+    expect(calls[1]).toEqual({ action: 'callers', nodeId: 'node:service', depth: 2 })
+    await run({ intent: 'callees', target })
+    expect(calls.at(-1)).toEqual({ action: 'callees', nodeId: 'node:service', depth: 2 })
   })
 
   test('unavailable relations report degradation and discovery instead of invented text relationships', async () => {
     const { run } = await fixture(() => { throw new AppError('UNAVAILABLE', 'disabled') })
-    const result = await run({ action: 'relations', kind: 'calls', target })
+    const result = await run({ intent: 'callers', target })
     expect(result.relations).toEqual([])
     expect(result.degraded).not.toEqual([])
-    // 能力目录只列模型自己调得到的动作，不点名发现入口，也不列宿主内部的索引动作。
-    expect(result.capabilities).toMatchObject({ actions: ['symbols', 'references', 'dependencies', 'relations', 'impact', 'diagnostics'] })
+    // 能力目录只列模型自己调得到的 intent，不点名发现入口，也不列宿主内部的索引动作。
+    expect(result.capabilities).toMatchObject({ intents: ['outline', 'definition', 'references', 'callers', 'callees', 'imports', 'importers', 'impact', 'diagnostics'] })
     expect(JSON.stringify(result.capabilities)).not.toContain('tooling:map')
     expect(JSON.stringify(result.capabilities)).not.toContain('build_index')
   })
 
   test('diagnostics retain limited coverage and unsupported language notes', async () => {
     const { run, calls } = await fixture(() => ({ source: 'language-service', diagnostics: [], degraded: 'missing standard library', note: 'only syntax', unsupportedServices: ['python'], scannedFiles: 2 }))
-    const result = await run({ action: 'diagnostics', path: 'src', language: 'typescript', extensions: ['.ts'], maxDepth: 4 })
+    const result = await run({ intent: 'diagnostics', path: 'src', language: 'typescript', extensions: ['.ts'], maxDepth: 4 })
     expect(calls[0]).toMatchObject({ action: 'language_diagnostics', path: 'src', language: 'typescript', extensions: ['.ts'], maxDepth: 4 })
     expect(result.degraded).toEqual(['missing standard library', 'only syntax'])
     expect(result.unsupportedServices).toEqual(['python'])
@@ -149,7 +150,7 @@ describe('six-action semantic query surface', () => {
       ? { source: 'codegraph', results: [{ id: 'service', name: 'Service', path: 'service.ts' }] }
       : input.action === 'impact' ? { source: 'codegraph', nodeCount: 3 }
       : { source: 'language-service', relatedTestPaths: ['service.test.ts'], definitions: [], references: [] })
-    const result = await run({ action: 'impact', target, path: 'src', depth: 4 })
+    const result = await run({ intent: 'impact', target, path: 'src' })
     expect(calls[0]).toMatchObject({ action: 'analyze_symbol_impact', declarationPath: 'service.ts', path: 'src' })
     expect(result.graph).toMatchObject({ nodeCount: 3 })
     expect(result.relatedTestPaths).toEqual(['service.test.ts'])
@@ -157,11 +158,11 @@ describe('six-action semantic query surface', () => {
 
   test('extensions stay in project:code-analysis and index lifecycle is not part of this package', async () => {
     const { context, calls } = await fixture(() => ({ candidates: [{ name: 'possibleUnused' }] }))
-    for (const action of ['trace', 'cycles', 'deadcode', 'routing', 'build_index', 'index_status', 'build_context'])
-      expect(ProjectCodeSchema.safeParse({ action }).success).toBe(false)
-    await projectCodeOperations.codeAnalysis(ProjectCodeAnalysisSchema.parse({ action: 'deadcode', limit: 4 }), context)
-    await projectCodeOperations.codeAnalysis(ProjectCodeAnalysisSchema.parse({ action: 'cycles', maxFiles: 40 }), context)
-    await projectCodeOperations.codeAnalysis(ProjectCodeAnalysisSchema.parse({ action: 'routing', framework: 'velar' }), context)
+    for (const intent of ['trace', 'cycles', 'deadcode', 'routing', 'build_index', 'index_status', 'build_context'])
+      expect(ProjectCodeSchema.safeParse({ intent }).success).toBe(false)
+    await projectCodeOperations.codeAnalysis(ProjectCodeAnalysisSchema.parse({ intent: 'deadcode', limit: 4 }), context)
+    await projectCodeOperations.codeAnalysis(ProjectCodeAnalysisSchema.parse({ intent: 'cycles', maxFiles: 40 }), context)
+    await projectCodeOperations.codeAnalysis(ProjectCodeAnalysisSchema.parse({ intent: 'routing', framework: 'velar' }), context)
     // 索引的建与查是宿主自己的事：本包不再有走到它的路径，也不发这两条查询。
     expect(Object.keys(projectCodeOperations)).not.toContain('codeIndex')
     expect(calls).toEqual([{ action: 'find_dead_code', limit: 4 }, { action: 'find_cycles', maxFiles: 40 }, { action: 'routing_manifest', framework: 'velar' }])
