@@ -1,7 +1,5 @@
-import type {
-  MemoryEvidenceInput,
-  MemoryScopeId,
-} from '../index'
+import type { MemoryEvidenceInput } from '../memory-tree/Types'
+import type { MemoryScopeId } from '../MemoryScope'
 
 export interface MemoryHostScopeInput {
   sessionId: string

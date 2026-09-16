@@ -10,6 +10,8 @@ import {
 } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
+import type { ContentKeyServiceV2, MemorySealedContentV2 } from './storage/ContentKeyService'
+import type { MemoryKeyringStoreV2 } from './storage/Keyring'
 import type { MemoryAuthorityDatabaseV2 } from './AuthorityDatabase'
 import {
   buildRedactTreeDiffOpV2,
@@ -17,7 +19,6 @@ import {
   type MemoryTreeDiffOpV2,
   type MemoryTreeNodeStructV2,
 } from './DiffChain'
-import type { ContentKeyServiceV2, MemoryKeyringStoreV2, MemorySealedContentV2 } from './storage'
 import type {
   MemoryTreeAuthorityCommitParticipantV2,
   MemoryTreeIdentityChangeV2,

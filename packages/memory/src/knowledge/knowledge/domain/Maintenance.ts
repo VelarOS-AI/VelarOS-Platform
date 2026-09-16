@@ -3,8 +3,8 @@ import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 
 import { KnowledgeIndexConfig, KnowledgeIndexStatuses } from '../../Constants'
-import type { KnowledgeRepo } from '../storage'
-import type { KnowledgeVectors } from '../storage'
+import type { KnowledgeRepo } from '../storage/Repository'
+import type { KnowledgeVectors } from '../storage/Vectors'
 
 import type { KnowledgeMutation } from './Mutation'
 import type {

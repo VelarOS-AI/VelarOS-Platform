@@ -13,8 +13,8 @@ import type {
   KnowledgeWorkspaceSyncOptions,
   KnowledgeWorkspaceSyncResult,
 } from '../domain/Types'
-import type { KnowledgeRepo } from '../storage'
-import type { KnowledgeFileIndexRecord } from '../storage'
+import type { KnowledgeRepo } from '../storage/Repository'
+import type { KnowledgeFileIndexRecord } from '../storage/RepositoryRows'
 
 import type {
   KnowledgeWorkspace,

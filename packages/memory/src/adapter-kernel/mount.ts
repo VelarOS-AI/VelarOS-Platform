@@ -11,7 +11,7 @@ import {
   createMemoryTreeStoreBackend,
   MemoryTreeBackendId,
 } from '../backend/TreeStoreBackend'
-import type { MemoryDomain } from '../index'
+import type { MemoryTreeDomain as MemoryDomain } from '../memory-tree/Service'
 
 import { MemoryEvidenceBridge } from './EvidenceBridge'
 import type { MemoryHostScopeResolver } from './HostContracts'

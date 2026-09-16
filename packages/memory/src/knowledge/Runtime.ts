@@ -1,19 +1,16 @@
-import {
-  KnowledgeChunkBuilder,
-  KnowledgeDomain,
-  KnowledgeIngestion,
-  KnowledgeMaintenance,
-  KnowledgeMutation,
-  KnowledgeQuery,
-} from './knowledge/domain'
-import { KnowledgeWorkspace } from './knowledge/ingestion'
-import {
-  KnowledgeRepo,
-  KnowledgeRows,
-  KnowledgeVectorQuery,
-  KnowledgeVectors,
-} from './knowledge/storage'
-import { EmbeddingApi, Embeddings } from './embedding'
+import { EmbeddingApi } from './embedding/EmbeddingApi'
+import { Embeddings } from './embedding/Embeddings'
+import { KnowledgeChunkBuilder } from './knowledge/domain/Chunks'
+import { KnowledgeMaintenance } from './knowledge/domain/Maintenance'
+import { KnowledgeMutation } from './knowledge/domain/Mutation'
+import { KnowledgeQuery } from './knowledge/domain/Query'
+import { KnowledgeDomain } from './knowledge/domain/Service'
+import { KnowledgeIngestion } from './knowledge/ingestion/Ingestion'
+import { KnowledgeWorkspace } from './knowledge/ingestion/WorkspaceStore'
+import { KnowledgeRepo } from './knowledge/storage/Repository'
+import { KnowledgeRows } from './knowledge/storage/RepositoryRows'
+import { KnowledgeVectorQuery } from './knowledge/storage/VectorQuery'
+import { KnowledgeVectors } from './knowledge/storage/Vectors'
 import type { KnowledgeRuntimeProviders } from './Types'
 import { VectorFailureMonitor } from './VectorFailureLog'
 

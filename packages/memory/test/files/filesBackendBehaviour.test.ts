@@ -7,14 +7,10 @@
 
 import { describe, expect, test } from 'bun:test'
 
-import {
-  createInMemoryMemoryFilesIo,
-  createMemoryFilesBackend,
-  type InMemoryMemoryFilesIo,
-  type MemoryFilesScopeRoot,
-} from '../../src/files'
+import { createMemoryFilesBackend, type MemoryFilesScopeRoot } from '../../src/files/Backend'
 import { parseMemoryFileDocument } from '../../src/files/Frontmatter'
 import { parseMemoryIndex, serializeMemoryIndex } from '../../src/files/IndexFile'
+import { createInMemoryMemoryFilesIo, type InMemoryMemoryFilesIo } from '../../src/files/Io'
 import type { MemoryEvidenceInput } from '../../src/memory-tree/Types'
 
 const ProjectRoot: MemoryFilesScopeRoot = {

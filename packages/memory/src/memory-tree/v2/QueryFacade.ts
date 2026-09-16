@@ -1,9 +1,9 @@
 import { isEmpty, isPresent, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
+import type { ContentKeyServiceV2 } from './storage/ContentKeyService'
 import type { MemoryAuthorityDatabaseV2 } from './AuthorityDatabase'
 import type { MemoryTreeNodeStructV2 } from './DiffChain'
-import type { ContentKeyServiceV2 } from './storage'
 import type { MemoryTreeStoreV2 } from './TreeStore'
 
 const DefaultRecallLimitV2 = 3

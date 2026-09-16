@@ -5,7 +5,7 @@ import { isEmpty, isNumber, optionalWhen, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import { MemoryReadCapability, MemoryWriteCapability } from '../../Capabilities'
-import type { MemoryEvidenceCategory, MemoryRecallItem } from '../../memory-tree'
+import type { MemoryEvidenceCategory, MemoryRecallItem } from '../../memory-tree/Types'
 import {
   GLOBAL_MEMORY_SCOPE,
   isMemoryVisibleInScope,

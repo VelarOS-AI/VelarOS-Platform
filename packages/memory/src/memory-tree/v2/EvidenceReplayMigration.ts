@@ -13,6 +13,7 @@ import {
   toNullable,
 } from '@velaros-ai/core'
 
+import type { ContentKeyServiceV2 } from './storage/ContentKeyService'
 import type { MemoryAuthorityDatabaseV2 } from './AuthorityDatabase'
 import { canonicalStringifyV2 } from './DiffChain'
 import type {
@@ -27,7 +28,6 @@ import {
   type MemoryIdentityKeyServiceV2,
   normalizeOriginV2,
 } from './IdentityKeys'
-import type { ContentKeyServiceV2 } from './storage'
 
 type SQLiteDatabase = InstanceType<typeof BetterSqlite3>
 

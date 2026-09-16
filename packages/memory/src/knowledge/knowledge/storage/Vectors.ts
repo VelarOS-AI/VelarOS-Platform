@@ -8,8 +8,8 @@ import { KnowledgeIndexConfig } from '../../Constants'
 import {
   buildDocumentRevisionKey,
   buildEmbeddingProfileIdentity,
-  buildVectorStoreStats,
-} from '../../shared'
+} from '../../shared/indexing/Indexing'
+import { buildVectorStoreStats } from '../../shared/vector/VectorStats'
 import type {
   KnowledgeLanceDbConnection,
   KnowledgeLanceDbLoader,

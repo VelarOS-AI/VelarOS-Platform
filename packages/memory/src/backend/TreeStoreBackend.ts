@@ -8,7 +8,7 @@
  * 迁移都必须先完成数据迁移和宿主切换，再调整这里的注册角色。
  */
 
-import type { MemoryTreeDomain } from '../memory-tree'
+import type { MemoryTreeDomain } from '../memory-tree/Service'
 
 import type {
   MemoryBackendDescriptor,

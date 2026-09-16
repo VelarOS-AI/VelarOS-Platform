@@ -6,7 +6,7 @@ import { join } from 'node:path'
 
 import { isEmpty } from '@velaros-ai/core'
 
-import type { MemoryWrappingRootV2 } from './storage'
+import type { MemoryWrappingRootV2 } from './storage/WrappingRoot'
 import { openMemorySystemRuntimeV2 } from './SystemRuntime'
 
 const ExpectedMinimumAssertionsV2 = 35

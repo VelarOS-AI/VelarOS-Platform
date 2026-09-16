@@ -16,15 +16,13 @@ import assert from 'node:assert/strict'
 import { KernelModuleApiVersion } from '@velaros-ai/kernel/contracts/abi'
 import { KernelModuleHost } from '@velaros-ai/kernel/runtime'
 
-import { createMemoryFilesBackend, MemoryFilesBackendId } from '../files'
+import type { MemoryStoreBackend } from '../backend/Contract'
+import { createMemoryTreeStoreBackend, MemoryTreeBackendId } from '../backend/TreeStoreBackend'
+import { createMemoryFilesBackend, MemoryFilesBackendId } from '../files/Backend'
 import { createInMemoryMemoryFilesIo } from '../files/Io'
-import {
-  createMemoryTreeStoreBackend,
-  MemoryDomain,
-  type MemoryStoreBackend,
-  MemoryTreeBackendId,
-} from '../index'
-import { createMemoryVectorBackend, MemoryVectorBackendId } from '../vector'
+import { MemoryTreeDomain as MemoryDomain } from '../memory-tree/Service'
+import { createMemoryVectorBackend } from '../vector/Backend'
+import { MemoryVectorBackendId } from '../vector/Contract'
 
 import {
   createMemoryStoreCapabilityToken,

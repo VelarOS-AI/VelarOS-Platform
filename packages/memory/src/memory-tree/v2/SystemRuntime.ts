@@ -1,3 +1,7 @@
+import { MemoryBlobStoreV2 } from './storage/BlobStore'
+import { ContentKeyServiceV2 } from './storage/ContentKeyService'
+import { MemoryKeyringStoreV2 } from './storage/Keyring'
+import type { MemoryWrappingRootV2 } from './storage/WrappingRoot'
 import { type MemoryAuthorityOpenReportV2, openMemoryAuthorityV2 } from './AuthorityDatabase'
 import { MemoryDreamRunCoordinatorV2 } from './DreamRuns'
 import { MemoryErasureServiceV2 } from './ErasureSaga'
@@ -6,8 +10,6 @@ import { MemoryEvidenceReplayMigrationV2 } from './EvidenceReplayMigration'
 import { MemoryIdentityKeyServiceV2 } from './IdentityKeys'
 import { MemoryMeaningCurationServiceV2 } from './MeaningCuration'
 import { MemoryQueryFacadeV2 } from './QueryFacade'
-import type { MemoryWrappingRootV2 } from './storage'
-import { ContentKeyServiceV2, MemoryBlobStoreV2, MemoryKeyringStoreV2 } from './storage'
 import { type MemoryTreeStoreOpenReportV2, MemoryTreeStoreV2 } from './TreeStore'
 
 export interface OpenMemorySystemRuntimeOptionsV2 {

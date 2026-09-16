@@ -1,7 +1,7 @@
 import { compact, isBlank,isEmpty } from '@velaros-ai/core'
 
 import { KnowledgeIndexStatuses } from '../../Constants'
-import { buildDocumentRevisionKey } from '../../shared'
+import { buildDocumentRevisionKey } from '../../shared/indexing/Indexing'
 import type { KnowledgeDatabaseProvider } from '../../Types'
 import type {
   KnowledgeDiagnostics,

@@ -12,7 +12,8 @@
 
 import { describe, expect, test } from 'bun:test'
 
-import { createInMemoryMemoryFilesIo,createMemoryFilesBackend } from '../../src/files'
+import { createMemoryFilesBackend } from '../../src/files/Backend'
+import { createInMemoryMemoryFilesIo } from '../../src/files/Io'
 import {
   buildProjectMemoryScope,
   isMemoryVisibleInScope,

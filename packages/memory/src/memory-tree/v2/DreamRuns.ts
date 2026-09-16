@@ -3,10 +3,10 @@ import { randomBytes } from 'node:crypto'
 import { isEmpty, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
+import type { ContentKeyServiceV2, MemorySealedContentV2 } from './storage/ContentKeyService'
 import type { MemoryAuthorityDatabaseV2 } from './AuthorityDatabase'
 import { canonicalStringifyV2, type MemoryTreeDiffOpV2 } from './DiffChain'
 import { computeDreamInputFingerprintV2 } from './IdentityKeys'
-import type { ContentKeyServiceV2, MemorySealedContentV2 } from './storage'
 import {
   type CommitMemoryTreeVersionResultV2,
   type MemoryTreeAuthorityCommitParticipantV2,

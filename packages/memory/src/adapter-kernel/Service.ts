@@ -1,8 +1,8 @@
 import { Log } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
+import type { MemoryTreeDomain as MemoryDomain } from '../memory-tree/Service'
 import type {
-  MemoryDomain,
   MemoryDreamRunOptions,
   MemoryDreamRunResult,
   MemoryEvidenceEligibilityResult,
@@ -13,7 +13,7 @@ import type {
   MemoryTreeDiagnostics,
   MemoryTreeIntegrityReport,
   MemoryTreeState,
-} from '../index'
+} from '../memory-tree/Types'
 
 import { MemoryDreamScheduler } from './DreamScheduler'
 import type { HostIdleSignalPort } from './HostSignals'

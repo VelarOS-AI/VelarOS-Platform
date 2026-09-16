@@ -1,5 +1,5 @@
-import type { KnowledgeIngestion } from '../ingestion'
-import type { KnowledgeVectors } from '../storage'
+import type { KnowledgeIngestion } from '../ingestion/Ingestion'
+import type { KnowledgeVectors } from '../storage/Vectors'
 
 import type { KnowledgeMaintenance } from './Maintenance'
 import type { KnowledgeStartupMaintenanceResult } from './Maintenance'

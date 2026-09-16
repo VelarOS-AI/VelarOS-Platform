@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto'
 
 import { AppError, isEmpty, isNull, isPresent, toNullable } from '@velaros-ai/core'
 
+import type { ContentKeyServiceV2, MemorySealedContentV2 } from './storage/ContentKeyService'
 import type { MemoryAuthorityDatabaseV2 } from './AuthorityDatabase'
 import type { MemoryTreeDiffOpV2, MemoryTreeNodeStructV2 } from './DiffChain'
 import { canonicalStringifyV2, quantizeTreeScoreV2 } from './DiffChain'
@@ -13,7 +14,6 @@ import {
   type MemoryIdentityKeyServiceV2,
   normalizeOriginV2,
 } from './IdentityKeys'
-import type { ContentKeyServiceV2, MemorySealedContentV2 } from './storage'
 import type {
   MemoryTreeAuthorityCommitParticipantV2,
   MemoryTreeIdentityChangeV2,

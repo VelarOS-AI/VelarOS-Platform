@@ -1,6 +1,6 @@
 import { compact, isEmpty, isFiniteNumber,isString } from '@velaros-ai/core'
 
-import { buildDocumentRevisionKey } from '../../shared'
+import { buildDocumentRevisionKey } from '../../shared/indexing/Indexing'
 import type { KnowledgeRecord } from '../domain/Types'
 
 import type { KnowledgeChunkRecord } from './RepositoryRows'

@@ -1,4 +1,5 @@
-import { MemoryTreeDomain, MemoryTreeRepository } from './memory-tree'
+import { MemoryTreeRepository } from './memory-tree/Repository'
+import { MemoryTreeDomain } from './memory-tree/Service'
 import type { MemoryTreeRuntimeProviders } from './Types'
 
 /**

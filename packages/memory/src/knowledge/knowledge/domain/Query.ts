@@ -3,14 +3,11 @@ import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 
 import { KnowledgeIndexConfig, KnowledgeMatchTypes } from '../../Constants'
-import type { Embeddings } from '../../embedding'
-import {
-  type HybridCandidate,
-  mergeHybridCandidates,
-} from '../../shared'
+import type { Embeddings } from '../../embedding/Embeddings'
+import { type HybridCandidate, mergeHybridCandidates } from '../../shared/query/HybridQuery'
 import { VectorFailureMonitor } from '../../VectorFailureLog'
-import type { KnowledgeRepo } from '../storage'
-import type { KnowledgeVectors } from '../storage'
+import type { KnowledgeRepo } from '../storage/Repository'
+import type { KnowledgeVectors } from '../storage/Vectors'
 
 import {
   applyFreshnessScore,

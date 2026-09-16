@@ -5,21 +5,13 @@
  * 卸了只掉索引。这个切片是它的全部代码——包的其余部分对它零引用，`./vector` 不被 import
  * 就一行都不加载。
  */
-export {
-  createMemoryVectorBackend,
-  type MemoryVectorBackendOptions,
-  MemoryVectorIndexSchemaVersion,
-} from './Backend'
-export {
-  type MemoryEmbedder,
-  MemoryVectorBackendId,
-  type MemoryVectorIndexRecord,
-  type MemoryVectorIndexStore,
-} from './Contract'
+export type { MemoryVectorBackendOptions } from './Backend'
+export { createMemoryVectorBackend, MemoryVectorIndexSchemaVersion } from './Backend'
+export type { MemoryEmbedder, MemoryVectorIndexRecord, MemoryVectorIndexStore } from './Contract'
+export { MemoryVectorBackendId } from './Contract'
+export type { FileVectorIndexStoreOptions, InMemoryVectorIndexStore } from './Store'
 export {
   createFileVectorIndexStore,
   createInMemoryVectorIndexStore,
-  type FileVectorIndexStoreOptions,
-  type InMemoryVectorIndexStore,
   MemoryVectorIndexFileName,
 } from './Store'

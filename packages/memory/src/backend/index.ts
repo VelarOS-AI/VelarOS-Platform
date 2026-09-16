@@ -29,8 +29,5 @@ export type {
   MemoryDerivedIndexFailure,
 } from './Layered'
 export { createLayeredMemoryStoreBackend } from './Layered'
-export {
-  createMemoryTreeStoreBackend,
-  MemoryTreeBackendId,
-  type MemoryTreeStoreDomain,
-} from './TreeStoreBackend'
+export type { MemoryTreeStoreDomain } from './TreeStoreBackend'
+export { createMemoryTreeStoreBackend, MemoryTreeBackendId } from './TreeStoreBackend'

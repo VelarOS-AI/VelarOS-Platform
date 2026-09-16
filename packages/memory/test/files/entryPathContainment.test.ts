@@ -18,14 +18,11 @@ import { join } from 'node:path'
 
 import { afterAll, describe, expect, test } from 'bun:test'
 
-import {
-  createInMemoryMemoryFilesIo,
-  createMemoryFilesBackend,
-  createNodeMemoryFilesIo,
-  type MemoryFilesScopeRoot,
-} from '../../src/files'
+import { createMemoryFilesBackend, type MemoryFilesScopeRoot } from '../../src/files/Backend'
 import { isMemoryEntryPath } from '../../src/files/EntryPath'
 import { parseMemoryIndex } from '../../src/files/IndexFile'
+import { createInMemoryMemoryFilesIo } from '../../src/files/Io'
+import { createNodeMemoryFilesIo } from '../../src/files/NodeIo'
 
 const SystemRoot: MemoryFilesScopeRoot = {
   scopeType: 'system',

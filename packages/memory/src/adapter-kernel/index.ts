@@ -22,35 +22,36 @@ export type { HostIdleSignalPort } from './HostSignals'
 // verify_integrity），全仓零挂载，且它的 get_claim 有一套工具路径没有的跨作用域拦截——两条语义
 // 不同的读路径并存，安全评审会读到没在跑的那条。2026-08-05 删除，跨作用域读规则收口到
 // `memory:get` 工具这一处（唯一在跑的读路径）。
+export type {
+  CreateMemoryStoreKernelModuleOptions,
+  MemoryStoreCapabilityRegistry,
+  MemoryStoreCapabilityService,
+  ResolveMemoryStoreBackendInput,
+} from './MemoryStoreCapability'
 export {
   createMemoryStoreCapabilityToken,
   createMemoryStoreKernelModule,
-  type CreateMemoryStoreKernelModuleOptions,
   DefaultMemoryStoreCapabilityVersion,
   listRegisteredMemoryStoreBackends,
   memoryStoreCapabilityId,
   MemoryStoreCapabilityNamespace,
-  type MemoryStoreCapabilityRegistry,
-  type MemoryStoreCapabilityService,
   resolveMemoryDerivedIndexBackends,
   resolveMemoryStoreBackend,
-  type ResolveMemoryStoreBackendInput,
 } from './MemoryStoreCapability'
-export {
-  type MemoryAdapterConfigPort,
-  type MemoryAdapterHostContextPort,
-  type MemoryAdapterMount,
-  MemoryAdapterRuntime,
-  type MemoryAdapterStorePort,
-  type MemoryAdapterTreePort,
-  mountMemoryAdapter,
-  type MountMemoryAdapterInput,
+export type {
+  MemoryAdapterConfigPort,
+  MemoryAdapterHostContextPort,
+  MemoryAdapterMount,
+  MemoryAdapterStorePort,
+  MemoryAdapterTreePort,
+  MountMemoryAdapterInput,
 } from './mount'
+export { MemoryAdapterRuntime, mountMemoryAdapter } from './mount'
 export type { MemoryServiceOptions } from './Service'
 export { MemoryService } from './Service'
-export {
-  type MemoryTurnContextDeltaSource,
-  MemoryTurnRecallCoordinator,
-  type MemoryTurnRecallDeps,
-  type MemoryTurnRecallInput,
+export type {
+  MemoryTurnContextDeltaSource,
+  MemoryTurnRecallDeps,
+  MemoryTurnRecallInput,
 } from './TurnRecallCoordinator'
+export { MemoryTurnRecallCoordinator } from './TurnRecallCoordinator'

@@ -1,17 +1,9 @@
+export type { MemoryFilesBackendOptions, MemoryFilesScopeRoot } from './Backend'
+export { createMemoryFilesBackend, MemoryFilesBackendId } from './Backend'
+export type { MemoryFileDocument, SerializeMemoryFileDocumentInput } from './Frontmatter'
+export { parseMemoryFileDocument, serializeMemoryFileDocument } from './Frontmatter'
+export type { MemoryIndexEntry } from './IndexFile'
 export {
-  createMemoryFilesBackend,
-  MemoryFilesBackendId,
-  type MemoryFilesBackendOptions,
-  type MemoryFilesScopeRoot,
-} from './Backend'
-export {
-  type MemoryFileDocument,
-  parseMemoryFileDocument,
-  serializeMemoryFileDocument,
-  type SerializeMemoryFileDocumentInput,
-} from './Frontmatter'
-export {
-  type MemoryIndexEntry,
   MemoryIndexFileName,
   MemoryIndexHeading,
   parseMemoryIndex,
@@ -19,9 +11,6 @@ export {
   serializeMemoryIndex,
   upsertMemoryIndexEntry,
 } from './IndexFile'
-export {
-  createInMemoryMemoryFilesIo,
-  type InMemoryMemoryFilesIo,
-  type MemoryFilesIo,
-} from './Io'
+export type { InMemoryMemoryFilesIo, MemoryFilesIo } from './Io'
+export { createInMemoryMemoryFilesIo } from './Io'
 export { createNodeMemoryFilesIo } from './NodeIo'

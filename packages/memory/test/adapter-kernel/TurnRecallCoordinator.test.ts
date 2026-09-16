@@ -1,7 +1,7 @@
 import { describe, expect, setSystemTime, test } from 'bun:test'
 
-import type { MemoryRecallItem, MemoryRecallOptions } from '../../src'
 import { MemoryTurnRecallCoordinator } from '../../src/adapter-kernel/TurnRecallCoordinator'
+import type { MemoryRecallItem, MemoryRecallOptions } from '../../src/memory-tree/Types'
 
 const RecallItem: MemoryRecallItem = {
   id: 'memory-1',

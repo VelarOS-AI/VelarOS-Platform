@@ -3,4 +3,25 @@
  *
  * 本入口只导出类型；`SQLite`、`LanceDB`、摄入、工具和运行时实现仍由包根入口提供。
  */
-export type * from './knowledge/domain/Types.js'
+export type {
+  KnowledgeDiagnostics,
+  KnowledgeEmbeddingProviderId,
+  KnowledgeFileIndexStats,
+  KnowledgeIndexRuntime,
+  KnowledgeIndexStatus,
+  KnowledgeMatchType,
+  KnowledgeRecord,
+  KnowledgeReindexFailure,
+  KnowledgeReindexOptions,
+  KnowledgeReindexResult,
+  KnowledgeSearchOptions,
+  KnowledgeSearchResult,
+  KnowledgeSourceKind,
+  KnowledgeSourceKindCounts,
+  KnowledgeUpsertInput,
+  KnowledgeVectorIndexInfo,
+  KnowledgeVectorStoreStats,
+  KnowledgeWorkspaceSyncOptions,
+  KnowledgeWorkspaceSyncResult,
+  KnowledgeWorkspaceSyncState,
+} from './knowledge/domain/Types.js'

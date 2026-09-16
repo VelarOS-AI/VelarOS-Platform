@@ -9,8 +9,8 @@
 
 import { describe, expect, test } from 'bun:test'
 
-import type { MemoryRecallItem } from '../../src'
-import { memoryTools } from '../../src/tools/memory'
+import type { MemoryRecallItem } from '../../src/memory-tree/Types'
+import { memoryTools } from '../../src/tools/memory/Memory.tool'
 import type { MemoryApi, MemoryToolContext } from '../../src/Types'
 
 function createRecallItem(patch: Partial<MemoryRecallItem> = {}): MemoryRecallItem {
