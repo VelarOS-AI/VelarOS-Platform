@@ -145,5 +145,12 @@
 
 - [x] ① system 结构复查（386ea2d、114a6c3、d692e79）
 - [ ] ② system 复查修 bug（已完成：18 条，9 个提交 21fcb91…c8a2983）、定为仓库标准（已完成）；project 改造（已完成：工具面 8d7513e、入口 bc93fd0、错误码 1ea639d、实现层四路、卡片与不变量，门禁零条）；project 复查修 bug（两份评审已回，修复排队中）
-- [ ] ③ 公共逻辑抽取（已完成：shell-command、rehearsal-sandbox、内核可调用操作表进 agent/tool-contract、project 迁入、text-files、platform 路径包含判断 c9564d45、core 真实路径 7c39d5c9；进行中：path-rules 与两边迁移；待做：工具定义辅助与内核模块样板、工具失败构造器）
+- [x] ③ 公共逻辑抽取（已完成：shell-command、rehearsal-sandbox、内核可调用操作表进 agent/tool-contract、project 迁入、text-files、platform 路径包含判断 c9564d45、core 真实路径 7c39d5c9；进行中：path-rules 与两边迁移；待做：工具定义辅助与内核模块样板、工具失败构造器）
 - [ ] 其余包：方案全部写完并归档在 `refactor-plans/`；缺陷修复已完成 model、memory、office、computer、browser、kernel、project（七小包在跑）；agent 第 1–3a 步完成、3b 在跑；browser、memory 包内改造第一段完成。等你拍板的项汇总在 `foundation-pending-decisions.md`：agent → browser → memory → kernel → model → office → agent-lab → development → core → html-artifacts → computer → cli → document-renderer → surface-protocol
+
+**停在这里（09-16 18:20，全量 `bun run check` 退出码 0、工作区干净）。** 这一段共 101 个提交、1446 个文件、+78,949 / −46,625。
+- 缺陷修复全部完成：project（实现层 14 条 + 产品层 49 条）、memory（3 条 P0 安全 + 16 条）、kernel（24 条，含权限闸绕过与守护进程起不来）、browser（11 条）、office/computer（9 条）、model（6 条）、七个小包（15 条）。
+- 公共件：shell-command、rehearsal-sandbox、text-files、path-rules 四个新包，外加 platform 的路径包含判断与 core 的真实路径。
+- 结构改造：system、project 达标；agent 第 1–4 步（第 4 步差常量表收尾）；browser、memory 完成包内第一段。
+- 模型面：project 九个工具收成七个、说明 6,436 → 4,663 字、147 个字段说明补齐、指纹已重算。
+- 等你拍板的项在 `foundation-pending-decisions.md`，方案与评审底稿在 `refactor-plans/`。
