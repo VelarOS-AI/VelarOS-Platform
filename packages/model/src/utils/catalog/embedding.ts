@@ -95,7 +95,7 @@ export function filterEmbeddingModels(candidateModels: readonly string[]): strin
 
 /** 这次目录是给 embedding 用时只留 embedding 模型；聊天用途原样返回。 */
 export function filterModelsForPurpose<TEntry extends { id: string }>(
-  purpose: 'chat' | 'embedding' | undefined,
+  purpose: Optional<'chat' | 'embedding'>,
   models: TEntry[]
 ): TEntry[] {
   if (purpose !== 'embedding') return models

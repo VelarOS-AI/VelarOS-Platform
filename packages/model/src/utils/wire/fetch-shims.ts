@@ -60,11 +60,10 @@ export function injectOllamaContextWindow<TInit extends object>(
   }
 }
 
-/** 往 JSON 请求体里合并几个顶层字段；解析不出 JSON 时原样放行。 */
+/** 往 JSON 请求体里合并几个顶层字段；解析不出 JSON 时原样放行，不让兼容层把请求打坏。 */
 export function mergeJsonRequestBody<TInit extends object>(
   init: Optional<TInit>,
-  merge: (body: Record<string, unknown>) => Record<string, unknown>,
-  onFailure: (error: unknown) => void
+  merge: (body: Record<string, unknown>) => Record<string, unknown>
 ): Optional<TInit> {
   const rawBody = (init as { body?: unknown } | undefined)?.body
   if (!isString(rawBody)) return init
@@ -78,7 +77,9 @@ export function mergeJsonRequestBody<TInit extends object>(
       body: JSON.stringify(merge(body)),
     } as TInit
   } catch (error) {
-    onFailure(error)
+    Log.tag('OpenAIModelAdapter').debug('注入 OpenRouter 路由请求体失败，保留原始初始化参数', {
+      error,
+    })
     return init
   }
 }

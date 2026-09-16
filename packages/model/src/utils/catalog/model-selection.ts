@@ -1,4 +1,4 @@
-import { first, isBlank } from '@velaros-ai/core'
+import { first, isBlank, toNullable } from '@velaros-ai/core'
 
 import { CustomModelProviderIds, OpenRouterCompatibleProviderIds } from '../../contract/constants.js'
 import type { ChatProviderId, ProviderModelResolution } from '../../types/model'
@@ -28,7 +28,7 @@ export function isCustomModelProvider(providerId: ChatProviderId): boolean {
 export function getSharedProviderCatalogOrNull(
   providerId: ChatProviderId
 ): Nullable<SharedProviderCatalog> {
-  return findSharedProviderCatalogDefinition(providerId) ?? null
+  return toNullable(findSharedProviderCatalogDefinition(providerId))
 }
 
 /** 这个 provider 静态目录里的全部模型 id。 */

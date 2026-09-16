@@ -141,9 +141,6 @@ class OpenAIModelAdapter extends ModelAdapter implements ModelProviderAdapter {
         }
 
         return nextBody
-      },
-      (error) => {
-        this.log.debug('注入 OpenRouter 路由请求体失败，保留原始初始化参数', { error })
       }
     )
   }
