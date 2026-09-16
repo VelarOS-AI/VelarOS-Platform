@@ -8,6 +8,7 @@
 
 import { isEmpty } from './utils/array.js'
 import { optionalWhen } from './utils/optionalWhen.js'
+import { clampToCodePointBoundary } from './utils/string.js'
 import { isArray, isBoolean, isNumber, isObject, isPlainObject,isPresent, isString } from './typeGuards'
 
 export type ErrorCode =
@@ -19,6 +20,8 @@ export type ErrorCode =
   | 'VALIDATION'
   | 'NOT_FOUND'
   | 'TIMEOUT'
+  /** 能力当下不可用（后端没装、没就绪、被关掉）；调用方应当降级，而不是当成失败重试。 */
+  | 'UNAVAILABLE'
   | 'ASSERTION'
   | 'INVARIANT'
   | 'LOG_FAILURE'
@@ -215,10 +218,11 @@ export class AppError extends Error {
     )
   }
 
+  /** 截断字符串化后的错误对象；切口按码点边界回退，不把代理对切成孤立代理项。 */
   private static truncate(value: string, maxLength: number): string {
     if (value.length <= maxLength) return value
 
-    return `${value.slice(0, maxLength - 1)}…`
+    return `${value.slice(0, clampToCodePointBoundary(value, maxLength - 1))}…`
   }
 
   private static isSerializedError(value: unknown): value is SerializedError {

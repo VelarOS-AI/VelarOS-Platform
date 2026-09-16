@@ -160,7 +160,7 @@
     },
     "packages/core": {
       "name": "@velaros-ai/core",
-      "version": "0.4.2",
+      "version": "0.4.3",
       "devDependencies": {
         "@types/node": "^22.19.17",
         "typescript": "^5.7.0",

@@ -75,7 +75,7 @@ export function optionalWhen<T, F = undefined>(
   if (typeof conditionOrGuard === 'function') {
     if (!isOptionalWhenTypeGuard<T>(conditionOrGuard)) {
       throw new TypeError(
-        `optionalWhen only accepts TypeGuards predicate functions as guards; received ${describeOptionalWhenFunction(conditionOrGuard)}.`,
+        `optionalWhen 的守卫位只接受 TypeGuards 里的谓词函数，收到的是 ${describeOptionalWhenFunction(conditionOrGuard)}。`,
       )
     }
     return conditionOrGuard(value) ? (value as T) : fallback

@@ -176,7 +176,7 @@ export class LogRuntime implements GlobalLog {
 
   public addTransport(transport: LogTransport): void {
     if (this.transports.has(transport.id)) {
-      throw new LogError('LogRuntime', `Transport already exists: ${transport.id}`)
+      throw new LogError('LogRuntime', `已经有同名的日志输出端了：${transport.id}`)
     }
 
     this.transports.set(transport.id, transport)

@@ -132,7 +132,7 @@
       "domain": "core",
       "directory": "packages/core",
       "name": "@velaros-ai/core",
-      "version": "0.4.2",
+      "version": "0.4.3",
       "description": "VelarOS 跨领域共享基础工具：断言、错误、结果、类型守卫与无领域语义的通用原语。",
       "exportSubpaths": [
         ".",
