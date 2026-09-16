@@ -258,6 +258,31 @@ export const GovernedModules = [
     acceptance: 'spec/acceptance.test.ts',
   },
   {
+    directory: 'cli',
+    name: '@velaros-ai/cli',
+    // 没有工具：不登记 toolsFile、toolDefiner、hostPort。可执行入口是包根的 bin/velaros.mjs
+    contract: 'src/contract',
+    types: 'src/types',
+    portable: 'cli.ts',
+    impl: 'src/impl',
+    utils: 'src/utils',
+    exports: 'src/exports',
+    // 根入口要起子进程（node:child_process），只有可移植数据这一个入口渲染进程能加载
+    browserSafeEntries: ['contracts.ts'],
+    environmentTable: 'CliEnvironmentVariables',
+    layers: [
+      // 进程壳：可执行文件把 argv 与环境交给它
+      ['VelarosCliProcess.ts'],
+      // 路由器：命名空间集合与一次路由
+      ['VelarosCliRouter.ts'],
+      // 命名空间：velaros terminal
+      ['TerminalNamespace.ts'],
+    ],
+    card: 'MODULE.md',
+    invariants: 'spec/invariants.md',
+    acceptance: 'spec/acceptance.test.ts',
+  },
+  {
     directory: 'browser',
     name: '@velaros-ai/browser',
     // 改造中：卡片与验收还没写；status 标 migrating，门禁照查照报剩下多少条，不计入失败。
