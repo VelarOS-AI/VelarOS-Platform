@@ -317,7 +317,7 @@ describe('删除与重命名按原样重建文件', () => {
     const plans: ProjectTransactionPendingOperation[] = []
     const originalCommit = FileProjectTransactionStateStore.prototype.commit
     FileProjectTransactionStateStore.prototype.commit = function (input) {
-      if (input.pending) plans.push(structuredClone(input.pending))
+      for (const plan of input.pendings ?? []) plans.push(structuredClone(plan))
       return originalCommit.call(this, input)
     }
     try {
@@ -336,7 +336,7 @@ describe('删除与重命名按原样重建文件', () => {
           status: applyPlan!.previousStatus,
         })),
         projections: snapshot.projections,
-        pending: applyPlan,
+        pendings: [applyPlan],
       })
       await createProjectKernel({ root, transactionStatePath: statePath })
       expect(await readFile(join(root, 'legacy.txt'))).toEqual(Utf16Bytes)

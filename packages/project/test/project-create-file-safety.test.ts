@@ -146,7 +146,7 @@ describe('create_file 不静默覆盖、回滚不丢原文', () => {
     let rollbackCommit: Parameters<FileProjectTransactionStateStore['commit']>[0] | undefined
     const originalCommit = FileProjectTransactionStateStore.prototype.commit
     FileProjectTransactionStateStore.prototype.commit = function (input) {
-      if (input.pending?.kind === 'rollback') rollbackCommit = structuredClone(input)
+      if (input.pendings?.some((plan) => plan.kind === 'rollback')) rollbackCommit = structuredClone(input)
       return originalCommit.call(this, input)
     }
     try {
@@ -155,7 +155,7 @@ describe('create_file 不静默覆盖、回滚不丢原文', () => {
       await project.applyEdit({ transactionId: transaction.transactionId })
       await project.rollback({ transactionId: transaction.transactionId })
       expect(await readFile(join(root, 'keep.txt'), 'utf8')).toBe(Precious)
-      expect(rollbackCommit?.pending?.restore).toEqual([
+      expect(rollbackCommit?.pendings?.[0]?.restore).toEqual([
         { path: 'keep.txt', exists: true, content: 'new\n', bytes: Buffer.from('new\n').toString('base64'), encoding: undefined, mode: (await stat(join(root, 'keep.txt'))).mode & 0o777, ownedStates: [{ exists: true, content: Precious, bytes: Buffer.from(Precious).toString('base64') }] },
       ])
 

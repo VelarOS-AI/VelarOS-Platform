@@ -66,7 +66,7 @@
 | `project:edit`、`project:file`、`project:change` | 执行门写锁 → 按 fileRef 取回读取时的版本与可见范围 → 规划成编辑意图（范围越界、定位不唯一在这里拒绝）→ 内核准备事务（补丁、差量、风险，不碰磁盘）→ 修改授权 → 应用（校验、审批、按版本核对、全成或全逆序还原）→ 回执带新 fileRef 与 changeRef；失败标 not-applied，入参可复用 |
 | `project:code` | 执行门读锁 → 翻译成宿主代码查询（语言服务类由宿主语言服务执行，代码索引类由代码图谱执行）→ 附来源、覆盖与降级信息 |
 | `project:code-analysis` | 宿主有代码图后端时单独登记 → 执行门读锁 → trace、cycles、deadcode、routing 翻译成代码索引类查询交给宿主 → 附来源与覆盖 |
-| `project:run` | 命令判定（`@velaros-ai/shell-command`）→ 危险命令每次由用户亲自确认 → 会改项目的先过修改授权 → 前台在执行门里跑（只读走读锁）、后台交宿主的任务管理 |
+| `project:run` | 命令判定（`@velaros-ai/shell-command`）→ 危险命令每次由用户亲自确认 → 会改项目的先过修改授权 → 前台在执行门里跑（只读走读锁）、后台交宿主的任务管理 → 输出经宿主的脱敏后端 |
 | `project:sandbox` | create 只镜像项目之内的目录；run 在镜像里跑（危险命令照样确认）；diff 看变化；apply 向宿主要不截断的完整差量，`rehearsalSandboxRules.prepareApply` 核对并给出确认请求，过修改授权与用户确认后连同差量指纹交给宿主落回；discard 删镜像 |
 
 ## 依赖什么
@@ -84,26 +84,27 @@
 
 ## 状态归谁
 
-- **领域内核**：每个项目根一个 `LocalProjectKernel`，持有事务仓库（内存里保留最近的事务，可选落盘的事务状态文件）、路径锁、审计日志（内存，有上限）、解析过的目标与证据包（有上限）、插件与登记表。
+- **领域内核**：每个项目根一个 `LocalProjectKernel`，持有事务仓库（内存里保留最近的事务，可选落盘的事务状态文件）、路径锁、审计日志（内存，有上限）、解析过的目标与证据包（有上限）、插件与登记表。可撤销历史按条数和字节预算（`ProjectTuning.persistence.historyBytes`，内存与状态文件共用）双重淘汰，最旧先出；还没应用的事务与正在写盘的事务永远保留，所以历史再大也不会让提交失败。
 - **变更记录**：宿主给的写端（落盘的用 `createFileProjectChangeFeed`，放在宿主私有目录），不给就在内存里。
 - **fileRef 与续读引用**：记录存在会话的上下文载荷里（`contextPayloadStore`），没有载荷存储时退回进程内存，按作用域隔离。
 - **执行门**：进程内按项目根排队，只在内存里。
 
 ## 生命周期
 
-内核随宿主创建、随宿主丢弃，没有要释放的句柄；落盘的变更记录要 `close()`。给了事务状态文件时，重启后内核先恢复中断的应用或回滚，只还原能证明属于该事务的内容。
+内核随宿主创建、随宿主丢弃，没有要释放的句柄；落盘的变更记录要 `close()`。给了事务状态文件时，重启后内核逐个恢复中断的应用或回滚（并发的事务各有各的恢复点），只还原能证明属于该事务的内容。
 
 ## 失败语义
 
 - 错误原因只来自 `ProjectErrorCodes`，挂在 `ProjectError.reason`；经内核调用时翻成 `AppError`，原因在 `context.projectError`。
 - 改动类失败在回执里标 `details.executionOutcome = 'not-applied'`，入参可复用（`inputReuse`）。
-- 版本过期 `BASE_REVISION_MISMATCH`、越出可见范围或项目 `SCOPE_VIOLATION` / `PERMISSION_DENIED`、撤销遇外部修改 `CONFLICT_WITH_EXTERNAL_EDIT`、生成文件 `GENERATED_FILE`、重启恢复遇到无法归属的改动 `TRANSACTION_RECOVERY_CONFLICT`。
+- 版本过期 `BASE_REVISION_MISMATCH`、越出可见范围或项目 `SCOPE_VIOLATION` / `PERMISSION_DENIED`、撤销遇外部修改 `CONFLICT_WITH_EXTERNAL_EDIT`、生成文件 `GENERATED_FILE`、重启恢复遇到无法归属的改动 `TRANSACTION_RECOVERY_CONFLICT`、模型给的正则写错或跑不完 `INVALID_INPUT`。
+- 改动已被字节预算挤出可撤销历史时，撤销报 `NOT_SUPPORTED` 并说明没有留下撤销记录（改动本身仍在变更记录里可查）；事务号根本不存在才是 `INVALID_INPUT`。
 - 命令自己失败不抛错，如实写进回执；用户或宿主拒绝时返回 `skipped`，不执行。
 
 ## 不变量
 
-共 12 条，登记在 `spec/invariants.md`，验收用例在 `spec/acceptance.test.ts`。编号只增不重排。
-按检验方式：测试 10 条、类型 1 条、门禁 1 条。未验证 0 条。
+共 13 条，登记在 `spec/invariants.md`，验收用例在 `spec/acceptance.test.ts`。编号只增不重排。
+按检验方式：测试 11 条、类型 1 条、门禁 1 条。未验证 0 条。
 
 ## 非目标
 

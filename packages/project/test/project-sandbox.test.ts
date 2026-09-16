@@ -28,13 +28,18 @@ function fakePort(calls: Array<Record<string, unknown>>, overrides: Partial<Sand
   }
 }
 
-/** 工具上下文：授权与确认按给定方式回答，宿主端口可有可无。 */
-function contextFor(options: { port?: ProjectSandboxPort; approved?: boolean; confirmed?: boolean }): ProjectToolContext {
+/** 工具上下文：授权与确认按给定方式回答，宿主端口可有可无；内核只提供落回的写治理与命令输出脱敏两件事。 */
+function contextFor(options: { port?: ProjectSandboxPort; approved?: boolean; confirmed?: boolean; blockedPaths?: string[]; redact?: boolean }): ProjectToolContext {
+  const blocked = new Set(options.blockedPaths ?? [])
   const project: Record<string, unknown> = {
     getRootPath: () => root,
     runInDirectory: async (_path: string, run: () => Promise<unknown>) => run(),
     runWithApproval: async (run: () => Promise<unknown>) => run(),
-    kernel: async () => { throw new Error('not needed') },
+    kernel: async () => ({
+      authorizeWrites: async (paths: readonly string[]) =>
+        paths.map((path) => (blocked.has(path) ? { path, allowed: false, reason: 'GENERATED_FILE', message: `${path} 是生成文件` } : { path, allowed: true })),
+      redactText: async ({ content }: { content: string }) => (options.redact ? { content: content.replace(/sk-[a-z0-9-]+/gi, '[REDACTED]'), redacted: true } : { content, redacted: false }),
+    }),
     prepareMutation: async () => ({ approved: options.approved !== false, rootPath: root, rejectionMessage: 'fixture rejected' }),
     runCommand: async () => { throw new Error('not needed') },
     queryCode: async () => ({}),
@@ -67,8 +72,9 @@ describe('project:sandbox', () => {
     expect(whole.note).toContain(whole.root)
     const sub = await call({ action: 'create', source: 'packages/app', network: true, ignored: 'copy' }, context) as { source: string; network: boolean; ignored: string }
     expect(sub).toMatchObject({ source: join(root, 'packages', 'app'), network: true, ignored: 'copy' })
-    await expect(call({ action: 'create', source: '../elsewhere' }, context)).rejects.toMatchObject({ code: 'VALIDATION' })
-    await expect(call({ action: 'create', source: '/etc' }, context)).rejects.toMatchObject({ code: 'VALIDATION' })
+    // 源出了项目（含经符号链接指到项目外）按 PERMISSION_DENIED 拒绝；挂进内核后这个 reason 就是能力错误的码。
+    await expect(call({ action: 'create', source: '../elsewhere' }, context)).rejects.toMatchObject({ reason: 'PERMISSION_DENIED' })
+    await expect(call({ action: 'create', source: '/etc' }, context)).rejects.toMatchObject({ reason: 'PERMISSION_DENIED' })
     // 名字以 .. 开头的目录在项目之内，照常接受。
     const dotted = await call({ action: 'create', source: '..cache' }, context) as { source: string }
     expect(dotted.source).toBe(join(root, '..cache'))
@@ -124,6 +130,37 @@ describe('project:sandbox', () => {
     fullApproval.awaitConfirmationDecision = async (message: string) => { full.push(message); return fullOriginal(message) }
     await call({ action: 'apply', sandboxId: 'sb' }, fullContext)
     expect(full[0]).toContain('新增 2100 个')
+  })
+
+  test('落回前每条路径都过项目的写授权：有不许写的就在问用户之前整批拒绝', async () => {
+    const calls: Array<Record<string, unknown>> = []
+    const asked: string[] = []
+    const context = contextFor({ port: fakePort(calls), blockedPaths: ['src/a.ts'] })
+    const approval = context.approval as unknown as { awaitConfirmationDecision: (message: string) => Promise<unknown> }
+    const original = approval.awaitConfirmationDecision
+    approval.awaitConfirmationDecision = async (message: string) => { asked.push(message); return original(message) }
+
+    const refusal = await call({ action: 'apply', sandboxId: 'sb' }, context).catch((error: { code: string; message: string }) => error)
+    expect(refusal).toMatchObject({ code: 'VALIDATION' })
+    expect((refusal as { message: string }).message).toContain('src/a.ts（GENERATED_FILE）')
+    expect((refusal as { message: string }).message).toContain('用 paths 点名要落的文件')
+    // 问用户之前就拒绝，被拒的一个都不落。
+    expect(asked).toEqual([])
+    expect(calls.some((entry) => 'apply' in entry)).toBe(false)
+
+    // 把不许写的那条从 paths 里去掉，剩下的照常落回。
+    const allowed = await call({ action: 'apply', sandboxId: 'sb', paths: ['src/new.ts'] }, contextFor({ port: fakePort(calls), blockedPaths: ['src/a.ts'] })) as { created: string[] }
+    expect(allowed.created).toEqual(['src/new.ts'])
+  })
+
+  test('沙箱里跑命令的输出和 project:run 一样过脱敏', async () => {
+    const calls: Array<Record<string, unknown>> = []
+    const context = contextFor({ port: fakePort(calls, {}), redact: true })
+    const port = context.project.sandbox as unknown as { runInSandbox: (options: unknown) => Promise<unknown> }
+    port.runInSandbox = async () => ({ command: 'cat .env', cwd: '/tmp', exitCode: 0, stdout: 'TOKEN=sk-live-abcdefghijkl\n', stderr: 'sk-live-abcdefghijkl', success: true })
+    const ran = await call({ action: 'run', sandboxId: 'sb', command: 'cat .env' }, context) as { stdout: string; stderr: string }
+    expect(ran.stdout).toBe('TOKEN=[REDACTED]\n')
+    expect(ran.stderr).toBe('[REDACTED]')
   })
 
   test('diff and discard pass straight through', async () => {

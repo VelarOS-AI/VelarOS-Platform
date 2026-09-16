@@ -14,11 +14,20 @@ import { ProjectTuning } from '../tuning.js'
 import { isDeletePatch } from './patch-chain.js'
 import { createsMissingFile } from './patch-ownership.js'
 
-/** 事务状态文件的格式版本：legacy 是没有字节计划的旧格式，只读不写；current 是现在写出的格式。 */
+/**
+ * 事务状态文件的格式版本。旧的两版只读不写，读回时单槽位的 pending 归一成只有一项的 pendings。
+ * legacy：没有字节计划、未完成操作只有一个槽位；bytePlans：加了字节计划，仍是单槽位；current：未完成操作按事务号并存（pendings）。
+ */
 export const TransactionStateFormatVersions = Object.freeze({
   legacy: 1,
-  current: 2,
+  bytePlans: 2,
+  current: 3,
 } as const)
+
+/** 这一版格式认不认识字节计划。 */
+function supportsBytePlans(formatVersion: unknown): boolean {
+  return formatVersion === TransactionStateFormatVersions.bytePlans || formatVersion === TransactionStateFormatVersions.current
+}
 
 /** 按事务状态文件损坏抛 TRANSACTION_RECOVERY_CONFLICT：message 是哪一项没通过（同时放进 details.stateValidationFailure），建议先保全两侧再人工恢复。 */
 export function invalidTransactionState(message: string): never {
@@ -250,17 +259,37 @@ function assertPending(value: unknown): asserts value is ProjectTransactionPendi
   }
 }
 
+/** 核对一个未完成操作指向的事务：事务存在、状态对得上、恢复路径正好是它的改动文件。 */
+function assertPendingAgainstTransactions(
+  pending: ProjectTransactionPendingOperation,
+  transactionsById: ReadonlyMap<string, StoredTransaction>,
+): void {
+  const transaction = transactionsById.get(pending.transactionId)
+  if (!transaction) invalidTransactionState('pending transaction is missing')
+  if (transaction.status !== pending.previousStatus) invalidTransactionState('pending transaction status mismatch')
+  const changedFiles = new Set(transaction.changedFiles)
+  if (
+    pending.restore.length !== changedFiles.size ||
+    pending.restore.some((entry) => !changedFiles.has(entry.path))
+  ) {
+    invalidTransactionState('pending restore paths do not match transaction')
+  }
+}
+
 /**
  * 核对整份事务状态：格式版本、revision、项目根一致，事务与投影各自合法且事务号不重复，字节计划合法，
- * 未完成操作指向的事务存在、状态对得上、恢复路径正好是它的改动文件；任何一项不过都按状态文件损坏抛出。
+ * 每个未完成操作指向的事务存在、状态对得上、恢复路径正好是它的改动文件，同一事务最多一个未完成操作；
+ * 任何一项不过都按状态文件损坏抛出。
  */
 export function assertTransactionStateSnapshot(
   value: unknown,
   root: string,
 ): asserts value is ProjectTransactionStateSnapshot {
   if (!isRecord(value)) invalidTransactionState('root object')
-  if (value.formatVersion !== TransactionStateFormatVersions.legacy && value.formatVersion !== TransactionStateFormatVersions.current) invalidTransactionState('format version')
-  if (value.formatVersion === TransactionStateFormatVersions.legacy && !isUndefined(value.bytePlans)) invalidTransactionState('byte plans require state version 2')
+  if (!Object.values(TransactionStateFormatVersions).includes(value.formatVersion as never)) invalidTransactionState('format version')
+  if (!supportsBytePlans(value.formatVersion) && !isUndefined(value.bytePlans)) invalidTransactionState('byte plans require state version 2')
+  if (value.formatVersion !== TransactionStateFormatVersions.current && !isUndefined(value.pendings)) invalidTransactionState('pending operations require state version 3')
+  if (value.formatVersion === TransactionStateFormatVersions.current && !isUndefined(value.pending)) invalidTransactionState('state version 3 records pending operations in pendings')
   if (!Number.isSafeInteger(value.revision) || (value.revision as number) < 0) invalidTransactionState('revision')
   if (value.root !== root) invalidTransactionState('project root mismatch')
   if (!isArray(value.transactions) || value.transactions.length > ProjectTuning.persistence.stateTransactions)
@@ -281,20 +310,29 @@ export function assertTransactionStateSnapshot(
     projectionIds.add(projection.transactionId)
   }
   const pending = value.pending
-  if (!isUndefined(pending)) assertPending(pending)
+  if (!isUndefined(pending)) {
+    assertPending(pending)
+    assertPendingAgainstTransactions(pending, transactionsById)
+  }
 
-  if (pending) {
-    const transaction = transactionsById.get(pending.transactionId)
-    if (!transaction) invalidTransactionState('pending transaction is missing')
-    if (transaction.status !== pending.previousStatus) invalidTransactionState('pending transaction status mismatch')
-    const changedFiles = new Set(transaction.changedFiles)
-    if (
-      pending.restore.length !== changedFiles.size ||
-      pending.restore.some((entry) => !changedFiles.has(entry.path))
-    ) {
-      invalidTransactionState('pending restore paths do not match transaction')
+  const pendings = value.pendings
+  if (!isUndefined(pendings)) {
+    if (!isArray(pendings) || pendings.length > ProjectTuning.persistence.stateTransactions) invalidTransactionState('pending operations')
+    const pendingIds = new Set<string>()
+    for (const entry of pendings) {
+      assertPending(entry)
+      if (pendingIds.has(entry.transactionId)) invalidTransactionState('duplicate pending transaction id')
+      pendingIds.add(entry.transactionId)
+      assertPendingAgainstTransactions(entry, transactionsById)
     }
   }
+}
+
+/** 读回的状态归一成现行形状：旧格式的单槽位 pending 变成只有一项的 pendings，调用方只看 pendings。 */
+export function normalizeTransactionState(value: ProjectTransactionStateSnapshot): ProjectTransactionStateSnapshot {
+  if (isUndefined(value.pending)) return value
+  const { pending, ...rest } = value
+  return { ...rest, pendings: [pending] }
 }
 
 /** 深拷贝一份事务状态（JSON 往返）：进出状态文件都复制，外面改不到里面存的那份。 */

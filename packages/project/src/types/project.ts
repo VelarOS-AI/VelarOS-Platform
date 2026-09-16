@@ -136,6 +136,18 @@ export interface ProjectMutationAuthorizationInput {
   activate?: boolean
 }
 
+/** 一条路径的写治理判定：不许写时 reason 是合同错误原因（PERMISSION_DENIED、SCOPE_VIOLATION、PROTECTED_FILE、GENERATED_FILE）。 */
+export interface ProjectWriteAuthorization {
+  /** 判定的是哪条路径，原样回给调用方。 */
+  path: string
+  /** 项目允不允许写这条路径。 */
+  allowed: boolean
+  /** 不许写时的原因码。 */
+  reason?: string
+  /** 不许写时给模型看的说明。 */
+  message?: string
+}
+
 /** 项目变更的授权范围。 */
 export type ProjectMutationAuthorizationScope = 'operation' | 'project'
 

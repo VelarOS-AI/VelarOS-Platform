@@ -7,8 +7,8 @@ import { resolve } from 'node:path'
 
 import { describe, expect, test } from 'bun:test'
 
+import type { ApprovalPort } from '../../packages/agent/src/contract/requires.js'
 import { CodingSessionTracker } from '../../packages/agent/src/impl/session/CodingSessionTracker'
-import type { ApprovalPort } from '../../packages/agent/src/impl/tools/DefaultDenyApprovalPort'
 import { createTaskApprovalPort } from '../../packages/agent/src/utils/toolkit/task-approval'
 import type { ProjectToolContext } from '../../packages/project/src/contract/requires'
 import { projectTools } from '../../packages/project/src/impl/ProjectTools'
@@ -54,7 +54,9 @@ function tools(approved: boolean) {
       runInDirectory: async (_path, action) => action(), runWithApproval: async (action) => action(),
       prepareMutation: async () => ({ approved: true, rootPath: workspaceRoot, switched: false,
         alreadyAuthorized: true, rejectionMessage: null, message: 'allowed' }),
-      kernel: unused, queryCode: unused,
+      // project:run 的输出要过项目的脱敏后端，所以这里给一个只做脱敏的内核替身。
+      kernel: async () => ({ redactText: async ({ content }: { content: string }) => ({ content, redacted: false }) }) as never,
+      queryCode: unused,
     },
   }
   return { system, project, tracker, cards: () => cards, runs: () => runs }

@@ -78,7 +78,7 @@ test.each([false, true])(
       const privateState = JSON.parse(
         await readFile(transactionStatePath, "utf8"),
       );
-      expect(privateState.formatVersion).toBe(2);
+      expect(privateState.formatVersion).toBe(3);
       expect(privateState.bytePlans[0].patches[0].before).toBe(
         original.toString("base64"),
       );
@@ -212,7 +212,7 @@ test("version 1 state loads and upgrades on the next durable commit", async () =
   });
   expect(
     JSON.parse(await readFile(transactionStatePath!, "utf8")).formatVersion,
-  ).toBe(2);
+  ).toBe(3);
 });
 
 test("interrupted apply restores raw backups from the private write-ahead state", async () => {
@@ -229,7 +229,7 @@ test("interrupted apply restores raw backups from the private write-ahead state"
     input,
   ) {
     const result = commit.call(this, input);
-    if (input.pending) pending = result;
+    if (input.pendings?.length) pending = result;
     return result;
   });
   try {
@@ -237,7 +237,7 @@ test("interrupted apply restores raw backups from the private write-ahead state"
   } finally {
     hook.mockRestore();
   }
-  expect(pending?.pending).toBeDefined();
+  expect(pending?.pendings?.[0]).toBeDefined();
   await writeFile(transactionStatePath!, JSON.stringify(pending));
   const reopened = await createProjectKernel({ root, transactionStatePath });
   expect(await readFile(join(root, "a.txt"))).toEqual(original);

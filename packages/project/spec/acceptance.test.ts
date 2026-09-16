@@ -111,6 +111,27 @@ describe('编辑的边界', () => {
       .rejects.toMatchObject({ reason: 'GENERATED_FILE', suggestedNextAction: expect.stringContaining('project:run') })
     await expect(readFile(join(root, 'src/api.generated.ts'))).rejects.toThrow()
   })
+
+  test('INV-16 演练沙箱落回过同一套写治理：有一条不许写就在问用户之前整批拒绝，一个文件都不落', async () => {
+    const applied: unknown[] = []
+    const sandbox = {
+      createSandbox: async () => ({ id: 'sb', root: join(root, '.mirror'), source: root, createdAt: 1, network: false, ignored: 'link' as const, fileCount: 1, bytes: 1, linkedDirectories: [], git: false }),
+      runInSandbox: async () => { throw new Error('用不到') },
+      diffSandbox: async () => ({ sandboxId: 'sb', source: root, created: ['src/api.generated.ts'], modified: ['notes.txt'], deleted: ['deploy.key'], truncated: false, gitChanged: false, textDiffs: [], omittedDiffs: 0, fingerprint: 'fp' }),
+      applySandbox: async (options: unknown) => { applied.push(options); return { sandboxId: 'sb', created: [], modified: [], deleted: [], skippedGit: false } },
+      discardSandbox: async () => ({ sandboxId: 'sb', removed: true }),
+    }
+    await writeFile(join(root, 'notes.txt'), 'notes\n')
+    const { call, confirmations, mutations } = await createProjectHarness(root, { sandbox: sandbox as never, corePolicy: { writeDeny: ['deploy.key'] } })
+    await expect(call('project:sandbox', { action: 'apply', sandboxId: 'sb' })).rejects.toMatchObject({ code: 'VALIDATION' })
+    // 生成文件与 writeDeny 的路径都点名了；拒绝发生在修改授权与用户确认之前，宿主一个文件都没落。
+    expect(mutations).toEqual([])
+    expect(confirmations).toEqual([])
+    expect(applied).toEqual([])
+    // 去掉不许写的两条之后，剩下的照常落回。
+    await call('project:sandbox', { action: 'apply', sandboxId: 'sb', paths: ['notes.txt'] })
+    expect(applied).toHaveLength(1)
+  })
 })
 
 describe('命令', () => {

@@ -83,3 +83,13 @@ export interface CommandRunResult {
   toolRequirements?: CommandToolRequirement[];
 }
 
+
+/** 解析可执行文件（utils/kernel/executable-path.ts）时可以换掉的三件事：按哪个平台的语义、读哪份环境变量、怎么判断文件在不在。 */
+export interface ExecutableLookupOptions {
+  /** 按哪个平台的语义解析（`win32` 或其他）；缺省当前进程的平台。 */
+  readonly platform?: string
+  /** 从哪份环境变量里读 PATH 与 PATHEXT；缺省当前进程的。 */
+  readonly env?: NodeJS.ProcessEnv
+  /** 判断一个候选文件在不在；缺省 existsSync。 */
+  readonly exists?: (candidate: string) => boolean
+}

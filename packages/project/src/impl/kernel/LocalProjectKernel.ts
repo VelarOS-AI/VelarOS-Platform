@@ -108,6 +108,7 @@ import type {
   SearchResult,
 } from '../../types/io.js'
 import type { CorePolicy, PolicyDecisionInput } from '../../types/policy.js'
+import type { ProjectWriteAuthorization } from '../../types/project.js'
 import type { ProjectRuntimeProviders } from '../../types/provider.js'
 import type { FileAttributes, FileSnapshot, ProjectSnapshot } from '../../types/snapshot.js'
 import type { ResolveTargetInput, ResolveTargetResult } from '../../types/target.js'
@@ -116,9 +117,12 @@ import type { ValidateInput, ValidationResult } from '../../types/validation.js'
 import { combineDiffs } from '../../utils/diff.js'
 import { ProjectError } from '../../utils/errors.js'
 import { metadataPaths } from '../../utils/files/git-index.js'
+import { matchesAny } from '../../utils/glob.js'
 import { runBatch } from '../../utils/kernel/batch.js'
 import { createCorePolicy } from '../../utils/kernel/policy.js'
-import { projectChangePatches } from '../../utils/transactions/change-records.js'
+import { boundedChangeIntents, projectChangePatches } from '../../utils/transactions/change-records.js'
+import { missingAncestorDirectories, removeEmptyDirectories } from '../../utils/transactions/created-directories.js'
+import { changeProjectionBytes, storedTransactionBytes, transactionBytePlanBytes } from '../../utils/transactions/history-budget.js'
 import { patchFileAttributes, withPatchFileAttributes } from '../../utils/transactions/patch-attributes.js'
 import { isCreatePatch, isDeletePatch, stagedContentAfter } from '../../utils/transactions/patch-chain.js'
 import {
@@ -161,6 +165,13 @@ import { NodeCommandProvider } from './NodeCommandProvider.js'
 export interface ProjectKernel {
   /** 对一段已经提交过的历史正文重新做读取授权与脱敏（文件上下文恢复时用），不重读可能已经变了的磁盘；路径被拒时抛 PERMISSION_DENIED。 */
   prepareContextSnapshot(input: { path: string; content: string }): Promise<{ content: string; redacted: boolean }>
+  /**
+   * 核对一批路径能不能由项目写：逐条给出能不能写和被谁拦下（越界、readDeny/writeDeny、宿主可见范围、protectedFiles、generatedFiles）。
+   * 不碰磁盘、不建事务、不发审批；沙箱落回这类「不经事务链的整批写入」在问用户之前用它过一遍写治理。
+   */
+  authorizeWrites(paths: readonly string[]): Promise<ProjectWriteAuthorization[]>
+  /** 把一段要交给模型的文字过一遍宿主的脱敏后端（没有后端时原样返回）：命令输出这类不带路径的文字也走它。 */
+  redactText(input: { content: string; path?: string }): Promise<{ content: string; redacted: boolean }>
   /** 工作区根目录的绝对路径。 */
   readonly root: string
   /** 生效的策略：内核缺省策略（ProjectPolicyDefaults）按宿主给的 corePolicy 覆盖后的结果。 */
@@ -253,6 +264,8 @@ class LocalProjectKernel implements ProjectKernel, ProjectPluginContext, LocalPr
   private readonly transactionRecovery: TransactionRecovery
   private readonly changeFeedWriter: ProjectChangeFeedWriter
   private readonly transactionState?: FileProjectTransactionStateStore
+  /** 未完成的提交或撤销，按事务号并存：并发的两个事务各占一项，谁都不会抹掉另一个的恢复计划。 */
+  private readonly durablePending = new Map<string, ProjectTransactionPendingOperation>()
   // 批处理工作池观测：当前在跑的批次数 + 最近一次批次的指标。
   private runningBatches = 0
   private lastBatchMetrics?: BatchMetrics
@@ -329,6 +342,8 @@ class LocalProjectKernel implements ProjectKernel, ProjectPluginContext, LocalPr
         this.transactionStateMachine.isTerminal(transaction.status),
       )
       this.transactionProjectionRepository.hydrate(durable.projections)
+      // 恢复期间每处理完一个未完成操作都会重写状态；先把全部装进内存，还没恢复的那些才不会被写没了。
+      for (const pending of durable.pendings ?? []) this.durablePending.set(pending.transactionId, pending)
     }
   }
 
@@ -358,12 +373,39 @@ class LocalProjectKernel implements ProjectKernel, ProjectPluginContext, LocalPr
     )
   }
 
-  private persistTransactionState(pending?: ProjectTransactionPendingOperation): void {
+  /**
+   * 可撤销历史按字节预算淘汰（最旧先出）：还没应用的事务、正在写盘的事务一个都不淘汰，
+   * 所以历史再大也不会让 apply 失败；单个事务自己就超预算时它应用完就不进历史，撤销时如实说没有撤销记录。
+   */
+  private capTransactionHistoryBytes(): void {
+    const bytePlans = this.transactionRecovery.captureBytePlans()
+    const retained = new Set(this.durablePending.keys())
+    for (const transaction of this.transactionRepository.values()) {
+      if (!this.transactionStateMachine.isTerminal(transaction.status)) retained.add(transaction.transactionId)
+    }
+    const evicted = this.transactionRepository.capBytes(
+      (transaction) => {
+        const projection = this.transactionProjectionRepository.get(transaction.transactionId)
+        const bytePlan = bytePlans.get(transaction.transactionId)
+        return (
+          storedTransactionBytes(transaction) +
+          (projection ? changeProjectionBytes(projection) : 0) +
+          (bytePlan ? transactionBytePlanBytes(bytePlan) : 0)
+        )
+      },
+      ProjectTuning.persistence.historyBytes,
+      retained,
+    )
+    this.deleteEvictedTransactionProjections(evicted)
+  }
+
+  private persistTransactionState(): void {
+    this.capTransactionHistoryBytes()
     this.transactionState?.commit({
       transactions: this.transactionStateValues(),
       bytePlans: this.transactionRecovery.persistedBytePlans(this.transactionStateValues()),
       projections: this.transactionProjectionValues(),
-      pending,
+      pendings: [...this.durablePending.values()],
     })
   }
 
@@ -392,7 +434,8 @@ class LocalProjectKernel implements ProjectKernel, ProjectPluginContext, LocalPr
     const previous =
       this.transactionProjectionRepository.get(tx.transactionId) ??
       this.changeFeedWriter.get(tx.transactionId)
-    const intents = [...(previous?.intents ?? []), ...newIntents]
+    // 变更记录是审计面：意图里的整份正文按上限截断，免得每次编辑都在内存与 changes.jsonl 里留一份正文副本。
+    const intents = boundedChangeIntents([...(previous?.intents ?? []), ...newIntents])
     const reasons = [...new Set(intents.map((intent) => intent.reason?.trim()).filter(isPresent))]
     return {
       transactionId: tx.transactionId,
@@ -586,6 +629,7 @@ class LocalProjectKernel implements ProjectKernel, ProjectPluginContext, LocalPr
       })
     await this.transactionRecovery.restore(pending, tx)
     tx.status = this.transactionStateMachine.restore(pending.previousStatus)
+    this.durablePending.delete(pending.transactionId)
     this.persistTransactionState()
   }
 
@@ -601,13 +645,24 @@ class LocalProjectKernel implements ProjectKernel, ProjectPluginContext, LocalPr
       previousStatus: tx.status,
       restore: this.transactionRecovery.durableRestorePlan(tx, kind, restoreByPath),
     }
-    this.persistTransactionState(pending)
+    this.durablePending.set(tx.transactionId, pending)
+    try {
+      this.persistTransactionState()
+    } catch (error) {
+      this.durablePending.delete(tx.transactionId)
+      throw error
+    }
     return pending
   }
 
+  /** 事务已经写完（或已经还原），它的恢复点不再需要；下一次落盘就不带它了。 */
+  private endDurableOperation(transactionId: string): void {
+    this.durablePending.delete(transactionId)
+  }
+
   public async initializeTransactionState(): Promise<void> {
-    const pending = this.transactionState?.snapshot().pending
-    if (pending) await this.restoreDurableOperation(pending)
+    // 逐个恢复：单槽位时代只能恢复最后一个，并发的另一个事务的半写就永远留在磁盘上了。
+    for (const pending of [...this.durablePending.values()]) await this.restoreDurableOperation(pending)
     this.reconcileDurableChangeFeed()
   }
 
@@ -902,6 +957,7 @@ class LocalProjectKernel implements ProjectKernel, ProjectPluginContext, LocalPr
       const transactionBeforePreflight = structuredClone(tx)
       const bytesBeforePreflight = this.transactionRecovery.captureBytePlans()
       let restoreByPath: Map<string, ApplyRestoreState>
+      let createdDirectories: string[] = []
       let pending: ProjectTransactionPendingOperation | undefined
 
       try {
@@ -980,6 +1036,10 @@ class LocalProjectKernel implements ProjectKernel, ProjectPluginContext, LocalPr
         // 写盘前先为每个受影响路径捕获原始状态，供失败回滚使用。
         // 注意：这里只读不写，不改变下面补丁的顺序写入与 rebase 语义。
         restoreByPath = await this.transactionRecovery.captureApplyRestoreState(tx.changedFiles)
+        // 写盘时 mkdir --recursive 会把缺的父目录一并建出来；这里先记下缺哪几级，撤销时才知道哪些空目录是本事务留下的。
+        createdDirectories = await missingAncestorDirectories(tx.changedFiles, async (directory) =>
+          (await this.store.snapshot(directory, false, { skipFileFilter: true })).exists,
+        )
         this.transactionRecovery.prepareBytePlan(tx, restoreByPath)
         pending = this.beginDurableOperation(tx, 'apply', restoreByPath)
       } catch (error) {
@@ -1021,11 +1081,15 @@ class LocalProjectKernel implements ProjectKernel, ProjectPluginContext, LocalPr
       const previousAppliedAt = tx.appliedAt
       tx.status = this.transactionStateMachine.commit(execution)
       tx.appliedAt = Date.now()
+      // 本事务顺带建出来的空目录跟着事务落盘，撤销（含跨进程重启后的撤销）时从深到浅清掉。
+      if (!isEmpty(createdDirectories)) tx.metadata = { ...(tx.metadata ?? {}), createdDirectories }
       const appliedRevisions = tx.changedFiles.map((pathValue) => ({
         path: pathValue,
         before: oldRevisions[pathValue],
         after: newRevisions[pathValue],
       }))
+      // 文件已经全部写完，恢复点不再需要；再落盘就不带它了。
+      if (pending) this.endDurableOperation(tx.transactionId)
       try {
         this.publishTransactionChange(tx, 'applied', [], appliedRevisions)
       } catch (stateError) {
@@ -1141,11 +1205,27 @@ class LocalProjectKernel implements ProjectKernel, ProjectPluginContext, LocalPr
     return this.runTransactionCommand(input.transactionId, () => this.rollbackSerialized(input))
   }
 
+  /**
+   * 撤销的目标不在内存事务表里：改动本身还在变更记录里（能查、能看 diff），只是撤销要用的原文没有留下——
+   * 事务太大没进可撤销历史，或已经被更新的改动挤出历史。如实说清楚，不要让模型以为事务号写错了。
+   */
+  private rejectUnknownRollbackTarget(transactionId: string): never {
+    const recorded =
+      this.transactionProjectionRepository.get(transactionId) ?? this.changeFeedWriter.get(transactionId)
+    if (!recorded) throw new ProjectError('INVALID_INPUT', `未知事务：${transactionId}`)
+    throw new ProjectError(
+      'NOT_SUPPORTED',
+      `这次改动没有留下撤销记录，撤销不了：${transactionId}`,
+      { transactionId, changedFiles: [...recorded.changedFiles] },
+      '改动本身还在变更记录里可以查看 diff；要回到改动前，请按 diff 手工改回，或用版本控制恢复这些文件。',
+    )
+  }
+
   /** rollback 写盘前的检查：事务状态与加锁。失败时磁盘都还没被改动。 */
   private async beginRollbackCommand(input: RollbackInput) {
     await this.hooks.emit('BeforeRollback', this, input)
     const tx = this.transactionRepository.get(input.transactionId)
-    if (!tx) throw new ProjectError('INVALID_INPUT', `未知事务：${input.transactionId}`)
+    if (!tx) this.rejectUnknownRollbackTarget(input.transactionId)
     const execution = this.transactionStateMachine.beginRollback(tx)
     const lock = await this.locks.lock(tx.changedFiles, `rollback:${tx.transactionId}`)
     return { tx, execution, lock }
@@ -1253,6 +1333,7 @@ class LocalProjectKernel implements ProjectKernel, ProjectPluginContext, LocalPr
         before: beforeRollback.find((revision) => revision.path === pathValue)?.after,
         after: rolledBackRevisions[pathValue],
       }))
+      if (pending) this.endDurableOperation(tx.transactionId)
       try {
         this.publishTransactionChange(tx, 'rolled_back', [], rollbackRevisions)
       } catch (stateError) {
@@ -1274,6 +1355,10 @@ class LocalProjectKernel implements ProjectKernel, ProjectPluginContext, LocalPr
       // apply 为被删路径撤掉的 intent-to-add 随文件恢复挂回去，git 视野回到 apply 之前。
       const gitTrackedFiles = await this.gitIndex.trackCreatedFilesInGit(
         metadataPaths(tx.metadata?.gitUntrackedFiles),
+      )
+      // 文件回到 apply 之前了，本事务顺带建出来的目录也要回去：从深到浅删掉仍然空着的那几级。
+      await removeEmptyDirectories(metadataPaths(tx.metadata?.createdDirectories), async (directory) =>
+        (await this.store.authorize(directory, 'write', '删除本次撤销留下的空目录', { skipFileFilter: true })).abs,
       )
       this.retainTerminalTransaction(tx.transactionId)
       this.persistCommittedTransactionState(tx.transactionId, 'git metadata or terminal retention')
@@ -1365,6 +1450,44 @@ class LocalProjectKernel implements ProjectKernel, ProjectPluginContext, LocalPr
 
   public async stat(input: FileStatInput): Promise<FileStatResult> {
     return this.queries.stat(input)
+  }
+
+  /**
+   * 逐条核对写授权：文件网关的 authorize 管越界、writeDeny 与宿主可见范围，再在这里补上受保护文件与生成文件两道策略门。
+   * 只判定、不写盘、不发审批；不经事务链的整批写入（沙箱落回）靠它在问用户之前把不许写的路径挑出来。
+   */
+  public async authorizeWrites(paths: readonly string[]): Promise<ProjectWriteAuthorization[]> {
+    const results: ProjectWriteAuthorization[] = []
+    for (const pathValue of paths) {
+      try {
+        const { rel } = await this.store.authorize(pathValue, 'write', '写入')
+        if (matchesAny(rel, this.policy.protectedFiles)) {
+          results.push({ path: pathValue, allowed: false, reason: 'PROTECTED_FILE', message: `${rel} 在项目策略的受保护文件里。` })
+        } else if (matchesAny(rel, this.policy.generatedFiles)) {
+          results.push({ path: pathValue, allowed: false, reason: 'GENERATED_FILE', message: `${rel} 匹配项目策略的生成文件。` })
+        } else results.push({ path: pathValue, allowed: true })
+      } catch (error) {
+        // arch-guard:silent-catch-ok 拒绝原因与说明都如实写进这条判定，交给调用方展示。
+        results.push({
+          path: pathValue,
+          allowed: false,
+          reason: error instanceof ProjectError ? error.reason : 'PERMISSION_DENIED',
+          message: AppError.getMessage(error),
+        })
+      }
+    }
+    return results
+  }
+
+  /** 把一段要交给模型的文字过一遍宿主的脱敏后端；没有后端时原样返回。 */
+  public async redactText(input: { content: string; path?: string }): Promise<{ content: string; redacted: boolean }> {
+    if (!this.providers.secretRedaction || !input.content) return { content: input.content, redacted: false }
+    const result = await this.providers.secretRedaction.redact({
+      path: input.path,
+      content: input.content,
+      trust: { source: 'project', trust: 'untrusted' },
+    })
+    return { content: result.content, redacted: result.redacted }
   }
 
   /** 对已经提交的历史正文执行当前读取授权和脱敏，不重读可能已变化的磁盘内容。 */

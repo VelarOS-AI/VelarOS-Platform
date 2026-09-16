@@ -6,6 +6,7 @@
 import type { FileContextSnapshot } from '@velaros-ai/agent/tool-contract'
 import { isArray, isEmpty, isNumber, isPlainObject, isString, isUndefined, Log, numberOrNull, optionalWhen, toOptional } from '@velaros-ai/core'
 
+import { ProjectPolicyDefaults } from '../../contract/constants.js'
 import type { AgentProjectReadResult } from '../../types/agent-port.js'
 import type { ProjectReferenceContext, ProjectVisibleCoverage } from '../../types/file-refs.js'
 import type { ProjectSourceLine, ProjectSourceWindow } from '../../types/source-window.js'
@@ -47,6 +48,7 @@ export async function presentProjectRead(
   const startColumn = file.range?.startColumn ?? requestedRange?.startColumn ?? 1
   if (!isUndefined(file.totalLines) && startLine > Math.max(1, file.totalLines)) return result
   let original: string | undefined
+  let beyondEditableSize = false
   if (sourceRef) {
     try { original = (await resolveProjectFileSource(context, sourceRef)).content } catch { Log.tag('ProjectSourceWindow').debug('原始引用不可用，尝试读取当前授权源码') }
   }
@@ -54,7 +56,12 @@ export async function presentProjectRead(
     try {
       const kernel = await context.project.kernel()
       const full = await kernel.read({ path: file.snapshot.path, baseRevision: file.snapshot.revision, maxChars: ProjectTuning.agent.fullReadChars })
-      if (!full.redacted && !full.truncated && !full.hasMore && isString(full.content)) original = full.content
+      if (!full.redacted && !full.truncated && !full.hasMore && isString(full.content)) {
+        // 这里读得全，不等于改得了：补丁策略要的是带完整正文的快照，而快照正文受 policy.maxFileSizeToReadBytes 约束。
+        // 两边上限对齐，超限的文件只给只读窗口并说明，不再签发一个用起来必然 NOT_SUPPORTED 的可编辑引用。
+        if (Buffer.byteLength(full.content, 'utf8') > ProjectPolicyDefaults.maxFileSizeToReadBytes) beyondEditableSize = true
+        else original = full.content
+      }
     } catch {
     Log.tag('ProjectSourceWindow').debug('引用解析或持久化失败，保留证据并限制编辑权限')
       // 二次读取过期或权限拒绝时，保留已读证据但不授予编辑范围。
@@ -94,6 +101,9 @@ export async function presentProjectRead(
       else if (raw) (result.fragments ??= []).push({ line, columns: [index ? 1 : startColumn, (index ? 1 : startColumn) + raw.length], text: raw })
     }
     result.editable = false
+    if (beyondEditableSize) {
+      result.referenceUnavailable = `文件超过可编辑上限（${Math.floor(ProjectPolicyDefaults.maxFileSizeToReadBytes / 1024 / 1024)} MiB），只给只读窗口：请改用 project:run 里的命令行工具处理，或先把文件拆小。`
+    }
   }
   return result
 }

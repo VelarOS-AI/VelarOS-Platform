@@ -12,6 +12,7 @@ declare const console: { log(...args: any[]): void; error(...args: any[]): void;
 declare class Buffer extends Uint8Array {
   public static isBuffer(value: unknown): value is Buffer;
   public static from(data: string | Uint8Array, encoding?: string): Buffer;
+  public static byteLength(data: string | Uint8Array, encoding?: string): number;
   public toString(encoding?: string): string;
 }
 

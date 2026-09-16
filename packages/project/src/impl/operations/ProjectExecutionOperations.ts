@@ -13,6 +13,7 @@ import { shellCommandApproval, shellCommandPolicy } from '@velaros-ai/shell-comm
 
 import type { ProjectToolContext } from '../../contract/requires.js'
 import type { ProjectRunInput, ProjectSandboxInput } from '../../types/tools.js'
+import { assertSandboxApplyWritable, redactCommandOutput } from '../../utils/agent/execution.js'
 import { requireSandboxPort, resolveSourceInsideProject } from '../../utils/agent/sandbox.js'
 
 import type { ProjectExecutionGateApi } from './ProjectExecutionGate.js'
@@ -64,7 +65,7 @@ export class ProjectExecutionOperations implements ProjectExecutionOperationsApi
 
     const invoke = () => context.project.runCommand(input.command, { timeoutMs: input.timeoutMs, background, maxOutputChars: input.maxOutputChars }, plan.isDangerous, context.abortSignal)
     const run = () => background ? invoke() : this.gate.run(context.project.getRootPath(), !plan.isReadOnly, context.abortSignal, invoke)
-    return input.cwd ? context.project.runInDirectory(input.cwd, run) : run()
+    return redactCommandOutput(context, await (input.cwd ? context.project.runInDirectory(input.cwd, run) : run()))
   }
 
   public async sandbox(input: ProjectSandboxInput, context: ProjectToolContext) {
@@ -92,7 +93,10 @@ export class ProjectExecutionOperations implements ProjectExecutionOperationsApi
         const decision = await context.approval.awaitConfirmationDecision(request.message, context.abortSignal, request.options)
         if (!decision.approved) return { approved: false, skipped: true, sandboxId, command: input.command, message: decision.message }
       }
-      return port.runInSandbox({ sandboxId, command: input.command, timeoutMs: input.timeoutMs, maxOutputChars: input.maxOutputChars }, context.abortSignal)
+      return redactCommandOutput(
+        context,
+        await port.runInSandbox({ sandboxId, command: input.command, timeoutMs: input.timeoutMs, maxOutputChars: input.maxOutputChars }, context.abortSignal),
+      )
     }
 
     if (input.action === 'diff') return port.diffSandbox({ sandboxId, maxFiles: input.maxFiles })
@@ -102,6 +106,7 @@ export class ProjectExecutionOperations implements ProjectExecutionOperationsApi
     const changes = await port.diffSandbox({ sandboxId, maxFiles: Number.MAX_SAFE_INTEGER, textDiffs: false })
     const request = this.sandboxRules.prepareApply({ diff: changes, paths: input.paths, targetLabel: `项目 ${changes.source}`, closingNote: ProjectExecutionOperations.ApplyClosingNote, riskScope: 'project-sandbox:apply' })
     if (!request) return { sandboxId, created: [], modified: [], deleted: [], skippedGit: changes.gitChanged, note: '镜像里没有文件变化，什么都没落。' }
+    await assertSandboxApplyWritable(context, [...request.selection.created, ...request.selection.modified, ...request.selection.deleted])
     const authorization = await context.project.prepareMutation({ operation: `把演练沙箱 ${sandboxId} 的改动落回项目` })
     if (!authorization.approved) return { approved: false, skipped: true, sandboxId, message: authorization.rejectionMessage ?? authorization.message }
     const decision = await context.approval.awaitConfirmationDecision(request.message, context.abortSignal, request.options)

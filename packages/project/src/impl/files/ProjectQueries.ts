@@ -4,6 +4,7 @@
 import {
   isEmpty,
   isNotNull,
+  isNumber,
   isObject,
   isUndefined,
   optionalWhen,
@@ -39,6 +40,7 @@ import {
 import { searchWithRipgrep } from '../../utils/files/ripgrep.js'
 import { matchesAny } from '../../utils/glob.js'
 import { id } from '../../utils/id.js'
+import { clampSnippet, snippetWindow } from '../../utils/search-snippet.js'
 import { ProjectTuning } from '../../utils/tuning.js'
 import type { AuditJournalApi } from '../persistence/AuditJournal.js'
 
@@ -218,20 +220,10 @@ export class ProjectQueries implements ProjectQueriesApi {
                 revision = (await this.dependencies.store.snapshot(hit.path, false)).revision
                 revisionByPath.set(hit.path, revision)
               }
-              let snippet = hit.snippet
-              if (snippet && this.dependencies.providers.secretRedaction) {
-                snippet = (
-                  await this.dependencies.providers.secretRedaction.redact({
-                    path: hit.path,
-                    content: snippet,
-                    trust: { source: 'project', trust: 'untrusted' },
-                  })
-                ).content
-              }
               enriched.push({
                 ...hit,
                 revision,
-                snippet,
+                snippet: await this.redactedSnippet(hit),
                 trust: { source: 'project', trust: 'untrusted' },
               })
             } catch {
@@ -296,6 +288,46 @@ export class ProjectQueries implements ProjectQueriesApi {
       outputSummary: `${result.hits.length} hits`,
     })
     return result
+  }
+
+  /**
+   * 命中片段的脱敏与截断，顺序不能反：先把够宽的窗口（命中所在整行）脱敏，最后才截到展示长度。
+   * 先截后脱敏会把边界上的密钥切成半截，脱敏正则认不出来，半截密钥就原样回给模型了。
+   */
+  private async redactedSnippet(hit: Pick<SearchHit, 'path' | 'range' | 'snippet'>): Promise<Optional<string>> {
+    const snippet = hit.snippet
+    if (!snippet) return snippet
+    const redaction = this.dependencies.providers.secretRedaction
+    if (!redaction) return clampSnippet(snippet)
+    // ripgrep 按 --max-columns 截过片段：到了上限就说明整行更长，脱敏之前先把整行读回来。
+    const wide =
+      snippet.length >= ProjectTuning.ripgrep.snippetChars ? (await this.hitLineWindow(hit)) ?? snippet : snippet
+    const redacted = await redaction.redact({
+      path: hit.path,
+      content: wide,
+      trust: { source: 'project', trust: 'untrusted' },
+    })
+    return clampSnippet(redacted.content)
+  }
+
+  /** 把命中所在的整行读回来并按命中位置收窄成窗口；读不到（文件已变、不许读）就返回 undefined，调用方退回原片段。 */
+  private async hitLineWindow(hit: Pick<SearchHit, 'path' | 'range'>): Promise<Optional<string>> {
+    const startLine = hit.range?.startLine
+    if (!isNumber(startLine) || startLine < 1) return undefined
+    try {
+      const read = await this.dependencies.store.read({
+        path: hit.path,
+        range: { startLine, endLine: startLine },
+      })
+      const line = read.content?.replace(/\r?\n$/, '')
+      if (isUndefined(line)) return undefined
+      const from = Math.max(0, (hit.range?.startColumn ?? 1) - 1)
+      const to = Math.max(from, (hit.range?.endColumn ?? from + 1) - 1)
+      return snippetWindow(line, from, to)
+    } catch {
+      // arch-guard:silent-catch-ok 读不回整行时退回原片段，搜索不因为脱敏取窗失败而失败。
+      return undefined
+    }
   }
 
   /** 快速后端只负责其可精确解释的文本；遗留编码在统一解码后交给同一搜索适配器。 */
@@ -366,19 +398,9 @@ export class ProjectQueries implements ProjectQueriesApi {
           caseSensitive: processed.caseSensitive,
         })
         for (const hit of adapterHits) {
-          let snippet = hit.snippet
-          if (snippet && this.dependencies.providers.secretRedaction) {
-            snippet = (
-              await this.dependencies.providers.secretRedaction.redact({
-                path: hit.path,
-                content: snippet,
-                trust: { source: 'project', trust: 'untrusted' },
-              })
-            ).content
-          }
           hits.push({
             ...hit,
-            snippet,
+            snippet: await this.redactedSnippet(hit),
             revision: snap.revision,
             trust: { source: 'project', trust: 'untrusted' },
           })

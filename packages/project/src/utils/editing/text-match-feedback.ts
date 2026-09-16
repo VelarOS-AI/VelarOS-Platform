@@ -10,6 +10,7 @@
 import { isBlank, isEmpty, isPresent, optionalWhen, toNullable, truncate, unique } from '@velaros-ai/core'
 
 import type { CandidateStart, TextMatchLocation, TextMatchMissDiagnosis, TextMismatchCause } from '../../types/editing.js'
+import { execGuardedRegex } from '../regex-guard.js'
 import { offsetToLine } from '../text.js'
 import { ProjectTuning } from '../tuning.js'
 
@@ -416,12 +417,11 @@ export function findLineWhitespaceTolerantMatches(
       ? ''
       : `(?:[ \\t]*(?=\\r?\\n|$)|${escape(lastLine.slice(lastBody.length))})`
   const pattern = lines.map((line) => escape(trimLineEnd(line))).join('[ \\t]*\\r?\\n') + lastTail
-  const matches: Array<{ index: number; text: string }> = []
-  for (const match of content.matchAll(new RegExp(pattern, 'g'))) {
-    matches.push({ index: match.index, text: match[0] })
-    if (matches.length >= limit) break
-  }
-  return matches
+  // 整次扫描交给带时限的护栏跑：needle 来自模型，多行拼出来的 pattern 在大文件上可能长时间回溯。
+  return execGuardedRegex(pattern, 'g', content, limit).map((match) => ({
+    index: match.index,
+    text: content.slice(match.index, match.index + match.length),
+  }))
 }
 
 /** 把匹配 offset 投影成有上限的行号列表，并附带所属外层行帮助区分同形文本。 */

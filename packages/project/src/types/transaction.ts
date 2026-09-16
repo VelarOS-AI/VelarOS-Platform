@@ -69,12 +69,15 @@ export interface ProjectTransactionPendingOperation {
 }
 
 export interface ProjectTransactionStateSnapshot {
-  readonly formatVersion: 1 | 2
+  readonly formatVersion: 1 | 2 | 3
   readonly revision: number
   readonly root: string
   readonly transactions: readonly StoredTransaction[]
   readonly projections: readonly ProjectChangeRecordInput[]
+  /** 格式版本 1、2 的单槽位未完成操作；只在读回旧状态时出现，读回后归一成 pendings。 */
   readonly pending?: ProjectTransactionPendingOperation
+  /** 未完成的提交或撤销，按事务号并存：并发的两个事务各有各的恢复计划，谁都不会抹掉另一个的。 */
+  readonly pendings?: readonly ProjectTransactionPendingOperation[]
   readonly bytePlans?: readonly TransactionBytePlan[]
 }
 

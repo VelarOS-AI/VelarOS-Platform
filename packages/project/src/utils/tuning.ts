@@ -55,6 +55,16 @@ export const ProjectTuning = Object.freeze({
     /** symbols 带 target 查详情时附带的声明源码最多多少字符。 */
     symbolSourceChars: 20_000,
   }),
+  /** 工具层的执行操作（impl/operations/ProjectExecutionOperations.ts 与 utils/agent/execution.ts）。 */
+  execution: Object.freeze({
+    /** 沙箱落回被写治理拦下时，拒绝说明里最多点名几条路径，其余只报总数。 */
+    reportedBlockedPaths: 20,
+  }),
+  /** 模型给的正则（utils/regex-guard.ts）：文本搜索与编辑定位都在带时限的沙箱里执行，灾难回溯不再卡住整个进程。 */
+  regex: Object.freeze({
+    /** 一次正则扫描（整份文件）最多跑多少毫秒；超时按 INVALID_INPUT 拒绝并让模型改写更具体的 query。 */
+    executionTimeoutMs: 1_000,
+  }),
   /** 事务：编辑失败的回读建议、校验失败回执、校验结果复用。 */
   transactions: Object.freeze({
     /** 编辑在 prepare 失败时，回执里建议模型回读出错文件用的 project:read maxChars（字符）。 */
@@ -78,6 +88,14 @@ export const ProjectTuning = Object.freeze({
   persistence: Object.freeze({
     /** 内存审计日志最多留多少条事件；超过从最早的丢起，避免长会话无界增长。 */
     auditEvents: 5_000,
+    /**
+     * 可撤销历史（内存里的事务加它的变更投影、字节计划）一共最多占多少字节，内存与事务状态文件共用这一个预算：
+     * 超了从最旧的事务淘汰，单个事务自己就超预算时它不进可撤销历史（应用照常成功，撤销时如实说没有撤销记录）。
+     * 必须留够余量给正在写盘的那一个事务（它的恢复计划也在状态文件里），两倍单事务上限加它要小于 stateFileBytes。
+     */
+    historyBytes: 48 * 1024 * 1024,
+    /** 变更记录里每个编辑意图带的正文字段（content、expectedContent、text 这些）最多留多少字符，超出截断并标注；记录是审计面，不是正文副本。 */
+    changeIntentContentChars: 4_000,
     /** 事务状态文件最大字节数，读回和写入都按它拦。 */
     stateFileBytes: 256 * 1024 * 1024,
     /** 状态文件里最多多少个事务、投影或字节计划；不能小于内核保留的事务总数，否则内核写不进自己的状态。 */
@@ -147,6 +165,10 @@ export const ProjectTuning = Object.freeze({
     fallbackHitsPerFileMax: 120,
     /** 回退搜索每个文件至少留几处命中（maxResults 很小时也不少于它）。 */
     fallbackHitsPerFileMin: 24,
+    /** 交给模型的命中片段最多多少字符；脱敏之后才截，截断不会把密钥切成脱敏正则认不出的半截。 */
+    snippetChars: 400,
+    /** 脱敏前先取多宽的窗口：命中所在的整行，行比它还长时以命中为中心向两侧各取一半。 */
+    snippetWindowChars: 4_000,
   }),
   /** ripgrep 搜索（utils/files/ripgrep.ts）。 */
   ripgrep: Object.freeze({

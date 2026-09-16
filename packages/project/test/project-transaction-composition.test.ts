@@ -671,7 +671,7 @@ describe('durable write-ahead plan for composed files', () => {
     const pendingPlans: ProjectTransactionPendingOperation[] = []
     const originalCommit = FileProjectTransactionStateStore.prototype.commit
     FileProjectTransactionStateStore.prototype.commit = function (input) {
-      if (input.pending) pendingPlans.push(structuredClone(input.pending))
+      for (const plan of input.pendings ?? []) pendingPlans.push(structuredClone(plan))
       return originalCommit.call(this, input)
     }
     try {
@@ -703,7 +703,7 @@ describe('durable write-ahead plan for composed files', () => {
         transactions: snapshot.transactions,
         bytePlans: snapshot.bytePlans,
         projections: snapshot.projections,
-        pending: { ...applyPlan!, previousStatus: 'rolled_back' },
+        pendings: [{ ...applyPlan!, previousStatus: 'rolled_back' }],
       })
       const intermediate = applyEntry!.ownedStates[0]
       expect(intermediate?.content).toBe('ALPHA\nbeta\ngamma\n')

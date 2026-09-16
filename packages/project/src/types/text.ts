@@ -9,3 +9,9 @@ export interface LineEndingAwareTextMatch {
   /** 换行符跟着 matchedText 适配后的替换文本。 */
   replacementText?: string
 }
+
+/** 带时限的正则扫描（utils/regex-guard.ts）的一条命中：在原文里的起点与匹配长度；正文由调用方按偏移自己切。 */
+export interface GuardedRegexMatch {
+  readonly index: number
+  readonly length: number
+}

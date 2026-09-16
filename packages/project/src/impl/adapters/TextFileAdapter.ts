@@ -10,8 +10,10 @@ import type { AdapterCapability, AdapterKind, AdapterSearchHit, AdapterSearchInp
 import type { FileSnapshot } from '../../types/snapshot.js'
 import type { ResolvedTarget, ResolveTargetInput, ResolveTargetResult } from '../../types/target.js'
 import type { ValidationResult } from '../../types/validation.js'
+import { execGuardedRegex } from '../../utils/regex-guard.js'
+import { snippetWindow } from '../../utils/search-snippet.js'
 import { textRangeTarget } from '../../utils/targets.js'
-import { createLowercaseOffsetMapper, includesLineEndingAware, lineToOffset, nextCodePointOffset, rangeFromOffsets, resolveLineEndingAwareTextMatch } from '../../utils/text.js'
+import { createLowercaseOffsetMapper, includesLineEndingAware, lineToOffset, rangeFromOffsets, resolveLineEndingAwareTextMatch } from '../../utils/text.js'
 import { ProjectTuning } from '../../utils/tuning.js'
 
 export class TextFileAdapter implements FileAdapter {
@@ -33,17 +35,17 @@ export class TextFileAdapter implements FileAdapter {
         score: 1,
         kind: 'text',
         range: rangeFromOffsets(content, start, end),
-        snippet: content.slice(Math.max(0, start - 120), Math.min(content.length, end + 120)),
+        // 交出去的是整行窗口（必要时以命中为中心收窄）：脱敏在这一层之后、截断之前做，
+        // 先截后脱敏会把边界上的密钥切成半截，脱敏正则就认不出来了。
+        snippet: snippetWindow(content, start, end),
         adapterId: this.id,
       })
     }
     if (input.regex || isEmpty(input.query)) {
       // 保持既有 JS 正则语法；仅显式正则（或空字面查询）创建 RegExp。
-      const regex = new RegExp(input.query, caseInsensitive ? 'gi' : 'g')
-      let match: Nullable<RegExpExecArray>
-      while (hits.length < limit && (match = regex.exec(content))) {
-        addHit(match.index, match.index + match[0].length)
-        if (isEmpty(match[0])) regex.lastIndex = nextCodePointOffset(content, regex.lastIndex)
+      // 整次扫描交给带时限的护栏跑：模型给的正则可能灾难回溯，直接 exec 会卡死整个进程。
+      for (const match of execGuardedRegex(input.query, caseInsensitive ? 'gi' : 'g', content, limit)) {
+        addHit(match.index, match.index + match.length)
       }
       return hits
     }

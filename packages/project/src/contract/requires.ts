@@ -36,6 +36,7 @@ import type {
   ProjectMutationAuthorizationInput,
   ProjectRunCommandOptions,
   ProjectSandboxRunOptions,
+  ProjectWriteAuthorization,
 } from '../types/project.js'
 import type { CommandRunInput, CommandRunResult,FileFilterInput, ProjectIntelligenceLocation, ProjectIntelligenceSymbol, RedactionInput, RedactionResult } from '../types/provider.js'
 import type { FileSnapshot } from '../types/snapshot.js'
@@ -75,6 +76,13 @@ export interface AgentProjectKernelPort {
    * 返回过滤后的正文和有没有被脱敏。没有这个方法时，凭 fileRef 的改动一律失败，会话恢复时也用不了历史快照。
    */
   prepareContextSnapshot?(input: { path: string; content: string }): Promise<{ content: string; redacted: boolean }>
+  /**
+   * 核对一批相对路径能不能由项目写，逐条给出 allowed 与拒绝原因（越界、readDeny/writeDeny、宿主可见范围、protectedFiles、generatedFiles）。
+   * 不碰磁盘、不建事务、不发审批。project:sandbox 落回这类不经事务链的整批写入，在问用户之前用它把不许写的路径挑出来。
+   */
+  authorizeWrites(paths: readonly string[]): Promise<ProjectWriteAuthorization[]>
+  /** 把一段要交给模型的文字过一遍宿主的脱敏后端（没有后端时原样返回）：project:run 与 project:sandbox 的命令输出都经它。 */
+  redactText(input: { content: string; path?: string }): Promise<{ content: string; redacted: boolean }>
   /**
    * 列项目里的文件和目录，每项是相对项目根的路径加类型：按 path、include/exclude、是否递归与深度过滤，缺省跳过 .gitignore 忽略的条目，
    * 按深度优先的稳定顺序最多给 maxFiles 条。

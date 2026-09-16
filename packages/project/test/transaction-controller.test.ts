@@ -140,7 +140,7 @@ describe('durable project transaction controller', () => {
       store.commit({
         transactions: snapshot.transactions,
         projections: snapshot.projections,
-        pending: {
+        pendings: [{
           kind: 'apply',
           transactionId: prepared.transactionId,
           previousStatus: 'validated',
@@ -150,14 +150,14 @@ describe('durable project transaction controller', () => {
             content: 'before\n',
             ownedStates: [{ exists: true, content: prepared.after }],
           }],
-        },
+        }],
       })
       await writeFile(join(root, 'note.txt'), prepared.after)
 
       const reopened = await openDurableHarness(root, statePath, feedPath)
       feed = reopened.feed
       expect(await readFile(join(root, 'note.txt'), 'utf8')).toBe('before\n')
-      expect(new FileProjectTransactionStateStore({ path: statePath, root }).snapshot().pending).toBeUndefined()
+      expect(new FileProjectTransactionStateStore({ path: statePath, root }).snapshot().pendings).toBeUndefined()
       expect(reopened.controller.get(prepared.transactionId)?.lifecycle).toBe('validated')
       await reopened.controller.apply({ transactionId: prepared.transactionId })
       expect(await readFile(join(root, 'note.txt'), 'utf8')).toBe('after\n')
@@ -189,7 +189,7 @@ describe('durable project transaction controller', () => {
       store.commit({
         transactions: snapshot.transactions,
         projections: snapshot.projections,
-        pending: {
+        pendings: [{
           kind: 'rollback',
           transactionId: prepared.transactionId,
           previousStatus: 'applied',
@@ -199,7 +199,7 @@ describe('durable project transaction controller', () => {
             content: prepared.after,
             ownedStates: [{ exists: true, content: 'before\n' }],
           }],
-        },
+        }],
       })
       await writeFile(join(root, 'note.txt'), 'before\n')
 
@@ -232,7 +232,7 @@ describe('durable project transaction controller', () => {
       store.commit({
         transactions: snapshot.transactions,
         projections: snapshot.projections,
-        pending: {
+        pendings: [{
           kind: 'apply',
           transactionId: prepared.transactionId,
           previousStatus: 'validated',
@@ -242,7 +242,7 @@ describe('durable project transaction controller', () => {
             content: 'before\n',
             ownedStates: [{ exists: true, content: prepared.after }],
           }],
-        },
+        }],
       })
       await writeFile(join(root, 'note.txt'), 'external\n')
 
@@ -253,7 +253,7 @@ describe('durable project transaction controller', () => {
         transactionStatePath: statePath,
       })).rejects.toMatchObject({ reason: 'TRANSACTION_RECOVERY_CONFLICT' })
       expect(await readFile(join(root, 'note.txt'), 'utf8')).toBe('external\n')
-      expect(new FileProjectTransactionStateStore({ path: statePath, root }).snapshot().pending).toBeDefined()
+      expect(new FileProjectTransactionStateStore({ path: statePath, root }).snapshot().pendings).toBeDefined()
     } finally {
       feed.close()
       await rm(directory, { recursive: true, force: true })

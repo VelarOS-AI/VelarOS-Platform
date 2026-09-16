@@ -10,6 +10,7 @@ import { AppError } from "@velaros-ai/core/error";
 import type { CommandProvider } from '../../contract/requires.js'
 import type { CommandRunInput, CommandRunResult } from '../../types/provider.js'
 import { createMissingCommandRequirement, detectCommandRunToolRequirements, formatCommandRunInput, isWindowsCommandAvailable } from '../../utils/kernel/command-requirements.js'
+import { resolveExecutableInPath } from '../../utils/kernel/executable-path.js'
 import { ProjectTuning } from '../../utils/tuning.js'
 
 /**
@@ -23,7 +24,10 @@ export class NodeCommandProvider implements CommandProvider {
       // `reject: false` 让非零退出 / 超时不抛错，与历史"始终 resolve CommandResult"语义一致；
       // 真实的 spawn 失败（ENOENT 等）仍会抛错，由外层 catch 转成失败结果。
       const commandEnvironment = { ...process.env, ...(input.env ?? {}) };
-      const result = await execa(input.command, input.args ?? [], {
+      // 裸命令名先按 PATH 解析成绝对路径再启动：Windows 的进程启动会先看当前工作目录，
+      // 而内核的 git、rg 是在项目根里跑的，项目里放一个同名的 git.exe 就会被优先执行。
+      const executable = resolveExecutableInPath(input.command, { env: commandEnvironment }) ?? input.command;
+      const result = await execa(executable, input.args ?? [], {
         cwd: input.cwd,
         env: commandEnvironment,
         input: input.stdin,

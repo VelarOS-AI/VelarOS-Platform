@@ -49,8 +49,18 @@ export interface TransactionRepositoryApi {
   snapshot(): TransactionRepositorySnapshot
   /** 用快照整个换掉当前的事务表与终态保留顺序。 */
   restore(snapshot: TransactionRepositorySnapshot): void
-  /** 记下一个刚结束的事务（移到保留顺序最后），再按终态上限淘汰最久没用的（不淘汰它自己）；返回被淘汰的事务号。 */
+  /** 记下一个刚结束的事务（移到保留顺序最后），再按终态上限淘汰最久没用的（不淘汰它自己）；事务已经不在表里就什么都不做。返回被淘汰的事务号。 */
   retainTerminal(transactionId: string): readonly string[]
+  /**
+   * 按字节预算淘汰保留的事务：`measure` 给出一个事务连同它的投影、字节计划一共占多少字节，
+   * 从最早加入的开始淘汰直到总量不超预算，`protectedIds` 里的一个都不淘汰。返回被淘汰的事务号。
+   * 单个事务自己就超预算时它也会被淘汰——这正是「超预算的单个事务不进可撤销历史」。
+   */
+  capBytes(
+    measure: (transaction: StoredTransaction) => number,
+    maxBytes: number,
+    protectedIds: ReadonlySet<string>,
+  ): readonly string[]
 }
 
 export class TransactionRepository implements TransactionRepositoryApi {
@@ -122,13 +132,39 @@ export class TransactionRepository implements TransactionRepositoryApi {
     this.terminalTransactionOrder = [...snapshot.terminalTransactionOrder]
   }
 
-  /** 记录已结束事务，并按终态 LRU 上限淘汰最旧事务。 */
+  /** 记录已结束事务，并按终态 LRU 上限淘汰最旧事务；已经被字节预算淘汰出表的事务不再记回保留顺序。 */
   public retainTerminal(transactionId: string): readonly string[] {
+    if (!this.transactions.has(transactionId)) return []
     this.terminalTransactionOrder = this.terminalTransactionOrder.filter(
       (retainedId) => retainedId !== transactionId,
     )
     this.terminalTransactionOrder.push(transactionId)
     return this.capTerminalTransactions(transactionId)
+  }
+
+  /** 按字节预算淘汰（最旧先出）：保留的历史不能无界增长，也不能让正在写盘的事务被淘汰掉。 */
+  public capBytes(
+    measure: (transaction: StoredTransaction) => number,
+    maxBytes: number,
+    protectedIds: ReadonlySet<string>,
+  ): readonly string[] {
+    const sizes = new Map<string, number>()
+    let total = 0
+    for (const [transactionId, transaction] of this.transactions) {
+      const size = measure(transaction)
+      sizes.set(transactionId, size)
+      total += size
+    }
+    if (total <= maxBytes) return []
+    const evicted: string[] = []
+    for (const transactionId of [...this.transactions.keys()]) {
+      if (total <= maxBytes) break
+      if (protectedIds.has(transactionId)) continue
+      if (!this.delete(transactionId)) continue
+      evicted.push(transactionId)
+      total -= sizes.get(transactionId) ?? 0
+    }
+    return evicted
   }
 
   private capTransactions(): string[] {

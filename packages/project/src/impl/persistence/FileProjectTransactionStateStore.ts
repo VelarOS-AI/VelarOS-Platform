@@ -24,7 +24,7 @@ import { isUndefined, toOptional } from '@velaros-ai/core'
 
 import type { ProjectChangeRecordInput } from '../../types/change-feed.js'
 import type { ProjectTransactionPendingOperation, ProjectTransactionStateSnapshot, StoredTransaction, TransactionBytePlan } from '../../types/transaction.js'
-import { assertTransactionStateSize, assertTransactionStateSnapshot, cloneTransactionState, invalidTransactionState, TransactionStateFormatVersions } from '../../utils/transactions/transaction-state.js'
+import { assertTransactionStateSize, assertTransactionStateSnapshot, cloneTransactionState, invalidTransactionState, normalizeTransactionState, TransactionStateFormatVersions } from '../../utils/transactions/transaction-state.js'
 
 /** 事务状态文件的构造参数。 */
 export interface FileProjectTransactionStateStoreOptions {
@@ -35,10 +35,11 @@ export interface FileProjectTransactionStateStoreOptions {
 }
 
 /**
- * 宿主私有、整份原子替换的事务状态：内存事务、变更投影、字节计划与未完成操作的恢复点，内核重启后据此恢复。
+ * 宿主私有、整份原子替换的事务状态：内存事务、变更投影、字节计划与各个未完成操作的恢复点，内核重启后据此恢复。
  *
- * 项目文件与这份状态不在同一个文件系统事务里；`pending.restore` 是先落盘的恢复边界，apply、rollback 中途被打断后，
- * 下一次持有者启动时据此恢复。读回和写入都逐项校验，任何一项不合规抛 TRANSACTION_RECOVERY_CONFLICT（按状态文件损坏处理）。
+ * 项目文件与这份状态不在同一个文件系统事务里；`pendings[].restore` 是先落盘的恢复边界，apply、rollback 中途被打断后，
+ * 下一次持有者启动时逐个据此恢复；并发的两个事务各占一项，谁都不会抹掉另一个的恢复计划。读回和写入都逐项校验，
+ * 任何一项不合规抛 TRANSACTION_RECOVERY_CONFLICT（按状态文件损坏处理）。旧格式的单槽位 pending 读回后归一成只有一项的 pendings。
  * 实例由内核在宿主给了 transactionStatePath 时创建，一个内核一份。
  */
 export interface FileProjectTransactionStateStoreApi {
@@ -46,7 +47,7 @@ export interface FileProjectTransactionStateStoreApi {
   readonly path: string
   /** 这份状态绑定的项目根（绝对路径）。 */
   readonly root: string
-  /** 当前状态的深拷贝（文件不存在时是 revision 0 的空状态）。 */
+  /** 当前状态的深拷贝（文件不存在时是 revision 0 的空状态）；未完成操作一律在 pendings 里。 */
   snapshot(): ProjectTransactionStateSnapshot
   /**
    * 写入下一版状态（revision 加一，按现行格式版本）：先校验整份状态与大小上限，再原子替换文件（临时文件 fsync 后改名，POSIX 上再刷父目录），
@@ -55,7 +56,7 @@ export interface FileProjectTransactionStateStoreApi {
   commit(input: {
     readonly transactions: readonly StoredTransaction[]
     readonly projections: readonly ProjectChangeRecordInput[]
-    readonly pending?: ProjectTransactionPendingOperation
+    readonly pendings?: readonly ProjectTransactionPendingOperation[]
     readonly bytePlans?: readonly TransactionBytePlan[]
   }): ProjectTransactionStateSnapshot
 }
@@ -93,7 +94,7 @@ export class FileProjectTransactionStateStore implements FileProjectTransactionS
     assertTransactionStateSize(statSync(this.path).size)
     const parsed: unknown = JSON.parse(readFileSync(this.path, 'utf8'))
     assertTransactionStateSnapshot(parsed, this.root)
-    return cloneTransactionState(parsed)
+    return normalizeTransactionState(cloneTransactionState(parsed))
   }
 
   public snapshot(): ProjectTransactionStateSnapshot {
@@ -103,16 +104,17 @@ export class FileProjectTransactionStateStore implements FileProjectTransactionS
   public commit(input: {
     readonly transactions: readonly StoredTransaction[]
     readonly projections: readonly ProjectChangeRecordInput[]
-    readonly pending?: ProjectTransactionPendingOperation
+    readonly pendings?: readonly ProjectTransactionPendingOperation[]
     readonly bytePlans?: readonly TransactionBytePlan[]
   }): ProjectTransactionStateSnapshot {
+    const pendings = toOptional(input.pendings)
     const next: ProjectTransactionStateSnapshot = {
       formatVersion: TransactionStateFormatVersions.current,
       revision: this.current.revision + 1,
       root: this.root,
       transactions: input.transactions,
       projections: input.projections,
-      pending: toOptional(input.pending),
+      pendings: pendings && pendings.length > 0 ? pendings : undefined,
       bytePlans: input.bytePlans,
     }
     const source = JSON.stringify(next)
