@@ -4,6 +4,7 @@ import { delimiter, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { isEmpty, isNonBlankString, isString, toNullable } from '@velaros-ai/core'
+import { velarosSharedResources } from '@velaros-ai/platform/shared-resources'
 
 import {
   type ComputerResourceRuntime,
@@ -76,6 +77,10 @@ function buildDefaultResourceRoots(resourceRuntime: ComputerResourceRuntime): st
   const roots = new Set<string>()
   // 用户按需安装根（userData/resources）优先，安装/停用即时生效。
   for (const root of resourceRuntime.extraResourceRoots()) roots.add(root)
+  // VelarOS 产品家族共用的资源安装根：插件市场就装在这里。宿主把这个根登记进**它自己的**
+  // 资源登记表时本包一无所知（Desktop 实测如此），装好的 Computer Use 于是找不到；这个根是
+  // 平台约定而不是宿主私有事实，本包自己算一份，宿主登不登记都能发现已安装的插件。
+  roots.add(velarosSharedResources.resourcesRoot())
   // 随应用打包的资源目录。
   const resourcesPath = readElectronResourcesPath()
   if (resourcesPath) {
@@ -104,7 +109,8 @@ function buildDefaultResourceRoots(resourceRuntime: ComputerResourceRuntime): st
  *   让「用户主动关掉」和「根本没装」长得一样，两者需要的引导文案完全不同。
  * - **根目录顺序即优先级**（`buildDefaultResourceRoots`）：`VELAROS_COMPUTER_RESOURCE_ROOT` 一旦
  *   设置就**整组接管**（不与默认根合并——测试与打包排障需要一个确定的、不受宿主状态影响的根集）；
- *   否则依次是用户按需安装根（装完即时生效）→ 应用打包资源 → 开发期 `out/resources`。
+ *   否则依次是宿主登记的按需安装根（装完即时生效）→ VelarOS 共享资源根（平台约定，本包自算，
+ *   宿主忘了登记也能发现插件市场装下的包）→ 应用打包资源 → 开发期 `out/resources`。
  * - **跨层接缝**：本类只回答「helper 在哪、用哪个解释器」，**不验证解释器能否启动**——那是
  *   `ComputerSidecarManager` 的事。方向不能反：resolver 不许 spawn 进程，否则「查询状态」这个
  *   本该廉价的动作会带上启动开销与副作用。

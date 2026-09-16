@@ -146,6 +146,7 @@
       "dependencies": {
         "@velaros-ai/core": "workspace:*",
         "@velaros-ai/kernel": "workspace:*",
+        "@velaros-ai/platform": "workspace:*",
         "zod": "^4.3.6",
       },
       "devDependencies": {
