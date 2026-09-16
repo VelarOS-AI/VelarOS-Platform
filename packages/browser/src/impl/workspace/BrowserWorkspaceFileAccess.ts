@@ -1,10 +1,8 @@
 import {
   lstat,
   mkdir,
-  readdir,
   readFile,
   realpath,
-  stat,
   unlink,
   writeFile,
 } from 'node:fs/promises'
@@ -31,6 +29,7 @@ import { isMissingFileError } from '../../utils/workspace-paths'
 import { ensureRoot } from '../../utils/workspace-paths'
 import { resolveExistingPathInRoot } from '../../utils/workspace-paths'
 import { normalizeRelativePath } from '../../utils/workspace-paths'
+import { collectRootEntries } from '../../utils/workspace-paths'
 import {
   getRelativePathInsideRoot,
   resolveBrowserWorkspacePath,
@@ -108,7 +107,7 @@ class BrowserWorkspaceFileAccess implements BrowserWorkspaceFileAccessApi {
 
     for (const workspaceRoot of this.readRoots) {
       if (entries.length >= limit) break
-      await this.collectRootEntries({
+      await collectRootEntries({
         workspaceRoot,
         path: options.path ?? '.',
         recursive,
@@ -122,80 +121,7 @@ class BrowserWorkspaceFileAccess implements BrowserWorkspaceFileAccessApi {
     return entries
   }
 
-  private async collectRootEntries(input: {
-    workspaceRoot: string
-    path: string
-    recursive: boolean
-    limit: number
-    maxDepth: number
-    entries: WorkspaceFileEntry[]
-    seenRelativePaths: Set<string>
-  }): Promise<void> {
-    const { entries, limit, maxDepth, recursive, seenRelativePaths } = input
-    const target = await resolveExistingPathInRoot(
-      input.workspaceRoot,
-      input.path,
-    ).catch(() => null)
-    if (!target) return
-
-    const targetStats = await stat(target.path).catch((error: any) => {
-      if (isMissingFileError(error)) return null
-      throw error
-    })
-    if (!targetStats) return
-
-    const pushEntry = (
-      entryPath: string,
-      type: WorkspaceFileEntry['type'],
-    ): boolean => {
-      const relativePath = getRelativePathInsideRoot(target.root, entryPath)
-      if (!relativePath || seenRelativePaths.has(relativePath)) return false
-      seenRelativePaths.add(relativePath)
-      entries.push({ path: entryPath, type })
-      return true
-    }
-
-    if (targetStats.isFile()) {
-      pushEntry(target.path, 'file')
-      return
-    }
-    if (!targetStats.isDirectory()) return
-
-    const visit = async (directory: string, depth: number): Promise<void> => {
-      if (entries.length >= limit) return
-
-      const dirents = await readdir(directory, { withFileTypes: true }).catch(
-        (error: any) => {
-          if (isMissingFileError(error)) return []
-          throw error
-        },
-      )
-      dirents.sort((a, b) => a.name.localeCompare(b.name))
-
-      for (const dirent of dirents) {
-        if (entries.length >= limit) return
-        if (dirent.isSymbolicLink()) {
-          continue
-        }
-
-        const entryPath = resolve(directory, dirent.name)
-        if (!getRelativePathInsideRoot(target.root, entryPath)) {
-          continue
-        }
-
-        if (dirent.isDirectory()) {
-          pushEntry(entryPath, 'directory')
-          if (recursive && depth < maxDepth) {
-            await visit(entryPath, depth + 1)
-          }
-        } else if (dirent.isFile()) {
-          pushEntry(entryPath, 'file')
-        }
-      }
-    }
-
-    await visit(target.path, 1)
-  }
+  
 
   public async readFile(
     path: string,

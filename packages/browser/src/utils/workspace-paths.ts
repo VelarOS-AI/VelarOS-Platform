@@ -1,3 +1,4 @@
+import { readdir } from 'node:fs/promises'
 import { lstat } from 'node:fs/promises'
 import { mkdir, realpath } from 'node:fs/promises'
 import { readFile, stat } from 'node:fs/promises'
@@ -9,6 +10,7 @@ import { AppError } from '@velaros-ai/core/error'
 import { resolveRealPath } from '@velaros-ai/core/utils/RealPath'
 import { currentPlatform } from '@velaros-ai/platform'
 
+import type { WorkspaceFileEntry } from '../types/browser.js'
 import type { ProjectReadFileResult } from '../types/browser.js'
 import type { BrowserWorkspaceResolvedPath } from '../types/workspace.js'
 import type { BrowserWorkspacePath } from '../types/workspace.js'
@@ -202,4 +204,80 @@ export function normalizeRelativePath(path: LooseOptional<string>): string {
   }
 
   return value
+}
+
+/** 列一个根下的文件条目，按上限与深度收口；根不存在时当空目录。 */
+export async function collectRootEntries(input: {
+  workspaceRoot: string
+  path: string
+  recursive: boolean
+  limit: number
+  maxDepth: number
+  entries: WorkspaceFileEntry[]
+  seenRelativePaths: Set<string>
+}): Promise<void> {
+  const { entries, limit, maxDepth, recursive, seenRelativePaths } = input
+  const target = await resolveExistingPathInRoot(
+    input.workspaceRoot,
+    input.path,
+  ).catch(() => null)
+  if (!target) return
+
+  const targetStats = await stat(target.path).catch((error: any) => {
+    if (isMissingFileError(error)) return null
+    throw error
+  })
+  if (!targetStats) return
+
+  const pushEntry = (
+    entryPath: string,
+    type: WorkspaceFileEntry['type'],
+  ): boolean => {
+    const relativePath = getRelativePathInsideRoot(target.root, entryPath)
+    if (!relativePath || seenRelativePaths.has(relativePath)) return false
+    seenRelativePaths.add(relativePath)
+    entries.push({ path: entryPath, type })
+    return true
+  }
+
+  if (targetStats.isFile()) {
+    pushEntry(target.path, 'file')
+    return
+  }
+  if (!targetStats.isDirectory()) return
+
+  const visit = async (directory: string, depth: number): Promise<void> => {
+    if (entries.length >= limit) return
+
+    const dirents = await readdir(directory, { withFileTypes: true }).catch(
+      (error: any) => {
+        if (isMissingFileError(error)) return []
+        throw error
+      },
+    )
+    dirents.sort((a, b) => a.name.localeCompare(b.name))
+
+    for (const dirent of dirents) {
+      if (entries.length >= limit) return
+      if (dirent.isSymbolicLink()) {
+        continue
+      }
+
+      const entryPath = resolve(directory, dirent.name)
+      if (!getRelativePathInsideRoot(target.root, entryPath)) {
+        continue
+      }
+
+      if (dirent.isDirectory()) {
+        pushEntry(entryPath, 'directory')
+        if (recursive && depth < maxDepth) {
+          await visit(entryPath, depth + 1)
+        }
+      } else if (dirent.isFile()) {
+        pushEntry(entryPath, 'file')
+      }
+    }
+  }
+
+  await visit(target.path, 1)
 }
