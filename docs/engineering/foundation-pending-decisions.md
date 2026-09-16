@@ -119,6 +119,14 @@
 | P2 | 可选资源包定位（office、computer、Desktop 三份同算法） | 进 `@velaros-ai/platform/shared-resources` |
 | P3 | 命令结果形状（system、project、office 三份同形） | 公共核心进 `@velaros-ai/shell-command/contracts`，三包各自 `extends` |
 
+## 七·五、跨仓欠账（本仓改不了，发版前必须处理）
+
+| # | 事项 | 现状 | 谁来改 |
+| --- | --- | --- | --- |
+| X1 | VelarScript-Libraries 的 `packages/contract-codegen/tests/support/platform.mjs:20` 读 `packages/kernel/dist/contracts/protocol/index.js` | kernel 搬家后该产物路径不存在，新位置是 `dist/exports/contracts-protocol.js`（53 个 schema、内容一致）；kernel 入口收口后还会再变一次 | 那个仓：改这一行并重生成已提交的 `kernel.manifest.json`、`kernel.report.json`。**建议等 kernel 收口到 0.3.0 之后一次改到位** |
+| X2 | Desktop 的 `arch-guard-velaros` 两处按 dist 布局钉路径（memory 三切片、`memory/dist/memory-tree/v2/storage/AtomicFile.js`），以及 browser 的 `dist/composition/`、`dist/tools/` | 三个包的 dist 布局都变了 | Desktop：随升级重写这几处检查 |
+| X3 | Desktop 14 个文件 + 两份 package.json 把 `@velaros-ai/memory/knowledge` 换成 `@velaros-ai/knowledge`（导出名不变） | knowledge 已独立成包 | Desktop：随升级机械替换 |
+
 ## 八、产品层接线（本仓不改，列给你排期）
 
 - Desktop：project 端口新增的两个方法（已自动满足）、memory 按作用域给可写根、browser 适配层（B6）、office 安装建议卡（C3）、model 按错误码判「缺 key」（C7）、各包入口收口后的 import 迁移。
