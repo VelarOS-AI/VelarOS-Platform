@@ -1,244 +1,48 @@
-/**
- * 模型工具的双重身份。
- *
- * VelarOS 内部只认 canonical id（`namespace:tool`）；provider 只接收它允许的传输名。
- * 传输名是一次请求的编译产物，不得写回注册表、权限策略或持久历史。
- */
-
 import { isEmpty } from '@velaros-ai/core'
 
-import type { ProviderToolReferenceCanonicalizer,ToolTransportNamePlan, ToolTransportProjection } from '../../types/tools.js'
-import { assertCanonicalToolId, isCanonicalToolId } from '../../utils/toolkit/identity'
-
-const ProviderToolNamePattern = /^[a-zA-Z0-9_-]{1,64}$/
-
-function stableToolNameHash(value: string): string {
-  let hash = 0x811c9dc5
-  for (let index = 0; index < value.length; index += 1) {
-    hash ^= value.charCodeAt(index)
-    hash = Math.imul(hash, 0x01000193)
-  }
-  return (hash >>> 0).toString(36).padStart(7, '0')
-}
-
-function providerToolNameCandidate(canonicalId: string): string {
-  const separatorIndex = canonicalId.indexOf(':')
-  const namespace = canonicalId
-    .slice(0, separatorIndex)
-    .replace(/[^a-zA-Z0-9_-]+/g, '_')
-    .replace(/_+/g, '_')
-    .replace(/^_+|_+$/g, '')
-  const tool = canonicalId
-    .slice(separatorIndex + 1)
-    .replace(/[^a-zA-Z0-9_-]+/g, '_')
-    .replace(/_+/g, '_')
-    .replace(/^_+|_+$/g, '')
-  const readable = `${namespace || 'tool'}__${tool || 'call'}`
-  if (readable.length > 0 && readable.length <= 64) return readable
-
-  const hash = stableToolNameHash(canonicalId)
-  const prefix = readable.slice(0, Math.max(1, 64 - hash.length - 2)) || 'tool'
-  return `${prefix}__${hash}`
-}
-
-/**
- * 为一个 provider 请求生成稳定、无冲突的工具名映射。
- *
- * Canonical id 编译成可读的 `namespace__tool`。任何净化碰撞都追加 canonical hash，
- * 因此外部 mod 也不能通过相似字符覆盖另一项。
- */
-function createToolTransportNamePlan(canonicalIds: readonly string[]): ToolTransportNamePlan {
-  const canonicalToProvider: Record<string, string> = {}
-  const providerToCanonical: Record<string, string> = {}
-
-  for (const canonicalId of [...new Set(canonicalIds)]) {
-    assertCanonicalToolId(canonicalId)
-    let providerName = providerToolNameCandidate(canonicalId)
-    const occupiedBy = providerToCanonical[providerName]
-    if (occupiedBy && occupiedBy !== canonicalId) {
-      const hash = stableToolNameHash(canonicalId)
-      providerName = `${providerName.slice(0, 64 - hash.length - 2)}__${hash}`
-    }
-    const finalOccupiedBy = providerToCanonical[providerName]
-    if (finalOccupiedBy && finalOccupiedBy !== canonicalId)
-      throw new Error(
-        `provider tool name collision: "${canonicalId}" and "${finalOccupiedBy}" both compile to "${providerName}"`
-      )
-
-    canonicalToProvider[canonicalId] = providerName
-    providerToCanonical[providerName] = canonicalId
-  }
-
-  return Object.freeze({
-    canonicalToProvider: Object.freeze(canonicalToProvider),
-    providerToCanonical: Object.freeze(providerToCanonical),
-  })
-}
-
-/**
- * 补全仅存在于历史中的 canonical 工具名传输别名。
- *
- * 动态工具空间只会把当前可见工具放进 provider tools，但历史里仍可能保留已经 page-out 的
- * tool-call/result。它们不是本轮可调用能力，却仍属于 provider 输入结构，名字同样必须满足供应方
- * 的字符集。这里只补请求历史的序列化别名；调用响应的 advertised 映射仍由可见工具快照单独维护，
- * 不能借此把历史工具重新开放出来。
- */
-function completeToolTransportNameAliases(
-  existingAliases: Readonly<Record<string, string>>,
-  historicalToolNames: readonly string[]
-): Readonly<Record<string, string>> {
-  const completed = { ...existingAliases }
-  const occupiedByProviderName = new Map<string, string>()
-
-  for (const [canonicalId, providerName] of Object.entries(completed)) {
-    const occupiedBy = occupiedByProviderName.get(providerName)
-    if (occupiedBy && occupiedBy !== canonicalId)
-      throw new Error(
-        `provider tool name collision: "${canonicalId}" and "${occupiedBy}" both compile to "${providerName}"`
-      )
-    occupiedByProviderName.set(providerName, canonicalId)
-  }
-
-  const missingCanonicalIds = [...new Set(historicalToolNames)]
-    .filter(
-      (toolName) =>
-        !completed[toolName] &&
-        !ProviderToolNamePattern.test(toolName) &&
-        isCanonicalToolId(toolName)
-    )
-    .sort()
-
-  for (const canonicalId of missingCanonicalIds) {
-    let providerName = providerToolNameCandidate(canonicalId)
-    const occupiedBy = occupiedByProviderName.get(providerName)
-    if (occupiedBy && occupiedBy !== canonicalId) {
-      const hash = stableToolNameHash(canonicalId)
-      providerName = `${providerName.slice(0, 64 - hash.length - 2)}__${hash}`
-    }
-    const finalOccupiedBy = occupiedByProviderName.get(providerName)
-    if (finalOccupiedBy && finalOccupiedBy !== canonicalId)
-      throw new Error(
-        `provider tool name collision: "${canonicalId}" and "${finalOccupiedBy}" both compile to "${providerName}"`
-      )
-
-    completed[canonicalId] = providerName
-    occupiedByProviderName.set(providerName, canonicalId)
-  }
-
-  return Object.freeze(completed)
-}
-
-/**
- * 从完整注册目录编译稳定传输身份，再投影出本次请求实际可见的工具。
- *
- * 不能只从可见工具编译：两个 canonical id 净化后发生碰撞时，工具驻留状态的变化会让
- * 同一工具在不同请求里改名，进而破坏历史解码、工具续租和未驻留调用的 fail-closed 判定。
- */
-function createToolTransportProjection(
-  registeredCanonicalIds: readonly string[],
-  visibleCanonicalIds: readonly string[]
-): ToolTransportProjection {
-  const plan = createToolTransportNamePlan(registeredCanonicalIds)
-  const visibleCanonicalToProvider: Record<string, string> = {}
-  for (const canonicalId of visibleCanonicalIds) {
-    const providerName = plan.canonicalToProvider[canonicalId]
-    if (!providerName)
-      throw new Error(
-        `visible tool is absent from the registered transport plan: ${canonicalId}`
-      )
-    visibleCanonicalToProvider[canonicalId] = providerName
-  }
-
-  return Object.freeze({
-    plan,
-    visibleCanonicalToProvider: Object.freeze(visibleCanonicalToProvider),
-  })
-}
-
-const ToolIdentityTokenCharacters = 'a-zA-Z0-9._:-'
-const ProviderToolIdentityTokenCharacters = 'a-zA-Z0-9_-'
-
-function escapeRegularExpression(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-}
-
-/**
- * 把模型可见文本里的 canonical 工具引用编译成当前请求的 provider 别名。
- *
- * 只替换完整 identity token，避免 `project:read` 误伤 `project:read_more`；映射只活在
- * provider 请求边界，不得写回提示词定义、注册表或持久历史。
- */
-function rewriteCanonicalToolReferences(
-  text: string,
-  aliases: Readonly<Record<string, string>>
-): string {
-  return rewriteToolReferences(text, aliases, ToolIdentityTokenCharacters)
-}
-
-/** 把 provider 可见别名还原为持久历史和用户界面使用的 canonical id。 */
-function rewriteProviderToolReferences(
-  text: string,
-  providerToCanonical: Readonly<Record<string, string>>
-): string {
-  return rewriteToolReferences(text, providerToCanonical, ProviderToolIdentityTokenCharacters)
-}
-
-function rewriteToolReferences(
-  text: string,
-  replacements: Readonly<Record<string, string>>,
-  tokenCharacters: string
-): string {
-  let rewritten = text
-  const entries = Object.entries(replacements)
-    .filter(([source, target]) => source !== target)
-    .sort(([left], [right]) => right.length - left.length || left.localeCompare(right))
-
-  for (const [source, target] of entries) {
-    const pattern = new RegExp(
-      `(^|[^${tokenCharacters}])${escapeRegularExpression(source)}(?=$|[^${tokenCharacters}])`,
-      'gu'
-    )
-    rewritten = rewritten.replace(pattern, (_match, prefix: string) => `${prefix}${target}`)
-  }
-  return rewritten
-}
+import type { ProviderToolReferenceCanonicalizer as ProviderToolReferenceCanonicalizerApi } from '../../types/tools.js'
+import { ProviderToolIdentityTokenCharacters, rewriteProviderToolReferences } from '../../utils/tools/tool-identity'
 
 /**
  * 流式正文按完整 identity token 还原，避免别名跨 chunk 时漏回用户界面或持久历史。
  * 只暂存末尾尚未闭合的 token；空映射时完全透传。
  */
-function createProviderToolReferenceCanonicalizer(
-  providerToCanonical: Readonly<Record<string, string>>
-): ProviderToolReferenceCanonicalizer {
-  const enabled = !isEmpty(Object.keys(providerToCanonical))
-  let pending = ''
-  const flush = (): string => {
-    const output = rewriteProviderToolReferences(pending, providerToCanonical)
-    pending = ''
-    return output
+class ProviderToolReferenceCanonicalizer implements ProviderToolReferenceCanonicalizerApi {
+  /** 映射为空时整条通道透传，不做任何改写。 */
+  private readonly enabled: boolean
+  /** 末尾尚未闭合的 identity token；下一片到达时与它拼接后再判定。 */
+  private pending = ''
+
+  constructor(private readonly providerToCanonical: Readonly<Record<string, string>>) {
+    this.enabled = !isEmpty(Object.keys(providerToCanonical))
   }
-  return {
-    push: (text) => {
-      if (!enabled) return text
-      pending += text
-      const incompleteToken = new RegExp(`[${ProviderToolIdentityTokenCharacters}]+$`, 'u').exec(
-        pending
-      )
-      const stableEnd = incompleteToken?.index ?? pending.length
-      const stable = pending.slice(0, stableEnd)
-      pending = pending.slice(stableEnd)
-      return rewriteProviderToolReferences(stable, providerToCanonical)
-    },
-    flush,
+
+  /** 吃进一片流式正文，返回已经可以安全还原的部分。 */
+  public push(text: string): string {
+    if (!this.enabled) return text
+    this.pending += text
+    const incompleteToken = new RegExp(`[${ProviderToolIdentityTokenCharacters}]+$`, 'u').exec(
+      this.pending
+    )
+    const stableEnd = incompleteToken?.index ?? this.pending.length
+    const stable = this.pending.slice(0, stableEnd)
+    this.pending = this.pending.slice(stableEnd)
+    return rewriteProviderToolReferences(stable, this.providerToCanonical)
+  }
+
+  /** 收尾：把暂存的尾巴还原并清空。 */
+  public flush(): string {
+    const output = rewriteProviderToolReferences(this.pending, this.providerToCanonical)
+    this.pending = ''
+    return output
   }
 }
 
-export {
-  completeToolTransportNameAliases,
-  createProviderToolReferenceCanonicalizer,
-  createToolTransportNamePlan,
-  createToolTransportProjection,
-  ProviderToolNamePattern,
-  rewriteCanonicalToolReferences,
-  rewriteProviderToolReferences,
+/** 按一次请求的别名映射开一条还原通道。 */
+function createProviderToolReferenceCanonicalizer(
+  providerToCanonical: Readonly<Record<string, string>>
+): ProviderToolReferenceCanonicalizerApi {
+  return new ProviderToolReferenceCanonicalizer(providerToCanonical)
 }
+
+export { createProviderToolReferenceCanonicalizer }

@@ -61,26 +61,10 @@ function hasCompletePathHintExtension(value: string): boolean {
 }
 
 /**
- * 会话/上下文检索共用的**纯关键词机械打分**（无 `embedding`、无向量库）。
- *
- * ## 谁在用
- * - {@link SessionSearchService}：跨会话消息搜索
- * - {@link ChatContextRetrievalService}：`searchConversationHistory` / `searchTerminalOutput`
- * - {@link ContextRetrievalQueryTraceStore}：`query` 签名归一化、分数分布统计
- *
- * ## 打分流水线（`rankContextText`）
- * 1. 从 `query` 与正文分别提取 `pathHints` / `symbolHints`
- * 2. 计算 `termScore`、`exactPhraseScore`、`pathScore`、`symbolScore`、`errorScore`、`planScore`
- * 3. 加权合成 `semanticScore`；若 `semanticScore>0` 再叠 `recencyScore×0.12` 得 `score`
- *
- * 导出单例 {@link chatSearchRanking}，全进程共用同一套权重与 `needle` 词表。
+ * 错误类 needle 词表。仅当 **query 与正文同时包含** 表中任一词时 errorScore=1。
+ * 典型场景：用户搜 "timeout error"，正文也有 stack trace / 超时字样。
  */
-class ChatSearchRanking {
-  /**
-   * 错误类 needle 词表。仅当 **query 与正文同时包含** 表中任一词时 errorScore=1。
-   * 典型场景：用户搜 "timeout error"，正文也有 stack trace / 超时字样。
-   */
-  private readonly errorNeedleTerms = [
+const errorNeedleTerms = [
     "base_revision_mismatch",
     "denied",
     "error",
@@ -98,13 +82,13 @@ class ChatSearchRanking {
     "失败",
     "错误",
     "超时",
-  ];
+  ]
 
-  /**
-   * 计划/待办类 needle 词表。判定逻辑同 errorNeedleTerms。
-   * 用于「还有哪些 todo / 阻塞项」类 query 与历史 plan 文本的弱关联。
-   */
-  private readonly planNeedleTerms = [
+/**
+ * 计划/待办类 needle 词表。判定逻辑同 errorNeedleTerms。
+ * 用于「还有哪些 todo / 阻塞项」类 query 与历史 plan 文本的弱关联。
+ */
+const planNeedleTerms = [
     "blocked",
     "next",
     "open issue",
@@ -118,13 +102,13 @@ class ChatSearchRanking {
     "未完成",
     "计划",
     "阻塞",
-  ];
+  ]
 
-  /**
-   * 符号 hint 提取时的英文停用词。过滤 message/search/session 等泛化词，
-   * 避免把普通英文句子拆出一堆无信息 token。
-   */
-  private readonly commonSymbolStopWords = new Set([
+/**
+ * 符号 hint 提取时的英文停用词。过滤 message/search/session 等泛化词，
+ * 避免把普通英文句子拆出一堆无信息 token。
+ */
+const commonSymbolStopWords = new Set([
     "about",
     "after",
     "before",
@@ -146,68 +130,68 @@ class ChatSearchRanking {
     "this",
     "tool",
     "with",
-  ]);
+  ])
 
-  /**
-   * 标识符 token 正则：JS/TS 风格变量名，至少 3 字符（`\w$` 重复 2 次 + 首字符）。
-   */
-  private readonly symbolHintPattern = /\b[A-Za-z_$][\w$]{2,}\b/g;
+/**
+ * 标识符 token 正则：JS/TS 风格变量名，至少 3 字符（`\w$` 重复 2 次 + 首字符）。
+ */
+const symbolHintPattern = /\b[A-Za-z_$][\w$]{2,}\b/g
 
-  /**
-   * query trace 中 scoreStats.buckets 的分桶边界。
-   * 顶桶 maxScore=1 使用闭区间 `[min, max]`，其余桶右开。
-   */
-  private readonly scoreStatBucketDefs = [
+/**
+ * query trace 中 scoreStats.buckets 的分桶边界。
+ * 顶桶 maxScore=1 使用闭区间 `[min, max]`，其余桶右开。
+ */
+const scoreStatBucketDefs = [
     { label: "0.75-1.00", minScore: 0.75, maxScore: 1 },
     { label: "0.50-0.75", minScore: 0.5, maxScore: 0.75 },
     { label: "0.25-0.50", minScore: 0.25, maxScore: 0.5 },
     { label: "0.00-0.25", minScore: 0, maxScore: 0.25 },
-  ] as const;
+  ] as const
 
-  /**
-   * 从用户 query 提取归一化检索词项（小写、去标点、拆词/ CJK 等）。
-   * 实现委托 `@velaros-ai/agent.extractSessionSearchTerms`。
-   */
-  public normalizeSearchTerms(query: string): string[] {
+/**
+ * 从用户 query 提取归一化检索词项（小写、去标点、拆词/ CJK 等）。
+ * 实现委托 `@velaros-ai/agent.extractSessionSearchTerms`。
+ */
+function normalizeSearchTerms(query: string): string[] {
     return extractSessionSearchTerms(query);
   }
 
-  /**
-   * 将 query 规范化为「同一 scope 内是否重复搜索」用的签名。
-   *
-   * - 有词项时：词项排序后用空格拼接（顺序无关）
-   * - 无词项时：整句小写 + 折叠空白
-   *
-   * 供 {@link ContextRetrievalQueryTraceStore.register} 作为 Map 键的一部分。
-   */
-  public normalizeQuerySignature(query: string, terms: string[]): string {
+/**
+ * 将 query 规范化为「同一 scope 内是否重复搜索」用的签名。
+ *
+ * - 有词项时：词项排序后用空格拼接（顺序无关）
+ * - 无词项时：整句小写 + 折叠空白
+ *
+ * 供 {@link ContextRetrievalQueryTraceStore.register} 作为 Map 键的一部分。
+ */
+function normalizeQuerySignature(query: string, terms: string[]): string {
     const normalized = query.toLowerCase().replace(/\s+/g, " ").trim();
     const termSignature = [...terms].sort().join(" ");
     return termSignature || normalized;
   }
 
-  /**
-   * 对单段 `haystack` 文本做机械相关性打分。
-   *
-   * @param input.query 原始用户查询（用于完整短语匹配、`needle` 检测）
-   * @param input.terms 已归一化词项列表（来自 `normalizeSearchTerms`）
-   * @param input.text 待打分正文（消息 `searchableText`、日志内容、工具结果等）
-   * @param input.index 可选，当前条目在会话中的序号（`0-based`）
-   * @param input.total 可选，会话总条数；与 `index` 一起算 `recencyScore`
-   *
-   * ### 各子分数含义
-   * | 字段 | 计算方式 | 权重 |
-   * |------|----------|------|
-   * | `termScore` | 命中词项数 / 词项总数 | 0.48 |
-   * | `exactPhraseScore` | `query≥4` 字符且正文包含整句 | 0.18 |
-   * | `pathScore` | 命中路径数 / `query` 路径 hint 数 | 0.22 |
-   * | `symbolScore` | 命中符号数 / `query` 符号 hint 数 | 0.18 |
-   * | `errorScore` | `query`+正文均含 `error needle` | 0.16 |
-   * | `planScore` | `query`+正文均含 `plan needle` | 0.10 |
-   *
-   * 最终 `score = semanticScore + (semanticScore>0 ? recencyScore×0.12 : 0)`。
-   */
-  public rankContextText(input: {
+/**
+ * 对单段 `haystack` 文本做机械相关性打分。
+ *
+ * @param input.query 原始用户查询（用于完整短语匹配、`needle` 检测）
+ * @param input.terms 已归一化词项列表（来自 `normalizeSearchTerms`）
+ * @param input.text 待打分正文（消息 `searchableText`、日志内容、工具结果等）
+ * @param input.index 可选，当前条目在会话中的序号（`0-based`）
+ * @param input.total 可选，会话总条数；与 `index` 一起算 `recencyScore`
+ *
+ * ### 各子分数含义
+ * | 字段 | 计算方式 | 权重 |
+ * |------|----------|------|
+ * | `termScore` | 命中词项数 / 词项总数 | 0.48 |
+ * | `exactPhraseScore` | `query≥4` 字符且正文包含整句 | 0.18 |
+ * | `pathScore` | 命中路径数 / `query` 路径 hint 数 | 0.22 |
+ * | `symbolScore` | 命中符号数 / `query` 符号 hint 数 | 0.18 |
+ * | `errorScore` | `query`+正文均含 `error needle` | 0.16 |
+ * | `planScore` | `query`+正文均含 `plan needle` | 0.10 |
+ *
+ * 最终 `score = semanticScore + (semanticScore>0 ? recencyScore×0.12 : 0)`。
+ */
+function rankContextText(input: {
     query: string;
     terms: string[];
     text: string;
@@ -216,10 +200,10 @@ class ChatSearchRanking {
   }): RankingSignals {
     const lowerText = input.text.toLowerCase();
     const lowerQuery = input.query.toLowerCase();
-    const queryPathHints = this.collectPathHints(input.query);
-    const textPathHints = this.collectPathHints(input.text);
-    const querySymbolHints = this.collectSymbolHints(input.query);
-    const textSymbolHints = this.collectSymbolHints(input.text);
+    const queryPathHints = collectPathHints(input.query);
+    const textPathHints = collectPathHints(input.text);
+    const querySymbolHints = collectSymbolHints(input.query);
+    const textSymbolHints = collectSymbolHints(input.text);
     // 路径匹配：全文包含完整 hint，或至少包含 basename（便于 `SessionSearchService.ts` 类短文件名命中）
     const matchedPaths = queryPathHints.filter((hint) => {
       const basenameHint = hint.split("/").pop() ?? hint;
@@ -245,19 +229,19 @@ class ChatSearchRanking {
     const symbolScore = isEmpty(querySymbolHints)
       ? 0
       : matchedSymbols.length / querySymbolHints.length;
-    const queryErrorTerms = this.errorNeedleTerms.filter((term) =>
+    const queryErrorTerms = errorNeedleTerms.filter((term) =>
       lowerQuery.includes(term),
     );
-    const textErrorTerms = this.errorNeedleTerms.filter((term) =>
+    const textErrorTerms = errorNeedleTerms.filter((term) =>
       lowerText.includes(term),
     );
     // 必须 query 与正文「都在聊错误」才给分，避免正文偶然出现 error 单词误伤
     const errorScore =
       isEmpty(queryErrorTerms) || isEmpty(textErrorTerms) ? 0 : 1;
-    const queryPlanTerms = this.planNeedleTerms.filter((term) =>
+    const queryPlanTerms = planNeedleTerms.filter((term) =>
       lowerQuery.includes(term),
     );
-    const textPlanTerms = this.planNeedleTerms.filter((term) =>
+    const textPlanTerms = planNeedleTerms.filter((term) =>
       lowerText.includes(term),
     );
     const planScore = isEmpty(queryPlanTerms) || isEmpty(textPlanTerms) ? 0 : 1;
@@ -300,19 +284,15 @@ class ChatSearchRanking {
     };
   }
 
-  /**
-   * 为 `UI` / `API` 生成展示用 `snippet`：围绕**最早出现**的命中词项截取。
-   *
-   * @param text 完整正文
-   * @param terms 检索词项（决定锚点位置）
-   * @param maxChars 最大字符数；实际截断还经 {@link chatSearchText.truncate}
-   * @returns 空正文返回 `null`；无词项命中时从开头取 `maxChars`
-   */
-  public buildSearchSnippet(
-    text: string,
-    terms: string[],
-    maxChars: number,
-  ): LooseOptional<string> {
+/**
+ * 为 `UI` / `API` 生成展示用 `snippet`：围绕**最早出现**的命中词项截取。
+ *
+ * @param text 完整正文
+ * @param terms 检索词项（决定锚点位置）
+ * @param maxChars 最大字符数；实际截断还经 {@link chatSearchText.truncate}
+ * @returns 空正文返回 `null`；无词项命中时从开头取 `maxChars`
+ */
+function buildSearchSnippet(text: string, terms: string[], maxChars: number): LooseOptional<string> {
     const trimmed = text.trim();
     if (!trimmed) return null;
 
@@ -331,13 +311,10 @@ class ChatSearchRanking {
     );
   }
 
-  /**
-   * 为日志类证据保留开头和结尾；无正文词项命中时不能再退化成纯文件头摘要。
-   */
-  public buildHeadTailSnippet(
-    text: string,
-    maxChars: number,
-  ): LooseOptional<string> {
+/**
+ * 为日志类证据保留开头和结尾；无正文词项命中时不能再退化成纯文件头摘要。
+ */
+function buildHeadTailSnippet(text: string, maxChars: number): LooseOptional<string> {
     const trimmed = text.trim();
     if (!trimmed) return null;
     if (trimmed.length <= maxChars) return trimmed;
@@ -351,15 +328,13 @@ class ChatSearchRanking {
     return `${trimmed.slice(0, headChars)}${marker}${trimmed.slice(-tailChars)}`;
   }
 
-  /**
-   * 汇总一批分数的 min/max/average 与分桶计数，写入 query trace。
-   *
-   * @param scores 通常为「所有命中项」的 score 列表（含未返回给 caller 的条目）
-   */
-  public buildRetrievalScoreStats(
-    scores: number[],
-  ): ChatContextRetrievalScoreStats {
-    const buckets = this.scoreStatBucketDefs.map((bucket) => ({
+/**
+ * 汇总一批分数的 min/max/average 与分桶计数，写入 query trace。
+ *
+ * @param scores 通常为「所有命中项」的 score 列表（含未返回给 caller 的条目）
+ */
+function buildRetrievalScoreStats(scores: number[]): ChatContextRetrievalScoreStats {
+    const buckets = scoreStatBucketDefs.map((bucket) => ({
       ...bucket,
       count: 0,
     }));
@@ -397,8 +372,8 @@ class ChatSearchRanking {
     };
   }
 
-  /** 单向扫描路径 token，去掉尾部标点，小写化，最多 16 条。 */
-  private collectPathHints(text: string): string[] {
+/** 单向扫描路径 token，去掉尾部标点，小写化，最多 16 条。 */
+function collectPathHints(text: string): string[] {
     const hints = new Set<string>();
     const addHint = (rawValue: string): void => {
       const value = trimPathHintPunctuation(rawValue).toLowerCase();
@@ -440,16 +415,16 @@ class ChatSearchRanking {
     return [...hints];
   }
 
-  /**
-   * 用 symbolHintPattern 扫描标识符；过滤停用词后，保留：
-   * 含 `_`/`$`、camelCase、或长度≥6 的 token。最多 16 条。
-   */
-  private collectSymbolHints(text: string): string[] {
+/**
+ * 用 symbolHintPattern 扫描标识符；过滤停用词后，保留：
+ * 含 `_`/`$`、camelCase、或长度≥6 的 token。最多 16 条。
+ */
+function collectSymbolHints(text: string): string[] {
     const hints = new Set<string>();
-    for (const match of text.matchAll(this.symbolHintPattern)) {
+    for (const match of text.matchAll(symbolHintPattern)) {
       const value = match[0];
       const normalized = value.toLowerCase();
-      if (this.commonSymbolStopWords.has(normalized)) {
+      if (commonSymbolStopWords.has(normalized)) {
         continue;
       }
 
@@ -468,9 +443,13 @@ class ChatSearchRanking {
     }
     return [...hints];
   }
-}
 
 /** 全进程唯一的打分实例；见 {@link ChatSearchRanking}。 */
-const chatSearchRanking = new ChatSearchRanking();
-
-export { chatSearchRanking };
+export const chatSearchRanking = Object.freeze({
+  normalizeSearchTerms,
+  normalizeQuerySignature,
+  rankContextText,
+  buildSearchSnippet,
+  buildHeadTailSnippet,
+  buildRetrievalScoreStats,
+});

@@ -1,11 +1,7 @@
 export type { ApprovalPort } from '../contract/requires.js'
 export type { InteractionPort } from '../contract/requires.js'
 export { fileContextFor } from '../impl/context/FileContextCoordinator'
-export {
-  createManualApprovalOptions,
-  createUnattendedSubAgentApprovalPort,
-  defaultDenyApprovalPort,
-} from '../impl/tools/DefaultDenyApprovalPort'
+export { defaultDenyApprovalPort } from '../impl/tools/DefaultDenyApprovalPort'
 export {
   DefaultToolContractExampleRegistry,
   renderToolExampleInputs,
@@ -17,6 +13,7 @@ export {
   ToolInputReuseSchema,
   withToolInputReuse,
 } from '../impl/tools/ToolInputReuseStore'
+export { createUnattendedSubAgentApprovalPort } from '../impl/tools/UnattendedSubAgentApprovalPort'
 export { defaultUnsupportedInteractionPort } from '../impl/tools/UnsupportedInteractionPort'
 export type { FileContextCarrier, FileContextRange, FileContextSnapshot, FileContextSource } from '../types/context.js'
 export type { DefineToolContractInput, DefineToolContractSurfaceInput, DefineToolRuntimeSpecInput, NonEmptyToolContractList, ToolContractDescriptionSpec, ToolContractExecute, ToolContractRole, ToolContractRuntimeSpec, ToolContractSpec, ToolContractSurface, ToolInputReuseContract, ToolInputReuseMigrationRequest } from '../types/toolkit.js'
@@ -27,6 +24,7 @@ export type { ToolCallableOperationsOptions, ToolContextResolver } from '../type
 export type { CreateToolSchemaBundleOptions, ToolSchemaBundle, ToolSchemaSource } from '../types/toolkit.js'
 export type { StructuredParameterDescriptionSpec, StructuredToolDescriptionParts, StructuredToolDescriptionSpec, ToolDescriptionBudgetWaiver, ToolDescriptionBudgetWaiverReason, ToolDescriptionDetail } from '../types/toolkit.js'
 export type { ToolInputReuseOptions } from '../types/tools.js'
+export { createManualApprovalOptions } from '../utils/toolkit/approval'
 export {
   createToolCallableOperations,
   parseToolWireInput,

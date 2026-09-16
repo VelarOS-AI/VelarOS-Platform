@@ -3,6 +3,7 @@
 import type { AgentExecutionConfig } from '../../contract/requires.js'
 import type { ExecutionRecord } from '../../types/agent.js'
 import type { RunSoloExecutionParams,SoloExecutionAgentRunner } from '../../types/execution.js'
+import { bindAbortSignal } from '../../utils/execution/solo-execution'
 
 import type { ExecutionService } from './ExecutionService'
 
@@ -74,20 +75,6 @@ class SoloExecutionService {
 
 }
 
-function bindAbortSignal(
-  source: LooseOptional<AbortSignal>,
-  target: AbortController
-): () => void {
-  if (!source) return () => {}
-  const abort = (): void => {
-    if (!target.signal.aborted) target.abort(source.reason)
-  }
-  if (source.aborted) {
-    abort()
-    return () => {}
-  }
-  source.addEventListener('abort', abort, { once: true })
-  return () => source.removeEventListener('abort', abort)
-}
+
 
 export { SoloExecutionService }

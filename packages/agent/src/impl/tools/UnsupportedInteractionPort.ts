@@ -7,11 +7,37 @@ import type { InteractionPort } from '../../contract/requires.js'
  * 构造路径。计划面返回空结构、任务/推荐/建议返回 null（而非旧的 `ctx.execution!` null
  * 崩溃事故式失败），让读取计划的工具与提示词组装在无会话宿主上安全降级、不抛 TypeError。
  */
-export const defaultUnsupportedInteractionPort: InteractionPort = {
-  executionId: '',
-  getCurrentPlan: () => [],
-  updateCurrentPlan: () => [],
-  getCurrentTask: () => null,
-  getCurrentRecommendedAction: () => null,
-  getCurrentExecutionAdvice: () => null,
+class UnsupportedInteractionPort implements InteractionPort {
+  /** 无会话宿主没有执行 id，用空串占位。 */
+  public readonly executionId = ''
+
+  /** 计划面降级为空数组。 */
+  public getCurrentPlan(): [] {
+    return []
+  }
+
+  /** 无会话宿主写不进计划，原样返回空数组。 */
+  public updateCurrentPlan(): [] {
+    return []
+  }
+
+  /** 无当前任务。 */
+  public getCurrentTask(): null {
+    return null
+  }
+
+  /** 无推荐动作。 */
+  public getCurrentRecommendedAction(): null {
+    return null
+  }
+
+  /** 无执行建议。 */
+  public getCurrentExecutionAdvice(): null {
+    return null
+  }
 }
+
+/** 无 execution 会话通道宿主的默认端口实例。 */
+const defaultUnsupportedInteractionPort: InteractionPort = new UnsupportedInteractionPort()
+
+export { defaultUnsupportedInteractionPort }

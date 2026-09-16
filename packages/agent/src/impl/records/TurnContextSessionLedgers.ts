@@ -4,11 +4,19 @@ import type { TurnContextDelta, TurnContextSourceId, TurnContextSourcePeekInput 
 import type { TurnContextAppendBus } from '../../types/records.js'
 
 import type { TurnContextLedgerAppendInput, TurnContextLedgerPeekResult } from './TurnContextLedger'
-import { DefaultLedgerMaxEntries, DefaultMaxSessions, nextTurnContextLedgerGeneration,TurnContextLedger, TurnContextProcessGeneration } from './TurnContextLedger'
+import { DefaultLedgerMaxEntries, DefaultMaxSessions, TurnContextLedger, TurnContextProcessGeneration } from './TurnContextLedger'
 
 /** 按 sessionId 惰性建账本；超出会话数按插入序淘汰最旧（Map 迭代序即插入序）。 */
 export class TurnContextSessionLedgers {
   private readonly ledgers = new Map<string, TurnContextLedger>()
+
+  /**
+   * 本登记处开出的账本序号（每个实例自己数）。
+   *
+   * 账本被容量淘汰后重建时序号从 1 重新开始，代次里带上它，旧 cursor 才会失配、
+   * 不至于把重建后的前几条 delta 静默吞掉（审计 U37）。
+   */
+  private ledgerInstanceSeq = 0
 
   constructor(
     private readonly sourceId: TurnContextSourceId,
@@ -44,10 +52,11 @@ export class TurnContextSessionLedgers {
     if (existing) return existing
 
     // 每个账本实例一个代次：容量淘汰后重建的这一本 seq 从 1 起，旧 cursor 必须失配才不会吞它。
+    this.ledgerInstanceSeq += 1
     const ledger = new TurnContextLedger(
       this.sourceId,
       this.options.maxEntries ?? DefaultLedgerMaxEntries,
-      nextTurnContextLedgerGeneration(),
+      `${TurnContextProcessGeneration}.${this.ledgerInstanceSeq.toString(36)}`,
     )
     this.ledgers.set(sessionId, ledger)
     while (this.ledgers.size > (this.options.maxSessions ?? DefaultMaxSessions)) {

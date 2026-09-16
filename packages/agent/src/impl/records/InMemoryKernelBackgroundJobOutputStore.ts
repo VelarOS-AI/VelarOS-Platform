@@ -1,7 +1,6 @@
 import type { KernelBackgroundJobOutputStore } from '../../contract/requires.js'
 import type { KernelBackgroundJobStoredOutput } from '../../types/records.js'
-
-import { normalizeReadOffset } from './KernelBackgroundJobManager'
+import { normalizeReadOffset } from '../../utils/records/background-jobs'
 
 class InMemoryKernelBackgroundJobOutputStore implements KernelBackgroundJobOutputStore {
   private readonly outputs = new Map<string, string>()

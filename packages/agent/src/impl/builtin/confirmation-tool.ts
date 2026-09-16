@@ -3,11 +3,11 @@ import { z } from 'zod'
 import type { ToolCapabilitySchema, ToolPermission } from '../../types/agent.js'
 import type { RequestConfirmationToolContext } from '../../types/builtin.js'
 import type { ToolContractRuntimeSpec } from '../../types/toolkit.js'
+import { createManualApprovalOptions } from '../../utils/toolkit/approval'
 import {
   renderParameterDescription as parameterDescription,
   renderToolDescription,
 } from '../../utils/toolkit/tool-description'
-import { createManualApprovalOptions } from '../tools/DefaultDenyApprovalPort'
 
 const UserConfirmationCapability = {
   effectKind: 'external',

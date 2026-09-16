@@ -3,8 +3,7 @@ import { AppError } from '@velaros-ai/core/error'
 
 import type { KernelSessionInputStore } from '../../contract/requires.js'
 import type { AdmitKernelSessionInput, KernelAdmittedInput, KernelSessionInputSnapshot, PromoteKernelInputOptions } from '../../types/execution.js'
-
-import { assertInputContent, cloneInput, cloneSnapshot, isSameAdmission, sortInputs } from './KernelSessionRunCoordinator'
+import { assertInputContent, cloneInput, cloneSnapshot, isSameAdmission, sortInputs } from '../../utils/execution/session-lane'
 
 export class InMemoryKernelSessionInputStore implements KernelSessionInputStore {
   private readonly inputsBySession = new Map<string, KernelAdmittedInput[]>()

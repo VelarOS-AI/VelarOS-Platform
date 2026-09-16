@@ -5,9 +5,8 @@ import type { ContextPayloadRecord } from '../../types/context.js'
 import type { ContextPayloadKernelToolOutputStoreOptions, KernelStoredToolOutput, ProjectKernelToolOutputInput, ProjectKernelToolOutputResult } from '../../types/tools.js'
 import { buildContextRefEnvelope } from '../../utils/context/context-ref-envelope'
 import { resolveGovernanceSessionKey } from '../../utils/residency/session-key'
+import { fitSourceWindowsWithinProjection, normalizeProjectionChars, projectSerializedPreview, serializeOutput } from '../../utils/tools/tool-output-store'
 import { ToolResultCanonicalizer } from '../context/ToolResultCanonicalizer'
-
-import { fitSourceWindowsWithinProjection, normalizeProjectionChars, projectSerializedPreview, serializeOutput } from './InMemoryKernelToolOutputStore'
 
 export class ContextPayloadKernelToolOutputStore implements KernelToolOutputStore {
   private readonly canonicalizer: ToolResultCanonicalizer

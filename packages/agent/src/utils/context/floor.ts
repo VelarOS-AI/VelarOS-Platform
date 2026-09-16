@@ -10,10 +10,10 @@ import type { ModelMessage } from 'ai'
 import { isBlank, isEmpty, isFalse, isPlainObject, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import { ProviderToolNamePattern } from '../../impl/tools/ProviderToolReferenceCanonicalizer'
 import type { AssertProviderRequestInvariantPhase,CompileProviderRequestInput, ToolReferenceScan } from '../../types/context.js'
 import type { ProviderRequestFingerprint } from '../../types/records.js'
 import { compareStableStrings } from '../residency/determinism'
+import { ProviderToolNamePattern } from '../tools/tool-identity'
 
 import { shortHash } from './content-hash'
 import { sortedStrings, sumPositive } from './message-scan'

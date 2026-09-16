@@ -17,9 +17,9 @@ import type { CompiledProviderRequest, ContextPinnedEvidenceInput, ProviderToolD
 import type { ContextUsageEmitTarget, ProviderToolNamePlan, ProviderToolTransportContext, ProviderToolTransportPlan,ProviderTurnActiveContext, ProviderTurnActiveContextProvider, ProviderTurnContextWorkingSetInputs, ProviderTurnPayloadContext, ToolSchemaCharEstimatorRegistry, ToolSchemaHashEstimatorRegistry } from '../../types/loop.js'
 import { collectProviderRequestHistoryToolNames } from "../../utils/context/message-scan";
 import { compareStableStrings } from "../../utils/residency/determinism";
+import { completeToolTransportNameAliases } from "../../utils/tools/tool-identity";
 import { ChatRuntimeEvents } from '../../utils/wire/chat-runtime.js'
 import { buildToolPayloadRefsForProviderMessages } from "../context/ToolPayloadReferencePlanner";
-import { completeToolTransportNameAliases } from "../tools/ProviderToolReferenceCanonicalizer";
 
 /**
  * Stream 与 Query 两条 turn 链路在"把一个 turn 组装成 provider 请求"上的公共逻辑。

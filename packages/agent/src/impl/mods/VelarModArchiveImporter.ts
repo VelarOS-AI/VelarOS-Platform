@@ -1,18 +1,16 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { basename, extname, join, posix } from 'node:path'
+import { basename, extname, join } from 'node:path'
 
 import JSZip, { type JSZipObject } from 'jszip'
 
 import {
-  isArray,
   isEmpty,
   isNumber,
   isPlainObject,
   isPresent,
   stringifyPretty,
-  trimmedStringOrEmpty,
 } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import {
@@ -22,6 +20,7 @@ import {
 
 import type { VelarModArchiveSignatureVerifier } from '../../contract/requires.js'
 import type { InstallScannedVelarModArchiveRequest, PreparedVelarModInstall, ScannedArchive, ScanSession,VelarModArchiveEntry, VelarModArchiveFinding, VelarModArchiveInstallFailureReason, VelarModArchiveScanReport, VelarModPermissionDescriptor, ZipSizeData } from '../../types/mods.js'
+import { assertArchiveEntryPath, countContributions, readAgentMetadata } from '../../utils/mods/archive'
 import { parseAgentModManifest } from '../../utils/wire/mods'
 
 const VelarModArchiveExtension = '.velarmod'
@@ -30,8 +29,8 @@ const MaxArchiveBytes = 32 * 1024 * 1024
 const MaxExpandedBytes = 128 * 1024 * 1024
 const MaxManifestBytes = 256 * 1024
 const MaxFileCount = 512
-const MaxPathLength = 240
-const MaxPathDepth = 8
+
+
 const MaxCompressionRatio = 100
 const DefaultScanSessionTtlMs = 10 * 60 * 1000
 
@@ -43,43 +42,9 @@ export interface VelarModArchiveImporterOptions {
   readonly nextScanId?: () => string
 }
 
-function hasControlCharacter(value: string): boolean {
-  for (const character of value) {
-    const codePoint = character.codePointAt(0) ?? 0
-    if (codePoint <= 0x1f || codePoint === 0x7f) return true
-  }
-  return false
-}
 
-function assertArchiveEntryPath(rawPath: string): string {
-  if (
-    rawPath.startsWith('/')
-    || /^[a-z]:\//iu.test(rawPath)
-    || rawPath.includes('\\')
-    || rawPath.length > MaxPathLength
-    || hasControlCharacter(rawPath)
-  ) throw new AppError(
-    'SECURITY',
-    `Mod archive contains an unsafe path: ${JSON.stringify(rawPath)}`,
-    undefined,
-    { reason: 'archive.path-unsafe' satisfies VelarModArchiveInstallFailureReason },
-  )
 
-  const normalized = posix.normalize(rawPath)
-  const segments = normalized.split('/')
-  if (
-    normalized === '.'
-    || normalized.startsWith('../')
-    || segments.includes('..')
-    || segments.length > MaxPathDepth
-  ) throw new AppError(
-    'SECURITY',
-    `Mod archive path escapes its root or is too deep: ${JSON.stringify(rawPath)}`,
-    undefined,
-    { reason: 'archive.path-escapes-root' satisfies VelarModArchiveInstallFailureReason },
-  )
-  return normalized.normalize('NFC')
-}
+
 
 function readZipSizes(entry: JSZipObject): { compressed: number; expanded: number } {
   const data = (entry as JSZipObject & { _data?: ZipSizeData })._data
@@ -89,28 +54,11 @@ function readZipSizes(entry: JSZipObject): { compressed: number; expanded: numbe
   }
 }
 
-function readText(value: unknown): string {
-  return trimmedStringOrEmpty(value)
-}
 
-function readAgentMetadata(agent: unknown, fallbackId: string) {
-  if (!isPlainObject(agent)) return { displayName: fallbackId, description: '', publisher: '', claimedTrust: '' }
-  return {
-    displayName: readText(agent.displayName) || fallbackId,
-    description: readText(agent.description),
-    publisher: readText(agent.publisher),
-    claimedTrust: readText(agent.trust),
-  }
-}
 
-function countContributions(agent: unknown): Readonly<Record<string, number>> {
-  if (!isPlainObject(agent) || !isPlainObject(agent.contributes)) return {}
-  return Object.fromEntries(
-    Object.entries(agent.contributes)
-      .filter(([, entries]) => isArray(entries) && !isEmpty(entries))
-      .map(([axis, entries]) => [axis, (entries as readonly unknown[]).length]),
-  )
-}
+
+
+
 
 /**
  * Host-neutral `.velarmod` scan, trust ticket, and extraction transaction.

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import { createManualApprovalOptions } from '../src/impl/tools/DefaultDenyApprovalPort'
+import { createManualApprovalOptions } from '../src/utils/toolkit/approval'
 
 describe('manual approval contract', () => {
   test('pins explicit user interaction and disables decision reuse', () => {

@@ -46,11 +46,7 @@ export { ChatStreamConsumer } from '../impl/chat/ChatStreamConsumer'
 export { ChatStreamProtocol,chatStreamProtocol } from '../impl/chat/ChatStreamProtocol'
 export { ChatStreamSessionLog } from '../impl/chat/ChatStreamSessionLog'
 export { McpCallTimeoutMs, McpClientConnection, McpConnectTimeoutMs } from '../impl/connectors/McpClientConnection'
-export {
-  assertSafeHttpFetchUrl,
-  isBlockedFetchIpAddress,
-  safeFetch,
-} from '../impl/connectors/SafeHttpFetch'
+export { assertSafeHttpFetchUrl, safeFetch } from '../impl/connectors/SafeHttpFetch'
 export { AgentLoopContextUsageManager } from '../impl/context/AgentLoopContextUsageManager'
 export {
   ContextUsageCalibrator,
@@ -67,7 +63,6 @@ export {
 export { ProviderRequestCompiler } from '../impl/context/ProviderRequestCompiler'
 export { compileProviderSendRequest } from '../impl/context/ProviderSendRequest'
 export {
-  buildToolPayloadRefOccurrenceKey,
   buildToolPayloadRefsForProviderMessages,
 } from '../impl/context/ToolPayloadReferencePlanner'
 export type { ToolResultCanonicalizerOptions } from '../impl/context/ToolResultCanonicalizer'
@@ -161,6 +156,7 @@ export type { LoopWindDownGuardOptions } from '../impl/loop/LoopWindDownGuard'
 export { loopContinue, loopFinish, LoopWindDownGuard } from '../impl/loop/LoopWindDownGuard'
 export type { QueryLoopRoleRuntime, QueryLoopRunContext, QueryLoopRuntime, QueryLoopTurnRunner } from '../impl/loop/QueryLoop'
 export { QueryLoop } from '../impl/loop/QueryLoop'
+export { isBlockedFetchIpAddress } from '../utils/connectors/fetch-safety'
 /** @deprecated 请改用 `QueryLoop`；该别名保留至 Agent 1.0。 */
 export { QueryLoop as AgentQueryLoop } from '../impl/loop/QueryLoop'
 export type { QueryTurnResult } from '../impl/loop/QueryTurn'
@@ -313,29 +309,17 @@ export { CodingSessionEditResultHelper } from '../impl/session/CodingSessionEdit
 export type { CodingSessionTrackerOptions } from '../impl/session/CodingSessionTracker'
 export { CodingSessionTracker } from '../impl/session/CodingSessionTracker'
 export { CodingSessionVerificationHelper } from '../impl/session/CodingSessionVerificationHelper'
-export { buildToolFingerprint, CodingToolCallDeduper } from '../impl/session/CodingToolCallDeduper'
+export { CodingToolCallDeduper } from '../impl/session/CodingToolCallDeduper'
 export { RuntimeReminderScheduler } from '../impl/session/RuntimeReminderScheduler'
 export { ContextPayloadKernelToolOutputStore } from '../impl/tools/ContextPayloadKernelToolOutputStore'
-export {
-  createManualApprovalOptions,
-  createUnattendedSubAgentApprovalPort,
-  defaultDenyApprovalPort,
-} from '../impl/tools/DefaultDenyApprovalPort'
+export { defaultDenyApprovalPort } from '../impl/tools/DefaultDenyApprovalPort'
 export { defaultRuntimePromptFeaturePolicy } from '../impl/tools/DefaultPromptFeaturePolicy'
 export type { InMemoryKernelToolOutputStoreOptions } from '../impl/tools/InMemoryKernelToolOutputStore'
 export { InMemoryKernelToolOutputStore } from '../impl/tools/InMemoryKernelToolOutputStore'
 export { isKernelWriteLikeTool, KernelToolLoopGuard } from '../impl/tools/KernelToolLoopGuard'
 export type { KernelToolResultMaterializerOptions } from '../impl/tools/KernelToolResultMaterializer'
 export { KernelToolResultMaterializer } from '../impl/tools/KernelToolResultMaterializer'
-export {
-  completeToolTransportNameAliases,
-  createProviderToolReferenceCanonicalizer,
-  createToolTransportNamePlan,
-  createToolTransportProjection,
-  ProviderToolNamePattern,
-  rewriteCanonicalToolReferences,
-  rewriteProviderToolReferences,
-} from '../impl/tools/ProviderToolReferenceCanonicalizer'
+export { createProviderToolReferenceCanonicalizer } from '../impl/tools/ProviderToolReferenceCanonicalizer'
 export type { SessionToolAllocatorOptions, SessionToolAllocatorPlanInput } from '../impl/tools/SessionToolAllocator'
 export { SessionToolAllocator,sessionToolAllocator } from '../impl/tools/SessionToolAllocator'
 export { ToolCapabilityRegistry } from '../impl/tools/ToolCapabilityRegistry'
@@ -354,6 +338,7 @@ export {
   withToolInputReuse,
 } from '../impl/tools/ToolInputReuseStore'
 export { ToolRegistryHelper as ToolRegistry, ToolRegistryHelper } from '../impl/tools/ToolRegistry'
+export { createUnattendedSubAgentApprovalPort } from '../impl/tools/UnattendedSubAgentApprovalPort'
 export { defaultUnsupportedInteractionPort } from '../impl/tools/UnsupportedInteractionPort'
 export type { ExecutionModeId } from '../types/agent'
 export type { KernelToolLoopGuardInput } from '../types/tools'
@@ -364,6 +349,8 @@ export type {
   ToolRegistryContext,
 } from '../types/tools'
 export { defineVelaTool } from '../utils/builtin/define-agent-tool'
+export { buildToolFingerprint } from '../utils/session/tool-dedupe'
+export { createManualApprovalOptions } from '../utils/toolkit/approval'
 // agentWorkflowSchema：check-schemas.mjs 契约门消费的权威 schema（agent:run_workflow）。
 export type { SessionLedgerLocator, SessionStoreDeps } from '../contract/requires.js'
 export type { AgentModelProvider, AgentModelRequestOptions, AgentModelRequestPolicy, AgentModelResolverPort } from '../contract/requires.js'
@@ -403,6 +390,7 @@ export type { AgentRuntimeInputPort } from '../contract/requires.js'
 export type { AgentRuntimeCapabilityPorts, CapabilityContextCollector, CapabilityDelegationPolicy, CapabilityIntentClassifier, CapabilityPromptContributor, CapabilityScopePolicy, CapabilityValidationInterpreter, ToolAllocationMetadata, ToolResultMiddleware, ToolValidationHintProvider } from '../contract/requires.js'
 export type { SubAgentTypeProvider } from '../contract/requires.js'
 export type { AgentTurnCapabilitySnapshotSource } from '../contract/requires.js'
+export { KernelSessionPolicy } from '../impl/execution/KernelSessionPolicy'
 export type { AgentModelInputModality } from '../types/agent.js'
 export type { ActiveDirectiveType } from '../types/agent.js'
 export type { AgentDelegationContract, AgentRoleExpectedOutputKind, WorkflowType } from '../types/agent.js'
@@ -664,6 +652,7 @@ export {
   estimateBlockTokens,
   hasFailureSignal,
 } from '../utils/context/context-ledger'
+export { buildToolPayloadRefOccurrenceKey } from '../utils/context/context-ref-envelope'
 export {
   ContextUsageCompactionPercent,
   ContextUsageHighWatermarkPercent,
@@ -711,7 +700,6 @@ export {
   resolveCustomSubAgentTypeConfig,
   resolveSubAgentTypeConfig,
 } from '../utils/delegation/sub-agent-type-registry'
-export { KernelSessionPolicy } from '../utils/execution/policy'
 export { createSkillDefinition } from '../utils/guidance/agent-skill-provider'
 export {
   BuiltInPromptCatalog,
@@ -1245,6 +1233,14 @@ export {
   toolArgsSchemaValidator,
   validateToolArgsWithNormalization,
 } from '../utils/tools/tool-args-schema-validator'
+export {
+  completeToolTransportNameAliases,
+  createToolTransportNamePlan,
+  createToolTransportProjection,
+  ProviderToolNamePattern,
+  rewriteCanonicalToolReferences,
+  rewriteProviderToolReferences,
+} from '../utils/tools/tool-identity'
 export {
   compactToolInputForModel,
   compactToolResultForDisplay,

@@ -2,8 +2,9 @@ import { isEmpty } from '@velaros-ai/core'
 
 import type { AgentRuntimeCapabilityPorts, ToolAllocationMetadata } from '../../contract/requires.js'
 import type { ToolCategoryId, ToolDescriptor } from '../../types/agent.js'
-import type { SessionToolAllocatorPlan, ToolAllocatorAdvisorState, ToolAllocatorCategory, ToolAllocatorDenialCode, ToolAllocatorDeniedRequest, ToolAllocatorFuseState, ToolAllocatorOperation, ToolAllocatorRequest, ToolAllocatorRuntimeIndex } from '../../types/tools.js'
+import type { SessionToolAllocatorPlan, ToolAllocatorAdvisorState, ToolAllocatorCategory, ToolAllocatorDeniedRequest, ToolAllocatorFuseState, ToolAllocatorOperation, ToolAllocatorRequest, ToolAllocatorRuntimeIndex } from '../../types/tools.js'
 import { resolveToolAllocationMetadata } from '../../utils/capabilities'
+import { createDeniedRequest, normalizeText, uniqueStrings, uniqueToolCategoryIds } from '../../utils/tools/session-tool-allocator'
 
 interface SessionToolAllocatorPlanInput<TTool extends { name: string } = ToolDescriptor> {
   turn: number
@@ -23,31 +24,13 @@ interface SessionToolAllocatorOptions {
   unresolvedRequestFuseThreshold?: number
 }
 
-function createDeniedRequest(input: {
-  operation: ToolAllocatorOperation
-  categoryId: ToolCategoryId
-  code: ToolAllocatorDenialCode
-  message: string
-}): ToolAllocatorDeniedRequest {
-  return {
-    operation: input.operation,
-    categoryId: input.categoryId,
-    code: input.code,
-    message: input.message,
-  }
-}
 
-function uniqueStrings(values: Iterable<string>): string[] {
-  return [...new Set(values)]
-}
 
-function uniqueToolCategoryIds(values: Iterable<ToolCategoryId>): ToolCategoryId[] {
-  return [...new Set(values)]
-}
 
-function normalizeText(value: string): string {
-  return value.trim().replace(/\s+/g, ' ').toLowerCase()
-}
+
+
+
+
 
 class SessionToolAllocator {
   private readonly baselineToolNames: readonly string[]

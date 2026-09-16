@@ -18,11 +18,11 @@
 // 钳到规范形态。判据：同一份上下文在不同机器/不同 locale 下必须算出**同一个纪元**，否则诊断会把
 // 环境差异误报成「上下文变了」，而这类误报没有任何办法证伪。
 //
-import { isFiniteNumber, isPresent } from '@velaros-ai/core'
+import { isPresent } from '@velaros-ai/core'
 
 import type { BuildKernelContextEpochInput, KernelContextEpoch, KernelContextEpochClaim, KernelContextEpochGuardLike, RecordKernelContextEpochDiagnosticOptions } from '../../types/loop.js'
 import type { ProviderTurnRecorder } from '../../types/records.js'
-import { compareStableStrings } from '../../utils/residency/determinism'
+import { normalizeLabel, normalizeNonNegativeInteger, normalizeOptionalLabel, normalizeOptionalNonNegativeInteger, normalizePercent, sortedUnique } from '../../utils/loop/context-epoch'
 import { UnknownGovernanceSessionId } from '../../utils/residency/session-key'
 import { KernelContextEpochStaleError } from '../errors/KernelContextEpochStaleError'
 
@@ -52,36 +52,17 @@ export class KernelContextEpochGuard implements KernelContextEpochGuardLike {
   }
 }
 
-/** P7-2：epoch 指纹里的清单序必须 locale 无关（码元序），否则同一份上下文跨机器判成"变了"。 */
-function sortedUnique(values: readonly string[]): string[] {
-  return [...new Set(values.map((value) => value.trim()).filter(Boolean))].sort(
-    compareStableStrings
-  )
-}
 
-function normalizeLabel(value: string, fallback: string): string {
-  return value.trim() || fallback
-}
 
-function normalizeOptionalLabel(value: LooseOptional<string>): Nullable<string> {
-  const normalized = value?.trim()
-  return normalized ? normalized : null
-}
 
-function normalizeOptionalNonNegativeInteger(value: LooseOptional<number>): Nullable<number> {
-  if (!isFiniteNumber(value) || value < 0) return null
-  return Math.floor(value)
-}
 
-function normalizeNonNegativeInteger(value: number): number {
-  if (!isFiniteNumber(value)) return 0
-  return Math.max(0, Math.floor(value))
-}
 
-function normalizePercent(value: number): number {
-  if (!isFiniteNumber(value)) return 0
-  return Math.min(100, Math.max(0, value))
-}
+
+
+
+
+
+
 
 export function buildKernelContextEpoch(input: BuildKernelContextEpochInput): KernelContextEpoch {
   const epoch: KernelContextEpoch = {

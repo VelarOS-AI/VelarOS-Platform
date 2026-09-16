@@ -137,3 +137,8 @@ export function normalizeLegacyFoldStub(value: unknown): Nullable<ContextRefEnve
 
   return null
 }
+
+/** 同一条工具结果在 provider 消息里的出现位置键（消息下标 + 片段下标）。 */
+export function buildToolPayloadRefOccurrenceKey(messageIndex: number, partIndex: number): string {
+  return `\u0000tool-result-occurrence:${messageIndex}:${partIndex}`
+}

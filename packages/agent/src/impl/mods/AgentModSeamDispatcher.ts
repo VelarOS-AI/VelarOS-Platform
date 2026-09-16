@@ -11,19 +11,20 @@
 // 不能发明新钩子。当前**真接线**的派发点由本文件的 `WiredSeamKindsByDispatcher` 逐条登记
 // （叙述见 VelarOS-Platform 的 docs/agent/agent-mod-trunk.md）；其余 kind 只有注册面与类型，
 // 注册它们会当场收到 `mod.seam-not-wired` 诊断。
-import { isEmpty, isFunction, isObject, isString, optionalWhen, toNullable } from '@velaros-ai/core'
+import { isEmpty, isFunction, isString, optionalWhen, toNullable } from '@velaros-ai/core'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
-import type { AgentModDiagnostic, AgentModHookMatcher, AgentModSeamKind } from '../../types/agent.js'
+import type { AgentModDiagnostic, AgentModSeamKind } from '../../types/agent.js'
 import type { AgentModHookContext, AgentModSeamDispatchMethodName,AgentModSeamHandler, AgentModSeamRegistration, AgentModSeamRegistrationInput, AgentModSessionLifecycleEvent, AgentModToolCallBeforeEvent, AgentModToolCallBeforeOutcome, AgentModToolResultAfterEvent, AgentModToolResultAfterOutcome, AgentModTurnContextAppendage, AgentModTurnContextAssembleEvent, AgentModTurnContextAssembleOutcome } from '../../types/mods.js'
+import { isThenable, matchesHook, readErrorMessage, resolveHookTimeoutMs } from '../../utils/mods/seams'
 import { compareStableStrings } from '../../utils/residency/determinism'
 
 // ─── 已接线 seam 的事件/结果契约 ──────────────────────────────────────────────
 
 const MaxSeamDiagnostics = 200
-const DefaultHookTimeoutMs = 5_000
-const MinimumHookTimeoutMs = 100
-const MaximumHookTimeoutMs = 30_000
+
+
+
 
 /**
  * 派发方法 → 它真正读取 handlers 的 kind（**已接线名单的唯一来源**）。
@@ -45,37 +46,15 @@ const WiredSeamKinds: ReadonlySet<AgentModSeamKind> = new Set<AgentModSeamKind>(
   Object.values(WiredSeamKindsByDispatcher).flat()
 )
 
-function readErrorMessage(error: unknown): string {
-  if (error instanceof Error) return error.message
-  return String(error)
-}
 
-function isThenable(value: unknown): value is Promise<unknown> {
-  return isObject(value) && isFunction(Reflect.get(value, 'then'))
-}
 
-function resolveHookTimeoutMs(value?: number): number {
-  if (!Number.isFinite(value)) return DefaultHookTimeoutMs
-  return Math.max(MinimumHookTimeoutMs, Math.min(MaximumHookTimeoutMs, Math.trunc(value!)))
-}
 
-function includesString(values: LooseOptional<readonly string[]>, value: unknown): boolean {
-  return !values || (isString(value) && values.includes(value))
-}
 
-/** matcher 字段间 AND，列表内 OR；事件缺字段时 fail-closed。 */
-function matchesHook(
-  matcher: LooseOptional<AgentModHookMatcher>,
-  event: unknown
-): boolean {
-  if (!matcher) return true
-  if (!isObject(event)) return false
-  return (
-    includesString(matcher.toolNames, Reflect.get(event, 'toolName')) &&
-    includesString(matcher.phases, Reflect.get(event, 'phase')) &&
-    includesString(matcher.statuses, Reflect.get(event, 'status'))
-  )
-}
+
+
+
+
+
 
 /**
  * seam 派发器。

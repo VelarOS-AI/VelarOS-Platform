@@ -50,17 +50,6 @@ export const DefaultMaxTrackedSessions = 128
  * 前提（也是全链既有纪律）：**没有人原地改写已经进过历史的消息对象**——要改就产生新对象。原地
  * 改会让缓存给出陈旧指纹，前缀比对把已经变了的那截当成没变。
  */
-const fingerprintByMessage = new WeakMap<ModelMessage, string>()
-
-function cachedStableFingerprint(message: ModelMessage): string {
-  const cached = fingerprintByMessage.get(message)
-  if (isPresent(cached)) return cached
-
-  const fingerprint = stableFingerprint(message)
-  fingerprintByMessage.set(message, fingerprint)
-  return fingerprint
-}
-
 export interface ContextGovernanceSessionOptions {
   /**
    * I2 蒸馏器解析器（晚绑）。
@@ -91,6 +80,12 @@ export class ContextGovernanceSession {
   private readonly reports: GovernanceEpochReport[] = []
   private readonly distillRunner: ContextDistillRunner
   public updatedAt = 0
+
+  /**
+   * 按消息身份缓存指纹（本会话内）。WeakMap：消息被丢弃时条目自动回收，缓存不构成泄漏。
+   * 前提是没有人原地改写已经进过历史的消息对象——要改就产生新对象。
+   */
+  private readonly fingerprintByMessage = new WeakMap<ModelMessage, string>()
   /**
    * 最近一次编译期治理用的量纲（送核门窗口口径 + 字符/token 密度）。
    *
@@ -140,11 +135,21 @@ export class ContextGovernanceSession {
   }
 
   /** 把本轮的 provider 历史同步进账本：前缀一致则增量追加，分叉则整本重建。 */
+  /** 按消息身份取指纹，未命中时现算并记账。 */
+  private cachedStableFingerprint(message: ModelMessage): string {
+    const cached = this.fingerprintByMessage.get(message)
+    if (isPresent(cached)) return cached
+
+    const fingerprint = stableFingerprint(message)
+    this.fingerprintByMessage.set(message, fingerprint)
+    return fingerprint
+  }
+
   public syncHistory(input: ContextGovernanceSyncInput): ContextGovernanceSyncResult {
     const { messages, at } = input
     // 量纲先落地再摄入：重建出来的新账本要带着同一把尺子出生。
     this.applyMeasuredCharsPerToken(input.charsPerToken)
-    const fingerprints = messages.map((message) => cachedStableFingerprint(message))
+    const fingerprints = messages.map((message) => this.cachedStableFingerprint(message))
     const sharedPrefix = resolveSharedPrefixLength(this.ingestedFingerprints, fingerprints)
     const rebuilt = sharedPrefix < this.ingestedFingerprints.length
     const from = rebuilt ? 0 : sharedPrefix

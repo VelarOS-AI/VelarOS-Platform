@@ -3,9 +3,9 @@ import { expect, test } from 'bun:test'
 
 import { InMemoryContextPayloadStore } from '../src/impl/context/InMemoryContextPayloadStore'
 import {
-  buildToolPayloadRefOccurrenceKey,
   buildToolPayloadRefsForProviderMessages,
 } from '../src/impl/context/ToolPayloadReferencePlanner'
+import { buildToolPayloadRefOccurrenceKey } from '../src/utils/context/context-ref-envelope'
 
 function message(value: string, toolCallId = 'read-1'): ModelMessage {
   return {

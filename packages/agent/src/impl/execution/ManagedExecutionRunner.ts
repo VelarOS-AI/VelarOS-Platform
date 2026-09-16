@@ -1,6 +1,5 @@
 import type { ModelMessage } from 'ai'
 
-import { isBlank, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import type { Logger } from '@velaros-ai/core/logger'
 
@@ -8,6 +7,7 @@ import type { AgentRuntimeInputPort,ExecutionActivitySignalsPort, ExecutionColla
 import type { AgentEvent } from '../../types/agent'
 import type { ExecutionRecord,StreamStatePayload } from '../../types/agent.js'
 import type { ExecutionAbortOptions, RunManagedExecutionParams } from '../../types/execution.js'
+import { resolveAbortReason } from '../../utils/execution/managed-execution'
 import { ChatRuntimeEvents } from '../../utils/wire/chat-runtime.js'
 import type { ExecutionRecords } from '../records/ExecutionRecords'
 import type { ExecutionStore } from '../records/ExecutionStore'
@@ -281,11 +281,7 @@ class ManagedExecutionRunner {
   }
 }
 
-function resolveAbortReason(reason: unknown): string {
-  if (isString(reason) && !isBlank(reason)) return reason
-  if (reason instanceof Error && !isBlank(reason.message)) return reason.message
-  return '运行被终止'
-}
+
 
 export { ManagedExecutionRunner }
 export type { ManagedExecutionRunnerDependencies }

@@ -8,7 +8,7 @@ import { ExecutionRecords } from '../src/impl/records/ExecutionRecords'
 import { ExecutionStore } from '../src/impl/records/ExecutionStore'
 import { SourceSessionGuard } from '../src/impl/records/SourceSessionGuard'
 import { CodingSessionTracker } from '../src/impl/session/CodingSessionTracker'
-import { createUnattendedSubAgentApprovalPort } from '../src/impl/tools/DefaultDenyApprovalPort'
+import { createUnattendedSubAgentApprovalPort } from '../src/impl/tools/UnattendedSubAgentApprovalPort'
 import { ExecutionStateMachine } from '../src/utils/records/state-machine'
 import { createTaskApprovalPort } from '../src/utils/toolkit/task-approval'
 
