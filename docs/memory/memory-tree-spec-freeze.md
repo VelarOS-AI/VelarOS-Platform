@@ -2,7 +2,7 @@
 
 > 状态：**现行规范**。S1–S8 全部实施片以本文为准；本文与 [memory-tree-product-architecture.md](./memory-tree-product-architecture.md) 冲突时，以本文为准（本文只收窄、不推翻架构文档的产品裁决）。
 > 日期：2026-07-24。冻结档：F5（密码学 / 序列化核心）。
-> 参考实现：`packages/memory/src/memory-tree/v2/DiffChain.ts`。逐字节回归探针：`packages/memory/src/memory-tree/v2/treediff-v2-probe.ts`（附录 A fixture + **46 断言**），由 `bun run check` 链的 `check:memory-anchors`（`scripts/checks/memoryTreeDiffProbe.mjs`）机械复跑——**代码 = 规范 = 探针**，三者任一失配即判退。此门替补已退役的 `check:schemas` 在记忆树冻结面的锁位，专拦 D1 类排序/canonical 漂移悄改哈希。附录 A.2 的锚点全字段 fixture 可**纯从本文档复算**。
+> 参考实现：`packages/memory/src/utils/tree-v2/diff-chain.ts`。逐字节回归探针：`packages/memory/probes/tree-v2/treediff.probe.ts`（附录 A fixture + **46 断言**），由 `bun run check` 链的 `probe:memory` 链上的 `probe:treediff-v2`（`scripts/memory/checks/memoryTreeDiffV2Probe.mjs`）机械复跑——**代码 = 规范 = 探针**，三者任一失配即判退。此门替补已退役的 `check:schemas` 在记忆树冻结面的锁位，专拦 D1 类排序/canonical 漂移悄改哈希。附录 A.2 的锚点全字段 fixture 可**纯从本文档复算**。
 > 修改纪律：本文任何**冻结语义**（§1/§2 canonical 与哈希公式、§0 域字符串、§3–§5 构造配方）的变更 = 规范版本变更（`.v2` → `.v3` 域字符串整体推进 + 重灌级迁移），不存在"小改"。附录 A.2 锚点是这些语义的逐字节金标：改锚点值必须是语义变更的**结果**，不得反向为迁就代码漂移原地改常数。
 
 ## 冻结范围与编号映射
@@ -145,7 +145,7 @@ base_event_hash = SHA256( UTF8( canonical({
 - **checkpoint cache 间隔 = 64 个 committed tree version**；当前投影始终随 authority head 更新。checkpoint 与当前投影只含结构 + blob 引用，统一进入 S2 的加密 index generation；它们是可丢弃派生缓存，损坏/缺失/落后时只从 authority forward 链重建。
 - **INV-BR 机械化**：forward replay 结果持有进程内 WeakSet 来源证明；非空起点继续正向重放时必须提交上一个已证明 forward 结果。公开读副本、伪造 `direction:"forward"`、backward replay 与把 backward 节点经空 diff “洗白”的结果都不能进入投影/checkpoint/base 写路径；生产持久化模块同时由静态探针禁止调用 `replayTreeDiffsBackwardV2`。
 
-**证明义务兑现（WS3-S3）**：`TreeStore.ts` 以单事务提交 meta CAS + snapshot + diff + frontier，open 时逐版本复算 `event_hash` / `tree_hash` / canonical JSON / 双锚点；`TreeManifest.ts` 与 `TreeProjectionIndex.ts` 落上述基点和加密 checkpoint。`tree-store-v2-probe.ts` 覆盖事务回滚、64 版 checkpoint、head 压缩、基点后再锚定、派生代损坏重建、manifest 篡改拒开与 INV-BR 正负控，由 `check:memory-storage` 编入根门禁。
+**证明义务兑现（WS3-S3）**：`impl/tree-v2/MemoryTreeStoreV2.ts` 以单事务提交 meta CAS + snapshot + diff + frontier，open 时逐版本复算 `event_hash` / `tree_hash` / canonical JSON / 双锚点；`utils/tree-v2/tree-manifest.ts` 与 `impl/tree-v2/MemoryTreeProjectionIndexV2.ts` 落上述基点和加密 checkpoint。`probes/tree-v2/tree-store.probe.ts` 覆盖事务回滚、64 版 checkpoint、head 压缩、基点后再锚定、派生代损坏重建、manifest 篡改拒开与 INV-BR 正负控，由 `check:memory-storage` 编入根门禁。
 
 ## §3 随机化承诺构造（#11 之 content_commitment，终稿）
 
@@ -341,7 +341,7 @@ input_fingerprint = "f2:" + hex( SHA256( UTF8( canonical({
 
 无密钥合法：输入全部为内部随机 id 与枚举，无明文语义面。`pipelineVersion` 纳入指纹：管线语义变更后旧指纹自然失效，防"同输入不同管线"的假幂等。
 
-**证明义务兑现（WS3-S4）**：`IdentityKeys.ts` 是 §4 / §5 / §6.4 的单源实现；`EvidenceIngest.ts` 在密文先落盘后以单 SQLite 事务分配连续 `ingest_sequence`、登记 blob 并写 Evidence，workspace 路径先经 `realpath` 收敛；`DreamRuns.ts` 与 `TreeStore.ts` 将 run `committed`、frontier 与树版本 CAS 放入同一事务，并为零候选批提供不伪造空 diff 的原子 no-op 提交。`ingest-dream-v2-probe.ts` 覆盖 I1–I6、可逆态再采集、fingerprint 重试、事务点 CAS 回滚、孤儿 run/blob 恢复与密文按需解封共 **65 条断言**，由 `check:memory-storage` 编入根门禁。
+**证明义务兑现（WS3-S4）**：`impl/tree-v2/MemoryIdentityKeyServiceV2.ts` 是 §4 / §5 / §6.4 的单源实现；`impl/tree-v2/MemoryEvidenceIngestServiceV2.ts` 在密文先落盘后以单 SQLite 事务分配连续 `ingest_sequence`、登记 blob 并写 Evidence，workspace 路径先经 `realpath` 收敛；`impl/tree-v2/MemoryDreamRunCoordinatorV2.ts` 与 `impl/tree-v2/MemoryTreeStoreV2.ts` 将 run `committed`、frontier 与树版本 CAS 放入同一事务，并为零候选批提供不伪造空 diff 的原子 no-op 提交。`probes/tree-v2/ingest-dream.probe.ts` 覆盖 I1–I6、可逆态再采集、fingerprint 重试、事务点 CAS 回滚、孤儿 run/blob 恢复与密文按需解封共 **65 条断言**，由 `check:memory-storage` 编入根门禁。
 
 **证明义务兑现（WS3-S5）**：authority migration 2 追加 `memory_concept_evidence` / `memory_episode_evidence`，补齐 Concept、Episode、Claim、Relation 四类意义对象的 Evidence 谱系；`MeaningCuration.ts` 不接受模型提供的存储 id，而是重算稳定键、盲索引、信任上限、密文正文与树投影。仅由 `external_content` 支撑的用户画像候选机械拒绝，普通 Claim 封顶为 `inferred / 0.4`，敏感 Claim 必须有 `user_stated` 或 `system_observed` 支撑。意义对象、Identity Epoch、projection diff、frontier 与 run 状态通过 tree authority participant 同事务发布。`meaning-curation-v2-probe.ts` 以 **43 条断言**覆盖信任降级、谱系闭合、稳定键强化收敛、正文零落库、重开重放与 CAS 零半提交；authority 探针另覆盖 v1→v2 追加迁移。
 
@@ -416,12 +416,12 @@ Desktop 权威切换或旧表 drop 动词。`QueryFacade.ts` 的同步 `recall` 
 - `<wrapped>` = base64(wrapping root 加密后的 32 字节密钥)。机密性全部来自 wrapping（信封由 OS 安全存储守护），容器选 JSON：文件小、整文件原子重写模型、可诊断；二进制格式在此没有换取任何安全收益。
 - **严格 parse**：未知顶层字段 = 拒绝加载。密钥文件的宽容解析是伪造注入面。
 - 擦除剔除协议、代际保留数、与 storage generation 的成对回滚约束沿架构文档（S1 实现细化），本骨架只冻结**文件形态与字段命名**，S1 不得另起格式。
-- **证明义务兑现（WS3-S1）**：`packages/memory/src/memory-tree/v2/storage/` 已落地换代/剔除机制与 `storage-v2-probe.ts`。探针在写新代→fsync→原子改写 CURRENT→删旧代的 **10 个原子步骤**前逐点注入崩溃，验证 CURRENT 判定的生效代恢复无损、已擦 DEK 不在任一存活代际残留且二次重开不复活；连同五根布局、备份隔离、严格 parse、GCM 篡改、root 轮换与 crypto-shred 共 **136 条冻结断言**，由 `bun run check` 链的 `check:memory-storage` 机械复跑。
+- **证明义务兑现（WS3-S1）**：`packages/memory/src/{impl,utils}/tree-v2/storage/` 已落地换代/剔除机制与 `probes/tree-v2/storage.probe.ts`。探针在写新代→fsync→原子改写 CURRENT→删旧代的 **10 个原子步骤**前逐点注入崩溃，验证 CURRENT 判定的生效代恢复无损、已擦 DEK 不在任一存活代际残留且二次重开不复活；连同五根布局、备份隔离、严格 parse、GCM 篡改、root 轮换与 crypto-shred 共 **136 条冻结断言**，由 `bun run check` 链的 `check:memory-storage` 机械复跑。
 - keyring 根整体**永不复制、永不入备份**（架构既定，重申为骨架约束）。
 
 ## §8 DiffChain v0 → 冻结版修订记录
 
-本次 S0 同批落地的代码修订（`packages/memory/src/memory-tree/v2/DiffChain.ts`），即 §1.4 差异表 D1–D4 的实现：
+本次 S0 同批落地的代码修订（`packages/memory/src/utils/tree-v2/diff-chain.ts`），即 §1.4 差异表 D1–D4 的实现：
 
 1. `hashTreeStateV2` / `toSortedNodes` 排序改 `compareCodeUnit`（D1）。
 2. `sortValue` 值域收紧 + `isPlainRecord` 原型检查 + 数组内 `undefined` 显式拒绝（D2）。
@@ -430,7 +430,7 @@ Desktop 权威切换或旧表 drop 动词。`QueryFacade.ts` 的同步 `recall` 
 
 v2 层零接线、零落库数据，修订无迁移面。
 
-**回归门兑现物**（返修批 A：原冻结以现在时声称的探针不在库，此次补齐）：逐字节探针 `packages/memory/src/memory-tree/v2/treediff-v2-probe.ts` 固化附录 A fixture + 双锚点，**46 断言基线**（§1.1 值域拒绝 12 + 错误可分类 1 + §1.2/§1.3 canonical 向量 9 + 量化 3 + 创世哨兵 2 + §2.1 tree_hash 5 + §2.2 event_hash 7 + §3/§8 正逆重放·redact 7）。由 `bun run check` 链的 `check:memory-anchors`（`scripts/checks/memoryTreeDiffProbe.mjs`，走 `bun --conditions=source` 吃 TS 源）机械复跑，锚点/canonical 失配即判退——替补退役的 `check:schemas` 对本冻结面的锁位。附录 A.2 锚点为由本参考实现复算的当前金标（原冻结的 `9e1d…`/`da8f…` 是字段值未提交、不可复算的占位，已更正）。
+**回归门兑现物**（返修批 A：原冻结以现在时声称的探针不在库，此次补齐）：逐字节探针 `packages/memory/probes/tree-v2/treediff.probe.ts` 固化附录 A fixture + 双锚点，**46 断言基线**（§1.1 值域拒绝 12 + 错误可分类 1 + §1.2/§1.3 canonical 向量 9 + 量化 3 + 创世哨兵 2 + §2.1 tree_hash 5 + §2.2 event_hash 7 + §3/§8 正逆重放·redact 7）。由 `bun run check` 链的 `probe:memory` 链上的 `probe:treediff-v2`（`scripts/memory/checks/memoryTreeDiffV2Probe.mjs`）机械复跑，锚点/canonical 失配即判退——替补退役的 `check:schemas` 对本冻结面的锁位。附录 A.2 锚点为由本参考实现复算的当前金标（原冻结的 `9e1d…`/`da8f…` 是字段值未提交、不可复算的占位，已更正）。
 
 ## 附录 A：跨版本 fixture（探针逐字节断言）
 
@@ -448,7 +448,7 @@ v2 层零接线、零落库数据，修订无迁移面。
 
 **A.2 状态与事件哈希向量（全字段 fixture，可纯从本文档复算）**
 
-固定双节点树（root + leaf），全 14 字段冻结如下；本 fixture 与探针 `treediff-v2-probe.ts` 的 `TreeDiffV2ProbeFixture` 同源。锚点 = 下列 canonical 字节的 UTF-8 `SHA256`（小写 hex），可脱离代码手工复算（对抗校验批 A 的 D1 缺口整改：原冻结只给 leaf 两字段、其余 11 字段委托给不在库的探针，无法复算）。
+固定双节点树（root + leaf），全 14 字段冻结如下；本 fixture 与探针 `probes/tree-v2/treediff.probe.ts` 的 `TreeDiffV2ProbeFixture` 同源。锚点 = 下列 canonical 字节的 UTF-8 `SHA256`（小写 hex），可脱离代码手工复算（对抗校验批 A 的 D1 缺口整改：原冻结只给 leaf 两字段、其余 11 字段委托给不在库的探针，无法复算）。
 
 | 字段                 | root 节点       | leaf 节点                                     |
 | -------------------- | --------------- | --------------------------------------------- |
@@ -490,7 +490,7 @@ tree_hash = 560d5c3c9fc1be42df6366f68ca3cd45ea3536a77789c4d021dd6bfe89bab988
 event_hash = db13996682f4b41248df3e3bb7b34d9cc6f3a676ce6c10b8bc58432ac89a9d1e
 ```
 
-（更正记录：原冻结的 `9e1d6f79…` / `da8f08f9…` 由字段值从未提交的 fixture 得出，不可复算，本次返修作废；上列为参考实现 `DiffChain.ts` 的真实复算值，`check:memory-anchors` 门逐字节锁定。此更正仅恢复文档—代码—探针一致，**不改任何域字符串或被哈希字节布局，非 `.v2`→`.v3` 语义变更**。）
+（更正记录：原冻结的 `9e1d6f79…` / `da8f08f9…` 由字段值从未提交的 fixture 得出，不可复算，本次返修作废；上列为参考实现 `utils/tree-v2/diff-chain.ts` 的真实复算值，`probe:treediff-v2` 门逐字节锁定。此更正仅恢复文档—代码—探针一致，**不改任何域字符串或被哈希字节布局，非 `.v2`→`.v3` 语义变更**。）
 
 ## 附录 B：诚实边界备忘（对抗校验批 A 的自认清单）
 
@@ -504,7 +504,7 @@ event_hash = db13996682f4b41248df3e3bb7b34d9cc6f3a676ce6c10b8bc58432ac89a9d1e
 
 对抗校验批 A 五条 major 全部成立，已在正文闭合，此处留账（不是遗留缺口，是"改了什么/改在哪"的索引）：
 
-- **B-A①③ 探针不在库 + 锚点不可复算（crypto/consistency）**：原冻结以现在时声称的 `treediff-v2-probe.ts` 与"32+ 断言复跑"在库/git 全历史中从不存在，锚点 `9e1d…`/`da8f…` 的 11 个节点字段值未提交、无法复算，且所引 `check:schemas` 已同日退役 ⇒ D1 类漂移无门可拦。**处置**：① 落地探针 `treediff-v2-probe.ts`（46 断言，附录 A fixture 同源）；② 附录 A.2 补全 14 字段 fixture + 被哈希 canonical 字节，锚点更正为真实复算值 `560d…`/`db13…`，可脱离代码手工 `SHA256` 复算；③ 新增 `check:memory-anchors` 门编入 `bun run check` 链，替补 `check:schemas` 在本冻结面的锁位。密码学构造本身经批 A 独立验证健全，本组是落地/完整性缺口，非构造缺陷。
+- **B-A①③ 探针不在库 + 锚点不可复算（crypto/consistency）**：原冻结以现在时声称的 `probes/tree-v2/treediff.probe.ts` 与"32+ 断言复跑"在库/git 全历史中从不存在，锚点 `9e1d…`/`da8f…` 的 11 个节点字段值未提交、无法复算，且所引 `check:schemas` 已同日退役 ⇒ D1 类漂移无门可拦。**处置**：① 落地探针 `probes/tree-v2/treediff.probe.ts`（46 断言，附录 A fixture 同源）；② 附录 A.2 补全 14 字段 fixture + 被哈希 canonical 字节，锚点更正为真实复算值 `560d…`/`db13…`，可脱离代码手工 `SHA256` 复算；③ 新增 `probe:treediff-v2` 门编入 `bun run check` 链，替补 `check:schemas` 在本冻结面的锁位。密码学构造本身经批 A 独立验证健全，本组是落地/完整性缺口，非构造缺陷。
 - **B-A②④ frontier 终态前提三态一刀切（crypto/lifecycle）**：§6.2"跳过即计水位、无回补"的终态论证只覆盖 `erased`；`excluded`/`source_deleted` 是可逆态，其水位之下的复活在 I2 只进不退下永久漏整理。**处置**：§6.2 拆分三态（仅 `erased` 内在终态），冻结"复活即再采集"——可逆态撤销走再采集（新 `ingest_sequence` 高于 frontier），并升格为 §6.3 **I6** 不变量。
 - **B-A⑤ C 案重灌不携带擦除态（lifecycle）**：§5.5"全部 stable_key 从头计算"对 erased 行两个分支都不成立（存活证据重导致擦除内容复活 / 无内容行算不出键）。**处置**：§5.5 补三条——"从头计算"定义域收窄为存活行；erased 以墓碑原样转录不重派生键；重灌携带擦除 deny-set（跨库延续 crypto-shred 不变量，与 I5 同机制）压制再生成。
 
@@ -512,7 +512,7 @@ event_hash = db13996682f4b41248df3e3bb7b34d9cc6f3a676ce6c10b8bc58432ac89a9d1e
 
 ### 批 A minor/note 处置账（2026-07-25 三轮）
 
-批 A 遗留 8 条 minor/note + 1 条 §7.2 证明义务标注，逐条处置如下（均**不动** §1/§2 任何算法/字节语义，`check:memory-anchors` 46/46 保持绿）：
+批 A 遗留 8 条 minor/note + 1 条 §7.2 证明义务标注，逐条处置如下（均**不动** §1/§2 任何算法/字节语义，`probe:treediff-v2` 46/46 保持绿）：
 
 | #   | 评审条目（档）                                                       | 裁决                                 | 处置落点                                                                                                                                                                      |
 | --- | -------------------------------------------------------------------- | ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -526,6 +526,6 @@ event_hash = db13996682f4b41248df3e3bb7b34d9cc6f3a676ce6c10b8bc58432ac89a9d1e
 | 8   | 架构 event_hash 公式漂移（note）                                     | **修订**（加指针注，不重写正文）     | 架构第 1087 行加规范权威指针注：`event_hash` 覆盖字段以 spec §2.2（§1.4 D4）为准，4 字段示意已扩 6 字段                                                                       |
 | +   | §7.2 keyring「已擦 DEK 跨代际剔除/换代崩溃可恢复」断言未证明（note） | **修订并兑现**                       | §7.2 先将证明义务钉给 S1；现由存储实现 + 10 崩溃点 / 136 断言探针兑现，并编入 `check:memory-storage`                                                                          |
 
-八条无一驳回——均为文档一致性/威胁记述/接缝补齐/交叉引用级修订，不触及冻结的算法与字节布局，故不构成 `.v2`→`.v3` 语义变更。**门结果：`check:memory-anchors` 46/46 逐字节一致（改前改后均绿）。**
+八条无一驳回——均为文档一致性/威胁记述/接缝补齐/交叉引用级修订，不触及冻结的算法与字节布局，故不构成 `.v2`→`.v3` 语义变更。**门结果：`probe:treediff-v2` 46/46 逐字节一致（改前改后均绿）。**
 
 > 精确文件清单（供 `--only`）：`docs/memory-tree-spec-freeze.md`（条目 1–7 + §7.2 标注 + 本处置账）、`docs/memory-tree-product-architecture.md`（条目 8 指针注，第 1087 行）。两文件均未 stage/commit。

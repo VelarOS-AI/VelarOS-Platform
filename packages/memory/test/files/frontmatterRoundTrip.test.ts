@@ -8,9 +8,9 @@
 
 import { describe, expect, test } from 'bun:test'
 
-import { createMemoryFilesBackend, type MemoryFilesScopeRoot } from '../../src/files/Backend'
-import { parseMemoryFileDocument, serializeMemoryFileDocument } from '../../src/files/Frontmatter'
-import { createInMemoryMemoryFilesIo } from '../../src/files/Io'
+import { createInMemoryMemoryFilesIo } from '../../src/contract/files-io'
+import { createMemoryFilesBackend, type MemoryFilesScopeRoot } from '../../src/impl/files/MemoryFilesBackend'
+import { parseMemoryFileDocument, serializeMemoryFileDocument } from '../../src/utils/files/frontmatter'
 
 const Root: MemoryFilesScopeRoot = {
   scopeType: 'global',

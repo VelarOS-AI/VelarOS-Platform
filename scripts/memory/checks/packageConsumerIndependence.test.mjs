@@ -29,8 +29,8 @@ test('maintained package test resolves explicit grouped-package build entries', 
     'utf8'
   )
   for (const packageEntry of [
-    'packages/memory/dist/index.js',
-    'packages/memory/dist/adapter-kernel/index.js',
+    'packages/memory/dist/exports/index.js',
+    'packages/memory/dist/exports/adapter-kernel.js',
   ]) {
     assert.match(
       source,
@@ -63,6 +63,8 @@ test('consumer gate runs from a copied repository without sibling repositories',
       copyDirectoryWithoutDependencies('tests/memory/consumer', copiedRepository),
     ])
     await copyScript('scripts/memory/checks/lockfileConsistency.mjs', copiedRepository)
+    // 门禁自己 import 的安全打包入口也要跟着进隔离副本，否则整条检查在解析阶段就断了。
+    await copyScript('scripts/release/safe-package-pack.mjs', copiedRepository)
     await copyScript(GateRelativePath, copiedRepository)
 
     assert.deepEqual(await readdir(isolatedParent), ['repository'])

@@ -1,7 +1,7 @@
 // 每个源文件都能在全新进程里单独加载：package.json 的每个入口与 src 下每个源文件各起一个 bun 进程只 import 它，不许报错。
-// 去 barrel 之前，包内互相经 `./memory-tree`、`./knowledge/domain` 等中间转发绕回来，模块图里带环；单独 import 环上的
+// 去 barrel 之前，包内互相经 `./memory-tree`、`./backend` 等中间转发绕回来，模块图里带环；单独 import 环上的
 // 文件会在初始化时撞上「Cannot access … before initialization」（TDZ），只因为消费方总先 import 包根才没炸出来。
-// 探针（`*-probe.ts`）是可执行脚本不是模块，import 就会跑断言、其中几个还要 Electron 的原生 SQLite，不在这条检查里。
+// 探针是可执行脚本不是模块，import 就会跑断言、其中几个还要 Electron 的原生 SQLite；它们已经搬出 `src/` 到 `probes/`，本来就不在这条检查里。
 import { spawn } from 'node:child_process'
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { availableParallelism } from 'node:os'

@@ -19,32 +19,32 @@
     "velaros"
   ],
   "type": "module",
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "main": "./dist/exports/index.js",
+  "types": "./dist/exports/index.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "types": "./dist/exports/index.d.ts",
+      "import": "./dist/exports/index.js"
     },
     "./contracts": {
-      "types": "./dist/contracts.d.ts",
-      "import": "./dist/contracts.js"
+      "types": "./dist/exports/contracts.d.ts",
+      "import": "./dist/exports/contracts.js"
     },
     "./backend": {
-      "types": "./dist/backend/index.d.ts",
-      "import": "./dist/backend/index.js"
+      "types": "./dist/exports/backend.d.ts",
+      "import": "./dist/exports/backend.js"
     },
     "./files": {
-      "types": "./dist/files/index.d.ts",
-      "import": "./dist/files/index.js"
+      "types": "./dist/exports/files.d.ts",
+      "import": "./dist/exports/files.js"
     },
     "./vector": {
-      "types": "./dist/vector/index.d.ts",
-      "import": "./dist/vector/index.js"
+      "types": "./dist/exports/vector.d.ts",
+      "import": "./dist/exports/vector.js"
     },
     "./adapter-kernel": {
-      "types": "./dist/adapter-kernel/index.d.ts",
-      "import": "./dist/adapter-kernel/index.js"
+      "types": "./dist/exports/adapter-kernel.d.ts",
+      "import": "./dist/exports/adapter-kernel.js"
     }
   },
   "files": [
@@ -66,11 +66,12 @@
     "probe:erasure-saga-v2": "node ../../scripts/memory/checks/memoryErasureSagaV2Probe.mjs",
     "probe:evidence-replay-v2": "node ../../scripts/memory/checks/memoryEvidenceReplayV2Probe.mjs",
     "probe:query-runtime-v2": "node ../../scripts/memory/checks/memoryQueryRuntimeV2Probe.mjs",
-    "probe:storage-v2": "bun --conditions=source src/memory-tree/v2/storage/storage-v2-probe.ts",
-    "probe:files": "bun --conditions=source src/files/memory-files-probe.ts",
-    "probe:vector": "bun --conditions=source src/vector/memory-vector-probe.ts",
-    "probe:store-capability": "bun --conditions=source src/adapter-kernel/memory-store-capability-probe.ts",
+    "probe:storage-v2": "bun --conditions=source probes/tree-v2/storage.probe.ts",
+    "probe:files": "bun --conditions=source probes/memory-files.probe.ts",
+    "probe:vector": "bun --conditions=source probes/memory-vector.probe.ts",
+    "probe:store-capability": "bun --conditions=source probes/memory-store-capability.probe.ts",
     "probe:tree-store-v2": "node ../../scripts/memory/checks/memoryTreeStoreV2Probe.mjs",
+    "probe:treediff-v2": "node ../../scripts/memory/checks/memoryTreeDiffV2Probe.mjs",
     "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/memory"
   },
   "dependencies": {

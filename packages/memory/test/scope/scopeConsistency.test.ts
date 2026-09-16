@@ -14,13 +14,13 @@
 
 import { describe, expect, test } from 'bun:test'
 
-import { createMemoryFilesBackend } from '../../src/files/Backend'
-import { createInMemoryMemoryFilesIo } from '../../src/files/Io'
+import { createInMemoryMemoryFilesIo } from '../../src/contract/files-io'
+import { createMemoryFilesBackend } from '../../src/impl/files/MemoryFilesBackend'
 import {
   isMemoryVisibleInScope,
   resolveMemoryScopeFilterValue,
   scopeTypeForScopeId,
-} from '../../src/MemoryScope'
+} from '../../src/utils/scope'
 
 describe('D-12 作用域种类', () => {
   test('global 只认字面 global', () => {

@@ -145,13 +145,10 @@
         "./packages/knowledge/src/*"
       ],
       "@velaros-ai/memory": [
-        "./packages/memory/src/index.ts"
-      ],
-      "@velaros-ai/memory/adapter-kernel": [
-        "./packages/memory/src/adapter-kernel/index.ts"
+        "./packages/memory/src/exports/index.ts"
       ],
       "@velaros-ai/memory/*": [
-        "./packages/memory/src/*"
+        "./packages/memory/src/exports/*"
       ],
       "@velaros-ai/office": [
         "./packages/office/src/index.ts"

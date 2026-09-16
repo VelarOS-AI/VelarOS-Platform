@@ -12,13 +12,13 @@
 
 import { describe, expect, test } from 'bun:test'
 
-import { createMemoryFilesBackend } from '../../src/files/Backend'
-import { createInMemoryMemoryFilesIo } from '../../src/files/Io'
+import { createInMemoryMemoryFilesIo } from '../../src/contract/files-io'
+import { createMemoryFilesBackend } from '../../src/impl/files/MemoryFilesBackend'
 import {
   buildProjectMemoryScope,
   isMemoryVisibleInScope,
   resolveMemoryScopeSelector,
-} from '../../src/MemoryScope'
+} from '../../src/utils/scope'
 
 describe('两轴作用域解析', () => {
   test('轴一在场即权威：同时给两轴时 workspaceRoot 不产生第二个候选', () => {

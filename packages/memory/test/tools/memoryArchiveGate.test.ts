@@ -10,11 +10,11 @@
 
 import { describe, expect, test } from 'bun:test'
 
-import { createMemoryFilesBackend, type MemoryFilesScopeRoot } from '../../src/files/Backend'
-import { createInMemoryMemoryFilesIo } from '../../src/files/Io'
-import type { MemoryRecallItem } from '../../src/memory-tree/Types'
-import { memoryTools } from '../../src/tools/memory/Memory.tool'
-import type { MemoryApi, MemoryToolContext } from '../../src/Types'
+import { createInMemoryMemoryFilesIo } from '../../src/contract/files-io'
+import type { MemoryApi, MemoryToolContext } from '../../src/contract/requires'
+import { createMemoryFilesBackend, type MemoryFilesScopeRoot } from '../../src/impl/files/MemoryFilesBackend'
+import { memoryTools } from '../../src/impl/MemoryTools'
+import type { MemoryRecallItem } from '../../src/types/memory'
 
 const Verbs = ['capture', 'recall', 'inspect', 'archive'] as const
 

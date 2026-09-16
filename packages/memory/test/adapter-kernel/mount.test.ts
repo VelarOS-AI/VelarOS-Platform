@@ -5,11 +5,11 @@ import { describe, test } from 'bun:test'
 import { KernelModuleApiVersion } from '@velaros-ai/kernel/contracts/abi'
 import { KernelModuleHost } from '@velaros-ai/kernel/runtime'
 
-import { createMemoryStoreKernelModule } from '../../src/adapter-kernel/MemoryStoreCapability'
-import { mountMemoryAdapter, type MountMemoryAdapterInput } from '../../src/adapter-kernel/mount'
-import { createMemoryFilesBackend } from '../../src/files/Backend'
-import { createInMemoryMemoryFilesIo } from '../../src/files/Io'
-import type { MemoryTreeDomain as MemoryDomain } from '../../src/memory-tree/Service'
+import { createInMemoryMemoryFilesIo } from '../../src/contract/files-io'
+import { createMemoryFilesBackend } from '../../src/impl/files/MemoryFilesBackend'
+import { mountMemoryAdapter, type MountMemoryAdapterInput } from '../../src/impl/host/MemoryAdapterRuntime'
+import { createMemoryStoreKernelModule } from '../../src/impl/host/MemoryStoreCapabilities'
+import type { MemoryTreeDomain as MemoryDomain } from '../../src/impl/tree/MemoryTreeDomain'
 
 function hostPorts(): Pick<MountMemoryAdapterInput, 'config' | 'hostContext'> {
   return {

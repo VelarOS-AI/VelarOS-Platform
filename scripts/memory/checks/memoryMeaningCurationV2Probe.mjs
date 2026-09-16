@@ -12,10 +12,9 @@ const entryFile = join(
   repoRoot,
   'packages',
   'memory',
-  'src',
-  'memory-tree',
-  'v2',
-  'meaning-curation-v2-probe.ts'
+  'probes',
+  'tree-v2',
+  'meaning-curation.probe.ts'
 )
 const electronBinary = join(repoRoot, 'node_modules', '.bin', 'electron')
 

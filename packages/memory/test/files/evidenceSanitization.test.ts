@@ -10,10 +10,10 @@
 
 import { describe, expect, test } from 'bun:test'
 
-import { createMemoryFilesBackend, type MemoryFilesScopeRoot } from '../../src/files/Backend'
-import { parseMemoryFileDocument } from '../../src/files/Frontmatter'
-import { createInMemoryMemoryFilesIo } from '../../src/files/Io'
-import type { MemoryEvidenceInput } from '../../src/memory-tree/Types'
+import { createInMemoryMemoryFilesIo } from '../../src/contract/files-io'
+import { createMemoryFilesBackend, type MemoryFilesScopeRoot } from '../../src/impl/files/MemoryFilesBackend'
+import type { MemoryEvidenceInput } from '../../src/types/memory'
+import { parseMemoryFileDocument } from '../../src/utils/files/frontmatter'
 
 const ProjectRoot: MemoryFilesScopeRoot = {
   scopeType: 'workspace',

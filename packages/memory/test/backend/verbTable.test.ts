@@ -8,17 +8,17 @@
 import { describe, expect, test } from 'bun:test'
 
 import {
-  createMemoryStoreCapabilityToken,
-  resolveMemoryStoreBackend,
-} from '../../src/adapter-kernel/MemoryStoreCapability'
-import {
   listMissingAuthorityMemoryVerbs,
   type MemoryBackendVerb,
   type MemoryStoreBackend,
   RequiredAuthorityMemoryVerbs,
   supportsMemoryBackendVerb,
-} from '../../src/backend/Contract'
-import { createMemoryFilesBackend } from '../../src/files/Backend'
+} from '../../src/contract/backend'
+import { createMemoryFilesBackend } from '../../src/impl/files/MemoryFilesBackend'
+import {
+  createMemoryStoreCapabilityToken,
+  resolveMemoryStoreBackend,
+} from '../../src/impl/host/MemoryStoreCapabilities'
 
 function createStubBackend(
   verbs: readonly MemoryBackendVerb[],

@@ -7,11 +7,11 @@
 
 import { describe, expect, test } from 'bun:test'
 
-import { createMemoryFilesBackend, type MemoryFilesScopeRoot } from '../../src/files/Backend'
-import { parseMemoryFileDocument } from '../../src/files/Frontmatter'
-import { parseMemoryIndex, serializeMemoryIndex } from '../../src/files/IndexFile'
-import { createInMemoryMemoryFilesIo, type InMemoryMemoryFilesIo } from '../../src/files/Io'
-import type { MemoryEvidenceInput } from '../../src/memory-tree/Types'
+import { createInMemoryMemoryFilesIo, type InMemoryMemoryFilesIo } from '../../src/contract/files-io'
+import { createMemoryFilesBackend, type MemoryFilesScopeRoot } from '../../src/impl/files/MemoryFilesBackend'
+import type { MemoryEvidenceInput } from '../../src/types/memory'
+import { parseMemoryFileDocument } from '../../src/utils/files/frontmatter'
+import { parseMemoryIndex, serializeMemoryIndex } from '../../src/utils/files/index-file'
 
 const ProjectRoot: MemoryFilesScopeRoot = {
   scopeType: 'workspace',

@@ -1,6 +1,6 @@
 # @velaros-ai/memory/adapter-kernel
 
-> `@velaros-ai/memory` 的一个导入切片(`packages/memory/src/adapter-kernel`)。包总览见
+> `@velaros-ai/memory` 的一个导入切片(源码在 `packages/memory/src/impl/host/`)。包总览见
 > [包 README](../../README.md)。
 
 ## 这个切片是什么

@@ -159,7 +159,7 @@ mod 拿到的是引用不是路径，这是权限面能被审计的前提。
 
 ### 5.2 token 族
 
-`packages/memory/src/adapter-kernel/MemoryStoreCapability.ts`：
+`packages/memory/src/impl/host/MemoryStoreCapabilities.ts`：
 
 ```ts
 export const MemoryStoreCapabilityNamespace = "velaros.memory.store";
@@ -197,7 +197,7 @@ token 是 mod 轴机制；主干只该持有与实现无关的窄动词契约。
 
 ### 5.3 窄端口
 
-`packages/memory/src/backend/Contract.ts` 只描述**动词**，不假设后端是树、是文件还是向量库：
+`packages/memory/src/contract/backend.ts` 只描述**动词**，不假设后端是树、是文件还是向量库：
 
 ```ts
 export type MemoryBackendRole = "authority" | "derived-index";

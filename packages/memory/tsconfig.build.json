@@ -10,7 +10,7 @@
     "sourceMap": true,
     "paths": {}
   },
-  "exclude": [
-    "src/**/*-probe.ts"
+  "include": [
+    "src/**/*.ts"
   ]
 }

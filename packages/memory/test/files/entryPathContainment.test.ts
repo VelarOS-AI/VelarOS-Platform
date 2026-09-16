@@ -8,7 +8,7 @@
  *  - 一个克隆来的仓库自带 `.velaros/memory/MEMORY.md`、索引行链到仓外的凭据文件，
  *    打开仓库聊到相关话题时回合自动召回就把凭据注进模型上下文。
  *
- * 判定住 `src/files/EntryPath.ts`，id 解析、索引解析、目录扫描三处共用；符号链接由
+ * 判定住 `src/utils/files/entry-path.ts`，id 解析、索引解析、目录扫描三处共用；符号链接由
  * `MemoryFilesIo.isInsideDirectory` 再解一道（Node 实现）。本文件两种 IO 都测。
  */
 
@@ -18,11 +18,11 @@ import { join } from 'node:path'
 
 import { afterAll, describe, expect, test } from 'bun:test'
 
-import { createMemoryFilesBackend, type MemoryFilesScopeRoot } from '../../src/files/Backend'
-import { isMemoryEntryPath } from '../../src/files/EntryPath'
-import { parseMemoryIndex } from '../../src/files/IndexFile'
-import { createInMemoryMemoryFilesIo } from '../../src/files/Io'
-import { createNodeMemoryFilesIo } from '../../src/files/NodeIo'
+import { createInMemoryMemoryFilesIo } from '../../src/contract/files-io'
+import { createMemoryFilesBackend, type MemoryFilesScopeRoot } from '../../src/impl/files/MemoryFilesBackend'
+import { createNodeMemoryFilesIo } from '../../src/impl/files/NodeMemoryFilesIo'
+import { isMemoryEntryPath } from '../../src/utils/files/entry-path'
+import { parseMemoryIndex } from '../../src/utils/files/index-file'
 
 const SystemRoot: MemoryFilesScopeRoot = {
   scopeType: 'system',

@@ -88,7 +88,7 @@ UI 显示「该工作区所属 mod 已停用，数据已保全，可重新启用
 它就不属于 Kernel；只认识「模块 / 能力 / 权限 / 事件 / 状态 / 引用 / 错误」的才留。
 
 机械形态：`packages/kernel/src/**` 有硬墙——出现 `memory` 这类具体能力词即判红。
-这就是为什么记忆后端的 capability token 住 `packages/memory/src/adapter-kernel/`
+这就是为什么记忆后端的 capability token 住 `packages/memory/src/impl/host/`
 而不是 core。
 
 ### 对 mod 作者的三条推论

@@ -11,13 +11,13 @@
 
 import { describe, expect, test } from 'bun:test'
 
-import { createLayeredMemoryStoreBackend } from '../../src/backend/Layered'
-import { isMemoryRecallItemExcluded } from '../../src/backend/RecallFilter'
-import { createMemoryFilesBackend } from '../../src/files/Backend'
-import { createInMemoryMemoryFilesIo } from '../../src/files/Io'
-import type { MemoryEvidenceInput, MemoryRecallItem } from '../../src/memory-tree/Types'
-import { createMemoryVectorBackend } from '../../src/vector/Backend'
-import type { MemoryEmbedder } from '../../src/vector/Contract'
+import { createInMemoryMemoryFilesIo } from '../../src/contract/files-io'
+import type { MemoryEmbedder } from '../../src/contract/vector'
+import { createLayeredMemoryStoreBackend } from '../../src/impl/backends/LayeredMemoryStore'
+import { createMemoryFilesBackend } from '../../src/impl/files/MemoryFilesBackend'
+import { createMemoryVectorBackend } from '../../src/impl/vector/MemoryVectorBackend'
+import type { MemoryEvidenceInput, MemoryRecallItem } from '../../src/types/memory'
+import { isMemoryRecallItemExcluded } from '../../src/utils/backends'
 
 /** 所有文本映射到同一方向：语义层必定全命中，过滤是否生效因此可观测。 */
 const allHitEmbedder: MemoryEmbedder = {

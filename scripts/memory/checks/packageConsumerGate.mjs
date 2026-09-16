@@ -76,12 +76,11 @@ const SupportPackageSpecifications = [
   },
 ]
 
+// 每个包发布后都必须在 tarball 里的文件；根入口的位置按各包 package.json 的 exports["."] 现算。
 const RequiredPublishedFiles = [
   'package.json',
   'README.md',
   'examples/minimal.ts',
-  'dist/index.js',
-  'dist/index.d.ts',
 ]
 
 export class SynchronousCommandRunner {
@@ -347,7 +346,13 @@ async function auditPackageRoot(
     assert.ok(manifest.repository?.directory)
     assert.ok(manifest.homepage)
     assert.ok(manifest.bugs?.url)
-    for (const relativePath of RequiredPublishedFiles) {
+    const rootEntry = manifest.exports?.['.']
+    assert.ok(rootEntry?.import && rootEntry?.types, `${specification.name} must declare a root entry`)
+    for (const relativePath of [
+      ...RequiredPublishedFiles,
+      rootEntry.import,
+      rootEntry.types,
+    ]) {
       await readFile(join(packageRoot, relativePath))
     }
     for (const [name, version] of Object.entries(

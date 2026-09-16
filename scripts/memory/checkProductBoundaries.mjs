@@ -62,10 +62,11 @@ const PortableContractRules = [
     packageName: '@velaros-ai/memory',
     packageRoot: 'packages/memory',
     exportKey: './contracts',
-    contractsFile: 'src/contracts.ts',
+    contractsFile: 'src/exports/contracts.ts',
+    // 键是入口里 import 的原文（含 .js），不是磁盘路径：搬家时两者必须一起改，否则这道门必红。
     sourceModules: new Map([
-      ['./memory-tree/Types.js', {
-        path: 'src/memory-tree/Types.ts',
+      ['../types/memory.js', {
+        path: 'src/types/memory.ts',
         allowedImports: new Set(),
       }],
     ]),

@@ -100,7 +100,7 @@
     "check:memory-boundaries": "node scripts/memory/checkProductBoundaries.mjs",
     "check:memory-knowledge-profile": "node scripts/memory/checks/knowledgeProfileIntegrationTest.mjs",
     "test:memory": "node --test tests/memory/maintained/packages/memory/*.mjs",
-    "probe:memory": "bun run --cwd packages/memory probe:storage-v2 && bun run --cwd packages/memory probe:authority-v2 && bun run --cwd packages/memory probe:tree-store-v2 && bun run --cwd packages/memory probe:ingest-dream-v2 && bun run --cwd packages/memory probe:meaning-curation-v2 && bun run --cwd packages/memory probe:erasure-saga-v2 && bun run --cwd packages/memory probe:evidence-replay-v2 && bun run --cwd packages/memory probe:query-runtime-v2 && bun run --cwd packages/memory probe:files && bun run --cwd packages/memory probe:vector && bun run --cwd packages/memory probe:store-capability",
+    "probe:memory": "bun run --cwd packages/memory probe:storage-v2 && bun run --cwd packages/memory probe:authority-v2 && bun run --cwd packages/memory probe:tree-store-v2 && bun run --cwd packages/memory probe:treediff-v2 && bun run --cwd packages/memory probe:ingest-dream-v2 && bun run --cwd packages/memory probe:meaning-curation-v2 && bun run --cwd packages/memory probe:erasure-saga-v2 && bun run --cwd packages/memory probe:evidence-replay-v2 && bun run --cwd packages/memory probe:query-runtime-v2 && bun run --cwd packages/memory probe:files && bun run --cwd packages/memory probe:vector && bun run --cwd packages/memory probe:store-capability",
     "test:capabilities": "bun test tests/capabilities",
     "test:ui": "bun test tests/ui packages/ui/test",
     "check:ui-popover-runtime": "node scripts/ui/check/popoverRuntime.mjs",

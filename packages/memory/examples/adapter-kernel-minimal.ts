@@ -1,7 +1,7 @@
 import {
   MemoryAdapterRuntime,
   type MountMemoryAdapterInput,
-} from '../src/adapter-kernel'
+} from '../src/exports/adapter-kernel'
 
 declare const input: MountMemoryAdapterInput
 
