@@ -205,7 +205,7 @@ export class KernelUpdater {
     if (isUndefined(resolved)) {
       throw new KernelUpdaterError(
         'MANIFEST_UNREACHABLE',
-        'No Kernel update manifest source was configured',
+        '没有配置内核更新清单的来源',
       )
     }
     return loadKernelUpdateManifest(resolved, { fetch: this.fetch, signal })
@@ -255,7 +255,7 @@ export class KernelUpdater {
       if (isNull(target)) {
         throw new KernelUpdaterError(
           'NO_ROLLBACK_TARGET',
-          'No previous Kernel version is recorded for rollback',
+          '没有记录可回滚的上一个内核版本',
           { version: pointer?.version },
         )
       }
@@ -344,7 +344,7 @@ export class KernelUpdater {
     if (isFalse(requirement.allowInstall)) {
       throw new KernelUpdaterError(
         'VERSION_UNAVAILABLE',
-        `No installed Kernel version satisfies "${requirement.range}"`,
+        `本机已安装的内核版本里没有满足 "${requirement.range}" 的`,
         { versionRange: requirement.range },
       )
     }
@@ -360,7 +360,7 @@ export class KernelUpdater {
     if (isUndefined(published)) {
       throw new KernelUpdaterError(
         'VERSION_UNAVAILABLE',
-        `No published Kernel version satisfies "${requirement.range}" on ${this.target}`,
+        `${this.target} 上发布的内核版本里没有满足 "${requirement.range}" 的`,
         { versionRange: requirement.range, target: this.target },
       )
     }
@@ -402,7 +402,7 @@ export class KernelUpdater {
     ) {
       throw new KernelUpdaterError(
         'INSTALL_FAILED',
-        `Kernel version "${version}" is active and cannot be reinstalled in place`,
+        `内核版本 "${version}" 正在使用中，不能原地重装`,
         { version, path: destination },
       )
     }
@@ -434,7 +434,7 @@ export class KernelUpdater {
       if (this.requireSignature && !signature.verified) {
         throw new KernelUpdaterError(
           'SIGNATURE_REJECTED',
-          `Kernel artifact signature was not verified: ${signature.reason ?? signature.method}`,
+          `内核制品的签名没有通过校验：${signature.reason ?? signature.method}`,
           { version, target: this.target, url: selection.artifact.url },
         )
       }
@@ -465,7 +465,7 @@ export class KernelUpdater {
         ? error
         : new KernelUpdaterError(
           'INSTALL_FAILED',
-          `Kernel version "${version}" could not be installed`,
+          `内核版本 "${version}" 安装失败`,
           { version, target: this.target },
           { cause: error },
         )
@@ -483,7 +483,7 @@ export class KernelUpdater {
     if (isUndefined(await readKernelInstallRecord(path))) {
       throw new KernelUpdaterError(
         'VERSION_NOT_INSTALLED',
-        `Kernel version "${version}" is not installed`,
+        `内核版本 "${version}" 本机没有安装`,
         { version, path },
       )
     }
@@ -519,7 +519,7 @@ export class KernelUpdater {
     await this.revertPointer(previous)
     throw new KernelUpdaterError(
       'HEALTH_CHECK_FAILED',
-      `Kernel version "${version}" failed its activation health check`,
+      `内核版本 "${version}" 激活后的健康检查没过`,
       {
         version,
         previousVersion: optionalWhen(isString, previousVersion),

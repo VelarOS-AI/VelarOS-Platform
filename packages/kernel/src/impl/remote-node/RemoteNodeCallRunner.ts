@@ -107,10 +107,10 @@ export class RemoteNodeCallRunner {
     // deadline 从**收帧**起算而不是从开始执行起算:Client 那头的等待是从发出去就开始的,
     // 把排队时间藏起来只会让两端对同一次调用的耐心不一致。
     call.deadline = this.options.timers.after(frame.deadlineMs, () => {
-      call.controller.abort(new Error('Remote node call deadline exceeded'))
+      call.controller.abort(new Error('远程节点调用超过截止时间'))
       this.settle(call, 'error', undefined, {
         code: 'DEADLINE_EXCEEDED',
-        message: `Call exceeded its ${frame.deadlineMs}ms deadline`,
+        message: `调用超过了 ${frame.deadlineMs}ms 的截止时长`,
         retryable: true,
       })
     }, { label: 'remote-node-deadline', unref: true })
@@ -128,7 +128,7 @@ export class RemoteNodeCallRunner {
         if (outcome.status === 'denied') {
           this.settle(call, 'denied', undefined, {
             code: outcome.error?.code ?? 'DENIED',
-            message: outcome.error?.message ?? 'Capability call was denied',
+            message: outcome.error?.message ?? '能力调用被拒绝',
             retryable: false,
           })
           return
@@ -148,12 +148,12 @@ export class RemoteNodeCallRunner {
     const call = this.calls.get(frame.callId)
     // 未知或已终态的 callId 一律静默:一个 callId 只有一帧终态,这里补发就破了那条不变量。
     if (isUndefined(call)) return
-    call.controller.abort(new Error(`Remote node call was cancelled: ${frame.reason}`))
+    call.controller.abort(new Error(`远程节点调用被取消：${frame.reason}`))
     // best-effort abort 之后**立刻**回终态,不等能力实现自己收敛——契约承诺的是「取消后仍有
     // 一帧终态」,不是「取消后等实现愿意停」。实现晚到的结果会被 `settled` 挡掉。
     this.settle(call, 'error', undefined, {
       code: 'CALL_ABORTED',
-      message: 'Call was cancelled by the client',
+      message: '调用被客户端取消',
       retryable: false,
     })
   }
@@ -204,7 +204,7 @@ export class RemoteNodeCallRunner {
       status: 'error',
       error: {
         code: 'MANIFEST_STALE',
-        message: `Call carried manifest revision ${frame.manifestRevision}`,
+        message: `调用带的清单修订号 ${frame.manifestRevision} 已经过期`,
         // 盲重试同一 revision 只会再被拒一次;Client 必须先按推送的清单重注册工具面。
         retryable: false,
       },

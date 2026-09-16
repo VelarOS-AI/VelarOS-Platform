@@ -69,7 +69,7 @@ export async function fetchKernelText(
   if (response.status < 200 || response.status >= 300) {
     throw new KernelUpdaterError(
       'MANIFEST_UNREACHABLE',
-      `Kernel update manifest request failed with status ${response.status}`,
+      `取内核更新清单失败，HTTP 状态 ${response.status}`,
       { url, actual: String(response.status) },
     )
   }
@@ -82,7 +82,7 @@ export async function fetchKernelText(
       if (size > MaximumKernelManifestBytes) {
         throw new KernelUpdaterError(
           'MANIFEST_UNREACHABLE',
-          'Kernel update manifest exceeds the maximum accepted size',
+          '内核更新清单超过了允许的最大体积',
           { url, expected: String(MaximumKernelManifestBytes) },
         )
       }
@@ -93,7 +93,7 @@ export async function fetchKernelText(
       ? error
       : new KernelUpdaterError(
         'MANIFEST_UNREACHABLE',
-        `Kernel update manifest at "${url}" could not be read`,
+        `读不出 "${url}" 处的内核更新清单`,
         { url },
         { cause: error },
       )
@@ -106,7 +106,7 @@ function toLocalPath(source: string): string {
   if (!SchemePattern.test(source) || isAbsolute(source)) return source
   throw new KernelUpdaterError(
     'DOWNLOAD_FAILED',
-    `Unsupported Kernel artifact URL scheme in "${source}"`,
+    `"${source}" 用了不支持的内核制品 URL 协议`,
     { url: source },
   )
 }

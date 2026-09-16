@@ -65,7 +65,7 @@ export class KernelLocalDaemon {
   public async start(): Promise<KernelDaemonEndpointDescriptor> {
     switch (this.state) {
       case 'disposed':
-        throw new Error('Disposed Kernel daemon cannot be started')
+        throw new Error('已回收的 Kernel 守护进程不能再启动')
       case 'running':
         return this.getDescriptor()
       case 'idle':
@@ -121,7 +121,7 @@ export class KernelLocalDaemon {
 
   public getDescriptor(): KernelDaemonEndpointDescriptor {
     if (isUndefined(this.descriptor)) {
-      throw new Error('Kernel daemon has not started')
+      throw new Error('Kernel 守护进程还没启动')
     }
     return this.descriptor
   }

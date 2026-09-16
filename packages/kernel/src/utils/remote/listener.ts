@@ -45,7 +45,7 @@ function listenServer(server: Server, host: string, port: number): Promise<numbe
       server.off('error', onError)
       const address = server.address()
       if (isNull(address) || isString(address)) {
-        reject(new Error('Remote node server did not bind a TCP port'))
+        reject(new Error('远程节点服务端没有绑上 TCP 端口'))
         return
       }
       resolve(address.port)
@@ -62,7 +62,7 @@ export async function listenRemoteNode(
 ): Promise<RemoteNodeListener> {
   const { bindHost, portStart, portEnd } = options
   if (!Number.isInteger(portStart) || !Number.isInteger(portEnd) || portStart > portEnd) {
-    throw new Error('Invalid remote node port range')
+    throw new Error('远程节点的端口区间不合法')
   }
   for (let port = portStart; port <= portEnd; port += 1) {
     const webSocketServer = new WebSocketServer({
@@ -102,5 +102,5 @@ export async function listenRemoteNode(
       if (!isNodeError(error, 'EADDRINUSE')) throw error
     }
   }
-  throw new Error(`No remote node port is available in ${portStart}-${portEnd}`)
+  throw new Error(`${portStart}-${portEnd} 区间里没有可用的远程节点端口`)
 }

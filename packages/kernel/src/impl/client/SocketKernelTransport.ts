@@ -227,7 +227,7 @@ export class SocketKernelTransport implements KernelClientTransport {
     this.rejectPending(
       fromKernelRpcError({
         code: 'TRANSPORT_CLOSED',
-        message: 'Kernel RPC transport is closed',
+        message: 'Kernel RPC 传输已关闭',
         retryable: true,
         details: null,
       }),
@@ -242,7 +242,7 @@ export class SocketKernelTransport implements KernelClientTransport {
     if (this.disposed) {
       throw fromKernelRpcError({
         code: 'TRANSPORT_CLOSED',
-        message: 'Kernel RPC transport is closed',
+        message: 'Kernel RPC 传输已关闭',
         retryable: true,
         details: null,
       })
@@ -277,7 +277,7 @@ export class SocketKernelTransport implements KernelClientTransport {
         cleanup()
         reject(fromKernelRpcError({
           code: 'TRANSPORT_WRITE_FAILED',
-          message: 'Kernel RPC request could not be sent',
+          message: 'Kernel RPC 请求发不出去',
           retryable: true,
           details: null,
         }))
@@ -392,7 +392,7 @@ export class SocketKernelTransport implements KernelClientTransport {
     const record = this.eventHandlers.get(frame.subscriptionId)
     if (isUndefined(record) || record.disposed) return
     void Promise.resolve(record.handler(frame.event)).catch((error) => {
-      log.warn('Kernel event handler failed', { error, subscriptionId: frame.subscriptionId })
+      log.warn('内核事件回调失败', { error, subscriptionId: frame.subscriptionId })
     })
   }
 
@@ -423,7 +423,7 @@ export class SocketKernelTransport implements KernelClientTransport {
     this.rejectPending(
       fromKernelRpcError({
         code: 'TRANSPORT_DISCONNECTED',
-        message: 'Kernel RPC connection closed',
+        message: 'Kernel RPC 连接已断开',
         retryable: true,
         details: null,
       }),
@@ -476,7 +476,7 @@ function decodeResponse(input: object): KernelRpcResponse {
 function decodeEventFrame(input: object): KernelRpcEventFrame {
   const eventInput = Reflect.get(input, 'event')
   if (!isObject(eventInput) && !isNull(eventInput) || isNull(eventInput)) {
-    throw invalidResponse('Kernel event is missing')
+    throw invalidResponse('事件帧里没有事件内容')
   }
   const sourceGeneration = Reflect.get(eventInput, 'sourceGeneration')
   const sequence = Reflect.get(eventInput, 'sequence')
@@ -531,7 +531,7 @@ function invalidResponse(message: string): KernelClientError {
 }
 
 function abortError(): Error {
-  return new DOMException('Kernel RPC request aborted', 'AbortError')
+  return new DOMException('Kernel RPC 请求已中止', 'AbortError')
 }
 
 function isSignalAborted(signal: LooseOptional<AbortSignal>): boolean {
@@ -541,7 +541,7 @@ function isSignalAborted(signal: LooseOptional<AbortSignal>): boolean {
 function transportClosedError(): KernelClientError {
   return fromKernelRpcError({
     code: 'TRANSPORT_CLOSED',
-    message: 'Kernel RPC transport is closed',
+    message: 'Kernel RPC 传输已关闭',
     retryable: true,
     details: null,
   })
@@ -550,7 +550,7 @@ function transportClosedError(): KernelClientError {
 function transportConnectError(): KernelClientError {
   return fromKernelRpcError({
     code: 'TRANSPORT_CONNECT_FAILED',
-    message: 'Kernel RPC endpoint is unavailable',
+    message: '连不上 Kernel RPC 端点',
     retryable: true,
     details: null,
   })

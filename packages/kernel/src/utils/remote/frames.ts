@@ -19,17 +19,17 @@ function decode<TFrame>(
   raw: unknown,
   parse: (input: unknown) => { success: boolean, data?: TFrame },
 ): FrameDecodeResult<TFrame> {
-  if (!(raw instanceof Buffer) && !isString(raw)) return { ok: false, reason: 'Frame payload is neither text nor binary' }
+  if (!(raw instanceof Buffer) && !isString(raw)) return { ok: false, reason: '帧的载荷既不是文本也不是二进制' }
   const text = raw.toString()
-  if (Buffer.byteLength(text, 'utf8') > RemoteNodeMaxFrameBytes) return { ok: false, reason: 'Frame exceeds the protocol size limit' }
+  if (Buffer.byteLength(text, 'utf8') > RemoteNodeMaxFrameBytes) return { ok: false, reason: '帧超过了协议的体积上限' }
   let input: unknown
   try {
     input = JSON.parse(text) as unknown
   } catch {
-    return { ok: false, reason: 'Frame is not valid JSON' }
+    return { ok: false, reason: '帧不是合法 JSON' }
   }
   const parsed = parse(input)
-  if (!parsed.success || isUndefined(parsed.data)) return { ok: false, reason: 'Frame does not match the protocol schema' }
+  if (!parsed.success || isUndefined(parsed.data)) return { ok: false, reason: '帧不符合协议 schema' }
   return { ok: true, frame: parsed.data }
 }
 

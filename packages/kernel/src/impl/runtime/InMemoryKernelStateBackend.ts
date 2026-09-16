@@ -47,7 +47,7 @@ function assertStateKey(key: string): void {
   if (!isBlank(key.trim())) return
   throw new KernelError(
     'MODULE_STATE',
-    'Kernel module state key must not be empty',
+    '内核模块的状态键不能为空',
   )
 }
 

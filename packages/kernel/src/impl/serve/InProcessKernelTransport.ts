@@ -108,7 +108,7 @@ export class InProcessKernelTransport implements KernelClientTransport {
         error: {
           code: 'CAPABILITY_NOT_GRANTED',
           message:
-            `Capability "${request.capabilityId}" is not bound on session "${request.sessionId}"`,
+            `能力 "${request.capabilityId}" 没有绑定在会话 "${request.sessionId}" 上`,
           retryable: false,
           details: null,
         },
@@ -143,7 +143,7 @@ export class InProcessKernelTransport implements KernelClientTransport {
   ): Promise<ModsInstallFromDirectoryResponse> {
     const result = await this.service.installModFromDirectory?.(request.directory)
     if (isUndefined(result)) {
-      throw Object.assign(new Error('Mod catalog is not available'), {
+      throw Object.assign(new Error('本 Kernel 没有接 ModStore'), {
         code: 'MODS_UNAVAILABLE',
       })
     }

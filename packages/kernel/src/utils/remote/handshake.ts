@@ -54,7 +54,7 @@ export function planRemoteNodeHandshake(
       kind: 'stop',
       error: new RemoteNodeClientError({
         code: RemoteNodeClientErrorCodes.ProtocolMismatch,
-        message: `Remote node speaks transport version ${input.challenge.protocolVersion}, this client speaks ${RemoteNodeProtocolVersion}`,
+        message: `远程节点说的是传输协议 v${input.challenge.protocolVersion}，本客户端说的是 v${RemoteNodeProtocolVersion}`,
         resultUnknown: false,
         retryable: false,
       }),
@@ -77,7 +77,7 @@ export function planRemoteNodeHandshake(
       kind: 'stop',
       error: new RemoteNodeClientError({
         code: RemoteNodeClientErrorCodes.PairingRequired,
-        message: 'Remote node requires pairing; supply a 6-digit pairing code',
+        message: '远程节点需要配对；请提供 6 位配对码',
         resultUnknown: false,
         retryable: false,
       }),

@@ -88,7 +88,7 @@ describe('bundled packs', () => {
     const loaded = await new KernelModLoader(store).loadEnabled()
 
     expect(loaded.modules).toHaveLength(0)
-    expect(loaded.failures[0]?.reason).toContain('no longer compiled')
+    expect(loaded.failures[0]?.reason).toContain('这次构建里已经没有它了')
   })
 
   test('registers first-time bundled packs enabled', () => {

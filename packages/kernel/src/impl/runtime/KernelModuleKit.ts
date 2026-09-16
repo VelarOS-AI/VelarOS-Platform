@@ -8,10 +8,10 @@ export function createCapabilityToken<TService extends object = object>(
   version = '1.0.0',
 ): CapabilityToken<TService> {
   if (isBlank(id.trim())) {
-    throw new Error('Capability token id must not be empty')
+    throw new Error('能力令牌的 id 不能为空')
   }
   if (isBlank(version.trim())) {
-    throw new Error('Capability token version must not be empty')
+    throw new Error('能力令牌的 version 不能为空')
   }
 
   return Object.freeze({ id, version })

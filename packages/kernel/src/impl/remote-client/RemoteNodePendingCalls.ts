@@ -82,7 +82,7 @@ export class RemoteNodePendingCalls {
     return new Promise<unknown>((resolve, reject) => {
       const onAbort = (): void => {
         this.settle(callId, (pending) => {
-          this.host.send({ type: 'cancel', callId, reason: 'Aborted by caller' })
+          this.host.send({ type: 'cancel', callId, reason: '调用方主动中止' })
           pending.reject(createAbortError())
         })
       }
@@ -124,7 +124,7 @@ export class RemoteNodePendingCalls {
           : RemoteNodeClientErrorCodes.CallFailed,
         message: describeNodeError(
           frame.error,
-          denied ? 'Remote node denied the call' : 'Remote node call failed',
+          denied ? '远程节点拒绝了这次调用' : '远程节点调用失败',
         ),
         nodeError: frame.error,
         // 两者都是对端给出的终态判决,不存在"可能半执行"。
@@ -156,7 +156,7 @@ export class RemoteNodePendingCalls {
       this.settle(entry.callId, (pending) => {
         pending.reject(new RemoteNodeClientError({
           code: RemoteNodeClientErrorCodes.NodeRestarted,
-          message: `Remote node restarted while "${describeCall(pending)}" was in flight; the result is unknown`,
+          message: `"${describeCall(pending)}" 还在途时远程节点重启了，结果未知`,
           resultUnknown: true,
           retryable: false,
         }))
@@ -205,11 +205,11 @@ export class RemoteNodePendingCalls {
       this.host.send({
         type: 'cancel',
         callId,
-        reason: 'Client deadline exceeded',
+        reason: '超过客户端侧的截止时间',
       })
       pending.reject(new RemoteNodeClientError({
         code: RemoteNodeClientErrorCodes.CallTimeout,
-        message: `Remote node call "${describeCall(pending)}" exceeded the client deadline`,
+        message: `远程节点调用 "${describeCall(pending)}" 超过了客户端侧的截止时间`,
         resultUnknown: pending.dispatched,
         retryable: false,
       }))

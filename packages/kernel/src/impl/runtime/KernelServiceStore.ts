@@ -67,7 +67,7 @@ export class KernelServiceStore {
       if (this.activeEntries.get(token.id) === entry) return
       throw new KernelError(
         'MODULE_STATE',
-        `Service handle for capability "${token.id}" from generation ${entry.generation} is stale`,
+        `能力 "${token.id}" 第 ${entry.generation} 代的服务句柄已经过期`,
         {
           moduleId: entry.ownerModuleId,
           capabilityId: token.id,
@@ -134,7 +134,7 @@ export class KernelServiceStore {
     if (isNotUndefined(duplicate)) {
       throw new KernelError(
         'DUPLICATE_SERVICE',
-        `A service is already registered for capability "${token.id}"`,
+        `能力 "${token.id}" 已经注册过服务了`,
         { moduleId: ownerModuleId, capabilityId: token.id },
       )
     }
@@ -144,7 +144,7 @@ export class KernelServiceStore {
     ) {
       throw new KernelError(
         'INVALID_SERVICE',
-        `Service for capability "${token.id}" must be an object`,
+        `能力 "${token.id}" 的服务必须是一个对象`,
         { moduleId: ownerModuleId, capabilityId: token.id },
       )
     }
@@ -163,7 +163,7 @@ export class KernelServiceStore {
         if (entries.size === 0) this.entries.delete(token.id)
         throw new KernelError(
           'DUPLICATE_SERVICE',
-          `An active service is already registered for capability "${token.id}"`,
+          `能力 "${token.id}" 已经有一个活动服务了`,
           { moduleId: ownerModuleId, capabilityId: token.id },
         )
       }
@@ -229,14 +229,14 @@ export class KernelServiceStore {
     if (isUndefined(entry)) {
       throw new KernelError(
         'MISSING_SERVICE',
-        `No service is registered for capability "${token.id}"`,
+        `能力 "${token.id}" 没有注册任何服务`,
         { capabilityId: token.id },
       )
     }
     if (entry.capabilityVersion === token.version) return entry
     throw new KernelError(
       'VERSION_MISMATCH',
-      `Capability "${token.id}" is active at version "${entry.capabilityVersion}", not "${token.version}"`,
+      `能力 "${token.id}" 当前活动的是版本 "${entry.capabilityVersion}"，不是 "${token.version}"`,
       {
         moduleId: entry.ownerModuleId,
         capabilityId: token.id,

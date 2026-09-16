@@ -11,11 +11,11 @@ import { KernelClientError } from '../errors'
 const methodSet: ReadonlySet<string> = new Set(KernelRpcMethods)
 
 export function decodeKernelRpcRequest(input: unknown): KernelRpcRequest {
-  const record = requireRecord(input, 'RPC frame must be an object')
+  const record = requireRecord(input, 'RPC 帧必须是一个对象')
   if (record.type !== 'request') {
     throw new KernelClientError({
       code: 'INVALID_RPC_FRAME',
-      message: 'RPC frame type must be "request"',
+      message: 'RPC 帧的 type 必须是 "request"',
     })
   }
   const requestId = requireNonEmptyString(record.requestId, 'requestId')
@@ -26,7 +26,7 @@ export function decodeKernelRpcRequest(input: unknown): KernelRpcRequest {
   if (!methodSet.has(method)) {
     throw new KernelClientError({
       code: 'METHOD_NOT_FOUND',
-      message: `RPC method "${method}" is not available`,
+      message: `RPC 方法 "${method}" 不存在`,
     })
   }
   return {
@@ -40,7 +40,7 @@ export function decodeKernelRpcRequest(input: unknown): KernelRpcRequest {
 
 export function requireRecord(
   input: unknown,
-  message = 'RPC params must be an object',
+  message = 'RPC 的 params 必须是一个对象',
 ): Readonly<Record<string, unknown>> {
   if (isPlainObject(input)) return input as Readonly<Record<string, unknown>>
   throw new KernelClientError({ code: 'INVALID_PARAMS', message })
@@ -53,7 +53,7 @@ export function requireNonEmptyString(
   if (isString(input) && !isBlank(input.trim())) return input
   throw new KernelClientError({
     code: 'INVALID_PARAMS',
-    message: `RPC field "${field}" must be a non-empty string`,
+    message: `RPC 字段 "${field}" 必须是非空字符串`,
   })
 }
 

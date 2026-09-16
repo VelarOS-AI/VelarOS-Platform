@@ -154,7 +154,7 @@ export class KernelService {
 
   public constructor(private readonly options: KernelServiceOptions) {
     if (isBlank(options.kernelVersion.trim())) {
-      throw new Error('Kernel version must not be empty')
+      throw new Error('内核版本号不能为空')
     }
     this.clientAccessBroker = options.clientAccessBroker
       ?? new DenyAllKernelClientAccessBroker()
@@ -252,7 +252,7 @@ export class KernelService {
     const parsed = CapabilitySessionOpenRequestSchema.safeParse(input)
     if (!parsed.success) return sessionFailure(
         'INVALID_REQUEST',
-        'Capability session open request does not match kernel protocol v2',
+        '打开能力会话的请求不符合 Kernel 协议 v2',
       )
 
     const request = parsed.data
@@ -308,7 +308,7 @@ export class KernelService {
       return failure(
         readCallId(input),
         'INVALID_REQUEST',
-        'Capability call request does not match kernel protocol v2',
+        '能力调用请求不符合 Kernel 协议 v2',
       )
 
     const request = parsed.data
@@ -397,7 +397,7 @@ export class KernelService {
             break
         }
       }
-      log.warn('Capability invocation failed', {
+      log.warn('能力调用失败', {
         aborted: signal.aborted,
         capabilityId: request.capabilityId,
         error,
@@ -431,7 +431,7 @@ export class KernelService {
   ): KernelRegistration {
     this.assertStarted()
     if (isBlank(type.trim())) {
-      throw new Error('Kernel event type must not be empty')
+      throw new Error('内核事件类型不能为空')
     }
     return this.options.host.subscribe(type, handler)
   }
@@ -465,7 +465,7 @@ export class KernelService {
     } catch (error) {
       if (error instanceof KernelError) throw error
       const reason = error instanceof Error ? error.message : String(error)
-      log.warn('Mod pack install failed', { directory, error })
+      log.warn('mod pack 安装失败', { directory, error })
       throw new KernelError(
         KernelErrorCodes.modInstallFailed,
         `从目录安装 mod pack 失败：${reason}`,

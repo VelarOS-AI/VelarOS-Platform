@@ -28,7 +28,7 @@ export function parseKernelActivePointer(input: unknown): KernelActivePointer {
   if (!result.success) {
     throw new KernelUpdaterError(
       'INVALID_POINTER',
-      'Kernel active version pointer is invalid',
+      '内核的激活版本指针不合法',
       {},
       { cause: result.error },
     )
@@ -45,7 +45,7 @@ export async function readKernelActivePointer(
   } catch (error) {
     throw new KernelUpdaterError(
       'INVALID_POINTER',
-      'Kernel active version pointer could not be read',
+      '读不出内核的激活版本指针',
       { path: pointerPath },
       { cause: error },
     )

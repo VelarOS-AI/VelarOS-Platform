@@ -111,7 +111,7 @@ describe('Kernel update manifest', () => {
 
     for (const input of malformed) {
       expect(() => parseKernelUpdateManifest(input)).toThrowError(KernelUpdaterError)
-      expect(() => parseKernelUpdateManifest(input)).toThrowError(/invalid/i)
+      expect(() => parseKernelUpdateManifest(input)).toThrowError(/不合法/)
     }
   })
 

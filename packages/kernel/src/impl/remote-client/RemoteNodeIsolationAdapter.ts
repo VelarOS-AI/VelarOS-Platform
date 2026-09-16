@@ -77,7 +77,7 @@ export class RemoteNodeIsolationAdapter implements KernelModuleIsolationAdapter 
       if (!isPresent(binding)) {
         // 投影与注册面对不上:继续下去只会注册一张调不通的能力面,不如当场停。
         throw new Error(
-          `Remote capability "${token.id}" has no binding in the current node projection`,
+          `当前的节点投影里没有远程能力 "${token.id}" 的绑定`,
         )
       }
       registrations.push(context.registerService(
@@ -197,7 +197,7 @@ export class RemoteNodeIsolationAdapter implements KernelModuleIsolationAdapter 
     if (client.connectionState === 'ready') return { status: 'healthy', details: { state: client.connectionState } }
     return {
       status: 'degraded',
-      message: 'Remote node connection is not ready',
+      message: '远程节点连接还没就绪',
       details: { state: client.connectionState },
     }
   }

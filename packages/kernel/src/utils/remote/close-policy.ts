@@ -36,18 +36,18 @@ const StopTable: Readonly<Record<number, {
   [RemoteNodeCloseCode.ProtocolMismatch]: {
     clearCredentials: false,
     code: RemoteNodeClientErrorCodes.ProtocolMismatch,
-    message: 'Remote node closed the connection: transport protocol mismatch',
+    message: '远程节点关闭了连接：传输协议版本对不上',
   },
   [RemoteNodeCloseCode.Unauthorized]: {
     // 留着不被承认的凭据只会让下一次连接重复失败,清掉,把人引回配对。
     clearCredentials: true,
     code: RemoteNodeClientErrorCodes.Unauthorized,
-    message: 'Remote node rejected this client; pair the host again',
+    message: '远程节点拒绝了本客户端；请重新配对这台主机',
   },
   [RemoteNodeCloseCode.Replaced]: {
     clearCredentials: false,
     code: RemoteNodeClientErrorCodes.Superseded,
-    message: 'Remote node connection was replaced by a newer one from this client',
+    message: '本连接被同一客户端的新连接顶替',
   },
 }
 

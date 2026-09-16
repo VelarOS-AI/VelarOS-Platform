@@ -34,7 +34,7 @@ function assertNonEmpty(value: string, label: string, moduleId?: string): void {
 
   throw new KernelError(
     'INVALID_MANIFEST',
-    `${label} must not be empty`,
+    `${label} 不能为空`,
     { moduleId },
   )
 }
@@ -93,30 +93,30 @@ export function validateManifest(
   if (!Number.isInteger(manifest.apiVersion) || manifest.apiVersion <= 0) {
     throw new KernelError(
       'INVALID_MANIFEST',
-      `Module "${manifest.id}" has an invalid apiVersion`,
+      `模块 "${manifest.id}" 的 apiVersion 不合法`,
       { moduleId: manifest.id },
     )
   }
   if (manifest.apiVersion !== apiVersion) {
     throw new KernelError(
       'API_VERSION_MISMATCH',
-      `Module "${manifest.id}" requires kernel API ${manifest.apiVersion}, host provides ${apiVersion}`,
+      `模块 "${manifest.id}" 要求内核 API ${manifest.apiVersion}，本宿主提供的是 ${apiVersion}`,
       { moduleId: manifest.id },
     )
   }
   if (!KernelModuleIsolationValues.includes(manifest.isolation)) {
     throw new KernelError(
       'INVALID_MANIFEST',
-      `Module "${manifest.id}" has invalid isolation "${manifest.isolation}"`,
+      `模块 "${manifest.id}" 的隔离形态 "${manifest.isolation}" 不合法`,
       { moduleId: manifest.id },
     )
   }
 
   assertProvidedCapabilities(manifest.provides, manifest.id)
-  assertRequirements(manifest.requires, 'required capability', manifest.id)
+  assertRequirements(manifest.requires, '必需能力', manifest.id)
   assertRequirements(
     manifest.optionalRequires,
-    'optional capability',
+    '可选能力',
     manifest.id,
   )
   assertUniqueValues(manifest.permissions, 'permission', manifest.id)
@@ -128,7 +128,7 @@ export function validateManifest(
     if (!requiredIds.has(requirement.id)) continue
     throw new KernelError(
       'INVALID_MANIFEST',
-      `Module "${manifest.id}" declares capability "${requirement.id}" as both required and optional`,
+      `模块 "${manifest.id}" 把能力 "${requirement.id}" 同时声明成必需和可选`,
       { moduleId: manifest.id, capabilityId: requirement.id },
     )
   }
@@ -159,7 +159,7 @@ function resolveRequirement(
     if (optional) return undefined
     throw new KernelError(
       'MISSING_CAPABILITY',
-      `Module "${consumer.manifest.id}" requires missing capability "${requirement.id}"`,
+      `模块 "${consumer.manifest.id}" 需要的能力 "${requirement.id}" 没有模块提供`,
       {
         moduleId: consumer.manifest.id,
         capabilityId: requirement.id,
@@ -175,7 +175,7 @@ function resolveRequirement(
 
   throw new KernelError(
     'VERSION_MISMATCH',
-    `Capability "${requirement.id}" from module "${provider.moduleId}" at ${provider.capability.version} does not satisfy ${requirement.versionRange}`,
+    `模块 "${provider.moduleId}" 提供的能力 "${requirement.id}"（${provider.capability.version}）不满足 ${requirement.versionRange}`,
     {
       moduleId: consumer.manifest.id,
       capabilityId: requirement.id,
@@ -204,7 +204,7 @@ export function resolveKernelModulePlan(
       if (isNotUndefined(existingProvider)) {
         throw new KernelError(
           'DUPLICATE_CAPABILITY',
-          `Capability "${capability.id}" is provided by both "${existingProvider.moduleId}" and "${module.manifest.id}"`,
+          `能力 "${capability.id}" 被 "${existingProvider.moduleId}" 与 "${module.manifest.id}" 同时声明提供`,
           {
             capabilityId: capability.id,
             relatedModuleIds: [
@@ -281,7 +281,7 @@ export function resolveKernelModulePlan(
       .sort()
     throw new KernelError(
       'CYCLIC_DEPENDENCY',
-      `Kernel module dependency cycle: ${cyclicModuleIds.join(', ')}`,
+      `内核模块依赖成环：${cyclicModuleIds.join(', ')}`,
       { relatedModuleIds: cyclicModuleIds },
     )
   }

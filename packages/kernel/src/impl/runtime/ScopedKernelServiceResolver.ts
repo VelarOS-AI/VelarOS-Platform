@@ -54,7 +54,7 @@ export class ScopedKernelServiceResolver implements KernelServiceResolver {
     if (this.allowedCapabilityIds.has(capabilityId)) return
     throw new KernelError(
       'UNDECLARED_CAPABILITY_ACCESS',
-      `Module "${this.moduleId}" accessed undeclared capability "${capabilityId}"`,
+      `模块 "${this.moduleId}" 访问了自己没声明的能力 "${capabilityId}"`,
       { moduleId: this.moduleId, capabilityId },
     )
   }

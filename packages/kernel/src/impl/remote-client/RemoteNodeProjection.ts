@@ -224,7 +224,7 @@ function buildModules(
     // 真被调到说明装配漏了 adapter,此时炸掉比静默注册一张空能力面安全。
     activate: () => {
       throw new Error(
-        `Remote module "${localModuleId}" must be activated by a remote isolation adapter`,
+        `远程模块 "${localModuleId}" 必须由远程隔离适配器来激活`,
       )
     },
   } satisfies KernelModuleDefinition))

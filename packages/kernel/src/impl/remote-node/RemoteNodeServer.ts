@@ -83,7 +83,7 @@ interface RemoteNodeConnection {
 function resolveNodePlatform(): RemoteNodePlatform {
   const parsed = RemoteNodePlatformSchema.safeParse(process.platform)
   if (!parsed.success) {
-    throw new Error(`Remote node does not support platform ${process.platform}`)
+    throw new Error(`远程节点不支持 ${process.platform} 这个平台`)
   }
   return parsed.data
 }
@@ -100,7 +100,7 @@ function readMismatchedHelloVersion(raw: RawData): Nullable<number> {
   try {
     value = JSON.parse(raw.toString()) as unknown
   } catch (error) {
-    log.debug('Remote node frame is not valid JSON', { error })
+    log.debug('远程节点的帧不是合法 JSON', { error })
     return null
   }
   if (!isRecord(value) || value.type !== 'hello') return null
@@ -177,7 +177,7 @@ export class RemoteNodeServer {
 
   /** 开一次配对窗口,返回给宿主展示的六位码。 */
   public startPairing(): RemoteNodeServerStatus {
-    if (!isPresent(this.endpoint)) throw new Error('Remote node server is not started')
+    if (!isPresent(this.endpoint)) throw new Error('远程节点服务端还没启动')
     this.pairing.open()
     return this.getStatus()
   }
@@ -186,7 +186,7 @@ export class RemoteNodeServer {
   public async unpair(): Promise<void> {
     const ready = this.ready
     if (isNotNull(ready)) {
-      this.closeConnection(ready, RemoteNodeCloseCode.Unauthorized, 'Credential cleared')
+      this.closeConnection(ready, RemoteNodeCloseCode.Unauthorized, '凭据已清除')
     }
     this.credential = null
     this.runner.forgetCompleted()
@@ -194,7 +194,7 @@ export class RemoteNodeServer {
   }
 
   public getStatus(): RemoteNodeServerStatus {
-    if (!isPresent(this.endpoint)) throw new Error('Remote node server is not started')
+    if (!isPresent(this.endpoint)) throw new Error('远程节点服务端还没启动')
     return {
       endpoint: this.endpoint,
       node: this.node,
@@ -308,7 +308,7 @@ export class RemoteNodeServer {
     }
     if (frame.type === 'pair') {
       void this.handlePair(connection, frame).catch((error: unknown) => {
-        log.error('Remote node pairing failed', { error })
+        log.error('远程节点配对失败', { error })
       })
       return
     }

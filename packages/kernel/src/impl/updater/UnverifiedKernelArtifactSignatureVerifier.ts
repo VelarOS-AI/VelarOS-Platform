@@ -41,8 +41,8 @@ implements KernelArtifactSignatureVerifier {
       verified: false,
       method: 'none',
       reason: isUndefined(context.artifact.signature)
-        ? 'No signature verifier is installed'
-        : 'A signature is present but no verifier is installed',
+        ? '没有装签名校验器'
+        : '制品带了签名，但本机没有装校验器',
     })
   }
 }

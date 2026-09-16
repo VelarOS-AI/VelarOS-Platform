@@ -109,11 +109,11 @@ export class KernelLocalRpcServer {
 
   public constructor(private readonly options: KernelLocalRpcServerOptions) {
     if (options.authToken.length < 32) {
-      throw new Error('Kernel RPC auth token must contain at least 32 characters')
+      throw new Error('Kernel RPC 的认证令牌至少要 32 个字符')
     }
     this.maxFrameBytes = options.maxFrameBytes ?? KernelRpcLimits.maxFrameBytes
     if (!Number.isInteger(this.maxFrameBytes) || this.maxFrameBytes <= 0) {
-      throw new Error('maxFrameBytes must be a positive integer')
+      throw new Error('maxFrameBytes 必须是正整数')
     }
     this.requestedEndpoint = options.endpoint
       ?? createDefaultKernelRpcEndpoint()
@@ -121,7 +121,7 @@ export class KernelLocalRpcServer {
       this.requestedEndpoint.kind === 'tcp'
       && this.requestedEndpoint.host !== '127.0.0.1'
     ) {
-      throw new Error('Kernel TCP RPC endpoint must be loopback-only')
+      throw new Error('Kernel 的 TCP RPC 端点只能绑回环地址')
     }
     this.server = createServer((socket) => this.accept(socket))
   }
@@ -129,7 +129,7 @@ export class KernelLocalRpcServer {
   public async start(): Promise<KernelRpcEndpoint> {
     switch (this.state) {
       case 'disposed':
-        throw new Error('Disposed Kernel RPC server cannot be started')
+        throw new Error('已回收的 Kernel RPC 服务端不能再启动')
       case 'listening':
         return this.getEndpoint()
       case 'idle':
@@ -162,7 +162,7 @@ export class KernelLocalRpcServer {
 
   public getEndpoint(): KernelRpcEndpoint {
     if (isUndefined(this.resolvedEndpoint)) {
-      throw new Error('Kernel RPC server has not started')
+      throw new Error('Kernel RPC 服务端还没启动')
     }
     return this.resolvedEndpoint
   }
@@ -350,7 +350,7 @@ export class KernelLocalRpcServer {
     if (!parsed.success) {
       throw new KernelClientError({
         code: 'INVALID_PARAMS',
-        message: 'Mods list request does not match kernel protocol v2',
+        message: 'mods.list 请求不符合 Kernel 协议 v2',
       })
     }
     return {
@@ -364,7 +364,7 @@ export class KernelLocalRpcServer {
     if (!parsed.success) {
       throw new KernelClientError({
         code: 'INVALID_PARAMS',
-        message: 'Mods setEnabled request does not match kernel protocol v2',
+        message: 'mods.setEnabled 请求不符合 Kernel 协议 v2',
       })
     }
     const result = await this.options.service.setModEnabled(
@@ -382,7 +382,7 @@ export class KernelLocalRpcServer {
     if (!parsed.success) {
       throw new KernelClientError({
         code: 'INVALID_PARAMS',
-        message: 'Mods installFromDirectory request does not match kernel protocol v2',
+        message: 'mods.installFromDirectory 请求不符合 Kernel 协议 v2',
       })
     }
     const result = await this.options.service.installModFromDirectory(
@@ -419,7 +419,7 @@ export class KernelLocalRpcServer {
     if (!parsed.success) {
       throw new KernelClientError({
         code: 'INVALID_PARAMS',
-        message: 'Capability session close request does not match kernel protocol v2',
+        message: '关闭能力会话的请求不符合 Kernel 协议 v2',
       })
     }
     return {
@@ -437,7 +437,7 @@ export class KernelLocalRpcServer {
     if (!parsed.success) return callGrantFailure(
         readCallIdFromParams(params),
         'INVALID_REQUEST',
-        'Capability call request does not match kernel protocol v2',
+        '能力调用请求不符合 Kernel 协议 v2',
       )
     if (!context.sessions.covers(parsed.data)) return callGrantFailure(
         parsed.data.callId,
@@ -592,7 +592,7 @@ async function removeStaleSocket(path: string): Promise<void> {
     const stat = await lstat(path)
     if (!stat.isSocket()) {
       throw new Error(
-        `Refusing to replace non-socket Kernel RPC path "${path}"`,
+        `Kernel RPC 路径 "${path}" 不是 socket，拒绝覆盖`,
       )
     }
     await unlink(path)
@@ -630,7 +630,7 @@ function resolveBoundEndpoint(
 ): KernelRpcEndpoint {
   if (requested.kind === 'unix') return requested
   const address = server.address() as Nullable<AddressInfo>
-  if (isNull(address)) throw new Error('Kernel RPC server has no address')
+  if (isNull(address)) throw new Error('Kernel RPC 服务端没有地址')
   return {
     kind: 'tcp',
     host: '127.0.0.1',

@@ -142,7 +142,7 @@ describe('Kernel artifact download and verification', () => {
     })
 
     expect(result).toMatchObject({ verified: false, method: 'none' })
-    expect(result.reason).toContain('verifier is installed')
+    expect(result.reason).toContain('没有装签名校验器')
   })
 
   test('derives a safe payload file name from the artifact URL', () => {

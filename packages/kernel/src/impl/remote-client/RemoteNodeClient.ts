@@ -212,7 +212,7 @@ export class RemoteNodeClient {
     this.rejectReadyWaiters(error)
     this.calls.failAll(error.code, error.message)
     this.detachSocket(socket)
-    socket?.close(1000, 'Client disposed')
+    socket?.close(1000, '客户端已回收')
     this.manifestListeners.clear()
     this.stateListeners.clear()
     this.stopListeners.clear()
@@ -471,7 +471,7 @@ export class RemoteNodeClient {
     this.socket = null
     this.session = null
     this.detachSocket(socket)
-    socket?.close(1000, 'Client stopped')
+    socket?.close(1000, '客户端已停止')
     this.setState('stopped')
     this.rejectReadyWaiters(error)
     this.calls.failAll(error.code, error.message)
@@ -514,7 +514,7 @@ export class RemoteNodeClient {
   private disposedError(): RemoteNodeClientError {
     return new RemoteNodeClientError({
       code: RemoteNodeClientErrorCodes.Disposed,
-      message: 'Remote node client is disposed',
+      message: '远程节点客户端已回收',
       resultUnknown: false,
       retryable: false,
     })

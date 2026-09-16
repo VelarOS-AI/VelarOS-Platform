@@ -85,7 +85,7 @@ export class KernelModLoader {
         }
         this.store.markLoadFailure(failure)
         failures.push(failure)
-        log.error('Mod pack load failed', { failure })
+        log.error('mod pack 装载失败', { failure })
       }
     }
     return { modules, packs, failures }
@@ -108,7 +108,7 @@ async function loadPackModule(
     // 孤儿：持久化的索引里还记着一个本次构建已不再编入的 pack。它的身份 URI 不能导入，
     // 直接说明原因，不要让它落进无意义的文件路径导入。
     throw new Error(
-      `Mod pack "${pack.id}" is a bundled pack that is no longer compiled into this Kernel build ("${pack.specifier}")`,
+      `mod pack "${pack.id}" 是随包编译进来的，但这次构建里已经没有它了（"${pack.specifier}"）`,
     )
   }
   const resolved = isAbsolute(pack.specifier)

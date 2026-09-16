@@ -112,7 +112,7 @@ export class KernelUpdateLock {
     if (this.released) return
     this.released = true
     await this.handle.close().catch((error) => {
-      log.warn('Kernel update lock handle failed to close', { error, path: this.lockPath })
+      log.warn('关闭内核更新锁的文件句柄失败', { error, path: this.lockPath })
     })
     await unlink(this.lockPath).catch(ignoreMissing)
   }

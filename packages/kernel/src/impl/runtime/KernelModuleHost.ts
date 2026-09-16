@@ -153,7 +153,7 @@ export class KernelModuleHost {
     if (!Number.isInteger(options.apiVersion) || options.apiVersion <= 0) {
       throw new KernelError(
         'INVALID_MANIFEST',
-        'Kernel host apiVersion must be a positive integer',
+        '内核宿主的 apiVersion 必须是正整数',
       )
     }
     this.permissionBroker = options.permissionBroker
@@ -164,7 +164,7 @@ export class KernelModuleHost {
       if (this.isolationAdapters.has(adapter.isolation)) {
         throw new KernelError(
           'INVALID_MANIFEST',
-          `Duplicate isolation adapter for "${adapter.isolation}"`,
+          `隔离形态 "${adapter.isolation}" 注册了两个适配器`,
         )
       }
       this.isolationAdapters.set(adapter.isolation, adapter)
@@ -176,7 +176,7 @@ export class KernelModuleHost {
     if (!isUndefined(this.startPromise)) {
       throw new KernelError(
         'MODULE_STATE',
-        'Kernel modules must be registered before host start',
+        '内核模块必须在宿主启动之前注册',
       )
     }
     const manifest = cloneManifest(definition.manifest)
@@ -184,7 +184,7 @@ export class KernelModuleHost {
     if (this.modules.has(manifest.id)) {
       throw new KernelError(
         'DUPLICATE_MODULE',
-        `Kernel module "${manifest.id}" is already registered`,
+        `内核模块 "${manifest.id}" 已经注册过了`,
         { moduleId: manifest.id },
       )
     }
@@ -286,7 +286,7 @@ export class KernelModuleHost {
     if (isUndefined(previous)) {
       throw new KernelError(
         'MODULE_STATE',
-        `Cannot replace unregistered module "${manifest.id}"`,
+        `模块 "${manifest.id}" 没注册过，替换不了`,
         { moduleId: manifest.id },
       )
     }
@@ -297,7 +297,7 @@ export class KernelModuleHost {
     ) {
       throw new KernelError(
         'MODULE_STATE',
-        `Kernel module "${manifest.id}" cannot be replaced from state "${previous.status}"`,
+        `内核模块 "${manifest.id}" 当前是 "${previous.status}" 状态，不能替换`,
         { moduleId: manifest.id },
       )
     }
@@ -673,7 +673,7 @@ export class KernelModuleHost {
 
   private assertNotDisposed(): void {
     if (!this.disposed) return
-    throw new KernelError('HOST_DISPOSED', 'Kernel module host is disposed')
+    throw new KernelError('HOST_DISPOSED', '内核模块宿主已回收')
   }
 
   private assertStartable(): void {
@@ -683,7 +683,7 @@ export class KernelModuleHost {
     if (isUndefined(invalid)) return
     throw new KernelError(
       'MODULE_STATE',
-      `Kernel module "${invalid.definition.manifest.id}" cannot start from state "${invalid.status}"`,
+      `内核模块 "${invalid.definition.manifest.id}" 当前是 "${invalid.status}" 状态，起不来`,
       { moduleId: invalid.definition.manifest.id },
     )
   }
@@ -744,7 +744,7 @@ export class KernelModuleHost {
         ) {
           throw new KernelError(
             'UNDECLARED_CAPABILITY_PROVIDER',
-            `Module "${manifest.id}" registered undeclared capability "${token.id}" at version "${token.version}"`,
+            `模块 "${manifest.id}" 注册了自己没声明提供的能力 "${token.id}"（版本 "${token.version}"）`,
             { moduleId: manifest.id, capabilityId: token.id },
           )
         }
@@ -763,7 +763,7 @@ export class KernelModuleHost {
     if (record.contextActive) return
     throw new KernelError(
       'MODULE_STATE',
-      `Kernel module context "${record.definition.manifest.id}" is no longer active`,
+      `内核模块上下文 "${record.definition.manifest.id}" 已经失效`,
       { moduleId: record.definition.manifest.id },
     )
   }

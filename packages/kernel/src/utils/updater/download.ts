@@ -50,7 +50,7 @@ export async function downloadKernelArtifact(
     if (response.status < 200 || response.status >= 300) {
       throw new KernelUpdaterError(
         'DOWNLOAD_FAILED',
-        `Kernel artifact request failed with status ${response.status}`,
+        `取内核制品失败，HTTP 状态 ${response.status}`,
         { url: artifact.url, actual: String(response.status) },
       )
     }
@@ -59,7 +59,7 @@ export async function downloadKernelArtifact(
       if (size > artifact.size) {
         throw new KernelUpdaterError(
           'ARTIFACT_SIZE_MISMATCH',
-          'Kernel artifact is larger than the manifest declares',
+          '内核制品比清单声明的还大',
           { url: artifact.url, expected: String(artifact.size) },
         )
       }
@@ -69,7 +69,7 @@ export async function downloadKernelArtifact(
     await handle.close()
   } catch (error) {
     await handle.close().catch((cleanupError) => {
-      log.warn('Kernel artifact handle failed to close during cleanup', {
+      log.warn('清理时关闭内核制品文件句柄失败', {
         error: cleanupError,
         path: destination,
       })
@@ -78,7 +78,7 @@ export async function downloadKernelArtifact(
     if (error instanceof KernelUpdaterError) throw error
     throw new KernelUpdaterError(
       'DOWNLOAD_FAILED',
-      `Kernel artifact download from "${artifact.url}" failed`,
+      `从 "${artifact.url}" 下载内核制品失败`,
       { url: artifact.url },
       { cause: error },
     )
@@ -88,7 +88,7 @@ export async function downloadKernelArtifact(
     await rm(destination, { force: true })
     throw new KernelUpdaterError(
       'ARTIFACT_SIZE_MISMATCH',
-      `Kernel artifact size ${size} does not match the manifest`,
+      `内核制品实际字节数 ${size} 与清单声明的不一致`,
       {
         url: artifact.url,
         expected: String(artifact.size),
@@ -102,7 +102,7 @@ export async function downloadKernelArtifact(
     await rm(destination, { force: true })
     throw new KernelUpdaterError(
       'DIGEST_MISMATCH',
-      'Kernel artifact SHA-256 digest does not match the manifest',
+      '内核制品的 SHA-256 与清单声明的不一致',
       { url: artifact.url, expected: artifact.sha256, actual: digest },
     )
   }

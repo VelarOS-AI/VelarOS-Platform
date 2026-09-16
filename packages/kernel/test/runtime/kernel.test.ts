@@ -74,10 +74,10 @@ describe('Kernel', () => {
     expect(kernel.hasCapability(ValueCapability.id)).toBeFalse()
     expect(kernel.resolveCallableCapability(ValueCapability.id)).toBeNull()
     expect(() => kernel.registerModule(valueModule())).toThrow(
-      'Kernel modules must be registered before start',
+      '内核模块必须在启动之前注册',
     )
     await expect(kernel.start()).rejects.toThrow(
-      'Disposed Kernel cannot be started',
+      '已回收的内核不能再启动',
     )
   })
 

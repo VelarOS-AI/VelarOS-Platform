@@ -93,7 +93,7 @@ export function parseKernelUpdateManifest(input: unknown): KernelUpdateManifest 
   if (!result.success) {
     throw new KernelUpdaterError(
       'INVALID_MANIFEST',
-      `Kernel update manifest is invalid: ${formatIssues(result.error)}`,
+      `内核更新清单不合法：${formatIssues(result.error)}`,
       {},
       { cause: result.error },
     )
@@ -104,7 +104,7 @@ export function parseKernelUpdateManifest(input: unknown): KernelUpdateManifest 
     if (seen.has(entry.version)) {
       throw new KernelUpdaterError(
         'INVALID_MANIFEST',
-        `Kernel update manifest declares version "${entry.version}" twice`,
+        `内核更新清单里版本 "${entry.version}" 声明了两次`,
         { version: entry.version },
       )
     }
@@ -129,7 +129,7 @@ export async function loadKernelUpdateManifest(
   } catch (error) {
     throw new KernelUpdaterError(
       'INVALID_MANIFEST',
-      `Kernel update manifest at "${source}" is not valid JSON`,
+      `"${source}" 处的内核更新清单不是合法 JSON`,
       { url: source },
       { cause: error },
     )
@@ -151,7 +151,7 @@ export function resolveKernelArtifactTarget(
   if (isUndefined(target) || !target.success) {
     throw new KernelUpdaterError(
       'UNSUPPORTED_TARGET',
-      `No Kernel artifact target exists for ${platform}/${architecture}`,
+      `内核制品没有 ${platform}/${architecture} 这个目标`,
       { target: `${platform}-${architecture}` },
     )
   }
@@ -166,7 +166,7 @@ export function findKernelManifestVersion(
   if (isUndefined(entry)) {
     throw new KernelUpdaterError(
       'VERSION_UNAVAILABLE',
-      `Kernel version "${version}" is not published in the update manifest`,
+      `更新清单里没有发布内核版本 "${version}"`,
       { version },
     )
   }
@@ -183,7 +183,7 @@ export function selectKernelArtifact(
   if (isUndefined(artifact)) {
     throw new KernelUpdaterError(
       'ARTIFACT_NOT_FOUND',
-      `Kernel version "${version}" publishes no artifact for ${target}`,
+      `内核版本 "${version}" 没有为 ${target} 发布制品`,
       { version, target },
     )
   }
