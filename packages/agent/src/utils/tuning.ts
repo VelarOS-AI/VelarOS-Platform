@@ -54,7 +54,7 @@ export const AgentTuning = Object.freeze({
     subAgentRetainedThreadIdleTtlMs: 30 * 60_000,
     /** 单条保留线程最多留多少字符的历史，超出截断。 */
     subAgentRetainedHistoryMaxChars: 600_000,
-  }),
+  } as const),
   /** 模型请求的重试与退避：RetryPolicy。 */
   retry: Object.freeze({
     /** 第一次重试前等多少毫秒。 */
@@ -71,7 +71,7 @@ export const AgentTuning = Object.freeze({
     aiSdkMaxRetries: 0,
     /** 供应方错误正文最多留多少字节进诊断，超出截断。 */
     providerErrorBodyBytes: 64 * 1024,
-  }),
+  } as const),
   /** 上下文预算与用量估算：context-budget、context-usage、ContextUsageCalibrator。 */
   context: Object.freeze({
     /** 安全余量占窗口的百分比：吸收本地估算与供应方计费口径的偏差。 */
@@ -98,7 +98,7 @@ export const AgentTuning = Object.freeze({
     defaultInlineBudgetChars: 8_000,
     /** 当前源码视图最多列出多少条被省略的文件路径；总数另外给。 */
     maxListedOmittedPaths: 40,
-  }),
+  } as const),
   /** 本地 token 估算的校准系数：ContextUsageCalibrator 按实测用量在线修正估算。 */
   calibration: Object.freeze({
     /** 没有任何样本时的初始系数（1 = 完全信任本地估算）。 */
@@ -113,7 +113,7 @@ export const AgentTuning = Object.freeze({
     minResidual: 0.25,
     /** 单个样本残差的上界，同上。 */
     maxResidual: 4,
-  }),
+  } as const),
   /** 逐字符的 token 成本估算表：没有真分词器时按字符类别累加（单位是 token）。 */
   tokenCost: Object.freeze({
     /** 一个 JSON 对象的起止花括号折算多少 token。 */
@@ -146,7 +146,7 @@ export const AgentTuning = Object.freeze({
     cjk: 1,
     /** 其余 Unicode 字符折算多少 token。 */
     otherUnicode: 1,
-  }),
+  } as const),
   /** 上下文驻留账本与治理：准入、锚点、骨架、面板、蒸馏。 */
   residency: Object.freeze({
     /** 缺席量纲时按多少字符折算一个 token；凡是能拿到实测密度的地方都必须传实测值，这只是兜底。 */
@@ -195,7 +195,7 @@ export const AgentTuning = Object.freeze({
     distillMinSegmentChars: 4_000,
     /** 自适应档：叙述短于多少字符就不请蒸馏，机械骨架已经够。 */
     distillMinNarrativeChars: 8_000,
-  }),
+  } as const),
   /** 会话召回与索引：ChatContextRetrievalService、查询轨迹。 */
   retrieval: Object.freeze({
     /** 计数索引最多留多少条目。 */
@@ -212,7 +212,7 @@ export const AgentTuning = Object.freeze({
     maxQueryCountEntries: 4_096,
     /** 索引里单条工具调用的入参序列化上限（字符）：只影响可搜索文本，不影响召回全文。 */
     indexedMessageToolArgsChars: 1_000,
-  }),
+  } as const),
   /** 工具执行与结果整形：ToolExecutor、失败详情、入参投影。 */
   tools: Object.freeze({
     /** 中止后等工具自己收尾多少毫秒，超时按未收尾记账。 */
@@ -269,7 +269,7 @@ export const AgentTuning = Object.freeze({
     restoredInputChars: 32_000,
     /** 清洗历史时最多保留最近几条带工具结果正文的消息。 */
     recentToolResultContentMessages: 1,
-  }),
+  } as const),
   /** 工具契约套件：说明体积与 schema 组装。 */
   toolkit: Object.freeze({
     /** 单个工具说明的开发期硬上限（字符）：保底闸，不是预算；正常单一职责的工具够不到。 */
@@ -282,7 +282,7 @@ export const AgentTuning = Object.freeze({
     forgivingSchemaMaxItems: 10,
     /** 工具发现打分低于最高分的多少比例就算低置信，标记给模型。 */
     lowConfidenceScoreRatio: 0.3,
-  }),
+  } as const),
   /** 子 Agent 派发与进展账本：SubAgentDispatcher、SubAgentProgressLedger。 */
   delegation: Object.freeze({
     /** 同一时刻最多并发跑几个子 Agent。 */
@@ -307,7 +307,7 @@ export const AgentTuning = Object.freeze({
     maxLedgerEntries: 32,
     /** 续跑失败原因最多带多少字符进下一轮指令。 */
     resumeFailureReasonChars: 200,
-  }),
+  } as const),
   /** 运行档与角色：按模型窗口与工具规模判档。 */
   runProfile: Object.freeze({
     /** 模型窗口未知时按多少 token 判档。 */
@@ -348,7 +348,7 @@ export const AgentTuning = Object.freeze({
     expandedMaxInputWorkingSetTokens: 192_000,
     /** expanded 档的工具 schema 字符上限。 */
     expandedMaxToolSchemaChars: 192_000,
-  }),
+  } as const),
   /** 提示词组装与回合载荷：ContextBuilder、TurnPayload、技能。 */
   prompt: Object.freeze({
     /** mod 追加的回合上下文段的缺省优先级：排在内置动态段之后，便于识别来源。 */
@@ -365,7 +365,7 @@ export const AgentTuning = Object.freeze({
     repeatedDebugPromptPreviewChars: 120,
     /** 会话提示词缓存键最多取前缀的多少字符。 */
     sessionPromptCacheKeyPrefixChars: 48,
-  }),
+  } as const),
   /** 执行记录、事件与后台任务：ExecutionStore、KernelBackgroundJobManager、回合上下文账本。 */
   records: Object.freeze({
     /** 每条执行最多留多少个事件，超过从最早的丢。 */
@@ -388,12 +388,12 @@ export const AgentTuning = Object.freeze({
     sessionListDefaultLimit: 100,
     /** 列会话资源时 limit 的上界，调用方给更大的值一律夹回。 */
     sessionListMaxLimit: 1_000,
-  }),
+  } as const),
   /** 会话工作态：CodingSessionTracker。 */
   session: Object.freeze({
     /** 外部改动触发的刷新最短间隔，毫秒：抖动期内的多次事件合成一次。 */
     externalTouchCooldownMs: 750,
-  }),
+  } as const),
   /** 流式诊断与生成产物。 */
   stream: Object.freeze({
     /** 原始流诊断最多采样几片，用来定位供应方协议问题。 */
@@ -402,7 +402,7 @@ export const AgentTuning = Object.freeze({
     maxGeneratedFileBytes: 20 * 1024 * 1024,
     /** 渲染侧聊天流日志最多留多少条。 */
     sessionLogCapacity: 10_000,
-  }),
+  } as const),
   /** mod 加载、接缝与归档扫描。 */
   mods: Object.freeze({
     /** 接缝诊断最多留多少条。 */
@@ -417,7 +417,7 @@ export const AgentTuning = Object.freeze({
     maximumHookTimeoutMs: 30_000,
     /** 归档扫描会话多久没人续用就丢弃，毫秒。 */
     scanSessionTtlMs: 10 * 60 * 1000,
-  }),
+  } as const),
   /** 外部连接：MCP 客户端、审批参数预览。 */
   connectors: Object.freeze({
     /** MCP server 起不来时等多少毫秒放弃连接。 */
@@ -428,7 +428,7 @@ export const AgentTuning = Object.freeze({
     approvalPreviewChars: 4_000,
     /** 审批弹窗里单个字符串字段最多多少字符。 */
     approvalStringChars: 400,
-  }),
+  } as const),
   /** 产品会话归档与搜索。 */
   productSession: Object.freeze({
     /** 归档没给上限时最多带多少条资源。 */
@@ -437,5 +437,5 @@ export const AgentTuning = Object.freeze({
     archiveMaxEvents: 100_000,
     /** 会话搜索没给上限时最多取几个关键词。 */
     sessionSearchMaxTerms: 12,
-  }),
+  } as const),
 } as const)
