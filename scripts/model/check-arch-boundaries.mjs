@@ -235,7 +235,7 @@ const allowedNodeSources = new Set([
   path.join(packageDirectory, 'src/impl/providers/NodeLocalModelEnvironment.ts'),
   path.join(packageDirectory, 'src/impl/providers/ProviderScriptRegistry.ts'),
   path.join(packageDirectory, 'src/impl/adapters/UserJsModelAdapter.ts'),
-  path.join(packageDirectory, 'src/types/scripts.ts'),
+  path.join(packageDirectory, 'src/types/user-adapter.ts'),
   path.join(packageDirectory, 'src/utils/scripts/provider-scripts.ts'),
   path.join(packageDirectory, 'src/utils/scripts/user-adapter.ts'),
 ])
