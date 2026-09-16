@@ -1,14 +1,29 @@
 import { describe, expect, test } from "bun:test";
 
-import { createBuiltinDetectors } from "../src/detect/index.js";
 import type {
   DetectorContext,
+  LoopThresholds,
   Observation,
   ToolCallRecord,
   TranscriptBlock,
-} from "../src/protocol/index.js";
+} from "../src/exports/index.js";
+import { DefaultLoopThresholds } from "../src/exports/index.js";
+import { createBuiltinDetectors } from "../src/utils/measure/detectors.js";
 
-import { journey, observation, trial } from "./fixtures.js";
+/** 宿主给的两份工具名单：本包核心里不写任何产品的工具名，测试自己提供。 */
+const HostToolNames = {
+  catalogToolNames: ["tooling:map"],
+  interactiveToolNames: ["interaction:ask_user"],
+};
+
+function builtins(thresholds: Partial<LoopThresholds> = {}) {
+  return createBuiltinDetectors({
+    thresholds: { ...DefaultLoopThresholds, ...thresholds },
+    ...HostToolNames,
+  });
+}
+
+import { journey, observation, trial } from "../spec/support.js";
 
 const context: DetectorContext = {
   trial: trial(),
@@ -63,7 +78,7 @@ function block(
 
 describe("built-in detectors", () => {
   test("keeps the host-neutral detector catalog explicit", () => {
-    expect(createBuiltinDetectors().map((item) => item.definition.id)).toEqual([
+    expect(builtins().map((item) => item.definition.id)).toEqual([
       "stuck-streaming-block",
       "stuck-running-tool",
       "orphan-tool-call",
@@ -81,7 +96,7 @@ describe("built-in detectors", () => {
   });
 
   test("preserves calibrated loop boundaries and ignores unknown empty arguments", () => {
-    const detectors = createBuiltinDetectors({
+    const detectors = builtins({
       retryWarn: 2,
       retryAbort: 3,
       toolMapReadWarn: 2,
@@ -144,7 +159,7 @@ describe("built-in detectors", () => {
         block("artifact", "artifact", null),
       ],
     };
-    const detectors = createBuiltinDetectors();
+    const detectors = builtins();
     for (const id of ["protocol-leak", "empty-final-answer"]) {
       expect(
         detectors

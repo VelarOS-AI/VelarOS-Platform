@@ -1,17 +1,9 @@
 import { describe, expect, test } from "bun:test";
 
-import {
-  type CampaignFailureRecord,
-  parseRealTaskCase,
-  reconcileCampaignProof,
-  recordCampaignFailure,
-  recordCampaignProof,
-  selectAdaptiveCampaignTasks,
-  transitionCampaignFailure,
-} from "../src/workload/index.js";
+import { adaptiveCampaign, type CampaignFailureRecord, labWire } from "../src/exports/index.js";
 
 function task(id: string, overrides: Record<string, unknown> = {}) {
-  return parseRealTaskCase({
+  return labWire.parseRealTaskCase({
     schema: "agent-lab/real-task-case@3",
     id,
     version: 1,
@@ -52,7 +44,7 @@ describe("adaptive real-task campaign", () => {
       task("b", { coverage: { archetype: "inspect", dataShapes: ["tree"], path: "boundary" } }),
       task("c"),
     ];
-    const selection = selectAdaptiveCampaignTasks({
+    const selection = adaptiveCampaign.selectTasks({
       cases,
       revisions: cases.map((entry) => ({ taskId: entry.id, revision: "r1" })),
       evidence: [{ taskId: "a", taskRevision: "r1", outcome: "pass", failureKey: null, updatedAt: 1 }],
@@ -66,7 +58,7 @@ describe("adaptive real-task campaign", () => {
 
   test("halts new sampling until a failure is diagnosed and fixed", () => {
     const cases = [task("a"), task("b")];
-    const failures = recordCampaignFailure({
+    const failures = adaptiveCampaign.recordFailure({
       failures: [],
       key: "tool-contract:alias",
       classification: "tool-contract",
@@ -75,7 +67,7 @@ describe("adaptive real-task campaign", () => {
       detail: "invalid provider tool name",
       now: 1,
     });
-    const blocked = selectAdaptiveCampaignTasks({
+    const blocked = adaptiveCampaign.selectTasks({
       cases,
       revisions: cases.map((entry) => ({ taskId: entry.id, revision: "r1" })),
       evidence: [],
@@ -87,7 +79,7 @@ describe("adaptive real-task campaign", () => {
   });
 
   test("requires diagnosis, a fix reference, and independent proof before closing", () => {
-    const initial = recordCampaignFailure({
+    const initial = adaptiveCampaign.recordFailure({
       failures: [],
       key: "validation:shape",
       classification: "parameter-validation",
@@ -96,19 +88,19 @@ describe("adaptive real-task campaign", () => {
       detail: "invalid arguments",
       now: 1,
     })[0]!;
-    const diagnosed = transitionCampaignFailure({
+    const diagnosed = adaptiveCampaign.transitionFailure({
       failure: initial,
       state: "diagnosed",
       rootCause: "schema allowed an ambiguous union",
     });
-    const fixed = transitionCampaignFailure({
+    const fixed = adaptiveCampaign.transitionFailure({
       failure: diagnosed,
       state: "fixed",
       fixReference: "commit:local",
       proofTaskIds: ["a", "b"],
     });
-    const first = recordCampaignProof(fixed, "a");
-    const second = recordCampaignProof(first, "b");
+    const first = adaptiveCampaign.recordProof(fixed, "a");
+    const second = adaptiveCampaign.recordProof(first, "b");
 
     expect(first.state).toBe("proving");
     expect(second.state).toBe("closed");
@@ -132,18 +124,18 @@ describe("adaptive real-task campaign", () => {
       fixReference: "verifier:line-ending",
     };
 
-    const invalidated = reconcileCampaignProof(proving, new Set());
+    const invalidated = adaptiveCampaign.reconcileProof(proving, new Set());
     expect(invalidated.state).toBe("fixed");
     expect(invalidated.passedProofTaskIds).toEqual([]);
 
-    const revised = transitionCampaignFailure({
+    const revised = adaptiveCampaign.transitionFailure({
       failure: invalidated,
       state: "fixed",
       fixReference: "verifier:line-ending",
       proofTaskIds: ["a", "replacement-task"],
     });
-    const partial = reconcileCampaignProof(revised, new Set(["a"]));
-    const closed = reconcileCampaignProof(revised, new Set(["a", "replacement-task"]));
+    const partial = adaptiveCampaign.reconcileProof(revised, new Set(["a"]));
+    const closed = adaptiveCampaign.reconcileProof(revised, new Set(["a", "replacement-task"]));
     expect(partial.state).toBe("proving");
     expect(closed.state).toBe("closed");
   });
@@ -164,7 +156,7 @@ describe("adaptive real-task campaign", () => {
       rootCause: "waiter leak",
       fixReference: "commit:one",
     };
-    const repeated = recordCampaignFailure({
+    const repeated = adaptiveCampaign.recordFailure({
       failures: [closed],
       key: closed.key,
       classification: "runtime",

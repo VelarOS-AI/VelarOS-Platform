@@ -88,9 +88,9 @@
     },
     "packages/agent-lab": {
       "name": "@velaros-ai/agent-lab",
-      "version": "0.1.5",
+      "version": "0.2.0",
       "bin": {
-        "velaros-agent-lab": "./dist/cli.js",
+        "velaros-agent-lab": "./bin/velaros-agent-lab.mjs",
       },
       "dependencies": {
         "zod": "^4.3.6",

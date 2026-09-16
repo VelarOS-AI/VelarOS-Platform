@@ -1,14 +1,13 @@
 import { describe, expect, test } from "bun:test";
 
-import { DetectorRegistry } from "../src/detect/index.js";
+import { FullCapabilities, journey, observation, trial } from "../spec/support.js";
 import type {
   LabDriver,
   ObservationPhase,
   SessionHandle,
-} from "../src/protocol/index.js";
-import { runJourney, VerifierRegistry } from "../src/runner/index.js";
-
-import { FullCapabilities, journey, observation, trial } from "./fixtures.js";
+  VerifierRegistryApi,
+} from "../src/exports/index.js";
+import { createDetectorRegistry, createVerifierRegistry, journeyRunner } from "../src/exports/index.js";
 
 function successfulDriver(prompts: string[], sessions: string[]): LabDriver {
   const session: SessionHandle = {
@@ -65,19 +64,19 @@ describe("continuous journey runner", () => {
   test("advances every leg through one persistent native session", async () => {
     const prompts: string[] = [];
     const sessions: string[] = [];
-    const verifiers = new VerifierRegistry();
+    const verifiers: VerifierRegistryApi = createVerifierRegistry();
     verifiers.register("complete", () => ({
       kind: "pass",
       credit: 1,
       evidence: {},
     }));
-    const result = await runJourney({
+    const result = await journeyRunner.runJourney({
       jobId: "job",
       suiteId: "suite",
       trial: trial("executor-a", "journey-a"),
       journey: journey("journey-a", 2),
       driver: successfulDriver(prompts, sessions),
-      detectors: new DetectorRegistry(),
+      detectors: createDetectorRegistry(),
       verifiers,
       workspaceRoot: "/workspace",
       sourceCommit: "platform",
@@ -95,19 +94,19 @@ describe("continuous journey runner", () => {
     driver.prepare = async () => {
       throw new Error("fixture unavailable");
     };
-    const verifiers = new VerifierRegistry();
+    const verifiers: VerifierRegistryApi = createVerifierRegistry();
     verifiers.register("complete", () => ({
       kind: "pass",
       credit: 1,
       evidence: {},
     }));
-    const result = await runJourney({
+    const result = await journeyRunner.runJourney({
       jobId: "job",
       suiteId: "suite",
       trial: trial(),
       journey: journey(),
       driver,
-      detectors: new DetectorRegistry(),
+      detectors: createDetectorRegistry(),
       verifiers,
       workspaceRoot: null,
       sourceCommit: null,
@@ -132,13 +131,13 @@ describe("continuous journey runner", () => {
             reason: "expected interruption",
           }
         : { kind: "settled" };
-    const verifiers = new VerifierRegistry();
+    const verifiers: VerifierRegistryApi = createVerifierRegistry();
     verifiers.register("complete", () => ({
       kind: "pass",
       credit: 1,
       evidence: {},
     }));
-    const result = await runJourney({
+    const result = await journeyRunner.runJourney({
       jobId: "job",
       suiteId: "suite",
       trial: trial("executor-a", "journey-a"),
@@ -147,7 +146,7 @@ describe("continuous journey runner", () => {
         legs: [{ ...first, continueOn: ["aborted"] }, definition.legs[1]!],
       },
       driver,
-      detectors: new DetectorRegistry(),
+      detectors: createDetectorRegistry(),
       verifiers,
       workspaceRoot: null,
       sourceCommit: null,
@@ -163,19 +162,19 @@ describe("continuous journey runner", () => {
     driver.send = async () => {
       throw new Error("hook command rejected");
     };
-    const verifiers = new VerifierRegistry();
+    const verifiers: VerifierRegistryApi = createVerifierRegistry();
     verifiers.register("complete", () => ({
       kind: "pass",
       credit: 1,
       evidence: {},
     }));
-    const result = await runJourney({
+    const result = await journeyRunner.runJourney({
       jobId: "job",
       suiteId: "suite",
       trial: trial(),
       journey: journey(),
       driver,
-      detectors: new DetectorRegistry(),
+      detectors: createDetectorRegistry(),
       verifiers,
       workspaceRoot: null,
       sourceCommit: null,
@@ -195,11 +194,11 @@ describe("continuous journey runner", () => {
       cause: "agent-unavailable",
       detail: "QUOTA_EXCEEDED: credits exhausted",
     });
-    const verifiers = new VerifierRegistry();
+    const verifiers: VerifierRegistryApi = createVerifierRegistry();
     verifiers.register("complete", () => ({ kind: "pass", credit: 1, evidence: {} }));
     verifiers.register("secondary", () => ({ kind: "pass", credit: 1, evidence: {} }));
 
-    const result = await runJourney({
+    const result = await journeyRunner.runJourney({
       jobId: "job",
       suiteId: "suite",
       trial: trial(),
@@ -222,7 +221,7 @@ describe("continuous journey runner", () => {
         ],
       },
       driver,
-      detectors: new DetectorRegistry(),
+      detectors: createDetectorRegistry(),
       verifiers,
       workspaceRoot: null,
       sourceCommit: null,
@@ -254,20 +253,20 @@ describe("continuous journey runner", () => {
       reasoningProfile: null,
       configuration: {},
     });
-    const verifiers = new VerifierRegistry();
+    const verifiers: VerifierRegistryApi = createVerifierRegistry();
     verifiers.register("complete", () => ({
       kind: "pass",
       credit: 1,
       evidence: {},
     }));
 
-    const result = await runJourney({
+    const result = await journeyRunner.runJourney({
       jobId: "job",
       suiteId: "suite",
       trial: trial(),
       journey: journey(),
       driver,
-      detectors: new DetectorRegistry(),
+      detectors: createDetectorRegistry(),
       verifiers,
       workspaceRoot: null,
       sourceCommit: null,

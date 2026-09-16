@@ -1,13 +1,18 @@
 import { describe, expect, test } from 'bun:test'
 
-import {
-  createBuiltinDetectors,
-  createWatchdogBaseline,
-  selectAbortCandidate,
-} from '../src/detect/index.js'
-import type { DetectorContext, Observation, ToolCallRecord } from '../src/protocol/index.js'
+import type { DetectorContext, Observation, ToolCallRecord } from '../src/exports/index.js'
+import { DefaultLoopThresholds } from '../src/exports/index.js'
+import { createBuiltinDetectors } from '../src/utils/measure/detectors.js'
+import { createWatchdogBaseline, selectAbortCandidate } from '../src/utils/measure/watchdog.js'
 
-import { journey, observation, trial } from './fixtures.js'
+/** 宿主给的两份工具名单加缺省阈值；本包核心里不写任何产品的工具名。 */
+const settings = {
+  thresholds: DefaultLoopThresholds,
+  catalogToolNames: ['tooling:map'],
+  interactiveToolNames: ['interaction:ask_user'],
+}
+
+import { journey, observation, trial } from '../spec/support.js'
 
 const context: DetectorContext = {
   trial: trial(),
@@ -65,7 +70,7 @@ function withCalls(names: readonly string[]): Observation {
 
 describe('watchdog gating', () => {
   test('records non-gating failures without aborting a recoverable run', () => {
-    const detectors = createBuiltinDetectors()
+    const detectors = createBuiltinDetectors(settings)
     const baselineObservation = observation()
     const baselineFindings = detectors.flatMap((detector) =>
       detector.detect(baselineObservation, context)
@@ -78,30 +83,32 @@ describe('watchdog gating', () => {
     const baseline = createWatchdogBaseline(
       baselineObservation,
       baselineFindings,
-      retryOnly
+      retryOnly,
+      settings
     )
-    expect(selectAbortCandidate(failedObservation, findings, baseline, retryOnly)).toBeNull()
+    expect(selectAbortCandidate(failedObservation, findings, baseline, retryOnly, settings)).toBeNull()
 
     const toolFailureGate = new Set(['tool-failure'])
     const gatedBaseline = createWatchdogBaseline(
       baselineObservation,
       baselineFindings,
-      toolFailureGate
+      toolFailureGate,
+      settings
     )
     expect(
-      selectAbortCandidate(failedObservation, findings, gatedBaseline, toolFailureGate)?.detectorId
+      selectAbortCandidate(failedObservation, findings, gatedBaseline, toolFailureGate, settings)?.detectorId
     ).toBe('tool-failure')
   })
 
   test('does not abort legitimate repeated reads separated by page mutations', () => {
     const retryOnly = new Set(['tool-retry-loop'])
     const baselineObservation = observation()
-    const baseline = createWatchdogBaseline(baselineObservation, [], retryOnly)
-    const detectors = createBuiltinDetectors()
+    const baseline = createWatchdogBaseline(baselineObservation, [], retryOnly, settings)
+    const detectors = createBuiltinDetectors(settings)
     const interleaved = withCalls(
       Array.from({ length: 6 }, () => ['browser:inspect_page', 'browser:act']).flat()
     )
-    expect(selectAbortCandidate(interleaved, [], baseline, retryOnly)).toBeNull()
+    expect(selectAbortCandidate(interleaved, [], baseline, retryOnly, settings)).toBeNull()
     expect(
       detectors
         .flatMap((detector) => detector.detect(interleaved, context))
@@ -109,7 +116,7 @@ describe('watchdog gating', () => {
     ).toBe(false)
 
     const consecutive = withCalls(Array.from({ length: 6 }, () => 'browser:inspect_page'))
-    expect(selectAbortCandidate(consecutive, [], baseline, retryOnly)?.detectorId).toBe(
+    expect(selectAbortCandidate(consecutive, [], baseline, retryOnly, settings)?.detectorId).toBe(
       'tool-retry-loop'
     )
     expect(

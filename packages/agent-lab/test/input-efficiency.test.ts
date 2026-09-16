@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
 
-import { summarizeToolInputEfficiency } from '../src/workload/InputEfficiency.js'
+import { realTaskWorkload } from '../src/exports/index.js'
 
 test('actual attempts remain visible while reused parameters count avoided characters only', () => {
   const receipt = (
@@ -20,7 +20,7 @@ test('actual attempts remain visible while reused parameters count avoided chara
   })
   const original = receipt('a', 'not-applied', 10000, 10000, false)
   const repaired = receipt('b', 'completed', 100, 10000, true)
-  expect(summarizeToolInputEfficiency([original, repaired, repaired])).toEqual({
+  expect(realTaskWorkload.summarizeToolInputEfficiency([original, repaired, repaired])).toEqual({
     attempts: 2,
     completed: 1,
     notApplied: 1,

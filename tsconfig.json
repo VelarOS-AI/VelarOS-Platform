@@ -7,10 +7,10 @@
         "./component-library/src/componentLibrary/*"
       ],
       "@velaros-ai/agent-lab": [
-        "./packages/agent-lab/src/index.ts"
+        "./packages/agent-lab/src/exports/index.ts"
       ],
       "@velaros-ai/agent-lab/*": [
-        "./packages/agent-lab/src/*"
+        "./packages/agent-lab/src/exports/*"
       ],
       "@velaros-ai/agent": [
         "./packages/agent/src/exports/index.ts"

@@ -4,8 +4,7 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { basename, dirname } from "node:path";
 
-import { discoverRunArchives } from "../src/archive/Discovery.ts";
-import { renderHistoricalReportHtml } from "../src/report/HistoricalHtmlReport.ts";
+import { labArchives, labReports } from "../src/exports/index.ts";
 
 function flag(argv, name) {
   const index = argv.indexOf(name);
@@ -67,7 +66,7 @@ const entries = [];
 let skippedDirectories = 0;
 const unreadableDirectories = [];
 for (const root of roots) {
-  const discovery = await discoverRunArchives(root);
+  const discovery = await labArchives.discoverRunArchives(root);
   skippedDirectories += discovery.skippedDirectories;
   unreadableDirectories.push(...discovery.unreadableDirectories);
   for (const archive of discovery.archives) {
@@ -78,7 +77,7 @@ for (const root of roots) {
     const differences = Object.keys(before).filter(
       (key) => JSON.stringify(before[key]) !== JSON.stringify(after[key]),
     );
-    const html = renderHistoricalReportHtml([archive.view], { generatedAt: 1 });
+    const html = labReports.renderHistoricalReportHtml([archive.view], { generatedAt: 1 });
     entries.push({
       root: `${basename(dirname(root))}/${basename(root)}`,
       directory: basename(archive.directory),

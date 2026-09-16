@@ -363,6 +363,37 @@ export const GovernedModules = [
     acceptance: 'spec/acceptance.test.ts',
   },
   {
+    directory: 'agent-lab',
+    name: '@velaros-ai/agent-lab',
+    // 没有模型面工具：本包是评测基础设施，不给 agent 挂工具，所以不登记 toolsFile、toolDefiner、hostPort
+    contract: 'src/contract',
+    types: 'src/types',
+    portable: 'agent-lab.ts',
+    impl: 'src/impl',
+    utils: 'src/utils',
+    tuning: 'tuning.ts',
+    exports: 'src/exports',
+    // 根入口读写归档、拉起命令行，只给 Node；渲染进程与第三方工具链只能加载可移植数据
+    browserSafeEntries: ['contracts.ts'],
+    // 不读任何环境变量：地址、凭据、驱动全部由宿主从注入面塞进来，所以不登记环境变量表
+    layers: [
+      // 命令行：六条命令，只把参数折成对下面几件能力的调用
+      ['AgentLabCli.ts'],
+      // 跑与存：一条旅程走完落成归档，归档读写与真实任务落盘
+      ['JourneyRunner.ts', 'LabArchives.ts'],
+      // 各件能力与两个注册处；驱动装配在上、轮询驱动本体在下
+      [
+        'LabDrivers.ts', 'LabWire.ts', 'LabReports.ts', 'LabStatistics.ts', 'LabCertification.ts',
+        'RealTaskWorkload.ts', 'AdaptiveCampaign.ts', 'DetectorRegistry.ts', 'VerifierRegistry.ts', 'BudgetLedger.ts',
+      ],
+      // 通用轮询驱动：唯一一个内置驱动，认协议的驱动由宿主注册
+      ['PollingDriver.ts'],
+    ],
+    card: 'MODULE.md',
+    invariants: 'spec/invariants.md',
+    acceptance: 'spec/acceptance.test.ts',
+  },
+  {
     directory: 'browser',
     name: '@velaros-ai/browser',
     // 改造中：卡片与验收还没写；status 标 migrating，门禁照查照报剩下多少条，不计入失败。

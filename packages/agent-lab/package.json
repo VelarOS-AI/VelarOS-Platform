@@ -1,64 +1,33 @@
 {
   "name": "@velaros-ai/agent-lab",
-  "version": "0.1.5",
+  "version": "0.2.0",
   "velaros": {
     "platform": "0.6"
   },
-  "description": "Reproducible continuous-journey evaluation, diagnostics, statistics, and certification for AI agents.",
+  "description": "可复现的连续旅程评测：诊断、统计与认证，连同 velaros-agent-lab 命令行；不认宿主。",
   "license": "Apache-2.0",
   "sideEffects": false,
   "engines": {
     "node": ">=20.0.0"
   },
   "type": "module",
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "main": "./dist/exports/index.js",
+  "types": "./dist/exports/index.d.ts",
   "bin": {
-    "velaros-agent-lab": "./dist/cli.js"
+    "velaros-agent-lab": "./bin/velaros-agent-lab.mjs"
   },
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "types": "./dist/exports/index.d.ts",
+      "import": "./dist/exports/index.js"
     },
-    "./protocol": {
-      "types": "./dist/protocol/index.d.ts",
-      "import": "./dist/protocol/index.js"
-    },
-    "./runner": {
-      "types": "./dist/runner/index.d.ts",
-      "import": "./dist/runner/index.js"
-    },
-    "./detect": {
-      "types": "./dist/detect/index.d.ts",
-      "import": "./dist/detect/index.js"
-    },
-    "./archive": {
-      "types": "./dist/archive/index.d.ts",
-      "import": "./dist/archive/index.js"
-    },
-    "./report": {
-      "types": "./dist/report/index.d.ts",
-      "import": "./dist/report/index.js"
-    },
-    "./statistics": {
-      "types": "./dist/statistics/index.d.ts",
-      "import": "./dist/statistics/index.js"
-    },
-    "./certification": {
-      "types": "./dist/certification/index.d.ts",
-      "import": "./dist/certification/index.js"
-    },
-    "./drivers": {
-      "types": "./dist/drivers/index.d.ts",
-      "import": "./dist/drivers/index.js"
-    },
-    "./workload": {
-      "types": "./dist/workload/index.d.ts",
-      "import": "./dist/workload/index.js"
+    "./contracts": {
+      "types": "./dist/exports/contracts.d.ts",
+      "import": "./dist/exports/contracts.js"
     }
   },
   "files": [
+    "bin",
     "dist",
     "README.md",
     "CHANGELOG.md",
@@ -66,9 +35,10 @@
     "NOTICE"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json && node ../../scripts/build/mark-executable.mjs dist/cli.js",
+    "clean": "rm -rf dist",
+    "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/capabilities/build/fix-esm-extensions.mjs dist && node ../../scripts/build/normalize-package-declarations.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "bun test test",
+    "test": "bun test spec/acceptance.test.ts test",
     "check:arch": "node scripts/check-architecture.mjs",
     "check:legacy": "bun scripts/check-legacy-equivalence.mjs",
     "check": "bun run typecheck && bun run test && bun run check:arch",

@@ -1,22 +1,15 @@
 import { describe, expect, test } from "bun:test";
 
-import { readRunArchiveView } from "../src/archive/index.js";
-import { normalizeObservation } from "../src/detect/index.js";
-import {
-  assertSelfContainedHtml,
-  createRunReportModel,
-  findExternalResourceViolations,
-  renderHistoricalReportHtml,
-  renderReportHtml,
-} from "../src/report/index.js";
-
-import { archive, observation } from "./fixtures.js";
+import { archive, observation } from "../spec/support.js";
+import { labArchives, labReports } from "../src/exports/index.js";
+import { normalizeObservation } from "../src/utils/measure/normalize.js";
+import { assertSelfContainedHtml, findExternalResourceViolations } from "../src/utils/render/html.js";
 
 describe("archive compatibility and reports", () => {
   test("reads legacy shapes without inventing absent fields", () => {
-    const v0 = readRunArchiveView([{ ok: true }]);
-    const v1 = readRunArchiveView({ sessionId: "s1", rounds: [{ ok: true }] });
-    const v2 = readRunArchiveView({ manifest: { runId: "r2" }, rounds: [] });
+    const v0 = labArchives.readRunArchiveView([{ ok: true }]);
+    const v1 = labArchives.readRunArchiveView({ sessionId: "s1", rounds: [{ ok: true }] });
+    const v2 = labArchives.readRunArchiveView({ manifest: { runId: "r2" }, rounds: [] });
     expect(v0.shape).toBe("v0-array");
     expect(v0.passed).toBeNull();
     expect(v1.total).toBe(1);
@@ -53,13 +46,13 @@ describe("archive compatibility and reports", () => {
   });
 
   test("renders deterministic self-contained v3 and legacy reports", () => {
-    const model = createRunReportModel(archive());
-    const first = renderReportHtml([model], { generatedAt: 1 });
-    const second = renderReportHtml([model], { generatedAt: 1 });
+    const model = labReports.createRunReportModel(archive());
+    const first = labReports.renderRunReportHtml([model], { generatedAt: 1 });
+    const second = labReports.renderRunReportHtml([model], { generatedAt: 1 });
     expect(first).toBe(second);
     expect(findExternalResourceViolations(first)).toEqual([]);
-    const historical = renderHistoricalReportHtml(
-      [readRunArchiveView({ sessionId: "legacy", rounds: [] })],
+    const historical = labReports.renderHistoricalReportHtml(
+      [labArchives.readRunArchiveView({ sessionId: "legacy", rounds: [] })],
       { generatedAt: 1 },
     );
     expect(historical).toContain('data-value="null">—</span>');

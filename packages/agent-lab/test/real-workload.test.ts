@@ -1,18 +1,10 @@
 import { describe, expect, test } from "bun:test";
 
-import {
-  auditRealTask,
-  classifyRunArchiveOutcome,
-  parseRealTaskRecord,
-  promoteRealTaskCase,
-  renderRealTaskReportHtml,
-  summarizeRealTaskCoverage,
-} from "../src/workload/index.js";
-
-import { archive } from "./fixtures.js";
+import { archive } from "../spec/support.js";
+import { labReports, labWire, realTaskWorkload } from "../src/exports/index.js";
 
 function record() {
-  return parseRealTaskRecord({
+  return labWire.parseRealTaskRecord({
     schema: "agent-lab/real-task@1",
     id: "task-1",
     capturedAt: 20,
@@ -121,16 +113,16 @@ function record() {
 
 describe("real-task archive outcomes", () => {
   test("classifies pass, verifier failure, and attrition from the archive itself", () => {
-    expect(classifyRunArchiveOutcome(archive())).toEqual({
+    expect(realTaskWorkload.classifyArchiveOutcome(archive())).toEqual({
       outcome: "pass",
-      detail: "all execution and external-truth gates passed",
+      detail: "执行门与外部真相门全部通过",
     });
-    expect(classifyRunArchiveOutcome(archive({ score: 0 }))).toEqual({
+    expect(realTaskWorkload.classifyArchiveOutcome(archive({ score: 0 }))).toEqual({
       outcome: "fail",
       detail: "complete: failed",
     });
     expect(
-      classifyRunArchiveOutcome(
+      realTaskWorkload.classifyArchiveOutcome(
         archive({
           score: null,
           drops: [
@@ -152,7 +144,7 @@ describe("real-task archive outcomes", () => {
   test("keeps an archive without a conclusive leg out of the pass denominator", () => {
     const incomplete = archive();
     expect(
-      classifyRunArchiveOutcome({
+      realTaskWorkload.classifyArchiveOutcome({
         ...incomplete,
         legs: [],
       }),
@@ -163,21 +155,21 @@ describe("real-task archive outcomes", () => {
 describe("real workload evaluation", () => {
   test("keeps task outcome unknown while reporting broken repeated tool errors", () => {
     const input = record();
-    const assessment = auditRealTask(input, { generatedAt: 30 });
+    const assessment = realTaskWorkload.audit(input, { generatedAt: 30 });
     expect(assessment.outcome).toBe("unknown");
     expect(assessment.health).toBe("broken");
     expect(assessment.verdict).toBe("needs-review");
     expect(assessment.metrics.repeatedToolErrors).toBe(3);
     expect(assessment.metrics.redundantToolCalls).toBe(0);
     expect(assessment.promotionRecommended).toBeTrue();
-    const report = renderRealTaskReportHtml(input, assessment);
+    const report = labReports.renderRealTaskReportHtml(input, assessment);
     expect(report).not.toContain(input.task.prompt!);
     expect(report).not.toContain(input.task.workspaceRoot!);
   });
 
   test("does not call parallel fan-out a feedback retry loop", () => {
     const base = record();
-    const input = parseRealTaskRecord({
+    const input = labWire.parseRealTaskRecord({
       ...base,
       evidence: {
         ...base.evidence,
@@ -188,7 +180,7 @@ describe("real workload evaluation", () => {
         })),
       },
     });
-    const assessment = auditRealTask(input, { generatedAt: 30 });
+    const assessment = realTaskWorkload.audit(input, { generatedAt: 30 });
     expect(assessment.metrics.repeatedToolErrors).toBe(0);
     expect(assessment.metrics.redundantToolCalls).toBe(3);
     expect(assessment.findings.some((finding) => finding.class === "retry-loop")).toBeFalse();
@@ -198,7 +190,7 @@ describe("real workload evaluation", () => {
   test("requires reviewed acceptance evidence before promotion", () => {
     const input = record();
     expect(() =>
-      promoteRealTaskCase(input, {
+      realTaskWorkload.promoteCase(input, {
         id: "case-1",
         workspace: {
           adapter: "git",
@@ -221,8 +213,8 @@ describe("real workload evaluation", () => {
         acceptance: [],
         privacy: { classification: "redacted", reviewNote: "reviewed" },
       }),
-    ).toThrow("at least one deterministic acceptance contract");
-    const promoted = promoteRealTaskCase(input, {
+    ).toThrow("至少要有一条可判定的验收合同");
+    const promoted = realTaskWorkload.promoteCase(input, {
       id: "case-1",
       workspace: {
         adapter: "git",
@@ -258,7 +250,7 @@ describe("real workload evaluation", () => {
   });
 
   test("keeps unrun and void work in the verified coverage denominator", () => {
-    const base = promoteRealTaskCase(record(), {
+    const base = realTaskWorkload.promoteCase(record(), {
       id: "case-coverage-a",
       workspace: {
         adapter: "manual",
@@ -299,7 +291,7 @@ describe("real workload evaluation", () => {
       id: "case-coverage-c",
       coverage: { ...base.coverage, objective: "inspect a binary boundary", dailyWeight: 1 },
     };
-    const [summary] = summarizeRealTaskCoverage(
+    const [summary] = realTaskWorkload.summarizeCoverage(
       [base, second, third],
       [
         { caseId: base.id, outcome: "pass" },

@@ -1,17 +1,18 @@
 import { readFile } from "node:fs/promises";
 
-import { afterEach, describe, expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 
-import { DetectorRegistry } from "../src/detect/index.js";
-import { VelarHooksClient } from "../src/drivers/index.js";
-import type { JobSpec, LabDriver, RunArchive } from "../src/protocol/index.js";
-import { UnlimitedBudget } from "../src/protocol/index.js";
-import { runJob, runJourney, VerifierRegistry } from "../src/runner/index.js";
+import { FullCapabilities, journey, observation, trial } from "../spec/support.js";
+import type { JobSpec, LabDriver, RunArchive, VerifierRegistryApi } from "../src/exports/index.js";
+import {
+  createDetectorRegistry,
+  createVerifierRegistry,
+  journeyRunner,
+  UnlimitedBudget,
+} from "../src/exports/index.js";
 
-import { FullCapabilities, journey, observation, trial } from "./fixtures.js";
-
-function passingVerifiers(): VerifierRegistry {
-  const verifiers = new VerifierRegistry();
+function passingVerifiers(): VerifierRegistryApi {
+  const verifiers = createVerifierRegistry();
   verifiers.register("complete", () => ({
     kind: "pass",
     credit: 1,
@@ -74,13 +75,13 @@ function clockedDriver(clock: { value: number }, legMs: number): LabDriver {
 describe("归档里的 harness 版本", () => {
   test("缺省用本包真实版本，不再是写死的 0.1.0", async () => {
     const clock = { value: 1_000 };
-    const result = await runJourney({
+    const result = await journeyRunner.runJourney({
       jobId: "job",
       suiteId: "suite",
       trial: trial(),
       journey: journey(),
       driver: clockedDriver(clock, 10),
-      detectors: new DetectorRegistry(),
+      detectors: createDetectorRegistry(),
       verifiers: passingVerifiers(),
       workspaceRoot: null,
       sourceCommit: null,
@@ -101,7 +102,7 @@ describe("段预算的口径", () => {
     const clock = { value: 0 };
     const definition = journey("journey-a", 2);
     const [first, second] = definition.legs;
-    const result = await runJourney({
+    const result = await journeyRunner.runJourney({
       jobId: "job",
       suiteId: "suite",
       trial: trial(),
@@ -115,7 +116,7 @@ describe("段预算的口径", () => {
         ],
       },
       driver: clockedDriver(clock, 5_000),
-      detectors: new DetectorRegistry(),
+      detectors: createDetectorRegistry(),
       verifiers: passingVerifiers(),
       workspaceRoot: null,
       sourceCommit: null,
@@ -132,7 +133,7 @@ describe("段预算的口径", () => {
     const clock = { value: 0 };
     const definition = journey("journey-a", 1);
     const [only] = definition.legs;
-    const result = await runJourney({
+    const result = await journeyRunner.runJourney({
       jobId: "job",
       suiteId: "suite",
       trial: trial(),
@@ -142,7 +143,7 @@ describe("段预算的口径", () => {
         legs: [{ ...only!, budget: { ...UnlimitedBudget, wallClockMs: 1_000 } }],
       },
       driver: clockedDriver(clock, 5_000),
-      detectors: new DetectorRegistry(),
+      detectors: createDetectorRegistry(),
       verifiers: passingVerifiers(),
       workspaceRoot: null,
       sourceCommit: null,
@@ -171,7 +172,7 @@ describe("runJob 的失败处理", () => {
     const started: string[] = [];
     const job = jobWith(6, 1);
     await expect(
-      runJob(job, {
+      journeyRunner.runJob(job, {
         resolveDriver: (candidate) => {
           started.push(candidate.id);
           if (started.length === 2) throw new Error("driver unavailable");
@@ -193,7 +194,7 @@ describe("runJob 的失败处理", () => {
     });
     const job = jobWith(4, 2);
 
-    const run = runJob(job, {
+    const run = journeyRunner.runJob(job, {
       resolveDriver: (candidate) => {
         if (candidate.replicate.index === 2) throw new Error("boom");
         return clockedDriver({ value: 0 }, 1);
@@ -211,79 +212,5 @@ describe("runJob 的失败处理", () => {
     releaseSlow();
     await expect(run).rejects.toThrow("boom");
     expect(finished).toEqual([job.trials[0]!.id]);
-  });
-});
-
-describe("Velar hooks 客户端", () => {
-  const originalFetch = globalThis.fetch;
-  const originalFile = process.env.VELAR_HOOKS_ENDPOINT_FILE;
-
-  afterEach(() => {
-    globalThis.fetch = originalFetch;
-    if (originalFile === undefined) delete process.env.VELAR_HOOKS_ENDPOINT_FILE;
-    else process.env.VELAR_HOOKS_ENDPOINT_FILE = originalFile;
-  });
-
-  test("没有给凭据来源时当场说清楚，不再默认去读 /tmp 下的固定文件", async () => {
-    delete process.env.VELAR_HOOKS_ENDPOINT_FILE;
-    const client = new VelarHooksClient({ retries: 0, retryMs: 0 });
-
-    await expect(client.command({ op: "ping" })).rejects.toThrow(
-      /找不到 Velar hooks 的地址/u,
-    );
-  });
-
-  test("4xx 立即失败，不重试", async () => {
-    let calls = 0;
-    globalThis.fetch = (async () => {
-      calls += 1;
-      return new Response(JSON.stringify({ error: "unauthorized" }), {
-        status: 401,
-      });
-    }) as unknown as typeof fetch;
-    const client = new VelarHooksClient({
-      endpoint: { url: "http://127.0.0.1:1", token: "t" },
-      retries: 5,
-      retryMs: 0,
-    });
-
-    await expect(client.command({ op: "ping" })).rejects.toThrow(/401/u);
-    expect(calls).toBe(1);
-  });
-
-  test("5xx 也不重发：命令是非幂等的，服务端已经收到了", async () => {
-    let calls = 0;
-    globalThis.fetch = (async () => {
-      calls += 1;
-      return new Response(JSON.stringify({ error: "boom" }), { status: 503 });
-    }) as unknown as typeof fetch;
-    const client = new VelarHooksClient({
-      endpoint: { url: "http://127.0.0.1:1", token: "t" },
-      retries: 5,
-      retryMs: 0,
-    });
-
-    await expect(client.command({ op: "ping" })).rejects.toThrow(/503/u);
-    expect(calls).toBe(1);
-  });
-
-  test("连不上（宿主还没起来）才重试", async () => {
-    let calls = 0;
-    globalThis.fetch = (async () => {
-      calls += 1;
-      throw Object.assign(new TypeError("fetch failed"), {
-        cause: Object.assign(new Error("connect ECONNREFUSED"), {
-          code: "ECONNREFUSED",
-        }),
-      });
-    }) as unknown as typeof fetch;
-    const client = new VelarHooksClient({
-      endpoint: { url: "http://127.0.0.1:1", token: "t" },
-      retries: 2,
-      retryMs: 0,
-    });
-
-    await expect(client.command({ op: "ping" })).rejects.toThrow(/fetch failed/u);
-    expect(calls).toBe(3);
   });
 });

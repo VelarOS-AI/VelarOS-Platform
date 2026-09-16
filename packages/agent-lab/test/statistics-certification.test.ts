@@ -1,23 +1,12 @@
 import { describe, expect, test } from "bun:test";
 
-import {
-  certifySubject,
-  parseCertificationPolicy,
-  parseCertificationSubject,
-} from "../src/certification/index.js";
-import { ObservationFaces } from "../src/protocol/index.js";
-import {
-  checkComparability,
-  compareExecutors,
-  estimateReliability,
-} from "../src/statistics/index.js";
-
-import { archive, FullCapabilities } from "./fixtures.js";
+import { archive, FullCapabilities } from "../spec/support.js";
+import { labCertification, labStatistics, labWire, ObservationFaces } from "../src/exports/index.js";
 
 describe("statistics and certification", () => {
   test("strictly validates public certification inputs", () => {
     expect(
-      parseCertificationSubject({
+      labWire.parseCertificationSubject({
         kind: "mod",
         id: "example-mod",
         version: "1.0.0",
@@ -25,7 +14,7 @@ describe("statistics and certification", () => {
       }).id,
     ).toBe("example-mod");
     expect(() =>
-      parseCertificationPolicy({
+      labWire.parseCertificationPolicy({
         id: "policy",
         version: 1,
         requiredJourneyIds: ["journey-a"],
@@ -45,12 +34,12 @@ describe("statistics and certification", () => {
       archive({ executorId: "a", journeyId: "j1", groupId: "g1", score: 1 }),
       archive({ executorId: "b", journeyId: "j1", groupId: "g1", score: 0 }),
     ];
-    const one = compareExecutors(oneCluster, "a", "b");
+    const one = labStatistics.compareExecutors(oneCluster, "a", "b");
     expect(one.completionDifference.estimate).toBe(1);
     expect(one.completionDifference.lower95).toBeNull();
     expect(one.decision).toBe("inconclusive");
 
-    const two = compareExecutors(
+    const two = labStatistics.compareExecutors(
       [
         ...oneCluster,
         archive({ executorId: "a", journeyId: "j2", groupId: "g2", score: 1 }),
@@ -76,7 +65,7 @@ describe("statistics and certification", () => {
         },
       ],
     });
-    const reliability = estimateReliability([archive(), dropped]);
+    const reliability = labStatistics.estimateReliability([archive(), dropped]);
     expect(reliability.attempts).toBe(1);
     expect(reliability.dropped).toBe(1);
     const original = archive({ runId: "drifted" });
@@ -87,7 +76,7 @@ describe("statistics and certification", () => {
         budget: { ...original.manifest.budget, tokens: 99 },
       },
     };
-    expect(checkComparability([archive(), drifted]).comparable).toBeFalse();
+    expect(labStatistics.checkComparability([archive(), drifted]).comparable).toBeFalse();
   });
 
   test("certifies only observed evidence and marks missing faces inconclusive", () => {
@@ -111,7 +100,7 @@ describe("statistics and certification", () => {
       digest: "digest",
     };
     expect(
-      certifySubject({
+      labCertification.certify({
         subject,
         policy,
         archives: [archive()],
@@ -130,7 +119,7 @@ describe("statistics and certification", () => {
       ) as typeof FullCapabilities.observes,
     };
     expect(
-      certifySubject({
+      labCertification.certify({
         subject,
         policy,
         archives: [archive({ capabilities: noArtifacts })],
