@@ -1,28 +1,16 @@
 import { createOpenAI } from '@ai-sdk/openai'
 
 import { isBlank } from '@velaros-ai/core'
-import { logRuntime } from '@velaros-ai/core/logger'
 
 import type { ModelProviderAdapter } from '../../contract/requires'
 import type {
   EmbeddingRequest,
   LanguageModelFactory,
   ModelAdapterConfig,
-  OpenAIModelFetch,
-  OpenAIModelFetchInit,
 } from '../../types/adapters'
 import type { ChatProviderId } from '../../types/model'
-import type { OpenRouterRequestRouting } from '../../types/providers'
 import { isOpenRouterCompatibleProvider } from '../../utils/catalog/model-selection'
-import { mergeJsonRequestBody } from '../../utils/wire/fetch-shims'
-import {
-  mergeOpenRouterAutoRouterPlugin,
-  mergeOpenRouterProviderPreferences,
-  normalizeOpenRouterRouting,
-  shouldInjectAutoRouterPlugin,
-  shouldInjectOpenRouterReasoning,
-} from '../../utils/wire/openrouter'
-import { mergeOpenRouterReasoning } from '../../utils/wire/reasoning'
+import { createOpenRouterFetch, normalizeOpenRouterRouting } from '../../utils/wire/openrouter'
 import type { ModelProviderCollectionApi } from '../providers/ModelProviderCollection'
 
 import { ModelAdapter } from './ModelAdapter'
@@ -36,8 +24,6 @@ import { applyThinkingDepthProviderOptions } from './ThinkingDepthLanguageModel'
  * auto-router 插件和 provider 偏好，因此单独做 routing 归一化。
  */
 class OpenAIModelAdapter extends ModelAdapter implements ModelProviderAdapter {
-  private readonly log = logRuntime.tag('OpenAIModelAdapter')
-
   constructor(providerIds: readonly ChatProviderId[], providers: ModelProviderCollectionApi) {
     super(providerIds, providers)
   }
@@ -70,7 +56,7 @@ class OpenAIModelAdapter extends ModelAdapter implements ModelProviderAdapter {
         apiKey,
         baseURL,
         name: config.provider,
-        fetch: this.createOpenRouterFetch(routing),
+        fetch: createOpenRouterFetch(routing),
       })
 
       return applyPromptCacheProviderOptions(openrouter.chat(routing.model))
@@ -92,57 +78,6 @@ class OpenAIModelAdapter extends ModelAdapter implements ModelProviderAdapter {
         input: texts,
       },
     }
-  }
-
-  /** 创建带 OpenRouter routing 注入能力的 fetch。 */
-  private createOpenRouterFetch(routing: OpenRouterRequestRouting): OpenAIModelFetch {
-    return async (input, init) =>
-      globalThis.fetch(input, this.injectOpenRouterRouting(init, routing) || undefined)
-  }
-
-  /**
-   * 向 OpenRouter 请求体注入 routing 参数。
-   *
-   * auto 模型 + allowedModels 会注入 auto-router 插件；
-   * providerPreferences 会合并进 body.provider。
-   */
-  private injectOpenRouterRouting(
-    init: Optional<OpenAIModelFetchInit>,
-    routing: OpenRouterRequestRouting
-  ): OpenAIModelFetchInit | undefined {
-    const injectAutoRouter = shouldInjectAutoRouterPlugin(routing.model, routing.allowedModels)
-    const injectPreferences = !!routing.providerPreferences
-    const injectReasoning = shouldInjectOpenRouterReasoning(routing)
-
-    if (!injectAutoRouter && !injectPreferences && !injectReasoning) return init
-
-    return mergeJsonRequestBody(
-      init,
-      (body) => {
-        const nextBody: Record<string, unknown> = { ...body }
-
-        if (injectAutoRouter) {
-          nextBody.plugins = mergeOpenRouterAutoRouterPlugin(body.plugins, routing.allowedModels)
-        }
-
-        if (routing.providerPreferences) {
-          nextBody.provider = mergeOpenRouterProviderPreferences(
-            body.provider,
-            routing.providerPreferences
-          )
-        }
-
-        if (injectReasoning) {
-          nextBody.reasoning = mergeOpenRouterReasoning(
-            body.reasoning,
-            routing.thinkingDepth,
-            routing.reasoningLevel
-          )
-        }
-
-        return nextBody
-      }
-    )
   }
 }
 

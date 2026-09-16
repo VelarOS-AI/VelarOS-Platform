@@ -1,10 +1,12 @@
 import { isArray, isBlank, isEmpty, isPlainObject } from '@velaros-ai/core'
 
 import { OpenRouterAutoModelId, OpenRouterFreeModelId } from '../../contract/constants.js'
+import type { OpenAIModelFetch, OpenAIModelFetchInit } from '../../types/adapters'
 import type { ModelRequestOptions, OpenRouterProviderRoutingPreferences, ReasoningLevel, ThinkingDepth } from '../../types/model'
 import type { OpenRouterRequestRouting } from '../../types/providers'
 
-import { isReasoningDisabledByLevel } from './reasoning'
+import { mergeJsonRequestBody } from './fetch-shims'
+import { isReasoningDisabledByLevel, mergeOpenRouterReasoning } from './reasoning'
 
 /** OpenRouter 自动路由到的模型可能带推理能力，按这些模式名判要不要注入 reasoning。 */
 const OpenRouterReasoningModelMatchers = [
@@ -128,4 +130,50 @@ export function shouldInjectOpenRouterReasoning(routing: OpenRouterRequestRoutin
     )
 
   return matchesOpenRouterReasoningModel(routing.model)
+}
+
+/**
+ * 向 OpenRouter 请求体注入路由参数：auto 模型加 allowedModels 注入 auto-router 插件，
+ * providerPreferences 合并进 body.provider，推理力度合并进 body.reasoning；三样都不用注入时原样放行。
+ */
+export function injectOpenRouterRouting(
+  init: Optional<OpenAIModelFetchInit>,
+  routing: OpenRouterRequestRouting
+): Optional<OpenAIModelFetchInit> {
+  const injectAutoRouter = shouldInjectAutoRouterPlugin(routing.model, routing.allowedModels)
+  const injectPreferences = !!routing.providerPreferences
+  const injectReasoning = shouldInjectOpenRouterReasoning(routing)
+
+  if (!injectAutoRouter && !injectPreferences && !injectReasoning) return init
+
+  return mergeJsonRequestBody(init, (body) => {
+    const nextBody: Record<string, unknown> = { ...body }
+
+    if (injectAutoRouter) {
+      nextBody.plugins = mergeOpenRouterAutoRouterPlugin(body.plugins, routing.allowedModels)
+    }
+
+    if (routing.providerPreferences) {
+      nextBody.provider = mergeOpenRouterProviderPreferences(
+        body.provider,
+        routing.providerPreferences
+      )
+    }
+
+    if (injectReasoning) {
+      nextBody.reasoning = mergeOpenRouterReasoning(
+        body.reasoning,
+        routing.thinkingDepth,
+        routing.reasoningLevel
+      )
+    }
+
+    return nextBody
+  })
+}
+
+/** 造一个会把这次 routing 注进请求体的 fetch，交给 AI SDK 的 OpenRouter 客户端用。 */
+export function createOpenRouterFetch(routing: OpenRouterRequestRouting): OpenAIModelFetch {
+  return async (input, init) =>
+    globalThis.fetch(input, injectOpenRouterRouting(init, routing) || undefined)
 }
