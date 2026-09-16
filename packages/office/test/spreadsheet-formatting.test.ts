@@ -13,7 +13,6 @@ import type {
 import {
   createOfficeKernelModule,
   type OfficeCapabilityService,
-  type OfficeToolContext,
 } from '../src/exports'
 
 function captureOfficeService(
@@ -38,20 +37,16 @@ describe('spreadsheet formatting', () => {
       resolveContext: async (_scope, signal) => ({
         abortSignal: signal,
         office: {
-          hasProjectRoot: () => true,
-          project: {
-            getRootPath: () => root,
-            runInDirectory: async <T>(_cwd: string, action: () => Promise<T>) => action(),
-            prepareMutation: async () => ({
-              approved: true,
-              rootPath: root,
-              switched: false,
-              alreadyAuthorized: true,
-              rejectionMessage: null,
-              message: 'approved',
-            }),
-          },
-          system: {} as OfficeToolContext['office']['system'],
+          getRootPath: () => root,
+          runInDirectory: async <T>(_cwd: string, action: () => Promise<T>) => action(),
+          prepareMutation: async () => ({
+            approved: true,
+            rootPath: root,
+            switched: false,
+            alreadyAuthorized: true,
+            rejectionMessage: null,
+            message: 'approved',
+          }),
         },
       }),
     })

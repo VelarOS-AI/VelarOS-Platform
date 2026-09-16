@@ -8,7 +8,7 @@ import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, extname, join } from 'node:path'
 
-import { OfficeMarkItDownInputExtensions } from '../../contract/constants.js'
+import { OfficeErrorCodes, OfficeMarkItDownInputExtensions } from '../../contract/constants.js'
 import type { OfficeToolContext } from '../../contract/requires.js'
 import type { ConvertDocumentToMarkdownInput } from '../../types/inputs.js'
 import type { MarkItDownLaunchSpec } from '../../types/office.js'
@@ -31,6 +31,8 @@ export interface OfficeMarkdownOperationsApi {
     input: ConvertDocumentToMarkdownInput,
     ctx: OfficeToolContext
   ): Promise<unknown>
+  /** MarkItDown 装没装、在哪；工具的 isAvailable 用它决定这个工具进不进发现目录。 */
+  locateMarkItDown(ctx: OfficeToolContext): Nullable<MarkItDownLaunchSpec>
 }
 
 export class OfficeMarkdownOperations implements OfficeMarkdownOperationsApi {
@@ -74,13 +76,13 @@ export class OfficeMarkdownOperations implements OfficeMarkdownOperationsApi {
         input.inputPath,
         OfficeMarkItDownInputExtensions
       )
-      const launch = this.locator.resolve()
+      const launch = this.locateMarkItDown(ctx)
       if (!launch) return {
         changed: false,
         skipped: true,
+        errorCode: OfficeErrorCodes.markItDownUnavailable,
         missingRuntime: 'markitdown',
         message: OfficeMarkdownOperations.RuntimeUnavailableMessage,
-        systemToolSuggestion: null,
       }
 
       if (input.outputPath) return this.runToFile({
@@ -96,6 +98,11 @@ export class OfficeMarkdownOperations implements OfficeMarkdownOperationsApi {
     })
   }
 
+  /** 宿主的插件状态优先；宿主没实现这个端口方法时回落到只按平台约定推导资源根的缺省定位器。 */
+  public locateMarkItDown(ctx: OfficeToolContext): Nullable<MarkItDownLaunchSpec> {
+    return ctx.office.locateMarkItDown?.() ?? this.locator.resolve()
+  }
+
   /** 让 MarkItDown 把结果打到 stdout，再按 maxChars 截断返回。 */
   private async runToStdout(input: {
     ctx: OfficeToolContext
@@ -104,16 +111,12 @@ export class OfficeMarkdownOperations implements OfficeMarkdownOperationsApi {
     maxChars: number
   }): Promise<Record<string, unknown>> {
     const nativeCommand = buildMarkItDownCommand({ launch: input.launch, inputPath: input.inputPath })
-    const commandResult = await input.ctx.office.system.runCommand(
-      describeOfficeNativeCommand(nativeCommand),
-      {
-        cwd: this.workspace.rootPath(input.ctx),
-        timeoutMs: OfficeTuning.command.markItDownTimeoutMs,
-        maxOutputChars: input.maxChars + OfficeTuning.markdown.stdoutHeadroomChars,
-        nativeCommand,
-      },
-      false
-    )
+    const commandResult = await input.ctx.office.runCommand(nativeCommand, {
+      description: describeOfficeNativeCommand(nativeCommand),
+      cwd: this.workspace.rootPath(input.ctx),
+      timeoutMs: OfficeTuning.command.markItDownTimeoutMs,
+      maxOutputChars: input.maxChars + OfficeTuning.markdown.stdoutHeadroomChars,
+    })
 
     if (!commandResult.success) return {
       changed: false,
@@ -163,16 +166,12 @@ export class OfficeMarkdownOperations implements OfficeMarkdownOperationsApi {
       const nativeCommand = buildMarkItDownCommand({
         launch: input.launch, inputPath: input.inputPath, outputPath: tempOutputPath,
       })
-      const commandResult = await input.ctx.office.system.runCommand(
-        describeOfficeNativeCommand(nativeCommand),
-        {
-          cwd: this.workspace.rootPath(input.ctx),
-          timeoutMs: OfficeTuning.command.markItDownTimeoutMs,
-          maxOutputChars: OfficeTuning.command.outputChars,
-          nativeCommand,
-        },
-        false
-      )
+      const commandResult = await input.ctx.office.runCommand(nativeCommand, {
+        description: describeOfficeNativeCommand(nativeCommand),
+        cwd: this.workspace.rootPath(input.ctx),
+        timeoutMs: OfficeTuning.command.markItDownTimeoutMs,
+        maxOutputChars: OfficeTuning.command.outputChars,
+      })
 
       if (!commandResult.success) return {
         changed: false,

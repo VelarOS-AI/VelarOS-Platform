@@ -11,3 +11,7 @@ export type {
   OfficeToolContext,
 } from '../contract/requires.js'
 export type * from '../types/office.js'
+export type {
+  OfficeProjectAuthorizationDecision,
+  OfficeProjectMutationAuthorizationInput,
+} from '../types/workspace.js'

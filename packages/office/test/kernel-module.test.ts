@@ -16,7 +16,6 @@ import {
   createOfficeKernelModule,
   OfficeCapability,
   type OfficeCapabilityService,
-  type OfficeToolContext,
 } from '../src/exports'
 
 function createCaptureContext(
@@ -65,23 +64,19 @@ describe('office tools kernel module', () => {
         return {
           abortSignal: signal,
           office: {
-            hasProjectRoot: () => true,
-            project: {
-              getRootPath: () => root,
-              runInDirectory: async <T>(
-                _cwd: string,
-                action: () => Promise<T>,
-              ) => action(),
-              prepareMutation: async () => ({
-                approved: true,
-                rootPath: root,
-                switched: false,
-                alreadyAuthorized: true,
-                rejectionMessage: null,
-                message: 'approved',
-              }),
-            },
-            system: {} as OfficeToolContext['office']['system'],
+            getRootPath: () => root,
+            runInDirectory: async <T>(
+              _cwd: string,
+              action: () => Promise<T>,
+            ) => action(),
+            prepareMutation: async () => ({
+              approved: true,
+              rootPath: root,
+              switched: false,
+              alreadyAuthorized: true,
+              rejectionMessage: null,
+              message: 'approved',
+            }),
           },
         }
       },
@@ -141,15 +136,11 @@ describe('office tools kernel module', () => {
       resolveContext: async (_scope, signal) => ({
         abortSignal: signal,
         office: {
-          hasProjectRoot: () => true,
-          project: {
-            getRootPath: () => root,
-            runInDirectory: async <T>(_cwd: string, action: () => Promise<T>) => action(),
-            prepareMutation: async () => {
-              throw new Error('read-only PDF extraction must not request mutation approval')
-            },
+          getRootPath: () => root,
+          runInDirectory: async <T>(_cwd: string, action: () => Promise<T>) => action(),
+          prepareMutation: async () => {
+            throw new Error('read-only PDF extraction must not request mutation approval')
           },
-          system: {} as OfficeToolContext['office']['system'],
         },
       }),
     })
@@ -200,20 +191,16 @@ describe('office tools kernel module', () => {
       resolveContext: async (_scope, signal) => ({
         abortSignal: signal,
         office: {
-          hasProjectRoot: () => true,
-          project: {
-            getRootPath: () => root,
-            runInDirectory: async <T>(_cwd: string, action: () => Promise<T>) => action(),
-            prepareMutation: async () => ({
-              approved: true,
-              rootPath: root,
-              switched: false,
-              alreadyAuthorized: true,
-              rejectionMessage: null,
-              message: 'approved',
-            }),
-          },
-          system: {} as OfficeToolContext['office']['system'],
+          getRootPath: () => root,
+          runInDirectory: async <T>(_cwd: string, action: () => Promise<T>) => action(),
+          prepareMutation: async () => ({
+            approved: true,
+            rootPath: root,
+            switched: false,
+            alreadyAuthorized: true,
+            rejectionMessage: null,
+            message: 'approved',
+          }),
         },
       }),
     })
@@ -253,20 +240,16 @@ describe('office tools kernel module', () => {
       resolveContext: async (_scope, signal) => ({
         abortSignal: signal,
         office: {
-          hasProjectRoot: () => true,
-          project: {
-            getRootPath: () => root,
-            runInDirectory: async <T>(_cwd: string, action: () => Promise<T>) => action(),
-            prepareMutation: async () => ({
-              approved: true,
-              rootPath: root,
-              switched: false,
-              alreadyAuthorized: true,
-              rejectionMessage: null,
-              message: 'approved',
-            }),
-          },
-          system: {} as OfficeToolContext['office']['system'],
+          getRootPath: () => root,
+          runInDirectory: async <T>(_cwd: string, action: () => Promise<T>) => action(),
+          prepareMutation: async () => ({
+            approved: true,
+            rootPath: root,
+            switched: false,
+            alreadyAuthorized: true,
+            rejectionMessage: null,
+            message: 'approved',
+          }),
         },
       }),
     })
@@ -308,20 +291,16 @@ describe('office tools kernel module', () => {
       resolveContext: async (_scope, signal) => ({
         abortSignal: signal,
         office: {
-          hasProjectRoot: () => true,
-          project: {
-            getRootPath: () => root,
-            runInDirectory: async <T>(_cwd: string, action: () => Promise<T>) => action(),
-            prepareMutation: async () => ({
-              approved: true,
-              rootPath: root,
-              switched: false,
-              alreadyAuthorized: true,
-              rejectionMessage: null,
-              message: 'approved',
-            }),
-          },
-          system: {} as OfficeToolContext['office']['system'],
+          getRootPath: () => root,
+          runInDirectory: async <T>(_cwd: string, action: () => Promise<T>) => action(),
+          prepareMutation: async () => ({
+            approved: true,
+            rootPath: root,
+            switched: false,
+            alreadyAuthorized: true,
+            rejectionMessage: null,
+            message: 'approved',
+          }),
         },
       }),
     })

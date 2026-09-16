@@ -29,7 +29,7 @@ import type {
 import { copyOfficeOutput, findGeneratedPdf, writeOfficeBuffer } from '../../utils/paths.js'
 import { buildLatexCompileCommands, getDefaultLatexSourcePath } from '../../utils/pdf/latex.js'
 import { applyPdfMetadata, applyPdfTextStamp, resolvePdfPageNumbers } from '../../utils/pdf/pages.js'
-import { createBrowserOnlineAlternative, createCommandFailureResult } from '../../utils/results.js'
+import { createCommandFailureResult } from '../../utils/results.js'
 import { OfficeTuning } from '../../utils/tuning.js'
 import { buildWordChildren } from '../../utils/word/docx.js'
 import { pdfjsRuntime, type PdfjsRuntimeApi } from '../runtime/PdfjsRuntime.js'
@@ -148,22 +148,9 @@ export class OfficePdfOperations implements OfficePdfOperationsApi {
       const libreOffice = await this.converters.findLibreOffice(ctx)
       // 本机缺少命令时不静默失败，返回明确安装建议和线上替代方案。
       if (!libreOffice) return this.converters.missingToolResult({
-          ctx,
           command: 'soffice',
           reason: OfficePdfOperations.LibreOfficeMissing.reason,
           message: OfficePdfOperations.LibreOfficeMissing.message,
-          alternatives: [
-            createBrowserOnlineAlternative({
-              zhDescription:
-                '不安装本机 LibreOffice，改用 Browser Use 打开在线 Word 转 PDF 服务；上传本地文件前会先确认目标网站和隐私风险。',
-              enDescription:
-                'Skip local LibreOffice and use Browser Use with an online Word-to-PDF service; confirm the target site and privacy risk before uploading files.',
-              zhDraft:
-                '我暂时不安装 LibreOffice。请改用 Browser Use 的线上流程继续刚才的 Word 转 PDF 任务；如果需要上传本地 Word 文件到第三方网站，请先告诉我目标网站和隐私风险，等我确认后再操作。',
-              enDraft:
-                'I do not want to install LibreOffice right now. Please use the Browser Use online workflow for the previous Word-to-PDF task. If you need to upload my local Word file to a third-party site, tell me the target site and privacy risk first and wait for confirmation.',
-            }),
-          ],
         })
 
       // 输入支持 .doc/.docx 自动补全；输出路径统一补 .pdf。
@@ -254,22 +241,9 @@ export class OfficePdfOperations implements OfficePdfOperationsApi {
           input.compiler && input.compiler !== 'auto' ? input.compiler : 'tectonic'
         // 没有编译器时返回结构化缺失工具结果，包含可执行的替代方案描述。
         return this.converters.missingToolResult({
-          ctx,
           command: requestedCommand,
           reason: OfficePdfOperations.LatexMissing.reason,
           message: OfficePdfOperations.LatexMissing.message,
-          alternatives: [
-            createBrowserOnlineAlternative({
-              zhDescription:
-                '不安装本机 LaTeX 编译器，改用 Browser Use 打开在线 LaTeX 编译服务；粘贴源码或上传文件前会先确认目标网站和隐私风险。',
-              enDescription:
-                'Skip local LaTeX tooling and use Browser Use with an online LaTeX compiler; confirm the target site and privacy risk before pasting source or uploading files.',
-              zhDraft:
-                '我暂时不安装 LaTeX 编译器。请改用 Browser Use 的线上流程继续刚才的 LaTeX 转 PDF 任务；如果需要把 LaTeX 源码粘贴或上传到第三方网站，请先告诉我目标网站和隐私风险，等我确认后再操作。',
-              enDraft:
-                'I do not want to install a LaTeX compiler right now. Please use the Browser Use online workflow for the previous LaTeX-to-PDF task. If you need to paste or upload LaTeX source to a third-party site, tell me the target site and privacy risk first and wait for confirmation.',
-            }),
-          ],
         })
       }
 

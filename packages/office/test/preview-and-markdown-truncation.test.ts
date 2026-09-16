@@ -30,38 +30,32 @@ function createContext(root: string, command?: CommandStub): OfficeToolContext {
   return {
     abortSignal: new AbortController().signal,
     office: {
-      hasProjectRoot: () => true,
-      project: {
-        getRootPath: () => root,
-        runInDirectory: async <T>(_cwd: string, action: () => Promise<T>) => action(),
-        prepareMutation: async () => ({
-          approved: true,
-          rootPath: root,
-          switched: false,
-          alreadyAuthorized: true,
-          rejectionMessage: null,
-          message: 'approved',
-        }),
-      },
-      system: {
-        inspectEnvironment: async () => ({ commands: [] }),
-        createSystemToolInstallSuggestion: () => null,
-        // 按宿主语义扮演：命令输出窗口**保留结尾**，截断事实只写在 commandResult.truncated 上。
-        runCommand: async () => ({
-          command: 'markitdown',
-          cwd: root,
-          exitCode: 0,
-          signal: null,
-          stdout: command?.stdout ?? '',
-          stderr: '',
-          durationMs: 1,
-          timedOut: false,
-          aborted: false,
-          truncated: command?.truncated ?? false,
-          success: true,
-          verification: { kind: 'unknown' as const, status: 'unknown' as const, issues: [] },
-        }),
-      },
+      getRootPath: () => root,
+      runInDirectory: async <T>(_cwd: string, action: () => Promise<T>) => action(),
+      prepareMutation: async () => ({
+        approved: true,
+        rootPath: root,
+        switched: false,
+        alreadyAuthorized: true,
+        rejectionMessage: null,
+        message: 'approved',
+      }),
+      inspectEnvironment: async () => ({ commands: [] }),
+      // 按宿主语义扮演：命令输出窗口**保留结尾**，截断事实只写在 commandResult.truncated 上。
+      runCommand: async () => ({
+        command: 'markitdown',
+        cwd: root,
+        exitCode: 0,
+        signal: null,
+        stdout: command?.stdout ?? '',
+        stderr: '',
+        durationMs: 1,
+        timedOut: false,
+        aborted: false,
+        truncated: command?.truncated ?? false,
+        success: true,
+        verification: { kind: 'unknown' as const, status: 'unknown' as const, issues: [] },
+      }),
     },
   }
 }

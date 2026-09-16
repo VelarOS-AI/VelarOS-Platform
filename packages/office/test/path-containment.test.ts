@@ -35,30 +35,26 @@ async function createHarness(): Promise<Harness> {
   const context: OfficeToolContext = {
     abortSignal: new AbortController().signal,
     office: {
-      hasProjectRoot: () => true,
-      project: {
-        getRootPath: () => currentRoot,
-        runInDirectory: async <T>(cwd: string, action: () => Promise<T>) => {
-          // 照 Desktop 的语义扮演：runInDirectory 把 cwd 当成**新的执行根**，
-          // 包含判断随之以它为准。记下调用是为了断言越界的 cwd 根本没有走到这里。
-          directorySwitches.push(cwd)
-          currentRoot = cwd
-          try {
-            return await action()
-          } finally {
-            currentRoot = root
-          }
-        },
-        prepareMutation: async () => ({
-          approved: true,
-          rootPath: root,
-          switched: false,
-          alreadyAuthorized: true,
-          rejectionMessage: null,
-          message: 'approved',
-        }),
+      getRootPath: () => currentRoot,
+      runInDirectory: async <T>(cwd: string, action: () => Promise<T>) => {
+        // 照 Desktop 的语义扮演：runInDirectory 把 cwd 当成**新的执行根**，
+        // 包含判断随之以它为准。记下调用是为了断言越界的 cwd 根本没有走到这里。
+        directorySwitches.push(cwd)
+        currentRoot = cwd
+        try {
+          return await action()
+        } finally {
+          currentRoot = root
+        }
       },
-      system: {} as OfficeToolContext['office']['system'],
+      prepareMutation: async () => ({
+        approved: true,
+        rootPath: root,
+        switched: false,
+        alreadyAuthorized: true,
+        rejectionMessage: null,
+        message: 'approved',
+      }),
     },
   }
   return { root, outside, context, directorySwitches }

@@ -55,7 +55,6 @@ import { officeMarkdownOperations } from './operations/OfficeMarkdownOperations.
 import { officePdfOperations } from './operations/OfficePdfOperations.js'
 import { officePreviewOperations } from './operations/OfficePreviewOperations.js'
 import { officeWorkspace } from './operations/OfficeWorkspace.js'
-import { markItDownBinaryResolver } from './runtime/MarkItDownLocator.js'
 
 // ── 能力声明：三档（只读、写盘、写盘且要跑外部命令） ──────────────
 
@@ -1255,7 +1254,7 @@ const convertDocumentToMarkdown = defineOfficeTool<ConvertDocumentToMarkdownInpu
   permissions: ['fs:read', 'fs:write', 'process:exec'],
   capabilities: OfficeDocumentProcessCapability,
   hideWhenUnavailable: true,
-  isAvailable: (ctx) => officeWorkspace.hasRoot(ctx) && !!markItDownBinaryResolver.resolve(),
+  isAvailable: (ctx) => officeWorkspace.hasRoot(ctx) && !!officeMarkdownOperations.locateMarkItDown(ctx),
   isConcurrencySafe: (input) => !input.outputPath,
   execute: (input, ctx) => officeMarkdownOperations.convertToMarkdown(input, ctx),
 })

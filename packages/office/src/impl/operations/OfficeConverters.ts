@@ -10,14 +10,13 @@ import { basename, dirname, extname, join } from 'node:path'
 
 import { AppError } from '@velaros-ai/core/error'
 
+import { OfficeErrorCodes } from '../../contract/constants.js'
 import type { OfficeToolContext } from '../../contract/requires.js'
 import type {
   NormalizedWordInput,
   OfficeEnvironmentCommandAvailability,
   OfficeNativeCommand,
   OfficeSystemCommandResult,
-  OfficeSystemToolInstallAlternative,
-  OfficeSystemToolInstallSuggestion,
 } from '../../types/office.js'
 import type { LatexCompiler } from '../../types/pdf.js'
 import type { NormalizeWordInputResult } from '../../types/workspace.js'
@@ -73,19 +72,17 @@ export interface OfficeConvertersApi {
   }): Promise<NormalizeWordInputResult>
   /** 回收归一化旧版 .doc 时建的临时目录。 */
   cleanupNormalizedWordInput(input: NormalizedWordInput): Promise<void>
-  /** 本机缺这条命令时的结构化跳过结果，带宿主生成的安装建议与替代方案。 */
-  missingToolResult(input: {
-    ctx: OfficeToolContext
-    command: string
-    reason: string
-    message: string
-    alternatives?: OfficeSystemToolInstallAlternative[]
-  }): {
+  /**
+   * 本机缺这条命令时的结构化跳过结果：错误码、缺哪个命令、为什么要它、怎么跟用户说。
+   * 安装建议卡与「改用浏览器线上处理」这类替代方案由宿主按这几项自己拼，本包不碰界面文案。
+   */
+  missingToolResult(input: { command: string; reason: string; message: string }): {
     changed: false
     skipped: true
+    errorCode: typeof OfficeErrorCodes.converterMissing
     missingCommand: string
+    reason: string
     message: string
-    systemToolSuggestion: Nullable<OfficeSystemToolInstallSuggestion>
   }
 }
 
@@ -94,7 +91,7 @@ export class OfficeConverters implements OfficeConvertersApi {
     ctx: OfficeToolContext,
     commands: string[]
   ): Promise<Nullable<OfficeEnvironmentCommandAvailability>> {
-    const inspection = await ctx.office.system.inspectEnvironment(commands)
+    const inspection = await ctx.office.inspectEnvironment(commands)
     const byName = new Map(inspection.commands.map((command) => [command.name, command]))
 
     // 保持传入 commands 的优先级顺序，例如优先 soffice 再 libreoffice。
@@ -125,11 +122,12 @@ export class OfficeConverters implements OfficeConvertersApi {
     cwd: string,
     timeoutMs: number = OfficeTuning.command.timeoutMs
   ): Promise<OfficeSystemCommandResult> {
-    return ctx.office.system.runCommand(
-      describeOfficeNativeCommand(command),
-      { cwd, timeoutMs, maxOutputChars: OfficeTuning.command.outputChars, nativeCommand: command },
-      false
-    )
+    return ctx.office.runCommand(command, {
+      description: describeOfficeNativeCommand(command),
+      cwd,
+      timeoutMs,
+      maxOutputChars: OfficeTuning.command.outputChars,
+    })
   }
 
   public async runLibreOffice(
@@ -245,32 +243,21 @@ export class OfficeConverters implements OfficeConvertersApi {
     await rm(input.tempDir, { recursive: true, force: true }).catch(() => undefined /* arch-guard:silent-catch-ok 尽力清理临时目录，删除失败非致命 */)
   }
 
-  public missingToolResult(input: {
-    ctx: OfficeToolContext
-    command: string
-    reason: string
-    message: string
-    alternatives?: OfficeSystemToolInstallAlternative[]
-  }): {
+  public missingToolResult(input: { command: string; reason: string; message: string }): {
     changed: false
     skipped: true
+    errorCode: typeof OfficeErrorCodes.converterMissing
     missingCommand: string
+    reason: string
     message: string
-    systemToolSuggestion: Nullable<OfficeSystemToolInstallSuggestion>
   } {
-    // 安装建议由宿主按平台和 scope 生成。
-    const suggestion = input.ctx.office.system.createSystemToolInstallSuggestion({
-      command: input.command,
-      reason: input.reason,
-      scope: input.ctx.office.hasProjectRoot() ? 'project' : 'system',
-    })
-
     return {
       changed: false,
       skipped: true,
+      errorCode: OfficeErrorCodes.converterMissing,
       missingCommand: input.command,
+      reason: input.reason,
       message: input.message,
-      systemToolSuggestion: suggestion ? { ...suggestion, alternatives: input.alternatives } : null,
     }
   }
 }

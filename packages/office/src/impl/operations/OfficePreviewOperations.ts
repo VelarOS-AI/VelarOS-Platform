@@ -19,7 +19,7 @@ import type {
   ParsedOfficePreview,
 } from '../../types/preview.js'
 import { getFileStats } from '../../utils/paths.js'
-import { createBrowserOnlineAlternative, createCommandFailureResult } from '../../utils/results.js'
+import { createCommandFailureResult } from '../../utils/results.js'
 import { OfficeTuning } from '../../utils/tuning.js'
 import type { OfficeDocumentRendererApi } from '../runtime/OfficeDocumentRenderer.js'
 import { officeDocumentRenderer } from '../runtime/OfficeDocumentRenderer.js'
@@ -158,22 +158,9 @@ export class OfficePreviewOperations implements OfficePreviewOperationsApi {
     if (!libreOffice) return {
         success: false,
         result: this.converters.missingToolResult({
-          ctx,
           command: 'soffice',
           reason: OfficePreviewOperations.LibreOfficeMissing.reason,
           message: OfficePreviewOperations.LibreOfficeMissing.message,
-          alternatives: [
-            createBrowserOnlineAlternative({
-              zhDescription:
-                '不安装本机 LibreOffice，改用 Browser Use 打开在线 DOC 转 DOCX/预览服务；上传本地文件前会先确认目标网站和隐私风险。',
-              enDescription:
-                'Skip local LibreOffice and use Browser Use with an online DOC-to-DOCX or preview service; confirm the target site and privacy risk before uploading files.',
-              zhDraft:
-                '我暂时不安装 LibreOffice。请改用 Browser Use 的线上流程继续刚才的 DOC 预览任务；如果需要上传本地 Word 文件到第三方网站，请先告诉我目标网站和隐私风险，等我确认后再操作。',
-              enDraft:
-                'I do not want to install LibreOffice right now. Please use the Browser Use online workflow for the previous DOC preview task. If you need to upload my local Word file to a third-party site, tell me the target site and privacy risk first and wait for confirmation.',
-            }),
-          ],
         }),
       }
 

@@ -12,57 +12,70 @@
 import type { ScopeRef } from '@velaros-ai/kernel/contracts/abi'
 
 import type {
+  MarkItDownLaunchSpec,
+  OfficeCommandOptions,
   OfficeEnvironmentInspection,
+  OfficeMutationDecision,
+  OfficeMutationRequest,
   OfficeNativeCommand,
-  OfficeProjectAuthorizationDecision,
-  OfficeProjectMutationAuthorizationInput,
   OfficeSystemCommandResult,
-  OfficeSystemToolInstallSuggestion,
 } from '../types/office.js'
 
-/** 工作区端口：office 只声明自己消费的那几件事，宿主可以用它的项目能力实现，但本包不依赖那个包。 */
-export interface OfficeProjectApi {
+/**
+ * 宿主端口：工具在运行时能向宿主要什么，工具里写作 `ctx.office`。全仓唯一权威。
+ *
+ * 扁平一层，只放工具真会调的方法——门禁按工具文件和它委托的执行类逐方法核对，宿主按权限授予成员时
+ * 也能精确到方法。宿主自己界面要的能力（安装建议卡、替代方案、自动批准通知）不进这里，由宿主在自己的
+ * 结果中间件里挂：本包只把 `OfficeErrorCodes.converterMissing` 与缺哪个命令、为什么要它交出去。
+ */
+export interface OfficeHostApi {
   /** 当前可写的工作区根；产物只能落在它里面。没有任何可用根时抛错，工具据此判自己不可用。 */
   getRootPath: () => string
-  /** 在指定目录下执行一段操作再恢复；宿主实现会把这个目录当成新的执行根。 */
+  /**
+   * 在指定目录下执行一段操作再恢复；宿主实现会把这个目录当成新的执行根。
+   * 只服务十个工具的 `cwd` 参数，那个参数删掉时这个方法一起去掉。
+   */
   runInDirectory: <T>(cwd: string, action: () => Promise<T>) => Promise<T>
-  /** 写盘之前向宿主申请一次工作区修改授权；被拒时工具什么都不写，返回跳过结果。 */
-  prepareMutation: (
-    input: OfficeProjectMutationAuthorizationInput
-  ) => Promise<OfficeProjectAuthorizationDecision>
-}
-
-/** 系统端口：探测本机有没有外部转换器，以及执行它们。 */
-export interface OfficeSystemApi {
-  /** 探测这几个命令在本机是否可用、路径在哪；不给命令名就只回答环境本身。 */
+  /** 写盘之前向宿主申请一次写入授权；被拒时工具什么都不写，返回跳过结果。 */
+  prepareMutation: (input: OfficeMutationRequest) => Promise<OfficeMutationDecision>
+  /** 探测这几个命令在本机是否可用、路径在哪。 */
   inspectEnvironment: (commands?: string[]) => Promise<OfficeEnvironmentInspection>
-  /** 由宿主按平台与 scope 生成一张「缺这个命令，可以这样装」的建议卡；宿主不支持时返回 null。 */
-  createSystemToolInstallSuggestion: (input: {
-    command: string
-    reason: string
-    scope: 'project' | 'system'
-  }) => Nullable<OfficeSystemToolInstallSuggestion>
-  /** 执行一条外部命令：本包一律只给原生 argv（nativeCommand），第一个参数是同一条命令的可读描述。 */
+  /** 执行一条外部命令；只收原生 argv，本包不拼 shell 串。 */
   runCommand: (
-    command: string,
-    options?: {
-      cwd?: string
-      timeoutMs?: number
-      maxOutputChars?: number
-      nativeCommand?: OfficeNativeCommand
-    },
-    allowDangerous?: boolean
+    command: OfficeNativeCommand,
+    options: OfficeCommandOptions
   ) => Promise<OfficeSystemCommandResult>
+  /**
+   * 按宿主自己的插件状态回答 MarkItDown 装没装、在哪。
+   * 宿主没实现时本包回落到只按平台约定推导资源根的缺省定位器，用户的停用开关就到不了本包。
+   */
+  locateMarkItDown?: () => Nullable<MarkItDownLaunchSpec>
 }
 
-/** Office 工具唯一消费的宿主能力；工作区与系统两件事只以窄端口组合进来。 */
-export interface OfficeHostApi {
-  /** 当前有没有可用的工作区根；只用来决定安装建议卡挂在工作区还是系统层面。 */
-  hasProjectRoot: () => boolean
-  /** 工作区端口：根路径、临时切目录、写入授权。 */
-  project: OfficeProjectApi
-  /** 系统端口：环境探测、安装建议、执行外部命令。 */
-  system: OfficeSystemApi
+/**
+ * 压平之前的工作区端口。
+ *
+ * @deprecated 宿主端口已经压平成 `OfficeHostApi`；这个嵌套形状只为兼容旧的导入名保留，本包不再读它。
+ */
+export interface OfficeProjectApi {
+  /** 同 `OfficeHostApi.getRootPath`：当前可写的工作区根。 */
+  getRootPath: OfficeHostApi['getRootPath']
+  /** 同 `OfficeHostApi.runInDirectory`：在指定目录下执行一段操作再恢复。 */
+  runInDirectory: OfficeHostApi['runInDirectory']
+  /** 同 `OfficeHostApi.prepareMutation`：写盘前申请一次写入授权。 */
+  prepareMutation: OfficeHostApi['prepareMutation']
+}
+
+/**
+ * 压平之前的系统端口。
+ *
+ * @deprecated 同上；安装建议卡那个成员已经搬回宿主，这里不再声明。
+ */
+export interface OfficeSystemApi {
+  /** 同 `OfficeHostApi.inspectEnvironment`：探测命令在本机可不可用。 */
+  inspectEnvironment: OfficeHostApi['inspectEnvironment']
+  /** 同 `OfficeHostApi.runCommand`：执行一条原生 argv 命令。 */
+  runCommand: OfficeHostApi['runCommand']
 }
 
 /** 每次工具调用拿到的上下文。 */

@@ -33,20 +33,16 @@ function createContext(root: string): OfficeToolContext {
   return {
     abortSignal: new AbortController().signal,
     office: {
-      hasProjectRoot: () => true,
-      project: {
-        getRootPath: () => root,
-        runInDirectory: async <T>(_cwd: string, action: () => Promise<T>) => action(),
-        prepareMutation: async () => ({
-          approved: true,
-          rootPath: root,
-          switched: false,
-          alreadyAuthorized: true,
-          rejectionMessage: null,
-          message: 'approved',
-        }),
-      },
-      system: {} as OfficeToolContext['office']['system'],
+      getRootPath: () => root,
+      runInDirectory: async <T>(_cwd: string, action: () => Promise<T>) => action(),
+      prepareMutation: async () => ({
+        approved: true,
+        rootPath: root,
+        switched: false,
+        alreadyAuthorized: true,
+        rejectionMessage: null,
+        message: 'approved',
+      }),
     },
   }
 }

@@ -26,12 +26,12 @@ describe('Office 命令描述串', () => {
     const command: OfficeNativeCommand = { file: '/bin/echo', args: ['ok'] }
     let seen: Nullable<{ command: string; nativeCommand: OfficeNativeCommand }> = null
     const context = {
-      office: { system: {
-        runCommand: async (described: string, options: { nativeCommand: OfficeNativeCommand }) => {
-          seen = { command: described, nativeCommand: options.nativeCommand }
+      office: {
+        runCommand: async (native: OfficeNativeCommand, options: { description: string }) => {
+          seen = { command: options.description, nativeCommand: native }
           return { success: true, exitCode: 0, stdout: '', stderr: '' }
         },
-      } },
+      },
     } as unknown as OfficeToolContext
 
     await officeConverters.runLibreOffice(context, command, process.cwd())
@@ -55,14 +55,14 @@ describe('Office native process bridge', () => {
       args: ['-e', 'process.stdout.write(JSON.stringify(process.argv.slice(1)))', ...argumentsToEcho],
     }
     const context = {
-      office: { system: {
-        runCommand: async (command: string, options: { nativeCommand: OfficeNativeCommand }) => {
-          expect(command).toBe(describeOfficeNativeCommand(options.nativeCommand))
-          expect(options.nativeCommand).toEqual(nativeCommand)
-          const result = spawnSync(options.nativeCommand.file, options.nativeCommand.args, { encoding: 'utf8' })
+      office: {
+        runCommand: async (native: OfficeNativeCommand, options: { description: string }) => {
+          expect(options.description).toBe(describeOfficeNativeCommand(native))
+          expect(native).toEqual(nativeCommand)
+          const result = spawnSync(native.file, native.args, { encoding: 'utf8' })
           return { success: result.status === 0, exitCode: result.status, stdout: result.stdout, stderr: result.stderr }
         },
-      } },
+      },
     } as unknown as OfficeToolContext
     const result = await officeConverters.runCommand(context, nativeCommand, process.cwd())
     expect(result.success).toBe(true)

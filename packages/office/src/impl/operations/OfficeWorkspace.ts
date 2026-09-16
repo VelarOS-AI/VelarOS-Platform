@@ -60,7 +60,7 @@ export interface OfficeWorkspaceApi {
 export class OfficeWorkspace implements OfficeWorkspaceApi {
   public hasRoot(ctx: OfficeToolContext): boolean {
     try {
-      return !!ctx.office.project.getRootPath()
+      return !!ctx.office.getRootPath()
     } catch {
       // arch-guard:silent-catch-ok 无任何可用根（未激活工作区）时执行根解析会抛错，等价于"工具不可用"，不是故障。
       return false
@@ -68,7 +68,7 @@ export class OfficeWorkspace implements OfficeWorkspaceApi {
   }
 
   public rootPath(ctx: OfficeToolContext): string {
-    return ctx.office.project.getRootPath()
+    return ctx.office.getRootPath()
   }
 
   /**
@@ -91,14 +91,14 @@ export class OfficeWorkspace implements OfficeWorkspaceApi {
         `工作目录超出工作区范围：${cwd}。去掉 cwd 让工具在当前工作区内执行，或先切换到该目录所属的工作区。`
       )
     // 宿主负责临时切换目录并恢复。
-    return ctx.office.project.runInDirectory(cwd, action)
+    return ctx.office.runInDirectory(cwd, action)
   }
 
   public async authorizeMutation(
     ctx: OfficeToolContext,
     input: { cwd?: string; operation: string; targetPath: string }
   ): Promise<Nullable<Record<string, unknown>>> {
-    const authorization = await ctx.office.project.prepareMutation(input)
+    const authorization = await ctx.office.prepareMutation(input)
     return authorization.approved ? null : buildProjectMutationSkippedResult(authorization)
   }
 
