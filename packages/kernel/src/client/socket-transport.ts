@@ -68,6 +68,19 @@ interface PendingRequest {
   readonly cleanup: () => void
 }
 
+/**
+ * 一条订阅的本地记录。
+ *
+ * `subscriptionId` 是服务端发的，断线重连后会换一个，所以它是**可变字段**：本地记录才是
+ * 订阅的身份，`dispose()` 关掉的始终是这条记录当前对应的那个服务端订阅。
+ */
+interface EventSubscriptionRecord {
+  readonly eventType: string
+  readonly handler: KernelClientEventHandler
+  subscriptionId: string
+  disposed: boolean
+}
+
 export interface SocketKernelTransportOptions {
   readonly authToken: string
   readonly endpoint: KernelRpcEndpoint
@@ -80,7 +93,10 @@ export interface SocketKernelTransportOptions {
  */
 export class SocketKernelTransport implements KernelClientTransport {
   private readonly pending = new Map<string, PendingRequest>()
-  private readonly eventHandlers = new Map<string, KernelClientEventHandler>()
+  /** 服务端订阅 id → 本地记录；断线时清空（id 随连接作废）。 */
+  private readonly eventHandlers = new Map<string, EventSubscriptionRecord>()
+  /** 还活着的本地订阅记录；跨断线保留，重连后照原样重建。 */
+  private readonly subscriptions = new Set<EventSubscriptionRecord>()
   private readonly maxFrameBytes: number
   private socket?: Socket
   private connecting?: Promise<Socket>
@@ -216,17 +232,51 @@ export class SocketKernelTransport implements KernelClientTransport {
     handler: KernelClientEventHandler,
   ): Promise<KernelEventSubscription> {
     const result = await this.request('events.subscribe', { eventType })
-    const subscriptionId = readSubscriptionId(result)
-    this.eventHandlers.set(subscriptionId, handler)
-    let disposed = false
+    const record: EventSubscriptionRecord = {
+      eventType,
+      handler,
+      subscriptionId: readSubscriptionId(result),
+      disposed: false,
+    }
+    this.subscriptions.add(record)
+    this.eventHandlers.set(record.subscriptionId, record)
     return {
       dispose: async () => {
-        if (disposed) return
-        disposed = true
-        this.eventHandlers.delete(subscriptionId)
+        if (record.disposed) return
+        record.disposed = true
+        this.subscriptions.delete(record)
+        this.eventHandlers.delete(record.subscriptionId)
         if (this.disposed) return
-        await this.request('events.unsubscribe', { subscriptionId })
+        await this.request('events.unsubscribe', {
+          subscriptionId: record.subscriptionId,
+        })
       },
+    }
+  }
+
+  /**
+   * 重连之后把还活着的订阅重新建起来。
+   *
+   * 断线时服务端的订阅连同它的 id 一起没了，而 `request()` 会在下一次调用时自动重连——
+   * 结果就是「连接自己恢复了、订阅悄悄失效了，调用方一无所知」。这里跟着连接一起恢复；
+   * 某一条恢复不了就记错误日志，不影响别的订阅，也不拖累触发重连的那次请求。
+   */
+  private async restoreSubscriptions(): Promise<void> {
+    for (const record of [...this.subscriptions]) {
+      if (record.disposed || this.disposed) continue
+      try {
+        const result = await this.request('events.subscribe', {
+          eventType: record.eventType,
+        })
+        if (record.disposed) continue
+        record.subscriptionId = readSubscriptionId(result)
+        this.eventHandlers.set(record.subscriptionId, record)
+      } catch (error) {
+        log.error('Kernel 事件订阅在重连后未能恢复', {
+          error,
+          eventType: record.eventType,
+        })
+      }
     }
   }
 
@@ -234,6 +284,7 @@ export class SocketKernelTransport implements KernelClientTransport {
     if (this.disposed) return
     this.disposed = true
     this.eventHandlers.clear()
+    this.subscriptions.clear()
     const socket = this.socket
     const connectingSocket = this.connectingSocket
     this.socket = undefined
@@ -348,6 +399,8 @@ export class SocketKernelTransport implements KernelClientTransport {
         this.socket = socket
         this.connecting = undefined
         resolve(socket)
+        // 连接已经就绪（socket 已挂上），恢复订阅走的是普通请求，不会再触发一次连接。
+        if (this.subscriptions.size > 0) void this.restoreSubscriptions()
       })
     })
     return this.connecting
@@ -404,9 +457,9 @@ export class SocketKernelTransport implements KernelClientTransport {
   }
 
   private handleEvent(frame: KernelRpcEventFrame): void {
-    const handler = this.eventHandlers.get(frame.subscriptionId)
-    if (isUndefined(handler)) return
-    void Promise.resolve(handler(frame.event)).catch((error) => {
+    const record = this.eventHandlers.get(frame.subscriptionId)
+    if (isUndefined(record) || record.disposed) return
+    void Promise.resolve(record.handler(frame.event)).catch((error) => {
       log.warn('Kernel event handler failed', { error, subscriptionId: frame.subscriptionId })
     })
   }
@@ -433,6 +486,7 @@ export class SocketKernelTransport implements KernelClientTransport {
     if (this.socket !== socket) return
     this.socket = undefined
     this.buffer = ''
+    // 服务端订阅 id 随连接作废，但本地记录留着：下次连上时照原样重建（restoreSubscriptions）。
     this.eventHandlers.clear()
     this.rejectPending(
       new KernelRpcClientError({

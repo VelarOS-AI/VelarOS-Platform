@@ -61,6 +61,9 @@ export async function connectToKernelDaemon(
   paths: KernelDaemonPaths = createDefaultKernelDaemonPaths(),
 ): Promise<ConnectedKernelDaemon> {
   const descriptor = await discoverKernelDaemon(paths)
+  // 认证令牌发出去之前先核 descriptor 的协议版本：本来的顺序是先 handshake（令牌已经写上
+  // 线）再核版本，和注释说的「先核对 descriptor 版本再信任 socket」正好相反。
+  assertProtocolCompatible(descriptor.protocolVersion)
   const client = new KernelClient(
     new SocketKernelTransport({
       authToken: descriptor.authToken,
@@ -69,7 +72,6 @@ export async function connectToKernelDaemon(
   )
   try {
     const handshake = await client.handshake()
-    assertProtocolCompatible(descriptor.protocolVersion)
     assertProtocolCompatible(handshake.protocolVersion)
     if (handshake.kernelVersion !== descriptor.kernelVersion) {
       throw new KernelClientError(

@@ -1,6 +1,6 @@
 import { type ChildProcess, spawn } from 'node:child_process'
 
-import { isNotNull, isNotUndefined, isUndefined } from '@velaros-ai/core'
+import { isNotNull, isNotUndefined, isObject, isUndefined, Log } from '@velaros-ai/core'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
 import {
@@ -9,7 +9,9 @@ import {
   type KernelDaemonPaths,
 } from './contracts'
 import { type ConnectedKernelDaemon,connectToKernelDaemon, discoverKernelDaemon } from './discovery'
-import { KernelClientError } from './errors'
+import { KernelClientError, KernelRpcClientError } from './errors'
+
+const log = Log.tag('KernelLauncher')
 
 export type KernelLauncherErrorCode =
   | 'KERNEL_BINARY_MISSING'
@@ -55,6 +57,10 @@ export interface KernelLauncherOptions {
   /** How long to wait for the descriptor to appear after spawning. */
   readonly startTimeoutMs?: number
   readonly pollIntervalMs?: number
+  /** SIGTERM 之后等它自己退的宽限期，过期改发 SIGKILL。 */
+  readonly stopGraceMs?: number
+  /** SIGKILL 之后还等多久；再不退就不等了。 */
+  readonly stopKillGraceMs?: number
   readonly spawnProcess?: typeof spawn
   readonly now?: () => number
   readonly sleep?: (ms: number) => Promise<void>
@@ -68,9 +74,41 @@ export interface KernelLaunchResult extends ConnectedKernelDaemon {
 
 const defaultStartTimeoutMs = 30_000
 const defaultPollIntervalMs = 100
+const defaultStopGraceMs = 5_000
+const defaultStopKillGraceMs = 2_000
 
 function hasExited(child: ChildProcess): boolean {
   return isNotNull(child.exitCode) || isNotNull(child.signalCode)
+}
+
+/**
+ * descriptor 里记的守护进程还活着吗。
+ *
+ * EPERM 表示进程存在但属于别人（共享守护进程的正常情形），照样算活着。
+ */
+function isProcessAlive(pid: number): boolean {
+  if (!Number.isInteger(pid) || pid <= 0) return false
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch (error) {
+    return isObject(error) && Reflect.get(error, 'code') === 'EPERM'
+  }
+}
+
+/**
+ * 这个错误是不是「守护进程没在跑」。
+ *
+ * 崩溃后残留的 descriptor 指着一个没人听的端点：连接会以
+ * `TRANSPORT_CONNECT_FAILED` 失败，而不是 `DAEMON_NOT_RUNNING`。原来只吞后者，于是
+ * `ensureRunning()` 直接把连接错误抛出去，一次都不 spawn，启动器被一份陈旧文件卡死。
+ */
+function meansDaemonIsNotRunning(error: unknown): boolean {
+  if (error instanceof KernelClientError) return error.code === 'DAEMON_NOT_RUNNING'
+    || error.code === 'DAEMON_DESCRIPTOR_INVALID'
+  if (error instanceof KernelRpcClientError) return error.code === 'TRANSPORT_CONNECT_FAILED'
+    || error.code === 'TRANSPORT_DISCONNECTED'
+  return false
 }
 
 /**
@@ -85,6 +123,8 @@ export class KernelLauncher {
   private readonly paths: KernelDaemonPaths
   private readonly startTimeoutMs: number
   private readonly pollIntervalMs: number
+  private readonly stopGraceMs: number
+  private readonly stopKillGraceMs: number
   private readonly spawnProcess: typeof spawn
   private readonly now: () => number
   private readonly sleep: (ms: number) => Promise<void>
@@ -95,16 +135,23 @@ export class KernelLauncher {
     this.paths = options.paths ?? createDefaultKernelDaemonPaths()
     this.startTimeoutMs = options.startTimeoutMs ?? defaultStartTimeoutMs
     this.pollIntervalMs = options.pollIntervalMs ?? defaultPollIntervalMs
+    this.stopGraceMs = options.stopGraceMs ?? defaultStopGraceMs
+    this.stopKillGraceMs = options.stopKillGraceMs ?? defaultStopKillGraceMs
     this.spawnProcess = options.spawnProcess ?? spawn
     this.now = options.now ?? Date.now
     this.sleep = options.sleep ?? ((ms) => TimerScope.sleep(ms, { label: 'KernelLauncher.poll' }))
   }
 
-  /** True when a daemon has already published a readable descriptor. */
+  /**
+   * 真的有守护进程在跑吗。
+   *
+   * 只看「descriptor 读得出来」会说谎：守护进程崩溃后文件还在，`isRunning()` 照样回 true。
+   * 这里再核一遍文件里记的 pid 是否还活着。
+   */
   public async isRunning(): Promise<boolean> {
     try {
-      await discoverKernelDaemon(this.paths)
-      return true
+      const descriptor = await discoverKernelDaemon(this.paths)
+      return isProcessAlive(descriptor.pid)
     } catch (error) {
       if (error instanceof KernelClientError) return false
       throw error
@@ -173,16 +220,40 @@ export class KernelLauncher {
     }
   }
 
-  /** Stops the owned Kernel process and waits for it to exit. */
+  /**
+   * 停掉本启动器起的那个 Kernel 进程。
+   *
+   * SIGTERM 之后有期限：宽限期内没退就 SIGKILL，再等一小段就不等了。原来是
+   * `await new Promise(resolve => child.once('exit', resolve))` 无限等——一个卡住不退的
+   * 守护进程能把调用方的停机流程永远挂在这里。
+   */
   public async stop(): Promise<void> {
     const child = this.child
     if (isUndefined(child)) return
     this.child = undefined
-    if (isNotNull(child.exitCode) || isNotNull(child.signalCode)) return
-    await new Promise<void>((resolve) => {
-      child.once('exit', () => resolve())
-      child.kill('SIGTERM')
+    if (hasExited(child)) return
+
+    child.kill('SIGTERM')
+    if (await this.waitForExit(child, this.stopGraceMs)) return
+    log.warn('Kernel 进程在 SIGTERM 宽限期内没有退出，改发 SIGKILL', {
+      graceMs: this.stopGraceMs,
+      pid: child.pid,
     })
+    child.kill('SIGKILL')
+    if (await this.waitForExit(child, this.stopKillGraceMs)) return
+    log.error('Kernel 进程在 SIGKILL 之后仍未退出，不再等待', { pid: child.pid })
+  }
+
+  private async waitForExit(
+    child: ChildProcess,
+    timeoutMs: number,
+  ): Promise<boolean> {
+    const deadline = this.now() + timeoutMs
+    while (this.now() < deadline) {
+      if (hasExited(child)) return true
+      await this.sleep(this.pollIntervalMs)
+    }
+    return hasExited(child)
   }
 
   /** Stops the current process and starts a freshly resolved version. */
@@ -205,18 +276,17 @@ export class KernelLauncher {
     try {
       return await connectToKernelDaemon(this.paths)
     } catch (error) {
-      if (
-        error instanceof KernelClientError
-        && (error.code === 'DAEMON_NOT_RUNNING'
-          || error.code === 'DAEMON_DESCRIPTOR_INVALID')
-      ) return undefined
+      if (meansDaemonIsNotRunning(error)) {
+        log.debug('未能连上已有的 Kernel 守护进程，按「没在跑」处理', { error })
+        return undefined
+      }
       throw error
     }
   }
 
   private spawnKernel(target: KernelVersionTarget): ChildProcess {
     try {
-      return this.spawnProcess(
+      const child = this.spawnProcess(
         target.execPath ?? process.execPath,
         [target.entryPoint, ...(target.args ?? [])],
         {
@@ -225,6 +295,9 @@ export class KernelLauncher {
           env: { ...process.env, ...target.env },
         },
       )
+      // detached 起的是共享守护进程：不 unref 的话父进程会被它吊着退不出去。
+      child.unref()
+      return child
     } catch (error) {
       throw new KernelLauncherError(
         'KERNEL_START_FAILED',

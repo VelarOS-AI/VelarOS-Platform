@@ -44,6 +44,20 @@ function okResponse(requestId: string, result: unknown) {
   return { type: 'response', requestId, status: 'ok', result }
 }
 
+function eventFrame(subscriptionId: string, payload: string, sequence: number) {
+  return {
+    type: 'event',
+    subscriptionId,
+    event: {
+      type: 'test.changed',
+      payload,
+      sourceModuleId: 'module.publisher',
+      sourceGeneration: 1,
+      sequence,
+    },
+  }
+}
+
 function callSuccess(callId: string, output: unknown) {
   return {
     protocolVersion: KernelProtocolVersion,
@@ -266,6 +280,57 @@ describe('kernel client socket transport', () => {
       expect(seen).toEqual(['first'])
     } finally {
       await client.dispose()
+    }
+  })
+
+  test('re-establishes event subscriptions after the connection drops', async () => {
+    let live: { send(frame: unknown): void } | undefined
+    let subscriptionSequence = 0
+    let onResubscribed: () => void = () => undefined
+    const resubscribed = new Promise<void>((resolve) => {
+      onResubscribed = resolve
+    })
+    const endpoint = await startEndpoint((request, connection) => {
+      live = connection
+      if (request.method === 'events.subscribe') {
+        subscriptionSequence += 1
+        connection.send(
+          okResponse(request.requestId, {
+            subscriptionId: `sub-${subscriptionSequence}`,
+          }),
+        )
+        if (subscriptionSequence === 2) onResubscribed()
+        return
+      }
+      connection.send(okResponse(request.requestId, { status: 'healthy', modules: [] }))
+    })
+
+    const transport = new SocketKernelTransport({
+      authToken: AuthToken,
+      endpoint: endpoint.getEndpoint(),
+    })
+    try {
+      const seen: string[] = []
+      await transport.subscribe('test.changed', (event) => {
+        seen.push(String(event.payload))
+      })
+      live?.send(eventFrame('sub-1', 'first', 1))
+      await Bun.sleep(20)
+      expect(seen).toEqual(['first'])
+
+      // 断线：服务端的订阅连同它的 id 一起作废。
+      endpoint.dropConnections()
+      await Bun.sleep(20)
+      // 下一次请求会自动重连，订阅必须跟着一起恢复（原来是静默失效，调用方毫不知情）。
+      await transport.health()
+      await resubscribed
+      expect(subscriptionSequence).toBe(2)
+
+      live?.send(eventFrame('sub-2', 'after-reconnect', 2))
+      await Bun.sleep(20)
+      expect(seen).toEqual(['first', 'after-reconnect'])
+    } finally {
+      await transport.dispose()
     }
   })
 

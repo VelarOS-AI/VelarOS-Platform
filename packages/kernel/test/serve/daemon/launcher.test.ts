@@ -6,12 +6,14 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, test } from 'bun:test'
 
 import {
+  connectToKernelDaemon,
   createDefaultKernelDaemonPaths,
   type KernelDaemonPaths,
   KernelLauncher,
   KernelLauncherError,
   type KernelVersionTarget,
 } from '@velaros-ai/kernel/client'
+import { KernelProtocolVersion } from '@velaros-ai/kernel/contracts/protocol'
 import { KernelModuleHost } from '@velaros-ai/kernel/runtime'
 import { KernelService } from '@velaros-ai/kernel/runtime'
 
@@ -56,9 +58,21 @@ class FakeChildProcess extends EventEmitter {
   public exitCode: number | null = null
   public signalCode: NodeJS.Signals | null = null
   public killed = false
+  public unrefCalls = 0
+  /** 收到的信号序列（SIGTERM 之后有没有补 SIGKILL 的证据）。 */
+  public readonly signals: NodeJS.Signals[] = []
+  /** true 时装成「收到信号也不退」的卡死进程。 */
+  public ignoreSignals = false
+
+  public unref(): this {
+    this.unrefCalls += 1
+    return this
+  }
 
   public kill(signal: NodeJS.Signals): boolean {
     this.killed = true
+    this.signals.push(signal)
+    if (this.ignoreSignals) return true
     this.signalCode = signal
     queueMicrotask(() => this.emit('exit', null, signal))
     return true
@@ -165,6 +179,90 @@ describe('KernelLauncher', () => {
       spawnProcess: fakeSpawn(new FakeChildProcess()),
     })
     expect(await launcher.isRunning()).toBe(false)
+    await launcher.dispose()
+  })
+
+  test('treats a descriptor left by a crashed Kernel as "not running"', async () => {
+    const directory = await temporaryDirectory()
+    const paths = createDefaultKernelDaemonPaths('launcher-kernel', directory)
+    // 崩溃后残留的 descriptor：pid 早没了，端点也没人听。
+    await writeFile(
+      paths.descriptorPath,
+      `${JSON.stringify({
+        authToken: 'x'.repeat(43),
+        instanceId: 'dead',
+        protocolVersion: KernelProtocolVersion,
+        kernelVersion: '0.3.0',
+        pid: 0x7fff_fffe,
+        startedAt: 1,
+        endpoint: { kind: 'tcp', host: '127.0.0.1', port: 1 },
+      })}\n`,
+      'utf8',
+    )
+
+    const child = new FakeChildProcess()
+    const launcher = new KernelLauncher({
+      paths,
+      resolver: resolverFor(),
+      spawnProcess: fakeSpawn(child),
+      startTimeoutMs: 30,
+      pollIntervalMs: 5,
+    })
+
+    // isRunning() 不再只看文件在不在，还要核 pid 是否真的活着。
+    expect(await launcher.isRunning()).toBe(false)
+
+    // 连不上不再直接抛出去，而是照常去启动。
+    const failure = await launcher.ensureRunning().catch((error: unknown) => error)
+    expect(failure).toMatchObject({ code: 'KERNEL_START_TIMEOUT' })
+    expect(child.unrefCalls).toBe(1)
+    await launcher.dispose()
+  })
+
+  test('refuses to connect to a descriptor from another protocol version before sending the token', async () => {
+    const directory = await temporaryDirectory()
+    const paths = createDefaultKernelDaemonPaths('launcher-kernel', directory)
+    await writeFile(
+      paths.descriptorPath,
+      `${JSON.stringify({
+        authToken: 'x'.repeat(43),
+        instanceId: 'other-protocol',
+        protocolVersion: KernelProtocolVersion + 1,
+        kernelVersion: '9.9.9',
+        pid: process.pid,
+        startedAt: 1,
+        endpoint: { kind: 'tcp', host: '127.0.0.1', port: 1 },
+      })}\n`,
+      'utf8',
+    )
+
+    // 版本不合在拨号之前就判定：端点根本没人听，若先 handshake 只会拿到连接错误。
+    await expect(connectToKernelDaemon(paths)).rejects.toMatchObject({
+      name: 'KernelClientError',
+      code: 'PROTOCOL_VERSION_MISMATCH',
+    })
+  })
+
+  test('stops a stuck Kernel with SIGKILL instead of waiting forever', async () => {
+    const directory = await temporaryDirectory()
+    const paths = createDefaultKernelDaemonPaths('launcher-kernel', directory)
+    const child = new FakeChildProcess()
+    child.ignoreSignals = true
+    const launcher = new KernelLauncher({
+      paths,
+      resolver: resolverFor(),
+      spawnProcess: fakeSpawn(child),
+      startTimeoutMs: 20,
+      pollIntervalMs: 2,
+      stopGraceMs: 10,
+      stopKillGraceMs: 10,
+    })
+
+    // 启动超时后会调 stop()：卡死的进程收 SIGTERM 不退，必须补一发 SIGKILL 并结束等待。
+    await expect(launcher.ensureRunning()).rejects.toMatchObject({
+      code: 'KERNEL_START_TIMEOUT',
+    })
+    expect(child.signals).toEqual(['SIGTERM', 'SIGKILL'])
     await launcher.dispose()
   })
 
