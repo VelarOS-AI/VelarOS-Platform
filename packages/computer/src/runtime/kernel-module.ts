@@ -19,6 +19,7 @@ import type {
   ComputerAvailability,
   ComputerClickOptions,
   ComputerClickResult,
+  ComputerCoordinateSpace,
   ComputerKeyResult,
   ComputerMoveResult,
   ComputerScreenshot,
@@ -107,8 +108,43 @@ function parseEmptyInput(input: unknown): void {
   parseStrictObject(input, [])
 }
 
-function parseCoordinateInput(input: unknown): { x: number; y: number } {
-  return readCoordinates(parseStrictObject(input, ['x', 'y']), true)
+/**
+ * 指针移动的入参门。
+ *
+ * 收的形状必须与 `computer:move` 工具 schema 一致：工具 schema 给 `coordinateSpace` 填了缺省值
+ * `primary-display`，而这里原先只收 `x`、`y`，于是「按工具名路由到内核操作」的宿主（Termel）
+ * 每次移动都撞 `unexpected key`——`computer:move` 经内核调用**必失败**（2026-09-16 实测）。
+ * 省略 `coordinateSpace` 仍按全局坐标解释，直接持有运行时的既有调用方不受影响。
+ */
+function parseMoveInput(input: unknown): {
+  x: number
+  y: number
+  coordinateSpace: ComputerCoordinateSpace
+} {
+  const record = parseStrictObject(input, ['x', 'y', 'coordinateSpace'])
+  const coordinateSpace = readCoordinateSpace(record.coordinateSpace)
+  return { ...readCoordinates(record, coordinateSpace === 'global'), coordinateSpace }
+}
+
+/**
+ * 主屏截图局部坐标 → 虚拟桌面全局坐标。
+ *
+ * 工具层的 x、y 是**截图左上角**起算的局部坐标，运行时收的是全局坐标；两者在多显示器下相差一个
+ * 主屏原点。少了这一步换算，同一组 x、y 经工具与经内核会点到不同位置（与 `resolveComputerPoint`
+ * 同一套算法，改一处要一起改）。
+ */
+async function moveInsidePrimaryDisplay(
+  runtime: ComputerRuntimePort,
+  point: { x: number; y: number }
+): Promise<ComputerMoveResult> {
+  const display = await runtime.screenSize()
+  if (point.x >= display.width || point.y >= display.height) {
+    throw new AppError(
+      'VALIDATION',
+      `主屏局部坐标超出截图边界：(${point.x}, ${point.y})，有效范围是 x=0-${display.width - 1}、y=0-${display.height - 1}。请重新截图定位。`
+    )
+  }
+  return runtime.mouseMove(display.originX + point.x, display.originY + point.y)
 }
 
 function readCoordinates(
@@ -249,9 +285,11 @@ function createComputerCapabilityService(
     },
     mouse_move: {
       metadata: ComputerOperationMetadata.mouse_move,
+      // 入参门保持同步抛错（与其余操作一致）；只有需要读屏幕原点时才进异步。
       invoke: (_scope, input) => {
-        const { x, y } = parseCoordinateInput(input)
-        return runtime.mouseMove(x, y)
+        const point = parseMoveInput(input)
+        if (point.coordinateSpace === 'global') return runtime.mouseMove(point.x, point.y)
+        return moveInsidePrimaryDisplay(runtime, point)
       },
     },
     left_click: {

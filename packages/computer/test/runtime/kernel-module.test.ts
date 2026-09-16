@@ -209,4 +209,84 @@ describe('computer kernel module', () => {
     await ownedLifecycle?.dispose?.()
     expect(disposed).toBe(true)
   })
+
+  test('accepts the move tool payload and converts primary-display coordinates', async () => {
+    const moves: Array<{ x: number; y: number }> = []
+    let screenSizeCalls = 0
+    let service: ComputerRuntimeCapabilityService | undefined
+    const runtime = {
+      isReady: () => true,
+      ensureAvailable: async () => ({
+        available: true,
+        reason: 'available' as const,
+        detail: null,
+      }),
+      // 主屏原点为负是多显示器的常态：工具的 x、y 是截图局部坐标，运行时收的是全局坐标。
+      screenSize: async () => {
+        screenSizeCalls += 1
+        return {
+          displayId: 7,
+          width: 1_500,
+          height: 1_000,
+          scaleFactor: 2,
+          originX: -1_800,
+          originY: 120,
+        }
+      },
+      screenshot: async () => {
+        throw new Error('not called')
+      },
+      mouseMove: async (x: number, y: number) => {
+        moves.push({ x, y })
+        return { x, y }
+      },
+      leftClick: async (x: number, y: number) => ({ x, y, button: 'left', count: 1 }),
+      typeText: async () => {
+        throw new Error('not called')
+      },
+      key: async () => {
+        throw new Error('not called')
+      },
+      dispose: () => undefined,
+    } satisfies ComputerRuntimePort
+    const module = createComputerKernelModule({ runtime })
+    await module.activate(
+      createCaptureContext((_tokenId, registered) => {
+        service = registered as ComputerRuntimeCapabilityService
+      }),
+    )
+
+    // 工具 schema 会给 coordinateSpace 填上缺省值；按工具名路由的宿主原样把它交给内核操作。
+    const toolPayload = computerTools['computer:move'].schema.parse({ x: 120, y: 40 })
+    expect(toolPayload).toEqual({ x: 120, y: 40, coordinateSpace: 'primary-display' })
+    await service?.invoke(
+      ComputerToolOperations['computer:move'],
+      undefined,
+      toolPayload,
+      new AbortController().signal,
+    )
+    expect(moves).toEqual([{ x: -1_680, y: 160 }])
+    expect(screenSizeCalls).toBe(1)
+
+    // 省略 coordinateSpace 仍是全局坐标，直接持有运行时的既有调用方不受影响。
+    await service?.invoke('mouse_move', undefined, { x: -30, y: 40 }, new AbortController().signal)
+    expect(moves.at(-1)).toEqual({ x: -30, y: 40 })
+    expect(screenSizeCalls).toBe(1)
+
+    await expect(
+      service?.invoke(
+        'mouse_move',
+        undefined,
+        { x: 1_500, y: 40, coordinateSpace: 'primary-display' },
+        new AbortController().signal,
+      ),
+    ).rejects.toMatchObject({ code: 'VALIDATION' })
+    expect(() =>
+      service?.invoke(
+        'mouse_move',
+        undefined,
+        { x: -1, y: 40, coordinateSpace: 'primary-display' },
+        new AbortController().signal,
+      )).toThrow('Computer capability input is invalid')
+  })
 })
