@@ -16,6 +16,9 @@ interface CoordinateClickPoint {
   y: number
 }
 
+/** 坐标恢复的探针截图路径：固定一份、每次覆盖写。 */
+const BrowserTargetRecoveryScreenshotPath = 'artifacts/screenshots/recovery/target-action.png'
+
 interface TargetActionEffectRecovery {
   source: 'target-action-effect'
   reason: 'no-observable-change'
@@ -42,9 +45,16 @@ export async function performTargetActionWithRecovery(
   const actionEffect = buildTargetActionEffectRecovery(action, result)
   if (result.matched || action.action !== 'click') return actionEffect ? { ...result, actionEffect } : result
 
-  // 被遮挡的元素不做坐标恢复:对同一中心点再点一次只会点中遮挡层,
-  // 且误标 matched:true 会让增强层的 covered 指引(targetBlocker)整条失效。
-  if (result.failureReason === 'covered') return result
+  // 坐标恢复只解决一种失败:**selector 没找到元素**。其余失败都不该走这里——
+  // covered 的元素对同一中心点再点一次只会点中遮挡层,还会让增强层的 covered 指引
+  // (targetBlocker)整条失效;not-interactable(display:none、宽高为 0、disabled)的元素
+  // 本来就点不动,退到 bounds 兜底会拿到全 0 的矩形,在视口 (0,0) 点一下——那通常是站点
+  // logo,等于把页面导航回首页,还回执 matched:true 告诉模型点成功了。
+  // 口径与 CdpInteractionEngine.selfHealTargetActionAfterNotFound 一致。
+  if (result.failureReason !== 'not-found') return result
+
+  // 带 frame 提示的 target 不做坐标恢复:恢复只在顶层文档里找同名元素,跨 frame 会点错。
+  if (action.target.frame) return result
 
   try {
     const recovery = await tryCoordinateRecovery(action.target, ctx)
@@ -87,8 +97,13 @@ async function tryCoordinateRecovery(
 
   const screenshot = await ctx.browser.captureScreenshot(
     buildBrowserScreenshotOptions({
-      path: `artifacts/screenshots/recovery/target-action-${Date.now()}.png`,
-      modelFacing: true,
+      // 恢复截图是一次性探针:只用它的 elementLabels 找坐标,图本身没人回看。
+      // 固定路径覆盖写,不再每次恢复都往工作区扔一个新文件(带时间戳的老写法会攒满
+      // artifacts/screenshots/recovery/);也不要面向模型的压缩图——那会再落一个文件、
+      // 再往回执里塞一份 base64。
+      path: BrowserTargetRecoveryScreenshotPath,
+      modelFacing: false,
+      includeModelImage: false,
       annotateElements: true,
     })
   )
@@ -128,6 +143,9 @@ function findClickPointFromLabels(
 
   // 同等身份信号命中多个截图元素时，坐标就是有歧义的；不能按 DOM 顺序点第一个。
   if (ranked.slice(1).some((entry) => entry.score === matched.score)) return null
+
+  // 零尺寸的标注框给不出可点的位置（中心点等于左上角），与 bounds 兜底同一条判据。
+  if (matched.label.width <= 0 || matched.label.height <= 0) return null
 
   return {
     x: Math.round(matched.label.x + matched.label.width / 2),
@@ -212,8 +230,12 @@ async function findClickPointFromBounds(
       'const r = el.getBoundingClientRect();',
       'return {',
       '  found: true,',
+      '  width: r.width,',
+      '  height: r.height,',
       '  centerX: Math.round(r.x + r.width / 2),',
       '  centerY: Math.round(r.y + r.height / 2),',
+      '  viewportWidth: window.innerWidth,',
+      '  viewportHeight: window.innerHeight,',
       '};',
     ].join('\n'),
     mode: 'function-body',
@@ -223,11 +245,30 @@ async function findClickPointFromBounds(
   const payload = bounds.result
   if (!isPlainObject(payload) || !isTrue(payload.found)) return null
 
+  const width = readFiniteNumber(payload.width)
+  const height = readFiniteNumber(payload.height)
+  // 零尺寸(display:none、未展开的菜单项、占位元素)的矩形全是 0:它的"中心"就是视口 (0,0),
+  // 点下去命中的是页面左上角的任意元素。这种元素判恢复失败,如实回退原始的未命中结果。
+  if (!isPresent(width) || !isPresent(height) || width <= 0 || height <= 0) return null
+
   const centerX = readFiniteNumber(payload.centerX)
   const centerY = readFiniteNumber(payload.centerY)
   if (!isPresent(centerX) || !isPresent(centerY)) return null
+  // 中心点落在视口外(元素在折叠区、被滚动出去)时坐标点击同样会点错人,不做恢复。
+  if (!isInsideViewport(centerX, centerY, payload)) return null
 
   return { x: centerX, y: centerY }
+}
+
+/** 中心点是否落在当前视口内；页面没给出视口尺寸时只要求坐标非负。 */
+function isInsideViewport(x: number, y: number, payload: Record<string, unknown>): boolean {
+  if (x < 0 || y < 0) return false
+
+  const viewportWidth = readFiniteNumber(payload.viewportWidth)
+  const viewportHeight = readFiniteNumber(payload.viewportHeight)
+  if (isPresent(viewportWidth) && viewportWidth > 0 && x >= viewportWidth) return false
+
+  return !(isPresent(viewportHeight) && viewportHeight > 0 && y >= viewportHeight)
 }
 
 function normalizeMatchText(value: Optional<Nullable<string>>): string {
