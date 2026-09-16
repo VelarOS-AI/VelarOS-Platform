@@ -112,7 +112,7 @@ export const ProjectToolExposure = Object.freeze({
   } as const),
   sandbox: Object.freeze({
     tier: 'common',
-    /** 常用档第 6 位。 */
+    /** 常用档最后一位：edit 与 run 并列第 5，所以它排第 7。 */
     rank: 60,
   } as const),
   change: Object.freeze({
