@@ -4,18 +4,25 @@
  * 单独成模块的理由：`./Io` 是端口 + 内存实现，必须能在不碰 `node:fs` 的环境里被加载
  * （探针、未来的 headless / 浏览器侧只读投影）。真实文件系统的依赖全部收在这里一处。
  *
- * 写入走 temp + rename：权威层被外部编辑器、git 和用户同时看着，半截文件比丢一次写入更糟。
+ * 写入走同目录临时文件 + fsync + rename + 目录 fsync：权威层被外部编辑器、git 和用户同时看着，
+ * 半截文件比丢一次写入更糟；只做 temp + rename 而不 fsync 的话，一次断电就可能留下一个长度
+ * 正确、内容全零的条目。语义与 `@velaros-ai/text-files` 的原子替换一致——那套实现是异步的，
+ * 本端口是同步的，接不进来（端口异步化是记忆包改造方案排在后面的一步）。
  */
 
 import {
+  closeSync,
   existsSync,
+  fsyncSync,
   mkdirSync,
+  openSync,
   readdirSync,
   readFileSync,
   readlinkSync,
   realpathSync,
   renameSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from 'node:fs'
 import { basename, dirname, isAbsolute, join as joinPath, relative, resolve, sep } from 'node:path'
@@ -72,6 +79,29 @@ function resolveRealPathSync(path: string): string {
   }
 }
 
+/** 已有文件的权限位；不存在（或读不到）时返回 undefined，让 umask 决定新文件的权限。 */
+function readFileMode(path: string): number | undefined {
+  try {
+    return statSync(path).mode & 0o777
+  } catch {
+    // arch-guard:silent-catch-ok 文件还不存在是最常见的一支，没有权限位可恢复。
+    return undefined
+  }
+}
+
+/** 把文件或目录的内容刷到盘上；平台不支持（Windows 的目录 fsync）时忽略。 */
+function syncPath(path: string): void {
+  let handle: Nullable<number> = null
+  try {
+    handle = openSync(path, 'r')
+    fsyncSync(handle)
+  } catch {
+    // arch-guard:silent-catch-ok 目录 fsync 在部分平台不被支持；刷不动只影响耐久性，不影响这次写入的正确性。
+  } finally {
+    if (isNotNull(handle)) closeSync(handle)
+  }
+}
+
 const nodeMemoryFilesIo: MemoryFilesIo = {
   join(...segments) {
     return joinPath(...segments)
@@ -90,10 +120,19 @@ const nodeMemoryFilesIo: MemoryFilesIo = {
     return readFileSync(path, 'utf8')
   },
   writeTextFile(path, content) {
-    mkdirSync(dirname(path), { recursive: true })
+    const directory = dirname(path)
+    mkdirSync(directory, { recursive: true })
     const temporary = `${path}.tmp-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6).toString(36)}`
-    writeFileSync(temporary, content, 'utf8')
-    renameSync(temporary, path)
+    try {
+      writeFileSync(temporary, content, { encoding: 'utf8', mode: readFileMode(path) })
+      syncPath(temporary)
+      renameSync(temporary, path)
+    } catch (error) {
+      rmSync(temporary, { force: true })
+      throw error
+    }
+    // 改名本身也要落盘，否则崩溃后目录项可能还指着旧文件（Windows 没有这一步的语义，失败即忽略）。
+    syncPath(directory)
   },
   deleteFile(path) {
     rmSync(path, { force: true })

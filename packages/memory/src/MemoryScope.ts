@@ -4,19 +4,38 @@
  */
 import { isFalse } from '@velaros-ai/core'
 
+import type { MemoryScopeType } from './memory-tree/Types'
+
 export type MemoryScopeId = string
 
 export const GLOBAL_MEMORY_SCOPE = 'global'
 export const SYSTEM_MEMORY_SCOPE = 'system'
 
+/** 前缀 → 作用域种类。`session:` 与 `execution:` 是类型里一直有、函数从前从不返回的两种。 */
+const ScopeTypeByPrefix: ReadonlyArray<readonly [string, MemoryScopeType]> = [
+  ['project:', 'workspace'],
+  ['site:', 'site'],
+  ['session:', 'session'],
+  ['execution:', 'execution'],
+]
+
+/**
+ * 作用域 id 是哪一种作用域。
+ *
+ * **`global` 只认字面的 `global`（以及空串）**：从前除 `project:`、`site:`、`system` 之外一律
+ * 判 `global`，而 `global` 在可见性判据里处处可见——宿主一传 `session:<id>`，那条记忆就对所有
+ * 会话可见。隔离判据失败开放是最坏的一种失败，认不出的前缀因此按**独立池**处理：与 `system`
+ * 一样自成一类，只有作用域精确相等才可见。
+ */
 export function scopeTypeForScopeId(
   scopeId: LooseOptional<string>
-): 'global' | 'workspace' | 'site' | 'system' {
+): MemoryScopeType {
   const normalized = scopeId?.trim() ?? ''
-  if (normalized.startsWith('project:')) return 'workspace'
-  if (normalized.startsWith('site:')) return 'site'
-  if (normalized === SYSTEM_MEMORY_SCOPE) return 'system'
-  return 'global'
+  for (const [prefix, scopeType] of ScopeTypeByPrefix) {
+    if (normalized.startsWith(prefix)) return scopeType
+  }
+  if (!normalized || normalized === GLOBAL_MEMORY_SCOPE) return 'global'
+  return 'system'
 }
 
 export function buildProjectMemoryScope(
@@ -65,6 +84,20 @@ export function resolveMemoryScopeSelector(
   return workspaceRoot ? buildProjectMemoryScope(workspaceRoot) : ''
 }
 
+/**
+ * 作用域过滤的**参数形态**：给按行过滤（SQL、索引扫描）的后端用。
+ *
+ * 空串 = 不加作用域条件。选定作用域是 `global` 时同样返回空串——`global` 在唯一判据里代表
+ * 「全部」，而树后端的 SQL 自己写过一份 `scope_id = ? OR scope_type = 'global'`，选定 global
+ * 时只剩 global 条目。判据分成两份写就一定会走偏，参数从这里取。
+ */
+export function resolveMemoryScopeFilterValue(
+  input: MemoryScopeSelectorInput
+): MemoryScopeId {
+  const selector = resolveMemoryScopeSelector(input)
+  return selector === GLOBAL_MEMORY_SCOPE ? '' : selector
+}
+
 /** 可见性判定的目标读数：后端记录、文件根与召回条目共用这一格。 */
 export interface MemoryScopeTarget {
   scopeType?: LooseOptional<string>
@@ -87,8 +120,12 @@ export interface MemoryScopeVisibilityInput extends MemoryScopeSelectorInput {
  *  2. 选定作用域 = `global` → 可见（`global` 记忆管理面代表「全部」）；
  *  3. 作用域精确相等 → 可见（**精确**，不是前缀也不是后缀：`project:/a/b` 与
  *     `project:/backup/a/b` 是两个项目，后缀匹配会让它们互读）；
- *  4. `includeGlobal` 未关且目标是 global → 可见；
+ *  4. `includeGlobal` 未关且目标**就是** global 池 → 可见；
  *  5. 否则不可见。
+ *
+ * 第 4 条按 **scopeId** 裁决，不按 scopeType：scopeId 在场即权威（`inferEvidenceScope` 同此），
+ * 而 scopeType 是从它派生出来的一格，历史上把认不出的前缀派生成了 `global`——按 scopeType 放行
+ * 等于让一格派生错误直接变成跨空间泄漏。没有 scopeId 的目标才回落看 scopeType。
  */
 export function isMemoryVisibleInScope(
   target: MemoryScopeTarget,
@@ -96,7 +133,10 @@ export function isMemoryVisibleInScope(
 ): boolean {
   const selector = resolveMemoryScopeSelector(input)
   if (!selector || selector === GLOBAL_MEMORY_SCOPE) return true
-  if (target.scopeId?.trim() === selector) return true
+  const targetScopeId = target.scopeId?.trim() ?? ''
+  if (targetScopeId === selector) return true
   if (isFalse(input.includeGlobal)) return false
-  return target.scopeType === 'global' || target.scopeId?.trim() === GLOBAL_MEMORY_SCOPE
+  return targetScopeId
+    ? targetScopeId === GLOBAL_MEMORY_SCOPE
+    : target.scopeType === 'global'
 }

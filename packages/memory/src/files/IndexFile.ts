@@ -36,9 +36,23 @@ export interface ParseMemoryIndexOptions {
 }
 
 const LinkedLine =
-  /^\s*[-*+]\s*\[(?<name>[^\]]*)\]\((?<path>[^)]+)\)\s*(?:[—–:-]\s*(?<description>.*))?$/u
+  /^\s*[-*+]\s*\[(?<name>(?:\\.|[^\\\]])*)\]\((?<path>[^)]+)\)\s*(?:[—–:-]\s*(?<description>.*))?$/u
 const BareLine =
   /^\s*[-*+]\s*(?<path>\S+\.md)\s*(?:[—–:-]\s*(?<description>.*))?$/u
+
+/**
+ * 名字里的 `\`、`[`、`]` 要转义，换行折成空格。
+ *
+ * 不转义时「[重要] 回复风格」这样的标题写进索引就解析不回来：那一行整条落空，普通召回找不到
+ * 这条记忆、每次再写都新建一个文件，下次重写索引时它又被丢掉一次。
+ */
+function encodeIndexName(name: string): string {
+  return name.replaceAll('\n', ' ').trim().replace(/[\\[\]]/gu, (character) => `\\${character}`)
+}
+
+function decodeIndexName(raw: string): string {
+  return raw.replace(/\\(.)/gu, '$1')
+}
 
 /**
  * 解析索引文件；非条目行（标题、空行、说明段落）一律忽略。
@@ -66,7 +80,7 @@ export function parseMemoryIndex(
     }
     entries.push({
       path,
-      name: (match.groups.name ?? '').trim() || path.replace(/\.md$/u, ''),
+      name: decodeIndexName(match.groups.name ?? '').trim() || path.replace(/\.md$/iu, ''),
       description: (match.groups.description ?? '').trim(),
     })
   }
@@ -81,10 +95,11 @@ export function serializeMemoryIndex(
   const lines = [heading, '']
   for (const entry of entries) {
     const description = entry.description.replaceAll('\n', ' ').trim()
+    const name = encodeIndexName(entry.name)
     lines.push(
       description
-        ? `- [${entry.name}](${entry.path}) — ${description}`
-        : `- [${entry.name}](${entry.path})`,
+        ? `- [${name}](${entry.path}) — ${description}`
+        : `- [${name}](${entry.path})`,
     )
   }
   lines.push('')

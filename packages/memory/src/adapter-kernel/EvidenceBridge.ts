@@ -83,17 +83,7 @@ export class MemoryEvidenceBridge {
     if (!isArray(payload.messages)) return
     const message = [...payload.messages].reverse().find((candidate) => candidate?.role === 'user')
     if (!message) return
-    // 冻结的环境回合上下文块（<environment-context>…）被 renderer 追加进 user 消息 textBlocks，
-    // 内含浏览器页面标题/URL 等第三方可控文本。它不是用户陈述，绝不能以 user_stated 采集，
-    // 否则外部网页标题会以「用户已确认事实」身份污染画像（R-041 注入防御在采集层被击穿）。
-    const content = message.textBlocks
-      .filter(isNonBlankString)
-      .filter((block) => {
-        const marker = this.options.environmentContextBlockOpenTag?.trim()
-        return !marker || !block.trimStart().startsWith(marker)
-      })
-      .join('\n')
-      .trim()
+    const content = this.readCapturableText(message.textBlocks)
     if (isBlank(content)) return
     this.enqueue([
       {
@@ -237,6 +227,25 @@ export class MemoryEvidenceBridge {
     await this.pending
   }
 
+  /**
+   * 可采集的正文：剔掉冻结的环境回合上下文块（`<environment-context>…`）。
+   *
+   * 那些块由 renderer 追加进 user 消息的 textBlocks，内含浏览器页面标题 / URL 等第三方可控
+   * 文本。它不是用户陈述，绝不能以 `user_stated` 采集，否则外部网页标题会以「用户已确认事实」
+   * 身份污染画像（R-041 注入防御在采集层被击穿）。
+   *
+   * 消息与会话快照**两条路都走这里**：同一条消息（同一个 sourceId）后到的快照会覆盖先到的
+   * 过滤版，只在其中一条上过滤等于没有过滤。
+   */
+  private readCapturableText(textBlocks: readonly string[]): string {
+    const marker = this.options.environmentContextBlockOpenTag?.trim()
+    return textBlocks
+      .filter(isNonBlankString)
+      .filter((block) => !marker || !block.trimStart().startsWith(marker))
+      .join('\n')
+      .trim()
+  }
+
   private toEvidence(
     sessionId: string,
     sessionTitle: string,
@@ -244,10 +253,7 @@ export class MemoryEvidenceBridge {
     message: MemoryHostTranscriptMessage,
     contextId?: LooseOptional<string>
   ): Nullable<MemoryEvidenceInput> {
-    const content = message.textBlocks
-      .filter(isNonBlankString)
-      .join('\n')
-      .trim()
+    const content = this.readCapturableText(message.textBlocks)
     if (isBlank(content)) return null
 
     return {

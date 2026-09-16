@@ -62,14 +62,19 @@ function normalizeNewlines(raw: string): string {
   return raw.replaceAll('\r\n', '\n').replaceAll('\r', '\n')
 }
 
-/** 去掉成对的引号；只在首尾**同种**引号时生效，避免吃掉正常的引号内容。 */
+/**
+ * 去掉成对的引号；只在首尾**同种**引号时生效，避免吃掉正常的引号内容。
+ *
+ * 引号内的同种引号按 YAML 连写两遍表示一个字面引号，读回时还原——`encodeValue` 写出去时加倍，
+ * 这里不还原的话，标题 `#tag it's` 每重写一次（归档、再采集）撇号就再翻一倍。
+ */
 function unquote(value: string): string {
   const trimmed = value.trim()
   if (trimmed.length < 2) return trimmed
   const first = trimmed[0]
   const last = trimmed.at(-1)
-  if ((first === '"' || first === "'") && first === last) return trimmed.slice(1, -1)
-  return trimmed
+  if (first !== last || (first !== '"' && first !== "'")) return trimmed
+  return trimmed.slice(1, -1).replaceAll(`${first}${first}`, first)
 }
 
 function firstHeading(body: string): string {
@@ -176,11 +181,20 @@ export function parseMemoryFileDocument(
   }
 }
 
-/** frontmatter 值需要加引号的场景：首尾空白、以特殊标点开头、含换行。 */
+/**
+ * frontmatter 值需要加引号的场景：首尾空白、以特殊标点开头、含换行，以及**首尾本来就是同种引号**。
+ *
+ * 最后一条不加的话，值 `"重要"` 会裸着写出去，读回来被 `unquote` 当成引号包裹剥掉一层。
+ * 加引号时同种引号加倍，`unquote` 对称还原。
+ */
 function encodeValue(value: string): string {
   const normalized = value.replaceAll('\n', ' ').trim()
   if (isEmpty(normalized)) return "''"
-  if (/^[#&*!|>%@`[{]/u.test(normalized) || normalized !== value) return `'${normalized.replaceAll("'", "''")}'`
+  if (
+    /^[#&*!|>%@`[{]/u.test(normalized)
+    || normalized !== value
+    || unquote(normalized) !== normalized
+  ) return `'${normalized.replaceAll("'", "''")}'`
   return normalized
 }
 

@@ -6,7 +6,7 @@ import { first,isArray, isBlank, isEmpty, isPlainObject,isString, toNullable } f
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 
-import { buildProjectMemoryScope } from '../MemoryScope'
+import { resolveMemoryScopeFilterValue } from '../MemoryScope'
 import type { MemoryDatabaseProvider } from '../Types'
 
 import { inferEvidenceScope } from './Sanitizer'
@@ -1233,7 +1233,9 @@ export class MemoryTreeRepository {
     const workspaceRoot = options.workspaceRoot?.trim() ?? ''
     const scopeId = options.scopeId?.trim() ?? ''
     const excludeSessionId = options.excludeSessionId?.trim() ?? ''
-    const effectiveScope = scopeId || (workspaceRoot ? buildProjectMemoryScope(workspaceRoot) : '')
+    // 作用域参数走全仓单源：两轴解析 + 「选定 global 等同不过滤」都在 `resolveMemoryScopeFilterValue`
+    // 里。这里自己写一份的时候，选定 global 只返回 global 条目，和别的后端给出的裁决不一样。
+    const effectiveScope = resolveMemoryScopeFilterValue({ scopeId, workspaceRoot })
     const normalizedQuery = query.trim()
     const includeGlobal = options.includeGlobal ?? true
     const excludedSourceTypes = options.excludeSourceTypes ?? []

@@ -59,9 +59,22 @@ export class MemoryDreamScheduler {
     )
   }
 
+  /**
+   * 停掉定时巡检。**只取消租约，不释放定时器作用域**——释放是真正的销毁（`dispose`）才做的事。
+   *
+   * 从前 `stop()` 直接 `TimerScope.dispose()`，之后 `start()` 里的 `every()` 会抛
+   * `INVARIANT`（「已释放」）；`MemoryService.warmup()` 在 `finally` 里调 `start()`，
+   * 于是「关掉后台整理再 warmup」就是一次未处理的拒绝。停了还能再起是调度器的基本契约。
+   */
   public stop(): void {
-    this.timers.dispose()
+    this.tickLease?.cancel()
     this.tickLease = null
+  }
+
+  /** 真正的销毁：释放定时器作用域，此后不能再 `start()`。 */
+  public dispose(): void {
+    this.stop()
+    this.timers.dispose()
   }
 
   public runNow(abortSignal?: AbortSignal): MemoryDreamRunResult {
