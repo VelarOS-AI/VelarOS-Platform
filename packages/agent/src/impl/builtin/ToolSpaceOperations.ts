@@ -10,9 +10,9 @@
 //  - `ToolSpaceReplace` —— replace op：唯一会改会话状态的 op。
 //
 // ## 关键不变量
-// `ToolSpaceOpHandlers` 用 `satisfies` 与 `toolSpaceSchema` 的判别联合对齐：schema 加了 op 而这里
+// `ToolSpaceOpHandlers` 用类型标注与 `toolSpaceSchema` 的判别联合对齐：schema 加了 op 而这里
 // 没接，编译期就红。`runToolSpace` 里那次断言是判别联合到具体 handler 的窄化，TS 无法自证，
-// 但上面的 `satisfies` 已经保证了逐 op 的入参类型正确。
+// 但上面的类型标注已经保证了逐 op 的入参类型正确。
 
 import { type z } from 'zod'
 
@@ -34,17 +34,17 @@ export {
   toolSpaceSchema,
 } from '../../utils/builtin/tool-space-schemas'
 
-const ToolSpaceOpHandlers = {
+export const ToolSpaceOpHandlers: {
+  [K in z.output<typeof toolSpaceSchema>['op']]: (
+    ctx: ToolContext,
+    input: Extract<z.output<typeof toolSpaceSchema>, { op: K }>
+  ) => unknown
+} = {
   find: searchToolDiscoveryCards,
   page: pageToolDiscoveryCards,
   map: mapToolDiscoveryCards,
   read: readRequestedSkillPages,
   replace: replaceToolSpacePages,
-} satisfies {
-  [K in z.output<typeof toolSpaceSchema>['op']]: (
-    ctx: ToolContext,
-    input: Extract<z.output<typeof toolSpaceSchema>, { op: K }>
-  ) => unknown
 }
 
 export async function runToolSpace(ctx: ToolContext, input: z.output<typeof toolSpaceSchema>) {

@@ -9,7 +9,7 @@
 //   - **只落已完成 span**：进行中 span 驻 recorder 内存，收敛才 emit + 校验 + 落账本（读侧无半态）。
 import { toNullable, toOptional } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
-import { logRuntime } from '@velaros-ai/core/logger'
+import { Log } from '@velaros-ai/core/logger'
 
 import type { ExecutionSpanScopeFactory } from '../../contract/requires.js'
 import type { ExecutionSpan } from '../../types/agent.js'
@@ -20,14 +20,14 @@ import { ExecutionSpanRecorder } from './ExecutionSpanRecorder'
 import { LedgerRunSpanScope } from './LedgerRunSpanScope'
 import { PromptAuditLedger } from './PromptAuditLedger'
 
-const log = logRuntime.tag('ExecutionSpanScope')
+const log = Log.tag('ExecutionSpanScope')
 
 // ── 生产侧端口契约（Ring0 接缝形状） ─────────────────────────────────────────────────
 
 // ── 默认实现：账本落盘 scope 工厂（Ring1，宿主装配） ──────────────────────────────────
 
 /** 无观测时的静默 tool 开启器（生产侧无需分支——始终拿到一个可调用对象或直接 null）。 */
-const NOOP_TOOL_OPENER: ToolSpanOpener = { beginToolSpan: () => null }
+export const NOOP_TOOL_OPENER: ToolSpanOpener = { beginToolSpan: () => null }
 
 /** {@link LedgerExecutionSpanScopeFactory} 装配依赖。 */
 export interface LedgerExecutionSpanScopeFactoryDeps {
@@ -210,5 +210,3 @@ export function runIsolatedSpanOp<T>(warn: SpanLedgerWarn, fn: () => T, label: s
 }
 
 
-
-export { NOOP_TOOL_OPENER }

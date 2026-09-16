@@ -1,4 +1,5 @@
 import {
+  type CapabilityToken,
   createCapabilityToken,
   createKernelCallableCapability,
   defineKernelModule,
@@ -11,19 +12,20 @@ import {
   type ScopeRef,
 } from '@velaros-ai/kernel/contracts/abi'
 
+import { AgentIdentity } from '../../contract/constants.js'
 import type { CreateAgentKernelModuleOptions } from '../../contract/requires.js'
 import type { AgentCapabilityExecutionContext, AgentCapabilityService } from '../../types/execution.js'
 import { parseEmptyInput } from '../../utils/execution/kernel-capability'
 
 /** Stable identity for an independently injected Agent execution capability. */
-export const AgentCapability =
-  createCapabilityToken<AgentCapabilityService>('velaros.agent')
+export const AgentCapability: CapabilityToken<AgentCapabilityService> =
+  createCapabilityToken<AgentCapabilityService>(AgentIdentity.capabilityId)
 
-/** Stable module identity used by host permission policies. */
-export const AgentKernelModuleId = 'velaros.agent.runtime'
+/** Stable module identity used by host permission policies；等价于 `AgentIdentity.kernelModuleId`。 */
+export const AgentKernelModuleId: string = AgentIdentity.kernelModuleId
 
-/** Permission required to execute an Agent through the Kernel capability. */
-export const AgentExecutionPermission = 'agent:execute'
+/** Permission required to execute an Agent through the Kernel capability；等价于 `AgentIdentity.executionPermission`。 */
+export const AgentExecutionPermission: string = AgentIdentity.executionPermission
 
 /**
  * 把宿主注入的 Agent 运行时包成一个内核模块：清单声明身份、能力与权限，`activate` 登记能力服务并接上生命周期。

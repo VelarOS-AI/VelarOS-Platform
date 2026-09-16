@@ -3,11 +3,14 @@ import { posix } from 'node:path'
 import { isArray, isEmpty, isPlainObject, trimmedStringOrEmpty } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
+import { VelarModArchiveLimits } from '../../contract/constants.js'
 import type { VelarModArchiveInstallFailureReason } from '../../types/mods.js'
 
-export const MaxPathLength = 240
+/** 归档内单条路径的字符上限，等价于 `VelarModArchiveLimits.maxPathLength`。 */
+export const MaxPathLength: number = VelarModArchiveLimits.maxPathLength
 
-export const MaxPathDepth = 8
+/** 归档内路径的层级深度上限，等价于 `VelarModArchiveLimits.maxPathDepth`。 */
+export const MaxPathDepth: number = VelarModArchiveLimits.maxPathDepth
 
 /**
  * 判串里是否含控制字符（码点 ≤ 0x1F 或等于 0x7F）。

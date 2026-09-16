@@ -11,6 +11,7 @@
 import { isFiniteNumber, isPresent } from '@velaros-ai/core'
 
 import type { ContextDistillConfig, ContextDistillInstrument, ContextGovernanceConfig, ContextGovernanceConfigInput,ContextGovernancePresetName } from '../../types/residency.js'
+import { AgentTuning } from '../tuning'
 
 export const DefaultContextGovernanceConfig: ContextGovernanceConfig = {
   cap: 200_000,
@@ -19,7 +20,11 @@ export const DefaultContextGovernanceConfig: ContextGovernanceConfig = {
   epochTriggerPercent: 100,
   epochTargetPercent: 90,
   minEpochSavingPercent: 10,
-  admission: { inlineMaxChars: 24_000, userInlineMaxChars: 48_000, excerptMaxChars: 24_000 },
+  admission: {
+    inlineMaxChars: AgentTuning.residency.admissionInlineMaxChars,
+    userInlineMaxChars: AgentTuning.residency.admissionUserInlineMaxChars,
+    excerptMaxChars: AgentTuning.residency.admissionExcerptMaxChars,
+  },
   // B2 起默认 'aux'（设计 §7 的终态默认）：宿主没注入蒸馏器时它自动退化为纯机械
   // （`skipReason: 'no-distiller'`），所以默认开档对 headless / 测试 / 无模型环境是安全的。
   instruments: { skeleton: true, distill: 'aux' },
@@ -41,14 +46,14 @@ export const DefaultContextGovernanceConfig: ContextGovernanceConfig = {
   distillation: {
     maxResidentSummaries: 8,
     maxSegmentsPerEpoch: 1,
-    maxInputChars: 48_000,
-    targetChars: 2_400,
-    timeoutMs: 45_000,
+    maxInputChars: AgentTuning.residency.distillMaxInputChars,
+    targetChars: AgentTuning.residency.distillTargetChars,
+    timeoutMs: AgentTuning.residency.distillTimeoutMs,
     maxRequiredAnchors: 24,
-    minSegmentChars: 4_000,
+    minSegmentChars: AgentTuning.residency.distillMinSegmentChars,
     adaptive: {
       minShortfallPercent: 5,
-      minNarrativeChars: 8_000,
+      minNarrativeChars: AgentTuning.residency.distillMinNarrativeChars,
       maxAnchorDensityPerKiloChar: 6,
       minSavingToCostRatio: 1.5,
       amortizationRequests: 5,

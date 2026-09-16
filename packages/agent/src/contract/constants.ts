@@ -274,6 +274,18 @@ export const VelarModArchiveLimits = Object.freeze({
 } as const)
 
 /**
+ * `.velarmod` 归档的固定文件名约定。
+ *
+ * 打包方按这两个名字产出归档，宿主按它们识别与验签；改名等于换一种包格式。
+ */
+export const VelarModArchiveFiles = Object.freeze({
+  /** Mod 包的扩展名，带点。 */
+  archiveExtension: '.velarmod',
+  /** 归档里市场签名文件的名字；验签器可以自报别的名字，缺省用它。 */
+  signatureFileName: 'velaros.mod.sig.json',
+} as const)
+
+/**
  * 写进工具说明与入参 schema 的上限：模型能直接看到这些数字，改了就是改模型面。
  *
  * 每一项都必须与工具 schema 里实际生效的 `.max()` / `.default()` 一致；只改一边会让说明骗模型。
@@ -295,7 +307,32 @@ export const AgentToolLimits = Object.freeze({
   /** 长期指令（`directive:*`）。 */
   directives: Object.freeze({
     /** 同时生效的长期指令条数上限，满了必须先归档或合并。 */
-    maxActive: 20,
+    maxActive: 8,
+    /** 指令 id 与来源消息 id 的最大字符数。 */
+    identifierChars: 120,
+    /** 指令标题的最大字符数。 */
+    titleChars: 160,
+    /** 指令正文的最大字符数。 */
+    contentChars: 1000,
+    /** 一次归档最多传多少个指令 id。 */
+    maxArchiveIds: 20,
+  }),
+  /** 目标与计划（`goal:*`、`plan:*`）；目标约束的标题与正文长度与长期指令共用 `directives` 里那几项。 */
+  planning: Object.freeze({
+    /** 目标描述的最大字符数。 */
+    objectiveChars: 2000,
+    /** 一次计划变更说明的最大字符数。 */
+    explanationChars: 500,
+    /** 一份目标或计划最多几个步骤。 */
+    maxSteps: 12,
+    /** 一份目标最多挂几条约束。 */
+    maxConstraints: 20,
+    /** 步骤 id 的最大字符数。 */
+    stepIdChars: 80,
+    /** 步骤标题的最大字符数，也是按标题引用步骤时的上限。 */
+    stepTitleChars: 160,
+    /** 单个步骤目标说明的最大字符数。 */
+    stepObjectiveChars: 300,
   }),
   /** 上下文蒸馏与转交（`context:distill`、`context:handoff`）。 */
   context: Object.freeze({
@@ -325,6 +362,14 @@ export const AgentToolLimits = Object.freeze({
   jobs: Object.freeze({
     /** `job:wait` 没给 timeout_ms 时等多久，毫秒。 */
     defaultWaitTimeoutMs: 120_000,
+    /** `job:wait` 允许的最长等待毫秒数，超出按 schema 拒收。 */
+    maxWaitTimeoutMs: 300_000,
+    /** `job:wait` 一次最多等多少个后台任务。 */
+    maxWaitJobIds: 20,
+    /** 后台任务 id 的最大字符数。 */
+    jobIdChars: 180,
+    /** 输出过滤正则的最大字符数。 */
+    outputFilterChars: 500,
     /** 一次读取后台任务输出最多返回多少字符。 */
     outputMaxChars: 64 * 1024,
     /** 任务列表里单条预览的最大字符数。 */
@@ -338,6 +383,10 @@ export const AgentToolLimits = Object.freeze({
     maxRounds: 6,
     /** 工作流里单个值的最大字节数。 */
     maxValueBytes: 32 * 1024,
+    /** 多数票没给 quorum 时按几票起算；schema 的文案写的就是这个数。 */
+    defaultQuorum: 2,
+    /** 多数票通过阈值的下限，同时是没给 majority_threshold 时的缺省值（钳制区间是它到 1）。 */
+    majorityThresholdFloor: 0.5,
   }),
   /** 子 Agent 结构化输出（`agent:dispatch` 的 schema 约束）。 */
   structuredOutput: Object.freeze({
@@ -407,4 +456,43 @@ export const AgentSkillFiles = Object.freeze({
   skillEntryFileName: 'SKILL.md',
   /** 记录哪些技能被用户停用的状态文件名。 */
   disabledStateFileName: '.disabled-skills.json',
+} as const)
+
+/**
+ * 产品界面状态快照（`<agent-surface-context>` 数据信封）的体积上限。
+ *
+ * 快照由宿主产品填，内容原样进模型上下文；上限是宿主按之裁剪的协议约束，不是包内可调参数。
+ * 超出的条目整条丢弃而不是腰斩，宁可少给几条完整证据。
+ */
+export const AgentSurfaceLimits = Object.freeze({
+  /** 一份快照最多带多少条条目，多的直接截掉。 */
+  maxContextEntries: 24,
+  /** 快照版本串的最大字符数。 */
+  maxRevisionChars: 128,
+  /** 单条条目 id 的最大字符数。 */
+  maxEntryIdChars: 128,
+  /** 单条条目标题的最大字符数。 */
+  maxEntryLabelChars: 160,
+  /** 单条条目来源标注的最大字符数。 */
+  maxEntrySourceChars: 256,
+  /** 单条条目正文的最大字符数。 */
+  maxEntryContentChars: 4_000,
+  /** 所有条目正文合计的最大字符数，按条目顺序先到先得。 */
+  maxTotalContentChars: 24_000,
+} as const)
+
+/**
+ * Agent 能力执行信封（`AgentCapabilityExecuteEnvelope`）的入参上限。
+ *
+ * 信封跨 mod 边界收，上限是拒收阈值而不是调优项：越界一律按校验失败拒绝，不截断也不降级。
+ */
+export const AgentCapabilityEnvelopeLimits = Object.freeze({
+  /** 一次执行最多带多少条消息。 */
+  maxMessages: 10_000,
+  /** 作用域元数据最多多少个键。 */
+  maxScopeMetadataKeys: 128,
+  /** 信封里各类标识串（执行 id、会话 id、关联 id）的最大字符数。 */
+  maxIdentifierChars: 512,
+  /** 产品 id 单独收得更紧：宿主产品的身份串没有长到需要 512 的理由。 */
+  maxProductIdChars: 128,
 } as const)

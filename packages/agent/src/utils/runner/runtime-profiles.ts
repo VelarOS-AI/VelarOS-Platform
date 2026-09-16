@@ -3,6 +3,7 @@ import { isNotUndefined, isNumber } from '@velaros-ai/core'
 import type { RunProfileDefinition, RunProfileRuntimePolicy } from '../../types/agent'
 import type { RunProfileId, RunProfileSelectionId,ToolSurfaceProfileId } from '../../types/agent.js'
 import type { AgentRunProfileCatalogSnapshot } from '../../types/runner.js'
+import { AgentTuning } from '../tuning'
 import {
   assertRunProfileId,
   parseOptionalRunProfileSelectionId,
@@ -11,9 +12,6 @@ import {
 const AutoRunProfileSelectionId: RunProfileSelectionId = 'auto'
 const DefaultRunProfileSelectionId: RunProfileSelectionId = AutoRunProfileSelectionId
 const DefaultToolSurfaceProfileId = 'guided' as const satisfies ToolSurfaceProfileId
-const UnknownContextWindowFallback = 128_000
-const BalancedContextWindowThreshold = 192_000
-const ExpandedContextWindowThreshold = 1_000_000
 
 const RunProfileDefinitions: Record<RunProfileId, RunProfileDefinition> = {
   compact: {
@@ -21,10 +19,10 @@ const RunProfileDefinitions: Record<RunProfileId, RunProfileDefinition> = {
     label: 'Compact',
     description: 'Bounded runtime profile for smaller context windows.',
     budget: {
-      maxToolCount: 32,
-      maxSystemPromptChars: 80_000,
-      maxInputWorkingSetTokens: 48_000,
-      maxToolSchemaChars: 48_000,
+      maxToolCount: AgentTuning.runProfile.compactMaxToolCount,
+      maxSystemPromptChars: AgentTuning.runProfile.compactMaxSystemPromptChars,
+      maxInputWorkingSetTokens: AgentTuning.runProfile.compactMaxInputWorkingSetTokens,
+      maxToolSchemaChars: AgentTuning.runProfile.compactMaxToolSchemaChars,
     },
     defaults: {
       thinkingDepth: 'fast',
@@ -37,10 +35,10 @@ const RunProfileDefinitions: Record<RunProfileId, RunProfileDefinition> = {
     label: 'Balanced',
     description: 'Default runtime profile for medium and large context windows.',
     budget: {
-      maxToolCount: 64,
-      maxSystemPromptChars: 220_000,
-      maxInputWorkingSetTokens: 96_000,
-      maxToolSchemaChars: 96_000,
+      maxToolCount: AgentTuning.runProfile.balancedMaxToolCount,
+      maxSystemPromptChars: AgentTuning.runProfile.balancedMaxSystemPromptChars,
+      maxInputWorkingSetTokens: AgentTuning.runProfile.balancedMaxInputWorkingSetTokens,
+      maxToolSchemaChars: AgentTuning.runProfile.balancedMaxToolSchemaChars,
     },
     defaults: {
       thinkingDepth: 'balanced',
@@ -53,10 +51,10 @@ const RunProfileDefinitions: Record<RunProfileId, RunProfileDefinition> = {
     label: 'Expanded',
     description: 'Broad but cognitively bounded runtime profile for very large context windows.',
     budget: {
-      maxToolCount: 128,
+      maxToolCount: AgentTuning.runProfile.expandedMaxToolCount,
       maxSystemPromptChars: null,
-      maxInputWorkingSetTokens: 192_000,
-      maxToolSchemaChars: 192_000,
+      maxInputWorkingSetTokens: AgentTuning.runProfile.expandedMaxInputWorkingSetTokens,
+      maxToolSchemaChars: AgentTuning.runProfile.expandedMaxToolSchemaChars,
     },
     defaults: {
       thinkingDepth: 'deep',
@@ -83,9 +81,9 @@ function describeRunProfiles(): AgentRunProfileCatalogSnapshot {
     schemaVersion: 1,
     defaultSelection: DefaultRunProfileSelectionId,
     automaticSelection: Object.freeze({
-      unknownContextWindowFallback: UnknownContextWindowFallback,
-      balancedAtOrAbove: BalancedContextWindowThreshold,
-      expandedAtOrAbove: ExpandedContextWindowThreshold,
+      unknownContextWindowFallback: AgentTuning.runProfile.unknownContextWindowTokens,
+      balancedAtOrAbove: AgentTuning.runProfile.balancedContextWindowTokens,
+      expandedAtOrAbove: AgentTuning.runProfile.expandedContextWindowTokens,
     }),
     profiles: Object.freeze(profiles),
   })
@@ -125,19 +123,19 @@ function resolveRunProfilePolicyForRuntime(input: {
   const requested = explicitSelection ?? DefaultRunProfileSelectionId
   const contextWindow = isNumber(input.contextWindow)
     ? input.contextWindow
-    : UnknownContextWindowFallback
+    : AgentTuning.runProfile.unknownContextWindowTokens
   let profile: RunProfileId
   let reason: string
 
   if (isNotUndefined(explicitSelection) && explicitSelection !== AutoRunProfileSelectionId) {
     profile = assertRunProfileId(explicitSelection, 'runProfile.requested')
     reason = 'explicit'
-  } else if (contextWindow < BalancedContextWindowThreshold) {
+  } else if (contextWindow < AgentTuning.runProfile.balancedContextWindowTokens) {
     profile = 'compact'
-    reason = `context-window<${BalancedContextWindowThreshold}`
-  } else if (contextWindow >= ExpandedContextWindowThreshold) {
+    reason = `context-window<${AgentTuning.runProfile.balancedContextWindowTokens}`
+  } else if (contextWindow >= AgentTuning.runProfile.expandedContextWindowTokens) {
     profile = 'expanded'
-    reason = `context-window>=${ExpandedContextWindowThreshold}`
+    reason = `context-window>=${AgentTuning.runProfile.expandedContextWindowTokens}`
   } else {
     profile = 'balanced'
     reason = 'context-window-default'

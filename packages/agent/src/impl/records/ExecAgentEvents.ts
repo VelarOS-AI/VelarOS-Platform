@@ -4,8 +4,7 @@ import type { AgentEvent } from '../../types/agent'
 import type { ExecutionAgentEventLedgerStore } from '../../types/records.js'
 import { describeAssistantRawContent, extractAssistantRawTextSummary, resolveRuntimeEventSeverity } from '../../utils/records/agent-event-payload'
 import { compactToolResultForDisplay } from '../../utils/tools/tool-result-serialization'
-
-const MaxAssistantOutputSummaryChars = 500
+import { AgentTuning } from '../../utils/tuning'
 
 /**
  * Agent 事件落账：把 AgentRunner 流出来的事件翻成 `ExecutionRecord.events` 上的一条条时间线记录，
@@ -20,6 +19,9 @@ export interface ExecAgentEventsApi {
 }
 
 class ExecAgentEvents implements ExecAgentEventsApi {
+  /** 助手输出摘要最多留多少字符。 */
+  private static readonly MaxAssistantOutputSummaryChars = AgentTuning.records.assistantOutputSummaryChars
+
   constructor(
     private readonly store: ExecutionAgentEventLedgerStore,
     private readonly emitExecutionDebug: (executionId: string) => void
@@ -58,7 +60,7 @@ class ExecAgentEvents implements ExecAgentEventsApi {
         return
       }
       case 'assistant-raw': {
-        const textSummary = extractAssistantRawTextSummary(event.payload.content, MaxAssistantOutputSummaryChars)
+        const textSummary = extractAssistantRawTextSummary(event.payload.content, ExecAgentEvents.MaxAssistantOutputSummaryChars)
         this.store.appendEvent(executionId, {
           kind: 'assistant-output-captured',
           severity: 'info',

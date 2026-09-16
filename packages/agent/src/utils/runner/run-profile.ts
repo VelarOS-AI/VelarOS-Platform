@@ -3,6 +3,7 @@ import { isBoolean, isEmpty,isNumber, isPresent, isTrue, numberOrNull } from '@v
 import type { RunProfileId,ToolDescriptor, ToolExposurePolicy, ToolExposureProfilePolicy, ToolExposureTier } from '../../types/agent.js'
 import type { ResolvedToolExposure } from '../../types/runner.js'
 import { compareStableStrings } from '../residency/determinism'
+import { AgentTuning } from '../tuning'
 
 import {
   describeRunProfiles,
@@ -108,10 +109,6 @@ function getSchemaSizePenalty(
   return Math.ceil(chars / 1_000)
 }
 
-/** 单个工具最多可获得的“热度”分数减免；上限约一个 tier，避免热工具完全压倒能力分级。 */
-const MaxToolHotnessBoost = 80
-const ToolHotnessUnit = 8
-
 /**
  * 冷热感知减分：本会话用过越多次的工具分数越低（排序越靠前 → 越不易被换出）。
  * 这让“工作集”在触达字节预算时优先存活，类似 OS 的 LRU/工作集页面置换。
@@ -123,7 +120,10 @@ function getToolHotnessBoost(
   const uses = toolUsageScores?.[toolName]
   if (!isNumber(uses) || uses <= 0) return 0
 
-  return Math.min(MaxToolHotnessBoost, uses * ToolHotnessUnit)
+  return Math.min(
+    AgentTuning.runProfile.maxToolHotnessBoost,
+    uses * AgentTuning.runProfile.toolHotnessUnit
+  )
 }
 
 /**
@@ -163,18 +163,13 @@ function sortToolsByBudgetPriority(
   })
 }
 
-const ToolResidentBoost = 1_500
-
 /**
  * 受保护工具的排序减分：命中保护集给 1500，否则 0。
  * 1500 比一个 tier 的间隔（1000）还大，保证被保护的工具能跨越一整级 tier 排到前面去。
  */
 function getToolResidentBoost(toolName: string, protectedToolSet?: ReadonlySet<string>): number {
-  return protectedToolSet?.has(toolName) ? ToolResidentBoost : 0
+  return protectedToolSet?.has(toolName) ? AgentTuning.runProfile.toolResidentBoost : 0
 }
-
-const ToolCountSoftOverageRatio = 0.15
-const ToolCountSoftOverageMin = 2
 
 /**
  * 把工具数量硬上限放宽成"软上限"：额外允许超出 15%，且至少多给 2 个。
@@ -186,7 +181,10 @@ function getSoftToolCountLimit(maxToolCount: Nullable<number>): Nullable<number>
 
   return (
     maxToolCount +
-    Math.max(ToolCountSoftOverageMin, Math.ceil(maxToolCount * ToolCountSoftOverageRatio))
+    Math.max(
+      AgentTuning.runProfile.toolCountSoftOverageMin,
+      Math.ceil(maxToolCount * AgentTuning.runProfile.toolCountSoftOverageRatio)
+    )
   )
 }
 

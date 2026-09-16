@@ -67,6 +67,9 @@ export interface ContextResidencyLedgerApi extends ResidencyLedgerView {
 }
 
 export class ContextResidencyLedger implements ContextResidencyLedgerApi {
+  /** 没有升温租约时的哨兵轮号：比任何真实轮号都小，所以"当前轮 ≤ 它"恒为假。 */
+  private static readonly NoWarmLeaseTurn = -1
+
   private readonly records: ContextRecord[] = []
   private readonly recordsById = new Map<string, ContextRecord>()
   private readonly residency = new Map<string, ContextResidency>()
@@ -170,7 +173,7 @@ export class ContextResidencyLedger implements ContextResidencyLedgerApi {
   public isEvictionProtected(recordId: string, currentTurn: number): boolean {
     this.assertKnown(recordId)
     if (this.stickyFaults.has(recordId)) return true
-    return currentTurn <= (this.warmUntilTurn.get(recordId) ?? -1)
+    return currentTurn <= (this.warmUntilTurn.get(recordId) ?? ContextResidencyLedger.NoWarmLeaseTurn)
   }
 
   public warmUntilTurnOf(recordId: string): Nullable<number> {
@@ -267,7 +270,7 @@ export class ContextResidencyLedger implements ContextResidencyLedgerApi {
     const recovery = this.config.faultRecovery
     const exponentialLease = recovery.baseWarmLeaseTurns * 2 ** Math.min(20, faultCount - 1)
     const leaseTurns = Math.min(recovery.maxWarmLeaseTurns, exponentialLease)
-    const currentLease = this.warmUntilTurn.get(recordId) ?? -1
+    const currentLease = this.warmUntilTurn.get(recordId) ?? ContextResidencyLedger.NoWarmLeaseTurn
     this.warmUntilTurn.set(recordId, Math.max(currentLease, currentTurn + leaseTurns))
     if (faultCount >= recovery.stickyAfterFaults) this.stickyFaults.add(recordId)
 

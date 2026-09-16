@@ -5,15 +5,23 @@ import { z } from 'zod'
 import { isArray, isEmpty, isPlainObject, isString, isTrue } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
+import { AgentToolLimits } from '../../contract/constants.js'
 import type { ActiveContextArtifact, ActiveContextArtifactKind, ActiveContextArtifactStatus, ActiveDirectiveArchiveInput, ActiveDirectiveType, ActiveDirectiveUpsertInput } from '../../types/agent.js'
 import type { ActiveDirectiveContext, ActiveDirectiveMetadata, GoalConstraintReference } from '../../types/builtin.js'
 
 
-const directiveTypeSchema = z.enum(['prohibition', 'preference', 'process', 'requirement', 'other'])
+export const directiveTypeSchema: z.ZodType<ActiveDirectiveType> = z.enum([
+  'prohibition',
+  'preference',
+  'process',
+  'requirement',
+  'other',
+])
 
-const ActiveDirectiveLimits = {
-  maxActive: 8,
-} as const
+/** 长期指令的条数上限；值在 AgentToolLimits.directives.maxActive，模型在工具说明里看得到。 */
+export const ActiveDirectiveLimits: { readonly maxActive: number } = Object.freeze({
+  maxActive: AgentToolLimits.directives.maxActive,
+})
 
 interface ActiveDirectiveArchiveResult {
   archivedIds: string[]
@@ -241,4 +249,4 @@ async function archiveActiveDirectives(
   }
 }
 
-export { type ActiveDirectiveArchiveResult, ActiveDirectiveLimits, type ActiveDirectiveType, archiveActiveDirectives, buildNoArchiveDiagnostic, createDirectiveArtifactId, directiveTypeSchema, getDirectiveType, isActiveDirectiveArtifact, listActiveDirectives, matchesDirectiveTitle, resolveDirectiveArtifactId, upsertActiveDirective }
+export { type ActiveDirectiveArchiveResult, type ActiveDirectiveType, archiveActiveDirectives, buildNoArchiveDiagnostic, createDirectiveArtifactId, getDirectiveType, isActiveDirectiveArtifact, listActiveDirectives, matchesDirectiveTitle, resolveDirectiveArtifactId, upsertActiveDirective }

@@ -4,6 +4,7 @@ import type { AgentSkillProvider } from '../../contract/requires.js'
 import type { ChatPromptFeatureId } from '../../types/agent'
 import type { AgentRoleId,CapabilityScopeId } from '../../types/agent.js'
 import type { AgentSkillDefinition,AgentSkillKind } from '../../types/guidance.js'
+import { AgentTuning } from '../tuning'
 
 /** 非空时复制一份；空数组与缺席都不写入技能定义。 */
 function copyNonEmpty<T>(values: Optional<readonly T[]>): Optional<T[]> {
@@ -51,7 +52,7 @@ function createSkillDefinition(args: {
     sourceKind: args.provider.kind,
     sourceId: args.provider.id,
     roleIds: args.roleIds,
-    priority: args.priority ?? 100,
+    priority: args.priority ?? AgentTuning.prompt.builtinSkillPriority,
     userVisible: args.userVisible ?? true,
     argumentHint: optionalWhen(isNonBlankString, args.argumentHint?.trim()),
     baseDir: optionalWhen(isNonBlankString, args.baseDir?.trim()),

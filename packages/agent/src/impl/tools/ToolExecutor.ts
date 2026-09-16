@@ -47,6 +47,7 @@ import { buildToolFailureResult as buildStructuredToolFailureResult } from "../.
 import { liftGenericModelContent } from "../../utils/tools/model-image-lift";
 import { buildExecutionAppError, buildInputReuseFailure, createToolAbortSettlement, endToolSpan, readProviderToolArgs, toLoopGuardFailureBatch } from "../../utils/tools/tool-execution-runtime";
 import { persistToolInputForRecall } from "../../utils/tools/tool-input-recall";
+import { AgentTuning } from "../../utils/tuning";
 import { completeProviderTurnSnapshot, type ProviderTurnEventReducer } from "../records/ProviderTurnEventReducer";
 
 import { ContextPayloadKernelToolOutputStore } from "./ContextPayloadKernelToolOutputStore"
@@ -54,11 +55,6 @@ import { isKernelWriteLikeTool, KernelToolLoopGuard } from "./KernelToolLoopGuar
 import { KernelToolResultMaterializer } from "./KernelToolResultMaterializer";
 import type { ToolExecutionPolicy } from "./ToolExecutionPolicy";
 import { resolveToolInputReuse, saveToolAttemptInput, saveToolAttemptOutcome, ToolInputReuseError, ToolInputReuseNote } from './ToolInputReuseStore';
-
-const log = logRuntime.tag("ToolExecutor");
-const ToolAbortSettlementGraceMs = 250;
-const ToolCancelledByUserReason = "Cancelled by user";
-const MaxConcurrentConcurrencySafeTools = 8;
 
 /**
  * 执行上下文里可能捎带的 payload 店位面：宿主装配时给了就用它归档超预算的工具输出，
@@ -68,12 +64,6 @@ export interface ToolExecutorPayloadContext {
   /** 宿主注入的上下文 payload 店；缺席（不传或 null）时本轮工具输出不落盘，只走内存句柄。 */
   contextPayloadStore?: LooseOptional<ContextPayloadStore>;
 }
-
-/**
- * 工具块元数据里的执行开始时刻（毫秒时间戳）。宿主按到达时刻记的 startedAt 包含排队等待，
- * 界面算单个工具耗时时优先用它。
- */
-const ToolExecutionStartedAtMetadataKey = "executionStartedAt";
 
 /**
  * 一轮工具调用的执行中枢：从模型吐出 tool-call 到结果回到历史之间的全部编排都归它。
@@ -130,6 +120,15 @@ export interface ToolExecutorApi {
  * 5. 某个工具出错时，取消其他正在执行的同轮工具
  */
 export class ToolExecutor implements ToolExecutorApi {
+  /** 用户主动中止时写进回执的原因文案；兄弟工具连坐的另有一句，见 resolveAbortSettlementReason。 */
+  private static readonly CancelledByUserReason = "Cancelled by user";
+  /**
+   * 工具块元数据里的执行开始时刻（毫秒时间戳）。宿主按到达时刻记的 startedAt 包含排队等待，
+   * 界面算单个工具耗时时优先用它。
+   */
+  private static readonly ExecutionStartedAtMetadataKey = "executionStartedAt";
+
+  private readonly log = logRuntime.tag("ToolExecutor");
   private readonly tools: ScheduledTool[] = [];
   private readonly ctx: ToolExecutionPolicyContext;
   private readonly events: ToolExecutorEvents;
@@ -332,7 +331,7 @@ export class ToolExecutor implements ToolExecutorApi {
         const queuedTools = this.tools
           .filter((t) => t.status === "queued")
           .map((t) => ({ name: t.toolName, safe: t.isConcurrencySafe }));
-        log.error("工具收集不变量被破坏：存在待处理工具但没有执行中的工具", {
+        this.log.error("工具收集不变量被破坏：存在待处理工具但没有执行中的工具", {
           queued: queuedTools,
           totalTools: this.tools.length,
           completedTools: this.tools.filter((t) => t.status === "done").length,
@@ -349,7 +348,7 @@ export class ToolExecutor implements ToolExecutorApi {
       for (const settlement of settlements) {
         if (settlement.status === "rejected") {
           this.terminalError ??= AppError.from(settlement.reason);
-          log.error("tool settlement failed", { error: AppError.getMessage(settlement.reason) });
+          this.log.error("tool settlement failed", { error: AppError.getMessage(settlement.reason) });
         }
       }
     }
@@ -393,7 +392,7 @@ export class ToolExecutor implements ToolExecutorApi {
 
   private canPrepare(): boolean {
     const executing = this.tools.filter((t) => t.status === "executing");
-    return executing.length < MaxConcurrentConcurrencySafeTools;
+    return executing.length < AgentTuning.tools.maxConcurrentConcurrencySafeTools;
   }
 
   private execute(tool: ScheduledTool): void {
@@ -423,7 +422,7 @@ export class ToolExecutor implements ToolExecutorApi {
     }
 
     if (this.ctx.abortSignal.aborted) {
-      const reason = ToolCancelledByUserReason;
+      const reason = ToolExecutor.CancelledByUserReason;
       return this.finalizeResult(tool, {
         toolCallId: tool.toolCallId,
         toolName: tool.toolName,
@@ -517,9 +516,9 @@ export class ToolExecutor implements ToolExecutorApi {
 
       // 参数留在框架内，失败后模型只需提供变更字段。归档不可用不改变普通工具执行语义。
       try { if (this.executionPolicy.supportsInputReuse(tool.toolName)) tool.attemptSaved = await saveToolAttemptInput(this.ctx as ToolInputReuseContext, tool.toolCallId, tool.toolName, tool.args, inputReuseContract.inputContractVersion); }
-      catch (error) { log.warn("tool input reuse unavailable", { error: AppError.getMessage(error) }); }
+      catch (error) { this.log.warn("tool input reuse unavailable", { error: AppError.getMessage(error) }); }
 
-      log.info("tool execute start", {
+      this.log.info("tool execute start", {
         name: tool.toolName,
         id: tool.toolCallId,
       });
@@ -552,7 +551,7 @@ export class ToolExecutor implements ToolExecutorApi {
       });
       if (!decision.allowed) {
         const executionToolName = decision.toolName ?? tool.toolName;
-        log.warn("tool execute end", {
+        this.log.warn("tool execute end", {
           name: executionToolName,
           id: tool.toolCallId,
           status: "blocked",
@@ -608,7 +607,7 @@ export class ToolExecutor implements ToolExecutorApi {
           effectiveArgs,
         );
       if (revalidationRejection) {
-        log.warn("tool execute end", {
+        this.log.warn("tool execute end", {
           name: executionToolName,
           id: tool.toolCallId,
           status: "blocked",
@@ -640,7 +639,7 @@ export class ToolExecutor implements ToolExecutorApi {
         writeLike,
       });
       if (loopGuardMessage) {
-        log.warn("tool execute end", {
+        this.log.warn("tool execute end", {
           name: executionToolName,
           id: tool.toolCallId,
           status: "blocked",
@@ -683,7 +682,7 @@ export class ToolExecutor implements ToolExecutorApi {
         });
       }
       const status = result.error ? "error" : "completed";
-      const logEnd = result.error ? log.warn.bind(log) : log.info.bind(log);
+      const logEnd = result.error ? this.log.warn.bind(this.log) : this.log.info.bind(this.log);
       logEnd("tool execute end", {
         name: tool.toolName,
         id: tool.toolCallId,
@@ -718,7 +717,7 @@ export class ToolExecutor implements ToolExecutorApi {
         error: appError.message,
       };
 
-      log.warn("tool execute end", {
+      this.log.warn("tool execute end", {
         name: tool.toolName,
         id: tool.toolCallId,
         status: "error",
@@ -788,7 +787,7 @@ export class ToolExecutor implements ToolExecutorApi {
       const canAdmit = activeCount === 0 || (
         isTrue(admission.isConcurrencySafe)
         && !activeExclusive
-        && activeCount < MaxConcurrentConcurrencySafeTools
+        && activeCount < AgentTuning.tools.maxConcurrentConcurrencySafeTools
       );
       if (!canAdmit) return;
 
@@ -852,7 +851,7 @@ export class ToolExecutor implements ToolExecutorApi {
             ...payload,
             metadata: {
               ...payload.metadata,
-              [ToolExecutionStartedAtMetadataKey]: executionStartedAt,
+              [ToolExecutor.ExecutionStartedAtMetadataKey]: executionStartedAt,
             },
           }
         : payload,
@@ -985,7 +984,7 @@ export class ToolExecutor implements ToolExecutorApi {
         toolContext: prepared.toolContext,
         error: finalizationError,
       });
-      log.error("tool result middleware failed", {
+      this.log.error("tool result middleware failed", {
         toolCallId: tool.toolCallId,
         toolName,
         error: AppError.getMessage(error),
@@ -1016,7 +1015,7 @@ export class ToolExecutor implements ToolExecutorApi {
       (result): ToolExecutionSettlement => ({ status: "completed", result }),
       (error): ToolExecutionSettlement => ({ status: "failed", error }),
     );
-    const abortSettlement = createToolAbortSettlement(abortSignal, ToolAbortSettlementGraceMs);
+    const abortSettlement = createToolAbortSettlement(abortSignal, AgentTuning.tools.abortSettlementGraceMs);
 
     try {
       const settlement = await Promise.race([
@@ -1035,10 +1034,10 @@ export class ToolExecutor implements ToolExecutorApi {
               operation.result.result,
             );
           const reason = this.resolveAbortSettlementReason();
-          log.warn("tool ignored abort; settling as cancelled", {
+          this.log.warn("tool ignored abort; settling as cancelled", {
             name: toolName,
             id: tool.toolCallId,
-            graceMs: ToolAbortSettlementGraceMs,
+            graceMs: AgentTuning.tools.abortSettlementGraceMs,
             reason,
           });
           return {
@@ -1052,7 +1051,7 @@ export class ToolExecutor implements ToolExecutorApi {
               toolName,
               {
                 details: {
-                  graceMs: ToolAbortSettlementGraceMs,
+                  graceMs: AgentTuning.tools.abortSettlementGraceMs,
                 },
               },
             ),
@@ -1068,7 +1067,7 @@ export class ToolExecutor implements ToolExecutorApi {
     if (this.siblingErrored && this.siblingAbort.signal.aborted)
       return `Cancelled: sibling tool "${this.siblingErrorName}" failed`;
 
-    return ToolCancelledByUserReason;
+    return ToolExecutor.CancelledByUserReason;
   }
 
   private async finalizeResult(
@@ -1083,7 +1082,7 @@ export class ToolExecutor implements ToolExecutorApi {
       this.siblingErrored = true;
       this.siblingErrorName = result.toolName;
       this.siblingAbort.abort("result_finalization_failed");
-      log.error("tool result finalization failed", {
+      this.log.error("tool result finalization failed", {
         toolCallId: result.toolCallId,
         toolName: result.toolName,
         error: AppError.getMessage(error),
@@ -1113,7 +1112,7 @@ export class ToolExecutor implements ToolExecutorApi {
           effects: result.effects,
         });
       } catch (publishError) {
-        log.error("tool finalization failure notification failed", {
+        this.log.error("tool finalization failure notification failed", {
           toolCallId: result.toolCallId,
           error: AppError.getMessage(publishError),
         });
@@ -1142,7 +1141,7 @@ export class ToolExecutor implements ToolExecutorApi {
           if (outcome === 'not-applied') receipt.inputReuse = { reuse: `attempt:${tool.toolCallId}`, note: ToolInputReuseNote };
           result.result = receipt;
         }
-      } catch (error) { log.warn("tool attempt receipt unavailable", { error: AppError.getMessage(error) }); }
+      } catch (error) { this.log.warn("tool attempt receipt unavailable", { error: AppError.getMessage(error) }); }
     }
     // mod 接缝：结果收敛派发（物化之前）。放在物化前是为了让改写后的结果与
     // displayResult / modelResult 全链保持同源，不出现「模型看到 A、UI 看到 B」。
@@ -1254,7 +1253,7 @@ export class ToolExecutor implements ToolExecutorApi {
         output: result.modelResult ?? result.result,
       });
     } catch (error) {
-      log.warn("provider turn tool settlement failed", {
+      this.log.warn("provider turn tool settlement failed", {
         toolCallId: result.toolCallId,
         toolName: result.toolName,
         error: AppError.getMessage(error),
@@ -1284,13 +1283,13 @@ export class ToolExecutor implements ToolExecutorApi {
       );
       this.providerTurnSnapshotEmitted = true;
       if (!isEmpty(completion.interruptedToolCallIds)) {
-        log.warn("provider turn snapshot interrupted pending tools", {
+        this.log.warn("provider turn snapshot interrupted pending tools", {
           toolCallIds: completion.interruptedToolCallIds,
         });
       }
       this.onProviderTurnSnapshot(completion.snapshot);
     } catch (error) {
-      log.warn("provider turn snapshot completion failed", {
+      this.log.warn("provider turn snapshot completion failed", {
         error: AppError.getMessage(error),
       });
     }

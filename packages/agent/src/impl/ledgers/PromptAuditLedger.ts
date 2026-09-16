@@ -32,11 +32,9 @@ import { canonicalJsonStringify } from '../../utils/ledgers/ledger-file'
 
 import { SerialWriteQueue } from './SerialWriteQueue'
 
-const PROMPT_AUDIT_LINE_SEPARATOR = JSONL_LINE_SEPARATOR
-
 /** 序列化一条审计记录成 JSONL 行（规范键序 + 行尾分隔符）。 */
 export function serializePromptAuditLine(record: PromptAuditRecord): string {
-  return `${canonicalJsonStringify(record)}${PROMPT_AUDIT_LINE_SEPARATOR}`
+  return `${canonicalJsonStringify(record)}${JSONL_LINE_SEPARATOR}`
 }
 
 /**

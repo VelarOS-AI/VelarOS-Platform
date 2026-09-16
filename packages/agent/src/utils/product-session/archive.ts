@@ -1,6 +1,7 @@
 import { isArray, isBoolean, isNumber, isPlainObject, isString } from '@velaros-ai/core'
 
 import type { AgentSessionArchiveEnvelope,AgentSessionArchiveEvent } from '../../types/product-session.js'
+import { AgentTuning } from '../tuning'
 
 export const VelarosAgentSessionArchiveFormat = 'velaros.agent-session' as const satisfies AgentSessionArchiveEnvelope<never, never, never>['format']
 export const VelarosAgentSessionArchiveSchemaVersion = 1 as const satisfies AgentSessionArchiveEnvelope<never, never, never>['schemaVersion']
@@ -70,15 +71,17 @@ export function parseAgentSessionArchiveEnvelope(input: unknown, options: {
     throw new Error('会话归档的 exportedAt 不合法：必须是能被 Date.parse 解析的 ISO 时间戳字符串，形如 2026-08-24T00:00:00.000Z。')
   }
   if (!isBoolean(input.sanitized)) throw new Error('会话归档的 sanitized 不合法：只能是 true 或 false，用来标明这份归档有没有脱敏过。')
-  if (!isArray(input.resources) || input.resources.length > (options.maximumResources ?? 1_000)) {
-    throw new Error(`会话归档的 resources 不合法：必须是数组，且条数不超过 ${options.maximumResources ?? 1_000} 条。`)
+  const maximumResources = options.maximumResources ?? AgentTuning.productSession.archiveMaxResources
+  if (!isArray(input.resources) || input.resources.length > maximumResources) {
+    throw new Error(`会话归档的 resources 不合法：必须是数组，且条数不超过 ${maximumResources} 条。`)
   }
+  const maximumEvents = options.maximumEvents ?? AgentTuning.productSession.archiveMaxEvents
   if (
     !isArray(input.events)
     || !input.events.every(isAgentSessionArchiveEvent)
-    || input.events.length > (options.maximumEvents ?? 100_000)
+    || input.events.length > maximumEvents
   ) {
-    throw new Error(`会话归档的 events 不合法：必须是数组，每条都要有字符串 type、数字 createdAt 和 payload 三个字段，且总条数不超过 ${options.maximumEvents ?? 100_000} 条。`)
+    throw new Error(`会话归档的 events 不合法：必须是数组，每条都要有字符串 type、数字 createdAt 和 payload 三个字段，且总条数不超过 ${maximumEvents} 条。`)
   }
   return Object.freeze({
     format: VelarosAgentSessionArchiveFormat,

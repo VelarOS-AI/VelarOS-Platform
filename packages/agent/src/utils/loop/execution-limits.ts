@@ -1,6 +1,7 @@
 import { isNull, isUndefined } from '@velaros-ai/core'
 
 import type { AgentExecutionLimitOverrides,AgentExecutionLimits } from '../../types/loop.js'
+import { AgentTuning } from '../tuning'
 // 域：Agent 执行的**收尾闸门**（什么时候必须停下来）。
 //
 // ## 为什么轮数上限默认是 null（不是漏配）
@@ -23,19 +24,19 @@ import type { AgentExecutionLimitOverrides,AgentExecutionLimits } from '../../ty
 // 在同一父会话的下一轮里带 thread_id 续跑（它保留着之前读过的上下文，不必从头再读）。上限只约束
 // 已脱离执行的线程；执行中的线程由单次执行的派发总量帽约束。计数设 0 即关闭跨执行保留（执行结束
 // 即丢，回到旧行为）；空闲期从脱离执行起算，不用计时器，由派发与执行收尾时顺手清理。
-const MaxNativeTimerDelayMs = 2_147_483_647
+const MaxNativeTimerDelayMs = AgentTuning.loop.maxNativeTimerDelayMs
 
 const DefaultAgentExecutionLimits = Object.freeze({
-  standardExecutionWallClockTimeoutMs: 24 * 60 * 60_000,
-  goalExecutionWallClockTimeoutMs: 7 * 24 * 60 * 60_000,
+  standardExecutionWallClockTimeoutMs: AgentTuning.loop.standardExecutionWallClockTimeoutMs,
+  goalExecutionWallClockTimeoutMs: AgentTuning.loop.goalExecutionWallClockTimeoutMs,
   primaryMaxTurns: null,
-  subAgentSoftDeadlineMs: 4 * 60 * 60_000,
+  subAgentSoftDeadlineMs: AgentTuning.loop.subAgentSoftDeadlineMs,
   subAgentMaxTurns: null,
-  modelStreamIdleTimeoutMs: 5 * 60_000,
-  subAgentRetainedThreadsPerSession: 8,
-  subAgentRetainedThreadsTotal: 64,
-  subAgentRetainedThreadIdleTtlMs: 30 * 60_000,
-  subAgentRetainedHistoryMaxChars: 600_000,
+  modelStreamIdleTimeoutMs: AgentTuning.loop.modelStreamIdleTimeoutMs,
+  subAgentRetainedThreadsPerSession: AgentTuning.loop.subAgentRetainedThreadsPerSession,
+  subAgentRetainedThreadsTotal: AgentTuning.loop.subAgentRetainedThreadsTotal,
+  subAgentRetainedThreadIdleTtlMs: AgentTuning.loop.subAgentRetainedThreadIdleTtlMs,
+  subAgentRetainedHistoryMaxChars: AgentTuning.loop.subAgentRetainedHistoryMaxChars,
 }) satisfies Readonly<AgentExecutionLimits>
 
 /**

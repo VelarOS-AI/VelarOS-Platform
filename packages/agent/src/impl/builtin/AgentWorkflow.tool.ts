@@ -1,13 +1,14 @@
 import { AppError } from '@velaros-ai/core/error'
 
+import { AgentToolNames } from '../../contract/constants.js'
 import type { AgentWorkflowToolCollection, RunAgentWorkflowInput,VelaTool } from '../../types/builtin.js'
 import { defineVelaTool } from '../../utils/builtin/define-agent-tool'
 import { agentWorkflowSchema } from '../../utils/builtin/workflow-schemas'
 
 import { AgentWorkflowCapability } from './Capabilities'
 
-const runAgentWorkflow: VelaTool<RunAgentWorkflowInput> = defineVelaTool({
-  name: 'agent:run_workflow',
+export const runAgentWorkflow: VelaTool<RunAgentWorkflowInput> = defineVelaTool({
+  name: AgentToolNames.agentRunWorkflow,
   role: 'control',
   category: 'agent-control',
   summary: '用声明式、有界控制流编排多个一级子 Agent，并在代码侧收敛结构化结果。',
@@ -79,8 +80,6 @@ const runAgentWorkflow: VelaTool<RunAgentWorkflowInput> = defineVelaTool({
   },
 })
 
-const agentWorkflowTools: AgentWorkflowToolCollection = {
-  'agent:run_workflow': runAgentWorkflow,
+export const agentWorkflowTools: AgentWorkflowToolCollection = {
+  [AgentToolNames.agentRunWorkflow]: runAgentWorkflow,
 }
-
-export { agentWorkflowTools }

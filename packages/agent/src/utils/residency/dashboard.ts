@@ -13,15 +13,13 @@ import type { ModelMessage } from 'ai'
 import { isEmpty } from '@velaros-ai/core'
 
 import type { ContextDashboardInput, ContextResidency, DashboardHolding } from '../../types/residency.js'
+import { AgentTuning } from '../tuning'
 
 import { compareStableStrings } from './determinism'
 import { residentChars, resolveEffectiveResidency } from './projection'
 
-/** 最大持仓榜的条数。 */
-const TopHoldingCount = 3
-/** 最近记录只给短索引；它回答“刚才那批调用落在哪”，不和最大持仓榜混为一谈。 */
-const LatestHoldingCount = 3
-const LatestParallelToolPartCount = 4
+// 榜单条数在 AgentTuning.residency：最大持仓榜 topHoldingCount，最近记录的短索引 latestHoldingCount
+// （它回答“刚才那批调用落在哪”，不和最大持仓榜混为一谈），并行工具调用的最近片段 latestParallelToolPartCount。
 
 const DashboardMarker = '[context-dashboard]'
 
@@ -134,7 +132,7 @@ function countByEffectiveResidency(
 }
 
 /**
- * 渲染"谁最占空间"那一行：占用为 0 的记录先剔掉（已折掉的没必要上榜），按实际字符数降序取前 `TopHoldingCount` 条，
+ * 渲染"谁最占空间"那一行：占用为 0 的记录先剔掉（已折掉的没必要上榜），按实际字符数降序取前 `AgentTuning.residency.topHoldingCount` 条，
  * 字符数并列时按记录 id 的码元序兜底，保证同一份账本在任何机器上排出同一张榜。
  * 字符数按千位四舍五入印成 `12k`——这行是给模型看的量级感，不是精确账。一条都没有时返回 null，整行不出现。
  */
@@ -142,7 +140,7 @@ function renderTopHoldings(holdings: readonly DashboardHolding[]): Nullable<stri
   const top = [...holdings]
     .filter((holding) => holding.chars > 0)
     .sort((left, right) => right.chars - left.chars || compareStableStrings(left.id, right.id))
-    .slice(0, TopHoldingCount)
+    .slice(0, AgentTuning.residency.topHoldingCount)
 
   if (isEmpty(top)) return null
 
@@ -156,7 +154,7 @@ function renderTopHoldings(holdings: readonly DashboardHolding[]): Nullable<stri
  * 最新并行结果暴露少量真实子调用 ID；模型可直接按 `tool:<id>` 精确召回，不再先扫 record 邻接。
  */
 function renderLatestHoldings(holdings: readonly DashboardHolding[]): Nullable<string> {
-  const latest = holdings.slice(-LatestHoldingCount)
+  const latest = holdings.slice(-AgentTuning.residency.latestHoldingCount)
   if (isEmpty(latest)) return null
 
   return `latest: ${latest
@@ -164,10 +162,10 @@ function renderLatestHoldings(holdings: readonly DashboardHolding[]): Nullable<s
       if (holding.toolParts.length <= 1) return `${holding.id}/${holding.label}`
 
       const refs = holding.toolParts
-        .slice(0, LatestParallelToolPartCount)
+        .slice(0, AgentTuning.residency.latestParallelToolPartCount)
         .map((part) => `${part.toolName}=tool:${part.toolCallId}`)
         .join(',')
-      const remaining = holding.toolParts.length - LatestParallelToolPartCount
+      const remaining = holding.toolParts.length - AgentTuning.residency.latestParallelToolPartCount
       return `${holding.id}/${holding.label}[${refs}${remaining > 0 ? `,+${remaining}` : ''}]`
     })
     .join(' ')}`

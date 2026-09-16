@@ -1,5 +1,6 @@
 import { isArray, isEmpty, isFiniteNumber, isNumber, isPlainObject, isPositiveNumber,isPresent, isString, isTrue, toNullable } from '@velaros-ai/core'
 
+import type { CapabilityValidationInterpreter,ReminderCapabilityResolver, RuntimePromptFeaturePolicy, RuntimeReminderProducer } from '../../contract/requires.js'
 import type {
   ChatPromptFeatureId,
   TaskApprovalRecord,
@@ -7,15 +8,6 @@ import type {
   ToolLayerTelemetryMetrics,
   TurnPlanningTelemetryPayload,
 } from '../../types/agent'
-import {
-  assertRunProfileSelectionId,
-  assertToolSurfaceProfileId,
-  resolveRunProfileSelectionId,
-  resolveToolSurfaceProfileId,
-} from '../../utils/wire/typed-field-asserts'
-
-const DefaultEnabledPromptFeatures: readonly ChatPromptFeatureId[] = []
-import type { CapabilityValidationInterpreter,ReminderCapabilityResolver, RuntimePromptFeaturePolicy, RuntimeReminderProducer } from '../../contract/requires.js'
 import type { CapabilityAutoApprovalNotice, CapabilityScopeId, RunProfileSelectionId,ThinkingDepth, ToolCategoryId, ToolSurfaceProfileId } from '../../types/agent.js'
 import type { CapabilityValidationRunResult, CapabilityValidationStatus } from '../../types/capabilities.js'
 import type { CapabilityValidationFailure, CodingSessionSnapshot, CodingSessionToolCategoryToolNames, CodingSessionToolContext, RuntimeReminderConsumeResult,RuntimeReminderInput } from '../../types/session.js'
@@ -25,6 +17,13 @@ import {
   DefaultToolSurfaceProfileId,
 } from '../../utils/runner/runtime-profiles'
 import { shouldTrackDynamicToolCategoryLease } from '../../utils/session/tool-lease'
+import { AgentTuning } from '../../utils/tuning'
+import {
+  assertRunProfileSelectionId,
+  assertToolSurfaceProfileId,
+  resolveRunProfileSelectionId,
+  resolveToolSurfaceProfileId,
+} from '../../utils/wire/typed-field-asserts'
 import { defaultRuntimePromptFeaturePolicy } from '../tools/DefaultPromptFeaturePolicy'
 
 import { CodingSessionEditResultHelper } from './CodingSessionEditResultHelper'
@@ -379,6 +378,9 @@ export interface CodingSessionTrackerApi {
  * AgentRunner.sessionApprovalRegistry 在外层负责恢复/保存。
  */
 class CodingSessionTracker implements CodingSessionTrackerApi {
+  /** 新会话默认不开任何提示词特性，由宿主逐条打开。 */
+  private static readonly DefaultEnabledPromptFeatures: readonly ChatPromptFeatureId[] = []
+
   private static readonly DefaultToolNameLeaseTurns = 64
   private static readonly DefaultMaxTurnPlanningSnapshots = 8
   private static readonly MaxRecentToolNames = 12
@@ -478,7 +480,7 @@ class CodingSessionTracker implements CodingSessionTrackerApi {
 
   constructor(
     initialCategories: ToolCategoryId[] = [],
-    initialPromptFeatures: ChatPromptFeatureId[] = [...DefaultEnabledPromptFeatures],
+    initialPromptFeatures: ChatPromptFeatureId[] = [...CodingSessionTracker.DefaultEnabledPromptFeatures],
     /** 跨 turn 恢复的已批准工具类别，避免每次发消息都重新询问授权。 */
     initialApprovedCategories: ToolCategoryId[] = [],
     /**
@@ -527,7 +529,7 @@ class CodingSessionTracker implements CodingSessionTrackerApi {
     this.inspectionTools = new Set(toolNamesFor(activityCategories.inspection))
     this.verificationTools = new Set(toolNamesFor(activityCategories.validation))
     this.externalTouchCooldownMs =
-      options.externalTouchCooldownMs ?? 750
+      options.externalTouchCooldownMs ?? AgentTuning.session.externalTouchCooldownMs
     this.normalizeResourceId =
       options.normalizeResourceId ?? normalizeResourceIdForTracker
     this.editResultHelper = new CodingSessionEditResultHelper({

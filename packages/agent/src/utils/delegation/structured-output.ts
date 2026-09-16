@@ -3,15 +3,21 @@ import { z } from 'zod'
 import { isArray, isBoolean, isEmpty, isRecord, isString,isUndefined } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
+import { AgentToolLimits } from '../../contract/constants.js'
 import type { AgentOutputJsonSchema } from '../../types/agent.js'
 import type { CompiledSubAgentOutputSchema, StructuredOutputParseResult } from '../../types/delegation.js'
 
 
-const MaxStructuredOutputSchemaBytes = 16 * 1024
-const MaxStructuredOutputBytes = 64 * 1024
-const MaxStructuredOutputSchemaDepth = 8
-const MaxStructuredOutputSchemaProperties = 64
-const MaxStructuredOutputSchemaEnumValues = 64
+/** 输出 schema 的字节上限，等价于 `AgentToolLimits.structuredOutput.maxSchemaBytes`（模型看得到）。 */
+const MaxStructuredOutputSchemaBytes = AgentToolLimits.structuredOutput.maxSchemaBytes
+/** 结构化输出正文的字节上限，等价于 `AgentToolLimits.structuredOutput.maxBytes`。 */
+const MaxStructuredOutputBytes = AgentToolLimits.structuredOutput.maxBytes
+/** 输出 schema 的最大嵌套深度，等价于 `AgentToolLimits.structuredOutput.maxSchemaDepth`。 */
+const MaxStructuredOutputSchemaDepth = AgentToolLimits.structuredOutput.maxSchemaDepth
+/** 输出 schema 单层属性数上限，等价于 `AgentToolLimits.structuredOutput.maxSchemaProperties`。 */
+const MaxStructuredOutputSchemaProperties = AgentToolLimits.structuredOutput.maxSchemaProperties
+/** 输出 schema 单个枚举的取值数上限，等价于 `AgentToolLimits.structuredOutput.maxSchemaEnumValues`。 */
+const MaxStructuredOutputSchemaEnumValues = AgentToolLimits.structuredOutput.maxSchemaEnumValues
 
 const AllowedSchemaKeywords = new Set([
   '$schema',

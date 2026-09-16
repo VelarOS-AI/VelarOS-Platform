@@ -1,6 +1,8 @@
 import { z } from 'zod'
 
+import { AgentToolLimits, AgentToolNames } from '../../contract/constants.js'
 import type { ActiveDirectiveType } from '../../types/agent.js'
+import type { VelaTool } from '../../types/builtin.js'
 import { defineVelaTool } from '../../utils/builtin/define-agent-tool'
 import {
   renderParameterDescription as parameterDescription,
@@ -15,8 +17,8 @@ import {
   upsertActiveDirective as upsertActiveDirectiveArtifact,
 } from './DirectiveOperations'
 
-const listActiveDirectivesTool = defineVelaTool<Record<string, never>>({
-  name: 'directive:list',
+export const listActiveDirectivesTool: VelaTool<Record<string, never>> = defineVelaTool<Record<string, never>>({
+  name: AgentToolNames.directiveList,
   role: 'inspect',
   category: 'context',
   summary: '列出当前 session 上下文保护区中仍然生效的用户长期指令。',
@@ -39,14 +41,20 @@ const listActiveDirectivesTool = defineVelaTool<Record<string, never>>({
   },
 })
 
-const upsertActiveDirectiveTool = defineVelaTool<{
+export const upsertActiveDirectiveTool: VelaTool<{
+  id?: string
+  title: string
+  content: string
+  directiveType: ActiveDirectiveType
+  sourceMessageId?: string
+}> = defineVelaTool<{
   id?: string
   title: string
   content: string
   directiveType: ActiveDirectiveType
   sourceMessageId?: string
 }>({
-  name: 'directive:upsert',
+  name: AgentToolNames.directiveUpsert,
   role: 'control',
   category: 'context',
   summary: '把用户明确要求后续轮次持续遵守的重要指令写入当前 session 上下文保护区。',
@@ -67,7 +75,7 @@ const upsertActiveDirectiveTool = defineVelaTool<{
     id: z
       .string()
       .min(1)
-      .max(120)
+      .max(AgentToolLimits.directives.identifierChars)
       .optional()
       .describe(
         parameterDescription({
@@ -77,7 +85,7 @@ const upsertActiveDirectiveTool = defineVelaTool<{
     title: z
       .string()
       .min(1)
-      .max(160)
+      .max(AgentToolLimits.directives.titleChars)
       .describe(
         parameterDescription({
           description: '约束标题，简短描述用户固定的规则。',
@@ -86,7 +94,7 @@ const upsertActiveDirectiveTool = defineVelaTool<{
     content: z
       .string()
       .min(1)
-      .max(1000)
+      .max(AgentToolLimits.directives.contentChars)
       .describe(
         parameterDescription({
           description: '后续轮次必须遵守的具体约束内容。',
@@ -107,7 +115,7 @@ const upsertActiveDirectiveTool = defineVelaTool<{
     sourceMessageId: z
       .string()
       .min(1)
-      .max(120)
+      .max(AgentToolLimits.directives.identifierChars)
       .optional()
       .describe(
         parameterDescription({
@@ -128,12 +136,16 @@ const upsertActiveDirectiveTool = defineVelaTool<{
   },
 })
 
-const archiveActiveDirective = defineVelaTool<{
+export const archiveActiveDirective: VelaTool<{
+  ids?: string[]
+  title?: string
+  directiveType?: ActiveDirectiveType
+}> = defineVelaTool<{
   ids?: string[]
   title?: string
   directiveType?: ActiveDirectiveType
 }>({
-  name: 'directive:archive',
+  name: AgentToolNames.directiveArchive,
   role: 'control',
   category: 'context',
   summary: '取消当前 session 上下文保护区中一个或多个已固定的长期指令。',
@@ -145,9 +157,9 @@ const archiveActiveDirective = defineVelaTool<{
   schema: z
     .object({
       ids: z
-        .array(z.string().min(1).max(120))
+        .array(z.string().min(1).max(AgentToolLimits.directives.identifierChars))
         .min(1)
-        .max(20)
+        .max(AgentToolLimits.directives.maxArchiveIds)
         .optional()
         .describe(
           parameterDescription({
@@ -157,7 +169,7 @@ const archiveActiveDirective = defineVelaTool<{
       title: z
         .string()
         .min(1)
-        .max(160)
+        .max(AgentToolLimits.directives.titleChars)
         .optional()
         .describe(
           parameterDescription({
@@ -179,10 +191,12 @@ const archiveActiveDirective = defineVelaTool<{
   execute: (input, ctx) => archiveActiveDirectives(ctx.activeContext, input),
 })
 
-const activeDirectiveTools = {
-  'directive:list': listActiveDirectivesTool,
-  'directive:upsert': upsertActiveDirectiveTool,
-  'directive:archive': archiveActiveDirective,
+export const activeDirectiveTools: {
+  'directive:list': typeof listActiveDirectivesTool
+  'directive:upsert': typeof upsertActiveDirectiveTool
+  'directive:archive': typeof archiveActiveDirective
+} = {
+  [AgentToolNames.directiveList]: listActiveDirectivesTool,
+  [AgentToolNames.directiveUpsert]: upsertActiveDirectiveTool,
+  [AgentToolNames.directiveArchive]: archiveActiveDirective,
 }
-
-export { activeDirectiveTools }

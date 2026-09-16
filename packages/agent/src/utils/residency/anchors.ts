@@ -13,20 +13,17 @@
  * 依赖纪律：不 import v1 压缩模块（B1 判死），正则在本文件单源。
  */
 import type { ContextAnchor,ContextAnchorKind } from '../../types/residency.js'
+import { AgentTuning } from '../tuning'
 
 import { compareStableStrings } from './determinism'
 
-/** 单条记录保留的锚点上限：超过即噪声，且锚点本身也占预算。 */
-export const MaxContextAnchors = 24
+/** 单条记录保留的锚点上限：超过即噪声，且锚点本身也占预算。值在 AgentTuning.residency.maxContextAnchors。 */
+export const MaxContextAnchors: number = AgentTuning.residency.maxContextAnchors
 
-/**
- * 锚点抽取的输入窗口上限。
- *
- * 工具输出可以是 MB 级（准入照样要算 bytes.full 与锚点，即便下一步就被摘录成 24K），对全文跑
- * 六条全局正则会在主进程上卡出可感知的准入延迟。按**头尾各半**取窗口与摘录本身的头尾口径一致：
- * 有价值的关键场（命令、路径、退出码）几乎都落在开头与结尾，中段是重复的日志体。
- */
-const MaxAnchorScanChars = 128_000
+// 锚点抽取的输入窗口上限在 AgentTuning.residency.maxAnchorScanChars：
+// 工具输出可以是 MB 级（准入照样要算 bytes.full 与锚点，即便下一步就被摘录成 24K），对全文跑
+// 六条全局正则会在主进程上卡出可感知的准入延迟。按**头尾各半**取窗口与摘录本身的头尾口径一致：
+// 有价值的关键场（命令、路径、退出码）几乎都落在开头与结尾，中段是重复的日志体。
 
 /** 类别优先序：截断与分栏一律按它，不按 UTF-16 码元序（数字恒排在字母前是纯偶然）。 */
 export const ContextAnchorKindOrder: readonly ContextAnchorKind[] = [
@@ -265,9 +262,9 @@ export function extractContextAnchors(
 
 /** 抽取窗口：超长文本只扫头尾各半，中段（重复日志体）不进正则。 */
 function sliceAnchorScanWindow(text: string): string {
-  if (text.length <= MaxAnchorScanChars) return text
+  if (text.length <= AgentTuning.residency.maxAnchorScanChars) return text
 
-  const half = Math.floor(MaxAnchorScanChars / 2)
+  const half = Math.floor(AgentTuning.residency.maxAnchorScanChars / 2)
   return `${text.slice(0, half)}\n${text.slice(text.length - half)}`
 }
 

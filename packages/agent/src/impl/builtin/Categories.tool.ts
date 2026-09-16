@@ -1,6 +1,8 @@
 import { type z } from 'zod'
 
+import { AgentToolNames } from '../../contract/constants.js'
 import type { ToolCapabilitySchema } from '../../types/agent.js'
+import type { VelaTool } from '../../types/builtin.js'
 import { defineVelaTool } from '../../utils/builtin/define-agent-tool'
 import {
   parseToolSpaceQueryMethodInput,
@@ -14,25 +16,25 @@ import {
   runToolSpace,
 } from './ToolSpaceOperations'
 
-const ToolingReadCapability = {
+export const ToolingReadCapability: ToolCapabilitySchema = {
   effectKind: 'read',
   readScopes: ['agent-tool-space'],
   canReadArbitrarySource: false,
   concurrency: 'safe',
   reason: 'agent tool-space discovery',
-} satisfies ToolCapabilitySchema
+}
 
-const ToolingWriteCapability = {
+export const ToolingWriteCapability: ToolCapabilitySchema = {
   effectKind: 'write',
   readScopes: ['agent-tool-space'],
   writeScopes: ['agent-tool-space'],
   canReadArbitrarySource: false,
   concurrency: 'unsafe',
   reason: 'agent tool-space residency update',
-} satisfies ToolCapabilitySchema
+}
 
-const toolSpaceMap = defineVelaTool<z.input<typeof toolSpaceQueryMethodSchema>>({
-  name: 'tooling:map',
+export const toolSpaceMap: VelaTool<z.input<typeof toolSpaceQueryMethodSchema>> = defineVelaTool<z.input<typeof toolSpaceQueryMethodSchema>>({
+  name: AgentToolNames.toolingMap,
   role: 'control',
   category: 'agent-control',
   // 工具地图就是模型当下要读的内容：禁止 page-out 成 payload 引用，否则模型还得
@@ -80,8 +82,8 @@ const toolSpaceMap = defineVelaTool<z.input<typeof toolSpaceQueryMethodSchema>>(
   },
 })
 
-const toolSpaceRead = defineVelaTool<z.input<typeof toolSpaceReadMethodSchema>>({
-  name: 'tooling:read',
+export const toolSpaceRead: VelaTool<z.input<typeof toolSpaceReadMethodSchema>> = defineVelaTool<z.input<typeof toolSpaceReadMethodSchema>>({
+  name: AgentToolNames.toolingRead,
   role: 'control',
   category: 'agent-control',
   // 同 tooling:map：技能正文是模型当下要读的内容，禁止 page-out。
@@ -109,8 +111,8 @@ const toolSpaceRead = defineVelaTool<z.input<typeof toolSpaceReadMethodSchema>>(
     ),
 })
 
-const toolSpaceReplace = defineVelaTool<z.input<typeof toolSpaceReplaceMethodSchema>>({
-  name: 'tooling:replace',
+export const toolSpaceReplace: VelaTool<z.input<typeof toolSpaceReplaceMethodSchema>> = defineVelaTool<z.input<typeof toolSpaceReplaceMethodSchema>>({
+  name: AgentToolNames.toolingReplace,
   role: 'control',
   category: 'agent-control',
   summary: '将发现的工具换入后续回合，或换出暂时不用的工具；返回实际处理结果与下一步。',
@@ -144,10 +146,12 @@ const toolSpaceReplace = defineVelaTool<z.input<typeof toolSpaceReplaceMethodSch
     ),
 })
 
-const categoriesTools = {
-  'tooling:map': toolSpaceMap,
-  'tooling:read': toolSpaceRead,
-  'tooling:replace': toolSpaceReplace,
+export const categoriesTools: {
+  'tooling:map': typeof toolSpaceMap
+  'tooling:read': typeof toolSpaceRead
+  'tooling:replace': typeof toolSpaceReplace
+} = {
+  [AgentToolNames.toolingMap]: toolSpaceMap,
+  [AgentToolNames.toolingRead]: toolSpaceRead,
+  [AgentToolNames.toolingReplace]: toolSpaceReplace,
 }
-
-export { categoriesTools }

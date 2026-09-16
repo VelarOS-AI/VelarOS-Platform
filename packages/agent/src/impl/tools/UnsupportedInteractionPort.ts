@@ -38,6 +38,4 @@ class UnsupportedInteractionPort implements InteractionPort {
 }
 
 /** 无 execution 会话通道宿主的默认端口实例。 */
-const defaultUnsupportedInteractionPort: InteractionPort = new UnsupportedInteractionPort()
-
-export { defaultUnsupportedInteractionPort }
+export const defaultUnsupportedInteractionPort: InteractionPort = new UnsupportedInteractionPort()

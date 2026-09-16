@@ -4,11 +4,11 @@ import { isEmpty, isNumber, optionalWhen,toNullable, truncate } from '@velaros-a
 import type { AgentRuntimeCapabilityPorts } from '../../contract/requires.js'
 import type { ToolCategoryId } from '../../types/agent.js'
 import type { IntentDomainMatch,ToolSpaceBootstrapDecisionKind, ToolSpaceBootstrapPlan, ToolSpaceBootstrapPlannerInput, ToolSpaceBootstrapState, ToolSpaceForcedToolChoice } from '../../types/loop.js'
+import { AgentTuning } from '../tuning'
 
 import { detectAgentIntentSignals, extractLatestUserTextFromMessages, isLowSignalIntentText, normalizeIntentText } from './intent-signals'
 
 const KernelDiscoveryTools = new Set(['tooling:map'])
-const MaxForcedDiscoveryPerFingerprint = 2
 
 /**
  * 对这句话跑一遍意图分类，只取其中的域清单（`requires*` 那几个汇总标志本层用不上）。
@@ -46,7 +46,7 @@ function buildFingerprint(input: {
 /**
  * 判定这一轮该不该放弃「强制先调 tooling:map」。两种情况为真：本轮还没走到状态里记的
  * `suppressedUntilTurn`（上游显式压了一段时间），或同一指纹已经强制过
- * `MaxForcedDiscoveryPerFingerprint`（2）次。
+ * `AgentTuning.loop.forcedDiscoveryPerFingerprint`（2）次。
  * 抑制生效后计划退回静默预载或不干预，改由模型自己决定要不要查工具页，不再被反复推回侦察。
  */
 function shouldSuppressForcedDiscovery(input: {
@@ -62,7 +62,7 @@ function shouldSuppressForcedDiscovery(input: {
 
   return (
     input.state?.lastDecisionFingerprint === input.fingerprint &&
-    (input.state?.forcedDiscoveryCount ?? 0) >= MaxForcedDiscoveryPerFingerprint
+    (input.state?.forcedDiscoveryCount ?? 0) >= AgentTuning.loop.forcedDiscoveryPerFingerprint
   )
 }
 
@@ -108,7 +108,7 @@ function markToolSpaceBootstrapDiscoverySatisfied(
     ...state,
     forcedDiscoveryCount: Math.max(
       state.forcedDiscoveryCount ?? 0,
-      MaxForcedDiscoveryPerFingerprint
+      AgentTuning.loop.forcedDiscoveryPerFingerprint
     ),
   }
 }

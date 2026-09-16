@@ -3,14 +3,15 @@ import { z } from 'zod'
 import { isBlank, isEmpty } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
+import { AgentToolLimits } from '../../contract/constants.js'
 import type { BackgroundJobOutputFilterResult, CancelBackgroundJobInput,ReadBackgroundJobOutputInput, WaitBackgroundJobsInput } from '../../types/builtin.js'
 import type { ToolBackgroundJobOutputSnapshot } from '../../types/tool-context.js'
 import {
   renderParameterDescription as parameterDescription,
 } from '../../utils/toolkit/tool-description'
 
-const readBackgroundJobOutputSchema = z.object({
-  job_id: z.string().trim().min(1).max(180).describe(
+export const readBackgroundJobOutputSchema: z.ZodType<ReadBackgroundJobOutputInput> = z.object({
+  job_id: z.string().trim().min(1).max(AgentToolLimits.jobs.jobIdChars).describe(
     parameterDescription({
       description: '后台 job id。agent:dispatch 返回的 thread_id 不是 job_id；使用工具结果或后续通知中的 job id。',
     })
@@ -27,25 +28,25 @@ const readBackgroundJobOutputSchema = z.object({
         ],
       })
     ),
-  filter: z.string().trim().min(1).max(500).optional().describe(
+  filter: z.string().trim().min(1).max(AgentToolLimits.jobs.outputFilterChars).optional().describe(
     parameterDescription({
       description:
         '可选正则表达式；只保留匹配的输出行。正则非法时忽略 filter 返回全量输出并说明原因，不报错。返回里会带「命中 K/N 行」，0 命中不等于没有新增输出。',
     })
   ),
-}) satisfies z.ZodType<unknown, ReadBackgroundJobOutputInput>
+})
 
-const waitBackgroundJobsSchema = z.object({
+export const waitBackgroundJobsSchema: z.ZodType<WaitBackgroundJobsInput> = z.object({
   job_ids: z
     .array(
-      z.string().trim().min(1).max(180).describe(
+      z.string().trim().min(1).max(AgentToolLimits.jobs.jobIdChars).describe(
         parameterDescription({
           description: '后台 job id。',
         })
       )
     )
     .min(1)
-    .max(20)
+    .max(AgentToolLimits.jobs.maxWaitJobIds)
     .optional()
     .describe(
       parameterDescription({
@@ -57,29 +58,29 @@ const waitBackgroundJobsSchema = z.object({
     .number()
     .int()
     .min(1)
-    .max(300_000)
-    .default(120_000)
+    .max(AgentToolLimits.jobs.maxWaitTimeoutMs)
+    .default(AgentToolLimits.jobs.defaultWaitTimeoutMs)
     .describe(
       parameterDescription({
         description:
           '最长等待毫秒数；超时后返回这些 job 当前状态和可读输出，而不是继续阻塞。',
       })
     ),
-  filter: z.string().trim().min(1).max(500).optional().describe(
+  filter: z.string().trim().min(1).max(AgentToolLimits.jobs.outputFilterChars).optional().describe(
     parameterDescription({
       description:
         '可选正则表达式；只保留匹配的输出行。正则非法时忽略 filter 返回全量输出并说明原因，不报错。返回里会带「命中 K/N 行」，0 命中不等于没有新增输出。',
     })
   ),
-}) satisfies z.ZodType<unknown, WaitBackgroundJobsInput>
+})
 
-const cancelBackgroundJobSchema = z.object({
-  job_id: z.string().trim().min(1).max(180).describe(
+export const cancelBackgroundJobSchema: z.ZodType<CancelBackgroundJobInput> = z.object({
+  job_id: z.string().trim().min(1).max(AgentToolLimits.jobs.jobIdChars).describe(
     parameterDescription({
       description: '要取消的后台 job id。',
     })
   ),
-}) satisfies z.ZodType<unknown, CancelBackgroundJobInput>
+})
 
 /**
  * filter 是**可用性**功能，不是校验边界：三个失败方向一律 fail-open。
@@ -161,4 +162,4 @@ function formatBackgroundJobWaitResults(
     .join('\n\n')
 }
 
-export { cancelBackgroundJobSchema, filterBackgroundJobOutput, formatBackgroundJobOutput, formatBackgroundJobWaitResults, readBackgroundJobOutputSchema, waitBackgroundJobsSchema }
+export { filterBackgroundJobOutput, formatBackgroundJobOutput, formatBackgroundJobWaitResults }

@@ -23,6 +23,7 @@ import {
   buildOutputTruncationContinuationPrompt,
   isOutputTruncationError,
 } from '../../utils/stream/output-truncation-recovery'
+import { AgentTuning } from '../../utils/tuning'
 import { ChatRuntimeEvents } from '../../utils/wire/chat-runtime.js'
 import { resolveModelContextUsageOptions } from '../context/AgentLoopContextUsageManager'
 import { compileProviderSendRequest, ProviderRequestCompiler } from '../context/ProviderRequestCompiler'
@@ -83,9 +84,6 @@ export interface QueryTurnResult {
   /** 本次真正发出去的请求快照（可重建校验已通过）；写进回合审计，供事后逐字节复现这一次请求。 */
   providerRequestSnapshot?: LooseOptional<ProviderRequestSnapshot>
 }
-
-const MaxQueryStreamContinuationRecoveryAttempts = 1
-const MaxQueryOutputTruncationRecoveryAttempts = 2
 
 /**
  * 子智能体和团队执行单元使用的非交互式单轮调用工具。
@@ -214,8 +212,8 @@ class QueryTurn<TToolContext extends QueryTurnToolContext = QueryTurnToolContext
           connectionContinuationRecoveries += 1
         }
         const maxAttempts = outputWasTruncated
-          ? MaxQueryOutputTruncationRecoveryAttempts
-          : MaxQueryStreamContinuationRecoveryAttempts
+          ? AgentTuning.loop.outputTruncationRecoveryAttempts
+          : AgentTuning.loop.streamContinuationRecoveryAttempts
         const appendedAssistant = this.appendInterruptedStreamRecoveryMessages(
           args.history,
           partial,
@@ -569,8 +567,9 @@ class QueryTurn<TToolContext extends QueryTurnToolContext = QueryTurnToolContext
     // 已接受的 tool call 可能已经产生副作用且没有完整 tool-result，不能自动重放。
     if (turnState?.hasToolUse) return false
     if (isEmpty(partial.assistantContent) && !partial.hasPendingToolCalls) return false
-    if (outputWasTruncated) return recoveryAttempts < MaxQueryOutputTruncationRecoveryAttempts
-    if (recoveryAttempts >= MaxQueryStreamContinuationRecoveryAttempts) return false
+    if (outputWasTruncated)
+      return recoveryAttempts < AgentTuning.loop.outputTruncationRecoveryAttempts
+    if (recoveryAttempts >= AgentTuning.loop.streamContinuationRecoveryAttempts) return false
     return this.connectionRetryHelper.isTransientConnectionError(AppError.from(error))
   }
 

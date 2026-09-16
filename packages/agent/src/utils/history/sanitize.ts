@@ -19,8 +19,10 @@ import {
   ModelToolResultMaxSerializedLength,
   serializeToolResultForModel,
 } from '../tools/tool-result-serialization'
+import { AgentTuning } from '../tuning'
 
-const MaxRecentToolResultContentMessagesToKeep = 1
+/** 清洗历史时保留最近几条带工具结果正文的消息，值在 `AgentTuning.tools.recentToolResultContentMessages`。 */
+const MaxRecentToolResultContentMessagesToKeep = AgentTuning.tools.recentToolResultContentMessages
 
 const HistoricalImagePlaceholder =
   '[historical image bytes omitted only from this later provider replay; the image may have been visible in its original turn]'

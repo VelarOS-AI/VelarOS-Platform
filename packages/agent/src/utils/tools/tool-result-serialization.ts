@@ -16,7 +16,9 @@ import { toOptional } from "@velaros-ai/core/utils/nullish";
 import { optionalWhenLazy } from "@velaros-ai/core/utils/optionalWhen";
 import { readFirstString } from "@velaros-ai/core/utils/unknownJsonRecord";
 
+import { AgentToolLimits } from '../../contract/constants.js'
 import type { SerializationHints,ToolResultCompactionLimits } from '../../types/tools.js'
+import { AgentTuning } from '../tuning'
 
 import { fitProjectReadsForModel, hasProjectSourceWindows } from './project-read-serialization';
 import { projectToolInputForHistory } from './tool-input-history-projection';
@@ -24,15 +26,16 @@ import { projectToolInputForHistory } from './tool-input-history-projection';
 // 2026-07 真机取证（Downloads 整理会话 9 轮空转）后校准：8_000/50 会把一次 137 条目录列表
 // 裁成 50 条,模型被迫 grep 分批+三连 recall 补查,一个 ls 级任务烧 9 轮。上限对齐业界
 // agent CLI 的单发预算（~30K 字符）;历史膨胀由注意力路由/微压缩按压力回收,不在写入时预裁。
-export const ModelToolResultMaxSerializedLength = 32_000;
+// 值在 AgentToolLimits.payload.modelToolResultChars（写进工具结果句柄说明，模型看得到）。
+export const ModelToolResultMaxSerializedLength: number = AgentToolLimits.payload.modelToolResultChars;
 
 const ModelToolResultLimits: ToolResultCompactionLimits = {
   maxSerializedLength: ModelToolResultMaxSerializedLength,
   maxStringLength: 2_000,
-  maxDepth: 8,
+  maxDepth: AgentTuning.tools.modelResultDepth,
   // 条目裁剪只是「海量小条目」的兜底,真正的预算闸门是 maxSerializedLength。
   // 曾为 12/50:与工具自身 truncated:false 矛盾、静默否决模型显式 limit（铁律⑦）,已放宽。
-  maxArrayItems: 400,
+  maxArrayItems: AgentTuning.tools.modelResultArrayItems,
   preserveLargeContent: false,
 };
 
@@ -44,8 +47,8 @@ const ModelToolResultLimits: ToolResultCompactionLimits = {
 const RecallToolResultLimits: ToolResultCompactionLimits = {
   maxSerializedLength: 400_000,
   maxStringLength: 16_000,
-  maxDepth: 12,
-  maxArrayItems: 5_000,
+  maxDepth: AgentTuning.tools.recallResultDepth,
+  maxArrayItems: AgentTuning.tools.recallResultArrayItems,
   preserveLargeContent: true,
 };
 
@@ -54,15 +57,15 @@ const ToolSpaceResultOps = new Set(["find", "page", "map", "read", "replace"]);
 const ToolSpaceModelResultLimits = {
   maxSerializedLength: 48_000,
   maxStringLength: 2_000,
-  maxDepth: 18,
-  maxArrayItems: 80,
+  maxDepth: AgentTuning.tools.toolSpaceResultDepth,
+  maxArrayItems: AgentTuning.tools.toolSpaceResultArrayItems,
 } as const;
 
 const DisplayToolResultLimits: ToolResultCompactionLimits = {
   maxSerializedLength: 60_000,
   maxStringLength: 1_200,
-  maxDepth: 8,
-  maxArrayItems: 20,
+  maxDepth: AgentTuning.tools.displayResultDepth,
+  maxArrayItems: AgentTuning.tools.displayResultArrayItems,
   preserveLargeContent: true,
 };
 

@@ -24,7 +24,7 @@ import { AppError } from '@velaros-ai/core/error'
 import type { JsonlParseResult } from '../../types/ledgers.js'
 
 /** JSONL 行分隔符的字节值(`\n` = 0x0A)；用于字节级偏移计算(canonical JSON 内部的换行已转义成 `\\n`，不会撞到)。 */
-const LINE_FEED_BYTE = 0x0a
+const LINE_FEED_BYTE = '\n'.charCodeAt(0)
 
 /** JSONL 行分隔符：写入恒以此结尾，便于崩溃时区分「完整行」与「半截尾行」。 */
 export const JSONL_LINE_SEPARATOR = '\n'

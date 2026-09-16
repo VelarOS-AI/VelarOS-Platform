@@ -65,10 +65,10 @@ class ToolContractExampleRegistry implements ToolContractExampleRegistryApi {
   }
 }
 
-const DefaultToolContractExampleRegistry = new ToolContractExampleRegistry()
+/** 进程内共享的那一份示例登记表：工具定义端写入，描述渲染端读出。 */
+export const DefaultToolContractExampleRegistry: ToolContractExampleRegistry = new ToolContractExampleRegistry()
 
 export {
-  DefaultToolContractExampleRegistry,
   renderToolExampleInputs,
   serializeToolExampleInput,
   ToolContractExampleRegistry,

@@ -3,6 +3,7 @@ import { type AppError } from '@velaros-ai/core/error'
 import { readStringScalar } from '@velaros-ai/core/utils/unknownJsonRecord'
 
 import type { ErrorCauseRecord, RuntimeToolIssue, ToolFailureBuildOptions,ToolFailureResult, ToolSpaceRecoveryGuide } from '../../types/tools.js'
+import { AgentTuning } from '../tuning'
 
 
 /**
@@ -53,30 +54,27 @@ function extractNestedSuggestedNextAction(error: unknown): LooseOptional<string>
   return null
 }
 
+// 失败 details 的四条闸（数组项数、对象键数、字符串长度、深度）在 AgentTuning.tools.failureDetails*：
 // cause 链上任意独立包（Project 等）都可能带回几十上百条 diagnostics 或超长字符串；
-// 这里的数值是专为失败 details 选的——比 toolResultSerialization.ts 的模型工具结果档
+// 这四个值是专为失败 details 选的——比 toolResultSerialization.ts 的模型工具结果档
 // （maxArrayItems 400）严格得多，因为失败 details 会被直接持久化为工具结果的一部分，
 // 裁掉的条目在当前边界内不可召回（截断发生在持久化之前，没有留存可续读的原始数据）；
 // 只做体积/深度兜底，不追求语义完整。标记键特意不用 __truncatedItems——那是
 // ContextRetrieval 工具（见 tool-library/builtin/ContextRetrieval.tool.ts）约定的
 // 续读协议标记，模型看到它会尝试用 context:recall + jsonPath + nextOffset 续读；
 // 这里没有 jsonPath/nextOffset，续读只会白费一个回合，必须用不同的键名避免模型误判。
-const MaxDetailsArrayItems = 10
-const MaxDetailsObjectKeys = 50
-const MaxDetailsStringLength = 2_000
-const MaxDetailsDepth = 6
 
 /**
- * 递归把领域错误 details 裁成可安全 JSON 化的有界值：长字符串截到 MaxDetailsStringLength 并补省略号、BigInt 转 `123n` 形式、
- * 数组只留前 MaxDetailsArrayItems 项并追加 `__omittedItems` 计数、对象只留前 MaxDetailsObjectKeys 个键并写 `__truncatedKeys`/`__originalKeyCount`、
- * 超过 MaxDetailsDepth 换成占位串、循环引用换成 `[circular reference omitted]`。
+ * 递归把领域错误 details 裁成可安全 JSON 化的有界值：长字符串截到 AgentTuning.tools.failureDetailsStringChars 并补省略号、BigInt 转 `123n` 形式、
+ * 数组只留前 AgentTuning.tools.failureDetailsArrayItems 项并追加 `__omittedItems` 计数、对象只留前 AgentTuning.tools.failureDetailsObjectKeys 个键并写 `__truncatedKeys`/`__originalKeyCount`、
+ * 超过 AgentTuning.tools.failureDetailsDepth 换成占位串、循环引用换成 `[circular reference omitted]`。
  * 有 `toJSON` 的对象（Date/URL 等）先走 toJSON 再裁（toJSON 自己抛错则降级为不支持对象标记），非纯对象直接标记类名丢弃。
  * 裁掉的内容在这一层不可召回——截断发生在结果落盘之前，所以标记键刻意避开 `__truncatedItems`（那是 context:recall 的续读协议标记，模型看到会白跑一轮）。
  */
 function boundDetailsValue(value: unknown, depth: number, seen: WeakSet<object>): unknown {
   if (isString(value))
-    return value.length > MaxDetailsStringLength
-      ? `${value.slice(0, MaxDetailsStringLength)}…`
+    return value.length > AgentTuning.tools.failureDetailsStringChars
+      ? `${value.slice(0, AgentTuning.tools.failureDetailsStringChars)}…`
       : value
 
   // BigInt 是 JSON.stringify 会直接抛错的少数几种基础类型，其余基础类型（number/boolean/
@@ -87,7 +85,7 @@ function boundDetailsValue(value: unknown, depth: number, seen: WeakSet<object>)
 
   if (seen.has(value)) return '[circular reference omitted]'
 
-  if (depth >= MaxDetailsDepth)
+  if (depth >= AgentTuning.tools.failureDetailsDepth)
     return isArray(value)
       ? `[array omitted at depth limit: ${value.length} items]`
       : '[object omitted at depth limit]'
@@ -96,11 +94,11 @@ function boundDetailsValue(value: unknown, depth: number, seen: WeakSet<object>)
 
   if (isArray(value)) {
     const items = value
-      .slice(0, MaxDetailsArrayItems)
+      .slice(0, AgentTuning.tools.failureDetailsArrayItems)
       .map((item) => boundDetailsValue(item, depth + 1, seen))
-    if (value.length > MaxDetailsArrayItems) {
+    if (value.length > AgentTuning.tools.failureDetailsArrayItems) {
       items.push({
-        __omittedItems: value.length - MaxDetailsArrayItems,
+        __omittedItems: value.length - AgentTuning.tools.failureDetailsArrayItems,
         originalLength: value.length,
       })
     }
@@ -132,11 +130,11 @@ function boundDetailsValue(value: unknown, depth: number, seen: WeakSet<object>)
 
   const entries = Object.entries(value)
   const record: Record<string, unknown> = {}
-  for (const [key, nestedValue] of entries.slice(0, MaxDetailsObjectKeys)) {
+  for (const [key, nestedValue] of entries.slice(0, AgentTuning.tools.failureDetailsObjectKeys)) {
     record[key] = boundDetailsValue(nestedValue, depth + 1, seen)
   }
-  if (entries.length > MaxDetailsObjectKeys) {
-    record.__truncatedKeys = entries.length - MaxDetailsObjectKeys
+  if (entries.length > AgentTuning.tools.failureDetailsObjectKeys) {
+    record.__truncatedKeys = entries.length - AgentTuning.tools.failureDetailsObjectKeys
     record.__originalKeyCount = entries.length
   }
   seen.delete(value)
@@ -284,7 +282,7 @@ function buildExecutionFailureResult(toolName: string, error: AppError): ToolFai
   // 冒充 Core code；Agent 边界在 UNKNOWN 时显式提升，避免真正原因只躺在 details 里。
   const effectiveCode = error.code === 'UNKNOWN' && nestedReason ? nestedReason : error.code
   // 先对领域 details 单独做有界投影，reason/code 之后再追加——顶层键数截断（
-  // MaxDetailsObjectKeys）只应该丢领域自己的字段，不能连着一起把 reason/code 也挤
+  // AgentTuning.tools.failureDetailsObjectKeys）只应该丢领域自己的字段，不能连着一起把 reason/code 也挤
   // 出前 50 个键（评审 minor：领域 details 顶层键不少于 49 个时会先丢 reason/code，
   // 而 details.reason 往往是唯一还能看到领域原因的地方）。
   const boundedNestedDetails = nestedDetails ? boundToolFailureDetails(nestedDetails) : {}

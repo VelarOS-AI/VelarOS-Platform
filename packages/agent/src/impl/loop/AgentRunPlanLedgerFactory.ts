@@ -50,6 +50,7 @@ class AgentRunPlanLedgerFactory implements AgentRunPlanLedgerFactoryApi {
   }
 }
 
-const agentRunPlanLedgerFactory = new AgentRunPlanLedgerFactory()
+/** 运行计划账本工厂的共享实例：自增序号是实例状态，全进程共用一份。 */
+export const agentRunPlanLedgerFactory: AgentRunPlanLedgerFactoryApi = new AgentRunPlanLedgerFactory()
 
-export { AgentRunPlanLedgerFactory,agentRunPlanLedgerFactory }
+export { AgentRunPlanLedgerFactory }

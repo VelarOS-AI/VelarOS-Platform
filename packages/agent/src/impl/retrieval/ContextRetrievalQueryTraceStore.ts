@@ -2,10 +2,9 @@ import type { ChatContextRetrievalQueryKind, ChatContextRetrievalQueryTraceEntry
 import type { RetrievalQueryRegistration } from '../../types/retrieval.js'
 import { normalizeRetrievalLimit } from '../../utils/retrieval/limits'
 import { chatSearchRanking } from '../../utils/retrieval/ranking'
+import { AgentTuning } from '../../utils/tuning'
 
 import { ContextRetrievalBoundedCounter } from './ContextRetrievalBoundedCounter'
-const DefaultMaxRecentQueryTracesPerSession = 24
-const DefaultMaxQueryCountEntries = 4_096
 
 /** 建 `ContextRetrievalQueryTraceStore` 时给的两个容量上限；两项都可以不传，不传就用本文件的缺省值。 */
 interface ContextRetrievalQueryTraceStoreOptions {
@@ -95,10 +94,10 @@ class ContextRetrievalQueryTraceStore implements ContextRetrievalQueryTraceStore
   constructor(options: ContextRetrievalQueryTraceStoreOptions = {}) {
     this.maxRecentQueryTracesPerSession = normalizeRetrievalLimit(
       options.maxRecentQueryTracesPerSession,
-      DefaultMaxRecentQueryTracesPerSession
+      AgentTuning.retrieval.maxRecentQueryTracesPerSession
     )
     this.queryCounts = new ContextRetrievalBoundedCounter(
-      normalizeRetrievalLimit(options.maxQueryCountEntries, DefaultMaxQueryCountEntries)
+      normalizeRetrievalLimit(options.maxQueryCountEntries, AgentTuning.retrieval.maxQueryCountEntries)
     )
   }
 

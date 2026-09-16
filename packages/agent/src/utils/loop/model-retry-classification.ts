@@ -85,6 +85,36 @@ export function isTransientApiCode(code: unknown): boolean {
   return isString(code) && TransientApiErrorCodes.has(code.trim().toLowerCase())
 }
 
+/** 上下文超限专用错误码：与 NonConnectionApiErrorCodes 的“context”子集对应。 */
+const ContextOverflowErrorCodes = new Set(['context_length_exceeded'])
+
+/** 上下文超限专用消息匹配器：仅命中“窗口/上下文/token 过多”这一类语义。 */
+const ContextOverflowMessageMatchers: RegExp[] = [
+  /context length/i,
+  /context window/i,
+  /maximum context/i,
+  /too many tokens/i,
+  /reduce the length/i,
+  /prompt is too long/i,
+  /input is too long/i,
+  /string too long/i,
+]
+
+/** 标在错误对象上的全局 symbol：说明这个上下文超限错**不能原样重放**（本轮已有可见输出或工具调用）。 */
+export const ContextOverflowReplayUnsafeSymbol = Symbol.for('velaros.contextOverflowReplayUnsafe')
+
+/** 这个 code / type 是不是上下文超限（大小写不计）。 */
+export function isContextOverflowApiCode(code: unknown): boolean {
+  return isString(code) && ContextOverflowErrorCodes.has(code.toLowerCase())
+}
+
+/** 错误文案是不是在说上下文/窗口/token 超限。 */
+export function isContextOverflowApiMessage(message: unknown): boolean {
+  if (!isString(message)) return false
+
+  return ContextOverflowMessageMatchers.some((pattern) => pattern.test(message))
+}
+
 /** 这个 HTTP 状态码是不是瞬态：408 / 425 / 429 与 5xx 都是网关、限流或超时，值得重发。 */
 export function isTransientApiStatus(status: unknown): boolean {
   if (!isNumber(status)) return false

@@ -3,8 +3,10 @@ import { last, toNullable, truncate } from '@velaros-ai/core'
 
 import type { SubAgentSessionRecord,SubAgentStructuredOutputContract, ToolCategoryId } from '../../types/agent.js'
 import type { ResolvedSubAgentTypeConfig,SubAgentDispatchInput, SubAgentResumeBriefing } from '../../types/delegation.js'
+import { AgentTuning } from '../tuning'
 
-const ResumeFailureReasonMaxChars = 200
+/** 续跑失败原因带进下一轮指令的字符上限，值在 `AgentTuning.delegation.resumeFailureReasonChars`。 */
+const ResumeFailureReasonMaxChars = AgentTuning.delegation.resumeFailureReasonChars
 
 /** 把调用方带来的附件上下文渲染成一个「附件上下文：」列表段；没有附件时返回 null，让拼装处直接过滤掉这一段。 */
 function formatAttachments(attachments: LooseOptional<readonly string[]>): Nullable<string> {

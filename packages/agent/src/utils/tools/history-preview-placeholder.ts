@@ -3,6 +3,8 @@
 // 本模块不进包的公开出口，格式只是模型可见文本，不是对外契约。
 import { isArray, isPlainObject, isString } from "@velaros-ai/core";
 
+import { AgentTuning } from "../tuning";
+
 // 只锚定开头：嵌套时内层 preview 被截到 160 字符，模型也会把占位头抄进真实参数后接真实内容，
 // 两种情况都不以 "…]" 收尾，按整串匹配会漏掉它们，重放时又被再包一层。
 export const HistoryPreviewPlaceholderHeaderPattern =
@@ -16,8 +18,6 @@ export function historyPreviewPlaceholder(length: number, field: string, preview
     : `[history preview omitted ${length} chars from ${field}; tool received the full value]`;
 }
 
-const MaxPlaceholderArgumentScanDepth = 6;
-const MaxPlaceholderArgumentScanNodes = 2_000;
 
 /**
  * 找出工具参数里「以历史占位串开头」的字符串字段，返回其路径（如 `edits[0].newText`）。
@@ -33,13 +33,13 @@ export function findHistoryPreviewPlaceholderArgumentPaths(
 
   const visit = (value: unknown, path: string, depth: number): void => {
     visited += 1;
-    if (visited > MaxPlaceholderArgumentScanNodes) return;
+    if (visited > AgentTuning.tools.placeholderScanNodes) return;
     if (isString(value)) {
       if (HistoryPreviewPlaceholderHeaderPattern.test(value.trimStart()))
         paths.push(path);
       return;
     }
-    if (depth >= MaxPlaceholderArgumentScanDepth) return;
+    if (depth >= AgentTuning.tools.placeholderScanDepth) return;
     if (isArray(value)) {
       value.forEach((item, index) => visit(item, `${path}[${index}]`, depth + 1));
       return;

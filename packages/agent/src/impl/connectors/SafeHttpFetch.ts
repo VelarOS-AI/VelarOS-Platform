@@ -91,8 +91,8 @@ class SafeHttpFetch implements SafeHttpFetchApi {
   }
 }
 
-/** 进程内共用的安全门实例。 */
-const safeHttpFetch = new SafeHttpFetch()
+/** 进程内共用的安全门实例（无状态，纯判定）。 */
+export const safeHttpFetch: SafeHttpFetchApi = new SafeHttpFetch()
 
 /** 过门：协议合法、目标不在内网黑名单；返回解析好的 URL。 */
 async function assertSafeHttpFetchUrl(rawUrl: string, options: SafeFetchOptions = {}): Promise<URL> {

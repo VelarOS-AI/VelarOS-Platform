@@ -3,6 +3,7 @@ import type {
   AgentSessionLease,
   AgentSessionLeaseClaim,
 } from '../../contract/requires'
+import { AgentTuning } from '../../utils/tuning'
 
 export class AgentSessionLeaseConflictError extends Error {
   public constructor(
@@ -54,5 +55,5 @@ export function isTerminalAgentBackgroundState(state: AgentBackgroundAgentState)
 }
 
 export function normalizeAgentSessionListLimit(limit?: number): number {
-  return Math.max(1, Math.min(limit ?? 100, 1_000))
+  return Math.max(1, Math.min(limit ?? AgentTuning.records.sessionListDefaultLimit, AgentTuning.records.sessionListMaxLimit))
 }

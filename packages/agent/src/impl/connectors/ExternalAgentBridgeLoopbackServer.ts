@@ -5,12 +5,17 @@ import { type WebSocket, WebSocketServer } from 'ws'
 
 import { isString } from '@velaros-ai/core'
 
+import { ExternalAgentBridgeLimits } from '../../contract/constants.js'
 import { ExternalAgentBridgeProtocolDescriptor } from '../../utils/wire/external-agent-bridge'
 
-export const ExternalAgentBridgeLoopbackHost = '127.0.0.1'
-export const ExternalAgentBridgeDefaultPortStart = 43_137
-export const ExternalAgentBridgeDefaultPortEnd = 43_147
-export const ExternalAgentBridgeMaxSocketPayloadBytes = 32 * 1_024 * 1_024
+/** 只在本机回环地址上监听，等价于 `ExternalAgentBridgeLimits.host`。 */
+export const ExternalAgentBridgeLoopbackHost: string = ExternalAgentBridgeLimits.host
+/** 端口扫描起点（含），等价于 `ExternalAgentBridgeLimits.portRangeStart`。 */
+export const ExternalAgentBridgeDefaultPortStart: number = ExternalAgentBridgeLimits.portRangeStart
+/** 端口扫描终点（含），等价于 `ExternalAgentBridgeLimits.portRangeEnd`。 */
+export const ExternalAgentBridgeDefaultPortEnd: number = ExternalAgentBridgeLimits.portRangeEnd
+/** 单帧字节上限，等价于 `ExternalAgentBridgeLimits.maxSocketPayloadBytes`。 */
+export const ExternalAgentBridgeMaxSocketPayloadBytes: number = ExternalAgentBridgeLimits.maxSocketPayloadBytes
 
 export function isExternalAgentBridgeExtensionOrigin(origin: unknown): origin is string {
   return isString(origin) && /^chrome-extension:\/\/[a-p]{32}$/u.test(origin)

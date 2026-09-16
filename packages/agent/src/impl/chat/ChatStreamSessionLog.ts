@@ -1,10 +1,9 @@
 
 import type { ChatStreamDeltaEnvelope, ChatStreamEvent, ChatStreamEventEnvelope, ChatStreamSnapshot } from '../../types/agent.js'
 import type { ChatStreamLogEntry } from '../../types/chat.js'
+import { AgentTuning } from '../../utils/tuning'
 
 import { type ChatStreamProtocol,chatStreamProtocol } from './ChatStreamProtocol'
-
-const DEFAULT_LOG_CAPACITY = 10_000
 
 /**
  * 主进程侧一条会话流的只追加日志：每投出一段增量或一条事件，就按单调递增的序号留一份，
@@ -40,6 +39,9 @@ export interface ChatStreamSessionLogApi {
 }
 
 export class ChatStreamSessionLog implements ChatStreamSessionLogApi {
+  /** 没给上限时一条会话流留多少条，值在 `AgentTuning.stream.sessionLogCapacity`。 */
+  private static readonly DefaultLogCapacity = AgentTuning.stream.sessionLogCapacity
+
   readonly sessionId: string
 
   private open = true
@@ -58,7 +60,7 @@ export class ChatStreamSessionLog implements ChatStreamSessionLogApi {
   ) {
     this.sessionId = sessionId
     this.appendSequence = options.carrySequence ?? 0
-    this.maxEntries = options.maxEntries ?? DEFAULT_LOG_CAPACITY
+    this.maxEntries = options.maxEntries ?? ChatStreamSessionLog.DefaultLogCapacity
     this.protocol = options.protocol ?? chatStreamProtocol
   }
 

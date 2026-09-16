@@ -4,6 +4,9 @@ import { logRuntime } from '@velaros-ai/core/logger'
 
 import type { ConnectionRetryBlockReason,ConnectionRetryOptions, ContextOverflowReplayUnsafeDetails } from '../../types/loop.js'
 import {
+  ContextOverflowReplayUnsafeSymbol,
+  isContextOverflowApiCode,
+  isContextOverflowApiMessage,
   isNonConnectionApiCode,
   isNonConnectionApiMessage,
   isNonConnectionApiStatus,
@@ -16,33 +19,12 @@ import {
   resolveReplaySafetyBlockReason,
   waitForRetryDelay,
 } from '../../utils/loop/model-retry-classification'
+import { AgentTuning } from '../../utils/tuning'
 
-/** 第一次重试的基础延迟。 */
-const ConnectionRetryBaseDelayMs = 3_000
-/** 退避封顶。超过这条线后不再翻倍，给瞬态故障留足缓冲又不让用户傻等。 */
-const ConnectionRetryMaxDelayMs = 30_000
-/** Jitter 上限（±）。多 worker 同时撞到 endpoint 时分散唤醒，避免羊群效应。 */
-const ConnectionRetryJitterMs = 750
-const ConnectionRetryHeaderMaxDelayMs = 2_147_483_647
-const MaxConnectionRetryAttempts = 5
-const AiSdkMaxRetries = 0
-
-/** 上下文超限专用错误码：与 NonConnectionApiErrorCodes 的“context”子集对应。 */
-const ContextOverflowErrorCodes = new Set(['context_length_exceeded'])
-
-/** 上下文超限专用消息匹配器：仅命中“窗口/上下文/token 过多”这一类语义。 */
-const ContextOverflowMessageMatchers: RegExp[] = [
-  /context length/i,
-  /context window/i,
-  /maximum context/i,
-  /too many tokens/i,
-  /reduce the length/i,
-  /prompt is too long/i,
-  /input is too long/i,
-  /string too long/i,
-]
-
-const ContextOverflowReplayUnsafeSymbol = Symbol.for('velaros.contextOverflowReplayUnsafe')
+/** 一次请求最多重试几次连接类故障；值在 `AgentTuning.retry.maxConnectionAttempts`。 */
+export const MaxConnectionRetryAttempts: number = AgentTuning.retry.maxConnectionAttempts
+/** 交给 AI SDK 自己重试几次；值在 `AgentTuning.retry.aiSdkMaxRetries`（固定 0，重试纪律全在本类）。 */
+export const AiSdkMaxRetries: number = AgentTuning.retry.aiSdkMaxRetries
 
 /**
  * 模型请求的重试判官：一次 provider 请求失败之后，「还能不能原样再发一遍」由它说了算。
@@ -225,20 +207,14 @@ class RetryPolicy implements RetryPolicyApi {
     if (depth > 5 || !isPresent(error)) return false
 
     const fingerprint = this.buildErrorFingerprint(error).toLowerCase()
-    if (ContextOverflowMessageMatchers.some((pattern) => pattern.test(fingerprint))) return true
+    if (isContextOverflowApiMessage(fingerprint)) return true
 
     const appError = AppError.from(error)
-    if (isString(appError.code) && ContextOverflowErrorCodes.has(appError.code.toLowerCase()))
-      return true
+    if (isContextOverflowApiCode(appError.code)) return true
 
     if (isPlainObject(error)) {
       const record = error
-      const code = isString(record.code) ? record.code.toLowerCase() : null
-      const type = isString(record.type) ? record.type.toLowerCase() : null
-      if (
-        (code && ContextOverflowErrorCodes.has(code)) ||
-        (type && ContextOverflowErrorCodes.has(type))
-      )
+      if (isContextOverflowApiCode(record.code) || isContextOverflowApiCode(record.type))
         return true
     }
 
@@ -355,9 +331,9 @@ class RetryPolicy implements RetryPolicyApi {
     if (isPresent(headerDelayMs)) return headerDelayMs
 
     const exponent = Math.max(0, attempt - 1)
-    const exponential = ConnectionRetryBaseDelayMs * 2 ** exponent
-    const capped = Math.min(exponential, ConnectionRetryMaxDelayMs)
-    const jitter = Math.floor((Math.random() * 2 - 1) * ConnectionRetryJitterMs)
+    const exponential = AgentTuning.retry.connectionBaseDelayMs * 2 ** exponent
+    const capped = Math.min(exponential, AgentTuning.retry.connectionMaxDelayMs)
+    const jitter = Math.floor((Math.random() * 2 - 1) * AgentTuning.retry.connectionJitterMs)
     return Math.max(0, capped + jitter)
   }
 
@@ -367,7 +343,7 @@ class RetryPolicy implements RetryPolicyApi {
     if (error instanceof Error) {
       const record = error as Error & Record<string, unknown>
       return (
-        readRetryAfterDelayMsFromRecord(record, ConnectionRetryHeaderMaxDelayMs) ??
+        readRetryAfterDelayMsFromRecord(record, AgentTuning.retry.connectionHeaderMaxDelayMs) ??
         this.readRetryAfterDelayMs(record.cause, depth + 1) ??
         this.readRetryAfterDelayMs(record.error, depth + 1) ??
         this.readRetryAfterDelayMs(record.lastError, depth + 1) ??
@@ -387,7 +363,7 @@ class RetryPolicy implements RetryPolicyApi {
 
     const record = error
     return (
-      readRetryAfterDelayMsFromRecord(record, ConnectionRetryHeaderMaxDelayMs) ??
+      readRetryAfterDelayMsFromRecord(record, AgentTuning.retry.connectionHeaderMaxDelayMs) ??
       this.readRetryAfterDelayMs(record.cause, depth + 1) ??
       this.readRetryAfterDelayMs(record.error, depth + 1) ??
       this.readRetryAfterDelayMs(record.lastError, depth + 1) ??
@@ -497,7 +473,8 @@ class RetryPolicy implements RetryPolicyApi {
 
 }
 
-const sharedRetryPolicy = new RetryPolicy()
+/** 重试判官的共享实例：本身无状态，模块级函数与不持实例的调用方共用一份。 */
+export const sharedRetryPolicy: RetryPolicyApi = new RetryPolicy()
 
 /**
  * 独立的“上下文超限”判定函数：供 agent loop 在不持有 RetryPolicy 实例时直接复用同一套分类规则，
@@ -541,5 +518,5 @@ function isContextOverflowReplayUnsafeDetails(
   return isBoolean(record.hasVisibleOutput) && isBoolean(record.hasToolUse)
 }
 
-export { AiSdkMaxRetries, isContextOverflowError, isContextOverflowReplayUnsafe, markContextOverflowReplayUnsafe, MaxConnectionRetryAttempts, RetryPolicy }
+export { isContextOverflowError, isContextOverflowReplayUnsafe, markContextOverflowReplayUnsafe, RetryPolicy }
 export { RetryPolicy as AgentConnectionRetryHelper }

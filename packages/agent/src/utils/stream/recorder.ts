@@ -3,6 +3,7 @@ import type { TextStreamPart, ToolSet } from 'ai'
 import { isArray, isEmpty, isFiniteNumber,isPlainObject, isPresent, isString, toNullable } from '@velaros-ai/core'
 
 import type { StreamActivityDiagnostics, StreamDiagnostics, StreamDiagnosticsSummary, StreamFinishDiagnostics, StreamFinishReasonDiagnostic, StreamRawChunkDiagnostic, StreamUsageDiagnostics } from '../../types/loop.js'
+import { AgentTuning } from '../tuning'
 
 
 const ProviderCacheWriteInputTokenPaths = [
@@ -31,7 +32,8 @@ function readNestedNumber(value: unknown, path: readonly string[]): Nullable<num
   return readNumber(current)
 }
 
-const MaxRawDiagnosticSamples = 8
+/** 原始流诊断最多采样几片，值在 `AgentTuning.stream.maxRawDiagnosticSamples`。 */
+const MaxRawDiagnosticSamples = AgentTuning.stream.maxRawDiagnosticSamples
 const SilentProviderFinishReasons = new Set(['stop', 'tool_calls'])
 const AbnormalProviderFinishReasonMessages: Record<string, string> = {
   length: 'Provider response may be truncated because the model hit the max output token limit.',

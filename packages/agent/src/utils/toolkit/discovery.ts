@@ -1,5 +1,6 @@
 import { isArray, isString } from '@velaros-ai/core'
 
+import { AgentToolLimits } from '../../contract/constants.js'
 import type { ToolCatalogEntry } from '../../types/agent.js'
 import { ToolCatalogDiscoveryToolName, ToolSchemaDiscoveryToolName } from '../wire/lease'
 
@@ -29,7 +30,7 @@ export const ToolContractDiscoveryDescriptors: readonly ToolCatalogEntry[] = Obj
           type: 'array',
           items: { type: 'string', minLength: 1 },
           minItems: 1,
-          maxItems: 12,
+          maxItems: AgentToolLimits.payload.schemaDiscoveryNames,
         },
       },
       required: ['names'],
@@ -52,5 +53,5 @@ export function readToolSchemaDiscoveryNames(input: Record<string, unknown>): st
         .map((value) => value.trim())
         .filter(Boolean)
     ),
-  ].slice(0, 12)
+  ].slice(0, AgentToolLimits.payload.schemaDiscoveryNames)
 }

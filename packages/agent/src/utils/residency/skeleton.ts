@@ -16,6 +16,7 @@
 import { isArray, isEmpty, isFiniteNumber, isObject, isString } from '@velaros-ai/core'
 
 import type { ContextAnchor, ContextRecord, ContextSkeletonField, ContextSkeletonInput, ContextSkeletonResult } from '../../types/residency.js'
+import { AgentTuning } from '../tuning'
 
 import { compareContextAnchors, normalizeAnchorText, toContextAnchorTexts } from './anchors'
 import { DefaultContextGovernanceConfig } from './governance-config'
@@ -42,8 +43,7 @@ const SkeletonFieldMaxItems: Record<ContextSkeletonField, number> = {
   verification: 3,
 }
 
-/** 单条目最大字符（沿用 v1 `SummarySectionItemLengths` 量级）。 */
-const SkeletonItemMaxChars = 220
+// 单条目最大字符（沿用 v1 `SummarySectionItemLengths` 量级）在 AgentTuning.residency.skeletonItemMaxChars。
 /**
  * 锚点行的默认条数上限。
  *
@@ -52,10 +52,9 @@ const SkeletonItemMaxChars = 220
  * 多出来的 8 条既抬高拒收概率、又根本没进最终产物——两头不讨好。
  */
 const DefaultMaxSkeletonAnchors = DefaultContextGovernanceConfig.distillation.maxRequiredAnchors
-/** 每份摘要最多代表的记录数；每个成员都必须在产物里留下精确召回指针。 */
-export const MaxContextSummaryMembers = 12
-/** 骨架整体字符上限：骨架自己超预算就不叫压缩了。 */
-const MaxSkeletonChars = 3_200
+/** 每份摘要最多代表的记录数；每个成员都必须在产物里留下精确召回指针。值在 AgentTuning.residency.maxContextSummaryMembers。 */
+export const MaxContextSummaryMembers: number = AgentTuning.residency.maxContextSummaryMembers
+// 骨架整体字符上限（骨架自己超预算就不叫压缩了）在 AgentTuning.residency.maxSkeletonChars。
 
 const SkeletonHeaderPrefix = '[context-skeleton'
 
@@ -292,7 +291,7 @@ function hasMarker(lowerLine: string, markers: readonly string[]): boolean {
 
 /**
  * 往某个栏目压一条条目，顺带做完全部归一与限额：把 ` | ` 换成 ` / `（管道是栏内分隔符，正文里的管道会串格式）、
- * 压平空白，归一后为空直接丢弃；超过 `SkeletonItemMaxChars` 的截断并补省略号。
+ * 压平空白，归一后为空直接丢弃；超过 `AgentTuning.residency.skeletonItemMaxChars` 的截断并补省略号。
  * 栏目已满额或已有一模一样的条目时**静默跳过**，既不报错也不替换——骨架是尽力而为的规则产物，先到先得。
  */
 function pushSkeletonItem(
@@ -303,8 +302,8 @@ function pushSkeletonItem(
   const normalized = raw.replace(/\s+\|\s+/g, ' / ').replace(/\s+/g, ' ').trim()
   if (!normalized) return
 
-  const item = normalized.length > SkeletonItemMaxChars
-    ? `${normalized.slice(0, SkeletonItemMaxChars - 1)}…`
+  const item = normalized.length > AgentTuning.residency.skeletonItemMaxChars
+    ? `${normalized.slice(0, AgentTuning.residency.skeletonItemMaxChars - 1)}…`
     : normalized
   const bucket = fields[field]
   if (bucket.length >= SkeletonFieldMaxItems[field] || bucket.includes(item)) return
@@ -323,17 +322,17 @@ function renderSkeletonField(field: ContextSkeletonField, items: readonly string
 }
 
 /**
- * 把骨架文本夹进 `MaxSkeletonChars`（骨架自己超预算就不叫压缩了），超了就截断并补省略号。
+ * 把骨架文本夹进 `AgentTuning.residency.maxSkeletonChars`（骨架自己超预算就不叫压缩了），超了就截断并补省略号。
  * 要害在于**召回行永不被截**：有 `protectedTail` 时先从总预算里扣掉它，只截正文，最后把整行原样接回去。
  * 反过来（先拼好再一刀切）会把末尾的召回指针切掉，被折叠的内容就真的取不回来了——那是有损，不是压缩。
  */
 function clampSkeletonText(body: string, protectedTail: Nullable<string>): string {
   if (!protectedTail) {
-    if (body.length <= MaxSkeletonChars) return body
-    return `${body.slice(0, MaxSkeletonChars - 1)}…`
+    if (body.length <= AgentTuning.residency.maxSkeletonChars) return body
+    return `${body.slice(0, AgentTuning.residency.maxSkeletonChars - 1)}…`
   }
 
-  const bodyBudget = Math.max(1, MaxSkeletonChars - protectedTail.length - 1)
+  const bodyBudget = Math.max(1, AgentTuning.residency.maxSkeletonChars - protectedTail.length - 1)
   const clampedBody =
     body.length <= bodyBudget ? body : `${body.slice(0, Math.max(0, bodyBudget - 1))}…`
   return `${clampedBody}\n${protectedTail}`

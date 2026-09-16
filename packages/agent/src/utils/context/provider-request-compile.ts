@@ -10,14 +10,10 @@ import { DefaultResidencyCharsPerToken } from '../residency/context-record'
 import { buildContextDashboardMessage } from '../residency/dashboard'
 import { estimateMessageBudgetChars } from '../residency/message-facts'
 import { rewriteCanonicalToolReferences } from '../tools/tool-identity'
+import { AgentTuning } from '../tuning'
 
 import { resolveToolSchemaReserve } from './budget-stage'
 import { estimateContextUsage } from './context-usage'
-
-export const MaxHistoryCharsPerToken = 8
-
-export /** 密度的合法区间：极端 tokenizer / 异常样本也不得把治理器推到无穷敏感或完全失明。 */
-const MinHistoryCharsPerToken = 0.25
 
 /**
  * 发送面传输装饰：prompt-cache 断点。
@@ -76,7 +72,7 @@ export function measureGovernanceRuler(
 
 /**
  * 实测本轮历史的「字符 / token」密度：拿同一把分词尺与校准系数对这批消息估一次 token，再用正文字符数去除。
- * 估出 0 token（消息为空等）时回落到 DefaultResidencyCharsPerToken；结果夹在 MinHistoryCharsPerToken 与 MaxHistoryCharsPerToken 之间，
+ * 估出 0 token（消息为空等）时回落到 DefaultResidencyCharsPerToken；结果夹在 AgentTuning.context 的密度上下界之间，
  * 免得极端 tokenizer 或异常样本把治理器推到无穷敏感或彻底失明。
  * 必须实测而不能固定按 4 折算——中文与结构化载荷会被固定口径低估数倍，治理 epoch 就会等到模型已被旧轨迹淹没才触发。
  */
@@ -93,8 +89,8 @@ export function resolveMeasuredCharsPerToken(
   if (estimate.estimatedTokens <= 0) return DefaultResidencyCharsPerToken
 
   return Math.min(
-    MaxHistoryCharsPerToken,
-    Math.max(MinHistoryCharsPerToken, bodyChars / estimate.estimatedTokens)
+    AgentTuning.context.maxHistoryCharsPerToken,
+    Math.max(AgentTuning.context.minHistoryCharsPerToken, bodyChars / estimate.estimatedTokens)
   )
 }
 

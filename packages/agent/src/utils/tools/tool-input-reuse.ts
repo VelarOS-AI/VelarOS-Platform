@@ -4,7 +4,7 @@ import { isNumber, isPlainObject, isString, isUndefined, optionalWhen } from '@v
 import { AppError } from '@velaros-ai/core/error'
 
 import type { ContextPayloadStore } from '../../contract/requires.js'
-import type { AttemptInput, ToolAttemptOutcome, ToolInputReuseContext } from '../../types/tools.js'
+import type { AttemptInput, ToolAttemptOutcome, ToolInputReuse, ToolInputReuseContext } from '../../types/tools.js'
 
 /** 复用信封里业务字段的描述后缀：provider 只看得到这一层，必须在这里说清两种调用各自的要求。 */
 export const RequiredUnlessReuse = '新调用必填；用 reuse 复用失败调用时省略。'
@@ -20,6 +20,34 @@ export const ForbiddenInputChangeKeys: ReadonlySet<string> = new Set([
   'prototype',
   'constructor',
 ])
+
+/** 复用信封的根 schema：带 reuse 时根上只能再有 changes，业务字段从被复用的那次调用恢复后重新校验。 */
+export const ToolInputReuseSchema = z.strictObject({
+  reuse: z.string().min(1).describe('原样复制失败回执 inputReuse.reuse（attempt:…）；带 reuse 时根上只能再有 changes，其余参数从该次调用恢复后重新校验。'),
+  changes: z
+    .array(
+      z
+        .strictObject({
+          op: z.enum(['set', 'remove']),
+          path: z
+            .array(z.union([z.string(), z.number().int().nonnegative()]))
+            .min(1)
+            .max(32),
+          value: z.unknown().optional(),
+        })
+        .superRefine((change, context) => {
+          if ((change.op === 'set') !== Object.hasOwn(change, 'value'))
+            context.addIssue({
+              code: 'custom',
+              path: ['value'],
+              message: 'op 为 set 时必须给 value；op 为 remove 时只给 path，不要带 value。',
+            })
+        })
+    )
+    .min(1)
+    .max(100)
+    .describe('路径按数组给出，如 ["items", 0, "name"]；使用原参数的实际字段路径，其他参数原样保留。'),
+}) satisfies z.ZodType<ToolInputReuse>
 
 /** 复用信封里业务字段一律可省；原本必填的字段在描述里写明两种调用各自的要求，provider 只看得到这一层。 */
 export function reusableInputField(field: z.ZodType): z.ZodType {

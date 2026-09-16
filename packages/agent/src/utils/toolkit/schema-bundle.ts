@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { isArray, isEmpty, isPlainObject,isRecord, isString } from '@velaros-ai/core'
 
 import type { CreateToolSchemaBundleOptions, SchemaBundleContext,ToolSchemaBundle, ToolSchemaSource } from '../../types/toolkit.js'
+import { AgentTuning } from '../tuning'
 
 const BundleSharedSchemaRefPrefix = '#/$defs/'
 
@@ -62,7 +63,8 @@ export function createToolSchemaBundle(
 ): ToolSchemaBundle {
   const sharedSchemaId = options.sharedSchemaId ?? '__shared'
   const sharedSchemaExternalUri = options.sharedSchemaExternalUri ?? 'tool-contract-shared'
-  const inlineSharedDefMaxChars = options.maxInlineSharedDefChars ?? 120
+  const inlineSharedDefMaxChars =
+    options.maxInlineSharedDefChars ?? AgentTuning.toolkit.inlineSharedDefChars
   const context: SchemaBundleContext = {
     sharedSchemaRefPrefix: `${sharedSchemaExternalUri}#/$defs/`,
     bundleSharedSchemaRefPrefix: BundleSharedSchemaRefPrefix,

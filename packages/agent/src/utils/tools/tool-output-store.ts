@@ -3,15 +3,10 @@ import { AppError } from '@velaros-ai/core/error'
 
 import type { ContextPayloadRecord } from '../../types/context.js'
 import type { KernelStoredToolOutput, ProjectKernelToolOutputInput } from '../../types/tools.js'
+import { AgentTuning } from '../tuning'
 
 import { fitProjectReadsForModel, hasProjectSourceWindows } from './project-read-serialization'
 import { ModelToolResultMaxSerializedLength } from './tool-result-serialization'
-
-export // 当轮句柄化阈值：低于此值的新鲜结果原样直达模型（模型档序列化预算 32K,见
-// toolResultSerialization.ts）。曾为 12_000——比模型档预算还小,导致 12.8K 的目录列表
-// 当轮变存根、再被下游对半砍成 ~4K 头尾拼接,模型三连 recall 也补不齐（真机 9 轮空转取证）。
-// 保持略低于模型档预算,让超大结果走「摘要+可召回句柄」而非盲目对半砍。
-const DefaultProjectionChars = 24_000
 
 export const ProjectionTruncationMarker = '...'
 
@@ -31,12 +26,16 @@ export function isLowSurrogate(codeUnit: number): boolean {
 }
 
 /**
- * 把调用方给的当轮投影字符预算收敛成合法值：缺省或非有限数（NaN/Infinity）一律回落到 DefaultProjectionChars，
- * 其余向下取整并夹到不小于 0（传 0 即「全部句柄化，正文一个字都不直达模型」）。
+ * 把调用方给的当轮投影字符预算收敛成合法值：缺省或非有限数（NaN/Infinity）一律回落到
+ * `AgentTuning.tools.outputProjectionChars`，其余向下取整并夹到不小于 0（传 0 即「全部句柄化，正文一个字都不直达模型」）。
+ *
+ * 这条缺省是**当轮句柄化阈值**：低于它的新鲜结果原样直达模型。曾为 12_000——比模型档序列化预算还小，
+ * 导致 12.8K 的目录列表当轮变存根、再被下游对半砍成 ~4K 头尾拼接，模型三连 recall 也补不齐（真机 9 轮空转取证）。
+ * 保持略低于模型档预算，让超大结果走「摘要+可召回句柄」而非盲目对半砍。
  */
 export function normalizeProjectionChars(value: LooseOptional<number>): number {
-  const candidate = value ?? DefaultProjectionChars
-  if (!isFiniteNumber(candidate)) return DefaultProjectionChars
+  const candidate = value ?? AgentTuning.tools.outputProjectionChars
+  if (!isFiniteNumber(candidate)) return AgentTuning.tools.outputProjectionChars
   return Math.max(0, Math.floor(candidate))
 }
 

@@ -1,11 +1,13 @@
 import { isEmpty, truncate } from "@velaros-ai/core";
 
 import type { PromptSegmentDefinition, RuntimePromptSnapshot, RuntimePromptToolCategorySummary } from '../../types/guidance.js'
+import { AgentTuning } from '../tuning'
 
 import { createCorePromptSegment, createSelectedSkillPromptSegment, createSkillPromptSegment, createTextPromptSegment, formatLabelList, hasAnyRuntimeTool, hasAnyRuntimeToolAvailable, hasRuntimeTool, PromptSegmentPriority } from "./shared";
 import { createTaskRuntimePromptSegments } from "./task";
 
-const MaxCustomSubAgentPromptEntries = 12;
+/** 提示词里最多列几个自定义子 Agent，值在 `AgentTuning.prompt.maxCustomSubAgentEntries`。 */
+const MaxCustomSubAgentPromptEntries = AgentTuning.prompt.maxCustomSubAgentEntries;
 
 /**
  * 渲染"自定义子 Agent 有哪些"那一行（id、base、说明），最多列 `MaxCustomSubAgentPromptEntries` 个，

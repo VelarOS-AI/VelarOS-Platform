@@ -25,11 +25,7 @@ import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
 import type { ContextDistiller, ContextDistillProduct, ContextDistillRequest, ContextDistillTotals, ContextGovernanceConfig } from '../../types/residency.js'
 import { buildDistillProduct, buildSkeletonFallbackProduct, createEmptyDistillTotals } from '../../utils/residency/distill'
-
-const log = logRuntime.tag('ContextDistillRunner')
-
-/** 等应用的产物上限：产物本身占内存，且积压超过几个就说明 epoch 根本没在跑。 */
-const DefaultMaxPendingProducts = 4
+import { AgentTuning } from '../../utils/tuning'
 
 /** 建 `ContextDistillRunner` 时一次性交的三项：怎么拿到蒸馏器、这个 runner 属于哪个会话、积压上限。 */
 export interface ContextDistillRunnerOptions {
@@ -76,6 +72,7 @@ export interface ContextDistillRunnerApi {
 }
 
 export class ContextDistillRunner implements ContextDistillRunnerApi {
+  private readonly log = logRuntime.tag('ContextDistillRunner')
   private readonly timers = new TimerScope({ name: 'ContextDistillRunner' })
   private readonly queue: ContextDistillRequest[] = []
   private readonly pending: ContextDistillProduct[] = []
@@ -84,7 +81,7 @@ export class ContextDistillRunner implements ContextDistillRunnerApi {
   private readonly maxPending: number
 
   public constructor(private readonly options: ContextDistillRunnerOptions) {
-    this.maxPending = Math.max(1, Math.floor(options.maxPendingProducts ?? DefaultMaxPendingProducts))
+    this.maxPending = Math.max(1, Math.floor(options.maxPendingProducts ?? AgentTuning.residency.maxPendingDistillProducts))
   }
 
   public get maxPendingProducts(): number {
@@ -188,12 +185,12 @@ export class ContextDistillRunner implements ContextDistillRunnerApi {
       this.settle(buildDistillProduct({ request, rawText: outcome }))
     } catch (error) {
       if (isTimeoutError(error)) {
-        log.warn('蒸馏超时，回落 I1 骨架', { epoch: request.epoch, timeoutMs })
+        this.log.warn('蒸馏超时，回落 I1 骨架', { epoch: request.epoch, timeoutMs })
         this.settle(buildDistillProduct({ request, rawText: null, failure: 'timeout' }))
         return
       }
 
-      log.warn('蒸馏调用失败，回落 I1 骨架', {
+      this.log.warn('蒸馏调用失败，回落 I1 骨架', {
         epoch: request.epoch,
         error: AppError.getMessage(error),
       })

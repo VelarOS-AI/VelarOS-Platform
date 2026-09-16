@@ -5,17 +5,16 @@ import type { BuildPromptRunPlanInput,CapabilityEvidenceSnapshot, ContextRunPlan
 import { estimateBlockTokens } from '../context/context-ledger'
 import { allocateContextWorkingSetBudget, resolveContextWorkingSetZoneCharBudget } from '../context/context-working-set-budget-governor'
 import { RunProfileDefinitions } from '../runner/runtime-profiles'
+import { AgentTuning } from '../tuning'
 
 import {
   contextDegradeStaircaseLength,
   resolveContextDegradeAction,
 } from './context-degrade-ladder'
 
-const DefaultAgentContextWindow = 128_000
-
 /** 排一轮的上下文预算计划：定窗口、按分区分预算、算工具 schema 字符额度，并给出这轮的压力口径。 */
 function planContextRun(input: PlanContextRunInput): ContextRunPlan {
-  const contextWindow = input.contextWindow ?? DefaultAgentContextWindow
+  const contextWindow = input.contextWindow ?? AgentTuning.loop.unknownContextWindowTokens
   const zoneAllocation = allocateContextWorkingSetBudget({
     contextWindow,
     ledger: buildContextLedger(input),

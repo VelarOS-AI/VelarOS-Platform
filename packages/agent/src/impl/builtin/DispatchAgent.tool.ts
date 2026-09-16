@@ -1,13 +1,14 @@
 import { AppError } from '@velaros-ai/core/error'
 
-import type { DispatchAgentInput } from '../../types/builtin.js'
+import { AgentToolNames } from '../../contract/constants.js'
+import type { DispatchAgentInput, VelaTool } from '../../types/builtin.js'
 import { defineVelaTool } from '../../utils/builtin/define-agent-tool'
 import { dispatchAgentSchema } from '../../utils/builtin/dispatch-schemas'
 
 import { AgentDispatchCapability } from './Capabilities'
 
-const dispatchAgent = defineVelaTool<DispatchAgentInput>({
-  name: 'agent:dispatch',
+export const dispatchAgent: VelaTool<DispatchAgentInput> = defineVelaTool<DispatchAgentInput>({
+  name: AgentToolNames.agentDispatch,
   role: 'control',
   category: 'agent-control',
   summary: '在当前执行作用域中派发独立 sub-agent。',
@@ -106,8 +107,6 @@ const dispatchAgent = defineVelaTool<DispatchAgentInput>({
   },
 })
 
-const dispatchAgentTools = {
-  'agent:dispatch': dispatchAgent,
+export const dispatchAgentTools: { 'agent:dispatch': typeof dispatchAgent } = {
+  [AgentToolNames.agentDispatch]: dispatchAgent,
 }
-
-export { dispatchAgentTools }

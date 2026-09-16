@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
-import type { HandoffContextInput } from '../../types/builtin.js'
+import { AgentToolLimits, AgentToolNames } from '../../contract/constants.js'
+import type { HandoffContextInput, VelaTool } from '../../types/builtin.js'
 import { defineVelaTool } from '../../utils/builtin/define-agent-tool'
 import {
   renderParameterDescription as parameterDescription,
@@ -8,14 +9,13 @@ import {
 
 import { AgentUserInteractionCapability } from './Capabilities'
 
-const HandoffReasonMaxChars = 400
-
-export const handoffContextSchema = z.object({
+/** 交接理由的长度上限模型直接看得见，值在 AgentToolLimits.context.handoffReasonChars。 */
+export const handoffContextSchema: z.ZodType<HandoffContextInput> = z.object({
   reason: z
     .string()
     .trim()
     .min(1)
-    .max(HandoffReasonMaxChars)
+    .max(AgentToolLimits.context.handoffReasonChars)
     .describe(
       parameterDescription({
         description: '为什么当前会话已经不适合继续，以及交接后应继续处理什么。',
@@ -24,8 +24,8 @@ export const handoffContextSchema = z.object({
     ),
 })
 
-const handoffContext = defineVelaTool<HandoffContextInput>({
-  name: 'context:handoff',
+export const handoffContext: VelaTool<HandoffContextInput> = defineVelaTool<HandoffContextInput>({
+  name: AgentToolNames.contextHandoff,
   role: 'control',
   category: 'context',
   summary: '请求用户批准把当前任务交接到新会话；只有显式调用才会显示批准/拒绝卡。',
@@ -64,8 +64,6 @@ const handoffContext = defineVelaTool<HandoffContextInput>({
   },
 })
 
-const contextHandoffTools = {
-  'context:handoff': handoffContext,
+export const contextHandoffTools: { 'context:handoff': VelaTool<HandoffContextInput> } = {
+  [AgentToolNames.contextHandoff]: handoffContext,
 }
-
-export { contextHandoffTools }

@@ -50,7 +50,6 @@ import { KernelSessionRunInterruptedError } from '../errors/KernelSessionRunInte
 
 
 
-const KernelSessionDemandResolved: KernelSessionDemandSettlement = { status: 'resolved' }
 
 
 
@@ -92,6 +91,9 @@ export interface KernelSessionRunCoordinatorApi {
 }
 
 export class KernelSessionRunCoordinator implements KernelSessionRunCoordinatorApi {
+  /** 「这次诉求已经兑现」的定局结论：内容恒定，全实例共用一份。 */
+  private static readonly KernelSessionDemandResolved: KernelSessionDemandSettlement = { status: 'resolved' }
+
   private readonly entries = new Map<string, KernelSessionRunEntry>()
   private readonly interruptSeqBySession = new Map<string, number>()
 
@@ -180,7 +182,7 @@ export class KernelSessionRunCoordinator implements KernelSessionRunCoordinatorA
     Promise.resolve()
       .then(() => demand.drain(createDrainTarget(sessionId, demand)))
       .then(
-        () => this.settle(sessionId, entry, demand, KernelSessionDemandResolved),
+        () => this.settle(sessionId, entry, demand, KernelSessionRunCoordinator.KernelSessionDemandResolved),
         (error: unknown) => this.settle(sessionId, entry, demand, {
           status: 'rejected',
           error,

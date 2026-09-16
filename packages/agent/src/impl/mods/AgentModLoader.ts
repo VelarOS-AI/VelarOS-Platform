@@ -25,13 +25,11 @@ import { AgentModContributionAxisNames, listAgentModDeclaredAxes, parseAgentModM
 import { AgentModRegistry } from './AgentModRegistry'
 import { AgentModHookDispatcher } from './AgentModSeamDispatcher'
 
-const DefaultAllowedTrustLevels: readonly AgentModTrustLevel[] = ['bundled-official']
-
 /** 必须有运行态载荷的轴：缺绑定=拒载（绝不静默降级成空贡献）。 */
-const PayloadRequiredAxes: ReadonlySet<AgentModContributionAxisName> = new Set(['tools', 'hooks'])
+export const PayloadRequiredAxes: ReadonlySet<AgentModContributionAxisName> = new Set(['tools', 'hooks'])
 
 /** 纯数据轴：不接受运行态载荷（代码钩子白名单之外）。 */
-const DataOnlyAxes: ReadonlySet<AgentModContributionAxisName> = new Set([
+export const DataOnlyAxes: ReadonlySet<AgentModContributionAxisName> = new Set([
   'spaces',
   'turnContextSources',
 ])
@@ -110,6 +108,9 @@ class AgentModLoader implements AgentModLoaderApi {
   private readonly rejected: AgentModRejection[] = []
   private readonly diagnostics: AgentModDiagnostic[] = []
 
+  /** 宿主没声明信任级名单时只认随包发布的官方 mod。 */
+  private static readonly DefaultAllowedTrustLevels: readonly AgentModTrustLevel[] = ['bundled-official']
+
   constructor(options: {
     host: AgentModHostProfile
     registry?: AgentModRegistry
@@ -125,7 +126,7 @@ class AgentModLoader implements AgentModLoaderApi {
     })
     this.seams = this.hooks
     this.supportedAxes = new Set(options.host.supportedAxes)
-    this.allowedTrustLevels = new Set(options.host.allowedTrustLevels ?? DefaultAllowedTrustLevels)
+    this.allowedTrustLevels = new Set(options.host.allowedTrustLevels ?? AgentModLoader.DefaultAllowedTrustLevels)
   }
 
   /** 装载一批候选包；重复调用会在既有注册表之上继续追加（id/主键冲突照样拒载）。 */
@@ -470,4 +471,4 @@ class AgentModLoader implements AgentModLoaderApi {
   }
 }
 
-export { AgentModLoader, DataOnlyAxes, PayloadRequiredAxes }
+export { AgentModLoader }

@@ -1,14 +1,13 @@
 import { isEmpty, isNotNull } from '@velaros-ai/core'
 
 import type { TurnContextDelta, TurnContextInspectHint, TurnContextSourceId, TurnContextSourcePeekInput } from '../../types/agent.js'
+import { AgentTuning } from '../../utils/tuning'
 
 
 /** 进程代次：重启后与持久化旧 cursor 不匹配，消费方不回放旧 delta 只重发 anchors。 */
-export const TurnContextProcessGeneration = `g_${Date.now().toString(36)}_${Math.random()
+export const TurnContextProcessGeneration: string = `g_${Date.now().toString(36)}_${Math.random()
   .toString(36)
   .slice(2, 10)}`
-
-let ledgerInstanceSeq = 0
 
 /**
  * 账本实例代次 = 进程代次 + 实例序号。
@@ -19,8 +18,7 @@ let ledgerInstanceSeq = 0
  * 不需要任何额外通知机制。
  */
 export function nextTurnContextLedgerGeneration(): string {
-  ledgerInstanceSeq += 1
-  return `${TurnContextProcessGeneration}.${ledgerInstanceSeq.toString(36)}`
+  return TurnContextLedger.nextGeneration()
 }
 
 /** 往账本里记一条环境变化要填的东西：正文在这一刻就定稿，之后谁都不许重排版。 */
@@ -75,6 +73,15 @@ export interface TurnContextLedgerApi {
  * - peek 为纯内存读取，无任何 IO。
  */
 export class TurnContextLedger implements TurnContextLedgerApi {
+  /** 本进程里已经建过几个账本实例；只由 {@link TurnContextLedger.nextGeneration} 推进。 */
+  private static instanceSeq = 0
+
+  /** 发一个新的账本实例代次：进程代次 + 实例序号。 */
+  public static nextGeneration(): string {
+    TurnContextLedger.instanceSeq += 1
+    return `${TurnContextProcessGeneration}.${TurnContextLedger.instanceSeq.toString(36)}`
+  }
+
   private nextSeq = 1
   private items: TurnContextDelta[] = []
   /** 有淘汰发生时，最旧保留项的 seq；无淘汰为 null。 */
@@ -154,8 +161,10 @@ export class TurnContextLedger implements TurnContextLedgerApi {
   }
 }
 
-export const DefaultLedgerMaxEntries = 100
-export const DefaultMaxSessions = 64
+/** 单条回合上下文账本的条目上限，值在 `AgentTuning.records.turnContextLedgerMaxEntries`。 */
+export const DefaultLedgerMaxEntries: number = AgentTuning.records.turnContextLedgerMaxEntries
+/** 最多同时为多少个会话保留账本，值在 `AgentTuning.records.turnContextMaxSessions`。 */
+export const DefaultMaxSessions: number = AgentTuning.records.turnContextMaxSessions
 
 
 

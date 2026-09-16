@@ -100,6 +100,7 @@ import { resolveReadonlyMode } from '../../utils/delegation/sub-agent-readonly-p
 import { buildSubAgentTaskResult } from '../../utils/delegation/sub-agent-result-builder'
 import { resolveCustomSubAgentTypeConfig, resolveSubAgentTypeConfig } from '../../utils/delegation/sub-agent-type-registry'
 import { resolveAgentExecutionLimits } from '../../utils/loop/execution-limits'
+import { AgentTuning } from '../../utils/tuning'
 import { AgentConnectionRetryHelper } from '../loop/RetryPolicy'
 import type { KernelBackgroundJobManager } from '../records/KernelBackgroundJobManager'
 import type { SubAgentGuidanceRelayRegistry } from '../records/SubAgentGuidanceRelayRegistry'
@@ -112,18 +113,6 @@ import { SubAgentSessionStore } from './SubAgentSessionStore'
 import type { TeamModelRouter } from './TeamModelRouter'
 import type { WriteLeaseCoordinator } from './WriteLeaseCoordinator'
 
-/** 回报给主 Agent 的同厂商可选模型上限：自定义/聚合厂商的目录可能很长，结果里只放前若干个。 */
-const MaxReportedSelectableModels = 24
-
-const SubAgentTransientRetryMaxAttempts = 2
-const DefaultMaxConcurrentSubAgents = 4
-const DefaultMaxSubAgentsPerExecution = 32
-
-/** 派发前就被拦下（没有建线程、或线程已不在）的结果：明确告诉父 Agent 这个 thread_id 续不了。 */
-const UnavailableThreadRetention: SubAgentThreadRetention = Object.freeze({
-  resumable: false,
-  reason: 'not-found',
-})
 
 
 
@@ -201,6 +190,20 @@ export interface SubAgentDispatcherApi {
 }
 
 class SubAgentDispatcher implements SubAgentDispatcherApi {
+  /** 回报给主 Agent 的同厂商可选模型上限：自定义/聚合厂商的目录可能很长，结果里只放前若干个。 */
+  private static readonly MaxReportedSelectableModels = AgentTuning.delegation.maxReportedSelectableModels
+  /** 子 Agent 遇到瞬态故障最多重试几次。 */
+  private static readonly SubAgentTransientRetryMaxAttempts = AgentTuning.delegation.transientRetryMaxAttempts
+  /** 同一时刻最多并发跑几个子 Agent。 */
+  private static readonly DefaultMaxConcurrentSubAgents = AgentTuning.delegation.maxConcurrentSubAgents
+  /** 一次执行里累计最多派发多少个子 Agent。 */
+  private static readonly DefaultMaxSubAgentsPerExecution = AgentTuning.delegation.maxSubAgentsPerExecution
+  /** 派发前就被拦下（没有建线程、或线程已不在）的结果：明确告诉父 Agent 这个 thread_id 续不了。 */
+  private static readonly UnavailableThreadRetention: SubAgentThreadRetention = Object.freeze({
+    resumable: false,
+    reason: 'not-found',
+  })
+
   /** 每个顶层执行独立的并发信号量，避免跨会话/窗口互相阻塞排队。 */
   private readonly semaphores = new Map<string, Semaphore>()
   private readonly dispatchCountByExecution = new Map<string, number>()
@@ -244,7 +247,7 @@ class SubAgentDispatcher implements SubAgentDispatcherApi {
   private resolveConcurrencyLimit(): number {
     return (
       this.configService.systemConfig.advancedRuntime?.maxConcurrentSubAgents ??
-      DefaultMaxConcurrentSubAgents
+      SubAgentDispatcher.DefaultMaxConcurrentSubAgents
     )
   }
 
@@ -279,8 +282,8 @@ class SubAgentDispatcher implements SubAgentDispatcherApi {
     const used = this.dispatchCountByExecution.get(executionKey) ?? 0
     return {
       maxConcurrentSubAgents,
-      maxSubAgentsPerExecution: DefaultMaxSubAgentsPerExecution,
-      remainingDispatchBudget: Math.max(0, DefaultMaxSubAgentsPerExecution - used),
+      maxSubAgentsPerExecution: SubAgentDispatcher.DefaultMaxSubAgentsPerExecution,
+      remainingDispatchBudget: Math.max(0, SubAgentDispatcher.DefaultMaxSubAgentsPerExecution - used),
     }
   }
 
@@ -314,7 +317,7 @@ class SubAgentDispatcher implements SubAgentDispatcherApi {
           threadId: requestedThreadId,
           text: formatSubAgentThreadUnavailableMessage(requestedThreadId),
           status: 'failed',
-          retention: UnavailableThreadRetention,
+          retention: SubAgentDispatcher.UnavailableThreadRetention,
         })
       )
     const isResume = !!existingSession
@@ -338,7 +341,7 @@ class SubAgentDispatcher implements SubAgentDispatcherApi {
           threadId: requestedThreadId ?? `subagent:${randomUUID()}`,
           text: this.formatUnknownSubagentTypeMessage(requestedType),
           status: 'failed',
-          retention: UnavailableThreadRetention,
+          retention: SubAgentDispatcher.UnavailableThreadRetention,
         })
       )
 
@@ -413,17 +416,17 @@ class SubAgentDispatcher implements SubAgentDispatcherApi {
             threadId: `subagent:${randomUUID()}`,
             text: `已跳过本次子智能体派发：${progressEvaluation.note}`,
             status: 'failed',
-            retention: UnavailableThreadRetention,
+            retention: SubAgentDispatcher.UnavailableThreadRetention,
           })
         )
 
       const used = this.dispatchCountByExecution.get(executionKey) ?? 0
-      if (used >= DefaultMaxSubAgentsPerExecution) return formatSubAgentTaskResultForParent(
+      if (used >= SubAgentDispatcher.DefaultMaxSubAgentsPerExecution) return formatSubAgentTaskResultForParent(
           buildSubAgentTaskResult({
             threadId: `subagent:${randomUUID()}`,
-            text: `本次执行已达到子智能体派发上限（${DefaultMaxSubAgentsPerExecution}）。请直接完成剩余工作或合并任务。`,
+            text: `本次执行已达到子智能体派发上限（${SubAgentDispatcher.DefaultMaxSubAgentsPerExecution}）。请直接完成剩余工作或合并任务。`,
             status: 'failed',
-            retention: UnavailableThreadRetention,
+            retention: SubAgentDispatcher.UnavailableThreadRetention,
           })
         )
       this.dispatchCountByExecution.set(executionKey, used + 1)
@@ -686,7 +689,7 @@ class SubAgentDispatcher implements SubAgentDispatcherApi {
               summary: formatSubAgentTransientRetryStatus(
                 error,
                 attempt,
-                SubAgentTransientRetryMaxAttempts
+                SubAgentDispatcher.SubAgentTransientRetryMaxAttempts
               ),
               error: error.message,
             })
@@ -922,7 +925,7 @@ class SubAgentDispatcher implements SubAgentDispatcherApi {
       threadId,
       text: summary,
       status: aborted ? 'aborted' : 'failed',
-      retention: owned ? this.sessionStore.describeRetention(threadId) : UnavailableThreadRetention,
+      retention: owned ? this.sessionStore.describeRetention(threadId) : SubAgentDispatcher.UnavailableThreadRetention,
     })
     if (aborted) {
       this.sessionStore.appendRunResult(threadId, taskResult)
@@ -1148,7 +1151,7 @@ class SubAgentDispatcher implements SubAgentDispatcherApi {
     const selectable = await this.modelRouter.listSelectableModels(modelSelection)
     const selectableModelIds = selectable
       ?.map((model) => model.id)
-      .slice(0, MaxReportedSelectableModels)
+      .slice(0, SubAgentDispatcher.MaxReportedSelectableModels)
     if (!requested)
       return {
         model: null,
@@ -1276,7 +1279,7 @@ class SubAgentDispatcher implements SubAgentDispatcherApi {
   ): Promise<string> {
     let lastError: Nullable<AppError> = null
 
-    for (let attempt = 1; attempt <= SubAgentTransientRetryMaxAttempts; attempt += 1) {
+    for (let attempt = 1; attempt <= SubAgentDispatcher.SubAgentTransientRetryMaxAttempts; attempt += 1) {
       try {
         return await runWithRoute(route)
       } catch (error) {
@@ -1301,7 +1304,7 @@ class SubAgentDispatcher implements SubAgentDispatcherApi {
     plan: ResolvedDispatchPlan,
     effectiveParentCtx: SubAgentToolContext
   ): boolean {
-    if (attempt >= SubAgentTransientRetryMaxAttempts) return false
+    if (attempt >= SubAgentDispatcher.SubAgentTransientRetryMaxAttempts) return false
     return this.connectionRetryHelper.shouldRetryConnectionError(error, attempt, {
       abortSignal: effectiveParentCtx.abortSignal,
       hasToolUse: () => plan.control.retryState.hasToolUse,

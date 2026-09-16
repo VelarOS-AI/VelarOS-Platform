@@ -6,12 +6,11 @@ import type { ScopedLog } from '@velaros-ai/core/logger'
 import type { RunSoloFinishingGateInput, SoloFinishingGateBlockTracker, SoloFinishingGateContinueReason, SoloFinishingGateEvents, SoloFinishingGateRepeatableReason, SoloFinishingGateResult, SoloGoalFinishingState } from '../../types/loop.js'
 import type { CodingSessionSnapshot } from '../../types/session.js'
 import { createInternalFollowUpMessage } from '../history/internal-messages'
+import { AgentTuning } from '../tuning'
 import { ChatRuntimeEvents } from '../wire/chat-runtime.js'
 
 import { evaluateKernelFinalReadiness } from './final-readiness'
 import { consumeSoloRuntimeGuidance } from './solo-runtime-guidance'
-
-const RepeatedFinishingGateBlockLimit = 3
 
 /**
  * 起一个空的「收尾门连拦」计数器：记住上一次是被哪条理由拦下的、它连着命中了几轮。
@@ -52,7 +51,7 @@ function isRepeatableFinishingGateReason(
 /**
  * 把一次「收尾被拦下」翻成给主循环的裁决，并顺手维护连拦计数。
  * 不可重复的理由（或宿主没给 tracker）先清零计数再让循环续一轮；可重复的理由同理由累加、换理由归 1，
- * 连续第 3 次（`RepeatedFinishingGateBlockLimit`）不再续轮，记一条 warn 并改判
+ * 连续第 3 次（`AgentTuning.loop.repeatedFinishingGateBlockLimit`）不再续轮，记一条 warn 并改判
  * `error` / `repeated-finishing-gate`，把原拦截理由一并带出去。
  * 这一档是硬熔断：同一条要求推回三轮仍不满足，再推只会空烧额度，交由上层收敛执行。
  */
@@ -73,7 +72,7 @@ function resolveBlockedFinishingGateResult(
     tracker.count = 1
   }
 
-  if (tracker.count >= RepeatedFinishingGateBlockLimit) {
+  if (tracker.count >= AgentTuning.loop.repeatedFinishingGateBlockLimit) {
     input.log.warn('turn stopped by repeated finishing gate block', {
       turn: input.turn,
       reason,

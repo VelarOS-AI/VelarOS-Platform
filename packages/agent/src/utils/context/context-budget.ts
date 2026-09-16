@@ -19,24 +19,27 @@ import { isFiniteNumber } from '@velaros-ai/core'
 import { clamp } from '@velaros-ai/core/utils/number'
 
 import type { ContextWindowBudget, ResolveContextWindowBudgetInput } from '../../types/context.js'
+import { AgentTuning } from '../tuning'
 
-/** 默认安全余量百分比：吸收本地估算与供应方计费口径的偏差。 */
-export const DefaultContextSafetyMarginPercent = 4
+/** 默认安全余量百分比：吸收本地估算与供应方计费口径的偏差；值在 AgentTuning.context.safetyMarginPercent。 */
+export const DefaultContextSafetyMarginPercent: number = AgentTuning.context.safetyMarginPercent
 
-/** 输出预留占上下文窗口的比例。 */
-export const DefaultOutputReserveRatio = 0.12
+/** 输出预留占上下文窗口的比例；值在 AgentTuning.context.outputReserveRatio。 */
+export const DefaultOutputReserveRatio: number = AgentTuning.context.outputReserveRatio
 
-/** 输出预留下限：再小的窗口也要给模型留出基本的成稿空间。 */
-export const MinOutputReserveTokens = 1_024
+/** 输出预留下限：再小的窗口也要给模型留出基本的成稿空间；值在 AgentTuning.context.minOutputReserveTokens。 */
+export const MinOutputReserveTokens: number = AgentTuning.context.minOutputReserveTokens
 
-/** 输出预留上限：超大窗口下不必无谓预留过多，留给输入侧更多额度。 */
-export const MaxOutputReserveTokens = 32_000
+/** 输出预留上限：超大窗口下不必无谓预留过多，留给输入侧更多额度；值在 AgentTuning.context.maxOutputReserveTokens。 */
+export const MaxOutputReserveTokens: number = AgentTuning.context.maxOutputReserveTokens
 
 /**
  * 缺页中断（context overflow）应急压缩的目标水位。
  * 比常规压缩目标更激进：真正撞墙时要一次性腾出足够空间，避免重试又立刻溢出。
+ * 值在 AgentTuning.context.overflowRecoveryTargetPercent。
  */
-export const ContextOverflowRecoveryTargetPercent = 60
+export const ContextOverflowRecoveryTargetPercent: number =
+  AgentTuning.context.overflowRecoveryTargetPercent
 
 /** 按窗口比例推导输出预留 token，并夹在上下限之间；显式值优先。 */
 export function resolveReservedOutputTokens(

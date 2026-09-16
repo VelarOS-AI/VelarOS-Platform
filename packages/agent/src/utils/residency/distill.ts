@@ -17,6 +17,7 @@
 import { isArray, isEmpty, isNonBlankString, isRecord, isString, toNullable } from '@velaros-ai/core'
 
 import type { ContextDistillGateSignals, ContextDistillInstrument, ContextDistillPlan, ContextDistillProduct, ContextDistillRejection, ContextDistillRequest, ContextDistillSkipReason, ContextDistillTotals, ContextGovernanceConfig, ContextRecord, ContextResidency, DistillSegment, PlanContextDistillationInput, ResidencyLedgerView } from '../../types/residency.js'
+import { AgentTuning } from '../tuning'
 
 import {
   anchorDensityPerKiloChar,
@@ -37,8 +38,6 @@ import {
 /** 蒸馏产物的文本头（与骨架头同形，便于转录与"别再折摘要"判据识别）。 */
 const DistillHeaderPrefix = '[context-distill'
 
-/** 目标提示的字符上限：它进的是模型提示词，不是上下文。 */
-const MaxGoalHintChars = 400
 
 /** 蒸馏产物文本的识别谓词。 */
 export function isContextDistillText(value: string): boolean {
@@ -407,7 +406,7 @@ function resolveGoalHint(ledger: ResidencyLedgerView): Nullable<string> {
     const content = record.message?.content
     const text = isString(content) ? content : readTextParts(content)
     const normalized = text.replace(/\s+/g, ' ').trim()
-    if (normalized) return normalized.slice(0, MaxGoalHintChars)
+    if (normalized) return normalized.slice(0, AgentTuning.residency.maxGoalHintChars)
   }
 
   return null

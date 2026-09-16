@@ -2,6 +2,7 @@ import type { AgentSkillProvider } from '../../contract/requires.js'
 import type { AgentRoleId } from '../../types/agent.js'
 import type { AgentSkillDefinition } from '../../types/guidance.js'
 import { createSkillDefinition } from '../../utils/guidance/agent-skill-provider'
+import { AgentTuning } from '../../utils/tuning'
 
 import type { SkillFileStore } from './SkillFileStore'
 
@@ -10,8 +11,6 @@ import type { SkillFileStore } from './SkillFileStore'
  * 用户显式安装的技能承载明确意图，索引 12 条截断时应先于泛化内置技能展示。
  * frontmatter `priority:` 可覆盖。
  */
-const UserFileSkillDefaultPriority = 60
-
 function resolveFileSkillScopes(spaces: readonly string[]): string[] {
   return spaces
     .map((space) => space.trim().toLowerCase())
@@ -49,7 +48,7 @@ class FileSkillProvider implements AgentSkillProvider {
         label: record.name,
         provider: this,
         roleIds: [...this.roleIds],
-        priority: record.priority ?? UserFileSkillDefaultPriority,
+        priority: record.priority ?? AgentTuning.prompt.userFileSkillPriority,
         capabilityScopes: resolveFileSkillScopes(record.spaces),
       })
     )

@@ -1,11 +1,9 @@
 
 import type { ChatMessage, TextBlock, ToolCallBlock } from '../../types/agent.js'
 import type { IndexedSessionMessage,MessageSearchIndex } from '../../types/retrieval.js'
+import { AgentTuning } from '../tuning'
 
 import { chatSearchText } from './text'
-
-/** 索引中单条 tool-call 的 args 序列化字符上限（仅影响 searchableText，不影响 retrieve 全文）。 */
-const indexedMessageToolArgsChars = 1_000
 
 /**
  * 合并消息内所有 type=text 的 block，trim 后以换行连接。
@@ -30,9 +28,9 @@ function getMessageToolBlocks(message: ChatMessage): ToolCallBlock[] {
  * 构建单条消息的搜索索引。
  *
  * @param message 源消息
- * @param toolArgsMaxChars 每个 tool args 经 stringifyPayload 的上限，默认 indexedMessageToolArgsChars
+ * @param toolArgsMaxChars 每个 tool args 经 stringifyPayload 的上限，默认 AgentTuning.retrieval.indexedMessageToolArgsChars
  */
-function buildMessageSearchIndex(message: ChatMessage, toolArgsMaxChars = indexedMessageToolArgsChars): MessageSearchIndex {
+function buildMessageSearchIndex(message: ChatMessage, toolArgsMaxChars = AgentTuning.retrieval.indexedMessageToolArgsChars): MessageSearchIndex {
     const text = getMessageText(message)
     const toolBlocks = getMessageToolBlocks(message)
     const toolNames = [...new Set(toolBlocks.map((block) => block.toolName))]

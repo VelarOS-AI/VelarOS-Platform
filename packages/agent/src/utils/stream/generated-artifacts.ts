@@ -6,8 +6,10 @@ import type {
   StreamAssistantSourcePayload,
 } from '../../types/agent'
 import type { ProviderStreamPart } from '../../types/loop.js'
+import { AgentTuning } from '../tuning'
 
-const MaxGeneratedFileBytes = 20 * 1024 * 1024
+/** 单个生成产物的字节上限，值在 `AgentTuning.stream.maxGeneratedFileBytes`。 */
+const MaxGeneratedFileBytes = AgentTuning.stream.maxGeneratedFileBytes
 const generatedArtifactsLog = Log.tag('GeneratedArtifacts')
 
 /**

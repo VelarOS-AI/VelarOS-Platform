@@ -1,12 +1,14 @@
 import { isArray, isEmpty, isFalse, isNotUndefined, isNumber, isPresent, isRecord, isUndefined } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
+import { AgentToolLimits } from '../../contract/constants.js'
 import type { AgentWorkflowAgentResult, AgentWorkflowDedupeStep, AgentWorkflowDefinition, AgentWorkflowMajorityVoteStep, AgentWorkflowPredicate, AgentWorkflowRepeatConvergence, AgentWorkflowRunResult, AgentWorkflowStep, AgentWorkflowStepResult, AgentWorkflowValuePath, AgentWorkflowValueRef } from '../../types/agent.js'
 import { compareStableStrings } from '../residency/determinism'
 
 export const Utf8ByteCounter = new TextEncoder()
 
-export const MaxWorkflowValueBytes = 32 * 1024
+/** 工作流里单个值的字节上限；值在 `AgentToolLimits.workflow.maxValueBytes`。 */
+export const MaxWorkflowValueBytes: number = AgentToolLimits.workflow.maxValueBytes
 
 /**
  * 有界深拷贝：解释器**每一次跨步骤传值都经过这里**，包括步骤输出、管线条目、调用输入与种子值。
@@ -236,8 +238,14 @@ export function resolveWorkflowMajorityVote(items: unknown[], step: AgentWorkflo
     groups.set(groupKey, group)
   }
 
-  const quorum = Math.max(1, step.quorum ?? 2)
-  const threshold = Math.min(1, Math.max(0.5, step.majority_threshold ?? 0.5))
+  const quorum = Math.max(1, step.quorum ?? AgentToolLimits.workflow.defaultQuorum)
+  const threshold = Math.min(
+    1,
+    Math.max(
+      AgentToolLimits.workflow.majorityThresholdFloor,
+      step.majority_threshold ?? AgentToolLimits.workflow.majorityThresholdFloor
+    )
+  )
   const decisions = [...groups.values()].map((group) => {
     const votes = [...group.votes.values()].sort((left, right) => right.count - left.count)
     const totalVotes = votes.reduce((sum, vote) => sum + vote.count, 0)

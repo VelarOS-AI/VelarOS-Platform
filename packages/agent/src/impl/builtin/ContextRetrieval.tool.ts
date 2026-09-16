@@ -1,6 +1,7 @@
 import { isPlainObject, isString, toNullable } from '@velaros-ai/core'
 
-import type { RecallContextInput } from '../../types/builtin.js'
+import { AgentToolNames } from '../../contract/constants.js'
+import type { RecallContextInput, VelaTool } from '../../types/builtin.js'
 import { inferRecallRefKind, recallContextSchema } from '../../utils/builtin/context-retrieval'
 import { defineVelaTool } from '../../utils/builtin/define-agent-tool'
 import { FileSnapshotToolName } from '../../utils/context/file-snapshot-archive'
@@ -17,8 +18,8 @@ function presentHistoricalFile(value: unknown): unknown {
     pagingNote: '续读时原样使用 nextOffset；它指向归档原文，不能根据显示正文长度推算。' }
 }
 
-const recallContext = defineVelaTool<RecallContextInput>({
-  name: 'context:recall',
+export const recallContext: VelaTool<RecallContextInput> = defineVelaTool<RecallContextInput>({
+  name: AgentToolNames.contextRecall,
   role: 'inspect',
   category: 'context',
   summary: '统一找回本会话之前见过的上下文。',
@@ -168,8 +169,6 @@ const recallContext = defineVelaTool<RecallContextInput>({
   },
 })
 
-const contextRetrievalTools = {
-  'context:recall': recallContext,
+export const contextRetrievalTools: { 'context:recall': VelaTool<RecallContextInput> } = {
+  [AgentToolNames.contextRecall]: recallContext,
 }
-
-export { contextRetrievalTools }

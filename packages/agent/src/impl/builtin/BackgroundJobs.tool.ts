@@ -1,6 +1,7 @@
 import { AppError } from '@velaros-ai/core/error'
 
-import type { CancelBackgroundJobInput, ReadBackgroundJobOutputInput, WaitBackgroundJobsInput } from '../../types/builtin.js'
+import { AgentToolLimits, AgentToolNames } from '../../contract/constants.js'
+import type { CancelBackgroundJobInput, ReadBackgroundJobOutputInput, VelaTool, WaitBackgroundJobsInput } from '../../types/builtin.js'
 import { defineVelaTool } from '../../utils/builtin/define-agent-tool'
 
 import { cancelBackgroundJobSchema, filterBackgroundJobOutput, formatBackgroundJobOutput, formatBackgroundJobWaitResults, readBackgroundJobOutputSchema, waitBackgroundJobsSchema } from './BackgroundJobOperations'
@@ -9,8 +10,8 @@ import {
   AgentBackgroundJobReadCapability,
 } from './Capabilities'
 
-const readBackgroundJobOutput = defineVelaTool<ReadBackgroundJobOutputInput>({
-  name: 'job:read_output',
+export const readBackgroundJobOutput: VelaTool<ReadBackgroundJobOutputInput> = defineVelaTool<ReadBackgroundJobOutputInput>({
+  name: AgentToolNames.jobReadOutput,
   role: 'control',
   category: 'agent-control',
   summary: '读取当前会话内核后台 job 的新增或完整输出。',
@@ -62,8 +63,8 @@ const readBackgroundJobOutput = defineVelaTool<ReadBackgroundJobOutputInput>({
   },
 })
 
-const waitBackgroundJobs = defineVelaTool<WaitBackgroundJobsInput>({
-  name: 'job:wait',
+export const waitBackgroundJobs: VelaTool<WaitBackgroundJobsInput> = defineVelaTool<WaitBackgroundJobsInput>({
+  name: AgentToolNames.jobWait,
   role: 'control',
   category: 'agent-control',
   summary: '等待当前会话内核后台 job 完成并返回结果。',
@@ -105,14 +106,14 @@ const waitBackgroundJobs = defineVelaTool<WaitBackgroundJobsInput>({
 
     const snapshots = await ctx.waitBackgroundJobs({
       jobIds: input.job_ids,
-      timeoutMs: input.timeout_ms ?? 120_000,
+      timeoutMs: input.timeout_ms ?? AgentToolLimits.jobs.defaultWaitTimeoutMs,
     })
     return formatBackgroundJobWaitResults(snapshots, input.filter)
   },
 })
 
-const cancelBackgroundJob = defineVelaTool<CancelBackgroundJobInput>({
-  name: 'job:cancel',
+export const cancelBackgroundJob: VelaTool<CancelBackgroundJobInput> = defineVelaTool<CancelBackgroundJobInput>({
+  name: AgentToolNames.jobCancel,
   role: 'control',
   category: 'agent-control',
   summary: '取消当前会话内核后台 job。',
@@ -154,10 +155,12 @@ const cancelBackgroundJob = defineVelaTool<CancelBackgroundJobInput>({
   },
 })
 
-const backgroundJobTools = {
-  'job:cancel': cancelBackgroundJob,
-  'job:read_output': readBackgroundJobOutput,
-  'job:wait': waitBackgroundJobs,
+export const backgroundJobTools: {
+  'job:cancel': VelaTool<CancelBackgroundJobInput>
+  'job:read_output': VelaTool<ReadBackgroundJobOutputInput>
+  'job:wait': VelaTool<WaitBackgroundJobsInput>
+} = {
+  [AgentToolNames.jobCancel]: cancelBackgroundJob,
+  [AgentToolNames.jobReadOutput]: readBackgroundJobOutput,
+  [AgentToolNames.jobWait]: waitBackgroundJobs,
 }
-
-export { backgroundJobTools }

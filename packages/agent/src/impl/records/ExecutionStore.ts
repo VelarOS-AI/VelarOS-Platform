@@ -10,12 +10,10 @@ import type { ExecutionEventRecord, ExecutionRecord, ExecutionTaskRecord, Stream
 import type { AppendExecutionEventInput, ExecutionDebugListener, ExecutionStateListener, ExecutionStoreOptions, PersistedExecutionStoreFile } from '../../types/records.js'
 import { isExecutionRecord, isPersistedExecutionStoreFile, isTerminalExecutionStatus, isTerminalExecutionTaskStatus, resolveExecutionEventRetentionLimit, resolveExecutionRecordRetentionLimit } from '../../utils/records/execution-store-validation'
 import { compareStableStrings } from '../../utils/residency/determinism'
+import { AgentTuning } from '../../utils/tuning'
 
 import { ExecDebugPayload } from './ExecDebugPayload'
 
-const DEFAULT_EXECUTION_EVENT_RETENTION_LIMIT = 500
-const DEFAULT_EXECUTION_RECORD_RETENTION_LIMIT = 200
-const PERSISTED_EXECUTION_STORE_VERSION = 1
 
 
 /**
@@ -60,6 +58,13 @@ export interface ExecutionStoreApi {
 }
 
 class ExecutionStore implements ExecutionStoreApi {
+  /** 每条执行的事件保留条数缺省值。 */
+  private static readonly DefaultEventRetentionLimit = AgentTuning.records.executionEventRetentionLimit
+  /** 执行记录的保留条数缺省值。 */
+  private static readonly DefaultRecordRetentionLimit = AgentTuning.records.executionRecordRetentionLimit
+  /** 落盘文件的格式版本：版本不符的旧文件整份丢弃，不做迁移。 */
+  private static readonly PersistedFileVersion = 1
+
   private readonly persistThrottleMs = 250
 
   /** executionId -> record。 */
@@ -97,8 +102,8 @@ class ExecutionStore implements ExecutionStoreApi {
     }
     this.persistencePath = options.persist ? options.persistencePath! : null
     this.now = options.now ?? Date.now
-    this.eventRetentionLimit = resolveExecutionEventRetentionLimit(options.eventRetentionLimit, DEFAULT_EXECUTION_EVENT_RETENTION_LIMIT)
-    this.recordRetentionLimit = resolveExecutionRecordRetentionLimit(options.recordRetentionLimit, DEFAULT_EXECUTION_RECORD_RETENTION_LIMIT)
+    this.eventRetentionLimit = resolveExecutionEventRetentionLimit(options.eventRetentionLimit, ExecutionStore.DefaultEventRetentionLimit)
+    this.recordRetentionLimit = resolveExecutionRecordRetentionLimit(options.recordRetentionLimit, ExecutionStore.DefaultRecordRetentionLimit)
 
     if (this.persistencePath) {
       // 先加载历史记录，再把未完成记录统一恢复成 aborted。
@@ -252,7 +257,7 @@ class ExecutionStore implements ExecutionStoreApi {
       if (!raw) return
 
       const parsed = JSON.parse(raw) as unknown
-      if (!isPersistedExecutionStoreFile(parsed, PERSISTED_EXECUTION_STORE_VERSION)) return
+      if (!isPersistedExecutionStoreFile(parsed, ExecutionStore.PersistedFileVersion)) return
 
       let changed = false
 

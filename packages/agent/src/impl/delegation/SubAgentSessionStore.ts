@@ -29,13 +29,6 @@ interface SubAgentSessionStoreOptions {
   now?: () => number
 }
 
-const TerminalThreadStatuses: ReadonlySet<SubAgentSessionStatus> = new Set<SubAgentSessionStatus>([
-  'completed',
-  'failed',
-  'aborted',
-  'wind_down',
-])
-
 function addToIndex(index: Map<string, Set<string>>, key: string, threadId: string): void {
   const threads = index.get(key) ?? new Set<string>()
   threads.add(threadId)
@@ -118,6 +111,14 @@ export interface SubAgentSessionStoreApi {
 }
 
 class SubAgentSessionStore implements SubAgentSessionStoreApi {
+  /** 已经走到终态的线程状态：只有它们才谈得上保留与淘汰。 */
+  private static readonly TerminalThreadStatuses: ReadonlySet<SubAgentSessionStatus> = new Set<SubAgentSessionStatus>([
+    'completed',
+    'failed',
+    'aborted',
+    'wind_down',
+  ])
+
   private readonly sessions = new Map<string, SubAgentSessionRecord>()
   private readonly historyByThread = new Map<string, ModelMessage[]>()
   private readonly retentionByThread = new Map<string, ThreadRetentionState>()
@@ -338,7 +339,7 @@ class SubAgentSessionStore implements SubAgentSessionStoreApi {
     const idleSince = Math.max(detachedAt, retention.lastUsedAt)
     if (now - idleSince > this.limits.subAgentRetainedThreadIdleTtlMs) return true
     // 执行收尾时还在跑的线程正被中断，等它收尾再判可续跑性。
-    if (!TerminalThreadStatuses.has(record.status)) return false
+    if (!SubAgentSessionStore.TerminalThreadStatuses.has(record.status)) return false
     return !this.describeRetention(record.thread_id).resumable
   }
 

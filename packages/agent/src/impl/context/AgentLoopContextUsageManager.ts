@@ -25,10 +25,9 @@ import {
   resolveReservedOutputTokens,
 } from '../../utils/context/context-budget'
 import { estimateContextUsage, sumToolSchemaChars } from '../../utils/context/context-usage'
+import { AgentTuning } from '../../utils/tuning'
 
 import { ContextUsageCalibrator } from './ContextUsageCalibrator'
-
-const DefaultAgentContextWindow = 128_000
 
 /** 本轮显式输出上限与实际请求策略同源，覆盖按窗口比例推导的缺省预留。 */
 function resolveModelContextUsageOptions(
@@ -133,7 +132,7 @@ class AgentLoopContextUsageManager<TToolContext> implements AgentLoopContextUsag
     // 输出预留按“有效窗口”推导：优先用 runtime 解析出的 contextWindow，否则回落模型目录值。
     const effectiveWindow = isNumber(contextWindow)
       ? contextWindow
-      : DefaultAgentContextWindow
+      : AgentTuning.loop.unknownContextWindowTokens
     const reservedOutputTokens = resolveReservedOutputTokens(effectiveWindow)
 
     return resolveModelContextUsageOptions({

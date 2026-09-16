@@ -3,7 +3,8 @@ import { z } from 'zod'
 import { isPresent, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import type { GoalConstraint, GoalStep } from '../../types/builtin.js'
+import { AgentToolLimits, AgentToolNames } from '../../contract/constants.js'
+import type { GoalConstraint, GoalStep, VelaTool } from '../../types/builtin.js'
 import { defineVelaTool } from '../../utils/builtin/define-agent-tool'
 import { assertGoalCanComplete, buildGoalLifecycleUpsertInput, buildGoalStateUpsertInput, buildGoalUpsertInput, completeGoalStep, findCurrentGoalArtifact, toGoalSnapshot } from '../../utils/builtin/goals'
 import { planStatusSchema } from '../../utils/builtin/plans'
@@ -22,19 +23,19 @@ function describeGoalStepRefsForModel(
   return describeStepRefsForModel(steps, (step) => step.step)
 }
 
-const goalStatusSchema = z.enum(['active', 'paused', 'complete', 'blocked', 'cancelled'])
-const goalStepSchema = z.object({
-  id: z.string().min(1).max(80).optional().describe(
+export const goalStatusSchema: z.ZodType<'active' | 'paused' | 'complete' | 'blocked' | 'cancelled'> = z.enum(['active', 'paused', 'complete', 'blocked', 'cancelled'])
+export const goalStepSchema: z.ZodType<GoalStep> = z.object({
+  id: z.string().min(1).max(AgentToolLimits.planning.stepIdChars).optional().describe(
     parameterDescription({
       description: '稳定步骤 ID；已有步骤可复用。',
     })
   ),
-  step: z.string().min(1).max(160).describe(
+  step: z.string().min(1).max(AgentToolLimits.planning.stepTitleChars).describe(
     parameterDescription({
       description: '步骤标题。',
     })
   ),
-  objective: z.string().min(1).max(300).optional().describe(
+  objective: z.string().min(1).max(AgentToolLimits.planning.stepObjectiveChars).optional().describe(
     parameterDescription({
       description: '可选的步骤目标。',
     })
@@ -53,18 +54,18 @@ const goalStepSchema = z.object({
   ),
 })
 
-const goalConstraintSchema = z.object({
-  id: z.string().min(1).max(120).optional().describe(
+export const goalConstraintSchema: z.ZodType<GoalConstraint> = z.object({
+  id: z.string().min(1).max(AgentToolLimits.directives.identifierChars).optional().describe(
     parameterDescription({
       description: '可选稳定 ID；更新同一约束时复用。',
     })
   ),
-  title: z.string().min(1).max(160).describe(
+  title: z.string().min(1).max(AgentToolLimits.directives.titleChars).describe(
     parameterDescription({
       description: '约束标题，简短描述用户固定的规则。',
     })
   ),
-  content: z.string().min(1).max(1000).describe(
+  content: z.string().min(1).max(AgentToolLimits.directives.contentChars).describe(
     parameterDescription({
       description: '后续轮次必须遵守的具体约束内容。',
     })
@@ -81,15 +82,15 @@ const goalConstraintSchema = z.object({
       ],
     })
   ),
-  sourceMessageId: z.string().min(1).max(120).optional().describe(
+  sourceMessageId: z.string().min(1).max(AgentToolLimits.directives.identifierChars).optional().describe(
     parameterDescription({
       description: '触发该约束的用户消息 ID；没有时省略。',
     })
   ),
 })
 
-const getGoal = defineVelaTool<Record<string, never>>({
-  name: 'goal:get',
+export const getGoal: VelaTool<Record<string, never>> = defineVelaTool<Record<string, never>>({
+  name: AgentToolNames.goalGet,
   role: 'inspect',
   category: 'planning',
   summary: '读取当前 session 的目标模式目标状态。',
@@ -117,13 +118,18 @@ const getGoal = defineVelaTool<Record<string, never>>({
   },
 })
 
-const createGoal = defineVelaTool<{
+export const createGoal: VelaTool<{
+  objective: string
+  token_budget?: number
+  steps?: GoalStep[]
+  constraints?: GoalConstraint[]
+}> = defineVelaTool<{
   objective: string
   token_budget?: number
   steps?: GoalStep[]
   constraints?: GoalConstraint[]
 }>({
-  name: 'goal:create',
+  name: AgentToolNames.goalCreate,
   role: 'control',
   category: 'planning',
   summary: '为需要长时间持续工作的任务创建当前 session 活动目标。',
@@ -148,7 +154,7 @@ const createGoal = defineVelaTool<{
   ],
   notes: ['同一 session 同时只允许一个活动目标；重复创建是幂等读取，不会覆盖当前目标。'],
   schema: z.object({
-    objective: z.string().trim().min(1).max(2000).describe(
+    objective: z.string().trim().min(1).max(AgentToolLimits.planning.objectiveChars).describe(
       parameterDescription({
         description: '本次目标模式要达成的具体目标。',
       })
@@ -166,7 +172,7 @@ const createGoal = defineVelaTool<{
     steps: z
       .array(goalStepSchema)
       .min(1)
-      .max(12)
+      .max(AgentToolLimits.planning.maxSteps)
       .optional()
       .describe(
         parameterDescription({
@@ -176,7 +182,7 @@ const createGoal = defineVelaTool<{
     constraints: z
       .array(goalConstraintSchema)
       .min(1)
-      .max(20)
+      .max(AgentToolLimits.planning.maxConstraints)
       .optional()
       .describe(
         parameterDescription({
@@ -222,14 +228,20 @@ const createGoal = defineVelaTool<{
   },
 })
 
-const updateGoal = defineVelaTool<{
+export const updateGoal: VelaTool<{
+  status?: 'active' | 'paused' | 'complete' | 'blocked' | 'cancelled'
+  objective?: string
+  steps?: GoalStep[]
+  complete_step?: string | number
+  constraints?: GoalConstraint[]
+}> = defineVelaTool<{
   status?: 'active' | 'paused' | 'complete' | 'blocked' | 'cancelled'
   objective?: string
   steps?: GoalStep[]
   complete_step?: string | number
   constraints?: GoalConstraint[]
 }>({
-  name: 'goal:update',
+  name: AgentToolNames.goalUpdate,
   role: 'control',
   category: 'planning',
   summary: '更新当前 session 的目标，支持暂停、恢复、完成、受阻或取消。',
@@ -280,14 +292,14 @@ const updateGoal = defineVelaTool<{
             ],
           })
         ),
-      objective: z.string().trim().min(1).max(2000).optional().describe(
+      objective: z.string().trim().min(1).max(AgentToolLimits.planning.objectiveChars).optional().describe(
         parameterDescription({
           description: '可选的新目标描述；省略则保留当前目标。',
         })
       ),
       steps: z
         .array(goalStepSchema)
-        .max(12)
+        .max(AgentToolLimits.planning.maxSteps)
         .optional()
         .describe(
           parameterDescription({
@@ -295,7 +307,7 @@ const updateGoal = defineVelaTool<{
           })
         ),
       complete_step: z
-        .union([z.string().trim().min(1).max(160), z.number().int().positive().max(12)])
+        .union([z.string().trim().min(1).max(AgentToolLimits.planning.stepTitleChars), z.number().int().positive().max(AgentToolLimits.planning.maxSteps)])
         .optional()
         .describe(
           parameterDescription({
@@ -308,7 +320,7 @@ const updateGoal = defineVelaTool<{
         ),
       constraints: z
         .array(goalConstraintSchema)
-        .max(20)
+        .max(AgentToolLimits.planning.maxConstraints)
         .optional()
         .describe(
           parameterDescription({
@@ -408,10 +420,12 @@ const updateGoal = defineVelaTool<{
   },
 })
 
-const goalTools = {
-  'goal:get': getGoal,
-  'goal:create': createGoal,
-  'goal:update': updateGoal,
+export const goalTools: {
+  'goal:get': typeof getGoal
+  'goal:create': typeof createGoal
+  'goal:update': typeof updateGoal
+} = {
+  [AgentToolNames.goalGet]: getGoal,
+  [AgentToolNames.goalCreate]: createGoal,
+  [AgentToolNames.goalUpdate]: updateGoal,
 }
-
-export { goalTools }

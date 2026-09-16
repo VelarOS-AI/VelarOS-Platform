@@ -4,6 +4,7 @@ import { isBlank, isEmpty, isPositiveNumber, isTrue, toNullable, toOptional } fr
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 
+import { TurnContextFormat } from '../../contract/constants.js'
 import type {ProviderRequestSnapshot } from '../../types/context.js'
 import type { AssistantContentPart } from '../../types/history.js'
 import type { AgentModelRequestPort, AgentModelStreamInput, ConsumeAssistantStreamArgs, ExecuteStreamTurnArgs, InterruptedStreamPartial,StreamTurnResult, StreamTurnToolContext, StreamTurnToolRegistry, SystemPromptDelivery } from '../../types/loop.js'
@@ -32,6 +33,7 @@ import {
   buildOutputTruncationContinuationPrompt,
   isOutputTruncationError,
 } from '../../utils/stream/output-truncation-recovery'
+import { AgentTuning } from '../../utils/tuning'
 import { ChatRuntimeEvents } from '../../utils/wire/chat-runtime.js'
 import { resolveModelContextUsageOptions } from '../context/AgentLoopContextUsageManager'
 import { compileProviderSendRequest, ProviderRequestCompiler } from '../context/ProviderRequestCompiler'
@@ -56,12 +58,9 @@ import {
 } from './RetryPolicy'
 import { StreamConsumer, type StreamConsumerTurnState } from './StreamConsumer'
 
-const PromptCacheMinStableSystemChars = 2000
-/** 系统提示词 dynamic 层尾块的固定标签（逐轮同形，只有正文变）。 */
-const DynamicPromptLayerMarker = '[system prompt · dynamic layer (current turn)]'
-const MaxStreamContinuationRecoveryAttempts = 1
-const MaxOutputTruncationRecoveryAttempts = 2
-const MaxReasoningOnlyVisibleAnswerRecoveryAttempts = 2
+/** 值在 `AgentTuning.loop.promptCacheMinStableSystemChars`：稳定前缀短于它就不下缓存断点。 */
+export const PromptCacheMinStableSystemChars: number =
+  AgentTuning.loop.promptCacheMinStableSystemChars
 
 /**
  * 系统提示词投递（P7-1 的修复点）。
@@ -101,7 +100,7 @@ function buildSystemPromptDelivery(
 function buildDynamicPromptLayerMessage(dynamicPart: string): ModelMessage {
   return {
     role: 'user',
-    content: [DynamicPromptLayerMarker, dynamicPart].join('\n'),
+    content: [TurnContextFormat.dynamicLayerMarker, dynamicPart].join('\n'),
   }
 }
 
@@ -485,7 +484,7 @@ class StreamTurn<TToolContext extends StreamTurnToolContext = StreamTurnToolCont
               phase: 'stream',
               aborted: args.abortSignal.aborted,
               recoveryAttempts: reasoningOnlyVisibleAnswerRecoveries,
-              maxAttempts: MaxReasoningOnlyVisibleAnswerRecoveryAttempts,
+              maxAttempts: AgentTuning.loop.reasoningOnlyAnswerRecoveryAttempts,
             })
           ) {
             reasoningOnlyVisibleAnswerRecoveries += 1
@@ -500,7 +499,7 @@ class StreamTurn<TToolContext extends StreamTurnToolContext = StreamTurnToolCont
               ChatRuntimeEvents.retryingTurn(
                 args.turn,
                 reasoningOnlyVisibleAnswerRecoveries,
-                MaxReasoningOnlyVisibleAnswerRecoveryAttempts,
+                AgentTuning.loop.reasoningOnlyAnswerRecoveryAttempts,
                 appError.message
               )
             )
@@ -533,8 +532,8 @@ class StreamTurn<TToolContext extends StreamTurnToolContext = StreamTurnToolCont
           providerTurnReducer = null
           const outputWasTruncated = isOutputTruncationError(appError)
           const maxContinuationAttempts = outputWasTruncated
-            ? MaxOutputTruncationRecoveryAttempts
-            : MaxStreamContinuationRecoveryAttempts
+            ? AgentTuning.loop.outputTruncationRecoveryAttempts
+            : AgentTuning.loop.streamContinuationRecoveryAttempts
           const appendedAssistant = this.appendInterruptedStreamRecoveryMessages(
             args.history,
             interruptedPartial,
@@ -650,8 +649,8 @@ class StreamTurn<TToolContext extends StreamTurnToolContext = StreamTurnToolCont
 
     const appError = AppError.from(error)
     if (isOutputTruncationError(appError))
-      return recoveryAttempts < MaxOutputTruncationRecoveryAttempts
-    if (recoveryAttempts >= MaxStreamContinuationRecoveryAttempts) return false
+      return recoveryAttempts < AgentTuning.loop.outputTruncationRecoveryAttempts
+    if (recoveryAttempts >= AgentTuning.loop.streamContinuationRecoveryAttempts) return false
 
     return this.connectionRetryHelper.isTransientConnectionError(appError)
   }
@@ -689,5 +688,5 @@ class StreamTurn<TToolContext extends StreamTurnToolContext = StreamTurnToolCont
   }
 }
 
-export { buildSystemPromptDelivery, PromptCacheMinStableSystemChars, StreamTurn }
+export { buildSystemPromptDelivery, StreamTurn }
 export { StreamTurn as AgentStreamTurnHelper }

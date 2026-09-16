@@ -18,7 +18,7 @@ import type { ModelMessage } from 'ai'
 
 import { isEmpty, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
-import { logRuntime } from '@velaros-ai/core/logger'
+import { Log } from '@velaros-ai/core/logger'
 
 import type { ContextUsageEstimate } from '../../types/agent.js'
 import type { CompiledProviderRequest, CompiledProviderSendRequest, CompileProviderRequestInput, CompileProviderSendRequestInput, ContextGovernanceRuler } from '../../types/context.js'
@@ -70,10 +70,7 @@ export {
   isSerializedContextRefCandidateText,
 } from '../../utils/context/message-scan'
 
-const log = logRuntime.tag('ProviderRequestCompiler')
-
-/** 无 sessionId 时的一次性治理会话键：账本仍生效，只是不与任何真实会话共享跨回合状态。 */
-const EphemeralGovernanceSessionId = '__ephemeral-governance-session__'
+const log = Log.tag('ProviderRequestCompiler')
 
 interface ProviderMessageProjection {
   projection: ReturnType<typeof projectContextLedger>
@@ -116,6 +113,9 @@ export interface ProviderRequestCompilerApi {
 }
 
 export class ProviderRequestCompiler implements ProviderRequestCompilerApi {
+  /** 无 sessionId 时的一次性治理会话键：账本仍生效，只是不与任何真实会话共享跨回合状态。 */
+  private static readonly EphemeralGovernanceSessionId = '__ephemeral-governance-session__'
+
   private readonly workingSetOS = new ContextWorkingSetOS()
   /**
    * 投影渲染长度的复用缓存。投影本身是纯函数，缓存的家在这里：编译器长活，账本记录一旦入账不再改写，
@@ -397,7 +397,7 @@ export class ProviderRequestCompiler implements ProviderRequestCompilerApi {
     const session = this.governanceSessions.resolve(
       input.governanceSessionId?.trim() ||
         input.sessionId?.trim() ||
-        EphemeralGovernanceSessionId
+        ProviderRequestCompiler.EphemeralGovernanceSessionId
     )
     if (!session) throw new AppError('INVARIANT', '治理会话解析失败：sessionId 归一后仍为空')
 

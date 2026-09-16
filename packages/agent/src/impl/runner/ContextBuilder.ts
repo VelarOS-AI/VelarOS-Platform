@@ -19,11 +19,13 @@ import type { AgentModSeamDispatcherApi } from '../../types/mods.js'
 import type { BuiltContext } from '../../types/runner.js'
 import { createIdentityPromptSegment } from '../../utils/guidance/catalog'
 import { appendModTurnContextParts, finalizePromptBuild } from '../../utils/runner/prompt-assembly'
+import { AgentTuning } from '../../utils/tuning'
 
+import type { ContextBuilderPartsApi } from './ContextBuilderParts'
 import { ContextBuilderParts } from './ContextBuilderParts'
 
-
-const contextBuilderHelper = new ContextBuilderParts()
+/** `ContextBuilder` 零件盒的共享实例：无状态，全仓共用一份即可。 */
+export const contextBuilderHelper: ContextBuilderPartsApi = new ContextBuilderParts()
 
 
 
@@ -63,8 +65,6 @@ export interface ContextBuilderApi {
 }
 
 class ContextBuilder implements ContextBuilderApi {
-  /** mod 追加段的缺省优先级：排在内置 dynamic 段之后、便于识别来源。 */
-  private static readonly ModTurnContextDefaultPriority = 9_000
   /** prompt 段注册表，负责排序、过滤和 tier 分组。 */
   private readonly registry: PromptRegistryApi
   /**
@@ -177,7 +177,7 @@ class ContextBuilder implements ContextBuilderApi {
     return appendModTurnContextParts({
       composition,
       appended: outcome.append ?? [],
-      defaultPriority: ContextBuilder.ModTurnContextDefaultPriority,
+      defaultPriority: AgentTuning.prompt.modTurnContextPriority,
     })
   }
 
@@ -199,7 +199,7 @@ class ContextBuilder implements ContextBuilderApi {
     return appendModTurnContextParts({
       composition,
       appended: outcome.append ?? [],
-      defaultPriority: ContextBuilder.ModTurnContextDefaultPriority,
+      defaultPriority: AgentTuning.prompt.modTurnContextPriority,
     })
   }
 
@@ -209,4 +209,4 @@ class ContextBuilder implements ContextBuilderApi {
   }
 }
 
-export { ContextBuilder, contextBuilderHelper }
+export { ContextBuilder }

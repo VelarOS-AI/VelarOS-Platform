@@ -36,6 +36,7 @@ import type { ChatSendRequest, ExecutionPendingInteractionKind, ExecutionPending
 import type { KernelCancelResult, KernelChatExecutionCoordinator, KernelChatExecutionService, KernelChatRunOptions, KernelChatSubmission, KernelControllerAnswerInput, KernelControllerApprovalInput, KernelControllerSendInput, KernelRuntimeStatus,KernelSessionAuthorization, PendingKernelChatRun } from '../../types/execution.js'
 import { acceptPendingChatRun, findLatestUserMessage } from '../../utils/execution/chat-bridge-runs'
 import { createSubmissionDeferred } from '../../utils/execution/session-lane'
+import { AgentTuning } from '../../utils/tuning'
 import { InMemoryKernelSessionInputStore } from '../execution/InMemoryKernelSessionInputStore'
 import { KernelSessionPolicy } from '../execution/KernelSessionPolicy'
 import { KernelSessionRunCoordinator } from '../execution/KernelSessionRunCoordinator'
@@ -44,8 +45,6 @@ import type { KernelBackgroundJobManager } from '../records/KernelBackgroundJobM
 import { KernelBackgroundJobManager as DefaultKernelBackgroundJobManager } from '../records/KernelBackgroundJobManager'
 
 import { KernelSessionController } from './KernelSessionController'
-
-const DefaultKernelBackgroundJobStalledAfterMs = 120_000
 
 /**
  * 建桥时的装配单：前两项是宿主必须给的两块（执行服务与执行协调器），后四项是内核侧的控制件，
@@ -62,7 +61,7 @@ interface ChatKernelSessionBridgeOptions<TRenderTarget> {
   runCoordinator?: KernelSessionRunCoordinator
   /** 投递与运行态策略：一条输入是插队还是排队、一份运行态快照怎么归约，都问它。缺省是包内默认策略。 */
   policy?: KernelSessionPolicy
-  /** 后台 job 管理器：子 Agent 的后台任务注册、停滞记账、读输出与取消都在它上面。缺省是内存实现，停滞判定用 `DefaultKernelBackgroundJobStalledAfterMs`。 */
+  /** 后台 job 管理器：子 Agent 的后台任务注册、停滞记账、读输出与取消都在它上面。缺省是内存实现，停滞判定用 `AgentTuning.records.backgroundJobStalledAfterMs`。 */
   backgroundJobManager?: KernelBackgroundJobManager
 }
 
@@ -136,7 +135,7 @@ class ChatKernelSessionBridge<TRenderTarget = unknown>
     this.backgroundJobManager =
       options.backgroundJobManager ??
       new DefaultKernelBackgroundJobManager({
-        stalledAfterMs: DefaultKernelBackgroundJobStalledAfterMs,
+        stalledAfterMs: AgentTuning.records.backgroundJobStalledAfterMs,
         outputStore: new InMemoryKernelBackgroundJobOutputStore(),
       })
     this.controller = this.createController()

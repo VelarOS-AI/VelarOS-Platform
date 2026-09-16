@@ -41,6 +41,4 @@ class DefaultPromptFeaturePolicy implements RuntimePromptFeaturePolicy {
 }
 
 /** 宿主未注入时使用的缺省提示词特性策略实例。 */
-const defaultRuntimePromptFeaturePolicy: RuntimePromptFeaturePolicy = new DefaultPromptFeaturePolicy()
-
-export { defaultRuntimePromptFeaturePolicy }
+export const defaultRuntimePromptFeaturePolicy: RuntimePromptFeaturePolicy = new DefaultPromptFeaturePolicy()

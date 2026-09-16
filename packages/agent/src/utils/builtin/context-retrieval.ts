@@ -1,12 +1,14 @@
 import { z } from 'zod'
 
+import { AgentToolLimits } from '../../contract/constants.js'
 import type { RecallContextInput } from '../../types/builtin.js'
 import {
   renderParameterDescription as parameterDescription,
 } from '../toolkit/tool-description'
 
-const MAX_CHARS_MIN = 1_000
-const MAX_CHARS_MAX = 30_000
+// 两条边界模型直接看得到（写在 maxChars 的说明里），在 AgentToolLimits.recall 登记。
+const MAX_CHARS_MIN = AgentToolLimits.recall.minRetrieveChars
+const MAX_CHARS_MAX = AgentToolLimits.recall.maxRetrieveChars
 
 /** maxChars 钳制到 [1000, 30000]:模型传超限值不该被硬拒(schema error),自动夹到范围。 */
 function clampMaxChars(value: number): number {
@@ -103,12 +105,14 @@ export const recallContextSchema = z
       ),
     maxResults: z
       .number()
-      .transform((value) => Math.min(20, Math.max(1, Math.round(value))))
+      .transform((value) =>
+        Math.min(AgentToolLimits.recall.maxSearchResults, Math.max(1, Math.round(value)))
+      )
       .optional()
       .describe(
         parameterDescription({
           description: '搜索模式最多返回多少条匹配结果。',
-          notes: ['默认 8。'],
+          notes: [`默认 ${AgentToolLimits.recall.defaultSearchResults}。`],
         })
       ),
     maxChars: z
@@ -119,7 +123,7 @@ export const recallContextSchema = z
       .describe(
         parameterDescription({
           description: '最多返回多少字符。',
-          notes: ['默认 8000；只有聚焦需求才提高上限。'],
+          notes: [`默认 ${AgentToolLimits.recall.defaultRetrieveChars}；只有聚焦需求才提高上限。`],
         })
       ),
   })

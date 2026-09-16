@@ -18,21 +18,29 @@ import {
   VelarosModManifestFileName,
 } from '@velaros-ai/kernel/contracts/protocol'
 
+import { VelarModArchiveFiles, VelarModArchiveLimits } from '../../contract/constants.js'
 import type { VelarModArchiveSignatureVerifier } from '../../contract/requires.js'
 import type { InstallScannedVelarModArchiveRequest, PreparedVelarModInstall, ScannedArchive, ScanSession,VelarModArchiveEntry, VelarModArchiveFinding, VelarModArchiveInstallFailureReason, VelarModArchiveScanReport, VelarModPermissionDescriptor, ZipSizeData } from '../../types/mods.js'
 import { assertArchiveEntryPath, countContributions, readAgentMetadata } from '../../utils/mods/archive'
+import { AgentTuning } from '../../utils/tuning'
 import { parseAgentModManifest } from '../../utils/wire/mods'
 
-const VelarModArchiveExtension = '.velarmod'
-const VelarModSignatureFileName = 'velaros.mod.sig.json'
-const MaxArchiveBytes = 32 * 1024 * 1024
-const MaxExpandedBytes = 128 * 1024 * 1024
-const MaxManifestBytes = 256 * 1024
-const MaxFileCount = 512
-
-
-const MaxCompressionRatio = 100
-const DefaultScanSessionTtlMs = 10 * 60 * 1000
+/** Mod 包的扩展名，等价于 `VelarModArchiveFiles.archiveExtension`。 */
+export const VelarModArchiveExtension: string = VelarModArchiveFiles.archiveExtension
+/** 归档内签名文件的固定名字，等价于 `VelarModArchiveFiles.signatureFileName`。 */
+export const VelarModSignatureFileName: string = VelarModArchiveFiles.signatureFileName
+/** 归档文件本身的字节上限，等价于 `VelarModArchiveLimits.maxArchiveBytes`。 */
+export const MaxArchiveBytes: number = VelarModArchiveLimits.maxArchiveBytes
+/** 解压后总字节上限，等价于 `VelarModArchiveLimits.maxExpandedBytes`。 */
+export const MaxExpandedBytes: number = VelarModArchiveLimits.maxExpandedBytes
+/** 清单文件的字节上限，等价于 `VelarModArchiveLimits.maxManifestBytes`。 */
+export const MaxManifestBytes: number = VelarModArchiveLimits.maxManifestBytes
+/** 归档里允许的文件数上限，等价于 `VelarModArchiveLimits.maxFileCount`。 */
+export const MaxFileCount: number = VelarModArchiveLimits.maxFileCount
+/** 允许的最大压缩比，等价于 `VelarModArchiveLimits.maxCompressionRatio`。 */
+export const MaxCompressionRatio: number = VelarModArchiveLimits.maxCompressionRatio
+/** 扫描会话的缺省有效期（ms），值在 `AgentTuning.mods.scanSessionTtlMs`。 */
+export const DefaultScanSessionTtlMs: number = AgentTuning.mods.scanSessionTtlMs
 
 /**
  * 建 `VelarModArchiveImporter` 要的宿主策略与可替换件：权限怎么呈现、签名根信谁，
@@ -418,4 +426,3 @@ export class VelarModArchiveImporter implements VelarModArchiveImporterApi {
   }
 }
 
-export { VelarModArchiveExtension, VelarModSignatureFileName }

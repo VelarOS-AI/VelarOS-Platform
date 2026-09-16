@@ -3,9 +3,10 @@ import { toNullable } from '@velaros-ai/core'
 import type { ContextMigrationEventSink } from '../../contract/requires.js'
 import type { ContextDistiller, ContextGovernanceConfig, ContextGovernanceConfigInput, ContextGovernanceSessionRegistryApi as ContextGovernanceSessionRegistryContract, ContextHandoffSignal, ContextRecordClassifier, GovernanceEpochReport, GovernanceEpochSource } from '../../types/residency.js'
 import { resolveContextGovernanceConfig } from '../../utils/residency/governance-config'
+import { AgentTuning } from '../../utils/tuning'
 
 import type { ContextGovernanceSessionRegistryOptions } from './ContextGovernanceSession'
-import { ContextGovernanceSession, DefaultMaxTrackedSessions } from './ContextGovernanceSession'
+import { ContextGovernanceSession } from './ContextGovernanceSession'
 
 /**
  * 治理会话登记处对外这一面：按会话 id 取（或新建）治理面、晚绑配置与蒸馏器、代转几个常用查询。
@@ -33,7 +34,7 @@ export class ContextGovernanceSessionRegistry implements ContextGovernanceSessio
     this.config = resolveContextGovernanceConfig(options.config)
     this.classifier = toNullable(options.classifier)
     this.sinkFactory = toNullable(options.sinkFactory)
-    this.maxTrackedSessions = options.maxTrackedSessions ?? DefaultMaxTrackedSessions
+    this.maxTrackedSessions = options.maxTrackedSessions ?? AgentTuning.residency.maxTrackedSessions
     this.distiller = toNullable(options.distiller)
   }
 

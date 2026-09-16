@@ -38,20 +38,13 @@ import {
 } from "../../utils/stream/output-truncation-recovery";
 import { createProviderTurnToolCallIdAllocator } from "../../utils/stream/tool-call-id";
 import { applyProviderToolInputStreamPart, buildToolInputReadyMetadata, diagnoseRejectedProviderToolInput, parseRecoverableProviderToolInputDraft, resolveProviderExecutableToolInput, resolveProviderFinalToolCallIdentity, summarizeProviderToolInputDraft } from "../../utils/stream/tool-input";
+import { AgentTuning } from "../../utils/tuning";
 import { ChatRuntimeEvents } from '../../utils/wire/chat-runtime.js'
 import { createProviderToolReferenceCanonicalizer } from "../tools/ProviderToolReferenceCanonicalizer";
 import { ToolExecutionPolicy } from "../tools/ToolExecutionPolicy";
 
 import { recordKernelContextEpochDiagnostic } from "./KernelContextEpochGuard";
 import { AgentStreamDiagnosticHelper } from "./StreamDiagnosticsHelper";
-
-const StreamIdleThinkingNoticeDelayMs = 15_000;
-
-/** 内联 `<think>` 标签抽出来的思考增量共用同一个 reasoning stream id（相邻续写并成一块）。 */
-const InlineReasoningTagStreamId = "inline-think";
-
-/** 从 raw 分片兜底抽出的思考增量共用的 reasoning stream id（取值沿用历史）。 */
-const RawReasoningStreamId = "deepseek-reasoning";
 
 /**
  * 一次尝试的流消费状态：由 turn helper 在每次尝试前整体新建（不是复用后重置），
@@ -150,6 +143,11 @@ export interface StreamConsumerApi {
 }
 
 class StreamConsumer implements StreamConsumerApi {
+  /** 内联 `<think>` 标签抽出来的思考增量共用同一个 reasoning stream id（相邻续写并成一块）。 */
+  private static readonly InlineReasoningTagStreamId = "inline-think";
+  /** 从 raw 分片兜底抽出的思考增量共用的 reasoning stream id（取值沿用历史）。 */
+  private static readonly RawReasoningStreamId = "deepseek-reasoning";
+
   private readonly log = logRuntime.tag("StreamConsumer");
   private readonly streamDiagnosticHelper = new AgentStreamDiagnosticHelper();
   private readonly executionPolicy: ToolExecutionPolicy;
@@ -215,7 +213,7 @@ class StreamConsumer implements StreamConsumerApi {
       if (!pendingRawReasoning) return;
       const text = pendingRawReasoning;
       pendingRawReasoning = "";
-      emitReasoningDelta(RawReasoningStreamId, text);
+      emitReasoningDelta(StreamConsumer.RawReasoningStreamId, text);
     };
     // 把可见正文里内联的 `<think>...</think>` 抽成 reasoning；没有标签时是纯透传。
     const inlineReasoningTagState = createInlineReasoningTagSplitState();
@@ -225,7 +223,7 @@ class StreamConsumer implements StreamConsumerApi {
       flushCurrentText();
       // 刻意不置 hasVisibleOutput：与结构化 reasoning-delta 一致，纯思考无可见答复仍触发
       // 「补一个可见答复」的恢复逻辑。
-      emitReasoningDelta(InlineReasoningTagStreamId, text);
+      emitReasoningDelta(StreamConsumer.InlineReasoningTagStreamId, text);
     };
     const routeInlineReasoningSegments = (
       segments: InlineReasoningSegment[],
@@ -854,7 +852,8 @@ class StreamConsumer implements StreamConsumerApi {
     turnState: StreamConsumerTurnState,
   ): StreamIdleThinkingNotifier {
     const delayMs =
-      args.idleReconnectDelayMs ?? StreamIdleThinkingNoticeDelayMs;
+      args.idleReconnectDelayMs ??
+      AgentTuning.loop.streamIdleThinkingNoticeDelayMs;
     if (!args.events.emitRuntime || delayMs <= 0)
       return {
         dispose: () => undefined,

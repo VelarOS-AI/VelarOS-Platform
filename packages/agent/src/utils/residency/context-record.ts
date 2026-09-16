@@ -15,6 +15,7 @@
 
 
 import type { ContextRecord,ContextResidency } from '../../types/residency.js'
+import { AgentTuning } from '../tuning'
 
 /** 降级序（下标即 rank，越大越冷）。 */
 export const ContextResidencyOrder: readonly ContextResidency[] = [
@@ -60,8 +61,9 @@ export function createContextRecordId(seq: number): string {
  *
  * 它是**兜底**不是常量：真实密度由编译期一次 tokenize 实测（中文/JSON 密集会话约 1.5-2），
  * 凡是能拿到实测值的地方都必须把它传进来——写死 4 会把占用低估 2-3 倍。
+ * 值在 AgentTuning.residency.defaultCharsPerToken。
  */
-export const DefaultResidencyCharsPerToken = 4
+export const DefaultResidencyCharsPerToken: number = AgentTuning.residency.defaultCharsPerToken
 
 /** 字符 → token 的粗估；`charsPerToken` 缺席时按 {@link DefaultResidencyCharsPerToken} 兜底。 */
 export function estimateResidencyTokens(

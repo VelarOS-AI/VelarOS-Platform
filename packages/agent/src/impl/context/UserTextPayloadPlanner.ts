@@ -7,13 +7,17 @@ import type { ContextPayloadStore } from '../../contract/requires.js'
 import type { ContextUserTextRecord, PersistUserTextPayloadsResult } from '../../types/context.js'
 import type { UserTextPayloadReference } from '../../types/history.js'
 import { hashUserMessageText, readUserMessageText } from '../../utils/context/user-message-text'
+import { AgentTuning } from '../../utils/tuning'
 
 import { createContextUserTextRef } from './InMemoryContextPayloadStore'
 
 export type { UserTextPayloadReference }
 
-/** 超过该字符数时为用户全文建立持久化引用；发送驻留形态由完整请求的容量治理决定。 */
-export const OversizedUserTextSafetyValveChars = 48_000
+/**
+ * 超过该字符数时为用户全文建立持久化引用；发送驻留形态由完整请求的容量治理决定。
+ * 值在 `AgentTuning.context.oversizedUserTextChars`。
+ */
+export const OversizedUserTextSafetyValveChars: number = AgentTuning.context.oversizedUserTextChars
 
 function buildUserTextMessageKey(sessionId: string, messageIndex: number, hash: string): string {
   return `${sessionId}:user:${messageIndex}:${hash.slice(0, 12)}`

@@ -38,7 +38,7 @@ import { createBuiltInPromptSegments } from '../../utils/guidance/catalog'
 import { createSkippedPromptSegment } from '../../utils/guidance/shared'
 import { compareStableStrings } from '../../utils/residency/determinism'
 /** 层序即块序：Tier0 在稳定前缀，Tier1/Tier2 在活动尾且 Tier2 恒排 Tier1 之后。 */
-const PromptSegmentTierRank: Readonly<Record<PromptSegmentTier, number>> = {
+export const PromptSegmentTierRank: Readonly<Record<PromptSegmentTier, number>> = {
   core: 0,
   runtime: 1,
   skill: 2,
@@ -74,8 +74,6 @@ function assertCorePromptSegmentHasNoPredicate(definition: PromptSegmentDefiniti
  * 提示词里，且没有任何线索指向「我改过 id」。改一次名就在这里补一行，别指望迁移脚本
  * （overrides 落在宿主的系统配置里，包这边够不着）。
  */
-const PromptSegmentIdAliases: Readonly<Record<string, string | undefined>> = {}
-
 /**
  * Prompt 段注册表对外的面：装配期把各处的段注册进来，每一轮再按 `(tierRank, priority, id)`
  * 组合出这轮 system prompt 的稳定前缀与活动尾。
@@ -126,6 +124,16 @@ export interface PromptRegistryApi {
  * - suppressions/overrides 可以禁用某些段。
  */
 class PromptRegistry implements PromptRegistryApi {
+  /**
+   * 存量 `segmentOverrides` 的段 id 别名（旧 id → 现 id）。
+   *
+   * 段 id 是**持久化配置的主键**——用户关掉某段，磁盘上留下的就是这个字符串。所以改段 id 是
+   * 破坏性变更：失配不会报错，只会让那段悄悄回到开启状态，用户以为已经关掉的内容又出现在
+   * 提示词里，且没有任何线索指向「我改过 id」。改一次名就在这里补一行，别指望迁移脚本
+   * （overrides 落在宿主的系统配置里，包这边够不着）。
+   */
+  private static readonly PromptSegmentIdAliases: Readonly<Record<string, string | undefined>> = {}
+
   /** 静态 prompt 段定义。 */
   private readonly definitions = new Map<string, PromptSegmentDefinition>()
   /** 动态 prompt 段 provider。 */
@@ -176,7 +184,7 @@ class PromptRegistry implements PromptRegistryApi {
     const skipped: PromptCompositionResult['skipped'] = []
     const overrides = new Map<string, PromptSegmentOverride>()
     for (const item of context.overrides ?? []) {
-      const alias = PromptSegmentIdAliases[item.id]
+      const alias = PromptRegistry.PromptSegmentIdAliases[item.id]
       // 两条并存只可能是跨版本升级的残留：现 id 的显式条目恒优先于旧 id 归一来的那条，
       // 因此结果与 overrides 的数组顺序无关。
       if (alias && overrides.has(alias)) continue
@@ -300,4 +308,4 @@ function createBuiltInPromptRegistry(options: BuiltInPromptOptions = {}): Prompt
   return new PromptRegistry(createBuiltInPromptSegments(options))
 }
 
-export { createBuiltInPromptRegistry,PromptRegistry, PromptSegmentTierRank, resolvePromptSegmentStability }
+export { createBuiltInPromptRegistry,PromptRegistry, resolvePromptSegmentStability }

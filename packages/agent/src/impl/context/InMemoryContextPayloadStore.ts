@@ -1,5 +1,6 @@
 import { toNullable } from '@velaros-ai/core'
 
+import { TurnContextFormat } from '../../contract/constants.js'
 import type { ContextPayloadStore } from '../../contract/requires.js'
 import type { ContextPayloadRecord, ContextUserTextRecord } from '../../types/context.js'
 import { buildContextPayloadRef, buildContextUserTextRef } from '../../utils/context/payload-ref'
@@ -14,8 +15,6 @@ export function createContextPayloadRef(sessionId: string, hash: string): string
 export function createContextUserTextRef(sessionId: string, hash: string): string {
   return buildContextUserTextRef(sessionId, hash)
 }
-
-const ContextUserTextToolName = '__context_user_text__'
 
 export class InMemoryContextPayloadStore implements ContextPayloadStore {
   private readonly recordsByKey = new Map<string, ContextPayloadRecord>()
@@ -86,7 +85,7 @@ export class InMemoryContextPayloadStore implements ContextPayloadStore {
       hash: record.hash,
       payloadRef: record.payloadRef,
       toolCallId: record.messageKey,
-      toolName: ContextUserTextToolName,
+      toolName: TurnContextFormat.userTextPayloadToolName,
       serializedResult: record.text,
       chars: record.chars,
       createdAt: record.createdAt,

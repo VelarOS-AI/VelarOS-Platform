@@ -1,16 +1,22 @@
 import { isFiniteNumber, isPresent, toOptional } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
+import { AgentToolLimits } from '../../contract/constants.js'
 import type { KernelBackgroundJob } from '../../types/records.js'
 import { compareStableStrings } from '../residency/determinism'
+import { AgentTuning } from '../tuning'
 
-export const DefaultOutputMaxChars = 64 * 1024
+/** 读一次任务输出的缺省字符上限，等价于 `AgentToolLimits.jobs.outputMaxChars`（模型看得到）。 */
+export const DefaultOutputMaxChars: number = AgentToolLimits.jobs.outputMaxChars
 
-export const DefaultTerminalJobTtlMs = 10 * 60 * 1_000
+/** 已结束任务的缺省保留时长，等价于 `AgentTuning.records.terminalJobTtlMs`。 */
+export const DefaultTerminalJobTtlMs: number = AgentTuning.records.terminalJobTtlMs
 
-export const DefaultTerminalJobLimit = 200
+/** 已结束任务的缺省保留条数，等价于 `AgentTuning.records.terminalJobLimit`。 */
+export const DefaultTerminalJobLimit: number = AgentTuning.records.terminalJobLimit
 
-export const DefaultJobPreviewMaxChars = 2_000
+/** 任务列表里单条预览的字符上限，等价于 `AgentToolLimits.jobs.previewMaxChars`（模型看得到）。 */
+export const DefaultJobPreviewMaxChars: number = AgentToolLimits.jobs.previewMaxChars
 
 /**
  * 浅拷贝一条任务记录。manager 对外交出的每条 job 都要过它：内部这份对象会被持续改写

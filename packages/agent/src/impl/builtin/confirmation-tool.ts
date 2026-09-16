@@ -1,5 +1,6 @@
 import { z } from 'zod'
 
+import { AgentToolNames } from '../../contract/constants.js'
 import type { ToolCapabilitySchema, ToolPermission } from '../../types/agent.js'
 import type { RequestConfirmationToolContext } from '../../types/builtin.js'
 import type { ToolContractRuntimeSpec } from '../../types/toolkit.js'
@@ -9,21 +10,21 @@ import {
   renderToolDescription,
 } from '../../utils/toolkit/tool-description'
 
-const UserConfirmationCapability = {
+export const UserConfirmationCapability: ToolCapabilitySchema = {
   effectKind: 'external',
   writeScopes: ['user-interaction'],
   canReadArbitrarySource: false,
   concurrency: 'unsafe',
   reason: 'explicit user confirmation request',
-} satisfies ToolCapabilitySchema
+}
 
-const requestConfirmationTool: ToolContractRuntimeSpec<
+export const requestConfirmationTool: ToolContractRuntimeSpec<
   { message: string },
   RequestConfirmationToolContext,
   { approved: boolean },
   ToolPermission
 > = {
-  name: 'interaction:confirm',
+  name: AgentToolNames.interactionConfirm,
   category: 'interaction',
   role: 'execute',
   readOnly: false,
@@ -59,8 +60,8 @@ const requestConfirmationTool: ToolContractRuntimeSpec<
   },
 }
 
-const confirmationTools = {
-  'interaction:confirm': requestConfirmationTool,
+export const confirmationTools: {
+  'interaction:confirm': typeof requestConfirmationTool
+} = {
+  [AgentToolNames.interactionConfirm]: requestConfirmationTool,
 }
-
-export { confirmationTools }

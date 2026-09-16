@@ -11,14 +11,12 @@ import {
 import type { ToolValidationHintProvider } from '../../contract/requires.js'
 import type { ToolValidationHintContext } from '../../types/capabilities.js'
 import type { ToolArgsValidationResult, ToolInputAdjustment, ToolInputAdjustmentCollector,ToolSchema, ToolSchemaIssue, ToolSchemaIssueDetail } from '../../types/tools.js'
+import { AgentTuning } from '../tuning'
 
 const DefaultToolArgsValidationHint =
   'If the argument JSON looks incomplete (cut off mid-field), the model stream may have been truncated and retrying may help; ' +
   'otherwise correct parameters to satisfy the schema. '
 
-const MaxToolInputAdjustments = 50
-const MaxToolInputAdjustmentDepth = 32
-const MaxToolInputAdjustmentPathLength = 256
 
 /**
  * 工具参数 schema 校验与轻量归一化。
@@ -90,8 +88,8 @@ class ToolArgsSchemaValidator {
         action: 'normalized',
         detail: 'additional schema adjustments were omitted from metadata',
       }
-      if (collector.adjustments.length >= MaxToolInputAdjustments) {
-        collector.adjustments[MaxToolInputAdjustments - 1] = truncatedAdjustment
+      if (collector.adjustments.length >= AgentTuning.tools.maxInputAdjustments) {
+        collector.adjustments[AgentTuning.tools.maxInputAdjustments - 1] = truncatedAdjustment
       } else {
         collector.adjustments.push(truncatedAdjustment)
       }
@@ -309,7 +307,7 @@ class ToolArgsSchemaValidator {
 
   private jsonLikeEquals(left: unknown, right: unknown, depth: number): boolean {
     if (Object.is(left, right)) return true
-    if (depth >= MaxToolInputAdjustmentDepth) return false
+    if (depth >= AgentTuning.tools.maxInputAdjustmentDepth) return false
     if (isArray(left) && isArray(right)) return left.length === right.length && left.every((item, index) =>
         this.jsonLikeEquals(item, right[index], depth + 1)
       )
@@ -331,12 +329,12 @@ class ToolArgsSchemaValidator {
     collector: ToolInputAdjustmentCollector
   ): void {
     if (collector.truncated) return
-    if (collector.adjustments.length >= MaxToolInputAdjustments) {
+    if (collector.adjustments.length >= AgentTuning.tools.maxInputAdjustments) {
       collector.truncated = true
       return
     }
     if (this.jsonLikeEquals(requested, effective, depth)) return
-    if (depth >= MaxToolInputAdjustmentDepth) {
+    if (depth >= AgentTuning.tools.maxInputAdjustmentDepth) {
       collector.truncated = true
       return
     }
@@ -344,7 +342,7 @@ class ToolArgsSchemaValidator {
     if (isPlainObject(requested) && isPlainObject(effective)) {
       const keys = new Set([...Object.keys(requested), ...Object.keys(effective)])
       for (const key of [...keys].sort()) {
-        if (collector.adjustments.length >= MaxToolInputAdjustments) {
+        if (collector.adjustments.length >= AgentTuning.tools.maxInputAdjustments) {
           collector.truncated = true
           return
         }
@@ -411,8 +409,8 @@ class ToolArgsSchemaValidator {
   }
 
   private limitAdjustmentPath(path: string): string {
-    if (path.length <= MaxToolInputAdjustmentPathLength) return path
-    return `${path.slice(0, MaxToolInputAdjustmentPathLength - 3)}...`
+    if (path.length <= AgentTuning.tools.maxInputAdjustmentPathChars) return path
+    return `${path.slice(0, AgentTuning.tools.maxInputAdjustmentPathChars - 3)}...`
   }
 
   private parseJsonString(value: string): { ok: true; value: unknown } | { ok: false } {

@@ -2,6 +2,7 @@ import { isFunction, isObject, isString } from '@velaros-ai/core'
 
 import type { AgentModHookMatcher } from '../../types/agent.js'
 import type { AgentModHookContext, AgentModSeamRegistration } from '../../types/mods.js'
+import { AgentTuning } from '../tuning'
 
 /**
  * 给一次钩子调用配一份上下文：告诉钩子自己是谁（modId / hookId）、正挂在哪个事件上，
@@ -20,11 +21,11 @@ export function createHookContext(
   }
 }
 
-export const DefaultHookTimeoutMs = 5_000
+export const DefaultHookTimeoutMs: number = AgentTuning.mods.defaultHookTimeoutMs
 
-export const MinimumHookTimeoutMs = 100
+export const MinimumHookTimeoutMs: number = AgentTuning.mods.minimumHookTimeoutMs
 
-export const MaximumHookTimeoutMs = 30_000
+export const MaximumHookTimeoutMs: number = AgentTuning.mods.maximumHookTimeoutMs
 
 /** 把 catch 到的任意异常折成一句可写进诊断的人话：Error 取 message，其余原样字符串化，绝不再抛。 */
 export function readErrorMessage(error: unknown): string {

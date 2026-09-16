@@ -18,14 +18,15 @@
  */
 
 import { clamp,isFiniteNumber } from '@velaros-ai/core'
-const DefaultCalibrationFactor = 1
-/** EMA 学习率：每个样本对系数的修正强度，越小越平滑。 */
-const CalibrationLearningRate = 0.25
-const MinCalibrationFactor = 0.5
-const MaxCalibrationFactor = 3
-/** 残差被夹住的范围，单个异常样本不会让系数瞬间跳变。 */
-const MinResidual = 0.25
-const MaxResidual = 4
+
+import { AgentTuning } from '../../utils/tuning'
+
+/** 没有任何样本时的初始系数；值在 `AgentTuning.calibration.defaultFactor`。 */
+export const DefaultCalibrationFactor: number = AgentTuning.calibration.defaultFactor
+/** 系数下界；值在 `AgentTuning.calibration.minFactor`。 */
+export const MinCalibrationFactor: number = AgentTuning.calibration.minFactor
+/** 系数上界；值在 `AgentTuning.calibration.maxFactor`。 */
+export const MaxCalibrationFactor: number = AgentTuning.calibration.maxFactor
 
 /**
  * 上下文用量校准器：用供应方回传的真实 input tokens 校准本地估算，按模型各学一套系数。
@@ -71,11 +72,16 @@ class ContextUsageCalibrator implements ContextUsageCalibratorApi {
       actualInputTokens <= 0
     ) return
 
-    const residual = clamp((actualInputTokens / predictedInputTokens), MinResidual, MaxResidual)
+    // 残差先夹住，单个异常样本不会让系数瞬间跳变。
+    const residual = clamp(
+      (actualInputTokens / predictedInputTokens),
+      AgentTuning.calibration.minResidual,
+      AgentTuning.calibration.maxResidual
+    )
     const current = this.getFactor(model)
     // 线性 EMA：朝着 current * residual 的目标移动，避免单样本跳变。
     const target = current * residual
-    const next = clamp((current + CalibrationLearningRate * (target - current)), MinCalibrationFactor, MaxCalibrationFactor)
+    const next = clamp((current + AgentTuning.calibration.learningRate * (target - current)), MinCalibrationFactor, MaxCalibrationFactor)
     this.factorByModel.set(model, next)
   }
 
@@ -85,9 +91,4 @@ class ContextUsageCalibrator implements ContextUsageCalibratorApi {
   }
 }
 
-export {
-  ContextUsageCalibrator,
-  DefaultCalibrationFactor,
-  MaxCalibrationFactor,
-  MinCalibrationFactor,
-}
+export { ContextUsageCalibrator }

@@ -1,5 +1,7 @@
-const MaxPreviewChars = 4_000
-const MaxStringChars = 400
+/** 审批预览整段的字符上限，值在 `AgentTuning.connectors.approvalPreviewChars`。 */
+const MaxPreviewChars = AgentTuning.connectors.approvalPreviewChars
+/** 审批预览里单个字符串字段的字符上限，值在 `AgentTuning.connectors.approvalStringChars`。 */
+const MaxStringChars = AgentTuning.connectors.approvalStringChars
 const SensitiveArgumentKey =
   /password|passwd|secret|token|authorization|credential|api[-_]?key|cookie/i
 
@@ -48,3 +50,5 @@ export function describeMcpApprovalArguments(args: Record<string, unknown>): str
   return text.length > MaxPreviewChars ? `${text.slice(0, MaxPreviewChars)}…[truncated]` : text
 }
 import { isArray, isBoolean, isNull, isNumber, isObject, isString } from '@velaros-ai/core'
+
+import { AgentTuning } from '../tuning'

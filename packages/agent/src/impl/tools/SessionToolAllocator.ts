@@ -5,6 +5,7 @@ import type { ToolCategoryId, ToolDescriptor } from '../../types/agent.js'
 import type { SessionToolAllocatorPlan, ToolAllocatorAdvisorState, ToolAllocatorCategory, ToolAllocatorDeniedRequest, ToolAllocatorFuseState, ToolAllocatorOperation, ToolAllocatorRequest } from '../../types/tools.js'
 import { resolveToolAllocationMetadata } from '../../utils/capabilities'
 import { buildAllocationMessage, buildRequestSignature, buildRuntimeToolIndex, createDeniedRequest, dedupeDeniedRequests, uniqueStrings, uniqueToolCategoryIds } from '../../utils/tools/session-tool-allocator'
+import { AgentTuning } from '../../utils/tuning'
 
 /** 一次发放判定的全部入参：本轮申请了什么、运行态有什么、会话允许什么，三者在这里汇合。 */
 interface SessionToolAllocatorPlanInput<TTool extends { name: string } = ToolDescriptor> {
@@ -70,7 +71,7 @@ class SessionToolAllocator implements SessionToolAllocatorApi {
       options.baselineToolNames ?? this.metadata.baselineToolNames ?? []
     this.unresolvedRequestFuseThreshold = Math.max(
       1,
-      options.unresolvedRequestFuseThreshold ?? 3
+      options.unresolvedRequestFuseThreshold ?? AgentTuning.tools.allocatorFailureBreakerThreshold
     )
   }
 
@@ -237,10 +238,10 @@ class SessionToolAllocator implements SessionToolAllocatorApi {
 
 }
 
-const sessionToolAllocator = new SessionToolAllocator()
+/** 无会话装配共用的那一份发放器；跨轮状态只有未解决申请的计数。 */
+export const sessionToolAllocator: SessionToolAllocatorApi = new SessionToolAllocator()
 
 export {
   SessionToolAllocator,
-  sessionToolAllocator,
 }
 export type { SessionToolAllocatorApi, SessionToolAllocatorOptions, SessionToolAllocatorPlanInput }

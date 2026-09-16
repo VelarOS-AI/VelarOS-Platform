@@ -2,8 +2,9 @@ import { z } from 'zod'
 
 import { isArray, isEmpty, isPresent, toNullable } from '@velaros-ai/core'
 
+import { AgentToolLimits, AgentToolNames } from '../../contract/constants.js'
 import type { ActiveContextArtifact, ExecutionTaskPlanStep } from '../../types/agent.js'
-import type { PlanLifecycle, UpdatePlanInput } from '../../types/builtin.js'
+import type { PlanLifecycle, UpdatePlanInput, VelaTool } from '../../types/builtin.js'
 import { defineVelaTool } from '../../utils/builtin/define-agent-tool'
 import {
   completePlanSteps,
@@ -20,10 +21,17 @@ import {
 
 import { AgentPlanningReadCapability, AgentPlanningWriteCapability } from './Capabilities'
 
-const planStepRefSchema = z.union([z.string().trim().min(1).max(160), z.number().int().positive()])
-const PlanArtifactId = 'active-plan'
-const PlanLifecycleValues = ['active', 'paused', 'completed', 'archived'] as const
-const PlanLifecycleSet = new Set<unknown>(PlanLifecycleValues)
+/** 步骤引用：1-based 序号或精确标题；标题长度与步骤标题上限一致，模型看得到。 */
+export const planStepRefSchema: z.ZodType<string | number> = z.union([
+  z.string().trim().min(1).max(AgentToolLimits.planning.stepTitleChars),
+  z.number().int().positive(),
+])
+/** 当前执行计划在活动上下文里的固定 artifact id。 */
+export const PlanArtifactId: string = 'active-plan'
+/** 计划生命周期的取值表。 */
+export const PlanLifecycleValues: readonly PlanLifecycle[] = ['active', 'paused', 'completed', 'archived']
+/** 按取值表建的判定集合，用来认出历史 artifact 上存的生命周期。 */
+export const PlanLifecycleSet: ReadonlySet<unknown> = new Set<unknown>(PlanLifecycleValues)
 
 function findPlanArtifact(
   artifacts: readonly ActiveContextArtifact[],
@@ -60,8 +68,8 @@ function describePlanStepRefsForModel(
 }
 
 /** 更新当前 execution 的可见计划。 */
-const updatePlan = defineVelaTool<UpdatePlanInput>({
-  name: 'plan:update',
+export const updatePlan: VelaTool<UpdatePlanInput> = defineVelaTool<UpdatePlanInput>({
+  name: AgentToolNames.planUpdate,
   role: 'control',
   category: 'planning',
   summary: '更新当前 execution 的可见执行计划。',
@@ -93,7 +101,7 @@ const updatePlan = defineVelaTool<UpdatePlanInput>({
   ],
   schema: z
     .object({
-      explanation: z.string().min(1).max(500).optional().describe(
+      explanation: z.string().min(1).max(AgentToolLimits.planning.explanationChars).optional().describe(
         parameterDescription({
           description: '本次计划变化的简短说明。',
         })
@@ -114,18 +122,18 @@ const updatePlan = defineVelaTool<UpdatePlanInput>({
       plan: z
         .array(
           z.object({
-            id: z.string().min(1).max(80).optional().describe(
+            id: z.string().min(1).max(AgentToolLimits.planning.stepIdChars).optional().describe(
               parameterDescription({
                 description: '稳定步骤 ID。',
                 notes: ['已有步骤可复用。'],
               })
             ),
-            step: z.string().min(1).max(160).describe(
+            step: z.string().min(1).max(AgentToolLimits.planning.stepTitleChars).describe(
               parameterDescription({
                 description: '步骤标题。',
               })
             ),
-            objective: z.string().min(1).max(300).optional().describe(
+            objective: z.string().min(1).max(AgentToolLimits.planning.stepObjectiveChars).optional().describe(
               parameterDescription({
                 description: '可选的步骤目标。',
               })
@@ -145,7 +153,7 @@ const updatePlan = defineVelaTool<UpdatePlanInput>({
           })
         )
         .min(1)
-        .max(12)
+        .max(AgentToolLimits.planning.maxSteps)
         .optional()
         .describe(
           parameterDescription({
@@ -155,7 +163,7 @@ const updatePlan = defineVelaTool<UpdatePlanInput>({
         ),
       complete_step: z
         // 空数组不再硬拒(模型会传 [] 表示"这次没有要完成的"),execute 侧按未传处理(no-op)。
-        .union([planStepRefSchema, z.array(planStepRefSchema).max(12)])
+        .union([planStepRefSchema, z.array(planStepRefSchema).max(AgentToolLimits.planning.maxSteps)])
         .optional()
         .describe(
           parameterDescription({
@@ -254,7 +262,7 @@ const updatePlan = defineVelaTool<UpdatePlanInput>({
       title: input.explanation?.trim() || '当前执行计划',
       content: formatActivePlanContent(toNullable(input.explanation), plan),
       metadata: {
-        source: 'plan:update',
+        source: AgentToolNames.planUpdate,
         planLifecycle: lifecycle,
         executionId: interaction.executionId,
         planStepCount: plan.length,
@@ -279,8 +287,8 @@ const updatePlan = defineVelaTool<UpdatePlanInput>({
 })
 
 /** 读取当前 execution 的计划和执行建议。 */
-const getPlan = defineVelaTool<Record<string, never>>({
-  name: 'plan:get',
+export const getPlan: VelaTool<Record<string, never>> = defineVelaTool<Record<string, never>>({
+  name: AgentToolNames.planGet,
   role: 'inspect',
   category: 'planning',
   summary: '读取当前 execution 的可见执行计划。',
@@ -313,9 +321,10 @@ const getPlan = defineVelaTool<Record<string, never>>({
     }
   },
 })
-const plansTools = {
-  'plan:update': updatePlan,
-  'plan:get': getPlan,
+export const plansTools: {
+  'plan:update': typeof updatePlan
+  'plan:get': typeof getPlan
+} = {
+  [AgentToolNames.planUpdate]: updatePlan,
+  [AgentToolNames.planGet]: getPlan,
 }
-
-export { plansTools }

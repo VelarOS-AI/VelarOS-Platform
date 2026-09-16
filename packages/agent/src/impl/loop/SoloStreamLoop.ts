@@ -86,13 +86,6 @@ import { SoloGoalLifecycle } from './SoloGoalLifecycle'
  * 6. 若没有工具调用，运行自动验证 gate，通过后结束。
  */
 
-const SoloInterruptedToolCallRecoveryLimits = {
-  'output-truncation': 2,
-  // 参数协议错误重试一次足以给模型自纠；继续盲试只会空烧上下文和额度。
-  'invalid-input': 1,
-  'invalid-identity': 1,
-} as const
-
 function resolveInterruptedToolCallRecoveryKind(
   error: AppError
 ): SoloInterruptedToolCallRecoveryKind {
@@ -160,6 +153,16 @@ class SoloStreamLoop<
   TEvents extends SoloLoopEvents = SoloLoopEvents,
 > implements SoloStreamLoopApi<TContext, TEvents>
 {
+  /**
+   * 工具调用在执行前就被打断时，按打断原因各自最多补救几次。
+   * 参数协议错误重试一次足以给模型自纠；继续盲试只会空烧上下文和额度。
+   */
+  private static readonly InterruptedToolCallRecoveryLimits = {
+    'output-truncation': 2,
+    'invalid-input': 1,
+    'invalid-identity': 1,
+  } as const
+
   private readonly log = logRuntime.tag('SoloStreamLoop')
   private readonly contextUsage: AgentLoopContextUsageManager<TContext>
   private readonly toolSpaceBootstrapStates = new Map<string, ToolSpaceBootstrapState>()
@@ -702,7 +705,7 @@ class SoloStreamLoop<
           appError.code === 'MODEL_STREAM_INTERRUPTED' &&
           !aborted &&
           interruptedToolCallRecoveryAttempts <
-            SoloInterruptedToolCallRecoveryLimits[recoveryKind]
+            SoloStreamLoop.InterruptedToolCallRecoveryLimits[recoveryKind]
         ) {
           interruptedToolCallRecoveryAttempts += 1
           args.history.push(

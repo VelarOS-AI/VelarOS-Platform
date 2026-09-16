@@ -20,6 +20,7 @@ import type { ModelMessage } from 'ai'
 
 import { isEmpty, isNotNull, isNull, isPresent, toNullable } from '@velaros-ai/core'
 
+import { AgentToolNames } from '../../contract/constants.js'
 import type { ContextMigrationEventSink } from '../../contract/requires.js'
 import type { ContextDistiller, ContextGovernanceConfig, ContextGovernanceConfigInput, ContextGovernanceSessionApi as ContextGovernanceSessionContract, ContextGovernanceSyncInput, ContextGovernanceSyncResult, ContextHandoffSignal, ContextRecord, ContextRecordClassifier, GovernanceEpochReport, GovernanceEpochSource,GovernanceWindowDerivation, GovernanceWindowInput } from '../../types/residency.js'
 import { stableFingerprint } from '../../utils/residency/determinism'
@@ -28,16 +29,13 @@ import { measureProjectedTokens, resolveProjectionBudget, runGovernanceEpoch, sh
 import { resolveGovernanceWindow } from '../../utils/residency/governance-window'
 import { planHistoryIngest } from '../../utils/residency/ingest'
 import { measureLedgerProjection } from '../../utils/residency/projection'
+import { AgentTuning } from '../../utils/tuning'
 
 import { ContextDistillRunner } from './ContextDistillRunner'
 import { ContextResidencyLedger } from './ContextResidencyLedger'
 
-/** @deprecated 兼容旧历史工具身份；当前运行时不将其作为治理入口。 */
-export const ContextEpochRequestToolName = 'context:distill'
-
-/** 每会话保留的 epoch 报告条数（转交信号只看最近若干次，无限留等于内存泄漏）。 */
-const MaxRetainedEpochReports = 32
-export const DefaultMaxTrackedSessions = 128
+/** @deprecated 兼容旧历史工具身份；当前运行时不将其作为治理入口。值在 AgentToolNames.contextDistill。 */
+export const ContextEpochRequestToolName: string = AgentToolNames.contextDistill
 
 /** 建 `ContextGovernanceSession` 时可选的两项（配置、分类器、事件汇走构造函数的前三个位置参数，不在这里）。 */
 export interface ContextGovernanceSessionOptions {
@@ -455,8 +453,8 @@ export class ContextGovernanceSession implements ContextGovernanceSessionApi {
 
   private pushReport(report: GovernanceEpochReport): void {
     this.reports.push(report)
-    if (this.reports.length > MaxRetainedEpochReports) {
-      this.reports.splice(0, this.reports.length - MaxRetainedEpochReports)
+    if (this.reports.length > AgentTuning.residency.maxRetainedEpochReports) {
+      this.reports.splice(0, this.reports.length - AgentTuning.residency.maxRetainedEpochReports)
     }
   }
 

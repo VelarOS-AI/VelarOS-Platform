@@ -7,17 +7,6 @@ import { parseSubAgentToolResult } from '../../utils/delegation/sub-agent-result
 
 import { AgentWorkflowRuntime } from './AgentWorkflowRuntime'
 
-const WorkflowAgentCodenames = [
-  'Atlas',
-  'Beacon',
-  'Cipher',
-  'Delta',
-  'Echo',
-  'Forge',
-  'Harbor',
-  'Iris',
-] as const
-
 /**
  * Workflow 与子 Agent 派发器之间的接线件：把 IR 解释器要的「派一个节点」翻译成一次真实的子 Agent 派发，
  * 并把派发结果的信封解析回节点结果。由 `AgentRunner` 在构造时建一份，每次 `run` 现建一个解释器实例。
@@ -37,6 +26,18 @@ export interface AgentWorkflowCoordinatorApi<TToolContext extends RunnerToolCont
 
 class AgentWorkflowCoordinator<TToolContext extends RunnerToolContext>
   implements AgentWorkflowCoordinatorApi<TToolContext> {
+  /** IR 没给 agent_name 时按序取的代号表：只为让同一次 run 里的节点有稳定可读的名字。 */
+  private static readonly AgentCodenames = [
+    'Atlas',
+    'Beacon',
+    'Cipher',
+    'Delta',
+    'Echo',
+    'Forge',
+    'Harbor',
+    'Iris',
+  ] as const
+
   constructor(
     private readonly subAgentDispatcher: RunnerSubAgentDispatcher<TToolContext>
   ) {}
@@ -53,7 +54,8 @@ class AgentWorkflowCoordinator<TToolContext extends RunnerToolContext>
     const runtime = new AgentWorkflowRuntime({
       limits,
       dispatch: async (context) => {
-        const generatedName = WorkflowAgentCodenames[generatedNameIndex % WorkflowAgentCodenames.length]!
+        const codenames = AgentWorkflowCoordinator.AgentCodenames
+        const generatedName = codenames[generatedNameIndex % codenames.length]!
         generatedNameIndex += 1
         return this.dispatchNode(request, context, context.call.agent_name ?? generatedName)
       },

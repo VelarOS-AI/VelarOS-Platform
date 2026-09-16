@@ -50,6 +50,7 @@ import { applyRunProfileToolExposure } from '../../utils/runner/run-profile'
 import { resolveRunProfilePolicyForRuntime } from '../../utils/runner/runtime-profiles'
 import { tickLoopReminders } from '../../utils/session/auto-verification'
 import { DefaultModelInputModalities } from '../../utils/tools/model-input-policy'
+import { AgentTuning } from '../../utils/tuning'
 import { ChatRuntimeEvents } from '../../utils/wire/chat-runtime.js'
 import { AgentLoopContextUsageManager } from '../context/AgentLoopContextUsageManager'
 import { forkFileContext } from '../context/FileContextCoordinator'
@@ -58,14 +59,6 @@ import { KernelToolLoopGuard } from '../tools/KernelToolLoopGuard'
 import { loopContinue, loopFinish, LoopWindDownGuard } from './LoopWindDownGuard'
 import type { QueryTurnResult } from './QueryTurn'
 import { isContextOverflowError, isContextOverflowReplayUnsafe } from './RetryPolicy'
-
-const MaxQueryLoopReasoningOnlyVisibleAnswerRecoveryAttempts = 2
-const MaxSubAgentStructuredOutputRepairAttempts = 2
-/**
- * 子 Agent 模型窗口未知时的保守回退（注入 `runtimeOverride` 的派发路径不带窗口）。
- * 编辑预算与运行档判档共用它——两处各写一个数就是两本账。
- */
-const SubAgentFallbackContextWindow = 128_000
 
 /** 子 Agent 的提示词装配面：本 loop 只管什么时候要提示词，怎么拼由宿主注入的这一件决定。 */
 interface QueryLoopRunContext<TContext extends QueryLoopToolContext, TSignals> {
@@ -330,7 +323,7 @@ class QueryLoop<
     // 子 Agent 同样下发输入侧可用窗口，让其编辑工具按自身模型窗口做编辑预算（缺省回退保守默认）。
     childCtx.codingSession.setUsableContextWindowTokens?.(
       resolveContextWindowBudget({
-        contextWindow: roleRuntime.contextWindow ?? SubAgentFallbackContextWindow,
+        contextWindow: roleRuntime.contextWindow ?? AgentTuning.loop.unknownContextWindowTokens,
       }).usableContextWindow
     )
 
@@ -343,7 +336,7 @@ class QueryLoop<
     // `resolveRunProfilePolicyForRuntime` 见到非 auto 的选择就直接采纳，不看窗口。
     const subAgentRunProfile = resolveRunProfilePolicyForRuntime({
       requested: args.parentCtx.codingSession.getRunProfile?.(),
-      contextWindow: roleRuntime.contextWindow ?? SubAgentFallbackContextWindow,
+      contextWindow: roleRuntime.contextWindow ?? AgentTuning.loop.unknownContextWindowTokens,
       model: roleRuntime.model,
     }).profile
 
@@ -579,7 +572,7 @@ class QueryLoop<
               aborted:
                 args.parentCtx.abortSignal.aborted || !!args.opts.workerAbortSignal?.aborted,
               recoveryAttempts: reasoningOnlyVisibleAnswerRecoveries,
-              maxAttempts: MaxQueryLoopReasoningOnlyVisibleAnswerRecoveryAttempts,
+              maxAttempts: AgentTuning.loop.reasoningOnlyAnswerRecoveryAttempts,
             })
           ) {
             reasoningOnlyVisibleAnswerRecoveries += 1
@@ -592,7 +585,7 @@ class QueryLoop<
               ChatRuntimeEvents.retryingTurn(
                 turn,
                 reasoningOnlyVisibleAnswerRecoveries,
-                MaxQueryLoopReasoningOnlyVisibleAnswerRecoveryAttempts,
+                AgentTuning.loop.reasoningOnlyAnswerRecoveryAttempts,
                 appError.message
               )
             )
@@ -691,7 +684,10 @@ class QueryLoop<
         if (compiledStructuredOutput) {
           const structured = parseSubAgentStructuredOutput(result.text, compiledStructuredOutput)
           if (!structured.success) {
-            if (structuredOutputRepairAttempts >= MaxSubAgentStructuredOutputRepairAttempts) {
+            if (
+              structuredOutputRepairAttempts >=
+              AgentTuning.loop.subAgentStructuredOutputRepairAttempts
+            ) {
               runScope?.end({ status: 'error' })
               throw new AppError(
                 'VALIDATION',

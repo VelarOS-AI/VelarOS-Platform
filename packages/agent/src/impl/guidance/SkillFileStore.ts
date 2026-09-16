@@ -14,6 +14,7 @@ import { isArray, isBlank, isEmpty,isString, stringifyPretty, trimmedStringOrEmp
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 
+import { AgentSkillFiles } from '../../contract/constants.js'
 import type { SkillFileRecord, SkillFrontmatter } from '../../types/guidance.js'
 import { normalizeSkillFileId } from '../../utils/guidance/skill-file-paths'
 import { compareStableStrings } from '../../utils/residency/determinism'
@@ -29,9 +30,7 @@ interface SkillFileStoreDependencies {
   defaultSpaces?: readonly string[]
 }
 
-const DisabledSkillStateFileName = '.disabled-skills.json'
 /** 目录式技能的入口文件名（<id>/SKILL.md）；扫描、指纹、资源枚举、解析、删除共用这一个字面量。 */
-const SkillDirEntryFileName = 'SKILL.md'
 
 /**
  * 解析 markdown 头部的 `---` frontmatter。
@@ -93,7 +92,7 @@ function listSkillDirResources(baseDir: string): string[] {
       const rel = prefix ? `${prefix}/${entry.name}` : entry.name
       if (entry.isDirectory()) {
         walk(join(dir, entry.name), rel, depth + 1)
-      } else if (entry.isFile() && rel !== SkillDirEntryFileName) {
+      } else if (entry.isFile() && rel !== AgentSkillFiles.skillEntryFileName) {
         resources.push(rel)
       }
     }
@@ -235,7 +234,7 @@ class SkillFileStore implements SkillFileStoreApi {
         const stats = statSync(filePath, { throwIfNoEntry: false })
         // 目录式技能连同资源文件一起进指纹（资源增删改也应触发重载）。
         const resourceVersion =
-          basename(filePath) === SkillDirEntryFileName
+          basename(filePath) === AgentSkillFiles.skillEntryFileName
             ? listSkillDirResources(dirname(filePath))
                 .map((rel) => {
                   const resourceStats = statSync(join(dirname(filePath), rel), {
@@ -355,7 +354,7 @@ class SkillFileStore implements SkillFileStoreApi {
     const filePath = this.resolveExistingPath(id)
     if (!filePath) return
 
-    if (basename(filePath) === SkillDirEntryFileName) {
+    if (basename(filePath) === AgentSkillFiles.skillEntryFileName) {
       rmSync(dirname(filePath), { force: true, recursive: true })
     } else {
       rmSync(filePath, { force: true })
@@ -436,12 +435,12 @@ class SkillFileStore implements SkillFileStoreApi {
     const flatPath = this.filePathOf(id)
     if (existsSync(flatPath)) return flatPath
 
-    const dirStylePath = join(this.dir(), normalizeSkillFileId(id), SkillDirEntryFileName)
+    const dirStylePath = join(this.dir(), normalizeSkillFileId(id), AgentSkillFiles.skillEntryFileName)
     return existsSync(dirStylePath) ? dirStylePath : null
   }
 
   private disabledStatePath(): string {
-    return join(this.dir(), DisabledSkillStateFileName)
+    return join(this.dir(), AgentSkillFiles.disabledStateFileName)
   }
 
   private readDisabledSkillIds(): Set<string> {
@@ -483,7 +482,7 @@ class SkillFileStore implements SkillFileStoreApi {
         }
         // 目录式技能：<id>/SKILL.md + 捆绑资源（Claude Code 同款渐进披露第三层）。
         if (entry.isDirectory()) {
-          const skillFilePath = join(root, entry.name, SkillDirEntryFileName)
+          const skillFilePath = join(root, entry.name, AgentSkillFiles.skillEntryFileName)
           if (existsSync(skillFilePath)) files.push(skillFilePath)
         }
       }
@@ -517,7 +516,7 @@ class SkillFileStore implements SkillFileStoreApi {
 
     try {
       const { data, body } = parseFrontmatter(readFileSync(filePath, 'utf8'))
-      const isDirStyle = basename(filePath) === SkillDirEntryFileName
+      const isDirStyle = basename(filePath) === AgentSkillFiles.skillEntryFileName
       const baseDir = isDirStyle ? dirname(filePath) : null
       const id = isDirStyle ? basename(dirname(filePath)) : basename(filePath, '.md')
       const parsedPriority = Number.parseInt(data.priority ?? '', 10)

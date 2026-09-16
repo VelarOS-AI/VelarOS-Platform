@@ -8,9 +8,7 @@ import type {
 import type { BuildTurnContextPayloadArgs } from '../../types/runner.js'
 import { isInternalFollowUpMessage } from '../history/internal-messages'
 import { isToolCategoryAvailable } from '../tools/access-policy'
-
-const RepeatedDebugUserPromptElideChars = 2_000
-const RepeatedDebugUserPromptPreviewChars = 120
+import { AgentTuning } from '../tuning'
 
 /**
  * 把二进制型的多模态内容换成一行体积摘要：base64 字符串按长度折算字节数，`URL` 取原文，
@@ -49,11 +47,11 @@ function serializeDebugContent(
       options.role === 'user' &&
       options.repeatedTurn &&
       options.isHistoricalMessage &&
-      content.length > RepeatedDebugUserPromptElideChars
+      content.length > AgentTuning.prompt.repeatedDebugPromptElideChars
     )
       return [
         `[较早的用户消息已从重复调试载荷中省略；原文字符数=${content.length}]`,
-        content.slice(0, RepeatedDebugUserPromptPreviewChars),
+        content.slice(0, AgentTuning.prompt.repeatedDebugPromptPreviewChars),
       ].join('\n')
 
     return content

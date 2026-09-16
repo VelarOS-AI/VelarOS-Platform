@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { isArray, isNumber, isPlainObject, isString } from '@velaros-ai/core'
 import { clampRounded } from '@velaros-ai/core/utils/number'
 
+import { AgentToolLimits } from '../../contract/constants.js'
 import type { BoundedReadInput, JsonSchemaObject,RecursiveTraversalInput } from '../../types/toolkit.js'
 
 import {
@@ -233,17 +234,14 @@ function refineBoundedReadInput(value: BoundedReadInput, refinementContext: z.Re
   }
 }
 
-/** recursive=true 但没给 maxDepth 时默认的安全上限:既保留有界遍历、又不因忘传而硬报错。 */
-const DEFAULT_RECURSIVE_MAX_DEPTH = 8
-
 /**
  * recursive=true 但没给 maxDepth 时,自动补一个安全默认深度(而非报错)。
  * 模型常写 { recursive: true } 忘带 maxDepth——这是「合理意图撞硬约束」的高频摩擦,
- * 用默认值兜底比让它报错重试友好得多;深度仍有界(DEFAULT_RECURSIVE_MAX_DEPTH),不会无限遍历。
+ * 用默认值兜底比让它报错重试友好得多;深度仍有界(AgentToolLimits.payload.defaultRecursiveMaxDepth),不会无限遍历。
  */
 function applyDefaultRecursiveMaxDepth<T extends RecursiveTraversalInput>(value: T): T {
   if (value.recursive && !isNumber(value.maxDepth))
-    return { ...value, maxDepth: DEFAULT_RECURSIVE_MAX_DEPTH }
+    return { ...value, maxDepth: AgentToolLimits.payload.defaultRecursiveMaxDepth }
   return value
 }
 

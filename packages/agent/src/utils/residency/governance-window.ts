@@ -3,12 +3,13 @@ import { isFiniteNumber } from '@velaros-ai/core'
 
 import type { ContextGovernanceConfig,GovernanceWindowDerivation, GovernanceWindowInput } from '../../types/residency.js'
 import { resolveContextUsageWindow } from '../context/context-usage'
+import { AgentTuning } from '../tuning'
 
-/** 兼容旧导出；可用窗口已经扣除安全余量，不再额外乘提前治理折扣。 */
-export const GovernanceHeadroomRatio = 1
+/** 兼容旧导出；可用窗口已经扣除安全余量，不再额外乘提前治理折扣。值在 AgentTuning.residency.governanceHeadroomRatio。 */
+export const GovernanceHeadroomRatio: number = AgentTuning.residency.governanceHeadroomRatio
 
-/** G 的地板：固定开销已经撑破送核门时的退化取值（治理器每轮必开）。 */
-export const MinGovernanceWindowTokens = 1
+/** G 的地板：固定开销已经撑破送核门时的退化取值（治理器每轮必开）。值在 AgentTuning.residency.minGovernanceWindowTokens。 */
+export const MinGovernanceWindowTokens: number = AgentTuning.residency.minGovernanceWindowTokens
 
 /** 完整输入容量扣除不可回收开销即为账本预算；旧 cap 不会让大窗口提前压缩。 */
 export function resolveGovernanceWindow(

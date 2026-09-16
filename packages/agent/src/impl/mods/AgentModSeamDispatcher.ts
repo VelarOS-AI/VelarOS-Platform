@@ -18,10 +18,9 @@ import type { AgentModDiagnostic, AgentModSeamKind } from '../../types/agent.js'
 import type { AgentModSeamDispatchMethodName,AgentModSeamHandler, AgentModSeamRegistration, AgentModSeamRegistrationInput, AgentModSessionLifecycleEvent, AgentModToolCallBeforeEvent, AgentModToolCallBeforeOutcome, AgentModToolResultAfterEvent, AgentModToolResultAfterOutcome, AgentModTurnContextAppendage, AgentModTurnContextAssembleEvent, AgentModTurnContextAssembleOutcome } from '../../types/mods.js'
 import { createHookContext, isThenable, matchesHook, readErrorMessage, resolveHookTimeoutMs } from '../../utils/mods/seams'
 import { compareStableStrings } from '../../utils/residency/determinism'
+import { AgentTuning } from '../../utils/tuning'
 
 // ─── 已接线 seam 的事件/结果契约 ──────────────────────────────────────────────
-
-const MaxSeamDiagnostics = 200
 
 
 
@@ -33,7 +32,7 @@ const MaxSeamDiagnostics = 200
  * 的事实面。两者的差集不静默：{@link AgentModSeamDispatcher.register} 命中差集即记
  * `mod.seam-not-wired` 诊断，沿 `getReport().diagnostics` 回到宿主的 mod 注册表页。
  */
-const WiredSeamKindsByDispatcher = {
+export const WiredSeamKindsByDispatcher: Readonly<Record<AgentModSeamDispatchMethodName, readonly AgentModSeamKind[]>> = {
   dispatchToolCallBefore: ['tool-call:before'],
   dispatchToolResultAfter: ['tool-result:after'],
   dispatchTurnContextAssemble: ['turn-context:assemble'],
@@ -42,7 +41,7 @@ const WiredSeamKindsByDispatcher = {
 } as const satisfies Record<AgentModSeamDispatchMethodName, readonly AgentModSeamKind[]>
 
 /** 已接线 kind 的扁平闭集（派生自 {@link WiredSeamKindsByDispatcher}，不许手写第二份）。 */
-const WiredSeamKinds: ReadonlySet<AgentModSeamKind> = new Set<AgentModSeamKind>(
+export const WiredSeamKinds: ReadonlySet<AgentModSeamKind> = new Set<AgentModSeamKind>(
   Object.values(WiredSeamKindsByDispatcher).flat()
 )
 
@@ -181,7 +180,7 @@ class AgentModSeamDispatcher implements AgentModSeamDispatcherApi {
       modId: input.modId,
       id: input.id,
       event: input.event,
-      priority: input.priority ?? 100,
+      priority: input.priority ?? AgentTuning.mods.defaultHookPriority,
       matcher: input.matcher,
       mode: input.mode ?? 'blocking',
       timeoutMs: resolveHookTimeoutMs(input.timeoutMs),
@@ -223,7 +222,7 @@ class AgentModSeamDispatcher implements AgentModSeamDispatcherApi {
 
   private record(diagnostic: AgentModDiagnostic): void {
     this.diagnostics.push(diagnostic)
-    if (this.diagnostics.length > MaxSeamDiagnostics) this.diagnostics.shift()
+    if (this.diagnostics.length > AgentTuning.mods.maxSeamDiagnostics) this.diagnostics.shift()
     this.onDiagnostic?.(diagnostic)
   }
 
@@ -432,14 +431,11 @@ class AgentModSeamDispatcher implements AgentModSeamDispatcherApi {
 }
 
 /** 标准 Hook 命名；Seam 常量只作旧调用方的兼容别名。 */
-const WiredHookEventsByDispatcher = WiredSeamKindsByDispatcher
-const WiredHookEvents = WiredSeamKinds
+export const WiredHookEventsByDispatcher: Readonly<Record<AgentModSeamDispatchMethodName, readonly AgentModSeamKind[]>> = WiredSeamKindsByDispatcher
+/** 同上，`WiredSeamKinds` 的兼容别名。 */
+export const WiredHookEvents: ReadonlySet<AgentModSeamKind> = WiredSeamKinds
 
 export {
   AgentModSeamDispatcher as AgentModHookDispatcher,
   AgentModSeamDispatcher,
-  WiredHookEvents,
-  WiredHookEventsByDispatcher,
-  WiredSeamKinds,
-  WiredSeamKindsByDispatcher,
 }

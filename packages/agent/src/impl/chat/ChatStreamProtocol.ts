@@ -305,4 +305,4 @@ export class ChatStreamProtocol implements ChatStreamProtocolApi {
 }
 
 /** 进程内共享的无状态协议实例。 */
-export const chatStreamProtocol = new ChatStreamProtocol()
+export const chatStreamProtocol: ChatStreamProtocol = new ChatStreamProtocol()

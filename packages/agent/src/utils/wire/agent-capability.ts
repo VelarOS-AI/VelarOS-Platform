@@ -11,6 +11,7 @@ import {
 } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
+import { AgentCapabilityEnvelopeLimits } from '../../contract/constants.js'
 import type { AgentCapabilityExecutionChannel, AgentCapabilityExecutionDescriptorV1, AgentCapabilityExecutionEventEnvelopeV1,AgentCapabilityExecutionSource } from '../../types/agent.js'
 import type { AgentCapabilityExecuteEnvelopeV1 } from '../../types/execution.js'
 
@@ -19,10 +20,6 @@ export const AgentCapabilityProtocolVersion = 1 as const satisfies AgentCapabili
 /** Semver axis advertised to mod manifests as `engines.agent`. */
 export const AgentCapabilityApiVersion = '1.0.0'
 export const AgentCapabilityExecutionEventType = 'velaros.agent.execution' as const
-
-const MaxAgentCapabilityMessages = 10_000
-const MaxAgentCapabilityScopeMetadataKeys = 128
-const DefaultIdentifierMaxLength = 512
 
 const EnvelopeKeys = new Set(['protocolVersion', 'execution', 'messages', 'config'])
 const ExecutionKeys = new Set(['id', 'source', 'scopeMetadata'])
@@ -75,7 +72,7 @@ function readRecord(value: unknown): Record<string, unknown> {
  */
 function requireBoundedIdentifier(
   value: unknown,
-  maxLength = DefaultIdentifierMaxLength,
+  maxLength: number = AgentCapabilityEnvelopeLimits.maxIdentifierChars,
 ): string {
   if (
     !isString(value)
@@ -106,7 +103,7 @@ export function parseAgentCapabilityExecuteEnvelopeV1(
   const source = readStrictRecord(execution.source, SourceKeys)
   if (
     !isArray(envelope.messages)
-    || envelope.messages.length > MaxAgentCapabilityMessages
+    || envelope.messages.length > AgentCapabilityEnvelopeLimits.maxMessages
   ) {
     throw invalidAgentCapabilityInput()
   }
@@ -122,7 +119,7 @@ export function parseAgentCapabilityExecuteEnvelopeV1(
   let scopeMetadata: Nullable<Readonly<Record<string, unknown>>> = null
   if (Object.hasOwn(execution, 'scopeMetadata')) {
     const parsedScopeMetadata = readRecord(execution.scopeMetadata)
-    if (Object.keys(parsedScopeMetadata).length > MaxAgentCapabilityScopeMetadataKeys) {
+    if (Object.keys(parsedScopeMetadata).length > AgentCapabilityEnvelopeLimits.maxScopeMetadataKeys) {
       throw invalidAgentCapabilityInput()
     }
     scopeMetadata = parsedScopeMetadata
@@ -130,7 +127,7 @@ export function parseAgentCapabilityExecuteEnvelopeV1(
 
   // 线协议里缺席的可选字段不写键：解析结果要能原样再过一遍严格解析，也不能带出 undefined 键。
   const parsedSource: { productId: string; sessionId: string; correlationId?: string } = {
-    productId: requireBoundedIdentifier(source.productId, 128),
+    productId: requireBoundedIdentifier(source.productId, AgentCapabilityEnvelopeLimits.maxProductIdChars),
     sessionId: requireBoundedIdentifier(source.sessionId),
   }
   if (Object.hasOwn(source, 'correlationId')) {

@@ -25,10 +25,6 @@ import { TaskApprovalState } from '../session/TaskApprovalState'
 
 import { AgentWorkflowCoordinator } from './AgentWorkflowCoordinator'
 
-const passthroughExecutionEnvironment: RunnerExecutionEnvironmentPort = {
-  run: (_input, action) => action({}),
-}
-
 /**
  * 主 Agent 运行器的对外面：一次主 Agent 运行的入口、子 Agent 委派入口，以及会话级任务审批的读写。
  *
@@ -40,6 +36,11 @@ export interface AgentRunnerApi<TToolContext extends RunnerToolContext = RunnerT
 
 class AgentRunner<TToolContext extends RunnerToolContext = RunnerToolContext>
   implements AgentRunnerApi<TToolContext> {
+  /** 宿主没给执行环境时的直通替身：不套沙箱、不改动作，原样把动作跑掉。 */
+  private static readonly PassthroughExecutionEnvironment: RunnerExecutionEnvironmentPort = {
+    run: (_input, action) => action({}),
+  }
+
   private readonly sessionApprovalRegistry = new Map<string, TaskApprovalState>()
   private readonly taskApprovalListeners = new Set<(sessionId: string) => void>()
   private readonly sessionPageInRegistry = new Map<
@@ -74,7 +75,7 @@ class AgentRunner<TToolContext extends RunnerToolContext = RunnerToolContext>
     this.workflowCoordinator = new AgentWorkflowCoordinator(this.subAgentDispatcher)
     this.capabilityPorts = infrastructure.capabilityPorts
     this.executionEnvironment =
-      domainServices.executionEnvironment ?? passthroughExecutionEnvironment
+      domainServices.executionEnvironment ?? AgentRunner.PassthroughExecutionEnvironment
     this.configService = infrastructure.configService
     this.toolRegistry = infrastructure.toolRegistry
     this.codingSessionPolicy = infrastructure.codingSessionPolicy

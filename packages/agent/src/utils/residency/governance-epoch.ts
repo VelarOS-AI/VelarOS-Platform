@@ -19,7 +19,7 @@ import type { AppliedDistillOutcome, ContextGovernanceConfig, ContextMigrationCa
 
 import { hasExcerptRenderMaterial } from './admission'
 import { anchorDensityPerKiloChar } from './anchors'
-import { estimateResidencyTokens } from './context-record'
+import { DefaultResidencyCharsPerToken, estimateResidencyTokens } from './context-record'
 import { createEmptyDistillTotals, isContextSummaryText } from './distill'
 import { measureLedgerProjection, residentChars } from './projection'
 import { buildContextSkeleton, MaxContextSummaryMembers } from './skeleton'
@@ -82,7 +82,7 @@ export function runGovernanceEpoch(input: RunGovernanceEpochInput): GovernanceEp
   // 已落地的产物不参与这道闸——钱已经花了，收益该算进本次报告，不该被"预计还能省多少"否掉。
   const reclaimableTokens = estimateResidencyTokens(
     candidates.reduce((total, candidate) => total + candidate.reclaimableChars, 0),
-    input.charsPerToken ?? 4
+    input.charsPerToken ?? DefaultResidencyCharsPerToken
   )
   const minSavingTokens = (config.minEpochSavingPercent / 100) * before
   if (reclaimableTokens < minSavingTokens && !input.capacityExceeded && input.source !== 'overflow-recovery') {
@@ -120,7 +120,7 @@ export function runGovernanceEpoch(input: RunGovernanceEpochInput): GovernanceEp
   for (const candidate of candidates) {
     // 容量治理达标即停。供应方已报告溢出时，本地估算可能偏低，仍允许回收陈旧的可重取内容；
     // 低密度叙述只有存在真实预算压力才降级，不因恢复请求继续扩大损失。
-    if (estimateResidencyTokens(projectedChars, input.charsPerToken ?? 4) <= targetTokens) {
+    if (estimateResidencyTokens(projectedChars, input.charsPerToken ?? DefaultResidencyCharsPerToken) <= targetTokens) {
       if (!modelRequested) break
       if (candidate.tier === 'low-density') continue
     }
@@ -602,8 +602,8 @@ function buildReport(
       gate: null,
       totals: createEmptyDistillTotals(),
     },
-    // 记账口径随报告一起出门：缺省 4 是 projection / ContextRecord 的同一条兜底。
-    charsPerToken: input.charsPerToken ?? 4,
+    // 记账口径随报告一起出门：缺省密度是 projection / ContextRecord 的同一条兜底。
+    charsPerToken: input.charsPerToken ?? DefaultResidencyCharsPerToken,
     // 窗口推导同理：报告里读不出"G 是怎么来的"，就没法在离线重放里区分
     //「触发线改了」与「送核门余量变了」（量纲统一批的记账落点）。
     window: toNullable(input.window),

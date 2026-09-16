@@ -2,6 +2,7 @@ import type { ModelMessage } from 'ai'
 
 import { isArray, isEmpty, isPlainObject, isString,Log } from '@velaros-ai/core'
 
+import { AgentToolLimits } from '../../contract/constants.js'
 import type { ContextPayloadStore } from '../../contract/requires.js'
 import type { FileContextCarrier, FileContextRange, FileContextSnapshot, FileContextSource, FileContextView, FileContextViewTier, FileSnapshotRecallInput } from '../../types/context.js'
 import {
@@ -590,7 +591,7 @@ export class FileContextCoordinator implements FileContextCoordinatorApi {
         versions.set(id, group)
       }
       const groups = [...versions.values()]
-      const page = groups.slice(offset, offset + (input.maxResults ?? 8))
+      const page = groups.slice(offset, offset + (input.maxResults ?? AgentToolLimits.recall.defaultSearchResults))
       return {
         kind: 'file-versions',
         historical: true,
@@ -640,7 +641,7 @@ export class FileContextCoordinator implements FileContextCoordinatorApi {
         found: true,
         offsetUnit: 'snapshot',
         snapshots: matches
-          .slice(input.offset ?? 0, (input.offset ?? 0) + (input.maxResults ?? 8))
+          .slice(input.offset ?? 0, (input.offset ?? 0) + (input.maxResults ?? AgentToolLimits.recall.defaultSearchResults))
           .map(({ ref, snapshot }) => ({
             ref,
             revision: snapshot.revision,
@@ -648,8 +649,8 @@ export class FileContextCoordinator implements FileContextCoordinatorApi {
             complete: snapshot.complete,
           })),
         nextOffset:
-          (input.offset ?? 0) + (input.maxResults ?? 8) < matches.length
-            ? (input.offset ?? 0) + (input.maxResults ?? 8)
+          (input.offset ?? 0) + (input.maxResults ?? AgentToolLimits.recall.defaultSearchResults) < matches.length
+            ? (input.offset ?? 0) + (input.maxResults ?? AgentToolLimits.recall.defaultSearchResults)
             : null,
       }
     const { ref, snapshot } = matches[0]!
@@ -663,7 +664,7 @@ export class FileContextCoordinator implements FileContextCoordinatorApi {
       range: snapshot.range,
       complete: snapshot.complete,
       redacted: snapshot.redacted,
-      ...sliceFileSnapshot(snapshot.content, input.offset ?? 0, input.maxChars ?? 8000),
+      ...sliceFileSnapshot(snapshot.content, input.offset ?? 0, input.maxChars ?? AgentToolLimits.recall.defaultRetrieveChars),
     }
   }
 

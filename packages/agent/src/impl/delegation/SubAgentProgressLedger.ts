@@ -1,14 +1,7 @@
 import { isBlank, isEmpty,isPresent, truncate } from '@velaros-ai/core'
 
 import type { DispatchDecision, DispatchSignature, FindingRecord,LedgerEntry, SubAgentTypeKey } from '../../types/delegation.js'
-
-const SubAgentFindingsMaxCharsEach = 480
-const SubAgentFindingsMaxRecords = 8
-const SubAgentMaxIdenticalDispatches = 3
-const SubAgentMaxRoundsPerTarget = 4
-
-/** 账本条目上限（远大于派发硬上限 16，仅作内存安全兜底）。 */
-const MaxLedgerEntries = 32
+import { AgentTuning } from '../../utils/tuning'
 
 /** 归一化文本：小写 + 折叠空白 + 去首尾，使「语义相同、排版不同」的提示词命中同一指纹。 */
 function normalizeText(value: string): string {
@@ -76,6 +69,17 @@ export interface SubAgentProgressLedgerApi {
 }
 
 class SubAgentProgressLedger implements SubAgentProgressLedgerApi {
+  /** 单条发现的最大字符数。 */
+  private static readonly SubAgentFindingsMaxCharsEach = AgentTuning.delegation.findingsMaxCharsEach
+  /** 每次执行最多留几条发现。 */
+  private static readonly SubAgentFindingsMaxRecords = AgentTuning.delegation.findingsMaxRecords
+  /** 同一条任务描述最多重复派发几次。 */
+  private static readonly SubAgentMaxIdenticalDispatches = AgentTuning.delegation.maxIdenticalDispatches
+  /** 针对同一个目标最多跑几轮。 */
+  private static readonly SubAgentMaxRoundsPerTarget = AgentTuning.delegation.maxRoundsPerTarget
+  /** 账本条目上限（远大于派发硬上限，仅作内存安全兜底）。 */
+  private static readonly MaxLedgerEntries = AgentTuning.delegation.maxLedgerEntries
+
   private readonly dispatches = new Map<string, LedgerEntry[]>()
   private readonly findings = new Map<string, FindingRecord[]>()
 
@@ -108,7 +112,7 @@ class SubAgentProgressLedger implements SubAgentProgressLedgerApi {
     const identicalCount = entries.filter(
       (entry) => entry.promptFingerprint === signature.promptFingerprint
     ).length
-    if (identicalCount + 1 >= SubAgentMaxIdenticalDispatches) return {
+    if (identicalCount + 1 >= SubAgentProgressLedger.SubAgentMaxIdenticalDispatches) return {
         kind: 'hard-stop',
         note: `已就几乎相同的子任务（类型 ${signature.type}）派发 ${identicalCount} 次，未见新进展。请不要再重复派发，改为综合现有信息自行完成，或换一个明显不同的拆分角度。`,
       }
@@ -116,7 +120,7 @@ class SubAgentProgressLedger implements SubAgentProgressLedgerApi {
     const targetEntries = entries.filter((entry) => entry.targetKey === signature.targetKey)
     const typesOnTarget = new Set<SubAgentTypeKey>(targetEntries.map((entry) => entry.type))
     typesOnTarget.add(signature.type)
-    if (targetEntries.length + 1 >= SubAgentMaxRoundsPerTarget && typesOnTarget.size >= 2) return {
+    if (targetEntries.length + 1 >= SubAgentProgressLedger.SubAgentMaxRoundsPerTarget && typesOnTarget.size >= 2) return {
         kind: 'soft-nudge',
         note: `提示：该目标已在多个子智能体之间往返 ${targetEntries.length + 1} 次（含 ${[...typesOnTarget].join('/')}）。若仍未收敛，请停止继续派发、综合已有发现自行收口，避免反复横跳空耗。`,
       }
@@ -132,8 +136,8 @@ class SubAgentProgressLedger implements SubAgentProgressLedgerApi {
       promptFingerprint: signature.promptFingerprint,
       targetKey: signature.targetKey,
     })
-    if (entries.length > MaxLedgerEntries) {
-      entries.splice(0, entries.length - MaxLedgerEntries)
+    if (entries.length > SubAgentProgressLedger.MaxLedgerEntries) {
+      entries.splice(0, entries.length - SubAgentProgressLedger.MaxLedgerEntries)
     }
     this.dispatches.set(executionKey, entries)
   }
@@ -149,10 +153,10 @@ class SubAgentProgressLedger implements SubAgentProgressLedgerApi {
     records.push({
       type: finding.type,
       title: truncate(finding.title.trim(), 80),
-      summary: truncate(summary, SubAgentFindingsMaxCharsEach),
+      summary: truncate(summary, SubAgentProgressLedger.SubAgentFindingsMaxCharsEach),
     })
-    if (records.length > SubAgentFindingsMaxRecords) {
-      records.splice(0, records.length - SubAgentFindingsMaxRecords)
+    if (records.length > SubAgentProgressLedger.SubAgentFindingsMaxRecords) {
+      records.splice(0, records.length - SubAgentProgressLedger.SubAgentFindingsMaxRecords)
     }
     this.findings.set(executionKey, records)
   }

@@ -24,6 +24,7 @@ import { z } from 'zod'
 
 import { isEmpty,isNotUndefined } from '@velaros-ai/core'
 
+import { AgentToolLimits } from '../../contract/constants.js'
 import type { ToolSpaceFindInput, ToolSpaceInput, ToolSpaceMapInput, ToolSpaceOperationInput,ToolSpacePageInput, ToolSpaceReadInput, ToolSpaceReplaceInput } from '../../types/builtin.js'
 import {
   renderParameterDescription as parameterDescription,
@@ -44,7 +45,8 @@ const ToolOsStateValues = [
   'unavailable',
 ] as const
 const toolDiscoveryToolOsStateSchema = z.enum(ToolOsStateValues)
-export const ToolSpaceQueryPageLimitMax = 50
+/** 一页最多返回多少条工具页；模型看得到，值在 AgentToolLimits.toolSpace.queryPageLimitMax。 */
+export const ToolSpaceQueryPageLimitMax = AgentToolLimits.toolSpace.queryPageLimitMax
 
 export const toolAvailabilitySchema = z.enum(ToolDiscoveryAvailabilityValues)
 

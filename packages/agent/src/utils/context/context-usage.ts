@@ -2,39 +2,23 @@ import { isArray, isBoolean, isFiniteNumber, isNumber, isObject, isPlainObject, 
 import { mapDefined } from '@velaros-ai/core/utils/mapDefined'
 import { clamp } from '@velaros-ai/core/utils/number'
 
+import { AgentContextThresholds } from '../../contract/constants.js'
 import type { ContextUsageEstimate } from '../../types/agent.js'
 import type { ContextUsageWindow, EstimateContextUsageOptions } from '../../types/context.js'
+import { AgentTuning } from '../tuning'
 
 import { resolveUsableContextWindow } from './context-budget'
 import { countTokensTiktoken, resolveTokenizerEngine } from './tokenizer'
 
-/** 界面提醒线，只表达接近容量，不触发压缩。 */
-export const ContextUsageHighWatermarkPercent = 90
-/** @deprecated 兼容旧消费者；自动治理只在完整请求超过可用输入容量时触发。 */
-export const ContextUsageSemanticPreSummaryPercent = 100
-/** 可用输入容量百分比；恰好装满仍可发送，超出才治理。 */
-export const ContextUsageCompactionPercent = 100
-/** 历史载荷诊断刻度，不能作为发送或压缩门限。 */
-export const ContextUsagePayloadCompactionChars = 400_000
-
-// 保持旧诊断图的字符刻度稳定；模型容量判决只使用 token 和 usableContextWindow。
-const ContextUsagePayloadWindowChars = 500_000
-
-const ObjectBoundaryTokenCost = 2
-const ArrayBoundaryTokenCost = 2
-const PropertyOverheadTokenCost = 1
-const MessageBaseTokenCost = 4
-const TextPartBaseTokenCost = 3
-const FilePartBaseTokenCost = 18
-const ToolPartBaseTokenCost = 8
-const UnknownCycleTokenCost = 8
-const NewlineTokenCost = 0.25
-const TabTokenCost = 0.25
-const AsciiPunctuationTokenCost = 0.5
-const NonAsciiPunctuationTokenCost = 0.75
-const EmojiTokenCost = 2
-const CjkTokenCost = 1
-const OtherUnicodeTokenCost = 1
+/** 界面提醒线，只表达接近容量，不触发压缩；值在 AgentContextThresholds.highWatermarkPercent。 */
+export const ContextUsageHighWatermarkPercent: number = AgentContextThresholds.highWatermarkPercent
+/** @deprecated 兼容旧消费者；自动治理只在完整请求超过可用输入容量时触发。值在 AgentContextThresholds.compactionPercent。 */
+export const ContextUsageSemanticPreSummaryPercent: number =
+  AgentContextThresholds.compactionPercent
+/** 可用输入容量百分比；恰好装满仍可发送，超出才治理。值在 AgentContextThresholds.compactionPercent。 */
+export const ContextUsageCompactionPercent: number = AgentContextThresholds.compactionPercent
+/** 历史载荷诊断刻度，不能作为发送或压缩门限；值在 AgentTuning.context.payloadCompactionChars。 */
+export const ContextUsagePayloadCompactionChars: number = AgentTuning.context.payloadCompactionChars
 
 /**
  * 把一段 base64 正文换成 `[base64 N bytes]` 的一行摘要，N 由串长按 3/4 反推（不解码，末尾的 `=` 填充算进去，故略有高估）。
@@ -184,7 +168,7 @@ function isCjkCodePoint(codePoint: number): boolean {
 
 /**
  * 该码位是否落在两段主要 emoji 区（U+1F300–U+1FAFF 与杂项符号 U+2600–U+27BF）。
- * 命中按 EmojiTokenCost 计——emoji 多是多字节序列，一个符号往往吃掉不止一个 token。粗略覆盖即可，漏掉的变体选择符等会落到通用档。
+ * 命中按 AgentTuning.tokenCost.emoji 计——emoji 多是多字节序列，一个符号往往吃掉不止一个 token。粗略覆盖即可，漏掉的变体选择符等会落到通用档。
  */
 function isEmojiCodePoint(codePoint: number): boolean {
   return (
@@ -195,7 +179,7 @@ function isEmojiCodePoint(codePoint: number): boolean {
 
 /**
  * 该字符是否属于 Unicode 标点或符号类（`\p{P}` 或 `\p{S}`）——中文全角标点、数学符号、货币符号等都算。
- * 非 ASCII 段里靠它区分「标点按 NonAsciiPunctuationTokenCost 计」还是「按 OtherUnicodeTokenCost 计」。
+ * 非 ASCII 段里靠它区分「标点按 AgentTuning.tokenCost.nonAsciiPunctuation 计」还是「按 AgentTuning.tokenCost.otherUnicode 计」。
  */
 function isUnicodePunctuation(char: string): boolean {
   return /[\p{P}\p{S}]/u.test(char)
@@ -223,7 +207,7 @@ function estimateAsciiRunTokens(run: string): number {
     0,
   )
 
-  return alphaNumericTokens + (punctuationCount * AsciiPunctuationTokenCost)
+  return alphaNumericTokens + (punctuationCount * AgentTuning.tokenCost.asciiPunctuation)
 }
 
 /**
@@ -273,9 +257,9 @@ function estimateStringTokens(text: string): number {
       if (isAsciiWhitespace(codePoint)) {
         flushAsciiRun()
         if (char === '\n' || char === '\r') {
-          estimated += NewlineTokenCost
+          estimated += AgentTuning.tokenCost.newline
         } else if (char === '\t') {
-          estimated += TabTokenCost
+          estimated += AgentTuning.tokenCost.tab
         }
         continue
       }
@@ -287,18 +271,18 @@ function estimateStringTokens(text: string): number {
     flushAsciiRun()
 
     if (isCjkCodePoint(codePoint)) {
-      estimated += CjkTokenCost
+      estimated += AgentTuning.tokenCost.cjk
       continue
     }
 
     if (isEmojiCodePoint(codePoint)) {
-      estimated += EmojiTokenCost
+      estimated += AgentTuning.tokenCost.emoji
       continue
     }
 
     estimated += isUnicodePunctuation(char)
-      ? NonAsciiPunctuationTokenCost
-      : OtherUnicodeTokenCost
+      ? AgentTuning.tokenCost.nonAsciiPunctuation
+      : AgentTuning.tokenCost.otherUnicode
   }
 
   flushAsciiRun()
@@ -329,13 +313,13 @@ function estimateEntriesTokens(
   entries: Array<[string, unknown]>,
   seen: Set<object>,
 ): number {
-  return entries.reduce(
+  return entries.reduce<number>(
     (total, [key, entry]) =>
       total
       + estimateStringTokens(key)
-      + PropertyOverheadTokenCost
+      + AgentTuning.tokenCost.propertyOverhead
       + estimateValueTokens(entry, seen),
-    ObjectBoundaryTokenCost,
+    AgentTuning.tokenCost.objectBoundary,
   )
 }
 
@@ -348,7 +332,7 @@ function estimateMessageTokens(
   seen: Set<object>,
 ): number {
   return (
-    MessageBaseTokenCost
+    AgentTuning.tokenCost.messageBase
     + estimateStringTokens(value.role)
     + estimateValueTokens(value.content, seen)
   )
@@ -367,32 +351,32 @@ function estimateTypedPartTokens(
   switch (type) {
     case 'text':
       return (
-        TextPartBaseTokenCost
+        AgentTuning.tokenCost.textPartBase
         + estimateStringTokens(String(value.text ?? ''))
         + estimateValueTokens(value.value, seen)
       )
     case 'image':
       return (
-        FilePartBaseTokenCost
+        AgentTuning.tokenCost.filePartBase
         + estimateStringTokens(String(value.image ?? ''))
         + estimateStringTokens(String(value.mediaType ?? ''))
       )
     case 'file':
       return (
-        FilePartBaseTokenCost
+        AgentTuning.tokenCost.filePartBase
         + estimateStringTokens(String(value.data ?? ''))
         + estimateStringTokens(String(value.mediaType ?? ''))
       )
     case 'tool-call':
       return (
-        ToolPartBaseTokenCost
+        AgentTuning.tokenCost.toolPartBase
         + estimateStringTokens(String(value.toolName ?? ''))
         + estimateStringTokens(String(value.toolCallId ?? ''))
         + estimateValueTokens(value.input, seen)
       )
     case 'tool-result':
       return (
-        ToolPartBaseTokenCost
+        AgentTuning.tokenCost.toolPartBase
         + estimateStringTokens(String(value.toolName ?? ''))
         + estimateStringTokens(String(value.toolCallId ?? ''))
         + estimateValueTokens(value.output, seen)
@@ -406,7 +390,7 @@ function estimateTypedPartTokens(
  * 估任意值的 token 数，是无分词器兜底路径的递归总入口。
  * 分派：字符串与数字按文本估；布尔与 null/undefined 各记 1；URL 转串；ArrayBuffer 及其视图先换成体积摘要再估；
  * 数组从边界开销起逐项累加；非纯对象按 `String(value)` 估；纯对象里，像消息的走消息档，带 `type` 的走片段档，其余逐键累加。
- * 循环引用返回固定的 UnknownCycleTokenCost 而不是继续下探——估算绝不能因为一个环就转不出来。
+ * 循环引用返回固定的 AgentTuning.tokenCost.unknownCycle 而不是继续下探——估算绝不能因为一个环就转不出来。
  * 注意 `seen` 只加不删，同一个对象在同一次估算里被多处引用时，第二次起只按环开销计（偏低），换来的是估算恒定终止。
  */
 function estimateValueTokens(value: unknown, seen: Set<object>): number {
@@ -424,12 +408,12 @@ function estimateValueTokens(value: unknown, seen: Set<object>): number {
 
   if (isArray(value)) return value.reduce<number>(
       (total, entry) => total + estimateValueTokens(entry, seen),
-      ArrayBoundaryTokenCost,
+      AgentTuning.tokenCost.arrayBoundary,
     )
 
   if (!isPlainObject(value)) return estimateStringTokens(String(value))
 
-  if (seen.has(value)) return UnknownCycleTokenCost
+  if (seen.has(value)) return AgentTuning.tokenCost.unknownCycle
 
   seen.add(value)
 
@@ -536,8 +520,9 @@ export function estimateContextUsage(
   const window = resolveContextUsageWindow(options)
   const { contextWindow, usableContextWindow, reservedOutputTokens } = window
   const tokenPercent = Number(((estimatedTokens / usableContextWindow) * 100).toFixed(2))
+  // 保持旧诊断图的字符刻度稳定；模型容量判决只使用 token 和 usableContextWindow。
   const payloadPercent = Number(
-    ((estimatedChars / ContextUsagePayloadWindowChars) * 100).toFixed(2)
+    ((estimatedChars / AgentTuning.context.payloadWindowChars) * 100).toFixed(2)
   )
   const percent = tokenPercent
 

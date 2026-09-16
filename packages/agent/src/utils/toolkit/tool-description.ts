@@ -3,6 +3,7 @@ import { AppError } from '@velaros-ai/core/error'
 
 import type { ToolCategoryId } from '../../types/agent.js'
 import type { StructuredDescriptionGrammar,StructuredParameterDescriptionSpec, StructuredToolDescriptionParts, StructuredToolDescriptionSpec, ToolDescriptionBudgetWaiver, ToolDescriptionBudgetWaiverReason, ToolDescriptionLike } from '../../types/toolkit.js'
+import { AgentTuning } from '../tuning'
 
 
 const StructuredToolDescriptionSections = [
@@ -42,8 +43,9 @@ const DescriptionSectionPrefix = '描述：'
  * 因此唯一的防线是写的时候别写爆：单一职责工具正常够不到这个量级
  * （现网 p50≈330、p90≈750、最大 ≈4k），撞线基本等于「这个工具该拆」，
  * 或该把细节挪进 `tooling:read` 的按需正文。
+ * 值在 `AgentTuning.toolkit.descriptionMaxChars`。
  */
-const ToolDescriptionMaxChars = 6_000
+const ToolDescriptionMaxChars: number = AgentTuning.toolkit.descriptionMaxChars
 
 /**
  * 保底闸：单个工具描述超过 `ToolDescriptionMaxChars`（6000 字符）就抛 `VALIDATION` AppError，
@@ -70,8 +72,10 @@ function assertToolDescriptionWithinLimit(name: string, description: string): vo
  * 逐节压缩等于删规则）：
  *  1. 拆 companion skill：工艺深度搬进技能，契约声明 `usageSkillId` 指路，描述瘦身到调用面；
  *  2. 显式豁免 `descriptionBudgetWaiver`，理由只认 `safety-protocol` / `meta-tool` 两种。
+ *
+ * 值在 `AgentTuning.toolkit.descriptionBudgetChars`。
  */
-const ToolDescriptionBudgetChars = 1_800
+const ToolDescriptionBudgetChars: number = AgentTuning.toolkit.descriptionBudgetChars
 
 const ToolDescriptionBudgetWaiverReasons: ReadonlySet<string> = new Set<
   ToolDescriptionBudgetWaiverReason

@@ -28,6 +28,7 @@ import { type z } from 'zod'
 
 import { isEmpty, optionalWhen, toNullable } from '@velaros-ai/core'
 
+import { AgentToolLimits } from '../../contract/constants.js'
 import type { ToolCategoryDomainId, ToolCategoryId, ToolOsState } from '../../types/agent.js'
 import type { ToolCategoryFilterResolution, ToolDiscoveryCard, ToolMapCategoryKind, ToolSearchResultEntry } from '../../types/builtin.js'
 import type { KernelToolContext as ToolContext } from '../../types/tool-context.js'
@@ -46,7 +47,8 @@ import {
 } from './tool-space-schemas'
 import { buildMatchSignals, buildToolSearchScoreContext, scoreCard, ToolFindLowConfidenceScoreRatio } from './tool-space-search'
 
-const ToolMapTargetToolRows = 32
+/** map 一页的目标工具行数；值在 AgentToolLimits.toolSpace.targetToolRows。 */
+const ToolMapTargetToolRows = AgentToolLimits.toolSpace.targetToolRows
 
 const ToolOsStateValues = [
   'resident',

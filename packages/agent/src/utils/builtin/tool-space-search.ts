@@ -34,12 +34,14 @@ import {
 import type { ToolActivationGuide, ToolDiscoveryCard, ToolMatchSignal, ToolSearchScoreContext } from '../../types/builtin.js'
 import type { KernelToolContext as ToolContext } from '../../types/tool-context.js'
 import { parseStructuredToolDescription } from '../toolkit/tool-description'
+import { AgentTuning } from '../tuning'
 
 import { readToolInputSchema } from './tool-read-details'
 import { matchedTermsForField, splitIdentifierSearchTerm } from './tool-search-terms'
 import { buildToolActivationGuide } from './tool-space-activation'
 
-export const ToolFindLowConfidenceScoreRatio = 0.3
+/** 低置信截断比例：值在 AgentTuning.toolkit.lowConfidenceScoreRatio，只影响排序不进模型面文案。 */
+export const ToolFindLowConfidenceScoreRatio = AgentTuning.toolkit.lowConfidenceScoreRatio
 
 /**
  * 单字段得分 = 该字段命中的候选词**条数** × 字段权重。一个词在字段里出现多次只算一条，

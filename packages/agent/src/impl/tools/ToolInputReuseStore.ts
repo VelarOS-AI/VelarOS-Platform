@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { isArray, isEmpty, isNumber, isObject, isPlainObject, isString, isUndefined, Log } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import type { AttemptInput, ToolAttemptOutcome, ToolInputChange,ToolInputReuse, ToolInputReuseContext, ToolInputReuseOptions } from '../../types/tools.js'
+import type { AttemptInput, ToolAttemptOutcome, ToolInputChange, ToolInputReuseContext, ToolInputReuseOptions } from '../../types/tools.js'
 import {
   ClaimToolName,
   contractVersion,
@@ -14,39 +14,14 @@ import {
   OutcomeToolName,
   reusableInputField,
   toolAttemptPayloadHash,
+  ToolInputReuseSchema,
 } from '../../utils/tools/tool-input-reuse'
 import { createContextPayloadRef } from '../context/InMemoryContextPayloadStore'
 import { ToolInputReuseError } from '../errors/ToolInputReuseError'
 
-export { readReusableAttemptInput } from '../../utils/tools/tool-input-reuse'
+export { readReusableAttemptInput, ToolInputReuseSchema } from '../../utils/tools/tool-input-reuse'
 export { ToolInputReuseError } from '../errors/ToolInputReuseError'
 
-export const ToolInputReuseSchema = z.strictObject({
-  reuse: z.string().min(1).describe('原样复制失败回执 inputReuse.reuse（attempt:…）；带 reuse 时根上只能再有 changes，其余参数从该次调用恢复后重新校验。'),
-  changes: z
-    .array(
-      z
-        .strictObject({
-          op: z.enum(['set', 'remove']),
-          path: z
-            .array(z.union([z.string(), z.number().int().nonnegative()]))
-            .min(1)
-            .max(32),
-          value: z.unknown().optional(),
-        })
-        .superRefine((change, context) => {
-          if ((change.op === 'set') !== Object.hasOwn(change, 'value'))
-            context.addIssue({
-              code: 'custom',
-              path: ['value'],
-              message: 'op 为 set 时必须给 value；op 为 remove 时只给 path，不要带 value。',
-            })
-        })
-    )
-    .min(1)
-    .max(100)
-    .describe('路径按数组给出，如 ["items", 0, "name"]；使用原参数的实际字段路径，其他参数原样保留。'),
-}) satisfies z.ZodType<ToolInputReuse>
 /** 失败回执 inputReuse.note：执行器给新失败和「复用请求本身有误」两处回执共用同一句说明。 */
 export const ToolInputReuseNote: string =
   '重试同一个工具，根上只给 reuse 与 changes。changes 的每一项用 op（set 或 remove）加 path（已保存参数里的真实字段路径，写成数组），op 为 set 时再给修正后的 value。没写进 changes 的字段会自动恢复并重新校验。'

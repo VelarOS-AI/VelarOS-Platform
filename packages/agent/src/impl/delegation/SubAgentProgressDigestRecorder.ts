@@ -1,9 +1,7 @@
 import { isEmpty, isNonBlankString, truncate } from '@velaros-ai/core'
 
 import type { AgentEvent } from '../../types/agent'
-
-/** 单个子 Agent 的进展摘要行数上限；超过后停记并留一条说明，防止撑爆 job 输出。 */
-const MaxDigestLines = 200
+import { AgentTuning } from '../../utils/tuning'
 
 /** 从工具入参里挑一个最有信息量的短提示（第一个非空字符串值）。 */
 function pickArgsHint(args: Record<string, unknown>): Nullable<string> {
@@ -37,6 +35,9 @@ export interface SubAgentProgressDigestRecorderApi {
 }
 
 class SubAgentProgressDigestRecorder implements SubAgentProgressDigestRecorderApi {
+  /** 单个子 Agent 的进展摘要行数上限；超过后停记并留一条说明，防止撑爆 job 输出。 */
+  private static readonly MaxDigestLines = AgentTuning.delegation.maxDigestLines
+
   private readonly startedAt = Date.now()
   private readonly toolNamesByCallId = new Map<string, string>()
   private pendingLines: string[] = []
@@ -68,13 +69,13 @@ class SubAgentProgressDigestRecorder implements SubAgentProgressDigestRecorderAp
   }
 
   private push(text: string): void {
-    if (this.lineCount >= MaxDigestLines) return
+    if (this.lineCount >= SubAgentProgressDigestRecorder.MaxDigestLines) return
     this.lineCount += 1
     const elapsedSeconds = Math.round((Date.now() - this.startedAt) / 1_000)
     const line = `[+${elapsedSeconds}s] ${text}\n`
     const suffix =
-      this.lineCount === MaxDigestLines
-        ? `[+${elapsedSeconds}s] （进展轨迹已达 ${MaxDigestLines} 行上限，后续省略；最终结果以子 Agent 返回为准）\n`
+      this.lineCount === SubAgentProgressDigestRecorder.MaxDigestLines
+        ? `[+${elapsedSeconds}s] （进展轨迹已达 ${SubAgentProgressDigestRecorder.MaxDigestLines} 行上限，后续省略；最终结果以子 Agent 返回为准）\n`
         : ''
     if (this.sink) {
       this.emit(`${line}${suffix}`)

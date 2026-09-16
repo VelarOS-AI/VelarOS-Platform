@@ -38,6 +38,22 @@ export const AgentTuning = Object.freeze({
     streamIdleThinkingNoticeDelayMs: 15_000,
     /** setTimeout 能接受的最大延迟毫秒数；超过它的等待要分段，否则会立刻触发。 */
     maxNativeTimerDelayMs: 2_147_483_647,
+    /** 普通执行的墙钟硬上限，毫秒：产品形态是过夜马拉松任务，所以给到 24 小时。 */
+    standardExecutionWallClockTimeoutMs: 24 * 60 * 60_000,
+    /** 目标模式执行的墙钟硬上限，毫秒：多日任务靠它兜底，不得小于普通执行的墙钟。 */
+    goalExecutionWallClockTimeoutMs: 7 * 24 * 60 * 60_000,
+    /** 子 Agent 的软期限，毫秒：到点进入收尾而不是硬杀，半成品副作用比超时更贵。 */
+    subAgentSoftDeadlineMs: 4 * 60 * 60_000,
+    /** 模型流空闲多久判死，毫秒：这是唯一的"模型没反应"闸，调大等于挂死更久才暴露。 */
+    modelStreamIdleTimeoutMs: 5 * 60_000,
+    /** 同一个父会话最多保留几条已结束的子 Agent 线程供下一轮续跑。 */
+    subAgentRetainedThreadsPerSession: 8,
+    /** 全局最多保留多少条已结束的子 Agent 线程。 */
+    subAgentRetainedThreadsTotal: 64,
+    /** 保留线程空闲多久就丢弃，毫秒：从脱离执行起算，由派发与收尾时顺手清理。 */
+    subAgentRetainedThreadIdleTtlMs: 30 * 60_000,
+    /** 单条保留线程最多留多少字符的历史，超出截断。 */
+    subAgentRetainedHistoryMaxChars: 600_000,
   }),
   /** 模型请求的重试与退避：RetryPolicy。 */
   retry: Object.freeze({
@@ -163,6 +179,22 @@ export const AgentTuning = Object.freeze({
     maxTrackedSessions: 128,
     /** 蒸馏产物最多积压几份：产物本身占内存，积压超过几个就说明 epoch 根本没在跑。 */
     maxPendingDistillProducts: 4,
+    /** 准入时一般记录内联多少字符，超出转摘录。 */
+    admissionInlineMaxChars: 24_000,
+    /** 准入时用户正文内联多少字符：用户自己写的话比工具输出值钱，给双倍额度。 */
+    admissionUserInlineMaxChars: 48_000,
+    /** 准入摘录的最大字符数（头尾各半取窗口）。 */
+    admissionExcerptMaxChars: 24_000,
+    /** 一次蒸馏喂给模型的最大字符数：段落在规划期就按它切好。 */
+    distillMaxInputChars: 48_000,
+    /** 蒸馏产物的目标字符数。 */
+    distillTargetChars: 2_400,
+    /** 一次蒸馏调用的超时，毫秒；到点即判超时并回落骨架。 */
+    distillTimeoutMs: 45_000,
+    /** 短于多少字符的段落不值得单独折一次蒸馏。 */
+    distillMinSegmentChars: 4_000,
+    /** 自适应档：叙述短于多少字符就不请蒸馏，机械骨架已经够。 */
+    distillMinNarrativeChars: 8_000,
   }),
   /** 会话召回与索引：ChatContextRetrievalService、查询轨迹。 */
   retrieval: Object.freeze({
@@ -217,6 +249,22 @@ export const AgentTuning = Object.freeze({
     inputHistoryOmissions: 100,
     /** 工具输出句柄没给投影长度时按多少字符投影。 */
     outputProjectionChars: 24_000,
+    /** 模型档序列化最多递归几层。 */
+    modelResultDepth: 8,
+    /** 模型档序列化里单个数组最多留几项：真正的闸门是字符预算，这一项只兜底"海量小条目"。 */
+    modelResultArrayItems: 400,
+    /** 召回档（持久化全保真）序列化最多递归几层。 */
+    recallResultDepth: 12,
+    /** 召回档序列化里单个数组最多留几项：写入时裁剪等于永久销毁，所以这一档只做防爆兜底。 */
+    recallResultArrayItems: 5_000,
+    /** 工具空间页表档序列化最多递归几层：页表是元数据，裁深了模型就不知道怎么换页。 */
+    toolSpaceResultDepth: 18,
+    /** 工具空间页表档序列化里单个数组最多留几项。 */
+    toolSpaceResultArrayItems: 80,
+    /** 界面展示档序列化最多递归几层。 */
+    displayResultDepth: 8,
+    /** 界面展示档序列化里单个数组最多留几项。 */
+    displayResultArrayItems: 20,
     /** 恢复失败调用的原参数时最多展示多少字符，更大的保持省略形态由模型按需召回。 */
     restoredInputChars: 32_000,
     /** 清洗历史时最多保留最近几条带工具结果正文的消息。 */
@@ -278,11 +326,35 @@ export const AgentTuning = Object.freeze({
     toolCountSoftOverageRatio: 0.15,
     /** 工具数软超额至少允许几个，避免小基数下比例失效。 */
     toolCountSoftOverageMin: 2,
+    /** compact 档最多长期携带几个工具。 */
+    compactMaxToolCount: 32,
+    /** compact 档的系统提示词字符上限。 */
+    compactMaxSystemPromptChars: 80_000,
+    /** compact 档的输入工作集上限（token）。 */
+    compactMaxInputWorkingSetTokens: 48_000,
+    /** compact 档的工具 schema 字符上限。 */
+    compactMaxToolSchemaChars: 48_000,
+    /** balanced 档最多长期携带几个工具。 */
+    balancedMaxToolCount: 64,
+    /** balanced 档的系统提示词字符上限。 */
+    balancedMaxSystemPromptChars: 220_000,
+    /** balanced 档的输入工作集上限（token）。 */
+    balancedMaxInputWorkingSetTokens: 96_000,
+    /** balanced 档的工具 schema 字符上限。 */
+    balancedMaxToolSchemaChars: 96_000,
+    /** expanded 档最多长期携带几个工具（该档不限系统提示词字符，所以没有对应项）。 */
+    expandedMaxToolCount: 128,
+    /** expanded 档的输入工作集上限（token）。 */
+    expandedMaxInputWorkingSetTokens: 192_000,
+    /** expanded 档的工具 schema 字符上限。 */
+    expandedMaxToolSchemaChars: 192_000,
   }),
   /** 提示词组装与回合载荷：ContextBuilder、TurnPayload、技能。 */
   prompt: Object.freeze({
     /** mod 追加的回合上下文段的缺省优先级：排在内置动态段之后，便于识别来源。 */
     modTurnContextPriority: 9_000,
+    /** 内置技能没声明优先级时的默认排序优先级（升序靠前）。 */
+    builtinSkillPriority: 100,
     /** 用户技能的默认排序优先级（升序靠前），故意低于内置目录的 100。 */
     userFileSkillPriority: 60,
     /** 提示词里最多列几个自定义子 Agent。 */
@@ -314,6 +386,8 @@ export const AgentTuning = Object.freeze({
     turnContextMaxSessions: 64,
     /** 列会话资源时没给 limit 返回多少条。 */
     sessionListDefaultLimit: 100,
+    /** 列会话资源时 limit 的上界，调用方给更大的值一律夹回。 */
+    sessionListMaxLimit: 1_000,
   }),
   /** 会话工作态：CodingSessionTracker。 */
   session: Object.freeze({
@@ -333,6 +407,8 @@ export const AgentTuning = Object.freeze({
   mods: Object.freeze({
     /** 接缝诊断最多留多少条。 */
     maxSeamDiagnostics: 200,
+    /** hook 没声明优先级时排在哪一档（升序靠前）。 */
+    defaultHookPriority: 100,
     /** hook 没给超时时等多少毫秒。 */
     defaultHookTimeoutMs: 5_000,
     /** hook 超时允许的最小值，毫秒。 */

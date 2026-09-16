@@ -4,6 +4,7 @@ import { isArray, isFalse, isPlainObject, isString, Log, optionalWhen } from '@v
 
 import type { RestoredReusableInputs } from '../../types/tools.js'
 import { isContextRefEnvelope } from '../context/context-ref-envelope'
+import { AgentTuning } from '../tuning'
 
 const RecoveryToolNames = new Set(['project:edit'])
 const RecoveryKinds = new Set(['project-edit-candidates', 'project-edit-validation'])
@@ -93,8 +94,6 @@ export function projectTransientRecoveryHistory(messages: readonly ModelMessage[
     : message)
 }
 
-/** 恢复原参数只展示有限体积；更大的输入保持省略形态，模型按省略元数据召回需要的字段。 */
-const RestoredInputMaxChars = 32_000
 
 /**
  * 把一个 tool-result 的 output 解成失败回执对象：文本类输出先 JSON.parse，若外层是 context-ref 信封再 parse 一次它的 excerpt。
@@ -132,7 +131,7 @@ function hasHistoryOmissions(input: unknown): boolean {
  * 让模型改一处重发即可，而不必凭印象把整份大参数重写一遍。
  * 判定很窄：只看最近一条 assistant 决策之后的 tool 回执，且回执必须自报 `inputReuse.reuse === 'attempt:<toolCallId>'`
  * 并确证 `executionOutcome === 'not-applied'`（真没写入）——已经产生副作用的失败绝不回填。
- * 回填还有两道闸：原参数序列化后超过 RestoredInputMaxChars 就放弃（保持省略形态，模型按省略元数据自己召回需要的字段）；
+ * 回填还有两道闸：原参数序列化后超过 AgentTuning.tools.restoredInputChars 就放弃（保持省略形态，模型按省略元数据自己召回需要的字段）；
  * 读取抛错只记 debug 不中断。没有任何一处成功回填时原样返回入参消息（浅拷），并告知哪些 toolCallId 被回填过。
  */
 export async function restoreReusableInputsForNextDecision(
@@ -157,7 +156,7 @@ export async function restoreReusableInputsForNextDecision(
   for (const toolCallId of failed) {
     try {
       const input = await readAttemptInput(toolCallId)
-      if (input && JSON.stringify(input).length <= RestoredInputMaxChars) restored.set(toolCallId, input)
+      if (input && JSON.stringify(input).length <= AgentTuning.tools.restoredInputChars) restored.set(toolCallId, input)
     } catch (error) {
       Log.tag('ContextProjection').debug('读取失败调用的原参数失败，保持省略形态', { error })
     }

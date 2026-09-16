@@ -4,6 +4,7 @@ import { isArray, isBlank, isEmpty, isPlainObject, isPresent, isString } from '@
 import { clampRounded } from '@velaros-ai/core/utils/number'
 
 import type { AppliedAdjustment } from '../../types/toolkit.js'
+import { AgentTuning } from '../tuning'
 
 /**
  * 可选的宽容 schema 原语；工具必须先明确哪些调整保持用户意图。
@@ -102,7 +103,7 @@ export function buildAppliedAdjustments(
 export function buildValidItemsHint(
   label: string,
   items: readonly string[],
-  maxItems = 10
+  maxItems = AgentTuning.toolkit.forgivingSchemaMaxItems
 ): string {
   if (isEmpty(items)) return `${label}:当前为空。`
   const shown = items.slice(0, maxItems)

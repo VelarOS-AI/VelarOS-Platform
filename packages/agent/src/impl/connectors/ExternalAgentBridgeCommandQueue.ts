@@ -1,13 +1,19 @@
 import { timingSafeEqual } from 'node:crypto'
 
+import { ExternalAgentBridgeLimits } from '../../contract/constants.js'
 import type { ExternalAgentBridgeCommand } from '../../types/agent.js'
 
 
-export const ExternalAgentBridgePairingLifetimeMs = 5 * 60_000
-export const ExternalAgentBridgeMaxCommands = 100
-export const ExternalAgentBridgeMaxProcessedEvents = 256
-export const ExternalAgentBridgePairingMaxFailures = 5
-export const ExternalAgentBridgePairingBlockMs = 30_000
+/** 一份配对码的有效期（ms），等价于 `ExternalAgentBridgeLimits.pairingLifetimeMs`。 */
+export const ExternalAgentBridgePairingLifetimeMs: number = ExternalAgentBridgeLimits.pairingLifetimeMs
+/** 未确认命令队列的堆积上限，等价于 `ExternalAgentBridgeLimits.maxCommands`。 */
+export const ExternalAgentBridgeMaxCommands: number = ExternalAgentBridgeLimits.maxCommands
+/** 已处理事件窗口的保留条数，等价于 `ExternalAgentBridgeLimits.maxProcessedEvents`。 */
+export const ExternalAgentBridgeMaxProcessedEvents: number = ExternalAgentBridgeLimits.maxProcessedEvents
+/** 进封禁前允许连续配对失败几次，等价于 `ExternalAgentBridgeLimits.pairingMaxFailures`。 */
+export const ExternalAgentBridgePairingMaxFailures: number = ExternalAgentBridgeLimits.pairingMaxFailures
+/** 配对失败超限后的封禁时长（ms），等价于 `ExternalAgentBridgeLimits.pairingBlockMs`。 */
+export const ExternalAgentBridgePairingBlockMs: number = ExternalAgentBridgeLimits.pairingBlockMs
 
 export function externalAgentBridgeTokensEqual(left: string, right: string): boolean {
   const leftBytes = Buffer.from(left)

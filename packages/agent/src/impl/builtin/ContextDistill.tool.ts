@@ -2,7 +2,8 @@ import { z } from 'zod'
 
 import { toNullable } from '@velaros-ai/core'
 
-import type { DistillContextInput } from '../../types/builtin.js'
+import { AgentToolLimits, AgentToolNames } from '../../contract/constants.js'
+import type { DistillContextInput, VelaTool } from '../../types/builtin.js'
 import { defineVelaTool } from '../../utils/builtin/define-agent-tool'
 import {
   renderParameterDescription as parameterDescription,
@@ -12,20 +13,17 @@ import { AgentContextSignalCapability } from './Capabilities'
 
 // 兼容事实便签受整体载荷预算约束，不使用过小的条目数硬限制。20 条精炼事实占用与旧版
 // 10 × 400 的契约大致相当，同时允许长阶段为每个已完成工作项保留独立可寻址的事实。
-const DistilledFactMaxChars = 240
-const DistilledFactMaxCount = 20
-const DistillNoteMaxChars = 300
-
-const distillContextSchema = z.object({
+// 三个上限模型直接看得见，写在 AgentToolLimits.context 里。
+export const distillContextSchema: z.ZodType<DistillContextInput> = z.object({
   facts: z
-    .array(z.string().trim().min(1).max(DistilledFactMaxChars))
+    .array(z.string().trim().min(1).max(AgentToolLimits.context.distilledFactChars))
     .min(1)
-    .max(DistilledFactMaxCount)
+    .max(AgentToolLimits.context.distilledFactCount)
     .describe(
       parameterDescription({
         description: '从已读取/搜索/执行结果中蒸馏出的持久事实。',
         notes: [
-          `最多 ${DistilledFactMaxCount} 条，每条不超过 ${DistilledFactMaxChars} 字符；事实较多时先合并重复项。`,
+          `最多 ${AgentToolLimits.context.distilledFactCount} 条，每条不超过 ${AgentToolLimits.context.distilledFactChars} 字符；事实较多时先合并重复项。`,
           '每条自包含，代码事实带 file:line 或符号名；决策写清结论和原因。',
           '只记新知识，之前 distill 过的事实不要重复。',
         ],
@@ -35,7 +33,7 @@ const distillContextSchema = z.object({
     .string()
     .trim()
     .min(1)
-    .max(DistillNoteMaxChars)
+    .max(AgentToolLimits.context.distillNoteChars)
     .optional()
     .describe(
       parameterDescription({
@@ -49,8 +47,8 @@ const distillContextSchema = z.object({
  * 兼容已发布的事实便签工具。默认工具面由目标、证据与召回工具维护；旧宿主显式注册此导出时，
  * 仅在工具结果中保留事实与进度，不再请求压缩。容量治理统一由运行时自动决定。
  */
-const distillContext = defineVelaTool<DistillContextInput>({
-  name: 'context:distill',
+export const distillContext: VelaTool<DistillContextInput> = defineVelaTool<DistillContextInput>({
+  name: AgentToolNames.contextDistill,
   role: 'control',
   category: 'context',
   summary: '记录已确认的关键事实与进度便签。',
@@ -88,8 +86,6 @@ const distillContext = defineVelaTool<DistillContextInput>({
 })
 
 /** @deprecated 供旧宿主保留事实便签兼容；压缩由运行时自动管理。 */
-const contextDistillTools = {
-  'context:distill': distillContext,
+export const contextDistillTools: { 'context:distill': VelaTool<DistillContextInput> } = {
+  [AgentToolNames.contextDistill]: distillContext,
 }
-
-export { contextDistillTools, distillContextSchema }

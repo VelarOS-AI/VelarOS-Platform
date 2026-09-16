@@ -1,11 +1,22 @@
 import { isFiniteNumber } from '@velaros-ai/core'
 import { clampRounded } from '@velaros-ai/core/utils/number'
 
-export const MinExecutionStepCount = 1
-export const MaxExecutionStepCount = 100
-export const DefaultTeamWorkerStepCount = 50
-export const DefaultTeamMaxStepCount = 300
-export const MaxTeamStepCount = 1000
+import { AgentStepLimits } from '../../contract/constants.js'
+
+/** 单次执行的步数下限，等价于 `AgentStepLimits.minExecutionSteps`。 */
+export const MinExecutionStepCount: number = AgentStepLimits.minExecutionSteps
+
+/** 单次执行的步数上限，等价于 `AgentStepLimits.maxExecutionSteps`。 */
+export const MaxExecutionStepCount: number = AgentStepLimits.maxExecutionSteps
+
+/** team 里单个 worker 没指定步数时的缺省值，等价于 `AgentStepLimits.defaultTeamWorkerSteps`。 */
+export const DefaultTeamWorkerStepCount: number = AgentStepLimits.defaultTeamWorkerSteps
+
+/** 一次 team 编排没指定总步数时的缺省值，等价于 `AgentStepLimits.defaultTeamMaxSteps`。 */
+export const DefaultTeamMaxStepCount: number = AgentStepLimits.defaultTeamMaxSteps
+
+/** 一次 team 编排的总步数上限，等价于 `AgentStepLimits.maxTeamSteps`。 */
+export const MaxTeamStepCount: number = AgentStepLimits.maxTeamSteps
 
 /**
  * 归一单次执行的最大步数：`value` 不是有限数（undefined / null / NaN / Infinity）时改用 `fallback`，

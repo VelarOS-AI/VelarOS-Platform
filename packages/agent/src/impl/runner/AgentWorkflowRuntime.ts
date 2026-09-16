@@ -53,14 +53,17 @@ import {
   Log,
 } from '@velaros-ai/core'
 
+import { AgentToolLimits } from '../../contract/constants.js'
 import type { AgentWorkflowAgentCall, AgentWorkflowAgentResult, AgentWorkflowDefinition, AgentWorkflowRunResult, AgentWorkflowStep, AgentWorkflowStepResult } from '../../types/agent.js'
 import type { AgentWorkflowDispatchPort, AgentWorkflowRunOptions } from '../../types/runner.js'
 import { asArray, boundedClone, clampDeclaredLimit, comparePredicate, dedupeWorkflowItems, evaluateWorkflowConvergence, isSuccessful, mapWithConcurrency, MaxWorkflowValueBytes, resolveWorkflowMajorityVote, resolveWorkflowRunStatus, resolveWorkflowSource, validateWorkflowDefinition } from '../../utils/runner/workflow-runtime'
 import { WorkflowAbortedError } from '../errors/WorkflowAbortedError'
 import { WorkflowBudgetExhaustedError } from '../errors/WorkflowBudgetExhaustedError'
 
-const MaxWorkflowAgents = 8
-const MaxWorkflowRounds = 6
+/** 一次工作流最多编排多少个 Agent；值在 `AgentToolLimits.workflow.maxAgents`。 */
+export const MaxWorkflowAgents: number = AgentToolLimits.workflow.maxAgents
+/** 一次工作流最多跑多少轮；值在 `AgentToolLimits.workflow.maxRounds`。 */
+export const MaxWorkflowRounds: number = AgentToolLimits.workflow.maxRounds
 
 
 const log = Log.tag('AgentWorkflowRuntime')
@@ -337,7 +340,5 @@ class AgentWorkflowRuntime implements AgentWorkflowRuntimeApi {
 
 export {
   AgentWorkflowRuntime,
-  MaxWorkflowAgents,
-  MaxWorkflowRounds,
   MaxWorkflowValueBytes,
 }

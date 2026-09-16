@@ -23,12 +23,13 @@ import { AppError } from '@velaros-ai/core/error'
 import type { McpAuthorizationProvider } from '../../contract/requires.js'
 import type { McpConnectionSpec, McpPendingAuthorization, McpPendingConnection,McpRawCallResult, McpRemoteTransport, McpResourceContent, McpResourceDescriptor, McpToolDescriptor, McpTransportKind } from '../../types/connectors.js'
 import { isMcpTimeoutError, parseMcpToolDescriptor } from '../../utils/connectors/mcp-protocol'
+import { AgentTuning } from '../../utils/tuning'
 import { McpAuthorizationRequiredError } from '../errors/McpAuthorizationRequiredError'
 
-/** 连接超时（ms）——server 起不来时不无限挂起。 */
-export const McpConnectTimeoutMs = 30_000
-/** 单次工具调用/资源读取超时（ms）。 */
-export const McpCallTimeoutMs = 120_000
+/** 连接超时（ms）——server 起不来时不无限挂起；值在 `AgentTuning.connectors.mcpConnectTimeoutMs`。 */
+export const McpConnectTimeoutMs: number = AgentTuning.connectors.mcpConnectTimeoutMs
+/** 单次工具调用/资源读取超时（ms）；值在 `AgentTuning.connectors.mcpCallTimeoutMs`。 */
+export const McpCallTimeoutMs: number = AgentTuning.connectors.mcpCallTimeoutMs
 
 const log = Log.tag('McpClientConnection')
 

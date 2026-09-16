@@ -2,10 +2,6 @@ import { randomUUID } from 'node:crypto'
 
 import type { ExecutionClock, ExecutionIdFactory } from '../../contract/requires.js'
 
-const SystemExecutionClock: ExecutionClock = Object.freeze({
-  now: () => Date.now(),
-})
-
 /**
  * Generates process-local execution identifiers without module-level mutable state.
  *
@@ -15,12 +11,17 @@ const SystemExecutionClock: ExecutionClock = Object.freeze({
  * namespace.
  */
 export class MonotonicExecutionIdFactory implements ExecutionIdFactory {
+  /** 缺省时钟：直接读系统时间；宿主与测试可以注入别的。 */
+  private static readonly SystemExecutionClock: ExecutionClock = Object.freeze({
+    now: () => Date.now(),
+  })
+
   private executionSequence = 0
   private taskSequence = 0
   private planStepSequence = 0
 
   public constructor(
-    private readonly clock: ExecutionClock = SystemExecutionClock,
+    private readonly clock: ExecutionClock = MonotonicExecutionIdFactory.SystemExecutionClock,
     private readonly instanceNamespace: string = randomUUID()
   ) {
     if (!instanceNamespace) {

@@ -24,7 +24,7 @@ import {
   hasExcerptRenderMaterial,
 } from './admission'
 import { toContextAnchorTexts } from './anchors'
-import { estimateResidencyTokens } from './context-record'
+import { DefaultResidencyCharsPerToken, estimateResidencyTokens } from './context-record'
 import { stableFingerprint } from './determinism'
 import { estimateMessageBudgetChars } from './message-facts'
 
@@ -34,7 +34,7 @@ export function projectContextLedger(
 ): ContextProjectionResult {
   const ordered = orderBySeq(input.records)
   const tailProtected = resolveTailProtectedRecordIds(ordered, input.budget)
-  const charsPerToken = input.budget.charsPerToken ?? 4
+  const charsPerToken = input.budget.charsPerToken ?? DefaultResidencyCharsPerToken
 
   const byResidency: Record<ContextResidency, number> = {
     INLINE: 0,
@@ -118,7 +118,7 @@ export function measureLedgerProjection(input: {
 }): ContextProjectionMeasurement {
   const ordered = orderBySeq(input.records)
   const tailProtectedRecordIds = resolveTailProtectedRecordIds(ordered, input.budget)
-  const charsPerToken = input.budget.charsPerToken ?? 4
+  const charsPerToken = input.budget.charsPerToken ?? DefaultResidencyCharsPerToken
   let projectedChars = 0
 
   for (const record of ordered) {

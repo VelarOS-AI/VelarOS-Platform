@@ -9,6 +9,7 @@
 //  ② 绑定直接引用原实体，Loader 与投影全程不复制不包装，载荷对象同一性逐项保持。
 import { optionalWhen, toOptional } from '@velaros-ai/core'
 
+import { AgentIdentity } from '../../contract/constants.js'
 import type { AgentModExecutionModeContribution, AgentModManifest, AgentModPromptSegmentContribution, AgentModToolContribution } from '../../types/agent.js'
 import type { BuiltinAgentModOptions, BuiltinAgentModPackage, VelaTool } from '../../types/builtin.js'
 import type {PromptSegmentDefinition } from '../../types/guidance.js'
@@ -30,11 +31,11 @@ import { dispatchAgentTools } from './DispatchAgent.tool'
 import { goalTools } from './Goals.tool'
 import { plansTools } from './Plans.tool'
 
-/** 随包官方 Agent mod 的稳定 id（恒加载，永不孤儿）。 */
-const BuiltinAgentModId = 'velaros.agent.builtin'
+/** 随包官方 Agent mod 的稳定 id（恒加载，永不孤儿）；值在 AgentIdentity.builtinModId。 */
+export const BuiltinAgentModId: string = AgentIdentity.builtinModId
 
 /** 内置工具库单源：新增内置工具集合只在此追加，manifest 自动跟随。 */
-const BuiltinAgentModToolCollections: ReadonlyArray<Readonly<
+export const BuiltinAgentModToolCollections: ReadonlyArray<Readonly<
   Record<string, VelaTool<any>>
 >> = [
   activeDirectiveTools,
@@ -149,8 +150,6 @@ function createBuiltinAgentModPackage(
 }
 
 export {
-  BuiltinAgentModId,
-  BuiltinAgentModToolCollections,
   collectBuiltinAgentModTools,
   createBuiltinAgentModPackage,
 }

@@ -10,40 +10,31 @@
  * 导出单例 {@link chatSearchText}。
  */
 import { isFiniteNumber, isString, Log,stringifyPretty } from '@velaros-ai/core'
-/** 调用方未传 maxChars 或传非法值时的默认 retrieve 字符上限。 */
-const defaultMaxRetrieveChars = 8_000
 
-/** retrieve/read 允许的硬顶，防止 agent 一次拉取过大正文。 */
-const maxRetrieveChars = 30_000
-
-/** 搜索 API 未传 maxResults 时的默认返回条数。 */
-const defaultSearchResults = 8
-
-/** 搜索 API 允许的最大返回条数。 */
-const maxSearchResults = 20
+import { AgentToolLimits } from '../../contract/constants.js'
 
 /**
  * 规范化单次 retrieve/read 的正文字符上限。
  *
- * @param value 来自 IPC 请求的 maxChars；undefined/非正数则用 defaultMaxRetrieveChars
- * @returns `[1, maxRetrieveChars]` 内的整数
+ * @param value 来自 IPC 请求的 maxChars；undefined/非正数则用 AgentToolLimits.recall.defaultRetrieveChars
+ * @returns `[1, AgentToolLimits.recall.maxRetrieveChars]` 内的整数
  */
 function clampMaxChars(value: LooseOptional<number>): number {
     return isFiniteNumber(value) && value > 0
-      ? Math.min(Math.floor(value), maxRetrieveChars)
-      : defaultMaxRetrieveChars
+      ? Math.min(Math.floor(value), AgentToolLimits.recall.maxRetrieveChars)
+      : AgentToolLimits.recall.defaultRetrieveChars
   }
 
 /**
  * 规范化搜索结果条数上限。
  *
  * @param value 来自 IPC 的 maxResults
- * @returns `[1, maxSearchResults]` 内的整数
+ * @returns `[1, AgentToolLimits.recall.maxSearchResults]` 内的整数
  */
 function clampMaxResults(value: LooseOptional<number>): number {
     return isFiniteNumber(value) && value > 0
-      ? Math.min(Math.floor(value), maxSearchResults)
-      : defaultSearchResults
+      ? Math.min(Math.floor(value), AgentToolLimits.recall.maxSearchResults)
+      : AgentToolLimits.recall.defaultSearchResults
   }
 
 /**

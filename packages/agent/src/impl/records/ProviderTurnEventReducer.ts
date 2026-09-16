@@ -24,7 +24,8 @@ import { isEmpty,isPresent, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import type { CompleteProviderTurnSnapshotOptions, CompleteProviderTurnSnapshotResult, EmitCompletedProviderTurnSnapshotInput,ProviderRequestFingerprint, ProviderTurnEvent, ProviderTurnRecorder, ProviderTurnRequestSnapshot, ProviderTurnSnapshot, ProviderTurnStatus, ProviderTurnToolSnapshot, ProviderTurnUsage } from '../../types/records.js'
-export const ProviderTurnInterruptedToolError = '工具执行被打断：回合中止时这次调用还没拿到结果，不代表工具本身失败。'
+/** 回合中止时尚未拿到结果的工具，在快照里统一记这句；对外承诺的是「不代表工具失败」这层语义。 */
+export const ProviderTurnInterruptedToolError: string = '工具执行被打断：回合中止时这次调用还没拿到结果，不代表工具本身失败。'
 
 /** 建归约器时要交代的身份。 */
 export interface ProviderTurnEventReducerOptions {

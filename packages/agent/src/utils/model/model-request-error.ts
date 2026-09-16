@@ -7,8 +7,10 @@ import {
 import { AppError } from '@velaros-ai/core/error'
 
 import type { ProviderResponseFailure } from '../../types/loop.js'
+import { AgentTuning } from '../tuning'
 
-const MaxProviderErrorBodyChars = 64 * 1024
+/** 供应方错误正文进诊断的字符上限，值在 `AgentTuning.retry.providerErrorBodyBytes`。 */
+const MaxProviderErrorBodyChars = AgentTuning.retry.providerErrorBodyBytes
 
 /**
  * 取一个「非空白字符串」：不是 string 返回 null，是 string 则 trim 后仍为空也返回 null。

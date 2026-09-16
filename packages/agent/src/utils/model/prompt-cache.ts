@@ -10,10 +10,10 @@ import {
 import type { AgentModelRequestOptions } from '../../contract/requires.js'
 import type { CoreProviderOptions, ModelMessageProviderOptions } from '../../types/loop.js'
 import { UnknownGovernanceSessionId } from '../residency/session-key'
+import { AgentTuning } from '../tuning'
 
-const SessionPromptCacheKeyHashSeed = 0x811c9dc5
-const SessionPromptCacheKeyHashPrime = 0x01000193
-const SessionPromptCacheKeyPrefixMaxChars = 48
+/** 会话提示词缓存键取前缀的字符上限，值在 `AgentTuning.prompt.sessionPromptCacheKeyPrefixChars`。 */
+const SessionPromptCacheKeyPrefixMaxChars = AgentTuning.prompt.sessionPromptCacheKeyPrefixChars
 
 const VelarosProviderOptionsKey = 'velaros'
 const PromptCacheBreakpointKey = 'promptCacheBreakpoint'
@@ -241,10 +241,11 @@ function omitRecordKey(
  * 不是加密哈希，也不保证不碰撞；好处是纯同步、无依赖、同一 id 跨进程结果稳定。
  */
 function hashPromptCacheKey(value: string): string {
-  let hash = SessionPromptCacheKeyHashSeed
+  // FNV-1a 32 位：偏移基 0x811c9dc5、质数 0x01000193 是算法本身的数，不是可调参数。
+  let hash = 0x811c9dc5
   for (let index = 0; index < value.length; index += 1) {
     hash ^= value.charCodeAt(index)
-    hash = Math.imul(hash, SessionPromptCacheKeyHashPrime) >>> 0
+    hash = Math.imul(hash, 0x01000193) >>> 0
   }
   return hash.toString(16).padStart(8, '0')
 }

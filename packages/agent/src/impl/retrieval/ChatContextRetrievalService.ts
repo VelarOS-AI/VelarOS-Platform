@@ -22,6 +22,7 @@ import { chatSearchRanking } from "../../utils/retrieval/ranking";
 import { resolveRetrievalScopeId } from "../../utils/retrieval/scope";
 import { buildEmptySearchRetryHints, combineSearchWarnings } from "../../utils/retrieval/search-hints";
 import { chatSearchText } from "../../utils/retrieval/text";
+import { AgentTuning } from "../../utils/tuning";
 
 import { ContextRetrievalBoundedCounter } from "./ContextRetrievalBoundedCounter"
 import { ContextRetrievalBoundedRecentMap } from "./ContextRetrievalBoundedRecentMap"
@@ -37,16 +38,10 @@ import {
 import { ContextRetrievalReferenceReader } from "./ContextRetrievalReferenceReader";
 import { contextRetrievalReferences } from "./ContextRetrievalReferences";
 
-const DefaultRetrievalCountEntryLimit = 4_096;
-const DefaultIndexBuildTelemetrySessionLimit = 512;
-const DefaultTerminalOutputPayloadCandidateLimit = 64;
-/**
- * 内存索引缓存的会话数上限。
- *
- * 缓存的是整份索引快照（长会话可达数 MB），所以宁小勿大：真正的热点只有"当前正在跑的那个
- * 会话"，8 个槽位足以覆盖并行子 agent + 用户手动切换，再多只是拿内存换命不中的概率。
- */
-const DefaultCachedIndexSessionLimit = 8;
+// 四条进程内容量上限都在 AgentTuning.retrieval：计数索引 countEntryLimit、构建遥测
+// indexBuildTelemetrySessionLimit、终端输出候选 terminalOutputPayloadCandidateLimit，以及内存索引缓存
+// cachedIndexSessionLimit——缓存的是整份索引快照（长会话可达数 MB），所以宁小勿大：真正的热点只有
+// "当前正在跑的那个会话"，8 个槽位足以覆盖并行子 agent + 用户手动切换，再多只是拿内存换命不中的概率。
 
 /** 建 `ChatContextRetrievalService` 时给的一组进程内容量上限；全部可以不传，不传就用本文件的缺省值。 */
 interface ChatContextRetrievalServiceOptions {
@@ -163,7 +158,7 @@ class ChatContextRetrievalService implements ChatContextRetrievalServiceApi {
     this.retrievalCounts = new ContextRetrievalBoundedCounter(
       normalizeRetrievalLimit(
         options.maxRetrievalCountEntries,
-        DefaultRetrievalCountEntryLimit,
+        AgentTuning.retrieval.countEntryLimit,
       ),
     );
     this.queryTraceStore = new ContextRetrievalQueryTraceStore(
@@ -172,17 +167,17 @@ class ChatContextRetrievalService implements ChatContextRetrievalServiceApi {
     this.indexBuildTelemetryBySession = new ContextRetrievalBoundedRecentMap(
       normalizeRetrievalLimit(
         options.maxIndexBuildTelemetrySessions,
-        DefaultIndexBuildTelemetrySessionLimit,
+        AgentTuning.retrieval.indexBuildTelemetrySessionLimit,
       ),
     );
     this.terminalOutputPayloadCandidateLimit = normalizeRetrievalLimit(
       options.maxTerminalOutputPayloadCandidates,
-      DefaultTerminalOutputPayloadCandidateLimit,
+      AgentTuning.retrieval.terminalOutputPayloadCandidateLimit,
     );
     this.cachedIndexBySession = new ContextRetrievalBoundedRecentMap(
       normalizeRetrievalLimit(
         options.maxCachedIndexSessions,
-        DefaultCachedIndexSessionLimit,
+        AgentTuning.retrieval.cachedIndexSessionLimit,
       ),
     );
     this.indexBuilder = new ContextRetrievalIndexBuilder(

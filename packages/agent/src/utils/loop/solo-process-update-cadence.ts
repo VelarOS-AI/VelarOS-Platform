@@ -1,6 +1,5 @@
 import type { AdvanceSoloProcessUpdateCadenceInput, AdvanceSoloProcessUpdateCadenceResult,SoloProcessUpdateCadenceState } from '../../types/loop.js'
-
-const SilentToolTurnThreshold = 2
+import { AgentTuning } from '../tuning'
 
 const VisibleProcessUpdateReminder = [
   '[system] 你已经连续完成了一组只有思考和工具调用的回合。',
@@ -34,7 +33,9 @@ function advanceSoloProcessUpdateCadence(
   return {
     state: { consecutiveToolOnlyTurns },
     reminder:
-      consecutiveToolOnlyTurns >= SilentToolTurnThreshold ? VisibleProcessUpdateReminder : null,
+      consecutiveToolOnlyTurns >= AgentTuning.loop.silentToolTurnThreshold
+        ? VisibleProcessUpdateReminder
+        : null,
   }
 }
 

@@ -2,9 +2,6 @@ import { AppError } from '@velaros-ai/core/error'
 
 import type { ApprovalPort } from '../../contract/requires.js'
 
-/** 无审批通道宿主返回给模型的设计式拒绝文案。 */
-const DEFAULT_DENY_MESSAGE = '该操作需要用户审批，但当前宿主没有审批通道，已按默认拒绝处理。'
-
 /**
  * 无审批通道宿主的默认端口：一切需要审批的操作按**设计式拒绝**处理。
  *
@@ -13,9 +10,12 @@ const DEFAULT_DENY_MESSAGE = '该操作需要用户审批，但当前宿主没�
  * null 崩溃事故式拒绝），让模型能向用户解释并改用更安全的方式。
  */
 class DefaultDenyApprovalPort implements ApprovalPort {
+  /** 无审批通道宿主返回给模型的设计式拒绝文案。 */
+  private static readonly DenyMessage = '该操作需要用户审批，但当前宿主没有审批通道，已按默认拒绝处理。'
+
   /** 终止型确认：直接抛 PERMISSION，让调用点按"被拒绝"收尾。 */
   public async awaitConfirmation(): Promise<void> {
-    throw new AppError('PERMISSION', DEFAULT_DENY_MESSAGE)
+    throw new AppError('PERMISSION', DefaultDenyApprovalPort.DenyMessage)
   }
 
   /** 非终止型确认：返回结构化拒绝信封，模型据此改用更安全的方式。 */
@@ -24,11 +24,9 @@ class DefaultDenyApprovalPort implements ApprovalPort {
     message: string
     autoApproved: boolean
   }> {
-    return { approved: false, message: DEFAULT_DENY_MESSAGE, autoApproved: false }
+    return { approved: false, message: DefaultDenyApprovalPort.DenyMessage, autoApproved: false }
   }
 }
 
 /** 无审批通道宿主的默认端口实例。 */
-const defaultDenyApprovalPort: ApprovalPort = new DefaultDenyApprovalPort()
-
-export { defaultDenyApprovalPort }
+export const defaultDenyApprovalPort: ApprovalPort = new DefaultDenyApprovalPort()

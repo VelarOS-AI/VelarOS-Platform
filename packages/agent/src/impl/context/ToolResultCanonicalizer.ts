@@ -4,6 +4,7 @@ import type { ContextPayloadStore } from '../../contract/requires.js'
 import type { CanonicalizeToolResultInput, CanonicalToolResult, ContextPayloadRecord, HashedToolResultInput } from '../../types/context.js'
 import { isStatefulToolResultName } from '../../utils/context/stateful-tool-results'
 import { buildCanonicalToolResult } from '../../utils/context/tool-result-canonical'
+import { AgentTuning } from '../../utils/tuning'
 
 import { createContextPayloadRef } from './InMemoryContextPayloadStore'
 
@@ -36,8 +37,6 @@ export interface ToolResultCanonicalizerApi {
   canonicalizeMany(inputs: readonly CanonicalizeToolResultInput[]): Promise<CanonicalToolResult[]>
 }
 
-const DefaultInlineBudgetChars = 8_000
-
 function sha256(text: string): string {
   return createHash('sha256').update(text).digest('hex')
 }
@@ -60,7 +59,10 @@ export class ToolResultCanonicalizer implements ToolResultCanonicalizerApi {
     private readonly store: ContextPayloadStore,
     options: ToolResultCanonicalizerOptions = {},
   ) {
-    this.inlineBudgetChars = Math.max(0, Math.floor(options.inlineBudgetChars ?? DefaultInlineBudgetChars))
+    this.inlineBudgetChars = Math.max(
+      0,
+      Math.floor(options.inlineBudgetChars ?? AgentTuning.context.defaultInlineBudgetChars)
+    )
   }
 
   public async canonicalize(input: CanonicalizeToolResultInput): Promise<CanonicalToolResult> {
