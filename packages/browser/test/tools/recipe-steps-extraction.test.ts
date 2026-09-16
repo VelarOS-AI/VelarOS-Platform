@@ -6,6 +6,7 @@ import assert from 'node:assert/strict'
 import { describe, test } from 'bun:test'
 
 import type { ToolContext } from '../../src/contract/requires.js'
+import { BrowserExtractOperations } from '../../src/impl/operations/BrowserExtractOperations.js'
 import type { BrowserRecipeStepPlan } from '../../src/types/recipes.js'
 import { simplifyBrowserEvaluatedValue } from '../../src/utils/page-scripts/evaluate.js'
 import { executeBrowserRecipeSteps } from '../../src/utils/recipes/steps.js'
@@ -65,6 +66,14 @@ function buildStepPlan(operation: BrowserRecipeStepPlan['operation']): BrowserRe
   ]
 }
 
+/** 拼一次步骤执行的入参：提取能力由调用方传进来，测试里就用真的提取执行类。 */
+function buildStepsInput(operation: BrowserRecipeStepPlan['operation'], ctx: ToolContext) {
+  return [
+    { stepPlan: buildStepPlan(operation), extraction: new BrowserExtractOperations(ctx) },
+    ctx,
+  ] as const
+}
+
 void describe('recipe 提取步骤的取回口径', () => {
   void test('150 行的表格整份存进 run 记录，而不是信封里的前 100 行', async () => {
     const rows = Array.from({ length: 150 }, (_, index) => [`row-${index}`, String(index)])
@@ -76,8 +85,7 @@ void describe('recipe 提取步骤的取回口径', () => {
     })
 
     const [stepResult] = await executeBrowserRecipeSteps(
-      { stepPlan: buildStepPlan({ kind: 'extract_table', maxRows: 200 }) },
-      createToolContext(channel.evaluateScript)
+      ...buildStepsInput({ kind: 'extract_table', maxRows: 200 }, createToolContext(channel.evaluateScript))
     )
 
     const result = stepResult?.result as Record<string, unknown>
@@ -98,8 +106,7 @@ void describe('recipe 提取步骤的取回口径', () => {
     const channel = createEvaluateChannel({ ok: true, items, itemCount: items.length })
 
     const [stepResult] = await executeBrowserRecipeSteps(
-      { stepPlan: buildStepPlan({ kind: 'extract_list', maxItems: 200 }) },
-      createToolContext(channel.evaluateScript)
+      ...buildStepsInput({ kind: 'extract_list', maxItems: 200 }, createToolContext(channel.evaluateScript))
     )
 
     const result = stepResult?.result as Record<string, unknown>
@@ -124,8 +131,7 @@ void describe('recipe 提取步骤的取回口径', () => {
 
     await assert.rejects(
       executeBrowserRecipeSteps(
-        { stepPlan: buildStepPlan({ kind: 'extract_table', maxRows: 4000 }) },
-        createToolContext(channel.evaluateScript)
+        ...buildStepsInput({ kind: 'extract_table', maxRows: 4000 }, createToolContext(channel.evaluateScript))
       ),
       /超过页面求值通道上限/u
     )

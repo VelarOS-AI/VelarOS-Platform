@@ -3,22 +3,9 @@ import { z } from 'zod'
 import { renderParameterDescription as parameterDescription } from '@velaros-ai/agent/tool-contract'
 import { isNonBlankString, isNumber, isPlainObject, isPresent, isString, toOptional } from '@velaros-ai/core'
 
-import type {
-  BrowserEmulationOptions,
-  BrowserNetworkControlOptions,
-  BrowserPageNavigationOptions,
-  BrowserPageScrollOptions,
-  BrowserPageWaitOptions,
-  BrowserPageZoomOptions,
-  BrowserPressKeyOptions,
-  BrowserTargetActionKind,
-  BrowserTargetActionValue,
-} from '../../types/browser'
+import type { ParsedBrowserActInput } from '../../types/tools'
 
-import {
-  type BrowserTargetHintInput,
-  browserTargetHintSchema,
-} from './Target'
+import { browserTargetHintSchema } from './target'
 
 const browserActActionSchema = z.enum([
   'target',
@@ -656,6 +643,7 @@ const browserActExactParseResults = new WeakMap<
   ReturnType<typeof browserActExactSchema.safeParse>
 >()
 
+/** 解析入参对应的精确动作分支，同一次 parse 里只算一遍（结果挂在上面那张 WeakMap 上）。 */
 function parseExactBrowserActBranch(
   input: object
 ): ReturnType<typeof browserActExactSchema.safeParse> {
@@ -1020,107 +1008,8 @@ const browserActSchema = z
     return normalizeBrowserActInput(exactParseResult.data)
   })
 
-type BrowserActExactInput = z.output<typeof browserActExactSchema>
-
-type ParsedBrowserActInput =
-  | {
-      action: 'target'
-      targetAction: BrowserTargetActionKind
-      target: BrowserTargetHintInput
-      value?: BrowserTargetActionValue
-      waitForNavigation?: boolean
-    }
-  | {
-      action: 'navigate'
-      navigationAction: BrowserPageNavigationOptions['action']
-      url?: string
-    }
-  | {
-      action: 'scroll'
-      direction?: BrowserPageScrollOptions['direction']
-      amount?: number
-      x?: number
-      y?: number
-    }
-  | { action: 'type'; text: string }
-  | {
-      action: 'press_key'
-      key: string
-      modifiers?: BrowserPressKeyOptions['modifiers']
-      repeat?: number
-      waitForNavigation?: boolean
-    }
-  | { action: 'move_mouse'; x: number; y: number }
-  | {
-      action: 'click_coordinates'
-      x: number
-      y: number
-      button?: 'left' | 'middle' | 'right'
-      clickCount?: number
-      waitForNavigation?: boolean
-    }
-  | {
-      action: 'drag'
-      source: BrowserTargetHintInput
-      target: BrowserTargetHintInput
-      steps?: number
-      waitForNavigation?: boolean
-    }
-  | {
-      action: 'wait_for_selector'
-      selector: string
-      state?: 'attached' | 'visible' | 'hidden' | 'detached'
-      visible?: boolean
-      timeoutMs?: number
-    }
-  | {
-      action: 'wait_for_url'
-      urlPattern: string
-      timeoutMs?: number
-    }
-  | {
-      action: 'wait_for_function'
-      expression: string
-      timeoutMs?: number
-    }
-  | {
-      action: 'wait_for_text'
-      text: string
-      timeoutMs?: number
-    }
-  | {
-      action: 'wait'
-      durationMs?: number
-      loadState?: BrowserPageWaitOptions['loadState']
-      timeoutMs?: number
-    }
-  | { action: 'set_viewport'; width: number; height: number }
-  | {
-      action: 'set_page_zoom'
-      zoomAction: BrowserPageZoomOptions['action']
-      zoomFactor?: number
-      step?: number
-    }
-  | {
-      action: 'configure_network'
-      offline?: BrowserNetworkControlOptions['offline']
-      extraHTTPHeaders?: BrowserNetworkControlOptions['extraHTTPHeaders']
-      blockedURLPatterns?: BrowserNetworkControlOptions['blockedURLPatterns']
-      blockedResourceTypes?: BrowserNetworkControlOptions['blockedResourceTypes']
-      mockResponses?: BrowserNetworkControlOptions['mockResponses']
-    }
-  | {
-      action: 'configure_emulation'
-      colorScheme?: BrowserEmulationOptions['colorScheme']
-      reducedMotion?: BrowserEmulationOptions['reducedMotion']
-      timezoneId?: BrowserEmulationOptions['timezoneId']
-      locale?: BrowserEmulationOptions['locale']
-      geolocation?: BrowserEmulationOptions['geolocation']
-      cpuThrottlingRate?: BrowserEmulationOptions['cpuThrottlingRate']
-      networkThrottling?: BrowserEmulationOptions['networkThrottling']
-    }
-
-function normalizeBrowserActInput(input: BrowserActExactInput): ParsedBrowserActInput {
+/** 把精确分支的解析结果收敛成执行用的入参：只保留该 action 自己的字段，并补上 navigate 的缺省动作。 */
+function normalizeBrowserActInput(input: z.output<typeof browserActExactSchema>): ParsedBrowserActInput {
   if (input.action === 'navigate') return {
       action: input.action,
       navigationAction: input.navigationAction ?? 'goto',
@@ -1130,6 +1019,7 @@ function normalizeBrowserActInput(input: BrowserActExactInput): ParsedBrowserAct
   return input
 }
 
+/** 校验并归一 browser:act 的入参；校验不过直接抛错。 */
 function parseBrowserActInput(input: unknown): ParsedBrowserActInput {
   // browserActSchema 的 overwrite 已经把入参收敛成精确分支并补齐缺省（见上面的 .overwrite）；
   // 校验不过时 parse 直接抛错，所以走到这里的值就是 ParsedBrowserActInput，不再解析一遍。
@@ -1139,7 +1029,4 @@ function parseBrowserActInput(input: unknown): ParsedBrowserActInput {
 export {
   browserActSchema,
   parseBrowserActInput,
-}
-export type {
-  ParsedBrowserActInput,
 }

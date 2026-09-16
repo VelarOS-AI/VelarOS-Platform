@@ -16,7 +16,7 @@ import { BrowserInteractionEngine } from '../../dist/impl/electron/BrowserIntera
 import {
   browserActSchema,
   parseBrowserActInput,
-} from '../../dist/impl/tools/BrowserActSchema.js'
+} from '../../dist/utils/schemas/act.js'
 import { performTargetActionWithRecovery } from '../../dist/utils/target-recovery.js'
 
 function target(overrides = {}) {

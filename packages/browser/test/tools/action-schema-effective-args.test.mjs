@@ -11,11 +11,11 @@ import { test } from 'bun:test'
 import {
   browserActSchema,
   parseBrowserActInput,
-} from '../../dist/impl/tools/BrowserActSchema.js'
+} from '../../dist/utils/schemas/act.js'
 import {
   browserExtractSchema,
   parseBrowserExtractInput,
-} from '../../dist/impl/tools/BrowserExtractSchema.js'
+} from '../../dist/utils/schemas/extract.js'
 
 test('browser:act overwrite keeps the flat shape while returning the exact navigate branch', () => {
   assert.ok(browserActSchema.shape.action)

@@ -36,9 +36,7 @@ export type { BrowserWorkspaceArtifactManagerApi } from '../impl/workspace/Brows
 export type { BrowserWorkspaceFileAccessApi } from '../impl/workspace/BrowserWorkspaceFileAccess.js'
 
 // recipe 一组：生成骨架、读产物、执行。Desktop 的 recipe 面板与 browser:recipe 工具共用。
-export type { BrowserRecipeArtifactsApi } from '../impl/operations/RecipeArtifacts.js'
-export type { BrowserRecipeReaderApi } from '../impl/operations/RecipeReader.js'
-export type { BrowserRecipeRunnerApi } from '../impl/operations/RecipeRun.js'
+export type { BrowserRecipeOperationsApi } from '../impl/operations/BrowserRecipeOperations.js'
 
 // 运行时一组：Electron 运行时是两个产品的主进程唯一入口；无 Electron 的 CDP 运行时待拍板（方案 7-5）。
 export type { CdpBrowserRuntimeApi } from '../impl/CdpBrowserRuntime.js'

@@ -73,6 +73,22 @@ export const BrowserFetchLimits = Object.freeze({
   fileBytes: 52_428_800,
 })
 
+/** `browser:extract` 的公开缺省值：写进工具说明，模型不传时按这些数执行。 */
+export const BrowserExtractDefaults = Object.freeze({
+  /** 页面有多张表格时默认取第几张（从 0 开始）。 */
+  tableIndex: 0,
+  /** 表格默认最多提取多少行。 */
+  tableRows: 200,
+  /** 列表默认最多提取多少条。 */
+  listItems: 50,
+  /** 翻页默认最多翻几页。 */
+  paginatePages: 5,
+  /** 翻页时每页默认最多提取多少条。 */
+  paginateItemsPerPage: 50,
+  /** 正文默认最多返回多少字符。 */
+  contentChars: 50_000,
+})
+
 /** 浏览器包的失败原因码：外面按码判断，不按文案判断。 */
 export const BrowserErrorCodes = Object.freeze({
   /** 界面没装浏览器合成 Provider，拿不到受控页面。 */

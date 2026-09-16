@@ -260,9 +260,8 @@ export const GovernedModules = [
   {
     directory: 'browser',
     name: '@velaros-ai/browser',
-    // 改造中：工具还散在 impl/tools/ 的 14 个 *.tool.ts 里，收进一个工具文件是下一段的事，
-    // 所以现在不填 toolsFile、toolDefiner、hostPort，也不填卡片与验收；status 标 migrating，
-    // 门禁照查照报剩下多少条，不计入失败。
+    // 改造中：卡片与验收还没写；status 标 migrating，门禁照查照报剩下多少条，不计入失败。
+    toolsFile: 'src/impl/BrowserTools.ts',
     contract: 'src/contract',
     types: 'src/types',
     portable: 'browser.ts',
@@ -272,11 +271,13 @@ export const GovernedModules = [
     exports: 'src/exports',
     // 入口收口（四个入口）是下一段的事；现在六个入口的名字一个不变
     browserSafeEntries: ['core-contracts.ts'],
+    hostPort: 'ToolBrowserApi',
+    hostPortField: 'browser',
     status: 'migrating',
     layers: [
-      // 工具：14 个 *.tool.ts 与它们的 schema、分组、挂载（下一段收成一个 BrowserTools.ts）
-      ['tools/'],
-      // 工具背后的执行：act / extract / recipe / files 的动作分派
+      // 工具：40 个模型面工具的定义、分类、常驻集与随包 mod 清单
+      ['BrowserTools.ts'],
+      // 工具背后的执行：act / extract / recipe / files / user_scripts / performance 的动作分派
       ['operations/'],
       // 运行时装配：Electron 运行时与无 Electron 的 CDP 运行时
       ['electron/', 'CdpBrowserRuntime.ts', 'CdpBrowserRuntimeContract.ts'],
@@ -287,6 +288,7 @@ export const GovernedModules = [
       // 纯策略门面与 React 合成
       ['policies/', 'BrowserComposition.ts'],
     ],
+    toolDefiner: 'defineBrowserTool',
     // 卡片与不变量登记是改造最后一段的事，这三份现在还不存在，照样登记，燃尽表里看得到
     card: 'MODULE.md',
     invariants: 'spec/invariants.md',

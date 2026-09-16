@@ -127,6 +127,10 @@ export const BrowserTuning = Object.freeze({
     inspectHtmlChars: 30_000,
     /** 检查页面时缺省取多少个可交互元素。 */
     inspectElements: 80,
+    /** 找动作候选时重读页面取多少字符正文（只用来认元素，不整份给模型）。 */
+    observeTextChars: 2_000,
+    /** 找动作候选时至少取多少个可交互元素；limit 大时按 limit 的四倍取。 */
+    observeMinElements: 80,
     /** 点击没命中后为自愈重读页面时取多少字符正文（只用来认元素，不给模型）。 */
     selfHealTextChars: 2_000,
     /** 自愈重读时取多少字符 HTML。 */
@@ -156,6 +160,10 @@ export const BrowserTuning = Object.freeze({
     structuredTimeoutMs: 10_000,
     /** 正文提取的页内求值超时毫秒数（正文脚本要遍历整篇文档，给得更宽）。 */
     contentTimeoutMs: 15_000,
+    /** 翻页提取里「下一页存在吗」这一小段判定脚本的求值超时毫秒数。 */
+    paginateProbeTimeoutMs: 5_000,
+    /** 翻页提取点完下一页之后等页面换内容的毫秒数。 */
+    paginateSettleMs: 1_200,
     /** recipe 的提取步骤缺省取多少行表格。 */
     recipeTableRows: 200,
     /** recipe 的提取步骤缺省取多少条列表项。 */
@@ -186,6 +194,8 @@ export const BrowserTuning = Object.freeze({
     artifactDepth: 4,
     /** 列页面媒体缺省返回多少条。 */
     mediaSources: 80,
+    /** 导出页面媒体或资源清单时一次取多少条。 */
+    exportMediaSources: 120,
   }),
   /** 性能：trace 与 insight。 */
   performance: Object.freeze({
@@ -200,5 +210,12 @@ export const BrowserTuning = Object.freeze({
   diagnostics: Object.freeze({
     /** 内嵌页面的诊断记录最多留多少条。 */
     maxEntries: 300,
+  }),
+  /** recipe：读三类产物文件时各自最多读多少字符。 */
+  recipes: Object.freeze({
+    /** 读一份 recipe 骨架最多读多少字符；超过就不是骨架而是别的东西了。 */
+    skeletonReadChars: 200_000,
+    /** 读一份页面快照或运行记录最多读多少字符（它们比骨架大得多）。 */
+    snapshotReadChars: 500_000,
   }),
 })

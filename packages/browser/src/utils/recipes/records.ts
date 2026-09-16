@@ -1,15 +1,7 @@
-import { isFalse, stringifyPretty } from '@velaros-ai/core'
 
-import type { ToolContext } from '../../contract/requires'
-import { createArtifactManager } from '../../impl/operations/Artifacts.js'
-import type {
-  BrowserRecipeSkeleton,
-  BrowserSiteContext,
-  BrowserWorkspaceArtifactRecord,
-} from '../../types/browser'
+import type { BrowserRecipeSkeleton, BrowserSiteContext } from '../../types/browser'
 import type { BrowserRecipeExecutionPlan, BrowserRecipeRunArtifactFields, BrowserRecipeRunInputFields, BrowserRecipeRunRecipeFields, BrowserRecipeRunRecordArtifact, BrowserRecipeRunSnapshotArtifacts, BrowserRecipeRunStepResult, BrowserRecipeRunStepSummaryFields, BrowserRecipeRunWindowFields, BrowserRecipeVariableResolution } from '../../types/recipes.js'
 
-import { isSameBrowserOrigin } from './paths'
 
 /** 根据执行计划和步骤结果生成可持久化 run record。 */
 export function buildBrowserRecipeRunRecord(input: {
@@ -67,60 +59,6 @@ export function buildBrowserRecipeRunRecord(input: {
     ...stepSummaryFields,
     ...inputFields,
     ...artifactFields,
-  }
-}
-
-/** 按策略写入 runs/ run record；可能因 dryRun、显式关闭或跨源而跳过。 */
-export async function writeBrowserRecipeRunRecord(input: {
-  ctx: ToolContext
-  recipe: BrowserRecipeSkeleton
-  runRecord: BrowserRecipeRunRecordArtifact
-  currentContext: LooseOptional<BrowserSiteContext>
-  dryRun: boolean
-  saveRun?: boolean
-  runName?: string
-}): Promise<{
-  runArtifact: LooseOptional<BrowserWorkspaceArtifactRecord>
-  runSaveSkippedReason: LooseOptional<string>
-}> {
-  // dryRun 只预检，不持久化运行记录。
-  if (input.dryRun) return {
-      runArtifact: null,
-      runSaveSkippedReason: 'dryRun=true，仅预检，不写入运行记录。',
-    }
-
-  // 调用方可显式关闭 run 保存。
-  if (isFalse(input.saveRun)) return {
-      runArtifact: null,
-      runSaveSkippedReason: null,
-    }
-
-  // 没有当前 browser context 时无法确定写入哪个站点工区。
-  if (!input.currentContext) return {
-      runArtifact: null,
-      runSaveSkippedReason: '当前没有激活的浏览器网站工区。',
-    }
-
-  // 如果执行导致跨站跳转，不把原站点 recipe 的 run record 写到新站点目录。
-  if (!isSameBrowserOrigin(input.currentContext.url, input.recipe.url)) return {
-      runArtifact: null,
-      runSaveSkippedReason: 'recipe 执行后已切换到不同网站，未把运行记录写入新的站点工区。',
-    }
-
-  // run record 作为 json artifact 写入当前站点 runs/。
-  const runArtifact = await createArtifactManager(input.ctx).writeArtifact({
-    context: input.currentContext,
-    kind: 'run',
-    format: 'json',
-    content: `${stringifyPretty(input.runRecord)}\n`,
-    name:
-      input.runName ||
-      `${input.recipe.title || 'recipe'}-${new Date(input.runRecord.finishedAt).toISOString()}-run`,
-  })
-
-  return {
-    runArtifact,
-    runSaveSkippedReason: null,
   }
 }
 

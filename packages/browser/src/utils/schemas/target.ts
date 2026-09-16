@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { isEmpty, toNullable } from '@velaros-ai/core'
 
 import type { BrowserElementTargetHint } from '../../types/browser'
+import type { BrowserTargetHintInput } from '../../types/tools'
 
 /**
  * 页面目标元素提示 schema。
@@ -52,8 +53,6 @@ export const browserTargetHintSchema = z
       })
     }
   })
-
-export type BrowserTargetHintInput = z.infer<typeof browserTargetHintSchema>
 
 /** 把外部输入归一化成 runtime 统一使用的 target hint。 */
 export function normalizeBrowserTargetHint(target: BrowserTargetHintInput): BrowserElementTargetHint {

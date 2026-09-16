@@ -1,12 +1,12 @@
 /** 工具层与它们背后的执行类用到的工作类型：入参过滤、回执形状、会话内的门控状态。 */
 
 /** 一个站点在本次会话里的登录门控状态；`origin` 解析失败时退化为整串 URL。 */
-import type { ToolPermission } from '@velaros-ai/agent/protocol'
+import type { ToolCapabilitySchema,ToolPermission } from '@velaros-ai/agent/protocol'
 import type { DefineToolRuntimeSpecInput } from '@velaros-ai/agent/tool-contract'
 
 import type { BrowserToolContext } from '../contract/requires.js'
 
-import type {BrowserElementTargetHint, BrowserObservedActionKind, BrowserObservedActionSource, BrowserPageDiagnosticEntry, BrowserPageDiagnosticLevel, BrowserPageDiagnosticsSummary, BrowserPendingEventKind, BrowserPendingEventsResult, BrowserPendingEventSummary, BrowserWorkspaceArtifactFormat, BrowserWorkspaceArtifactKind } from './browser.js'
+import type {BrowserElementTargetHint, BrowserEmulationOptions, BrowserNetworkControlOptions, BrowserObservedActionKind, BrowserObservedActionSource, BrowserPageDiagnosticEntry, BrowserPageDiagnosticLevel, BrowserPageDiagnosticsSummary, BrowserPageNavigationOptions, BrowserPageScrollOptions, BrowserPageWaitOptions, BrowserPageZoomOptions, BrowserPendingEventKind, BrowserPendingEventsResult, BrowserPendingEventSummary, BrowserPressKeyOptions, BrowserTargetActionKind, BrowserTargetActionValue, BrowserWorkspaceArtifactFormat, BrowserWorkspaceArtifactKind } from './browser.js'
 import type { BrowserTargetActionClickMode } from './runtime.js'
 
 export interface BrowserTargetActionScriptBuildOptions {
@@ -185,3 +185,220 @@ export type DefineBrowserToolInput<TInput extends Record<string, unknown>> = Omi
 >
 
 export type BrowserLoginGateOriginState = 'prompted' | 'approved' | 'declined'
+
+/** 浏览器工具的能力标注里多带的一格：这个工具是在看页面、动页面，还是读写站点产物。 */
+export type BrowserCapabilityAccess = 'observe' | 'control' | 'artifact'
+
+/** 浏览器工具能力标注的 metadata：在通用字段之外多带 browserAccess。 */
+export type BrowserCapabilityMetadata = Readonly<{
+  browserAccess: BrowserCapabilityAccess
+  canMutateProject?: boolean
+}> & Readonly<Record<string, unknown>>
+
+/** 浏览器工具的能力标注：通用形状加上上面那格 metadata。 */
+export type BrowserToolCapabilitySchema = Omit<ToolCapabilitySchema, 'metadata'> & {
+  metadata: BrowserCapabilityMetadata
+}
+
+/** browser:act 与 recipe 步骤定位元素用的提示：ref、css、text、name、attributes 至少给一项。 */
+export interface BrowserTargetHintInput {
+  ref?: LooseOptional<string>
+  css?: LooseOptional<string>
+  role?: LooseOptional<string>
+  text?: LooseOptional<string>
+  name?: LooseOptional<string>
+  frame?: {
+    css?: LooseOptional<string>
+    name?: LooseOptional<string>
+    title?: LooseOptional<string>
+    url?: LooseOptional<string>
+  }
+  attributes?: Record<string, string>
+}
+
+/** browser:act 校验并收敛之后的入参：17 个动作各自只保留自己那几个字段。 */
+export type ParsedBrowserActInput =
+  | {
+      action: 'target'
+      targetAction: BrowserTargetActionKind
+      target: BrowserTargetHintInput
+      value?: BrowserTargetActionValue
+      waitForNavigation?: boolean
+    }
+  | {
+      action: 'navigate'
+      navigationAction: BrowserPageNavigationOptions['action']
+      url?: string
+    }
+  | {
+      action: 'scroll'
+      direction?: BrowserPageScrollOptions['direction']
+      amount?: number
+      x?: number
+      y?: number
+    }
+  | { action: 'type'; text: string }
+  | {
+      action: 'press_key'
+      key: string
+      modifiers?: BrowserPressKeyOptions['modifiers']
+      repeat?: number
+      waitForNavigation?: boolean
+    }
+  | { action: 'move_mouse'; x: number; y: number }
+  | {
+      action: 'click_coordinates'
+      x: number
+      y: number
+      button?: 'left' | 'middle' | 'right'
+      clickCount?: number
+      waitForNavigation?: boolean
+    }
+  | {
+      action: 'drag'
+      source: BrowserTargetHintInput
+      target: BrowserTargetHintInput
+      steps?: number
+      waitForNavigation?: boolean
+    }
+  | {
+      action: 'wait_for_selector'
+      selector: string
+      state?: 'attached' | 'visible' | 'hidden' | 'detached'
+      visible?: boolean
+      timeoutMs?: number
+    }
+  | {
+      action: 'wait_for_url'
+      urlPattern: string
+      timeoutMs?: number
+    }
+  | {
+      action: 'wait_for_function'
+      expression: string
+      timeoutMs?: number
+    }
+  | {
+      action: 'wait_for_text'
+      text: string
+      timeoutMs?: number
+    }
+  | {
+      action: 'wait'
+      durationMs?: number
+      loadState?: BrowserPageWaitOptions['loadState']
+      timeoutMs?: number
+    }
+  | { action: 'set_viewport'; width: number; height: number }
+  | {
+      action: 'set_page_zoom'
+      zoomAction: BrowserPageZoomOptions['action']
+      zoomFactor?: number
+      step?: number
+    }
+  | {
+      action: 'configure_network'
+      offline?: BrowserNetworkControlOptions['offline']
+      extraHTTPHeaders?: BrowserNetworkControlOptions['extraHTTPHeaders']
+      blockedURLPatterns?: BrowserNetworkControlOptions['blockedURLPatterns']
+      blockedResourceTypes?: BrowserNetworkControlOptions['blockedResourceTypes']
+      mockResponses?: BrowserNetworkControlOptions['mockResponses']
+    }
+  | {
+      action: 'configure_emulation'
+      colorScheme?: BrowserEmulationOptions['colorScheme']
+      reducedMotion?: BrowserEmulationOptions['reducedMotion']
+      timezoneId?: BrowserEmulationOptions['timezoneId']
+      locale?: BrowserEmulationOptions['locale']
+      geolocation?: BrowserEmulationOptions['geolocation']
+      cpuThrottlingRate?: BrowserEmulationOptions['cpuThrottlingRate']
+      networkThrottling?: BrowserEmulationOptions['networkThrottling']
+    }
+
+
+/** browser:get_page_diagnostics 的入参：读最近的诊断事件，可选择读完清缓存。 */
+export type BrowserGetPageDiagnosticsInput = {
+  limit: number
+  clear?: boolean
+}
+
+/** browser:list_page_errors 的入参，和诊断总表一样。 */
+export type BrowserListPageErrorsInput = BrowserGetPageDiagnosticsInput
+
+/** browser:list_network_events 的入参：诊断总表再按网络维度过滤。 */
+export type BrowserListNetworkEventsInput = BrowserGetPageDiagnosticsInput & {
+  status?: number
+  resourceType?: string
+  failedOnly?: boolean
+}
+
+/** browser:list_console_events 的入参：诊断总表再按 console 维度过滤。 */
+export type BrowserListConsoleEventsInput = BrowserGetPageDiagnosticsInput & {
+  level?: BrowserPageDiagnosticLevel
+  errorsOnly?: boolean
+}
+
+/** browser:query_elements 的入参。 */
+export type BrowserQueryElementsInput = {
+  selector: string
+  attributes?: string[]
+  includeHtml?: boolean
+  limit: number
+  maxTextChars?: number
+  maxHtmlChars?: number
+}
+
+/** browser:get_network_request 的入参。 */
+export type BrowserGetNetworkRequestInput = {
+  requestId: string
+  includeResponseBody?: boolean
+  maxBodyChars?: number
+}
+
+/** browser:get_network_response_body 的入参。 */
+export type BrowserGetNetworkResponseBodyInput = {
+  requestId: string
+  maxChars?: number
+}
+
+/** browser:read_page_storage 的入参。 */
+export type BrowserReadPageStorageInput = {
+  includeLocalStorage?: boolean
+  includeSessionStorage?: boolean
+  includeCookies?: boolean
+  storageScope?: 'current-origin' | 'all-origins'
+  cookieScope?: 'current-url' | 'all'
+  limit: number
+  maxValueChars?: number
+}
+
+/** browser:read_page_data 的入参：十四个只读预设各取所需。 */
+export type BrowserReadPageDataInput = {
+  preset:
+    | 'title'
+    | 'url'
+    | 'body_text'
+    | 'selector_text'
+    | 'selector_attribute'
+    | 'selector_count'
+    | 'selector_visible'
+    | 'selector_value'
+    | 'selector_enabled'
+    | 'selector_checked'
+    | 'selector_box'
+    | 'selector_styles'
+    | 'json_ld'
+    | 'media_sources'
+  selector?: string
+  attribute?: string
+  limit?: number
+  maxChars?: number
+}
+
+/** browser:evaluate_script 的入参。 */
+export type BrowserEvaluateScriptInput = {
+  script: string
+  mode?: 'expression' | 'function-body'
+  timeoutMs?: number
+  maxResultChars?: number
+}

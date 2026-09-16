@@ -3,8 +3,7 @@ import { AppError } from '@velaros-ai/core/error'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
 import type { ToolContext } from '../../contract/requires'
-import { extractBrowserList, extractBrowserTable } from '../../impl/operations/PageExtraction'
-import type { BrowserRecipeRunStepResult, BrowserRecipeStepOperation, BrowserRecipeStepPlan, ExecuteBrowserRecipeStepsInput } from '../../types/recipes.js'
+import type { BrowserRecipeExtractionAccess, BrowserRecipeRunStepResult, BrowserRecipeStepOperation, BrowserRecipeStepPlan, ExecuteBrowserRecipeStepsInput } from '../../types/recipes.js'
 import { performTargetActionWithRecovery } from '../target-recovery'
 import { BrowserTuning } from '../tuning'
 
@@ -54,7 +53,8 @@ function isOperationMiss(operation: BrowserRecipeStepOperation, result: unknown)
 async function executeRecipeStepOperation(
   operation: BrowserRecipeStepOperation,
   stepKind: BrowserRecipeStepPlan['step']['kind'],
-  ctx: ToolContext
+  ctx: ToolContext,
+  extraction: BrowserRecipeExtractionAccess
 ): Promise<unknown> {
   switch (operation.kind) {
     case 'target_action':
@@ -76,18 +76,18 @@ async function executeRecipeStepOperation(
       return ctx.browser.scrollPage(operation.options)
     case 'wait_for_selector':
       return ctx.browser.waitForSelector(operation.options)
-    // 提取步骤与 browser:extract 共用 PageExtraction 的取回口径：求值通道恒返回信封，
-    // 直接读信封会把「第 100 行之后的表格行」「超上限的长结果」静默丢掉，run 记录里存下的
-    // 也就成了信封而不是数据。helper 负责拆信封、按最大上限申请、超限明确失败。
+    // 提取步骤与 browser:extract 共用同一个提取执行类：求值通道恒返回信封，直接读信封会把
+    // 「第 100 行之后的表格行」「超上限的长结果」静默丢掉，run 记录里存下的也就成了信封而不是
+    // 数据。执行类负责拆信封、按最大上限申请、超限明确失败。
     case 'extract_table':
-      return extractBrowserTable(ctx, {
+      return extraction.extractTable({
         selector: operation.selector,
         tableIndex: operation.tableIndex ?? 0,
         maxRows: operation.maxRows ?? BrowserTuning.extraction.recipeTableRows,
         save: false,
       })
     case 'extract_list':
-      return extractBrowserList(ctx, {
+      return extraction.extractList({
         selector: operation.selector,
         maxItems: operation.maxItems ?? BrowserTuning.extraction.recipeListItems,
         save: false,
@@ -120,12 +120,12 @@ export async function executeBrowserRecipeSteps(
 
     const { targetCss, targetRole, targetText, selectorDesc } = readTargetHints(operation, step.id)
     const maxAttempts = Math.max(1, (step.retryCount ?? 0) + 1)
-    let result = await executeRecipeStepOperation(operation, step.kind, ctx)
+    let result = await executeRecipeStepOperation(operation, step.kind, ctx, input.extraction)
 
     for (let attempt = 1; isOperationMiss(operation, result) && attempt < maxAttempts; attempt++) {
       await TimerScope.sleep(300, { signal: ctx.abortSignal })
       ctx.abortSignal.throwIfAborted()
-      result = await executeRecipeStepOperation(operation, step.kind, ctx)
+      result = await executeRecipeStepOperation(operation, step.kind, ctx, input.extraction)
     }
 
     if (isOperationMiss(operation, result)) {

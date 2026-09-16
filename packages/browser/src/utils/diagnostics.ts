@@ -1,10 +1,9 @@
 import { isFiniteNumber, isNotNull, isPlainObject, isString, toNullable } from '@velaros-ai/core'
 
-import type { BrowserListConsoleEventsInput, BrowserListNetworkEventsInput, BrowserListPageErrorsInput } from '../impl/tools/Inspection.js'
 import type { BrowserPageDiagnosticEntry, BrowserPageDiagnosticsSummary } from '../types/browser'
 import type { BrowserPageDiagnosticKind, BrowserPageDiagnostics } from '../types/browser.js'
 import type { BrowserPageDriverNetworkCaptureState } from '../types/driver.js'
-import type { BrowserConsoleEventFilters, BrowserConsoleEventsResult, BrowserNetworkEventFilters, BrowserNetworkEventsResult, BrowserPageErrorsResult } from '../types/tools.js'
+import type { BrowserConsoleEventFilters, BrowserConsoleEventsResult, BrowserListConsoleEventsInput, BrowserListNetworkEventsInput, BrowserListPageErrorsInput, BrowserNetworkEventFilters, BrowserNetworkEventsResult, BrowserPageErrorsResult } from '../types/tools.js'
 
 /**
  * 诊断按种类取窗口：**先按种类过滤，再取最近 limit 条**。

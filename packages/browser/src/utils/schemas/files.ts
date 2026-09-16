@@ -232,6 +232,7 @@ const browserFilesSchema = z
     }
   })
 
+/** 校验并归一 browser:files 的入参，返回那一支动作自己的字段。 */
 function parseBrowserFilesInput(input: unknown): z.output<typeof browserFilesExactSchema> {
   const parsed = browserFilesSchema.parse(input)
   const exactParseResult = browserFilesExactSchema.safeParse(parsed)
@@ -240,6 +241,7 @@ function parseBrowserFilesInput(input: unknown): z.output<typeof browserFilesExa
 }
 
 export {
+  browserFilesExactSchema,
   browserFilesSchema,
   parseBrowserFilesInput,
 }

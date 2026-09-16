@@ -2,8 +2,17 @@ import { z } from 'zod'
 
 import {
   renderParameterDescription as parameterDescription,
+  requiredResultLimit,
 } from '@velaros-ai/agent/tool-contract'
-import { requiredResultLimit } from '@velaros-ai/agent/tool-contract'
+
+import type {
+  BrowserGetNetworkRequestInput,
+  BrowserGetNetworkResponseBodyInput,
+  BrowserGetPageDiagnosticsInput,
+  BrowserListConsoleEventsInput,
+  BrowserListNetworkEventsInput,
+  BrowserQueryElementsInput,
+} from '../../types/tools'
 
 
 export const browserQueryElementsSchema = z.object({
@@ -60,7 +69,6 @@ export const browserQueryElementsSchema = z.object({
     ),
 })
 
-export type BrowserQueryElementsInput = z.infer<typeof browserQueryElementsSchema>
 
 export const browserQueryElementsGuidedSchema = browserQueryElementsSchema.extend({
   limit: z
@@ -77,10 +85,10 @@ export const browserQueryElementsGuidedSchema = browserQueryElementsSchema.exten
     ),
 })
 
-export type BrowserQueryElementsGuidedInput = z.infer<typeof browserQueryElementsGuidedSchema>
 
+/** guided 面的查元素入参补上缺省条数，转成基础面的形状。 */
 export function normalizeBrowserQueryElementsGuided(
-  input: BrowserQueryElementsGuidedInput
+  input: z.infer<typeof browserQueryElementsGuidedSchema>
 ): BrowserQueryElementsInput {
   return {
     ...input,
@@ -97,7 +105,6 @@ export const browserGetPageDiagnosticsSchema = z.object({
   ),
 })
 
-export type BrowserGetPageDiagnosticsInput = z.infer<typeof browserGetPageDiagnosticsSchema>
 
 export const browserGetPageDiagnosticsGuidedSchema = browserGetPageDiagnosticsSchema.extend({
   limit: z
@@ -114,10 +121,10 @@ export const browserGetPageDiagnosticsGuidedSchema = browserGetPageDiagnosticsSc
     ),
 })
 
-export type BrowserGetPageDiagnosticsGuidedInput = z.infer<typeof browserGetPageDiagnosticsGuidedSchema>
 
+/** guided 面的读诊断入参补上缺省条数，转成基础面的形状。 */
 export function normalizeBrowserGetPageDiagnosticsGuided(
-  input: BrowserGetPageDiagnosticsGuidedInput
+  input: z.infer<typeof browserGetPageDiagnosticsGuidedSchema>
 ): BrowserGetPageDiagnosticsInput {
   return {
     ...input,
@@ -150,7 +157,6 @@ export const browserListNetworkEventsSchema = z.object({
   ),
 })
 
-export type BrowserListNetworkEventsInput = z.infer<typeof browserListNetworkEventsSchema>
 
 export const browserListNetworkEventsGuidedSchema = browserListNetworkEventsSchema.extend({
   limit: z
@@ -167,10 +173,10 @@ export const browserListNetworkEventsGuidedSchema = browserListNetworkEventsSche
     ),
 })
 
-export type BrowserListNetworkEventsGuidedInput = z.infer<typeof browserListNetworkEventsGuidedSchema>
 
+/** guided 面的列网络事件入参补上缺省条数，转成基础面的形状。 */
 export function normalizeBrowserListNetworkEventsGuided(
-  input: BrowserListNetworkEventsGuidedInput
+  input: z.infer<typeof browserListNetworkEventsGuidedSchema>
 ): BrowserListNetworkEventsInput {
   return {
     ...input,
@@ -193,9 +199,6 @@ export const browserGetNetworkResponseBodySchema = z.object({
   ),
 })
 
-export type BrowserGetNetworkResponseBodyInput = z.infer<
-  typeof browserGetNetworkResponseBodySchema
->
 
 export const browserGetNetworkResponseBodyGuidedSchema =
   browserGetNetworkResponseBodySchema.extend({
@@ -207,12 +210,10 @@ export const browserGetNetworkResponseBodyGuidedSchema =
     ),
   })
 
-export type BrowserGetNetworkResponseBodyGuidedInput = z.infer<
-  typeof browserGetNetworkResponseBodyGuidedSchema
->
 
+/** guided 面的读响应体入参补上缺省字符数，转成基础面的形状。 */
 export function normalizeBrowserGetNetworkResponseBodyGuided(
-  input: BrowserGetNetworkResponseBodyGuidedInput
+  input: z.infer<typeof browserGetNetworkResponseBodyGuidedSchema>
 ): BrowserGetNetworkResponseBodyInput {
   return {
     ...input,
@@ -242,7 +243,6 @@ export const browserGetNetworkRequestSchema = z.object({
   ),
 })
 
-export type BrowserGetNetworkRequestInput = z.infer<typeof browserGetNetworkRequestSchema>
 
 export const browserGetNetworkRequestGuidedSchema = browserGetNetworkRequestSchema.extend({
   includeResponseBody: z.boolean().optional().describe(
@@ -259,12 +259,10 @@ export const browserGetNetworkRequestGuidedSchema = browserGetNetworkRequestSche
   ),
 })
 
-export type BrowserGetNetworkRequestGuidedInput = z.infer<
-  typeof browserGetNetworkRequestGuidedSchema
->
 
+/** guided 面的读请求详情入参补上缺省值，转成基础面的形状。 */
 export function normalizeBrowserGetNetworkRequestGuided(
-  input: BrowserGetNetworkRequestGuidedInput
+  input: z.infer<typeof browserGetNetworkRequestGuidedSchema>
 ): BrowserGetNetworkRequestInput {
   return {
     ...input,
@@ -292,7 +290,6 @@ export const browserListConsoleEventsSchema = z.object({
   ),
 })
 
-export type BrowserListConsoleEventsInput = z.infer<typeof browserListConsoleEventsSchema>
 
 export const browserListConsoleEventsGuidedSchema = browserListConsoleEventsSchema.extend({
   limit: z
@@ -309,10 +306,10 @@ export const browserListConsoleEventsGuidedSchema = browserListConsoleEventsSche
     ),
 })
 
-export type BrowserListConsoleEventsGuidedInput = z.infer<typeof browserListConsoleEventsGuidedSchema>
 
+/** guided 面的列 console 事件入参补上缺省条数，转成基础面的形状。 */
 export function normalizeBrowserListConsoleEventsGuided(
-  input: BrowserListConsoleEventsGuidedInput
+  input: z.infer<typeof browserListConsoleEventsGuidedSchema>
 ): BrowserListConsoleEventsInput {
   return {
     ...input,
@@ -322,10 +319,8 @@ export function normalizeBrowserListConsoleEventsGuided(
 
 export const browserListPageErrorsSchema = browserGetPageDiagnosticsSchema
 
-export type BrowserListPageErrorsInput = z.infer<typeof browserListPageErrorsSchema>
 
 export const browserListPageErrorsGuidedSchema = browserGetPageDiagnosticsGuidedSchema
 
-export type BrowserListPageErrorsGuidedInput = z.infer<typeof browserListPageErrorsGuidedSchema>
 
 export const normalizeBrowserListPageErrorsGuided = normalizeBrowserGetPageDiagnosticsGuided

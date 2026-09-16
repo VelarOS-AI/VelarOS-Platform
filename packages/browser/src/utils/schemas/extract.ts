@@ -232,6 +232,7 @@ const browserExtractSchema = z
     return exactParseResult.success ? exactParseResult.data : input
   })
 
+/** 校验并归一 browser:extract 的入参，返回那一支动作自己的字段。 */
 function parseBrowserExtractInput(input: unknown): z.output<typeof browserExtractExactSchema> {
   const parsed = browserExtractSchema.parse(input)
   const exactParseResult = browserExtractExactSchema.safeParse(parsed)
@@ -241,6 +242,7 @@ function parseBrowserExtractInput(input: unknown): z.output<typeof browserExtrac
 }
 
 export {
+  browserExtractExactSchema,
   browserExtractSchema,
   parseBrowserExtractInput,
 }

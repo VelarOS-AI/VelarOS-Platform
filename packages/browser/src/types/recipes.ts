@@ -3,6 +3,7 @@ import type { buildRecipeExecutionPlan } from '../utils/recipes/plan.js'
 
 import type { BrowserPageInspection, BrowserRecipeSkeleton, BrowserSiteContext } from './browser'
 import type { BrowserPageNavigationOptions, BrowserPageScrollOptions, BrowserRecipeSkeletonStep, BrowserTargetActionOptions, BrowserWaitForSelectorOptions,BrowserWorkspaceArtifactRecord } from './browser.js'
+import type { BrowserExtractionPayload, BrowserListExtractionInput, BrowserTableExtractionInput } from './tools.js'
 
 export type BrowserRecipeRunVariables = Record<string, string>
 
@@ -13,12 +14,25 @@ export interface BrowserRecipeVariableResolution {
   missingVariableNames: string[]
 }
 
+/**
+ * recipe 的提取步骤要用到的两种提取能力。
+ *
+ * 提取步骤与 `browser:extract` 共用同一份取回口径（拆求值信封、按最大上限申请、超限明确失败），
+ * 所以这里不自己实现，由调用方（recipe 执行类）把提取执行类传进来。
+ */
+export interface BrowserRecipeExtractionAccess {
+  extractTable(input: BrowserTableExtractionInput): Promise<BrowserExtractionPayload>
+  extractList(input: BrowserListExtractionInput): Promise<BrowserExtractionPayload>
+}
+
 /** 执行 recipe 步骤列表的入参。 */
 export interface ExecuteBrowserRecipeStepsInput {
   /** 已经由 plan helper 编译好的步骤计划。 */
   stepPlan: BrowserRecipeStepPlan[]
   /** target 未命中时是否立即抛错停止。 */
   stopOnMiss?: boolean
+  /** 提取步骤用的提取能力，由调用方传进来。 */
+  extraction: BrowserRecipeExtractionAccess
 }
 
 export type BrowserRecipeRunRecipeFields = Pick<

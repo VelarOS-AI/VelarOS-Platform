@@ -74,9 +74,6 @@ export const browserReadPageStorageSchema = z.object({
     ),
 });
 
-export type BrowserReadPageStorageInput = z.infer<
-  typeof browserReadPageStorageSchema
->;
 
 export const browserReadPageStorageGuidedSchema =
   browserReadPageStorageSchema.extend({
@@ -94,13 +91,11 @@ export const browserReadPageStorageGuidedSchema =
       ),
   });
 
-export type BrowserReadPageStorageGuidedInput = z.infer<
-  typeof browserReadPageStorageGuidedSchema
->;
 
+/** guided 面的读存储入参补上缺省条数，转成基础面的形状。 */
 export function normalizeBrowserReadPageStorageGuided(
-  input: BrowserReadPageStorageGuidedInput,
-): BrowserReadPageStorageInput {
+  input: z.infer<typeof browserReadPageStorageGuidedSchema>,
+): z.infer<typeof browserReadPageStorageSchema> {
   return {
     ...input,
     limit: input.limit ?? 50,
@@ -160,9 +155,6 @@ export const browserEvaluateScriptSchema = z.object({
     ),
 });
 
-export type BrowserEvaluateScriptInput = z.infer<
-  typeof browserEvaluateScriptSchema
->;
 
 export const browserReadPageDataSchema = z
   .object({
@@ -270,19 +262,17 @@ export const browserReadPageDataSchema = z
     }
   });
 
-export type BrowserReadPageDataInput = z.infer<
-  typeof browserReadPageDataSchema
->;
 
+/** 把一个只读预设翻成页内求值的入参：脚本按预设拼好，上限与条数就地补齐。 */
 export function normalizeBrowserReadPageData(
-  input: BrowserReadPageDataInput,
-): BrowserEvaluateScriptInput {
+  input: z.infer<typeof browserReadPageDataSchema>,
+): z.infer<typeof browserEvaluateScriptSchema> {
   const selector = encodeBrowserScriptStringLiteral(input.selector ?? "");
   const attribute = encodeBrowserScriptStringLiteral(input.attribute ?? "");
   const maxChars = input.maxChars ?? 4000;
   const limit = input.limit ?? 20;
 
-  const scripts: Record<BrowserReadPageDataInput["preset"], string> = {
+  const scripts: Record<z.infer<typeof browserReadPageDataSchema>["preset"], string> = {
     title: 'return { title: document.title || "" };',
     url: "return { url: location.href };",
     body_text: [

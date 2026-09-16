@@ -286,6 +286,7 @@ const browserRecipeSchema = z
     }
   })
 
+/** 校验并归一 browser:recipe 的入参，返回那一支动作自己的字段。 */
 function parseBrowserRecipeInput(input: unknown): z.output<typeof browserRecipeExactSchema> {
   const parsed = browserRecipeSchema.parse(input)
   const exactParseResult = browserRecipeExactSchema.safeParse(parsed)
@@ -295,6 +296,7 @@ function parseBrowserRecipeInput(input: unknown): z.output<typeof browserRecipeE
 }
 
 export {
+  browserRecipeExactSchema,
   browserRecipeSchema,
   parseBrowserRecipeInput,
 }

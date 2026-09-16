@@ -7,7 +7,7 @@ import assert from 'node:assert/strict'
 import { describe, test } from 'bun:test'
 
 import type { ToolContext } from '../../src/contract/requires.js'
-import { browserTools } from '../../src/impl/tools/Collection'
+import { browserTools } from '../../src/impl/BrowserTools'
 import type { BrowserPageDiagnosticEntry } from '../../src/types/browser.js'
 import { clearBrowserDiagnosticEntries, takeBrowserDiagnosticWindow } from '../../src/utils/diagnostics.js'
 
