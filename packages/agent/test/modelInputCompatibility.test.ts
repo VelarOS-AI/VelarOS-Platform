@@ -127,7 +127,7 @@ describe('model input compatibility', () => {
       {
         category: { id: 'computer-control' },
         tools: [
-          descriptor({ name: 'computer:screen_size' }),
+          descriptor({ name: 'computer:key' }),
           descriptor({
             name: 'computer:screenshot',
             requiredModelInputModalities: ['image'],
@@ -138,12 +138,12 @@ describe('model input compatibility', () => {
 
     expect(
       filterToolCategoriesForModelInputs(categories, ['text'])[0]?.tools.map((tool) => tool.name)
-    ).toEqual(['computer:screen_size'])
+    ).toEqual(['computer:key'])
     expect(
       filterToolCategoriesForModelInputs(categories, ['text', 'image'])[0]?.tools.map(
         (tool) => tool.name
       )
-    ).toEqual(['computer:screen_size', 'computer:screenshot'])
+    ).toEqual(['computer:key', 'computer:screenshot'])
   })
 
   test('uses the same model-input gate for registry lists and tooling capability pages', () => {
@@ -160,14 +160,14 @@ describe('model input compatibility', () => {
       },
       isToolSystemEnabled: () => true,
       getCurrentVisibleToolNames: () => [
-        'computer:screen_size',
+        'computer:key',
         'computer:screenshot',
       ],
       getSupportedModelInputModalities: () => supportedInputModalities,
     } satisfies ToolCapabilityRegistryContext
     const registered = new Map([
       [
-        'computer:screen_size',
+        'computer:key',
         {
           categoryId: 'computer-control',
           tool: {
@@ -192,16 +192,16 @@ describe('model input compatibility', () => {
     const capabilities = new ToolCapabilityRegistry()
 
     expect(registry.listAvailable(registered, context, undefined, 'all').map((tool) => tool.name))
-      .toEqual(['computer:screen_size'])
+      .toEqual(['computer:key'])
     expect(capabilities.listCapabilityPages(registered, context).map((page) => page.name)).toEqual([
-      'computer:screen_size',
+      'computer:key',
     ])
 
     supportedInputModalities = ['text', 'image']
     expect(registry.listAvailable(registered, context, undefined, 'all').map((tool) => tool.name))
-      .toEqual(['computer:screen_size', 'computer:screenshot'])
+      .toEqual(['computer:key', 'computer:screenshot'])
     expect(capabilities.listCapabilityPages(registered, context).map((page) => page.name)).toEqual([
-      'computer:screen_size',
+      'computer:key',
       'computer:screenshot',
     ])
   })

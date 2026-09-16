@@ -40,8 +40,6 @@ export function describeComputerUseObservation(
   switch (toolName) {
     case 'computer:screenshot':
       return '为当前任务观察了主屏幕；原始截图未进入长期记忆。'
-    case 'computer:screen_size':
-      return '为当前任务读取了主屏幕几何信息。'
     case 'computer:move':
       return `为当前任务移动了鼠标到 (${numberOrUnknown(args.x)}, ${numberOrUnknown(args.y)})。`
     case 'computer:click':
