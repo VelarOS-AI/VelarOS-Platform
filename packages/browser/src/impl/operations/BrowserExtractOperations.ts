@@ -17,6 +17,7 @@ import type { BrowserWorkspaceArtifactFormat } from '../../types/browser'
 import type {
   BrowserExtractionPayload,
   BrowserExtractionSaveOptions,
+  BrowserExtractPaginateInput,
   BrowserListExtractionInput,
   BrowserPageContentExtractionInput,
   BrowserTableExtractionInput,
@@ -34,13 +35,6 @@ import { getActiveBrowserContext, requireActiveBrowserSite } from '../../utils/t
 import { BrowserTuning } from '../../utils/tuning'
 import { BrowserWorkspaceArtifactManager } from '../workspace/BrowserWorkspaceArtifactManager.js'
 
-/** browser:extract action=paginate 的入参：逐页提取列表并合并。 */
-interface BrowserExtractPaginateInput extends BrowserExtractionSaveOptions {
-  selector?: string
-  maxPages: number
-  maxItemsPerPage: number
-  nextPageSelector?: string
-}
 
 /**
  * `browser:extract` 背后的执行类：表格、列表、翻页列表、正文四种提取，可选落盘。

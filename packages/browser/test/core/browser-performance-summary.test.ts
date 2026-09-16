@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 
 import { test } from 'bun:test'
 
-import { extractKeyMetricsFromSummary } from '../../src/impl/engines/BrowserPerformanceOrchestrator.js'
+import { extractKeyMetricsFromSummary } from '../../src/utils/performance.js'
 
 void test('performance summary accepts legacy spacing without including nested metrics or suffix details', () => {
   const summary = [

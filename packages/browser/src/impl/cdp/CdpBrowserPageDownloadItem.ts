@@ -7,7 +7,19 @@ import { AppError } from '@velaros-ai/core/error'
 import type { BrowserPageDriverDownloadItem } from '../../contract/requires.js'
 import type { CdpBrowserPageDownloadItemOptions, CdpDownloadDoneState, CdpDownloadProgressEvent } from '../../types/cdp.js'
 
-export class CdpBrowserPageDownloadItem implements BrowserPageDriverDownloadItem {
+/**
+ * 一条正在下载的 CDP 条目：既是宿主端口要的那份下载项，也带着 CDP 侧独有的两件——
+ * 服务端给的源地址，和按 `Browser.downloadProgress` 事件推进的进度。
+ */
+export interface CdpBrowserPageDownloadItemApi extends BrowserPageDriverDownloadItem {
+  /** 服务端给的下载源地址；CDP 不一定给，给不出时是 null。 */
+  getURL(): Nullable<string>
+  /** 按一条下载进度事件推进状态；到达终态时回终态，否则回 null。 */
+  updateProgress(event: CdpDownloadProgressEvent): Nullable<CdpDownloadDoneState>
+}
+
+/** 见 {@link CdpBrowserPageDownloadItemApi}。 */
+export class CdpBrowserPageDownloadItem implements CdpBrowserPageDownloadItemApi {
   private totalBytes = 0
   private receivedBytes = 0
   private savePath = ''

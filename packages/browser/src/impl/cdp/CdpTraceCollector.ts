@@ -1,29 +1,10 @@
-import { isEmpty, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
-import type { CdpHeapSnapshotChunkEvent, CdpIoReadResult, CdpTraceTransport, CdpTracingCompleteEvent, WebContentsDebuggerLike } from '../../types/cdp.js'
+import type { CdpIoReadResult, CdpTraceTransport, CdpTracingCompleteEvent } from '../../types/cdp.js'
 import { parseTraceEvents } from '../../utils/cdp/tracing'
 import { BrowserTuning } from '../../utils/tuning'
 
-/** 把 webContents.debugger 适配成采集器需要的 CDP 会话面。 */
-export function createWebContentsCdpTraceTransport(
-  webContents: WebContentsDebuggerLike
-): CdpTraceTransport {
-  return {
-    send: <T = unknown>(method: string, params?: Record<string, unknown>) =>
-      webContents.debugger.sendCommand(method, params) as Promise<T>,
-    onEvent: <T = unknown>(method: string, listener: (params: T) => void) => {
-      const handler = (_event: unknown, eventMethod: string, params: unknown): void => {
-        if (eventMethod === method) listener(params as T)
-      }
-      webContents.debugger.on('message', handler)
-      return () => {
-        webContents.debugger.off('message', handler)
-      }
-    },
-  }
-}
 
 /**
  * 性能 trace 采集器：开 CDP Tracing、等 `Tracing.tracingComplete`、把数据流读回来。
@@ -190,41 +171,3 @@ export class CdpTraceCollector implements CdpTraceCollectorApi {
   }
 }
 
-/**
- * 采集 V8 堆快照并流式写入文件（HeapProfiler domain）。
- *
- * CDP 约定：所有 addHeapSnapshotChunk 事件都会在 takeHeapSnapshot 响应之前派发，
- * 所以「先订阅 → 发命令 → 等响应 → 退订」即可拿全数据。
- * 快照可能有几百 MB，用 sink 回调流式消费，不在内存里拼接。
- */
-export async function captureCdpHeapSnapshot(
-  transport: CdpTraceTransport,
-  sink: (chunk: string) => void
-): Promise<{ chunks: number; bytes: number }> {
-  let chunks = 0
-  let bytes = 0
-  const unsubscribe = transport.onEvent<CdpHeapSnapshotChunkEvent>(
-    'HeapProfiler.addHeapSnapshotChunk',
-    (params) => {
-      const chunk = params?.chunk
-      if (!isString(chunk) || isEmpty(chunk)) return
-      chunks += 1
-      bytes += Buffer.byteLength(chunk)
-      sink(chunk)
-    }
-  )
-
-  try {
-    await transport.send('HeapProfiler.takeHeapSnapshot', {
-      reportProgress: false,
-      captureNumericValue: true,
-    })
-  } finally {
-    unsubscribe()
-  }
-
-  if (chunks === 0) {
-    throw new AppError('EXECUTION_FAILED', '浏览器没有返回堆快照数据。')
-  }
-  return { chunks, bytes }
-}

@@ -1,8 +1,17 @@
 /** 外部浏览器页面会话；通过 CDP driver 接入，不依赖任何 host 的内嵌 WebContents。 */
-import type { DevtoolsParsedTrace } from '../../vendor/devtools-performance-engine/devtoolsPerformanceEngine.mjs'
 import type { BrowserPageDriver } from '../contract/requires.js'
 
-import type { BrowserTargetActionEffectSnapshot, BrowserViewportOptions, ProjectReadFileResult, WorkspaceFileEntry, WorkspaceListOptions, WorkspaceWriteFileOptions, WorkspaceWriteFileResult } from './browser.js'
+import type {
+  BrowserTargetActionEffectSnapshot,
+  BrowserTurnContextSourcePeekInput,
+  BrowserTurnContextSourcePeekResult,
+  BrowserViewportOptions,
+  ProjectReadFileResult,
+  WorkspaceFileEntry,
+  WorkspaceListOptions,
+  WorkspaceWriteFileOptions,
+  WorkspaceWriteFileResult,
+} from './browser.js'
 import type { BrowserPageDriverState } from './driver.js'
 
 export interface BrowserViewportDeviceMetrics {
@@ -61,9 +70,19 @@ export interface BrowserViewportScreenMetrics {
   innerHeight: number
 }
 
-/** 一次 trace 录制的解析产物；rawEvents 供落盘，parsedTrace 供 insight 查询。 */
+/**
+ * vendor DevTools 引擎解析出来的那份 trace。
+ *
+ * 它的具体形状属于第三方引擎，而类型文件按标准不引实现与 vendor 产物，所以这里只声明
+ * insight 查询真用得到的那一格；引擎内部仍按自己的完整类型走。
+ */
+export interface BrowserParsedTrace {
+  insights?: LooseOptional<Map<string, { model: Record<string, unknown> }>>
+}
+
+/** 一次 trace 录制的解析产物；`rawEvents` 供落盘，`parsedTrace` 供 insight 查询。 */
 export interface BrowserParsedTraceRecording {
-  parsedTrace: DevtoolsParsedTrace
+  parsedTrace: BrowserParsedTrace
   insightSetIds: string[]
   rawEvents: unknown[]
 }
@@ -140,4 +159,25 @@ export interface BrowserPageDriverKernel {
   syncSessionSiteContext(sessionId: string, url: string): void
   /** 可测的延时（TimerScope 包装）。 */
   delay(ms: number): Promise<void>
+}
+
+/**
+ * 回合上下文增量源：本包自持这一份形状，结构上与内核的通用回合上下文源兼容。
+ *
+ * 带方法成员，所以不在可移植数据文件里——`./contracts` 只放不带行为的数据。
+ */
+export interface BrowserTurnContextDeltaSource {
+  /** 源 id，宿主按它认这一路增量。 */
+  id: string
+  /** 这一路增量允许出现在哪些空间。 */
+  scopes: readonly string[]
+  /** 渲染进程看不看得到。 */
+  rendererVisible?: boolean
+  /** 读一段还没被消费的增量。 */
+  peekCached(input: BrowserTurnContextSourcePeekInput): BrowserTurnContextSourcePeekResult
+}
+
+export interface BrowserCommandSpec {
+  file: string
+  args: string[]
 }

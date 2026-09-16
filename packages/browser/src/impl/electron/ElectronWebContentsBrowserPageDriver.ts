@@ -15,19 +15,15 @@ import type {
 } from '../../types/browser'
 import type { CdpScreencastConsumerOptions, CdpScreencastStartOptions, CdpSend,ScreencastCapturedFrame } from '../../types/cdp.js'
 import type { BrowserPageDriverClickCoordinatesOptions, BrowserPageDriverDiagnosticsOptions, BrowserPageDriverDragCoordinatesOptions, BrowserPageDriverEmulationState, BrowserPageDriverMoveMouseOptions, BrowserPageDriverNetworkCaptureState, BrowserPageDriverNetworkControlState, BrowserPageDriverNetworkIdleOptions, BrowserPageDriverNetworkRequestDetailsResult, BrowserPageDriverNetworkResponseBodyResult, BrowserPageDriverState } from '../../types/driver'
-import type { BrowserPageDriverFactory } from '../../types/electron.js'
 import { applyCdpEmulation, createDefaultCdpEmulationState } from '../../utils/cdp/emulation'
+import { captureCdpHeapSnapshot, createWebContentsCdpTraceTransport } from '../../utils/cdp/tracing.js'
 import { clearBrowserDiagnosticEntries, takeBrowserDiagnosticWindow } from '../../utils/diagnostics.js'
 import { cdpMouseButtonsMask, clampEmbeddedDiagnosticLimit } from '../../utils/electron/webcontents'
 import { BrowserTuning } from '../../utils/tuning'
 import { buildBrowserViewportDeviceMetrics } from '../../utils/viewport'
 import { BrowserCdpNetworkController } from '../cdp/BrowserCdpNetworkController'
 import { CdpScreencastRecorder } from '../cdp/CdpScreencastRecorder'
-import {
-  captureCdpHeapSnapshot,
-  CdpTraceCollector,
-  createWebContentsCdpTraceTransport,
-} from '../cdp/CdpTraceCollector'
+import { CdpTraceCollector } from '../cdp/CdpTraceCollector'
 
 import { electronDebuggerHolds } from './ElectronDebuggerHolds'
 
@@ -513,7 +509,4 @@ class ElectronWebContentsBrowserPageDriver implements BrowserPageDriver {
   }
 }
 
-const createElectronWebContentsBrowserPageDriver: BrowserPageDriverFactory = ({ webContents }) =>
-  new ElectronWebContentsBrowserPageDriver(webContents)
-
-export { createElectronWebContentsBrowserPageDriver,ElectronWebContentsBrowserPageDriver }
+export { ElectronWebContentsBrowserPageDriver }

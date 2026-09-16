@@ -2,12 +2,7 @@ import assert from 'node:assert/strict'
 
 import { test } from 'bun:test'
 
-import {
-  BrowserEvaluateSimplifyMaxDepth,
-  BrowserEvaluateSimplifyMaxEntries,
-  buildEvaluateScript,
-  simplifyBrowserEvaluatedValue,
-} from '../../dist/core.js'
+import { BrowserEvaluateSimplifyMaxDepth, BrowserEvaluateSimplifyMaxEntries, buildEvaluateScript, simplifyBrowserEvaluatedValue } from '../../dist/utils/page-scripts/evaluate.js'
 
 /**
  * `simplify` 是所有 evaluateScript 的公共出口，浏览器工具与宿主注入的页面探针都从这里出结果。

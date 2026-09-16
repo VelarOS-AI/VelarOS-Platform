@@ -2,11 +2,11 @@ import { readFile } from 'node:fs/promises'
 
 import { describe, expect, test } from 'bun:test'
 
-void describe('browser composition entry', () => {
-  void test('keeps the renderer entry isolated from host-side mod bindings', async () => {
-    const source = await readFile(new URL('../dist/composition.js', import.meta.url), 'utf8')
+void describe('browser renderer entry', () => {
+  void test('keeps the renderer entry isolated from host-side bindings and node builtins', async () => {
+    const source = await readFile(new URL('../dist/renderer.js', import.meta.url), 'utf8')
 
-    expect(source).not.toContain('./mod')
+    expect(source).not.toContain('BrowserTools')
     expect(source).not.toContain('node:')
   })
 })

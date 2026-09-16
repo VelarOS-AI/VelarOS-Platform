@@ -6,8 +6,41 @@ import type { DefineToolRuntimeSpecInput } from '@velaros-ai/tool-contract'
 
 import type { BrowserToolContext } from '../contract/requires.js'
 
-import type {BrowserElementTargetHint,BrowserEmulationOptions, BrowserNetworkControlOptions, BrowserObservedActionKind, BrowserObservedActionSource, BrowserPageDiagnosticEntry, BrowserPageDiagnosticLevel, BrowserPageDiagnostics, BrowserPageDiagnosticsSummary, BrowserPageNavigationOptions, BrowserPageScrollOptions, BrowserPageWaitOptions, BrowserPageZoomOptions, BrowserPendingEventKind, BrowserPendingEventsResult, BrowserPendingEventSummary, BrowserPressKeyOptions, BrowserTargetActionKind, BrowserTargetActionValue, BrowserWorkspaceArtifactFormat, BrowserWorkspaceArtifactKind } from './browser.js'
+import type { BrowserElementTargetHint, BrowserEmulationOptions, BrowserNetworkControlOptions, BrowserPageDiagnosticEntry, BrowserPageDiagnosticLevel, BrowserPageDiagnostics, BrowserPageDiagnosticsSummary, BrowserPageNavigationOptions, BrowserPageScrollOptions, BrowserPageWaitOptions, BrowserPageZoomOptions, BrowserPendingEventKind, BrowserPendingEventsResult, BrowserPendingEventSummary, BrowserPressKeyOptions, BrowserTargetActionKind, BrowserTargetActionValue, BrowserWorkspaceArtifactFormat, BrowserWorkspaceArtifactKind } from './browser.js'
 import type { BrowserTargetActionClickMode } from './runtime.js'
+
+/** 浏览器工具的职责类别 id（七类，每个工具恰好落一类）。 */
+export type BrowserToolCategoryId =
+  | 'browser-core'
+  | 'browser-session'
+  | 'browser-observe'
+  | 'browser-network'
+  | 'browser-events'
+  | 'browser-files'
+  | 'browser-advanced'
+
+/** 装配浏览器内置 mod 时宿主可以给的选项。 */
+export interface BrowserBundledModOptions {
+  /**
+   * 除浏览器空间外，还允许哪些空间挂浏览器工具（「客居」）。
+   *
+   * 空间之间互不知道对方：浏览器包不认识「项目空间」是什么，谁客居由**宿主的空间配方**说了算。
+   * 不传就是只挂在浏览器空间自己身上。
+   */
+  readonly guestSpaceIds?: readonly string[]
+}
+
+/** 浏览器内置 mod 的定义：身份、清单与它贡献的工具和类别。 */
+export interface BrowserBundledModDefinition {
+  readonly id: string
+  readonly specifier: string
+  readonly defaultEnabled: true
+  readonly manifest: Record<string, unknown>
+  readonly bindings: {
+    readonly tools: Readonly<Record<string, unknown>>
+    readonly toolCategories: Readonly<Record<string, unknown>>
+  }
+}
 
 export interface BrowserTargetActionScriptBuildOptions {
   clickMode?: BrowserTargetActionClickMode
@@ -398,4 +431,111 @@ export type BrowserEvaluateScriptInput = {
   mode?: 'expression' | 'function-body'
   timeoutMs?: number
   maxResultChars?: number
+}
+
+/** `browser:extract action=paginate` 的入参：逐页提取列表并合并。 */
+export interface BrowserExtractPaginateInput extends BrowserExtractionSaveOptions {
+  selector?: string
+  maxPages: number
+  maxItemsPerPage: number
+  nextPageSelector?: string
+}
+
+export type BrowserObservedActionSource = 'action' | 'link' | 'form_field'
+
+export type BrowserObservedActionKind = BrowserTargetActionKind | 'upload'
+
+export interface BrowserObservedActionInput {
+  action: 'target'
+  targetAction: BrowserTargetActionKind
+  target: BrowserElementTargetHint
+  value?: BrowserTargetActionValue
+}
+
+export interface BrowserObservedUploadInput {
+  target: BrowserElementTargetHint
+  filePath: string
+}
+
+export interface BrowserObservedActionPreview {
+  label: string
+  target: string
+  command: string
+  requiresValue: boolean
+  twoStep: boolean
+}
+
+export interface BrowserObservedTargetActionReplay {
+  tool: 'browser:act'
+  input: BrowserObservedActionInput
+}
+
+export interface BrowserObservedUploadReplay {
+  tool: 'browser:upload_file'
+  input: BrowserObservedUploadInput
+}
+
+export type BrowserObservedActionReplay =
+  | BrowserObservedTargetActionReplay
+  | BrowserObservedUploadReplay
+
+/**
+ * 一个动作候选。
+ *
+ * 目标元素只出现在 `replay.input.target` 这一处：曾经同一份 target 在 `target`、`actionInput`
+ * 与 `replay.input` 里各写一遍，回执体积翻三倍，模型还要自己判断以哪一份为准。
+ */
+export interface BrowserObservedActionCandidateBase {
+  id: string
+  actionId: string
+  method: BrowserObservedActionKind
+  description: string
+  source: BrowserObservedActionSource
+  score: number
+  twoStep: boolean
+  requiresValue: boolean
+  arguments: string[]
+  preview: BrowserObservedActionPreview
+}
+
+export interface BrowserObservedTargetActionCandidate extends BrowserObservedActionCandidateBase {
+  method: BrowserTargetActionKind
+  replay: BrowserObservedTargetActionReplay
+}
+
+export interface BrowserObservedUploadCandidate extends BrowserObservedActionCandidateBase {
+  method: 'upload'
+  replay: BrowserObservedUploadReplay
+}
+
+export type BrowserObservedActionCandidate =
+  | BrowserObservedTargetActionCandidate
+  | BrowserObservedUploadCandidate
+
+export interface BrowserObserveActionsResult {
+  url: string
+  title: string
+  instruction: Nullable<string>
+  candidates: BrowserObservedActionCandidate[]
+  capturedAt: number
+}
+
+export interface BrowserExtractPageContentOptions {
+  format?: BrowserPageContentFormat
+  selector?: string
+  maxChars?: number
+  save?: boolean
+  name?: string
+}
+
+export interface BrowserExtractPageContentResult {
+  ok: boolean
+  format: BrowserPageContentFormat
+  selector: Nullable<string>
+  content: string
+  truncated: boolean
+  url: string
+  capturedAt: number
+  savedPath?: string
+  savedRelativePath?: string
 }

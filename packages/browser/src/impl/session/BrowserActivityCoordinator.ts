@@ -3,11 +3,9 @@ import { createTurnContextSessionLedgers } from '@velaros-ai/agent'
 import { isNumber,toNullable, toOptional } from '@velaros-ai/core'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
-import type {
-  BrowserTurnContextDeltaSource,
-  BrowserUserActivityEvent,
-  BrowserUserActivityItem,
-} from '../../types/browser.js'
+import type { BrowserUserActivityEvent } from '../../types/browser.js'
+import type { BrowserTurnContextDeltaSource } from '../../types/runtime.js'
+import type { BrowserUserActivityItem } from '../../types/session.js'
 import type { BrowserActivitySessionState, BrowserUserActivityWaitResult, BrowserUserActivityWaitState } from '../../types/session.js'
 import { formatSummaryItem } from '../../utils/session'
 import { BrowserTuning } from '../../utils/tuning'

@@ -5,43 +5,12 @@ import { AppError } from '@velaros-ai/core/error'
 import { BrowserUserScriptLimits } from '../../contract/constants'
 import type { BrowserSiteContext, BrowserUserScriptDraft, BrowserUserScriptLastRun, BrowserUserScriptOverview, BrowserUserScriptPatch, BrowserUserScriptRecord } from '../../types/browser.js'
 import type { BrowserUserScriptAccess, BrowserUserScriptStore } from '../../types/workspace.js'
-import { createScriptId, globMatches, normalizeCode, normalizeDescription, normalizeName, normalizePatterns, scriptPath, sortScripts, validateUserScriptPatch } from '../../utils/user-scripts'
+import { browserUserScriptMatchesUrl, createScriptId, normalizeCode, normalizeDescription, normalizeName, normalizePatterns, scriptPath, sortScripts, validateUserScriptPatch } from '../../utils/user-scripts'
 import { requireScript, requireStoredScript } from '../../utils/user-scripts.js'
 
 const log = Log.tag('BrowserUserScriptManager')
 
-/** Chrome 风格 match pattern 的有界子集：http/https、* scheme、* / *.host。 */
-export function browserUserScriptPatternMatches(url: string, pattern: string): boolean {
-  if (!URL.canParse(url)) return false
-  const parsed = new URL(url)
-  if (pattern === '<all_urls>') return parsed.protocol === 'http:' || parsed.protocol === 'https:'
-  const separator = pattern.indexOf('://')
-  if (separator < 0) return globMatches(url, pattern)
-  const scheme = pattern.slice(0, separator)
-  const remainder = pattern.slice(separator + 3)
-  const slash = remainder.indexOf('/')
-  if (slash < 0) return false
-  const hostPattern = remainder.slice(0, slash).toLowerCase()
-  const pathPattern = remainder.slice(slash)
-  const protocol = parsed.protocol.slice(0, -1)
-  if (scheme !== '*' && scheme !== protocol) return false
-  if (scheme === '*' && protocol !== 'http' && protocol !== 'https') return false
-  const host = parsed.hostname.toLowerCase()
-  const hostMatches =
-    hostPattern === '*' ||
-    hostPattern === host ||
-    (hostPattern.startsWith('*.') &&
-      (host === hostPattern.slice(2) || host.endsWith(`.${hostPattern.slice(2)}`)))
-  if (!hostMatches) return false
-  return globMatches(`${parsed.pathname}${parsed.search}${parsed.hash}`, pathPattern)
-}
 
-export function browserUserScriptMatchesUrl(script: BrowserUserScriptRecord, url: string): boolean {
-  if (!script.match.some((pattern) => browserUserScriptPatternMatches(url, pattern))) return false
-  return !(script.excludeMatch ?? []).some((pattern) =>
-    browserUserScriptPatternMatches(url, pattern)
-  )
-}
 
 /**
  * 站点用户脚本的存储：索引与代码都落在站点工作区里，负责增删改查、启停、排序与执行记录。
@@ -52,6 +21,8 @@ export function browserUserScriptMatchesUrl(script: BrowserUserScriptRecord, url
  * 实例归运行时：无会话状态，一份就够；站点由每次调用传进来的上下文决定。
  */
 export interface BrowserUserScriptManagerApi {
+  /** 一条脚本在这个地址上该不该跑：`@match` 先过、`@exclude` 一票否决；与注入时用的是同一份判据。 */
+  matchesUrl(script: BrowserUserScriptRecord, url: string): boolean
   /** 读这个站点的用户脚本总览：全局开关与每个脚本的状态。 */
   getOverview(context: BrowserSiteContext): Promise<BrowserUserScriptOverview>
   /** 读一个用户脚本的代码与元信息。 */
@@ -86,6 +57,10 @@ export interface BrowserUserScriptManagerApi {
 }
 
 class BrowserUserScriptManager implements BrowserUserScriptManagerApi {
+  public matchesUrl(script: BrowserUserScriptRecord, url: string): boolean {
+    return browserUserScriptMatchesUrl(script, url)
+  }
+
   private static readonly BrowserUserScriptIndexPath = 'scripts/index.json'
   private static readonly BrowserUserScriptStoreVersion = 1 as const
 
@@ -414,5 +389,12 @@ class BrowserUserScriptManager implements BrowserUserScriptManagerApi {
   }
 }
 
-export { BrowserUserScriptManager }
+/** 按一个站点工作区的读写口建用户脚本仓库；索引文件与匹配规则只有这一份。 */
+function createBrowserUserScriptStore(
+  access: BrowserUserScriptAccess
+): BrowserUserScriptManagerApi {
+  return new BrowserUserScriptManager(access)
+}
+
+export { BrowserUserScriptManager, createBrowserUserScriptStore }
 export type { BrowserUserScriptAccess } from '../../types/workspace.js'

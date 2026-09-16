@@ -7,7 +7,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-const packagePath = new URL("../../dist/tools.js", import.meta.url);
+const packagePath = new URL("../../dist/impl/BrowserTools.js", import.meta.url);
 
 test("controlled page data presets are read-only and arbitrary script execution is external", async () => {
   const { browserTools } = await import(packagePath.href);

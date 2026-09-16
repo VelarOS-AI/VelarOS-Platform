@@ -39,10 +39,6 @@ export interface BrowserActionPolicyDecision {
   reason: Nullable<string>
 }
 
-export interface BrowserCommandSpec {
-  file: string
-  args: string[]
-}
 
 export interface BrowserPageState {
   /** 当前 URL。 */
@@ -150,14 +146,6 @@ export interface BrowserTurnContextSourcePeekResult {
   }>
 }
 
-/** Browser-owned adapter shape structurally compatible with Kernel's generic turn-context source. */
-export interface BrowserTurnContextDeltaSource {
-  id: string
-  scopes: readonly string[]
-  rendererVisible?: boolean
-  peekCached(input: BrowserTurnContextSourcePeekInput): BrowserTurnContextSourcePeekResult
-}
-
 export type BrowserUserActivityKind =
   | 'click'
   | 'keyboard'
@@ -170,20 +158,7 @@ export type BrowserUserActivityKind =
   | 'focus'
   | 'unknown'
 
-export interface BrowserUserActivityItem {
-  kind: BrowserUserActivityKind
-  url: Nullable<string>
-  occurredAt: number
-  detail?: LooseOptional<string>
-}
 
-export interface BrowserUserActivitySummary {
-  startedAt: number
-  endedAt: number
-  itemCount: number
-  items: BrowserUserActivityItem[]
-  text: string
-}
 
 export interface BrowserUserActivityEvent {
   sessionId: string
@@ -232,19 +207,7 @@ export interface BrowserWorkspaceArtifactRecord {
   savedAt: number
 }
 
-export interface BrowserWorkspaceArtifactListItem {
-  kind: BrowserWorkspaceArtifactKind
-  type: 'file' | 'directory'
-  path: string
-  relativePath: string
-  name: string
-}
 
-export interface BrowserWorkspaceArtifactsOverview {
-  browserContext: BrowserSiteContext
-  manifest: BrowserWorkspaceManifest
-  artifacts: BrowserWorkspaceArtifactListItem[]
-}
 
 export type BrowserUserScriptRunAt = 'document-start' | 'document-end' | 'document-idle'
 export type BrowserUserScriptWorld = 'isolated' | 'main'
@@ -487,20 +450,7 @@ export interface BrowserRecipeSkeletonPreview {
   generatedAt: number
 }
 
-/** Browser-owned request for persisting an element-picker selection as a recipe step. */
-export interface BrowserSaveRecipeStepRequest {
-  sessionId: string
-  selection: BrowserElementSelection
-  stepKind?: BrowserRecipeSkeletonStepKind
-  recipePath?: string
-}
 
-/** Browser-owned result returned after a recipe step is persisted. */
-export interface BrowserSaveRecipeStepResult {
-  recipePath: string
-  stepId: string
-  stepCount: number
-}
 
 export interface BrowserInspectPageOptions {
   maxTextChars?: number
@@ -797,83 +747,18 @@ export interface BrowserTargetActionOptions {
   waitForNavigation?: boolean
 }
 
-export type BrowserObservedActionSource = 'action' | 'link' | 'form_field'
-export type BrowserObservedActionKind = BrowserTargetActionKind | 'upload'
 
-export interface BrowserObservedActionInput {
-  action: 'target'
-  targetAction: BrowserTargetActionKind
-  target: BrowserElementTargetHint
-  value?: BrowserTargetActionValue
-}
 
-export interface BrowserObservedUploadInput {
-  target: BrowserElementTargetHint
-  filePath: string
-}
 
-export interface BrowserObservedActionPreview {
-  label: string
-  target: string
-  command: string
-  requiresValue: boolean
-  twoStep: boolean
-}
 
-export interface BrowserObservedTargetActionReplay {
-  tool: 'browser:act'
-  input: BrowserObservedActionInput
-}
 
-export interface BrowserObservedUploadReplay {
-  tool: 'browser:upload_file'
-  input: BrowserObservedUploadInput
-}
 
-export type BrowserObservedActionReplay =
-  | BrowserObservedTargetActionReplay
-  | BrowserObservedUploadReplay
 
-/**
- * 一个动作候选。
- *
- * 目标元素只出现在 `replay.input.target` 这一处：曾经同一份 target 在 `target`、`actionInput`
- * 与 `replay.input` 里各写一遍，回执体积翻三倍，模型还要自己判断以哪一份为准。
- */
-export interface BrowserObservedActionCandidateBase {
-  id: string
-  actionId: string
-  method: BrowserObservedActionKind
-  description: string
-  source: BrowserObservedActionSource
-  score: number
-  twoStep: boolean
-  requiresValue: boolean
-  arguments: string[]
-  preview: BrowserObservedActionPreview
-}
 
-export interface BrowserObservedTargetActionCandidate extends BrowserObservedActionCandidateBase {
-  method: BrowserTargetActionKind
-  replay: BrowserObservedTargetActionReplay
-}
 
-export interface BrowserObservedUploadCandidate extends BrowserObservedActionCandidateBase {
-  method: 'upload'
-  replay: BrowserObservedUploadReplay
-}
 
-export type BrowserObservedActionCandidate =
-  | BrowserObservedTargetActionCandidate
-  | BrowserObservedUploadCandidate
 
-export interface BrowserObserveActionsResult {
-  url: string
-  title: string
-  instruction: Nullable<string>
-  candidates: BrowserObservedActionCandidate[]
-  capturedAt: number
-}
+
 
 export interface BrowserTargetActionResult {
   action: BrowserTargetActionKind
@@ -1135,27 +1020,6 @@ export interface BrowserListMediaSourcesResult {
   capturedAt: number
 }
 
-export type BrowserPageContentFormat = 'plain' | 'markdown' | 'html'
-
-export interface BrowserExtractPageContentOptions {
-  format?: BrowserPageContentFormat
-  selector?: string
-  maxChars?: number
-  save?: boolean
-  name?: string
-}
-
-export interface BrowserExtractPageContentResult {
-  ok: boolean
-  format: BrowserPageContentFormat
-  selector: Nullable<string>
-  content: string
-  truncated: boolean
-  url: string
-  capturedAt: number
-  savedPath?: string
-  savedRelativePath?: string
-}
 
 export interface BrowserListPageResourcesOptions {
   limit?: number

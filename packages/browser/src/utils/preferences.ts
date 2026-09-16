@@ -9,20 +9,13 @@
  * 从同一份清单生成：类型对齐了但校验没对齐，等于没对齐。
  */
 
+import {
+  BrowserAutomationModes,
+  BrowserSearchEngineIds,
+  DefaultBrowserAutomationMode,
+  DefaultBrowserSearchEngine,
+} from '../contract/constants.js'
 import type { BrowserAutomationMode, BrowserSearchEngineId } from '../types/browser.js'
-
-export const BrowserSearchEngineIds = [
-  'google',
-  'bing',
-] as const satisfies readonly BrowserSearchEngineId[]
-
-export const BrowserAutomationModes = [
-  'webview',
-  'external',
-] as const satisfies readonly BrowserAutomationMode[]
-
-export const DefaultBrowserSearchEngine: BrowserSearchEngineId = 'google'
-export const DefaultBrowserAutomationMode: BrowserAutomationMode = 'webview'
 
 /** 判一个字符串是不是合法的搜索引擎 id。 */
 export function isBrowserSearchEngineId(value: unknown): value is BrowserSearchEngineId {

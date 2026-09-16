@@ -1,12 +1,8 @@
 import { AppError } from '@velaros-ai/core/error'
 
 import type { BrowserToolContext } from '../../contract/requires'
-import type {
-  BrowserEvaluateScriptResult,
-  BrowserObserveActionsResult,
-  BrowserPageDiagnosticKind,
-  BrowserScreenshotArtifact,
-} from '../../types/browser'
+import type { BrowserEvaluateScriptResult, BrowserPageDiagnosticKind, BrowserScreenshotArtifact } from '../../types/browser'
+import type { BrowserObserveActionsResult } from '../../types/tools'
 import type {
   BrowserGetPageDiagnosticsInput,
   BrowserPageDiagnosticsReadResult,

@@ -2,19 +2,22 @@ import { isNumber, isObject,isString, stringifyPretty, toNullable } from '@velar
 import { AppError } from '@velaros-ai/core/error'
 import { Log } from '@velaros-ai/core/logger'
 
-import { BrowserWorkspaceArtifactDirectoryMap, BrowserWorkspaceArtifactFormatExtensionMap } from '../../contract/constants'
+import { BrowserWorkspaceArtifactDirectoryMap } from '../../contract/constants'
 import type {
   BrowserRecipeSkeleton,
   BrowserSiteContext,
-  BrowserWorkspaceArtifactFormat,
   BrowserWorkspaceArtifactKind,
   BrowserWorkspaceArtifactRecord,
   BrowserWorkspaceManifest,
   WorkspaceFileEntry,
 } from '../../types/browser'
 import type { BrowserWorkspaceArtifactAccess, SaveBrowserPageSnapshotInput, SaveBrowserRecipeSkeletonInput, WriteBrowserArtifactInput } from '../../types/workspace.js'
-import { isManifestCurrent } from '../../utils/artifacts'
-import { slugifyArtifactName } from '../../utils/artifacts'
+import {
+  buildBrowserArtifactRelativePath,
+  buildBrowserPageSnapshotName,
+  buildBrowserRecipeSkeletonName,
+  isManifestCurrent,
+} from '../../utils/artifacts'
 import { getBrowserSiteOrigin } from '../../utils/artifacts.js'
 import {
   applyBrowserRecipeTemplate,
@@ -280,51 +283,15 @@ class BrowserWorkspaceArtifactManager implements BrowserWorkspaceArtifactManager
   }
 }
 
-/** 根据页面 URL/标题生成页面快照文件名。 */
-function buildBrowserPageSnapshotName(url: string, fallbackTitle?: string): string {
-  try {
-    const parsedUrl = new URL(url)
-    const normalizedPath = `${parsedUrl.pathname}${parsedUrl.search}`
-      .replace(/^\/+/, '')
-      .replace(/\/+/g, '-')
-    const candidate = normalizedPath || fallbackTitle || 'home'
-    return slugifyArtifactName(candidate, 'page')
-  } catch (error) {
-    log.debug('从 URL 推导浏览器页面快照名称失败', { url, error })
-    return slugifyArtifactName(fallbackTitle || url, 'page')
-  }
+
+
+
+/** 按一个站点工作区的读写口建产物管理器；清单、目录表与命名规则只有这一份。 */
+function createBrowserWorkspaceArtifacts(
+  access: BrowserWorkspaceArtifactAccess
+): BrowserWorkspaceArtifactManagerApi {
+  return new BrowserWorkspaceArtifactManager(access)
 }
 
-/** 根据页面 URL/标题生成 recipe skeleton 文件名。 */
-function buildBrowserRecipeSkeletonName(url: string, fallbackTitle?: string): string {
-  return `${buildBrowserPageSnapshotName(url, fallbackTitle)}-skeleton`
-}
-
-/** 根据类型、格式和名称生成 artifact 相对路径。 */
-function buildBrowserArtifactRelativePath(
-  kind: BrowserWorkspaceArtifactKind,
-  format: BrowserWorkspaceArtifactFormat,
-  name?: string
-): string {
-  const directory = BrowserWorkspaceArtifactDirectoryMap[kind]
-  const extension = BrowserWorkspaceArtifactFormatExtensionMap[format]
-  const slug = slugifyArtifactName(name, kind)
-  return `${directory}/${slug}.${extension}`
-}
-
-/** 创建 artifact manager 的工厂函数。 */
-function createBrowserWorkspaceArtifactAccess(
-  args: BrowserWorkspaceArtifactAccess
-): BrowserWorkspaceArtifactManager {
-  return new BrowserWorkspaceArtifactManager(args)
-}
-
-export {
-  BrowserWorkspaceArtifactManager,
-  buildBrowserArtifactRelativePath,
-  buildBrowserPageSnapshotName,
-  buildBrowserRecipeSkeleton,
-  buildBrowserRecipeSkeletonName,
-  createBrowserWorkspaceArtifactAccess,
-}
+export { BrowserWorkspaceArtifactManager, createBrowserWorkspaceArtifacts }
 export type { BrowserWorkspaceArtifactAccess } from '../../types/workspace.js'

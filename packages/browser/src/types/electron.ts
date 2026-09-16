@@ -1,38 +1,11 @@
 import type electron from 'electron'
 
-import type {
-  KernelCallableCapabilityService,
-} from '@velaros-ai/kernel'
+import type { BrowserExternalPageLauncher,BrowserPageDriver, BrowserSystemPointerDriver } from '../contract/requires.js'
 
-import type { BrowserPageDriver, BrowserSystemPointerDriver } from '../contract/requires.js'
-import type { ElectronBrowserRuntime } from '../impl/electron/ElectronBrowserRuntime.js'
-
-import type {
-  BrowserNavigationHistoryRestore,
-  BrowserPageDiagnosticEntry,
-  BrowserUserActivityEvent,
-  BrowserUserActivitySummary,
-  BrowserViewportOptions,
-} from './browser'
+import type { BrowserNavigationHistoryRestore, BrowserPageDiagnosticEntry, BrowserUserActivityEvent, BrowserViewportOptions } from './browser'
 import type { BrowserScreenshotCaptureRegion, BrowserSiteContext } from './browser.js'
-import type { CdpExternalBrowserLaunchOptions, CdpExternalBrowserSession } from './cdp.js'
 import type { BrowserPageDriverKernel,BrowserPageDriverSession } from './runtime.js'
-
-export interface BrowserRuntimeCapabilityService
-  extends KernelCallableCapabilityService {
-  /**
-   * Product-local runtime. Electron WebContents cannot be transferred into a
-   * daemon, so in-process consumers receive the injected runtime explicitly.
-   */
-  readonly runtime: ElectronBrowserRuntime
-}
-
-export interface CreateBrowserKernelModuleOptions {
-  /** Reuse the product composition root's only Browser runtime instance. */
-  readonly runtime: ElectronBrowserRuntime
-  /** Injected runtimes remain product-owned unless this is explicitly true. */
-  readonly disposeInjectedRuntime?: boolean
-}
+import type { BrowserUserActivitySummary } from './session'
 
 /** 在内嵌页面里求值时的期限参数。 */
 export interface BrowserEvaluateDeadlineOptions {
@@ -199,10 +172,6 @@ export interface BrowserWebAuthnAccountSelectionRequest {
     name?: string
     userHandle?: string
   }>
-}
-
-export interface BrowserExternalPageLauncher {
-  launch(options?: CdpExternalBrowserLaunchOptions): Promise<CdpExternalBrowserSession>
 }
 
 export interface ElectronBrowserRuntimeOptions {

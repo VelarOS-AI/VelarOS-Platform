@@ -1,10 +1,17 @@
 import { AppError } from '@velaros-ai/core/error'
+import { Log } from '@velaros-ai/core/logger'
 
+import {
+  BrowserWorkspaceArtifactDirectoryMap,
+  BrowserWorkspaceArtifactFormatExtensionMap,
+} from '../contract/constants.js'
 import type { ToolContext } from '../contract/requires.js'
 import type { BrowserSiteContext, BrowserWorkspaceManifest } from '../types/browser'
-import type { BrowserWorkspaceArtifactFormat } from '../types/browser.js'
+import type { BrowserWorkspaceArtifactFormat, BrowserWorkspaceArtifactKind } from '../types/browser.js'
 import type { BrowserPageContentFormat } from '../types/tools.js'
 import type { BrowserWorkspaceArtifactAccess } from '../types/workspace.js'
+
+const log = Log.tag('BrowserArtifacts')
 
 /**
  * 用工具上下文里的浏览器文件 API 拼出产物管理器要的三个口子。
@@ -113,4 +120,36 @@ export function slugifyArtifactName(value: LooseOptional<string>, fallbackPrefix
 
   const timePart = new Date().toISOString().replace(/[:.]/g, '-')
   return `${fallbackPrefix}-${timePart}`
+}
+
+/** 根据类型、格式和名称生成 artifact 相对路径。 */
+export function buildBrowserArtifactRelativePath(
+  kind: BrowserWorkspaceArtifactKind,
+  format: BrowserWorkspaceArtifactFormat,
+  name?: string
+): string {
+  const directory = BrowserWorkspaceArtifactDirectoryMap[kind]
+  const extension = BrowserWorkspaceArtifactFormatExtensionMap[format]
+  const slug = slugifyArtifactName(name, kind)
+  return `${directory}/${slug}.${extension}`
+}
+
+/** 根据页面 URL/标题生成页面快照文件名。 */
+export function buildBrowserPageSnapshotName(url: string, fallbackTitle?: string): string {
+  try {
+    const parsedUrl = new URL(url)
+    const normalizedPath = `${parsedUrl.pathname}${parsedUrl.search}`
+      .replace(/^\/+/, '')
+      .replace(/\/+/g, '-')
+    const candidate = normalizedPath || fallbackTitle || 'home'
+    return slugifyArtifactName(candidate, 'page')
+  } catch (error) {
+    log.debug('从 URL 推导浏览器页面快照名称失败', { url, error })
+    return slugifyArtifactName(fallbackTitle || url, 'page')
+  }
+}
+
+/** 根据页面 URL/标题生成 recipe skeleton 文件名。 */
+export function buildBrowserRecipeSkeletonName(url: string, fallbackTitle?: string): string {
+  return `${buildBrowserPageSnapshotName(url, fallbackTitle)}-skeleton`
 }

@@ -16,9 +16,11 @@ import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
 import type { BrowserPageDriver } from '../../contract/requires.js'
 import type { CdpChromeStderrDiagnostics, CdpDevToolsActivePort, CdpExternalBrowserChildProcess, CdpExternalBrowserLaunchOptions, CdpExternalBrowserSession, CdpExternalBrowserSpawn, CdpTargetDescription } from '../../types/cdp.js'
+import { resolveCdpTargetId, resolveCdpTargetListUrl } from '../../utils/cdp/driver.js'
 import { getExecutablePathCandidates, parseTargetEntry, shouldRetryLaunchAttempt } from '../../utils/cdp/launcher'
 import { buildLaunchArgs, formatChromeEarlyExitMessage } from '../../utils/cdp/launcher'
 import { captureChromeStderr } from '../../utils/cdp/launcher'
+import { openCdpWebSocket } from '../../utils/cdp/transport.js'
 import { BrowserTuning } from '../../utils/tuning'
 
 import { BrowserPlatformCompatibility } from './BrowserPlatformCompatibility'
@@ -26,6 +28,7 @@ import {
   CdpBrowserPageDriver,
   type CdpBrowserPageDriverConnectOptions,
 } from './CdpBrowserPageDriver'
+import { CdpWebSocketTransport } from './CdpWebSocketTransport'
 
 export interface CdpExternalBrowserLauncherDependencies {
   spawn?: LooseOptional<CdpExternalBrowserSpawn>
@@ -86,10 +89,27 @@ class CdpExternalBrowserLauncher implements CdpExternalBrowserLauncherApi {
     this.execFileSync = dependencies.execFileSync ?? defaultExecFileSync
     this.connectPageDriver =
       dependencies.connectPageDriver ??
-      ((webSocketDebuggerUrl, options) =>
-        CdpBrowserPageDriver.connect(webSocketDebuggerUrl, options))
+      ((webSocketDebuggerUrl, options) => this.connectDefaultPageDriver(webSocketDebuggerUrl, options))
     this.sleep =
       dependencies.sleep ?? ((ms) => TimerScope.sleep(ms, { label: 'cdpExternalBrowser.poll' }))
+  }
+
+  /** 没注入连接器时的缺省连法：现连一条 CDP WebSocket，包成页面驱动。 */
+  private async connectDefaultPageDriver(
+    webSocketDebuggerUrl: string,
+    options: CdpBrowserPageDriverConnectOptions = {}
+  ): Promise<BrowserPageDriver> {
+    const socket = await openCdpWebSocket(webSocketDebuggerUrl, options)
+    return new CdpBrowserPageDriver({
+      transport: new CdpWebSocketTransport({ socket, timeoutMs: options.timeoutMs }),
+      initialUrl: options.initialUrl,
+      initialTitle: options.initialTitle,
+      downloadPath: options.downloadPath,
+      targetListUrl: resolveCdpTargetListUrl(webSocketDebuggerUrl),
+      activeTargetId: resolveCdpTargetId(webSocketDebuggerUrl),
+      fetch: options.fetch ?? this.fetch,
+      onDispose: options.onDispose,
+    })
   }
 
   public async launch(

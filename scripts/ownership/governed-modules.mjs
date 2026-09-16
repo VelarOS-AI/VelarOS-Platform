@@ -26,6 +26,9 @@
 //   hostPort            注入面里的宿主端口接口名；端口只放工具真会调的方法，门禁从工具文件出发沿 import 核对
 //   hostPortField       工具上下文里放宿主端口的字段名（ctx.<字段>.方法），缺省 system
 //   status              'migrating' 表示正在按标准改造：问题照查照报条数，不计入失败（改造完删掉这一项）
+//   lazyImports         允许动态 import() 的目标（不填的包一条都不许有）：每项 { specifier, file, reason }——
+//                       specifier 是 import() 里的字符串原文，file 是唯一允许加载它的源文件（相对包根），
+//                       reason 一句话写清为什么必须懒加载。登记过的目标必须真有人加载，没人用的要删
 //   layers          实现文件的分层（文件名），从上到下；上层可以引下层与同层，下层不许引上层；每个实现文件都要登记在某一层
 //   toolDefiner     定义工具的函数名；它只许在工具文件里被调用，保证工具定义一个不漏都在那里
 //   card            模块卡片（相对包根）
@@ -410,7 +413,6 @@ export const GovernedModules = [
   {
     directory: 'browser',
     name: '@velaros-ai/browser',
-    // 改造中：卡片与验收还没写；status 标 migrating，门禁照查照报剩下多少条，不计入失败。
     toolsFile: 'src/impl/BrowserTools.ts',
     contract: 'src/contract',
     types: 'src/types',
@@ -418,13 +420,12 @@ export const GovernedModules = [
     impl: 'src/impl',
     utils: 'src/utils',
     tuning: 'tuning.ts',
-    // 入口收口（四个入口）是下一段的事；现在六个入口的名字一个不变
-    browserSafeEntries: ['core-contracts.ts'],
+    // 渲染进程会加载这两个：可移植数据与渲染进程要的那几件纯策略值
+    browserSafeEntries: ['contracts.ts', 'renderer.ts'],
     hostPort: 'ToolBrowserApi',
     hostPortField: 'browser',
-    status: 'migrating',
     layers: [
-      // 工具：40 个模型面工具的定义、分类、常驻集与随包 mod 清单
+      // 工具：32 个模型面工具的定义、分类、常驻集与随包 mod 清单
       ['BrowserTools.ts'],
       // 工具背后的执行：act / extract / recipe / files / user_scripts / performance 的动作分派
       ['operations/'],
@@ -434,11 +435,19 @@ export const GovernedModules = [
       ['engines/'],
       // 协议、会话状态、站点工作区，互不依赖
       ['cdp/', 'session/', 'workspace/'],
-      // React 合成
-      ['BrowserComposition.ts'],
+      // 纯策略门面与 React 合成
+      ['policies/', 'BrowserComposition.ts'],
     ],
     toolDefiner: 'defineBrowserTool',
-    // 卡片与不变量登记是改造最后一段的事，这三份现在还不存在，照样登记，燃尽表里看得到
+    // 性能引擎是 2.5 MB 的 vendor 产物，静态 import 会让每个加载本包的进程都付这笔钱；
+    // 它只在 browser:performance 真跑 trace 时才用得到，所以登记成唯一一个懒加载目标。
+    lazyImports: [
+      {
+        specifier: '../../../vendor/devtools-performance-engine/devtoolsPerformanceEngine.mjs',
+        file: 'src/impl/engines/BrowserPerformanceTraceEngine.ts',
+        reason: 'vendor DevTools 性能引擎约 2.5 MB，只在解析 trace 与出 insight 时才加载',
+      },
+    ],
     card: 'MODULE.md',
     invariants: 'spec/invariants.md',
     acceptance: 'spec/acceptance.test.ts',

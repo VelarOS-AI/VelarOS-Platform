@@ -232,6 +232,16 @@ export const BrowserPageDataLimits = Object.freeze({
   pageResources: 500,
   /** 不给 limit 时列多少条页面资源。 */
   defaultPageResources: 120,
+  /** 只读预设不给 maxChars 时取多少字符。 */
+  defaultPresetChars: 4_000,
+  /** 只读预设不给 limit 时取多少条。 */
+  defaultPresetItems: 20,
+})
+
+/** 页面求值通道的对外上限：结果 JSON 超过它就只回截断标记，不回正文。 */
+export const BrowserEvaluateLimits = Object.freeze({
+  /** 一次求值最多取回多少字符的结果 JSON。 */
+  resultChars: 200_000,
 })
 
 /** 浏览器包的失败原因码：外面按码判断，不按文案判断。 */
@@ -239,3 +249,63 @@ export const BrowserErrorCodes = Object.freeze({
   /** 界面没装浏览器合成 Provider，拿不到受控页面。 */
   compositionNotInstalled: 'BROWSER_COMPOSITION_NOT_INSTALLED',
 })
+
+/** 浏览器偏好的合法值闭集与出厂缺省：搜索引擎与自动化后端。加一个引擎只改这里。 */
+export const BrowserSearchEngineIds = Object.freeze(['google', 'bing'] as const)
+
+/** 自动化后端的合法值闭集：内嵌 webview 还是外部浏览器。 */
+export const BrowserAutomationModes = Object.freeze(['webview', 'external'] as const)
+
+/** 出厂缺省搜索引擎。 */
+export const DefaultBrowserSearchEngine = 'google' as const
+
+/** 出厂缺省自动化后端。 */
+export const DefaultBrowserAutomationMode = 'webview' as const
+
+/**
+ * 「内嵌浏览器视图没接上」这一失败态的跨层标记（挂在 `AppError.context.reason` 上）。
+ *
+ * 运行时只陈述事实并打上这个标记；宿主捕获后翻译成可执行指引。文案可以随便改，标记不能——它是接缝。
+ */
+export const BrowserViewNotAttachedReason = 'browser-view-not-attached' as const
+
+/**
+ * 浏览器自动化的统一虚拟指针外观：页面注入脚本与宿主预览窗口共用这一份，免得两处各画一份。
+ */
+export const BrowserFallbackVirtualPointer = Object.freeze({
+  /** 指针图标的宽（CSS 像素）。 */
+  width: 24,
+  /** 指针图标的高（CSS 像素）。 */
+  height: 24,
+  viewBox: '0 0 24 24',
+  // @arch-guard:suspend code-style/require-chinese-comments 理由：下一行是第三方图标的著作权归属，署名与许可证名必须逐字保留，翻译会使归属失效。
+  // 取自 Pictogrammers Material Design Icons `cursor-default`（Apache-2.0）。
+  // 采用经典系统箭头的短柄轮廓，避免宽大的导航箭头或带钩的光标造型。
+  path: 'M13.64,21.97C13.14,22.21 12.54,22 12.31,21.5L10.13,16.76L7.62,18.78C7.45,18.92 7.24,19 7,19A1,1 0 0,1 6,18V3A1,1 0 0,1 7,2C7.24,2 7.47,2.09 7.64,2.23L7.65,2.22L19.14,11.86C19.57,12.22 19.62,12.85 19.27,13.27C19.12,13.45 18.91,13.57 18.7,13.61L15.54,14.23L17.74,18.96C18,19.46 17.76,20.05 17.26,20.28L13.64,21.97Z',
+  fill: '#050505',
+  stroke: '#ffffff',
+  /** 描边宽度（CSS 像素）：浅色页面上也看得见轮廓。 */
+  strokeWidth: 1.8,
+  /** 热点相对图标左上角的横向偏移（CSS 像素）：箭头尖就落在这里。 */
+  hotspotX: 7,
+  /** 热点相对图标左上角的纵向偏移（CSS 像素）。 */
+  hotspotY: 2,
+  filter: 'drop-shadow(0 1px 1px rgba(0, 0, 0, 0.48))',
+})
+
+/**
+ * 浏览器空间的常驻工具（每轮都带真实 schema 进请求）。
+ *
+ * 只钉「进站 — 看 — 动 — 等 — 取」这条主回路：不进站点其余工具全都隐身，所以
+ * `browser:enter_site` 必须常驻，否则模型得先换入一个工具才能开始。其余二十多个工具
+ * （网络 / 媒体 / 录屏 / 下载 / 用户脚本 / 性能…）都是排障或特化场景，留在 loadable。
+ */
+export const BrowserResidentToolNames = Object.freeze([
+  'browser:enter_site',
+  'browser:inspect_page',
+  'browser:act',
+  'browser:extract',
+  'browser:capture_screenshot',
+  'browser:get_page_state',
+  'browser:wait_for_pending_event',
+] as const)

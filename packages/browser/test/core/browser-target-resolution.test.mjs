@@ -8,11 +8,9 @@ import assert from 'node:assert/strict'
 
 import { test } from 'bun:test'
 
-import {
-  BrowserTargetRefStore,
-  CdpInteractionEngine,
-} from '../../dist/core.js'
 import { BrowserInteractionEngine } from '../../dist/impl/electron/BrowserInteractionEngine.js'
+import { CdpInteractionEngine } from '../../dist/impl/engines/CdpInteractionEngine.js'
+import { BrowserTargetRefStore } from '../../dist/impl/session/BrowserTargetRefStore.js'
 import {
   browserActSchema,
   parseBrowserActInput,

@@ -24,8 +24,10 @@ import {
   BrowserPageDataLimits,
   BrowserPendingEventLimits,
   BrowserPerformanceLimits,
+  BrowserResidentToolNames,
   BrowserSpaceId,
 } from '../contract/constants'
+import type { BrowserToolCollection } from '../contract/provides.js'
 import type {
   BrowserElementQueryResult,
   BrowserEvaluateScriptResult,
@@ -33,6 +35,8 @@ import type {
   BrowserPendingEventKind,
 } from '../types/browser.js'
 import type {
+  BrowserBundledModDefinition,
+  BrowserBundledModOptions,
   BrowserEvaluateScriptInput,
   BrowserGetNetworkRequestInput,
   BrowserGetNetworkResponseBodyInput,
@@ -42,6 +46,7 @@ import type {
   BrowserReadPageStorageInput,
   BrowserTargetHintInput,
   BrowserToolCapabilitySchema,
+  BrowserToolCategoryId,
 } from '../types/tools.js'
 import { waitForPendingEvent } from '../utils/pending-events'
 import { browserActSchema, parseBrowserActInput } from '../utils/schemas/act'
@@ -2048,7 +2053,7 @@ const rawBrowserTools = {
 }
 
 /** Browser Use 工具集合：说明按 browser 类别统一结构化之后的那一份。 */
-const browserTools = toolDescriptions.forCategory(rawBrowserTools, 'browser')
+const browserTools: BrowserToolCollection = toolDescriptions.forCategory(rawBrowserTools, 'browser')
 
 // @arch-guard:suspend code-style/require-chinese-comments 理由：本块为中文说明，技术标识符（availableInSpaces/localhost/composeAgentModSpaces 等）密度触发启发式误报。
 /**
@@ -2067,25 +2072,8 @@ const browserTools = toolDescriptions.forCategory(rawBrowserTools, 'browser')
  * 对不存在的空间**当场抛错**——那是刻意的，引用一个没人贡献的空间属于无效装配。
  * 继承 project 配方的其他空间也会自动继承本条，不需要再点名一次。
  */
-const BrowserGuestSpaceIds = ['project'] as const
-
-/**
- * 浏览器空间的常驻工具（每轮都带真实 schema 进请求）。
- *
- * 只钉「进站 — 看 — 动 — 等 — 取」这条主回路：不进站点其余工具全都隐身，所以
- * `browser:enter_site` 必须常驻，否则模型得先换入一个工具才能开始。看页面是动作的前提，
- * 动作后要等事件、要取内容。其余二十多个工具（网络/媒体/录屏/下载/用户脚本/性能…）都是
- * 排障或特化场景，留在 loadable，由模型从 `tooling:map` 按名换入——常驻不是「装得下就都装」。
- */
-const BrowserResidentToolNames = new Set<string>([
-  'browser:enter_site',
-  'browser:inspect_page',
-  'browser:act',
-  'browser:extract',
-  'browser:capture_screenshot',
-  'browser:get_page_state',
-  'browser:wait_for_pending_event',
-])
+/** 常驻集的成员判定：清单本身是对外承诺，住在合同的常量表里。 */
+const BrowserResidentToolNameSet = new Set<string>(BrowserResidentToolNames)
 
 /**
  * 浏览器职责分类：一个分类 = 一个使用场景（4–8 个工具），不是一个实现文件。
@@ -2152,8 +2140,6 @@ const BrowserToolNamesByCategory = {
   ],
 } as const satisfies Record<string, readonly string[]>
 
-type BrowserToolCategoryId = keyof typeof BrowserToolNamesByCategory
-
 const BrowserToolCategoryDefinitions = Object.freeze<
   Record<BrowserToolCategoryId, ToolCategoryDefinition>
 >({
@@ -2218,7 +2204,7 @@ for (const categoryId of BrowserToolCategoryIds) {
   }
 }
 
-const BrowserAgentModManifest = Object.freeze({
+const BrowserAgentModManifestBuilder = { build: (guestSpaceIds: readonly string[]) => Object.freeze({
   id: BrowserModId,
   version: '0.2.6',
   publisher: 'VelarOS',
@@ -2238,8 +2224,8 @@ const BrowserAgentModManifest = Object.freeze({
     tools: Object.keys(browserTools).map((name) => ({
       name,
       categoryId: requireBrowserToolCategoryId(BrowserToolCategoryByName, name),
-      availableInSpaces: [BrowserSpaceId, ...BrowserGuestSpaceIds],
-      residentInSpaces: optionalWhen(BrowserResidentToolNames.has(name), [BrowserSpaceId]),
+      availableInSpaces: [BrowserSpaceId, ...guestSpaceIds],
+      residentInSpaces: optionalWhen(BrowserResidentToolNameSet.has(name), [BrowserSpaceId]),
     })),
     /*
      * 只声明**真被消费**的那几格：身份策略、绑定能力、职责类别。
@@ -2255,39 +2241,28 @@ const BrowserAgentModManifest = Object.freeze({
       boundCapabilityIds: [BrowserModId],
       toolCategoryIds: BrowserToolCategoryIds,
     }],
-  },
-})
+    },
+  }) }
 
-interface BrowserBundledModDefinition {
-  readonly id: typeof BrowserModId
-  readonly specifier: string
-  readonly defaultEnabled: true
-  readonly manifest: typeof BrowserAgentModManifest
-  readonly bindings: {
-    readonly tools: typeof browserTools
-    readonly toolCategories: Readonly<Record<BrowserToolCategoryId, ToolCategoryDefinition>>
-  }
-}
-
-function createBrowserBundledModDefinition(): BrowserBundledModDefinition {
+/**
+ * 浏览器内置 mod 的定义：工具、类别与空间清单一次交出去。
+ *
+ * 客居空间由**宿主**传（`options.guestSpaceIds`）：空间之间互不知道对方，浏览器包不认识
+ * 「项目空间」是什么，谁客居是宿主空间配方的事。
+ */
+function createBrowserBundledModDefinition(
+  options: BrowserBundledModOptions = {}
+): BrowserBundledModDefinition {
   return Object.freeze({
     id: BrowserModId,
     specifier: `bundled:${BrowserModId}`,
     defaultEnabled: true,
-    manifest: BrowserAgentModManifest,
+    manifest: BrowserAgentModManifestBuilder.build(options.guestSpaceIds ?? []),
     bindings: Object.freeze({
       tools: browserTools,
       toolCategories: BrowserToolCategoryDefinitions,
     }),
-  })
+  }) as BrowserBundledModDefinition
 }
 
-export {
-  BrowserResidentToolNames,
-  BrowserToolCategoryDefinitions,
-  BrowserToolCategoryIds,
-  BrowserToolNamesByCategory,
-  browserTools,
-  createBrowserBundledModDefinition,
-}
-export type { BrowserBundledModDefinition, BrowserToolCategoryId }
+export { browserTools, createBrowserBundledModDefinition }

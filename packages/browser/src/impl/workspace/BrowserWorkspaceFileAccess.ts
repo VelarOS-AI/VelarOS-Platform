@@ -338,17 +338,18 @@ class BrowserWorkspaceFileAccess implements BrowserWorkspaceFileAccessApi {
   
 }
 
+/** 按一个工作区根建文件访问器；历史根只读，写一律落在当前根。 */
 function createBrowserWorkspaceFileAccess(
   workspaceRoot: string,
   legacyWorkspaceRoots: readonly string[] = [],
-): BrowserWorkspaceFileAccess {
+): BrowserWorkspaceFileAccessApi {
   return new BrowserWorkspaceFileAccess(workspaceRoot, legacyWorkspaceRoots)
 }
 
 /** 直接按站点上下文建文件访问器；历史根的挂接口径只有这一处，免得每个调用点各记一遍。 */
 function createBrowserSiteWorkspaceFileAccess(
   context: Pick<BrowserSiteContext, 'workspaceRoot' | 'legacyWorkspaceRoots'>,
-): BrowserWorkspaceFileAccess {
+): BrowserWorkspaceFileAccessApi {
   return new BrowserWorkspaceFileAccess(
     context.workspaceRoot,
     context.legacyWorkspaceRoots ?? [],
@@ -356,7 +357,6 @@ function createBrowserSiteWorkspaceFileAccess(
 }
 
 export {
-  BrowserWorkspaceFileAccess,
   createBrowserSiteWorkspaceFileAccess,
   createBrowserWorkspaceFileAccess,
 }

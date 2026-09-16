@@ -4,6 +4,7 @@ import { Log } from '@velaros-ai/core/logger'
 
 import type * as DevtoolsPerformanceEngineModule from '../../../vendor/devtools-performance-engine/devtoolsPerformanceEngine.mjs'
 import type {
+  DevtoolsParsedTrace,
   DevtoolsTraceModel,
 } from '../../../vendor/devtools-performance-engine/devtoolsPerformanceEngine.mjs'
 import type { BrowserParsedTraceRecording, BrowserTraceParseMetadata } from '../../types/runtime.js'
@@ -59,7 +60,7 @@ export class BrowserPerformanceTraceEngine implements BrowserPerformanceTraceEng
 
   public async formatSummary(recording: BrowserParsedTraceRecording): Promise<string> {
     const module = await this.loadEngineModule()
-    const focus = module.AgentFocus.fromParsedTrace(recording.parsedTrace)
+    const focus = module.AgentFocus.fromParsedTrace(recording.parsedTrace as DevtoolsParsedTrace)
     return new module.PerformanceTraceFormatter(focus, 'ALL').formatTraceSummary()
   }
 
@@ -70,7 +71,7 @@ export class BrowserPerformanceTraceEngine implements BrowserPerformanceTraceEng
   ): Promise<string> {
     const insight = readBrowserTraceInsight(recording, insightSetId, insightName)
     const module = await this.loadEngineModule()
-    const focus = module.AgentFocus.fromParsedTrace(recording.parsedTrace)
+    const focus = module.AgentFocus.fromParsedTrace(recording.parsedTrace as DevtoolsParsedTrace)
     return new module.PerformanceInsightFormatter(focus, insight, 'ALL').formatInsight()
   }
 

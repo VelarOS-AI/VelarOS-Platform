@@ -34,7 +34,7 @@ export const CapabilityOwners = [
       {
         directory: 'browser',
         name: '@velaros-ai/browser',
-        entrySubpaths: ['./core', './tools', './composition', './runtime'],
+        entrySubpaths: ['.', './renderer', './electron'],
         sourceRoots: ['contract', 'types', 'impl', 'utils', 'exports'],
         electronRoots: ['impl/electron', 'utils/electron', 'types/electron.ts'],
         schemaExports: [],

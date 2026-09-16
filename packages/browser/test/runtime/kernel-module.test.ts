@@ -4,7 +4,7 @@ import type {
   KernelModuleActivateContext,
 } from '@velaros-ai/kernel'
 
-import { BrowserRuntimeCapability, createBrowserKernelModule } from '../../src/impl/electron/kernel-module'
+import { BrowserRuntimeCapability, createBrowserKernelModule } from '../../src/impl/electron/ElectronBrowserRuntime'
 import type { BrowserRuntimeCapabilityService } from '../../src/types/electron.js'
 
 function createContext() {

@@ -3,7 +3,7 @@
 import { AppError } from '@velaros-ai/core/error'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
-import type { BrowserUserActivityItem } from '../types/browser.js'
+import type { BrowserUserActivityItem } from '../types/session.js'
 import type { BrowserSessionActionOptions, BrowserSessionQueueSlot } from '../types/session.js'
 
 import { BrowserTuning } from './tuning'

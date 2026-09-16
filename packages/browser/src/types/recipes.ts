@@ -1,5 +1,3 @@
-import type { BrowserWorkspaceArtifactManager } from '../impl/workspace/BrowserWorkspaceArtifactManager.js'
-import type { buildRecipeExecutionPlan } from '../utils/recipes/plan.js'
 
 import type { BrowserPageInspection, BrowserRecipeSkeleton, BrowserSiteContext } from './browser'
 import type { BrowserPageNavigationOptions, BrowserPageScrollOptions, BrowserRecipeSkeletonStep, BrowserTargetActionOptions, BrowserWaitForSelectorOptions,BrowserWorkspaceArtifactRecord } from './browser.js'
@@ -92,9 +90,18 @@ export interface RunBrowserRecipeSkeletonInput {
   runName?: string
 }
 
-export type BrowserRecipeRunSnapshot = Awaited<
-  ReturnType<BrowserWorkspaceArtifactManager['savePageSnapshot']>
->
+/** 一次执行前后各存一张页面快照的结果：产物记录加页面概要。 */
+export interface BrowserRecipeRunSnapshot {
+  artifact: BrowserWorkspaceArtifactRecord
+  page: {
+    url: string
+    title: string
+    capturedAt: number
+    headings: number
+    links: number
+    textChars: number
+  }
+}
 
 /** recipe skeleton 可选预设模板。 */
 export type BrowserRecipeTemplate = 'login' | 'search' | 'pagination' | 'form_submit'
@@ -280,7 +287,28 @@ export interface BrowserRecipeStepPlan {
   inputName?: string
 }
 
-export type BrowserRecipeExecutionPlan = ReturnType<typeof buildRecipeExecutionPlan>
+/** 一份 recipe 的执行计划：能跑的步骤、缺的输入、预览结果与三个计数。 */
+export interface BrowserRecipeExecutionPlan {
+  executableSteps: BrowserRecipeSkeletonStep[]
+  limitedSteps: BrowserRecipeSkeletonStep[]
+  inputNames: {
+    requiredInputNames: string[]
+    optionalInputNames: string[]
+  }
+  unusedInputNames: string[]
+  stepPlan: BrowserRecipeStepPlan[]
+  missingInputs: Array<{
+    stepId: string
+    name: string
+    label: string
+    type: string
+    required: boolean
+  }>
+  previewStepResults: BrowserRecipeRunStepResult[]
+  readyStepCount: number
+  missingInputCount: number
+  skippedStepCount: number
+}
 
 /** run record 中记录的 before/after snapshot artifact。 */
 export interface BrowserRecipeRunSnapshotArtifacts {

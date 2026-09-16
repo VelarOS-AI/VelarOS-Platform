@@ -41,8 +41,12 @@ export const BrowserTuning = Object.freeze({
     networkRequestRecords: 300,
     /** 内嵌页面的网络诊断最多留多少条。 */
     embeddedNetworkDiagnostics: 300,
-    /** 无 Electron 的 CDP 运行时里，诊断缓冲最多留多少条。 */
-    runtimeDiagnosticEntries: 300,
+    /** 网络节流预设 slow-3g 的往返时延（毫秒）。 */
+    throttlingLatencySlow3gMs: 2_000,
+    /** 网络节流预设 fast-3g 与 slow-4g 的往返时延（毫秒）：两档带宽相同，只是叫法不同。 */
+    throttlingLatencyMid3gMs: 562.5,
+    /** 网络节流预设 fast-4g 的往返时延（毫秒）。 */
+    throttlingLatencyFast4gMs: 165,
     /** 读 trace 数据流时每次取多少字节。 */
     traceStreamChunkBytes: 1_048_576,
     /** 停止 trace 后等它落完的毫秒数。 */
@@ -117,6 +121,8 @@ export const BrowserTuning = Object.freeze({
   }),
   /** 页面观察与动作：检查、自愈、等待。 */
   page: Object.freeze({
+    /** 只读预设走页内求值时的超时（毫秒）：预设脚本都很短，用不着通道上限那么长。 */
+    presetEvaluateTimeoutMs: 5_000,
     /** 内嵌浏览器的缺省视口宽度，像素。 */
     viewportWidth: 1_365,
     /** 内嵌浏览器的缺省视口高度，像素。 */
@@ -207,6 +213,19 @@ export const BrowserTuning = Object.freeze({
     reloadNetworkIdleTimeoutMs: 10_000,
   }),
   /** 诊断：宿主侧记录器的保留条数。 */
+  /** 页面求值：结果压扁时的递归与取项上限。 */
+  evaluate: Object.freeze({
+    /** 页面求值结果压扁时最多递归多少层；与页面脚本里的字面量由单测机械绑定。 */
+    simplifyMaxDepth: 8,
+    /** 单个对象最多取多少个键 / 数组最多取多少项；同上由单测绑定。 */
+    simplifyMaxEntries: 100,
+  }),
+  /** Electron：内嵌页面这条路上的平台常量。 */
+  electron: Object.freeze({
+    /** Electron 在「导航被新导航打断」时给的错误码；判定按这个码走，不按文案。 */
+    navigationAbortErrorCode: -3,
+  }),
+  /** 诊断：内嵌页面的诊断记录保留量。 */
   diagnostics: Object.freeze({
     /** 内嵌页面的诊断记录最多留多少条。 */
     maxEntries: 300,

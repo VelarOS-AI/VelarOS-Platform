@@ -2,14 +2,9 @@ import assert from 'node:assert/strict'
 
 import { test } from 'bun:test'
 
-import {
-  BrowserLoginGateLedger,
-  buildBrowserLoginGateMessage,
-  buildBrowserLoginGateRecord,
-  buildInspectionScript,
-  resolveBrowserLoginGateOrigin,
-} from '../../dist/core.js'
-import { withBrowserLoginGate } from '../../dist/tools.js'
+import { createBrowserLoginGate } from '../../dist/impl/workspace/BrowserLoginGate.js'
+import { buildBrowserLoginGateMessage, buildBrowserLoginGateRecord, resolveBrowserLoginGateOrigin } from '../../dist/utils/login-gate.js'
+import { buildInspectionScript } from '../../dist/utils/page-scripts/inspection.js'
 
 const requiresLoginDetection = {
   requiresLogin: true,
@@ -85,7 +80,6 @@ void test('login gate message names the site and never dumps detector signals', 
 })
 
 void test('ledger asks once per origin, whatever the answer was', async () => {
-  const ledger = new BrowserLoginGateLedger()
   let asked = 0
   const port = {
     requestLoginCompletion: async () => {
@@ -93,12 +87,9 @@ void test('ledger asks once per origin, whatever the answer was', async () => {
       return { approved: false, message: '用户拒绝登录。' }
     },
   }
+  const ledger = createBrowserLoginGate(port)
   const gateFor = (url) =>
-    withBrowserLoginGate(
-      createStubBrowserApi([{ url, text: '登录', login: requiresLoginDetection }]).api,
-      port,
-      { ledger }
-    )
+    ledger.wrap(createStubBrowserApi([{ url, text: '登录', login: requiresLoginDetection }]).api)
 
   assert.equal(ledger.shouldPrompt('https://a.com', requiresLoginDetection), true)
   await gateFor('https://a.com/login').inspectPage({})
@@ -133,12 +124,12 @@ void test('approved gate re-reads the page instead of handing back the login scr
     { url: 'https://example.com/home', text: 'welcome back', login: cleanDetection },
   ])
   const prompts = []
-  const gated = withBrowserLoginGate(stub.api, {
+  const gated = createBrowserLoginGate({
     requestLoginCompletion: async (input) => {
       prompts.push(input.origin)
       return { approved: true }
     },
-  })
+  }).wrap(stub.api)
 
   const inspection = await gated.inspectPage({})
 
@@ -152,9 +143,9 @@ void test('declined gate annotates the artifact and does not re-read', async () 
   const stub = createStubBrowserApi([
     { url: 'https://example.com/login', text: 'sign in', login: requiresLoginDetection },
   ])
-  const gated = withBrowserLoginGate(stub.api, {
+  const gated = createBrowserLoginGate({
     requestLoginCompletion: async () => ({ approved: false, message: '没有审批通道' }),
-  })
+  }).wrap(stub.api)
 
   const artifact = await gated.captureScreenshot({})
 
@@ -169,12 +160,12 @@ void test('clean pages never touch the approval channel', async () => {
     { url: 'https://example.com/home', text: 'welcome', login: cleanDetection },
   ])
   let prompted = 0
-  const gated = withBrowserLoginGate(stub.api, {
+  const gated = createBrowserLoginGate({
     requestLoginCompletion: async () => {
       prompted += 1
       return { approved: true }
     },
-  })
+  }).wrap(stub.api)
 
   const inspection = await gated.inspectPage({})
 
@@ -190,13 +181,13 @@ void test('concurrent observations on one origin share a single prompt', async (
     { url: 'https://example.com/home', text: 'welcome', login: cleanDetection },
   ])
   let prompted = 0
-  const gated = withBrowserLoginGate(stub.api, {
+  const gated = createBrowserLoginGate({
     requestLoginCompletion: async () => {
       prompted += 1
       await new Promise((resolve) => setTimeout(resolve, 5))
       return { approved: true }
     },
-  })
+  }).wrap(stub.api)
 
   await Promise.all([gated.inspectPage({}), gated.captureScreenshot({})])
 
@@ -210,13 +201,13 @@ void test('an aborted prompt does not count as asked', async () => {
     { url: 'https://example.com/home', text: 'welcome', login: cleanDetection },
   ])
   let attempts = 0
-  const gated = withBrowserLoginGate(stub.api, {
+  const gated = createBrowserLoginGate({
     requestLoginCompletion: async () => {
       attempts += 1
       if (attempts === 1) throw new Error('aborted')
       return { approved: true }
     },
-  })
+  }).wrap(stub.api)
 
   await assert.rejects(() => gated.inspectPage({}), /aborted/u)
   const inspection = await gated.inspectPage({})

@@ -251,3 +251,37 @@ export function validateUserScriptPatch(patch: BrowserUserScriptPatch): BrowserU
     version: isPresent(patch.version) ? patch.version.trim() || null : null,
   }
 }
+
+/** 一条 `@match` / `@exclude` 通配是否命中这个地址。 */
+export function browserUserScriptPatternMatches(url: string, pattern: string): boolean {
+  if (!URL.canParse(url)) return false
+  const parsed = new URL(url)
+  if (pattern === '<all_urls>') return parsed.protocol === 'http:' || parsed.protocol === 'https:'
+  const separator = pattern.indexOf('://')
+  if (separator < 0) return globMatches(url, pattern)
+  const scheme = pattern.slice(0, separator)
+  const remainder = pattern.slice(separator + 3)
+  const slash = remainder.indexOf('/')
+  if (slash < 0) return false
+  const hostPattern = remainder.slice(0, slash).toLowerCase()
+  const pathPattern = remainder.slice(slash)
+  const protocol = parsed.protocol.slice(0, -1)
+  if (scheme !== '*' && scheme !== protocol) return false
+  if (scheme === '*' && protocol !== 'http' && protocol !== 'https') return false
+  const host = parsed.hostname.toLowerCase()
+  const hostMatches =
+    hostPattern === '*' ||
+    hostPattern === host ||
+    (hostPattern.startsWith('*.') &&
+      (host === hostPattern.slice(2) || host.endsWith(`.${hostPattern.slice(2)}`)))
+  if (!hostMatches) return false
+  return globMatches(`${parsed.pathname}${parsed.search}${parsed.hash}`, pathPattern)
+}
+
+/** 一条用户脚本在这个地址上该不该跑：先过 match，再被 exclude 一票否决。 */
+export function browserUserScriptMatchesUrl(script: BrowserUserScriptRecord, url: string): boolean {
+  if (!script.match.some((pattern) => browserUserScriptPatternMatches(url, pattern))) return false
+  return !(script.excludeMatch ?? []).some((pattern) =>
+    browserUserScriptPatternMatches(url, pattern)
+  )
+}

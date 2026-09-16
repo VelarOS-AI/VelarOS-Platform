@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { agentToolContracts } from '@velaros-ai/agent/tool-contract'
 import { renderParameterDescription as parameterDescription } from '@velaros-ai/tool-contract'
 
+import { BrowserInspectLimits } from '../../contract/constants.js'
 import type {
   BrowserGetNetworkRequestInput,
   BrowserGetNetworkResponseBodyInput,
@@ -85,7 +86,7 @@ export function normalizeBrowserQueryElementsGuided(
 ): BrowserQueryElementsInput {
   return {
     ...input,
-    limit: input.limit ?? 20,
+    limit: input.limit ?? BrowserInspectLimits.defaultQueryElements,
   }
 }
 
@@ -155,7 +156,7 @@ export function normalizeBrowserGetPageDiagnosticsGuided(
 ): BrowserGetPageDiagnosticsInput {
   return {
     ...input,
-    limit: input.limit ?? 50,
+    limit: input.limit ?? BrowserInspectLimits.defaultDiagnosticEntries,
   }
 }
 
@@ -190,7 +191,7 @@ export function normalizeBrowserGetNetworkResponseBodyGuided(
 ): BrowserGetNetworkResponseBodyInput {
   return {
     ...input,
-    maxChars: input.maxChars ?? 20000,
+    maxChars: input.maxChars ?? BrowserInspectLimits.defaultResponseBodyChars,
   }
 }
 
@@ -238,6 +239,6 @@ export function normalizeBrowserGetNetworkRequestGuided(
   return {
     ...input,
     includeResponseBody: !!input.includeResponseBody,
-    maxBodyChars: input.maxBodyChars ?? 20000,
+    maxBodyChars: input.maxBodyChars ?? BrowserInspectLimits.defaultResponseBodyChars,
   }
 }

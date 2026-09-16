@@ -2,8 +2,9 @@ import assert from 'node:assert/strict'
 
 import { test } from 'bun:test'
 
-import { CdpBrowserPageDriver, CdpInteractionEngine } from '../../dist/core.js'
-import { ElectronWebContentsBrowserPageDriver } from '../../dist/runtime.js'
+import { CdpBrowserPageDriver } from '../../dist/impl/cdp/CdpBrowserPageDriver.js'
+import { ElectronWebContentsBrowserPageDriver } from '../../dist/impl/electron/ElectronWebContentsBrowserPageDriver.js'
+import { CdpInteractionEngine } from '../../dist/impl/engines/CdpInteractionEngine.js'
 
 const createCommandRecorder = () => {
   const commands = []

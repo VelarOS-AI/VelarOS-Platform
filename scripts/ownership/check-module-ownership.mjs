@@ -21,7 +21,8 @@
 //   8. 环境变量：代码里出现的每个 VELAROS_*（以及登记在 environmentPrefixes 里的别人的前缀）名字都登记在常量表的环境变量表里，登记了的都有人用。
 //      宿主端口：登记的端口接口里的每个方法，都有工具在调（工具文件自己调，或它委托的 impl 类在调）；没人调的方法不许留在注入面。
 //   9. src 下只有 contract、types、impl、utils 四个目录加入口文件；src 根上除入口以外不放源文件（src 根与入口目录里的每个 .ts 都要在
-//      package.json 的 exports 里有对应子路径）；依赖只许写在文件头，不许用内联 import 类型和动态 import。
+//      package.json 的 exports 里有对应子路径）；依赖只许写在文件头，不许用内联 import 类型；
+//      动态 import 只放行登记表 lazyImports 里登记过的目标（谁加载、加载什么、为什么）。
 //      可执行入口放包根 bin/：package.json 的 bin 指 ./bin/<命令>.mjs，文件在、带 #!/usr/bin/env node、files 里有 bin。
 //  10. 模块卡片十节齐全；「提供什么」列出全部入口、导出的每个值和每个公开接口；「骨干链路」点到每个工具；「结构」写明目录树。
 //  11. 不变量登记表每行编号唯一、检验方式合法、检验器真的存在；卡片里的条数如实。包的 test 脚本跑验收测试。
@@ -1150,17 +1151,36 @@ for (const module of selectedModules) {
   }
 
   // ── 9. src 下的目录，以及依赖只许写在文件头 ────────────────────────────
+  const lazyImports = module.lazyImports ?? []
+  const usedLazyImports = new Set()
   for (const file of sourceFiles) {
     const sourceFile = parse(file)
     const visitImports = (node) => {
       if (ts.isImportTypeNode(node)) {
         fail(`${label}: ${shortPath(file)} 用了内联的 import('…') 类型；依赖统一写在文件头的 import type 里，依赖方向和导出规则才查得到`)
       } else if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword) {
-        fail(`${label}: ${shortPath(file)} 用了动态 import()；依赖统一写成文件头的静态 import，依赖方向才查得到`)
+        // 懒加载只放行登记过的目标：登记表的 lazyImports 里写明「谁、加载什么、为什么」，
+        // 没登记的动态 import 照旧拦下——否则依赖方向就查不到了。
+        const specifier = node.arguments?.[0]
+        const target = specifier && ts.isStringLiteralLike(specifier) ? specifier.text : ''
+        const registered = lazyImports.find((entry) => entry.specifier === target)
+        if (!registered) {
+          fail(`${label}: ${shortPath(file)} 用了动态 import()；依赖统一写成文件头的静态 import，依赖方向才查得到（确需懒加载的目标登记进 lazyImports）`)
+        } else {
+          usedLazyImports.add(registered.specifier)
+          if (registered.file !== shortPath(file)) {
+            fail(`${label}: ${shortPath(file)} 动态 import 了 ${target}，但登记表把它登记在 ${registered.file}；一个懒加载目标只许一处加载`)
+          }
+        }
       }
       ts.forEachChild(node, visitImports)
     }
     visitImports(sourceFile)
+  }
+  for (const entry of lazyImports) {
+    if (!usedLazyImports.has(entry.specifier)) {
+      fail(`${label}: 登记的懒加载目标 ${entry.specifier} 没有人加载；不用的删掉`)
+    }
   }
   const governedDirectories = [module.contract, module.types, module.impl, module.utils].map((path) => basename(path))
   for (const directory of childDirectories(srcRoot)) {

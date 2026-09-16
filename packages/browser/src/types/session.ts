@@ -1,6 +1,6 @@
 import type { BrowserPageDriverDownloadItem } from '../contract/requires.js'
 
-import type { BrowserElementTargetHint } from './browser.js'
+import type { BrowserElementTargetHint, BrowserUserActivityKind } from './browser.js'
 
 export interface BrowserTargetRefSession {
   generation: number
@@ -77,4 +77,19 @@ export interface BrowserUserActivityWaitResult {
 export interface BrowserActivitySessionState {
   lastUserActivityAt: Nullable<number>
   modelActionDepth: number
+}
+
+export interface BrowserUserActivityItem {
+  kind: BrowserUserActivityKind
+  url: Nullable<string>
+  occurredAt: number
+  detail?: LooseOptional<string>
+}
+
+export interface BrowserUserActivitySummary {
+  startedAt: number
+  endedAt: number
+  itemCount: number
+  items: BrowserUserActivityItem[]
+  text: string
 }

@@ -3,7 +3,9 @@ import { z } from "zod";
 import { agentToolContracts } from '@velaros-ai/agent/tool-contract'
 import { renderParameterDescription as parameterDescription } from "@velaros-ai/tool-contract";
 
+import { BrowserPageDataLimits } from '../../contract/constants.js'
 import { encodeBrowserScriptStringLiteral } from "../../utils/page-scripts/literal";
+import { BrowserTuning } from '../tuning'
 
 export const browserReadPageStorageSchema = z.object({
   includeLocalStorage: z
@@ -98,7 +100,7 @@ export function normalizeBrowserReadPageStorageGuided(
 ): z.infer<typeof browserReadPageStorageSchema> {
   return {
     ...input,
-    limit: input.limit ?? 50,
+    limit: input.limit ?? BrowserPageDataLimits.defaultStorageItems,
   };
 }
 
@@ -268,8 +270,8 @@ export function normalizeBrowserReadPageData(
 ): z.infer<typeof browserEvaluateScriptSchema> {
   const selector = encodeBrowserScriptStringLiteral(input.selector ?? "");
   const attribute = encodeBrowserScriptStringLiteral(input.attribute ?? "");
-  const maxChars = input.maxChars ?? 4000;
-  const limit = input.limit ?? 20;
+  const maxChars = input.maxChars ?? BrowserPageDataLimits.defaultPresetChars;
+  const limit = input.limit ?? BrowserPageDataLimits.defaultPresetItems;
 
   const scripts: Record<z.infer<typeof browserReadPageDataSchema>["preset"], string> = {
     title: 'return { title: document.title || "" };',
@@ -382,7 +384,7 @@ export function normalizeBrowserReadPageData(
   return {
     script: scripts[input.preset],
     mode: "function-body",
-    timeoutMs: 5000,
+    timeoutMs: BrowserTuning.page.presetEvaluateTimeoutMs,
     maxResultChars: Math.min(
       200000,
       Math.max(20000, maxChars * Math.min(limit, 20)),

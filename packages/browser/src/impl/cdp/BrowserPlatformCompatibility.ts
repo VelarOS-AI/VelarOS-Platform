@@ -1,4 +1,4 @@
-import type { BrowserCommandSpec } from '../../types/browser.js'
+import type { BrowserCommandSpec } from '../../types/runtime.js'
 
 /**
  * 平台兼容：只剩一件事——按当前操作系统给出「连同子孙一起杀掉这个进程」的命令规格。

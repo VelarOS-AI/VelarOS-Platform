@@ -35,7 +35,7 @@ export interface BrowserLoginGateApi {
    * 页面往返，又会撞上浏览器动作策略里 `evaluate` 那条门——导航后的登录墙由紧接着的 inspect / screenshot
    * 接住；`browser:act` 一类动作工具同理：模型要拿到 target 就得先观察，观察即过门。
    */
-  wrap(api: ToolBrowserApi, port: BrowserLoginGatePort): ToolBrowserApi
+  wrap(api: ToolBrowserApi): ToolBrowserApi
   /** 命中检测且该站点在本会话里从未问过时才阻塞。 */
   shouldPrompt(origin: string, detection: LooseOptional<BrowserLoginDetection>): boolean
   /** 该站点此前是否已经问过（供制品标注复用同一结论，避免同一轮里前后不一致）。 */
@@ -53,7 +53,10 @@ export class BrowserLoginGate implements BrowserLoginGateApi {
    */
   private readonly pendingByOrigin = new Map<string, Promise<BrowserLoginGateRecord>>()
 
-  public wrap(api: ToolBrowserApi, port: BrowserLoginGatePort): ToolBrowserApi {
+  constructor(private readonly port: BrowserLoginGatePort) {}
+
+  public wrap(api: ToolBrowserApi): ToolBrowserApi {
+    const port = this.port
     return {
       ...api,
       inspectPage: async (inspectOptions) => {
@@ -137,17 +140,12 @@ export class BrowserLoginGate implements BrowserLoginGateApi {
   }
 }
 
-/** 会话级门控的可选参数：账本（也就是门控实例本身）由宿主按浏览器会话持有。 */
-export interface BrowserLoginGateOptions {
-  /** 会话级门控；不传就现建一份（每个会话一个 api 实例，天然隔离）。 */
-  ledger?: BrowserLoginGate
-}
-
-/** 给宿主的工厂：把宿主端口包上登录墙门控后交回。 */
-export function withBrowserLoginGate(
-  api: ToolBrowserApi,
-  port: BrowserLoginGatePort,
-  options: BrowserLoginGateOptions = {}
-): ToolBrowserApi {
-  return (options.ledger ?? new BrowserLoginGate()).wrap(api, port)
+/**
+ * 给宿主的工厂：一个浏览器会话建一份门控，用它把宿主端口包起来。
+ *
+ * 账本住在实例上，所以「每个站点最多问一次」的记账天然按会话隔离；跨会话共用一份实例
+ * 等于让两个会话共享同一张「已经问过」的表。
+ */
+export function createBrowserLoginGate(port: BrowserLoginGatePort): BrowserLoginGateApi {
+  return new BrowserLoginGate(port)
 }

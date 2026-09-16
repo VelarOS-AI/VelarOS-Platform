@@ -2,13 +2,12 @@ import assert from 'node:assert/strict'
 
 import { test } from 'bun:test'
 
-import {
-  BrowserResidentToolNames,
-  BrowserToolCategoryIds,
-  createBrowserBundledModDefinition,
-} from '../dist/composition-mod.js'
+import { BrowserResidentToolNames } from '../dist/contract/constants.js'
+import { createBrowserBundledModDefinition } from '../dist/impl/BrowserTools.js'
 
-const manifest = createBrowserBundledModDefinition().manifest
+// 客居空间由宿主传：0.3.0 起本包不再点名「项目空间」。
+const manifest = createBrowserBundledModDefinition({ guestSpaceIds: ['project'] }).manifest
+const BrowserToolCategoryIds = manifest.contributes.toolCategories.map((entry) => entry.id)
 const spaceContribution = manifest.contributes.spaces[0]
 const toolContributions = manifest.contributes.tools
 
@@ -25,7 +24,7 @@ void test('browser tools are guests in root-bound spaces: available there, resid
     // 客居 = 可用不常驻：写进 residentInSpaces 就等于给每个项目会话每轮塞浏览器 schema。
     assert.deepEqual(
       tool.residentInSpaces ?? null,
-      BrowserResidentToolNames.has(tool.name) ? ['browser'] : null,
+      BrowserResidentToolNames.includes(tool.name) ? ['browser'] : null,
       `${tool.name} 的常驻声明只能是浏览器空间`
     )
   }

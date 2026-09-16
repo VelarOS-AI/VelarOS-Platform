@@ -1,5 +1,7 @@
+import { BrowserEvaluateLimits } from '../../contract/constants.js'
 import type { BrowserEvaluateScriptOptions } from '../../types/browser'
 import { clampInteger } from '../numbers.js'
+import { BrowserTuning } from '../tuning'
 
 /**
  * 只编译不执行的用户脚本语法预检；返回错误消息，语法合法时返回 null。
@@ -28,14 +30,14 @@ function precheckBrowserInlineScriptSyntax(functionBody: string): Nullable<strin
  * 旧值是 4，正好卡在 `root → entity → components → transform → position` 这类三层嵌套的
  * 领域快照上：`position` 被替换成 `[object Object]`，坐标彻底读不出来。
  */
-const BrowserEvaluateSimplifyMaxDepth = 8
+const BrowserEvaluateSimplifyMaxDepth = BrowserTuning.evaluate.simplifyMaxDepth
 /** 单个对象最多取多少个键 / 数组最多取多少项。同样与函数体字面量绑定。 */
-const BrowserEvaluateSimplifyMaxEntries = 100
+const BrowserEvaluateSimplifyMaxEntries = BrowserTuning.evaluate.simplifyMaxEntries
 /**
  * `maxResultChars` 的钳制上界：结果 JSON 文本超过它时信封 `result` 置 null、`resultTruncated` 为 true。
  * 需要完整取回大载荷的调用方（页面结构化提取）按这个上界申请，超出即失败。
  */
-const BrowserEvaluateMaxResultChars = 200_000
+const BrowserEvaluateMaxResultChars = BrowserEvaluateLimits.resultChars
 
 /**
  * 把页面里的 Element 压成可 JSON 化的描述。

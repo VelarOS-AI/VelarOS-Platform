@@ -1,8 +1,7 @@
 import { optionalWhen } from '@velaros-ai/core/utils/optionalWhen'
 
+import { DefaultBrowserSearchEngine } from '../contract/constants.js'
 import type { BrowserSearchEngineId } from '../types/browser.js'
-
-import { DefaultBrowserSearchEngine } from './preferences.js'
 
 const BrowserExplicitSchemePattern = /^[a-z][a-z0-9+.-]*:\/\//i
 const BrowserLocalAddressPattern = /^(?:localhost|127(?:\.\d{1,3}){3}|\[?::1\]?)(?::|\/|$)/i

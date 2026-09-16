@@ -112,23 +112,17 @@ Object.assign(globalThis, { __velarosProjectContractsBrowserGate: {
     },
   ],
   [
-    '@velaros-ai/browser/core',
+    '@velaros-ai/browser',
     {
-      bundleName: 'browser-core-contracts',
-      source: `import {
-  buildBrowserScreenshotOptions,
-  getBrowserSiteHost,
-  getBrowserUrlCandidate,
-  isLocalBrowserUrl,
-  resolveBrowserNavigationInput,
-  resolveBrowserSearchFallbackUrl,
-  resolveBrowserSearchOrNavigationInput,
-  type BrowserAutomationMode,
-  type BrowserElementSelection,
-  type BrowserPageNavigationAction,
-  type BrowserPagePreviewFrame,
-  type BrowserViewportOptions,
-} from '@velaros-ai/browser/core/contracts'
+      bundleName: 'browser-contracts',
+      source: `import { browserAddress, browserScreenshotPolicy } from '@velaros-ai/browser/renderer'
+import type {
+  BrowserAutomationMode,
+  BrowserElementSelection,
+  BrowserPageNavigationAction,
+  BrowserPagePreviewFrame,
+  BrowserViewportOptions,
+} from '@velaros-ai/browser/contracts'
 
 export interface BrowserContractsTypeFixture {
   mode: BrowserAutomationMode
@@ -139,13 +133,13 @@ export interface BrowserContractsTypeFixture {
 }
 
 Object.assign(globalThis, { __velarosBrowserContractsBrowserGate: {
-  buildBrowserScreenshotOptions,
-  getBrowserSiteHost,
-  getBrowserUrlCandidate,
-  isLocalBrowserUrl,
-  resolveBrowserNavigationInput,
-  resolveBrowserSearchFallbackUrl,
-  resolveBrowserSearchOrNavigationInput,
+  buildOptions: browserScreenshotPolicy.buildOptions,
+  siteHost: browserAddress.siteHost,
+  urlCandidate: browserAddress.urlCandidate,
+  isLocalUrl: browserAddress.isLocalUrl,
+  resolveNavigationInput: browserAddress.resolveNavigationInput,
+  searchFallbackUrl: browserAddress.searchFallbackUrl,
+  resolveSearchOrNavigationInput: browserAddress.resolveSearchOrNavigationInput,
 } })
 `,
     },

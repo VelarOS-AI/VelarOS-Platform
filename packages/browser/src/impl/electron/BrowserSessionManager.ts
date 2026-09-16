@@ -25,6 +25,7 @@ import { AppError } from '@velaros-ai/core/error'
 import { Log } from '@velaros-ai/core/logger'
 import { type TimerLease, TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
+import { BrowserViewNotAttachedReason } from '../../contract/constants.js'
 import type {
   BrowserNavigationHistoryRestore,
   BrowserPageDiagnosticEntry,
@@ -44,7 +45,6 @@ import type { BrowserPopupBootstrapLease, BrowserSessionLookup } from '../../typ
 import { browserUserActivityConsolePrefix } from '../../utils/electron/sessions'
 import { formatKeyboardActivityDetail, isPlaceholderUrl, readEventString, readUserActivityKind } from '../../utils/electron/sessions'
 import { asBrowserDialogEventSource, buildBrowserPopupWindowOptions, buildBrowserUserActivityBridgeScript,isNamedPopupFrame, resolveBrowserPopupNavigation, resolveBrowserPopupUrl } from '../../utils/electron/sessions.js'
-import { BrowserViewNotAttachedReason } from '../../utils/errors'
 import { BrowserTuning } from '../../utils/tuning'
 import { BrowserPendingEventsBroker } from '../session/BrowserPendingEventsBroker'
 

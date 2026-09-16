@@ -3,6 +3,9 @@
 
 import type { ReactNode } from 'react'
 
+import type { KernelCallableCapabilityService } from '@velaros-ai/kernel'
+
+import type { ElectronBrowserRuntimeApi } from '../impl/electron/ElectronBrowserRuntime.js'
 import type { BrowserElementSelection, ControlledBrowserSurfaceInput } from '../types/browser'
 import type {
   BrowserCaptureScreenshotOptions,
@@ -500,4 +503,23 @@ export interface ControlledBrowserSurface {
    * 返回节点不得要求消费方理解 Electron、WebView 或宿主 controller。
    */
   readonly render: (options: ControlledBrowserSurfaceRenderOptions) => ReactNode
+}
+
+/**
+ * 浏览器运行时在内核里的服务形状：可调用能力，外加进程内消费方直接拿到的那份运行时。
+ *
+ * Electron 的 WebContents 递不进守护进程，所以「整件运行时」只在进程内经这一格交出去，
+ * 跨进程只走 `close_session` / `close_all_sessions` 两个可调用操作。
+ */
+export interface BrowserRuntimeCapabilityService extends KernelCallableCapabilityService {
+  /** 产品持有的那一份 Electron 浏览器运行时。 */
+  readonly runtime: ElectronBrowserRuntimeApi
+}
+
+/** 把浏览器运行时挂进内核时宿主要给的东西。 */
+export interface CreateBrowserKernelModuleOptions {
+  /** 复用产品组合根里唯一那份浏览器运行时。 */
+  readonly runtime: ElectronBrowserRuntimeApi
+  /** 注入进来的运行时缺省归产品所有；显式为真时才由内核模块在卸载时释放它。 */
+  readonly disposeInjectedRuntime?: boolean
 }

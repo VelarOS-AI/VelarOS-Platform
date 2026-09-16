@@ -9,11 +9,28 @@ import {
 } from '@velaros-ai/agent'
 import { AgentProtocolVersions, AgentToolNames } from '@velaros-ai/agent/contracts'
 import { logRuntime } from '@velaros-ai/core/logger'
-import {
-  createInMemoryMemoryFilesIo,
-  createMemoryFilesBackend,
-} from '@velaros-ai/memory/files'
-import { mountMemoryAdapter } from '@velaros-ai/memory/adapter-kernel'
+import { createMemoryFilesBackend, mountMemoryAdapter } from '@velaros-ai/memory'
+
+/** 纯内存的文件端口：0.3 起包内的内存实现不出包，发版夹具自己写一份最小实现。 */
+function createFixtureMemoryFilesIo() {
+  const files = new Map()
+  return {
+    join: (...segments) => segments.join('/'),
+    ensureDirectory: () => {},
+    listFiles: (directory) =>
+      [...files.keys()]
+        .filter((path) => path.startsWith(`${directory}/`) && !path.slice(directory.length + 1).includes('/'))
+        .map((path) => path.slice(directory.length + 1)),
+    readTextFile: (path) => files.get(path) ?? null,
+    writeTextFile: (path, content) => {
+      files.set(path, content)
+    },
+    deleteFile: (path) => {
+      files.delete(path)
+    },
+    snapshot: () => Object.fromEntries(files),
+  }
+}
 
 const usage = {
   inputTokens: { total: 10, noCache: 10, cacheRead: 0, cacheWrite: 0 },
@@ -385,7 +402,7 @@ async function probeToolContracts() {
 }
 
 async function probeIndependentMemoryBackend() {
-  const io = createInMemoryMemoryFilesIo()
+  const io = createFixtureMemoryFilesIo()
   const backend = createMemoryFilesBackend({
     roots: [{ scopeType: 'global', scopeId: 'global', directory: '/memory' }],
     io,

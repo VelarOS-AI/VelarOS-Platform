@@ -2,19 +2,14 @@ import assert from 'node:assert/strict'
 
 import { test } from 'bun:test'
 
-import {
-  BrowserFallbackVirtualPointer,
-  BrowserScreenshotDefaultDomStable,
-  BrowserScreenshotDefaultModelImage,
-  buildBrowserFallbackVirtualPointerSvg,
-  buildBrowserLoginDetectionScript,
-  buildBrowserScreenshotOptions,
-  buildTargetActionScript,
-  CdpInteractionEngine,
-  checkBrowserActionPolicy,
-  resolveBrowserNavigationInput,
-  resolveBrowserSearchOrNavigationInput,
-} from '../../dist/core.js'
+import { BrowserFallbackVirtualPointer } from '../../dist/contract/constants.js'
+import { CdpInteractionEngine } from '../../dist/impl/engines/CdpInteractionEngine.js'
+import { checkBrowserActionPolicy } from '../../dist/utils/action-policy.js'
+import { resolveBrowserNavigationInput, resolveBrowserSearchOrNavigationInput } from '../../dist/utils/address.js'
+import { buildBrowserLoginDetectionScript } from '../../dist/utils/page-scripts/login-detection.js'
+import { buildTargetActionScript } from '../../dist/utils/page-scripts/target-action.js'
+import { buildBrowserFallbackVirtualPointerSvg } from '../../dist/utils/pointer.js'
+import { BrowserScreenshotDefaultDomStable, BrowserScreenshotDefaultModelImage, buildBrowserScreenshotOptions } from '../../dist/utils/screenshot-options.js'
 
 class SystemPointerTestEngine extends CdpInteractionEngine {
   constructor() {

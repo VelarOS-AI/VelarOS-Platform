@@ -15,15 +15,13 @@ import type {
   BrowserWriteFileInput,
 } from '../../types/tools.js'
 import { buildBrowserArtifactAccess } from '../../utils/artifacts.js'
+import { buildBrowserPageSnapshotName } from '../../utils/artifacts.js'
 import type { browserFilesExactSchema } from '../../utils/schemas/files'
 import { buildBrowserScreenshotOptions } from '../../utils/screenshot-options'
 import { getActiveBrowserContext, requireActiveBrowserSite } from '../../utils/tool.js'
 import { BrowserTuning } from '../../utils/tuning'
 import { getRelativePathInsideRoot, toPortableRelativePath } from '../../utils/workspace-paths'
-import {
-  BrowserWorkspaceArtifactManager,
-  buildBrowserPageSnapshotName,
-} from '../workspace/BrowserWorkspaceArtifactManager.js'
+import { BrowserWorkspaceArtifactManager } from '../workspace/BrowserWorkspaceArtifactManager.js'
 
 import { BrowserExtractOperations } from './BrowserExtractOperations.js'
 

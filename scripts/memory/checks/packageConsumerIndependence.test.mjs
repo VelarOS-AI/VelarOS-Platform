@@ -30,7 +30,6 @@ test('maintained package test resolves explicit grouped-package build entries', 
   )
   for (const packageEntry of [
     'packages/memory/dist/index.js',
-    'packages/memory/dist/adapter-kernel.js',
   ]) {
     assert.match(
       source,

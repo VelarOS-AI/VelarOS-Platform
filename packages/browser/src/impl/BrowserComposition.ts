@@ -50,18 +50,3 @@ export class BrowserComposition implements BrowserCompositionApi {
 
 /** 进程唯一的一份：一个渲染进程只有一套合成边界。 */
 export const browserComposition: BrowserCompositionApi = new BrowserComposition()
-
-/** 给宿主的工厂：装适配器的 Provider（收口那一轮改成 `browserComposition.Provider`）。 */
-export function BrowserCompositionProvider(props: {
-  adapter: BrowserCompositionAdapter
-  children: ReactNode
-}): ReactElement {
-  return browserComposition.Provider(props)
-}
-
-/** 给宿主的工厂：取受控浏览器页面（收口那一轮改成 `browserComposition.useControlledSurface`）。 */
-export function useControlledBrowserSurface(
-  input: ControlledBrowserSurfaceInput
-): ControlledBrowserSurface {
-  return browserComposition.useControlledSurface(input)
-}

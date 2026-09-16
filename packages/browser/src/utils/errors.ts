@@ -1,17 +1,6 @@
 import { isPlainObject } from '@velaros-ai/core'
 
-/**
- * 「内嵌浏览器视图没接上」这一失败态的**跨层标记**——宿主无关，只依赖 core 纯原语。
- *
- * 为什么需要一个标记而不是让各层各自 match 错误文案：这条失败态的**事实**只有运行时知道
- * （等 attach 超时了），而**补救办法**只有宿主壳知道（把会话页调到前台？重开会话？
- * 换外部浏览器承载？）。两边都想说话，就必然出现「运行时给一句放之四海皆准的废话」
- * 或者「宿主靠字符串匹配去猜」。
- *
- * 定下的分工：运行时只陈述事实并打上 {@link BrowserViewNotAttachedReason}；
- * 宿主捕获后翻译成**可执行**指引。文案可以随便改，标记不能——它是接缝。
- */
-export const BrowserViewNotAttachedReason = 'browser-view-not-attached' as const
+import { BrowserViewNotAttachedReason } from '../contract/constants.js'
 
 /**
  * 判定一个未知 catch 值是否就是「视图没接上」。

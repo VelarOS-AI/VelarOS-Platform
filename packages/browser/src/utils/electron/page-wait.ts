@@ -1,7 +1,5 @@
 /** 内嵌页面等待里用不着实例状态的那部分：等待条件与超时的计算。 */
 
-/** Electron 在「导航被新导航打断」时给的错误码：判定本身就是这个码，跟着判定放。 */
-const BrowserNavigationAbortErrorCode = -3
 import type { WebContents } from 'electron'
 
 import { isBlank, isNumber, isPlainObject, isString } from '@velaros-ai/core'
@@ -10,6 +8,7 @@ import type { TimerLease } from '@velaros-ai/core/utils/TimerScope'
 
 import type { BrowserDomStabilityOptions, BrowserPageStabilityResult } from '../../types/browser'
 import { clampInteger } from '../numbers.js'
+import { BrowserTuning } from '../tuning'
 
 /** 清理定时器。 */
 export function clearTimer(timer: Nullable<TimerLease>): void {
@@ -33,11 +32,11 @@ export function createWindowClosedError(): AppError {
 
 /** 判断错误是否是 Electron 导航取消。 */
 export function isNavigationAbort(errorCodeOrError: unknown): boolean {
-  if (errorCodeOrError === BrowserNavigationAbortErrorCode) return true;
+  if (errorCodeOrError === BrowserTuning.electron.navigationAbortErrorCode) return true;
 
   const appError = AppError.from(errorCodeOrError);
   return (
-    appError.context.errorCode === BrowserNavigationAbortErrorCode ||
+    appError.context.errorCode === BrowserTuning.electron.navigationAbortErrorCode ||
     /\bERR_ABORTED\b|\(-3\)/.test(appError.message)
   );
 }

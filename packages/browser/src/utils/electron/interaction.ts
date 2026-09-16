@@ -1,7 +1,8 @@
 /** 内嵌页面交互里用不着实例状态的那部分。 */
 
+import { BrowserFallbackVirtualPointer } from '../../contract/constants.js'
 import type { BrowserPointerPoint } from '../../types/runtime.js'
-import { BrowserFallbackVirtualPointer, buildBrowserFallbackVirtualPointerSvg } from '../pointer'
+import { buildBrowserFallbackVirtualPointerSvg } from '../pointer'
 
 /** 拼一段在页面里画虚拟鼠标轨迹的脚本。 */
 export function buildVirtualPointerScript(

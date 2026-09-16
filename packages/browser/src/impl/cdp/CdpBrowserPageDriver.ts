@@ -49,6 +49,8 @@ import { buildFetchResourceScript, buildViewportRect, clampPageZoomFactor, clamp
 import { normalizeDomStorageEntry, normalizeNetworkCookie, normalizePageTargetDescription, resolveConsoleMessage, resolveRegionScreenshotInput } from '../../utils/cdp/driver'
 import { resolveCdpTargetListUrl } from '../../utils/cdp/driver'
 import { resolveCdpTargetId } from '../../utils/cdp/driver.js'
+import { captureCdpHeapSnapshot } from '../../utils/cdp/tracing.js'
+import { openCdpWebSocket } from '../../utils/cdp/transport.js'
 import { clearBrowserDiagnosticEntries, takeBrowserDiagnosticWindow } from '../../utils/diagnostics.js'
 import { normalizeBrowserPressKeyOptions } from '../../utils/keyboard'
 import { BrowserTuning } from '../../utils/tuning'
@@ -57,7 +59,7 @@ import { buildBrowserViewportDeviceMetrics } from '../../utils/viewport'
 import { BrowserCdpNetworkController } from './BrowserCdpNetworkController'
 import { CdpBrowserPageDownloadItem } from './CdpBrowserPageDownloadItem.js'
 import { CdpScreencastRecorder } from './CdpScreencastRecorder'
-import { captureCdpHeapSnapshot, CdpTraceCollector } from './CdpTraceCollector'
+import { CdpTraceCollector } from './CdpTraceCollector'
 import {
   CdpWebSocketTransport,
   type CdpWebSocketTransportConnectOptions,
@@ -115,19 +117,21 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
     getNetworkThrottling: () => this.networkThrottling,
   })
 
-  public static async connect(
+  /** 给同一个浏览器里的另一个 target 连一个兄弟驱动：socket、target 坐标与依赖都沿用本实例的。 */
+  private async connectSiblingDriver(
     webSocketUrl: string,
     options: CdpBrowserPageDriverConnectOptions = {}
   ): Promise<CdpBrowserPageDriver> {
-    const transport = await CdpWebSocketTransport.connect(webSocketUrl, options)
+    const socket = await openCdpWebSocket(webSocketUrl, options)
+    const transport = new CdpWebSocketTransport({ socket, timeoutMs: options.timeoutMs })
     const driver = new CdpBrowserPageDriver({
       transport,
       initialUrl: options.initialUrl,
       initialTitle: options.initialTitle,
-      downloadPath: options.downloadPath,
+      downloadPath: options.downloadPath ?? this.options.downloadPath,
       targetListUrl: resolveCdpTargetListUrl(webSocketUrl),
       activeTargetId: resolveCdpTargetId(webSocketUrl),
-      fetch: options.fetch,
+      fetch: options.fetch ?? this.options.fetch,
       onDispose: options.onDispose,
     })
     await driver.resumeTargetIfWaitingForDebugger()
@@ -246,7 +250,7 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
     const connectPageDriver =
       this.options.connectPageDriver ??
       ((webSocketDebuggerUrl: string, connectOptions: CdpBrowserPageDriverConnectOptions) =>
-        CdpBrowserPageDriver.connect(webSocketDebuggerUrl, connectOptions))
+        this.connectSiblingDriver(webSocketDebuggerUrl, connectOptions))
 
     return connectPageDriver(target.webSocketDebuggerUrl, {
       initialUrl: target.url,

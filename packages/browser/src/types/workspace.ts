@@ -1,6 +1,5 @@
-import type { BrowserRecipeTemplate } from '../utils/recipes/skeleton.js'
-
 import type { BrowserPageInspection,BrowserSiteContext, BrowserUserScriptRecord, BrowserWorkspaceArtifactFormat, BrowserWorkspaceArtifactKind, ProjectReadFileResult, WorkspaceFileEntry, WorkspaceListOptions, WorkspaceWriteFileOptions, WorkspaceWriteFileResult } from './browser.js'
+import type { BrowserRecipeTemplate } from './recipes.js'
 
 /** 站点工作区里的一条路径。 */
 export interface BrowserWorkspacePath {

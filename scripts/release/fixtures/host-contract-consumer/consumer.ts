@@ -6,7 +6,7 @@ import {
 import { agentToolContracts, fileContextRegistry } from '@velaros-ai/agent/tool-contract'
 import { createModelRequestClient } from '@velaros-ai/model'
 import { languageQueries, type LanguageReadPort, type LanguageToolContext } from '@velaros-ai/development'
-import { mountMemoryAdapter, type MountMemoryAdapterInput } from '@velaros-ai/memory/adapter-kernel'
+import { mountMemoryAdapter, type MountMemoryAdapterInput } from '@velaros-ai/memory'
 import { ComputerOperationMetadata, ComputerToolNames, type ComputerOperation } from '@velaros-ai/computer/contracts'
 import { projectFileContext, type ProjectFileContextCarrier } from '@velaros-ai/project'
 

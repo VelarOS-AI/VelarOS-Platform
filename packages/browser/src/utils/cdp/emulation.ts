@@ -4,6 +4,7 @@ import { AppError } from '@velaros-ai/core/error'
 import type { BrowserEmulationOptions, BrowserGeolocationOptions, BrowserGeolocationState, BrowserNetworkThrottlingPreset } from '../../types/browser.js'
 import type { CdpSend } from '../../types/cdp.js'
 import type { BrowserPageDriverEmulationState } from '../../types/driver'
+import { BrowserTuning } from '../tuning'
 
 /**
  * CDP 环境模拟共享逻辑。
@@ -20,22 +21,22 @@ export const CdpNetworkThrottlingPresets: Record<
 > = {
   none: { latencyMs: 0, downloadBytesPerSecond: -1, uploadBytesPerSecond: -1 },
   'slow-3g': {
-    latencyMs: 2000,
+    latencyMs: BrowserTuning.cdp.throttlingLatencySlow3gMs,
     downloadBytesPerSecond: (500 * 1000) / 8 * 0.8,
     uploadBytesPerSecond: (500 * 1000) / 8 * 0.8,
   },
   'fast-3g': {
-    latencyMs: 562.5,
+    latencyMs: BrowserTuning.cdp.throttlingLatencyMid3gMs,
     downloadBytesPerSecond: (1.6 * 1000 * 1000) / 8 * 0.9,
     uploadBytesPerSecond: (750 * 1000) / 8 * 0.9,
   },
   'slow-4g': {
-    latencyMs: 562.5,
+    latencyMs: BrowserTuning.cdp.throttlingLatencyMid3gMs,
     downloadBytesPerSecond: (1.6 * 1000 * 1000) / 8 * 0.9,
     uploadBytesPerSecond: (750 * 1000) / 8 * 0.9,
   },
   'fast-4g': {
-    latencyMs: 165,
+    latencyMs: BrowserTuning.cdp.throttlingLatencyFast4gMs,
     downloadBytesPerSecond: (9 * 1000 * 1000) / 8 * 0.9,
     uploadBytesPerSecond: (1.5 * 1000 * 1000) / 8 * 0.9,
   },

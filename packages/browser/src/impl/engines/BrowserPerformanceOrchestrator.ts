@@ -1,13 +1,13 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 
-import { isEmpty, toNullable } from '@velaros-ai/core'
+import { toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import type { BrowserHeapSnapshotOptions, BrowserHeapSnapshotResult, BrowserPerformanceInsightOptions, BrowserPerformanceInsightResult, BrowserPerformanceTraceStartOptions, BrowserPerformanceTraceStartResult, BrowserPerformanceTraceStopResult, BrowserSiteContext } from '../../types/browser.js'
 import type { BrowserPageDriverEmulationState } from '../../types/driver'
 import type { BrowserPageDriverKernel,BrowserPerformanceTraceState } from '../../types/runtime.js'
-import { serializeBrowserTraceToGzip } from '../../utils/performance'
+import { extractKeyMetricsFromSummary, serializeBrowserTraceToGzip } from '../../utils/performance'
 import { resolveAutoStopMs } from '../../utils/performance'
 import { BrowserTuning } from '../../utils/tuning'
 import { resolveBrowserWorkspacePath } from '../../utils/workspace-paths'
@@ -249,60 +249,3 @@ export class BrowserPerformanceOrchestrator implements BrowserPerformanceOrchest
   
 }
 
-/**
- * 从 DevTools trace 摘要里抽出每个 insight set 的顶层 Core Web Vitals。
- *
- * 摘要格式稳定:`## insight set id: X` 分段,顶层指标是 2 空格缩进的 `- LCP: …`
- * (4 空格缩进的是 LCP breakdown 子项,不取)。抽成紧凑一行,保证 summary 被折叠时
- * 关键数值仍可见,避免 agent 反复 recall 去 summary blob 里挖 CLS/INP。
- */
-export function extractKeyMetricsFromSummary(summary: string): string {
-  const sections: string[] = []
-  let currentSet: Nullable<string> = null
-  let metrics: string[] = []
-
-  const flush = (): void => {
-    if (currentSet && !isEmpty(metrics)) {
-      sections.push(`${currentSet}: ${metrics.join(', ')}`)
-    }
-    metrics = []
-  }
-
-  for (const line of summary.split('\n')) {
-    const setPrefix = '## insight set id:'
-    if (line.startsWith('##')) {
-      const header = line.slice(2).trimStart()
-      if (header.startsWith(setPrefix.slice(3))) {
-        const setId = header.slice(setPrefix.length - 3).trim()
-        if (setId) {
-          flush()
-          currentSet = setId
-          continue
-        }
-      }
-    }
-    // 顶层 CWV:恰好 2 空格 + `-NAME: value`(排除 4 空格的 breakdown 子项)。
-    if (!line.startsWith('  -')) continue
-    const metric = line.slice(3).trimStart()
-    const separator = metric.indexOf(':')
-    if (separator < 0) continue
-    const name = metric.slice(0, separator).trimEnd()
-    if (!['LCP', 'CLS', 'INP', 'FCP', 'TTFB'].includes(name)) continue
-    let value = metric.slice(separator + 1).trim()
-    let suffixCursor = 0
-    while (suffixCursor < value.length) {
-      const comma = value.indexOf(',', suffixCursor)
-      if (comma < 0) break
-      const suffix = value.slice(comma + 1).trimStart()
-      if (suffix.startsWith('event:') || suffix.startsWith('nodeId:') || suffix.startsWith('bounds:')) {
-        value = value.slice(0, comma).trimEnd()
-        break
-      }
-      suffixCursor = comma + 1
-    }
-    if (value) metrics.push(`${name} ${value}`)
-  }
-  flush()
-
-  return !isEmpty(sections) ? sections.join(' | ') : '(未从摘要解析到 Core Web Vitals)'
-}

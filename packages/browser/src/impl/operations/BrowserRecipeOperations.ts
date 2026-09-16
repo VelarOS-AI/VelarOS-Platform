@@ -5,7 +5,6 @@ import { AppError } from '@velaros-ai/core/error'
 
 import type { ToolContext } from '../../contract/requires'
 import type {
-  BrowserRecipeDryRunSummary,
   BrowserRecipeSkeleton,
   BrowserSiteContext,
   BrowserWorkspaceArtifactRecord,
@@ -471,49 +470,5 @@ export class BrowserRecipeOperations implements BrowserRecipeOperationsApi {
     })
 
     return { runArtifact, runSaveSkippedReason: null }
-  }
-}
-
-/**
- * 干跑一份 recipe 骨架并返回结构化结论。
- *
- * 供**宿主界面直调**（产物面板的「干跑」按钮走 IPC 落到这里），与模型走的
- * `browser:recipe action=run_skeleton dryRun=true` 共用同一个执行器：干跑的语义只有一处实现，
- * 按钮与工具不会各自漂移。刻意不写运行记录、不存快照——预检就该零副作用。
- */
-export async function runBrowserRecipeDryRun(
-  input: { path: string },
-  ctx: ToolContext
-): Promise<BrowserRecipeDryRunSummary> {
-  const result = await new BrowserRecipeOperations(ctx).runSkeleton({
-    path: input.path,
-    dryRun: true,
-    saveRun: false,
-    saveSnapshots: false,
-  })
-
-  return {
-    path: result.path,
-    url: result.url,
-    title: toNullable(result.title),
-    executableStepCount: result.executableStepCount,
-    readyStepCount: result.readyStepCount,
-    missingInputCount: result.missingInputCount,
-    skippedStepCount: result.skippedStepCount,
-    requiredInputNames: [...result.requiredInputNames],
-    missingInputs: result.missingInputs.map((missing) => ({
-      stepId: missing.stepId,
-      name: missing.name,
-      label: missing.label,
-      required: missing.required,
-    })),
-    steps: result.stepResults.map((step) => ({
-      id: step.id,
-      kind: step.kind,
-      status: step.status,
-      message: step.message,
-      inputName: toNullable(step.inputName),
-      targetCss: toNullable(step.targetCss),
-    })),
   }
 }

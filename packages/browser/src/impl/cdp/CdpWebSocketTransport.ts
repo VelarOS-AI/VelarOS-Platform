@@ -17,7 +17,6 @@ import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
 import type { CdpBrowserPageDriverTransport, CdpJsonRpcMessage, CdpPendingRequest, CdpWebSocketLike } from '../../types/cdp.js'
 import { parseMessage } from '../../utils/cdp/transport'
-import { createDefaultSocket } from '../../utils/cdp/transport.js'
 import { BrowserTuning } from '../../utils/tuning'
 
 /** 用一条已经连上的 WebSocket 建传输时的参数。 */
@@ -36,7 +35,25 @@ export interface CdpWebSocketTransportConnectOptions {
   timeoutMs?: LooseOptional<number>
 }
 
-class CdpWebSocketTransport implements CdpBrowserPageDriverTransport {
+/**
+ * CDP 的 JSON-RPC over WebSocket 传输：下发命令、订阅事件、订阅关闭，外加一把释放。
+ *
+ * 比通用的 {@link CdpBrowserPageDriverTransport} 多两件：事件与关闭的订阅在这一路上一定有，
+ * 以及 `dispose` —— socket 是它自己持有的资源。
+ */
+export interface CdpWebSocketTransportApi extends CdpBrowserPageDriverTransport {
+  /** 下发一条 CDP 命令并等回包；`T` 是断言不是校验。 */
+  send<T = unknown>(method: string, params?: Record<string, unknown>): Promise<T>
+  /** 订阅一类 CDP 事件；返回取消订阅的函数。 */
+  onEvent<T = unknown>(method: string, listener: (params: T) => void): () => void
+  /** 订阅传输关闭；返回取消订阅的函数。 */
+  onClose(listener: () => void): () => void
+  /** 关掉 socket 并拒绝所有在飞请求。 */
+  dispose(): void
+}
+
+/** 见 {@link CdpWebSocketTransportApi}。 */
+class CdpWebSocketTransport implements CdpWebSocketTransportApi {
   private nextId = 1
   private readonly pending = new Map<number, CdpPendingRequest>()
   private readonly eventListeners = new Map<string, Set<(params: unknown) => void>>()
@@ -44,49 +61,6 @@ class CdpWebSocketTransport implements CdpBrowserPageDriverTransport {
   private readonly timeoutMs: number
   private readonly timers = new TimerScope({ name: 'CdpWebSocketTransport' })
   private readonly textDecoder = new TextDecoder()
-
-  public static connect(
-    url: string,
-    options: CdpWebSocketTransportConnectOptions = {}
-  ): Promise<CdpWebSocketTransport> {
-    const createSocket = options.createSocket ?? createDefaultSocket
-    const socket = createSocket(url)
-    const timeoutMs = options.timeoutMs ?? BrowserTuning.cdp.commandTimeoutMs
-    const timers = new TimerScope({ name: 'CdpWebSocketTransport.connect' })
-
-    return new Promise((resolve, reject) => {
-      const cleanup = () => {
-        socket.removeEventListener('open', handleOpen)
-        socket.removeEventListener('error', handleError)
-        socket.removeEventListener('close', handleClose)
-        timeout.cancel()
-        timers.dispose()
-      }
-      const handleOpen = () => {
-        cleanup()
-        resolve(new CdpWebSocketTransport({ socket, timeoutMs }))
-      }
-      const handleError = () => {
-        cleanup()
-        reject(new AppError('NETWORK', `无法连接浏览器 CDP WebSocket：${url}`))
-      }
-      const handleClose = () => {
-        cleanup()
-        reject(new AppError('NETWORK', `浏览器 CDP WebSocket 连接已关闭：${url}`))
-      }
-      const timeout = timers.after(timeoutMs, () => {
-        cleanup()
-        reject(new AppError('TIMEOUT', `连接浏览器 CDP WebSocket 超时：${url}`))
-      }, {
-        label: 'cdp.connect',
-        unref: true,
-      })
-
-      socket.addEventListener('open', handleOpen)
-      socket.addEventListener('error', handleError)
-      socket.addEventListener('close', handleClose)
-    })
-  }
 
   constructor(private readonly options: CdpWebSocketTransportOptions) {
     this.timeoutMs = options.timeoutMs ?? BrowserTuning.cdp.commandTimeoutMs

@@ -1,10 +1,10 @@
 {
   "name": "@velaros-ai/browser",
-  "version": "0.2.20",
+  "version": "0.3.0",
   "velaros": {
     "platform": "0.6"
   },
-  "description": "Browser capability package: host-agnostic CDP automation core, agent tool collection, React composition boundary, and the Electron-backed session runtime, each behind its own subpath.",
+  "description": "Browser capability package: the agent tool collection, site-workspace artifacts and user scripts, recipe execution, address/preference/screenshot policies, and the Electron-backed session runtime, behind four entries.",
   "license": "Apache-2.0",
   "author": "VelarOS",
   "homepage": "https://github.com/VelarOS-AI/VelarOS-Platform/tree/main/packages/browser#readme",
@@ -24,30 +24,22 @@
   },
   "type": "module",
   "exports": {
-    "./core": {
-      "types": "./dist/core.d.ts",
-      "import": "./dist/core.js",
-      "default": "./dist/core.js"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
     },
-    "./core/contracts": {
-      "types": "./dist/core-contracts.d.ts",
-      "import": "./dist/core-contracts.js"
+    "./contracts": {
+      "types": "./dist/contracts.d.ts",
+      "import": "./dist/contracts.js"
     },
-    "./tools": {
-      "types": "./dist/tools.d.ts",
-      "import": "./dist/tools.js"
+    "./renderer": {
+      "types": "./dist/renderer.d.ts",
+      "import": "./dist/renderer.js"
     },
-    "./composition": {
-      "types": "./dist/composition.d.ts",
-      "import": "./dist/composition.js"
-    },
-    "./composition/mod": {
-      "types": "./dist/composition-mod.d.ts",
-      "import": "./dist/composition-mod.js"
-    },
-    "./runtime": {
-      "types": "./dist/runtime.d.ts",
-      "import": "./dist/runtime.js"
+    "./electron": {
+      "types": "./dist/electron.d.ts",
+      "import": "./dist/electron.js"
     }
   },
   "files": [
@@ -64,8 +56,7 @@
     "clean": "rm -rf dist",
     "generate:schema-bundle": "bun scripts/generate-tools-schema-bundle.mjs",
     "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/capabilities/build/fix-esm-extensions.mjs dist && node ../../scripts/build/normalize-package-declarations.mjs && bun run generate:schema-bundle",
-    "test": "bun run build && bun run test:built",
-    "test:built": "bun test test",
+    "test": "bun run build && bun test spec/acceptance.test.ts test",
     "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/browser"
   },
   "dependencies": {
