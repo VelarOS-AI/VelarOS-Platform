@@ -9,7 +9,7 @@ Office 是 `@velaros-ai` 品牌下的办公文档能力聚合包。它负责创�
 | --- | --- |
 | `@velaros-ai/office/tools` | 模型工具集合 `officeTools` |
 | `@velaros-ai/office/contracts` | 宿主端口和工具上下文类型 |
-| `@velaros-ai/office/runtime` | MarkItDown 与可选资源运行时 |
+| `@velaros-ai/office/runtime` | MarkItDown 定位器（`createMarkItDownLocator`）|
 | `@velaros-ai/office/renderer` | 独立文档渲染产品使用的窄解析与渲染原语 |
 | `@velaros-ai/office/composition` | Kernel module 组合入口 |
 | `@velaros-ai/office` | 上述职责入口的聚合导出 |
@@ -24,6 +24,7 @@ Office 是 `@velaros-ai` 品牌下的办公文档能力聚合包。它负责创�
 office:create_word_document
 office:create_presentation
 office:create_spreadsheet
+office:extract_pdf_text
 office:create_latex_pdf
 office:convert_word_to_pdf
 office:convert_pdf_to_word
@@ -32,19 +33,23 @@ office:preview_document
 office:convert_document_to_markdown
 ```
 
-纯 JavaScript 创建能力不依赖外部命令。转换能力通过宿主注入的 System 端口发现并运行
-LibreOffice、LaTeX 或 MarkItDown；依赖缺失时返回结构化诊断，不隐藏成通用执行错误。
+纯 JavaScript 创建能力不依赖外部命令。转换能力通过宿主端口发现并运行 LibreOffice、LaTeX
+或 MarkItDown；依赖缺失时返回带 `OfficeErrorCodes.converterMissing` 的结构化结果（缺哪个命令、
+为什么要它），不隐藏成通用执行错误。安装建议卡与替代方案由宿主按这几项自己拼，本包不碰界面文案。
 
 ## 宿主契约
 
-一次工具调用只接收 `OfficeToolContext`：
+一次工具调用只接收 `OfficeToolContext`：`abortSignal` 与扁平一层的宿主端口 `office`。
+端口上只有工具真会调的方法：
 
-- `abortSignal`：取消当前调用。
-- `hasProjectRoot()`：确认是否绑定项目。
-- `project`：授权并解析项目内输出路径。
-- `system`：检查环境并执行必要的外部转换器。
+- `getRootPath()`：当前可写的工作区根，产物只能落在它里面。
+- `runInDirectory(cwd, action)`：在 `cwd` 下临时执行；只服务十个工具的 `cwd` 参数。
+- `prepareMutation(request)`：写盘前申请一次写入授权，被拒时工具一个字节都不写。
+- `inspectEnvironment(commands?)`：探测外部转换器在本机可不可用。
+- `runCommand(command, options)`：执行一条原生 argv 命令，本包不拼 shell 串。
+- `locateMarkItDown?()`：可选；宿主按自己的插件状态回答 MarkItDown 装没装。
 
-Office 只依赖这些结构化端口，不依赖 Project 或 System 的具体实现。宿主可以用本地、远程或
+Office 只依赖这个结构化端口，不依赖 Project 或 System 的具体实现。宿主可以用本地、远程或
 浏览器桥接实现同一契约。
 
 ```ts
@@ -53,9 +58,7 @@ import { officeTools } from '@velaros-ai/office/tools'
 
 const context: OfficeToolContext = {
   abortSignal: new AbortController().signal,
-  hasProjectRoot: () => true,
-  project: createOfficeProjectAdapter('/srv/customer-project'),
-  system: createOfficeSystemAdapter(),
+  office: createOfficeHostAdapter('/srv/customer-project'),
 }
 
 const tool = officeTools['office:create_word_document']
@@ -67,5 +70,5 @@ const input = tool.schema.parse({
 await tool.execute(input, context)
 ```
 
-工具定义无状态。不同文件可以并发处理；同一文件的互斥和授权由 Project 端口负责。
+工具定义无状态。不同文件可以并发处理；同一文件的互斥和授权由宿主端口负责。
 包内不提供 CLI，因为这些模型工具不是对已有命令行能力的重复包装。
