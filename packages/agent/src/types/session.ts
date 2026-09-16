@@ -1,7 +1,9 @@
-import type { ReminderCapabilityResolver, RuntimeReminderProducer } from '../contract/requires.js'
+import type { TaskApprovalStateApi } from '../contract/provides.js'
+import type { CapabilityValidationInterpreter, ReminderCapabilityResolver, RuntimePromptFeaturePolicy, RuntimeReminderProducer } from '../contract/requires.js'
 
-import type { StreamToolCallPayload, StreamToolResultPayload,ThinkingDepth, ToolCategoryId } from './agent.js'
-import type { CapabilityValidationRunResult,CapabilityValidationStatus } from './capabilities.js'
+import type { CapabilityScopeId, RunProfileSelectionId, StreamToolCallPayload, StreamToolResultPayload, ThinkingDepth, ToolCategoryId, ToolSurfaceProfileId } from './agent.js'
+import type { CapabilityValidationRunResult, CapabilityValidationStatus } from './capabilities.js'
+
 
 export interface CapabilityValidationFailure {
   command: string
@@ -91,7 +93,7 @@ export interface RuntimeReminderConsumeResult {
  * 运行期提醒调度台的最小形状：工具上下文只需要"按触发点取一条提醒"这一面。
  * 类实现在 impl/session/RuntimeReminderScheduler.ts。
  */
-export interface RuntimeReminderSchedulerApi {
+export interface RuntimeReminderSchedulerContract {
   /** 登记一个提醒生产者；同 id 重复登记时后来的覆盖先前的。 */
   register(producer: RuntimeReminderProducer): void
   /** 注销一个提醒生产者。 */
@@ -189,4 +191,58 @@ export interface TickLoopRemindersArgs {
   mode: LoopReminderMode
   phase: LoopReminderPhase
   toolContext: AutoVerificationToolContext
+}
+
+/**
+ * 建一台 {@link CodingSessionTracker} 时宿主交给它的全部装配项。
+ *
+ * 全是可选：产品把自己的工具目录、活动分类、授权与提醒策略灌进来，跟踪器自己不认识任何具体工具名。
+ * 构造后除 `taskApprovals`（可由 fork 共享同一份）外都不再变——运行期改这些要新建跟踪器。
+ */
+export interface CodingSessionTrackerOptions {
+  /** 共享的任务授权账本；子 Agent fork 时把父的这份接过来，批准/拒绝对主子立即同时生效。缺省自建一份。 */
+  taskApprovals?: TaskApprovalStateApi
+  /** 工具类别 → 该类别下的工具名清单（静态目录）。用于把工具名反查成类别，以及没绑 ToolContext 时兜底。 */
+  toolCategoryToolNames?: CodingSessionToolCategoryToolNames
+  /** 提示能力的归一化与「这个能力要开哪些工具类别」策略，由产品提供；缺省用运行时自带的那份。 */
+  promptFeaturePolicy?: RuntimePromptFeaturePolicy
+  /** 本会话起始的思考力度；运行期可由 `setThinkingDepth` 改。缺省 `balanced`。 */
+  thinkingDepth?: ThinkingDepth
+  /** 白名单：给了就只有名单内的类别可被启用，名单外的一律拒绝。缺省不限。 */
+  allowedToolCategories?: ToolCategoryId[]
+  /** 能力自身写盘后多久内忽略文件系统外部触碰回声（毫秒）；太短会把自己的写入误判成外部修改。 */
+  externalTouchCooldownMs?: number
+  /** 把宿主给的原始路径归一成会话内统一的资源 id；缺省用跟踪器自带的相对路径归一（拒绝 `..`）。 */
+  normalizeResourceId?: LooseOptional<(raw: string) => LooseOptional<string>>
+  /** 工具呈现档位的初值（决定工具面怎么铺开）；非法值会被断言拦下。 */
+  toolSurfaceProfile?: ToolSurfaceProfileId
+  /** 运行档位的初值；非法值会被断言拦下。 */
+  runProfile?: RunProfileSelectionId
+  /** 起始就处于「激活」的类别（已启用里再挑一层）；缺省等于全部已启用类别。 */
+  activeToolCategories?: ToolCategoryId[]
+  /** 黑名单：名单内的类别一律不许启用，优先级高于白名单。 */
+  deniedToolCategories?: readonly ToolCategoryId[]
+  /** 常驻类别：不会被关停、也不会被轮次租约到期换出（但具体工具 schema 仍受预算约束）。 */
+  residentToolCategories?: readonly ToolCategoryId[]
+  /** 按名换入的工具租约能撑几轮不被用到就到期；至少 1，缺省 64。 */
+  toolNameLeaseTurns?: number
+  /** 轮次规划快照最多留几份（按最近使用淘汰）；至少 1，缺省 8。 */
+  maxTurnPlanningSnapshots?: number
+  /** 本次执行当前拥有的互斥能力作用域身份。 */
+  activeCapabilityScope?: CapabilityScopeId
+  /** 产品提供的验证结果解释器；空表示本产品没有「验证」概念，验证相关提醒全部不触发。 */
+  validationInterpreters?: readonly CapabilityValidationInterpreter[]
+  /** 产品提供的运行时提醒 producer；构造时一次性注册进调度器。 */
+  reminderProducers?: readonly RuntimeReminderProducer[]
+  /** 按「这类工具算哪种活动」给工具类别分组，决定一次调用推进编辑版本、算检查还是算验证。 */
+  activityCategories?: {
+    /** 算「检查改动」的类别（读、列目录、看 diff 之类）；调过就把已检查版本推到当前编辑版本。 */
+    inspection?: readonly ToolCategoryId[]
+    /** 算「改代码」的类别；成功一次编辑版本 +1，并进入外部触碰冷却。 */
+    mutation?: readonly ToolCategoryId[]
+    /** 算「跑验证」的类别；调过就把已验证版本推到当前编辑版本，并收集验证结论。 */
+    validation?: readonly ToolCategoryId[]
+    /** 虽然会改东西、但改的是非代码产物的类别；不推进编辑版本，不触发「改完记得验证」。 */
+    nonCodeMutation?: readonly ToolCategoryId[]
+  }
 }

@@ -14,8 +14,8 @@
 //    无从复现——这是历史上最难查的一类问题。
 //  - **组装是纯函数**：同一输入恒得同一提示词（金标轨迹逐字节比对依赖它）。
 import type { AgentChatRuntimeConfig } from '../../contract/requires.js'
-import type { PromptBudgetOptions, PromptCompositionResult, PromptContribution, PromptRegistryApi, PromptRenderContext, PromptSegmentDefinition, PromptSegmentProvider } from '../../types/guidance.js'
-import type { AgentModSeamDispatcherApi } from '../../types/mods.js'
+import type { PromptBudgetOptions, PromptCompositionResult, PromptContribution, PromptRegistryContract, PromptRenderContext, PromptSegmentDefinition, PromptSegmentProvider } from '../../types/guidance.js'
+import type { AgentModSeamDispatcherContract } from '../../types/mods.js'
 import type { BuiltContext } from '../../types/runner.js'
 import { createIdentityPromptSegment } from '../../utils/guidance/catalog'
 import { appendModTurnContextParts, finalizePromptBuild } from '../../utils/runner/prompt-assembly'
@@ -26,20 +26,6 @@ import { ContextBuilderParts } from './ContextBuilderParts'
 
 /** `ContextBuilder` 零件盒的共享实例：无状态，全仓共用一份即可。 */
 export const contextBuilderHelper: ContextBuilderPartsApi = new ContextBuilderParts()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 /**
  * ContextBuilder — Context Engineering 核心。
@@ -66,17 +52,17 @@ export interface ContextBuilderApi {
 
 class ContextBuilder implements ContextBuilderApi {
   /** prompt 段注册表，负责排序、过滤和 tier 分组。 */
-  private readonly registry: PromptRegistryApi
+  private readonly registry: PromptRegistryContract
   /**
    * 可选 mod 拦截 seam 派发器；注入时在段排序后、预算裁剪前派发一次
    * `turn-context:assemble`。追加段与内置段同样计入预算，不得绕过上下文治理。
    * 缺省 null → 全链 no-op，组装结果逐字节不变。
    */
-  private readonly seams: Nullable<AgentModSeamDispatcherApi>
+  private readonly seams: Nullable<AgentModSeamDispatcherContract>
 
   constructor(
-    registry: PromptRegistryApi = contextBuilderHelper.createDefaultRegistry(),
-    seams: Nullable<AgentModSeamDispatcherApi> = null
+    registry: PromptRegistryContract = contextBuilderHelper.createDefaultRegistry(),
+    seams: Nullable<AgentModSeamDispatcherContract> = null
   ) {
     this.registry = registry
     this.seams = seams

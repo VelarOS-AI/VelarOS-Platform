@@ -2,7 +2,9 @@ import { isPlainObject } from '@velaros-ai/core'
 
 import type { ContextPayloadStore } from '../../contract/requires.js'
 import type { FileContextCarrier } from '../../types/context.js'
+import { childKeepsFileSources } from '../../utils/context/file-context-coordinator'
 
+import type { FileContextCoordinatorApi } from './FileContextCoordinator'
 import { FileContextCoordinator } from './FileContextCoordinator'
 
 /**
@@ -18,17 +20,22 @@ export interface FileContextRegistryApi {
    * 载体没有执行作用域、没有 sessionId 或没有 payload 存储时返回 undefined —— 这种载体上的读取
    * 不归任何执行分支所有，不该拿到协调器。
    */
-  for(carrier: FileContextCarrier): FileContextCoordinator | undefined
+  for(carrier: FileContextCarrier): FileContextCoordinatorApi | undefined
+  /**
+   * 派生子分支的文件上下文：子分支拿到自己的作用域，只继承父分支的来源访问口，
+   * 不继承父分支的活跃源码与预算。子分支已经看不见读文件的工具时连来源也不继承。
+   */
+  fork(parent: FileContextCarrier, child: FileContextCarrier): void
 }
 
 class FileContextRegistry implements FileContextRegistryApi {
   /** 执行 tracker → 那次执行的协调器；连同建它时的会话与存储一起记，二者任一变化就重建。 */
   private readonly coordinators = new WeakMap<
     object,
-    { sessionId: string; store: ContextPayloadStore; coordinator: FileContextCoordinator }
+    { sessionId: string; store: ContextPayloadStore; coordinator: FileContextCoordinatorApi }
   >()
 
-  public for(carrier: FileContextCarrier): FileContextCoordinator | undefined {
+  public for(carrier: FileContextCarrier): FileContextCoordinatorApi | undefined {
     const owner = carrier.fileContextScope ?? carrier.codingSession
     if (!owner || !isPlainObject(owner)  || !carrier.sessionId || !carrier.contextPayloadStore)
       return undefined
@@ -46,6 +53,13 @@ class FileContextRegistry implements FileContextRegistryApi {
       coordinator,
     })
     return coordinator
+  }
+
+  public fork(parent: FileContextCarrier, child: FileContextCarrier): void {
+    const previous = this.for(parent)
+    child.fileContextScope = {}
+    if (!previous) return
+    this.for(child)?.inheritSources(previous, () => childKeepsFileSources(child))
   }
 }
 

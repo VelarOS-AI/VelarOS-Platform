@@ -80,15 +80,3 @@ class RemoteHostToolFactory implements RemoteHostToolFactoryApi {
 /** 宿主进程唯一的一份远程工具翻译面；无状态，任何节点的任何一条描述都从这里进来。 */
 export const remoteHostToolFactory: RemoteHostToolFactoryApi = new RemoteHostToolFactory()
 
-/**
- * 把节点广播的一条工具描述翻成标准 VelaTool。
- *
- * 走的是与 MCP 工具同一条路：进注册面即继承 ToolExecutor / ApprovalPort / span / 循环守卫，
- * 不为"远程"另开执行路（宪章 §15 原则二：能力进入产品只有主干一条路）。
- *
- * 描述里写明**目标机器**是必需的而非装饰：模型看到两份 `run_command` 时，唯一能区分"这条在
- * 哪台机器上执行"的线索就是名字和描述，选错机器的后果是在错误的主机上跑构建或删文件。
- */
-export function createRemoteHostTool(input: RemoteHostToolInput): RemoteHostTool {
-  return remoteHostToolFactory.create(input)
-}

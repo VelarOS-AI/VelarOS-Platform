@@ -18,42 +18,25 @@ import { isNull, isTrue, toNullable, toOptional } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 
-import type {ExecutionSpanScopeFactory } from '../../contract/requires.js'
-import type { AgentExecutionLimitOverrides, AgentExecutionLimits, AgentLoopSurface, ExecuteSoloModeStreamLoopArgs, LoopTurnVerdict, SoloInterruptedToolCallRecoveryKind, SoloLoopEvents, SoloLoopRoleRuntime, SoloLoopRunContext, SoloLoopRuntime, SoloLoopToolContext, SoloLoopToolRegistry, SoloLoopTurnRunner, SoloModeStreamLoopResult, SoloStreamLoopApi as SoloStreamLoopContract, StreamTurnResult, ToolSpaceBootstrapState } from '../../types/loop.js'
-import type { AgentModSeamDispatcherApi } from '../../types/mods.js'
-import type { ContextGovernanceSessionRegistryApi } from '../../types/residency.js'
+import type { ExecutionSpanScopeFactory } from '../../contract/requires.js'
+import type { AgentExecutionLimitOverrides, AgentExecutionLimits, AgentLoopSurface, ExecuteSoloModeStreamLoopArgs, LoopTurnVerdict, SoloLoopEvents, SoloLoopRoleRuntime, SoloLoopRunContext, SoloLoopRuntime, SoloLoopToolContext, SoloLoopToolRegistry, SoloLoopTurnRunner, SoloModeStreamLoopResult, SoloStreamLoopApi as SoloStreamLoopContract, StreamTurnResult, ToolSpaceBootstrapState } from '../../types/loop.js'
+import type { AgentModSeamDispatcherContract } from '../../types/mods.js'
+import type { ContextGovernanceSessionRegistryContract } from '../../types/residency.js'
 import { createInternalFollowUpMessage } from '../../utils/history/internal-messages'
-import {
-  beginLoopTurnSpans,
-  endLoopTurnSpansError,
-  endLoopTurnSpansOk,
-  executeLoopTurnWithContextOverflowRecovery,
-  restartLoopTurnModelSpanAfterRetry,
-  runAgentLoop,
-} from '../../utils/loop/agent-loop'
+import { beginLoopTurnSpans, endLoopTurnSpansError, endLoopTurnSpansOk, executeLoopTurnWithContextOverflowRecovery, restartLoopTurnModelSpanAfterRetry, runAgentLoop } from '../../utils/loop/agent-loop'
 import { resolveAgentContextPhase } from '../../utils/loop/context-phase'
 import { resolveAgentExecutionLimits } from '../../utils/loop/execution-limits'
 import { extractLatestUserTextFromMessages } from '../../utils/loop/intent-signals'
 import { resolveLoopSessionStateKey, sumPreparedToolSchemaChars } from '../../utils/loop/loop-turn-assembly'
 import { runSoloBackgroundCompletionGate } from '../../utils/loop/solo-background-completion-gate'
 import { applySoloContextDegradeAction } from '../../utils/loop/solo-context-degrade-action-executor'
-import {
-  createSoloFinishingGateBlockTracker,
-  resetSoloFinishingGateBlockTracker,
-  runSoloFinishingGate,
-} from '../../utils/loop/solo-finishing-gate'
-import {
-  buildSoloRunProfileTelemetry,
-  buildSoloToolAllocatorTelemetry,
-  buildSoloToolSchemaTelemetry,
-} from '../../utils/loop/solo-loop-telemetry-builder'
+import { createSoloFinishingGateBlockTracker, resetSoloFinishingGateBlockTracker, runSoloFinishingGate } from '../../utils/loop/solo-finishing-gate'
+import { buildSoloRunProfileTelemetry, buildSoloToolAllocatorTelemetry, buildSoloToolSchemaTelemetry } from '../../utils/loop/solo-loop-telemetry-builder'
 import { resolveSoloTurnModelRequestOptions } from '../../utils/loop/solo-model-request-options'
-import {
-  advanceSoloProcessUpdateCadence,
-  createSoloProcessUpdateCadenceState,
-} from '../../utils/loop/solo-process-update-cadence'
+import { advanceSoloProcessUpdateCadence, createSoloProcessUpdateCadenceState } from '../../utils/loop/solo-process-update-cadence'
 import { prepareSoloRunPlanForTurn } from '../../utils/loop/solo-run-plan-preparer'
 import { consumeSoloRuntimeGuidance } from '../../utils/loop/solo-runtime-guidance'
+import { buildInterruptedToolCallRecoveryGuidance, resolveInterruptedToolCallRecoveryKind } from '../../utils/loop/solo-stream-loop'
 import { runSoloToolSpaceBootstrapFallback } from '../../utils/loop/solo-tool-space-bootstrap-fallback'
 import { runSoloToolUseContinuation } from '../../utils/loop/solo-tool-use-continuation'
 import { runSoloTurnWindDown } from '../../utils/loop/solo-turn-wind-down'
@@ -61,66 +44,18 @@ import { captureAgentTurnCapabilitySnapshot } from '../../utils/loop/turn-capabi
 import { resolveGovernanceSessionKey } from '../../utils/residency/session-key'
 import { createAgentRuntimeInputInterruptScope } from '../../utils/runner/runtime-input-port'
 import { runAutomaticVerification, tickLoopReminders } from '../../utils/session/auto-verification'
-import { ChatRuntimeEvents } from '../../utils/wire/chat-runtime.js'
 import { AgentLoopContextUsageManager } from '../context/AgentLoopContextUsageManager'
+import { chatRuntimeEvents } from '../records/ChatRuntimeEvents'
 import { KernelToolLoopGuard } from '../tools/KernelToolLoopGuard'
 import { SessionToolAllocator } from '../tools/SessionToolAllocator'
 import { ToolExecutionPolicy } from '../tools/ToolExecutionPolicy'
 import { ToolExecutor } from '../tools/ToolExecutor'
 
 import { agentRunPlanLedgerFactory } from './AgentRunPlanLedgerFactory'
-import { loopContinue, loopFinish, LoopWindDownGuard } from './LoopWindDownGuard'
+import { loopContinue, loopFinish,LoopWindDownGuard } from './LoopWindDownGuard'
 import { recoveryRunPlanner } from './RecoveryRunPlanner'
-import { isContextOverflowError, isContextOverflowReplayUnsafe } from './RetryPolicy'
+import { agentRetryPolicy, isContextOverflowReplayUnsafe } from './RetryPolicy'
 import { SoloGoalLifecycle } from './SoloGoalLifecycle'
-
-/**
- * 主 Agent 面（B5 单引擎双面：装配 AgentLoop 引擎的 UI 投影面）。
- *
- * 每一轮执行顺序（引擎骨架 + 本面装配）：
- * 1. 检查 abort（护栏 3，引擎）。
- * 2. 构建系统提示词和本轮上下文。
- * 3. 整理/压缩历史记录，避免超过上下文窗口。
- * 4. 调用模型流式接口，并在流式过程中即时执行工具。
- * 5. 若有工具调用，把 tool result 追加回 history 后进入下一轮。
- * 6. 若没有工具调用，运行自动验证 gate，通过后结束。
- */
-
-function resolveInterruptedToolCallRecoveryKind(
-  error: AppError
-): SoloInterruptedToolCallRecoveryKind {
-  const reason = error.context?.reason
-  if (reason === 'final_tool_name_missing' || reason === 'tool_input_start_name_missing') return 'invalid-identity'
-  const finishReason = error.context?.finishReason
-  return finishReason === 'length' || finishReason === 'repetition_truncation'
-    ? 'output-truncation'
-    : 'invalid-input'
-}
-
-/** 构造注入给下一轮的能力中立纠正提示，不把所有参数协议错误误报为超长截断。 */
-function buildInterruptedToolCallRecoveryGuidance(
-  kind: SoloInterruptedToolCallRecoveryKind
-): string {
-  if (kind === 'invalid-identity') return [
-    '上一次工具调用缺少工具名称，已在执行前拒绝，没有产生副作用。',
-    '如果该操作仍然必要，请从当前工具目录中选择一个明确工具，并重新发送一次完整调用。',
-    '不要猜测或省略工具名，也不要重复分析；现在直接完成这个未执行的操作。',
-  ].join('\n')
-
-  if (kind === 'invalid-input') return [
-    '上一次工具调用的参数不是完整、合法的 JSON object，已在执行前拒绝，没有产生副作用。',
-    '如果该操作仍然必要，只重发一个完整工具调用；严格遵循当前 schema，确保字符串、换行和引号正确转义。',
-    '参数含长文本时，改用当前能力公开的小块写入或分段追加方式；具体操作名与参数以工具目录为准。',
-    '不要重复分析，现在直接完成这个未执行的操作。',
-  ].join('\n')
-
-  return [
-    '上一次工具调用因为一次性输出内容过大，在传输中途被截断、没能执行。',
-    '请把这次操作拆成更小的多次工具调用，每次只处理一部分，不要再一口气输出超大内容。',
-    '优先使用当前能力公开的局部更新或分段追加操作；具体操作名与参数必须以工具目录为准。',
-    '现在就用更小的分批方式重做这次操作。',
-  ].join('\n')
-}
 
 /**
  * 主会话循环面：一次「用户发了话，跑到给出答复为止」的完整执行。
@@ -178,7 +113,7 @@ class SoloStreamLoop<
      * 治理会话登记处（宿主级单实例，驻留账本跨回合的家）。
      * 本 loop 只在缺页降级时用它强开一次 epoch；常规治理在编译期由 `ProviderRequestCompiler` 完成。
      */
-    private readonly governanceSessions: ContextGovernanceSessionRegistryApi,
+    private readonly governanceSessions: ContextGovernanceSessionRegistryContract,
     /** 构建 system prompt、turn context payload 和上下文片段。 */
     private readonly runContextHelper: SoloLoopRunContext<TContext>,
     /** 用于估算工具 schema 占用并生成 AI SDK tool set。 */
@@ -195,7 +130,7 @@ class SoloStreamLoop<
      * 依然是 null，主链行为逐字节不变；注入时本 loop 把它透传给每轮（含缺页重放时重建的那个）
      * ToolExecutor，`tool-call:before` / `tool-result:after` 才真正接得到主面的工具调用。
      */
-    private readonly seams: LooseOptional<AgentModSeamDispatcherApi> = null
+    private readonly seams: LooseOptional<AgentModSeamDispatcherContract> = null
   ) {
     this.executionLimits = resolveAgentExecutionLimits(executionLimitOverrides)
     this.contextUsage = new AgentLoopContextUsageManager(toolRegistry)
@@ -277,7 +212,7 @@ class SoloStreamLoop<
       }
 
       // 通过宿主注入的 model port 解析本轮实际 provider/model；Agent Runtime 不持有具体 Model 实现。
-      args.events.emitRuntime(ChatRuntimeEvents.phase('preparing'))
+      args.events.emitRuntime(chatRuntimeEvents.phase('preparing'))
       const resolvedRoleRuntime = await this.runtimeHelper.resolveRoleRuntime(
         args.config,
         args.systemConfig,
@@ -293,7 +228,7 @@ class SoloStreamLoop<
       // 工具发现与最终 tools 必须共用本轮已解析模型的输入能力，不能让目录继续展示
       // 模型无法消费结果的截图/音频工具。
       args.toolContext.setSupportedModelInputModalities(roleRuntime.supportedInputModalities)
-      args.events.emitRuntime(ChatRuntimeEvents.phase('preparing-tools'))
+      args.events.emitRuntime(chatRuntimeEvents.phase('preparing-tools'))
       const contextPhaseDecision = resolveAgentContextPhase({
         turn,
         history: args.history,
@@ -363,7 +298,7 @@ class SoloStreamLoop<
 
       // 调模型前构建本轮 system prompt、上下文片段和 step budget。
       const promptStartedAt = Date.now()
-      args.events.emitRuntime(ChatRuntimeEvents.phase('building-prompt'))
+      args.events.emitRuntime(chatRuntimeEvents.phase('building-prompt'))
       this.log.info('prompt build start', {
         turn,
         historyMessages: args.history.length,
@@ -478,7 +413,7 @@ class SoloStreamLoop<
         ...turnContextPayload,
         controlPlaneLedger: runPlan.ledger,
       })
-      args.events.emitRuntime(ChatRuntimeEvents.turnStart(turn))
+      args.events.emitRuntime(chatRuntimeEvents.turnStart(turn))
       this.log.debug('turn start', { turn })
 
       // 观测（护栏 4，机制单源在 AgentLoop）：本轮 = turn span（run 的子）；provider 请求 = model span
@@ -507,7 +442,10 @@ class SoloStreamLoop<
           turnResult = await executeLoopTurnWithContextOverflowRecovery({
             turn,
             abortSignal: args.abortController.signal,
-            overflowRules: { isContextOverflowError, isContextOverflowReplayUnsafe },
+            overflowRules: {
+              isContextOverflowError: (error) => agentRetryPolicy.isContextOverflowError(error),
+              isContextOverflowReplayUnsafe,
+            },
             executeTurn: () =>
               this.turnHelper.executeStreamTurn({
                 provider: roleRuntime.provider,
@@ -583,7 +521,7 @@ class SoloStreamLoop<
         )
         if (turnResult.interruptedByRuntimeInput) {
           this.log.info('provider turn yielded to runtime guidance before tool dispatch', { turn })
-          args.events.emitRuntime(ChatRuntimeEvents.turnEnd(turn))
+          args.events.emitRuntime(chatRuntimeEvents.turnEnd(turn))
           return loopContinue()
         }
         if (turnResult.hasToolUse) {
@@ -667,7 +605,7 @@ class SoloStreamLoop<
               consumeTurnContextNote: args.consumeTurnContextNote,
               awaitPendingBackgroundJobs: args.awaitPendingBackgroundJobs,
               emitWaitingPhase: () =>
-                args.events.emitRuntime(ChatRuntimeEvents.phase('waiting-background')),
+                args.events.emitRuntime(chatRuntimeEvents.phase('waiting-background')),
               log: this.log,
             }),
           // 收尾门只在**用户显式开启目标模式**时生效（2026-08-05 裁决）。模型自己调
@@ -721,7 +659,7 @@ class SoloStreamLoop<
               attempt: interruptedToolCallRecoveryAttempts,
             }
           )
-          args.events.emitRuntime(ChatRuntimeEvents.turnEnd(turn))
+          args.events.emitRuntime(chatRuntimeEvents.turnEnd(turn))
           return loopContinue()
         }
         // runtimeHelper 会区分 abort、network、provider 等错误并发出合适事件。
@@ -737,7 +675,7 @@ class SoloStreamLoop<
         }
         // 错误分支也必须 emit turnEnd，否则 UI 上对应轮次会一直停在“进行中”，
         // ChatRuntime 的 turnStart/turnEnd 计数也无法收敛。
-        args.events.emitRuntime(ChatRuntimeEvents.turnEnd(turn))
+        args.events.emitRuntime(chatRuntimeEvents.turnEnd(turn))
         runScope?.end({ status: aborted ? 'aborted' : 'error' })
         return loopFinish({ status: aborted ? 'aborted' : 'error' })
       }

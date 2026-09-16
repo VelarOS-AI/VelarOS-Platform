@@ -1,15 +1,14 @@
 import { describe, expect, test } from 'bun:test'
 
 import {
-  AgentSessionLeaseConflictError,
-  isTerminalAgentBackgroundState,
-  normalizeAgentSessionListLimit,
-  resolveAgentSessionLeaseClaim,
-} from '../src/impl/errors/AgentSessionLeaseConflictError'
-import {
   createAgentSessionArchiveEnvelope,
   parseAgentSessionArchiveEnvelope,
 } from '../src/utils/product-session/archive'
+import {
+  isTerminalAgentBackgroundState,
+  normalizeAgentSessionListLimit,
+  resolveAgentSessionLeaseClaim,
+} from '../src/utils/product-session/lifecycle'
 
 describe('Agent Session application lifecycle', () => {
   test('keeps a live lease owner and allows dead-owner recovery', () => {
@@ -26,7 +25,7 @@ describe('Agent Session application lifecycle', () => {
       () => true,
       100,
       'TestHost'
-    )).toThrow(AgentSessionLeaseConflictError)
+    )).toThrow(/正被另一个/u)
     expect(resolveAgentSessionLeaseClaim(
       current,
       { sessionId: 'session-1', ownerId: 'owner-b', ownerPid: 42 },

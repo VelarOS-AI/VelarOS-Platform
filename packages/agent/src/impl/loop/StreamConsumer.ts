@@ -1,50 +1,32 @@
-import type { TextStreamPart, ToolSet } from "ai";
+import type { TextStreamPart, ToolSet } from 'ai'
 
-import {
-  isEmpty,
-  toNullable,
-} from "@velaros-ai/core";
-import { AppError } from "@velaros-ai/core/error";
-import { logRuntime } from "@velaros-ai/core/logger";
-import { TimerScope } from "@velaros-ai/core/utils/TimerScope";
+import { isEmpty, toNullable } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
+import { logRuntime } from '@velaros-ai/core/logger'
+import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
 import type { AssistantContentPart } from '../../types/history.js'
 import type { ConsumeAssistantStreamArgs, InlineReasoningSegment, PendingStreamToolCall, ProviderToolInputDraft, ProviderToolNameResolution, StreamDiagnostics, StreamIdleThinkingNotifier } from '../../types/loop.js'
 import type { ProviderTurnRecorder } from '../../types/records.js'
 import type { ToolExecutionPolicyRegistry } from '../../types/tools.js'
+import { recordKernelContextEpochDiagnostic } from '../../utils/loop/kernel-context-epoch-guard'
 import { appendStreamTextDelta, emitStreamUsageTelemetry } from '../../utils/loop/stream-consumer-emit'
-import { normalizeModelRequestError } from "../../utils/model/model-request-error";
-import {
-  buildEmptyAssistantStreamError,
-  shouldRecoverEmptyStreamAsContextPressure,
-} from "../../utils/stream/empty-stream-recovery";
-import {
-  readGeneratedFilePayload,
-  readSourcePayload,
-} from "../../utils/stream/generated-artifacts";
-import {
-  readNextStreamPartWithIdleTimeout,
-  returnStreamIteratorQuietly,
-} from "../../utils/stream/idle-read";
-import { createInlineReasoningTagSplitState, flushInlineReasoningTagTail, splitInlineReasoningTagDelta } from "../../utils/stream/inline-reasoning-tags";
-import {
-  createLeakedToolMarkupFilterState,
-  filterLeakedToolMarkupDelta,
-  flushLeakedToolMarkupTail,
-} from "../../utils/stream/leaked-tool-markup";
-import {
-  createOutputTruncationError,
-  isRecoverableOutputTruncationDiagnostic,
-} from "../../utils/stream/output-truncation-recovery";
-import { createProviderTurnToolCallIdAllocator } from "../../utils/stream/tool-call-id";
-import { applyProviderToolInputStreamPart, buildToolInputReadyMetadata, diagnoseRejectedProviderToolInput, parseRecoverableProviderToolInputDraft, resolveProviderExecutableToolInput, resolveProviderFinalToolCallIdentity, summarizeProviderToolInputDraft } from "../../utils/stream/tool-input";
-import { AgentTuning } from "../../utils/tuning";
-import { ChatRuntimeEvents } from '../../utils/wire/chat-runtime.js'
-import { createProviderToolReferenceCanonicalizer } from "../tools/ProviderToolReferenceCanonicalizer";
-import { ToolExecutionPolicy } from "../tools/ToolExecutionPolicy";
+import { normalizeModelRequestError } from '../../utils/model/model-request-error'
+import { buildEmptyAssistantStreamError, shouldRecoverEmptyStreamAsContextPressure } from '../../utils/stream/empty-stream-recovery'
+import { readGeneratedFilePayload, readSourcePayload } from '../../utils/stream/generated-artifacts'
+import { readNextStreamPartWithIdleTimeout, returnStreamIteratorQuietly } from '../../utils/stream/idle-read'
+import { createInlineReasoningTagSplitState, flushInlineReasoningTagTail, splitInlineReasoningTagDelta } from '../../utils/stream/inline-reasoning-tags'
+import { createLeakedToolMarkupFilterState, filterLeakedToolMarkupDelta, flushLeakedToolMarkupTail } from '../../utils/stream/leaked-tool-markup'
+import { createOutputTruncationError, isRecoverableOutputTruncationDiagnostic } from '../../utils/stream/output-truncation-recovery'
+import { createProviderTurnToolCallIdAllocator } from '../../utils/stream/tool-call-id'
+import { applyProviderToolInputStreamPart, buildToolInputReadyMetadata, diagnoseRejectedProviderToolInput, parseRecoverableProviderToolInputDraft, resolveProviderExecutableToolInput, resolveProviderFinalToolCallIdentity, summarizeProviderToolInputDraft } from '../../utils/stream/tool-input'
+import { AgentTuning } from '../../utils/tuning'
+import { chatRuntimeEvents } from '../records/ChatRuntimeEvents'
+import { ProviderToolReferenceCanonicalizer } from '../tools/ProviderToolReferenceCanonicalizer'
+import type { ToolExecutionPolicyApi } from '../tools/ToolExecutionPolicy'
+import { ToolExecutionPolicy } from '../tools/ToolExecutionPolicy'
 
-import { recordKernelContextEpochDiagnostic } from "./KernelContextEpochGuard";
-import { AgentStreamDiagnosticHelper } from "./StreamDiagnosticsHelper";
+import { AgentStreamDiagnosticHelper } from './StreamDiagnosticsHelper'
 
 /**
  * 一次尝试的流消费状态：由 turn helper 在每次尝试前整体新建（不是复用后重置），
@@ -150,7 +132,7 @@ class StreamConsumer implements StreamConsumerApi {
 
   private readonly log = logRuntime.tag("StreamConsumer");
   private readonly streamDiagnosticHelper = new AgentStreamDiagnosticHelper();
-  private readonly executionPolicy: ToolExecutionPolicy;
+  private readonly executionPolicy: ToolExecutionPolicyApi;
 
   constructor(toolRegistry: ToolExecutionPolicyRegistry) {
     this.executionPolicy = new ToolExecutionPolicy(toolRegistry);
@@ -173,11 +155,11 @@ class StreamConsumer implements StreamConsumerApi {
     // 过滤泄漏的原生工具调用标记（`<｜DSML｜...`），别把它当正文推给 UI/历史。
     const leakedToolMarkupState = createLeakedToolMarkupFilterState();
     const toolReferenceCanonicalizer =
-      createProviderToolReferenceCanonicalizer(
+      new ProviderToolReferenceCanonicalizer(
         args.providerToCanonicalToolNames ?? {},
       );
     const reasoningToolReferenceCanonicalizer =
-      createProviderToolReferenceCanonicalizer(
+      new ProviderToolReferenceCanonicalizer(
         args.providerToCanonicalToolNames ?? {},
       );
     let reasoningStreamId = "reasoning";
@@ -313,7 +295,7 @@ class StreamConsumer implements StreamConsumerApi {
           input: toolCall.input,
         });
 
-        args.events.emitRuntime?.(ChatRuntimeEvents.phase("executing-tool"));
+        args.events.emitRuntime?.(chatRuntimeEvents.phase("executing-tool"));
         this.log.info("tool call received", {
           turn: turnState.turn,
           toolName: toolCall.toolName,
@@ -844,7 +826,7 @@ class StreamConsumer implements StreamConsumerApi {
    *
    * 静默 ≠ 断线：推理模型思考时本来就会十几秒甚至更久不出字。过去这里每 15 秒发一次
    * `reconnecting`，界面便显示「连接中断，正在重连」——明明什么都没断、也没有重连在发生，
-   * 误导用户去查网络。「重连中」只属于真正发生重试的路径（`AgentConnectionRetryHelper`、
+   * 误导用户去查网络。「重连中」只属于真正发生重试的路径（`RetryPolicy`、
    * `retryingTurn`）；这里只负责让静默期的状态停在「思考中」。
    */
   private createIdleThinkingNotifier(
@@ -886,7 +868,7 @@ class StreamConsumer implements StreamConsumerApi {
           });
           // 一段静默只拉一次状态；之后每个周期只记日志，不重复刷事件。
           if (!idleNoticeActive)
-            args.events.emitRuntime?.(ChatRuntimeEvents.phase("executing"));
+            args.events.emitRuntime?.(chatRuntimeEvents.phase("executing"));
           idleNoticeActive = true;
           schedule();
         },

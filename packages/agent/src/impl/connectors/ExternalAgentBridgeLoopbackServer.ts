@@ -1,11 +1,13 @@
 import { createServer, type Server } from 'node:http'
 import type { Socket } from 'node:net'
 
-import { type WebSocket, WebSocketServer } from 'ws'
+import {WebSocketServer } from 'ws'
 
 import { isString } from '@velaros-ai/core'
 
 import { ExternalAgentBridgeLimits } from '../../contract/constants.js'
+import type { ExternalAgentBridgeLoopbackServerOptions } from '../../types/connectors.js'
+import { isExternalAgentBridgeExtensionOrigin } from '../../utils/connectors/external-agent-bridge-loopback-server'
 import { ExternalAgentBridgeProtocolDescriptor } from '../../utils/wire/external-agent-bridge'
 
 /** 只在本机回环地址上监听，等价于 `ExternalAgentBridgeLimits.host`。 */
@@ -16,26 +18,6 @@ export const ExternalAgentBridgeDefaultPortStart: number = ExternalAgentBridgeLi
 export const ExternalAgentBridgeDefaultPortEnd: number = ExternalAgentBridgeLimits.portRangeEnd
 /** 单帧字节上限，等价于 `ExternalAgentBridgeLimits.maxSocketPayloadBytes`。 */
 export const ExternalAgentBridgeMaxSocketPayloadBytes: number = ExternalAgentBridgeLimits.maxSocketPayloadBytes
-
-export function isExternalAgentBridgeExtensionOrigin(origin: unknown): origin is string {
-  return isString(origin) && /^chrome-extension:\/\/[a-p]{32}$/u.test(origin)
-}
-
-/** 建 `ExternalAgentBridgeLoopbackServer` 时一次性交的参数：端口范围、握手路径、单帧上限和两个回调；建好之后不再变。 */
-export interface ExternalAgentBridgeLoopbackServerOptions {
-  /** 端口扫描的起点（含），缺省 `ExternalAgentBridgeDefaultPortStart`；`start()` 从这里往上逐个试，谁先空着用谁。 */
-  readonly portStart?: number
-  /** 端口扫描的终点（含），缺省 `ExternalAgentBridgeDefaultPortEnd`；扫到这里还全被占就抛错。必须 >= `portStart`，否则 `start()` 直接拒。 */
-  readonly portEnd?: number
-  /** WebSocket 握手只认这一个 URL path，缺省 `ExternalAgentBridgeProtocolDescriptor.socketPath`；其余路径的 Upgrade 一律回 403。改它等于换协议端点，客户端要跟着改。 */
-  readonly socketPath?: string
-  /** 单条 WebSocket 消息的字节上限，缺省 `ExternalAgentBridgeMaxSocketPayloadBytes`（32 MB）；超了由 ws 关连接，不会进 `onConnection` 那条流。 */
-  readonly maxPayloadBytes?: number
-  /** 一条连接通过 Origin 和 path 校验、升级成功后回调，把 socket 交给宿主；配对、凭据校验、设备/会话绑定和工具执行全在这条回调之后由宿主做。 */
-  readonly onConnection: (socket: WebSocket) => void
-  /** 传输层出错时回调（HTTP clientError、socket error、WebSocketServer error）；只用来记日志或上报，服务器自己会销毁坏掉的 socket，不调用方也不影响运行。 */
-  readonly onError?: (error: Error) => void
-}
 
 /**
  * 外部 Agent 桥的 loopback 传输层：在 127.0.0.1 上挑一个空端口起 HTTP 服务，只放行来自 Chrome 扩展 Origin、且打在约定 path 上的 WebSocket Upgrade，其余一律 403。
@@ -156,4 +138,9 @@ export class ExternalAgentBridgeLoopbackServer implements ExternalAgentBridgeLoo
     this.endpointValue = `ws://${ExternalAgentBridgeLoopbackHost}:${address.port}${socketPath}`
     return this.endpointValue
   }
+}
+
+/** 起一台外部 Agent 桥的回环服务；只监听本机回环地址。 */
+export function createExternalAgentBridgeLoopbackServer(options: ExternalAgentBridgeLoopbackServerOptions): ExternalAgentBridgeLoopbackServerApi {
+  return new ExternalAgentBridgeLoopbackServer(options)
 }

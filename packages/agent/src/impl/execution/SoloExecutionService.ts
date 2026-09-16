@@ -2,10 +2,10 @@
 
 import type { AgentExecutionConfig } from '../../contract/requires.js'
 import type { ExecutionRecord } from '../../types/agent.js'
-import type { RunSoloExecutionParams,SoloExecutionAgentRunner } from '../../types/execution.js'
+import type { RunSoloExecutionParams, SoloExecutionAgentRunner } from '../../types/execution.js'
 import { bindAbortSignal } from '../../utils/execution/solo-execution'
 
-import type { ExecutionService } from './ExecutionService'
+import type { ExecutionServiceApi } from './ExecutionService'
 
 /**
  * 统一主 Agent 执行入口的薄包装。
@@ -33,7 +33,7 @@ export interface SoloExecutionServiceApi {
 class SoloExecutionService implements SoloExecutionServiceApi {
   constructor(
     /** 执行生命周期托管：create record、session 互斥、complete/fail/abort。 */
-    private readonly executionService: ExecutionService,
+    private readonly executionService: ExecutionServiceApi,
     /** 主进程 AgentRunner；实际 multi-turn 在 Agent 的 SoloStreamLoop。 */
     private readonly agentRunner: SoloExecutionAgentRunner
   ) {}
@@ -79,6 +79,9 @@ class SoloExecutionService implements SoloExecutionServiceApi {
 
 }
 
-
-
 export { SoloExecutionService }
+
+/** 建一台 Solo 执行服务：主会话回合的入口。 */
+export function createSoloExecutionService(executionService: ExecutionServiceApi, agentRunner: SoloExecutionAgentRunner): SoloExecutionServiceApi {
+  return new SoloExecutionService(executionService, agentRunner)
+}

@@ -6,7 +6,7 @@ import { z } from 'zod'
 import { isPlainObject, isString, toNullable } from '@velaros-ai/core'
 
 import { AgentToolLimits } from '../../contract/constants.js'
-import type { DistillContextInput, HandoffContextInput, RecallContextInput } from '../../types/builtin.js'
+import type { HandoffContextInput, RecallContextInput } from '../../types/builtin.js'
 import type { KernelToolContext } from '../../types/tool-context.js'
 import { renderParameterDescription as parameterDescription } from '../toolkit/tool-description'
 
@@ -27,39 +27,6 @@ export const handoffContextSchema: z.ZodType<HandoffContextInput> = z.object({
     ),
 })
 
-// 兼容事实便签受整体载荷预算约束，不使用过小的条目数硬限制。20 条精炼事实占用与旧版
-// 10 × 400 的契约大致相当，同时允许长阶段为每个已完成工作项保留独立可寻址的事实。
-// 三个上限模型直接看得见，写在 AgentToolLimits.context 里。
-/** 事实便签的入参形状：一批精炼事实，外加一句可选的进度便签。 */
-export const distillContextSchema: z.ZodType<DistillContextInput> = z.object({
-  facts: z
-    .array(z.string().trim().min(1).max(AgentToolLimits.context.distilledFactChars))
-    .min(1)
-    .max(AgentToolLimits.context.distilledFactCount)
-    .describe(
-      parameterDescription({
-        description: '从已读取/搜索/执行结果中蒸馏出的持久事实。',
-        notes: [
-          `最多 ${AgentToolLimits.context.distilledFactCount} 条，每条不超过 ${AgentToolLimits.context.distilledFactChars} 字符；事实较多时先合并重复项。`,
-          '每条自包含，代码事实带 file:line 或符号名；决策写清结论和原因。',
-          '只记新知识，之前 distill 过的事实不要重复。',
-        ],
-      })
-    ),
-  note: z
-    .string()
-    .trim()
-    .min(1)
-    .max(AgentToolLimits.context.distillNoteChars)
-    .optional()
-    .describe(
-      parameterDescription({
-        description: '一句话进度便签：当前做到哪里、下一步是什么。',
-        notes: ['被打断或上下文压缩后靠它恢复现场，避免重读文件。'],
-      })
-    ),
-})
-
 /** 模型读取统一逻辑正文，持久档案及其分页坐标保留原始文本。 */
 export function presentHistoricalFile(value: unknown): unknown {
   if (!isPlainObject(value) || !isString(value.content) || value.kind !== 'file-snapshot') return value
@@ -68,7 +35,6 @@ export function presentHistoricalFile(value: unknown): unknown {
     pagingNote: '续读时原样使用 nextOffset；它指向归档原文，不能根据显示正文长度推算。' }
 }
 
-
 /** ref 指向本会话已落盘的载荷时把归档记录取出来，用于判断它到底是文件快照还是内部记录。 */
 export async function findRecallArchiveRecord(input: RecallContextInput, ctx: KernelToolContext) {
   const payloadPrefix = `ctx-payload:${encodeURIComponent(ctx.sessionId)}:`
@@ -76,7 +42,6 @@ export async function findRecallArchiveRecord(input: RecallContextInput, ctx: Ke
     : input.ref?.startsWith('file-snapshot:') ? input.ref.slice('file-snapshot:'.length) : undefined
   return archiveHash ? ctx.contextPayloadStore?.findByHash(ctx.sessionId, archiveHash) : undefined
 }
-
 
 /** 按 ref 精确取回：refKind 省略时按 ref 前缀判别，reason 省略时给个兜底，不硬拒。 */
 export async function recallByRef(input: RecallContextInput, ctx: KernelToolContext): Promise<unknown> {
@@ -135,7 +100,6 @@ export async function recallByRef(input: RecallContextInput, ctx: KernelToolCont
       }
   }
 }
-
 
 /** 按 query 搜索：kind 缺省 all，会话历史与终端日志各出一份结果。 */
 export async function recallByQuery(input: RecallContextInput, ctx: KernelToolContext): Promise<unknown> {

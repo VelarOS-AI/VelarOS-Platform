@@ -1,7 +1,8 @@
 /** Prompt 段稳定性：stable 适合缓存，dynamic 每轮可能变化。由 tier 派生，不再由段自报。 */
+import type { SkillFileStoreApi } from '../contract/provides.js'
 import type { AgentChatRuntimeConfig } from '../contract/requires.js'
 
-import type { AgentContextPhase, AgentDeveloperContext, AgentRoleId, AgentSkillDescriptor, AgentSurfaceId, AppLocale, CapabilityScopeId, ChatPromptFeatureId, PromptSegmentOverride, RunProfileId,ThinkingDepth, ToolOsState, ToolSurfaceProfileId, WorkflowType } from './agent.js'
+import type { AgentContextPhase, AgentDeveloperContext, AgentRoleId, AgentSkillDescriptor, AgentSurfaceId, AppLocale, CapabilityScopeId, ChatPromptFeatureId, PromptSegmentOverride, RunProfileId, ThinkingDepth, ToolOsState, ToolSurfaceProfileId, WorkflowType } from './agent.js'
 import type { SubAgentDispatchCatalog } from './delegation.js'
 
 export type PromptSegmentStability = 'stable' | 'dynamic'
@@ -248,7 +249,7 @@ export interface BuiltInPromptOptions {
  * 提示词段注册表的最小形状：注册、屏蔽、组合这一面。
  * 类实现在 impl/guidance/PromptRegistry.ts。
  */
-export interface PromptRegistryApi {
+export interface PromptRegistryContract {
   /** 注册或覆盖单个 prompt 段（Tier0 带谓词即抛）。 */
   register(definition: PromptSegmentDefinition): this
   /** 批量注册 prompt 段。 */
@@ -262,5 +263,26 @@ export interface PromptRegistryApi {
   /** 组合所有可用段，并返回 stable/dynamic/skipped 分组结果。 */
   compose(context?: PromptRenderContext): PromptCompositionResult
   /** 克隆注册表，供 ContextBuilder 链式变体隔离修改。 */
-  clone(): PromptRegistryApi
+  clone(): PromptRegistryContract
+}
+
+/**
+ * 建 `SkillFileStore` 要的外部依赖：技能目录在哪、以及外部 Skill 没声明 spaces 时兜底给哪些空间。
+ * 由宿主在装配期一次性递入，建好之后不再变。
+ */
+export interface SkillFileStoreDependencies {
+  /** 技能目录解析器由宿主递入；桌面和 headless 宿主可使用各自的数据根。 */
+  skillsDir: () => string
+  /** 兼容没有声明 spaces 的外部 Skill；为空时保持 Platform 的 fail-closed 必填语义。 */
+  defaultSpaces?: readonly string[]
+}
+
+export interface SkillMarketClientDependencies {
+  store: SkillFileStoreApi
+  /**
+   * 宿主提供的市场根地址。未注入或返回空值时，市场保持禁用且网络请求不会发生。
+   */
+  marketBase?: () => string
+  fetchImpl?: typeof fetch
+  now?: () => number
 }

@@ -2,20 +2,10 @@ import type { AgentSkillProvider } from '../../contract/requires.js'
 import type { AgentRoleId } from '../../types/agent.js'
 import type { AgentSkillDefinition } from '../../types/guidance.js'
 import { createSkillDefinition } from '../../utils/guidance/agent-skill-provider'
+import { resolveFileSkillScopes } from '../../utils/guidance/file-skill-provider'
 import { AgentTuning } from '../../utils/tuning'
 
-import type { SkillFileStore } from './SkillFileStore'
-
-/**
- * 用户技能默认排序优先级：故意低于内置 catalog 的 100（priority 升序=靠前）。
- * 用户显式安装的技能承载明确意图，索引 12 条截断时应先于泛化内置技能展示。
- * frontmatter `priority:` 可覆盖。
- */
-function resolveFileSkillScopes(spaces: readonly string[]): string[] {
-  return spaces
-    .map((space) => space.trim().toLowerCase())
-    .filter(Boolean)
-}
+import type { SkillFileStoreApi } from './SkillFileStore'
 
 /**
  * 文件式技能供应方：storage/skills 下的 markdown 文件即已安装技能。
@@ -28,7 +18,7 @@ class FileSkillProvider implements AgentSkillProvider {
   readonly label: string
 
   constructor(
-    private readonly store: SkillFileStore,
+    private readonly store: SkillFileStoreApi,
     private readonly roleIds: readonly AgentRoleId[],
     options: {
       readonly id?: string
@@ -64,3 +54,12 @@ class FileSkillProvider implements AgentSkillProvider {
 }
 
 export { FileSkillProvider }
+
+/** 建一个文件式技能供应方：从技能目录读 SKILL.md。 */
+export function createFileSkillProvider(store: SkillFileStoreApi, roleIds: readonly AgentRoleId[], options: {
+      readonly id?: string
+      readonly kind?: AgentSkillProvider['kind']
+      readonly label?: string
+    } = {}): AgentSkillProvider {
+  return new FileSkillProvider(store, roleIds, options)
+}

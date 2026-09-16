@@ -55,4 +55,7 @@ class ChatMessages implements ChatMessagesApi {
 }
 
 export { ChatMessages }
-export { ChatMessages as ChatMessageHelper }
+
+/** 聊天消息的判定与投影面（无状态，进程内共用一份）。 */
+export const chatMessages: ChatMessagesApi = new ChatMessages()
+

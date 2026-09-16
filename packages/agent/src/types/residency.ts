@@ -1,8 +1,9 @@
 /** 转交信号（设计 §4）：连续 2 次 epoch 节省率不足且 post-epoch 占用仍高 → 建议开新会话。 */
 import type { ModelMessage } from 'ai'
 
-import type { ContextRefRetrieval } from './context.js'
+import type { ContextMigrationEventSink } from '../contract/requires.js'
 
+import type { ContextRefRetrieval } from './context.js'
 
 /**
  * 驻留账本的最小形状：蒸馏与 epoch 这两族纯函数真正用到的那几个方法。
@@ -31,7 +32,6 @@ export interface ResidencyLedgerView {
   /** 账本统计（条数、各层占用、缺页率）。 */
   stats(): ContextLedgerStats
 }
-
 
 /**
  * 一个会话的上下文治理面最小形状：同步历史、算窗口、跑 epoch、记缺页。
@@ -72,7 +72,7 @@ export interface ContextGovernanceSessionApi {
  * 治理会话登记处的最小形状：按会话 id 取治理面、配置与 epoch 报告。
  * 类实现在 impl/residency/ContextGovernanceSessionRegistry.ts。
  */
-export interface ContextGovernanceSessionRegistryApi {
+export interface ContextGovernanceSessionRegistryContract {
   /** 当前全局治理配置。 */
   governanceConfig(): ContextGovernanceConfig
   /** 注入/撤销蒸馏器。 */
@@ -1179,4 +1179,24 @@ export interface HistoryIngestPlan {
   nextTurn: number
   /** 本批结束时是否已见过轮边界（下一批的 `turnBoundarySeen` 入参）。 */
   turnBoundarySeen: boolean
+}
+
+/**
+ * 建 `ContextGovernanceSessionRegistry` 时给的一组宿主注入；全部可省，整个对象也能不传。
+ * 除 `distiller` 外都只在建表那一刻读一次，之后新建的会话继承当时的值。
+ */
+export interface ContextGovernanceSessionRegistryOptions {
+  /** 宿主注入的治理配置（宽容解析 + 默认值兜底）。 */
+  config?: LooseOptional<ContextGovernanceConfigInput>
+  /** 领域语义分类器：refetchable / 去重目标 / pinned（能力包注入，agent 包不认工具名单）。 */
+  classifier?: LooseOptional<ContextRecordClassifier>
+  /** 迁移事件汇工厂；缺省关闭落盘（agent 包 host 无关，写盘是宿主的事）。 */
+  sinkFactory?: LooseOptional<(sessionId: string) => Nullable<ContextMigrationEventSink>>
+  /** 最大跟踪会话数；超出按"最近使用"淘汰最旧的那个。 */
+  maxTrackedSessions?: LooseOptional<number>
+  /**
+   * I2 蒸馏器（宿主注入的一次辅助模型调用）。缺省 = 治理退化为纯机械：
+   * 档位仍按配置记账，但每次规划都以 `no-distiller` 跳过，不会静默假装蒸馏过。
+   */
+  distiller?: LooseOptional<ContextDistiller>
 }

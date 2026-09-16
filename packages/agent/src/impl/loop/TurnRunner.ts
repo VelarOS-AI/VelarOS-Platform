@@ -4,12 +4,12 @@ import { type AppError } from '@velaros-ai/core/error'
 
 import type { AgentTurnToolExecutor, AgentTurnToolResult, AssistantContentPart } from '../../types/history.js'
 import type { ExecuteQueryTurnArgs, ExecuteStreamTurnArgs, StreamTurnResult, TurnRunnerToolContext, TurnRunnerToolRegistry } from '../../types/loop.js'
-import type { ContextGovernanceSessionRegistryApi } from '../../types/residency.js'
+import type { ContextGovernanceSessionRegistryContract } from '../../types/residency.js'
 import { TurnHistory } from '../records/TurnHistory'
 
 import { KernelContextEpochGuard } from './KernelContextEpochGuard'
 import { QueryTurn, type QueryTurnResult } from './QueryTurn'
-import { AgentConnectionRetryHelper } from './RetryPolicy'
+import { RetryPolicy } from './RetryPolicy'
 import type { StreamConsumerTurnState } from './StreamConsumer'
 import { StreamTurn } from './StreamTurn'
 
@@ -62,7 +62,7 @@ class TurnRunner<TToolContext extends TurnRunnerToolContext = TurnRunnerToolCont
   implements TurnRunnerApi<TToolContext>
 {
   /** 网络/连接类错误重试策略。 */
-  private readonly connectionRetryHelper = new AgentConnectionRetryHelper()
+  private readonly connectionRetryHelper = new RetryPolicy()
   /** assistant/tool 消息历史拼接。 */
   private readonly turnHistoryHelper = new TurnHistory()
   /** 非流式 query turn helper。 */
@@ -74,7 +74,7 @@ class TurnRunner<TToolContext extends TurnRunnerToolContext = TurnRunnerToolCont
   constructor(
     private readonly toolRegistry: TurnRunnerToolRegistry<TToolContext>,
     /** 治理会话登记处（宿主级单实例，驻留账本跨回合的家）。 */
-    private readonly governanceSessions: ContextGovernanceSessionRegistryApi
+    private readonly governanceSessions: ContextGovernanceSessionRegistryContract
   ) {
     this.queryTurnHelper = new QueryTurn(
       toolRegistry,

@@ -42,3 +42,8 @@ export class ExternalAgentBridgePairingThrottle implements ExternalAgentBridgePa
     this.blockedUntilValue = 0
   }
 }
+
+/** 开一个配对节流器：连续失败超限后按封禁时长拒绝再试。 */
+export function createExternalAgentBridgePairingThrottle(now: () => number = Date.now): ExternalAgentBridgePairingThrottleApi {
+  return new ExternalAgentBridgePairingThrottle(now)
+}

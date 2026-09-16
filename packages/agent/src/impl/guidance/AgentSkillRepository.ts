@@ -1,9 +1,9 @@
 import { isFalse, isPresent, toNullable } from '@velaros-ai/core'
 
 import type { AgentSkillProvider } from '../../contract/requires.js'
-import type { ChatPromptFeatureId } from '../../types/agent'
-import type { AgentRoleId, AgentSkillDescriptor,CapabilityScopeId } from '../../types/agent.js'
-import type { AgentSkillDefinition } from '../../types/guidance.js'
+import type { AgentRoleId, AgentSkillDescriptor, CapabilityScopeId, ChatPromptFeatureId } from '../../types/agent'
+import type { AgentSkillDefinition, AgentSkillKind } from '../../types/guidance.js'
+import { createSkillDefinition } from '../../utils/guidance/agent-skill-provider'
 import { formatLinkedSkillPrompt, toSkillDescriptor } from '../../utils/guidance/skill-index-prompt'
 import { hasAutoInjectPromptFeature, isSkillVisibleForPromptFeatures, isSkillVisibleForResource, isSkillVisibleInScope } from '../../utils/guidance/skill-visibility'
 import { compareStableStrings } from '../../utils/residency/determinism'
@@ -93,6 +93,28 @@ export interface AgentSkillRepositoryApi {
    * 只认这条技能 `resourcePaths` 里已经枚举过的路径，其余一律返回 null——防止拼路径越界读。
    */
   readSkillResource(skill: AgentSkillDefinition, resourcePath: string): Nullable<string>
+
+  /** 按供应方给的字段构造一条技能定义，缺省值在这里补齐。 */
+  createDefinition(args: {
+  id: string
+  label: string
+  description?: string
+  provider: Pick<AgentSkillProvider, 'id' | 'kind'>
+  roleIds: AgentRoleId[]
+  priority?: number
+  markdown: string
+  /** 技能类型；省略默认 capability（指针 + 按需读取）。role 只应由内置角色供应方显式声明。 */
+  skillKind?: AgentSkillKind
+  autoInjectPromptFeatures?: readonly ChatPromptFeatureId[]
+  capabilityScopes: readonly CapabilityScopeId[]
+  enabled?: boolean
+  userVisible?: boolean
+  argumentHint?: LooseOptional<string>
+  baseDir?: LooseOptional<string>
+  resourcePaths?: readonly string[]
+  sourceResourceId?: LooseOptional<string>
+  allowedTools?: readonly string[]
+}): AgentSkillDefinition
 }
 
 class AgentSkillRepository implements AgentSkillRepositoryApi {
@@ -329,6 +351,34 @@ class AgentSkillRepository implements AgentSkillRepositoryApi {
     // 不抛错：一条技能的档位声明错了不该让整个技能库不可用）。
     return skill.skillKind === 'role' && this.trustedRoleSkillProviderIds.has(skill.sourceId)
   }
+
+  public createDefinition(args: {
+  id: string
+  label: string
+  description?: string
+  provider: Pick<AgentSkillProvider, 'id' | 'kind'>
+  roleIds: AgentRoleId[]
+  priority?: number
+  markdown: string
+  /** 技能类型；省略默认 capability（指针 + 按需读取）。role 只应由内置角色供应方显式声明。 */
+  skillKind?: AgentSkillKind
+  autoInjectPromptFeatures?: readonly ChatPromptFeatureId[]
+  capabilityScopes: readonly CapabilityScopeId[]
+  enabled?: boolean
+  userVisible?: boolean
+  argumentHint?: LooseOptional<string>
+  baseDir?: LooseOptional<string>
+  resourcePaths?: readonly string[]
+  sourceResourceId?: LooseOptional<string>
+  allowedTools?: readonly string[]
+}): AgentSkillDefinition {
+    return createSkillDefinition(args)
+  }
 }
 
 export { AgentSkillRepository }
+
+/** 建一份技能仓库：按供应方合并技能定义并处理启停。 */
+export function createAgentSkillRepository(providers: AgentSkillProvider[], options: { trustedRoleSkillProviderIds?: readonly string[] } = {}): AgentSkillRepositoryApi {
+  return new AgentSkillRepository(providers, options)
+}

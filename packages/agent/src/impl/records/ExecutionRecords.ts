@@ -3,13 +3,8 @@ import { isEmpty, toNullable } from '@velaros-ai/core'
 import { logRuntime } from '@velaros-ai/core/logger'
 
 import type { ExecutionIdFactory } from '../../contract/requires.js'
-import type {
-  ConfirmationRequestDetail,
-  StreamTurnContextPayload,
-  ToolExecutionPlanUpdate,
-} from '../../types/agent'
-import type { ExecutionRecord, ExecutionTaskPlanStep, ExecutionTaskRecord,UserActionCard } from '../../types/agent.js'
-import type { CreateExecutionArgs,ExecutionResourceProvider } from '../../types/records.js'
+import type { ConfirmationRequestDetail, ExecutionRecord, ExecutionTaskPlanStep, ExecutionTaskRecord, StreamTurnContextPayload, ToolExecutionPlanUpdate, UserActionCard } from '../../types/agent'
+import type { CreateExecutionArgs, ExecutionResourceProvider } from '../../types/records.js'
 import { requireCurrentTask } from '../../utils/records/execution-tasks'
 
 import { ExecutionPlanLedgerHelper } from './ExecPlanLedger'
@@ -18,9 +13,8 @@ import { type ExecutionRoutingCoordinator } from './ExecRouting'
 import { type ExecutionStateMachine } from './ExecStateMachine'
 import { ExecutionTaskLedgerHelper } from './ExecTaskLedger'
 import { ExecutionRecordSummaryHelper } from './ExecutionRecordSummaryHelper'
-import { type ExecutionStore } from './ExecutionStore'
+import type { ExecutionStoreApi } from './ExecutionStore'
 import { MonotonicExecutionIdFactory } from './MonotonicExecutionIdFactory'
-
 
 /**
  * 执行记录的写入口：`ExecutionService` 管生命周期编排，真正改 `ExecutionRecord` 的活全在这里——
@@ -82,7 +76,7 @@ class ExecutionRecords implements ExecutionRecordsApi {
 
   constructor(
     /** 执行记录存储。 */
-    private readonly store: ExecutionStore,
+    private readonly store: ExecutionStoreApi,
     /** 状态机校验合法状态迁移。 */
     private readonly stateMachine: ExecutionStateMachine,
     /** 创建 execution 时读取当前 resourceId。 */

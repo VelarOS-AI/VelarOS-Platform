@@ -2,8 +2,8 @@ import assert from 'node:assert/strict'
 
 import { describe, test } from 'bun:test'
 
-import { hasRunningOwnSelfStep } from '../src/impl/records/ExecTaskLedger'
 import type { ExecutionTaskPlanStep } from '../src/types/agent.js'
+import { hasRunningOwnSelfStep } from '../src/utils/records/exec-task-ledger'
 
 function step(id: string, status: ExecutionTaskPlanStep['status']): ExecutionTaskPlanStep {
   return {

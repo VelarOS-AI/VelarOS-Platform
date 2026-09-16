@@ -6,7 +6,7 @@ import { describe, test } from 'bun:test'
 import { AppError } from '@velaros-ai/core/error'
 
 import { ExecutionService } from '../src/impl/execution/ExecutionService'
-import { ExecutionEventBus } from '../src/impl/records/ExecutionEventBus'
+import {  createNoopExecutionEventBus } from '../src/impl/records/ExecutionEventBus'
 import { ExecutionStore } from '../src/impl/records/ExecutionStore'
 import { SubAgentGuidanceRelayRegistry } from '../src/impl/records/SubAgentGuidanceRelayRegistry'
 import type { ExecutionGuidanceRelayPlan, ManagedExecutionController } from '../src/types/execution.js'
@@ -48,7 +48,7 @@ function createServiceHarness() {
     const completed = service.runManagedExecution({
       sourceSessionId: 'guidance-lifecycle-session',
       messages: [originalMessage],
-      events: ExecutionEventBus.noop(),
+      events: createNoopExecutionEventBus(),
       run: async (controller) => {
         ready.resolve(controller)
         await finish.promise

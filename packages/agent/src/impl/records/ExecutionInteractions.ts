@@ -1,15 +1,8 @@
 import { AppError } from '@velaros-ai/core/error'
 
-import type { ToolConfirmationDecisionOptions } from '../../types/agent'
+import type { ExecutionRecord, StreamStatePayload, ToolConfirmationDecisionOptions } from '../../types/agent'
 
 import { type ExecutionRecords } from './ExecutionRecords'
-
-/** 拒绝确认时给模型/执行账的那句话：固定前缀 + 用户理由（有才拼）。 */
-function buildConfirmationDenialMessage(rejectionMessage: Nullable<string>): string {
-  return rejectionMessage
-    ? `用户拒绝了本次确认请求：${rejectionMessage}`
-    : '用户拒绝了本次确认请求。'
-}
 
 /**
  * 执行里「停下来问用户」的那一半：工具要确认或要用户打字时，先把执行和当前任务切到 `awaiting_*` 状态、
@@ -100,7 +93,7 @@ class ExecutionInteractions implements ExecutionInteractionsApi {
     this.emitExecutionDebug(executionId)
     this.emitExecutionState(
       executionId,
-      ChatRuntimeEvents.awaitingConfirmation(
+      chatRuntimeEvents.awaitingConfirmation(
         executionId,
         message,
         options.userActionCards,
@@ -156,7 +149,7 @@ class ExecutionInteractions implements ExecutionInteractionsApi {
     this.records.setTaskStatus(execution.id, execution.currentTaskId, 'awaiting_input')
     this.records.setAwaitingInput(executionId, question)
     this.emitExecutionDebug(executionId)
-    this.emitExecutionState(executionId, ChatRuntimeEvents.awaitingInput(executionId, question))
+    this.emitExecutionState(executionId, chatRuntimeEvents.awaitingInput(executionId, question))
 
     return new Promise<string>((resolve, reject) => {
       if (abortSignal?.aborted) {
@@ -264,6 +257,7 @@ class ExecutionInteractions implements ExecutionInteractionsApi {
 export { ExecutionInteractions }
 import { randomUUID } from 'node:crypto'
 
-import type { ExecutionRecord,StreamStatePayload } from '../../types/agent.js'
 import type { ConfirmationDecision, PendingConfirmationResolvers, PendingInputResolvers, PendingInteractionKind } from '../../types/records.js'
-import { ChatRuntimeEvents } from '../../utils/wire/chat-runtime.js'
+import { buildConfirmationDenialMessage } from '../../utils/records/execution-interactions'
+
+import { chatRuntimeEvents } from './ChatRuntimeEvents'

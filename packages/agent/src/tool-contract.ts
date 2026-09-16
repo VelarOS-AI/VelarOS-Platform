@@ -1,96 +1,17 @@
-export type { ApprovalPort } from './contract/requires.js'
-export type { InteractionPort } from './contract/requires.js'
-export { fileContextFor } from './impl/context/FileContextCoordinator'
+// `./tool-contract` 入口：空间包与宿主写工具时要的那几件。
+// 通用的工具定义、说明渲染、schema 打包、宽容入参与身份判定都在 `@velaros-ai/tool-contract`；
+// 这里只留跟 Agent 审批语义、入参复用与文件上下文绑定的部分。
+export type { ToolInputReuseStoreApi } from './contract/provides.js'
+export type { ApprovalPort, InteractionPort } from './contract/requires.js'
+export type { FileContextCoordinatorApi } from './impl/context/FileContextCoordinator'
+export type { FileContextRegistryApi } from './impl/context/FileContextRegistry'
+export { fileContextRegistry } from './impl/context/FileContextRegistry'
+export type { AgentToolContractsApi } from './impl/tools/AgentToolContracts'
+export { agentToolContracts } from './impl/tools/AgentToolContracts'
 export { defaultDenyApprovalPort } from './impl/tools/DefaultDenyApprovalPort'
-export {
-  resolveToolInputReuse,
-  ToolInputReuseSchema,
-  withToolInputReuse,
-} from './impl/tools/ToolInputReuseStore'
+export { resolveToolInputReuse, toolInputReuseStore, withToolInputReuse } from './impl/tools/ToolInputReuseStore'
 export { createUnattendedSubAgentApprovalPort } from './impl/tools/UnattendedSubAgentApprovalPort'
 export { defaultUnsupportedInteractionPort } from './impl/tools/UnsupportedInteractionPort'
 export type { FileContextCarrier, FileContextRange, FileContextSnapshot, FileContextSource } from './types/context.js'
-export type { DefineToolContractInput, DefineToolContractSurfaceInput, DefineToolRuntimeSpecInput, NonEmptyToolContractList, ToolContractDescriptionSpec, ToolContractExecute, ToolContractRole, ToolContractRuntimeSpec, ToolContractSpec, ToolContractSurface, ToolInputReuseContract, ToolInputReuseMigrationRequest } from './types/toolkit.js'
-export type { ManualApprovalOptions, UnattendedApprovalEscalationHooks } from './types/toolkit.js'
-export type { AppliedAdjustment } from './types/toolkit.js'
-export type { ToolConceptRegistry } from './types/toolkit.js'
-export type { ToolCallableOperationsOptions, ToolContextResolver } from './types/toolkit.js'
-export type { CreateToolSchemaBundleOptions, ToolSchemaBundle, ToolSchemaSource } from './types/toolkit.js'
-export type { StructuredParameterDescriptionSpec, StructuredToolDescriptionParts, StructuredToolDescriptionSpec, ToolDescriptionBudgetWaiver, ToolDescriptionBudgetWaiverReason, ToolDescriptionDetail } from './types/toolkit.js'
+export type { BoundedReadInput, ManualApprovalOptions, RecursiveTraversalInput, ToolInputReuseContract, ToolInputReuseMigrationRequest, UnattendedApprovalEscalationHooks } from './types/toolkit.js'
 export type { ToolInputReuseOptions } from './types/tools.js'
-export { createManualApprovalOptions } from './utils/toolkit/approval'
-export {
-  createToolCallableOperations,
-  parseToolWireInput,
-} from './utils/toolkit/callable-operations'
-export {
-  createToolConceptLookup,
-  defineToolConcepts,
-  globalToolConcept,
-  GlobalToolConcepts,
-} from './utils/toolkit/concepts'
-export {
-  buildToolContractDescription,
-  defineToolContract,
-  defineToolRuntimeSpec,
-  isToolContractSpec,
-  resolveToolReadOnly,
-} from './utils/toolkit/define-tool-contract'
-export {
-  readToolSchemaDiscoveryNames,
-  ToolContractDiscoveryDescriptors,
-} from './utils/toolkit/discovery'
-export type { ToolContractExampleRegistry } from './utils/toolkit/examples'
-export {
-  createToolExampleRegistry,
-  DefaultToolContractExampleRegistry,
-  renderToolExampleInputs,
-  serializeToolExampleInput,
-} from './utils/toolkit/examples'
-export {
-  buildAppliedAdjustments,
-  buildValidItemsHint,
-  clampedInt,
-  emptyIsNoop,
-  inferActionFromFields,
-  preferFirst,
-  withDefaultNote,
-} from './utils/toolkit/forgiving-schema'
-export {
-  assertCanonicalToolId,
-  CanonicalToolIdPattern,
-  isCanonicalToolId,
-} from './utils/toolkit/identity'
-export {
-  canonicalizeProviderInputSchema,
-  createToolSchemaBundle,
-  schemaToInputSchema,
-} from './utils/toolkit/schema-bundle'
-export { createApprovalOperationKey, createTaskApprovalPort } from './utils/toolkit/task-approval'
-export {
-  assertToolDescriptionWithinBudget,
-  assertToolDescriptionWithinLimit,
-  compactStructuredToolDescription,
-  isStructuredParameterDescription,
-  isStructuredToolDescription,
-  parseStructuredToolDescription,
-  renderParameterDescription,
-  renderToolDescription,
-  renderUsageSkillNote,
-  structureToolDescriptionForModel,
-  structureToolDescriptionsForCategory,
-  ToolDescriptionBudgetChars,
-  ToolDescriptionMaxChars,
-} from './utils/toolkit/tool-description'
-export {
-  applyDefaultRecursiveMaxDepth,
-  optionalReadEndLine,
-  optionalReadMaxChars,
-  optionalReadStartLine,
-  refineBoundedReadInput,
-  requiredNonNegativeMaxDepth,
-  requiredPositiveMaxDepth,
-  requiredResultLimit,
-  ToolInputBoundMessages,
-  withReadBoundJsonSchemaConstraints,
-} from './utils/toolkit/tool-input-bounds'

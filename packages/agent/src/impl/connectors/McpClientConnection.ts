@@ -6,23 +6,16 @@
 import { UnauthorizedError } from '@modelcontextprotocol/sdk/client/auth.js'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js'
-import { getDefaultEnvironment, StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
+import { getDefaultEnvironment,StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js'
 
-import {
-  isArray,
-  isPresent,
-  isRecord,
-  Log,
-  toNullable,
-  toOptional,
-} from '@velaros-ai/core'
+import { isArray, isPresent, isRecord, Log, toNullable, toOptional } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import { McpLimits } from '../../contract/constants.js'
 import type { McpAuthorizationProvider } from '../../contract/requires.js'
-import type { McpConnectionSpec, McpPendingAuthorization, McpPendingConnection,McpRawCallResult, McpRemoteTransport, McpResourceContent, McpResourceDescriptor, McpToolDescriptor, McpTransportKind } from '../../types/connectors.js'
+import type { McpConnectionSpec, McpPendingAuthorization, McpPendingConnection, McpRawCallResult, McpRemoteTransport, McpResourceContent, McpResourceDescriptor, McpToolDescriptor, McpTransportKind } from '../../types/connectors.js'
 import { isMcpTimeoutError, parseMcpToolDescriptor } from '../../utils/connectors/mcp-protocol'
 import { McpAuthorizationRequiredError } from '../errors/McpAuthorizationRequiredError'
 
@@ -32,7 +25,6 @@ export const McpConnectTimeoutMs: number = McpLimits.connectTimeoutMs
 export const McpCallTimeoutMs: number = McpLimits.callTimeoutMs
 
 const log = Log.tag('McpClientConnection')
-
 
 /**
  * 单个外部 MCP 服务器的进程外连接：起 transport、initialize、枚举工具和资源、发调用、收尾。
@@ -379,4 +371,14 @@ export class McpClientConnection implements McpClientConnectionApi {
       log.debug('mcp transport close failed', { server: this.serverName })
     }
   }
+}
+
+/** 建一条到 MCP 服务器的连接；超时与授权口由选项注入。 */
+export function createMcpClientConnection(serverName: string, spec: McpConnectionSpec, options: {
+      connectTimeoutMs?: number
+      callTimeoutMs?: number
+      /** 已建立的连接意外关闭时通知宿主，供其撤回工具目录。 */
+      onClose?: () => void
+    } = {}): McpClientConnectionApi {
+  return new McpClientConnection(serverName, spec, options)
 }

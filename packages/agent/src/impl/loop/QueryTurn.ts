@@ -4,51 +4,38 @@ import { isEmpty, toNullable, toOptional } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 
-import type {ProviderRequestSnapshot } from '../../types/context.js'
+import type { ProviderRequestSnapshot } from '../../types/context.js'
 import type { AgentModelRequestPort, AgentModelStreamInput, ExecuteQueryTurnArgs, InterruptedStreamPartial, QueryTurnToolContext, QueryTurnToolRegistry } from '../../types/loop.js'
-import type { ContextGovernanceSessionRegistryApi } from '../../types/residency.js'
+import type { ContextGovernanceSessionRegistryContract } from '../../types/residency.js'
 import { assertProviderRequestSnapshotReconstructable } from '../../utils/context/provider-request-snapshot'
 import { createInternalFollowUpMessage } from '../../utils/history/internal-messages'
-import {
-  buildProviderTurnId,
-  createQueryTurnStreamConsumerEvents,
-  createQueryTurnToolExecutorEvents,
-} from '../../utils/loop/loop-turn-assembly'
+import { buildKernelContextEpoch, recordKernelContextEpochDiagnostic } from '../../utils/loop/kernel-context-epoch-guard'
+import { buildProviderTurnId, createQueryTurnStreamConsumerEvents, createQueryTurnToolExecutorEvents } from '../../utils/loop/loop-turn-assembly'
 import { assertModelInputCompatibility } from '../../utils/model/model-input-compatibility'
 import { normalizeModelRequestError } from '../../utils/model/model-request-error'
 import { mergeSessionPromptCacheProviderOptions } from '../../utils/model/prompt-cache'
+import { emitCompletedProviderTurnSnapshot } from '../../utils/records/provider-turn-event-reducer'
 import { compareStableStrings } from '../../utils/residency/determinism'
 import { resolveGovernanceSessionKey } from '../../utils/residency/session-key'
-import {
-  buildOutputTruncationContinuationPrompt,
-  isOutputTruncationError,
-} from '../../utils/stream/output-truncation-recovery'
+import { buildOutputTruncationContinuationPrompt, isOutputTruncationError } from '../../utils/stream/output-truncation-recovery'
 import { AgentTuning } from '../../utils/tuning'
-import { ChatRuntimeEvents } from '../../utils/wire/chat-runtime.js'
 import { resolveModelContextUsageOptions } from '../context/AgentLoopContextUsageManager'
-import { compileProviderSendRequest, ProviderRequestCompiler } from '../context/ProviderRequestCompiler'
-import { emitCompletedProviderTurnSnapshot, ProviderTurnEventReducer } from '../records/ProviderTurnEventReducer'
+import type { ProviderRequestCompilerApi } from '../context/ProviderRequestCompiler'
+import { compileProviderSendRequest,ProviderRequestCompiler } from '../context/ProviderRequestCompiler'
+import { chatRuntimeEvents } from '../records/ChatRuntimeEvents'
+import type { ProviderTurnEventReducerApi } from '../records/ProviderTurnEventReducer'
+import { ProviderTurnEventReducer } from '../records/ProviderTurnEventReducer'
 import type { TurnHistoryApi } from '../records/TurnHistory'
 import { KernelToolLoopGuard } from '../tools/KernelToolLoopGuard'
+import type { ToolExecutionPolicyApi } from '../tools/ToolExecutionPolicy'
 import { ToolExecutionPolicy } from '../tools/ToolExecutionPolicy'
 import { ToolExecutor } from '../tools/ToolExecutor'
 
 import { AiSdkAgentModelRequestPort, applyModelRequestPolicy } from './AiSdkAgentModelRequestPort'
-import { buildKernelContextEpoch, recordKernelContextEpochDiagnostic } from './KernelContextEpochGuard'
-import {
-  buildKernelPrefixShape,
-  KernelPrefixShapeTracker,
-  recordKernelPrefixShapeDiagnostic,
-} from './KernelPrefixShapeTracker'
-import { createLinkedAbortScope } from './LinkedAbortScope'
+import { buildKernelPrefixShape, KernelPrefixShapeTracker, recordKernelPrefixShapeDiagnostic } from './KernelPrefixShapeTracker'
+import { LinkedAbortScope } from './LinkedAbortScope'
 import { ProviderTurnRequestHelper } from './ProviderTurnRequestHelper'
-import {
-  AgentConnectionRetryHelper,
-  AiSdkMaxRetries,
-  isContextOverflowError,
-  markContextOverflowReplayUnsafe,
-  MaxConnectionRetryAttempts,
-} from './RetryPolicy'
+import { agentRetryPolicy, AiSdkMaxRetries, markContextOverflowReplayUnsafe,MaxConnectionRetryAttempts, RetryPolicy } from './RetryPolicy'
 import { StreamConsumer, type StreamConsumerTurnState } from './StreamConsumer'
 
 /**
@@ -119,11 +106,11 @@ export interface QueryTurnApi<TToolContext extends QueryTurnToolContext = QueryT
 class QueryTurn<TToolContext extends QueryTurnToolContext = QueryTurnToolContext>
   implements QueryTurnApi<TToolContext>
 {
-  private readonly connectionRetryHelper = new AgentConnectionRetryHelper()
-  private readonly executionPolicy: ToolExecutionPolicy
+  private readonly connectionRetryHelper = new RetryPolicy()
+  private readonly executionPolicy: ToolExecutionPolicyApi
   /** 逐块消费 fullStream 的唯一引擎（与 StreamTurn 共用同一实现）。 */
   private readonly streamConsumerHelper: StreamConsumer
-  private readonly requestCompiler: ProviderRequestCompiler
+  private readonly requestCompiler: ProviderRequestCompilerApi
   private readonly log = logRuntime.tag('QueryTurn')
   private readonly turnRequestHelper = new ProviderTurnRequestHelper(this.log, 'query')
   private readonly prefixShapeTracker = new KernelPrefixShapeTracker()
@@ -132,7 +119,7 @@ class QueryTurn<TToolContext extends QueryTurnToolContext = QueryTurnToolContext
     private readonly toolRegistry: QueryTurnToolRegistry<TToolContext>,
     private readonly turnHistoryHelper: TurnHistoryApi,
     /** 治理会话登记处（宿主级单实例，驻留账本与 epoch 状态跨回合共享一份，必传）。 */
-    private readonly governanceSessions: ContextGovernanceSessionRegistryApi,
+    private readonly governanceSessions: ContextGovernanceSessionRegistryContract,
     private readonly modelRequestService: AgentModelRequestPort =
       new AiSdkAgentModelRequestPort()
   ) {
@@ -179,7 +166,7 @@ class QueryTurn<TToolContext extends QueryTurnToolContext = QueryTurnToolContext
             onRetry: (error, attempt) => {
               args.onModelRequestRetry?.(error, attempt)
               args.events?.emitRuntime(
-                ChatRuntimeEvents.reconnecting(attempt, MaxConnectionRetryAttempts)
+                chatRuntimeEvents.reconnecting(attempt, MaxConnectionRetryAttempts)
               )
             },
           }
@@ -224,7 +211,7 @@ class QueryTurn<TToolContext extends QueryTurnToolContext = QueryTurnToolContext
           .map((part) => part.text ?? '')
           .join('')
         args.events?.emitRuntime(
-          ChatRuntimeEvents.reconnecting(
+          chatRuntimeEvents.reconnecting(
             outputWasTruncated ? outputTruncationRecoveries : connectionContinuationRecoveries,
             maxAttempts
           )
@@ -265,9 +252,9 @@ class QueryTurn<TToolContext extends QueryTurnToolContext = QueryTurnToolContext
         ? this.streamConsumerHelper
         : new StreamConsumer(toolRegistry)
     const startedAt = Date.now()
-    const requestAbortScope = createLinkedAbortScope(args.toolContext.abortSignal)
+    const requestAbortScope = new LinkedAbortScope([args.toolContext.abortSignal])
     let didLogTurnEnd = false
-    let providerTurnReducer: ProviderTurnEventReducer | undefined
+    let providerTurnReducer: ProviderTurnEventReducerApi | undefined
     this.log.info('model query turn start', {
       turn: toNullable(args.turn),
       model: args.model,
@@ -535,7 +522,7 @@ class QueryTurn<TToolContext extends QueryTurnToolContext = QueryTurnToolContext
       }
     } catch (error) {
       requestAbortScope.abort(error)
-      if (isContextOverflowError(error) && (turnState.hasVisibleOutput || turnState.hasToolUse)) {
+      if (agentRetryPolicy.isContextOverflowError(error) && (turnState.hasVisibleOutput || turnState.hasToolUse)) {
         markContextOverflowReplayUnsafe(error, {
           hasVisibleOutput: turnState.hasVisibleOutput,
           hasToolUse: turnState.hasToolUse,
@@ -609,7 +596,7 @@ class QueryTurn<TToolContext extends QueryTurnToolContext = QueryTurnToolContext
 
   private emitProviderTurnSnapshot(
     args: ExecuteQueryTurnArgs<TToolContext>,
-    reducer?: ProviderTurnEventReducer,
+    reducer?: ProviderTurnEventReducerApi,
     options: { requirePendingTools?: boolean } = {}
   ): void {
     emitCompletedProviderTurnSnapshot({

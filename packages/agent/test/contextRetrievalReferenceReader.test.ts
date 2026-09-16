@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { afterEach, test } from "node:test";
 
 import { ContextRetrievalReferenceReader } from "../src/impl/retrieval/ContextRetrievalReferenceReader";
-import { chatSearchRanking } from "../src/utils/retrieval/ranking";
+import { buildHeadTailSnippet } from '../src/utils/retrieval/ranking'
 
 const temporaryRoots: string[] = [];
 
@@ -38,7 +38,7 @@ void test("preserves the authoritative tail across log sampling and display snip
   assert.match(log?.content ?? "", /event-001/u);
   assert.match(log?.content ?? "", /event-400/u);
 
-  const displaySnippet = chatSearchRanking.buildHeadTailSnippet(
+  const displaySnippet = buildHeadTailSnippet(
     log?.content ?? "",
     300,
   );

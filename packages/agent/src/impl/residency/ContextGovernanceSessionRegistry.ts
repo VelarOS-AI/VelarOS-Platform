@@ -1,11 +1,11 @@
 import { toNullable } from '@velaros-ai/core'
 
 import type { ContextMigrationEventSink } from '../../contract/requires.js'
-import type { ContextDistiller, ContextGovernanceConfig, ContextGovernanceConfigInput, ContextGovernanceSessionRegistryApi as ContextGovernanceSessionRegistryContract, ContextHandoffSignal, ContextRecordClassifier, GovernanceEpochReport, GovernanceEpochSource } from '../../types/residency.js'
-import { resolveContextGovernanceConfig } from '../../utils/residency/governance-config'
+import type { ContextDistiller, ContextGovernanceConfig, ContextGovernanceConfigInput, ContextGovernancePresetName, ContextGovernanceSessionRegistryContract, ContextGovernanceSessionRegistryOptions, ContextHandoffSignal, ContextRecordClassifier, GovernanceEpochReport, GovernanceEpochSource } from '../../types/residency.js'
+import { compareStableStrings } from '../../utils/residency/determinism'
+import { ContextGovernancePresetNames, ContextGovernancePresets, resolveContextGovernanceArmName, resolveContextGovernanceConfig } from '../../utils/residency/governance-config'
 import { AgentTuning } from '../../utils/tuning'
 
-import type { ContextGovernanceSessionRegistryOptions } from './ContextGovernanceSession'
 import { ContextGovernanceSession } from './ContextGovernanceSession'
 
 /**
@@ -15,7 +15,16 @@ import { ContextGovernanceSession } from './ContextGovernanceSession'
  * 按最近使用淘汰最旧的（`resolve` 命中会把条目挪到尾部）。编译器、召回服务和转交信号读的都是这一份状态。
  * 形状与对外公开的 `ContextGovernanceSessionRegistryApi` 同源，这里把它挪到类上方当本类的接口。
  */
-export interface ContextGovernanceSessionRegistryApi extends ContextGovernanceSessionRegistryContract {}
+export interface ContextGovernanceSessionRegistryApi extends ContextGovernanceSessionRegistryContract {
+  /** 实验臂预设表：四臂同引擎，差异只在器械档位；分臂实验按名取配置。 */
+  readonly presets: Readonly<Record<ContextGovernancePresetName, ContextGovernanceConfigInput>>
+  /** 实验臂的名字清单，顺序固定。 */
+  readonly presetNames: readonly ContextGovernancePresetName[]
+  /** 认出一份治理配置对应哪个实验分臂；都不匹配返回 null。 */
+  resolveArmName(config: ContextGovernanceConfig): Nullable<ContextGovernancePresetName>
+  /** 与治理账本同源的稳定字符串比较：同内容必同序。 */
+  compareStableStrings(left: string, right: string): number
+}
 
 /**
  * 治理会话登记处（宿主级单实例）。
@@ -23,6 +32,10 @@ export interface ContextGovernanceSessionRegistryApi extends ContextGovernanceSe
  * 取代 `ContextAttentionSessionRegistry` 的注入位：编译器、召回服务与转交信号消费同一份状态。
  */
 export class ContextGovernanceSessionRegistry implements ContextGovernanceSessionRegistryApi {
+  public readonly presets: Readonly<Record<ContextGovernancePresetName, ContextGovernanceConfigInput>> =
+    ContextGovernancePresets
+  public readonly presetNames: readonly ContextGovernancePresetName[] = ContextGovernancePresetNames
+
   private readonly sessions = new Map<string, ContextGovernanceSession>()
   private config: ContextGovernanceConfig
   private readonly classifier: Nullable<ContextRecordClassifier>
@@ -157,4 +170,17 @@ export class ContextGovernanceSessionRegistry implements ContextGovernanceSessio
     const oldestFirst = [...this.sessions.keys()].slice(0, overflow)
     for (const sessionId of oldestFirst) this.sessions.delete(sessionId)
   }
+
+  public resolveArmName(config: ContextGovernanceConfig): Nullable<ContextGovernancePresetName> {
+    return resolveContextGovernanceArmName(config)
+  }
+
+  public compareStableStrings(left: string, right: string): number {
+    return compareStableStrings(left, right)
+  }
+}
+
+/** 建一份上下文治理的会话登记处：每个会话的驻留账本与压缩进度都挂在它身上。 */
+export function createContextGovernanceSessionRegistry(options: ContextGovernanceSessionRegistryOptions = {}): ContextGovernanceSessionRegistryApi {
+  return new ContextGovernanceSessionRegistry(options)
 }

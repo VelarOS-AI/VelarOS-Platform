@@ -3,12 +3,13 @@ import type { z } from 'zod'
 
 import type { AppError } from '@velaros-ai/core/error'
 
-import type { AgentExecutionConfig,AgentModelProvider, AgentModelRequestOptions, ToolExecutionApi } from '../contract/requires.js'
+import type { AgentExecutionConfig, AgentModelProvider, AgentModelRequestOptions, ToolExecutionApi } from '../contract/requires.js'
 
-import type { AgentModelInputModality, AgentRoleId, ExecutionTaskStatus, SubAgentSessionStatus, SubAgentStructuredOutputContract, SubAgentTaskMode, SubAgentTaskRequest, SubAgentTaskResult, SubAgentTaskResultStatus, SubAgentToolDigestEntry, SubAgentTypeId, SubAgentUsage, SubAgentWindDownReason, TeamExecutionPhase,TeamModelRouteCategory, TeamModelSelectionTrace, TeamWorkerType, ThinkingDepth, ToolCategoryId } from './agent.js'
+import type { AgentModelInputModality, AgentRoleId, ExecutionTaskStatus, SubAgentSessionStatus, SubAgentStructuredOutputContract, SubAgentTaskMode, SubAgentTaskRequest, SubAgentTaskResult, SubAgentTaskResultStatus, SubAgentToolDigestEntry, SubAgentTypeId, SubAgentUsage, SubAgentWindDownReason, TeamExecutionPhase, TeamModelRouteCategory, TeamModelSelectionTrace, TeamWorkerType, ThinkingDepth, ToolCategoryId } from './agent.js'
 import type { AgentExecutionLimits } from './loop.js'
-import type { ExecutionEventBusApi, SubAgentGuidanceRelayWorkerHandle } from './records.js'
+import type { ExecutionEventBusContract, SubAgentGuidanceRelayWorkerHandle } from './records.js'
 import type { CodingSessionSnapshot } from './session.js'
+
 
 export interface SubAgentQueryOptions {
   roleId?: AgentRoleId
@@ -19,7 +20,7 @@ export interface SubAgentQueryOptions {
     reason: string
   ) => Promise<SubAgentToolCategoryRequestResult>
   runtimeOverride?: SubAgentRuntimeOverride
-  events?: ExecutionEventBusApi
+  events?: ExecutionEventBusContract
   streamTextDeltas?: boolean
   identity?: string
   contextEpochScope?: string
@@ -142,7 +143,7 @@ export interface FindingRecord {
 export interface SubAgentDispatchRequest {
   input: SubAgentDispatchInput
   parentCtx: SubAgentToolContext
-  events: ExecutionEventBusApi
+  events: ExecutionEventBusContract
   config: AgentExecutionConfig
   /**
    * 本次顶层执行的 id；缺省取 `config.execution.executionId`，再缺省回退父会话 id。
@@ -174,7 +175,7 @@ export interface DispatchPromptScope {
 
 /** 派发控制分片：运行编排所需的事件面 / 重试 / 中继 / 模型覆盖 / effort 覆盖。 */
 export interface DispatchControlScope {
-  workerEvents: ExecutionEventBusApi
+  workerEvents: ExecutionEventBusContract
   retryState: SubAgentRetryState
   relayHandle: Nullable<SubAgentGuidanceRelayWorkerHandle>
   resolvedModelOverride: Nullable<string>
@@ -415,4 +416,12 @@ export interface ResolvedSubAgentTypeConfig extends Omit<SubAgentTypeDescriptor,
   subagentType: SubAgentTypeId
   customAgentId?: string
   customAgentName?: string
+}
+
+/** 建 {@link SubAgentSessionStore} 时的装配项；两项都可缺省，产品一般只传 limits。 */
+export interface SubAgentSessionStoreOptions {
+  /** 保留上限；缺省取 `resolveAgentExecutionLimits()` 的默认值。 */
+  limits?: SubAgentThreadRetentionLimits
+  /** 时钟（epoch 毫秒），供测试注入；缺省 `Date.now()`。 */
+  now?: () => number
 }

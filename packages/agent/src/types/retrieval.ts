@@ -1,4 +1,4 @@
-import type { ChatContextEvidenceRecord, ChatContextRetrievalIndexDiagnostics,ChatContextRetrievalIndexLoadSource, ChatContextRetrievalIndexSourceFingerprint, ChatMessage, ChatSessionToolResultPayload, SerializedMessage } from './agent.js'
+import type { ChatContextEvidenceRecord, ChatContextRetrievalIndexDiagnostics, ChatContextRetrievalIndexLoadSource, ChatContextRetrievalIndexSourceFingerprint, ChatMessage, ChatSessionToolResultPayload, SerializedMessage } from './agent.js'
 import type { ContextRecord } from './residency.js'
 
 export type ChatContextRetrievalIndexToolPayload =
@@ -181,7 +181,7 @@ export interface ChatContextRetrievalIndexStore {
 }
 
 /**
- * {@link chatSearchRanking.rankContextText} 的完整打分输出。
+ * {@link rankContextText} 的完整打分输出。
  * 供会话搜索、history 搜索、terminal 搜索与 query trace 共用。
  */
 export interface RankingSignals {
@@ -203,7 +203,7 @@ export interface RankingSignals {
 
 /**
  * 单条 {@link ChatMessage} 的扁平搜索索引。
- * `searchableText` 是 {@link chatSearchRanking.rankContextText} 的实际输入。
+ * `searchableText` 是 {@link rankContextText} 的实际输入。
  */
 export interface MessageSearchIndex {
   /** 仅 text block 合并后的可见正文（不含 tool 结果）。 */
@@ -286,4 +286,31 @@ export interface ArtifactManifestSnippet {
   /** 文本类 artifact 的文件头 preview；二进制为 null。 */
   preview: LooseOptional<string>
   warning: LooseOptional<string>
+}
+
+// 四条进程内容量上限都在 AgentTuning.retrieval：计数索引 countEntryLimit、构建遥测
+// indexBuildTelemetrySessionLimit、终端输出候选 terminalOutputPayloadCandidateLimit，以及内存索引缓存
+// cachedIndexSessionLimit——缓存的是整份索引快照（长会话可达数 MB），所以宁小勿大：真正的热点只有
+// "当前正在跑的那个会话"，8 个槽位足以覆盖并行子 agent + 用户手动切换，再多只是拿内存换命不中的概率。
+
+/** 建 `ChatContextRetrievalService` 时给的一组进程内容量上限；全部可以不传，不传就用本文件的缺省值。 */
+export interface ChatContextRetrievalServiceOptions {
+  /** handle/证据重复读取计数最多记多少个键，缺省 4096；键是「会话+scope+handle+jsonPath+offset」，满了按最近使用淘汰，被淘汰的 handle 重新从 1 数起（重复告警会漏报一次）。 */
+  maxRetrievalCountEntries?: LooseOptional<number>;
+  /** 索引构建遥测最多留多少个会话，缺省 512；只影响 `getRetrievalIndexDiagnostics` 能不能报出上次构建的来源和耗时。 */
+  maxIndexBuildTelemetrySessions?: LooseOptional<number>;
+  /** 搜终端输出时，每次最多挑多少条工具 payload 去读盘，缺省 64；这是读盘量的闸门，调大更全但更慢。 */
+  maxTerminalOutputPayloadCandidates?: LooseOptional<number>;
+  /** 内存里最多缓存几个会话的索引快照，缺省 8；一份快照长会话可达数 MB，热点其实只有当前在跑的那个，调大只是拿内存换命不中的概率。 */
+  maxCachedIndexSessions?: LooseOptional<number>;
+  /** 转给内部 `ContextRetrievalQueryTraceStore` 的容量上限，管查询计数表和每会话 trace 条数。 */
+  queryTrace?: ContextRetrievalQueryTraceStoreOptions;
+}
+
+/** 建 `ContextRetrievalQueryTraceStore` 时给的两个容量上限；两项都可以不传，不传就用本文件的缺省值。 */
+export interface ContextRetrievalQueryTraceStoreOptions {
+  /** 查询计数表最多记多少个键，缺省 4096；键是「会话+scope+kind+归一化查询」，满了按最近使用淘汰，被淘汰的查询重新从 1 数起。 */
+  maxQueryCountEntries?: LooseOptional<number>
+  /** 每个会话保留多少条最近的 trace，缺省 24；只影响 `getRecent` 能回溯多远，超出的从最旧的丢。 */
+  maxRecentQueryTracesPerSession?: LooseOptional<number>
 }

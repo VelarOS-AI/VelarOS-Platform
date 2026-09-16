@@ -120,7 +120,7 @@ describe('plan lifecycle tools', () => {
     expect(harness.readArtifact()?.status).toBe('active')
     expect(harness.readArtifact()?.metadata?.planLifecycle).toBe('paused')
 
-    const readPaused = await plansTools['plan:get'].execute({}, harness.context)
+    const readPaused = await plansTools['plan:update'].execute({}, harness.context)
     expect(readPaused.lifecycle).toBe('paused')
 
     const resumed = await plansTools['plan:update'].execute(
@@ -213,7 +213,7 @@ describe('plan lifecycle tools', () => {
     expect(harness.readArtifact()?.metadata?.executionId).toBe('plan-lifecycle-execution')
 
     harness.beginExecution('next-execution')
-    const beforeCreate = await plansTools['plan:get'].execute({}, harness.context)
+    const beforeCreate = await plansTools['plan:update'].execute({}, harness.context)
     expect(beforeCreate.lifecycle).toBe('active')
 
     const created = await plansTools['plan:update'].execute(

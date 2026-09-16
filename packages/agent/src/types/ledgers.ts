@@ -1,7 +1,8 @@
 /** 引擎负责分配、追加输入不得携带的基字段。 */
 
-import type { ExecutionSpan, ExecutionSpanMetrics,ExecutionSpanStatus, SessionEntry } from './agent.js'
+import type { ExecutionSpan, ExecutionSpanMetrics, ExecutionSpanStatus, SessionEntry } from './agent.js'
 import type { ProviderRequestSnapshot } from './context.js'
+
 
 export type EngineAssignedField = 'id' | 'parentId' | 'createdAt'
 
@@ -414,3 +415,22 @@ export interface JsonlParseResult<T> {
   /** 调用方据此决定是否 `truncateJsonlToLineCount` 回写修复。 */
   truncatedTail: boolean
 }
+
+/** {@link LedgerExecutionSpanScopeFactory} 装配依赖。 */
+export interface LedgerExecutionSpanScopeFactoryDeps {
+  /** 每会话执行账本文件路径（数据根下与 session ledger 平行目录）。 */
+  resolveLedgerPath: (sessionId: string) => string
+  /**
+   * D3：每会话 prompt 审计侧信道文件路径（与 span 账本物理平行，如 `execution-spans/<id>.prompts.jsonl`）。
+   * 缺省关闭——`recordPromptAudit` 降级 no-op（不装配 sidecar = 不落重内容）。
+   */
+  resolvePromptAuditPath?: (sessionId: string) => string
+  /** 非致命恢复事件回落（尾行修复等）；缺省进 warn 日志。 */
+  warn?: SpanLedgerWarn
+  /** 取当前时刻（epoch 毫秒）的时钟，交给录制器算 span 时长；缺省 `Date.now`，property 电池注入确定性时钟复现字节。 */
+  now?: () => number
+  /** 分配 span 身份的工厂；缺省由录制器回落到 `randomUUID`，测试注入递增序号让落盘 span 逐字节可比。 */
+  nextSpanId?: () => string
+}
+
+export type ExecutionSpanCategory = 'capability' | 'run' | 'turn' | 'model' | 'tool' | 'policy'

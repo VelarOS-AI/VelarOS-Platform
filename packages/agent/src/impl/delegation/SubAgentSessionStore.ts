@@ -17,30 +17,10 @@ import type { ModelMessage } from 'ai'
 import { isEmpty, isNotNull, isNull, toNullable, toOptional } from '@velaros-ai/core'
 
 import type { SubAgentSessionRecord, SubAgentSessionStatus, SubAgentTaskRequest, SubAgentTaskResult } from '../../types/agent.js'
-import type { CreateSubAgentSessionInput, DetachedThreadCandidate,SubAgentReleasedThread, SubAgentThreadRetention, SubAgentThreadRetentionLimits, ThreadRetentionState } from '../../types/delegation.js'
+import type { CreateSubAgentSessionInput, DetachedThreadCandidate, SubAgentReleasedThread, SubAgentSessionStoreOptions, SubAgentThreadRetention, SubAgentThreadRetentionLimits, ThreadRetentionState } from '../../types/delegation.js'
+import { addToIndex, removeFromIndex } from '../../utils/delegation/sub-agent-session-store'
 import { measureThreadHistoryChars } from '../../utils/delegation/thread-retention'
 import { resolveAgentExecutionLimits } from '../../utils/loop/execution-limits'
-
-/** 建 {@link SubAgentSessionStore} 时的装配项；两项都可缺省，产品一般只传 limits。 */
-interface SubAgentSessionStoreOptions {
-  /** 保留上限；缺省取 `resolveAgentExecutionLimits()` 的默认值。 */
-  limits?: SubAgentThreadRetentionLimits
-  /** 时钟（epoch 毫秒），供测试注入；缺省 `Date.now()`。 */
-  now?: () => number
-}
-
-function addToIndex(index: Map<string, Set<string>>, key: string, threadId: string): void {
-  const threads = index.get(key) ?? new Set<string>()
-  threads.add(threadId)
-  index.set(key, threads)
-}
-
-function removeFromIndex(index: Map<string, Set<string>>, key: string, threadId: string): void {
-  const threads = index.get(key)
-  if (!threads) return
-  threads.delete(threadId)
-  if (threads.size === 0) index.delete(key)
-}
 
 /**
  * 子 Agent 线程内存存储：执行期挂在执行上，执行结束后按父会话有限保留，供续跑复用上下文。
@@ -401,3 +381,8 @@ class SubAgentSessionStore implements SubAgentSessionStoreApi {
 
 export { SubAgentSessionStore }
 export type { SubAgentSessionStoreOptions }
+
+/** 建一份子 Agent 线程存储。 */
+export function createSubAgentSessionStore(options: SubAgentSessionStoreOptions = {}): SubAgentSessionStoreApi {
+  return new SubAgentSessionStore(options)
+}

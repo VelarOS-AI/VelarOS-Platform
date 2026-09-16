@@ -1,10 +1,9 @@
-import type { AgentEvent, StreamTurnContextPayload } from '../../types/agent'
-import type { ExecutionRecord } from '../../types/agent.js'
+import type { AgentEvent, ExecutionRecord, StreamTurnContextPayload } from '../../types/agent'
 import type { ExecutionAbortOptions } from '../../types/execution.js'
 import { chatStreamProtocol } from '../chat/ChatStreamProtocol'
 import { ExecutionAgentEventLedger } from '../records/ExecAgentEvents'
 import type { ExecutionRecords } from '../records/ExecutionRecords'
-import type { ExecutionStore } from '../records/ExecutionStore'
+import type { ExecutionStoreApi } from '../records/ExecutionStore'
 
 /**
  * `ExecutionAgentEventFacade` 的注入面，由 `ExecutionService` 在构造时填齐。
@@ -14,7 +13,7 @@ interface ExecutionAgentEventFacadeDependencies {
   /** 执行记录的高层读写口：本件用它按 sourceSession 找最近一次执行，并把 turn-context 里的角色同步进记录。 */
   records: ExecutionRecords
   /** 执行记录存储；交给事件账本，让每条 agent 事件先落进调试时间线。 */
-  store: ExecutionStore
+  store: ExecutionStoreApi
   /** 通知「这条执行的调试快照变了」，由服务重建 debug payload 发给 renderer。账本每写一条事件就调一次。 */
   emitExecutionDebug: (executionId: string) => void
   /** 读一条执行记录的当前状态；收到完成类事件时先读它，确认还在 running 才真的收尾。 */

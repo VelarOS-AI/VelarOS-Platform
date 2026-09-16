@@ -1,5 +1,4 @@
-import type { AgentTurnRouteIdentity, StreamTurnContextPayload } from '../../types/agent'
-import type { AgentRoleId, ExecutionTaskExecutionAdvice, ExecutionTaskPlanStep, ExecutionTaskRecommendedAction, ExecutionTaskRecord } from '../../types/agent.js'
+import type { AgentRoleId, AgentTurnRouteIdentity, ExecutionTaskExecutionAdvice, ExecutionTaskPlanStep, ExecutionTaskRecommendedAction, ExecutionTaskRecord, StreamTurnContextPayload } from '../../types/agent'
 import type { ExecutionRouteProvider, ResolvedTaskRoute } from '../../types/records.js'
 
 import { ExecPlanState } from './ExecPlanState'
@@ -68,3 +67,8 @@ class ExecRouting implements ExecRoutingApi {
 }
 
 export { ExecRouting, ExecRouting as ExecutionRoutingCoordinator }
+
+/** 建一台执行路由器：按回合身份解出下一步交给谁。 */
+export function createExecutionRouting(provider?: ExecutionRouteProvider): ExecRoutingApi {
+  return new ExecRouting(provider)
+}

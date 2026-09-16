@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
 
-import { chatSearchRanking } from "../src/utils/retrieval/ranking";
+import { rankContextText } from '../src/utils/retrieval/ranking'
 
 function collectPathHints(text: string): string[] {
-  return chatSearchRanking.rankContextText({
+  return rankContextText({
     query: "",
     terms: [],
     text,

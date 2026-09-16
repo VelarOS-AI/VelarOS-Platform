@@ -1,97 +1,25 @@
-import { isArray, isEmpty, isFiniteNumber, isNumber, isPlainObject, isPositiveNumber,isPresent, isString, isTrue, toNullable } from '@velaros-ai/core'
+import { isArray, isEmpty, isFiniteNumber, isNumber, isPlainObject, isPositiveNumber, isPresent, isString, isTrue, toNullable } from '@velaros-ai/core'
 
-import type { CapabilityValidationInterpreter,ReminderCapabilityResolver, RuntimePromptFeaturePolicy, RuntimeReminderProducer } from '../../contract/requires.js'
-import type {
-  ChatPromptFeatureId,
-  TaskApprovalRecord,
-  ToolConfirmationDecisionOptions,
-  ToolLayerTelemetryMetrics,
-  TurnPlanningTelemetryPayload,
-} from '../../types/agent'
-import type { CapabilityAutoApprovalNotice, CapabilityScopeId, RunProfileSelectionId,ThinkingDepth, ToolCategoryId, ToolSurfaceProfileId } from '../../types/agent.js'
+import type { ReminderCapabilityResolver, RuntimePromptFeaturePolicy } from '../../contract/requires.js'
+import type { CapabilityAutoApprovalNotice, CapabilityScopeId, ChatPromptFeatureId, RunProfileSelectionId, TaskApprovalRecord, ThinkingDepth, ToolCategoryId, ToolConfirmationDecisionOptions, ToolLayerTelemetryMetrics, ToolSurfaceProfileId, TurnPlanningTelemetryPayload } from '../../types/agent'
 import type { CapabilityValidationRunResult, CapabilityValidationStatus } from '../../types/capabilities.js'
-import type { CapabilityValidationFailure, CodingSessionSnapshot, CodingSessionToolCategoryToolNames, CodingSessionToolContext, RuntimeReminderConsumeResult,RuntimeReminderInput } from '../../types/session.js'
+import type { CapabilityValidationFailure, CodingSessionSnapshot, CodingSessionToolCategoryToolNames, CodingSessionToolContext, CodingSessionTrackerOptions, RuntimeReminderConsumeResult, RuntimeReminderInput } from '../../types/session.js'
 import type { ToolAllocatorRequest } from '../../types/tools.js'
-import {
-  DefaultRunProfileSelectionId,
-  DefaultToolSurfaceProfileId,
-} from '../../utils/runner/runtime-profiles'
+import { DefaultRunProfileSelectionId, DefaultToolSurfaceProfileId } from '../../utils/runner/runtime-profiles'
+import { normalizeResourceIdForTracker } from '../../utils/session/coding-session-tracker'
 import { shouldTrackDynamicToolCategoryLease } from '../../utils/session/tool-lease'
 import { AgentTuning } from '../../utils/tuning'
-import {
-  assertRunProfileSelectionId,
-  assertToolSurfaceProfileId,
-  resolveRunProfileSelectionId,
-  resolveToolSurfaceProfileId,
-} from '../../utils/wire/typed-field-asserts'
+import { assertRunProfileSelectionId, assertToolSurfaceProfileId, resolveRunProfileSelectionId, resolveToolSurfaceProfileId } from '../../utils/wire/typed-field-asserts'
 import { defaultRuntimePromptFeaturePolicy } from '../tools/DefaultPromptFeaturePolicy'
 
 import { CodingSessionEditResultHelper } from './CodingSessionEditResultHelper'
 import { CodingSessionVerificationHelper } from './CodingSessionVerificationHelper'
 import { CodingToolCallDeduper } from './CodingToolCallDeduper'
+import type { RuntimeReminderSchedulerApi } from './RuntimeReminderScheduler'
 import { RuntimeReminderScheduler } from './RuntimeReminderScheduler'
 import { SessionTelemetryCounters } from './SessionTelemetryCounters'
+import type { TaskApprovalStateApi } from './TaskApprovalState'
 import { TaskApprovalState } from './TaskApprovalState'
-
-/**
- * 建一台 {@link CodingSessionTracker} 时宿主交给它的全部装配项。
- *
- * 全是可选：产品把自己的工具目录、活动分类、授权与提醒策略灌进来，跟踪器自己不认识任何具体工具名。
- * 构造后除 `taskApprovals`（可由 fork 共享同一份）外都不再变——运行期改这些要新建跟踪器。
- */
-interface CodingSessionTrackerOptions {
-  /** 共享的任务授权账本；子 Agent fork 时把父的这份接过来，批准/拒绝对主子立即同时生效。缺省自建一份。 */
-  taskApprovals?: TaskApprovalState
-  /** 工具类别 → 该类别下的工具名清单（静态目录）。用于把工具名反查成类别，以及没绑 ToolContext 时兜底。 */
-  toolCategoryToolNames?: CodingSessionToolCategoryToolNames
-  /** 提示能力的归一化与「这个能力要开哪些工具类别」策略，由产品提供；缺省用运行时自带的那份。 */
-  promptFeaturePolicy?: RuntimePromptFeaturePolicy
-  /** 本会话起始的思考力度；运行期可由 `setThinkingDepth` 改。缺省 `balanced`。 */
-  thinkingDepth?: ThinkingDepth
-  /** 白名单：给了就只有名单内的类别可被启用，名单外的一律拒绝。缺省不限。 */
-  allowedToolCategories?: ToolCategoryId[]
-  /** 能力自身写盘后多久内忽略文件系统外部触碰回声（毫秒）；太短会把自己的写入误判成外部修改。 */
-  externalTouchCooldownMs?: number
-  /** 把宿主给的原始路径归一成会话内统一的资源 id；缺省用跟踪器自带的相对路径归一（拒绝 `..`）。 */
-  normalizeResourceId?: LooseOptional<(raw: string) => LooseOptional<string>>
-  /** 工具呈现档位的初值（决定工具面怎么铺开）；非法值会被断言拦下。 */
-  toolSurfaceProfile?: ToolSurfaceProfileId
-  /** 运行档位的初值；非法值会被断言拦下。 */
-  runProfile?: RunProfileSelectionId
-  /** 起始就处于「激活」的类别（已启用里再挑一层）；缺省等于全部已启用类别。 */
-  activeToolCategories?: ToolCategoryId[]
-  /** 黑名单：名单内的类别一律不许启用，优先级高于白名单。 */
-  deniedToolCategories?: readonly ToolCategoryId[]
-  /** 常驻类别：不会被关停、也不会被轮次租约到期换出（但具体工具 schema 仍受预算约束）。 */
-  residentToolCategories?: readonly ToolCategoryId[]
-  /** 按名换入的工具租约能撑几轮不被用到就到期；至少 1，缺省 64。 */
-  toolNameLeaseTurns?: number
-  /** 轮次规划快照最多留几份（按最近使用淘汰）；至少 1，缺省 8。 */
-  maxTurnPlanningSnapshots?: number
-  /** 本次执行当前拥有的互斥能力作用域身份。 */
-  activeCapabilityScope?: CapabilityScopeId
-  /** 产品提供的验证结果解释器；空表示本产品没有「验证」概念，验证相关提醒全部不触发。 */
-  validationInterpreters?: readonly CapabilityValidationInterpreter[]
-  /** 产品提供的运行时提醒 producer；构造时一次性注册进调度器。 */
-  reminderProducers?: readonly RuntimeReminderProducer[]
-  /** 按「这类工具算哪种活动」给工具类别分组，决定一次调用推进编辑版本、算检查还是算验证。 */
-  activityCategories?: {
-    /** 算「检查改动」的类别（读、列目录、看 diff 之类）；调过就把已检查版本推到当前编辑版本。 */
-    inspection?: readonly ToolCategoryId[]
-    /** 算「改代码」的类别；成功一次编辑版本 +1，并进入外部触碰冷却。 */
-    mutation?: readonly ToolCategoryId[]
-    /** 算「跑验证」的类别；调过就把已验证版本推到当前编辑版本，并收集验证结论。 */
-    validation?: readonly ToolCategoryId[]
-    /** 虽然会改东西、但改的是非代码产物的类别；不推进编辑版本，不触发「改完记得验证」。 */
-    nonCodeMutation?: readonly ToolCategoryId[]
-  }
-}
-
-function normalizeResourceIdForTracker(raw: string): LooseOptional<string> {
-  const rel = raw.replace(/\\/g, '/').replace(/^\/+/, '').trim()
-  if (!rel || rel.includes('..')) return null
-  return rel
-}
 
 /**
  * 编码会话跟踪器对外的全部面：一次主 Agent 执行期间，谁都经这一份问「改了什么、查没查、验没验、现在能用哪些工具、
@@ -107,7 +35,7 @@ export interface CodingSessionTrackerApi {
    *
    * 授权账本**共享同一份**（同一个任务的事实），所以批准、拒绝、收回对主子立即同时生效。
    */
-  forkForSubAgent(): CodingSessionTracker
+  forkForSubAgent(): CodingSessionTrackerApi
   /**
    * 会话内已知的资源最新 revision（资源 id → revision）。
    *
@@ -174,7 +102,7 @@ export interface CodingSessionTrackerApi {
    */
   attachToolContext(toolContext: CodingSessionToolContext): void
   /** 取出提醒调度器本体，供自动验证等外部逻辑复用同一批 producer，而不是各自再拼一套。 */
-  getReminderScheduler(): RuntimeReminderScheduler
+  getReminderScheduler(): RuntimeReminderSchedulerApi
   /** 把当前快照、编辑版本、思考力度与工具名解析器打包成 producer 需要的输入；每次要问提醒之前现算。 */
   buildReminderInput(): RuntimeReminderInput
   /** 记下「验证提醒已经针对当前这批改动发过了」，同一批改动不再重复提醒；没有任何改动时不记。 */
@@ -301,8 +229,10 @@ export interface CodingSessionTrackerApi {
   hasConfirmedRiskScope(scope: string): boolean
   /** 当前已批准的全部风险作用域。 */
   getConfirmedRiskScopes(): string[]
+  /** 本会话的任务审批账本；新一轮或子 Agent 要沿用同一份授权时按它传递。 */
+  readonly taskApprovalState: TaskApprovalStateApi
   /** 接过另一台跟踪器的授权账本（共享同一个对象）；新一轮与子 Agent 用它保持授权归属一致，其余状态仍各自独立。 */
-  useTaskApprovalStateFrom(source: CodingSessionTracker): void
+  useTaskApprovalStateFrom(source: CodingSessionTrackerApi): void
   /** 全部授权记录（含已拒绝、已收回）的深拷贝，供授权面板渲染。 */
   getTaskApprovalRecords(): TaskApprovalRecord[]
   /** 落一条审批结论（批准或拒绝）；`message` 是拒绝理由。同一个 key 重复落时沿用首次的记录 id。 */
@@ -444,7 +374,7 @@ class CodingSessionTracker implements CodingSessionTrackerApi {
   private readonly residentToolCategories: ReadonlySet<ToolCategoryId>
   private readonly enabledPromptFeatures: Set<ChatPromptFeatureId>
   private readonly sessionApprovedToolCategories = new Set<ToolCategoryId>()
-  private approvalState = new TaskApprovalState()
+  private approvalState: TaskApprovalStateApi = new TaskApprovalState()
   private readonly toolCategoryToolNames: CodingSessionToolCategoryToolNames
   private readonly inspectionTools: Set<string>
   private readonly verificationTools: Set<string>
@@ -469,7 +399,7 @@ class CodingSessionTracker implements CodingSessionTrackerApi {
   /**
    * 运行时提醒调度器：声明式管理 post-edit / 失败验证等动态提醒。
    */
-  private readonly reminderScheduler: RuntimeReminderScheduler
+  private readonly reminderScheduler: RuntimeReminderSchedulerApi
   /**
    * Tool context 解析器：可选注入，提供后用 ToolRegistry 派生可见工具名；
    * 没注入时回退到静态 ToolCategoryToolNames，避免测试场景必须 mock 完整 ToolContext。
@@ -480,7 +410,7 @@ class CodingSessionTracker implements CodingSessionTrackerApi {
 
   constructor(
     initialCategories: ToolCategoryId[] = [],
-    initialPromptFeatures: ChatPromptFeatureId[] = [...CodingSessionTracker.DefaultEnabledPromptFeatures],
+    initialPromptFeatures?: ChatPromptFeatureId[],
     /** 跨 turn 恢复的已批准工具类别，避免每次发消息都重新询问授权。 */
     initialApprovedCategories: ToolCategoryId[] = [],
     /**
@@ -549,7 +479,9 @@ class CodingSessionTracker implements CodingSessionTrackerApi {
       )
     )
     this.enabledPromptFeatures = new Set<ChatPromptFeatureId>(
-      this.promptFeaturePolicy.normalize(initialPromptFeatures)
+      this.promptFeaturePolicy.normalize(
+        initialPromptFeatures ?? [...CodingSessionTracker.DefaultEnabledPromptFeatures]
+      )
     )
     this.promptFeaturePolicy
       .getCategoriesForFeatures(this.getEnabledPromptFeatures())
@@ -590,7 +522,7 @@ class CodingSessionTracker implements CodingSessionTrackerApi {
    * 授权账本是同一任务的事实，主子共享；批准、拒绝与收回均立即对双方生效。
    * 持久副作用由注入能力服务和 WriteLeaseCoordinator 协调。
    */
-  public forkForSubAgent(): CodingSessionTracker {
+  public forkForSubAgent(): CodingSessionTrackerApi {
     const child = new CodingSessionTracker(
       [...this.enabledToolCategories],
       [...this.enabledPromptFeatures],
@@ -919,7 +851,7 @@ class CodingSessionTracker implements CodingSessionTrackerApi {
   }
 
   /** 给外部（如自动验证 helper）直接访问 scheduler 的能力，方便复用 producer。 */
-  public getReminderScheduler(): RuntimeReminderScheduler {
+  public getReminderScheduler(): RuntimeReminderSchedulerApi {
     return this.reminderScheduler
   }
 
@@ -1405,13 +1337,17 @@ class CodingSessionTracker implements CodingSessionTrackerApi {
     return !!normalizedScope && this.approvalState.has(normalizedScope)
   }
 
+  public get taskApprovalState(): TaskApprovalStateApi {
+    return this.approvalState
+  }
+
   public getConfirmedRiskScopes(): string[] {
     return this.approvalState.scopes()
   }
 
   /** 新一轮和子 Agent 保留同一授权归属；编辑、工具启用与提醒状态仍独立。 */
-  public useTaskApprovalStateFrom(source: CodingSessionTracker): void {
-    this.approvalState = source.approvalState
+  public useTaskApprovalStateFrom(source: CodingSessionTrackerApi): void {
+    this.approvalState = source.taskApprovalState
   }
 
   public getTaskApprovalRecords(): TaskApprovalRecord[] {
@@ -1675,3 +1611,8 @@ class CodingSessionTracker implements CodingSessionTrackerApi {
 
 export type { CodingSessionTrackerOptions }
 export { CodingSessionTracker }
+
+/** 建一份会话工作态：可见工具类别、提示词特性与本轮改动都记在它身上。 */
+export function createCodingSessionTracker(initialCategories: ToolCategoryId[] = [], initialPromptFeatures?: ChatPromptFeatureId[], initialApprovedCategories: ToolCategoryId[] = [], freshAutoApprovedCategories: ToolCategoryId[] = [], options: CodingSessionTrackerOptions = {}): CodingSessionTrackerApi {
+  return new CodingSessionTracker(initialCategories, initialPromptFeatures, initialApprovedCategories, freshAutoApprovedCategories, options)
+}

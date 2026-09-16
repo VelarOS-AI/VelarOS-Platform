@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test'
 
-import { createProviderToolReferenceCanonicalizer } from '../src/impl/tools/ProviderToolReferenceCanonicalizer'
+import { ProviderToolReferenceCanonicalizer } from '../src/impl/tools/ProviderToolReferenceCanonicalizer'
 import {
   assertCanonicalToolId,
   isCanonicalToolId,
@@ -102,7 +102,7 @@ describe('canonical tool identity', () => {
       )
     ).toBe('已用 project:read. 未调用 project__read_more。')
 
-    const stream = createProviderToolReferenceCanonicalizer(aliases)
+    const stream = new ProviderToolReferenceCanonicalizer(aliases)
     expect(stream.push('已用 project__')).toBe('已用 ')
     expect(stream.push('read，接着 interaction__ask')).toBe('project:read，接着 ')
     expect(stream.push('_user')).toBe('')

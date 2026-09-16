@@ -1,12 +1,7 @@
 import type { AgentRuntimeCapabilityPorts } from '../../contract/requires.js'
 import type { ToolCategoryId } from '../../types/agent.js'
 import type { CapabilityRunPlan, PlanCapabilityRunInput, ResolveCapabilityPageFaultsInput, ToolCategory, ToolPageFault } from '../../types/loop.js'
-import {
-  planCapabilityRun,
-  resolveCapabilityPageFaults,
-  resolveCapabilityProtectedTools,
-  resolveCapabilityToolCategoriesForExposure,
-} from '../../utils/loop/capability-run-planner'
+import { planCapabilityRun, resolveCapabilityPageFaults, resolveCapabilityProtectedTools, resolveCapabilityToolCategoriesForExposure } from '../../utils/loop/capability-run-planner'
 
 /**
  * 一轮请求的能力规划件：这轮换入哪些工具类别、暴露哪些工具、哪些工具缺页了。

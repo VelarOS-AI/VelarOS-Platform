@@ -1,16 +1,19 @@
 import type { ModelMessage } from 'ai'
 
-import type { AgentEvent, AgentRoleExpectedOutputKind, AgentRoleId, AgentTurnRouteIdentity,CapabilityScopeId, ChatRuntimeEvent, ExecutionEventRecord, ExecutionRecord, ExecutionTaskPlanStep, ExecutionTaskPlanStepStatus, ExecutionTaskRecord, StreamAssistantGeneratedFilePayload, StreamAssistantRawPayload, StreamAssistantSourcePayload, StreamExecutionGraphPayload, StreamReasoningPayload, StreamStatePayload, StreamToolCallPayload, StreamToolMetadataPayload, StreamToolProgressPayload, StreamToolResultPayload, StreamTurnContextPayload, StreamWorkerThreadPayload, TurnContextSourceId, TurnContextSourcePeekInput, TurnContextSourcePeekResult, WorkflowType } from './agent.js'
+import type { KernelBackgroundJobOutputStore } from '../contract/requires.js'
+
+import type { AgentEvent, AgentRoleExpectedOutputKind, AgentRoleId, AgentTurnRouteIdentity, CapabilityScopeId, ChatRuntimeEvent, ExecutionEventRecord, ExecutionRecord, ExecutionTaskPlanStep, ExecutionTaskPlanStepStatus, ExecutionTaskRecord, StreamAssistantGeneratedFilePayload, StreamAssistantRawPayload, StreamAssistantSourcePayload, StreamExecutionGraphPayload, StreamReasoningPayload, StreamStatePayload, StreamToolCallPayload, StreamToolMetadataPayload, StreamToolProgressPayload, StreamToolResultPayload, StreamTurnContextPayload, StreamWorkerThreadPayload, TurnContextDelta, TurnContextInspectHint, TurnContextSourceId, TurnContextSourcePeekInput, TurnContextSourcePeekResult, WorkflowType } from './agent.js'
+
 
 /**
  * 执行事件总线的最小形状：一次 run 里所有"往 UI 发事件"的出口。
  * 类实现在 impl/records/ExecutionEventBus.ts，这里只登记调用方看得到的那一面。
  */
-export interface ExecutionEventBusApi {
+export interface ExecutionEventBusContract {
   /** 在 agent 事件转发前插入旁路监听，ExecutionService 用它写入事件账本。 */
-  withAgentTap(tap: (event: AgentEvent) => void): ExecutionEventBusApi
+  withAgentTap(tap: (event: AgentEvent) => void): ExecutionEventBusContract
   /** 给团队 worker 内部模型循环使用的静默总线；options 缺席时只保留 contextInvalidated 上浮。 */
-  forWorkerExecution(options?: WorkerExecutionStreamOptions): ExecutionEventBusApi
+  forWorkerExecution(options?: WorkerExecutionStreamOptions): ExecutionEventBusContract
   /** 发送原始 agent 事件。 */
   emitAgent(event: AgentEvent): void
   /** 发送 runtime 级事件，如 done/error/aborted。 */
@@ -481,4 +484,63 @@ export interface BuildGuidanceRelayPromptInput {
 export interface MainAgentGuidanceDelivery {
   message: ModelMessage
   kind: 'planned-rewrite' | 'verbatim'
+}
+
+/** 往账本里记一条环境变化要填的东西：正文在这一刻就定稿，之后谁都不许重排版。 */
+export interface TurnContextLedgerAppendInput {
+  /** 这件事发生的时刻（毫秒时间戳）；不填就取写入时刻。事后补记时才需要显式传。 */
+  occurredAt?: number
+  /** 这条 delta 的短标签，投给模型时当这一行的抬头，例如来源名或操作名。 */
+  label: string
+  /** 投给模型的正文，`append` 时就得是最终形态：消费方原样投递，不再截断、不再拼接、不再改格式。 */
+  summaryText: string
+  /** 可选的细看线索：告诉模型想看全貌该调哪个工具、带什么参数。不填表示这条看完就够了。 */
+  inspect?: TurnContextInspectHint
+}
+
+/** `peek` 的结果：既给这次要投的 delta，也给回下次 peek 该带的游标基底。 */
+export interface TurnContextLedgerPeekResult {
+  /** 本账本的代次；和消费方手里的对不上，说明账本换过一茬，消费方要整段替换自己的 cursor 而不是接着往下读。 */
+  generation: string
+  /** 当前还留着的最旧那条的 seq；账本空时等于下一个要发的 seq。 */
+  headSeq: number
+  /** 至今发出过的最大 seq；消费方消费完这批后把 cursor 记到这里。 */
+  tailSeq: number
+  /** 有 delta 因容量被淘汰、而且正好落在这次请求的区间里时，给出最旧保留项的 seq，表示「这条之前的你没看到」。没缺口时不带这个字段。 */
+  droppedBeforeSeq?: number
+  /** 这次该投的 delta，按 seq 从小到大；`afterSeq` 之后的全部，可能为空数组。 */
+  deltas: TurnContextDelta[]
+}
+
+/** 建后台任务管理器时可以拧的几项；全部可选，不给就按默认值走。 */
+export interface KernelBackgroundJobManagerOptions {
+  /** 取当前时刻的函数（毫秒）。测试传一个可控的时钟，就能不真等地验证停滞告警和终态淘汰。默认 `Date.now`。 */
+  now?: () => number
+  /** 任务多久没有可见输出就算「疑似停滞」（毫秒）。`recordStalledJobs` 按它判断并往环境上下文里记一条提示；传 0 或不传表示不做停滞判断。 */
+  stalledAfterMs?: number
+  /** 终态任务在表里留多久（毫秒），超时被 `pruneTerminalJobs` 清掉。 */
+  terminalJobTtlMs?: number
+  /** 终态任务最多留几条，超出时从最旧的开始清。运行中的任务不受这条限制。 */
+  terminalJobLimit?: number
+  /** 一个任务在内存里最多留多少字符的输出；超了从头截，被截掉的量会在读输出时如实报给调用方。 */
+  outputMaxChars?: number
+  /** 把任务输出落到内存之外的存储（宿主实现）。给了就优先写它、从它读；读写一旦出错就对这个任务停用存储并回退到内存，同时把错误挂在快照的 `artifactError` 上。 */
+  outputStore?: KernelBackgroundJobOutputStore
+  /** 任务进入终态（完成、失败、取消）时回调一次，参数是该任务的快照；宿主用它做收尾通知。回调抛错不影响任务本身收尾。 */
+  onTerminal?: (job: KernelBackgroundJob) => void
+  /** task.lifecycle 可见 delta 的写入广播总线（每宿主一个实例，由宿主装配注入）；缺省则不通知 renderer。 */
+  turnContextAppendHub?: TurnContextAppendBus
+}
+
+/**
+ * 总线的三条出口：构造 `ExecutionEventBus` 时由宿主填，哪条不填哪条就静默丢弃。
+ * 派发是同步的，handler 抛错会冒泡回发事件的那一方。
+ */
+export interface ExecutionEventBusHandlers {
+  /** Agent 文本、工具、runtime、turn context 等流式事件。 */
+  agent?: (event: AgentEvent) => void
+  /** 面向 UI 的阶段/等待/完成等状态事件。 */
+  state?: (payload: StreamStatePayload) => void
+  /** 执行图和调试面板需要的结构化快照。 */
+  debug?: (payload: StreamExecutionGraphPayload) => void
 }

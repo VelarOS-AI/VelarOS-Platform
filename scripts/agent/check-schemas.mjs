@@ -10,8 +10,9 @@ import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { AgentWorkflowRuntime,agentWorkflowSchema } from '@velaros-ai/agent'
-import { createToolSchemaBundle } from '@velaros-ai/agent/tool-contract'
+import { createAgentWorkflowRuntime } from '@velaros-ai/agent'
+import { agentWorkflowSchema } from '../../packages/agent/src/utils/builtin/workflow-schemas.ts'
+import { toolSchemas } from '@velaros-ai/tool-contract'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const RepoRoot = resolve(HERE, '../..')
@@ -41,7 +42,7 @@ function bundleOf(collection) {
     description: '',
     schema: tool.schema,
   }))
-  return createToolSchemaBundle(sources)
+  return toolSchemas.bundle(sources)
 }
 
 // 消费一个 dist bundle 产物,缺失即失败(不静默跳过),返回 label→collection 映射供后续防线复用。
@@ -125,7 +126,7 @@ const reviewSchema = {
   required: ['verdict', 'confidence'],
   additionalProperties: false,
 }
-const fakeRuntime = new AgentWorkflowRuntime({
+const fakeRuntime = createAgentWorkflowRuntime({
   // 并发/总量的权威在派发器（P3 判决）：这里喂一份最宽松的真实快照，让归约语义探针不被配额干扰。
   limits: {
     maxConcurrentSubAgents: 4,
@@ -205,7 +206,7 @@ const repeatRun = await fakeRuntime.run(agentWorkflowSchema.parse({
   }],
 }), { runId: 'check:repeat' })
 
-const degradedRuntime = new AgentWorkflowRuntime({
+const degradedRuntime = createAgentWorkflowRuntime({
   limits: { maxConcurrentSubAgents: 4, maxSubAgentsPerExecution: 32, remainingDispatchBudget: 32 },
   dispatch: async ({ call }) => {
     if (call.id === 'review-c') return { call_id: call.id, status: 'failed', summary: 'simulated provider failure' }

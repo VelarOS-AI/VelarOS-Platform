@@ -2,30 +2,15 @@ import { toNullable } from '@velaros-ai/core'
 
 import type { RuntimePromptFeaturePolicy } from '../../contract/requires.js'
 import type { ToolCategoryOverview, ToolDescriptor } from '../../types/agent.js'
-import type { RegistryTool, ToolRegistryContext } from '../../types/tools'
-import type { RegisteredToolMap, ToolCapabilityPage, ToolCapabilityRegistryContext, ToolCapabilityRegistryListOptions, ToolDiscoveryToolAvailabilityInput } from '../../types/tools.js'
+import type { RegisteredToolMap, RegistryTool, ToolCapabilityPage, ToolCapabilityRegistryContext, ToolCapabilityRegistryListOptions, ToolDiscoveryToolAvailabilityInput, ToolRegistryContext } from '../../types/tools'
 import { decideToolCategoryAccess } from '../../utils/tools/access-policy'
 import { descriptorForRegisteredTool, reasonsForToolPage, schemaPolicyForAvailability } from '../../utils/tools/capability-registry'
-import {
-  nextActionForDiscoveryAvailability,
-  resolveToolDiscoveryAvailability,
-  schemaStateForDiscoveryAvailability,
-} from '../../utils/tools/discovery-availability'
+import { nextActionForDiscoveryAvailability, resolveToolDiscoveryAvailability, schemaStateForDiscoveryAvailability } from '../../utils/tools/discovery-availability'
 import { isToolCompatibleWithModelInputs } from '../../utils/tools/model-input-policy'
 import { isPluginBackedToolCategory } from '../../utils/tools/tool-space-resolver'
 
 import { defaultRuntimePromptFeaturePolicy } from './DefaultPromptFeaturePolicy'
 import { ToolRegistryHelper } from './ToolRegistry'
-
-
-
-
-
-
-
-
-
-
 
 /**
  * 工具能力发现面：给「模型现在能用什么、还能换入什么」这个问题出数据。
@@ -174,3 +159,8 @@ class ToolCapabilityRegistry implements ToolCapabilityRegistryApi {
 }
 
 export { ToolCapabilityRegistry }
+
+/** 建一份工具能力登记处：按能力声明决定工具在这一轮可不可见。 */
+export function createToolCapabilityRegistry(promptFeaturePolicy: RuntimePromptFeaturePolicy = defaultRuntimePromptFeaturePolicy): ToolCapabilityRegistryApi {
+  return new ToolCapabilityRegistry(promptFeaturePolicy)
+}

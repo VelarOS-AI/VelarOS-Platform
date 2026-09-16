@@ -48,75 +48,36 @@
 //  - 历史为空或超出体积上限的线程不可续跑，结果里 `resumable=false`，父 Agent 据此改为新派。
 import { randomUUID } from 'node:crypto'
 
-import {
-  isBoolean,
-  isEmpty,
-  isPresent,
-  Log,
-  toNullable,
-  toOptional,
-  truncate,
-} from '@velaros-ai/core'
+import { isBoolean, isEmpty, isPresent, Log, toNullable, toOptional, truncate } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import type { AgentRuntimeCapabilityPorts, CustomSubAgentRegistry, SubAgentConfigPort, SubAgentQueryRunner, SubAgentTypeProvider } from '../../contract/requires.js'
-import type {SubAgentTaskResult, SubAgentUsage, TeamModelSelectionTrace, ThinkingDepth, ToolCategoryId } from '../../types/agent.js'
+import type { SubAgentTaskResult, SubAgentUsage, TeamModelSelectionTrace, ThinkingDepth, ToolCategoryId } from '../../types/agent.js'
 import type { DispatchPlan, ResolvedDispatchPlan, ResolvedSubAgentTypeConfig, SubAgentDispatchCatalog, SubAgentDispatchLimitsSnapshot, SubAgentDispatchRequest, SubAgentModelChoice, SubAgentResumeBriefing, SubAgentRetryState, SubAgentThreadRetention, SubAgentToolCategoryRequestResult, SubAgentToolContext, SubAgentWorkerExecutionOutput, TeamModelRouteResult, WorkerStatusArgs } from '../../types/delegation.js'
 import type { AgentExecutionLimitOverrides, AgentExecutionLimits } from '../../types/loop.js'
-import type { ExecutionEventBusApi, SubAgentGuidanceRelayWorkerHandle } from '../../types/records.js'
+import type { ExecutionEventBusContract, SubAgentGuidanceRelayWorkerHandle } from '../../types/records.js'
 import { resolveCapabilityDelegationPolicy } from '../../utils/capabilities'
-import {
-  applySubAgentEffortOverride,
-  applySubAgentModelOverride,
-  buildResumeDispatchRequest,
-  resolveEffectiveSubAgentTypeConfig,
-  resolveInitialSubAgentToolCategories,
-  resolveSubAgentRouteCategory,
-  resolveSubAgentTypeKey,
-  validateSubAgentResumeIdentity,
-} from '../../utils/delegation/dispatch-plan'
-import {
-  attachSubAgentWorkerProbes,
-  buildAutonomousSubAgentParentCtx,
-  buildSubAgentAsyncThreadKey,
-  combineAbortSignals,
-  emitSubAgentDangerousConfirmationCard,
-  emitSubAgentWorkerStatus,
-  formatSubAgentTransientRetryStatus,
-  isSubAgentAbortError,
-} from '../../utils/delegation/dispatch-worker'
+import { applySubAgentEffortOverride, applySubAgentModelOverride, buildResumeDispatchRequest, resolveEffectiveSubAgentTypeConfig, resolveInitialSubAgentToolCategories, resolveSubAgentRouteCategory, resolveSubAgentTypeKey, validateSubAgentResumeIdentity } from '../../utils/delegation/dispatch-plan'
+import { attachSubAgentWorkerProbes, buildAutonomousSubAgentParentCtx, buildSubAgentAsyncThreadKey, combineAbortSignals, emitSubAgentDangerousConfirmationCard, emitSubAgentWorkerStatus, formatSubAgentTransientRetryStatus, isSubAgentAbortError } from '../../utils/delegation/dispatch-worker'
 import { dedupeToolCategories, formatModelFallbackNote } from '../../utils/delegation/dispatcher'
 import { buildSubAgentDispatchInstruction, buildSubAgentResumeBriefing, buildSubAgentResumeInstruction } from '../../utils/delegation/instruction'
-import {
-  formatSubAgentBackgroundArtifact,
-  formatSubAgentFailureRedispatchGuidance,
-  formatSubAgentStartedMessage,
-  formatSubAgentTaskResultForParent,
-  formatSubAgentThreadUnavailableMessage,
-  formatSubAgentThreadUnresumableMessage,
-  resolveSubAgentAgentName,
-} from '../../utils/delegation/result-format'
+import { formatSubAgentBackgroundArtifact, formatSubAgentFailureRedispatchGuidance, formatSubAgentStartedMessage, formatSubAgentTaskResultForParent, formatSubAgentThreadUnavailableMessage, formatSubAgentThreadUnresumableMessage, resolveSubAgentAgentName } from '../../utils/delegation/result-format'
 import { resolveReadonlyMode } from '../../utils/delegation/sub-agent-readonly-policy'
 import { buildSubAgentTaskResult } from '../../utils/delegation/sub-agent-result-builder'
 import { resolveCustomSubAgentTypeConfig, resolveSubAgentTypeConfig } from '../../utils/delegation/sub-agent-type-registry'
 import { resolveAgentExecutionLimits } from '../../utils/loop/execution-limits'
 import { AgentTuning } from '../../utils/tuning'
-import { AgentConnectionRetryHelper } from '../loop/RetryPolicy'
-import type { KernelBackgroundJobManager } from '../records/KernelBackgroundJobManager'
-import type { SubAgentGuidanceRelayRegistry } from '../records/SubAgentGuidanceRelayRegistry'
+import { RetryPolicy } from '../loop/RetryPolicy'
+import type { KernelBackgroundJobManagerApi } from '../records/KernelBackgroundJobManager'
+import type { SubAgentGuidanceRelayRegistryApi } from '../records/SubAgentGuidanceRelayRegistry'
 import { createUnattendedSubAgentApprovalPort } from '../tools/UnattendedSubAgentApprovalPort'
 
 import { Semaphore } from './Semaphore'
 import { SubAgentProgressDigestRecorder } from './SubAgentProgressDigestRecorder'
 import { SubAgentProgressLedger } from './SubAgentProgressLedger'
 import { SubAgentSessionStore } from './SubAgentSessionStore'
-import type { TeamModelRouter } from './TeamModelRouter'
-import type { WriteLeaseCoordinator } from './WriteLeaseCoordinator'
-
-
-
-
-
+import type { TeamModelRouterApi } from './TeamModelRouter'
+import type { WriteLeaseCoordinatorApi } from './WriteLeaseCoordinator'
 
 /**
  * 解析子智能体派发/清理共用的 executionKey。
@@ -132,10 +93,6 @@ function resolveSubAgentExecutionKey(args: {
   if (executionId) return executionId
   return args.sessionId
 }
-
-
-
-
 
 /**
  * 按需子智能体派发器。
@@ -211,20 +168,20 @@ class SubAgentDispatcher implements SubAgentDispatcherApi {
   private readonly progressLedger = new SubAgentProgressLedger()
   /** 子 Agent 线程：执行期挂在执行上，执行结束后按父会话有限保留供续跑（见文件头 ④）。 */
   private readonly sessionStore: SubAgentSessionStore
-  private readonly connectionRetryHelper = new AgentConnectionRetryHelper()
+  private readonly connectionRetryHelper = new RetryPolicy()
   private readonly cancelledAsyncThreads = new Set<string>()
   private readonly log = Log.tag('SubAgentDispatcher')
   private agentRunner: Nullable<SubAgentQueryRunner> = null
   private readonly executionLimits: AgentExecutionLimits
 
   constructor(
-    private readonly modelRouter: TeamModelRouter,
-    private readonly writeLeaseCoordinator: WriteLeaseCoordinator,
+    private readonly modelRouter: TeamModelRouterApi,
+    private readonly writeLeaseCoordinator: WriteLeaseCoordinatorApi,
     private readonly configService: SubAgentConfigPort,
-    private readonly guidanceRelayRegistry: SubAgentGuidanceRelayRegistry,
+    private readonly guidanceRelayRegistry: SubAgentGuidanceRelayRegistryApi,
     private readonly subAgentTypeProvider: SubAgentTypeProvider,
     private readonly capabilityPorts?: AgentRuntimeCapabilityPorts,
-    private readonly backgroundJobManager?: KernelBackgroundJobManager,
+    private readonly backgroundJobManager?: KernelBackgroundJobManagerApi,
     private readonly customAgentRegistry?: CustomSubAgentRegistry,
     executionLimitOverrides: AgentExecutionLimitOverrides = {}
   ) {
@@ -614,7 +571,7 @@ class SubAgentDispatcher implements SubAgentDispatcherApi {
     request: SubAgentDispatchRequest
     autonomousParentCtx: SubAgentToolContext
     typeConfig: ResolvedSubAgentTypeConfig
-    workerEvents: ExecutionEventBusApi
+    workerEvents: ExecutionEventBusContract
     title: string
     threadId: string
     initialToolCategories: ToolCategoryId[]
@@ -1361,3 +1318,8 @@ class SubAgentDispatcher implements SubAgentDispatcherApi {
 }
 
 export { resolveSubAgentExecutionKey, SubAgentDispatcher }
+
+/** 建一台子 Agent 派发器：并发闸、类型路由、模型路由与写租约都在它身上。 */
+export function createSubAgentDispatcher(modelRouter: TeamModelRouterApi, writeLeaseCoordinator: WriteLeaseCoordinatorApi, configService: SubAgentConfigPort, guidanceRelayRegistry: SubAgentGuidanceRelayRegistryApi, subAgentTypeProvider: SubAgentTypeProvider, capabilityPorts?: AgentRuntimeCapabilityPorts, backgroundJobManager?: KernelBackgroundJobManagerApi, customAgentRegistry?: CustomSubAgentRegistry, executionLimitOverrides: AgentExecutionLimitOverrides = {}): SubAgentDispatcherApi {
+  return new SubAgentDispatcher(modelRouter, writeLeaseCoordinator, configService, guidanceRelayRegistry, subAgentTypeProvider, capabilityPorts, backgroundJobManager, customAgentRegistry, executionLimitOverrides)
+}

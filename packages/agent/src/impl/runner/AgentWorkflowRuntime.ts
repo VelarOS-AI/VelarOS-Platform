@@ -48,10 +48,7 @@
 // 注意占位也会进 `outputs`：下游 filter / dedupe / majority_vote 读到的数组里含 skipped 条目，
 // 需要时按 `status` 自行滤除。
 
-import {
-  isUndefined,
-  Log,
-} from '@velaros-ai/core'
+import { isUndefined,Log } from '@velaros-ai/core'
 
 import { AgentToolLimits } from '../../contract/constants.js'
 import type { AgentWorkflowAgentCall, AgentWorkflowAgentResult, AgentWorkflowDefinition, AgentWorkflowRunResult, AgentWorkflowStep, AgentWorkflowStepResult } from '../../types/agent.js'
@@ -65,26 +62,7 @@ export const MaxWorkflowAgents: number = AgentToolLimits.workflow.maxAgents
 /** 一次工作流最多跑多少轮；值在 `AgentToolLimits.workflow.maxRounds`。 */
 export const MaxWorkflowRounds: number = AgentToolLimits.workflow.maxRounds
 
-
 const log = Log.tag('AgentWorkflowRuntime')
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 /**
  * 声明式多 Agent Workflow 的 IR 解释器：输入一份已过 schema 校验的定义，顺序执行 steps，输出逐步骤结果树。
@@ -341,4 +319,9 @@ class AgentWorkflowRuntime implements AgentWorkflowRuntimeApi {
 export {
   AgentWorkflowRuntime,
   MaxWorkflowValueBytes,
+}
+
+/** 建一台声明式工作流解释器。 */
+export function createAgentWorkflowRuntime(port: AgentWorkflowDispatchPort): AgentWorkflowRuntimeApi {
+  return new AgentWorkflowRuntime(port)
 }

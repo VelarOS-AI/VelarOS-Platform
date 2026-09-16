@@ -2,7 +2,7 @@ import { describe, expect, spyOn, test } from 'bun:test'
 
 import { ExecutionService } from '../src/impl/execution/ExecutionService'
 import { AgentModSeamDispatcher } from '../src/impl/mods/AgentModSeamDispatcher'
-import { ExecutionEventBus } from '../src/impl/records/ExecutionEventBus'
+import {  createNoopExecutionEventBus } from '../src/impl/records/ExecutionEventBus'
 import { ExecutionStore } from '../src/impl/records/ExecutionStore'
 
 function deferred() {
@@ -41,7 +41,7 @@ describe('execution shutdown ownership', () => {
     const run = service.runManagedExecution({
       sourceSessionId: 'active',
       messages: [],
-      events: ExecutionEventBus.noop(),
+      events: createNoopExecutionEventBus(),
       run: async ({ abortController }) => {
         signal = abortController.signal
         await cleanup.promise
@@ -64,7 +64,7 @@ describe('execution shutdown ownership', () => {
       service.runManagedExecution({
         sourceSessionId: 'late',
         messages: [],
-        events: ExecutionEventBus.noop(),
+        events: createNoopExecutionEventBus(),
         run: async () => {
           throw new Error('must never enter')
         },
@@ -89,7 +89,7 @@ describe('execution shutdown ownership', () => {
     const run = service.runManagedExecution({
       sourceSessionId: 'preparing',
       messages: [],
-      events: ExecutionEventBus.noop(),
+      events: createNoopExecutionEventBus(),
       run: async () => {
         executed = true
       },

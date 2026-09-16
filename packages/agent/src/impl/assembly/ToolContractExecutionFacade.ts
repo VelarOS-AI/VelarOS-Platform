@@ -5,7 +5,7 @@ import { isNull } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import type { DescribeToolSchemaResponse, LeaseDeniedResponse, ToolCatalogEntry, ToolDescriptor as RegistryToolDescriptor, VelarToolCallEnvelope, VelarToolResultEnvelope } from '../../types/agent.js'
-import type { ToolContractExecutionBinding,ToolContractExecutionContext, ToolContractExecutionRegistry } from '../../types/execution.js'
+import type { CreateToolContractExecutionFacade, ToolContractExecutionBinding, ToolContractExecutionContext, ToolContractExecutionRegistry } from '../../types/execution.js'
 import type { ToolExecutionPolicyRegistry, ToolExecutorEvents } from '../../types/tools.js'
 import { resolveToolReadOnly } from '../../utils/toolkit/define-tool-contract'
 import { ToolContractDiscoveryDescriptors } from '../../utils/toolkit/discovery'
@@ -213,3 +213,7 @@ export class ToolContractExecutionFacade<
   }
 
 }
+
+/** 装一台工具契约执行门面：宿主拿它跑单次工具调用，不用自己拼执行器与策略。 */
+export const createToolContractExecutionFacade: CreateToolContractExecutionFacade = (toolRegistry) =>
+  new ToolContractExecutionFacade(toolRegistry)

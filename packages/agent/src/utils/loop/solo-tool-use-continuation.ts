@@ -2,7 +2,7 @@
 
 import type { RunSoloToolUseContinuationInput, SoloToolUseContinuationEvents, SoloToolUseContinuationResult } from '../../types/loop.js'
 import { createInternalFollowUpMessage } from '../history/internal-messages'
-import { ChatRuntimeEvents } from '../wire/chat-runtime.js'
+import { streamTurnEnd } from '../wire/chat-runtime'
 
 import { markToolSpaceBootstrapDiscoverySatisfied } from './tool-space-bootstrap-planner'
 
@@ -43,11 +43,11 @@ async function runSoloToolUseContinuation<
       turn: input.turn,
       hardCap: input.hardCap,
     })
-    input.events.emitRuntime(ChatRuntimeEvents.turnEnd(input.turn))
+    input.events.emitRuntime(streamTurnEnd(input.turn))
     return { status: 'completed', reason: 'wind-down-cap', toolResults }
   }
 
-  input.events.emitRuntime(ChatRuntimeEvents.turnEnd(input.turn))
+  input.events.emitRuntime(streamTurnEnd(input.turn))
   input.log.debug('turn end', { turn: input.turn })
   return { status: 'continue', toolResults }
 }

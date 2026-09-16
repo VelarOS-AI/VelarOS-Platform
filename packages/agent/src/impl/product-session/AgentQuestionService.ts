@@ -1,9 +1,10 @@
 import { randomUUID } from 'node:crypto'
 
-import { isArray, isPlainObject, isString } from '@velaros-ai/core'
+import { isString } from '@velaros-ai/core'
 
 import type { AgentSessionEventPort } from '../../contract/requires.js'
 import type { AgentQuestionRequest, AskAgentQuestionInput, PendingQuestion, QuestionListener } from '../../types/product-session.js'
+import { isQuestionRequest, isRecord } from '../../utils/product-session/agent-question-service'
 
 /**
  * 模型向用户提问的通道：`ask` 返回的 Promise 一直挂着，直到用户在界面上选了答案（`resolve`）或这个会话被取消（`rejectSession`）。
@@ -132,14 +133,7 @@ export class AgentQuestionService implements AgentQuestionServiceApi {
   }
 }
 
-function isQuestionRequest(value: unknown): value is AgentQuestionRequest {
-  return isRecord(value)
-    && isString(value.id)
-    && isString(value.sessionId)
-    && isString(value.question)
-    && isArray(value.options)
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return isPlainObject(value)
+/** 建一台产品会话的提问服务。 */
+export function createAgentQuestionService(sessions: AgentSessionEventPort): AgentQuestionServiceApi {
+  return new AgentQuestionService(sessions)
 }

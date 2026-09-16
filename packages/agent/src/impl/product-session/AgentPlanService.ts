@@ -177,24 +177,7 @@ export class AgentPlanService implements AgentPlanServiceApi {
   }
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+/** 建一台产品会话的计划服务。 */
+export function createAgentPlanService(sessions: AgentSessionEventPort): AgentPlanServiceApi {
+  return new AgentPlanService(sessions)
+}

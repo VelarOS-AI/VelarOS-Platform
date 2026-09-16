@@ -1,11 +1,11 @@
 import { describe, expect, test } from 'bun:test'
 
 import {
+  agentTools,
   BuiltinAgentModId,
-  collectBuiltinAgentModTools,
-  createBuiltinAgentModPackage,
+  createBuiltinAgentModDefinition,
 } from '../src/impl/AgentTools'
-import { assembleAgentMods } from '../src/impl/assembly/AgentModHostAssembler'
+import { agentModHost } from '../src/impl/AgentTools'
 import { AgentModStaleSnapshotError } from '../src/impl/errors/AgentModStaleSnapshotError'
 import { AgentModLoader } from '../src/impl/mods/AgentModLoader'
 import { AgentModRegistry } from '../src/impl/mods/AgentModRegistry'
@@ -105,7 +105,7 @@ describe('agent mod loader', () => {
 
   test('装载随包内置 mod 后，工具与提示词段逐项等价于直接枚举（自食狗粮零变化）', () => {
     const loader = new AgentModLoader({ host: createHost() })
-    const builtin = createBuiltinAgentModPackage()
+    const builtin = createBuiltinAgentModDefinition()
     const contextRecallContribution = builtin.manifest.contributes?.tools?.find(
       (tool) => tool.name === 'context:recall'
     )
@@ -133,7 +133,7 @@ describe('agent mod loader', () => {
     const snapshot = loader.snapshot()
 
     // ① 工具：清单逐项相等，且**载荷对象同一性**保持（装载不复制不包装）。
-    const expectedTools = collectBuiltinAgentModTools()
+    const expectedTools = agentTools
     const loadedTools = projectAgentModTools(snapshot)
     expect(Object.keys(loadedTools).sort()).toEqual(Object.keys(expectedTools).sort())
     for (const [name, tool] of Object.entries(expectedTools)) {
@@ -169,7 +169,7 @@ describe('agent mod loader', () => {
   })
 
   test('宿主组装入口缺省恒加载内置 mod，并按 agent section 路由 pack', async () => {
-    const { report } = await assembleAgentMods({
+    const { report } = await agentModHost.assembleAgentMods({
       host: createHost(),
       packs: [
         {
@@ -206,7 +206,7 @@ describe('agent mod loader', () => {
   })
 
   test('pack manifest 读不出即拒载并留可读诊断，不静默跳过', async () => {
-    const { report } = await assembleAgentMods({
+    const { report } = await agentModHost.assembleAgentMods({
       host: createHost(),
       bundled: [],
       packs: [
@@ -234,7 +234,7 @@ describe('agent mod loader', () => {
   })
 
   test('Agent 路由只看 agent section，空 provides 也正常装载', async () => {
-    const { report } = await assembleAgentMods({
+    const { report } = await agentModHost.assembleAgentMods({
       host: createHost(),
       bundled: [],
       packs: [
@@ -272,7 +272,7 @@ describe('agent mod loader', () => {
   })
 
   test('「读不出文件」与「文件在但没有 agent 节」是两个不同诊断', async () => {
-    const { report } = await assembleAgentMods({
+    const { report } = await agentModHost.assembleAgentMods({
       host: createHost(),
       bundled: [],
       packs: [
@@ -303,7 +303,7 @@ describe('agent mod loader', () => {
   })
 
   test('信封本身非法（缺 module 节）拒载并留信封诊断', async () => {
-    const { report } = await assembleAgentMods({
+    const { report } = await agentModHost.assembleAgentMods({
       host: createHost(),
       bundled: [],
       packs: [
@@ -492,7 +492,7 @@ describe('partial activation', () => {
 describe('注册表两阶段与 generation', () => {
   test('运行阶段写入即抛；快照按 generation 冻结并 stale-reject', () => {
     const loader = new AgentModLoader({ host: createHost() })
-    loader.load([createBuiltinAgentModPackage()])
+    loader.load([createBuiltinAgentModDefinition()])
 
     const snapshot = loader.snapshot()
     expect(loader.registry.isStale(snapshot)).toBe(false)

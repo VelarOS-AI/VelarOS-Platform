@@ -22,7 +22,7 @@ import type { RunSpanScope,SessionLedgerWarn } from '../types/ledgers.js'
 import type { AgentTurnCapabilitySnapshot,QueryLoopToolRegistry, ResolvedAgentModelRuntime, SoloLoopToolRegistry, TurnRunnerToolRegistry } from '../types/loop.js'
 import type { AgentModBindings, AgentModPackDescriptorLike, VelarModArchiveEntry } from '../types/mods.js'
 import type { AgentSessionApplicationEvent } from '../types/product-session.js'
-import type { ExecutionEventBusApi, ExecutionResourceProvider, KernelBackgroundJobStoredOutput } from '../types/records.js'
+import type { ExecutionEventBusContract, ExecutionResourceProvider, KernelBackgroundJobStoredOutput } from '../types/records.js'
 import type { ContextFaultEvent,ContextGovernanceConfigInput, ContextResidencyMigrationEvent } from '../types/residency.js'
 import type { AgentExecutionStackToolContext, AgentRoleDefinition, AgentRoleDescriptorProviderContext, AgentRuntimeInputResult,AgentSurfaceProfile, AgentTurnBoundary, AgentTurnSettlement, DerivedAgentSurfaceRunPolicy, DeriveSurfaceRunPolicyInput, ResolveAgentSurfaceInput, RunnerBuildToolContextArgs, RunnerExecutionScope, RunnerModelCapabilityPort, RunnerToolContext } from '../types/runner.js'
 import type { ReminderScope, ReminderTrigger, RuntimeReminderInput } from '../types/session.js'
@@ -333,13 +333,13 @@ export interface RunnerModelRuntimePort extends RunnerModelCapabilityPort {
     error: unknown,
     turn: number,
     abortSignal: AbortSignal,
-    events: ExecutionEventBusApi,
+    events: ExecutionEventBusContract,
     log: ScopedLog
   ): void
   /** 发「本次运行正常收尾」运行时事件；一次 run 最多发一次，发完 UI 才收流。 */
-  emitDone(events: ExecutionEventBusApi): void
+  emitDone(events: ExecutionEventBusContract): void
   /** 发「本次运行被中止」运行时事件；`message` 省略时用默认中止文案。中止门里调用，不抛错。 */
-  emitAbort(events: ExecutionEventBusApi, message?: string): void
+  emitAbort(events: ExecutionEventBusContract, message?: string): void
 }
 
 /** Runner 读取运行时配置的窄端口。两块配置都是**按次读取**的活引用，宿主改设置后下一轮即生效。 */
@@ -369,7 +369,7 @@ export interface RunnerSubAgentDispatcher<TToolContext extends RunnerToolContext
   dispatch(request: {
     input: SubAgentDispatchInput
     parentCtx: TToolContext
-    events: ExecutionEventBusApi
+    events: ExecutionEventBusContract
     config: AgentExecutionConfig
   }): Promise<string>
   /**

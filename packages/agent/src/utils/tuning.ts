@@ -217,6 +217,8 @@ export const AgentTuning = Object.freeze({
   tools: Object.freeze({
     /** 中止后等工具自己收尾多少毫秒，超时按未收尾记账。 */
     abortSettlementGraceMs: 250,
+    /** 工具入参按 schema issue 归一化最多重试几遍，仍不通过就报校验失败。 */
+    maxArgsNormalizationPasses: 5,
     /** 同时最多并发跑几个声明了并发安全的工具。 */
     maxConcurrentConcurrencySafeTools: 8,
     /** 同一个工具连续失败几次后熔断，不再让模型继续撞。 */
@@ -272,14 +274,6 @@ export const AgentTuning = Object.freeze({
   } as const),
   /** 工具契约套件：说明体积与 schema 组装。 */
   toolkit: Object.freeze({
-    /** 单个工具说明的开发期硬上限（字符）：保底闸，不是预算；正常单一职责的工具够不到。 */
-    descriptionMaxChars: 6_000,
-    /** 单个工具说明的软预算（字符）：复杂用法属于技能文书，不该每轮随工具清单进上下文。 */
-    descriptionBudgetChars: 1_800,
-    /** 共享定义短于多少字符时直接内联，不单独建 $defs。 */
-    inlineSharedDefChars: 120,
-    /** 宽容 schema 修正时单个数组最多补几项。 */
-    forgivingSchemaMaxItems: 10,
     /** 工具发现打分低于最高分的多少比例就算低置信，标记给模型。 */
     lowConfidenceScoreRatio: 0.3,
   } as const),

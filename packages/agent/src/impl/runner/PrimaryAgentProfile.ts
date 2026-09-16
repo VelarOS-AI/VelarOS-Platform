@@ -1,30 +1,8 @@
-import type { ChatPromptFeatureId } from '../../types/agent'
-import type { AgentRoleId, AgentSkillDescriptor,CapabilityScopeId } from '../../types/agent.js'
-import type { AgentRoleDefinition, AgentRoleResolution, AgentRoleToolCategoryResolver } from '../../types/runner.js'
+import type { CapabilityScopeId, ChatPromptFeatureId } from '../../types/agent'
+import type { AgentRoleDefinition, AgentRoleResolution, AgentRoleToolCategoryResolver, PrimaryAgentProfileSkillRepository } from '../../types/runner.js'
 import { resolveSelectedSkillAllowedTools } from '../../utils/runner/role-router'
 
 import { AgentRolePolicy } from './AgentRolePolicy'
-
-/**
- * 主 Agent 需要的那一小面技能仓库：只用来取角色技能全文与本轮可见的技能清单，不承担安装、校验、落盘。
- * 由装配点注入真实仓库；参数一律透传给仓库，本件不解释它们的语义。
- */
-interface PrimaryAgentProfileSkillRepository {
-  /** 取某个角色的技能 Markdown 全文（按本轮选中的技能、提示词特性与能力作用域裁剪后的那一份）；没有内容时返回空串，调用方原样进提示词。 */
-  getSkillMarkdownForRole(
-    roleId: AgentRoleId,
-    selectedSkillIds?: string[],
-    promptFeatures?: readonly ChatPromptFeatureId[],
-    capabilityScope?: CapabilityScopeId
-  ): string
-  /** 列出本轮该角色可见的技能描述（id、说明、可选的 allowed-tools 门控）；提示词的技能目录与技能工具门控都读这一份。 */
-  listSkillsForRole(
-    roleId: AgentRoleId,
-    selectedSkillIds?: string[],
-    capabilityScope?: CapabilityScopeId,
-    promptFeatures?: readonly ChatPromptFeatureId[]
-  ): AgentSkillDescriptor[]
-}
 
 /**
  * 当前作用域主 Agent 的角色画像：主 Agent 没有预设角色表，它的「角色」就是当前运行态实际开放的那一面能力。
@@ -133,3 +111,8 @@ class PrimaryAgentProfile implements PrimaryAgentProfileApi {
 
 export { PrimaryAgentProfile }
 export type { PrimaryAgentProfileSkillRepository }
+
+/** 建一份主 Agent 画像：技能、工具类别与身份都从这里解。 */
+export function createPrimaryAgentProfile(skillRepository: PrimaryAgentProfileSkillRepository, categoryResolver: AgentRoleToolCategoryResolver): PrimaryAgentProfileApi {
+  return new PrimaryAgentProfile(skillRepository, categoryResolver)
+}

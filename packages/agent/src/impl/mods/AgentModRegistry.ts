@@ -7,14 +7,12 @@
 //     （`isStale` / `assertFresh`），不做「静默用旧值」。
 //
 // 明确不做：全局 registry 即时修改、加载顺序覆盖、giant context 注入。
-import { isTrue,toNullable } from '@velaros-ai/core'
+import { isTrue, toNullable } from '@velaros-ai/core'
 
 import type { AgentModContributionAxisName } from '../../types/agent.js'
 import type { AgentModAxisRecord, AgentModContributionRecord, AgentModRegistryPhase, AgentModRegistrySnapshot } from '../../types/mods.js'
 import { AgentModContributionAxisNames } from '../../utils/wire/mods'
 import { AgentModStaleSnapshotError } from '../errors/AgentModStaleSnapshotError'
-
-
 
 /**
  * Agent 领域贡献注册表对外的面：各 mod 的贡献按「轴 + 主键」登记在这里，运行链一律读它的冻结快照。

@@ -1,8 +1,7 @@
 import { Log, mapDefined } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import type { TaskApprovalRecord, ToolConfirmationDecisionOptions } from '../../types/agent'
-import type { ToolCategoryId } from '../../types/agent.js'
+import type { TaskApprovalRecord, ToolCategoryId, ToolConfirmationDecisionOptions } from '../../types/agent'
 
 /**
  * 任务内唯一的授权账本：谁被批准了什么、谁被拒了、拒的理由是什么，全在这一份里。

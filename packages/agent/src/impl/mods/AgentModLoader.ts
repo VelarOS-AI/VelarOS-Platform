@@ -8,22 +8,17 @@
 //  - 宿主声明它支持哪些贡献轴（`supportedAxes`）；
 //  - mod 的某轴在本宿主无落点 → 该轴缺席、mod 仍以 `partial` 态激活，缺席轴进诊断；
 //  - `requiredAxes` 命中不支持的轴 → 直接拒载，不做残废激活。
-import {
-  isArray,
-  isBlank,
-  isEmpty,
-  isPlainObject,
-  isString,
-  isUndefined,
-  toNullable,
-} from '@velaros-ai/core'
+import { isBlank, isEmpty, isString, isUndefined, toNullable } from '@velaros-ai/core'
 
-import type { AgentModContributionAxisName, AgentModDiagnostic, AgentModManifest, AgentModTrustLevel } from '../../types/agent.js'
-import type { AgentModActivationState, AgentModAxisRecord, AgentModBindings, AgentModHostProfile, AgentModLoadReport, AgentModPackage, AgentModRegistrySnapshot, AgentModRejection, AgentModSeamHandler, ValidatedAgentMod } from '../../types/mods.js'
+import type { AgentModContributionAxisName, AgentModDiagnostic, AgentModTrustLevel } from '../../types/agent.js'
+import type { AgentModActivationState, AgentModAxisRecord, AgentModHostProfile, AgentModLoadReport, AgentModPackage, AgentModRegistrySnapshot, AgentModRejection, AgentModSeamHandler, ValidatedAgentMod } from '../../types/mods.js'
+import { readAxisEntries, readBindingRecord } from '../../utils/mods/agent-mod-loader'
 import { AgentModContributionAxisNames, listAgentModDeclaredAxes, parseAgentModManifest, readAgentModContributionKey, satisfiesSemverRange } from '../../utils/wire/mods'
 
+import type { AgentModRegistryApi } from './AgentModRegistry'
 import { AgentModRegistry } from './AgentModRegistry'
-import { AgentModHookDispatcher } from './AgentModSeamDispatcher'
+import type { AgentModSeamDispatcherApi } from './AgentModSeamDispatcher'
+import { AgentModSeamDispatcher } from './AgentModSeamDispatcher'
 
 /** 必须有运行态载荷的轴：缺绑定=拒载（绝不静默降级成空贡献）。 */
 export const PayloadRequiredAxes: ReadonlySet<AgentModContributionAxisName> = new Set(['tools', 'hooks'])
@@ -33,22 +28,6 @@ export const DataOnlyAxes: ReadonlySet<AgentModContributionAxisName> = new Set([
   'spaces',
   'turnContextSources',
 ])
-
-function readBindingRecord(
-  bindings: AgentModBindings,
-  axis: AgentModContributionAxisName
-): Readonly<Record<string, unknown>> {
-  const record = Reflect.get(bindings, axis)
-  return isPlainObject(record) ? record : {}
-}
-
-function readAxisEntries(
-  manifest: AgentModManifest,
-  axis: AgentModContributionAxisName
-): readonly unknown[] {
-  const entries = Reflect.get(manifest.contributes, axis)
-  return isArray(entries) ? entries : []
-}
 
 /**
  * Agent 领域 mod 装载器。
@@ -69,11 +48,11 @@ function readAxisEntries(
  */
 export interface AgentModLoaderApi {
   /** 这台 Loader 写入的贡献注册表；消费者从它取按回合冻结的快照。装配期传入或由 Loader 自建。 */
-  readonly registry: AgentModRegistry
+  readonly registry: AgentModRegistryApi
   /** 这台 Loader 写入的 Hook 派发器；主链在各派发点向它要钩子。装配期传入或由 Loader 自建。 */
-  readonly hooks: AgentModHookDispatcher
+  readonly hooks: AgentModSeamDispatcherApi
   /** @deprecated 与 `hooks` 是同一个对象，留给旧调用方；新代码一律用 `hooks`。 */
-  readonly seams: AgentModHookDispatcher
+  readonly seams: AgentModSeamDispatcherApi
   /**
    * 装一批候选包，返回本次之后的完整装载报告。
    * 整个过程是一个 registration 阶段：开注册面 → 逐包判定 → 跨包查主键冲突 → 逐个激活 →
@@ -96,10 +75,10 @@ export interface AgentModLoaderApi {
 }
 
 class AgentModLoader implements AgentModLoaderApi {
-  public readonly registry: AgentModRegistry
-  public readonly hooks: AgentModHookDispatcher
+  public readonly registry: AgentModRegistryApi
+  public readonly hooks: AgentModSeamDispatcherApi
   /** @deprecated 新调用方使用 `hooks`。 */
-  public readonly seams: AgentModHookDispatcher
+  public readonly seams: AgentModSeamDispatcherApi
 
   private readonly host: AgentModHostProfile
   private readonly supportedAxes: ReadonlySet<AgentModContributionAxisName>
@@ -113,15 +92,15 @@ class AgentModLoader implements AgentModLoaderApi {
 
   constructor(options: {
     host: AgentModHostProfile
-    registry?: AgentModRegistry
-    hooks?: AgentModHookDispatcher
+    registry?: AgentModRegistryApi
+    hooks?: AgentModSeamDispatcherApi
     /** @deprecated 新调用方使用 `hooks`。 */
-    seams?: AgentModHookDispatcher
+    seams?: AgentModSeamDispatcherApi
     onDiagnostic?: (diagnostic: AgentModDiagnostic) => void
   }) {
     this.host = options.host
     this.registry = options.registry ?? new AgentModRegistry()
-    this.hooks = options.hooks ?? options.seams ?? new AgentModHookDispatcher({
+    this.hooks = options.hooks ?? options.seams ?? new AgentModSeamDispatcher({
       onDiagnostic: options.onDiagnostic,
     })
     this.seams = this.hooks
@@ -472,3 +451,15 @@ class AgentModLoader implements AgentModLoaderApi {
 }
 
 export { AgentModLoader }
+
+/** 建一台 Agent 领域 mod 装载器：注册、冲突判定与诊断都在它身上。 */
+export function createAgentModLoader(options: {
+    host: AgentModHostProfile
+    registry?: AgentModRegistryApi
+    hooks?: AgentModSeamDispatcherApi
+    /** @deprecated 新调用方使用 `hooks`。 */
+    seams?: AgentModSeamDispatcherApi
+    onDiagnostic?: (diagnostic: AgentModDiagnostic) => void
+  }): AgentModLoaderApi {
+  return new AgentModLoader(options)
+}

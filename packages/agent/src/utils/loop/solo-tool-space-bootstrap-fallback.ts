@@ -2,7 +2,7 @@
 
 import type { RunSoloToolSpaceBootstrapFallbackInput, SoloToolSpaceBootstrapFallbackEvents, SoloToolSpaceBootstrapFallbackResult } from '../../types/loop.js'
 import { createInternalFollowUpMessage } from '../history/internal-messages'
-import { ChatRuntimeEvents } from '../wire/chat-runtime.js'
+import { streamTurnEnd } from '../wire/chat-runtime'
 
 /**
  * 上一轮强制了 `tooling:map` 却被模型无视（这一轮压根没调工具）时的兜底：把那条侦察提醒重新压进 history，
@@ -33,7 +33,7 @@ function runSoloToolSpaceBootstrapFallback<
       ['[系统] 上一轮未执行必需的工具空间侦察。', fallbackReminder].join('\n')
     )
   )
-  input.events.emitRuntime(ChatRuntimeEvents.turnEnd(input.turn))
+  input.events.emitRuntime(streamTurnEnd(input.turn))
   input.log.debug('turn continued by tool-space bootstrap fallback', { turn: input.turn })
   return { status: 'continue', reason: 'ignored-tool-choice' }
 }

@@ -23,38 +23,31 @@
 //
 // 派发点与 seam 闭集见 `../mods/AgentModSeams.ts` 与 docs/agent-mod-trunk.md；
 // 策略门与审批语义见 `./ExecutionPolicy.ts`。
-import {
-  isEmpty,
-  isPlainObject,
-  isPresent,
-  isString,
-  isTrue,
-  optionalWhen,
-  toNullable,
-  toOptional,
-} from "@velaros-ai/core";
-import { AppError } from "@velaros-ai/core/error";
-import { logRuntime } from "@velaros-ai/core/logger";
+import { isEmpty, isPlainObject, isPresent, isString, isTrue, optionalWhen, toNullable, toOptional } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
+import { logRuntime } from '@velaros-ai/core/logger'
 
 import type { ContextPayloadStore, KernelToolOutputStore, ToolResultMiddleware } from '../../contract/requires.js'
 import type { ToolSpanOpener } from '../../types/ledgers.js'
 import type { KernelToolLoopGuardApi } from '../../types/loop.js'
-import type { AgentModSeamDispatcherApi } from '../../types/mods.js'
+import type { AgentModSeamDispatcherContract } from '../../types/mods.js'
 import type { ProviderTurnSnapshot } from '../../types/records.js'
-import type { ActiveToolExecutionContext, ScheduledTool, ToolExecutionPolicyContext, ToolExecutionPrepared, ToolExecutionSettlement, ToolExecutorEvents,ToolInputReuseContext, ToolResult } from '../../types/tools.js'
-import { resolveToolResultMiddlewares } from "../../utils/capabilities";
-import { buildToolFailureResult as buildStructuredToolFailureResult } from "../../utils/tools/execution-policy-failures";
-import { liftGenericModelContent } from "../../utils/tools/model-image-lift";
-import { buildExecutionAppError, buildInputReuseFailure, createToolAbortSettlement, endToolSpan, readProviderToolArgs, toLoopGuardFailureBatch } from "../../utils/tools/tool-execution-runtime";
-import { persistToolInputForRecall } from "../../utils/tools/tool-input-recall";
-import { AgentTuning } from "../../utils/tuning";
-import { completeProviderTurnSnapshot, type ProviderTurnEventReducer } from "../records/ProviderTurnEventReducer";
+import type { ActiveToolExecutionContext, ScheduledTool, ToolExecutionPolicyContext, ToolExecutionPrepared, ToolExecutionSettlement, ToolExecutorEvents, ToolInputReuseContext, ToolResult } from '../../types/tools.js'
+import { resolveToolResultMiddlewares } from '../../utils/capabilities'
+import { completeProviderTurnSnapshot } from '../../utils/records/provider-turn-event-reducer'
+import { buildToolFailureResult as buildStructuredToolFailureResult } from '../../utils/tools/execution-policy-failures'
+import { liftGenericModelContent } from '../../utils/tools/model-image-lift'
+import { buildExecutionAppError, buildInputReuseFailure, createToolAbortSettlement, endToolSpan, readProviderToolArgs, toLoopGuardFailureBatch } from '../../utils/tools/tool-execution-runtime'
+import { emitToolMetadataEvent, emitToolProgressEvent } from '../../utils/tools/tool-executor'
+import { persistToolInputForRecall } from '../../utils/tools/tool-input-recall'
+import { AgentTuning } from '../../utils/tuning'
+import type { ProviderTurnEventReducerApi } from '../records/ProviderTurnEventReducer'
 
-import { ContextPayloadKernelToolOutputStore } from "./ContextPayloadKernelToolOutputStore"
-import { isKernelWriteLikeTool, KernelToolLoopGuard } from "./KernelToolLoopGuard";
-import { KernelToolResultMaterializer } from "./KernelToolResultMaterializer";
-import type { ToolExecutionPolicy } from "./ToolExecutionPolicy";
-import { resolveToolInputReuse, saveToolAttemptInput, saveToolAttemptOutcome, ToolInputReuseError, ToolInputReuseNote } from './ToolInputReuseStore';
+import { ContextPayloadKernelToolOutputStore } from './ContextPayloadKernelToolOutputStore'
+import { isKernelWriteLikeTool,KernelToolLoopGuard } from './KernelToolLoopGuard'
+import { KernelToolResultMaterializer } from './KernelToolResultMaterializer'
+import type { ToolExecutionPolicy, ToolExecutionPolicyApi } from './ToolExecutionPolicy'
+import { resolveToolInputReuse, ToolInputReuseError, ToolInputReuseNote, toolInputReuseStore } from './ToolInputReuseStore'
 
 /**
  * 执行上下文里可能捎带的 payload 店位面：宿主装配时给了就用它归档超预算的工具输出，
@@ -79,7 +72,7 @@ export interface ToolExecutorApi {
    * 循环在每轮开始时调一次；不调的话本轮就不产供应商回合快照，执行本身不受影响。
    */
   configureProviderTurnReducer(
-    input: ProviderTurnEventReducer,
+    input: ProviderTurnEventReducerApi,
     onSnapshot?: LooseOptional<(snapshot: ProviderTurnSnapshot) => void>
   ): void
   /**
@@ -136,12 +129,12 @@ export class ToolExecutor implements ToolExecutorApi {
   private siblingErrored = false;
   private siblingErrorName = "";
   private terminalError: LooseOptional<AppError> = null;
-  private readonly executionPolicy: ToolExecutionPolicy;
+  private readonly executionPolicy: ToolExecutionPolicyApi;
   private readonly resultMiddlewares: ReadonlyArray<ToolResultMiddleware<any>>;
   private readonly materializer: KernelToolResultMaterializer;
   private readonly loopGuard: KernelToolLoopGuardApi;
   private failureBatchResultCursor = 0;
-  private providerTurnReducer: LooseOptional<ProviderTurnEventReducer>;
+  private providerTurnReducer: LooseOptional<ProviderTurnEventReducerApi>;
   private onProviderTurnSnapshot: LooseOptional<
     (snapshot: ProviderTurnSnapshot) => void
   >;
@@ -156,21 +149,21 @@ export class ToolExecutor implements ToolExecutorApi {
    * 缺省 null → 全链 no-op。钩子只能拦下或改写，**不能放行**被策略门拒绝的调用：
    * 入参改写发生在 {@link ToolExecutionPolicy.prepareExecution} 之前，改写后照样过完整策略门。
    */
-  private readonly seams: LooseOptional<AgentModSeamDispatcherApi>;
+  private readonly seams: LooseOptional<AgentModSeamDispatcherContract>;
 
   constructor(
     ctx: ToolExecutionPolicyContext,
     events: ToolExecutorEvents,
-    executionPolicy: ToolExecutionPolicy,
+    executionPolicy: ToolExecutionPolicyApi,
     options: {
-      providerTurnReducer?: LooseOptional<ProviderTurnEventReducer>;
+      providerTurnReducer?: LooseOptional<ProviderTurnEventReducerApi>;
       onProviderTurnSnapshot?: LooseOptional<
         (snapshot: ProviderTurnSnapshot) => void
       >;
       outputStore?: LooseOptional<KernelToolOutputStore>;
       loopGuard?: KernelToolLoopGuardApi;
       toolSpanOpener?: LooseOptional<ToolSpanOpener>;
-      seams?: LooseOptional<AgentModSeamDispatcherApi>;
+      seams?: LooseOptional<AgentModSeamDispatcherContract>;
     } = {},
   ) {
     this.ctx = ctx;
@@ -194,7 +187,7 @@ export class ToolExecutor implements ToolExecutorApi {
   }
 
   public configureProviderTurnReducer(
-    input: ProviderTurnEventReducer,
+    input: ProviderTurnEventReducerApi,
     onSnapshot?: LooseOptional<(snapshot: ProviderTurnSnapshot) => void>,
   ): void {
     this.providerTurnReducer = input;
@@ -515,7 +508,7 @@ export class ToolExecutor implements ToolExecutorApi {
       }
 
       // 参数留在框架内，失败后模型只需提供变更字段。归档不可用不改变普通工具执行语义。
-      try { if (this.executionPolicy.supportsInputReuse(tool.toolName)) tool.attemptSaved = await saveToolAttemptInput(this.ctx as ToolInputReuseContext, tool.toolCallId, tool.toolName, tool.args, inputReuseContract.inputContractVersion); }
+      try { if (this.executionPolicy.supportsInputReuse(tool.toolName)) tool.attemptSaved = await toolInputReuseStore.saveAttemptInput(this.ctx as ToolInputReuseContext, tool.toolCallId, tool.toolName, tool.args, inputReuseContract.inputContractVersion); }
       catch (error) { this.log.warn("tool input reuse unavailable", { error: AppError.getMessage(error) }); }
 
       this.log.info("tool execute start", {
@@ -1134,7 +1127,7 @@ export class ToolExecutor implements ToolExecutorApi {
       const outcome = !result.error ? 'completed' : !tool.operationStarted || details?.executionOutcome === 'not-applied' ? 'not-applied' : 'unknown';
       try {
         const metrics = { requestedChars: tool.requestedInputChars ?? JSON.stringify(effectiveArgs).length, effectiveChars: JSON.stringify(effectiveArgs).length, reused: !!tool.inputReused };
-        await saveToolAttemptOutcome(this.ctx as ToolInputReuseContext, tool.toolCallId, outcome, metrics);
+        await toolInputReuseStore.saveAttemptOutcome(this.ctx as ToolInputReuseContext, tool.toolCallId, outcome, metrics);
         this.emitToolMetadata(tool.toolCallId, { metadata: { ...(tool.lastMetadata ?? {}), inputReuseMetrics: metrics } });
         if (result.error && failure) {
           const receipt: Record<string, unknown> = { ...failure, executionOutcome: outcome };
@@ -1327,34 +1320,16 @@ export class ToolExecutor implements ToolExecutorApi {
 
 }
 
-export function emitToolProgressEvent(
-  events: ToolExecutorEvents,
-  toolCallId: string,
-  chunk: string,
-): void {
-  if (!chunk) return;
-
-  events.emitToolProgress?.({
-    toolCallId,
-    chunk,
-    timestamp: Date.now(),
-  });
+/** 建一条工具执行链：入队、并发闸、审批门、结果中间件都在它身上；一次回合一台。 */
+export function createToolExecutor(ctx: ToolExecutionPolicyContext, events: ToolExecutorEvents, executionPolicy: ToolExecutionPolicyApi, options: {
+      providerTurnReducer?: LooseOptional<ProviderTurnEventReducerApi>;
+      onProviderTurnSnapshot?: LooseOptional<
+        (snapshot: ProviderTurnSnapshot) => void
+      >;
+      outputStore?: LooseOptional<KernelToolOutputStore>;
+      loopGuard?: KernelToolLoopGuardApi;
+      toolSpanOpener?: LooseOptional<ToolSpanOpener>;
+      seams?: LooseOptional<AgentModSeamDispatcherContract>;
+    } = {}): ToolExecutorApi {
+  return new ToolExecutor(ctx, events, executionPolicy, options)
 }
-
-export function emitToolMetadataEvent(
-  events: ToolExecutorEvents,
-  toolCallId: string,
-  payload: { title?: string; metadata?: Record<string, unknown> },
-): void {
-  const title = payload.title?.trim();
-  const metadata = payload.metadata;
-  if (!title && !metadata) return;
-
-  events.emitToolMetadata?.({
-    toolCallId,
-    title: toOptional(title),
-    metadata,
-    timestamp: Date.now(),
-  });
-}
-

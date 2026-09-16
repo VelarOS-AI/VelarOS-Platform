@@ -3,7 +3,8 @@ import type { ChatStreamDeltaEnvelope, ChatStreamEvent, ChatStreamEventEnvelope,
 import type { ChatStreamLogEntry } from '../../types/chat.js'
 import { AgentTuning } from '../../utils/tuning'
 
-import { type ChatStreamProtocol,chatStreamProtocol } from './ChatStreamProtocol'
+import type { ChatStreamProtocolApi } from './ChatStreamProtocol'
+import {chatStreamProtocol } from './ChatStreamProtocol'
 
 /**
  * 主进程侧一条会话流的只追加日志：每投出一段增量或一条事件，就按单调递增的序号留一份，
@@ -48,14 +49,14 @@ export class ChatStreamSessionLog implements ChatStreamSessionLogApi {
   private entries: ChatStreamLogEntry[] = []
   private appendSequence = 0
   private readonly maxEntries: number
-  private readonly protocol: ChatStreamProtocol
+  private readonly protocol: ChatStreamProtocolApi
 
   constructor(
     sessionId: string,
     options: {
       carrySequence?: number
       maxEntries?: number
-      protocol?: ChatStreamProtocol
+      protocol?: ChatStreamProtocolApi
     } = {}
   ) {
     this.sessionId = sessionId
@@ -132,4 +133,13 @@ export class ChatStreamSessionLog implements ChatStreamSessionLogApi {
       this.open = false
     }
   }
+}
+
+/** 开一份聊天流的会话日志：记录一条流的生命周期与可观测条目。 */
+export function createChatStreamSessionLog(sessionId: string, options: {
+      carrySequence?: number
+      maxEntries?: number
+      protocol?: ChatStreamProtocolApi
+    } = {}): ChatStreamSessionLogApi {
+  return new ChatStreamSessionLog(sessionId, options)
 }

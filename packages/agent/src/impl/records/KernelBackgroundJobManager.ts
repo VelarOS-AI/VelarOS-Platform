@@ -28,50 +28,17 @@
 // 取消一个会话要连带取消它派生出的整棵任务树（子 Agent 会以父任务 id 或父会话 id 再起任务），
 // 故走 `collectLineageClosure` 的不动点闭包而不是一趟 filter。判据见该方法。
 //
-import {
-  isEmpty,
-  isPositiveNumber,
-  isPresent,
-  optionalWhen,
-} from '@velaros-ai/core'
+import { isEmpty, isPositiveNumber, isPresent, optionalWhen } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
-import { type TimerLease, TimerScope } from '@velaros-ai/core/utils/TimerScope'
+import { type TimerLease,TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
 import type { KernelBackgroundJobOutputStore } from '../../contract/requires.js'
 import type { CapabilityScopeId } from '../../types/agent.js'
-import type { KernelBackgroundJob, KernelBackgroundJobOutputSnapshot, KernelBackgroundJobStatus, StartKernelBackgroundJobInput, TurnContextAppendBus, TurnContextDeltaSource, WaitForKernelBackgroundJobsInput, WaitForNextKernelBackgroundJobInput } from '../../types/records.js'
+import type { KernelBackgroundJob, KernelBackgroundJobManagerOptions, KernelBackgroundJobOutputSnapshot, KernelBackgroundJobStatus, StartKernelBackgroundJobInput, TurnContextDeltaSource, WaitForKernelBackgroundJobsInput, WaitForNextKernelBackgroundJobInput } from '../../types/records.js'
 import { appendArtifactError, assertNonBlank, cloneJob, compareTerminalJobs, formatDuration, normalizeOutputMaxChars, normalizeTerminalJobLimit, normalizeTerminalJobTtlMs, normalizeWaitTimeoutMs, trimOptional, truncateJobPreview } from '../../utils/records/background-jobs'
 
 import { TurnContextSessionLedgers } from './TurnContextSessionLedgers'
-/** 建后台任务管理器时可以拧的几项；全部可选，不给就按默认值走。 */
-export interface KernelBackgroundJobManagerOptions {
-  /** 取当前时刻的函数（毫秒）。测试传一个可控的时钟，就能不真等地验证停滞告警和终态淘汰。默认 `Date.now`。 */
-  now?: () => number
-  /** 任务多久没有可见输出就算「疑似停滞」（毫秒）。`recordStalledJobs` 按它判断并往环境上下文里记一条提示；传 0 或不传表示不做停滞判断。 */
-  stalledAfterMs?: number
-  /** 终态任务在表里留多久（毫秒），超时被 `pruneTerminalJobs` 清掉。 */
-  terminalJobTtlMs?: number
-  /** 终态任务最多留几条，超出时从最旧的开始清。运行中的任务不受这条限制。 */
-  terminalJobLimit?: number
-  /** 一个任务在内存里最多留多少字符的输出；超了从头截，被截掉的量会在读输出时如实报给调用方。 */
-  outputMaxChars?: number
-  /** 把任务输出落到内存之外的存储（宿主实现）。给了就优先写它、从它读；读写一旦出错就对这个任务停用存储并回退到内存，同时把错误挂在快照的 `artifactError` 上。 */
-  outputStore?: KernelBackgroundJobOutputStore
-  /** 任务进入终态（完成、失败、取消）时回调一次，参数是该任务的快照；宿主用它做收尾通知。回调抛错不影响任务本身收尾。 */
-  onTerminal?: (job: KernelBackgroundJob) => void
-  /** task.lifecycle 可见 delta 的写入广播总线（每宿主一个实例，由宿主装配注入）；缺省则不通知 renderer。 */
-  turnContextAppendHub?: TurnContextAppendBus
-}
-
-
-
-
-
-
-
-
-
 
 /**
  * 后台任务登记处：谁在跑、跑到哪、输出攒了多少，全在这里；同时把任务的完成与失败写成 `task.lifecycle` 环境 delta，
@@ -910,25 +877,9 @@ class KernelBackgroundJobManager implements KernelBackgroundJobManagerApi {
   }
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 export { KernelBackgroundJobManager }
+
+/** 建一台后台任务管理器：异步派发的子 Agent 登记成后台任务。 */
+export function createBackgroundJobManager(options: KernelBackgroundJobManagerOptions = {}): KernelBackgroundJobManagerApi {
+  return new KernelBackgroundJobManager(options)
+}

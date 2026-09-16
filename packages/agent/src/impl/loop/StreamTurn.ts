@@ -1,108 +1,41 @@
 import type { ModelMessage, TextStreamPart, ToolSet } from 'ai'
 
-import { isBlank, isEmpty, isPositiveNumber, isTrue, toNullable, toOptional } from '@velaros-ai/core'
+import { isBlank, isEmpty, isTrue, toNullable, toOptional } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 
-import { TurnContextFormat } from '../../contract/constants.js'
-import type {ProviderRequestSnapshot } from '../../types/context.js'
+import type { ProviderRequestSnapshot } from '../../types/context.js'
 import type { AssistantContentPart } from '../../types/history.js'
-import type { AgentModelRequestPort, AgentModelStreamInput, ConsumeAssistantStreamArgs, ExecuteStreamTurnArgs, InterruptedStreamPartial,StreamTurnResult, StreamTurnToolContext, StreamTurnToolRegistry, SystemPromptDelivery } from '../../types/loop.js'
-import type { ContextGovernanceSessionRegistryApi } from '../../types/residency.js'
+import type { AgentModelRequestPort, AgentModelStreamInput, ConsumeAssistantStreamArgs, ExecuteStreamTurnArgs, InterruptedStreamPartial, StreamTurnResult, StreamTurnToolContext, StreamTurnToolRegistry } from '../../types/loop.js'
+import type { ContextGovernanceSessionRegistryContract } from '../../types/residency.js'
 import { assertProviderRequestSnapshotReconstructable } from '../../utils/context/provider-request-snapshot'
 import { createInternalFollowUpMessage } from '../../utils/history/internal-messages'
-import {
-  buildProviderTurnId,
-  resolveProviderToolChoiceName,
-} from '../../utils/loop/loop-turn-assembly'
-import {
-  buildInterruptedStreamRecoveryPrompt,
-  buildPrimaryReasoningOnlyVisibleAnswerRecoveryPrompt,
-  shouldRecoverReasoningOnlyEmptyResponse,
-  wasStreamTurnInterruptedByRuntimeInput,
-} from '../../utils/loop/loop-turn-recovery'
+import { buildKernelContextEpoch, recordKernelContextEpochDiagnostic } from '../../utils/loop/kernel-context-epoch-guard'
+import { buildProviderTurnId, resolveProviderToolChoiceName } from '../../utils/loop/loop-turn-assembly'
+import { buildInterruptedStreamRecoveryPrompt, buildPrimaryReasoningOnlyVisibleAnswerRecoveryPrompt, shouldRecoverReasoningOnlyEmptyResponse, wasStreamTurnInterruptedByRuntimeInput } from '../../utils/loop/loop-turn-recovery'
+import { buildSystemPromptDelivery } from '../../utils/loop/stream-turn'
 import { assertModelInputCompatibility } from '../../utils/model/model-input-compatibility'
 import { normalizeModelRequestError } from '../../utils/model/model-request-error'
-import {
-  createPromptCacheSystemMessage,
-  mergeSessionPromptCacheProviderOptions,
-} from '../../utils/model/prompt-cache'
+import { mergeSessionPromptCacheProviderOptions } from '../../utils/model/prompt-cache'
+import { emitCompletedProviderTurnSnapshot } from '../../utils/records/provider-turn-event-reducer'
 import { compareStableStrings } from '../../utils/residency/determinism'
 import { resolveGovernanceSessionKey } from '../../utils/residency/session-key'
-import {
-  buildOutputTruncationContinuationPrompt,
-  isOutputTruncationError,
-} from '../../utils/stream/output-truncation-recovery'
+import { buildOutputTruncationContinuationPrompt, isOutputTruncationError } from '../../utils/stream/output-truncation-recovery'
 import { AgentTuning } from '../../utils/tuning'
-import { ChatRuntimeEvents } from '../../utils/wire/chat-runtime.js'
 import { resolveModelContextUsageOptions } from '../context/AgentLoopContextUsageManager'
-import { compileProviderSendRequest, ProviderRequestCompiler } from '../context/ProviderRequestCompiler'
-import { emitCompletedProviderTurnSnapshot, ProviderTurnEventReducer } from '../records/ProviderTurnEventReducer'
+import type { ProviderRequestCompilerApi } from '../context/ProviderRequestCompiler'
+import { compileProviderSendRequest,ProviderRequestCompiler } from '../context/ProviderRequestCompiler'
+import { chatRuntimeEvents } from '../records/ChatRuntimeEvents'
+import type { ProviderTurnEventReducerApi } from '../records/ProviderTurnEventReducer'
+import { ProviderTurnEventReducer } from '../records/ProviderTurnEventReducer'
 import type { TurnHistoryApi } from '../records/TurnHistory'
 
 import { AiSdkAgentModelRequestPort, applyModelRequestPolicy } from './AiSdkAgentModelRequestPort'
-import { buildKernelContextEpoch, recordKernelContextEpochDiagnostic } from './KernelContextEpochGuard'
-import {
-  buildKernelPrefixShape,
-  KernelPrefixShapeTracker,
-  recordKernelPrefixShapeDiagnostic,
-} from './KernelPrefixShapeTracker'
-import { createLinkedAbortScope } from './LinkedAbortScope'
+import { buildKernelPrefixShape, KernelPrefixShapeTracker, recordKernelPrefixShapeDiagnostic } from './KernelPrefixShapeTracker'
+import { LinkedAbortScope } from './LinkedAbortScope'
 import { ProviderTurnRequestHelper } from './ProviderTurnRequestHelper'
-import {
-  type AgentConnectionRetryHelper,
-  AiSdkMaxRetries,
-  isContextOverflowError,
-  markContextOverflowReplayUnsafe,
-  MaxConnectionRetryAttempts,
-} from './RetryPolicy'
+import { agentRetryPolicy, AiSdkMaxRetries, markContextOverflowReplayUnsafe, MaxConnectionRetryAttempts, type RetryPolicy } from './RetryPolicy'
 import { StreamConsumer, type StreamConsumerTurnState } from './StreamConsumer'
-
-/** 值在 `AgentTuning.loop.promptCacheMinStableSystemChars`：稳定前缀短于它就不下缓存断点。 */
-export const PromptCacheMinStableSystemChars: number =
-  AgentTuning.loop.promptCacheMinStableSystemChars
-
-/**
- * 系统提示词投递（P7-1 的修复点）。
- *
- * 旧形态把 dynamic 层作为**第二条 system 消息插在稳定前缀与历史之间**。那一层里有
- * `runtime.datetime`（`new Date().toLocaleString()`），逐请求变字节 —— 稳定前缀本身还能命中缓存，
- * 但它后面的**整段历史**每一轮都被踢出缓存。在 input:output ≈ 100:1 的 agent 负载上，这是把
- * 最贵的一段反复重算。
- *
- * 新形态：稳定层留在前缀（带缓存断点），dynamic 层整体下沉到活动尾。
- *
- * **为什么尾块是 user 角色而不是 system**：provider 只接受开头连续的 system 段（Anthropic 对被
- * user/assistant 隔开的第二段 system 直接报错）。尾块与既有 retained-context 注入同形——
- * user 角色 + 显式标签，内容仍是原样的 `<current_context>` XML。
- */
-function buildSystemPromptDelivery(
-  systemPrompt: string,
-  stableCutoff: LooseOptional<number>
-): SystemPromptDelivery {
-  if (!isPositiveNumber(stableCutoff))
-    return { system: systemPrompt, leadingMessages: [], tailBlocks: [] }
-
-  const cutoff = Math.min(Math.floor(stableCutoff), systemPrompt.length)
-  const stablePart = systemPrompt.slice(0, cutoff)
-  const dynamicPart = systemPrompt.slice(cutoff)
-
-  if (stablePart.length < PromptCacheMinStableSystemChars)
-    return { system: systemPrompt, leadingMessages: [], tailBlocks: [] }
-
-  return {
-    leadingMessages: [createPromptCacheSystemMessage(stablePart)],
-    tailBlocks: isEmpty(dynamicPart.trim()) ? [] : [buildDynamicPromptLayerMessage(dynamicPart)],
-  }
-}
-
-/** dynamic 层尾块。标签固定，正文逐字保留（不重新格式化，否则金标轨迹比对失效）。 */
-function buildDynamicPromptLayerMessage(dynamicPart: string): ModelMessage {
-  return {
-    role: 'user',
-    content: [TurnContextFormat.dynamicLayerMarker, dynamicPart].join('\n'),
-  }
-}
 
 /**
  * 主会话的一轮模型调用：从「把上下文编译成请求」到「assistant 内容写回历史」这一整段。
@@ -146,7 +79,7 @@ class StreamTurn<TToolContext extends StreamTurnToolContext = StreamTurnToolCont
 {
   /** 逐块消费 fullStream，并把文本/tool call 分发到事件总线和 ToolExecutor。 */
   private readonly streamConsumerHelper: StreamConsumer
-  private readonly requestCompiler: ProviderRequestCompiler
+  private readonly requestCompiler: ProviderRequestCompilerApi
   private readonly log = logRuntime.tag('StreamTurn')
   private readonly turnRequestHelper = new ProviderTurnRequestHelper(this.log, 'stream')
   private readonly prefixShapeTracker = new KernelPrefixShapeTracker()
@@ -155,11 +88,11 @@ class StreamTurn<TToolContext extends StreamTurnToolContext = StreamTurnToolCont
     /** 用于生成当前可见 AI tools。 */
     private readonly toolRegistry: StreamTurnToolRegistry<TToolContext>,
     /** 网络/供应商瞬断重试策略。 */
-    private readonly connectionRetryHelper: AgentConnectionRetryHelper,
+    private readonly connectionRetryHelper: RetryPolicy,
     /** assistant/tool 历史拼接工具。 */
     private readonly turnHistoryHelper: TurnHistoryApi,
     /** 治理会话登记处（宿主级单实例，驻留账本与 epoch 状态跨回合共享一份，必传）。 */
-    private readonly governanceSessions: ContextGovernanceSessionRegistryApi,
+    private readonly governanceSessions: ContextGovernanceSessionRegistryContract,
     /** 后端统一模型请求层。 */
     private readonly modelRequestService: AgentModelRequestPort =
       new AiSdkAgentModelRequestPort()
@@ -189,15 +122,15 @@ class StreamTurn<TToolContext extends StreamTurnToolContext = StreamTurnToolCont
     }
     const startedAt = Date.now()
     let didLogTurnEnd = false
-    let providerTurnReducer: LooseOptional<ProviderTurnEventReducer> = null
+    let providerTurnReducer: LooseOptional<ProviderTurnEventReducerApi> = null
     let providerRequestSnapshot: LooseOptional<ProviderRequestSnapshot> = null
     let predictedInputTokens: LooseOptional<number> = null
     let streamContinuationRecoveries = 0
     let reasoningOnlyVisibleAnswerRecoveries = 0
-    const turnAbortScope = createLinkedAbortScope(
+    const turnAbortScope = new LinkedAbortScope([
       args.abortSignal,
-      ...(args.runtimeInputInterruptSignal ? [args.runtimeInputInterruptSignal] : [])
-    )
+      ...(args.runtimeInputInterruptSignal ? [args.runtimeInputInterruptSignal] : []),
+    ])
     this.log.info('model stream turn start', {
       turn: args.turn,
       model: args.model,
@@ -211,7 +144,7 @@ class StreamTurn<TToolContext extends StreamTurnToolContext = StreamTurnToolCont
         try {
           assistantContent = await this.connectionRetryHelper.runWithConnectionRetry(
             async () => {
-              const requestAbortScope = createLinkedAbortScope(turnAbortScope.signal)
+              const requestAbortScope = new LinkedAbortScope([turnAbortScope.signal])
               // 每次尝试整体新建 turnState（S7），彻底消除失败尝试的 usage 残留。
               turnState = {
                 turn: args.turn,
@@ -221,8 +154,8 @@ class StreamTurn<TToolContext extends StreamTurnToolContext = StreamTurnToolCont
               }
               try {
                 requestAbortScope.signal.throwIfAborted()
-                // system、history、tools 和 model 在这里交给统一请求层；重试边界由 AgentConnectionRetryHelper 控制。
-                args.events.emitRuntime(ChatRuntimeEvents.phase('requesting-model'))
+                // system、history、tools 和 model 在这里交给统一请求层；重试边界由 RetryPolicy 控制。
+                args.events.emitRuntime(chatRuntimeEvents.phase('requesting-model'))
                 this.log.info('model request start', {
                   turn: args.turn,
                   model: args.model,
@@ -460,7 +393,7 @@ class StreamTurn<TToolContext extends StreamTurnToolContext = StreamTurnToolCont
               onRetry: (error, attempt) => {
                 args.onModelRequestRetry?.(error, attempt)
                 args.events.emitRuntime(
-                  ChatRuntimeEvents.retryingTurn(
+                  chatRuntimeEvents.retryingTurn(
                     args.turn,
                     attempt,
                     MaxConnectionRetryAttempts,
@@ -496,7 +429,7 @@ class StreamTurn<TToolContext extends StreamTurnToolContext = StreamTurnToolCont
               )
             )
             args.events.emitRuntime(
-              ChatRuntimeEvents.retryingTurn(
+              chatRuntimeEvents.retryingTurn(
                 args.turn,
                 reasoningOnlyVisibleAnswerRecoveries,
                 AgentTuning.loop.reasoningOnlyAnswerRecoveryAttempts,
@@ -540,7 +473,7 @@ class StreamTurn<TToolContext extends StreamTurnToolContext = StreamTurnToolCont
             outputWasTruncated ? 'output-truncation' : 'connection'
           )
           args.events.emitRuntime(
-            ChatRuntimeEvents.retryingTurn(
+            chatRuntimeEvents.retryingTurn(
               args.turn,
               streamContinuationRecoveries,
               maxContinuationAttempts,
@@ -608,7 +541,7 @@ class StreamTurn<TToolContext extends StreamTurnToolContext = StreamTurnToolCont
         providerRequestSnapshot: toOptional(providerRequestSnapshot),
       }
     } catch (error) {
-      if (isContextOverflowError(error) && (turnState.hasVisibleOutput || turnState.hasToolUse)) {
+      if (agentRetryPolicy.isContextOverflowError(error) && (turnState.hasVisibleOutput || turnState.hasToolUse)) {
         markContextOverflowReplayUnsafe(error, {
           hasVisibleOutput: turnState.hasVisibleOutput,
           hasToolUse: turnState.hasToolUse,
@@ -676,7 +609,7 @@ class StreamTurn<TToolContext extends StreamTurnToolContext = StreamTurnToolCont
 
   private emitProviderTurnSnapshot(
     args: ExecuteStreamTurnArgs<TToolContext>,
-    reducer: LooseOptional<ProviderTurnEventReducer>,
+    reducer: LooseOptional<ProviderTurnEventReducerApi>,
     options: { requirePendingTools?: boolean } = {}
   ): void {
     emitCompletedProviderTurnSnapshot({

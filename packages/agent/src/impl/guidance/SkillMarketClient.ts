@@ -9,19 +9,9 @@ import { asRecord, readString } from '@velaros-ai/core/utils/unknownJsonRecord'
 
 import { AgentSkillFailureCodes } from '../../contract/constants.js'
 import type { SkillMarketCatalog, SkillMarketEntry } from '../../types/agent.js'
-import type { RemoteSkillEntry, SkillMarketAvailability } from '../../types/guidance.js'
+import type { RemoteSkillEntry, SkillMarketAvailability, SkillMarketClientDependencies } from '../../types/guidance.js'
 
-import type { SkillFileStore } from './SkillFileStore'
-
-interface SkillMarketClientDependencies {
-  store: SkillFileStore
-  /**
-   * 宿主提供的市场根地址。未注入或返回空值时，市场保持禁用且网络请求不会发生。
-   */
-  marketBase?: () => string
-  fetchImpl?: typeof fetch
-  now?: () => number
-}
+import type { SkillFileStoreApi } from './SkillFileStore'
 
 /**
  * 技能市场客户端对外的面：从宿主配的市场根拉 `skills-manifest.json`，和本地已安装技能对账，
@@ -53,7 +43,7 @@ export interface SkillMarketClientApi {
 
 class SkillMarketClient implements SkillMarketClientApi {
   private readonly log = logRuntime.tag('SkillMarketClient')
-  private readonly store: SkillFileStore
+  private readonly store: SkillFileStoreApi
   private readonly marketBase?: () => string
   private readonly fetchImpl: typeof fetch
   private readonly now: () => number
@@ -233,3 +223,8 @@ class SkillMarketClient implements SkillMarketClientApi {
 }
 
 export { SkillMarketClient, type SkillMarketClientDependencies }
+
+/** 建一个技能市场客户端。 */
+export function createSkillMarketClient(dependencies: SkillMarketClientDependencies): SkillMarketClientApi {
+  return new SkillMarketClient(dependencies)
+}

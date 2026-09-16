@@ -3,14 +3,13 @@ import type { ModelMessage } from 'ai'
 import { AppError } from '@velaros-ai/core/error'
 import type { Logger } from '@velaros-ai/core/logger'
 
-import type { AgentRuntimeInputPort,ExecutionActivitySignalsPort, ExecutionCollaborationPort, ExecutionResourcePort, ToolExecutionApi } from '../../contract/requires.js'
-import type { AgentEvent } from '../../types/agent'
-import type { ExecutionRecord,StreamStatePayload } from '../../types/agent.js'
+import type { AgentRuntimeInputPort, ExecutionActivitySignalsPort, ExecutionCollaborationPort, ExecutionResourcePort, ToolExecutionApi } from '../../contract/requires.js'
+import type { AgentEvent, ExecutionRecord, StreamStatePayload } from '../../types/agent'
 import type { ExecutionAbortOptions, RunManagedExecutionParams } from '../../types/execution.js'
 import { resolveAbortReason } from '../../utils/execution/managed-execution'
-import { ChatRuntimeEvents } from '../../utils/wire/chat-runtime.js'
+import { chatRuntimeEvents } from '../records/ChatRuntimeEvents'
 import type { ExecutionRecords } from '../records/ExecutionRecords'
-import type { ExecutionStore } from '../records/ExecutionStore'
+import type { ExecutionStoreApi } from '../records/ExecutionStore'
 import type { SourceSessionGuard } from '../records/SourceSessionGuard'
 
 /**
@@ -27,7 +26,7 @@ interface ManagedExecutionRunnerDependencies {
   /** 会话级互斥：`start` 领运行权并拿到 abortController 与代次，`finish` 按代次释放，保证旧执行的收尾不会清掉新执行的互斥位。 */
   sourceSessionGuard: SourceSessionGuard
   /** 执行记录存储：本次执行期间在这里挂 executionId 级的 state / debug 监听，收尾时解绑。 */
-  store: ExecutionStore
+  store: ExecutionStoreApi
   /** 执行资源端口：用于把这次执行映射到协作面的资源 id；取不到时只跳过协作者登记，不影响执行本身。 */
   executionResource: ExecutionResourcePort
   /** 活跃信号端口：开跑时开一段执行会话（宿主据此判定「有事在做」），收尾时释放。 */
@@ -160,7 +159,7 @@ class ManagedExecutionRunner implements ManagedExecutionRunnerApi {
     // 每个 execution 默认至少有一个 root task，启动后标记为 running。
     const rootTaskId = execution.currentTaskId
     records.startTask(execution.id, rootTaskId)
-    events.emitState(ChatRuntimeEvents.phase('creating-task'))
+    events.emitState(chatRuntimeEvents.phase('creating-task'))
     log.info('execution task created', {
       executionId: execution.id,
       sourceSessionId: params.sourceSessionId,
@@ -185,7 +184,7 @@ class ManagedExecutionRunner implements ManagedExecutionRunnerApi {
     if (supersededExecutionId) {
       emitExecutionState(
         supersededExecutionId,
-        ChatRuntimeEvents.aborted(
+        chatRuntimeEvents.aborted(
           '运行被新的请求取代。',
           supersededExecutionId,
           'EXECUTION_ABORTED'
@@ -313,8 +312,6 @@ class ManagedExecutionRunner implements ManagedExecutionRunnerApi {
     })
   }
 }
-
-
 
 export { ManagedExecutionRunner }
 export type { ManagedExecutionRunnerDependencies }

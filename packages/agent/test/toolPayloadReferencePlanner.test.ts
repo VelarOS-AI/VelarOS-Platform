@@ -2,9 +2,7 @@ import type { ModelMessage } from 'ai'
 import { expect, test } from 'bun:test'
 
 import { InMemoryContextPayloadStore } from '../src/impl/context/InMemoryContextPayloadStore'
-import {
-  buildToolPayloadRefsForProviderMessages,
-} from '../src/impl/context/ToolPayloadReferencePlanner'
+import { ToolPayloadReferencePlanner } from '../src/impl/context/ToolPayloadReferencePlanner'
 import { buildToolPayloadRefOccurrenceKey } from '../src/utils/context/context-ref-envelope'
 
 function message(value: string, toolCallId = 'read-1'): ModelMessage {
@@ -24,7 +22,7 @@ function message(value: string, toolCallId = 'read-1'): ModelMessage {
 test('repeated provider planning reuses a paged result instead of archiving its envelope', async () => {
   const store = new InMemoryContextPayloadStore()
   const original = JSON.stringify({ content: '原文😀\\路径\r\n'.repeat(1200) })
-  const first = await buildToolPayloadRefsForProviderMessages({
+  const first = await new ToolPayloadReferencePlanner(store).buildRefs({
     sessionId: 'session',
     messages: [message(original)],
     store,
@@ -37,7 +35,7 @@ test('repeated provider planning reuses a paged result instead of archiving its 
     originalLength: original.length,
   })
   for (let i = 0; i < 3; i++) {
-    const next = await buildToolPayloadRefsForProviderMessages({
+    const next = await new ToolPayloadReferencePlanner(store).buildRefs({
       sessionId: 'session',
       messages: [message(paged)],
       store,
@@ -53,7 +51,7 @@ test('mixed raw and existing references retain occurrence identity without ambig
   const store = new InMemoryContextPayloadStore()
   const existingRef = 'ctx-payload:session:existing'
   const wrapped = JSON.stringify({ __contextRef: 'tool-output', ref: existingRef })
-  const refs = await buildToolPayloadRefsForProviderMessages({
+  const refs = await new ToolPayloadReferencePlanner(store).buildRefs({
     sessionId: 'session',
     messages: [message(wrapped), message('different raw output')],
     store,
@@ -67,7 +65,7 @@ test('mixed raw and existing references retain occurrence identity without ambig
 test('malformed reference-looking text remains available as original content', async () => {
   const store = new InMemoryContextPayloadStore()
   const value = '{"__contextRef":"tool-output","ref":"ctx-payload:unfinished'
-  await buildToolPayloadRefsForProviderMessages({
+  await new ToolPayloadReferencePlanner(store).buildRefs({
     sessionId: 'session',
     messages: [message(value)],
     store,

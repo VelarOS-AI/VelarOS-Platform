@@ -16,15 +16,13 @@
 // IO 全部经 `AgentModPackReader` 注入：主干零文件系统依赖，宿主决定怎么读、读不读得动。
 import { isUndefined, toOptional } from '@velaros-ai/core'
 import { velarosModEnvelopes } from '@velaros-ai/kernel'
-import {
-  VelarosModManifestFileName,
-} from '@velaros-ai/kernel/contracts'
+import { VelarosModManifestFileName } from '@velaros-ai/kernel/contracts'
 
 import type { AgentModPackReader } from '../../contract/requires.js'
 import type { AgentModDiagnostic } from '../../types/agent.js'
-import type { AgentModAssembly, AgentModDiscoveryResult, AgentModPackage,AgentModPackDescriptorLike, AssembleAgentModsInput } from '../../types/mods.js'
+import type { AgentModAssembly, AgentModDiscoveryResult, AgentModPackage, AgentModPackDescriptorLike, AgentModRegistrySnapshot, AgentModSurfaceSnapshot, AssembleAgentModsInput } from '../../types/mods.js'
+import { createAgentModSurfaceSnapshot } from '../../utils/mods/agent-mod-projection'
 import { readErrorMessage } from '../../utils/mods/seams'
-import { createBuiltinAgentModPackage } from '../AgentTools'
 import { AgentModLoader } from '../mods/AgentModLoader'
 
 /**
@@ -48,9 +46,18 @@ export interface AgentModHostAssemblerApi {
    * 顺序只决定「谁先占住主键」——冲突一律拒载并留诊断，不存在后者覆盖前者的加载顺序语义。
    */
   assembleAgentMods(input: AssembleAgentModsInput): Promise<AgentModAssembly>
+
+  /** 把注册表快照投影成宿主面要的 mod 贡献快照。 */
+  createSurfaceSnapshot(snapshot: AgentModRegistrySnapshot): AgentModSurfaceSnapshot
 }
 
 class AgentModHostAssembler implements AgentModHostAssemblerApi {
+  /**
+   * 随包官方 mod 的来源：由挂载处（`impl/AgentTools.ts`）注入，组装器自己不认识任何具体工具。
+   * `assembleAgentMods` 的入参没给 `bundled` 时才调它。
+   */
+  constructor(private readonly bundledPackages: () => readonly AgentModPackage[]) {}
+
   public async discoverAgentModPackages(input: {
     packs: readonly AgentModPackDescriptorLike[]
     reader: AgentModPackReader
@@ -139,7 +146,7 @@ class AgentModHostAssembler implements AgentModHostAssemblerApi {
     const loader =
       input.loader ?? new AgentModLoader({ host: input.host, onDiagnostic: input.onDiagnostic })
 
-    const bundled = input.bundled ?? [createBuiltinAgentModPackage()]
+    const bundled = input.bundled ?? this.bundledPackages()
     const discovery =
       input.packs && input.reader
         ? await this.discoverAgentModPackages({ packs: input.packs, reader: input.reader })
@@ -156,27 +163,10 @@ class AgentModHostAssembler implements AgentModHostAssemblerApi {
       }),
     }
   }
+
+  public createSurfaceSnapshot(snapshot: AgentModRegistrySnapshot): AgentModSurfaceSnapshot {
+    return createAgentModSurfaceSnapshot(snapshot)
+  }
 }
 
-/**
- * discover：把 Kernel 的 pack 清单折算成 Agent 候选包。
- *
- * 跳过一律留痕（禁用 / 未声明 Agent 节 / 读不出 manifest 各有诊断码），绝不静默丢弃。
- */
-async function discoverAgentModPackages(input: {
-  packs: readonly AgentModPackDescriptorLike[]
-  reader: AgentModPackReader
-}): Promise<AgentModDiscoveryResult> {
-  return new AgentModHostAssembler().discoverAgentModPackages(input)
-}
-
-/**
- * 宿主组装入口：bundled 先、pack 后（bundled 有序数组，pack 平铺）。
- *
- * 顺序只决定「谁先占住主键」——冲突一律拒载并留诊断，不存在后者覆盖前者的加载顺序语义。
- */
-async function assembleAgentMods(input: AssembleAgentModsInput): Promise<AgentModAssembly> {
-  return new AgentModHostAssembler().assembleAgentMods(input)
-}
-
-export { assembleAgentMods, discoverAgentModPackages }
+export { AgentModHostAssembler }

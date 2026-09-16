@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto'
 
-import type {RunnerSubAgentDispatcher } from '../../contract/requires.js'
-import type { AgentWorkflowAgentResult, AgentWorkflowRunResult,ToolCategoryId } from '../../types/agent.js'
-import type { AgentWorkflowDispatchContext, AgentWorkflowRunRequest,RunnerToolContext } from '../../types/runner.js'
+import type { RunnerSubAgentDispatcher } from '../../contract/requires.js'
+import type { AgentWorkflowAgentResult, AgentWorkflowRunResult, ToolCategoryId } from '../../types/agent.js'
+import type { AgentWorkflowDispatchContext, AgentWorkflowRunRequest, RunnerToolContext } from '../../types/runner.js'
 import { parseSubAgentToolResult } from '../../utils/delegation/sub-agent-result-builder'
 
 import { AgentWorkflowRuntime } from './AgentWorkflowRuntime'

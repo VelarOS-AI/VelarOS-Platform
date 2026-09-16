@@ -1,4 +1,4 @@
-import { isEmpty,isTrue } from '@velaros-ai/core'
+import { isEmpty, isTrue } from '@velaros-ai/core'
 
 import type { CapabilityValidationInterpreter } from '../../contract/requires.js'
 // 失败形状单源住 reminders/types（coding → reminders 是既有依赖方向，反过来会成环）。

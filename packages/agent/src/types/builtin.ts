@@ -19,11 +19,6 @@ export interface BuiltinAgentModPackage extends AgentModPackage {
   readonly bindings: AgentModBindings
 }
 
-export interface DistillContextInput extends Record<string, unknown> {
-  facts: string[]
-  note?: string
-}
-
 /** 一次 filter 应用的结果：输出本身 + 让模型能自己判断「是没输出还是没命中」的账。 */
 export interface BackgroundJobOutputFilterResult {
   /** 呈现给模型的输出正文（filter 未生效时 = 原始输出）。 */

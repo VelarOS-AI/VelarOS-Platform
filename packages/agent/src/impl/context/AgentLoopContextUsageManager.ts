@@ -15,29 +15,17 @@
  */
 import type { ModelMessage } from 'ai'
 
-import { isFiniteNumber, isNumber } from '@velaros-ai/core'
+import { isNumber } from '@velaros-ai/core'
 
 import type { AgentModelRequestOptions } from '../../contract/requires.js'
 import type { ContextUsageEstimate } from '../../types/agent.js'
 import type { AgentLoopToolRegistry, EstimateContextUsageOptions } from '../../types/context.js'
-import {
-  DefaultContextSafetyMarginPercent,
-  resolveReservedOutputTokens,
-} from '../../utils/context/context-budget'
+import { resolveModelContextUsageOptions } from '../../utils/context/agent-loop-context-usage-manager'
+import { DefaultContextSafetyMarginPercent, resolveReservedOutputTokens } from '../../utils/context/context-budget'
 import { estimateContextUsage, sumToolSchemaChars } from '../../utils/context/context-usage'
 import { AgentTuning } from '../../utils/tuning'
 
 import { ContextUsageCalibrator } from './ContextUsageCalibrator'
-
-/** 本轮显式输出上限与实际请求策略同源，覆盖按窗口比例推导的缺省预留。 */
-function resolveModelContextUsageOptions(
-  options: EstimateContextUsageOptions = {},
-  modelRequestOptions?: LooseOptional<AgentModelRequestOptions>
-): EstimateContextUsageOptions {
-  const maxOutputTokens = modelRequestOptions?.requestPolicy?.maxOutputTokens
-  if (!isFiniteNumber(maxOutputTokens) || maxOutputTokens < 0) return options
-  return { ...options, reservedOutputTokens: maxOutputTokens }
-}
 
 /**
  * 回合级上下文用量估算器：组装每轮预算判断要用的 `EstimateContextUsageOptions`，并把真实用量回灌给校准器。

@@ -1,5 +1,4 @@
-import type { ToolExecutionPlanUpdate } from '../../types/agent'
-import type { ExecutionTaskExecutionAdvice, ExecutionTaskPlanStep, ExecutionTaskRecord } from '../../types/agent.js'
+import type { ExecutionTaskExecutionAdvice, ExecutionTaskPlanStep, ExecutionTaskRecord, ToolExecutionPlanUpdate } from '../../types/agent'
 import type { ExecutionRoutingCoordinator } from '../records/ExecRouting'
 import type { ExecutionRecords } from '../records/ExecutionRecords'
 /**

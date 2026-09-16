@@ -1,11 +1,10 @@
-import { isEmpty,isPresent, toOptional } from '@velaros-ai/core'
+import { isEmpty, isPresent, toOptional } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import type { ToolConfirmationDecisionOptions } from '../../types/agent'
-import type { ExecutionPendingInteractionKind, ExecutionPendingInteractionSnapshot, ExecutionProvideInputRequest, ExecutionRecord, ExecutionResolveConfirmationRequest } from '../../types/agent.js'
+import type { ExecutionPendingInteractionKind, ExecutionPendingInteractionSnapshot, ExecutionProvideInputRequest, ExecutionRecord, ExecutionResolveConfirmationRequest, ToolConfirmationDecisionOptions } from '../../types/agent'
 import type { ExecutionInteractions } from '../records/ExecutionInteractions'
 import type { ExecutionRecords } from '../records/ExecutionRecords'
-import type { ExecutionStore } from '../records/ExecutionStore'
+import type { ExecutionStoreApi } from '../records/ExecutionStore'
 import type { SourceSessionGuard } from '../records/SourceSessionGuard'
 
 /**
@@ -45,7 +44,7 @@ class ExecutionInteractionFacade implements ExecutionInteractionFacadeApi {
     private readonly interactions: ExecutionInteractions,
     private readonly records: ExecutionRecords,
     private readonly sourceSessionGuard: SourceSessionGuard,
-    private readonly store: ExecutionStore
+    private readonly store: ExecutionStoreApi
   ) {}
 
   public async awaitConfirmation(

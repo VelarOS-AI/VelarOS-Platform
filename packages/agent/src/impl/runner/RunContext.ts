@@ -1,19 +1,10 @@
 import type { ModelMessage } from 'ai'
 
 import type { AgentChatRuntimeConfig, AgentSystemRuntimeConfig, RuntimePromptFeaturePolicy } from '../../contract/requires.js'
-import type {
-  AgentContextPhase,
-  ChatPromptFeatureId,
-  ExecutionModeId,
-  StreamTurnContextPayload,
-} from '../../types/agent'
-import type { RunProfileId } from '../../types/agent.js'
+import type { AgentContextPhase, ChatPromptFeatureId, ExecutionModeId, RunProfileId, StreamTurnContextPayload } from '../../types/agent'
 import type { PromptSegmentDefinition } from '../../types/guidance.js'
-import type { AgentRoleResolution, AssembledSystemPrompt, BuildSystemPromptArgs, BuildTurnContextPayloadArgs,PromptStatePreparedToolCategories, PromptStateToolContext, RunContextToolContext } from '../../types/runner.js'
-import {
-  createSelectedSkillPromptSegment,
-  createSkillPromptSegment,
-} from '../../utils/guidance/shared'
+import type { AgentRoleResolution, AssembledSystemPrompt, BuildSystemPromptArgs, BuildTurnContextPayloadArgs, PromptStatePreparedToolCategories, PromptStateToolContext, RunContextToolContext } from '../../types/runner.js'
+import { createSelectedSkillPromptSegment, createSkillPromptSegment } from '../../utils/guidance/shared'
 
 import type { ContextBuilder } from './ContextBuilder'
 import { PromptStateBuilder } from './PromptStateBuilder'

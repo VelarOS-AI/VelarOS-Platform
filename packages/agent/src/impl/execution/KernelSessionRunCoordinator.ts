@@ -38,28 +38,6 @@ import type { KernelSessionDemandSettlement, KernelSessionDrainRunner, KernelSes
 import { coalesceKernelSessionDemands, createDemand, createDrainTarget, createRunDeferred, entryAcceptsKernelSessionWake, maxSeq, settleKernelSessionDemand, settleSuppressedKernelSessionDemand, shouldRunPendingKernelSessionDemand, suppressKernelSessionPendingAtOrBefore } from '../../utils/execution/session-lane'
 import { KernelSessionRunInterruptedError } from '../errors/KernelSessionRunInterruptedError'
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 /**
  * 会话运行权协调器：回答「现在谁在跑、下一个跑谁、这次打断算谁的」。一个 sessionId 同时只有一个需求在跑，
  * 最多再挂一个 pending，新需求与 pending **合并**而不是排队。

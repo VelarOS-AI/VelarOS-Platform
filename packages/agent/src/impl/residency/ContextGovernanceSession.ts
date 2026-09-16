@@ -20,9 +20,9 @@ import type { ModelMessage } from 'ai'
 
 import { isEmpty, isNotNull, isNull, isPresent, toNullable } from '@velaros-ai/core'
 
-import { AgentToolNames } from '../../contract/constants.js'
 import type { ContextMigrationEventSink } from '../../contract/requires.js'
-import type { ContextDistiller, ContextGovernanceConfig, ContextGovernanceConfigInput, ContextGovernanceSessionApi as ContextGovernanceSessionContract, ContextGovernanceSyncInput, ContextGovernanceSyncResult, ContextHandoffSignal, ContextRecord, ContextRecordClassifier, GovernanceEpochReport, GovernanceEpochSource,GovernanceWindowDerivation, GovernanceWindowInput } from '../../types/residency.js'
+import type { ContextDistiller, ContextGovernanceConfig, ContextGovernanceSessionApi as ContextGovernanceSessionContract, ContextGovernanceSyncInput, ContextGovernanceSyncResult, ContextHandoffSignal, ContextRecord, ContextRecordClassifier, GovernanceEpochReport, GovernanceEpochSource, GovernanceWindowDerivation, GovernanceWindowInput } from '../../types/residency.js'
+import { resolveSharedPrefixLength } from '../../utils/residency/context-governance-session'
 import { stableFingerprint } from '../../utils/residency/determinism'
 import { planContextDistillation } from '../../utils/residency/distill'
 import { measureProjectedTokens, resolveProjectionBudget, runGovernanceEpoch, shouldOpenGovernanceEpoch } from '../../utils/residency/governance-epoch'
@@ -33,9 +33,6 @@ import { AgentTuning } from '../../utils/tuning'
 
 import { ContextDistillRunner } from './ContextDistillRunner'
 import { ContextResidencyLedger } from './ContextResidencyLedger'
-
-/** @deprecated 兼容旧历史工具身份；当前运行时不将其作为治理入口。值在 AgentToolNames.contextDistill。 */
-export const ContextEpochRequestToolName: string = AgentToolNames.contextDistill
 
 /** 建 `ContextGovernanceSession` 时可选的两项（配置、分类器、事件汇走构造函数的前三个位置参数，不在这里）。 */
 export interface ContextGovernanceSessionOptions {
@@ -483,30 +480,3 @@ export class ContextGovernanceSession implements ContextGovernanceSessionApi {
   }
 }
 
-/**
- * 建 `ContextGovernanceSessionRegistry` 时给的一组宿主注入；全部可省，整个对象也能不传。
- * 除 `distiller` 外都只在建表那一刻读一次，之后新建的会话继承当时的值。
- */
-export interface ContextGovernanceSessionRegistryOptions {
-  /** 宿主注入的治理配置（宽容解析 + 默认值兜底）。 */
-  config?: LooseOptional<ContextGovernanceConfigInput>
-  /** 领域语义分类器：refetchable / 去重目标 / pinned（能力包注入，agent 包不认工具名单）。 */
-  classifier?: LooseOptional<ContextRecordClassifier>
-  /** 迁移事件汇工厂；缺省关闭落盘（agent 包 host 无关，写盘是宿主的事）。 */
-  sinkFactory?: LooseOptional<(sessionId: string) => Nullable<ContextMigrationEventSink>>
-  /** 最大跟踪会话数；超出按"最近使用"淘汰最旧的那个。 */
-  maxTrackedSessions?: LooseOptional<number>
-  /**
-   * I2 蒸馏器（宿主注入的一次辅助模型调用）。缺省 = 治理退化为纯机械：
-   * 档位仍按配置记账，但每次规划都以 `no-distiller` 跳过，不会静默假装蒸馏过。
-   */
-  distiller?: LooseOptional<ContextDistiller>
-}
-
-
-function resolveSharedPrefixLength(left: readonly string[], right: readonly string[]): number {
-  const limit = Math.min(left.length, right.length)
-  let index = 0
-  while (index < limit && left[index] === right[index]) index += 1
-  return index
-}

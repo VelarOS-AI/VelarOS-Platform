@@ -17,7 +17,7 @@ import { isFiniteNumber, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import type { ContextMigrationEventSink } from '../../contract/requires.js'
-import type { ContextAdmissionInput, ContextGovernanceConfig,ContextLedgerAppendResult, ContextLedgerStats, ContextMigrationCause, ContextMigrationOutcome, ContextRecord, ContextRecordClassifier, ContextResidency, ContextResidencyMigrationEvent, ContextResidencyVector, ResidencyLedgerView } from '../../types/residency.js'
+import type { ContextAdmissionInput, ContextGovernanceConfig, ContextLedgerAppendResult, ContextLedgerStats, ContextMigrationCause, ContextMigrationOutcome, ContextRecord, ContextRecordClassifier, ContextResidency, ContextResidencyMigrationEvent, ContextResidencyVector, ResidencyLedgerView } from '../../types/residency.js'
 import { admitContextRecord } from '../../utils/residency/admission'
 import { clampResidencyForRecord, DefaultResidencyCharsPerToken, estimateResidencyTokens, isResidencyDowngrade, residencyRank } from '../../utils/residency/context-record'
 import { DefaultContextGovernanceConfig } from '../../utils/residency/governance-config'

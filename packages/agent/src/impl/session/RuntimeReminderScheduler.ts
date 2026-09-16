@@ -1,7 +1,7 @@
 import { isNull, toNullable } from '@velaros-ai/core'
 
 import type { RuntimeReminderProducer } from '../../contract/requires.js'
-import type { ReminderTrigger, RuntimeReminderConsumeResult,RuntimeReminderInput } from '../../types/session.js'
+import type { ReminderTrigger, RuntimeReminderConsumeResult, RuntimeReminderInput } from '../../types/session.js'
 import { resolveReminderScopeKey } from '../../utils/session/reminder-scope'
 
 /**

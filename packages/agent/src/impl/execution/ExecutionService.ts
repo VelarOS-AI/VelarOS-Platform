@@ -17,62 +17,30 @@ import type { ModelMessage } from 'ai'
 import { isBlank, isEmpty, Log, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import type { AuthGatePort, ExecutionActivitySignalsPort, ExecutionCollaborationPort, ExecutionGuidanceRelayPlanner, ExecutionIdFactory,ExecutionRecordsPathPort, ExecutionResourcePort } from '../../contract/requires.js'
-import type {
-  StreamTurnContextPayload,
-  ToolConfirmationDecisionOptions,
-  ToolExecutionPlanUpdate,
-} from '../../types/agent'
-import type { ExecutionPendingInteractionSnapshot, ExecutionProvideInputRequest, ExecutionRecord, ExecutionResolveConfirmationRequest, ExecutionTaskExecutionAdvice, ExecutionTaskPlanStep, ExecutionTaskRecord,StreamStatePayload } from '../../types/agent.js'
-import type { ExecutionAbortOptions, ExecutionGuidanceRelayPlanInput, RunManagedExecutionParams } from '../../types/execution.js'
-import type { AgentModSeamDispatcherApi } from '../../types/mods.js'
-import type { ExecutionRouteProvider } from '../../types/records.js'
+import type { AuthGatePort, ExecutionActivitySignalsPort, ExecutionGuidanceRelayPlanner, ExecutionResourcePort } from '../../contract/requires.js'
+import type { ExecutionPendingInteractionSnapshot, ExecutionProvideInputRequest, ExecutionRecord, ExecutionResolveConfirmationRequest, ExecutionTaskExecutionAdvice, ExecutionTaskPlanStep, ExecutionTaskRecord, StreamStatePayload, StreamTurnContextPayload, ToolConfirmationDecisionOptions, ToolExecutionPlanUpdate } from '../../types/agent'
+import type { ExecutionAbortOptions, ExecutionGuidanceRelayPlanInput, ExecutionServiceOptions, RunManagedExecutionParams } from '../../types/execution.js'
+import type { AgentModSeamDispatcherContract } from '../../types/mods.js'
 import { assertGuidanceEnqueued, isTerminalExecutionStatus } from '../../utils/execution/managed-execution'
 import { extractGuidanceUserText } from '../../utils/records/guidance-relay'
-import { ChatRuntimeEvents } from '../../utils/wire/chat-runtime.js'
+import { chatRuntimeEvents } from '../records/ChatRuntimeEvents'
 import { ExecutionRoutingCoordinator } from '../records/ExecRouting'
 import { ExecutionStateMachine } from '../records/ExecStateMachine'
 import { ExecutionGuidanceQueue } from '../records/ExecutionGuidanceQueue'
 import { ExecutionInteractions } from '../records/ExecutionInteractions'
 import { ExecutionRecords } from '../records/ExecutionRecords'
+import type { ExecutionStoreApi } from '../records/ExecutionStore'
 import { ExecutionStore } from '../records/ExecutionStore'
 import { SourceSessionGuard } from '../records/SourceSessionGuard'
+import type { SubAgentGuidanceRelayRegistryApi } from '../records/SubAgentGuidanceRelayRegistry'
 import { SubAgentGuidanceRelayRegistry } from '../records/SubAgentGuidanceRelayRegistry'
-import { createToolExecutionApi } from '../tools/ToolExecutionApiBinding'
+import { ToolExecutionApiBinding } from '../tools/ToolExecutionApiBinding'
 
 import { ExecutionAgentEventFacade } from './ExecutionAgentEventFacade'
 import { ExecutionInteractionFacade } from './ExecutionInteractionFacade'
 import { ExecutionStateFacade } from './ExecutionStateFacade'
 import { ExecutionTaskFacade } from './ExecutionTaskFacade'
 import { ManagedExecutionRunner } from './ManagedExecutionRunner'
-
-/** `ExecutionService` 的装配参数：两个必填端口由产品宿主给，其余可选项不给就各自走内置实现或整条链路 no-op。 */
-interface ExecutionServiceOptions {
-  /** 准入断言端口：托管执行启动前由产品宿主确认当前运行态已获授权。 */
-  authGate: AuthGatePort
-  /** 执行记录落盘路径端口：未显式传 store 时用于构建默认持久化 ExecutionStore。 */
-  executionRecordsPath: ExecutionRecordsPathPort
-  /** 自带的执行记录存储；测试与多运行时隔离用它换掉默认的落盘 store，不传则按 `executionRecordsPath` 现建一个持久化的。 */
-  store?: ExecutionStore
-  /** 活跃子 Agent 注册表：主 Agent 收到运行中引导时按它找出该转给哪些 worker。不传则自建一份空的。 */
-  guidanceRelayRegistry?: SubAgentGuidanceRelayRegistry
-  /** 引导转发规划器（通常是一次辅助模型调用）：决定用户这句话该转给哪个 worker、怎么措辞。不传则只入主 Agent 队列，不转发。 */
-  guidanceRelayService?: ExecutionGuidanceRelayPlanner
-  /** 协作协调器：注入后每次托管执行会登记成一个主 Agent 协作者，供协作面展示与冲突判定；不传则整条协作面不参与。 */
-  collaborationCoordinator?: ExecutionCollaborationPort
-  /** 终态回调：执行落终态时通知宿主（发系统通知等）。它自己抛错不影响执行收尾。 */
-  notifyTerminalExecution?: (execution: ExecutionRecord) => void
-  /** 路由 provider：把当前任务算成「下一步建议」。不传则路由协调器给不出建议，提示词里对应的那句就不出。 */
-  routeProvider?: ExecutionRouteProvider
-  /** 可选 ID 工厂；用于多运行时隔离、确定性测试或接入宿主 ID 体系。 */
-  idFactory?: ExecutionIdFactory
-  /**
-   * 可选 mod 拦截 seam 派发器（裁决 9 机制②）——注入时在托管执行进入/离开各派发一次
-   * 会话生命周期钩子；缺省不注入 → 全链 no-op。钩子是纯通知：既不改执行入参，
-   * 也不能否决执行（准入判定单源在 authGate 与策略门，钩子不可旁路）。
-   */
-  seams?: AgentModSeamDispatcherApi
-}
 
 /**
  * 执行领域服务。
@@ -162,7 +130,7 @@ class ExecutionService implements ExecutionServiceApi {
   /** session 级互斥和 abort 管理。 */
   private readonly sourceSessionGuard = new SourceSessionGuard()
   /** 执行记录存储，开启 persist 后会写入本地文件。 */
-  private readonly store: ExecutionStore
+  private readonly store: ExecutionStoreApi
   /** 根据当前任务和角色计算下一步路由/委派建议。 */
   private readonly routingCoordinator: ExecutionRoutingCoordinator
   /** 对 ExecutionStore 的高层封装，集中处理 record/task/plan 更新。 */
@@ -172,7 +140,7 @@ class ExecutionService implements ExecutionServiceApi {
   /** 运行中引导消息队列；每条消息只在 agent loop 中消费一次。 */
   private readonly guidanceQueue = new ExecutionGuidanceQueue()
   /** 活跃子 Agent 注册表，供运行中引导 relay 使用。 */
-  private readonly guidanceRelayRegistry: SubAgentGuidanceRelayRegistry
+  private readonly guidanceRelayRegistry: SubAgentGuidanceRelayRegistryApi
   /** 主 Agent 侧引导 relay 规划器。 */
   private readonly guidanceRelayService: Nullable<ExecutionGuidanceRelayPlanner>
   /** 用户输入、确认与 source session 查找相关 API。 */
@@ -192,7 +160,7 @@ class ExecutionService implements ExecutionServiceApi {
   /** 准入断言端口；托管执行启动前校验已授权。 */
   private readonly authGate: AuthGatePort
   /** 可选 mod seam 派发器；缺省 null → 会话生命周期钩子全链 no-op。 */
-  private readonly seams: Nullable<AgentModSeamDispatcherApi>
+  private readonly seams: Nullable<AgentModSeamDispatcherContract>
 
   constructor(
     private readonly executionResource: ExecutionResourcePort,
@@ -257,7 +225,7 @@ class ExecutionService implements ExecutionServiceApi {
       executionResource: this.executionResource,
       activitySignals: this.activitySignals,
       collaborationCoordinator: options.collaborationCoordinator,
-      createToolExecutionApi: (execution) => createToolExecutionApi(execution, this),
+      createToolExecutionApi: (execution) => new ToolExecutionApiBinding(this).bind(execution),
       handleAgentEvent: (executionId, event) =>
         this.agentEventFacade.handleAgentEvent(executionId, event),
       emitExecutionState: (executionId, payload) => this.emitExecutionState(executionId, payload),
@@ -439,7 +407,7 @@ class ExecutionService implements ExecutionServiceApi {
       sourceSessionId: request.sessionId,
       onConsumed: request.inputId
         ? () =>
-            this.emitExecutionState(executionId, ChatRuntimeEvents.inputApplied(request.inputId!))
+            this.emitExecutionState(executionId, chatRuntimeEvents.inputApplied(request.inputId!))
         : undefined,
     })
     assertGuidanceEnqueued(enqueued, '引导消息为空或不是用户消息。')
@@ -719,3 +687,8 @@ class ExecutionService implements ExecutionServiceApi {
 
 export { ExecutionService }
 export type { ExecutionServiceOptions }
+
+/** 建一台执行服务：一次 run 的所有权、会话互斥、待输入与待确认都归它。 */
+export function createExecutionService(executionResource: ExecutionResourcePort, activitySignals: ExecutionActivitySignalsPort, options: ExecutionServiceOptions): ExecutionServiceApi {
+  return new ExecutionService(executionResource, activitySignals, options)
+}

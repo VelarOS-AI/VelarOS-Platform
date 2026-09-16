@@ -8,8 +8,7 @@ import { build } from 'vite'
 const RepositoryRoot = resolve(import.meta.dirname, '../..')
 const BrowserEntries = {
   chat: resolve(RepositoryRoot, 'packages/agent/src/chat.ts'),
-  'chat-stream': resolve(RepositoryRoot, 'packages/agent/src/chat-stream.ts'),
-  protocol: resolve(RepositoryRoot, 'packages/agent/src/protocol.ts'),
+  contracts: resolve(RepositoryRoot, 'packages/agent/src/contracts.ts'),
   'tool-contract': resolve(RepositoryRoot, 'packages/agent/src/tool-contract.ts'),
 }
 const NodeBuiltinSpecifiers = new Set(

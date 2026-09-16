@@ -1,10 +1,5 @@
 import type { ArtifactManifestSnippet, LogReadSnippet, ReferencedArtifactPath, ReferencedLogPath } from '../../types/retrieval.js'
-import {
-  formatArtifactManifests,
-  formatLogSnippets,
-  readReferencedArtifactManifestSnippets,
-  readReferencedLogSnippets,
-} from '../../utils/retrieval/reference-reader'
+import { formatArtifactManifests, formatLogSnippets, readReferencedArtifactManifestSnippets, readReferencedLogSnippets } from '../../utils/retrieval/reference-reader'
 
 import { contextRetrievalReferences } from './ContextRetrievalReferences'
 

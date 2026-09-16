@@ -1,18 +1,11 @@
 import type { ModelMessage } from 'ai'
 
-import { isBlank, isEmpty, isNonEmptyArray, isString, toNullable } from '@velaros-ai/core'
+import { isEmpty, toNullable } from '@velaros-ai/core'
 
 import type { AgentRuntimeInputPort } from '../../contract/requires.js'
 import type { ExecutionGuidanceClearResult, ExecutionGuidanceEnqueueResult, ExecutionGuidanceFinalizationResult, ExecutionGuidanceLane } from '../../types/records.js'
 import type { AgentRuntimeInputResult } from '../../types/runner.js'
-
-function hasUserVisibleGuidance(message: ModelMessage): boolean {
-  if (message.role !== 'user') return false
-
-  if (isString(message.content)) return !isBlank(message.content.trim())
-
-  return isNonEmptyArray(message.content)
-}
+import { hasUserVisibleGuidance } from '../../utils/records/execution-guidance-queue'
 
 /**
  * 运行中补话的队列：一次执行一条 lane，用户在模型跑着的时候补的消息先进队，
@@ -153,3 +146,8 @@ class ExecutionGuidanceQueue implements ExecutionGuidanceQueueApi {
 }
 
 export { ExecutionGuidanceQueue }
+
+/** 建一条执行引导队列：用户插话先进队列，轮边界才并进历史。 */
+export function createExecutionGuidanceQueue(): ExecutionGuidanceQueueApi {
+  return new ExecutionGuidanceQueue()
+}

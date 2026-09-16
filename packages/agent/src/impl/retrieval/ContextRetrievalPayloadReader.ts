@@ -1,186 +1,19 @@
 
-import { isArray, isEmpty, isNonBlankString, isNotNull,isNumber, isPlainObject, isPresent, isString, toNullable } from '@velaros-ai/core'
+import { isEmpty, isNonBlankString, isNotNull, isPresent, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import type { RetrievalPayloadStorePort, RetrievalStateStorePort } from '../../contract/requires.js'
 import type { ChatContextEvidenceRecord, ChatContextRetrievedPayload, ChatMessage, ChatSessionPayloadSnapshot, SerializedMessage } from '../../types/agent.js'
-import type { DirectToolPayloadLookupResult, JsonPathSegment, JsonPathSelection,ResolvedToolPayload } from '../../types/retrieval.js'
+import type { DirectToolPayloadLookupResult, ResolvedToolPayload } from '../../types/retrieval.js'
 import { normalizeLegacyFoldStub } from '../../utils/context/context-ref-envelope'
 import { isPrivateFileContextRecord } from '../../utils/context/private-file-records'
-import { chatSearchMessages } from '../../utils/retrieval/messages'
+import { selectJsonPath } from '../../utils/retrieval/context-retrieval-payload-reader'
+import { getMessageText, getMessageToolBlocks } from '../../utils/retrieval/messages'
 import { paginateJsonPathValue, paginateSerializedText } from '../../utils/retrieval/pagination'
 import { chatSearchText } from '../../utils/retrieval/text'
 
 import { type ContextRetrievalReferenceReader } from './ContextRetrievalReferenceReader'
 import { contextRetrievalReferences } from './ContextRetrievalReferences'
-
-function readJsonPathIdentifier(path: string, start: number): Nullable<{ key: string; next: number }> {
-  let index = start
-  while (index < path.length && /[A-Za-z0-9_$]/.test(path[index]!)) {
-    index += 1
-  }
-
-  if (index === start) return null
-
-  return { key: path.slice(start, index), next: index }
-}
-
-function readJsonPathQuotedKey(raw: string): Nullable<string> {
-  const inner = raw.slice(1, -1)
-  let value = ''
-  for (let index = 0; index < inner.length; index += 1) {
-    const char = inner[index]!
-    if (char !== '\\') {
-      value += char
-      continue
-    }
-
-    index += 1
-    const escaped = inner[index]
-    if (!escaped) return null
-    switch (escaped) {
-      case '"':
-      case '\\':
-      case '/': {
-        value += escaped
-        break
-      }
-      case 'b': {
-        value += '\b'
-        break
-      }
-      case 'f': {
-        value += '\f'
-        break
-      }
-      case 'n': {
-        value += '\n'
-        break
-      }
-      case 'r': {
-        value += '\r'
-        break
-      }
-      case 't': {
-        value += '\t'
-        break
-      }
-      case 'u': {
-        const hex = inner.slice(index + 1, index + 5)
-        if (!/^[0-9A-Fa-f]{4}$/.test(hex)) return null
-        value += String.fromCharCode(Number.parseInt(hex, 16))
-        index += 4
-        break
-      }
-      default:
-        return null
-    }
-  }
-  return value
-}
-
-function readJsonPathBracket(path: string, start: number): Nullable<{ segment: JsonPathSegment; next: number }> {
-  let end = -1
-  let quoted = false
-  let escaped = false
-  for (let index = start + 1; index < path.length; index++) {
-    const char = path[index]
-    if (escaped) { escaped = false; continue }
-    if (quoted && char === '\\') { escaped = true; continue }
-    if (char === '"') { quoted = !quoted; continue }
-    if (!quoted && char === ']') { end = index; break }
-  }
-  if (end < 0) return null
-
-  const raw = path.slice(start + 1, end).trim()
-  if (/^\d+$/.test(raw)) return { segment: Number(raw), next: end + 1 }
-
-  if (raw.startsWith('"') && raw.endsWith('"')) {
-    const parsed = readJsonPathQuotedKey(raw)
-    return isString(parsed) ? { segment: parsed, next: end + 1 } : null
-  }
-
-  return null
-}
-
-function parseJsonPath(path: string): Nullable<JsonPathSegment[]> {
-  const trimmed = path.trim()
-  const normalized = trimmed.startsWith('$')
-    ? trimmed
-    : trimmed.startsWith('.') || trimmed.startsWith('[')
-      ? `$${trimmed}`
-      : `$.${trimmed}`
-  if (normalized === '$') return []
-  if (!normalized.startsWith('$')) return null
-
-  const segments: JsonPathSegment[] = []
-  let index = 1
-
-  while (index < normalized.length) {
-    const char = normalized[index]
-    if (char === '.') {
-      const identifier = readJsonPathIdentifier(normalized, index + 1)
-      if (!identifier) return null
-      segments.push(identifier.key)
-      index = identifier.next
-      continue
-    }
-
-    if (char === '[') {
-      const bracket = readJsonPathBracket(normalized, index)
-      if (!bracket) return null
-      segments.push(bracket.segment)
-      index = bracket.next
-      continue
-    }
-
-    return null
-  }
-
-  return segments
-}
-
-export function selectJsonPath(serialized: string, path: string): JsonPathSelection {
-  let root: unknown
-  try {
-    root = JSON.parse(serialized)
-  } catch (error) {
-    return {
-      found: false,
-      value: null,
-      reason: `serializedResult 不是合法 JSON，按 jsonPath 取值前解析就失败了：${AppError.getMessage(error)}`,
-    }
-  }
-
-  const segments = parseJsonPath(path)
-  if (!segments) return {
-      found: false,
-      value: null,
-      reason: 'jsonPath 写法不对：请写成 $.a.b[0] 或 $["complex.key"] 这样的路径。',
-    }
-
-  let current = root
-  for (const segment of segments) {
-    if (isNumber(segment)) {
-      if (!isArray(current) || segment >= current.length) return {
-          found: false,
-          value: null,
-          reason: `jsonPath 的 [${segment}] 这一段取不到：这里不是数组，或者下标越界了。`,
-        }
-      current = current[segment]
-      continue
-    }
-
-    if (!isPlainObject(current) || !Object.prototype.hasOwnProperty.call(current, segment)) return {
-        found: false,
-        value: null,
-        reason: `jsonPath 的 ${segment} 这一段取不到：这里不是对象，或者对象上没有这个键。`,
-      }
-    current = current[segment]
-  }
-
-  return { found: true, value: current }
-}
 
 /**
  * 按 handle 把藏在宿主资源区的正文取回来这一面：工具结果、内容寻址的大 payload、超大 user 正文和单条历史消息，四类各有自己的前缀。
@@ -717,8 +550,8 @@ class ContextRetrievalPayloadReader implements ContextRetrievalPayloadReaderApi 
       }
 
     const serialized = await this.loadSerializedMessage(input.sessionId, message)
-    const text = chatSearchMessages.getMessageText(message)
-    const toolBlocks = chatSearchMessages.getMessageToolBlocks(message)
+    const text = getMessageText(message)
+    const toolBlocks = getMessageToolBlocks(message)
     const content = [
       `messageIndex: ${index}`,
       `role: ${message.role}`,

@@ -30,14 +30,15 @@
 // ContextBuilder 会派生变体（子 Agent / 不同 surface）；共享同一注册表会让一次 `suppress` 泄漏到别的
 // 变体上。clone 复制定义与压制态、共享 provider 引用（provider 是无状态加载器）。
 //
-import { AppError } from '@velaros-ai/core/error'
 
 import type { PromptSegmentOverride } from '../../types/agent.js'
-import type { BuiltInPromptOptions,PromptCompositionResult,PromptContribution,PromptRenderContext, PromptSegmentDefinition, PromptSegmentProvider, PromptSegmentTier, PromptSuppression } from '../../types/guidance.js'
+import type { BuiltInPromptOptions, PromptCompositionResult, PromptContribution, PromptRenderContext, PromptSegmentDefinition, PromptSegmentProvider, PromptSegmentRetention, PromptSegmentSource, PromptSegmentTier, PromptSuppression } from '../../types/guidance.js'
 import { createBuiltInPromptSegments } from '../../utils/guidance/catalog'
+import { assertCorePromptSegmentHasNoPredicate } from '../../utils/guidance/prompt-registry'
 import { resolvePromptSegmentStability } from '../../utils/guidance/prompt-stability'
-import { createSkippedPromptSegment } from '../../utils/guidance/shared'
+import { createSelectedSkillPromptSegment, createSkippedPromptSegment, createTextPromptSegment } from '../../utils/guidance/shared'
 import { compareStableStrings } from '../../utils/residency/determinism'
+
 /** 层序即块序：Tier0 在稳定前缀，Tier1/Tier2 在活动尾且 Tier2 恒排 Tier1 之后。 */
 export const PromptSegmentTierRank: Readonly<Record<PromptSegmentTier, number>> = {
   core: 0,
@@ -45,23 +46,6 @@ export const PromptSegmentTierRank: Readonly<Record<PromptSegmentTier, number>> 
   skill: 2,
 }
 
-/**
- * Tier0 不许带激活谓词——注册面机械拦截，不靠「用 createCorePromptSegment 构造」这条约定。
- *
- * `createCorePromptSegment` 不暴露 `when` 只是把这件事做成了**工厂的**不变量：注册面收的是
- * 裸 `PromptSegmentDefinition`，`{ tier: 'core', when }` 在类型上完全可表达，任何绕过工厂的
- * 注册（宿主自己拼一份、mod 投影、provider 动态生成）都能把一个逐轮开关的段塞进稳定前缀。
- * 后果不是「多一段」而是**前缀缓存整体失效**——它后面的全部历史一起作废，且症状只表现为
- * 「有时候贵」，几乎没人会往提示词分层上想（§② 的历史病灶就是这么来的）。
- */
-function assertCorePromptSegmentHasNoPredicate(definition: PromptSegmentDefinition): void {
-  if (definition.tier === 'core' && definition.when) {
-    throw new AppError(
-      'VALIDATION',
-      `Tier0 段「${definition.id}」不许带激活谓词：core 段进稳定前缀且必须逐轮字节不变，按 facts 开关的内容请落 tier:'runtime'。`
-    )
-  }
-}
 /**
  * 存量 `segmentOverrides` 的段 id 别名（旧 id → 现 id）。
  *
@@ -108,7 +92,24 @@ export interface PromptRegistryApi {
    * 复制一份注册表：定义与运行时压制态各复制一份，provider 引用共享（provider 无状态）。
    * ContextBuilder 派生变体时用它做隔离，改克隆体不会碰到原表。
    */
-  clone(): PromptRegistry
+  clone(): PromptRegistryApi
+
+  /** 构造一个纯文本提示词段（Tier1 起；Tier0 的核心段由包内自己建）。 */
+  createTextSegment(args: {
+  id: string
+  label: string
+  /** 行为知识层；缺省 Tier1。Tier0 走 {@link createCorePromptSegment}，此处不接受 `core`。 */
+  tier?: Exclude<PromptSegmentTier, 'core'>
+  source: PromptSegmentSource
+  priority: number
+  retention?: PromptSegmentRetention
+  text: Nullable<string>
+  when?: () => boolean
+}): PromptSegmentDefinition
+  /** 构造「本轮命中技能」那一段。 */
+  createSelectedSkillSegment(text: string): PromptSegmentDefinition
+  /** 按选项生成包内置的那批提示词段。 */
+  createBuiltInSegments(options?: BuiltInPromptOptions): PromptSegmentDefinition[]
 }
 
 /**
@@ -258,7 +259,7 @@ class PromptRegistry implements PromptRegistryApi {
   }
 
   /** 克隆注册表，供 ContextBuilder 链式变体隔离修改。 */
-  public clone(): PromptRegistry {
+  public clone(): PromptRegistryApi {
     const clone = new PromptRegistry([...this.definitions.values()])
     for (const provider of this.providers.values()) {
       clone.registerProvider(provider)
@@ -292,6 +293,27 @@ class PromptRegistry implements PromptRegistryApi {
     })
   }
 
+  public createTextSegment(args: {
+  id: string
+  label: string
+  /** 行为知识层；缺省 Tier1。Tier0 走 {@link createCorePromptSegment}，此处不接受 `core`。 */
+  tier?: Exclude<PromptSegmentTier, 'core'>
+  source: PromptSegmentSource
+  priority: number
+  retention?: PromptSegmentRetention
+  text: Nullable<string>
+  when?: () => boolean
+}): PromptSegmentDefinition {
+    return createTextPromptSegment(args)
+  }
+
+  public createSelectedSkillSegment(text: string): PromptSegmentDefinition {
+    return createSelectedSkillPromptSegment(text)
+  }
+
+  public createBuiltInSegments(options: BuiltInPromptOptions = {}): PromptSegmentDefinition[] {
+    return createBuiltInPromptSegments(options)
+  }
 }
 
 /**
@@ -300,8 +322,13 @@ class PromptRegistry implements PromptRegistryApi {
  * 返回类型保持具体类而不是 `PromptRegistryApi`：宿主（Desktop）把它标注成 `PromptRegistry` 存字段，
  * 收窄成接口会让那边编译不过。等导出面收口那一轮把类整体收进接口时再一起改。
  */
-function createBuiltInPromptRegistry(options: BuiltInPromptOptions = {}): PromptRegistry {
+function createBuiltInPromptRegistry(options: BuiltInPromptOptions = {}): PromptRegistryApi {
   return new PromptRegistry(createBuiltInPromptSegments(options))
 }
 
 export { createBuiltInPromptRegistry,PromptRegistry }
+
+/** 建一份空的提示词段目录；要包内置那批段用 createBuiltInPromptRegistry。 */
+export function createPromptRegistry(definitions: PromptSegmentDefinition[] = []): PromptRegistryApi {
+  return new PromptRegistry(definitions)
+}

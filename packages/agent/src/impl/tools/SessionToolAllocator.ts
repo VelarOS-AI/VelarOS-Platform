@@ -58,7 +58,6 @@ interface SessionToolAllocatorApi {
   ): Promise<SessionToolAllocatorPlan>
 }
 
-
 class SessionToolAllocator implements SessionToolAllocatorApi {
   private readonly baselineToolNames: readonly string[]
   private readonly metadata: ToolAllocationMetadata

@@ -2,7 +2,8 @@
 import type { ChatStreamEvent } from '../../types/agent.js'
 import type { ChatStreamLifecyclePhase, ChatStreamLogEntry, ChatStreamTerminationReason } from '../../types/chat.js'
 
-import { type ChatStreamProtocol,chatStreamProtocol } from './ChatStreamProtocol'
+import type { ChatStreamProtocolApi } from './ChatStreamProtocol'
+import {chatStreamProtocol } from './ChatStreamProtocol'
 
 /**
  * 渲染进程消费侧的一条流的账本：记这条会话的流走到哪个生命周期阶段、终止是谁造成的、
@@ -66,11 +67,11 @@ export class ChatStreamConsumer implements ChatStreamConsumerApi {
   private terminationReason: Nullable<ChatStreamTerminationReason> = null
   private appliedSequence = 0
   private pendingEntries: ChatStreamLogEntry[] = []
-  private readonly protocol: ChatStreamProtocol
+  private readonly protocol: ChatStreamProtocolApi
 
   constructor(
     sessionId: string,
-    options: { initialPhase?: ChatStreamLifecyclePhase; protocol?: ChatStreamProtocol } = {}
+    options: { initialPhase?: ChatStreamLifecyclePhase; protocol?: ChatStreamProtocolApi } = {}
   ) {
     this.sessionId = sessionId
     this.phase = options.initialPhase ?? 'idle'
@@ -159,4 +160,9 @@ export class ChatStreamConsumer implements ChatStreamConsumerApi {
     this.pendingEntries = []
     return pending
   }
+}
+
+/** 开一条聊天流的消费端：按会话 id 收流、维护生命周期阶段。 */
+export function createChatStreamConsumer(sessionId: string, options: { initialPhase?: ChatStreamLifecyclePhase; protocol?: ChatStreamProtocolApi } = {}): ChatStreamConsumerApi {
+  return new ChatStreamConsumer(sessionId, options)
 }

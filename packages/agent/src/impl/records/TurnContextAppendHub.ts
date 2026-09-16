@@ -41,3 +41,8 @@ export class TurnContextAppendHub implements TurnContextAppendHubApi {
     }
   }
 }
+
+/** 建一个回合上下文写入总线：各来源往同一条总线投递环境变化。 */
+export function createTurnContextAppendHub(): TurnContextAppendHubApi {
+  return new TurnContextAppendHub()
+}

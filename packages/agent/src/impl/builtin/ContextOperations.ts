@@ -2,7 +2,7 @@ import type { HandoffContextInput, RecallContextInput } from '../../types/builti
 import type { KernelToolContext } from '../../types/tool-context.js'
 import { findRecallArchiveRecord, presentHistoricalFile, recallByQuery, recallByRef } from '../../utils/builtin/context-tools'
 import { FileSnapshotToolName } from '../../utils/context/file-snapshot-archive'
-import { fileContextFor } from '../context/FileContextCoordinator'
+import { fileContextRegistry } from '../context/FileContextRegistry'
 
 /**
  * 上下文两个工具（`context:recall`、`context:handoff`）的执行面。
@@ -40,7 +40,7 @@ class ContextOperations implements ContextOperationsApi {
     const archiveRecord = await findRecallArchiveRecord(input, ctx)
     // 历史文件走文件快照协调器；宿主没接快照存储时如实说取不到。
     if (input.path || input.refKind === 'file-snapshot' || archiveRecord?.toolName === FileSnapshotToolName) {
-      const files = fileContextFor(ctx)
+      const files = fileContextRegistry.for(ctx)
       return files ? presentHistoricalFile(await files.recall({ ...input, ref: archiveRecord?.payloadRef ?? input.ref }))
         : { kind: 'file-snapshot', found: false, reason: '当前宿主没有接文件快照存储，取不到历史版本。' }
     }
@@ -65,9 +65,6 @@ class ContextOperations implements ContextOperationsApi {
 
     return requestHandoff({ reason: input.reason })
   }
-
-
-
 
 }
 

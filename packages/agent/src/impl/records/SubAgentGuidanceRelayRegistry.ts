@@ -1,6 +1,6 @@
-import { isBlank, isEmpty,toNullable } from '@velaros-ai/core'
+import { isBlank, isEmpty, toNullable } from '@velaros-ai/core'
 
-import type { ActiveSubAgentGuidanceRelayWorker,RegisterSubAgentGuidanceRelayWorkerInput, SubAgentGuidanceRelayWorkerHandle, SubAgentGuidanceRelayWorkerSnapshot } from '../../types/records.js'
+import type { ActiveSubAgentGuidanceRelayWorker, RegisterSubAgentGuidanceRelayWorkerInput, SubAgentGuidanceRelayWorkerHandle, SubAgentGuidanceRelayWorkerSnapshot } from '../../types/records.js'
 /**
  * 子 Agent 登记簿：按 executionId 记住这一次执行里还在跑的子 Agent（线程），
  * 并给每个子 Agent 挂一条 FIFO 队列，用户在父会话里补的话可以中途转达给它。
@@ -129,3 +129,8 @@ class SubAgentGuidanceRelayRegistry implements SubAgentGuidanceRelayRegistryApi 
 }
 
 export { SubAgentGuidanceRelayRegistry }
+
+/** 建一份子 Agent 引导转达登记处。 */
+export function createSubAgentGuidanceRelayRegistry(): SubAgentGuidanceRelayRegistryApi {
+  return new SubAgentGuidanceRelayRegistry()
+}

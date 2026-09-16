@@ -2,8 +2,7 @@ import { Log } from '@velaros-ai/core'
 
 import type { ContextMigrationEventSink } from '../../contract/requires.js'
 import type { ContextFaultEvent, ContextMigrationEventLineWriter, ContextResidencyMigrationEvent } from '../../types/residency.js'
-
-import { formatFaultEventLine, formatMigrationEventLine } from './InMemoryContextMigrationEventSink'
+import { formatFaultEventLine, formatMigrationEventLine } from '../../utils/residency/migration-log'
 
 /**
  * JSONL 汇：把事件序列化成稳定行交给注入的写入器。
@@ -34,4 +33,9 @@ export class JsonlContextMigrationEventSink implements ContextMigrationEventSink
       this.log.warn('迁移事件写入失败，已丢弃该行', { error: String(error) })
     }
   }
+}
+
+/** 建一个把治理迁移事件按 JSONL 写出去的事件口。 */
+export function createJsonlContextMigrationEventSink(writer: ContextMigrationEventLineWriter): ContextMigrationEventSink {
+  return new JsonlContextMigrationEventSink(writer)
 }

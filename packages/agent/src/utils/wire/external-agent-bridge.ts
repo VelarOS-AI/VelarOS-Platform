@@ -1,6 +1,8 @@
 import { z } from 'zod'
 
-import type { ExternalAgentBridgeClientMessage, ExternalAgentBridgeCommand, ExternalAgentBridgeHostMessage, ExternalAgentBridgeMessage } from '../../types/agent.js'
+import { ExternalAgentBridgeProtocol } from '../../contract/constants.js'
+import type { ExternalAgentBridgeClientMessage, ExternalAgentBridgeCommand } from '../../types/agent.js'
+import type { ExternalAgentBridgeHostMessage, ExternalAgentBridgeMessage } from '../../types/connectors.js'
 
 /**
  * External Agent Bridge transport version.
@@ -55,10 +57,10 @@ export const ExternalAgentBridgeHostMessageTypes = Object.freeze([
  * Keep this plain-data only: classic workers and non-TypeScript hosts vendor it.
  */
 export const ExternalAgentBridgeProtocolDescriptor = Object.freeze({
-  id: 'velaros-external-agent-bridge',
+  id: ExternalAgentBridgeProtocol.id,
   transportVersion: ExternalAgentBridgeProtocolVersion,
-  service: 'velaros-external-agent',
-  socketPath: '/v1/external-agent/ws',
+  service: ExternalAgentBridgeProtocol.service,
+  socketPath: ExternalAgentBridgeProtocol.socketPath,
   clientMessageTypes: ExternalAgentBridgeClientMessageTypes,
   hostMessageTypes: ExternalAgentBridgeHostMessageTypes,
 })

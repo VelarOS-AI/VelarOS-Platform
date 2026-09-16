@@ -10,7 +10,6 @@
 // 不另立一份名单，所以不可能与实现漂移。
 import { z } from 'zod'
 
-import { toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import { AgentIdentity, AgentToolLimits, AgentToolNames } from '../contract/constants.js'
@@ -19,9 +18,7 @@ import type {
   AgentWorkflowToolCollection,
   BuiltinAgentModOptions,
   BuiltinAgentModPackage,
-  CancelBackgroundJobInput,
   DispatchAgentInput,
-  DistillContextInput,
   GoalConstraint,
   GoalStep,
   HandoffContextInput,
@@ -33,10 +30,10 @@ import type {
   WaitBackgroundJobsInput,
 } from '../types/builtin.js'
 import type { AgentModBindings } from '../types/mods.js'
-import { cancelBackgroundJobSchema, readBackgroundJobOutputSchema, waitBackgroundJobsSchema } from '../utils/builtin/background-jobs'
+import { readBackgroundJobOutputSchema, waitBackgroundJobsSchema } from '../utils/builtin/background-jobs'
 import { toExecutionModeContribution, toPromptSegmentContribution, toToolContribution } from '../utils/builtin/builtin-mod'
 import { recallContextSchema } from '../utils/builtin/context-retrieval'
-import { distillContextSchema, handoffContextSchema } from '../utils/builtin/context-tools'
+import { handoffContextSchema } from '../utils/builtin/context-tools'
 import { defineVelaTool } from '../utils/builtin/define-agent-tool'
 import { archiveActiveDirectives, directiveTypeSchema, listActiveDirectives, upsertActiveDirective } from '../utils/builtin/directives'
 import { buildSubAgentDispatchRequest, dispatchAgentSchema } from '../utils/builtin/dispatch-schemas'
@@ -57,6 +54,8 @@ import { createManualApprovalOptions } from '../utils/toolkit/approval'
 import { renderParameterDescription as parameterDescription } from '../utils/toolkit/tool-description'
 import { AgentModManifestSchemaVersion } from '../utils/wire/mods'
 
+import type { AgentModHostAssemblerApi } from './assembly/AgentModHostAssembler'
+import { AgentModHostAssembler } from './assembly/AgentModHostAssembler'
 import { backgroundJobOperations } from './builtin/BackgroundJobOperations'
 import { contextOperations } from './builtin/ContextOperations'
 import { goalOperations } from './builtin/GoalOperations'
@@ -365,50 +364,6 @@ export const handoffContext: VelaTool<HandoffContextInput> = defineVelaTool<Hand
   execute: async (input, ctx) => contextOperations.handoff(input, ctx),
 })
 
-/**
- * 已退出模型面的事实便签工具。
- *
- * 上下文折叠由运行时按实际容量自己做，让模型再手工声明一次「我消化完了」只剩仪式感，
- * 所以 `isAvailable` 恒假：它不进任何一轮的工具面，模型看不到也调不到。定义与导出名留着
- * 只为让已经装好的旧宿主不至于在升级时崩在 import 上，第 6 步入口收口时整体删掉。
- */
-export const distillContext: VelaTool<DistillContextInput> = defineVelaTool<DistillContextInput>({
-  name: AgentToolNames.contextDistill,
-  role: 'control',
-  category: 'context',
-  summary: '（已退役）记录已确认的关键事实与进度便签。',
-  outputInline: true,
-  suitable: ['无：上下文折叠已由运行时自动完成，不需要模型声明。'],
-  forbidden: ['不要调用它；它不会出现在任何一轮的工具面。'],
-  usage: ['无：本工具已退出模型面。'],
-  examples: [
-    {
-      facts: ['治理 epoch 状态机在 GovernanceEpoch.ts，按 I0 逐出 → I1 骨架顺序执行'],
-      note: '机制已完成，下一步补常驻注册',
-    },
-  ],
-  notes: ['已退役：系统按实际容量自动整理上下文，原文可按需使用 context:recall 取回。'],
-  schema: distillContextSchema,
-  permissions: [],
-  capabilities: AgentContextSignalCapability,
-  // 恒假 = 退出模型面：注册表的可见性过滤会把它从发现面与执行面一起去掉。
-  isAvailable: () => false,
-  isConcurrencySafe: () => true,
-  // 保留旧结果的事实字段供历史记录与召回读取；兼容调用不能绕过自动容量治理。
-  execute: async (input, ctx) => {
-    ctx.abortSignal.throwIfAborted()
-    return {
-      distilled: true,
-      epochRequested: false,
-      compactionStatus: 'automatic',
-      facts: input.facts,
-      note: toNullable(input.note),
-      effect:
-        '事实与进度便签已记录在本次工具结果中。系统按实际容量自动整理上下文；原文可按需使用 context:recall 取回。',
-    }
-  },
-})
-
 // ── 长期指令（directive:list / directive:upsert / directive:archive）────────
 
 export const listActiveDirectivesTool: VelaTool<Record<string, never>> = defineVelaTool<Record<string, never>>({
@@ -575,33 +530,6 @@ export const archiveActiveDirective: VelaTool<{
   capabilities: AgentContextWriteCapability,
   isConcurrencySafe: () => false,
   execute: (input, ctx) => archiveActiveDirectives(ctx.activeContext, input),
-})
-
-// ── 目标（goal:get / goal:create / goal:update）──────────────────────────────
-
-/**
- * 已并入 `goal:update` 的读目标工具。
- *
- * `goal:update` 不传任何字段就是一次读取，两个入口做同一件事，模型还要先挑一个——挑错就白跑一轮。
- * `isAvailable` 恒假：它不进任何一轮的工具面。定义与导出名留到第 6 步入口收口时删。
- */
-export const getGoal: VelaTool<Record<string, never>> = defineVelaTool<Record<string, never>>({
-  name: AgentToolNames.goalGet,
-  role: 'inspect',
-  category: 'planning',
-  summary: '（已并入 goal:update）读取当前目标。',
-  suitable: ['无：改用 goal:update 的空调用读取当前目标。'],
-  forbidden: ['不要调用它；它不会出现在任何一轮的工具面。'],
-  usage: ['无：本工具已退出模型面。'],
-  examples: [{}],
-  notes: ['已并入 goal:update：不传任何字段调用 goal:update 即为读取。'],
-  schema: z.object({}),
-  permissions: [],
-  capabilities: AgentPlanningReadCapability,
-  // 恒假 = 退出模型面：读目标由 goal:update 的空调用覆盖。
-  isAvailable: () => false,
-  isConcurrencySafe: () => true,
-  execute: async (_input, ctx) => goalOperations.read(ctx),
 })
 
 export const createGoal: VelaTool<{
@@ -905,31 +833,6 @@ export const updatePlan: VelaTool<UpdatePlanInput> = defineVelaTool<UpdatePlanIn
   execute: async (input, ctx) => planOperations.update(input, ctx),
 })
 
-/**
- * 已并入 `plan:update` 的读计划工具。
- *
- * `plan:update` 不传任何字段就是一次读取，且回带的字段已经覆盖这里多出的 task、recommendedAction
- * 与 executionAdvice。`isAvailable` 恒假：它不进任何一轮的工具面。定义与导出名留到第 6 步删。
- */
-export const getPlan: VelaTool<Record<string, never>> = defineVelaTool<Record<string, never>>({
-  name: AgentToolNames.planGet,
-  role: 'inspect',
-  category: 'planning',
-  summary: '（已并入 plan:update）读取当前执行计划。',
-  suitable: ['无：改用 plan:update 的空调用读取当前计划。'],
-  forbidden: ['不要调用它；它不会出现在任何一轮的工具面。'],
-  usage: ['无：本工具已退出模型面。'],
-  examples: [{}],
-  notes: ['已并入 plan:update：不传任何字段调用 plan:update 即为读取，回执里带任务、推荐动作与执行建议。'],
-  schema: z.object({}),
-  permissions: [],
-  capabilities: AgentPlanningReadCapability,
-  // 恒假 = 退出模型面：读计划由 plan:update 的空调用覆盖。
-  isAvailable: () => false,
-  isConcurrencySafe: () => true,
-  execute: async (_input, ctx) => planOperations.read(ctx),
-})
-
 // ── 子 Agent（agent:dispatch / agent:run_workflow）───────────────────────────
 
 export const dispatchAgent: VelaTool<DispatchAgentInput> = defineVelaTool<DispatchAgentInput>({
@@ -1149,38 +1052,6 @@ export const waitBackgroundJobs: VelaTool<WaitBackgroundJobsInput> = defineVelaT
   execute: async (input, ctx) => backgroundJobOperations.wait(input, ctx),
 })
 
-/**
- * 已退出模型面的后台作业取消工具。
- *
- * 后台作业只有子 Agent 一种来源，中断走的也是同一个 `abortWorker`；留两条路等于让模型同时记住
- * thread_id 和 job_id，挑错一个就白跑一轮。中断统一用 `agent:dispatch({thread_id, interrupt:true})`，
- * 它覆盖同步与异步两种子 Agent。`isAvailable` 恒假；定义与导出名留到第 6 步入口收口时删。
- */
-export const cancelBackgroundJob: VelaTool<CancelBackgroundJobInput> = defineVelaTool<CancelBackgroundJobInput>({
-  name: AgentToolNames.jobCancel,
-  role: 'control',
-  category: 'agent-control',
-  summary: '（已退役）取消当前会话内核后台 job。',
-  suitable: ['无：中断子 Agent 用 agent:dispatch({thread_id, interrupt:true})。'],
-  forbidden: ['不要调用它；它不会出现在任何一轮的工具面。'],
-  usage: ['无：本工具已退出模型面。'],
-  examples: [
-    {
-      job_id: 'subagent:abc:background:123',
-    },
-  ],
-  notes: [
-    '已退役：中断子 Agent 用 agent:dispatch({thread_id, interrupt:true})，之后仍可用 job:read_output 查看最终输出。',
-  ],
-  schema: cancelBackgroundJobSchema,
-  permissions: [],
-  capabilities: AgentBackgroundJobCancelCapability,
-  // 恒假 = 退出模型面：中断统一由 agent:dispatch 的 interrupt 覆盖。
-  isAvailable: () => false,
-  isConcurrencySafe: () => false,
-  execute: async (input, ctx) => backgroundJobOperations.cancel(input, ctx),
-})
-
 // ── 交互（interaction:confirm）───────────────────────────────────────────────
 
 export const requestConfirmationTool: VelaTool<{ message: string }> = defineVelaTool<{ message: string }>({
@@ -1234,11 +1105,6 @@ export const contextHandoffTools: { 'context:handoff': VelaTool<HandoffContextIn
   [AgentToolNames.contextHandoff]: handoffContext,
 }
 
-/** @deprecated 供旧宿主保留事实便签兼容；压缩由运行时自动管理。 */
-export const contextDistillTools: { 'context:distill': VelaTool<DistillContextInput> } = {
-  [AgentToolNames.contextDistill]: distillContext,
-}
-
 export const activeDirectiveTools: {
   'directive:list': typeof listActiveDirectivesTool
   'directive:upsert': typeof upsertActiveDirectiveTool
@@ -1250,21 +1116,15 @@ export const activeDirectiveTools: {
 }
 
 export const goalTools: {
-  'goal:get': typeof getGoal
   'goal:create': typeof createGoal
   'goal:update': typeof updateGoal
 } = {
-  [AgentToolNames.goalGet]: getGoal,
   [AgentToolNames.goalCreate]: createGoal,
   [AgentToolNames.goalUpdate]: updateGoal,
 }
 
-export const plansTools: {
-  'plan:update': typeof updatePlan
-  'plan:get': typeof getPlan
-} = {
+export const plansTools: { 'plan:update': typeof updatePlan } = {
   [AgentToolNames.planUpdate]: updatePlan,
-  [AgentToolNames.planGet]: getPlan,
 }
 
 export const dispatchAgentTools: { 'agent:dispatch': typeof dispatchAgent } = {
@@ -1276,11 +1136,9 @@ export const agentWorkflowTools: AgentWorkflowToolCollection = {
 }
 
 export const backgroundJobTools: {
-  'job:cancel': VelaTool<CancelBackgroundJobInput>
   'job:read_output': VelaTool<ReadBackgroundJobOutputInput>
   'job:wait': VelaTool<WaitBackgroundJobsInput>
 } = {
-  [AgentToolNames.jobCancel]: cancelBackgroundJob,
   [AgentToolNames.jobReadOutput]: readBackgroundJobOutput,
   [AgentToolNames.jobWait]: waitBackgroundJobs,
 }
@@ -1312,19 +1170,6 @@ export const BuiltinAgentModToolCollections: ReadonlyArray<Readonly<
   plansTools,
 ]
 
-/** 展平内置工具集合；重复工具名在此即抛（不留到 Loader 才发现）。 */
-export function collectBuiltinAgentModTools(): Record<string, VelaTool<any>> {
-  const tools: Record<string, VelaTool<any>> = {}
-  for (const collection of BuiltinAgentModToolCollections) {
-    for (const [name, tool] of Object.entries(collection)) {
-      if (name in tools) {
-        throw new Error(`内置工具名重复：${name}（内置集合之间必须互斥）。`)
-      }
-      tools[name] = tool
-    }
-  }
-  return tools
-}
 
 /**
  * 构造随包官方 Agent mod。
@@ -1333,10 +1178,10 @@ export function collectBuiltinAgentModTools(): Record<string, VelaTool<any>> {
  * 技能轴刻意缺席——Agent Runtime 自身不带内置技能定义（技能由宿主的文件式供应方注入），
  * 声明空轴只会制造零消费者的假贡献。
  */
-export function createBuiltinAgentModPackage(
+export function createBuiltinAgentModDefinition(
   options: BuiltinAgentModOptions = {}
 ): BuiltinAgentModPackage {
-  const tools = collectBuiltinAgentModTools()
+  const tools = agentTools
   const promptSegments = createBuiltInPromptSegments(options.promptOptions)
   const executionModes = listExecutionModes()
 
@@ -1374,3 +1219,30 @@ export function createBuiltinAgentModPackage(
     bindings,
   }
 }
+
+/**
+ * 本包全部内置工具按名索引的单源：宿主要挂工具、要查某个工具的定义，一律从这里取。
+ *
+ * 取代原先十一个各自导出的集合——宿主挑着挂就漏过工具（`context:handoff` 曾因此整轮缺席）。
+ * 分组仍在 `BuiltinAgentModToolCollections` 里，那是给内置 mod 拼清单用的，不再出包。
+ */
+export const agentTools: Readonly<Record<string, VelaTool<any>>> = Object.freeze(
+  BuiltinAgentModToolCollections.reduce<Record<string, VelaTool<any>>>((tools, collection) => {
+    for (const [name, tool] of Object.entries(collection)) {
+      // 重复工具名在这里即抛，不留到 Loader 才发现。
+      if (name in tools) throw new Error(`内置工具名重复：${name}（内置集合之间必须互斥）。`)
+      tools[name] = tool
+    }
+    return tools
+  }, {})
+)
+
+/**
+ * 宿主装配 mod 用的组装器：内置 mod 由本文件提供，pack 由宿主给。
+ *
+ * 装配器自己不认识任何具体工具，随包官方 mod 从这里注入——工具面（本文件）在分层的最上层，
+ * 装配层在它之下，依赖方向只能是这一个方向。
+ */
+export const agentModHost: AgentModHostAssemblerApi = new AgentModHostAssembler(() => [
+  createBuiltinAgentModDefinition(),
+])

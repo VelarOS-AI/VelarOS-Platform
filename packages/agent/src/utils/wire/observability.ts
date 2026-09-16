@@ -8,7 +8,8 @@
 // 内不改。协议面一律 `z.strictObject`（§6 wire 裁决 ⑥：Forgiving 是模型输入边界的宽容，协议是版本化契约）。
 import { z } from 'zod'
 
-import type { CapabilitySpan, ExecutionSpan,ExecutionSpanCategory, ExecutionSpanMetrics, ExecutionSpanStatus, ModelSpan, PolicySpan, RunSpan, ToolSpan, TurnSpan } from '../../types/agent.js'
+import type { CapabilitySpan, ExecutionSpan, ExecutionSpanMetrics, ExecutionSpanStatus, ModelSpan, PolicySpan, RunSpan, ToolSpan, TurnSpan } from '../../types/agent.js'
+import type { ExecutionSpanCategory } from '../../types/ledgers.js'
 
 /** span 类别：通用执行面 model/tool/capability/policy + run/turn 两个结构容器。判别字段。 */
 export const ExecutionSpanCategorySchema = z.enum([

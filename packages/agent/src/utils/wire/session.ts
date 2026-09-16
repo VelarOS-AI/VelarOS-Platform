@@ -1,7 +1,8 @@
 // 域：Agent 会话动词与会话树 entry；不进入 Kernel protocol。
 import { z } from 'zod'
 
-import type { AdmitReceipt, AdmitRequest, AnswerRequest, ApproveRequest, BranchSummaryEntry, CancelRequest, CancelResult, CompactionEntry, CustomEntry, CustomMessageEntry, MessageEntry, ModelChangeEntry, RuntimeStatusRequest, RuntimeStatusResponse, SessionEntry, SessionEventEnvelope,SessionEventPayload, SessionInfoEntry, SessionInputDelivery, SessionTarget, SteerRequest, WakeRequest } from '../../types/agent.js'
+import type { BranchSummaryEntry, CompactionEntry, CustomEntry, CustomMessageEntry, MessageEntry, ModelChangeEntry, SessionEntry, SessionInfoEntry } from '../../types/agent.js'
+import type { AdmitReceipt, AdmitRequest, AnswerRequest, ApproveRequest, CancelRequest, CancelResult, RuntimeStatusRequest, RuntimeStatusResponse, SessionEventEnvelope, SessionEventPayload, SessionInputDelivery, SessionTarget, SteerRequest, WakeRequest } from '../../types/product-session.js'
 
 import { ModelMessagePartSchema, ModelMessageRoleSchema, ModelMessageSchema } from './message'
 

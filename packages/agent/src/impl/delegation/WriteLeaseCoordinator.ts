@@ -82,3 +82,8 @@ class WriteLeaseCoordinator implements WriteLeaseCoordinatorApi {
 }
 
 export { WriteLeaseCoordinator }
+
+/** 建一份写租约协调器：同一资源同时只许一个子 Agent 写。 */
+export function createWriteLeaseCoordinator(): WriteLeaseCoordinatorApi {
+  return new WriteLeaseCoordinator()
+}

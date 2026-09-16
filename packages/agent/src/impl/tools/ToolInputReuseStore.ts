@@ -1,21 +1,11 @@
 import { z } from 'zod'
 
-import { isArray, isEmpty, isNumber, isObject, isPlainObject, isString, isUndefined, Log } from '@velaros-ai/core'
+import { isArray, isEmpty, isNumber, isObject, isPlainObject, isString, isUndefined,Log } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
+import type { ToolInputReuseEnvelopeSchema, WithToolInputReuse } from '../../types/toolkit.js'
 import type { AttemptInput, ToolAttemptOutcome, ToolInputChange, ToolInputReuseContext, ToolInputReuseOptions } from '../../types/tools.js'
-import {
-  ClaimToolName,
-  contractVersion,
-  describeParameterPath,
-  ForbiddenInputChangeKeys,
-  inputScope,
-  InputToolName,
-  OutcomeToolName,
-  reusableInputField,
-  toolAttemptPayloadHash,
-  ToolInputReuseSchema,
-} from '../../utils/tools/tool-input-reuse'
+import { ClaimToolName, contractVersion, describeParameterPath, ForbiddenInputChangeKeys, inputScope, InputToolName, OutcomeToolName, reusableInputField, toolAttemptPayloadHash,ToolInputReuseSchema } from '../../utils/tools/tool-input-reuse'
 import { createContextPayloadRef } from '../context/InMemoryContextPayloadStore'
 import { ToolInputReuseError } from '../errors/ToolInputReuseError'
 
@@ -306,7 +296,7 @@ class ToolInputReuseStore implements ToolInputReuseStoreApi {
 /** 宿主进程唯一的一份参数复用账房；会话与存储都由每次调用传进来的上下文决定。 */
 export const toolInputReuseStore: ToolInputReuseStoreApi = new ToolInputReuseStore()
 
-export function withToolInputReuse<T extends z.ZodType>(schema: T) {
+export const withToolInputReuse: WithToolInputReuse = <T extends z.ZodType>(schema: T): ToolInputReuseEnvelopeSchema<T> => {
   if (!(schema instanceof z.ZodObject)) throw new Error('withToolInputReuse 只能包裹对象 schema（z.object / z.strictObject）：复用信封要在根对象上补 reuse 与 changes 两个字段，非对象 schema 没有可补的位置。')
   // Provider 工具 schema 保持 object 根节点（不接受根级 anyOf）；根对象严格，未知字段在这一层就报出，
   // 业务字段的必填与互斥约束由同一套原始 schema 在运行时验证。
@@ -333,29 +323,6 @@ export function withToolInputReuse<T extends z.ZodType>(schema: T) {
     .transform((input) => (Object.hasOwn(input, 'reuse') ? input : schema.parse(input)))
   toolInputReuseStore.markReusable(wrapped)
   return wrapped
-}
-
-export function supportsToolInputReuse(schema: object): boolean {
-  return toolInputReuseStore.supportsReuse(schema)
-}
-
-export function saveToolAttemptInput(
-  context: ToolInputReuseContext,
-  callId: string,
-  toolName: string,
-  args: Record<string, unknown>,
-  inputContractVersion?: number
-): Promise<boolean> {
-  return toolInputReuseStore.saveAttemptInput(context, callId, toolName, args, inputContractVersion)
-}
-
-export function saveToolAttemptOutcome(
-  context: ToolInputReuseContext,
-  callId: string,
-  outcome: ToolAttemptOutcome,
-  metrics?: { requestedChars: number; effectiveChars: number; reused: boolean }
-): Promise<void> {
-  return toolInputReuseStore.saveAttemptOutcome(context, callId, outcome, metrics)
 }
 
 export function resolveToolInputReuse(

@@ -15,15 +15,12 @@ import { isEmpty, isFunction, isString, optionalWhen, toNullable } from '@velaro
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
 import type { AgentModDiagnostic, AgentModSeamKind } from '../../types/agent.js'
-import type { AgentModSeamDispatchMethodName,AgentModSeamHandler, AgentModSeamRegistration, AgentModSeamRegistrationInput, AgentModSessionLifecycleEvent, AgentModToolCallBeforeEvent, AgentModToolCallBeforeOutcome, AgentModToolResultAfterEvent, AgentModToolResultAfterOutcome, AgentModTurnContextAppendage, AgentModTurnContextAssembleEvent, AgentModTurnContextAssembleOutcome } from '../../types/mods.js'
+import type { AgentModSeamDispatchMethodName, AgentModSeamHandler, AgentModSeamRegistration, AgentModSeamRegistrationInput, AgentModSessionLifecycleEvent, AgentModToolCallBeforeEvent, AgentModToolCallBeforeOutcome, AgentModToolResultAfterEvent, AgentModToolResultAfterOutcome, AgentModTurnContextAppendage, AgentModTurnContextAssembleEvent, AgentModTurnContextAssembleOutcome } from '../../types/mods.js'
 import { createHookContext, isThenable, matchesHook, readErrorMessage, resolveHookTimeoutMs } from '../../utils/mods/seams'
 import { compareStableStrings } from '../../utils/residency/determinism'
 import { AgentTuning } from '../../utils/tuning'
 
 // ─── 已接线 seam 的事件/结果契约 ──────────────────────────────────────────────
-
-
-
 
 /**
  * 派发方法 → 它真正读取 handlers 的 kind（**已接线名单的唯一来源**）。
@@ -44,16 +41,6 @@ export const WiredSeamKindsByDispatcher: Readonly<Record<AgentModSeamDispatchMet
 export const WiredSeamKinds: ReadonlySet<AgentModSeamKind> = new Set<AgentModSeamKind>(
   Object.values(WiredSeamKindsByDispatcher).flat()
 )
-
-
-
-
-
-
-
-
-
-
 
 /**
  * Hook 派发器对外的面：mod 的钩子按事件登记在这里，主链走到各派发点时按优先级逐个调它们。
@@ -438,4 +425,9 @@ export const WiredHookEvents: ReadonlySet<AgentModSeamKind> = WiredSeamKinds
 export {
   AgentModSeamDispatcher as AgentModHookDispatcher,
   AgentModSeamDispatcher,
+}
+
+/** 建一台 mod seam 派发器：把主链上的拦截点分发给已注册的 hook。 */
+export function createAgentModSeamDispatcher(options: { onDiagnostic?: (diagnostic: AgentModDiagnostic) => void } = {}): AgentModSeamDispatcherApi {
+  return new AgentModSeamDispatcher(options)
 }

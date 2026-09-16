@@ -1,16 +1,7 @@
 import type { ModelMessage, ToolCallPart, ToolResultPart } from 'ai'
 
 import type { HistoryToolCallReference } from '../../types/history.js'
-import {
-  extractAssistantToolCallIds,
-  extractAssistantToolCalls,
-  extractTextContent,
-  extractToolResultIds,
-  isToolCallPart,
-  isToolResultPart,
-  previewDynamicValue,
-  previewText,
-} from '../../utils/history/messages'
+import { extractAssistantToolCallIds, extractAssistantToolCalls, extractTextContent, extractToolResultIds, isToolCallPart, isToolResultPart, previewDynamicValue, previewText } from '../../utils/history/messages'
 
 /**
  * 模型消息历史的读取面：从一条 `ModelMessage` 里认片段、取工具调用与结果 id、取正文、压预览。

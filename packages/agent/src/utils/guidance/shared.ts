@@ -1,5 +1,6 @@
 import { isEmpty } from '@velaros-ai/core'
 
+import { PromptSegmentPriority } from '../../contract/constants.js'
 import type { PromptCompositionResult,PromptSegmentDefinition, PromptSegmentRetention, PromptSegmentSource, PromptSegmentStability, PromptSegmentTier, RuntimePromptSnapshot } from '../../types/guidance.js'
 
 /**
@@ -13,17 +14,6 @@ import type { PromptCompositionResult,PromptSegmentDefinition, PromptSegmentRete
  * 2026-08-06 删除的死常量（全树零消费者）：`developmentP0` / `role` / `strategy` / `guardrail`，
  * 以及 `datetime: 500`——真实的 datetime 段自带字面量 9_020，从来没读过这个常量。
  */
-export const PromptSegmentPriority = {
-  identity: 0,
-  brandVoice: 10,
-  // 对外兼容的通用纪律优先级；内置 Tier0 保持身份与品牌语气两段。
-  safetyBoundary: 20,
-  runtime: 1_000,
-  capabilityProtocol: 1_200,
-  runtimeAdvice: 1_500,
-  skill: 9_000,
-  user: 10_000,
-} as const
 
 /**
  * 把一串标签拼成提示词里的一行（顿号分隔）；空清单渲染成 `无` 而不是空串。

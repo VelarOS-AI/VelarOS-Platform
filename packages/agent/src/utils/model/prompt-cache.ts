@@ -256,3 +256,7 @@ export {
   mergeSessionPromptCacheProviderOptions,
   resolveSessionPromptCacheKey,
 }
+
+/** 值在 `AgentTuning.loop.promptCacheMinStableSystemChars`：稳定前缀短于它就不下缓存断点。 */
+export const PromptCacheMinStableSystemChars: number =
+  AgentTuning.loop.promptCacheMinStableSystemChars

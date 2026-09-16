@@ -55,9 +55,4 @@ class LinkedAbortScope implements LinkedAbortScopeApi {
   }
 }
 
-/** 开一条只监听、不接管父信号的取消作用域。 */
-function createLinkedAbortScope(...parentSignals: AbortSignal[]): LinkedAbortScopeApi {
-  return new LinkedAbortScope(parentSignals)
-}
-
-export { createLinkedAbortScope }
+export { LinkedAbortScope }

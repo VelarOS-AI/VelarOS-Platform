@@ -6,11 +6,11 @@ import { logRuntime } from '@velaros-ai/core/logger'
 
 import { InMemoryContextPayloadStore } from '../src/impl/context/InMemoryContextPayloadStore'
 import { AgentModSeamDispatcher } from '../src/impl/mods/AgentModSeamDispatcher'
-import { AgentTurnHistoryHelper } from '../src/impl/records/TurnHistory'
+import { agentTurnHistory } from '../src/impl/records/TurnHistory'
 import { KernelToolLoopGuard } from '../src/impl/tools/KernelToolLoopGuard'
 import { ToolExecutionPolicy } from '../src/impl/tools/ToolExecutionPolicy'
 import { ToolExecutor } from '../src/impl/tools/ToolExecutor'
-import { saveToolAttemptInput, saveToolAttemptOutcome, withToolInputReuse } from '../src/impl/tools/ToolInputReuseStore'
+import { toolInputReuseStore, withToolInputReuse } from '../src/impl/tools/ToolInputReuseStore'
 import type { ToolInputReuseContract } from '../src/types/toolkit.js'
 import type { ToolExecutionPolicyContext, ToolExecutorEvents, ToolResult } from '../src/types/tools.js'
 import { clampedInt } from '../src/utils/toolkit/forgiving-schema'
@@ -120,7 +120,7 @@ describe('tool execution lifecycle', () => {
     executor.enqueue('cancel-during-operation', 'probe:write', { path: 'first' }, false)
     executor.enqueue('queued-mutation', 'probe:write', { path: 'second' }, false)
     const history: any[] = []
-    const running = new AgentTurnHistoryHelper().appendToolResultsToHistory(history, executor)
+    const running = agentTurnHistory.appendToolResultsToHistory(history, executor)
     await entered.promise
     h.abort.abort('user stopped this run')
     release.resolve()
@@ -176,7 +176,7 @@ describe('tool execution lifecycle', () => {
     executor.enqueue('completed-operation', 'probe:write', { path: 'first' }, false)
     executor.enqueue('queued-mutation', 'probe:write', { path: 'second' }, false)
     const history: any[] = []
-    const running = new AgentTurnHistoryHelper().appendToolResultsToHistory(history, executor)
+    const running = agentTurnHistory.appendToolResultsToHistory(history, executor)
     await entered.promise
     h.abort.abort('user stopped during result middleware')
     const results = await running
@@ -270,7 +270,7 @@ describe('tool execution lifecycle', () => {
     const executor = new ToolExecutor(h.context, h.events, h.policy)
     executor.enqueue('invalid-union', 'probe:write', { action: 'read', path: 3 }, false)
     const history: any[] = []
-    await new AgentTurnHistoryHelper().appendToolResultsToHistory(history, executor)
+    await agentTurnHistory.appendToolResultsToHistory(history, executor)
 
     expect(executions).toBe(0)
     expect(history[0].content[0].output.type).toBe('error-text')
@@ -293,7 +293,7 @@ describe('tool execution lifecycle', () => {
       edits: [{ oldText: 'a', newText: placeholder }],
     }, false)
     const history: any[] = []
-    await new AgentTurnHistoryHelper().appendToolResultsToHistory(history, executor)
+    await agentTurnHistory.appendToolResultsToHistory(history, executor)
 
     expect(executions).toBe(0)
     const failure = JSON.parse(history[0].content[0].output.value)
@@ -838,7 +838,7 @@ describe('tool execution lifecycle', () => {
     expect(h.emitted).toHaveLength(2)
     expect(h.emitted.find((item) => (item as { toolCallId: string }).toolCallId === 'first')).toMatchObject({ result: { ok: true } })
     const history: any[] = []
-    await expect(new AgentTurnHistoryHelper().appendToolResultsToHistory(history, executor)).rejects.toMatchObject({ code: 'TOOL_RESULT_FINALIZATION_FAILED' })
+    await expect(agentTurnHistory.appendToolResultsToHistory(history, executor)).rejects.toMatchObject({ code: 'TOOL_RESULT_FINALIZATION_FAILED' })
     expect(history[0].content.map((item: any) => item.toolCallId)).toEqual(['first', 'second'])
     expect(history[0].content[0].output.type).toBe('text')
     expect(JSON.parse(history[0].content[0].output.value)).toEqual({ ok: true })
@@ -856,7 +856,7 @@ describe('tool execution lifecycle', () => {
     const executor = new ToolExecutor(h.context, h.events, h.policy)
     executor.enqueue('transformed-operation', 'probe:write', {}, false)
     const history: any[] = []
-    const results = await new AgentTurnHistoryHelper().appendToolResultsToHistory(history, executor)
+    const results = await agentTurnHistory.appendToolResultsToHistory(history, executor)
     const expected = { operation: { changed: true, revision: 2 }, summary: 'Saved revision 2' }
     expect(results[0]?.result).toEqual(expected)
     expect(JSON.parse(history[0].content[0].output.value)).toEqual(expected)
@@ -945,7 +945,7 @@ describe('tool execution lifecycle', () => {
     expect(executor.getTerminalError()?.code).toBe('TOOL_RESULT_FINALIZATION_FAILED')
     expect(h.emitted).toHaveLength(2)
     const history: any[] = []
-    await expect(new AgentTurnHistoryHelper().appendToolResultsToHistory(history, executor)).rejects.toMatchObject({ code: 'TOOL_RESULT_FINALIZATION_FAILED' })
+    await expect(agentTurnHistory.appendToolResultsToHistory(history, executor)).rejects.toMatchObject({ code: 'TOOL_RESULT_FINALIZATION_FAILED' })
     expect(history[0].content.map((result: any) => result.toolCallId)).toEqual(['first', 'second'])
   })
 
@@ -1079,7 +1079,7 @@ test('a malformed reuse request fails validation and hands the untouched attempt
   const typo = new ToolExecutor(h.context, h.events, h.policy)
   typo.enqueue('typo', 'probe:write', { reuse: 'attempt:bad', changes: [{ op: 'set', path: ['lines'], value: 1 }], content: 'body' }, false)
   const history: any[] = []
-  await new AgentTurnHistoryHelper().appendToolResultsToHistory(history, typo)
+  await agentTurnHistory.appendToolResultsToHistory(history, typo)
   const failure = JSON.parse(history[0].content[0].output.value)
   expect(failure).toMatchObject({
     error: 'schema_validation_failed',
@@ -1100,8 +1100,8 @@ test('Executor migrates trusted failed input before the current schema and persi
   const store = new InMemoryContextPayloadStore()
   const sourceContext = { sessionId: 'migration', resourceId: 'resource:one', contextPayloadStore: store }
   const body = '正文🙂\\path\r\n'.repeat(10_000)
-  await saveToolAttemptInput(sourceContext, 'old-call', 'probe:write', { oldField: body })
-  await saveToolAttemptOutcome(sourceContext, 'old-call', 'not-applied')
+  await toolInputReuseStore.saveAttemptInput(sourceContext, 'old-call', 'probe:write', { oldField: body })
+  await toolInputReuseStore.saveAttemptOutcome(sourceContext, 'old-call', 'not-applied')
   let migrations = 0
   let writes = 0
   const h = harness((_ctx, input) => {
@@ -1145,8 +1145,8 @@ test('Executor migrates trusted failed input before the current schema and persi
 
 test('Executor migration failures retain actionable errors and leave the original attempt retryable', async () => {
   const sourceContext = { sessionId: 'migration-error', resourceId: 'resource:one', contextPayloadStore: new InMemoryContextPayloadStore() }
-  await saveToolAttemptInput(sourceContext, 'old-call', 'probe:write', { body: 'unchanged content' })
-  await saveToolAttemptOutcome(sourceContext, 'old-call', 'not-applied')
+  await toolInputReuseStore.saveAttemptInput(sourceContext, 'old-call', 'probe:write', { body: 'unchanged content' })
+  await toolInputReuseStore.saveAttemptOutcome(sourceContext, 'old-call', 'not-applied')
   let writes = 0
   const h = harness(() => { writes++; return { ok: true } }, {
     schema: withToolInputReuse(z.strictObject({ field: z.string() })),

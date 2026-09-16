@@ -2,16 +2,15 @@ import { describe, expect, test } from 'bun:test'
 import { z } from 'zod'
 
 import { clampedInt } from '../src/utils/toolkit/forgiving-schema'
-import { ToolArgsSchemaValidator } from '../src/utils/tools/tool-args-schema-validator'
+import { describeAdjustments, replaceRecordContents, validateWithNormalization } from '../src/utils/tools/tool-args-schema-validator'
 
 describe('ToolArgsSchemaValidator effective arguments', () => {
   test('union failures report only the branch selected by the supplied discriminator', () => {
-    const validator = new ToolArgsSchemaValidator()
     const schema = z.union([
       z.object({ action: z.literal('read'), path: z.string() }),
       z.object({ action: z.literal('write'), path: z.string(), text: z.string() }),
     ])
-    const result = validator.validateWithNormalization(schema, { action: 'read', path: 3 })
+    const result = validateWithNormalization(schema, { action: 'read', path: 3 })
     expect(result.success).toBe(false)
     if (result.success) return
     expect(result.issues).toEqual([{ path: 'path', message: expect.stringContaining('expected string') }])
@@ -19,7 +18,6 @@ describe('ToolArgsSchemaValidator effective arguments', () => {
   })
 
   test('nested union alternatives keep outer field paths and do not coerce across branches', () => {
-    const validator = new ToolArgsSchemaValidator()
     const schema = z.object({
       request: z.union([
         z.object({ action: z.literal('read'), limit: z.number() }),
@@ -27,7 +25,7 @@ describe('ToolArgsSchemaValidator effective arguments', () => {
       ]),
     })
     const args = { request: { action: 'read', limit: '5' } }
-    const result = validator.validateWithNormalization(schema, args)
+    const result = validateWithNormalization(schema, args)
 
     expect(result.success).toBe(false)
     if (result.success) return
@@ -36,7 +34,6 @@ describe('ToolArgsSchemaValidator effective arguments', () => {
   })
 
   test('a missing variant field is not mistaken for a discriminator', () => {
-    const validator = new ToolArgsSchemaValidator()
     const Line = z.number().int().positive()
     const Range = z.union([Line, z.tuple([Line, Line])])
     const edit = z.union([
@@ -46,31 +43,30 @@ describe('ToolArgsSchemaValidator effective arguments', () => {
     ])
     const schema = z.object({ edits: z.array(edit) })
 
-    const missingSide = validator.validateWithNormalization(schema, { edits: [{ op: 'insert', range: 2, text: 'x' }] })
+    const missingSide = validateWithNormalization(schema, { edits: [{ op: 'insert', range: 2, text: 'x' }] })
     expect(missingSide.success).toBe(false)
     if (!missingSide.success) expect(missingSide.issues).toEqual([{ path: 'edits.0.side', message: expect.stringContaining('"before"|"after"') }])
 
-    const wrongRange = validator.validateWithNormalization(schema, { edits: [{ op: 'replace', range: [1, 2, 3], text: 'x' }] })
+    const wrongRange = validateWithNormalization(schema, { edits: [{ op: 'replace', range: [1, 2, 3], text: 'x' }] })
     expect(wrongRange.success).toBe(false)
     if (!wrongRange.success) {
       expect(wrongRange.issues.every((issue) => issue.path.startsWith('edits.0.range'))).toBe(true)
       expect(wrongRange.issues.some((issue) => /\bop\b/u.test(issue.message))).toBe(false)
     }
 
-    const unknownOp = validator.validateWithNormalization(schema, { edits: [{ op: 'delete', range: 2, text: '' }] })
+    const unknownOp = validateWithNormalization(schema, { edits: [{ op: 'delete', range: 2, text: '' }] })
     expect(unknownOp.success).toBe(false)
     if (!unknownOp.success) expect(unknownOp.issues).toEqual([{ path: 'edits.0.op', message: '选项不合法：只能填 "replace"|"insert" 之一' }])
 
-    const scalarRange = validator.validateWithNormalization(schema, { edits: [{ op: 'replace', range: '2', text: 'x' }] })
+    const scalarRange = validateWithNormalization(schema, { edits: [{ op: 'replace', range: '2', text: 'x' }] })
     expect(scalarRange.success).toBe(false)
     if (!scalarRange.success) expect(scalarRange.issues).toEqual([{ path: 'edits.0.range', message: '输入类型不对：应为 number | tuple，实际收到 string' }])
   })
 
   test('bounds feedback for deeply nested external union schemas', () => {
-    const validator = new ToolArgsSchemaValidator()
     let schema: z.ZodType = z.string()
     for (let depth = 0; depth < 12; depth++) schema = z.union([schema, z.literal('alternative')])
-    const result = validator.validateWithNormalization(z.object({ value: schema }), { value: 3 })
+    const result = validateWithNormalization(z.object({ value: schema }), { value: 3 })
 
     expect(result.success).toBe(false)
     if (result.success) return
@@ -80,11 +76,10 @@ describe('ToolArgsSchemaValidator effective arguments', () => {
   })
 
   test('keeps prototype-like JSON keys as ordinary own properties when replacing input', () => {
-    const validator = new ToolArgsSchemaValidator()
     const target = { removed: true } as Record<string, unknown>
     const source = JSON.parse('{"__proto__":{"unexpected":true},"constructor":"value","limit":5}')
 
-    validator.replaceRecordContents(target, source)
+    replaceRecordContents(target, source)
 
     expect(Object.getPrototypeOf(target)).toBe(Object.prototype)
     expect(Object.hasOwn(target, '__proto__')).toBe(true)
@@ -94,8 +89,7 @@ describe('ToolArgsSchemaValidator effective arguments', () => {
   })
 
   test('returns the exact transformed input that will be executed', () => {
-    const validator = new ToolArgsSchemaValidator()
-    const result = validator.validateWithNormalization(
+    const result = validateWithNormalization(
       z.object({
         limit: clampedInt(1, 50),
         mode: z.enum(['brief', 'full']).default('brief'),
@@ -137,8 +131,7 @@ describe('ToolArgsSchemaValidator effective arguments', () => {
   })
 
   test('does not mark an unchanged call as normalized', () => {
-    const validator = new ToolArgsSchemaValidator()
-    const result = validator.validateWithNormalization(
+    const result = validateWithNormalization(
       z.object({ query: z.string() }),
       { query: 'schema' }
     )
@@ -152,11 +145,10 @@ describe('ToolArgsSchemaValidator effective arguments', () => {
   })
 
   test('bounds adjustment metadata for large or deeply nested external schemas', () => {
-    const validator = new ToolArgsSchemaValidator()
     const requested = Object.fromEntries(
       Array.from({ length: 100 }, (_, index) => [`unsupported_${index}`, index])
     )
-    const result = validator.validateWithNormalization(z.object({}), requested)
+    const result = validateWithNormalization(z.object({}), requested)
 
     expect(result.success).toBe(true)
     if (!result.success) return
@@ -182,7 +174,7 @@ describe('ToolArgsSchemaValidator effective arguments', () => {
     requestedCursor.value = 'before'
     effectiveCursor.value = 'after'
 
-    expect(validator.describeAdjustments(deepRequested, deepEffective)).toEqual([{
+    expect(describeAdjustments(deepRequested, deepEffective)).toEqual([{
       field: '<additional>',
       action: 'normalized',
       detail: '还有别的 schema 调整没写进元数据',

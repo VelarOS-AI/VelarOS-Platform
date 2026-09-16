@@ -10,14 +10,11 @@ import process from 'node:process'
 
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 
-import {
-  createRemoteNodeClient,
-  createRemoteNodeClientCredentialStore,
-} from '@velaros-ai/kernel/remote'
+import { createRemoteNodeClient, createRemoteNodeClientCredentialStore } from '@velaros-ai/kernel/remote'
 
 import { readArguments, seizeStdout } from '../../utils/connectors/stdio-entry'
 
-import { createRemoteNodeMcpServer } from './RemoteNodeMcpServer'
+import { RemoteNodeMcpServer } from './RemoteNodeMcpServer'
 
 /**
  * `velaros-remote-mcp` 这个可执行入口本身:接命令行参数、建 remote-node 客户端、把它包成 MCP
@@ -47,7 +44,7 @@ class RemoteNodeMcpStdioEntry implements RemoteNodeMcpStdioEntryApi {
       }),
       pairingCode: args.pairingCode,
     })
-    const server = createRemoteNodeMcpServer({ client })
+    const server = new RemoteNodeMcpServer({ client }).server
 
     // 节点判死(协议不符 / 未授权 / 被顶替)时退出而不是空转:MCP 客户端看到进程结束会给出
     // 明确的失败,而一个连不上却还在应答 tools/list 的空服务器只会让人以为"这台机器没工具"。

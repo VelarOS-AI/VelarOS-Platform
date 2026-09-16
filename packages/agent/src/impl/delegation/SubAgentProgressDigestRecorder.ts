@@ -1,15 +1,8 @@
-import { isEmpty, isNonBlankString, truncate } from '@velaros-ai/core'
+import { isEmpty, truncate } from '@velaros-ai/core'
 
 import type { AgentEvent } from '../../types/agent'
+import { pickArgsHint } from '../../utils/delegation/sub-agent-progress-digest-recorder'
 import { AgentTuning } from '../../utils/tuning'
-
-/** 从工具入参里挑一个最有信息量的短提示（第一个非空字符串值）。 */
-function pickArgsHint(args: Record<string, unknown>): Nullable<string> {
-  for (const value of Object.values(args)) {
-    if (isNonBlankString(value)) return truncate(value.trim(), 60)
-  }
-  return null
-}
 
 /**
  * 子 Agent 运行中进展摘要记录器。

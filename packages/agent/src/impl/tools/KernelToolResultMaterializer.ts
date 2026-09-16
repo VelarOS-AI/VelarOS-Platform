@@ -1,5 +1,5 @@
 import type { KernelToolOutputStore } from '../../contract/requires.js'
-import type {MaterializedKernelToolResult, MaterializeKernelToolResultInput } from '../../types/tools.js'
+import type { MaterializedKernelToolResult,MaterializeKernelToolResultInput } from '../../types/tools.js'
 
 /** 构造参数：只有一项，决定超预算的工具输出往哪存。 */
 export interface KernelToolResultMaterializerOptions {

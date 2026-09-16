@@ -10,17 +10,10 @@
 // 不在这里加任何授权判断。放行与否由两端既有的闸决定(调用方自己的审批 + 节点的 permission
 // broker);这一层多判一次,就会变成第三份谁都不认识、又谁都绕不开的影子策略。
 import { Server } from '@modelcontextprotocol/sdk/server/index.js'
-import {
-  CallToolRequestSchema,
-  ListToolsRequestSchema,
-} from '@modelcontextprotocol/sdk/types.js'
+import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js'
 
-import {
-  isUndefined,
-} from '@velaros-ai/core'
-import type {
-  RemoteNodeToolDescriptor,
-} from '@velaros-ai/kernel'
+import { isUndefined } from '@velaros-ai/core'
+import type { RemoteNodeToolDescriptor } from '@velaros-ai/kernel'
 
 import type { RemoteNodeMcpBridgeOptions } from '../../types/connectors.js'
 import { describeTool, explainFailure, log, stringifyOutput, toMcpToolName } from '../../utils/connectors/remote-node-mcp'
@@ -113,13 +106,4 @@ class RemoteNodeMcpServer implements RemoteNodeMcpServerApi {
   }
 }
 
-/**
- * 把节点清单与调用面接到一个 MCP Server 上。
- *
- * 返回未连接传输的 Server;调用方自行挑 stdio / HTTP 传输并 `connect`。
- */
-export function createRemoteNodeMcpServer(
-  options: RemoteNodeMcpBridgeOptions,
-): Server {
-  return new RemoteNodeMcpServer(options).server
-}
+export { RemoteNodeMcpServer }

@@ -64,3 +64,8 @@ export class AgentCapabilityEventPublisher implements AgentCapabilityEventPublis
     return this.drainPromise
   }
 }
+
+/** 建一台 Agent 能力事件发布器：把执行事件按信封发到内核事件总线。 */
+export function createAgentCapabilityEventPublisher(deliver: AgentCapabilityKernelEventDelivery, execution: AgentCapabilityExecutionDescriptorV1, onDeliveryError: (error: unknown) => void): AgentCapabilityEventPublisherApi {
+  return new AgentCapabilityEventPublisher(deliver, execution, onDeliveryError)
+}

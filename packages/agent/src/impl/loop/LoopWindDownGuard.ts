@@ -1,28 +1,8 @@
 import { isPresent } from '@velaros-ai/core'
 
-import type { LoopTurnVerdict, LoopWindDownGuardApi as LoopWindDownGuardContract, LoopWindDownTriggerReason } from '../../types/loop.js'
+import type { LoopWindDownGuardApi as LoopWindDownGuardContract, LoopWindDownTriggerReason } from '../../types/loop.js'
+import { loopContinue, loopFinish } from '../../utils/loop/loop-wind-down-guard'
 import { AgentTuning } from '../../utils/tuning'
-
-/**
- * Loop 装配面契约（B5 单引擎双面）。
- *
- * `AgentLoop`（runAgentLoop）是全内核唯一的 agent 循环引擎；主 agent 面（SoloStreamLoop）与
- * 子 agent 面（QueryLoop）都只是对这份契约的装配：
- * - 主面 = UI 投影 / turn 轴 / goal 生命周期 / handoff 信号 / 自动验证收尾门；
- * - 子面 = 无 UI / turn:null 轴 / 结构化输出 / 软上限（时间轴）/ usage 回传。
- *
- * 四类护栏（轮次上限 / 上下文治理触发 / 中止 / 异常收敛）机制单源在引擎侧
- * （本文件的 {@link LoopWindDownGuard} + AgentLoop 的溢出恢复与 turn span 收敛），
- * 面只提供文案、日志与收敛动作——装配差异是真差异要保，机制分裂是形态债要禁。
- */
-
-function loopContinue<TFinish>(): LoopTurnVerdict<TFinish> {
-  return { kind: 'continue' }
-}
-
-function loopFinish<TFinish>(value: TFinish): LoopTurnVerdict<TFinish> {
-  return { kind: 'finish', value }
-}
 
 /** 建 {@link LoopWindDownGuard} 时定死的两根轴（轮数、可选时间），建好后不再改。 */
 interface LoopWindDownGuardOptions {

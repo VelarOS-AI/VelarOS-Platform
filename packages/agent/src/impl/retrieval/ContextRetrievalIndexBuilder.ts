@@ -2,7 +2,7 @@ import type { RetrievalPayloadStorePort, RetrievalStateStorePort } from '../../c
 import type { ChatContextRetrievalIndexSnapshot } from '../../types/retrieval.js'
 import { isPrivateFileContextRecord } from '../../utils/context/private-file-records'
 import { ChatContextRetrievalIndexVersion } from '../../utils/retrieval/index-snapshot'
-import { chatSearchMessages } from '../../utils/retrieval/messages'
+import { buildMessageSearchIndex } from '../../utils/retrieval/messages'
 import { chatSearchText } from '../../utils/retrieval/text'
 
 import { contextRetrievalReferences } from './ContextRetrievalReferences'
@@ -74,7 +74,7 @@ class ContextRetrievalIndexBuilder implements ContextRetrievalIndexBuilderApi {
         payloadFingerprint: null,
       },
       messages: messages.map((message, index) => {
-        const { text, searchableText, toolNames } = chatSearchMessages.buildMessageSearchIndex(message)
+        const { text, searchableText, toolNames } = buildMessageSearchIndex(message)
 
         return {
           handleId: `message:${index}`,

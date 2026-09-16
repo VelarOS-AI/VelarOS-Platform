@@ -157,3 +157,8 @@ export class SessionLedger implements SessionLedgerHandleApi {
     if (this.closed) throw new AppError('INVARIANT', `会话账本 ${this.ctx.sessionId} 已关闭，不再接受追加或分叉：需要继续写请重新打开这个会话的账本。`)
   }
 }
+
+/** 打开一份会话树账本句柄；一般由 SessionStore 交出，单独装配时才直接建。 */
+export function createSessionLedger(ctx: SessionLedgerContext): SessionLedgerHandleApi {
+  return new SessionLedger(ctx)
+}

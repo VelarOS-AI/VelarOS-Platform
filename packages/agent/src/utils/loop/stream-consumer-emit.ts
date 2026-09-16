@@ -6,7 +6,7 @@ import { isEmpty, isNotNull, isNull, isObject, isPresent, isString, toNullable }
 
 import type { ConsumeAssistantStreamArgs, StreamConsumerEvents, StreamDiagnostics } from '../../types/loop.js'
 import type { ProviderTurnRecorder, ProviderTurnUsage } from '../../types/records.js'
-import { ChatRuntimeEvents } from '../wire/chat-runtime.js'
+import { streamUsageTelemetry } from '../wire/chat-runtime'
 
 /**
  * 从传入的请求指纹里取稳定 id 字符串（`ProviderRequestFingerprint` 的 `id`），供 model span 的
@@ -79,7 +79,7 @@ export function emitStreamUsageTelemetry(
   })
 
   args.events.emitRuntime?.(
-    ChatRuntimeEvents.usageTelemetry({
+    streamUsageTelemetry({
       turn: turnState.turn,
       model: args.model,
       inputTokens: diagnostics.inputTokens,

@@ -4,9 +4,9 @@ import { describe, expect, test } from 'bun:test'
 import { contextRetrievalTools } from '../src/impl/AgentTools'
 import {
   FileContextCoordinator,
-  fileContextFor,
-  forkFileContext,
-} from '../src/impl/context/FileContextCoordinator'
+  } from '../src/impl/context/FileContextCoordinator'
+import { fileContextRegistry } from '../src/impl/context/FileContextRegistry'
+import { fileContextRegistry } from '../src/impl/context/FileContextRegistry'
 import { InMemoryContextPayloadStore } from '../src/impl/context/InMemoryContextPayloadStore'
 import { compileProviderSendRequest, ProviderRequestCompiler } from '../src/impl/context/ProviderRequestCompiler'
 import { ContextGovernanceSessionRegistry } from '../src/impl/residency/ContextGovernanceSessionRegistry'
@@ -82,7 +82,7 @@ describe('file context provider and archive', () => {
   test('actual provider request contains B once, preserves raw A, and recalls A without reverting B', async () => {
     const store = new InMemoryContextPayloadStore()
     const ctx = { codingSession: {}, sessionId: 's', contextPayloadStore: store }
-    const files = fileContextFor(ctx)!
+    const files = fileContextRegistry.for(ctx)!
     let disk = snapshot('A', 'old unique source')
     files.registerSource(source(() => disk))
     await files.observe([disk], files.beginObservation(), 'read-1')
@@ -216,12 +216,12 @@ describe('file context provider and archive', () => {
   test('child views are isolated and inherited refresh obeys child tool scope', async () => {
     const store = new InMemoryContextPayloadStore()
     const parent = { codingSession: {}, sessionId: 's', contextPayloadStore: store }
-    const files = fileContextFor(parent)!
+    const files = fileContextRegistry.for(parent)!
     files.registerSource(source(() => snapshot('A', 'parent')))
     await files.observe([snapshot('A', 'parent')], files.beginObservation(), 'read-1')
     const child = { ...parent, getCurrentVisibleToolNames: () => ['context:recall'] }
-    forkFileContext(parent, child)
-    const childFiles = fileContextFor(child)!
+    fileContextRegistry.fork(parent, child)
+    const childFiles = fileContextRegistry.for(child)!
     expect(childFiles.currentViews()).toEqual([])
     childFiles.touch(workspaceId, ['a.ts'])
     await childFiles.prepare()
@@ -233,7 +233,7 @@ describe('file context provider and archive', () => {
   test('bare snapshot refs use authorized recall even when the caller requests generic payload access', async () => {
     const store = new InMemoryContextPayloadStore()
     const ctx = { codingSession: {}, sessionId: 's', contextPayloadStore: store }
-    const files = fileContextFor(ctx)!
+    const files = fileContextRegistry.for(ctx)!
     files.registerSource(source(() => snapshot('A', 'historical')))
     await files.observe([snapshot('A', 'historical')], files.beginObservation(), 'read-1')
     const ref = files.currentViews()[0]!.refs[0]!
@@ -518,7 +518,7 @@ test('the last finalization pass strips unresolved source and unsigned continuat
 
 test('model historical file recall displays Unicode LF once while archive and paging preserve original text', async () => {
   const ctx = { sessionId: 'historical-format', codingSession: {}, contextPayloadStore: new InMemoryContextPayloadStore() }
-  const files = fileContextFor(ctx)!
+  const files = fileContextRegistry.for(ctx)!
   const original = '\uFEFFfirst\\n\r\n中文🙂\r\nlast'
   files.registerSource(source(() => snapshot('A', original)))
   await files.observe([snapshot('A', original)], files.beginObservation())
@@ -540,7 +540,7 @@ test('model historical file recall displays Unicode LF once while archive and pa
 
 test('explicit reads outrank incidental search windows in the current view and survive trimming', async () => {
   const store = new InMemoryContextPayloadStore()
-  const files = fileContextFor({ codingSession: {}, sessionId: 's', contextPayloadStore: store })!
+  const files = fileContextRegistry.for({ codingSession: {}, sessionId: 's', contextPayloadStore: store })!
   const disk = new Map<string, FileContextSnapshot>()
   files.registerSource({ workspaceId, normalizePath: (path: string) => path, read: async (path) => [disk.get(path)!] })
   const requested = snapshot('A', 'requested unique source', 'requested.ts')

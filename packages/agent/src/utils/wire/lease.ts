@@ -2,7 +2,8 @@
 import { z } from 'zod'
 
 import { AgentLeasePolicy, AgentToolNames } from '../../contract/constants.js'
-import type { ContractLease, LeaseDenialReason, LeaseDeniedResponse,ToolCatalogEntry, ToolCatalogSnapshot, VelarToolCallEnvelope, VelarToolResultEnvelope, VelarToolResultStatus } from '../../types/agent.js'
+import type { LeaseDenialReason, LeaseDeniedResponse, ToolCatalogEntry, VelarToolCallEnvelope, VelarToolResultEnvelope, VelarToolResultStatus } from '../../types/agent.js'
+import type { ContractLease, ToolCatalogSnapshot } from '../../types/tools.js'
 
 import { AgentProtocolVersion } from './version'
 

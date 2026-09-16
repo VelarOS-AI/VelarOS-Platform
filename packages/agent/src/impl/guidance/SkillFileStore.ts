@@ -1,34 +1,15 @@
-import {
-  existsSync,
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  renameSync,
-  rmSync,
-  statSync,
-  writeFileSync,
-} from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { basename, dirname, extname, join } from 'node:path'
 
-import { isArray, isBlank, isEmpty,isString, stringifyPretty, trimmedStringOrEmpty } from '@velaros-ai/core'
+import { isArray, isBlank, isEmpty, isString, stringifyPretty, trimmedStringOrEmpty } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 
 import { AgentSkillFailureCodes, AgentSkillFiles } from '../../contract/constants.js'
-import type { SkillFileRecord, SkillFrontmatter } from '../../types/guidance.js'
+import type { SkillFileRecord, SkillFileStoreDependencies, SkillFrontmatter } from '../../types/guidance.js'
 import { normalizeSkillFileId } from '../../utils/guidance/skill-file-paths'
+import { listSkillDirResources, slugify } from '../../utils/guidance/skill-file-store'
 import { compareStableStrings } from '../../utils/residency/determinism'
-
-/**
- * 建 `SkillFileStore` 要的外部依赖：技能目录在哪、以及外部 Skill 没声明 spaces 时兜底给哪些空间。
- * 由宿主在装配期一次性递入，建好之后不再变。
- */
-interface SkillFileStoreDependencies {
-  /** 技能目录解析器由宿主递入；桌面和 headless 宿主可使用各自的数据根。 */
-  skillsDir: () => string
-  /** 兼容没有声明 spaces 的外部 Skill；为空时保持 Platform 的 fail-closed 必填语义。 */
-  defaultSpaces?: readonly string[]
-}
 
 /** 目录式技能的入口文件名（<id>/SKILL.md）；扫描、指纹、资源枚举、解析、删除共用这一个字面量。 */
 
@@ -72,43 +53,6 @@ function parseFrontmatterList(value: LooseOptional<string>): string[] {
     .split(',')
     .map((entry) => entry.trim().replace(/^["']|["']$/g, ''))
     .filter((entry) => entry.length > 0)
-}
-
-/** 枚举目录式技能的捆绑资源相对路径（深度≤3、上限 50，跳过隐藏文件与 SKILL.md）。 */
-function listSkillDirResources(baseDir: string): string[] {
-  const resources: string[] = []
-  const walk = (dir: string, prefix: string, depth: number): void => {
-    if (depth > 3 || resources.length >= 50) return
-    let entries
-    try {
-      entries = readdirSync(dir, { withFileTypes: true })
-    } catch {
-      // arch-guard:silent-catch-ok 目录不可读（权限/竞态删除）只应让**这一层**缺席，不该让整棵
-      // 资源枚举失败——技能目录是用户可随手改动的普通目录，一个坏子目录不配否决整个技能。
-      return
-    }
-    for (const entry of entries) {
-      if (entry.name.startsWith('.') || resources.length >= 50) continue
-      const rel = prefix ? `${prefix}/${entry.name}` : entry.name
-      if (entry.isDirectory()) {
-        walk(join(dir, entry.name), rel, depth + 1)
-      } else if (entry.isFile() && rel !== AgentSkillFiles.skillEntryFileName) {
-        resources.push(rel)
-      }
-    }
-  }
-  walk(baseDir, '', 1)
-  return resources.sort()
-}
-
-/** 从名称派生文件 slug（中英文保留，其余折叠成 -）。 */
-function slugify(name: string): string {
-  return name
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9一-龥]+/gi, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 48)
 }
 
 /**
@@ -565,3 +509,8 @@ class SkillFileStore implements SkillFileStoreApi {
 
 export { formatSkillDisplayMarkdown, listSkillDirResources, parseFrontmatter, parseFrontmatterList, SkillFileStore }
 export type { SkillFileStoreDependencies }
+
+/** 建一份技能文件存储：技能目录的读写与启停状态都经它。 */
+export function createSkillFileStore(dependencies: SkillFileStoreDependencies): SkillFileStoreApi {
+  return new SkillFileStore(dependencies)
+}

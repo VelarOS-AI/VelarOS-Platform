@@ -1,4 +1,5 @@
 
+import type { HostProjection, ModelMessage, ModelMessagePart, ModelMessageRole, ToolCatalogEntry, VelarToolResultEnvelope,VelarToolResultStatus  } from './agent.js'
 export interface AgentSessionApplicationEvent<TPayload = unknown> {
   readonly type: string
   readonly payload: TPayload
@@ -122,4 +123,137 @@ export interface RequestAgentPermissionInput<TMode extends string = string> {
   readonly readOnly: boolean
   readonly risk?: AgentPermissionRisk
   readonly metadata?: Readonly<Record<string, unknown>>
+}
+
+export type SessionInputDelivery = 'queue' | 'steer'
+
+export type SessionTarget = {
+  sessionId: string
+  seq: Nullable<number>
+}
+
+export type AdmitRequest = {
+  sessionId: string
+  inputId: string
+  role: Nullable<ModelMessageRole>
+  content: string
+  delivery: Nullable<SessionInputDelivery>
+  metadata: Nullable<Record<string, unknown>>
+  parts?: ModelMessagePart[]
+}
+
+export type AdmitReceipt = {
+  inputId: string
+  sessionId: string
+  seq: number
+}
+
+export type WakeRequest = {
+  sessionId: string
+  seq: Nullable<number>
+}
+
+export type SteerRequest = {
+  sessionId: string
+  inputId: string
+  role: Nullable<ModelMessageRole>
+  content: string
+}
+
+export type AnswerRequest = {
+  sessionId: string
+  seq: Nullable<number>
+  answer: string
+}
+
+export type ApproveRequest = {
+  sessionId: string
+  seq: Nullable<number>
+  approved: boolean
+  rejectionMessage: Nullable<string>
+  approvalPayload: unknown
+}
+
+export type CancelRequest = {
+  sessionId: string
+  seq: Nullable<number>
+}
+
+export type CancelResult = {
+  aborted: boolean
+}
+
+export type RuntimeStatusRequest = {
+  sessionId: string
+  seq: Nullable<number>
+}
+
+export type RuntimeStatusResponse = {
+  hasPendingConfirmation: boolean
+  hasPendingInput: boolean
+  running: boolean
+  pendingPrompt: boolean
+  cancelRequested: boolean
+  cancellable: boolean
+  queuedInputs: number
+  backgroundJobs: number
+}
+
+export type SessionEventPayload = {
+  kind: 'lifecycle'
+  phase: string
+} | {
+  kind: 'custom'
+  customType: string
+  data: unknown
+}
+
+export type SessionEventEnvelope = {
+  sessionId: string
+  sequence: number
+  event: SessionEventPayload
+}
+
+export type ResolveCatalogRequest = {
+  hostProjection: HostProjection
+}
+
+export type DescribeToolSchemaRequest = {
+  name: string
+}
+
+export type ExecuteToolRequest = {
+  protocolVersion: 1
+  contractId: string
+  catalogRevision: string
+  toolCallId: string
+  toolName: string
+  input: Record<string, unknown>
+}
+
+export type ExecuteToolResponse = {
+  protocolVersion: 1
+  contractId: string
+  catalogRevision: string
+  toolCallId: string
+  toolName: string
+  status: VelarToolResultStatus
+  output?: unknown
+  error?: string
+}
+
+export type RunTurnOptions = {
+  modelId?: string
+  maxToolTurns?: number
+}
+
+export type RunTurnRequest = {
+  messages: ModelMessage[]
+  tools: ToolCatalogEntry[]
+  options?: RunTurnOptions
+}
+
+export type RunTurnResponse = {
+  messages: ModelMessage[]
+  toolResults: VelarToolResultEnvelope[]
 }

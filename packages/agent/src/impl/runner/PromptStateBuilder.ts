@@ -2,28 +2,14 @@ import { isEmpty, isTrue, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 
-import type {RuntimePromptFeaturePolicy } from '../../contract/requires.js'
+import type { RuntimePromptFeaturePolicy } from '../../contract/requires.js'
 import type { RuntimePromptSnapshot } from '../../types/guidance.js'
-import type { BuildRuntimePromptStateArgs, HtmlArtifactPromptTurnInput } from '../../types/runner.js'
+import type { BuildRuntimePromptStateArgs } from '../../types/runner.js'
 import { resolveCapabilityPromptSegments } from '../../utils/capabilities'
 import { createRuntimePromptSegments } from '../../utils/guidance/runtime'
-import {
-  isExecutionModeActive,
-  resolveExecutionModes,
-  stripExecutionModePromptFeatures,
-} from '../../utils/runner/execution-mode-registry'
-import {
-  collectRecentToolFailures,
-  collectToolNames,
-  filterToolCategoryOverviewsByAllowedTools,
-  formatExecutionPlanPreview,
-  hasCompactedContextInHistory,
-  readLatestUserTurnText,
-  resolveSnapshotRunProfile,
-  resolveToolCategoryOverviews,
-  summarizeRequestableToolCategories,
-  summarizeToolCategories,
-} from '../../utils/runner/prompt-state'
+import { isExecutionModeActive, resolveExecutionModes, stripExecutionModePromptFeatures } from '../../utils/runner/execution-mode-registry'
+import { collectRecentToolFailures, collectToolNames, filterToolCategoryOverviewsByAllowedTools, formatExecutionPlanPreview, hasCompactedContextInHistory, resolveSnapshotRunProfile, resolveToolCategoryOverviews, summarizeRequestableToolCategories, summarizeToolCategories } from '../../utils/runner/prompt-state'
+import { shouldInjectHtmlArtifactPromptForTurn } from '../../utils/runner/prompt-state-builder'
 import { defaultRuntimePromptFeaturePolicy } from '../tools/DefaultPromptFeaturePolicy'
 
 interface RuntimeStateContextResult {
@@ -31,17 +17,6 @@ interface RuntimeStateContextResult {
   segments: ReturnType<typeof createRuntimePromptSegments>
   /** Deprecated compatibility field; domain environment context is a capability contribution. */
   devEnvironmentContext: Nullable<string>
-}
-
-function shouldInjectHtmlArtifactPromptForTurn({
-  selectedPromptFeatureSet,
-  messages,
-}: HtmlArtifactPromptTurnInput): boolean {
-  if (!selectedPromptFeatureSet.has('html-artifact')) return false
-  const latest = readLatestUserTurnText(messages)
-  const visualSignal =
-    /(?:可视化|图表|架构图|流程图|原型|看板|仪表盘|页面|网页|卡片|落地页|实时预览|复杂说明|复杂展示|交互|互动|讲解|演示|动态效果|实时效果|chart|diagram|dashboard|prototype|preview|artifact|html|svg|canvas|page|card|landing page|real-time|interactive|interaction|explain|explanation|demo|visual)/iu
-  return !!latest && visualSignal.test(latest)
 }
 
 /**

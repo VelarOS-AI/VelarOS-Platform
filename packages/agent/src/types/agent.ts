@@ -582,12 +582,6 @@ export type ToolPermission = string
 
 export type ToolSurfaceProfileId = string
 
-export interface ToolSurfaceProfileDefinition {
-  id: ToolSurfaceProfileId
-  label: string
-  description: string
-}
-
 export type ToolOsState = 'resident' | 'loadable' | 'needs_setup' | 'unavailable'
 
 export type ToolCategoryDomainId = string
@@ -663,14 +657,6 @@ export type ToolAvailabilityScope = 'enabled' | 'all' | 'system-enabled' | 'cata
 
 export type ToolProviderKind = string
 
-export interface ToolProviderDescriptor {
-  id: string
-  kind: ToolProviderKind
-  label: string
-  enabled: boolean
-  toolCount: number
-}
-
 export interface ToolCategoryDefinition {
   id: ToolCategoryId
   label: string
@@ -711,32 +697,8 @@ export interface ToolExposurePolicy {
   profiles?: Partial<Record<RunProfileId, ToolExposureProfilePolicy>>
 }
 
-export type ToolRenderKind = string
-
-export type ToolActivityKind = string
-
 /** Provider-neutral model input kinds used by model runtimes and tool requirements. */
 export type AgentModelInputModality = 'text' | 'image' | 'audio'
-
-export interface ToolRenderMetadata {
-  /** 紧凑工具行 / 默认工具渲染主图标的视觉语义。 */
-  leadingKind?: ToolRenderKind
-  /** 对话聚合摘要使用的活动语义，同一工具可同时属于多个摘要类别。 */
-  activityKinds?: readonly ToolActivityKind[]
-  /** 是否使用专用工具渲染器，而不是普通工具行。 */
-  dedicatedRender?: boolean
-}
-
-export interface ToolMetadata {
-  /** 工具的产品归属类别；用于覆盖物理集合带来的默认分类。 */
-  categoryId?: ToolCategoryId
-  /** 内部工具的统一暴露策略；provider 仍可通过 descriptor.exposure 覆盖。 */
-  exposure?: ToolExposurePolicy
-  /** UI 展示、图标和工具活动摘要语义。 */
-  render?: ToolRenderMetadata
-  /** 该工具需要的聊天输入 feature / 插件开关。 */
-  promptFeatureGate?: ChatPromptFeatureId
-}
 
 /**
  * 工具角色：刻画工具对外部世界的作用面，用于子 Agent 暴露收窄与读改分离归类。
@@ -773,14 +735,6 @@ export interface ToolCategoryOverview {
   category: ToolCategoryDefinition
   enabled: boolean
   tools: ToolDescriptor[]
-}
-
-export interface ToolOverview {
-  enabledCategories: ToolCategoryId[]
-  disabledToolNames: string[]
-  providers: ToolProviderDescriptor[]
-  categories: ToolCategoryOverview[]
-  totalTools: number
 }
 
 export interface CapabilityAutoApprovalNotice {
@@ -958,8 +912,6 @@ export interface UserActionCardBlock {
   /** 结算记录（单源）：有值即「已作答」，渲染层只读它。 */
   resolution?: ConversationCardResolution
 }
-
-export type JsonObject = Record<string, unknown>
 
 /** 当前会话可见历史的线性边界。 */
 export interface SessionLineageContext {
@@ -1729,72 +1681,6 @@ export interface ExecutionProvideGuidanceRequest {
   message: SerializedMessage
 }
 
-export interface ChatTranslateThinkingRequest {
-  sessionId: string
-  messageId: string
-  blockIndex: number
-  text: string
-  locale: AppLocale
-  provider?: string
-  model?: string
-  thinkingDepth?: ThinkingDepth
-}
-
-export interface ChatTranslateThinkingResponse {
-  text: string
-}
-
-export interface ChatSummarizeForHandoffRequest {
-  sessionId: string
-  /** 供续跑简报总结的对话正文（调用方已做裁剪/序列化）。 */
-  transcript: string
-  /** 会话的资源范围提示（本地根路径 / 远端 URL 等），供简报点明落点。 */
-  scopeHint?: string
-  locale: AppLocale
-  provider?: string
-  model?: string
-  thinkingDepth?: ThinkingDepth
-}
-
-export interface ChatSummarizeForHandoffResponse {
-  brief: string
-}
-
-export type ChatSuggestionPhase = 'new-session' | 'next-turn'
-
-export interface ChatSuggestionItem {
-  id: string
-  title: string
-  prompt: string
-  reason: string
-  confidence: number
-}
-
-export interface ChatGenerateSuggestionsRequest {
-  sessionId: string
-  phase: ChatSuggestionPhase
-  locale: AppLocale
-  /** Opaque capability scope used by injected suggestion context providers. */
-  scope?: CapabilityScopeId
-  resourceId?: string
-  scopeMetadata?: Record<string, unknown>
-  scopeHint?: string
-  /** next-turn only：renderer 已裁剪并序列化的最近对话。 */
-  transcript?: string
-  provider?: string
-  model?: string
-  thinkingDepth?: ThinkingDepth
-}
-
-export interface ChatGenerateSuggestionsResponse {
-  suggestions: ChatSuggestionItem[]
-  sourceCount: number
-}
-
-// 手动压缩功能已移除(2026-07-18 用户裁决:压缩由内部看门自治);旧落盘数据里的 'manual'
-// 在恢复时归一为 'auto'。
-export type ChatContextCompactionTrigger = 'auto'
-
 export interface ChatSendContextView {
   viewId: string
   messages: DebugModelMessage[]
@@ -1803,76 +1689,7 @@ export interface ChatSendContextView {
   sourceLastMessageTimestamp: Nullable<number>
 }
 
-export type ChatContextOSSourceKind = string
-
-export interface ChatContextOSSourceSnapshot {
-  kind: ChatContextOSSourceKind
-  count: number
-  label: string
-  estimatedChars?: LooseOptional<number>
-  metadata?: Record<string, unknown>
-}
-
-export interface ChatContextOSSourceGraphSnapshot {
-  sessionId: string
-  capturedAt: number
-  sources: ChatContextOSSourceSnapshot[]
-}
-
-export type ChatContextPipelineProfileId = string
-
-export type ChatContextPipelineStageId = string
-
-export type ChatContextBudgetLaneId = string
-
-export type ChatContextPipelineStageStatus = 'completed' | 'skipped' | 'pending'
-
-export interface ChatContextPipelineStageRun {
-  id: ChatContextPipelineStageId
-  required: boolean
-  status: ChatContextPipelineStageStatus
-  reason?: LooseOptional<string>
-}
-
-export interface ChatContextBudgetLaneDefinition {
-  id: ChatContextBudgetLaneId
-  priority: number
-  minPercent: number
-  maxPercent: number
-}
-
-export interface ChatContextPipelineRun {
-  profile: ChatContextPipelineProfileId
-  stages: ChatContextPipelineStageRun[]
-  budgetLanes: ChatContextBudgetLaneDefinition[]
-  notes: string[]
-}
-
-export interface ChatContextDebugTraceEntry {
-  stage: ChatContextPipelineStageId
-  action: 'inline' | 'summarize' | 'handle' | 'drop' | 'skip' | 'estimate' | 'retain'
-  target: string
-  reason: string
-  score?: LooseOptional<number>
-  metadata?: Record<string, unknown>
-}
-
 export type ChatContextRetrievalHandleKind = string
-
-export interface ChatContextRetrievalHandle {
-  id: string
-  kind: ChatContextRetrievalHandleKind
-  sessionId: string
-  sourceMessageIndex: Nullable<number>
-  role?: LooseOptional<SerializedMessage['role']>
-  toolCallId?: LooseOptional<string>
-  toolName?: LooseOptional<string>
-  label: string
-  summary: string
-  estimatedChars: number
-  priority: number
-  metadata?: Record<string, unknown>
-}
 
 export interface ChatContextRetrievePayloadRequest {
   sessionId: string
@@ -2068,88 +1885,6 @@ export interface ChatContextRetrievalIndexDiagnostics {
   recentQueries: ChatContextRetrievalQueryTraceEntry[]
 }
 
-export interface ChatContextRetrievalIndexDiagnosticsRequest {
-  sessionId: string
-}
-
-export type ChatContextRetentionAction =
-  | 'keep-full'
-  | 'keep-pinned'
-  | 'summarize'
-  | 'reference-only'
-  | 'drop'
-
-export interface ChatContextDroppedRange {
-  startMessageIndex: number
-  endMessageIndex: number
-  action: ChatContextRetentionAction
-  reason: string
-  retrievalHandleIds: string[]
-}
-
-export interface ChatContextViewTokenStats {
-  before: ContextUsageEstimate
-  after: ContextUsageEstimate
-  source: ChatContextUsageAccountingSource
-  confidence: ChatContextUsageAccountingConfidence
-}
-
-export interface ChatContextViewRollbackMeta {
-  parentViewId: Nullable<string>
-  sourceMessageCount: number
-  sourceLastMessageId: Nullable<string>
-  sourceLastMessageTimestamp: Nullable<number>
-  canRollback: boolean
-  invalidationReasons: string[]
-}
-
-export interface ChatSessionContextView {
-  id: string
-  parentViewId: Nullable<string>
-  sessionId: string
-  trigger: ChatContextCompactionTrigger
-  createdAt: number
-  model: string
-  sourceGraph: ChatContextOSSourceGraphSnapshot
-  sourceMessageCount: number
-  sourceLastMessageId: Nullable<string>
-  sourceLastMessageTimestamp: Nullable<number>
-  coveredMessageCount: number
-  messages: DebugModelMessage[]
-  estimatedBefore: ContextUsageEstimate
-  estimatedAfter: ContextUsageEstimate
-  removedMessages: number
-  passes: number
-  keptRecentTurns: number
-  targetPercent: number
-  usageSource: ChatContextUsageAccountingSource
-  pipeline: ChatContextPipelineRun
-  protectedEvidenceIds: string[]
-  droppedRanges: ChatContextDroppedRange[]
-  tokenStats: ChatContextViewTokenStats
-  rollbackMeta: ChatContextViewRollbackMeta
-  evidenceLedger: ChatContextEvidenceRecord[]
-  retrievalHandles: ChatContextRetrievalHandle[]
-  debugTrace: ChatContextDebugTraceEntry[]
-  generatedTitle?: LooseOptional<string>
-}
-
-export interface ChatSessionContextViewStore {
-  activeViewId: Nullable<string>
-  views: ChatSessionContextView[]
-  maxViews: number
-}
-
-/** Capability-owned evidence freshness snapshot used during compaction. */
-export interface ChatCompactContextCapabilityTruth {
-  revisionsByResource: Readonly<Record<string, string>>
-  externallyTouchedResourceIds: readonly string[]
-}
-
-export interface ChatAbortRequest {
-  sessionId: string
-}
-
 export type ActiveContextArtifactKind = 'plan' | 'decision' | 'requirement'
 
 export type ActiveContextArtifactScope = string
@@ -2258,74 +1993,6 @@ export interface ActiveContextGovernanceReport {
   summary: string
 }
 
-export type ActiveContextGovernanceDecision = 'accept' | 'reject' | 'ignore'
-
-export interface ActiveContextApplyGovernanceDecisionInput {
-  suggestionId: string
-  artifactId: string
-  action: ActiveContextGovernanceAction
-  decision: ActiveContextGovernanceDecision
-  reason?: LooseOptional<string>
-}
-
-export interface ActiveContextGovernanceApplyResult {
-  artifact: Nullable<ActiveContextArtifact>
-  report: ActiveContextGovernanceReport
-}
-
-export interface ChatActiveContextRequest {
-  sessionId: string
-}
-
-export interface ChatArchiveActiveDirectiveRequest {
-  sessionId: string
-  ids: string[]
-}
-
-export interface ChatActiveDirectivesChangedEvent {
-  sessionId: string
-}
-
-export interface ChatAssessActiveContextGovernanceRequest {
-  sessionId: string
-  options?: ActiveContextGovernanceOptions
-}
-
-export interface ChatApplyActiveContextGovernanceRequest extends ActiveContextApplyGovernanceDecisionInput {
-  sessionId: string
-  options?: ActiveContextGovernanceOptions
-}
-
-export interface ChatArchiveActiveContextRequest {
-  sessionId: string
-  filter: ActiveContextArchiveFilter
-}
-
-export type ChatGoalLifecycleAction =
-  | 'resume'
-  | 'pause'
-  | 'block'
-  | 'complete'
-  | 'cancel'
-  | 'remove'
-
-export interface ChatUpdateGoalLifecycleRequest {
-  sessionId: string
-  action: ChatGoalLifecycleAction
-}
-
-export interface ChatUpdateGoalLifecycleResponse {
-  goal: ActiveContextArtifact
-}
-
-export interface ChatGetGoalLifecycleRequest {
-  sessionId: string
-}
-
-export interface ChatGetGoalLifecycleResponse {
-  goal: Nullable<ActiveContextArtifact>
-}
-
 export interface ChatSessionToolResultPayload {
   /** A local copy retained for an explicitly approved task handoff; never grants access to another session. */
   handoff?: { sourceSessionId: string; sourceRef: string; sourceRefs?: string[] }
@@ -2346,270 +2013,6 @@ export interface ChatSessionPayloadSnapshot {
   toolResults: Record<string, ChatSessionToolResultPayload>
   widgetArtifacts?: Record<string, ChatSessionWidgetArtifactVersion>
   generatedFiles?: Record<string, StreamAssistantGeneratedFilePayload>
-}
-
-export interface ChatPersistSessionPayloadsRequest {
-  sessions: ChatSessionPayloadSnapshot[]
-}
-
-export interface ChatLoadSessionPayloadRequest {
-  sessionId: string
-}
-
-export interface ChatSessionStateTimelineSnapshot {
-  key: string
-  messages: ChatMessage[]
-  messagePaging?: LooseOptional<ChatMessagePaging>
-}
-
-export interface ChatMessagePaging {
-  /** 当前 messages[] 在全量数组中的起始下标 */
-  loadedFromIndex: number
-  /** 全量消息数 */
-  totalCount: number
-}
-
-/**
- * 会话磁盘快照的规范 JSON 形状。
- *
- * - 写出：`serializeSessionForDisk`（renderer，不含 executionGraph）
- * - 重组：`ChatStateStore.loadAllSessions` → `entry.data`
- * - 持久化：manifest 中的 `session` 为去掉 messages 后的 metadata；完整快照由上述路径重组
- *
- * renderer `chatTypes.StoredChatSession` 与之同构。
- */
-export interface StoredChatSession {
-  id: string
-  /** 所属 folder id；成员会话搜索结果需要用它回到正确的侧边栏容器。 */
-  folderId?: LooseOptional<string>
-  title: string
-  titleManuallyEdited?: boolean
-  isPinned?: boolean
-  /** 成员在所属 folder 内的置顶状态；不影响外层 folder 排序。 */
-  isMemberPinned?: boolean
-  sidebarOrder?: LooseOptional<number>
-  createdAt: number
-  updatedAt: number
-  thinkingDepth?: ThinkingDepth
-  /** @deprecated 已并入 `executionModes`；存量磁盘会话仍可能只有这一格，读入时折算。 */
-  goalMode?: boolean
-  /**
-   * 会话执行模式粘性（权威轴）：上次发送实际生效的执行模式。
-   * hook send 省略 config 时回落到它，兑现「省略字段回落 session 默认」契约。
-   */
-  executionModes?: ExecutionModeId[]
-  /** 会话能力粘性：上次发送实际生效的 prompt features（**只含能力**，模式已拆到 `executionModes`）。 */
-  promptFeatures?: ChatPromptFeatureId[]
-  scope?: CapabilityScopeId
-  pureChatMode?: boolean
-  toolSurfaceProfile?: ToolSurfaceProfileId
-  selectedProvider?: LooseOptional<string>
-  selectedModel?: string
-  resourceId?: LooseOptional<string>
-  scopeMetadata?: Record<string, unknown>
-  resourceVersion?: number
-  messages: ChatMessage[]
-  messageRunMarkers?: unknown[]
-  isStreaming?: boolean
-  runtime?: Record<string, unknown>
-  contextView?: LooseOptional<ChatSessionContextView>
-  contextViewStore?: ChatSessionContextViewStore
-  trace?: unknown[]
-  turnContexts?: unknown[]
-  workerThreads?: unknown[]
-  crewAgentRuns?: unknown[]
-  checkpoints?: unknown
-  headSnapshot?: LooseOptional<Record<string, unknown>>
-  branches?: unknown[]
-  activeBranchId?: string
-  sourceResourceId?: LooseOptional<string>
-  messagePaging?: LooseOptional<ChatMessagePaging>
-}
-
-export interface ChatSessionStateSaveSnapshot {
-  version: 1
-  /** 已移除时间线消息数组的 `StoredChatSession` 元数据。 */
-  session: Record<string, unknown>
-  timelines: ChatSessionStateTimelineSnapshot[]
-  /** 子 Agent 执行线程独立保存，不写入 session manifest。 */
-  workerThreads?: unknown[]
-}
-
-/**
- * 单个 session 状态的保存请求。
- * snapshot 是 renderer 侧已拆分的 metadata + timeline windows。
- */
-export interface ChatSaveSessionStateRequest {
-  sessionId: string
-  snapshot?: LooseOptional<ChatSessionStateSaveSnapshot>
-}
-
-/**
- * folder 注册表单条：虚拟文件夹（会话组）元数据的唯一落盘真值。
- * 成员会话不再反范式复制 pin/排序等 folder 级字段。
- */
-export interface ChatFolderRegistryEntry {
-  id: string
-  title: string
-  titleManuallyEdited: boolean
-  isPinned: boolean
-  sidebarOrder: Nullable<number>
-  /** 归档时间；null 表示正常显示，非空表示仅在归档页显示。 */
-  archivedAt?: LooseOptional<number>
-  /** 单独归档的成员；成员仍留在 folder 中，恢复时可回到原位置。 */
-  archivedMembers?: Array<{
-    memberSessionId: string
-    archivedAt: number
-  }>
-  /**
-   * folder 级执行体绑定 —— **存量读取源，新数据不再往这里写**（2026-08-07 起改成员级）。
-   *
-   * 它曾是唯一的路由声明：一个 folder 全员由同一个外部引擎执行，于是「在当前对话里加一个
-   * 由外部引擎执行的成员」根本表达不出来，只能另开一个 folder。判决：绑定下沉到**成员**
-   * （见 {@link ChatFolderRegistryEntry.memberExecutionBindings}），外部引擎成员因此能与
-   * 其它资源范围的成员并列在同一个 folder 里。
-   *
-   * 存量 folders.json 里这一格仍然有效：解析顺序 = 成员级优先、缺席时回落本格。不做落盘迁移，
-   * 少一次「迁移脚本写坏用户数据」的机会。
-   */
-  executionBinding?: LooseOptional<{
-    kind: 'engine'
-    engineId: 'claude-code' | 'codex'
-    workspaceRoot: string
-  }>
-  /**
-   * **成员级执行体绑定**：哪个成员会话由哪个外部引擎执行（2026-08-07 新增，写入面唯一权威）。
-   *
-   * 数组而不是 Record：与 `archivedMembers` 同形，JSON 里稳定可读；成员数是个位数，查表用 find
-   * 即可。缺席成员 = Velar 自己执行。单个成员的绑定创建后不可变——切执行体请新建成员，
-   * 避免一条会话混入两种执行账本（这条与原来的 folder 级判决一致，只是粒度换了）。
-   */
-  memberExecutionBindings?: LooseOptional<
-    Array<{
-      memberSessionId: string
-      kind: 'engine'
-      engineId: 'claude-code' | 'codex'
-      workspaceRoot: string
-    }>
-  >
-  createdAt: number
-  updatedAt: number
-  /** 成员会话 id（每个成员一个固定资源范围）。 */
-  memberSessionIds: string[]
-  /** 当前活跃成员会话 id。 */
-  activeMemberSessionId: string
-}
-
-/** folder 注册表磁盘快照（storage/chat/folders.json）。 */
-export interface ChatFolderRegistrySnapshot {
-  version: 1
-  /** 当前活跃 folder；启动恢复 = 其 activeMemberSessionId 指向的成员会话。 */
-  activeFolderId: string
-  folders: ChatFolderRegistryEntry[]
-  updatedAt: number
-}
-
-/** folder 注册表保存请求（整表覆盖写）。 */
-export interface ChatSaveFolderRegistryRequest {
-  snapshot: ChatFolderRegistrySnapshot
-}
-
-/** 单个 session 磁盘文件记录。 */
-export interface ChatSessionStateDiskEntry {
-  sessionId: string
-  /** JSON 序列化的 {@link StoredChatSession}。 */
-  data: string
-}
-
-/** 启动首屏快速恢复：先返回最近 session 的可显示窗口，再由 renderer 后台补全全部 session。 */
-export interface ChatStartupSessionStateResponse {
-  activeEntry: Nullable<ChatSessionStateDiskEntry>
-  sessionCount: number
-}
-
-/** 启动时批量返回所有已保存的 session 状态。 */
-export interface ChatLoadAllSessionStatesResponse {
-  sessions: ChatSessionStateDiskEntry[]
-}
-
-/**
- * 按需加载较老消息的请求。
- *
- * beforeIndex: 当前已加载部分在全量数组中的起始下标（即 messages[beforeIndex..]已在内存中）。
- * count: 本次期望加载多少条消息。
- */
-export interface ChatLoadOlderMessagesRequest {
-  sessionId: string
-  /** Optional capability-owned context selector. */
-  /** 当前活动分支；省略时由磁盘 manifest 的 activeBranchId 兜底。 */
-  branchId?: LooseOptional<string>
-  /** 已在内存中的消息在全量数组里的起始位置 */
-  beforeIndex: number
-  /** 期望加载的条数 */
-  count: number
-}
-
-/** 加载较老消息的响应。 */
-export interface ChatLoadOlderMessagesResponse {
-  /** 载入的消息（按时间顺序） */
-  messages: ChatMessage[]
-  /** 这批消息在全量数组里的起始位置 */
-  loadedFromIndex: number
-  /** 是否还有更老的消息 */
-  hasMore: boolean
-}
-
-/** 按需加载子 Agent 执行线程详情。 */
-export interface ChatLoadWorkerThreadDetailRequest {
-  sessionId: string
-  threadId: string
-}
-
-export interface ChatLoadWorkerThreadDetailResponse {
-  workerThread: Nullable<Record<string, unknown>>
-}
-
-export type ChatSessionSearchMatchType = 'keyword'
-
-export interface ChatSessionSearchRequest {
-  query: string
-  limit?: LooseOptional<number>
-  kinds?: LooseOptional<Array<'chat'>>
-}
-
-export interface ChatSessionSearchMatch {
-  messageId: string
-  messageIndex: number
-  role: SerializedMessage['role'] | ChatMessage['role']
-  timestamp: number
-  score: number
-  matchType: ChatSessionSearchMatchType
-  snippet: string
-}
-
-export interface ChatSessionSearchResultGroup {
-  sessionId: string
-  folderId: string
-  title: string
-  kind: 'chat'
-  createdAt: number
-  updatedAt: number
-  topScore: number
-  matches: ChatSessionSearchMatch[]
-}
-
-export interface ChatSessionSearchResponse {
-  query: string
-  groups: ChatSessionSearchResultGroup[]
-}
-
-export interface ChatStreamSnapshotCursor {
-  sessionId: string
-  afterSequence?: LooseOptional<number>
-}
-
-export interface ChatStreamSnapshotRequest {
-  cursors?: ChatStreamSnapshotCursor[]
 }
 
 export interface StreamToolCallPayload {
@@ -2702,75 +2105,6 @@ export interface ChatStreamEventEnvelope {
   sequence?: number
 }
 
-export interface ChatHookSendTaskEvent {
-  sessionId: string
-  capabilityContext?: unknown
-  messageId: string
-  message: string
-  timestamp: number
-  /** 外部 hook 指定的发送配置覆盖（模型/运行模式/思考力度等）；省略则用目标上下文默认。 */
-  config?: unknown
-  /** hook 携带的图片输入（等价 composer 贴图/选图）；renderer 装配进 serialized.imageAttachments。 */
-  imageAttachments?: SerializedImageAttachment[]
-}
-
-/**
- * hook 可见性操作的会话选中通知：主进程窗口前置后,让 renderer 把目标会话切成 UI 当前选中
- * （等价侧边栏点击）。sessionId 可为成员 id 或 folder id,renderer 用与 send_task 同一套解析。
- * 没有这一步时 focus/send 只有 OS 级窗口聚焦——已存在会话的界面永远不切换（真机踩坑）。
- */
-export interface ChatHookFocusSessionEvent {
-  sessionId: string
-}
-
-/** hook provide_guidance：向运行中的会话追加用户引导（renderer 负责入会话+持久化）。 */
-export interface ChatHookProvideGuidanceEvent {
-  sessionId: string
-  messageId: string
-  message: string
-  timestamp: number
-}
-
-/** hook bridge_ping：主进程探测 renderer hook 桥活性的 ping 事件；renderer 收到后以同 nonce 回 pong。 */
-export interface ChatHookBridgePingEvent {
-  nonce: string
-}
-
-/**
- * hook resolve_confirmation：主进程 headless 放行确认后,通知 renderer 对目标会话重新进入
- * streaming 态(prepareSessionStreamStart + markSessionStreaming)。UI 点按钮走
- * useChatExecutionResolveConfirmation 会自己 re-prime;hook 批准绕过 renderer,不补这一步
- * 则恢复流(tool-result+后续回答)会被当迟到输入丢弃、不落 state store。
- */
-export interface ChatHookResolveConfirmationEvent {
-  confirmationId?: string
-  sessionId: string
-}
-
-/** hook arm_handoff：绕过降级判定，直接给目标会话布防转交建议卡（测试驱动）。 */
-export interface ChatHookArmHandoffEvent {
-  sessionId: string
-}
-
-/** hook resolve_handoff：程序化解析目标会话当前布防的转交建议卡（等价点击卡片按钮）。 */
-export interface ChatHookResolveHandoffEvent {
-  sessionId: string
-  approved: boolean
-}
-
-export type BackendLogNotificationLevel = 'warn' | 'error' | 'fatal'
-
-export type BackendLogNotificationTone = 'warning' | 'error'
-
-export interface BackendLogNotificationEvent {
-  id: string
-  title: string
-  tone: BackendLogNotificationTone
-  level: BackendLogNotificationLevel
-  scope: string
-  timestamp: number
-}
-
 export type ChatStreamSnapshotItem =
   | { kind: 'delta'; sequence: number; text: string }
   | { kind: 'event'; sequence: number; event: ChatStreamEvent }
@@ -2780,12 +2114,6 @@ export interface ChatStreamSnapshot {
   isStreaming: boolean
   latestSequence: number
   items: ChatStreamSnapshotItem[]
-}
-
-export interface ChatConfig {
-  /** Product-owned model selection. Core does not define provider/catalog/auth DTOs. */
-  modelSelection?: unknown
-  systemPromptAppend: string
 }
 
 export type SubAgentTaskMode = 'sync' | 'async'
@@ -2886,24 +2214,6 @@ export interface CustomSubAgentDescriptor {
   updatedAt: number
 }
 
-/** 自定义 agent 市场条目（远端 manifest + 本地安装状态合成）。 */
-export interface CustomAgentMarketEntry {
-  id: string
-  name: string
-  description: string
-  version: string
-  installState: 'not-installed' | 'installed' | 'update-available'
-  install?: {
-    phase: 'installing' | 'failed'
-    error?: string
-  }
-}
-
-export interface CustomAgentMarketCatalog {
-  generatedAt: number
-  entries: CustomAgentMarketEntry[]
-}
-
 /**
  * 子 Agent 一次运行的 token/成本用量汇总（跨全部轮次累加）。
  * 由 QueryLoop 从每轮 model span 的四字段冒泡，经派发结果 envelope 回传父 Agent，
@@ -2955,11 +2265,6 @@ export interface SubAgentSessionRecord {
   results: SubAgentTaskResult[]
 }
 
-export interface SubAgentWorkerOutcome {
-  text: string
-  result: SubAgentTaskResult
-}
-
 export type ExecutionStatus =
   | 'pending'
   | 'awaiting_confirmation'
@@ -3008,11 +2313,6 @@ export interface ExecutionResolveConfirmationRequest {
 
 export type ExecutionPendingInteractionKind = 'confirmation' | 'input'
 
-export interface ExecutionHasPendingInteractionRequest {
-  sessionId: string
-  kind: ExecutionPendingInteractionKind
-}
-
 export type ExecutionPendingInteractionSnapshot =
   | {
       kind: 'confirmation'
@@ -3026,31 +2326,6 @@ export type ExecutionPendingInteractionSnapshot =
       executionId: string
       question: string
     }
-
-export interface ExecutionHasPendingInteractionResult {
-  available: boolean
-  interaction?: LooseOptional<ExecutionPendingInteractionSnapshot>
-}
-
-export interface ExecutionAbortSubAgentWorkerRequest {
-  sessionId: string
-  threadId: string
-  reason?: LooseOptional<string>
-}
-
-export interface ExecutionAbortSubAgentWorkerResult {
-  aborted: boolean
-}
-
-export interface ExecutionRelaySubAgentGuidanceRequest {
-  sessionId: string
-  threadId: string
-  message: string
-}
-
-export interface ExecutionRelaySubAgentGuidanceResult {
-  relayed: boolean
-}
 
 export type ExecutionTaskPlanStepStatus =
   | 'pending'
@@ -3332,36 +2607,7 @@ export interface ChatMessageTurnContext {
   chips: Array<{ sourceId: TurnContextSourceId; label: string }>
 }
 
-/** pre-send peek 请求（renderer → main，纯内存同步聚合）。 */
-export interface ChatTurnContextPeekRequest {
-  sessionId: string
-  scope: CapabilityScopeId
-}
-
-/** delta 写入后的变更推送（main → renderer，写入侧防抖），驱动 composer chips 实时刷新。 */
-export interface ChatTurnContextChangedEvent {
-  sessionId: string
-}
-
-/** fan-in 聚合后经 IPC 给 renderer 的快照；renderer 据此渲染 chips 并在发送时冻结。 */
-export interface TurnContextPeekSnapshot {
-  sessionId: string
-  scope: CapabilityScopeId
-  capturedAt: number
-  /** 各 source 本次 peek 的 {generation, tailSeq}，即 receipt.observedThrough 的基底。 */
-  observedThrough: TurnContextCursorVector
-  /** 已按 occurredAt/sourceId/seq 确定性排序、已应用 cap；renderer 只做 dismissed 过滤不得重排。 */
-  deltas: TurnContextDelta[]
-  anchors: TurnContextAnchor[]
-  /** anchors 内容哈希；renderer 与 space/viewId 组合成 anchorGeneration。 */
-  anchorsHash: string
-  /** 溢出/缺口提示行（已格式化），冻结时置于 delta 文本之前。 */
-  overflowNotes: string[]
-}
-
 export type AgentSkillSourceKind = 'builtin' | 'global' | 'project' | 'plugin'
-
-export type AgentSkillSystemKind = 'system-bound' | 'optional-enhancement'
 
 export interface AgentSkillDescriptor {
   id: string
@@ -3377,34 +2623,6 @@ export interface AgentSkillDescriptor {
   argumentHint?: string
   /** 每技能工具门控（frontmatter `allowed-tools`）：显式选中该技能的轮次，工具面收缩到声明集+交互必备。 */
   allowedTools?: readonly string[]
-}
-
-/** 文件式技能的对外摘要（设置页/聊天 / 列表用，不含正文）。 */
-export interface SkillSummary {
-  id: string
-  name: string
-  description: string
-  version: Nullable<string>
-  updatedAt: number
-  sourceKind?: AgentSkillSourceKind
-  systemKind?: AgentSkillSystemKind
-  userVisible?: boolean
-  enabled?: boolean
-  toggleable?: boolean
-  deletable?: boolean
-  revealable?: boolean
-  /** 必填且非空；通用 Skill 也必须显式列出宿主支持的全部空间。 */
-  capabilityScopes: CapabilityScopeId[]
-}
-
-export interface SkillListRequest {
-  includeHidden?: boolean
-  includeDisabled?: boolean
-}
-
-export interface SkillSetEnabledRequest {
-  id: string
-  enabled: boolean
 }
 
 /** 技能市场条目（远端 manifest + 本地安装状态合成）。 */
@@ -3440,17 +2658,6 @@ export interface ContextUsageEstimate {
   payloadPercent: number
   percent: number
 }
-
-export interface SemverVersion {
-  major: number
-  minor: number
-  patch: number
-}
-
-export type SemverComparator =
-  | { kind: 'any' }
-  | { kind: '=' | '>' | '>=' | '<' | '<='; version: SemverVersion }
-  | { kind: '^' | '~'; version: SemverVersion }
 
 export type AgentModContributionAxisName =
   | 'tools'
@@ -3576,9 +2783,6 @@ export type AgentModHookMatcher = {
   statuses?: string[]
 }
 
-/** @deprecated 新代码使用通用 AgentModCommandHandler。 */
-export type AgentModCommandHookHandler = AgentModCommandHandler
-
 export type AgentModHookExecutionMode = 'blocking' | 'background'
 
 export type AgentModHookContribution = {
@@ -3657,19 +2861,6 @@ export type ToolCatalogEntry = {
   readOnly?: boolean
 }
 
-export type ToolCatalogSnapshot = {
-  protocolVersion: 1
-  catalogRevision: string
-  tools: ToolCatalogEntry[]
-}
-
-export type ContractLease = {
-  contractId: string
-  catalogRevision: string
-  needsRefresh: boolean
-  expiresInMs: Nullable<number>
-}
-
 export type VelarToolCallEnvelope = {
   protocolVersion: 1
   contractId: string
@@ -3726,8 +2917,6 @@ export interface AgentCapabilityExecutionEventEnvelopeV1 {
   readonly channel: AgentCapabilityExecutionChannel
   readonly payload: unknown
 }
-
-export type ExecutionSpanCategory = 'capability' | 'run' | 'turn' | 'model' | 'tool' | 'policy'
 
 export type ExecutionSpanStatus = 'error' | 'ok' | 'aborted'
 
@@ -3888,54 +3077,6 @@ export type ExternalAgentBridgeClientMessage = {
   type: 'disconnect'
 }
 
-export type ExternalAgentBridgeHostMessage = {
-  version: 2
-  type: 'hello'
-  service: string
-  protocol: 2
-  pairingAvailable: boolean
-  deviceId: Nullable<string>
-} 
-  | {
-  version: 2
-  type: 'paired'
-  token: string
-  device: Record<string, unknown>
-} 
-  | {
-  version: 2
-  type: 'resumed'
-  device: Record<string, unknown>
-  after: number
-} 
-  | {
-  version: 2
-  type: 'pong'
-  at: number
-} 
-  | {
-  version: 2
-  type: 'event_ack'
-  eventId: string
-} 
-  | {
-  version: 2
-  type: 'command'
-  command: ExternalAgentBridgeCommand
-} 
-  | {
-  version: 2
-  type: 'disconnected'
-} 
-  | {
-  version: 2
-  type: 'error'
-  code: string
-  error: string
-}
-
-export type ExternalAgentBridgeMessage = ExternalAgentBridgeClientMessage | ExternalAgentBridgeHostMessage
-
 export type ModelMessageRole = 'tool' | 'system' | 'user' | 'assistant'
 
 export type ModelMessagePart = {
@@ -3959,8 +3100,6 @@ export type ModelMessage = {
   role: ModelMessageRole
   content: string | ModelMessagePart[]
 }
-
-export type SessionInputDelivery = 'queue' | 'steer'
 
 export type SessionInfoEntry = {
   type: 'session-info'
@@ -4026,158 +3165,15 @@ export type BranchSummaryEntry = {
 
 export type SessionEntry = SessionInfoEntry | MessageEntry | CompactionEntry | CustomEntry | CustomMessageEntry | ModelChangeEntry | BranchSummaryEntry
 
-export type SessionTarget = {
-  sessionId: string
-  seq: Nullable<number>
-}
-
-export type AdmitRequest = {
-  sessionId: string
-  inputId: string
-  role: Nullable<ModelMessageRole>
-  content: string
-  delivery: Nullable<SessionInputDelivery>
-  metadata: Nullable<Record<string, unknown>>
-  parts?: ModelMessagePart[]
-}
-
-export type AdmitReceipt = {
-  inputId: string
-  sessionId: string
-  seq: number
-}
-
-export type WakeRequest = {
-  sessionId: string
-  seq: Nullable<number>
-}
-
-export type SteerRequest = {
-  sessionId: string
-  inputId: string
-  role: Nullable<ModelMessageRole>
-  content: string
-}
-
-export type AnswerRequest = {
-  sessionId: string
-  seq: Nullable<number>
-  answer: string
-}
-
-export type ApproveRequest = {
-  sessionId: string
-  seq: Nullable<number>
-  approved: boolean
-  rejectionMessage: Nullable<string>
-  approvalPayload: unknown
-}
-
-export type CancelRequest = {
-  sessionId: string
-  seq: Nullable<number>
-}
-
-export type CancelResult = {
-  aborted: boolean
-}
-
-export type RuntimeStatusRequest = {
-  sessionId: string
-  seq: Nullable<number>
-}
-
-export type RuntimeStatusResponse = {
-  hasPendingConfirmation: boolean
-  hasPendingInput: boolean
-  running: boolean
-  pendingPrompt: boolean
-  cancelRequested: boolean
-  cancellable: boolean
-  queuedInputs: number
-  backgroundJobs: number
-}
-
-export type SessionEventPayload = {
-  kind: 'lifecycle'
-  phase: string
-} | {
-  kind: 'custom'
-  customType: string
-  data: unknown
-}
-
-export type SessionEventEnvelope = {
-  sessionId: string
-  sequence: number
-  event: SessionEventPayload
-}
-
 export type HostProjection = {
   hostId: string
   includeCategories: Nullable<string[]>
   excludeToolNames: Nullable<string[]>
 }
 
-export type ResolveCatalogRequest = {
-  hostProjection: HostProjection
-}
-
-export type DescribeToolSchemaRequest = {
-  name: string
-}
-
 export type DescribeToolSchemaResponse = {
   tool: ToolCatalogEntry
   catalogRevision: string
-}
-
-export type ExecuteToolRequest = {
-  protocolVersion: 1
-  contractId: string
-  catalogRevision: string
-  toolCallId: string
-  toolName: string
-  input: Record<string, unknown>
-}
-
-export type ExecuteToolResponse = {
-  protocolVersion: 1
-  contractId: string
-  catalogRevision: string
-  toolCallId: string
-  toolName: string
-  status: VelarToolResultStatus
-  output?: unknown
-  error?: string
-}
-
-export type RunTurnOptions = {
-  modelId?: string
-  maxToolTurns?: number
-}
-
-export type RunTurnRequest = {
-  messages: ModelMessage[]
-  tools: ToolCatalogEntry[]
-  options?: RunTurnOptions
-}
-
-export type RunTurnResponse = {
-  messages: ModelMessage[]
-  toolResults: VelarToolResultEnvelope[]
-}
-
-/**
- * A product-level Agent surface is a host-neutral composition contract.
- *
- * It selects existing capability Skills by default. The selected Skills remain
- * subject to host enablement, scope, entitlement and pure-chat policies; this
- * contract does not grant tools, permissions or workflow authority.
- */
-export interface AgentProductSurfaceDefinition {
-  readonly id: AgentSurfaceId
-  readonly defaultSkillIds: readonly string[]
 }
 
 export interface AgentSurfaceContextEntry {

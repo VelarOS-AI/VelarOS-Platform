@@ -2,13 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import { z } from 'zod'
 
 import { InMemoryContextPayloadStore } from '../src/impl/context/InMemoryContextPayloadStore'
-import {
-  resolveToolInputReuse,
-  saveToolAttemptInput,
-  saveToolAttemptOutcome,
-  ToolInputReuseError,
-  withToolInputReuse,
-} from '../src/impl/tools/ToolInputReuseStore'
+import { resolveToolInputReuse, ToolInputReuseError, toolInputReuseStore, withToolInputReuse } from '../src/impl/tools/ToolInputReuseStore'
 import { schemaToInputSchema } from '../src/utils/toolkit/schema-bundle'
 
 const toolName = 'project:edit'
@@ -26,8 +20,8 @@ const retry = {
 describe('tool input reuse', () => {
   test('changes one field in a large immutable input and preserves exact Unicode and escapes across restart', async () => {
     const ctx = context()
-    await saveToolAttemptInput(ctx, 'first', toolName, input)
-    await saveToolAttemptOutcome(ctx, 'first', 'not-applied')
+    await toolInputReuseStore.saveAttemptInput(ctx, 'first', toolName, input)
+    await toolInputReuseStore.saveAttemptOutcome(ctx, 'first', 'not-applied')
     const restored = await resolveToolInputReuse(context(ctx.contextPayloadStore), toolName, retry)
     expect(restored).toEqual({ edits: [{ ...input.edits[0], oldText: 'right' }] })
     expect(input.edits[0]!.oldText).toBe('wrong')
@@ -39,13 +33,13 @@ describe('tool input reuse', () => {
   test('requires a settled not-applied receipt and matching session, workspace and tool', async () => {
     for (const outcome of ['completed', 'unknown', undefined] as const) {
       const ctx = context()
-      await saveToolAttemptInput(ctx, 'first', toolName, input)
-      if (outcome) await saveToolAttemptOutcome(ctx, 'first', outcome)
+      await toolInputReuseStore.saveAttemptInput(ctx, 'first', toolName, input)
+      if (outcome) await toolInputReuseStore.saveAttemptOutcome(ctx, 'first', outcome)
       await expect(resolveToolInputReuse(ctx, toolName, retry)).rejects.toThrow()
     }
     const ctx = context()
-    await saveToolAttemptInput(ctx, 'first', toolName, input)
-    await saveToolAttemptOutcome(ctx, 'first', 'not-applied')
+    await toolInputReuseStore.saveAttemptInput(ctx, 'first', toolName, input)
+    await toolInputReuseStore.saveAttemptOutcome(ctx, 'first', 'not-applied')
     await expect(
       resolveToolInputReuse(context(ctx.contextPayloadStore, '/other'), toolName, retry)
     ).rejects.toThrow()
@@ -56,8 +50,8 @@ describe('tool input reuse', () => {
   })
   test('validates paths without prototype traversal, implicit parents or array holes', async () => {
     const ctx = context()
-    await saveToolAttemptInput(ctx, 'first', toolName, input)
-    await saveToolAttemptOutcome(ctx, 'first', 'not-applied')
+    await toolInputReuseStore.saveAttemptInput(ctx, 'first', toolName, input)
+    await toolInputReuseStore.saveAttemptOutcome(ctx, 'first', 'not-applied')
     for (const path of [
       ['__proto__', 'polluted'],
       ['edits', 99],
@@ -110,8 +104,8 @@ test('reuse restores before business refinements and retains strict unknown-fiel
 
 test('one failed attempt admits only one execution, including concurrent retries and restart', async () => {
   const ctx = context()
-  await saveToolAttemptInput(ctx, 'first', toolName, input)
-  await saveToolAttemptOutcome(ctx, 'first', 'not-applied')
+  await toolInputReuseStore.saveAttemptInput(ctx, 'first', toolName, input)
+  await toolInputReuseStore.saveAttemptOutcome(ctx, 'first', 'not-applied')
   const results = await Promise.allSettled([
     resolveToolInputReuse(ctx, toolName, retry, 'second'),
     resolveToolInputReuse(ctx, toolName, retry, 'duplicate'),
@@ -125,8 +119,8 @@ test('one failed attempt admits only one execution, including concurrent retries
 describe('malformed reuse requests', () => {
   async function failedAttempt() {
     const ctx = context()
-    await saveToolAttemptInput(ctx, 'first', toolName, input)
-    await saveToolAttemptOutcome(ctx, 'first', 'not-applied')
+    await toolInputReuseStore.saveAttemptInput(ctx, 'first', toolName, input)
+    await toolInputReuseStore.saveAttemptOutcome(ctx, 'first', 'not-applied')
     return ctx
   }
   async function rejection(promise: Promise<unknown>): Promise<ToolInputReuseError> {
@@ -190,8 +184,8 @@ test('the provider schema keeps a strict root and says which fields a new call n
 describe('trusted saved input contract migration', () => {
   test('migrates patched saved parameters with trusted provenance before admitting a retry', async () => {
     const ctx = context()
-    await saveToolAttemptInput(ctx, 'first', toolName, input)
-    await saveToolAttemptOutcome(ctx, 'first', 'not-applied')
+    await toolInputReuseStore.saveAttemptInput(ctx, 'first', toolName, input)
+    await toolInputReuseStore.saveAttemptOutcome(ctx, 'first', 'not-applied')
     const seen: unknown[] = []
     const restored = await resolveToolInputReuse(ctx, toolName, retry, 'second', {
       inputContractVersion: 2,
@@ -211,8 +205,8 @@ describe('trusted saved input contract migration', () => {
 
   test('migration failure preserves the source attempt so the next retry only supplies missing fields', async () => {
     const ctx = context()
-    await saveToolAttemptInput(ctx, 'first', toolName, input)
-    await saveToolAttemptOutcome(ctx, 'first', 'not-applied')
+    await toolInputReuseStore.saveAttemptInput(ctx, 'first', toolName, input)
+    await toolInputReuseStore.saveAttemptOutcome(ctx, 'first', 'not-applied')
     const options = {
       inputContractVersion: 2,
       migrateReusedInput: ({ input: restored }: { input: Record<string, unknown> }) => {
@@ -237,8 +231,8 @@ describe('trusted saved input contract migration', () => {
     expect(await resolveToolInputReuse(ctx, toolName, fresh, 'fresh', options)).toBe(fresh)
     expect(migrations).toBe(0)
     expect(withToolInputReuse(z.strictObject({ files: z.array(z.unknown()) })).safeParse(fresh).success).toBe(false)
-    await saveToolAttemptInput(ctx, 'first', toolName, input, 2)
-    await saveToolAttemptOutcome(ctx, 'first', 'not-applied')
+    await toolInputReuseStore.saveAttemptInput(ctx, 'first', toolName, input, 2)
+    await toolInputReuseStore.saveAttemptOutcome(ctx, 'first', 'not-applied')
     const restored = await resolveToolInputReuse(ctx, toolName, {
       ...retry, changes: [{ op: 'set', path: ['sourceContractVersion'], value: 1 }],
     }, 'second', options)
@@ -248,8 +242,8 @@ describe('trusted saved input contract migration', () => {
 
   test('only trusted runtime aliases can migrate input from renamed tools', async () => {
     const ctx = context()
-    await saveToolAttemptInput(ctx, 'first', 'project:write', input)
-    await saveToolAttemptOutcome(ctx, 'first', 'not-applied')
+    await toolInputReuseStore.saveAttemptInput(ctx, 'first', 'project:write', input)
+    await toolInputReuseStore.saveAttemptOutcome(ctx, 'first', 'not-applied')
     let migratedSource = ''
     const options = {
       inputContractVersion: 2,
@@ -269,27 +263,27 @@ describe('trusted saved input contract migration', () => {
     const options = { inputContractVersion: 2, migrateReusedInput: () => { migrations++; return {} } }
     for (const outcome of ['unknown', 'completed'] as const) {
       const ctx = context()
-      await saveToolAttemptInput(ctx, 'first', toolName, input)
-      await saveToolAttemptOutcome(ctx, 'first', outcome)
+      await toolInputReuseStore.saveAttemptInput(ctx, 'first', toolName, input)
+      await toolInputReuseStore.saveAttemptOutcome(ctx, 'first', outcome)
       await expect(resolveToolInputReuse(ctx, toolName, retry, 'retry', options)).rejects.toThrow('可能已经生效')
     }
     const ctx = { sessionId: 's', resourceId: 'resource:one', contextPayloadStore: new InMemoryContextPayloadStore() }
-    await saveToolAttemptInput(ctx, 'first', toolName, input)
-    await saveToolAttemptOutcome(ctx, 'first', 'not-applied')
+    await toolInputReuseStore.saveAttemptInput(ctx, 'first', toolName, input)
+    await toolInputReuseStore.saveAttemptOutcome(ctx, 'first', 'not-applied')
     await expect(resolveToolInputReuse({ ...ctx, resourceId: 'resource:two' }, toolName, retry, 'retry', options)).rejects.toThrow('资源作用域')
     expect(migrations).toBe(0)
     expect(await resolveToolInputReuse(ctx, toolName, retry)).toMatchObject({ edits: [{ oldText: 'right' }] })
     const legacy = { sessionId: 'legacy', contextPayloadStore: new InMemoryContextPayloadStore() }
-    await saveToolAttemptInput(legacy, 'first', toolName, input)
-    await saveToolAttemptOutcome(legacy, 'first', 'not-applied')
+    await toolInputReuseStore.saveAttemptInput(legacy, 'first', toolName, input)
+    await toolInputReuseStore.saveAttemptOutcome(legacy, 'first', 'not-applied')
     await expect(resolveToolInputReuse({ ...legacy, resourceId: 'resource:one' }, toolName, retry, 'retry', options)).rejects.toThrow('没有记录资源作用域')
     expect(migrations).toBe(0)
   })
 
   test('newly saved contract versions survive restart and mismatches require explicit migration', async () => {
     const ctx = context()
-    await saveToolAttemptInput(ctx, 'first', toolName, input, 2)
-    await saveToolAttemptOutcome(ctx, 'first', 'not-applied')
+    await toolInputReuseStore.saveAttemptInput(ctx, 'first', toolName, input, 2)
+    await toolInputReuseStore.saveAttemptOutcome(ctx, 'first', 'not-applied')
     await expect(resolveToolInputReuse(context(ctx.contextPayloadStore), toolName, retry)).rejects.toThrow('第 2 版参数契约')
     expect(await resolveToolInputReuse(context(ctx.contextPayloadStore), toolName, retry, 'second', { inputContractVersion: 2 })).toEqual({ edits: [{ ...input.edits[0], oldText: 'right' }] })
   })

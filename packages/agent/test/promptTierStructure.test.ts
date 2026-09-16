@@ -12,6 +12,7 @@ import assert from 'node:assert/strict'
 
 import { describe, test } from 'bun:test'
 
+import { PromptSegmentPriority } from '../src/contract/constants'
 import type { RuntimePromptFeaturePolicy } from '../src/contract/requires.js'
 import { createBuiltInPromptRegistry } from '../src/impl/guidance/PromptRegistry'
 import { PromptRegistry } from '../src/impl/guidance/PromptRegistry'
@@ -20,11 +21,7 @@ import { ContextBuilder } from '../src/impl/runner/ContextBuilder'
 import { PromptStateBuilder, shouldInjectHtmlArtifactPromptForTurn } from '../src/impl/runner/PromptStateBuilder'
 import type { BuildRuntimePromptStateArgs } from '../src/types/runner.js'
 import { createBuiltInPromptSegments } from '../src/utils/guidance/catalog'
-import {
-  createSelectedSkillPromptSegment,
-  createTextPromptSegment,
-  PromptSegmentPriority,
-} from '../src/utils/guidance/shared'
+import { createSelectedSkillPromptSegment, createTextPromptSegment } from '../src/utils/guidance/shared'
 import { projectAgentModPromptSegments } from '../src/utils/mods/agent-mod-projection'
 import {
   configureAppRuntimeFacts,

@@ -32,38 +32,21 @@ import { isArray, isBlank, isEmpty, isPresent, isString, Log, toNullable } from 
 import { AppError } from '@velaros-ai/core/error'
 
 import type { KernelSessionInputStore } from '../../contract/requires.js'
-import type { ChatSendRequest, ExecutionPendingInteractionKind, ExecutionPendingInteractionSnapshot, ExecutionProvideGuidanceRequest, ExecutionProvideInputRequest, ExecutionResolveConfirmationRequest,UserActionCardResult } from '../../types/agent.js'
-import type { KernelCancelResult, KernelChatExecutionCoordinator, KernelChatExecutionService, KernelChatRunOptions, KernelChatSubmission, KernelControllerAnswerInput, KernelControllerApprovalInput, KernelControllerSendInput, KernelRuntimeStatus,KernelSessionAuthorization, PendingKernelChatRun } from '../../types/execution.js'
+import type { ChatSendRequest, ExecutionPendingInteractionKind, ExecutionPendingInteractionSnapshot, ExecutionProvideGuidanceRequest, ExecutionProvideInputRequest, ExecutionResolveConfirmationRequest, UserActionCardResult } from '../../types/agent.js'
+import type { ChatKernelSessionBridgeOptions, CreateChatKernelSessionBridge, KernelCancelResult, KernelChatRunOptions, KernelChatSubmission, KernelControllerAnswerInput, KernelControllerApprovalInput, KernelControllerSendInput, KernelRuntimeStatus, KernelSessionAuthorization, PendingKernelChatRun } from '../../types/execution.js'
 import { acceptPendingChatRun, findLatestUserMessage } from '../../utils/execution/chat-bridge-runs'
 import { createSubmissionDeferred } from '../../utils/execution/session-lane'
 import { AgentTuning } from '../../utils/tuning'
 import { InMemoryKernelSessionInputStore } from '../execution/InMemoryKernelSessionInputStore'
+import type { KernelSessionPolicyApi } from '../execution/KernelSessionPolicy'
 import { KernelSessionPolicy } from '../execution/KernelSessionPolicy'
+import type { KernelSessionRunCoordinatorApi } from '../execution/KernelSessionRunCoordinator'
 import { KernelSessionRunCoordinator } from '../execution/KernelSessionRunCoordinator'
 import { InMemoryKernelBackgroundJobOutputStore } from '../records/InMemoryKernelBackgroundJobOutputStore'
-import type { KernelBackgroundJobManager } from '../records/KernelBackgroundJobManager'
+import type { KernelBackgroundJobManagerApi } from '../records/KernelBackgroundJobManager'
 import { KernelBackgroundJobManager as DefaultKernelBackgroundJobManager } from '../records/KernelBackgroundJobManager'
 
 import { KernelSessionController } from './KernelSessionController'
-
-/**
- * 建桥时的装配单：前两项是宿主必须给的两块（执行服务与执行协调器），后四项是内核侧的控制件，
- * 缺省一律回落到内存实现——语义与持久实现一致，只是不落盘，让 headless 与探针零装配就能跑。
- */
-interface ChatKernelSessionBridgeOptions<TRenderTarget> {
-  /** 宿主的会话执行服务：桥经它读在途交互、投递引导/回答/批准、中止并等某个 source session 收敛。 */
-  executionService: KernelChatExecutionService
-  /** 宿主的执行协调器：桥把一条 run 真正跑起来就是回调它的 `run`，渲染目标与事件渲染全归它管。 */
-  executionCoordinator: KernelChatExecutionCoordinator<TRenderTarget>
-  /** 输入账本：谁先谁后、能不能插队、还有几条排队都存在它里面。缺省是进程内内存账本。 */
-  inputStore?: KernelSessionInputStore
-  /** 运行协调器：按 seq 唤醒 drain、判断会话在不在跑、中止与等空闲。缺省是进程内实现。 */
-  runCoordinator?: KernelSessionRunCoordinator
-  /** 投递与运行态策略：一条输入是插队还是排队、一份运行态快照怎么归约，都问它。缺省是包内默认策略。 */
-  policy?: KernelSessionPolicy
-  /** 后台 job 管理器：子 Agent 的后台任务注册、停滞记账、读输出与取消都在它上面。缺省是内存实现，停滞判定用 `AgentTuning.records.backgroundJobStalledAfterMs`。 */
-  backgroundJobManager?: KernelBackgroundJobManager
-}
 
 /**
  * 聊天面 → 内核会话通道的跨层接缝：宿主的一次「发消息 / 中断 / 回答 / 批准」落在这里，
@@ -118,10 +101,10 @@ class ChatKernelSessionBridge<TRenderTarget = unknown>
   implements ChatKernelSessionBridgeApi<TRenderTarget> {
   private readonly log = Log.tag('ChatKernelSessionBridge')
   private readonly inputStore: KernelSessionInputStore
-  private readonly runCoordinator: KernelSessionRunCoordinator
+  private readonly runCoordinator: KernelSessionRunCoordinatorApi
   private readonly controller: KernelSessionController<UserActionCardResult[]>
-  private readonly policy: KernelSessionPolicy
-  private readonly backgroundJobManager: KernelBackgroundJobManager
+  private readonly policy: KernelSessionPolicyApi
+  private readonly backgroundJobManager: KernelBackgroundJobManagerApi
   private readonly pendingRuns = new Map<string, Array<PendingKernelChatRun<TRenderTarget>>>()
   private readonly activeRuns = new Map<string, PendingKernelChatRun<TRenderTarget>>()
   private readonly stoppedSessions = new Set<string>()
@@ -552,3 +535,7 @@ class ChatKernelSessionBridge<TRenderTarget = unknown>
 
 export { ChatKernelSessionBridge }
 export type { ChatKernelSessionBridgeApi, ChatKernelSessionBridgeOptions }
+
+/** 装一条聊天↔会话通道：宿主的渲染目标与会话控制器在这里合成一条双向通道。 */
+export const createChatKernelSessionBridge: CreateChatKernelSessionBridge = (options) =>
+  new ChatKernelSessionBridge(options)

@@ -23,26 +23,15 @@ import { Log } from '@velaros-ai/core/logger'
 import type { ContextUsageEstimate } from '../../types/agent.js'
 import type { CompiledProviderRequest, CompiledProviderSendRequest, CompileProviderRequestInput, CompileProviderSendRequestInput, ContextGovernanceRuler } from '../../types/context.js'
 import type { SanitizeModelHistoryOptions, UserTextPayloadReference } from '../../types/history.js'
-import type { ContextGovernanceSessionApi, ContextGovernanceSessionRegistryApi } from '../../types/residency.js'
-import type { GovernanceEpochReport,GovernanceWindowDerivation } from '../../types/residency.js'
+import type { ContextGovernanceSessionApi, ContextGovernanceSessionRegistryContract, GovernanceEpochReport, GovernanceWindowDerivation } from '../../types/residency.js'
 import { estimateProviderRequestUsage, runBudgetStage } from '../../utils/context/budget-stage'
 import { projectFileContext } from '../../utils/context/file-context-projection'
-import {
-  assertProviderRequestInvariants,
-  buildProviderRequestFingerprint,
-} from '../../utils/context/floor'
+import { assertProviderRequestInvariants, buildProviderRequestFingerprint } from '../../utils/context/floor'
 import { applyHistoryStructureRepair } from '../../utils/context/history-sanitize-stage'
-import {
-  buildProviderHistoryRewriteFingerprint,
-  createProviderRequestScratch,
-  resolveSharedToolReferenceScan,
-} from '../../utils/context/pipeline'
+import { buildProviderHistoryRewriteFingerprint, createProviderRequestScratch, resolveSharedToolReferenceScan } from '../../utils/context/pipeline'
 import { applySendTransportDecorations, buildGovernanceRewriteSignals, buildProviderRequestTailBlocks, measureGovernanceRuler, partitionStablePrefix, rewriteProviderToolNames } from '../../utils/context/provider-request-compile'
 import { buildProviderRequestSnapshot } from '../../utils/context/provider-request-snapshot'
-import {
-  buildRetainedContextRewriteSignals,
-  withProviderVisibleRetainedContext,
-} from '../../utils/context/retained-context-stage'
+import { buildRetainedContextRewriteSignals, withProviderVisibleRetainedContext } from '../../utils/context/retained-context-stage'
 import { sanitizeHistoryForProvider } from '../../utils/history/request'
 import { assertValidModelHistory } from '../../utils/history/validate'
 import { resolveProjectionBudget } from '../../utils/residency/governance-epoch'
@@ -50,20 +39,14 @@ import { resolveGovernanceWindow } from '../../utils/residency/governance-window
 import { projectContextLedger } from '../../utils/residency/projection'
 import { rewriteCanonicalToolReferences } from '../../utils/tools/tool-identity'
 import { readReusableAttemptInput } from '../../utils/tools/tool-input-reuse'
-import {
-  projectTransientRecoveryHistory,
-  restoreReusableInputsForNextDecision,
-} from '../../utils/tools/transient-recovery-projection'
+import { projectTransientRecoveryHistory, restoreReusableInputsForNextDecision } from '../../utils/tools/transient-recovery-projection'
 import { ContextGovernanceSessionRegistry } from '../residency/ContextGovernanceSessionRegistry'
 import { ContextProjectionRenderCache } from '../residency/ContextProjectionRenderCache'
 
 import { ContextWorkingSetOS } from './ContextWorkingSetOS'
-import { fileContextFor } from './FileContextCoordinator'
-import { buildToolPayloadRefsForProviderMessages } from './ToolPayloadReferencePlanner'
-import {
-  OversizedUserTextSafetyValveChars,
-  UserTextPayloadPlanner,
-} from './UserTextPayloadPlanner'
+import { fileContextRegistry } from './FileContextRegistry'
+import { ToolPayloadReferencePlanner } from './ToolPayloadReferencePlanner'
+import { OversizedUserTextSafetyValveChars, UserTextPayloadPlanner } from './UserTextPayloadPlanner'
 
 export {
   collectProviderRequestHistoryToolNames,
@@ -128,7 +111,7 @@ export class ProviderRequestCompiler implements ProviderRequestCompilerApi {
      * 治理会话登记处（宿主级单实例，账本跨回合的家）。缺省自建一份——单宿主进程里这等价于
      * 注入，多宿主同进程装配才需要显式共享同一份实例。
      */
-    private readonly governanceSessions: ContextGovernanceSessionRegistryApi = new ContextGovernanceSessionRegistry()
+    private readonly governanceSessions: ContextGovernanceSessionRegistryContract = new ContextGovernanceSessionRegistry()
   ) {}
 
   public compile(input: CompileProviderRequestInput): CompiledProviderRequest {
@@ -204,7 +187,7 @@ export class ProviderRequestCompiler implements ProviderRequestCompilerApi {
     // 生产发送路径会注入 buildToolPayloadRefs，并由工具描述决定 outputInline；此时不能再跑一遍不懂
     // 工具策略的通用规划器，否则会给本应永久内联的结果补上 ref。无宿主回调时才用通用持久化兜底。
     if (input.payloadStore && !input.buildToolPayloadRefs) {
-      storedToolPayloadRefs = await buildToolPayloadRefsForProviderMessages({
+      storedToolPayloadRefs = await new ToolPayloadReferencePlanner(input.payloadStore).buildRefs({
         sessionId: input.sessionId,
         messages: input.rawHistoryMessages,
         store: input.payloadStore,
@@ -214,7 +197,7 @@ export class ProviderRequestCompiler implements ProviderRequestCompilerApi {
     // 交给编译器的是**未装饰**的历史：prompt-cache 断点每轮换位，贴在这里
     // 会让驻留账本的前缀指纹在每个新用户回合分叉、整本重建（审计 V10/U2/U4）。装饰改由编译器在
     // 投影之后贴（`applySendTransportDecorations`），provider 收到的字节不变。
-    const fileContext = input.toolContext ? fileContextFor(input.toolContext) : undefined
+    const fileContext = input.toolContext ? fileContextRegistry.for(input.toolContext) : undefined
     await fileContext?.seedHistory(sanitizedHistoryMessages)
     await fileContext?.prepare()
     const fileViews = fileContext?.currentViews() ?? []
@@ -480,24 +463,12 @@ export class ProviderRequestCompiler implements ProviderRequestCompilerApi {
 
 export function compileProviderSendRequest(
   input: CompileProviderSendRequestInput,
-  compiler: ProviderRequestCompiler
+  compiler: ProviderRequestCompilerApi
 ): Promise<CompiledProviderSendRequest> {
   return compiler.compileSendRequest(input)
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+/** 建一台 provider 请求编译器；不注入治理登记处就自己建一份独占的。 */
+export function createProviderRequestCompiler(governanceSessions: ContextGovernanceSessionRegistryContract = new ContextGovernanceSessionRegistry()): ProviderRequestCompilerApi {
+  return new ProviderRequestCompiler(governanceSessions)
+}

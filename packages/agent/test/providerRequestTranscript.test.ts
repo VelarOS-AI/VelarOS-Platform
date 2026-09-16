@@ -5,15 +5,12 @@ import { jsonSchema, type ModelMessage, tool, type ToolSet } from 'ai'
 import { describe, test } from 'bun:test'
 
 import { ProviderRequestCompiler } from '../src/impl/context/ProviderRequestCompiler'
-import {
-  parsePromptAuditText,
-  serializePromptAuditLine,
-} from '../src/impl/ledgers/PromptAuditLedger'
 import { ProviderTurnRequestHelper } from '../src/impl/loop/ProviderTurnRequestHelper'
 import { ContextGovernanceSessionRegistry } from '../src/impl/residency/ContextGovernanceSessionRegistry'
 import { ToolExecutionPolicy } from '../src/impl/tools/ToolExecutionPolicy'
 import { assertProviderRequestSnapshotReconstructable } from '../src/utils/context/provider-request-snapshot'
 import { decodeProviderRequestAuditValue } from '../src/utils/context/serialization'
+import { parsePromptAuditText, serializePromptAuditLine } from '../src/utils/ledgers/prompt-audit-ledger'
 
 const fixtureUrl = new URL('./fixtures/provider-request-basic.json', import.meta.url)
 

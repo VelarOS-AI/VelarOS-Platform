@@ -1,20 +1,7 @@
-import type {
-  KernelModuleActivateContext,
-  KernelModuleDefinition,
-  KernelModuleLifecycle,
-} from '@velaros-ai/kernel'
-import {
-  kernelModules,
-} from '@velaros-ai/kernel'
-import type {
-  CapabilityToken,
-  KernelModuleHealth,
-  KernelModuleManifest,
-  ScopeRef,
-} from '@velaros-ai/kernel/contracts'
-import {
-  KernelVersionAxes,
-} from '@velaros-ai/kernel/contracts'
+import type { KernelModuleActivateContext, KernelModuleDefinition, KernelModuleLifecycle } from '@velaros-ai/kernel'
+import { kernelModules } from '@velaros-ai/kernel'
+import type { CapabilityToken, KernelModuleHealth, KernelModuleManifest, ScopeRef } from '@velaros-ai/kernel/contracts'
+import { KernelVersionAxes } from '@velaros-ai/kernel/contracts'
 
 import { AgentIdentity } from '../../contract/constants.js'
 import type { CreateAgentKernelModuleOptions } from '../../contract/requires.js'

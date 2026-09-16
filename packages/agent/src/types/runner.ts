@@ -1,16 +1,16 @@
 /** 角色合约：来自共享配置的 profile，加上后端运行所需 workflow 信息。 */
 import type { ModelMessage } from 'ai'
 
-import type { AgentChatRuntimeConfig, AgentExecutionConfig, AgentExecutionStackToolRegistry, AgentModelProvider, AgentModelResolverPort, AgentRuntimeCapabilityPorts,AgentRuntimeInputPort, AgentSurfaceProfileProvider, AgentSystemRuntimeConfig, CapabilityValidationInterpreter, ExecutionSpanScopeFactory, RunnerConfigService, RunnerExecutionEnvironmentPort, RunnerSubAgentDispatcher, RunnerToolContextBuilder, RunnerToolRegistry, RuntimePromptFeaturePolicy, RuntimeReminderProducer, ToolExecutionApi } from '../contract/requires.js'
+import type { AgentExecutionStackApi, AgentExecutionStackWithQueryApi } from '../contract/provides.js'
+import type { AgentChatRuntimeConfig, AgentExecutionConfig, AgentExecutionStackToolRegistry, AgentModelProvider, AgentModelResolverPort, AgentRuntimeCapabilityPorts, AgentRuntimeInputPort, AgentSurfaceProfileProvider, AgentSystemRuntimeConfig, CapabilityValidationInterpreter, ExecutionSpanScopeFactory, RunnerConfigService, RunnerExecutionEnvironmentPort, RunnerSubAgentDispatcher, RunnerToolContextBuilder, RunnerToolRegistry, RuntimePromptFeaturePolicy, RuntimeReminderProducer, ToolExecutionApi } from '../contract/requires.js'
 
-import type { AgentContextPhase, AgentDeveloperContext, AgentRoleExpectedOutputKind, AgentRoleId, AgentRoleProfileConfig, AgentSkillDescriptor, AgentSurfaceId, AgentWorkflowAgentCall, AgentWorkflowAgentResult, AgentWorkflowDefinition, AgentWorkflowRunResult, AppLocale, CapabilityScopeId, ChatPromptFeatureId, ChatRuntimeEvent, ExecutionModeId, ExecutionTaskPlanStep, PermissionConfirmationMode, PromptSegmentTrace, ReasoningLevel, RunProfileDefinition, RunProfileId, RunProfileSelectionId, SessionLineageContext, SkippedPromptSegmentTrace, StreamTurnContextPayload,TaskApprovalRecord, ThinkingDepth, ToolAvailabilityScope, ToolCategoryId, ToolCategoryOverview, ToolExposureTier, ToolSurfaceProfileId, TurnContextAnchor, TurnContextDelta, WorkflowType } from './agent.js'
+import type { AgentContextPhase, AgentDeveloperContext, AgentRoleExpectedOutputKind, AgentRoleId, AgentRoleProfileConfig, AgentSkillDescriptor, AgentSurfaceId, AgentWorkflowAgentCall, AgentWorkflowAgentResult, AgentWorkflowDefinition, AgentWorkflowRunResult, AppLocale, CapabilityScopeId, ChatPromptFeatureId, ChatRuntimeEvent, ExecutionModeId, ExecutionTaskPlanStep, PermissionConfirmationMode, PromptSegmentTrace, ReasoningLevel, RunProfileDefinition, RunProfileId, RunProfileSelectionId, SessionLineageContext, SkippedPromptSegmentTrace, StreamTurnContextPayload, TaskApprovalRecord, ThinkingDepth, ToolAvailabilityScope, ToolCategoryId, ToolCategoryOverview, ToolExposureTier, ToolSurfaceProfileId, TurnContextAnchor, TurnContextDelta, WorkflowType } from './agent.js'
 import type { SubAgentDispatchCatalog, SubAgentDispatchInput, SubAgentDispatchLimitsSnapshot } from './delegation.js'
-import type { PromptSegmentStability, RuntimePromptSnapshot } from './guidance.js'
-import type { PromptRegistryApi } from './guidance.js'
+import type { PromptRegistryContract, PromptSegmentStability, RuntimePromptSnapshot } from './guidance.js'
 import type { AgentExecutionLimitOverrides, QueryLoopApi, QueryLoopRoleEngine, QueryLoopSubAgentOptions, QueryLoopToolCategoryResolver, QueryLoopToolContext, ResolvedAgentModelRuntime, SoloAwaitPendingBackgroundJobs, SoloLoopToolContext, SoloStreamLoopApi } from './loop.js'
-import type { AgentModSeamDispatcherApi } from './mods.js'
-import type { ExecutionEventBusApi } from './records.js'
-import type { ContextGovernanceSessionRegistryApi } from './residency.js'
+import type { AgentModSeamDispatcherContract } from './mods.js'
+import type { ExecutionEventBusContract } from './records.js'
+import type { ContextGovernanceSessionRegistryContract } from './residency.js'
 import type { CodingSessionSnapshot, CodingSessionToolCategoryToolNames, CodingSessionToolContext } from './session.js'
 
 /**
@@ -34,7 +34,7 @@ export interface AgentRunnerConfig extends AgentExecutionConfig {
   cancelBackgroundJob?: RunnerCancelBackgroundJob
 }
 
-export interface PrimaryAgentProfileApi {
+export interface PrimaryAgentProfileContract {
   /** 按已知工具名与本轮开关解析出角色结论。 */
   resolve(options: {
     knownToolNames: string[]
@@ -52,9 +52,9 @@ export interface PrimaryAgentProfileApi {
  * Runner 的最小形状：宿主与执行栈看得到的那一面。
  * 类实现在 impl/runner/AgentRunner.ts。
  */
-export interface AgentRunnerApi<TToolContext extends RunnerToolContext = RunnerToolContext> {
+export interface AgentRunnerContract<TToolContext extends RunnerToolContext = RunnerToolContext> {
   /** 以 solo worker 身份跑一次模型循环，事件走传进来的总线。 */
-  streamSoloWorker(messages: ModelMessage[], config: AgentRunnerConfig, events: ExecutionEventBusApi, options?: StreamSoloWorkerOptions): Promise<void>
+  streamSoloWorker(messages: ModelMessage[], config: AgentRunnerConfig, events: ExecutionEventBusContract, options?: StreamSoloWorkerOptions): Promise<void>
   /** 列出某会话已登记的任务审批记录。 */
   getTaskApprovalRecords(sessionId: string): TaskApprovalRecord[]
   /** 撤销一条任务审批。 */
@@ -135,7 +135,7 @@ export interface RunnerCodingSessionPolicyBundle {
   }
 }
 
-export type RunnerSubAgentOptions = QueryLoopSubAgentOptions<ExecutionEventBusApi>
+export type RunnerSubAgentOptions = QueryLoopSubAgentOptions<ExecutionEventBusContract>
 
 export type RunnerReadBackgroundJobOutput = (input: {
   jobId: string
@@ -178,13 +178,13 @@ export interface RunnerBuildToolContextArgs {
   roleState: {
     getAllowedToolNames: () => string[]
     getEnabledToolCategories: () => ToolCategoryId[]
-    getResolution: () => ReturnType<PrimaryAgentProfileApi['resolve']>
+    getResolution: () => ReturnType<PrimaryAgentProfileContract['resolve']>
   }
   disabledToolNames: string[]
   capabilityPorts?: AgentRuntimeCapabilityPorts
   resourceId?: LooseOptional<string>
   execution?: LooseOptional<ToolExecutionApi>
-  events?: ExecutionEventBusApi
+  events?: ExecutionEventBusContract
   query(task: string, opts?: RunnerSubAgentOptions): Promise<string>
   dispatchSubAgent?(input: SubAgentDispatchInput): Promise<string>
   getSubAgentDispatchCatalog?: () => SubAgentDispatchCatalog
@@ -247,9 +247,9 @@ export interface AgentConfig {
 
 export interface AgentRunnerComponents<TToolContext extends RunnerToolContext> {
   contextHelper: RunnerToolContextBuilder<TToolContext>
-  primaryAgentStreamLoop: SoloStreamLoopApi<TToolContext, ExecutionEventBusApi>
-  queryLoop: QueryLoopApi<TToolContext, ExecutionEventBusApi>
-  primaryAgentProfile: PrimaryAgentProfileApi
+  primaryAgentStreamLoop: SoloStreamLoopApi<TToolContext, ExecutionEventBusContract>
+  queryLoop: QueryLoopApi<TToolContext, ExecutionEventBusContract>
+  primaryAgentProfile: PrimaryAgentProfileContract
   subAgentDispatcher: RunnerSubAgentDispatcher<TToolContext>
 }
 
@@ -390,13 +390,13 @@ export interface AgentExecutionStackOptions<TContext extends AgentExecutionStack
   model: AgentModelResolverPort
   toolRegistry: AgentExecutionStackToolRegistry<TContext>
   /** 共享宿主会话生命周期时注入；缺省为此栈独占登记处。 */
-  governanceSessions?: ContextGovernanceSessionRegistryApi
-  promptRegistry?: PromptRegistryApi
+  governanceSessions?: ContextGovernanceSessionRegistryContract
+  promptRegistry?: PromptRegistryContract
   promptFeaturePolicy?: RuntimePromptFeaturePolicy
   listCustomSubAgents?: () => Array<{ id: string; description: string; base: string }>
   spanScopeFactory?: LooseOptional<ExecutionSpanScopeFactory>
   executionLimitOverrides?: AgentExecutionLimitOverrides
-  seams?: LooseOptional<AgentModSeamDispatcherApi>
+  seams?: LooseOptional<AgentModSeamDispatcherContract>
   /** 只运行 Solo 的宿主省略此项；不会创建 QueryLoopApi 或默认启用子 Agent。 */
   query?: {
     roleEngine: QueryLoopRoleEngine
@@ -411,9 +411,9 @@ export interface AgentExecutionStackRunnerOptions<
   'toolRegistry' | 'executionLimitOverrides' | 'codingSessionPolicy'
 > {
   contextHelper: RunnerToolContextBuilder<TContext>
-  primaryAgentProfile: PrimaryAgentProfileApi
+  primaryAgentProfile: PrimaryAgentProfileContract
   subAgentDispatcher: RunnerSubAgentDispatcher<TContext> & {
-    bindAgentRunner(runner: Pick<AgentRunnerApi<TContext>, 'query'>): void
+    bindAgentRunner(runner: Pick<AgentRunnerContract<TContext>, 'query'>): void
   }
   executionEnvironment?: RunnerExecutionEnvironmentPort
   /** 提示词策略取自栈配置，避免两个执行面或 Runner 各持一份。 */
@@ -605,7 +605,7 @@ export interface AgentWorkflowRunOptions {
 export interface AgentWorkflowRunRequest<TToolContext extends RunnerToolContext> {
   input: AgentWorkflowDefinition
   parentCtx: TToolContext
-  events: ExecutionEventBusApi
+  events: ExecutionEventBusContract
   config: AgentExecutionConfig
 }
 
@@ -703,4 +703,42 @@ export interface BuildTurnContextPayloadArgs {
   toolAllocatorTelemetry?: StreamTurnContextPayload['toolAllocatorTelemetry']
   turnPlanningTelemetry?: StreamTurnContextPayload['turnPlanningTelemetry']
   contextPhaseTelemetry: StreamTurnContextPayload['contextPhaseTelemetry']
+}
+
+/**
+ * 主 Agent 需要的那一小面技能仓库：只用来取角色技能全文与本轮可见的技能清单，不承担安装、校验、落盘。
+ * 由装配点注入真实仓库；参数一律透传给仓库，本件不解释它们的语义。
+ */
+export interface PrimaryAgentProfileSkillRepository {
+  /** 取某个角色的技能 Markdown 全文（按本轮选中的技能、提示词特性与能力作用域裁剪后的那一份）；没有内容时返回空串，调用方原样进提示词。 */
+  getSkillMarkdownForRole(
+    roleId: AgentRoleId,
+    selectedSkillIds?: string[],
+    promptFeatures?: readonly ChatPromptFeatureId[],
+    capabilityScope?: CapabilityScopeId
+  ): string
+  /** 列出本轮该角色可见的技能描述（id、说明、可选的 allowed-tools 门控）；提示词的技能目录与技能工具门控都读这一份。 */
+  listSkillsForRole(
+    roleId: AgentRoleId,
+    selectedSkillIds?: string[],
+    capabilityScope?: CapabilityScopeId,
+    promptFeatures?: readonly ChatPromptFeatureId[]
+  ): AgentSkillDescriptor[]
+}
+
+/**
+ * 装一套默认执行栈的工厂签名。
+ *
+ * 建栈时给了 `query` 配置（角色引擎 + 工具类别解析）就多出子 Agent 查询面与 Runner 装配，
+ * 类型上按重载区分：拿到的是 {@link AgentExecutionStackWithQueryApi} 还是 {@link AgentExecutionStackApi}。
+ */
+export interface CreateAgentExecutionStack {
+  <TContext extends AgentExecutionStackToolContext = AgentExecutionStackToolContext>(
+    options: AgentExecutionStackOptions<TContext> & {
+      query: NonNullable<AgentExecutionStackOptions<TContext>['query']>
+    }
+  ): AgentExecutionStackWithQueryApi<TContext>
+  <TContext extends AgentExecutionStackToolContext = AgentExecutionStackToolContext>(
+    options: AgentExecutionStackOptions<TContext>
+  ): AgentExecutionStackApi<TContext>
 }

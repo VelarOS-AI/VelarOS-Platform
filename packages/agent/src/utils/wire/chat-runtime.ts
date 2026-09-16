@@ -20,74 +20,69 @@ export const STREAM_FAILURE_RUNTIME_STATE_KINDS = StreamRuntimeStateKinds.failur
 /** 契约测试与 bridge exhaustive switch 用的完整 kind 列表。 */
 export const ALL_STREAM_RUNTIME_STATE_KINDS = StreamRuntimeStateKinds.all satisfies readonly StreamStateKind[]
 
-export const ChatRuntimeEvents = {
-  inputApplied(inputId: string): StreamInputAppliedPayload {
+/** 构造一条 inputApplied 运行态事件的载荷。 */
+export function streamInputApplied(inputId: string): StreamInputAppliedPayload {
     return { kind: 'input-applied', inputId }
-  },
-  phase(teamPhase: TeamExecutionPhase): StreamPhasePayload {
+  }
+
+/** 构造一条 phase 运行态事件的载荷。 */
+export function streamPhase(teamPhase: TeamExecutionPhase): StreamPhasePayload {
     return {
       kind: 'phase',
       teamPhase,
     }
-  },
+  }
 
-  usageTelemetry(
-    payload: Omit<StreamUsageTelemetryPayload, 'kind' | 'timestamp'> & {
+/** 构造一条 usageTelemetry 运行态事件的载荷。 */
+export function streamUsageTelemetry(payload: Omit<StreamUsageTelemetryPayload, 'kind' | 'timestamp'> & {
       timestamp?: number
-    }
-  ): StreamUsageTelemetryPayload {
+    }): StreamUsageTelemetryPayload {
     return {
       kind: 'usage-telemetry',
       timestamp: payload.timestamp ?? Date.now(),
       ...payload,
     }
-  },
+  }
 
-  contextUsageEstimate(
-    payload: Omit<StreamContextUsageEstimatePayload, 'kind' | 'timestamp'> & {
+/** 构造一条 contextUsageEstimate 运行态事件的载荷。 */
+export function streamContextUsageEstimate(payload: Omit<StreamContextUsageEstimatePayload, 'kind' | 'timestamp'> & {
       timestamp?: number
-    }
-  ): StreamContextUsageEstimatePayload {
+    }): StreamContextUsageEstimatePayload {
     return {
       kind: 'context-usage-estimate',
       timestamp: payload.timestamp ?? Date.now(),
       ...payload,
     }
-  },
+  }
 
-  turnStart(turn: number): StreamTurnStartPayload {
+/** 构造一条 turnStart 运行态事件的载荷。 */
+export function streamTurnStart(turn: number): StreamTurnStartPayload {
     return {
       kind: 'turn-start',
       turn,
     }
-  },
+  }
 
-  turnEnd(turn: number): StreamTurnEndPayload {
+/** 构造一条 turnEnd 运行态事件的载荷。 */
+export function streamTurnEnd(turn: number): StreamTurnEndPayload {
     return {
       kind: 'turn-end',
       turn,
     }
-  },
+  }
 
-  reconnecting(
-    attempt: number,
-    maxAttempts?: LooseOptional<number>,
-    message?: LooseOptional<string>
-  ): StreamReconnectingPayload {
+/** 构造一条 reconnecting 运行态事件的载荷。 */
+export function streamReconnecting(attempt: number, maxAttempts?: LooseOptional<number>, message?: LooseOptional<string>): StreamReconnectingPayload {
     return {
       kind: 'reconnecting',
       attempt,
       maxAttempts: (toNullable(maxAttempts)),
       message: (toNullable(message)),
     }
-  },
+  }
 
-  retryingTurn(
-    turn: number,
-    attempt: number,
-    maxAttempts?: LooseOptional<number>,
-    message?: LooseOptional<string>
-  ): StreamRetryingTurnPayload {
+/** 构造一条 retryingTurn 运行态事件的载荷。 */
+export function streamRetryingTurn(turn: number, attempt: number, maxAttempts?: LooseOptional<number>, message?: LooseOptional<string>): StreamRetryingTurnPayload {
     return {
       kind: 'retrying-turn',
       turn,
@@ -95,41 +90,39 @@ export const ChatRuntimeEvents = {
       maxAttempts: (toNullable(maxAttempts)),
       message: (toNullable(message)),
     }
-  },
+  }
 
-  done(message?: string, outcome: Pick<StreamDonePayload, 'verification' | 'goalStatus'> = {}): StreamDonePayload {
+/** 构造一条 done 运行态事件的载荷。 */
+export function streamDone(message?: string, outcome: Pick<StreamDonePayload, 'verification' | 'goalStatus'> = {}): StreamDonePayload {
     return {
       kind: 'done',
       ...outcome,
       message,
     }
-  },
+  }
 
-  aborted(message: string, executionId?: string, code?: ErrorCode): StreamAbortedPayload {
+/** 构造一条 aborted 运行态事件的载荷。 */
+export function streamAborted(message: string, executionId?: string, code?: ErrorCode): StreamAbortedPayload {
     return {
       kind: 'aborted',
       message,
       executionId,
       code,
     }
-  },
+  }
 
-  error(message: string, code?: ErrorCode, context?: ErrorContext): StreamErrorPayload {
+/** 构造一条 error 运行态事件的载荷。 */
+export function streamError(message: string, code?: ErrorCode, context?: ErrorContext): StreamErrorPayload {
     return {
       kind: 'error',
       message,
       code,
       context: optionalWhen((!!context && !isEmpty(Object.keys(context))), context),
     }
-  },
+  }
 
-  awaitingConfirmation(
-    executionId: string,
-    confirmationMessage: string,
-    userActionCards?: UserActionCard[],
-    confirmationDetail?: ConfirmationRequestDetail,
-    confirmationId?: string
-  ): StreamAwaitingConfirmationPayload {
+/** 构造一条 awaitingConfirmation 运行态事件的载荷。 */
+export function streamAwaitingConfirmation(executionId: string, confirmationMessage: string, userActionCards?: UserActionCard[], confirmationDetail?: ConfirmationRequestDetail, confirmationId?: string): StreamAwaitingConfirmationPayload {
     return {
       kind: 'awaiting-confirmation',
       confirmationId,
@@ -138,13 +131,13 @@ export const ChatRuntimeEvents = {
       userActionCards,
       confirmationDetail,
     }
-  },
+  }
 
-  awaitingInput(executionId: string, question: string): StreamAwaitingInputPayload {
+/** 构造一条 awaitingInput 运行态事件的载荷。 */
+export function streamAwaitingInput(executionId: string, question: string): StreamAwaitingInputPayload {
     return {
       kind: 'awaiting-input',
       executionId,
       question,
     }
-  },
-} as const
+  }

@@ -1,4 +1,6 @@
-import { isArray, isEmpty, isPlainObject, isString,Log } from '@velaros-ai/core'
+import { isEmpty, isPlainObject } from '@velaros-ai/core'
+
+import { fingerprint, resourceKeys, trim } from '../../utils/tools/execution-progress'
 
 /**
  * 执行进展账本：按「资源 + 失败条件」认出没有新证据的重试。
@@ -75,44 +77,4 @@ export class ExecutionProgress implements ExecutionProgressApi {
     return `同一个对象、同一种失败原因已经连续 ${attempts} 次没有新证据。先查清具体是哪个前置条件不满足，或者换一条修复路径；只需要改一个字段时用失败回执里的参数复用，不必重填正文。`
   }
 }
-function trim<T>(map: Map<string, T>): void {
-  while (map.size > 128) map.delete(map.keys().next().value!)
-}
-function resourceKeys(args: Record<string, unknown>): string[] {
-  const paths = new Set<string>()
-  const visit = (value: unknown, depth: number): void => {
-    if (depth > 4 || paths.size >= 100) return
-    if (isArray(value)) {
-      value.slice(0, 100).forEach((item) => visit(item, depth + 1))
-      return
-    }
-    if (!isPlainObject(value)) return
-    for (const [key, nested] of Object.entries(value)) {
-      if (['path', 'resourceId', 'url'].includes(key) && isString(nested))
-        paths.add(nested)
-      else if (key === 'paths' && isArray(nested))
-        nested.slice(0, 100).forEach((path) => {
-          if (isString(path)) paths.add(path)
-        })
-      else if (['edits', 'operations', 'files'].includes(key)) visit(nested, depth + 1)
-    }
-  }
-  visit(args, 0)
-  return [...paths].sort()
-}
 
-// 仅用于有界的恢复建议去重；不作为文件版本、权限或写入幂等依据。
-function fingerprint(value: unknown): string | undefined {
-  try {
-    const text = JSON.stringify(value, (key, item) =>
-      ['durationMs', 'startedAt', 'finishedAt', 'timestamp'].includes(key) ? undefined : item
-    )
-    if (!text) return undefined
-    let hash = 2166136261
-    for (let i = 0; i < text.length; i++) hash = Math.imul(hash ^ text.charCodeAt(i), 16777619)
-    return `${text.length}:${hash >>> 0}`
-  } catch { Log.tag('ContextProjection').debug('跳过无法解析或序列化的记录，保持原文与召回入口')
-
-    return undefined
-  }
-}

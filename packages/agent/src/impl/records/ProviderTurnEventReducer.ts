@@ -20,10 +20,12 @@
 // `snapshot()` / `buildRequestSnapshot` / `cloneTool` 全部浅拷贝出去。读侧（观测、调试面板、账本）
 // 会长期持有这些对象；返回内部引用会让归约器后续的写入把已发出的快照一起改掉。
 //
-import { isEmpty,isPresent, toNullable } from '@velaros-ai/core'
+import { isEmpty, isPresent } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import type { CompleteProviderTurnSnapshotOptions, CompleteProviderTurnSnapshotResult, EmitCompletedProviderTurnSnapshotInput,ProviderRequestFingerprint, ProviderTurnEvent, ProviderTurnRecorder, ProviderTurnRequestSnapshot, ProviderTurnSnapshot, ProviderTurnStatus, ProviderTurnToolSnapshot, ProviderTurnUsage } from '../../types/records.js'
+import type { ProviderTurnEvent, ProviderTurnRequestSnapshot, ProviderTurnSnapshot, ProviderTurnStatus, ProviderTurnToolSnapshot, ProviderTurnUsage } from '../../types/records.js'
+import { buildInterruptedToolsDiagnostic, buildRequestSnapshot, cloneTool } from '../../utils/records/provider-turn-event-reducer'
+
 /** 回合中止时尚未拿到结果的工具，在快照里统一记这句；对外承诺的是「不代表工具失败」这层语义。 */
 export const ProviderTurnInterruptedToolError: string = '工具执行被打断：回合中止时这次调用还没拿到结果，不代表工具本身失败。'
 
@@ -31,46 +33,6 @@ export const ProviderTurnInterruptedToolError: string = '工具执行被打断�
 export interface ProviderTurnEventReducerOptions {
   /** 这一次 provider 生成回合的 id；快照上带着它，也是所有不变量报错里指认「是哪一轮出的问题」的那个值。 */
   turnId: string
-}
-
-function cloneTool(tool: ProviderTurnToolSnapshot): ProviderTurnToolSnapshot {
-  return { ...tool }
-}
-
-/**
- * 请求快照的**唯一构造器**（事件入账与快照外发共用）。
- *
- * 全部可选字段一律浅拷贝而非引用透传：快照要在回合收敛后仍可被读侧安全持有，
- * 引用透传会让调用方后续改自己的对象时把已发出的快照一起改掉。
- * 出核统一 `Nullable`（`toNullable`），入参两种缺席形态都收——归一只在这一处发生（§1.5）。
- */
-function buildRequestSnapshot(source: {
-  availableToolNames: readonly string[]
-  toolChoiceName?: LooseOptional<string>
-  requestFingerprint?: ProviderRequestFingerprint
-  toolSchemaChars?: Record<string, number>
-  toolSchemaHashes?: Record<string, string>
-  contextUsage?: ProviderTurnRequestSnapshot['contextUsage']
-}): ProviderTurnRequestSnapshot {
-  const snapshot: ProviderTurnRequestSnapshot = {
-    availableToolNames: [...source.availableToolNames],
-    toolChoiceName: toNullable(source.toolChoiceName),
-  }
-  if (source.requestFingerprint) snapshot.requestFingerprint = { ...source.requestFingerprint }
-  if (source.toolSchemaChars) snapshot.toolSchemaChars = { ...source.toolSchemaChars }
-  if (source.toolSchemaHashes) snapshot.toolSchemaHashes = { ...source.toolSchemaHashes }
-  if (source.contextUsage) snapshot.contextUsage = { ...source.contextUsage }
-  return snapshot
-}
-
-function buildInterruptedToolsDiagnostic(
-  toolCallIds: string[]
-): { code: string; message: string; details?: Record<string, unknown> } {
-  return {
-    code: 'provider-turn-tools-interrupted',
-    message: `本回合被中止时还有 ${toolCallIds.length} 个 provider 工具调用停在 pending，已按「被打断」收尾；它们的真实结果不会再回来，快照里这几条的失败原因不代表工具本身出错。`,
-    details: { toolCallIds },
-  }
 }
 
 /**
@@ -298,57 +260,3 @@ export class ProviderTurnEventReducer implements ProviderTurnEventReducerApi {
   }
 }
 
-export function completeProviderTurnSnapshot(
-  reducer: ProviderTurnRecorder,
-  options: CompleteProviderTurnSnapshotOptions = {}
-): CompleteProviderTurnSnapshotResult {
-  try {
-    return {
-      snapshot: reducer.complete(),
-      interruptedToolCallIds: [],
-    }
-  } catch (error) {
-    const interruptedToolCallIds = reducer.pendingToolCallIds()
-    if (!options.interruptPendingTools || isEmpty(interruptedToolCallIds)) {
-      throw error
-    }
-
-    return {
-      snapshot: reducer.completeWithInterruptedPendingTools(options.interruptedToolError),
-      interruptedToolCallIds,
-    }
-  }
-}
-
-/**
- * provider 回合快照的**单源发射器**：把 reducer 收敛成 {@link ProviderTurnSnapshot} 并交给 onSnapshot。
- * 此前 StreamTurn / QueryTurn 各抄一份逐字相同的收敛+发射+吞错逻辑（三胞胎之二），此处收口——
- * pending-tools 中断诊断与快照失败隔离（快照 bug 绝不冒泡进回合主路）一处表达，连告警文案也收敛为
- * 单源。返回是否真的发出了快照。
- */
-export function emitCompletedProviderTurnSnapshot(
-  input: EmitCompletedProviderTurnSnapshotInput
-): boolean {
-  const { reducer, onSnapshot, log } = input
-  if (!reducer || !onSnapshot) return false
-  if (
-    input.requirePendingTools &&
-    isEmpty(reducer.pendingToolCallIds()) &&
-    !reducer.hasDiagnostics()
-  )
-    return false
-
-  try {
-    const completion = completeProviderTurnSnapshot(reducer, { interruptPendingTools: true })
-    if (!isEmpty(completion.interruptedToolCallIds)) {
-      log.warn('provider turn snapshot interrupted pending tools', {
-        toolCallIds: completion.interruptedToolCallIds,
-      })
-    }
-    onSnapshot(completion.snapshot)
-    return true
-  } catch (error) {
-    log.warn('provider turn snapshot completion failed', { error: AppError.getMessage(error) })
-    return false
-  }
-}

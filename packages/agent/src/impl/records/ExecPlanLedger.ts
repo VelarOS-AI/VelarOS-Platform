@@ -1,12 +1,11 @@
 import { isEmpty } from '@velaros-ai/core'
 
 import type { ExecutionIdFactory } from '../../contract/requires.js'
-import type { ToolExecutionPlanUpdate } from '../../types/agent'
-import type { AgentRoleId,ExecutionTaskPlanStep, ExecutionTaskRecord } from '../../types/agent.js'
+import type { AgentRoleId, ExecutionTaskPlanStep, ExecutionTaskRecord, ToolExecutionPlanUpdate } from '../../types/agent'
 import type { PlanChangePayload } from '../../types/records.js'
 import { normalizePlanTitle, slugifyPlanStepTitle, toExecutionPlanStepStatus } from '../../utils/records/plan-steps'
 
-import type { ExecRouting } from './ExecRouting'
+import type { ExecRoutingApi } from './ExecRouting'
 import { MonotonicExecutionIdFactory } from './MonotonicExecutionIdFactory'
 
 /**
@@ -37,7 +36,7 @@ export interface ExecPlanLedgerApi {
 
 class ExecPlanLedger implements ExecPlanLedgerApi {
   constructor(
-    private readonly routingCoordinator: ExecRouting,
+    private readonly routingCoordinator: ExecRoutingApi,
     private readonly idFactory: ExecutionIdFactory = new MonotonicExecutionIdFactory(),
   ) {}
 
@@ -190,3 +189,8 @@ class ExecPlanLedger implements ExecPlanLedgerApi {
 
 export { ExecPlanLedger }
 export { ExecPlanLedger as ExecutionPlanLedgerHelper }
+
+/** 建一份执行计划账本。 */
+export function createExecutionPlanLedger(routingCoordinator: ExecRoutingApi, idFactory: ExecutionIdFactory = new MonotonicExecutionIdFactory()): ExecPlanLedgerApi {
+  return new ExecPlanLedger(routingCoordinator, idFactory)
+}

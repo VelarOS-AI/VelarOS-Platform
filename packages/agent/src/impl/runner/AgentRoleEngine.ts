@@ -1,7 +1,7 @@
 import type { AgentRoleDescriptorProvider } from '../../contract/requires.js'
-import type { AgentRoleResolution, AgentRoleToolBindings,ResolveAgentRoleOptions } from '../../types/runner.js'
+import type { AgentRoleResolution, AgentRoleToolBindings, ResolveAgentRoleOptions } from '../../types/runner.js'
 import { resolveLockedAgentRole } from '../../utils/runner/role-router'
-import type { AgentSkillRepository } from '../guidance/AgentSkillRepository'
+import type { AgentSkillRepositoryApi } from '../guidance/AgentSkillRepository'
 
 import { AgentRolePolicy } from './AgentRolePolicy'
 import { AgentRoleRegistry } from './AgentRoleRegistry'
@@ -31,7 +31,7 @@ class AgentRoleEngine implements AgentRoleEngineApi {
 
   constructor(
     /** 技能仓库会把内置角色技能和用户配置技能合并进角色提示词。 */
-    private readonly skillRepository: AgentSkillRepository,
+    private readonly skillRepository: AgentSkillRepositoryApi,
     /** 角色工具集绑定（宿主注入）。 */
     private readonly toolBindings: AgentRoleToolBindings,
     private readonly roleProvider: AgentRoleDescriptorProvider
@@ -87,3 +87,8 @@ class AgentRoleEngine implements AgentRoleEngineApi {
 }
 
 export { AgentRoleEngine }
+
+/** 建一台角色引擎：按角色解出技能、工具类别与提示词。 */
+export function createAgentRoleEngine(skillRepository: AgentSkillRepositoryApi, toolBindings: AgentRoleToolBindings, roleProvider: AgentRoleDescriptorProvider): AgentRoleEngineApi {
+  return new AgentRoleEngine(skillRepository, toolBindings, roleProvider)
+}

@@ -18,6 +18,7 @@ import type { SessionEntry } from '../../types/agent.js'
 import type { SessionLedgerContext, SessionLedgerWarn } from '../../types/ledgers.js'
 import { readLedgerFile, serializeLedgerLine, truncateLedgerToEntryCount } from '../../utils/ledgers/ledger-file'
 
+import type { SessionLedgerHandleApi } from './SessionLedger'
 import { SessionLedger } from './SessionLedger'
 
 /**
@@ -32,15 +33,15 @@ export interface SessionStoreApi {
    *
    * 同 id 已有**非空**账本时抛 `INVARIANT`（不覆盖既有会话）；文件存在但为空视同没建过，照常播种。
    */
-  create(sessionId: string): Promise<SessionLedger>
+  create(sessionId: string): Promise<SessionLedgerHandleApi>
   /**
    * 打开既有会话账本并交出 handle；文件不存在时抛 `NOT_FOUND`。
    *
    * 开档顺带修复崩溃留下的半截尾行（ftruncate 到最后一条完整 entry），修过的事记在 handle 的 `warnings` 里。
    */
-  open(sessionId: string): Promise<SessionLedger>
+  open(sessionId: string): Promise<SessionLedgerHandleApi>
   /** 存在就打开、不存在就新建；宿主恢复会话走这条，不必先问文件在不在。 */
-  openOrCreate(sessionId: string): Promise<SessionLedger>
+  openOrCreate(sessionId: string): Promise<SessionLedgerHandleApi>
 }
 
 export class SessionStore implements SessionStoreApi {
@@ -59,7 +60,7 @@ export class SessionStore implements SessionStoreApi {
   }
 
   /** 新建会话账本；同 id 已有非空账本时抛错（避免覆盖既有会话）。 */
-  public async create(sessionId: string): Promise<SessionLedger> {
+  public async create(sessionId: string): Promise<SessionLedgerHandleApi> {
     const path = this.locator.resolveLedgerPath(sessionId)
     if (existsSync(path)) {
       const existing = await readLedgerFile(path)
@@ -71,7 +72,7 @@ export class SessionStore implements SessionStoreApi {
   }
 
   /** 打开既有会话账本；不存在时抛错。开档时容忍并回写修复半截尾行。 */
-  public async open(sessionId: string): Promise<SessionLedger> {
+  public async open(sessionId: string): Promise<SessionLedgerHandleApi> {
     const path = this.locator.resolveLedgerPath(sessionId)
     if (!existsSync(path)) throw new AppError('NOT_FOUND', `找不到会话 ${sessionId} 的账本文件：这个会话从未落过盘，或者账本已被清理。要新建请用 create 或 openOrCreate。`, undefined, {
         sessionId,
@@ -80,13 +81,13 @@ export class SessionStore implements SessionStoreApi {
   }
 
   /** 存在则打开、不存在则新建。 */
-  public async openOrCreate(sessionId: string): Promise<SessionLedger> {
+  public async openOrCreate(sessionId: string): Promise<SessionLedgerHandleApi> {
     const path = this.locator.resolveLedgerPath(sessionId)
     if (!existsSync(path)) return this.create(sessionId)
     return this.hydrate(sessionId, path)
   }
 
-  private async hydrate(sessionId: string, path: string): Promise<SessionLedger> {
+  private async hydrate(sessionId: string, path: string): Promise<SessionLedgerHandleApi> {
     const read = await readLedgerFile(path)
     const warnings: string[] = []
     if (read.truncatedTail) {
@@ -105,7 +106,7 @@ export class SessionStore implements SessionStoreApi {
     path: string,
     entries: SessionEntry[],
     warnings: string[]
-  ): Promise<SessionLedger> {
+  ): Promise<SessionLedgerHandleApi> {
     await mkdir(dirname(path), { recursive: true })
     if (!existsSync(path)) await writeFile(path, '')
     // 双开断言（P1-10）：同一账本文件已持有 append handle 时拒绝再开——两个 'a' 模式 handle 并发写会交错撕裂行。
@@ -137,7 +138,7 @@ export class SessionStore implements SessionStoreApi {
   private async forkInto(
     newSessionId: string,
     lineage: readonly SessionEntry[]
-  ): Promise<SessionLedger> {
+  ): Promise<SessionLedgerHandleApi> {
     const path = this.locator.resolveLedgerPath(newSessionId)
     if (existsSync(path)) {
       const existing = await readLedgerFile(path)
@@ -152,4 +153,7 @@ export class SessionStore implements SessionStoreApi {
   }
 }
 
-
+/** 建一份会话树账本存储。 */
+export function createSessionStore(deps: SessionStoreDeps): SessionStoreApi {
+  return new SessionStore(deps)
+}

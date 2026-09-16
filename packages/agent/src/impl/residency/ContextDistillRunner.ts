@@ -18,12 +18,13 @@
  * 拒收 / 超时 / 端口抛错**一律产出回落骨架产物**，绝不"什么都不给"：段落是在规划期就被判定
  * 非折不可的（机械器械没达标），这时候空手而归等于让压力原样留到下一轮。
  */
-import { isEmpty, isNotNull, isRecord, isString } from '@velaros-ai/core'
+import { isEmpty, isNotNull } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
 import type { ContextDistiller, ContextDistillProduct, ContextDistillRequest, ContextDistillTotals, ContextGovernanceConfig } from '../../types/residency.js'
+import { isTimeoutError } from '../../utils/residency/context-distill-runner'
 import { buildDistillProduct, buildSkeletonFallbackProduct, createEmptyDistillTotals } from '../../utils/residency/distill'
 import { AgentTuning } from '../../utils/tuning'
 
@@ -35,11 +36,6 @@ export interface ContextDistillRunnerOptions {
   sessionId: Nullable<string>
   /** 最多攒几个等应用的产物，缺省 4（小数向下取整，至少 1）；产物本身占内存，而积压超过几个就说明 epoch 根本没在跑，超限时丢最旧的那些。 */
   maxPendingProducts?: LooseOptional<number>
-}
-
-/** `TimerScope.withTimeout` 的超时中止（与端口自己抛的错分开记账：超时不是失败）。 */
-function isTimeoutError(error: unknown): boolean {
-  return isRecord(error) && isString(error.name) && error.name === 'TimeoutError'
 }
 
 /**

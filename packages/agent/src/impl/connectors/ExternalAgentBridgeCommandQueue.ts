@@ -2,7 +2,7 @@ import { timingSafeEqual } from 'node:crypto'
 
 import { ExternalAgentBridgeLimits } from '../../contract/constants.js'
 import type { ExternalAgentBridgeCommand } from '../../types/agent.js'
-
+import type { CreateExternalAgentBridgeCommandQueue } from '../../types/connectors.js'
 
 /** 一份配对码的有效期（ms），等价于 `ExternalAgentBridgeLimits.pairingLifetimeMs`。 */
 export const ExternalAgentBridgePairingLifetimeMs: number = ExternalAgentBridgeLimits.pairingLifetimeMs
@@ -87,5 +87,7 @@ export class ExternalAgentBridgeCommandQueue<
   }
 }
 
-
-
+/** 开一条外部 Agent 桥的命令队列；超过上限按背压拒收。 */
+export const createExternalAgentBridgeCommandQueue: CreateExternalAgentBridgeCommandQueue = (
+  maxCommands = ExternalAgentBridgeLimits.maxCommands
+) => new ExternalAgentBridgeCommandQueue(maxCommands)

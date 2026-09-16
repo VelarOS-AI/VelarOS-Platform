@@ -13,7 +13,7 @@ import { Log } from '@velaros-ai/core/logger'
 
 import type { ExecutionSpanScopeFactory } from '../../contract/requires.js'
 import type { ExecutionSpan } from '../../types/agent.js'
-import type { CapabilitySpanInput, ExecutionCapabilitySpanRecorder, PromptAuditRecord, RunSpanScope, SpanLedgerWarn, ToolSpanOpener } from '../../types/ledgers.js'
+import type { CapabilitySpanInput, ExecutionCapabilitySpanRecorder, LedgerExecutionSpanScopeFactoryDeps, PromptAuditRecord, RunSpanScope, SpanLedgerWarn, ToolSpanOpener } from '../../types/ledgers.js'
 
 import { ExecutionSpanLedger } from './ExecutionSpanLedger'
 import { ExecutionSpanRecorder } from './ExecutionSpanRecorder'
@@ -28,23 +28,6 @@ const log = Log.tag('ExecutionSpanScope')
 
 /** 无观测时的静默 tool 开启器（生产侧无需分支——始终拿到一个可调用对象或直接 null）。 */
 export const NOOP_TOOL_OPENER: ToolSpanOpener = { beginToolSpan: () => null }
-
-/** {@link LedgerExecutionSpanScopeFactory} 装配依赖。 */
-export interface LedgerExecutionSpanScopeFactoryDeps {
-  /** 每会话执行账本文件路径（数据根下与 session ledger 平行目录）。 */
-  resolveLedgerPath: (sessionId: string) => string
-  /**
-   * D3：每会话 prompt 审计侧信道文件路径（与 span 账本物理平行，如 `execution-spans/<id>.prompts.jsonl`）。
-   * 缺省关闭——`recordPromptAudit` 降级 no-op（不装配 sidecar = 不落重内容）。
-   */
-  resolvePromptAuditPath?: (sessionId: string) => string
-  /** 非致命恢复事件回落（尾行修复等）；缺省进 warn 日志。 */
-  warn?: SpanLedgerWarn
-  /** 取当前时刻（epoch 毫秒）的时钟，交给录制器算 span 时长；缺省 `Date.now`，property 电池注入确定性时钟复现字节。 */
-  now?: () => number
-  /** 分配 span 身份的工厂；缺省由录制器回落到 `randomUUID`，测试注入递增序号让落盘 span 逐字节可比。 */
-  nextSpanId?: () => string
-}
 
 /**
  * 账本落盘的 span scope 工厂的完整面：注入端口要的 `beginRun`、宿主级能力观测 `recordCapabilitySpan`，
@@ -192,21 +175,7 @@ export class LedgerExecutionSpanScopeFactory implements LedgerExecutionSpanScope
   }
 }
 
-// ── scope 实现（父子指针内部记账，动词内失败隔离） ────────────────────────────────────
-
-/**
- * 生产侧动词的**失败隔离单源**：任一 span 操作抛出都吞成 warn + null。
- *
- * 这是「纯旁路」纪律（见文件头）唯一的落地点——SoloLoop / ToolExecutor 侧才敢直呼不设防。
- * 两个 scope 实现共用同一份，别再各自 try/catch 一遍（改隔离语义要一处改完）。
- */
-export function runIsolatedSpanOp<T>(warn: SpanLedgerWarn, fn: () => T, label: string): Nullable<T> {
-  try {
-    return fn()
-  } catch (error) {
-    warn(`execution span scope: ${label} failed`, { error: AppError.getMessage(error) })
-    return null
-  }
+/** 建一台落盘 span 作用域工厂：每次运行与每个回合各开一个 span。 */
+export function createLedgerExecutionSpanScopeFactory(deps: LedgerExecutionSpanScopeFactoryDeps): LedgerExecutionSpanScopeFactoryApi {
+  return new LedgerExecutionSpanScopeFactory(deps)
 }
-
-

@@ -1,9 +1,8 @@
 import { isFalse, isUndefined } from '@velaros-ai/core'
 
 import type { TurnContextDelta, TurnContextSourceId, TurnContextSourcePeekInput } from '../../types/agent.js'
-import type { TurnContextAppendBus } from '../../types/records.js'
+import type { TurnContextAppendBus, TurnContextLedgerAppendInput, TurnContextLedgerPeekResult } from '../../types/records.js'
 
-import type { TurnContextLedgerAppendInput, TurnContextLedgerPeekResult } from './TurnContextLedger'
 import { DefaultLedgerMaxEntries, DefaultMaxSessions, TurnContextLedger, TurnContextProcessGeneration } from './TurnContextLedger'
 
 /**
@@ -104,4 +103,15 @@ export class TurnContextSessionLedgers implements TurnContextSessionLedgersApi {
   public clearSession(sessionId: string): void {
     this.ledgers.delete(sessionId)
   }
+}
+
+/** 给一个来源建按会话分档的回合上下文账本。 */
+export function createTurnContextSessionLedgers(sourceId: TurnContextSourceId, options: {
+      maxEntries?: number
+      maxSessions?: number
+      notifyRenderer?: boolean
+      /** 可见 source 的写入广播总线（每宿主一个实例，经 composition 注入）；缺省则不广播。 */
+      appendHub?: TurnContextAppendBus
+    } = {}): TurnContextSessionLedgersApi {
+  return new TurnContextSessionLedgers(sourceId, options)
 }

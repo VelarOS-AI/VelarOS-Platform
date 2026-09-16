@@ -4,36 +4,10 @@ import { isArray, isEmpty, isPlainObject, isString,Log } from '@velaros-ai/core'
 
 import { AgentToolLimits } from '../../contract/constants.js'
 import type { ContextPayloadStore } from '../../contract/requires.js'
-import type { FileContextCarrier, FileContextRange, FileContextSnapshot, FileContextSource, FileContextView, FileContextViewTier, FileSnapshotRecallInput } from '../../types/context.js'
-import {
-  FileObservationToolName,
-  FileSnapshotToolName,
-  type parseFileSnapshot,
-  saveFileRename,
-  saveFileSnapshot,
-  sliceFileSnapshot,
-  tryParseFileRename,
-  tryParseFileSnapshot,
-} from '../../utils/context/file-snapshot-archive'
+import type { FileContextRange, FileContextSnapshot, FileContextSource, FileContextView, FileContextViewTier, FileSnapshotRecallInput } from '../../types/context.js'
+import { key, resolveViewTier, tierRank } from '../../utils/context/file-context-coordinator'
+import { FileObservationToolName, FileSnapshotToolName, type parseFileSnapshot,saveFileRename, saveFileSnapshot, sliceFileSnapshot, tryParseFileRename, tryParseFileSnapshot } from '../../utils/context/file-snapshot-archive'
 
-import { fileContextRegistry } from './FileContextRegistry'
-
-function key(workspaceId: string, path: string): string {
-  return JSON.stringify([workspaceId, path])
-}
-
-/** 显式读取过的文件不会被顺带观察降级；刷新沿用原层级。 */
-function resolveViewTier(
-  previous: Optional<FileContextView>,
-  requested?: FileContextViewTier
-): FileContextViewTier {
-  if (previous && (previous.tier ?? 'requested') === 'requested') return 'requested'
-  return requested ?? previous?.tier ?? 'requested'
-}
-
-function tierRank(view: FileContextView): number {
-  return view.tier === 'incidental' ? 0 : 1
-}
 
 /**
  * 一个执行分支的文件上下文协调器：维护「这个分支现在看得见哪些文件的哪些片段」（活跃工作集），
@@ -48,11 +22,13 @@ export interface FileContextCoordinatorApi {
   readonly scopeId: string
   /** 登记一个资源来源（读取、路径归一、归档校验入口）；同一 workspaceId 再登记即覆盖。 */
   registerSource(source: FileContextSource): void
+  /** 列出本协调器登记过的全部来源；子分支继承来源时按它逐个包一层授权判定。 */
+  listSources(): readonly FileContextSource[]
   /**
    * 子分支继承父分支的来源访问口（不继承活跃工作集）。`canRead` 在每次读取与召回时重新求值，
    * 返回 false 就拒绝——子 agent 的可见工具一变，它对源码的访问权限当场跟着变。
    */
-  inheritSources(parent: FileContextCoordinator, canRead: () => boolean): void
+  inheritSources(parent: FileContextCoordinatorApi, canRead: () => boolean): void
   /**
    * 领一个观察序号，读之前领、读完把它交给 `observe`。序号用来判定迟到的读取结果：
    * 序号比当前视图旧的结果只进档案，不改当前指针。
@@ -136,8 +112,13 @@ export class FileContextCoordinator implements FileContextCoordinatorApi {
   public registerSource(source: FileContextSource): void {
     this.sources.set(source.workspaceId, source)
   }
-  public inheritSources(parent: FileContextCoordinator, canRead: () => boolean): void {
-    for (const source of parent.sources.values())
+
+  public listSources(): readonly FileContextSource[] {
+    return [...this.sources.values()]
+  }
+
+  public inheritSources(parent: FileContextCoordinatorApi, canRead: () => boolean): void {
+    for (const source of parent.listSources())
       this.registerSource({
         ...source,
         read: (path, ranges, scopeId) => {
@@ -675,22 +656,3 @@ export class FileContextCoordinator implements FileContextCoordinatorApi {
   }
 }
 
-/** 按执行 tracker 隔离；上下文浅拷贝不会丢服务，tracker 回收后也不会残留全局会话。 */
-export function fileContextFor(context: FileContextCarrier): FileContextCoordinator | undefined {
-  return fileContextRegistry.for(context)
-}
-
-/** 子分支继承来源访问口，不继承父分支的活跃源码与预算。 */
-export function forkFileContext(parent: FileContextCarrier, child: FileContextCarrier): void {
-  const previous = fileContextFor(parent)
-  child.fileContextScope = {}
-  if (!previous) return
-  fileContextFor(child)?.inheritSources(
-    previous,
-    () =>
-      !child.getCurrentVisibleToolNames ||
-      child
-        .getCurrentVisibleToolNames()
-        .some((name) => ['project:read', 'project:search', 'project:code', 'project:write', 'project:edit'].includes(name))
-  )
-}

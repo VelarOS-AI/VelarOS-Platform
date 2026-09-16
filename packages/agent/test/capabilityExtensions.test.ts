@@ -3,7 +3,7 @@ import { describe, expect, test } from 'bun:test'
 import type { AgentRuntimeCapabilityPorts } from '../src/contract/requires.js'
 import { SessionToolAllocator } from '../src/impl/tools/SessionToolAllocator'
 import { decideCapabilityScopeCategory, resolveCapabilityDelegationPolicy, resolveCapabilityPromptSegments, resolveCapabilityScopeId, resolveToolAllocationMetadata, resolveToolResultMiddlewares, resolveToolValidationHintProviders } from '../src/utils/capabilities'
-import { ToolArgsSchemaValidator } from '../src/utils/tools/tool-args-schema-validator'
+import { buildValidationNextActions, describeValidationHint } from '../src/utils/tools/tool-args-schema-validator'
 
 describe('Agent Runtime capability injection', () => {
   const ports: AgentRuntimeCapabilityPorts = {
@@ -124,13 +124,12 @@ describe('Agent Runtime capability injection', () => {
   })
 
   test('uses capability-owned validation guidance', () => {
-    const validator = new ToolArgsSchemaValidator()
     const providers = resolveToolValidationHintProviders(ports)
     expect(
-      validator.describeValidationHint('documents_read', 'range is required', providers)
+      describeValidationHint('documents_read', 'range is required', providers)
     ).toBe('Provide a bounded document range. ')
     expect(
-      validator.buildValidationNextActions(
+      buildValidationNextActions(
         'documents_read',
         [{ path: 'range', message: 'Required' }],
         providers

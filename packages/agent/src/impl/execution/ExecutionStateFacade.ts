@@ -1,6 +1,6 @@
-import type { ExecutionRecord,StreamStatePayload } from '../../types/agent.js'
+import type { ExecutionRecord, StreamStatePayload } from '../../types/agent.js'
 import type { ExecutionAbortOptions } from '../../types/execution.js'
-import { ChatRuntimeEvents } from '../../utils/wire/chat-runtime.js'
+import { chatRuntimeEvents } from '../records/ChatRuntimeEvents'
 import type { ExecutionInteractions } from '../records/ExecutionInteractions'
 import type { ExecutionRecords } from '../records/ExecutionRecords'
 
@@ -52,7 +52,7 @@ class ExecutionStateFacade implements ExecutionStateFacadeApi {
     const abortedExecution = this.records.setExecutionError(executionId, reason)
     this.emitExecutionDebug(executionId)
     if (options.emitStreamState ?? true) {
-      this.emitExecutionState(executionId, ChatRuntimeEvents.aborted(reason, executionId))
+      this.emitExecutionState(executionId, chatRuntimeEvents.aborted(reason, executionId))
     }
     return abortedExecution
   }

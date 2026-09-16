@@ -1,9 +1,8 @@
 import { randomUUID } from 'node:crypto'
 
-import { isNumber, isPlainObject, isString } from '@velaros-ai/core'
-
 import type { AgentSessionEventPort } from '../../contract/requires.js'
-import type { AgentGoal,AgentGoalStatus } from '../../types/product-session.js'
+import type { AgentGoal, AgentGoalStatus } from '../../types/product-session.js'
+import { isGoal, isGoalUpdate } from '../../utils/product-session/agent-goal-service'
 
 /**
  * 会话目标服务：一个会话同时只允许有一个「进行中」的目标，目标本身不单独存库，
@@ -68,22 +67,7 @@ export class AgentGoalService implements AgentGoalServiceApi {
   }
 }
 
-function isGoal(value: unknown): value is AgentGoal {
-  return isRecord(value)
-    && isString(value.id)
-    && isString(value.sessionId)
-    && isString(value.objective)
-    && value.status === 'active'
-    && isNumber(value.createdAt)
-    && isNumber(value.updatedAt)
-}
-
-function isGoalUpdate(value: unknown): value is Pick<AgentGoal, 'id' | 'status'> {
-  return isRecord(value)
-    && isString(value.id)
-    && (value.status === 'complete' || value.status === 'blocked' || value.status === 'cancelled')
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return isPlainObject(value)
+/** 建一台产品会话的目标服务。 */
+export function createAgentGoalService(sessions: AgentSessionEventPort, now: () => number = Date.now, nextId: () => string = randomUUID): AgentGoalServiceApi {
+  return new AgentGoalService(sessions, now, nextId)
 }

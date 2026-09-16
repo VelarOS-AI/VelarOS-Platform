@@ -172,7 +172,7 @@ function normalizeParameterDescription(description: string): string {
  * transform 之后 JSON Schema 里不再保留 minimum/maximum，上下界只能靠描述让模型看到。
  * 名字里的 `required` 只为兼容既有引用，语义上它是可选参数。
  */
-function requiredResultLimit(max: number, description: string) {
+function requiredResultLimit(max: number, description: string): z.ZodDefault<z.ZodPipe<z.ZodNumber, z.ZodTransform<number, number>>> {
   // 可选 + 以 max 为默认上限:省略按 max 兜底,超限钳到 max(结果仍有界),
   // 消除"首漏 limit 报 schema 错"与"limit 给大即整调用报废"两个门槛。
   // 名字保留 required 仅为兼容既有引用,语义是"有界结果上限"。
@@ -184,7 +184,7 @@ function requiredResultLimit(max: number, description: string) {
 }
 
 /** 正整数递归深度,超限钳制(≥1;适合要求至少进入一层子目录的工具)。 */
-function requiredPositiveMaxDepth(max: number, description: string) {
+function requiredPositiveMaxDepth(max: number, description: string): z.ZodPipe<z.ZodNumber, z.ZodTransform<number, number>> {
   return z
     .number()
     .transform((value) => clampRounded(value,1, max))
@@ -192,7 +192,7 @@ function requiredPositiveMaxDepth(max: number, description: string) {
 }
 
 /** 非负递归深度,超限钳制(maxDepth=0 表示只处理当前层)。 */
-function requiredNonNegativeMaxDepth(max: number, description: string) {
+function requiredNonNegativeMaxDepth(max: number, description: string): z.ZodPipe<z.ZodNumber, z.ZodTransform<number, number>> {
   return z
     .number()
     .transform((value) => clampRounded(value,0, max))
@@ -200,12 +200,12 @@ function requiredNonNegativeMaxDepth(max: number, description: string) {
 }
 
 /** 可选起始行 schema，统一要求正整数。 */
-function optionalReadStartLine(description: string) {
+function optionalReadStartLine(description: string): z.ZodOptional<z.ZodNumber> {
   return z.number().int().positive().optional().describe(normalizeParameterDescription(description))
 }
 
 /** 可选结束行 schema，统一要求正整数。 */
-function optionalReadEndLine(description: string) {
+function optionalReadEndLine(description: string): z.ZodOptional<z.ZodNumber> {
   return z.number().int().positive().optional().describe(normalizeParameterDescription(description))
 }
 
@@ -214,7 +214,7 @@ function optionalReadEndLine(description: string) {
  * 宽容:超上限钳制到 max 而非拒绝(模型读大文件时常直接给巨大 maxChars,结果仍有界);
  * 非整数取整、非正数提到 1。
  */
-function optionalReadMaxChars(max: number, description: string) {
+function optionalReadMaxChars(max: number, description: string): z.ZodOptional<z.ZodPipe<z.ZodNumber, z.ZodTransform<number, number>>> {
   return z
     .number()
     .transform((value) => clampRounded(value, 1, max))

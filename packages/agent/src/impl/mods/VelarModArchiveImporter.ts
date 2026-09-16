@@ -5,23 +5,15 @@ import { basename, extname, join } from 'node:path'
 
 import JSZip, { type JSZipObject } from 'jszip'
 
-import {
-  isEmpty,
-  isNumber,
-  isPlainObject,
-  isPresent,
-  stringifyPretty,
-} from '@velaros-ai/core'
+import { isEmpty, isNumber, isPlainObject, isPresent, stringifyPretty } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { velarosModEnvelopes } from '@velaros-ai/kernel'
-import {
-  VelarosModManifestFileName,
-} from '@velaros-ai/kernel/contracts'
+import { VelarosModManifestFileName } from '@velaros-ai/kernel/contracts'
 
 import { VelarModArchiveFiles, VelarModArchiveLimits } from '../../contract/constants.js'
-import type { VelarModArchiveSignatureVerifier } from '../../contract/requires.js'
-import type { InstallScannedVelarModArchiveRequest, PreparedVelarModInstall, ScannedArchive, ScanSession,VelarModArchiveEntry, VelarModArchiveFinding, VelarModArchiveInstallFailureReason, VelarModArchiveScanReport, VelarModPermissionDescriptor, ZipSizeData } from '../../types/mods.js'
+import type { InstallScannedVelarModArchiveRequest, PreparedVelarModInstall, ScannedArchive, ScanSession, VelarModArchiveEntry, VelarModArchiveFinding, VelarModArchiveImporterOptions, VelarModArchiveInstallFailureReason, VelarModArchiveScanReport, VelarModPermissionDescriptor } from '../../types/mods.js'
 import { assertArchiveEntryPath, countContributions, readAgentMetadata } from '../../utils/mods/archive'
+import { readZipSizes } from '../../utils/mods/velar-mod-archive-importer'
 import { AgentTuning } from '../../utils/tuning'
 import { parseAgentModManifest } from '../../utils/wire/mods'
 
@@ -41,32 +33,6 @@ export const MaxFileCount: number = VelarModArchiveLimits.maxFileCount
 export const MaxCompressionRatio: number = VelarModArchiveLimits.maxCompressionRatio
 /** 扫描会话的缺省有效期（ms），值在 `AgentTuning.mods.scanSessionTtlMs`。 */
 export const DefaultScanSessionTtlMs: number = AgentTuning.mods.scanSessionTtlMs
-
-/**
- * 建 `VelarModArchiveImporter` 要的宿主策略与可替换件：权限怎么呈现、签名根信谁，
- * 以及测试要替换的时钟与 id 生成器。装配期一次性递入，建好之后不再变。
- */
-export interface VelarModArchiveImporterOptions {
-  /**
-   * 把 manifest 里声明的权限 id 翻成宿主能展示给用户的描述（名称、说明、风险等级）。
-   * 返回 null 表示本宿主根本没有这个权限——扫描会据此记一条 blocking 发现，该包装不了。
-   */
-  readonly resolvePermission: (permission: string) => Nullable<VelarModPermissionDescriptor>
-  /**
-   * 市场签名验证器，由宿主按它信任的签名根注入。不注入就代表本宿主验不了签：
-   * 包里带了签名文件反而会记 blocking 发现，而不是当没看见放过去。
-   */
-  readonly signatureVerifier?: VelarModArchiveSignatureVerifier
-  /**
-   * 一次扫描结果的有效期，单位毫秒；缺省 10 分钟。用户确认安装必须在这之内，
-   * 过期后要重新扫，免得拿着很久以前的结论去装一个中途被换掉的包。
-   */
-  readonly scanSessionTtlMs?: number
-  /** 取当前时刻（毫秒）的时钟，只为测试可替换；缺省 `Date.now`。 */
-  readonly now?: () => number
-  /** 生成一次扫描的 scanId，只为测试可替换；缺省 `randomUUID`。同一台机上不能重复。 */
-  readonly nextScanId?: () => string
-}
 
 /**
  * `.velarmod` 归档的导入面：扫描一个包并给出可展示的结论，用户确认后再把它解到暂存目录。
@@ -95,24 +61,6 @@ export interface VelarModArchiveImporterApi {
    */
   prepareInstall(request: InstallScannedVelarModArchiveRequest): Promise<PreparedVelarModInstall>
 }
-
-
-
-
-
-function readZipSizes(entry: JSZipObject): { compressed: number; expanded: number } {
-  const data = (entry as JSZipObject & { _data?: ZipSizeData })._data
-  return {
-    compressed: Number(data?.compressedSize ?? 0),
-    expanded: Number(data?.uncompressedSize ?? 0),
-  }
-}
-
-
-
-
-
-
 
 /**
  * Host-neutral `.velarmod` scan, trust ticket, and extraction transaction.
@@ -426,3 +374,7 @@ export class VelarModArchiveImporter implements VelarModArchiveImporterApi {
   }
 }
 
+/** 建一台 `.velarmod` 归档导入器：逐条核对上限，越界一律拒载。 */
+export function createVelarModArchiveImporter(options: VelarModArchiveImporterOptions): VelarModArchiveImporterApi {
+  return new VelarModArchiveImporter(options)
+}

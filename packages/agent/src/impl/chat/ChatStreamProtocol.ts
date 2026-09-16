@@ -1,7 +1,6 @@
 import type { SerializedError } from '@velaros-ai/core/error'
 
-import type { AgentEvent } from '../../types/agent'
-import type { ChatStreamEvent, StreamDebugPayload, StreamDonePayload, StreamErrorPayload, StreamFailureRuntimeStateKind, StreamReasoningPayload, StreamStateKind, StreamStatePayload, StreamToolCallPayload, StreamToolMetadataPayload, StreamToolProgressPayload, StreamToolResultPayload,TerminalStreamRuntimeStateKind } from '../../types/agent.js'
+import type { AgentEvent, ChatStreamEvent, StreamDebugPayload, StreamDonePayload, StreamErrorPayload, StreamFailureRuntimeStateKind, StreamReasoningPayload, StreamStateKind, StreamStatePayload, StreamToolCallPayload, StreamToolMetadataPayload, StreamToolProgressPayload, StreamToolResultPayload, TerminalStreamRuntimeStateKind } from '../../types/agent'
 import type { AgentBridgeDispatch, AgentBridgeOutput, TerminalRuntimeExecutionAction } from '../../types/chat.js'
 import { readAgentEventObservability, readStreamEventObservability } from '../../utils/chat/stream-observability'
 import { ALL_STREAM_RUNTIME_STATE_KINDS, STREAM_FAILURE_RUNTIME_STATE_KINDS, TERMINAL_STREAM_RUNTIME_STATE_KINDS } from '../../utils/wire/chat-runtime.js'
@@ -305,4 +304,4 @@ export class ChatStreamProtocol implements ChatStreamProtocolApi {
 }
 
 /** 进程内共享的无状态协议实例。 */
-export const chatStreamProtocol: ChatStreamProtocol = new ChatStreamProtocol()
+export const chatStreamProtocol: ChatStreamProtocolApi = new ChatStreamProtocol()

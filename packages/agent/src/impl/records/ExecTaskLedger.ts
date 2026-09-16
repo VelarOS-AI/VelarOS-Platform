@@ -2,19 +2,11 @@ import { toNullable } from '@velaros-ai/core'
 
 import type { ExecutionRecord, ExecutionTaskPlanStep, ExecutionTaskRecord } from '../../types/agent.js'
 import type { ExecutionTaskLedgerStore } from '../../types/records.js'
+import { hasRunningOwnSelfStep } from '../../utils/records/exec-task-ledger'
 import { findCurrentSelfStep } from '../../utils/records/plan-steps'
 
 import { type ExecRecordSeverity } from './ExecRecordSeverity'
-import { type ExecRouting } from './ExecRouting'
-export function hasRunningOwnSelfStep(
-  plan: readonly ExecutionTaskPlanStep[],
-  roleId: string
-): boolean {
-  return plan.some(
-    (step) => step.mode === 'self' && step.roleId === roleId && step.status === 'running'
-  )
-}
-
+import type { ExecRoutingApi } from './ExecRouting'
 
 /**
  * 任务与计划步骤的写入口：改任务、改步骤都从这里走，顺带把该配的事件
@@ -50,7 +42,7 @@ export interface ExecTaskLedgerApi {
 class ExecTaskLedger implements ExecTaskLedgerApi {
   constructor(
     private readonly store: ExecutionTaskLedgerStore,
-    private readonly routingCoordinator: ExecRouting,
+    private readonly routingCoordinator: ExecRoutingApi,
     private readonly severityHelper: ExecRecordSeverity,
   ) {}
 

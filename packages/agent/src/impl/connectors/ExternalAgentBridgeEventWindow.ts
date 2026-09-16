@@ -25,3 +25,8 @@ export class ExternalAgentBridgeEventWindow implements ExternalAgentBridgeEventW
     return true
   }
 }
+
+/** 开一个已处理事件窗口，用于去重与重放判定。 */
+export function createExternalAgentBridgeEventWindow(maxEvents: number = ExternalAgentBridgeMaxProcessedEvents): ExternalAgentBridgeEventWindowApi {
+  return new ExternalAgentBridgeEventWindow(maxEvents)
+}

@@ -1,17 +1,14 @@
 import type { ModelMessage } from 'ai'
 
-import type {
-  KernelCallableCapabilityService,
-} from '@velaros-ai/kernel'
-import type {
-  KernelModuleHealth,
-  ScopeRef,
-} from '@velaros-ai/kernel/contracts'
+import type { KernelCallableCapabilityService } from '@velaros-ai/kernel'
+import type { KernelModuleHealth, ScopeRef } from '@velaros-ai/kernel/contracts'
 
-import type { AgentExecutionConfig, AgentRuntimeInputPort,ToolExecutionApi } from '../contract/requires.js'
+import type { ChatKernelSessionBridgeApi, ExecutionStoreApi, KernelBackgroundJobManagerApi, KernelSessionPolicyApi, KernelSessionRunCoordinatorApi, SubAgentGuidanceRelayRegistryApi, ToolContractExecutionFacadeApi } from '../contract/provides.js'
+import type { AgentExecutionConfig, AgentRuntimeInputPort, AuthGatePort, ExecutionCollaborationPort, ExecutionGuidanceRelayPlanner, ExecutionIdFactory, ExecutionRecordsPathPort, KernelSessionInputStore, ToolExecutionApi } from '../contract/requires.js'
 
 import type { AgentCapabilityExecutionDescriptorV1, ChatSendRequest, ExecutionPendingInteractionKind, ExecutionPendingInteractionSnapshot, ExecutionProvideInputRequest, ExecutionRecord, ExecutionResolveConfirmationRequest, HostProjection, ToolCatalogEntry, ToolDescriptor as RegistryToolDescriptor } from './agent.js'
-import type { ExecutionEventBusApi, GuidanceRelayPlan, KernelBackgroundJobOutputSnapshot, SubAgentGuidanceRelayWorkerSnapshot, WaitForKernelBackgroundJobsInput } from './records.js'
+import type { AgentModSeamDispatcherContract } from './mods.js'
+import type { ExecutionEventBusContract, ExecutionRouteProvider, GuidanceRelayPlan, KernelBackgroundJobOutputSnapshot, SubAgentGuidanceRelayWorkerSnapshot, WaitForKernelBackgroundJobsInput } from './records.js'
 import type { ToolExecutionPolicyContext, ToolExecutionPolicyRegistry } from './tools.js'
 
 /** {@link ExecutionCollaborationPort.registerActor} 入参：主 Agent 执行者登记。 */
@@ -249,7 +246,7 @@ export interface SoloExecutionAgentRunner {
   streamSoloWorker(
     messages: ModelMessage[],
     config: AgentExecutionConfig,
-    events: ExecutionEventBusApi,
+    events: ExecutionEventBusContract,
     options: {
       consumeGuidance?: () => Nullable<ModelMessage>
       runtimeInput?: AgentRuntimeInputPort
@@ -272,7 +269,7 @@ export interface RunSoloExecutionParams {
   /** 调用方的取消信号；托管执行启动后会桥接到内部 abortController。 */
   abortSignal?: AbortSignal
   /** 事件出口；Coordinator 绑到 {@link ChatStreamBridge}。 */
-  events: ExecutionEventBusApi
+  events: ExecutionEventBusContract
 }
 
 export type KernelInputDelivery = 'queue' | 'steer'
@@ -373,7 +370,7 @@ export interface ManagedExecutionController {
   /** 工具可调用的执行 API，用于创建任务、等待确认、更新计划等。 */
   executionApi: ToolExecutionApi
   /** 已加上 agent tap 的事件总线。 */
-  events: ExecutionEventBusApi
+  events: ExecutionEventBusContract
   /** 手动刷新 debug payload，供计划/任务变化后立即同步 UI。 */
   emitDebug: () => void
   /** 读取并移除本执行下一条运行中引导消息。 */
@@ -390,7 +387,7 @@ export interface RunManagedExecutionParams {
   /** 原始模型消息。 */
   messages: ModelMessage[]
   /** 调用方提供的事件总线。 */
-  events: ExecutionEventBusApi
+  events: ExecutionEventBusContract
   /** 需要被宿主协作层观察的执行者；纯聊天不需要声明。 */
   collaborationActor?: {
     kind: 'main-agent'
@@ -435,3 +432,60 @@ export interface ResolveKernelRuntimeStatusInput {
   queuedInputs?: number
   backgroundJobs?: number
 }
+
+/**
+ * 建桥时的装配单：前两项是宿主必须给的两块（执行服务与执行协调器），后四项是内核侧的控制件，
+ * 缺省一律回落到内存实现——语义与持久实现一致，只是不落盘，让 headless 与探针零装配就能跑。
+ */
+export interface ChatKernelSessionBridgeOptions<TRenderTarget> {
+  /** 宿主的会话执行服务：桥经它读在途交互、投递引导/回答/批准、中止并等某个 source session 收敛。 */
+  executionService: KernelChatExecutionService
+  /** 宿主的执行协调器：桥把一条 run 真正跑起来就是回调它的 `run`，渲染目标与事件渲染全归它管。 */
+  executionCoordinator: KernelChatExecutionCoordinator<TRenderTarget>
+  /** 输入账本：谁先谁后、能不能插队、还有几条排队都存在它里面。缺省是进程内内存账本。 */
+  inputStore?: KernelSessionInputStore
+  /** 运行协调器：按 seq 唤醒 drain、判断会话在不在跑、中止与等空闲。缺省是进程内实现。 */
+  runCoordinator?: KernelSessionRunCoordinatorApi
+  /** 投递与运行态策略：一条输入是插队还是排队、一份运行态快照怎么归约，都问它。缺省是包内默认策略。 */
+  policy?: KernelSessionPolicyApi
+  /** 后台 job 管理器：子 Agent 的后台任务注册、停滞记账、读输出与取消都在它上面。缺省是内存实现，停滞判定用 `AgentTuning.records.backgroundJobStalledAfterMs`。 */
+  backgroundJobManager?: KernelBackgroundJobManagerApi
+}
+
+/** `ExecutionService` 的装配参数：两个必填端口由产品宿主给，其余可选项不给就各自走内置实现或整条链路 no-op。 */
+export interface ExecutionServiceOptions {
+  /** 准入断言端口：托管执行启动前由产品宿主确认当前运行态已获授权。 */
+  authGate: AuthGatePort
+  /** 执行记录落盘路径端口：未显式传 store 时用于构建默认持久化 ExecutionStoreApi。 */
+  executionRecordsPath: ExecutionRecordsPathPort
+  /** 自带的执行记录存储；测试与多运行时隔离用它换掉默认的落盘 store，不传则按 `executionRecordsPath` 现建一个持久化的。 */
+  store?: ExecutionStoreApi
+  /** 活跃子 Agent 注册表：主 Agent 收到运行中引导时按它找出该转给哪些 worker。不传则自建一份空的。 */
+  guidanceRelayRegistry?: SubAgentGuidanceRelayRegistryApi
+  /** 引导转发规划器（通常是一次辅助模型调用）：决定用户这句话该转给哪个 worker、怎么措辞。不传则只入主 Agent 队列，不转发。 */
+  guidanceRelayService?: ExecutionGuidanceRelayPlanner
+  /** 协作协调器：注入后每次托管执行会登记成一个主 Agent 协作者，供协作面展示与冲突判定；不传则整条协作面不参与。 */
+  collaborationCoordinator?: ExecutionCollaborationPort
+  /** 终态回调：执行落终态时通知宿主（发系统通知等）。它自己抛错不影响执行收尾。 */
+  notifyTerminalExecution?: (execution: ExecutionRecord) => void
+  /** 路由 provider：把当前任务算成「下一步建议」。不传则路由协调器给不出建议，提示词里对应的那句就不出。 */
+  routeProvider?: ExecutionRouteProvider
+  /** 可选 ID 工厂；用于多运行时隔离、确定性测试或接入宿主 ID 体系。 */
+  idFactory?: ExecutionIdFactory
+  /**
+   * 可选 mod 拦截 seam 派发器（裁决 9 机制②）——注入时在托管执行进入/离开各派发一次
+   * 会话生命周期钩子；缺省不注入 → 全链 no-op。钩子是纯通知：既不改执行入参，
+   * 也不能否决执行（准入判定单源在 authGate 与策略门，钩子不可旁路）。
+   */
+  seams?: AgentModSeamDispatcherContract
+}
+
+/** 装一条聊天↔会话通道的工厂签名。 */
+export type CreateChatKernelSessionBridge = <TRenderTarget = unknown>(
+  options: ChatKernelSessionBridgeOptions<TRenderTarget>
+) => ChatKernelSessionBridgeApi<TRenderTarget>
+
+/** 装一台工具契约执行门面的工厂签名：收一份工具登记处，交出单次调用的执行口。 */
+export type CreateToolContractExecutionFacade = <TContext extends ToolContractExecutionContext>(
+  toolRegistry: ToolContractExecutionRegistry<TContext>
+) => ToolContractExecutionFacadeApi<TContext>

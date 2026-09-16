@@ -2,7 +2,7 @@ import type { ModelMessage } from 'ai'
 import { describe, expect, test } from 'bun:test'
 
 import { ChatStreamProtocol } from '../src/impl/chat/ChatStreamProtocol'
-import { AgentTurnHistoryHelper } from '../src/impl/records/TurnHistory'
+import { agentTurnHistory } from '../src/impl/records/TurnHistory'
 import { translateMcpCallResult } from '../src/utils/connectors/mcp-call-result'
 import { liftGenericModelContent } from '../src/utils/tools/model-image-lift'
 
@@ -51,7 +51,7 @@ describe('MCP call result media', () => {
 
   test('writes every result media block to the next model turn and retains legacy modelImage', async () => {
     const history: ModelMessage[] = []
-    const helper = new AgentTurnHistoryHelper()
+    const helper = agentTurnHistory
     await helper.appendToolResultsToHistory(history, {
       collectAll: async () => [
         {

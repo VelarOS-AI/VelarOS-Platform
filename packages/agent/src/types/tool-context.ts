@@ -7,8 +7,8 @@ import type { AgentRuntimeCapabilityPorts,ApprovalPort, ContextPayloadStore, Int
 import type { AgentDelegationContract, AgentDeveloperContext, AgentModelInputModality, AgentRoleId, AgentSkillDescriptor, AgentSurfaceId, AgentWorkflowDefinition, AgentWorkflowRunResult, AppLocale, CapabilityAutoApprovalNotice, CapabilityScopeId, ChatPromptFeatureId, RunProfileSelectionId, SessionLineageContext, SubAgentStructuredOutputContract, SubAgentUsage,TaskApprovalRecord, ToolAvailabilityScope, ToolCategoryId, ToolCategoryOverview, ToolConfirmationDecisionOptions, ToolDescriptor, ToolSurfaceProfileId } from './agent.js'
 import type { CapabilityValidationRunResult, CapabilityValidationStatus } from './capabilities.js'
 import type { SubAgentDispatchCatalog,SubAgentDispatchInput, SubAgentRuntimeOverride, SubAgentToolCategoryRequestResult } from './delegation.js'
-import type { ExecutionEventBusApi } from './records.js'
-import type { CodingSessionSnapshot, RuntimeReminderConsumeResult, RuntimeReminderInput, RuntimeReminderSchedulerApi } from './session.js'
+import type { ExecutionEventBusContract } from './records.js'
+import type { CodingSessionSnapshot, RuntimeReminderConsumeResult, RuntimeReminderInput, RuntimeReminderSchedulerContract } from './session.js'
 import type { ToolAllocatorRequest,ToolCapabilityPage } from './tools.js'
 
 export interface ToolConversationHandoffRequest {
@@ -44,7 +44,7 @@ export interface ToolCodingSessionApi {
   getTaskApprovalDenial?: (key: string) => Nullable<string>
   revokeTaskApproval?: (id: string) => boolean
   /** 运行时提醒调度器（声明式 producer）；调用方应配合 finalizeReminderConsumeResult 同步 tracker 标记。 */
-  getReminderScheduler: () => RuntimeReminderSchedulerApi
+  getReminderScheduler: () => RuntimeReminderSchedulerContract
   /** 组装一次 producer 评估所需的输入。 */
   buildReminderInput: () => RuntimeReminderInput
   /**
@@ -288,7 +288,7 @@ export interface SubAgentOptions {
   roleId?: AgentRoleId
   delegation?: AgentDelegationContract
   runtimeOverride?: SubAgentRuntimeOverride
-  events?: ExecutionEventBusApi
+  events?: ExecutionEventBusContract
   requestToolCategories?: (
     categories: ToolCategoryId[],
     reason: string,

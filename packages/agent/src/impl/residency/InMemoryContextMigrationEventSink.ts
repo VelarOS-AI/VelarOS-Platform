@@ -11,8 +11,7 @@
  */
 
 import type { ContextMigrationEventSink } from '../../contract/requires.js'
-import type { ContextFaultEvent,ContextResidencyMigrationEvent } from '../../types/residency.js'
-import { stableStringify } from '../../utils/residency/determinism'
+import type { ContextFaultEvent, ContextResidencyMigrationEvent } from '../../types/residency.js'
 
 /**
  * 内存版的迁移事件汇：`ContextMigrationEventSink` 端口的全部方法，外加三个把事件读回来的口子。
@@ -55,15 +54,4 @@ export class InMemoryContextMigrationEventSink implements InMemoryContextMigrati
     this.faults.length = 0
   }
 }
-
-/** 事件 → 确定性 JSONL 行（键排序，同事件同字节）。 */
-export function formatMigrationEventLine(event: ContextResidencyMigrationEvent): string {
-  return stableStringify({ type: 'migration', ...event })
-}
-
-/** fault 事件 → 确定性 JSONL 行。 */
-export function formatFaultEventLine(event: ContextFaultEvent): string {
-  return stableStringify({ type: 'fault', ...event })
-}
-
 

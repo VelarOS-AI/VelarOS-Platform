@@ -9,16 +9,14 @@ import type { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import type { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js'
 import type { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js'
+import type { WebSocket } from 'ws'
 
-import type {
-  RemoteNodeClientApi,
-  RemoteNodeManifest,
-  RemoteNodeToolDescriptor,
-} from '@velaros-ai/kernel'
+import type { RemoteNodeClientApi, RemoteNodeManifest, RemoteNodeToolDescriptor } from '@velaros-ai/kernel'
 
+import type { ExternalAgentBridgeCommandQueueApi } from '../contract/provides.js'
 import type { ApprovalPort } from '../contract/requires.js'
 
-import type { ToolCategoryId, ToolResultModelContentPart } from './agent.js'
+import type { ExternalAgentBridgeClientMessage, ExternalAgentBridgeCommand, ToolCategoryId, ToolResultModelContentPart } from './agent.js'
 import type { VelaTool } from './builtin.js'
 import type { ToolContractRuntimeSpec } from './toolkit.js'
 
@@ -208,3 +206,75 @@ export interface ParsedMcpContent {
   text: string
   modelContent: ToolResultModelContentPart[]
 }
+
+/** 建 `ExternalAgentBridgeLoopbackServer` 时一次性交的参数：端口范围、握手路径、单帧上限和两个回调；建好之后不再变。 */
+export interface ExternalAgentBridgeLoopbackServerOptions {
+  /** 端口扫描的起点（含），缺省 `ExternalAgentBridgeDefaultPortStart`；`start()` 从这里往上逐个试，谁先空着用谁。 */
+  readonly portStart?: number
+  /** 端口扫描的终点（含），缺省 `ExternalAgentBridgeDefaultPortEnd`；扫到这里还全被占就抛错。必须 >= `portStart`，否则 `start()` 直接拒。 */
+  readonly portEnd?: number
+  /** WebSocket 握手只认这一个 URL path，缺省 `ExternalAgentBridgeProtocolDescriptor.socketPath`；其余路径的 Upgrade 一律回 403。改它等于换协议端点，客户端要跟着改。 */
+  readonly socketPath?: string
+  /** 单条 WebSocket 消息的字节上限，缺省 `ExternalAgentBridgeMaxSocketPayloadBytes`（32 MB）；超了由 ws 关连接，不会进 `onConnection` 那条流。 */
+  readonly maxPayloadBytes?: number
+  /** 一条连接通过 Origin 和 path 校验、升级成功后回调，把 socket 交给宿主；配对、凭据校验、设备/会话绑定和工具执行全在这条回调之后由宿主做。 */
+  readonly onConnection: (socket: WebSocket) => void
+  /** 传输层出错时回调（HTTP clientError、socket error、WebSocketServer error）；只用来记日志或上报，服务器自己会销毁坏掉的 socket，不调用方也不影响运行。 */
+  readonly onError?: (error: Error) => void
+}
+
+/** 开一条外部 Agent 桥命令队列的工厂签名；不给上限就用 `ExternalAgentBridgeLimits.maxCommands`。 */
+export type CreateExternalAgentBridgeCommandQueue = <
+  TType extends string = string,
+  TPayload extends Record<string, unknown> = Record<string, unknown>,
+>(
+  maxCommands?: number
+) => ExternalAgentBridgeCommandQueueApi<TType, TPayload>
+
+export type ExternalAgentBridgeHostMessage = {
+  version: 2
+  type: 'hello'
+  service: string
+  protocol: 2
+  pairingAvailable: boolean
+  deviceId: Nullable<string>
+} 
+  | {
+  version: 2
+  type: 'paired'
+  token: string
+  device: Record<string, unknown>
+} 
+  | {
+  version: 2
+  type: 'resumed'
+  device: Record<string, unknown>
+  after: number
+} 
+  | {
+  version: 2
+  type: 'pong'
+  at: number
+} 
+  | {
+  version: 2
+  type: 'event_ack'
+  eventId: string
+} 
+  | {
+  version: 2
+  type: 'command'
+  command: ExternalAgentBridgeCommand
+} 
+  | {
+  version: 2
+  type: 'disconnected'
+} 
+  | {
+  version: 2
+  type: 'error'
+  code: string
+  error: string
+}
+
+export type ExternalAgentBridgeMessage = ExternalAgentBridgeClientMessage | ExternalAgentBridgeHostMessage

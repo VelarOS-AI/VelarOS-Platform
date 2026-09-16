@@ -1,30 +1,15 @@
 import { isEmpty } from '@velaros-ai/core'
 
-import type { AgentRuntimeCapabilityPorts,RuntimePromptFeaturePolicy } from '../../contract/requires.js'
-import type { ToolAvailabilityScope, ToolCategoryDefinition, ToolCategoryId, ToolCategoryOverview, ToolDescriptor } from '../../types/agent.js'
-import type { RegisteredTool, RegistryTool, ToolRegistryContext } from '../../types/tools'
-import type { OverriddenToolMap,RegisteredToolMap } from '../../types/tools.js'
-import { resolveCapabilityCategoryDefinitions } from '../../utils/capabilities'
+import type { AgentRuntimeCapabilityPorts, RuntimePromptFeaturePolicy } from '../../contract/requires.js'
+import type { ToolAvailabilityScope, ToolCategoryId, ToolCategoryOverview, ToolDescriptor } from '../../types/agent.js'
+import type { OverriddenToolMap, RegisteredTool, RegisteredToolMap, RegistryTool, ToolRegistryContext } from '../../types/tools'
 import { compareStableStrings } from '../../utils/residency/determinism'
 import { isToolCategoryAvailable } from '../../utils/tools/access-policy'
 import { activeDescriptorForRegisteredTool } from '../../utils/tools/capability-registry'
 import { isToolCompatibleWithModelInputs } from '../../utils/tools/model-input-policy'
+import { resolveCategoryDefinition } from '../../utils/tools/tool-registry'
 
 import { defaultRuntimePromptFeaturePolicy } from './DefaultPromptFeaturePolicy'
-
-function resolveCategoryDefinition(
-  categoryId: ToolCategoryId,
-  ports?: AgentRuntimeCapabilityPorts
-): ToolCategoryDefinition {
-  return (
-    resolveCapabilityCategoryDefinitions(ports)[categoryId] ?? {
-      id: categoryId,
-      label: categoryId,
-      description: '',
-      toolOs: { domain: 'injected', defaultState: 'loadable' },
-    }
-  )
-}
 
 /**
  * 工具可见性过滤器（别名 `ToolRegistryHelper`）：回答「这个上下文下哪些工具该出现」。
@@ -326,3 +311,8 @@ class ToolRegistry implements ToolRegistryApi {
 export { ToolRegistry }
 export type { RegisteredTool }
 export { ToolRegistry as ToolRegistryHelper }
+
+/** 建一份工具登记处：工具、类别与可见性判定都在它身上。 */
+export function createToolRegistry(promptFeaturePolicy: RuntimePromptFeaturePolicy = defaultRuntimePromptFeaturePolicy): ToolRegistryApi {
+  return new ToolRegistry(promptFeaturePolicy)
+}

@@ -1,48 +1,18 @@
-import type { ModelMessage, ToolSet } from "ai";
-import { asSchema } from "ai";
+import type { ModelMessage, ToolSet } from 'ai'
+import { asSchema } from 'ai'
 
-import {
-  isEmpty,
-  isFunction,
-  isPlainObject,
-  isString,
-  isTrue,
-  toNullable,
-} from "@velaros-ai/core";
-import { AppError } from "@velaros-ai/core/error";
-import type { ScopedLog } from "@velaros-ai/core/logger";
+import { isEmpty, isPlainObject, isString, isTrue, toNullable } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
+import type { ScopedLog } from '@velaros-ai/core/logger'
 
-import type { StreamContextGovernanceState } from '../../types/agent.js'
 import type { CompiledProviderRequest, ContextPinnedEvidenceInput, ProviderToolDefinitionSnapshotInput } from '../../types/context.js'
-import type { ContextUsageEmitTarget, ProviderToolNamePlan, ProviderToolTransportContext, ProviderToolTransportPlan,ProviderTurnActiveContext, ProviderTurnActiveContextProvider, ProviderTurnContextWorkingSetInputs, ProviderTurnPayloadContext, ToolSchemaCharEstimatorRegistry, ToolSchemaHashEstimatorRegistry } from '../../types/loop.js'
-import { collectProviderRequestHistoryToolNames } from "../../utils/context/message-scan";
-import { compareStableStrings } from "../../utils/residency/determinism";
-import { completeToolTransportNameAliases } from "../../utils/tools/tool-identity";
-import { ChatRuntimeEvents } from '../../utils/wire/chat-runtime.js'
-import { buildToolPayloadRefsForProviderMessages } from "../context/ToolPayloadReferencePlanner";
-
-/**
- * Stream 与 Query 两条 turn 链路在"把一个 turn 组装成 provider 请求"上的公共逻辑。
- *
- * 这些方法与流式/非流式无关，过去在 StreamTurn 与 QueryTurn 中逐字/近似重复，
- * 漂移风险已经显现（见 docs/agent-pipeline-review.md §1）。这里统一为单一来源，
- * 仅以 `label` 区分日志文案，其余行为对两条链路严格一致。
- */
-
-function resolveActiveContextProvider(
-  value: unknown,
-): Nullable<ProviderTurnActiveContextProvider["activeContext"]> {
-  if (!isPlainObject(value)) return null;
-  const activeContext = value.activeContext;
-  if (!isPlainObject(activeContext)) return null;
-  const listActiveContextArtifacts = activeContext.listActiveContextArtifacts;
-  return isFunction(listActiveContextArtifacts)
-    ? {
-        listActiveContextArtifacts:
-          listActiveContextArtifacts as ProviderTurnActiveContext["listActiveContextArtifacts"],
-      }
-    : null;
-}
+import type { ContextUsageEmitTarget, ProviderToolNamePlan, ProviderToolTransportContext, ProviderToolTransportPlan, ProviderTurnContextWorkingSetInputs, ProviderTurnPayloadContext, ToolSchemaCharEstimatorRegistry, ToolSchemaHashEstimatorRegistry } from '../../types/loop.js'
+import { collectProviderRequestHistoryToolNames } from '../../utils/context/message-scan'
+import { buildStreamGovernanceState, resolveActiveContextProvider } from '../../utils/loop/provider-turn-request-helper'
+import { compareStableStrings } from '../../utils/residency/determinism'
+import { completeToolTransportNameAliases } from '../../utils/tools/tool-identity'
+import { ToolPayloadReferencePlanner } from '../context/ToolPayloadReferencePlanner'
+import { chatRuntimeEvents } from '../records/ChatRuntimeEvents'
 
 /**
  * 「把一个 turn 组装成 provider 请求」的公共件：工具面、schema 账、payload 引用、发送前的拦截与上报。
@@ -354,7 +324,7 @@ class ProviderTurnRequestHelper implements ProviderTurnRequestHelperApi {
     if (!toolContext.sessionId || !toolContext.contextPayloadStore)
       return undefined;
 
-    const refs = await buildToolPayloadRefsForProviderMessages({
+    const refs = await new ToolPayloadReferencePlanner(toolContext.contextPayloadStore).buildRefs({
       sessionId: toolContext.sessionId,
       messages,
       store: toolContext.contextPayloadStore,
@@ -461,7 +431,7 @@ class ProviderTurnRequestHelper implements ProviderTurnRequestHelperApi {
     target: ContextUsageEmitTarget,
   ): void {
     target.events?.emitRuntime?.(
-      ChatRuntimeEvents.contextUsageEstimate({
+      chatRuntimeEvents.contextUsageEstimate({
         ...compiledRequest.estimate,
         turn: toNullable(target.turn),
         model: target.model,
@@ -476,53 +446,6 @@ class ProviderTurnRequestHelper implements ProviderTurnRequestHelperApi {
       }),
     );
   }
-}
-
-/**
- * 编译结果 → 流事件里的治理状态块。
- *
- * 编译器没持有治理会话（一次性编译 / 旧调用面）时返回 undefined：宁可让壳侧"这轮没有治理状态"，
- * 也不要伪造一个 `handoffArmed:false` 的默认块——布防看门分不清"没信号"和"信号说别布防"。
- */
-function buildStreamGovernanceState(
-  compiledRequest: CompiledProviderRequest,
-): LooseOptional<StreamContextGovernanceState> {
-  const handoff = compiledRequest.governanceHandoff;
-  if (!handoff) return undefined;
-
-  const report = compiledRequest.governanceEpoch;
-  const distill = report?.distill;
-  return {
-    epoch: compiledRequest.governanceEpochSeq ?? 0,
-    occupancyPercent: toNullable(compiledRequest.governanceOccupancyPercent),
-    epochApplied: isTrue(report?.applied),
-    epochSavingPercent: report ? report.savingPercent : null,
-    handoffArmed: handoff.armed,
-    recentSavingPercents: [...handoff.recentSavingPercents],
-    lastEpochAfterPercent: handoff.lastEpochAfterPercent,
-    handoffReason: handoff.reason,
-    // 没跑 epoch 的轮次也给一份零值块（而不是缺席）：与 governance 块整体缺席不同，这里
-    // "本轮没有 epoch" 是确定的事实，零值就是它的忠实表示，消费方不必区分两种 undefined。
-    distill: {
-      mode: distill?.mode ?? "off",
-      appliedProducts: distill?.appliedProducts ?? 0,
-      appliedByInstrument: {
-        ...(distill?.appliedByInstrument ?? { distill: 0, skeleton: 0 }),
-      },
-      planned: isTrue(distill?.planned),
-      skipReason: toNullable(distill?.skipReason),
-      totals: {
-        ...(distill?.totals ?? {
-          requested: 0,
-          accepted: 0,
-          rejected: 0,
-          timedOut: 0,
-          failed: 0,
-          staleDropped: 0,
-        }),
-      },
-    },
-  };
 }
 
 export { ProviderTurnRequestHelper };

@@ -1,11 +1,5 @@
-import type { AgentRoleId,ExecutionTaskExecutionAdvice, ExecutionTaskPlanStep, ExecutionTaskRecommendedAction, ExecutionTaskRecord } from '../../types/agent.js'
-import {
-  findFirstActionableSelfStep,
-  refreshExecutionPlan,
-  resolveExecutionAdvice,
-  resolveRecommendedAction,
-  selectPreferredActionableDelegatedStep,
-} from '../../utils/records/plan-state'
+import type { AgentRoleId, ExecutionTaskExecutionAdvice, ExecutionTaskPlanStep, ExecutionTaskRecommendedAction, ExecutionTaskRecord } from '../../types/agent.js'
+import { findFirstActionableSelfStep, refreshExecutionPlan, resolveExecutionAdvice, resolveRecommendedAction, selectPreferredActionableDelegatedStep } from '../../utils/records/plan-state'
 
 /**
  * 执行计划状态辅助器。
@@ -59,3 +53,8 @@ class ExecPlanState implements ExecPlanStateApi {
 }
 
 export { ExecPlanState, ExecPlanState as ExecutionPlanStateHelper }
+
+/** 建一份执行计划状态机。 */
+export function createExecutionPlanState(): ExecPlanStateApi {
+  return new ExecPlanState()
+}

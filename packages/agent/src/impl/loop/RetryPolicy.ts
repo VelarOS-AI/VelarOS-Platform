@@ -1,24 +1,9 @@
-import { isArray, isBoolean, isFunction,isNumber, isObject, isPlainObject,isPresent, isString } from '@velaros-ai/core'
+import { isArray, isBoolean, isNumber, isPlainObject, isPresent, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 
-import type { ConnectionRetryBlockReason,ConnectionRetryOptions, ContextOverflowReplayUnsafeDetails } from '../../types/loop.js'
-import {
-  ContextOverflowReplayUnsafeSymbol,
-  isContextOverflowApiCode,
-  isContextOverflowApiMessage,
-  isNonConnectionApiCode,
-  isNonConnectionApiMessage,
-  isNonConnectionApiStatus,
-  isRetryableEmptyPreOutputStream,
-  isRetryAbortError,
-  isTransientApiCode,
-  isTransientApiMessage,
-  isTransientApiStatus,
-  readRetryAfterDelayMsFromRecord,
-  resolveReplaySafetyBlockReason,
-  waitForRetryDelay,
-} from '../../utils/loop/model-retry-classification'
+import type { ConnectionRetryBlockReason, ConnectionRetryOptions } from '../../types/loop.js'
+import { isContextOverflowApiCode, isContextOverflowApiMessage, isNonConnectionApiCode, isNonConnectionApiMessage, isNonConnectionApiStatus, isRetryableEmptyPreOutputStream, isRetryAbortError, isTransientApiCode, isTransientApiMessage, isTransientApiStatus, readRetryAfterDelayMsFromRecord, resolveReplaySafetyBlockReason, waitForRetryDelay } from '../../utils/loop/model-retry-classification'
 import { AgentTuning } from '../../utils/tuning'
 
 /** 一次请求最多重试几次连接类故障；值在 `AgentTuning.retry.maxConnectionAttempts`。 */
@@ -473,50 +458,9 @@ class RetryPolicy implements RetryPolicyApi {
 
 }
 
-/** 重试判官的共享实例：本身无状态，模块级函数与不持实例的调用方共用一份。 */
-export const sharedRetryPolicy: RetryPolicyApi = new RetryPolicy()
+export { RetryPolicy }
+export { isContextOverflowReplayUnsafe, markContextOverflowReplayUnsafe } from '../../utils/loop/retry-policy'
 
-/**
- * 独立的“上下文超限”判定函数：供 agent loop 在不持有 RetryPolicy 实例时直接复用同一套分类规则，
- * 决定是否进入缺页兜底（应急压缩 + 重试一次）。
- */
-function isContextOverflowError(error: unknown): boolean {
-  return sharedRetryPolicy.isContextOverflowError(error)
-}
+/** 模型连接重试策略（无状态，进程内共用一份）。 */
+export const agentRetryPolicy: RetryPolicyApi = new RetryPolicy()
 
-function markContextOverflowReplayUnsafe(
-  error: unknown,
-  details: ContextOverflowReplayUnsafeDetails
-): unknown {
-  if (!isObject(error) && !isFunction(error)) return error
-
-  Reflect.set(error as Record<PropertyKey, unknown>, ContextOverflowReplayUnsafeSymbol, details)
-  return error
-}
-
-function isContextOverflowReplayUnsafe(error: unknown, depth = 0): boolean {
-  if (depth > 5 || !isPresent(error)) return false
-  if (!isObject(error) && !isFunction(error)) return false
-
-  const record = error as Record<PropertyKey, unknown>
-  const details = record[ContextOverflowReplayUnsafeSymbol]
-  if (isContextOverflowReplayUnsafeDetails(details)) return true
-
-  if (isContextOverflowReplayUnsafe(record.cause, depth + 1)) return true
-  const nestedErrors = record.errors
-  if (isArray(nestedErrors))
-    return nestedErrors.some((nestedError) => isContextOverflowReplayUnsafe(nestedError, depth + 1))
-  return false
-}
-
-function isContextOverflowReplayUnsafeDetails(
-  value: unknown
-): value is ContextOverflowReplayUnsafeDetails {
-  if (!isPlainObject(value)) return false
-
-  const record = value
-  return isBoolean(record.hasVisibleOutput) && isBoolean(record.hasToolUse)
-}
-
-export { isContextOverflowError, isContextOverflowReplayUnsafe, markContextOverflowReplayUnsafe, RetryPolicy }
-export { RetryPolicy as AgentConnectionRetryHelper }

@@ -1,7 +1,8 @@
 // 域：Agent 执行动词；由 Agent capability 拥有，Kernel 只路由其不透明信封。
 import { z } from 'zod'
 
-import type { DescribeToolSchemaRequest, DescribeToolSchemaResponse, ExecuteToolRequest, ExecuteToolResponse, HostProjection, ResolveCatalogRequest, RunTurnOptions, RunTurnRequest, RunTurnResponse } from '../../types/agent.js'
+import type { DescribeToolSchemaResponse, HostProjection } from '../../types/agent.js'
+import type { DescribeToolSchemaRequest, ExecuteToolRequest, ExecuteToolResponse, ResolveCatalogRequest, RunTurnOptions, RunTurnRequest, RunTurnResponse } from '../../types/product-session.js'
 
 import {
   ToolCatalogEntrySchema,

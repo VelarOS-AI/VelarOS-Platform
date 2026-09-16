@@ -5,7 +5,7 @@ import type { ToolCategoryId } from '../../types/agent.js'
 import type { AnyVelaTool, ToolArgsValidationResult, ToolExecutionPolicyContext, ToolExecutionPolicySurface } from '../../types/tools.js'
 import { getToolSurfaceFallbackChain } from '../runner/runtime-profiles'
 
-import { toolArgsSchemaValidator } from './tool-args-schema-validator'
+import { describeAdjustments, validateWithNormalization } from './tool-args-schema-validator'
 
 /**
  * 选这次调用该用工具的哪一张表面（surface）。
@@ -45,9 +45,9 @@ export function validateAndNormalizeToolInput(input: {
   toolContext: ToolExecutionPolicyContext
 }): ToolArgsValidationResult<any> {
   const selectedSurface = input.selectedSurface
-  if (!selectedSurface) return toolArgsSchemaValidator.validateWithNormalization(input.tool.schema, input.args)
+  if (!selectedSurface) return validateWithNormalization(input.tool.schema, input.args)
 
-  const surfaceResult = toolArgsSchemaValidator.validateWithNormalization(
+  const surfaceResult = validateWithNormalization(
     selectedSurface.schema,
     input.args
   )
@@ -57,11 +57,11 @@ export function validateAndNormalizeToolInput(input: {
     ? selectedSurface.normalize(surfaceResult.data, input.toolContext)
     : surfaceResult.data
   const baseArgs = isPlainObject(normalizedInput) ? normalizedInput : {}
-  const baseResult = toolArgsSchemaValidator.validateWithNormalization(input.tool.schema, baseArgs)
+  const baseResult = validateWithNormalization(input.tool.schema, baseArgs)
   if (!baseResult.success) return baseResult
 
   const requestedArgs = surfaceResult.requestedArgs
-  const adjustments = toolArgsSchemaValidator.describeAdjustments(
+  const adjustments = describeAdjustments(
     requestedArgs,
     baseResult.args
   )

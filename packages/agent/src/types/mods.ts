@@ -4,13 +4,14 @@
  * 与 Kernel client 的 `KernelModPackDescriptor` 同形：`specifier` 指向 pack 包目录，
  * `provides` 列出该 pack 贡献的能力 id。
  */
-import type { AgentModPackReader } from '../contract/requires.js'
+import type { AgentModPackReader, VelarModArchiveSignatureVerifier } from '../contract/requires.js'
 
-import type { AgentModContributionAxisName, AgentModDiagnostic, AgentModExecutionModeContribution, AgentModHookContribution, AgentModHookExecutionMode,AgentModHookMatcher, AgentModManifest, AgentModPromptSegmentContribution, AgentModSeamKind, AgentModSkillContribution, AgentModSpaceContribution, AgentModSubAgentTypeContribution, AgentModToolCategoryContribution, AgentModToolContribution, AgentModTrustLevel, AgentModTurnContextSourceContribution, ToolCategoryDefinition } from './agent.js'
+import type { AgentModContributionAxisName, AgentModDiagnostic, AgentModExecutionModeContribution, AgentModHookContribution, AgentModHookExecutionMode, AgentModHookMatcher, AgentModManifest, AgentModPromptSegmentContribution, AgentModSeamKind, AgentModSkillContribution, AgentModSpaceContribution, AgentModSubAgentTypeContribution, AgentModToolCategoryContribution, AgentModToolContribution, AgentModTrustLevel, AgentModTurnContextSourceContribution, ToolCategoryDefinition } from './agent.js'
 import type { VelaTool } from './builtin.js'
 import type { SubAgentTypeDescriptor } from './delegation.js'
-import type { AgentSkillDefinition,PromptSegmentDefinition } from './guidance.js'
+import type { AgentSkillDefinition, PromptSegmentDefinition } from './guidance.js'
 import type { ExecutionModeDescriptor } from './runner.js'
+
 
 export interface AgentModPackDescriptorLike {
   readonly id: string
@@ -30,7 +31,7 @@ export interface AgentModDiscoveryResult {
  * Mod 注册表的最小形状：九条贡献轴的登记与快照这一面。
  * 类实现在 impl/mods/AgentModRegistry.ts。
  */
-export interface AgentModRegistryApi {
+export interface AgentModRegistryContract {
   /** 当前代号；每次 endRegistration 递增，快照据此判新旧。 */
   readonly generation: number
   /** 当前处于注册阶段还是已封存。 */
@@ -61,13 +62,13 @@ export interface AgentModRegistryApi {
  * Mod 装载机的最小形状：装载、停用、出报告这一面。
  * 类实现在 impl/mods/AgentModLoader.ts。
  */
-export interface AgentModLoaderApi {
+export interface AgentModLoaderContract {
   /** 本次装载写进去的注册表。 */
-  readonly registry: AgentModRegistryApi
+  readonly registry: AgentModRegistryContract
   /** 钩子派发台。 */
-  readonly hooks: AgentModSeamDispatcherApi
+  readonly hooks: AgentModSeamDispatcherContract
   /** @deprecated 新调用方使用 `hooks`。 */
-  readonly seams: AgentModSeamDispatcherApi
+  readonly seams: AgentModSeamDispatcherContract
   /** 装载一批候选包；重复调用会在既有注册表之上继续追加（id/主键冲突照样拒载）。 */
   load(packages: readonly AgentModPackage[]): AgentModLoadReport
   /** 停用一个 mod：摘除其全部贡献与钩子；用户数据一律保留。 */
@@ -82,7 +83,7 @@ export interface AgentModLoaderApi {
  * Mod 钩子派发台的最小形状：登记、封存与四条派发通道。
  * 类实现在 impl/mods/AgentModSeamDispatcher.ts。
  */
-export interface AgentModSeamDispatcherApi {
+export interface AgentModSeamDispatcherContract {
   /** 打开 registration 阶段（Loader 装载前调用）。 */
   beginRegistration(): void
   /** 关闭 registration 阶段；此后写入即抛。 */
@@ -118,12 +119,12 @@ export interface AssembleAgentModsInput {
   /** Kernel 报上来的 pack 清单；缺省不做 pack 发现。 */
   readonly packs?: readonly AgentModPackDescriptorLike[]
   readonly reader?: AgentModPackReader
-  readonly loader?: AgentModLoaderApi
+  readonly loader?: AgentModLoaderContract
   readonly onDiagnostic?: (diagnostic: AgentModDiagnostic) => void
 }
 
 export interface AgentModAssembly {
-  readonly loader: AgentModLoaderApi
+  readonly loader: AgentModLoaderContract
   readonly report: AgentModLoadReport
 }
 
@@ -516,14 +517,14 @@ export interface AgentModSeamRegistration {
 }
 
 /**
- * `AgentModSeamDispatcherApi` 上每个真实派发方法的名字（类型层派生，不手写）。
+ * `AgentModSeamDispatcherContract` 上每个真实派发方法的名字（类型层派生，不手写）。
  *
  * 下面的 {@link WiredSeamKindsByDispatcher} 对本联合保持穷举：新增一个 `dispatch*` 方法却忘了
  * 登记它派发哪些 kind = 编译红，而不是又长出一条「注册得进、永远不触发」的哑接缝。
  */
 export type AgentModSeamDispatchMethodName = {
-  [K in keyof AgentModSeamDispatcherApi]: K extends `dispatch${string}` ? K : never
-}[keyof AgentModSeamDispatcherApi]
+  [K in keyof AgentModSeamDispatcherContract]: K extends `dispatch${string}` ? K : never
+}[keyof AgentModSeamDispatcherContract]
 
 /**
  * 一代 Mod 注册表对应的一份完整 Agent Surface。
@@ -554,3 +555,40 @@ export type {
   AgentModSeamRegistration as AgentModHookRegistration,
   AgentModSeamRegistrationInput as AgentModHookRegistrationInput,
 }
+
+/**
+ * 建 `VelarModArchiveImporter` 要的宿主策略与可替换件：权限怎么呈现、签名根信谁，
+ * 以及测试要替换的时钟与 id 生成器。装配期一次性递入，建好之后不再变。
+ */
+export interface VelarModArchiveImporterOptions {
+  /**
+   * 把 manifest 里声明的权限 id 翻成宿主能展示给用户的描述（名称、说明、风险等级）。
+   * 返回 null 表示本宿主根本没有这个权限——扫描会据此记一条 blocking 发现，该包装不了。
+   */
+  readonly resolvePermission: (permission: string) => Nullable<VelarModPermissionDescriptor>
+  /**
+   * 市场签名验证器，由宿主按它信任的签名根注入。不注入就代表本宿主验不了签：
+   * 包里带了签名文件反而会记 blocking 发现，而不是当没看见放过去。
+   */
+  readonly signatureVerifier?: VelarModArchiveSignatureVerifier
+  /**
+   * 一次扫描结果的有效期，单位毫秒；缺省 10 分钟。用户确认安装必须在这之内，
+   * 过期后要重新扫，免得拿着很久以前的结论去装一个中途被换掉的包。
+   */
+  readonly scanSessionTtlMs?: number
+  /** 取当前时刻（毫秒）的时钟，只为测试可替换；缺省 `Date.now`。 */
+  readonly now?: () => number
+  /** 生成一次扫描的 scanId，只为测试可替换；缺省 `randomUUID`。同一台机上不能重复。 */
+  readonly nextScanId?: () => string
+}
+
+export interface SemverVersion {
+  major: number
+  minor: number
+  patch: number
+}
+
+export type SemverComparator =
+  | { kind: 'any' }
+  | { kind: '=' | '>' | '>=' | '<' | '<='; version: SemverVersion }
+  | { kind: '^' | '~'; version: SemverVersion }

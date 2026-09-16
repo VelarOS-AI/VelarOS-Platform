@@ -4,7 +4,7 @@ import { describe, expect, test } from 'bun:test'
 import { InMemoryContextPayloadStore } from '../src/impl/context/InMemoryContextPayloadStore'
 import { compileProviderSendRequest, ProviderRequestCompiler } from '../src/impl/context/ProviderRequestCompiler'
 import { ContextGovernanceSessionRegistry } from '../src/impl/residency/ContextGovernanceSessionRegistry'
-import { readReusableAttemptInput, saveToolAttemptInput, saveToolAttemptOutcome } from '../src/impl/tools/ToolInputReuseStore'
+import { readReusableAttemptInput, toolInputReuseStore } from '../src/impl/tools/ToolInputReuseStore'
 import { compactToolInputForModel } from '../src/utils/tools/tool-result-serialization'
 import { projectTransientRecoveryHistory, restoreReusableInputsForNextDecision } from '../src/utils/tools/transient-recovery-projection'
 
@@ -178,12 +178,12 @@ describe('the next decision sees the full input it is asked to correct', () => {
   test('the stored attempt record is the source, and only a not-applied outcome is readable', async () => {
     const store = new InMemoryContextPayloadStore()
     const context = { sessionId: 's', contextPayloadStore: store, resourceId: '/repo' }
-    await saveToolAttemptInput(context, 'edit-1', 'project:edit', original, 2)
+    await toolInputReuseStore.saveAttemptInput(context, 'edit-1', 'project:edit', original, 2)
     expect(await readReusableAttemptInput(store, 's', 'edit-1')).toBeUndefined()
-    await saveToolAttemptOutcome(context, 'edit-1', 'not-applied')
+    await toolInputReuseStore.saveAttemptOutcome(context, 'edit-1', 'not-applied')
     expect(await readReusableAttemptInput(store, 's', 'edit-1')).toEqual(original)
-    await saveToolAttemptInput(context, 'edit-2', 'project:edit', original, 2)
-    await saveToolAttemptOutcome(context, 'edit-2', 'unknown')
+    await toolInputReuseStore.saveAttemptInput(context, 'edit-2', 'project:edit', original, 2)
+    await toolInputReuseStore.saveAttemptOutcome(context, 'edit-2', 'unknown')
     expect(await readReusableAttemptInput(store, 's', 'edit-2')).toBeUndefined()
     expect(await readReusableAttemptInput(store, 'other-session', 'edit-1')).toBeUndefined()
   })
@@ -193,8 +193,8 @@ test('the compiled provider request keeps the restored input through structure r
   const store = new InMemoryContextPayloadStore()
   const context = { sessionId: 's', contextPayloadStore: store, codingSession: {} }
   const input = { files: [{ fileRef: 'view:x', edits: [{ op: 'replace', range: [2, 4], text: `${'正文🙂 '.repeat(600)}end` }] }] }
-  await saveToolAttemptInput(context, 'c1', 'project:edit', input, 2)
-  await saveToolAttemptOutcome(context, 'c1', 'not-applied')
+  await toolInputReuseStore.saveAttemptInput(context, 'c1', 'project:edit', input, 2)
+  await toolInputReuseStore.saveAttemptOutcome(context, 'c1', 'not-applied')
   const history: ModelMessage[] = [
     { role: 'user', content: 'Apply the change.' },
     { role: 'assistant', content: [{ type: 'tool-call', toolCallId: 'c1', toolName: 'project:edit', input }] },

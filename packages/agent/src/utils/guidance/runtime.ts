@@ -1,9 +1,10 @@
 import { isEmpty, truncate } from "@velaros-ai/core";
 
+import { PromptSegmentPriority } from '../../contract/constants.js'
 import type { PromptSegmentDefinition, RuntimePromptSnapshot, RuntimePromptToolCategorySummary } from '../../types/guidance.js'
 import { AgentTuning } from '../tuning'
 
-import { createCorePromptSegment, createSelectedSkillPromptSegment, createSkillPromptSegment, createTextPromptSegment, formatLabelList, hasAnyRuntimeTool, hasAnyRuntimeToolAvailable, hasRuntimeTool, PromptSegmentPriority } from "./shared";
+import { createCorePromptSegment, createSelectedSkillPromptSegment, createSkillPromptSegment, createTextPromptSegment, formatLabelList, hasAnyRuntimeTool, hasAnyRuntimeToolAvailable, hasRuntimeTool } from "./shared";
 import { createTaskRuntimePromptSegments } from "./task";
 
 /** 提示词里最多列几个自定义子 Agent，值在 `AgentTuning.prompt.maxCustomSubAgentEntries`。 */

@@ -1,7 +1,8 @@
 
+import { PromptSegmentPriority } from '../../contract/constants.js'
 import type { PromptSegmentDefinition, RuntimePromptSnapshot } from '../../types/guidance.js'
 
-import { createTextPromptSegment, PromptSegmentPriority } from './shared'
+import { createTextPromptSegment } from './shared'
 
 /**
  * 产出与**执行模式**相关的两段运行态提示词：计划预览（快照里有预览才渲染）与目标模式纪律（目标模式开启才渲染）。

@@ -4,7 +4,7 @@ import type { AppError } from '@velaros-ai/core/error'
 import type { ApprovalPort } from '../../contract/requires.js'
 import type { AgentEvent, UserActionCard } from '../../types/agent.js'
 import type { DangerousConfirmationStatusSink, SubAgentRetryState, SubAgentToolContext, WorkerStatusArgs } from '../../types/delegation.js'
-import type { ExecutionEventBusApi } from '../../types/records.js'
+import type { ExecutionEventBusContract } from '../../types/records.js'
 import type { UnattendedApprovalEscalationHooks } from '../../types/toolkit.js'
 
 import { resolveSubAgentTypeKey } from './dispatch-plan'
@@ -42,10 +42,10 @@ export function combineAbortSignals(
  * 总线不支持挂探针时原样返回，调用方不需要分支。
  */
 export function attachSubAgentWorkerProbes(
-  workerEvents: ExecutionEventBusApi,
+  workerEvents: ExecutionEventBusContract,
   retryState: SubAgentRetryState,
   progressDigest: { record: (event: AgentEvent) => void }
-): ExecutionEventBusApi {
+): ExecutionEventBusContract {
   if (!isFunction(workerEvents.withAgentTap)) return workerEvents
 
   return workerEvents.withAgentTap((event: AgentEvent) => {

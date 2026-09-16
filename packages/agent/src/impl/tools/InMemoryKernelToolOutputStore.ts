@@ -23,8 +23,8 @@
 //    payloadRef。**refKind 必须显式传**——outputId 形如 `session:tool-output:1` 会被前缀推断误判。
 import { toNullable } from '@velaros-ai/core'
 
-import type {KernelToolOutputStore } from '../../contract/requires.js'
-import type {KernelStoredToolOutput, ProjectKernelToolOutputInput, ProjectKernelToolOutputResult } from '../../types/tools.js'
+import type { KernelToolOutputStore } from '../../contract/requires.js'
+import type { KernelStoredToolOutput, ProjectKernelToolOutputInput, ProjectKernelToolOutputResult } from '../../types/tools.js'
 import { buildContextRefEnvelope } from '../../utils/context/context-ref-envelope'
 import { resolveGovernanceSessionKey } from '../../utils/residency/session-key'
 import { fitSourceWindowsWithinProjection, normalizeProjectionChars, projectSerializedPreview, serializeOutput } from '../../utils/tools/tool-output-store'
@@ -51,22 +51,6 @@ export interface InMemoryKernelToolOutputStoreApi extends KernelToolOutputStore 
   /** 列出本实例存过的全部输出，按存入顺序；给测试与诊断查账用，不参与召回链路。 */
   list(): KernelStoredToolOutput[]
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 export class InMemoryKernelToolOutputStore implements InMemoryKernelToolOutputStoreApi {
   private readonly outputs = new Map<string, KernelStoredToolOutput>()
@@ -134,5 +118,4 @@ export class InMemoryKernelToolOutputStore implements InMemoryKernelToolOutputSt
     return [...this.outputs.values()]
   }
 }
-
 

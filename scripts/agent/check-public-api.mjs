@@ -178,12 +178,23 @@ function buildSnapshot(manifest) {
 
 function validatePolicy(manifest, policy, entrySymbols) {
   if (policy.schemaVersion !== 1) throw new Error('Unsupported Agent public API policy schema.')
-  if (policy.rootEntrypoint?.status !== 'compatibility-umbrella') {
-    throw new Error('Agent root entrypoint must remain declared as a compatibility umbrella.')
+  // 根入口有两种身份：`primary` = 它本身就是宿主面（1.0.0 收口后的状态，没有兼容别名，
+  // 也就没有移除窗口）；`compatibility-umbrella` = 它只是旧名字的聚合伞，必须写明最早在哪个
+  // 主版本移除。别名策略只在伞形态下才有意义。
+  const rootStatus = policy.rootEntrypoint?.status
+  if (rootStatus !== 'primary' && rootStatus !== 'compatibility-umbrella') {
+    throw new Error("Agent root entrypoint status must be 'primary' or 'compatibility-umbrella'.")
   }
   const removalMajor = policy.rootEntrypoint.earliestRemovalMajor
-  if (!Number.isSafeInteger(removalMajor) || removalMajor < 1) {
-    throw new Error('Agent root compatibility removal major must be a positive integer.')
+  if (rootStatus === 'compatibility-umbrella') {
+    if (!Number.isSafeInteger(removalMajor) || removalMajor < 1) {
+      throw new Error('Agent root compatibility removal major must be a positive integer.')
+    }
+  } else if (removalMajor !== null && removalMajor !== undefined) {
+    throw new Error('Primary Agent root entrypoint must not declare a removal major.')
+  }
+  if (rootStatus === 'primary' && ((policy.deprecatedAliases ?? []).length > 0 || (policy.supportedAliases ?? []).length > 0)) {
+    throw new Error('Primary Agent root entrypoint cannot carry compatibility aliases.')
   }
   for (const entrypoint of policy.rootEntrypoint.recommendedEntrypoints ?? []) {
     if (!manifest.exports?.[entrypoint]) {

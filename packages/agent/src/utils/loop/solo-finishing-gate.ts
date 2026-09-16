@@ -7,7 +7,7 @@ import type { RunSoloFinishingGateInput, SoloFinishingGateBlockTracker, SoloFini
 import type { CodingSessionSnapshot } from '../../types/session.js'
 import { createInternalFollowUpMessage } from '../history/internal-messages'
 import { AgentTuning } from '../tuning'
-import { ChatRuntimeEvents } from '../wire/chat-runtime.js'
+import { streamTurnEnd } from '../wire/chat-runtime'
 
 import { evaluateKernelFinalReadiness } from './final-readiness'
 import { consumeSoloRuntimeGuidance } from './solo-runtime-guidance'
@@ -142,7 +142,7 @@ async function runSoloFinishingGate<
     for (const reminder of finishingReminders) {
       input.history.push(createInternalFollowUpMessage(reminder))
     }
-    input.events.emitRuntime(ChatRuntimeEvents.turnEnd(input.turn))
+    input.events.emitRuntime(streamTurnEnd(input.turn))
     input.log.debug('turn end with post-edit reminder', { turn: input.turn })
     return resolveBlockedFinishingGateResult(input, 'finishing-reminder')
   }
@@ -153,7 +153,7 @@ async function runSoloFinishingGate<
 
   if (verificationGate.followupMessage) {
     input.history.push(createInternalFollowUpMessage(verificationGate.followupMessage))
-    input.events.emitRuntime(ChatRuntimeEvents.turnEnd(input.turn))
+    input.events.emitRuntime(streamTurnEnd(input.turn))
     input.log.debug('turn blocked by verification gate', { turn: input.turn })
     return resolveBlockedFinishingGateResult(input, 'verification-followup')
   }
@@ -164,7 +164,7 @@ async function runSoloFinishingGate<
   })
   if (!finalReadiness.allowed && finalReadiness.followupMessage) {
     input.history.push(createInternalFollowUpMessage(finalReadiness.followupMessage))
-    input.events.emitRuntime(ChatRuntimeEvents.turnEnd(input.turn))
+    input.events.emitRuntime(streamTurnEnd(input.turn))
     input.log.debug('turn blocked by final readiness gate', {
       turn: input.turn,
       reason: finalReadiness.reason,
@@ -179,11 +179,11 @@ async function runSoloFinishingGate<
   if (backgroundGate && backgroundGate.status !== 'ready') {
     if (backgroundGate.status === 'interrupted' && input.abortSignal.aborted) {
       input.emitAbort()
-      input.events.emitRuntime(ChatRuntimeEvents.turnEnd(input.turn))
+      input.events.emitRuntime(streamTurnEnd(input.turn))
       return { status: 'aborted' }
     }
 
-    input.events.emitRuntime(ChatRuntimeEvents.turnEnd(input.turn))
+    input.events.emitRuntime(streamTurnEnd(input.turn))
     input.log.debug('turn continued by background completion gate', {
       turn: input.turn,
       status: backgroundGate.status,
@@ -194,7 +194,7 @@ async function runSoloFinishingGate<
 
   if (input.abortSignal.aborted) {
     input.emitAbort()
-    input.events.emitRuntime(ChatRuntimeEvents.turnEnd(input.turn))
+    input.events.emitRuntime(streamTurnEnd(input.turn))
     return { status: 'aborted' }
   }
 
@@ -212,7 +212,7 @@ async function runSoloFinishingGate<
       log: input.log,
     })
     if (guidance.consumed) {
-      input.events.emitRuntime(ChatRuntimeEvents.turnEnd(input.turn))
+      input.events.emitRuntime(streamTurnEnd(input.turn))
       input.log.debug('turn continued by user guidance', { turn: input.turn })
       return resolveBlockedFinishingGateResult(input, 'user-guidance')
     }
@@ -220,7 +220,7 @@ async function runSoloFinishingGate<
     if (!goalState.terminal) {
       await input.recordGoalCompletionAttempt?.(goalState)
       input.history.push(createInternalFollowUpMessage(buildGoalStatusRequiredReminder(goalState)))
-      input.events.emitRuntime(ChatRuntimeEvents.turnEnd(input.turn))
+      input.events.emitRuntime(streamTurnEnd(input.turn))
       input.log.debug('turn continued by goal status gate', {
         turn: input.turn,
         status: goalState.status,
@@ -240,15 +240,15 @@ async function runSoloFinishingGate<
     log: input.log,
   })
   if (finalGuidance.consumed) {
-    input.events.emitRuntime(ChatRuntimeEvents.turnEnd(input.turn))
+    input.events.emitRuntime(streamTurnEnd(input.turn))
     return resolveBlockedFinishingGateResult(input, 'user-guidance')
   }
   if (input.abortSignal.aborted) {
     input.emitAbort()
-    input.events.emitRuntime(ChatRuntimeEvents.turnEnd(input.turn))
+    input.events.emitRuntime(streamTurnEnd(input.turn))
     return { status: 'aborted' }
   }
-  input.events.emitRuntime(ChatRuntimeEvents.turnEnd(input.turn))
+  input.events.emitRuntime(streamTurnEnd(input.turn))
   input.log.debug('agent done', { turns: input.turn })
   return { status: 'completed' }
 }

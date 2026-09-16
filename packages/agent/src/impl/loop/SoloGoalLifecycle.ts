@@ -1,6 +1,7 @@
 import type { ActiveContextArtifact, ActiveContextArtifactKind, ActiveContextArtifactStatus, ActiveContextUpsertInput } from '../../types/agent.js'
-import type { SoloGoalFinishingState,SoloGoalLifecycleStatus } from '../../types/loop.js'
+import type { SoloGoalFinishingState } from '../../types/loop.js'
 import { assertGoalCanComplete, buildGoalTerminalUpsertInput, buildGoalUpsertInput, findCurrentGoalArtifact, toGoalSnapshot } from '../../utils/builtin/goals'
+import { readSoloGoalBlockedAuditTurns, readSoloGoalStatus, toSoloGoalFinishingState } from '../../utils/loop/solo-goal-lifecycle'
 
 /** goal 生命周期所需的最小 activeContext 端口（读全量 requirement + upsert 单条目标）。 */
 interface SoloGoalLifecycleActiveContext {
@@ -16,39 +17,6 @@ interface SoloGoalLifecycleActiveContext {
   }): Promise<ActiveContextArtifact[]>
   /** 按 id 写回一条制品（没有就建），返回写入后的最新形态；目标的每次状态流转都走它。 */
   upsertActiveContextArtifact(input: ActiveContextUpsertInput): Promise<ActiveContextArtifact>
-}
-
-function readSoloGoalStatus(artifact: ActiveContextArtifact): SoloGoalLifecycleStatus {
-  return toGoalSnapshot(artifact).status
-}
-
-function readSoloGoalBlockedAuditTurns(artifact: ActiveContextArtifact): number {
-  return toGoalSnapshot(artifact).blockedAuditTurns
-}
-
-function toSoloGoalFinishingState(goal: Nullable<ActiveContextArtifact>): SoloGoalFinishingState {
-  if (!goal)
-    return {
-      exists: false,
-      terminal: false,
-      status: 'missing',
-    }
-
-  const snapshot = toGoalSnapshot(goal)
-  const status = snapshot.status
-  return {
-    exists: true,
-    terminal:
-      status === 'complete' ||
-      status === 'blocked' ||
-      status === 'paused' ||
-      status === 'cancelled' ||
-      status === 'removed',
-    status:
-      status === 'paused' || status === 'cancelled' || status === 'removed' ? 'blocked' : status,
-    objective: goal.content,
-    blockedAuditTurns: readSoloGoalBlockedAuditTurns(goal),
-  }
 }
 
 /**

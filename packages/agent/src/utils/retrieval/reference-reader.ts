@@ -5,7 +5,7 @@ import { isEmpty } from "@velaros-ai/core";
 
 import type { ArtifactManifestSnippet, LogReadSnippet, ReferencedArtifactPath, ReferencedLogPath } from '../../types/retrieval.js'
 
-import { chatSearchRanking } from "./ranking";
+import { buildHeadTailSnippet } from './ranking'
 import { inferArtifactType, isInternalArtifactPath, isInternalCommandLogPath, isTextArtifactPath } from "./references";
 import { chatSearchText } from "./text";
 
@@ -133,7 +133,7 @@ async function readReferencedLog(
     return {
       ...reference,
       content: truncated
-        ? chatSearchRanking.buildHeadTailSnippet(
+        ? buildHeadTailSnippet(
             buffer.toString("utf-8"),
             maxChars,
           )

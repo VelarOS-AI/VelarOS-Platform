@@ -82,3 +82,8 @@ class TeamModelRouter implements TeamModelRouterApi {
 }
 
 export { TeamModelRouter }
+
+/** 建一台团队模型路由器：按角色与思考深度挑模型。 */
+export function createTeamModelRouter(routing: TeamModelRoutingPort): TeamModelRouterApi {
+  return new TeamModelRouter(routing)
+}

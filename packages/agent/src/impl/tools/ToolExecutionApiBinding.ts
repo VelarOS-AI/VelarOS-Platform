@@ -43,12 +43,4 @@ class ToolExecutionApiBinding implements ToolExecutionApiBindingApi {
   }
 }
 
-/** 将公开执行域方法绑定到当前执行，供工具调用。 */
-function createToolExecutionApi(
-  execution: ExecutionRecord,
-  host: ToolExecutionApiHost
-): ToolExecutionApi {
-  return new ToolExecutionApiBinding(host).bind(execution)
-}
-
-export { createToolExecutionApi }
+export { ToolExecutionApiBinding }

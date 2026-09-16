@@ -1,65 +1,17 @@
-// 执行模式轴的纯解析面（无 loop / 无 Node.js 依赖）从这里导出，供渲染层通过
-// `@velaros-ai/agent/chat` 子路径消费，避免渲染代码导入包含运行时能力的包根。
-export { ChatMessageHelper, ChatMessageHelper as ChatMessages } from './impl/chat/ChatMessages'
-export { ChatStreamConsumer } from './impl/chat/ChatStreamConsumer'
-export { ChatStreamProtocol,chatStreamProtocol } from './impl/chat/ChatStreamProtocol'
-export { ChatStreamSessionLog } from './impl/chat/ChatStreamSessionLog'
-export type { ExecutionModeId } from './types/agent'
-export type { ContextUsageEstimate } from './types/agent.js'
-export type { AgentBridgeDispatch, AgentBridgeOutput, ChatStreamLifecyclePhase, ChatStreamLogEntry, ChatStreamTerminationReason, StreamObservabilityEntry, TerminalRuntimeExecutionAction } from './types/chat.js'
-export type { ResolvedChatSendRequestOptions } from './types/chat.js'
-export type { ContextUsageWindow, EstimateContextUsageOptions } from './types/context.js'
-export type { TurnContextBlockInput } from './types/runner.js'
-export type { GoalDockAction, GoalDockPrimaryAction, GoalDockTone, GoalDockViewModel, GoalLifecycleAction, GoalLifecycleStatus } from './types/runner.js'
-export type { SerializationHints } from './types/tools.js'
-export { resolveChatSendRequestOptions } from './utils/chat/resolve-chat-send-request'
-export { resolveStoredChatSessionFields } from './utils/chat/resolve-stored-chat-session'
-export {
-  normalizeSessionLineageId,
-  normalizeSessionLineageIdList,
-} from './utils/chat/session-lineage'
-export {
-  extractSessionSearchTerms,
-  normalizeSessionSearchText,
-} from './utils/chat/session-search-text'
-export {
-  ContextUsageCompactionPercent,
-  ContextUsageHighWatermarkPercent,
-  ContextUsagePayloadCompactionChars,
-  ContextUsageSemanticPreSummaryPercent,
-  countContextMediaParts,
-  estimateContextUsage,
-  estimateContextValueChars,
-  resolveContextUsageWindow,
-} from './utils/context/context-usage'
-export {
-  isExecutionModeActive,
-  normalizeExecutionModes,
-  resolveExecutionModes,
-  stripExecutionModePromptFeatures,
-} from './utils/runner/execution-mode-registry'
-export {
-  buildGoalDockViewModel,
-  findCurrentGoalArtifact,
-  getGoalLifecycleStatus,
-  GoalArtifactId,
-  goalLifecycleToUpsertInput,
-  isGoalArtifact,
-} from './utils/runner/goal-lifecycle-projection'
-export {
-  formatTurnContextOmittedNote,
-  renderTurnContextBlock,
-  stripTurnContextBlocks,
-  TurnContextBlockCloseTag,
-  TurnContextBlockOpenTag,
-  TurnContextMidRunNoteLead,
-} from './utils/runner/turn-context-format'
-export {
-  compactToolInputForModel,
-  compactToolResultForDisplay,
-  deserializeSerializedToolResult,
-  extractSerializationHintsFromToolInput,
-  ModelToolResultMaxSerializedLength,
-  serializeToolResultForModel,
-  serializeToolResultForRecall,
-} from './utils/tools/tool-result-serialization'
+// `./chat` 入口：渲染进程用的聊天流、消息与展示投影。
+// 整条引用链不碰 Node 内置模块（INV-2），渲染代码可以直接加载。
+export * from './contracts.js'
+export type { AgentChatKitApi } from './impl/chat/AgentChatKit'
+export { agentChat } from './impl/chat/AgentChatKit'
+export type { AgentWireApi } from './impl/chat/AgentWire'
+export { agentWire } from './impl/chat/AgentWire'
+export type { ChatMessagesApi } from './impl/chat/ChatMessages'
+export { chatMessages } from './impl/chat/ChatMessages'
+export type { ChatStreamConsumerApi } from './impl/chat/ChatStreamConsumer'
+export { createChatStreamConsumer } from './impl/chat/ChatStreamConsumer'
+export type { ChatStreamProtocolApi } from './impl/chat/ChatStreamProtocol'
+export { chatStreamProtocol } from './impl/chat/ChatStreamProtocol'
+export type { ChatStreamSessionLogApi } from './impl/chat/ChatStreamSessionLog'
+export { createChatStreamSessionLog } from './impl/chat/ChatStreamSessionLog'
+export type { ChatRuntimeEventsApi } from './impl/records/ChatRuntimeEvents'
+export { chatRuntimeEvents } from './impl/records/ChatRuntimeEvents'

@@ -6,10 +6,9 @@ import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
 import type { AgentExecutionConfig, AgentRuntimeCapabilityPorts, AgentSurfaceProfileProvider, RunnerConfigService, RunnerExecutionEnvironmentPort, RunnerSubAgentDispatcher, RunnerToolContextBuilder, RunnerToolRegistry } from '../../contract/requires.js'
 import type { ToolCategoryId } from '../../types/agent.js'
-import type { QueryLoopApi, SoloStreamLoopApi } from '../../types/loop.js'
-import type { AgentExecutionLimits } from '../../types/loop.js'
-import type { ExecutionEventBusApi } from '../../types/records.js'
-import type { AgentRunnerApi as RunnerAgentRunnerContract, AgentRunnerComponents, AgentRunnerConfig, AgentRunnerDomainServices, AgentRunnerInfrastructure, AgentSurfaceProfile, PrimaryAgentProfileApi, RunnerCodingSessionPolicyBundle, RunnerExecutionScope, RunnerSubAgentOptions, RunnerToolContext, StreamSoloWorkerOptions } from '../../types/runner.js'
+import type { AgentExecutionLimits, QueryLoopApi, SoloStreamLoopApi } from '../../types/loop.js'
+import type { ExecutionEventBusContract } from '../../types/records.js'
+import type { AgentRunnerComponents, AgentRunnerConfig, AgentRunnerContract as RunnerAgentRunnerContract, AgentRunnerDomainServices, AgentRunnerInfrastructure, AgentSurfaceProfile, PrimaryAgentProfileContract, RunnerCodingSessionPolicyBundle, RunnerExecutionScope, RunnerSubAgentOptions, RunnerToolContext, StreamSoloWorkerOptions } from '../../types/runner.js'
 import { findCurrentGoalArtifact, toGoalSnapshot } from '../../utils/builtin/goals'
 import { collectCapabilityContext, resolveCapabilityCategoryDefinitions, resolveCapabilityContextCollectors, resolveCapabilityValidationInterpreters } from '../../utils/capabilities'
 import { resolveAgentContextPhase } from '../../utils/loop/context-phase'
@@ -18,8 +17,9 @@ import { buildRunVerificationSummary } from '../../utils/loop/run-completion'
 import { buildApprovalRegistryKey, resolveSubAgentExecutionKey } from '../../utils/runner/coding-tracking'
 import { hasActiveExecutionGoal, resolveExecutionWallClockDeadlineMs } from '../../utils/runner/goal-lifecycle'
 import { dedupeRuntimePromptFeatures } from '../../utils/runner/prompt-state'
-import { ChatRuntimeEvents } from '../../utils/wire/chat-runtime.js'
-import { forkFileContext } from '../context/FileContextCoordinator'
+import { fileContextRegistry } from '../context/FileContextRegistry'
+import { chatRuntimeEvents } from '../records/ChatRuntimeEvents'
+import type { CodingSessionTrackerApi } from '../session/CodingSessionTracker'
 import { CodingSessionTracker } from '../session/CodingSessionTracker'
 import { TaskApprovalState } from '../session/TaskApprovalState'
 
@@ -49,9 +49,9 @@ class AgentRunner<TToolContext extends RunnerToolContext = RunnerToolContext>
   >()
   private readonly log = Log.tag('AgentRunner')
   private readonly contextHelper: RunnerToolContextBuilder<TToolContext>
-  private readonly primaryAgentStreamLoop: SoloStreamLoopApi<TToolContext, ExecutionEventBusApi>
-  private readonly queryLoop: QueryLoopApi<TToolContext, ExecutionEventBusApi>
-  private readonly primaryAgentProfile: PrimaryAgentProfileApi
+  private readonly primaryAgentStreamLoop: SoloStreamLoopApi<TToolContext, ExecutionEventBusContract>
+  private readonly queryLoop: QueryLoopApi<TToolContext, ExecutionEventBusContract>
+  private readonly primaryAgentProfile: PrimaryAgentProfileContract
   private readonly subAgentDispatcher: RunnerSubAgentDispatcher<TToolContext>
   private readonly workflowCoordinator: AgentWorkflowCoordinator<TToolContext>
   private readonly capabilityPorts?: AgentRuntimeCapabilityPorts
@@ -86,7 +86,7 @@ class AgentRunner<TToolContext extends RunnerToolContext = RunnerToolContext>
   public async streamSoloWorker(
     messages: ModelMessage[],
     config: AgentRunnerConfig,
-    events: ExecutionEventBusApi,
+    events: ExecutionEventBusContract,
     options: StreamSoloWorkerOptions = {}
   ): Promise<void> {
     const systemConfig = this.configService.systemConfig
@@ -112,7 +112,7 @@ class AgentRunner<TToolContext extends RunnerToolContext = RunnerToolContext>
     systemConfig: RunnerConfigService['systemConfig'],
     abortController: AbortController,
     sessionId: string,
-    events: ExecutionEventBusApi,
+    events: ExecutionEventBusContract,
     options: StreamSoloWorkerOptions,
     executionScope: RunnerExecutionScope
   ): Promise<void> {
@@ -245,7 +245,7 @@ class AgentRunner<TToolContext extends RunnerToolContext = RunnerToolContext>
         cancelBackgroundJob: loopConfig.cancelBackgroundJob,
       })
       codingSession.attachToolContext(toolContext)
-      events.emitState(ChatRuntimeEvents.phase('collecting-context'))
+      events.emitState(chatRuntimeEvents.phase('collecting-context'))
       const initialContextPhase = resolveAgentContextPhase({
         turn: 1,
         history: messages,
@@ -333,7 +333,7 @@ class AgentRunner<TToolContext extends RunnerToolContext = RunnerToolContext>
         const goal = findCurrentGoalArtifact(await toolContext.activeContext.listActiveContextArtifacts({
           status: 'all', kinds: ['requirement'],
         }))
-        events.emitRuntime(ChatRuntimeEvents.done(undefined, {
+        events.emitRuntime(chatRuntimeEvents.done(undefined, {
           verification: buildRunVerificationSummary(codingSession.getSnapshot()),
           goalStatus: goal ? toGoalSnapshot(goal).status : undefined,
         }))
@@ -355,7 +355,7 @@ class AgentRunner<TToolContext extends RunnerToolContext = RunnerToolContext>
 
   private persistSessionLeases(
     approvalRegistryKey: string,
-    codingSession: CodingSessionTracker
+    codingSession: CodingSessionTrackerApi
   ): void {
     const toolNames = codingSession.getBudgetOverrideToolNames()
     const categories = codingSession.getBudgetOverrideToolCategories()
@@ -404,7 +404,7 @@ class AgentRunner<TToolContext extends RunnerToolContext = RunnerToolContext>
       ...parentCtx,
       codingSession: parentCtx.codingSession.forkForSubAgent?.() ?? parentCtx.codingSession,
     }
-    forkFileContext(parentCtx, subAgentParentCtx)
+    fileContextRegistry.fork(parentCtx, subAgentParentCtx)
     try {
       return await this.queryLoop.execute({
         task,

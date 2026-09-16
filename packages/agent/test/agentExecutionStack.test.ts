@@ -14,11 +14,12 @@ import { TeamModelRouter } from '../src/impl/delegation/TeamModelRouter'
 import { WriteLeaseCoordinator } from '../src/impl/delegation/WriteLeaseCoordinator'
 import { createBuiltInPromptRegistry } from '../src/impl/guidance/PromptRegistry'
 import { QueryTurn } from '../src/impl/loop/QueryTurn'
-import { isContextOverflowError, isContextOverflowReplayUnsafe } from '../src/impl/loop/RetryPolicy'
+import { agentRetryPolicy, isContextOverflowReplayUnsafe } from '../src/impl/loop/RetryPolicy'
+import { agentRetryPolicy } from '../src/impl/loop/RetryPolicy'
 import { AgentModSeamDispatcher } from '../src/impl/mods/AgentModSeamDispatcher'
 import { ExecutionEventBus } from '../src/impl/records/ExecutionEventBus'
 import { SubAgentGuidanceRelayRegistry } from '../src/impl/records/SubAgentGuidanceRelayRegistry'
-import { AgentTurnHistoryHelper } from '../src/impl/records/TurnHistory'
+import { agentTurnHistory } from '../src/impl/records/TurnHistory'
 import { ContextGovernanceSessionRegistry } from '../src/impl/residency/ContextGovernanceSessionRegistry'
 import { ContextBuilder } from '../src/impl/runner/ContextBuilder'
 import { PrimaryAgentProfile } from '../src/impl/runner/PrimaryAgentProfile'
@@ -543,7 +544,7 @@ test('Query idle timeout aborts the actual provider request and leaves its paren
     }
   }
   const controller = new AbortController()
-  const query = new QueryTurn(toolRegistry, new AgentTurnHistoryHelper(), new ContextGovernanceSessionRegistry())
+  const query = new QueryTurn(toolRegistry, agentTurnHistory, new ContextGovernanceSessionRegistry())
   try {
     await expect(query.executeQueryTurn({
       provider: fixture.provider, model: 'probe', systemPrompt: 'probe',
@@ -576,7 +577,7 @@ test('Query overflow after visible output never replays that output through the 
       }),
     }
   }
-  const query = new QueryTurn(toolRegistry, new AgentTurnHistoryHelper(), new ContextGovernanceSessionRegistry())
+  const query = new QueryTurn(toolRegistry, agentTurnHistory, new ContextGovernanceSessionRegistry())
   const context = createContext('query-overflow')
   const textDeltas: string[] = []
   let recoveryActions = 0
@@ -584,7 +585,10 @@ test('Query overflow after visible output never replays that output through the 
   try {
     await executeLoopTurnWithContextOverflowRecovery({
       turn: 1, abortSignal: context.abortSignal,
-      overflowRules: { isContextOverflowError, isContextOverflowReplayUnsafe },
+      overflowRules: {
+        isContextOverflowError: (error) => agentRetryPolicy.isContextOverflowError(error),
+        isContextOverflowReplayUnsafe,
+      },
       executeTurn: () => query.executeQueryTurn({
         provider: fixture.provider, model: 'probe', systemPrompt: 'probe',
         history: [{ role: 'user', content: 'work' }], toolContext: context,
@@ -662,7 +666,7 @@ for (const scenario of ['recovers', 'exhausts', 'preserves-write'] as const) {
       ...createContext(sessionId),
       getCurrentVisibleToolTransportNames: () => ({ read_file: 'read_file', write_file: 'write_file', 'context:recall': 'context__recall' }),
     }
-    const query = new QueryTurn(registry, new AgentTurnHistoryHelper(), governance)
+    const query = new QueryTurn(registry, agentTurnHistory, governance)
     let actions = 0
     const executeTurn = () => query.executeQueryTurn({
         provider: fixture.provider, model: 'probe', systemPrompt: 'probe', history,
@@ -686,7 +690,10 @@ for (const scenario of ['recovers', 'exhausts', 'preserves-write'] as const) {
     const run = executeLoopTurnWithContextOverflowRecovery({
       turn: 1,
       abortSignal: context.abortSignal,
-      overflowRules: { isContextOverflowError, isContextOverflowReplayUnsafe },
+      overflowRules: {
+        isContextOverflowError: (error) => agentRetryPolicy.isContextOverflowError(error),
+        isContextOverflowReplayUnsafe,
+      },
       executeTurn,
       resolveAction: (attempt) => resolveContextDegradeAction('query', attempt),
       applyAction: async () => {
@@ -905,7 +912,7 @@ test('a Query retry owns a fresh signal after cancelling the stalled attempt', a
     }
   }
   const parent = new AbortController()
-  const query = new QueryTurn(toolRegistry, new AgentTurnHistoryHelper(), new ContextGovernanceSessionRegistry())
+  const query = new QueryTurn(toolRegistry, agentTurnHistory, new ContextGovernanceSessionRegistry())
   try {
     const result = await query.executeQueryTurn({
       provider: fixture.provider, model: 'probe', systemPrompt: 'probe',

@@ -3,9 +3,9 @@ import assert from 'node:assert/strict'
 import { describe, test } from 'bun:test'
 
 import { ManagedExecutionRunner } from '../src/impl/execution/ManagedExecutionRunner'
-import { ExecutionEventBus } from '../src/impl/records/ExecutionEventBus'
+import { chatRuntimeEvents } from '../src/impl/records/ChatRuntimeEvents'
+import {  createNoopExecutionEventBus } from '../src/impl/records/ExecutionEventBus'
 import type { ExecutionRecord } from '../src/types/agent.js'
-import { ChatRuntimeEvents } from '../src/utils/wire/chat-runtime.js'
 
 function executionRecord(): ExecutionRecord {
   return {
@@ -95,9 +95,9 @@ void describe('ManagedExecutionRunner terminal ownership', () => {
       runner.run({
         sourceSessionId: execution.sourceSessionId,
         messages: [],
-        events: ExecutionEventBus.noop(),
+        events: createNoopExecutionEventBus(),
         run: async ({ events }) => {
-          events.emitRuntime(ChatRuntimeEvents.aborted('auth expired'))
+          events.emitRuntime(chatRuntimeEvents.aborted('auth expired'))
           throw new Error('provider stream stopped after abort')
         },
       }),

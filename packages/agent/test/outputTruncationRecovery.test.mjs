@@ -8,7 +8,11 @@ import assert from 'node:assert/strict'
 
 import { test } from 'bun:test'
 
-const packagePath = new URL('../dist/index.js', import.meta.url)
+const truncationPath = new URL('../dist/utils/stream/output-truncation-recovery.js', import.meta.url)
+const consumerPath = new URL('../dist/impl/loop/StreamConsumer.js', import.meta.url)
+const toolInputPath = new URL('../dist/utils/stream/tool-input.js', import.meta.url)
+const soloOptionsPath = new URL('../dist/utils/loop/solo-model-request-options.js', import.meta.url)
+const policyPath = new URL('../dist/impl/tools/ToolExecutionPolicy.js', import.meta.url)
 
 function finishDiagnostic(normalizedFinishReason) {
   return {
@@ -24,7 +28,7 @@ function finishDiagnostic(normalizedFinishReason) {
 }
 
 test('length and repetition truncation are recoverable', async () => {
-  const { isRecoverableOutputTruncationDiagnostic } = await import(packagePath.href)
+  const { isRecoverableOutputTruncationDiagnostic } = await import(truncationPath.href)
 
   assert.equal(isRecoverableOutputTruncationDiagnostic(finishDiagnostic('length')), true)
   assert.equal(
@@ -39,7 +43,7 @@ test('truncation recovery uses a dedicated error and continuation prompt', async
     buildOutputTruncationContinuationPrompt,
     createOutputTruncationError,
     isOutputTruncationError,
-  } = await import(packagePath.href)
+  } = await import(truncationPath.href)
   const error = createOutputTruncationError(finishDiagnostic('length'), {
     model: 'test-model',
     turn: 3,
@@ -54,7 +58,7 @@ test('truncation recovery uses a dedicated error and continuation prompt', async
 })
 
 test('stream consumer preserves partial text when provider finishes by length', async () => {
-  const { StreamConsumer } = await import(packagePath.href)
+  const { StreamConsumer } = await import(consumerPath.href)
   const consumer = new StreamConsumer({})
   const textDeltas = []
   let interruptedPartial = null
@@ -104,7 +108,7 @@ test('stream consumer preserves partial text when provider finishes by length', 
 })
 
 test('final tool input reparses complete JSON strings but rejects truncated strings', async () => {
-  const { resolveProviderFinalToolInput } = await import(packagePath.href)
+  const { resolveProviderFinalToolInput } = await import(toolInputPath.href)
 
   assert.deepEqual(resolveProviderFinalToolInput('{"type":"html","content":"ok"}'), {
     ok: true,
@@ -120,7 +124,7 @@ test('final tool input reparses complete JSON strings but rejects truncated stri
 })
 
 test('invalid final tool input may recover only from a completed valid stream draft', async () => {
-  const { resolveProviderExecutableToolInput } = await import(packagePath.href)
+  const { resolveProviderExecutableToolInput } = await import(toolInputPath.href)
   const completedDraft = {
     id: 'tool-1',
     toolName: 'project:edit',
@@ -163,7 +167,7 @@ test('invalid final tool input may recover only from a completed valid stream dr
 })
 
 test('invalid tool input diagnostics expose structure without exposing content', async () => {
-  const { diagnoseRejectedProviderToolInput } = await import(packagePath.href)
+  const { diagnoseRejectedProviderToolInput } = await import(toolInputPath.href)
   const finalInput = '{"path":"private-report.md","content":"line one\nline two'
   const diagnostic = diagnoseRejectedProviderToolInput(finalInput, {
     id: 'tool-1',
@@ -183,7 +187,7 @@ test('invalid tool input diagnostics expose structure without exposing content',
 })
 
 test('capability aliases are absent by default and resolve only when injected', async () => {
-  const { ToolExecutionPolicy } = await import(packagePath.href)
+  const { ToolExecutionPolicy } = await import(policyPath.href)
   const policy = new ToolExecutionPolicy({
     get: (toolName) => (toolName === 'artifact:produce' ? {} : null),
   })
@@ -199,7 +203,7 @@ test('capability aliases are absent by default and resolve only when injected', 
 })
 
 test('stream consumer never executes a truncated final tool call', async () => {
-  const { StreamConsumer } = await import(packagePath.href)
+  const { StreamConsumer } = await import(consumerPath.href)
   const consumer = new StreamConsumer({ get: () => null })
   const enqueued = []
   let interruptedPartial = null
@@ -258,7 +262,7 @@ test('HTML Live Preview raises only its own turn output budget floor', async () 
   const {
     HtmlArtifactMinimumOutputTokens,
     resolveSoloTurnModelRequestOptions,
-  } = await import(packagePath.href)
+  } = await import(soloOptionsPath.href)
   const compact = {
     requestPolicy: { temperature: 0.15, maxOutputTokens: 8192 },
   }

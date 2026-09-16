@@ -4,7 +4,7 @@ import { toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 import { writeJsonFileAtomically } from '@velaros-ai/core/utils/FilePersistence'
-import { type TimerLease, TimerScope } from '@velaros-ai/core/utils/TimerScope'
+import { type TimerLease,TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
 import type { ExecutionEventRecord, ExecutionRecord, ExecutionTaskRecord, StreamStatePayload } from '../../types/agent.js'
 import type { AppendExecutionEventInput, ExecutionDebugListener, ExecutionStateListener, ExecutionStoreOptions, PersistedExecutionStoreFile } from '../../types/records.js'
@@ -13,8 +13,6 @@ import { compareStableStrings } from '../../utils/residency/determinism'
 import { AgentTuning } from '../../utils/tuning'
 
 import { ExecDebugPayload } from './ExecDebugPayload'
-
-
 
 /**
  * 执行记录的存放处：内存里一张 `executionId → ExecutionRecord` 的表，外加可选的磁盘持久化。

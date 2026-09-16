@@ -2,7 +2,7 @@
  * 小型最近使用 Map：命中和写入都会把 key 移到队尾，超过容量时淘汰最旧 key。
  * 仅用于进程内诊断/重复提醒状态，不承担持久化语义。
  */
-import {isString } from '@velaros-ai/core'
+import { isString } from '@velaros-ai/core'
 
 /**
  * 有界的最近使用表：读和写都把 key 顶到队尾，装满之后从队头（最久没碰过的）开始淘汰。
@@ -65,6 +65,5 @@ class ContextRetrievalBoundedRecentMap<Value> implements ContextRetrievalBounded
     }
   }
 }
-
 
 export { ContextRetrievalBoundedRecentMap }

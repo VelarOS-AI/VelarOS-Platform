@@ -10,8 +10,8 @@
 import { AppError } from '@velaros-ai/core/error'
 
 import type { ExecutionSpan, ExecutionSpanMetrics } from '../../types/agent.js'
-import type { ExecutionSpanOutcome,ExecutionSpanStart } from '../../types/ledgers.js'
-import { emptyExecutionSpanMetrics, ExecutionSpanSchema } from '../../utils/wire/observability'
+import type { ExecutionSpanOutcome, ExecutionSpanStart } from '../../types/ledgers.js'
+import { emptyExecutionSpanMetrics,ExecutionSpanSchema } from '../../utils/wire/observability'
 
 /**
  * 一条**进行中**的 span handle：由 `ExecutionSpanRecorder.open` 造出，身份与起始时刻在那一刻就定死。
@@ -70,5 +70,4 @@ export class OpenExecutionSpan implements OpenExecutionSpanApi {
     return span
   }
 }
-
 

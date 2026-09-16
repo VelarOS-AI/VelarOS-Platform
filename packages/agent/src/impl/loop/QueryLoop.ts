@@ -2,48 +2,27 @@ import { randomUUID } from 'node:crypto'
 
 import type { ModelMessage } from 'ai'
 
-import {
-  isBlank,
-  isEmpty,
-  isNull,
-  isPresent,
-  toNullable,
-  toOptional,
-} from '@velaros-ai/core'
+import { isEmpty, isNull, isPresent, toNullable, toOptional } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 
-import type { AgentChatRuntimeConfig, AgentModelRequestOptions, AgentSystemRuntimeConfig,ExecutionSpanScopeFactory } from '../../contract/requires.js'
+import type { AgentChatRuntimeConfig, AgentModelRequestOptions, AgentSystemRuntimeConfig, ExecutionSpanScopeFactory } from '../../contract/requires.js'
 import type { AgentModelInputModality } from '../../types/agent.js'
 import type { AgentExecutionLimitOverrides, AgentExecutionLimits, AgentLoopSurface, ExecuteQueryLoopArgs, ExecuteQueryTurnArgs, LoopTurnVerdict, QueryLoopApi as QueryLoopContract, QueryLoopRoleEngine, QueryLoopToolCategoryResolver, QueryLoopToolContext, QueryLoopToolRegistry, QueryTurnEvents, QueryTurnProvider } from '../../types/loop.js'
-import type { AgentModSeamDispatcherApi } from '../../types/mods.js'
-import type { ContextGovernanceSessionRegistryApi } from '../../types/residency.js'
+import type { AgentModSeamDispatcherContract } from '../../types/mods.js'
+import type { ContextGovernanceSessionRegistryContract } from '../../types/residency.js'
 import type { AgentRoleResolution } from '../../types/runner.js'
 import { resolveCapabilityDelegationPolicy } from '../../utils/capabilities'
 import { resolveContextWindowBudget } from '../../utils/context/context-budget'
-import {
-  buildStructuredOutputRepairPrompt,
-  compileSubAgentOutputSchema,
-  parseSubAgentStructuredOutput,
-} from '../../utils/delegation/structured-output'
+import { buildStructuredOutputRepairPrompt, compileSubAgentOutputSchema, parseSubAgentStructuredOutput } from '../../utils/delegation/structured-output'
 import { createInternalFollowUpMessage } from '../../utils/history/internal-messages'
-import {
-  beginLoopTurnSpans,
-  endLoopTurnSpansError,
-  endLoopTurnSpansOk,
-  executeLoopTurnWithContextOverflowRecovery,
-  restartLoopTurnModelSpanAfterRetry,
-  runAgentLoop,
-} from '../../utils/loop/agent-loop'
+import { beginLoopTurnSpans, endLoopTurnSpansError, endLoopTurnSpansOk, executeLoopTurnWithContextOverflowRecovery, restartLoopTurnModelSpanAfterRetry, runAgentLoop } from '../../utils/loop/agent-loop'
 import { resolveContextDegradeAction } from '../../utils/loop/context-degrade-ladder'
 import { resolveAgentExecutionLimits } from '../../utils/loop/execution-limits'
 import { buildSubAgentInstruction, createSubAgentContext, resolveSubAgentDelegation, resolveSubAgentToolScope } from '../../utils/loop/loop-runtime'
 import { prepareQueryLoopToolSchemaChars } from '../../utils/loop/loop-turn-assembly'
-import {
-  buildSubAgentReasoningOnlyVisibleAnswerRecoveryPrompt,
-  buildSubAgentWindDownReminder,
-  shouldRecoverReasoningOnlyEmptyResponse,
-} from '../../utils/loop/loop-turn-recovery'
+import { buildSubAgentReasoningOnlyVisibleAnswerRecoveryPrompt, buildSubAgentWindDownReminder, shouldRecoverReasoningOnlyEmptyResponse } from '../../utils/loop/loop-turn-recovery'
+import { consumeQueryLoopRelayedGuidance } from '../../utils/loop/query-loop'
 import { captureAgentTurnCapabilityContext, captureAgentTurnCapabilitySnapshot } from '../../utils/loop/turn-capability-snapshot'
 import { resolveGovernanceSessionKey } from '../../utils/residency/session-key'
 import { applyRunProfileToolExposure } from '../../utils/runner/run-profile'
@@ -51,14 +30,14 @@ import { resolveRunProfilePolicyForRuntime } from '../../utils/runner/runtime-pr
 import { tickLoopReminders } from '../../utils/session/auto-verification'
 import { DefaultModelInputModalities } from '../../utils/tools/model-input-policy'
 import { AgentTuning } from '../../utils/tuning'
-import { ChatRuntimeEvents } from '../../utils/wire/chat-runtime.js'
 import { AgentLoopContextUsageManager } from '../context/AgentLoopContextUsageManager'
-import { forkFileContext } from '../context/FileContextCoordinator'
+import { fileContextRegistry } from '../context/FileContextRegistry'
+import { chatRuntimeEvents } from '../records/ChatRuntimeEvents'
 import { KernelToolLoopGuard } from '../tools/KernelToolLoopGuard'
 
-import { loopContinue, loopFinish, LoopWindDownGuard } from './LoopWindDownGuard'
+import { loopContinue, loopFinish,LoopWindDownGuard } from './LoopWindDownGuard'
 import type { QueryTurnResult } from './QueryTurn'
-import { isContextOverflowError, isContextOverflowReplayUnsafe } from './RetryPolicy'
+import { agentRetryPolicy, isContextOverflowReplayUnsafe } from './RetryPolicy'
 
 /** 子 Agent 的提示词装配面：本 loop 只管什么时候要提示词，怎么拼由宿主注入的这一件决定。 */
 interface QueryLoopRunContext<TContext extends QueryLoopToolContext, TSignals> {
@@ -197,7 +176,7 @@ class QueryLoop<
      * 治理会话登记处（宿主级单实例，与主面同一份）。
      * 本 loop 只在缺页降级时用它强开一次 epoch；常规治理在编译期由 `ProviderRequestCompiler` 完成。
      */
-    private readonly governanceSessions: ContextGovernanceSessionRegistryApi,
+    private readonly governanceSessions: ContextGovernanceSessionRegistryContract,
     /** 构建子 Agent system prompt。 */
     private readonly runContextHelper: QueryLoopRunContext<TContext, TSignals>,
     /** 解析目标角色能力。 */
@@ -219,7 +198,7 @@ class QueryLoop<
      * 可选 mod 拦截 seam 派发器（裁决 9 机制②）；与主面共用同一实例，逐轮透传给 QueryTurn 的
      * ToolExecutor。缺省 null → 全链 no-op，行为逐字节不变。
      */
-    private readonly seams: LooseOptional<AgentModSeamDispatcherApi> = null
+    private readonly seams: LooseOptional<AgentModSeamDispatcherContract> = null
   ) {
     this.executionLimits = resolveAgentExecutionLimits(executionLimitOverrides)
     this.contextUsage = new AgentLoopContextUsageManager(toolRegistry)
@@ -313,7 +292,7 @@ class QueryLoop<
       allowedCategories,
       getAllowedSubAgentTools: (tools) => this.turnHelper.getAllowedSubAgentTools(tools),
       getToolNamesForCategories: this.getToolNamesForCategories,
-      forkFileContext,
+      forkFileContext: (parent, child) => fileContextRegistry.fork(parent, child),
       requestToolCategories: args.opts.requestToolCategories,
       blockedToolNames: delegationPolicy.blockedToolNames,
       blockedCategoryIds: delegationPolicy.blockedCategoryIds,
@@ -506,7 +485,10 @@ class QueryLoop<
           result = await executeLoopTurnWithContextOverflowRecovery({
             turn,
             abortSignal,
-            overflowRules: { isContextOverflowError, isContextOverflowReplayUnsafe },
+            overflowRules: {
+              isContextOverflowError: (error) => agentRetryPolicy.isContextOverflowError(error),
+              isContextOverflowReplayUnsafe,
+            },
             executeTurn: () =>
               this.turnHelper.executeQueryTurn({
                 provider: roleRuntime.provider,
@@ -582,7 +564,7 @@ class QueryLoop<
               )
             )
             args.opts.events?.emitRuntime(
-              ChatRuntimeEvents.retryingTurn(
+              chatRuntimeEvents.retryingTurn(
                 turn,
                 reasoningOnlyVisibleAnswerRecoveries,
                 AgentTuning.loop.reasoningOnlyAnswerRecoveryAttempts,
@@ -794,29 +776,6 @@ class QueryLoop<
     }
   }
 
-}
-
-async function consumeQueryLoopRelayedGuidance(input: {
-  turn: number
-  history: ModelMessage[]
-  consumeRelayedGuidance?: () => Nullable<string> | Promise<Nullable<string>>
-  log: Pick<ReturnType<typeof logRuntime.tag>, 'info'>
-}): Promise<void> {
-  const relay = (await input.consumeRelayedGuidance?.())?.trim()
-  if (!relay || isBlank(relay)) return
-
-  input.history.push(
-    createInternalFollowUpMessage(
-      [
-        '[主控 relay 引导]',
-        '上级主 Agent 已理解用户追加引导，并将以下要点转交给你继续执行。',
-        '请按主控表述行动；不要假设你能看到用户原文。',
-        '',
-        relay,
-      ].join('\n')
-    )
-  )
-  input.log.info('sub-agent relayed guidance consumed', { turn: input.turn })
 }
 
 export { QueryLoop }

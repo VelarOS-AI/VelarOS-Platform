@@ -1,11 +1,12 @@
 import { z } from 'zod'
 
-import { isArray, isEmpty, isPresent } from '@velaros-ai/core'
+import { isArray, isEmpty, isPresent, toNullable } from '@velaros-ai/core'
 
-import { AgentToolLimits } from '../../contract/constants.js'
+import { AgentToolLimits, AgentToolNames } from '../../contract/constants.js'
 import type { InteractionPort } from '../../contract/requires.js'
 import type { ActiveContextArtifact, ExecutionTaskPlanStep } from '../../types/agent.js'
 import type { PlanLifecycle, PlanStepCompletionResult, PlanStepRef, StepEngineOptions,UpdatePlanInput, UserPlanStatus, UserPlanStep } from '../../types/builtin.js'
+import type { KernelToolContext } from '../../types/tool-context.js'
 
 import { completeSteps, describeStepRefsForModel } from './step-refs'
 
@@ -213,4 +214,67 @@ export function resolveNextPlanLifecycle(
   return isInitialPlan || (state.previousLifecycle === 'active' && inferredLifecycle === 'completed')
     ? inferredLifecycle
     : state.previousLifecycle
+}
+
+/** 计划产物没有显式说明时的标题。 */
+const DefaultPlanTitle = '当前执行计划'
+
+/** 写界面上的计划与落盘条目，并定出这次之后的生命周期。 */
+export async function commitPlanUpdate(
+  input: UpdatePlanInput,
+  ctx: KernelToolContext,
+  state: {
+    effectivePlan: ReturnType<typeof toUserPlanSteps>
+    previousPlan: ReturnType<KernelToolContext['interaction']['getCurrentPlan']>
+    previousLifecycle: ReturnType<typeof readPlanLifecycle>
+    hasStoredPlanArtifact: boolean
+    stepCompletion: Nullable<ReturnType<typeof completePlanSteps>>
+  }
+): Promise<unknown> {
+  const interaction = ctx.interaction
+  // 执行模式表示用户选择的工作方式。维护内部计划只更新任务进度，
+  // 若同时启用旧计划开关，下一轮会错误报告用户要求计划模式，
+  // 导致已经授权的工作被再次要求确认。
+  const updateWithPlan = {
+    explanation: input.explanation,
+    lifecycle: input.lifecycle,
+    plan: state.effectivePlan,
+  }
+  const plan = interaction.updateCurrentPlan(updateWithPlan)
+  const lifecycle = resolveNextPlanLifecycle(input, updateWithPlan, state)
+  await ctx.activeContext.upsertActiveContextArtifact({
+    id: PlanArtifactId,
+    kind: 'plan',
+    scope: 'session',
+    status:
+      lifecycle === 'archived'
+        ? 'archived'
+        : lifecycle === 'completed'
+          ? 'completed'
+          : 'active',
+    resourceId: null,
+    title: input.explanation?.trim() || DefaultPlanTitle,
+    content: formatActivePlanContent(toNullable(input.explanation), plan),
+    metadata: {
+      source: AgentToolNames.planUpdate,
+      planLifecycle: lifecycle,
+      executionId: interaction.executionId,
+      planStepCount: plan.length,
+    },
+  })
+
+  return {
+    updated: true,
+    isInitialPlan: isEmpty(state.previousPlan) && !state.hasStoredPlanArtifact,
+    activeContextStatus: lifecycle,
+    explanation: toNullable(input.explanation),
+    plan,
+    // 显式回带每步的可引用 ref(1-based 序号)+标题+状态:下次 complete_step 直接照 ref 传,
+    // 不必自己数数组位置、更不要自造 id(步骤没有 id)。
+    steps: describePlanStepRefsForModel(plan),
+    completedStep: toNullable(state.stepCompletion?.completedStep),
+    completedSteps: state.stepCompletion?.completedSteps ?? [],
+    promotedStep: toNullable(state.stepCompletion?.promotedStep),
+    allStepsResolved: toNullable(state.stepCompletion?.allStepsResolved),
+  }
 }

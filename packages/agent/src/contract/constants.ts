@@ -23,22 +23,16 @@ export const AgentToolNames = Object.freeze({
   contextRecall: 'context:recall',
   /** 把当前会话的上下文转交给一条新会话继续。 */
   contextHandoff: 'context:handoff',
-  /** 声明本轮已经消化完的内容，让旧结果折叠成可召回的句柄。 */
-  contextDistill: 'context:distill',
   /** 列出当前生效的长期指令。 */
   directiveList: 'directive:list',
   /** 新增或改写一条长期指令。 */
   directiveUpsert: 'directive:upsert',
   /** 归档一条长期指令，让它不再进入提示词。 */
   directiveArchive: 'directive:archive',
-  /** 读当前目标。 */
-  goalGet: 'goal:get',
   /** 建立当前目标。 */
   goalCreate: 'goal:create',
   /** 更新当前目标的状态或内容。 */
   goalUpdate: 'goal:update',
-  /** 读当前计划。 */
-  planGet: 'plan:get',
   /** 更新当前计划的步骤与生命周期。 */
   planUpdate: 'plan:update',
   /** 派发一个有界子任务给子 Agent。 */
@@ -49,8 +43,6 @@ export const AgentToolNames = Object.freeze({
   jobReadOutput: 'job:read_output',
   /** 等一批后台任务收尾。 */
   jobWait: 'job:wait',
-  /** 取消一个后台任务。 */
-  jobCancel: 'job:cancel',
   /** 向用户要一次确认。 */
   interactionConfirm: 'interaction:confirm',
   /** 租约自恢复：拉取当前完整工具目录（不在二十个内置工具里，由租约协议直接消费）。 */
@@ -74,17 +66,13 @@ export const AgentToolCategoryByName = Object.freeze({
   [AgentToolNames.agentRunWorkflow]: 'agent-control',
   [AgentToolNames.jobReadOutput]: 'agent-control',
   [AgentToolNames.jobWait]: 'agent-control',
-  [AgentToolNames.jobCancel]: 'agent-control',
   [AgentToolNames.contextRecall]: 'context',
   [AgentToolNames.contextHandoff]: 'context',
-  [AgentToolNames.contextDistill]: 'context',
   [AgentToolNames.directiveList]: 'context',
   [AgentToolNames.directiveUpsert]: 'context',
   [AgentToolNames.directiveArchive]: 'context',
-  [AgentToolNames.goalGet]: 'planning',
   [AgentToolNames.goalCreate]: 'planning',
   [AgentToolNames.goalUpdate]: 'planning',
-  [AgentToolNames.planGet]: 'planning',
   [AgentToolNames.planUpdate]: 'planning',
   [AgentToolNames.interactionConfirm]: 'interaction',
 } as const)
@@ -109,6 +97,12 @@ export const AgentIdentity = Object.freeze({
   remoteHostToolCategory: 'remote-host',
   /** 远程节点 MCP 服务对外报出的服务名。 */
   remoteNodeMcpServerName: 'velaros-remote-host',
+  /** Agent 执行事件在内核事件总线上的事件类型名。 */
+  capabilityExecutionEventType: 'velaros.agent.execution',
+  /** 产品会话归档信封的格式串；读到别的格式一律拒绝解析。 */
+  sessionArchiveFormat: 'velaros.agent-session',
+  /** 一条会话默认的活动分支 id；没有显式分支时时间线按它索引。 */
+  defaultActiveBranchId: 'main',
 } as const)
 
 /**
@@ -475,6 +469,55 @@ export const AgentContextThresholds = Object.freeze({
   highWatermarkPercent: 90,
   /** 自动治理线：完整请求超过可用输入容量的这个百分比才开始治理。 */
   compactionPercent: 100,
+  /**
+   * 「这条不该按目标去重」的否决标记：分类器给出它表示认识这个工具但拒绝按目标归并，
+   * 到此为止不再回落结构信号。它是一个哨兵串，不是任何真实的去重目标。
+   */
+  dedupeVetoTarget: '@@velaros/no-dedupe@@',
+} as const)
+
+/**
+ * 提示词段的优先级刻度。
+ *
+ * 同一层里按这个数字从小到大排；数字是对外约定——宿主与 mod 贡献的段要插在哪两段之间，
+ * 靠的就是这张表，改动会改变模型看到的系统提示顺序。
+ */
+export const PromptSegmentPriority = Object.freeze({
+  /** 身份段：永远第一段。 */
+  identity: 0,
+  /** 品牌语气。 */
+  brandVoice: 10,
+  /** 通用安全边界。 */
+  safetyBoundary: 20,
+  /** 运行期事实（应用、平台、时间）。 */
+  runtime: 1_000,
+  /** 能力协议段：空间包贡献的工具使用约定。 */
+  capabilityProtocol: 1_200,
+  /** 运行期建议。 */
+  runtimeAdvice: 1_500,
+  /** 本轮命中的技能正文。 */
+  skill: 9_000,
+  /** 用户自己写的系统提示，永远最后一段。 */
+  user: 10_000,
+} as const)
+
+/**
+ * 外部 Agent 桥的协议身份与两侧消息类型闭集。
+ *
+ * 桥的另一端是别人写的客户端（VS Code 扩展等），这张表是双方共同遵守的握手约定；
+ * 版本号在 `AgentProtocolVersions.externalAgentBridge`。
+ */
+export const ExternalAgentBridgeProtocol = Object.freeze({
+  /** 协议 id，握手时逐字比对。 */
+  id: 'velaros-external-agent-bridge',
+  /** 服务名，客户端按它认出这是哪一类服务。 */
+  service: 'velaros-external-agent',
+  /** 回环 WebSocket 的路径。 */
+  socketPath: '/v1/external-agent/ws',
+  /** 客户端能发的消息类型闭集。 */
+  clientMessageTypes: Object.freeze(['probe', 'pair', 'resume', 'ping', 'ack', 'event', 'disconnect'] as const),
+  /** 宿主能发的消息类型闭集。 */
+  hostMessageTypes: Object.freeze(['hello', 'paired', 'resumed', 'pong', 'event_ack', 'command', 'disconnected', 'error'] as const),
 } as const)
 
 /**

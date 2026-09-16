@@ -8,15 +8,18 @@ import type { AgentChatRuntimeConfig, AgentExecutionConfig, AgentModelProvider, 
 import type { ActiveContextArtifact, ActiveContextArtifactKind, ActiveContextArtifactStatus, ActiveContextUpsertInput, AgentContextPhase, AgentContextPhaseReason,AgentDelegationContract, AgentEvent, AgentModelInputModality, AgentRoleId, AgentSurfaceId, AppLocale, CapabilityScopeId, ChatPromptFeatureId, ChatRuntimeEvent, ControlPlaneLedgerEntry, ControlPlaneLedgerSource, ExecutionModeId, PromptSegmentTrace, RunProfileDefinition, RunProfileId, RunProfileRuntimePolicy, RunProfileSelectionId, SkippedPromptSegmentTrace, StreamAssistantGeneratedFilePayload, StreamAssistantRawPayload, StreamAssistantSourcePayload, StreamReasoningPayload, StreamToolCallPayload, StreamToolMetadataPayload, StreamToolProgressPayload, StreamToolResultPayload, StreamTurnContextPayload, StreamTurnEndPayload, SubAgentStructuredOutputContract, SubAgentUsage, ThinkingDepth, ToolAvailabilityScope, ToolCategoryId, ToolCategoryOverview, ToolDescriptor, ToolLayerTelemetryMetrics, ToolSurfaceProfileId, TurnPlanningTelemetryPayload } from './agent.js'
 import type { GoalStatus } from './builtin.js'
 import type { AgentLoopToolRegistry,ContextActiveTaskInput, ContextPinnedEvidenceInput, ContextWorkingSetBudgetAllocation, EstimateContextUsageOptions, ForkFileContext, ProviderRequestPressureKind, ProviderRequestSnapshot } from './context.js'
+import type { SubAgentToolCategoryRequestResult } from './delegation.js'
 import type { AgentHistoryToolContext, AgentTurnToolExecutor, AgentTurnToolResult, AssistantContentPart } from './history.js'
 import type { ModelSpanHandle,ToolSpanOpener, TurnSpanScope } from './ledgers.js'
-import type { AgentModSeamDispatcherApi } from './mods.js'
+import type { AgentModSeamDispatcherContract } from './mods.js'
 import type { ProviderTurnRecorder, ProviderTurnSnapshot } from './records.js'
-import type { ContextGovernanceSessionRegistryApi } from './residency.js'
+import type { ContextGovernanceSessionRegistryContract } from './residency.js'
 import type { AgentRoleResolution, PromptStatePreparedToolCategories, ResolveAgentRoleOptions } from './runner.js'
 import type { AutoVerificationEvents, AutoVerificationGateResult,AutoVerificationToolContext, CodingSessionSnapshot } from './session.js'
 import type { KernelToolFailureBatchEntry, KernelToolLoopGuardInput } from './tools.js'
 import type { SessionToolAllocatorPlan, ToolAllocatorRequest, ToolExecutionPolicyContext, ToolExecutionPolicyRegistry, ToolExecutorEvents } from './tools.js'
+
+export type { SubAgentToolCategoryRequestResult } from './delegation.js'
 
 /** 产品自持的模型提供方集合解析出来的、可直接执行的模型运行时。 */
 
@@ -345,7 +348,7 @@ export interface ExecuteQueryTurnArgs<
    * ToolExecutor 全链 no-op，行为逐字节不变。子面与主面共用同一派发器，钩子的「拦下/改写」
    * 才不会在委派边界上出现盲区。
    */
-  seams?: LooseOptional<AgentModSeamDispatcherApi>
+  seams?: LooseOptional<AgentModSeamDispatcherContract>
 }
 
 export interface ProviderTurnPayloadContext {
@@ -1442,7 +1445,7 @@ export interface ApplySoloContextDegradeActionContext<
   TContext extends SoloContextDegradeToolContext = SoloContextDegradeToolContext,
 > {
   /** 治理会话登记处：`govern-epoch` 级的落点（缺页 = 强开一次 epoch）。 */
-  governanceSessions: ContextGovernanceSessionRegistryApi
+  governanceSessions: ContextGovernanceSessionRegistryContract
   toolRegistry: SoloContextDegradeToolRegistry<TContext>
   log: Pick<ScopedLog, 'warn'>
   roleRuntime: { model: string; contextWindow?: LooseOptional<number> }
@@ -1798,16 +1801,6 @@ export interface SubAgentContextBase {
   capabilityPorts?: AgentRuntimeCapabilityPorts
 }
 
-export interface SubAgentToolCategoryRequestResult {
-  enabled: boolean
-  approved: boolean
-  autoApproved?: boolean
-  reason?: string
-  requestedCategories: ToolCategoryId[]
-  enabledCategories: ToolCategoryId[]
-  skippedCategories: ToolCategoryId[]
-  message: string
-}
 
 export interface CreateSubAgentContextArgs<TContext extends SubAgentContextBase> {
   parentCtx: TContext

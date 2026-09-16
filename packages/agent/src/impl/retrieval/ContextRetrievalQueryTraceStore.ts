@@ -1,18 +1,10 @@
 import type { ChatContextRetrievalQueryKind, ChatContextRetrievalQueryTraceEntry } from '../../types/agent.js'
-import type { RetrievalQueryRegistration } from '../../types/retrieval.js'
+import type { ContextRetrievalQueryTraceStoreOptions, RetrievalQueryRegistration } from '../../types/retrieval.js'
 import { normalizeRetrievalLimit } from '../../utils/retrieval/limits'
-import { chatSearchRanking } from '../../utils/retrieval/ranking'
+import { buildRetrievalScoreStats, normalizeQuerySignature } from '../../utils/retrieval/ranking'
 import { AgentTuning } from '../../utils/tuning'
 
 import { ContextRetrievalBoundedCounter } from './ContextRetrievalBoundedCounter'
-
-/** 建 `ContextRetrievalQueryTraceStore` 时给的两个容量上限；两项都可以不传，不传就用本文件的缺省值。 */
-interface ContextRetrievalQueryTraceStoreOptions {
-  /** 查询计数表最多记多少个键，缺省 4096；键是「会话+scope+kind+归一化查询」，满了按最近使用淘汰，被淘汰的查询重新从 1 数起。 */
-  maxQueryCountEntries?: LooseOptional<number>
-  /** 每个会话保留多少条最近的 trace，缺省 24；只影响 `getRecent` 能回溯多远，超出的从最旧的丢。 */
-  maxRecentQueryTracesPerSession?: LooseOptional<number>
-}
 
 /**
  * 搜索查询的计数与 trace 存档对外这一面：搜之前登记一次拿到重复次数，搜完记一条 trace，诊断时把最近几条取回来。
@@ -114,7 +106,7 @@ class ContextRetrievalQueryTraceStore implements ContextRetrievalQueryTraceStore
     query: string
     terms: string[]
   }): RetrievalQueryRegistration {
-    const normalizedQuery = chatSearchRanking.normalizeQuerySignature(input.query, input.terms)
+    const normalizedQuery = normalizeQuerySignature(input.query, input.terms)
     const key = [
       input.sessionId,
       input.retrievalScopeId,
@@ -176,7 +168,7 @@ class ContextRetrievalQueryTraceStore implements ContextRetrievalQueryTraceStore
       matchReasons: [
         ...new Set(input.returnedItems.flatMap((item) => item.matchReasons)),
       ].slice(0, 10),
-      scoreStats: chatSearchRanking.buildRetrievalScoreStats(input.matchedScores),
+      scoreStats: buildRetrievalScoreStats(input.matchedScores),
       warning: repeatedWarning,
     }
     const traces = this.recentQueryTracesBySession.get(input.sessionId) ?? []

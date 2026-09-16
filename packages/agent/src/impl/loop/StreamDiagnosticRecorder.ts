@@ -1,13 +1,7 @@
 import type { TextStreamPart, ToolSet } from 'ai'
 
 import type { StreamDiagnostics, StreamDiagnosticsSummary, StreamFinishReasonDiagnostic } from '../../types/loop.js'
-import {
-  buildAbnormalFinishReasonDiagnostic,
-  buildNonDisplayableResponseMessage,
-  createStreamDiagnostics,
-  recordStreamPartDiagnostics,
-  summarizeStreamDiagnostics,
-} from '../../utils/stream/recorder'
+import { buildAbnormalFinishReasonDiagnostic, buildNonDisplayableResponseMessage, createStreamDiagnostics, recordStreamPartDiagnostics, summarizeStreamDiagnostics } from '../../utils/stream/recorder'
 
 /**
  * 一条 provider 流的诊断记录器：开账本、逐分片记账、收尾时给结论。

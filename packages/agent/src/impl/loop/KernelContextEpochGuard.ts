@@ -18,14 +18,10 @@
 // 钳到规范形态。判据：同一份上下文在不同机器/不同 locale 下必须算出**同一个纪元**，否则诊断会把
 // 环境差异误报成「上下文变了」，而这类误报没有任何办法证伪。
 //
-import { isPresent } from '@velaros-ai/core'
 
-import type { BuildKernelContextEpochInput, KernelContextEpoch, KernelContextEpochClaim, KernelContextEpochGuardLike, RecordKernelContextEpochDiagnosticOptions } from '../../types/loop.js'
-import type { ProviderTurnRecorder } from '../../types/records.js'
-import { normalizeLabel, normalizeNonNegativeInteger, normalizeOptionalLabel, normalizeOptionalNonNegativeInteger, normalizePercent, resolveKernelContextEpochKey, sortedUnique } from '../../utils/loop/context-epoch'
-import { UnknownGovernanceSessionId } from '../../utils/residency/session-key'
+import type { KernelContextEpoch, KernelContextEpochClaim, KernelContextEpochGuardLike } from '../../types/loop.js'
+import { resolveKernelContextEpochKey } from '../../utils/loop/context-epoch'
 import { KernelContextEpochStaleError } from '../errors/KernelContextEpochStaleError'
-
 
 /**
  * 上下文纪元看门人：管「我拼装请求时看到的上下文，到真正发出去时还是不是同一份」。
@@ -66,63 +62,3 @@ export class KernelContextEpochGuard implements KernelContextEpochGuardApi {
   }
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-export function buildKernelContextEpoch(input: BuildKernelContextEpochInput): KernelContextEpoch {
-  const epoch: KernelContextEpoch = {
-    sessionId: normalizeLabel(input.sessionId, UnknownGovernanceSessionId),
-    scope: normalizeOptionalLabel(input.scope),
-    phase: input.phase,
-    turn: normalizeOptionalNonNegativeInteger(input.turn),
-    model: normalizeLabel(input.model, 'unknown-model'),
-    messageCount: normalizeNonNegativeInteger(input.messageCount),
-    availableToolNames: sortedUnique([...input.availableToolNames]),
-    contextUsage: {
-      estimatedTokens: normalizeNonNegativeInteger(input.contextUsage.estimatedTokens),
-      tokenPercent: normalizePercent(input.contextUsage.tokenPercent),
-      usableContextWindow: normalizeNonNegativeInteger(input.contextUsage.usableContextWindow),
-    },
-    createdAt: normalizeNonNegativeInteger(input.createdAt ?? Date.now()),
-  }
-  if (isPresent(input.requestFingerprint)) {
-    epoch.requestFingerprint = input.requestFingerprint
-  }
-  return epoch
-}
-
-export function recordKernelContextEpochDiagnostic(
-  reducer: ProviderTurnRecorder,
-  epoch: KernelContextEpoch,
-  options: RecordKernelContextEpochDiagnosticOptions = {}
-): void {
-  reducer.apply({
-    type: 'diagnostic',
-    code: 'context-epoch',
-    message: '已记下这次发往供应方的请求所处的上下文纪元',
-    details: {
-      sessionId: epoch.sessionId,
-      scope: epoch.scope,
-      phase: epoch.phase,
-      turn: epoch.turn,
-      model: epoch.model,
-      messageCount: epoch.messageCount,
-      availableToolNames: epoch.availableToolNames,
-      contextUsage: epoch.contextUsage,
-      requestFingerprint: epoch.requestFingerprint,
-      createdAt: epoch.createdAt,
-      claimKey: options.claim?.key,
-      revision: options.claim?.revision,
-      current: options.current,
-    },
-  })
-}

@@ -7,7 +7,7 @@ import type { ScopedLog } from '@velaros-ai/core/logger'
 import type { AgentRuntimeCapabilityPorts,ApprovalPort, ContextPayloadStore, ToolExecutionApi } from '../contract/requires.js'
 
 import type { ChatPromptFeatureId } from './agent'
-import type { AgentEvent, AgentModelInputModality, AgentRoleId, CapabilityAutoApprovalNotice, CapabilityScopeId, ChatRuntimeEvent, ExecutionRecord, ExecutionTaskRecord, RunProfileSelectionId, StreamToolCallPayload, StreamToolMetadataPayload, StreamToolProgressPayload, StreamToolResultEffects, StreamToolResultPayload, ToolAvailabilityScope, ToolCapabilitySchema, ToolCategoryId, ToolCategoryOverview,ToolConfirmationDecisionOptions, ToolDescriptor, ToolExecutionPlanUpdate, ToolExposurePolicy, ToolOsState, ToolPermission, ToolProviderKind, ToolResultModelContentPart, ToolRole, ToolSurfaceProfileId } from './agent.js'
+import type { AgentEvent, AgentModelInputModality, AgentRoleId, CapabilityAutoApprovalNotice, CapabilityScopeId, ChatRuntimeEvent, ExecutionRecord, ExecutionTaskRecord, RunProfileSelectionId, StreamToolCallPayload, StreamToolMetadataPayload, StreamToolProgressPayload, StreamToolResultEffects, StreamToolResultPayload, ToolAvailabilityScope, ToolCapabilitySchema, ToolCatalogEntry, ToolCategoryId, ToolCategoryOverview, ToolConfirmationDecisionOptions, ToolDescriptor, ToolExecutionPlanUpdate, ToolExposurePolicy, ToolOsState, ToolPermission, ToolProviderKind, ToolResultModelContentPart, ToolRole, ToolSurfaceProfileId } from './agent.js'
 import type { ToolResultModelImage, ToolValidationIssueDetail } from './capabilities.js'
 import type { ContextRefEnvelope } from './context.js'
 import type { ToolSpanHandle } from './ledgers.js'
@@ -896,4 +896,17 @@ export interface ToolModelInputRequirements {
 
 export interface ToolModelInputContext {
   getSupportedModelInputModalities?: () => readonly AgentModelInputModality[]
+}
+
+export type ToolCatalogSnapshot = {
+  protocolVersion: 1
+  catalogRevision: string
+  tools: ToolCatalogEntry[]
+}
+
+export type ContractLease = {
+  contractId: string
+  catalogRevision: string
+  needsRefresh: boolean
+  expiresInMs: Nullable<number>
 }

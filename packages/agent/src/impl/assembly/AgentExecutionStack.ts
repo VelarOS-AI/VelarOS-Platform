@@ -1,12 +1,12 @@
 import { AppError } from '@velaros-ai/core/error'
 
-import type { AgentExecutionStackApi, AgentExecutionStackWithQueryApi } from '../../contract/provides.js'
+import type { AgentExecutionStackWithQueryApi } from '../../contract/provides.js'
 import type { AgentExecutionStackToolRegistry, RuntimePromptFeaturePolicy } from '../../contract/requires.js'
-import type { PromptRegistryApi } from '../../types/guidance.js'
+import type { PromptRegistryContract } from '../../types/guidance.js'
 import type { AgentExecutionLimits, ExecuteQueryLoopArgs, ExecuteSoloModeStreamLoopArgs, SoloModeStreamLoopResult } from '../../types/loop.js'
-import type { ExecutionEventBusApi } from '../../types/records.js'
-import type { ContextGovernanceSessionRegistryApi } from '../../types/residency.js'
-import type { AgentExecutionStackOptions, AgentExecutionStackRunnerOptions, AgentExecutionStackToolContext, AgentRunnerApi } from '../../types/runner.js'
+import type { ExecutionEventBusContract } from '../../types/records.js'
+import type { ContextGovernanceSessionRegistryContract } from '../../types/residency.js'
+import type { AgentExecutionStackOptions, AgentExecutionStackRunnerOptions, AgentExecutionStackToolContext, AgentRunnerContract, CreateAgentExecutionStack } from '../../types/runner.js'
 import { resolveAgentExecutionLimits } from '../../utils/loop/execution-limits'
 import { createBuiltInPromptRegistry } from '../guidance/PromptRegistry'
 import { QueryLoop } from '../loop/QueryLoop'
@@ -25,9 +25,9 @@ import { defaultRuntimePromptFeaturePolicy } from '../tools/DefaultPromptFeature
  */
 export interface AgentExecutionStackParts<TContext extends AgentExecutionStackToolContext> {
   /** 本栈用的提示词目录：产品给了用产品的，没给用包内置的那一份。 */
-  readonly promptRegistry: PromptRegistryApi
+  readonly promptRegistry: PromptRegistryContract
   /** 上下文治理的会话登记处；宿主想跨栈共享会话生命周期就注入同一个实例，否则是本栈独占的一份。 */
-  readonly governanceSessions: ContextGovernanceSessionRegistryApi
+  readonly governanceSessions: ContextGovernanceSessionRegistryContract
   /** 本栈绑定的那一份工具面；建 Runner 时原样传下去，保证两个执行面看到的工具集合一致。 */
   readonly toolRegistry: AgentExecutionStackToolRegistry<TContext>
   /** 提示词特性（思考深度、执行模式等）的取舍策略；Runner 的 codingSessionPolicy 一律用它，避免两个面各持一份。 */
@@ -35,21 +35,21 @@ export interface AgentExecutionStackParts<TContext extends AgentExecutionStackTo
   /** 解析过缺省值的执行上限（主面/子面的最大轮次等）；两个循环与 Runner 共用这一份结论。 */
   readonly executionLimits: AgentExecutionLimits
   /** 主 Agent 的流式循环，Solo 面与 Runner 的主面用的是同一个实例。 */
-  readonly soloLoop: SoloStreamLoop<TContext, ExecutionEventBusApi>
+  readonly soloLoop: SoloStreamLoop<TContext, ExecutionEventBusContract>
   /** 子 Agent 查询循环；建栈时没给 `options.query` 就缺席，此时查询面一调即抛 `INVALID_STATE`。 */
-  readonly queryLoop?: QueryLoop<TContext, ExecutionEventBusApi>
+  readonly queryLoop?: QueryLoop<TContext, ExecutionEventBusContract>
 }
 
 class AgentExecutionStack<
   TContext extends AgentExecutionStackToolContext = AgentExecutionStackToolContext,
 > implements AgentExecutionStackWithQueryApi<TContext> {
-  public readonly promptRegistry: PromptRegistryApi
-  public readonly governanceSessions: ContextGovernanceSessionRegistryApi
+  public readonly promptRegistry: PromptRegistryContract
+  public readonly governanceSessions: ContextGovernanceSessionRegistryContract
   private readonly toolRegistry: AgentExecutionStackToolRegistry<TContext>
   private readonly promptFeaturePolicy: RuntimePromptFeaturePolicy
   private readonly executionLimits: AgentExecutionLimits
-  private readonly soloLoop: SoloStreamLoop<TContext, ExecutionEventBusApi>
-  private readonly queryLoop: LooseOptional<QueryLoop<TContext, ExecutionEventBusApi>>
+  private readonly soloLoop: SoloStreamLoop<TContext, ExecutionEventBusContract>
+  private readonly queryLoop: LooseOptional<QueryLoop<TContext, ExecutionEventBusContract>>
 
   public constructor(parts: AgentExecutionStackParts<TContext>) {
     this.promptRegistry = parts.promptRegistry
@@ -62,7 +62,7 @@ class AgentExecutionStack<
   }
 
   public executeSolo(
-    args: ExecuteSoloModeStreamLoopArgs<TContext, ExecutionEventBusApi>
+    args: ExecuteSoloModeStreamLoopArgs<TContext, ExecutionEventBusContract>
   ): Promise<SoloModeStreamLoopResult> {
     return this.soloLoop.execute(args)
   }
@@ -73,12 +73,12 @@ class AgentExecutionStack<
   }
 
   public async executeQuery(
-    args: ExecuteQueryLoopArgs<TContext, ExecutionEventBusApi>
+    args: ExecuteQueryLoopArgs<TContext, ExecutionEventBusContract>
   ): Promise<string> {
     return this.requireQueryLoop().execute(args)
   }
 
-  public createRunner(options: AgentExecutionStackRunnerOptions<TContext>): AgentRunnerApi<TContext> {
+  public createRunner(options: AgentExecutionStackRunnerOptions<TContext>): AgentRunnerContract<TContext> {
     const queryLoop = this.requireQueryLoop()
     const {
       contextHelper,
@@ -112,7 +112,7 @@ class AgentExecutionStack<
    * 查询面的唯一取用口：没配 query 的栈在这里就拦下来，而不是让调用点拿到 undefined 再炸在别处。
    * 建栈时的取舍是产品的决定，所以这是 `INVALID_STATE` 而不是运行期故障。
    */
-  private requireQueryLoop(): QueryLoop<TContext, ExecutionEventBusApi> {
+  private requireQueryLoop(): QueryLoop<TContext, ExecutionEventBusContract> {
     if (!this.queryLoop) {
       throw new AppError(
         'INVALID_STATE',
@@ -127,21 +127,11 @@ class AgentExecutionStack<
  * 默认执行栈的唯一装配入口。产品注入能力与策略，包内配对上下文、回合、Solo/Query 与 Runner。
  * 每份栈绑定一份工具面；工具面整体替换时应创建新栈，治理登记处可由宿主继续共享。
  */
-export function createAgentExecutionStack<
-  TContext extends AgentExecutionStackToolContext = AgentExecutionStackToolContext,
->(
-  options: AgentExecutionStackOptions<TContext> & {
-    query: NonNullable<AgentExecutionStackOptions<TContext>['query']>
-  }
-): AgentExecutionStackWithQueryApi<TContext>
-export function createAgentExecutionStack<
-  TContext extends AgentExecutionStackToolContext = AgentExecutionStackToolContext,
->(options: AgentExecutionStackOptions<TContext>): AgentExecutionStackApi<TContext>
-export function createAgentExecutionStack<
+export const createAgentExecutionStack: CreateAgentExecutionStack = <
   TContext extends AgentExecutionStackToolContext = AgentExecutionStackToolContext,
 >(
   options: AgentExecutionStackOptions<TContext>
-): AgentExecutionStackApi<TContext> | AgentExecutionStackWithQueryApi<TContext> {
+): AgentExecutionStackWithQueryApi<TContext> => {
   const promptRegistry = options.promptRegistry ?? createBuiltInPromptRegistry()
   const governanceSessions = options.governanceSessions ?? new ContextGovernanceSessionRegistry()
   const promptFeaturePolicy = options.promptFeaturePolicy ?? defaultRuntimePromptFeaturePolicy
@@ -153,7 +143,7 @@ export function createAgentExecutionStack<
     promptFeaturePolicy,
     options.listCustomSubAgents
   )
-  const soloLoop = new SoloStreamLoop<TContext, ExecutionEventBusApi>(
+  const soloLoop = new SoloStreamLoop<TContext, ExecutionEventBusContract>(
     modelRuntime,
     turnRunner,
     governanceSessions,
@@ -164,7 +154,7 @@ export function createAgentExecutionStack<
     options.seams
   )
   const queryLoop = options.query
-    ? new QueryLoop<TContext, ExecutionEventBusApi>(
+    ? new QueryLoop<TContext, ExecutionEventBusContract>(
         modelRuntime,
         turnRunner,
         governanceSessions,

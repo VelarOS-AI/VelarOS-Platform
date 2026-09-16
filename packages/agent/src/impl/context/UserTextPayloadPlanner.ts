@@ -7,6 +7,7 @@ import type { ContextPayloadStore } from '../../contract/requires.js'
 import type { ContextUserTextRecord, PersistUserTextPayloadsResult } from '../../types/context.js'
 import type { UserTextPayloadReference } from '../../types/history.js'
 import { hashUserMessageText, readUserMessageText } from '../../utils/context/user-message-text'
+import { buildUserTextMessageKey } from '../../utils/context/user-text-payload-planner'
 import { AgentTuning } from '../../utils/tuning'
 
 import { createContextUserTextRef } from './InMemoryContextPayloadStore'
@@ -18,10 +19,6 @@ export type { UserTextPayloadReference }
  * 值在 `AgentTuning.context.oversizedUserTextChars`。
  */
 export const OversizedUserTextSafetyValveChars: number = AgentTuning.context.oversizedUserTextChars
-
-function buildUserTextMessageKey(sessionId: string, messageIndex: number, hash: string): string {
-  return `${sessionId}:user:${messageIndex}:${hash.slice(0, 12)}`
-}
 
 /**
  * 超长用户正文的归档规划器：把历史里过长的用户消息原文存进 payload 店，换回一串「位置 → 地址」的引用。

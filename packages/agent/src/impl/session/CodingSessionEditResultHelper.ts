@@ -1,4 +1,4 @@
-import { isArray, isEmpty, isFalse, isObject, isPlainObject,isString,isTrue } from '@velaros-ai/core'
+import { isArray, isEmpty, isFalse, isObject, isPlainObject, isString, isTrue } from '@velaros-ai/core'
 
 import { hasVerificationRelevantModifiedPaths } from '../../utils/session/paths'
 

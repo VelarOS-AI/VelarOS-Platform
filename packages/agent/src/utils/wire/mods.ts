@@ -24,7 +24,8 @@ import {
 } from '@velaros-ai/kernel/contracts'
 
 import { AgentModAxes, AgentProtocolVersions } from '../../contract/constants.js'
-import type { AgentModCommandHandler, AgentModContributes, AgentModContributionAxisName, AgentModDiagnostic, AgentModEngines, AgentModExecutionModeContribution, AgentModHookContribution, AgentModHookEvent, AgentModHookExecutionMode, AgentModHookMatcher, AgentModManifest, AgentModManifestParseResult, AgentModPromptSegmentContribution, AgentModSkillContribution, AgentModSpaceContribution, AgentModSubAgentTypeContribution, AgentModToolCategoryContribution, AgentModToolContribution, AgentModTrustLevel, AgentModTurnContextSourceContribution, ParseAgentModManifestOptions,SemverComparator, SemverVersion } from '../../types/agent.js'
+import type { AgentModCommandHandler, AgentModContributes, AgentModContributionAxisName, AgentModDiagnostic, AgentModEngines, AgentModExecutionModeContribution, AgentModHookContribution, AgentModHookEvent, AgentModHookExecutionMode, AgentModHookMatcher, AgentModManifest, AgentModManifestParseResult, AgentModPromptSegmentContribution, AgentModSkillContribution, AgentModSpaceContribution, AgentModSubAgentTypeContribution, AgentModToolCategoryContribution, AgentModToolContribution, AgentModTrustLevel, AgentModTurnContextSourceContribution, ParseAgentModManifestOptions } from '../../types/agent.js'
+import type { SemverComparator, SemverVersion } from '../../types/mods.js'
 import { isCanonicalToolId } from '../toolkit/identity'
 
 // ─── semver：manifest 兼容轴的最小判定器（单源，Loader 复用） ──────────────────

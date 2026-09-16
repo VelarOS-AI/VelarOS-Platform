@@ -1,1275 +1,285 @@
-export type { AgentEnvironmentVariable, AgentErrorCode, AgentToolCategoryId, AgentToolName } from './contract/constants.js'
-export { AgentCapabilityApiVersionString, AgentContextThresholds, AgentEnvironmentVariables, AgentErrorCodes, AgentIdentity, AgentLeasePolicy, AgentProtocolVersions, AgentSkillFiles, AgentStepLimits, AgentToolCategoryByName, AgentToolLimits, AgentToolNames, AgentToolTransport, ExternalAgentBridgeLimits, TurnContextFormat, VelarModArchiveLimits } from './contract/constants.js'
-export type { AgentBackgroundAgent, AgentBackgroundAgentControlPort, AgentBackgroundAgentPort, AgentBackgroundAgentState, AgentSessionCatalogPort, AgentSessionCatalogQuery, AgentSessionEventPort, AgentSessionLease, AgentSessionLeaseClaim, AgentSessionLeasePort, AgentSessionLifecycleStatus, AgentSessionMetadata, AgentSessionResourceReference, CreateAgentSessionMetadataInput, RemoteHostServicePorts, ToolExecutionApi } from './contract/requires.js'
-export {
-  activeDirectiveTools,
-  agentWorkflowTools,
-  backgroundJobTools,
-  BuiltinAgentModId,
-  BuiltinAgentModToolCollections,
-  categoriesTools,
-  collectBuiltinAgentModTools,
-  confirmationTools,
-  contextDistillTools,
-  contextHandoffTools,
-  contextRetrievalTools,
-  createBuiltinAgentModPackage,
-  dispatchAgentTools,
-  goalTools,
-  plansTools,
-} from './impl/AgentTools'
+// `.` 入口：Node 宿主装 Agent 运行时要的全部整件能力。
+//
+// 值只有两类：`impl/` 里按公开接口标注过的实例与工厂，以及 `contract/constants.ts` 的常量表。
+// 类、zod schema、utils 里的函数一律不出包——需要它们提供的能力时走这里登记的接口面。
+// 渲染进程要的子集在 `./chat`，写工具要的子集在 `./tool-contract`，只要数据的在 `./contracts`。
+export * from './chat.js'
+export * from './contracts.js'
+export * from './tool-contract.js'
+
+
+// ── 合同：产品面与注入面的接口 ───────────────────────────────────────
+
+export type { AgentCapabilityEventPublisherApi, AgentChatKitApi, AgentExecutionStackApi,
+ AgentExecutionStackWithQueryApi, AgentGoalServiceApi, AgentLedgerFilesApi, AgentModHostAssemblerApi,
+ AgentModLoaderApi, AgentModSeamDispatcherApi, AgentPlanServiceApi, AgentQuestionServiceApi,
+ AgentRoleEngineApi, AgentRunnerApi, AgentRuntimeKitApi, AgentSessionKitApi, AgentSkillRepositoryApi,
+ AgentToolContractsApi, AgentWireApi, AgentWorkflowRuntimeApi, ChatContextRetrievalServiceApi,
+ ChatKernelSessionBridgeApi, ChatMessagesApi, ChatRuntimeEventsApi, ChatSearchMessagesApi,
+ ChatSearchRankingApi, ChatStreamConsumerApi, ChatStreamProtocolApi, ChatStreamSessionLogApi,
+ CodingSessionTrackerApi, ContextGovernanceSessionRegistryApi, DirectiveOperationsApi, ExecPlanLedgerApi,
+ ExecPlanStateApi, ExecRoutingApi, ExecutionEventBusApi, ExecutionGuidanceQueueApi, ExecutionServiceApi,
+ ExternalAgentBridgeCommandQueueApi, ExternalAgentBridgeEventWindowApi, ExternalAgentBridgeLoopbackServerApi,
+ ExternalAgentBridgePairingThrottleApi, FileContextCoordinatorApi, FileContextRegistryApi, GuidanceRelayKitApi,
+ KernelBackgroundJobManagerApi, KernelSessionControllerApi, LedgerExecutionSpanScopeFactoryApi,
+ McpClientConnectionApi, McpToolTranslatorApi, PrimaryAgentProfileApi, PromptRegistryApi,
+ ProviderRequestCompilerApi, ProviderTurnEventReducerApi, RetryPolicyApi, SessionLedgerHandleApi, SessionStoreApi, SkillFileStoreApi,
+ SkillMarketClientApi, SoloExecutionServiceApi, SubAgentDispatcherApi, SubAgentGuidanceRelayRegistryApi,
+ SubAgentSessionStoreApi, TeamModelRouterApi, ToolCapabilityRegistryApi, ToolContractExecutionFacadeApi,
+ToolExecutionPolicyApi, ToolExecutorApi, ToolInputReuseStoreApi,  ToolRegistryApi, ToolTransportNamesApi, TurnContextAppendHubApi, TurnContextLedgerApi,
+ TurnContextSessionLedgersApi, TurnHistoryApi, VelarModArchiveImporterApi, WriteLeaseCoordinatorApi } from './contract/provides.js'
+export type { AgentModRegistryApi, ContextRetrievalQueryTraceStoreApi, ExecutionStoreApi, KernelSessionPolicyApi, KernelSessionRunCoordinatorApi, RuntimeReminderSchedulerApi, TaskApprovalStateApi } from './contract/provides.js'
+export type { AgentBackgroundAgent, AgentBackgroundAgentControlPort, AgentBackgroundAgentPort,
+ AgentBackgroundAgentState, AgentCapabilityRuntime, AgentChatRuntimeConfig, AgentExecutionConfig,
+ AgentExecutionStackToolRegistry, AgentModelProvider, AgentModelRequestOptions,
+ AgentModelRequestPolicy, AgentModelResolverPort, AgentModelRetryPolicy, AgentModPackReader, AgentRoleDescriptorProvider,
+ AgentRunLifecycle, AgentRuntimeCapabilityPorts, AgentRuntimeInputPort, AgentSessionCatalogPort,
+ AgentSessionCatalogQuery, AgentSessionEventPort, AgentSessionLease, AgentSessionLeaseClaim,
+ AgentSessionLeasePort, AgentSessionLifecycleStatus, AgentSessionMetadata, AgentSessionResourceReference,
+ AgentSkillProvider, AgentSurfaceProfileProvider, AgentSystemRuntimeConfig, AgentTurnCapabilitySnapshotSource,
+ApprovalPort,  AppRuntimeFacts, AuthGatePort, CapabilityContextCollector, CapabilityDelegationPolicy,
+ CapabilityIntentClassifier, CapabilityPromptContributor, CapabilityScopePolicy,
+ CapabilityValidationInterpreter, ContextMigrationEventSink, ContextPayloadStore,
+ CreateAgentKernelModuleOptions, CreateAgentSessionMetadataInput, CustomSubAgentRegistry,
+ ExecutionActivitySignalsPort, ExecutionClock, ExecutionCollaborationPort, ExecutionGuidanceRelayPlanner,
+ ExecutionIdFactory, ExecutionRecordsPathPort, ExecutionResourcePort, ExecutionSpanScopeFactory,
+ InteractionPort, KernelBackgroundJobOutputStore, KernelSessionInputStore, KernelToolOutputStore,
+ McpAuthorizationProvider, ReminderCapabilityResolver, RemoteHostServicePorts, RetrievalPayloadStorePort,
+ RetrievalStateStorePort, RunnerConfigService, RunnerExecutionEnvironmentPort, RunnerModelRuntimePort,
+ RunnerSubAgentDispatcher, RunnerToolContextBuilder, RunnerToolRegistry, RuntimePromptFeaturePolicy,
+ RuntimeReminderProducer, SessionLedgerLocator, SessionStoreDeps, SubAgentConfigPort, SubAgentQueryRunner,
+ SubAgentTypeProvider, TeamModelRoutingPort, ToolActiveContextApi, ToolAllocationMetadata,
+ ToolConversationContextApi, ToolExecutionApi, ToolResultMiddleware, ToolRoleApi, ToolRuntimeApi,
+ ToolSkillsApi, ToolValidationHintProvider, VelarModArchiveSignatureVerifier } from './contract/requires.js'
+
+// ── 实例与工厂 ────────────────────────────────────────────────────────
+
+export { agentModHost, agentTools, BuiltinAgentModId, createBuiltinAgentModDefinition } from './impl/AgentTools'
 export { createAgentExecutionStack } from './impl/assembly/AgentExecutionStack'
-export {
-  AgentCapability,
-  AgentExecutionPermission,
-  AgentKernelModuleId,
-  createAgentKernelModule,
-} from './impl/assembly/AgentKernelModule'
-export { assembleAgentMods, discoverAgentModPackages } from './impl/assembly/AgentModHostAssembler'
-export type { ChatKernelSessionBridgeOptions } from './impl/assembly/ChatKernelSessionBridge'
-export { ChatKernelSessionBridge } from './impl/assembly/ChatKernelSessionBridge'
-export type { KernelSessionControllerAdapter } from './impl/assembly/KernelSessionController'
-export { KernelSessionController } from './impl/assembly/KernelSessionController'
-export { ChatMessageHelper, ChatMessageHelper as ChatMessages } from './impl/chat/ChatMessages'
-export { ChatStreamConsumer } from './impl/chat/ChatStreamConsumer'
-export { ChatStreamProtocol,chatStreamProtocol } from './impl/chat/ChatStreamProtocol'
-export { ChatStreamSessionLog } from './impl/chat/ChatStreamSessionLog'
-export { McpCallTimeoutMs, McpClientConnection, McpConnectTimeoutMs } from './impl/connectors/McpClientConnection'
+export { AgentCapability, AgentExecutionPermission, AgentKernelModuleId, createAgentKernelModule } from './impl/assembly/AgentKernelModule'
+export { createChatKernelSessionBridge } from './impl/assembly/ChatKernelSessionBridge'
+export { createToolContractExecutionFacade } from './impl/assembly/ToolContractExecutionFacade'
+export { directiveOperations } from './impl/builtin/DirectiveOperations'
+export { createExternalAgentBridgeCommandQueue, externalAgentBridgeTokensEqual } from './impl/connectors/ExternalAgentBridgeCommandQueue'
+export { createExternalAgentBridgeEventWindow } from './impl/connectors/ExternalAgentBridgeEventWindow'
+export { createExternalAgentBridgeLoopbackServer } from './impl/connectors/ExternalAgentBridgeLoopbackServer'
+export { createExternalAgentBridgePairingThrottle } from './impl/connectors/ExternalAgentBridgePairingThrottle'
+export { createMcpClientConnection } from './impl/connectors/McpClientConnection'
+export { mcpToolTranslator } from './impl/connectors/McpToolTranslator'
+export { runRemoteNodeMcpStdio } from './impl/connectors/RemoteNodeMcpStdioEntry'
 export { assertSafeHttpFetchUrl, safeFetch } from './impl/connectors/SafeHttpFetch'
-export { AgentLoopContextUsageManager } from './impl/context/AgentLoopContextUsageManager'
-export {
-  ContextUsageCalibrator,
-  DefaultCalibrationFactor,
-  MaxCalibrationFactor,
-  MinCalibrationFactor,
-} from './impl/context/ContextUsageCalibrator'
-export { ContextWorkingSetBudgetGovernor } from './impl/context/ContextWorkingSetBudgetGovernor'
-export { ContextWorkingSetOS } from './impl/context/ContextWorkingSetOS'
-export { fileContextFor } from './impl/context/FileContextCoordinator'
-export {
-  createContextPayloadRef,
-  createContextUserTextRef,
-  InMemoryContextPayloadStore,
-} from './impl/context/InMemoryContextPayloadStore'
-export { compileProviderSendRequest, ProviderRequestCompiler } from './impl/context/ProviderRequestCompiler'
-export {
-  buildToolPayloadRefsForProviderMessages,
-} from './impl/context/ToolPayloadReferencePlanner'
-export type { ToolResultCanonicalizerOptions } from './impl/context/ToolResultCanonicalizer'
-export { ToolResultCanonicalizer } from './impl/context/ToolResultCanonicalizer'
-export {
-  OversizedUserTextSafetyValveChars,
-  UserTextPayloadPlanner,
-} from './impl/context/UserTextPayloadPlanner'
-export {
-  resolveSubAgentExecutionKey,
-  SubAgentDispatcher,
-} from './impl/delegation/SubAgentDispatcher'
-export { SubAgentProgressDigestRecorder } from './impl/delegation/SubAgentProgressDigestRecorder'
-export { SubAgentProgressLedger } from './impl/delegation/SubAgentProgressLedger'
-export type { SubAgentSessionStoreOptions } from './impl/delegation/SubAgentSessionStore'
-export { SubAgentSessionStore } from './impl/delegation/SubAgentSessionStore'
-export { TeamModelRouter } from './impl/delegation/TeamModelRouter'
-export { WriteLeaseCoordinator } from './impl/delegation/WriteLeaseCoordinator'
-export { AgentModStaleSnapshotError } from './impl/errors/AgentModStaleSnapshotError'
-export { KernelContextEpochStaleError } from './impl/errors/KernelContextEpochStaleError'
-export { KernelSessionRunInterruptedError } from './impl/errors/KernelSessionRunInterruptedError'
-export { McpAuthorizationRequiredError } from './impl/errors/McpAuthorizationRequiredError'
-export { AgentCapabilityEventPublisher } from './impl/execution/AgentCapabilityEventPublisher'
-export type {
-  ExecutionAgentEventFacadeDependencies,
-} from './impl/execution/ExecutionAgentEventFacade'
-export { ExecutionAgentEventFacade } from './impl/execution/ExecutionAgentEventFacade'
-export { ExecutionInteractionFacade } from './impl/execution/ExecutionInteractionFacade'
-export type { ExecutionServiceOptions } from './impl/execution/ExecutionService'
-export { ExecutionService } from './impl/execution/ExecutionService'
-export { ExecutionStateFacade } from './impl/execution/ExecutionStateFacade'
-export { ExecutionTaskFacade } from './impl/execution/ExecutionTaskFacade'
-export { InMemoryKernelSessionInputStore } from './impl/execution/InMemoryKernelSessionInputStore'
-export { KernelSessionRunCoordinator } from './impl/execution/KernelSessionRunCoordinator'
-export type { ManagedExecutionRunnerDependencies } from './impl/execution/ManagedExecutionRunner'
-export { ManagedExecutionRunner } from './impl/execution/ManagedExecutionRunner'
-export { PersistentKernelSessionInputStore } from './impl/execution/PersistentKernelSessionInputStore'
-export { SoloExecutionService } from './impl/execution/SoloExecutionService'
-export { AgentSkillRepository } from './impl/guidance/AgentSkillRepository'
-export { FileSkillProvider } from './impl/guidance/FileSkillProvider'
-export {
-  createBuiltInPromptRegistry,
-  PromptRegistry,
-  PromptSegmentTierRank,
-} from './impl/guidance/PromptRegistry'
-export type { SkillFileStoreDependencies } from './impl/guidance/SkillFileStore'
-export {
-  formatSkillDisplayMarkdown,
-  listSkillDirResources,
-  parseFrontmatter,
-  parseFrontmatterList,
-  SkillFileStore,
-} from './impl/guidance/SkillFileStore'
-export type { SkillMarketClientDependencies } from './impl/guidance/SkillMarketClient'
-export { SkillMarketClient } from './impl/guidance/SkillMarketClient'
-export { ExecutionSpanLedger } from './impl/ledgers/ExecutionSpanLedger'
-export { ExecutionSpanRecorder } from './impl/ledgers/ExecutionSpanRecorder'
-export type { LedgerExecutionSpanScopeFactoryDeps } from './impl/ledgers/LedgerExecutionSpanScopeFactory'
-export {
-  LedgerExecutionSpanScopeFactory,
-  NOOP_TOOL_OPENER,
-} from './impl/ledgers/LedgerExecutionSpanScopeFactory'
-export { OpenExecutionSpan } from './impl/ledgers/OpenExecutionSpan'
-export {
-  parsePromptAuditText,
-  PromptAuditLedger,
-  readPromptAuditFile,
-  serializePromptAuditLine,
-} from './impl/ledgers/PromptAuditLedger'
-export { SerialWriteQueue } from './impl/ledgers/SerialWriteQueue'
-export { SessionLedger } from './impl/ledgers/SessionLedger'
-export { SessionStore } from './impl/ledgers/SessionStore'
-export { AgentIntentPlanner, agentIntentPlanner } from './impl/loop/AgentIntentPlanner'
-export {
-  AgentRawStreamTextExtractor,
-  AgentRawStreamTextExtractor as RawStreamText,
-} from './impl/loop/AgentRawStreamTextExtractor'
-export { AgentRunPlanComposer, agentRunPlanComposer } from './impl/loop/AgentRunPlanComposer'
-export {
-  AgentRunPlanLedgerComposer,
-  agentRunPlanLedgerComposer,
-} from './impl/loop/AgentRunPlanLedgerComposer'
-export {
-  AgentRunPlanLedgerFactory,
-  agentRunPlanLedgerFactory,
-} from './impl/loop/AgentRunPlanLedgerFactory'
-export type { AiSdkAgentModelRequestPortOptions } from './impl/loop/AiSdkAgentModelRequestPort'
-export {
-  AiSdkAgentModelRequestPort,
-  applyModelRequestPolicy,
-} from './impl/loop/AiSdkAgentModelRequestPort'
-export { CapabilityRunPlanner, capabilityRunPlanner } from './impl/loop/CapabilityRunPlanner'
-export { ContextRunPlanner, contextRunPlanner } from './impl/loop/ContextRunPlanner'
-export { buildKernelContextEpoch, KernelContextEpochGuard, recordKernelContextEpochDiagnostic } from './impl/loop/KernelContextEpochGuard'
-export type { KernelPrefixShapeTrackerRecord, KernelPrefixShapeTrackerRecordInput } from './impl/loop/KernelPrefixShapeTracker'
-export {
-  buildKernelPrefixShape,
-  compareKernelPrefixShape,
-  KernelPrefixShapeTracker,
-  recordKernelPrefixShapeDiagnostic,
-} from './impl/loop/KernelPrefixShapeTracker'
-export type { LoopWindDownGuardOptions } from './impl/loop/LoopWindDownGuard'
-export { loopContinue, loopFinish, LoopWindDownGuard } from './impl/loop/LoopWindDownGuard'
-export { PromptRunPlanner, promptRunPlanner } from './impl/loop/PromptRunPlanner'
-export type { QueryLoopRoleRuntime, QueryLoopRunContext, QueryLoopRuntime, QueryLoopTurnRunner } from './impl/loop/QueryLoop'
-export { QueryLoop } from './impl/loop/QueryLoop'
-export type { ActiveDirectiveArchiveResult } from './types/builtin.js'
-export { distillContextSchema, handoffContextSchema } from './utils/builtin/context-tools'
-export {
-  ActiveDirectiveLimits,
-  archiveActiveDirectives,
-  buildNoArchiveDiagnostic,
-  createDirectiveArtifactId,
-  directiveTypeSchema,
-  getDirectiveType,
-  isActiveDirectiveArtifact,
-  listActiveDirectives,
-  matchesDirectiveTitle,
-  resolveDirectiveArtifactId,
-  upsertActiveDirective,
-} from './utils/builtin/directives'
-export { isBlockedFetchIpAddress } from './utils/connectors/fetch-safety'
-export { resolvePromptSegmentStability } from './utils/guidance/prompt-stability'
-/** @deprecated 请改用 `QueryLoop`；该别名保留至 Agent 1.0。 */
-export { QueryLoop as AgentQueryLoop } from './impl/loop/QueryLoop'
-export type { QueryTurnResult } from './impl/loop/QueryTurn'
-export { QueryTurn } from './impl/loop/QueryTurn'
-/** @deprecated 请改用 `QueryTurn`；该别名保留至 Agent 1.0。 */
-export { QueryTurn as AgentQueryTurnHelper } from './impl/loop/QueryTurn'
-export { RecoveryRunPlanner, recoveryRunPlanner } from './impl/loop/RecoveryRunPlanner'
-export {
-  AgentConnectionRetryHelper,
-  AiSdkMaxRetries,
-  isContextOverflowError,
-  isContextOverflowReplayUnsafe,
-  markContextOverflowReplayUnsafe,
-  MaxConnectionRetryAttempts,
-} from './impl/loop/RetryPolicy'
-/** @deprecated 请改用 `AgentConnectionRetryHelper`；该别名保留至 Agent 1.0。 */
-export { AgentConnectionRetryHelper as RetryPolicy } from './impl/loop/RetryPolicy'
-export { SoloStreamLoop } from './impl/loop/SoloStreamLoop'
-/** @deprecated 请改用 `SoloStreamLoop`；该别名保留至 Agent 1.0。 */
-export { SoloStreamLoop as AgentSoloModeStreamLoop } from './impl/loop/SoloStreamLoop'
-export type { StreamConsumerTurnState } from './impl/loop/StreamConsumer'
-export {
-  StreamConsumer as AgentStreamConsumerHelper,
-  StreamConsumer,
-} from './impl/loop/StreamConsumer'
-export {
-  AgentStreamDiagnosticRecorder,
-  AgentStreamDiagnosticRecorder as StreamDiagnosticRecorder,
-} from './impl/loop/StreamDiagnosticRecorder'
-export {
-  AgentStreamDiagnosticHelper,
-  AgentStreamDiagnosticHelper as StreamDiagnosticsHelper,
-} from './impl/loop/StreamDiagnosticsHelper'
-export {
-  buildSystemPromptDelivery,
-  PromptCacheMinStableSystemChars,
-  StreamTurn,
-} from './impl/loop/StreamTurn'
-/** @deprecated 请改用 `StreamTurn`；该别名保留至 Agent 1.0。 */
-export { StreamTurn as AgentStreamTurnHelper } from './impl/loop/StreamTurn'
-export { TurnRunner } from './impl/loop/TurnRunner'
-/** @deprecated 请改用 `TurnRunner`；该别名保留至 Agent 1.0。 */
-export { TurnRunner as AgentTurnHelper } from './impl/loop/TurnRunner'
-export { AgentModLoader, DataOnlyAxes, PayloadRequiredAxes } from './impl/mods/AgentModLoader'
-export { AgentModRegistry } from './impl/mods/AgentModRegistry'
-export {
-  AgentModHookDispatcher,
-  AgentModSeamDispatcher,
-  WiredHookEvents,
-  WiredSeamKinds,
-} from './impl/mods/AgentModSeamDispatcher'
-export type { VelarModArchiveImporterOptions } from './impl/mods/VelarModArchiveImporter'
-export {
-  VelarModArchiveExtension,
-  VelarModArchiveImporter,
-  VelarModSignatureFileName,
-} from './impl/mods/VelarModArchiveImporter'
-export {
-  ExecutionAgentEventLedger as ExecAgentEvents,
-  ExecutionAgentEventLedger,
-} from './impl/records/ExecAgentEvents'
-export { ExecutionDebugPayloadBuilder as ExecDebugPayload, ExecutionDebugPayloadBuilder } from './impl/records/ExecDebugPayload'
-export {
-  ExecutionPlanLedgerHelper as ExecPlanLedger,
-  ExecutionPlanLedgerHelper,
-} from './impl/records/ExecPlanLedger'
-export { ExecutionRecordSeverityHelper as ExecRecordSeverity, ExecutionRecordSeverityHelper } from './impl/records/ExecRecordSeverity'
-export { ExecutionRoutingCoordinator as ExecRouting, ExecutionRoutingCoordinator } from './impl/records/ExecRouting'
-export { ExecutionTaskLedgerHelper as ExecTaskLedger, ExecutionTaskLedgerHelper } from './impl/records/ExecTaskLedger'
-export type { ExecutionEventBusHandlers } from './impl/records/ExecutionEventBus'
-export { ExecutionEventBus } from './impl/records/ExecutionEventBus'
-export { ExecutionGuidanceQueue } from './impl/records/ExecutionGuidanceQueue'
-export {
-  ExecutionInteractions as ExecInteractions,
-  ExecutionInteractions,
-} from './impl/records/ExecutionInteractions'
-export { ExecutionRecords as ExecRecords, ExecutionRecords } from './impl/records/ExecutionRecords'
-export { ExecutionRecordSummaryHelper as ExecRecordSummary, ExecutionRecordSummaryHelper } from './impl/records/ExecutionRecordSummaryHelper'
-export { ExecutionStore as ExecStore, ExecutionStore } from './impl/records/ExecutionStore'
-export { ExecutionWorkflowRouteHelper, ExecutionWorkflowRouteHelper as ExecWorkflowRoute } from './impl/records/ExecWorkflowRoute'
-export { InMemoryKernelBackgroundJobOutputStore } from './impl/records/InMemoryKernelBackgroundJobOutputStore'
-export type { KernelBackgroundJobManagerOptions } from './impl/records/KernelBackgroundJobManager'
-export { KernelBackgroundJobManager } from './impl/records/KernelBackgroundJobManager'
-export { MonotonicExecutionIdFactory } from './impl/records/MonotonicExecutionIdFactory'
-export type { ProviderTurnEventReducerOptions } from './impl/records/ProviderTurnEventReducer'
-export {
-  completeProviderTurnSnapshot,
-  emitCompletedProviderTurnSnapshot,
-  ProviderTurnEventReducer,
-  ProviderTurnInterruptedToolError,
-} from './impl/records/ProviderTurnEventReducer'
-export {
-  SourceSessionGuard as ExecSessionGuard,
-  SourceSessionGuard,
-} from './impl/records/SourceSessionGuard'
-export { SubAgentGuidanceRelayRegistry } from './impl/records/SubAgentGuidanceRelayRegistry'
-export { TurnContextAppendHub } from './impl/records/TurnContextAppendHub'
-export type { TurnContextLedgerAppendInput, TurnContextLedgerPeekResult } from './impl/records/TurnContextLedger'
-export { nextTurnContextLedgerGeneration, TurnContextLedger, TurnContextProcessGeneration } from './impl/records/TurnContextLedger'
-export { TurnContextSessionLedgers } from './impl/records/TurnContextSessionLedgers'
-export type { ContextDistillRunnerOptions } from './impl/residency/ContextDistillRunner'
-export { ContextDistillRunner } from './impl/residency/ContextDistillRunner'
-export type { ContextGovernanceSessionOptions, ContextGovernanceSessionRegistryOptions } from './impl/residency/ContextGovernanceSession'
-export { ContextEpochRequestToolName, ContextGovernanceSession } from './impl/residency/ContextGovernanceSession'
-export { ContextGovernanceSessionRegistry } from './impl/residency/ContextGovernanceSessionRegistry'
-export type { ContextResidencyLedgerOptions } from './impl/residency/ContextResidencyLedger'
-export { ContextResidencyLedger } from './impl/residency/ContextResidencyLedger'
-export { formatFaultEventLine, formatMigrationEventLine, InMemoryContextMigrationEventSink } from './impl/residency/InMemoryContextMigrationEventSink'
-export { JsonlContextMigrationEventSink } from './impl/residency/JsonlContextMigrationEventSink'
-export type {
-  ChatContextRetrievalServiceOptions,
-} from './impl/retrieval/ChatContextRetrievalService'
-export { ChatContextRetrievalService } from './impl/retrieval/ChatContextRetrievalService'
-export { ContextRetrievalBoundedCounter } from './impl/retrieval/ContextRetrievalBoundedCounter'
-export { ContextRetrievalBoundedRecentMap } from './impl/retrieval/ContextRetrievalBoundedRecentMap'
-export { ContextRetrievalIndexBuilder } from './impl/retrieval/ContextRetrievalIndexBuilder'
-export {
-  ContextRetrievalPayloadReader,
-  selectJsonPath,
-} from './impl/retrieval/ContextRetrievalPayloadReader'
-export type { ContextRetrievalQueryTraceStoreOptions } from './impl/retrieval/ContextRetrievalQueryTraceStore'
-export { ContextRetrievalQueryTraceStore } from './impl/retrieval/ContextRetrievalQueryTraceStore'
-export { AgentRoleEngine } from './impl/runner/AgentRoleEngine'
-export { AgentRolePolicy } from './impl/runner/AgentRolePolicy'
-export { AgentRoleRegistry } from './impl/runner/AgentRoleRegistry'
-export type { AgentRunnerConfig } from './impl/runner/AgentRunner'
-export { AgentRunner } from './impl/runner/AgentRunner'
-export { AgentRuntimeEvents } from './impl/runner/AgentRuntimeEvents'
-export { AgentWorkflowCoordinator } from './impl/runner/AgentWorkflowCoordinator'
-export {
-  AgentWorkflowRuntime,
-  MaxWorkflowAgents,
-  MaxWorkflowRounds,
-  MaxWorkflowValueBytes,
-} from './impl/runner/AgentWorkflowRuntime'
-export { ContextBuilder, contextBuilderHelper } from './impl/runner/ContextBuilder'
-export { ContextBuilderParts } from './impl/runner/ContextBuilderParts'
-export type { AgentModHookEventMap, AgentModHookGenericEvent, AgentModHookHandler, AgentModHookOutcomeMap, AgentModHookRegistration, AgentModHookRegistrationInput } from './types/mods.js'
-/** @deprecated 请改用 `ContextBuilderParts`；该别名保留至 Agent 1.0。 */
-export { ContextBuilderParts as ContextBuilderHelper } from './impl/runner/ContextBuilderParts'
-export type { AgentProvider, ResolvedAgentRuntime } from './impl/runner/ModelRuntime'
-export { AgentRuntimeHelper, ModelRuntime } from './impl/runner/ModelRuntime'
-export type { PrimaryAgentProfileSkillRepository } from './impl/runner/PrimaryAgentProfile'
-export { PrimaryAgentProfile } from './impl/runner/PrimaryAgentProfile'
-export type { RuntimeStateContextResult } from './impl/runner/PromptStateBuilder'
-export {
-  PromptStateBuilder,
-  shouldInjectHtmlArtifactPromptForTurn,
-} from './impl/runner/PromptStateBuilder'
-/** @deprecated 请改用 `PromptStateBuilder`；该别名保留至 Agent 1.0。 */
-export {
-  PromptStateBuilder as AgentRuntimePromptStateBuilder,
-} from './impl/runner/PromptStateBuilder'
-export { AgentRunContextHelper, RunContext } from './impl/runner/RunContext'
-export { AgentTurnContextPayloadBuilder, TurnPayload } from './impl/runner/TurnPayload'
-export { CodingSessionEditResultHelper } from './impl/session/CodingSessionEditResultHelper'
-export type { CodingSessionTrackerOptions } from './impl/session/CodingSessionTracker'
-export { CodingSessionTracker } from './impl/session/CodingSessionTracker'
-export { CodingSessionVerificationHelper } from './impl/session/CodingSessionVerificationHelper'
-export { CodingToolCallDeduper } from './impl/session/CodingToolCallDeduper'
-export { RuntimeReminderScheduler } from './impl/session/RuntimeReminderScheduler'
-export { ContextPayloadKernelToolOutputStore } from './impl/tools/ContextPayloadKernelToolOutputStore'
-export { defaultDenyApprovalPort } from './impl/tools/DefaultDenyApprovalPort'
-export { defaultRuntimePromptFeaturePolicy } from './impl/tools/DefaultPromptFeaturePolicy'
-export type { InMemoryKernelToolOutputStoreOptions } from './impl/tools/InMemoryKernelToolOutputStore'
-export { InMemoryKernelToolOutputStore } from './impl/tools/InMemoryKernelToolOutputStore'
-export { isKernelWriteLikeTool, KernelToolLoopGuard } from './impl/tools/KernelToolLoopGuard'
-export type { KernelToolResultMaterializerOptions } from './impl/tools/KernelToolResultMaterializer'
-export { KernelToolResultMaterializer } from './impl/tools/KernelToolResultMaterializer'
-export { createProviderToolReferenceCanonicalizer } from './impl/tools/ProviderToolReferenceCanonicalizer'
-export type { SessionToolAllocatorOptions, SessionToolAllocatorPlanInput } from './impl/tools/SessionToolAllocator'
-export { SessionToolAllocator,sessionToolAllocator } from './impl/tools/SessionToolAllocator'
-export { ToolCapabilityRegistry } from './impl/tools/ToolCapabilityRegistry'
-export { createToolExecutionApi } from './impl/tools/ToolExecutionApiBinding'
-export { ToolExecutionPolicy } from './impl/tools/ToolExecutionPolicy'
-export { ToolExecutor } from './impl/tools/ToolExecutor'
-export {
-  resolveToolInputReuse,
-  ToolInputReuseSchema,
-  withToolInputReuse,
-} from './impl/tools/ToolInputReuseStore'
-export { ToolRegistryHelper as ToolRegistry, ToolRegistryHelper } from './impl/tools/ToolRegistry'
-export { createUnattendedSubAgentApprovalPort } from './impl/tools/UnattendedSubAgentApprovalPort'
-export { defaultUnsupportedInteractionPort } from './impl/tools/UnsupportedInteractionPort'
-export type { ExecutionModeId } from './types/agent'
-export type { KernelToolLoopGuardInput } from './types/tools'
-export type {
-  RegisteredTool,
-  RegistryTool,
-  ToolRegistryCodingSession,
-  ToolRegistryContext,
-} from './types/tools'
-export { defineVelaTool } from './utils/builtin/define-agent-tool'
-export { buildToolFingerprint } from './utils/session/tool-dedupe'
-export { createManualApprovalOptions } from './utils/toolkit/approval'
-export type { ToolContractExampleRegistry } from './utils/toolkit/examples'
-export {
-  createToolExampleRegistry,
-  DefaultToolContractExampleRegistry,
-  renderToolExampleInputs,
-  serializeToolExampleInput,
-} from './utils/toolkit/examples'
-// agentWorkflowSchema：check-schemas.mjs 契约门消费的权威 schema（agent:run_workflow）。
-export type { AgentExecutionStack, AgentExecutionStackApi, AgentExecutionStackWithQuery, AgentExecutionStackWithQueryApi } from './contract/provides.js'
-export type { SessionLedgerLocator, SessionStoreDeps } from './contract/requires.js'
-export type { AgentModelProvider, AgentModelRequestOptions, AgentModelRequestPolicy, AgentModelResolverPort } from './contract/requires.js'
-export type { ToolConversationContextApi } from './contract/requires.js'
-export type { RunnerConfigService, RunnerExecutionEnvironmentPort, RunnerModelRuntimePort, RunnerSubAgentDispatcher, RunnerToolContextBuilder, RunnerToolRegistry } from './contract/requires.js'
-export type { ToolRoleApi } from './contract/requires.js'
-export type { ToolRuntimeApi } from './contract/requires.js'
-export type { ToolActiveContextApi } from './contract/requires.js'
-export type { AgentChatRuntimeConfig, AgentExecutionConfig, AgentSystemRuntimeConfig } from './contract/requires.js'
-export type { ReminderCapabilityResolver, RuntimeReminderProducer } from './contract/requires.js'
-export type { AuthGatePort, ExecutionActivitySignalsPort, ExecutionCollaborationPort, ExecutionGuidanceRelayPlanner, ExecutionRecordsPathPort, ExecutionResourcePort } from './contract/requires.js'
-export type { CustomSubAgentRegistry, SubAgentConfigPort, SubAgentQueryRunner } from './contract/requires.js'
-export type { ToolSkillsApi } from './contract/requires.js'
-export type { AgentModelRetryPolicy, AgentRunLifecycle } from './contract/requires.js'
-export type { RetrievalPayloadStorePort, RetrievalStateStorePort } from './contract/requires.js'
-export type { AgentSurfaceProfileProvider } from './contract/requires.js'
-export type { ContextMigrationEventSink } from './contract/requires.js'
-export type { McpAuthorizationProvider } from './contract/requires.js'
-export type { ExecutionClock, ExecutionIdFactory } from './contract/requires.js'
-export type { KernelBackgroundJobOutputStore } from './contract/requires.js'
-export type { RuntimePromptFeaturePolicy } from './contract/requires.js'
-export type { ApprovalPort } from './contract/requires.js'
-export type { InteractionPort } from './contract/requires.js'
-export type { KernelToolOutputStore } from './contract/requires.js'
-export type { ContextPayloadStore } from './contract/requires.js'
-export type { AgentCapabilityRuntime, CreateAgentKernelModuleOptions } from './contract/requires.js'
-export type { AgentModPackReader } from './contract/requires.js'
-export type { AgentExecutionStackToolRegistry } from './contract/requires.js'
-export type { AgentRoleDescriptorProvider } from './contract/requires.js'
-export type { ExecutionSpanScopeFactory } from './contract/requires.js'
-export type { TeamModelRoutingPort } from './contract/requires.js'
-export type { KernelSessionInputStore } from './contract/requires.js'
-export type { VelarModArchiveSignatureVerifier } from './contract/requires.js'
-export type { AgentSkillProvider } from './contract/requires.js'
-export type { AppRuntimeFacts } from './contract/requires.js'
-export type { AgentRuntimeInputPort } from './contract/requires.js'
-export type { AgentRuntimeCapabilityPorts, CapabilityContextCollector, CapabilityDelegationPolicy, CapabilityIntentClassifier, CapabilityPromptContributor, CapabilityScopePolicy, CapabilityValidationInterpreter, ToolAllocationMetadata, ToolResultMiddleware, ToolValidationHintProvider } from './contract/requires.js'
-export type { SubAgentTypeProvider } from './contract/requires.js'
-export type { AgentTurnCapabilitySnapshotSource } from './contract/requires.js'
-export { KernelSessionPolicy } from './impl/execution/KernelSessionPolicy'
-export {
-  ExecutionPlanStateHelper as ExecPlanState,
-  ExecutionPlanStateHelper,
-} from './impl/records/ExecPlanState'
-export {
-  ExecutionStateMachine as ExecStateMachine,
-  ExecutionStateMachine,
-} from './impl/records/ExecStateMachine'
-export {
-  AgentHistoryMessageHelper,
-  AgentHistoryMessageHelper as HistoryMessages,
-} from './impl/records/HistoryMessages'
-export {
-  AgentToolResultHelper,
-  agentToolResultHelper,
-} from './impl/records/ToolResults'
-export {
-  AgentTurnHistoryHelper,
-  AgentTurnHistoryHelper as TurnHistory,
-} from './impl/records/TurnHistory'
-export type { AgentModelInputModality } from './types/agent.js'
-export type { ActiveDirectiveType } from './types/agent.js'
-export type { AgentDelegationContract, AgentRoleExpectedOutputKind, WorkflowType } from './types/agent.js'
-export type { ContextUsageEstimate } from './types/agent.js'
-export type { CapabilitySpan, ExecutionSpan, ExecutionSpanCategory, ExecutionSpanMetrics, ExecutionSpanStatus, ModelSpan, PolicySpan, RunSpan, ToolSpan, TurnSpan } from './types/agent.js'
-export type { BuiltinAgentModOptions, BuiltinAgentModPackage } from './types/builtin.js'
-export type { DistillContextInput } from './types/builtin.js'
-export type { ActiveDirectiveContext } from './types/builtin.js'
-export type { HandoffContextInput } from './types/builtin.js'
-export type { AgentWorkflowToolCollection } from './types/builtin.js'
-export type { DefineVelaToolInput, VelaTool, VelaToolSurface } from './types/builtin.js'
-export type { CapabilityCommandResult, CapabilityValidationGoal, CapabilityValidationRunResult, CapabilityValidationStatus, CapabilityValidationSuggestion, CapabilityValidationSummary } from './types/capabilities.js'
-export type { AgentRuntimeCapabilityDescriptor, AgentRuntimeCapabilityExtension, CapabilityIntentClassifierContext, CapabilityIntentSignal, CapabilityScopeCategoryDecision, CapabilityScopeResidency, CapabilityScopeRuntimeFacts, CapabilityValidationInterpretation, ToolAllocationDelegation, ToolAllocationPrerequisite, ToolResultMiddlewareContext, ToolResultMiddlewareResult, ToolResultModelImage, ToolValidationHintContext, ToolValidationIssueDetail, ToolValidationRecovery } from './types/capabilities.js'
-export type { AgentBridgeDispatch, AgentBridgeOutput, ChatStreamLifecyclePhase, ChatStreamLogEntry, ChatStreamTerminationReason, StreamObservabilityEntry, TerminalRuntimeExecutionAction } from './types/chat.js'
-export type { ResolvedChatSendRequestOptions } from './types/chat.js'
-export type { SafeFetchOptions } from './types/connectors.js'
-export type { McpConnectionSpec, McpRawCallResult, McpResourceContent, McpResourceDescriptor, McpToolAnnotations, McpToolDescriptor, McpTransportKind } from './types/connectors.js'
-export type { McpAutoApprovePolicy, TranslatedMcpTool, TranslateMcpToolInput } from './types/connectors.js'
-export type { FileContextCarrier, FileContextRange, FileContextSnapshot, FileContextSource } from './types/context.js'
-export type { CompiledProviderSendRequest, CompileProviderSendRequestInput } from './types/context.js'
-export type { ContextPayloadRecord, ContextUserTextRecord } from './types/context.js'
-export type { BuildToolPayloadRefsForProviderMessagesInput } from './types/context.js'
-export type { CompiledProviderRequest, CompileProviderRequestInput, ProviderHistoryRewriteSignal, ProviderRequestCompileDecision, ProviderRequestPressureKind, ProviderRequestZoneDiagnostic } from './types/context.js'
-export type { AgentLoopToolDescriptor, AgentLoopToolRegistry } from './types/context.js'
-export type { PersistUserTextPayloadsResult } from './types/context.js'
-export type { CanonicalizeToolResultInput, CanonicalToolResult, CanonicalToolResultVisibleReference } from './types/context.js'
-export type { ClassifiedContextWorkingSet, ClassifyContextWorkingSetInput, ContextActiveTaskInput, ContextPinnedEvidenceInput, ContextResourceItemStateInput, ContextResourceStateInput, ContextWorkingSetRetrievalHandleInput } from './types/context.js'
-export type { ProviderRequestSnapshot, ProviderToolDefinitionSnapshot, ProviderToolDefinitionSnapshotInput } from './types/context.js'
-export type { ContextUsageWindow, EstimateContextUsageOptions } from './types/context.js'
-export type { TokenizerEngine } from './types/context.js'
-export type { ContextLedgerEntry, ContextWorkingSetBlock, ContextWorkingSetBlockLifecycle, ContextWorkingSetBlockProvenance, ContextWorkingSetBlockSafety, ContextWorkingSetBlockSource } from './types/context.js'
-export type { ContextWindowBudget, ResolveContextWindowBudgetInput } from './types/context.js'
-export type { ContextWorkingSetReclaimAction, ContextWorkingSetZoneId, ContextWorkingSetZonePolicy } from './types/context.js'
-export type { ContextWorkingSetBudgetAllocation, ContextWorkingSetBudgetGovernorInput, ContextWorkingSetBudgetLedgerEntry, ContextWorkingSetZoneBudgetSnapshot } from './types/context.js'
-export type { SubAgentCodingSession, SubAgentDispatchInput, SubAgentQueryOptions, SubAgentToolCategoryRequestResult, SubAgentToolContext } from './types/delegation.js'
-export type { SubAgentRuntimeOverride, TeamModelRouteRequest, TeamModelRouteResult, TeamSelectableModel } from './types/delegation.js'
-export type { DispatchDecision, DispatchSignature } from './types/delegation.js'
-export type { SubAgentDispatchRequest } from './types/delegation.js'
-export type { SubAgentDispatchLimitsSnapshot } from './types/delegation.js'
-export type { CreateSubAgentSessionInput, SubAgentReleasedThread, SubAgentThreadRetention, SubAgentThreadRetentionLimits, SubAgentThreadUnresumableReason } from './types/delegation.js'
-export type { CapabilityWriteLease } from './types/delegation.js'
-export type { BuildSubAgentTaskResultInput } from './types/delegation.js'
-export type { ResolvedSubAgentTypeConfig, SubAgentDispatchCatalog, SubAgentTypeDescriptor } from './types/delegation.js'
-export type { ExecutionCollaborationActorHandle, ExecutionCollaborationActorInput, ExecutionGuidanceRelayPlan, ExecutionGuidanceRelayPlanInput } from './types/execution.js'
-export type { AgentCapabilityExecutionContext, AgentCapabilityService } from './types/execution.js'
-export type { KernelChatExecutionCoordinator, KernelChatExecutionService, KernelChatRunOptions, KernelChatSubmission } from './types/execution.js'
-export type { KernelCancelResult, KernelControllerAnswerInput, KernelControllerApprovalInput, KernelControllerSendInput, KernelControllerTarget, KernelInputReceipt } from './types/execution.js'
-export type { AgentCapabilityKernelEventDelivery } from './types/execution.js'
-export type { RunSoloExecutionParams, SoloExecutionAgentRunner } from './types/execution.js'
-export type { AdmitKernelSessionInput, KernelAdmittedInput, KernelInputDelivery, KernelInputRole, KernelInputStatus, KernelSessionDrainMode, KernelSessionDrainRunner, KernelSessionDrainTarget, KernelSessionInputSnapshot, KernelSessionInputSnapshotPersistence, KernelSessionInputStoreResult, PromoteKernelInputOptions } from './types/execution.js'
-export type { ExecutionAbortOptions } from './types/execution.js'
-export type { ManagedExecutionController, RunManagedExecutionParams } from './types/execution.js'
-export type { KernelRuntimeStatus, KernelSessionInputKind, ResolveKernelRuntimeStatusInput } from './types/execution.js'
-export type { PromptBudgetOptions, PromptCompositionResult, PromptContribution, PromptRenderContext, PromptSegmentDefinition, PromptSegmentProvider, PromptSegmentRetention, PromptSegmentSource, PromptSegmentStability, PromptSegmentTier } from './types/guidance.js'
-export type { SkillFileRecord } from './types/guidance.js'
-export type { SkillMarketAvailability } from './types/guidance.js'
-export type { AgentSkillDefinition, AgentSkillKind } from './types/guidance.js'
-export type { RuntimePromptSnapshot, RuntimePromptToolCategorySummary } from './types/guidance.js'
-export type { BuiltInPromptOptions } from './types/guidance.js'
-export type { SanitizeModelHistoryOptions, UserTextPayloadReference } from './types/history.js'
-export type { AssertValidModelHistoryOptions, ModelHistoryValidationIssue, ModelHistoryValidationResult } from './types/history.js'
-export type { ParsedContextOSGeneratedMessage } from './types/history.js'
-export type { AgentHistoryToolContext, ModelHistoryRequestPhase } from './types/history.js'
-export type { AgentTurnToolExecutor, AgentTurnToolResult, AssistantContentPart } from './types/history.js'
-export type { HistorySanitizationIssue, HistorySanitizationResult } from './types/history.js'
-export type { SessionEntryDraft, SessionLedgerWarn } from './types/ledgers.js'
-export type { ExecutionSpanOutcome, ExecutionSpanRecorderDeps, ExecutionSpanStart } from './types/ledgers.js'
-export type { CapabilitySpanInput, ExecutionCapabilitySpanRecorder, ModelSpanHandle, ModelSpanOutcome, RunSpanScope, ToolSpanHandle, ToolSpanOpener, ToolSpanOutcome, TurnSpanScope } from './types/ledgers.js'
-export type { PromptAuditReadResult, PromptAuditRecord } from './types/ledgers.js'
-export type { SpanLedgerWarn } from './types/ledgers.js'
-export type { SessionEntryClass, SessionTree, SessionTreeNode } from './types/ledgers.js'
-export type { LedgerReadResult } from './types/ledgers.js'
-export type { SpanLedgerReadResult } from './types/ledgers.js'
-export type { ExecutionSpanTree, ExecutionSpanTreeNode } from './types/ledgers.js'
-export type { ExecutionSpanDebugCapability, ExecutionSpanDebugPolicy, ExecutionSpanDebugProjection, ExecutionSpanDebugPromptAudit, ExecutionSpanDebugRun, ExecutionSpanDebugTool, ExecutionSpanDebugTurn } from './types/ledgers.js'
-export type { JsonlParseResult } from './types/ledgers.js'
-export type { ResolvedAgentModelRuntime } from './types/loop.js'
-export type { StreamDiagnostics, StreamDiagnosticsSummary, StreamFinishReasonDiagnostic, StreamRawChunkDiagnostic } from './types/loop.js'
-export type { AgentIntentDomain, AgentIntentPlan, AgentRunPlan, AgentRunPlanLedgerEntry, AgentRunPlanLedgerSource, AgentRunPlannerInput, AgentRuntimePlan, CapabilityRunPlan, ContextRunPlan, PromptRunPlan, RecoveryRunPlan, ToolPageFault } from './types/loop.js'
-export type { ExecuteQueryTurnArgs, QueryTurnEvents, QueryTurnProvider, QueryTurnToolContext, QueryTurnToolRegistry } from './types/loop.js'
-export type { ExecuteStreamTurnArgs, StreamTurnEvents, StreamTurnProvider, StreamTurnResult, StreamTurnToolContext, StreamTurnToolRegistry } from './types/loop.js'
-export type { AgentLoopSurface, LoopTurnVerdict, LoopWindDownTriggerReason } from './types/loop.js'
-export type { ConnectionRetryOptions } from './types/loop.js'
-export type { TurnRunnerToolRegistry } from './types/loop.js'
-export type { ExecuteSoloModeStreamLoopArgs, SoloLoopEvents, SoloLoopRoleRuntime, SoloLoopRunContext, SoloLoopRuntime, SoloLoopToolContext, SoloLoopToolRegistry, SoloLoopTurnRunner, SoloModeStreamLoopResult } from './types/loop.js'
-export type { ExecuteQueryLoopArgs, QueryLoopRoleEngine, QueryLoopSubAgentOptions, QueryLoopSubAgentRuntimeOverride, QueryLoopToolCategoryResolver, QueryLoopToolContext, QueryLoopToolRegistry } from './types/loop.js'
-export type { AgentContextSemanticSummaryInput, AgentModelRequestPort, AgentModelStreamInput, AgentModelStreamResult } from './types/loop.js'
-export type { BuildKernelContextEpochInput, KernelContextEpoch, KernelContextEpochClaim, KernelContextEpochGuardLike, KernelContextEpochPhase, KernelContextUsageSnapshot, RecordKernelContextEpochDiagnosticOptions } from './types/loop.js'
-export type { KernelPrefixShape, KernelPrefixShapeDiagnostic, KernelPrefixShapeInput, KernelPrefixShapePhase, RecordKernelPrefixShapeDiagnosticInput } from './types/loop.js'
-export type { ConsumeAssistantStreamArgs, InterruptedStreamPartial, StreamConsumerEvents, StreamConsumerToolExecutor } from './types/loop.js'
-export type { ReadNextStreamPartIdleTimeoutOptions } from './types/loop.js'
-export type { EmptyAssistantStreamErrorInput, EmptyStreamContextPressure } from './types/loop.js'
-export type { LeakedToolMarkupFilterState } from './types/loop.js'
-export type { InlineReasoningSegment, InlineReasoningSegmentKind, InlineReasoningTagSplitState } from './types/loop.js'
-export type { ProviderExecutableToolInputResolution, ProviderFinalToolInputResolution, ProviderJsonTextDiagnostic, ProviderToolInputDraft, RejectedProviderToolInputDiagnostic } from './types/loop.js'
-export type { BuildPromptRunPlanInput, PlanContextRunInput, PlanRecoveryRunInput } from './types/loop.js'
-export type { BuildSoloRunProfileTelemetryInput, BuildSoloToolSchemaTelemetryInput, SoloToolSchemaTelemetryContext } from './types/loop.js'
-export type { RunSoloToolSpaceBootstrapFallbackInput, SoloToolSpaceBootstrapFallbackEvents, SoloToolSpaceBootstrapFallbackResult } from './types/loop.js'
-export type { AgentExecutionLimitOverrides, AgentExecutionLimits } from './types/loop.js'
-export type { ApplySoloContextDegradeActionContext, SoloContextDegradeToolContext, SoloContextDegradeToolRegistry } from './types/loop.js'
-export type { AgentIntentDomainSignal, AgentIntentSignalDomain, AgentIntentSignals } from './types/loop.js'
-export type { ConsumeSoloRuntimeGuidanceInput, SoloRuntimeGuidancePhase, SoloRuntimeGuidanceResult } from './types/loop.js'
-export type { EvaluateKernelFinalReadinessInput, KernelFinalReadinessAudit, KernelFinalReadinessAuditResult, KernelFinalReadinessReason, KernelFinalReadinessResult } from './types/loop.js'
-export type { AgentTurnCapabilitySnapshot } from './types/loop.js'
-export type { ContextDegradeAction, ContextDegradeActionKind, ContextDegradeChain } from './types/loop.js'
-export type { PrepareSoloRunPlanForTurnInput, PrepareSoloRunPlanForTurnResult, SoloRunPlanCodingSession, SoloRunPlanRoleRuntime, SoloRunPlanToolCategory, SoloRunPlanToolContext, SoloRunPlanToolRegistry } from './types/loop.js'
-export type { RunSoloTurnWindDownInput } from './types/loop.js'
-export type { CreateSubAgentContextArgs, ResolveSoloLoopToolsArgs, ResolveSubAgentDelegationArgs, ResolveSubAgentToolScopeArgs, SubAgentContextBase, SubAgentOptionsLike, SubAgentToolScope } from './types/loop.js'
-export type { ToolSpaceBootstrapDecision, ToolSpaceBootstrapPlan, ToolSpaceBootstrapPlannerInput, ToolSpaceBootstrapState } from './types/loop.js'
-export type { PlanCapabilityRunInput, ResolveCapabilityPageFaultsInput } from './types/loop.js'
-export type { BuildAgentRunPlanInput, BuildAgentRunPlanLedgerInput, PlanAgentIntentInput } from './types/loop.js'
-export type { RunSoloFinishingGateInput, SoloFinishingGateBlockTracker, SoloFinishingGateContinueReason, SoloFinishingGateEvents, SoloFinishingGateRepeatableReason, SoloFinishingGateResult } from './types/loop.js'
-export type { AgentContextPhaseDecision, ResolveAgentContextPhaseInput } from './types/loop.js'
-export type { ExecuteLoopTurnWithContextOverflowRecoveryInput, LoopTurnPromptAudit, LoopTurnSpans, LoopTurnSpanUsage } from './types/loop.js'
-export type { RunSoloToolUseContinuationInput, SoloToolUseContinuationEvents, SoloToolUseContinuationResult } from './types/loop.js'
-export type { ResolveSoloLoopProtectedToolsArgs, ResolveSoloLoopToolCategoriesForExposureArgs, SoloLoopProtectedToolCategory, SoloLoopToolCategory } from './types/loop.js'
-export type { AgentModAssembly, AgentModDiscoveryResult, AgentModPackDescriptorLike, AssembleAgentModsInput } from './types/mods.js'
-export type { InstallScannedVelarModArchiveRequest, PreparedVelarModInstall, VelarModArchiveEntry, VelarModArchiveFinding, VelarModArchiveInstallFailureReason, VelarModArchiveScanReport, VelarModPermissionDescriptor } from './types/mods.js'
-export type { AgentModAxisDeclarationMap, AgentModAxisPayloadMap, AgentModAxisRecord, AgentModContributionRecord, AgentModRegistryPhase, AgentModRegistrySnapshot } from './types/mods.js'
-export type { AgentModActivationState, AgentModActivationStatus, AgentModBindings, AgentModHostProfile, AgentModLoadReport, AgentModPackage, AgentModRejection, AgentModSourceKind } from './types/mods.js'
-export type { AgentModHookContext, AgentModSeamEventMap, AgentModSeamGenericEvent, AgentModSeamHandler, AgentModSeamOutcomeMap, AgentModSeamRegistration, AgentModSeamRegistrationInput, AgentModSessionLifecycleEvent, AgentModToolCallBeforeEvent, AgentModToolCallBeforeOutcome, AgentModToolResultAfterEvent, AgentModToolResultAfterOutcome, AgentModTurnContextAppendage, AgentModTurnContextAssembleEvent, AgentModTurnContextAssembleOutcome, AgentModTurnContextSegmentView } from './types/mods.js'
-export type { AgentModSurfaceSnapshot } from './types/mods.js'
-export type { ResolvedTaskRoute } from './types/records.js'
-export type { AppendExecutionEventInput, ExecutionAgentEventLedgerStore, ExecutionTaskLedgerStore } from './types/records.js'
-export type { WorkerExecutionStreamOptions } from './types/records.js'
-export type { RegisterSubAgentGuidanceRelayWorkerInput, SubAgentGuidanceRelayWorkerHandle, SubAgentGuidanceRelayWorkerSnapshot } from './types/records.js'
-export type { CompleteProviderTurnSnapshotOptions, CompleteProviderTurnSnapshotResult, EmitCompletedProviderTurnSnapshotInput, ProviderRequestFingerprint, ProviderTurnEvent, ProviderTurnRequestSnapshot, ProviderTurnSnapshot, ProviderTurnStatus, ProviderTurnToolSnapshot, ProviderTurnToolStatus, ProviderTurnUsage } from './types/records.js'
-export type { ExecutionGuidanceClearResult, ExecutionGuidanceEnqueueResult, ExecutionGuidanceFinalizationResult } from './types/records.js'
-export type { TurnContextAppendBus, TurnContextAppendListener } from './types/records.js'
-export type { PendingConfirmationResolvers, PendingInputResolvers } from './types/records.js'
-export type { ExecutionStoreOptions } from './types/records.js'
-export type { KernelBackgroundJob, KernelBackgroundJobOutputSnapshot, KernelBackgroundJobStatus, KernelBackgroundJobStoredOutput, StartKernelBackgroundJobInput, WaitForKernelBackgroundJobsInput, WaitForNextKernelBackgroundJobInput } from './types/records.js'
-export type { PlanChangePayload } from './types/records.js'
-export type { ExecutionRouteProvider } from './types/records.js'
-export type { ExecutionResourceProvider } from './types/records.js'
-export type { GuidanceRelayPlan, MainAgentGuidanceDelivery } from './types/records.js'
-export type { ContextGovernanceSyncInput, ContextGovernanceSyncResult, ContextHandoffSignal } from './types/residency.js'
-export type { ContextLedgerAppendResult, ContextLedgerStats, ContextMigrationOutcome, ContextMigrationRejection } from './types/residency.js'
-export type { ContextFaultEvent, ContextLedgerGenerationStamp, ContextMigrationCause, ContextMigrationEventLineWriter, ContextResidencyMigrationEvent } from './types/residency.js'
-export type { ContextProjectionBudget, ContextProjectionMeasurement, ContextProjectionResult, ContextProjectionStats, ProjectContextLedgerInput } from './types/residency.js'
-export type { AdmitContextRecordOptions, ContextAdmissionDecision, ContextAdmissionInput, ContextClassificationInput, ContextRecordClassifier } from './types/residency.js'
-export type { GovernanceWindowDerivation, GovernanceWindowInput } from './types/residency.js'
-export type { ContextRecord, ContextRecordBytes, ContextRecordExcerpt, ContextRecordKind, ContextRecordToolPart, ContextResidency, ContextResidencyVector } from './types/residency.js'
-export type { ContextDistiller, ContextDistillGateSignals, ContextDistillInput, ContextDistillPlan, ContextDistillProduct, ContextDistillRejection, ContextDistillRequest, ContextDistillSkipReason, ContextDistillTotals, PlanContextDistillationInput } from './types/residency.js'
-export type { ContextAdmissionConfig, ContextDistillAdaptiveConfig, ContextDistillConfig, ContextDistillInstrument, ContextEvictionConfig, ContextFaultRecoveryConfig, ContextGovernanceConfig, ContextGovernanceConfigInput, ContextGovernancePresetName, ContextHandoffConfig, ContextInstrumentConfig } from './types/residency.js'
-export type { ContextAnchor, ContextAnchorKind } from './types/residency.js'
-export type { ContextDashboardInput } from './types/residency.js'
-export type { GovernanceEpochDistillReport, GovernanceEpochReport, GovernanceEpochSkipReason, GovernanceEpochSource, RunGovernanceEpochInput } from './types/residency.js'
-export type { ContextSkeletonField, ContextSkeletonInput, ContextSkeletonResult } from './types/residency.js'
-export type { ToolCallFact, ToolResultFact } from './types/residency.js'
-export type { HistoryIngestPlan, IngestHistoryOptions } from './types/residency.js'
-export type { JsonPathSelection } from './types/retrieval.js'
-export type { RetrievalQueryRegistration } from './types/retrieval.js'
-export type { PaginatedJsonPathSelection, PaginatedTextWindow } from './types/retrieval.js'
-export type { ChatContextRetrievalIndexMessageEntry, ChatContextRetrievalIndexReferencedPath, ChatContextRetrievalIndexSaveOptions, ChatContextRetrievalIndexSnapshot, ChatContextRetrievalIndexStore, ChatContextRetrievalIndexToolPayloadEntry } from './types/retrieval.js'
-export type { RankingSignals } from './types/retrieval.js'
-export type { IndexedSessionMessage, MessageSearchIndex } from './types/retrieval.js'
-export type { ArtifactManifestSnippet, LogReadSnippet, ReferencedArtifactPath, ReferencedLogPath } from './types/retrieval.js'
-export type { AgentRoleContract, AgentRoleDefinition, AgentRoleResolution, ResolveAgentRoleOptions } from './types/runner.js'
-export type { CodingSessionTrackerLike, RunnerAgentProvider, RunnerBuildToolContextArgs, RunnerCancelBackgroundJob, RunnerCodingSessionPolicyBundle, RunnerContextCodingSession, RunnerExecutionScope, RunnerModelCapabilityPort, RunnerReadBackgroundJobOutput, RunnerResolvedAgentRuntime, RunnerSubAgentOptions, RunnerToolContext, RunnerWaitBackgroundJobs } from './types/runner.js'
-export type { AgentRunnerComponents, AgentRunnerDomainServices, AgentRunnerInfrastructure } from './types/runner.js'
-export type { ExecutionModeDescriptor, ExecutionModePromptProjection, ExecutionModeStickiness } from './types/runner.js'
-export type { RunContextCodingSession, RunContextToolContext } from './types/runner.js'
-export type { AgentTurnBoundary, AgentTurnSettlement } from './types/runner.js'
-export type { AgentSurfaceProfile, DerivedAgentSurfaceRunPolicy, DeriveSurfaceRunPolicyInput, ResolveAgentSurfaceInput } from './types/runner.js'
-export type { AgentExecutionStackOptions, AgentExecutionStackRunnerOptions, AgentExecutionStackToolContext } from './types/runner.js'
-export type { BuildRuntimePromptStateArgs, PromptStateCodingSession, PromptStateExecutionApi, PromptStatePreparedToolCategories, PromptStateRoleResolution, PromptStateToolContext } from './types/runner.js'
-export type { AgentRoleToolCategoryResolver } from './types/runner.js'
-export type { AgentRoleDescriptorProviderContext, AgentRoleToolBindings } from './types/runner.js'
-export type { BuiltContext } from './types/runner.js'
-export type { AgentWorkflowDispatchContext, AgentWorkflowDispatchPort, AgentWorkflowRunOptions } from './types/runner.js'
-export type { AgentWorkflowRunRequest } from './types/runner.js'
-export type { AgentRunProfileCatalogSnapshot } from './types/runner.js'
-export type { TurnContextBlockInput } from './types/runner.js'
-export type { AgentRuntimeInputResult } from './types/runner.js'
-export type { AgentRuntimeEventBus } from './types/runner.js'
-export type { RoutedAgentRoleResult } from './types/runner.js'
-export type { GoalDockAction, GoalDockPrimaryAction, GoalDockTone, GoalDockViewModel, GoalLifecycleAction, GoalLifecycleStatus } from './types/runner.js'
-export type { BuildTurnContextPayloadArgs } from './types/runner.js'
-export type { CapabilityValidationFailure, CodingSessionSnapshot, ReminderScope, ReminderTrigger, RuntimeReminderInput } from './types/session.js'
-export type { CodingSessionToolCategoryToolNames, CodingSessionToolContext } from './types/session.js'
-export type { CapabilityValidationCollectionResult } from './types/session.js'
-export type { RuntimeReminderConsumeResult } from './types/session.js'
-export type { AutoVerificationCodingSession, AutoVerificationEvents, AutoVerificationGateResult, AutoVerificationToolContext, LoopReminderMode, LoopReminderPhase, TickLoopRemindersArgs } from './types/session.js'
-export type { ToolCodingSessionApi } from './types/tool-context.js'
-export type { CancelToolBackgroundJobInput, KernelToolContext, ReadToolBackgroundJobOutputInput, SubAgentOptions, ToolBackgroundJobOutputSnapshot, ToolRoleSkillReadResult, WaitToolBackgroundJobsInput } from './types/tool-context.js'
-export type { DefineToolContractInput, DefineToolContractSurfaceInput, DefineToolRuntimeSpecInput, NonEmptyToolContractList, ToolContractDescriptionSpec, ToolContractExecute, ToolContractRole, ToolContractRuntimeSpec, ToolContractSpec, ToolContractSurface, ToolInputReuseContract, ToolInputReuseMigrationRequest } from './types/toolkit.js'
-export type { ManualApprovalOptions, UnattendedApprovalEscalationHooks } from './types/toolkit.js'
-export type { AppliedAdjustment } from './types/toolkit.js'
-export type { ToolConceptRegistry } from './types/toolkit.js'
-export type { ToolCallableOperationsOptions, ToolContextResolver } from './types/toolkit.js'
-export type { CreateToolSchemaBundleOptions, ToolSchemaBundle, ToolSchemaSource } from './types/toolkit.js'
-export type { StructuredParameterDescriptionSpec, StructuredToolDescriptionParts, StructuredToolDescriptionSpec, ToolDescriptionBudgetWaiver, ToolDescriptionBudgetWaiverReason, ToolDescriptionDetail } from './types/toolkit.js'
-export type { RegisteredToolMap, ToolCapabilityPage, ToolCapabilityPageKind, ToolCapabilityReason, ToolCapabilityRegistryContext, ToolCapabilityRegistryListOptions, ToolCapabilitySchemaPolicy } from './types/tools.js'
-export type { SessionToolAllocatorPlan, ToolAllocatorAdvisorState, ToolAllocatorDeniedRequest, ToolAllocatorOperation, ToolAllocatorRequest } from './types/tools.js'
-export type { ToolInputReuseOptions } from './types/tools.js'
-export type { MaterializedKernelToolResult, MaterializeKernelToolResultInput } from './types/tools.js'
-export type { ProviderToolReferenceCanonicalizer, ToolTransportNamePlan, ToolTransportProjection } from './types/tools.js'
-export type { ToolExecutionDecision, ToolExecutionPolicyContext, ToolExecutionPolicyExecution, ToolExecutionPolicyRegistry, ToolExecutionPolicyTool, ToolExecutionPrepared } from './types/tools.js'
-export type { KernelToolFailureBatchEntry } from './types/tools.js'
-export type { ToolExecutionApiHost } from './types/tools.js'
-export type { ContextPayloadKernelToolOutputStoreOptions, KernelStoredToolOutput, KernelToolOutputProjection, ProjectKernelToolOutputInput, ProjectKernelToolOutputResult } from './types/tools.js'
-export type { PendingTool, ToolExecutorEvents, ToolResult } from './types/tools.js'
-export type { ToolAccessRuntimeState, ToolCategoryAccessDecision, ToolCategoryUnavailableReason } from './types/tools.js'
-export type { BuildToolAccessDecisionInput, ToolAccessDecision, ToolAccessFinalState, ToolAccessGates, ToolAccessLayer, ToolAccessPageKind, ToolAccessReason } from './types/tools.js'
-export type { ToolDiscoveryAvailability, ToolDiscoveryCategoryAvailabilityInput, ToolDiscoveryNextAction, ToolDiscoverySchemaState, ToolDiscoveryToolAvailabilityInput } from './types/tools.js'
-export type { ToolFailureResult } from './types/tools.js'
-export type { SerializationHints } from './types/tools.js'
-export type { ToolArgsValidationResult, ToolSchemaIssueDetail } from './types/tools.js'
-export type { PluginEntry, ToolSpacePage, ToolSpacePageKind, ToolSpacePageRisk, ToolSpaceReason, ToolSpaceResolverContext, ToolSpaceSchemaPolicy } from './types/tools.js'
-export type { ToolModelInputContext, ToolModelInputRequirements } from './types/tools.js'
-export { agentWorkflowSchema } from './utils/builtin/workflow-schemas'
-export {
-  collectCapabilityContext,
-  decideCapabilityScopeCategory,
-  expandCapabilityCategoryIds,
-  resolveCapabilityCategoryDefinitions,
-  resolveCapabilityContextCollectors,
-  resolveCapabilityDelegationPolicy,
-  resolveCapabilityIntentClassifiers,
-  resolveCapabilityPromptSegments,
-  resolveCapabilityScopeId,
-  resolveCapabilityScopePolicy,
-  resolveCapabilityScopeResidency,
-  resolveCapabilityValidationInterpreters,
-  resolveToolAliases,
-  resolveToolAllocationMetadata,
-  resolveToolResultMiddlewares,
-  resolveToolValidationHintProviders,
-} from './utils/capabilities'
-export { resolveChatSendRequestOptions } from './utils/chat/resolve-chat-send-request'
-export { resolveStoredChatSessionFields } from './utils/chat/resolve-stored-chat-session'
-export {
-  normalizeSessionLineageId,
-  normalizeSessionLineageIdList,
-} from './utils/chat/session-lineage'
-export {
-  extractSessionSearchTerms,
-  normalizeSessionSearchText,
-} from './utils/chat/session-search-text'
-export { translateMcpCallResult } from './utils/connectors/mcp-call-result'
-export {
-  buildMcpToolName,
-  convertMcpInputSchema,
-  translateMcpTool,
-} from './utils/connectors/mcp-tool-translation'
-export {
-  ContextOverflowRecoveryTargetPercent,
-  DefaultContextSafetyMarginPercent,
-  DefaultOutputReserveRatio,
-  MaxOutputReserveTokens,
-  MinOutputReserveTokens,
-  resolveContextWindowBudget,
-  resolveReservedOutputTokens,
-  resolveUsableContextWindow,
-} from './utils/context/context-budget'
-export {
-  estimateBlockChars,
-  estimateBlockTokens,
-  hasFailureSignal,
-} from './utils/context/context-ledger'
-export { buildToolPayloadRefOccurrenceKey } from './utils/context/context-ref-envelope'
-export {
-  ContextUsageCompactionPercent,
-  ContextUsageHighWatermarkPercent,
-  ContextUsagePayloadCompactionChars,
-  ContextUsageSemanticPreSummaryPercent,
-  countContextMediaParts,
-  estimateContextUsage,
-  estimateContextValueChars,
-  resolveContextUsageWindow,
-} from './utils/context/context-usage'
-export {
-  ContextWorkingSetZoneIds,
-  DefaultContextWorkingSetZonePolicies,
-} from './utils/context/context-working-set-zones'
-export {
-  collectProviderRequestHistoryToolNames,
-  isSerializedContextRefCandidateText,
-} from './utils/context/message-scan'
-export {
-  assertProviderRequestSnapshotReconstructable,
-  buildProviderRequestSnapshot,
-} from './utils/context/provider-request-snapshot'
-export { countTokensTiktoken, resolveTokenizerEngine } from './utils/context/tokenizer'
-export {
-  buildStructuredOutputRepairPrompt,
-  compileSubAgentOutputSchema,
-  MaxStructuredOutputBytes,
-  MaxStructuredOutputSchemaBytes,
-  parseSubAgentStructuredOutput,
-} from './utils/delegation/structured-output'
-export {
-  isBlockedInReadonlyMode,
-  resolveReadonlyMode,
-} from './utils/delegation/sub-agent-readonly-policy'
-export {
-  buildSubAgentTaskResult,
-  formatSubAgentToolResult,
-  parseSubAgentToolResult,
-} from './utils/delegation/sub-agent-result-builder'
-export {
-  resolveCustomSubAgentTypeConfig,
-  resolveSubAgentTypeConfig,
-} from './utils/delegation/sub-agent-type-registry'
-export { createSkillDefinition } from './utils/guidance/agent-skill-provider'
-export {
-  BuiltInPromptCatalog,
-  createBuiltInPromptSegments,
-  createIdentityPromptSegment,
-} from './utils/guidance/catalog'
-export { createRuntimePromptSegments } from './utils/guidance/runtime'
-export {
-  createCorePromptSegment,
-  createSelectedSkillPromptSegment,
-  createSkillPromptSegment,
-  createTextPromptSegment,
-  PromptSegmentPriority,
-} from './utils/guidance/shared'
-export {
-  buildContextOSGeneratedAssistantMessage,
-  CompactionSummaryInstruction,
-  CompactionSummaryMarker,
-  ContextOSBlockMarkers,
-  DynamicHandlesInstruction,
-  DynamicHandlesMarker,
-  isContextOSGeneratedAssistantMessage,
-  parseContextOSGeneratedMessage,
-  PinnedEvidenceInstruction,
-  PinnedEvidenceMarker,
-  readCompactionSummaryBody,
-} from './utils/history/context-os-message'
-export {
-  buildInternalFollowUpContent,
-  createInternalFollowUpMessage,
-  InternalFollowUpPrefix,
-  InternalFollowUpTagName,
-  isInternalFollowUpMessage,
-  mapInternalFollowUpsForProvider,
-} from './utils/history/internal-messages'
-export { repairHistoryStructureForProvider } from './utils/history/repair'
-export { sanitizeHistoryForProvider } from './utils/history/request'
-export {
-  isReplayUnsafeAssistantMessage,
-  sanitizeModelHistory,
-  sanitizeModelHistoryForProvider,
-  sanitizeModelMessage,
-  sanitizeModelMessageForProvider,
-} from './utils/history/sanitize'
-/** @deprecated 请改用 `AgentToolResultHelper`；该别名保留至 Agent 1.0。 */
-export { AgentToolResultHelper as ToolResults } from './impl/records/ToolResults'
-export { ContextRetrievalReferenceReader } from './impl/retrieval/ContextRetrievalReferenceReader'
-export {
-  ContextRetrievalReferences,
-  contextRetrievalReferences,
-} from './impl/retrieval/ContextRetrievalReferences'
-export {
-  assertValidModelHistory,
-  assertValidModelHistoryForProvider,
-  stripOrphanToolResultParts,
-  validateModelHistory,
-  validateModelHistoryForProvider,
-} from './utils/history/validate'
-export {
-  parseSpanLedgerText,
-  readSpanLedgerFile,
-  serializeSpanLine,
-  SPAN_LEDGER_LINE_SEPARATOR,
-} from './utils/ledgers/execution-ledger-file'
-export { projectExecutionSpanDebug } from './utils/ledgers/execution-span-debug'
-export { buildExecutionSpanTree, spanPathToRoot } from './utils/ledgers/execution-span-tree'
-export {
-  completeLineByteLength,
-  JSONL_LINE_SEPARATOR,
-  parseJsonlWithTailTolerance,
-  truncateJsonlToLineCount,
-} from './utils/ledgers/jsonl-file'
-export {
-  canonicalJsonStringify,
-  LEDGER_LINE_SEPARATOR,
-  parseLedgerText,
-  readLedgerFile,
-  serializeLedgerLine,
-  truncateLedgerToEntryCount,
-} from './utils/ledgers/ledger-file'
-export {
-  buildContextEntries,
-  buildSessionTree,
-  classifySessionEntry,
-  isProviderContextEntry,
-  isSnapshotComparableEntry,
-  pathRootToLeaf,
-  resolveCurrentLeafId,
-} from './utils/ledgers/session-tree'
-export {
-  beginLoopTurnSpans,
-  endLoopTurnSpansError,
-  endLoopTurnSpansOk,
-  executeLoopTurnWithContextOverflowRecovery,
-  runAgentLoop,
-} from './utils/loop/agent-loop'
-export {
-  contextDegradeStaircaseLength,
-  resolveContextDegradeAction,
-} from './utils/loop/context-degrade-ladder'
-export { resolveAgentContextPhase } from './utils/loop/context-phase'
-export {
-  DefaultAgentExecutionLimits,
-  MaxNativeTimerDelayMs,
-  resolveAgentExecutionLimits,
-} from './utils/loop/execution-limits'
-export { evaluateKernelFinalReadiness } from './utils/loop/final-readiness'
-export {
-  detectAgentIntentSignals,
-  extractLatestUserTextFromMessages,
-  isLowSignalIntentText,
-  normalizeIntentText,
-} from './utils/loop/intent-signals'
-export {
-  buildSubAgentInstruction,
-  createSubAgentContext,
-  extractAssistantText,
-  resolveSoloLoopTools,
-  resolveSubAgentDelegation,
-  resolveSubAgentToolScope,
-} from './utils/loop/loop-runtime'
-export { applySoloContextDegradeAction } from './utils/loop/solo-context-degrade-action-executor'
-export {
-  createSoloFinishingGateBlockTracker,
-  resetSoloFinishingGateBlockTracker,
-  runSoloFinishingGate,
-} from './utils/loop/solo-finishing-gate'
-export {
-  buildSoloRunProfileTelemetry,
-  buildSoloToolAllocatorTelemetry,
-  buildSoloToolSchemaTelemetry,
-} from './utils/loop/solo-loop-telemetry-builder'
-export {
-  resolveSoloLoopProtectedTools,
-  resolveSoloLoopToolCategoriesForExposure,
-} from './utils/loop/solo-loop-tool-exposure'
-export {
-  HtmlArtifactMinimumOutputTokens,
-  resolveSoloTurnModelRequestOptions,
-} from './utils/loop/solo-model-request-options'
-export { prepareSoloRunPlanForTurn } from './utils/loop/solo-run-plan-preparer'
-export { consumeSoloRuntimeGuidance } from './utils/loop/solo-runtime-guidance'
-export { runSoloToolSpaceBootstrapFallback } from './utils/loop/solo-tool-space-bootstrap-fallback'
-export { runSoloToolUseContinuation } from './utils/loop/solo-tool-use-continuation'
-export {
-  buildSoloTurnCapWindDownReminder,
-  runSoloTurnWindDown,
-} from './utils/loop/solo-turn-wind-down'
-export {
-  markToolSpaceBootstrapDiscoverySatisfied,
-  planToolSpaceBootstrap,
-} from './utils/loop/tool-space-bootstrap-planner'
-export {
-  captureAgentTurnCapabilityContext,
-  captureAgentTurnCapabilitySnapshot,
-} from './utils/loop/turn-capability-snapshot'
-export {
-  assertModelInputCompatibility,
-  collectRequiredModelInputModalities,
-} from './utils/model/model-input-compatibility'
-export {
-  createPromptCacheSystemMessage,
-  markLatestUserMessagePromptCacheBreakpoint,
-  mergeSessionPromptCacheProviderOptions,
-  resolveSessionPromptCacheKey,
-} from './utils/model/prompt-cache'
-export {
-  composeAgentModSpaces,
-  createAgentModSurfaceSnapshot,
-  projectAgentModExecutionModes,
-  projectAgentModPromptSegments,
-  projectAgentModSkills,
-  projectAgentModSpaces,
-  projectAgentModSubAgentTypes,
-  projectAgentModToolCategories,
-  projectAgentModTools,
-  projectAgentModTurnContextSources,
-} from './utils/mods/agent-mod-projection'
-export {
-  buildGuidanceRelayPrompt,
-  extractGuidanceUserText,
-  filterValidGuidanceRelays,
-  GuidanceRelayPlanSchema,
-  normalizeGuidanceRelayPlan,
-  parseGuidanceRelayPlan,
-  resolveMainAgentGuidanceDelivery,
-  resolveMainAgentGuidanceMessage,
-} from './utils/records/guidance-relay'
-export {
-  admitContextRecord,
-  buildExcerptEnvelope,
-  buildToolPartExcerptEnvelope,
-  ContextDedupeVetoTarget,
-  hasExcerptRenderMaterial,
-  sliceHeadTailExcerpt,
-} from './utils/residency/admission'
-export {
-  anchorDensityPerKiloChar,
-  compareContextAnchors,
-  ContextAnchorKindOrder,
-  contextAnchorKindRank,
-  extractContextAnchors,
-  MaxContextAnchors,
-  normalizeAnchorText,
-  toContextAnchorTexts,
-} from './utils/residency/anchors'
-export {
-  clampResidencyForRecord,
-  ContextResidencyOrder,
-  createContextRecordId,
-  DefaultResidencyCharsPerToken,
-  estimateResidencyTokens,
-  isResidencyDowngrade,
-  PinnedFloorResidency,
-  residencyRank,
-} from './utils/residency/context-record'
-export {
-  buildContextDashboardMessage,
-  isContextDashboardText,
-  renderContextDashboardText,
-} from './utils/residency/dashboard'
-export {
-  compareStableStrings,
-  sortedUniqueStrings,
-  stableFingerprint,
-  stableSortBy,
-  stableStringify,
-} from './utils/residency/determinism'
-export {
-  buildDistillProduct,
-  buildSkeletonFallbackProduct,
-  collectMissingAnchors,
-  createEmptyDistillTotals,
-  extractDistilledBody,
-  isContextDistillText,
-  isContextSummaryText,
-  planContextDistillation,
-  resolveDistillGate,
-  validateDistilledBody,
-} from './utils/residency/distill'
-export {
-  ContextGovernancePresetNames,
-  ContextGovernancePresets,
-  DefaultContextGovernanceConfig,
-  resolveContextGovernanceArmName,
-  resolveContextGovernanceConfig,
-  resolveContextGovernancePreset,
-} from './utils/residency/governance-config'
-export {
-  measureProjectedTokens,
-  resolveProjectionBudget,
-  runGovernanceEpoch,
-  shouldOpenGovernanceEpoch,
-} from './utils/residency/governance-epoch'
-export {
-  GovernanceHeadroomRatio,
-  governanceWakesBeforeSendGate,
-  MinGovernanceWindowTokens,
-  resolveGovernanceWindow,
-  resolveGovernanceWindowTokens,
-} from './utils/residency/governance-window'
-export {
-  ingestHistoryIntoLedger,
-  planHistoryIngest,
-  resolveRecordKind,
-} from './utils/residency/ingest'
-export {
-  estimateMessageBudgetChars,
-  estimateMessageChars,
-  extractResourceLocator,
-  hasToolCallParts,
-  readMessageText,
-  readToolCallFacts,
-  readToolResultFacts,
-} from './utils/residency/message-facts'
-export {
-  measureLedgerProjection,
-  projectContextLedger,
-  residentChars,
-  resolveEffectiveResidency,
-  resolveTailProtectedRecordIds,
-} from './utils/residency/projection'
-export {
-  resolveGovernanceSessionKey,
-  UnknownGovernanceSessionId,
-} from './utils/residency/session-key'
-export {
-  buildContextSkeleton,
-  collectContextAnchorUnion,
-  isContextSkeletonText,
-  MaxContextSummaryMembers,
-  renderContextAnchorLine,
-  renderContextRecallLine,
-} from './utils/residency/skeleton'
-export {
-  ChatContextRetrievalIndexVersion,
-  contextRetrievalFingerprintIsComparable,
-  contextRetrievalFingerprintsEqual,
-} from './utils/retrieval/index-snapshot'
-export { chatSearchMessages } from './utils/retrieval/messages'
-export { paginateJsonPathSelection, paginateSerializedText } from './utils/retrieval/pagination'
-export { chatSearchRanking } from './utils/retrieval/ranking'
-export { chatSearchText } from './utils/retrieval/text'
-export {
-  configureAppRuntimeFacts,
-  hasAnyAppRuntimeFact,
-  readAppRuntimeFacts,
-} from './utils/runner/app-runtime-facts'
-export {
-  ExecutionModeOrder,
-  ExecutionModeRegistry,
-  getExecutionMode,
-  isExecutionModeActive,
-  isExecutionModeId,
-  listExecutionModes,
-  normalizeExecutionModes,
-  resolveExecutionModeForPromptFeature,
-  resolveExecutionModes,
-  stripExecutionModePromptFeatures,
-} from './utils/runner/execution-mode-registry'
-export {
-  buildGoalDockViewModel,
-  findCurrentGoalArtifact,
-  getGoalLifecycleStatus,
-  GoalArtifactId,
-  goalLifecycleToUpsertInput,
-  isGoalArtifact,
-} from './utils/runner/goal-lifecycle-projection'
-export { resolveLockedAgentRole } from './utils/runner/role-router'
-export { applyRunProfileToolExposure } from './utils/runner/run-profile'
-export {
-  describeRunProfiles,
-  resolveRunProfileForRuntime,
-  resolveRunProfilePolicyForRuntime,
-  RunProfileDefinitions,
-} from './utils/runner/runtime-profiles'
-export {
-  formatTurnContextOmittedNote,
-  renderTurnContextBlock,
-  stripTurnContextBlocks,
-  TurnContextBlockCloseTag,
-  TurnContextBlockOpenTag,
-  TurnContextMidRunNoteLead,
-} from './utils/runner/turn-context-format'
-export {
-  runAutomaticVerification,
-  shouldBlockOnVerificationState,
-  shouldRequestVerificationReminder,
-  tickLoopReminders,
-} from './utils/session/auto-verification'
-export {
-  hasVerificationRelevantModifiedPaths,
-  isVerificationRelevantPath,
-} from './utils/session/paths'
-export {
-  buildEmptyAssistantStreamError,
-  isReasoningOnlyEmptyResponseError,
-  isReasoningOnlyEmptyStream,
-  shouldRecoverEmptyStreamAsContextPressure,
-} from './utils/stream/empty-stream-recovery'
-export { readGeneratedFilePayload, readSourcePayload } from './utils/stream/generated-artifacts'
-export {
-  DefaultStreamIdleStallTimeoutMs,
-  readNextStreamPartWithIdleTimeout,
-  returnStreamIteratorQuietly,
-} from './utils/stream/idle-read'
-export {
-  createInlineReasoningTagSplitState,
-  flushInlineReasoningTagTail,
-  splitInlineReasoningTagDelta,
-} from './utils/stream/inline-reasoning-tags'
-export {
-  createLeakedToolMarkupFilterState,
-  filterLeakedToolMarkupDelta,
-  flushLeakedToolMarkupTail,
-} from './utils/stream/leaked-tool-markup'
-export {
-  buildOutputTruncationContinuationPrompt,
-  createOutputTruncationError,
-  isOutputTruncationError,
-  isRecoverableOutputTruncationDiagnostic,
-} from './utils/stream/output-truncation-recovery'
-export {
-  applyProviderToolInputStreamPart,
-  buildToolInputReadyMetadata,
-  diagnoseProviderJsonText,
-  diagnoseRejectedProviderToolInput,
-  parseEndedProviderToolInputDraft,
-  parseRecoverableProviderToolInputDraft,
-  resolveProviderExecutableToolInput,
-  resolveProviderFinalToolCallIdentity,
-  resolveProviderFinalToolInput,
-  summarizeProviderToolInputDraft,
-} from './utils/stream/tool-input'
-export {
-  createToolCallableOperations,
-  parseToolWireInput,
-} from './utils/toolkit/callable-operations'
-export {
-  createToolConceptLookup,
-  defineToolConcepts,
-  globalToolConcept,
-  GlobalToolConcepts,
-} from './utils/toolkit/concepts'
-export {
-  buildToolContractDescription,
-  defineToolContract,
-  defineToolRuntimeSpec,
-  isToolContractSpec,
-  resolveToolReadOnly,
-} from './utils/toolkit/define-tool-contract'
-export {
-  readToolSchemaDiscoveryNames,
-  ToolContractDiscoveryDescriptors,
-} from './utils/toolkit/discovery'
-export {
-  buildAppliedAdjustments,
-  buildValidItemsHint,
-  clampedInt,
-  emptyIsNoop,
-  inferActionFromFields,
-  preferFirst,
-  withDefaultNote,
-} from './utils/toolkit/forgiving-schema'
-export {
-  assertCanonicalToolId,
-  CanonicalToolIdPattern,
-  isCanonicalToolId,
-} from './utils/toolkit/identity'
-export {
-  canonicalizeProviderInputSchema,
-  createToolSchemaBundle,
-  schemaToInputSchema,
-} from './utils/toolkit/schema-bundle'
-export { createApprovalOperationKey, createTaskApprovalPort } from './utils/toolkit/task-approval'
-export {
-  assertToolDescriptionWithinBudget,
-  assertToolDescriptionWithinLimit,
-  compactStructuredToolDescription,
-  isStructuredParameterDescription,
-  isStructuredToolDescription,
-  parseStructuredToolDescription,
-  renderParameterDescription,
-  renderToolDescription,
-  renderUsageSkillNote,
-  structureToolDescriptionForModel,
-  structureToolDescriptionsForCategory,
-  ToolDescriptionBudgetChars,
-  ToolDescriptionMaxChars,
-} from './utils/toolkit/tool-description'
-export {
-  applyDefaultRecursiveMaxDepth,
-  optionalReadEndLine,
-  optionalReadMaxChars,
-  optionalReadStartLine,
-  refineBoundedReadInput,
-  requiredNonNegativeMaxDepth,
-  requiredPositiveMaxDepth,
-  requiredResultLimit,
-  ToolInputBoundMessages,
-  withReadBoundJsonSchemaConstraints,
-} from './utils/toolkit/tool-input-bounds'
-export { buildToolAccessDecision } from './utils/tools/access-decision'
-export {
-  decideToolCategoryAccess,
-  isToolCategoryAvailable,
-  resolveActiveCapabilityScope,
-} from './utils/tools/access-policy'
-export {
-  nextActionForDiscoveryAvailability,
-  resolveCapabilityDiscoveryAvailability,
-  resolveToolDiscoveryAvailability,
-  schemaStateForDiscoveryAvailability,
-  ToolDiscoveryAvailabilityValues,
-  toolOsStateForDiscoveryAvailability,
-} from './utils/tools/discovery-availability'
-export { liftGenericModelImage } from './utils/tools/model-image-lift'
-export {
-  DefaultModelInputModalities,
-  isToolCompatibleWithModelInputs,
-} from './utils/tools/model-input-policy'
-export {
-  formatToolSchemaIssues,
-  ToolArgsSchemaValidator,
-  toolArgsSchemaValidator,
-  validateToolArgsWithNormalization,
-} from './utils/tools/tool-args-schema-validator'
-export {
-  completeToolTransportNameAliases,
-  createToolTransportNamePlan,
-  createToolTransportProjection,
-  ProviderToolNamePattern,
-  rewriteCanonicalToolReferences,
-  rewriteProviderToolReferences,
-} from './utils/tools/tool-identity'
-export {
-  compactToolInputForModel,
-  compactToolResultForDisplay,
-  deserializeSerializedToolResult,
-  extractSerializationHintsFromToolInput,
-  ModelToolResultMaxSerializedLength,
-  serializeToolResultForModel,
-  serializeToolResultForRecall,
-} from './utils/tools/tool-result-serialization'
-export {
-  buildPluginEntries,
-  buildToolSpaceCategoryFilter,
-  buildToolSpacePages,
-  buildToolSpacePagesFromCapabilities,
-  isPluginBackedToolCategory,
-  isPromptFeatureEffectivelyEnabled,
-  matchReasonForToolSpacePage,
-  PluginBackedToolCategoryIds,
-  PluginFeatureDescriptions,
-  ToolSpacePageKindValues,
-} from './utils/tools/tool-space-resolver'
-export {
-  CapabilitySpanSchema,
-  emptyExecutionSpanMetrics,
-  ExecutionSpanCategorySchema,
-  ExecutionSpanMetricsSchema,
-  ExecutionSpanSchema,
-  ExecutionSpanStatusSchema,
-  ModelSpanSchema,
-  PolicySpanSchema,
-  RunSpanSchema,
-  ToolSpanSchema,
-  TurnSpanSchema,
-} from './utils/wire/observability'
+export { fileContextRegistry } from './impl/context/FileContextRegistry'
+export { createContextPayloadRef, createContextUserTextRef, createInMemoryContextPayloadStore } from './impl/context/InMemoryContextPayloadStore'
+export { compileProviderSendRequest, createProviderRequestCompiler } from './impl/context/ProviderRequestCompiler'
+export { createSubAgentDispatcher, resolveSubAgentExecutionKey } from './impl/delegation/SubAgentDispatcher'
+export { createSubAgentSessionStore } from './impl/delegation/SubAgentSessionStore'
+export { createTeamModelRouter } from './impl/delegation/TeamModelRouter'
+export { createWriteLeaseCoordinator } from './impl/delegation/WriteLeaseCoordinator'
+export { createAgentCapabilityEventPublisher } from './impl/execution/AgentCapabilityEventPublisher'
+export { createExecutionService } from './impl/execution/ExecutionService'
+export { createSoloExecutionService } from './impl/execution/SoloExecutionService'
+export { createAgentSkillRepository } from './impl/guidance/AgentSkillRepository'
+export { createFileSkillProvider } from './impl/guidance/FileSkillProvider'
+export { createBuiltInPromptRegistry, createPromptRegistry } from './impl/guidance/PromptRegistry'
+export { createSkillFileStore, formatSkillDisplayMarkdown, parseFrontmatter, parseFrontmatterList } from './impl/guidance/SkillFileStore'
+export { createSkillMarketClient } from './impl/guidance/SkillMarketClient'
+export { agentLedgerFiles } from './impl/ledgers/AgentLedgerFiles'
+export { createLedgerExecutionSpanScopeFactory } from './impl/ledgers/LedgerExecutionSpanScopeFactory'
+export { readPromptAuditFile } from './impl/ledgers/PromptAuditLedger'
+export { createSessionLedger } from './impl/ledgers/SessionLedger'
+export { createSessionStore } from './impl/ledgers/SessionStore'
+export { agentRetryPolicy } from './impl/loop/RetryPolicy'
+export { createAgentModLoader } from './impl/mods/AgentModLoader'
+export { createAgentModSeamDispatcher } from './impl/mods/AgentModSeamDispatcher'
+export { createVelarModArchiveImporter } from './impl/mods/VelarModArchiveImporter'
+export { createAgentGoalService } from './impl/product-session/AgentGoalService'
+export { createAgentPlanService } from './impl/product-session/AgentPlanService'
+export { createAgentQuestionService } from './impl/product-session/AgentQuestionService'
+export { agentSessionKit } from './impl/product-session/AgentSessionKit'
+export { createExecutionPlanLedger } from './impl/records/ExecPlanLedger'
+export { createExecutionPlanState } from './impl/records/ExecPlanState'
+export { createExecutionRouting } from './impl/records/ExecRouting'
+export { createExecutionEventBus, createNoopExecutionEventBus } from './impl/records/ExecutionEventBus'
+export { createExecutionGuidanceQueue } from './impl/records/ExecutionGuidanceQueue'
+export { guidanceRelay } from './impl/records/GuidanceRelayKit'
+export { createBackgroundJobManager } from './impl/records/KernelBackgroundJobManager'
+export { createSubAgentGuidanceRelayRegistry } from './impl/records/SubAgentGuidanceRelayRegistry'
+export { createTurnContextAppendHub } from './impl/records/TurnContextAppendHub'
+export { TurnContextProcessGeneration } from './impl/records/TurnContextLedger'
+export { createTurnContextSessionLedgers } from './impl/records/TurnContextSessionLedgers'
+export { agentTurnHistory } from './impl/records/TurnHistory'
+export { createContextGovernanceSessionRegistry } from './impl/residency/ContextGovernanceSessionRegistry'
+export { createJsonlContextMigrationEventSink } from './impl/residency/JsonlContextMigrationEventSink'
+export { createChatContextRetrievalService } from './impl/retrieval/ChatContextRetrievalService'
+export { chatSearchMessages } from './impl/retrieval/ChatSearchMessages'
+export { chatSearchRanking } from './impl/retrieval/ChatSearchRanking'
+export { createAgentRoleEngine } from './impl/runner/AgentRoleEngine'
+export { agentRuntime } from './impl/runner/AgentRuntimeKit'
+export { createAgentWorkflowRuntime } from './impl/runner/AgentWorkflowRuntime'
+export { createPrimaryAgentProfile } from './impl/runner/PrimaryAgentProfile'
+export { createCodingSessionTracker } from './impl/session/CodingSessionTracker'
+export { createToolCapabilityRegistry } from './impl/tools/ToolCapabilityRegistry'
+export { createToolExecutionPolicy } from './impl/tools/ToolExecutionPolicy'
+export { createToolExecutor } from './impl/tools/ToolExecutor'
+export { createToolRegistry } from './impl/tools/ToolRegistry'
+export { toolTransportNames } from './impl/tools/ToolTransportNames'
+export type { ActiveDirectiveArchiveDiagnostic, ActiveDirectiveArchiveResult, ActiveDirectiveContext,
+ BuiltinAgentModOptions, BuiltinAgentModPackage, GoalConstraintReference, VelaTool } from './types/builtin.js'
+export type { AgentRuntimeCapabilityDescriptor, AgentRuntimeCapabilityExtension, CapabilityCommandResult,
+ CapabilityIntentClassifierContext, CapabilityIntentSignal, CapabilityScopeCategoryDecision,
+ CapabilityScopeResidency, CapabilityScopeRuntimeFacts, CapabilityValidationInterpretation,
+ CapabilityValidationRunResult, CapabilityValidationStatus, CapabilityValidationSuggestion,
+ CapabilityValidationSummary, ToolAllocationDelegation, ToolAllocationPrerequisite,
+ ToolResultMiddlewareContext, ToolResultMiddlewareResult, ToolResultModelImage, ToolValidationHintContext,
+ ToolValidationIssueDetail, ToolValidationRecovery } from './types/capabilities.js'
+export type { AgentBridgeDispatch, AgentBridgeOutput, ChatStreamLifecyclePhase, ChatStreamLogEntry,
+ ChatStreamTerminationReason, ResolvedChatSendRequestOptions, StreamObservabilityEntry,
+ TerminalRuntimeExecutionAction } from './types/chat.js'
+export type { McpAutoApprovePolicy, McpConnectionSpec, McpRawCallResult, McpResourceContent,
+ McpResourceDescriptor, McpToolAnnotations, McpToolCaller, McpToolDescriptor, McpTransportKind, RemoteHostTool,
+ RemoteHostToolContext, RemoteHostToolEntry, SafeFetchOptions, TranslatedMcpTool,TranslateMcpToolInput } from './types/connectors.js'
+export type { CreateExternalAgentBridgeCommandQueue, ExternalAgentBridgeLoopbackServerOptions } from './types/connectors.js'
+export type { AgentLoopToolDescriptor, AgentLoopToolRegistry, CompiledProviderRequest, CompiledProviderSendRequest, CompileProviderRequestInput,
+ CompileProviderSendRequestInput, ContextActiveTaskInput,
+ ContextLedgerEntry, ContextPayloadRecord, ContextPinnedEvidenceInput, ContextRefRetrieval,
+ ContextResourceItemStateInput, ContextResourceStateInput, ContextUsageWindow, ContextUserTextRecord,
+ ContextWorkingSetReclaimAction, ContextWorkingSetRetrievalHandleInput, ContextWorkingSetZoneId,
+ EstimateContextUsageOptions, FileContextView, FileContextViewTier, FileSnapshotRecallInput,
+ ProviderHistoryRewriteSignal, ProviderRequestAuditValue, ProviderRequestCompileDecision,
+ ProviderRequestPressureKind, ProviderRequestSnapshot, ProviderRequestZoneDiagnostic,
+ ProviderToolDefinitionSnapshot, ProviderToolDefinitionSnapshotInput } from './types/context.js'
+export type { CapabilityWriteLease, CreateSubAgentSessionInput, SubAgentCodingSession, SubAgentDispatchCatalog,
+ SubAgentDispatchInput, SubAgentDispatchLimitsSnapshot, SubAgentDispatchRequest, SubAgentQueryOptions,
+ SubAgentReleasedThread, SubAgentRuntimeOverride, SubAgentThreadRetention, SubAgentThreadUnresumableReason,
+ SubAgentToolCategoryRequestResult, SubAgentToolContext, SubAgentTypeDescriptor, TeamModelRouteRequest,
+ TeamModelRouteResult, TeamSelectableModel } from './types/delegation.js'
+export type { SubAgentSessionStoreOptions, SubAgentThreadRetentionLimits } from './types/delegation.js'
+export type { AdmitKernelSessionInput, AgentCapabilityExecuteEnvelopeV1, AgentCapabilityExecutionContext,
+ AgentCapabilityKernelEventDelivery, AgentCapabilityService, ExecutionAbortOptions,
+ ExecutionCollaborationActorHandle, ExecutionCollaborationActorInput, ExecutionGuidanceRelayPlan,
+ ExecutionGuidanceRelayPlanInput, KernelAdmittedInput, KernelCancelResult, KernelChatSubmission,
+ KernelControllerAnswerInput, KernelControllerApprovalInput, KernelControllerSendInput, KernelControllerTarget,
+ KernelInputDelivery, KernelInputReceipt, KernelInputRole, KernelInputStatus, KernelRuntimeStatus,
+ KernelSessionAuthorization, KernelSessionInputStoreResult, ManagedExecutionController,
+ PromoteKernelInputOptions, RunManagedExecutionParams, RunSoloExecutionParams, SoloExecutionAgentRunner,
+ ToolContractCatalogRegistry, ToolContractExecutionBinding, ToolContractExecutionContext,
+ ToolContractExecutionRegistry } from './types/execution.js'
+export type { ChatKernelSessionBridgeOptions, CreateChatKernelSessionBridge, CreateToolContractExecutionFacade,
+ ExecutionServiceOptions, KernelChatBackgroundJobCancelInput, KernelChatBackgroundJobReadInput,
+ KernelChatExecutionCoordinator, KernelChatExecutionService, KernelChatRunOptions,
+ KernelImplicitBackgroundWaitInput, KernelSessionDrainMode, KernelSessionDrainRunner, KernelSessionDrainTarget,
+ KernelSessionInputKind, ResolveKernelRuntimeStatusInput } from './types/execution.js'
+export type { AgentSkillDefinition, AgentSkillKind, BuiltInPromptOptions, PromptCompositionResult,
+ PromptContribution, PromptRegistryContract, PromptRenderContext, PromptSegmentDefinition,
+ PromptSegmentProvider, PromptSegmentRetention, PromptSegmentSource, PromptSegmentStability, PromptSegmentTier,
+ RuntimePromptCustomSubAgent, RuntimePromptSnapshot, RuntimePromptToolCategorySummary,
+ RuntimePromptToolSummary, SkillFileRecord, SkillFrontmatter, SkillMarketAvailability } from './types/guidance.js'
+export type { SkillFileStoreDependencies, SkillMarketClientDependencies } from './types/guidance.js'
+export type { AgentHistoryToolContext, AgentTurnToolExecutor, AgentTurnToolResult, AssistantContentPart,
+ AssistantRawContentPart, SanitizeModelHistoryOptions, UserTextPayloadReference } from './types/history.js'
+export type { CapabilitySpanInput, DistributiveOmit, EngineAssignedField, ExecutionCapabilitySpanRecorder,
+ ExecutionSpanDebugCapability, ExecutionSpanDebugPolicy, ExecutionSpanDebugProjection,
+ ExecutionSpanDebugPromptAudit, ExecutionSpanDebugRun, ExecutionSpanDebugTool, ExecutionSpanDebugTurn,
+ ForkFactory, LedgerReadResult, ModelSpanHandle, ModelSpanOutcome, ProjectExecutionSpanDebugOptions,
+ PromptAuditReadResult, PromptAuditRecord, RunSpanScope, SessionEntryDraft, SessionLedgerApi,
+ SessionLedgerContext, SessionLedgerWarn, SessionTree, SessionTreeNode, SpanLedgerReadResult, ToolSpanHandle,
+ ToolSpanOpener, ToolSpanOutcome, TurnSpanScope } from './types/ledgers.js'
+export type { LedgerExecutionSpanScopeFactoryDeps, SpanLedgerWarn } from './types/ledgers.js'
+export type { AgentExecutionLimitOverrides, AgentExecutionLimits, AgentTurnCapabilitySnapshot,
+ ConnectionRetryOptions, ExecuteQueryLoopArgs, ExecuteSoloModeStreamLoopArgs, InlineReasoningSegment,
+ InlineReasoningSegmentKind, InlineReasoningTagSplitState, ProviderStreamPart, QueryLoopRoleEngine,
+ QueryLoopSubAgentOptions, QueryLoopSubAgentRuntimeOverride, QueryLoopToolCategoryResolver,
+ QueryLoopToolContext, QueryLoopToolRegistry, QueryTurnEvents, QueryTurnToolContext, QueryTurnToolRegistry,
+ ResolvedAgentModelRuntime, SoloAwaitPendingBackgroundJobs, SoloBackgroundWaitInput, SoloLoopEvents,
+ SoloLoopToolContext, SoloLoopToolRegistry, SoloModeStreamLoopResult, StreamConsumerEvents, StreamTurnEvents,
+ StreamTurnToolContext, StreamTurnToolRegistry, SubAgentContextBase, SubAgentOptionsLike,
+ TurnRunnerToolContext, TurnRunnerToolRegistry } from './types/loop.js'
+export type { KernelToolLoopGuardApi } from './types/loop.js'
+export type { AgentModActivationState, AgentModActivationStatus, AgentModAssembly, AgentModAxisDeclarationMap,
+ AgentModAxisPayloadMap, AgentModAxisRecord, AgentModBindings, AgentModContributionRecord,
+ AgentModDiscoveryResult, AgentModHookContext, AgentModHostProfile, AgentModLoaderContract,
+AgentModLoadReport, AgentModPackage,  AgentModPackDescriptorLike, AgentModRegistryContract, AgentModRegistryPhase,
+ AgentModRegistrySnapshot, AgentModRejection, AgentModSeamDispatcherContract, AgentModSeamEventMap,
+ AgentModSeamGenericEvent, AgentModSeamHandler, AgentModSeamOutcomeMap, AgentModSeamRegistration,
+ AgentModSeamRegistrationInput, AgentModSessionLifecycleEvent, AgentModSourceKind, AgentModSurfaceSnapshot,
+ AgentModToolCallBeforeEvent, AgentModToolCallBeforeOutcome, AgentModToolResultAfterEvent,
+ AgentModToolResultAfterOutcome, AgentModTurnContextAppendage, AgentModTurnContextAssembleEvent,
+ AgentModTurnContextAssembleOutcome, AgentModTurnContextSegmentView, AssembleAgentModsInput,
+ InstallScannedVelarModArchiveRequest, PreparedVelarModInstall, VelarModArchiveEntry, VelarModArchiveFinding,
+ VelarModArchiveScanReport, VelarModPermissionDescriptor } from './types/mods.js'
+export type { VelarModArchiveImporterOptions } from './types/mods.js'
+export type { AgentGoal, AgentGoalStatus, AgentPermissionAction, AgentPermissionRequest, AgentPermissionRisk,
+ AgentPermissionRule, AgentPlan, AgentPlanStatus, AgentPlanStep, AgentPlanStepStatus, AgentQuestionRequest,
+ AgentSessionApplicationEvent, AgentSessionArchiveEnvelope, AgentSessionArchiveEvent, AskAgentQuestionInput,
+ QuestionListener, RequestAgentPermissionInput } from './types/product-session.js'
+export type { BuildGuidanceRelayPromptInput, ExecutionEventBusContract, ExecutionGuidanceClearResult,
+ ExecutionGuidanceEnqueueResult, ExecutionGuidanceFinalizationResult, ExecutionResourceProvider,
+ ExecutionRouteProvider, GuidanceRelayPlan, KernelBackgroundJob, KernelBackgroundJobOutputSnapshot,
+ KernelBackgroundJobStatus, KernelBackgroundJobStoredOutput, PlanChangePayload, ProviderRequestFingerprint,
+ RegisterSubAgentGuidanceRelayWorkerInput, ResolvedTaskRoute, StartKernelBackgroundJobInput,
+ SubAgentGuidanceRelayWorkerHandle, SubAgentGuidanceRelayWorkerSnapshot, TurnContextAppendBus,
+ TurnContextAppendListener, TurnContextDeltaSource, WaitForKernelBackgroundJobsInput,
+ WaitForNextKernelBackgroundJobInput, WorkerExecutionStreamOptions } from './types/records.js'
+export type { AppendExecutionEventInput, ExecutionDebugListener, ExecutionEventBusHandlers,
+ ExecutionStateListener, KernelBackgroundJobManagerOptions, TurnContextLedgerAppendInput,
+ TurnContextLedgerPeekResult } from './types/records.js'
+export type { ProviderTurnEvent, ProviderTurnRequestSnapshot, ProviderTurnSnapshot, ProviderTurnStatus,
+ ProviderTurnToolSnapshot, ProviderTurnToolStatus, ProviderTurnUsage } from './types/records.js'
+export type { ContextAdmissionConfig, ContextAdmissionInput, ContextAnchor, ContextAnchorKind,
+ ContextDistillAdaptiveConfig, ContextDistillConfig, ContextDistiller,
+ContextDistillGateSignals, ContextDistillInput,
+ ContextDistillInstrument, ContextDistillSkipReason, ContextDistillTotals,  ContextEvictionConfig, ContextFaultEvent, ContextFaultRecoveryConfig, ContextGovernanceConfig,
+ ContextGovernanceConfigInput, ContextGovernancePresetName, ContextGovernanceSessionApi,
+ ContextGovernanceSessionRegistryContract, ContextGovernanceSyncInput, ContextGovernanceSyncResult,
+ ContextHandoffConfig, ContextHandoffSignal, ContextInstrumentConfig, ContextLedgerAppendResult,
+ ContextLedgerGenerationStamp, ContextLedgerStats, ContextMigrationCause, ContextMigrationEventLineWriter,
+ ContextMigrationOutcome, ContextMigrationRejection, ContextRecord, ContextRecordBytes, ContextRecordExcerpt,
+ ContextRecordKind, ContextRecordToolPart, ContextResidency, ContextResidencyMigrationEvent,
+ ContextResidencyVector, GovernanceEpochDistillReport, GovernanceEpochReport, GovernanceEpochSkipReason,
+ GovernanceEpochSource, GovernanceWindowDerivation, GovernanceWindowInput, ResidencyLedgerView } from './types/residency.js'
+export type { ContextClassificationInput, ContextGovernanceSessionRegistryOptions, ContextRecordClassifier } from './types/residency.js'
+export type { ChatContextRetrievalIndexMessageEntry, ChatContextRetrievalIndexReferencedPath,
+ ChatContextRetrievalIndexSaveOptions, ChatContextRetrievalIndexSnapshot, ChatContextRetrievalIndexStore,
+ ChatContextRetrievalIndexToolPayloadEntry, IndexedSessionMessage, MessageSearchIndex, RankingSignals } from './types/retrieval.js'
+export type { ChatContextRetrievalServiceOptions, ContextRetrievalQueryTraceStoreOptions,
+ RetrievalQueryRegistration } from './types/retrieval.js'
+export type { AgentExecutionStackOptions, AgentExecutionStackRunnerOptions, AgentExecutionStackToolContext,
+ AgentRoleContract, AgentRoleDefinition, AgentRoleDescriptorProviderContext, AgentRoleResolution,
+ AgentRoleToolBindings, AgentRoleToolCategoryResolver, AgentRunnerConfig,
+ AgentRunnerContract, AgentRunnerInfrastructure, AgentRunProfileCatalogSnapshot, AgentRuntimeInputResult, AgentSurfaceProfile,
+ AgentSurfaceToolPolicy, AgentTurnBoundary, AgentTurnSettlement, AgentWorkflowDispatchContext,
+ AgentWorkflowDispatchPort, AgentWorkflowRunOptions, DerivedAgentSurfaceRunPolicy,
+DeriveSurfaceRunPolicyInput,  ExecutionModeDescriptor, ExecutionModePromptProjection, ExecutionModeStickiness, GoalDockAction,
+ GoalDockPrimaryAction, GoalDockTone, GoalDockViewModel, GoalLifecycleAction, GoalLifecycleStatus,
+ PrimaryAgentProfileContract, PromptStateCodingSession, PromptStateExecutionApi, PromptStateSkillsApi,
+ PromptStateToolContext, ResolveAgentRoleOptions, ResolveAgentSurfaceInput, RunContextCodingSession,
+ RunContextToolContext, RunnerBuildToolContextArgs, RunnerCancelBackgroundJob, RunnerCodingSessionPolicyBundle,
+ RunnerContextCodingSession, RunnerExecutionScope, RunnerModelCapabilityPort, RunnerReadBackgroundJobOutput,
+ RunnerSubAgentOptions, RunnerToolContext, RunnerWaitBackgroundJobs, StreamSoloWorkerOptions,
+ TurnContextBlockInput } from './types/runner.js'
+export type { CreateAgentExecutionStack, PrimaryAgentProfileSkillRepository } from './types/runner.js'
+export type { AutoVerificationCodingSession, AutoVerificationEvents, AutoVerificationToolContext,
+ CapabilityValidationFailure, CodingSessionSnapshot, CodingSessionToolCategoryToolNames,
+ CodingSessionToolContext, ReminderScope, ReminderTrigger, RuntimeReminderConsumeResult, RuntimeReminderInput,
+ RuntimeReminderSchedulerContract } from './types/session.js'
+export type { CodingSessionTrackerOptions } from './types/session.js'
+export type { CancelToolBackgroundJobInput, KernelToolContext, ReadToolBackgroundJobOutputInput,
+ SubAgentOptions, ToolBackgroundJobOutputSnapshot, ToolCodingSessionApi, ToolConversationHandoffRequest,
+ ToolConversationHandoffResult, ToolRoleSkillReadResult, WaitToolBackgroundJobsInput } from './types/tool-context.js'
+export type { ApprovalSession, ToolInputReuseEnvelopeSchema, ToolInputReuseEnvelopeShape } from './types/toolkit.js'
+export type { WithToolInputReuse } from './types/toolkit.js'
+export type { KernelStoredToolOutput, OverriddenToolMap, ProjectKernelToolOutputInput,
+ ProjectKernelToolOutputResult, RegisteredTool, RegisteredToolMap, RegistryTool, SerializationHints,
+ ToolAllocatorOperation, ToolAllocatorRequest, ToolCapabilityPage, ToolCapabilityPageKind,
+ ToolCapabilityReason, ToolCapabilityRegistryContext, ToolCapabilityRegistryListOptions,
+ ToolCapabilitySchemaPolicy, ToolDiscoveryAvailability, ToolDiscoveryNextAction, ToolDiscoverySchemaState,
+ ToolExecutionPolicyCodingSession, ToolExecutionPolicyContext, ToolExecutionPolicyExecution,
+ ToolExecutionPolicyRegistry, ToolExecutionPolicySurface, ToolExecutionPolicyTool, ToolExecutorEvents,
+ ToolInputReuseContext, ToolRegistryCodingSession, ToolRegistryContext, ToolSchema, ToolSchemaIssue,
+ ToolSchemaResult, ToolTransportNamePlan, ToolTransportProjection, ToolVisibleSurfaceProfileId } from './types/tools.js'
+export type { ToolAttemptOutcome } from './types/tools.js'
+export type { KernelToolFailureBatchEntry, KernelToolLoopGuardInput, ToolResult } from './types/tools.js'
+export type { AnyVelaTool, RuntimeToolIssue, ToolArgsValidationResult, ToolExecutionDecision,
+ ToolExecutionFailureInput, ToolExecutionFailureKind, ToolExecutionPrepared, ToolExecutionRequest,
+ ToolExecutionSuccessInput, ToolFailureResult, ToolInputAdjustment, ToolSchemaIssueDetail,
+ ToolSpaceRecoveryGuide } from './types/tools.js'

@@ -1,13 +1,7 @@
-import {
-  generateText,
-  streamText,
-  type ToolSet,
-} from 'ai'
+import { generateText, streamText, type ToolSet } from 'ai'
 
-import { isFiniteNumber } from '@velaros-ai/core'
-
-import type { AgentModelRequestOptions } from '../../contract/requires.js'
-import type { AgentContextSemanticSummaryInput, AgentModelRequestPort, AgentModelStreamInput, AgentModelStreamResult, ModelRequestPolicyTarget } from '../../types/loop.js'
+import type { AgentContextSemanticSummaryInput, AgentModelRequestPort, AgentModelStreamInput, AgentModelStreamResult } from '../../types/loop.js'
+import { applyModelRequestPolicy } from '../../utils/loop/ai-sdk-agent-model-request-port'
 
 /** 构造参数：只为测试替身留的两个注入口，生产装配一律留空走 AI SDK 原函数。 */
 interface AiSdkAgentModelRequestPortOptions {
@@ -92,30 +86,6 @@ class AiSdkAgentModelRequestPort implements AiSdkAgentModelRequestPortApi {
     )
     return result.text
   }
-}
-
-function applyPolicyNumber(
-  current: Optional<number>,
-  policyValue: Optional<number>
-): number | undefined {
-  if (isFiniteNumber(current)) return current
-  return isFiniteNumber(policyValue) ? policyValue : current
-}
-
-function applyModelRequestPolicy<TRequest extends object>(
-  request: TRequest,
-  modelRequestOptions?: LooseOptional<AgentModelRequestOptions>
-): TRequest {
-  const policy = modelRequestOptions?.requestPolicy
-  if (!policy) return request
-
-  const target = request as TRequest & ModelRequestPolicyTarget
-  return {
-    ...target,
-    temperature: applyPolicyNumber(target.temperature, policy.temperature),
-    topP: applyPolicyNumber(target.topP, policy.topP),
-    maxOutputTokens: applyPolicyNumber(target.maxOutputTokens, policy.maxOutputTokens),
-  } as TRequest
 }
 
 export {

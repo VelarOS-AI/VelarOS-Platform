@@ -17,19 +17,12 @@
 //    否则模型只会原样重试。
 //  - **自动批准必须留痕**（`CapabilityAutoApprovalNotice`）：无痕迹的自动批准等于没有审批。
 //  - **本门不认识 mod**：mod 贡献在装载期已被宿主收窄，到这里与内置工具同权。
-import {
-  isPlainObject,
-  isPresent,
-  optionalWhenLazy,
-  toNullable,
-  toOptional,
-} from '@velaros-ai/core'
+import { isPlainObject, isPresent, optionalWhenLazy, toNullable, toOptional } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 
 import type { AgentRuntimeCapabilityPorts } from '../../contract/requires.js'
-import type { ToolConfirmationDecisionOptions } from '../../types/agent'
-import type {CapabilityAutoApprovalNotice, ToolCapabilityEffectKind, ToolCategoryId, ToolRole } from '../../types/agent.js'
+import type { CapabilityAutoApprovalNotice, ToolCapabilityEffectKind, ToolCategoryId, ToolConfirmationDecisionOptions, ToolRole } from '../../types/agent'
 import type { ToolInputReuseContract } from '../../types/toolkit.js'
 import type { ToolExecutionDecision, ToolExecutionFailureInput, ToolExecutionFailureKind, ToolExecutionPolicyContext, ToolExecutionPolicyRegistry, ToolExecutionPrepared, ToolExecutionRequest, ToolExecutionSuccessInput, ToolFailureResult } from '../../types/tools.js'
 import { resolveCapabilityCategoryDefinitions, resolveToolAliases, resolveToolValidationHintProviders } from '../../utils/capabilities'
@@ -37,10 +30,10 @@ import { createApprovalOperationKey } from '../../utils/toolkit/task-approval'
 import { decideToolCategoryAccess } from '../../utils/tools/access-policy'
 import { buildExecutionFailureResult, buildToolFailureResult } from '../../utils/tools/execution-policy-failures'
 import { createToolContext, evaluatePlanningModeToolPolicy, formatSessionToolApprovalMessage, resolveToolSurface, validateAndNormalizeToolInput } from '../../utils/tools/execution-policy-preparation'
-import { toolArgsSchemaValidator } from '../../utils/tools/tool-args-schema-validator'
+import { buildValidationNextActions, describeValidationHint, replaceRecordContents } from '../../utils/tools/tool-args-schema-validator'
 import { buildToolSpaceRecoveryGuide } from '../../utils/tools/tool-space-recovery'
 
-import { supportsToolInputReuse } from './ToolInputReuseStore'
+import { toolInputReuseStore } from './ToolInputReuseStore'
 
 /**
  * 工具执行的策略与审批门：单个工具「能不能执行、怎样执行、失败了怎么说」全在这里判。
@@ -317,7 +310,7 @@ class ToolExecutionPolicy implements ToolExecutionPolicyApi {
       // base surface 的 provider 输入与执行输入同形，可原地收敛，令历史、去重和审批看到实际参数。
       // profile surface 可能有意使用另一套参数形状，只回显调整，不把 base 参数写回 provider 历史。
       if (!selectedSurface) {
-        toolArgsSchemaValidator.replaceRecordContents(request.args, normalizedForPolicy.args)
+        replaceRecordContents(request.args, normalizedForPolicy.args)
       }
       request.updateMetadata?.({
         metadata: {
@@ -451,7 +444,7 @@ class ToolExecutionPolicy implements ToolExecutionPolicyApi {
       const validationHintProviders = resolveToolValidationHintProviders(
         prepared.toolContext.capabilityPorts
       )
-      const hint = toolArgsSchemaValidator.describeValidationHint(
+      const hint = describeValidationHint(
         toolName,
         issues,
         validationHintProviders
@@ -469,7 +462,7 @@ class ToolExecutionPolicy implements ToolExecutionPolicyApi {
             {
               code: 'VALIDATION',
               details: { schemaIssues: issueDetails, executionOutcome: 'not-applied' },
-              nextActions: toolArgsSchemaValidator.buildValidationNextActions(
+              nextActions: buildValidationNextActions(
                 toolName,
                 issueDetails,
                 validationHintProviders
@@ -579,7 +572,7 @@ class ToolExecutionPolicy implements ToolExecutionPolicyApi {
    */
   public supportsInputReuse(toolName: string): boolean {
     const tool = this.toolRegistry.get(this.resolveCanonicalToolName(toolName))
-    return !!tool && supportsToolInputReuse(tool.schema)
+    return !!tool && toolInputReuseStore.supportsReuse(tool.schema)
   }
 
   public inputReuseContract(toolName: string): ToolInputReuseContract<any> {
@@ -784,3 +777,8 @@ class ToolExecutionPolicy implements ToolExecutionPolicyApi {
 
 export { ToolExecutionPolicy }
 export type { ToolExecutionPolicyApi, ToolFailureResult }
+
+/** 建一份工具执行策略：可用性、入参校验、审批与别名解析都按它判。 */
+export function createToolExecutionPolicy(toolRegistry: ToolExecutionPolicyRegistry): ToolExecutionPolicyApi {
+  return new ToolExecutionPolicy(toolRegistry)
+}

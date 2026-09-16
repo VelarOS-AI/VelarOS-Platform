@@ -19,23 +19,13 @@ import { existsSync } from 'node:fs'
 import { type FileHandle, mkdir, open, readFile, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 
-import { isArray, isFiniteNumber, isPlainObject, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import type { PromptAuditReadResult, PromptAuditRecord, SpanLedgerWarn } from '../../types/ledgers.js'
-import {
-  JSONL_LINE_SEPARATOR,
-  parseJsonlWithTailTolerance,
-  truncateJsonlToLineCount,
-} from '../../utils/ledgers/jsonl-file'
-import { canonicalJsonStringify } from '../../utils/ledgers/ledger-file'
+import { truncateJsonlToLineCount } from '../../utils/ledgers/jsonl-file'
+import { parsePromptAuditText, serializePromptAuditLine } from '../../utils/ledgers/prompt-audit-ledger'
 
 import { SerialWriteQueue } from './SerialWriteQueue'
-
-/** 序列化一条审计记录成 JSONL 行（规范键序 + 行尾分隔符）。 */
-export function serializePromptAuditLine(record: PromptAuditRecord): string {
-  return `${canonicalJsonStringify(record)}${JSONL_LINE_SEPARATOR}`
-}
 
 /**
  * 崩溃安全读取审计侧信道文件。不存在 → 空。逐行解析：首个失败行若是最后一行判为半截尾行（截断标记），
@@ -45,36 +35,6 @@ export async function readPromptAuditFile(path: string): Promise<PromptAuditRead
   if (!existsSync(path)) return { records: [], truncatedTail: false }
   const raw = await readFile(path, 'utf-8')
   return parsePromptAuditText(raw, path)
-}
-
-/** {@link readPromptAuditFile} 的纯文本内核，供 harness 断言单点复用。 */
-export function parsePromptAuditText(raw: string, path: string): PromptAuditReadResult {
-  return parseJsonlWithTailTolerance({
-    raw,
-    path,
-    ledgerLabel: 'prompt audit ledger',
-    parseLine: tryParsePromptAuditLine,
-  })
-}
-
-function tryParsePromptAuditLine(line: string): Nullable<PromptAuditRecord> {
-  try {
-    const json = JSON.parse(line) as unknown
-    return isValidPromptAuditRecord(json) ? json : null
-  } catch {
-    return null // arch-guard:silent-catch-ok 半截/非法行由调用方按位置判尾行容忍或中段抛错
-  }
-}
-
-function isValidPromptAuditRecord(value: unknown): value is PromptAuditRecord {
-  if (!isPlainObject(value)) return false
-  return (
-    isFiniteNumber(value.capturedAt) &&
-    isString(value.sessionId) &&
-    isString(value.runId) &&
-    isString(value.systemPrompt) &&
-    isArray(value.promptSegments)
-  )
 }
 
 /**

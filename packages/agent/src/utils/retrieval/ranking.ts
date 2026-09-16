@@ -172,7 +172,7 @@ const scoreStatBucketDefs = [
  * 从用户 query 提取归一化检索词项（小写、去标点、拆词/ CJK 等）。
  * 实现委托 `@velaros-ai/agent.extractSessionSearchTerms`。
  */
-function normalizeSearchTerms(query: string): string[] {
+export function normalizeSearchTerms(query: string): string[] {
     return extractSessionSearchTerms(query);
   }
 
@@ -184,7 +184,7 @@ function normalizeSearchTerms(query: string): string[] {
  *
  * 供 {@link ContextRetrievalQueryTraceStore.register} 作为 Map 键的一部分。
  */
-function normalizeQuerySignature(query: string, terms: string[]): string {
+export function normalizeQuerySignature(query: string, terms: string[]): string {
     const normalized = query.toLowerCase().replace(/\s+/g, " ").trim();
     const termSignature = [...terms].sort().join(" ");
     return termSignature || normalized;
@@ -211,7 +211,7 @@ function normalizeQuerySignature(query: string, terms: string[]): string {
  *
  * 最终 `score = semanticScore + (semanticScore>0 ? recencyScore×0.12 : 0)`。
  */
-function rankContextText(input: {
+export function rankContextText(input: {
     query: string;
     terms: string[];
     text: string;
@@ -312,7 +312,7 @@ function rankContextText(input: {
  * @param maxChars 最大字符数；实际截断还经 {@link chatSearchText.truncate}
  * @returns 空正文返回 `null`；无词项命中时从开头取 `maxChars`
  */
-function buildSearchSnippet(text: string, terms: string[], maxChars: number): LooseOptional<string> {
+export function buildSearchSnippet(text: string, terms: string[], maxChars: number): LooseOptional<string> {
     const trimmed = text.trim();
     if (!trimmed) return null;
 
@@ -334,7 +334,7 @@ function buildSearchSnippet(text: string, terms: string[], maxChars: number): Lo
 /**
  * 为日志类证据保留开头和结尾；无正文词项命中时不能再退化成纯文件头摘要。
  */
-function buildHeadTailSnippet(text: string, maxChars: number): LooseOptional<string> {
+export function buildHeadTailSnippet(text: string, maxChars: number): LooseOptional<string> {
     const trimmed = text.trim();
     if (!trimmed) return null;
     if (trimmed.length <= maxChars) return trimmed;
@@ -353,7 +353,7 @@ function buildHeadTailSnippet(text: string, maxChars: number): LooseOptional<str
  *
  * @param scores 通常为「所有命中项」的 score 列表（含未返回给 caller 的条目）
  */
-function buildRetrievalScoreStats(scores: number[]): ChatContextRetrievalScoreStats {
+export function buildRetrievalScoreStats(scores: number[]): ChatContextRetrievalScoreStats {
     const buckets = scoreStatBucketDefs.map((bucket) => ({
       ...bucket,
       count: 0,
@@ -464,12 +464,3 @@ function collectSymbolHints(text: string): string[] {
     return [...hints];
   }
 
-/** 全进程唯一的打分实例；见 {@link ChatSearchRanking}。 */
-export const chatSearchRanking = Object.freeze({
-  normalizeSearchTerms,
-  normalizeQuerySignature,
-  rankContextText,
-  buildSearchSnippet,
-  buildHeadTailSnippet,
-  buildRetrievalScoreStats,
-});

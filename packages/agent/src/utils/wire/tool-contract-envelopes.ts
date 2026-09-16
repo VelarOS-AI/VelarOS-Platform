@@ -1,7 +1,8 @@
 // 域：Agent 工具契约的结果信封与租约拒绝响应的构造口。schema 在 ./lease，这里只负责按 schema 拼出对象。
 import { isEmpty, isPlainObject } from '@velaros-ai/core'
 
-import type { LeaseDenialReason, LeaseDeniedResponse, ToolCatalogEntry, ToolCatalogSnapshot, VelarToolCallEnvelope, VelarToolResultEnvelope } from '../../types/agent.js'
+import type { LeaseDenialReason, LeaseDeniedResponse, ToolCatalogEntry, VelarToolCallEnvelope, VelarToolResultEnvelope } from '../../types/agent.js'
+import type { ToolCatalogSnapshot } from '../../types/tools.js'
 import type { ToolResult } from '../../types/tools.js'
 import { readToolSchemaDiscoveryNames } from '../toolkit/discovery'
 

@@ -1,8 +1,8 @@
 import type { ExecutionSpanStatus } from '../../types/agent.js'
 import type { PromptAuditRecord, RunSpanScope, SpanLedgerWarn, TurnSpanScope } from '../../types/ledgers.js'
+import { runIsolatedSpanOp } from '../../utils/ledgers/ledger-execution-span-scope-factory'
 
 import { type ExecutionSpanRecorder } from './ExecutionSpanRecorder'
-import { runIsolatedSpanOp } from './LedgerExecutionSpanScopeFactory'
 import { LedgerTurnSpanScope } from './LedgerTurnSpanScope'
 
 /**

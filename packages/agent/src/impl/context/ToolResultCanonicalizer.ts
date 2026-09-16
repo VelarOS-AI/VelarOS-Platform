@@ -1,9 +1,8 @@
-import { createHash } from 'node:crypto'
 
 import type { ContextPayloadStore } from '../../contract/requires.js'
 import type { CanonicalizeToolResultInput, CanonicalToolResult, ContextPayloadRecord, HashedToolResultInput } from '../../types/context.js'
-import { isStatefulToolResultName } from '../../utils/context/stateful-tool-results'
 import { buildCanonicalToolResult } from '../../utils/context/tool-result-canonical'
+import { createBatchKey, hashToolResult } from '../../utils/context/tool-result-canonicalizer'
 import { AgentTuning } from '../../utils/tuning'
 
 import { createContextPayloadRef } from './InMemoryContextPayloadStore'
@@ -35,21 +34,6 @@ export interface ToolResultCanonicalizerApi {
    * 入参为空时返回空数组，不碰 store。
    */
   canonicalizeMany(inputs: readonly CanonicalizeToolResultInput[]): Promise<CanonicalToolResult[]>
-}
-
-function sha256(text: string): string {
-  return createHash('sha256').update(text).digest('hex')
-}
-
-function createBatchKey(sessionId: string, hash: string): string {
-  return `${sessionId}\u0000${hash}`
-}
-
-function hashToolResult(input: CanonicalizeToolResultInput): string {
-  const content = isStatefulToolResultName(input.toolName)
-    ? `${input.toolCallId}\u0000${input.serializedResult}`
-    : input.serializedResult
-  return sha256(content)
 }
 
 export class ToolResultCanonicalizer implements ToolResultCanonicalizerApi {

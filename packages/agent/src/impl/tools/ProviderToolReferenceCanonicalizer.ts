@@ -47,11 +47,4 @@ class ProviderToolReferenceCanonicalizer implements ProviderToolReferenceCanonic
   }
 }
 
-/** 按一次请求的别名映射开一条还原通道。 */
-function createProviderToolReferenceCanonicalizer(
-  providerToCanonical: Readonly<Record<string, string>>
-): ProviderToolReferenceCanonicalizerContract {
-  return new ProviderToolReferenceCanonicalizer(providerToCanonical)
-}
-
-export { createProviderToolReferenceCanonicalizer }
+export { ProviderToolReferenceCanonicalizer }

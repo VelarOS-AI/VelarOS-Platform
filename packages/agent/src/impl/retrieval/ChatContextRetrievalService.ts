@@ -1,61 +1,29 @@
-import {
-  isEmpty,
-  isNotNull,
-  optionalWhen,
-  toNullable,
-} from "@velaros-ai/core";
+import { isEmpty, isNotNull, optionalWhen, toNullable } from '@velaros-ai/core'
 
 import type { RetrievalPayloadStorePort, RetrievalStateStorePort } from '../../contract/requires.js'
 import type { ChatContextReadEvidenceRequest, ChatContextReadEvidenceResult, ChatContextReadToolPayloadRequest, ChatContextRetrievalIndexDiagnostics, ChatContextRetrievalIndexSourceFingerprint, ChatContextRetrievedPayload, ChatContextRetrievePayloadRequest, ChatContextSearchConversationHistoryItem, ChatContextSearchConversationHistoryRequest, ChatContextSearchConversationHistoryResult, ChatContextSearchTerminalOutputItem, ChatContextSearchTerminalOutputRequest, ChatContextSearchTerminalOutputResult } from '../../types/agent.js'
-import type { ContextGovernanceSessionRegistryApi } from '../../types/residency.js'
-import type { CachedRetrievalIndex, ChatContextRetrievalIndexSnapshot, ChatContextRetrievalIndexStore, ChatContextRetrievalIndexToolPayload, LogReadSnippet, ReferencedLogPath, RetrievalIndexBuildTelemetry } from '../../types/retrieval.js'
-import { compareStableStrings } from "../../utils/residency/determinism";
-import {
-  readMessageText,
-  readToolResultFacts,
-} from "../../utils/residency/message-facts";
-import { contextRetrievalFingerprintIsComparable, contextRetrievalFingerprintsEqual, isServiceableCachedRetrievalIndex } from "../../utils/retrieval/index-snapshot";
-import { findLedgerRecordByRef } from "../../utils/retrieval/ledger-records";
-import { normalizeRetrievalLimit } from "../../utils/retrieval/limits";
-import { paginateJsonPathSelection, paginateSerializedText } from "../../utils/retrieval/pagination";
-import { chatSearchRanking } from "../../utils/retrieval/ranking";
-import { resolveRetrievalScopeId } from "../../utils/retrieval/scope";
-import { buildEmptySearchRetryHints, combineSearchWarnings } from "../../utils/retrieval/search-hints";
-import { chatSearchText } from "../../utils/retrieval/text";
-import { AgentTuning } from "../../utils/tuning";
+import type { ContextGovernanceSessionRegistryContract } from '../../types/residency.js'
+import type { CachedRetrievalIndex, ChatContextRetrievalIndexSnapshot, ChatContextRetrievalIndexStore, ChatContextRetrievalIndexToolPayload, ChatContextRetrievalServiceOptions, LogReadSnippet, ReferencedLogPath, RetrievalIndexBuildTelemetry } from '../../types/retrieval.js'
+import { compareStableStrings } from '../../utils/residency/determinism'
+import { readMessageText, readToolResultFacts } from '../../utils/residency/message-facts'
+import { selectJsonPath } from '../../utils/retrieval/context-retrieval-payload-reader'
+import { contextRetrievalFingerprintIsComparable, contextRetrievalFingerprintsEqual, isServiceableCachedRetrievalIndex } from '../../utils/retrieval/index-snapshot'
+import { findLedgerRecordByRef } from '../../utils/retrieval/ledger-records'
+import { normalizeRetrievalLimit } from '../../utils/retrieval/limits'
+import { paginateJsonPathSelection, paginateSerializedText } from '../../utils/retrieval/pagination'
+import { buildHeadTailSnippet, buildSearchSnippet, normalizeSearchTerms, rankContextText } from '../../utils/retrieval/ranking'
+import { resolveRetrievalScopeId } from '../../utils/retrieval/scope'
+import { buildEmptySearchRetryHints, combineSearchWarnings } from '../../utils/retrieval/search-hints'
+import { chatSearchText } from '../../utils/retrieval/text'
+import { AgentTuning } from '../../utils/tuning'
 
-import { ContextRetrievalBoundedCounter } from "./ContextRetrievalBoundedCounter"
-import { ContextRetrievalBoundedRecentMap } from "./ContextRetrievalBoundedRecentMap"
-import { ContextRetrievalIndexBuilder } from "./ContextRetrievalIndexBuilder";
-import {
-  ContextRetrievalPayloadReader,
-  selectJsonPath,
-} from "./ContextRetrievalPayloadReader";
-import {
-  ContextRetrievalQueryTraceStore,
-  type ContextRetrievalQueryTraceStoreOptions,
-} from "./ContextRetrievalQueryTraceStore";
-import { ContextRetrievalReferenceReader } from "./ContextRetrievalReferenceReader";
-import { contextRetrievalReferences } from "./ContextRetrievalReferences";
-
-// 四条进程内容量上限都在 AgentTuning.retrieval：计数索引 countEntryLimit、构建遥测
-// indexBuildTelemetrySessionLimit、终端输出候选 terminalOutputPayloadCandidateLimit，以及内存索引缓存
-// cachedIndexSessionLimit——缓存的是整份索引快照（长会话可达数 MB），所以宁小勿大：真正的热点只有
-// "当前正在跑的那个会话"，8 个槽位足以覆盖并行子 agent + 用户手动切换，再多只是拿内存换命不中的概率。
-
-/** 建 `ChatContextRetrievalService` 时给的一组进程内容量上限；全部可以不传，不传就用本文件的缺省值。 */
-interface ChatContextRetrievalServiceOptions {
-  /** handle/证据重复读取计数最多记多少个键，缺省 4096；键是「会话+scope+handle+jsonPath+offset」，满了按最近使用淘汰，被淘汰的 handle 重新从 1 数起（重复告警会漏报一次）。 */
-  maxRetrievalCountEntries?: LooseOptional<number>;
-  /** 索引构建遥测最多留多少个会话，缺省 512；只影响 `getRetrievalIndexDiagnostics` 能不能报出上次构建的来源和耗时。 */
-  maxIndexBuildTelemetrySessions?: LooseOptional<number>;
-  /** 搜终端输出时，每次最多挑多少条工具 payload 去读盘，缺省 64；这是读盘量的闸门，调大更全但更慢。 */
-  maxTerminalOutputPayloadCandidates?: LooseOptional<number>;
-  /** 内存里最多缓存几个会话的索引快照，缺省 8；一份快照长会话可达数 MB，热点其实只有当前在跑的那个，调大只是拿内存换命不中的概率。 */
-  maxCachedIndexSessions?: LooseOptional<number>;
-  /** 转给内部 `ContextRetrievalQueryTraceStore` 的容量上限，管查询计数表和每会话 trace 条数。 */
-  queryTrace?: ContextRetrievalQueryTraceStoreOptions;
-}
+import { ContextRetrievalBoundedCounter } from './ContextRetrievalBoundedCounter'
+import { ContextRetrievalBoundedRecentMap } from './ContextRetrievalBoundedRecentMap'
+import { ContextRetrievalIndexBuilder } from './ContextRetrievalIndexBuilder'
+import { ContextRetrievalPayloadReader } from './ContextRetrievalPayloadReader'
+import { ContextRetrievalQueryTraceStore } from './ContextRetrievalQueryTraceStore'
+import { ContextRetrievalReferenceReader } from './ContextRetrievalReferenceReader'
+import { contextRetrievalReferences } from './ContextRetrievalReferences'
 
 /**
  * 单会话上下文检索的门面：按句柄取回正文、在历史消息和终端输出里搜、读证据、报索引诊断、会话没了就清场。
@@ -84,6 +52,9 @@ export interface ChatContextRetrievalServiceApi {
   getRetrievalIndexDiagnostics(sessionId: string): Promise<Nullable<ChatContextRetrievalIndexDiagnostics>>;
   /** 硬失效通道：会话被删除或重置时，丢掉这个 sessionId 的缓存快照、构建遥测和在飞的加载。不调的话同名会话复用、或目录被原样恢复成旧 mtime 时，进程内会继续供应上一段对话的索引。幂等，空 id 直接忽略。 */
   invalidateSession(sessionId: LooseOptional<string>): void;
+
+  /** 判断两份来源指纹是不是同一份（缓存索引能不能直接用）。 */
+  fingerprintsEqual(left: LooseOptional<ChatContextRetrievalIndexSourceFingerprint>, right: LooseOptional<ChatContextRetrievalIndexSourceFingerprint>): boolean
 }
 
 /**
@@ -150,7 +121,7 @@ class ChatContextRetrievalService implements ChatContextRetrievalServiceApi {
      * 治理会话登记处；每次召回都是一次**缺页（fault）**，经此记进驻留账本。
      * fault 率是策略好坏的核心信号，也是 epoch 排序里"高者缓降"的输入（设计 §4C）。
      */
-    private readonly governanceSessions: ContextGovernanceSessionRegistryApi,
+    private readonly governanceSessions: ContextGovernanceSessionRegistryContract,
     /** 检索索引存储端口；宿主注入文件系统实现（落盘策略与新鲜度指纹在宿主侧）。 */
     private readonly indexStore: ChatContextRetrievalIndexStore,
     options: ChatContextRetrievalServiceOptions = {},
@@ -573,7 +544,7 @@ class ChatContextRetrievalService implements ChatContextRetrievalServiceApi {
     );
     const maxResults = chatSearchText.clampMaxResults(request.maxResults);
     const maxChars = chatSearchText.clampMaxChars(request.maxChars);
-    const terms = chatSearchRanking.normalizeSearchTerms(query);
+    const terms = normalizeSearchTerms(query);
     const queryRegistration = this.queryTraceStore.register({
       sessionId,
       retrievalScopeId,
@@ -587,7 +558,7 @@ class ChatContextRetrievalService implements ChatContextRetrievalServiceApi {
     const matchedItems = index.messages
       .map(
         (message): LooseOptional<ChatContextSearchConversationHistoryItem> => {
-          const ranking = chatSearchRanking.rankContextText({
+          const ranking = rankContextText({
             query,
             terms,
             text: message.searchableText,
@@ -613,7 +584,7 @@ class ChatContextRetrievalService implements ChatContextRetrievalServiceApi {
               Math.min(240, maxChars),
             ),
             matchedText: toNullable(
-              chatSearchRanking.buildSearchSnippet(
+              buildSearchSnippet(
                 message.text || message.searchableText,
                 terms,
                 Math.min(900, maxChars),
@@ -797,7 +768,7 @@ class ChatContextRetrievalService implements ChatContextRetrievalServiceApi {
       request.retrievalScopeId,
       request.sessionLineage,
     );
-    const terms = chatSearchRanking.normalizeSearchTerms(query);
+    const terms = normalizeSearchTerms(query);
     const queryRegistration = this.queryTraceStore.register({
       sessionId,
       retrievalScopeId,
@@ -830,7 +801,7 @@ class ChatContextRetrievalService implements ChatContextRetrievalServiceApi {
           snippet.source,
           snippet.content ?? "",
         ].join("\n");
-        const ranking = chatSearchRanking.rankContextText({
+        const ranking = rankContextText({
           query,
           terms,
           text: haystack,
@@ -851,11 +822,11 @@ class ChatContextRetrievalService implements ChatContextRetrievalServiceApi {
             !terms.some((term) =>
               content.toLowerCase().includes(term.toLowerCase()),
             )
-              ? chatSearchRanking.buildHeadTailSnippet(
+              ? buildHeadTailSnippet(
                   content,
                   Math.min(1_500, maxChars),
                 )
-              : chatSearchRanking.buildSearchSnippet(
+              : buildSearchSnippet(
                   content,
                   terms,
                   Math.min(1_500, maxChars),
@@ -945,7 +916,7 @@ class ChatContextRetrievalService implements ChatContextRetrievalServiceApi {
    * 缓存判据是"源指纹一致就复用"，而会话被删后目录消失、指纹多半读不出来，于是**大多数**情况会
    * 自然退化成重建 —— 但那是巧合不是保证：同一 sessionId 被复用、或目录被外部工具原样恢复到旧
    * mtime 时，进程内会继续供应上一段对话的索引，而 8 个槽位的 LRU 让它可以活很久（审计 R8）。
-   * 治理侧已经认了"会话没了状态就该没"（`ContextGovernanceSessionRegistryApi.invalidateSession`），
+   * 治理侧已经认了"会话没了状态就该没"（`ContextGovernanceSessionRegistryContract.invalidateSession`），
    * 检索侧跟上：宿主的会话删除路径两个都调。失效是幂等的，多调一次没有代价。
    */
   public invalidateSession(sessionId: LooseOptional<string>): void {
@@ -1079,7 +1050,7 @@ class ChatContextRetrievalService implements ChatContextRetrievalServiceApi {
       const referenceText = toolPayload.logReferences
         .map((reference) => `${reference.path}\n${reference.source}`)
         .join("\n");
-      const ranking = chatSearchRanking.rankContextText({
+      const ranking = rankContextText({
         query: input.query,
         terms: input.terms,
         text: `${toolPayload.searchableText}\n${referenceText}`,
@@ -1139,6 +1110,14 @@ class ChatContextRetrievalService implements ChatContextRetrievalServiceApi {
       .filter((snippet): snippet is LogReadSnippet => isNotNull(snippet));
   }
 
+  public fingerprintsEqual(left: LooseOptional<ChatContextRetrievalIndexSourceFingerprint>, right: LooseOptional<ChatContextRetrievalIndexSourceFingerprint>): boolean {
+    return contextRetrievalFingerprintsEqual(left, right)
+  }
 }
 
 export { ChatContextRetrievalService, type ChatContextRetrievalServiceOptions };
+
+/** 建一台会话召回服务：索引、排序与载荷读取都在它身上。 */
+export function createChatContextRetrievalService(payloadStore: RetrievalPayloadStorePort, stateStore: RetrievalStateStorePort, governanceSessions: ContextGovernanceSessionRegistryContract, indexStore: ChatContextRetrievalIndexStore, options: ChatContextRetrievalServiceOptions = {}): ChatContextRetrievalServiceApi {
+  return new ChatContextRetrievalService(payloadStore, stateStore, governanceSessions, indexStore, options)
+}

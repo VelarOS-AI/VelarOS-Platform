@@ -1,9 +1,9 @@
 import type { ExecutionSpanStatus, ModelSpan, ToolSpan } from '../../types/agent.js'
 import type { ProviderRequestSnapshot } from '../../types/context.js'
 import type { CapabilitySpanInput, LedgerTurnSpanScopeDeps, ModelSpanHandle, SpanLedgerWarn, ToolSpanHandle, TurnSpanScope } from '../../types/ledgers.js'
+import { runIsolatedSpanOp } from '../../utils/ledgers/ledger-execution-span-scope-factory'
 
 import { type ExecutionSpanRecorder } from './ExecutionSpanRecorder'
-import { runIsolatedSpanOp } from './LedgerExecutionSpanScopeFactory'
 
 /**
  * 一轮 provider 生成（turn）的 span 作用域：本轮的 model / tool / capability / policy span 都从这里开。

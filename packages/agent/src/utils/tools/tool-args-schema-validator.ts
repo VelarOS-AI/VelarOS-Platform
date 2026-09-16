@@ -18,29 +18,20 @@ const DefaultToolArgsValidationHint =
   '否则请按 schema 改正参数。'
 
 
-/**
- * 工具参数 schema 校验与轻量归一化。
- *
- * 负责把模型侧可能以字符串形式传入的 JSON/数字/boolean 按 schema issue 提示做有限次修正，
- * 并在失败时生成面向模型的 hint 与 nextActions。
- */
-class ToolArgsSchemaValidator {
-  private readonly maxNormalizationPasses = 5
 
-  public validateWithNormalization<TInput>(
-    schema: ToolSchema<TInput>,
-    args?: Record<string, unknown>
-  ): ToolArgsValidationResult<TInput> {
-    const requestedArgs = this.cloneJsonLikeValue(args ?? {}) as Record<string, unknown>
-    let current = this.cloneJsonLikeValue(args ?? {}) as Record<string, unknown>
+
+/** 按 schema 校验工具入参；模型常见的字符串化 JSON、数字与布尔按 issue 提示有限次归一后再校验。 */
+export function validateWithNormalization<TInput>(schema: ToolSchema<TInput>, args?: Record<string, unknown>): ToolArgsValidationResult<TInput> {
+    const requestedArgs = cloneJsonLikeValue(args ?? {}) as Record<string, unknown>
+    let current = cloneJsonLikeValue(args ?? {}) as Record<string, unknown>
     let lastResult = schema.safeParse(current)
 
     for (
       let pass = 0;
-      pass < this.maxNormalizationPasses && !lastResult.success;
+      pass < AgentTuning.tools.maxArgsNormalizationPasses && !lastResult.success;
       pass += 1
     ) {
-      const next = this.normalizeArgsFromSchemaIssues(current, lastResult.error.issues)
+      const next = normalizeArgsFromSchemaIssues(current, lastResult.error.issues)
       if (!next.changed) {
         break
       }
@@ -50,9 +41,9 @@ class ToolArgsSchemaValidator {
 
     if (lastResult.success) {
       const effectiveArgs = isPlainObject(lastResult.data)
-        ? this.cloneJsonLikeValue(lastResult.data) as Record<string, unknown>
+        ? cloneJsonLikeValue(lastResult.data) as Record<string, unknown>
         : current
-      const adjustments = this.describeAdjustments(requestedArgs, effectiveArgs)
+      const adjustments = describeAdjustments(requestedArgs, effectiveArgs)
       return {
         success: true,
         data: lastResult.data,
@@ -66,22 +57,19 @@ class ToolArgsSchemaValidator {
     return {
       success: false,
       error: lastResult.error,
-      issues: this.formatIssues(lastResult.error.issues, current),
+      issues: formatIssues(lastResult.error.issues, current),
     }
   }
 
-  /**
+/**
    * 比较模型输入与实际执行参数。只描述字段路径和调整类型，不复制字段值，避免诊断元数据泄密。
    */
-  public describeAdjustments(
-    requested: Record<string, unknown>,
-    effective: Record<string, unknown>
-  ): ToolInputAdjustment[] {
+export function describeAdjustments(requested: Record<string, unknown>, effective: Record<string, unknown>): ToolInputAdjustment[] {
     const collector: ToolInputAdjustmentCollector = {
       adjustments: [],
       truncated: false,
     }
-    this.collectAdjustments(requested, effective, '', 0, collector)
+    collectAdjustments(requested, effective, '', 0, collector)
     if (collector.truncated) {
       const truncatedAdjustment: ToolInputAdjustment = {
         field: '<additional>',
@@ -97,15 +85,13 @@ class ToolArgsSchemaValidator {
     return collector.adjustments
   }
 
-  public formatIssues(
-    issues: ToolSchemaIssue[],
-    input?: unknown
-  ): ToolSchemaIssueDetail[] {
+/** 把校验 issue 折成给模型看的清单：路径、期望类型与实际值。 */
+export function formatIssues(issues: ToolSchemaIssue[], input?: unknown): ToolSchemaIssueDetail[] {
     const formatted: ToolSchemaIssueDetail[] = []
     const seen = new Set<string>()
     let visited = 0
     const push = (path: PropertyKey[], message: string, alternatives: number[]): void => {
-      const field = this.issuePathKey(path)
+      const field = issuePathKey(path)
       const key = JSON.stringify([field, message])
       if (seen.has(key)) return
       seen.add(key)
@@ -126,7 +112,7 @@ class ToolArgsSchemaValidator {
         if (issue.code === 'invalid_union' && issue.errors?.length && alternatives.length < 8) {
           // Zod 的 union 分支路径相对外层 issue。只展开输入实际对应的分支；仍并列的分支保留编号，
           // 避免提示模型同时满足互斥选项。
-          const relevant = this.relevantUnionBranches(issue.errors, this.valueAtPath(input, path))
+          const relevant = relevantUnionBranches(issue.errors, valueAtPath(input, path))
           if (relevant.merged) {
             push([...path, ...relevant.merged.path], relevant.merged.message, alternatives)
             continue
@@ -144,15 +130,12 @@ class ToolArgsSchemaValidator {
     return formatted
   }
 
-  /**
+/**
    * 选出与输入相符的 union 分支：输入里确有值、有分支对它报 invalid_value、也有分支对它毫无异议的字段就是
    * 判别字段（如 op），报错的分支直接淘汰；缺失字段同样报 invalid_value，所以必须看输入里是否真有这个值。
    * 所有分支都拒绝同一个判别值时合并成一句「可选值」；剩余分支取问题最少的；都只差同一处类型时合并成一句。
    */
-  private relevantUnionBranches(
-    branches: ToolSchemaIssue[][],
-    value: unknown
-  ): { branches: Array<{ index: number; issues: ToolSchemaIssue[] }>; merged?: { path: PropertyKey[]; message: string } } {
+function relevantUnionBranches(branches: ToolSchemaIssue[][], value: unknown): { branches: Array<{ index: number; issues: ToolSchemaIssue[] }>; merged?: { path: PropertyKey[]; message: string } } {
     let candidates = branches.map((issues, index) => ({ index, issues }))
     const rejections = (issues: ToolSchemaIssue[], key: PropertyKey) =>
       issues.filter((issue) => issue.code === 'invalid_value' && issue.path.length === 1 && issue.path[0] === key)
@@ -184,7 +167,8 @@ class ToolArgsSchemaValidator {
     return { branches: selected }
   }
 
-  private valueAtPath(input: unknown, path: readonly PropertyKey[]): unknown {
+/** 按 issue 路径取出入参里对应位置的值。 */
+function valueAtPath(input: unknown, path: readonly PropertyKey[]): unknown {
     let cursor = input
     for (const segment of path) {
       if (!isObject(cursor)) return undefined
@@ -193,12 +177,9 @@ class ToolArgsSchemaValidator {
     return cursor
   }
 
-  public describeValidationHint(
-    toolName: string,
-    issues: string,
-    providers: readonly ToolValidationHintProvider[] = []
-  ): string {
-    const recovery = this.resolveRecovery(providers, {
+/** 给一次校验失败挑一句面向模型的提示；能力包给了更贴切的提示就用它的。 */
+export function describeValidationHint(toolName: string, issues: string, providers: readonly ToolValidationHintProvider[] = []): string {
+    const recovery = resolveRecovery(providers, {
       toolName,
       issues,
       pageId: `tool:${toolName}`,
@@ -207,11 +188,8 @@ class ToolArgsSchemaValidator {
     return recovery.hint ?? DefaultToolArgsValidationHint
   }
 
-  public buildValidationNextActions(
-    toolName: string,
-    issueDetails: readonly ToolSchemaIssueDetail[] = [],
-    providers: readonly ToolValidationHintProvider[] = []
-  ): string[] {
+/** 给一次校验失败列出模型下一步能做的动作。 */
+export function buildValidationNextActions(toolName: string, issueDetails: readonly ToolSchemaIssueDetail[] = [], providers: readonly ToolValidationHintProvider[] = []): string[] {
     const pageId = `tool:${toolName}`
     const issues = issueDetails.map((issue) => `${issue.path}: ${issue.message}`).join('; ')
     const recoveryContext: ToolValidationHintContext = {
@@ -226,16 +204,14 @@ class ToolArgsSchemaValidator {
       `如果目标工具未暴露真实 schema，请通过宿主提供的能力发现接口加载 ${pageId} 后再调用。`,
     ]
 
-    const recovery = this.resolveRecovery(providers, recoveryContext)
+    const recovery = resolveRecovery(providers, recoveryContext)
     if (recovery.nextActions) actions.unshift(...recovery.nextActions)
 
     return actions
   }
 
-  private resolveRecovery(
-    providers: readonly ToolValidationHintProvider[],
-    context: ToolValidationHintContext
-  ): { hint?: string; nextActions?: readonly string[] } {
+/** 判定这次校验失败该按哪种恢复路径处理。 */
+function resolveRecovery(providers: readonly ToolValidationHintProvider[], context: ToolValidationHintContext): { hint?: string; nextActions?: readonly string[] } {
     for (const provider of providers) {
       const recovery = provider.getRecovery(context)
       if (recovery) return recovery
@@ -243,21 +219,21 @@ class ToolArgsSchemaValidator {
     return {}
   }
 
-  public replaceRecordContents(
-    target: Record<string, unknown>,
-    source: Record<string, unknown>
-  ): void {
+/** 原地把一个记录对象的内容整体换成另一份（`__proto__` 等键按普通自有属性写）。 */
+export function replaceRecordContents(target: Record<string, unknown>, source: Record<string, unknown>): void {
     for (const key of Object.keys(target)) {
       delete target[key]
     }
     Object.defineProperties(target, Object.getOwnPropertyDescriptors(source))
   }
 
-  private issuePathKey(path: readonly PropertyKey[]): string {
+/** 把 issue 路径折成可比较的字符串键。 */
+function issuePathKey(path: readonly PropertyKey[]): string {
     return path.map(String).join('.')
   }
 
-  private readIssueExpected(issue: {
+/** 从一条 issue 里读出它期望的类型名。 */
+function readIssueExpected(issue: {
     message: string
     expected?: unknown
     code?: unknown
@@ -272,7 +248,8 @@ class ToolArgsSchemaValidator {
     return null
   }
 
-  private readPathValue(root: unknown, path: readonly PropertyKey[]): unknown {
+/** 按路径读一个嵌套值；路径断在中途返回 undefined。 */
+function readPathValue(root: unknown, path: readonly PropertyKey[]): unknown {
     let current = root
     for (const segment of path) {
       if (!isObject(current) && !isArray(current)) return undefined
@@ -281,7 +258,8 @@ class ToolArgsSchemaValidator {
     return current
   }
 
-  private writePathValue(root: unknown, path: readonly PropertyKey[], value: unknown): boolean {
+/** 按路径写一个嵌套值；路径断在中途返回 false。 */
+function writePathValue(root: unknown, path: readonly PropertyKey[], value: unknown): boolean {
     if (isEmpty(path)) return false
 
     let current = root
@@ -297,43 +275,40 @@ class ToolArgsSchemaValidator {
     return true
   }
 
-  private cloneJsonLikeValue(value: unknown): unknown {
-    if (isArray(value)) return value.map((item) => this.cloneJsonLikeValue(item))
+/** 浅层复制一个 JSON 形状的值，避免归一化改到调用方的对象。 */
+function cloneJsonLikeValue(value: unknown): unknown {
+    if (isArray(value)) return value.map((item) => cloneJsonLikeValue(item))
     if (isPlainObject(value)) return Object.fromEntries(
-        Object.entries(value).map(([key, item]) => [key, this.cloneJsonLikeValue(item)])
+        Object.entries(value).map(([key, item]) => [key, cloneJsonLikeValue(item)])
       )
     return value
   }
 
-  private jsonLikeEquals(left: unknown, right: unknown, depth: number): boolean {
+/** 比较两个 JSON 形状的值是否等价（限定深度，防环）。 */
+function jsonLikeEquals(left: unknown, right: unknown, depth: number): boolean {
     if (Object.is(left, right)) return true
     if (depth >= AgentTuning.tools.maxInputAdjustmentDepth) return false
     if (isArray(left) && isArray(right)) return left.length === right.length && left.every((item, index) =>
-        this.jsonLikeEquals(item, right[index], depth + 1)
+        jsonLikeEquals(item, right[index], depth + 1)
       )
     if (isPlainObject(left) && isPlainObject(right)) {
       const leftKeys = Object.keys(left)
       const rightKeys = Object.keys(right)
       return leftKeys.length === rightKeys.length && leftKeys.every((key) =>
-        Object.hasOwn(right, key) && this.jsonLikeEquals(left[key], right[key], depth + 1)
+        Object.hasOwn(right, key) && jsonLikeEquals(left[key], right[key], depth + 1)
       )
     }
     return false
   }
 
-  private collectAdjustments(
-    requested: unknown,
-    effective: unknown,
-    path: string,
-    depth: number,
-    collector: ToolInputAdjustmentCollector
-  ): void {
+/** 对比请求入参与实际生效入参，列出被系统改过的字段。 */
+function collectAdjustments(requested: unknown, effective: unknown, path: string, depth: number, collector: ToolInputAdjustmentCollector): void {
     if (collector.truncated) return
     if (collector.adjustments.length >= AgentTuning.tools.maxInputAdjustments) {
       collector.truncated = true
       return
     }
-    if (this.jsonLikeEquals(requested, effective, depth)) return
+    if (jsonLikeEquals(requested, effective, depth)) return
     if (depth >= AgentTuning.tools.maxInputAdjustmentDepth) {
       collector.truncated = true
       return
@@ -351,7 +326,7 @@ class ToolArgsSchemaValidator {
         const effectiveHasKey = Object.hasOwn(effective, key)
         if (!requestedHasKey) {
           collector.adjustments.push({
-            field: this.limitAdjustmentPath(nestedPath),
+            field: limitAdjustmentPath(nestedPath),
             action: 'defaulted',
             detail: 'schema 补上了没填的字段',
           })
@@ -359,13 +334,13 @@ class ToolArgsSchemaValidator {
         }
         if (!effectiveHasKey) {
           collector.adjustments.push({
-            field: this.limitAdjustmentPath(nestedPath),
+            field: limitAdjustmentPath(nestedPath),
             action: 'ignored',
             detail: 'schema 去掉了一个不支持的字段',
           })
           continue
         }
-        this.collectAdjustments(
+        collectAdjustments(
           requested[key],
           effective[key],
           nestedPath,
@@ -378,7 +353,7 @@ class ToolArgsSchemaValidator {
 
     if (isArray(requested) && isArray(effective) && requested.length === effective.length) {
       for (const [index, item] of requested.entries()) {
-        this.collectAdjustments(
+        collectAdjustments(
           item,
           effective[index],
           `${path}[${index}]`,
@@ -402,18 +377,20 @@ class ToolArgsSchemaValidator {
       detail = 'schema 在执行前把模型给的值夹到了范围内或做了取整'
     }
     collector.adjustments.push({
-      field: this.limitAdjustmentPath(path || '<root>'),
+      field: limitAdjustmentPath(path || '<root>'),
       action,
       detail,
     })
   }
 
-  private limitAdjustmentPath(path: string): string {
+/** 把过长的调整路径截短，只留给模型看得懂的那一段。 */
+function limitAdjustmentPath(path: string): string {
     if (path.length <= AgentTuning.tools.maxInputAdjustmentPathChars) return path
     return `${path.slice(0, AgentTuning.tools.maxInputAdjustmentPathChars - 3)}...`
   }
 
-  private parseJsonString(value: string): { ok: true; value: unknown } | { ok: false } {
+/** 尝试把一段文本解析成 JSON；失败时不抛错，返回 ok:false。 */
+function parseJsonString(value: string): { ok: true; value: unknown } | { ok: false } {
     try {
       return { ok: true, value: JSON.parse(value) }
     } catch {
@@ -421,35 +398,29 @@ class ToolArgsSchemaValidator {
     }
   }
 
-  private normalizeJsonEncodedStringForExpectedType(
-    value: string,
-    expected: Nullable<string>,
-    depth = 0
-  ): { changed: boolean; value: unknown } {
+/** 把被字符串化的 JSON 按期望类型还原成对象或数组。 */
+function normalizeJsonEncodedStringForExpectedType(value: string, expected: Nullable<string>, depth = 0): { changed: boolean; value: unknown } {
     if (depth >= 3) return { changed: false, value }
 
-    const parsed = this.parseJsonString(value.trim())
+    const parsed = parseJsonString(value.trim())
     if (!parsed.ok || !isString(parsed.value)) return { changed: false, value }
 
-    const nested = this.normalizeStringForExpectedType(parsed.value, expected, depth + 1)
+    const nested = normalizeStringForExpectedType(parsed.value, expected, depth + 1)
     if (nested.changed) return nested
 
     return { changed: true, value: parsed.value }
   }
 
-  private normalizeStringForExpectedType(
-    value: string,
-    expected: Nullable<string>,
-    depth = 0
-  ): { changed: boolean; value: unknown } {
+/** 把字符串按期望类型转成数字、布尔或数组。 */
+function normalizeStringForExpectedType(value: string, expected: Nullable<string>, depth = 0): { changed: boolean; value: unknown } {
     const trimmed = value.trim()
     if (isEmpty(trimmed)) return { changed: false, value }
 
-    const jsonEncodedString = this.normalizeJsonEncodedStringForExpectedType(trimmed, expected, depth)
+    const jsonEncodedString = normalizeJsonEncodedStringForExpectedType(trimmed, expected, depth)
     if (jsonEncodedString.changed) return jsonEncodedString
 
     if (expected === 'array' || expected === 'object') {
-      const parsed = this.parseJsonString(trimmed)
+      const parsed = parseJsonString(trimmed)
       if (!parsed.ok) return { changed: false, value }
       if (expected === 'array' && isArray(parsed.value)) return { changed: true, value: parsed.value }
       if (expected === 'object' && isPlainObject(parsed.value)) return { changed: true, value: parsed.value }
@@ -476,7 +447,7 @@ class ToolArgsSchemaValidator {
     }
 
     if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
-      const parsed = this.parseJsonString(trimmed)
+      const parsed = parseJsonString(trimmed)
       if (parsed.ok && (isPlainObject(parsed.value) || isArray(parsed.value))) return { changed: true, value: parsed.value }
     }
 
@@ -495,43 +466,31 @@ class ToolArgsSchemaValidator {
     return { changed: false, value }
   }
 
-  private normalizeArgsFromSchemaIssues(
-    args: Record<string, unknown>,
-    issues: ToolSchemaIssue[]
-  ): { args: Record<string, unknown>; changed: boolean } {
-    const next = this.cloneJsonLikeValue(args)
+/** 按这一轮的 issue 清单对入参做一遍归一化，返回新入参与是否真的改过。 */
+function normalizeArgsFromSchemaIssues(args: Record<string, unknown>, issues: ToolSchemaIssue[]): { args: Record<string, unknown>; changed: boolean } {
+    const next = cloneJsonLikeValue(args)
     if (!isPlainObject(next)) return { args, changed: false }
 
     let changed = false
     const seen = new Set<string>()
     for (const issue of issues) {
-      const key = this.issuePathKey(issue.path)
+      const key = issuePathKey(issue.path)
       if (seen.has(key)) continue
       seen.add(key)
 
-      const current = this.readPathValue(next, issue.path)
+      const current = readPathValue(next, issue.path)
       if (!isString(current)) continue
 
-      const normalized = this.normalizeStringForExpectedType(current, this.readIssueExpected(issue))
+      const normalized = normalizeStringForExpectedType(current, readIssueExpected(issue))
       if (!normalized.changed) continue
 
-      changed = this.writePathValue(next, issue.path, normalized.value) || changed
+      changed = writePathValue(next, issue.path, normalized.value) || changed
     }
 
     return { args: next, changed }
   }
 
-}
-
-const toolArgsSchemaValidator = new ToolArgsSchemaValidator()
-
-const validateToolArgsWithNormalization =
-  toolArgsSchemaValidator.validateWithNormalization.bind(toolArgsSchemaValidator)
-const formatToolSchemaIssues = toolArgsSchemaValidator.formatIssues.bind(toolArgsSchemaValidator)
-
 export {
-  formatToolSchemaIssues,
-  ToolArgsSchemaValidator,
-  toolArgsSchemaValidator,
-  validateToolArgsWithNormalization,
+  formatIssues as formatToolSchemaIssues,
+  validateWithNormalization as validateToolArgsWithNormalization,
 }

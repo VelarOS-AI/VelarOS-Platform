@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import { selectJsonPath } from '../src/impl/retrieval/ContextRetrievalPayloadReader'
+import { selectJsonPath } from '../src/utils/retrieval/context-retrieval-payload-reader'
 import { findHistoryPreviewPlaceholderArgumentPaths } from '../src/utils/tools/history-preview-placeholder'
 import { compactToolInputForModel } from '../src/utils/tools/tool-result-serialization'
 

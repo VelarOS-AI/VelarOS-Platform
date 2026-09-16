@@ -1,51 +1,13 @@
 import { isEmpty, isNotNull } from '@velaros-ai/core'
 
-import type { TurnContextDelta, TurnContextInspectHint, TurnContextSourceId, TurnContextSourcePeekInput } from '../../types/agent.js'
+import type { TurnContextDelta, TurnContextSourceId, TurnContextSourcePeekInput } from '../../types/agent.js'
+import type { TurnContextLedgerAppendInput, TurnContextLedgerPeekResult } from '../../types/records.js'
 import { AgentTuning } from '../../utils/tuning'
-
 
 /** 进程代次：重启后与持久化旧 cursor 不匹配，消费方不回放旧 delta 只重发 anchors。 */
 export const TurnContextProcessGeneration: string = `g_${Date.now().toString(36)}_${Math.random()
   .toString(36)
   .slice(2, 10)}`
-
-/**
- * 账本实例代次 = 进程代次 + 实例序号。
- *
- * 账本被容量淘汰后重建时 `seq` 从 1 重新开始，而消费方的 cursor 还停在旧账本的 seq 20；
- * 代次不换代的话 `peek` 的 `seq > 20` 会把重建后的前 20 条 delta 全部静默吞掉，连缺口提示都
- * 没有（审计 U37）。换代让协议既有的"generation 不同直接替换 cursor"分支自动兜住这件事，
- * 不需要任何额外通知机制。
- */
-export function nextTurnContextLedgerGeneration(): string {
-  return TurnContextLedger.nextGeneration()
-}
-
-/** 往账本里记一条环境变化要填的东西：正文在这一刻就定稿，之后谁都不许重排版。 */
-export interface TurnContextLedgerAppendInput {
-  /** 这件事发生的时刻（毫秒时间戳）；不填就取写入时刻。事后补记时才需要显式传。 */
-  occurredAt?: number
-  /** 这条 delta 的短标签，投给模型时当这一行的抬头，例如来源名或操作名。 */
-  label: string
-  /** 投给模型的正文，`append` 时就得是最终形态：消费方原样投递，不再截断、不再拼接、不再改格式。 */
-  summaryText: string
-  /** 可选的细看线索：告诉模型想看全貌该调哪个工具、带什么参数。不填表示这条看完就够了。 */
-  inspect?: TurnContextInspectHint
-}
-
-/** `peek` 的结果：既给这次要投的 delta，也给回下次 peek 该带的游标基底。 */
-export interface TurnContextLedgerPeekResult {
-  /** 本账本的代次；和消费方手里的对不上，说明账本换过一茬，消费方要整段替换自己的 cursor 而不是接着往下读。 */
-  generation: string
-  /** 当前还留着的最旧那条的 seq；账本空时等于下一个要发的 seq。 */
-  headSeq: number
-  /** 至今发出过的最大 seq；消费方消费完这批后把 cursor 记到这里。 */
-  tailSeq: number
-  /** 有 delta 因容量被淘汰、而且正好落在这次请求的区间里时，给出最旧保留项的 seq，表示「这条之前的你没看到」。没缺口时不带这个字段。 */
-  droppedBeforeSeq?: number
-  /** 这次该投的 delta，按 seq 从小到大；`afterSeq` 之后的全部，可能为空数组。 */
-  deltas: TurnContextDelta[]
-}
 
 /**
  * 一个会话里一个 source 的环境 delta 账本，内存 ring buffer：seq 从 1 单调递增，
@@ -73,15 +35,6 @@ export interface TurnContextLedgerApi {
  * - peek 为纯内存读取，无任何 IO。
  */
 export class TurnContextLedger implements TurnContextLedgerApi {
-  /** 本进程里已经建过几个账本实例；只由 {@link TurnContextLedger.nextGeneration} 推进。 */
-  private static instanceSeq = 0
-
-  /** 发一个新的账本实例代次：进程代次 + 实例序号。 */
-  public static nextGeneration(): string {
-    TurnContextLedger.instanceSeq += 1
-    return `${TurnContextProcessGeneration}.${TurnContextLedger.instanceSeq.toString(36)}`
-  }
-
   private nextSeq = 1
   private items: TurnContextDelta[] = []
   /** 有淘汰发生时，最旧保留项的 seq；无淘汰为 null。 */
@@ -165,6 +118,4 @@ export class TurnContextLedger implements TurnContextLedgerApi {
 export const DefaultLedgerMaxEntries: number = AgentTuning.records.turnContextLedgerMaxEntries
 /** 最多同时为多少个会话保留账本，值在 `AgentTuning.records.turnContextMaxSessions`。 */
 export const DefaultMaxSessions: number = AgentTuning.records.turnContextMaxSessions
-
-
 

@@ -17,7 +17,7 @@
  * - 进程内、按模型隔离；不持久化（每次启动重新学习，几轮即可收敛）。
  */
 
-import { clamp,isFiniteNumber } from '@velaros-ai/core'
+import { clamp, isFiniteNumber } from '@velaros-ai/core'
 
 import { AgentTuning } from '../../utils/tuning'
 

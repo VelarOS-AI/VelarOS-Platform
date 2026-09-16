@@ -3,7 +3,7 @@ import type { ScopedLog } from '@velaros-ai/core/logger'
 import { readFirstString } from '@velaros-ai/core/utils/unknownJsonRecord'
 
 import type { AgentRuntimeEventBus } from '../../types/runner.js'
-import { ChatRuntimeEvents } from '../wire/chat-runtime.js'
+import { streamAborted, streamDone, streamError } from '../wire/chat-runtime'
 
 /** 取一个错误对象的 `name`：不是 `Error` 实例（字符串、普通对象、undefined）时返回 null，调用方据此跳过判名。 */
 function readErrorName(error: unknown): Nullable<string> {
@@ -45,12 +45,12 @@ export function resolveAgentRuntimeAbortMessage(error: AppError, abortSignal: Ab
 
 /** 往事件总线发一条运行被终止：带 `EXECUTION_ABORTED` 错误码，下游据此把本轮收成"停止"而不是"失败"。 */
 export function emitAgentRuntimeAbort(events: AgentRuntimeEventBus, message = '运行被终止'): void {
-  events.emitRuntime(ChatRuntimeEvents.aborted(message, undefined, 'EXECUTION_ABORTED'))
+  events.emitRuntime(streamAborted(message, undefined, 'EXECUTION_ABORTED'))
 }
 
 /** 往事件总线发一条本轮正常收尾。 */
 export function emitAgentRuntimeDone(events: AgentRuntimeEventBus): void {
-  events.emitRuntime(ChatRuntimeEvents.done())
+  events.emitRuntime(streamDone())
 }
 
 /**
@@ -74,5 +74,5 @@ export function handleAgentRuntimeStreamError(
   }
 
   log.error('stream error', appError)
-  events.emitRuntime(ChatRuntimeEvents.error(appError.message, appError.code, appError.context))
+  events.emitRuntime(streamError(appError.message, appError.code, appError.context))
 }

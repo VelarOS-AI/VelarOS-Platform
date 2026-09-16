@@ -5,7 +5,6 @@ import { agentWorkflowTools } from '../src/impl/AgentTools'
 import { backgroundJobTools } from '../src/impl/AgentTools'
 import { categoriesTools } from '../src/impl/AgentTools'
 import { confirmationTools } from '../src/impl/AgentTools'
-import { contextDistillTools } from '../src/impl/AgentTools'
 import { contextHandoffTools } from '../src/impl/AgentTools'
 import { contextRetrievalTools } from '../src/impl/AgentTools'
 import { dispatchAgentTools } from '../src/impl/AgentTools'
@@ -19,7 +18,6 @@ const tools = {
   ...agentWorkflowTools,
   ...backgroundJobTools,
   ...categoriesTools,
-  ...contextDistillTools,
   ...contextHandoffTools,
   ...contextRetrievalTools,
   ...dispatchAgentTools,
@@ -31,20 +29,16 @@ const tools = {
 const expectedEffects = {
   'agent:dispatch': 'execute',
   'agent:run_workflow': 'execute',
-  'context:distill': 'write',
   'context:handoff': 'external',
   'context:recall': 'read',
   'directive:archive': 'write',
   'directive:list': 'read',
   'directive:upsert': 'write',
   'goal:create': 'write',
-  'goal:get': 'read',
   'goal:update': 'write',
   'interaction:confirm': 'external',
-  'job:cancel': 'execute',
   'job:read_output': 'read',
   'job:wait': 'read',
-  'plan:get': 'read',
   'plan:update': 'write',
   'tooling:map': 'read',
   'tooling:read': 'read',

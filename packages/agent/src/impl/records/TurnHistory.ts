@@ -1,11 +1,7 @@
 import type { ModelMessage } from 'ai'
 
 import type { AgentTurnToolExecutor, AgentTurnToolResult, AssistantContentPart, AssistantRawContentPart } from '../../types/history.js'
-import {
-  appendAssistantMessage,
-  appendToolResultsToHistory,
-  toAssistantRawContent,
-} from '../../utils/history/turn'
+import { appendAssistantMessage, appendToolResultsToHistory, toAssistantRawContent } from '../../utils/history/turn'
 
 /**
  * 轮次历史：把单轮产物落到模型消息历史。
@@ -68,4 +64,8 @@ class TurnHistory implements TurnHistoryApi {
   }
 }
 
-export { TurnHistory as AgentTurnHistoryHelper,TurnHistory }
+export { TurnHistory }
+
+/** 回合历史的只读投影面（无状态，进程内共用一份）。 */
+export const agentTurnHistory: TurnHistoryApi = new TurnHistory()
+

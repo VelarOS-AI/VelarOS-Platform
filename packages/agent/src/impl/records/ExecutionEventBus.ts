@@ -1,135 +1,7 @@
-import { toNullable } from '@velaros-ai/core'
 
-import type {
-  AgentEvent,
-  StreamAssistantGeneratedFilePayload,
-  StreamAssistantRawPayload,
-  StreamAssistantSourcePayload,
-  StreamTurnContextPayload,
-  StreamWorkerThreadPayload,
-} from '../../types/agent'
-import type { ChatRuntimeEvent, StreamExecutionGraphPayload, StreamReasoningPayload, StreamStatePayload, StreamToolCallPayload, StreamToolMetadataPayload, StreamToolProgressPayload, StreamToolResultPayload } from '../../types/agent.js'
-import type { WorkerExecutionStreamOptions, WorkerThreadProjection } from '../../types/records.js'
-
-/**
- * 总线的三条出口：构造 `ExecutionEventBus` 时由宿主填，哪条不填哪条就静默丢弃。
- * 派发是同步的，handler 抛错会冒泡回发事件的那一方。
- */
-interface ExecutionEventBusHandlers {
-  /** Agent 文本、工具、runtime、turn context 等流式事件。 */
-  agent?: (event: AgentEvent) => void
-  /** 面向 UI 的阶段/等待/完成等状态事件。 */
-  state?: (payload: StreamStatePayload) => void
-  /** 执行图和调试面板需要的结构化快照。 */
-  debug?: (payload: StreamExecutionGraphPayload) => void
-}
-
-/**
- * 线程身份信封：worker 线程事件里**与事件类型无关**的那部分。
- *
- * 收成一处的理由不是省行数，是**改一个字段不能只改对八分之一**：这些字段是前端认领同一条线程
- * （threadId / activationId）与定位其在计划树中位置（taskId / nodeId / dag）的依据，逐分支各抄
- * 一份时漏抄任一字段的症状是"某类事件的气泡挂错线程/挂不上"，且只在跑到那类事件时才出现。
- */
-function workerThreadEnvelope(
-  options: WorkerExecutionStreamOptions
-): Omit<StreamWorkerThreadPayload, 'event' | 'timestamp'> {
-  return {
-    kind: 'worker-thread',
-    threadId: options.threadId,
-    activationId: toNullable(options.activationId),
-    taskId: toNullable(options.taskId),
-    nodeId: toNullable(options.nodeId),
-    title: options.title,
-    agentName: toNullable(options.agentName),
-    roleId: toNullable(options.roleId),
-    phase: toNullable(options.phase),
-    status: 'running',
-    capabilityTarget: toNullable(options.capabilityTarget),
-    dag: toNullable(options.dag),
-  }
-}
-
-/**
- * agent 事件 → worker 线程投影；返回 null 表示这类事件不进线程详情（静默丢弃）。
- *
- * 白名单而非黑名单：worker 的输出默认**不**冒到主聊天流（主会话只听协调者/汇总者），所以新增
- * 事件类型的缺省是"不透出"，要透出必须在这里显式登记。
- * `tool-progress` / `tool-metadata` 用事件自带 timestamp（它们是有序增量，用接收时刻会让
- * 乱序到达的分片在 UI 上排错序），其余用接收时刻。
- */
-function projectWorkerThreadEvent(event: AgentEvent): Nullable<WorkerThreadProjection> {
-  switch (event.type) {
-    case 'text-delta':
-      return { event: 'delta', text: event.text }
-    case 'reasoning-delta':
-      return {
-        event: 'chat-event',
-        chatEvent: { type: 'reasoning-delta', id: event.id, text: event.text },
-      }
-    case 'tool-start':
-      return {
-        event: 'chat-event',
-        chatEvent: {
-          type: 'tool-start',
-          toolCallId: event.toolCallId,
-          toolName: event.toolName,
-          args: event.args,
-          categoryId: event.categoryId,
-        },
-      }
-    case 'tool-progress':
-      return {
-        event: 'chat-event',
-        timestamp: event.timestamp,
-        chatEvent: {
-          type: 'tool-progress',
-          toolCallId: event.toolCallId,
-          chunk: event.chunk,
-          timestamp: event.timestamp,
-        },
-      }
-    case 'tool-metadata':
-      return {
-        event: 'chat-event',
-        timestamp: event.timestamp,
-        chatEvent: {
-          type: 'tool-metadata',
-          toolCallId: event.toolCallId,
-          title: event.title,
-          metadata: event.metadata,
-          timestamp: event.timestamp,
-        },
-      }
-    case 'tool-done':
-      return {
-        event: 'chat-event',
-        chatEvent: {
-          type: 'tool-done',
-          toolCallId: event.toolCallId,
-          result: event.result,
-          error: event.error,
-          effects: event.effects,
-          modelImage: event.modelImage,
-          modelContent: event.modelContent,
-        },
-      }
-    case 'notice':
-      return {
-        event: 'chat-event',
-        chatEvent: { type: 'notice', kind: event.kind, payload: event.payload },
-      }
-    case 'runtime':
-      if (event.payload.kind !== 'reconnecting') return null
-      return {
-        event: 'chat-event',
-        summary: `Reconnecting (${event.payload.attempt})`,
-        chatEvent: { type: 'runtime-state', payload: event.payload },
-      }
-    default:
-      return null
-  }
-}
+import type { AgentEvent, ChatRuntimeEvent, StreamAssistantGeneratedFilePayload, StreamAssistantRawPayload, StreamAssistantSourcePayload, StreamExecutionGraphPayload, StreamReasoningPayload, StreamStatePayload, StreamToolCallPayload, StreamToolMetadataPayload, StreamToolProgressPayload, StreamToolResultPayload, StreamTurnContextPayload, StreamWorkerThreadPayload } from '../../types/agent'
+import type { ExecutionEventBusHandlers, WorkerExecutionStreamOptions } from '../../types/records.js'
+import { projectWorkerThreadEvent, workerThreadEnvelope } from '../../utils/records/execution-event-bus'
 
 /**
  * 执行事件的出口：执行服务、AgentRunner、工具执行器都不认宿主视图，只往这条总线上发事件，
@@ -179,11 +51,6 @@ export interface ExecutionEventBusApi {
 
 class ExecutionEventBus implements ExecutionEventBusApi {
   constructor(private readonly handlers: ExecutionEventBusHandlers = {}) {}
-
-  /** 测试或后台执行不需要事件输出时使用的空总线。 */
-  public static noop(): ExecutionEventBus {
-    return new ExecutionEventBus()
-  }
 
   /** 在 agent 事件转发前插入旁路监听，ExecutionService 用它写入事件账本。 */
   public withAgentTap(tap: (event: AgentEvent) => void): ExecutionEventBus {
@@ -343,7 +210,7 @@ class ExecutionEventBus implements ExecutionEventBusApi {
 
   /** 工具执行完成或失败时发给 UI。 */
   public emitToolDone(payload: StreamToolResultPayload): void {
-    // 工具结果先通知宿主，再由 AgentTurnHistoryHelper 写入 history 供下一轮模型读取。
+    // 工具结果先通知宿主，再由 agentTurnHistory 写入 history 供下一轮模型读取。
     this.emitAgent({
       type: 'tool-done',
       toolCallId: payload.toolCallId,
@@ -376,3 +243,13 @@ class ExecutionEventBus implements ExecutionEventBusApi {
 
 export { ExecutionEventBus }
 export type { ExecutionEventBusHandlers }
+
+/** 建一条执行事件总线；不给处理器就是一条不往外发的空总线。 */
+export function createExecutionEventBus(handlers: ExecutionEventBusHandlers = {}): ExecutionEventBusApi {
+  return new ExecutionEventBus(handlers)
+}
+
+/** 建一条什么都不往外发的空总线：测试与后台执行不需要事件输出时用它。 */
+export function createNoopExecutionEventBus(): ExecutionEventBusApi {
+  return new ExecutionEventBus()
+}

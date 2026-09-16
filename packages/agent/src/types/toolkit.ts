@@ -102,3 +102,33 @@ export interface CallableToolSpec<TContext> {
   isAvailable?: (context: TContext) => boolean
   execute: (input: Record<string, unknown>, context: TContext) => unknown
 }
+
+/**
+ * 入参复用信封包裹后的 schema 形状。
+ *
+ * `withToolInputReuse` 在原 schema 的根对象上补 `reuse` 与 `changes` 两个字段：
+ * 模型给了 `reuse` 就按上一次的入参加补丁跑，没给就走原 schema。这里写出包裹后的完整类型，
+ * 让消费方在 `z.infer` 时仍能拿到两种输入形态的联合。
+ */
+export type ToolInputReuseEnvelopeSchema<T extends z.ZodType> = z.ZodPipe<z.ZodObject<{
+    reuse: z.ZodOptional<z.ZodString>;
+    changes: z.ZodOptional<z.ZodArray<z.ZodObject<{
+        op: z.ZodEnum<{
+            remove: "remove";
+            set: "set";
+        }>;
+        path: z.ZodArray<z.ZodUnion<readonly [z.ZodString, z.ZodNumber]>>;
+        value: z.ZodOptional<z.ZodUnknown>;
+    }, z.core.$strict>>>;
+}, z.core.$strict>, z.ZodTransform<ToolInputReuseEnvelopeShape | Awaited<z.core.output<T>>, ToolInputReuseEnvelopeShape>>
+
+/** 复用信封在根对象上补的那两个字段：给了 `reuse` 就按上一次入参加补丁跑，没给就走原 schema。 */
+export interface ToolInputReuseEnvelopeShape {
+  /** 上一次尝试的 callId；给了它才走复用。 */
+  reuse?: string
+  /** 相对上一次入参的补丁；只允许 set / remove 两种操作。 */
+  changes?: Array<{ op: 'remove' | 'set'; path: Array<string | number>; value?: unknown }>
+}
+
+/** 给一份工具 schema 套上入参复用信封的工厂签名。 */
+export type WithToolInputReuse = <T extends z.ZodType>(schema: T) => ToolInputReuseEnvelopeSchema<T>

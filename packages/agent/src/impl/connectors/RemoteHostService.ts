@@ -1,13 +1,13 @@
 import { isPresent, Log, toOptional } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
-import type { RemoteNodeClientApi } from '@velaros-ai/kernel'
 import { createRemoteNodeClient } from '@velaros-ai/kernel/remote'
 
 import type { RemoteHostServicePorts } from '../../contract/requires.js'
-import type { ConnectedHost,RemoteHostDefinition, RemoteHostToolEntry, RemoteHostToolInvoker } from '../../types/connectors.js'
+import type { ConnectedHost, RemoteHostDefinition, RemoteHostToolEntry } from '../../types/connectors.js'
+import { buildRemoteToolName, createInvoker } from '../../utils/connectors/remote-host-service'
 import { RemoteHostToolCategoryId } from '../../utils/connectors/remote-identity.js'
 
-import { createRemoteHostTool } from './RemoteHostToolFactory.js'
+import { remoteHostToolFactory } from './RemoteHostToolFactory.js'
 
 const log = Log.tag('RemoteHostService')
 
@@ -137,7 +137,7 @@ export class RemoteHostService implements RemoteHostServiceApi {
           // 本地类别可能带着仅适用于本地 capability 的可用性探针,
           // 远端明明有的能力会因为本机没装而凭空消失。
           categoryId: RemoteHostToolCategoryId,
-          tool: createRemoteHostTool({
+          tool: remoteHostToolFactory.create({
             canonicalName,
             categoryId: RemoteHostToolCategoryId,
             hostLabel: host.definition.label,
@@ -151,33 +151,3 @@ export class RemoteHostService implements RemoteHostServiceApi {
   }
 }
 
-function createInvoker(client: RemoteNodeClientApi): RemoteHostToolInvoker {
-  return {
-    invoke: (descriptor, input, signal) =>
-      client.invoke(
-        {
-          capabilityId: descriptor.capabilityId,
-          operation: descriptor.operation,
-          input,
-        },
-        signal,
-      ),
-  }
-}
-
-/**
- * 生成跨机唯一的 canonical 工具名。
- *
- * 形状对齐 MCP 的 `mcp.<server>:<tool>`：注册表要求 `namespace:tool`，且 namespace 允许点号。
- * 节点侧的名字可能自带冒号（如 `provider:operation`），必须压平，否则拼出来的是非法 id。
- */
-function buildRemoteToolName(hostId: string, toolName: string): string {
-  const namespace = slugify(hostId)
-  const tool = toolName.toLowerCase().replaceAll(/[^a-z\d_-]/gu, '_')
-  return `remote.${namespace}:${tool.replace(/^[^a-z]+/u, '')}`
-}
-
-function slugify(value: string): string {
-  const slug = value.toLowerCase().replaceAll(/[^a-z\d-]/gu, '-')
-  return slug.replace(/^[^a-z]+/u, '') || 'host'
-}

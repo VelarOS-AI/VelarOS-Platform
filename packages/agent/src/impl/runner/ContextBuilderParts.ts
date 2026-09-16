@@ -1,5 +1,5 @@
 import type { AgentChatRuntimeConfig } from '../../contract/requires.js'
-import type { PromptRegistryApi } from '../../types/guidance.js'
+import type { PromptRegistryContract } from '../../types/guidance.js'
 import { createBuiltInPromptRegistry } from '../guidance/PromptRegistry'
 
 /**
@@ -8,13 +8,13 @@ import { createBuiltInPromptRegistry } from '../guidance/PromptRegistry'
  */
 export interface ContextBuilderPartsApi {
   /** 建一份内置提示词段注册表；每次调用都是新的一份，调用方可以随意 register/suppress 而不影响别人。 */
-  createDefaultRegistry(): PromptRegistryApi
+  createDefaultRegistry(): PromptRegistryContract
   /** 把宿主配置里的 `systemPromptAppend` 归一成可直接拼接的文本：去掉首尾空白，全空白或缺省一律当作没配，返回 null。 */
   buildPromptAppend(config?: Pick<AgentChatRuntimeConfig, 'systemPromptAppend'>): Nullable<string>
 }
 
 class ContextBuilderParts implements ContextBuilderPartsApi {
-  public createDefaultRegistry(): PromptRegistryApi {
+  public createDefaultRegistry(): PromptRegistryContract {
     return createBuiltInPromptRegistry()
   }
 

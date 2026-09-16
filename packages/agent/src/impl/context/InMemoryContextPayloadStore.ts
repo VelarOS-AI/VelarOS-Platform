@@ -3,10 +3,8 @@ import { toNullable } from '@velaros-ai/core'
 import { TurnContextFormat } from '../../contract/constants.js'
 import type { ContextPayloadStore } from '../../contract/requires.js'
 import type { ContextPayloadRecord, ContextUserTextRecord } from '../../types/context.js'
+import { createStoreKey } from '../../utils/context/context-payload-store-key'
 import { buildContextPayloadRef, buildContextUserTextRef } from '../../utils/context/payload-ref'
-function createStoreKey(sessionId: string, hash: string): string {
-  return `${sessionId}:${hash}`
-}
 
 export function createContextPayloadRef(sessionId: string, hash: string): string {
   return buildContextPayloadRef(sessionId, hash)
@@ -114,4 +112,9 @@ export class InMemoryContextPayloadStore implements ContextPayloadStore {
     }
     return stored
   }
+}
+
+/** 建一份只活在内存里的上下文载荷存储；宿主不注入持久实现时用它。 */
+export function createInMemoryContextPayloadStore(): ContextPayloadStore {
+  return new InMemoryContextPayloadStore()
 }

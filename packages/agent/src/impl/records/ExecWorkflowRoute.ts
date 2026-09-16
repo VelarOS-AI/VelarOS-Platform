@@ -1,16 +1,8 @@
 import type { AgentTurnRouteIdentity, StreamTurnContextPayload } from '../../types/agent'
-import type { ExecutionRouteProvider,ResolvedTaskRoute } from '../../types/records.js'
+import type { ExecutionRouteProvider, ResolvedTaskRoute } from '../../types/records.js'
+import { emptyRoute, resolveTurnRouteIdentity } from '../../utils/records/exec-workflow-route'
 
 import { ExecPlanState } from './ExecPlanState'
-
-function emptyRoute(identity: AgentTurnRouteIdentity): ResolvedTaskRoute {
-  return {
-    workflowType: identity.workflowType,
-    expectedOutput: identity.expectedOutput,
-    suggestedNextRoles: [],
-    executionPlan: [],
-  }
-}
 
 /**
  * 工作流路线解析：拿「角色 + 工作流类型 + 期望产出」去问注入的 `ExecutionRouteProvider` 要一条路线，
@@ -42,17 +34,6 @@ class ExecWorkflowRoute implements ExecWorkflowRouteApi {
       ...route,
       executionPlan: this.planStateHelper.refreshExecutionPlan(route.executionPlan),
     }
-  }
-}
-
-
-function resolveTurnRouteIdentity(
-  payload: Pick<StreamTurnContextPayload, 'roleId' | 'workflowType' | 'roleExpectedOutput'>
-): AgentTurnRouteIdentity {
-  return {
-    roleId: payload.roleId,
-    workflowType: payload.workflowType,
-    expectedOutput: payload.roleExpectedOutput,
   }
 }
 

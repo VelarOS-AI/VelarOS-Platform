@@ -1,17 +1,11 @@
 // 出站 HTTP 的 SSRF 安全门；判黑规则与非显然的妥协写在 utils/connectors/fetch-safety.ts 文件头。
-import { lookup } from 'node:dns/promises'
 import { isIP } from 'node:net'
 
 import { AppError } from '@velaros-ai/core/error'
 
 import type { SafeFetchOptions } from '../../types/connectors.js'
 import { isBlockedFetchIpAddress, normalizeIpLiteral, parseSafeHttpUrl } from '../../utils/connectors/fetch-safety'
-
-/** 默认的主机名解析：取全部 A/AAAA 记录，逐个判黑。 */
-async function defaultLookupIpAddresses(hostname: string): Promise<string[]> {
-  const resolved = await lookup(hostname, { all: true, verbatim: true })
-  return resolved.map((entry) => entry.address)
-}
+import { defaultLookupIpAddresses } from '../../utils/connectors/safe-http-fetch'
 
 /**
  * 出站 HTTP 的 SSRF 安全门：协议只认 http/https，主机名解析成 IP 后逐个对内网黑名单判黑，重定向手动跟、每一跳都重新过门。

@@ -1,12 +1,5 @@
-import type { ReferencedArtifactPath,ReferencedLogPath } from '../../types/retrieval.js'
-import {
-  collectReferencedArtifactPaths,
-  collectReferencedLogPaths,
-  inferArtifactType,
-  isInternalArtifactPath,
-  isInternalCommandLogPath,
-  isTextArtifactPath,
-} from '../../utils/retrieval/references'
+import type { ReferencedArtifactPath, ReferencedLogPath } from '../../types/retrieval.js'
+import { collectReferencedArtifactPaths, collectReferencedLogPaths, inferArtifactType, isInternalArtifactPath, isInternalCommandLogPath, isTextArtifactPath } from '../../utils/retrieval/references'
 
 /**
  * 从工具结果的 `serializedResult` / `displayResult` 中**扫描**内部日志与 `artifact` 路径引用。
