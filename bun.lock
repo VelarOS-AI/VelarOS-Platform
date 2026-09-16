@@ -216,6 +216,7 @@
         "velaros-kernel-daemon": "./bin/velaros-kernel-daemon.mjs",
       },
       "dependencies": {
+        "@types/ws": "^8.18.1",
         "@velaros-ai/core": "workspace:*",
         "ws": "^8.18.3",
         "zod": "^4.3.6",
@@ -223,7 +224,6 @@
       "devDependencies": {
         "@types/bun": "^1.3.13",
         "@types/node": "^22.19.17",
-        "@types/ws": "^8.18.1",
         "typescript": "^5.7.0",
       },
     },
