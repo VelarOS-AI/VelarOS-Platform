@@ -3,13 +3,7 @@ import { describe, expect, test } from 'bun:test'
 import {
   type ChatProviderId,
   filterEmbeddingModelCandidates,
-  findProviderRuntimeConfig,
-  getFirstConfiguredProviderRuntimeConfig,
-  isModelProviderEmbeddingCapable,
-  isProviderRuntimeConfigured,
   ModelProviderCollection,
-  normalizeProviderRuntimeConfigs,
-  resolveAutoEmbeddingSelection,
   resolveDefaultEmbeddingModelForProvider,
   selectEmbeddingModelCandidate,
 } from '../src/exports/index'
@@ -76,17 +70,9 @@ describe('Model-owned embedding selection helpers', () => {
     expect(
       resolveDefaultEmbeddingModelForProvider(providerCollection, 'openai'),
     ).toBe('text-embedding-3-large')
-    expect(
-      resolveAutoEmbeddingSelection(providerCollection, {
-        provider: 'openai',
-        candidateModels: ['chat-model'],
-      }),
-    ).toEqual({
-      provider: 'openai',
-      model: 'text-embedding-3-large',
-    })
-    expect(isModelProviderEmbeddingCapable(providerCollection, 'openai')).toBe(true)
-    expect(isModelProviderEmbeddingCapable(providerCollection, 'anthropic')).toBe(false)
+    expect(providerCollection.defaultEmbeddingModel('openai')).toBe('text-embedding-3-large')
+    expect(providerCollection.isEmbeddingCapable('openai')).toBe(true)
+    expect(providerCollection.isEmbeddingCapable('anthropic')).toBe(false)
   })
 
   test('keeps injected embedding manifests isolated to their composition', () => {
@@ -105,10 +91,7 @@ describe('Model-owned embedding selection helpers', () => {
       ),
     ).toBe('example-embed-v1')
     expect(
-      isModelProviderEmbeddingCapable(
-        first.providerCollection,
-        InjectedEmbeddingProviderId,
-      ),
+      first.providerCollection.isEmbeddingCapable(InjectedEmbeddingProviderId),
     ).toBe(true)
     expect(() =>
       resolveDefaultEmbeddingModelForProvider(
@@ -130,27 +113,24 @@ describe('Model-owned provider runtime availability helpers', () => {
       defaultModel: 'gpt-5.5',
     }
     const runtimeConfigs = [configuredOpenAI]
-    const normalized = normalizeProviderRuntimeConfigs(
-      providerCollection,
-      runtimeConfigs,
-    )
+    const normalized = providerCollection.normalizeRuntimeConfigs(runtimeConfigs)
 
     expect(normalized.length).toBeGreaterThan(runtimeConfigs.length)
     expect(
-      findProviderRuntimeConfig(providerCollection, runtimeConfigs, 'openai'),
+      providerCollection.findRuntimeConfig(runtimeConfigs, 'openai'),
     ).toEqual({
       ...providerCollection.getDefaultRuntimeConfig('openai'),
       ...configuredOpenAI,
     })
     expect(
-      isProviderRuntimeConfigured(providerCollection, {
+      providerCollection.isRuntimeConfigured({
         runtimeConfig: configuredOpenAI,
         providerRuntimeConfigs: runtimeConfigs,
         env: { OPENAI_API_KEY: 'from-environment' },
       }),
     ).toBe(true)
     expect(
-      isProviderRuntimeConfigured(providerCollection, {
+      providerCollection.isRuntimeConfigured({
         runtimeConfig: configuredOpenAI,
         providerRuntimeConfigs: runtimeConfigs,
         env: {},
@@ -178,14 +158,16 @@ describe('Model-owned provider runtime availability helpers', () => {
     ]
 
     expect(
-      getFirstConfiguredProviderRuntimeConfig(
-        providerCollection,
-        runtimeConfigs,
-        {
-          env: {},
-          supportsProvider: (provider) => provider === 'openai',
-        },
-      )?.provider,
+      providerCollection
+        .normalizeRuntimeConfigs(runtimeConfigs)
+        .find((runtimeConfig) =>
+          providerCollection.isRuntimeConfigured({
+            runtimeConfig,
+            providerRuntimeConfigs: runtimeConfigs,
+            env: {},
+            supportsProvider: (provider) => provider === 'openai',
+          }),
+        )?.provider,
     ).toBe('openai')
   })
 })

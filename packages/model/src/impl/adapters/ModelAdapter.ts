@@ -1,55 +1,25 @@
-import type { LanguageModel } from 'ai'
-
 import { AppError } from '@velaros-ai/core/error'
 
-import type {
-  AgentProviderAdapterConfig,
-  ChatProviderId,
-  ModelRequestOptions,
-  ReasoningLevel,
-  ThinkingDepth,
-} from '../../types/ModelContracts'
-import type { ModelProviderCollection } from '../providers/ModelProviderCollection'
-import type { ProviderScriptRuntimeMetadata } from '../providers/ProviderScriptRegistryPort'
-
-export interface ModelAdapterConfig {
-  /** 聊天 provider id。 */
-  provider: ChatProviderId
-  /** UI 配置或环境变量中的 API key。 */
-  apiKey: string
-  /** provider base URL，已按 preset 做过默认值解析。 */
-  baseURL: string
-  /** 用户上传的自定义 provider adapter。 */
-  adapter?: LooseOptional<AgentProviderAdapterConfig>
-  /** 本次请求期望的模型运行策略；adapter 会按 provider 能力映射为 reasoning/thinking 参数。 */
-  thinkingDepth?: LooseOptional<ThinkingDepth>
-  /** Composer 思考力度 5 档；存在时优先于 thinkingDepth 决定 reasoning 开关/力度/预算。 */
-  reasoningLevel?: LooseOptional<ReasoningLevel>
-  /** 本地 provider script 已解析的运行时元数据；执行阶段复用它，避免同一轮运行二次解析漂移。 */
-  providerScriptRuntimeMetadata?: LooseOptional<ProviderScriptRuntimeMetadata>
-}
-
-/** embedding 请求的 provider 无关描述。 */
-export interface EmbeddingRequest {
-  url: string
-  headers: Record<string, string>
-  body?: unknown
-  execute?: () => Promise<unknown>
-}
-
-/** 延迟到具体 modelId 才创建 AI SDK LanguageModel。 */
-export type LanguageModelFactory = (modelId: string, options?: ModelRequestOptions) => LanguageModel
+import { ModelErrorCodes } from '../../contract/constants.js'
+import type { ModelProviderAdapter } from '../../contract/requires'
+import type { EmbeddingRequest, LanguageModelFactory, ModelAdapterConfig } from '../../types/adapters'
+import type { ChatProviderId } from '../../types/model'
+import type { ModelProviderCollectionApi } from '../providers/ModelProviderCollection'
 
 /**
  * 模型适配器基类。
  *
- * 子类负责把统一的 ModelAdapterConfig 转换为 provider SDK/API 需要的参数。
- * 语言模型和 embedding 是分开的能力：不支持 embedding 的 provider 可复用默认错误。
+ * 子类负责把统一的 `ModelAdapterConfig` 转换为 provider SDK/API 需要的参数。
+ * 语言模型和 embedding 是分开的能力：不支持 embedding 的 provider 复用这里的默认错误。
+ *
+ * @deprecated 扩展点已经换成注入面的 `ModelProviderAdapter`：宿主自带适配器实现那个接口，
+ * 从 `createModelRuntimeComposition({ adapters })` 传进来即可，不必继承本类。
+ * 本类下一轮入口收口后不再出包。
  */
-abstract class ModelAdapter {
+abstract class ModelAdapter implements ModelProviderAdapter {
   constructor(
     private readonly providerIds: readonly ChatProviderId[],
-    private readonly providers: ModelProviderCollection
+    private readonly providers: ModelProviderCollectionApi
   ) {}
 
   /** 这个 adapter 是否支持指定 provider。 */
@@ -60,15 +30,15 @@ abstract class ModelAdapter {
   /** 创建语言模型工厂。 */
   public abstract createLanguageModelFactory(config: ModelAdapterConfig): LanguageModelFactory
 
-  /** 创建 embedding 请求；默认表示不支持 embedding。 */
+  /** 创建 embedding 请求；默认表示这个 provider 没有接入 embedding。 */
   public createEmbeddingRequest(
     config: ModelAdapterConfig,
     _model: string,
     _texts: string[]
   ): EmbeddingRequest {
     throw new AppError(
-      'VALIDATION',
-      `${config.provider} 当前未接入 embedding 适配，记忆会回退为文本检索`
+      ModelErrorCodes.embeddingUnsupported,
+      `${config.provider} 当前未接入 embedding 适配`
     )
   }
 

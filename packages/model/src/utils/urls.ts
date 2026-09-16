@@ -6,12 +6,10 @@
  * 而不是只去一个——与 platform 的 `trimTrailingPathTextSeparators` 同口径；model 不允许依赖 platform
  * （见 `scripts/model/check-arch-boundaries.mjs` 的依赖边界），所以在这里单独写一份。
  */
-function trimTrailingPathSeparators(value: string): string {
+export function trimTrailingPathSeparators(value: string): string {
   const trimmed = value.trim()
   let end = trimmed.length
   while (end > 0 && trimmed[end - 1] === '/') end -= 1
 
   return trimmed.slice(0, end)
 }
-
-export { trimTrailingPathSeparators }

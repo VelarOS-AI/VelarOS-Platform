@@ -1,4 +1,4 @@
 export {
   resolveProviderScriptContextWindow,
   resolveProviderScriptMetadataContextWindow,
-} from '../impl/providers/ProviderScriptContextWindow'
+} from '../impl/providers/ModelCatalog'

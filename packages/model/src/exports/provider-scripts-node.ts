@@ -4,19 +4,23 @@
  * 仅可信宿主进程可导入此子路径。浏览器和渲染器消费者应依赖包根入口导出的
  * `ProviderScriptRegistryPort`。
  */
+export type {
+  ProviderScriptHostBridge,
+  ProviderScriptRegistryOptions,
+} from '../contract/requires'
+export { ProviderScriptModelAdapter } from '../impl/adapters/ProviderScriptModelAdapter'
 export {
-  type ProviderScriptDefinition,
-  type ProviderScriptHelpers,
-  type ProviderScriptHostBridge,
-  type ProviderScriptInput,
-  ProviderScriptModelAdapter,
   ProviderScriptRegistry,
-  type ProviderScriptRegistryOptions,
-  type ProviderScriptRuntimeInput,
   resolveProviderScriptDevConfigCandidates,
 } from '../impl/providers/ProviderScriptRegistry'
 export type {
   ProviderScriptDescriptor,
-  ProviderScriptRegistryPort,
   ProviderScriptRuntimeMetadata,
-} from '../impl/providers/ProviderScriptRegistryPort'
+} from '../types/model'
+export type {
+  ProviderScriptDefinition,
+  ProviderScriptHelpers,
+  ProviderScriptInput,
+  ProviderScriptRuntimeInput,
+} from '../types/script-authoring'
+export type { ProviderScriptRegistryPort } from '../types/scripts'

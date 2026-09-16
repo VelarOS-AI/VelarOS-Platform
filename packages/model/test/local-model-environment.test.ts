@@ -6,9 +6,9 @@
  */
 import { afterEach, describe, expect, test } from 'bun:test'
 
+import { OllamaEnvNames } from '../src/contract/constants'
 import {
   LocalModelEnvironment,
-  OllamaEnvNames,
   resolveOllamaChatModel,
   resolveOllamaContextWindow,
 } from '../src/impl/providers/LocalModelEnvironment'
@@ -50,10 +50,13 @@ describe('LocalModelEnvironment', () => {
   })
 
   test('accepts a custom environment port without copying host state', () => {
-    const environment = LocalModelEnvironment.from({
-      read: (name) =>
-        name === OllamaEnvNames.contextWindow ? '16384' : undefined,
-    })
+    const environment = new LocalModelEnvironment(
+      {},
+      {
+        read: (name) =>
+          name === OllamaEnvNames.contextWindow ? '16384' : undefined,
+      },
+    )
 
     expect(environment.resolveOllamaContextWindow()).toBe(16384)
   })

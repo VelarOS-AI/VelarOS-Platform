@@ -1,22 +1,60 @@
+export {
+  CustomModelProviderIds,
+  DefaultProviderModels,
+  DirectOpenAICompatibleProviderIds,
+  ModelErrorCodes,
+  ModelInputModalities,
+  ModelProviderAdapterKinds,
+  ModelProviderOperationalManifests,
+  ModelProviderValidationKinds,
+  ModelWireLimits,
+  OllamaEnvNames,
+  OllamaProviderId,
+  OpenAICompatibleGatewayDefaultBaseURL,
+  OpenRouterAutoModelId,
+  OpenRouterCompatibleProviderIds,
+  OpenRouterFreeModelId,
+  ReasoningLevels,
+  ThinkingDepths,
+  VelarAutoModelId,
+  VelarCloudManagedProviderIds,
+} from '../contract/constants.js'
+export type {
+  AgentModelResolverApi,
+  AgentModelRuntimeApi,
+  AiSdkModelRequestTransportOptions,
+  LocalModelEnvironmentApi,
+  ModelProviderCollectionApi,
+  ModelProviderCollectionOptions,
+  ModelRequestClientApi,
+  ModelRequestClientOptions,
+  ModelRuntimeCapabilityService,
+  ProviderModelCatalogApi,
+  ProviderModelCatalogCacheApi,
+  ProviderModelCatalogServiceOptions,
+  VelarCloudModelRuntimeApi,
+} from '../contract/provides'
+export type {
+  CreateModelKernelModuleOptions,
+  CreateModelRuntimeCompositionOptions,
+  ModelEnvironmentPort,
+  ModelProviderAdapter,
+  ModelRequestTransport,
+  ProviderModelCatalogAttribution,
+  ProviderScriptHostBridge,
+  ProviderScriptRegistryOptions,
+  VelarCloudModelRuntimeBinding,
+} from '../contract/requires'
 export { AnthropicModelAdapter } from '../impl/adapters/AnthropicModelAdapter'
 export { DeepSeekModelAdapter } from '../impl/adapters/DeepSeekModelAdapter'
 export { GoogleModelAdapter } from '../impl/adapters/GoogleModelAdapter'
-export {
-  type EmbeddingRequest,
-  type LanguageModelFactory,
-  ModelAdapter,
-  type ModelAdapterConfig,
-} from '../impl/adapters/ModelAdapter'
+export { ModelAdapter } from '../impl/adapters/ModelAdapter'
 export { OpenAICompatibleModelAdapter } from '../impl/adapters/OpenAICompatibleModelAdapter'
 export { OpenAIModelAdapter } from '../impl/adapters/OpenAIModelAdapter'
 export {
   applyPromptCacheCallOptions,
   applyPromptCacheProviderOptions,
-  createPromptCacheSystemMessage,
-  markLatestUserMessagePromptCacheBreakpoint,
-  mergeSessionPromptCacheProviderOptions,
-  resolveSessionPromptCacheKey,
-} from '../impl/adapters/PromptCacheModelOptions'
+} from '../impl/adapters/PromptCacheLanguageModel'
 export {
   applyThinkingDepthProviderOptions,
   createThinkingDepthProviderOptions,
@@ -24,174 +62,95 @@ export {
   requireThinkingDepth,
   resolveThinkingBudget,
   resolveThinkingDepthEffort,
-} from '../impl/adapters/ThinkingDepthModelOptions'
+} from '../impl/adapters/ThinkingDepthLanguageModel'
 export { VelarModelAdapter } from '../impl/adapters/VelarModelAdapter'
-export type { ResolvedAgentModelRuntime } from '../impl/composition/AgentModelResolver'
 export { AgentModelResolver } from '../impl/composition/AgentModelResolver'
-export type { AgentProvider } from '../impl/composition/AgentModelRuntime'
 export { AgentModelRuntime } from '../impl/composition/AgentModelRuntime'
 export {
   createModelKernelModule,
-  type CreateModelKernelModuleOptions,
   ModelCapability,
-  type ModelRegistryPort,
-  type ModelRuntimeCapabilityService,
-} from '../impl/composition/kernel-module'
-export type {
-  AutoEmbeddingSelection,
-  AutoEmbeddingSelectionInput,
-} from '../impl/providers/EmbeddingModelSelection'
-export {
-  filterEmbeddingModelCandidates,
-  isModelProviderEmbeddingCapable,
-  resolveAutoEmbeddingSelection,
-  resolveDefaultEmbeddingModelForProvider,
-  selectEmbeddingModelCandidate,
-} from '../impl/providers/EmbeddingModelSelection'
-export type {
-  ModelEnvironmentPort,
-  ModelEnvironmentVariables,
-} from '../impl/providers/LocalModelEnvironment'
+} from '../impl/composition/ModelKernelCapability'
 export {
   LocalModelEnvironment,
-  OllamaEnvNames,
-  OllamaProviderId,
   resolveOllamaBaseURL,
   resolveOllamaChatModel,
   resolveOllamaContextWindow,
   resolveOllamaVisibleChatModels,
 } from '../impl/providers/LocalModelEnvironment'
-export type {
-  ModelCapabilityProfile,
-  ProviderModelDefinition,
-  ProviderModelResolution,
-  SharedProviderCatalog,
-} from '../impl/providers/ModelCatalog'
 export {
-  CustomModelProviderIds,
-  DefaultProviderModels,
-  DirectOpenAICompatibleProviderIds,
+  getModelProviderOperationalManifest,
   getResolvedProviderModel,
   getSharedProviderCatalog,
   getSharedProviderModels,
   getSharedProviderSuggestedModels,
   getVisibleProviderModels,
-  isDirectOpenAICompatibleProvider,
   isOpenRouterCompatibleProvider,
   KnownModelContextWindows,
-  KnownTeamModelCapabilityOverrides,
   OpenAiOnlyModels,
-  OpenRouterAutoModelId,
-  OpenRouterCompatibleProviderIds,
-  OpenRouterFreeModelId,
-  resolveModelContextWindow,
-  resolveOpenRouterCompatibleModelContextWindow,
   resolveProviderModelContextWindow,
   resolveProviderModelSelection,
   SharedProviderCatalogs,
-  VelarAutoModelId,
 } from '../impl/providers/ModelCatalog'
 export {
-  type ModelProviderAvailabilityOptions,
+  filterEmbeddingModelCandidates,
   ModelProviderCollection,
-  type ModelProviderCollectionOptions,
-  type ModelProviderConfiguredInput,
-  type ModelProviderPreset,
+  resolveDefaultEmbeddingModelForProvider,
+  selectEmbeddingModelCandidate,
 } from '../impl/providers/ModelProviderCollection'
-export type {
-  ModelProviderAdapterKind,
-  ModelProviderOperationalManifest,
-  ModelProviderValidationKind,
-} from '../impl/providers/ProviderManifest'
-export {
-  getModelProviderIdsByAdapterKind,
-  getModelProviderOperationalManifest,
-  ModelProviderOperationalManifests,
-  OpenAICompatibleGatewayDefaultBaseURL,
-} from '../impl/providers/ProviderManifest'
-export {
-  type ProviderModelCatalogAttribution,
-  ProviderModelCatalogService,
-  type ProviderModelCatalogServiceOptions,
-} from '../impl/providers/ProviderModelCatalogService'
-export type {
-  ProviderRuntimeAvailabilityOptions,
-  ProviderRuntimeConfiguredInput,
-} from '../impl/providers/ProviderRuntimeAvailability'
-export {
-  findProviderRuntimeConfig,
-  getFirstConfiguredProviderRuntimeConfig,
-  isProviderRuntimeConfigured,
-  normalizeProviderRuntimeConfigs,
-} from '../impl/providers/ProviderRuntimeAvailability'
-export {
-  type ProviderScriptDescriptor,
-  type ProviderScriptRegistryPort,
-  type ProviderScriptRuntimeMetadata,
-} from '../impl/providers/ProviderScriptRegistryPort'
+export { ProviderModelCatalogService } from '../impl/providers/ProviderModelCatalogService'
 export {
   isVelarCloudManagedProviderId,
-  type VelarCloudManagedProviderId,
-  VelarCloudManagedProviderIds,
   VelarCloudModelRuntime,
-  velarCloudModelRuntime,
-  type VelarCloudModelRuntimeBinding,
 } from '../impl/providers/VelarCloudModelRuntime'
-export {
-  AiSdkModelRequestTransport,
-  type AiSdkModelRequestTransportOptions,
-} from '../impl/requests/AiSdkModelRequestTransport'
-export type {
-  ModelConnectionProbePort,
-  ModelCredentialStorePort,
-  ModelProfileCredentialSource,
-  ModelProfileEnvironmentPort,
-  ModelProfileStorePort,
-} from '../impl/requests/ModelProfiles'
+export { AiSdkModelRequestTransport } from '../impl/requests/AiSdkModelRequestTransport'
 export {
   omitModelProfileCredential,
   resolveModelProfileCredential,
   resolveModelProfileCredentialSource,
   runModelConnectionProbe,
 } from '../impl/requests/ModelProfiles'
-export type {
-  ModelProviderRetryDecision,
-  ModelProviderRetryOptions,
-} from '../impl/requests/ModelProviderRetry'
 export {
   planModelProviderRetry,
   waitForModelRetry,
 } from '../impl/requests/ModelProviderRetry'
 export {
+  applyModelRequestPolicy,
   ModelRequestClient,
-  type ModelRequestClientOptions,
-} from '../impl/requests/ModelRequestClient'
-export { applyModelRequestPolicy } from '../impl/requests/ModelRequestPolicy'
-export {
   ModelRequestService,
   type ModelRequestServiceOptions,
-} from '../impl/requests/ModelRequestService'
-export type {
-  ModelPricingRates,
-  ModelRunUsage,
-  ModelUsageSummary,
-} from '../impl/requests/ModelUsage'
+} from '../impl/requests/ModelRequestClient'
 export {
   normalizeModelRunUsage,
   normalizePersistedModelUsage,
   summarizeModelUsage,
 } from '../impl/requests/ModelUsage'
-export { ProviderRawStreamText } from '../impl/requests/ProviderRawStreamText'
-export type { ModelAdapterRegistryPort } from '../types/ModelAdapterRegistryPort'
-export type * from '../types/ModelContracts'
+export type {
+  AgentProvider,
+  EmbeddingRequest,
+  LanguageModelFactory,
+  ModelAdapterConfig,
+  ModelAdapterRegistryPort,
+  ModelRegistryPort,
+  ModelResolutionTraceEntry,
+  ResolvedAgentModelRuntime,
+} from '../types/adapters'
+export type * from '../types/model'
+export type {
+  ModelProviderAvailabilityOptions,
+  ModelProviderConfiguredInput,
+  ProviderModelDefinition,
+  SharedProviderCatalog,
+} from '../types/providers'
 export type {
   ModelRequestDecodedObjectInput,
   ModelRequestEndpoint,
+  ModelRequestEnvelope,
   ModelRequestGenerateText,
   ModelRequestGenerateTextInput,
   ModelRequestGenerateTextResult,
   ModelRequestLanguageModel,
   ModelRequestMessages,
+  ModelRequestObjectBaseInput,
   ModelRequestObjectInput,
   ModelRequestObjectOutput,
   ModelRequestObjectOutputInput,
@@ -204,5 +163,5 @@ export type {
   ModelRequestStreamTextResult,
   ModelRequestTextInput,
   ModelRequestTextOutput,
-  ModelRequestTransport,
-} from '../types/ModelRequestTypes'
+} from '../types/requests'
+export type { ProviderScriptRegistryPort } from '../types/scripts'

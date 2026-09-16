@@ -1,40 +1,41 @@
 import { AppError } from '@velaros-ai/core/error'
 
-import type { ChatProviderId } from '../../types/ModelContracts'
-
-import { trimTrailingPathSeparators } from './ModelEndpointUrl'
-
-export const VelarCloudManagedProviderIds = [
-  'velar',
-  'velar-dev',
-] as const satisfies readonly ChatProviderId[]
-
-export type VelarCloudManagedProviderId = (typeof VelarCloudManagedProviderIds)[number]
-
-export function isVelarCloudManagedProviderId(
-  providerId: ChatProviderId
-): providerId is VelarCloudManagedProviderId {
-  return (VelarCloudManagedProviderIds as readonly ChatProviderId[]).includes(providerId)
-}
-
-export interface VelarCloudModelRuntimeBinding {
-  readonly baseURL: string
-  readonly fetch: typeof fetch
-}
+import { ModelErrorCodes, VelarCloudManagedProviderIds } from '../../contract/constants.js'
+import type { VelarCloudModelRuntimeBinding } from '../../contract/requires'
+import type { ChatProviderId, VelarCloudManagedProviderId } from '../../types/model'
+import { trimTrailingPathSeparators } from '../../utils/urls'
 
 /**
  * 单个宿主拥有的 Velar Cloud 连接绑定。
+ *
+ * 账户认证挂在宿主注入的 `fetch` 上，本包只负责按 provider 存取绑定；
+ * 一个装配一份，绑定不会跨宿主泄漏。
  */
-export class VelarCloudModelRuntime {
+export interface VelarCloudModelRuntimeApi {
+  /** 宿主登录或授权变化后注册一个托管 provider 的绑定；地址为空一律拒。 */
+  registerProvider(
+    providerId: VelarCloudManagedProviderId,
+    binding: VelarCloudModelRuntimeBinding
+  ): void
+  /** 账户退出或授权被撤销时移除单个绑定；移除一个不影响另一个。 */
+  unregisterProvider(providerId: VelarCloudManagedProviderId): boolean
+  /** 这个托管 provider 现在连着没有。 */
+  hasProvider(providerId: VelarCloudManagedProviderId): boolean
+}
+
+/** 适配器取绑定用的包内接口；宿主面不开这个方法。 */
+export interface VelarCloudModelRuntimeLookup {
+  /** 取一个托管 provider 的绑定；没连接时按 cloudNotConnected 抛。 */
+  require(providerId?: VelarCloudManagedProviderId): VelarCloudModelRuntimeBinding
+}
+
+export class VelarCloudModelRuntime
+  implements VelarCloudModelRuntimeApi, VelarCloudModelRuntimeLookup
+{
   private readonly bindings = new Map<
     VelarCloudManagedProviderId,
     VelarCloudModelRuntimeBinding
   >()
-
-  /** @deprecated 新宿主应使用 registerProvider；此入口始终只绑定原有 Velar。 */
-  public register(binding: VelarCloudModelRuntimeBinding): void {
-    this.registerProvider('velar', binding)
-  }
 
   public registerProvider(
     providerId: VelarCloudManagedProviderId,
@@ -51,11 +52,6 @@ export class VelarCloudModelRuntime {
     })
   }
 
-  /**
-   * 在账户退出或授权被撤销时移除单个服务绑定。
-   *
-   * 每个 provider 独立删除；移除 Velar Dev 不会断开原有 Velar，反之亦然。
-   */
   public unregisterProvider(providerId: VelarCloudManagedProviderId): boolean {
     return this.bindings.delete(providerId)
   }
@@ -68,7 +64,7 @@ export class VelarCloudModelRuntime {
     const binding = this.bindings.get(providerId)
     if (!binding?.baseURL) {
       throw new AppError(
-        'UNAVAILABLE',
+        ModelErrorCodes.cloudNotConnected,
         providerId === 'velar-dev'
           ? 'Velar Dev 模型服务尚未连接，请先登录已授权账户。'
           : 'Velar 模型服务尚未连接，请先登录内部账户。'
@@ -78,8 +74,9 @@ export class VelarCloudModelRuntime {
   }
 }
 
-/**
- * @deprecated 仅为 0.4.x 直接消费者保留。新的 composition 使用自己的
- * `ModelRuntimeComposition.velarCloudRuntime`，不会读取该兼容实例。
- */
-export const velarCloudModelRuntime = new VelarCloudModelRuntime()
+/** 这个 provider 是不是由 VelarOS Cloud 托管。 */
+export function isVelarCloudManagedProviderId(
+  providerId: ChatProviderId
+): providerId is VelarCloudManagedProviderId {
+  return (VelarCloudManagedProviderIds as readonly string[]).includes(providerId)
+}

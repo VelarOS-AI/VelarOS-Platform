@@ -1,15 +1,16 @@
 import { createOpenAI } from '@ai-sdk/openai'
 
-import type { ChatProviderId } from '../../types/ModelContracts'
-import type { ModelProviderCollection } from '../providers/ModelProviderCollection'
+import type { ModelProviderAdapter } from '../../contract/requires'
+import type { LanguageModelFactory, ModelAdapterConfig } from '../../types/adapters'
+import type { ChatProviderId } from '../../types/model'
+import type { ModelProviderCollectionApi } from '../providers/ModelProviderCollection'
 
-import type { LanguageModelFactory, ModelAdapterConfig } from './ModelAdapter'
 import { ModelAdapter } from './ModelAdapter'
-import { applyPromptCacheProviderOptions } from './PromptCacheModelOptions'
+import { applyPromptCacheProviderOptions } from './PromptCacheLanguageModel'
 
 /** DeepSeek 适配器，复用 OpenAI-compatible AI SDK provider。 */
-class DeepSeekModelAdapter extends ModelAdapter {
-  constructor(providerIds: readonly ChatProviderId[], providers: ModelProviderCollection) {
+class DeepSeekModelAdapter extends ModelAdapter implements ModelProviderAdapter {
+  constructor(providerIds: readonly ChatProviderId[], providers: ModelProviderCollectionApi) {
     super(providerIds, providers)
   }
 

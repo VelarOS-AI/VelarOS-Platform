@@ -170,7 +170,7 @@ describe('model input modalities', () => {
 
     expect(Date.now() - startedAt).toBeLessThan(1_000)
     expect(runtime.supportedInputModalities).toEqual(['text', 'image', 'audio'])
-    expect(runtime.fallbackReason).toContain('timed out after 25ms')
+    expect(runtime.fallbackReason).toContain('元数据探测超时（25ms）')
   })
 
   test('aborts provider-script runtime metadata immediately instead of waiting for its deadline', async () => {

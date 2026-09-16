@@ -1,36 +1,42 @@
 import { AppError } from '@velaros-ai/core/error'
 
-import type { ModelAdapterRegistryPort } from '../../types/ModelAdapterRegistryPort'
-import type { ChatProviderId } from '../../types/ModelContracts'
+import { ModelErrorCodes } from '../../contract/constants.js'
+import type { ModelProviderAdapter } from '../../contract/requires'
+import type {
+  EmbeddingRequest,
+  LanguageModelFactory,
+  ModelAdapterConfig,
+  ModelAdapterRegistryPort,
+} from '../../types/adapters'
+import type { ChatProviderId } from '../../types/model'
+import type { ProviderScriptRegistryPort } from '../../types/scripts'
 import { AnthropicModelAdapter } from '../adapters/AnthropicModelAdapter'
 import { DeepSeekModelAdapter } from '../adapters/DeepSeekModelAdapter'
 import { GoogleModelAdapter } from '../adapters/GoogleModelAdapter'
-import type { EmbeddingRequest, LanguageModelFactory, ModelAdapterConfig } from '../adapters/ModelAdapter'
-import type { ModelAdapter } from '../adapters/ModelAdapter'
 import { OpenAICompatibleModelAdapter } from '../adapters/OpenAICompatibleModelAdapter'
 import { OpenAIModelAdapter } from '../adapters/OpenAIModelAdapter'
+import { ProviderScriptModelAdapter } from '../adapters/ProviderScriptModelAdapter'
 import { UserJsModelAdapter } from '../adapters/UserJsModelAdapter'
 import { VelarModelAdapter } from '../adapters/VelarModelAdapter'
-import type { LocalModelEnvironment } from '../providers/LocalModelEnvironment'
-import type { ModelProviderCollection } from '../providers/ModelProviderCollection'
-import { NodeLocalModelEnvironment } from '../providers/NodeLocalModelEnvironment'
+import type { LocalModelEnvironmentApi } from '../providers/LocalModelEnvironment'
+import { LocalModelEnvironment } from '../providers/LocalModelEnvironment'
+import type { ModelProviderCollectionApi } from '../providers/ModelProviderCollection'
+import type { ProviderScriptRegistryScripts } from '../providers/ProviderScriptRegistry'
 import {
-  ProviderScriptModelAdapter,
-  type ProviderScriptRegistry,
-} from '../providers/ProviderScriptRegistry'
-import {
-  type VelarCloudModelRuntime,
-  velarCloudModelRuntime,
+  VelarCloudModelRuntime,
+  type VelarCloudModelRuntimeLookup,
 } from '../providers/VelarCloudModelRuntime'
 
 /**
  * 模型适配器注册表。
  *
- * 不同 provider 的 SDK/API 差异都封装在 ModelAdapter 里；Agent 只通过
- * Registry 按 provider 找到适配器，再创建 language model 或 embedding 请求。
+ * 不同 provider 的 SDK/API 差异都封装在各自的适配器里；Agent 只经注册表按 provider
+ * 找到适配器，再创建语言模型或 embedding 请求。适配器顺序即匹配优先级。
  */
-class ModelAdapterRegistry implements ModelAdapterRegistryPort {
-  constructor(private readonly adapters: readonly ModelAdapter[]) {
+export interface ModelAdapterRegistryApi extends ModelAdapterRegistryPort {}
+
+class ModelAdapterRegistry implements ModelAdapterRegistryApi {
+  constructor(private readonly adapters: readonly ModelProviderAdapter[]) {
   }
 
   /** 判断当前 provider 是否有适配器。 */
@@ -53,10 +59,10 @@ class ModelAdapterRegistry implements ModelAdapterRegistryPort {
   }
 
   /** 按 provider 查找第一个匹配适配器。 */
-  private getAdapter(provider: ChatProviderId): ModelAdapter {
+  private getAdapter(provider: ChatProviderId): ModelProviderAdapter {
     const adapter = this.adapters.find((candidate) => candidate.supports(provider))
     if (!adapter) {
-      throw new AppError('VALIDATION', `未找到 provider 适配器：${provider}`)
+      throw new AppError(ModelErrorCodes.adapterMissing, `未找到 provider 适配器：${provider}`)
     }
 
     return adapter
@@ -64,18 +70,21 @@ class ModelAdapterRegistry implements ModelAdapterRegistryPort {
 }
 
 /**
- * 为一个产品 composition 创建独立的模型适配器注册表。
+ * 为一个产品装配创建独立的模型适配器注册表。
  *
- * adapter 顺序会影响 provider 匹配优先级；可变的 provider-script registry
- * 必须由同一个 composition 显式传入，禁止回落到进程全局状态。
+ * 适配器顺序会影响 provider 匹配优先级：宿主自带的排在最前，然后是 Cloud 托管、
+ * provider script，最后才是各家内置 SDK。可变的 provider script 注册表必须由同一个装配
+ * 显式传入，禁止回落到进程全局状态。
  */
 function createModelAdapterRegistry(
-  providerScriptRegistry: ProviderScriptRegistry,
-  providers: ModelProviderCollection,
-  velarCloudRuntime: VelarCloudModelRuntime,
-  localModelEnvironment: LocalModelEnvironment = new NodeLocalModelEnvironment()
-): ModelAdapterRegistry {
+  providerScriptRegistry: ProviderScriptRegistryScripts & ProviderScriptRegistryPort,
+  providers: ModelProviderCollectionApi,
+  velarCloudRuntime: VelarCloudModelRuntimeLookup,
+  localModelEnvironment: LocalModelEnvironmentApi = new LocalModelEnvironment(),
+  injectedAdapters: readonly ModelProviderAdapter[] = []
+): ModelAdapterRegistryApi {
   return new ModelAdapterRegistry([
+    ...injectedAdapters,
     new VelarModelAdapter(providers, velarCloudRuntime),
     new ProviderScriptModelAdapter(providerScriptRegistry, providers),
     new AnthropicModelAdapter(providers.getProviderIdsByAdapterKind('anthropic-sdk'), providers),
@@ -92,18 +101,20 @@ function createModelAdapterRegistry(
 }
 
 /**
- * @deprecated 仅用于兼容 0.4.x 的进程级 Velar Cloud 绑定。
- * 新宿主必须创建自己的 `VelarCloudModelRuntime`，并调用
- * {@link createModelAdapterRegistry} 显式注入。
+ * 不传 Cloud 绑定的兼容入口。
+ *
+ * @deprecated 0.4.x 时它读进程级的 Velar Cloud 单例；那个单例已经删掉，
+ * 现在每次调用都建一个空绑定，等价于"没连接 Cloud"。新宿主一律用
+ * {@link createModelAdapterRegistry} 显式注入自己的 `VelarCloudModelRuntime`。
  */
 function createLegacyModelAdapterRegistry(
-  providerScriptRegistry: ProviderScriptRegistry,
-  providers: ModelProviderCollection
-): ModelAdapterRegistry {
+  providerScriptRegistry: ProviderScriptRegistryScripts & ProviderScriptRegistryPort,
+  providers: ModelProviderCollectionApi
+): ModelAdapterRegistryApi {
   return createModelAdapterRegistry(
     providerScriptRegistry,
     providers,
-    velarCloudModelRuntime
+    new VelarCloudModelRuntime()
   )
 }
 

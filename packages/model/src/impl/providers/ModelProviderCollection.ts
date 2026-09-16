@@ -1,62 +1,97 @@
 import { isBlank, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
+import { ModelErrorCodes, ModelProviderOperationalManifests } from '../../contract/constants.js'
 import type {
   AgentProviderRuntimeConfig,
   ChatProviderId,
+  ModelProviderAdapterKind,
+  ModelProviderOperationalManifest,
+  ModelProviderPreset,
   ModelSelection,
-  ProviderScriptManifest,
-} from '../../types/ModelContracts'
-
+  ProviderModelResolution,
+} from '../../types/model'
+import type { ModelProviderConfiguredInput, SharedProviderCatalog } from '../../types/providers'
+import type { ProviderScriptRegistryPort } from '../../types/scripts'
 import {
-  getSharedProviderCatalog,
-  type ProviderModelResolution,
-  resolveProviderModelSelection,
-  type SharedProviderCatalog,
-} from './ModelCatalog'
-import { trimTrailingPathSeparators } from './ModelEndpointUrl'
+  filterEmbeddingModels,
+  isEmbeddingCapableManifest,
+  resolveDefaultEmbeddingModel,
+  selectEmbeddingModel,
+} from '../../utils/catalog/embedding'
 import {
-  getModelProviderOperationalManifest,
-  type ModelProviderAdapterKind,
-  type ModelProviderOperationalManifest,
-  ModelProviderOperationalManifests,
-} from './ProviderManifest'
-import type { ProviderScriptRegistryPort } from './ProviderScriptRegistryPort'
+  asOperationalManifests,
+  createScriptOperationalManifest,
+} from '../../utils/catalog/manifests'
+import { trimTrailingPathSeparators } from '../../utils/urls'
 
-export interface ModelProviderPreset extends ModelProviderOperationalManifest {
-  modelSuggestions: string[]
-  defaultModel: string
-}
+import { getSharedProviderCatalog, resolveProviderModelSelection } from './ModelCatalog'
 
-export interface ModelProviderAvailabilityOptions {
-  env?: Readonly<Record<string, string | undefined>>
-  supportsProvider?: (provider: ChatProviderId) => boolean
-}
-
-export interface ModelProviderConfiguredInput extends ModelProviderAvailabilityOptions {
-  runtimeConfig: AgentProviderRuntimeConfig
-  providerRuntimeConfigs?: readonly AgentProviderRuntimeConfig[]
-  apiKeyOverride?: LooseOptional<string>
-}
-
+/** 一个产品装配独占的 provider 集合要什么。 */
 export interface ModelProviderCollectionOptions {
   /**
-   * Host-owned environment values used for API-key fallback.
+   * 宿主给的环境变量，用来回落 API Key。
    *
-   * Browser and worker hosts should pass only the values they intentionally
-   * expose. The portable collection never reads a process-global environment.
+   * 浏览器与 worker 宿主只传自己愿意暴露的值；可移植的集合永远不会去发现进程级环境。
    */
   environment?: Readonly<Record<string, string | undefined>>
 }
 
 /**
- * Explicit provider collection owned by one product composition.
+ * 一个产品装配独占的 provider 集合。
  *
- * Static built-ins are immutable module data. Injected provider scripts are
- * read only through this instance's registry, so one composition can never
- * become another composition's implicit provider fallback.
+ * 内置 provider 是不可变的模块数据；注入的 provider script 只经本实例持有的注册表读，
+ * 所以一个装配永远不会变成另一个装配的隐式 provider 兜底。
  */
-export class ModelProviderCollection {
+export interface ModelProviderCollectionApi {
+  /** 列出全部运营清单：内置的加上本装配注入的 provider script。 */
+  listOperationalManifests(): ModelProviderOperationalManifest[]
+  /** 列出全部预设：运营清单加上静态目录算出来的建议模型与缺省模型。 */
+  listPresets(): ModelProviderPreset[]
+  /** 取一个 provider 的运营清单；不认识这个 provider 就抛。 */
+  requireOperationalManifest(provider: ChatProviderId): ModelProviderOperationalManifest
+  /** 取用某一种适配器的全部 provider id；装配适配器时按它分配。 */
+  getProviderIdsByAdapterKind(adapterKind: ModelProviderAdapterKind): ChatProviderId[]
+  /** 取一个 provider 的目录；不认识这个 provider 就抛。 */
+  requireCatalog(provider: ChatProviderId): SharedProviderCatalog
+  /** 在同一个 provider 内选一个可用模型，并说明有没有发生回退。 */
+  resolveModelSelection(provider: ChatProviderId, currentModel?: string): ProviderModelResolution
+  /** 在同一个 provider 内选一个可用模型，只要结果。 */
+  resolveModel(provider: ChatProviderId, currentModel?: string): string
+  /** 这个 provider 的 API Key 环境变量名；没有约定就返回空串。 */
+  getApiKeyEnvironmentName(provider: ChatProviderId): string
+  /** 取这次调用要用的 API Key：selection 里写了就用它，否则读登记的环境变量。 */
+  resolveApiKey(
+    selection: Pick<ModelSelection, 'apiKey' | 'provider'>,
+    env?: Readonly<Record<string, string | undefined>>
+  ): string
+  /** 取这次调用必需的 API Key；这个 provider 要 key 却拿不到时按 credentialMissing 抛。 */
+  requireApiKey(
+    selection: Pick<ModelSelection, 'apiKey' | 'provider'>,
+    env?: Readonly<Record<string, string | undefined>>
+  ): string
+  /** 取这次调用的 baseURL：selection 里写了就用它，否则用清单里的缺省地址；末尾分隔符一律去掉。 */
+  resolveBaseURL(selection: Pick<ModelSelection, 'baseURL' | 'provider'>): string
+  /** 这个 provider 的缺省运行时配置，产品首次配置照着它建。 */
+  getDefaultRuntimeConfig(provider: ChatProviderId): AgentProviderRuntimeConfig
+  /** 把产品存的运行时配置补齐成"每个 provider 一条"，缺的字段用缺省值兜。 */
+  normalizeRuntimeConfigs(
+    runtimeConfigs: readonly AgentProviderRuntimeConfig[]
+  ): AgentProviderRuntimeConfig[]
+  /** 在一批运行时配置里找某个 provider 那条；没有就返回 null。 */
+  findRuntimeConfig(
+    runtimeConfigs: readonly AgentProviderRuntimeConfig[],
+    provider: ChatProviderId
+  ): Nullable<AgentProviderRuntimeConfig>
+  /** 这条运行时配置算不算"配好了"：启用、有适配器、凭据齐（或这个 provider 不要凭据）。 */
+  isRuntimeConfigured(input: ModelProviderConfiguredInput): boolean
+  /** 这个 provider 的默认 embedding 模型；没有就返回空串。 */
+  defaultEmbeddingModel(provider: ChatProviderId): string
+  /** 这个 provider 的适配器能不能造 embedding 请求。 */
+  isEmbeddingCapable(provider: ChatProviderId): boolean
+}
+
+export class ModelProviderCollection implements ModelProviderCollectionApi {
   private readonly environment: Readonly<Record<string, string | undefined>>
 
   constructor(
@@ -68,9 +103,9 @@ export class ModelProviderCollection {
 
   public listOperationalManifests(): ModelProviderOperationalManifest[] {
     return [
-      ...ModelProviderOperationalManifests,
+      ...asOperationalManifests(ModelProviderOperationalManifests),
       ...this.providerScripts.listProviderManifests().map((manifest) =>
-        this.createScriptOperationalManifest(manifest)
+        createScriptOperationalManifest(manifest)
       ),
     ]
   }
@@ -87,13 +122,15 @@ export class ModelProviderCollection {
   }
 
   public requireOperationalManifest(provider: ChatProviderId): ModelProviderOperationalManifest {
-    const builtIn = getModelProviderOperationalManifest(provider)
+    const builtIn = asOperationalManifests(ModelProviderOperationalManifests).find(
+      (manifest) => manifest.id === provider
+    )
     if (builtIn) return builtIn
 
     const script = this.providerScripts.getProviderScript(provider)
-    if (script) return this.createScriptOperationalManifest(script.manifest)
+    if (script) return createScriptOperationalManifest(script.manifest)
 
-    throw new AppError('VALIDATION', `未知模型 provider：${provider}`)
+    throw new AppError(ModelErrorCodes.providerUnknown, `未知模型 provider：${provider}`)
   }
 
   public getProviderIdsByAdapterKind(
@@ -116,11 +153,11 @@ export class ModelProviderCollection {
         })),
       }
 
-    const manifest = getModelProviderOperationalManifest(provider)
     const catalog = getSharedProviderCatalog(provider)
-    if (!manifest || !catalog) {
-      throw new AppError('VALIDATION', `未知模型 provider：${provider}`)
+    if (!catalog) {
+      throw new AppError(ModelErrorCodes.providerUnknown, `未知模型 provider：${provider}`)
     }
+    this.requireOperationalManifest(provider)
     return {
       provider: catalog.provider,
       defaultModel: catalog.defaultModel,
@@ -177,8 +214,10 @@ export class ModelProviderCollection {
     const manifest = this.requireOperationalManifest(selection.provider)
     if (manifest.apiKeyOptional) return ''
 
+    // 判据与文案都收在这一处：同一个"缺 key"以前在适配器基类里还有一份，两句话不一样，
+    // 产品按文字分支时会漏掉其中一条。现在只有这一句，并且带 credentialMissing 码。
     throw new AppError(
-      'VALIDATION',
+      ModelErrorCodes.credentialMissing,
       `${manifest.label} 的 API Key 未配置，请在产品模型设置中补充。`
     )
   }
@@ -250,21 +289,41 @@ export class ModelProviderCollection {
     return !isBlank(envName ? env[envName] ?? '' : '')
   }
 
-  private createScriptOperationalManifest(
-    manifest: ProviderScriptManifest
-  ): ModelProviderOperationalManifest {
-    return {
-      id: manifest.id,
-      label: manifest.label,
-      description: manifest.description,
-      defaultBaseURL: manifest.defaultBaseURL,
-      defaultApiKey: manifest.defaultApiKey,
-      apiKeyOptional: manifest.apiKeyOptional,
-      baseURLConfigurable: manifest.baseURLConfigurable,
-      enabledByDefault: manifest.enabledByDefault,
-      adapterKind: 'provider-script',
-      validationKind: 'provider-script',
-      providerScript: manifest,
-    }
+  public defaultEmbeddingModel(provider: ChatProviderId): string {
+    return resolveDefaultEmbeddingModel(this.requireOperationalManifest(provider), provider)
   }
+
+  public isEmbeddingCapable(provider: ChatProviderId): boolean {
+    return isEmbeddingCapableManifest(this.requireOperationalManifest(provider))
+  }
+}
+
+/**
+ * 取一个 provider 的默认 embedding 模型。
+ *
+ * @deprecated 下一轮入口收口后改用 `composition.providerCollection.defaultEmbeddingModel(provider)`。
+ */
+export function resolveDefaultEmbeddingModelForProvider(
+  providerCollection: ModelProviderCollectionApi,
+  provider: ChatProviderId
+): string {
+  return providerCollection.defaultEmbeddingModel(provider)
+}
+
+/**
+ * 从一串候选模型里挑最像 embedding 的那个。
+ *
+ * @deprecated 下一轮入口收口后不再出包；包内改用 `utils/catalog/embedding` 的同名函数。
+ */
+export function selectEmbeddingModelCandidate(candidateModels: readonly string[]): string {
+  return selectEmbeddingModel(candidateModels)
+}
+
+/**
+ * 只留下看起来像 embedding 的候选模型。
+ *
+ * @deprecated 下一轮入口收口后不再出包；包内改用 `utils/catalog/embedding` 的同名函数。
+ */
+export function filterEmbeddingModelCandidates(candidateModels: readonly string[]): string[] {
+  return filterEmbeddingModels(candidateModels)
 }

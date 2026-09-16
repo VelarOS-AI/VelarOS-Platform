@@ -1,54 +1,44 @@
-export type {
-  ModelEnvironmentPort,
-  ModelEnvironmentVariables,
-} from '../impl/providers/LocalModelEnvironment'
 export {
-  LocalModelEnvironment,
+  CustomModelProviderIds,
+  DefaultProviderModels,
+  DirectOpenAICompatibleProviderIds,
+  ModelProviderOperationalManifests,
   OllamaEnvNames,
   OllamaProviderId,
+  OpenAICompatibleGatewayDefaultBaseURL,
+  OpenRouterAutoModelId,
+  OpenRouterCompatibleProviderIds,
+  OpenRouterFreeModelId,
+  VelarAutoModelId,
+} from '../contract/constants.js'
+export type { LocalModelEnvironmentApi } from '../contract/provides'
+export type { ModelEnvironmentPort } from '../contract/requires'
+export {
+  LocalModelEnvironment,
   resolveOllamaBaseURL,
   resolveOllamaChatModel,
   resolveOllamaContextWindow,
   resolveOllamaVisibleChatModels,
 } from '../impl/providers/LocalModelEnvironment'
-export type {
-  ModelCapabilityProfile,
-  ProviderModelDefinition,
-  ProviderModelResolution,
-  SharedProviderCatalog,
-} from '../impl/providers/ModelCatalog'
 export {
-  CustomModelProviderIds,
-  DefaultProviderModels,
-  DirectOpenAICompatibleProviderIds,
+  getModelProviderOperationalManifest,
   getResolvedProviderModel,
   getSharedProviderCatalog,
   getSharedProviderModels,
   getSharedProviderSuggestedModels,
   getVisibleProviderModels,
-  isDirectOpenAICompatibleProvider,
   isOpenRouterCompatibleProvider,
   KnownModelContextWindows,
-  KnownTeamModelCapabilityOverrides,
   OpenAiOnlyModels,
-  OpenRouterAutoModelId,
-  OpenRouterCompatibleProviderIds,
-  OpenRouterFreeModelId,
-  resolveModelContextWindow,
-  resolveOpenRouterCompatibleModelContextWindow,
   resolveProviderModelContextWindow,
   resolveProviderModelSelection,
   SharedProviderCatalogs,
-  VelarAutoModelId,
 } from '../impl/providers/ModelCatalog'
 export type {
+  ChatProviderId,
   ModelProviderAdapterKind,
   ModelProviderOperationalManifest,
   ModelProviderValidationKind,
-} from '../impl/providers/ProviderManifest'
-export {
-  getModelProviderIdsByAdapterKind,
-  getModelProviderOperationalManifest,
-  ModelProviderOperationalManifests,
-  OpenAICompatibleGatewayDefaultBaseURL,
-} from '../impl/providers/ProviderManifest'
+  ProviderModelResolution,
+} from '../types/model'
+export type { ProviderModelDefinition, SharedProviderCatalog } from '../types/providers'

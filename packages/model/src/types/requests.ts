@@ -6,10 +6,7 @@ import type {
   ToolSet,
 } from 'ai'
 
-import type { ModelRequestOptions } from './ModelContracts'
-
-type ModelRequestGenerateTextFunction = typeof generateText
-type ModelRequestStreamTextFunction = typeof streamText
+import type { ModelRequestOptions } from './model'
 
 export type ModelRequestGenerateTextInput<
   TOutput extends ModelRequestOutput = ModelRequestTextOutput,
@@ -33,8 +30,8 @@ export type ModelRequestStreamTextResult<TToolSet extends ToolSet = ToolSet> = R
 
 export type ModelRequestLanguageModel = ModelRequestGenerateTextInput['model']
 export type ModelRequestMessages = NonNullable<ModelRequestGenerateTextInput['messages']>
-export type ModelRequestGenerateText = ModelRequestGenerateTextFunction
-export type ModelRequestStreamText = ModelRequestStreamTextFunction
+export type ModelRequestGenerateText = typeof generateText
+export type ModelRequestStreamText = typeof streamText
 export type ModelRequestEndpoint = string
 
 export interface ModelRequestEnvelope<TRequest> {
@@ -70,7 +67,7 @@ export type ModelRequestOpenStreamInput<TToolSet extends ToolSet = ToolSet> =
     endpoint: ModelRequestEndpoint
   }
 
-interface ModelRequestObjectBaseInput<TSchemaOutput> {
+export interface ModelRequestObjectBaseInput<TSchemaOutput> {
   endpoint: ModelRequestEndpoint
   model: ModelRequestLanguageModel
   system: string
@@ -118,4 +115,13 @@ export interface ModelRequestStreamTextInputToString {
   abortSignal?: ModelRequestStreamTextInput['abortSignal']
   onError?: ModelRequestStreamTextInput['onError']
   stopWhen?: (text: string) => boolean
+}
+
+/** 从一条失败里扒出来的事实：状态码、errno、文案、响应头，以及服务端自己说的可重试标记。 */
+export interface ModelRetryErrorFacts {
+  readonly statuses: Set<number>
+  readonly codes: Set<string>
+  readonly messages: string[]
+  readonly headers: Record<string, string>
+  retryable: boolean
 }

@@ -32,7 +32,8 @@
 
 根入口与 `/catalog` **永不读 `process.env`**(也不读 `globalThis.process` 或浏览器全局)。
 浏览器、Worker、测试、远程宿主自己 `new LocalModelEnvironment({...})`,
-只放它愿意暴露的值;或者实现 `ModelEnvironmentPort` 走 `LocalModelEnvironment.from(port)`。
+只放它愿意暴露的值;或者实现 `ModelEnvironmentPort`,
+作为 `new LocalModelEnvironment({}, port)` 的第二个参数传进去。
 **唯一**把 `process.env` 适配到这个端口的地方是 `/node` 的 `NodeLocalModelEnvironment`
 与默认 composition。这不是洁癖:密钥读取路径一旦有进程级兜底,
 就没法保证某个 composition 看不到另一个 composition 的凭据。

@@ -1,45 +1,27 @@
-import type {
-  LanguageModelV3,
-  LanguageModelV3CallOptions,
-  LanguageModelV3GenerateResult,
-  LanguageModelV3StreamResult,
-} from '@ai-sdk/provider'
-import type { LanguageModel } from 'ai'
+import { isFiniteNumber, isNumber, isPlainObject, isString, Log } from '@velaros-ai/core'
 
-import { isFiniteNumber, isNumber, isPlainObject, isString } from '@velaros-ai/core'
-
-import type { ChatProviderId, ReasoningLevel, ThinkingDepth } from '../../types/ModelContracts'
-
-type ReasoningEffort = 'low' | 'medium' | 'high'
-type ProviderOptions = NonNullable<LanguageModelV3CallOptions['providerOptions']>
-
-const DefaultThinkingDepth: ThinkingDepth = 'balanced'
-/** ultra 档无显式 maxOutputTokens 时使用的 thinking budget 下限。 */
-const UltraReasoningBudgetFloor = 16_000
-/** ultra 档 thinking budget 的硬上限。 */
-const UltraReasoningBudgetCeil = 24_000
-/** ultra 档相对 maxOutputTokens 的预算系数。 */
-const UltraReasoningBudgetRatio = 0.6
-/** 非 ultra 档相对 maxOutputTokens 的预算系数基线（再乘各档 multiplier）。 */
-const ThinkingBudgetRatio = 0.35
+import type { ChatProviderId, ReasoningEffort, ReasoningLevel, ThinkingDepth } from '../../types/model'
+import { ModelTuning } from '../tuning'
 
 /**
  * 是否拿到了可按比例换算的输出预算。
  *
  * 判据：缺席、`NaN`/`Infinity` 与 **0** 都必须走各档常量兜底——0 直接按比例算会得出
  * 0 budget，等于悄悄关掉 reasoning（§2.4 失败方向）。负数**刻意仍走比例路径**：
- * 结果被下游 `Math.max(1024, …)` 的下限兜住，本批不改既有行为，真要拒的话该在入口挡（见报告）。
+ * 结果被下游预算下限兜住，本批不改既有行为。
  */
 function hasUsableOutputBudget(maxOutputTokens?: number): maxOutputTokens is number {
   return isFiniteNumber(maxOutputTokens) && maxOutputTokens !== 0
 }
 
-function requireThinkingDepth(depth?: LooseOptional<ThinkingDepth>): ThinkingDepth {
+/** 把任意输入收窄成三档思考深度，认不出来的按 balanced。 */
+export function requireThinkingDepth(depth?: LooseOptional<ThinkingDepth>): ThinkingDepth {
   return depth === 'fast' || depth === 'balanced' || depth === 'deep'
     ? depth
-    : DefaultThinkingDepth
+    : 'balanced'
 }
 
+/** 五档思考力度落到三档思考深度上。 */
 function reasoningLevelToThinkingDepth(level: ReasoningLevel): ThinkingDepth {
   switch (level) {
     case 'off':
@@ -53,7 +35,8 @@ function reasoningLevelToThinkingDepth(level: ReasoningLevel): ThinkingDepth {
   }
 }
 
-function resolveThinkingDepthEffort(depth?: LooseOptional<ThinkingDepth>): ReasoningEffort {
+/** 三档思考深度对应的 reasoning 力度。 */
+export function resolveThinkingDepthEffort(depth?: LooseOptional<ThinkingDepth>): ReasoningEffort {
   switch (requireThinkingDepth(depth)) {
     case 'fast':
       return 'low'
@@ -65,12 +48,12 @@ function resolveThinkingDepthEffort(depth?: LooseOptional<ThinkingDepth>): Reaso
 }
 
 /** off 档：本次请求完全不发 reasoning。 */
-function isReasoningDisabledByLevel(level?: LooseOptional<ReasoningLevel>): boolean {
+export function isReasoningDisabledByLevel(level?: LooseOptional<ReasoningLevel>): boolean {
   return level === 'off'
 }
 
 /** reasoning 力度：有 5 档 level 时优先按 level，否则回落到 3 档 thinkingDepth。ultra 与 high 同为 high effort（力度轴上限），差异体现在 budget。 */
-function resolveReasoningEffort(
+export function resolveReasoningEffort(
   level?: LooseOptional<ReasoningLevel>,
   depth?: LooseOptional<ThinkingDepth>
 ): ReasoningEffort {
@@ -89,7 +72,7 @@ function resolveReasoningEffort(
 }
 
 /** thinking budget：ultra 档在 deep 基础上进一步抬高，其余按 level→thinkingDepth 映射。 */
-function resolveReasoningBudget(
+export function resolveReasoningBudget(
   maxOutputTokens?: number,
   level?: LooseOptional<ReasoningLevel>,
   depth?: LooseOptional<ThinkingDepth>
@@ -99,12 +82,16 @@ function resolveReasoningBudget(
   if (level !== 'ultra') return base
 
   const boosted = hasUsableOutputBudget(maxOutputTokens)
-    ? Math.min(UltraReasoningBudgetCeil, Math.floor(maxOutputTokens * UltraReasoningBudgetRatio))
-    : UltraReasoningBudgetFloor
+    ? Math.min(
+        ModelTuning.reasoning.ultraCeil,
+        Math.floor(maxOutputTokens * ModelTuning.reasoning.ultraRatio)
+      )
+    : ModelTuning.reasoning.ultraFloor
   return Math.max(base, boosted)
 }
 
-function resolveThinkingBudget(
+/** 三档思考深度对应的 thinking budget；没有输出预算可换算时走各档常量。 */
+export function resolveThinkingBudget(
   maxOutputTokens?: number,
   depth?: LooseOptional<ThinkingDepth>
 ): number {
@@ -113,26 +100,31 @@ function resolveThinkingBudget(
   if (!hasUsableOutputBudget(maxOutputTokens)) {
     switch (normalizedDepth) {
       case 'fast':
-        return 2048
+        return ModelTuning.reasoning.budgetFast
       case 'deep':
-        return 8192
+        return ModelTuning.reasoning.budgetDeep
       default:
-        return 4096
+        return ModelTuning.reasoning.budgetBalanced
     }
   }
 
   const multiplier =
     normalizedDepth === 'fast'
-      ? 0.5
+      ? ModelTuning.reasoning.fastMultiplier
       : normalizedDepth === 'deep'
-        ? 1.5
+        ? ModelTuning.reasoning.deepMultiplier
         : 1
-  const maxBudget = normalizedDepth === 'deep' ? 12_000 : 8192
+  const maxBudget =
+    normalizedDepth === 'deep' ? ModelTuning.reasoning.budgetMaxDeep : ModelTuning.reasoning.budgetMax
 
-  return Math.max(1024, Math.min(maxBudget, Math.floor(maxOutputTokens * ThinkingBudgetRatio * multiplier)))
+  return Math.max(
+    ModelTuning.reasoning.budgetMin,
+    Math.min(maxBudget, Math.floor(maxOutputTokens * ModelTuning.reasoning.budgetRatio * multiplier))
+  )
 }
 
-function mergeOpenRouterReasoning(
+/** OpenRouter 与 Velar 路由层的 reasoning 开关：off 显式关，ultra 抬 token 预算，其余只给力度。 */
+export function mergeOpenRouterReasoning(
   existing: unknown,
   depth?: LooseOptional<ThinkingDepth>,
   level?: LooseOptional<ReasoningLevel>
@@ -146,7 +138,7 @@ function mergeOpenRouterReasoning(
   if (level === 'ultra') return {
       ...base,
       effort: 'high',
-      max_tokens: isNumber(base.max_tokens) ? base.max_tokens : UltraReasoningBudgetCeil,
+      max_tokens: isNumber(base.max_tokens) ? base.max_tokens : ModelTuning.reasoning.ultraCeil,
     }
 
   return {
@@ -179,7 +171,8 @@ function createReasoningDisabledProviderOptions(
   return { anthropic: { thinking: { type: 'disabled' } } }
 }
 
-function createThinkingDepthProviderOptions(
+/** 按 provider 与具体模型算出这一轮要附加的 reasoning providerOptions；不需要时返回 null。 */
+export function createThinkingDepthProviderOptions(
   provider: ChatProviderId,
   model: string,
   depth?: LooseOptional<ThinkingDepth>,
@@ -221,63 +214,11 @@ function createThinkingDepthProviderOptions(
   }
 }
 
-function applyThinkingDepthProviderOptions(
-  model: LanguageModel,
-  provider: ChatProviderId,
-  modelId: string,
-  depth?: LooseOptional<ThinkingDepth>,
-  level?: LooseOptional<ReasoningLevel>
-): LanguageModel {
-  const providerOptions = createThinkingDepthProviderOptions(provider, modelId, depth, level)
-  if (!providerOptions || isString(model) || model.specificationVersion !== 'v3') return model
-
-  return new ThinkingDepthLanguageModel(model, providerOptions as ProviderOptions)
-}
-
-class ThinkingDepthLanguageModel implements LanguageModelV3 {
-  constructor(
-    private readonly model: LanguageModelV3,
-    private readonly providerOptions: ProviderOptions
-  ) {}
-
-  public get specificationVersion(): 'v3' {
-    return this.model.specificationVersion
-  }
-
-  public get provider(): string {
-    return this.model.provider
-  }
-
-  public get modelId(): string {
-    return this.model.modelId
-  }
-
-  public get supportedUrls(): LanguageModelV3['supportedUrls'] {
-    return this.model.supportedUrls
-  }
-
-  public doGenerate(
-    options: LanguageModelV3CallOptions
-  ): PromiseLike<LanguageModelV3GenerateResult> {
-    return this.model.doGenerate(this.mergeOptions(options))
-  }
-
-  public doStream(options: LanguageModelV3CallOptions): PromiseLike<LanguageModelV3StreamResult> {
-    return this.model.doStream(this.mergeOptions(options))
-  }
-
-  private mergeOptions(options: LanguageModelV3CallOptions): LanguageModelV3CallOptions {
-    return {
-      ...options,
-      providerOptions: mergeProviderOptions(options.providerOptions, this.providerOptions),
-    }
-  }
-}
-
-function mergeProviderOptions(
-  existing: LanguageModelV3CallOptions['providerOptions'],
-  next: ProviderOptions
-): ProviderOptions {
+/** 两层选项合并：同名的厂商命名空间做浅合并，别的直接覆盖。 */
+export function mergeProviderOptions(
+  existing: Optional<Record<string, unknown>>,
+  next: Record<string, unknown>
+): Record<string, unknown> {
   const merged: Record<string, unknown> = { ...(existing ?? {}) }
 
   Object.entries(next).forEach(([key, value]) => {
@@ -288,9 +229,10 @@ function mergeProviderOptions(
         : value
   })
 
-  return merged as ProviderOptions
+  return merged
 }
 
+/** Claude 的思考参数：自适应思考那一代发 effort，其余发固定 budget。 */
 function createAnthropicThinkingOptions(model: string, depth: ThinkingDepth): Record<string, unknown> {
   if (matchesAdaptiveClaudeThinkingModel(model)) return {
       sendReasoning: true,
@@ -310,10 +252,12 @@ function createAnthropicThinkingOptions(model: string, depth: ThinkingDepth): Re
   }
 }
 
+/** 这个模型名看起来是不是 OpenAI 的推理模型。 */
 function matchesOpenAiReasoningModel(model: string): boolean {
   return /(?:^|\/)(?:o[34](?:-|$)|gpt-[45]|gpt-oss)/i.test(model)
 }
 
+/** 这个模型名看起来是不是支持 thinking 的 Claude。 */
 function matchesClaudeReasoningModel(model: string): boolean {
   return [
     /claude-(?:opus|sonnet|haiku)-(?:latest|4(?:[.-]\d+)?)/i,
@@ -322,6 +266,7 @@ function matchesClaudeReasoningModel(model: string): boolean {
   ].some((matcher) => matcher.test(model))
 }
 
+/** 这个模型名看起来是不是自适应思考那一代的 Claude。 */
 function matchesAdaptiveClaudeThinkingModel(model: string): boolean {
   return [
     /claude-(?:opus|sonnet)-(?:latest|4[.-](?:6|7)(?:\D|$))/i,
@@ -329,19 +274,34 @@ function matchesAdaptiveClaudeThinkingModel(model: string): boolean {
   ].some((matcher) => matcher.test(model))
 }
 
+/** 这个模型名看起来是不是支持 thinking 的 Gemini。 */
 function matchesGoogleReasoningModel(model: string): boolean {
   return /gemini-(?:2\.5|3(?:[.-]|$))/i.test(model)
 }
 
-export {
-  applyThinkingDepthProviderOptions,
-  createThinkingDepthProviderOptions,
-  isReasoningDisabledByLevel,
-  mergeOpenRouterReasoning,
-  requireThinkingDepth,
-  resolveReasoningBudget,
-  resolveReasoningEffort,
-  resolveThinkingBudget,
-  resolveThinkingDepthEffort,
+/** 把这一轮的推理档位注进 Velar 路由的请求体；注不进去就保留原请求，宁可这一轮不带 reasoning。 */
+export function injectVelarThinkingRouting(
+  init: Parameters<typeof fetch>[1],
+  thinkingDepth?: LooseOptional<ThinkingDepth>,
+  reasoningLevel?: LooseOptional<ReasoningLevel>
+): Parameters<typeof fetch>[1] {
+  if (!thinkingDepth && !reasoningLevel) return init
+  if (!isString(init?.body)) return init
+
+  try {
+    const body = JSON.parse(init.body)
+    if (!isPlainObject(body)) return init
+
+    return {
+      ...init,
+      body: JSON.stringify({
+        ...body,
+        reasoning: mergeOpenRouterReasoning(body.reasoning, thinkingDepth, reasoningLevel),
+      }),
+    }
+  } catch (error) {
+    // 注入失败一律保留原始请求体：宁可这一轮不带 reasoning，也不能让路由参数把请求打坏（§2.4）。
+    Log.tag('VelarModelAdapter').debug('注入 Velar reasoning 路由失败，保留原始请求体', { error })
+    return init
+  }
 }
-export type { ReasoningEffort }

@@ -1,16 +1,17 @@
 import { createAnthropic } from '@ai-sdk/anthropic'
 
-import type { ChatProviderId } from '../../types/ModelContracts'
-import type { ModelProviderCollection } from '../providers/ModelProviderCollection'
+import type { ModelProviderAdapter } from '../../contract/requires'
+import type { LanguageModelFactory, ModelAdapterConfig } from '../../types/adapters'
+import type { ChatProviderId } from '../../types/model'
+import type { ModelProviderCollectionApi } from '../providers/ModelProviderCollection'
 
-import type { LanguageModelFactory, ModelAdapterConfig } from './ModelAdapter'
 import { ModelAdapter } from './ModelAdapter'
-import { applyPromptCacheProviderOptions } from './PromptCacheModelOptions'
-import { applyThinkingDepthProviderOptions } from './ThinkingDepthModelOptions'
+import { applyPromptCacheProviderOptions } from './PromptCacheLanguageModel'
+import { applyThinkingDepthProviderOptions } from './ThinkingDepthLanguageModel'
 
 /** Anthropic provider 适配器。 */
-class AnthropicModelAdapter extends ModelAdapter {
-  constructor(providerIds: readonly ChatProviderId[], providers: ModelProviderCollection) {
+class AnthropicModelAdapter extends ModelAdapter implements ModelProviderAdapter {
+  constructor(providerIds: readonly ChatProviderId[], providers: ModelProviderCollectionApi) {
     super(providerIds, providers)
   }
 

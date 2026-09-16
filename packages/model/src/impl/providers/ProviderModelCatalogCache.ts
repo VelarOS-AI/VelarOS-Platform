@@ -1,18 +1,28 @@
 import { isUndefined } from '@velaros-ai/core'
 
-import type { ProviderModelCatalog } from '../../types/ModelContracts'
+import type { ProviderModelCatalog } from '../../types/model'
+import type { ProviderModelCatalogCacheEntry } from '../../types/providers'
+import { ModelTuning } from '../../utils/tuning'
 
-interface CatalogEntry {
-  controller: AbortController
-  promise: Promise<ProviderModelCatalog>
-  catalog?: ProviderModelCatalog
-  expiresAt: number
-  waiters: number
+/**
+ * 目录服务独占的能力快照缓存。
+ *
+ * 键里带着密钥，所以它只驻留内存，既不序列化也不进日志或 IPC；
+ * 同一个键上的并发请求合成一条，等待者全退出时在飞的请求跟着取消。
+ */
+export interface ProviderModelCatalogCacheApi {
+  /** 取一份目录快照：命中未过期的就直接返回拷贝，否则发起（或搭上）一次请求。 */
+  load(
+    key: string,
+    fetchCatalog: (signal: AbortSignal) => Promise<ProviderModelCatalog>,
+    options: { refresh: boolean; signal?: AbortSignal }
+  ): Promise<ProviderModelCatalog>
+  /** 失效一个键；不给键就整张表清掉。 */
+  invalidate(key?: string): void
 }
 
-/** 目录服务独占的能力快照；键仅驻留内存，不进入日志或 IPC。 */
-export class ProviderModelCatalogCache {
-  readonly #entries = new Map<string, CatalogEntry>()
+export class ProviderModelCatalogCache implements ProviderModelCatalogCacheApi {
+  readonly #entries = new Map<string, ProviderModelCatalogCacheEntry>()
 
   public async load(
     key: string,
@@ -37,7 +47,9 @@ export class ProviderModelCatalogCache {
           if (this.#entries.get(key) === current && !controller.signal.aborted) {
             current.catalog = structuredClone(catalog)
             // 不支持目录的 provider 短期回落，避免每轮重复等待同一个失败端点。
-            current.expiresAt = Date.now() + (catalog.error ? 30_000 : 300_000)
+            current.expiresAt =
+              Date.now()
+              + (catalog.error ? ModelTuning.catalog.errorCacheTtlMs : ModelTuning.catalog.cacheTtlMs)
           }
           return catalog
         },
@@ -47,7 +59,7 @@ export class ProviderModelCatalogCache {
         }
       )
       // 保持有界；已交给调用者的请求仍由各自等待者负责取消和回收。
-      if (this.#entries.size > 128) {
+      if (this.#entries.size > ModelTuning.catalog.cacheEntries) {
         const oldest = this.#entries.keys().next().value
         if (!isUndefined(oldest)) this.#entries.delete(oldest)
       }
@@ -63,7 +75,7 @@ export class ProviderModelCatalogCache {
 
   private waitForCatalog(
     key: string,
-    entry: CatalogEntry,
+    entry: ProviderModelCatalogCacheEntry,
     signal?: AbortSignal
   ): Promise<ProviderModelCatalog> {
     entry.waiters += 1

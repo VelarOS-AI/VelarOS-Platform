@@ -1,75 +1,72 @@
-import {
-  isArray,
-  isBlank,
-  isEmpty,
-  isPlainObject,
-  isString,
-  optionalWhen,
-  toNullable,
-  toOptional,
-} from '@velaros-ai/core'
+import { isBlank, isEmpty, toNullable, toOptional } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
+import type { ProviderModelCatalogAttribution } from '../../contract/requires'
 import type {
   ChatProviderId,
   ListProviderModelsRequest,
-  ModelInputModality,
+  ModelProviderPreset,
+  ModelProviderValidationKind,
   ProviderModelCatalog,
   ProviderModelCatalogEntry,
-} from '../../types/ModelContracts'
-
+} from '../../types/model'
+import type { RemoteProviderModelEntry } from '../../types/providers'
+import type { ProviderScriptRegistryPort } from '../../types/scripts'
+import { filterModelsForPurpose } from '../../utils/catalog/embedding'
 import {
-  filterEmbeddingModelCandidates,
-  resolveDefaultEmbeddingModelForProvider,
-} from './EmbeddingModelSelection'
+  canListRemoteProviderModels,
+  createEmptyRemoteCatalog,
+  createProviderModelListRequest,
+  normalizeProviderErrorMessage,
+  readRemoteModelEntries,
+} from '../../utils/catalog-http'
+import { ModelTuning } from '../../utils/tuning'
+
 import { resolveProviderModelContextWindow } from './ModelCatalog'
-import type { ModelProviderCollection, ModelProviderPreset } from './ModelProviderCollection'
-import type { ModelProviderValidationKind } from './ProviderManifest'
+import type { ModelProviderCollectionApi } from './ModelProviderCollection'
 import { ProviderModelCatalogCache } from './ProviderModelCatalogCache'
-import type { ProviderScriptRegistryPort } from './ProviderScriptRegistryPort'
-import { toPositiveInteger } from './ProviderScriptRegistryPort'
 
-interface ProviderModelListRequest {
-  readonly url: string
-  readonly headers: ReadonlyArray<[string, string]>
-}
-
-interface RemoteProviderModelEntry {
-  readonly id: string
-  readonly label?: string
-  readonly contextWindow?: number
-  readonly inputModalities?: readonly ModelInputModality[]
-}
-
-export interface ProviderModelCatalogAttribution {
-  /** OpenRouter HTTP-Referer value supplied by the host product. */
-  readonly referer?: string
-  /** OpenRouter X-Title value supplied by the host product. */
-  readonly title?: string
-}
-
+/** 建目录服务要什么：provider 集合必给，其余按宿主能力注入。 */
 export interface ProviderModelCatalogServiceOptions {
-  readonly providerCollection: ModelProviderCollection
-  /** Required only when the product composition exposes provider scripts. */
+  /** 本装配的 provider 集合。 */
+  readonly providerCollection: ModelProviderCollectionApi
+  /** 只有暴露 provider script 的装配才要传。 */
   readonly providerScriptRegistry?: ProviderScriptRegistryPort
-  /** Host-injected transport keeps tests and non-browser runtimes explicit. */
+  /** 宿主注入的 transport，让测试与非浏览器运行时都显式。 */
   readonly fetch?: typeof globalThis.fetch
+  /** 一次目录请求的硬超时，毫秒。 */
   readonly timeoutMs?: number
+  /** OpenRouter 的请求归属信息。 */
   readonly attribution?: ProviderModelCatalogAttribution
 }
 
-const DefaultProviderModelCatalogTimeoutMs = 15_000
-
 /**
- * Provider-neutral dynamic model discovery.
+ * provider 无关的动态模型发现。
  *
- * Provider endpoint shapes, authentication headers and response parsing belong to the Model
- * domain. Products own when discovery runs, where credentials are stored, and how the resulting
- * catalog is projected through their IPC and UI boundaries.
+ * provider 的端点形状、鉴权头与响应解析属于 model 域；
+ * 什么时候发现、凭据存哪、目录怎么投影到 IPC 与界面，是产品的事。
+ * 一个装配只有一份，缓存、归属与失效都跟着这一份走。
  */
-export class ProviderModelCatalogService {
-  private readonly providerCollection: ModelProviderCollection
+export interface ProviderModelCatalogApi {
+  /** 列出这个鉴权作用域下的模型；每次调用都强制刷新一次快照。 */
+  listProviderModels(
+    request: ListProviderModelsRequest,
+    signal?: AbortSignal
+  ): Promise<ProviderModelCatalog>
+  /** 取某个具体模型的能力；命中未过期的快照就不再发请求。 */
+  resolveModelCapabilities(
+    request: ListProviderModelsRequest & { model: string },
+    signal?: AbortSignal
+  ): Promise<ProviderModelCatalogEntry | undefined>
+  /** 宿主更新目录来源后显式失效；不给请求就整张表清掉。 */
+  invalidateProviderModels(request?: ListProviderModelsRequest): void
+  /** 设置请求归属信息；不改变模型或鉴权作用域。 */
+  setAttribution(attribution: ProviderModelCatalogAttribution): void
+}
+
+export class ProviderModelCatalogService implements ProviderModelCatalogApi {
+  private readonly providerCollection: ModelProviderCollectionApi
   private readonly providerScriptRegistry?: ProviderScriptRegistryPort
   private readonly fetch: typeof globalThis.fetch
   private readonly timeoutMs: number
@@ -82,7 +79,7 @@ export class ProviderModelCatalogService {
     this.providerCollection = options.providerCollection
     this.providerScriptRegistry = options.providerScriptRegistry
     this.fetch = options.fetch ?? globalThis.fetch.bind(globalThis)
-    this.timeoutMs = Math.max(1, options.timeoutMs ?? DefaultProviderModelCatalogTimeoutMs)
+    this.timeoutMs = Math.max(1, options.timeoutMs ?? ModelTuning.catalog.requestTimeoutMs)
     this.attribution = options.attribution ?? {}
   }
 
@@ -102,12 +99,10 @@ export class ProviderModelCatalogService {
     return catalog.models.find((entry) => entry.id === request.model)
   }
 
-  /** 宿主更新目录来源后显式失效；进行中的旧请求不能重新写入当前快照。 */
   public invalidateProviderModels(request?: ListProviderModelsRequest): void {
     this.snapshots.invalidate(request ? this.createSnapshotKey(request) : undefined)
   }
 
-  /** 共享目录实例由宿主设置请求归属信息，不改变模型或鉴权作用域。 */
   public setAttribution(attribution: ProviderModelCatalogAttribution): void {
     this.attribution = { ...attribution }
   }
@@ -144,7 +139,7 @@ export class ProviderModelCatalogService {
         )
       } catch (error) {
         operationSignal.throwIfAborted()
-        return this.createEmptyRemoteCatalog(request.provider, Date.now(), AppError.getMessage(error))
+        return createEmptyRemoteCatalog(request.provider, Date.now(), AppError.getMessage(error))
       } finally {
         timers.dispose()
       }
@@ -165,7 +160,7 @@ export class ProviderModelCatalogService {
     if (preset.validationKind === 'provider-script')
       return this.listProviderScriptModels(resolvedRequest, preset, fetchedAt)
 
-    if (!this.canListRemoteProviderModels(preset.validationKind))
+    if (!canListRemoteProviderModels(preset.validationKind))
       return this.createPresetCatalog(request.provider, fetchedAt, request.purpose)
 
     if (
@@ -173,7 +168,7 @@ export class ProviderModelCatalogService {
       && !preset.apiKeyOptional
       && preset.validationKind !== 'openrouter-key'
     )
-      return this.createEmptyRemoteCatalog(
+      return createEmptyRemoteCatalog(
         request.provider,
         fetchedAt,
         `${preset.label} API Key 未配置。`
@@ -188,17 +183,17 @@ export class ProviderModelCatalogService {
       const remoteModels = await this.listRemoteProviderModels(
         resolvedRequest,
         baseURL,
-        preset.validationKind,
+        preset,
         signal
       )
       return {
         provider: request.provider,
         source: 'remote',
-        models: this.filterModelsForPurpose(request.purpose, remoteModels),
+        models: filterModelsForPurpose(request.purpose, remoteModels),
         fetchedAt,
       }
     } catch (error) {
-      return this.createEmptyRemoteCatalog(
+      return createEmptyRemoteCatalog(
         request.provider,
         fetchedAt,
         AppError.getMessage(error)
@@ -216,22 +211,13 @@ export class ProviderModelCatalogService {
     throw new AppError('VALIDATION', `未知模型 provider：${provider}`)
   }
 
-  private canListRemoteProviderModels(validationKind: ModelProviderValidationKind): boolean {
-    return (
-      validationKind === 'openrouter-key'
-      || validationKind === 'openai-compatible-models'
-      || validationKind === 'anthropic-models'
-      || validationKind === 'google-models'
-    )
-  }
-
   private async listProviderScriptModels(
     request: ListProviderModelsRequest,
     preset: ModelProviderPreset,
     fetchedAt: number
   ): Promise<ProviderModelCatalog> {
     if (!this.providerScriptRegistry?.supportsProvider(request.provider))
-      return this.createEmptyRemoteCatalog(
+      return createEmptyRemoteCatalog(
         request.provider,
         fetchedAt,
         `${preset.label} provider script 未注入。`
@@ -248,14 +234,14 @@ export class ProviderModelCatalogService {
       return {
         provider: request.provider,
         source: 'remote',
-        models: this.filterModelsForPurpose(
+        models: filterModelsForPurpose(
           request.purpose,
           this.normalizeModels(request.provider, models)
         ),
         fetchedAt,
       }
     } catch (error) {
-      return this.createEmptyRemoteCatalog(
+      return createEmptyRemoteCatalog(
         request.provider,
         fetchedAt,
         AppError.getMessage(error)
@@ -266,10 +252,15 @@ export class ProviderModelCatalogService {
   private async listRemoteProviderModels(
     request: ListProviderModelsRequest,
     baseURL: string,
-    validationKind: ModelProviderValidationKind,
+    preset: ModelProviderPreset,
     signal?: AbortSignal
   ): Promise<ProviderModelCatalogEntry[]> {
-    const listRequest = this.createProviderModelListRequest(request, baseURL, validationKind)
+    const listRequest = createProviderModelListRequest(
+      request,
+      baseURL,
+      preset.validationKind,
+      this.attribution
+    )
     const headers = new Headers()
     for (const [name, value] of listRequest.headers) headers.append(name, value)
     // 外层目录请求拥有完整期限，响应头与正文读取共用同一取消信号。
@@ -278,83 +269,15 @@ export class ProviderModelCatalogService {
       const responseText = (await response.text()).trim()
       throw new AppError(
         'NETWORK',
-        this.normalizeProviderErrorMessage(request.provider, response.status, responseText)
+        normalizeProviderErrorMessage(preset.label, response.status, responseText)
       )
     }
 
     return this.parseRemoteProviderModels(
       request.provider,
-      validationKind,
+      preset.validationKind,
       await response.json()
     )
-  }
-
-  private createProviderModelListRequest(
-    request: ListProviderModelsRequest,
-    baseURL: string,
-    validationKind: ModelProviderValidationKind
-  ): ProviderModelListRequest {
-    switch (validationKind) {
-      case 'anthropic-models':
-        return {
-          url: this.appendPath(baseURL, 'models'),
-          headers: [
-            ['Content-Type', 'application/json'],
-            ['anthropic-version', '2023-06-01'],
-            ['x-api-key', request.apiKey],
-          ],
-        }
-
-      case 'google-models': {
-        const url = new URL(this.appendPath(baseURL, 'models'))
-        url.searchParams.set('key', request.apiKey)
-        url.searchParams.set('pageSize', '1000')
-        return {
-          url: url.toString(),
-          headers: [['Content-Type', 'application/json']],
-        }
-      }
-
-      case 'openrouter-key':
-        return {
-          url: this.appendPath(baseURL, 'models'),
-          headers: [
-            ...this.optionalBearerHeader(request.apiKey),
-            ['Content-Type', 'application/json'],
-            ...this.optionalHeader('HTTP-Referer', this.attribution.referer),
-            ...this.optionalHeader('X-Title', this.attribution.title),
-          ],
-        }
-
-      case 'openai-compatible-models':
-      default:
-        return {
-          url: this.appendPath(baseURL, 'models'),
-          headers: [
-            ...this.optionalBearerHeader(request.apiKey),
-            ['Content-Type', 'application/json'],
-          ],
-        }
-    }
-  }
-
-  private appendPath(baseURL: string, path: string): string {
-    let end = baseURL.length
-    while (end > 0 && baseURL[end - 1] === '/') end -= 1
-    const url = new URL(`${baseURL.slice(0, end)}/${path}`)
-    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-      throw new AppError('VALIDATION', `模型目录地址协议不受支持：${url.protocol}`)
-    }
-    return url.toString()
-  }
-
-  private optionalBearerHeader(apiKey: string): Array<[string, string]> {
-    return isBlank(apiKey) ? [] : [['Authorization', `Bearer ${apiKey}`]]
-  }
-
-  private optionalHeader(name: string, value?: string): Array<[string, string]> {
-    const normalized = value?.trim() ?? ''
-    return normalized ? [[name, normalized]] : []
   }
 
   private parseRemoteProviderModels(
@@ -362,54 +285,7 @@ export class ProviderModelCatalogService {
     validationKind: ModelProviderValidationKind,
     payload: unknown
   ): ProviderModelCatalogEntry[] {
-    return this.normalizeModels(provider, this.readRemoteModelEntries(validationKind, payload))
-  }
-
-  private readRemoteModelEntries(
-    validationKind: ModelProviderValidationKind,
-    payload: unknown
-  ): RemoteProviderModelEntry[] {
-    if (!isPlainObject(payload)) return []
-
-    if (validationKind === 'google-models')
-      return isArray(payload.models)
-        ? payload.models.flatMap((item): RemoteProviderModelEntry[] => {
-            if (!isPlainObject(item)) return []
-            const rawName = isString(item.name) ? item.name : ''
-            const id = rawName.startsWith('models/')
-              ? rawName.slice('models/'.length)
-              : rawName
-            if (!id.trim()) return []
-            return [
-              {
-                id,
-                label: optionalWhen(isString, item.displayName),
-                contextWindow: toOptional(toPositiveInteger(item.inputTokenLimit)),
-              },
-            ]
-          })
-        : []
-
-    return isArray(payload.data)
-      ? payload.data.flatMap((item): RemoteProviderModelEntry[] => {
-          if (!isPlainObject(item) || !isString(item.id) || !item.id.trim()) return []
-          const architecture = isPlainObject(item.architecture) ? item.architecture : null
-          const inputModalities =
-            architecture && isArray(architecture.input_modalities)
-              ? architecture.input_modalities.filter(this.isModelInputModality)
-              : []
-          return [
-            {
-              id: item.id,
-              contextWindow: toOptional(
-                toPositiveInteger(item.context_length ?? item.context_window)
-              ),
-              label: [item.display_name, item.displayName, item.name].find(isString),
-              inputModalities: optionalWhen(!isEmpty(inputModalities), inputModalities),
-            },
-          ]
-        })
-      : []
+    return this.normalizeModels(provider, readRemoteModelEntries(validationKind, payload))
   }
 
   private normalizeModels(
@@ -444,15 +320,6 @@ export class ProviderModelCatalogService {
     return models
   }
 
-  private filterModelsForPurpose(
-    purpose: ListProviderModelsRequest['purpose'],
-    models: ProviderModelCatalogEntry[]
-  ): ProviderModelCatalogEntry[] {
-    if (purpose !== 'embedding') return models
-    const embeddingIds = new Set(filterEmbeddingModelCandidates(models.map((model) => model.id)))
-    return models.filter((model) => embeddingIds.has(model.id))
-  }
-
   private createPresetCatalog(
     provider: ChatProviderId,
     fetchedAt: number,
@@ -461,62 +328,18 @@ export class ProviderModelCatalogService {
     const preset = this.getProviderPreset(provider)
     const values = purpose === 'embedding'
       ? [
-          resolveDefaultEmbeddingModelForProvider(this.providerCollection, provider),
+          this.providerCollection.defaultEmbeddingModel(provider),
           ...preset.modelSuggestions,
         ]
       : preset.modelSuggestions
     return {
       provider,
       source: 'preset',
-      models: this.filterModelsForPurpose(
+      models: filterModelsForPurpose(
         purpose,
         this.normalizeModels(provider, values.map((id) => ({ id })))
       ),
       fetchedAt,
     }
   }
-
-  private createEmptyRemoteCatalog(
-    provider: ChatProviderId,
-    fetchedAt: number,
-    error: string
-  ): ProviderModelCatalog {
-    return {
-      provider,
-      source: 'remote',
-      models: [],
-      fetchedAt,
-      error,
-    }
-  }
-
-  private normalizeProviderErrorMessage(
-    provider: ChatProviderId,
-    status: number,
-    rawText: string
-  ): string {
-    const preset = this.getProviderPreset(provider)
-    const text = rawText.trim()
-    let message = text
-
-    try {
-      const parsed = JSON.parse(text) as {
-        error?: { message?: string }
-        message?: string
-      }
-      message = parsed.error?.message || parsed.message || text
-    } catch {
-      // arch-guard:silent-catch-ok Provider 错误正文允许是纯文本或 HTML；下方仍会归一化并返回明确错误。
-    }
-
-    if (
-      status === 401
-      || /missing authentication header|invalid api key|authentication/iu.test(message)
-    )
-      return `${preset.label} API Key 不可用`
-    return message ? message.slice(0, 160) : `HTTP ${status}`
-  }
-
-  private readonly isModelInputModality = (value: unknown): value is ModelInputModality =>
-    value === 'text' || value === 'image' || value === 'audio'
 }

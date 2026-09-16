@@ -1,6 +1,9 @@
 import type { ToolSet } from 'ai'
 
-import type { ModelRequestOptions } from '../../types/ModelContracts'
+import type {
+  ModelRequestTransport,
+} from '../../contract/requires'
+import type { ModelRequestOptions } from '../../types/model'
 import type {
   ModelRequestDecodedObjectInput,
   ModelRequestGenerateText,
@@ -11,15 +14,18 @@ import type {
   ModelRequestStreamTextInputToString,
   ModelRequestStreamTextResult,
   ModelRequestTextInput,
-  ModelRequestTransport,
-} from '../../types/ModelRequestTypes'
+} from '../../types/requests'
+import { applyRequestPolicy } from '../../utils/wire/request-policy'
 
 import { AiSdkModelRequestTransport } from './AiSdkModelRequestTransport'
-import { applyModelRequestPolicy } from './ModelRequestPolicy'
 
+/** 建一个请求客户端要什么，三样都可选。 */
 export interface ModelRequestClientOptions {
+  /** 宿主自带的 transport；给了就完全替换内置的那套。 */
   transport?: ModelRequestTransport
+  /** 只替换非流式实现，其余仍走内置 transport。 */
   generateText?: ModelRequestGenerateText
+  /** 只替换流式实现，其余仍走内置 transport。 */
   streamText?: ModelRequestStreamText
 }
 
@@ -29,7 +35,25 @@ export interface ModelRequestClientOptions {
  * 宿主只需注入 `ModelRequestTransport`；endpoint 是调用方定义的可观测标签，不要求
  * 使用任何 VelarOS 产品协议。
  */
-class ModelRequestClient {
+export interface ModelRequestClientApi {
+  /** 发一次非流式请求，只要文本。 */
+  generateText(input: ModelRequestTextInput): Promise<string>
+  /** 开一条流式请求；请求策略从第二个参数带进来。 */
+  streamText<TToolSet extends ToolSet = ToolSet>(
+    input: ModelRequestOpenStreamInput<TToolSet>,
+    modelRequestOptions?: ModelRequestOptions
+  ): ModelRequestStreamTextResult<TToolSet>
+  /** 按 schema 发一次结构化输出请求。 */
+  generateObject<TOutput = unknown>(input: ModelRequestObjectInput<TOutput>): Promise<TOutput>
+  /** 按 schema 发一次结构化输出请求，再用显式 decoder 转成领域类型。 */
+  generateDecodedObject<TSchemaOutput, TOutput>(
+    input: ModelRequestDecodedObjectInput<TSchemaOutput, TOutput>
+  ): Promise<TOutput>
+  /** 开一条流式请求并把文本收齐；`stopWhen` 命中就提前收。 */
+  collectTextStream(input: ModelRequestStreamTextInputToString): Promise<string>
+}
+
+class ModelRequestClient implements ModelRequestClientApi {
   protected readonly transport: ModelRequestTransport
 
   constructor(options: ModelRequestClientOptions = {}) {
@@ -45,7 +69,7 @@ class ModelRequestClient {
     const { endpoint, modelRequestOptions, ...request } = input
     const result = await this.transport.generateText({
       endpoint,
-      request: applyModelRequestPolicy(request, modelRequestOptions),
+      request: applyRequestPolicy(request, modelRequestOptions),
     })
     return result.text
   }
@@ -57,7 +81,7 @@ class ModelRequestClient {
     const { endpoint, ...request } = input
     return this.transport.streamText<TToolSet>({
       endpoint,
-      request: applyModelRequestPolicy(
+      request: applyRequestPolicy(
         request as ModelRequestStreamTextInput<TToolSet>,
         modelRequestOptions
       ),
@@ -87,7 +111,7 @@ class ModelRequestClient {
     })
     const result = await this.transport.generateText({
       endpoint: input.endpoint,
-      request: applyModelRequestPolicy(
+      request: applyRequestPolicy(
         {
           model: input.model,
           system: input.system,
@@ -118,4 +142,16 @@ class ModelRequestClient {
   }
 }
 
+/** 把请求策略里的温度、topP 与输出上限兜进一次请求；请求里已有的值不动。 */
+export function applyModelRequestPolicy<TRequest extends object>(
+  request: TRequest,
+  modelRequestOptions?: LooseOptional<ModelRequestOptions>
+): TRequest {
+  return applyRequestPolicy(request, modelRequestOptions)
+}
+
 export { ModelRequestClient }
+/** @deprecated 使用 ModelRequestClient。 */
+export { ModelRequestClient as ModelRequestService }
+/** @deprecated 使用 ModelRequestClientOptions。 */
+export type { ModelRequestClientOptions as ModelRequestServiceOptions }

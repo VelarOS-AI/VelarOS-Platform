@@ -5,6 +5,7 @@ import {
   type ToolSet,
 } from 'ai'
 
+import type { ModelRequestTransport } from '../../contract/requires'
 import type {
   ModelRequestEnvelope,
   ModelRequestGenerateText,
@@ -17,14 +18,17 @@ import type {
   ModelRequestStreamTextInput,
   ModelRequestStreamTextResult,
   ModelRequestTextOutput,
-  ModelRequestTransport,
-} from '../../types/ModelRequestTypes'
+} from '../../types/requests'
 
-interface AiSdkModelRequestTransportOptions {
+/** 内置 transport 要什么：两个实现都可选，不给就用 AI SDK 的。 */
+export interface AiSdkModelRequestTransportOptions {
+  /** 替换非流式实现，测试与录制回放靠它。 */
   generateText?: ModelRequestGenerateText
+  /** 替换流式实现，测试与录制回放靠它。 */
   streamText?: ModelRequestStreamText
 }
 
+/** 直接落在 AI SDK 上的默认 transport；宿主不注入自己的 transport 时用它。 */
 class AiSdkModelRequestTransport implements ModelRequestTransport {
   private readonly generateTextImpl: ModelRequestGenerateText
   private readonly streamTextImpl: ModelRequestStreamText
@@ -58,4 +62,3 @@ class AiSdkModelRequestTransport implements ModelRequestTransport {
 }
 
 export { AiSdkModelRequestTransport }
-export type { AiSdkModelRequestTransportOptions }

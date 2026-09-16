@@ -2,93 +2,76 @@ import { isBlank, optionalWhen, toNullable, toOptional } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 
-import type { ModelAdapterRegistryPort } from '../../types/ModelAdapterRegistryPort'
+import { OllamaProviderId, OpenRouterAutoModelId, OpenRouterFreeModelId } from '../../contract/constants.js'
+import type {
+  ModelAdapterRegistryPort,
+  ResolvedAgentModelRuntime,
+} from '../../types/adapters'
 import type {
   AgentProviderAdapterConfig,
   ChatProviderId,
-  ModelInputModality,
   ModelRequestOptions,
   ModelRuntimeContext,
   ModelSelection,
   OpenRouterRoutingConfig,
+  ProviderScriptRuntimeMetadata,
   ReasoningLevel,
   ThinkingDepth,
-} from '../../types/ModelContracts'
-import type { LanguageModelFactory } from '../adapters/ModelAdapter'
-import { createThinkingDepthProviderOptions } from '../adapters/ThinkingDepthModelOptions'
-import { LocalModelEnvironment, OllamaProviderId } from '../providers/LocalModelEnvironment'
-import {
-  isOpenRouterCompatibleProvider,
-  OpenRouterAutoModelId,
-  OpenRouterFreeModelId,
-} from '../providers/ModelCatalog'
-import type { ModelProviderCollection } from '../providers/ModelProviderCollection'
-import type { ProviderModelCatalogService } from '../providers/ProviderModelCatalogService'
+} from '../../types/model'
+import type { ProviderScriptRegistryPort } from '../../types/scripts'
 import {
   resolveProviderScriptContextWindow,
   resolveProviderScriptMetadataContextWindow,
-} from '../providers/ProviderScriptContextWindow'
+} from '../../utils/catalog/context-windows'
+import { isOpenRouterCompatibleProvider } from '../../utils/catalog/model-selection'
 import {
-  type ProviderScriptRegistryPort,
-  type ProviderScriptRuntimeMetadata,
-} from '../providers/ProviderScriptRegistryPort'
-
-interface ResolvedAgentModelRuntime {
-  provider: LanguageModelFactory
-  providerId: string
-  model: string
-  providerModel: string
-  contextWindow?: number
-  /** Explicit concrete-model input contract; unknown metadata allows a provider attempt. */
-  supportedInputModalities: readonly ModelInputModality[]
-  modelRequestOptions?: ModelRequestOptions
-  resolutionSource: 'provider-collection'
-  resolutionTrace: Array<{
-    provider: string
-    model: string
-    providerModel?: string
-    status: 'selected' | 'skipped'
-    reason?: string
-  }>
-  fallbackReason?: string
-}
-
-const UnknownModelInputModalities = [
-  'text',
-  'image',
-  'audio',
-] as const satisfies readonly ModelInputModality[]
-
-type ResolutionTraceEntry = ResolvedAgentModelRuntime['resolutionTrace'][number]
+  buildResolutionTrace,
+  createUnavailableProviderError,
+  mergeFallbackReason,
+  mergeModelRequestOptionLayers,
+  mergeModelRequestOptions,
+  UnknownModelInputModalities,
+} from '../../utils/resolution'
+import { createThinkingDepthProviderOptions } from '../../utils/wire/reasoning'
+import type { LocalModelEnvironmentApi } from '../providers/LocalModelEnvironment'
+import { LocalModelEnvironment } from '../providers/LocalModelEnvironment'
+import type { ModelProviderCollectionApi } from '../providers/ModelProviderCollection'
+import type { ProviderModelCatalogApi } from '../providers/ProviderModelCatalogService'
 
 /**
- * Resolves one explicit product selection against this composition's provider
- * collection. Fallback is restricted to another model of the same provider;
- * this resolver never switches providers.
+ * 把一次产品选择解析成 Agent 能直接用的运行时。
  *
  * 导览（§5.3b ⑥非显然妥协 / ③时序）——回退面刻意做窄。
  *
- * **只换模型不换 provider**：provider 不可用时抛 `createUnavailableProviderError` 并给出自救动作
+ * **只换模型不换 provider**：provider 不可用时抛 `providerUnavailable` 并给出自救动作
  * （§2.7），而不是悄悄换一家。判据是计费与数据流向——自动跨 provider 回退会让用户的密钥、
  * 隐私边界与账单在他不知情时改变。要放宽必须先有产品裁决，不是在这里加一个 `?? fallbackProvider`。
  *
- * **三个"模型名"不是一个东西，别合并**：`resolvedModel.model`（目录解析结果）、
- * `externalModel`（回给产品显示与记账的名字）、`runtimeModel`（真正发给服务商的名字）。
- * provider script 可以把前者映射成另一个后端模型，这时三者会分叉——上下文窗口按 runtimeModel 查，
- * UI 与 trace 按 externalModel 显示。
+ * **三个"模型名"不是一个东西，别合并**：目录解析结果、回给产品显示与记账的名字、
+ * 真正发给服务商的名字。provider script 可以把前者映射成另一个后端模型，这时三者会分叉——
+ * 上下文窗口按真正发出去的名字查，界面与 trace 按对外名字显示。
  *
- * **provider script 元数据失败不阻断**（§2.8）：`resolveProviderScriptRuntimeMetadata` 捕获异常后
- * 回落成"按本地目录估算窗口"并把原因写进 `fallbackReason` 一路带到 trace，让用户看得见降级发生过。
+ * **provider script 元数据失败不阻断**（§2.8）：捕获异常后回落成"按本地目录估算窗口"
+ * 并把原因写进 `fallbackReason` 一路带到 trace，让用户看得见降级发生过。
  */
-class AgentModelResolver {
+export interface AgentModelResolverApi {
+  /** 解析一次产品选择；provider 不可用时抛，绝不换 provider。 */
+  resolve(
+    selection: ModelSelection,
+    runtimeContext: ModelRuntimeContext,
+    signal?: AbortSignal
+  ): Promise<ResolvedAgentModelRuntime>
+}
+
+class AgentModelResolver implements AgentModelResolverApi {
   private readonly log = logRuntime.tag('AgentModelResolver')
 
   constructor(
     private readonly modelAdapterRegistry: ModelAdapterRegistryPort,
     private readonly providerScriptRegistry: ProviderScriptRegistryPort,
-    private readonly providers: ModelProviderCollection,
-    private readonly localModelEnvironment = new LocalModelEnvironment(),
-    private readonly modelCatalog?: Pick<ProviderModelCatalogService, 'resolveModelCapabilities'>
+    private readonly providers: ModelProviderCollectionApi,
+    private readonly localModelEnvironment: LocalModelEnvironmentApi = new LocalModelEnvironment(),
+    private readonly modelCatalog?: Pick<ProviderModelCatalogApi, 'resolveModelCapabilities'>
   ) {}
 
   public async resolve(
@@ -104,7 +87,7 @@ class AgentModelResolver {
       runtimeContext.providerRuntimeConfigs,
       selection.provider
     )
-    if (!runtimeConfig) throw this.createUnavailableProviderError(selection.provider)
+    if (!runtimeConfig) throw createUnavailableProviderError(selection.provider)
 
     const adapter = selection.adapter ?? runtimeConfig.adapter
     const effectiveRuntimeConfig = { ...runtimeConfig, adapter }
@@ -116,7 +99,7 @@ class AgentModelResolver {
         supportsProvider: (provider) => this.modelAdapterRegistry.supportsProvider(provider),
       })
     ) {
-      throw this.createUnavailableProviderError(selection.provider)
+      throw createUnavailableProviderError(selection.provider)
     }
 
     const apiKey = this.providers.resolveApiKey({
@@ -127,7 +110,7 @@ class AgentModelResolver {
       provider: selection.provider,
       baseURL: isBlank(selection.baseURL) ? runtimeConfig.baseURL : selection.baseURL,
     })
-    const trace = this.buildResolutionTrace(
+    const trace = buildResolutionTrace(
       selection.provider,
       selection.model,
       modelResolution.model,
@@ -150,32 +133,6 @@ class AgentModelResolver {
       fallbackReason,
       signal,
     })
-  }
-
-  private buildResolutionTrace(
-    provider: ChatProviderId,
-    requestedModel: string,
-    selectedModel: string,
-    didFallback: boolean
-  ): ResolutionTraceEntry[] {
-    if (!didFallback) return [{ provider, model: selectedModel, status: 'selected' }]
-
-    return [
-      {
-        provider,
-        model: requestedModel,
-        status: 'skipped',
-        reason: '所选模型已不在当前 provider 的可用目录中',
-      },
-      { provider, model: selectedModel, status: 'selected' },
-    ]
-  }
-
-  private createUnavailableProviderError(provider: ChatProviderId): AppError {
-    return new AppError(
-      'VALIDATION',
-      `当前 provider ${provider} 不可用。请确认它已启用，且 API Key、Base URL 或自定义 adapter 配置有效；Model Runtime 不会自动切换到其它 provider。`
-    )
   }
 
   private async createRuntime(input: {
@@ -239,8 +196,8 @@ class AgentModelResolver {
           this.localModelEnvironment.resolveOllamaContextWindow(catalogContextWindow)
         )
         : catalogContextWindow
-    const modelRequestOptions = this.mergeModelRequestOptions(
-      this.mergeModelRequestOptionLayers(
+    const modelRequestOptions = mergeModelRequestOptions(
+      mergeModelRequestOptionLayers(
         resolvedModel.requestOptions,
         providerScriptMetadata?.modelRequestOptions
       ),
@@ -255,7 +212,7 @@ class AgentModelResolver {
     const runtimeTrace = input.resolutionTrace.map((entry) => {
       if (entry.status !== 'selected' || entry.provider !== input.providerId) return entry
 
-      const reason = this.mergeFallbackReason(entry.reason, metadataFallbackReason)
+      const reason = mergeFallbackReason(entry.reason, metadataFallbackReason)
       return {
         ...entry,
         model: externalModel,
@@ -287,55 +244,8 @@ class AgentModelResolver {
       resolutionSource: 'provider-collection',
       resolutionTrace: runtimeTrace,
       fallbackReason: toOptional(
-        this.mergeFallbackReason(input.fallbackReason, metadataFallbackReason)
+        mergeFallbackReason(input.fallbackReason, metadataFallbackReason)
       ),
-    }
-  }
-
-  private mergeFallbackReason(
-    primary: LooseOptional<string>,
-    secondary: LooseOptional<string>
-  ): string {
-    return [primary, secondary]
-      .map((reason) => reason?.trim() ?? '')
-      .filter((reason) => !isBlank(reason))
-      .join('；')
-  }
-
-  private mergeModelRequestOptions(
-    requestOptions: LooseOptional<ModelRequestOptions>,
-    providerOptions: Nullable<Record<string, unknown>>
-  ) {
-    if (!providerOptions) return toOptional(requestOptions)
-
-    return {
-      ...(requestOptions ?? {}),
-      requestPolicy: requestOptions?.requestPolicy,
-      providerOptions: {
-        ...(requestOptions?.providerOptions ?? {}),
-        ...providerOptions,
-      },
-    }
-  }
-
-  private mergeModelRequestOptionLayers(
-    primary: LooseOptional<ModelRequestOptions>,
-    secondary: LooseOptional<ModelRequestOptions>
-  ) {
-    if (!secondary) return toOptional(primary)
-    if (!primary) return secondary
-
-    return {
-      ...primary,
-      ...secondary,
-      openRouter: secondary.openRouter ?? primary.openRouter,
-      requestPolicy: secondary.requestPolicy ?? primary.requestPolicy,
-      providerOptions: secondary.providerOptions
-        ? {
-            ...(primary.providerOptions ?? {}),
-            ...secondary.providerOptions,
-          }
-        : primary.providerOptions,
     }
   }
 
@@ -395,7 +305,7 @@ class AgentModelResolver {
     } catch (error) {
       if (input.signal?.aborted) throw input.signal.reason ?? error
       const fallbackReason =
-        `${manifest.label} provider script metadata unavailable: ${AppError.getMessage(error)}`
+        `${manifest.label} 的 provider script 元数据不可用：${AppError.getMessage(error)}`
       this.log.warn('provider script model context fallback', {
         provider: input.providerId,
         error: AppError.getMessage(error),
@@ -410,4 +320,3 @@ class AgentModelResolver {
 }
 
 export { AgentModelResolver }
-export type { ResolvedAgentModelRuntime }

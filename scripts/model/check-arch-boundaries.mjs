@@ -117,11 +117,9 @@ const entrySource = await readFile(path.join(packageDirectory, 'src/exports/inde
 for (const ownedExport of [
   '../impl/providers/LocalModelEnvironment',
   '../impl/providers/ModelCatalog',
-  '../types/ModelContracts',
   '../impl/providers/ModelProviderCollection',
-  '../impl/providers/EmbeddingModelSelection',
-  '../impl/providers/ProviderRuntimeAvailability',
-  '../impl/providers/ProviderManifest',
+  '../contract/constants.js',
+  '../types/model',
 ]) {
   if (!entrySource.includes(ownedExport)) {
     failures.push(`public entry must export Model-owned contract ${ownedExport}`)
@@ -130,7 +128,7 @@ for (const ownedExport of [
 
 for (const nodeOnlyModule of [
   '../impl/composition/ModelAdapterRegistry',
-  '../impl/composition/ModelRuntimeComposition',
+  '../impl/composition/DefaultModelRuntimeComposition',
   '../impl/providers/ProviderScriptRegistry',
   '../impl/adapters/UserJsModelAdapter',
 ]) {
@@ -141,10 +139,10 @@ for (const nodeOnlyModule of [
     failures.push(`portable public entry must not export Node-only module ${nodeOnlyModule}`)
   }
 }
-if (!entrySource.includes('../impl/providers/ProviderScriptRegistryPort')) {
+if (!entrySource.includes('ProviderScriptRegistryPort')) {
   failures.push('portable public entry must export ProviderScriptRegistryPort')
 }
-if (!entrySource.includes('../types/ModelAdapterRegistryPort')) {
+if (!entrySource.includes('ModelAdapterRegistryPort')) {
   failures.push('portable public entry must export ModelAdapterRegistryPort')
 }
 
@@ -163,9 +161,8 @@ if (
   failures.push('contracts entry must contain type-only exports and emit no runtime surface')
 }
 for (const requiredContractOwner of [
-  '../types/ModelContracts',
-  '../impl/providers/ModelProviderCollection',
-  '../impl/providers/ProviderManifest',
+  '../types/model',
+  '../types/providers',
 ]) {
   if (!contractsSource.includes(requiredContractOwner)) {
     failures.push(`contracts entry must export types from ${requiredContractOwner}`)
@@ -179,20 +176,26 @@ const catalogSource = await readFile(
 const catalogOwners = new Set(
   [...catalogSource.matchAll(/from\s+['"]([^'"]+)['"]/gu)].map((match) => match[1]),
 )
+// 渲染进程能加载的目录入口只许经这几个所有者出去；合同与类型是纯声明，不带运行时。
 const expectedCatalogOwners = new Set([
   '../impl/providers/LocalModelEnvironment',
   '../impl/providers/ModelCatalog',
-  '../impl/providers/ProviderManifest',
+  '../contract/constants.js',
+  '../contract/provides',
+  '../contract/requires',
+  '../types/model',
+  '../types/providers',
 ])
-if (
-  catalogOwners.size !== expectedCatalogOwners.size
-  || [...catalogOwners].some((owner) => !expectedCatalogOwners.has(owner))
-) {
+if ([...catalogOwners].some((owner) => !expectedCatalogOwners.has(owner))) {
   failures.push(
-    'catalog entry may export only LocalModelEnvironment, ModelCatalog, and ProviderManifest',
+    'catalog entry may export only LocalModelEnvironment, ModelCatalog, the constants table, and declaration files',
   )
 }
-for (const catalogOwner of expectedCatalogOwners) {
+// 目录链里真带运行时的只有这两个实现文件，逐个核对它们不碰宿主进程。
+for (const catalogOwner of [
+  '../impl/providers/LocalModelEnvironment',
+  '../impl/providers/ModelCatalog',
+]) {
   const source = await readFile(
     path.join(packageDirectory, `src/${catalogOwner.slice(3)}.ts`),
     'utf8',
@@ -216,7 +219,7 @@ const nodeEntrySource = await readFile(
 )
 for (const nodeHostModule of [
   '../impl/composition/ModelAdapterRegistry',
-  '../impl/composition/ModelRuntimeComposition',
+  '../impl/composition/DefaultModelRuntimeComposition',
   '../impl/providers/NodeLocalModelEnvironment',
   '../impl/providers/ProviderScriptRegistry',
 ]) {
@@ -225,11 +228,16 @@ for (const nodeHostModule of [
   }
 }
 
+// 只有这几个文件在 Node 入口链上：用户 JS adapter 的沙箱形状与搬运函数也在里面，
+// 它们只从 `./node` 进来，渲染进程加载的 `./catalog` 与 `./contracts` 走不到。
 const allowedNodeSources = new Set([
-  path.join(packageDirectory, 'src/impl/composition/ModelRuntimeComposition.ts'),
+  path.join(packageDirectory, 'src/impl/composition/DefaultModelRuntimeComposition.ts'),
   path.join(packageDirectory, 'src/impl/providers/NodeLocalModelEnvironment.ts'),
   path.join(packageDirectory, 'src/impl/providers/ProviderScriptRegistry.ts'),
   path.join(packageDirectory, 'src/impl/adapters/UserJsModelAdapter.ts'),
+  path.join(packageDirectory, 'src/types/scripts.ts'),
+  path.join(packageDirectory, 'src/utils/scripts/provider-scripts.ts'),
+  path.join(packageDirectory, 'src/utils/scripts/user-adapter.ts'),
 ])
 for (const file of sourceFiles) {
   const source = await readFile(file, 'utf8')
@@ -245,17 +253,15 @@ for (const file of sourceFiles) {
   }
 }
 
+// embedding 与可用性判定都下沉成了纯函数：它们只许收清单，不许自己造或发现可变的 provider 状态。
 for (const helperName of [
-  'EmbeddingModelSelection',
-  'ProviderRuntimeAvailability',
+  'catalog/embedding',
+  'catalog/manifests',
 ]) {
   const helperSource = await readFile(
-    path.join(packageDirectory, `src/impl/providers/${helperName}.ts`),
+    path.join(packageDirectory, `src/utils/${helperName}.ts`),
     'utf8',
   )
-  if (!helperSource.includes('providerCollection: ModelProviderCollection')) {
-    failures.push(`${helperName} must receive an explicit ModelProviderCollection`)
-  }
   if (
     helperSource.includes('new ModelProviderCollection')
     || helperSource.includes('createModelRuntimeComposition')
@@ -275,7 +281,7 @@ for (const helperName of [
 }
 
 const compositionSource = await readFile(
-  path.join(packageDirectory, 'src/impl/composition/ModelRuntimeComposition.ts'),
+  path.join(packageDirectory, 'src/impl/composition/DefaultModelRuntimeComposition.ts'),
   'utf8',
 )
 if (
@@ -299,11 +305,21 @@ const runtimeSource = await readFile(
   path.join(packageDirectory, 'src/impl/composition/AgentModelRuntime.ts'),
   'utf8',
 )
-if (runtimeSource.includes("?? 'openrouter'") || runtimeSource.includes("|| 'openrouter'")) {
-  failures.push('AgentModelRuntime must not fall back to a global/default provider')
+// 入参收窄已下沉到 utils/scripts/selection.ts，两边一起核：入口不许兜底，解析不许放过缺席的上下文。
+const selectionSource = await readFile(
+  path.join(packageDirectory, 'src/utils/scripts/selection.ts'),
+  'utf8',
+)
+for (const [label, source] of [
+  ['AgentModelRuntime', runtimeSource],
+  ['model selection parser', selectionSource],
+]) {
+  if (source.includes("?? 'openrouter'") || source.includes("|| 'openrouter'")) {
+    failures.push(`${label} must not fall back to a global/default provider`)
+  }
 }
 if (
-  !runtimeSource.includes(
+  !selectionSource.includes(
     "requireRecord(value, 'Model Runtime context 必须显式提供。')",
   )
   || runtimeSource.includes('runtimeContext ??')
