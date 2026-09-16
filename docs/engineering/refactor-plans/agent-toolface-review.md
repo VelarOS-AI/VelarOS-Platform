@@ -17,7 +17,7 @@
   - `directive:list` 可并入 `directive:archive`，或降为非常驻。
 - **提示词**：冲突 18 条、冗余 19 类、术语歧义 20 类、悬空/过时引用 15 处。模型能看到的纯英文字符串字面量约 190 条。另有两个系统性来源：zod 默认报错全是英文；系统提示词每段的 `<section name>` 用了 17 个英文段名。
 
-路径约定：未写前缀的都相对 `/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/packages/agent/src/`；`Desktop:` 与 `Workbench:` 指 `/Users/mac/Desktop/VelarOS/projects/VelarOS-Desktop/` 与 `…/VelarOS-Workbench/`。
+路径约定：未写前缀的都相对 `<仓库所在目录>/VelarOS-Platform/packages/agent/src/`；`Desktop:` 与 `Workbench:` 指 `<仓库所在目录>/VelarOS-Desktop/` 与 `…/VelarOS-Workbench/`。
 
 ---
 

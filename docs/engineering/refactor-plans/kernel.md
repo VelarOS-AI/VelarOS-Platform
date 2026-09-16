@@ -513,7 +513,7 @@ utils 在所有层之下，谁都能用；它只引 utils、types 与合同。
 **D7 中｜安全（Windows）：私钥凭据的缺省路径在没有 HOME 时落到 `/tmp`。**
 - 位置：`remote/client/credential-store.ts:43-48`（`home = process.env.HOME`，空则 `'/tmp'`）；同病 `runtime/host/sidecar-bridge.ts:510`。
 - 现象：Windows 通常没有 `HOME`，Ed25519 私钥写到当前盘根的 `\tmp\.velaros\remote-nodes\<slug>.json`；NTFS 上 0600 不生效（文件自己的注释也承认），同机其他用户可读。
-- 复现：`env -u HOME bun probe-home.ts` → `/tmp/.velaros/remote-nodes/mac.json`，而 `os.homedir()` 是 `/Users/mac`。
+- 复现：`env -u HOME bun probe-home.ts` → `/tmp/.velaros/remote-nodes/mac.json`，而 `os.homedir()` 是 `<用户家目录>`。
 - 修：用 `os.homedir()`。
 
 **D8 中｜安全（Linux 多用户）：守护进程运行目录在共享 `/tmp` 下，不核属主。**

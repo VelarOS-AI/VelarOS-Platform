@@ -1,6 +1,6 @@
 分析完成，全程只读，没有改任何文件，也没有提交。行号以 Platform HEAD `1ebe2f6` 为准。分析期间另一个实例一直在提交：HEAD 从 21fcb91 走到 1ebe2f6，其中 `3489fa6` 改了 `src/agent/LoopRuntime.ts`，之后 agent 目录没再变。
 
-路径约定：`src/…` 指 `/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/packages/agent/src/…`；`Platform/`、`Desktop/`、`Workbench/` 指 `/Users/mac/Desktop/VelarOS/projects/` 下的三个仓。
+路径约定：`src/…` 指 `<仓库所在目录>/VelarOS-Platform/packages/agent/src/…`；`Platform/`、`Desktop/`、`Workbench/` 指 `<仓库所在目录>/` 下的三个仓。
 
 ## 结论速览
 
@@ -368,4 +368,4 @@ Cloud 和 Desktop 里都已经没有生产者，属于死知识，直接删除�
 | `src/protocol/types/chatRuntime.ts`、`subAgentTask.ts` | 验证概念中立化 | P2 |
 | `inline-reasoning-tags.ts`、`tool-input.ts`、`IntentSignals.ts`、`ToolSearchTerms.ts`、`kernel-module.ts`、`BuiltinAgentMod.ts`、`protocol/mods.ts`、`protocol/types/skill.ts`、`history/internalMessages.ts`、各处注释 | 保留 | 可接受 |
 
-**门禁建议（可选）：** 给 `/Users/mac/Desktop/VelarOS/projects/VelarOS-Platform/scripts/agent/check-arch-boundaries.mjs` 的防线⑤词表增补 `project|system:|office|html-artifact|widget|desktop|renderer|anthropic|openai|deepseek|claude|codex|chrome-extension|vela-(command|bg|system)`，用当前违规生成基线后按棘轮归零。这样 `3489fa6` 这类新回归就能当场被拦下。
+**门禁建议（可选）：** 给 `<仓库所在目录>/VelarOS-Platform/scripts/agent/check-arch-boundaries.mjs` 的防线⑤词表增补 `project|system:|office|html-artifact|widget|desktop|renderer|anthropic|openai|deepseek|claude|codex|chrome-extension|vela-(command|bg|system)`，用当前违规生成基线后按棘轮归零。这样 `3489fa6` 这类新回归就能当场被拦下。
