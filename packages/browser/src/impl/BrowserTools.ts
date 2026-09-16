@@ -1939,7 +1939,7 @@ const browserUserScripts = defineBrowserTool<z.input<typeof browserUserScriptsSc
   ],
   notes: [
     '外部浏览器与 runAt=document-start 暂不支持，会明确回报不支持，不会伪报注入成功。',
-    '脚本按「文档 + 版本号」幂等，一个脚本失败不影响页面和别的脚本。',
+    '同一个脚本在同一个文档里只注入一次；改过它（update）之后下一个文档会重新注入。一个脚本失败不影响页面和别的脚本。',
   ],
   usageSkillId: 'browser-automation-recipes',
   schema: browserUserScriptsSchema,

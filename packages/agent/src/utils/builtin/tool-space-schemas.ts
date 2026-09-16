@@ -309,16 +309,8 @@ const toolSpaceQueryMethodObjectSchema = z.object({
     })
     .optional()
     .describe(parameterDescription({ description: 'find 模式下要搜索的工具意图、能力名、工具名或任务短语。' })),
-  ids: z
-    .array(z.string().trim().min(1).max(180))
-    .min(1)
-    .max(12)
-    .optional()
-    .describe(parameterDescription({ description: 'read 模式下要读取正文的技能页 id：skill:<skill_id>。' })),
-  detail: z
-    .enum(['brief', 'full'])
-    .optional()
-    .describe(parameterDescription({ description: 'read 模式详情级别。' })),
+  // ids / detail 不在这里：它们只属于 read，而 read 不是本门面的 op（见上方 `toolSpaceQueryOperationSchema`）。
+  // 摆在这里等于给模型两个填了也不生效的参数——归一时按 strip 静默丢掉，模型还以为自己指定了。
   kind: z
     .enum(['tool', 'capability', 'plugin', 'all'])
     .optional()

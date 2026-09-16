@@ -68,7 +68,7 @@
   ],
   "fingerprints": {
     "project": "6881efd6c4b5e3373428590fa9164bd33b6a8481ec575acb91c1424387591e3a",
-    "agent": "fe450984e3279ec7624fbe4898b474a9f139811b146bbebaabdd67173b09d335",
+    "agent": "4d94b89223eb27a2c2c453f9cab23e89513e7ed6091889169e4cf323b7906e14",
     "documents": "0b21de94640e41de1b8c3981391f7d28c40d81006b1cedf7ace5abf19fc87732"
   },
   "sourceArtifacts": [
@@ -86,7 +86,7 @@
     },
     {
       "path": "packages/agent/src/impl/AgentTools.ts",
-      "fingerprint": "26d813d6c6c1a4524e2cb4aabb6bd1863eaf544db3e71c0450f181c17ee3d735"
+      "fingerprint": "154745cdf0dfcf03bc37ebe9d59b42d90261f69e04e7e8a2f7f1bec21008a2fe"
     },
     {
       "path": "packages/agent/src/impl/builtin/ContextOperations.ts",

@@ -211,7 +211,7 @@ export const toolSpaceMap: VelaTool<z.input<typeof toolSpaceQueryMethodSchema>> 
   protocol: [
     '具体任务优先 op="find"：query 用用户目标短语，一次返回可换入的具体工具页。',
     '默认或 op="map"：按分类分页；page.nextCursor 非空时继续调用 tooling:map(cursor: nextCursor)。',
-    'op="find"：按 query 搜索工具页；op="page"：平铺分页；op="read"：读取指定技能正文（skill:<id>）。',
+    'op="find"：按 query 搜索工具页；op="page"：平铺分页。读技能正文是另一个工具 tooling:read，这里没有 read 这个取值。',
     'map 下每个 category 返回完整 toolNames；详细状态页仍按 maxToolsPerCategory 展开。',
     '每个 category 头部包含 capability 页，可用 tooling:replace 一类激活。',
     '每个 tool 页包含 toolOsState 与 activation：resident 可直接调用，loadable 按 activation.method 换入，needs_setup 先处理 dependencies。',
@@ -275,8 +275,8 @@ export const toolSpaceReplace: VelaTool<z.input<typeof toolSpaceReplaceMethodSch
   forbidden: ['不要用它执行目标工具；replace 后下一轮再调用真实工具。'],
   protocol: [
     'pageIn 可传 tool:* 或 capability:*；capability:* 表示一类激活。',
-    '能力前置条件缺失时会返回 requiresUserActionDetails；按依赖与 nextActions 处理，不要猜测能力自有资源。',
-    'requiresUserActionDetails / requiresApprovalDetails 会说明阻塞原因和下一步。',
+    '能力前置条件缺失时会返回 requiresUserActionDetails；按每条的 activation.dependencies 与 nextAction 处理，不要猜测能力自有资源。',
+    'requiresUserActionDetails / requiresApprovalDetails 会说明阻塞原因，整体的下一步看回执的 nextTurnHint。',
   ],
   usage: [
     '从 tooling:map 结果复制精确页 id，传 pageIn/pageOut 和 reason；例子中的页也须以当前目录为准。',
