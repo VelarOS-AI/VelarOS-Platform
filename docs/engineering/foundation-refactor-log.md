@@ -91,8 +91,8 @@
 
 | 时间 | 决策 | 理由 |
 | --- | --- | --- |
-| 09-16 17:40 | **用户拍板**：project 工具面归并 J1–J5——改动三合一收成 `project:edit`（action: apply/inspect/undo）、`project:code` 改 9 个命名意图、`project:code-analysis` 保持独立、`project:list` 的 recursive+maxDepth 收成 `depth` | `change` 本来就是 `file ∪ edit` 的超集，模型每次改代码都要先做一道无谓的选择题；`project:code` 70 多个字段全无说明、旋钮交叉，模型基本只能瞎填 |
-| 09-16 17:40 | **用户立的两条规矩进标准**（`module-ownership.md` 规矩 2、3）：① 写一堆说明不如写清楚示例——先给能照着填的真实示例，说明只补示例讲不出来的；② 一件事只给一个入口，批量维度只留一个字段名 | 模型填错的代价是重来一轮；条文写得再全也不如一个能照抄的例子 |
+| 09-16 16:55 | **用户拍板**：project 工具面归并 J1–J5——改动三合一收成 `project:edit`（action: apply/inspect/undo）、`project:code` 改 9 个命名意图、`project:code-analysis` 保持独立、`project:list` 的 recursive+maxDepth 收成 `depth` | `change` 本来就是 `file ∪ edit` 的超集，模型每次改代码都要先做一道无谓的选择题；`project:code` 70 多个字段全无说明、旋钮交叉，模型基本只能瞎填 |
+| 09-16 16:55 | **用户立的两条规矩进标准**（`module-ownership.md` 规矩 2、3）：① 写一堆说明不如写清楚示例——先给能照着填的真实示例，说明只补示例讲不出来的；② 一件事只给一个入口，批量维度只留一个字段名 | 模型填错的代价是重来一轮；条文写得再全也不如一个能照抄的例子 |
 | 09-16 14:40 | 「目录被忽略则里面的一切被忽略」按各级上级目录推，不再展开成 `pattern/**` | 展开会让名叫 `build` 的**文件**被 `build/` 命中；git 的语义是目录限定 |
 | 09-16 14:10 | 撤销历史预算定 48 MiB（内存与状态文件共用），未应用的事务与待恢复的事务永不淘汰 | 单文件读取上限 5 MiB，一个大事务记账约 25–38 MiB；48 MiB 能留住 1–2 次大改动，同时离 256 MiB 硬顶足够远，保证「历史大小永远不会让 apply 失败」 |
 | 09-16 12:45 | **用户拍板**：`project:change` 的步骤改成按动作的判别联合（create/overwrite/move/delete/recode/edit），删掉点名别的工具的 `tool` 字段，一步一个目标 | 原形状把外部批量藏进工具内部：批量嵌三层、判别字段直接写 `file`/`edit` 两个工具名，评审也发现它没有任何说明。批量维度收成 `steps` 一个 |
@@ -148,7 +148,7 @@
 - [x] ③ 公共逻辑抽取（已完成：shell-command、rehearsal-sandbox、内核可调用操作表进 agent/tool-contract、project 迁入、text-files、platform 路径包含判断 c9564d45、core 真实路径 7c39d5c9；进行中：path-rules 与两边迁移；待做：工具定义辅助与内核模块样板、工具失败构造器）
 - [ ] 其余包：方案全部写完并归档在 `refactor-plans/`；缺陷修复已完成 model、memory、office、computer、browser、kernel、project（七小包在跑）；agent 第 1–3a 步完成、3b 在跑；browser、memory 包内改造第一段完成。等你拍板的项汇总在 `foundation-pending-decisions.md`：agent → browser → memory → kernel → model → office → agent-lab → development → core → html-artifacts → computer → cli → document-renderer → surface-protocol
 
-**停在这里（09-16 18:20，全量 `bun run check` 退出码 0、工作区干净）。** 这一段共 101 个提交、1446 个文件、+78,949 / −46,625。
+**停在这里（09-16 17:12，全量 `bun run check` 退出码 0、工作区干净）。** 这一段共 101 个提交、1446 个文件、+78,949 / −46,625。
 - 缺陷修复全部完成：project（实现层 14 条 + 产品层 49 条）、memory（3 条 P0 安全 + 16 条）、kernel（24 条，含权限闸绕过与守护进程起不来）、browser（11 条）、office/computer（9 条）、model（6 条）、七个小包（15 条）。
 - 公共件：shell-command、rehearsal-sandbox、text-files、path-rules 四个新包，外加 platform 的路径包含判断与 core 的真实路径。
 - 结构改造：system、project 达标；agent 第 1–4 步（第 4 步差常量表收尾）；browser、memory 完成包内第一段。
