@@ -214,16 +214,18 @@ describe('记忆包的对外承诺', () => {
   })
 
   test('INV-8 落盘前经同一道清洗：秘密打码、正文截断、空内容拒收', async () => {
+    // 拼出来而不是写成字面量：`check:public-readiness` 会把仓库里像 API key 的串当真凭据拦下。
+    const fakeSecret = `${'sk'}-1234567890abcdefghijklmnop`
     const { io, backend } = filesBackend()
     const ctx = toolContext(backend, 'system')
     await runTool('memory:save', {
       kind: 'fact',
       title: '接口凭据',
-      content: '调用时带 Authorization: Bearer sk-1234567890abcdefghijklmnop 这个头。',
+      content: `调用时带 Authorization: Bearer ${fakeSecret} 这个头。`,
     }, ctx)
 
     const written = Object.values(io.snapshot()).join('\n')
-    expect(written).not.toContain('sk-1234567890abcdefghijklmnop')
+    expect(written).not.toContain(fakeSecret)
 
     expect(() => backend.capture(evidence({ content: '   ' }))).toThrow(/不能为空/u)
   })
