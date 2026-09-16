@@ -10,6 +10,13 @@
 
 （按时间追加。每条写：改了什么、为什么、影响谁。）
 
+- **project 工具面归并完成（09-16 18:40，6e2f95fc、afe8afba、d3619b04、3fc0e147）。** 九个工具收成七个，模型面说明从 6,436 字降到 4,716 字（−27%）。
+  - **改动只剩一个入口 `project:edit`**（`action: apply | inspect | undo`）：原来的 `project:file`（整文件动作）与 `project:change`（事务）删掉；一次 apply 就是一次事务，步骤是一步一个目标的判别联合。说明从三份 2,612 字合成一份 1,198 字，里面是五个能直接照抄的示例（改一个文件两处、跨文件事务、移动后再改同一文件、inspect、undo）。
+  - **`project:code` 改成九个命名意图**（outline / definition / references / callers / callees / imports / importers / impact / diagnostics），字段从十二个收到六个；`direction`、`kind`、`depth` 由意图推出来，`query`、`exact`、`exportedOnly`、`includeReExports`、`includeExternal`、`specifier`、`within`、`kinds` 删掉。说明 929 → 688 字。
+  - **`project:list` 的 `recursive` + `maxDepth` 收成一个 `depth`**（数字或 `all`）。**缺省行为变了**：不给 depth 从「只列一层」变成「往下三层」，缺省值写进了字段说明；仍受每页 200 条与列举总量上限约束。
+  - **能力收窄，宿主端口都还在、想恢复只要加回意图**：关系查询的「类型层级」与「相关节点」、只列导出、按模块名过滤依赖、限定调用方目录，这些模型面入口没了。「只知道符号名不知道在哪」我已让它补回来（放宽 target 形状，不新增字段）。
+  - 界面的工具卡渲染跟着改了（读 `steps`，旧形态保留给历史会话）；agent 里写死 project 工具名的两处也改了。
+
 - **project 的契约与提示词整轮改完（09-16 17:10，5c0f4c97、ebfa73de、14f26c94、b3df25ef、ca35a9f1）。** 产品层评审 49 条加你拍板的三件事，逐条落地。模型看得到的变化：
   - **入参形状两处**：`project:read` 只收 `files`（每项 `{path, range?}`）与 `continuation`，读一个文件写成只有一项的 files；`project:change` 的 `steps` 改成一步一个目标的判别联合（`create|overwrite|move|delete|recode|edit`），`tool` 字段删掉，说明里写明「一次 apply 就是一次事务」，并补了真实的 apply 示例。
   - **`project:code` 的 schema 从嵌套 oneOf 改成平对象**：Desktop 扁平化后 `dependencies` 整支不再消失、字段说明不再被别的动作顶替；顺带删掉 `cwd`。
