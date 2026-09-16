@@ -4,11 +4,11 @@ import type { AgentProjectKernelPort } from '@velaros-ai/project'
 /** Source inspection consumes no project mutation, execution, or approval capability. */
 export type LanguageReadPort = Pick<AgentProjectKernelPort, 'listFiles' | 'read' | 'listSymbols'>
 
+/** 语言查询只要读取面：项目根加内核的读端口；路径一律相对项目根，没有「按目录执行」这回事。 */
 export interface LanguageToolContext {
   abortSignal: AbortSignal
   project: {
     getRootPath(): string
-    runInDirectory<T>(path: string, action: () => Promise<T>): Promise<T>
     kernel(): Promise<LanguageReadPort>
   }
 }

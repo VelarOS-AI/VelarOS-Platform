@@ -1,7 +1,7 @@
 /**
  * 项目空间的九个模型面工具与可选的 project:code-analysis。每个工具的定义就是模型看到的全部信息面：摘要、适用与禁用场景、协议、用法、示例、
  * 参数（schema 与每个字段的说明）、权限、能力声明都在定义里；execute 一行交给 impl/operations 里的执行类。
- * 按读取、改动、代码理解、执行四类排列，文件末尾是它们怎么分组、作为内置 mod 挂进产品、作为能力服务挂进内核、连同内核组成项目空间。
+ * 按读取、改动、代码理解、执行四类排列，文件末尾是它们怎么分组、作为内置 mod 挂进产品、作为能力服务挂进内核。
  * 这是人最先看的文件，改了要在差量报告里点名。
  */
 
@@ -15,15 +15,14 @@ import { createCapabilityToken, createKernelCallableCapability, defineKernelModu
 import { RehearsalSandboxLimits } from '@velaros-ai/rehearsal-sandbox/contracts'
 import { shellCommandPolicy } from '@velaros-ai/shell-command'
 
-import { ProjectChangeLimits, ProjectCodeAnalysisModId, ProjectCodeAnalysisToolName, ProjectCodeLimits, ProjectCommandLimits, ProjectFileLimits, ProjectModId, ProjectPackageVersion, ProjectSpaceId, ProjectToolExposure, ProjectToolNames } from '../contract/constants.js'
-import type { ProjectBundledModDefinition, ProjectCapabilityService, ProjectCodeAnalysisContribution, ProjectSpace, ProjectToolCollection } from '../contract/provides.js'
-import type { CreateProjectKernelModuleOptions, CreateProjectKernelOptions, ProjectToolContext } from '../contract/requires.js'
+import { ProjectChangeLimits, ProjectCodeAnalysisToolName, ProjectCodeLimits, ProjectCommandLimits, ProjectFileLimits, ProjectModId, ProjectPackageVersion, ProjectSpaceId, ProjectToolExposure, ProjectToolNames } from '../contract/constants.js'
+import type { ProjectBundledModDefinition, ProjectCapabilityService, ProjectCodeAnalysisToolCollection, ProjectToolCollection } from '../contract/provides.js'
+import type { CreateProjectKernelModuleOptions, ProjectToolContext } from '../contract/requires.js'
 import type { ProjectChangeStep, ProjectEditInput, ProjectFileInput } from '../types/editing.js'
 import type { ProjectChangeInput, ProjectCodeAnalysisInput, ProjectCodeInput, ProjectListInput, ProjectReadInput, ProjectRunInput, ProjectSandboxInput, ProjectSearchInput } from '../types/tools.js'
 import { ProjectSourceInstructions } from '../utils/agent/source-window.js'
 import { defineProjectTool, hasExactlyOneSource, toProjectCapabilityError } from '../utils/tool.js'
 
-import { createProjectKernel } from './kernel/LocalProjectKernel.js'
 import { projectChangeOperations } from './operations/ProjectChangeOperations.js'
 import { projectCodeOperations } from './operations/ProjectCodeOperations.js'
 import { projectExecutionOperations } from './operations/ProjectExecutionOperations.js'
@@ -438,7 +437,7 @@ const codeTool = defineProjectTool<ProjectCodeInput>({
  * 创建可选的 project:code-analysis：代码路径追踪、依赖环、未使用代码候选和框架路由，由宿主的图后端提供；
  * 不在默认工具集合里，宿主给出可用性判断后单独登记。
  */
-export function createProjectCodeAnalysisTools(isAvailable: (context: ProjectToolContext) => boolean): ProjectToolCollection {
+export function createProjectCodeAnalysisTools(isAvailable: (context: ProjectToolContext) => boolean): ProjectCodeAnalysisToolCollection {
   const analysisTool = defineProjectTool<ProjectCodeAnalysisInput>({
     name: ProjectCodeAnalysisToolName,
     category: 'development-code',
@@ -527,6 +526,22 @@ const sandboxTool = defineProjectTool<ProjectSandboxInput>({
     maxOutputChars: z.number().int().positive().max(ProjectCommandLimits.outputChars).optional().describe('run：最多返回多少字符的输出。'),
     paths: z.array(z.string().min(1)).max(RehearsalSandboxLimits.applyPaths).optional().describe('apply：只落这些相对路径；不传就全部。'),
     maxFiles: z.number().int().positive().max(RehearsalSandboxLimits.diffFilesMax).optional().describe(`diff：新增与修改各列最多列多少条，默认 ${RehearsalSandboxLimits.diffFiles}；删除列永远完整。`),
+  }).superRefine((input, context) => {
+    // 缺字段、填错字段都在这里拦下：别等到执行到一半才报，也别让 create 的字段跟着 run 一起发出去。
+    if (input.action !== 'create' && !input.sandboxId)
+      context.addIssue({ code: 'custom', path: ['sandboxId'], message: `${input.action} 需要 create 回执里的 sandboxId。` })
+    if (input.action === 'run' && !input.command)
+      context.addIssue({ code: 'custom', path: ['command'], message: 'run 需要 command。' })
+    const scoped = [
+      { action: 'create', fields: ['source', 'network', 'ignored'] },
+      { action: 'run', fields: ['command', 'timeoutMs', 'maxOutputChars'] },
+      { action: 'diff', fields: ['maxFiles'] },
+      { action: 'apply', fields: ['paths'] },
+    ] as const
+    for (const { action, fields } of scoped)
+      for (const field of fields)
+        if (input.action !== action && isNotUndefined(input[field]))
+          context.addIssue({ code: 'custom', path: [field], message: `${field} 只配合 action=${action} 使用。` })
   }),
   permissions: ['fs:read', 'fs:write', 'process:exec'],
   capabilities: ProjectExecutionCapability,
@@ -540,27 +555,27 @@ const sandboxTool = defineProjectTool<ProjectSandboxInput>({
 // ── 工具集合：按职责类别分组 ─────────────────────────────────────────────
 
 /** 读取类：读源码、列文件、搜源码。 */
-export const projectFileTools: ProjectToolCollection = Object.freeze({
+export const projectFileTools = Object.freeze({
   [ProjectToolNames.read]: readTool,
   [ProjectToolNames.list]: listTool,
   [ProjectToolNames.search]: searchTool,
 })
 
 /** 改动类：文件动作、源码编辑、组合变更。 */
-export const projectChangeTools: ProjectToolCollection = Object.freeze({
+export const projectChangeTools = Object.freeze({
   [ProjectToolNames.file]: fileTool,
   [ProjectToolNames.edit]: editTool,
   [ProjectToolNames.change]: changeTool,
 })
 
 /** 执行类：跑命令、演练沙箱。 */
-export const projectExecutionTools: ProjectToolCollection = Object.freeze({
+export const projectExecutionTools = Object.freeze({
   [ProjectToolNames.run]: runTool,
   [ProjectToolNames.sandbox]: sandboxTool,
 })
 
 /** 代码理解类：project:code。 */
-export const projectCodeTools: ProjectToolCollection = Object.freeze({
+export const projectCodeTools = Object.freeze({
   [ProjectToolNames.code]: codeTool,
 })
 
@@ -672,30 +687,6 @@ export function createProjectBundledModDefinition(): ProjectBundledModDefinition
   })
 }
 
-/** 代码图分析扩展的清单：只声明工具这一个能力轴，project:code-analysis 只在项目空间里可用。 */
-const ProjectCodeAnalysisManifest = Object.freeze<AgentModManifest>({
-  id: ProjectCodeAnalysisModId,
-  version: ProjectPackageVersion,
-  publisher: 'VelarOS',
-  displayName: 'Project code analysis',
-  description: '按需代码图分析扩展。',
-  manifestSchemaVersion: 1,
-  engines: { velaros: '*', agent: '*' },
-  trust: 'bundled-official',
-  requiredAxes: ['tools'],
-  contributes: { tools: [{ name: ProjectCodeAnalysisToolName, categoryId: 'development-code', availableInSpaces: [ProjectSpaceId] }] },
-})
-
-/** 创建可选的代码图分析扩展：只贡献 project:code-analysis，宿主给出可用性判断后单独挂载。 */
-export function createProjectCodeAnalysisContribution(isAvailable: (context: ProjectToolContext) => boolean): ProjectCodeAnalysisContribution {
-  return Object.freeze({
-    id: ProjectCodeAnalysisModId,
-    version: ProjectPackageVersion,
-    manifest: ProjectCodeAnalysisManifest,
-    bindings: Object.freeze({ tools: createProjectCodeAnalysisTools(isAvailable) }),
-  })
-}
-
 // ── 作为能力服务挂进 VelarOS 内核 ─────────────────────────────────────────
 
 /** 项目能力服务在内核里的身份令牌，宿主按它取到注入的项目工具集合。 */
@@ -720,12 +711,4 @@ export function createProjectKernelModule(options: CreateProjectKernelModuleOpti
       context.registerService(ProjectCapability, Object.freeze({ ...callable, tools: Object.freeze({ ...projectTools }) }))
     },
   })
-}
-
-// ── 项目空间：内核加工具 ───────────────────────────────────────────────────
-
-/** 创建一个项目空间：按选项建项目内核（锚定在 root），配上九个工具。 */
-export async function createProjectSpace(options: CreateProjectKernelOptions): Promise<ProjectSpace> {
-  const kernel = await createProjectKernel(options)
-  return Object.freeze({ id: ProjectSpaceId, kernel, tools: projectTools })
 }

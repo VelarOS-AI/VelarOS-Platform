@@ -58,7 +58,6 @@ async function createContext(
     abortSignal: new AbortController().signal,
     project: {
       getRootPath: () => projectRoot,
-      runInDirectory: async (_path, action) => action(),
       kernel: async () => ({
         listFiles: kernel.listFiles.bind(kernel),
         read: kernel.read.bind(kernel),

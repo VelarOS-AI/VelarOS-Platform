@@ -28,8 +28,7 @@ async function fixture() {
     abortSignal: new AbortController().signal,
     project: {
       getRootPath: () => root, kernel: async () => kernel,
-      runInDirectory: async (_path, fn) => fn(), runWithApproval: async (fn) => fn(),
-      prepareMutation: async () => ({ approved: true, rootPath: root }),
+      prepareMutation: async () => ({ approved: true, message: '已授权' }),
       queryCode: async () => ({}), runCommand: async () => ({}) as never,
     }, approval: {} as never,
   }

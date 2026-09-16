@@ -3,9 +3,6 @@
  * `project:run`、`project:sandbox` 各调一个方法：命令判定与危险命令的审批请求来自 `@velaros-ai/shell-command`，落回前的核对与确认来自 `@velaros-ai/rehearsal-sandbox`。
  */
 
-import { resolve } from 'node:path'
-
-import { AppError } from '@velaros-ai/core/error'
 import type { RehearsalSandboxRulesApi } from '@velaros-ai/rehearsal-sandbox'
 import { rehearsalSandboxRules } from '@velaros-ai/rehearsal-sandbox'
 import type { ShellCommandApprovalApi, ShellCommandPolicyApi } from '@velaros-ai/shell-command'
@@ -14,7 +11,7 @@ import { shellCommandApproval, shellCommandPolicy } from '@velaros-ai/shell-comm
 import type { ProjectToolContext } from '../../contract/requires.js'
 import type { ProjectRunInput, ProjectSandboxInput } from '../../types/tools.js'
 import { assertSandboxApplyWritable, redactCommandOutput } from '../../utils/agent/execution.js'
-import { requireSandboxPort, resolveSourceInsideProject } from '../../utils/agent/sandbox.js'
+import { requireSandboxPort, resolveCommandCwdInsideProject, resolveSourceInsideProject } from '../../utils/agent/sandbox.js'
 
 import type { ProjectExecutionGateApi } from './ProjectExecutionGate.js'
 import { projectExecutionGate } from './ProjectExecutionGate.js'
@@ -46,9 +43,10 @@ export class ProjectExecutionOperations implements ProjectExecutionOperationsApi
 
   public async run(input: ProjectRunInput, context: ProjectToolContext) {
     context.abortSignal.throwIfAborted()
+    // 工作目录先核对在项目之内：排在确认与授权之前，用户不会被问一条注定失败的命令。
+    const commandCwd = await resolveCommandCwdInsideProject(context.project.getRootPath(), input.cwd)
     const plan = this.policy.analyze(input.command)
     const background = input.background ?? plan.shouldStartInBackground
-    const commandCwd = resolve(context.project.getRootPath(), input.cwd ?? '.')
 
     if (plan.isDangerous) {
       const request = this.approvals.dangerous({ command: input.command, plan, cwd: commandCwd, background, scopeLabel: '当前项目', riskScope: 'project-command:dangerous' })
@@ -60,20 +58,20 @@ export class ProjectExecutionOperations implements ProjectExecutionOperationsApi
     if (!plan.isReadOnly) {
       const authorization = await context.project.prepareMutation({ cwd: input.cwd, operation: `运行可能修改项目的命令：${input.command}` })
       if (!authorization.approved)
-        return { approved: false, skipped: true, command: input.command, message: authorization.rejectionMessage ?? authorization.message }
+        return { approved: false, skipped: true, command: input.command, message: authorization.message }
     }
 
-    const invoke = () => context.project.runCommand(input.command, { timeoutMs: input.timeoutMs, background, maxOutputChars: input.maxOutputChars }, plan.isDangerous, context.abortSignal)
+    const invoke = () => context.project.runCommand(input.command, { cwd: input.cwd, timeoutMs: input.timeoutMs, background, maxOutputChars: input.maxOutputChars }, plan.isDangerous, context.abortSignal)
     const run = () => background ? invoke() : this.gate.run(context.project.getRootPath(), !plan.isReadOnly, context.abortSignal, invoke)
-    return redactCommandOutput(context, await (input.cwd ? context.project.runInDirectory(input.cwd, run) : run()))
+    return redactCommandOutput(context, await run())
   }
 
   public async sandbox(input: ProjectSandboxInput, context: ProjectToolContext) {
     context.abortSignal.throwIfAborted()
     const port = requireSandboxPort(context)
     const rootPath = context.project.getRootPath()
+    // sandboxId、command 这些跨字段要求由 schema 拦，执行阶段只按动作取值。
     const sandboxId = input.sandboxId ?? ''
-    if (input.action !== 'create' && !sandboxId) throw new AppError('VALIDATION', `${input.action} 需要 create 返回的 sandboxId`)
 
     if (input.action === 'create') {
       const source = await resolveSourceInsideProject(rootPath, input.source)
@@ -85,17 +83,17 @@ export class ProjectExecutionOperations implements ProjectExecutionOperationsApi
     }
 
     if (input.action === 'run') {
-      if (!input.command) throw new AppError('VALIDATION', 'run 需要 command')
+      const command = input.command ?? ''
       // 沙箱里的命令出不了镜像，所以不走项目的修改授权；危险命令仍然让用户看一眼。
-      const plan = this.policy.analyze(input.command)
+      const plan = this.policy.analyze(command)
       if (plan.isDangerous) {
-        const request = this.approvals.dangerous({ command: input.command, plan, cwd: `sandbox:${sandboxId}`, background: false, scopeLabel: `演练沙箱 ${sandboxId}`, riskScope: 'project-command:dangerous' })
+        const request = this.approvals.dangerous({ command, plan, cwd: `sandbox:${sandboxId}`, background: false, scopeLabel: `演练沙箱 ${sandboxId}`, riskScope: 'project-command:dangerous' })
         const decision = await context.approval.awaitConfirmationDecision(request.message, context.abortSignal, request.options)
-        if (!decision.approved) return { approved: false, skipped: true, sandboxId, command: input.command, message: decision.message }
+        if (!decision.approved) return { approved: false, skipped: true, sandboxId, command, message: decision.message }
       }
       return redactCommandOutput(
         context,
-        await port.runInSandbox({ sandboxId, command: input.command, timeoutMs: input.timeoutMs, maxOutputChars: input.maxOutputChars }, context.abortSignal),
+        await port.runInSandbox({ sandboxId, command, timeoutMs: input.timeoutMs, maxOutputChars: input.maxOutputChars }, context.abortSignal),
       )
     }
 
@@ -108,7 +106,7 @@ export class ProjectExecutionOperations implements ProjectExecutionOperationsApi
     if (!request) return { sandboxId, created: [], modified: [], deleted: [], skippedGit: changes.gitChanged, note: '镜像里没有文件变化，什么都没落。' }
     await assertSandboxApplyWritable(context, [...request.selection.created, ...request.selection.modified, ...request.selection.deleted])
     const authorization = await context.project.prepareMutation({ operation: `把演练沙箱 ${sandboxId} 的改动落回项目` })
-    if (!authorization.approved) return { approved: false, skipped: true, sandboxId, message: authorization.rejectionMessage ?? authorization.message }
+    if (!authorization.approved) return { approved: false, skipped: true, sandboxId, message: authorization.message }
     const decision = await context.approval.awaitConfirmationDecision(request.message, context.abortSignal, request.options)
     if (!decision.approved) return { approved: false, skipped: true, sandboxId, message: decision.message }
     return port.applySandbox({ sandboxId, paths: input.paths, fingerprint: changes.fingerprint })

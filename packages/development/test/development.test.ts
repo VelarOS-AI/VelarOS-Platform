@@ -48,15 +48,10 @@ describe('@velaros-ai/development', () => {
     try {
       await writeFile(join(root, 'user.ts'), 'export class UserService {}\n')
       const kernel = await createProjectKernel({ root })
-      let directory: string | null = null
       const context: LanguageToolContext = {
         abortSignal: new AbortController().signal,
         project: {
           getRootPath: () => root,
-          runInDirectory: async (path, action) => {
-            directory = path
-            return action()
-          },
           kernel: async () => ({
             listFiles: kernel.listFiles.bind(kernel),
             read: kernel.read.bind(kernel),
@@ -65,15 +60,15 @@ describe('@velaros-ai/development', () => {
         },
       }
 
+      // 端口上只剩项目根与内核读端口：路径一律相对项目根，没有「按目录执行」。
       const result = await executeProjectCodeLanguageQuery(
-        { action: 'find_symbols', query: 'UserService', exact: true, cwd: '.' },
+        { action: 'find_symbols', query: 'UserService', exact: true },
         context
       )
       expect(result).toMatchObject({
         source: 'language-service',
         symbolCount: 1,
       })
-      expect(directory).toBe('.')
     } finally {
       await rm(root, { recursive: true, force: true })
     }
@@ -86,7 +81,6 @@ describe('@velaros-ai/development', () => {
       abortSignal: abort.signal,
       project: {
         getRootPath: () => '/project',
-        runInDirectory: async (_path, action) => action(),
         kernel: async () => ({
           listFiles: async () => {
             abort.abort(new Error('language query cancelled'))

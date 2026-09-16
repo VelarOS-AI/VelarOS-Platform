@@ -179,15 +179,9 @@ describe('project:write 工具层', () => {
       abortSignal: new AbortController().signal,
       project: {
         getRootPath: () => root,
-        runInDirectory: async (_path, action) => action(),
         kernel: async () => createProjectKernel({ root }),
-        runWithApproval: async (action) => action(),
         prepareMutation: async () => ({
           approved: true,
-          rootPath: root,
-          switched: false,
-          alreadyAuthorized: true,
-          rejectionMessage: null,
           message: 'approved',
           authorizationScope: 'project',
         }),

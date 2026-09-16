@@ -28,9 +28,6 @@ export const ProjectPackageVersion = '2.2.0' as const
 /** 项目空间作为官方内置 mod 的身份。 */
 export const ProjectModId = 'velaros.project' as const
 
-/** 代码图分析扩展作为可选内置 mod 的身份，只贡献 project:code-analysis。 */
-export const ProjectCodeAnalysisModId = 'velaros.project.code-analysis' as const
-
 /** 项目空间自己的身份，mod 清单里声明的空间用它。 */
 export const ProjectSpaceId = 'project' as const
 
@@ -39,9 +36,9 @@ export const ProjectSpaceId = 'project' as const
  * 新的失败形态先在这里加一项，不要拿 INVALID_INPUT 兜底。
  */
 export const ProjectErrorCodes = Object.freeze({
-  /** 路径或操作被项目策略、授权或脱敏规则拒绝。 */
+  /** 路径出了项目（含经符号链接指到项目外），或被项目策略、授权、脱敏规则拒绝。 */
   permissionDenied: 'PERMISSION_DENIED',
-  /** 文件在读取之后被改过，编辑用的版本已经过期；重读再改。 */
+  /** 文件（或列举出的目录）在读取之后被改过，手里的版本已经过期；重读、重列再来。 */
   baseRevisionMismatch: 'BASE_REVISION_MISMATCH',
   /** 要读、要改的文件、符号或原文片段找不到。 */
   targetNotFound: 'TARGET_NOT_FOUND',
@@ -51,7 +48,7 @@ export const ProjectErrorCodes = Object.freeze({
   targetExists: 'TARGET_EXISTS',
   /** 补丁套不上当前内容。 */
   patchApplyError: 'PATCH_APPLY_ERROR',
-  /** 超出了允许的范围：路径出了项目或 fileRef 的可见范围，或者事务的文件数、行数超过预算。 */
+  /** 超出允许的范围：range 超出 fileRef 实际显示的范围、符号引用不属于当前项目，或者一个事务的文件数、行数超过预算。 */
   scopeViolation: 'SCOPE_VIOLATION',
   /** 目标在项目策略的受保护文件里。 */
   protectedFile: 'PROTECTED_FILE',
@@ -135,33 +132,45 @@ export const ProjectToolExposure = Object.freeze({
   } as const),
 })
 
-/** 读取类工具（project:read、project:list、project:search）的公开上限。 */
+/** 读取类工具（project:read、project:list、project:search）的公开上限与缺省值。 */
 export const ProjectFileLimits = Object.freeze({
   /** project:read 一次最多读几个文件。 */
   readFiles: 20,
   /** project:read 一次调用所有文件共用的字符预算最多多大。 */
   readChars: 500_000,
+  /** project:read 不给 maxChars 时一次调用所有文件共用的字符预算。 */
+  readCharsDefault: 24_000,
   /** project:list、project:search 的 include / exclude 各最多几条 glob。 */
   patterns: 20,
   /** project:list 递归时最多往下几层。 */
   listDepth: 30,
+  /** project:list 递归时不给 maxDepth 只往下几层。 */
+  listRecursiveDepthDefault: 3,
   /** project:list 每页最多几条。 */
   listPage: 2_000,
   /** project:list 不给 limit 时每页几条。 */
   listPageDefault: 200,
   /** project:search 最多返回几处命中。 */
   searchHits: 100,
+  /** project:search 不给 limit 时最多返回几处命中。 */
+  searchHitsDefault: 30,
   /** project:search 每处命中前后最多各带几行。 */
   searchContextLines: 10,
+  /** project:search 不给 contextLines 时每处命中前后各带几行。 */
+  searchContextLinesDefault: 1,
 })
 
-/** 改动类工具（project:file、project:edit、project:change）的公开上限。 */
+/**
+ * 改动类工具（project:file、project:edit、project:change）的公开上限：这些是 schema 的上限；
+ * 一次事务实际能改几个文件、几行，还受内核策略 `ProjectPolicyDefaults` 的 maxChangedFilesPerTransaction（缺省 100）、
+ * maxChangedLinesPerFile、maxChangedLinesPerTransaction 约束，宿主可以调高。
+ */
 export const ProjectChangeLimits = Object.freeze({
-  /** project:file 一次、project:change 一个 file 步骤最多几个文件动作。 */
+  /** project:file 一次最多几个文件动作。 */
   fileActions: 1000,
   /** 一个 recode 动作最多转换几个文件。 */
   recodePaths: 1000,
-  /** project:edit 一次、project:change 一个 edit 步骤最多改几个文件。 */
+  /** project:edit 一次最多改几个文件。 */
   editFiles: 1000,
   /** 一个文件里最多几处编辑。 */
   editsPerFile: 1000,
@@ -169,10 +178,12 @@ export const ProjectChangeLimits = Object.freeze({
   steps: 1000,
 })
 
-/** 代码理解类工具（project:code、project:code-analysis）的公开上限。 */
+/** 代码理解类工具（project:code、project:code-analysis）的公开上限与缺省值。 */
 export const ProjectCodeLimits = Object.freeze({
   /** 一次查询最多返回几条结果。 */
   results: 200,
+  /** 不给 limit 时一次查询返回几条结果。 */
+  resultsDefault: 30,
   /** 按扩展名过滤时最多给几个扩展名。 */
   extensions: 20,
   /** 扫描目录时最多往下几层。 */

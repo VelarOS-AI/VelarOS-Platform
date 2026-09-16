@@ -10,6 +10,7 @@ import { isEmpty, isPlainObject, isString, Log, optionalWhen } from '@velaros-ai
 import type { ProjectToolContext } from '../../contract/requires.js'
 import type { PrepareEditInput } from '../../types/edit.js'
 import type { ProjectEditInput, ProjectFileInput } from '../../types/editing.js'
+import type { ProjectChangeReceipt } from '../../types/project.js'
 import type { ProjectSourceWindow } from '../../types/source-window.js'
 import type { ProjectChangeInput } from '../../types/tools.js'
 import { withProjectEditRecovery } from '../../utils/agent/edit-recovery.js'
@@ -20,7 +21,10 @@ import { presentProjectContextSnapshot } from '../../utils/agent/source-window.j
 import { projectMutationDenied, projectTransactionHasChanges } from '../../utils/agent/transaction-result.js'
 import { compileProjectChange, compileProjectEdit, compileProjectFile } from '../../utils/editing/planner-index.js'
 import { ProjectError } from '../../utils/errors.js'
+import { plannedFilePaths } from '../../utils/transactions/edit-intents.js'
 import { rethrowNotApplied } from '../../utils/transactions/transaction-errors.js'
+import { ProjectTuning } from '../../utils/tuning.js'
+import { projectApprovalBridge } from '../kernel/ProjectApprovalBridge.js'
 
 import type { ProjectExecutionGateApi } from './ProjectExecutionGate.js'
 import { projectExecutionGate } from './ProjectExecutionGate.js'
@@ -77,53 +81,52 @@ export class ProjectChangeOperations implements ProjectChangeOperationsApi {
       throw new ProjectError('TARGET_NOT_FOUND', '变更回执当前不可用。', { changeRef, executionOutcome: 'not-applied' },
         'changeRef 只能原样复制本会话 edit/file/change 成功回执里的值。')
     if (input.action === 'inspect') {
-      const diff = transaction.diff.slice(0, 16_000)
+      const diff = transaction.diff.slice(0, ProjectTuning.transactions.receiptDiffChars)
       return { changeRef, transactionId: transaction.transactionId, status: transaction.status,
         oldRevisions: record.oldRevisions,
         newRevisions: record.newRevisions,
         changedFiles: transaction.changedFiles, changedLines: transaction.changedLines,
         diff, diffTruncated: diff.length < transaction.diff.length,
       }
-  }
-  const authorization = await context.project.prepareMutation({ operation: '撤销项目变更' })
-  if (!authorization.approved) throw projectMutationDenied(authorization)
-  return context.project.runWithApproval(() => this.gate.run(
-    context.project.getRootPath(), true, context.abortSignal, async () => {
-      const files = registerProjectFileContext(context)
-      try {
-        const result = await kernel.rollback({ transactionId: record.transactionId })
-        return { ...result, changeRef }
-      } finally {
-        files?.touch(context.project.getRootPath(), transaction.changedFiles)
-        await files?.prepare(context.toolCallId)
+    }
+    // 撤销是幂等的：已经撤销过就直接如实回执，不再问一次用户、也不报错。
+    if (transaction.status === 'rolled_back')
+      return {
+        changeRef, transactionId: transaction.transactionId, status: 'rolled_back', alreadyUndone: true,
+        changedFiles: transaction.changedFiles, message: '这次改动已经撤销过，不用再撤销。',
       }
-    },
-  ))
+    const authorization = await context.project.prepareMutation({ operation: '撤销项目变更', paths: [...transaction.changedFiles] })
+    if (!authorization.approved) throw projectMutationDenied(authorization)
+    return projectApprovalBridge.run({ approval: context.approval, abortSignal: context.abortSignal }, () => this.gate.run(
+      context.project.getRootPath(), true, context.abortSignal, async () => {
+        const files = registerProjectFileContext(context)
+        try {
+          const result = await kernel.rollback({ transactionId: record.transactionId })
+          return { ...result, changeRef }
+        } finally {
+          files?.touch(context.project.getRootPath(), transaction.changedFiles)
+          await files?.prepare(context.toolCallId)
+        }
+      },
+    ))
   }
 
-  /** 按计划开一个事务并提交：先过项目的修改授权，再在写门里准备、应用、刷新当前文件视图、存变更回执；计划没有写入时不开事务。失败时丢弃事务并如实报未执行。 */
-    private async applyTransaction(
+  /**
+   * 按计划开一个事务并提交：先在写门里规划（纯计算，不写盘），带着这次要写的路径过项目的修改授权，再准备、应用、刷新当前文件视图、存变更回执；
+   * 计划没有写入时不开事务。失败时丢弃事务并如实报未执行。
+   */
+  private async applyTransaction(
     input: {
       operations?: PrepareEditInput['operations']
       plan?: () => Promise<PrepareEditInput>
-      cwd?: string
       operationLabel: string
-      targetPath?: string
       baseRevisions?: Record<string, string>
     },
     context: ProjectToolContext
   ) {
     context.abortSignal.throwIfAborted()
-    const authorization = await context.project.prepareMutation({
-      cwd: input.cwd,
-      operation: input.operationLabel,
-      targetPath: input.targetPath,
-    })
-    if (!authorization.approved) throw projectMutationDenied(authorization)
-
-    return context.project.runInDirectory(authorization.rootPath, async () =>
-      context.project.runWithApproval(() =>
-        this.gate.run(
+    return projectApprovalBridge.run({ approval: context.approval, abortSignal: context.abortSignal }, () =>
+      this.gate.run(
           context.project.getRootPath(),
           true,
           context.abortSignal,
@@ -136,7 +139,7 @@ export class ProjectChangeOperations implements ProjectChangeOperationsApi {
                 baseRevisions: input.baseRevisions,
               })
               .catch(rethrowNotApplied)
-            // 计划没有产生任何写入（例如所有文件已是目标编码）时不开事务，直接回执。
+            // 计划没有产生任何写入（例如所有文件已是目标编码）时不开事务，也不打扰用户。
             if (isEmpty(plan.operations))
               return {
                 approved: true,
@@ -145,6 +148,12 @@ export class ProjectChangeOperations implements ProjectChangeOperationsApi {
                 recode: optionalWhen(isPlainObject, plan.metadata?.recode),
                 message: '没有需要写入的文件。',
               }
+            // 规划之后、开事务之前问授权：确认卡片能列出这次会写哪些文件，被拒时一个字节都没写。
+            const authorization = await context.project.prepareMutation({
+              operation: input.operationLabel,
+              paths: plannedFilePaths(plan.operations),
+            })
+            if (!authorization.approved) throw projectMutationDenied(authorization)
             const transaction = await kernel.prepareEdit(plan).catch(rethrowNotApplied)
             try {
               const applied = await kernel.applyEdit({ transactionId: transaction.transactionId })
@@ -223,20 +232,25 @@ export class ProjectChangeOperations implements ProjectChangeOperationsApi {
                 Log.tag('ProjectTransaction').warn('save_change_receipt_failed', { error: String(error) })
                 return undefined
               })
-              return {
-                changed: projectTransactionHasChanges(finalTransaction.patches),
-                contextRefreshError,
-                transactionId: transaction.transactionId,
+              // 宿主界面按这几个字段画改动摘要（合同在 types/project.ts 的 ProjectChangeReceipt），
+              // 字段名与内核 ApplyResult 一致：读结果过期判断、「已编辑」统计和改动摘要都按 newRevisions 读，
+              // 新建的文件靠「不在 oldRevisions 里」认出来；以前这里叫 revisions，那几处全都读空。
+              const receipt: ProjectChangeReceipt = {
                 changeRef: changeRef ?? transaction.transactionId,
+                transactionId: transaction.transactionId,
+                changed: projectTransactionHasChanges(finalTransaction.patches),
                 changedFiles: applied.changedFiles,
-                // 字段名与内核 ApplyResult 一致：Agent 的读结果过期判断、「已编辑」统计和宿主的改动摘要都按
-                // newRevisions 读；以前这里叫 revisions，这几处全都读空。
+                oldRevisions: applied.oldRevisions,
                 newRevisions: applied.newRevisions,
+              }
+              const diff = finalTransaction.diff.slice(0, ProjectTuning.transactions.receiptDiffChars)
+              return {
+                ...receipt,
+                contextRefreshError,
                 files,
-                diff: finalTransaction.diff.slice(0, 16_000),
-                diffTruncated: finalTransaction.diff.length > 16_000,
-                changedLines: finalTransaction.changedLines,
-                risk: transaction.risk,
+                diff,
+                diffTruncated: diff.length < finalTransaction.diff.length,
+                diffLines: finalTransaction.changedLines,
                 notes: optionalWhen(!isEmpty(notes), notes),
                 recode: optionalWhen(isPlainObject, transaction.metadata?.recode),
               }
@@ -247,7 +261,6 @@ export class ProjectChangeOperations implements ProjectChangeOperationsApi {
             }
           }
         )
-      )
     )
   }
 }

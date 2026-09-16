@@ -28,8 +28,7 @@ async function contextFor(): Promise<ProjectToolContext> {
     abortSignal: new AbortController().signal,
     project: {
       getRootPath: () => root, kernel: async () => kernel,
-      runInDirectory: async (_path, run) => run(), runWithApproval: async (run) => run(),
-      prepareMutation: async () => ({ approved: true, rootPath: root }),
+      prepareMutation: async () => ({ approved: true, message: '已授权' }),
       queryCode: async () => ({}), runCommand: async () => ({}) as never,
     }, approval: {} as never,
   } as unknown as ProjectToolContext

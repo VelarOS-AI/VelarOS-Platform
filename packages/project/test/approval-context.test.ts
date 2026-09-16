@@ -2,7 +2,7 @@ import { resolve } from 'node:path'
 
 import { describe, expect, test } from 'bun:test'
 
-import { projectApprovalBridge } from '../src/impl/operations/ProjectApprovalBridge.js'
+import { projectApprovalBridge } from '../src/impl/kernel/ProjectApprovalBridge.js'
 import { projectTools } from '../src/impl/ProjectTools.js'
 
 describe('project approval context', () => {

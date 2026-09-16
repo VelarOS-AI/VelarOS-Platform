@@ -6,6 +6,7 @@ import { relative, resolve } from 'node:path'
 
 import { isArray, isEmpty, isNumber, isPlainObject, isString, isTrue, numberOrNull, optionalWhen, toOptional } from '@velaros-ai/core'
 
+import { ProjectCodeLimits } from '../../contract/constants.js'
 import type { ProjectToolContext } from '../../contract/requires.js'
 import type { ProjectSymbol } from '../../types/adapter.js'
 import type { CodeSymbolTarget, RecordValue } from '../../types/agent.js'
@@ -59,18 +60,15 @@ function boundRelations(result: RecordValue, limit: number): RecordValue {
   return { ...bounded, truncated }
 }
 
-/** 从 project:code 的入参里取出交给语言服务的公共范围：语言、工作目录、条数上限、扩展名与目录深度。 */
+/** 从 project:code 的入参里取出交给语言服务的公共范围：语言、条数上限、扩展名与目录深度。 */
 function scope(input: ProjectCodeScope): ProjectCodeScope {
-  return { language: input.language, cwd: input.cwd, limit: input.limit, extensions: input.extensions, maxDepth: input.maxDepth }
+  return { language: input.language, limit: input.limit, extensions: input.extensions, maxDepth: input.maxDepth }
 }
 
-/** 代码能力目录：关系查询后端没启用时随降级回执一起给出，告诉模型哪些动作在哪个工具、哪些依赖宿主。 */
+/** 代码能力目录：关系查询后端没启用时随降级回执一起给出，只列模型自己调得到的动作。 */
 export const ProjectCodeCapabilityCatalogue = Object.freeze({
-  tool: 'project:code',
-  discovery: 'tooling:map',
   actions: ['symbols', 'references', 'dependencies', 'relations', 'impact', 'diagnostics'],
-  extensions: [{ id: 'project:code-analysis', actions: ['trace', 'cycles', 'deadcode', 'routing'], availability: 'host-dependent' }],
-  host: { index: ['build_index', 'index_status'], taskContext: 'build_context' },
+  extensions: [{ tool: 'project:code-analysis', actions: ['trace', 'cycles', 'deadcode', 'routing'], note: '宿主有代码图后端时才有' }],
 })
 
 /** 这个错误是不是「后端没启用」：code 为 UNAVAILABLE 或 reason 为 NOT_SUPPORTED；是的话调用方降级说明，不当成查询失败。 */
@@ -92,7 +90,7 @@ function envelope(input: { action: string; path?: string; language?: string; lim
       language: input.language,
       scannedFiles: result.scannedFiles,
       truncated: isTrue(result.truncated),
-      limit: input.limit ?? ProjectTuning.codeQuery.defaultResults,
+      limit: input.limit ?? ProjectCodeLimits.resultsDefault,
       version: result.revision ? 'backend-reported' : 'unversioned-locations',
       revisions: result.revision ? [{ revision: result.revision, scope: result.source ?? 'host' }] : [],
       ...record(result.coverage ?? {}),
@@ -182,7 +180,7 @@ async function symbols(input: Extract<ProjectCodeInput, { action: 'symbols' }>, 
   if (input.exact && input.query) items = items.filter((item) => item.name === input.query)
   if (isEmpty(items) && input.query && !input.exportedOnly) {
     try {
-      const graph = await query({ action: 'search_symbols', query: input.query, kind: input.kinds?.length === 1 ? input.kinds[0] : undefined, limit: Math.min(ProjectTuning.codeQuery.graphCandidates, input.limit ?? ProjectTuning.codeQuery.defaultResults) }, context)
+      const graph = await query({ action: 'search_symbols', query: input.query, kind: input.kinds?.length === 1 ? input.kinds[0] : undefined, limit: Math.min(ProjectTuning.codeQuery.graphCandidates, input.limit ?? ProjectCodeLimits.resultsDefault) }, context)
       items = graphRows(graph).filter((item) =>
         isString(item.name) && item.name.toLocaleLowerCase('en-US').includes(input.query!.toLocaleLowerCase('en-US')) &&
         (!input.path || (isString(item.path) && (sameCodePath(context.project.getRootPath(), item.path, input.path) || item.path.startsWith(`${input.path.replace(/\/$/, '')}/`)))) &&
@@ -206,8 +204,8 @@ async function relations(input: Extract<ProjectCodeInput, { action: 'relations' 
     const target = await graphTarget(input.target, context)
     if (input.kind === 'calls') {
       const parts: RecordValue = {}
-      if (input.direction !== 'outgoing') parts.incoming = boundRelations(await query({ action: 'callers', nodeId: target.nodeId, depth: input.depth }, context), input.limit ?? ProjectTuning.codeQuery.defaultResults)
-      if (input.direction !== 'incoming') parts.outgoing = boundRelations(await query({ action: 'callees', nodeId: target.nodeId, depth: input.depth }, context), input.limit ?? ProjectTuning.codeQuery.defaultResults)
+      if (input.direction !== 'outgoing') parts.incoming = boundRelations(await query({ action: 'callers', nodeId: target.nodeId, depth: input.depth }, context), input.limit ?? ProjectCodeLimits.resultsDefault)
+      if (input.direction !== 'incoming') parts.outgoing = boundRelations(await query({ action: 'callees', nodeId: target.nodeId, depth: input.depth }, context), input.limit ?? ProjectCodeLimits.resultsDefault)
       return envelope(input, { ...parts, truncated: Object.values(parts).some((part) => record(part).truncated), sources: Object.values(parts).map((part) => ({ backend: record(part).source ?? 'codegraph' })) })
     }
     const result = await query(input.kind === 'types' ? { action: 'type_hierarchy', nodeId: target.nodeId } : { action: 'explore', nodeIds: [target.nodeId] }, context)
@@ -224,9 +222,9 @@ async function relations(input: Extract<ProjectCodeInput, { action: 'relations' 
         frontier = new Set([...next].filter((id) => !selected.has(id)))
         for (const id of frontier) selected.add(id)
       }
-      return envelope(input, boundRelations({ ...result, nodes: rows(result.nodes).filter((item) => selected.has(String(item.id))), relations: edges.filter((edge) => selected.has(String(edge.from)) && selected.has(String(edge.to))) }, input.limit ?? ProjectTuning.codeQuery.defaultResults), { direction: input.direction })
+      return envelope(input, boundRelations({ ...result, nodes: rows(result.nodes).filter((item) => selected.has(String(item.id))), relations: edges.filter((edge) => selected.has(String(edge.from)) && selected.has(String(edge.to))) }, input.limit ?? ProjectCodeLimits.resultsDefault), { direction: input.direction })
     }
-    return envelope(input, boundRelations(result, input.limit ?? ProjectTuning.codeQuery.defaultResults), { requestedDirection: input.direction, degraded: [
+    return envelope(input, boundRelations(result, input.limit ?? ProjectCodeLimits.resultsDefault), { requestedDirection: input.direction, degraded: [
       ...(isString(result.degraded) ? [result.degraded] : []),
       ...(input.direction === 'both' ? [] : ['当前图后端未提供可验证的边方向，返回双向关系；没有把未分类节点伪装成指定方向。']),
     ] })
@@ -236,22 +234,9 @@ async function relations(input: Extract<ProjectCodeInput, { action: 'relations' 
   }
 }
 
-/** 代码查询：symbols、references、dependencies、relations、impact、diagnostics；cwd 先换算成项目内的绝对路径再查。结果统一装进带来源与覆盖范围的信封。 */
+/** 代码查询：symbols、references、dependencies、relations、impact、diagnostics；路径一律相对项目根。结果统一装进带来源与覆盖范围的信封。 */
 export async function queryProjectCode(input: ProjectCodeInput, context: ProjectToolContext): Promise<RecordValue> {
   context.abortSignal.throwIfAborted()
-  if (input.cwd) return context.project.runInDirectory(input.cwd, () => {
-    const directory = resolve(context.project.getRootPath(), input.cwd!)
-    const scoped = { ...input, cwd: undefined }
-    if (input.action === 'dependencies' && input.direction === 'incoming') {
-      if (input.path) Object.assign(scoped, { path: resolve(directory, input.path) })
-      Object.assign(scoped, { within: resolve(directory, input.within ?? '.') })
-    } else if (input.action !== 'relations' && !(input.action === 'symbols' && input.target)) {
-      Object.assign(scoped, { path: resolve(directory, input.path ?? '.') })
-    }
-    if ('target' in input && input.target && 'path' in input.target)
-      Object.assign(scoped, { target: { ...input.target, path: resolve(directory, input.target.path) } })
-    return queryProjectCode(scoped, context)
-  })
   switch (input.action) {
     case 'symbols': return symbols(input, context)
     case 'relations': return relations(input, context)
@@ -300,15 +285,8 @@ export async function analyzeProjectCode(input: ProjectCodeAnalysisInput, contex
       break
     }
     case 'cycles': request = { action: 'find_cycles', maxFiles: input.maxFiles }; break
-    case 'deadcode': request = { action: 'find_dead_code', limit: input.limit ?? ProjectTuning.codeQuery.defaultResults }; break
+    case 'deadcode': request = { action: 'find_dead_code', limit: input.limit ?? ProjectCodeLimits.resultsDefault }; break
     case 'routing': request = { action: 'routing_manifest', framework: input.framework }; break
   }
   return envelope(input, await query(request, context))
-}
-
-/** 代码索引的生命周期（重建、查状态）：宿主接口，模型的只读工具碰不到它。 */
-export async function indexProjectCode(
-  input: { action: 'build_index'; force?: boolean } | { action: 'index_status' }, context: ProjectToolContext,
-) {
-  return query(input.action === 'build_index' ? { ...input, force: input.force ?? true } : input, context)
 }

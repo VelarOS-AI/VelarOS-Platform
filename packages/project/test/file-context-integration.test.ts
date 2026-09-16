@@ -38,9 +38,7 @@ async function fixture(options: Parameters<typeof createProjectKernel>[0] = { ro
     project: {
       getRootPath: () => root,
       kernel: async () => kernel,
-      runInDirectory: async (_path, run) => run(),
-      runWithApproval: async (run) => run(),
-      prepareMutation: async () => ({ approved: true, rootPath: root }),
+      prepareMutation: async () => ({ approved: true, message: '已授权' }),
       queryCode: async () => ({}),
       runCommand: async () => ({}) as never,
     },

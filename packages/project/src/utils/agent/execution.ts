@@ -4,10 +4,10 @@
  */
 
 import { isEmpty, isString } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
 
 import type { ProjectToolContext } from '../../contract/requires.js'
 import type { ProjectCommandResult } from '../../types/project.js'
+import { ProjectError } from '../errors.js'
 import { ProjectTuning } from '../tuning.js'
 
 /**
@@ -34,8 +34,10 @@ export async function assertSandboxApplyWritable(context: ProjectToolContext, pa
   if (isEmpty(blocked)) return
   const listed = blocked.slice(0, ProjectTuning.execution.reportedBlockedPaths).map((decision) => `${decision.path}（${decision.reason}）`)
   const rest = blocked.length > listed.length ? `，另有 ${blocked.length - listed.length} 条` : ''
-  throw new AppError(
-    'VALIDATION',
-    `这些路径项目不许写，整批没落：${listed.join('、')}${rest}。下一步：用 paths 点名要落的文件、把它们去掉再 apply。`,
+  throw new ProjectError(
+    'PERMISSION_DENIED',
+    `这些路径项目不许写，整批没落：${listed.join('、')}${rest}。`,
+    { paths: blocked.slice(0, ProjectTuning.execution.reportedBlockedPaths).map((decision) => decision.path), blocked: blocked.length },
+    '用 paths 点名要落的文件、把它们去掉再 apply。',
   )
 }

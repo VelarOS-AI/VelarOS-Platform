@@ -136,7 +136,10 @@ async function planSource(plan: ProjectFilePlanState, selector: ProjectPlanSourc
   }
   const { identity } = binding
   if (identity.deleted) throw new ProjectError('TARGET_NOT_FOUND', '引用文件已在本计划删除。')
-  if (!follows && identity.generation > 0) throw new ProjectError('BASE_REVISION_MISMATCH', 'fileRef 的原始视图已经被前序计划步骤修改。', { path: identity.view.path }, '后续步骤使用 sourceRef 跟随当前计划中的文件身份。')
+  if (!follows && identity.generation > 0) throw new ProjectError('INVALID_INPUT',
+    `这一步引用的文件已被本计划前面的步骤移动或修改（现在是 ${identity.view.path}）。`,
+    { path: identity.view.path },
+    '把这一项的键名 fileRef 改成 sourceRef，值不变；range 按前面步骤改完后的内容算，拿不准就用 match。')
   return binding
 }
 

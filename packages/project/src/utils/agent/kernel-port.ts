@@ -224,7 +224,7 @@ export async function executeAgentProjectSearch(
   project: AgentProjectKernelPort,
   input: AgentProjectSearchRequest
 ): Promise<AgentProjectSearchResult> {
-  const requestedLimit = input.limit ?? ProjectTuning.search.defaultHits
+  const requestedLimit = input.limit ?? ProjectFileLimits.searchHitsDefault
   const effectiveLimit = Math.min(ProjectFileLimits.searchHits, Math.max(1, requestedLimit))
   const result = await project.search({
     query: input.query,

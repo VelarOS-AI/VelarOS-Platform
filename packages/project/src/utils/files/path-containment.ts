@@ -4,6 +4,8 @@
  * 真实路径由 `@velaros-ai/core` 的 `resolveRealPath` 算：写入路径在检查时通常还不存在（create_file），
  * 它把路径解析到最近一个存在的祖先再把尚不存在的尾巴拼回去，「祖先目录里有软链指向 root 外」照样抓得到。
  */
+import { resolve as resolvePath } from 'node:path'
+
 import { isNull } from '@velaros-ai/core'
 import { resolveRealPath } from '@velaros-ai/core/utils/RealPath'
 import { currentPlatform } from '@velaros-ai/platform'
@@ -15,6 +17,22 @@ import { isInsideRoot } from '../path.js'
 export function relativeInsideRealRoot(realRoot: string, realPath: string): Nullable<string> {
   const relative = currentPlatform.relativePathTextInside(realPath, realRoot, { caseSensitive: true })
   return isNull(relative) || relative === '.' ? null : relative
+}
+
+/**
+ * 把项目内的相对路径（或项目内的绝对路径）解析成绝对路径，并按解开符号链接后的真实路径核对它还在不在项目之内：
+ * 只看字面时，项目里一个指向项目外的链接目录就能把边界绕过去。返回解析后的绝对路径、真实路径和判定结果，
+ * 拒绝时的文字由调用方按用途给（沙箱源目录、命令工作目录各说各的）。
+ */
+export async function resolveInsideProject(
+  rootPath: string,
+  requested: string,
+): Promise<{ resolved: string; realPath: string; inside: boolean }> {
+  const resolved = resolvePath(rootPath, requested)
+  const realRoot = await resolveRealPath(rootPath)
+  const realPath = await resolveRealPath(resolved)
+  // 真实路径已经解开，按字面比（realpath 给出的就是盘上的写法）。
+  return { resolved, realPath, inside: currentPlatform.isPathTextInside(realPath, realRoot, { caseSensitive: true }) }
 }
 
 /**

@@ -8,21 +8,21 @@
 // ── 子集入口 ────────────────────────────────────────────────────
 export * from './contracts.js'
 
-// ── 产品面：工具、内置 mod、项目空间、内核挂载、领域内核、有限事务面、落盘变更记录、审批桥、文件上下文登记 ───────
-export type { ProjectBundledModDefinition, ProjectCapabilityService, ProjectChangeFeed, ProjectCodeAnalysisContribution, ProjectSpace, ProjectToolCollection, VelaTool } from '../contract/provides.js'
+// ── 产品面：工具、内置 mod、内核挂载、领域内核、有限事务面、落盘变更记录、审批桥、文件上下文登记 ───────
+export type { ProjectBundledModDefinition, ProjectCapabilityService, ProjectChangeFeed, ProjectChangeTool, ProjectCodeAnalysisToolCollection, ProjectToolCollection, VelaTool } from '../contract/provides.js'
 export type { ProjectKernel } from '../impl/kernel/LocalProjectKernel.js'
 export { createProjectKernel } from '../impl/kernel/LocalProjectKernel.js'
 export { createSecretRedactionProvider } from '../impl/kernel/PatternSecretRedactionProvider.js'
+export type { ProjectApprovalBridgeApi } from '../impl/kernel/ProjectApprovalBridge.js'
+export { projectApprovalBridge } from '../impl/kernel/ProjectApprovalBridge.js'
 export type { ProjectTransactionControllerApi } from '../impl/kernel/ProjectTransactionController.js'
 export { createProjectTransactionController } from '../impl/kernel/ProjectTransactionController.js'
-export type { ProjectApprovalBridgeApi } from '../impl/operations/ProjectApprovalBridge.js'
-export { projectApprovalBridge } from '../impl/operations/ProjectApprovalBridge.js'
 export type { ProjectFileContextApi } from '../impl/operations/ProjectFileContext.js'
 export { projectFileContext } from '../impl/operations/ProjectFileContext.js'
 export type { FileProjectChangeFeedApi } from '../impl/persistence/FileProjectChangeFeed.js'
 export { createFileProjectChangeFeed } from '../impl/persistence/FileProjectChangeFeed.js'
 export { typescriptPlugin } from '../impl/plugins/TypeScriptProjectPlugin.js'
-export { createProjectBundledModDefinition, createProjectCodeAnalysisContribution, createProjectCodeAnalysisTools, createProjectKernelModule, createProjectSpace, ProjectCapability, projectTools } from '../impl/ProjectTools.js'
+export { createProjectBundledModDefinition, createProjectCodeAnalysisTools, createProjectKernelModule, ProjectCapability, projectTools } from '../impl/ProjectTools.js'
 
 // ── 注入面：宿主要给的东西，以及插件与扩展点 ─────────────────────────
 export type {
@@ -68,7 +68,7 @@ export type { FixFileContent, FixInput, FixResult, ProjectFixContext } from '../
 export type { HookContext, HookEvent } from '../types/hook.js'
 export type { FileListEntry, FileStatInput, FileStatResult, ObserveInput, ReadInput, ReadResult, SearchHit, SearchInput, SearchResult } from '../types/io.js'
 export type { PatchStrategyInput } from '../types/patch.js'
-export type { PipelineContext } from '../types/pipeline.js'
+export type { PipelineContext, PipelinePhase } from '../types/pipeline.js'
 export type { TypeScriptPluginOptions } from '../types/plugins.js'
 export type { ApprovalRequest, CorePolicy, PolicyDecision, PolicyDecisionInput } from '../types/policy.js'
 export type { CommandRunInput, CommandRunResult, CommandToolRequirement, CommandToolRequirementKind, FileFilterInput, ProjectIntelligenceLocation, ProjectIntelligenceSymbol, ProjectRuntimeProviders, RedactionInput, RedactionResult } from '../types/provider.js'

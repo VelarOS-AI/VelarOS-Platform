@@ -5,17 +5,10 @@
 
 /** 项目包的可调参数，按用途分组。 */
 export const ProjectTuning = Object.freeze({
-  /** project:read 读源码（utils/agent/project-files.ts）的字符预算。 */
-  read: Object.freeze({
-    /** 没给 maxChars 时一次调用所有文件共用的字符预算；上限是 ProjectFileLimits.readChars。 */
-    defaultMaxChars: 24_000,
-  }),
-  /** project:search 搜源码（utils/agent/project-files.ts、kernel-port.ts）：缺省命中条数，以及命中列表与源码窗口交给模型的总量。 */
+  /** project:search 搜源码（utils/agent/project-files.ts、kernel-port.ts）：命中列表与源码窗口交给模型的总量（缺省命中条数是对外承诺，在常量表）。 */
   search: Object.freeze({
     /** 命中合成的源码窗口总共最多多少字符（按呈现给模型的 JSON 算，含路径、版本、引用这些固定元数据）；装不下的命中只留定位。 */
     windowBudgetChars: 12_000,
-    /** 没给 limit 时最多返回几处命中；上限是 ProjectFileLimits.searchHits。 */
-    defaultHits: 30,
     /** 命中列表（只含路径、版本、范围、片段）按 JSON 算最多多少字符；装不下的命中截掉并标 truncated，让模型收窄条件。 */
     hitsBudgetChars: 24_000,
   }),
@@ -44,10 +37,8 @@ export const ProjectTuning = Object.freeze({
     /** 编辑后视图在每段改动前后各多带几行。 */
     changeContextLines: 5,
   }),
-  /** 代码查询（utils/agent/code-query.ts）：project:code 与 project:code-analysis 的缺省条数和回执体量。 */
+  /** 代码查询（utils/agent/code-query.ts）：project:code 与 project:code-analysis 的回执体量（缺省条数是对外承诺，在常量表）。 */
   codeQuery: Object.freeze({
-    /** 没给 limit 时一次查询返回几条（关系、死代码候选同样按它）；上限见 ProjectCodeLimits。 */
-    defaultResults: 30,
     /** 按符号名到代码图谱找节点时最多取几个候选；符号搜索回退到代码图谱时也不超过它。 */
     graphCandidates: 50,
     /** 关系查询结果里 output、relationshipMap 这类整段文字最多留多少字符，超出截断并标 truncated。 */
@@ -65,8 +56,10 @@ export const ProjectTuning = Object.freeze({
     /** 一次正则扫描（整份文件）最多跑多少毫秒；超时按 INVALID_INPUT 拒绝并让模型改写更具体的 query。 */
     executionTimeoutMs: 1_000,
   }),
-  /** 事务：编辑失败的回读建议、校验失败回执、校验结果复用。 */
+  /** 事务：回执带多长的差量、编辑失败的回读建议、校验失败回执、校验结果复用。 */
   transactions: Object.freeze({
+    /** 提交回执与 project:change 的 inspect 各带多少字符的差量；超出截断并标 diffTruncated，要看全的去读改后的文件。 */
+    receiptDiffChars: 16_000,
     /** 编辑在 prepare 失败时，回执里建议模型回读出错文件用的 project:read maxChars（字符）。 */
     recoveryReadMaxChars: 12_000,
     /** 知道出错行时，建议回读的范围从出错行往上多读几行。 */
@@ -138,8 +131,6 @@ export const ProjectTuning = Object.freeze({
     searchTextKindIdleMs: 60_000,
     /** 列目录没给 maxFiles 时最多列多少条。 */
     listMaxFiles: 5_000,
-    /** 递归列目录没给 maxDepth 时往下走几层。 */
-    listRecursiveDepth: 3,
     /** observe 扫描工作区没给 maxDepth 时往下走几层。 */
     observeDepth: 20,
     /** 文件层跑的 git 子命令（check-ignore、add --intent-to-add、rm --cached、diff --cached）的超时，毫秒。 */

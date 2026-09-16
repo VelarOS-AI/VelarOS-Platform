@@ -23,7 +23,6 @@ async function createContext(projectRoot: string): Promise<LanguageToolContext> 
     abortSignal: new AbortController().signal,
     project: {
       getRootPath: () => projectRoot,
-      runInDirectory: async (_path, action) => action(),
       kernel: async () => ({
         listFiles: kernel.listFiles.bind(kernel),
         read: kernel.read.bind(kernel),

@@ -47,14 +47,15 @@ describe('Project Agent boundary', () => {
     const source = readFileSync(resolve(SourceRoot, 'contract/requires.ts'), 'utf8')
     for (const field of [
       'getRootPath',
-      'runInDirectory',
       'kernel',
-      'runWithApproval',
       'prepareMutation',
       'runCommand',
       'queryCode',
     ]) expect(source).toContain(field)
+    // 端口上只留工具真会调的方法：按目录执行、包审批上下文这两件事已经收回包内（cwd 经 runCommand.options，审批经 projectApprovalBridge）。
     for (const removedField of [
+      'runInDirectory',
+      'runWithApproval',
       'codingSession',
       'projectSandbox',
       'listRoots',

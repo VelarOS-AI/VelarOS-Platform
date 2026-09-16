@@ -13,13 +13,16 @@ import type { ProjectApprovalContext } from '../../types/agent.js'
 import type { ApprovalRequest } from '../../types/policy.js'
 
 /**
- * 项目审批桥：宿主在执行一次工具调用时用 run 标出这次调用的审批端口，并给内核 install 一次审批 provider；
- * 这之后内核发起的审批请求都交给当前那次调用的审批端口，确认卡片列出动作、原因和涉及的路径。不在任何调用里时一律拒绝。
+ * 项目审批桥：改动工具在提交与撤销时用 run 标出这次调用的审批端口，内核发起的审批请求就交给它，确认卡片列出动作、原因和涉及的路径；
+ * 不在任何工具调用里时一律拒绝。`createProjectKernel` 在宿主没给 `providers.approval` 时默认装的就是它，宿主不必再接一次；
+ * 自己组装 providers 的宿主可以用 install 把它装到别的内核上。
  */
 export interface ProjectApprovalBridgeApi {
   /** 在给定的工具审批上下文里执行 action：action 期间内核发起的审批都交给这次调用的审批端口。 */
   run<T>(context: ProjectApprovalContext, action: () => Promise<T>): Promise<T>
-  /** 给内核装上审批 provider：审批请求交给当前上下文的审批端口；没有上下文时拒绝。 */
+  /** 这座桥作为内核的审批后端：审批请求交给当前上下文的审批端口；没有上下文时拒绝。 */
+  provider(): ApprovalProvider
+  /** 给内核装上审批 provider：等价于把 provider() 写进它的 providers.approval。 */
   install(kernel: { providers: { approval?: ApprovalProvider } }): void
 }
 
@@ -30,8 +33,12 @@ export class ProjectApprovalBridge implements ProjectApprovalBridgeApi {
     return this.store.run(context, action)
   }
 
+  public provider(): ApprovalProvider {
+    return { approve: (request) => this.approve(request) }
+  }
+
   public install(kernel: { providers: { approval?: ApprovalProvider } }): void {
-    kernel.providers.approval = { approve: (request) => this.approve(request) }
+    kernel.providers.approval = this.provider()
   }
 
   /** 把一次内核审批请求交给当前调用的审批端口：高风险的标高风险，操作键按动作与排好序的路径生成，同一操作只问一次。 */

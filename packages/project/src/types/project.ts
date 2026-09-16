@@ -7,58 +7,12 @@ import type { ProjectCodeLanguageActions } from '../contract/constants.js'
 
 // ── 命令 ──────────────────────────────────────────────────────────
 
-/** 缺命令时给用户的一个替代做法：id 与三段中英文案（按钮标签、说明、填进输入框的草稿）。 */
-export interface ProjectToolInstallAlternative {
-  id: string
-  label: {
-    'zh-CN': string
-    'en-US': string
-  }
-  description: {
-    'zh-CN': string
-    'en-US': string
-  }
-  draft: {
-    'zh-CN': string
-    'en-US': string
-  }
-}
-
-/** 命令因为缺工具失败时附带的安装建议：缺的是哪个命令、哪个包、能不能一键安装、由哪次命令触发，以及替代做法。 */
-export interface ProjectToolInstallSuggestion {
-  id: string
-  toolId: string
-  label: string
-  command: string
-  packageName: string
-  reason: string
-  installCommand: Nullable<string>
-  installAvailable: boolean
-  detectedAt: number
-  triggeredBy: {
-    scope: 'project' | 'system'
-    command: string
-  }
-  alternatives?: ProjectToolInstallAlternative[]
-}
-
-/** 会话风险确认自动批准了一次项目修改时，给界面显示的一条记录：改的是哪条路径、为什么放行、什么时候。 */
-export interface ProjectAutoApprovalNotice {
-  id: string
-  path: string
-  reason: string
-  action: 'add' | 'mutation'
-  message: string
-  approvedAt: number
-}
-
-/** 宿主 runCommand 的选项：工作目录、超时、是否后台、输出上限，以及发起命令的会话。 */
+/** 宿主 runCommand 的选项：工作目录（相对项目根，工具已核对过在项目之内）、超时、是否后台、输出上限。 */
 export interface ProjectRunCommandOptions {
   cwd?: string
   timeoutMs?: number
   background?: boolean
   maxOutputChars?: number
-  sessionId?: string
 }
 
 /** 后台命令起来之后宿主报告的进程事实：任务号、进程号、日志、占用端口，以及结束它的命令。 */
@@ -87,7 +41,7 @@ export interface ProjectCommandOutputCapture {
   error?: string
 }
 
-/** 一条命令跑完的结果：退出码与信号、输出、耗时、是否超时或中止、输出是否截断，按命令类型归纳的验证结论，缺工具时的安装建议。 */
+/** 一条命令跑完的结果：退出码与信号、输出、耗时、是否超时或中止、输出是否截断，以及按命令类型归纳的验证结论。 */
 export interface ProjectCommandResult {
   command: string
   cwd: string
@@ -106,7 +60,6 @@ export interface ProjectCommandResult {
   success: boolean
   backgroundProcess?: LooseOptional<ProjectBackgroundProcessInfo>
   verification: ProjectVerificationSummary
-  systemToolSuggestion?: LooseOptional<ProjectToolInstallSuggestion>
 }
 
 /** 命令属于哪类验证：构建、代码检查、测试、类型检查，认不出是 unknown。 */
@@ -124,16 +77,14 @@ export interface ProjectVerificationSummary {
 
 // ── 项目修改授权 ──────────────────────────────────────────────────
 
-/** 项目写操作授权请求；这是全仓唯一权威定义。 */
+/** 项目写操作的授权请求：做什么、在哪个目录、会写哪些文件（相对项目根）。这是全仓唯一权威定义。 */
 export interface ProjectMutationAuthorizationInput {
-  /** 可选当前工作目录。 */
-  cwd?: string
-  /** 操作名称，用于生成确认文案。 */
+  /** 给用户看的操作名，如「编辑项目源码」。 */
   operation: string
-  /** 目标路径；为空时按 cwd 或当前 root 判断。 */
-  targetPath?: LooseOptional<string>
-  /** 授权通过后是否激活该 root。 */
-  activate?: boolean
+  /** project:run 的工作目录（相对项目根，工具已核对过在项目之内）；文件改动不带。 */
+  cwd?: string
+  /** 这次会写入的文件（相对项目根）：文件改动在规划之后、提交之前填，命令不填。 */
+  paths?: string[]
 }
 
 /** 一条路径的写治理判定：不许写时 reason 是合同错误原因（PERMISSION_DENIED、SCOPE_VIOLATION、PROTECTED_FILE、GENERATED_FILE）。 */
@@ -148,31 +99,34 @@ export interface ProjectWriteAuthorization {
   message?: string
 }
 
-/** 项目变更的授权范围。 */
-export type ProjectMutationAuthorizationScope = 'operation' | 'project'
-
-/** 项目变更授权决策结果。 */
+/** 项目变更授权的决定：批不批准，以及给模型看的说明（被拒时就是拒绝原因）。宿主自己的实现可以多返回字段，结构上兼容。 */
 export interface ProjectAuthorizationDecision {
-  /** 用户/策略是否允许本次操作。 */
+  /** 用户或策略允不允许这次写操作。 */
   approved: boolean
-  /** 本次决策对应的项目 root。 */
-  rootPath: string
-  /** 是否发生了 active root 切换。 */
-  switched: boolean
-  /** 目标 root 是否原本就已授权。 */
-  alreadyAuthorized: boolean
-  /** 拒绝时给工具/模型看的原因。 */
-  rejectionMessage: Nullable<string>
-  /** 成功或拒绝的可读说明。 */
+  /** 给模型看的说明：批准时是放行理由，被拒时是拒绝原因，工具原样交给模型。 */
   message: string
-  /** 本次没有立即激活，而是发出了非阻塞提示。 */
-  deferred?: boolean
-  /** 会话风险确认自动批准触发时的可见 UI 记录。 */
-  projectAutoApprovalNotice?: ProjectAutoApprovalNotice
-  /** 本次确认是否由会话风险确认策略完成。 */
-  autoApproved?: boolean
-  /** 授权范围。 */
-  authorizationScope?: ProjectMutationAuthorizationScope
+}
+
+// ── 改动回执（模型与界面共用的那几个字段） ───────────────────────────
+
+/**
+ * project:edit、project:file、project:change(apply) 成功后的回执里，宿主界面可以依赖的字段：模型凭 changeRef 查看或撤销，
+ * 界面按 changedFiles 与前后版本画改动摘要。回执里另有只给模型看的字段（files、diff、diffLines、notes、recode），
+ * 它们跟着说明与上下文预算走，不进这份合同。
+ */
+export interface ProjectChangeReceipt {
+  /** 凭它 inspect、undo；模型只用这个。 */
+  changeRef: string
+  /** 事务号，给界面当这次改动的标识。 */
+  transactionId: string
+  /** 真有改动时为 true；已是目标格式的 recode 这类没写任何字节的为 false。 */
+  changed: boolean
+  /** 改动涉及的文件，相对项目根。 */
+  changedFiles: string[]
+  /** 提交前每个文件的版本；这次新建的文件不在里面，界面据此认出新建。 */
+  oldRevisions: Record<string, string>
+  /** 提交后每个文件的版本；删掉的文件记为 'deleted'。 */
+  newRevisions: Record<string, string>
 }
 
 // ── 演练沙箱（数据形状在 @velaros-ai/rehearsal-sandbox，这里只有项目空间独有的镜像里跑命令） ──
@@ -189,22 +143,19 @@ export interface ProjectSandboxRunOptions {
 // project:code 的入参由本包翻译成下面的查询交给宿主：语言服务类动作（find_symbols 等七个）由宿主的语言服务执行，
 // 其余是代码索引类动作，宿主有代码图谱时执行。缺省值已经填好，数字已经钳在范围之内。
 
-/** 代码查询共用的范围：语言、工作目录、条数上限（1–200）、扩展名（最多 20 个）、目录深度（0–16）。模型的 project:code 入参与宿主收到的语言服务查询共用它。 */
+/** 代码查询共用的范围：语言、条数上限（1–200）、扩展名（最多 20 个）、目录深度（0–16）。模型的 project:code 入参与宿主收到的语言服务查询共用它；路径一律相对项目根。 */
 export interface ProjectCodeScope {
   language?: string
-  cwd?: string
   limit?: number
   extensions?: string[]
   maxDepth?: number
 }
 
-/** 代码索引类查询：按名字搜符号、按任务收集上下文、展开节点、追调用链、看影响面、找环与死代码、路由清单、建索引与看索引状态。 */
+/** 代码索引类查询：按名字搜符号、展开节点、追调用链、看影响面、找环与死代码、路由清单。索引本身的生命周期归宿主，本包不发这类查询。 */
 export type ProjectCodeIndexQuery =
   | { action: 'search_symbols'; query: string; kind?: string; limit: number }
-  | { action: 'build_context'; task: string; maxNodes: number }
   | { action: 'explore'; nodeIds: string[] }
   | { action: 'trace'; fromSymbol: string; toSymbol: string }
-  | { action: 'read_node'; nodeId: string }
   | { action: 'callers'; nodeId: string; depth: number }
   | { action: 'callees'; nodeId: string; depth: number }
   | { action: 'impact'; nodeId: string; depth: number }
@@ -213,12 +164,10 @@ export type ProjectCodeIndexQuery =
   | { action: 'find_cycles'; maxFiles?: number }
   | { action: 'find_dead_code'; limit: number }
   | { action: 'routing_manifest'; framework?: string }
-  | { action: 'build_index'; force: boolean }
-  | { action: 'index_status' }
 
 /** 语言服务类查询：找符号、列导出、看一个文件引了谁、看谁引了它、找引用、诊断、符号改动的影响面。 */
 export type ProjectCodeLanguageQuery = ProjectCodeScope & (
-  | { action: 'find_symbols'; query?: string; path?: string; exportedOnly?: boolean; kinds?: string[]; exact?: boolean }
+  | { action: 'find_symbols'; query?: string; path?: string; kinds?: string[]; exact?: boolean }
   | { action: 'list_exports'; path?: string; query?: string; includeReExports?: boolean }
   | { action: 'find_imports'; path?: string; specifier?: string; kind?: string; includeExternal?: boolean }
   | { action: 'find_importers'; targetPath?: string; specifier?: string; path?: string; includeReExports?: boolean }

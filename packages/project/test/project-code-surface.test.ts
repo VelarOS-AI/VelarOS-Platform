@@ -35,9 +35,7 @@ async function fixture(handler: (input: ProjectCodeQuery) => unknown = () => ({}
     project: {
       getRootPath: () => root,
       kernel: async () => kernel,
-      runInDirectory: async (_path, action) => action(),
-      runWithApproval: async (action) => action(),
-      prepareMutation: async () => ({ approved: true, rootPath: root }),
+      prepareMutation: async () => ({ approved: true, message: '已授权' }),
       runCommand: async () => ({}) as never,
       queryCode: async (input) => { calls.push(input); return handler(input) },
     },
@@ -131,7 +129,10 @@ describe('six-action semantic query surface', () => {
     const result = await run({ action: 'relations', kind: 'calls', target })
     expect(result.relations).toEqual([])
     expect(result.degraded).not.toEqual([])
-    expect(result.capabilities).toMatchObject({ discovery: 'tooling:map' })
+    // 能力目录只列模型自己调得到的动作，不点名发现入口，也不列宿主内部的索引动作。
+    expect(result.capabilities).toMatchObject({ actions: ['symbols', 'references', 'dependencies', 'relations', 'impact', 'diagnostics'] })
+    expect(JSON.stringify(result.capabilities)).not.toContain('tooling:map')
+    expect(JSON.stringify(result.capabilities)).not.toContain('build_index')
   })
 
   test('diagnostics retain limited coverage and unsupported language notes', async () => {
@@ -153,15 +154,15 @@ describe('six-action semantic query surface', () => {
     expect(result.relatedTestPaths).toEqual(['service.test.ts'])
   })
 
-  test('extensions and index lifecycle remain outside the six-action schema', async () => {
+  test('extensions stay in project:code-analysis and index lifecycle is not part of this package', async () => {
     const { context, calls } = await fixture(() => ({ candidates: [{ name: 'possibleUnused' }] }))
     for (const action of ['trace', 'cycles', 'deadcode', 'routing', 'build_index', 'index_status', 'build_context'])
       expect(ProjectCodeSchema.safeParse({ action }).success).toBe(false)
     await projectCodeOperations.codeAnalysis(ProjectCodeAnalysisSchema.parse({ action: 'deadcode', limit: 4 }), context)
     await projectCodeOperations.codeAnalysis(ProjectCodeAnalysisSchema.parse({ action: 'cycles', maxFiles: 40 }), context)
     await projectCodeOperations.codeAnalysis(ProjectCodeAnalysisSchema.parse({ action: 'routing', framework: 'velar' }), context)
-    await projectCodeOperations.codeIndex({ action: 'build_index', force: false }, context)
-    await projectCodeOperations.codeIndex({ action: 'index_status' }, context)
-    expect(calls).toEqual([{ action: 'find_dead_code', limit: 4 }, { action: 'find_cycles', maxFiles: 40 }, { action: 'routing_manifest', framework: 'velar' }, { action: 'build_index', force: false }, { action: 'index_status' }])
+    // 索引的建与查是宿主自己的事：本包不再有走到它的路径，也不发这两条查询。
+    expect(Object.keys(projectCodeOperations)).not.toContain('codeIndex')
+    expect(calls).toEqual([{ action: 'find_dead_code', limit: 4 }, { action: 'find_cycles', maxFiles: 40 }, { action: 'routing_manifest', framework: 'velar' }])
   })
 })

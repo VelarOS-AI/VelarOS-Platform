@@ -127,7 +127,8 @@ export async function loadProjectFileView(context: ProjectReferenceContext, file
     throw new ProjectError('INVALID_INPUT', '这不是可编辑的 fileRef：编辑只接受当前视图或读取结果里的 view:… 引用。', { ref: fileRef }, ReadForReferenceNextAction)
   const source = await resolveProjectFileSource(context, record.source)
   const kernel = await context.project.kernel()
-  if (!kernel.prepareContextSnapshot) throw new ProjectError('INVALID_INPUT', '历史快照的授权检查不可用。')
+  if (!kernel.prepareContextSnapshot) throw new ProjectError('NOT_SUPPORTED', '当前宿主没有实现历史快照的授权检查，凭 fileRef 的改动都用不了。', undefined,
+    '这是宿主缺能力，不是入参问题：告诉用户这个宿主接的项目内核缺 prepareContextSnapshot。')
   const authorized = await kernel.prepareContextSnapshot({ path: source.path, content: source.content })
   if (authorized.redacted || authorized.content !== source.content)
     throw new ProjectError('PERMISSION_DENIED', '当前项目策略限制了该引用对应的源码，不能用它编辑。', { path: source.path })

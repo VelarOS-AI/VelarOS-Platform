@@ -26,6 +26,7 @@ import type {
   SearchInput,
   SearchResult,
 } from '../../types/io.js'
+import type { PipelinePhase } from '../../types/pipeline.js'
 import type { CorePolicy, PolicyDecisionInput } from '../../types/policy.js'
 import type { ProjectRuntimeProviders } from '../../types/provider.js'
 import type { FileSnapshot, ProjectSnapshot } from '../../types/snapshot.js'
@@ -101,7 +102,7 @@ export interface ProjectQueriesDependencies {
   /** 发一个内核生命周期 hook 事件；hook 抛错会中止这次查询。 */
   readonly emit: (event: HookEvent, data: unknown) => Promise<void>
   /** 让入参过一遍某个阶段（如 read.input）的管线，返回改写后的入参。 */
-  readonly transform: <T>(phase: string, input: T) => Promise<T>
+  readonly transform: <T>(phase: PipelinePhase, input: T) => Promise<T>
 }
 
 export class ProjectQueries implements ProjectQueriesApi {

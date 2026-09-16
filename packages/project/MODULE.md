@@ -20,11 +20,9 @@
 
 | 值 | 接口 | 做什么 |
 | --- | --- | --- |
-| `projectTools` | `ProjectToolCollection`，元素是 `VelaTool` | 九个模型面工具 |
-| `createProjectCodeAnalysisTools` | `ProjectToolCollection` | 可选的 project:code-analysis，宿主有代码图后端时单独登记 |
+| `projectTools` | `ProjectToolCollection`，元素是 `VelaTool`；三个改动工具是 `ProjectChangeTool` | 九个模型面工具 |
+| `createProjectCodeAnalysisTools` | `ProjectCodeAnalysisToolCollection` | 可选的 project:code-analysis，宿主有代码图后端时单独登记 |
 | `createProjectBundledModDefinition` | `ProjectBundledModDefinition` | 项目空间作为官方内置 mod 的定义 |
-| `createProjectCodeAnalysisContribution` | `ProjectCodeAnalysisContribution` | 代码图分析扩展作为可选内置 mod 的定义 |
-| `createProjectSpace` | `ProjectSpace` | 一个项目根上的领域内核加九个工具 |
 | `createProjectKernelModule` | 上游的 `KernelModuleDefinition` | 挂进内核的模块 |
 | `ProjectCapability` | 能力令牌，服务是 `ProjectCapabilityService` | 在内核里按名调用项目工具 |
 | `createProjectKernel` | `ProjectKernel` | 领域内核：读写、事务、校验、撤销、代码查询 |
@@ -39,14 +37,14 @@
 
 | 注入点 | 必须 | 谁给、什么时候 |
 | --- | --- | --- |
-| `ProjectToolContext` / `ProjectToolApi` | 是 | 宿主在每次工具调用时给：项目根、按目录执行、修改授权、跑命令、领域内核端口 `AgentProjectKernelPort`、代码查询 `queryCode`，可选的沙箱端口 `ProjectSandboxPort` |
+| `ProjectToolContext` / `ProjectToolApi` | 是 | 宿主在每次工具调用时给：项目根、领域内核端口 `AgentProjectKernelPort`、修改授权、跑命令、代码查询 `queryCode`，可选的沙箱端口 `ProjectSandboxPort` |
 | `CreateProjectKernelOptions` / `ProjectProviders` | 是 | 建内核时给：项目根、策略覆盖、事务状态文件、变更记录写端 `ProjectChangeFeedWriter`，以及可选的策略、审批、文件过滤、脱敏、证据包、日志、命令、遥测、代码智能后端（`PolicyProvider`、`ApprovalProvider`、`FileFilterProvider`、`SecretRedactionProvider`、`ContextProvider`、`LoggerProvider`、`CommandProvider`、`TelemetryProvider`、`ProjectCodeIntelligenceHost`） |
 | `ProjectPlugin` / `ProjectPluginContext` | 否 | 插件扩展点：`FileAdapter`、`FileAdapterFactory`、`PatchStrategy`、`ProjectValidator`、`ProjectFixer`、`ProjectHook`、`PipelineStage` |
 | `CreateProjectKernelModuleOptions` / `ProjectToolContextResolver` | 挂进内核且要按名调用时 | 产品壳按作用域给出一次工具调用的上下文 |
 
-**常量表**是 `contract/constants.ts`：工具与 mod 身份（`ProjectToolNames`、`ProjectCodeAnalysisToolName`、`ProjectModId`、`ProjectCodeAnalysisModId`、`ProjectSpaceId`、`ProjectPackageVersion`）、错误原因 `ProjectErrorCodes`、入参契约版本 `ProjectToolContract`、工具排位 `ProjectToolExposure`、公开上限（`ProjectFileLimits`、`ProjectChangeLimits`、`ProjectCodeLimits`、`ProjectCommandLimits`、`ProjectSandboxLimits`、`ProjectTransactionLimits`）、内核缺省策略 `ProjectPolicyDefaults`、宿主代码查询的语言服务动作 `ProjectCodeLanguageActions`。工具说明与 schema 里的数字都引它们。
+**常量表**是 `contract/constants.ts`：工具与 mod 身份（`ProjectToolNames`、`ProjectCodeAnalysisToolName`、`ProjectModId`、`ProjectSpaceId`、`ProjectPackageVersion`）、错误原因 `ProjectErrorCodes`、入参契约版本 `ProjectToolContract`、工具排位 `ProjectToolExposure`、公开上限与模型面缺省值（`ProjectFileLimits`、`ProjectChangeLimits`、`ProjectCodeLimits`、`ProjectCommandLimits`、`ProjectTransactionLimits`）、内核缺省策略 `ProjectPolicyDefaults`、宿主代码查询的语言服务动作 `ProjectCodeLanguageActions`。工具说明与 schema 里的数字都引它们；沙箱的上限在 `@velaros-ai/rehearsal-sandbox` 的 `RehearsalSandboxLimits`。
 
-**数据面**是 `types/`，只放类型；`types/project.ts` 是可移植数据（宿主端口上流动的命令回执、授权决定、沙箱数据、宿主代码查询）。
+**数据面**是 `types/`，只放类型；`types/project.ts` 是可移植数据（宿主端口上流动的命令回执、授权决定、改动回执 `ProjectChangeReceipt`、在镜像里跑命令的选项、宿主代码查询）。
 
 两个入口对应 `package.json` 的 `exports`，源文件在 `src/exports/`，只有转发语句：
 
@@ -63,7 +61,7 @@
 | --- | --- |
 | `project:read` | 执行门读锁 → 内核 stat/read（授权、脱敏、按行列与字符预算截取）→ 源码窗口（`[行号, 原文]`）→ 文件上下文协调器定稿时签发 fileRef（绑定路径、版本、看到的范围） |
 | `project:list`、`project:search` | 执行门读锁 → 内核列举（gitignore 与策略过滤）/ 搜索（有 ripgrep 用 ripgrep，没有逐文件扫）→ 搜索命中带可编辑的源码窗口 |
-| `project:edit`、`project:file`、`project:change` | 执行门写锁 → 按 fileRef 取回读取时的版本与可见范围 → 规划成编辑意图（范围越界、定位不唯一在这里拒绝）→ 内核准备事务（补丁、差量、风险，不碰磁盘）→ 修改授权 → 应用（校验、审批、按版本核对、全成或全逆序还原）→ 回执带新 fileRef 与 changeRef；失败标 not-applied，入参可复用 |
+| `project:edit`、`project:file`、`project:change` | 执行门写锁 → 按 fileRef 取回读取时的版本与可见范围 → 规划成编辑意图（范围越界、定位不唯一在这里拒绝）→ 带着要写的路径过修改授权 → 内核准备事务（补丁、差量、风险，不碰磁盘）→ 应用（校验、审批、按版本核对、全成或全逆序还原）→ 回执带新 fileRef 与 changeRef；失败标 not-applied，入参可复用 |
 | `project:code` | 执行门读锁 → 翻译成宿主代码查询（语言服务类由宿主语言服务执行，代码索引类由代码图谱执行）→ 附来源、覆盖与降级信息 |
 | `project:code-analysis` | 宿主有代码图后端时单独登记 → 执行门读锁 → trace、cycles、deadcode、routing 翻译成代码索引类查询交给宿主 → 附来源与覆盖 |
 | `project:run` | 命令判定（`@velaros-ai/shell-command`）→ 危险命令每次由用户亲自确认 → 会改项目的先过修改授权 → 前台在执行门里跑（只读走读锁）、后台交宿主的任务管理 → 输出经宿主的脱敏后端 |
@@ -97,7 +95,7 @@
 
 - 错误原因只来自 `ProjectErrorCodes`，挂在 `ProjectError.reason`；经内核调用时翻成 `AppError`，原因在 `context.projectError`。
 - 改动类失败在回执里标 `details.executionOutcome = 'not-applied'`，入参可复用（`inputReuse`）。
-- 版本过期 `BASE_REVISION_MISMATCH`、越出可见范围或项目 `SCOPE_VIOLATION` / `PERMISSION_DENIED`、撤销遇外部修改 `CONFLICT_WITH_EXTERNAL_EDIT`、生成文件 `GENERATED_FILE`、重启恢复遇到无法归属的改动 `TRANSACTION_RECOVERY_CONFLICT`、模型给的正则写错或跑不完 `INVALID_INPUT`。
+- 版本过期（文件或列举出的目录）`BASE_REVISION_MISMATCH`；range 超出看到的范围 `SCOPE_VIOLATION`；路径出了项目 `PERMISSION_DENIED`；撤销遇外部修改 `CONFLICT_WITH_EXTERNAL_EDIT`；生成文件 `GENERATED_FILE`；受保护文件 `PROTECTED_FILE`；重启恢复遇到无法归属的改动 `TRANSACTION_RECOVERY_CONFLICT`；宿主缺能力 `NOT_SUPPORTED`；模型给的正则写错或跑不完 `INVALID_INPUT`。
 - 改动已被字节预算挤出可撤销历史时，撤销报 `NOT_SUPPORTED` 并说明没有留下撤销记录（改动本身仍在变更记录里可查）；事务号根本不存在才是 `INVALID_INPUT`。
 - 命令自己失败不抛错，如实写进回执；用户或宿主拒绝时返回 `skipped`，不执行。
 
@@ -119,9 +117,9 @@ src/
   contract/     对外合同：provides.ts（产品面，登记类上方接口）、requires.ts（注入面）、constants.ts（常量表）
   types/        只放类型，按域分文件；project.ts 是可移植数据
   impl/         一类一文件，按层分子目录（上层可以引下层）：
-    ProjectTools.ts    九个工具的定义、分组、内置 mod、内核挂载、项目空间
-    operations/        工具背后的执行类：文件、改动、执行、代码，执行门、审批桥、文件上下文登记
-    kernel/            领域内核 LocalProjectKernel，有限事务面，命令与脱敏后端
+    ProjectTools.ts    九个工具的定义、分组、内置 mod、内核挂载
+    operations/        工具背后的执行类：文件、改动、执行、代码，执行门、文件上下文登记
+    kernel/            领域内核 LocalProjectKernel，有限事务面，命令、审批与脱敏后端
     plugins/           核心插件、TypeScript 插件与它们的校验器
     transactions/ files/ strategies/ adapters/ registries/ persistence/   事务、文件访问、补丁策略、文件适配器、登记表、持久化
   utils/        纯函数与可调参数（tuning.ts）；agent/（Agent 适配）、editing/（编辑规划）、files/（文件读写）、kernel/、transactions/ 按域分子目录
@@ -135,10 +133,10 @@ test/           实现细节测试；test/support 是第 1 版工具驱动器与
 | 层 | 实现文件 | 接口 |
 | --- | --- | --- |
 | 工具 | `ProjectTools.ts` | 没有类 |
-| operations | `ProjectFileOperations`、`ProjectChangeOperations`、`ProjectExecutionOperations`、`ProjectCodeOperations`、`ProjectExecutionGate`、`ProjectApprovalBridge`、`ProjectFileContext` | 同名加 `Api`，写在各自类上方 |
+| operations | `ProjectFileOperations`、`ProjectChangeOperations`、`ProjectExecutionOperations`、`ProjectCodeOperations`、`ProjectExecutionGate`、`ProjectFileContext` | 同名加 `Api`，写在各自类上方 |
 | kernel | `LocalProjectKernel` | `ProjectKernel`（provides 登记）、`ProjectPluginContext`（requires）、`LocalProjectKernelStartup` |
 | kernel | `ProjectTransactionController` | `ProjectTransactionControllerApi`（provides 登记） |
-| kernel | `NodeCommandProvider`、`PatternSecretRedactionProvider` | `CommandProvider`、`SecretRedactionProvider`（requires） |
+| kernel | `NodeCommandProvider`、`ProjectApprovalBridge`、`PatternSecretRedactionProvider` | `CommandProvider`、`ProjectApprovalBridgeApi`（provides 登记）、`SecretRedactionProvider`（requires） |
 | plugins | `CoreProjectPlugin`、`TypeScriptProjectPlugin` | `ProjectPlugin`（requires） |
 | plugins | `ScopeValidator`、`PostconditionValidator`、`TypeScriptSyntaxValidator` | `ProjectValidator`（requires） |
 | transactions | `TransactionPlanner`、`TransactionCoordinator`、`TransactionOverlay`、`TransactionValidation`、`TransactionStateMachine`、`TransactionRepository`、`TransactionProjectionRepository`、`TransactionRecovery`、`LockManager` | 同名加 `Api` |

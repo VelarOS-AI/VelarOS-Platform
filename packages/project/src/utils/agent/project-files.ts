@@ -8,6 +8,7 @@ import { createHash } from 'node:crypto'
 import type { FileContextSnapshot } from '@velaros-ai/agent/tool-contract'
 import { isEmpty, isNotUndefined, Log, optionalWhen } from '@velaros-ai/core'
 
+import { ProjectFileLimits } from '../../contract/constants.js'
 import type { ProjectToolContext } from '../../contract/requires.js'
 import type { ListCursor } from '../../types/agent.js'
 import type { AgentProjectReadResult } from '../../types/agent-port.js'
@@ -40,7 +41,7 @@ export async function readProjectSource(input: ProjectReadInput, context: Projec
   const requests = page ? [{ path: page.path, range: page.range, baseRevision: page.revision }]
     : parsed.files?.map((file) => ({ path: file.path, range: readLineRange(file.range), baseRevision: undefined }))
       ?? [{ path: parsed.path!, range: readLineRange(parsed.range), baseRevision: undefined }]
-  let remaining = parsed.maxChars ?? ProjectTuning.read.defaultMaxChars
+  let remaining = parsed.maxChars ?? ProjectFileLimits.readCharsDefault
   const files: ProjectSourceWindow[] = []
   const issues: unknown[] = []
   const snapshots: AgentProjectReadResult[] = []
@@ -81,7 +82,7 @@ export async function searchProjectSource(input: ProjectSearchInput, context: Pr
   const coordinator = registerProjectFileContext(context)
   const sequence = coordinator?.beginObservation()
   const result = await executeAgentProjectSearch(kernel, input)
-  const contextLines = input.contextLines ?? 1
+  const contextLines = input.contextLines ?? ProjectFileLimits.searchContextLinesDefault
   const windows = new Map<string, { path: string; revision: string; startLine: number; endLine: number }>()
   for (const hit of result.hits) {
     if (!hit.range || !hit.revision) continue
@@ -145,9 +146,9 @@ export async function listProjectEntries(input: ProjectListInput, context: Proje
   context.abortSignal.throwIfAborted()
   const fingerprint = createHash('sha256').update(JSON.stringify(scanned)).digest('hex')
   if (saved && saved.fingerprint !== fingerprint)
-    throw new ProjectError('INVALID_INPUT', '目录条目已变化，分页游标已过期。', {
+    throw new ProjectError('BASE_REVISION_MISMATCH', '这个目录在上一页之后变过，cursor 已经过期。', {
       restart: query,
-    }, '使用返回的 restart 条件重新列举。')
+    }, '去掉 cursor、按 restart 里的条件重新列一次，再用新回执里的 cursor 续页。')
   const offset = saved?.offset ?? 0
   const available = scanned.slice(0, ProjectTuning.list.maxEntries)
   const entries = available.slice(offset, offset + input.limit)

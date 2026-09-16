@@ -8,6 +8,7 @@ import { DefaultToolContractExampleRegistry } from '@velaros-ai/agent/tool-contr
 import { isArray, isPresent, isUndefined, Log } from '@velaros-ai/core'
 
 import type { ProjectToolCollection } from '../../src/contract/provides.js'
+import { projectApprovalBridge } from '../../src/impl/kernel/ProjectApprovalBridge'
 import { projectChangeOperations } from '../../src/impl/operations/ProjectChangeOperations'
 import { projectExecutionGate } from '../../src/impl/operations/ProjectExecutionGate'
 import { projectTools } from '../../src/impl/ProjectTools'
@@ -394,7 +395,7 @@ const projectRollback = defineProjectTool<{ transactionId: string }>({
   isConcurrencySafe: () => false,
   execute: async (input, context) => {
     context.abortSignal.throwIfAborted()
-    return context.project.runWithApproval(() =>
+    return projectApprovalBridge.run({ approval: context.approval, abortSignal: context.abortSignal }, () =>
       projectExecutionGate.run(
         context.project.getRootPath(),
         true,

@@ -33,14 +33,12 @@ function contextFor(options: { port?: ProjectSandboxPort; approved?: boolean; co
   const blocked = new Set(options.blockedPaths ?? [])
   const project: Record<string, unknown> = {
     getRootPath: () => root,
-    runInDirectory: async (_path: string, run: () => Promise<unknown>) => run(),
-    runWithApproval: async (run: () => Promise<unknown>) => run(),
     kernel: async () => ({
       authorizeWrites: async (paths: readonly string[]) =>
         paths.map((path) => (blocked.has(path) ? { path, allowed: false, reason: 'GENERATED_FILE', message: `${path} 是生成文件` } : { path, allowed: true })),
       redactText: async ({ content }: { content: string }) => (options.redact ? { content: content.replace(/sk-[a-z0-9-]+/gi, '[REDACTED]'), redacted: true } : { content, redacted: false }),
     }),
-    prepareMutation: async () => ({ approved: options.approved !== false, rootPath: root, rejectionMessage: 'fixture rejected' }),
+    prepareMutation: async () => ({ approved: options.approved !== false, message: options.approved === false ? 'fixture rejected' : '已授权' }),
     runCommand: async () => { throw new Error('not needed') },
     queryCode: async () => ({}),
   }
@@ -61,7 +59,7 @@ describe('project:sandbox', () => {
     expect(tool.hideWhenUnavailable).toBe(true)
     expect(tool.isAvailable?.(contextFor({}))).toBe(false)
     expect(tool.isAvailable?.(contextFor({ port: fakePort([]) }))).toBe(true)
-    await expect(call({ action: 'create' }, contextFor({}))).rejects.toMatchObject({ code: 'UNAVAILABLE' })
+    await expect(call({ action: 'create' }, contextFor({}))).rejects.toMatchObject({ reason: 'NOT_SUPPORTED' })
   })
 
   test('create mirrors the project or a directory inside it, never a path outside', async () => {
@@ -84,8 +82,9 @@ describe('project:sandbox', () => {
   test('run needs the sandbox id and a command, hands both to the host, and asks before dangerous commands', async () => {
     const calls: Array<Record<string, unknown>> = []
     const context = contextFor({ port: fakePort(calls), confirmed: false })
-    await expect(call({ action: 'run', command: 'ls' }, context)).rejects.toMatchObject({ code: 'VALIDATION' })
-    await expect(call({ action: 'run', sandboxId: 'sb' }, context)).rejects.toMatchObject({ code: 'VALIDATION' })
+    // 缺字段由 schema 拦，不再等到执行阶段。
+    expect(tool.schema.safeParse({ action: 'run', command: 'ls' }).success).toBe(false)
+    expect(tool.schema.safeParse({ action: 'run', sandboxId: 'sb' }).success).toBe(false)
     const ran = await call({ action: 'run', sandboxId: 'sb', command: 'bun scripts/migrate.ts', timeoutMs: 1000 }, context) as { stdout: string }
     expect(ran.stdout).toBe('ran')
     expect(calls[0]).toEqual({ run: { sandboxId: 'sb', command: 'bun scripts/migrate.ts', timeoutMs: 1000, maxOutputChars: undefined } })
@@ -140,10 +139,10 @@ describe('project:sandbox', () => {
     const original = approval.awaitConfirmationDecision
     approval.awaitConfirmationDecision = async (message: string) => { asked.push(message); return original(message) }
 
-    const refusal = await call({ action: 'apply', sandboxId: 'sb' }, context).catch((error: { code: string; message: string }) => error)
-    expect(refusal).toMatchObject({ code: 'VALIDATION' })
+    const refusal = await call({ action: 'apply', sandboxId: 'sb' }, context).catch((error: { reason: string; message: string }) => error)
+    expect(refusal).toMatchObject({ reason: 'PERMISSION_DENIED' })
     expect((refusal as { message: string }).message).toContain('src/a.ts（GENERATED_FILE）')
-    expect((refusal as { message: string }).message).toContain('用 paths 点名要落的文件')
+    expect((refusal as { suggestedNextAction: string }).suggestedNextAction).toContain('用 paths 点名要落的文件')
     // 问用户之前就拒绝，被拒的一个都不落。
     expect(asked).toEqual([])
     expect(calls.some((entry) => 'apply' in entry)).toBe(false)

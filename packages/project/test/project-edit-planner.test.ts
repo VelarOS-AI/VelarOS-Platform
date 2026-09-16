@@ -269,7 +269,8 @@ describe('compiled plans on the real transaction engine', () => {
     views.set('a.txt', { ...views.get('a.txt')!, coverage: [{ startOffset: 0, endOffset: 8, startLine: 1, endLine: 1, completeLines: true }] })
     const first = { tool: 'edit' as const, files: [{ fileRef: 'a.txt', edits: [{ op: 'replace' as const, range: 1, text: 'new\nvisible' }] }] }
     await expect(compileProjectChange({ action: 'apply', steps: [first, { tool: 'edit', files: [{ sourceRef: 'a.txt', edits: [{ op: 'replace', range: 3, text: 'bad' }] }] }] }, resolver)).rejects.toMatchObject({ reason: 'SCOPE_VIOLATION' })
-    await expect(compileProjectChange({ action: 'apply', steps: [first, { tool: 'edit', files: [{ fileRef: 'a.txt', edits: [{ op: 'replace', range: 1, text: 'bad' }] }] }] }, resolver)).rejects.toMatchObject({ reason: 'BASE_REVISION_MISMATCH' })
+    // 前面的步骤动过这个文件：这是入参该换成 sourceRef，不是版本过期。
+    await expect(compileProjectChange({ action: 'apply', steps: [first, { tool: 'edit', files: [{ fileRef: 'a.txt', edits: [{ op: 'replace', range: 1, text: 'bad' }] }] }] }, resolver)).rejects.toMatchObject({ reason: 'INVALID_INPUT', suggestedNextAction: expect.stringContaining('sourceRef') })
     const valid = await compileProjectChange({ action: 'apply', steps: [first, { tool: 'edit', files: [{ sourceRef: 'a.txt', edits: [{ op: 'replace', range: 2, text: 'known' }] }] }] }, resolver)
     expect(valid.operations.at(-1)?.operation).toMatchObject({ content: 'new\nknown\nhidden\n' })
   })
@@ -279,7 +280,7 @@ describe('compiled plans on the real transaction engine', () => {
     await expect(compileProjectFile({ actions: [{ op: 'create', path: './a.txt', text: 'bad' }] }, resolver)).rejects.toMatchObject({ reason: 'TARGET_EXISTS', details: { path: 'a.txt' } })
     await expect(compileProjectFile({ actions: [{ op: 'move', fileRef: 'a.txt', to: 'b.txt' }] }, resolver)).rejects.toMatchObject({ reason: 'TARGET_EXISTS', details: { path: 'b.txt' } })
     await expect(compileProjectChange({ action: 'apply', steps: [{ tool: 'edit', files: [{ path: 'a.txt', edits: [{ op: 'replace', range: 1, text: 'bad' }] }] }] }, resolver)).rejects.toMatchObject({ reason: 'TARGET_NOT_FOUND' })
-    await expect(compileProjectFile({ actions: [{ op: 'overwrite', fileRef: 'a.txt', text: 'new' }, { op: 'delete', fileRef: 'a.txt' }] }, resolver)).rejects.toMatchObject({ reason: 'BASE_REVISION_MISMATCH' })
+    await expect(compileProjectFile({ actions: [{ op: 'overwrite', fileRef: 'a.txt', text: 'new' }, { op: 'delete', fileRef: 'a.txt' }] }, resolver)).rejects.toMatchObject({ reason: 'INVALID_INPUT' })
   })
 
   test.each(['before-prepare', 'before-apply'])('content CAS rejects same metadata external changes %s', async (timing) => {

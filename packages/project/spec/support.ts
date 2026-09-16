@@ -29,6 +29,8 @@ export async function createProjectHarness(root: string, options: ProjectHarness
   const kernel = await createProjectKernel({ root, corePolicy: options.corePolicy, providers: options.providers })
   const confirmations: RecordedConfirmation[] = []
   const mutations: string[] = []
+  /** 每次修改授权带来的、这次会写的文件（相对项目根）；断言确认卡片列得出要改哪些文件。 */
+  const authorizedPaths: string[][] = []
   const commands: string[] = []
   const approved = options.approve !== false
   const context = {
@@ -49,12 +51,11 @@ export async function createProjectHarness(root: string, options: ProjectHarness
     project: {
       getRootPath: () => root,
       kernel: async () => kernel,
-      runInDirectory: async <T>(_path: string, run: () => Promise<T>) => run(),
-      runWithApproval: async <T>(run: () => Promise<T>) => run(),
-      prepareMutation: async ({ operation }: { operation: string }) => {
+      prepareMutation: async ({ operation, paths }: { operation: string; paths?: string[] }) => {
         mutations.push(operation)
+        authorizedPaths.push(paths ?? [])
         const authorized = options.authorizeMutation !== false
-        return { approved: authorized, rootPath: root, switched: false, alreadyAuthorized: authorized, rejectionMessage: authorized ? null : '宿主没有授权修改这个项目', message: authorized ? '已授权' : '未授权' }
+        return { approved: authorized, message: authorized ? '已授权' : '宿主没有授权修改这个项目' }
       },
       sandbox: options.sandbox,
       queryCode: async () => ({}),
@@ -80,5 +81,5 @@ export async function createProjectHarness(root: string, options: ProjectHarness
     if (range !== undefined) args.range = range
     return (await call('project:read', args)).files[0]
   }
-  return { kernel, context, call, read, confirmations, mutations, commands }
+  return { kernel, context, call, read, confirmations, mutations, authorizedPaths, commands }
 }

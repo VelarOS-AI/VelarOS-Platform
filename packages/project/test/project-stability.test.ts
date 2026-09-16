@@ -40,15 +40,9 @@ function projectContext(root: string, signal: AbortSignal): ProjectToolContext {
     abortSignal: signal,
     project: {
       getRootPath: () => root,
-      runInDirectory: async (_path, action) => action(),
       kernel: async () => createProjectKernel({ root }),
-      runWithApproval: async (action) => action(),
       prepareMutation: async () => ({
         approved: true,
-        rootPath: root,
-        switched: false,
-        alreadyAuthorized: true,
-        rejectionMessage: null,
         message: 'approved',
         authorizationScope: 'project',
       }),

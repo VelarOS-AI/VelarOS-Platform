@@ -149,7 +149,7 @@ describe('编辑的边界', () => {
     }
     await writeFile(join(root, 'notes.txt'), 'notes\n')
     const { call, confirmations, mutations } = await createProjectHarness(root, { sandbox: sandbox as never, corePolicy: { writeDeny: ['deploy.key'] } })
-    await expect(call('project:sandbox', { action: 'apply', sandboxId: 'sb' })).rejects.toMatchObject({ code: 'VALIDATION' })
+    await expect(call('project:sandbox', { action: 'apply', sandboxId: 'sb' })).rejects.toMatchObject({ reason: 'PERMISSION_DENIED' })
     // 生成文件与 writeDeny 的路径都点名了；拒绝发生在修改授权与用户确认之前，宿主一个文件都没落。
     expect(mutations).toEqual([])
     expect(confirmations).toEqual([])

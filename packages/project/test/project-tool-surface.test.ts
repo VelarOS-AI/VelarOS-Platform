@@ -32,9 +32,7 @@ async function fixture(options: { approved?: boolean; readDeny?: string[]; provi
     project: {
       getRootPath: () => root,
       kernel: async () => kernel,
-      runInDirectory: async (_path, run) => run(),
-      runWithApproval: async (run) => run(),
-      prepareMutation: async () => ({ approved: options.approved !== false, rootPath: root, rejectionMessage: 'fixture rejected' }),
+      prepareMutation: async () => ({ approved: options.approved !== false, message: options.approved === false ? 'fixture rejected' : '已授权' }),
       queryCode: async () => ({}),
       runCommand: async (command, commandOptions, _allowDangerous, signal) => {
         // 能不能起后台进程由宿主在执行时决定；这个假宿主不支持后台。
@@ -248,7 +246,8 @@ describe('actual Project tool surface with final model references', () => {
     expect(second.entries).toHaveLength(1)
     expect(second.entries[0].path).not.toBe(first.entries[0].path)
     await writeFile(join(root, 'src/d.ts'), 'export {}\n')
-    await expect(call('project:list', { cursor: second.cursor })).rejects.toMatchObject({ reason: 'INVALID_INPUT' })
+    // 目录变了是「手里的东西过期了」，和续读页过期同一个码，下一步都是重新列。
+    await expect(call('project:list', { cursor: second.cursor })).rejects.toMatchObject({ reason: 'BASE_REVISION_MISMATCH' })
   })
 
   test('search results authorize only returned source and support literal and regex queries', async () => {
@@ -322,7 +321,7 @@ describe('edit outcomes and guidance the model can act on', () => {
     await expect(call('project:change', { action: 'undo', changeRef: edited.changeRef }))
       .rejects.toMatchObject({ reason: 'CONFLICT_WITH_EXTERNAL_EDIT', details: { executionOutcome: 'not-applied' } })
     await expect(call('project:change', { action: 'undo', changeRef: `change:${'0'.repeat(64)}` }))
-      .rejects.toMatchObject({ context: { executionOutcome: 'not-applied' } })
+      .rejects.toMatchObject({ reason: 'INVALID_INPUT', details: { executionOutcome: 'not-applied' } })
     expect(await readFile(join(root, 'a.txt'), 'utf8')).toBe('three\n')
   })
 

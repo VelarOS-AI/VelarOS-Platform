@@ -32,9 +32,7 @@ async function contextFor(redacted: boolean): Promise<ProjectToolContext> {
     project: {
       getRootPath: () => root,
       kernel: async () => kernel,
-      runInDirectory: async (_path: string, run: () => Promise<unknown>) => run(),
-      runWithApproval: async (run: () => Promise<unknown>) => run(),
-      prepareMutation: async () => ({ approved: true, rootPath: root }),
+      prepareMutation: async () => ({ approved: true, message: '已授权' }),
       queryCode: async () => ({}),
       runCommand: async (command: string) => ({ command, cwd: root, exitCode: 0, stdout: `${secret}\n`, stderr: `api_key=${secret}`, success: true }),
     },

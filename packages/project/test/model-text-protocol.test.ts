@@ -28,8 +28,7 @@ test.each(['utf8', 'utf8-bom', 'utf16le', 'utf16be', 'utf16le-nobom', 'utf16be-n
         abortSignal: new AbortController().signal,
         project: {
           getRootPath: () => root, kernel: async () => kernel,
-          runInDirectory: async (_path, action) => action(), runWithApproval: async (action) => action(),
-          prepareMutation: async () => ({ approved: true, rootPath: root }),
+          prepareMutation: async () => ({ approved: true, message: '已授权' }),
           queryCode: async () => ({}), runCommand: async () => ({}) as never,
         }, approval: {} as never,
       }

@@ -4,7 +4,7 @@
  * - 工具上下文 `ProjectToolContext`：必须。宿主每次调工具时给，里面是宿主端口 `ProjectToolApi`（工具里写作 `ctx.project`）与审批端口 `ApprovalPort`；
  *   宿主端口的 `kernel()` 交出项目内核的 Agent 视图 `AgentProjectKernelPort`，可选的 `sandbox` 是演练沙箱端口 `ProjectSandboxPort`。
  * - 上下文解析器 `ProjectToolContextResolver`：把本包挂进内核、按名调用工具时必须，放在 `CreateProjectKernelModuleOptions` 里给。
- * - 内核配置 `CreateProjectKernelOptions`：建项目内核时必须。里面的宿主能力 `ProjectProviders`（策略、审批、文件过滤、脱敏、证据包、日志、子进程、遥测、临时目录、代码智能）
+ * - 内核配置 `CreateProjectKernelOptions`：建项目内核时必须。里面的宿主能力 `ProjectProviders`（策略、审批、文件过滤、脱敏、证据包、日志、子进程、遥测、代码智能）
  *   与变更记录写端 `ProjectChangeFeedWriter` 都可选。
  * - 插件 `ProjectPlugin`：可选，放在内核配置里给；插件在 setup 里经 `ProjectPluginContext` 登记文件适配器工厂 `FileAdapterFactory`、补丁策略 `PatchStrategy`、
  *   校验器 `ProjectValidator`、修复器 `ProjectFixer`、生命周期 hook `ProjectHook` 与管线阶段 `PipelineStage`。
@@ -22,12 +22,13 @@ import type { RehearsalSandboxHostPort } from '@velaros-ai/rehearsal-sandbox'
 import type { AdapterCapability, AdapterKind, AdapterPrepareEditInput, AdapterSearchHit, AdapterSearchInput, AdapterValidateInput, ParseInput, ParseResult, ProjectSymbol } from '../types/adapter.js'
 import type { AgentProjectApplyResult, AgentProjectKernelReadResult, AgentProjectPreparedTransaction, AgentProjectSearchResult, AgentProjectStoredTransaction } from '../types/agent-port.js'
 import type { ProjectChangeRecord,ProjectChangeRecordInput } from '../types/change-feed.js'
+import type { EvidencePack } from '../types/context.js'
 import type { ApplyEditInput, PreparedPatch, PrepareEditInput, RollbackInput, RollbackResult } from '../types/edit.js'
 import type { FixInput, FixResult,ProjectFixContext } from '../types/fix.js'
 import type { HookContext,HookEvent } from '../types/hook.js'
 import type { FileStatInput, FileStatResult, ObserveInput, ReadInput, SearchInput } from '../types/io.js'
 import type { PatchStrategyInput } from '../types/patch.js'
-import type { PipelineContext } from '../types/pipeline.js'
+import type { PipelineContext, PipelinePhase } from '../types/pipeline.js'
 import type { ApprovalRequest,CorePolicy, PolicyDecision, PolicyDecisionInput } from '../types/policy.js'
 import type {
   ProjectAuthorizationDecision,
@@ -43,7 +44,7 @@ import type { FileSnapshot } from '../types/snapshot.js'
 import type { ResolveTargetInput, ResolveTargetResult } from '../types/target.js'
 import type { ProjectValidationContext,ValidateInput, ValidationResult } from '../types/validation.js'
 
-import type { ProjectChangeFeed } from './provides.js'
+import type { ProjectChangeFeed, ProjectKernel } from './provides.js'
 
 // ── 挂进内核 ────────────────────────────────────────────────────
 
@@ -73,9 +74,9 @@ export interface CreateProjectKernelModuleOptions {
 export interface AgentProjectKernelPort {
   /**
    * 对一段已经拿在手里的历史正文（签发过的视图、归档的提交快照）按当前的读取授权与脱敏再过一遍，不重读磁盘：路径现在不许读就抛 PERMISSION_DENIED，
-   * 返回过滤后的正文和有没有被脱敏。没有这个方法时，凭 fileRef 的改动一律失败，会话恢复时也用不了历史快照。
+   * 返回过滤后的正文和有没有被脱敏。凭 fileRef 编辑和会话恢复都靠它，所以是必须的（`ProjectKernel` 本来就实现了）。
    */
-  prepareContextSnapshot?(input: { path: string; content: string }): Promise<{ content: string; redacted: boolean }>
+  prepareContextSnapshot(input: { path: string; content: string }): Promise<{ content: string; redacted: boolean }>
   /**
    * 核对一批相对路径能不能由项目写，逐条给出 allowed 与拒绝原因（越界、readDeny/writeDeny、宿主可见范围、protectedFiles、generatedFiles）。
    * 不碰磁盘、不建事务、不发审批。project:sandbox 落回这类不经事务链的整批写入，在问用户之前用它把不许写的路径挑出来。
@@ -150,8 +151,8 @@ export interface ProjectChangeFeedWriter extends ProjectChangeFeed {
 export interface PipelineStage<I = any, O = any> {
   /** 这一段的标识；内核不按它去重。 */
   id: string;
-  /** 挂在哪个阶段：observe.input、read.input、search.input、resolve.input、prepare.input 之一。 */
-  phase: string;
+  /** 挂在哪个阶段。 */
+  phase: PipelinePhase;
   /** 同一阶段里的先后，小的先跑；缺省 0，相同时按登记顺序。 */
   order?: number;
   /** 改写输入并返回改写后的值（可以原样返回）；ctx 里有内核实例和阶段名。抛错时这次请求失败。 */
@@ -250,7 +251,7 @@ export interface FileAdapterFactory {
   /** 创建 adapter 前对每个文件快照执行的快速适配性检查。 */
   canHandle(snapshot: FileSnapshot): Promise<boolean> | boolean
   /** 为这个快照新建适配器；kernel 是当前内核实例，适配器要读别的文件时用它。 */
-  create(input: { snapshot: FileSnapshot; kernel: any }): Promise<FileAdapter> | FileAdapter
+  create(input: { snapshot: FileSnapshot; kernel: ProjectKernel }): Promise<FileAdapter> | FileAdapter
 }
 
 /** 可安装的扩展点集合，用于注册 adapter、strategy、validator、hook 和 fixer。建内核时经 `CreateProjectKernelOptions.plugins` 给，按顺序装在内置核心插件之后。 */
@@ -336,9 +337,9 @@ export interface SecretRedactionProvider {
 /** 证据包后端：内核建证据包（buildEvidencePack）时让宿主补充元数据，并在交出去之前做最后清洗。 */
 export interface ContextProvider {
   /** 为 evidence pack 补充宿主侧元数据：返回的对象挂在 pack.metadata.contextProvider 下，返回非对象则忽略。 */
-  buildEvidence?(input: any): Promise<any> | any;
-  /** evidence 离开 project 边界前的最后清洗步骤：返回对象就整个替换证据包（没带 evidenceId 时沿用原来的），返回非对象则不改。 */
-  sanitize?(input: any): Promise<any> | any;
+  buildEvidence?(input: EvidencePack): Promise<Record<string, unknown>> | Record<string, unknown> | undefined;
+  /** evidence 离开 project 边界前的最后清洗步骤：返回证据包就整个替换（没带 evidenceId 时沿用原来的），返回非对象则不改。 */
+  sanitize?(input: EvidencePack): Promise<EvidencePack> | EvidencePack | undefined;
 }
 
 /** 日志后端：内核把不影响结果的附带失败（变更记录写失败、事务状态二次落盘失败、git 索引维护失败）记到这里；校验器与修复器也经 providers 拿到它。 */
@@ -372,7 +373,7 @@ export interface TelemetryProvider {
 export interface ProjectProviders {
   /** 动态策略：读、搜索、编辑、提交之前问它放不放行；不给就只按 corePolicy 的静态规则。 */
   policy?: PolicyProvider;
-  /** 审批：策略要求审批或高风险写入需要人审时经它确认；不给则需要审批的操作一律拒绝。 */
+  /** 审批：策略要求审批或高风险写入需要人审时经它确认；不给时用内置审批桥——工具调用期间交给这次调用的审批端口，调用之外一律拒绝。 */
   approval?: ApprovalProvider;
   /** 文件可见性过滤，叠加在 corePolicy 的 deny glob 之上；不给就不额外过滤。 */
   fileFilter?: FileFilterProvider;
@@ -398,7 +399,7 @@ export interface CreateProjectKernelOptions {
   root: string
   /** 覆盖默认的静态策略（读写上限、deny glob、受保护与生成文件、事务规模、revision 算法、高风险审批等）；只给要改的项，approval 按字段合并。 */
   corePolicy?: Partial<CorePolicy>
-  /** 可选的宿主能力：策略、审批、文件过滤、脱敏、证据包、日志、子进程、遥测、临时目录、代码智能。 */
+  /** 可选的宿主能力：策略、审批、文件过滤、脱敏、证据包、日志、子进程、遥测、代码智能。 */
   providers?: ProjectProviders
   /** 额外插件，按顺序装在内置核心插件之后；同名的只装一次，任一个 setup 抛错，建内核就失败。 */
   plugins?: ProjectPlugin[]
@@ -423,30 +424,20 @@ export interface CreateProjectKernelOptions {
  * 端口里只有工具真会调的方法，门禁按工具文件核对。
  */
 export interface ProjectToolApi {
-  /** 当前项目根的绝对路径：工具以它为基准解析相对路径、给项目资源门排队、核对回执属于哪个工作区；runInDirectory 期间也不变。 */
+  /** 当前项目根的绝对路径：工具以它为基准解析相对路径、给项目资源门排队、核对回执属于哪个工作区。 */
   getRootPath: () => string
-  /**
-   * 在项目内的 path 目录下执行 action 并返回它的结果：path 是相对项目根的路径或项目内的绝对路径，出了项目就抛错拒绝；
-   * action 期间 runCommand 以这个目录为工作目录，结束后恢复。project:run 的 cwd 就是这样生效的。
-   */
-  runInDirectory: <T>(path: string, action: () => Promise<T>) => Promise<T>
   /** 取当前项目根上的内核（Agent 视图）。工具每次调用都会取，宿主应当按项目根缓存同一个内核，不要每次新建。 */
   kernel: () => Promise<AgentProjectKernelPort>
   /**
-   * 在这次调用的审批上下文里执行 action：action 期间内核发起的审批（策略要求的、高风险写入的）都交给这次调用的审批端口。
-   * 宿主一般先给内核装上 `projectApprovalBridge.install`，再用 `projectApprovalBridge.run` 实现它；改动工具的提交与撤销都包在它里面。
-   */
-  runWithApproval: <T>(action: () => Promise<T>) => Promise<T>
-  /**
    * 项目写操作的授权：改文件、撤销变更、跑可能改项目的命令、把沙箱落回项目之前各问一次。宿主在这里向用户确认或按会话授权放行，
-   * 返回是否批准、授权的项目根（改动在这个根里执行）和给模型看的说明；被拒时工具一个文件都不写。
+   * 文件改动会带上这次要写的路径（规划之后、提交之前问）；被拒时工具一个文件都不写，回执里原样交出 message。
    */
   prepareMutation: (
     input: ProjectMutationAuthorizationInput
   ) => Promise<ProjectAuthorizationDecision>
   /**
-   * 在当前目录（runInDirectory 选的，缺省项目根）跑一条 shell 命令，工具把结果原样交给模型。allowDangerous 为真表示这条命令被判为危险、
-   * 用户已经亲自确认过，宿主不必再问；options.background 为真时宿主把它登记成后台任务后立即返回，做不到就抛错拒绝。
+   * 在 options.cwd（相对项目根，缺省是项目根；工具已经核对过它在项目之内）跑一条 shell 命令，工具把结果原样交给模型。
+   * allowDangerous 为真表示这条命令被判为危险、用户已经亲自确认过，宿主不必再问；options.background 为真时宿主把它登记成后台任务后立即返回，做不到就抛错拒绝。
    * 命令自己失败（非零退出、超时）写进结果，不抛错；abortSignal 触发时尽快停下。
    */
   runCommand: (
@@ -456,10 +447,11 @@ export interface ProjectToolApi {
     abortSignal?: AbortSignal
   ) => Promise<ProjectCommandResult>
   /**
-   * Project 内置代码理解入口；宿主可用 CodeGraph 覆盖同一 action 面的增强查询。project:code 与 project:code-analysis 的动作由本包翻译成 `ProjectCodeQuery` 交过来：
-   * 语言服务类动作（`ProjectCodeLanguageActions` 里的七个）交给宿主的语言服务，其余交给代码图谱。返回普通对象，本包把其中的 source、revision、truncated、
-   * degraded、note 装进带来源与覆盖范围的回执；代码图谱类动作没有后端时抛 code 为 UNAVAILABLE（或 reason 为 NOT_SUPPORTED）的错误，本包据此降级说明，
-   * 不当成失败，语言服务类动作抛错则这次查询失败。
+   * 代码查询端口：project:code 与 project:code-analysis 的动作由本包翻译成 `ProjectCodeQuery` 交过来，本包自己不带实现
+   * （语言服务那一半可以用 `@velaros-ai/development` 的 `createProjectCodeQuery`，代码图谱那一半由宿主的图后端提供）。
+   * 语言服务类动作（`ProjectCodeLanguageActions` 里的七个）抛错时这次查询失败；代码图谱类动作没有后端时，抛 code 为 UNAVAILABLE
+   * （或 reason 为 NOT_SUPPORTED）的错误：project:code 把它当降级写进回执，project:code-analysis 直接失败（它只在宿主有图后端时才登记）。
+   * 返回普通对象，其中的 source、revision、truncated、degraded、note 会被装进回执。
    */
   queryCode: (input: ProjectCodeQuery, context: ProjectToolContext) => Promise<unknown>
   /** 演练沙箱端口；宿主用系统能力实现（Desktop 用本地内核）。没接的宿主没有 project:sandbox。 */

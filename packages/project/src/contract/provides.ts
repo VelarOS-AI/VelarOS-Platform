@@ -1,22 +1,22 @@
 /**
  * 产品面：本包交给外面的整件能力。类实现的 API 定义在各自的类上方（`impl/` 里，接口紧挨着类），这里登记并转发；
- * 没有类的公开接口（工具集合、内置 mod 定义、项目空间、能力服务、变更记录的只读视图）直接声明在这里。这里的每个接口都必须从根入口导出。
+ * 没有类的公开接口（工具集合、内置 mod 定义、能力服务、变更记录的只读视图）直接声明在这里。这里的每个接口都必须从根入口导出。
  */
 
 import type { AgentModManifest, ToolCategoryDefinition, ToolPermission } from '@velaros-ai/agent/protocol'
 import type { ToolContractRuntimeSpec } from '@velaros-ai/agent/tool-contract'
 import type { KernelCallableCapabilityService } from '@velaros-ai/kernel/contracts/abi'
 
-import type { ProjectKernel } from '../impl/kernel/LocalProjectKernel.js'
 import type { ProjectChangeListener, ProjectChangeListOptions, ProjectChangeRecord } from '../types/change-feed.js'
+import type { ProjectChangeReceipt } from '../types/project.js'
 
-import type { ProjectCodeAnalysisModId, ProjectModId, ProjectSpaceId } from './constants.js'
+import type { ProjectCodeAnalysisToolName, ProjectModId, ProjectToolName } from './constants.js'
 import type { ProjectToolContext } from './requires.js'
 
 // ── 类实现的产品面接口：定义在类上方，这里登记 ────────────────
 export type { ProjectKernel } from '../impl/kernel/LocalProjectKernel.js'
+export type { ProjectApprovalBridgeApi } from '../impl/kernel/ProjectApprovalBridge.js'
 export type { ProjectTransactionControllerApi } from '../impl/kernel/ProjectTransactionController.js'
-export type { ProjectApprovalBridgeApi } from '../impl/operations/ProjectApprovalBridge.js'
 export type { ProjectFileContextApi } from '../impl/operations/ProjectFileContext.js'
 export type { FileProjectChangeFeedApi } from '../impl/persistence/FileProjectChangeFeed.js'
 
@@ -27,10 +27,20 @@ export type VelaTool<TInput extends Record<string, any> = Record<string, any>> =
   ToolContractRuntimeSpec<TInput, ProjectToolContext, any, ToolPermission>
 
 /**
- * 按工具名索引的项目工具：默认的九个是 `projectTools`，可选的 project:code-analysis 由 `createProjectCodeAnalysisTools` 单独给出。
- * 集合层面不区分各工具的入参类型：宿主拿模型给的入参先用该工具的 schema 严格校验，再调它的 execute。
+ * 改动类工具（project:edit、project:file、project:change 的 apply）的运行时规格：成功回执里宿主界面可以依赖的字段由 `ProjectChangeReceipt` 定下，
+ * 其余字段（源码窗口、差量、说明）只给模型看，跟着工具说明与上下文预算走。`projectTools` 里的这三个就是它。
  */
-export type ProjectToolCollection = Readonly<Record<string, VelaTool<any>>>
+export type ProjectChangeTool<TInput extends Record<string, any> = Record<string, any>> =
+  ToolContractRuntimeSpec<TInput, ProjectToolContext, ProjectChangeReceipt & Record<string, unknown>, ToolPermission>
+
+/**
+ * 按工具名索引的九个项目工具（其中三个改动工具满足 `ProjectChangeTool`）：集合层面不区分各工具的入参类型，
+ * 宿主拿模型给的入参先用该工具的 schema 严格校验，再调它的 execute。
+ */
+export type ProjectToolCollection = Readonly<Record<ProjectToolName, VelaTool<any>>>
+
+/** 可选的 project:code-analysis：宿主有代码图后端时由 `createProjectCodeAnalysisTools(isAvailable)` 单独给出，只有这一个工具。 */
+export type ProjectCodeAnalysisToolCollection = Readonly<Record<typeof ProjectCodeAnalysisToolName, VelaTool<any>>>
 
 /**
  * 项目空间作为官方内置 mod 的定义，由 `createProjectBundledModDefinition()` 创建。
@@ -54,35 +64,7 @@ export interface ProjectBundledModDefinition {
   }
 }
 
-/**
- * 代码图分析扩展作为可选内置 mod 的定义，由 `createProjectCodeAnalysisContribution(isAvailable)` 创建。
- * 只贡献 project:code-analysis 一个工具；宿主有代码图后端时单独挂载，isAvailable 决定每次调用时它在不在。
- */
-export interface ProjectCodeAnalysisContribution {
-  /** mod 身份，固定是 `velaros.project.code-analysis`。 */
-  readonly id: typeof ProjectCodeAnalysisModId
-  /** 版本，跟本包一致。 */
-  readonly version: string
-  /** mod 清单：只声明工具这一个能力轴，工具只在项目空间里可用。 */
-  readonly manifest: AgentModManifest
-  /** 清单里声明的东西对应的实物。 */
-  readonly bindings: {
-    /** 只有 project:code-analysis。 */
-    readonly tools: ProjectToolCollection
-  }
-}
-
-// ── 项目空间与内核挂载 ─────────────────────────────────────────
-
-/** 项目空间：一个项目根上的领域内核加九个工具，由 `createProjectSpace(options)` 创建。 */
-export interface ProjectSpace {
-  /** 空间身份，固定是 `project`。 */
-  readonly id: typeof ProjectSpaceId
-  /** 这个项目根上的领域内核：读写、事务、校验与撤销都经过它。 */
-  readonly kernel: ProjectKernel
-  /** 九个工具。 */
-  readonly tools: ProjectToolCollection
-}
+// ── 内核挂载 ───────────────────────────────────────────────────
 
 /**
  * 项目能力服务：本包作为内核模块激活后登记的服务，身份令牌是 `ProjectCapability`。

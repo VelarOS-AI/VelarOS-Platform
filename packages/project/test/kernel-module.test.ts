@@ -38,17 +38,11 @@ function projectContext(signal: AbortSignal): ProjectToolContext {
     abortSignal: signal,
     project: {
       getRootPath: () => '/project',
-      runInDirectory: async (_path, action) => action(),
       kernel: async () => ({
         listFiles: async () => [],
       }) as never,
-      runWithApproval: async (action) => action(),
       prepareMutation: async () => ({
         approved: false,
-        rootPath: '/project',
-        switched: false,
-        alreadyAuthorized: false,
-        rejectionMessage: 'denied',
         message: 'denied',
         authorizationScope: 'project',
       }),
@@ -112,10 +106,6 @@ describe('Project Kernel module', () => {
       context.project.kernel = async () => kernel
       context.project.prepareMutation = async () => ({
         approved: true,
-        rootPath: root,
-        switched: false,
-        alreadyAuthorized: true,
-        rejectionMessage: null,
         message: 'approved',
         authorizationScope: 'project',
       })

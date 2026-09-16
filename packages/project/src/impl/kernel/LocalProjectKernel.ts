@@ -156,6 +156,7 @@ import { TransactionStateMachine } from '../transactions/TransactionStateMachine
 import { TransactionValidation } from '../transactions/TransactionValidation.js'
 
 import { NodeCommandProvider } from './NodeCommandProvider.js'
+import { projectApprovalBridge } from './ProjectApprovalBridge.js'
 
 /**
  * 项目内核：一个工作区根上的读写、事务、校验与撤销。把「一次编辑意图」变成可预览、可校验、可回滚的磁盘写入：
@@ -276,6 +277,8 @@ class LocalProjectKernel implements ProjectKernel, ProjectPluginContext, LocalPr
     this.providers = {
       ...(options.providers ?? {}),
       command: options.providers?.command ?? new NodeCommandProvider(),
+      // 宿主不给审批后端时装上审批桥：工具调用期间交给这次调用的审批端口，调用之外一律拒绝（与「不给就拒绝」的旧缺省等价）。
+      approval: options.providers?.approval ?? projectApprovalBridge.provider(),
     }
     this.changeFeedWriter = options.changeFeed ?? new MemoryProjectChangeFeed()
     this.changeFeed = this.changeFeedWriter
