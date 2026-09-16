@@ -15,6 +15,18 @@
 | A4 | 空间知识搬家（源码视图整条链、验证账本搬进 project）放到结构改造之后单独一轮 | 做，但单独一轮 | 会改发请求的字节，影响重放基线与前缀缓存，要 agent 与 project 同车发版 |
 | A5 | 提示词修正（工具面评审第 3 节：冲突、冗余、失实、中英混用、约 44 处英文） | 照做 | 模型面；指纹重算 |
 
+## 一·五、project 的工具面归并（你 09-16 提出，待定）
+
+现状：`project:file`（整文件动作）、`project:edit`（文件内编辑）、`project:change`（前两者合成一次事务，外加 inspect/undo）三者语义重叠——`change` 本来就是 `file ∪ edit` 的超集，模型每次改代码都要先做一道无谓的选择题，选错要重来一轮。`project:code` 则是另一个极端：6 个动作 × 一堆交叉旋钮（`direction`、`kind`、`exact`、`exportedOnly`、`includeReExports`、`includeExternal`…）。
+
+| # | 事项 | 我的建议 | 影响 |
+| --- | --- | --- | --- |
+| J1 | 改动三合一：删 `project:file`、`project:change`，只留一个入口，`action: apply/inspect/undo`，`steps[]` 是批量维度 | 做。说明字数从三份约 2,500 降到约 1,100，模型不用再选工具 | 模型面；界面工具卡目录与渲染、agent 里写死 project 工具名的两处、一批测试 |
+| J2 | 合并后的名字 | `project:edit`（模型想的是「我要改代码」，这个词最容易命中） | 模型面 |
+| J3 | `project:code` 改成命名意图：`outline`/`definition`/`references`/`callers`/`callees`/`imports`/`importers`/`impact`/`diagnostics`，字段只留 `target`、`path`、`limit`，罕用旋钮删掉或进缺省 | 做。它现在 70 多个字段、模型基本只能瞎填 | 模型面；宿主代码查询端口的入参映射 |
+| J4 | `project:code-analysis`（trace/cycles/deadcode/routing）并进 code 还是保持独立 | 保持独立：它只在宿主有图后端时出现，并进去会让主工具的可用性时有时无 | 无 |
+| J5 | `project:list` 的 `recursive` + `maxDepth` 收成一个 `depth` | 做 | 模型面 |
+
 ## 二、browser
 
 | # | 事项 | 我的建议 | 影响 |
