@@ -647,7 +647,7 @@ class SubAgentDispatcher implements SubAgentDispatcherApi {
       })
       const asyncThreadKey = buildSubAgentAsyncThreadKey(executionKey, args.threadId)
       if (this.cancelledAsyncThreads.delete(asyncThreadKey)) {
-        relayHandle.abort('Background sub-agent job cancelled')
+        relayHandle.abort('后台子 Agent 作业已取消')
       }
       this.sessionStore.setStatus(args.threadId, 'running')
       emitSubAgentWorkerStatus({ ...args.statusBase, status: 'running', summary: args.title })
@@ -903,7 +903,7 @@ class SubAgentDispatcher implements SubAgentDispatcherApi {
 
   private cancelAsyncWorker(executionKey: string, threadId: string): void {
     this.cancelledAsyncThreads.add(buildSubAgentAsyncThreadKey(executionKey, threadId))
-    this.abortWorker(executionKey, threadId, 'Background sub-agent job cancelled')
+    this.abortWorker(executionKey, threadId, '后台子 Agent 作业已取消')
   }
 
   private handleInterruptDispatch(
@@ -911,7 +911,7 @@ class SubAgentDispatcher implements SubAgentDispatcherApi {
     executionKey: string,
     threadId: string
   ): string {
-    const aborted = this.abortWorker(executionKey, threadId, 'Sub-agent interrupted via agent:dispatch')
+    const aborted = this.abortWorker(executionKey, threadId, '子 Agent 已被 agent:dispatch 中断')
     // 别的父会话的线程对本会话等同于不存在。
     const owned =
       this.sessionStore.getSession(threadId)?.parent_session_id === request.parentCtx.sessionId

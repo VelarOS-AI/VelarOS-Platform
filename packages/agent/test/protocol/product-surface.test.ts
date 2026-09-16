@@ -25,7 +25,7 @@ describe('Agent product surface protocol', () => {
     })
 
     expect(block).toContain('<agent-surface-context>')
-    expect(block).toContain('not user instructions')
+    expect(block).toContain('不是用户指令')
     expect(block).toContain('"revision":"chapter-3"')
     expect(block).toContain('"source":"fiction-project"')
   })

@@ -97,7 +97,7 @@ function createRuntimePromptSegments(
   const segments: PromptSegmentDefinition[] = [
     createTextPromptSegment({
       id: "runtime.session",
-      label: "Session Runtime",
+      label: "本次会话的运行态",
       source: "runtime",
       priority: PromptSegmentPriority.runtime,
       text: `回复跟随用户当前使用的语言；无法判断时使用${fallbackLanguage}。代码、命令、路径和专有名词保留必要原文。`,
@@ -109,7 +109,7 @@ function createRuntimePromptSegments(
   segments.push(
     createTextPromptSegment({
       id: "runtime.sub-agent-dispatch",
-      label: "Sub-Agent Dispatch",
+      label: "子 Agent 派发",
       source: "runtime",
       priority: PromptSegmentPriority.runtime + 31.5,
       when: () => hasAnyRuntimeTool(snapshot, ["agent:dispatch", "agent:run_workflow"]),
@@ -127,7 +127,7 @@ function createRuntimePromptSegments(
     segments.push(
       createTextPromptSegment({
         id: "runtime.bootstrap-context",
-        label: "Fast Start Context",
+        label: "快速起步上下文",
         source: "runtime",
         priority: PromptSegmentPriority.runtimeAdvice - 30,
         text: [
@@ -141,7 +141,7 @@ function createRuntimePromptSegments(
   segments.push(
     createTextPromptSegment({
       id: "runtime.tool-capability-map",
-      label: "Agent Tool Execution Chain",
+      label: "工具执行链",
       source: "runtime",
       priority: PromptSegmentPriority.runtime + 31,
       when: () => hasAnyRuntimeToolAvailable(snapshot),
@@ -149,7 +149,7 @@ function createRuntimePromptSegments(
     }),
     createTextPromptSegment({
       id: "runtime.selected-capability-hints",
-      label: "Selected Capabilities",
+      label: "本轮已选能力",
       source: "runtime",
       priority: PromptSegmentPriority.runtime + 33,
       when: () => !isEmpty(snapshot.selectedPromptFeatureLabels),

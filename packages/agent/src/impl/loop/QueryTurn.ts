@@ -590,19 +590,19 @@ class QueryTurn<TToolContext extends QueryTurnToolContext = QueryTurnToolContext
     }
 
     const lines = [
-      'The previous sub-agent response stream was interrupted by a transient provider connection failure.',
+      '上一条子任务回复的输出流被供应方的一次瞬时连接故障打断了。',
     ]
     if (appendedAssistant) {
       lines.push(
-        'The partial assistant text is preserved above. Continue from it without repeating it.'
+        '已经输出的那半段正文保留在上面，从它接着写，不要重复。'
       )
     }
     if (partial.hasPendingToolCalls) {
       lines.push(
-        'A tool call was incomplete and was not executed. If it is still needed, emit a fresh complete tool call with valid arguments.'
+        '有一次工具调用没发完，也没有执行。如果还需要它，请重新发一次参数完整合法的调用。'
       )
     }
-    lines.push('Continue the subtask now and finish the requested answer.')
+    lines.push('现在继续这个子任务，把要的答复写完。')
     history.push(createInternalFollowUpMessage(lines.join('\n')))
     return appendedAssistant
   }

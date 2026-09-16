@@ -14,8 +14,8 @@ import type { ToolArgsValidationResult, ToolInputAdjustment, ToolInputAdjustment
 import { AgentTuning } from '../tuning'
 
 const DefaultToolArgsValidationHint =
-  'If the argument JSON looks incomplete (cut off mid-field), the model stream may have been truncated and retrying may help; ' +
-  'otherwise correct parameters to satisfy the schema. '
+  '参数 JSON 看起来不完整（在某个字段中间断掉）时，多半是模型输出流被截断了，重试一次可能就好；' +
+  '否则请按 schema 改正参数。'
 
 
 /**
@@ -86,7 +86,7 @@ class ToolArgsSchemaValidator {
       const truncatedAdjustment: ToolInputAdjustment = {
         field: '<additional>',
         action: 'normalized',
-        detail: 'additional schema adjustments were omitted from metadata',
+        detail: '还有别的 schema 调整没写进元数据',
       }
       if (collector.adjustments.length >= AgentTuning.tools.maxInputAdjustments) {
         collector.adjustments[AgentTuning.tools.maxInputAdjustments - 1] = truncatedAdjustment
@@ -353,7 +353,7 @@ class ToolArgsSchemaValidator {
           collector.adjustments.push({
             field: this.limitAdjustmentPath(nestedPath),
             action: 'defaulted',
-            detail: 'schema supplied the omitted field',
+            detail: 'schema 补上了没填的字段',
           })
           continue
         }
@@ -361,7 +361,7 @@ class ToolArgsSchemaValidator {
           collector.adjustments.push({
             field: this.limitAdjustmentPath(nestedPath),
             action: 'ignored',
-            detail: 'schema removed an unsupported field',
+            detail: 'schema 去掉了一个不支持的字段',
           })
           continue
         }
@@ -393,13 +393,13 @@ class ToolArgsSchemaValidator {
     const coerced = isString(requested) && !isString(effective)
     const clamped = isNumber(requested) && isNumber(effective)
     let action: ToolInputAdjustment['action'] = 'normalized'
-    let detail = 'schema transformed the model value before execution'
+    let detail = 'schema 在执行前改写了模型给的值'
     if (coerced) {
       action = 'coerced'
-      detail = 'schema converted the model value to its declared type'
+      detail = 'schema 把模型给的值转成了声明的类型'
     } else if (clamped) {
       action = 'clamped'
-      detail = 'schema bounded or rounded the model value before execution'
+      detail = 'schema 在执行前把模型给的值夹到了范围内或做了取整'
     }
     collector.adjustments.push({
       field: this.limitAdjustmentPath(path || '<root>'),

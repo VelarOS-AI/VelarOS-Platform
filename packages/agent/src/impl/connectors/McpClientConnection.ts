@@ -20,16 +20,16 @@ import {
 } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
+import { McpLimits } from '../../contract/constants.js'
 import type { McpAuthorizationProvider } from '../../contract/requires.js'
 import type { McpConnectionSpec, McpPendingAuthorization, McpPendingConnection,McpRawCallResult, McpRemoteTransport, McpResourceContent, McpResourceDescriptor, McpToolDescriptor, McpTransportKind } from '../../types/connectors.js'
 import { isMcpTimeoutError, parseMcpToolDescriptor } from '../../utils/connectors/mcp-protocol'
-import { AgentTuning } from '../../utils/tuning'
 import { McpAuthorizationRequiredError } from '../errors/McpAuthorizationRequiredError'
 
-/** 连接超时（ms）——server 起不来时不无限挂起；值在 `AgentTuning.connectors.mcpConnectTimeoutMs`。 */
-export const McpConnectTimeoutMs: number = AgentTuning.connectors.mcpConnectTimeoutMs
-/** 单次工具调用/资源读取超时（ms）；值在 `AgentTuning.connectors.mcpCallTimeoutMs`。 */
-export const McpCallTimeoutMs: number = AgentTuning.connectors.mcpCallTimeoutMs
+/** 连接超时（ms）——server 起不来时不无限挂起；值在合同表 `McpLimits.connectTimeoutMs`。 */
+export const McpConnectTimeoutMs: number = McpLimits.connectTimeoutMs
+/** 单次工具调用/资源读取超时（ms）；值在合同表 `McpLimits.callTimeoutMs`。 */
+export const McpCallTimeoutMs: number = McpLimits.callTimeoutMs
 
 const log = Log.tag('McpClientConnection')
 

@@ -9,36 +9,16 @@ import { isEmpty } from '@velaros-ai/core/utils/array'
 import { toNullable } from '@velaros-ai/core/utils/nullish'
 import { optionalWhen } from '@velaros-ai/core/utils/optionalWhen'
 
+import { StreamRuntimeStateKinds } from '../../contract/constants.js'
 import type { ConfirmationRequestDetail, StreamAbortedPayload, StreamAwaitingConfirmationPayload, StreamAwaitingInputPayload, StreamContextUsageEstimatePayload, StreamDonePayload, StreamErrorPayload, StreamInputAppliedPayload, StreamPhasePayload, StreamReconnectingPayload, StreamRetryingTurnPayload, StreamStateKind, StreamTurnEndPayload, StreamTurnStartPayload, StreamUsageTelemetryPayload,TeamExecutionPhase, UserActionCard } from '../../types/agent.js'
 
-export const TERMINAL_STREAM_RUNTIME_STATE_KINDS = [
-  'done',
-  'aborted',
-  'error',
-] as const satisfies readonly StreamStateKind[]
+export const TERMINAL_STREAM_RUNTIME_STATE_KINDS = StreamRuntimeStateKinds.terminal satisfies readonly StreamStateKind[]
 
 /** 表示执行失败/中止、用于抑制重复 error 广播的 runtime kind。 */
-export const STREAM_FAILURE_RUNTIME_STATE_KINDS = [
-  'error',
-  'aborted',
-] as const satisfies readonly StreamStateKind[]
+export const STREAM_FAILURE_RUNTIME_STATE_KINDS = StreamRuntimeStateKinds.failure satisfies readonly StreamStateKind[]
 
 /** 契约测试与 bridge exhaustive switch 用的完整 kind 列表。 */
-export const ALL_STREAM_RUNTIME_STATE_KINDS = [
-  'input-applied',
-  'phase',
-  'usage-telemetry',
-  'context-usage-estimate',
-  'turn-start',
-  'turn-end',
-  'reconnecting',
-  'retrying-turn',
-  'done',
-  'aborted',
-  'error',
-  'awaiting-confirmation',
-  'awaiting-input',
-] as const satisfies readonly StreamStateKind[]
+export const ALL_STREAM_RUNTIME_STATE_KINDS = StreamRuntimeStateKinds.all satisfies readonly StreamStateKind[]
 
 export const ChatRuntimeEvents = {
   inputApplied(inputId: string): StreamInputAppliedPayload {

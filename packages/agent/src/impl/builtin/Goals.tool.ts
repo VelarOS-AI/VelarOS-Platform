@@ -206,7 +206,7 @@ export const createGoal: VelaTool<{
         status: goal.status,
         goal,
         reused: true,
-        nextAction: 'An active goal already exists and was preserved. Use goal:update to change or complete it.',
+        nextAction: '已经有一个活动目标，这次没有覆盖它。要改或要收尾请用 goal:update。',
       }
     }
 
@@ -412,8 +412,8 @@ export const updateGoal: VelaTool<{
       allStepsResolved: toNullable(stepCompletion?.allStepsResolved),
       nextAction: stepCompletion
         ? stepCompletion.allStepsResolved
-          ? 'All goal steps are resolved. If the objective is truly complete, call goal:update({status:"complete"}).'
-          : 'Continue with the active goal step.'
+          ? '目标的步骤已经全部有了结论。如果目标确实达成了，调用 goal:update({status:"complete"}) 收尾。'
+          : '继续做当前这个目标步骤。'
         : null,
       finalTokenUsage: null,
     }

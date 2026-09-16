@@ -25,11 +25,11 @@ import { AgentTuning } from '../tuning'
 const MaxRecentToolResultContentMessagesToKeep = AgentTuning.tools.recentToolResultContentMessages
 
 const HistoricalImagePlaceholder =
-  '[historical image bytes omitted only from this later provider replay; the image may have been visible in its original turn]'
+  '[这张图片的字节只是在这次较晚的重放里被省略了；它在原来那一轮里可能是可见的]'
 const HistoricalFilePlaceholder =
-  '[historical file bytes omitted only from this later provider replay; the file may have been available in its original turn]'
+  '[这个文件的字节只是在这次较晚的重放里被省略了；它在原来那一轮里可能是可用的]'
 const HistoricalToolMediaPlaceholder =
-  '[historical tool media bytes omitted only from this later provider replay; they may have been visible or audible in the original tool result; use the artifact reference in this tool result instead]'
+  '[这些媒体字节只是在这次较晚的重放里被省略了；它们在原来那条工具结果里可能是可看可听的；请改用这条工具结果里的制品引用]'
 const InvalidTextSurrogatePattern =
   /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g
 const EmptyResponseReplayPrefixes = [

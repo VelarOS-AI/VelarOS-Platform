@@ -20,7 +20,7 @@ import { isReplayUnsafeAssistantMessage, sanitizeModelMessage } from './sanitize
 import { stripOrphanToolResultParts } from './validate'
 
 const InterruptedToolResultValue =
-  '[no result: the previous turn was interrupted before this tool call completed]'
+  '[没有结果：上一轮在这次工具调用完成之前就被打断了]'
 
 /**
  * 回填判据：tool-call 组里缺结果的调用能否用「被中断」占位结果补齐。

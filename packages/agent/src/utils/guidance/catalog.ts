@@ -93,14 +93,14 @@ function createBuiltInPromptSegments(
     createIdentityPromptSegment(primaryAgentIdentity),
     createCorePromptSegment({
       id: 'core.brand-voice',
-      label: 'Brand Voice',
+      label: '表达风格',
       source: 'built-in',
       priority: PromptSegmentPriority.brandVoice,
       text: PromptCatalog.brandVoice,
     }),
     {
       id: 'runtime.environment',
-      label: 'Current Runtime Environment',
+      label: '当前运行环境',
       tier: 'runtime',
       source: 'runtime',
       retention: 'protected',
@@ -109,7 +109,7 @@ function createBuiltInPromptSegments(
     },
     {
       id: 'runtime.datetime',
-      label: 'Current Date Time',
+      label: '当前时间',
       tier: 'runtime',
       source: 'runtime',
       priority: 9020,
@@ -119,7 +119,7 @@ function createBuiltInPromptSegments(
     // 视觉协议按逐轮 facts 激活，统一留在 Tier1 活动尾，保持 Tier0 稳定前缀逐字不变。
     {
       id: 'runtime.visual-widget-tools',
-      label: 'Visual Output Tools',
+      label: '可视化输出工具',
       tier: 'runtime',
       source: 'built-in',
       retention: 'protected',
@@ -134,7 +134,7 @@ function createBuiltInPromptSegments(
     },
     {
       id: 'runtime.html-artifact-protocol',
-      label: 'HTML Live Preview Protocol',
+      label: 'HTML 实时预览协议',
       tier: 'runtime',
       source: 'built-in',
       retention: 'protected',
@@ -149,7 +149,7 @@ function createBuiltInPromptSegments(
     },
     {
       id: 'runtime.visual-rendering-routing',
-      label: 'Visual Rendering Routing',
+      label: '呈现方式怎么选',
       tier: 'runtime',
       source: 'built-in',
       retention: 'protected',
@@ -168,7 +168,7 @@ function createBuiltInPromptSegments(
       // 用户附加提示词刻意留在 Tier1：它可以在会话进行中被设置页改掉，进 Tier0 等于让一次
       // 设置改动把稳定前缀连同整段历史一起作废。
       id: 'user.systemPromptAppend',
-      label: 'User Prompt Appendix',
+      label: '用户附加提示词',
       tier: 'runtime',
       source: 'user',
       priority: PromptSegmentPriority.user,
@@ -189,7 +189,7 @@ function createBuiltInPromptSegments(
 function createIdentityPromptSegment(identity: string): PromptSegmentDefinition {
   return createCorePromptSegment({
     id: 'core.identity',
-    label: 'Identity',
+    label: '身份',
     source: 'built-in',
     priority: PromptSegmentPriority.identity,
     text: identity,

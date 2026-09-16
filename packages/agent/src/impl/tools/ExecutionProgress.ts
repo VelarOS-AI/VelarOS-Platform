@@ -72,7 +72,7 @@ export class ExecutionProgress implements ExecutionProgressApi {
     this.episodes.set(key, attempts)
     trim(this.episodes)
     if (attempts < 3) return undefined
-    return `The same resource and failure condition persisted for ${attempts} attempts without new evidence. Inspect the specific precondition or choose another repair approach; reuse saved arguments when only a field needs correction.`
+    return `同一个对象、同一种失败原因已经连续 ${attempts} 次没有新证据。先查清具体是哪个前置条件不满足，或者换一条修复路径；只需要改一个字段时用失败回执里的参数复用，不必重填正文。`
   }
 }
 function trim<T>(map: Map<string, T>): void {

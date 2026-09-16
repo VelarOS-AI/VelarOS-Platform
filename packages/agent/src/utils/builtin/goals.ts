@@ -210,7 +210,7 @@ function buildGoalStateUpsertInput(input: {
 const GoalStepEngineOptions: StepEngineOptions = {
   kindLabel: 'goal',
   listLabel: '当前目标步骤',
-  emptyMessage: 'Active goal has no steps to complete.',
+  emptyMessage: '当前目标下没有可以完成的步骤。',
   resolvedStatuses: ['completed', 'skipped'],
   promoteFallbackAnywhere: true,
 }

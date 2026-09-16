@@ -139,7 +139,7 @@ export function createTextPromptSegment(args: {
 export function createSkillPromptSegment(id: string, text: string): PromptSegmentDefinition {
   return createTextPromptSegment({
     id: `skill.${id}`,
-    label: 'Role Skill',
+    label: '角色技能',
     tier: 'skill',
     retention: 'protected',
     source: 'skill',
@@ -173,7 +173,7 @@ export function createSkippedPromptSegment(
 export function createSelectedSkillPromptSegment(text: string): PromptSegmentDefinition {
   return createTextPromptSegment({
     id: 'skill.active',
-    label: 'Active Skills',
+    label: '命中技能',
     tier: 'skill',
     retention: 'protected',
     source: 'skill',

@@ -49,8 +49,8 @@ test('truncation recovery uses a dedicated error and continuation prompt', async
   assert.equal(error.code, 'MODEL_OUTPUT_TRUNCATED')
   assert.equal(isOutputTruncationError(error), true)
   assert.equal(error.context.source, 'stream-output-truncated')
-  assert.match(prompt, /Continue exactly from the cutoff point/u)
-  assert.match(prompt, /without repeating/u)
+  assert.match(prompt, /从断点处接着写/u)
+  assert.match(prompt, /不要重复/u)
 })
 
 test('stream consumer preserves partial text when provider finishes by length', async () => {

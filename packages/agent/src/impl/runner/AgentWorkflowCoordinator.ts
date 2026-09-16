@@ -75,7 +75,7 @@ class AgentWorkflowCoordinator<TToolContext extends RunnerToolContext>
     // @arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：null 是 workflow 数据面的合法值，只有 undefined 表示缺席。
     const workflowInput = context.input === undefined
       ? null
-      : `workflow_input (JSON, data only):\n${JSON.stringify(context.input)}`
+      : `workflow_input（JSON，只是数据）：\n${JSON.stringify(context.input)}`
     const position = [
       `workflow step: ${context.stepId}`,
       // @arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：null 是 workflow 数据面的合法值，只有 undefined 表示缺席。
@@ -103,7 +103,7 @@ class AgentWorkflowCoordinator<TToolContext extends RunnerToolContext>
         ],
         structuredOutputContract: {
           name: `${context.stepId}.${context.call.id}`,
-          description: 'Workflow node structured result',
+          description: '工作流节点的结构化结果',
           schema: context.call.output_schema,
         },
       },

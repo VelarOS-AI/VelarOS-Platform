@@ -77,7 +77,7 @@ class KernelToolLoopGuard implements KernelToolLoopGuardApi {
     const count = this.lastWriteSuccess?.key === key ? this.lastWriteSuccess.count : 0
     if (count < 2) return null
 
-    return `Tool "${input.toolName}" with the same arguments already succeeded 2 times. Stop repeating the write and inspect the current state before trying again.`
+    return `工具 "${input.toolName}" 用同一组参数已经成功过 2 次。别再重复这次写入，先看清当前状态再决定下一步。`
   }
 
   public recordSuccess(input: KernelToolLoopGuardInput): void {
@@ -113,7 +113,7 @@ class KernelToolLoopGuard implements KernelToolLoopGuardApi {
 
     if (this.lastFailureBatchCount < 3) return null
 
-    return `The same tool failure batch failed 3 times in a row. Stop retrying the same calls, inspect the failure cause, and choose a different repair path.`
+    return `同一批工具调用已经连续失败 3 次。别再原样重试，先查清失败原因，换一条修复路径。`
   }
 }
 

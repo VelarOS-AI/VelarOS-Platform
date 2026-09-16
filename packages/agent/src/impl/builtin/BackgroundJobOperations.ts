@@ -122,7 +122,7 @@ function filterBackgroundJobOutput(
 /**
  * 「本次没有新增输出」与「有新增但 filter 一行没命中」必须是两句话。
  *
- * 两者曾经都印成 `(no new output)`：子 Agent 输出了 200 行进展、`filter:'error|failed'` 一行没中，
+ * 两者曾经都印成「没有新增输出」：子 Agent 输出了 200 行进展、`filter:'error|failed'` 一行没中，
  * 模型照文档判定「没有新增输出」→ 认为 job 停滞而去 cancel 或重派，而那 200 行已经被增量游标
  * 吞掉。现在把行数账带回去（新增 N 行 / 命中 K 行），并明写用 `mode=snapshot` 复读。
  */
@@ -132,20 +132,20 @@ function formatBackgroundJobOutput(
 ): string {
   const header = `[${snapshot.id}] ${snapshot.kind} "${snapshot.label}" ${snapshot.status}`
   const truncationNotice = snapshot.truncated
-    ? `\n[cached output truncated: omitted ${Math.max(0, Math.floor(snapshot.omittedChars ?? 0))} earlier chars]`
+    ? `\n[缓存输出已截断：更早的 ${Math.max(0, Math.floor(snapshot.omittedChars ?? 0))} 个字符被省略]`
     : ''
   const filterNotice = filtered.ignoredReason
-    ? `\n[filter ignored (invalid regex), showing all output: ${filtered.ignoredReason}]`
+    ? `\n[filter 是无效正则，已忽略并返回全量输出：${filtered.ignoredReason}]`
     : ''
   const prefix = `${header}${truncationNotice}${filterNotice}`
 
-  if (filtered.totalLines === 0) return `${prefix}\n(no new output)`
+  if (filtered.totalLines === 0) return `${prefix}\n（没有新增输出）`
 
   if (filtered.applied && filtered.matchedLines === 0)
-    return `${prefix}\n(${filtered.totalLines} new line(s), 0 matched the filter — re-read with mode=snapshot or without filter to see them)`
+    return `${prefix}\n（新增 ${filtered.totalLines} 行，但一行都没命中 filter——用 mode=snapshot 或去掉 filter 复读就能看到）`
 
   if (filtered.applied && filtered.matchedLines < filtered.totalLines)
-    return `${prefix}\n[filter matched ${filtered.matchedLines}/${filtered.totalLines} line(s); the rest are readable with mode=snapshot]\n${filtered.output}`
+    return `${prefix}\n[filter 命中 ${filtered.matchedLines}/${filtered.totalLines} 行；其余用 mode=snapshot 可读]\n${filtered.output}`
 
   return `${prefix}\n${filtered.output}`
 }
@@ -154,7 +154,7 @@ function formatBackgroundJobWaitResults(
   snapshots: readonly ToolBackgroundJobOutputSnapshot[],
   filter?: string
 ): string {
-  if (isEmpty(snapshots)) return 'No background jobs to wait for.'
+  if (isEmpty(snapshots)) return '没有需要等待的后台任务。'
   return snapshots
     .map((snapshot) =>
       formatBackgroundJobOutput(snapshot, filterBackgroundJobOutput(snapshot.output, filter))

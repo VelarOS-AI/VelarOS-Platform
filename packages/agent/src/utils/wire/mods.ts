@@ -21,6 +21,7 @@ import {
 } from '@velaros-ai/core'
 import { VelarosModManifestFileName } from '@velaros-ai/kernel/contracts/protocol'
 
+import { AgentModAxes, AgentProtocolVersions } from '../../contract/constants.js'
 import type { AgentModCommandHandler, AgentModContributes, AgentModContributionAxisName, AgentModDiagnostic, AgentModEngines, AgentModExecutionModeContribution, AgentModHookContribution, AgentModHookEvent, AgentModHookExecutionMode, AgentModHookMatcher, AgentModManifest, AgentModManifestParseResult, AgentModPromptSegmentContribution, AgentModSkillContribution, AgentModSpaceContribution, AgentModSubAgentTypeContribution, AgentModToolCategoryContribution, AgentModToolContribution, AgentModTrustLevel, AgentModTurnContextSourceContribution, ParseAgentModManifestOptions,SemverComparator, SemverVersion } from '../../types/agent.js'
 import { isCanonicalToolId } from '../toolkit/identity'
 
@@ -142,17 +143,7 @@ function satisfiesSemverRange(version: string, range: string): boolean {
  * 贡献点由官方演进，mod 不能发明新轴。壳级 UI 轴（pages/settingsRenderers/
  * surfaces/tours）不在 Agent 主干——它们是产品壳的不透明信封，由壳自己的 manifest 面拥有。
  */
-const AgentModContributionAxisNames = [
-  'tools',
-  'toolCategories',
-  'promptSegments',
-  'skills',
-  'spaces',
-  'subAgentTypes',
-  'turnContextSources',
-  'executionModes',
-  'hooks',
-] as const satisfies readonly AgentModContributionAxisName[]
+const AgentModContributionAxisNames = AgentModAxes.contributionAxisNames satisfies readonly AgentModContributionAxisName[]
 
 const AgentModContributionAxisNameSchema = z.enum(AgentModContributionAxisNames)
 
@@ -166,23 +157,7 @@ const AgentModContributionAxisNameSchema = z.enum(AgentModContributionAxisNames)
  * 新 manifest 一律使用 `event`。`seam` 只是 v1 编译期 Mod 的过渡输入别名，解析后不再存在；
  * 外部 `.velarmod` 与编译期 Mod 因此消费同一份规范化声明。
  */
-const AgentModHookEvents = [
-  'session:start',
-  'session:end',
-  'turn:start',
-  'turn:end',
-  'turn-context:assemble',
-  'prompt:compose',
-  'tool-call:before',
-  'tool-call:after',
-  'tool-result:after',
-  'model-request:before',
-  'model-response:after',
-  'sub-agent:dispatch',
-  'compaction:before',
-  'skill:select',
-  'diagnostic:publish',
-] as const satisfies readonly AgentModHookEvent[]
+const AgentModHookEvents = AgentModAxes.hookEvents satisfies readonly AgentModHookEvent[]
 
 const AgentModHookEventSchema = z.enum(AgentModHookEvents)
 
@@ -385,7 +360,7 @@ const AgentModHookMatcherSchema = z.strictObject({
 }) satisfies z.ZodType<AgentModHookMatcher>
 /** @deprecated 新代码使用通用 AgentModCommandHandlerSchema。 */
 const AgentModCommandHookHandlerSchema = AgentModCommandHandlerSchema
-const AgentModHookExecutionModes = ['blocking', 'background'] as const satisfies readonly AgentModHookExecutionMode[]
+const AgentModHookExecutionModes = AgentModAxes.hookExecutionModes satisfies readonly AgentModHookExecutionMode[]
 /**
  * Hook 挂接声明。
  *
@@ -441,13 +416,9 @@ const AgentModContributesSchema = z.strictObject({
 // ─── manifest 龙骨 ───────────────────────────────────────────────────────────
 
 /** manifest 自身 schema 版本：新增字段和兼容迁移必须通过此版本演进。 */
-const AgentModManifestSchemaVersion = 1 as const
+const AgentModManifestSchemaVersion = AgentProtocolVersions.agentModManifestSchema
 
-const AgentModTrustLevels = [
-  'bundled-official',
-  'marketplace-signed',
-  'local-dev',
-] as const satisfies readonly AgentModTrustLevel[]
+const AgentModTrustLevels = AgentModAxes.trustLevels satisfies readonly AgentModTrustLevel[]
 /**
  * 兼容双轴 + 领域轴。
  *

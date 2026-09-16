@@ -348,7 +348,7 @@ function buildUserTextSafetyValveText(
   ref: string,
   refKind: ContextRecordExcerpt['refKind']
 ): string {
-  const guidance = `[user text partially resident; originalLength=${original.length}; visible=head+tail; use context:recall(ref:"${ref}", refKind:"${refKind}", offset:0) for the exact full text.]`
+  const guidance = `[用户正文只保留了一部分；原文长度 ${original.length}；这里可见的是开头加结尾；要精确的完整正文请用 context:recall(ref:"${ref}", refKind:"${refKind}", offset:0)。]`
   const excerptBudget = Math.max(1, maxChars - guidance.length - 2)
   const excerpt = sliceHeadTailExcerpt(original, excerptBudget).trim()
   return [excerpt, '', guidance].join('\n')

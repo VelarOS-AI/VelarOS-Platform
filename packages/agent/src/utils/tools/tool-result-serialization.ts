@@ -177,7 +177,7 @@ function buildDepthLimitMarker(
         ref: "<toolCallId>",
         refKind: "tool-payload",
         jsonPath,
-        reason: `Read the full tool result payload and inspect ${jsonPath}.`,
+        reason: `要取回完整的工具结果，看 ${jsonPath} 这一段。`,
       },
     },
   };
@@ -361,9 +361,9 @@ function serializationErrorMessage(error: unknown): string {
   );
   if (message) return message;
   if (isNull(error))
-    return "A null value was caught while serializing the tool result.";
+    return "序列化工具结果时接到的是 null。";
   if (isUndefined(error))
-    return "An undefined value was caught while serializing the tool result.";
+    return "序列化工具结果时接到的是 undefined。";
   return String(error);
 }
 
@@ -378,7 +378,7 @@ function stringifySerializationError(payload: Record<string, unknown>): string {
   } catch {
     // arch-guard:silent-catch-ok 下面的回退是静态 JSON。
   }
-  return '{"serializationError":true,"reason":"tool_result_serialization_fallback_failed","message":"Tool result serialization failed and the structured fallback could not be serialized."}';
+  return '{"serializationError":true,"reason":"tool_result_serialization_fallback_failed","message":"工具结果序列化失败，连结构化兜底结果也序列化不出来。"}';
 }
 
 /**
@@ -419,8 +419,8 @@ function stringifyToolResult(value: unknown): string {
       ? "tool_result_returned_null"
       : "json_stringify_returned_undefined";
     const message = isString(serialized)
-      ? "Tool returned top-level null; model-visible fallback inserted so the result is not silently lost."
-      : "Tool result could not be serialized to JSON; model-visible fallback inserted.";
+      ? "工具顶层返回了 null；已插入一条模型可见的兜底结果，免得这次调用悄无声息地丢掉。"
+      : "工具结果转不成 JSON；已插入一条模型可见的兜底结果。";
     return stringifySerializationError(
       buildSerializationErrorResult(reason, message, value),
     );

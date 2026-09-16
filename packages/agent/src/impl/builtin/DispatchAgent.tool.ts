@@ -38,8 +38,8 @@ export const dispatchAgent: VelaTool<DispatchAgentInput> = defineVelaTool<Dispat
       agent_name: 'Scout',
       readonly: true,
       tool_scope: 'type_default',
-      description: 'Scan auth module',
-      prompt: 'Read src/auth and summarize login flow, key files, and risks.',
+      description: '摸清登录模块',
+      prompt: '读 src/auth，把登录流程、关键文件和风险点各讲一遍。',
     },
     // 异步后台任务：mode:async，父 Agent 先继续，之后用 job:wait/job:read_output 收束
     {
@@ -47,13 +47,13 @@ export const dispatchAgent: VelaTool<DispatchAgentInput> = defineVelaTool<Dispat
       readonly: true,
       tool_scope: 'type_default',
       mode: 'async',
-      description: 'Review utility coverage',
-      prompt: 'Read src/util.js and its tests. Report missing edge cases with exact file locations.',
+      description: '复核工具函数的测试覆盖',
+      prompt: '读 src/util.js 和它的测试，指出漏掉的边界情况，每条都给准确的文件位置。',
     },
     // 修复后复验：续跑原来的验证者，它还记得失败现场
     {
       thread_id: 'subagent:verifier-thread',
-      prompt: 'Fixed the null check in src/auth/login.ts; re-run the auth tests.',
+      prompt: '已经修好 src/auth/login.ts 的空值判断，重跑一遍登录相关的测试。',
     },
     { thread_id: 'subagent:running-thread', interrupt: true },
   ],

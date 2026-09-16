@@ -149,7 +149,7 @@ export function projectFileContext(
       } catch { Log.tag('ContextProjection').debug('跳过无法解析或序列化的记录，保持原文与召回入口')
 
         // 首尾拼接内容不能作为源码证据，保留持久召回引用。
-        return { ...record, excerpt: undefined, reason: 'Source excerpt was clipped; use current source views or retrieve the stored output.' }
+        return { ...record, excerpt: undefined, reason: '源码片段被截断了；请改用当前的源码视图，或者把存下来的完整输出取回来。' }
       }
     }
     if (record.kind === 'project-source-window' && isString(record.path) && paths.has(record.path)) {

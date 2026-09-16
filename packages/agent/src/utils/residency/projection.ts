@@ -386,7 +386,7 @@ function buildTombstoneText(
 ): string {
   const reason = `context record ${record.id} is ${residency.toLowerCase()}`
   if (residency === 'EXPIRED')
-    return `[context-record ${record.id} expired: cold-archived, original no longer retrievable]`
+    return `[上下文记录 ${record.id} 已过期：已冷归档，原文不再可取回]`
 
   const ref = resolveTombstoneRef(record, part)
   return JSON.stringify(

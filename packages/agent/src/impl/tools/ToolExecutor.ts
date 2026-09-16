@@ -408,7 +408,7 @@ export class ToolExecutor implements ToolExecutorApi {
 
   private async runOne(tool: ScheduledTool): Promise<ToolResult> {
     if (this.siblingErrored && this.siblingAbort.signal.aborted) {
-      const reason = `Cancelled: sibling tool "${this.siblingErrorName}" failed`;
+      const reason = `已取消：同批的工具 "${this.siblingErrorName}" 失败了`;
       return this.finalizeResult(tool, {
         toolCallId: tool.toolCallId,
         toolName: tool.toolName,
@@ -1065,7 +1065,7 @@ export class ToolExecutor implements ToolExecutorApi {
 
   private resolveAbortSettlementReason(): string {
     if (this.siblingErrored && this.siblingAbort.signal.aborted)
-      return `Cancelled: sibling tool "${this.siblingErrorName}" failed`;
+      return `已取消：同批的工具 "${this.siblingErrorName}" 失败了`;
 
     return ToolExecutor.CancelledByUserReason;
   }

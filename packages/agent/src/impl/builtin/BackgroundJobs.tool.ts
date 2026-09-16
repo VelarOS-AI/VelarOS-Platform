@@ -27,7 +27,7 @@ export const readBackgroundJobOutput: VelaTool<ReadBackgroundJobOutputInput> = d
   usage: [
     '默认 mode=incremental，只返回新增输出并推进游标；需要完整缓存时用 mode=snapshot。',
     'filter 是正则表达式，只保留匹配行；正则无效会被忽略（返回全量输出并说明原因），不会报错。',
-    '「no new output」= 本次真的没有新增；「N new line(s), 0 matched the filter」= 有新增但一行没命中，此时用 mode=snapshot 或去掉 filter 复读。两者都不代表 job 不存在。',
+    '「没有新增输出」＝本次真的没有新增；「新增 N 行，但一行都没命中 filter」＝有新增但一行没命中，此时用 mode=snapshot 或去掉 filter 复读。两者都不代表 job 不存在。',
   ],
   examples: [
     {
@@ -54,7 +54,7 @@ export const readBackgroundJobOutput: VelaTool<ReadBackgroundJobOutputInput> = d
       jobId: input.job_id,
       mode: input.mode ?? 'incremental',
     })
-    if (!snapshot) return `Background job "${input.job_id}" was not found for this session.`
+    if (!snapshot) return `本会话里没有 id 为 "${input.job_id}" 的后台任务。`
 
     return formatBackgroundJobOutput(
       snapshot,
@@ -150,7 +150,7 @@ export const cancelBackgroundJob: VelaTool<CancelBackgroundJobInput> = defineVel
     }
 
     const snapshot = await ctx.cancelBackgroundJob({ jobId: input.job_id })
-    if (!snapshot) return `Background job "${input.job_id}" was not found for this session.`
+    if (!snapshot) return `本会话里没有 id 为 "${input.job_id}" 的后台任务。`
     return formatBackgroundJobOutput(snapshot, filterBackgroundJobOutput(snapshot.output))
   },
 })

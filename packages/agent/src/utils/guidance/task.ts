@@ -15,7 +15,7 @@ export function createTaskRuntimePromptSegments(
   return [
     createTextPromptSegment({
       id: 'runtime.execution-plan',
-      label: 'Execution Plan',
+      label: '执行计划',
       source: 'runtime',
       priority: PromptSegmentPriority.runtimeAdvice,
       when: () => !!snapshot.executionPlanPreview,
@@ -23,7 +23,7 @@ export function createTaskRuntimePromptSegments(
     }),
     createTextPromptSegment({
       id: 'runtime.goal-mode',
-      label: 'Goal Mode',
+      label: '目标模式',
       source: 'runtime',
       priority: PromptSegmentPriority.runtimeAdvice + 1,
       when: () => snapshot.goalMode,

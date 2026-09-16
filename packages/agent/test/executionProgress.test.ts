@@ -14,12 +14,12 @@ test('changing unrelated parameters or reading another file does not clear an un
   expect(fail('one')).toBeUndefined()
   progress.record({ toolName: 'read', args: { path: 'other.ts' }, result: { revision: 'O' } })
   expect(fail('two')).toBeUndefined()
-  expect(fail('three')).toContain('3 attempts')
+  expect(fail('three')).toContain('连续 3 次')
   progress.record({ toolName: 'read', args: { path: 'a.ts' }, result: { revision: 'A' } })
   expect(fail('four')).toBeUndefined()
   progress.record({ toolName: 'read', args: { path: 'a.ts' }, result: { revision: 'A' } })
   expect(fail('five')).toBeUndefined()
-  expect(fail('six')).toContain('3 attempts')
+  expect(fail('six')).toContain('连续 3 次')
 })
 
 test('different resources and changed revision are independent exploration', () => {

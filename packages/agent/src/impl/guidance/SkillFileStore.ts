@@ -14,7 +14,7 @@ import { isArray, isBlank, isEmpty,isString, stringifyPretty, trimmedStringOrEmp
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 
-import { AgentSkillFiles } from '../../contract/constants.js'
+import { AgentSkillFailureCodes, AgentSkillFiles } from '../../contract/constants.js'
 import type { SkillFileRecord, SkillFrontmatter } from '../../types/guidance.js'
 import { normalizeSkillFileId } from '../../utils/guidance/skill-file-paths'
 import { compareStableStrings } from '../../utils/residency/determinism'
@@ -300,18 +300,18 @@ class SkillFileStore implements SkillFileStoreApi {
     const { data, body } = parseFrontmatter(content)
     const name = data.name?.trim()
     if (!name) {
-      throw new AppError('VALIDATION', 'skill-frontmatter-name-missing：技能 frontmatter 里没有 name，它既是显示名也是缺省 id 的来源，必须写。')
+      throw new AppError('VALIDATION', `${AgentSkillFailureCodes.frontmatterNameMissing}：技能 frontmatter 里没有 name，它既是显示名也是缺省 id 的来源，必须写。`)
     }
     if (isBlank(body)) {
-      throw new AppError('VALIDATION', 'skill-body-empty：技能正文是空的，frontmatter 之后必须写内容，只有头部的文件装了也没用。')
+      throw new AppError('VALIDATION', `${AgentSkillFailureCodes.bodyEmpty}：技能正文是空的，frontmatter 之后必须写内容，只有头部的文件装了也没用。`)
     }
     if (isEmpty(parseFrontmatterList(data.spaces)) && isEmpty(this.defaultSpaces)) {
-      throw new AppError('VALIDATION', 'skill-frontmatter-spaces-missing：技能没声明生效空间，frontmatter 的 spaces 为空且宿主也没给缺省空间，这样它在任何空间里都不会被加载。')
+      throw new AppError('VALIDATION', `${AgentSkillFailureCodes.frontmatterSpacesMissing}：技能没声明生效空间，frontmatter 的 spaces 为空且宿主也没给缺省空间，这样它在任何空间里都不会被加载。`)
     }
 
     const id = options.id?.trim() || slugify(name)
     if (!id) {
-      throw new AppError('VALIDATION', 'skill-id-invalid：从 name 派生出来的 slug 是空的，请显式传 id，或把 name 改成含字母数字的名字。')
+      throw new AppError('VALIDATION', `${AgentSkillFailureCodes.idInvalid}：从 name 派生出来的 slug 是空的，请显式传 id，或把 name 改成含字母数字的名字。`)
     }
 
     const filePath = this.filePathOf(id)
@@ -331,14 +331,14 @@ class SkillFileStore implements SkillFileStoreApi {
   /** 导入本地 md 文件（复制进 skills 目录）。 */
   public importFile(sourcePath: string): SkillFileRecord {
     if (extname(sourcePath).toLowerCase() !== '.md') {
-      throw new AppError('VALIDATION', 'skill-import-md-only：只能导入 .md 技能文件，所选文件的扩展名不是 .md。')
+      throw new AppError('VALIDATION', `${AgentSkillFailureCodes.importMarkdownOnly}：只能导入 .md 技能文件，所选文件的扩展名不是 .md。`)
     }
 
     let content: string
     try {
       content = readFileSync(sourcePath, 'utf8')
     } catch {
-      throw new AppError('VALIDATION', 'skill-import-unreadable：技能文件读不出来，确认路径还在、且当前用户有读权限。')
+      throw new AppError('VALIDATION', `${AgentSkillFailureCodes.importUnreadable}：技能文件读不出来，确认路径还在、且当前用户有读权限。`)
     }
     return this.saveContent(content)
   }
@@ -376,7 +376,7 @@ class SkillFileStore implements SkillFileStoreApi {
     spaces: readonly string[]
   ): number {
     if (isEmpty(spaces)) {
-      throw new AppError('VALIDATION', 'legacy-skill-spaces-missing：迁移旧配置式技能必须指定生效空间，spaces 为空迁出来的技能在任何空间都用不上，本次迁移已中止。')
+      throw new AppError('VALIDATION', `${AgentSkillFailureCodes.legacySpacesMissing}：迁移旧配置式技能必须指定生效空间，spaces 为空迁出来的技能在任何空间都用不上，本次迁移已中止。`)
     }
     const markerPath = join(this.dir(), '.migrated-config-skills')
     if (existsSync(markerPath)) return 0

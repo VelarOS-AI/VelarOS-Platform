@@ -429,7 +429,7 @@ void describe('context residency ledger · projection layout', () => {
       budget: { tailProtectTurns: 0 },
     })
     const content = String(projected.messages[0]?.content)
-    assert.ok(content.includes('expired'))
+    assert.ok(content.includes('已过期'))
     assert.ok(!content.includes('context:recall'))
   })
 })

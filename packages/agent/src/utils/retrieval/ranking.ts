@@ -339,7 +339,7 @@ function buildHeadTailSnippet(text: string, maxChars: number): LooseOptional<str
     if (!trimmed) return null;
     if (trimmed.length <= maxChars) return trimmed;
 
-    const marker = "\n... head/tail excerpt; middle omitted ...\n";
+    const marker = "\n……只截了开头和结尾，中间省略……\n";
     if (maxChars <= marker.length)
       return chatSearchText.truncate(trimmed, maxChars);
     const contentBudget = maxChars - marker.length;

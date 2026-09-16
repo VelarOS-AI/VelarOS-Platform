@@ -7,6 +7,7 @@ import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 import { asRecord, readString } from '@velaros-ai/core/utils/unknownJsonRecord'
 
+import { AgentSkillFailureCodes } from '../../contract/constants.js'
 import type { SkillMarketCatalog, SkillMarketEntry } from '../../types/agent.js'
 import type { RemoteSkillEntry, SkillMarketAvailability } from '../../types/guidance.js'
 
@@ -121,14 +122,14 @@ class SkillMarketClient implements SkillMarketClientApi {
     try {
       const entry = (await this.fetchManifest()).find((candidate) => candidate.id === id)
       if (!entry) {
-        throw new AppError('VALIDATION', 'skill-market-entry-missing：市场清单里没有这个技能，它可能已经下架，或者本地清单是旧的，刷新后再装。')
+        throw new AppError('VALIDATION', `${AgentSkillFailureCodes.marketEntryMissing}：市场清单里没有这个技能，它可能已经下架，或者本地清单是旧的，刷新后再装。`)
       }
 
       const content = await this.readTextResource(new URL(entry.file, this.normalizedBase()))
       if (entry.sha256) {
         const actual = createHash('sha256').update(content, 'utf8').digest('hex')
         if (actual !== entry.sha256.trim().toLowerCase()) {
-          throw new AppError('VALIDATION', 'skill-checksum-mismatch：下载到的技能正文与清单登记的 sha256 对不上，文件可能损坏或被改过，已放弃安装。')
+          throw new AppError('VALIDATION', `${AgentSkillFailureCodes.checksumMismatch}：下载到的技能正文与清单登记的 sha256 对不上，文件可能损坏或被改过，已放弃安装。`)
         }
       }
 
@@ -136,7 +137,7 @@ class SkillMarketClient implements SkillMarketClientApi {
       this.installStates.delete(id)
       this.notify()
     } catch (error) {
-      const reason = error instanceof AppError ? error.message : 'skill-install-failed：技能安装失败，原因未知。'
+      const reason = error instanceof AppError ? error.message : `${AgentSkillFailureCodes.installFailed}：技能安装失败，原因未知。`
       this.log.warn('技能安装失败', { id, error })
       this.installStates.set(id, { phase: 'failed', error: reason })
       this.notify()
@@ -148,7 +149,7 @@ class SkillMarketClient implements SkillMarketClientApi {
     if (!base) {
       throw new AppError(
         'UNAVAILABLE',
-        'skill-market-disabled：宿主没有配置技能市场地址，市场处于关闭状态，装不了远程技能。',
+        `${AgentSkillFailureCodes.marketDisabled}：宿主没有配置技能市场地址，市场处于关闭状态，装不了远程技能。`,
         undefined,
         { reason: 'endpoint-not-configured' }
       )
@@ -160,7 +161,7 @@ class SkillMarketClient implements SkillMarketClientApi {
     } catch (error) {
       throw new AppError(
         'VALIDATION',
-        'skill-market-endpoint-invalid：宿主配置的技能市场地址不是合法 URL，解析失败。',
+        `${AgentSkillFailureCodes.marketEndpointInvalid}：宿主配置的技能市场地址不是合法 URL，解析失败。`,
         error,
         { endpoint: base }
       )
@@ -177,12 +178,12 @@ class SkillMarketClient implements SkillMarketClientApi {
     try {
       parsed = JSON.parse(raw)
     } catch {
-      throw new AppError('VALIDATION', 'skill-manifest-invalid：skills-manifest.json 不是合法 JSON，解析失败。')
+      throw new AppError('VALIDATION', `${AgentSkillFailureCodes.manifestInvalid}：skills-manifest.json 不是合法 JSON，解析失败。`)
     }
 
     const skills = asRecord(parsed)?.skills
     if (!isArray(skills)) {
-      throw new AppError('VALIDATION', 'skill-manifest-invalid：skills-manifest.json 里的 skills 不是数组，清单格式不对。')
+      throw new AppError('VALIDATION', `${AgentSkillFailureCodes.manifestInvalid}：skills-manifest.json 里的 skills 不是数组，清单格式不对。`)
     }
 
     return skills.flatMap((item): RemoteSkillEntry[] => {
@@ -209,13 +210,13 @@ class SkillMarketClient implements SkillMarketClientApi {
       try {
         return await readFile(fileURLToPath(url), 'utf8')
       } catch {
-        throw new AppError('VALIDATION', 'skill-market-unavailable：本地技能市场文件读不出来，确认路径还在、且当前用户有读权限。')
+        throw new AppError('VALIDATION', `${AgentSkillFailureCodes.marketUnavailable}：本地技能市场文件读不出来，确认路径还在、且当前用户有读权限。`)
       }
     }
 
     const response = await this.fetchImpl(url).catch(() => null)
     if (!response?.ok) {
-      throw new AppError('VALIDATION', 'skill-market-unavailable：技能市场请求失败，网络不通或服务端返回了错误状态码。')
+      throw new AppError('VALIDATION', `${AgentSkillFailureCodes.marketUnavailable}：技能市场请求失败，网络不通或服务端返回了错误状态码。`)
     }
     return response.text()
   }

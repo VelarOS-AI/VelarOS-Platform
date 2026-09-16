@@ -633,7 +633,7 @@ class ToolExecutionPolicy implements ToolExecutionPolicyApi {
           resolveCapabilityCategoryDefinitions(toolContext.capabilityPorts)[categoryId]?.label ??
           categoryId
         const unavailableReason =
-          access.message ?? `${categoryLabel} is unavailable in the active capability scope.`
+          access.message ?? `当前能力范围里用不了 ${categoryLabel}。`
         return buildToolFailureResult('tool_unavailable', unavailableReason, canonicalToolName, {
           details: {
             categoryId,

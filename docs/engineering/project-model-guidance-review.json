@@ -68,7 +68,7 @@
   ],
   "fingerprints": {
     "project": "925b79022faf40a79759265eee4ca25c6b118a628e652b5b15ace36611d1f772",
-    "agent": "8dfec8a29d419d74238eb513b9340ded15032935308153d988c6e9aa9b9da74d",
+    "agent": "bb977b690e1acd5acaace6f768d21d8b1a3a1a0a8365e48f8070165603b9b6e8",
     "documents": "0b21de94640e41de1b8c3981391f7d28c40d81006b1cedf7ace5abf19fc87732"
   },
   "sourceArtifacts": [
@@ -90,7 +90,7 @@
     },
     {
       "path": "packages/agent/src/impl/builtin/ContextRetrieval.tool.ts",
-      "fingerprint": "50255de3d5126a250f86a349c9bfffd5f232980cb085f2e41fe914ad5fc1f862"
+      "fingerprint": "9a67708afe4afe1729da1d2c9dcea77afcaa479ae455a9b661167a9572586607"
     },
     {
       "path": "packages/agent/src/impl/builtin/Plans.tool.ts",
@@ -106,7 +106,7 @@
     },
     {
       "path": "packages/agent/src/impl/tools/ToolExecutor.ts",
-      "fingerprint": "7a90027e11c321fa135cdfd05bd3945dbf3486a719dff448786730f0097a7391"
+      "fingerprint": "f68ae918edbf3b8cd1f062cdf87396ef1a810fb66a0af33e60dc01b04397c068"
     },
     {
       "path": "packages/agent/src/impl/tools/ToolInputReuseStore.ts",
@@ -118,23 +118,23 @@
     },
     {
       "path": "packages/agent/src/utils/context/file-context-projection.ts",
-      "fingerprint": "31f8d73ccc79bb876b50feeee0a5b1356e7c5d7c8415bf269d69c26717d2eb16"
+      "fingerprint": "8564b59ca6f876283428226785da86d2eec5da9e06d29f6bcd235fd8c03302eb"
     },
     {
       "path": "packages/agent/src/utils/guidance/catalog.ts",
-      "fingerprint": "da5fb3e197c17d8323c5291226eb7b225a4724469a73580c25786bdcff845a5d"
+      "fingerprint": "c09db4570153d38b9d7c1f500f3d48c14dff10770dd20e849cc3baa37a1ff709"
     },
     {
       "path": "packages/agent/src/utils/guidance/runtime.ts",
-      "fingerprint": "842b623a10ad2b0f7db246626f62329714fa7bdf4c994ef1e5e1e84238c9fe3a"
+      "fingerprint": "62d8711394a71df9141bfd4829e2162788afc75723a5fb9ea54455a05bfc2370"
     },
     {
       "path": "packages/agent/src/utils/guidance/task.ts",
-      "fingerprint": "cb8f47eeb5f2d27eacdb71c4a3aaaa89799bcf07c4639a968b64cdeaa48c53ff"
+      "fingerprint": "2cc95a141d0581eddb88bdcdc7f0821955953c6c79dee0c86b8297596165750b"
     },
     {
       "path": "packages/agent/src/utils/tools/tool-args-schema-validator.ts",
-      "fingerprint": "49f8af0a77570f5da5c0ada9a7586f260ed3bb8cc536014d5495f05438390c07"
+      "fingerprint": "7a56536be83f708ff46b1cea2ec865b4f20944bb8d18cdd1de5e63c7f085aa37"
     },
     {
       "path": "packages/agent/src/utils/tools/tool-input-history-projection.ts",

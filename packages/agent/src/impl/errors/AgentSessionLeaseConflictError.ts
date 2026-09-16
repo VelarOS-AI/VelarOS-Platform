@@ -1,3 +1,4 @@
+import { AgentErrorCodes } from '../../contract/constants'
 import type {
   AgentBackgroundAgentState,
   AgentSessionLease,
@@ -6,6 +7,8 @@ import type {
 import { AgentTuning } from '../../utils/tuning'
 
 export class AgentSessionLeaseConflictError extends Error {
+  public readonly code = AgentErrorCodes.sessionLeaseConflict
+
   public constructor(
     public readonly sessionId: string,
     public readonly ownerPid: number,

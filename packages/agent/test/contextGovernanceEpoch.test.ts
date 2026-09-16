@@ -717,8 +717,8 @@ void describe('准入层 · 48K 超长 user 正文安全阀（裁决 2）', () =
     const message = projected.messages[0]!
     assert.equal(message.role, 'user')
     const content = String(message.content)
-    assert.ok(content.includes('user text partially resident'))
-    assert.ok(content.includes('visible=head+tail'))
+    assert.ok(content.includes('用户正文只保留了一部分'))
+    assert.ok(content.includes('这里可见的是开头加结尾'))
     assert.ok(content.includes('ctx-payload:user-1'))
   })
 

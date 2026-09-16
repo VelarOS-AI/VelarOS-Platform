@@ -116,22 +116,22 @@ describe('ToolArgsSchemaValidator effective arguments', () => {
       {
         field: 'enabled',
         action: 'coerced',
-        detail: 'schema converted the model value to its declared type',
+        detail: 'schema 把模型给的值转成了声明的类型',
       },
       {
         field: 'limit',
         action: 'clamped',
-        detail: 'schema bounded or rounded the model value before execution',
+        detail: 'schema 在执行前把模型给的值夹到了范围内或做了取整',
       },
       {
         field: 'mode',
         action: 'defaulted',
-        detail: 'schema supplied the omitted field',
+        detail: 'schema 补上了没填的字段',
       },
       {
         field: 'unsupported',
         action: 'ignored',
-        detail: 'schema removed an unsupported field',
+        detail: 'schema 去掉了一个不支持的字段',
       },
     ])
   })
@@ -164,7 +164,7 @@ describe('ToolArgsSchemaValidator effective arguments', () => {
     expect(result.adjustments.at(-1)).toEqual({
       field: '<additional>',
       action: 'normalized',
-      detail: 'additional schema adjustments were omitted from metadata',
+      detail: '还有别的 schema 调整没写进元数据',
     })
 
     const deepRequested: Record<string, unknown> = {}
@@ -185,7 +185,7 @@ describe('ToolArgsSchemaValidator effective arguments', () => {
     expect(validator.describeAdjustments(deepRequested, deepEffective)).toEqual([{
       field: '<additional>',
       action: 'normalized',
-      detail: 'additional schema adjustments were omitted from metadata',
+      detail: '还有别的 schema 调整没写进元数据',
     }])
   })
 })

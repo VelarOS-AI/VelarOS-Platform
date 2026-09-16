@@ -50,7 +50,7 @@ export function isOutputTruncationError(error: unknown): boolean {
 }
 
 /**
- * 拼续写轮要追加的英文提示词，告诉模型上一段是被供应方的输出上限掐断的、请接着写。
+ * 拼续写轮要追加的提示词，告诉模型上一段是被供应方的输出上限掐断的、请接着写。
  *
  * `appendedAssistant` 指截断前已流给用户的那段文本是否已作为 assistant 消息进了历史：
  * 进了就要求**从断点接着写、不要重复或重述**（否则用户会看到同一段被写两遍）；
@@ -59,21 +59,21 @@ export function isOutputTruncationError(error: unknown): boolean {
  */
 export function buildOutputTruncationContinuationPrompt(appendedAssistant: boolean): string {
   const lines = [
-    'The previous assistant response stopped because the provider hit an output limit.',
+    '上一条回复是因为供应方的输出上限被掐断的，不是答完了。',
   ]
 
   if (appendedAssistant) {
     lines.push(
-      'The visible text already streamed to the user has been preserved in conversation history.',
-      'Continue exactly from the cutoff point without repeating, restarting, or summarizing the preserved text.'
+      '已经流给用户的可见正文保留在对话历史里。',
+      '从断点处接着写，不要重复、不要从头再来、也不要把保留的那段重述一遍。'
     )
   } else {
-    lines.push('Continue the response now without restarting it from the beginning.')
+    lines.push('现在继续这条回复，不要从头重写。')
   }
 
   lines.push(
-    'Complete the remaining answer in normal visible assistant text.',
-    'Keep any still-needed tool call complete and valid; do not emit a partial tool call.'
+    '剩下的内容用普通可见正文写完。',
+    '还需要的工具调用要发就发完整合法的一次，不要发半截调用。'
   )
   return lines.join('\n')
 }

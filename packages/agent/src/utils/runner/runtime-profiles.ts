@@ -17,7 +17,7 @@ const RunProfileDefinitions: Record<RunProfileId, RunProfileDefinition> = {
   compact: {
     id: 'compact',
     label: 'Compact',
-    description: 'Bounded runtime profile for smaller context windows.',
+    description: '给较小上下文窗口用的收紧画像。',
     budget: {
       maxToolCount: AgentTuning.runProfile.compactMaxToolCount,
       maxSystemPromptChars: AgentTuning.runProfile.compactMaxSystemPromptChars,
@@ -33,7 +33,7 @@ const RunProfileDefinitions: Record<RunProfileId, RunProfileDefinition> = {
   balanced: {
     id: 'balanced',
     label: 'Balanced',
-    description: 'Default runtime profile for medium and large context windows.',
+    description: '中等到大上下文窗口的缺省画像。',
     budget: {
       maxToolCount: AgentTuning.runProfile.balancedMaxToolCount,
       maxSystemPromptChars: AgentTuning.runProfile.balancedMaxSystemPromptChars,
@@ -49,7 +49,7 @@ const RunProfileDefinitions: Record<RunProfileId, RunProfileDefinition> = {
   expanded: {
     id: 'expanded',
     label: 'Expanded',
-    description: 'Broad but cognitively bounded runtime profile for very large context windows.',
+    description: '给超大上下文窗口用的画像：放得开，但仍然给认知负担留了上限。',
     budget: {
       maxToolCount: AgentTuning.runProfile.expandedMaxToolCount,
       maxSystemPromptChars: null,

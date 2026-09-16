@@ -342,7 +342,7 @@ describe('file context provider and archive', () => {
     expect(files.currentViews()[0]!.snapshots[0]!.revision).toBe('B')
     expect(((await files.recall({ path: 'a.ts', revision: 'A' })) as any).content).toBe('old')
     expect(((await files.recall({ ref: 'ctx-payload:s:corrupt' })) as any).reason).toBe(
-      'Snapshot archive is corrupt'
+      '快照归档已损坏'
     )
   })
 

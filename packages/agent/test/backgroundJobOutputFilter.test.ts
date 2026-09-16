@@ -35,7 +35,7 @@ void describe('background job output filter fails open', () => {
     assert.ok(filtered.ignoredReason)
 
     const rendered = formatBackgroundJobOutput(snapshot({ output }), filtered)
-    assert.ok(rendered.includes('filter ignored'))
+    assert.ok(rendered.includes('filter 是无效正则，已忽略'))
     assert.ok(rendered.includes('line one'))
   })
 
@@ -48,10 +48,10 @@ void describe('background job output filter fails open', () => {
     assert.equal(filtered.matchedLines, 0)
 
     const rendered = formatBackgroundJobOutput(snapshot({ output }), filtered)
-    // 关键回归：曾经这里印的是 `(no new output)`，模型据此判定 job 停滞去 cancel 或重派，
+    // 关键回归：曾经这里印的是「没有新增输出」，模型据此判定 job 停滞去 cancel 或重派，
     // 而那几行已经被增量游标吞掉。
-    assert.ok(!rendered.includes('(no new output)'))
-    assert.ok(rendered.includes('3 new line(s), 0 matched the filter'))
+    assert.ok(!rendered.includes('（没有新增输出）'))
+    assert.ok(rendered.includes('新增 3 行，但一行都没命中 filter'))
     assert.ok(rendered.includes('mode=snapshot'))
   })
 
@@ -60,7 +60,7 @@ void describe('background job output filter fails open', () => {
     const rendered = formatBackgroundJobOutput(snapshot({ output: '' }), filtered)
 
     assert.equal(filtered.totalLines, 0)
-    assert.ok(rendered.includes('(no new output)'))
+    assert.ok(rendered.includes('（没有新增输出）'))
   })
 
   void test('partial hits report how many lines the cursor consumed', () => {
@@ -71,7 +71,7 @@ void describe('background job output filter fails open', () => {
     assert.equal(filtered.totalLines, 3)
 
     const rendered = formatBackgroundJobOutput(snapshot({ output }), filtered)
-    assert.ok(rendered.includes('filter matched 1/3 line(s)'))
+    assert.ok(rendered.includes('filter 命中 1/3 行'))
     assert.ok(rendered.includes('error: nope'))
   })
 

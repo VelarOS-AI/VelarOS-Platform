@@ -163,9 +163,62 @@ export const AgentErrorCodes = Object.freeze({
   toolResultFinalizationFailed: 'TOOL_RESULT_FINALIZATION_FAILED',
   /** 当前能力范围里没有这个工具类别，工具不可用（不是"没找到"，也不是"被拒"）。 */
   toolUnavailable: 'AGENT_TOOL_UNAVAILABLE',
+  /** 会话运行在取得会话所有权之前就被中断，这次运行没开始执行，也没留下执行记录。 */
+  sessionRunInterrupted: 'AGENT_SESSION_RUN_INTERRUPTED',
+  /** 拿到的 mod 注册表快照已经过期（generation 推进过），按 stale-reject 拒绝，不回退到旧值。 */
+  modStaleSnapshot: 'AGENT_MOD_STALE_SNAPSHOT',
+  /** 同一会话已被另一个进程持有：一个会话同一时刻只允许一个进程执行。 */
+  sessionLeaseConflict: 'AGENT_SESSION_LEASE_CONFLICT',
+  /** 这个 MCP 服务器要求先走完 OAuth 授权，调用被拒；授权流程由宿主产品拥有。 */
+  mcpAuthorizationRequired: 'MCP_AUTHORIZATION_REQUIRED',
+  /** 失败入参复用的引用无效、已执行或已被别人认领，还原不出可执行的参数。 */
+  toolInputReuseInvalid: 'AGENT_TOOL_INPUT_REUSE_INVALID',
+  /** 工作流的步数或值预算用尽，编排被强制收尾。 */
+  workflowBudgetExhausted: 'AGENT_WORKFLOW_BUDGET_EXHAUSTED',
+  /** 工作流被中断（用户取消或上层 abort）。 */
+  workflowAborted: 'AGENT_WORKFLOW_ABORTED',
 } as const)
 
 export type AgentErrorCode = (typeof AgentErrorCodes)[keyof typeof AgentErrorCodes]
+
+/**
+ * 技能装载与技能市场的失败串码。
+ *
+ * 这些串码写在失败说明的开头（`<码>：<中文说明>`），宿主与测试按码分支、按说明给人看；
+ * 中文说明会随措辞调整变化，码不会。
+ */
+export const AgentSkillFailureCodes = Object.freeze({
+  /** 技能正文为空：只有 frontmatter，没有可交给模型的内容。 */
+  bodyEmpty: 'skill-body-empty',
+  /** 技能包校验和与清单登记的不一致，可能在传输或落盘时被改过。 */
+  checksumMismatch: 'skill-checksum-mismatch',
+  /** frontmatter 缺 name：它既是显示名也是缺省 id 的来源。 */
+  frontmatterNameMissing: 'skill-frontmatter-name-missing',
+  /** frontmatter 缺 spaces：技能没说自己属于哪个空间就无法挂载。 */
+  frontmatterSpacesMissing: 'skill-frontmatter-spaces-missing',
+  /** 技能 id 不合法（字符集或长度不符）。 */
+  idInvalid: 'skill-id-invalid',
+  /** 导入的技能文件不是 Markdown：只收 `.md`。 */
+  importMarkdownOnly: 'skill-import-md-only',
+  /** 导入的技能文件读不出来（不存在、没权限或已损坏）。 */
+  importUnreadable: 'skill-import-unreadable',
+  /** 技能安装失败（落盘或解包环节出错）。 */
+  installFailed: 'skill-install-failed',
+  /** 技能清单不合法，解析不出可用的技能条目。 */
+  manifestInvalid: 'skill-manifest-invalid',
+  /** 技能市场在当前宿主里没有启用。 */
+  marketDisabled: 'skill-market-disabled',
+  /** 配置的技能市场地址不合法。 */
+  marketEndpointInvalid: 'skill-market-endpoint-invalid',
+  /** 市场清单里没有这个技能：可能已下架，或本地清单是旧的。 */
+  marketEntryMissing: 'skill-market-entry-missing',
+  /** 技能市场当前不可达。 */
+  marketUnavailable: 'skill-market-unavailable',
+  /** 旧版技能目录缺 spaces 登记，迁移不出新形态。 */
+  legacySpacesMissing: 'legacy-skill-spaces-missing',
+} as const)
+
+export type AgentSkillFailureCode = (typeof AgentSkillFailureCodes)[keyof typeof AgentSkillFailureCodes]
 
 /**
  * 本包读取的环境变量。
@@ -479,6 +532,107 @@ export const AgentSurfaceLimits = Object.freeze({
   maxEntryContentChars: 4_000,
   /** 所有条目正文合计的最大字符数，按条目顺序先到先得。 */
   maxTotalContentChars: 24_000,
+} as const)
+
+/**
+ * 宿主与模型都能在请求里指定的几组字段取值。
+ *
+ * 每组都是闭集：收到集合外的值一律按校验失败拒收，不猜也不夹回；改动这几组等于改宿主的请求面。
+ */
+export const AgentFieldValues = Object.freeze({
+  /** 团队侧的三档思考深度。 */
+  thinkingDepth: Object.freeze(['fast', 'balanced', 'deep'] as const),
+  /** Composer 侧的五档推理力度，映射到上面三档。 */
+  reasoningLevel: Object.freeze(['off', 'low', 'medium', 'high', 'ultra'] as const),
+  /** 运行画像：一次运行按哪套上下文与工具预算跑。 */
+  runProfileId: Object.freeze(['compact', 'balanced', 'expanded'] as const),
+  /** 用户可选的运行画像，多一个交给运行时自己挑的 `auto`。 */
+  runProfileSelectionId: Object.freeze(['auto', 'compact', 'balanced', 'expanded'] as const),
+  /** 工具面画像：模型面一次看到多少工具、要不要强制走发现。 */
+  toolSurfaceProfileId: Object.freeze(['preset', 'guided', 'direct', 'expert'] as const),
+} as const)
+
+/**
+ * 聊天流的运行态事件种类。
+ *
+ * 渲染侧按这几组判断「这条流结束了没有」「要不要抑制重复的失败广播」，是宿主与渲染进程共用的闭集。
+ */
+export const StreamRuntimeStateKinds = Object.freeze({
+  /** 终态：收到其中之一就说明这条流已经结束，后续同一执行的状态一律忽略。 */
+  terminal: Object.freeze(['done', 'aborted', 'error'] as const),
+  /** 失败态：用来抑制同一次执行里重复广播的错误。 */
+  failure: Object.freeze(['error', 'aborted'] as const),
+  /** 全集：契约测试与桥接侧的穷尽分支按它核对。 */
+  all: Object.freeze([
+    'input-applied',
+    'phase',
+    'usage-telemetry',
+    'context-usage-estimate',
+    'turn-start',
+    'turn-end',
+    'reconnecting',
+    'retrying-turn',
+    'done',
+    'aborted',
+    'error',
+    'awaiting-confirmation',
+    'awaiting-input',
+  ] as const),
+} as const)
+
+/**
+ * Agent 领域 mod 的贡献闭集：能挂哪几根轴、能挂哪几个 hook 事件、以什么方式跑、信任级别有哪几档。
+ *
+ * 贡献点由官方演进，mod 不能发明新轴与新事件；清单里出现集合外的名字一律拒载。
+ * 「今天真有派发点」的是哪几个事件由实现侧的接线表登记，这里只给闭集，不复述第二份。
+ */
+export const AgentModAxes = Object.freeze({
+  /** 领域贡献轴：mod 能往 Agent 里挂的九类东西。 */
+  contributionAxisNames: Object.freeze([
+    'tools',
+    'toolCategories',
+    'promptSegments',
+    'skills',
+    'spaces',
+    'subAgentTypes',
+    'turnContextSources',
+    'executionModes',
+    'hooks',
+  ] as const),
+  /** Hook 生命周期事件闭集。 */
+  hookEvents: Object.freeze([
+    'session:start',
+    'session:end',
+    'turn:start',
+    'turn:end',
+    'turn-context:assemble',
+    'prompt:compose',
+    'tool-call:before',
+    'tool-call:after',
+    'tool-result:after',
+    'model-request:before',
+    'model-response:after',
+    'sub-agent:dispatch',
+    'compaction:before',
+    'skill:select',
+    'diagnostic:publish',
+  ] as const),
+  /** Hook 的执行方式：`blocking` 顺序等待、可改写主链；`background` 只观察、并发跑且忽略返回值。 */
+  hookExecutionModes: Object.freeze(['blocking', 'background'] as const),
+  /** Mod 的信任级别，决定验签与权限的严格程度。 */
+  trustLevels: Object.freeze(['bundled-official', 'marketplace-signed', 'local-dev'] as const),
+} as const)
+
+/**
+ * 连接 MCP 服务器的超时约定。
+ *
+ * 这两个数字对接的是外部进程而不是包内链路，宿主在建连接时可以逐个覆盖；不覆盖就按这里的值算。
+ */
+export const McpLimits = Object.freeze({
+  /** 建连接（含 transport 协商）最多等多久，毫秒。 */
+  connectTimeoutMs: 30_000,
+  /** 一次工具调用或资源读取最多等多久，毫秒。 */
+  callTimeoutMs: 120_000,
 } as const)
 
 /**

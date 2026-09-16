@@ -49,7 +49,7 @@ export function toUserPlanSteps(plan: readonly ExecutionTaskPlanStep[]): UserPla
 const PlanStepEngineOptions: StepEngineOptions = {
   kindLabel: 'plan',
   listLabel: '当前计划步骤',
-  emptyMessage: 'Active execution plan has no steps to complete.',
+  emptyMessage: '当前执行计划里没有可以完成的步骤。',
   resolvedStatuses: ['completed', 'skipped', 'failed'],
   promoteFallbackAnywhere: false,
 }

@@ -218,7 +218,7 @@ export class FileContextCoordinator implements FileContextCoordinatorApi {
             snapshots: [],
             refs: [],
             ranges: [],
-            error: 'File changed during snapshot capture',
+            error: '拍快照的过程中文件被改动了',
           })
           continue
         }
@@ -308,7 +308,7 @@ export class FileContextCoordinator implements FileContextCoordinatorApi {
         delete mapped.viewSource
         if (mapped.continuation && isPlainObject(mapped.continuation)) {
           delete mapped.continuation
-          mapped.continuationUnavailable = 'Read the current path again; this window has no usable continuation reference.'
+          mapped.continuationUnavailable = '重新读一次当前路径；这个窗口没有可用的续读引用。'
         }
       }
       if (!record.__contextRef) return mapped
@@ -626,10 +626,10 @@ export class FileContextCoordinator implements FileContextCoordinatorApi {
         historical: true,
         found: false,
         reason: accessDenied
-          ? 'Snapshot is restricted by current project policy'
+          ? '当前项目策略不允许读这份快照'
           : corruptSnapshots && input.ref
-            ? 'Snapshot archive is corrupt'
-            : 'Snapshot not saved or no longer available in this scope',
+            ? '快照归档已损坏'
+            : '这份快照没有存下来，或者在当前作用域里已经取不到了',
       }
     const complete = matches.find((match) => match.snapshot.complete)
     if (input.revision && complete) matches.splice(0, matches.length, complete)

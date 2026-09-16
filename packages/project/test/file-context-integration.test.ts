@@ -223,7 +223,7 @@ describe('Project tools maintain current file context', () => {
     denied = true
     const blocked = (await files.recall({ path: 'a.txt', revision })) as any
     expect(blocked.found).toBe(false)
-    expect(blocked.reason).toContain('policy')
+    expect(blocked.reason).toContain('项目策略不允许')
   })
 
   test('archives committed B even when an external writer immediately advances disk to C', async () => {

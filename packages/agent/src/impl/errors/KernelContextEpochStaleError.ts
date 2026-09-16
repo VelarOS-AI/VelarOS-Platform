@@ -1,7 +1,8 @@
+import { AgentErrorCodes } from '../../contract/constants.js'
 import type { KernelContextEpochClaim } from '../../types/loop.js'
 
 export class KernelContextEpochStaleError extends Error {
-  public readonly code = 'KERNEL_CONTEXT_EPOCH_STALE'
+  public readonly code = AgentErrorCodes.contextEpochStale
 
   constructor(
     public readonly claim: KernelContextEpochClaim,

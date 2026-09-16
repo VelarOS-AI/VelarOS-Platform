@@ -26,8 +26,8 @@ describe('historical binary replay markers', () => {
     const firstMessage = sanitized.history[0]!
     const serialized = JSON.stringify(firstMessage.content)
 
-    assert.match(serialized, /omitted only from this later provider replay/u)
-    assert.match(serialized, /may have been visible in its original turn/u)
+    assert.match(serialized, /只是在这次较晚的重放里被省略了/u)
+    assert.match(serialized, /它在原来那一轮里可能是可见的/u)
     assert.doesNotMatch(serialized, /data:image/u)
   })
 
@@ -74,7 +74,7 @@ describe('historical binary replay markers', () => {
     const serializedOld = JSON.stringify(sanitized.history[0]?.content)
     const serializedNewest = JSON.stringify(sanitized.history[1]?.content)
 
-    assert.match(serializedOld, /historical tool media bytes omitted/u)
+    assert.match(serializedOld, /这些媒体字节只是在这次较晚的重放里被省略了/u)
     assert.doesNotMatch(serializedOld, /old-image/u)
     assert.match(serializedNewest, /new-image/u)
     assert.match(serializedNewest, /new-audio/u)

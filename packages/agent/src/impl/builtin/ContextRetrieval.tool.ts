@@ -42,9 +42,9 @@ export const recallContext: VelaTool<RecallContextInput> = defineVelaTool<Recall
   ],
   examples: [
     { query: "BASE_REVISION_MISMATCH", kind: "all" },
-    { ref: "<evidenceRef>", refKind: "evidence", reason: "need pinned evidence" },
-    { ref: "<toolCallId>", refKind: "tool-payload", reason: "need full tool result" },
-    { ref: "<toolCallId>", jsonPath: "$.entries", offset: 400, reason: "continue truncated array" },
+    { ref: "<evidenceRef>", refKind: "evidence", reason: "要取回置顶的那条证据" },
+    { ref: "<toolCallId>", refKind: "tool-payload", reason: "要完整的工具结果" },
+    { ref: "<toolCallId>", jsonPath: "$.entries", offset: 400, reason: "接着读被截断的数组" },
   ],
   notes: [
     `优先阅读 ${PinnedEvidenceMarker}/${DynamicHandlesMarker} 摘要；不足时再取回详情。`,
@@ -58,7 +58,7 @@ export const recallContext: VelaTool<RecallContextInput> = defineVelaTool<Recall
   execute: async (input, ctx) => {
     if (input.ref && /^(?:source|view|read-page):/.test(input.ref)) return {
       kind: 'internal-reference', found: false,
-      reason: 'This reference is consumed by Project tools. Read current source with project:read; recall historical source with path and revision.',
+      reason: '这个引用归项目工具消费。当前源码用 project:read 读；历史源码用 path 加 revision 召回。',
     }
     const payloadPrefix = `ctx-payload:${encodeURIComponent(ctx.sessionId)}:`
     const archiveHash = input.ref?.startsWith(payloadPrefix) ? input.ref.slice(payloadPrefix.length)
@@ -67,11 +67,11 @@ export const recallContext: VelaTool<RecallContextInput> = defineVelaTool<Recall
     if (input.path || input.refKind === 'file-snapshot' || archiveRecord?.toolName === FileSnapshotToolName) {
       const files = fileContextFor(ctx)
       return files ? presentHistoricalFile(await files.recall({ ...input, ref: archiveRecord?.payloadRef ?? input.ref }))
-        : { kind: 'file-snapshot', found: false, reason: 'File snapshot storage is unavailable' }
+        : { kind: 'file-snapshot', found: false, reason: '当前宿主没有接文件快照存储，取不到历史版本。' }
     }
     if (archiveRecord?.toolName.startsWith('__') && archiveRecord.toolName !== '__context_user_text__') return {
       kind: 'internal-reference', found: false,
-      reason: 'Internal runtime records are not generic conversation payloads. Use the owning tool; historical files use path and revision.',
+      reason: '这是运行时的内部记录，不是通用的对话载荷。请用产生它的那个工具去读；历史文件用 path 加 revision。',
     }
     const conversation = ctx.conversation
     const maxChars = toNullable(input.maxChars)

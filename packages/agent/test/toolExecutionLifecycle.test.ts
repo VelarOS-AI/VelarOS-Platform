@@ -254,7 +254,7 @@ describe('tool execution lifecycle', () => {
       executor.enqueue(`retry-${index}`, 'probe:read', args, true)
       const [result] = await executor.collectAll()
       expect(result?.args).toEqual({ path: 'src/a.ts', limit: 50 })
-      if (index === 2) expect(result?.result).toMatchObject({ error: 'tool_execution_failed', progressAdvice: expect.stringContaining('3 times') })
+      if (index === 2) expect(result?.result).toMatchObject({ error: 'tool_execution_failed', progressAdvice: expect.stringContaining('连续失败 3 次') })
       else expect(result?.result).not.toMatchObject({ error: 'tool_loop_guard' })
     }
   })
@@ -980,7 +980,7 @@ describe('tool execution lifecycle', () => {
     for (let turn = 1; turn <= 3; turn++) {
       const executor = new ToolExecutor(h.context, h.events, h.policy, { loopGuard })
       const result = await call(executor, `turn-${turn}`)
-      if (turn === 3) expect(result.result).toMatchObject({ error: 'tool_execution_failed', progressAdvice: expect.stringContaining('3 times') })
+      if (turn === 3) expect(result.result).toMatchObject({ error: 'tool_execution_failed', progressAdvice: expect.stringContaining('连续失败 3 次') })
       else expect(result.result).not.toMatchObject({ error: 'tool_loop_guard' })
       await executor.collectAll()
     }

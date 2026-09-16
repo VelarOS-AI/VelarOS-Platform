@@ -57,8 +57,8 @@ function buildProviderVisibleRetainedContextMessage(
     role: 'user',
     content: [
       '[ContextOS retained context]',
-      'The following active-task and pinned-evidence blocks are hard retained for this request. They are context, not a replacement for the latest user instruction.',
-      'Stale evidence describes an earlier snapshot. Recheck its filePath before relying on current file state; payloadRef identifies its stored original.',
+      '下面这些活动任务块与置顶证据块是本次请求强制保留的。它们是背景资料，不能替代用户最新的那条指令。',
+      '标了 stale 的证据描述的是更早的快照。要依赖当前文件状态之前先按它的 filePath 复核一遍；payloadRef 指向它存下来的原文。',
       stringifyPretty(retainedBlocks),
     ].join('\n'),
   }

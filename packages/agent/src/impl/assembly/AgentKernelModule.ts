@@ -65,7 +65,7 @@ class AgentKernelModule implements AgentKernelModuleApi {
       health: {
         metadata: {
           permissions: [],
-          reason: 'Inspect the injected Agent runtime health.',
+          reason: '查看注入进来的 Agent 运行时是否健康。',
         },
         invoke: async (_scope, input) => {
           parseEmptyInput(input)
@@ -75,7 +75,7 @@ class AgentKernelModule implements AgentKernelModuleApi {
       execute: {
         metadata: {
           permissions: [AgentExecutionPermission],
-          reason: 'Execute an Agent request through the injected runtime.',
+          reason: '经注入进来的运行时执行一次 Agent 请求。',
         },
         invoke: async (scope, input, signal) => this.execute(context, scope, input, signal),
       },

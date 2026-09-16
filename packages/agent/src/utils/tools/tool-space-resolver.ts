@@ -230,15 +230,15 @@ function reasonForCategoryAccess(
   return reason(
     'capability',
     unavailableReason,
-    'The injected capability policy denied this category in the active scope.'
+    '注入的能力策略在当前作用域里拒绝了这个类别。'
   )
 }
 
 /**
- * 拼「工具注册了但当前作用域里跑不了」的说明文案；工具名缺席时用 `This tool` 兜底，保证句子完整。
+ * 拼「工具注册了但当前作用域里跑不了」的说明文案；工具名缺席时用「这个工具」兜底，保证句子完整。
  */
 function runtimeUnavailableMessage(toolName: LooseOptional<string>): string {
-  return `${toolName ?? 'This tool'} is registered but unavailable in the active capability scope.`
+  return `${toolName ?? '这个工具'} 已经注册，但当前能力范围里用不了。`
 }
 
 /**

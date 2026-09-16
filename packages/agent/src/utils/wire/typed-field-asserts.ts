@@ -2,6 +2,7 @@ import { isArray, isPresent, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { isBlank } from '@velaros-ai/core/utils/string'
 
+import { AgentFieldValues } from '../../contract/constants.js'
 import type { ChatPromptFeatureId } from '../../types/agent'
 import type { ReasoningLevel, RunProfileId, RunProfileSelectionId,ThinkingDepth, ToolSurfaceProfileId } from '../../types/agent.js'
 import type { TypedEnumAsserts } from '../../types/runner.js'
@@ -42,10 +43,10 @@ function createTypedEnumAsserts<const T extends string>(
   return { values, is, assert, parseOptional, resolve }
 }
 
-const ThinkingDepthValues = ['fast', 'balanced', 'deep'] as const satisfies readonly ThinkingDepth[]
+const ThinkingDepthValues = AgentFieldValues.thinkingDepth satisfies readonly ThinkingDepth[]
 const thinkingDepthField = createTypedEnumAsserts(ThinkingDepthValues, 'thinkingDepth')
 
-const ReasoningLevelValues = ['off', 'low', 'medium', 'high', 'ultra'] as const satisfies readonly ReasoningLevel[]
+const ReasoningLevelValues = AgentFieldValues.reasoningLevel satisfies readonly ReasoningLevel[]
 const reasoningLevelField = createTypedEnumAsserts(ReasoningLevelValues, 'reasoningLevel')
 
 /** 把 Composer 的 5 档思考力度映射到团队 3 档 ThinkingDepth（用于 prompt 段/编码追踪等既有运行时消费方）。 */
@@ -62,19 +63,16 @@ function reasoningLevelToThinkingDepth(level?: LooseOptional<ReasoningLevel>): T
   }
 }
 
-const RunProfileIdValues = ['compact', 'balanced', 'expanded'] as const satisfies readonly RunProfileId[]
+const RunProfileIdValues = AgentFieldValues.runProfileId satisfies readonly RunProfileId[]
 const runProfileIdField = createTypedEnumAsserts(RunProfileIdValues, 'runProfile')
 
-const RunProfileSelectionIdValues = [
-  'auto',
-  ...RunProfileIdValues,
-] as const satisfies readonly RunProfileSelectionId[]
+const RunProfileSelectionIdValues = AgentFieldValues.runProfileSelectionId satisfies readonly RunProfileSelectionId[]
 const runProfileSelectionIdField = createTypedEnumAsserts(
   RunProfileSelectionIdValues,
   'runProfile'
 )
 
-const ToolSurfaceProfileIdValues = ['preset', 'guided', 'direct', 'expert'] as const satisfies readonly ToolSurfaceProfileId[]
+const ToolSurfaceProfileIdValues = AgentFieldValues.toolSurfaceProfileId satisfies readonly ToolSurfaceProfileId[]
 const toolSurfaceProfileIdField = createTypedEnumAsserts(
   ToolSurfaceProfileIdValues,
   'toolSurfaceProfile'

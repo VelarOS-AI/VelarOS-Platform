@@ -420,10 +420,6 @@ export const AgentTuning = Object.freeze({
   } as const),
   /** 外部连接：MCP 客户端、审批参数预览。 */
   connectors: Object.freeze({
-    /** MCP server 起不来时等多少毫秒放弃连接。 */
-    mcpConnectTimeoutMs: 30_000,
-    /** 单次 MCP 工具调用或资源读取的超时，毫秒。 */
-    mcpCallTimeoutMs: 120_000,
     /** 审批弹窗里参数预览最多多少字符。 */
     approvalPreviewChars: 4_000,
     /** 审批弹窗里单个字符串字段最多多少字符。 */

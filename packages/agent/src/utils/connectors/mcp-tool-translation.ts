@@ -147,7 +147,7 @@ function resolveToolCapabilities(descriptor: McpToolDescriptor): ToolCapabilityS
     readScopes: ['mcp'],
     concurrency: 'safe',
     canReadArbitrarySource: true,
-    reason: 'MCP server declares this external tool read-only',
+    reason: 'MCP 服务器声明这个外部工具只读',
   }
 
   return {
@@ -157,8 +157,8 @@ function resolveToolCapabilities(descriptor: McpToolDescriptor): ToolCapabilityS
     concurrency: 'unsafe',
     canReadArbitrarySource: true,
     reason: descriptor.annotations.idempotentHint
-      ? 'MCP server declares an idempotent external mutation'
-      : 'MCP external tool may mutate server state',
+      ? 'MCP 服务器声明这是一次幂等的外部写入'
+      : 'MCP 外部工具可能改动服务器状态',
   }
 }
 

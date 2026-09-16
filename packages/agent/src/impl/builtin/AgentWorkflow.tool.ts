@@ -32,7 +32,7 @@ export const runAgentWorkflow: VelaTool<RunAgentWorkflowInput> = defineVelaTool(
   ],
   examples: [
     {
-      name: 'Independent review vote',
+      name: '独立复核投票',
       max_concurrency: 3,
       max_agents: 3,
       steps: [
@@ -42,7 +42,7 @@ export const runAgentWorkflow: VelaTool<RunAgentWorkflowInput> = defineVelaTool(
           calls: ['Atlas', 'Beacon'].map((agent_name, index) => ({
             id: `review-${index + 1}`,
             agent_name,
-            prompt: 'Independently inspect the current project change. Return a verdict; do not modify files.',
+            prompt: '独立检查当前这次项目改动，给出结论；不要改任何文件。',
             readonly: true,
             output_schema: {
               type: 'object',
