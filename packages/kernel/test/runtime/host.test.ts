@@ -868,7 +868,7 @@ describe('KernelModuleHost', () => {
     missingAdapterHost.registerModule(
       moduleDefinition({
         id: 'module.external',
-        isolation: 'sidecar',
+        isolation: 'remote',
         activate() {
           localActivateCalled = true
         },
@@ -887,7 +887,7 @@ describe('KernelModuleHost', () => {
     const adaptedHost = new KernelModuleHost({
       apiVersion: 1,
       isolationAdapters: [{
-        isolation: 'sidecar',
+        isolation: 'remote',
         activate: (_module, context) => {
           adapterActivateCalled = true
           context.registerService(ValueCapability, {
@@ -899,7 +899,7 @@ describe('KernelModuleHost', () => {
     adaptedHost.registerModule(
       moduleDefinition({
         id: 'module.adapted',
-        isolation: 'sidecar',
+        isolation: 'remote',
         provides: [ValueCapability],
         activate() {
           localActivateCalled = true

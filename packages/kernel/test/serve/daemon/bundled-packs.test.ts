@@ -6,7 +6,6 @@ import { afterEach, describe, expect, test } from 'bun:test'
 
 import { defineKernelModule } from '../../../src/contracts/abi/module'
 import {
-  BundledKernelPacks,
   createBundledModPack,
   registerBundledPacks,
   toBundledPackRecords,
@@ -49,24 +48,14 @@ const probeModule = defineKernelModule({
 })
 
 describe('bundled packs', () => {
-  test('ships the sidecar catalog as a compile-time constant, not disk entries', () => {
-    const ids = BundledKernelPacks.map((pack) => pack.id)
-    expect(ids).toEqual(['system.agent', 'system.model', 'system.browser'])
-    for (const pack of BundledKernelPacks) {
-      // The module is in hand at import time: no path, no dist, no IO.
-      expect(typeof pack.module.activate).toBe('function')
-      expect(pack.module.manifest.isolation).toBe('sidecar')
-    }
-  })
-
-  test('records carry the bundled identity URI instead of a path', () => {
-    const records = toBundledPackRecords()
-    expect(records.map((record) => record.specifier)).toEqual([
-      'bundled:velaros.agent.sidecar',
-      'bundled:velaros.model.sidecar',
-      'bundled:velaros.browser.sidecar',
+  test('内核自己不带任何 bundled pack，宿主交来的模块 import 期就在手', () => {
+    const records = toBundledPackRecords([
+      createBundledModPack({ id: 'system.probe', module: probeModule }),
     ])
+    expect(records.map((record) => record.specifier)).toEqual(['bundled:velaros.probe'])
     expect(records.every((record) => record.kind === 'system')).toBe(true)
+    // 模块在 import 期就在手：没有路径、没有 dist、没有 IO。
+    expect(typeof records[0]?.module?.activate).toBe('function')
   })
 
   test('loads a host-injected bundled capability pack without importing anything', async () => {
@@ -154,24 +143,6 @@ describe('bundled packs', () => {
       },
     ])
     expect(store.get('system.probe')?.enabled).toBe(true)
-  })
-
-  test('auto-registration does not resurrect a user-disabled bundled pack', () => {
-    const store = emptyStore()
-    store.register({
-      id: 'system.agent',
-      kind: 'system',
-      version: '0.0.1',
-      specifier: 'bundled:velaros.agent.sidecar',
-      enabled: false,
-      provides: ['velaros.agent'],
-    })
-
-    const records = registerBundledPacks(store)
-
-    expect(store.get('system.agent')?.enabled).toBe(false)
-    expect(store.get('system.model')?.enabled).toBe(true)
-    expect(records.find((record) => record.id === 'system.agent')?.enabled).toBe(false)
   })
 
   test('persists the enabled bit but never the live module object', async () => {

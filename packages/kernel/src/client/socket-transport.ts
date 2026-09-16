@@ -4,7 +4,6 @@ import {
 } from 'node:net'
 
 import {
-  isArray,
   isBlank,
   isBoolean,
   isNotUndefined,
@@ -30,12 +29,6 @@ import {
 } from '../contracts/protocol/capability'
 import { type KernelHandshake, KernelHandshakeSchema } from '../contracts/protocol/handshake'
 import {
-  type KernelRunIdentity,
-  KernelRunIdentitySchema,
-  type KernelSessionIdentity,
-  KernelSessionIdentitySchema,
-} from '../contracts/protocol/identity'
-import {
   type ModsInstallFromDirectoryRequest,
   type ModsInstallFromDirectoryResponse,
   ModsInstallFromDirectoryResponseSchema,
@@ -47,10 +40,6 @@ import {
   ModsSetEnabledResponseSchema,
 } from '../contracts/protocol/mods'
 import type { KernelServiceHealth } from '../contracts/service/health'
-import type {
-  OpenKernelSessionInput,
-  StartKernelRunInput,
-} from '../contracts/service/identity-inputs'
 
 import type { KernelRpcEndpoint } from './contracts/endpoint'
 import type {
@@ -147,67 +136,6 @@ export class SocketKernelTransport implements KernelClientTransport {
     return CapabilityCallResponseSchema.parse(
       await this.request('capability.call', request, signal),
     )
-  }
-
-  public async openSession(
-    input: OpenKernelSessionInput,
-  ): Promise<KernelSessionIdentity> {
-    return KernelSessionIdentitySchema.parse(
-      await this.request('session.open', input),
-    )
-  }
-
-  public async getSession(
-    sessionId: string,
-  ): Promise<KernelSessionIdentity | undefined> {
-    const result = await this.request('session.get', { sessionId })
-    return isNull(result)
-      ? undefined
-      : KernelSessionIdentitySchema.parse(result)
-  }
-
-  public async listSessions(): Promise<readonly KernelSessionIdentity[]> {
-    const result = await this.request('session.list', null)
-    if (!isArray(result)) {
-      throw invalidResponse('Session list is not an array')
-    }
-    return result.map((identity) =>
-      KernelSessionIdentitySchema.parse(identity))
-  }
-
-  public async closeSession(sessionId: string): Promise<boolean> {
-    return parseBoolean(
-      await this.request('session.close', { sessionId }),
-    )
-  }
-
-  public async startRun(
-    input: StartKernelRunInput,
-  ): Promise<KernelRunIdentity> {
-    return KernelRunIdentitySchema.parse(
-      await this.request('run.start', input),
-    )
-  }
-
-  public async getRun(
-    runId: string,
-  ): Promise<KernelRunIdentity | undefined> {
-    const result = await this.request('run.get', { runId })
-    return isNull(result)
-      ? undefined
-      : KernelRunIdentitySchema.parse(result)
-  }
-
-  public async listRuns(): Promise<readonly KernelRunIdentity[]> {
-    const result = await this.request('run.list', null)
-    if (!isArray(result)) {
-      throw invalidResponse('Run list is not an array')
-    }
-    return result.map((identity) => KernelRunIdentitySchema.parse(identity))
-  }
-
-  public async finishRun(runId: string): Promise<boolean> {
-    return parseBoolean(await this.request('run.finish', { runId }))
   }
 
   public async listMods(request: ModsListRequest): Promise<ModsListResponse> {
@@ -510,11 +438,6 @@ export class SocketKernelTransport implements KernelClientTransport {
     }
     this.pending.clear()
   }
-}
-
-function parseBoolean(input: unknown): boolean {
-  if (isBoolean(input)) return input
-  throw invalidResponse('RPC result is not a boolean')
 }
 
 function decodeResponse(input: object): KernelRpcResponse {

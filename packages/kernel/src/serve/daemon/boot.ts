@@ -5,10 +5,8 @@ import type { KernelDaemonPaths } from '../../client/contracts/descriptor'
 import type { KernelModuleDefinition } from '../../contracts/abi/module'
 import type { KernelPermissionBroker } from '../../contracts/abi/permissions'
 import { KernelModuleApiVersion } from '../../contracts/abi/version-axis'
-import type { KernelHostBridgeRegistry } from '../../runtime/host/host-bridge'
 import type { KernelModuleIsolationAdapter } from '../../runtime/host/isolation'
 import { KernelModuleHost } from '../../runtime/host/KernelModuleHost'
-import { parseHostBridgeEndpoint, SidecarIsolationAdapter } from '../../runtime/host/sidecar-bridge'
 import {
   AllowLoadedKernelClientAccessBroker,
   type KernelClientAccessBroker,
@@ -49,9 +47,6 @@ export interface BootKernelDaemonOptions {
   readonly modStorePaths?: KernelModStorePaths
   readonly paths?: KernelDaemonPaths
   readonly isolationAdapters?: readonly KernelModuleIsolationAdapter[]
-  readonly hostBridges?: KernelHostBridgeRegistry
-  /** Unix socket path for product HostBridge (overrides env when set). */
-  readonly hostBridgeEndpoint?: string
   /** Host-owned capability permission policy. Secure default remains deny-all. */
   readonly permissionBroker?: KernelPermissionBroker
   /**
@@ -101,19 +96,7 @@ export async function bootKernelDaemon(
     }
   }
 
-  const hostBridgeEndpoint = parseHostBridgeEndpoint(
-    options.hostBridgeEndpoint ?? process.env.VELAROS_HOST_BRIDGE_ENDPOINT,
-  )
-  const isolationAdapters = [
-    ...(options.isolationAdapters ?? []),
-    ...(options.hostBridges?.toIsolationAdapters() ?? []),
-    ...(hostBridgeEndpoint
-      ? [new SidecarIsolationAdapter({
-          endpoint: hostBridgeEndpoint,
-          allowOfflineFallback: true,
-        })]
-      : []),
-  ]
+  const isolationAdapters = options.isolationAdapters ?? []
 
   modules = retainActivatableModules({
     modules,
@@ -211,8 +194,7 @@ export async function bootKernelDaemon(
  * 模块清单里的隔离形态是**数据**（bundled 目录桩、用户装的 pack、宿主注入的模块都能声明
  * 任意形态），适配器是**本次装配注入的东西**；两者对不上时，宿主让 `KernelModuleHost`
  * 在 activate 阶段抛 `MISSING_ISOLATION_ADAPTER`，整个 `velaros-kernel-daemon` 跟着退出——
- * 随包的三个 sidecar 目录桩加上「没有产品设 `VELAROS_HOST_BRIDGE_ENDPOINT`」，等于默认装配
- * 根本起不来。
+ * 一个装不上的模块不该让整个进程起不来。
  *
  * 这里按 ModLoader 的同一条口径处理：**单个模块装不上只损失它自己的能力**。跳过的模块登记成
  * 装载失败（进 `modLoadFailures`、写回 ModStore、启动日志照列），而不是静悄悄消失：客户端

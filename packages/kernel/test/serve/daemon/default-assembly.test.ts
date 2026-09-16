@@ -10,10 +10,7 @@ import { createCapabilityToken } from '../../../src/contracts/abi/capability'
 import { defineKernelModule } from '../../../src/contracts/abi/module'
 import { KernelProtocolVersion } from '../../../src/contracts/protocol/version'
 import { bootKernelDaemon } from '../../../src/serve/daemon/boot'
-import {
-  createBundledModPack,
-  registerBundledPacks,
-} from '../../../src/serve/daemon/bundled-packs'
+import { createBundledModPack } from '../../../src/serve/daemon/bundled-packs'
 import { loadModIndexIntoStore } from '../../../src/serve/daemon/mod-loader'
 import { KernelModStore } from '../../../src/serve/daemon/mod-store'
 
@@ -32,6 +29,22 @@ async function temporaryDirectory(): Promise<string> {
 }
 
 const EchoToken = createCapabilityToken('velaros.test.echo')
+const RemoteOnlyToken = createCapabilityToken('velaros.test.remote-only')
+
+/** 声明了 `remote` 隔离形态、而本次装配没有注入对应适配器的模块：必须被跳过而不是拖垮守护进程。 */
+const remoteOnlyModule = defineKernelModule({
+  manifest: {
+    id: 'velaros.test.remote-only.module',
+    version: '1.0.0',
+    apiVersion: 1,
+    provides: [RemoteOnlyToken],
+    requires: [],
+    optionalRequires: [],
+    permissions: [],
+    isolation: 'remote',
+  },
+  activate() {},
+})
 
 /** 宿主按 `bootKernelDaemon({ modPacks })` 注入的那类编译期能力模块。 */
 const echoModule = defineKernelModule({
@@ -60,10 +73,7 @@ const echoModule = defineKernelModule({
 
 describe('Kernel 默认装配', () => {
   // Windows 的守护进程走 TCP 回环，Unix socket 路径不适用；冒烟只在类 Unix 上跑。
-  test.skipIf(process.platform === 'win32')('没有 HostBridge 也能起来并响应一次调用', async () => {
-    const previousEndpoint = process.env.VELAROS_HOST_BRIDGE_ENDPOINT
-    // 缺省环境：没有任何产品会设这个变量，随包的三个 sidecar 目录桩因此没有适配器。
-    delete process.env.VELAROS_HOST_BRIDGE_ENDPOINT
+  test.skipIf(process.platform === 'win32')('缺隔离适配器的模块被跳过，守护进程照常起来并响应一次调用', async () => {
     const runtimeDirectory = await temporaryDirectory()
     const paths = {
       descriptorPath: join(runtimeDirectory, 'velaros-kernel.endpoint.json'),
@@ -78,12 +88,17 @@ describe('Kernel 默认装配', () => {
     // 与 `serve/main.ts` 相同的装配顺序。
     const modStore = new KernelModStore(modStorePaths)
     await loadModIndexIntoStore(modStore)
-    registerBundledPacks(modStore)
     modStore.registerAll([
       {
         ...createBundledModPack({ id: 'system.test.echo', module: echoModule }),
         kind: 'system' as const,
         specifier: 'bundled:velaros.test.echo.module',
+        enabled: true,
+      },
+      {
+        ...createBundledModPack({ id: 'system.test.remote-only', module: remoteOnlyModule }),
+        kind: 'system' as const,
+        specifier: 'bundled:velaros.test.remote-only.module',
         enabled: true,
       },
     ])
@@ -96,9 +111,9 @@ describe('Kernel 默认装配', () => {
     })
 
     try {
-      // 三个 sidecar 目录桩被跳过并如实登记，能激活的模块照常进 handshake。
+      // 没有适配器的模块被跳过并如实登记，能激活的模块照常进 handshake。
       expect([...booted.modLoadFailures].map((failure) => failure.id).sort())
-        .toEqual(['system.agent', 'system.browser', 'system.model'])
+        .toEqual(['system.test.remote-only'])
       for (const failure of booted.modLoadFailures) {
         expect(failure.reason).toContain('没有对应的适配器')
       }
@@ -132,11 +147,6 @@ describe('Kernel 默认装配', () => {
       }
     } finally {
       await booted.stop()
-      if (previousEndpoint === undefined) {
-        delete process.env.VELAROS_HOST_BRIDGE_ENDPOINT
-      } else {
-        process.env.VELAROS_HOST_BRIDGE_ENDPOINT = previousEndpoint
-      }
     }
   })
 })

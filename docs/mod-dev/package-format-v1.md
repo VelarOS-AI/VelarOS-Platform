@@ -68,7 +68,7 @@ Desktop v1 的声明式 `invoke-capability` 公开面也是闭集，但覆盖当
 - 工具权限上界为 `tools[].permissions ∪ handler.permissions`，且每项都必须包含在
   `module.permissions` 和用户批准集合中；具体宿主还可为受控命令启动声明固定基础权限；
 - JSON Schema 编译失败必须拒载，不能静默退化成任意对象；stdin/stdout 必须是有版本、有界 JSON；
-- `module.isolation` 不表达逐次 command handler 的执行方式，不要求也不建议为此写成 `sidecar`。
+- `module.isolation` 不表达逐次 command handler 的执行方式，不要为此改它。
 
 ## 3. 信任不由 Mod 自报
 

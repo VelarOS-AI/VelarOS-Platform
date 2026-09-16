@@ -105,7 +105,7 @@ function createManifest(version: string, permissions: readonly string[]) {
       requires: [],
       optionalRequires: [],
       permissions,
-      isolation: 'sidecar',
+      isolation: 'in-process',
     },
     agent: {
       id: 'review-kit',

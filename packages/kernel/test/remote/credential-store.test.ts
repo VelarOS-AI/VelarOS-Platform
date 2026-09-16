@@ -8,7 +8,6 @@ import {
   defaultRemoteNodeCredentialsPath,
   FileRemoteNodeCredentialStore,
 } from '../../src/remote/client/credential-store'
-import { defaultHostBridgeSocketPath } from '../../src/runtime/host/sidecar-bridge'
 
 const directories: string[] = []
 
@@ -32,8 +31,6 @@ describe('远程节点凭据落点', () => {
       .toBe(join(homedir(), '.velaros', 'remote-nodes', 'example-host.json'))
     expect(defaultRemoteNodeCredentialsPath('example-host', '   '))
       .toBe(join(homedir(), '.velaros', 'remote-nodes', 'example-host.json'))
-    expect(defaultHostBridgeSocketPath(undefined))
-      .toBe(`${homedir()}/.velaros/host-bridge.sock`)
   })
 
   test('显式给出的主目录照用', () => {

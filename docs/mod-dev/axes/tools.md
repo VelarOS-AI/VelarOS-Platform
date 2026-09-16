@@ -99,7 +99,7 @@ const bindings: AgentModBindings = {
 
 协议只定义可移植声明；包内路径、进程沙箱、权限 broker、JSON stdin/stdout、输出上限与中止语义
 由具体宿主实现。`module.isolation` 是 Kernel module 装载元数据，不表示 command handler 载体，
-宿主不得要求它等于 `sidecar`。运行态工具权限必须取
+宿主不得按它推断 handler 怎么起。运行态工具权限必须取
 `tools[].permissions ∪ handler.permissions` 的明确并集，不能在适配时丢失。
 
 若外部工具引用同一包通过 `toolCategories` 声明的类别，宿主适配器必须同时提供对应

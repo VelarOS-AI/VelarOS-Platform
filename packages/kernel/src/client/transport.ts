@@ -8,7 +8,6 @@ import type {
   CapabilitySessionOpenResponse,
 } from '../contracts/protocol/capability'
 import type { KernelHandshake } from '../contracts/protocol/handshake'
-import type { KernelRunIdentity, KernelSessionIdentity } from '../contracts/protocol/identity'
 import type {
   ModsInstallFromDirectoryRequest,
   ModsInstallFromDirectoryResponse,
@@ -18,10 +17,6 @@ import type {
   ModsSetEnabledResponse,
 } from '../contracts/protocol/mods'
 import type { KernelServiceHealth } from '../contracts/service/health'
-import type {
-  OpenKernelSessionInput,
-  StartKernelRunInput,
-} from '../contracts/service/identity-inputs'
 
 export interface KernelEventSubscription {
   dispose(): void | Promise<void>
@@ -36,7 +31,7 @@ export type KernelClientEventHandler = (
  *
  * This is the **transport-implementor** surface (Unix socket, in-process adapter,
  * future authenticated remote). Products should use {@link KernelClient} instead
- * of calling these methods directly — especially capability and identity wires.
+ * of calling these methods directly — especially the capability wire.
  */
 export interface KernelClientTransport {
   // --- Connection ---
@@ -55,17 +50,6 @@ export interface KernelClientTransport {
     request: CapabilityCallRequest,
     signal?: AbortSignal,
   ): Promise<CapabilityCallResponse>
-
-  // 身份 wire（RPC: session.*、run.*）只服务 Kernel 内部归属注册，不是产品级 Client API，
-  // 也不授予任何 capability。
-  openSession(input: OpenKernelSessionInput): Promise<KernelSessionIdentity>
-  getSession(sessionId: string): Promise<KernelSessionIdentity | undefined>
-  listSessions(): Promise<readonly KernelSessionIdentity[]>
-  closeSession(sessionId: string): Promise<boolean>
-  startRun(input: StartKernelRunInput): Promise<KernelRunIdentity>
-  getRun(runId: string): Promise<KernelRunIdentity | undefined>
-  listRuns(): Promise<readonly KernelRunIdentity[]>
-  finishRun(runId: string): Promise<boolean>
 
   // --- ModStore wire (RPC: mods.*) ---
   listMods(request: ModsListRequest): Promise<ModsListResponse>

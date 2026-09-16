@@ -130,24 +130,6 @@ describe('Kernel local RPC', () => {
       expect(handshake.kernelVersion).toBe('0.2.0')
       expect(JSON.stringify(handshake)).not.toContain(RpcAuthToken)
       expect(
-        await transport.openSession({
-          id: 'session-rpc',
-          ownerModuleId: 'module.rpc',
-          scope: null,
-        }),
-      ).toMatchObject({ id: 'session-rpc' })
-      expect(
-        await transport.startRun({
-          id: 'run-rpc',
-          ownerModuleId: 'module.rpc',
-          sessionId: 'session-rpc',
-        }),
-      ).toMatchObject({
-        id: 'run-rpc',
-        sessionId: 'session-rpc',
-        generation: 1,
-      })
-      expect(
         await transport.call(call),
       ).toMatchObject({
         status: 'error',
@@ -184,17 +166,6 @@ describe('Kernel local RPC', () => {
         payload: { value: 42 },
         sourceModuleId: 'module.rpc',
       })
-      expect((await transport.listSessions()).map(({ id }) => id))
-        .toEqual(['session-rpc'])
-      expect((await transport.listRuns()).map(({ id }) => id))
-        .toEqual(['run-rpc'])
-      await expect(transport.getSession('')).rejects.toMatchObject({
-        rpcError: {
-          code: 'INVALID_PARAMS',
-          retryable: false,
-        },
-      })
-
       const controller = new AbortController()
       const cancelled = transport.call(
         { ...boundCall, callId: 'call-cancelled', operation: 'wait' },

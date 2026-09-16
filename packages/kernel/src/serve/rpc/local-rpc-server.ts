@@ -19,14 +19,12 @@ import { join } from 'node:path'
 import {
   isBlank,
   isEmpty,
-  isNotNull,
   isNotUndefined,
   isNull,
   isObject,
   isString,
   isUndefined,
   Log,
-  toNullable,
 } from '@velaros-ai/core'
 
 import type { KernelRpcEndpoint } from '../../client/contracts/endpoint'
@@ -45,7 +43,6 @@ import {
   CapabilitySessionCloseRequestSchema,
   type CapabilitySessionCloseResponse,
   type CapabilitySessionOpenResponse,
-  ScopeRefSchema,
 } from '../../contracts/protocol/capability'
 import {
   ModsInstallFromDirectoryRequestSchema,
@@ -53,12 +50,7 @@ import {
   ModsSetEnabledRequestSchema,
 } from '../../contracts/protocol/mods'
 import { KernelProtocolVersion } from '../../contracts/protocol/version'
-import type {
-  OpenKernelSessionInput,
-  StartKernelRunInput,
-} from '../../contracts/service/identity-inputs'
 import { CapabilitySessionLedger } from '../../runtime/service/capability-grants'
-import { KernelIdentityRegistryError } from '../../runtime/service/identity-registry'
 import {
   type KernelService,
   KernelServiceLifecycleError,
@@ -341,34 +333,6 @@ export class KernelLocalRpcServer {
         return this.callCapability(context, request.params, signal)
       case 'capability.cancel':
         return this.cancelCall(context, request.params)
-      case 'session.open':
-        return this.options.service.openSession(
-          parseOpenSessionInput(request.params),
-        )
-      case 'session.get':
-        return toNullable(this.options.service.getSession(
-          readIdentityId(request.params, 'sessionId'),
-        ))
-      case 'session.list':
-        return this.options.service.listSessions()
-      case 'session.close':
-        return this.options.service.closeSession(
-          readIdentityId(request.params, 'sessionId'),
-        )
-      case 'run.start':
-        return this.options.service.startRun(
-          parseStartRunInput(request.params),
-        )
-      case 'run.get':
-        return toNullable(this.options.service.getRun(
-          readIdentityId(request.params, 'runId'),
-        ))
-      case 'run.list':
-        return this.options.service.listRuns()
-      case 'run.finish':
-        return this.options.service.finishRun(
-          readIdentityId(request.params, 'runId'),
-        )
       case 'events.subscribe':
         return this.subscribe(context, request)
       case 'events.unsubscribe':
@@ -490,7 +454,7 @@ export class KernelLocalRpcServer {
     context: ConnectionContext,
     params: unknown,
   ): boolean {
-    const requestId = readIdentityId(params, 'requestId')
+    const requestId = readRequiredId(params, 'requestId')
     const controller = context.controllers.get(requestId)
     controller?.abort()
     return isNotUndefined(controller)
@@ -522,7 +486,7 @@ export class KernelLocalRpcServer {
     context: ConnectionContext,
     params: unknown,
   ): boolean {
-    const subscriptionId = readIdentityId(params, 'subscriptionId')
+    const subscriptionId = readRequiredId(params, 'subscriptionId')
     const registration = context.subscriptions.get(subscriptionId)
     if (isUndefined(registration)) return false
     registration.dispose()
@@ -539,45 +503,8 @@ export class KernelLocalRpcServer {
   }
 }
 
-function parseOpenSessionInput(input: unknown): OpenKernelSessionInput {
-  const params = requireRecord(input)
-  const scope = ScopeRefSchema.nullable().safeParse(params.scope)
-  if (!scope.success) {
-    throw new KernelRpcProtocolError(
-      'INVALID_PARAMS',
-      'RPC field "scope" must be a valid opaque scope or null',
-    )
-  }
-  return {
-    id: requireNonEmptyString(params.id, 'id'),
-    ownerModuleId: requireNonEmptyString(
-      params.ownerModuleId,
-      'ownerModuleId',
-    ),
-    scope: scope.data,
-  }
-}
-
-function parseStartRunInput(input: unknown): StartKernelRunInput {
-  const params = requireRecord(input)
-  const sessionId = params.sessionId
-  if (isNotNull(sessionId) && !isString(sessionId)) {
-    throw new KernelRpcProtocolError(
-      'INVALID_PARAMS',
-      'RPC field "sessionId" must be a string or null',
-    )
-  }
-  return {
-    id: requireNonEmptyString(params.id, 'id'),
-    ownerModuleId: requireNonEmptyString(
-      params.ownerModuleId,
-      'ownerModuleId',
-    ),
-    sessionId,
-  }
-}
-
-function readIdentityId(params: unknown, field: string): string {
+/** 从 RPC 参数里读一个必填的非空字符串 id（取消调用的 requestId、退订的 subscriptionId）。 */
+function readRequiredId(params: unknown, field: string): string {
   return requireNonEmptyString(requireRecord(params)[field], field)
 }
 
@@ -601,7 +528,6 @@ function toRpcFailure(
   error: unknown,
 ): KernelRpcFailure {
   if (error instanceof KernelRpcProtocolError) return rpcFailure(requestId, error.code, error.message)
-  if (error instanceof KernelIdentityRegistryError) return rpcFailure(requestId, error.code, error.message)
   if (error instanceof KernelServiceLifecycleError) return rpcFailure(requestId, error.code, error.message, true)
   if (error instanceof KernelModCatalogError) return rpcFailure(
     requestId,

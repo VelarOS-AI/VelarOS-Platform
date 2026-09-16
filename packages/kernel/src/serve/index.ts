@@ -10,7 +10,6 @@ export type { BootedKernelDaemon, BootKernelDaemonOptions } from './daemon/boot'
 export { bootKernelDaemon, installKernelShutdownHandlers } from './daemon/boot'
 export type { KernelBundledPack } from './daemon/bundled-packs'
 export {
-  BundledKernelPacks,
   bundledPackSpecifier,
   createBundledModPack,
   registerBundledPacks,

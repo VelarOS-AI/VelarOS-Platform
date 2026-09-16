@@ -15,7 +15,6 @@ import { createKernelCallableCapability } from '../../../src/contracts/abi/calla
 import { createCapabilityToken } from '../../../src/contracts/abi/capability'
 import type { KernelModuleDefinition } from '../../../src/contracts/abi/module'
 import { KernelProtocolVersion } from '../../../src/contracts/protocol/version'
-import { KernelHostBridgeRegistry } from '../../../src/runtime/host/host-bridge'
 import { KernelModuleHost } from '../../../src/runtime/host/KernelModuleHost'
 import { AllowLoadedKernelClientAccessBroker } from '../../../src/runtime/service/client-access'
 import { KernelService } from '../../../src/runtime/service/KernelService'
@@ -282,17 +281,5 @@ export default {
     const loaded = await new KernelModLoader(store).loadEnabled()
     expect(loaded.modules).toHaveLength(1)
     expect(loaded.modules[0]?.manifest.id).toBe('module.user-echo')
-  })
-
-  test('HostBridge registry builds isolation adapters', () => {
-    const registry = new KernelHostBridgeRegistry()
-    registry.register({
-      id: 'velaros.browser',
-      isolation: 'sidecar',
-      activate: () => ({ dispose() {} }),
-    })
-    const adapters = registry.toIsolationAdapters()
-    expect(adapters).toHaveLength(1)
-    expect(adapters[0]?.isolation).toBe('sidecar')
   })
 })

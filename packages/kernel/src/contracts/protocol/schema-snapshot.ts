@@ -21,10 +21,6 @@ import {
 } from './capability'
 import { KernelHandshakeSchema } from './handshake'
 import {
-  KernelRunIdentitySchema,
-  KernelSessionIdentitySchema,
-} from './identity'
-import {
   VelarosModCapabilityRequirementSchema,
   VelarosModCapabilityTokenSchema,
   VelarosModEnvelopeSchema,
@@ -92,11 +88,6 @@ const capabilityWireSchemas = {
   CapabilitySessionCloseResponse: CapabilitySessionCloseResponseSchema,
 }
 
-const identityWireSchemas = {
-  KernelSessionIdentity: KernelSessionIdentitySchema,
-  KernelRunIdentity: KernelRunIdentitySchema,
-}
-
 const modsWireSchemas = {
   VelarosModCapabilityToken: VelarosModCapabilityTokenSchema,
   VelarosModCapabilityRequirement: VelarosModCapabilityRequirementSchema,
@@ -146,7 +137,6 @@ const remoteNodeWireSchemas = {
 export const KernelProtocolWireSchemas = {
   ...handshakeWireSchemas,
   ...capabilityWireSchemas,
-  ...identityWireSchemas,
   ...modsWireSchemas,
   ...remoteNodeWireSchemas,
 }

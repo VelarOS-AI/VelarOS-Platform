@@ -44,8 +44,6 @@ export {
 } from './capability'
 export type { KernelHandshake } from './handshake'
 export { KernelHandshakeSchema } from './handshake'
-export type { KernelRunIdentity, KernelSessionIdentity } from './identity'
-export { KernelRunIdentitySchema, KernelSessionIdentitySchema } from './identity'
 export type {
   VelarosModEnvelope,
   VelarosModEnvelopeParseResult,

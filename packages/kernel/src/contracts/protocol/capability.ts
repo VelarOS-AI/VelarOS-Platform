@@ -11,7 +11,6 @@ export const CapabilityIsolationSchema = z.enum([
   'in-process',
   'worker',
   'remote',
-  'sidecar',
 ])
 export type CapabilityIsolation = z.infer<typeof CapabilityIsolationSchema>
 

@@ -47,11 +47,6 @@ export {
 } from '../contracts/protocol/capability'
 export type { KernelHandshake } from '../contracts/protocol/handshake'
 export { KernelHandshakeSchema } from '../contracts/protocol/handshake'
-export type { KernelRunIdentity, KernelSessionIdentity } from '../contracts/protocol/identity'
-export {
-  KernelRunIdentitySchema,
-  KernelSessionIdentitySchema,
-} from '../contracts/protocol/identity'
 export type {
   VelarosModEnvelope,
   VelarosModEnvelopeParseResult,
@@ -158,10 +153,6 @@ export { KernelProtocolWireSchemas } from '../contracts/protocol/schema-snapshot
  */
 export { KernelProtocolVersion } from '../contracts/protocol/version'
 export type { KernelServiceHealth, KernelServiceModuleHealth } from '../contracts/service/health'
-export type {
-  OpenKernelSessionInput,
-  StartKernelRunInput,
-} from '../contracts/service/identity-inputs'
 export type { OpenCapabilitySessionInput } from './CapabilitySession'
 export { CapabilitySession, openCapabilitySessionOnTransport } from './CapabilitySession'
 export type { KernelDaemonEndpointDescriptor, KernelDaemonPaths } from './contracts/descriptor'

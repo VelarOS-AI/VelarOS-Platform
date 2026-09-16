@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 // Kernel 进程入口:被 launcher spawn,负责装配 ModStore/host/service/daemon。
 //
-// 装载路径：ModStore（编译期 bundled packs + VELAROS_KERNEL_SYSTEM_PACKS + 用户索引）。
+// 装载路径：ModStore（VELAROS_KERNEL_SYSTEM_PACKS + 用户索引）。
 //
-// bundled 是编译期的（宪章 §15.2）：本进程编进来的只有 sidecar 目录桩，具体能力的 bundled
+// bundled 是编译期的（宪章 §15.2）：内核自己一个 bundled pack 都不带，具体能力的 bundled
 // pack 由宿主的构建图注入（`bootKernelDaemon({ modPacks })`，见 daemon/bundled-packs.ts）。
 //
 // 外部产品通过 @velaros-ai/kernel/client：connect → openCapabilitySession → session.call。
@@ -12,7 +12,6 @@ import { isArray, isEmpty, isNotUndefined, Log } from '@velaros-ai/core'
 import { KernelVersion as DefaultKernelVersion } from '../contracts/abi/version-axis'
 
 import { bootKernelDaemon, installKernelShutdownHandlers } from './daemon/boot'
-import { registerBundledPacks } from './daemon/bundled-packs'
 import { installModPackFromDirectory, loadModIndexIntoStore } from './daemon/mod-loader'
 import {
   createDefaultKernelModStorePaths,
@@ -34,7 +33,6 @@ const modStorePaths = createDefaultKernelModStorePaths(
 )
 const modStore = new KernelModStore(modStorePaths)
 await loadModIndexIntoStore(modStore)
-registerBundledPacks(modStore)
 
 if (isNotUndefined(systemPacksJson) && !isEmpty(systemPacksJson)) {
   const parsed = JSON.parse(systemPacksJson) as unknown

@@ -13,8 +13,6 @@ export { resolveKernelModulePlan, validateManifest } from './host/dependency-res
 export type { KernelHostErrorCode, KernelHostErrorDetails } from './host/errors'
 export { KernelHostError, KernelOperationError, KernelStartupError, toError } from './host/errors'
 export { KernelEventHub } from './host/event-bus'
-export type { KernelHostBridge } from './host/host-bridge'
-export { KernelHostBridgeRegistry } from './host/host-bridge'
 export type { ExternalKernelModuleIsolation, KernelModuleIsolationAdapter } from './host/isolation'
 export type {
   KernelCompositionCapabilitySnapshot,
@@ -29,24 +27,6 @@ export {
 } from './host/permission-broker'
 export type { KernelActiveServiceSnapshot } from './host/service-registry'
 export { KernelServiceStore, ScopedKernelServiceResolver } from './host/service-registry'
-export type {
-  HostBridgeCancelFrame,
-  HostBridgeEndpoint,
-  HostBridgeEventFrame,
-  HostBridgeOnEvent,
-  HostBridgeRpcFailure,
-  HostBridgeRpcMethod,
-  HostBridgeRpcRequest,
-  HostBridgeRpcResponse,
-  HostBridgeRpcSuccess,
-  SidecarIsolationAdapterOptions,
-} from './host/sidecar-bridge'
-export {
-  defaultHostBridgeSocketPath,
-  HostBridgeClient,
-  parseHostBridgeEndpoint,
-  SidecarIsolationAdapter,
-} from './host/sidecar-bridge'
 export type { KernelStateBackend } from './host/state-store'
 export { createNamespacedStateStore, InMemoryKernelStateBackend } from './host/state-store'
 export { assertSemanticVersion, satisfiesVersionRange } from './host/version'
@@ -66,11 +46,6 @@ export {
   AllowLoadedKernelClientAccessBroker,
   DenyAllKernelClientAccessBroker,
 } from './service/client-access'
-export type {
-  KernelIdentityRegistryErrorCode,
-  KernelIdentityRegistryOptions,
-} from './service/identity-registry'
-export { KernelIdentityRegistry, KernelIdentityRegistryError } from './service/identity-registry'
 export type { KernelServiceOptions, KernelServiceStatus } from './service/KernelService'
 export {
   KernelService,

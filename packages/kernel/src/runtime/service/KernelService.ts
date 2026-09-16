@@ -27,13 +27,8 @@ import {
   type KernelModuleDescriptor,
 } from '../../contracts/protocol/capability'
 import type { KernelHandshake } from '../../contracts/protocol/handshake'
-import type { KernelRunIdentity, KernelSessionIdentity } from '../../contracts/protocol/identity'
 import { KernelProtocolVersion } from '../../contracts/protocol/version'
 import type { KernelServiceHealth, KernelServiceModuleHealth } from '../../contracts/service/health'
-import type {
-  OpenKernelSessionInput,
-  StartKernelRunInput,
-} from '../../contracts/service/identity-inputs'
 import {
   KernelCapabilityInvoker,
   KernelCapabilityNotCallableError,
@@ -52,7 +47,6 @@ import {
   DenyAllKernelClientAccessBroker,
   type KernelClientAccessBroker,
 } from './client-access'
-import { KernelIdentityRegistry } from './identity-registry'
 import { type KernelModCatalog, KernelModCatalogError } from './mod-catalog'
 
 const log = Log.tag('KernelService')
@@ -67,7 +61,6 @@ export type KernelServiceStatus = 'idle' | 'started' | 'failed' | 'disposed'
 
 export interface KernelServiceOptions {
   readonly host: KernelModuleHost
-  readonly identities?: KernelIdentityRegistry
   readonly kernelVersion: string
   /** Gates capability.session.open. Defaults to deny-all. */
   readonly clientAccessBroker?: KernelClientAccessBroker
@@ -183,7 +176,6 @@ export class KernelService {
   private startFailure?: unknown
   private startPromise?: Promise<void>
   private disposePromise?: Promise<void>
-  private readonly identities: KernelIdentityRegistry
   private readonly clientAccessBroker: KernelClientAccessBroker
   private readonly capabilityInvoker: KernelCapabilityInvoker
 
@@ -191,7 +183,6 @@ export class KernelService {
     if (isBlank(options.kernelVersion.trim())) {
       throw new Error('Kernel version must not be empty')
     }
-    this.identities = options.identities ?? new KernelIdentityRegistry()
     this.clientAccessBroker = options.clientAccessBroker
       ?? new DenyAllKernelClientAccessBroker()
     this.capabilityInvoker = new KernelCapabilityInvoker(options.host)
@@ -240,7 +231,6 @@ export class KernelService {
   private async disposeOnce(): Promise<void> {
     if (this.status === 'disposed') return
     this.status = 'disposed'
-    this.identities.clear()
     await this.options.host.dispose()
   }
 
@@ -447,48 +437,6 @@ export class KernelService {
 
   private moduleHealthSnapshots(): readonly KernelServiceModuleHealth[] {
     return this.options.host.listModules().map(toModuleHealth)
-  }
-
-  public openSession(
-    input: OpenKernelSessionInput,
-  ): KernelSessionIdentity {
-    this.assertStarted()
-    return this.identities.openSession(input)
-  }
-
-  public getSession(sessionId: string): KernelSessionIdentity | undefined {
-    this.assertStarted()
-    return this.identities.getSession(sessionId)
-  }
-
-  public listSessions(): readonly KernelSessionIdentity[] {
-    this.assertStarted()
-    return this.identities.listSessions()
-  }
-
-  public closeSession(sessionId: string): boolean {
-    this.assertStarted()
-    return this.identities.closeSession(sessionId)
-  }
-
-  public startRun(input: StartKernelRunInput): KernelRunIdentity {
-    this.assertStarted()
-    return this.identities.startRun(input)
-  }
-
-  public getRun(runId: string): KernelRunIdentity | undefined {
-    this.assertStarted()
-    return this.identities.getRun(runId)
-  }
-
-  public listRuns(): readonly KernelRunIdentity[] {
-    this.assertStarted()
-    return this.identities.listRuns()
-  }
-
-  public finishRun(runId: string): boolean {
-    this.assertStarted()
-    return this.identities.finishRun(runId)
   }
 
   public subscribe<TPayload>(

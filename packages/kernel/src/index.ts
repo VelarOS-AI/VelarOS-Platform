@@ -41,10 +41,6 @@ export type { ResourceRef, ScopeRef } from './contracts/abi/references'
 export type { KernelStateStore } from './contracts/abi/state'
 export { KernelModuleApiVersion, KernelVersion } from './contracts/abi/version-axis'
 export type { KernelServiceHealth, KernelServiceModuleHealth } from './contracts/service/health'
-export type {
-  OpenKernelSessionInput,
-  StartKernelRunInput,
-} from './contracts/service/identity-inputs'
 export type { KernelCapabilityCall } from './runtime/capability-invocation'
 export {
   KernelCapabilityNotCallableError,
@@ -63,8 +59,6 @@ export {
   toError,
 } from './runtime/host/errors'
 export { KernelEventHub } from './runtime/host/event-bus'
-export type { KernelHostBridge } from './runtime/host/host-bridge'
-export { KernelHostBridgeRegistry } from './runtime/host/host-bridge'
 export type {
   ExternalKernelModuleIsolation,
   KernelModuleIsolationAdapter,
@@ -82,24 +76,6 @@ export {
 } from './runtime/host/permission-broker'
 export type { KernelActiveServiceSnapshot } from './runtime/host/service-registry'
 export { KernelServiceStore, ScopedKernelServiceResolver } from './runtime/host/service-registry'
-export type {
-  HostBridgeCancelFrame,
-  HostBridgeEndpoint,
-  HostBridgeEventFrame,
-  HostBridgeOnEvent,
-  HostBridgeRpcFailure,
-  HostBridgeRpcMethod,
-  HostBridgeRpcRequest,
-  HostBridgeRpcResponse,
-  HostBridgeRpcSuccess,
-  SidecarIsolationAdapterOptions,
-} from './runtime/host/sidecar-bridge'
-export {
-  defaultHostBridgeSocketPath,
-  HostBridgeClient,
-  parseHostBridgeEndpoint,
-  SidecarIsolationAdapter,
-} from './runtime/host/sidecar-bridge'
 export type { KernelStateBackend } from './runtime/host/state-store'
 export { createNamespacedStateStore, InMemoryKernelStateBackend } from './runtime/host/state-store'
 export { assertSemanticVersion, satisfiesVersionRange } from './runtime/host/version'
@@ -119,14 +95,6 @@ export {
   AllowLoadedKernelClientAccessBroker,
   DenyAllKernelClientAccessBroker,
 } from './runtime/service/client-access'
-export type {
-  KernelIdentityRegistryErrorCode,
-  KernelIdentityRegistryOptions,
-} from './runtime/service/identity-registry'
-export {
-  KernelIdentityRegistry,
-  KernelIdentityRegistryError,
-} from './runtime/service/identity-registry'
 export type { KernelServiceOptions, KernelServiceStatus } from './runtime/service/KernelService'
 export {
   KernelService,

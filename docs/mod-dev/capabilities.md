@@ -62,7 +62,7 @@ interface KernelModuleManifest {
   readonly requires: readonly CapabilityRequirement[];
   readonly optionalRequires: readonly CapabilityRequirement[];
   readonly permissions: readonly string[];
-  readonly isolation: KernelModuleIsolation; // 'in-process' | 'worker' | 'remote' | 'sidecar'
+  readonly isolation: KernelModuleIsolation; // 'in-process' | 'worker' | 'remote'
 }
 ```
 
@@ -77,8 +77,9 @@ bundled pack 走构建图，没有寻址问题。
 ### `isolation` 是部署轴，不是架构轴
 
 **进程边界是部署决策，不是架构决策。** 换 `isolation` 值就换部署形态，descriptor 之外零改动。
-默认 `'in-process'`——能力 mod 进程内装载是默认，要隔离才声明。`worker` / `remote` 仍由 Host
-注入同一 `KernelModuleIsolationAdapter` 接缝；`sidecar` 只为旧 HostBridge 产物兼容，新 Mod 不得使用。
+默认 `'in-process'`——能力 mod 进程内装载是默认，要隔离才声明。`worker` / `remote` 由 Host
+注入同一 `KernelModuleIsolationAdapter` 接缝。HostBridge 时代的 `sidecar` 取值已随实现一起删除，
+清单里再写它会被 schema 拒收。
 
 ---
 

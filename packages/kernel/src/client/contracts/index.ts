@@ -7,10 +7,6 @@ export * as KernelAbi from '../../contracts/abi'
 export type { KernelModuleHealthStatus } from '../../contracts/abi/module'
 export * as KernelProtocol from '../../contracts/protocol'
 export type { KernelServiceHealth, KernelServiceModuleHealth } from '../../contracts/service/health'
-export type {
-  OpenKernelSessionInput,
-  StartKernelRunInput,
-} from '../../contracts/service/identity-inputs'
 export type { KernelDaemonEndpointDescriptor, KernelDaemonPaths } from './descriptor'
 export {
   createDefaultKernelDaemonPaths,

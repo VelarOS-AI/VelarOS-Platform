@@ -296,8 +296,7 @@
       "enum": [
         "in-process",
         "worker",
-        "remote",
-        "sidecar"
+        "remote"
       ]
     },
     "CapabilityRequireItem": {
@@ -956,8 +955,7 @@
                 "enum": [
                   "in-process",
                   "worker",
-                  "remote",
-                  "sidecar"
+                  "remote"
                 ]
               },
               "catalogRevision": {
@@ -1147,8 +1145,7 @@
           "enum": [
             "in-process",
             "worker",
-            "remote",
-            "sidecar"
+            "remote"
           ]
         },
         "catalogRevision": {
@@ -1166,112 +1163,6 @@
         "permissions",
         "isolation",
         "catalogRevision"
-      ],
-      "additionalProperties": false
-    },
-    "KernelRunIdentity": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "type": "object",
-      "properties": {
-        "id": {
-          "type": "string",
-          "minLength": 1
-        },
-        "ownerModuleId": {
-          "type": "string",
-          "minLength": 1
-        },
-        "sessionId": {
-          "anyOf": [
-            {
-              "type": "string",
-              "minLength": 1
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "generation": {
-          "type": "integer",
-          "exclusiveMinimum": 0,
-          "maximum": 9007199254740991
-        },
-        "startedAt": {
-          "type": "integer",
-          "minimum": -9007199254740991,
-          "maximum": 9007199254740991
-        }
-      },
-      "required": [
-        "id",
-        "ownerModuleId",
-        "sessionId",
-        "generation",
-        "startedAt"
-      ],
-      "additionalProperties": false
-    },
-    "KernelSessionIdentity": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "type": "object",
-      "properties": {
-        "id": {
-          "type": "string",
-          "minLength": 1
-        },
-        "ownerModuleId": {
-          "type": "string",
-          "minLength": 1
-        },
-        "scope": {
-          "anyOf": [
-            {
-              "type": "object",
-              "properties": {
-                "id": {
-                  "type": "string",
-                  "minLength": 1
-                },
-                "ownerModuleId": {
-                  "type": "string",
-                  "minLength": 1
-                },
-                "kind": {
-                  "anyOf": [
-                    {
-                      "type": "string",
-                      "minLength": 1
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
-                }
-              },
-              "required": [
-                "id",
-                "ownerModuleId",
-                "kind"
-              ],
-              "additionalProperties": false
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "createdAt": {
-          "type": "integer",
-          "minimum": -9007199254740991,
-          "maximum": 9007199254740991
-        }
-      },
-      "required": [
-        "id",
-        "ownerModuleId",
-        "scope",
-        "createdAt"
       ],
       "additionalProperties": false
     },
@@ -3588,8 +3479,7 @@
               "enum": [
                 "in-process",
                 "worker",
-                "remote",
-                "sidecar"
+                "remote"
               ]
             },
             "entry": {
@@ -3717,8 +3607,7 @@
           "enum": [
             "in-process",
             "worker",
-            "remote",
-            "sidecar"
+            "remote"
           ]
         },
         "entry": {

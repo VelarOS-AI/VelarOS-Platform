@@ -15,13 +15,11 @@ export type Awaitable<T> = T | Promise<T>
  *
  * 默认 `in-process`,装配者选,Kernel 不预设。`remote` 表示 provider 住在另一台机器上,
  * 由宿主注入的 isolation adapter 负责传输与生命周期映射;descriptor 之外零改动。
- * `sidecar` 是 HostBridge 时代的存量值(§15.2 已判决自进程退役),新模块不要再声明。
  */
 export type KernelModuleIsolation =
   | 'in-process'
   | 'worker'
   | 'remote'
-  | 'sidecar'
 
 /**
  * 合法 isolation 值的运行期单源。
@@ -33,7 +31,6 @@ export const KernelModuleIsolationValues: readonly KernelModuleIsolation[] = [
   'in-process',
   'worker',
   'remote',
-  'sidecar',
 ]
 
 /**
@@ -145,7 +142,7 @@ export interface KernelModuleLifecycle {
 /**
  * Executable module supplied to a host or to an isolation adapter.
  *
- * Worker and sidecar loaders implement this same boundary, keeping the host
+ * Worker and remote loaders implement this same boundary, keeping the host
  * independent of transport details.
  */
 export interface KernelModuleDefinition {

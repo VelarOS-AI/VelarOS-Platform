@@ -15,7 +15,6 @@ import type {
   CapabilitySessionOpenResponse,
 } from '../../contracts/protocol/capability'
 import type { KernelHandshake } from '../../contracts/protocol/handshake'
-import type { KernelRunIdentity, KernelSessionIdentity } from '../../contracts/protocol/identity'
 import type {
   ModsInstallFromDirectoryRequest,
   ModsInstallFromDirectoryResponse,
@@ -26,10 +25,6 @@ import type {
 } from '../../contracts/protocol/mods'
 import { KernelProtocolVersion } from '../../contracts/protocol/version'
 import type { KernelServiceHealth } from '../../contracts/service/health'
-import type {
-  OpenKernelSessionInput,
-  StartKernelRunInput,
-} from '../../contracts/service/identity-inputs'
 import { CapabilitySessionLedger } from '../../runtime/service/capability-grants'
 
 /**
@@ -46,14 +41,6 @@ export interface InProcessKernelService {
     request: unknown,
     signal?: AbortSignal,
   ): Promise<CapabilityCallResponse>
-  openSession(input: OpenKernelSessionInput): KernelSessionIdentity
-  getSession(sessionId: string): KernelSessionIdentity | undefined
-  listSessions(): readonly KernelSessionIdentity[]
-  closeSession(sessionId: string): boolean
-  startRun(input: StartKernelRunInput): KernelRunIdentity
-  getRun(runId: string): KernelRunIdentity | undefined
-  listRuns(): readonly KernelRunIdentity[]
-  finishRun(runId: string): boolean
   subscribe(type: string, handler: KernelClientEventHandler): KernelRegistration
   listMods?(): ReadonlyArray<ModsListResponse['packs'][number]>
   setModEnabled?(
@@ -126,42 +113,6 @@ export class InProcessKernelTransport implements KernelClientTransport {
         },
       }
     return this.service.handleCapabilityCall(request, signal)
-  }
-
-  public openSession(
-    input: OpenKernelSessionInput,
-  ): Promise<KernelSessionIdentity> {
-    return Promise.resolve(this.service.openSession(input))
-  }
-
-  public getSession(
-    sessionId: string,
-  ): Promise<KernelSessionIdentity | undefined> {
-    return Promise.resolve(this.service.getSession(sessionId))
-  }
-
-  public listSessions(): Promise<readonly KernelSessionIdentity[]> {
-    return Promise.resolve(this.service.listSessions())
-  }
-
-  public closeSession(sessionId: string): Promise<boolean> {
-    return Promise.resolve(this.service.closeSession(sessionId))
-  }
-
-  public startRun(input: StartKernelRunInput): Promise<KernelRunIdentity> {
-    return Promise.resolve(this.service.startRun(input))
-  }
-
-  public getRun(runId: string): Promise<KernelRunIdentity | undefined> {
-    return Promise.resolve(this.service.getRun(runId))
-  }
-
-  public listRuns(): Promise<readonly KernelRunIdentity[]> {
-    return Promise.resolve(this.service.listRuns())
-  }
-
-  public finishRun(runId: string): Promise<boolean> {
-    return Promise.resolve(this.service.finishRun(runId))
   }
 
   public async listMods(request: ModsListRequest): Promise<ModsListResponse> {
