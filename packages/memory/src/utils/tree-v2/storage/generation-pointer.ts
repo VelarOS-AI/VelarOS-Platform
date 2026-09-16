@@ -3,7 +3,13 @@ import { join } from 'node:path'
 
 import { AppError } from '@velaros-ai/core/error'
 
-import { type StorageStepHooksV2, writeFileAtomicV2 } from './atomic-file'
+import type {
+  CommitCurrentGenerationOptionsV2,
+  GenerationEntryV2,
+  ListGenerationEntriesOptionsV2,
+} from '../../../types/tree-v2/storage'
+
+import { writeFileAtomicV2 } from './atomic-file'
 import { MemoryStorageErrorCodesV2 } from './error-codes'
 
 /**
@@ -42,7 +48,7 @@ export function readCurrentGenerationV2(directoryPath: string): Nullable<number>
 export function commitCurrentGenerationV2(
   directoryPath: string,
   generation: number,
-  options: { label?: string; hooks?: StorageStepHooksV2 } = {}
+  options: CommitCurrentGenerationOptionsV2 = {}
 ): void {
   if (!Number.isSafeInteger(generation) || generation < 1) {
     throw new AppError('VALIDATION', '生效代号必须是正整数。', undefined, {
@@ -55,19 +61,13 @@ export function commitCurrentGenerationV2(
   })
 }
 
-export interface GenerationEntryV2 {
-  readonly generation: number
-  readonly name: string
-  readonly path: string
-}
-
 /**
  * 枚举目录内的代际实体（`generation-<n>` + 指定后缀，文件或目录形态）。
  * 命名不合规的条目一律忽略（不是本协议的实体），返回按代号升序。
  */
 export function listGenerationEntriesV2(
   directoryPath: string,
-  options: { suffix: string; kind: 'file' | 'directory' }
+  options: ListGenerationEntriesOptionsV2
 ): GenerationEntryV2[] {
   if (!existsSync(directoryPath)) return []
   const entries: GenerationEntryV2[] = []

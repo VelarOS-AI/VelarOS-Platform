@@ -9,7 +9,11 @@
  * 在写回时保序输出——后端不认识的字段是用户或未来档的资产，不许被静默吞掉。
  */
 
-import { isBlank, isEmpty,isUndefined } from '@velaros-ai/core'
+import { isBlank, isEmpty, isUndefined } from '@velaros-ai/core'
+
+import type { MemoryFileDocument, SerializeMemoryFileDocumentInput } from '../../types/files'
+
+export type { MemoryFileDocument, SerializeMemoryFileDocumentInput } from '../../types/files'
 
 /** frontmatter 里的三个一等字段之外，后端自己也会写的保留 key（写回时保序在前）。 */
 const ReservedAttributeOrder = [
@@ -40,24 +44,15 @@ const FieldAliases: Readonly<Record<string, 'name' | 'description' | 'type'>> = 
   category: 'type',
 }
 
-export interface MemoryFileDocument {
-  readonly name: string
-  readonly description: string
-  readonly type: string
-  /** 一等字段之外的 frontmatter 键值，按出现顺序保留。 */
-  readonly attributes: Readonly<Record<string, string>>
-  /** frontmatter 之后的正文（已 trim 首尾空行）。 */
-  readonly body: string
-  /** 该文件是否本来就带 frontmatter；false 表示三个一等字段是从正文推断出来的。 */
-  readonly hadFrontmatter: boolean
-}
 
 const FrontmatterFence = /^-{3,}\s*$/u
 
+/** 去掉文本开头的 BOM 字符。 */
 function stripBom(raw: string): string {
   return raw.charCodeAt(0) === 0xfe_ff ? raw.slice(1) : raw
 }
 
+/** 把 CRLF 与 CR 统一成 LF。 */
 function normalizeNewlines(raw: string): string {
   return raw.replaceAll('\r\n', '\n').replaceAll('\r', '\n')
 }
@@ -77,6 +72,7 @@ function unquote(value: string): string {
   return trimmed.slice(1, -1).replaceAll(`${first}${first}`, first)
 }
 
+/** 从正文里取第一个 markdown 标题当标题；没有就返回空串。 */
 function firstHeading(body: string): string {
   for (const line of body.split('\n')) {
     const match = /^\s{0,3}#{1,6}\s+(.*\S)\s*$/u.exec(line)
@@ -85,6 +81,7 @@ function firstHeading(body: string): string {
   return ''
 }
 
+/** 从正文里取第一段非空文字当摘要；没有就返回空串。 */
 function firstParagraph(body: string): string {
   const paragraph: string[] = []
   for (const line of body.split('\n')) {
@@ -198,13 +195,6 @@ function encodeValue(value: string): string {
   return normalized
 }
 
-export interface SerializeMemoryFileDocumentInput {
-  readonly name: string
-  readonly description: string
-  readonly type: string
-  readonly attributes?: Readonly<Record<string, string>>
-  readonly body: string
-}
 
 /** 写回一个记忆文件。三个一等字段固定在前，保留字段按既定顺序，其余保序追加。 */
 export function serializeMemoryFileDocument(

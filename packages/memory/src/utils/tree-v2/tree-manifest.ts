@@ -1,47 +1,34 @@
 import { createHash } from 'node:crypto'
 
-import { isArray, isNotNull, isNull, isPlainObject, isString } from '@velaros-ai/core'
+import { isArray, isNull, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
+import type { MemoryTreeNodeStructV2 } from '../../types/tree-v2/diff'
+import type {
+  MemoryTreeBaseHashesV2,
+  MemoryTreeBaseManifestV2,
+  MemoryTreeBaseStateV2,
+} from '../../types/tree-v2/store'
+
+import { assertPositiveSafeIntegerV2, compareCodeUnitV2, isStrictRecordV2 } from './checks'
 import {
   canonicalStringifyV2,
   hashTreeBaseEventV2,
   hashTreeStateV2,
   isMemoryTreeNodeStructV2,
-  type MemoryTreeNodeStructV2,
 } from './diff-chain'
 
+/** 基点清单哈希的域分隔串。 */
 const MemoryTreeBaseManifestDomainV2 = 'velaros.memory.tree-base-manifest.v2'
+/** 基点状态 blob 的格式身份。 */
 export const MemoryTreeBaseStateFormatV2 = 'velaros.memory.tree-base-state.v2'
 
-export interface MemoryTreeBaseManifestV2 {
-  readonly format: 'velaros.memory.tree-base-manifest.v2'
-  readonly baseVersion: number
-  readonly nodeStableKeys: readonly string[]
-  readonly blobRefs: readonly string[]
-  readonly redactedStableKeys: readonly string[]
-  readonly nodeCount: number
-  readonly redactedCount: number
-}
-
-export interface MemoryTreeBaseStateV2 {
-  readonly format: typeof MemoryTreeBaseStateFormatV2
-  readonly baseVersion: number
-  readonly nodes: readonly MemoryTreeNodeStructV2[]
-  readonly manifest: MemoryTreeBaseManifestV2
-}
-
-export interface MemoryTreeBaseHashesV2 {
-  readonly treeHash: string
-  readonly manifestHash: string
-  readonly baseEventHash: string
-}
-
+/** 由一组节点算出基点清单：节点键、去重的 blob 引用、redact 名册与两个计数。 */
 export function buildMemoryTreeBaseManifestV2(
   baseVersion: number,
   nodes: readonly MemoryTreeNodeStructV2[]
 ): MemoryTreeBaseManifestV2 {
-  assertBaseVersionV2(baseVersion)
+  assertPositiveSafeIntegerV2(baseVersion, '物化基点版本')
   const sortedNodes = sortNodesV2(nodes)
   const nodeStableKeys = sortedNodes.map((node) => node.stableKey)
   if (new Set(nodeStableKeys).size !== nodeStableKeys.length) {
@@ -67,6 +54,7 @@ export function buildMemoryTreeBaseManifestV2(
   }
 }
 
+/** 对基点清单算 sha256（带域分隔）。 */
 export function hashMemoryTreeBaseManifestV2(manifest: MemoryTreeBaseManifestV2): string {
   return createHash('sha256')
     .update(
@@ -78,6 +66,7 @@ export function hashMemoryTreeBaseManifestV2(manifest: MemoryTreeBaseManifestV2)
     .digest('hex')
 }
 
+/** 把一组节点整理成基点状态 blob 的内容（节点排序 + 配套清单）。 */
 export function buildMemoryTreeBaseStateV2(
   baseVersion: number,
   nodes: readonly MemoryTreeNodeStructV2[]
@@ -91,6 +80,7 @@ export function buildMemoryTreeBaseStateV2(
   }
 }
 
+/** 算基点的三个哈希锚点，算之前先自检状态与清单一致。 */
 export function computeMemoryTreeBaseHashesV2(
   state: MemoryTreeBaseStateV2,
   priorSegmentEventHead: string
@@ -110,6 +100,7 @@ export function computeMemoryTreeBaseHashesV2(
   }
 }
 
+/** 严格解析基点状态 blob：格式、内容自洽与 canonical 字节三关都要过。 */
 export function parseMemoryTreeBaseStateV2(raw: Buffer | string): MemoryTreeBaseStateV2 {
   const source = isString(raw) ? raw : raw.toString('utf8')
   let parsed: unknown
@@ -128,14 +119,16 @@ export function parseMemoryTreeBaseStateV2(raw: Buffer | string): MemoryTreeBase
   return parsed
 }
 
+/** 自检基点状态：按它的节点重建一遍，字节必须完全一致。 */
 export function validateMemoryTreeBaseStateV2(state: MemoryTreeBaseStateV2): void {
-  assertBaseVersionV2(state.baseVersion)
+  assertPositiveSafeIntegerV2(state.baseVersion, '物化基点版本')
   const rebuilt = buildMemoryTreeBaseStateV2(state.baseVersion, state.nodes)
   if (canonicalStringifyV2(rebuilt) !== canonicalStringifyV2(state)) {
     throw new AppError('INVARIANT', '物化基点 manifest 与节点集合不一致或排序不规范。')
   }
 }
 
+/** 基点状态 blob 的运行时守卫：顶层与清单的键集、类型都要对上。 */
 function isMemoryTreeBaseStateV2(value: unknown): value is MemoryTreeBaseStateV2 {
   if (!isStrictRecordV2(value, ['baseVersion', 'format', 'manifest', 'nodes'])) return false
   if (
@@ -170,33 +163,10 @@ function isMemoryTreeBaseStateV2(value: unknown): value is MemoryTreeBaseStateV2
   )
 }
 
+/** 把节点按 stableKey 的码元序排好。 */
 function sortNodesV2(nodes: readonly MemoryTreeNodeStructV2[]): MemoryTreeNodeStructV2[] {
   return [...nodes].sort((left, right) => compareCodeUnitV2(left.stableKey, right.stableKey))
 }
 
-function compareCodeUnitV2(left: string, right: string): number {
-  return left < right ? -1 : left > right ? 1 : 0
-}
 
-function assertBaseVersionV2(version: number): void {
-  if (!Number.isSafeInteger(version) || version < 1) {
-    throw new AppError('VALIDATION', '物化基点版本必须是正整数。', undefined, {
-      version,
-    })
-  }
-}
 
-function isStrictRecordV2(
-  value: unknown,
-  expectedKeys: readonly string[]
-): value is Record<string, unknown> {
-  if (!isPlainObject(value)) return false
-  const prototype: unknown = Object.getPrototypeOf(value)
-  if (prototype !== Object.prototype && isNotNull(prototype)) return false
-  const actualKeys = Object.keys(value).sort()
-  const sortedExpected = [...expectedKeys].sort()
-  return (
-    actualKeys.length === sortedExpected.length &&
-    actualKeys.every((key, index) => key === sortedExpected[index])
-  )
-}

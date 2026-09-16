@@ -1,6 +1,7 @@
 import { isArray, isBlank, isPlainObject,isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
+import { MemoryEvidenceLimits } from '../contract/constants'
 import type { MemoryEvidenceInput } from '../types/memory'
 
 import {
@@ -8,9 +9,8 @@ import {
   scopeTypeForScopeId,
   SYSTEM_MEMORY_SCOPE,
 } from './scope'
+import { MemoryTuning } from './tuning'
 
-const MaxEvidenceContentChars = 24_000
-const MaxEvidenceTitleChars = 240
 
 const SecretPatterns: Array<{ pattern: RegExp; replacement: string }> = [
   {
@@ -66,20 +66,22 @@ export function redactMemorySecrets(value: string): string {
   )
 }
 
+/** 清洗一个元数据值：字符串打码并截断，数组与对象按上限收，太深就整块截掉。 */
 function sanitizeMetadataValue(value: unknown, depth: number = 0): unknown {
-  if (depth > 5) return '[TRUNCATED_METADATA]'
-  if (isString(value)) return redactMemorySecrets(normalizeEvidenceText(value, 2_000))
-  if (isArray(value)) return value.slice(0, 100).map((item) => sanitizeMetadataValue(item, depth + 1))
+  if (depth > MemoryTuning.tree.metadataDepth) return '[TRUNCATED_METADATA]'
+  if (isString(value)) return redactMemorySecrets(normalizeEvidenceText(value, MemoryTuning.tree.metadataStringChars))
+  if (isArray(value)) return value.slice(0, MemoryTuning.tree.metadataArrayItems).map((item) => sanitizeMetadataValue(item, depth + 1))
   if (!isPlainObject(value)) return value
   return Object.fromEntries(
     Object.entries(value)
-      .slice(0, 100)
+      .slice(0, MemoryTuning.tree.metadataArrayItems)
       .map(([key, item]) => [key.slice(0, 120), sanitizeMetadataValue(item, depth + 1)])
   )
 }
 
+/** 一条证据进后端之前的清洗：正文与标题打码截断，元数据逐项清洗，作用域按两轴补齐。 */
 export function sanitizeMemoryEvidenceInput(input: MemoryEvidenceInput): MemoryEvidenceInput {
-  const content = redactMemorySecrets(normalizeEvidenceText(input.content, MaxEvidenceContentChars))
+  const content = redactMemorySecrets(normalizeEvidenceText(input.content, MemoryEvidenceLimits.contentChars))
   if (isBlank(content)) throw new AppError('VALIDATION', '记忆证据内容不能为空。')
 
   return {
@@ -89,12 +91,13 @@ export function sanitizeMemoryEvidenceInput(input: MemoryEvidenceInput): MemoryE
     executionId: input.executionId?.trim(),
     workspaceRoot: input.workspaceRoot?.trim(),
     scopeId: input.scopeId?.trim(),
-    title: redactMemorySecrets(normalizeEvidenceText(input.title ?? '', MaxEvidenceTitleChars)),
+    title: redactMemorySecrets(normalizeEvidenceText(input.title ?? '', MemoryEvidenceLimits.titleChars)),
     content,
     metadata: sanitizeMetadataValue(input.metadata ?? {}) as Record<string, unknown>,
   }
 }
 
+/** 从一条证据的作用域两格推出它该落在哪个作用域：scopeId 在场即权威，否则按工作区根物化。 */
 export function inferEvidenceScope(input: MemoryEvidenceInput): {
   scopeType: NonNullable<MemoryEvidenceInput['scopeType']>
   scopeId: string

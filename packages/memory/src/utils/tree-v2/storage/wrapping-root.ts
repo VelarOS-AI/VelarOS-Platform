@@ -1,28 +1,20 @@
 import { AppError } from '@velaros-ai/core/error'
 
+import type { MemoryWrappingRootV2 } from '../../../types/tree-v2/storage'
+
 import { MemoryStorageErrorCodesV2 } from './error-codes'
 
-/**
- * OS 安全存储中的 wrapping root 端口。
- *
- * memory 包永远不 import Electron、Keychain 或 DPAPI。桌面宿主可用系统安全存储包装这一个
- * root，headless 宿主可接平台密钥服务；keyring 只持 `wrappingRootId` 和被包装字节。
- */
-export interface MemoryWrappingRootV2 {
-  /** 稳定引用 id，格式冻结为 `wr-<小写 hex>`；不是密钥本身。 */
-  readonly id: string
-  wrapKey(key: Buffer): Buffer
-  unwrapKey(wrapped: Buffer): Buffer
-}
-
+/** wrapping root id 的形态：`wr-` 前缀加 16–128 位小写 hex。 */
 export const MemoryWrappingRootIdPatternV2 = /^wr-[0-9a-f]{16,128}$/
 
+/** 校验 wrapping root 的 id 形态，不合规抛 VALIDATION。 */
 export function assertMemoryWrappingRootV2(root: MemoryWrappingRootV2): void {
   if (!MemoryWrappingRootIdPatternV2.test(root.id)) {
     throw new AppError('VALIDATION', 'wrapping root id 必须是 wr- 前缀的小写 hex 标识。')
   }
 }
 
+/** 经 wrapping root 把 32 字节明文密钥包装成 base64 信封；root 返回空信封判损坏。 */
 export function wrapMemoryKeyV2(root: MemoryWrappingRootV2, key: Buffer): string {
   assertMemoryWrappingRootV2(root)
   assertRawMemoryKeyV2(key)
@@ -33,6 +25,7 @@ export function wrapMemoryKeyV2(root: MemoryWrappingRootV2, key: Buffer): string
   return wrapped.toString('base64')
 }
 
+/** 经 wrapping root 把 base64 信封解回 32 字节明文密钥；解不开或长度不对判损坏。 */
 export function unwrapMemoryKeyV2(root: MemoryWrappingRootV2, wrappedBase64: string): Buffer {
   assertMemoryWrappingRootV2(root)
   const wrapped = decodeCanonicalBase64V2(wrappedBase64, 'wrapped key')
@@ -50,6 +43,7 @@ export function unwrapMemoryKeyV2(root: MemoryWrappingRootV2, wrappedBase64: str
   return Buffer.from(key)
 }
 
+/** 严格解码规范 base64（长度、字符集、往返一致都要过），不合规判损坏。 */
 export function decodeCanonicalBase64V2(value: string, label: string): Buffer {
   if (!value || value.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(value)) {
     throw new AppError(MemoryStorageErrorCodesV2.corruption, `${label} 不是规范 base64。`)
@@ -61,6 +55,7 @@ export function decodeCanonicalBase64V2(value: string, label: string): Buffer {
   return decoded
 }
 
+/** 断言这是 32 字节的明文密钥，不是就判损坏。 */
 export function assertRawMemoryKeyV2(key: Buffer): void {
   if (!Buffer.isBuffer(key) || key.length !== 32) {
     throw new AppError(MemoryStorageErrorCodesV2.corruption, 'memory key 必须是 32 字节。')

@@ -4,19 +4,33 @@
  */
 import { isFalse } from '@velaros-ai/core'
 
-import type { MemoryScopeType } from '../types/memory'
+import {
+  GLOBAL_MEMORY_SCOPE,
+  MemoryScopePrefixes,
+  SYSTEM_MEMORY_SCOPE,
+} from '../contract/constants'
+import type {
+  MemoryScopeId,
+  MemoryScopeSelectorInput,
+  MemoryScopeTarget,
+  MemoryScopeType,
+  MemoryScopeVisibilityInput,
+} from '../types/memory'
 
-export type MemoryScopeId = string
-
-export const GLOBAL_MEMORY_SCOPE = 'global'
-export const SYSTEM_MEMORY_SCOPE = 'system'
+export { GLOBAL_MEMORY_SCOPE, MemoryScopePrefixes, SYSTEM_MEMORY_SCOPE } from '../contract/constants'
+export type {
+  MemoryScopeId,
+  MemoryScopeSelectorInput,
+  MemoryScopeTarget,
+  MemoryScopeVisibilityInput,
+} from '../types/memory'
 
 /** 前缀 → 作用域种类。`session:` 与 `execution:` 是类型里一直有、函数从前从不返回的两种。 */
 const ScopeTypeByPrefix: ReadonlyArray<readonly [string, MemoryScopeType]> = [
-  ['project:', 'workspace'],
-  ['site:', 'site'],
-  ['session:', 'session'],
-  ['execution:', 'execution'],
+  [MemoryScopePrefixes.project, 'workspace'],
+  [MemoryScopePrefixes.site, 'site'],
+  [MemoryScopePrefixes.session, 'session'],
+  [MemoryScopePrefixes.execution, 'execution'],
 ]
 
 /**
@@ -38,34 +52,20 @@ export function scopeTypeForScopeId(
   return 'system'
 }
 
+/** 工作区根 → 项目作用域 id；根为空时回落到系统池（不落进别人的池子）。 */
 export function buildProjectMemoryScope(
   root: LooseOptional<string>
 ): MemoryScopeId {
   const normalized = root?.trim()
-  return normalized ? `project:${normalized}` : SYSTEM_MEMORY_SCOPE
+  return normalized ? `${MemoryScopePrefixes.project}${normalized}` : SYSTEM_MEMORY_SCOPE
 }
 
+/** 站点源 → 站点作用域 id；源为空时回落到系统池。 */
 export function buildSiteMemoryScope(
   origin: LooseOptional<string>
 ): MemoryScopeId {
   const normalized = origin?.trim()
-  return normalized ? `site:${normalized}` : SYSTEM_MEMORY_SCOPE
-}
-
-/**
- * 作用域的**两根轴**：会话身份轴与工作区根轴。
- *
- * - 轴一 `scopeId` = 会话身份（空间实体）派生出的作用域：`system` / `project:<root>` /
- *   `site:<origin>`。宿主每次调用都算得出它，因此它**在场即权威**。
- * - 轴二 `workspaceRoot` = 当前工作区根。它不是第二个候选作用域，而是轴一缺席时
- *   **把项目作用域物化出来**的那个参数。
- *
- * 两轴正交但不并列：同时给两根轴时按轴一裁决。这一条必须写死，否则「浏览器空间的会话
- * 恰好也有活动项目根」就会同时命中站点池与项目池——那正是跨空间泄漏。
- */
-export interface MemoryScopeSelectorInput {
-  scopeId?: LooseOptional<string>
-  workspaceRoot?: LooseOptional<string>
+  return normalized ? `${MemoryScopePrefixes.site}${normalized}` : SYSTEM_MEMORY_SCOPE
 }
 
 /**
@@ -96,20 +96,6 @@ export function resolveMemoryScopeFilterValue(
 ): MemoryScopeId {
   const selector = resolveMemoryScopeSelector(input)
   return selector === GLOBAL_MEMORY_SCOPE ? '' : selector
-}
-
-/** 可见性判定的目标读数：后端记录、文件根与召回条目共用这一格。 */
-export interface MemoryScopeTarget {
-  scopeType?: LooseOptional<string>
-  scopeId?: LooseOptional<string>
-}
-
-export interface MemoryScopeVisibilityInput extends MemoryScopeSelectorInput {
-  /**
-   * 是否并入真正的 global 记忆。默认并入（通用召回的既有行为）；需要严格实体隔离的入口
-   * 显式传 false。
-   */
-  includeGlobal?: LooseOptional<boolean>
 }
 
 /**

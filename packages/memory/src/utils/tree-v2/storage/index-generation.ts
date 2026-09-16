@@ -5,7 +5,13 @@ import { join } from 'node:path'
 import { isNull, isPlainObject, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import { type MemoryKeyringStoreV2 } from '../../../impl/tree-v2/storage/MemoryKeyringStoreV2'
+import type {
+  MemoryIndexGenerationEnvelopeV2,
+  MemoryIndexGenerationKeyringV2,
+  MemoryIndexGenerationSealReportV2,
+  MemoryIndexGenerationSnapshotV2,
+} from '../../../types/tree-v2/storage'
+import { assertPositiveSafeIntegerV2 } from '../checks'
 import { canonicalStringifyV2 } from '../diff-chain'
 
 import { fsyncDirectoryV2, writeFileAtomicV2 } from './atomic-file'
@@ -22,6 +28,7 @@ const IndexEnvelopeFormatV2 = 'velaros.memory.index-generation.v2'
 const IndexEnvelopeAlgorithmV2 = 'A256GCM'
 const IndexArtifactFileNameV2 = 'index-generation.sealed'
 
+/** 派生索引代的落盘策略：内存构建、整代封存、先 seal 后切 CURRENT，磁盘上永远没有明文。 */
 export const MemoryIndexStoragePolicyV2 = Object.freeze({
   strategy: 'aes-256-gcm-generation-envelope',
   buildMode: 'memory-only',
@@ -29,21 +36,6 @@ export const MemoryIndexStoragePolicyV2 = Object.freeze({
   plaintextAtRest: false,
   plaintextWalAllowed: false,
 } as const)
-
-interface MemoryIndexGenerationEnvelopeV2 {
-  readonly format: typeof IndexEnvelopeFormatV2
-  readonly generation: number
-  readonly algorithm: typeof IndexEnvelopeAlgorithmV2
-  readonly iv: string
-  readonly tag: string
-  readonly ciphertext: string
-}
-
-export interface MemoryIndexGenerationSealReportV2 {
-  readonly generation: number
-  readonly encryptedByteLength: number
-  readonly replacedGeneration: Nullable<number>
-}
 
 /**
  * 派生 index generation 的文件级静态加密边界。
@@ -55,10 +47,10 @@ export function sealMemoryIndexGenerationV2(
   indexDir: string,
   generation: number,
   plaintextArtifact: Buffer,
-  keyring: MemoryKeyringStoreV2,
+  keyring: MemoryIndexGenerationKeyringV2,
   random: (byteLength: number) => Buffer = randomBytes
 ): MemoryIndexGenerationSealReportV2 {
-  assertGenerationV2(generation)
+  assertPositiveSafeIntegerV2(generation, 'index generation')
   const generationDir = indexGenerationDirV2(indexDir, generation)
   if (existsSync(generationDir)) {
     throw new AppError('INVARIANT', 'index generation 目录已存在，禁止原位覆盖。', undefined, {
@@ -118,8 +110,8 @@ export function sealMemoryIndexGenerationV2(
 /** 只在内存中解封当前派生代；调用方负责尽快清零返回 Buffer。 */
 export function openCurrentMemoryIndexGenerationV2(
   indexDir: string,
-  keyring: MemoryKeyringStoreV2
-): Nullable<{ generation: number; plaintextArtifact: Buffer }> {
+  keyring: MemoryIndexGenerationKeyringV2
+): Nullable<MemoryIndexGenerationSnapshotV2> {
   const generation = readCurrentGenerationV2(indexDir)
   if (isNull(generation)) return null
   const generationDir = indexGenerationDirV2(indexDir, generation)
@@ -177,7 +169,7 @@ export function openCurrentMemoryIndexGenerationV2(
  */
 export function pruneMemoryIndexGenerationsV2(
   indexDir: string,
-  keyring: MemoryKeyringStoreV2
+  keyring: MemoryIndexGenerationKeyringV2
 ): readonly number[] {
   const current = readCurrentGenerationV2(indexDir)
   if (isNull(current)) return []
@@ -195,6 +187,7 @@ export function pruneMemoryIndexGenerationsV2(
   return removed
 }
 
+/** 严格解析一代索引的密文信封：未知或缺字段、格式身份或代号不符一律判损坏。 */
 function parseIndexEnvelopeV2(
   raw: string,
   expectedGeneration: number
@@ -242,14 +235,8 @@ function parseIndexEnvelopeV2(
   }
 }
 
+/** 这一代索引信封的 GCM 附加认证数据：格式身份加代号，防止跨代替换。 */
 function indexGenerationAadV2(generation: number): Buffer {
   return Buffer.from(`${IndexEnvelopeFormatV2}\0${generation}`, 'utf8')
 }
 
-function assertGenerationV2(generation: number): void {
-  if (!Number.isSafeInteger(generation) || generation < 1) {
-    throw new AppError('VALIDATION', 'index generation 必须是正整数。', undefined, {
-      generation,
-    })
-  }
-}

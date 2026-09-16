@@ -17,6 +17,19 @@ import {
 } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
+import type {
+  ApplyTreeDiffOpOptionsV2,
+  HashTreeBaseEventInputV2,
+  HashTreeEventInputV2,
+  MemoryTreeDiffOpTypeV2,
+  MemoryTreeDiffOpV2,
+  MemoryTreeDiffV2,
+  MemoryTreeNodeStructV2,
+  MemoryTreeVisibilityStateV2,
+} from '../../types/tree-v2/diff'
+
+import { compareCodeUnitV2, isPlainRecordV2 } from './checks'
+
 /**
  * 第六轮修订模型的 TreeDiff 链纯函数层（WS3 重构地基件，尚未接线）。
  *
@@ -41,6 +54,7 @@ import { AppError } from '@velaros-ai/core/error'
  * 跨版本 fixture 见规范附录 A，探针逐字节断言。
  */
 
+/** 结构事件的九个操作词（运行时守卫用它判合法性）。 */
 export const MemoryTreeDiffOpTypesV2 = [
   'add',
   'update',
@@ -53,57 +67,6 @@ export const MemoryTreeDiffOpTypesV2 = [
   'redact',
 ] as const
 
-export type MemoryTreeDiffOpTypeV2 = (typeof MemoryTreeDiffOpTypesV2)[number]
-
-/** ③ 类语义正文的结构层引用：结构历史永不内嵌明文。 */
-export interface MemoryTreeContentRefV2 {
-  /** 加密内容 blob 引用；crypto-shred 销毁后为 null（结构位置保留）。 */
-  blobRef: Nullable<string>
-  /** 随机化承诺（nonce 封装于加密信封内，非明文派生哈希）；redact 后保留但不可验证。 */
-  commitment: string
-  /** 彻底清除占位标记：true 时渲染 redacted 占位，不声称能验证已删原文。 */
-  redacted: boolean
-}
-
-export type MemoryTreeVisibilityStateV2 = 'active' | 'dormant' | 'pruned' | 'redacted'
-
-/**
- * 结构事件里的节点 payload：只含 ① 纯结构字段 + ③ 类内容引用。
- * 节点身份 = stableKey；父链接用 parentKey（同为 stableKey），使 diff 自包含、
- * 不依赖任何存储层生成的行 id。
- */
-export interface MemoryTreeNodeStructV2 {
-  stableKey: string
-  parentKey: Nullable<string>
-  nodeType: string
-  namespace: string
-  subjectType: string
-  subjectId: string
-  content: MemoryTreeContentRefV2
-  mainlineScore: number
-  confidence: number
-  activation: number
-  firstSeenAt: number
-  lastActiveAt: number
-  visibilityState: MemoryTreeVisibilityStateV2
-}
-
-/**
- * 自包含可逆结构事件：before = 事件前受影响节点的完整结构，after = 事件后。
- * 正向 apply：删 before 键、插 after 节点；逆向 apply：对换。
- */
-export interface MemoryTreeDiffOpV2 {
-  type: MemoryTreeDiffOpTypeV2
-  before: readonly MemoryTreeNodeStructV2[]
-  after: readonly MemoryTreeNodeStructV2[]
-}
-
-export interface MemoryTreeDiffV2 {
-  version: number
-  baseVersion: number
-  ops: readonly MemoryTreeDiffOpV2[]
-}
-
 const StateHashDomainV2 = 'velaros.memory.tree-state.v2'
 const EventHashDomainV2 = 'velaros.memory.tree-diff.v2'
 const BaseEventHashDomainV2 = 'velaros.memory.tree-base.v2'
@@ -113,11 +76,6 @@ const BaseEventHashDomainV2 = 'velaros.memory.tree-base.v2'
  * 与"字段缺失/空串"可区分，可加 NOT NULL + 长度约束（规范 §2.3）。
  */
 export const TreeDiffGenesisEventHashV2 = '0'.repeat(64)
-
-/** UTF-16 码元序比较：canonical 排序唯一合法比较器，禁 localeCompare（环境 locale 不得影响哈希）。 */
-function compareCodeUnit(left: string, right: string): number {
-  return left < right ? -1 : left > right ? 1 : 0
-}
 
 /** 评分字段的确定性量化（进入结构事件前由生产者调用），消除浮点漂移对哈希的影响。 */
 export function quantizeTreeScoreV2(value: number): number {
@@ -137,6 +95,7 @@ export function canonicalStringifyV2(value: unknown): string {
   return JSON.stringify(sortValue(value))
 }
 
+/** canonical 递归重排：对象键按码元序、拒绝 JSON 值域之外的东西。 */
 function sortValue(value: unknown): unknown {
   if (isNull(value) || isBoolean(value) || isString(value)) return value
   if (isNumber(value)) {
@@ -152,10 +111,10 @@ function sortValue(value: unknown): unknown {
       }
       return sortValue(item)
     })
-  if (isRecord(value) && isPlainRecord(value))
+  if (isRecord(value) && isPlainRecordV2(value))
     return Object.fromEntries(
       Object.keys(value)
-        .sort(compareCodeUnit)
+        .sort(compareCodeUnitV2)
         .filter((key) => !isUndefined(value[key]))
         .map((key) => [key, sortValue(value[key])])
     )
@@ -165,18 +124,14 @@ function sortValue(value: unknown): unknown {
   )
 }
 
-/** 纯数据对象判定：原型必须是 Object.prototype 或 null，挡住 Date/Map/类实例的静默降级。 */
-function isPlainRecord(value: Record<string, unknown>): boolean {
-  const prototype: unknown = Object.getPrototypeOf(value)
-  return prototype === Object.prototype || isNull(prototype)
-}
-
+/** 给拒绝信息用的值种类描述。 */
 function describeValueKind(value: unknown): string {
   if (isUndefined(value)) return 'undefined'
   if (isObject(value)) return `非纯对象 ${Object.prototype.toString.call(value)}`
   return typeof value
 }
 
+/** 取一段文本的 sha256 十六进制摘要。 */
 function sha256(value: string): string {
   return createHash('sha256').update(value).digest('hex')
 }
@@ -184,7 +139,7 @@ function sha256(value: string): string {
 /** 状态哈希（规范 §2.1）：节点按 stableKey UTF-16 码元序排序后整体 canonical 哈希。 */
 export function hashTreeStateV2(nodes: readonly MemoryTreeNodeStructV2[]): string {
   const canonical = [...nodes].sort((left, right) =>
-    compareCodeUnit(left.stableKey, right.stableKey)
+    compareCodeUnitV2(left.stableKey, right.stableKey)
   )
   return sha256(canonicalStringifyV2({ domain: StateHashDomainV2, nodes: canonical }))
 }
@@ -194,13 +149,7 @@ export function hashTreeStateV2(nodes: readonly MemoryTreeNodeStructV2[]): strin
  * baseVersion, identityChange, ops})。identityChange 缺省恒序列化为 null（缺席≠null 的
  * 歧义在冻结时一次性关死，S3 落 identity_change payload 时无需二次冻结哈希公式）。
  */
-export function hashTreeEventV2(input: {
-  previousEventHash: string
-  version: number
-  baseVersion: number
-  ops: readonly MemoryTreeDiffOpV2[]
-  identityChange?: unknown
-}): string {
+export function hashTreeEventV2(input: HashTreeEventInputV2): string {
   return sha256(
     canonicalStringifyV2({
       domain: EventHashDomainV2,
@@ -214,12 +163,7 @@ export function hashTreeEventV2(input: {
 }
 
 /** 物化基点的链再锚定哈希（规范 §2.4）。 */
-export function hashTreeBaseEventV2(input: {
-  baseVersion: number
-  treeHash: string
-  priorSegmentEventHead: string
-  manifestHash: string
-}): string {
+export function hashTreeBaseEventV2(input: HashTreeBaseEventInputV2): string {
   return sha256(
     canonicalStringifyV2({
       domain: BaseEventHashDomainV2,
@@ -231,10 +175,12 @@ export function hashTreeBaseEventV2(input: {
   )
 }
 
+/** 两个节点是不是逐字节相同（按 canonical 序列化比较）。 */
 function nodeEquals(left: MemoryTreeNodeStructV2, right: MemoryTreeNodeStructV2): boolean {
   return canonicalStringifyV2(left) === canonicalStringifyV2(right)
 }
 
+/** 取一组节点的 stableKey 列表。 */
 function keysOf(nodes: readonly MemoryTreeNodeStructV2[]): string[] {
   return nodes.map((node) => node.stableKey)
 }
@@ -335,7 +281,7 @@ export function validateTreeDiffOpV2(op: MemoryTreeDiffOpV2): void {
 export function applyTreeDiffOpV2(
   current: ReadonlyMap<string, MemoryTreeNodeStructV2>,
   op: MemoryTreeDiffOpV2,
-  options: { strict?: boolean } = {}
+  options: ApplyTreeDiffOpOptionsV2 = {}
 ): Map<string, MemoryTreeNodeStructV2> {
   const strict = options.strict ?? true
   const next = new Map(current)
@@ -389,6 +335,7 @@ export function invertTreeDiffOpV2(op: MemoryTreeDiffOpV2): MemoryTreeDiffOpV2 {
   return { type: inverseType[op.type], before: op.after, after: op.before }
 }
 
+/** 整段版本求逆：版本与基线对调，事件倒序逐个求逆。 */
 export function invertTreeDiffV2(diff: MemoryTreeDiffV2): MemoryTreeDiffV2 {
   return {
     version: diff.baseVersion,
@@ -397,120 +344,11 @@ export function invertTreeDiffV2(diff: MemoryTreeDiffV2): MemoryTreeDiffV2 {
   }
 }
 
-export interface MemoryTreeReplayResultV2 {
-  nodes: MemoryTreeNodeStructV2[]
-  stateHash: string
-  /** INV-BR 运行时来源标记；持久化只接受 forward。 */
-  direction: 'forward' | 'backward'
-}
-
-/**
- * 重放结果值对象。
- *
- * 持久化资格保存在实例私有槽位中，不依赖模块级身份表，也不会被对象展开、
- * JSON 序列化或伪造同形普通对象复制。该实现类不从包入口导出。
- */
-class MemoryTreeReplayResultValueV2 implements MemoryTreeReplayResultV2 {
-  readonly #persistenceEligible: boolean
-
-  constructor(
-    public readonly nodes: MemoryTreeNodeStructV2[],
-    public readonly stateHash: string,
-    public readonly direction: 'forward' | 'backward',
-    persistenceEligible: boolean
-  ) {
-    this.#persistenceEligible = persistenceEligible
-  }
-
-  public isEligibleForForwardPersistence(): boolean {
-    return this.direction === 'forward' && this.#persistenceEligible
-  }
-}
-
-function isEligibleForwardReplayResultV2(
-  result: MemoryTreeReplayResultV2
-): result is MemoryTreeReplayResultValueV2 {
-  return result instanceof MemoryTreeReplayResultValueV2 && result.isEligibleForForwardPersistence()
-}
-
-function toSortedNodes(map: ReadonlyMap<string, MemoryTreeNodeStructV2>): MemoryTreeNodeStructV2[] {
-  return [...map.values()].sort((left, right) => compareCodeUnit(left.stableKey, right.stableKey))
-}
-
-/**
- * 从任意起点沿 diff 链正向重放；strict 校验每个事件的现场一致性。
- * `validateOps=false` 供逆向重建使用：求逆后的 redact 事件在结构层"恢复"了 blobRef
- * （blob 本体已销毁、内容仍不可恢复），不满足正向创作事件的语义不变量——语义校验
- * 只约束已提交链上的原始事件，机械求逆产物只做现场一致性核对。
- */
-export function replayTreeDiffsForwardV2(
-  initial: readonly MemoryTreeNodeStructV2[],
-  diffs: readonly MemoryTreeDiffV2[],
-  options: {
-    strict?: boolean
-    validateOps?: boolean
-    /**
-     * 非空 initial 要进入持久化链时，必须同时提交其原始 forward 结果作来源证明。
-     * 省略时仍可做内存重放，但结果不能通过 INV-BR 持久化断言。
-     */
-    persistenceBase?: MemoryTreeReplayResultV2
-  } = {}
-): MemoryTreeReplayResultV2 {
-  const persistenceBaseMatches =
-    initial.length === 0 ||
-    (!isUndefined(options.persistenceBase) &&
-      isEligibleForwardReplayResultV2(options.persistenceBase) &&
-      canonicalStringifyV2(initial) === canonicalStringifyV2(options.persistenceBase.nodes))
-  let state: ReadonlyMap<string, MemoryTreeNodeStructV2> = new Map(
-    initial.map((node) => [node.stableKey, cloneTreeNodeV2(node)])
-  )
-  let expectedBase: Nullable<number> = null
-  for (const diff of diffs) {
-    if (isNotNull(expectedBase) && diff.baseVersion !== expectedBase) {
-      throw new AppError(
-        'INTERNAL',
-        `TreeDiff v2 链断裂：v${diff.version} 基线为 ${diff.baseVersion}，期望 ${expectedBase}。`
-      )
-    }
-    for (const op of diff.ops) {
-      if (options.validateOps ?? true) validateTreeDiffOpV2(op)
-      state = applyTreeDiffOpV2(state, op, { strict: options.strict })
-    }
-    expectedBase = diff.version
-  }
-  const nodes = toSortedNodes(state)
-  return new MemoryTreeReplayResultValueV2(
-    nodes,
-    hashTreeStateV2(nodes),
-    'forward',
-    persistenceBaseMatches
-  )
-}
-
-/** 从当前视图沿链逆向重建历史状态（第六轮：当前树是物化视图，历史可双向重建）。 */
-export function replayTreeDiffsBackwardV2(
-  current: readonly MemoryTreeNodeStructV2[],
-  diffs: readonly MemoryTreeDiffV2[],
-  options: { strict?: boolean } = {}
-): MemoryTreeReplayResultV2 {
-  const inverted = [...diffs]
-    .sort((left, right) => right.version - left.version)
-    .map((diff) => invertTreeDiffV2(diff))
-  const result = replayTreeDiffsForwardV2(current, inverted, {
-    ...options,
-    validateOps: false,
-  })
-  return new MemoryTreeReplayResultValueV2(result.nodes, result.stateHash, 'backward', false)
-}
-
-/**
- * INV-BR：任何物化视图、checkpoint、基点或候选写回都必须消费本进程正向重放产生的
- * 原始值对象；伪造 `direction: "forward"` 或复制一个普通对象都不能通过私有来源证明。
- */
-export function assertForwardReplayResultForPersistenceV2(result: MemoryTreeReplayResultV2): void {
-  if (!isEligibleForwardReplayResultV2(result)) {
-    throw new AppError('INVARIANT', 'INV-BR：逆向重建或来源不明的树状态禁止进入持久化写路径。')
-  }
+/** 把节点表按 stableKey 的码元序排成数组：重放结果与状态哈希都要这个确定序。 */
+export function toSortedTreeNodesV2(
+  map: ReadonlyMap<string, MemoryTreeNodeStructV2>
+): MemoryTreeNodeStructV2[] {
+  return [...map.values()].sort((left, right) => compareCodeUnitV2(left.stableKey, right.stableKey))
 }
 
 /**
@@ -583,6 +421,7 @@ export function isMemoryTreeDiffOpV2(value: unknown): value is MemoryTreeDiffOpV
   return [...record.before, ...record.after].every(isMemoryTreeNodeStructV2)
 }
 
+/** 节点结构的运行时守卫：键集、类型、形态全要对上（存储层读回时用）。 */
 export function isMemoryTreeNodeStructV2(value: unknown): value is MemoryTreeNodeStructV2 {
   if (!isRecord(value)) return false
   const record = value
@@ -646,15 +485,18 @@ export function isMemoryTreeNodeStructV2(value: unknown): value is MemoryTreeNod
   )
 }
 
+/** 评分字段必须是有限数。 */
 function isFiniteTreeNumberV2(value: unknown): value is number {
   return isFiniteNumber(value)
 }
 
+/** 时间戳字段必须是非负安全整数。 */
 function isSafeTreeTimestampV2(value: unknown): value is number {
   return isNumber(value) && Number.isSafeInteger(value) && value >= 0
 }
 
-function cloneTreeNodeV2(node: MemoryTreeNodeStructV2): MemoryTreeNodeStructV2 {
+/** 浅拷一个节点（连同它的 content 引用），避免重放时把入参改花。 */
+export function cloneTreeNodeV2(node: MemoryTreeNodeStructV2): MemoryTreeNodeStructV2 {
   return {
     ...node,
     content: { ...node.content },

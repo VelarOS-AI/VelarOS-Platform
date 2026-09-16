@@ -3,6 +3,11 @@ import { isAbsolute, join } from 'node:path'
 
 import { AppError } from '@velaros-ai/core/error'
 
+import type {
+  MemoryPhysicalRootsOpenReportV2,
+  MemoryPhysicalRootsV2,
+} from '../../../types/tree-v2/storage'
+
 import { MemoryStorageErrorCodesV2 } from './error-codes'
 
 /**
@@ -22,31 +27,13 @@ import { MemoryStorageErrorCodesV2 } from './error-codes'
  * 判为不变量破坏（硬错误），而不是警告。
  */
 
-export interface MemoryPhysicalRootsV2 {
-  readonly dataRoot: string
-  readonly memoryRoot: string
-  readonly authorityDir: string
-  /** 权威库文件路径（S2 建库；本层自检只要求"存在则必须是文件"）。 */
-  readonly authorityDatabasePath: string
-  readonly blobsDir: string
-  readonly keyringDir: string
-  readonly indexDir: string
-  readonly backupDir: string
-}
-
-export interface MemoryPhysicalRootsOpenReportV2 {
-  /** 本次 open 新建的目录（绝对路径，按创建顺序）。 */
-  readonly createdDirectories: readonly string[]
-  /** 非致命布局异常（备份快照命名不合规、快照含未知条目等）。 */
-  readonly warnings: readonly string[]
-}
-
 /** 备份快照目录名：UTC ISO8601 basic（如 `20260725T031500Z`）。 */
 export const BackupSnapshotNamePatternV2 = /^\d{8}T\d{6}Z$/
 
 const BackupSnapshotAllowedEntries = new Set(['authority', 'blobs'])
 const BackupForbiddenEntries = new Set(['keyring', 'index'])
 
+/** 按备份快照命名格式（UTC ISO8601 basic）格式化一个时刻。 */
 export function formatBackupSnapshotNameV2(at: number | Date = Date.now()): string {
   const iso = new Date(at).toISOString()
   return `${iso.slice(0, 19).replace(/[-:]/g, '')}Z`
@@ -129,6 +116,7 @@ export function openMemoryPhysicalRootsV2(dataRoot: string): {
   return { roots, report: { createdDirectories, warnings } }
 }
 
+/** 扫备份根：快照里出现 keyring/index 是不变量破坏（抛错），其余异常进 warnings。 */
 function auditBackupRoot(backupDir: string, warnings: string[]): void {
   for (const snapshot of readdirSync(backupDir, { withFileTypes: true })) {
     if (!snapshot.isDirectory()) {

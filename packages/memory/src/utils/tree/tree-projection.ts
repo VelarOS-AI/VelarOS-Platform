@@ -3,18 +3,15 @@ import { createHash } from 'node:crypto'
 import { isPlainObject,isString,toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import type { MemoryTreeNodeRecord } from '../../types/memory'
+import type { MemoryRecallItem, MemoryTreeNodeRecord } from '../../types/memory'
+import type { MemoryTreeDiffNode, MemoryTreeDiffOp, MemoryTreePathIndex } from '../../types/tree'
 
-export type MemoryTreeDiffOp =
-  | { type: 'add' | 'update' | 'move'; node: MemoryTreeDiffNode; previousParentId?: LooseOptional<string> }
-  | { type: 'remove'; stableKey: string }
-
-export type MemoryTreeDiffNode = Omit<MemoryTreeNodeRecord, 'projectionVersion'>
-
+/** 取一段文本的 sha256 十六进制摘要：树哈希与事件哈希都用它。 */
 function sha256(value: string): string {
   return createHash('sha256').update(value).digest('hex')
 }
 
+/** 把一个树节点削成参与比对与哈希的形状：丢掉投影版本号，浮点数按固定位数规整。 */
 export function comparableTreeNode(node: MemoryTreeNodeRecord): MemoryTreeDiffNode {
   return {
     id: node.id,
@@ -35,6 +32,7 @@ export function comparableTreeNode(node: MemoryTreeNodeRecord): MemoryTreeDiffNo
   }
 }
 
+/** 算整棵树的内容哈希：节点按稳定键排序后做一次 sha256，同样的树永远同样的哈希。 */
 export function hashTreeNodes(nodes: readonly MemoryTreeNodeRecord[]): string {
   const canonical = nodes
     .map(comparableTreeNode)
@@ -42,6 +40,7 @@ export function hashTreeNodes(nodes: readonly MemoryTreeNodeRecord[]): string {
   return sha256(JSON.stringify(canonical))
 }
 
+/** 算一次投影事件的哈希：把上一事件哈希、版本号与操作序列一起摘要，串成不可改写的事件链。 */
 export function hashTreeEvent(input: {
   previousEventHash: string
   version: number
@@ -57,6 +56,7 @@ export function hashTreeEvent(input: {
   )
 }
 
+/** 比较前后两版节点，给出这一版的 diff：新增、修改、换父，以及消失的节点。 */
 export function buildTreeOps(
   previous: readonly MemoryTreeNodeRecord[],
   next: readonly MemoryTreeNodeRecord[]
@@ -87,6 +87,7 @@ export function buildTreeOps(
   return ops
 }
 
+/** 把一版 diff 应用到当前节点集上，得到那一版的全量节点（按稳定键排序）。 */
 export function applyTreeOps(
   current: readonly MemoryTreeNodeRecord[],
   ops: readonly MemoryTreeDiffOp[],
@@ -103,6 +104,10 @@ export function applyTreeOps(
   return [...byKey.values()].sort((left, right) => left.stableKey.localeCompare(right.stableKey))
 }
 
+/**
+ * 落库前校验一版投影：id 与稳定键不许重复、恰好一个根与一个主干、锚点在节点里、父节点存在且无环。
+ * 任何一条不成立就抛 INTERNAL，宁可不提交也不写出一棵坏树。
+ */
 export function validateTreeProjection(
   nodes: readonly MemoryTreeNodeRecord[],
   anchors: { rootNodeId: string; globalMainlineNodeId: string }
@@ -147,6 +152,7 @@ export function validateTreeProjection(
   }
 }
 
+/** 判断一个从 JSON 读回来的值是不是合法的 diff 操作；库里的 diff 都要先过它再回放。 */
 export function isMemoryTreeDiffOp(value: unknown): value is MemoryTreeDiffOp {
   if (!isPlainObject(value)) return false
   const record = value
@@ -155,4 +161,35 @@ export function isMemoryTreeDiffOp(value: unknown): value is MemoryTreeDiffOp {
   if (!['add', 'update', 'move'].includes(record.type) || !isPlainObject(record.node)) return false
   const node = record.node
   return isString(node.id) && isString(node.stableKey) && isString(node.nodeType)
+}
+
+/** 顺着 parentId 往上爬，给出某个主体在树里从根到自己的一条路径；索引里找不到它就给空路径。 */
+export function treePathFromIndex(
+  index: MemoryTreePathIndex,
+  subjectType: string,
+  subjectId: string
+): MemoryRecallItem['path'] {
+  let current = index.bySubject.get(`${subjectType}:${subjectId}`)
+  const path: MemoryRecallItem['path'] = []
+  const seen = new Set<string>()
+  while (current && !seen.has(current.id)) {
+    seen.add(current.id)
+    path.unshift({
+      id: current.id,
+      nodeType: current.nodeType,
+      title: current.title,
+      subjectType: current.subjectType,
+      subjectId: current.subjectId,
+    })
+    current = current.parentId ? index.byId.get(current.parentId) : undefined
+  }
+  return path
+}
+
+/** 把一批节点做成树路径索引：一次建好，召回时每条结果查表而不是重新扫全表。 */
+export function buildTreePathIndex(nodes: readonly MemoryTreeNodeRecord[]): MemoryTreePathIndex {
+  return {
+    byId: new Map(nodes.map((node) => [node.id, node])),
+    bySubject: new Map(nodes.map((node) => [`${node.subjectType}:${node.subjectId}`, node])),
+  }
 }

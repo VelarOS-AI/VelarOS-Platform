@@ -13,6 +13,8 @@ import { basename, dirname, join } from 'node:path'
 
 import { isString } from '@velaros-ai/core'
 
+import type { StorageStepHooksV2, WriteFileAtomicOptionsV2 } from '../../../types/tree-v2/storage'
+
 /**
  * 存储物理层的原子文件底座（WS3-S1）。
  *
@@ -29,11 +31,7 @@ import { isString } from '@velaros-ai/core'
  * 两者都可由 `removeStaleTempFilesV2` 与各自 owner 的恢复协议判别清理。
  */
 
-/** 崩溃注入钩子：beforeStep 在每个写入步骤前调用；探针在指定 step 抛错模拟断电。 */
-export interface StorageStepHooksV2 {
-  beforeStep?(step: string): void
-}
-
+/** 汇报一个写入步骤即将开始；探针在指定 step 抛错就等于模拟"这一步之前断电"。 */
 export function invokeStorageStepV2(hooks: Optional<StorageStepHooksV2>, step: string): void {
   hooks?.beforeStep?.(step)
 }
@@ -63,7 +61,7 @@ export function fsyncDirectoryV2(directoryPath: string): void {
 export function writeFileAtomicV2(
   filePath: string,
   data: string | Buffer,
-  options: { label: string; hooks?: StorageStepHooksV2 }
+  options: WriteFileAtomicOptionsV2
 ): void {
   const directory = dirname(filePath)
   const tempPath = join(

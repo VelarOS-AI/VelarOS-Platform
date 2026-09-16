@@ -1,15 +1,18 @@
-import type BetterSqlite3 from 'better-sqlite3'
-
-type SQLiteDatabase = InstanceType<typeof BetterSqlite3>
+import type { MemorySqliteDatabaseV2 } from '../../types/tree-v2/authority'
 
 /**
- * Memory Tree v2 的首个独立 authority schema 版本。
+ * Memory Tree v2 权威库的格式身份（格式里的数字就地写，不进可调参数表）。
  *
- * 这里的 “1” 是 authority.sqlite3 自身的 append-only migration 序号，不是产品协议版本；
- * 数据库身份由 application_id 单独锁为 Memory Tree v2。
+ * `schemaVersion` 是 authority.sqlite3 自身的 append-only migration 序号，不是产品协议版本；
+ * `applicationId` 把数据库身份单独锁为 Memory Tree v2，认错库就拒开而不是猜。
  */
-export const MemoryAuthoritySchemaVersionV2 = 3
-export const MemoryAuthorityApplicationIdV2 = 0x564d5632 // ASCII "VMV2"
+export const MemoryAuthorityFormatIdentityV2 = Object.freeze({
+  /** 当前运行时支持到的 schema 版本，等于迁移条数。 */
+  schemaVersion: 3,
+  /** SQLite `application_id`，ASCII "VMV2"。 */
+  applicationId: 0x564d5632,
+})
+
 export const MemoryAuthorityMigrationIdV2 = 'memory-authority-v2:0001-baseline'
 export const MemoryAuthorityMeaningEvidenceMigrationIdV2 =
   'memory-authority-v2:0002-meaning-evidence-links'
@@ -82,39 +85,48 @@ export const MemoryAuthorityForbiddenPlaintextColumnsV2 = Object.freeze([
   'workspace_root',
 ] as const)
 
+/** 盲索引匹配键列的 SQLite CHECK 片段：允许 NULL，否则必须是 `m2:` + 64 位小写 hex。 */
 const MatchKeyCheck = (column: string): string =>
   `(${column} IS NULL OR (` +
   `length(${column}) = 67 AND substr(${column}, 1, 3) = 'm2:' ` +
   `AND substr(${column}, 4) NOT GLOB '*[^0-9a-f]*'))`
 
+/** 稳定键列的 CHECK 片段：必须是 `k2:` + 32 位小写 hex。 */
 const StableKeyCheck = (column: string): string =>
   `(length(${column}) = 35 AND substr(${column}, 1, 3) = 'k2:' ` +
   `AND substr(${column}, 4) NOT GLOB '*[^0-9a-f]*')`
 
+/** 主张分组键列的 CHECK 片段：必须是 `g2:` + 32 位小写 hex。 */
 const GroupKeyCheck = (column: string): string =>
   `(length(${column}) = 35 AND substr(${column}, 1, 3) = 'g2:' ` +
   `AND substr(${column}, 4) NOT GLOB '*[^0-9a-f]*')`
 
+/** 治理目标匹配键列的 CHECK 片段：允许 NULL，否则必须是 `d2:` + 32 位小写 hex。 */
 const GovernanceMatchKeyCheck = (column: string): string =>
   `(${column} IS NULL OR (` +
   `length(${column}) = 35 AND substr(${column}, 1, 3) = 'd2:' ` +
   `AND substr(${column}, 4) NOT GLOB '*[^0-9a-f]*'))`
 
+/** 随机化承诺列的 CHECK 片段：允许 NULL，否则必须是 `c2:` + 64 位小写 hex。 */
 const CommitmentCheck = (column: string): string =>
   `(${column} IS NULL OR (` +
   `length(${column}) = 67 AND substr(${column}, 1, 3) = 'c2:' ` +
   `AND substr(${column}, 4) NOT GLOB '*[^0-9a-f]*'))`
 
+/** 整理输入指纹列的 CHECK 片段：必须是 `f2:` + 64 位小写 hex。 */
 const FingerprintCheck = (column: string): string =>
   `(length(${column}) = 67 AND substr(${column}, 1, 3) = 'f2:' ` +
   `AND substr(${column}, 4) NOT GLOB '*[^0-9a-f]*')`
 
+/** 哈希列的 CHECK 片段：必须是 64 位小写 hex。 */
 const HashCheck = (column: string): string =>
   `(length(${column}) = 64 AND ${column} NOT GLOB '*[^0-9a-f]*')`
 
+/** 密文引用列的 CHECK 片段：允许 NULL，否则必须是 32 位小写 hex 的 blob id。 */
 const BlobRefCheck = (column: string): string =>
   `(${column} IS NULL OR (length(${column}) = 32 AND ${column} NOT GLOB '*[^0-9a-f]*'))`
 
+/** 密文引用与承诺成对出现的 CHECK 片段：两列要么都为 NULL，要么都不为 NULL。 */
 const BlobPairCheck = (reference: string, commitment: string): string =>
   `((${reference} IS NULL) = (${commitment} IS NULL))`
 
@@ -660,8 +672,9 @@ export const MemoryAuthorityEvidenceReplayMigrationSqlV2 = `
     WHERE target_match_key IS NOT NULL;
 `
 
+/** 在空库上建起全套 v2 权威表，并把第 1 版迁移写进账本。 */
 export function applyMemoryAuthoritySchemaV2(
-  database: SQLiteDatabase,
+  database: MemorySqliteDatabaseV2,
   appliedAt = Date.now()
 ): void {
   database.exec(MemoryAuthoritySchemaSqlV2)
@@ -673,8 +686,9 @@ export function applyMemoryAuthoritySchemaV2(
     .run(1, MemoryAuthorityMigrationIdV2, appliedAt)
 }
 
+/** 加上意义与证据的关联表（第 2 版迁移），并写进账本。 */
 export function applyMemoryAuthorityMeaningEvidenceMigrationV2(
-  database: SQLiteDatabase,
+  database: MemorySqliteDatabaseV2,
   appliedAt = Date.now()
 ): void {
   database.exec(MemoryAuthorityMeaningEvidenceMigrationSqlV2)
@@ -686,8 +700,9 @@ export function applyMemoryAuthorityMeaningEvidenceMigrationV2(
     .run(MemoryAuthorityMeaningEvidenceMigrationIdV2, appliedAt)
 }
 
+/** 加上证据回放与治理账本（第 3 版迁移），并写进账本。 */
 export function applyMemoryAuthorityEvidenceReplayMigrationV2(
-  database: SQLiteDatabase,
+  database: MemorySqliteDatabaseV2,
   appliedAt = Date.now()
 ): void {
   database.exec(MemoryAuthorityEvidenceReplayMigrationSqlV2)

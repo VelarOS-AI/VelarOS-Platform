@@ -1,36 +1,26 @@
 import { isPresent } from '@velaros-ai/core'
 
-import type { MemoryConceptType, MemoryEvidenceCategory, MemoryEvidenceRecord } from '../../types/memory'
+import type { MemoryEvidenceRecord } from '../../types/memory'
+import type {
+  DerivedMemoryCategory,
+  MemoryConceptDescriptor,
+  MemorySemanticCandidate,
+} from '../../types/tree'
+import { MemoryTuning } from '../tuning'
 
-const MaxSemanticCandidates = 8
-const MaxSemanticClauseChars = 420
-
-type DerivedMemoryCategory = Exclude<MemoryEvidenceCategory, 'conversation'>
-
-interface SemanticConceptDescriptor {
-  type: MemoryConceptType
-  name: string
-  stableDiscriminator: string
-}
-
-export interface MemorySemanticCandidate {
-  category: DerivedMemoryCategory
-  title: string
-  content: string
-  confidenceScale: number
-  descriptor?: SemanticConceptDescriptor
-}
-
+/** 把连续空白折叠成单个空格并去掉首尾空白。 */
 function compact(value: string): string {
   return value.replace(/\s+/g, ' ').trim()
 }
 
+/** 规整空白后截到指定字数，截断处补省略号。 */
 function truncate(value: string, maxLength: number): string {
   const normalized = compact(value)
   if (normalized.length <= maxLength) return normalized
   return `${normalized.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`
 }
 
+/** 把一段正文切成候选子句：按换行与中英文句读断开，剥掉项目符号与引号，太短太长的丢掉。 */
 function semanticClauses(content: string): string[] {
   return content
     .replace(/\r\n?/g, '\n')
@@ -41,9 +31,10 @@ function semanticClauses(content: string): string[] {
         .replace(/^[“”"'‘’]+|[“”"'‘’]+$/gu, '')
         .trim()
     )
-    .filter((clause) => clause.length >= 4 && clause.length <= MaxSemanticClauseChars)
+    .filter((clause) => clause.length >= 4 && clause.length <= MemoryTuning.tree.semanticClauseChars)
 }
 
+/** 按类别给候选拼一个中文标题：类别标签加上截短的正文。 */
 function titleFor(category: DerivedMemoryCategory, value: string): string {
   const labels: Record<DerivedMemoryCategory, string> = {
     fact: '画像',
@@ -60,12 +51,13 @@ function titleFor(category: DerivedMemoryCategory, value: string): string {
   return `${labels[category]}：${truncate(value, 56)}`
 }
 
+/** 组装一条语义候选：类别、标题、规整过的正文，以及这条句式相对满分的置信折扣。 */
 function candidate(
   category: DerivedMemoryCategory,
   clause: string,
   value: string,
   confidenceScale: number = 1,
-  descriptor?: SemanticConceptDescriptor
+  descriptor?: MemoryConceptDescriptor
 ): MemorySemanticCandidate {
   return {
     category,
@@ -76,12 +68,14 @@ function candidate(
   }
 }
 
+/** 判断一句「我希望…」说的是交互方式（算偏好）还是要做成的事（算目标）。 */
 function interactionPreference(value: string): boolean {
   return /(回复|回答|输出|结论|细节|格式|风格|证据|说明|称呼|语言|简洁|详细|优先|先|不要|必须|response|answer|output|format|style|evidence|concise|detail)/iu.test(
     value
   )
 }
 
+/** 按中文自述句式匹配一条子句，命中就给出对应类别的候选；都不命中返回 null。 */
 function extractChineseCandidate(clause: string): Nullable<MemorySemanticCandidate> {
   let match = clause.match(/^(?:我|用户)(?:的)?(?:长期)?偏好(?:是|为|：|:)?\s*(.+)$/u)
   if (match?.[1]) return candidate('preference', clause, match[1])
@@ -127,6 +121,7 @@ function extractChineseCandidate(clause: string): Nullable<MemorySemanticCandida
   return null
 }
 
+/** 按英文自述句式匹配一条子句，命中就给出对应类别的候选；都不命中返回 null。 */
 function extractEnglishCandidate(clause: string): Nullable<MemorySemanticCandidate> {
   let match = clause.match(
     /^(?:I prefer|My (?:long-term )?preference is|The user prefers)\s+(.+)$/iu
@@ -178,7 +173,7 @@ export function extractDeterministicSemanticCandidates(
   for (const item of candidates) {
     const key = `${item.category}:${compact(item.content).toLocaleLowerCase()}`
     if (!unique.has(key)) unique.set(key, item)
-    if (unique.size >= MaxSemanticCandidates) break
+    if (unique.size >= MemoryTuning.tree.semanticCandidates) break
   }
   return [...unique.values()]
 }

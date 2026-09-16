@@ -16,24 +16,19 @@
  * 文件系统上两者会撞成同一个文件。
  */
 
+import { MemoryFilesLayout } from '../../contract/constants'
+import type { MemoryIndexEntry, ParseMemoryIndexOptions } from '../../types/files'
+
 import { DefaultMemoryEntriesDirectoryName, isMemoryEntryPath } from './entry-path'
 
-export const MemoryIndexFileName = 'MEMORY.md'
-export const MemoryIndexHeading = '# Memory index'
+export type { MemoryIndexEntry, ParseMemoryIndexOptions } from '../../types/files'
 
-export interface MemoryIndexEntry {
-  /** 相对索引文件的条目路径，如 `entries/some-slug.md`。同时充当该作用域内的稳定键。 */
-  readonly path: string
-  readonly name: string
-  readonly description: string
-}
+/** 索引文件名（常量表 MemoryFilesLayout.indexFileName 的别名）。 */
+export const MemoryIndexFileName = MemoryFilesLayout.indexFileName
 
-export interface ParseMemoryIndexOptions {
-  /** 条目目录名；索引行必须指向 `<目录>/<名>.md`，别的形状一律跳过。 */
-  readonly entriesDirectoryName?: string
-  /** 越界行的诊断口：路径逃出条目目录时先跳过、再把它交给这里（后端记日志）。 */
-  readonly onRejectedPath?: (path: string) => void
-}
+/** 索引文件的一级标题（常量表 MemoryFilesLayout.indexHeading 的别名）。 */
+export const MemoryIndexHeading = MemoryFilesLayout.indexHeading
+
 
 const LinkedLine =
   /^\s*[-*+]\s*\[(?<name>(?:\\.|[^\\\]])*)\]\((?<path>[^)]+)\)\s*(?:[—–:-]\s*(?<description>.*))?$/u
@@ -50,6 +45,7 @@ function encodeIndexName(name: string): string {
   return name.replaceAll('\n', ' ').trim().replace(/[\\[\]]/gu, (character) => `\\${character}`)
 }
 
+/** 把索引行里被转义的标题还原成原文。 */
 function decodeIndexName(raw: string): string {
   return raw.replace(/\\(.)/gu, '$1')
 }

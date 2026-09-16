@@ -24,6 +24,3 @@ export const MemoryStorageErrorCodesV2 = {
   blobCorrupted: 'MEMORY_BLOB_CORRUPTED',
   commitmentMismatch: 'MEMORY_COMMITMENT_MISMATCH',
 } as const
-
-export type MemoryStorageErrorCodeV2 =
-  (typeof MemoryStorageErrorCodesV2)[keyof typeof MemoryStorageErrorCodesV2]

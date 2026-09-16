@@ -11,8 +11,10 @@
 
 import { isEmpty } from '@velaros-ai/core'
 
+import { MemoryFilesLayout } from '../../contract/constants'
+
 /** 条目目录的缺省名字；后端可由宿主改名，改了之后本判定跟着改名走。 */
-export const DefaultMemoryEntriesDirectoryName = 'entries'
+export const DefaultMemoryEntriesDirectoryName = MemoryFilesLayout.entriesDirectoryName
 
 /**
  * 一级名字是否安全：不许路径分隔符、空字节与首尾空白，`.` 与 `..` 同样不算名字。
@@ -50,4 +52,9 @@ export function isMemoryEntryFileName(
   entriesDirectoryName: string = DefaultMemoryEntriesDirectoryName,
 ): boolean {
   return isMemoryEntryPath(`${entriesDirectoryName}/${fileName}`, entriesDirectoryName)
+}
+
+/** 把路径规整成统一分隔符、无重复斜杠的形式（内存 IO 与路径判定共用）。 */
+export function normalizeMemoryFilePath(path: string): string {
+  return path.replaceAll('\\', '/').replace(/\/+/gu, '/')
 }
