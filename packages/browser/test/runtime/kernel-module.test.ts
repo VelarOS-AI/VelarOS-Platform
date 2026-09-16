@@ -6,7 +6,7 @@ import {
   BrowserRuntimeCapability,
   type BrowserRuntimeCapabilityService,
   createBrowserKernelModule,
-} from '../../src/exports/runtime'
+} from '../../src/impl/electron/kernel-module'
 
 function createContext() {
   let registered: object | undefined

@@ -2,8 +2,7 @@ import { z } from "zod";
 
 import { renderParameterDescription as parameterDescription } from "@velaros-ai/agent/tool-contract";
 
-import { defineBrowserTool } from "../../contract/requires";
-import { requireActiveBrowserSite } from "../../utils/tool-context";
+import { defineBrowserTool, requireActiveBrowserSite } from '../../utils/tool.js'
 
 import {
   BrowserControlCapability,

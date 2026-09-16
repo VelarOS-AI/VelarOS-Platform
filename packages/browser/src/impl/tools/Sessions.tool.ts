@@ -2,8 +2,8 @@ import { z } from 'zod'
 
 import { renderParameterDescription as parameterDescription } from '@velaros-ai/agent/tool-contract'
 
-import { defineBrowserTool } from '../../contract/requires'
-import { createArtifactManager, getActiveBrowserContext, requireActiveBrowserSite } from '../../utils/tool-context'
+import { defineBrowserTool, getActiveBrowserContext, requireActiveBrowserSite } from '../../utils/tool.js'
+import { createArtifactManager } from '../operations/Artifacts.js'
 
 import {
   BrowserArtifactReadCapability,

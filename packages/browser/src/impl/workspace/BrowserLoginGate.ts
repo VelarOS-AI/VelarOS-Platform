@@ -1,129 +1,153 @@
-import type { ToolBrowserApi } from '../../contract/requires'
-import type { BrowserLoginDetection, BrowserLoginGateRecord } from '../../exports/core'
+import { toNullable } from '@velaros-ai/core'
+
+import type { BrowserLoginGatePort, ToolBrowserApi } from '../../contract/requires'
+import type { BrowserLoginDetection, BrowserLoginGateRecord } from '../../types/browser'
+import type { BrowserLoginGateOriginState } from '../../types/tools'
 import {
-  BrowserLoginGateLedger,
   buildBrowserLoginGateMessage,
   buildBrowserLoginGateRecord,
   buildBrowserLoginGateRiskScope,
   resolveBrowserLoginGateOrigin,
-} from '../../exports/core'
+} from '../../utils/login-gate'
 
 /**
- * 登录墙门控的**工具层装饰器**：检测命中 → 阻塞征询用户 → 用户完成后重读页面并标注。
+ * 登录墙门控：一个浏览器会话一份，既是**账本**也是**装饰器**。
  *
- * 为什么是装饰器而不是写进每个工具的 `execute`：门控要覆盖的是「观察到登录墙」这件事，
- * 而观察发生在 {@link ToolBrowserApi} 这一层；写进工具意味着每加一个观察类工具就要记得
- * 复制一遍门控，忘一次就是一条静默绕过（上一版就是这么丢的：门控随一个 600 行的
- * enhancer 整文件删除，检测层与渲染层却都留着，没有任何门会红）。
+ * 检测启发式（`utils/page-scripts/login-detection.ts`）只回答「这一页看起来是不是登录 / 验证墙」；
+ * 它单独存在时的产品行为是静默降级——截图元数据里多一句话，模型继续在登录页上瞎点。这个类补的
+ * 是第二层：命中即**阻塞**，经宿主的 {@link BrowserLoginGatePort} 请用户人工完成登录，完成后重读
+ * 页面并把结论标注回制品（渲染层读的就是 `loginGate`）。
  *
- * 只包 `inspectPage` 与 `captureScreenshot` 两条**读页面内容**的路：
- *  - `navigatePage` / `getPageState` 不读正文，要检测就得额外发一次 `evaluateScript`，
- *    既多一次页面往返，又会撞上浏览器动作策略里 `evaluate` 那条门——用户关掉脚本执行权限
- *    不该让导航整条失效。导航后的登录墙由紧接着的 inspect / screenshot 接住。
- *  - `browser:act` 一类动作工具同理：模型要拿到 target 就得先观察，观察即过门。
+ * 账本语义是**每个站点最多问一次**：问过就记账，之后无论批准还是拒绝都不再阻塞。理由是死锁防护——
+ * 用户点了「继续」但页面仍判定为登录墙（跳到了另一张验证页、或启发式误判）时，逐次重问会把会话钉死
+ * 在一个永远过不去的门上；记账之后模型至少能带着结论收尾。账本是会话级、纯内存：登录态本身由全局
+ * partition 持久化，门控只负责「这一轮要不要停下来等人」，不该反过来变成第二份登录态真相。
+ *
+ * 状态归调用方：一个浏览器会话建一个实例，装饰器与账本共用同一份状态，跨会话天然隔离。
  */
-
-export interface BrowserLoginGateDecision {
-  /** 用户是否表示「已完成登录，继续」。 */
-  approved: boolean
-  /** 拒绝原因或用户批注；批准时通常为空。 */
-  message?: LooseOptional<string>
-}
-
-export interface BrowserLoginGatePort {
+export interface BrowserLoginGateApi {
   /**
-   * 阻塞当前工具调用并请用户人工完成登录/验证。
+   * 把宿主端口包上门控后交回：只包 `inspectPage` 与 `captureScreenshot` 两条读页面内容的路。
    *
-   * 宿主实现应弹出**必须由用户亲自裁决**的确认卡（Desktop 走 ApprovalPort 的手动审批）。
-   * 没有审批通道的宿主必须返回 `approved:false`，不能静默放行——那正是本层要补的洞。
+   * 为什么是装饰器而不是写进每个工具的 `execute`：门控要覆盖的是「观察到登录墙」这件事，而观察发生在
+   * {@link ToolBrowserApi} 这一层；写进工具意味着每加一个观察类工具就要记得复制一遍门控，忘一次就是一条
+   * 静默绕过。`navigatePage` / `getPageState` 不读正文，要检测就得额外发一次 `evaluateScript`，既多一次
+   * 页面往返，又会撞上浏览器动作策略里 `evaluate` 那条门——导航后的登录墙由紧接着的 inspect / screenshot
+   * 接住；`browser:act` 一类动作工具同理：模型要拿到 target 就得先观察，观察即过门。
    */
-  requestLoginCompletion: (input: {
-    message: string
-    riskScope: string
-    origin: string
-    detection: BrowserLoginDetection
-  }) => Promise<BrowserLoginGateDecision>
+  wrap(api: ToolBrowserApi, port: BrowserLoginGatePort): ToolBrowserApi
+  /** 命中检测且该站点在本会话里从未问过时才阻塞。 */
+  shouldPrompt(origin: string, detection: LooseOptional<BrowserLoginDetection>): boolean
+  /** 该站点此前是否已经问过（供制品标注复用同一结论，避免同一轮里前后不一致）。 */
+  getState(origin: string): Nullable<BrowserLoginGateOriginState>
 }
 
+export class BrowserLoginGate implements BrowserLoginGateApi {
+  private readonly states = new Map<string, BrowserLoginGateOriginState>()
+  /**
+   * 同一站点的并发征询去重。
+   *
+   * `browser:inspect_page` 声明 `isConcurrencySafe: true`（`browser:capture_screenshot` 是 false，
+   * 走会话队列），同一会话的多次 inspect 与跨会话的调用都可能同时撞上同一个站点的登录墙，那就会弹两张卡；
+   * 这里让后来者直接 await 同一次征询。
+   */
+  private readonly pendingByOrigin = new Map<string, Promise<BrowserLoginGateRecord>>()
+
+  public wrap(api: ToolBrowserApi, port: BrowserLoginGatePort): ToolBrowserApi {
+    return {
+      ...api,
+      inspectPage: async (inspectOptions) => {
+        const inspection = await api.inspectPage(inspectOptions)
+        const gate = await this.runGate(port, inspection.login, inspection.url)
+        if (!gate) return inspection
+        // 批准后重读：用户登录完成，旧那份正文是登录页，交给模型只会让它对着登录页作答。
+        if (!gate.approved) return { ...inspection, loginGate: gate }
+        return { ...(await api.inspectPage(inspectOptions)), loginGate: gate }
+      },
+      captureScreenshot: async (captureOptions) => {
+        const artifact = await api.captureScreenshot(captureOptions)
+        const gate = await this.runGate(port, artifact.metadata?.login, artifact.url)
+        if (!gate) return artifact
+        if (!gate.approved) return { ...artifact, loginGate: gate }
+        return { ...(await api.captureScreenshot(captureOptions)), loginGate: gate }
+      },
+    }
+  }
+
+  public shouldPrompt(origin: string, detection: LooseOptional<BrowserLoginDetection>): boolean {
+    if (!detection?.requiresLogin) return false
+    return !this.states.has(origin)
+  }
+
+  public getState(origin: string): Nullable<BrowserLoginGateOriginState> {
+    return toNullable(this.states.get(origin))
+  }
+
+  /** 走一次门控：没命中返回 null，命中则阻塞征询并返回要标注回制品的结论。 */
+  private async runGate(
+    port: BrowserLoginGatePort,
+    detection: LooseOptional<BrowserLoginDetection>,
+    url: LooseOptional<string>
+  ): Promise<Nullable<BrowserLoginGateRecord>> {
+    if (!detection?.requiresLogin) return null
+
+    const origin = resolveBrowserLoginGateOrigin(url)
+    const pending = this.pendingByOrigin.get(origin)
+    if (pending) return pending
+    if (!this.shouldPrompt(origin, detection)) return null
+
+    this.states.set(origin, 'prompted')
+    const gate = this.askUser(port, origin, detection, url)
+    this.pendingByOrigin.set(origin, gate)
+    try {
+      return await gate
+    } finally {
+      this.pendingByOrigin.delete(origin)
+    }
+  }
+
+  /** 阻塞征询用户一次并记账；没走到裁决（中止、宿主抛错）就撤销记账。 */
+  private async askUser(
+    port: BrowserLoginGatePort,
+    origin: string,
+    detection: BrowserLoginDetection,
+    url: LooseOptional<string>
+  ): Promise<BrowserLoginGateRecord> {
+    let decision
+    try {
+      decision = await port.requestLoginCompletion({
+        message: buildBrowserLoginGateMessage(detection, url),
+        riskScope: buildBrowserLoginGateRiskScope(origin),
+        origin,
+        detection,
+      })
+    } catch (error) {
+      // 记账在征询之前（防并发重复弹卡），中止 / 抛错必须撤销：没走到裁决就不算问过，
+      // 否则用户中止一次之后，这个站点的登录墙再也拦不住 agent 了。
+      this.states.delete(origin)
+      throw error
+    }
+    this.states.set(origin, decision.approved ? 'approved' : 'declined')
+    return buildBrowserLoginGateRecord({
+      detection,
+      url,
+      approved: decision.approved,
+      message: decision.message,
+    })
+  }
+}
+
+/** 会话级门控的可选参数：账本（也就是门控实例本身）由宿主按浏览器会话持有。 */
 export interface BrowserLoginGateOptions {
-  /** 会话级账本；不传则装饰器自己持有一份（每个会话一个 api 实例，天然隔离）。 */
-  ledger?: BrowserLoginGateLedger
+  /** 会话级门控；不传就现建一份（每个会话一个 api 实例，天然隔离）。 */
+  ledger?: BrowserLoginGate
 }
 
+/** 给宿主的工厂：把宿主端口包上登录墙门控后交回。 */
 export function withBrowserLoginGate(
   api: ToolBrowserApi,
   port: BrowserLoginGatePort,
   options: BrowserLoginGateOptions = {}
 ): ToolBrowserApi {
-  const ledger = options.ledger ?? new BrowserLoginGateLedger()
-  /**
-   * 同一站点的并发征询去重。
-   *
-   * `browser:inspect_page` 声明 `isConcurrencySafe: true`（`browser:capture_screenshot` 是
-   * false，走会话队列），同一会话的多次 inspect 与跨会话的调用都可能同时撞上同一个站点的
-   * 登录墙，那就会弹两张卡；这里让后来者直接 await 同一次征询。
-   */
-  const pendingByOrigin = new Map<string, Promise<BrowserLoginGateRecord>>()
-
-  const runGate = async (
-    detection: LooseOptional<BrowserLoginDetection>,
-    url: LooseOptional<string>
-  ): Promise<Nullable<BrowserLoginGateRecord>> => {
-    if (!detection?.requiresLogin) return null
-
-    const origin = resolveBrowserLoginGateOrigin(url)
-    const pending = pendingByOrigin.get(origin)
-    if (pending) return pending
-    if (!ledger.shouldPrompt(origin, detection)) return null
-
-    ledger.markPrompted(origin)
-    const gate = (async () => {
-      let decision
-      try {
-        decision = await port.requestLoginCompletion({
-          message: buildBrowserLoginGateMessage(detection, url),
-          riskScope: buildBrowserLoginGateRiskScope(origin),
-          origin,
-          detection,
-        })
-      } catch (error) {
-        // 记账在征询之前（防并发重复弹卡），中止/抛错必须撤销：没走到裁决就不算问过，
-        // 否则用户中止一次之后，这个站点的登录墙再也拦不住 agent 了。
-        ledger.clear(origin)
-        throw error
-      }
-      ledger.markResolved(origin, decision.approved)
-      return buildBrowserLoginGateRecord({
-        detection,
-        url,
-        approved: decision.approved,
-        message: decision.message,
-      })
-    })()
-    pendingByOrigin.set(origin, gate)
-    try {
-      return await gate
-    } finally {
-      pendingByOrigin.delete(origin)
-    }
-  }
-
-  return {
-    ...api,
-    inspectPage: async (inspectOptions) => {
-      const inspection = await api.inspectPage(inspectOptions)
-      const gate = await runGate(inspection.login, inspection.url)
-      if (!gate) return inspection
-      // 批准后重读：用户登录完成，旧那份正文是登录页，交给模型只会让它对着登录页作答。
-      if (!gate.approved) return { ...inspection, loginGate: gate }
-      return { ...(await api.inspectPage(inspectOptions)), loginGate: gate }
-    },
-    captureScreenshot: async (captureOptions) => {
-      const artifact = await api.captureScreenshot(captureOptions)
-      const gate = await runGate(artifact.metadata?.login, artifact.url)
-      if (!gate) return artifact
-      if (!gate.approved) return { ...artifact, loginGate: gate }
-      return { ...(await api.captureScreenshot(captureOptions)), loginGate: gate }
-    },
-  }
+  return (options.ledger ?? new BrowserLoginGate()).wrap(api, port)
 }

@@ -3,8 +3,7 @@ import { z } from 'zod'
 import { isEmpty } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import { defineBrowserTool } from '../../contract/requires'
-import { requireActiveBrowserSite } from '../../utils/tool-context'
+import { defineBrowserTool, requireActiveBrowserSite } from '../../utils/tool.js'
 
 import { BrowserArtifactWriteCapability } from './Capabilities'
 

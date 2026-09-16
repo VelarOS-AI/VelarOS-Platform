@@ -4,9 +4,9 @@ import { isArray, isTrue, stringifyPretty } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
-import { type BrowserToolContext, defineBrowserTool } from '../../contract/requires'
+import { type BrowserToolContext } from '../../contract/requires'
 import { encodeBrowserScriptStringLiteral } from '../../utils/page-scripts/literal'
-import { requireActiveBrowserSite } from '../../utils/tool-context'
+import { defineBrowserTool, requireActiveBrowserSite } from '../../utils/tool.js'
 import {
   extractBrowserList,
   extractBrowserPageContent,

@@ -8,32 +8,51 @@ import { isArray, isFalse, isNumber, isObject, isPlainObject, isPresent, isStrin
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 
-import type { BrowserCaptureScreenshotOptions, BrowserDomStabilityOptions, BrowserElementTargetHint, BrowserLoginDetection, BrowserPagePreviewFrame, BrowserPagePreviewPointerEvent, BrowserPagePreviewStreamEvent, BrowserPageStabilityResult, BrowserScreencastStartOptions, BrowserScreencastStartResult, BrowserScreencastStopOptions, BrowserScreencastStopResult, BrowserScreenshotArtifact, BrowserScreenshotCaptureRegion, BrowserScreenshotDiff, BrowserScreenshotElementLabel, BrowserScreenshotElementLabelOptions, BrowserScreenshotElementLegendItem, BrowserScreenshotMetadata, BrowserScreenshotModelImage, BrowserScreenshotModelImageOptions, BrowserScreenshotRegionOptions, BrowserSiteContext } from '../../exports/core'
+import type { BrowserPageDriver } from '../../contract/requires.js'
+import type {
+  BrowserCaptureScreenshotOptions,
+  BrowserDomStabilityOptions,
+  BrowserElementTargetHint,
+  BrowserLoginDetection,
+  BrowserPagePreviewFrame,
+  BrowserPagePreviewPointerEvent,
+  BrowserPagePreviewStreamEvent,
+  BrowserPageStabilityResult,
+  BrowserScreencastStartOptions,
+  BrowserScreencastStartResult,
+  BrowserScreencastStopOptions,
+  BrowserScreencastStopResult,
+  BrowserScreenshotArtifact,
+  BrowserScreenshotCaptureRegion,
+  BrowserScreenshotDiff,
+  BrowserScreenshotElementLabel,
+  BrowserScreenshotElementLabelOptions,
+  BrowserScreenshotElementLegendItem,
+  BrowserScreenshotMetadata,
+  BrowserScreenshotModelImage,
+  BrowserScreenshotModelImageOptions,
+  BrowserScreenshotRegionOptions,
+  BrowserSiteContext,
+} from '../../types/browser'
+import type { BrowserPageDriverScreenshotOptions } from '../../types/driver'
+import { type BrowserSession } from '../../types/electron'
+import type { BrowserRuntimeKernel } from '../../types/electron.js'
+import type { ExternalBrowserPageSession } from '../../types/runtime.js'
+import { evaluateInWebContents } from '../../utils/electron/evaluate'
+import { clampInteger, clampNumber, clampZoomFactor, readBoundedString, readFiniteNumber } from '../../utils/numbers.js'
+import { browserLoginDetectionScriptFragment } from '../../utils/page-scripts/login-detection'
+import { DEFAULT_BROWSER_VIEWPORT } from '../../utils/viewport.js'
 import {
-  type BrowserPageDriver,
-  type BrowserPageDriverScreenshotOptions,
-  type BrowserTargetRefStore,
+  type BrowserWorkspacePath,
+  resolveBrowserWorkspacePath,
+} from '../../utils/workspace-paths'
+import {
   DefaultScreencastStartOptions,
   encodeScreencastFramesToGif,
   type ScreencastCapturedFrame,
   type ScreencastFrameDecoder,
-} from '../../exports/core'
-import { browserLoginDetectionScriptFragment } from '../../exports/core'
-import {
-  type BrowserWorkspacePath,
-  resolveBrowserWorkspacePath,
-} from '../../exports/core'
-import { type BrowserSession, DEFAULT_BROWSER_VIEWPORT } from '../../types/electron'
-import { evaluateInWebContents } from '../../utils/electron/evaluate'
-import {
-  type BrowserRuntimeKernel,
-  clampInteger,
-  clampNumber,
-  clampZoomFactor,
-  type ExternalBrowserPageSession,
-  readBoundedString,
-  readFiniteNumber,
-} from '../../utils/electron/runtime-internals'
+} from '../cdp/CdpScreencastRecorder'
+import type { BrowserTargetRefStore } from '../session/BrowserTargetRefStore'
 
 import type { BrowserPageWaiter } from './BrowserPageWaiter'
 

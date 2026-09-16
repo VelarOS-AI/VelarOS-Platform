@@ -1,13 +1,46 @@
 import type electron from 'electron'
 
+import type { BrowserPageDriver, BrowserSystemPointerDriver } from '../contract/requires.js'
 import type {
   CdpExternalBrowserLaunchOptions,
   CdpExternalBrowserSession,
-} from '../exports/core'
-import type { BrowserSystemPointerDriver } from '../exports/core'
-import type { BrowserNavigationHistoryRestore, BrowserPageDiagnosticEntry, BrowserUserActivityEvent, BrowserUserActivitySummary, BrowserViewportOptions } from '../exports/core'
-import { DEFAULT_BROWSER_VIEWPORT } from '../exports/core'
+} from '../impl/cdp/CdpExternalBrowserLauncher'
 import type { BrowserPageDriverFactory } from '../impl/electron/ElectronWebContentsBrowserPageDriver'
+import { DEFAULT_BROWSER_VIEWPORT } from '../utils/viewport.js'
+
+import type {
+  BrowserNavigationHistoryRestore,
+  BrowserPageDiagnosticEntry,
+  BrowserUserActivityEvent,
+  BrowserUserActivitySummary,
+  BrowserViewportOptions,
+} from './browser'
+import type { BrowserPageDriverKernel,BrowserPageDriverSession } from './runtime.js'
+
+/** 统一的页面 driver 会话：webview 与外部 CDP 二选一，driver 面向多态调用。 */
+export interface BrowserRuntimePageDriverSession extends BrowserPageDriverSession {
+  browserSession?: BrowserSession
+}
+
+/**
+ * engines 依赖的运行时内核面（Electron 宿主全量）。
+ *
+ * 约束：只放「取会话、刷状态、跨域协作、共享工具」；领域逻辑一律进各自 engine。
+ * 新增成员前先问：这是不是又在把 kernel 养成第二个上帝类。
+ */
+export interface BrowserRuntimeKernel extends BrowserPageDriverKernel {
+  /** 统一多态入口：优先外部 CDP 会话，否则包裹 webview driver。 */
+  getLivePageDriverSession(
+    sessionId: string,
+    abortSignal?: AbortSignal
+  ): Promise<BrowserRuntimePageDriverSession>
+  /** webview 专属路径（Electron 输入合成、注入脚本等 driver 覆盖不了的能力）。 */
+  getLivePageSession(sessionId: string, abortSignal?: AbortSignal): Promise<BrowserSession>
+  /** 从 webview 会话解析当前 URL（含占位页处理）。 */
+  resolveCurrentPageUrl(session: BrowserSession, fallbackUrl: string): string
+  /** 把 webview 会话包成 BrowserPageDriver（多态调用面）。 */
+  wrapPageDriver(sessionId: string, session: BrowserSession): BrowserPageDriver
+}
 
 export { DEFAULT_BROWSER_VIEWPORT }
 

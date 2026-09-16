@@ -5,6 +5,25 @@
  * 这里的联合类型跟着它 `satisfies` 咬合。宿主（Desktop 的持久层 schema、Normalizer、IPC 契约）
  * 一律消费导出的清单与守卫，不再各写一份字面量。
  */
+/** 浏览器页面的轻量状态快照。 */
+export interface BrowserPageState {
+  /** 当前 URL。 */
+  url: string
+  /** 当前 document.title。 */
+  title: string
+  /** 最近一次加载是否成功。 */
+  loadState: 'loaded' | 'error' | 'unknown'
+  /** 模型显式设置的 CSS viewport。 */
+  viewport: Nullable<BrowserViewportOptions>
+  /** 最近一次导航失败详情；成功或未知时为 null。 */
+  lastNavigationError: LooseOptional<{
+    url: string
+    errorCode: number
+    errorDescription: string
+    failedAt: number
+  }>
+}
+
 export type BrowserSearchEngineId = 'google' | 'bing'
 export type BrowserAutomationMode = 'webview' | 'external'
 

@@ -2,23 +2,18 @@ import { isArray, isBoolean, isEmpty, isFiniteNumber, isNumber, isPlainObject, i
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 
+import type { BrowserPageDriver, BrowserSystemPointerDriver } from '../../contract/requires.js'
 import type { BrowserClickCoordinatesOptions, BrowserClickCoordinatesResult, BrowserDragOptions, BrowserDragResult, BrowserElementTargetHint, BrowserMoveMouseOptions, BrowserMoveMouseResult, BrowserPageInspection, BrowserPagePreviewPointerEvent, BrowserPageScrollOptions, BrowserPageScrollResult, BrowserPageZoomOptions, BrowserPageZoomResult, BrowserPressKeyOptions, BrowserPressKeyResult, BrowserSiteContext, BrowserTargetActionEffect, BrowserTargetActionEffectSnapshot, BrowserTargetActionOptions, BrowserTargetActionResult, BrowserTargetActionTextDiff, BrowserTypeTextOptions, BrowserTypeTextResult, BrowserViewportOptions, BrowserViewportResult } from '../../types/browser.js'
-import type {
-  BrowserPageDriver,
-  BrowserPageDriverPointerListener,
-  BrowserPageDriverState,
-  BrowserSystemPointerDriver,
-} from '../../types/driver'
+import type { BrowserPageDriverPointerListener, BrowserPageDriverState } from '../../types/driver'
+import type { BrowserPageDriverKernel, BrowserPageDriverSession, ExternalBrowserPageSession } from '../../types/runtime.js'
 import { normalizeBrowserPressKeyOptions } from '../../utils/keyboard'
-import type { BrowserPageScriptBuilder } from '../../utils/page-scripts/builder'
-import {
-  type BrowserPageDriverKernel,
-  type BrowserPageDriverSession,
-  clampInteger,
-  clampZoomFactor,
-  DEFAULT_BROWSER_VIEWPORT,
-  type ExternalBrowserPageSession,
-} from '../../utils/runtime-internals'
+import { clampInteger, clampZoomFactor } from '../../utils/numbers.js'
+import { buildActionEffectSnapshotScript } from '../../utils/page-scripts/action-effect'
+import { buildDragTargetScript } from '../../utils/page-scripts/drag'
+import { buildInspectionScript } from '../../utils/page-scripts/inspection'
+import { buildScrollScript } from '../../utils/page-scripts/scroll'
+import { buildTargetActionScript } from '../../utils/page-scripts/target-action'
+import { DEFAULT_BROWSER_VIEWPORT } from '../../utils/viewport.js'
 import type { BrowserTargetRefStore } from '../session/BrowserTargetRefStore'
 
 export interface BrowserPointerPoint {
@@ -74,7 +69,6 @@ export class CdpInteractionEngine {
 
   constructor(
     protected readonly kernel: BrowserPageDriverKernel,
-    protected readonly scripts: BrowserPageScriptBuilder,
     protected readonly targetRefs: BrowserTargetRefStore,
     protected readonly onPreviewPointer?: LooseOptional<(
       sessionId: string,
@@ -215,7 +209,7 @@ export class CdpInteractionEngine {
     )
     const initialActionResult =
       await externalSession.driver.executeJavaScript<BrowserTargetActionResult>(
-        this.scripts.buildTargetActionScript(hydratedOptions, { clickMode }),
+        buildTargetActionScript(hydratedOptions, { clickMode }),
         true
       )
     const healedActionResult = await this.selfHealTargetActionAfterNotFound({
@@ -263,7 +257,7 @@ export class CdpInteractionEngine {
     externalSession?: LooseOptional<ExternalBrowserPageSession>
   }): Promise<BrowserPageInspection> {
     const inspection = await input.driver.executeJavaScript<BrowserPageInspection>(
-      this.scripts.buildInspectionScript({
+      buildInspectionScript({
         includeHtml: false,
         maxTextChars: 2_000,
         maxHtmlChars: 1_000,
@@ -299,7 +293,7 @@ export class CdpInteractionEngine {
     if (!healedTarget) return input.result
 
     return input.driver.executeJavaScript<BrowserTargetActionResult>(
-      this.scripts.buildTargetActionScript({
+      buildTargetActionScript({
         ...input.options,
         target: healedTarget,
       }, {
@@ -441,7 +435,7 @@ export class CdpInteractionEngine {
   ): Promise<Nullable<BrowserTargetActionInternalEffectSnapshot>> {
     try {
       const value = await driver.executeJavaScript<unknown>(
-        this.scripts.buildActionEffectSnapshotScript()
+        buildActionEffectSnapshotScript()
       )
 
       return this.normalizeTargetActionEffectSnapshot(value)
@@ -597,7 +591,7 @@ export class CdpInteractionEngine {
       })
 
       return input.driver.executeJavaScript<BrowserTargetActionResult>(
-        this.scripts.buildTargetActionScript(input.options, { clickMode: 'dom' }),
+        buildTargetActionScript(input.options, { clickMode: 'dom' }),
         true
       )
     }
@@ -777,7 +771,7 @@ export class CdpInteractionEngine {
     }
 
     const resolved = await input.driver.executeJavaScript<BrowserDragResult>(
-      this.scripts.buildDragTargetScript(input.options),
+      buildDragTargetScript(input.options),
       true
     )
     if (!resolved.matched) return {
@@ -1005,7 +999,7 @@ export class CdpInteractionEngine {
     _abortSignal?.throwIfAborted()
     const externalSession = this.requireExternalPageSession(sessionId)
     const result = await externalSession.driver.executeJavaScript<BrowserPageScrollResult>(
-      this.scripts.buildScrollScript(options),
+      buildScrollScript(options),
       true
     )
     this.syncExternalPageStateFromScriptResult(sessionId, externalSession, result, context.url)

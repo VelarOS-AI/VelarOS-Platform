@@ -4,35 +4,36 @@ import { isPresent } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 
-import type { BrowserEmulationOptions, BrowserMouseButton, BrowserNetworkControlOptions, BrowserNetworkRequestDetailsOptions, BrowserNetworkResponseBodyOptions, BrowserPageDiagnosticEntry, BrowserViewportOptions } from '../../exports/core'
+import type { BrowserPageDriver } from '../../contract/requires.js'
+import type {
+  BrowserEmulationOptions,
+  BrowserMouseButton,
+  BrowserNetworkControlOptions,
+  BrowserNetworkRequestDetailsOptions,
+  BrowserNetworkResponseBodyOptions,
+  BrowserPageDiagnosticEntry,
+  BrowserViewportOptions,
+} from '../../types/browser'
+import type { BrowserPageDriverClickCoordinatesOptions, BrowserPageDriverDiagnosticsOptions, BrowserPageDriverDragCoordinatesOptions, BrowserPageDriverEmulationState, BrowserPageDriverMoveMouseOptions, BrowserPageDriverNetworkCaptureState, BrowserPageDriverNetworkControlState, BrowserPageDriverNetworkIdleOptions, BrowserPageDriverNetworkRequestDetailsResult, BrowserPageDriverNetworkResponseBodyResult, BrowserPageDriverState } from '../../types/driver'
 import {
   applyCdpEmulation,
-  BrowserCdpNetworkController,
-  type BrowserPageDriver,
-  type BrowserPageDriverClickCoordinatesOptions,
-  type BrowserPageDriverDiagnosticsOptions,
-  type BrowserPageDriverDragCoordinatesOptions,
-  type BrowserPageDriverEmulationState,
-  type BrowserPageDriverMoveMouseOptions,
-  type BrowserPageDriverNetworkCaptureState,
-  type BrowserPageDriverNetworkControlState,
-  type BrowserPageDriverNetworkIdleOptions,
-  type BrowserPageDriverNetworkRequestDetailsResult,
-  type BrowserPageDriverNetworkResponseBodyResult,
-  type BrowserPageDriverState,
-  buildBrowserViewportDeviceMetrics,
-  captureCdpHeapSnapshot,
+  type CdpSend,
+  createDefaultCdpEmulationState,
+} from '../../utils/cdp/emulation'
+import { clearBrowserDiagnosticEntries, takeBrowserDiagnosticWindow } from '../../utils/diagnostics.js'
+import { buildBrowserViewportDeviceMetrics } from '../../utils/viewport'
+import { BrowserCdpNetworkController } from '../cdp/BrowserCdpNetworkController'
+import {
   type CdpScreencastConsumerOptions,
   CdpScreencastRecorder,
   type CdpScreencastStartOptions,
-  type CdpSend,
-  CdpTraceCollector,
-  clearBrowserDiagnosticEntries,
-  createDefaultCdpEmulationState,
-  createWebContentsCdpTraceTransport,
   type ScreencastCapturedFrame,
-  takeBrowserDiagnosticWindow,
-} from '../../exports/core'
+} from '../cdp/CdpScreencastRecorder'
+import {
+  captureCdpHeapSnapshot,
+  CdpTraceCollector,
+  createWebContentsCdpTraceTransport,
+} from '../cdp/CdpTraceCollector'
 
 export interface BrowserPageDriverFactoryInput {
   sessionId: string

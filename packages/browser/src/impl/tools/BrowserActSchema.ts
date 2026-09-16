@@ -3,7 +3,17 @@ import { z } from 'zod'
 import { renderParameterDescription as parameterDescription } from '@velaros-ai/agent/tool-contract'
 import { isNonBlankString, isNumber, isPlainObject, isPresent, isString, toOptional } from '@velaros-ai/core'
 
-import type { BrowserEmulationOptions, BrowserNetworkControlOptions, BrowserPageNavigationOptions, BrowserPageScrollOptions, BrowserPageWaitOptions, BrowserPageZoomOptions, BrowserPressKeyOptions, BrowserTargetActionKind, BrowserTargetActionValue } from '../../exports/core'
+import type {
+  BrowserEmulationOptions,
+  BrowserNetworkControlOptions,
+  BrowserPageNavigationOptions,
+  BrowserPageScrollOptions,
+  BrowserPageWaitOptions,
+  BrowserPageZoomOptions,
+  BrowserPressKeyOptions,
+  BrowserTargetActionKind,
+  BrowserTargetActionValue,
+} from '../../types/browser'
 
 import {
   type BrowserTargetHintInput,

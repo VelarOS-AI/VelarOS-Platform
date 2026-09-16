@@ -1,11 +1,11 @@
 import { isFalse, toNullable } from '@velaros-ai/core'
 
 import type { ToolContext } from '../../contract/requires'
-import type { BrowserRecipeSkeleton } from '../../exports/core'
+import type { BrowserRecipeSkeleton } from '../../types/browser'
 import { type BrowserRecipeRunStepResult, buildRecipeExecutionPlan } from '../../utils/recipes/plan'
 import type { BrowserRecipeRunVariables } from '../../utils/recipes/variables'
-import { createArtifactManager } from '../../utils/tool-context'
 
+import { createArtifactManager } from './Artifacts.js'
 import { browserRecipeReader } from './RecipeReader'
 import { browserRecipeRunner } from './RecipeRun'
 

@@ -24,7 +24,7 @@ import type {
 import {
   getRelativePathInsideRoot,
   resolveBrowserWorkspacePath,
-} from '../../utils/path-containment.js'
+} from '../../utils/workspace-paths.js'
 
 const DefaultListLimit = 200
 const DefaultListMaxDepth = 4

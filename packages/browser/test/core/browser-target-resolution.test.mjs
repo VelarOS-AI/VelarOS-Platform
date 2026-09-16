@@ -188,11 +188,14 @@ test('external drag hydrates both sourceRef and targetRef before building the pa
   const source = target({ ref: '@e1', css: '#source', text: 'Source' })
   const destination = target({ ref: '@e2', css: '#destination', text: 'Destination' })
   store.storeTargets('external', [source, destination])
-  let scriptedOptions = null
+  let dragScript = null
   const driver = {
     kind: 'external',
     dragCoordinates: async () => {},
-    executeJavaScript: async () => dragMiss(),
+    executeJavaScript: async (script) => {
+      dragScript = script
+      return dragMiss()
+    },
   }
   const engine = new CdpInteractionEngine(
     {
@@ -202,12 +205,6 @@ test('external drag hydrates both sourceRef and targetRef before building the pa
         url: 'https://example.test/',
         title: 'Example',
       }),
-    },
-    {
-      buildDragTargetScript: (options) => {
-        scriptedOptions = options
-        return 'drag'
-      },
     },
     store,
   )
@@ -221,8 +218,8 @@ test('external drag hydrates both sourceRef and targetRef before building the pa
     },
   )
 
-  assert.equal(scriptedOptions.source.css, '#source')
-  assert.equal(scriptedOptions.target.css, '#destination')
+  assert.ok(dragScript.includes('#source'))
+  assert.ok(dragScript.includes('#destination'))
 })
 
 test('embedded drag hydrates both sourceRef and targetRef before building the page script', async () => {
@@ -230,23 +227,20 @@ test('embedded drag hydrates both sourceRef and targetRef before building the pa
   const source = target({ ref: '@e1', css: '#embedded-source', text: 'Source' })
   const destination = target({ ref: '@e2', css: '#embedded-target', text: 'Target' })
   store.storeTargets('embedded', [source, destination])
-  let scriptedOptions = null
+  let dragScript = null
   const driver = {
     kind: 'embedded',
     dragCoordinates: async () => {},
-    executeJavaScript: async () => dragMiss(),
+    executeJavaScript: async (script) => {
+      dragScript = script
+      return dragMiss()
+    },
   }
   const engine = new BrowserInteractionEngine(
     {
       getExternalPageSession: () => null,
       getLivePageSession: async () => ({ webContents: {} }),
       wrapPageDriver: () => driver,
-    },
-    {
-      buildDragTargetScript: (options) => {
-        scriptedOptions = options
-        return 'drag'
-      },
     },
     {},
     store,
@@ -261,12 +255,12 @@ test('embedded drag hydrates both sourceRef and targetRef before building the pa
     },
   )
 
-  assert.equal(scriptedOptions.source.css, '#embedded-source')
-  assert.equal(scriptedOptions.target.css, '#embedded-target')
+  assert.ok(dragScript.includes('#embedded-source'))
+  assert.ok(dragScript.includes('#embedded-target'))
 })
 
 test('target self-healing requires a reliable identity signal and a unique best match', () => {
-  const engine = new CdpInteractionEngine({}, {}, new BrowserTargetRefStore())
+  const engine = new CdpInteractionEngine({}, new BrowserTargetRefStore())
   const find = (stale, candidates) => engine.findSelfHealingTarget(
     { action: 'click', target: stale },
     inspection({ actions: candidates.map((candidate) => ({
@@ -421,11 +415,7 @@ test('failed internal self-heal inspection does not invalidate refs already show
       lines: ['- button "Different" [ref=@e1]'],
     }),
   }
-  const engine = new CdpInteractionEngine(
-    {},
-    { buildInspectionScript: () => 'inspect-for-self-heal' },
-    store,
-  )
+  const engine = new CdpInteractionEngine({}, store)
 
   const result = await engine.selfHealTargetActionAfterNotFound({
     sessionId: 'self-heal',

@@ -3,10 +3,29 @@ import type { z } from 'zod'
 import { isNumber, isPresent, numberOrNull, toOptional } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import { type BrowserToolContext, defineBrowserTool } from '../../contract/requires'
-import type { BrowserClickCoordinatesOptions, BrowserClickCoordinatesResult, BrowserMoveMouseResult, BrowserPageNavigationOptions, BrowserPageNavigationResult, BrowserPageScrollOptions, BrowserPageScrollResult, BrowserPageWaitOptions, BrowserPageWaitResult, BrowserPageZoomOptions, BrowserPageZoomResult, BrowserPressKeyOptions, BrowserPressKeyResult, BrowserTargetActionOptions, BrowserTargetActionResult, BrowserTypeTextResult, BrowserViewportResult, BrowserWaitForSelectorResult } from '../../exports/core'
+import { type BrowserToolContext } from '../../contract/requires'
+import type {
+  BrowserClickCoordinatesOptions,
+  BrowserClickCoordinatesResult,
+  BrowserMoveMouseResult,
+  BrowserPageNavigationOptions,
+  BrowserPageNavigationResult,
+  BrowserPageScrollOptions,
+  BrowserPageScrollResult,
+  BrowserPageWaitOptions,
+  BrowserPageWaitResult,
+  BrowserPageZoomOptions,
+  BrowserPageZoomResult,
+  BrowserPressKeyOptions,
+  BrowserPressKeyResult,
+  BrowserTargetActionOptions,
+  BrowserTargetActionResult,
+  BrowserTypeTextResult,
+  BrowserViewportResult,
+  BrowserWaitForSelectorResult,
+} from '../../types/browser'
 import { performTargetActionWithRecovery } from '../../utils/target-recovery'
-import { requireActiveBrowserSite } from '../../utils/tool-context'
+import { defineBrowserTool, requireActiveBrowserSite } from '../../utils/tool.js'
 
 import { browserActSchema, parseBrowserActInput } from './BrowserActSchema'
 import { BrowserControlCapability } from './Capabilities'

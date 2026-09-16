@@ -2,10 +2,9 @@ import { z } from 'zod'
 
 import { renderParameterDescription as parameterDescription } from '@velaros-ai/agent/tool-contract'
 
-import { defineBrowserTool } from '../../contract/requires'
-import type { BrowserPendingEventKind } from '../../exports/core'
+import type { BrowserPendingEventKind } from '../../types/browser'
 import { waitForPendingEvent } from '../../utils/pending-events'
-import { hasPendingBrowserEvent, requireActiveBrowserSite } from '../../utils/tool-context'
+import { defineBrowserTool, hasPendingBrowserEvent, requireActiveBrowserSite } from '../../utils/tool.js'
 
 import {
   BrowserControlCapability,

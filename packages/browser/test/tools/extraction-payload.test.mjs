@@ -8,7 +8,7 @@ import assert from 'node:assert/strict'
 
 import { test } from 'bun:test'
 
-import { BrowserEvaluateScriptBuilder } from '../../dist/exports/core.js'
+import { buildEvaluateScript } from '../../dist/exports/core.js'
 import { browserTools } from '../../dist/exports/tools.js'
 
 const TEXT_NODE = 3
@@ -16,7 +16,6 @@ const ELEMENT_NODE = 1
 const PAGE_URL = 'https://example.test/catalog'
 // 只属于 evaluate 信封的键：工具结果和落盘产物里一个都不许出现。
 const EnvelopeOnlyKeys = ['mode', 'result', 'resultText', 'resultTruncated', 'durationMs']
-const evaluateScriptBuilder = new BrowserEvaluateScriptBuilder()
 
 class FakeText {
   constructor(text) {
@@ -114,7 +113,7 @@ function matchesSelectorList(element, selectorList) {
 }
 
 /**
- * 假页面：evaluateScript 与 engine 做的完全一样——用真实 BrowserEvaluateScriptBuilder 包装转发来的
+ * 假页面：evaluateScript 与 engine 做的完全一样——用真实 buildEvaluateScript 包装转发来的
  * 脚本，再在页面里执行，所以工具拿到的就是生产环境的信封，而不是手写的替身。
  */
 function createFakePage(body) {
@@ -139,7 +138,7 @@ function createFakePage(body) {
       'HTMLAnchorElement',
       'XPathResult',
       'getComputedStyle',
-      `return ${evaluateScriptBuilder.buildEvaluateScript(options)}`
+      `return ${buildEvaluateScript(options)}`
     )
     return runInPage(
       {},

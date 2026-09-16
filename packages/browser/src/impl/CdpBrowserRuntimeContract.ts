@@ -1,5 +1,6 @@
 import type { ToolBrowserApi } from '../contract/requires'
-import type { CdpBrowserRuntime } from '../exports/core'
+
+import type { CdpBrowserRuntime } from './CdpBrowserRuntime'
 
 /**
  * 编译型契约验证:`CdpBrowserRuntime.bindBrowserApi(sessionId, context)` 的返回面

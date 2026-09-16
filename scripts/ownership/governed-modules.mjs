@@ -30,6 +30,40 @@
 //   acceptance      验收测试文件；每条「测试」档不变量都要在这里有以编号开头的用例
 export const GovernedModules = [
   {
+    directory: 'agent',
+    name: '@velaros-ai/agent',
+    toolsFile: 'src/impl/AgentTools.ts',
+    contract: 'src/contract',
+    types: 'src/types',
+    portable: 'agent.ts',
+    impl: 'src/impl',
+    utils: 'src/utils',
+    tuning: 'tuning.ts',
+    exports: 'src/exports',
+    browserSafeEntries: [],
+    environmentTable: 'AgentEnvironmentVariables',
+    status: 'migrating',
+    layers: [
+      ['AgentTools.ts'],
+      ['builtin/'],
+      ['assembly/'],
+      ['execution/', 'product-session/'],
+      ['delegation/'],
+      ['runner/'],
+      ['loop/'],
+      ['session/', 'tools/'],
+      ['context/', 'residency/', 'retrieval/'],
+      ['guidance/', 'mods/', 'connectors/', 'chat/'],
+      ['records/'],
+      ['ledgers/'],
+      ['errors/'],
+    ],
+    toolDefiner: 'defineVelaTool',
+    card: 'MODULE.md',
+    invariants: 'spec/invariants.md',
+    acceptance: 'spec/acceptance.test.ts',
+  },
+  {
     directory: 'system',
     name: '@velaros-ai/system',
     toolsFile: 'src/impl/SystemTools.ts',
@@ -202,6 +236,41 @@ export const GovernedModules = [
     acceptance: 'spec/acceptance.test.ts',
   },
   {
+    directory: 'browser',
+    name: '@velaros-ai/browser',
+    // 改造中：工具还散在 impl/tools/ 的 14 个 *.tool.ts 里，收进一个工具文件是下一段的事，
+    // 所以现在不填 toolsFile、toolDefiner、hostPort，也不填卡片与验收；status 标 migrating，
+    // 门禁照查照报剩下多少条，不计入失败。
+    contract: 'src/contract',
+    types: 'src/types',
+    portable: 'browser.ts',
+    impl: 'src/impl',
+    utils: 'src/utils',
+    tuning: 'tuning.ts',
+    exports: 'src/exports',
+    // 入口收口（四个入口）是下一段的事；现在六个入口的名字一个不变
+    browserSafeEntries: ['core-contracts.ts'],
+    status: 'migrating',
+    layers: [
+      // 工具：14 个 *.tool.ts 与它们的 schema、分组、挂载（下一段收成一个 BrowserTools.ts）
+      ['tools/'],
+      // 工具背后的执行：act / extract / recipe / files 的动作分派
+      ['operations/'],
+      // 运行时装配：Electron 运行时与无 Electron 的 CDP 运行时
+      ['electron/', 'CdpBrowserRuntime.ts', 'CdpBrowserRuntimeContract.ts'],
+      // 领域引擎：交互、页面数据、截图、性能
+      ['engines/'],
+      // 协议、会话状态、站点工作区，互不依赖
+      ['cdp/', 'session/', 'workspace/'],
+      // 纯策略门面与 React 合成
+      ['policies/', 'BrowserComposition.ts'],
+    ],
+    // 卡片与不变量登记是改造最后一段的事，这三份现在还不存在，照样登记，燃尽表里看得到
+    card: 'MODULE.md',
+    invariants: 'spec/invariants.md',
+    acceptance: 'spec/acceptance.test.ts',
+  },
+  {
     directory: 'kernel',
     name: '@velaros-ai/kernel',
     // 没有模型面工具：不登记 toolsFile、toolDefiner、hostPort（同 platform）
@@ -228,6 +297,79 @@ export const GovernedModules = [
     invariants: 'spec/invariants.md',
     acceptance: 'spec/acceptance.test.ts',
     // 按仓库标准改造中：问题照查照报条数，不计入失败（改造完删掉这一项）
+    status: 'migrating',
+  },
+  {
+    directory: 'memory',
+    name: '@velaros-ai/memory',
+    // 改造中：下面这些是目标位置，还没到位的照报条数、不计入失败
+    // （方案 docs/engineering/refactor-plans/memory.md §2.2–2.6、附录 A）
+    toolsFile: 'src/impl/MemoryTools.ts',
+    contract: 'src/contract',
+    types: 'src/types',
+    portable: 'memory.ts',
+    impl: 'src/impl',
+    utils: 'src/utils',
+    tuning: 'tuning.ts',
+    exports: 'src/exports',
+    // 根入口要 SQLite 与文件 IO，只给 Node；渲染进程只能加载可移植数据
+    browserSafeEntries: ['contracts.ts'],
+    hostPort: 'MemoryToolApi',
+    hostPortField: 'memory',
+    layers: [
+      // 工具：四个记忆工具的定义与挂载
+      ['MemoryTools.ts'],
+      // 工具执行：execute 交给的类，只经 ctx.memory 调宿主
+      ['MemoryToolOperations.ts'],
+      // 宿主胶水：装配、证据采集桥、回合召回、树治理门面、空闲整理调度、后端令牌族
+      ['host/'],
+      // 后端编排与规则：叠加体、树后端适配、动词与派生索引判定、作用域规则
+      ['backends/'],
+      // 三个互不相引的后端实现
+      ['files/', 'vector/', 'tree/'],
+      // 树 v2：独立子系统，除探针外没人引它，也不出包
+      ['tree-v2/'],
+    ],
+    toolDefiner: 'defineMemoryTool',
+    // 卡片与不变量登记是改造最后一段的事，这三份现在还不存在，照样登记，燃尽表里看得到
+    card: 'MODULE.md',
+    invariants: 'spec/invariants.md',
+    acceptance: 'spec/acceptance.test.ts',
+    status: 'migrating',
+  },
+  {
+    directory: 'knowledge',
+    name: '@velaros-ai/knowledge',
+    // 改造中：刚从 @velaros-ai/memory 的 /knowledge 子路径整体搬出来成独立包，
+    // 源码还是原来的目录形状，五个目录与工具文件是下一段的事（方案 §2.7、附录 B）
+    toolsFile: 'src/impl/KnowledgeTools.ts',
+    contract: 'src/contract',
+    types: 'src/types',
+    portable: 'knowledge.ts',
+    impl: 'src/impl',
+    utils: 'src/utils',
+    tuning: 'tuning.ts',
+    exports: 'src/exports',
+    // 根入口要 SQLite 与 LanceDB，只给 Node；渲染进程只能加载可移植数据
+    browserSafeEntries: ['contracts.ts'],
+    hostPort: 'KnowledgeToolApi',
+    hostPortField: 'knowledge',
+    layers: [
+      // 工具：三个知识工具的定义与挂载
+      ['KnowledgeTools.ts'],
+      // 工具执行：零命中补一次同步、回执拼装
+      ['KnowledgeToolOperations.ts'],
+      // 运行时对象图
+      ['KnowledgeRuntime.ts'],
+      // 领域：门面、查询、写入、维护、摄入、工作区
+      ['domain/'],
+      // 存储：关系仓、向量表、嵌入客户端
+      ['storage/'],
+    ],
+    toolDefiner: 'defineKnowledgeTool',
+    card: 'MODULE.md',
+    invariants: 'spec/invariants.md',
+    acceptance: 'spec/acceptance.test.ts',
     status: 'migrating',
   },
 ]

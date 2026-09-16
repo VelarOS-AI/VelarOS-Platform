@@ -3,12 +3,8 @@ import { z } from "zod";
 import { renderParameterDescription as parameterDescription } from "@velaros-ai/agent/tool-contract";
 import { isBoolean, optionalWhen } from "@velaros-ai/core";
 
-import { defineBrowserTool } from "../../contract/requires";
-import type {
-  BrowserEvaluateScriptResult,
-  BrowserPageStorageResult,
-} from "../../exports/core";
-import { requireActiveBrowserSite } from "../../utils/tool-context";
+import type { BrowserEvaluateScriptResult, BrowserPageStorageResult } from "../../types/browser";
+import { defineBrowserTool, requireActiveBrowserSite } from '../../utils/tool.js'
 
 import {
   BrowserControlCapability,

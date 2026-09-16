@@ -1,11 +1,10 @@
+import { defineToolRuntimeSpec } from '@velaros-ai/agent/tool-contract'
 import { AppError } from '@velaros-ai/core/error'
 
-import type { VelaTool } from '../contract/requires'
-import type { BrowserPendingEventKind } from '../exports/core'
-import { BrowserWorkspaceArtifactManager } from '../exports/core'
-
-/** Browser 工具 execute 函数拿到的上下文类型。 */
-type BrowserToolContext = Parameters<VelaTool<Record<string, never>>['execute']>[1]
+import type { VelaTool } from '../contract/provides.js'
+import type { BrowserToolContext } from '../contract/requires.js'
+import type { BrowserPendingEventKind } from '../types/browser.js'
+import type { DefineBrowserToolInput } from '../types/tools.js'
 
 /**
  * 只在实时快照确认存在 pending 事件时暴露对应处理工具。
@@ -37,26 +36,15 @@ export function requireActiveBrowserSite(ctx: BrowserToolContext): void {
   }
 }
 
-/**
- * 创建当前 browser 工作区的 artifact manager。
- *
- * manager 只通过 ToolBrowserApi 读写文件，因此天然被限制在当前站点的私有目录中。
- */
-export function createArtifactManager(ctx: BrowserToolContext): BrowserWorkspaceArtifactManager {
-  requireActiveBrowserSite(ctx)
-
-  // 用 browser 文件 API 适配 artifact manager，避免它直接依赖 workspace/root 路径。
-  return new BrowserWorkspaceArtifactManager({
-    readFile: (path, startLine, endLine, maxChars) =>
-      ctx.browser.readFile(path, startLine, endLine, maxChars),
-    writeFile: (path, content, options) => ctx.browser.writeFile(path, content, options),
-    listFiles: (options) => ctx.browser.listFiles(options),
-  })
-}
-
 /** 读取当前激活的 BrowserSiteContext；未激活时抛出用户可读错误。 */
 export function getActiveBrowserContext(ctx: BrowserToolContext) {
   requireActiveBrowserSite(ctx)
   // isActive() 与 getContext() 共享同一 session 状态；激活后 context 必定存在。
   return ctx.browser.getContext()!
+}
+
+export function defineBrowserTool<TInput extends Record<string, unknown>>(
+  input: DefineBrowserToolInput<TInput>
+): VelaTool<TInput> {
+  return defineToolRuntimeSpec({ ...input, category: 'browser' })
 }

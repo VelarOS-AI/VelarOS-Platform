@@ -3,9 +3,9 @@ import assert from 'node:assert/strict'
 import { test } from 'bun:test'
 
 import {
-  BrowserEvaluateScriptBuilder,
   BrowserEvaluateSimplifyMaxDepth,
   BrowserEvaluateSimplifyMaxEntries,
+  buildEvaluateScript,
   simplifyBrowserEvaluatedValue,
 } from '../../dist/exports/core.js'
 
@@ -169,7 +169,7 @@ void test('simplify handles errors and nullish values', () => {
 
 void test('the generated page script inlines the very function under test', () => {
   // 页面里跑的必须是同一份实现——否则单测锁的行为与线上行为会各走各的。
-  const script = new BrowserEvaluateScriptBuilder().buildEvaluateScript({
+  const script = buildEvaluateScript({
     script: 'document.title',
   })
 

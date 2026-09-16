@@ -11,7 +11,7 @@ import { join } from 'node:path'
 import { describe, test } from 'bun:test'
 
 import { createBrowserSiteWorkspaceFileAccess } from '../../src/impl/workspace/BrowserWorkspaceFileAccess.js'
-import { resolveWorkspaceFilePath } from '../../src/utils/runtime-internals.js'
+import { resolveWorkspaceFilePath } from '../../src/utils/workspace-paths.js'
 
 /** 造一个站点工作区：downloads/ 是指向工作区外目录的符号链接，leak.txt 是指向区外文件的链接。 */
 async function createLinkedSiteRoot(): Promise<{ siteRoot: string; outside: string }> {

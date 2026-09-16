@@ -25,8 +25,6 @@
 // ## 类型边界
 // CDP 是无 schema 的 JSON-RPC，`transport.send<T>()` 的 `T` 是**断言不是校验**（§1.4 白名单②，
 // 无泛型的原生驱动返回）。所以每个 `normalize*` 私有方法都必须自己收窄，不能假设字段存在。
-import { copyFile, mkdir, rename, unlink } from 'node:fs/promises'
-import { dirname, join } from 'node:path'
 
 import {
   isArray,
@@ -44,40 +42,16 @@ import {
 } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
+import type { BrowserPageDriver } from '../../contract/requires.js'
 import type { BrowserEmulationOptions, BrowserGeolocationOptions, BrowserGeolocationState, BrowserKeyModifier, BrowserMouseButton, BrowserNetworkControlOptions, BrowserNetworkRequestDetailsOptions, BrowserNetworkResponseBodyOptions, BrowserNetworkThrottlingPreset, BrowserOriginStorage, BrowserPageDiagnosticEntry, BrowserPageDiagnosticLevel, BrowserPageTargetInfo, BrowserPressKeyOptions, BrowserStorageEntry, BrowserSwitchPageTargetOptions, BrowserTypeTextOptions, BrowserViewportOptions } from '../../types/browser.js'
-import type {
-  BrowserPageDriver,
-  BrowserPageDriverClickCoordinatesOptions,
-  BrowserPageDriverCookie,
-  BrowserPageDriverCookieOptions,
-  BrowserPageDriverDiagnosticsOptions,
-  BrowserPageDriverDownloadEvent,
-  BrowserPageDriverDownloadItem,
-  BrowserPageDriverDownloadListener,
-  BrowserPageDriverDragCoordinatesOptions,
-  BrowserPageDriverEmulationState,
-  BrowserPageDriverFetchResourceOptions,
-  BrowserPageDriverFetchResourceResult,
-  BrowserPageDriverFileInputOptions,
-  BrowserPageDriverMoveMouseOptions,
-  BrowserPageDriverNetworkControlState,
-  BrowserPageDriverNetworkIdleOptions,
-  BrowserPageDriverNetworkRequestDetailsResult,
-  BrowserPageDriverNetworkResponseBodyResult,
-  BrowserPageDriverPdfOptions,
-  BrowserPageDriverScreenshot,
-  BrowserPageDriverScreenshotOptions,
-  BrowserPageDriverState,
-  BrowserPageDriverStorageOriginOptions,
-} from '../../types/driver'
+import type { CdpDownloadProgressEvent } from '../../types/cdp.js'
+import type { BrowserPageDriverClickCoordinatesOptions, BrowserPageDriverCookie, BrowserPageDriverCookieOptions, BrowserPageDriverDiagnosticsOptions, BrowserPageDriverDownloadEvent, BrowserPageDriverDownloadListener, BrowserPageDriverDragCoordinatesOptions, BrowserPageDriverEmulationState, BrowserPageDriverFetchResourceOptions, BrowserPageDriverFetchResourceResult, BrowserPageDriverFileInputOptions, BrowserPageDriverMoveMouseOptions, BrowserPageDriverNetworkControlState, BrowserPageDriverNetworkIdleOptions, BrowserPageDriverNetworkRequestDetailsResult, BrowserPageDriverNetworkResponseBodyResult, BrowserPageDriverPdfOptions, BrowserPageDriverScreenshot, BrowserPageDriverScreenshotOptions, BrowserPageDriverState, BrowserPageDriverStorageOriginOptions } from '../../types/driver'
+import { clearBrowserDiagnosticEntries, takeBrowserDiagnosticWindow } from '../../utils/diagnostics.js'
 import { normalizeBrowserPressKeyOptions } from '../../utils/keyboard'
-import {
-  clearBrowserDiagnosticEntries,
-  takeBrowserDiagnosticWindow,
-} from '../../utils/runtime-internals'
 import { buildBrowserViewportDeviceMetrics } from '../../utils/viewport'
 
 import { BrowserCdpNetworkController } from './BrowserCdpNetworkController'
+import { CdpBrowserPageDownloadItem } from './CdpBrowserPageDownloadItem.js'
 import {
   type CdpScreencastConsumerOptions,
   CdpScreencastRecorder,
@@ -266,13 +240,6 @@ interface CdpDownloadWillBeginEvent {
   suggestedFilename?: unknown
 }
 
-interface CdpDownloadProgressEvent {
-  guid?: unknown
-  totalBytes?: unknown
-  receivedBytes?: unknown
-  state?: unknown
-}
-
 const CDP_KEY_MODIFIER_MASKS: Record<BrowserKeyModifier, number> = {
   alt: 1,
   control: 2,
@@ -280,175 +247,6 @@ const CDP_KEY_MODIFIER_MASKS: Record<BrowserKeyModifier, number> = {
   shift: 8,
 }
 const MaxCdpDiagnosticEntries = 300
-
-/**
- * 网络节流预设 → CDP Network.emulateNetworkConditions 参数。
- * 吞吐单位 bytes/s，-1 表示不限速；数值与 DevTools 前端预设保持一致。
- */
-type CdpDownloadDoneState = 'completed' | 'cancelled'
-
-interface CdpBrowserPageDownloadItemOptions {
-  transport: CdpBrowserPageDriverTransport
-  guid: string
-  url: Nullable<string>
-  filename: string
-  downloadPath: string
-  appendDiagnostic: (entry: BrowserPageDiagnosticEntry) => void
-}
-
-class CdpBrowserPageDownloadItem implements BrowserPageDriverDownloadItem {
-  private totalBytes = 0
-  private receivedBytes = 0
-  private savePath = ''
-  private doneState: Nullable<CdpDownloadDoneState> = null
-  private finalized = false
-  private readonly doneListeners: Array<(_event: unknown, state: string) => void> = []
-
-  constructor(private readonly options: CdpBrowserPageDownloadItemOptions) {}
-
-  public getFilename(): string {
-    return this.options.filename
-  }
-
-  public getMimeType(): string {
-    return ''
-  }
-
-  public getTotalBytes(): number {
-    return this.totalBytes
-  }
-
-  public getReceivedBytes(): number {
-    return this.receivedBytes
-  }
-
-  public getSavePath(): string {
-    return this.savePath
-  }
-
-  public getURL(): Nullable<string> {
-    return this.options.url
-  }
-
-  public pause(): void {
-    // 裸 CDP 下载事件无法在浏览器写入文件前真正暂停。
-  }
-
-  public cancel(): void {
-    if (this.doneState === 'completed') {
-      void unlink(this.resolveSourcePath()).catch(() => {
-        // arch-guard:silent-catch-ok 下载已完成后的源文件清理是幂等 best-effort，文件可能已被移动。
-      })
-      return
-    }
-
-    void this.options.transport
-      .send('Browser.cancelDownload', { guid: this.options.guid })
-      .catch(() => {
-        // arch-guard:silent-catch-ok cancel 本身是尽力清理；本地状态仍会明确进入 cancelled。
-      })
-    this.markDone('cancelled')
-  }
-
-  public setSavePath(path: string): void {
-    this.savePath = path
-  }
-
-  public resume(): void {
-    void this.finalizeAcceptedDownload()
-  }
-
-  public once(
-    event: 'done',
-    listener: (_event: unknown, state: string) => void
-  ): CdpBrowserPageDownloadItem {
-    if (event !== 'done') return this
-
-    if (this.doneState) {
-      queueMicrotask(() => listener(null, this.doneState!))
-      return this
-    }
-
-    this.doneListeners.push(listener)
-    return this
-  }
-
-  public updateProgress(event: CdpDownloadProgressEvent): Nullable<CdpDownloadDoneState> {
-    if (isFiniteNumber(event.totalBytes)) {
-      this.totalBytes = Math.max(0, Math.round(event.totalBytes))
-    }
-    if (isFiniteNumber(event.receivedBytes)) {
-      this.receivedBytes = Math.max(0, Math.round(event.receivedBytes))
-    }
-
-    if (event.state === 'completed') {
-      this.markDone('completed')
-      return 'completed'
-    }
-    if (event.state === 'canceled' || event.state === 'cancelled') {
-      this.markDone('cancelled')
-      return 'cancelled'
-    }
-
-    return null
-  }
-
-  private markDone(state: CdpDownloadDoneState): void {
-    if (this.doneState) return
-
-    this.doneState = state
-    if (state === 'completed') {
-      void this.finalizeAcceptedDownload()
-    }
-    const listeners = this.doneListeners.splice(0, this.doneListeners.length)
-    for (const listener of listeners) {
-      listener(null, state)
-    }
-  }
-
-  private async finalizeAcceptedDownload(): Promise<void> {
-    if (this.finalized || this.doneState !== 'completed' || !this.savePath.trim()) return
-
-    this.finalized = true
-    const sourcePath = this.resolveSourcePath()
-    const targetPath = this.savePath
-    if (sourcePath === targetPath) return
-
-    try {
-      await mkdir(dirname(targetPath), { recursive: true })
-      await rename(sourcePath, targetPath)
-    } catch (renameError) {
-      try {
-        await copyFile(sourcePath, targetPath)
-        await unlink(sourcePath).catch(() => {
-          // arch-guard:silent-catch-ok copy 已成功，源文件可能被浏览器并发移走；不能把成功下载改判失败。
-        })
-      } catch (copyError) {
-        this.options.appendDiagnostic({
-          kind: 'download',
-          level: 'warning',
-          message: `CDP 下载完成但无法移动到目标路径：${this.options.filename}`,
-          url: this.options.url,
-          line: null,
-          column: null,
-          code: null,
-          capturedAt: Date.now(),
-          details: {
-            guid: this.options.guid,
-            sourcePath,
-            targetPath,
-            renameError: AppError.from(renameError).message,
-            copyError: AppError.from(copyError).message,
-          },
-        })
-      }
-    }
-  }
-
-  private resolveSourcePath(): string {
-    return join(this.options.downloadPath, this.options.guid)
-  }
-}
 
 class CdpBrowserPageDriver implements BrowserPageDriver {
   public readonly kind = 'external'

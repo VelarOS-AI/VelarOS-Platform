@@ -2,7 +2,7 @@ import { z } from 'zod'
 
 import { isEmpty, toNullable } from '@velaros-ai/core'
 
-import type { BrowserElementTargetHint } from '../../exports/core'
+import type { BrowserElementTargetHint } from '../../types/browser'
 
 /**
  * 页面目标元素提示 schema。

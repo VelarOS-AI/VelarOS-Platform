@@ -1,5 +1,11 @@
 import type { BrowserViewportOptions } from '../types/browser.js'
 
+/** 内嵌浏览器默认视口，和桌面常见窗口比例接近。 */
+export const DEFAULT_BROWSER_VIEWPORT = {
+  width: 1365,
+  height: 768,
+} as const
+
 export interface BrowserViewportDeviceMetrics {
   width: number
   height: number

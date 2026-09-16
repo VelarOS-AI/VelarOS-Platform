@@ -1,30 +1,218 @@
-import type { ToolPermission } from '@velaros-ai/agent/protocol'
-import {
-  defineToolRuntimeSpec,
-  type DefineToolRuntimeSpecInput,
-  type ToolContractRuntimeSpec,
-  type ToolContractSurface,
-} from '@velaros-ai/agent/tool-contract'
 
-import type { BrowserCaptureScreenshotOptions, BrowserClickCoordinatesOptions, BrowserClickCoordinatesResult, BrowserDragOptions, BrowserDragResult, BrowserElementQueryOptions, BrowserElementQueryResult, BrowserEmulationOptions, BrowserEmulationResult, BrowserEvaluateScriptOptions, BrowserEvaluateScriptResult, BrowserExportPagePdfOptions, BrowserExportPagePdfResult, BrowserFetchResourceOptions, BrowserFetchResourceResult, BrowserHandleDialogOptions, BrowserHandleDialogResult, BrowserHandleDownloadOptions, BrowserHandleDownloadResult, BrowserHandlePermissionOptions, BrowserHandlePermissionResult, BrowserHeapSnapshotOptions, BrowserHeapSnapshotResult, BrowserInspectPageOptions, BrowserListMediaSourcesOptions, BrowserListMediaSourcesResult, BrowserListPageResourcesOptions, BrowserListPageResourcesResult, BrowserMoveMouseOptions, BrowserMoveMouseResult, BrowserNetworkControlOptions, BrowserNetworkControlResult, BrowserNetworkRequestDetailsOptions, BrowserNetworkRequestDetailsResult, BrowserNetworkResponseBodyOptions, BrowserNetworkResponseBodyResult, BrowserPageDiagnostics, BrowserPageDiagnosticsOptions, BrowserPageInspection, BrowserPageNavigationOptions, BrowserPageNavigationResult, BrowserPageScrollOptions, BrowserPageScrollResult, BrowserPageStorageOptions, BrowserPageStorageResult, BrowserPageTargetsResult, BrowserPageWaitOptions, BrowserPageWaitResult, BrowserPageWindowState, BrowserPageZoomOptions, BrowserPageZoomResult, BrowserPendingEventsResult, BrowserPerformanceInsightOptions, BrowserPerformanceInsightResult, BrowserPerformanceTraceStartOptions, BrowserPerformanceTraceStartResult, BrowserPerformanceTraceStopResult, BrowserPressKeyOptions, BrowserPressKeyResult, BrowserScreencastStartOptions, BrowserScreencastStartResult, BrowserScreencastStopOptions, BrowserScreencastStopResult, BrowserScreenshotArtifact, BrowserSiteContext, BrowserSwitchPageTargetOptions, BrowserSwitchPageTargetResult, BrowserTargetActionOptions, BrowserTargetActionResult, BrowserTurnContextSnapshot, BrowserTypeTextOptions, BrowserTypeTextResult, BrowserUploadFileOptions, BrowserUploadFileResult, BrowserUserScriptManageRequest, BrowserUserScriptMutationResult, BrowserViewportOptions, BrowserViewportResult, BrowserWaitForSelectorOptions, BrowserWaitForSelectorResult, ProjectReadFileResult, WorkspaceFileEntry, WorkspaceListOptions, WorkspaceWriteFileOptions, WorkspaceWriteFileResult } from '../exports/core'
 
-/** 浏览器页面的轻量状态快照。 */
-export interface BrowserPageState {
-  /** 当前 URL。 */
-  url: string
-  /** 当前 document.title。 */
-  title: string
-  /** 最近一次加载是否成功。 */
-  loadState: 'loaded' | 'error' | 'unknown'
-  /** 模型显式设置的 CSS viewport。 */
-  viewport: Nullable<BrowserViewportOptions>
-  /** 最近一次导航失败详情；成功或未知时为 null。 */
-  lastNavigationError: LooseOptional<{
-    url: string
-    errorCode: number
-    errorDescription: string
-    failedAt: number
-  }>
+
+import type { CdpExternalBrowserLaunchOptions, CdpExternalBrowserSession } from '../impl/cdp/CdpExternalBrowserLauncher.js'
+import type { CdpScreencastConsumerOptions, CdpScreencastStartOptions, ScreencastCapturedFrame } from '../impl/cdp/CdpScreencastRecorder.js'
+import type {
+  BrowserCaptureScreenshotOptions,
+  BrowserClickCoordinatesOptions,
+  BrowserClickCoordinatesResult,
+  BrowserDragOptions,
+  BrowserDragResult,
+  BrowserElementQueryOptions,
+  BrowserElementQueryResult,
+  BrowserEmulationOptions,
+  BrowserEmulationResult,
+  BrowserEvaluateScriptOptions,
+  BrowserEvaluateScriptResult,
+  BrowserExportPagePdfOptions,
+  BrowserExportPagePdfResult,
+  BrowserFetchResourceOptions,
+  BrowserFetchResourceResult,
+  BrowserHandleDialogOptions,
+  BrowserHandleDialogResult,
+  BrowserHandleDownloadOptions,
+  BrowserHandleDownloadResult,
+  BrowserHandlePermissionOptions,
+  BrowserHandlePermissionResult,
+  BrowserHeapSnapshotOptions,
+  BrowserHeapSnapshotResult,
+  BrowserInspectPageOptions,
+  BrowserListMediaSourcesOptions,
+  BrowserListMediaSourcesResult,
+  BrowserListPageResourcesOptions,
+  BrowserListPageResourcesResult,
+  BrowserMoveMouseOptions,
+  BrowserMoveMouseResult,
+  BrowserNetworkControlOptions,
+  BrowserNetworkControlResult,
+  BrowserNetworkRequestDetailsOptions,
+  BrowserNetworkRequestDetailsResult,
+  BrowserNetworkResponseBodyOptions,
+  BrowserNetworkResponseBodyResult,
+  BrowserPageDiagnostics,
+  BrowserPageDiagnosticsOptions,
+  BrowserPageInspection,
+  BrowserPageNavigationOptions,
+  BrowserPageNavigationResult,
+  BrowserPageScrollOptions,
+  BrowserPageScrollResult,
+  BrowserPageStorageOptions,
+  BrowserPageStorageResult,
+  BrowserPageTargetsResult,
+  BrowserPageWaitOptions,
+  BrowserPageWaitResult,
+  BrowserPageWindowState,
+  BrowserPageZoomOptions,
+  BrowserPageZoomResult,
+  BrowserPendingEventsResult,
+  BrowserPerformanceInsightOptions,
+  BrowserPerformanceInsightResult,
+  BrowserPerformanceTraceStartOptions,
+  BrowserPerformanceTraceStartResult,
+  BrowserPerformanceTraceStopResult,
+  BrowserPressKeyOptions,
+  BrowserPressKeyResult,
+  BrowserScreencastStartOptions,
+  BrowserScreencastStartResult,
+  BrowserScreencastStopOptions,
+  BrowserScreencastStopResult,
+  BrowserScreenshotArtifact,
+  BrowserSiteContext,
+  BrowserSwitchPageTargetOptions,
+  BrowserSwitchPageTargetResult,
+  BrowserTargetActionOptions,
+  BrowserTargetActionResult,
+  BrowserTurnContextSnapshot,
+  BrowserTypeTextOptions,
+  BrowserTypeTextResult,
+  BrowserUploadFileOptions,
+  BrowserUploadFileResult,
+  BrowserUserScriptManageRequest,
+  BrowserUserScriptMutationResult,
+  BrowserViewportOptions,
+  BrowserViewportResult,
+  BrowserWaitForSelectorOptions,
+  BrowserWaitForSelectorResult,
+  ProjectReadFileResult,
+  WorkspaceFileEntry,
+  WorkspaceListOptions,
+  WorkspaceWriteFileOptions,
+  WorkspaceWriteFileResult,
+} from '../types/browser'
+import type { BrowserLoginDetection, BrowserOriginStorage, BrowserPageDiagnosticEntry, BrowserPageState,BrowserPageTargetInfo } from '../types/browser.js'
+import type { BrowserPageDriverClickCoordinatesOptions, BrowserPageDriverCookie, BrowserPageDriverCookieOptions, BrowserPageDriverDiagnosticsOptions, BrowserPageDriverDownloadListener, BrowserPageDriverDragCoordinatesOptions, BrowserPageDriverEmulationState,BrowserPageDriverFetchResourceOptions, BrowserPageDriverFetchResourceResult, BrowserPageDriverFileInputOptions, BrowserPageDriverKind, BrowserPageDriverMoveMouseOptions, BrowserPageDriverNetworkCaptureState, BrowserPageDriverNetworkControlState, BrowserPageDriverNetworkIdleOptions, BrowserPageDriverNetworkRequestDetailsResult, BrowserPageDriverNetworkResponseBodyResult, BrowserPageDriverPdfOptions, BrowserPageDriverScreenshot, BrowserPageDriverScreenshotOptions, BrowserPageDriverState, BrowserPageDriverStorageOriginOptions, BrowserSystemPointerMoveOptions } from '../types/driver.js'
+
+/** 启动/接入外部浏览器并返回 page-level CDP driver 的 host 无关 launcher 面。 */
+export interface BrowserExternalPageLauncher {
+  launch(options?: CdpExternalBrowserLaunchOptions): Promise<CdpExternalBrowserSession>
+}
+
+/**
+ * 宿主注入的系统指针能力。
+ *
+ * 返回 false 表示当前环境、权限或可见性不允许使用系统指针，浏览器运行时随即改画统一兜底箭头。
+ */
+export interface BrowserSystemPointerDriver {
+  move(options: BrowserSystemPointerMoveOptions): Promise<boolean>
+}
+
+export interface BrowserPageDriverDownloadItem {
+  getFilename(): string
+  getMimeType(): string
+  getTotalBytes(): number
+  getReceivedBytes(): number
+  getSavePath(): string
+  pause(): void
+  cancel(): void
+  setSavePath(path: string): void
+  resume(): void
+  once(event: 'done', listener: (_event: unknown, state: string) => void): unknown
+}
+
+export interface BrowserPageDriver {
+  kind: BrowserPageDriverKind
+  executeJavaScript<T = unknown>(script: string, userGesture?: boolean): Promise<T>
+  navigateTo(url: string): Promise<BrowserPageDriverState>
+  refreshPageState(): Promise<BrowserPageDriverState>
+  bringToFront(): Promise<void>
+  captureScreenshot?(
+    options: BrowserPageDriverScreenshotOptions
+  ): Promise<BrowserPageDriverScreenshot>
+  typeText?(options: BrowserTypeTextOptions): Promise<void>
+  pressKey?(options: BrowserPressKeyOptions): Promise<void>
+  moveMouse?(options: BrowserPageDriverMoveMouseOptions): Promise<void>
+  clickCoordinates?(options: BrowserPageDriverClickCoordinatesOptions): Promise<void>
+  dragCoordinates?(options: BrowserPageDriverDragCoordinatesOptions): Promise<void>
+  setViewport?(options: BrowserViewportOptions): Promise<void>
+  setFileInputFiles?(options: BrowserPageDriverFileInputOptions): Promise<boolean>
+  printToPdf?(options: BrowserPageDriverPdfOptions): Promise<Buffer>
+  fetchResource?(
+    options: BrowserPageDriverFetchResourceOptions
+  ): Promise<BrowserPageDriverFetchResourceResult>
+  getPageZoomFactor?(): number
+  setPageZoomFactor?(zoomFactor: number): Promise<void>
+  readDiagnostics?(options: BrowserPageDriverDiagnosticsOptions): BrowserPageDiagnosticEntry[]
+  /**
+   * 确保网络采集已经在跑（读诊断前调用）。
+   *
+   * 内嵌页面的采集是惰性建立的：不调用就永远读不到网络事件。读诊断时顺手把它建起来，
+   * 并如实回报「这次才开始」，回执才能告诉模型之前的请求看不到。
+   */
+  ensureNetworkCapture?(): Promise<BrowserPageDriverNetworkCaptureState>
+  listPageTargets?(): Promise<BrowserPageTargetInfo[]>
+  switchPageTarget?(options: BrowserSwitchPageTargetOptions): Promise<BrowserPageDriver>
+  onDownload?(listener: BrowserPageDriverDownloadListener): () => void
+  grantPermissions?(permissions: string[], origin?: LooseOptional<string>): Promise<void>
+  readCookies?(options?: BrowserPageDriverCookieOptions): Promise<BrowserPageDriverCookie[]>
+  readStorageOrigins?(
+    options: BrowserPageDriverStorageOriginOptions
+  ): Promise<BrowserOriginStorage[]>
+  configureNetwork?(
+    options: BrowserNetworkControlOptions
+  ): Promise<BrowserPageDriverNetworkControlState>
+  readNetworkResponseBody?(
+    options: BrowserNetworkResponseBodyOptions
+  ): Promise<BrowserPageDriverNetworkResponseBodyResult>
+  readNetworkRequestDetails?(
+    options: BrowserNetworkRequestDetailsOptions
+  ): Promise<BrowserPageDriverNetworkRequestDetailsResult>
+  waitForNetworkIdle?(options: BrowserPageDriverNetworkIdleOptions): Promise<void>
+  configureEmulation?(
+    options: BrowserEmulationOptions
+  ): Promise<BrowserPageDriverEmulationState>
+  getEmulationState?(): BrowserPageDriverEmulationState
+  /** 开始录制性能 trace（CDP Tracing domain）。 */
+  startTracing?(): Promise<void>
+  /** 停止录制并返回全部 trace 事件。 */
+  stopTracing?(): Promise<unknown[]>
+  isTracing?(): boolean
+  /** 采集 V8 堆快照，流式写入 sink。 */
+  captureHeapSnapshot?(sink: (chunk: string) => void): Promise<{ chunks: number; bytes: number }>
+  /** 开始页面录屏（CDP Page.startScreencast）。 */
+  startScreencast?(
+    options: CdpScreencastStartOptions,
+    consumer?: CdpScreencastConsumerOptions
+  ): Promise<void>
+  /** 停止录屏并取回帧序列。 */
+  stopScreencast?(): Promise<{ frames: ScreencastCapturedFrame[]; frameLimitReached: boolean }>
+  isScreencasting?(): boolean
+  getURL(): string
+  getTitle(): string
+  isDestroyed(): boolean
+  dispose?(): void
+}
+
+export interface BrowserLoginGateDecision {
+  /** 用户是否表示「已完成登录，继续」。 */
+  approved: boolean
+  /** 拒绝原因或用户批注；批准时通常为空。 */
+  message?: LooseOptional<string>
+}
+
+export interface BrowserLoginGatePort {
+  /**
+   * 阻塞当前工具调用并请用户人工完成登录/验证。
+   *
+   * 宿主实现应弹出**必须由用户亲自裁决**的确认卡（Desktop 走 ApprovalPort 的手动审批）。
+   * 没有审批通道的宿主必须返回 `approved:false`，不能静默放行——那正是本层要补的洞。
+   */
+  requestLoginCompletion: (input: {
+    message: string
+    riskScope: string
+    origin: string
+    detection: BrowserLoginDetection
+  }) => Promise<BrowserLoginGateDecision>
 }
 
 /**
@@ -186,21 +374,3 @@ export interface BrowserToolContext {
 
 export type ToolContext = BrowserToolContext
 
-export type VelaToolSurface<
-  TSurfaceInput extends Record<string, unknown> = Record<string, unknown>,
-  TBaseInput extends Record<string, unknown> = Record<string, unknown>,
-> = ToolContractSurface<TSurfaceInput, TBaseInput, BrowserToolContext>
-
-export type VelaTool<TInput extends Record<string, unknown> = Record<string, unknown>> =
-  ToolContractRuntimeSpec<TInput, BrowserToolContext, unknown, ToolPermission>
-
-type DefineBrowserToolInput<TInput extends Record<string, unknown>> = Omit<
-  DefineToolRuntimeSpecInput<TInput, BrowserToolContext, unknown, ToolPermission>,
-  'category'
->
-
-export function defineBrowserTool<TInput extends Record<string, unknown>>(
-  input: DefineBrowserToolInput<TInput>
-): VelaTool<TInput> {
-  return defineToolRuntimeSpec({ ...input, category: 'browser' })
-}

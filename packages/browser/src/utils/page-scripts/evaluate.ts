@@ -1,5 +1,5 @@
 import type { BrowserEvaluateScriptOptions } from '../../types/browser'
-import { clampInteger } from '../runtime-internals'
+import { clampInteger } from '../numbers.js'
 
 /**
  * 只编译不执行的用户脚本语法预检；返回错误消息，语法合法时返回 null。
@@ -141,123 +141,120 @@ function simplifyBrowserEvaluatedValue(value: any, depth = 0, path: any[] = []):
 }
 
 /** 构造页面内自定义脚本执行器。 */
-class BrowserEvaluateScriptBuilder {
-  /** 构建 evaluate 脚本，并把返回值序列化成安全 JSON。 */
-  public buildEvaluateScript(options: BrowserEvaluateScriptOptions): string {
-    const mode = options.mode ?? 'expression'
-    // 用户脚本直接内联进 executeJavaScript 的源码：不能在页面里 new Function/eval——
-    // 那会撞上站点 CSP 的 unsafe-eval（HN 等严格 CSP 站点直接拒绝），而
-    // executeJavaScript 本身不受页面 CSP 限制。
-    const functionBody = mode === 'function-body'
-      ? options.script
-      : `return ( ${options.script} );`
-    const syntaxError = precheckBrowserInlineScriptSyntax(functionBody)
-    if (syntaxError) return `(() => ({
-        url: location.href,
-        ok: false,
-        mode: ${JSON.stringify(mode)},
-        result: null,
-        resultTruncated: false,
-        error: { name: 'SyntaxError', message: ${JSON.stringify(syntaxError)}, stack: null },
-        durationMs: 0,
-        capturedAt: Date.now(),
-      }))()`
 
-    const payload = JSON.stringify({
-      mode,
-      timeoutMs: clampInteger(options.timeoutMs, 1, 30_000, 5_000),
-      maxResultChars: clampInteger(options.maxResultChars, 1, BrowserEvaluateMaxResultChars, 20_000),
-    })
+/** 构建 evaluate 脚本，并把返回值序列化成安全 JSON。 */
+export function buildEvaluateScript(options: BrowserEvaluateScriptOptions): string {
+  const mode = options.mode ?? 'expression'
+  // 用户脚本直接内联进 executeJavaScript 的源码：不能在页面里 new Function/eval——
+  // 那会撞上站点 CSP 的 unsafe-eval（HN 等严格 CSP 站点直接拒绝），而
+  // executeJavaScript 本身不受页面 CSP 限制。
+  const functionBody = mode === 'function-body'
+    ? options.script
+    : `return ( ${options.script} );`
+  const syntaxError = precheckBrowserInlineScriptSyntax(functionBody)
+  if (syntaxError) return `(() => ({
+      url: location.href,
+      ok: false,
+      mode: ${JSON.stringify(mode)},
+      result: null,
+      resultTruncated: false,
+      error: { name: 'SyntaxError', message: ${JSON.stringify(syntaxError)}, stack: null },
+      durationMs: 0,
+      capturedAt: Date.now(),
+    }))()`
 
-    // 页面返回值可能包含 DOM、Error、循环引用等，脚本内会先 simplify 再 JSON 化。
-    return `(() => {
-      const payload = ${payload}
-      const startedAt = Date.now()
-      const truncateText = (value, max) => {
-        const text = String(value || '')
-        return {
-          text: text.length > max ? text.slice(0, max) : text,
-          truncated: text.length > max,
-        }
+  const payload = JSON.stringify({
+    mode,
+    timeoutMs: clampInteger(options.timeoutMs, 1, 30_000, 5_000),
+    maxResultChars: clampInteger(options.maxResultChars, 1, BrowserEvaluateMaxResultChars, 20_000),
+  })
+
+  // 页面返回值可能包含 DOM、Error、循环引用等，脚本内会先 simplify 再 JSON 化。
+  return `(() => {
+    const payload = ${payload}
+    const startedAt = Date.now()
+    const truncateText = (value, max) => {
+      const text = String(value || '')
+      return {
+        text: text.length > max ? text.slice(0, max) : text,
+        truncated: text.length > max,
       }
-      // 这两个函数的**唯一定义**在本模块里（describeBrowserEvaluatedElement /
-      // simplifyBrowserEvaluatedValue），这里靠 toString() 内联进页面——所以它们能被单测
-      // 直接调用验证行为，而不是只能对脚本文本做正则断言。改那两个函数即改页面行为。
-      const describeBrowserEvaluatedElement = ${describeBrowserEvaluatedElement.toString()}
-      const simplifyBrowserEvaluatedValue = ${simplifyBrowserEvaluatedValue.toString()}
-      const serialize = (value) => {
-        const simplified = simplifyBrowserEvaluatedValue(value)
-        let resultText
-        try {
-          resultText = JSON.stringify(simplified, null, 2)
-        } catch {
-          resultText = String(simplified)
-        }
-        if (resultText === undefined) resultText = 'undefined'
-        const truncated = truncateText(resultText, payload.maxResultChars)
-        // 没截断时 result 就是完整内容，再附一份缩进 JSON 只是把回执体积翻倍还多；
-        // 截断时 result 置 null，这时 resultText 才是模型唯一能看到的内容。
-        const serialized = {
-          result: truncated.truncated ? null : simplified,
-          resultTruncated: truncated.truncated,
-        }
-        if (truncated.truncated) serialized.resultText = truncated.text
-        return serialized
+    }
+    // 这两个函数的**唯一定义**在本模块里（describeBrowserEvaluatedElement /
+    // simplifyBrowserEvaluatedValue），这里靠 toString() 内联进页面——所以它们能被单测
+    // 直接调用验证行为，而不是只能对脚本文本做正则断言。改那两个函数即改页面行为。
+    const describeBrowserEvaluatedElement = ${describeBrowserEvaluatedElement.toString()}
+    const simplifyBrowserEvaluatedValue = ${simplifyBrowserEvaluatedValue.toString()}
+    const serialize = (value) => {
+      const simplified = simplifyBrowserEvaluatedValue(value)
+      let resultText
+      try {
+        resultText = JSON.stringify(simplified, null, 2)
+      } catch {
+        resultText = String(simplified)
       }
-      const userScript = async function () {
+      if (resultText === undefined) resultText = 'undefined'
+      const truncated = truncateText(resultText, payload.maxResultChars)
+      // 没截断时 result 就是完整内容，再附一份缩进 JSON 只是把回执体积翻倍还多；
+      // 截断时 result 置 null，这时 resultText 才是模型唯一能看到的内容。
+      const serialized = {
+        result: truncated.truncated ? null : simplified,
+        resultTruncated: truncated.truncated,
+      }
+      if (truncated.truncated) serialized.resultText = truncated.text
+      return serialized
+    }
+    const userScript = async function () {
 ${functionBody}
-      }
-      const run = async () => {
-        let timeoutHandle
-        return Promise.race([
-          userScript.call(window),
-          new Promise((_, reject) => {
-            timeoutHandle = setTimeout(() => reject(new Error('browser evaluate timeout after ' + payload.timeoutMs + 'ms')), payload.timeoutMs)
-          }),
-        ]).finally(() => {
-          if (timeoutHandle !== undefined) clearTimeout(timeoutHandle)
-        })
-      }
+    }
+    const run = async () => {
+      let timeoutHandle
+      return Promise.race([
+        userScript.call(window),
+        new Promise((_, reject) => {
+          timeoutHandle = setTimeout(() => reject(new Error('browser evaluate timeout after ' + payload.timeoutMs + 'ms')), payload.timeoutMs)
+        }),
+      ]).finally(() => {
+        if (timeoutHandle !== undefined) clearTimeout(timeoutHandle)
+      })
+    }
 
-      return run()
-        .then((value) => {
-          const serialized = serialize(value)
-          return {
-            url: location.href,
-            ok: true,
-            mode: payload.mode,
-            ...serialized,
-            error: null,
-            durationMs: Date.now() - startedAt,
-            capturedAt: Date.now(),
-          }
-        })
-        .catch((error) => {
-          const err = error instanceof Error ? error : new Error(String(error))
-          const stack = truncateText(err.stack || '', 8000)
-          return {
-            url: location.href,
-            ok: false,
-            mode: payload.mode,
-            result: null,
-            resultTruncated: false,
-            error: {
-              name: err.name || 'Error',
-              message: err.message,
-              stack: stack.text || null,
-            },
-            durationMs: Date.now() - startedAt,
-            capturedAt: Date.now(),
-          }
-        })
-    })()`
-  }
-
+    return run()
+      .then((value) => {
+        const serialized = serialize(value)
+        return {
+          url: location.href,
+          ok: true,
+          mode: payload.mode,
+          ...serialized,
+          error: null,
+          durationMs: Date.now() - startedAt,
+          capturedAt: Date.now(),
+        }
+      })
+      .catch((error) => {
+        const err = error instanceof Error ? error : new Error(String(error))
+        const stack = truncateText(err.stack || '', 8000)
+        return {
+          url: location.href,
+          ok: false,
+          mode: payload.mode,
+          result: null,
+          resultTruncated: false,
+          error: {
+            name: err.name || 'Error',
+            message: err.message,
+            stack: stack.text || null,
+          },
+          durationMs: Date.now() - startedAt,
+          capturedAt: Date.now(),
+        }
+      })
+  })()`
 }
 
 export {
   BrowserEvaluateMaxResultChars,
-  BrowserEvaluateScriptBuilder,
   BrowserEvaluateSimplifyMaxDepth,
   BrowserEvaluateSimplifyMaxEntries,
   describeBrowserEvaluatedElement,

@@ -1,8 +1,46 @@
-export * from '../impl/electron/BrowserDiagnosticsRecorder'
-export * from '../impl/electron/BrowserPageWaiter'
-export * from '../impl/electron/BrowserSessionManager'
-export * from '../impl/electron/ElectronBrowserRuntime'
-export * from '../impl/electron/ElectronWebContentsBrowserPageDriver'
-export * from '../impl/electron/kernel-module'
-export * from '../types/electron'
-export * from '../utils/electron/runtime-internals'
+export { BrowserDiagnosticsRecorder } from '../impl/electron/BrowserDiagnosticsRecorder'
+export { BrowserPageWaiter } from '../impl/electron/BrowserPageWaiter'
+export type { BrowserSessionManagerOptions } from '../impl/electron/BrowserSessionManager'
+export { BrowserSessionManager } from '../impl/electron/BrowserSessionManager'
+export { ElectronBrowserRuntime } from '../impl/electron/ElectronBrowserRuntime'
+export type {
+  BrowserPageDriverFactory,
+  BrowserPageDriverFactoryInput,
+} from '../impl/electron/ElectronWebContentsBrowserPageDriver'
+export {
+  createElectronWebContentsBrowserPageDriver,
+  ElectronWebContentsBrowserPageDriver,
+} from '../impl/electron/ElectronWebContentsBrowserPageDriver'
+export type {
+  BrowserRuntimeCapabilityService,
+  CreateBrowserKernelModuleOptions,
+} from '../impl/electron/kernel-module'
+export { BrowserRuntimeCapability, createBrowserKernelModule } from '../impl/electron/kernel-module'
+export type { BrowserUserActivityEvent, BrowserUserActivitySummary } from '../types/browser'
+export type {
+  BrowserExternalPageLauncher,
+  BrowserPermissionRequest,
+  BrowserPermissionRequestHandler,
+  BrowserPermissionRequestHandlerRegistration,
+  BrowserRuntimeKernel,
+  BrowserRuntimePageDriverSession,
+  BrowserSession,
+  BrowserUnmanagedPermissionRequest,
+  BrowserWebAuthnAccountSelectionRequest,
+  ElectronBrowserRuntimeOptions,
+} from '../types/electron'
+export type {
+  BrowserPageDriverKernel,
+  BrowserPageDriverSession,
+  ExternalBrowserPageSession,
+} from '../types/runtime'
+export {
+  clampInteger,
+  clampNumber,
+  clampZoomFactor,
+  readBoundedString,
+  readFiniteNumber,
+} from '../utils/numbers'
+export { resolveExternalPageUrl } from '../utils/url'
+export { DEFAULT_BROWSER_VIEWPORT } from '../utils/viewport'
+export { resolveWorkspaceFilePath } from '../utils/workspace-paths'

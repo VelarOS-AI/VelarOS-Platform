@@ -3,26 +3,44 @@ import electron from 'electron'
 import { isEmpty, toOptional } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import type { BrowserClickCoordinatesOptions, BrowserClickCoordinatesResult, BrowserDragOptions, BrowserDragResult, BrowserElementTargetHint, BrowserMoveMouseOptions, BrowserMoveMouseResult, BrowserPagePreviewPointerEvent, BrowserPageScrollOptions, BrowserPageScrollResult, BrowserPageZoomOptions, BrowserPageZoomResult, BrowserPressKeyOptions, BrowserPressKeyResult, BrowserSiteContext, BrowserTargetActionOptions, BrowserTargetActionResult, BrowserTypeTextOptions, BrowserTypeTextResult } from '../../exports/core'
+import type { BrowserPageDriver } from '../../contract/requires.js'
+import type {
+  BrowserClickCoordinatesOptions,
+  BrowserClickCoordinatesResult,
+  BrowserDragOptions,
+  BrowserDragResult,
+  BrowserElementTargetHint,
+  BrowserMoveMouseOptions,
+  BrowserMoveMouseResult,
+  BrowserPagePreviewPointerEvent,
+  BrowserPageScrollOptions,
+  BrowserPageScrollResult,
+  BrowserPageZoomOptions,
+  BrowserPageZoomResult,
+  BrowserPressKeyOptions,
+  BrowserPressKeyResult,
+  BrowserSiteContext,
+  BrowserTargetActionOptions,
+  BrowserTargetActionResult,
+  BrowserTypeTextOptions,
+  BrowserTypeTextResult,
+} from '../../types/browser'
+import type { BrowserSession } from '../../types/electron'
+import type { BrowserRuntimeKernel, BrowserRuntimePageDriverSession } from '../../types/electron.js'
+import { evaluateInWebContents } from '../../utils/electron/evaluate'
+import { normalizeBrowserPressKeyOptions } from '../../utils/keyboard'
+import { clampInteger, clampZoomFactor } from '../../utils/numbers.js'
+import { buildDragTargetScript } from '../../utils/page-scripts/drag'
+import { buildScrollScript } from '../../utils/page-scripts/scroll'
+import { buildTargetActionScript } from '../../utils/page-scripts/target-action'
+import { buildHighlightFromTargetScript, buildHighlightScript } from '../../utils/page-scripts/target-highlight'
 import {
   BrowserFallbackVirtualPointer,
-  type BrowserPageDriver,
-  type BrowserPageScriptBuilder,
-  type BrowserPointerPoint,
-  type BrowserTargetRefStore,
   buildBrowserFallbackVirtualPointerSvg,
-  CdpInteractionEngine,
-  clampInteger,
-  clampZoomFactor,
-  DEFAULT_BROWSER_VIEWPORT,
-  normalizeBrowserPressKeyOptions,
-} from '../../exports/core'
-import type { BrowserSession } from '../../types/electron'
-import { evaluateInWebContents } from '../../utils/electron/evaluate'
-import type {
-  BrowserRuntimeKernel,
-  BrowserRuntimePageDriverSession,
-} from '../../utils/electron/runtime-internals'
+} from '../../utils/pointer'
+import { DEFAULT_BROWSER_VIEWPORT } from '../../utils/viewport.js'
+import { type BrowserPointerPoint, CdpInteractionEngine } from '../engines/CdpInteractionEngine'
+import type { BrowserTargetRefStore } from '../session/BrowserTargetRefStore'
 
 import type { BrowserPageWaiter } from './BrowserPageWaiter'
 
@@ -40,7 +58,6 @@ export class BrowserInteractionEngine extends CdpInteractionEngine {
 
   constructor(
     private readonly electronKernel: BrowserRuntimeKernel,
-    scripts: BrowserPageScriptBuilder,
     private readonly pageWaiter: BrowserPageWaiter,
     targetRefs: BrowserTargetRefStore,
     onPreviewPointer?: LooseOptional<(
@@ -48,7 +65,7 @@ export class BrowserInteractionEngine extends CdpInteractionEngine {
       pointer: BrowserPagePreviewPointerEvent
     ) => void>
   ) {
-    super(electronKernel, scripts, targetRefs, onPreviewPointer)
+    super(electronKernel, targetRefs, onPreviewPointer)
   }
 
   /** 会话关闭时清理该 WebContents 的指针轨迹状态。 */
@@ -104,7 +121,7 @@ export class BrowserInteractionEngine extends CdpInteractionEngine {
     const clickMode = this.resolveTargetActionClickMode(driver, hydratedOptions)
     const beforeEffectSnapshot = await this.captureTargetActionEffectSnapshot(driver)
     const initialActionResult = await driver.executeJavaScript<BrowserTargetActionResult>(
-      this.scripts.buildTargetActionScript(hydratedOptions, { clickMode }),
+      buildTargetActionScript(hydratedOptions, { clickMode }),
       true
     )
     const healedActionResult = await this.selfHealTargetActionAfterNotFound({
@@ -318,7 +335,7 @@ export class BrowserInteractionEngine extends CdpInteractionEngine {
     }
 
     const resolved = await driver.executeJavaScript<BrowserDragResult>(
-      this.scripts.buildDragTargetScript(hydratedOptions),
+      buildDragTargetScript(hydratedOptions),
       true
     )
     if (!resolved.matched) return {
@@ -426,8 +443,8 @@ export class BrowserInteractionEngine extends CdpInteractionEngine {
       await evaluateInWebContents(
         session.webContents,
         label && target.css
-          ? this.scripts.buildTargetHighlightScript({ selector: target.css, label })
-          : this.scripts.buildTargetHighlightFromTargetScript(target, toOptional(label)),
+          ? buildHighlightScript({ selector: target.css, label })
+          : buildHighlightFromTargetScript(target, toOptional(label)),
         true
       )
     } catch (error) {
@@ -797,7 +814,7 @@ export class BrowserInteractionEngine extends CdpInteractionEngine {
     // 滚动脚本返回滚动位置和最大滚动范围。
     return evaluateInWebContents(
       session.webContents,
-      this.scripts.buildScrollScript(options),
+      buildScrollScript(options),
       true
     ) as Promise<BrowserPageScrollResult>
   }

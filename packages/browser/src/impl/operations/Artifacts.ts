@@ -3,12 +3,27 @@ import type {
   BrowserWorkspaceArtifactFormat,
   BrowserWorkspaceArtifactKind,
   WorkspaceWriteFileResult,
-} from '../../exports/core'
-import {
-  getRelativePathInsideRoot,
-  toPortableRelativePath,
-} from '../../exports/core'
-import { createArtifactManager, getActiveBrowserContext, requireActiveBrowserSite } from '../../utils/tool-context'
+} from '../../types/browser'
+import { getActiveBrowserContext, requireActiveBrowserSite } from '../../utils/tool.js'
+import { getRelativePathInsideRoot, toPortableRelativePath } from '../../utils/workspace-paths'
+import { BrowserWorkspaceArtifactManager } from '../workspace/BrowserWorkspaceArtifactManager.js'
+
+/**
+ * 创建当前 browser 工作区的 artifact manager。
+ *
+ * manager 只通过 ToolBrowserApi 读写文件，因此天然被限制在当前站点的私有目录中。
+ */
+export function createArtifactManager(ctx: BrowserToolContext): BrowserWorkspaceArtifactManager {
+  requireActiveBrowserSite(ctx)
+
+  // 用 browser 文件 API 适配 artifact manager，避免它直接依赖 workspace/root 路径。
+  return new BrowserWorkspaceArtifactManager({
+    readFile: (path, startLine, endLine, maxChars) =>
+      ctx.browser.readFile(path, startLine, endLine, maxChars),
+    writeFile: (path, content, options) => ctx.browser.writeFile(path, content, options),
+    listFiles: (options) => ctx.browser.listFiles(options),
+  })
+}
 
 const BrowserReadDefaultMaxChars = 200_000
 

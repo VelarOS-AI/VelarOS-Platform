@@ -2,16 +2,11 @@ import { isString, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 
+import type { BrowserExternalPageLauncher,BrowserPageDriver } from '../contract/requires.js'
 import type { BrowserCaptureScreenshotOptions, BrowserClickCoordinatesOptions, BrowserDragOptions, BrowserElementQueryOptions, BrowserEmulationOptions, BrowserEvaluateScriptOptions, BrowserExportPagePdfOptions, BrowserFetchResourceOptions, BrowserHandleDialogOptions, BrowserHandleDownloadOptions, BrowserHandlePermissionOptions, BrowserHeapSnapshotOptions, BrowserInspectPageOptions, BrowserListMediaSourcesOptions, BrowserListPageResourcesOptions, BrowserMoveMouseOptions, BrowserNetworkControlOptions, BrowserNetworkRequestDetailsOptions, BrowserNetworkResponseBodyOptions, BrowserPageDiagnosticsOptions, BrowserPageNavigationOptions, BrowserPageNavigationResult, BrowserPageScrollOptions, BrowserPageStorageOptions, BrowserPageTargetsResult, BrowserPageWaitOptions, BrowserPageWindowState, BrowserPageZoomOptions, BrowserPerformanceInsightOptions, BrowserPerformanceTraceStartOptions, BrowserPressKeyOptions, BrowserScreencastStartOptions, BrowserScreencastStopOptions, BrowserSiteContext, BrowserSwitchPageTargetOptions, BrowserSwitchPageTargetResult, BrowserTargetActionOptions, BrowserTypeTextOptions, BrowserUploadFileOptions, BrowserUserScriptManageRequest, BrowserUserScriptMutationResult, BrowserViewportOptions, BrowserWaitForSelectorOptions, ProjectReadFileResult, WorkspaceFileEntry, WorkspaceListOptions, WorkspaceWriteFileOptions, WorkspaceWriteFileResult } from '../types/browser.js'
-import type { BrowserPageDriver, BrowserPageDriverState } from '../types/driver'
-import type { BrowserPageScriptBuilder } from '../utils/page-scripts/builder'
-import {
-  type BrowserPageDriverKernel,
-  type BrowserPageDriverSession,
-  type ExternalBrowserPageSession,
-} from '../utils/runtime-internals'
+import type { BrowserPageDriverState } from '../types/driver'
+import type { BrowserPageDriverKernel, BrowserPageDriverSession, ExternalBrowserPageSession } from '../types/runtime.js'
 
-import { type BrowserExternalPageLauncher } from './cdp/CdpExternalBrowserLauncher'
 import { BrowserPerformanceOrchestrator } from './engines/BrowserPerformanceOrchestrator'
 import { CdpInteractionEngine } from './engines/CdpInteractionEngine'
 import { type BrowserDiagnosticsLimits, CdpPageDataEngine } from './engines/CdpPageDataEngine'
@@ -46,8 +41,6 @@ export interface CdpWorkspaceFileAccess {
 export interface CdpBrowserRuntimeOptions {
   /** 浏览器工作区文件访问（宿主按 member/site 注入数据根 browser 分区）。 */
   artifactAccess: CdpWorkspaceFileAccess
-  /** 页面注入脚本构建器（`@velaros-ai/browser/core` 的 BrowserPageScriptBuilder）。 */
-  scripts: BrowserPageScriptBuilder
   /** 前台可见外部浏览器 launcher（协助登录，`CdpExternalBrowserLauncher`）。 */
   foregroundBrowserLauncher?: LooseOptional<BrowserExternalPageLauncher>
 }
@@ -113,13 +106,12 @@ export class CdpBrowserRuntime {
   constructor(options: CdpBrowserRuntimeOptions) {
     this.artifactAccess = options.artifactAccess
     this.foregroundBrowserLauncher = options.foregroundBrowserLauncher
-    this.interaction = new CdpInteractionEngine(this.kernel, options.scripts, this.targetRefs)
+    this.interaction = new CdpInteractionEngine(this.kernel, this.targetRefs)
     const diagnosticsLimits: BrowserDiagnosticsLimits = {
       maxEntries: CdpBrowserRuntimeMaxDiagnosticEntries,
     }
     this.pageData = new CdpPageDataEngine(
       this.kernel,
-      options.scripts,
       this.targetRefs,
       diagnosticsLimits
     )

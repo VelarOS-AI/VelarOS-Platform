@@ -5,9 +5,8 @@ import assert from 'node:assert/strict'
 
 import { describe, test } from 'bun:test'
 
-import { BrowserEvaluateScriptBuilder } from '../../src/utils/page-scripts/evaluate.js'
+import { buildEvaluateScript } from '../../src/utils/page-scripts/evaluate.js'
 
-const builder = new BrowserEvaluateScriptBuilder()
 
 /** 在一个只提供 location 的沙箱里跑构建出来的页面脚本，拿到它返回的信封。 */
 async function runEvaluateScript(options: {
@@ -15,7 +14,7 @@ async function runEvaluateScript(options: {
   mode?: 'expression' | 'function-body'
   maxResultChars?: number
 }): Promise<Record<string, unknown>> {
-  const pageScript = builder.buildEvaluateScript(options)
+  const pageScript = buildEvaluateScript(options)
   // eslint-disable-next-line @typescript-eslint/no-implied-eval -- 测试里跑的就是构建出来的页面脚本本身。
   const run = new Function('location', 'window', `return ${pageScript}`) as (
     location: { href: string },

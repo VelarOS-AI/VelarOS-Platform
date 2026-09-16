@@ -1,6 +1,6 @@
 import { createContext, createElement, type ReactElement, type ReactNode, useContext } from 'react'
 
-import type { BrowserElementSelection } from '../exports/core'
+import type { BrowserElementSelection } from '../types/browser'
 
 export interface ControlledBrowserSurfaceInput {
   sessionId: string

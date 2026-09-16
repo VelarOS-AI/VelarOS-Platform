@@ -3,10 +3,10 @@ import assert from 'node:assert/strict'
 import { test } from 'bun:test'
 
 import {
-  BrowserInspectionScriptBuilder,
   BrowserLoginGateLedger,
   buildBrowserLoginGateMessage,
   buildBrowserLoginGateRecord,
+  buildInspectionScript,
   resolveBrowserLoginGateOrigin,
 } from '../../dist/exports/core.js'
 import { withBrowserLoginGate } from '../../dist/exports/tools.js'
@@ -60,7 +60,7 @@ function createStubBrowserApi(pages) {
 }
 
 void test('login detection ships inside the inspection script (no extra evaluateScript round trip)', () => {
-  const script = new BrowserInspectionScriptBuilder().buildInspectionScript({
+  const script = buildInspectionScript({
     includeHtml: false,
     maxTextChars: 100,
     maxHtmlChars: 100,
@@ -84,14 +84,31 @@ void test('login gate message names the site and never dumps detector signals', 
   assert.doesNotMatch(message, /password-input/u)
 })
 
-void test('ledger asks once per origin, whatever the answer was', () => {
+void test('ledger asks once per origin, whatever the answer was', async () => {
   const ledger = new BrowserLoginGateLedger()
+  let asked = 0
+  const port = {
+    requestLoginCompletion: async () => {
+      asked += 1
+      return { approved: false, message: '用户拒绝登录。' }
+    },
+  }
+  const gateFor = (url) =>
+    withBrowserLoginGate(
+      createStubBrowserApi([{ url, text: '登录', login: requiresLoginDetection }]).api,
+      port,
+      { ledger }
+    )
 
   assert.equal(ledger.shouldPrompt('https://a.com', requiresLoginDetection), true)
-  ledger.markPrompted('https://a.com')
+  await gateFor('https://a.com/login').inspectPage({})
+  assert.equal(asked, 1)
   assert.equal(ledger.shouldPrompt('https://a.com', requiresLoginDetection), false)
-  ledger.markResolved('https://a.com', false)
-  assert.equal(ledger.shouldPrompt('https://a.com', requiresLoginDetection), false)
+  assert.equal(ledger.getState('https://a.com'), 'declined')
+  // 同一站点问过就不再阻塞：第二次调用不再弹卡。
+  await gateFor('https://a.com/login').inspectPage({})
+  assert.equal(asked, 1)
+  // 另一个站点单独记账；没命中检测的页面根本不问。
   assert.equal(ledger.shouldPrompt('https://b.com', requiresLoginDetection), true)
   assert.equal(ledger.shouldPrompt('https://b.com', cleanDetection), false)
 })

@@ -7,8 +7,14 @@ import {
 } from '@velaros-ai/core'
 
 import type { ToolContext } from '../contract/requires'
-import type { BrowserElementTargetHint, BrowserScreenshotElementLabel, BrowserTargetActionOptions, BrowserTargetActionResult } from '../exports/core'
-import { buildBrowserScreenshotOptions } from '../exports/core'
+import type {
+  BrowserElementTargetHint,
+  BrowserScreenshotElementLabel,
+  BrowserTargetActionOptions,
+  BrowserTargetActionResult,
+} from '../types/browser'
+
+import { buildBrowserScreenshotOptions } from './screenshot-options'
 
 interface CoordinateClickPoint {
   x: number

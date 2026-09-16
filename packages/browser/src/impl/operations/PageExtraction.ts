@@ -8,10 +8,13 @@ import {
 import { AppError } from '@velaros-ai/core/error'
 
 import type { ToolContext } from '../../contract/requires'
-import type { BrowserWorkspaceArtifactFormat } from '../../exports/core'
-import { BrowserEvaluateMaxResultChars, BrowserPageScriptBuilder } from '../../exports/core'
+import type { BrowserWorkspaceArtifactFormat } from '../../types/browser'
 import { createBrowserPageContentBoundary } from '../../utils/page-content'
-import { createArtifactManager, getActiveBrowserContext } from '../../utils/tool-context'
+import { BrowserEvaluateMaxResultChars } from '../../utils/page-scripts/evaluate'
+import { buildListExtractionScript, buildPageContentExtractionScript, buildTableExtractionScript } from '../../utils/page-scripts/extraction'
+import { getActiveBrowserContext } from '../../utils/tool.js'
+
+import { createArtifactManager } from './Artifacts.js'
 
 /** 页面提取脚本返回的载荷：页面侧构造的纯 JSON 对象。 */
 type BrowserExtractionPayload = Record<string, unknown>
@@ -138,7 +141,7 @@ async function extractBrowserTable(
 ): Promise<BrowserExtractionPayload> {
   const payload = await evaluateBrowserExtractionScript(
     ctx,
-    new BrowserPageScriptBuilder().buildTableExtractionScript({
+    buildTableExtractionScript({
       selector: input.selector,
       tableIndex: input.tableIndex,
       maxRows: input.maxRows,
@@ -155,7 +158,7 @@ async function extractBrowserList(
 ): Promise<BrowserExtractionPayload> {
   const payload = await evaluateBrowserExtractionScript(
     ctx,
-    new BrowserPageScriptBuilder().buildListExtractionScript({
+    buildListExtractionScript({
       selector: input.selector,
       maxItems: input.maxItems,
     }),
@@ -176,7 +179,7 @@ async function extractBrowserPageContent(
   const context = getActiveBrowserContext(ctx)
   const payload = await evaluateBrowserExtractionScript(
     ctx,
-    new BrowserPageScriptBuilder().buildPageContentExtractionScript({
+    buildPageContentExtractionScript({
       format: input.format,
       selector: input.selector,
       ignoreSelectors: input.ignoreSelectors,

@@ -125,12 +125,13 @@ function requirePublicTypeContracts(
     ? contractsRelative
     : `./${contractsRelative}`;
 
-  if (
-    !rootSource.includes(`export type * from '${contractsSpecifier}'`) &&
-    !rootSource.includes(`export type * from '${contractsSpecifier}.js'`) &&
-    !rootSource.includes(`export * from '${contractsSpecifier}'`) &&
-    !rootSource.includes(`export * from '${contractsSpecifier}.js'`)
-  ) {
+  // 入口可以整片转发（`export * from`），也可以逐个名字转发（去掉 barrel 之后的写法）；
+  // 只要根入口确实从这个文件往外转发就算数。
+  const forwardsContracts = new RegExp(
+    `\\bfrom\\s+['"]${contractsSpecifier.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")}(?:\\.js)?['"]`,
+    "u",
+  );
+  if (!forwardsContracts.test(rootSource)) {
     fail(
       `${packageDirectory}: root entrypoint must export ${contractsSpecifier}`,
     );
@@ -173,11 +174,15 @@ function requirePortableContractsEntry({
   }
 
   const contractsSource = readFileSync(contractsPath, "utf8");
+  // 登记的白名单写 ".js"，入口里可能写 ".js" 也可能不带扩展名（包里哪种写法多用哪种）；
+  // 两种都指向同一个模块，比对前统一去掉扩展名。
+  const withoutExtension = (specifier) => specifier.replace(/\.js$/u, "");
+  const allowedModules = new Set([...modules].map(withoutExtension));
   const contractImports = [
     ...contractsSource.matchAll(/\bfrom\s+['"]([^'"]+)['"]/gu),
   ].map((match) => match[1]);
   for (const specifier of contractImports) {
-    if (!modules.has(specifier)) {
+    if (!allowedModules.has(withoutExtension(specifier))) {
       fail(
         `${packageName}/contracts imports forbidden implementation module ${specifier}`,
       );

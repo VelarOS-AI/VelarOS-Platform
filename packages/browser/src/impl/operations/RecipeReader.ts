@@ -10,7 +10,7 @@ import {
   requireRunPath,
   requireSameBrowserOrigin,
 } from '../../utils/recipes/paths'
-import { getActiveBrowserContext } from '../../utils/tool-context'
+import { getActiveBrowserContext } from '../../utils/tool.js'
 
 /** 读取当前站点 browser artifact（recipes/pages/runs）并做同源校验。 */
 class BrowserRecipeReader {

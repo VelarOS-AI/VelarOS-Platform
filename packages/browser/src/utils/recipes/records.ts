@@ -1,8 +1,12 @@
 import { isFalse, stringifyPretty } from '@velaros-ai/core'
 
 import type { ToolContext } from '../../contract/requires'
-import type { BrowserRecipeSkeleton, BrowserSiteContext, BrowserWorkspaceArtifactRecord } from '../../exports/core'
-import { createArtifactManager } from '../tool-context'
+import { createArtifactManager } from '../../impl/operations/Artifacts.js'
+import type {
+  BrowserRecipeSkeleton,
+  BrowserSiteContext,
+  BrowserWorkspaceArtifactRecord,
+} from '../../types/browser'
 
 import { isSameBrowserOrigin } from './paths'
 import type { BrowserRecipeExecutionPlan, BrowserRecipeRunStepResult } from './plan'

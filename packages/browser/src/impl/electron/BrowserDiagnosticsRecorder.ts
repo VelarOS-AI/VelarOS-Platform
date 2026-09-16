@@ -1,6 +1,6 @@
 import { isString } from '@velaros-ai/core'
 
-import type { BrowserPageDiagnosticEntry, BrowserPageDiagnosticLevel } from '../../exports/core'
+import type { BrowserPageDiagnosticEntry, BrowserPageDiagnosticLevel } from '../../types/browser'
 import type { BrowserSession } from '../../types/electron'
 
 /** 单个会话最多保留的诊断条数。 */

@@ -4,8 +4,7 @@ import { renderParameterDescription as parameterDescription } from '@velaros-ai/
 import { isNull } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import { defineBrowserTool } from '../../contract/requires'
-import { requireActiveBrowserSite } from '../../utils/tool-context'
+import { defineBrowserTool, requireActiveBrowserSite } from '../../utils/tool.js'
 
 import { BrowserControlCapability } from './Capabilities'
 

@@ -16,11 +16,8 @@ import { AppError } from "@velaros-ai/core/error";
 import { logRuntime } from "@velaros-ai/core/logger";
 import { type TimerLease, TimerScope } from "@velaros-ai/core/utils/TimerScope";
 
-import {
-  type BrowserDomStabilityOptions,
-  type BrowserPageStabilityResult,
-  clampInteger,
-} from "../../exports/core";
+import type { BrowserDomStabilityOptions, BrowserPageStabilityResult } from "../../types/browser";
+import { clampInteger } from '../../utils/numbers.js'
 
 /** Electron 导航被取消时的错误码。 */
 const BrowserNavigationAbortErrorCode = -3;

@@ -1,10 +1,6 @@
-import type {
-  CdpScreencastConsumerOptions,
-  CdpScreencastStartOptions,
-  ScreencastCapturedFrame,
-} from '../impl/cdp/CdpScreencastRecorder'
+import type { BrowserPageDriverDownloadItem } from '../contract/requires.js'
 
-import type { BrowserClickCoordinatesOptions, BrowserDragCoordinatesOptions, BrowserEmulationOptions, BrowserGeolocationState, BrowserMouseButton, BrowserMoveMouseOptions, BrowserNetworkControlOptions, BrowserNetworkRequestDetailsOptions, BrowserNetworkRequestDetailsResult, BrowserNetworkResponseBodyOptions, BrowserNetworkThrottlingPreset, BrowserOriginStorage, BrowserPageDiagnosticEntry, BrowserPageDiagnosticKind, BrowserPageTargetInfo, BrowserPressKeyOptions, BrowserScreenshotCaptureRegion, BrowserScreenshotMetadata, BrowserScreenshotRect, BrowserSwitchPageTargetOptions, BrowserTypeTextOptions, BrowserViewportOptions } from './browser.js'
+import type { BrowserClickCoordinatesOptions, BrowserDragCoordinatesOptions, BrowserGeolocationState, BrowserMouseButton, BrowserMoveMouseOptions, BrowserNetworkControlOptions, BrowserNetworkRequestDetailsResult, BrowserNetworkThrottlingPreset, BrowserPageDiagnosticKind, BrowserScreenshotCaptureRegion, BrowserScreenshotMetadata, BrowserScreenshotRect } from './browser.js'
 
 export type BrowserPageDriverKind = 'webview' | 'external'
 
@@ -25,15 +21,6 @@ export interface BrowserSystemPointerMoveOptions {
   x: number
   y: number
   durationMs: number
-}
-
-/**
- * 宿主注入的系统指针能力。
- *
- * 返回 false 表示当前环境、权限或可见性不允许使用系统指针，浏览器运行时随即改画统一兜底箭头。
- */
-export interface BrowserSystemPointerDriver {
-  move(options: BrowserSystemPointerMoveOptions): Promise<boolean>
 }
 
 export type BrowserPageDriverPointerListener = (
@@ -164,19 +151,6 @@ export interface BrowserPageDriverEmulationState {
   networkThrottling: BrowserNetworkThrottlingPreset
 }
 
-export interface BrowserPageDriverDownloadItem {
-  getFilename(): string
-  getMimeType(): string
-  getTotalBytes(): number
-  getReceivedBytes(): number
-  getSavePath(): string
-  pause(): void
-  cancel(): void
-  setSavePath(path: string): void
-  resume(): void
-  once(event: 'done', listener: (_event: unknown, state: string) => void): unknown
-}
-
 export interface BrowserPageDriverDownloadEvent {
   url: Nullable<string>
   item: BrowserPageDriverDownloadItem
@@ -186,75 +160,3 @@ export type BrowserPageDriverDownloadListener = (
   event: BrowserPageDriverDownloadEvent
 ) => void
 
-export interface BrowserPageDriver {
-  kind: BrowserPageDriverKind
-  executeJavaScript<T = unknown>(script: string, userGesture?: boolean): Promise<T>
-  navigateTo(url: string): Promise<BrowserPageDriverState>
-  refreshPageState(): Promise<BrowserPageDriverState>
-  bringToFront(): Promise<void>
-  captureScreenshot?(
-    options: BrowserPageDriverScreenshotOptions
-  ): Promise<BrowserPageDriverScreenshot>
-  typeText?(options: BrowserTypeTextOptions): Promise<void>
-  pressKey?(options: BrowserPressKeyOptions): Promise<void>
-  moveMouse?(options: BrowserPageDriverMoveMouseOptions): Promise<void>
-  clickCoordinates?(options: BrowserPageDriverClickCoordinatesOptions): Promise<void>
-  dragCoordinates?(options: BrowserPageDriverDragCoordinatesOptions): Promise<void>
-  setViewport?(options: BrowserViewportOptions): Promise<void>
-  setFileInputFiles?(options: BrowserPageDriverFileInputOptions): Promise<boolean>
-  printToPdf?(options: BrowserPageDriverPdfOptions): Promise<Buffer>
-  fetchResource?(
-    options: BrowserPageDriverFetchResourceOptions
-  ): Promise<BrowserPageDriverFetchResourceResult>
-  getPageZoomFactor?(): number
-  setPageZoomFactor?(zoomFactor: number): Promise<void>
-  readDiagnostics?(options: BrowserPageDriverDiagnosticsOptions): BrowserPageDiagnosticEntry[]
-  /**
-   * 确保网络采集已经在跑（读诊断前调用）。
-   *
-   * 内嵌页面的采集是惰性建立的：不调用就永远读不到网络事件。读诊断时顺手把它建起来，
-   * 并如实回报「这次才开始」，回执才能告诉模型之前的请求看不到。
-   */
-  ensureNetworkCapture?(): Promise<BrowserPageDriverNetworkCaptureState>
-  listPageTargets?(): Promise<BrowserPageTargetInfo[]>
-  switchPageTarget?(options: BrowserSwitchPageTargetOptions): Promise<BrowserPageDriver>
-  onDownload?(listener: BrowserPageDriverDownloadListener): () => void
-  grantPermissions?(permissions: string[], origin?: LooseOptional<string>): Promise<void>
-  readCookies?(options?: BrowserPageDriverCookieOptions): Promise<BrowserPageDriverCookie[]>
-  readStorageOrigins?(
-    options: BrowserPageDriverStorageOriginOptions
-  ): Promise<BrowserOriginStorage[]>
-  configureNetwork?(
-    options: BrowserNetworkControlOptions
-  ): Promise<BrowserPageDriverNetworkControlState>
-  readNetworkResponseBody?(
-    options: BrowserNetworkResponseBodyOptions
-  ): Promise<BrowserPageDriverNetworkResponseBodyResult>
-  readNetworkRequestDetails?(
-    options: BrowserNetworkRequestDetailsOptions
-  ): Promise<BrowserPageDriverNetworkRequestDetailsResult>
-  waitForNetworkIdle?(options: BrowserPageDriverNetworkIdleOptions): Promise<void>
-  configureEmulation?(
-    options: BrowserEmulationOptions
-  ): Promise<BrowserPageDriverEmulationState>
-  getEmulationState?(): BrowserPageDriverEmulationState
-  /** 开始录制性能 trace（CDP Tracing domain）。 */
-  startTracing?(): Promise<void>
-  /** 停止录制并返回全部 trace 事件。 */
-  stopTracing?(): Promise<unknown[]>
-  isTracing?(): boolean
-  /** 采集 V8 堆快照，流式写入 sink。 */
-  captureHeapSnapshot?(sink: (chunk: string) => void): Promise<{ chunks: number; bytes: number }>
-  /** 开始页面录屏（CDP Page.startScreencast）。 */
-  startScreencast?(
-    options: CdpScreencastStartOptions,
-    consumer?: CdpScreencastConsumerOptions
-  ): Promise<void>
-  /** 停止录屏并取回帧序列。 */
-  stopScreencast?(): Promise<{ frames: ScreencastCapturedFrame[]; frameLimitReached: boolean }>
-  isScreencasting?(): boolean
-  getURL(): string
-  getTitle(): string
-  isDestroyed(): boolean
-  dispose?(): void
-}

@@ -1,6 +1,10 @@
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
-import type { BrowserPendingEventKind, BrowserPendingEventsResult, BrowserPendingEventSummary } from '../exports/core'
+import type {
+  BrowserPendingEventKind,
+  BrowserPendingEventsResult,
+  BrowserPendingEventSummary,
+} from '../types/browser'
 
 const DefaultPendingEventWaitTimeoutMs = 5000
 const PendingEventPollIntervalMs = 50

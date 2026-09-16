@@ -9,13 +9,10 @@ import type { BrowserCaptureScreenshotOptions, BrowserScreencastStartResult, Bro
 import type {
   BrowserPageDriverScreenshotOptions,
 } from '../../types/driver'
-import type { BrowserWorkspacePath } from '../../utils/path-containment'
-import { resolveBrowserWorkspacePath } from '../../utils/path-containment'
-import {
-  type BrowserPageDriverKernel,
-  DEFAULT_BROWSER_VIEWPORT,
-  type ExternalBrowserPageSession,
-} from '../../utils/runtime-internals'
+import type { BrowserPageDriverKernel, ExternalBrowserPageSession } from '../../types/runtime.js'
+import { DEFAULT_BROWSER_VIEWPORT } from '../../utils/viewport.js'
+import type { BrowserWorkspacePath } from '../../utils/workspace-paths'
+import { resolveBrowserWorkspacePath } from '../../utils/workspace-paths'
 
 /**
  * 截图域的 host 无关外部核（**降级实现**）。

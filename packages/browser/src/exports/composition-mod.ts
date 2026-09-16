@@ -3,13 +3,12 @@
  *
  * 子路径名不变，实现搬到 `impl/tools/mod.ts`。
  */
-export type { BrowserBundledModDefinition, BrowserToolCategoryId } from '../impl/tools/mod.js'
+export { BrowserModId, BrowserSpaceId } from '../contract/constants'
+export type { BrowserBundledModDefinition, BrowserToolCategoryId } from '../impl/tools/mod'
 export {
-  BrowserModId,
   BrowserResidentToolNames,
-  BrowserSpaceId,
   BrowserToolCategoryDefinitions,
   BrowserToolCategoryIds,
   BrowserToolNamesByCategory,
   createBrowserBundledModDefinition,
-} from '../impl/tools/mod.js'
+} from '../impl/tools/mod'

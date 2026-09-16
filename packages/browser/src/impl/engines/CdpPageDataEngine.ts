@@ -10,16 +10,19 @@ import type {
   BrowserPageDriverCookie,
   BrowserPageDriverState,
 } from '../../types/driver'
-import type { BrowserPageScriptBuilder } from '../../utils/page-scripts/builder'
-import {
-  type BrowserPageDriverKernel,
-  clampInteger,
-  type ExternalBrowserPageSession,
-  readBoundedString,
-  readFiniteNumber,
-  resolveExternalPageUrl,
-  resolveWorkspaceFilePath,
-} from '../../utils/runtime-internals'
+import type { BrowserPageDriverKernel, ExternalBrowserPageSession } from '../../types/runtime.js'
+import { clampInteger, readBoundedString, readFiniteNumber } from '../../utils/numbers.js'
+import { buildElementQueryScript } from '../../utils/page-scripts/element-query'
+import { buildEvaluateScript } from '../../utils/page-scripts/evaluate'
+import { buildPageResourcesScript } from '../../utils/page-scripts/extraction'
+import { buildResolveFileInputScript } from '../../utils/page-scripts/file-upload'
+import { buildInspectionScript } from '../../utils/page-scripts/inspection'
+import { buildListMediaSourcesScript } from '../../utils/page-scripts/media-sources'
+import { buildPageWaitScript } from '../../utils/page-scripts/page-wait'
+import { buildPageStorageScript } from '../../utils/page-scripts/storage'
+import { buildWaitForSelectorScript } from '../../utils/page-scripts/wait-for-selector'
+import { resolveExternalPageUrl } from '../../utils/url.js'
+import { resolveWorkspaceFilePath } from '../../utils/workspace-paths.js'
 import type { BrowserTargetRefStore } from '../session/BrowserTargetRefStore'
 
 const DefaultFetchResourceMaxBytes = 50 * 1024 * 1024
@@ -45,7 +48,6 @@ export class CdpPageDataEngine {
 
   constructor(
     protected readonly kernel: BrowserPageDriverKernel,
-    protected readonly scripts: BrowserPageScriptBuilder,
     protected readonly targetRefs: BrowserTargetRefStore,
     protected readonly diagnosticsLimits: BrowserDiagnosticsLimits
   ) {}
@@ -100,7 +102,7 @@ export class CdpPageDataEngine {
     _abortSignal?.throwIfAborted()
     const externalSession = this.requireExternalPageSession(sessionId)
     const inspection = await externalSession.driver.executeJavaScript<BrowserPageInspection>(
-      this.scripts.buildInspectionScript({
+      buildInspectionScript({
         includeHtml: !!options.includeHtml,
         maxTextChars: options.maxTextChars ?? 20_000,
         maxHtmlChars: options.maxHtmlChars ?? 30_000,
@@ -123,7 +125,7 @@ export class CdpPageDataEngine {
     _abortSignal?.throwIfAborted()
     const externalSession = this.requireExternalPageSession(sessionId)
     const result = await externalSession.driver.executeJavaScript<BrowserElementQueryResult>(
-      this.scripts.buildElementQueryScript(options),
+      buildElementQueryScript(options),
       true
     )
     this.syncExternalPageStateFromScriptResult(sessionId, externalSession, result, context.url)
@@ -139,7 +141,7 @@ export class CdpPageDataEngine {
     _abortSignal?.throwIfAborted()
     const externalSession = this.requireExternalPageSession(sessionId)
     const result = await externalSession.driver.executeJavaScript<BrowserEvaluateScriptResult>(
-      this.scripts.buildEvaluateScript(options),
+      buildEvaluateScript(options),
       true
     )
     this.syncExternalPageStateFromScriptResult(sessionId, externalSession, result, context.url)
@@ -155,7 +157,7 @@ export class CdpPageDataEngine {
     _abortSignal?.throwIfAborted()
     const externalSession = this.requireExternalPageSession(sessionId)
     const result = await externalSession.driver.executeJavaScript<BrowserPageStorageResult>(
-      this.scripts.buildPageStorageScript(options),
+      buildPageStorageScript(options),
       true
     )
     this.syncExternalPageStateFromScriptResult(sessionId, externalSession, result, context.url)
@@ -387,7 +389,7 @@ export class CdpPageDataEngine {
       items?: unknown
       truncated?: boolean
     }>(
-      this.scripts.buildListMediaSourcesScript({
+      buildListMediaSourcesScript({
         limit,
         includeDataUrls,
         includeBlobUrls,
@@ -448,7 +450,7 @@ export class CdpPageDataEngine {
       resourceOrigins?: unknown
       mediaCount?: unknown
       truncated?: boolean
-    }>(this.scripts.buildPageResourcesScript({ limit, includeIframes }), true)
+    }>(buildPageResourcesScript({ limit, includeIframes }), true)
     this.syncExternalPageStateFromScriptResult(sessionId, externalSession, result, context.url)
 
     return {
@@ -642,7 +644,7 @@ export class CdpPageDataEngine {
     const locator = await externalSession.driver.executeJavaScript<{
       matched: boolean
       selector: Nullable<string>
-    }>(this.scripts.buildResolveFileInputScript(hydratedTarget), true)
+    }>(buildResolveFileInputScript(hydratedTarget), true)
     this.syncExternalPageStateFromScriptResult(sessionId, externalSession, locator, context.url)
 
     if (!locator.matched || !locator.selector)
@@ -830,7 +832,7 @@ export class CdpPageDataEngine {
     _abortSignal?.throwIfAborted()
     const externalSession = this.requireExternalPageSession(sessionId)
     const result = await externalSession.driver.executeJavaScript<BrowserWaitForSelectorResult>(
-      this.scripts.buildWaitForSelectorScript(options),
+      buildWaitForSelectorScript(options),
       true
     )
     this.syncExternalPageStateFromScriptResult(sessionId, externalSession, result, context.url)
@@ -855,7 +857,7 @@ export class CdpPageDataEngine {
       })
     }
     const result = await externalSession.driver.executeJavaScript<BrowserPageWaitResult>(
-      this.scripts.buildPageWaitScript(options),
+      buildPageWaitScript(options),
       true
     )
     this.syncExternalPageStateFromScriptResult(sessionId, externalSession, result, context.url)

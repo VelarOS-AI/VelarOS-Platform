@@ -1,7 +1,7 @@
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 
-import { normalizeBrowserArtifactJsonPath } from '../../exports/core'
+import { normalizeBrowserArtifactJsonPath } from '../artifacts'
 
 const log = logRuntime.tag('BrowserRecipePaths')
 

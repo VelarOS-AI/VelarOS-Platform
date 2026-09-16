@@ -3,8 +3,8 @@ import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 import { type TimerLease, TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
+import type { BrowserPageDriverDownloadItem } from '../../contract/requires.js'
 import type { BrowserPendingEventSummary } from '../../types/browser.js'
-import type { BrowserPageDriverDownloadItem } from '../../types/driver'
 
 const DefaultDialogTimeoutMs = 30_000
 const DefaultPermissionTimeoutMs = 15_000

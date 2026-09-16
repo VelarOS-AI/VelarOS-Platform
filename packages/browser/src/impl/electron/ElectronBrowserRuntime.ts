@@ -33,36 +33,111 @@ import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
-import type { BrowserTurnContextDeltaSource } from '../../exports/core'
-import type { BrowserCaptureScreenshotOptions, BrowserClickCoordinatesOptions, BrowserClickCoordinatesResult, BrowserDragOptions, BrowserDragResult, BrowserElementQueryOptions, BrowserElementQueryResult, BrowserEmulationOptions, BrowserEmulationResult, BrowserEvaluateScriptOptions, BrowserEvaluateScriptResult, BrowserExportPagePdfOptions, BrowserExportPagePdfResult, BrowserFetchResourceOptions, BrowserFetchResourceResult, BrowserHandleDialogOptions, BrowserHandleDialogResult, BrowserHandleDownloadOptions, BrowserHandleDownloadResult, BrowserHandlePermissionOptions, BrowserHandlePermissionResult, BrowserHeapSnapshotOptions, BrowserHeapSnapshotResult, BrowserInspectPageOptions, BrowserListMediaSourcesOptions, BrowserListMediaSourcesResult, BrowserListPageResourcesOptions, BrowserListPageResourcesResult, BrowserMoveMouseOptions, BrowserMoveMouseResult, BrowserNavigationHistoryRestore, BrowserNetworkControlOptions, BrowserNetworkControlResult, BrowserNetworkRequestDetailsOptions, BrowserNetworkRequestDetailsResult, BrowserNetworkResponseBodyOptions, BrowserNetworkResponseBodyResult, BrowserPageDiagnostics, BrowserPageDiagnosticsOptions, BrowserPageInspection, BrowserPageNavigationOptions, BrowserPageNavigationResult, BrowserPagePreviewFrame, BrowserPagePreviewStreamEvent, BrowserPageScrollOptions, BrowserPageScrollResult, BrowserPageStorageOptions, BrowserPageStorageResult, BrowserPageTargetInfo, BrowserPageTargetsResult, BrowserPageWaitOptions, BrowserPageWaitResult, BrowserPageWindowState, BrowserPageZoomOptions, BrowserPageZoomResult, BrowserPendingEventsResult, BrowserPerformanceInsightOptions, BrowserPerformanceInsightResult, BrowserPerformanceTraceStartOptions, BrowserPerformanceTraceStartResult, BrowserPerformanceTraceStopResult, BrowserPressKeyOptions, BrowserPressKeyResult, BrowserScreencastStartOptions, BrowserScreencastStartResult, BrowserScreencastStopOptions, BrowserScreencastStopResult, BrowserScreenshotArtifact, BrowserSiteContext, BrowserSwitchPageTargetOptions, BrowserSwitchPageTargetResult, BrowserTargetActionOptions, BrowserTargetActionResult, BrowserTurnContextSnapshot, BrowserTypeTextOptions, BrowserTypeTextResult, BrowserUploadFileOptions, BrowserUploadFileResult, BrowserUserScriptLastRun, BrowserUserScriptRecord, BrowserViewportOptions, BrowserViewportResult, BrowserWaitForSelectorOptions, BrowserWaitForSelectorResult } from '../../exports/core'
-import {
-  BrowserActivityCoordinator,
-  type BrowserPageDriver,
-  type BrowserPageDriverState,
-  BrowserPageScriptBuilder,
-  BrowserPerformanceOrchestrator,
-  BrowserSessionActionQueue,
-  BrowserTargetRefStore,
-  type BrowserUserActivityWaitState,
-  CdpExternalBrowserLauncher,
-  type CdpExternalBrowserLaunchOptions,
-} from '../../exports/core'
-import {
-  getBrowserUrlCandidate,
-  resolveBrowserSearchFallbackUrl,
-} from '../../exports/core'
+import type {
+  BrowserCaptureScreenshotOptions,
+  BrowserClickCoordinatesOptions,
+  BrowserClickCoordinatesResult,
+  BrowserDragOptions,
+  BrowserDragResult,
+  BrowserElementQueryOptions,
+  BrowserElementQueryResult,
+  BrowserEmulationOptions,
+  BrowserEmulationResult,
+  BrowserEvaluateScriptOptions,
+  BrowserEvaluateScriptResult,
+  BrowserExportPagePdfOptions,
+  BrowserExportPagePdfResult,
+  BrowserFetchResourceOptions,
+  BrowserFetchResourceResult,
+  BrowserHandleDialogOptions,
+  BrowserHandleDialogResult,
+  BrowserHandleDownloadOptions,
+  BrowserHandleDownloadResult,
+  BrowserHandlePermissionOptions,
+  BrowserHandlePermissionResult,
+  BrowserHeapSnapshotOptions,
+  BrowserHeapSnapshotResult,
+  BrowserInspectPageOptions,
+  BrowserListMediaSourcesOptions,
+  BrowserListMediaSourcesResult,
+  BrowserListPageResourcesOptions,
+  BrowserListPageResourcesResult,
+  BrowserMoveMouseOptions,
+  BrowserMoveMouseResult,
+  BrowserNavigationHistoryRestore,
+  BrowserNetworkControlOptions,
+  BrowserNetworkControlResult,
+  BrowserNetworkRequestDetailsOptions,
+  BrowserNetworkRequestDetailsResult,
+  BrowserNetworkResponseBodyOptions,
+  BrowserNetworkResponseBodyResult,
+  BrowserPageDiagnostics,
+  BrowserPageDiagnosticsOptions,
+  BrowserPageInspection,
+  BrowserPageNavigationOptions,
+  BrowserPageNavigationResult,
+  BrowserPagePreviewFrame,
+  BrowserPagePreviewStreamEvent,
+  BrowserPageScrollOptions,
+  BrowserPageScrollResult,
+  BrowserPageStorageOptions,
+  BrowserPageStorageResult,
+  BrowserPageTargetInfo,
+  BrowserPageTargetsResult,
+  BrowserPageWaitOptions,
+  BrowserPageWaitResult,
+  BrowserPageWindowState,
+  BrowserPageZoomOptions,
+  BrowserPageZoomResult,
+  BrowserPendingEventsResult,
+  BrowserPerformanceInsightOptions,
+  BrowserPerformanceInsightResult,
+  BrowserPerformanceTraceStartOptions,
+  BrowserPerformanceTraceStartResult,
+  BrowserPerformanceTraceStopResult,
+  BrowserPressKeyOptions,
+  BrowserPressKeyResult,
+  BrowserScreencastStartOptions,
+  BrowserScreencastStartResult,
+  BrowserScreencastStopOptions,
+  BrowserScreencastStopResult,
+  BrowserScreenshotArtifact,
+  BrowserSiteContext,
+  BrowserSwitchPageTargetOptions,
+  BrowserSwitchPageTargetResult,
+  BrowserTargetActionOptions,
+  BrowserTargetActionResult,
+  BrowserTurnContextDeltaSource,
+  BrowserTurnContextSnapshot,
+  BrowserTypeTextOptions,
+  BrowserTypeTextResult,
+  BrowserUploadFileOptions,
+  BrowserUploadFileResult,
+  BrowserUserScriptLastRun,
+  BrowserUserScriptRecord,
+  BrowserViewportOptions,
+  BrowserViewportResult,
+  BrowserWaitForSelectorOptions,
+  BrowserWaitForSelectorResult,
+} from '../../types/browser'
+import type { BrowserPageDriverState } from '../../types/driver'
 import {
   type BrowserExternalPageLauncher,
   type BrowserSession,
   type ElectronBrowserRuntimeOptions,
 } from '../../types/electron'
+import { getBrowserUrlCandidate, resolveBrowserSearchFallbackUrl } from '../../utils/address'
 import {
-  type BrowserRuntimeKernel,
-  type BrowserRuntimePageDriverSession,
-  clampInteger,
-  type ExternalBrowserPageSession,
-  resolveWorkspaceFilePath,
-} from '../../utils/electron/runtime-internals'
+  CdpExternalBrowserLauncher,
+  type CdpExternalBrowserLaunchOptions,
+} from '../cdp/CdpExternalBrowserLauncher'
+import { BrowserPerformanceOrchestrator } from '../engines/BrowserPerformanceOrchestrator'
+import {
+  BrowserActivityCoordinator,
+  type BrowserUserActivityWaitState,
+} from '../session/BrowserActivityCoordinator'
+import { BrowserSessionActionQueue } from '../session/BrowserSessionActionQueue'
+import { BrowserTargetRefStore } from '../session/BrowserTargetRefStore'
 
 import { BrowserDiagnosticsRecorder } from './BrowserDiagnosticsRecorder'
 import { BrowserInteractionEngine } from './BrowserInteractionEngine'
@@ -122,6 +197,12 @@ function buildBrowserUserScriptExecutionSource(
 }
 import { isEmpty, isNonBlankString, isPlainObject, isPresent, isString, optionalWhen, toNullable } from '@velaros-ai/core'
 
+import type { BrowserPageDriver } from '../../contract/requires.js'
+import type { BrowserRuntimeKernel, BrowserRuntimePageDriverSession } from '../../types/electron.js'
+import type { ExternalBrowserPageSession } from '../../types/runtime.js'
+import { clampInteger } from '../../utils/numbers.js'
+import { resolveWorkspaceFilePath } from '../../utils/workspace-paths.js'
+
 const TurnContextRecentErrorWindowMs = 5 * 60 * 1000
 
 interface BrowserPagePresentationTarget {
@@ -144,8 +225,6 @@ class ElectronBrowserRuntime {
   private readonly diagnostics = new BrowserDiagnosticsRecorder()
   /** 处理导航和动作后的等待逻辑。 */
   private readonly pageWaiter = new BrowserPageWaiter()
-  /** 页面注入脚本构造器。 */
-  private readonly scripts = new BrowserPageScriptBuilder()
   /** 当前页面自动化驱动。默认包裹 Electron WebContents，未来可接外部浏览器驱动。 */
   private createPageDriver: BrowserPageDriverFactory
   /** 外部浏览器启动器，负责启动 Chrome/Chromium 并返回 page-level CDP driver。 */
@@ -198,7 +277,6 @@ class ElectronBrowserRuntime {
   /** 交互域执行体（target action/自愈/键鼠合成/指针动画/viewport/zoom）。 */
   private readonly interaction = new BrowserInteractionEngine(
     this.kernel,
-    this.scripts,
     this.pageWaiter,
     this.targetRefs,
     (sessionId, pointer) => this.screenshot.notifyPreviewPointer(sessionId, pointer)
@@ -206,7 +284,6 @@ class ElectronBrowserRuntime {
   /** 页面数据域执行体（检查/存储/网络数据/媒体/诊断/上传/导出/等待）。 */
   private readonly pageData = new BrowserPageDataEngine(
     this.kernel,
-    this.scripts,
     this.pageWaiter,
     this.diagnostics,
     this.targetRefs,

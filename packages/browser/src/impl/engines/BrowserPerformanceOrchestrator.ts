@@ -6,8 +6,8 @@ import { AppError } from '@velaros-ai/core/error'
 
 import type { BrowserHeapSnapshotOptions, BrowserHeapSnapshotResult, BrowserPerformanceInsightOptions, BrowserPerformanceInsightResult, BrowserPerformanceTraceStartOptions, BrowserPerformanceTraceStartResult, BrowserPerformanceTraceStopResult, BrowserSiteContext } from '../../types/browser.js'
 import type { BrowserPageDriverEmulationState } from '../../types/driver'
-import { resolveBrowserWorkspacePath } from '../../utils/path-containment'
-import type { BrowserPageDriverKernel } from '../../utils/runtime-internals'
+import type { BrowserPageDriverKernel } from '../../types/runtime.js'
+import { resolveBrowserWorkspacePath } from '../../utils/workspace-paths'
 
 import {
   type BrowserParsedTraceRecording,

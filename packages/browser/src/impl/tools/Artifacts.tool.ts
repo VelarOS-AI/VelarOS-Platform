@@ -1,6 +1,6 @@
 import { type z } from 'zod'
 
-import { defineBrowserTool } from '../../contract/requires'
+import { defineBrowserTool } from '../../utils/tool.js'
 import {
   listBrowserWorkspaceArtifacts,
   listBrowserWorkspaceFiles,

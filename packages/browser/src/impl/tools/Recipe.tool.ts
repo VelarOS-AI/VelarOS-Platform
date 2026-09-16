@@ -2,7 +2,7 @@ import type { z } from 'zod'
 
 import { AppError } from '@velaros-ai/core/error'
 
-import { defineBrowserTool } from '../../contract/requires'
+import { defineBrowserTool } from '../../utils/tool.js'
 import { browserRecipeArtifacts } from '../operations/RecipeArtifacts'
 import { browserRecipeRunner } from '../operations/RecipeRun'
 

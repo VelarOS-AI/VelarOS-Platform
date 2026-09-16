@@ -92,7 +92,6 @@ void test('viewport interaction preserves mobile mode in the driver call and res
       getLivePageDriverSession: async () => ({ driver }),
       refreshPageDriverSessionState: async () => ({ url: 'https://example.com', title: '' }),
     },
-    {},
     {}
   )
 

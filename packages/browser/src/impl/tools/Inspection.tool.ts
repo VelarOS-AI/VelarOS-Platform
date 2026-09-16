@@ -4,17 +4,16 @@ import { renderParameterDescription as parameterDescription } from '@velaros-ai/
 import { isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import { defineBrowserTool } from '../../contract/requires'
-import type { BrowserElementQueryResult, BrowserObserveActionsResult, BrowserPageDiagnostics } from '../../exports/core'
-import { buildBrowserScreenshotOptions } from '../../exports/core'
-import type { BrowserConsoleEventsResult } from '../../utils/diagnostics/console-events'
-import { buildBrowserConsoleEventsResult } from '../../utils/diagnostics/console-events'
-import type { BrowserNetworkEventsResult } from '../../utils/diagnostics/network-events'
-import { buildBrowserNetworkEventsResult } from '../../utils/diagnostics/network-events'
-import type { BrowserPageErrorsResult } from '../../utils/diagnostics/page-errors'
-import { buildBrowserPageErrorsResult } from '../../utils/diagnostics/page-errors'
+import type {
+  BrowserElementQueryResult,
+  BrowserObserveActionsResult,
+  BrowserPageDiagnostics,
+} from '../../types/browser'
+import type { BrowserConsoleEventsResult, BrowserNetworkEventsResult, BrowserPageErrorsResult } from '../../utils/diagnostics.js'
+import { buildBrowserConsoleEventsResult, buildBrowserNetworkEventsResult, buildBrowserPageErrorsResult } from '../../utils/diagnostics.js'
 import { buildObserveActionsResult, clampObserveActionLimit } from '../../utils/observe-actions'
-import { requireActiveBrowserSite } from '../../utils/tool-context'
+import { buildBrowserScreenshotOptions } from '../../utils/screenshot-options'
+import { defineBrowserTool, requireActiveBrowserSite } from '../../utils/tool.js'
 
 import { BrowserArtifactWriteCapability, BrowserObserveCapability } from './Capabilities'
 import type {

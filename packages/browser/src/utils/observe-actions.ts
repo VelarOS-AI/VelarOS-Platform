@@ -1,6 +1,20 @@
 import { isEmpty,isNonBlankString } from '@velaros-ai/core'
 
-import { type BrowserElementTargetHint, type BrowserObserveActionsResult, type BrowserObservedActionCandidate, type BrowserObservedActionInput, type BrowserObservedActionKind, type BrowserObservedActionPreview, type BrowserObservedActionSource, type BrowserPageAction, type BrowserPageFormField, type BrowserPageInspection, clampInteger } from '../exports/core'
+import type {
+  BrowserElementTargetHint,
+  BrowserObserveActionsResult,
+  BrowserObservedActionCandidate,
+  BrowserObservedActionInput,
+  BrowserObservedActionKind,
+  BrowserObservedActionPreview,
+  BrowserObservedActionSource,
+  BrowserPageAction,
+  BrowserPageFormField,
+  BrowserPageInspection,
+} from '../types/browser'
+
+import { clampInteger } from './numbers.js'
+
 
 interface ObserveActionDraft {
   method: BrowserObservedActionKind

@@ -6,22 +6,51 @@ import electron from 'electron'
 import { isFalse, isNumber, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import type { BrowserElementQueryOptions, BrowserElementQueryResult, BrowserEvaluateScriptOptions, BrowserEvaluateScriptResult, BrowserExportPagePdfOptions, BrowserExportPagePdfResult, BrowserFetchResourceOptions, BrowserFetchResourceResult, BrowserInspectPageOptions, BrowserListMediaSourcesOptions, BrowserListMediaSourcesResult, BrowserListPageResourcesOptions, BrowserListPageResourcesResult, BrowserPageDiagnostics, BrowserPageDiagnosticsOptions, BrowserPageInspection, BrowserPageStorageOptions, BrowserPageStorageResult, BrowserPageWaitOptions, BrowserPageWaitResult, BrowserSiteContext, BrowserUploadFileOptions, BrowserUploadFileResult, BrowserWaitForSelectorOptions, BrowserWaitForSelectorResult } from '../../exports/core'
-import {
-  type BrowserPageDriver,
-  type BrowserPageScriptBuilder,
-  type BrowserTargetRefStore,
-  buildBrowserNetworkCaptureNotice,
-  CdpPageDataEngine,
-  clampInteger,
-  clearBrowserDiagnosticEntries,
-  readFiniteNumber,
-  resolveWorkspaceFilePath,
-  takeBrowserDiagnosticWindow,
-} from '../../exports/core'
+import type { BrowserPageDriver } from '../../contract/requires.js'
+import type {
+  BrowserElementQueryOptions,
+  BrowserElementQueryResult,
+  BrowserEvaluateScriptOptions,
+  BrowserEvaluateScriptResult,
+  BrowserExportPagePdfOptions,
+  BrowserExportPagePdfResult,
+  BrowserFetchResourceOptions,
+  BrowserFetchResourceResult,
+  BrowserInspectPageOptions,
+  BrowserListMediaSourcesOptions,
+  BrowserListMediaSourcesResult,
+  BrowserListPageResourcesOptions,
+  BrowserListPageResourcesResult,
+  BrowserPageDiagnostics,
+  BrowserPageDiagnosticsOptions,
+  BrowserPageInspection,
+  BrowserPageStorageOptions,
+  BrowserPageStorageResult,
+  BrowserPageWaitOptions,
+  BrowserPageWaitResult,
+  BrowserSiteContext,
+  BrowserUploadFileOptions,
+  BrowserUploadFileResult,
+  BrowserWaitForSelectorOptions,
+  BrowserWaitForSelectorResult,
+} from '../../types/browser'
 import type { BrowserSession } from '../../types/electron'
+import type { BrowserRuntimeKernel } from '../../types/electron.js'
+import { buildBrowserNetworkCaptureNotice, clearBrowserDiagnosticEntries, takeBrowserDiagnosticWindow } from '../../utils/diagnostics.js'
 import { evaluateInWebContents } from '../../utils/electron/evaluate'
-import type { BrowserRuntimeKernel } from '../../utils/electron/runtime-internals'
+import { clampInteger, readFiniteNumber } from '../../utils/numbers.js'
+import { buildElementQueryScript } from '../../utils/page-scripts/element-query'
+import { buildEvaluateScript } from '../../utils/page-scripts/evaluate'
+import { buildPageResourcesScript } from '../../utils/page-scripts/extraction'
+import { buildResolveFileInputScript } from '../../utils/page-scripts/file-upload'
+import { buildInspectionScript } from '../../utils/page-scripts/inspection'
+import { buildListMediaSourcesScript } from '../../utils/page-scripts/media-sources'
+import { buildPageWaitScript } from '../../utils/page-scripts/page-wait'
+import { buildPageStorageScript } from '../../utils/page-scripts/storage'
+import { buildWaitForSelectorScript } from '../../utils/page-scripts/wait-for-selector'
+import { resolveWorkspaceFilePath } from '../../utils/workspace-paths.js'
+import { CdpPageDataEngine } from '../engines/CdpPageDataEngine'
+import type { BrowserTargetRefStore } from '../session/BrowserTargetRefStore'
 
 import type { BrowserDiagnosticsRecorder } from './BrowserDiagnosticsRecorder'
 import type { BrowserInteractionEngine } from './BrowserInteractionEngine'
@@ -43,13 +72,12 @@ const DefaultFetchResourceMaxBytes = 50 * 1024 * 1024
 export class BrowserPageDataEngine extends CdpPageDataEngine {
   constructor(
     private readonly electronKernel: BrowserRuntimeKernel,
-    scripts: BrowserPageScriptBuilder,
     private readonly pageWaiter: BrowserPageWaiter,
     private readonly diagnosticsRecorder: BrowserDiagnosticsRecorder,
     targetRefs: BrowserTargetRefStore,
     private readonly interaction: BrowserInteractionEngine
   ) {
-    super(electronKernel, scripts, targetRefs, diagnosticsRecorder)
+    super(electronKernel, targetRefs, diagnosticsRecorder)
   }
 
   // ---- webview 专属 kernel 桥接 ----
@@ -93,7 +121,7 @@ export class BrowserPageDataEngine extends CdpPageDataEngine {
     // 检查脚本在页面上下文中执行，返回纯 JSON 结构。
     const driver = this.getPageDriver(sessionId, session)
     const inspection = await driver.executeJavaScript<BrowserPageInspection>(
-      this.scripts.buildInspectionScript({
+      buildInspectionScript({
         includeHtml: !!options.includeHtml,
         maxTextChars,
         maxHtmlChars,
@@ -120,7 +148,7 @@ export class BrowserPageDataEngine extends CdpPageDataEngine {
 
     const result = (await evaluateInWebContents(
       session.webContents,
-      this.scripts.buildElementQueryScript(options),
+      buildElementQueryScript(options),
       true
     )) as BrowserElementQueryResult
 
@@ -159,7 +187,7 @@ export class BrowserPageDataEngine extends CdpPageDataEngine {
     // （AGENT-12 的第一因：一个永不 settle 的求值占死会话队列，把整条会话焊死）。
     return evaluateInWebContents<BrowserEvaluateScriptResult>(
       session.webContents,
-      this.scripts.buildEvaluateScript(options),
+      buildEvaluateScript(options),
       true,
       {
         label: 'evaluateScript',
@@ -182,7 +210,7 @@ export class BrowserPageDataEngine extends CdpPageDataEngine {
 
     return evaluateInWebContents(
       session.webContents,
-      this.scripts.buildPageStorageScript(options),
+      buildPageStorageScript(options),
       true
     ) as Promise<BrowserPageStorageResult>
   }
@@ -277,7 +305,7 @@ export class BrowserPageDataEngine extends CdpPageDataEngine {
 
     const result = (await evaluateInWebContents(
       session.webContents,
-      this.scripts.buildListMediaSourcesScript({
+      buildListMediaSourcesScript({
         limit,
         includeDataUrls,
         includeBlobUrls,
@@ -309,7 +337,7 @@ export class BrowserPageDataEngine extends CdpPageDataEngine {
 
     const result = (await evaluateInWebContents(
       session.webContents,
-      this.scripts.buildPageResourcesScript({ limit, includeIframes }),
+      buildPageResourcesScript({ limit, includeIframes }),
       true
     )) as {
       links?: unknown
@@ -391,7 +419,7 @@ export class BrowserPageDataEngine extends CdpPageDataEngine {
 
     const locator = (await evaluateInWebContents(
       session.webContents,
-      this.scripts.buildResolveFileInputScript(hydratedTarget),
+      buildResolveFileInputScript(hydratedTarget),
       true
     )) as { matched: boolean; selector: Nullable<string> }
 
@@ -503,7 +531,7 @@ export class BrowserPageDataEngine extends CdpPageDataEngine {
 
     return evaluateInWebContents(
       session.webContents,
-      this.scripts.buildWaitForSelectorScript(options),
+      buildWaitForSelectorScript(options),
       true
     ) as Promise<BrowserWaitForSelectorResult>
   }
@@ -529,7 +557,7 @@ export class BrowserPageDataEngine extends CdpPageDataEngine {
 
     return evaluateInWebContents(
       session.webContents,
-      this.scripts.buildPageWaitScript(options),
+      buildPageWaitScript(options),
       true
     ) as Promise<BrowserPageWaitResult>
   }

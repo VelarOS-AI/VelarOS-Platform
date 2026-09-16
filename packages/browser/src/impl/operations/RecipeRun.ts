@@ -2,8 +2,7 @@ import { isEmpty, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import type { ToolContext } from '../../contract/requires'
-import type { BrowserWorkspaceArtifactManager } from '../../exports/core'
-import type { BrowserRecipeDryRunSummary, BrowserRecipeSkeleton } from '../../exports/core'
+import type { BrowserRecipeDryRunSummary, BrowserRecipeSkeleton } from '../../types/browser'
 import { isSameBrowserOrigin } from '../../utils/recipes/paths'
 import {
   type BrowserRecipeRunStepResult,
@@ -18,8 +17,10 @@ import {
   type BrowserRecipeRunVariables,
   resolveBrowserRecipeInputVariables,
 } from '../../utils/recipes/variables'
-import { createArtifactManager, getActiveBrowserContext } from '../../utils/tool-context'
+import { getActiveBrowserContext } from '../../utils/tool.js'
+import type { BrowserWorkspaceArtifactManager } from '../workspace/BrowserWorkspaceArtifactManager'
 
+import { createArtifactManager } from './Artifacts.js'
 import { browserRecipeReader } from './RecipeReader'
 
 /** 执行 recipe skeleton 的入参。 */

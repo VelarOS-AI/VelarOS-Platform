@@ -4,11 +4,11 @@ import { renderParameterDescription as parameterDescription } from '@velaros-ai/
 import { isFalse } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import { defineBrowserTool } from '../../contract/requires'
-import { buildBrowserPageSnapshotName } from '../../exports/core'
-import { buildBrowserScreenshotOptions } from '../../exports/core'
-import { createArtifactManager, requireActiveBrowserSite } from '../../utils/tool-context'
+import { buildBrowserScreenshotOptions } from '../../utils/screenshot-options'
+import { defineBrowserTool, requireActiveBrowserSite } from '../../utils/tool.js'
+import { createArtifactManager } from '../operations/Artifacts.js'
 import { extractBrowserPageContent, extractBrowserTable } from '../operations/PageExtraction'
+import { buildBrowserPageSnapshotName } from '../workspace/BrowserWorkspaceArtifactManager'
 
 import { BrowserControlCapability } from './Capabilities'
 

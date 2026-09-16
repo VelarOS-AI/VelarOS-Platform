@@ -1,7 +1,7 @@
 import { isArray, isNumber, isPlainObject,isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import type { BrowserPageInspection, BrowserRecipeSkeleton } from '../../exports/core'
+import type { BrowserPageInspection, BrowserRecipeSkeleton } from '../../types/browser'
 
 import type { BrowserRecipeRunStepResult } from './plan'
 

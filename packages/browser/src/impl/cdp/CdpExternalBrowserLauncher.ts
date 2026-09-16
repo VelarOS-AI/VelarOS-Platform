@@ -14,7 +14,7 @@ import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
-import type { BrowserPageDriver } from '../../types/driver'
+import type { BrowserPageDriver } from '../../contract/requires.js'
 
 import { BrowserPlatformCompatibility } from './BrowserPlatformCompatibility'
 import {
@@ -41,11 +41,6 @@ export interface CdpExternalBrowserSession {
   userDataDir: string
   webSocketDebuggerUrl: string
   dispose(): void
-}
-
-/** 启动/接入外部浏览器并返回 page-level CDP driver 的 host 无关 launcher 面。 */
-export interface BrowserExternalPageLauncher {
-  launch(options?: CdpExternalBrowserLaunchOptions): Promise<CdpExternalBrowserSession>
 }
 
 export interface CdpExternalBrowserLauncherDependencies {

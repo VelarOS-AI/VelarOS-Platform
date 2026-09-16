@@ -25,8 +25,14 @@ import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 import { type TimerLease, TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
-import type { BrowserNavigationHistoryRestore, BrowserPageDiagnosticEntry, BrowserPageDiagnosticKind, BrowserPageDiagnosticLevel, BrowserUserActivityKind, BrowserViewportOptions } from '../../exports/core'
-import { BrowserPendingEventsBroker, BrowserViewNotAttachedReason } from '../../exports/core'
+import type {
+  BrowserNavigationHistoryRestore,
+  BrowserPageDiagnosticEntry,
+  BrowserPageDiagnosticKind,
+  BrowserPageDiagnosticLevel,
+  BrowserUserActivityKind,
+  BrowserViewportOptions,
+} from '../../types/browser'
 import {
   type BrowserPermissionRequestHandler,
   type BrowserSession,
@@ -34,6 +40,8 @@ import {
   type BrowserWebAuthnAccountSelectionRequest,
   type ElectronBrowserRuntimeOptions,
 } from '../../types/electron'
+import { BrowserViewNotAttachedReason } from '../../utils/errors'
+import { BrowserPendingEventsBroker } from '../session/BrowserPendingEventsBroker'
 
 import { type BrowserDiagnosticsRecorder } from './BrowserDiagnosticsRecorder'
 import { type BrowserPageWaiter } from './BrowserPageWaiter'

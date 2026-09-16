@@ -6,10 +6,10 @@ import {
   BrowserFallbackVirtualPointer,
   BrowserScreenshotDefaultDomStable,
   BrowserScreenshotDefaultModelImage,
-  BrowserTargetActionScriptBuilder,
   buildBrowserFallbackVirtualPointerSvg,
   buildBrowserLoginDetectionScript,
   buildBrowserScreenshotOptions,
+  buildTargetActionScript,
   CdpInteractionEngine,
   checkBrowserActionPolicy,
   resolveBrowserNavigationInput,
@@ -120,7 +120,7 @@ void test('browser screenshot policy owns stable model-facing defaults', () => {
 })
 
 void test('browser fill actions return the resulting control value as direct evidence', () => {
-  const script = new BrowserTargetActionScriptBuilder().buildTargetActionScript({
+  const script = buildTargetActionScript({
     action: 'fill',
     target: { css: 'input[name="answer"]' },
     value: '2000',

@@ -4,6 +4,20 @@ import { AppError } from '@velaros-ai/core/error'
 import { resolveRealPath } from '@velaros-ai/core/utils/RealPath'
 import { currentPlatform } from '@velaros-ai/platform'
 
+/**
+ * 解析站点工作区内的相对保存路径，防目录穿越。
+ *
+ * 判定走 {@link resolveBrowserWorkspacePath}（按真实路径，解开符号链接）：与 `browser:files`
+ * 同一份实现，工作区里指向外面的符号链接读写都拒绝。
+ */
+export async function resolveWorkspaceFilePath(
+  workspaceRoot: string,
+  requestedPath: string,
+  label = '路径'
+): Promise<BrowserWorkspacePath> {
+  return resolveBrowserWorkspacePath(workspaceRoot, requestedPath, label)
+}
+
 /** 站点工作区里的一条路径。 */
 export interface BrowserWorkspacePath {
   /** 解开符号链接后的真实绝对路径：包含判定与落盘都用它。 */

@@ -1,6 +1,13 @@
 import { isPresent, toOptional } from '@velaros-ai/core'
 
-import type { BrowserPageNavigationOptions, BrowserPageScrollOptions, BrowserRecipeSkeleton, BrowserRecipeSkeletonStep, BrowserTargetActionOptions, BrowserWaitForSelectorOptions } from '../../exports/core'
+import type {
+  BrowserPageNavigationOptions,
+  BrowserPageScrollOptions,
+  BrowserRecipeSkeleton,
+  BrowserRecipeSkeletonStep,
+  BrowserTargetActionOptions,
+  BrowserWaitForSelectorOptions,
+} from '../../types/browser'
 
 const ExecutableRecipeStepKinds = new Set<BrowserRecipeSkeletonStep['kind']>([
   'click_action',
