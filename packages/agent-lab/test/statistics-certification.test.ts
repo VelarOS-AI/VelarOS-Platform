@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { archive, FullCapabilities } from "../spec/support.js";
-import { labCertification, labStatistics, labWire, ObservationFaces } from "../src/exports/index.js";
+import { labCertification, labStatistics, labWire, ObservationFaces } from "../src/index.js";
 
 describe("statistics and certification", () => {
   test("strictly validates public certification inputs", () => {

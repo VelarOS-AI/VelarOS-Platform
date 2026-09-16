@@ -9,7 +9,7 @@ import { join } from 'node:path'
 
 import { afterEach, describe, expect, test } from 'bun:test'
 
-import { documentRenderer, DocumentRendererProtocol } from '../src/exports/index'
+import { documentRenderer, DocumentRendererProtocol } from '../src/index'
 
 /** 一条回执里的错误部分，用来在断言里取 message。 */
 const errorOf = (response: unknown): { code: string; message: string } =>

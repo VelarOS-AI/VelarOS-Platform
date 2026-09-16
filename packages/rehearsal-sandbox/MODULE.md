@@ -22,7 +22,7 @@ system:sandbox 与 project:sandbox 两个工具、宿主的沙箱实现都用这
 
 **数据面**是 `types/`：`types/rehearsal-sandbox.ts` 是可移植数据（建、看差量、落回、丢弃的入参与结果，筛出来的三列），`types/apply.ts` 是落回确认请求的入参与结果（引用 agent 的确认选项类型，从根入口导出）。
 
-两个入口对应 `package.json` 的 `exports`，源文件在 `src/exports/`，只有转发语句：
+两个入口对应 `package.json` 的 `exports`，源文件是 `src` 根上的入口文件，只有转发语句：
 
 | 入口 | 给谁用 | 里面有什么 |
 | --- | --- | --- |
@@ -75,7 +75,8 @@ src/
   types/        只放类型：rehearsal-sandbox.ts 是可移植数据，apply.ts 是确认请求的入参与结果
   impl/         RehearsalSandboxRules：落回规则的唯一出口
   utils/        apply.ts（筛选与确认文案的纯函数）、tuning.ts（可调参数）
-  exports/      两个入口，只有转发
+  index.ts      `.` 入口，只转发
+  contracts.ts  `./contracts` 入口，只转发
 spec/           不变量登记与验收测试
 test/           实现细节测试
 ```

@@ -6,9 +6,9 @@ import { afterEach, beforeEach, expect, spyOn, test } from 'bun:test'
 
 import { textCodec } from '@velaros-ai/text-files'
 
-import { createProjectKernel, type EditIntent } from '../src/exports/index'
 import { FileStore } from '../src/impl/files/FileStore'
 import { FileProjectTransactionStateStore } from '../src/impl/persistence/FileProjectTransactionStateStore'
+import { createProjectKernel, type EditIntent } from '../src/index'
 
 let root = ''
 beforeEach(async () => {

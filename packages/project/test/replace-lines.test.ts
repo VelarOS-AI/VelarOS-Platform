@@ -4,7 +4,7 @@ import { join } from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
-import { createProjectKernel } from '../src/exports/index'
+import { createProjectKernel } from '../src/index'
 import type { ReplaceLinesOperation } from '../src/types/edit'
 
 import { ProjectEditOperationSchema } from './support/edit-intent-schema'

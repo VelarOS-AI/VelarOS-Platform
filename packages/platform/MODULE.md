@@ -21,7 +21,7 @@ VelarOS 各产品在不同操作系统上共用的约定：路径文本怎么比
 
 **数据面**是 `types/`，只放类型；**常量表**是 `contract/constants.ts`。`./contracts` 入口就是常量表加可移植数据类型文件 `types/platform.ts`：`ShellKind`、`RuntimePlatform`、`CommandSpec`、编辑器与后台启动的定义、`PlatformEnvironmentVariables`；带进程环境变量类型的选项在 `types/options.ts`，从根入口导出。
 
-三个入口对应 `package.json` 的 `exports`，源文件在 `src/exports/`，只有转发语句：
+三个入口对应 `package.json` 的 `exports`，源文件是 `src` 根上的入口文件，只有转发语句：
 
 | 入口 | 给谁用 | 里面有什么 |
 | --- | --- | --- |
@@ -80,7 +80,9 @@ src/
   types/        只放类型：platform.ts 是可移植数据文件，options.ts 放带 Node 类型的选项
   impl/         一个类一个文件：PlatformCompatibility.ts、VelarOSSharedResources.ts
   utils/        platform.ts：shell 种类、命令规格、路径文本与 PATH 的小函数，每个上方一句说明
-  exports/      三个对外入口，只转发，package.json 的 exports 指向这里
+  index.ts             `.` 入口，只转发
+  contracts.ts         `./contracts` 入口，只转发
+  shared-resources.ts  `./shared-resources` 入口，只转发
 ```
 
 | 实现文件 | 接口 | 做什么 |

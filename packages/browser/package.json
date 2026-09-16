@@ -25,29 +25,29 @@
   "type": "module",
   "exports": {
     "./core": {
-      "types": "./dist/exports/core.d.ts",
-      "import": "./dist/exports/core.js",
-      "default": "./dist/exports/core.js"
+      "types": "./dist/core.d.ts",
+      "import": "./dist/core.js",
+      "default": "./dist/core.js"
     },
     "./core/contracts": {
-      "types": "./dist/exports/core-contracts.d.ts",
-      "import": "./dist/exports/core-contracts.js"
+      "types": "./dist/core-contracts.d.ts",
+      "import": "./dist/core-contracts.js"
     },
     "./tools": {
-      "types": "./dist/exports/tools.d.ts",
-      "import": "./dist/exports/tools.js"
+      "types": "./dist/tools.d.ts",
+      "import": "./dist/tools.js"
     },
     "./composition": {
-      "types": "./dist/exports/composition.d.ts",
-      "import": "./dist/exports/composition.js"
+      "types": "./dist/composition.d.ts",
+      "import": "./dist/composition.js"
     },
     "./composition/mod": {
-      "types": "./dist/exports/composition-mod.d.ts",
-      "import": "./dist/exports/composition-mod.js"
+      "types": "./dist/composition-mod.d.ts",
+      "import": "./dist/composition-mod.js"
     },
     "./runtime": {
-      "types": "./dist/exports/runtime.d.ts",
-      "import": "./dist/exports/runtime.js"
+      "types": "./dist/runtime.d.ts",
+      "import": "./dist/runtime.js"
     }
   },
   "files": [

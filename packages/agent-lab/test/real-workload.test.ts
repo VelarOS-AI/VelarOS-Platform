@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { archive } from "../spec/support.js";
-import { labReports, labWire, realTaskWorkload } from "../src/exports/index.js";
+import { labReports, labWire, realTaskWorkload } from "../src/index.js";
 
 function record() {
   return labWire.parseRealTaskRecord({

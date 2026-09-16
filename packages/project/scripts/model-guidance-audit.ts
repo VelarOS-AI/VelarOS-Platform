@@ -1,4 +1,4 @@
-import '../../agent/src/exports/index'
+import '../../agent/src/index'
 
 import { createHash } from 'node:crypto'
 import { readdir, readFile, stat, writeFile } from 'node:fs/promises'

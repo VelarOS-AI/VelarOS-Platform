@@ -11,7 +11,7 @@ import { test } from 'bun:test'
 import {
   BrowserTargetRefStore,
   CdpInteractionEngine,
-} from '../../dist/exports/core.js'
+} from '../../dist/core.js'
 import { BrowserInteractionEngine } from '../../dist/impl/electron/BrowserInteractionEngine.js'
 import {
   browserActSchema,

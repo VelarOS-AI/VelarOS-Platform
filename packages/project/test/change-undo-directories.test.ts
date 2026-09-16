@@ -4,7 +4,7 @@ import { join } from 'node:path'
 
 import { afterEach, beforeEach, expect, test } from 'bun:test'
 
-import { createProjectKernel } from '../src/exports/index'
+import { createProjectKernel } from '../src/index'
 import { ancestorDirectories, missingAncestorDirectories } from '../src/utils/transactions/created-directories'
 
 let root = ''

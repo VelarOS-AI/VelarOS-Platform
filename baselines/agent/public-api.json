@@ -1,11 +1,11 @@
 {
   "schemaVersion": 1,
   "packageName": "@velaros-ai/agent",
-  "acceptedPackageVersion": "0.6.41",
+  "acceptedPackageVersion": "0.6.42",
   "entries": {
     ".": {
-      "types": "./dist/exports/index.d.ts",
-      "import": "./dist/exports/index.js",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
       "symbols": [
         "ActiveDirectiveArchiveResult\ttype\t724247ded1e83ac5a31bad89139692e84f0849e1a2b510ee4f23df13e9a62c40",
         "ActiveDirectiveContext\ttype\t00cb1538c3f81002ecfedefd202fe8562a49ffbce24eba3426fd5e1961b55eb8",
@@ -144,7 +144,7 @@
         "AgentRunPlanLedgerSource\ttype\tfc62e5b23083fc0759fb6cee71a2d5bae736e3c48a7dbc0d9f540ed180dced79",
         "AgentRunPlannerInput\ttype\tae226508bd32144faf39e95dd6ce7e82efc5c52f979278af58de3451a45864b5",
         "AgentRunProfileCatalogSnapshot\ttype\t69afa4235f435822b7a842204b9cbefad24b826a0bc8706125cc09e011d6858b",
-        "AgentRunner\ttype,value\t12e61dabc0cb972c05b021c5caa40d7ea75cbc7fb19c704a2a8e23b72fd6a913",
+        "AgentRunner\ttype,value\tb55f224219481fcc3c3ab772979a172ac120c2b00012fa7987ae8dc8a0911744",
         "AgentRunnerComponents\ttype\tc6bf2003617e031a7a4a03ea92c4ba88759db1cb5936d87021246c20b72b3655",
         "AgentRunnerConfig\ttype\t21862520215a3818d9aef0fe61ed434108805a91a04b9c87a3c1c05dcfc93366",
         "AgentRunnerDomainServices\ttype\t0c1da8db38d74b1f7bbe26ad199b63301ee6fc222be8447f2b05e8b9323027e8",
@@ -1581,7 +1581,7 @@
         "resolveSoloLoopToolCategoriesForExposure\tvalue\tfb10540d0e1b7fa1204873a83956bdf54e84d69c6d6eccd88c3f7b6fa0c53720",
         "resolveSoloLoopTools\tvalue\t79c942476ee8fe7c98852f935ee29004fe7788bcb5f7e7f6dacca17bb82af772",
         "resolveSoloTurnModelRequestOptions\tvalue\t96b2b80f06f4cacc0f56e6698fdd5c8c3ddde032ec881ee5df2d1fc7bcd89eb8",
-        "resolveStoredChatSessionFields\tvalue\t7801ea4b60116fb3f3d2712f8554502ebd868c1187040a16a3e720b8eec52123",
+        "resolveStoredChatSessionFields\tvalue\tc6c9302e837b2c1d0d708fa5dd5e94ee0c8e30ca70a1430d8a4479f1990c574a",
         "resolveSubAgentDelegation\tvalue\tef68e18b8684891c1b9b7cd573e4de46817a205f1b6aa03c28335f008ce3d3de",
         "resolveSubAgentExecutionKey\tvalue\t774a9da15f6f49e28e454adee06129d7213966e5882e87ad3f482964ac4424b5",
         "resolveSubAgentToolScope\tvalue\t75a1e07ce121300eb5a582981c227fb9123cebfe45707f93d4f32c1b9ba1362f",
@@ -1659,8 +1659,8 @@
       ]
     },
     "./bridge": {
-      "types": "./dist/exports/bridge.d.ts",
-      "import": "./dist/exports/bridge.js",
+      "types": "./dist/bridge.d.ts",
+      "import": "./dist/bridge.js",
       "symbols": [
         "ExternalAgentBridgeCommandQueue\ttype,value\t455293a2384962f81ee7e701a977ecb005c65113d35bd1bbe757e2ff98ce6b44",
         "ExternalAgentBridgeDefaultPortEnd\tvalue\tbd0a21ab290ff784ddac8e1aa122430bfa8080695bef7babd759e72d4e6ea034",
@@ -1681,8 +1681,8 @@
       ]
     },
     "./chat": {
-      "types": "./dist/exports/chat.d.ts",
-      "import": "./dist/exports/chat.js",
+      "types": "./dist/chat.d.ts",
+      "import": "./dist/chat.js",
       "symbols": [
         "AgentBridgeDispatch\ttype\t6c51d9a7f568aa98408be2115f25830ad80bd6d8109fdf010ac18091d636c7c7",
         "AgentBridgeOutput\ttype\t3c759b4dec2f412f5dc62f679c9e9369d23b756b0e4144ca16411877d389ca16",
@@ -1742,7 +1742,7 @@
         "resolveChatSendRequestOptions\tvalue\t7e2de91a1a4614d6254e9d139db86196c1c8e68badc378387d797de2737b0269",
         "resolveContextUsageWindow\tvalue\td4ff465e8d3cee557de3416ca2760e95d2b613bbceac7ccdf44156c5375f3c39",
         "resolveExecutionModes\tvalue\t7241b28aea73c6901cfd7ee406fa2390d4da998a66177d4ef028902405b62cbd",
-        "resolveStoredChatSessionFields\tvalue\t7801ea4b60116fb3f3d2712f8554502ebd868c1187040a16a3e720b8eec52123",
+        "resolveStoredChatSessionFields\tvalue\tc6c9302e837b2c1d0d708fa5dd5e94ee0c8e30ca70a1430d8a4479f1990c574a",
         "serializeToolResultForModel\tvalue\teecc6d4105f0f4e869a012de457ab10f6ddffa35b26539930a661d0f3e204501",
         "serializeToolResultForRecall\tvalue\tdf151d18f63061ae8a4cfbd93b0eb051ef2ff6debadffc1155f6d0c05c662a73",
         "stripExecutionModePromptFeatures\tvalue\t996d1316d5bbaebb98ebe10c648399e71f9f6ddeaf85e69bdeda2dab72394ef0",
@@ -1750,8 +1750,8 @@
       ]
     },
     "./chat-stream": {
-      "types": "./dist/exports/chat-stream.d.ts",
-      "import": "./dist/exports/chat-stream.js",
+      "types": "./dist/chat-stream.d.ts",
+      "import": "./dist/chat-stream.js",
       "symbols": [
         "AgentBridgeDispatch\ttype\t6c51d9a7f568aa98408be2115f25830ad80bd6d8109fdf010ac18091d636c7c7",
         "AgentBridgeOutput\ttype\t3c759b4dec2f412f5dc62f679c9e9369d23b756b0e4144ca16411877d389ca16",
@@ -1767,8 +1767,8 @@
       ]
     },
     "./host": {
-      "types": "./dist/exports/host.d.ts",
-      "import": "./dist/exports/host.js",
+      "types": "./dist/host.d.ts",
+      "import": "./dist/host.js",
       "symbols": [
         "AgentCapability\tvalue\t1781253efe71fd2d05e60e708b5f99bcdfa2065d72bee25aca9c5f19aa15baf1",
         "AgentCapabilityExecutionContext\ttype\t217e2bfb600bb83f1207c6a441ce025e54b0071304438654b8db99757be9918e",
@@ -1865,8 +1865,8 @@
       ]
     },
     "./mcp": {
-      "types": "./dist/exports/mcp.d.ts",
-      "import": "./dist/exports/mcp.js",
+      "types": "./dist/mcp.d.ts",
+      "import": "./dist/mcp.js",
       "symbols": [
         "McpAuthorizationProvider\ttype\t13a2b59382ee9fc181fbe995752ff0b7c0d2ea997db84e079d7d2b180ae4164d",
         "McpAuthorizationRequiredError\ttype,value\t5e8e320c7934aec53821c85c05c752f4695668dec3f3fe5799a2cb780486c799",
@@ -1890,8 +1890,8 @@
       ]
     },
     "./mods": {
-      "types": "./dist/exports/mods.d.ts",
-      "import": "./dist/exports/mods.js",
+      "types": "./dist/mods.d.ts",
+      "import": "./dist/mods.js",
       "symbols": [
         "AgentModActivationState\ttype\t52878c6d3f9ab8a4d3ac30b0f0758188a4cfa0bac590d0eefb7a5c3fc86318e0",
         "AgentModActivationStatus\ttype\t1eeed748e24579bfd047965ff957b539cf0b094b6b5f1ff7ce2bb002e6e3246d",
@@ -1977,8 +1977,8 @@
       ]
     },
     "./node": {
-      "types": "./dist/exports/node.d.ts",
-      "import": "./dist/exports/node.js",
+      "types": "./dist/node.d.ts",
+      "import": "./dist/node.js",
       "symbols": [
         "ToolContractCatalogRegistry\ttype\tbb4debcebb1cda32f165dc6935b1099ebc18eb4cc7bfd83fb7cb598f0915a800",
         "ToolContractDiscoveryDescriptors\tvalue\t86bfebf9c65142ead6a8d15753c8832abba73505043fbdbc7a3fa8d49f94e7d1",
@@ -1989,8 +1989,8 @@
       ]
     },
     "./protocol": {
-      "types": "./dist/exports/protocol.d.ts",
-      "import": "./dist/exports/protocol.js",
+      "types": "./dist/protocol.d.ts",
+      "import": "./dist/protocol.js",
       "symbols": [
         "ALL_STREAM_RUNTIME_STATE_KINDS\tvalue\t785c609a2c6498f45a885d7fddf7651e11591f5c429c27bcca8d4e50de3d80db",
         "ActiveContextApplyGovernanceDecisionInput\ttype\te26a0513507130407eaf55b74d1bca78e474756e6fbee74fe873afb07f4a86a4",
@@ -2657,8 +2657,8 @@
       ]
     },
     "./protocol/agent-capability": {
-      "types": "./dist/exports/protocol/agent-capability.d.ts",
-      "import": "./dist/exports/protocol/agent-capability.js",
+      "types": "./dist/protocol/agent-capability.d.ts",
+      "import": "./dist/protocol/agent-capability.js",
       "symbols": [
         "AgentCapabilityApiVersion\tvalue\t65ece2e8d767f41c93cb9550700a738ee9b14420164c19c55c4e675eab2917b5",
         "AgentCapabilityExecuteEnvelopeV1\ttype\t239650f05538832a36f2f1a25475764bdb02762161184034ca8492bc6505f140",
@@ -2673,8 +2673,8 @@
       ]
     },
     "./protocol/execution": {
-      "types": "./dist/exports/protocol/execution.d.ts",
-      "import": "./dist/exports/protocol/execution.js",
+      "types": "./dist/protocol/execution.d.ts",
+      "import": "./dist/protocol/execution.js",
       "symbols": [
         "DescribeToolSchemaRequest\ttype\t00a251317cf0796353486a6526a8dc27eded32b99574a195cd1e0c53971aaf1d",
         "DescribeToolSchemaRequestSchema\tvalue\te7c7ef582190ddef8c154c61a36a1c464331e3de0e651f722983b00994a208b9",
@@ -2697,8 +2697,8 @@
       ]
     },
     "./protocol/external-agent-bridge": {
-      "types": "./dist/exports/protocol/external-agent-bridge.d.ts",
-      "import": "./dist/exports/protocol/external-agent-bridge.js",
+      "types": "./dist/protocol/external-agent-bridge.d.ts",
+      "import": "./dist/protocol/external-agent-bridge.js",
       "symbols": [
         "ExternalAgentBridgeAckSchema\tvalue\t87afb67bb100766a335eb91569b4f92d1eaffb209c008659a50467dc012f16c7",
         "ExternalAgentBridgeClientMessage\ttype\t0ce1767eb8dc6af875bc066922bb2a875603be34dc4eb06f976fab9f6e1af5bc",
@@ -2733,8 +2733,8 @@
       ]
     },
     "./protocol/lease": {
-      "types": "./dist/exports/protocol/lease.d.ts",
-      "import": "./dist/exports/protocol/lease.js",
+      "types": "./dist/protocol/lease.d.ts",
+      "import": "./dist/protocol/lease.js",
       "symbols": [
         "ContractLease\ttype\t0d1ac87ab071e9626655eead9c23cec800c3a1491de84787d34da16a1c7c0d26",
         "ContractLeaseSchema\tvalue\t1cb4cfa68ac34fa23101a4566f4d8162d4f5902c0b247dd770c6553cb9e0eb66",
@@ -2759,8 +2759,8 @@
       ]
     },
     "./protocol/message": {
-      "types": "./dist/exports/protocol/message.d.ts",
-      "import": "./dist/exports/protocol/message.js",
+      "types": "./dist/protocol/message.d.ts",
+      "import": "./dist/protocol/message.js",
       "symbols": [
         "ModelMessage\ttype\ta311b0952b345451b8f2136e6a7fb6699d5afea541e4ff223bc1724c7a5cc1f9",
         "ModelMessagePart\ttype\tb483b9f03b1674ade500b52bc13e842682dd403324e56cef4f6d17bfcc3750b6",
@@ -2774,8 +2774,8 @@
       ]
     },
     "./protocol/mods": {
-      "types": "./dist/exports/protocol/mods.d.ts",
-      "import": "./dist/exports/protocol/mods.js",
+      "types": "./dist/protocol/mods.d.ts",
+      "import": "./dist/protocol/mods.js",
       "symbols": [
         "AgentModCommandHandler\ttype\t4ed6c7cf1cc30c795ab429aea352b12a75483dc339f50dfab1f867f929d7d9a4",
         "AgentModCommandHandlerSchema\tvalue\t66a5250be04fb8ca4fdceeb597e66cd51521ac5c293b4ec6946529db9acdd2c4",
@@ -2832,8 +2832,8 @@
       ]
     },
     "./protocol/observability": {
-      "types": "./dist/exports/protocol/observability.d.ts",
-      "import": "./dist/exports/protocol/observability.js",
+      "types": "./dist/protocol/observability.d.ts",
+      "import": "./dist/protocol/observability.js",
       "symbols": [
         "CapabilitySpan\ttype\te12555d2c84ad93824fe6370371b4ad47e33a87524dae2e1dc3d4b3ee2c3920a",
         "CapabilitySpanSchema\tvalue\tee9a8e174ab02f70e397a43b1b1d8f42481fd67410753f363d8b3b5654b5d70d",
@@ -2859,8 +2859,8 @@
       ]
     },
     "./protocol/session": {
-      "types": "./dist/exports/protocol/session.d.ts",
-      "import": "./dist/exports/protocol/session.js",
+      "types": "./dist/protocol/session.d.ts",
+      "import": "./dist/protocol/session.js",
       "symbols": [
         "AdmitReceipt\ttype\t41b4e55e4fadb2e4b68b83bed6818b55101b2d8a192c3e6bd1559054c90a9b3d",
         "AdmitReceiptSchema\tvalue\tf1c8ed6662fa7f3bf287e01320c8bfec92077647e2b48233ed9036f693d6e805",
@@ -2909,8 +2909,8 @@
       ]
     },
     "./remote": {
-      "types": "./dist/exports/remote.d.ts",
-      "import": "./dist/exports/remote.js",
+      "types": "./dist/remote.d.ts",
+      "import": "./dist/remote.js",
       "symbols": [
         "RemoteHostDefinition\ttype\t2e827e656fc21ea3474f22e8c32b60bb431673fe6ee91d02976a07e58258ad82",
         "RemoteHostService\ttype,value\t1e1435d03ad4dedb9203b1d82aaf27be2f02900b0576f3666c0aea9c8cdb7410",
@@ -2926,8 +2926,8 @@
       ]
     },
     "./remote/mcp": {
-      "types": "./dist/exports/remote/mcp.d.ts",
-      "import": "./dist/exports/remote/mcp.js",
+      "types": "./dist/remote/mcp.d.ts",
+      "import": "./dist/remote/mcp.js",
       "symbols": [
         "RemoteNodeMcpBridgeOptions\ttype\t0661fe6e6aab87f730a694a9ee00b409a554a7a4781194496d43a201efbb7318",
         "createRemoteNodeMcpServer\tvalue\taef0fa6db35015f31f97d1c2fd7dfadf742ff1c67f4b934e1721e9462d7070ec",
@@ -2935,8 +2935,8 @@
       ]
     },
     "./run-context": {
-      "types": "./dist/exports/run-context.d.ts",
-      "import": "./dist/exports/run-context.js",
+      "types": "./dist/run-context.d.ts",
+      "import": "./dist/run-context.js",
       "symbols": [
         "AgentRunContextHelper\ttype,value\t4f3e5a4689606c42236b31a7b0496c90d7f4e637650a7a5954b7d689916f0a46",
         "AgentTurnContextPayloadBuilder\ttype,value\t92c135be50a4ca4accca8ad82f7dbc085889a91525cdb69bcde26aedb0498f56",
@@ -2964,8 +2964,8 @@
       ]
     },
     "./runtime": {
-      "types": "./dist/exports/runtime.d.ts",
-      "import": "./dist/exports/runtime.js",
+      "types": "./dist/runtime.d.ts",
+      "import": "./dist/runtime.js",
       "symbols": [
         "AgentChatRuntimeConfig\ttype\t428b73073d6b7fcdb950c27b10e29695296fe4677aedfa19cbcb899ea986bdfc",
         "AgentExecutionConfig\ttype\t5370d5ac0a1dd7433b3ff67baffec67dc30fb76b873a9c56df5bf27ad02dd974",
@@ -3001,8 +3001,8 @@
       ]
     },
     "./session": {
-      "types": "./dist/exports/session.d.ts",
-      "import": "./dist/exports/session.js",
+      "types": "./dist/session.d.ts",
+      "import": "./dist/session.js",
       "symbols": [
         "AgentBackgroundAgent\ttype\t9440ed920b238f276fd96bc5290c5955be85205087cfcb24033ac0368a2e362d",
         "AgentBackgroundAgentControlPort\ttype\te2af2a659b282149705f35629766fb3a7b869eda96f2060afd83372253aea25c",
@@ -3056,8 +3056,8 @@
       ]
     },
     "./tool-contract": {
-      "types": "./dist/exports/tool-contract.d.ts",
-      "import": "./dist/exports/tool-contract.js",
+      "types": "./dist/tool-contract.d.ts",
+      "import": "./dist/tool-contract.js",
       "symbols": [
         "AppliedAdjustment\ttype\tf42588c8b72a94c860b2034631f99382672d99637760ee7304ca63f74f6cc48e",
         "ApprovalPort\ttype\t8031929fae21f275b453d0dbd5a16fdadd600cb4d7396460986cfd5719ae146f",

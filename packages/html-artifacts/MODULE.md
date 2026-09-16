@@ -43,7 +43,7 @@ webview 与测试用；不给就用包自带的 DOM 实现。
 `HtmlArtifactShellDocumentOptions`、`HtmlArtifactFrameFit`、`HtmlArtifactFrameFitInput`、`NormalizeHtmlArtifactExternalUrlOptions`）；
 带回调的挂载选项 `MountHtmlArtifactOptions` 与宿主错误 `HtmlArtifactHostError` 在 `types/browser.ts`，不进可移植文件。
 
-两个入口对应 `package.json` 的 `exports`，源文件在 `src/exports/`，只有转发语句：
+两个入口对应 `package.json` 的 `exports`，源文件是 `src` 根上的入口文件，只有转发语句：
 
 | 入口 | 给谁用 | 里面有什么 |
 | --- | --- | --- |
@@ -107,7 +107,8 @@ src/
   types/        只放类型：html-artifacts.ts 是可移植数据，browser.ts 是带回调的挂载选项与宿主错误，internals.ts 是不出包的工作类型
   impl/         一类一文件：HtmlArtifactProtocol、HtmlArtifactProtocolParser、HtmlArtifactDocuments、HtmlArtifactRuntime、DomHtmlArtifactEnvironment
   utils/        protocol-stream.ts 状态机本体、shell-document.ts 文档构造、size-controller.ts 注入脚本源码、frame-fit.ts 宿主缩放、external-url.ts 外链白名单、host-bridge.ts 宿主侧小工具、runtime-guards.ts 与 runtime-log.ts 零依赖副本、tuning.ts 可调参数
-  exports/      两个入口，只有转发
+  index.ts      `.` 入口，只转发
+  contracts.ts  `./contracts` 入口，只转发
 spec/           不变量登记、验收测试与共用的浏览器假件
 test/           实现细节测试
 demo/           一个不进包的演示页

@@ -4,9 +4,9 @@ import { join, resolve } from 'node:path'
 
 import { describe, expect, test } from 'bun:test'
 
-import { createProjectKernel } from '../src/exports/index.js'
 import { projectApprovalBridge } from '../src/impl/kernel/ProjectApprovalBridge.js'
 import { projectTools } from '../src/impl/ProjectTools.js'
+import { createProjectKernel } from '../src/index.js'
 
 describe('project approval context', () => {
   test('dangerous project approval identifies the precise command and working directory', async () => {

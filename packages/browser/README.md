@@ -21,12 +21,12 @@ Electron 内嵌 WebContents,和外部 Chrome 的 CDP 连接。本包的答案是
 
 | 子路径 | 源码 | 运行面 |
 | --- | --- | --- |
-| `@velaros-ai/browser/core` | `src/exports/core.ts` | host 无关的 CDP 自动化运行时、驱动、策略、脚本构建器 |
-| `@velaros-ai/browser/core/contracts` | `src/exports/core-contracts.ts` | 浏览器安全 DTO + 确定性策略(无 Node 内置模块) |
-| `@velaros-ai/browser/tools` | `src/exports/tools.ts` | 宿主注入式的 40 个 `browser:*` canonical agent 工具 |
-| `@velaros-ai/browser/composition` | `src/exports/composition.ts` | renderer-safe React 合成边界(peer `react`) |
-| `@velaros-ai/browser/composition/mod` | `src/exports/composition-mod.ts` | 宿主侧 Mod Loader 定义；会绑定完整工具集合，renderer 不得导入 |
-| `@velaros-ai/browser/runtime` | `src/exports/runtime.ts` | Electron 会话 / 自动化运行时(peer `electron`) |
+| `@velaros-ai/browser/core` | `src/core.ts` | host 无关的 CDP 自动化运行时、驱动、策略、脚本构建器 |
+| `@velaros-ai/browser/core/contracts` | `src/core-contracts.ts` | 浏览器安全 DTO + 确定性策略(无 Node 内置模块) |
+| `@velaros-ai/browser/tools` | `src/tools.ts` | 宿主注入式的 40 个 `browser:*` canonical agent 工具 |
+| `@velaros-ai/browser/composition` | `src/composition.ts` | renderer-safe React 合成边界(peer `react`) |
+| `@velaros-ai/browser/composition/mod` | `src/composition-mod.ts` | 宿主侧 Mod Loader 定义；会绑定完整工具集合，renderer 不得导入 |
+| `@velaros-ai/browser/runtime` | `src/runtime.ts` | Electron 会话 / 自动化运行时(peer `electron`) |
 
 `react` 与 `electron` 都是**可选 peer**:只用 `./core` / `./tools` 的宿主两个都不用装。
 源码按 `contract` / `types` / `impl` / `utils` / `exports` 五个目录组织,子路径只是入口文件。

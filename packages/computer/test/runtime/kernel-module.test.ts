@@ -8,7 +8,7 @@ import type {
 import {
   ComputerOperationMetadata,
   ComputerToolOperations,
-} from '../../src/exports/contracts'
+} from '../../src/contracts'
 import {
   ComputerCapability,
   type ComputerCapabilityService,
@@ -16,8 +16,8 @@ import {
   ComputerKernelModuleVersion,
   type ComputerRuntimePort,
   createComputerKernelModule,
-} from '../../src/exports/runtime'
-import { computerTools } from '../../src/exports/tools'
+} from '../../src/runtime'
+import { computerTools } from '../../src/tools'
 
 function createCaptureContext(
   capture: (tokenId: string, service: object) => void,

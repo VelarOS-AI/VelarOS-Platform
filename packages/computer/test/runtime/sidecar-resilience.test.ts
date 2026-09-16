@@ -2,8 +2,8 @@ import { spawn } from 'node:child_process'
 
 import { describe, expect, test } from 'bun:test'
 
-import type { ComputerHelperLaunchSpec, ComputerSidecarProcess } from '../../src/exports/runtime'
-import { ComputerSidecarManager } from '../../src/exports/runtime'
+import type { ComputerHelperLaunchSpec, ComputerSidecarProcess } from '../../src/runtime'
+import { ComputerSidecarManager } from '../../src/runtime'
 
 /** 假 helper 用 `sh` 扮演：EPIPE、半行崩溃、卡在启动这三种故障都要真管道才复现得出来。 */
 const posixTest = process.platform === 'win32' ? test.skip : test

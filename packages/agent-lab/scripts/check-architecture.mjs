@@ -62,8 +62,8 @@ const binarySource = await readFile(binaryPath, 'utf8').catch(() => null)
 if (binarySource === null) fail(`missing executable shell: bin/${BinaryCommand}.mjs`)
 else {
   if (!binarySource.startsWith(BinaryShebang)) fail(`bin/${BinaryCommand}.mjs must start with ${BinaryShebang}`)
-  if (!binarySource.includes('dist/exports/index.js')) {
-    fail(`bin/${BinaryCommand}.mjs must hand the process to dist/exports/index.js`)
+  if (!binarySource.includes('dist/index.js')) {
+    fail(`bin/${BinaryCommand}.mjs must hand the process to dist/index.js`)
   }
 }
 
@@ -101,8 +101,8 @@ const requiredFiles = [
   'CHANGELOG.md',
   'MODULE.md',
   `bin/${BinaryCommand}.mjs`,
-  'src/exports/index.ts',
-  'src/exports/contracts.ts',
+  'src/index.ts',
+  'src/contracts.ts',
   'spec/invariants.md',
   'spec/acceptance.test.ts',
   'spec/support.ts',

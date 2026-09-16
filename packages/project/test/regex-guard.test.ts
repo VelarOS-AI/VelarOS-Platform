@@ -6,7 +6,7 @@ import { join, resolve } from 'node:path'
 import { afterEach, beforeEach, expect, test } from 'bun:test'
 import { execa } from 'execa'
 
-import { createProjectKernel } from '../src/exports/index'
+import { createProjectKernel } from '../src/index'
 import { execGuardedRegex } from '../src/utils/regex-guard'
 import { ProjectTuning } from '../src/utils/tuning'
 

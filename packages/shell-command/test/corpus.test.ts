@@ -5,7 +5,7 @@
 
 import { describe, expect, test } from 'bun:test'
 
-import { shellCommandPolicy } from '../src/exports/index'
+import { shellCommandPolicy } from '../src/index'
 
 const DangerousCommands = [
   'dd of=/dev/disk2 if=/dev/zero bs=1m',

@@ -31,7 +31,7 @@ VelarOS 唯一的正式命令行发行包，装出来的可执行文件叫 `vela
 
 **数据面**是 `types/cli.ts`（可移植）：`VelarosCliRunOptions`、`VelarosCliEnvironment`、`VelarosCliNamespaceRunResult`、`VelarosCliSuccessEnvelope`、`VelarosCliErrorEnvelope` 与它们用到的 `VelarosCliStatus`。
 
-两个入口对应 `package.json` 的 `exports`，源文件在 `src/exports/`，只有转发语句：
+两个入口对应 `package.json` 的 `exports`，源文件是 `src` 根上的入口文件，只有转发语句：
 
 | 入口 | 给谁用 | 里面有什么 |
 | --- | --- | --- |
@@ -100,7 +100,8 @@ src/
   types/        只放类型：cli.ts 是可移植数据（运行选项、两种信封、命名空间结果），output.ts 是造信封用的包内工作类型
   impl/         一类一文件：VelarosCliProcess（进程壳）、VelarosCliRouter（路由器与工厂、默认实例）、TerminalNamespace（velaros terminal）
   utils/        errors.ts 是错误类与归一化（错误类不出包），output.ts 是信封、文本与根帮助
-  exports/      两个入口，只有转发
+  index.ts      `.` 入口，只转发
+  contracts.ts  `./contracts` 入口，只转发
 spec/           不变量登记与验收测试
 ```
 

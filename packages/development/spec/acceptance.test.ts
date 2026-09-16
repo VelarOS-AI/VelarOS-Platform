@@ -10,6 +10,7 @@ import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from '
 
 import { createProjectKernel } from '@velaros-ai/project'
 
+import { typeScriptProjectPool } from '../src/impl/TypeScriptProjectPool'
 import {
   createExternalLanguageService,
   createProjectCodeQuery,
@@ -17,8 +18,7 @@ import {
   type LanguageReadPort,
   type LanguageToolContext,
   typeScriptProjects,
-} from '../src/exports/index'
-import { typeScriptProjectPool } from '../src/impl/TypeScriptProjectPool'
+} from '../src/index'
 
 // 用例跑真实类型检查，机器繁忙时会超过默认的 5 秒。
 setDefaultTimeout(30_000)

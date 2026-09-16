@@ -2,8 +2,8 @@ import { spawnSync } from 'node:child_process'
 
 import { describe, expect, test } from 'bun:test'
 
-import type { OfficeNativeCommand, OfficeToolContext } from '../src/exports'
 import { officeConverters } from '../src/impl/operations/OfficeConverters'
+import type { OfficeNativeCommand, OfficeToolContext } from '../src/index'
 import { describeOfficeNativeCommand } from '../src/utils/commands'
 import { buildLatexCompileCommands } from '../src/utils/pdf/latex'
 

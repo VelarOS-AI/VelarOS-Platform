@@ -10,7 +10,7 @@ import { join } from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
-import { textCodec, type TextEncoding, TextEncodings, TextFileErrorCodes, textFileIo } from '../src/exports/index'
+import { textCodec, type TextEncoding, TextEncodings, TextFileErrorCodes, textFileIo } from '../src/index'
 
 let root = ''
 beforeEach(async () => { root = await mkdtemp(join(tmpdir(), 'text-files-acceptance-')) })

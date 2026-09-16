@@ -20,7 +20,7 @@ async function main(): Promise<void> {
     process.env.NAPI_RS_NATIVE_LIBRARY_PATH ??= bundledCanvas
   }
   const { documentRenderer } =
-    await import('../../../packages/document-renderer/src/exports/index')
+    await import('../../../packages/document-renderer/src/index')
   const result = await documentRenderer.runCli(process.argv.slice(2))
   process.stdout.write(result.text)
   process.exitCode = result.exitCode

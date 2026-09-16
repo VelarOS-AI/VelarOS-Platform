@@ -6,8 +6,8 @@ import { describe, expect, test } from 'bun:test'
 
 import { textCodec } from '@velaros-ai/text-files'
 
-import { createProjectKernel, type EditIntent, type ProjectKernel, type ProjectPlugin } from '../src/exports/index'
 import { FileProjectTransactionStateStore } from '../src/impl/persistence/FileProjectTransactionStateStore'
+import { createProjectKernel, type EditIntent, type ProjectKernel, type ProjectPlugin } from '../src/index'
 import type { ApprovalRequest } from '../src/types/policy'
 import type { ProjectTransactionPendingOperation } from '../src/types/transaction.js'
 

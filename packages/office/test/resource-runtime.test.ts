@@ -4,8 +4,8 @@ import { join } from 'node:path'
 
 import { afterEach, describe, expect, test } from 'bun:test'
 
-import type { OfficeResourcePort } from '../src/exports'
-import { createMarkItDownLocator } from '../src/exports'
+import type { OfficeResourcePort } from '../src/index'
+import { createMarkItDownLocator } from '../src/index'
 
 let createdRoot: Nullable<string> = null
 

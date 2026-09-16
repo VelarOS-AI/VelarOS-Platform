@@ -19,32 +19,32 @@
     "agent-tools"
   ],
   "type": "module",
-  "main": "./dist/exports/index.js",
-  "types": "./dist/exports/index.d.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/exports/index.d.ts",
-      "import": "./dist/exports/index.js"
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
     },
     "./composition": {
-      "types": "./dist/exports/composition.d.ts",
-      "import": "./dist/exports/composition.js"
+      "types": "./dist/composition.d.ts",
+      "import": "./dist/composition.js"
     },
     "./contracts": {
-      "types": "./dist/exports/contracts.d.ts",
-      "import": "./dist/exports/contracts.js"
+      "types": "./dist/contracts.d.ts",
+      "import": "./dist/contracts.js"
     },
     "./runtime": {
-      "types": "./dist/exports/runtime.d.ts",
-      "import": "./dist/exports/runtime.js"
+      "types": "./dist/runtime.d.ts",
+      "import": "./dist/runtime.js"
     },
     "./renderer": {
-      "types": "./dist/exports/renderer.d.ts",
-      "import": "./dist/exports/renderer.js"
+      "types": "./dist/renderer.d.ts",
+      "import": "./dist/renderer.js"
     },
     "./tools": {
-      "types": "./dist/exports/tools.d.ts",
-      "import": "./dist/exports/tools.js"
+      "types": "./dist/tools.d.ts",
+      "import": "./dist/tools.js"
     }
   },
   "files": [

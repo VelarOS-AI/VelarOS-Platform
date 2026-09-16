@@ -6,8 +6,8 @@ import { join } from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
-import { createProjectKernel, type EditIntent, type ProjectKernel } from '../src/exports/index'
 import { NodeCommandProvider } from '../src/impl/kernel/NodeCommandProvider'
+import { createProjectKernel, type EditIntent, type ProjectKernel } from '../src/index'
 import type { CommandRunResult } from '../src/types/provider'
 
 type Operation = EditIntent['operation']

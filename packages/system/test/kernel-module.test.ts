@@ -1,13 +1,13 @@
 import { describe, expect, test } from 'bun:test'
 
 import { captureService } from '../spec/support'
-import type { SystemBackgroundTaskQueryOptions, SystemBackgroundTaskRecord, SystemOpenPortInfo, SystemOpenPortQueryOptions, SystemProcessInfo, SystemProcessQueryOptions } from '../src/exports/contracts'
+import type { SystemBackgroundTaskQueryOptions, SystemBackgroundTaskRecord, SystemOpenPortInfo, SystemOpenPortQueryOptions, SystemProcessInfo, SystemProcessQueryOptions } from '../src/contracts'
+import { LocalSystemKernel } from '../src/impl/LocalSystemKernel.js'
 import {
   createSystemKernelModule,
   type SystemCapabilityService,
   type SystemToolContext,
-} from '../src/exports/index'
-import { LocalSystemKernel } from '../src/impl/LocalSystemKernel.js'
+} from '../src/index'
 import { collectPortPids, parseOpenPortEntries, parseProcessRows, selectBackgroundTasks, selectOpenPorts, selectSystemProcesses } from '../src/utils/system-info.js'
 
 /** 60 条进程、60 个端口、60 个后台任务，只有 pid 1056～1059 命中过滤词；过滤词大小写各异、前后带空格。 */

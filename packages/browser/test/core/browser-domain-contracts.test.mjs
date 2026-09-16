@@ -14,7 +14,7 @@ import {
   checkBrowserActionPolicy,
   resolveBrowserNavigationInput,
   resolveBrowserSearchOrNavigationInput,
-} from '../../dist/exports/core.js'
+} from '../../dist/core.js'
 
 class SystemPointerTestEngine extends CdpInteractionEngine {
   constructor() {

@@ -7,7 +7,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-const packagePath = new URL('../../dist/exports/tools.js', import.meta.url)
+const packagePath = new URL('../../dist/tools.js', import.meta.url)
 
 function createContext(pendingEvents, options = {}) {
   return {

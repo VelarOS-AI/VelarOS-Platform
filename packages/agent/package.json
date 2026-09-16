@@ -1,6 +1,6 @@
 {
   "name": "@velaros-ai/agent",
-  "version": "0.6.41",
+  "version": "0.6.42",
   "velaros": {
     "platform": "0.6"
   },
@@ -11,100 +11,100 @@
     "node": ">=20.0.0"
   },
   "type": "module",
-  "main": "./dist/exports/index.js",
-  "types": "./dist/exports/index.d.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/exports/index.d.ts",
-      "import": "./dist/exports/index.js"
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
     },
     "./runtime": {
-      "types": "./dist/exports/runtime.d.ts",
-      "import": "./dist/exports/runtime.js"
+      "types": "./dist/runtime.d.ts",
+      "import": "./dist/runtime.js"
     },
     "./host": {
-      "types": "./dist/exports/host.d.ts",
-      "import": "./dist/exports/host.js"
+      "types": "./dist/host.d.ts",
+      "import": "./dist/host.js"
     },
     "./node": {
-      "types": "./dist/exports/node.d.ts",
-      "import": "./dist/exports/node.js"
+      "types": "./dist/node.d.ts",
+      "import": "./dist/node.js"
     },
     "./chat-stream": {
-      "types": "./dist/exports/chat-stream.d.ts",
-      "import": "./dist/exports/chat-stream.js"
+      "types": "./dist/chat-stream.d.ts",
+      "import": "./dist/chat-stream.js"
     },
     "./chat": {
-      "types": "./dist/exports/chat.d.ts",
-      "import": "./dist/exports/chat.js"
+      "types": "./dist/chat.d.ts",
+      "import": "./dist/chat.js"
     },
     "./run-context": {
-      "types": "./dist/exports/run-context.d.ts",
-      "import": "./dist/exports/run-context.js"
+      "types": "./dist/run-context.d.ts",
+      "import": "./dist/run-context.js"
     },
     "./protocol": {
-      "types": "./dist/exports/protocol.d.ts",
-      "import": "./dist/exports/protocol.js"
+      "types": "./dist/protocol.d.ts",
+      "import": "./dist/protocol.js"
     },
     "./protocol/agent-capability": {
-      "types": "./dist/exports/protocol/agent-capability.d.ts",
-      "import": "./dist/exports/protocol/agent-capability.js"
+      "types": "./dist/protocol/agent-capability.d.ts",
+      "import": "./dist/protocol/agent-capability.js"
     },
     "./protocol/execution": {
-      "types": "./dist/exports/protocol/execution.d.ts",
-      "import": "./dist/exports/protocol/execution.js"
+      "types": "./dist/protocol/execution.d.ts",
+      "import": "./dist/protocol/execution.js"
     },
     "./protocol/external-agent-bridge": {
-      "types": "./dist/exports/protocol/external-agent-bridge.d.ts",
-      "import": "./dist/exports/protocol/external-agent-bridge.js"
+      "types": "./dist/protocol/external-agent-bridge.d.ts",
+      "import": "./dist/protocol/external-agent-bridge.js"
     },
     "./protocol/lease": {
-      "types": "./dist/exports/protocol/lease.d.ts",
-      "import": "./dist/exports/protocol/lease.js"
+      "types": "./dist/protocol/lease.d.ts",
+      "import": "./dist/protocol/lease.js"
     },
     "./protocol/message": {
-      "types": "./dist/exports/protocol/message.d.ts",
-      "import": "./dist/exports/protocol/message.js"
+      "types": "./dist/protocol/message.d.ts",
+      "import": "./dist/protocol/message.js"
     },
     "./protocol/mods": {
-      "types": "./dist/exports/protocol/mods.d.ts",
-      "import": "./dist/exports/protocol/mods.js"
+      "types": "./dist/protocol/mods.d.ts",
+      "import": "./dist/protocol/mods.js"
     },
     "./protocol/observability": {
-      "types": "./dist/exports/protocol/observability.d.ts",
-      "import": "./dist/exports/protocol/observability.js"
+      "types": "./dist/protocol/observability.d.ts",
+      "import": "./dist/protocol/observability.js"
     },
     "./protocol/session": {
-      "types": "./dist/exports/protocol/session.d.ts",
-      "import": "./dist/exports/protocol/session.js"
+      "types": "./dist/protocol/session.d.ts",
+      "import": "./dist/protocol/session.js"
     },
     "./tool-contract": {
-      "types": "./dist/exports/tool-contract.d.ts",
-      "import": "./dist/exports/tool-contract.js"
+      "types": "./dist/tool-contract.d.ts",
+      "import": "./dist/tool-contract.js"
     },
     "./mcp": {
-      "types": "./dist/exports/mcp.d.ts",
-      "import": "./dist/exports/mcp.js"
+      "types": "./dist/mcp.d.ts",
+      "import": "./dist/mcp.js"
     },
     "./mods": {
-      "types": "./dist/exports/mods.d.ts",
-      "import": "./dist/exports/mods.js"
+      "types": "./dist/mods.d.ts",
+      "import": "./dist/mods.js"
     },
     "./bridge": {
-      "types": "./dist/exports/bridge.d.ts",
-      "import": "./dist/exports/bridge.js"
+      "types": "./dist/bridge.d.ts",
+      "import": "./dist/bridge.js"
     },
     "./session": {
-      "types": "./dist/exports/session.d.ts",
-      "import": "./dist/exports/session.js"
+      "types": "./dist/session.d.ts",
+      "import": "./dist/session.js"
     },
     "./remote": {
-      "types": "./dist/exports/remote.d.ts",
-      "import": "./dist/exports/remote.js"
+      "types": "./dist/remote.d.ts",
+      "import": "./dist/remote.js"
     },
     "./remote/mcp": {
-      "types": "./dist/exports/remote/mcp.d.ts",
-      "import": "./dist/exports/remote/mcp.js"
+      "types": "./dist/remote/mcp.d.ts",
+      "import": "./dist/remote/mcp.js"
     }
   },
   "files": [

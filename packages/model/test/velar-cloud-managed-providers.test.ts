@@ -6,8 +6,8 @@ import {
   isVelarCloudManagedProviderId,
   resolveProviderModelSelection,
   VelarCloudModelRuntime,
-} from '../src/exports/index'
-import { createModelRuntimeComposition } from '../src/exports/node'
+} from '../src/index'
+import { createModelRuntimeComposition } from '../src/node'
 
 const VelarDevModelId = 'velar-dev/Z3B0LTUuNC1taW5p'
 

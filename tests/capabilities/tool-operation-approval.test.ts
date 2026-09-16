@@ -12,8 +12,8 @@ import { CodingSessionTracker } from '../../packages/agent/src/impl/session/Codi
 import { createTaskApprovalPort } from '../../packages/agent/src/utils/toolkit/task-approval'
 import type { ProjectToolContext } from '../../packages/project/src/contract/requires'
 import { projectTools } from '../../packages/project/src/impl/ProjectTools'
-import type { SystemToolContext } from '../../packages/system/src/exports/index'
-import { systemTools } from '../../packages/system/src/exports/index'
+import type { SystemToolContext } from '../../packages/system/src/index'
+import { systemTools } from '../../packages/system/src/index'
 
 function tools(approved: boolean) {
   const workspaceRoot = resolve('/workspace')

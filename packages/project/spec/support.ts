@@ -6,7 +6,7 @@
 import { InMemoryContextPayloadStore } from '@velaros-ai/agent'
 import { fileContextFor } from '@velaros-ai/agent/tool-contract'
 
-import { createProjectKernel, type CreateProjectKernelOptions, type ProjectCommandResult, projectFileContext, type ProjectProviders, type ProjectSandboxPort, type ProjectToolContext, projectTools } from '../src/exports/index'
+import { createProjectKernel, type CreateProjectKernelOptions, type ProjectCommandResult, projectFileContext, type ProjectProviders, type ProjectSandboxPort, type ProjectToolContext, projectTools } from '../src/index'
 
 /** 替身宿主的开关：用户点不点确认、宿主给不给项目修改授权、内核的策略与 provider。 */
 export interface ProjectHarnessOptions {

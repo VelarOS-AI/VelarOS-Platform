@@ -5,9 +5,9 @@ import { join } from 'node:path'
 import { describe, expect, test } from 'bun:test'
 
 import { ProjectToolNames } from '../src/contract/constants'
-import type { EditOperation } from '../src/exports/index'
-import { createProjectKernel } from '../src/exports/index'
 import { FileProjectChangeFeed } from '../src/impl/persistence/FileProjectChangeFeed.js'
+import type { EditOperation } from '../src/index'
+import { createProjectKernel } from '../src/index'
 
 import { ProjectEditOperationSchema } from './support/edit-intent-schema'
 

@@ -4,8 +4,8 @@ import { join } from 'node:path'
 
 import { describe, expect, test } from 'bun:test'
 
-import type { EditOperation, ProjectPlugin } from '../src/exports/index'
-import { createProjectKernel, typescriptPlugin } from '../src/exports/index'
+import type { EditOperation, ProjectPlugin } from '../src/index'
+import { createProjectKernel, typescriptPlugin } from '../src/index'
 import type { JsTsSymbol } from '../src/types/jsts.js'
 import { findJsTsSymbols } from '../src/utils/jsts-ast'
 

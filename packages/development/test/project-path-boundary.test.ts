@@ -9,7 +9,7 @@ import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from '
 
 import { createProjectKernel } from '@velaros-ai/project'
 
-import { languageQueries, type LanguageToolContext, typeScriptProjects } from '../src/exports/index'
+import { languageQueries, type LanguageToolContext, typeScriptProjects } from '../src/index'
 
 setDefaultTimeout(30_000)
 

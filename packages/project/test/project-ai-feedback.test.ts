@@ -8,7 +8,7 @@ import { defaultDenyApprovalPort } from '@velaros-ai/agent/tool-contract'
 
 import type { ProjectToolContext } from '../src/contract/requires'
 import type { AgentProjectKernelPort } from '../src/contract/requires.js'
-import { createProjectKernel, type EditOperation, typescriptPlugin } from '../src/exports/index'
+import { createProjectKernel, type EditOperation, typescriptPlugin } from '../src/index'
 import { executeAgentProjectRead, executeAgentProjectSearch } from '../src/utils/agent/kernel-port'
 import { diagnoseTextMatchMiss, findLineWhitespaceTolerantMatches } from '../src/utils/editing/text-match-feedback'
 import { includesLineEndingAware } from '../src/utils/text'

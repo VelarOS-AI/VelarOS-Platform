@@ -4,8 +4,8 @@ import { join } from 'node:path'
 
 import { afterEach, beforeEach, expect, spyOn, test } from 'bun:test'
 
-import { createProjectKernel, type ProjectKernel } from '../src/exports/index'
 import { TransactionRecovery } from '../src/impl/transactions/TransactionRecovery'
+import { createProjectKernel, type ProjectKernel } from '../src/index'
 import type { ProjectTransactionStateSnapshot } from '../src/types/transaction'
 
 let directory = ''

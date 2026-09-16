@@ -14,7 +14,7 @@ import { join } from 'node:path'
 import { describe, expect, test } from 'bun:test'
 import { z } from 'zod'
 
-import { computerTools } from '../src/exports/tools'
+import { computerTools } from '../src/tools'
 
 /** 递归按键名排序，让快照与对象字面量里键的书写顺序无关。 */
 function sortDeep(value: unknown): unknown {

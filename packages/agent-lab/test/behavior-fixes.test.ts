@@ -3,13 +3,13 @@ import { readFile } from "node:fs/promises";
 import { describe, expect, test } from "bun:test";
 
 import { FullCapabilities, journey, observation, trial } from "../spec/support.js";
-import type { JobSpec, LabDriver, RunArchive, VerifierRegistryApi } from "../src/exports/index.js";
+import type { JobSpec, LabDriver, RunArchive, VerifierRegistryApi } from "../src/index.js";
 import {
   createDetectorRegistry,
   createVerifierRegistry,
   journeyRunner,
   UnlimitedBudget,
-} from "../src/exports/index.js";
+} from "../src/index.js";
 
 function passingVerifiers(): VerifierRegistryApi {
   const verifiers = createVerifierRegistry();

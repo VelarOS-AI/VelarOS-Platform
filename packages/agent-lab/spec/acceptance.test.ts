@@ -16,7 +16,7 @@ import type {
   RunArchive,
   SessionHandle,
   ToolCallRecord,
-} from '../src/exports/index.js'
+} from '../src/index.js'
 import {
   AgentLabPackageVersion,
   createDetectorRegistry,
@@ -30,7 +30,7 @@ import {
   labWire,
   realTaskWorkload,
   UnlimitedBudget,
-} from '../src/exports/index.js'
+} from '../src/index.js'
 import { canonicalJson } from '../src/utils/canonical-json.js'
 
 import { FullCapabilities, journey, observation, trial } from './support.js'

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { archive, observation } from "../spec/support.js";
-import { labArchives, labReports } from "../src/exports/index.js";
+import { labArchives, labReports } from "../src/index.js";
 import { normalizeObservation } from "../src/utils/measure/normalize.js";
 import { assertSelfContainedHtml, findExternalResourceViolations } from "../src/utils/render/html.js";
 

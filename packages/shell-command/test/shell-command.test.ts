@@ -2,7 +2,7 @@
 
 import { describe, expect, test } from 'bun:test'
 
-import { shellCommandPolicy } from '../src/exports/index'
+import { shellCommandPolicy } from '../src/index'
 
 describe('前缀命令', () => {
   test('env、time 本身只读，后面跟的命令才决定整条是否只读', () => {

@@ -1,7 +1,7 @@
 import {
   createMemoryRuntime,
   type MemoryTreeRuntimeProviders,
-} from '../src/exports/index'
+} from '../src/index'
 
 declare const providers: MemoryTreeRuntimeProviders
 

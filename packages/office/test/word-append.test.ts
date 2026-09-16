@@ -5,8 +5,8 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, test } from 'bun:test'
 import JSZip from 'jszip'
 
-import type { OfficeToolContext } from '../src/exports'
-import { officeTools } from '../src/exports'
+import type { OfficeToolContext } from '../src/index'
+import { officeTools } from '../src/index'
 
 // 部件路径在测试里写字面量：这样这组用例对着修复前的实现也能跑（只会红，不会加载失败）。
 const WordContentTypesXmlPath = '[Content_Types].xml'

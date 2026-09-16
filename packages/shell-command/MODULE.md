@@ -22,7 +22,7 @@ system:run、project:run、两个空间演练沙箱里的 run、宿主的审批�
 
 **数据面**是 `types/`：`types/shell-command.ts` 是可移植数据（`ShellCommandPlan`、并发判定的入参与选项），`types/approval.ts` 是审批请求的入参与结果（引用 agent 的确认选项类型，从根入口导出）。
 
-两个入口对应 `package.json` 的 `exports`，源文件在 `src/exports/`，只有转发语句：
+两个入口对应 `package.json` 的 `exports`，源文件是 `src` 根上的入口文件，只有转发语句：
 
 | 入口 | 给谁用 | 里面有什么 |
 | --- | --- | --- |
@@ -77,7 +77,8 @@ src/
   types/        只放类型：shell-command.ts 是可移植数据，approval.ts 是审批请求的入参与结果，invocation.ts 是判定内部的工作类型
   impl/         一类一文件：ShellCommandPolicy（判定的唯一出口）、ShellCommandApproval（审批请求）
   utils/        command-policy.ts：判定本身，全是纯函数，每个函数上方一句说明
-  exports/      两个入口，只有转发
+  index.ts      `.` 入口，只转发
+  contracts.ts  `./contracts` 入口，只转发
 spec/           不变量登记与验收测试
 test/           实现细节测试
 ```

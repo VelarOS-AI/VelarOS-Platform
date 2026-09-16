@@ -6,13 +6,13 @@ import { describe, expect, test } from 'bun:test'
 import {
   ComputerHelperErrorCodes,
   ComputerResourceLayout,
-} from '../../src/exports/contracts'
+} from '../../src/contracts'
 import {
   ComputerSidecarManager,
   createComputerHelperLocator,
   resolveBundledComputerRuntimeSourceRoot,
-} from '../../src/exports/runtime'
-import { decodeComputerResponse } from '../../src/exports/runtime'
+} from '../../src/runtime'
+import { decodeComputerResponse } from '../../src/runtime'
 
 const HelperScriptNames: Partial<Record<NodeJS.Platform, string>> = {
   darwin: 'mac_helper.py',

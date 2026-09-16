@@ -6,8 +6,8 @@ import type {
   Observation,
   ToolCallRecord,
   TranscriptBlock,
-} from "../src/exports/index.js";
-import { DefaultLoopThresholds } from "../src/exports/index.js";
+} from "../src/index.js";
+import { DefaultLoopThresholds } from "../src/index.js";
 import { createBuiltinDetectors } from "../src/utils/measure/detectors.js";
 
 /** 宿主给的两份工具名单：本包核心里不写任何产品的工具名，测试自己提供。 */

@@ -6,8 +6,8 @@ import { describe, expect, test } from 'bun:test'
 
 import { textCodec } from '@velaros-ai/text-files'
 
-import { createProjectKernel } from '../src/exports/index'
 import { TextFileAdapter } from '../src/impl/adapters/TextFileAdapter'
+import { createProjectKernel } from '../src/index'
 import type { FileSnapshot } from '../src/types/snapshot'
 
 function snapshot(content: string): FileSnapshot {

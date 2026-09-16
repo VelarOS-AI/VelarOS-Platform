@@ -2,7 +2,7 @@
 
 import { describe, expect, test } from 'bun:test'
 
-import { textCodec, TextEncodings, TextFileErrorCodes } from '../src/exports/index'
+import { textCodec, TextEncodings, TextFileErrorCodes } from '../src/index'
 
 describe('编码识别', () => {
   test.each(TextEncodings)('逐字节喂进流式识别与一次识别结论一致：%s', (encoding) => {

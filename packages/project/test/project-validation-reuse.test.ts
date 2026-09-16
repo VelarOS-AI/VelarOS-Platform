@@ -20,8 +20,8 @@ import { logRuntime } from '@velaros-ai/core/logger'
 
 import type { ProjectToolContext } from '../src/contract/requires'
 import type { ProjectPlugin } from '../src/contract/requires.js'
-import { createProjectKernel } from '../src/exports/index'
 import { projectTools } from '../src/impl/ProjectTools'
+import { createProjectKernel } from '../src/index'
 import { finalizeProjectModelResult } from '../src/utils/agent/source-window'
 import { ProjectError } from '../src/utils/errors'
 

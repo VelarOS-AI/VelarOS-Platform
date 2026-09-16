@@ -10,11 +10,11 @@ import { test } from 'node:test'
 import {
   createMemoryRuntime,
   MemoryRuntime,
-} from '../../../../../packages/memory/dist/exports/index.js'
+} from '../../../../../packages/memory/dist/index.js'
 import {
   MemoryAdapterRuntime,
   mountMemoryAdapter,
-} from '../../../../../packages/memory/dist/exports/adapter-kernel.js'
+} from '../../../../../packages/memory/dist/adapter-kernel.js'
 
 test('package root exposes a class-first runtime while retaining the factory', () => {
   const databaseProvider = () => {

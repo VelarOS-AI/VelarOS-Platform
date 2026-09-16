@@ -225,7 +225,18 @@ packages/kernel/
     impl/      runtime/  serve/  client/  updater/  remote-client/  remote-node/
     utils/     tuning.ts  errors.ts  semver.ts  fs.ts
                runtime/  wire/  rpc/  serve/  updater/  remote/
-    exports/   对外入口，只转发
+    index.ts               `.` 入口，只转发
+    contracts.ts           `./contracts` 入口，只转发
+    contracts-abi.ts       `./contracts/abi` 入口，只转发
+    contracts-protocol.ts  `./contracts/protocol` 入口，只转发
+    runtime.ts             `./runtime` 入口，只转发
+    client.ts              `./client` 入口，只转发
+    client-contracts.ts    `./client/contracts` 入口，只转发
+    serve.ts               `./serve` 入口，只转发
+    serve-updater.ts       `./serve/updater` 入口，只转发
+    remote.ts              `./remote` 入口，只转发
+    remote-client.ts       `./remote/client` 入口，只转发
+    remote-node.ts         `./remote/node` 入口，只转发
 ```
 
 分层（登记在 `scripts/ownership/governed-modules.mjs` 的 `layers`，上层可以引下层，下层不许引上层）：

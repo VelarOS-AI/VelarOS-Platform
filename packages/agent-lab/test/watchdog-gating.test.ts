@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 
-import type { DetectorContext, Observation, ToolCallRecord } from '../src/exports/index.js'
-import { DefaultLoopThresholds } from '../src/exports/index.js'
+import type { DetectorContext, Observation, ToolCallRecord } from '../src/index.js'
+import { DefaultLoopThresholds } from '../src/index.js'
 import { createBuiltinDetectors } from '../src/utils/measure/detectors.js'
 import { createWatchdogBaseline, selectAbortCandidate } from '../src/utils/measure/watchdog.js'
 

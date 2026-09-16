@@ -2,7 +2,7 @@ import { join } from 'node:path'
 
 import { describe, expect, test } from 'bun:test'
 
-import { velarosSharedResources } from '../src/exports/shared-resources.js'
+import { velarosSharedResources } from '../src/shared-resources.js'
 
 describe('VelarOS shared resource store', () => {
   test('resolves the stable organization root on supported platform families', () => {

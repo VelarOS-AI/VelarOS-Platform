@@ -25,7 +25,7 @@ system 空间（`system:read`、`system:edit`、沙箱差量）与 project 空�
 
 **数据面**是 `types/text-files.ts`，可移植：`TextEncoding`（编码名）、`DecodedText`（正文与编码）、`ExpectedBytes`（写前要核对的原字节）、`TextChunk`（流式读出的一块正文）。
 
-两个入口对应 `package.json` 的 `exports`，源文件在 `src/exports/`，只有转发语句：
+两个入口对应 `package.json` 的 `exports`，源文件是 `src` 根上的入口文件，只有转发语句：
 
 | 入口 | 给谁用 | 里面有什么 |
 | --- | --- | --- |
@@ -91,7 +91,8 @@ src/
   types/        只放类型：text-files.ts 是可移植数据
   impl/         一类一文件：TextFileIo（文件读写的唯一出口）→ TextCodec（编解码的唯一出口）→ TextEncodingProbe（一次流式识别）→ TextStreamDecoder（按块严格解码）
   utils/        encoding.ts（BOM、解码器标签、无 BOM 的 UTF-16、孤立代理项、写成字节、GB18030 的字符宽度、严格解码）、preserving.ts（GB18030 按原字节拼回）、file-io.ts（打开普通文件、有界读、读文件头、原子替换、核对原字节）、tuning.ts（可调参数）
-  exports/      两个入口，只有转发
+  index.ts      `.` 入口，只转发
+  contracts.ts  `./contracts` 入口，只转发
 spec/           不变量登记与验收测试
 test/           实现细节测试
 ```

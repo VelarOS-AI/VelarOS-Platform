@@ -7,8 +7,8 @@ import { describe, expect, test } from 'bun:test'
 import { defaultDenyApprovalPort } from '@velaros-ai/agent/tool-contract'
 
 import type { ProjectToolContext } from '../src/contract/requires'
-import { createProjectKernel, type EditIntent } from '../src/exports/index'
 import { FileProjectTransactionStateStore } from '../src/impl/persistence/FileProjectTransactionStateStore'
+import { createProjectKernel, type EditIntent } from '../src/index'
 
 import { LegacyProjectToolNames as ProjectToolNames } from './support/legacy-tools'
 import { legacyProjectTools as projectTools } from './support/legacy-tools'

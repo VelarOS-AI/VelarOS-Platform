@@ -16,7 +16,7 @@ import {
   createProjectKernelModule,
   ProjectCapability,
   type ProjectCapabilityService,
-} from '../src/exports/index'
+} from '../src/index'
 import { finalizeProjectModelResult } from '../src/utils/agent/source-window'
 
 function captureService(

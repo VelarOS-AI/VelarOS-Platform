@@ -1,4 +1,4 @@
-import { mountHtmlArtifact } from '../dist/exports/index.js'
+import { mountHtmlArtifact } from '../dist/index.js'
 
 const defaultSample = `<artifact version="1" id="flight-card" title="Flight card">
 <patch type="replace"><main id="artifact-root"></main></patch>

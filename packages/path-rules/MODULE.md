@@ -25,7 +25,7 @@ system 空间（全局搜索、沙箱镜像）与 project 空间（列目录、�
 
 **数据面**是 `types/path-rules.ts`，可移植：`GitignoreRule`（一条解析好的规则）、`PathMatchOptions`（区不区分大小写）、`IgnoreCandidate`（一个待判定的遍历条目）、`IgnoreRulesOrigin`（规则从哪一级算起）。`types/options.ts` 的 `IgnorePolicyOptions` 带注入口，只走根入口。
 
-两个入口对应 `package.json` 的 `exports`，源文件在 `src/exports/`，只有转发语句：
+两个入口对应 `package.json` 的 `exports`，源文件是 `src` 根上的入口文件，只有转发语句：
 
 | 入口 | 给谁用 | 里面有什么 |
 | --- | --- | --- |
@@ -83,7 +83,8 @@ src/
   types/        只放类型：path-rules.ts 是可移植数据，options.ts 是带注入口的选项
   impl/         一类一文件：IgnorePolicy（一次遍历的忽略判定）→ GitignoreRules（.gitignore 的解析与判定）→ PathMatcher（glob 匹配）
   utils/        path.ts（相对路径的规整、在不在根里、各级上级）、glob.ts（规则形状）、gitignore.ts（一行的规整与展开）、discovery.ts（找版本库根、读 .gitignore）、tuning.ts（可调参数）
-  exports/      两个入口，只有转发
+  index.ts      `.` 入口，只转发
+  contracts.ts  `./contracts` 入口，只转发
 spec/           不变量登记与验收测试
 test/           实现细节测试
 ```

@@ -7,7 +7,7 @@
 import { describe, expect, test } from 'bun:test'
 
 import { projectTools } from '../../packages/project/src/impl/ProjectTools'
-import { systemTools } from '../../packages/system/src/exports/index'
+import { systemTools } from '../../packages/system/src/index'
 
 const system = systemTools['system:sandbox']!
 const project = projectTools['project:sandbox']!

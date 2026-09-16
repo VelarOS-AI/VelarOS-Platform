@@ -61,7 +61,7 @@
 **数据面**是 `types/agent-lab.ts`（可移植）：旅程与试验、观测与判词、归档与视图、报告模型、统计结果、认证报告、
 真实任务记录/评估/用例/覆盖、自适应战役的账，以及命令行结果，全部手写，schema 逐个 `satisfies` 对齐它们。
 
-两个入口对应 `package.json` 的 `exports`，源文件在 `src/exports/`，只有转发语句：
+两个入口对应 `package.json` 的 `exports`，源文件是 `src` 根上的入口文件，只有转发语句：
 
 | 入口 | 给谁用 | 里面有什么 |
 | --- | --- | --- |
@@ -131,7 +131,8 @@ src/
   types/        只放类型：agent-lab.ts 可移植数据（线格式的单一来源）、options.ts 带回调的选项、internal.ts 包内工作类型
   impl/         一类一文件：命令行、旅程运行、归档、驱动装配与轮询驱动、线格式、报告、统计、认证、真实任务、战役、两个注册处、用量账本
   utils/        纯函数：measure/ 十份测量、render/ 四份渲染、wire/ 四份 schema，外加规范 JSON、摘要、预算、参数、归档文件与 tuning.ts 可调参数表
-  exports/      两个入口，只有转发
+  index.ts      `.` 入口，只转发
+  contracts.ts  `./contracts` 入口，只转发
 bin/            velaros-agent-lab.mjs：可执行壳，只把进程环境与一个动态 import 的加载器交给 agentLabCli
 spec/           不变量登记、验收测试与共用假对象
 test/           实现测试

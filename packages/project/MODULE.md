@@ -47,7 +47,7 @@ overwrite 要求看过全文，move、delete 只核对版本。
 
 **数据面**是 `types/`，只放类型；`types/project.ts` 是可移植数据（宿主端口上流动的命令回执、授权决定、改动回执 `ProjectChangeReceipt`、在镜像里跑命令的选项、宿主代码查询）。
 
-两个入口对应 `package.json` 的 `exports`，源文件在 `src/exports/`，只有转发语句：
+两个入口对应 `package.json` 的 `exports`，源文件是 `src` 根上的入口文件，只有转发语句：
 
 | 入口 | 给谁用 | 里面有什么 |
 | --- | --- | --- |
@@ -124,7 +124,8 @@ src/
     plugins/           核心插件、TypeScript 插件与它们的校验器
     transactions/ files/ strategies/ adapters/ registries/ persistence/   事务、文件访问、补丁策略、文件适配器、登记表、持久化
   utils/        纯函数与可调参数（tuning.ts）；agent/（Agent 适配）、editing/（编辑规划）、files/（文件读写）、kernel/、transactions/ 按域分子目录
-  exports/      两个入口，只有转发
+  index.ts      `.` 入口，只转发
+  contracts.ts  `./contracts` 入口，只转发
 spec/           不变量登记、验收测试与测试替身
 test/           实现细节测试；test/support 是第 1 版工具驱动器与旧协议 schema
 ```

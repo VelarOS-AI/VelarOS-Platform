@@ -9,9 +9,9 @@ import { defaultDenyApprovalPort } from '@velaros-ai/agent/tool-contract'
 
 import { ProjectToolNames } from '../src/contract/constants'
 import type { ProjectToolContext } from '../src/contract/requires'
-import { createProjectKernel, type ProjectKernel } from '../src/exports/index'
 import { NodeCommandProvider } from '../src/impl/kernel/NodeCommandProvider'
 import { projectTools } from '../src/impl/ProjectTools'
+import { createProjectKernel, type ProjectKernel } from '../src/index'
 import type { CommandRunResult } from '../src/types/provider'
 
 // 根 .gitignore 忽略任意层级的 dist/；中间目录 pkg 的 .gitignore 再忽略 *.log。

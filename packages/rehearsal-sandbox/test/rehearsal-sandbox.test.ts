@@ -2,7 +2,7 @@
 
 import { describe, expect, test } from 'bun:test'
 
-import { rehearsalSandboxRules } from '../src/exports/index'
+import { rehearsalSandboxRules } from '../src/index'
 
 describe('按路径筛三列', () => {
   test('反斜杠当 /、开头的 ./ 去掉；不点名就全部；点名了没有的放 unknown', () => {

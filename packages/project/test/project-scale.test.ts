@@ -4,7 +4,7 @@ import { join } from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
-import { createProjectKernel } from '../src/exports/index'
+import { createProjectKernel } from '../src/index'
 import type { EditIntent } from '../src/types/edit'
 
 import { ProjectModelEditSchema } from './support/edit-intent-schema'

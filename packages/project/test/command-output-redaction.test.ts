@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, expect, test } from 'bun:test'
 
 import type { ProjectToolContext } from '../src/contract/requires'
-import { createProjectKernel, createSecretRedactionProvider, projectTools } from '../src/exports/index'
+import { createProjectKernel, createSecretRedactionProvider, projectTools } from '../src/index'
 
 const tool = projectTools['project:run']!
 /** 假密钥按段拼出来：仓库里不留完整的密钥形状，公开就绪扫描才不会把测试数据当成真泄漏。 */

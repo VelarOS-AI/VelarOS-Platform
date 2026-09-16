@@ -11,7 +11,7 @@ import { afterEach, describe, expect, test } from 'bun:test'
 
 import ExcelJS from '../../office/node_modules/exceljs'
 import { PDFDocument, rgb } from '../../office/node_modules/pdf-lib'
-import { documentRenderer, DocumentRendererProtocol } from '../src/exports/index'
+import { documentRenderer, DocumentRendererProtocol } from '../src/index'
 
 describe('独立渲染能力包', () => {
   let temporaryRoot: string | undefined

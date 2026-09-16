@@ -10,7 +10,7 @@ import { platform } from 'node:process'
 
 import { describe, expect, test } from 'bun:test'
 
-import { createProjectKernel, type EditIntent, type ProjectKernel } from '../src/exports/index'
+import { createProjectKernel, type EditIntent, type ProjectKernel } from '../src/index'
 import type { CorePolicy } from '../src/types/policy'
 import type { FileFilterInput } from '../src/types/provider'
 import { resolveSourceInsideProject } from '../src/utils/agent/sandbox'

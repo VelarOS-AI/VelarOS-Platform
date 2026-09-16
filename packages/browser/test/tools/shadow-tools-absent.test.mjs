@@ -36,7 +36,7 @@ const RetiredShadowToolNames = [
 ]
 
 void test('影子工具名既不在工具集合里，也不再写进全局示例表', async () => {
-  const { browserTools } = await import(new URL('../../dist/exports/tools.js', import.meta.url).href)
+  const { browserTools } = await import(new URL('../../dist/tools.js', import.meta.url).href)
 
   for (const name of RetiredShadowToolNames) {
     assert.equal(browserTools[name], undefined, `${name} 不应该出现在工具集合里`)

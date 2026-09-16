@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { adaptiveCampaign, type CampaignFailureRecord, labWire } from "../src/exports/index.js";
+import { adaptiveCampaign, type CampaignFailureRecord, labWire } from "../src/index.js";
 
 function task(id: string, overrides: Record<string, unknown> = {}) {
   return labWire.parseRealTaskCase({

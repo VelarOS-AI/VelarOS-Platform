@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
 
 import { FullCapabilities, journey, observation, trial } from "../spec/support.js";
-import type { NativeExecutionState } from "../src/exports/index.js";
-import { EmptyBudgetUsage, labDrivers, UnlimitedBudget } from "../src/exports/index.js";
+import type { NativeExecutionState } from "../src/index.js";
+import { EmptyBudgetUsage, labDrivers, UnlimitedBudget } from "../src/index.js";
 
 test("polling driver requires executor-native progress and stable idle", async () => {
   const states: NativeExecutionState[] = [

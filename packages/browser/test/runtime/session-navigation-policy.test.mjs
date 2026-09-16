@@ -9,7 +9,7 @@ import { EventEmitter } from 'node:events'
 
 import { test } from 'bun:test'
 
-import { BrowserSessionManager } from '../../dist/exports/runtime.js'
+import { BrowserSessionManager } from '../../dist/runtime.js'
 
 class FakeElectronSession extends EventEmitter {}
 

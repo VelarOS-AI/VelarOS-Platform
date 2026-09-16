@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, expect, test } from 'bun:test'
 
 import type { CommandProvider } from '../src/contract/requires'
-import { createProjectKernel, createSecretRedactionProvider } from '../src/exports/index'
+import { createProjectKernel, createSecretRedactionProvider } from '../src/index'
 import { clampSnippet, snippetWindow } from '../src/utils/search-snippet'
 import { ProjectTuning } from '../src/utils/tuning'
 

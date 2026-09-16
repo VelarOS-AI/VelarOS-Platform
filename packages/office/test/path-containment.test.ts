@@ -5,8 +5,8 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, test } from 'bun:test'
 import { PDFDocument, StandardFonts } from 'pdf-lib'
 
-import type { OfficeToolContext } from '../src/exports'
-import { officeTools } from '../src/exports'
+import type { OfficeToolContext } from '../src/index'
+import { officeTools } from '../src/index'
 
 interface Harness {
   root: string

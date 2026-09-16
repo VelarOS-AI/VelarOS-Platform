@@ -6,7 +6,7 @@ import {
   BrowserResidentToolNames,
   BrowserToolCategoryIds,
   createBrowserBundledModDefinition,
-} from '../dist/exports/composition-mod.js'
+} from '../dist/composition-mod.js'
 
 const manifest = createBrowserBundledModDefinition().manifest
 const spaceContribution = manifest.contributes.spaces[0]

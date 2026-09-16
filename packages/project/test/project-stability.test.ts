@@ -17,7 +17,7 @@ import {
   createProjectKernelModule,
   ProjectCapability,
   type ProjectCapabilityService,
-} from '../src/exports/index'
+} from '../src/index'
 
 import { ProjectEditOperationSchema } from './support/edit-intent-schema'
 

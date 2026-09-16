@@ -42,7 +42,7 @@ Project 代码理解背后的语言服务库。宿主拿它实现 project 注入
 外加常量表派生的 `LanguageServiceId` 与 `CodeQuerySource`。语言查询自己的输入、记录与结果是包内工作类型，不出包——
 它们经 `queryCode` 变成普通对象交给 project，由 project 的工具合同负责形状。
 
-两个入口对应 `package.json` 的 `exports`，源文件在 `src/exports/`，只有转发语句：
+两个入口对应 `package.json` 的 `exports`，源文件是 `src` 根上的入口文件，只有转发语句：
 
 | 入口 | 给谁用 | 里面有什么 |
 | --- | --- | --- |
@@ -119,7 +119,8 @@ src/
   types/        只放类型：development.ts 可移植（外部语言服务的五种数据），language.ts 语言查询的输入与结果，syntax.ts 语法层中间形状，external-language.ts LSP 工作类型，typescript.ts 语言服务池工作类型
   impl/         一类一文件，八个类：代码查询分派、语言查询、语言服务登记处、两个语言服务、TypeScript 项目池、外部语言服务与它的客户端
   utils/        纯函数：选文件与扫描外壳、两种语言的语法解析、tsconfig 发现与解析、诊断归一、LSP 归一、路径边界、结果合并，tuning.ts 是可调参数表
-  exports/      两个入口，只有转发
+  index.ts      `.` 入口，只转发
+  contracts.ts  `./contracts` 入口，只转发
 spec/           不变量登记与验收测试
 test/           实现测试：诊断、查询语义、路径边界、外部语言服务
 ```

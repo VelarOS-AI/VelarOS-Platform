@@ -6,8 +6,8 @@ import type {
   ObservationPhase,
   SessionHandle,
   VerifierRegistryApi,
-} from "../src/exports/index.js";
-import { createDetectorRegistry, createVerifierRegistry, journeyRunner } from "../src/exports/index.js";
+} from "../src/index.js";
+import { createDetectorRegistry, createVerifierRegistry, journeyRunner } from "../src/index.js";
 
 function successfulDriver(prompts: string[], sessions: string[]): LabDriver {
   const session: SessionHandle = {

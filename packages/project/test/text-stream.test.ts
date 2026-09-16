@@ -6,7 +6,7 @@ import { afterEach, beforeEach, expect, test } from 'bun:test'
 
 import { textCodec } from '@velaros-ai/text-files'
 
-import { createProjectKernel } from '../src/exports/index'
+import { createProjectKernel } from '../src/index'
 import { compileProjectEdit } from '../src/utils/editing/file-planner'
 import { detectBinaryByPrefix, hashFileAndDetectBinary, limitContent, readLimitedTextPrefix, readProjectTextFile, readTextLineWindow } from '../src/utils/files/file-reader'
 

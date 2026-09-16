@@ -19,7 +19,7 @@ import {
   Embeddings,
   knowledgeTools,
   KnowledgeWorkspace,
-} from '../src/exports/index'
+} from '../src/index'
 import type {
   KnowledgeSearchResult,
   KnowledgeWorkspaceSyncResult,

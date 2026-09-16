@@ -8,7 +8,7 @@ import { InMemoryContextPayloadStore } from '@velaros-ai/agent'
 
 import { ProjectPolicyDefaults } from '../src/contract/constants'
 import type { ProjectToolContext } from '../src/contract/requires'
-import { createProjectKernel } from '../src/exports/index'
+import { createProjectKernel } from '../src/index'
 import { readProjectSource } from '../src/utils/agent/project-files'
 import { finalizeProjectModelResult } from '../src/utils/agent/source-window'
 

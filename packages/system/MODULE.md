@@ -36,7 +36,7 @@
 
 **数据面**是 `types/`，只放类型；**常量表**是 `contract/constants.ts`，只放值。`./contracts` 入口就是常量表加可移植数据类型文件 `types/system.ts`：工具身份表 `SystemToolNames`、`SystemToolCategoryByName`，身份常量 `SystemModId`、`SystemSpaceId`，错误码 `SystemErrorCodes`，环境变量表 `SystemEnvironmentVariables`，公开上限 `SystemFileLimits`、`SystemCommandLimits`、`SystemFailureLimits`（工具说明与 schema 里的数字都引它们），以及经宿主端口流动的数据结构。演练沙箱的数据形状与上限在公共包 `@velaros-ai/rehearsal-sandbox/contracts`（`SandboxRecord`、`SandboxDiff`、`RehearsalSandboxLimits` 等），宿主端口直接用它们。`types/` 里实现自己的工作类型（写入计划、准备好的命令、清单印记、带回调的选项）没有公开签名用到，所以不出包。
 
-两个入口对应 `package.json` 的 `exports`，源文件在 `src/exports/`，只有转发语句：
+两个入口对应 `package.json` 的 `exports`，源文件是 `src` 根上的入口文件，只有转发语句：
 
 | 入口 | 给谁用 | 里面有什么 |
 | --- | --- | --- |
@@ -130,7 +130,8 @@ src/
   types/        只放类型，按域分文件：system.ts 是可移植数据文件，files.ts、commands.ts、sandbox.ts、processes.ts、tool.ts 各管一域；哪些出包由合同的签名决定；平台数据来自 `@velaros-ai/platform`
   impl/         扁平：SystemTools.ts 放七个工具，其余一个类一个文件，文件名就是类名
   utils/        纯工具函数，按类别分文件；每个函数上方一句中文说明；tuning.ts 是全包的可调参数表
-  exports/      两个对外入口，只转发，package.json 的 exports 指向这里
+  index.ts      `.` 入口，只转发
+  contracts.ts  `./contracts` 入口，只转发
 ```
 
 **看代码的顺序**：`SystemTools.ts` → `contract/` 的三个文件 → 需要时看 utils 里函数上方的一句说明。类的实现、数据字段、工具函数的内部一般不用看。

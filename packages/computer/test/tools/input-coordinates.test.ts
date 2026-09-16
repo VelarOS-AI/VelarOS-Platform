@@ -2,9 +2,9 @@ import { describe, expect, test } from 'bun:test'
 
 import { AppError } from '@velaros-ai/core/error'
 
-import type { ComputerClickOptions } from '../../src/exports/runtime'
-import type { ComputerToolContext, ToolComputerApi } from '../../src/exports/tools'
-import { computerTools } from '../../src/exports/tools'
+import type { ComputerClickOptions } from '../../src/runtime'
+import type { ComputerToolContext, ToolComputerApi } from '../../src/tools'
+import { computerTools } from '../../src/tools'
 
 const SnapshotId = 'screen_test_snapshot_01'
 

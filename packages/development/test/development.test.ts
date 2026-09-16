@@ -11,7 +11,7 @@ import {
   createProjectCodeQuery,
   languageQueries,
   type LanguageToolContext,
-} from '../src/exports/index'
+} from '../src/index'
 
 describe('@velaros-ai/development', () => {
   test('routes CodeGraph actions through the optional Project index overlay', async () => {

@@ -7,8 +7,8 @@ import { join } from 'node:path'
 
 import { describe, expect, test } from 'bun:test'
 
-import { createPlatform, currentPlatform } from '../src/exports/index'
-import { velarosSharedResources } from '../src/exports/shared-resources'
+import { createPlatform, currentPlatform } from '../src/index'
+import { velarosSharedResources } from '../src/shared-resources'
 
 describe('跨平台兼容层', () => {
   test('INV-2 在一台机器上按指定平台回答，不看当前进程', () => {

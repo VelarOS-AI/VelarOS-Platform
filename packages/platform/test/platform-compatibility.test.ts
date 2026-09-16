@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import { createPlatform } from '../src/exports/index.js'
+import { createPlatform } from '../src/index.js'
 
 describe('PlatformCompatibility', () => {
   test('owns portable path primitives for product hosts', () => {

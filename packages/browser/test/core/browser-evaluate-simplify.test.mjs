@@ -7,7 +7,7 @@ import {
   BrowserEvaluateSimplifyMaxEntries,
   buildEvaluateScript,
   simplifyBrowserEvaluatedValue,
-} from '../../dist/exports/core.js'
+} from '../../dist/core.js'
 
 /**
  * `simplify` 是所有 evaluateScript 的公共出口，浏览器工具与宿主注入的页面探针都从这里出结果。

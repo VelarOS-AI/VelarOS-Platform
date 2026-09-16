@@ -19,32 +19,32 @@
     "velaros"
   ],
   "type": "module",
-  "main": "./dist/exports/index.js",
-  "types": "./dist/exports/index.d.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/exports/index.d.ts",
-      "import": "./dist/exports/index.js"
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
     },
     "./contracts": {
-      "types": "./dist/exports/contracts.d.ts",
-      "import": "./dist/exports/contracts.js"
+      "types": "./dist/contracts.d.ts",
+      "import": "./dist/contracts.js"
     },
     "./backend": {
-      "types": "./dist/exports/backend.d.ts",
-      "import": "./dist/exports/backend.js"
+      "types": "./dist/backend.d.ts",
+      "import": "./dist/backend.js"
     },
     "./files": {
-      "types": "./dist/exports/files.d.ts",
-      "import": "./dist/exports/files.js"
+      "types": "./dist/files.d.ts",
+      "import": "./dist/files.js"
     },
     "./vector": {
-      "types": "./dist/exports/vector.d.ts",
-      "import": "./dist/exports/vector.js"
+      "types": "./dist/vector.d.ts",
+      "import": "./dist/vector.js"
     },
     "./adapter-kernel": {
-      "types": "./dist/exports/adapter-kernel.d.ts",
-      "import": "./dist/exports/adapter-kernel.js"
+      "types": "./dist/adapter-kernel.d.ts",
+      "import": "./dist/adapter-kernel.js"
     }
   },
   "files": [

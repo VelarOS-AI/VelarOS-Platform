@@ -7,7 +7,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-const packagePath = new URL('../../dist/exports/tools.js', import.meta.url)
+const packagePath = new URL('../../dist/tools.js', import.meta.url)
 
 test('browser:act discovery summary names its primary navigation and interaction intents', async () => {
   const { browserTools } = await import(packagePath.href)

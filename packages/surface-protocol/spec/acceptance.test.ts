@@ -9,7 +9,7 @@ import {
   ProviderSurfaceLimits,
   ProviderSurfaceProtocol,
   providerSurfaceWire,
-} from '../src/exports/index'
+} from '../src/index'
 
 describe('线格式严格校验', () => {
   test('INV-1 目录用 revision，未声明的字段一律拒，失败只给路径与错误码', () => {

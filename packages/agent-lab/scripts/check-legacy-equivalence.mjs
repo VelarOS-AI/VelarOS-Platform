@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { basename, dirname } from "node:path";
 
-import { labArchives, labReports } from "../src/exports/index.ts";
+import { labArchives, labReports } from "../src/index.ts";
 
 function flag(argv, name) {
   const index = argv.indexOf(name);

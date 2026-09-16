@@ -6,7 +6,7 @@ import { join } from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
-import { textCodec, TextFileErrorCodes, textFileIo } from '../src/exports/index'
+import { textCodec, TextFileErrorCodes, textFileIo } from '../src/index'
 import { replaceFileAtomically } from '../src/utils/file-io'
 
 let root = ''

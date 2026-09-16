@@ -11,8 +11,8 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
 import { DefaultToolContractExampleRegistry } from '@velaros-ai/agent/tool-contract'
 
-import { ProjectToolNames, projectTools } from '../src/exports/index'
 import { ProjectExecutionGate } from '../src/impl/operations/ProjectExecutionGate'
+import { ProjectToolNames, projectTools } from '../src/index'
 
 import { createProjectHarness } from './support'
 

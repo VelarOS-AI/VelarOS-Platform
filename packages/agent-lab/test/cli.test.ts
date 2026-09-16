@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 
 import { describe, expect, test } from "bun:test";
 
-import { agentLabCli } from "../src/exports/index.js";
+import { agentLabCli } from "../src/index.js";
 
 /** `run` 用不到时给一个会当场报错的加载器：本包不做动态 import。 */
 const options = {
@@ -29,7 +29,7 @@ describe("public CLI", () => {
   test("ships an executable shell that only wires the process into the package", async () => {
     const source = await readFile(new URL("../bin/velaros-agent-lab.mjs", import.meta.url), "utf8");
     expect(source.startsWith("#!/usr/bin/env node")).toBe(true);
-    expect(source).toContain("dist/exports/index.js");
+    expect(source).toContain("dist/index.js");
     expect(source).toContain("agentLabCli.run(process.argv.slice(2)");
   });
 });

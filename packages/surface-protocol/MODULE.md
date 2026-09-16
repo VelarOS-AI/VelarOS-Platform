@@ -26,7 +26,7 @@ provider 自持代理面（Agent Surface）的线格式合同：浏览器扩展�
 
 **数据面**是 `types/surface-protocol.ts`（可移植）：十种线格式载荷（`ProviderSurfaceToolCall`、`ProviderSurfaceToolResult`、`ProviderSurfaceToolCatalog`、`ProviderSurfaceToolDescriptor`、`ProviderSurfaceWorkspaceCatalog`、`ProviderSurfaceWorkspaceOption`、`ProviderSurfaceBinding`、`ProviderSurfaceToolContractBinding`、`ProviderSurfaceArtifact`，与常量表派生的 `ProviderSurfaceWorkspaceSpace`、`ProviderSurfaceToolResultStatus`、`ProviderSurfaceArtifactMediaType`），外加校验结果 `ProviderSurfaceCheck` 与 `ProviderSurfaceIssue`。
 
-两个入口对应 `package.json` 的 `exports`，源文件在 `src/exports/`，只有转发语句：
+两个入口对应 `package.json` 的 `exports`，源文件是 `src` 根上的入口文件，只有转发语句：
 
 | 入口 | 给谁用 | 里面有什么 |
 | --- | --- | --- |
@@ -80,7 +80,8 @@ src/
   types/        只放类型：surface-protocol.ts 是可移植数据，手写十种载荷与校验结果
   impl/         一类一文件：ProviderSurfaceWire（五个 check 与 createBinding 的唯一出口）
   utils/        wire.ts：zod schema 与失败收集，逐个 satisfies 对齐手写类型，不出包
-  exports/      两个入口，只有转发
+  index.ts      `.` 入口，只转发
+  contracts.ts  `./contracts` 入口，只转发
 spec/           不变量登记与验收测试
 ```
 

@@ -8,7 +8,7 @@ import assert from 'node:assert/strict'
 
 import { test } from 'bun:test'
 
-const packagePath = new URL('../dist/exports/index.js', import.meta.url)
+const packagePath = new URL('../dist/index.js', import.meta.url)
 
 function finishDiagnostic(normalizedFinishReason) {
   return {

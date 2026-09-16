@@ -4,8 +4,8 @@ import { runInNewContext } from 'node:vm'
 
 import { describe, expect, test } from 'bun:test'
 
-import { mountHtmlArtifact } from '../src/exports/index.js'
-import type { HtmlArtifactHostError } from '../src/exports/index.js'
+import { mountHtmlArtifact } from '../src/index.js'
+import type { HtmlArtifactHostError } from '../src/index.js'
 import {
   bridgeType,
   createFakeEnvironment,

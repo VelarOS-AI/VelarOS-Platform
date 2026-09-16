@@ -8,7 +8,7 @@ import {
   HtmlArtifactBridgeMessageTypes,
   HtmlArtifactDefaults,
   htmlArtifactDocuments,
-} from '../src/exports/index.js'
+} from '../src/index.js'
 import { HTML_ARTIFACT_SIZE_CONTROLLER_FACTORY_SOURCE } from '../src/utils/size-controller.js'
 
 /** 一次尺寸测量的高度输入。 */

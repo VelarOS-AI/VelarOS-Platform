@@ -5,8 +5,8 @@ import type {
   ComputerHelperRequest,
   ComputerHelperResponse,
   ComputerSidecarProcess,
-} from '../../src/exports/runtime'
-import { ComputerSidecarManager } from '../../src/exports/runtime'
+} from '../../src/runtime'
+import { ComputerSidecarManager } from '../../src/runtime'
 
 class FakeOutput {
   private readonly listeners: Array<(chunk: Buffer | string) => void> = []

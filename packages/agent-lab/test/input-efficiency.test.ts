@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
 
-import { realTaskWorkload } from '../src/exports/index.js'
+import { realTaskWorkload } from '../src/index.js'
 
 test('actual attempts remain visible while reused parameters count avoided characters only', () => {
   const receipt = (

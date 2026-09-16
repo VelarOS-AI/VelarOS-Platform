@@ -6,7 +6,7 @@ import { afterEach, describe, expect, test } from 'bun:test'
 
 import { velarosSharedResources } from '@velaros-ai/platform/shared-resources'
 
-import { resolveComputerHelper } from '../../src/exports/runtime'
+import { resolveComputerHelper } from '../../src/runtime'
 
 const HelperScriptNames: Partial<Record<NodeJS.Platform, string>> = {
   darwin: 'mac_helper.py',

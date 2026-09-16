@@ -1,7 +1,7 @@
 import {
   type MemoryAdapterMountInput,
   mountMemoryAdapter,
-} from '../src/exports/adapter-kernel'
+} from '../src/adapter-kernel'
 
 declare const input: MemoryAdapterMountInput
 

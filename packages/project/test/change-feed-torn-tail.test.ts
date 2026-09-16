@@ -4,7 +4,7 @@ import { join } from 'node:path'
 
 import { afterEach, beforeEach, expect, test } from 'bun:test'
 
-import { createFileProjectChangeFeed } from '../src/exports/index'
+import { createFileProjectChangeFeed } from '../src/index'
 import type { ProjectChangeRecordInput } from '../src/types/change-feed'
 
 let directory = ''

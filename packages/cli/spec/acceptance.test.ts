@@ -16,11 +16,11 @@ import {
   type VelarosCliErrorEnvelope,
   VelarosCliExitCodes,
   type VelarosCliSuccessEnvelope,
-} from '../src/exports/index'
+} from '../src/index'
 
 const packageRoot = new URL('../', import.meta.url)
 const binaryPath = fileURLToPath(new URL('bin/velaros.mjs', packageRoot))
-const builtEntryUrl = new URL('dist/exports/index.js', packageRoot).href
+const builtEntryUrl = new URL('dist/index.js', packageRoot).href
 
 /** 把 `--json` 的文本读成成功信封。 */
 function readSuccess(text: string): VelarosCliSuccessEnvelope {

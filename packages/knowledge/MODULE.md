@@ -134,7 +134,8 @@ src/
     tools.ts       工具入参的公共处理
     index-issues.ts 索引问题汇总（guidance 中文）
     code.ts chunks.ts query.ts indexing.ts vector-stats.ts paths.ts workspace.ts rows.ts vector-query.ts embedding.ts
-  exports/       对外入口，只转发
+  index.ts      `.` 入口，只转发
+  contracts.ts  `./contracts` 入口，只转发
     index.ts       根入口（`.`）
     contracts.ts   可移植数据入口（`./contracts`）
   velaros-globals.d.ts

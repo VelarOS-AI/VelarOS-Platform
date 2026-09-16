@@ -8,8 +8,8 @@ import { InMemoryContextPayloadStore } from '@velaros-ai/agent'
 import { textCodec } from '@velaros-ai/text-files'
 
 import type { ProjectToolContext } from '../src/contract/requires'
-import { createProjectKernel } from '../src/exports/index'
 import { projectTools } from '../src/impl/ProjectTools'
+import { createProjectKernel } from '../src/index'
 import { registerProjectFileContext } from '../src/utils/agent/file-context'
 import { finalizeProjectModelResult } from '../src/utils/agent/source-window'
 

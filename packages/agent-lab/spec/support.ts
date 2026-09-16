@@ -4,8 +4,8 @@ import type {
   Observation,
   RunArchive,
   TrialSpec,
-} from "../src/exports/index.js";
-import { ObservationFaces, UnlimitedBudget } from "../src/exports/index.js";
+} from "../src/index.js";
+import { ObservationFaces, UnlimitedBudget } from "../src/index.js";
 import { createUnobservedObservation } from "../src/utils/measure/normalize.js";
 
 export function journey(id = "journey-a", legs = 1): JourneySpec {

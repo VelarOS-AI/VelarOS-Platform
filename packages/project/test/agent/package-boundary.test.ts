@@ -4,7 +4,7 @@ import { relative, resolve } from 'node:path'
 import { describe, expect, test } from 'bun:test'
 
 import { ProjectToolNames } from '../../src/contract/constants'
-import { projectTools } from '../../src/exports/index'
+import { projectTools } from '../../src/index'
 
 const PackageRoot = resolve(import.meta.dir, '../..')
 const SourceRoot = resolve(PackageRoot, 'src')

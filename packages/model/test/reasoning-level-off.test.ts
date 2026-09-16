@@ -11,12 +11,12 @@ import type {
 } from '@ai-sdk/provider'
 import { describe, expect, test } from 'bun:test'
 
-import type { ChatProviderId } from '../src/exports/index'
+import type { ChatProviderId } from '../src/index'
 import {
   applyThinkingDepthProviderOptions,
   createThinkingDepthProviderOptions,
-} from '../src/exports/index'
-import { createModelRuntimeComposition } from '../src/exports/node'
+} from '../src/index'
+import { createModelRuntimeComposition } from '../src/node'
 
 const AnthropicModelId = 'claude-sonnet-4-6'
 const OpenAiModelId = 'gpt-5.5'

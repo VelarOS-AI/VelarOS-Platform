@@ -7,7 +7,7 @@
 import { describe, expect, test } from 'bun:test'
 
 import { DefaultProviderModels, ModelProviderOperationalManifests } from '../src/contract/constants'
-import { getSharedProviderCatalog, SharedProviderCatalogs } from '../src/exports/index'
+import { getSharedProviderCatalog, SharedProviderCatalogs } from '../src/index'
 
 describe('缺省模型常量表', () => {
   test('每个内置 provider 的缺省模型与静态目录一致', () => {

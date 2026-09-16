@@ -12,20 +12,20 @@
   "engines": {
     "node": ">=20.0.0"
   },
-  "main": "./dist/exports/index.js",
-  "types": "./dist/exports/index.d.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/exports/index.d.ts",
-      "import": "./dist/exports/index.js"
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
     },
     "./contracts": {
-      "types": "./dist/exports/contracts.d.ts",
-      "import": "./dist/exports/contracts.js"
+      "types": "./dist/contracts.d.ts",
+      "import": "./dist/contracts.js"
     },
     "./shared-resources": {
-      "types": "./dist/exports/shared-resources.d.ts",
-      "import": "./dist/exports/shared-resources.js"
+      "types": "./dist/shared-resources.d.ts",
+      "import": "./dist/shared-resources.js"
     }
   },
   "files": [

@@ -5,7 +5,7 @@
 
 import { describe, expect, test } from 'bun:test'
 
-import { rehearsalSandboxRules, SandboxApplyOperationKind, type SandboxDiff } from '../src/exports/index'
+import { rehearsalSandboxRules, SandboxApplyOperationKind, type SandboxDiff } from '../src/index'
 import { RehearsalSandboxTuning } from '../src/utils/tuning'
 
 function diffOf(overrides: Partial<SandboxDiff> = {}): SandboxDiff {

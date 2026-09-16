@@ -7,8 +7,8 @@ import * as ts from 'typescript'
 
 import { createProjectKernel, typescriptPlugin } from '@velaros-ai/project'
 
-import { languageQueries, type LanguageToolContext, typeScriptProjects } from '../src/exports/index'
 import { languageServiceRegistry } from '../src/impl/LanguageServiceRegistry'
+import { languageQueries, type LanguageToolContext, typeScriptProjects } from '../src/index'
 import { groupFilesByTypeScriptProject } from '../src/utils/typescript-config'
 
 // 用例跑的是真实类型检查与数百个文件的夹具，机器繁忙时会超过默认的 5 秒。

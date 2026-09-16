@@ -16,7 +16,7 @@ import {
   createOfficeKernelModule,
   OfficeCapability,
   type OfficeCapabilityService,
-} from '../src/exports'
+} from '../src/index'
 
 function createCaptureContext(
   capture: (tokenId: string, service: object) => void,

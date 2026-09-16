@@ -6,8 +6,8 @@ import {
   ModelProviderCollection,
   resolveDefaultEmbeddingModelForProvider,
   selectEmbeddingModelCandidate,
-} from '../src/exports/index'
-import { createModelRuntimeComposition } from '../src/exports/node'
+} from '../src/index'
+import { createModelRuntimeComposition } from '../src/node'
 
 const InjectedEmbeddingProviderId = 'test-embedding-provider' as ChatProviderId
 

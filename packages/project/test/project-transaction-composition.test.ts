@@ -4,14 +4,14 @@ import { dirname, join } from 'node:path'
 
 import { describe, expect, test } from 'bun:test'
 
+import { FileProjectTransactionStateStore } from '../src/impl/persistence/FileProjectTransactionStateStore'
 import {
   createProjectKernel,
   type EditIntent,
   type ProjectKernel,
   type ProjectPlugin,
   typescriptPlugin,
-} from '../src/exports/index'
-import { FileProjectTransactionStateStore } from '../src/impl/persistence/FileProjectTransactionStateStore'
+} from '../src/index'
 import type { Diagnostic } from '../src/types/common'
 import type { ProjectTransactionPendingOperation } from '../src/types/transaction.js'
 import { unifiedDiff } from '../src/utils/diff'

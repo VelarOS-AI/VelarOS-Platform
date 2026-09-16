@@ -4,9 +4,9 @@ import { join } from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test'
 
-import { createProjectKernel } from '../src/exports/index'
 import { FileStore } from '../src/impl/files/FileStore'
 import { ProjectEditSchema, projectTools } from '../src/impl/ProjectTools'
+import { createProjectKernel } from '../src/index'
 import type { ProjectContentEdit, ProjectEditView, ProjectPlannerResolver } from '../src/types/editing'
 import { normalizeProjectLineRange } from '../src/utils/editing/line-range'
 import { completeProjectCoverage } from '../src/utils/editing/planner-coverage'

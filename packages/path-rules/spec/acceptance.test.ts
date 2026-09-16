@@ -9,7 +9,7 @@ import { join } from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
-import { createIgnorePolicy, type GitCheckIgnoreRunner, gitignoreRules, pathMatcher } from '../src/exports/index'
+import { createIgnorePolicy, type GitCheckIgnoreRunner, gitignoreRules, pathMatcher } from '../src/index'
 
 let root = ''
 beforeEach(async () => {

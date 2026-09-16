@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { archive, journey, trial } from "../spec/support.js";
-import { labWire, RunArchiveSchemaId } from "../src/exports/index.js";
+import { labWire, RunArchiveSchemaId } from "../src/index.js";
 
 describe("public protocol", () => {
   test("accepts versioned continuous journeys and strict v3 archives", () => {

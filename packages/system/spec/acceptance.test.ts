@@ -12,7 +12,8 @@ import { join, resolve } from 'node:path'
 
 import { describe, expect, test } from 'bun:test'
 
-import type { SystemCommandResult } from '../src/exports/contracts'
+import type { SystemCommandResult } from '../src/contracts'
+import { systemProcessManager } from '../src/impl/SystemProcessManager.js'
 import {
   createLocalSystemKernel,
   createSystemBundledModDefinition,
@@ -23,8 +24,7 @@ import {
   type SystemToolContext,
   SystemToolNames,
   systemTools,
-} from '../src/exports/index'
-import { systemProcessManager } from '../src/impl/SystemProcessManager.js'
+} from '../src/index'
 import { buildSystemProcessConfinementSpawnSpec } from '../src/utils/confinement.js'
 import { assertInsideSandboxBase, sandboxBaseDirectory } from '../src/utils/sandbox.js'
 

@@ -13,7 +13,7 @@ import type {
 import {
   createOfficeKernelModule,
   type OfficeCapabilityService,
-} from '../src/exports'
+} from '../src/index'
 
 function captureOfficeService(
   capture: (service: OfficeCapabilityService) => void,

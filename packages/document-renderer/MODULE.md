@@ -27,7 +27,7 @@
 **数据面**是 `types/document-renderer.ts`（可移植）：`RendererDescriptor`、`RendererOperationDescriptor`、`DocumentRendererResponse`、`DocumentRendererCliResult`，外加常量表派生的 `DocumentRendererErrorCode`。
 请求的形状（`DocumentRendererRequest` 那一族）是包内的工作类型，留在 `types/rendering.ts`：调用方按 JSON 协议拼请求，不 import 类型。
 
-两个入口对应 `package.json` 的 `exports`，源文件在 `src/exports/`，只有转发语句：
+两个入口对应 `package.json` 的 `exports`，源文件是 `src` 根上的入口文件，只有转发语句：
 
 | 入口 | 给谁用 | 里面有什么 |
 | --- | --- | --- |
@@ -90,7 +90,8 @@ src/
   types/        只放类型：document-renderer.ts 是可移植数据（describe 与回执），rendering.ts 是包内工作类型（三种请求、路径判定的入参出参）
   impl/         一类一文件：DocumentRenderer（协议出口）、OfficeRenderer（两种渲染）、RendererPaths（路径准入）
   utils/        request.ts（schema 与中文校验说明）、paths.ts（包含判断、符号链接、资源目录）、command.ts（读标准输入、错误码归一、拼回执）、tuning.ts（可调参数）
-  exports/      两个入口，只有转发
+  index.ts      `.` 入口，只转发
+  contracts.ts  `./contracts` 入口，只转发
 spec/           不变量登记与验收测试
 test/           实现测试：真的渲染出图落盘
 ```

@@ -1,6 +1,6 @@
 # @velaros-ai/browser/tools
 
-> `@velaros-ai/browser` 的一个导入切片(入口 `packages/browser/src/exports/tools.ts`)。包总览见
+> `@velaros-ai/browser` 的一个导入切片(入口 `packages/browser/src/tools.ts`)。包总览见
 > [包 README](../../README.md)。
 
 ## 这个切片是什么

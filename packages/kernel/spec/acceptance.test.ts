@@ -20,10 +20,6 @@ import {
   RemoteNodeLimits,
 } from '../src/contract/constants'
 import type { KernelPermissionBroker } from '../src/contract/requires'
-import {
-  createKernel,
-  kernelModules,
-} from '../src/exports/index'
 import { KernelClient } from '../src/impl/client/KernelClient'
 import { RemoteNodePairingGate } from '../src/impl/remote-node/RemoteNodePairingGate'
 import { KernelModuleHost } from '../src/impl/runtime/KernelModuleHost'
@@ -32,6 +28,10 @@ import { InProcessKernelTransport } from '../src/impl/serve/InProcessKernelTrans
 import { KernelLocalDaemon } from '../src/impl/serve/KernelLocalDaemon'
 import { KernelService } from '../src/impl/serve/KernelService'
 import { KernelUpdater } from '../src/impl/updater/KernelUpdater'
+import {
+  createKernel,
+  kernelModules,
+} from '../src/index'
 import type { KernelModulePermissionRequest } from '../src/types/kernel'
 import { createDefaultKernelDaemonPaths } from '../src/utils/rpc/descriptor'
 import { negotiateKernelProtocol } from '../src/utils/wire/negotiation'

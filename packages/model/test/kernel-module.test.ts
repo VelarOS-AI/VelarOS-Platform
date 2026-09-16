@@ -10,7 +10,7 @@ import {
   ModelCapability,
   type ModelRegistryPort,
   type ModelRuntimeCapabilityService,
-} from '../src/exports/index'
+} from '../src/index'
 
 function createCaptureContext(
   capture: (tokenId: string, service: object) => void,
