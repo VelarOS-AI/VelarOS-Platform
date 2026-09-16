@@ -65,8 +65,8 @@ export type ProjectSandboxInput = {
   maxFiles?: number
 }
 
-/** 代码查询的目标符号：前一次查询返回的 symbolRef，或者文件路径加符号名（可带容器名区分同名符号）。 */
-export type ProjectCodeTarget = { symbolRef: string } | { path: string; symbol: string; container?: string }
+/** 代码查询的目标符号：前一次查询返回的 symbolRef，或者符号名（可带声明所在文件与容器名收窄；不给 path 就按名字在整个项目里找）。 */
+export type ProjectCodeTarget = { symbolRef: string } | { path?: string; symbol: string; container?: string }
 
 /**
  * project:code 的入参：一个 intent 说明要知道什么，字段只有目标、范围与条数。

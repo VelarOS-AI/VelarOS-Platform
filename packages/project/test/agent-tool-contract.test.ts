@@ -65,7 +65,8 @@ describe('Project model-facing tool contract', () => {
         permissions: ['fs:read'],
         execute: async () => null,
       }),
-    ).toThrow('example does not satisfy schema')
+      // 只认「点名这个工具的示例不合 schema」，不钉上游那句话的措辞（它已经改成中文）。
+    ).toThrow(/project:invalid-example/u)
 
     for (const [name, expected] of [
       [ProjectToolNames.read, { files: [{ path: 'src/service.ts', range: [42, 60] }, { path: 'src/types.ts', range: 20 }] }],

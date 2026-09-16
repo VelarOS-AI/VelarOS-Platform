@@ -9,7 +9,6 @@ import { isString } from '@velaros-ai/core'
 
 import type { ProjectToolContext } from '../../contract/requires.js'
 import type { CodeSymbolTarget } from '../../types/agent.js'
-import type { ProjectCodeTarget } from '../../types/tools.js'
 import { ProjectError } from '../errors.js'
 
 const ToolName = '__project_code_symbol__'
@@ -40,9 +39,12 @@ export async function saveCodeSymbolReference(
   return `symbol:${hash}`
 }
 
-/** 把代码查询的目标还原成 {path, symbol, container}：本来就是这个形状的原样返回；symbolRef 找不到、不属于当前项目或记录坏了时抛错。 */
+/**
+ * 把代码查询的目标还原成 {path, symbol, container}：本来就是这个形状的原样返回；symbolRef 找不到、不属于当前项目或记录坏了时抛错。
+ * 只给符号名、还没定到文件的目标先由调用方按名字定位（`resolveCodeTarget`），这里不收。
+ */
 export async function resolveCodeSymbolReference(
-  input: ProjectCodeTarget,
+  input: { symbolRef: string } | CodeSymbolTarget,
   context: ProjectToolContext,
 ): Promise<CodeSymbolTarget> {
   if (!('symbolRef' in input)) return input

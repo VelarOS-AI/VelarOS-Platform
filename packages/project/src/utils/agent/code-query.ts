@@ -127,7 +127,50 @@ function choose<T>(candidates: T[], target: CodeSymbolTarget): T {
   if (candidates.length === 1) return candidates[0]!
   throw new ProjectError(!isEmpty(candidates) ? 'AMBIGUOUS_TARGET' : 'TARGET_NOT_FOUND',
     !isEmpty(candidates) ? '同名符号仍有多个声明。' : '当前项目中未找到目标符号。',
-    { target, candidates }, '查询 symbols 后使用具体 symbolRef；必要时指定 container。')
+    { target, candidates }, '先用 intent=definition 只给 {symbol} 看候选，挑一个的 symbolRef 再查；必要时指定 container。')
+}
+
+/** 目标只给了名字（没有 symbolRef、也没有 path）时返回这个名字，否则返回 undefined。 */
+function nameOnlyTarget(target: ProjectCodeTarget): Optional<{ symbol: string; container?: string }> {
+  return 'symbolRef' in target || isString(target.path) ? undefined : target
+}
+
+/** 按名字在整个项目里找这个符号的声明：名字精确匹配，给了 container 再按 container 收窄。 */
+async function declarationsByName(
+  scopeInput: ProjectCodeScope,
+  target: { symbol: string; container?: string },
+  context: ProjectToolContext,
+) {
+  const result = await query({ action: 'find_symbols', ...scope(scopeInput), query: target.symbol, exact: true }, context)
+  const items = rows(result.symbols).filter((item) =>
+    item.name === target.symbol && isString(item.path) && (!target.container || item.container === target.container))
+  return { result, items }
+}
+
+/** 按名字找到的结果只是候选，回执里照实说。 */
+function nameMatchNote(symbol: string): string {
+  return `这些是按名字在整个项目里找到的 ${symbol} 声明候选，不是绑定证明；挑一个的 symbolRef 再查一次。`
+}
+
+/**
+ * 把 target 定到一个符号：symbolRef 与带 path 的写法直接还原；只给名字时按名字找声明，
+ * 恰好一处才定得下来，多处报 AMBIGUOUS_TARGET 并带上候选，一处没有报 TARGET_NOT_FOUND。
+ */
+async function resolveCodeTarget(
+  target: ProjectCodeTarget,
+  scopeInput: ProjectCodeScope,
+  context: ProjectToolContext,
+): Promise<CodeSymbolTarget> {
+  if ('symbolRef' in target) return resolveCodeSymbolReference(target, context)
+  if (isString(target.path)) return resolveCodeSymbolReference({ ...target, path: target.path }, context)
+  const named = target
+  const { items } = await declarationsByName(scopeInput, named, context)
+  const found = choose(items.map((item) => ({
+    path: String(item.path), symbol: named.symbol,
+    container: optionalWhen(isString, item.container),
+    line: toOptional(numberOrNull(item.line)),
+  })), { path: '', symbol: named.symbol, container: named.container })
+  return found
 }
 
 /** 在目标文件的符号表里找到目标符号的声明（按名字、容器，有行号时优先同一行的那个）；找不到或不唯一时抛错。 */
@@ -140,9 +183,8 @@ async function locate(target: CodeSymbolTarget, context: ProjectToolContext): Pr
   return choose(atLine.length === 1 ? atLine : symbols, target)
 }
 
-/** 把目标符号换成代码图谱里的节点：按名字搜候选，再按路径、容器、行号收窄到唯一一个；找不到或不唯一时抛错。 */
-async function graphTarget(input: ProjectCodeTarget, context: ProjectToolContext): Promise<CodeSymbolTarget & { nodeId: string }> {
-  const target = await resolveCodeSymbolReference(input, context)
+/** 把已经定好的目标符号换成代码图谱里的节点：按名字搜候选，再按路径、容器、行号收窄到唯一一个；找不到或不唯一时抛错。 */
+async function graphTarget(target: CodeSymbolTarget, context: ProjectToolContext): Promise<CodeSymbolTarget & { nodeId: string }> {
   const result = await query({ action: 'search_symbols', query: target.symbol, limit: ProjectTuning.codeQuery.graphCandidates }, context)
   const matches = graphRows(result).filter((item) =>
     item.name === target.symbol && isString(item.path) && sameCodePath(context.project.getRootPath(), item.path, target.path) &&
@@ -159,11 +201,22 @@ async function outline(input: Extract<ProjectCodeInput, { intent: 'outline' }>, 
 }
 
 /**
- * definition：给出这个符号的声明、body 范围和当前源码（中途文件变了就报版本冲突）；
- * target 指的文件里没有这个声明时，退一步按名字在整个项目里找候选，回执说明这是候选不是定论。
+ * definition：给出这个符号的声明、body 范围和当前源码（中途文件变了就报版本冲突）。
+ * 只给名字时按名字在整个项目里找：恰好一处就直接给详情，多处回候选列表；
+ * 给了 path 但那个文件里没有这个声明时，同样退一步按名字找候选，回执说明这是候选不是定论。
  */
 async function definition(input: Extract<ProjectCodeInput, { intent: 'definition' }>, context: ProjectToolContext) {
-  const target = await resolveCodeSymbolReference(input.target, context)
+  const named = nameOnlyTarget(input.target)
+  if (named) {
+    const { result, items } = await declarationsByName(input, named, context)
+    if (isEmpty(items))
+      throw new ProjectError('TARGET_NOT_FOUND', `整个项目里没有名叫 ${named.symbol} 的符号声明。`, { target: named },
+        '用 project:search 按文本找到它出现的地方，再对那个文件用 intent=outline。')
+    // 多处同名：把候选连同各自的路径、种类一起给出去，让模型挑，而不是替它猜一个。
+    if (items.length > 1)
+      return envelope(input, result, { symbols: await symbolRows(items, context), degraded: [nameMatchNote(named.symbol)] })
+  }
+  const target = await resolveCodeTarget(input.target, input, context)
   const before = await (await context.project.kernel()).read({ path: target.path, maxChars: 1 })
   let symbol: ProjectSymbol
   try {
@@ -171,11 +224,10 @@ async function definition(input: Extract<ProjectCodeInput, { intent: 'definition
   } catch (error) {
     if (!(error instanceof ProjectError) || error.reason !== 'TARGET_NOT_FOUND') throw error
     // 模型常把「看到它的文件」当成「声明它的文件」：按名字在整个项目里找一遍，给候选而不是空手回去。
-    const found = await query({ action: 'find_symbols', ...scope(input), query: target.symbol, exact: true }, context)
-    const candidates = rows(found.symbols).filter((item) => item.name === target.symbol)
-    if (isEmpty(candidates)) throw error
-    return envelope(input, found, { symbols: await symbolRows(candidates, context),
-      degraded: [`${target.path} 里没有 ${target.symbol} 的声明，这些是按名字在整个项目里找到的候选；挑一个的 symbolRef 再查一次。`] })
+    const { result, items } = await declarationsByName(input, target, context)
+    if (isEmpty(items)) throw error
+    return envelope(input, result, { symbols: await symbolRows(items, context),
+      degraded: [`${target.path} 里没有 ${target.symbol} 的声明。${nameMatchNote(target.symbol)}`] })
   }
   const detail = symbol as ProjectSymbol & { bodyRange?: ProjectSymbol['range']; statementRange?: ProjectSymbol['range'] }
   const source = await readProjectSource({ files: [{ path: symbol.path, range: [symbol.range.startLine, symbol.range.endLine] }], maxChars: ProjectTuning.codeQuery.symbolSourceChars }, context)
@@ -198,7 +250,7 @@ async function calls(input: Extract<ProjectCodeInput, { intent: 'callers' | 'cal
   // 层数在这里补：schema 的根是一个平对象，字段级 default 会落到所有 intent 上，那样反倒说不清哪个 intent 收哪些字段。
   const depth = ProjectCodeLimits.relationDepthDefault
   try {
-    const target = await graphTarget(input.target, context)
+    const target = await graphTarget(await resolveCodeTarget(input.target, input, context), context)
     const result = boundRelations(await query({ action: input.intent === 'callers' ? 'callers' : 'callees', nodeId: target.nodeId, depth }, context), input.limit ?? ProjectCodeLimits.resultsDefault)
     return envelope(input, result, { target, sources: [{ backend: result.source ?? 'codegraph' }] })
   } catch (error) {
@@ -232,18 +284,18 @@ export async function queryProjectCode(input: ProjectCodeInput, context: Project
     case 'imports': case 'importers': return dependencies(input, context)
     case 'diagnostics': return envelope(input, await query({ action: 'language_diagnostics', ...scope(input), path: input.path }, context))
     case 'references': {
-      const target = await resolveCodeSymbolReference(input.target, context)
+      const target = await resolveCodeTarget(input.target, input, context)
       await locate(target, context)
       const result = await query({ action: 'find_references', ...scope(input), symbol: target.symbol, path: input.path, exactWord: true }, context)
       return envelope(input, result, { target, degraded: [String(result.degraded ?? ''), '这一类语言查询按名字收集引用候选，同名声明之间的绑定关系后端没有证明。'].filter(Boolean) })
     }
     case 'impact': {
-      const target = await resolveCodeSymbolReference(input.target, context)
+      const target = await resolveCodeTarget(input.target, input, context)
       await locate(target, context)
       const result = await query({ action: 'analyze_symbol_impact', ...scope(input), symbol: target.symbol, path: input.path, declarationPath: target.path }, context)
       let graph: unknown
       try {
-        const resolved = await graphTarget(input.target, context)
+        const resolved = await graphTarget(target, context)
         graph = await query({ action: 'impact', nodeId: resolved.nodeId, depth: ProjectCodeLimits.relationDepthDefault }, context)
       } catch (error) { if (!unavailable(error) && !(error instanceof ProjectError && error.reason === 'TARGET_NOT_FOUND')) throw error }
       return envelope(input, result, { target, graph, degraded: ['影响面是语言服务给的候选：按名字找到的引用不等于精确绑定。', ...(isString(result.degraded) ? [result.degraded] : [])] })
@@ -256,8 +308,8 @@ export async function analyzeProjectCode(input: ProjectCodeAnalysisInput, contex
   let request: ProjectCodeQuery
   switch (input.intent) {
     case 'trace': {
-      const from = await graphTarget(input.from, context)
-      const to = await graphTarget(input.to, context)
+      const from = await graphTarget(await resolveCodeTarget(input.from, {}, context), context)
+      const to = await graphTarget(await resolveCodeTarget(input.to, {}, context), context)
       request = { action: 'trace', fromSymbol: from.nodeId, toSymbol: to.nodeId }
       break
     }

@@ -11,6 +11,12 @@ const validQueries = [
   { intent: 'outline', path: 'src', language: 'typescript', extensions: ['.ts'], limit: 40, maxDepth: 3 },
   { intent: 'definition', target: { path: 'src/cache.ts', symbol: 'Cache' } },
   { intent: 'definition', target: { symbolRef: 'symbol:abc' } },
+  // 只知道名字、不知道在哪个文件：三个 intent 都收得下
+  { intent: 'definition', target: { symbol: 'Cache' } },
+  { intent: 'definition', target: { symbol: 'Cache', container: 'Store' } },
+  { intent: 'references', target: { symbol: 'Cache' }, path: 'src' },
+  { intent: 'callers', target: { symbol: 'Cache' } },
+  { intent: 'impact', target: { symbol: 'Cache' } },
   { intent: 'references', target: { path: 'src/cache.ts', symbol: 'Cache' } },
   { intent: 'references', target: { path: 'src/cache.ts', symbol: 'Cache', container: 'Store' }, path: 'test', limit: 40 },
   { intent: 'callers', target: { symbolRef: 'symbol:abc' } },
@@ -50,6 +56,11 @@ const invalidQueries = [
   { intent: 'outline', path: '' },
   { intent: 'outline', path: 'src', limit: 201 },
   { intent: 'outline', path: 'src', unknown: true },
+  // target 放宽的是 path，symbol 仍然必填，形状也仍然收口
+  { intent: 'definition', target: { path: 'src/cache.ts' } },
+  { intent: 'definition', target: { symbol: '' } },
+  { intent: 'definition', target: { symbol: 'Cache', unknown: true } },
+  { intent: 'definition', target: {} },
 ]
 
 /** 模型面的每个字段都要有说明：把没有 description 的字段名报出来。 */

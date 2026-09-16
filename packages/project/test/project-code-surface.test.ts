@@ -88,6 +88,48 @@ describe('nine-intent semantic query surface', () => {
     expect(result.degraded.join('')).toContain('候选')
   })
 
+  test('只给符号名：唯一一处就直接给详情，多处回候选，一处都没有报找不到并给下一步', async () => {
+    const single = await fixture((input) => input.action === 'find_symbols' && input.query === 'Service'
+      ? { source: 'language-service', symbols: [{ path: 'service.ts', name: 'Service', kind: 'function', line: 1 }] } : {})
+    const detail = await single.run({ intent: 'definition', target: { symbol: 'Service' } })
+    expect(single.calls[0]).toMatchObject({ action: 'find_symbols', query: 'Service', exact: true })
+    expect(detail.declaration).toMatchObject({ startLine: 1, endLine: 3 })
+
+    const many = await fixture(() => ({ source: 'language-service', symbols: [
+      { path: 'service.ts', name: 'Service', kind: 'function', line: 1 },
+      { path: 'other.ts', name: 'Service', kind: 'class', line: 9 },
+    ] }))
+    const candidates = await many.run({ intent: 'definition', target: { symbol: 'Service' } })
+    expect((candidates.symbols as any[]).map((item) => [item.path, item.kind]))
+      .toEqual([['service.ts', 'function'], ['other.ts', 'class']])
+    expect((candidates.symbols as any[]).every((item) => String(item.symbolRef).startsWith('symbol:'))).toBe(true)
+    expect(candidates.declaration).toBeUndefined()
+    expect(candidates.degraded.join('')).toContain('按名字')
+
+    const none = await fixture(() => ({ source: 'language-service', symbols: [] }))
+    await expect(none.run({ intent: 'definition', target: { symbol: 'Missing' } })).rejects.toMatchObject({
+      reason: 'TARGET_NOT_FOUND', suggestedNextAction: expect.stringContaining('project:search'),
+    })
+  })
+
+  test('只给名字的 target 在 references、callers、impact 上先定位到唯一声明，多处则报歧义', async () => {
+    const { run, calls } = await fixture((input) => input.action === 'find_symbols'
+      ? { source: 'language-service', symbols: [{ path: 'service.ts', name: 'Service', kind: 'function', line: 1 }] }
+      : input.action === 'search_symbols' ? { source: 'codegraph', results: [{ id: 'node:service', path: 'service.ts', name: 'Service', line: 1 }] }
+      : { source: 'language-service', references: [] })
+    await run({ intent: 'references', target: { symbol: 'Service' } })
+    expect(calls.map((input) => input.action)).toEqual(['find_symbols', 'find_references'])
+    expect(calls[1]).toMatchObject({ action: 'find_references', symbol: 'Service' })
+    await run({ intent: 'callers', target: { symbol: 'Service' } })
+    expect(calls.at(-1)).toMatchObject({ action: 'callers', nodeId: 'node:service' })
+
+    const ambiguous = await fixture(() => ({ source: 'language-service', symbols: [
+      { path: 'service.ts', name: 'Service', line: 1 }, { path: 'other.ts', name: 'Service', line: 2 },
+    ] }))
+    await expect(ambiguous.run({ intent: 'references', target: { symbol: 'Service' } }))
+      .rejects.toMatchObject({ reason: 'AMBIGUOUS_TARGET', suggestedNextAction: expect.stringContaining('definition') })
+  })
+
   test('references preserve search scope and state name matching limitations', async () => {
     const { run, calls } = await fixture(() => ({ source: 'language-service', references: [{ path: 'other.ts', line: 1, excerpt: 'Service()' }], scannedFiles: 2, truncated: true }))
     const result = await run({ intent: 'references', target, path: 'tests', limit: 10 })

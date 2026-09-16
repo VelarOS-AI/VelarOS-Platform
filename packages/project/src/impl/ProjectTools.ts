@@ -138,15 +138,15 @@ const OverwriteText = z.string().describe('替换后的完整正文。')
 const MoveTo = z.string().min(1).describe('移动到的新路径，相对项目根；已存在就拒绝。')
 const EditsField = z.array(ProjectContentEditSchema).min(1).max(ProjectChangeLimits.editsPerFile)
 
-/** 代码查询的目标：前序 symbols 返回的 symbolRef，或 {path, symbol, container?}；调用方不需要后端节点 id。 */
+/** 代码查询的目标：前序查询返回的 symbolRef、指定文件里的声明，或只给名字全项目找；调用方不需要后端节点 id。 */
 const ProjectCodeTargetSchema = z.union([
-  z.strictObject({ symbolRef: z.string().startsWith('symbol:').describe('symbols 回执里的 symbolRef，原样复制。') }),
+  z.strictObject({ symbolRef: z.string().startsWith('symbol:').describe('前一次查询回执里的 symbolRef，原样复制。') }),
   z.strictObject({
-    path: z.string().min(1).describe('符号声明所在的文件，相对项目根。'),
+    path: z.string().min(1).optional().describe('符号声明所在的文件，相对项目根；不知道在哪就别给。'),
     symbol: z.string().min(1).describe('符号名，按源码里的写法。'),
     container: z.string().min(1).optional().describe('同名符号很多时用它区分：符号所在的类、命名空间等外层名字。'),
   }),
-]).describe('要查的符号：symbols 回执里的 symbolRef，或 {path, symbol, container?}。')
+]).describe('要查的符号，三种写法：回执里的 symbolRef 最准；{path, symbol} 指名道姓地查那个文件里的声明；只给 {symbol} 就按名字在整个项目里找，命中多个回候选让你挑。')
 
 /** 代码查询共用的范围字段。 */
 const CodeScope = {
@@ -371,13 +371,13 @@ const codeTool = defineProjectTool<ProjectCodeInput>({
   summary: '问代码：一个 intent 就是一句「要知道什么」——结构、定义、引用、调用方与被调方、依赖、影响面、诊断。',
   suitable: ['要理解代码结构、定位声明、看清依赖与调用关系、评估改动波及面或检查诊断。'],
   usage: [
-    'definition、references、callers、callees、impact 要 target：前一次查询回执里的 symbolRef，或 {path, symbol, container?}（同名符号多时用 container 区分）；不知道符号在哪先 outline 或 project:search。',
-    'outline、imports、importers、diagnostics 要 path；references、impact 的 path 只用来收窄范围。',
-    '回执的 degraded 不为空时结果只是候选：references、impact 按名字收集，不等于精确绑定；空诊断也不等于没问题。',
+    'definition、references、callers、callees、impact 要 target；outline、imports、importers、diagnostics 要 path；references、impact 的 path 只用来收窄范围。',
+    '回执的 degraded 不为空时结果只是候选：按名字找到的符号与引用不等于精确绑定，空诊断也不等于没问题。',
   ],
   notes: ['本轮有 project:code-analysis 时，trace、cycles、deadcode、routing 用它。'],
   examples: [
     { intent: 'outline', path: 'src/user.ts' },
+    { intent: 'definition', target: { symbol: 'UserService' } },
     { intent: 'references', target: { path: 'src/user.ts', symbol: 'UserService' } },
     { intent: 'importers', path: 'src/user.ts' },
   ],
