@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test'
 
 import {
   createProviderSurfaceBinding,
+  ProviderSurfaceBindingSchema,
   ProviderSurfaceProtocolVersion,
   ProviderSurfaceToolCallSchema,
   ProviderSurfaceToolCatalogSchema,
@@ -64,6 +65,16 @@ describe('provider surface protocol', () => {
         localPath: '/secret/path',
       }],
     }).success).toBe(false)
+  })
+
+  test('工厂造出的绑定一定过得了自己的 schema，空 provider 当场拒绝', () => {
+    expect(ProviderSurfaceBindingSchema.safeParse(
+      createProviderSurfaceBinding('chatgpt', 'project', 42),
+    ).success).toBe(true)
+
+    expect(() => createProviderSurfaceBinding('', 'project')).toThrow(/绑定参数不合法：provider/u)
+    expect(() => createProviderSurfaceBinding('chatgpt', 'project', 1.5))
+      .toThrow(/绑定参数不合法/u)
   })
 
   test('carries bounded image artifacts outside textual tool output', () => {

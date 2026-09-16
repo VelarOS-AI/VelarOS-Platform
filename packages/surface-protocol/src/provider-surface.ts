@@ -127,12 +127,19 @@ export type ProviderSurfaceToolResult = z.infer<
   typeof ProviderSurfaceToolResultSchema
 >
 
+/**
+ * 新建一个 provider 自持的绑定。
+ *
+ * 入参当场校验：造出来的绑定必须过得了 `ProviderSurfaceBindingSchema`。`provider` 为空串时
+ * 曾经照造不误，拿去 `safeParse` 却是 false——协议两端一个说合法一个说不合法，问题只会在
+ * 桥的另一头才爆出来。
+ */
 export function createProviderSurfaceBinding(
   provider: string,
   workspaceSpace: ProviderSurfaceWorkspaceSpace,
   now = Date.now(),
 ): ProviderSurfaceBinding {
-  return {
+  const checked = ProviderSurfaceBindingSchema.safeParse({
     provider,
     surfaceOwner: 'provider',
     workspaceSpace,
@@ -145,5 +152,13 @@ export function createProviderSurfaceBinding(
     toolContract: null,
     createdAt: now,
     updatedAt: now,
+  })
+  if (!checked.success) {
+    const fields = checked.error.issues.map((issue) => issue.path.join('.')).join('、')
+    throw new Error(
+      `绑定参数不合法：${fields}。provider 不能为空，时间戳必须是非负整数毫秒。`,
+    )
   }
+
+  return checked.data
 }

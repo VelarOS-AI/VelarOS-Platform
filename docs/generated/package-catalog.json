@@ -303,7 +303,7 @@
       "domain": "surface",
       "directory": "packages/surface-protocol",
       "name": "@velaros-ai/surface-protocol",
-      "version": "0.1.2",
+      "version": "0.1.3",
       "description": "Host-neutral wire contracts for provider-owned VelarOS Agent Surfaces.",
       "exportSubpaths": [
         "."
