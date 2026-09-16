@@ -84,3 +84,8 @@ export function remoteNodeDisposedError(): RemoteNodeClientError {
     retryable: false,
   })
 }
+
+/** 一次调用被中止时交回调用方的错误;名字按 DOM 约定叫 `AbortError`,上层按它判断。 */
+export function createAbortError(): Error {
+  return new DOMException('Remote node call aborted', 'AbortError')
+}

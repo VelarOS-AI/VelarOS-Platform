@@ -28,8 +28,7 @@ import type {
   RemoteNodeProgressEvent,
 } from '../../types/remote'
 import { toRemoteNodeKernelError } from '../../utils/remote/calls'
-import { createKernelCallableCapability } from '../runtime/KernelCallableCapability'
-import { createCapabilityToken } from '../runtime/KernelModuleKit'
+import { kernelModules } from '../runtime/KernelModuleKit'
 
 import type { RemoteNodeClientApi } from './RemoteNodeClient'
 
@@ -71,8 +70,8 @@ export class RemoteNodeIsolationAdapter implements KernelModuleIsolationAdapter 
         )
       }
       registrations.push(context.registerService(
-        createCapabilityToken(token.id, token.version),
-        createKernelCallableCapability(
+        kernelModules.token(token.id, token.version),
+        kernelModules.callable(
           this.buildOperationTable(binding, context),
         ),
       ))
@@ -161,4 +160,11 @@ export class RemoteNodeIsolationAdapter implements KernelModuleIsolationAdapter 
       details: { state: client.connectionState },
     }
   }
+}
+
+/** 建一个远程隔离适配器;作为 `isolationAdapters` 注入内核,一台远端主机一个。 */
+export function createRemoteNodeIsolationAdapter(
+  options: RemoteNodeIsolationAdapterOptions,
+): KernelModuleIsolationAdapter {
+  return new RemoteNodeIsolationAdapter(options)
 }

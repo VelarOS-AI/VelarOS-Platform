@@ -7,8 +7,7 @@ import { afterEach, describe, expect, test } from 'bun:test'
 import { KernelClient } from '../../../src/impl/client/KernelClient'
 import { SocketKernelTransport } from '../../../src/impl/client/SocketKernelTransport'
 import { KernelModuleHost } from '../../../src/impl/runtime/KernelModuleHost'
-import { createCapabilityToken } from '../../../src/impl/runtime/KernelModuleKit'
-import { defineKernelModule } from '../../../src/impl/runtime/KernelModuleKit'
+import { kernelModules } from '../../../src/impl/runtime/KernelModuleKit'
 import { InProcessKernelTransport } from '../../../src/impl/serve/InProcessKernelTransport'
 import { bootKernelDaemon } from '../../../src/impl/serve/KernelDaemonAssembly'
 import { KernelLocalRpcServer } from '../../../src/impl/serve/KernelLocalRpcServer'
@@ -67,12 +66,12 @@ describe('mods RPC', () => {
         indexPath: join(root, 'mod-index.json'),
       },
       modules: [
-        defineKernelModule({
+        kernelModules.define({
           manifest: {
             id: 'module.seed',
             version: '1.0.0',
             apiVersion: 1,
-            provides: [createCapabilityToken('test.seed')],
+            provides: [kernelModules.token('test.seed')],
             requires: [],
             optionalRequires: [],
             permissions: [],

@@ -57,10 +57,3 @@ export class NamespacedKernelStateStore implements KernelStateStore {
     }
   }
 }
-
-/** 建一个模块作用域的状态面（宿主装激活上下文时用）。 */
-export function createNamespacedStateStore(
-  options: NamespacedKernelStateStoreOptions,
-): KernelStateStore {
-  return Object.freeze(new NamespacedKernelStateStore(options))
-}

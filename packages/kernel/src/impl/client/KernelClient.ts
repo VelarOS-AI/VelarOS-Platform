@@ -3,17 +3,17 @@ import type { KernelClientEventHandler, KernelClientTransport } from '../../cont
 import type { OpenCapabilitySessionInput } from '../../types/client'
 import type { KernelServiceHealth } from '../../types/kernel.js'
 import type {
+  CapabilitySessionOpenRequest,
+  CapabilitySessionOpenResponse,
   KernelHandshake,
   ModsInstallFromDirectoryResponse,
   ModsListResponse,
   ModsSetEnabledResponse,
 } from '../../types/wire'
+import { KernelClientError } from '../../utils/errors'
 import { KernelProtocolVersion } from '../../utils/wire/version'
 
-import {
-  type CapabilitySessionApi,
-  openCapabilitySessionOnTransport,
-} from './CapabilitySession'
+import { CapabilitySession, type CapabilitySessionApi } from './CapabilitySession'
 
 /**
  * 产品面的内核客户端：一台内核连接上，产品真正要用的那几件事。
@@ -59,10 +59,28 @@ export class KernelClient implements KernelClientApi {
     return this.transport.health()
   }
 
-  public openCapabilitySession(
+  public async openCapabilitySession(
     input: OpenCapabilitySessionInput,
   ): Promise<CapabilitySessionApi> {
-    return openCapabilitySessionOnTransport(this.transport, input)
+    const response: CapabilitySessionOpenResponse =
+      await this.transport.openCapabilitySession({
+        protocolVersion: KernelProtocolVersion,
+        requires: [...input.requires],
+      } satisfies CapabilitySessionOpenRequest)
+    // 服务端拒绝时码原样来自失败信封（拿不到能力一般是 CAPABILITY_NOT_GRANTED）。
+    if (response.status === 'error') {
+      throw new KernelClientError({
+        code: response.error.code,
+        message: response.error.message,
+        retryable: response.error.retryable,
+        rpcError: response.error,
+      })
+    }
+    return new CapabilitySession(
+      this.transport,
+      response.sessionId,
+      response.requires,
+    )
   }
 
   public listMods(): Promise<ModsListResponse> {

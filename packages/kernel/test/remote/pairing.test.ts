@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 
-import { KernelModuleApiVersion } from '../../src/contract/constants'
+import { KernelVersionAxes } from '../../src/contract/constants'
 import type { RemoteNodeClientCredentialStore as RemoteNodeCredentialStore } from '../../src/contract/requires'
 import type { RemoteNodeServerCredentialStore as NodeCredentialStore } from '../../src/contract/requires'
 import { RemoteNodeClient } from '../../src/impl/remote-client/RemoteNodeClient'
@@ -175,7 +175,7 @@ describe('远程节点清单修订号', () => {
 describe('远程代理模块 API 轴', () => {
   test('引用宿主的常量，不另抄一个字面量', () => {
     // 抄一份的后果：模块 API 版本升到 2 时，所有远端代理模块注册即报 API_VERSION_MISMATCH。
-    expect(RemoteNodeModuleApiVersion).toBe(KernelModuleApiVersion)
+    expect(RemoteNodeModuleApiVersion).toBe(KernelVersionAxes.moduleApi)
   })
 })
 

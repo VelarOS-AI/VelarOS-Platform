@@ -1,7 +1,5 @@
 import { chmod, unlink } from 'node:fs/promises'
 import { createServer, type Server, type Socket } from 'node:net'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
 
 import { isBlank, isNotUndefined, isUndefined, Log } from '@velaros-ai/core'
 
@@ -13,6 +11,7 @@ import { KernelClientError } from '../../utils/errors'
 import { isNodeError } from '../../utils/fs'
 import {
   closeKernelRpcServer,
+  createDefaultKernelRpcEndpoint,
   kernelRpcTokensMatch,
   listenOnKernelRpcEndpoint,
   removeStaleKernelRpcSocket,
@@ -75,18 +74,6 @@ export interface KernelLocalRpcServerConnection {
   readonly sessions: CapabilitySessionLedger
   /** 还没读到换行的半行数据。 */
   buffer: string
-}
-
-/** 按平台折一个缺省的本机 RPC 端点：Windows 走回环 TCP，其余走临时目录下的 unix socket。 */
-export function createDefaultKernelRpcEndpoint(
-  name: string = 'velaros-kernel',
-): KernelRpcEndpoint {
-  if (process.platform === 'win32') return { kind: 'tcp', host: '127.0.0.1', port: 0 }
-  const safeName = name.replaceAll(/[^a-zA-Z0-9._-]/g, '-')
-  return {
-    kind: 'unix',
-    path: join(tmpdir(), `${safeName}-${process.pid}.sock`),
-  }
 }
 
 /**

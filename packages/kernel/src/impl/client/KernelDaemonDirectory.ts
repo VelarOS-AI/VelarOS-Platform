@@ -28,8 +28,6 @@ export interface KernelDaemonDirectoryConnection {
   readonly handshake: KernelHandshake
 }
 
-export type { KernelDaemonDirectoryConnection as ConnectedKernelDaemon }
-
 /**
  * 本机共享 Kernel 守护进程的目录：算落点、读 descriptor、连上去。
  *
@@ -123,22 +121,3 @@ export class KernelDaemonDirectory implements KernelDaemonDirectoryApi {
 
 /** 进程内唯一的守护进程目录。 */
 export const kernelDaemons: KernelDaemonDirectoryApi = new KernelDaemonDirectory()
-
-/** 读出正在跑的 Kernel 守护进程发布的端点 descriptor；没有在跑就抛 DAEMON_NOT_RUNNING。 */
-export function discoverKernelDaemon(
-  paths?: KernelDaemonPaths,
-): Promise<KernelDaemonEndpointDescriptor> {
-  return kernelDaemons.discover(paths)
-}
-
-/**
- * 发现、连上并核对共享 Kernel 守护进程。
- *
- * descriptor 的协议版本在 socket 被信任之前就核过，活的握手还要和它对上，所以上一版内核留下
- * 的陈旧 descriptor 不会把调用悄悄路由到另一个运行时上。
- */
-export function connectToKernelDaemon(
-  paths?: KernelDaemonPaths,
-): Promise<KernelDaemonDirectoryConnection> {
-  return kernelDaemons.connect(paths)
-}

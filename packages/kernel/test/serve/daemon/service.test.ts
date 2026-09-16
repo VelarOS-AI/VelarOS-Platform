@@ -3,17 +3,16 @@ import { describe, expect, test } from 'bun:test'
 import type { KernelModuleDefinition } from '../../../src/contract/requires'
 import type { KernelPermissionBroker } from '../../../src/contract/requires'
 import { KernelClient } from '../../../src/impl/client/KernelClient'
-import { createKernelCallableCapability } from '../../../src/impl/runtime/KernelCallableCapability'
 import { KernelModuleHost } from '../../../src/impl/runtime/KernelModuleHost'
-import { createCapabilityToken } from '../../../src/impl/runtime/KernelModuleKit'
+import { kernelModules } from '../../../src/impl/runtime/KernelModuleKit'
 import { InProcessKernelTransport } from '../../../src/impl/serve/InProcessKernelTransport'
 import { KernelService } from '../../../src/impl/serve/KernelService'
 import type { CapabilityCallRequest } from '../../../src/utils/wire/capability'
 import { KernelProtocolVersion } from '../../../src/utils/wire/version'
 
-const CallableToken = createCapabilityToken('test.callable', '1.2.0')
-const PlainToken = createCapabilityToken('test.plain')
-const ThrowingToken = createCapabilityToken('test.throwing')
+const CallableToken = kernelModules.token('test.callable', '1.2.0')
+const PlainToken = kernelModules.token('test.plain')
+const ThrowingToken = kernelModules.token('test.throwing')
 
 function moduleDefinition(options: {
   readonly id: string
@@ -85,7 +84,7 @@ describe('KernelService', () => {
     host.registerModule(moduleDefinition({
       id: 'module.concurrent-service',
       token: CallableToken,
-      service: createKernelCallableCapability({}),
+      service: kernelModules.callable({}),
       ready: () => readyGate,
       dispose: () => {
         disposalCount += 1
@@ -141,7 +140,7 @@ describe('KernelService', () => {
       moduleDefinition({
         id: 'module.callable',
         token: CallableToken,
-        service: createKernelCallableCapability({
+        service: kernelModules.callable({
           double: {
             metadata: { permissions: [] },
             invoke(
@@ -206,7 +205,7 @@ describe('KernelService', () => {
       moduleDefinition({
         id: 'module.throwing',
         token: ThrowingToken,
-        service: createKernelCallableCapability({
+        service: kernelModules.callable({
           read: {
             metadata: { permissions: [] },
             invoke() {
@@ -272,7 +271,7 @@ describe('KernelService', () => {
         id: 'module.protected',
         token: CallableToken,
         permissions: ['test.allowed', 'test.denied'],
-        service: createKernelCallableCapability({
+        service: kernelModules.callable({
           read: {
             metadata: {
               permissions: ['test.allowed', 'test.denied'],

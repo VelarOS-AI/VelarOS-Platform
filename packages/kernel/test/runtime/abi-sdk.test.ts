@@ -1,15 +1,14 @@
 import { describe, expect, test } from 'bun:test'
 
-import { createCapabilityToken, requireCapability } from '../../src/impl/runtime/KernelModuleKit'
-import { defineKernelModule } from '../../src/impl/runtime/KernelModuleKit'
+import { kernelModules } from '../../src/impl/runtime/KernelModuleKit'
 
 describe('kernel sdk', () => {
   test('creates stable typed capability declarations', () => {
-    const token = createCapabilityToken<{ value: string }>('example.value')
+    const token = kernelModules.token<{ value: string }>('example.value')
 
     expect(token.id).toBe('example.value')
     expect(token.version).toBe('1.0.0')
-    expect(requireCapability(token, '^1.0.0')).toEqual({
+    expect(kernelModules.requirement(token, '^1.0.0')).toEqual({
       id: 'example.value',
       versionRange: '^1.0.0',
     })
@@ -17,7 +16,7 @@ describe('kernel sdk', () => {
   })
 
   test('preserves module definitions without adding runtime policy', () => {
-    const module = defineKernelModule({
+    const module = kernelModules.define({
       manifest: {
         id: 'example.module',
         version: '1.0.0',

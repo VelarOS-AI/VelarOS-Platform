@@ -316,7 +316,7 @@ export default [
         {
           patterns: [
             {
-              group: ['@velaros-ai/kernel/runtime', '@velaros-ai/kernel/runtime/*', '@velaros-ai/kernel/serve', '@velaros-ai/kernel/serve/*', '../runtime/*', '../serve/*'],
+              group: ['@velaros-ai/kernel', '@velaros-ai/kernel/serve', '../runtime/*', '../serve/*'],
               message:
                 'Kernel 瘦客户端只能依赖合同与 utils;进程内内核与 serve 是更外层实现。',
             },
@@ -336,7 +336,7 @@ export default [
         {
           patterns: [
             {
-              group: ['@velaros-ai/kernel/runtime', '@velaros-ai/kernel/runtime/*', '@velaros-ai/kernel/client', '@velaros-ai/kernel/client/*', '@velaros-ai/kernel/serve', '@velaros-ai/kernel/serve/*', '../impl/*', '../utils/*', '../../utils/*'],
+              group: ['@velaros-ai/kernel', '@velaros-ai/kernel/client', '@velaros-ai/kernel/serve', '@velaros-ai/kernel/remote', '../impl/*', '../utils/*', '../../utils/*'],
               message:
                 'Kernel 的 contract 与 types 不得依赖 impl 与 utils。',
             },

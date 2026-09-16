@@ -5,7 +5,7 @@ import { join } from 'node:path'
 
 import { afterEach, describe, expect, test } from 'bun:test'
 
-import { connectToKernelDaemon } from '../../../src/impl/client/KernelDaemonDirectory'
+import { kernelDaemons } from '../../../src/impl/client/KernelDaemonDirectory'
 import { KernelModuleHost } from '../../../src/impl/runtime/KernelModuleHost'
 import { KernelLauncher } from '../../../src/impl/serve/KernelLauncher'
 import { KernelLocalDaemon } from '../../../src/impl/serve/KernelLocalDaemon'
@@ -234,7 +234,7 @@ describe('KernelLauncher', () => {
     )
 
     // 版本不合在拨号之前就判定：端点根本没人听，若先 handshake 只会拿到连接错误。
-    await expect(connectToKernelDaemon(paths)).rejects.toMatchObject({
+    await expect(kernelDaemons.connect(paths)).rejects.toMatchObject({
       name: 'KernelClientError',
       code: 'PROTOCOL_VERSION_MISMATCH',
     })

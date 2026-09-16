@@ -4,7 +4,7 @@ import { join } from 'node:path'
 
 import { afterEach, describe, expect, test } from 'bun:test'
 
-import { defineKernelModule } from '../../../src/impl/runtime/KernelModuleKit'
+import { kernelModules } from '../../../src/impl/runtime/KernelModuleKit'
 import { KernelModLoader, persistModIndex } from '../../../src/impl/serve/KernelModLoader'
 import {
   KernelModStore,
@@ -39,7 +39,7 @@ function emptyStore(): KernelModStore {
   })
 }
 
-const probeModule = defineKernelModule({
+const probeModule = kernelModules.define({
   manifest: {
     id: 'velaros.probe',
     version: '2.1.0',

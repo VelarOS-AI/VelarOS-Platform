@@ -1,3 +1,5 @@
+import { basename } from 'node:path'
+
 import { z } from 'zod'
 
 import { isNotUndefined, isUndefined } from '@velaros-ai/core'
@@ -198,4 +200,20 @@ function formatIssues(error: z.ZodError): string {
   return error.issues
     .map((issue) => `${issue.path.join('.') || '<root>'}: ${issue.message}`)
     .join('; ')
+}
+
+/**
+ * 制品落盘时用的文件名：从制品地址的末段取，非法字符换成 `-`。
+ *
+ * 取不出能用的名字（空、`.`、`..`）就退回 `kernel-payload`，绝不让制品地址决定往哪写。
+ */
+export function kernelArtifactFileName(artifact: KernelArtifact): string {
+  const pathname = URL.canParse(artifact.url)
+    ? new URL(artifact.url).pathname
+    : artifact.url.split(/[?#]/)[0] ?? ''
+  const candidate = basename(pathname)
+    .replaceAll(/[^A-Za-z0-9._-]/g, '-')
+  return candidate.length > 0 && candidate !== '.' && candidate !== '..'
+    ? candidate
+    : 'kernel-payload'
 }

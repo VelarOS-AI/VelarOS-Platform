@@ -9,19 +9,22 @@
 // ## 改写只在本机发生
 // wire 上永远走 Node 侧原名(remote-node 契约已判决)。因此每条投影都带着 remote 原名,
 // `invoke` 时按 binding 换回去。丢掉这层映射就等于把调用发到一个 Node 不认识的能力上。
-import { createHash } from 'node:crypto'
+import { isPresent, isUndefined } from '@velaros-ai/core'
 
-import { isNonBlankString, isPresent, isUndefined } from '@velaros-ai/core'
-
-import { KernelModuleApiVersion } from '../../contract/constants'
+import { KernelVersionAxes } from '../../contract/constants'
 import type { KernelModuleDefinition } from '../../contract/requires'
 import type {
   RemoteNodeCapabilityBinding,
   RemoteNodeProjectionInput,
   RemoteNodeToolProjection,
 } from '../../types/remote'
+import {
+  namespaceRemoteId,
+  namespaceRemoteToolName,
+  slugifyRemoteHostName,
+} from '../../utils/remote/projection'
 import type { RemoteNodeManifest } from '../../utils/wire/remote-node'
-import { createCapabilityToken } from '../runtime/KernelModuleKit'
+import { kernelModules } from '../runtime/KernelModuleKit'
 
 /**
  * 本机 Kernel 的 API 轴;远端代理模块与宿主同轴,不另立版本。
@@ -29,7 +32,7 @@ import { createCapabilityToken } from '../runtime/KernelModuleKit'
  * 必须**引用**宿主那份常量而不是另抄一个字面量：抄一份的后果是模块 API 版本升到 2 时,
  * 所有远端代理模块注册即报 `API_VERSION_MISMATCH`,而两处写的都是「同轴」。
  */
-export const RemoteNodeModuleApiVersion: typeof KernelModuleApiVersion = KernelModuleApiVersion
+export const RemoteNodeModuleApiVersion: number = KernelVersionAxes.moduleApi
 
 /**
  * 代理模块自身的版本。
@@ -73,7 +76,7 @@ export interface RemoteNodeProjectionApi {
  * 一份远端清单在本机的投影。
  *
  * 构造即定型:能力绑定、代理模块与工具面在构造函数里一次算完,之后只读。清单变更时整份重建,
- * 不提供任何就地修改的口子——`createKernelCallableCapability` 建的是**闭合**操作表,改不了,
+ * 不提供任何就地修改的口子——`kernelModules.callable` 建的是**闭合**操作表,改不了,
  * 这也是我们要的:能力面变化必须走一次显式的注册周期。
  */
 export class RemoteNodeProjection implements RemoteNodeProjectionApi {
@@ -176,7 +179,7 @@ export class RemoteNodeProjection implements RemoteNodeProjectionApi {
             binding.operations.flatMap((operation) => operation.permissions)),
         )],
         provides: members.map((binding) =>
-          createCapabilityToken(binding.localCapabilityId, binding.version)),
+          kernelModules.token(binding.localCapabilityId, binding.version)),
         requires: [],
         version: RemoteNodeModuleVersion,
       },
@@ -192,44 +195,9 @@ export class RemoteNodeProjection implements RemoteNodeProjectionApi {
 }
 
 /**
- * 把人给的主机名收敛成 `[a-z0-9-]+`。
- *
- * 全非 ASCII 的名字(中文主机名很常见)归一化后会空掉,这时用名字摘要兜底而不是报错:
- * id 需要的是唯一与稳定,不是可读——可读性由 `hostName` 自己承担。
- */
-export function slugifyRemoteHostName(hostName: string): string {
-  const replaced = hostName
-    .toLowerCase()
-    .replaceAll(/[^a-z0-9]+/gu, '-')
-  let start = 0
-  let end = replaced.length
-  while (replaced[start] === '-') start += 1
-  while (end > start && replaced[end - 1] === '-') end -= 1
-  const slug = replaced.slice(start, end)
-  if (isNonBlankString(slug)) return slug
-  return `host-${createHash('sha256').update(hostName).digest('hex').slice(0, 8)}`
-}
-
-/** 远端 id 的本地化:`velaros.system` → `velaros.remote.<slug>.system`。 */
-export function namespaceRemoteId(hostSlug: string, remoteId: string): string {
-  const tail = remoteId.startsWith('velaros.')
-    ? remoteId.slice('velaros.'.length)
-    : remoteId
-  return `velaros.remote.${hostSlug}.${tail}`
-}
-
-/** 工具名的本地化:`<hostSlug>:<toolName>`,模型看得见是哪台机器在干活。 */
-export function namespaceRemoteToolName(
-  hostSlug: string,
-  toolName: string,
-): string {
-  return `${hostSlug}:${toolName}`
-}
-
-/**
  * 投影一份清单。
  *
- * 清单每次变更都应整份重投影再重注册:`createKernelCallableCapability` 建的是**闭合**操作表,
+ * 清单每次变更都应整份重投影再重注册:`kernelModules.callable` 建的是**闭合**操作表,
  * 就地改不了——这也是我们要的,能力面变化必须走一次显式的注册周期。
  */
 export function createRemoteNodeProjection(

@@ -12,9 +12,8 @@ import { afterEach, describe, expect, test } from 'bun:test'
 import type { KernelModuleDefinition } from '../../../src/contract/requires'
 import { KernelClient } from '../../../src/impl/client/KernelClient'
 import { SocketKernelTransport } from '../../../src/impl/client/SocketKernelTransport'
-import { createKernelCallableCapability } from '../../../src/impl/runtime/KernelCallableCapability'
 import { KernelModuleHost } from '../../../src/impl/runtime/KernelModuleHost'
-import { createCapabilityToken } from '../../../src/impl/runtime/KernelModuleKit'
+import { kernelModules } from '../../../src/impl/runtime/KernelModuleKit'
 import { AllowLoadedKernelClientAccessBroker } from '../../../src/impl/serve/AllowLoadedKernelClientAccessBroker'
 import { InProcessKernelTransport } from '../../../src/impl/serve/InProcessKernelTransport'
 import { KernelLocalRpcServer } from '../../../src/impl/serve/KernelLocalRpcServer'
@@ -23,7 +22,7 @@ import { KernelModStore } from '../../../src/impl/serve/KernelModStore'
 import { KernelService } from '../../../src/impl/serve/KernelService'
 import { KernelProtocolVersion } from '../../../src/utils/wire/version'
 
-const Token = createCapabilityToken('test.grants')
+const Token = kernelModules.token('test.grants')
 const AuthToken = 'grant-auth-token-0123456789-abcdefgh'
 /** 测试里的模块导入函数；生产里由 `bin/velaros-kernel-daemon.mjs` 注入。 */
 const importModule = (url: string): Promise<Record<string, unknown>> => import(url) as Promise<Record<string, unknown>>
@@ -52,7 +51,7 @@ function createService(): KernelService {
     activate(context) {
       context.registerService(
         Token,
-        createKernelCallableCapability({
+        kernelModules.callable({
           read: {
             metadata: { permissions: [] },
             invoke: () => 'granted-output',
@@ -211,7 +210,7 @@ describe('capability session bind', () => {
       activate(context) {
         context.registerService(
           Token,
-          createKernelCallableCapability({
+          kernelModules.callable({
             read: {
               metadata: { permissions: [] },
               invoke: () => 'nope',

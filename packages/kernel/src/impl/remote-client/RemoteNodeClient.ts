@@ -27,7 +27,7 @@ import type { RemoteNodeSocket, RemoteNodeSocketFactory } from '../../contract/r
 import type { RemoteNodeKeyPair, RemoteNodeReadyWaiter } from '../../types/remote'
 import { type RemoteNodeClientFailure, type RemoteNodeClientOptions, type RemoteNodeConnectionState, type RemoteNodeCredentials, type RemoteNodeInvokeRequest, type RemoteNodeManifestListener, type RemoteNodeSession, type RemoteNodeStateListener, type RemoteNodeStopListener, type RemoteNodeUnsubscribe } from '../../types/remote-client'
 import { RemoteNodeClientError } from '../../utils/errors'
-import { remoteNodeDisposedError } from '../../utils/remote/calls'
+import { createAbortError, remoteNodeDisposedError } from '../../utils/remote/calls'
 import {
   computeReconnectDelayMs,
   planRemoteNodeCloseAction,
@@ -56,7 +56,7 @@ import {
   type RemoteNodeServerFrame,
 } from '../../utils/wire/remote-node'
 
-import { createAbortError, RemoteNodePendingCalls } from './RemoteNodePendingCalls'
+import { RemoteNodePendingCalls } from './RemoteNodePendingCalls'
 
 const log = Log.tag('RemoteNodeClient')
 
@@ -527,4 +527,11 @@ export class RemoteNodeClient implements RemoteNodeClientApi {
     this.readyWaiters.clear()
     for (const waiter of waiters) waiter.reject(error)
   }
+}
+
+/** 建一个远程节点客户端;实例归装配方,一台远端主机一个,连上之前不产生任何网络动作。 */
+export function createRemoteNodeClient(
+  options: RemoteNodeClientOptions,
+): RemoteNodeClientApi {
+  return new RemoteNodeClient(options)
 }

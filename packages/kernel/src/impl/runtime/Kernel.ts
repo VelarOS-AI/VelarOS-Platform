@@ -1,6 +1,6 @@
 import { isUndefined } from '@velaros-ai/core'
 
-import { KernelModuleApiVersion, KernelVersion } from '../../contract/constants'
+import { KernelVersionAxes } from '../../contract/constants'
 import type { KernelRegistration } from '../../contract/provides'
 import type {
   KernelCallableCapabilityService,
@@ -102,10 +102,10 @@ export class Kernel implements KernelApi {
   public readonly version: string
 
   public constructor(private readonly options: KernelOptions = {}) {
-    this.version = options.kernelVersion ?? KernelVersion
+    this.version = options.kernelVersion ?? KernelVersionAxes.kernel
     this.failureMode = options.lifecycleFailureMode ?? 'throw'
     this.host = new KernelModuleHost({
-      apiVersion: options.apiVersion ?? KernelModuleApiVersion,
+      apiVersion: options.apiVersion ?? KernelVersionAxes.moduleApi,
       permissionBroker: options.permissionBroker,
       stateBackend: options.stateBackend,
       isolationAdapters: options.isolationAdapters,

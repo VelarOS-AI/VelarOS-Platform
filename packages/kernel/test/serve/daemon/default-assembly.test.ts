@@ -4,10 +4,8 @@ import { join } from 'node:path'
 
 import { afterEach, describe, expect, test } from 'bun:test'
 
-import { connectToKernelDaemon } from '../../../src/impl/client/KernelDaemonDirectory'
-import { createKernelCallableCapability } from '../../../src/impl/runtime/KernelCallableCapability'
-import { createCapabilityToken } from '../../../src/impl/runtime/KernelModuleKit'
-import { defineKernelModule } from '../../../src/impl/runtime/KernelModuleKit'
+import { kernelDaemons } from '../../../src/impl/client/KernelDaemonDirectory'
+import { kernelModules } from '../../../src/impl/runtime/KernelModuleKit'
 import { bootKernelDaemon } from '../../../src/impl/serve/KernelDaemonAssembly'
 import { loadModIndexIntoStore } from '../../../src/impl/serve/KernelModLoader'
 import { KernelModStore } from '../../../src/impl/serve/KernelModStore'
@@ -28,11 +26,11 @@ async function temporaryDirectory(): Promise<string> {
   return directory
 }
 
-const EchoToken = createCapabilityToken('velaros.test.echo')
-const RemoteOnlyToken = createCapabilityToken('velaros.test.remote-only')
+const EchoToken = kernelModules.token('velaros.test.echo')
+const RemoteOnlyToken = kernelModules.token('velaros.test.remote-only')
 
 /** 声明了 `remote` 隔离形态、而本次装配没有注入对应适配器的模块：必须被跳过而不是拖垮守护进程。 */
-const remoteOnlyModule = defineKernelModule({
+const remoteOnlyModule = kernelModules.define({
   manifest: {
     id: 'velaros.test.remote-only.module',
     version: '1.0.0',
@@ -47,7 +45,7 @@ const remoteOnlyModule = defineKernelModule({
 })
 
 /** 宿主按 `bootKernelDaemon({ modPacks })` 注入的那类编译期能力模块。 */
-const echoModule = defineKernelModule({
+const echoModule = kernelModules.define({
   manifest: {
     id: 'velaros.test.echo.module',
     version: '1.0.0',
@@ -61,7 +59,7 @@ const echoModule = defineKernelModule({
   activate(context) {
     context.registerService(
       EchoToken,
-      createKernelCallableCapability({
+      kernelModules.callable({
         echo: {
           metadata: { permissions: [] },
           invoke: (_scope, input) => input,
@@ -121,7 +119,7 @@ describe('Kernel 默认装配', () => {
         .toEqual(['velaros.test.echo.module'])
 
       // 客户端能连上并真的调一次能力。
-      const connected = await connectToKernelDaemon(paths)
+      const connected = await kernelDaemons.connect(paths)
       try {
         expect(connected.handshake.kernelVersion).toBe('0.2.3')
         const session = await connected.client.openCapabilitySession({

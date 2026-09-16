@@ -18,117 +18,58 @@ VelarOS 的库优先微内核。它只理解四件事：模块生命周期、能
 
 ## 提供什么
 
-十二个入口。`.` 与 `./contracts` 任何环境都能加载（渲染进程也能）；
-`./client`、`./serve`、`./remote` 及它们的子路径是 Node 专用。
+五个入口。`.` 与 `./contracts` 任何环境都能加载（渲染进程也能）；
+`./client`、`./serve`、`./remote` 是 Node 专用。
 
 | 入口 | 给谁 | 运行环境 |
 | --- | --- | --- |
 | `.` | 八个能力包写内核模块；Desktop / Workbench 装进程内内核 | 任何环境 |
-| `./contracts` | 任何进程拿稳定契约数据（ABI 与 wire 两套坐标） | 任何环境 |
-| `./contracts/abi` | 只要 ABI 那一套坐标的调用方 | 任何环境 |
-| `./contracts/protocol` | 只要 wire 那一套坐标的调用方 | 任何环境 |
-| `./runtime` | 进程内内核的实现面（与 `.` 重叠，入口收口那一轮并进 `.`） | 任何环境 |
+| `./contracts` | 任何进程拿可移植的契约数据与常量表 | 任何环境 |
 | `./client` | 附着到已运行守护进程的产品 | Node |
-| `./client/contracts` | 只要本机 RPC 端点数据的调用方 | 任何环境 |
-| `./serve` | 自己起守护进程的宿主、可执行文件 | Node |
-| `./serve/updater` | 装或升级共享 Runtime 的产品 | Node |
-| `./remote` | 远程节点两端的装配方 | Node + `ws` |
-| `./remote/client` | 只要远程 Client 侧的调用方 | Node + `ws` |
-| `./remote/node` | 只要远程 Node 侧的调用方 | Node + `ws` |
+| `./serve` | 自己起守护进程的宿主、可执行文件、装或升级共享 Runtime 的产品 | Node |
+| `./remote` | 远程能力节点两端的装配方 | Node + `ws` |
 
-<!-- 名字清单：门禁要求每个导出的值与每个公开接口都在这一节里出现（下一轮入口收口时同步删减） -->
+`./contracts` 是 `.` 的可移植子集（常量表 + `types/kernel.ts`）：只要数据不要值的调用方认它，
+拿值（造内核、写模块、起守护进程）一律从根入口取。
+
+<!-- 名字清单：门禁要求每个导出的值与每个公开接口都在这一节里出现 -->
 
 ### 公开接口
 
-- `AllowLoadedKernelClientAccessBrokerApi`、`BootKernelDaemonOptions`、`BootedKernelDaemon`、`BootedKernelDaemonApi`
-- `CapabilitySessionApi`、`CapabilitySessionLedgerApi`、`ConnectedKernelDaemon`、`InProcessKernelService`
-- `InProcessKernelTransportApi`、`InProcessKernelTransportService`、`KernelApi`、`KernelArtifactExtractor`
-- `KernelArtifactSignatureVerifier`、`KernelCallableCapabilityOperation`、`KernelCallableCapabilityService`、`KernelCapabilityInvokerApi`
-- `KernelCapabilityOperationContext`、`KernelCapabilityOperationMetadata`、`KernelCapabilityOperationReason`、`KernelClientAccessBroker`
-- `KernelClientApi`、`KernelClientEventHandler`、`KernelClientTransport`、`KernelDaemonAssemblyOptions`
-- `KernelDaemonDirectoryApi`、`KernelDaemonDirectoryConnection`、`KernelDaemonProcessApi`、`KernelDaemonProcessEnvironment`
-- `KernelEventHandler`、`KernelEventHubApi`、`KernelEventSubscription`、`KernelFetch`
-- `KernelHealthCheck`、`KernelLaunchResult`、`KernelLauncherApi`、`KernelLauncherOptions`
-- `KernelLauncherResult`、`KernelLocalDaemonApi`、`KernelLocalDaemonOptions`、`KernelLocalRpcServerApi`
-- `KernelLocalRpcServerOptions`、`KernelModLoaderApi`、`KernelModStoreApi`、`KernelModStorePaths`
-- `KernelModuleActivateContext`、`KernelModuleDefinition`、`KernelModuleEventBus`、`KernelModuleHostApi`
+- `BootedKernelDaemonApi`、`CapabilitySessionApi`、`KernelApi`、`KernelArtifactExtractor`
+- `KernelArtifactSignatureVerifier`、`KernelCallableCapabilityOperation`、`KernelCallableCapabilityService`、`KernelCapabilityOperationContext`
+- `KernelCapabilityOperationMetadata`、`KernelCapabilityOperationReason`、`KernelClientAccessBroker`、`KernelClientApi`
+- `KernelClientEventHandler`、`KernelClientTransport`、`KernelDaemonAssemblyOptions`、`KernelDaemonDirectoryApi`
+- `KernelDaemonDirectoryConnection`、`KernelDaemonProcessApi`、`KernelDaemonProcessEnvironment`、`KernelEventHandler`
+- `KernelEventSubscription`、`KernelFetch`、`KernelHealthCheck`、`KernelLauncherApi`
+- `KernelLauncherOptions`、`KernelLauncherResult`、`KernelLocalDaemonApi`、`KernelModStoreApi`
+- `KernelModStorePaths`、`KernelModuleActivateContext`、`KernelModuleDefinition`、`KernelModuleEventBus`
 - `KernelModuleHostOptions`、`KernelModuleImporter`、`KernelModuleIsolationAdapter`、`KernelModuleKitApi`
 - `KernelModuleLifecycle`、`KernelModulePermissionBroker`、`KernelOptions`、`KernelPermissionBroker`
-- `KernelRegistration`、`KernelServiceApi`、`KernelServiceHandle`、`KernelServiceOptions`
-- `KernelServiceResolver`、`KernelServiceStoreApi`、`KernelStateBackend`、`KernelStateStore`
-- `KernelUpdateLockApi`、`KernelUpdaterApi`、`RemoteNodeActivitySink`、`RemoteNodeAuditSink`
-- `RemoteNodeCallRunnerApi`、`RemoteNodeCallRunnerOptions`、`RemoteNodeCapabilityInvoker`、`RemoteNodeClientApi`
-- `RemoteNodeClientCredentialStore`、`RemoteNodeInvocationPoolApi`、`RemoteNodeIsolationAdapterOptions`、`RemoteNodeManifestSource`
-- `RemoteNodePairingGateApi`、`RemoteNodePairingGateOptions`、`RemoteNodePendingCallsApi`、`RemoteNodePendingCallsHost`
-- `RemoteNodeProjectionApi`、`RemoteNodeResultCacheApi`、`RemoteNodeServerApi`、`RemoteNodeServerCredentialStore`
-- `RemoteNodeSocket`、`RemoteNodeSocketFactory`、`VelarosModEnvelopeApi`
+- `KernelRegistration`、`KernelServiceApi`、`KernelServiceHandle`、`KernelServiceResolver`
+- `KernelStateBackend`、`KernelStateStore`、`KernelUpdaterApi`、`RemoteNodeActivitySink`
+- `RemoteNodeAuditSink`、`RemoteNodeCapabilityInvoker`、`RemoteNodeClientApi`、`RemoteNodeClientCredentialStore`
+- `RemoteNodeIsolationAdapterOptions`、`RemoteNodeManifestSource`、`RemoteNodeProjectionApi`、`RemoteNodeServerApi`
+- `RemoteNodeServerCredentialStore`、`RemoteNodeSocket`、`RemoteNodeSocketFactory`、`VelarosModEnvelopeApi`
 
 ### 导出的值
 
-- `AllowLoadedKernelClientAccessBroker`、`BundledSpecifierScheme`、`CapabilityCallErrorSchema`、`CapabilityCallFailureSchema`
-- `CapabilityCallRequestSchema`、`CapabilityCallResponseSchema`、`CapabilityCallSuccessSchema`、`CapabilityIsolationSchema`
-- `CapabilityRequireItemSchema`、`CapabilityRequirementSchema`、`CapabilitySession`、`CapabilitySessionCloseRequestSchema`
-- `CapabilitySessionCloseResponseSchema`、`CapabilitySessionLedger`、`CapabilitySessionOpenFailureSchema`、`CapabilitySessionOpenRequestSchema`
-- `CapabilitySessionOpenResponseSchema`、`CapabilitySessionOpenSuccessSchema`、`CapabilityTokenSchema`、`DenyAllKernelClientAccessBroker`
-- `DenyAllKernelPermissionBroker`、`FileRemoteNodeCredentialStore`、`InMemoryKernelStateBackend`、`InProcessKernelTransport`
-- `Kernel`、`KernelAbi`、`KernelActivePointerSchema`、`KernelArchitectureSchema`
-- `KernelArtifactFormatSchema`、`KernelArtifactSchema`、`KernelArtifactTargetSchema`、`KernelArtifactTargets`
-- `KernelClient`、`KernelClientError`、`KernelClientErrorCodes`、`KernelError`
-- `KernelEventHub`、`KernelHandshakeSchema`、`KernelInstallRecordFileName`、`KernelInstallRecordSchema`
-- `KernelInstallRootVariable`、`KernelLauncher`、`KernelLocalDaemon`、`KernelLocalRpcServer`
-- `KernelManifestVersionSchema`、`KernelModLoader`、`KernelModPackDescriptorSchema`、`KernelModPackKindSchema`
-- `KernelModStore`、`KernelModuleApiVersion`、`KernelModuleDescriptorSchema`、`KernelModuleHost`
-- `KernelModuleIsolationValues`、`KernelModuleIsolations`、`KernelPlatformSchema`、`KernelProtocol`
-- `KernelProtocolVersion`、`KernelProtocolWireSchemas`、`KernelRpcMethods`、`KernelService`
-- `KernelServiceStore`、`KernelUpdateLock`、`KernelUpdateManifestSchema`、`KernelUpdater`
-- `KernelUpdaterError`、`KernelVersion`、`KernelVersionPattern`、`KernelVersionSchema`
-- `MaximumKernelManifestBytes`、`ModsInstallFromDirectoryRequestSchema`、`ModsInstallFromDirectoryResponseSchema`、`ModsListRequestSchema`
-- `ModsListResponseSchema`、`ModsSetEnabledRequestSchema`、`ModsSetEnabledResponseSchema`、`PassthroughKernelArtifactExtractor`
-- `RemoteNodeAuthenticateSchema`、`RemoteNodeCallRunner`、`RemoteNodeCancelSchema`、`RemoteNodeCapabilityDescriptorSchema`
-- `RemoteNodeChallengeSchema`、`RemoteNodeClient`、`RemoteNodeClientError`、`RemoteNodeClientErrorCodes`
-- `RemoteNodeClientFrameSchema`、`RemoteNodeCloseCode`、`RemoteNodeErrorSchema`、`RemoteNodeFatalSchema`
-- `RemoteNodeHeartbeatIntervalMs`、`RemoteNodeHelloSchema`、`RemoteNodeIdentitySchema`、`RemoteNodeIdleTimeoutMs`
-- `RemoteNodeInvocationPool`、`RemoteNodeInvokeSchema`、`RemoteNodeIsolationAdapter`、`RemoteNodeManifestChangedSchema`
-- `RemoteNodeManifestSchema`、`RemoteNodeMaxFrameBytes`、`RemoteNodeModuleApiVersion`、`RemoteNodeModuleVersion`
-- `RemoteNodeOperationDescriptorSchema`、`RemoteNodePairSchema`、`RemoteNodePairedSchema`、`RemoteNodePairingGate`
-- `RemoteNodePairingLifetimeMs`、`RemoteNodePairingLockoutMs`、`RemoteNodePairingMaxFailures`、`RemoteNodePendingCalls`
-- `RemoteNodePingSchema`、`RemoteNodePlatformSchema`、`RemoteNodePongSchema`、`RemoteNodeProgressEventType`
-- `RemoteNodeProgressSchema`、`RemoteNodeProjection`、`RemoteNodeProtocolVersion`、`RemoteNodeReadySchema`
-- `RemoteNodeResultCache`、`RemoteNodeResultSchema`、`RemoteNodeServer`、`RemoteNodeServerFrameSchema`
-- `RemoteNodeSocketPath`、`RemoteNodeToolDescriptorSchema`、`ResourceRefSchema`、`ScopeRefSchema`
-- `ScopedKernelServiceResolver`、`SocketKernelTransport`、`UnverifiedKernelArtifactSignatureVerifier`、`VelarosModCapabilityRequirementSchema`
-- `VelarosModCapabilityTokenSchema`、`VelarosModEnvelopeSchema`、`VelarosModManifestFileName`、`VelarosModModuleSectionSchema`
-- `assertKernelVersion`、`assertSemanticVersion`、`bootKernelDaemon`、`bundledPackSpecifier`
-- `compareKernelVersions`、`computeManifestRevision`、`computeReconnectDelayMs`、`connectToKernelDaemon`
-- `createAbortError`、`createBundledModPack`、`createCapabilityToken`、`createChallenge`
-- `createClientId`、`createDefaultKernelDaemonPaths`、`createDefaultKernelModStorePaths`、`createDefaultKernelRpcEndpoint`
-- `createEpoch`、`createKernel`、`createKernelCallableCapability`、`createKernelInstallLayout`
-- `createManifest`、`createNamespacedStateStore`、`createNodeId`、`createPairingCode`
-- `createRemoteNodeAuditLog`、`createRemoteNodeFileAuditLog`、`createRemoteNodeFileCredentialStore`、`createRemoteNodeProjection`
-- `createRemoteNodeServerCredentialStore`、`createRemoteNodeWebSocket`、`createScopedPermissionBroker`、`decodeClientFrame`
-- `decodeKernelRpcRequest`、`decodeServerFrame`、`defaultKernelInstallRoot`、`defaultKernelRuntimeDirectory`
-- `defaultRemoteNodeCredentialsPath`、`defineKernelModule`、`discoverKernelDaemon`、`downloadKernelArtifact`
-- `ensureKernelInstallLayout`、`fetchKernelText`、`findKernelManifestVersion`、`generateRemoteNodeKeyPair`
-- `installKernelShutdownHandlers`、`installModPackFromDirectory`、`isKernelCallableCapabilityService`、`isKernelProtocolAccepted`
-- `isKernelVersion`、`isRemoteKernelUrl`、`kernelArtifactFileName`、`kernelDaemonProcess`
-- `kernelModules`、`kernelVersionDirectory`、`listKernelInstalledVersions`、`listKernelManifestVersions`
-- `loadKernelUpdateManifest`、`loadModIndexIntoStore`、`namespaceRemoteId`、`namespaceRemoteToolName`
-- `negotiateKernelProtocol`、`nodeKernelFetch`、`openCapabilitySessionOnTransport`、`parseKernelActivePointer`
-- `parseKernelDaemonDescriptor`、`parseKernelUpdateManifest`、`parseKernelVersion`、`parseVelarosModEnvelope`
-- `persistModIndex`、`planRemoteNodeCloseAction`、`planRemoteNodeHandshake`、`readKernelActivePointer`
-- `readKernelInstallRecord`、`registerBundledPacks`、`registerSystemModPacks`、`requireCapability`
-- `requireNonEmptyString`、`requireRecord`、`resolveKernelArtifactTarget`、`resolveKernelCapabilityOperationReason`
-- `resolveKernelModulePlan`、`rpcFailure`、`satisfiesKernelVersionRange`、`satisfiesVersionRange`
-- `selectKernelArtifact`、`selectKernelManifestVersion`、`sendFrame`、`signChallenge`
-- `slugifyRemoteHostName`、`toBundledPackRecords`、`toError`、`validateManifest`
-- `velarosModEnvelopes`、`verifyChallengeSignature`、`withKernelUpdateLock`、`writeKernelActivePointer`
-- `writeKernelInstallRecord`
+- `KernelCallErrorCodes`、`KernelClientErrorCodes`、`KernelEnvironmentVariables`、`KernelErrorCodes`
+- `KernelFileModes`、`KernelModuleIsolationValues`、`KernelModuleIsolations`、`KernelRpcLimits`
+- `KernelRpcMethods`、`KernelUpdaterErrorCodes`、`KernelVersionAxes`、`RemoteNodeClientErrorCodes`
+- `RemoteNodeCloseCodes`、`RemoteNodeErrorCodes`、`RemoteNodeLimits`、`RemoteNodeProgressEventType`
+- `RemoteNodeSocketPath`、`VelarosModManifestFileName`、`bootKernelDaemon`、`createDefaultKernelModStorePaths`
+- `createKernel`、`createKernelLauncher`、`createKernelUpdater`、`createRemoteNodeAuditLog`
+- `createRemoteNodeClient`、`createRemoteNodeClientCredentialStore`、`createRemoteNodeIsolationAdapter`、`createRemoteNodeProjection`
+- `createRemoteNodeServer`、`createRemoteNodeServerCredentialStore`、`installModPackFromDirectory`、`kernelDaemonProcess`
+- `kernelDaemons`、`kernelModules`、`loadModIndexIntoStore`、`persistModIndex`
+- `registerBundledPacks`、`registerSystemModPacks`、`velarosModEnvelopes`
 
 ## 骨干链路
 
 内核没有工具，这一节写每件能力怎么被回答。
 
-- **装一个进程内内核**：`createKernel(options)` → `Kernel` 建一份 `KernelModuleHost` 与一份
+- **装一个进程内内核**：`createKernel(options)` 建一份 `KernelModuleHost` 与一份
   `KernelCapabilityInvoker` → `registerModule` 逐个登记 →`start()` 解析依赖图（`resolveKernelModulePlan`）
   → 按序 `activate` → 全部 `ready`。失败按 `lifecycleFailureMode` 抛或降级。
 - **调一件能力**：`kernel.invokeCapability(call)` → `KernelCapabilityInvoker.invoke`：
@@ -140,8 +81,9 @@ VelarOS 的库优先微内核。它只理解四件事：模块生命周期、能
 - **起守护进程**：`bootKernelDaemon(options)` → `KernelDaemonAssembly` 装 ModStore、Loader、
   宿主、`KernelService`、`KernelLocalDaemon` → 拿单实例锁 → 起本机 RPC → 写 descriptor。
   可执行文件走 `kernelDaemonProcess.run({ environment })`（`bin/velaros-kernel-daemon.mjs`）。
+  不过网络的进程内客户端由 `booted.createClient()` 给，走的是同一条调用路径（INV-9）。
 - **附着到已运行的守护进程**：`kernelDaemons.discover()` 读 descriptor → `kernelDaemons.connect()`
-  建 `SocketKernelTransport` 与 `KernelClient` → `openCapabilitySession(requires)` 绑能力
+  建传输与客户端 → `openCapabilitySession(requires)` 绑能力
   → `session.call(...)`。会话外的调用一律 `CAPABILITY_NOT_GRANTED`（INV-14）。
 - **装一台远程节点**：Node 侧 `createRemoteNodeServer(options).start()` 监听、配对、认证、派发；
   Client 侧 `createRemoteNodeClient(options).connect()` 握手拿清单，
@@ -227,16 +169,9 @@ packages/kernel/
                runtime/  wire/  rpc/  serve/  updater/  remote/
     index.ts               `.` 入口，只转发
     contracts.ts           `./contracts` 入口，只转发
-    contracts-abi.ts       `./contracts/abi` 入口，只转发
-    contracts-protocol.ts  `./contracts/protocol` 入口，只转发
-    runtime.ts             `./runtime` 入口，只转发
     client.ts              `./client` 入口，只转发
-    client-contracts.ts    `./client/contracts` 入口，只转发
     serve.ts               `./serve` 入口，只转发
-    serve-updater.ts       `./serve/updater` 入口，只转发
     remote.ts              `./remote` 入口，只转发
-    remote-client.ts       `./remote/client` 入口，只转发
-    remote-node.ts         `./remote/node` 入口，只转发
 ```
 
 分层（登记在 `scripts/ownership/governed-modules.mjs` 的 `layers`，上层可以引下层，下层不许引上层）：

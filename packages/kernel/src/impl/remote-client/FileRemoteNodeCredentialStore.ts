@@ -7,36 +7,24 @@
 //  - **坏了就当没有**:解析失败一律回 `null`,让人重走配对仪式。带着半信半疑的凭据继续连,
 //    换来的只是一串看不懂的 4002。
 import { mkdir, readFile, rm } from 'node:fs/promises'
-import { homedir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { dirname } from 'node:path'
 
 import { z } from 'zod'
 
-import { isNonBlankString, Log } from '@velaros-ai/core'
+import { Log } from '@velaros-ai/core'
 import { writeJsonFileAtomically } from '@velaros-ai/core/utils/FilePersistence'
 
 import { KernelFileModes } from '../../contract/constants'
 import type { RemoteNodeClientCredentialStore as RemoteNodeCredentialStore } from '../../contract/requires'
-import type { RemoteNodeCredentials } from '../../types/remote-client'
+import type {
+  RemoteNodeClientCredentialStoreOptions,
+  RemoteNodeCredentials,
+} from '../../types/remote-client'
 import { isNodeError } from '../../utils/fs'
+import { defaultRemoteNodeCredentialsPath } from '../../utils/remote/credentials'
 import { RemoteNodeIdentitySchema } from '../../utils/wire/remote-node'
 
 const log = Log.tag('RemoteNodeCredentials')
-
-/**
- * 默认落点:每台远端主机一份,按 slug 分文件,互不影响。
- *
- * 用 `os.homedir()` 而不是 `process.env.HOME`:Windows 通常没有 HOME,原来的 `'/tmp'` 兜底
- * 会把 Ed25519 私钥写到当前盘根的 `\tmp\.velaros\`——NTFS 上 0600 不生效,同机其他用户可读。
- * `homedir()` 在 Windows 走 USERPROFILE,在类 Unix 上 HOME 缺失时退回口令数据库。
- */
-export function defaultRemoteNodeCredentialsPath(
-  hostSlug: string,
-  home: string = homedir(),
-): string {
-  const root = isNonBlankString(home) ? home.trim() : homedir()
-  return join(root, '.velaros', 'remote-nodes', `${hostSlug}.json`)
-}
 
 /**
  * 明文文件实现。
@@ -132,4 +120,18 @@ export class FileRemoteNodeCredentialStore implements RemoteNodeCredentialStore 
   public async clear(): Promise<void> {
     await rm(this.filePath, { force: true })
   }
+}
+
+/**
+ * 建一份按主机 slug 落盘的客户端凭据存储。
+ *
+ * 缺省落点是 `~/.velaros/remote-nodes/<hostSlug>.json`；同一台远端主机在不同产品里共用这一份，
+ * 换实现（Electron `safeStorage` 密封版）时只换这个工厂，调用方一行不改。
+ */
+export function createRemoteNodeClientCredentialStore(
+  options: RemoteNodeClientCredentialStoreOptions,
+): RemoteNodeCredentialStore {
+  return new FileRemoteNodeCredentialStore(
+    options.path ?? defaultRemoteNodeCredentialsPath(options.hostSlug, options.home),
+  )
 }

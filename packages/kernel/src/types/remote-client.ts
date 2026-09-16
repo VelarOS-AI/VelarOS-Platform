@@ -7,7 +7,7 @@ export type { RemoteNodeClientCredentialStore as RemoteNodeCredentialStore } fro
 // Platform Kernel 统一持有与宿主无关的远程节点实现。
 // 域:远程能力节点 Client 侧的本地契约面——可替换端口、失败分档与事件形状。
 //
-// wire 帧形状冻结在 `@velaros-ai/kernel/contracts/protocol` 的 remote-node,本文件一个字都不改;
+// wire 帧形状冻结在 `types/wire.ts` 的 remote-node 帧,本文件一个字都不改;
 // 这里只声明**本机这一侧**的缝:socket 实现、凭据落盘、调用请求与失败语义。
 //
 // 值得读两遍的只有 `resultUnknown`:它把「没执行」与「可能已半执行」分成两档。跨机调用里
@@ -102,6 +102,16 @@ export interface RemoteNodeClientErrorInit {
   readonly resultUnknown: boolean
   readonly nodeError?: LooseOptional<RemoteNodeError>
   readonly cause?: unknown
+}
+
+/** 建一份客户端凭据存储要的东西;三项都不给时落在缺省目录下。 */
+export interface RemoteNodeClientCredentialStoreOptions {
+  /** 远端主机的 slug(`RemoteNodeProjectionApi.hostSlug`);一台主机一份文件,互不影响。 */
+  readonly hostSlug: string
+  /** 家目录覆盖;不给就用当前用户的家目录。 */
+  readonly home?: string
+  /** 直接指定凭据文件路径;给了就不再按 slug 算落点。 */
+  readonly path?: string
 }
 
 export interface RemoteNodeClientOptions {

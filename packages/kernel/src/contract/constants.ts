@@ -433,18 +433,3 @@ export type RemoteNodeCloseCode = (typeof RemoteNodeCloseCodes)[keyof typeof Rem
 
 /** 合法的模块隔离形态。 */
 export type KernelModuleIsolation = (typeof KernelModuleIsolations)[keyof typeof KernelModuleIsolations]
-
-/**
- * 内核宿主对 mod 清单自报的版本，等于 {@link KernelVersionAxes}.kernel。
- *
- * 保留这个名字是为了让八个能力包与三个产品这一轮零改动；入口收口那一轮统一改成读版本轴表。
- */
-export const KernelVersion = '0.3.0' as const
-
-/**
- * 模块清单 ABI 版本，等于 {@link KernelVersionAxes}.moduleApi。
- *
- * 能力包写 `apiVersion: KernelModuleApiVersion`；门禁禁止在清单里直接写数字 1。
- * 同上，入口收口那一轮改成读版本轴表。
- */
-export const KernelModuleApiVersion = 1

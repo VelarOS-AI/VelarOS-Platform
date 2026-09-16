@@ -92,10 +92,3 @@ export function createRemoteNodeServerCredentialStore(
 ): RemoteNodeCredentialStore {
   return new FileRemoteNodeServerCredentialStore(path)
 }
-
-/** `createRemoteNodeServerCredentialStore` 的现有导出名,保住消费方这一轮零改动。 */
-export function createRemoteNodeFileCredentialStore(
-  path: string,
-): RemoteNodeCredentialStore {
-  return new FileRemoteNodeServerCredentialStore(path)
-}

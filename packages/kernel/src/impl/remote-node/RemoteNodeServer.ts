@@ -506,3 +506,10 @@ export class RemoteNodeServer implements RemoteNodeServerApi {
     }
   }
 }
+
+/** 建一台远程能力节点的 Node 侧服务端;宿主注入四个端口,本函数只负责把它们接到 wire 上。 */
+export function createRemoteNodeServer(
+  options: RemoteNodeServerOptions,
+): RemoteNodeServerApi {
+  return new RemoteNodeServer(options)
+}

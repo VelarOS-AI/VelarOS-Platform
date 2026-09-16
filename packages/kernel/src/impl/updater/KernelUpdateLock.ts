@@ -25,7 +25,7 @@ const log = Log.tag('KernelUpdateLock')
 /**
  * 跨进程的独占文件锁，`versions/` 与 `current.json` 的每一次改动都在它下面跑。
  *
- * 实例由更新器（或 `withKernelUpdateLock`）按锁文件路径建一把，一把锁对应一个锁文件：两个产品
+ * 实例由更新器按锁文件路径建一把，一把锁对应一个锁文件：两个产品
  * 同时更新同一份共享内核时排队，而不是互相踩。记着的 pid 已经不在的锁会被回收；还被活着的进程
  * 持着的锁一个字节都不动。
  */
@@ -172,19 +172,5 @@ export class KernelUpdateLock implements KernelUpdateLockApi {
     await TimerScope.sleep(this.ownerReadRetryMs, {
       label: 'KernelUpdateLock.ownerRead',
     })
-  }
-}
-
-/** 在更新锁下面跑一段操作：拿锁、跑、无论成败都释放。拿不到锁就直接抛，操作一次都不跑。 */
-export async function withKernelUpdateLock<T>(
-  options: KernelUpdateLockOptions,
-  operation: (lock: KernelUpdateLockApi) => Promise<T>,
-): Promise<T> {
-  const lock = new KernelUpdateLock(options)
-  await lock.acquire()
-  try {
-    return await operation(lock)
-  } finally {
-    await lock.release()
   }
 }

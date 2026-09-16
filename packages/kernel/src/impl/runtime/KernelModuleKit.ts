@@ -68,26 +68,3 @@ export class KernelModuleKit implements KernelModuleKitApi {
 
 /** 整个进程共用的模块 SDK；能力包与宿主都用它，不自己 new。 */
 export const kernelModules: KernelModuleKitApi = new KernelModuleKit()
-
-/** 造一枚能力令牌（等价于 `kernelModules.token`，为老调用点保留）。 */
-export function createCapabilityToken<TService extends object = object>(
-  id: string,
-  version?: string,
-): CapabilityToken<TService> {
-  return kernelModules.token<TService>(id, version)
-}
-
-/** 把令牌写成清单依赖（等价于 `kernelModules.requirement`，为老调用点保留）。 */
-export function requireCapability(
-  token: CapabilityToken,
-  versionRange?: string,
-): CapabilityRequirement {
-  return kernelModules.requirement(token, versionRange)
-}
-
-/** 原样交回模块定义并保住精确类型（等价于 `kernelModules.define`，为老调用点保留）。 */
-export function defineKernelModule<TModule extends KernelModuleDefinition>(
-  module: TModule,
-): TModule {
-  return kernelModules.define(module)
-}

@@ -4,10 +4,8 @@ import { join } from 'node:path'
 
 import { afterEach, describe, expect, test } from 'bun:test'
 
-import {
-  defaultRemoteNodeCredentialsPath,
-  FileRemoteNodeCredentialStore,
-} from '../../src/impl/remote-client/FileRemoteNodeCredentialStore'
+import { FileRemoteNodeCredentialStore } from '../../src/impl/remote-client/FileRemoteNodeCredentialStore'
+import { defaultRemoteNodeCredentialsPath } from '../../src/utils/remote/credentials'
 
 const directories: string[] = []
 

@@ -45,8 +45,8 @@ import { KernelEventHub } from './KernelEventHub'
 import {
   KernelServiceStore,
 } from './KernelServiceStore'
-import { createNamespacedStateStore } from './NamespacedKernelStateStore'
-import { createScopedPermissionBroker } from './ScopedKernelPermissionBroker'
+import { NamespacedKernelStateStore } from './NamespacedKernelStateStore'
+import { ScopedKernelPermissionBroker } from './ScopedKernelPermissionBroker'
 import { ScopedKernelServiceResolver } from './ScopedKernelServiceResolver'
 
 const log = Log.tag('KernelModuleHost')
@@ -725,17 +725,17 @@ export class KernelModuleHost implements KernelModuleHostApi {
         () => assertModuleContextActive(record),
         options.isEventDeliveryEnabled,
       ),
-      permissions: createScopedPermissionBroker({
+      permissions: Object.freeze(new ScopedKernelPermissionBroker({
         manifest,
         generation: record.generation,
         broker: this.permissionBroker,
         assertActive: () => assertModuleContextActive(record),
-      }),
-      state: createNamespacedStateStore({
+      })),
+      state: Object.freeze(new NamespacedKernelStateStore({
         namespace: manifest.id,
         backend: this.stateBackend,
         assertActive: () => assertModuleContextActive(record),
-      }),
+      })),
       registerService: <TService extends object>(
         token: CapabilityToken<TService>,
         service: TService,

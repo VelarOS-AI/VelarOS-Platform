@@ -22,6 +22,7 @@ import type { RemoteNodePendingCall } from '../../types/remote'
 import { type RemoteNodeInvokeRequest } from '../../types/remote-client'
 import { RemoteNodeClientError } from '../../utils/errors'
 import {
+  createAbortError,
   describeRemoteNodeCall,
   describeRemoteNodeError,
   resolveRemoteNodeDeadlineMs,
@@ -240,10 +241,4 @@ export class RemoteNodePendingCalls implements RemoteNodePendingCallsApi {
     pending.detach()
     apply(pending)
   }
-}
-
-
-/** 一次调用被中止时交回调用方的错误;名字按 DOM 约定叫 `AbortError`,上层按它判断。 */
-export function createAbortError(): Error {
-  return new DOMException('Remote node call aborted', 'AbortError')
 }

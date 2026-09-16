@@ -1,7 +1,7 @@
 import { isNotUndefined, isNull, Log } from '@velaros-ai/core'
 import { toOptional } from '@velaros-ai/core/utils/nullish'
 
-import { KernelModuleApiVersion } from '../../contract/constants'
+import { KernelVersionAxes } from '../../contract/constants'
 import type {
   KernelModuleDefinition,
   KernelModuleImporter,
@@ -11,15 +11,19 @@ import type {
 import type { KernelClientAccessBroker } from '../../contract/requires'
 import type { KernelDaemonPaths } from '../../types/kernel'
 import type {
+  KernelBundledPack,
   KernelModCatalog,
   KernelModPackLoadFailure,
   KernelModPackRecord,
   LoadModsResult,
 } from '../../types/serve'
 import { installKernelShutdownSignalHandlers } from '../../utils/serve/daemon-process'
+import { toBundledPackRecords } from '../../utils/serve/mod-packs'
+import { KernelClient, type KernelClientApi } from '../client/KernelClient'
 import { KernelModuleHost } from '../runtime/KernelModuleHost'
 
 import { AllowLoadedKernelClientAccessBroker } from './AllowLoadedKernelClientAccessBroker'
+import { InProcessKernelTransport } from './InProcessKernelTransport'
 import { KernelLocalDaemon, type KernelLocalDaemonApi } from './KernelLocalDaemon'
 import {
   installModPackFromDirectory,
@@ -48,13 +52,18 @@ export interface KernelDaemonAssemblyOptions {
   /** 显式交进来的模块定义（测试与组合根用）；给了就不再去 ModStore 装。 */
   readonly modules?: readonly KernelModuleDefinition[]
   /**
-   * 预先登记的 mod pack，只在没给 `modules` 时才装。
-   *
-   * 这是宿主注入**编译期随包能力**的口子：静态 import 能力的 `create*KernelModule()`，用
-   * `createBundledModPack` / `toBundledPackRecords` 折成记录后从这里交进来。内核侧因此始终
-   * 不认识任何具体能力（§15.2 依赖方向单向 ⑤→④→③→②）。
+   * 预先登记的 mod pack 记录，只在没给 `modules` 时才装；已经有记录形状的调用方（守护进程
+   * 自己重装一遍时）走这一条。
    */
   readonly modPacks?: readonly KernelModPackRecord[]
+  /**
+   * 编译期随包能力，只在没给 `modules` 时才装。
+   *
+   * 这是宿主注入**编译期随包能力**的口子：静态 import 能力的 `create*KernelModule()` 直接
+   * 按 `{ id, version, provides, module }` 交进来，内核侧自己折成 ModStore 记录，因此始终
+   * 不认识任何具体能力（§15.2 依赖方向单向 ⑤→④→③→②）。
+   */
+  readonly bundledPacks?: readonly KernelBundledPack[]
   /** ModStore 的落盘路径；不给就用缺省的 `~/.velaros`。 */
   readonly modStorePaths?: KernelModStorePaths
   /** descriptor、锁与 socket 的落点；不给就用缺省的运行目录。 */
@@ -103,9 +112,14 @@ export interface BootedKernelDaemonApi {
   stop(): Promise<void>
   /** 在常见终止信号上挂停机动作；返回摘掉这些监听器的函数。 */
   installShutdownHandlers(): () => void
+  /**
+   * 建一个不过网络的进程内客户端。
+   *
+   * 走的是和本机 RPC 完全相同的一条调用路径（INV-9），只是不做序列化；能力会话按这条传输
+   * 记账，客户端一丢，绑过的能力全部失效。
+   */
+  createClient(): KernelClientApi
 }
-
-export type { BootedKernelDaemonApi as BootedKernelDaemon }
 
 /** 一个 Kernel 进程的装配件。 */
 export class KernelDaemonAssembly implements BootedKernelDaemonApi {
@@ -137,7 +151,7 @@ export class KernelDaemonAssembly implements BootedKernelDaemonApi {
     modules = this.retainActivatableModules(modules, isolationAdapters, packByModule)
 
     const host = new KernelModuleHost({
-      apiVersion: options.apiVersion ?? KernelModuleApiVersion,
+      apiVersion: options.apiVersion ?? KernelVersionAxes.moduleApi,
       permissionBroker: toOptional(options.permissionBroker),
       isolationAdapters,
     })
@@ -272,6 +286,10 @@ export class KernelDaemonAssembly implements BootedKernelDaemonApi {
     }
     return activatable
   }
+
+  public createClient(): KernelClientApi {
+    return new KernelClient(new InProcessKernelTransport(this.service))
+  }
 }
 
 /**
@@ -288,6 +306,9 @@ export async function bootKernelDaemon(
   if (options.modPacks) {
     modStore.registerAll(options.modPacks)
   }
+  if (options.bundledPacks) {
+    modStore.registerAll(toBundledPackRecords(options.bundledPacks))
+  }
   const explicitModules = options.modules ?? []
   // Loader 按 pack 隔离故障：单个损坏 pack 只损失自身能力，不拖垮整个 Kernel 进程。
   const loaded = explicitModules.length === 0 && modStore.listEnabled().length > 0
@@ -296,11 +317,4 @@ export async function bootKernelDaemon(
   const assembly = new KernelDaemonAssembly({ loaded, modStore, options })
   await assembly.start()
   return assembly
-}
-
-/** 在常见终止信号上挂停机动作（`@velaros-ai/kernel/serve` 的入口函数，转交给装配件自己）。 */
-export function installKernelShutdownHandlers(
-  booted: BootedKernelDaemonApi,
-): () => void {
-  return booted.installShutdownHandlers()
 }

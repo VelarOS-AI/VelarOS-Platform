@@ -3,10 +3,7 @@ import { join } from 'node:path'
 
 import { afterEach, describe, expect, test } from 'bun:test'
 
-import {
-  connectToKernelDaemon,
-  discoverKernelDaemon,
-} from '../../src/impl/client/KernelDaemonDirectory'
+import { kernelDaemons } from '../../src/impl/client/KernelDaemonDirectory'
 import { createDefaultKernelDaemonPaths } from '../../src/utils/rpc/descriptor'
 import { KernelProtocolVersion } from '../../src/utils/wire/version'
 
@@ -67,11 +64,11 @@ describe('kernel daemon discovery', () => {
     const directory = await temporaryRuntimeDirectory(directories)
     const paths = createDefaultKernelDaemonPaths('test-kernel', directory)
 
-    await expect(discoverKernelDaemon(paths)).rejects.toMatchObject({
+    await expect(kernelDaemons.discover(paths)).rejects.toMatchObject({
       name: 'KernelClientError',
       code: 'DAEMON_NOT_RUNNING',
     })
-    await expect(connectToKernelDaemon(paths)).rejects.toMatchObject({
+    await expect(kernelDaemons.connect(paths)).rejects.toMatchObject({
       code: 'DAEMON_NOT_RUNNING',
     })
   })
@@ -81,7 +78,7 @@ describe('kernel daemon discovery', () => {
     const paths = createDefaultKernelDaemonPaths('test-kernel', directory)
     await Bun.write(paths.descriptorPath, 'not json at all\n')
 
-    await expect(discoverKernelDaemon(paths)).rejects.toMatchObject({
+    await expect(kernelDaemons.discover(paths)).rejects.toMatchObject({
       code: 'DAEMON_DESCRIPTOR_INVALID',
     })
   })
@@ -109,7 +106,7 @@ describe('kernel daemon discovery', () => {
 
     for (const [label, descriptor] of Object.entries(invalidVariants)) {
       await writeDescriptorFile(paths, descriptor)
-      const rejection = discoverKernelDaemon(paths)
+      const rejection = kernelDaemons.discover(paths)
       await expect(rejection, label).rejects.toMatchObject({
         code: 'DAEMON_DESCRIPTOR_INVALID',
       })
@@ -123,7 +120,7 @@ describe('kernel daemon discovery', () => {
     })
     await writeDescriptorFile(paths, descriptorFor(endpoint.getEndpoint()))
 
-    const connected = await connectToKernelDaemon(paths)
+    const connected = await kernelDaemons.connect(paths)
     try {
       expect(connected.handshake.kernelVersion).toBe('0.3.0')
       expect(connected.descriptor.instanceId).toBe('fake-instance')
@@ -146,7 +143,7 @@ describe('kernel daemon discovery', () => {
       }),
     )
 
-    const rejection = await connectToKernelDaemon(paths).catch(
+    const rejection = await kernelDaemons.connect(paths).catch(
       (error: unknown) => error,
     )
     expect(rejection).toMatchObject({
@@ -168,7 +165,7 @@ describe('kernel daemon discovery', () => {
       descriptorFor(endpoint.getEndpoint(), { kernelVersion: '0.2.0' }),
     )
 
-    await expect(connectToKernelDaemon(paths)).rejects.toMatchObject({
+    await expect(kernelDaemons.connect(paths)).rejects.toMatchObject({
       code: 'DAEMON_DESCRIPTOR_INVALID',
     })
   })

@@ -14,7 +14,7 @@ import {
   meansKernelDaemonIsNotRunning,
 } from '../../utils/serve/daemon-process'
 import { KernelTuning } from '../../utils/tuning'
-import { type ConnectedKernelDaemon, connectToKernelDaemon, discoverKernelDaemon } from '../client/KernelDaemonDirectory'
+import { type KernelDaemonDirectoryConnection,kernelDaemons } from '../client/KernelDaemonDirectory'
 
 const log = Log.tag('KernelLauncher')
 
@@ -41,14 +41,12 @@ export interface KernelLauncherOptions {
 }
 
 /** 一次启动的结果：连上的客户端，加上这次是不是由本启动器起的那个进程。 */
-export interface KernelLauncherResult extends ConnectedKernelDaemon {
+export interface KernelLauncherResult extends KernelDaemonDirectoryConnection {
   /** 复用了已经在跑的守护进程时没有这个字段。 */
   readonly process?: ChildProcess
   /** true = 这次是本启动器起的，false = 附着到已有的守护进程。 */
   readonly started: boolean
 }
-
-export type { KernelLauncherResult as KernelLaunchResult }
 
 /**
  * 起（或附着到）共享的 Kernel 进程，并交回一个验过健康的客户端；实例归要用 Kernel 的产品。
@@ -62,7 +60,7 @@ export interface KernelLauncherApi {
   /** 连上共享 Kernel，没在跑就先起一个；起不来或超时抛带码的错误。 */
   ensureRunning(): Promise<KernelLauncherResult>
   /** 核一次连上的 Kernel 自报的健康；自报已停止时抛 `KERNEL_UNHEALTHY`。 */
-  verifyHealthy(connection: ConnectedKernelDaemon): Promise<void>
+  verifyHealthy(connection: KernelDaemonDirectoryConnection): Promise<void>
   /** 停掉本启动器起的那个进程：SIGTERM → 宽限 → SIGKILL → 再等一小段就不等了。 */
   stop(): Promise<void>
   /** 停掉当前进程，再按重新解析出来的版本起一个。 */
@@ -105,7 +103,7 @@ export class KernelLauncher implements KernelLauncherApi {
    */
   public async isRunning(): Promise<boolean> {
     try {
-      const descriptor = await discoverKernelDaemon(this.paths)
+      const descriptor = await kernelDaemons.discover(this.paths)
       return isKernelDaemonProcessAlive(descriptor.pid)
     } catch (error) {
       if (error instanceof KernelClientError) return false
@@ -162,7 +160,7 @@ export class KernelLauncher implements KernelLauncherApi {
   }
 
   public async verifyHealthy(
-    connection: ConnectedKernelDaemon,
+    connection: KernelDaemonDirectoryConnection,
   ): Promise<void> {
     const health = await connection.client.health()
     if (health.status === 'stopped') {
@@ -222,13 +220,13 @@ export class KernelLauncher implements KernelLauncherApi {
   }
 
   public getDescriptor(): Promise<KernelDaemonEndpointDescriptor> {
-    return discoverKernelDaemon(this.paths)
+    return kernelDaemons.discover(this.paths)
   }
 
   /** 试着连已有的守护进程；「没在跑」一类的失败当作没连上，别的照抛。 */
-  private async tryConnect(): Promise<ConnectedKernelDaemon | undefined> {
+  private async tryConnect(): Promise<KernelDaemonDirectoryConnection | undefined> {
     try {
-      return await connectToKernelDaemon(this.paths)
+      return await kernelDaemons.connect(this.paths)
     } catch (error) {
       if (meansKernelDaemonIsNotRunning(error)) {
         log.debug('未能连上已有的 Kernel 守护进程，按「没在跑」处理', { error })
@@ -270,4 +268,11 @@ export class KernelLauncher implements KernelLauncherApi {
       message: '已回收的 Kernel 启动器不能再启动 Kernel',
     })
   }
+}
+
+/** 建一个共享 Kernel 进程的启动器;实例归要用 Kernel 的产品,起停都由它负责。 */
+export function createKernelLauncher(
+  options: KernelLauncherOptions,
+): KernelLauncherApi {
+  return new KernelLauncher(options)
 }

@@ -63,10 +63,3 @@ export class KernelCallableCapability implements KernelCallableCapabilityService
     return definition.invoke(scope, input, signal)
   }
 }
-
-/** 建一件可调用能力（模块 SDK 的入口，能力包写内核模块时用它）。 */
-export function createKernelCallableCapability(
-  operations: Readonly<Record<string, KernelCallableCapabilityOperation>>,
-): KernelCallableCapabilityService {
-  return new KernelCallableCapability(operations)
-}

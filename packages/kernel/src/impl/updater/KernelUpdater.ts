@@ -545,3 +545,10 @@ export class KernelUpdater implements KernelUpdaterApi {
     return run
   }
 }
+
+/** 建一个共享 Runtime 更新器;不给选项就用缺省安装根与当前平台的产物目标。 */
+export function createKernelUpdater(
+  options: KernelUpdaterOptions = {},
+): KernelUpdaterApi {
+  return new KernelUpdater(options)
+}

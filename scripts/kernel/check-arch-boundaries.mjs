@@ -205,7 +205,7 @@ function scanPackageSet() {
     violations.push({
       rule: 'kernel-package-set',
       fingerprint: `kernel-package-set::unexpected::${unexpected.join(',')}`,
-      message: `Kernel 域只应包含 packages/kernel,发现额外包:${unexpected.join(', ')}。内部职责请收进 @velaros-ai/kernel 子路径。`,
+      message: `Kernel 域只应包含 packages/kernel,发现额外包:${unexpected.join(', ')}。内部职责请收进 @velaros-ai/kernel 的五个入口。`,
     })
   }
   if (missing.length > 0) {
@@ -265,9 +265,10 @@ function scanDependencyDirection() {
   const contractsForbidden = (line) =>
     InternalImplementationPattern.test(line)
     || importsPackage(line, [
-      '@velaros-ai/kernel/runtime',
+      '@velaros-ai/kernel',
       '@velaros-ai/kernel/client',
       '@velaros-ai/kernel/serve',
+      '@velaros-ai/kernel/remote',
     ])
     || /(?:from\s+|import\s*\(|require\()\s*['"]\.\.(?:\/\.\.)*\/(?:impl|utils)(?:\/[^'"]*)?['"]/.test(line)
   const contractsViolation = (file, line) => ({
@@ -296,7 +297,7 @@ function scanDependencyDirection() {
     ...scanLines(
       ['packages/kernel/src/impl/runtime', 'packages/kernel/src/utils/runtime'],
       (line) =>
-        importsPackage(line, ['@velaros-ai/kernel/client', '@velaros-ai/kernel/serve'])
+        importsPackage(line, ['@velaros-ai/kernel/client', '@velaros-ai/kernel/serve', '@velaros-ai/kernel/remote'])
         || /(?:from\s+|import\s*\(|require\()\s*['"]\.\.(?:\/\.\.)*\/(?:client|serve|updater|remote-client|remote-node|rpc)(?:\/[^'"]*)?['"]/.test(line),
       (file, line) => ({
         rule: 'runtime-dependency-direction',
@@ -311,7 +312,7 @@ function scanDependencyDirection() {
     ...scanLines(
       ['packages/kernel/src/impl/client'],
       (line) =>
-        importsPackage(line, ['@velaros-ai/kernel/runtime', '@velaros-ai/kernel/serve'])
+        importsPackage(line, ['@velaros-ai/kernel', '@velaros-ai/kernel/serve'])
         || /(?:from\s+|import\s*\(|require\()\s*['"]\.\.(?:\/\.\.)*\/(?:runtime|serve)(?:\/[^'"]*)?['"]/.test(line),
       (file, line) => ({
         rule: 'client-dependency-direction',
@@ -328,10 +329,11 @@ function scanDependencyDirection() {
       (line) =>
         UpdaterReachesOtherSlicePattern.test(line)
         || importsPackage(line, [
-          '@velaros-ai/kernel/runtime',
+          '@velaros-ai/kernel',
           '@velaros-ai/kernel/client',
           '@velaros-ai/kernel/contracts',
           '@velaros-ai/kernel/serve',
+          '@velaros-ai/kernel/remote',
         ]),
       (file, line) => ({
         rule: 'updater-dependency-direction',
@@ -710,7 +712,7 @@ function scanRuntimeSinglePath() {
       (file, line) => ({
         rule: 'kernel-module-api-version-single-source',
         fingerprint: `kernel-module-api-version-single-source::${file}:${line}`,
-        message: `${file}:${line}: module apiVersion 必须引用 KernelModuleApiVersion,禁止复制数字版本。`,
+        message: `${file}:${line}: module apiVersion 必须引用 KernelVersionAxes.moduleApi,禁止复制数字版本。`,
       }),
     ),
   )

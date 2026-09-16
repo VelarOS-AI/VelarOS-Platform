@@ -64,10 +64,3 @@ export function createRemoteNodeAuditLog(
 ): RemoteNodeAuditSink {
   return new FileRemoteNodeAuditLog(options)
 }
-
-/** `createRemoteNodeAuditLog` 的现有导出名,保住消费方这一轮零改动。 */
-export function createRemoteNodeFileAuditLog(
-  options: RemoteNodeFileAuditLogOptions,
-): RemoteNodeAuditSink {
-  return new FileRemoteNodeAuditLog(options)
-}

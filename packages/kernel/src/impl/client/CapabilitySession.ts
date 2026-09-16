@@ -1,14 +1,10 @@
 import type { KernelClientTransport } from '../../contract/requires'
-import type { OpenCapabilitySessionInput } from '../../types/client'
 import type {
   CapabilityCallRequest,
   CapabilityCallResponse,
   CapabilityRequireItem,
   CapabilitySessionCloseResponse,
-  CapabilitySessionOpenRequest,
-  CapabilitySessionOpenResponse,
 } from '../../types/wire'
-import { KernelClientError } from '../../utils/errors'
 import { KernelProtocolVersion } from '../../utils/wire/version'
 
 /**
@@ -68,33 +64,4 @@ export class CapabilitySession implements CapabilitySessionApi {
       throw new Error(`能力会话 "${this.sessionId}" 已经关掉了，重新开一条再调`)
     }
   }
-}
-
-/**
- * 在一条传输上开出能力会话：把 requires 集合报上去，拿回服务端绑定的那条会话。
- *
- * 服务端拒绝时抛 KernelClientError，码原样来自失败信封（拿不到能力一般是 CAPABILITY_NOT_GRANTED）。
- */
-export async function openCapabilitySessionOnTransport(
-  transport: KernelClientTransport,
-  input: OpenCapabilitySessionInput,
-): Promise<CapabilitySessionApi> {
-  const response: CapabilitySessionOpenResponse =
-    await transport.openCapabilitySession({
-      protocolVersion: KernelProtocolVersion,
-      requires: [...input.requires],
-    } satisfies CapabilitySessionOpenRequest)
-  if (response.status === 'error') {
-    throw new KernelClientError({
-      code: response.error.code,
-      message: response.error.message,
-      retryable: response.error.retryable,
-      rpcError: response.error,
-    })
-  }
-  return new CapabilitySession(
-    transport,
-    response.sessionId,
-    response.requires,
-  )
 }

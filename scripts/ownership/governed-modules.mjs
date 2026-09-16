@@ -465,12 +465,9 @@ export const GovernedModules = [
       // 进程内内核：模块宿主、唯一调用路径、模块 SDK、mod 信封解析；不碰 Node 模块
       ['runtime/'],
     ],
-    // 卡片与不变量登记是改造最后一段的事，这三份现在还不存在，照样登记，燃尽表里看得到
     card: 'MODULE.md',
     invariants: 'spec/invariants.md',
     acceptance: 'spec/acceptance.test.ts',
-    // 按仓库标准改造中：问题照查照报条数，不计入失败（改造完删掉这一项）
-    status: 'migrating',
   },
   {
     directory: 'memory',

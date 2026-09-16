@@ -8,7 +8,7 @@ import { dirname, join } from 'node:path'
 
 import { afterEach, describe, expect, test } from 'bun:test'
 
-import { KernelUpdateLock, withKernelUpdateLock } from '../../../src/impl/updater/KernelUpdateLock'
+import { KernelUpdateLock } from '../../../src/impl/updater/KernelUpdateLock'
 import type { KernelUpdateLockOptions } from '../../../src/types/updater'
 import { KernelUpdaterError } from '../../../src/utils/errors'
 
@@ -174,10 +174,16 @@ describe('Kernel update lock', () => {
 
   test('releases the lock when the guarded operation throws', async () => {
     const path = await lockPath()
+    const lock = new KernelUpdateLock({ lockPath: path })
 
-    await expect(withKernelUpdateLock({ lockPath: path }, () => {
-      throw new Error('update failed')
-    })).rejects.toThrowError('update failed')
+    await lock.acquire()
+    try {
+      expect(() => {
+        throw new Error('update failed')
+      }).toThrowError('update failed')
+    } finally {
+      await lock.release()
+    }
 
     await expect(stat(path)).rejects.toMatchObject({ code: 'ENOENT' })
   })

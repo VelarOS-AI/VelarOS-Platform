@@ -49,10 +49,3 @@ export class ScopedKernelPermissionBroker implements KernelModulePermissionBroke
     return decision
   }
 }
-
-/** 建一个模块作用域的权限面（宿主装激活上下文时用）。 */
-export function createScopedPermissionBroker(
-  options: ScopedKernelPermissionBrokerOptions,
-): KernelModulePermissionBroker {
-  return Object.freeze(new ScopedKernelPermissionBroker(options))
-}

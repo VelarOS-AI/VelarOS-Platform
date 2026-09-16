@@ -1,6 +1,6 @@
 {
   "name": "@velaros-ai/kernel",
-  "version": "0.2.3",
+  "version": "0.3.0",
   "velaros": {
     "platform": "0.6"
   },
@@ -22,45 +22,17 @@
       "types": "./dist/contracts.d.ts",
       "import": "./dist/contracts.js"
     },
-    "./contracts/abi": {
-      "types": "./dist/contracts-abi.d.ts",
-      "import": "./dist/contracts-abi.js"
-    },
-    "./contracts/protocol": {
-      "types": "./dist/contracts-protocol.d.ts",
-      "import": "./dist/contracts-protocol.js"
-    },
-    "./runtime": {
-      "types": "./dist/runtime.d.ts",
-      "import": "./dist/runtime.js"
-    },
     "./client": {
       "types": "./dist/client.d.ts",
       "import": "./dist/client.js"
-    },
-    "./client/contracts": {
-      "types": "./dist/client-contracts.d.ts",
-      "import": "./dist/client-contracts.js"
     },
     "./serve": {
       "types": "./dist/serve.d.ts",
       "import": "./dist/serve.js"
     },
-    "./serve/updater": {
-      "types": "./dist/serve-updater.d.ts",
-      "import": "./dist/serve-updater.js"
-    },
     "./remote": {
       "types": "./dist/remote.d.ts",
       "import": "./dist/remote.js"
-    },
-    "./remote/client": {
-      "types": "./dist/remote-client.d.ts",
-      "import": "./dist/remote-client.js"
-    },
-    "./remote/node": {
-      "types": "./dist/remote-node.d.ts",
-      "import": "./dist/remote-node.js"
     }
   },
   "bin": {

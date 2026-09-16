@@ -3,16 +3,14 @@ import { describe, expect, test } from 'bun:test'
 import { KernelCallErrorCodes } from '../../src/contract/constants'
 import type { KernelPermissionBroker } from '../../src/contract/requires'
 import { Kernel } from '../../src/impl/runtime/Kernel'
-import { createKernelCallableCapability } from '../../src/impl/runtime/KernelCallableCapability'
-import { createCapabilityToken } from '../../src/impl/runtime/KernelModuleKit'
-import { defineKernelModule } from '../../src/impl/runtime/KernelModuleKit'
-const ValueCapability = createCapabilityToken('test.value', '2.4.0')
+import { kernelModules } from '../../src/impl/runtime/KernelModuleKit'
+const ValueCapability = kernelModules.token('test.value', '2.4.0')
 
 function valueModule(options: {
   readonly onInvoke?: () => void
   readonly failReady?: boolean
 } = {}) {
-  return defineKernelModule({
+  return kernelModules.define({
     manifest: {
       id: 'test.value.module',
       version: '1.0.0',
@@ -26,7 +24,7 @@ function valueModule(options: {
     activate(context) {
       context.registerService(
         ValueCapability,
-        createKernelCallableCapability({
+        kernelModules.callable({
           read: {
             metadata: {
               permissions: ['test:read'],

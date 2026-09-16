@@ -11,11 +11,10 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, test } from 'bun:test'
 
 import type { KernelModuleDefinition } from '../../../src/contract/requires'
-import { connectToKernelDaemon, discoverKernelDaemon } from '../../../src/impl/client/KernelDaemonDirectory'
+import { kernelDaemons } from '../../../src/impl/client/KernelDaemonDirectory'
 import { SocketKernelTransport } from '../../../src/impl/client/SocketKernelTransport'
-import { createKernelCallableCapability } from '../../../src/impl/runtime/KernelCallableCapability'
 import { KernelModuleHost } from '../../../src/impl/runtime/KernelModuleHost'
-import { createCapabilityToken } from '../../../src/impl/runtime/KernelModuleKit'
+import { kernelModules } from '../../../src/impl/runtime/KernelModuleKit'
 import { AllowLoadedKernelClientAccessBroker } from '../../../src/impl/serve/AllowLoadedKernelClientAccessBroker'
 import { KernelLocalDaemon } from '../../../src/impl/serve/KernelLocalDaemon'
 import { KernelLocalRpcServer } from '../../../src/impl/serve/KernelLocalRpcServer'
@@ -25,7 +24,7 @@ import { createDefaultKernelDaemonPaths } from '../../../src/utils/rpc/descripto
 import type { CapabilityCallRequest } from '../../../src/utils/wire/capability'
 import { KernelProtocolVersion } from '../../../src/utils/wire/version'
 
-const EchoToken = createCapabilityToken('test.rpc.echo')
+const EchoToken = kernelModules.token('test.rpc.echo')
 const RpcAuthToken = 'test-auth-token-0123456789-abcdefgh'
 const temporaryDirectories: string[] = []
 
@@ -54,7 +53,7 @@ function createRpcService(): {
     activate(context) {
       context.registerService(
         EchoToken,
-        createKernelCallableCapability({
+        kernelModules.callable({
           echo: {
             metadata: { permissions: [] },
             async invoke(_scope, input) {
@@ -199,11 +198,11 @@ describe('Kernel local RPC', () => {
     })
 
     try {
-      expect(await discoverKernelDaemon(paths)).toEqual(descriptor)
+      expect(await kernelDaemons.discover(paths)).toEqual(descriptor)
       if (process.platform !== 'win32') {
         expect((await stat(paths.descriptorPath)).mode & 0o777).toBe(0o600)
       }
-      const connected = await connectToKernelDaemon(paths)
+      const connected = await kernelDaemons.connect(paths)
       try {
         expect(connected.handshake.kernelVersion).toBe('0.2.0')
         expect(connected.descriptor.instanceId).toBe(descriptor.instanceId)
@@ -219,7 +218,7 @@ describe('Kernel local RPC', () => {
       await firstDaemon.dispose()
     }
 
-    await expect(discoverKernelDaemon(paths)).rejects.toMatchObject({
+    await expect(kernelDaemons.discover(paths)).rejects.toMatchObject({
       code: 'DAEMON_NOT_RUNNING',
     })
   })
@@ -242,14 +241,14 @@ describe('Kernel local RPC', () => {
       })
       // 目录已存在时 mkdir 的 mode 不生效，所以拒绝之后它仍然是 0755，没有被悄悄改掉。
       expect((await stat(runtimeDirectory)).mode & 0o777).toBe(0o755)
-      await expect(discoverKernelDaemon(paths)).rejects.toMatchObject({
+      await expect(kernelDaemons.discover(paths)).rejects.toMatchObject({
         code: 'DAEMON_NOT_RUNNING',
       })
 
       // 收紧到 0700 之后照常起来。
       await chmod(runtimeDirectory, 0o700)
       await daemon.start()
-      expect((await discoverKernelDaemon(paths)).pid).toBe(process.pid)
+      expect((await kernelDaemons.discover(paths)).pid).toBe(process.pid)
     } finally {
       await daemon.dispose()
     }

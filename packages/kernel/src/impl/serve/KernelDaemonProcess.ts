@@ -3,12 +3,12 @@
 // 装载路径：ModStore（VELAROS_KERNEL_SYSTEM_PACKS + 用户索引）。
 //
 // bundled 是编译期的（宪章 §15.2）：内核自己一个 bundled pack 都不带，具体能力的 bundled
-// pack 由宿主的构建图注入（`bootKernelDaemon({ modPacks })`，见 utils/serve/mod-packs.ts）。
+// pack 由宿主的构建图注入（`bootKernelDaemon({ bundledPacks })`，见 utils/serve/mod-packs.ts）。
 //
 // 外部产品通过 @velaros-ai/kernel/client：connect → openCapabilitySession → session.call。
 import { isEmpty, isNotUndefined, Log } from '@velaros-ai/core'
 
-import { KernelVersion as DefaultKernelVersion } from '../../contract/constants'
+import { KernelVersionAxes } from '../../contract/constants'
 import type { KernelModuleImporter } from '../../contract/requires'
 import { parseKernelSystemModPacks } from '../../utils/serve/mod-index'
 
@@ -46,7 +46,7 @@ export class KernelDaemonProcess implements KernelDaemonProcessApi {
     readonly importModule?: KernelModuleImporter
   }): Promise<BootedKernelDaemonApi> {
     const { environment } = input
-    const kernelVersion = environment.VELAROS_KERNEL_VERSION ?? DefaultKernelVersion
+    const kernelVersion = environment.VELAROS_KERNEL_VERSION ?? KernelVersionAxes.kernel
 
     // 建 ModStore：先读用户索引，再按环境变量登记系统 pack、安装目录 pack。
     const userModsRoot = environment.VELAROS_KERNEL_USER_MODS?.trim()

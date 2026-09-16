@@ -84,35 +84,14 @@
       "@velaros-ai/kernel/contracts": [
         "./packages/kernel/src/contracts.ts"
       ],
-      "@velaros-ai/kernel/contracts/abi": [
-        "./packages/kernel/src/contracts-abi.ts"
-      ],
-      "@velaros-ai/kernel/contracts/protocol": [
-        "./packages/kernel/src/contracts-protocol.ts"
-      ],
-      "@velaros-ai/kernel/runtime": [
-        "./packages/kernel/src/runtime.ts"
-      ],
       "@velaros-ai/kernel/client": [
         "./packages/kernel/src/client.ts"
-      ],
-      "@velaros-ai/kernel/client/contracts": [
-        "./packages/kernel/src/client-contracts.ts"
       ],
       "@velaros-ai/kernel/serve": [
         "./packages/kernel/src/serve.ts"
       ],
-      "@velaros-ai/kernel/serve/updater": [
-        "./packages/kernel/src/serve-updater.ts"
-      ],
       "@velaros-ai/kernel/remote": [
         "./packages/kernel/src/remote.ts"
-      ],
-      "@velaros-ai/kernel/remote/client": [
-        "./packages/kernel/src/remote-client.ts"
-      ],
-      "@velaros-ai/kernel/remote/node": [
-        "./packages/kernel/src/remote-node.ts"
       ],
       "@velaros-ai/platform": [
         "./packages/platform/src/index.ts"

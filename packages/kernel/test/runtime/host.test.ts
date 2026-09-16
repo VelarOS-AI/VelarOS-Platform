@@ -5,7 +5,7 @@ import type { KernelModuleActivateContext } from '../../src/contract/provides'
 import type { KernelModuleDefinition } from '../../src/contract/requires'
 import type { KernelPermissionBroker } from '../../src/contract/requires'
 import { KernelModuleHost } from '../../src/impl/runtime/KernelModuleHost'
-import { createCapabilityToken } from '../../src/impl/runtime/KernelModuleKit'
+import { kernelModules } from '../../src/impl/runtime/KernelModuleKit'
 import type { CapabilityToken } from '../../src/types/kernel.js'
 import { KernelError } from '../../src/utils/errors'
 
@@ -13,13 +13,13 @@ interface ValueService {
   read(): string
 }
 
-const ValueCapability = createCapabilityToken<ValueService>('test.value')
-const DerivedCapability = createCapabilityToken<ValueService>('test.derived')
-const CompatibleVersionCapability = createCapabilityToken<ValueService>(
+const ValueCapability = kernelModules.token<ValueService>('test.value')
+const DerivedCapability = kernelModules.token<ValueService>('test.derived')
+const CompatibleVersionCapability = kernelModules.token<ValueService>(
   'test.versioned',
   '1.4.0',
 )
-const IncompatibleVersionCapability = createCapabilityToken<ValueService>(
+const IncompatibleVersionCapability = kernelModules.token<ValueService>(
   'test.versioned',
   '2.0.0',
 )
@@ -492,7 +492,7 @@ describe('KernelModuleHost', () => {
       ((providerFailure as KernelError).cause as KernelError).code,
     ).toBe('UNDECLARED_CAPABILITY_PROVIDER')
 
-    const wrongVersionToken = createCapabilityToken<ValueService>(
+    const wrongVersionToken = kernelModules.token<ValueService>(
       ValueCapability.id,
       '1.1.0',
     )
@@ -825,7 +825,7 @@ describe('KernelModuleHost', () => {
       }),
     )
     await host.start()
-    const wrongVersion = createCapabilityToken<ValueService>(
+    const wrongVersion = kernelModules.token<ValueService>(
       ValueCapability.id,
       '2.0.0',
     )

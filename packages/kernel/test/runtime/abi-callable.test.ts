@@ -1,11 +1,11 @@
 import { describe, expect, test } from 'bun:test'
 
 import { KernelCallErrorCodes } from '../../src/contract/constants'
-import { createKernelCallableCapability } from '../../src/impl/runtime/KernelCallableCapability'
+import { kernelModules } from '../../src/impl/runtime/KernelModuleKit'
 
 describe('callable capability contract', () => {
   test('exposes immutable per-operation metadata and invokes declared operations', async () => {
-    const service = createKernelCallableCapability({
+    const service = kernelModules.callable({
       read: {
         metadata: {
           permissions: ['fs:read'],
@@ -31,7 +31,7 @@ describe('callable capability contract', () => {
   })
 
   test('fails closed for unknown and aborted operations', async () => {
-    const service = createKernelCallableCapability({
+    const service = kernelModules.callable({
       ping: {
         metadata: { permissions: [] },
         invoke: () => 'pong',
@@ -59,7 +59,7 @@ describe('callable capability contract', () => {
 
   test('rejects empty and duplicate permission declarations', () => {
     expect(() =>
-      createKernelCallableCapability({
+      kernelModules.callable({
         bad: {
           metadata: { permissions: ['fs:read', 'fs:read'] },
           invoke: () => undefined,
@@ -67,7 +67,7 @@ describe('callable capability contract', () => {
       })).toThrow('重复的权限名')
 
     expect(() =>
-      createKernelCallableCapability({
+      kernelModules.callable({
         bad: {
           metadata: { permissions: [''] },
           invoke: () => undefined,

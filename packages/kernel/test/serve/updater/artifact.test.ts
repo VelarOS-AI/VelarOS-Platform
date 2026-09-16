@@ -6,10 +6,10 @@ import { join } from 'node:path'
 
 import { afterEach, describe, expect, test } from 'bun:test'
 
-import { kernelArtifactFileName } from '../../../src/impl/updater/PassthroughKernelArtifactExtractor'
 import { UnverifiedKernelArtifactSignatureVerifier } from '../../../src/impl/updater/UnverifiedKernelArtifactSignatureVerifier'
 import { KernelUpdaterError } from '../../../src/utils/errors'
 import { downloadKernelArtifact } from '../../../src/utils/updater/download'
+import { kernelArtifactFileName } from '../../../src/utils/updater/manifest'
 import {
   parseKernelUpdateManifest,
   selectKernelArtifact,
