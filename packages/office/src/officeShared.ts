@@ -23,6 +23,8 @@ import {
 import { renderParameterDescription as parameterDescription } from '@velaros-ai/agent/tool-contract'
 import { isPlainObject, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
+import { resolveRealPath } from '@velaros-ai/core/utils/RealPath'
+import { currentPlatform } from '@velaros-ai/platform'
 
 import type {
   OfficeEnvironmentCommandAvailability,
@@ -33,10 +35,7 @@ import type {
   OfficeSystemToolInstallAlternative,
   OfficeSystemToolInstallSuggestion,
 } from './OfficeContracts'
-import {
-  getRelativePathInsideOfficeRoot,
-  officePlatformCompatibility,
-} from './OfficePlatformCompatibility'
+import { officePlatformCompatibility } from './OfficePlatformCompatibility'
 
 // 集中再导出常用依赖，减少子模块重复导入。
 export { AppError }
@@ -279,23 +278,34 @@ export function toolRequiresProject(ctx: ToolContext): boolean {
   }
 }
 
-/** 在可选 cwd 下执行 Office 操作。 */
+/**
+ * 在可选 cwd 下执行 Office 操作。
+ *
+ * 判据（§5.3b ④安全门）：`cwd` 不是「顺便换个目录」，宿主实现会把它当成**新的执行根**
+ * （Desktop 的 `runInDirectory` 走 root override），下面所有路径包含判断随之以它为准。
+ * 所以进宿主之前先按真实路径确认它仍在当前工作区内：只读工具从不请求授权，不挡这一下，
+ * 一个根外的 `cwd` 就能让 `extract_pdf_text` / `preview_document` /
+ * `convert_document_to_markdown` 读到工作区外的文件（2026-09-16 实测）。
+ * 写工具的 `prepareMutation` 在这之前跑，宿主批准的「切换到外部目录」会先把根换过去，
+ * 那时 `cwd` 自然落在新根内，合法流程不受影响。
+ */
 export async function runWithDirectory<T>(
   ctx: OfficeToolContext,
   cwd: LooseOptional<string>,
   action: () => Promise<T>
 ): Promise<T> {
   if (!cwd) return action()
+  await assertOfficePathInsideProject(ctx.office.project.getRootPath(), resolve(cwd), cwd)
   // project 层负责临时切换目录并恢复。
   return ctx.office.project.runInDirectory(cwd, action)
 }
 
 /** 解析输出路径并强制扩展名，最终保证路径仍在工作区内。 */
-export function normalizeExtensionPath(
+export async function normalizeExtensionPath(
   rootPath: string,
   outputPath: string,
   extension: string
-): string {
+): Promise<string> {
   const trimmedPath = outputPath.trim()
   if (!trimmedPath) throw new AppError('VALIDATION', '输出路径不能为空。')
 
@@ -310,7 +320,7 @@ export function normalizeExtensionPath(
 
   const resolvedPath = currentExtension ? basePath : `${basePath}${extension}`
   // 最后统一做工作区包含关系和内部目录保护。
-  assertOfficePathInsideProject(rootPath, resolvedPath, outputPath)
+  await assertOfficePathInsideProject(rootPath, resolvedPath, outputPath)
 
   return resolvedPath
 }
@@ -321,17 +331,26 @@ export function normalizeExtensionPath(
  * 判据（§5.3b ④安全门）——这是整个 office 能力**唯一**的路径包含门：所有工具的读写路径
  * 都必须先经 `normalizeExtensionPath` / `resolveOfficeInputPathWithExtensions` 落到这里。
  * 挡的是 `../` 穿越与绝对路径逃逸——注意入参允许绝对路径（用户经常直接粘），所以不能靠
- * "是否相对路径"判断，必须 **resolve 之后再算相对关系**（`getRelativePathInsideOfficeRoot`）。
+ * "是否相对路径"判断，必须 **resolve 之后再算相对关系**。
  * 绕过它写盘 = 模型可以往用户主目录任意位置落文件，因此新增写入路径的工具一律走上面两个入口，
  * 不要自己 `resolve` 完就用。
+ *
+ * **按真实路径判，不按字面路径判**（`resolveRealPath`）：工作区里一个指向根外的符号链接，
+ * 字面路径怎么看都在根内，写下去却落在根外；目标是已存在的链接文件时 `writeFile` 还会顺着
+ * 它覆盖根外的原文件（2026-09-16 实测：根里建 `link → ../outside`，
+ * `create_spreadsheet({ outputPath: 'link/escaped.xlsx' })` 成功写到了根外）。两边都要解：
+ * 根本身也可能是符号链接（macOS 的 `/tmp` → `/private/tmp`），只解一边会把合法路径判成越界。
  */
-export function assertOfficePathInsideProject(
+export async function assertOfficePathInsideProject(
   rootPath: string,
   resolvedPath: string,
   originalPath: string
-): void {
-  const relativePath = getRelativePathInsideOfficeRoot(rootPath, resolvedPath)
-  if (!relativePath) {
+): Promise<void> {
+  const [realRootPath, realResolvedPath] = await Promise.all([
+    resolveRealPath(rootPath),
+    resolveRealPath(resolvedPath),
+  ])
+  if (!currentPlatform.isPathTextInside(realResolvedPath, realRootPath)) {
     throw new AppError('PERMISSION', `路径超出工作区范围：${originalPath}`)
   }
 }
@@ -343,7 +362,11 @@ export async function prepareOfficeOutputPath(
   extension: string,
   overwrite?: boolean
 ): Promise<{ path: string; created: boolean }> {
-  const resolvedPath = normalizeExtensionPath(ctx.office.project.getRootPath(), outputPath, extension)
+  const resolvedPath = await normalizeExtensionPath(
+    ctx.office.project.getRootPath(),
+    outputPath,
+    extension
+  )
   const existing = await getFileStats(resolvedPath)
   // 目标存在但不是普通文件时拒绝，避免覆盖目录或特殊文件。
   if (existing && !existing.isFile()) {
@@ -380,7 +403,7 @@ export async function resolveOfficeInputPathWithExtensions(
     throw new AppError('VALIDATION', `输入文件扩展名必须是 ${extensions.join(' 或 ')}。`)
   }
 
-  assertOfficePathInsideProject(ctx.office.project.getRootPath(), resolvedPath, inputPath)
+  await assertOfficePathInsideProject(ctx.office.project.getRootPath(), resolvedPath, inputPath)
   const existing = await getFileStats(resolvedPath)
 
   // 转换/编辑前必须确认输入文件存在。

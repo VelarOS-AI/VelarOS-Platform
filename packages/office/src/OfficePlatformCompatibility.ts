@@ -1,19 +1,8 @@
-import { isAbsolute, relative, resolve, sep } from 'node:path'
-
-import { isEmpty } from '@velaros-ai/core'
-
-export function getRelativePathInsideOfficeRoot(
-  rootPath: string,
-  candidatePath: string
-): Nullable<string> {
-  const relativePath = relative(resolve(rootPath), resolve(candidatePath))
-  const inside =
-    isEmpty(relativePath)
-    || relativePath === '.'
-    || (relativePath !== '..' && !relativePath.startsWith(`..${sep}`) && !isAbsolute(relativePath))
-  return inside ? relativePath || '.' : null
-}
-
+/**
+ * 路径包含判断不在这里：它按真实路径算（见 `officeShared` 的 `assertOfficePathInsideProject`），
+ * 用 `@velaros-ai/core` 的 `resolveRealPath` 与 `@velaros-ai/platform` 的 `isPathTextInside`。
+ * 本文件原先那份按字面路径算的 `getRelativePathInsideOfficeRoot` 放行了符号链接逃逸，已删。
+ */
 export class OfficePlatformCompatibility {
   constructor(private readonly platform: NodeJS.Platform = process.platform) {}
 

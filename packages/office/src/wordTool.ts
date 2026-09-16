@@ -1270,7 +1270,7 @@ export async function prepareWordDocumentOutputPath(
   ctx: OfficeToolContext,
   input: Pick<CreateWordDocumentInput, 'outputPath' | 'overwrite' | 'appendMode'>
 ): Promise<{ path: string; created: boolean; append: boolean }> {
-  const resolvedPath = normalizeExtensionPath(
+  const resolvedPath = await normalizeExtensionPath(
     ctx.office.project.getRootPath(),
     input.outputPath,
     '.docx'

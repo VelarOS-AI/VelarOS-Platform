@@ -274,6 +274,7 @@
         "@napi-rs/canvas": "1.0.8",
         "@velaros-ai/core": "workspace:*",
         "@velaros-ai/kernel": "workspace:*",
+        "@velaros-ai/platform": "workspace:*",
         "docx": "^9.6.1",
         "exceljs": "^4.4.0",
         "jszip": "^3.10.1",
