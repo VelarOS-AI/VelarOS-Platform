@@ -1,0 +1,2357 @@
+{
+  "office:create_word_document": {
+    "name": "office:create_word_document",
+    "category": "office",
+    "role": "render",
+    "summary": "生成 .docx Word 文档。",
+    "readOnly": false,
+    "permissions": [
+      "fs:read",
+      "fs:write"
+    ],
+    "capabilities": {
+      "effectKind": "write",
+      "readScopes": [
+        "project",
+        "system"
+      ],
+      "writeScopes": [
+        "project"
+      ],
+      "filesystem": {
+        "read": "project",
+        "write": "project"
+      },
+      "metadata": {
+        "project": {
+          "requiresActiveProject": true,
+          "requiresProjectSwitchForExternalCwd": true,
+          "mutation": "non-transactional",
+          "arbitraryRead": true
+        },
+        "canMutateProject": true
+      },
+      "concurrency": "unsafe",
+      "reason": "office document creation or conversion"
+    },
+    "description": "描述：生成 .docx Word 文档。\n\n适合：\n- 需要生成普通文档、学术论文、论文模板或带表格的 Word 文件。\n\n禁止：\n- 不要用它生成 PDF、PPT 或 Excel。\n\n用法：\n- 传 outputPath，并提供 blocks 或 content；复杂样式用结构化 blocks。\n\n示例：\n- 调用参数示例：{\"outputPath\":\"report.docx\",\"content\":\"# Summary\\nDetails\"}。\n- 调用参数示例：{\"outputPath\":\"spec.docx\",\"blocks\":[{\"kind\":\"heading\",\"text\":\"设计说明\",\"level\":1},{\"kind\":\"paragraph\",\"text\":\"本节描述整体架构。\"},{\"kind\":\"bullets\",\"items\":[\"模块 A\",\"模块 B\"]},{\"kind\":\"table\",\"header\":true,\"rows\":[[{\"text\":\"字段\"},{\"text\":\"类型\"}],[{\"text\":\"id\"},{\"text\":\"string\"}]]},{\"kind\":\"pageBreak\"}]}。\n\n注意：\n- 结构化 blocks 支持富文本、多级标题、列表、表格和分页符。",
+    "schema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "cwd": {
+          "type": "string"
+        },
+        "outputPath": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1200,
+          "description": "描述：输出文件路径。\n\n用法：\n- 支持相对当前工作区的路径。\n\n注意：\n- 无扩展名时会按工具类型自动补齐。"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "author": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "profile": {
+          "description": "描述：文档排版模板。\n\n取值：\n- standard：普通文档。\n- academic-paper：学术论文。\n- thesis：论文/毕业论文。",
+          "type": "string",
+          "enum": [
+            "standard",
+            "academic-paper",
+            "thesis"
+          ]
+        },
+        "language": {
+          "description": "描述：文档语言。\n\n取值：\n- zh-CN：中文。\n- en-US：英文。",
+          "type": "string",
+          "enum": [
+            "zh-CN",
+            "en-US"
+          ]
+        },
+        "metadata": {
+          "type": "object",
+          "properties": {
+            "subtitle": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "school": {
+              "type": "string",
+              "maxLength": 120
+            },
+            "department": {
+              "type": "string",
+              "maxLength": 120
+            },
+            "major": {
+              "type": "string",
+              "maxLength": 120
+            },
+            "course": {
+              "type": "string",
+              "maxLength": 120
+            },
+            "className": {
+              "type": "string",
+              "maxLength": 80
+            },
+            "studentId": {
+              "type": "string",
+              "maxLength": 80
+            },
+            "advisor": {
+              "type": "string",
+              "maxLength": 120
+            },
+            "date": {
+              "type": "string",
+              "maxLength": 80
+            },
+            "organization": {
+              "type": "string",
+              "maxLength": 120
+            }
+          }
+        },
+        "abstract": {
+          "type": "string",
+          "maxLength": 20000
+        },
+        "keywords": {
+          "maxItems": 30,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          }
+        },
+        "includeTableOfContents": {
+          "type": "boolean"
+        },
+        "blocks": {
+          "anyOf": [
+            {
+              "minItems": 1,
+              "maxItems": 500,
+              "type": "array",
+              "items": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "const": "heading"
+                      },
+                      "text": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 500
+                      },
+                      "level": {
+                        "anyOf": [
+                          {
+                            "type": "number",
+                            "const": 1
+                          },
+                          {
+                            "type": "number",
+                            "const": 2
+                          },
+                          {
+                            "type": "number",
+                            "const": 3
+                          }
+                        ]
+                      },
+                      "color": {
+                        "type": "string"
+                      },
+                      "align": {
+                        "type": "string",
+                        "enum": [
+                          "left",
+                          "center",
+                          "right"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "text"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "const": "paragraph"
+                      },
+                      "text": {
+                        "type": "string",
+                        "maxLength": 20000
+                      },
+                      "runs": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "text": {
+                              "type": "string"
+                            },
+                            "bold": {
+                              "type": "boolean"
+                            },
+                            "italic": {
+                              "type": "boolean"
+                            },
+                            "underline": {
+                              "type": "boolean"
+                            },
+                            "strike": {
+                              "type": "boolean"
+                            },
+                            "color": {
+                              "type": "string"
+                            },
+                            "highlight": {
+                              "type": "string"
+                            },
+                            "fontSize": {
+                              "type": "number"
+                            },
+                            "font": {
+                              "type": "string"
+                            },
+                            "superScript": {
+                              "type": "boolean"
+                            },
+                            "subScript": {
+                              "type": "boolean"
+                            },
+                            "link": {
+                              "type": "string"
+                            },
+                            "break": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "text"
+                          ]
+                        }
+                      },
+                      "align": {
+                        "type": "string",
+                        "enum": [
+                          "left",
+                          "center",
+                          "right",
+                          "justify"
+                        ]
+                      },
+                      "spaceBefore": {
+                        "type": "number"
+                      },
+                      "spaceAfter": {
+                        "type": "number"
+                      },
+                      "indent": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "kind"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "const": "bullets"
+                      },
+                      "items": {
+                        "minItems": 1,
+                        "maxItems": 200,
+                        "type": "array",
+                        "items": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 1000
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "text": {
+                                  "type": "string"
+                                },
+                                "runs": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "text": {
+                                        "type": "string"
+                                      },
+                                      "bold": {
+                                        "type": "boolean"
+                                      },
+                                      "italic": {
+                                        "type": "boolean"
+                                      },
+                                      "underline": {
+                                        "type": "boolean"
+                                      },
+                                      "strike": {
+                                        "type": "boolean"
+                                      },
+                                      "color": {
+                                        "type": "string"
+                                      },
+                                      "highlight": {
+                                        "type": "string"
+                                      },
+                                      "fontSize": {
+                                        "type": "number"
+                                      },
+                                      "font": {
+                                        "type": "string"
+                                      },
+                                      "superScript": {
+                                        "type": "boolean"
+                                      },
+                                      "subScript": {
+                                        "type": "boolean"
+                                      },
+                                      "link": {
+                                        "type": "string"
+                                      },
+                                      "break": {
+                                        "type": "number"
+                                      }
+                                    },
+                                    "required": [
+                                      "text"
+                                    ]
+                                  }
+                                },
+                                "level": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 8
+                                }
+                              },
+                              "required": [
+                                "text"
+                              ]
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "items"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "const": "table"
+                      },
+                      "rows": {
+                        "minItems": 1,
+                        "maxItems": 500,
+                        "type": "array",
+                        "items": {
+                          "minItems": 1,
+                          "maxItems": 30,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "text": {
+                                "type": "string"
+                              },
+                              "runs": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "text": {
+                                      "type": "string"
+                                    },
+                                    "bold": {
+                                      "type": "boolean"
+                                    },
+                                    "italic": {
+                                      "type": "boolean"
+                                    },
+                                    "underline": {
+                                      "type": "boolean"
+                                    },
+                                    "strike": {
+                                      "type": "boolean"
+                                    },
+                                    "color": {
+                                      "type": "string"
+                                    },
+                                    "highlight": {
+                                      "type": "string"
+                                    },
+                                    "fontSize": {
+                                      "type": "number"
+                                    },
+                                    "font": {
+                                      "type": "string"
+                                    },
+                                    "superScript": {
+                                      "type": "boolean"
+                                    },
+                                    "subScript": {
+                                      "type": "boolean"
+                                    },
+                                    "link": {
+                                      "type": "string"
+                                    },
+                                    "break": {
+                                      "type": "number"
+                                    }
+                                  },
+                                  "required": [
+                                    "text"
+                                  ]
+                                }
+                              },
+                              "bold": {
+                                "type": "boolean"
+                              },
+                              "color": {
+                                "type": "string"
+                              },
+                              "bgColor": {
+                                "type": "string"
+                              },
+                              "align": {
+                                "type": "string",
+                                "enum": [
+                                  "left",
+                                  "center",
+                                  "right",
+                                  "justify"
+                                ]
+                              },
+                              "verticalAlign": {
+                                "type": "string",
+                                "enum": [
+                                  "top",
+                                  "center",
+                                  "bottom"
+                                ]
+                              },
+                              "columnSpan": {
+                                "type": "integer",
+                                "exclusiveMinimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "rowSpan": {
+                                "type": "integer",
+                                "exclusiveMinimum": 0,
+                                "maximum": 9007199254740991
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "header": {
+                        "type": "boolean"
+                      },
+                      "headerBgColor": {
+                        "type": "string"
+                      },
+                      "borderColor": {
+                        "type": "string"
+                      },
+                      "widthPct": {
+                        "type": "number",
+                        "minimum": 10,
+                        "maximum": 100
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "rows"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "const": "pageBreak"
+                      }
+                    },
+                    "required": [
+                      "kind"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000000,
+              "description": "描述：大段 Markdown 或纯文本内容。\n\n注意：\n- 工具会自动转为 Word 段落、标题和列表。"
+            }
+          ],
+          "description": "描述：Word 内容块输入。\n\n取值：\n- 结构化 blocks 数组：完整控制段落、标题、表格和分页。\n- 字符串：按 Markdown 或纯文本自动生成内容块。"
+        },
+        "content": {
+          "description": "描述：大段 Markdown 或纯文本内容。\n\n用法：\n- 不需要精细结构化 blocks 时使用。",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000000
+        },
+        "overwrite": {
+          "type": "boolean"
+        },
+        "appendMode": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "outputPath"
+      ]
+    },
+    "surfaces": {
+      "preset": {
+        "description": "描述：用文本内容快速生成 Word 文档。\n\n适合：\n- 只需要 outputPath、content 和少量元数据。\n\n禁止：\n- 不要用于富文本 runs 或精细表格样式。\n\n用法：\n- 传 outputPath 和 content；可传 title、overwrite。\n\n示例：\n- 调用参数示例：{\"outputPath\":\"note.docx\",\"content\":\"# Note\\nBody\"}。\n\n注意：\n- content 支持 Markdown 和纯文本自动排版。",
+        "schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "outputPath": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1200,
+              "description": "描述：输出文件路径。\n\n用法：\n- 支持相对当前工作区的路径。\n\n注意：\n- 无扩展名时会按工具类型自动补齐。"
+            },
+            "title": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "content": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000000,
+              "description": "描述：Markdown 或纯文本正文。\n\n注意：\n- 工具会自动转为标题、段落、列表和表格。"
+            },
+            "overwrite": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "outputPath",
+            "content"
+          ]
+        }
+      },
+      "guided": {
+        "description": "描述：用文本内容和常见元数据生成 Word 文档。\n\n适合：\n- 需要设置作者、语言、模板、摘要、关键词或目录。\n\n禁止：\n- 不要用于富文本 runs 和精细表格单元格样式。\n\n用法：\n- 传 outputPath 和 content；按需传 profile、metadata、includeTableOfContents。\n\n示例：\n- 调用参数示例：{\"outputPath\":\"paper.docx\",\"content\":\"# Abstract\",\"profile\":\"academic-paper\"}。\n\n注意：\n- 复杂内容块保留给 direct/expert。",
+        "schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "cwd": {
+              "type": "string"
+            },
+            "outputPath": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1200,
+              "description": "描述：输出文件路径。\n\n用法：\n- 支持相对当前工作区的路径。\n\n注意：\n- 无扩展名时会按工具类型自动补齐。"
+            },
+            "title": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "author": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120
+            },
+            "profile": {
+              "description": "描述：文档排版模板。\n\n取值：\n- standard：普通文档。\n- academic-paper：学术论文。\n- thesis：论文/毕业论文。",
+              "type": "string",
+              "enum": [
+                "standard",
+                "academic-paper",
+                "thesis"
+              ]
+            },
+            "language": {
+              "description": "描述：文档语言。\n\n取值：\n- zh-CN：中文。\n- en-US：英文。",
+              "type": "string",
+              "enum": [
+                "zh-CN",
+                "en-US"
+              ]
+            },
+            "metadata": {
+              "type": "object",
+              "properties": {
+                "subtitle": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "school": {
+                  "type": "string",
+                  "maxLength": 120
+                },
+                "department": {
+                  "type": "string",
+                  "maxLength": 120
+                },
+                "major": {
+                  "type": "string",
+                  "maxLength": 120
+                },
+                "course": {
+                  "type": "string",
+                  "maxLength": 120
+                },
+                "className": {
+                  "type": "string",
+                  "maxLength": 80
+                },
+                "studentId": {
+                  "type": "string",
+                  "maxLength": 80
+                },
+                "advisor": {
+                  "type": "string",
+                  "maxLength": 120
+                },
+                "date": {
+                  "type": "string",
+                  "maxLength": 80
+                },
+                "organization": {
+                  "type": "string",
+                  "maxLength": 120
+                }
+              }
+            },
+            "abstract": {
+              "type": "string",
+              "maxLength": 20000
+            },
+            "keywords": {
+              "maxItems": 30,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80
+              }
+            },
+            "includeTableOfContents": {
+              "type": "boolean"
+            },
+            "content": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000000,
+              "description": "描述：Markdown 或纯文本正文。\n\n注意：\n- 需要富文本 runs 或表格单元格样式时切到 direct/expert。"
+            },
+            "overwrite": {
+              "type": "boolean"
+            },
+            "appendMode": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "outputPath",
+            "content"
+          ]
+        }
+      }
+    }
+  },
+  "office:create_presentation": {
+    "name": "office:create_presentation",
+    "category": "office",
+    "role": "render",
+    "summary": "生成 .pptx PowerPoint 演示文稿。",
+    "readOnly": false,
+    "permissions": [
+      "fs:read",
+      "fs:write"
+    ],
+    "capabilities": {
+      "effectKind": "write",
+      "readScopes": [
+        "project",
+        "system"
+      ],
+      "writeScopes": [
+        "project"
+      ],
+      "filesystem": {
+        "read": "project",
+        "write": "project"
+      },
+      "metadata": {
+        "project": {
+          "requiresActiveProject": true,
+          "requiresProjectSwitchForExternalCwd": true,
+          "mutation": "non-transactional",
+          "arbitraryRead": true
+        },
+        "canMutateProject": true
+      },
+      "concurrency": "unsafe",
+      "reason": "office document creation or conversion"
+    },
+    "description": "描述：生成 .pptx PowerPoint 演示文稿。\n\n适合：\n- 需要生成自动排版幻灯片，或用结构化元素精细控制 PPTX。\n\n禁止：\n- 不要用它生成电子表格或 Word 文档。\n\n用法：\n- 传 outputPath，并提供 slides 或 content；模板用 template 选择。\n\n示例：\n- 调用参数示例：{\"outputPath\":\"deck.pptx\",\"content\":\"# Title\\n---\\n## Agenda\"}。\n- 调用参数示例：{\"outputPath\":\"q3-review.pptx\",\"template\":\"consulting\",\"slides\":[{\"elements\":[{\"kind\":\"text\",\"value\":\"Q3 Review\",\"x\":0.5,\"y\":0.4,\"w\":9,\"h\":1},{\"kind\":\"table\",\"rows\":[[\"Metric\",\"Value\"],[\"Revenue\",\"1.2M\"]],\"x\":0.5,\"y\":2,\"w\":9,\"h\":3}],\"notes\":\"强调环比增长\"}]}。\n\n注意：\n- direct/expert 可用 elements 控制 text、table、shape、image、chart。",
+    "schema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "cwd": {
+          "type": "string"
+        },
+        "outputPath": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1200,
+          "description": "描述：输出文件路径。\n\n用法：\n- 支持相对当前工作区的路径。\n\n注意：\n- 无扩展名时会按工具类型自动补齐。"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "author": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "layout": {
+          "description": "描述：演示文稿页面比例。\n\n取值：\n- LAYOUT_4x3：标准 4:3。\n- LAYOUT_16x9：宽屏 16:9。\n- LAYOUT_16x10：宽屏 16:10。\n- LAYOUT_WIDE：pptxgenjs 宽屏布局。",
+          "type": "string",
+          "enum": [
+            "LAYOUT_4x3",
+            "LAYOUT_16x9",
+            "LAYOUT_16x10",
+            "LAYOUT_WIDE"
+          ]
+        },
+        "rtlMode": {
+          "type": "boolean"
+        },
+        "template": {
+          "description": "描述：自动排版模板。\n\n取值：\n- modern：现代演示风格。\n- consulting：咨询汇报风格。\n- academic：学术表达风格。\n- minimal：极简文档风格。",
+          "type": "string",
+          "enum": [
+            "modern",
+            "consulting",
+            "academic",
+            "minimal"
+          ]
+        },
+        "theme": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {}
+        },
+        "slides": {
+          "anyOf": [
+            {
+              "minItems": 1,
+              "maxItems": 200,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "background": {
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {}
+                  },
+                  "elements": {
+                    "maxItems": 200,
+                    "type": "array",
+                    "items": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "text"
+                            },
+                            "value": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "text": {
+                                        "type": "string"
+                                      },
+                                      "options": {
+                                        "type": "object",
+                                        "propertyNames": {
+                                          "type": "string"
+                                        },
+                                        "additionalProperties": {}
+                                      }
+                                    },
+                                    "required": [
+                                      "text"
+                                    ]
+                                  }
+                                }
+                              ]
+                            },
+                            "x": {
+                              "type": "number"
+                            },
+                            "y": {
+                              "type": "number"
+                            },
+                            "w": {
+                              "type": "number"
+                            },
+                            "h": {
+                              "type": "number"
+                            },
+                            "options": {
+                              "type": "object",
+                              "propertyNames": {
+                                "type": "string"
+                              },
+                              "additionalProperties": {}
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "value",
+                            "x",
+                            "y",
+                            "w",
+                            "h"
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "table"
+                            },
+                            "rows": {
+                              "minItems": 1,
+                              "type": "array",
+                              "items": {
+                                "type": "array",
+                                "items": {}
+                              }
+                            },
+                            "x": {
+                              "type": "number"
+                            },
+                            "y": {
+                              "type": "number"
+                            },
+                            "w": {
+                              "type": "number"
+                            },
+                            "h": {
+                              "type": "number"
+                            },
+                            "options": {
+                              "type": "object",
+                              "propertyNames": {
+                                "type": "string"
+                              },
+                              "additionalProperties": {}
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "rows",
+                            "x",
+                            "y",
+                            "w",
+                            "h"
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "shape"
+                            },
+                            "shape": {
+                              "type": "string"
+                            },
+                            "x": {
+                              "type": "number"
+                            },
+                            "y": {
+                              "type": "number"
+                            },
+                            "w": {
+                              "type": "number"
+                            },
+                            "h": {
+                              "type": "number"
+                            },
+                            "options": {
+                              "type": "object",
+                              "propertyNames": {
+                                "type": "string"
+                              },
+                              "additionalProperties": {}
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "shape",
+                            "x",
+                            "y",
+                            "w",
+                            "h"
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "image"
+                            },
+                            "data": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "png",
+                                "jpeg",
+                                "gif",
+                                "svg",
+                                "bmp",
+                                "webp"
+                              ]
+                            },
+                            "x": {
+                              "type": "number"
+                            },
+                            "y": {
+                              "type": "number"
+                            },
+                            "w": {
+                              "type": "number"
+                            },
+                            "h": {
+                              "type": "number"
+                            },
+                            "options": {
+                              "type": "object",
+                              "propertyNames": {
+                                "type": "string"
+                              },
+                              "additionalProperties": {}
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "data",
+                            "x",
+                            "y",
+                            "w",
+                            "h"
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "chart"
+                            },
+                            "chartType": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "data": {
+                              "minItems": 1,
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "propertyNames": {
+                                  "type": "string"
+                                },
+                                "additionalProperties": {}
+                              }
+                            },
+                            "x": {
+                              "type": "number"
+                            },
+                            "y": {
+                              "type": "number"
+                            },
+                            "w": {
+                              "type": "number"
+                            },
+                            "h": {
+                              "type": "number"
+                            },
+                            "options": {
+                              "type": "object",
+                              "propertyNames": {
+                                "type": "string"
+                              },
+                              "additionalProperties": {}
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "chartType",
+                            "data",
+                            "x",
+                            "y",
+                            "w",
+                            "h"
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  "notes": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "elements"
+                ]
+              }
+            },
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000000,
+              "description": "描述：大段 Markdown 或纯文本内容。\n\n注意：\n- 工具会自动转为简单标题/正文幻灯片。"
+            }
+          ],
+          "description": "描述：PPT 幻灯片输入。\n\n取值：\n- 结构化 slides 数组：完整控制元素和布局。\n- 字符串：按 Markdown 或纯文本自动拆页。"
+        },
+        "content": {
+          "description": "描述：大段 Markdown 或纯文本内容。\n\n用法：\n- 不需要精细结构化 slides 时使用。",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000000
+        },
+        "overwrite": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "outputPath"
+      ]
+    },
+    "surfaces": {
+      "preset": {
+        "description": "描述：用文本内容快速生成 PowerPoint。\n\n适合：\n- 只需要 outputPath、content 和少量元数据。\n\n禁止：\n- 不要用于自定义坐标、图片或图表。\n\n用法：\n- 传 outputPath 和 content；可传 title、template、overwrite。\n\n示例：\n- 调用参数示例：{\"outputPath\":\"brief.pptx\",\"content\":\"# Brief\\n---\\nDetails\"}。\n\n注意：\n- content 会用 # 标题和 --- 自动拆页。",
+        "schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "outputPath": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1200,
+              "description": "描述：输出文件路径。\n\n用法：\n- 支持相对当前工作区的路径。\n\n注意：\n- 无扩展名时会按工具类型自动补齐。"
+            },
+            "title": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "content": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000000,
+              "description": "描述：Markdown 或纯文本内容。\n\n注意：\n- # 标题和 --- 会自动拆成幻灯片。"
+            },
+            "template": {
+              "description": "描述：自动排版模板。\n\n取值：\n- modern：现代演示风格。\n- consulting：咨询汇报风格。\n- academic：学术表达风格。\n- minimal：极简文档风格。",
+              "type": "string",
+              "enum": [
+                "modern",
+                "consulting",
+                "academic",
+                "minimal"
+              ]
+            },
+            "overwrite": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "outputPath",
+            "content"
+          ]
+        }
+      },
+      "guided": {
+        "description": "描述：用文本内容和常见选项生成 PowerPoint。\n\n适合：\n- 需要选择模板、布局、作者或 RTL 模式。\n\n禁止：\n- 不要用于精细元素坐标和复杂主题对象。\n\n用法：\n- 传 outputPath 和 content；按需传 layout、template、rtlMode。\n\n示例：\n- 调用参数示例：{\"outputPath\":\"deck.pptx\",\"content\":\"# Plan\",\"template\":\"consulting\"}。\n\n注意：\n- 复杂元素保留给 direct/expert。",
+        "schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "cwd": {
+              "type": "string"
+            },
+            "outputPath": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1200,
+              "description": "描述：输出文件路径。\n\n用法：\n- 支持相对当前工作区的路径。\n\n注意：\n- 无扩展名时会按工具类型自动补齐。"
+            },
+            "title": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "author": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120
+            },
+            "layout": {
+              "description": "描述：演示文稿页面比例。\n\n取值：\n- LAYOUT_4x3：标准 4:3。\n- LAYOUT_16x9：宽屏 16:9。\n- LAYOUT_16x10：宽屏 16:10。\n- LAYOUT_WIDE：pptxgenjs 宽屏布局。",
+              "type": "string",
+              "enum": [
+                "LAYOUT_4x3",
+                "LAYOUT_16x9",
+                "LAYOUT_16x10",
+                "LAYOUT_WIDE"
+              ]
+            },
+            "rtlMode": {
+              "type": "boolean"
+            },
+            "template": {
+              "description": "描述：自动排版模板。\n\n取值：\n- modern：现代演示风格。\n- consulting：咨询汇报风格。\n- academic：学术表达风格。\n- minimal：极简文档风格。",
+              "type": "string",
+              "enum": [
+                "modern",
+                "consulting",
+                "academic",
+                "minimal"
+              ]
+            },
+            "content": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000000,
+              "description": "描述：Markdown 或纯文本内容。\n\n注意：\n- 需要元素坐标、图片、图表或主题对象时切到 direct/expert。"
+            },
+            "overwrite": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "outputPath",
+            "content"
+          ]
+        }
+      }
+    }
+  },
+  "office:create_spreadsheet": {
+    "name": "office:create_spreadsheet",
+    "category": "office",
+    "role": "render",
+    "summary": "生成 .xlsx Excel 工作簿。",
+    "readOnly": false,
+    "permissions": [
+      "fs:read",
+      "fs:write"
+    ],
+    "capabilities": {
+      "effectKind": "write",
+      "readScopes": [
+        "project",
+        "system"
+      ],
+      "writeScopes": [
+        "project"
+      ],
+      "filesystem": {
+        "read": "project",
+        "write": "project"
+      },
+      "metadata": {
+        "project": {
+          "requiresActiveProject": true,
+          "requiresProjectSwitchForExternalCwd": true,
+          "mutation": "non-transactional",
+          "arbitraryRead": true
+        },
+        "canMutateProject": true
+      },
+      "concurrency": "unsafe",
+      "reason": "office document creation or conversion"
+    },
+    "description": "描述：生成 .xlsx Excel 工作簿。\n\n适合：\n- 需要生成表格、公式、多工作表或带格式的 Excel 文件。\n\n禁止：\n- 不要用它生成 Word、PowerPoint 或 PDF 文档。\n\n用法：\n- 传 outputPath，并提供 sheets 或 content；复杂样式用结构化 sheets。\n\n示例：\n- 调用参数示例：{\"outputPath\":\"data.xlsx\",\"content\":\"name,value\\nA,1\"}。\n- 调用参数示例：{\"outputPath\":\"report.xlsx\",\"sheets\":[{\"name\":\"Sales\",\"columns\":[\"Region\",\"Q1\"],\"rows\":[[{\"value\":\"Region\",\"font\":{\"bold\":true}},{\"value\":\"Q1\",\"font\":{\"bold\":true}}],[\"North\",1200],[\"South\",980]],\"freezeRows\":1}]}。\n\n注意：\n- 结构化单元格支持字体、填充、边框、数字格式、富文本、链接和合并。",
+    "schema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "cwd": {
+          "type": "string"
+        },
+        "outputPath": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1200,
+          "description": "描述：输出文件路径。\n\n用法：\n- 支持相对当前工作区的路径。\n\n注意：\n- 无扩展名时会按工具类型自动补齐。"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "author": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "sheets": {
+          "anyOf": [
+            {
+              "minItems": 1,
+              "maxItems": 100,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 31
+                  },
+                  "columns": {
+                    "type": "array",
+                    "items": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "header": {
+                              "type": "string"
+                            },
+                            "key": {
+                              "type": "string"
+                            },
+                            "width": {
+                              "type": "number"
+                            },
+                            "style": {
+                              "type": "object",
+                              "propertyNames": {
+                                "type": "string"
+                              },
+                              "additionalProperties": {}
+                            }
+                          },
+                          "required": [
+                            "header"
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  "rows": {
+                    "minItems": 1,
+                    "maxItems": 100000,
+                    "type": "array",
+                    "items": {
+                      "maxItems": 1000,
+                      "type": "array",
+                      "items": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "boolean"
+                          },
+                          {
+                            "type": "null"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "value": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "boolean"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "dateValue": {
+                                "type": "string",
+                                "format": "date-time",
+                                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                              },
+                              "formula": {
+                                "type": "string"
+                              },
+                              "numFmt": {
+                                "type": "string"
+                              },
+                              "font": {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "size": {
+                                    "type": "number"
+                                  },
+                                  "bold": {
+                                    "type": "boolean"
+                                  },
+                                  "italic": {
+                                    "type": "boolean"
+                                  },
+                                  "underline": {
+                                    "anyOf": [
+                                      {
+                                        "type": "boolean"
+                                      },
+                                      {
+                                        "type": "string"
+                                      }
+                                    ]
+                                  },
+                                  "strike": {
+                                    "type": "boolean"
+                                  },
+                                  "color": {
+                                    "type": "string"
+                                  }
+                                }
+                              },
+                              "fill": {
+                                "type": "object",
+                                "propertyNames": {
+                                  "type": "string"
+                                },
+                                "additionalProperties": {}
+                              },
+                              "border": {
+                                "type": "object",
+                                "propertyNames": {
+                                  "type": "string"
+                                },
+                                "additionalProperties": {}
+                              },
+                              "alignment": {
+                                "type": "object",
+                                "propertyNames": {
+                                  "type": "string"
+                                },
+                                "additionalProperties": {}
+                              },
+                              "rowHeight": {
+                                "type": "number"
+                              },
+                              "link": {
+                                "type": "string"
+                              },
+                              "tooltip": {
+                                "type": "string"
+                              },
+                              "richText": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "text": {
+                                      "type": "string"
+                                    },
+                                    "font": {
+                                      "type": "object",
+                                      "properties": {
+                                        "name": {
+                                          "type": "string"
+                                        },
+                                        "size": {
+                                          "type": "number"
+                                        },
+                                        "bold": {
+                                          "type": "boolean"
+                                        },
+                                        "italic": {
+                                          "type": "boolean"
+                                        },
+                                        "underline": {
+                                          "anyOf": [
+                                            {
+                                              "type": "boolean"
+                                            },
+                                            {
+                                              "type": "string"
+                                            }
+                                          ]
+                                        },
+                                        "strike": {
+                                          "type": "boolean"
+                                        },
+                                        "color": {
+                                          "type": "string"
+                                        }
+                                      }
+                                    }
+                                  },
+                                  "required": [
+                                    "text"
+                                  ]
+                                }
+                              },
+                              "colSpan": {
+                                "type": "integer",
+                                "exclusiveMinimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "rowSpan": {
+                                "type": "integer",
+                                "exclusiveMinimum": 0,
+                                "maximum": 9007199254740991
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  "freezeRows": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "freezeCols": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "tabColor": {
+                    "type": "string"
+                  },
+                  "showGridLines": {
+                    "type": "boolean"
+                  },
+                  "headerStyle": {
+                    "type": "object",
+                    "properties": {
+                      "numFmt": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 120
+                      },
+                      "font": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "size": {
+                            "type": "number"
+                          },
+                          "bold": {
+                            "type": "boolean"
+                          },
+                          "italic": {
+                            "type": "boolean"
+                          },
+                          "underline": {
+                            "anyOf": [
+                              {
+                                "type": "boolean"
+                              },
+                              {
+                                "type": "string"
+                              }
+                            ]
+                          },
+                          "strike": {
+                            "type": "boolean"
+                          },
+                          "color": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "fill": {
+                        "type": "object",
+                        "propertyNames": {
+                          "type": "string"
+                        },
+                        "additionalProperties": {}
+                      },
+                      "border": {
+                        "type": "object",
+                        "propertyNames": {
+                          "type": "string"
+                        },
+                        "additionalProperties": {}
+                      },
+                      "alignment": {
+                        "type": "object",
+                        "propertyNames": {
+                          "type": "string"
+                        },
+                        "additionalProperties": {}
+                      },
+                      "bold": {
+                        "type": "boolean"
+                      },
+                      "italic": {
+                        "type": "boolean"
+                      },
+                      "color": {
+                        "type": "string"
+                      },
+                      "bgColor": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "numberFormats": {
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string",
+                      "pattern": "^[A-Z]+[1-9]\\d*(?::[A-Z]+[1-9]\\d*)?$"
+                    },
+                    "additionalProperties": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 120
+                    }
+                  }
+                },
+                "required": [
+                  "name",
+                  "rows"
+                ]
+              }
+            },
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000000,
+              "description": "描述：CSV、TSV 或 Markdown 表格内容。\n\n注意：\n- 工具会自动转为单个工作表。"
+            }
+          ],
+          "description": "描述：Excel 工作表输入。\n\n取值：\n- 结构化 sheets 数组：完整控制多工作表、列和单元格。\n- 字符串：按 CSV、TSV 或 Markdown 表格自动生成单表。"
+        },
+        "content": {
+          "description": "描述：CSV、TSV 或 Markdown 表格内容。\n\n用法：\n- 不需要精细结构化 sheets 时使用。",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000000
+        },
+        "overwrite": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "outputPath"
+      ]
+    },
+    "surfaces": {
+      "preset": {
+        "description": "描述：用文本内容快速生成 Excel 工作簿。\n\n适合：\n- 只需要 outputPath、content 和少量元数据。\n\n禁止：\n- 不要用于多工作表或精细单元格样式。\n\n用法：\n- 传 outputPath 和 content；可传 title、overwrite。\n\n示例：\n- 调用参数示例：{\"outputPath\":\"table.xlsx\",\"content\":\"a,b\\n1,2\"}。\n\n注意：\n- content 支持 CSV、TSV、Markdown 表格或 JSON rows。",
+        "schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "outputPath": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1200,
+              "description": "描述：输出文件路径。\n\n用法：\n- 支持相对当前工作区的路径。\n\n注意：\n- 无扩展名时会按工具类型自动补齐。"
+            },
+            "title": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "content": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000000,
+              "description": "描述：CSV、TSV、Markdown 表格或 JSON rows。\n\n注意：\n- 工具会自动转为单张工作表。"
+            },
+            "overwrite": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "outputPath",
+            "content"
+          ]
+        }
+      },
+      "guided": {
+        "description": "描述：用文本内容和常见元数据生成 Excel 工作簿。\n\n适合：\n- 需要设置 cwd、title、author 或覆盖策略。\n\n禁止：\n- 不要用于多工作表、公式对象或精细样式。\n\n用法：\n- 传 outputPath 和 content；按需传 title、author、overwrite。\n\n示例：\n- 调用参数示例：{\"outputPath\":\"metrics.xlsx\",\"content\":\"| k | v |\\n|---|---|\\n| a | 1 |\"}。\n\n注意：\n- 复杂工作簿保留给 direct/expert。",
+        "schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "cwd": {
+              "type": "string"
+            },
+            "outputPath": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1200,
+              "description": "描述：输出文件路径。\n\n用法：\n- 支持相对当前工作区的路径。\n\n注意：\n- 无扩展名时会按工具类型自动补齐。"
+            },
+            "title": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "author": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120
+            },
+            "content": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000000,
+              "description": "描述：CSV、TSV、Markdown 表格或 JSON rows。\n\n注意：\n- 多工作表、样式和公式对象请切到 direct/expert。"
+            },
+            "overwrite": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "outputPath",
+            "content"
+          ]
+        }
+      }
+    }
+  },
+  "office:extract_pdf_text": {
+    "name": "office:extract_pdf_text",
+    "category": "office",
+    "role": "inspect",
+    "summary": "按页提取文本型 PDF 中的可选择文本。",
+    "readOnly": true,
+    "permissions": [
+      "fs:read"
+    ],
+    "capabilities": {
+      "effectKind": "read",
+      "readScopes": [
+        "project",
+        "system"
+      ],
+      "filesystem": {
+        "read": "project",
+        "write": "none"
+      },
+      "canReadArbitrarySource": false,
+      "metadata": {
+        "project": {
+          "requiresActiveProject": true,
+          "requiresProjectSwitchForExternalCwd": true,
+          "arbitraryRead": true
+        },
+        "canMutateProject": false
+      },
+      "concurrency": "safe",
+      "reason": "office document inspection"
+    },
+    "description": "描述：按页提取文本型 PDF 中的可选择文本。\n\n适合：\n- 读取 PDF 的指定页、核对正文，或为后续总结提取有界文本。\n\n禁止：\n- 不要用于扫描件或图片型 PDF 的 OCR，也不要用于编辑或转换 PDF。\n\n强制流程：\n- 页码使用从 1 开始的编号；指定页使用 pages，读取前若干页使用 maxPages。\n- 省略 pages 和 maxPages 时只读取前 20 页；hasMore=true 表示仍有未读取页面。\n\n用法：\n- 传 inputPath；需要单页或离散页面时传 pages，例如 pages=[2,5]。\n\n示例：\n- 调用参数示例：{\"inputPath\":\"paper.pdf\",\"pages\":[2]}。\n\n注意：\n- 返回总页数和逐页文本；重复页码只提取一次并保持首次出现顺序。",
+    "schema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "cwd": {
+          "type": "string"
+        },
+        "inputPath": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1200,
+          "description": "描述：输入 PDF 文件路径。\n\n用法：\n- 支持相对当前工作区的路径。"
+        },
+        "pages": {
+          "description": "描述：要提取的 PDF 页码，使用从 1 开始的编号。\n\n注意：\n- 按传入顺序返回；重复页码只提取一次。",
+          "minItems": 1,
+          "maxItems": 100,
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "maxPages": {
+          "description": "描述：从第一页开始最多提取的页数。\n\n注意：\n- 省略 pages 和 maxPages 时默认读取前 20 页。",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        }
+      },
+      "required": [
+        "inputPath"
+      ]
+    },
+    "surfaces": {}
+  },
+  "office:convert_pdf_to_word": {
+    "name": "office:convert_pdf_to_word",
+    "category": "office",
+    "role": "render",
+    "summary": "将 PDF 可提取文本转换为 Word 文档。",
+    "readOnly": false,
+    "permissions": [
+      "fs:read",
+      "fs:write"
+    ],
+    "capabilities": {
+      "effectKind": "write",
+      "readScopes": [
+        "project",
+        "system"
+      ],
+      "writeScopes": [
+        "project"
+      ],
+      "filesystem": {
+        "read": "project",
+        "write": "project"
+      },
+      "metadata": {
+        "project": {
+          "requiresActiveProject": true,
+          "requiresProjectSwitchForExternalCwd": true,
+          "mutation": "non-transactional",
+          "arbitraryRead": true
+        },
+        "canMutateProject": true
+      },
+      "concurrency": "unsafe",
+      "reason": "office document creation or conversion"
+    },
+    "description": "描述：将 PDF 可提取文本转换为 Word 文档。\n\n适合：\n- 需要把 PDF 文本抽取到 .docx 中继续编辑。\n\n禁止：\n- 不要期待它对扫描件或图片型 PDF 做 OCR。\n\n用法：\n- 传 inputPath 和 outputPath；可传 maxPages 限制页数。\n\n示例：\n- 调用参数示例：{\"inputPath\":\"paper.pdf\",\"outputPath\":\"paper.docx\",\"maxPages\":20}。\n\n注意：\n- 输出按页生成 Word 段落。",
+    "schema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "cwd": {
+          "type": "string"
+        },
+        "inputPath": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1200,
+          "description": "描述：输入 PDF 文件路径。\n\n用法：\n- 支持相对当前工作区的路径。"
+        },
+        "outputPath": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1200,
+          "description": "描述：输出文件路径。\n\n用法：\n- 支持相对当前工作区的路径。\n\n注意：\n- 无扩展名时会按工具类型自动补齐。"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "author": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "maxPages": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 500
+        },
+        "overwrite": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "inputPath",
+        "outputPath"
+      ]
+    },
+    "surfaces": {}
+  },
+  "office:convert_word_to_pdf": {
+    "name": "office:convert_word_to_pdf",
+    "category": "office",
+    "role": "render",
+    "summary": "将 Word 文档转换为 PDF。",
+    "readOnly": false,
+    "permissions": [
+      "fs:read",
+      "fs:write",
+      "process:exec"
+    ],
+    "capabilities": {
+      "effectKind": "write",
+      "readScopes": [
+        "project",
+        "system"
+      ],
+      "writeScopes": [
+        "project"
+      ],
+      "filesystem": {
+        "read": "project",
+        "write": "project"
+      },
+      "metadata": {
+        "project": {
+          "requiresActiveProject": true,
+          "requiresProjectSwitchForExternalCwd": true,
+          "mutation": "non-transactional",
+          "arbitraryRead": true
+        },
+        "canMutateProject": true
+      },
+      "concurrency": "unsafe",
+      "reason": "office document conversion with local process execution",
+      "process": {
+        "execution": "input-dependent"
+      }
+    },
+    "description": "描述：将 Word 文档转换为 PDF。\n\n适合：\n- 需要把 .docx 或 .doc 文件导出为 .pdf 并尽量保留排版。\n\n禁止：\n- 不要用于扫描图片 OCR 或 PDF 编辑。\n\n用法：\n- 传 inputPath 和 outputPath；覆盖已有文件时传 overwrite=true。\n\n示例：\n- 调用参数示例：{\"inputPath\":\"report.docx\",\"outputPath\":\"report.pdf\"}。\n\n注意：\n- 旧版 .doc 会先临时归一化为 .docx；转换依赖本机 LibreOffice。",
+    "schema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "cwd": {
+          "type": "string"
+        },
+        "inputPath": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1200,
+          "description": "描述：输入 Word 文件路径。\n\n用法：\n- 支持 .docx 或 .doc，也支持相对当前工作区的路径。"
+        },
+        "outputPath": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1200,
+          "description": "描述：输出文件路径。\n\n用法：\n- 支持相对当前工作区的路径。\n\n注意：\n- 无扩展名时会按工具类型自动补齐。"
+        },
+        "overwrite": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "inputPath",
+        "outputPath"
+      ]
+    },
+    "surfaces": {}
+  },
+  "office:create_latex_pdf": {
+    "name": "office:create_latex_pdf",
+    "category": "office",
+    "role": "render",
+    "summary": "编译 LaTeX 源码并输出 PDF。",
+    "readOnly": false,
+    "permissions": [
+      "fs:read",
+      "fs:write",
+      "process:exec"
+    ],
+    "capabilities": {
+      "effectKind": "write",
+      "readScopes": [
+        "project",
+        "system"
+      ],
+      "writeScopes": [
+        "project"
+      ],
+      "filesystem": {
+        "read": "project",
+        "write": "project"
+      },
+      "metadata": {
+        "project": {
+          "requiresActiveProject": true,
+          "requiresProjectSwitchForExternalCwd": true,
+          "mutation": "non-transactional",
+          "arbitraryRead": true
+        },
+        "canMutateProject": true
+      },
+      "concurrency": "unsafe",
+      "reason": "office document conversion with local process execution",
+      "process": {
+        "execution": "input-dependent"
+      }
+    },
+    "description": "描述：编译 LaTeX 源码并输出 PDF。\n\n适合：\n- 需要生成论文、数学公式、严肃排版或依赖 LaTeX 的 PDF。\n\n禁止：\n- 不要用于普通文本转 PDF；普通文档优先生成 Word 或演示稿。\n\n强制流程：\n- 先写入 .tex 源码；编译失败时读取命令输出后修正源码再重试。\n\n用法：\n- 传 outputPath 和 latexSource；可指定 compiler、sourcePath 和 runs。\n\n示例：\n- 调用参数示例：{\"outputPath\":\"paper.pdf\",\"latexSource\":\"\\\\documentclass{article}...\"}。\n\n注意：\n- 会尝试 tectonic、latexmk、xelatex、pdflatex。",
+    "schema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "cwd": {
+          "type": "string"
+        },
+        "outputPath": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1200,
+          "description": "描述：输出文件路径。\n\n用法：\n- 支持相对当前工作区的路径。\n\n注意：\n- 无扩展名时会按工具类型自动补齐。"
+        },
+        "sourcePath": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1200,
+          "description": "描述：可选的 .tex 源文件输出路径。\n\n注意：\n- 省略时与 PDF 同名写在同目录。"
+        },
+        "latexSource": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000000,
+          "description": "描述：完整 LaTeX 源码。\n\n注意：\n- 工具会写入 .tex 并编译为 PDF。"
+        },
+        "compiler": {
+          "description": "描述：LaTeX 编译器选择。\n\n取值：\n- auto：按可用性自动尝试。\n- tectonic：使用 tectonic。\n- latexmk：使用 latexmk。\n- xelatex：使用 xelatex。\n- pdflatex：使用 pdflatex。",
+          "type": "string",
+          "enum": [
+            "auto",
+            "tectonic",
+            "latexmk",
+            "xelatex",
+            "pdflatex"
+          ]
+        },
+        "runs": {
+          "description": "描述：xelatex 或 pdflatex 编译轮数。\n\n注意：\n- 默认 2；latexmk 和 tectonic 会忽略该值。",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3
+        },
+        "overwrite": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "outputPath",
+        "latexSource"
+      ]
+    },
+    "surfaces": {}
+  },
+  "office:edit_pdf_document": {
+    "name": "office:edit_pdf_document",
+    "category": "office",
+    "role": "edit",
+    "summary": "编辑现有 PDF 并输出新 PDF。",
+    "readOnly": false,
+    "permissions": [
+      "fs:read",
+      "fs:write"
+    ],
+    "capabilities": {
+      "effectKind": "write",
+      "readScopes": [
+        "project",
+        "system"
+      ],
+      "writeScopes": [
+        "project"
+      ],
+      "filesystem": {
+        "read": "project",
+        "write": "project"
+      },
+      "metadata": {
+        "project": {
+          "requiresActiveProject": true,
+          "requiresProjectSwitchForExternalCwd": true,
+          "mutation": "non-transactional",
+          "arbitraryRead": true
+        },
+        "canMutateProject": true
+      },
+      "concurrency": "unsafe",
+      "reason": "office document creation or conversion"
+    },
+    "description": "描述：编辑现有 PDF 并输出新 PDF。\n\n适合：\n- 需要复制、拆分、重排、删除、旋转页面，添加文字戳或修改元数据。\n\n禁止：\n- 不要用它直接覆盖原文件，除非明确传 overwrite=true 且输出路径可覆盖。\n\n用法：\n- 传 inputPath 和 outputPath；按需传 pageSelection、removePages、rotatePages、textStamps 或 metadata。\n\n示例：\n- 调用参数示例：{\"inputPath\":\"in.pdf\",\"outputPath\":\"out.pdf\",\"removePages\":[1]}。\n\n注意：\n- 页码使用 1-based 编号。",
+    "schema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "cwd": {
+          "type": "string"
+        },
+        "inputPath": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1200,
+          "description": "描述：输入 PDF 文件路径。\n\n用法：\n- 支持相对当前工作区的路径。"
+        },
+        "outputPath": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1200,
+          "description": "描述：输出文件路径。\n\n用法：\n- 支持相对当前工作区的路径。\n\n注意：\n- 无扩展名时会按工具类型自动补齐。"
+        },
+        "overwrite": {
+          "type": "boolean"
+        },
+        "pageSelection": {
+          "minItems": 1,
+          "maxItems": 1000,
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "removePages": {
+          "maxItems": 1000,
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "rotatePages": {
+          "maxItems": 1000,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "page": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "degrees": {
+                "anyOf": [
+                  {
+                    "type": "number",
+                    "const": 90
+                  },
+                  {
+                    "type": "number",
+                    "const": 180
+                  },
+                  {
+                    "type": "number",
+                    "const": 270
+                  }
+                ]
+              }
+            },
+            "required": [
+              "page",
+              "degrees"
+            ]
+          }
+        },
+        "textStamps": {
+          "maxItems": 500,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "text": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              },
+              "page": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "allPages": {
+                "type": "boolean"
+              },
+              "x": {
+                "type": "number"
+              },
+              "y": {
+                "type": "number"
+              },
+              "size": {
+                "type": "number",
+                "minimum": 4,
+                "maximum": 96
+              },
+              "color": {
+                "type": "string"
+              },
+              "opacity": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              }
+            },
+            "required": [
+              "text"
+            ]
+          }
+        },
+        "metadata": {
+          "type": "object",
+          "properties": {
+            "title": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "author": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120
+            },
+            "subject": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 300
+            },
+            "keywords": {
+              "maxItems": 30,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80
+              }
+            }
+          }
+        }
+      },
+      "required": [
+        "inputPath",
+        "outputPath"
+      ]
+    },
+    "surfaces": {}
+  },
+  "office:preview_document": {
+    "name": "office:preview_document",
+    "category": "office",
+    "role": "render",
+    "summary": "解析 Office 文档并可生成 HTML 或 PNG 预览。",
+    "readOnly": false,
+    "permissions": [
+      "fs:read",
+      "fs:write",
+      "process:exec"
+    ],
+    "capabilities": {
+      "effectKind": "write",
+      "readScopes": [
+        "project",
+        "system"
+      ],
+      "writeScopes": [
+        "project"
+      ],
+      "filesystem": {
+        "read": "project",
+        "write": "project"
+      },
+      "metadata": {
+        "project": {
+          "requiresActiveProject": true,
+          "requiresProjectSwitchForExternalCwd": true,
+          "mutation": "non-transactional",
+          "arbitraryRead": true
+        },
+        "canMutateProject": true
+      },
+      "concurrency": "unsafe",
+      "reason": "office document conversion with local process execution",
+      "process": {
+        "execution": "input-dependent"
+      }
+    },
+    "description": "描述：解析 Office 文档并可生成 HTML 或 PNG 预览。\n\n适合：\n- 需要检查生成后的 Word、PowerPoint 或 Excel 文档结构和摘要。\n\n禁止：\n- 不要用它编辑文档内容。\n\n用法：\n- 传 inputPath；需要预览文件时传 .html 或 .png outputPath。\n- 重复写入同一个 outputPath 时传 overwrite=true。\n\n示例：\n- 调用参数示例：{\"inputPath\":\"report.docx\",\"outputPath\":\"preview.html\"}。\n- 调用参数示例：{\"inputPath\":\"metrics.xlsx\",\"outputPath\":\"preview.png\"}。\n\n注意：\n- .doc 会先临时转为 .docx 后解析。",
+    "schema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "cwd": {
+          "type": "string"
+        },
+        "inputPath": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1200,
+          "description": "描述：输入 Office 文件路径。\n\n用法：\n- 支持 .docx、.doc、.pptx、.xlsx，也支持相对当前工作区的路径。"
+        },
+        "outputPath": {
+          "description": "描述：可选预览输出路径，支持 .html 或 .png。\n\n注意：\n- 无扩展名时自动补齐 .html；需要静态预览图时显式使用 .png。",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1200
+        },
+        "overwrite": {
+          "type": "boolean"
+        },
+        "maxItems": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200
+        },
+        "autoRefresh": {
+          "description": "描述：生成 HTML 预览时是否加入自动刷新脚本。\n\n用法：\n- 便于在浏览器中查看最新预览。",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "inputPath"
+      ]
+    },
+    "surfaces": {}
+  },
+  "office:convert_document_to_markdown": {
+    "name": "office:convert_document_to_markdown",
+    "category": "office",
+    "role": "inspect",
+    "summary": "用 MarkItDown 将工作区文档转换成 Markdown，便于模型读取。",
+    "readOnly": false,
+    "permissions": [
+      "fs:read",
+      "fs:write",
+      "process:exec"
+    ],
+    "capabilities": {
+      "effectKind": "write",
+      "readScopes": [
+        "project",
+        "system"
+      ],
+      "writeScopes": [
+        "project"
+      ],
+      "filesystem": {
+        "read": "project",
+        "write": "project"
+      },
+      "metadata": {
+        "project": {
+          "requiresActiveProject": true,
+          "requiresProjectSwitchForExternalCwd": true,
+          "mutation": "non-transactional",
+          "arbitraryRead": true
+        },
+        "canMutateProject": true
+      },
+      "concurrency": "unsafe",
+      "reason": "office document conversion with local process execution",
+      "process": {
+        "execution": "input-dependent"
+      }
+    },
+    "hideWhenUnavailable": true,
+    "description": "描述：用 MarkItDown 将工作区文档转换成 Markdown，便于模型读取。\n\n适合：\n- 需要把 PDF、Office、HTML 或结构化文本文件转换成模型可读 Markdown。\n\n禁止：\n- 不要用它读取工作区外路径或远程 URL。\n- 不要把它当成高保真排版转换器。\n\n强制流程：\n- 先传工作区内 inputPath；需要持久化结果时再传 outputPath。\n\n用法：\n- 传 inputPath；可选 outputPath 写入 .md；用 maxChars 控制返回文本长度。\n\n示例：\n- 调用参数示例：{\"inputPath\":\"report.pdf\",\"outputPath\":\"report.md\",\"maxChars\":40000}。\n\n注意：\n- 使用随应用打包的 Microsoft MarkItDown runtime，不要求用户自行安装 CLI。",
+    "schema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "cwd": {
+          "type": "string"
+        },
+        "inputPath": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1200,
+          "description": "描述：输入文件路径。\n\n用法：\n- 支持 PDF、Word、PowerPoint、Excel、HTML、CSV、JSON、XML、ZIP、EPub 和文本文件。\n\n注意：\n- 只支持本地工作区内文件，不接受 URL。"
+        },
+        "outputPath": {
+          "description": "描述：可选 Markdown 输出路径。\n\n注意：\n- 无扩展名时自动补齐 .md；写入前会走工作区 mutation 授权。",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1200
+        },
+        "overwrite": {
+          "type": "boolean"
+        },
+        "maxChars": {
+          "description": "描述：返回结果中最多包含的 Markdown 字符数。\n\n注意：\n- 写入 outputPath 时仍会保存完整 Markdown；该限制只影响工具返回文本。",
+          "type": "integer",
+          "minimum": 1000,
+          "maximum": 200000
+        }
+      },
+      "required": [
+        "inputPath"
+      ]
+    },
+    "surfaces": {}
+  }
+}
