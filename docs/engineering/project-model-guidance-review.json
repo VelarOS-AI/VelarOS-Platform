@@ -1,10 +1,8 @@
 {
   "version": 1,
   "toolNames": [
-    "project:change",
     "project:code",
     "project:edit",
-    "project:file",
     "project:list",
     "project:read",
     "project:run",
@@ -69,14 +67,14 @@
     }
   ],
   "fingerprints": {
-    "project": "6df98d0e1a09b5e75ec3e378dd68d3856fa70d4e2e5b63202449194cb372d117",
+    "project": "925b79022faf40a79759265eee4ca25c6b118a628e652b5b15ace36611d1f772",
     "agent": "8dfec8a29d419d74238eb513b9340ded15032935308153d988c6e9aa9b9da74d",
-    "documents": "e933cfe3873c54414bfd678aa0a2a8e8dc24beffa7b55e85af40a9efa220f265"
+    "documents": "0b21de94640e41de1b8c3981391f7d28c40d81006b1cedf7ace5abf19fc87732"
   },
   "sourceArtifacts": [
     {
       "path": "docs/engineering/project-text-protocol.md",
-      "fingerprint": "d2561ba5cb540113fbdd1950269a88061a4757c516318e9ef070fd0aa6c607c1"
+      "fingerprint": "10ce0a63f1ac813a3a7a268c88f03c988076b4e015a4c907feefcfc5aef0b054"
     },
     {
       "path": "docs/engineering/project-tool-surface-implementation.md",
@@ -84,79 +82,79 @@
     },
     {
       "path": "docs/engineering/project-tool-surface-redesign-proposal.md",
-      "fingerprint": "5742ab781b088db64b39cc6de6f2d1a6d041662f4fbc78702729dc5f56a9b884"
+      "fingerprint": "fc4c1b3f207a8e561f89a45dd895044ab51ebcee41bbc4fe525708ba6e9bb724"
     },
     {
       "path": "packages/agent/src/impl/builtin/Categories.tool.ts",
-      "fingerprint": "5af64b642da29e29985dcd66d2375feccbacaf4c9044e5f503d1d675f2d55041"
+      "fingerprint": "61481221313b23d8da6e9cc22935a5e58d6d1b2532bbdd482021e02f0f080091"
     },
     {
       "path": "packages/agent/src/impl/builtin/ContextRetrieval.tool.ts",
-      "fingerprint": "cf4607b37de585468b90e93edcf6036e3913822f568dd5ddea951ab61ce1e6e8"
+      "fingerprint": "50255de3d5126a250f86a349c9bfffd5f232980cb085f2e41fe914ad5fc1f862"
     },
     {
       "path": "packages/agent/src/impl/builtin/Plans.tool.ts",
-      "fingerprint": "4d323a076f4f232bbfb80a47c05bc5bf6dcb4443c285674445236d1d9228b7eb"
+      "fingerprint": "8cbbce01d7e8145a4e365fc275e2bcc3ef6f1bd530a8e9889d9c319581b99de4"
     },
     {
       "path": "packages/agent/src/impl/runner/PromptStateBuilder.ts",
-      "fingerprint": "23af1eb8ecb1ce4384ba7f293ad39bdf15903df5fe42344c360603bd4bec91b1"
+      "fingerprint": "4395eaa4cd7f8865a1e970ded2881d24cf21c14218cc3039bb6edbf68dc75221"
     },
     {
       "path": "packages/agent/src/impl/runner/RunContext.ts",
-      "fingerprint": "8adf64b036fe57b2497163c0e5c9a0d1539f4fe39301642d8649076b1acfe041"
+      "fingerprint": "6c31f84d6b6ed05e9025b8324e5be403726755d523c8da63983c68bc65e44e4c"
     },
     {
       "path": "packages/agent/src/impl/tools/ToolExecutor.ts",
-      "fingerprint": "7e0416bae3266480f73dac8ad418cf6c84ea653b985fa542cabd1e63428d7fbc"
+      "fingerprint": "7a90027e11c321fa135cdfd05bd3945dbf3486a719dff448786730f0097a7391"
     },
     {
       "path": "packages/agent/src/impl/tools/ToolInputReuseStore.ts",
-      "fingerprint": "816d2ac2620f40ed736c337fe680d2eaa4a560386b8fb44147143616759c326a"
+      "fingerprint": "b3b2f41747e74d253062582e28edb6ed0e2e0e2c4c2534a9d45ea5c6c7f73123"
     },
     {
       "path": "packages/agent/src/utils/builtin/context-retrieval.ts",
-      "fingerprint": "70306555398868db8e35b8ccaac91a65d545145b990861c440d3a24d549b49e5"
+      "fingerprint": "cef5569d42ca9402d1706af11cdaa6a08cbedceec79ff238c9f63b03fcebba08"
     },
     {
       "path": "packages/agent/src/utils/context/file-context-projection.ts",
-      "fingerprint": "aa89a6d57e298228eaa05c88361dbc6fbac87352bfc11335b3a49a6ced7d4b10"
+      "fingerprint": "31f8d73ccc79bb876b50feeee0a5b1356e7c5d7c8415bf269d69c26717d2eb16"
     },
     {
       "path": "packages/agent/src/utils/guidance/catalog.ts",
-      "fingerprint": "8b23429e723e055d48392c264826f5473b6720526bf8dc3ca17780b7d735c7ab"
+      "fingerprint": "da5fb3e197c17d8323c5291226eb7b225a4724469a73580c25786bdcff845a5d"
     },
     {
       "path": "packages/agent/src/utils/guidance/runtime.ts",
-      "fingerprint": "071b3cce0b16b0addd5a3d3ac0a51db908ad17fa3070d780c0d774a295a217fc"
+      "fingerprint": "842b623a10ad2b0f7db246626f62329714fa7bdf4c994ef1e5e1e84238c9fe3a"
     },
     {
       "path": "packages/agent/src/utils/guidance/task.ts",
-      "fingerprint": "fd2a3db3f6bc1937aa5d470eb2aff86776cb02b0988c33110a37c45d72f745fe"
+      "fingerprint": "cb8f47eeb5f2d27eacdb71c4a3aaaa89799bcf07c4639a968b64cdeaa48c53ff"
     },
     {
       "path": "packages/agent/src/utils/tools/tool-args-schema-validator.ts",
-      "fingerprint": "3b8f9c58047ae6dbdac6d39826bb115dcaea0177a6e95e08ccd61748bbf4d60b"
+      "fingerprint": "49f8af0a77570f5da5c0ada9a7586f260ed3bb8cc536014d5495f05438390c07"
     },
     {
       "path": "packages/agent/src/utils/tools/tool-input-history-projection.ts",
-      "fingerprint": "c7dc7f3fe68aae4538ce399565ec54ae1d095ec0684add1e8308b98ca77514ce"
+      "fingerprint": "7576e218251eaa2efbb4ae0769d9b1c7b3d93a6cf76eb0f38ee848d9af6ffb15"
     },
     {
       "path": "packages/agent/src/utils/tools/transient-recovery-projection.ts",
-      "fingerprint": "63dee555f972127c1fdf050be884388bb0e0ceff03155b518524018fb405fa24"
+      "fingerprint": "f8f0227c38ac3f038bd5106bba92ad92b03f3fa47a700ed098ac9544290057fd"
     },
     {
       "path": "packages/project/README.md",
-      "fingerprint": "843772a9ca8cf80f280ae41cf83f6353c4227aff0c7a5f5b291fd224386f731a"
+      "fingerprint": "5714699afbf2df1b4902302cf36c9e91b22bf8017448d8db18e3856e827806ff"
     },
     {
       "path": "packages/project/src/impl/ProjectTools.ts",
-      "fingerprint": "6e181f4c2691ff64500736bb11600b0c68e6b4003ddd45a4119f4236726a8545"
+      "fingerprint": "2e4ad36c34671c2f9fe4c5830b110ee2fe26a395dd2bd796711b10be3814b240"
     },
     {
       "path": "packages/project/src/impl/operations/ProjectChangeOperations.ts",
-      "fingerprint": "59ba1cadba4590ce40b370047d8696b6983085ec1aa27d066f32ad05e81ffa07"
+      "fingerprint": "1a004f01d35e6ca212eab09d3664b1adfd95cf52cb5a5ffb9ac10fb8f0383c51"
     },
     {
       "path": "packages/project/src/impl/operations/ProjectCodeOperations.ts",
@@ -168,7 +166,7 @@
     },
     {
       "path": "packages/project/src/impl/operations/ProjectExecutionOperations.ts",
-      "fingerprint": "e6c04d578bf47f2b4c333fb26c33f1521efa8fce2eace742237ad94b011cb3a5"
+      "fingerprint": "c568cae6ea726a8d805289cf15e169c19e994e0ecd7fe23f7300ef626a488ce3"
     },
     {
       "path": "packages/project/src/impl/operations/ProjectFileContext.ts",
@@ -180,11 +178,11 @@
     },
     {
       "path": "packages/project/src/utils/agent/code-query.ts",
-      "fingerprint": "73664bf3fd9afba9dcdc5433ad39184119180b55f1b339758d7046b6a5a6a08d"
+      "fingerprint": "25193de4795a48eed4f813aed90f2ed171007a7f4cf3e2482f07d9326f4cd64d"
     },
     {
       "path": "packages/project/src/utils/agent/edit-recovery.ts",
-      "fingerprint": "c0065f3f3d96b3f8e1e05729cd196a1d489a6f64113dd263d89a3e3048508aec"
+      "fingerprint": "917a3fae9f3939c9f648831ed51e4476d4caf4ea9ad39aa4c86f6c62fed27108"
     },
     {
       "path": "packages/project/src/utils/agent/execution.ts",
@@ -208,15 +206,15 @@
     },
     {
       "path": "packages/project/src/utils/agent/project-files.ts",
-      "fingerprint": "cb68bd89c7df6fb6fa49a25d33c86dde5bd102f0c15bef0b1acffd45346eda08"
+      "fingerprint": "9791b71b729f62c1470b36848a60b7633a9459e726906c01e0cf44c3d92b7474"
     },
     {
       "path": "packages/project/src/utils/agent/receipts.ts",
-      "fingerprint": "34ee3276a88421047a94fd3d09caa62ee60a09f58ae84bb83a10f85af6d59711"
+      "fingerprint": "1ab0db7cc5eda8353b6d8f1ecd0b85e208bb8a696f3a48964a99cbc9eb5e2952"
     },
     {
       "path": "packages/project/src/utils/agent/sandbox.ts",
-      "fingerprint": "38897a5a2a060f3a114adc2c0a6618016aeaf8bfa63b856abc9c4f650ea53822"
+      "fingerprint": "54db985a41e915176c97f8c2e574079cb55831e733268ec6974afee74d8d9d3b"
     },
     {
       "path": "packages/project/src/utils/agent/source-window.ts",
@@ -224,7 +222,7 @@
     },
     {
       "path": "packages/project/src/utils/agent/symbol-references.ts",
-      "fingerprint": "e1f6b3a390f93fd94bbc213395959b0401b99ad7d40e17b9f841724fb26ea01f"
+      "fingerprint": "b066e3cc47469f24eeb88d499bf1d4791eb72b624d10a2e29d35c3263ee2638a"
     },
     {
       "path": "packages/project/src/utils/agent/transaction-result.ts",
@@ -232,7 +230,7 @@
     },
     {
       "path": "packages/project/src/utils/tool.ts",
-      "fingerprint": "61423c9fa44ca987f3acfb1bd162e71393266c5e65b53792e97ffca4122a5ae3"
+      "fingerprint": "1e85a64652837ce62002c22dfda548c6c8e603c51fb2615ece00431472cfda15"
     },
     {
       "path": "packages/project/src/utils/transactions/transaction-errors.ts",
