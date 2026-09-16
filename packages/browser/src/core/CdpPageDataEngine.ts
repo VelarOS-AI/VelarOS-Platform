@@ -546,6 +546,7 @@ export class CdpPageDataEngine {
     const limit = clampInteger(options.limit, 1, this.diagnosticsLimits.maxEntries, 100)
     const entries = externalSession.driver.readDiagnostics?.({
       limit,
+      kinds: options.kinds,
       clear: options.clear,
     }) ?? []
     const state = await this.refreshExternalPageState(sessionId, externalSession, context.url)

@@ -92,7 +92,7 @@ export const browserGetPageDiagnosticsSchema = z.object({
   limit: requiredResultLimit(300, '最多返回多少条诊断事件'),
   clear: z.boolean().optional().describe(
     parameterDescription({
-      description: '读取后是否清空已缓存的诊断事件。',
+      description: '读取后是否清空诊断缓存；只清这次读取的种类。',
     })
   ),
 })
@@ -126,10 +126,10 @@ export function normalizeBrowserGetPageDiagnosticsGuided(
 }
 
 export const browserListNetworkEventsSchema = z.object({
-  limit: requiredResultLimit(300, '最多读取多少条诊断事件'),
+  limit: requiredResultLimit(300, '最多返回多少条网络事件（按种类过滤之后再取这么多条）'),
   clear: z.boolean().optional().describe(
     parameterDescription({
-      description: '读取后是否清空已缓存的诊断事件。',
+      description: '读取后是否清空诊断缓存；只清这次读取的种类。',
     })
   ),
   status: z.number().int().positive().max(999).optional().describe(
@@ -161,7 +161,7 @@ export const browserListNetworkEventsGuidedSchema = browserListNetworkEventsSche
     .optional()
     .describe(
       parameterDescription({
-        description: '最多读取多少条诊断事件。',
+        description: '最多返回多少条网络事件（按种类过滤之后再取这么多条）。',
         notes: ['默认 50。'],
       })
     ),
@@ -274,10 +274,10 @@ export function normalizeBrowserGetNetworkRequestGuided(
 }
 
 export const browserListConsoleEventsSchema = z.object({
-  limit: requiredResultLimit(300, '最多读取多少条诊断事件'),
+  limit: requiredResultLimit(300, '最多返回多少条 console 事件（按种类过滤之后再取这么多条）'),
   clear: z.boolean().optional().describe(
     parameterDescription({
-      description: '读取后是否清空已缓存的诊断事件。',
+      description: '读取后是否清空诊断缓存；只清这次读取的种类。',
     })
   ),
   level: z.enum(['debug', 'info', 'warning', 'error']).optional().describe(
@@ -303,7 +303,7 @@ export const browserListConsoleEventsGuidedSchema = browserListConsoleEventsSche
     .optional()
     .describe(
       parameterDescription({
-        description: '最多读取多少条诊断事件。',
+        description: '最多返回多少条 console 事件（按种类过滤之后再取这么多条）。',
         notes: ['默认 50。'],
       })
     ),

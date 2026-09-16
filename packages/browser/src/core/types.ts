@@ -1168,7 +1168,16 @@ export interface BrowserPageDiagnosticEntry {
 }
 
 export interface BrowserPageDiagnosticsOptions {
+  /** 过滤之后最多返回几条；缺席时用引擎缺省。 */
   limit?: number
+  /**
+   * 只要这些种类的诊断；缺席表示全部种类。
+   *
+   * 过滤发生在取窗口**之前**：先按种类挑，再取最近 limit 条。反过来做的话，一个 console
+   * 刷屏的页面会把失败请求整批挤出窗口——`list_network_events` 回 0 条，而失败请求就在
+   * 更早的诊断里。`clear` 同样只清这里选中的种类。
+   */
+  kinds?: readonly BrowserPageDiagnosticKind[]
   clear?: boolean
 }
 

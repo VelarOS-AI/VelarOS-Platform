@@ -3,7 +3,7 @@ import type {
   CdpScreencastStartOptions,
   ScreencastCapturedFrame,
 } from './BrowserScreencastRecorder'
-import type { BrowserClickCoordinatesOptions, BrowserDragCoordinatesOptions, BrowserEmulationOptions, BrowserGeolocationState, BrowserMouseButton, BrowserMoveMouseOptions, BrowserNetworkControlOptions, BrowserNetworkRequestDetailsOptions, BrowserNetworkRequestDetailsResult, BrowserNetworkResponseBodyOptions, BrowserNetworkThrottlingPreset, BrowserOriginStorage, BrowserPageDiagnosticEntry, BrowserPageTargetInfo, BrowserPressKeyOptions, BrowserScreenshotCaptureRegion, BrowserScreenshotMetadata, BrowserScreenshotRect, BrowserSwitchPageTargetOptions, BrowserTypeTextOptions, BrowserViewportOptions } from './types.js'
+import type { BrowserClickCoordinatesOptions, BrowserDragCoordinatesOptions, BrowserEmulationOptions, BrowserGeolocationState, BrowserMouseButton, BrowserMoveMouseOptions, BrowserNetworkControlOptions, BrowserNetworkRequestDetailsOptions, BrowserNetworkRequestDetailsResult, BrowserNetworkResponseBodyOptions, BrowserNetworkThrottlingPreset, BrowserOriginStorage, BrowserPageDiagnosticEntry, BrowserPageDiagnosticKind, BrowserPageTargetInfo, BrowserPressKeyOptions, BrowserScreenshotCaptureRegion, BrowserScreenshotMetadata, BrowserScreenshotRect, BrowserSwitchPageTargetOptions, BrowserTypeTextOptions, BrowserViewportOptions } from './types.js'
 
 export type BrowserPageDriverKind = 'webview' | 'external'
 
@@ -87,7 +87,10 @@ export interface BrowserPageDriverFetchResourceResult {
 }
 
 export interface BrowserPageDriverDiagnosticsOptions {
+  /** 按种类过滤之后最多返回几条。 */
   limit: number
+  /** 只要这些种类；缺席表示全部种类。过滤在取窗口之前，clear 也只清这些种类。 */
+  kinds?: readonly BrowserPageDiagnosticKind[]
   clear?: boolean
 }
 

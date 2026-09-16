@@ -73,6 +73,10 @@ import type {
 } from './BrowserPageDriver'
 import { captureCdpHeapSnapshot, CdpTraceCollector } from './BrowserPerformanceTracing'
 import {
+  clearBrowserDiagnosticEntries,
+  takeBrowserDiagnosticWindow,
+} from './BrowserRuntimeInternals'
+import {
   type CdpScreencastConsumerOptions,
   CdpScreencastRecorder,
   type CdpScreencastStartOptions,
@@ -1030,9 +1034,10 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
       MaxCdpDiagnosticEntries,
       this.clampPositiveInteger(options.limit, 100)
     )
-    const entries = this.diagnostics.slice(-limit)
+    // 先按种类挑，再取窗口；clear 只清这次读的种类，别顺手吃掉别人的证据。
+    const entries = takeBrowserDiagnosticWindow(this.diagnostics, limit, options.kinds)
     if (options.clear) {
-      this.diagnostics.splice(0, this.diagnostics.length)
+      clearBrowserDiagnosticEntries(this.diagnostics, options.kinds)
     }
 
     return entries

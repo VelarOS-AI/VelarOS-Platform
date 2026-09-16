@@ -6,7 +6,7 @@ import type {
 } from './BrowserPageDriver'
 import type { BrowserWorkspacePath } from './BrowserPathContainment'
 import { resolveBrowserWorkspacePath } from './BrowserPathContainment'
-import type { BrowserViewportOptions } from './types.js'
+import type { BrowserPageDiagnosticKind, BrowserViewportOptions } from './types.js'
 
 /** 内嵌浏览器默认视口，和桌面常见窗口比例接近。 */
 export const DEFAULT_BROWSER_VIEWPORT = {
@@ -91,6 +91,39 @@ export interface BrowserPageDriverKernel {
 
 export function readFiniteNumber(value: unknown): number | undefined {
   return optionalWhen(isFiniteNumber, value)
+}
+
+/**
+ * 诊断按种类取窗口：**先按种类过滤，再取最近 limit 条**。
+ *
+ * 顺序反过来就是一个实打实的 bug：一个 console 刷屏的页面里，「最近 50 条诊断」全是 console，
+ * 再过滤网络就回 0 条（`networkTotal: 0`），而失败的请求就在更早的诊断里。
+ */
+export function takeBrowserDiagnosticWindow<Entry extends { kind: BrowserPageDiagnosticKind }>(
+  entries: readonly Entry[],
+  limit: number,
+  kinds?: LooseOptional<readonly BrowserPageDiagnosticKind[]>
+): Entry[] {
+  const selected = kinds ? entries.filter((entry) => kinds.includes(entry.kind)) : [...entries]
+  return selected.slice(-limit)
+}
+
+/**
+ * 按种类清空诊断缓冲（就地改）：kinds 缺席时全清，否则只清所选种类。
+ *
+ * 读一次网络事件顺手把 console 与页面异常也清掉，等于让「读」吃掉别人的证据。
+ */
+export function clearBrowserDiagnosticEntries<Entry extends { kind: BrowserPageDiagnosticKind }>(
+  buffer: Entry[],
+  kinds?: LooseOptional<readonly BrowserPageDiagnosticKind[]>
+): void {
+  if (!kinds) {
+    buffer.splice(0, buffer.length)
+    return
+  }
+
+  const kept = buffer.filter((entry) => !kinds.includes(entry.kind))
+  buffer.splice(0, buffer.length, ...kept)
 }
 
 export function readBoundedString(value: unknown, maxLength: number): Nullable<string> {

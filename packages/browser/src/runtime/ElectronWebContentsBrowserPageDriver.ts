@@ -26,9 +26,11 @@ import {
   type CdpScreencastStartOptions,
   type CdpSend,
   CdpTraceCollector,
+  clearBrowserDiagnosticEntries,
   createDefaultCdpEmulationState,
   createWebContentsCdpTraceTransport,
   type ScreencastCapturedFrame,
+  takeBrowserDiagnosticWindow,
 } from '../core'
 
 export interface BrowserPageDriverFactoryInput {
@@ -236,9 +238,9 @@ class ElectronWebContentsBrowserPageDriver implements BrowserPageDriver {
     if (!hold) return []
 
     const limit = clampEmbeddedDiagnosticLimit(options.limit)
-    const entries = hold.diagnostics.slice(-limit)
+    const entries = takeBrowserDiagnosticWindow(hold.diagnostics, limit, options.kinds)
     if (options.clear) {
-      hold.diagnostics.splice(0, hold.diagnostics.length)
+      clearBrowserDiagnosticEntries(hold.diagnostics, options.kinds)
     }
     return entries
   }

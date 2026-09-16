@@ -442,7 +442,7 @@ const browserGetPageDiagnostics = defineBrowserTool<BrowserGetPageDiagnosticsInp
   summary: '读取当前浏览器页面的诊断事件。',
   suitable: ['需要调试网页功能、前端报错、加载失败或自动化失败。'],
   forbidden: ['不要用它读取页面正文或网络响应体。'],
-  usage: ['传 limit；读取后需要清空缓存时传 clear=true。'],
+  usage: ['传 limit；clear=true 会清空全部种类的诊断缓存。'],
   examples: [{ limit: 100 }],
   notes: ['包含近期 console、加载错误、网络诊断和按 level/kind/origin/status/resourceType 聚合的 summary。'],
   schema: browserGetPageDiagnosticsSchema,
@@ -496,9 +496,12 @@ const browserListNetworkEvents = defineBrowserTool<BrowserListNetworkEventsInput
   summary: '列出当前页面捕获的网络诊断事件。',
   suitable: ['需要快速定位失败请求、HTTP 错误、被拦截资源或网络异常。'],
   forbidden: ['不要把它当作完整 HAR 或响应体读取工具；这里只返回 diagnostics 中已捕获的网络事件。'],
-  usage: ['传 limit；可用 status、resourceType 或 failedOnly 缩小范围。'],
+  usage: ['limit 是过滤之后最多返回几条；可用 status、resourceType 或 failedOnly 再缩小范围。'],
   examples: [{ limit: 100, failedOnly: true }, { limit: 80, status: 404 }],
-  notes: ['复用 browser:get_page_diagnostics 的网络事件缓存，并重算过滤后的 summary。'],
+  notes: [
+    '先按种类挑出网络事件、再取最近 limit 条，所以 console 刷屏的页面也不会把失败请求挤出窗口。',
+    'clear=true 只清网络事件，不动 console 与页面异常。',
+  ],
   schema: browserListNetworkEventsSchema,
   surfaces: {
     preset: {
@@ -508,7 +511,7 @@ const browserListNetworkEvents = defineBrowserTool<BrowserListNetworkEventsInput
       forbidden: ['不要用它清空诊断缓存。'],
       usage: ['无需参数。'],
       examples: [{}],
-      notes: ['默认读取最近 50 条诊断事件后只返回网络事件。'],
+      notes: ['默认返回最近 50 条网络事件。'],
       schema: z.object({}),
       normalize: () => ({
         limit: 50,
@@ -536,8 +539,11 @@ const browserListNetworkEvents = defineBrowserTool<BrowserListNetworkEventsInput
     // 网络事件来自当前受控页面的 diagnostics 缓存。
     requireActiveBrowserSite(ctx)
 
+    // 只读网络这一类：过滤在取窗口之前，console 刷屏的页面也不会把失败请求挤出去；
+    // clear 也只清网络事件。
     const diagnostics = await ctx.browser.getPageDiagnostics({
       limit,
+      kinds: ['network'],
       clear,
     })
 
@@ -654,9 +660,12 @@ const browserListConsoleEvents = defineBrowserTool<BrowserListConsoleEventsInput
   summary: '列出当前页面捕获的 console 诊断事件。',
   suitable: ['需要快速定位 console error、warning 或前端运行时报错。'],
   forbidden: ['不要把它当作页面正文读取工具；这里只有 diagnostics 中已捕获的 console 事件。'],
-  usage: ['传 limit；可用 level 或 errorsOnly 缩小范围。'],
+  usage: ['limit 是过滤之后最多返回几条；可用 level 或 errorsOnly 再缩小范围。'],
   examples: [{ limit: 100, errorsOnly: true }, { limit: 80, level: 'warning' }],
-  notes: ['复用 browser:get_page_diagnostics 的 console 事件缓存，并重算过滤后的 summary。'],
+  notes: [
+    '先按种类挑出 console 事件、再取最近 limit 条。',
+    'clear=true 只清 console 事件，不动网络事件与页面异常。',
+  ],
   schema: browserListConsoleEventsSchema,
   surfaces: {
     preset: {
@@ -666,7 +675,7 @@ const browserListConsoleEvents = defineBrowserTool<BrowserListConsoleEventsInput
       forbidden: ['不要用它清空诊断缓存。'],
       usage: ['无需参数。'],
       examples: [{}],
-      notes: ['默认读取最近 50 条诊断事件后只返回 console 事件。'],
+      notes: ['默认返回最近 50 条 console 事件。'],
       schema: z.object({}),
       normalize: () => ({
         limit: 50,
@@ -696,6 +705,7 @@ const browserListConsoleEvents = defineBrowserTool<BrowserListConsoleEventsInput
 
     const diagnostics = await ctx.browser.getPageDiagnostics({
       limit,
+      kinds: ['console'],
       clear,
     })
 
@@ -715,9 +725,12 @@ const browserListPageErrors = defineBrowserTool<BrowserListPageErrorsInput>({
   summary: '列出当前页面捕获的未处理异常。',
   suitable: ['需要快速定位页面运行时异常、未捕获 JS 错误或自动化后页面报错。'],
   forbidden: ['不要把它当作 console 输出列表；console 输出用 browser:list_console_events。'],
-  usage: ['传 limit；读取后需要清空缓存时传 clear=true。'],
+  usage: ['limit 是过滤之后最多返回几条；clear=true 只清页面异常。'],
   examples: [{ limit: 50, clear: true }],
-  notes: ['复用 browser:get_page_diagnostics 的 page-error 事件缓存，并重算过滤后的 summary。'],
+  notes: [
+    '先按种类挑出未处理异常、再取最近 limit 条。',
+    'clear=true 只清页面异常，不动 console 与网络事件。',
+  ],
   schema: browserListPageErrorsSchema,
   surfaces: {
     preset: {
@@ -727,7 +740,7 @@ const browserListPageErrors = defineBrowserTool<BrowserListPageErrorsInput>({
       forbidden: ['不要用它清空诊断缓存。'],
       usage: ['无需参数。'],
       examples: [{}],
-      notes: ['默认读取最近 50 条诊断事件后只返回 page-error 事件。'],
+      notes: ['默认返回最近 50 条未处理异常。'],
       schema: z.object({}),
       normalize: () => ({
         limit: 50,
@@ -757,6 +770,7 @@ const browserListPageErrors = defineBrowserTool<BrowserListPageErrorsInput>({
 
     const diagnostics = await ctx.browser.getPageDiagnostics({
       limit,
+      kinds: ['page-error'],
       clear,
     })
 

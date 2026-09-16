@@ -13,8 +13,10 @@ import {
   type BrowserTargetRefStore,
   CdpPageDataEngine,
   clampInteger,
+  clearBrowserDiagnosticEntries,
   readFiniteNumber,
   resolveWorkspaceFilePath,
+  takeBrowserDiagnosticWindow,
 } from '../core'
 
 import type { BrowserDiagnosticsRecorder } from './BrowserDiagnosticsRecorder'
@@ -339,18 +341,20 @@ export class BrowserPageDataEngine extends CdpPageDataEngine {
 
     const session = await this.getLivePageSessionUnlocked(sessionId, abortSignal)
     const limit = clampInteger(options.limit, 1, this.diagnosticsRecorder.maxEntries, 100)
+    const kinds = options.kinds
     // 嵌入式:控制台诊断在 session.diagnostics,网络诊断在 driver 的网络采集缓冲(惰性建立)。
-    // 两处按 capturedAt 合并再取窗口,list_network_events 才能拿到嵌入式的网络事件。
+    // 两处各自先按种类过滤再取窗口,合并后按 capturedAt 排序再取一次窗口。
     const driverSession = await this.electronKernel.getLivePageDriverSession(sessionId, abortSignal)
-    const networkEntries =
-      driverSession.driver.readDiagnostics?.({ limit, clear: options.clear }) ?? []
-    const entries = [...session.diagnostics.slice(-limit), ...networkEntries]
+    const networkEntries = kinds && !kinds.includes('network')
+      ? []
+      : driverSession.driver.readDiagnostics?.({ limit, kinds, clear: options.clear }) ?? []
+    const entries = [...takeBrowserDiagnosticWindow(session.diagnostics, limit, kinds), ...networkEntries]
       .sort((left, right) => left.capturedAt - right.capturedAt)
       .slice(-limit)
 
     if (options.clear) {
-      // clear=true 用于 UI 读取后清空本次诊断窗口。
-      session.diagnostics = []
+      // clear=true 只清这次读的种类:读一次网络事件不该把 console 与页面异常一起清掉。
+      clearBrowserDiagnosticEntries(session.diagnostics, kinds)
     }
 
     return {
