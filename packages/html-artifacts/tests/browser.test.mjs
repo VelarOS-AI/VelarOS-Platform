@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
+import { runInNewContext } from 'node:vm'
 
 import { HtmlArtifactRuntime, mountHtmlArtifact } from '../dist/index.js'
 
@@ -115,6 +116,27 @@ describe('browser host', () => {
     assert.match(runtime.iframe.srcdoc, /velaros:html-artifact:test-2:render/)
     runtime.dispose()
     assert.equal(window.listeners.get('message')?.size ?? 0, 0)
+  })
+
+  test('accepts a mount target whose methods come from another realm', async () => {
+    // 另一个 realm（另一个 iframe、webview 桥）造出来的函数：`instanceof Function` 为假，
+    // `typeof` 为 'function'。宿主跨 realm 递进来的挂载目标不能被当成「不是元素」而拒绝。
+    const foreignTarget = runInNewContext('({ children: [], replaceChildren(...items) { this.children = items } })')
+    assert.equal(foreignTarget.replaceChildren instanceof Function, false)
+
+    const document = new FakeDocument()
+    const window = new FakeWindow()
+    const environment = {
+      createBridgeId: () => 'foreign-1',
+      createIframe: () => document.createElement('iframe'),
+      addMessageListener: (listener) => window.addEventListener('message', listener),
+      removeMessageListener: (listener) => window.removeEventListener('message', listener),
+      scrollBy: (deltaX, deltaY) => window.scrollBy({ left: deltaX, top: deltaY }),
+    }
+
+    const runtime = new HtmlArtifactRuntime(foreignTarget, { environment })
+    assert.equal(foreignTarget.children.length, 1)
+    runtime.dispose()
   })
 
   test('keeps compatibility controller methods bound when destructured', async () => {

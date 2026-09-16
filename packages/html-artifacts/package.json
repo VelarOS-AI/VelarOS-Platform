@@ -1,6 +1,6 @@
 {
   "name": "@velaros-ai/html-artifacts",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "velaros": {
     "platform": "0.6"
   },
@@ -62,9 +62,8 @@
     "test": "npm run build && node --test tests/*.test.mjs",
     "demo": "npm run build && vite demo",
     "demo:build": "npm run build && vite build demo --outDir ../demo-dist --emptyOutDir",
-    "check:dist": "npm run build && node scripts/check-dist.mjs",
     "check:package-contract": "npm run build && node scripts/check-package-contract.mjs",
-    "check": "npm run typecheck && npm test && npm run demo:build && npm run check:package-contract && npm run check:dist",
+    "check": "npm run typecheck && npm test && npm run demo:build && npm run check:package-contract",
     "release:dry-run": "npm run check && node scripts/prepare-release.mjs --dry-run",
     "prepack": "npm run build"
   },

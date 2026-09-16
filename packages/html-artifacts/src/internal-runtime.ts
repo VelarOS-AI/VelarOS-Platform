@@ -6,8 +6,13 @@ export function isFiniteNumber(value: unknown): value is number {
   return Number.isFinite(value as number)
 }
 
+/**
+ * 判定用 `typeof` 而不是 `instanceof Function`：`instanceof` 比的是本 realm 的原型链，宿主在
+ * 另一个 realm（另一个 iframe、webview 桥）里造出来的函数会被判成「不是函数」——回调被静默丢掉、
+ * 另一个 realm 传来的挂载目标被当成不是元素而拒绝。
+ */
 export function isFunction(value: unknown): value is Function {
-  return value instanceof Function
+  return typeof value === 'function'
 }
 
 export function isNull(value: unknown): value is null {

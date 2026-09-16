@@ -113,7 +113,7 @@
     "check:code-style": "arch-guard verify",
     "check:code-style:report": "arch-guard run --no-baseline",
     "check:code-style:fix": "arch-guard run --fix --no-baseline",
-    "check:html-artifacts-package": "bun run --cwd packages/html-artifacts check:package-contract && bun run --cwd packages/html-artifacts check:dist",
+    "check:html-artifacts-package": "bun run --cwd packages/html-artifacts check:package-contract",
     "check:project-arch": "bun run --cwd packages/project check:arch",
     "check:project-agent-contract": "bun run --cwd packages/project check:agent-contract",
     "check:agent-lab-package": "bun run --cwd packages/agent-lab check",

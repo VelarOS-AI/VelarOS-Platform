@@ -126,12 +126,14 @@ Widget、Memory 或 VelarOS Kernel 内部实现。
 ## 开发
 
 ```bash
-npm run check     # typecheck + Node 测试 + 生产 demo 构建 + 包契约 + dist 检查
+npm run check     # typecheck + Node 测试 + 生产 demo 构建 + 包契约
 npm run demo
 ```
 
-包级门:`check:package-contract`(元数据 / exports / 文档 / 运行时导入 / 严格外部类型)
-与 `check:dist`;两者由仓根 `check:html-artifacts-package` 挂进 `check:gates`。
+包级门:`check:package-contract`(元数据 / exports / 文档 / 运行时导入 / 严格外部类型),
+由仓根 `check:html-artifacts-package` 挂进 `check:gates`。产物一致性由它「逐个入口打包安装再
+import」那一步覆盖;本包独立成仓时代那个比对 `dist` 的 `check:dist` 已删除——仓根 `.gitignore`
+忽略 `dist/`,它两条断言恒为空,是一道空转的门。
 
 ## 安全
 
