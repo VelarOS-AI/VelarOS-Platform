@@ -260,14 +260,24 @@ function checkRuntimeDependencyOwnership() {
     }
   }
 
-  const memoryManifest = readJson(join(packageRoot, 'memory', 'package.json'))
-  if (memoryManifest.peerDependencies?.['@lancedb/lancedb'] !== '^0.27.2') {
-    fail('@velaros-ai/memory: LanceDB must remain an injected peer runtime')
+  // 向量库住在知识包（记忆包拆分后不再碰 LanceDB），两边都要守：知识包按可选 peer 注入，记忆包一个也不许有。
+  const knowledgeManifest = readJson(join(packageRoot, 'knowledge', 'package.json'))
+  if (knowledgeManifest.peerDependencies?.['@lancedb/lancedb'] !== '^0.27.2') {
+    fail('@velaros-ai/knowledge: LanceDB must remain an injected peer runtime')
   }
-  for (const section of runtimeSections) {
-    if (memoryManifest[section]?.['@lancedb/lancedb']) {
-      fail(`@velaros-ai/memory: LanceDB must not be installed through ${section}`)
+  const memoryManifest = readJson(join(packageRoot, 'memory', 'package.json'))
+  for (const [name, manifest] of [
+    ['@velaros-ai/knowledge', knowledgeManifest],
+    ['@velaros-ai/memory', memoryManifest],
+  ]) {
+    for (const section of runtimeSections) {
+      if (manifest[section]?.['@lancedb/lancedb']) {
+        fail(`${name}: LanceDB must not be installed through ${section}`)
+      }
     }
+  }
+  if (memoryManifest.peerDependencies?.['@lancedb/lancedb']) {
+    fail('@velaros-ai/memory: LanceDB 已经随知识库拆走，记忆包不该再声明它')
   }
 
   const cliManifest = readJson(join(packageRoot, 'cli', 'package.json'))
