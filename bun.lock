@@ -188,10 +188,7 @@
     },
     "packages/document-renderer": {
       "name": "@velaros-ai/document-renderer",
-      "version": "0.1.7",
-      "bin": {
-        "velar-document-renderer": "./dist/cli.js",
-      },
+      "version": "0.2.0",
       "dependencies": {
         "@velaros-ai/core": "workspace:*",
         "@velaros-ai/office": "workspace:*",

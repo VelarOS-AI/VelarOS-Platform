@@ -13,5 +13,5 @@
       "@velaros-ai/office/renderer": ["./packages/office/src/exports/renderer.ts"]
     }
   },
-  "include": ["../../types/velaros-globals.d.ts", "src/**/*.ts", "test/**/*.ts"]
+  "include": ["../../types/velaros-globals.d.ts", "src/**/*.ts", "spec/**/*.ts", "test/**/*.ts"]
 }

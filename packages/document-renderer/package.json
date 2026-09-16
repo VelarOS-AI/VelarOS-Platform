@@ -1,6 +1,6 @@
 {
   "name": "@velaros-ai/document-renderer",
-  "version": "0.1.7",
+  "version": "0.2.0",
   "private": true,
   "velaros": {
     "platform": "0.6",
@@ -9,20 +9,20 @@
   "description": "Independent command capability pack for rendering Office documents and PDF pages.",
   "license": "Apache-2.0",
   "type": "module",
+  "sideEffects": false,
   "engines": {
     "node": ">=20.0.0"
   },
-  "bin": {
-    "velar-document-renderer": "./dist/cli.js"
-  },
+  "main": "./dist/exports/index.js",
+  "types": "./dist/exports/index.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "types": "./dist/exports/index.d.ts",
+      "import": "./dist/exports/index.js"
     },
-    "./cli": {
-      "types": "./dist/cli.d.ts",
-      "import": "./dist/cli.js"
+    "./contracts": {
+      "types": "./dist/exports/contracts.d.ts",
+      "import": "./dist/exports/contracts.js"
     }
   },
   "files": [
@@ -35,7 +35,7 @@
     "clean": "rm -rf dist",
     "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/capabilities/build/fix-esm-extensions.mjs dist && node ../../scripts/build/normalize-package-declarations.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "bun test test",
+    "test": "bun test spec/acceptance.test.ts test/renderer.test.ts",
     "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/document-renderer"
   },
   "dependencies": {

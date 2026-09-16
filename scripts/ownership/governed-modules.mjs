@@ -258,6 +258,30 @@ export const GovernedModules = [
     acceptance: 'spec/acceptance.test.ts',
   },
   {
+    directory: 'document-renderer',
+    name: '@velaros-ai/document-renderer',
+    // 没有工具：宿主不 import 它，只按命令协议调打包出来的可执行文件
+    contract: 'src/contract',
+    types: 'src/types',
+    portable: 'document-renderer.ts',
+    impl: 'src/impl',
+    utils: 'src/utils',
+    tuning: 'tuning.ts',
+    exports: 'src/exports',
+    // 根入口要读写磁盘、要 office 的渲染原语，只给 Node；可移植数据那个入口谁都能加载
+    browserSafeEntries: ['contracts.ts'],
+    environmentTable: 'DocumentRendererEnvironmentVariables',
+    layers: [
+      // 命令协议的唯一出口：校验、分派、回执、命令行
+      ['DocumentRenderer.ts'],
+      // 两种渲染的执行与它们共用的路径准入
+      ['OfficeRenderer.ts', 'RendererPaths.ts'],
+    ],
+    card: 'MODULE.md',
+    invariants: 'spec/invariants.md',
+    acceptance: 'spec/acceptance.test.ts',
+  },
+  {
     directory: 'cli',
     name: '@velaros-ai/cli',
     // 没有工具：不登记 toolsFile、toolDefiner、hostPort。可执行入口是包根的 bin/velaros.mjs

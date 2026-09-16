@@ -1,4 +1,9 @@
-import { mkdir, mkdtemp, readFile, rm, stat, symlink } from 'node:fs/promises'
+/**
+ * 实现测试：真的把文档渲染出来落盘。协议、路径准入、回执形状的承诺在 spec/acceptance.test.ts。
+ * 夹具直接用 office 装好的 exceljs 与 pdf-lib，本包不重复声明这两个依赖。
+ */
+
+import { mkdir, mkdtemp, readFile, rm, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -6,38 +11,17 @@ import { afterEach, describe, expect, test } from 'bun:test'
 
 import ExcelJS from '../../office/node_modules/exceljs'
 import { PDFDocument, rgb } from '../../office/node_modules/pdf-lib'
-import { runDocumentRendererCli } from '../src/cli'
-import { executeRendererRequest } from '../src/service'
+import { documentRenderer, DocumentRendererProtocol } from '../src/exports/index'
 
-const ProtocolVersion = 1 as const
-
-describe('independent document renderer capability pack', () => {
+describe('独立渲染能力包', () => {
   let temporaryRoot: string | undefined
 
   afterEach(async () => {
     if (temporaryRoot) await rm(temporaryRoot, { recursive: true, force: true })
+    temporaryRoot = undefined
   })
 
-  test('describes a standalone command protocol', async () => {
-    const packageManifest = JSON.parse(
-      await readFile(new URL('../package.json', import.meta.url), 'utf8'),
-    ) as { version: string }
-    const response = await executeRendererRequest({
-      protocolVersion: ProtocolVersion,
-      requestId: 'describe-1',
-      operation: 'describe',
-    })
-    expect(response).toMatchObject({
-      status: 'success',
-      result: {
-        product: 'velar-document-renderer',
-        version: packageManifest.version,
-        transport: 'one-json-request-per-process',
-      },
-    })
-  })
-
-  test('renders a spreadsheet to HTML and PNG', async () => {
+  test('把表格渲染成 HTML 与 PNG', async () => {
     temporaryRoot = await mkdtemp(join(tmpdir(), 'velar-renderer-office-'))
     const workbook = new ExcelJS.Workbook()
     const sheet = workbook.addWorksheet('Tasks')
@@ -46,8 +30,8 @@ describe('independent document renderer capability pack', () => {
     await workbook.xlsx.writeFile(join(temporaryRoot, 'tasks.xlsx'))
 
     for (const extension of ['html', 'png']) {
-      const response = await executeRendererRequest({
-        protocolVersion: ProtocolVersion,
+      const response = await documentRenderer.execute({
+        protocolVersion: DocumentRendererProtocol.version,
         requestId: `office-${extension}`,
         operation: 'render-office',
         projectRoot: temporaryRoot,
@@ -62,15 +46,15 @@ describe('independent document renderer capability pack', () => {
       .toContain('Run a real command')
   })
 
-  test('renders one PDF page to PNG', async () => {
+  test('把 PDF 的一页渲染成 PNG', async () => {
     temporaryRoot = await mkdtemp(join(tmpdir(), 'velar-renderer-pdf-'))
     const document = await PDFDocument.create()
     const page = document.addPage([320, 200])
     page.drawRectangle({ x: 32, y: 32, width: 256, height: 136, color: rgb(0.1, 0.5, 0.45) })
     await Bun.write(join(temporaryRoot, 'sample.pdf'), await document.save())
 
-    const response = await executeRendererRequest({
-      protocolVersion: ProtocolVersion,
+    const response = await documentRenderer.execute({
+      protocolVersion: DocumentRendererProtocol.version,
       requestId: 'pdf-1',
       operation: 'render-pdf-page',
       projectRoot: temporaryRoot,
@@ -87,84 +71,15 @@ describe('independent document renderer capability pack', () => {
       .toBe('PNG')
   })
 
-  test('denies traversal and symlink escapes', async () => {
-    temporaryRoot = await mkdtemp(join(tmpdir(), 'velar-renderer-policy-'))
-    const externalRoot = await mkdtemp(join(tmpdir(), 'velar-renderer-external-'))
-    try {
-      await Bun.write(join(externalRoot, 'outside.pdf'), '%PDF-1.4\n%%EOF\n')
-      await Bun.write(join(temporaryRoot, 'inside.pdf'), '%PDF-1.4\n%%EOF\n')
-      await Bun.write(join(externalRoot, 'outside.png'), 'do not overwrite')
-      await symlink(join(externalRoot, 'outside.pdf'), join(temporaryRoot, 'linked.pdf'))
-      await symlink(join(externalRoot, 'outside.png'), join(temporaryRoot, 'linked-output.png'))
-
-      const traversal = await executeRendererRequest({
-        protocolVersion: ProtocolVersion,
-        requestId: 'traversal',
-        operation: 'render-pdf-page',
-        projectRoot: temporaryRoot,
-        inputPath: '../outside.pdf',
-        outputPath: 'page.png',
-      })
-      expect(traversal).toMatchObject({ status: 'error', error: { code: 'PATH_DENIED' } })
-
-      const symlinkEscape = await executeRendererRequest({
-        protocolVersion: ProtocolVersion,
-        requestId: 'symlink',
-        operation: 'render-pdf-page',
-        projectRoot: temporaryRoot,
-        inputPath: 'linked.pdf',
-        outputPath: 'page.png',
-      })
-      expect(symlinkEscape).toMatchObject({ status: 'error', error: { code: 'PATH_DENIED' } })
-
-      const outputSymlinkEscape = await executeRendererRequest({
-        protocolVersion: ProtocolVersion,
-        requestId: 'output-symlink',
-        operation: 'render-pdf-page',
-        projectRoot: temporaryRoot,
-        inputPath: 'inside.pdf',
-        outputPath: 'linked-output.png',
-      })
-      expect(outputSymlinkEscape)
-        .toMatchObject({ status: 'error', error: { code: 'PATH_DENIED' } })
-      expect(await readFile(join(externalRoot, 'outside.png'), 'utf8')).toBe('do not overwrite')
-    } finally {
-      await rm(externalRoot, { recursive: true, force: true })
-    }
-  })
-
-  test('拒绝越界的输出路径时，projectRoot 之外一个目录都不建', async () => {
-    temporaryRoot = await mkdtemp(join(tmpdir(), 'velar-renderer-mkdir-'))
-    const externalRoot = await mkdtemp(join(tmpdir(), 'velar-renderer-mkdir-external-'))
-    try {
-      await Bun.write(join(temporaryRoot, 'inside.pdf'), '%PDF-1.4\n%%EOF\n')
-      await symlink(externalRoot, join(temporaryRoot, 'link'))
-
-      const response = await executeRendererRequest({
-        protocolVersion: ProtocolVersion,
-        requestId: 'mkdir-escape',
-        operation: 'render-pdf-page',
-        projectRoot: temporaryRoot,
-        inputPath: 'inside.pdf',
-        outputPath: 'link/newdir/deeper/page.png',
-      })
-
-      expect(response).toMatchObject({ status: 'error', error: { code: 'PATH_DENIED' } })
-      expect(await stat(join(externalRoot, 'newdir')).catch(() => null)).toBeNull()
-    } finally {
-      await rm(externalRoot, { recursive: true, force: true })
-    }
-  })
-
-  test('项目里名叫 ..xxx 的目录不算越界', async () => {
+  test('项目里名叫 ..xxx 的目录照常渲染', async () => {
     temporaryRoot = await mkdtemp(join(tmpdir(), 'velar-renderer-dotdot-'))
     const document = await PDFDocument.create()
     document.addPage([160, 100])
     await mkdir(join(temporaryRoot, '..cache'), { recursive: true })
     await Bun.write(join(temporaryRoot, '..cache', 'sample.pdf'), await document.save())
 
-    const response = await executeRendererRequest({
-      protocolVersion: ProtocolVersion,
+    const response = await documentRenderer.execute({
+      protocolVersion: DocumentRendererProtocol.version,
       requestId: 'dotdot',
       operation: 'render-pdf-page',
       projectRoot: temporaryRoot,
@@ -177,69 +92,5 @@ describe('independent document renderer capability pack', () => {
     expect(response).toMatchObject({ status: 'success' })
     expect((await stat(join(temporaryRoot, '..cache', 'out', 'page-1.png'))).size)
       .toBeGreaterThan(100)
-  })
-
-  test('INVALID_REQUEST 给的是可读的中文说明，不是 zod 原始 issue', async () => {
-    const unknownOperation = await executeRendererRequest({
-      protocolVersion: 1,
-      requestId: 'bad-operation',
-      operation: 'render-everything',
-    })
-
-    expect(unknownOperation).toMatchObject({
-      status: 'error',
-      requestId: 'bad-operation',
-      error: {
-        code: 'INVALID_REQUEST',
-        message: '请求不合法：operation 应为 describe、render-office 或 render-pdf-page',
-      },
-    })
-
-    const missingFields = await executeRendererRequest({
-      protocolVersion: 1,
-      requestId: 'missing',
-      operation: 'render-office',
-    })
-
-    expect(missingFields).toMatchObject({ status: 'error', error: { code: 'INVALID_REQUEST' } })
-    const message = (missingFields as { error: { message: string } }).error.message
-    expect(message).toBe('请求不合法：projectRoot 应为字符串；inputPath 应为字符串；outputPath 应为字符串')
-    expect(message).not.toContain('"code"')
-  })
-
-  test('非法 JSON 输入也回一条 JSON 回执', async () => {
-    const brokenArgument = await runDocumentRendererCli(['--request-json', '{bad'])
-    expect(brokenArgument.exitCode).toBe(1)
-    expect(JSON.parse(brokenArgument.text)).toMatchObject({
-      status: 'error',
-      requestId: 'invalid-request',
-      error: { code: 'INVALID_REQUEST' },
-    })
-    expect(JSON.parse(brokenArgument.text).error.message).toContain('--request-json 的值')
-
-    const missingArgument = await runDocumentRendererCli(['--request-json'])
-    expect(missingArgument.exitCode).toBe(1)
-    expect(JSON.parse(missingArgument.text)).toMatchObject({
-      status: 'error',
-      error: { code: 'INVALID_REQUEST' },
-    })
-
-    const brokenStandardInput = await runDocumentRendererCli([], 'not json at all')
-    expect(brokenStandardInput.exitCode).toBe(1)
-    expect(JSON.parse(brokenStandardInput.text)).toMatchObject({
-      status: 'error',
-      error: { code: 'INVALID_REQUEST' },
-    })
-    expect(JSON.parse(brokenStandardInput.text).error.message).toContain('标准输入')
-  })
-
-  test('describe 走命令行也回同一条回执', async () => {
-    const result = await runDocumentRendererCli(['describe'])
-
-    expect(result.exitCode).toBe(0)
-    expect(JSON.parse(result.text)).toMatchObject({
-      status: 'success',
-      result: { product: 'velar-document-renderer' },
-    })
   })
 })
