@@ -13,10 +13,17 @@ import {
   renderParameterDescription as parameterDescription,
   structureToolDescriptionsForCategory,
 } from '@velaros-ai/agent/tool-contract'
-import { isBoolean, isNull, isString, optionalWhen } from '@velaros-ai/core'
+import { isNull, optionalWhen } from '@velaros-ai/core'
 
 import {
+  BrowserCaptureLimits,
+  BrowserFetchLimits,
+  BrowserFileLimits,
+  BrowserInspectLimits,
   BrowserModId,
+  BrowserPageDataLimits,
+  BrowserPendingEventLimits,
+  BrowserPerformanceLimits,
   BrowserSpaceId,
 } from '../contract/constants'
 import type {
@@ -143,7 +150,7 @@ const BrowserSessionCapability = {
 } satisfies BrowserToolCapabilitySchema
 
 // ── 来自 Sessions.tool.ts ──
-/** 进入或切换当前 session 的 browser site 工作区。 */
+/** 进入或切换当前 session 的 站点 工作区。 */
 const enterBrowserSite = defineBrowserTool<{ url: string }>({
   name: 'browser:enter_site',
   role: 'control',
@@ -156,12 +163,14 @@ const enterBrowserSite = defineBrowserTool<{ url: string }>({
       '不要在没有目标网站时调用。',
     ],
   protocol: [
-      '先进入目标网站，再使用 inspect、query、click、screenshot 等浏览器工具。',
-      '切换主站点时保留旧站点工作区，并为新站点创建独立工作区。',
-    ],
-  usage: ['传目标 URL；调用成功后后续 browser 工具绑定该站点。'],
-  examples: [{ url: "http://localhost:3000" }],
-  notes: ['浏览器工作区按站点隔离，不能跨站点直接读写。'],
+    '进入后用 browser:inspect_page 看页面、browser:act 操作页面。',
+    '切换主站点时保留旧站点工作区，并为新站点建一个独立的。',
+  ],
+  examples: [{ url: 'http://localhost:3000' }, { url: 'example.com' }],
+  notes: [
+    '不带协议时按 https:// 补全。',
+    '站点工作区按站点隔离，跨站点读写不了对方的文件。',
+  ],
   schema: z.object({
     url: z
       .string()
@@ -180,16 +189,14 @@ const enterBrowserSite = defineBrowserTool<{ url: string }>({
   execute: async ({ url }, ctx) => new BrowserSiteOperations(ctx).enterSite(url),
 })
 
-/** 退出当前 browser site 模式。 */
+/** 退出当前 站点模式。 */
 const leaveBrowserSite = defineBrowserTool<Record<string, never>>({
   name: 'browser:leave_site',
   role: 'control',
   summary: '退出当前浏览器网站会话。',
   suitable: ['不再需要当前网站的浏览器能力。'],
   forbidden: ['不要在仍需继续操作当前网页时调用。'],
-  usage: ['调用时传空对象。'],
-  examples: [{}],
-  notes: ['退出不会删除该站点已有浏览器工作区产物。'],
+  notes: ['退出不会删除这个站点已有的工作区产物。'],
   schema: z.object({}),
   permissions: [],
   capabilities: BrowserControlCapability,
@@ -197,7 +204,7 @@ const leaveBrowserSite = defineBrowserTool<Record<string, never>>({
   isConcurrencySafe: () => false,
   execute: async (_input, ctx) => {
     ctx.abortSignal.throwIfAborted()
-    // 只解除当前 session 的 browser mode，不删除站点工作区产物。
+    // 只解除当前 session 的 站点模式，不删除站点工作区产物。
     await ctx.browser.leaveSite()
 
     return {
@@ -214,9 +221,7 @@ const browserShowPage = defineBrowserTool<Record<string, never>>({
   summary: '显示并连接当前受控浏览器页面。',
   suitable: ['需要让当前已绑定网页在内嵌浏览器中可见。'],
   forbidden: ['不要用它切换网站；切换网站用 browser:enter_site。'],
-  usage: ['调用前必须已有 active browser site。'],
-  examples: [{}],
-  notes: ['只连接当前受控页面，不提供任意脚本执行。'],
+  notes: ['只把当前这一页显示出来，不执行任何脚本。'],
   schema: z.object({}),
   permissions: ['network'],
   capabilities: BrowserControlCapability,
@@ -235,17 +240,10 @@ const browserShowPage = defineBrowserTool<Record<string, never>>({
 const browserListPageTargets = defineBrowserTool<Record<string, never>>({
   name: 'browser:list_page_targets',
   role: 'inspect',
-  summary: '列出当前受控浏览器页面 target。',
-  suitable: [
-      '需要判断当前浏览器是内嵌 WebView 还是外部 CDP 页面。',
-      '需要查看外部浏览器可见的 page target 列表，为后续多标签页控制做判断。',
-    ],
-  forbidden: [
-      '不要用它切换、新建或关闭标签页；它只读当前 target 库存。',
-    ],
-  usage: ['调用前必须已有 active browser site；传空对象。'],
-  examples: [{}],
-  notes: ['WebView 路径返回单个 synthetic current target；外部 CDP 路径尽量读取真实 page target list。'],
+  summary: '列出当前受控浏览器的标签页。',
+  suitable: ['要在多个标签页之间挑一个来操作，先看看有哪些。'],
+  forbidden: ['不要用它切换、新建或关闭标签页；切换用 browser:switch_page_target。'],
+  notes: ['内嵌页面只返回当前这一页；外部浏览器返回它的全部标签页。'],
   schema: z.object({}),
   permissions: ['network'],
   capabilities: BrowserObserveCapability,
@@ -263,29 +261,22 @@ const browserListPageTargets = defineBrowserTool<Record<string, never>>({
 const browserSwitchPageTarget = defineBrowserTool<{ targetId: string }>({
   name: 'browser:switch_page_target',
   role: 'control',
-  summary: '切换当前受控的外部 CDP page target。',
-  suitable: [
-      '外部浏览器已有多个 page target，需要把后续 browser 工具绑定到另一个标签页。',
-      'browser:list_page_targets 返回了目标 targetId，且用户或任务需要操作该页面。',
-    ],
+  summary: '把后续操作切到外部浏览器的另一个标签页。',
+  suitable: ['browser:list_page_targets 里有要操作的那一页。'],
   forbidden: [
-      '不要用它切换网站工作区；主站点切换仍使用 browser:enter_site。',
-      '不要在内嵌 WebView 路径使用；WebView 当前只有单个 synthetic target。',
-    ],
-  protocol: [
-      '先调用 browser:list_page_targets 获取 targetId。',
-      '切换后继续用 browser:inspect_page 或 browser:get_page_state 确认当前受控页面。',
-    ],
-  usage: ['传 browser:list_page_targets 返回的 targetId。'],
+    '不要用它切换网站；换站点用 browser:enter_site。',
+    '内嵌页面只有一页，不用切换。',
+  ],
+  protocol: ['切换后用 browser:get_page_state 确认落到了哪一页。'],
   examples: [{ targetId: 'page-2' }],
-  notes: ['只切换当前受控 page driver，不关闭外部浏览器窗口。'],
+  notes: ['只切换后续操作的目标，不关闭任何窗口。'],
   schema: z.object({
     targetId: z
       .string()
       .min(1)
       .describe(
         parameterDescription({
-          description: '要切换到的 CDP page target id。',
+          description: '要切换到的 CDP 标签页 id。',
           usage: ['来自 browser:list_page_targets 返回的 targets[].id。'],
         })
       ),
@@ -356,12 +347,12 @@ const browserInspectPage = defineBrowserTool<{
       .number()
       .int()
       .positive()
-      .max(100000)
+      .max(BrowserInspectLimits.textChars)
       .optional()
       .describe(
         parameterDescription({
           description: '最多返回多少正文字符。',
-          notes: ['默认 20000。'],
+          notes: [`不给就是 ${BrowserInspectLimits.defaultTextChars} 字符。`],
         })
       ),
     includeHtml: z.boolean().optional().describe(
@@ -373,26 +364,26 @@ const browserInspectPage = defineBrowserTool<{
       .number()
       .int()
       .positive()
-      .max(100000)
+      .max(BrowserInspectLimits.htmlChars)
       .optional()
       .describe(
         parameterDescription({
           description: '最多返回多少 HTML 字符。',
           usage: ['仅 includeHtml=true 时使用。'],
-          notes: ['默认 30000。'],
+          notes: [`不给就是 ${BrowserInspectLimits.defaultHtmlChars} 字符。`],
         })
       ),
     maxElements: z
       .number()
       .int()
       .positive()
-      .max(400)
+      .max(BrowserInspectLimits.elements)
       .optional()
       .describe(
         parameterDescription({
           description: '最多返回多少个交互元素。',
           usage: ['大型页面建议显式设置，避免上下文膨胀。'],
-          notes: ['默认 80，最大 400。'],
+          notes: [`不给就是 ${BrowserInspectLimits.defaultElements} 个，最多 ${BrowserInspectLimits.elements} 个。`],
         })
       ),
   }),
@@ -430,32 +421,39 @@ const browserObserveActions = defineBrowserTool<{
   forbidden: ['不要用它执行动作；执行候选动作时用 browser:act。'],
   protocol: ['先 observe 候选，展示 preview；执行时调用候选的 replay.tool，并把 replay.input 作为入参。'],
   usage: ['可传 instruction 做轻量过滤和排序；limit 控制返回数量；ignoreSelectors 可排除导航、弹窗、广告等噪音区域。'],
-  examples: [{ instruction: 'email', limit: 5 }, { instruction: 'checkout', ignoreSelectors: ['nav', '.cookie-banner'] }],
+  examples: [
+    { instruction: 'email' },
+    { instruction: 'checkout', ignoreSelectors: ['nav', '.cookie-banner'] },
+  ],
   notes: [
-    '候选来自当前页面 inspection，不调用外部 LLM。',
-    'ignoreSelectors 会在生成候选前过滤对应子树，适合排除 cookie banner、固定导航和广告容器。',
-    '每个候选包含 actionId、preview 和 replay；target 类动作同时提供 actionInput。',
-    '原生 select 会作为需要 value 的 select 候选返回；value 可按 option value 或可见文本匹配。',
-    'file input 会作为 upload 候选返回；执行时用 browser:upload_file 并补 filePath。',
-    '自定义 dropdown 触发器会带 twoStep=true；先执行 click，再重新 observe 选项。',
+    '候选来自当前页面的一次检查，不另外调模型。',
+    'ignoreSelectors 在生成候选前就过滤掉那些子树，适合排除 cookie 提示条、固定导航和广告容器。',
+    '每个候选给 preview（人能看懂的一句）与 replay（照着调的工具名和入参）；目标元素只在 replay.input.target 里出现一次。',
+    '原生 select 会给成需要 value 的 select 候选；value 可以按 option 的值或可见文本匹配。',
+    'file input 会给成 upload 候选；执行时用 browser:upload_file 并补上 filePath。',
+    '自定义下拉的触发器带 twoStep=true：先点开，再重新看一次候选里的选项。',
   ],
   schema: z.object({
-    instruction: z.string().min(1).max(500).optional().describe(
+    instruction: z.string().min(1).max(BrowserInspectLimits.instructionChars).optional().describe(
       parameterDescription({
         description: '要观察的动作或元素意图。',
         notes: ['省略时返回页面上优先级最高的常见动作候选。'],
       })
     ),
-    limit: z.number().int().positive().max(80).optional().describe(
+    limit: z.number().int().positive().max(BrowserInspectLimits.observeCandidates).optional().describe(
       parameterDescription({
         description: '最多返回多少个候选动作。',
-        notes: ['默认 20。'],
+        notes: [`不给就是 ${BrowserInspectLimits.defaultObserveCandidates} 个。`],
       })
     ),
-    ignoreSelectors: z.array(z.string().min(1).max(1000)).max(50).optional().describe(
+    ignoreSelectors: z
+      .array(z.string().min(1).max(BrowserInspectLimits.selectorChars))
+      .max(BrowserInspectLimits.ignoreSelectors)
+      .optional()
+      .describe(
       parameterDescription({
         description: '生成候选前要忽略的 CSS selector 子树。',
-        notes: ['用于过滤导航、cookie banner、广告、侧栏等噪音区域。'],
+        notes: ['用于过滤导航、cookie 提示条、广告、侧栏等噪音区域。'],
       })
     ),
   }),
@@ -501,7 +499,7 @@ const browserCaptureScreenshot = defineBrowserTool<{
     path: z
       .string()
       .min(1)
-      .max(180)
+      .max(BrowserCaptureLimits.pathChars)
       .optional()
       .describe(
         parameterDescription({
@@ -509,18 +507,37 @@ const browserCaptureScreenshot = defineBrowserTool<{
           notes: ['省略时写入默认 screenshots 目录。'],
         })
       ),
-    width: z.number().int().min(320).max(3840).optional().describe(
+    width: z
+      .number()
+      .int()
+      .min(BrowserCaptureLimits.minViewportWidth)
+      .max(BrowserCaptureLimits.maxViewportWidth)
+      .optional()
+      .describe(
       parameterDescription({
         description: '截图视口宽度。',
       })
     ),
-    height: z.number().int().min(240).max(2160).optional().describe(
+    height: z
+      .number()
+      .int()
+      .min(BrowserCaptureLimits.minViewportHeight)
+      .max(BrowserCaptureLimits.maxViewportHeight)
+      .optional()
+      .describe(
       parameterDescription({
         description: '截图视口高度。',
       })
     ),
     waitForNetworkIdle: z
-      .union([z.boolean(), z.number().int().min(100).max(5000)])
+      .union([
+        z.boolean(),
+        z
+          .number()
+          .int()
+          .min(BrowserCaptureLimits.minNetworkIdleMs)
+          .max(BrowserCaptureLimits.maxNetworkIdleMs),
+      ])
       .optional()
       .describe(
         parameterDescription({
@@ -532,9 +549,24 @@ const browserCaptureScreenshot = defineBrowserTool<{
       .union([
         z.boolean(),
         z.object({
-          stableFrames: z.number().int().min(3).max(16).optional(),
-          sampleIntervalMs: z.number().int().min(16).max(250).optional(),
-          maxWaitMs: z.number().int().min(250).max(8000).optional(),
+          stableFrames: z
+            .number()
+            .int()
+            .min(BrowserCaptureLimits.minDomStableFrames)
+            .max(BrowserCaptureLimits.maxDomStableFrames)
+            .optional(),
+          sampleIntervalMs: z
+            .number()
+            .int()
+            .min(BrowserCaptureLimits.minDomStableSampleMs)
+            .max(BrowserCaptureLimits.maxDomStableSampleMs)
+            .optional(),
+          maxWaitMs: z
+            .number()
+            .int()
+            .min(BrowserCaptureLimits.minDomStableWaitMs)
+            .max(BrowserCaptureLimits.maxDomStableWaitMs)
+            .optional(),
         }),
       ])
       .optional()
@@ -549,8 +581,18 @@ const browserCaptureScreenshot = defineBrowserTool<{
         z.boolean(),
         z.object({
           enabled: z.boolean().optional(),
-          maxWidth: z.number().int().min(320).max(32000).optional(),
-          maxHeight: z.number().int().min(240).max(32000).optional(),
+          maxWidth: z
+            .number()
+            .int()
+            .min(BrowserCaptureLimits.minViewportWidth)
+            .max(BrowserCaptureLimits.fullPageMaxSide)
+            .optional(),
+          maxHeight: z
+            .number()
+            .int()
+            .min(BrowserCaptureLimits.minViewportHeight)
+            .max(BrowserCaptureLimits.fullPageMaxSide)
+            .optional(),
         }),
       ])
       .optional()
@@ -564,7 +606,7 @@ const browserCaptureScreenshot = defineBrowserTool<{
         z.boolean(),
         z.object({
           enabled: z.boolean().optional(),
-          maxElements: z.number().int().min(1).max(120).optional(),
+          maxElements: z.number().int().min(1).max(BrowserCaptureLimits.annotatedElements).optional(),
         }),
       ])
       .optional()
@@ -585,13 +627,17 @@ const browserCaptureScreenshot = defineBrowserTool<{
     region: z
       .union([
         z.object({
-          selector: z.string().min(1).max(1000).describe('要截的那个元素的 CSS selector。'),
+          selector: z
+            .string()
+            .min(1)
+            .max(BrowserInspectLimits.selectorChars)
+            .describe('要截的那个元素的 CSS selector。'),
         }),
         z.object({
-          x: z.number().int().min(0).max(20000),
-          y: z.number().int().min(0).max(20000),
-          width: z.number().int().min(1).max(20000),
-          height: z.number().int().min(1).max(20000),
+          x: z.number().int().min(0).max(BrowserCaptureLimits.regionMaxSide),
+          y: z.number().int().min(0).max(BrowserCaptureLimits.regionMaxSide),
+          width: z.number().int().min(1).max(BrowserCaptureLimits.regionMaxSide),
+          height: z.number().int().min(1).max(BrowserCaptureLimits.regionMaxSide),
         }),
       ])
       .optional()
@@ -653,34 +699,17 @@ const browserQueryElements = defineBrowserTool<BrowserQueryElementsInput>({
   notes: ['只使用受控查询接口。', '`>>` 只进入一层同源 iframe；跨域 iframe、OOPIF 和递归 frame traversal 不在当前页面脚本路径内。'],
   schema: browserQueryElementsSchema,
   surfaces: {
-    preset: {
-      role: 'inspect',
-      summary: '用 CSS selector 查询当前页面元素。',
-      suitable: ['只需要默认上限的元素文本和常用属性。'],
-      forbidden: ['不要用它请求 HTML 或额外属性；需要时切到 guided/direct。'],
-      usage: ['传 selector。'],
-      examples: [{ selector: ".product-card" }],
-      notes: ['默认最多返回 20 个匹配元素。'],
-      schema: z.object({
-        selector: z.string().min(1).max(1000).describe(
-          parameterDescription({
-            description: 'CSS selector；一层同源 iframe 内元素可用 iframe selector >> inner selector。',
-          })
-        ),
-      }),
-      normalize: (input) => ({
-        selector: isString(input.selector) ? input.selector : '',
-        limit: 20,
-      }),
-    },
     guided: {
       role: 'inspect',
       summary: '用 CSS selector 查询元素并返回 target。',
       suitable: ['需要调整返回上限、属性或 HTML。'],
       forbidden: ['不要用它执行页面动作。'],
       usage: ['传 selector；limit 可省略；一层同源 iframe 内元素可用 `iframe[...] >> .inner`。'],
-      examples: [{ selector: "article", limit: 5, attributes: ["href"] }, { selector: 'iframe[name="checkout"] >> .total', limit: 5 }],
-      notes: ['省略 limit 时默认 20。'],
+      examples: [
+        { selector: 'article', attributes: ['href'] },
+        { selector: 'iframe[name="checkout"] >> .total' },
+      ],
+      notes: [`不给 limit 就是 ${BrowserInspectLimits.defaultQueryElements} 个。`],
       schema: browserQueryElementsGuidedSchema,
       normalize: normalizeBrowserQueryElementsGuided,
     },
@@ -724,8 +753,8 @@ const browserGetPageDiagnostics = defineBrowserTool<BrowserGetPageDiagnosticsInp
       summary: '读取当前页面诊断事件。',
       suitable: ['需要调整条数或读完清掉这一类缓存。'],
       forbidden: ['不要用它调试别的页面。'],
-      examples: [{ kind: 'network', limit: 80, clear: true }],
-      notes: ['省略 limit 时默认 50。'],
+      examples: [{ kind: 'network', clear: true }],
+      notes: [`不给 limit 就是 ${BrowserInspectLimits.defaultDiagnosticEntries} 条。`],
       schema: browserGetPageDiagnosticsGuidedSchema,
       normalize: normalizeBrowserGetPageDiagnosticsGuided,
     },
@@ -738,36 +767,27 @@ const browserGetPageDiagnostics = defineBrowserTool<BrowserGetPageDiagnosticsInp
   execute: async (input, ctx) => new BrowserInspectOperations(ctx).readDiagnostics(input),
 })
 
-/** 按网络诊断事件 requestId 读取外部 CDP 浏览器捕获的响应体。 */
+/** 按诊断事件里的 requestId 读响应体。 */
 const browserGetNetworkResponseBody = defineBrowserTool<BrowserGetNetworkResponseBodyInput>({
   name: 'browser:get_network_response_body',
   role: 'inspect',
   summary: '读取当前页面某个已捕获网络请求的响应体。',
-  suitable: [
-    'browser:list_network_events 返回了 requestId，需要查看对应 API 响应体。',
-    '需要调试当前页面 XHR/fetch 的 JSON、文本或 base64 响应。',
-  ],
-  forbidden: [
-    '不要用它下载任意 URL；下载资源用 browser:fetch_resource。',
-    '不要在没有当前页面 requestId 时调用；先用 browser:list_network_events 找 requestId。',
-  ],
-  protocol: ['先调用 browser:list_network_events 获取 requestId，再用该 requestId 读取响应体。'],
-  usage: ['传 requestId；大响应按需设置 maxChars。'],
-  examples: [{ requestId: '12345.67', maxChars: 20000 }],
+  suitable: ['需要看当前页面某次 XHR / fetch 回了什么。'],
+  forbidden: ['不要用它下载任意 URL；下载资源用 browser:fetch_resource。'],
+  examples: [{ requestId: 'a1b2.3' }],
   notes: [
-    'requestId 来自 browser:list_network_events 的网络事件。',
-    '浏览器只保留近期响应体：过旧或跨标签页的 requestId 可能已经读不到。',
+    'requestId 来自 browser:get_page_diagnostics kind=network 的网络事件。',
+    '只保留近期的响应体：较早或别的标签页的 requestId 可能已经读不到。',
   ],
   schema: browserGetNetworkResponseBodySchema,
   surfaces: {
     guided: {
       role: 'inspect',
       summary: '按 requestId 读取网络响应体。',
-      suitable: ['已经从 browser:list_network_events 拿到 requestId。'],
+      suitable: ['已经从 browser:get_page_diagnostics kind=network 拿到 requestId。'],
       forbidden: ['不要传 URL；这里只接受 requestId。'],
-      usage: ['传 requestId；maxChars 可省略。'],
-      examples: [{ requestId: '12345.67' }],
-      notes: ['省略 maxChars 时默认 20000。'],
+      examples: [{ requestId: 'a1b2.3' }],
+      notes: [`不给 maxChars 就是 ${BrowserInspectLimits.defaultResponseBodyChars} 字符。`],
       schema: browserGetNetworkResponseBodyGuidedSchema,
       normalize: normalizeBrowserGetNetworkResponseBodyGuided,
     },
@@ -785,38 +805,31 @@ const browserGetNetworkResponseBody = defineBrowserTool<BrowserGetNetworkRespons
   },
 })
 
-/** 按网络诊断事件 requestId 读取请求/响应详情。 */
+/** 按诊断事件里的 requestId 读请求与响应详情。 */
 const browserGetNetworkRequest = defineBrowserTool<BrowserGetNetworkRequestInput>({
   name: 'browser:get_network_request',
   role: 'inspect',
   summary: '读取当前页面某个已捕获网络请求的完整详情。',
-  suitable: [
-    'browser:list_network_events 返回了 requestId，需要查看请求 headers、postData、响应 headers、timing 或 body size。',
-    '需要调试当前页面 XHR/fetch、资源加载、缓存命中或失败原因。',
-  ],
+  suitable: ['要看一次请求的请求头、postData、响应头、耗时或体积。'],
   forbidden: [
-    '不要把它当作 HAR 导出；这里只返回单个 requestId 的详情。',
-    '不要传 URL；必须先通过 browser:list_network_events 获取 requestId。',
+    '不要把它当 HAR 导出；这里只回一个 requestId 的详情。',
+    '不要传 URL；这里只接受 requestId。',
   ],
-  protocol: [
-    '先调用 browser:list_network_events 定位请求；需要 body 时设置 includeResponseBody=true 或改用 browser:get_network_response_body。',
-  ],
-  usage: ['传 requestId；需要响应体时传 includeResponseBody=true 和可选 maxBodyChars。'],
-  examples: [{ requestId: '12345.67' }, { requestId: '12345.67', includeResponseBody: true }],
+  examples: [{ requestId: 'a1b2.3' }, { requestId: 'a1b2.3', includeResponseBody: true }],
   notes: [
-    'requestId 来自 browser:list_network_events 的网络事件。',
-    '详情缓存有上限：过旧的 requestId 可能已经读不到。',
+    'requestId 来自 browser:get_page_diagnostics kind=network 的网络事件。',
+    '详情缓存有上限：较早的 requestId 可能已经读不到。',
   ],
   schema: browserGetNetworkRequestSchema,
   surfaces: {
     guided: {
       role: 'inspect',
       summary: '按 requestId 读取网络请求详情。',
-      suitable: ['已经从 browser:list_network_events 拿到 requestId。'],
+      suitable: ['已经从 browser:get_page_diagnostics kind=network 拿到 requestId。'],
       forbidden: ['不要传 URL；这里只接受 requestId。'],
       usage: ['传 requestId；includeResponseBody 和 maxBodyChars 可省略。'],
-      examples: [{ requestId: '12345.67', includeResponseBody: true }],
-      notes: ['省略 includeResponseBody 时不读取响应体；省略 maxBodyChars 时默认 20000。'],
+      examples: [{ requestId: 'a1b2.3', includeResponseBody: true }],
+      notes: [`不给 includeResponseBody 就不读响应体；不给 maxBodyChars 就是 ${BrowserInspectLimits.defaultResponseBodyChars} 字符。`],
       schema: browserGetNetworkRequestGuidedSchema,
       normalize: normalizeBrowserGetNetworkRequestGuided,
     },
@@ -846,7 +859,7 @@ const browserAct = defineBrowserTool<z.input<typeof browserActSchema>>({
     '需要直接访问 URL，或点击、填写、选择、清空、选中文本、前进、后退、刷新、滚动、键鼠、等待、视口、缩放、网络或环境模拟控制当前 browser 页面。',
   ],
   forbidden: [
-    '不要用它进入或退出 browser site 模式；站点会话仍用 browser:enter_site/browser:leave_site。',
+    '不要用它进入或退出 站点模式；站点会话仍用 browser:enter_site/browser:leave_site。',
     '不要用坐标点击替代稳定 selector；能定位元素时优先 action=target。',
   ],
   usage: [
@@ -933,7 +946,6 @@ const browserAct = defineBrowserTool<z.input<typeof browserActSchema>>({
       networkThrottling: 'slow-3g',
     },
   ],
-  notes: ['这是 browser 页面动作的唯一公开入口；内部仍按 action 复用导航、键鼠、等待和视口控制实现。'],
   usageSkillId: 'browser-automation-recipes',
   schema: browserActSchema,
   permissions: ['network', 'input:control'],
@@ -969,40 +981,10 @@ const browserReadPageStorage = defineBrowserTool<BrowserReadPageStorageInput>({
       usage: [
         "可传 includeLocalStorage、includeSessionStorage、includeCookies、storageScope 和 limit。",
       ],
-      examples: [{ includeCookies: true, limit: 80 }],
-      notes: ["省略 limit 时默认每类 50 项。"],
+      examples: [{ includeCookies: true }],
+      notes: [`不给 limit 就是每类 ${BrowserPageDataLimits.defaultStorageItems} 项。`],
       schema: browserReadPageStorageGuidedSchema,
       normalize: normalizeBrowserReadPageStorageGuided,
-    },
-    preset: {
-      role: "inspect",
-      summary: "用默认上限读取当前页面常用存储。",
-      suitable: ["需要快速查看 localStorage 和 sessionStorage。"],
-      forbidden: ["不要用它调整读取上限。"],
-      usage: ["可传 includeCookies。"],
-      examples: [{ includeCookies: true }],
-      notes: ["需要精细上限时切到 guided/direct。"],
-      schema: z.object({
-        includeCookies: z
-          .boolean()
-          .optional()
-          .describe(
-            parameterDescription({
-              description: "是否读取当前页 cookie。",
-              notes: ["默认 false。"],
-            }),
-          ),
-      }),
-      normalize: (input) => {
-        const includeCookies = input.includeCookies;
-        return {
-          includeCookies: optionalWhen(
-            isBoolean(includeCookies),
-            Boolean(includeCookies),
-          ),
-          limit: 50,
-        };
-      },
     },
   },
   permissions: ["network"],
@@ -1024,7 +1006,7 @@ const browserReadPageStorage = defineBrowserTool<BrowserReadPageStorageInput>({
     ctx.abortSignal.throwIfAborted();
     requireActiveBrowserSite(ctx);
 
-    // external CDP 模式会读当前页对应的浏览器 cookie jar；webview 保持页面可见 cookie。
+    // 外部浏览器会读当前页对应的浏览器 cookie jar；内嵌页面只读页面可见的 cookie。
     return ctx.browser.readPageStorage({
       includeLocalStorage,
       includeSessionStorage,
@@ -1132,8 +1114,8 @@ const browserExtract = defineBrowserTool<z.input<typeof browserExtractSchema>>({
     '需要提取正文为 plain/markdown/html，或跨分页收集列表项。',
   ],
   forbidden: [
-    '不要用于截图、PDF、媒体或资源清单导出；这些仍用 browser:export_page。',
-    '不要用它操作页面表单或按钮；页面动作使用 browser:act。',
+    '截图用 browser:capture_screenshot；PDF 用 browser:files action=save_pdf；媒体与资源清单用 browser:list_media_sources、browser:list_page_resources。',
+    '不要用它操作页面表单或按钮；页面动作用 browser:act。',
   ],
   protocol: ['分页提取会点击下一页，先确认当前页面处于列表第一页。'],
   usage: ['传 action 选择 table、list、paginate 或 content，再传该动作需要的字段。'],
@@ -1148,10 +1130,9 @@ const browserExtract = defineBrowserTool<z.input<typeof browserExtractSchema>>({
     { action: 'paginate', selector: '.result', maxPages: 3, maxItemsPerPage: 40 },
   ],
   notes: [
-    '这是 browser 页面结构化提取的唯一公开入口；内部仍按 action 复用有界提取实现。',
     '返回：table 给 headers/rows/rowCount（没找到表格时 ok=false 并附 error）；list 给 items（title/href/description）；paginate 给 pagesVisited/totalItems/items；content 给 content/format/truncated。',
     'save=true 且提取成功时写入 extracts/，并追加 savedPath/savedRelativePath；paginate 默认保存。',
-    '单次提取结果按 JSON 计超过约 20 万字符时直接报错而不是截断；按提示调小 maxRows/maxItems/maxChars 或收窄 selector。',
+    '单次提取结果超过求值通道上限时直接报错而不是截断；按提示调小 maxRows/maxItems/maxChars 或收窄 selector。',
   ],
   schema: browserExtractSchema,
   permissions: ['network', 'fs:read', 'fs:write'],
@@ -1164,20 +1145,16 @@ const browserExtract = defineBrowserTool<z.input<typeof browserExtractSchema>>({
 
 // ── 来自 Export.tool.ts ──
 
-/** 浏览器网站工作区文件与结构化 artifact 的统一原语入口。 */
+/** 浏览器网站工作区文件与结构化产物 的统一原语入口。 */
 const browserFiles = defineBrowserTool<z.input<typeof browserFilesSchema>>({
   name: 'browser:files',
   role: 'edit',
-  summary: '统一管理当前网站浏览器工作区文件和结构化 artifact。',
+  summary: '统一管理当前网站浏览器工作区文件和结构化产物。',
   suitable: [
     '需要列出、读取或写入当前网站工作区文件。',
-    '需要列出/写入标准 artifact，或保存当前页面快照。',
+    '需要列出/写入标准产物，或保存当前页面快照。',
   ],
-  forbidden: ['不要用它跨网站访问其他 browser 工作区。', '读取文件必须传 endLine 或 maxChars。'],
-  protocol: [
-    'action=list_files/read_file/write_file 对应普通路径。',
-    'action=list_artifacts/write_artifact/save_page_snapshot 对应标准 artifact 目录。',
-  ],
+  forbidden: ['不要用它跨站点访问别的站点工作区。'],
   usage: ['传 action，再按 action 提供对应参数；覆盖已有内容必须显式 overwrite=true。'],
   examples: [
     // 列出工作区文件（limit 必填）
@@ -1186,16 +1163,16 @@ const browserFiles = defineBrowserTool<z.input<typeof browserFilesSchema>>({
     { action: 'read_file', path: 'recipes/login.json', maxChars: 12000 },
     // 写普通文件；覆盖已有必须 overwrite=true
     { action: 'write_file', path: 'notes/todo.md', content: '# TODO\n- ...' },
-    // 列出标准 artifact
+    // 列出标准产物
     { action: 'list_artifacts', kind: 'extract', limit: 50 },
-    // 写结构化 artifact
+    // 写结构化产物
     { action: 'write_artifact', kind: 'extract', format: 'json', content: '{...}' },
     // 保存当前页面快照
     { action: 'save_page_snapshot', name: 'login-page' },
   ],
   notes: [
-    '这是 browser 文件/产物的唯一公开入口；内部按 action 分派到有界读写实现。',
-    'write_file 返回 absolute path 供本机文件链接打开，并返回 relativePath 供展示和持久化。',
+    'list_files / read_file / write_file 走普通路径；list_artifacts / write_artifact / save_page_snapshot / save_pdf 走标准产物目录。',
+    'write_file 同时返回绝对路径（本机点开用）与相对路径（展示与持久化用）。',
   ],
   schema: browserFilesSchema,
   permissions: ['network', 'fs:read', 'fs:write'],
@@ -1206,7 +1183,7 @@ const browserFiles = defineBrowserTool<z.input<typeof browserFilesSchema>>({
     new BrowserFileOperations(ctx).run(parseBrowserFilesInput(input)),
 })
 
-/** browser 工作区文件/artifact 工具出口。 */
+/** 站点工作区文件与产物类工具出口。 */
 
 // ── 来自 Fetch.tool.ts ──
 const browserFetchResource = defineBrowserTool<{
@@ -1221,10 +1198,7 @@ const browserFetchResource = defineBrowserTool<{
     "已从页面拿到可直接访问的 http(s) 媒体 URL。",
     "需要保留登录态或站点 cookie 才能下载的资源。",
   ],
-  forbidden: [
-    "不要用于 blob:、data: 或 DRM 受保护流。",
-    "savePath 只能是当前站点工作区里的相对路径；指向区外的符号链接会被拒绝。",
-  ],
+  forbidden: ['不要用于 blob:、data: 或 DRM 保护的流。'],
   usage: [
     "先用 browser:list_media_sources 或 browser:read_page_data preset=media_sources 找 URL。",
     "传 url 和 savePath（建议 downloads/ 下）；需要时传 referer。",
@@ -1235,12 +1209,12 @@ const browserFetchResource = defineBrowserTool<{
       savePath: "downloads/hero.jpg",
     },
   ],
-  notes: ["使用当前页面 session cookie；单文件上限 50MB。"],
+  notes: [`带着当前页面的 cookie 下载；单个文件最多 ${BrowserFetchLimits.fileBytes} 字节。`],
   schema: z.object({
     url: z
       .string()
       .url()
-      .max(4096)
+      .max(BrowserFileLimits.pathChars)
       .describe(
         parameterDescription({
           description: "要下载的 http(s) 资源 URL。",
@@ -1249,17 +1223,17 @@ const browserFetchResource = defineBrowserTool<{
     savePath: z
       .string()
       .min(1)
-      .max(4096)
+      .max(BrowserFileLimits.pathChars)
       .describe(
         parameterDescription({
-          description: "保存路径（相对 browser workspace）。",
+          description: "保存路径（相对 站点工作区）。",
           usage: ["建议放在 downloads/ 目录。"],
         }),
       ),
     referer: z
       .string()
       .url()
-      .max(4096)
+      .max(BrowserFileLimits.pathChars)
       .optional()
       .describe(
         parameterDescription({
@@ -1297,12 +1271,16 @@ const browserListMediaSources = defineBrowserTool<{
   schema: z.object({
     limit: z
       .number()
-      .transform((value) => Math.min(200, Math.max(1, Math.round(value))))
+      .transform((value) =>
+          Math.min(BrowserPageDataLimits.mediaSources, Math.max(1, Math.round(value)))
+        )
       .optional()
       .describe(
         parameterDescription({
           description: "最多返回多少条。",
-          notes: ["默认 80。", "上限 200,超出自动钳制。"],
+          notes: [
+            `不给就是 ${BrowserPageDataLimits.defaultMediaSources} 条，最多 ${BrowserPageDataLimits.mediaSources} 条，超了自动钳到上限。`,
+          ],
         }),
       ),
     includeDataUrls: z
@@ -1355,12 +1333,16 @@ const browserListPageResources = defineBrowserTool<{
   schema: z.object({
     limit: z
       .number()
-      .transform((value) => Math.min(500, Math.max(1, Math.round(value))))
+      .transform((value) =>
+          Math.min(BrowserPageDataLimits.pageResources, Math.max(1, Math.round(value)))
+        )
       .optional()
       .describe(
         parameterDescription({
           description: "链接/iframe 最多返回多少条。",
-          notes: ["默认 120。", "上限 500,超出自动钳制。"],
+          notes: [
+            `不给就是 ${BrowserPageDataLimits.defaultPageResources} 条，最多 ${BrowserPageDataLimits.pageResources} 条，超了自动钳到上限。`,
+          ],
         }),
       ),
     includeIframes: z
@@ -1414,9 +1396,9 @@ const browserUploadFile = defineBrowserTool<{
         description: 'file input 元素定位线索。',
       })
     ),
-    filePath: z.string().min(1).max(4096).describe(
+    filePath: z.string().min(1).max(BrowserFileLimits.pathChars).describe(
       parameterDescription({
-        description: '要上传的文件路径（browser workspace 内）。',
+        description: '要上传的文件路径（站点工作区 内）。',
       })
     ),
   }),
@@ -1442,12 +1424,10 @@ const browserListPendingEvents = defineBrowserTool<Record<string, never>>({
   summary: '列出当前页面待处理的阻塞事件。',
   suitable: [
     '需要确认是否有未处理的 JS 弹窗、下载或权限请求。',
-    'browser:get_page_diagnostics 显示 pending 事件后进一步定位 eventId。',
+    'browser:get_page_diagnostics 提示有挂起事件后，进一步定位 eventId。',
   ],
-  forbidden: ['不要用它代替具体的 handle 工具。'],
-  usage: ['无需参数；返回 pending 数组。'],
-  examples: [{}],
-  notes: ['事件会在超时后自动回退到默认策略。'],
+  forbidden: ['不要用它代替 browser:handle_dialog / handle_download / handle_permission。'],
+  notes: ['没人处理的事件会在超时后按缺省结算（弹窗取消、权限拒绝、下载取消）。'],
   schema: z.object({}),
   permissions: ['network'],
   capabilities: BrowserObserveCapability,
@@ -1482,10 +1462,18 @@ const browserWaitForPendingEvent = defineBrowserTool<{
         notes: ['默认 download。'],
       })
     ),
-    timeoutMs: z.number().transform((value) => Math.min(60000, Math.max(1, Math.round(value)))).optional().describe(
+    timeoutMs: z
+      .number()
+      .transform((value) =>
+        Math.min(BrowserPendingEventLimits.maxWaitMs, Math.max(1, Math.round(value)))
+      )
+      .optional()
+      .describe(
       parameterDescription({
         description: '最长等待毫秒数。',
-        notes: ['默认 5000。', '上限 60000,超出自动钳制。'],
+        notes: [
+            `不给就是 ${BrowserPendingEventLimits.defaultWaitMs} 毫秒，最多 ${BrowserPendingEventLimits.maxWaitMs} 毫秒，超了自动钳到上限。`,
+          ],
       })
     ),
   }),
@@ -1515,8 +1503,7 @@ const browserHandleDialog = defineBrowserTool<{
   role: 'control',
   summary: '处理待处理的 JS 弹窗（alert/confirm/prompt）。',
   suitable: ['页面出现 alert、confirm 或 prompt 弹窗阻塞自动化。'],
-  forbidden: ['不要在无 pending dialog 时调用。'],
-  usage: ['accept=true 确认；accept=false 取消；prompt 可传 promptText。'],
+  usage: ['accept=true 确认；accept=false 取消；prompt 弹窗可传 promptText。'],
   examples: [
     // 确认 alert/confirm
     { accept: true },
@@ -1582,7 +1569,7 @@ const browserHandleDownload = defineBrowserTool<{
       ),
       savePath: z.string().optional().describe(
         parameterDescription({
-          description: '保存路径（相对 browser workspace）。',
+          description: '保存路径（相对 站点工作区）。',
           usage: ['action=accept 时必填。'],
         })
       ),
@@ -1615,7 +1602,6 @@ const browserHandlePermission = defineBrowserTool<{
   role: 'control',
   summary: '允许或拒绝待处理的浏览器权限请求。',
   suitable: ['页面请求 geolocation、notifications、clipboard 等权限时。'],
-  forbidden: ['不要对非 pending 权限随意调用。'],
   usage: ['grant=true 允许；grant=false 拒绝。'],
   examples: [{ grant: true }],
   notes: ['可先调用 browser:list_pending_events 查看 permission 详情。'],
@@ -1721,19 +1707,26 @@ const browserPerformance = defineBrowserTool<{
         .number()
         .nullable()
         .transform((value) =>
-          isNull(value) ? null : Math.min(60_000, Math.max(1000, Math.round(value)))
+          isNull(value)
+          ? null
+          : Math.min(
+              BrowserPerformanceLimits.maxTraceMs,
+              Math.max(BrowserPerformanceLimits.minTraceMs, Math.round(value))
+            )
         )
         .optional()
         .describe(
           parameterDescription({
-            description: 'start_trace 录制窗口毫秒数；默认 5000，null 表示录到 stop_trace。',
-            notes: ['范围 [1000,60000],超出自动钳制。'],
+            description: `start_trace 录制窗口毫秒数；不给就是 ${BrowserPerformanceLimits.defaultTraceMs}，null 表示录到 stop_trace。`,
+            notes: [
+            `范围 ${BrowserPerformanceLimits.minTraceMs}–${BrowserPerformanceLimits.maxTraceMs} 毫秒，超了自动钳回来。`,
+          ],
           })
         ),
       insightSetId: z
         .string()
         .min(1)
-        .max(120)
+        .max(BrowserPerformanceLimits.insightIdChars)
         .optional()
         .describe(
           parameterDescription({
@@ -1743,7 +1736,7 @@ const browserPerformance = defineBrowserTool<{
       insightName: z
         .string()
         .min(1)
-        .max(120)
+        .max(BrowserPerformanceLimits.insightIdChars)
         .optional()
         .describe(
           parameterDescription({
@@ -1753,7 +1746,7 @@ const browserPerformance = defineBrowserTool<{
       path: z
         .string()
         .min(1)
-        .max(300)
+        .max(BrowserPerformanceLimits.snapshotPathChars)
         .optional()
         .describe(
           parameterDescription({
@@ -1828,17 +1821,29 @@ const browserScreencast = defineBrowserTool<{
           values: ['start：开始录制。', 'stop：停止并合成 GIF。'],
         })
       ),
-      maxWidth: z.number().int().min(240).max(1600).optional().describe(
+      maxWidth: z
+      .number()
+      .int()
+      .min(BrowserCaptureLimits.minScreencastWidth)
+      .max(BrowserCaptureLimits.maxScreencastWidth)
+      .optional()
+      .describe(
         parameterDescription({
-          description: 'start 的帧最大宽度；默认 800，越大文件越大。',
+          description: `start 的帧最大宽度；不给就是 ${BrowserCaptureLimits.defaultScreencastWidth}，越大文件越大。`,
         })
       ),
-      everyNthFrame: z.number().int().min(1).max(10).optional().describe(
+      everyNthFrame: z
+      .number()
+      .int()
+      .min(1)
+      .max(BrowserCaptureLimits.maxScreencastFrameStep)
+      .optional()
+      .describe(
         parameterDescription({
-          description: 'start 的抽帧间隔（每 N 帧取 1）；默认 2。',
+          description: `start 的抽帧间隔（每 N 帧取 1）；不给就是 ${BrowserCaptureLimits.defaultScreencastFrameStep}。`,
         })
       ),
-      name: z.string().min(1).max(60).optional().describe(
+      name: z.string().min(1).max(BrowserCaptureLimits.screencastNameChars).optional().describe(
         parameterDescription({
           description: 'stop 的产物名；缺省按时间戳命名。',
         })
@@ -1857,13 +1862,13 @@ const browserScreencast = defineBrowserTool<{
 const browserRecipe = defineBrowserTool<z.input<typeof browserRecipeSchema>>({
   name: 'browser:recipe',
   role: 'edit',
-  summary: '统一管理当前网站的 browser recipe skeleton 和运行记录。',
+  summary: '统一管理当前网站的 browser recipe 骨架 和运行记录。',
   suitable: [
-    '需要生成、预览、执行或重跑当前 browser site 的 recipe。',
-    '需要读取 recipe skeleton 或历史 run record。',
+    '需要生成、预览、执行或重跑当前 站点 的 recipe。',
+    '需要读取 recipe 骨架 或历史 运行记录。',
   ],
   forbidden: [
-    '不要用它读取普通 browser 工作区文件；文件和 artifact 读写使用 browser:files。',
+    '不要用它读普通工作区文件；文件与产物读写用 browser:files。',
     '不要首次运行新 recipe 时直接跳过 dryRun 预检。',
   ],
   protocol: ['真实执行前先 action=run_skeleton dryRun=true 预检；确认目标命中后再执行。'],
@@ -1883,7 +1888,7 @@ const browserRecipe = defineBrowserTool<z.input<typeof browserRecipeSchema>>({
     // 基于历史 run 重跑（须重新传 inputs）
     { action: 'rerun_from_run', path: 'runs/search-001.json', inputs: { q: 'VelarOS' } },
   ],
-  notes: ['这是 browser recipe 的唯一公开入口；内部仍按 action 复用 skeleton、run 和 rerun 实现。'],
+  notes: ['首次跑一份新 recipe 先 dryRun 预检，确认目标都命中了再真跑。'],
   usageSkillId: 'browser-automation-recipes',
   schema: browserRecipeSchema,
   permissions: ['network', 'fs:read', 'fs:write'],
@@ -1928,8 +1933,8 @@ const browserUserScripts = defineBrowserTool<z.input<typeof browserUserScriptsSc
     },
   ],
   notes: [
-    'external CDP 与 document-start v1 会返回 unsupported，不会伪报注入成功。',
-    '脚本按 document + revision 幂等，单脚本失败不会阻断页面或其他脚本。',
+    '外部浏览器与 runAt=document-start 暂不支持，会明确回报不支持，不会伪报注入成功。',
+    '脚本按「文档 + 版本号」幂等，一个脚本失败不影响页面和别的脚本。',
   ],
   usageSkillId: 'browser-automation-recipes',
   schema: browserUserScriptsSchema,

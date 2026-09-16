@@ -10,6 +10,8 @@ import {
   requiredResultLimit,
 } from '@velaros-ai/agent/tool-contract'
 
+import { BrowserFileLimits } from '../../contract/constants'
+
 const browserFilesActionSchema = z.enum([
   'list_files',
   'read_file',
@@ -31,8 +33,7 @@ const browserFilesExactSchema = z.discriminatedUnion('action', [
       ),
       recursive: z.boolean().optional().describe(
         parameterDescription({
-          description: '是否递归列出子目录。',
-          usage: ['recursive=true 时必须传 maxDepth。'],
+          description: '是否递归列子目录；不给 maxDepth 时用工具契约的缺省深度。',
         })
       ),
       maxDepth: z.number().int().min(0).max(12).optional().describe(
@@ -78,7 +79,7 @@ const browserFilesExactSchema = z.discriminatedUnion('action', [
     action: z.literal('list_artifacts'),
     kind: z.enum(['page', 'recipe', 'extract', 'note', 'run']).optional().describe(
       parameterDescription({
-        description: '要查看的 artifact 类型。',
+        description: '要查看的 产物类型。',
       })
     ),
     limit: requiredResultLimit(300, '最多返回多少项'),
@@ -107,7 +108,7 @@ const browserFilesExactSchema = z.discriminatedUnion('action', [
     ),
     overwrite: z.boolean().optional().describe(
       parameterDescription({
-        description: '目标 artifact 已存在时是否允许覆盖。',
+        description: '目标 产物已存在时是否允许覆盖。',
       })
     ),
   }),
@@ -154,13 +155,13 @@ const browserFilesSchema = z
   .object({
     action: browserFilesActionSchema.describe(
       parameterDescription({
-        description: '要执行的浏览器工作区文件或 artifact 动作。',
+        description: '要执行的站点工作区文件或产物动作。',
         values: [
           'list_files：列出普通文件路径。',
-          'read_file：读取普通文件，必须传 endLine 或 maxChars。',
+          `read_file：读普通文件；不给 endLine、maxChars 时最多读 ${BrowserFileLimits.readChars} 字符。`,
           'write_file：写入普通文件。',
-          'list_artifacts：列出标准 artifact。',
-          'write_artifact：写入标准 artifact。',
+          'list_artifacts：列出标准产物。',
+          'write_artifact：写入标准产物。',
           'save_page_snapshot：保存当前页面快照。',
           'save_pdf：把当前页面打印成整页 PDF 存进工作区（只有它能出 PDF）。',
         ],
@@ -196,7 +197,7 @@ const browserFilesSchema = z
     ),
     kind: z.enum(['page', 'recipe', 'extract', 'note', 'run']).optional().describe(
       parameterDescription({
-        description: 'artifact 类型。',
+        description: '产物类型。',
       })
     ),
     format: z.enum(['json', 'text', 'markdown', 'html']).optional().describe(
@@ -206,7 +207,7 @@ const browserFilesSchema = z
     ),
     name: z.string().min(1).max(120).optional().describe(
       parameterDescription({
-        description: 'artifact 或快照名称。',
+        description: '产物或快照名称。',
       })
     ),
     includeHtml: z.boolean().optional().describe(

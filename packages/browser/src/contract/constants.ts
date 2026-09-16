@@ -53,6 +53,8 @@ export const BrowserWorkspaceArtifactFormatExtensionMap = Object.freeze({
 export const BrowserFileLimits = Object.freeze({
   /** 读一个文件不给 endLine、maxChars 时最多返回多少字符。 */
   readChars: 200_000,
+  /** 一个工作区相对路径最长多少字符。 */
+  pathChars: 4_096,
   /** 列目录一次最多返回多少条。 */
   listItems: 1_000,
   /** 递归列目录最多往下走几层。 */
@@ -87,6 +89,136 @@ export const BrowserExtractDefaults = Object.freeze({
   paginateItemsPerPage: 50,
   /** 正文默认最多返回多少字符。 */
   contentChars: 50_000,
+})
+
+/**
+ * 页面观察的公开上限与缺省：`inspect_page`、`query_elements`、`observe_actions`、
+ * `get_page_diagnostics` 与两个网络详情工具的说明和 schema 都引这里，改一处模型看到的跟着变。
+ */
+export const BrowserInspectLimits = Object.freeze({
+  /** 一次检查最多返回多少字符正文。 */
+  textChars: 100_000,
+  /** 不给 maxTextChars 时返回多少字符正文。 */
+  defaultTextChars: 20_000,
+  /** 一次检查最多返回多少字符 HTML。 */
+  htmlChars: 100_000,
+  /** 不给 maxHtmlChars 时返回多少字符 HTML。 */
+  defaultHtmlChars: 30_000,
+  /** 一次检查最多返回多少个可交互元素。 */
+  elements: 400,
+  /** 不给 maxElements 时返回多少个可交互元素。 */
+  defaultElements: 80,
+  /** 一个 CSS selector 最长多少字符。 */
+  selectorChars: 1_000,
+  /** 一次查询最多返回多少个匹配元素。 */
+  queryElements: 100,
+  /** 不给 limit 时返回多少个匹配元素。 */
+  defaultQueryElements: 20,
+  /** 查询时每个元素最多返回多少文本字符。 */
+  queryTextChars: 20_000,
+  /** 查询时每个元素最多返回多少 HTML 字符。 */
+  queryHtmlChars: 50_000,
+  /** 一次查询最多额外读几个属性。 */
+  queryAttributes: 20,
+  /** 一个属性名最长多少字符。 */
+  attributeNameChars: 80,
+  /** 一次最多给多少个动作候选。 */
+  observeCandidates: 80,
+  /** 不给 limit 时给多少个动作候选。 */
+  defaultObserveCandidates: 20,
+  /** 找候选时那句意图最长多少字符。 */
+  instructionChars: 500,
+  /** 一次最多排除多少个噪音子树 selector。 */
+  ignoreSelectors: 50,
+  /** 一次最多返回多少条诊断事件。 */
+  diagnosticEntries: 300,
+  /** 不给 limit 时返回多少条诊断事件。 */
+  defaultDiagnosticEntries: 50,
+  /** HTTP status 过滤的取值上限。 */
+  networkStatus: 999,
+  /** resourceType 过滤最长多少字符。 */
+  resourceTypeChars: 80,
+  /** 一个 requestId 最长多少字符。 */
+  requestIdChars: 200,
+  /** 响应体一次最多读多少字符。 */
+  responseBodyChars: 200_000,
+  /** 不给 maxChars / maxBodyChars 时读多少字符响应体。 */
+  defaultResponseBodyChars: 20_000,
+})
+
+/** 截图与录屏的公开上限与缺省：写进 `capture_screenshot`、`screencast` 的说明与 schema。 */
+export const BrowserCaptureLimits = Object.freeze({
+  /** 截图保存路径最长多少字符。 */
+  pathChars: 180,
+  /** 截图视口宽度的下限与上限，像素。 */
+  minViewportWidth: 320,
+  maxViewportWidth: 3_840,
+  /** 截图视口高度的下限与上限，像素。 */
+  minViewportHeight: 240,
+  maxViewportHeight: 2_160,
+  /** 截图前等网络空闲的毫秒数下限与上限。 */
+  minNetworkIdleMs: 100,
+  maxNetworkIdleMs: 5_000,
+  /** 判 DOM 稳定要连续多少帧没变化的下限与上限。 */
+  minDomStableFrames: 3,
+  maxDomStableFrames: 16,
+  /** 判 DOM 稳定的取样间隔毫秒数下限与上限。 */
+  minDomStableSampleMs: 16,
+  maxDomStableSampleMs: 250,
+  /** 等 DOM 稳定的毫秒数下限与上限。 */
+  minDomStableWaitMs: 250,
+  maxDomStableWaitMs: 8_000,
+  /** 整页截图单边最多多少像素。 */
+  fullPageMaxSide: 32_000,
+  /** 一张图最多标注多少个元素。 */
+  annotatedElements: 120,
+  /** 区域截图的坐标与边长上限，像素。 */
+  regionMaxSide: 20_000,
+  /** 录屏帧宽度的下限、上限与缺省，像素。 */
+  minScreencastWidth: 240,
+  maxScreencastWidth: 1_600,
+  defaultScreencastWidth: 800,
+  /** 录屏抽帧间隔（每 N 帧取 1）的上限与缺省。 */
+  maxScreencastFrameStep: 10,
+  defaultScreencastFrameStep: 2,
+  /** 录屏产物名最长多少字符。 */
+  screencastNameChars: 60,
+})
+
+/** 性能分析的公开上限与缺省：写进 `browser:performance` 的说明与 schema。 */
+export const BrowserPerformanceLimits = Object.freeze({
+  /** trace 录制窗口的毫秒数下限、上限与缺省。 */
+  minTraceMs: 1_000,
+  maxTraceMs: 60_000,
+  defaultTraceMs: 5_000,
+  /** insight 集合 id 与 insight 名最长多少字符。 */
+  insightIdChars: 120,
+  /** 堆快照保存路径最长多少字符。 */
+  snapshotPathChars: 300,
+})
+
+/** 挂起事件等待的公开上限与缺省：写进 `browser:wait_for_pending_event` 的说明与 schema。 */
+export const BrowserPendingEventLimits = Object.freeze({
+  /** 等一个挂起事件最多等多少毫秒。 */
+  maxWaitMs: 60_000,
+  /** 不给 timeoutMs 时等多少毫秒。 */
+  defaultWaitMs: 5_000,
+})
+
+/** 页面存储与资源清单的公开上限与缺省。 */
+export const BrowserPageDataLimits = Object.freeze({
+  /** 每类存储一次最多返回多少项。 */
+  storageItems: 300,
+  /** 不给 limit 时每类返回多少项。 */
+  defaultStorageItems: 50,
+  /** 每个存储值最多返回多少字符。 */
+  storageValueChars: 50_000,
+  /** 列页面媒体的上限与缺省条数。 */
+  mediaSources: 200,
+  defaultMediaSources: 80,
+  /** 列页面资源的上限与缺省条数。 */
+  pageResources: 500,
+  defaultPageResources: 120,
 })
 
 /** 浏览器包的失败原因码：外面按码判断，不按文案判断。 */

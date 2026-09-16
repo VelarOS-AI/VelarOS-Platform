@@ -244,7 +244,6 @@ function formatObservedActionCandidate(
         tool: 'browser:upload_file',
         input: uploadInput,
       },
-      target: draft.target,
     }
   }
 
@@ -268,8 +267,6 @@ function formatObservedActionCandidate(
       tool: 'browser:act',
       input: actionInput,
     },
-    target: draft.target,
-    actionInput,
   }
 }
 

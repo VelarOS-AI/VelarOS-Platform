@@ -834,6 +834,12 @@ export type BrowserObservedActionReplay =
   | BrowserObservedTargetActionReplay
   | BrowserObservedUploadReplay
 
+/**
+ * 一个动作候选。
+ *
+ * 目标元素只出现在 `replay.input.target` 这一处：曾经同一份 target 在 `target`、`actionInput`
+ * 与 `replay.input` 里各写一遍，回执体积翻三倍，模型还要自己判断以哪一份为准。
+ */
 export interface BrowserObservedActionCandidateBase {
   id: string
   actionId: string
@@ -845,13 +851,11 @@ export interface BrowserObservedActionCandidateBase {
   requiresValue: boolean
   arguments: string[]
   preview: BrowserObservedActionPreview
-  target: BrowserElementTargetHint
 }
 
 export interface BrowserObservedTargetActionCandidate extends BrowserObservedActionCandidateBase {
   method: BrowserTargetActionKind
   replay: BrowserObservedTargetActionReplay
-  actionInput: BrowserObservedActionInput
 }
 
 export interface BrowserObservedUploadCandidate extends BrowserObservedActionCandidateBase {

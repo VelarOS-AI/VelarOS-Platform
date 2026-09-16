@@ -21,7 +21,7 @@ const commonSaveFields = {
 const ignoreSelectorsSchema = z.array(z.string().min(1).max(1000)).max(50).optional().describe(
   parameterDescription({
     description: '正文提取时排除的 CSS selector 或 XPath（//... 或 xpath=...）列表。',
-    notes: ['用于过滤 nav、sidebar、cookie banner、广告等噪音子树。'],
+    notes: ['用于过滤 导航、侧栏、cookie 提示条、广告等噪音子树。'],
   })
 )
 
@@ -204,12 +204,12 @@ const browserExtractSchema = z
     ),
     save: z.boolean().optional().describe(
       parameterDescription({
-        description: '是否把提取结果保存为 artifact。',
+        description: '是否把提取结果保存为产物。',
       })
     ),
     name: z.string().min(1).max(120).optional().describe(
       parameterDescription({
-        description: '保存 artifact 时使用的名称。',
+        description: '保存 产物时用的名称。',
       })
     ),
   })

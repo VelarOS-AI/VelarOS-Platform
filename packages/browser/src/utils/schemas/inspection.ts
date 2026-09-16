@@ -167,7 +167,7 @@ export function normalizeBrowserGetPageDiagnosticsGuided(
 export const browserGetNetworkResponseBodySchema = z.object({
   requestId: z.string().trim().min(1).max(200).describe(
     parameterDescription({
-      description: 'browser:list_network_events 返回的网络 requestId。',
+      description: 'browser:get_page_diagnostics kind=network 给出的 requestId。',
       notes: ['必须来自当前页面近期捕获到的网络事件。'],
     })
   ),
@@ -204,7 +204,7 @@ export function normalizeBrowserGetNetworkResponseBodyGuided(
 export const browserGetNetworkRequestSchema = z.object({
   requestId: z.string().trim().min(1).max(200).describe(
     parameterDescription({
-      description: 'browser:list_network_events 返回的网络 requestId。',
+      description: 'browser:get_page_diagnostics kind=network 给出的 requestId。',
       notes: ['必须来自当前页面近期捕获到的网络事件。'],
     })
   ),

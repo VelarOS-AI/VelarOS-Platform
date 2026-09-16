@@ -194,7 +194,6 @@ export const browserReadPageDataSchema = z
             "json_ld：读取 JSON-LD 脚本内容。",
             "media_sources：枚举页面图片/视频/音频 URL（含 fetchable 标记）。",
           ],
-          notes: ["需要任意 JS 时切到 direct/expert。"],
         }),
       ),
     selector: z

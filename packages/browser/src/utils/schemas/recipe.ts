@@ -26,7 +26,7 @@ const variablesSchema = z.record(z.string(), z.string()).describe(
 
 const recipePathSchema = z.string().min(1).describe(
   parameterDescription({
-    description: '当前网站浏览器工作区内的 recipe skeleton 路径。',
+    description: '当前网站浏览器工作区内的 recipe 骨架 路径。',
     usage: ['通常是 recipes/xxx.json。'],
   })
 )
@@ -71,7 +71,7 @@ const runOptionsFields = {
   ),
   runName: z.string().min(1).max(120).optional().describe(
     parameterDescription({
-      description: '保存 run artifact 时使用的名称。',
+      description: '保存 run 产物时用的名称。',
     })
   ),
 }
@@ -189,12 +189,12 @@ const browserRecipeSchema = z
       parameterDescription({
         description: '要执行的 browser recipe 动作。',
         values: [
-          'generate_skeleton：基于当前页面生成 recipe skeleton。',
+          'generate_skeleton：基于当前页面生成 recipe 骨架。',
           'generate_skeleton_from_snapshot：基于已保存页面快照生成 skeleton。',
           'read_skeleton：读取并预览 skeleton。',
           'run_skeleton：执行或 dryRun skeleton。',
           'read_run：读取历史运行记录。',
-          'rerun_from_run：根据历史 run record 重跑。',
+          'rerun_from_run：根据历史 运行记录 重跑。',
         ],
       })
     ),
@@ -269,7 +269,7 @@ const browserRecipeSchema = z
     ),
     runName: z.string().min(1).max(120).optional().describe(
       parameterDescription({
-        description: '保存 run artifact 时使用的名称。',
+        description: '保存 run 产物时用的名称。',
       })
     ),
   })
