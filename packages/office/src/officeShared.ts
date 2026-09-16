@@ -707,6 +707,9 @@ export async function normalizeWordInputToDocx(input: {
     '.docx'
   )
   if (!generatedDocx) {
+    // 抛出去就没人认领这个临时目录了（调用方只在 success=false 的结构化返回里收拾），
+    // 于是每失败一次就在系统临时目录留一个 velaros-office-docx-normalize-*。
+    await rm(tempDir, { recursive: true, force: true }).catch(() => undefined /* arch-guard:silent-catch-ok 尽力清理临时目录，删除失败非致命 */)
     throw new AppError('EXECUTION_FAILED', 'DOC 转 DOCX 命令已结束，但没有生成 DOCX 文件。')
   }
 

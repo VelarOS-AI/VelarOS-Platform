@@ -272,10 +272,12 @@ export async function parseDocxPreview(inputPath: string, maxItems: number): Pro
 
 export async function parsePptxPreview(inputPath: string, maxItems: number): Promise<ParsedOfficePreview> {
   const zip = await JSZip.loadAsync(await readFile(inputPath))
-  const slideFiles = Object.keys(zip.files)
+  // 先数全量再截取：summary 报的是文档事实（共几页），previewedSlides 才是本次预览了几页。
+  // 两者合一的话，maxItems 一小，模型看到的「共 2 页」就是假的（xlsx 一直是分开报的）。
+  const allSlideFiles = Object.keys(zip.files)
     .filter((name) => /^ppt\/slides\/slide\d+\.xml$/.test(name))
     .sort(compareOfficeXmlPartNames)
-    .slice(0, maxItems)
+  const slideFiles = allSlideFiles.slice(0, maxItems)
 
   const slides: PreviewSlide[] = []
   for (const [index, fileName] of slideFiles.entries()) {
@@ -300,7 +302,8 @@ export async function parsePptxPreview(inputPath: string, maxItems: number): Pro
     kind: 'pptx',
     title: slides[0]?.title ?? 'Presentation',
     summary: {
-      slides: slides.length,
+      slides: allSlideFiles.length,
+      previewedSlides: slides.length,
       charts: chartCount,
       images: imageCount,
     },

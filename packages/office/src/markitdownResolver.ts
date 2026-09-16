@@ -5,6 +5,7 @@ import { delimiter, join, resolve } from 'node:path'
 import { isEmpty, toNullable } from '@velaros-ai/core'
 import { logRuntime } from '@velaros-ai/core/logger'
 import { asRecord, readString } from '@velaros-ai/core/utils/unknownJsonRecord'
+import { velarosSharedResources } from '@velaros-ai/platform/shared-resources'
 
 import {
   type OfficeResourceRuntime,
@@ -44,6 +45,10 @@ function buildDefaultResourceRoots(): string[] {
   if (!isEmpty(environmentRoots)) return environmentRoots
 
   const roots = new Set<string>()
+  // VelarOS 产品家族共用的资源安装根：插件市场就装在这里。宿主把这个根登记进**它自己的**
+  // 资源登记表时本包一无所知（Desktop 实测如此），装好的 MarkItDown 于是找不到；这个根是
+  // 平台约定而不是宿主私有事实，本包自己算一份，宿主登不登记都能发现已安装的插件。
+  roots.add(velarosSharedResources.resourcesRoot())
   const resourcesPath = readElectronResourcesPath()
   if (resourcesPath) {
     roots.add(resourcesPath)

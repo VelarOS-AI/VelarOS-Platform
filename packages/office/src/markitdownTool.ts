@@ -85,6 +85,10 @@ export const convertDocumentToMarkdownSchema = z.object({
     ),
 })
 
+/** 命令输出窗口把开头丢掉时给模型的抬头；不写它，模型会把文档结尾当成开头读。 */
+const OutputWindowTruncatedNotice =
+  '<!-- 以下是文档的结尾部分：完整输出超过宿主的命令输出窗口，开头已被丢弃。需要完整内容请传 outputPath 写入文件后再读。 -->'
+
 function truncateMarkdown(
   markdown: string,
   maxChars: number
@@ -92,7 +96,7 @@ function truncateMarkdown(
   if (markdown.length <= maxChars) return { markdown, truncated: false }
 
   return {
-    markdown: `${markdown.slice(0, maxChars)}\n\n<!-- MarkItDown output truncated by VelarOS -->`,
+    markdown: `${markdown.slice(0, maxChars)}\n\n<!-- 后续内容已按 maxChars 截断 -->`,
     truncated: true,
   }
 }
@@ -135,6 +139,7 @@ async function runMarkItDownToStdout(input: {
   markdown: string
   truncated: boolean
   commandResult: unknown
+  message?: string
 }> {
   const nativeCommand = buildMarkItDownCommand({ launch: input.launch, inputPath: input.inputPath })
   const commandResult = await input.ctx.office.system.runCommand(
@@ -157,12 +162,24 @@ async function runMarkItDownToStdout(input: {
     commandResult,
   }
 
-  return {
-    changed: false,
+  const limited = truncateMarkdown(commandResult.stdout ?? '', input.maxChars)
+  const result = {
+    changed: false as const,
     inputPath: input.inputPath,
-    kind: 'markdown',
-    ...truncateMarkdown(commandResult.stdout ?? '', input.maxChars),
+    kind: 'markdown' as const,
+    markdown: limited.markdown,
+    truncated: limited.truncated,
     commandResult,
+  }
+  // 宿主的命令输出窗口**保留结尾**：长文档这里拿到的是文档末尾，而截断发生在 stdout 这一层，
+  // 只看 maxChars 的那一步会一路报 truncated=false，模型于是把结尾当开头读（2026-09-16 实测）。
+  if (!commandResult.truncated) return result
+  return {
+    ...result,
+    markdown: `${OutputWindowTruncatedNotice}\n\n${limited.markdown}`,
+    truncated: true,
+    message:
+      'MarkItDown 输出超过宿主的命令输出窗口，返回的是文档结尾部分；需要完整内容请传 outputPath 写入文件后再读。',
   }
 }
 
