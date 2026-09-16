@@ -496,8 +496,8 @@ const browserActConfigureNetworkSchema = z
     action: z.literal('configure_network'),
     offline: z.boolean().optional().describe(
       parameterDescription({
-        description: '是否把外部 CDP 浏览器切到离线网络状态。',
-        notes: ['仅外部 CDP 浏览器支持；false 会恢复在线。'],
+        description: '是否把页面切到离线网络状态。',
+        notes: ['false 恢复在线。'],
       })
     ),
     extraHTTPHeaders: z.record(z.string().min(1).max(120), z.string().max(4000)).optional().describe(
@@ -711,8 +711,8 @@ const browserActSchema = z
           'wait：等待页面加载状态或短暂停顿。',
           'set_viewport：设置页面 CSS viewport 分辨率，用于响应式设计检查；工作区外框不变。',
           'set_page_zoom：调整页面缩放。',
-          'configure_network：配置外部 CDP 浏览器网络状态。',
-          'configure_emulation：配置外部 CDP 浏览器环境模拟。',
+          'configure_network：离线、加请求头、拦截或 mock 请求。',
+          'configure_emulation：配色方案、动效偏好、时区、语言、地理位置、CPU 与网络节流。',
         ],
         usage: [
           '条件必填：target 需要 targetAction 和 target/targetRef/targetCss；drag 需要 source/sourceRef/sourceCss 和 target/targetRef/targetCss。',

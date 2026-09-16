@@ -1181,6 +1181,9 @@ export interface BrowserPageDiagnosticsOptions {
   clear?: boolean
 }
 
+/** 读诊断时关于网络采集的如实说明；没有要说的时候不给。 */
+export type BrowserNetworkCaptureNotice = LooseOptional<string>
+
 export interface BrowserPageDiagnosticsSummary {
   total: number
   byLevel: Record<string, number>
@@ -1195,6 +1198,11 @@ export interface BrowserPageDiagnostics {
   title: Nullable<string>
   entries: BrowserPageDiagnosticEntry[]
   summary: BrowserPageDiagnosticsSummary
+  /**
+   * 网络采集的如实说明：内嵌页面的采集是读诊断时才建立的，这次才开始时要告诉模型
+   * 「之前的请求没有记录」，采集没能建立时要说清原因。没有要说的就不给这个字段。
+   */
+  networkCaptureNotice?: BrowserNetworkCaptureNotice
   capturedAt: number
 }
 

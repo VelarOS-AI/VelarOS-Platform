@@ -23,6 +23,8 @@ export interface BrowserNetworkEventsResult {
   filters: BrowserNetworkEventFilters
   diagnosticTotal: number
   networkTotal: number
+  /** 网络采集刚在这次调用建立时的说明（内嵌页面）；没有要说的就是 null。 */
+  networkCaptureNotice: Nullable<string>
   capturedAt: number
 }
 
@@ -42,6 +44,7 @@ export function buildBrowserNetworkEventsResult(
     filters,
     diagnosticTotal: diagnostics.entries.length,
     networkTotal: networkEntries.length,
+    networkCaptureNotice: toNullable(diagnostics.networkCaptureNotice),
     capturedAt: diagnostics.capturedAt,
   }
 }

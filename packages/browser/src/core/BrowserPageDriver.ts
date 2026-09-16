@@ -86,6 +86,14 @@ export interface BrowserPageDriverFetchResourceResult {
   bytes: Buffer
 }
 
+/** 网络采集的建立结果（内嵌页面是惰性建立的）。 */
+export interface BrowserPageDriverNetworkCaptureState {
+  /** 采集是不是在这次调用里才建立；true 表示在这之前发出的请求没有记录。 */
+  startedNow: boolean
+  /** 采集没能建立时的原因（例如 DevTools 已经接管调试器）；正常时为 null。 */
+  unavailableReason: Nullable<string>
+}
+
 export interface BrowserPageDriverDiagnosticsOptions {
   /** 按种类过滤之后最多返回几条。 */
   limit: number
@@ -200,6 +208,13 @@ export interface BrowserPageDriver {
   getPageZoomFactor?(): number
   setPageZoomFactor?(zoomFactor: number): Promise<void>
   readDiagnostics?(options: BrowserPageDriverDiagnosticsOptions): BrowserPageDiagnosticEntry[]
+  /**
+   * 确保网络采集已经在跑（读诊断前调用）。
+   *
+   * 内嵌页面的采集是惰性建立的：不调用就永远读不到网络事件。读诊断时顺手把它建起来，
+   * 并如实回报「这次才开始」，回执才能告诉模型之前的请求看不到。
+   */
+  ensureNetworkCapture?(): Promise<BrowserPageDriverNetworkCaptureState>
   listPageTargets?(): Promise<BrowserPageTargetInfo[]>
   switchPageTarget?(options: BrowserSwitchPageTargetOptions): Promise<BrowserPageDriver>
   onDownload?(listener: BrowserPageDriverDownloadListener): () => void

@@ -11,6 +11,7 @@ import {
   type BrowserPageDriver,
   type BrowserPageScriptBuilder,
   type BrowserTargetRefStore,
+  buildBrowserNetworkCaptureNotice,
   CdpPageDataEngine,
   clampInteger,
   clearBrowserDiagnosticEntries,
@@ -342,12 +343,16 @@ export class BrowserPageDataEngine extends CdpPageDataEngine {
     const session = await this.getLivePageSessionUnlocked(sessionId, abortSignal)
     const limit = clampInteger(options.limit, 1, this.diagnosticsRecorder.maxEntries, 100)
     const kinds = options.kinds
-    // 嵌入式:控制台诊断在 session.diagnostics,网络诊断在 driver 的网络采集缓冲(惰性建立)。
+    // 嵌入式:控制台诊断在 session.diagnostics,网络诊断在 driver 的网络采集缓冲。
     // 两处各自先按种类过滤再取窗口,合并后按 capturedAt 排序再取一次窗口。
     const driverSession = await this.electronKernel.getLivePageDriverSession(sessionId, abortSignal)
-    const networkEntries = kinds && !kinds.includes('network')
-      ? []
-      : driverSession.driver.readDiagnostics?.({ limit, kinds, clear: options.clear }) ?? []
+    const wantsNetwork = !kinds || kinds.includes('network')
+    // 内嵌页面的网络采集是惰性建立的:不在这里建起来,模型照提示词「先列网络事件找 requestId」
+    // 永远只会拿到空数组。建立之后如实告诉它「采集从现在开始」。
+    const networkCapture = wantsNetwork ? await driverSession.driver.ensureNetworkCapture?.() : null
+    const networkEntries = wantsNetwork
+      ? driverSession.driver.readDiagnostics?.({ limit, kinds, clear: options.clear }) ?? []
+      : []
     const entries = [...takeBrowserDiagnosticWindow(session.diagnostics, limit, kinds), ...networkEntries]
       .sort((left, right) => left.capturedAt - right.capturedAt)
       .slice(-limit)
@@ -357,13 +362,17 @@ export class BrowserPageDataEngine extends CdpPageDataEngine {
       clearBrowserDiagnosticEntries(session.diagnostics, kinds)
     }
 
-    return {
+    const diagnostics: BrowserPageDiagnostics = {
       url: this.resolveCurrentPageUrl(session, context.url),
       title: session.webContents.getTitle() || null,
       entries,
       summary: this.summarizePageDiagnostics(entries),
       capturedAt: Date.now(),
     }
+    const notice = buildBrowserNetworkCaptureNotice(networkCapture)
+    if (notice) diagnostics.networkCaptureNotice = notice
+
+    return diagnostics
   }
 
   public override async uploadFile(

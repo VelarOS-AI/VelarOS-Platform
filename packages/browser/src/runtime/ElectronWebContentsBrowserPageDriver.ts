@@ -14,6 +14,7 @@ import {
   type BrowserPageDriverDragCoordinatesOptions,
   type BrowserPageDriverEmulationState,
   type BrowserPageDriverMoveMouseOptions,
+  type BrowserPageDriverNetworkCaptureState,
   type BrowserPageDriverNetworkControlState,
   type BrowserPageDriverNetworkIdleOptions,
   type BrowserPageDriverNetworkRequestDetailsResult,
@@ -225,6 +226,26 @@ class ElectronWebContentsBrowserPageDriver implements BrowserPageDriver {
   public async waitForNetworkIdle(options: BrowserPageDriverNetworkIdleOptions): Promise<void> {
     const hold = await this.ensureNetworkHold()
     await hold.controller.waitForNetworkIdle(options)
+  }
+
+  /**
+   * 确保网络采集已经在跑：没有采集时当场建立,并如实回报「这次才开始」。
+   *
+   * 采集要 attach debugger。attach 失败(多半是 DevTools 已经接管)不该让读诊断整个失败——
+   * 那是一次「看看有什么」的读操作;把原因带回去,让回执说清楚为什么列不到网络事件。
+   */
+  public async ensureNetworkCapture(): Promise<BrowserPageDriverNetworkCaptureState> {
+    if (webContentsNetworkHolds.has(this.webContents))
+      return { startedNow: false, unavailableReason: null }
+
+    try {
+      await this.ensureNetworkHold()
+      return { startedNow: true, unavailableReason: null }
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error)
+      embeddedDriverLog.debug('内嵌页面的网络采集未能建立', { reason })
+      return { startedNow: false, unavailableReason: reason }
+    }
   }
 
   /**

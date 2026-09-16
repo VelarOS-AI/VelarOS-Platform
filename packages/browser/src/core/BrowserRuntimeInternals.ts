@@ -2,6 +2,7 @@ import { isFiniteNumber, isString, optionalWhen } from '@velaros-ai/core'
 
 import type {
   BrowserPageDriver,
+  BrowserPageDriverNetworkCaptureState,
   BrowserPageDriverState,
 } from './BrowserPageDriver'
 import type { BrowserWorkspacePath } from './BrowserPathContainment'
@@ -106,6 +107,24 @@ export function takeBrowserDiagnosticWindow<Entry extends { kind: BrowserPageDia
 ): Entry[] {
   const selected = kinds ? entries.filter((entry) => kinds.includes(entry.kind)) : [...entries]
   return selected.slice(-limit)
+}
+
+/**
+ * 网络采集状态 → 给模型看的如实说明；采集一直在跑（没什么要说的）时返回 null。
+ *
+ * 内嵌页面的采集是读诊断时才建立的：不说这一句，模型看到的就是「网络事件是空的」，
+ * 然后照着提示词在空列表上打转。
+ */
+export function buildBrowserNetworkCaptureNotice(
+  state: LooseOptional<Nullable<BrowserPageDriverNetworkCaptureState>>
+): Nullable<string> {
+  if (!state) return null
+  if (state.unavailableReason)
+    return `内嵌页面的网络采集没能开始（${state.unavailableReason}），这次列不到网络事件；关掉开发者工具后再试。`
+
+  return state.startedNow
+    ? '内嵌页面的网络采集从这次调用才开始，在这之前发出的请求没有记录；重新加载页面后再列一次就能看到。'
+    : null
 }
 
 /**

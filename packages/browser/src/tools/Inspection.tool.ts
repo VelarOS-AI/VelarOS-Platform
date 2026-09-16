@@ -501,6 +501,7 @@ const browserListNetworkEvents = defineBrowserTool<BrowserListNetworkEventsInput
   notes: [
     '先按种类挑出网络事件、再取最近 limit 条，所以 console 刷屏的页面也不会把失败请求挤出窗口。',
     'clear=true 只清网络事件，不动 console 与页面异常。',
+    '内嵌页面的网络采集在第一次读诊断时才建立：这种时候回执里的 networkCaptureNotice 会写明「之前的请求没有记录」，重新加载页面后再列一次即可。',
   ],
   schema: browserListNetworkEventsSchema,
   surfaces: {
@@ -574,8 +575,8 @@ const browserGetNetworkResponseBody = defineBrowserTool<BrowserGetNetworkRespons
   usage: ['传 requestId；大响应按需设置 maxChars。'],
   examples: [{ requestId: '12345.67', maxChars: 20000 }],
   notes: [
-    '仅外部 CDP 浏览器支持；webview 模式会明确报错。',
-    'CDP 可能只保留近期响应体；过旧或跨 target 的 requestId 可能不可读。',
+    'requestId 来自 browser:list_network_events 的网络事件。',
+    '浏览器只保留近期响应体：过旧或跨标签页的 requestId 可能已经读不到。',
   ],
   schema: browserGetNetworkResponseBodySchema,
   surfaces: {
@@ -623,8 +624,8 @@ const browserGetNetworkRequest = defineBrowserTool<BrowserGetNetworkRequestInput
   usage: ['传 requestId；需要响应体时传 includeResponseBody=true 和可选 maxBodyChars。'],
   examples: [{ requestId: '12345.67' }, { requestId: '12345.67', includeResponseBody: true }],
   notes: [
-    '仅外部 CDP 浏览器支持；webview 模式会明确报错。',
-    '详情缓存有上限，过旧 requestId 可能不可读。',
+    'requestId 来自 browser:list_network_events 的网络事件。',
+    '详情缓存有上限：过旧的 requestId 可能已经读不到。',
   ],
   schema: browserGetNetworkRequestSchema,
   surfaces: {
