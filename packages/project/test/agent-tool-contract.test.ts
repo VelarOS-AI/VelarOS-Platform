@@ -287,21 +287,23 @@ describe('Project model-facing tool contract', () => {
       path: ['src', 'missing.ts'],
     })
 
+    // 每条 issue 自己带合同错误码、发生了什么和下一步；读不到的路径不占 files 里的空窗口。
+    expect(result.files).toEqual([])
     expect(result.issues).toEqual([
       {
         path: 'src',
-        reason: 'directory',
-        message: '该路径是目录；project:read 不会枚举目录内容。',
+        code: 'NOT_SUPPORTED',
+        message: '这个路径是目录，project:read 不列目录内容。',
+        next: '用 project:list 列这个目录，再读里面的文件。',
       },
       {
         path: 'missing.ts',
-        reason: 'not_found',
-        message: '路径不存在，未读取任何内容。',
+        code: 'TARGET_NOT_FOUND',
+        message: '这个路径不存在，什么都没读到。',
+        next: '先用 project:list 列出准确的路径再读，不要接着猜文件名。',
       },
     ])
-    expect(result.nextAction).toBe(
-      '先用 project:list 枚举精确路径，再调用 project:read；不要继续猜测文件名。',
-    )
+    expect(result.nextAction).toContain('原因和下一步见 issues')
   })
 
   test('projects and bounds rich kernel search results at the Agent boundary', async () => {

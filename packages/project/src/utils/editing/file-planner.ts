@@ -10,7 +10,7 @@ import { ProjectError } from '../errors.js'
 import { normalizeProjectInputText } from '../text.js'
 
 import { applyProjectMutations } from './content-planner.js'
-import { advanceProjectCoverage, completeProjectCoverage } from './planner-coverage.js'
+import { advanceProjectCoverage, completeProjectCoverage, coversWholeProjectFile } from './planner-coverage.js'
 import { selectProjectMutations } from './select.js'
 import { createProjectSourceCoordinates, normalizePhysicalNewlines, sourceNewlineAt } from './source.js'
 
@@ -51,11 +51,40 @@ function createFilePlan(resolver: ProjectPlannerResolver): ProjectFilePlanState 
   return { resolver, paths: new Map(), references: new Map(), operations: [], baseRevisions: {}, recode: { converted: [], unchanged: [] } }
 }
 
+/** 路径里带通配符（`*`、`?`、`[]`、`{}`）就当 glob，交给 resolver 展开。 */
+function isGlobPattern(path: string): boolean {
+  return /[*?[\]{}]/u.test(path)
+}
+
+/**
+ * 把 recode 的 paths 展开成实际文件路径：写成 glob 的按项目的列举规则展开（遵守读取策略与 .gitignore），
+ * 一个都没匹配上就按找不到目标拒绝；写成精确路径的原样保留，存不存在由后面的读取判定。
+ */
+async function expandRecodePaths(plan: ProjectFilePlanState, paths: readonly string[]): Promise<string[]> {
+  const expanded: string[] = []
+  for (const [pathIndex, raw] of paths.entries()) {
+    if (!isGlobPattern(raw)) {
+      expanded.push(raw)
+      continue
+    }
+    const matched = await plan.resolver.listPaths(raw)
+    if (isEmpty(matched))
+      throw new ProjectError('TARGET_NOT_FOUND', `${raw} 没有匹配到任何文件。`, { path: raw, pathIndex },
+        '用 project:list 按同一条 glob 看看能列出什么，再把路径或 glob 改对。')
+    expanded.push(...matched)
+  }
+  if (expanded.length > ProjectChangeLimits.recodePaths)
+    throw new ProjectError('SCOPE_VIOLATION', `展开后有 ${expanded.length} 个文件，超过一次 ${ProjectChangeLimits.recodePaths} 个的上限。`,
+      { actual: expanded.length, maximum: ProjectChangeLimits.recodePaths },
+      '把 glob 收窄，或者按目录分几次调用。')
+  return expanded
+}
+
 /** 按路径批量转换磁盘编码；正文不变的文件跳过，已在本计划改动的文件拒绝，避免两套坐标叠加。 */
 async function recodePlanFiles(plan: ProjectFilePlanState, action: ProjectRecodeAction): Promise<void> {
   const target = recodeTargetEncoding(action)
   const seen = new Set<string>()
-  for (const [pathIndex, raw] of action.paths.entries()) {
+  for (const [pathIndex, raw] of (await expandRecodePaths(plan, action.paths)).entries()) {
     try {
       const observed = await plan.resolver.readText(raw)
       if (seen.has(observed.path)) continue
@@ -160,6 +189,10 @@ async function planFileAction(plan: ProjectFilePlanState, action: ProjectPlanFil
   const { identity, view } = await planSource(plan, action, allowFuture)
   switch (action.op) {
     case 'overwrite': {
+      // 整份替换会把没看过的行一起丢掉，所以要求 fileRef 覆盖全文；move、delete 不动正文，只核对版本。
+      if (!coversWholeProjectFile(view))
+        throw new ProjectError('SCOPE_VIOLATION', `${view.path} 只看过其中一段，不能整份替换。`, { path: view.path },
+          '整份替换前先用 project:read 把整个文件读完（不给 range 就是从头读），拿新的 fileRef 再 overwrite；只改其中几处用 project:edit。')
       const source = createProjectSourceCoordinates(view.content)
       const text = normalizePhysicalNewlines(normalizeProjectInputText(action.text), sourceNewlineAt(source, 0, view.content.length))
       plan.operations.push({ operation: { type: 'replace_content', path: view.path, expectedContent: view.content, content: text, mode: 'overwrite' } })

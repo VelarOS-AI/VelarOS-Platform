@@ -6,12 +6,12 @@
 import { createHash } from 'node:crypto'
 
 import type { FileContextSnapshot } from '@velaros-ai/agent/tool-contract'
-import { isEmpty, isNotUndefined, Log, optionalWhen } from '@velaros-ai/core'
+import { isEmpty, isNotUndefined, isString, Log, optionalWhen } from '@velaros-ai/core'
 
 import { ProjectFileLimits } from '../../contract/constants.js'
 import type { ProjectToolContext } from '../../contract/requires.js'
 import type { ListCursor } from '../../types/agent.js'
-import type { AgentProjectReadResult } from '../../types/agent-port.js'
+import type { AgentProjectReadIssue, AgentProjectReadResult } from '../../types/agent-port.js'
 import type { ObserveInput } from '../../types/io.js'
 import type { ProjectSourceWindow } from '../../types/source-window.js'
 import type { ProjectListInput, ProjectReadInput, ProjectSearchInput } from '../../types/tools.js'
@@ -42,7 +42,8 @@ export async function readProjectSource(input: ProjectReadInput, context: Projec
     : (parsed.files ?? []).map((file) => ({ path: file.path, range: readLineRange(file.range), baseRevision: undefined }))
   let remaining = parsed.maxChars ?? ProjectFileLimits.readCharsDefault
   const files: ProjectSourceWindow[] = []
-  const issues: unknown[] = []
+  const issues: AgentProjectReadIssue[] = []
+  let nextAction: Optional<string>
   const snapshots: AgentProjectReadResult[] = []
   for (const [index, request] of requests.entries()) {
     context.abortSignal.throwIfAborted()
@@ -53,6 +54,7 @@ export async function readProjectSource(input: ProjectReadInput, context: Projec
         maxChars: Math.max(1, Math.floor(remaining / (requests.length - index))),
       }, { rootPath: context.project.getRootPath() })
       issues.push(...(result.issues ?? []))
+      nextAction ??= result.nextAction
       for (const file of result.files) {
         files.push(await presentProjectRead(context, file, request.range, page?.source))
         snapshots.push(file)
@@ -60,7 +62,14 @@ export async function readProjectSource(input: ProjectReadInput, context: Projec
       }
     } catch (error) {
       if (requests.length === 1) throw error
-      issues.push({ path: request.path, reason: 'failed', ...toAgentProjectErrorObject(error) })
+      const failure = toAgentProjectErrorObject(error)
+      const issue: AgentProjectReadIssue = {
+        path: request.path,
+        code: isString(failure.reason) ? failure.reason : 'INVALID_INPUT',
+        message: String(failure.message ?? error),
+      }
+      if (isString(failure.suggestedNextAction)) issue.next = failure.suggestedNextAction
+      issues.push(issue)
     }
   }
   if (coordinator && isNotUndefined(sequence)) await coordinator.observe(snapshots.flatMap((file, index) => {
@@ -71,7 +80,14 @@ export async function readProjectSource(input: ProjectReadInput, context: Projec
       continuation: view.continuation, hasMore: file.hasMore,
     } : undefined }] : []
   }), sequence, context.toolCallId)
-  return { rootPath: context.project.getRootPath(), count: files.length, files, issues: optionalWhen(!isEmpty(issues), issues) }
+  // count 只数真读到的文件：读不到的路径不进 files，只在 issues 里各带一条码、说明和下一步。
+  return {
+    rootPath: context.project.getRootPath(),
+    count: files.length,
+    files,
+    issues: optionalWhen(!isEmpty(issues), issues),
+    nextAction: optionalWhen(!isEmpty(issues), nextAction),
+  }
 }
 
 /** 搜项目源码：命中按文件与版本合成可编辑的源码窗口（总量有上限，装不下的只留定位），窗口作为顺带观察进入当前文件视图。 */

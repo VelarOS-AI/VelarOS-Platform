@@ -64,8 +64,9 @@ export function matchCandidate(
   confidence: ProjectMatchCandidate['confidence'],
   differences?: readonly string[],
 ): ProjectMatchCandidate {
+  // 候选只给行范围和原文：模型面没有任何字段收字符偏移，给了只会被照抄进下一次入参。
   return {
-    range: [sourceLineAt(source, start), sourceLineAt(source, Math.max(start, end - 1))], startOffset: start, endOffset: end,
+    range: [sourceLineAt(source, start), sourceLineAt(source, Math.max(start, end - 1))],
     ...boundedText(source.content.slice(start, end)),
     ...distinguishingMatch(source, window, windows, start, end),
     confidence, differences,

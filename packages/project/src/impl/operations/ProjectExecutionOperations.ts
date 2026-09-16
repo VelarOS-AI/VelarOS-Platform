@@ -78,7 +78,7 @@ export class ProjectExecutionOperations implements ProjectExecutionOperationsApi
       const record = await port.createSandbox({ source, network: !!input.network, ignored: input.ignored ?? 'link' })
       return {
         ...record,
-        note: `镜像根是 ${record.root}。项目工具出不了项目边界，所以要跑的脚本先用 project:file 写进项目再 create，或者直接用 run 传命令；镜像里的命令写不到镜像外，${record.network ? '可以联网' : '连不上网'}。跑完用 diff 看变化，用完 discard。`,
+        note: `沙箱 ${record.id} 已建好（${record.network ? '可以联网' : '不能联网'}）。接下来用 action=run 在镜像里跑命令，diff 看变化，用完 discard。`,
       }
     }
 

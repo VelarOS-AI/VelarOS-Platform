@@ -64,7 +64,7 @@ async function put(context: ProjectReferenceContext, value: RefRecord, prefix: s
 
 /** 引用不可用时的下一步：模型只能原样复制框架签发的引用，缺引用就去读，不能自己拼。 */
 const ReadForReferenceNextAction =
-  '引用只能原样复制 [Current project files] 或读取结果里的值；当前视图没有该文件时，先用 project:read 读取目标范围获取 fileRef。失败回执带 inputReuse 时，用 reuse + changes 只替换引用字段，正文保持原样。'
+  '引用只能从 [Current project files] 或读取、修改回执里原样复制；当前视图里没有这个文件时，先用 project:read 读一遍目标范围拿 fileRef。回执带 inputReuse 时，用 reuse + changes 只替换引用字段，正文不用重写。'
 
 /** 按引用取回记录：格式不对、找不到、不属于当前作用域或属于别的工作区时抛 INVALID_INPUT，并说明只能原样复制框架签发的引用。 */
 async function get(context: ProjectReferenceContext, ref: string): Promise<RefRecord> {
@@ -80,7 +80,7 @@ async function get(context: ProjectReferenceContext, ref: string): Promise<RefRe
   if (!value || value.version !== 1 || value.scope !== projectFileRefScope(context))
     throw new ProjectError('INVALID_INPUT', '该引用不属于当前会话或执行分支（可能来自别的会话，或所在分支已回退）。', { ref }, ReadForReferenceNextAction)
   if (value.kind === 'project-file-source' && value.workspace !== resolve(context.project.getRootPath()))
-    throw new ProjectError('INVALID_INPUT', '该引用属于另一个工作区。', { ref }, ReadForReferenceNextAction)
+    throw new ProjectError('INVALID_INPUT', '这个引用属于另一个项目。', { ref }, ReadForReferenceNextAction)
   return value
 }
 
@@ -144,9 +144,9 @@ export async function resolveProjectFileRef(context: ProjectReferenceContext, fi
   const kernel = await context.project.kernel()
   const current = await kernel.read({ path: source.path, maxChars: Math.max(source.content.length + 1, 1) })
   if (current.redacted || current.truncated || current.hasMore || current.content !== source.content || !current.snapshot.revision)
-    throw new ProjectError('BASE_REVISION_MISMATCH', `${source.path} 在该 fileRef 显示之后已被修改。`,
+    throw new ProjectError('BASE_REVISION_MISMATCH', `${source.path} 在这个 fileRef 之后改过（当前版本 ${current.snapshot.revision ?? '未知'}）。`,
       { path: source.path, expected: source.revision, actual: current.snapshot.revision },
-      '用 project:read 重新读取目标范围获取新 fileRef；失败回执带 inputReuse 时，用 reuse + changes 只替换 fileRef（有 range 的编辑同时确认新行号），正文保持原样。')
+      '这可能就是你上一次的修改：用 [Current project files] 或上一次修改回执里这个文件的新 fileRef，按新行号重做；那里没有这个文件时再 project:read。回执带 inputReuse 时，用 reuse + changes 只替换 fileRef（有 range 的同时改行号），正文不用重写。')
   return { ...source, revision: current.snapshot.revision }
 }
 

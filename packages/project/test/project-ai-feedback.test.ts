@@ -140,9 +140,9 @@ describe('project:read range clamping', () => {
     expect(batch.files.map((file) => file.snapshot.path)).toEqual(['b.txt'])
     expect(batch.issues).toEqual([{
       path: 'a.txt',
-      reason: 'failed',
       code: 'BASE_REVISION_MISMATCH',
       message: expect.stringContaining('a.txt'),
+      next: expect.any(String),
     }])
     expect(batch.nextAction).toContain('只重读这些路径')
 
@@ -170,7 +170,7 @@ describe('project:read range clamping', () => {
       range: { startLine: 1, startColumn: 12 },
     }, { rootPath: root })
     expect(columns.files.map((file) => file.snapshot.path)).toEqual(['wide.txt'])
-    expect(columns.issues).toEqual([expect.objectContaining({ path: 'short.txt', reason: 'failed', code: 'INVALID_INPUT' })])
+    expect(columns.issues).toEqual([expect.objectContaining({ path: 'short.txt', code: 'INVALID_INPUT' })])
     expect(columns.nextAction).toBeDefined()
   })
 

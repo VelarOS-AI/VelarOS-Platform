@@ -227,6 +227,7 @@ async function kernelFixture(files: Record<string, string>, revisionStrategy: 'm
     resolveFileRef: async (ref) => { const resolved = views.get(ref); if (!resolved) throw new Error('missing ref'); return resolved },
     readPath: async (path) => { const result = await project.read({ path }); return result.snapshot },
     readText: async () => { throw new Error('recode is not part of this fixture') },
+    listPaths: async () => { throw new Error('recode is not part of this fixture') },
   }
   return { project, resolver, views }
 }
@@ -337,6 +338,7 @@ describe('compiled plans on the real transaction engine', () => {
       resolveFileRef: async () => ({ ...view(read.snapshot.content!), path: 'utf16.txt', revision: read.snapshot.revision }),
       readPath: async (path) => (await project.read({ path })).snapshot,
       readText: async () => { throw new Error('recode is not part of this fixture') },
+      listPaths: async () => { throw new Error('recode is not part of this fixture') },
     }
     const tx = await project.prepareEdit(await compileProjectEdit({ files: [{ fileRef: 'v', edits: [{ op: 'replace', range: 2, text: '修改🧪' }] }] }, resolver))
     await project.applyEdit({ transactionId: tx.transactionId })
@@ -356,6 +358,7 @@ describe('compiled plans on the real transaction engine', () => {
       resolveFileRef: async () => originalView,
       readPath: async (path) => (await project.read({ path })).snapshot,
       readText: async () => { throw new Error('recode is not part of this fixture') },
+      listPaths: async () => { throw new Error('recode is not part of this fixture') },
     }
     const plan = await compileProjectEdit({ files: [{ fileRef: 'v', edits: [{ op: 'replace', range: 10_000, text: 'changed and verified' }] }] }, resolver)
     const tx = await project.prepareEdit(plan)

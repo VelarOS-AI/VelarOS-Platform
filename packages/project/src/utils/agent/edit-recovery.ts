@@ -34,7 +34,7 @@ export async function withProjectEditRecovery(
     if (!file) throw error
     // 找不到可确认的新位置时，仍按 fileRef 协议说明下一步，并点名要替换的参数路径。
     const stale = new ProjectError(error.reason, error.message, error.details,
-      `用 project:read 重新读取该文件的目标范围获取新 fileRef；失败回执带 inputReuse 时，用 reuse + changes 设置 ["files",${fileIndex},"fileRef"]（有 range 的编辑同时确认新行号），正文保持原样。`)
+      `这个文件在该 fileRef 之后改过（可能就是你上一次的修改）：用 [Current project files] 或上一次修改回执里这个文件的新 fileRef，按新行号重做；那里没有再 project:read。回执带 inputReuse 时，用 reuse + changes 设置 ["files",${fileIndex},"fileRef"]（有 range 的同时改行号），正文不用重写。`)
     try {
       const previous = await loadProjectFileView(context, file.fileRef)
       const kernel = await context.project.kernel()

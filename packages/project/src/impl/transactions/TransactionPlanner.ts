@@ -480,7 +480,7 @@ export class TransactionPlanner implements TransactionPlannerApi {
       if (changedLines > this.dependencies.policy.maxChangedLinesPerFile) {
         throw new ProjectError(
           'SCOPE_VIOLATION',
-          `文件变更行数超过宿主限制：${pathValue}`,
+          `这个文件改的行数超过项目策略上限（单文件 ${this.dependencies.policy.maxChangedLinesPerFile} 行）：${pathValue}`,
           {
             path: pathValue,
             actual: changedLines,
@@ -488,7 +488,7 @@ export class TransactionPlanner implements TransactionPlannerApi {
             stage: 'prepare',
             written: false,
           },
-          '请缩小该文件的变更范围，或由宿主调整事务规模策略。',
+          '把这个文件的改动缩小到上限之内；确实要一次改这么多，请用户调整项目策略。',
         )
       }
       return { diff, changedLines }
@@ -549,7 +549,8 @@ export class TransactionPlanner implements TransactionPlannerApi {
     }
     for (const file of changedFiles) {
       if (matchesAny(file, this.dependencies.policy.protectedFiles))
-        throw new ProjectError('PROTECTED_FILE', `受保护文件被修改：${file}`)
+        throw new ProjectError('PROTECTED_FILE', `受保护文件不能改：${file}（项目策略 protectedFiles），没有写入。`, { path: file },
+          '这个文件受项目策略保护：告诉用户需要改它，由用户调整策略；不要换路径或用命令绕过。')
       if (matchesAny(file, this.dependencies.policy.generatedFiles))
         throw new ProjectError('GENERATED_FILE', `生成文件不能手工修改：${file}`, { path: file },
           GeneratedFileSuggestedNextAction)

@@ -102,12 +102,14 @@ export interface AgentProjectKernelReadResult extends Omit<AgentProjectReadResul
   }
 }
 
+/** 一个读不到的路径：码来自合同错误原因表，message 说发生了什么，next 说下一步怎么办。 */
 export interface AgentProjectReadIssue {
   path: string
-  reason: 'directory' | 'not_found' | 'binary' | 'failed'
+  /** 合同错误原因：路径不存在或是目录、二进制时分别是 TARGET_NOT_FOUND、NOT_SUPPORTED，其余按抛出的码。 */
+  code: string
   message: string
-  /** reason=failed 时的 Project 错误码。 */
-  code?: string
+  /** 这一条的下一步；没有可照做的下一步时缺省。 */
+  next?: string
 }
 
 export interface AgentProjectSearchResult {

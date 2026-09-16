@@ -48,8 +48,8 @@ export async function resolveConfinedRealPath(
   if (isInsideRoot(realRoot, realTarget)) return realTarget
   throw new ProjectError(
     'PERMISSION_DENIED',
-    `路径解析后越出工作区根目录：${inputPath}`,
+    `路径经符号链接指到了项目外：${inputPath}`,
     { inputPath },
-    '该路径或其祖先通过符号链接指向当前工作区外部。请切换到目标包的真实工作区，或只检查当前工作区源码；不要改搜该路径的父目录。',
+    '这个路径或它的某一层父目录经符号链接指到项目外，读不了：只看项目里的源码，或者请用户换到那个项目；不要改搜它的父目录。',
   )
 }

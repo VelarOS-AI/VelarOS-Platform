@@ -73,9 +73,10 @@ describe('six-action semantic query surface', () => {
     const { run, calls } = await fixture(() => ({ source: 'language-service', references: [{ path: 'other.ts', line: 1, excerpt: 'Service()' }], scannedFiles: 2, truncated: true }))
     const result = await run({ action: 'references', target, path: 'tests', limit: 10 })
     expect(calls).toMatchObject([{ action: 'find_references', path: 'tests', symbol: 'Service', exactWord: true, limit: 10 }])
-    expect(result.resolution).toBe('name-candidates')
-    expect(result.degraded).not.toEqual([])
-    expect(result.coverage).toMatchObject({ path: 'tests', scannedFiles: 2, truncated: true, version: 'unversioned-locations' })
+    // 「按名字收候选」在 degraded 里用中文说清楚，不再另给一个英文枚举。
+    expect(result.resolution).toBeUndefined()
+    expect(result.degraded.join('')).toContain('按名字收集引用候选')
+    expect(result.coverage).toMatchObject({ path: 'tests', scannedFiles: 2, truncated: true, versioned: false })
   })
 
   test('same name in different containers requires explicit disambiguation', async () => {
@@ -121,7 +122,7 @@ describe('six-action semantic query surface', () => {
     expect((discovered.symbols as any[])[0].line).toBe(1)
     const result = await run({ action: 'relations', kind: 'types', direction: 'outgoing', target })
     expect((result.nodes as any[]).map((node) => node.id)).toEqual(['a', 'b'])
-    expect(result.coverage).toMatchObject({ complete: false, version: 'backend-reported' })
+    expect(result.coverage).toMatchObject({ complete: false, versioned: true })
   })
 
   test('unavailable relations report degradation and discovery instead of invented text relationships', async () => {

@@ -181,7 +181,7 @@ describe('命令', () => {
     expect(readOnly.commands).toEqual(['ls'])
   })
 
-  test('修改授权带着这次要写的文件问，而且问在写之前；命令的 cwd 出了项目先拒绝，不打扰用户', async () => {
+  test('INV-17 修改授权带着这次要写的文件问，而且问在写之前；命令的 cwd 出了项目先拒绝，不打扰用户', async () => {
     await writeFile(join(root, 'a.txt'), 'alpha\n')
     const harness = await createProjectHarness(root)
     const file = await harness.read('a.txt')

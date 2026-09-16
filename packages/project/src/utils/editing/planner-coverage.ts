@@ -9,6 +9,16 @@ export function completeProjectCoverage(content: string): ProjectVisibleCoverage
   return [{ startOffset: 0, endOffset: content.length, startLine: 1, endLine: source.lines.length, completeLines: true }]
 }
 
+/** 这个视图看没看过整份正文：整份替换要求看过全文，不然没看过的行会被一起丢掉。 */
+export function coversWholeProjectFile(view: ProjectEditView): boolean {
+  let cursor = 0
+  for (const window of [...view.coverage].sort((a, b) => a.startOffset - b.startOffset)) {
+    if (window.startOffset > cursor) return false
+    cursor = Math.max(cursor, window.endOffset)
+  }
+  return cursor >= view.content.length
+}
+
 /** 按本计划的拼接推进可见覆盖范围：没改动的可见原文照旧可见，再加上本计划自己写进去的文本，其余仍算没看过。 */
 export function advanceProjectCoverage(view: ProjectEditView, content: string, mutations: readonly ProjectResolvedMutation[]): ProjectVisibleCoverage[] {
   const ordered = orderProjectMutations(mutations)

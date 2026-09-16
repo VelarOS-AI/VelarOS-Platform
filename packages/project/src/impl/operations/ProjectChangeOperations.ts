@@ -43,6 +43,10 @@ export interface ProjectChangeOperationsApi {
 }
 
 export class ProjectChangeOperations implements ProjectChangeOperationsApi {
+  /** 差量装不下时的下一步：回执只给前一段，要看全的去读改完的文件。 */
+  private static readonly TruncatedDiffNextAction =
+    `差量太长，只给了前 ${ProjectTuning.transactions.receiptDiffChars} 个字符；要看完整结果，用 project:read 读改后的文件。`
+
   constructor(private readonly gate: ProjectExecutionGateApi) {}
 
   public file(input: ProjectFileInput, context: ProjectToolContext) {
@@ -78,16 +82,20 @@ export class ProjectChangeOperations implements ProjectChangeOperationsApi {
     const kernel = await context.project.kernel()
     const transaction = kernel.getTransaction(record.transactionId)
     if (!transaction)
-      throw new ProjectError('TARGET_NOT_FOUND', '变更回执当前不可用。', { changeRef, executionOutcome: 'not-applied' },
-        'changeRef 只能原样复制本会话 edit/file/change 成功回执里的值。')
+      throw new ProjectError('TARGET_NOT_FOUND', '这次改动的记录已经不在内核里（重启过，或者超过了保留条数）。', { changeRef, executionOutcome: 'not-applied' },
+        '它不能再 inspect、undo 了：改动本身还在，要撤销用 git；换一个更近的 changeRef 才查得到。')
     if (input.action === 'inspect') {
       const diff = transaction.diff.slice(0, ProjectTuning.transactions.receiptDiffChars)
-      return { changeRef, transactionId: transaction.transactionId, status: transaction.status,
+      const diffTruncated = diff.length < transaction.diff.length
+      const inspected: Record<string, unknown> = {
+        changeRef, transactionId: transaction.transactionId, status: transaction.status,
         oldRevisions: record.oldRevisions,
         newRevisions: record.newRevisions,
-        changedFiles: transaction.changedFiles, changedLines: transaction.changedLines,
-        diff, diffTruncated: diff.length < transaction.diff.length,
+        changedFiles: transaction.changedFiles, diffLines: transaction.changedLines,
+        diff, diffTruncated,
       }
+      if (diffTruncated) inspected.nextAction = ProjectChangeOperations.TruncatedDiffNextAction
+      return inspected
     }
     // 撤销是幂等的：已经撤销过就直接如实回执，不再问一次用户、也不报错。
     if (transaction.status === 'rolled_back')
@@ -245,13 +253,15 @@ export class ProjectChangeOperations implements ProjectChangeOperationsApi {
                 newRevisions: applied.newRevisions,
               }
               const diff = finalTransaction.diff.slice(0, ProjectTuning.transactions.receiptDiffChars)
+              const diffTruncated = diff.length < finalTransaction.diff.length
               return {
                 ...receipt,
                 contextRefreshError,
                 files,
                 diff,
-                diffTruncated: diff.length < finalTransaction.diff.length,
+                diffTruncated,
                 diffLines: finalTransaction.changedLines,
+                nextAction: optionalWhen(diffTruncated, ProjectChangeOperations.TruncatedDiffNextAction),
                 notes: optionalWhen(!isEmpty(notes), notes),
                 recode: optionalWhen(isPlainObject, transaction.metadata?.recode),
               }

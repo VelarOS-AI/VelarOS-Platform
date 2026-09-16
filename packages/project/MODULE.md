@@ -8,7 +8,8 @@
 
 项目空间的能力包：让 agent 在一个项目根里读源码、列文件、搜文本、查代码结构、按版本精确改源码、跑命令、在演练沙箱里先跑一遍再落回。
 每一次改动都是一个带版本防护的事务：几个文件、几处编辑全成或全不成，可以查看、可以撤销，撤销遇到外部修改拒绝覆盖。
-模型编辑只认框架签发的 fileRef：它绑定路径、版本和模型实际看到的那段源码，看不到的行改不了。
+模型编辑只认框架签发的 fileRef：它绑定路径、版本和模型实际看到的那段源码。局部编辑（project:edit 与 change 的 edit 步骤）只能改 fileRef 看得到的行；
+overwrite 要求看过全文，move、delete 只核对版本。
 
 它不知道系统空间，也不知道界面长什么样；系统空间是另一个独立的包，两边互不引用。命令判定、沙箱契约、磁盘文本的编解码与原子读写这些两个空间共用的东西在能力公共件里（`@velaros-ai/shell-command`、`@velaros-ai/rehearsal-sandbox`、`@velaros-ai/text-files`，ADR 0008）。
 
@@ -96,13 +97,13 @@
 - 错误原因只来自 `ProjectErrorCodes`，挂在 `ProjectError.reason`；经内核调用时翻成 `AppError`，原因在 `context.projectError`。
 - 改动类失败在回执里标 `details.executionOutcome = 'not-applied'`，入参可复用（`inputReuse`）。
 - 版本过期（文件或列举出的目录）`BASE_REVISION_MISMATCH`；range 超出看到的范围 `SCOPE_VIOLATION`；路径出了项目 `PERMISSION_DENIED`；撤销遇外部修改 `CONFLICT_WITH_EXTERNAL_EDIT`；生成文件 `GENERATED_FILE`；受保护文件 `PROTECTED_FILE`；重启恢复遇到无法归属的改动 `TRANSACTION_RECOVERY_CONFLICT`；宿主缺能力 `NOT_SUPPORTED`；模型给的正则写错或跑不完 `INVALID_INPUT`。
-- 改动已被字节预算挤出可撤销历史时，撤销报 `NOT_SUPPORTED` 并说明没有留下撤销记录（改动本身仍在变更记录里可查）；事务号根本不存在才是 `INVALID_INPUT`。
+- 改动已被字节预算挤出可撤销历史时，撤销报 `NOT_SUPPORTED` 并说明没有留下撤销记录（改动本身仍在变更记录里可查）；记录已经不在内核里是 `TARGET_NOT_FOUND`，引用本身不是本会话签发的才是 `INVALID_INPUT`。撤销一个已经撤销过的改动是幂等成功，不是错误。
 - 命令自己失败不抛错，如实写进回执；用户或宿主拒绝时返回 `skipped`，不执行。
 
 ## 不变量
 
-共 15 条，登记在 `spec/invariants.md`，验收用例在 `spec/acceptance.test.ts`。编号只增不重排。
-按检验方式：测试 13 条、类型 1 条、门禁 1 条。未验证 0 条。
+共 16 条，登记在 `spec/invariants.md`，验收用例在 `spec/acceptance.test.ts`。编号只增不重排。
+按检验方式：测试 14 条、类型 1 条、门禁 1 条。未验证 0 条。
 
 ## 非目标
 

@@ -99,7 +99,7 @@ describe('Project immutable visible source references', () => {
     const file = (await read({ files: [{ path: 'a.ts' }] })).files[0]
     await expect(resolveProjectFileRef({ ...context, codingSession: {} }, file.fileRef)).rejects.toThrow('执行分支')
     await writeFile(join(root, 'a.ts'), 'other')
-    await expect(resolveProjectFileRef(context, file.fileRef)).rejects.toThrow('显示之后已被修改')
+    await expect(resolveProjectFileRef(context, file.fileRef)).rejects.toThrow('这个 fileRef 之后改过')
     const next = (await read({ files: [{ path: 'a.ts' }] })).files[0]
     expect(next.fileRef).not.toBe(file.fileRef)
     expect((await resolveProjectFileRef(context, next.fileRef)).content).toBe('other')

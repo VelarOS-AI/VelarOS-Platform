@@ -75,22 +75,25 @@ function projectAgentReadContinuation(
   return projected
 }
 
-/** 读到的不是可读文本（不存在、是目录、是二进制）时给一条带原因的 issue；读到了正文返回 undefined。 */
+/** 读到的不是可读文本（不存在、是目录、是二进制）时给一条带码和下一步的 issue；读到了正文返回 undefined。 */
 function unreadableIssue(file: AgentProjectReadResult): Optional<AgentProjectReadIssue> {
   if (!file.snapshot.exists) return {
     path: file.snapshot.path,
-    reason: 'not_found',
-    message: '路径不存在，未读取任何内容。',
+    code: 'TARGET_NOT_FOUND',
+    message: '这个路径不存在，什么都没读到。',
+    next: '先用 project:list 列出准确的路径再读，不要接着猜文件名。',
   }
   if (file.snapshot.isDirectory) return {
     path: file.snapshot.path,
-    reason: 'directory',
-    message: '该路径是目录；project:read 不会枚举目录内容。',
+    code: 'NOT_SUPPORTED',
+    message: '这个路径是目录，project:read 不列目录内容。',
+    next: '用 project:list 列这个目录，再读里面的文件。',
   }
   if (file.snapshot.isBinary) return {
     path: file.snapshot.path,
-    reason: 'binary',
-    message: '该路径是二进制文件；project:read 只读取文本。',
+    code: 'NOT_SUPPORTED',
+    message: '这个路径是二进制文件，project:read 只读文本。',
+    next: '换一个能处理这种格式的工具，或者用 project:run 跑命令看它。',
   }
   return undefined
 }
@@ -148,19 +151,17 @@ export async function executeAgentProjectRead(
       baseRevision: baseRevisions?.[filePath],
     }).catch((error: unknown) => {
       if (paths.length === 1 || !isAgentProjectError(error)) throw error
-      issues.push({
-        path: filePath,
-        reason: 'failed',
-        code: error.reason,
-        message: [error.message, error.suggestedNextAction].filter(isString).join(' '),
-      })
+      const issue: AgentProjectReadIssue = { path: filePath, code: error.reason, message: error.message }
+      if (isString(error.suggestedNextAction)) issue.next = error.suggestedNextAction
+      issues.push(issue)
       return undefined
     })
     if (isUndefined(result)) continue
     const file = projectAgentReadResult(filePath, result)
-    files.push(file)
     const issue = unreadableIssue(file)
+    // 读不到的路径只进 issues：再给一个空窗口只会让模型以为文件是空的。
     if (isPresent(issue)) issues.push(issue)
+    else files.push(file)
     if (!isUndefined(remainingChars)) {
       remainingChars = Math.max(0, remainingChars - [...(result.content ?? '')].length)
     }
@@ -176,15 +177,10 @@ export async function executeAgentProjectRead(
   }
 }
 
-/** 按读取问题给模型下一步；全部读到时没有建议。 */
+/** 整次调用的下一步：每条 issue 自己带 next，这里只在有读不到的路径时说一句怎么收场。 */
 function readIssuesNextAction(issues: readonly AgentProjectReadIssue[]): Optional<string> {
-  if (issues.some((issue) => issue.reason === 'directory' || issue.reason === 'not_found'))
-    return '先用 project:list 枚举精确路径，再调用 project:read；不要继续猜测文件名。'
-  if (issues.some((issue) => issue.reason === 'binary'))
-    return '请改用能处理该二进制格式的专用能力，不要继续调用 project:read。'
-  if (issues.some((issue) => issue.reason === 'failed'))
-    return '部分文件读取失败，原因见 issues；按各条 message 修正后只重读这些路径，已返回的文件不必重读。'
-  return undefined
+  if (isEmpty(issues)) return undefined
+  return '这几个路径没读到，原因和下一步见 issues；按各条改好后只重读这些路径，已经读到的不用重读。'
 }
 
 /** 把一处内核搜索命中裁成定位要用的路径、版本、范围和片段，丢掉得分、后端这些诊断字段。 */
@@ -259,7 +255,7 @@ export async function executeAgentProjectSearch(
       literalHint ??
       optionalWhen(
         responseTruncated,
-        '结果已达到 Agent 搜索输出上限；请收窄 query、path 或 include 后继续，不要改搜父目录。'
+        '命中太多，只给了前面这些；收窄 query、path 或 include 再搜，不要改搜父目录。'
       ),
     toolRequirements: result.toolRequirements?.map((requirement) => ({
       kind: requirement.kind,

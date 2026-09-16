@@ -6,10 +6,10 @@
 | 编号 | 不变量 | 检验方式 | 检验器 |
 | --- | --- | --- | --- |
 | INV-1 | 模型面只有九个工具（外加宿主单独登记的 project:code-analysis），名字只来自 `ProjectToolNames`；每个工具的入参 schema 都拒收未知字段 | 测试 | `spec/acceptance.test.ts` |
-| INV-2 | 编辑只认本会话读取或修改回执里的 fileRef：它绑定路径、版本和模型实际看到的那段源码；range 超出看到的范围整批拒绝（SCOPE_VIOLATION，not-applied），文件一个字节都不变 | 测试 | `spec/acceptance.test.ts` |
+| INV-2 | 编辑只认本会话读取或修改回执里的 fileRef：它绑定路径、版本和模型实际看到的那段源码；range 超出看到的范围整批拒绝（SCOPE_VIOLATION，not-applied），文件一个字节都不变；整份替换（overwrite）要求 fileRef 覆盖全文，move、delete 只核对版本 | 测试 | `spec/acceptance.test.ts` |
 | INV-3 | 文件在读取之后被外部改过，基于旧版本的编辑整批拒绝（BASE_REVISION_MISMATCH，not-applied），不覆盖外部改动 | 测试 | `spec/acceptance.test.ts` |
 | INV-4 | 一次 project:edit / project:file / project:change 是一个事务：几个文件、几处编辑全成或全不成；失败时回执标 not-applied，入参可复用 | 测试 | `spec/acceptance.test.ts` |
-| INV-5 | 撤销只撤本事务写下的内容：遇到之后的外部修改拒绝覆盖（CONFLICT_WITH_EXTERNAL_EDIT） | 测试 | `spec/acceptance.test.ts` |
+| INV-5 | 撤销只撤本事务写下的内容：遇到之后的外部修改拒绝覆盖（CONFLICT_WITH_EXTERNAL_EDIT）；已经撤销过的再撤一次是幂等成功，不报错也不改坏东西 | 测试 | `spec/acceptance.test.ts` |
 | INV-6 | 读、列、搜、改都只在项目根之内：越出项目的路径（包括经符号链接指到项目外）一律拒绝 | 测试 | `spec/acceptance.test.ts` |
 | INV-7 | 危险命令每次都由用户亲自确认（高风险、手动、不可记忆，操作身份跨工具一致）；被拒返回 skipped、不执行；会改项目的命令先过宿主的项目修改授权 | 测试 | `spec/acceptance.test.ts` |
 | INV-8 | 同一项目根上写操作串行、读操作可并发；排队的写者不被后来的读者饿死，取消了的等待者不运行 | 测试 | `spec/acceptance.test.ts` |
@@ -20,3 +20,4 @@
 | INV-13 | 同一个物理文件的项目内别名（符号链接、大小写变体）算同一个文件：一次事务里两个入参指向同一份内容时，在写任何东西之前整批拒绝（INVALID_INPUT，not-applied）；拒读拒写名单与宿主的可见性过滤器同时按请求路径和解开符号链接后的真实路径判，别名绕不过去 | 测试 | `spec/acceptance.test.ts` |
 | INV-14 | 版本库内部（任意一层的 `.git`）缺省不许写，报错说清楚要用 `project:run` 跑 git 命令；演练沙箱的源目录解开符号链接后必须仍在项目之内，否则 PERMISSION_DENIED | 测试 | `spec/acceptance.test.ts` |
 | INV-16 | 演练沙箱落回过与编辑同一套写治理（越界、writeDeny、受保护文件、生成文件、宿主可见范围）：有一条不许写就在问用户之前整批拒绝并点名，一个文件都不落 | 测试 | `spec/acceptance.test.ts` |
+| INV-17 | 项目的修改授权问在规划之后、写盘之前，并带上这次会写的文件（相对项目根）：宿主的确认卡片列得出要改哪些文件，被拒时一个字节都不写；project:run 的 cwd 出了项目在问用户之前就拒绝 | 测试 | `spec/acceptance.test.ts` |

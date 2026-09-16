@@ -128,7 +128,7 @@ export function readPastEnd(
     totalLines,
     truncated: false,
     hasMore: false,
-    note: `文件共 ${totalLines} 行，请求的起始行 ${startLine} 超出范围，未返回内容；如需文件末尾，请把 startLine 设为不大于 ${totalLines} 的值。`,
+    note: `文件共 ${totalLines} 行，要的起始行 ${startLine} 超出范围，没有返回内容；要读末尾，起始行不要超过 ${totalLines}。`,
   }
 }
 

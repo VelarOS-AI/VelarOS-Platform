@@ -89,8 +89,6 @@ export interface PlannerCoverageWindow { start: number; end: number }
 
 export interface ProjectMatchCandidate {
   range: readonly [number, number]
-  startOffset: number
-  endOffset: number
   text: string
   truncated: boolean
   match?: string
@@ -261,4 +259,6 @@ export interface ProjectPlannerResolver {
   readPath(path: string): Promise<ProjectPlannerPath>
   /** 文件缺失、二进制、脱敏或超出完整读取上限时抛出 ProjectError。 */
   readText(path: string): Promise<ProjectPlannerText>
+  /** 按 glob 列出项目里匹配的文件（相对项目根，遵守读取策略与 .gitignore）：recode 的 paths 写成 glob 时用它展开。 */
+  listPaths(pattern: string): Promise<string[]>
 }

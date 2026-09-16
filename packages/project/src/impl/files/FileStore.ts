@@ -418,7 +418,8 @@ export class FileStore implements FileStoreApi {
           endLine: limited.truncated ? limitedCursor.line : window.range.endLine,
           endColumn: limited.truncated ? limitedCursor.column : selected.endColumn,
         },
-        truncated: hasMore,
+        // 要的那一段完整给到了就不叫截断；后面还有内容由 hasMore 和 continuation 说。
+        truncated: limited.truncated || selected.hasMoreOnEndLine,
         hasMore,
         nextStartLine: optionalWhen(hasMore && cursor.column === 1, cursor.line),
         continuation: optionalWhen(
@@ -458,6 +459,8 @@ export class FileStore implements FileStoreApi {
           : { line: sliced.range.endLine + 1, column: 1 }
       const hasMore =
         limited.truncated || selected.hasMoreOnEndLine || sliced.range.endLine < totalLines
+      // 明确给了 range 时，这一段读全了就不标截断：标了模型会以为没读完，接着去翻页。
+      const truncated = limited.truncated || selected.hasMoreOnEndLine
       const remainingLines = hasMore
         ? Math.max(0, totalLines - cursor.line + (cursor.column > 1 ? 1 : 0))
         : 0
@@ -471,7 +474,7 @@ export class FileStore implements FileStoreApi {
           endColumn: limited.truncated ? limitedCursor.column : selected.endColumn,
         },
         totalLines,
-        truncated: hasMore,
+        truncated,
         hasMore,
         nextStartLine: optionalWhen(hasMore && cursor.column === 1, cursor.line),
         remainingLines: optionalWhen(hasMore, remainingLines),

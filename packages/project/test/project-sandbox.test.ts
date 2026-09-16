@@ -67,7 +67,9 @@ describe('project:sandbox', () => {
     const context = contextFor({ port: fakePort(calls) })
     const whole = await call({ action: 'create' }, context) as { source: string; root: string; note: string }
     expect(whole.source).toBe(root)
-    expect(whole.note).toContain(whole.root)
+    // 回执里的说明只说下一步；镜像根是模型碰不到的绝对路径，不再抄给它。
+    expect(whole.note).toContain('接下来用 action=run')
+    expect(whole.note).not.toContain(whole.root)
     const sub = await call({ action: 'create', source: 'packages/app', network: true, ignored: 'copy' }, context) as { source: string; network: boolean; ignored: string }
     expect(sub).toMatchObject({ source: join(root, 'packages', 'app'), network: true, ignored: 'copy' })
     // 源出了项目（含经符号链接指到项目外）按 PERMISSION_DENIED 拒绝；挂进内核后这个 reason 就是能力错误的码。

@@ -177,6 +177,22 @@ describe('actual Project tool surface with final model references', () => {
     expect(change.safeParse({ action: 'apply', steps: [{ tool: 'edit', files: [{ fileRef: 'view:x', edits: [] }] }] }).success).toBe(false)
   })
 
+  test('整份替换要求看过全文：只读了几行的 fileRef 覆盖不了整个文件', async () => {
+    await writeFile(join(root, 'a.txt'), 'one\ntwo\nthree\nfour\n')
+    const { call, read } = await fixture()
+    const partial = await read('a.txt', [1, 2])
+    await expect(call('project:file', { actions: [{ op: 'overwrite', fileRef: partial.fileRef, text: 'replaced\n' }] }))
+      .rejects.toMatchObject({ reason: 'SCOPE_VIOLATION', details: { executionOutcome: 'not-applied' } })
+    expect(await readFile(join(root, 'a.txt'), 'utf8')).toBe('one\ntwo\nthree\nfour\n')
+    // move、delete 不动正文，只核对版本，照旧收只看过一段的 fileRef。
+    const moved = await call('project:file', { actions: [{ op: 'move', fileRef: partial.fileRef, to: 'b.txt' }] })
+    expect(moved.changedFiles.sort()).toEqual(['a.txt', 'b.txt'])
+    const whole = await read('b.txt')
+    const overwritten = await call('project:file', { actions: [{ op: 'overwrite', fileRef: whole.fileRef, text: 'replaced\n' }] })
+    expect(overwritten.changed).toBe(true)
+    expect(await readFile(join(root, 'b.txt'), 'utf8')).toBe('replaced\n')
+  })
+
   test('改动回执带提交前后的版本：新建的文件不在 oldRevisions 里，撤销两次照样成功', async () => {
     await writeFile(join(root, 'a.txt'), 'one\n')
     const { call, read } = await fixture()

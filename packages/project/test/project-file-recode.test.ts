@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -47,6 +47,25 @@ const text = '第一行 🙂 C:\\src\\path 字面 \\n\r\nsecond line\r\n'
 const bytes = (path: string) => readFile(join(root, path))
 
 describe('project:file recode', () => {
+  test('paths 收 glob：按项目的列举规则展开；没匹配上、是目录、不存在都带下一步', async () => {
+    await mkdir(join(root, 'docs'), { recursive: true })
+    await writeFile(join(root, 'docs/a.txt'), textCodec.encode(text, 'gb18030'))
+    await writeFile(join(root, 'docs/b.txt'), textCodec.encode(text, 'utf16le'))
+    await writeFile(join(root, 'docs/keep.md'), 'untouched\n')
+    const { call } = await fixture()
+    const result = await call('project:file', { actions: [{ op: 'recode', paths: ['docs/*.txt'], newline: 'lf' }] })
+    expect(result.recode.converted.map((entry: { path: string }) => entry.path).sort()).toEqual(['docs/a.txt', 'docs/b.txt'])
+    expect(result.changedFiles.sort()).toEqual(['docs/a.txt', 'docs/b.txt'])
+    expect(await readFile(join(root, 'docs/keep.md'), 'utf8')).toBe('untouched\n')
+
+    await expect(call('project:file', { actions: [{ op: 'recode', paths: ['docs/*.rs'] }] }))
+      .rejects.toMatchObject({ reason: 'TARGET_NOT_FOUND', suggestedNextAction: expect.stringContaining('project:list') })
+    await expect(call('project:file', { actions: [{ op: 'recode', paths: ['docs'] }] }))
+      .rejects.toMatchObject({ reason: 'NOT_SUPPORTED', suggestedNextAction: expect.stringContaining('project:list') })
+    await expect(call('project:file', { actions: [{ op: 'recode', paths: ['docs/missing.txt'] }] }))
+      .rejects.toMatchObject({ reason: 'TARGET_NOT_FOUND', suggestedNextAction: expect.stringContaining('project:list') })
+  })
+
   test('converts mixed encodings to UTF-8 LF, keeps the text, reports formats, and undo restores the original bytes', async () => {
     await writeFile(join(root, 'gb.txt'), textCodec.encode(text, 'gb18030'))
     await writeFile(join(root, 'u16.txt'), textCodec.encode(text, 'utf16le'))

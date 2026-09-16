@@ -31,7 +31,7 @@ export function toAbs(root: string, relOrAbs: string): string {
   const abs = path.resolve(root, relOrAbs);
   const rootAbs = path.resolve(root);
   if (!isInsideRoot(rootAbs, abs)) {
-    throw new ProjectError("PERMISSION_DENIED", `路径越出工作区根目录：${relOrAbs}`);
+    throw new ProjectError("PERMISSION_DENIED", `路径出了当前项目：${relOrAbs}`);
   }
   return abs;
 }

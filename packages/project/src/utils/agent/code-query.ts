@@ -91,7 +91,8 @@ function envelope(input: { action: string; path?: string; language?: string; lim
       scannedFiles: result.scannedFiles,
       truncated: isTrue(result.truncated),
       limit: input.limit ?? ProjectCodeLimits.resultsDefault,
-      version: result.revision ? 'backend-reported' : 'unversioned-locations',
+      // 结果是不是绑在一个确定版本上：绑了才敢当依据，没绑就只是当前这一眼看到的位置。
+      versioned: !!result.revision,
       revisions: result.revision ? [{ revision: result.revision, scope: result.source ?? 'host' }] : [],
       ...record(result.coverage ?? {}),
     },
@@ -169,7 +170,7 @@ async function symbols(input: Extract<ProjectCodeInput, { action: 'symbols' }>, 
       body: detail.bodyRange,
       statement: detail.statementRange,
       source,
-      coverage: { path: symbol.path, version: 'read-snapshot', range: symbol.range, truncated: source.files.some((file) => file.hasMore) },
+      coverage: { path: symbol.path, versioned: true, range: symbol.range, truncated: source.files.some((file) => file.hasMore) },
     })
   }
   const result = input.exportedOnly
@@ -252,7 +253,7 @@ export async function queryProjectCode(input: ProjectCodeInput, context: Project
       // 保留 file_dependencies 补充的编译器模块依赖边。旧后端会返回两个方向的邻接信息，
       // 因此将其与按方向筛选的导入记录分开。
       if (input.path && (await (await context.project.kernel()).stat({ path: input.path })).kind === 'file') {
-        try { graph = { scope: 'file-neighborhood', filtersApplied: false, ...await query({ action: 'file_dependencies', path: relative(context.project.getRootPath(), resolve(context.project.getRootPath(), input.path)) }, context) } }
+        try { graph = { scope: '文件邻接（没有按 direction 过滤）', ...await query({ action: 'file_dependencies', path: relative(context.project.getRootPath(), resolve(context.project.getRootPath(), input.path)) }, context) } }
         catch (error) { if (!unavailable(error)) throw error }
       }
       return envelope(input, result, { direction: input.direction, graph })
@@ -261,7 +262,7 @@ export async function queryProjectCode(input: ProjectCodeInput, context: Project
       const target = await resolveCodeSymbolReference(input.target, context)
       await locate(target, context)
       const result = await query({ action: 'find_references', ...scope(input), symbol: target.symbol, path: input.path, exactWord: true }, context)
-      return envelope(input, result, { target, resolution: 'name-candidates', degraded: [String(result.degraded ?? ''), '此语言查询按名称收集引用候选；同名声明之间的绑定关系未得到后端证明。'].filter(Boolean) })
+      return envelope(input, result, { target, degraded: [String(result.degraded ?? ''), '这一类语言查询按名字收集引用候选，同名声明之间的绑定关系后端没有证明。'].filter(Boolean) })
     }
     case 'impact': {
       const target = await resolveCodeSymbolReference(input.target, context)
@@ -272,7 +273,7 @@ export async function queryProjectCode(input: ProjectCodeInput, context: Project
         const resolved = await graphTarget(input.target, context)
         graph = await query({ action: 'impact', nodeId: resolved.nodeId, depth: input.depth ?? ProjectCodeLimits.relationDepthDefault }, context)
       } catch (error) { if (!unavailable(error) && !(error instanceof ProjectError && error.reason === 'TARGET_NOT_FOUND')) throw error }
-      return envelope(input, result, { target, graph, resolution: 'impact-candidates', degraded: ['影响候选保留语言服务来源；名称引用不等于精确绑定证明。', ...(isString(result.degraded) ? [result.degraded] : [])] })
+      return envelope(input, result, { target, graph, degraded: ['影响面是语言服务给的候选：按名字找到的引用不等于精确绑定。', ...(isString(result.degraded) ? [result.degraded] : [])] })
     }
   }
 }

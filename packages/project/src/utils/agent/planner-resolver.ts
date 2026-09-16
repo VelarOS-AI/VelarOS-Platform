@@ -1,5 +1,6 @@
 import { isString } from '@velaros-ai/core'
 
+import { ProjectFileLimits } from '../../contract/constants.js'
 import type { ProjectToolContext } from '../../contract/requires'
 import type { ProjectPlannerResolver } from '../../types/editing'
 import { ProjectError } from '../errors'
@@ -30,9 +31,14 @@ export function projectPlannerResolver(context: ProjectToolContext): ProjectPlan
       const kernel = await context.project.kernel()
       const result = await kernel.read({ path, maxChars: ProjectTuning.agent.fullReadChars })
       if (!result.snapshot.exists)
-        throw new ProjectError('TARGET_NOT_FOUND', '文件不存在。', { path })
-      if (result.snapshot.isDirectory || result.snapshot.isBinary)
-        throw new ProjectError('NOT_SUPPORTED', '编码转换需要普通文本文件路径。', { path })
+        throw new ProjectError('TARGET_NOT_FOUND', `${path} 不存在。`, { path },
+          '先用 project:list 列出准确的路径再转换；paths 里也可以直接写 glob。')
+      if (result.snapshot.isDirectory)
+        throw new ProjectError('NOT_SUPPORTED', `${path} 是目录；recode 只收文件路径。`, { path },
+          '先用 project:list（include 写 glob）列出文件，再把路径传给 recode；paths 里也可以直接写 glob。')
+      if (result.snapshot.isBinary)
+        throw new ProjectError('NOT_SUPPORTED', `${path} 是二进制文件，没有可转换的文本。`, { path },
+          'recode 只转换文本文件：把这条路径去掉再发。')
       if (!result.snapshot.revision || result.redacted || result.truncated || result.hasMore || !isString(result.content))
         throw new ProjectError('NOT_SUPPORTED', '文件正文无法完整读取，不能转换编码。', { path })
       const stat = await kernel.stat({ path: result.snapshot.path })
@@ -45,6 +51,17 @@ export function projectPlannerResolver(context: ProjectToolContext): ProjectPlan
         content: result.content,
         textEncoding: stat.textEncoding ?? 'utf8',
       }
+    },
+    listPaths: async (pattern) => {
+      context.abortSignal.throwIfAborted()
+      const kernel = await context.project.kernel()
+      const entries = await kernel.listFiles({
+        include: [pattern],
+        recursive: true,
+        maxDepth: ProjectFileLimits.listDepth,
+        maxFiles: ProjectTuning.list.maxEntries,
+      })
+      return entries.filter((entry) => entry.type === 'file').map((entry) => entry.path)
     },
   }
 }

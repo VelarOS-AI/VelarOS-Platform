@@ -85,8 +85,10 @@ export function selectProjectMutations(view: ProjectEditView, edits: readonly Pr
             ? missingMatchCandidates(view, source, windows, edit.match)
             : exactMatchCandidates(source, windows, matches)
           const elsewhere = total === 0 ? matchesElsewhere(source, allWindows, windows, edit.match) : []
-          const details: Record<string, unknown> = { path: view.path, revision: view.revision, range: edit.range, matches: total,
-            recovery: { kind: 'project-edit-candidates', requiresConfirmation: true, candidates, candidatesTruncated: total > candidates.length } }
+          const details: Record<string, unknown> = { path: view.path, revision: view.revision, range: edit.range, matches: total }
+          // 一个候选都没有时不给 recovery：空的确认信封只会让模型以为还有东西可确认。
+          if (!isEmpty(candidates))
+            details.recovery = { kind: 'project-edit-candidates', requiresConfirmation: true, candidates, candidatesTruncated: total > candidates.length }
           if (!isEmpty(elsewhere)) details.elsewhere = elsewhere
           const { message, next } = total === 0
             ? missingMatchGuidance(candidates, elsewhere)

@@ -37,21 +37,15 @@ export function revisionMismatch(message: string, details: any): ProjectError {
   )
 }
 
-/** 编辑失败后的回读建议：知道出错行时只读附近几行。 */
+/** 编辑失败后的回读建议：入参按 project:read 现在的形状给（files 里一项，range 是 [首行,末行]），知道出错行时只读附近几行。 */
 export function recoveryRead(path: string, line: Optional<number>) {
   const maxChars = ProjectTuning.transactions.recoveryReadMaxChars
-  if (!line) return { tool: 'project:read', input: { path, maxChars } }
-  return {
-    tool: 'project:read',
-    input: {
-      path,
-      range: {
-        startLine: Math.max(1, line - ProjectTuning.transactions.recoveryReadLinesBefore),
-        endLine: line + ProjectTuning.transactions.recoveryReadLinesAfter,
-      },
-      maxChars,
-    },
-  }
+  if (!line) return { tool: 'project:read', input: { files: [{ path }], maxChars } }
+  const range = [
+    Math.max(1, line - ProjectTuning.transactions.recoveryReadLinesBefore),
+    line + ProjectTuning.transactions.recoveryReadLinesAfter,
+  ]
+  return { tool: 'project:read', input: { files: [{ path, range }], maxChars } }
 }
 
 /** 超过 maximum 个字符就截断并补一个省略号。 */
