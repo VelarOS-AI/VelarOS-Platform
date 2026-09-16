@@ -18,9 +18,10 @@
 //      provides 与 requires 里的每个声明都从根入口导出；公开接口引用到的数据类型都导出，导出的数据类型都被公开接口用到；
 //      可移植数据文件里没有公开接口用不到的类型。package.json 的 exports 与入口文件一一对应。
 //   7. 会被渲染进程加载的入口，整条值引用链里不许出现 Node 内置模块。
-//   8. 环境变量：代码里出现的每个 VELAROS_* 名字都登记在常量表的环境变量表里，登记了的都有人用。
+//   8. 环境变量：代码里出现的每个 VELAROS_*（以及登记在 environmentPrefixes 里的别人的前缀）名字都登记在常量表的环境变量表里，登记了的都有人用。
 //      宿主端口：登记的端口接口里的每个方法，都有工具在调（工具文件自己调，或它委托的 impl 类在调）；没人调的方法不许留在注入面。
 //   9. src 下只有 contract、types、impl、utils、exports 五个目录，src 根上不放源文件；依赖只许写在文件头，不许用内联 import 类型和动态 import。
+//      可执行入口放包根 bin/：package.json 的 bin 指 ./bin/<命令>.mjs，文件在、带 #!/usr/bin/env node、files 里有 bin。
 //  10. 模块卡片十节齐全；「提供什么」列出全部入口、导出的每个值和每个公开接口；「骨干链路」点到每个工具；「结构」写明目录树。
 //  11. 不变量登记表每行编号唯一、检验方式合法、检验器真的存在；卡片里的条数如实。包的 test 脚本跑验收测试。
 //  12. 常量分四处：对外承诺的在 contract/constants.ts，每个数字上限有中文说明；可调参数只在登记的 utils/<tuning>：导出的冻结表，只放数字，每项有说明、每项有人用；
@@ -43,6 +44,12 @@ import {
 const RepoRoot = resolve(import.meta.dir, '../..')
 const PackagesRoot = join(RepoRoot, 'packages')
 const RootManifest = JSON.parse(readFileSync(join(RepoRoot, 'package.json'), 'utf8'))
+/** 本仓自己定义的环境变量一律用这个前缀；别人定义的前缀由登记表的 environmentPrefixes 补充。 */
+const DefaultEnvironmentPrefix = 'VELAROS_'
+/** 可执行入口固定放包根这个目录，扩展名固定 .mjs，第一行固定这个 shebang。 */
+const BinaryDirectory = 'bin'
+const BinaryExtension = '.mjs'
+const BinaryShebang = '#!/usr/bin/env node'
 const failures = []
 const fail = (message) => failures.push(message)
 
@@ -1067,6 +1074,14 @@ for (const module of selectedModules) {
   }
   if (constantsSourceFile) visitTable(constantsSourceFile)
   if (module.environmentTable && registeredVariables.size === 0) fail(`${label}: 常量表里没有环境变量表 ${module.environmentTable}`)
+  // 本仓自己的变量一律 VELAROS_ 前缀；读别人定义的名字时把那个前缀登记在 environmentPrefixes 里，一起扫、一起要求登记
+  const environmentPrefixes = [DefaultEnvironmentPrefix, ...(module.environmentPrefixes ?? [])]
+  const environmentNamePattern = new RegExp(`(?:${[...environmentPrefixes].sort((a, b) => b.length - a.length).join('|')})[A-Z0-9_]*`, 'gu')
+  for (const name of registeredVariables) {
+    if (!environmentPrefixes.some((prefix) => name.startsWith(prefix))) {
+      fail(`${label}: ${module.environmentTable} 登记的 ${name} 不是 ${environmentPrefixes.join(' 或 ')} 前缀；本仓自己的变量用 ${DefaultEnvironmentPrefix}，读别人定义的名字先把前缀登记进 environmentPrefixes`)
+    }
+  }
   const usedVariables = new Set()
   for (const file of sourceFiles) {
     if (file === constantsPath) continue
@@ -1075,7 +1090,7 @@ for (const module of selectedModules) {
       // 字符串里写的变量名，和 env.VELAROS_X 这样按属性读的变量名，都算用到
       const isText = ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node) || ts.isTemplateHead(node) || ts.isTemplateMiddle(node) || ts.isTemplateTail(node)
       if (isText || ts.isIdentifier(node)) {
-        for (const token of node.text.match(/VELAROS_[A-Z0-9_]*/gu) ?? []) {
+        for (const token of node.text.match(environmentNamePattern) ?? []) {
           const matches = [...registeredVariables].filter((name) => name === token || (token.endsWith('_') && name.startsWith(token)))
           if (matches.length === 0) fail(`${label}: ${shortPath(file)} 用到了环境变量 ${token}，但${module.environmentTable ? `它不在 ${module.environmentTable} 里` : '本包没有登记环境变量表'}；环境变量也是注入，先登记再用`)
           for (const name of matches) if (name === token) usedVariables.add(name)
@@ -1144,6 +1159,25 @@ for (const module of selectedModules) {
     if (!allowedSourceDirectories.includes(directory)) {
       fail(`${label}: src/${directory}/ 不是登记的目录；src 下只有 ${allowedSourceDirectories.join('、')} 五个目录`)
     }
+  }
+
+  // ── 9b. 可执行入口放包根 bin/，只当壳 ───────────────────────────────────
+  const binaryTargets = Object.entries(manifest.bin ?? {})
+  for (const [command, target] of binaryTargets) {
+    const expected = `./${BinaryDirectory}/${command}${BinaryExtension}`
+    if (target !== expected) {
+      fail(`${label}: package.json bin["${command}"] 是 ${target}，可执行入口放包根 ${BinaryDirectory}/、写成 ${expected}；src 下不留有副作用的文件`)
+      continue
+    }
+    const binaryPath = join(packageRoot, BinaryDirectory, `${command}${BinaryExtension}`)
+    if (!existsSync(binaryPath)) {
+      fail(`${label}: package.json 登记了命令 ${command}，但没有 ${shortPath(binaryPath)}`)
+    } else if (!readFileSync(binaryPath, 'utf8').startsWith(BinaryShebang)) {
+      fail(`${label}: ${shortPath(binaryPath)} 第一行不是 ${BinaryShebang}；装出来的命令要能直接执行`)
+    }
+  }
+  if (binaryTargets.length > 0 && !(manifest.files ?? []).includes(BinaryDirectory)) {
+    fail(`${label}: package.json 的 files 里没有 ${BinaryDirectory}；可执行入口不打进包里，装上也跑不起来`)
   }
 
   // ── 10. 模块卡片 ───────────────────────────────────────────────────────

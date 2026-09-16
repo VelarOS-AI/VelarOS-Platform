@@ -20,6 +20,8 @@
 //   exports         对外入口所在目录，package.json 的 exports 指向这里编译出来的文件
 //   browserSafeEntries  会被渲染进程加载的入口（exports 下的文件名）：整条引用链不许出现 Node 内置模块
 //   environmentTable    常量表里登记环境变量的表名（不读环境变量的包不填；不填时代码里出现环境变量名就拦）
+//   environmentPrefixes 除 VELAROS_ 外还要扫的环境变量前缀（读别人定义、改不了的名字时才填）：只扩大扫描面，不是豁免，
+//                       登记的名字照样要有人用、代码里的名字照样要先登记；新起的变量名一律 VELAROS_
 //   hostPort            注入面里的宿主端口接口名；端口只放工具真会调的方法，门禁从工具文件出发沿 import 核对
 //   hostPortField       工具上下文里放宿主端口的字段名（ctx.<字段>.方法），缺省 system
 //   status              'migrating' 表示正在按标准改造：问题照查照报条数，不计入失败（改造完删掉这一项）
