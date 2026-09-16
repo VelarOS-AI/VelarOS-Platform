@@ -75,7 +75,7 @@ export const CapabilityOwners = [
       {
         directory: 'office',
         name: '@velaros-ai/office',
-        entrySubpaths: ['.'],
+        entrySubpaths: ['.', './contracts', './renderer'],
         sourceRoots: ['contract', 'types', 'impl', 'utils', 'exports'],
         electronRoots: [],
         schemaExports: ['officeTools'],

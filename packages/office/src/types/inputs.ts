@@ -10,7 +10,6 @@ import type { WordBlock, WordDocumentLanguage, WordDocumentMetadata, WordDocumen
 
 /** office:create_word_document 的入参。 */
 export type CreateWordDocumentInput = {
-  cwd?: string
   outputPath: string
   title?: string
   author?: string
@@ -28,7 +27,6 @@ export type CreateWordDocumentInput = {
 
 /** office:create_presentation 的入参。 */
 export type CreatePresentationInput = {
-  cwd?: string
   outputPath: string
   title?: string
   author?: string
@@ -43,7 +41,6 @@ export type CreatePresentationInput = {
 
 /** office:create_spreadsheet 的入参。 */
 export type CreateSpreadsheetInput = {
-  cwd?: string
   outputPath: string
   title?: string
   author?: string
@@ -54,7 +51,6 @@ export type CreateSpreadsheetInput = {
 
 /** office:extract_pdf_text 的入参；页码用从 1 开始的编号，pages 与 maxPages 互斥。 */
 export type ExtractPdfTextInput = {
-  cwd?: string
   inputPath: string
   pages?: number[]
   maxPages?: number
@@ -62,7 +58,6 @@ export type ExtractPdfTextInput = {
 
 /** office:convert_pdf_to_word 的入参。 */
 export type ConvertPdfToWordInput = {
-  cwd?: string
   inputPath: string
   outputPath: string
   title?: string
@@ -73,7 +68,6 @@ export type ConvertPdfToWordInput = {
 
 /** office:convert_word_to_pdf 的入参；转换依赖本机 LibreOffice。 */
 export type ConvertWordToPdfInput = {
-  cwd?: string
   inputPath: string
   outputPath: string
   overwrite?: boolean
@@ -81,7 +75,6 @@ export type ConvertWordToPdfInput = {
 
 /** office:create_latex_pdf 的入参；源码会先落盘为 .tex，再调用系统编译器。 */
 export type CreateLatexPdfInput = {
-  cwd?: string
   outputPath: string
   sourcePath?: string
   latexSource: string
@@ -92,7 +85,6 @@ export type CreateLatexPdfInput = {
 
 /** office:edit_pdf_document 的入参：选页、删页、旋转、文字戳和元数据。 */
 export type EditPdfDocumentInput = {
-  cwd?: string
   inputPath: string
   outputPath: string
   overwrite?: boolean
@@ -105,7 +97,6 @@ export type EditPdfDocumentInput = {
 
 /** office:preview_document 的入参。 */
 export type PreviewOfficeDocumentInput = {
-  cwd?: string
   inputPath: string
   outputPath?: string
   overwrite?: boolean
@@ -115,7 +106,6 @@ export type PreviewOfficeDocumentInput = {
 
 /** office:convert_document_to_markdown 的入参。 */
 export type ConvertDocumentToMarkdownInput = {
-  cwd?: string
   inputPath: string
   outputPath?: string
   overwrite?: boolean

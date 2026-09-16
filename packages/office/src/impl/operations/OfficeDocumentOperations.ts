@@ -79,29 +79,26 @@ export class OfficeDocumentOperations implements OfficeDocumentOperationsApi {
     ctx.abortSignal.throwIfAborted()
     // Office 产物写入前统一请求工作区 mutation 授权。
     const denied = await this.workspace.authorizeMutation(ctx, {
-      cwd: input.cwd,
       operation: '生成 Word 文档',
       targetPath: input.outputPath,
     })
     if (denied) return denied
 
-    return this.workspace.runInDirectory(ctx, input.cwd, async () => {
-      const output = await this.workspace.prepareWordOutput(ctx, input)
-      if (output.append) {
-        // append 模式先生成临时 fragment docx，再把 XML body 合并进原文档。
-        const fragmentDocument = new Document({
-          title: input.title,
-          creator: input.author ?? 'VelarOS',
-          sections: [{ children: buildWordChildren({ blocks }) }],
-        })
-        const fragmentBuffer = await Packer.toBuffer(fragmentDocument)
-        return appendWordDocumentBuffer(output, fragmentBuffer)
-      }
-      // 新建模式直接构建完整 document。
-      const document = buildWordDocument({ ...input, blocks })
-      const buffer = await Packer.toBuffer(document)
-      return writeOfficeBuffer(output, buffer, 'docx')
-    })
+    const output = await this.workspace.prepareWordOutput(ctx, input)
+    if (output.append) {
+      // append 模式先生成临时 fragment docx，再把 XML body 合并进原文档。
+      const fragmentDocument = new Document({
+        title: input.title,
+        creator: input.author ?? '',
+        sections: [{ children: buildWordChildren({ blocks }) }],
+      })
+      const fragmentBuffer = await Packer.toBuffer(fragmentDocument)
+      return appendWordDocumentBuffer(output, fragmentBuffer)
+    }
+    // 新建模式直接构建完整 document。
+    const document = buildWordDocument({ ...input, blocks })
+    const buffer = await Packer.toBuffer(document)
+    return writeOfficeBuffer(output, buffer, 'docx')
   }
 
   public async createPresentation(
@@ -117,42 +114,41 @@ export class OfficeDocumentOperations implements OfficeDocumentOperationsApi {
     ctx.abortSignal.throwIfAborted()
     // 写入 PPTX 前先请求工作区授权。
     const denied = await this.workspace.authorizeMutation(ctx, {
-      cwd: input.cwd,
       operation: '生成 PowerPoint 演示文稿',
       targetPath: input.outputPath,
     })
     if (denied) return denied
 
-    return this.workspace.runInDirectory(ctx, input.cwd, async () => {
-      const output = await this.workspace.prepareOutput(ctx, input.outputPath, '.pptx', input.overwrite)
-      const pptx = new PptxGenJS()
-      // 基础文档属性和可选 layout/theme 都在创建后设置。
-      pptx.layout = input.layout ?? 'LAYOUT_WIDE'
-      pptx.author = input.author ?? 'VelarOS'
-      pptx.company = 'VelarOS'
-      pptx.title = input.title ?? output.path
-      pptx.subject = input.title ?? 'Generated presentation'
-      if (isPresent(input.rtlMode)) pptx.rtlMode = input.rtlMode
-      pptx.theme = input.theme ?? buildPresentationTheme(input.template ?? 'modern')
+    const output = await this.workspace.prepareOutput(ctx, input.outputPath, '.pptx', input.overwrite)
+    const pptx = new PptxGenJS()
+    // 基础文档属性和可选 layout/theme 都在创建后设置。
+    pptx.layout = input.layout ?? 'LAYOUT_WIDE'
+    // 作者、公司、标题都是用户文档的元数据，不给就留空：
+    // 产品名不写进用户的产物，本机的绝对路径更不该跟着文件走。
+    pptx.author = input.author ?? ''
+    pptx.company = ''
+    pptx.title = input.title ?? ''
+    pptx.subject = input.title ?? ''
+    if (isPresent(input.rtlMode)) pptx.rtlMode = input.rtlMode
+    pptx.theme = input.theme ?? buildPresentationTheme(input.template ?? 'modern')
 
-      for (const slideInput of slides) {
-        const slide = pptx.addSlide()
-        // 每页可独立设置背景、元素和 speaker notes。
-        if (slideInput.background) slide.background = slideInput.background
-        addSlideElements(slide, slideInput.elements)
-        if (slideInput.notes) slide.addNotes(slideInput.notes)
-      }
+    for (const slideInput of slides) {
+      const slide = pptx.addSlide()
+      // 每页可独立设置背景、元素和 speaker notes。
+      if (slideInput.background) slide.background = slideInput.background
+      addSlideElements(slide, slideInput.elements)
+      if (slideInput.notes) slide.addNotes(slideInput.notes)
+    }
 
-      await pptx.writeFile({ fileName: output.path })
-      const fileStats = await stat(output.path)
-      return {
-        path: output.path,
-        bytes: fileStats.size,
-        created: output.created,
-        changed: true,
-        kind: 'pptx',
-      } satisfies OfficeOutput
-    })
+    await pptx.writeFile({ fileName: output.path })
+    const fileStats = await stat(output.path)
+    return {
+      path: output.path,
+      bytes: fileStats.size,
+      created: output.created,
+      changed: true,
+      kind: 'pptx',
+    } satisfies OfficeOutput
   }
 
   public async createSpreadsheet(
@@ -169,51 +165,48 @@ export class OfficeDocumentOperations implements OfficeDocumentOperationsApi {
     ctx.abortSignal.throwIfAborted()
     // 写文件前统一走工作区授权，确保用户知道会修改哪个路径。
     const denied = await this.workspace.authorizeMutation(ctx, {
-      cwd: input.cwd,
       operation: '生成 Excel 工作簿',
       targetPath: input.outputPath,
     })
     if (denied) return denied
 
-    return this.workspace.runInDirectory(ctx, input.cwd, async () => {
-      const output = await this.workspace.prepareOutput(ctx, input.outputPath, '.xlsx', input.overwrite)
-      const workbook = new ExcelJS.Workbook()
-      // 工作簿级元数据写在文件属性里，不影响表格内容。
-      workbook.creator = input.author ?? 'VelarOS'
-      workbook.lastModifiedBy = input.author ?? 'VelarOS'
-      workbook.created = new Date()
-      workbook.modified = new Date()
-      workbook.title = input.title ?? ''
+    const output = await this.workspace.prepareOutput(ctx, input.outputPath, '.xlsx', input.overwrite)
+    const workbook = new ExcelJS.Workbook()
+    // 工作簿级元数据写在文件属性里，不影响表格内容。
+    workbook.creator = input.author ?? ''
+    workbook.lastModifiedBy = input.author ?? ''
+    workbook.created = new Date()
+    workbook.modified = new Date()
+    workbook.title = input.title ?? ''
 
-      for (const [sheetIndex, sheetInput] of sheets.entries()) {
-        const sheet = addSpreadsheetWorksheet(workbook, sheetInput, sheetIndex)
+    for (const [sheetIndex, sheetInput] of sheets.entries()) {
+      const sheet = addSpreadsheetWorksheet(workbook, sheetInput, sheetIndex)
 
-        if (!!sheetInput.columns && !isEmpty(sheetInput.columns)) {
-          // 列定义主要负责表头、key、宽度和默认列样式。
-          sheet.columns = sheetInput.columns.map((col) =>
-            isString(col)
-              ? { header: col }
-              : { header: col.header, key: col.key, width: col.width, style: col.style as object }
-          )
-        }
-
-        for (const rowData of sheetInput.rows) writeSpreadsheetRow(sheet, rowData)
-
-        if (sheetInput.headerStyle && sheetInput.columns?.length) {
-          const headerStyle = buildExcelCellStyle(sheetInput.headerStyle)
-          for (let column = 1; column <= sheetInput.columns.length; column++)
-            Object.assign(sheet.getRow(1).getCell(column), headerStyle)
-        }
-        applyNumberFormats(sheet, sheetInput.numberFormats)
-
-        // 内容全部写入后再自动列宽，避免漏掉后续行的最长文本。
-        applyAutoWidths(sheet)
+      if (!!sheetInput.columns && !isEmpty(sheetInput.columns)) {
+        // 列定义主要负责表头、key、宽度和默认列样式。
+        sheet.columns = sheetInput.columns.map((col) =>
+          isString(col)
+            ? { header: col }
+            : { header: col.header, key: col.key, width: col.width, style: col.style as object }
+        )
       }
 
-      // ExcelJS 输出 ArrayBuffer，最终转成 Buffer 交给共享写入逻辑。
-      const buffer = await workbook.xlsx.writeBuffer()
-      return writeOfficeBuffer(output, Buffer.from(buffer), 'xlsx')
-    })
+      for (const rowData of sheetInput.rows) writeSpreadsheetRow(sheet, rowData)
+
+      if (sheetInput.headerStyle && sheetInput.columns?.length) {
+        const headerStyle = buildExcelCellStyle(sheetInput.headerStyle)
+        for (let column = 1; column <= sheetInput.columns.length; column++)
+          Object.assign(sheet.getRow(1).getCell(column), headerStyle)
+      }
+      applyNumberFormats(sheet, sheetInput.numberFormats)
+
+      // 内容全部写入后再自动列宽，避免漏掉后续行的最长文本。
+      applyAutoWidths(sheet)
+    }
+
+    // ExcelJS 输出 ArrayBuffer，最终转成 Buffer 交给共享写入逻辑。
+    const buffer = await workbook.xlsx.writeBuffer()
+    return writeOfficeBuffer(output, Buffer.from(buffer), 'xlsx')
   }
 }
 

@@ -4,14 +4,5 @@
  */
 export * from './contract/constants.js'
 export type { OfficeToolPermission, VelaTool } from './contract/provides.js'
-export type {
-  OfficeHostApi,
-  OfficeProjectApi,
-  OfficeSystemApi,
-  OfficeToolContext,
-} from './contract/requires.js'
+export type { OfficeHostApi, OfficeToolContext } from './contract/requires.js'
 export type * from './types/office.js'
-export type {
-  OfficeProjectAuthorizationDecision,
-  OfficeProjectMutationAuthorizationInput,
-} from './types/workspace.js'

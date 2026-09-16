@@ -5,7 +5,6 @@
 
 /** 向宿主申请一次写入授权：这次要做什么、目标是哪条路径。 */
 export interface OfficeMutationRequest {
-  cwd?: string
   operation: string
   targetPath?: LooseOptional<string>
 }
@@ -28,38 +27,6 @@ export interface OfficeEnvironmentInspection {
   commands: OfficeEnvironmentCommandAvailability[]
 }
 
-/**
- * 安装建议卡上的一个替代方案。
- *
- * @deprecated 安装建议与替代方案已经搬回宿主：office 只返回 `OfficeErrorCodes.converterMissing`
- * 与缺哪个命令、为什么要它，卡片的文案、按钮与用户草稿由宿主自己拼。名字只为兼容保留。
- */
-export interface OfficeSystemToolInstallAlternative {
-  id: string
-  label: { 'zh-CN': string; 'en-US': string }
-  description: { 'zh-CN': string; 'en-US': string }
-  draft: { 'zh-CN': string; 'en-US': string }
-}
-
-/**
- * 宿主生成的安装建议卡。
- *
- * @deprecated 同上，已搬回宿主；本包不再构造也不再读它，只在命令结果里原样透传。
- */
-export interface OfficeSystemToolInstallSuggestion {
-  id: string
-  toolId: string
-  label: string
-  command: string
-  packageName: string
-  reason: string
-  installCommand: Nullable<string>
-  installAvailable: boolean
-  detectedAt: number
-  triggeredBy: { scope: 'project' | 'system'; command: string }
-  alternatives?: OfficeSystemToolInstallAlternative[]
-}
-
 export interface OfficeSystemCommandResult {
   command: string
   cwd: string
@@ -79,7 +46,11 @@ export interface OfficeSystemCommandResult {
     status: 'aborted' | 'failed' | 'passed' | 'timed-out' | 'unknown'
     issues: string[]
   }
-  systemToolSuggestion?: LooseOptional<OfficeSystemToolInstallSuggestion>
+  /**
+   * 宿主挂在命令结果上的安装建议卡：缺转换器时「装什么、怎么装、能不能改用浏览器线上处理」全由宿主拼，
+   * 本包既不构造也不读它，原样透传给宿主自己的结果中间件。形状归宿主所有，所以这里不声明。
+   */
+  systemToolSuggestion?: unknown
 }
 
 /** 跑一条外部命令的选项：在哪跑、给多久、收多少输出，以及给审批与日志看的可读描述。 */

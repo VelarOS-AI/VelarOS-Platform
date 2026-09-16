@@ -67,10 +67,6 @@ describe('office tools kernel module', () => {
           abortSignal: signal,
           office: {
             getRootPath: () => root,
-            runInDirectory: async <T>(
-              _cwd: string,
-              action: () => Promise<T>,
-            ) => action(),
             prepareMutation: async () => ({
               approved: true,
               rootPath: root,
@@ -139,7 +135,6 @@ describe('office tools kernel module', () => {
         abortSignal: signal,
         office: {
           getRootPath: () => root,
-          runInDirectory: async <T>(_cwd: string, action: () => Promise<T>) => action(),
           prepareMutation: async () => {
             throw new Error('read-only PDF extraction must not request mutation approval')
           },
@@ -194,7 +189,6 @@ describe('office tools kernel module', () => {
         abortSignal: signal,
         office: {
           getRootPath: () => root,
-          runInDirectory: async <T>(_cwd: string, action: () => Promise<T>) => action(),
           prepareMutation: async () => ({
             approved: true,
             rootPath: root,
@@ -243,7 +237,6 @@ describe('office tools kernel module', () => {
         abortSignal: signal,
         office: {
           getRootPath: () => root,
-          runInDirectory: async <T>(_cwd: string, action: () => Promise<T>) => action(),
           prepareMutation: async () => ({
             approved: true,
             rootPath: root,
@@ -294,7 +287,6 @@ describe('office tools kernel module', () => {
         abortSignal: signal,
         office: {
           getRootPath: () => root,
-          runInDirectory: async <T>(_cwd: string, action: () => Promise<T>) => action(),
           prepareMutation: async () => ({
             approved: true,
             rootPath: root,

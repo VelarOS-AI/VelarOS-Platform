@@ -237,7 +237,6 @@ const wordBlocksInputSchema = z
 
 const createWordDocumentSchema = z
   .object({
-    cwd: z.string().optional(),
     outputPath: outputPathSchema,
     title: z.string().min(1).max(OfficeInputLimits.titleChars).optional(),
     author: z.string().min(1).max(OfficeInputLimits.shortFieldChars).optional(),
@@ -304,7 +303,6 @@ const createWordDocumentPresetSchema = z.object({
 })
 
 const createWordDocumentGuidedSchema = z.object({
-  cwd: z.string().optional(),
   outputPath: outputPathSchema,
   title: z.string().min(1).max(OfficeInputLimits.titleChars).optional(),
   author: z.string().min(1).max(OfficeInputLimits.shortFieldChars).optional(),
@@ -440,7 +438,6 @@ const presentationSlidesInputSchema = z
 
 const createPresentationSchema = z
   .object({
-    cwd: z.string().optional(),
     outputPath: outputPathSchema,
     title: z.string().min(1).max(OfficeInputLimits.titleChars).optional(),
     author: z.string().min(1).max(OfficeInputLimits.shortFieldChars).optional(),
@@ -524,7 +521,6 @@ const createPresentationPresetSchema = z.object({
 })
 
 const createPresentationGuidedSchema = z.object({
-  cwd: z.string().optional(),
   outputPath: outputPathSchema,
   title: z.string().min(1).max(OfficeInputLimits.titleChars).optional(),
   author: z.string().min(1).max(OfficeInputLimits.shortFieldChars).optional(),
@@ -598,7 +594,6 @@ const spreadsheetSheetsInputSchema = z
 
 const createSpreadsheetSchema = z
   .object({
-    cwd: z.string().optional(),
     outputPath: outputPathSchema,
     title: z.string().min(1).max(OfficeInputLimits.titleChars).optional(),
     author: z.string().min(1).max(OfficeInputLimits.shortFieldChars).optional(),
@@ -638,7 +633,6 @@ const createSpreadsheetPresetSchema = z.object({
 })
 
 const createSpreadsheetGuidedSchema = z.object({
-  cwd: z.string().optional(),
   outputPath: outputPathSchema,
   title: z.string().min(1).max(OfficeInputLimits.titleChars).optional(),
   author: z.string().min(1).max(OfficeInputLimits.shortFieldChars).optional(),
@@ -669,7 +663,6 @@ const inputPdfPathSchema = z
   )
 
 const convertPdfToWordSchema = z.object({
-  cwd: z.string().optional(),
   inputPath: inputPdfPathSchema,
   outputPath: outputPathSchema,
   title: z.string().min(1).max(OfficeInputLimits.titleChars).optional(),
@@ -680,7 +673,6 @@ const convertPdfToWordSchema = z.object({
 
 const extractPdfTextSchema = z
   .object({
-    cwd: z.string().optional(),
     inputPath: inputPdfPathSchema,
     pages: z
       .array(z.number().int().positive())
@@ -728,7 +720,6 @@ const inputWordPathSchema = z
   )
 
 const convertWordToPdfSchema = z.object({
-  cwd: z.string().optional(),
   inputPath: inputWordPathSchema,
   outputPath: outputPathSchema,
   overwrite: z.boolean().optional(),
@@ -746,7 +737,6 @@ const pdfTextStampSchema = z.object({
 })
 
 const editPdfDocumentSchema = z.object({
-  cwd: z.string().optional(),
   inputPath: inputPdfPathSchema,
   outputPath: outputPathSchema,
   overwrite: z.boolean().optional(),
@@ -787,7 +777,6 @@ const latexSourcePathSchema = z
   )
 
 const createLatexPdfSchema = z.object({
-  cwd: z.string().optional(),
   outputPath: outputPathSchema,
   sourcePath: latexSourcePathSchema.optional(),
   latexSource: z
@@ -833,7 +822,6 @@ const createLatexPdfSchema = z.object({
 // ── 预览与 Markdown schema ────────────────────────────────────
 
 const previewOfficeDocumentSchema = z.object({
-  cwd: z.string().optional(),
   inputPath: z
     .string()
     .min(1)
@@ -859,14 +847,13 @@ const previewOfficeDocumentSchema = z.object({
     .optional()
     .describe(
       parameterDescription({
-        description: '生成 HTML 预览时是否加入自动刷新脚本。',
-        usage: ['便于在浏览器中查看最新预览。'],
+        description: '生成 HTML 预览时是否加入自动刷新脚本，缺省不加。',
+        usage: ['只有需要在浏览器里盯着预览随源文件更新时才传 true。'],
       })
     ),
 })
 
 const convertDocumentToMarkdownSchema = z.object({
-  cwd: z.string().optional(),
   inputPath: z
     .string()
     .min(1)
@@ -1098,7 +1085,7 @@ const createSpreadsheet = defineOfficeTool<CreateSpreadsheetInput>({
     guided: {
       role: 'render',
       summary: '用文本内容和常见元数据生成 Excel 工作簿。',
-      suitable: ['需要设置 cwd、title、author 或覆盖策略。'],
+      suitable: ['用 content 生成单张表，可设 title、author、overwrite。'],
       forbidden: ['不要用于多工作表、公式对象或精细样式。'],
       usage: ['传 outputPath 和 content；按需传 title、author、overwrite。'],
       examples: [{ outputPath: "metrics.xlsx", content: "| k | v |\n|---|---|\n| a | 1 |" }],

@@ -1,6 +1,6 @@
 {
   "name": "@velaros-ai/office",
-  "version": "1.1.11",
+  "version": "2.0.0",
   "velaros": {
     "platform": "0.6"
   },
@@ -26,25 +26,13 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
-    "./composition": {
-      "types": "./dist/composition.d.ts",
-      "import": "./dist/composition.js"
-    },
     "./contracts": {
       "types": "./dist/contracts.d.ts",
       "import": "./dist/contracts.js"
     },
-    "./runtime": {
-      "types": "./dist/runtime.d.ts",
-      "import": "./dist/runtime.js"
-    },
     "./renderer": {
       "types": "./dist/renderer.d.ts",
       "import": "./dist/renderer.js"
-    },
-    "./tools": {
-      "types": "./dist/tools.d.ts",
-      "import": "./dist/tools.js"
     }
   },
   "files": [
@@ -65,7 +53,7 @@
     "clean": "rm -rf dist",
     "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/capabilities/build/fix-esm-extensions.mjs dist && node ../../scripts/build/normalize-package-declarations.mjs",
     "test:kernel-module": "bun test test/kernel-module.test.ts",
-    "test": "bun run build && bun test test",
+    "test": "bun run build && bun test test spec/acceptance.test.ts",
     "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/office"
   },
   "dependencies": {

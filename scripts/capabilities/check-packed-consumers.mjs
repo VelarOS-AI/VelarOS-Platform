@@ -204,14 +204,14 @@ void BuiltinExternalLanguageServers.length
     '@velaros-ai/office',
     `import type {
   OfficeEnvironmentInspection,
-  OfficeSystemApi,
+  OfficeHostApi,
 } from '@velaros-ai/office/contracts'
 
 declare const inspectFromHost: (
   commands?: string[]
 ) => Promise<OfficeEnvironmentInspection>
 
-const inspectForOffice: OfficeSystemApi['inspectEnvironment'] = inspectFromHost
+const inspectForOffice: OfficeHostApi['inspectEnvironment'] = inspectFromHost
 
 void inspectForOffice
 `,

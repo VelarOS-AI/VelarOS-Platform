@@ -7,14 +7,11 @@ Office 是 `@velaros-ai` 品牌下的办公文档能力聚合包。它负责创�
 
 | 入口 | 职责 |
 | --- | --- |
-| `@velaros-ai/office/tools` | 模型工具集合 `officeTools` |
-| `@velaros-ai/office/contracts` | 宿主端口和工具上下文类型 |
-| `@velaros-ai/office/runtime` | MarkItDown 定位器（`createMarkItDownLocator`）|
+| `@velaros-ai/office` | Node 宿主要的全部：工具集合 `officeTools`、内核挂载、MarkItDown 定位器、注入面 |
+| `@velaros-ai/office/contracts` | 可移植数据：常量表、宿主端口与工具上下文类型（渲染进程也能加载）|
 | `@velaros-ai/office/renderer` | 独立文档渲染产品使用的窄解析与渲染原语 |
-| `@velaros-ai/office/composition` | Kernel module 组合入口 |
-| `@velaros-ai/office` | 上述职责入口的聚合导出 |
 
-业务代码应依赖最窄的职责入口，只有需要完整 Office 空间时才使用根聚合入口。
+2.0.0 起只有这三个入口：`./tools`、`./runtime`、`./composition` 已并进根入口。
 `renderer` 入口不代表宿主内置渲染；它只供独立安装、独立发布的 Document Renderer
 命令能力包消费。VelarOS Terminal 不依赖此入口，也不注册 Office/PDF 渲染工具。
 
@@ -43,7 +40,6 @@ office:convert_document_to_markdown
 端口上只有工具真会调的方法：
 
 - `getRootPath()`：当前可写的工作区根，产物只能落在它里面。
-- `runInDirectory(cwd, action)`：在 `cwd` 下临时执行；只服务十个工具的 `cwd` 参数。
 - `prepareMutation(request)`：写盘前申请一次写入授权，被拒时工具一个字节都不写。
 - `inspectEnvironment(commands?)`：探测外部转换器在本机可不可用。
 - `runCommand(command, options)`：执行一条原生 argv 命令，本包不拼 shell 串。
@@ -54,7 +50,7 @@ Office 只依赖这个结构化端口，不依赖 Project 或 System 的具体�
 
 ```ts
 import type { OfficeToolContext } from '@velaros-ai/office/contracts'
-import { officeTools } from '@velaros-ai/office/tools'
+import { officeTools } from '@velaros-ai/office'
 
 const context: OfficeToolContext = {
   abortSignal: new AbortController().signal,
@@ -65,7 +61,7 @@ const tool = officeTools['office:create_word_document']
 const input = tool.schema.parse({
   outputPath: 'reports/summary.docx',
   title: '季度总结',
-  blocks: [{ kind: 'paragraph', text: '由 VelarOS 生成。' }],
+  blocks: [{ kind: 'paragraph', text: '第一段正文。' }],
 })
 await tool.execute(input, context)
 ```

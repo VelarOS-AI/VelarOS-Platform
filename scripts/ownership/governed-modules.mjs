@@ -588,11 +588,9 @@ export const GovernedModules = [
       ['runtime/'],
     ],
     toolDefiner: 'defineOfficeTool',
-    // 卡片与不变量登记是入口收口那一轮的事，这三份现在还不存在，照样登记，燃尽表里看得到
     card: 'MODULE.md',
     invariants: 'spec/invariants.md',
     acceptance: 'spec/acceptance.test.ts',
-    status: 'migrating',
   },
   {
     directory: 'computer',

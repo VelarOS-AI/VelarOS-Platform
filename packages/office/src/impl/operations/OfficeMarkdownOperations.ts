@@ -61,7 +61,6 @@ export class OfficeMarkdownOperations implements OfficeMarkdownOperationsApi {
 
     if (input.outputPath) {
       const denied = await this.workspace.authorizeMutation(ctx, {
-        cwd: input.cwd,
         operation: '生成 Markdown 文档',
         targetPath: input.outputPath,
       })
@@ -70,32 +69,30 @@ export class OfficeMarkdownOperations implements OfficeMarkdownOperationsApi {
 
     const maxChars = input.maxChars ?? OfficeTuning.markdown.returnChars
 
-    return this.workspace.runInDirectory(ctx, input.cwd, async () => {
-      const inputPath = await this.workspace.resolveInput(
-        ctx,
-        input.inputPath,
-        OfficeMarkItDownInputExtensions
-      )
-      const launch = this.locateMarkItDown(ctx)
-      if (!launch) return {
-        changed: false,
-        skipped: true,
-        errorCode: OfficeErrorCodes.markItDownUnavailable,
-        missingRuntime: 'markitdown',
-        message: OfficeMarkdownOperations.RuntimeUnavailableMessage,
-      }
+    const inputPath = await this.workspace.resolveInput(
+      ctx,
+      input.inputPath,
+      OfficeMarkItDownInputExtensions
+    )
+    const launch = this.locateMarkItDown(ctx)
+    if (!launch) return {
+      changed: false,
+      skipped: true,
+      errorCode: OfficeErrorCodes.markItDownUnavailable,
+      missingRuntime: 'markitdown',
+      message: OfficeMarkdownOperations.RuntimeUnavailableMessage,
+    }
 
-      if (input.outputPath) return this.runToFile({
-        ctx,
-        launch,
-        inputPath,
-        outputPath: input.outputPath,
-        overwrite: input.overwrite,
-        maxChars,
-      })
-
-      return this.runToStdout({ ctx, launch, inputPath, maxChars })
+    if (input.outputPath) return this.runToFile({
+      ctx,
+      launch,
+      inputPath,
+      outputPath: input.outputPath,
+      overwrite: input.overwrite,
+      maxChars,
     })
+
+    return this.runToStdout({ ctx, launch, inputPath, maxChars })
   }
 
   /** 宿主的插件状态优先；宿主没实现这个端口方法时回落到只按平台约定推导资源根的缺省定位器。 */

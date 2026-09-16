@@ -34,7 +34,6 @@ function createContext(root: string): OfficeToolContext {
     abortSignal: new AbortController().signal,
     office: {
       getRootPath: () => root,
-      runInDirectory: async <T>(_cwd: string, action: () => Promise<T>) => action(),
       prepareMutation: async () => ({
         approved: true,
         rootPath: root,

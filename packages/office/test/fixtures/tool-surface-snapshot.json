@@ -39,9 +39,6 @@
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "type": "object",
       "properties": {
-        "cwd": {
-          "type": "string"
-        },
         "outputPath": {
           "type": "string",
           "minLength": 1,
@@ -578,9 +575,6 @@
           "$schema": "https://json-schema.org/draft/2020-12/schema",
           "type": "object",
           "properties": {
-            "cwd": {
-              "type": "string"
-            },
             "outputPath": {
               "type": "string",
               "minLength": 1,
@@ -736,9 +730,6 @@
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "type": "object",
       "properties": {
-        "cwd": {
-          "type": "string"
-        },
         "outputPath": {
           "type": "string",
           "minLength": 1,
@@ -1140,9 +1131,6 @@
           "$schema": "https://json-schema.org/draft/2020-12/schema",
           "type": "object",
           "properties": {
-            "cwd": {
-              "type": "string"
-            },
             "outputPath": {
               "type": "string",
               "minLength": 1,
@@ -1240,9 +1228,6 @@
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "type": "object",
       "properties": {
-        "cwd": {
-          "type": "string"
-        },
         "outputPath": {
           "type": "string",
           "minLength": 1,
@@ -1653,14 +1638,11 @@
         }
       },
       "guided": {
-        "description": "描述：用文本内容和常见元数据生成 Excel 工作簿。\n\n适合：\n- 需要设置 cwd、title、author 或覆盖策略。\n\n禁止：\n- 不要用于多工作表、公式对象或精细样式。\n\n用法：\n- 传 outputPath 和 content；按需传 title、author、overwrite。\n\n示例：\n- 调用参数示例：{\"outputPath\":\"metrics.xlsx\",\"content\":\"| k | v |\\n|---|---|\\n| a | 1 |\"}。\n\n注意：\n- 复杂工作簿保留给 direct/expert。",
+        "description": "描述：用文本内容和常见元数据生成 Excel 工作簿。\n\n适合：\n- 用 content 生成单张表，可设 title、author、overwrite。\n\n禁止：\n- 不要用于多工作表、公式对象或精细样式。\n\n用法：\n- 传 outputPath 和 content；按需传 title、author、overwrite。\n\n示例：\n- 调用参数示例：{\"outputPath\":\"metrics.xlsx\",\"content\":\"| k | v |\\n|---|---|\\n| a | 1 |\"}。\n\n注意：\n- 复杂工作簿保留给 direct/expert。",
         "schema": {
           "$schema": "https://json-schema.org/draft/2020-12/schema",
           "type": "object",
           "properties": {
-            "cwd": {
-              "type": "string"
-            },
             "outputPath": {
               "type": "string",
               "minLength": 1,
@@ -1731,9 +1713,6 @@
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "type": "object",
       "properties": {
-        "cwd": {
-          "type": "string"
-        },
         "inputPath": {
           "type": "string",
           "minLength": 1,
@@ -1804,9 +1783,6 @@
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "type": "object",
       "properties": {
-        "cwd": {
-          "type": "string"
-        },
         "inputPath": {
           "type": "string",
           "minLength": 1,
@@ -1889,9 +1865,6 @@
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "type": "object",
       "properties": {
-        "cwd": {
-          "type": "string"
-        },
         "inputPath": {
           "type": "string",
           "minLength": 1,
@@ -1959,9 +1932,6 @@
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "type": "object",
       "properties": {
-        "cwd": {
-          "type": "string"
-        },
         "outputPath": {
           "type": "string",
           "minLength": 1,
@@ -2048,9 +2018,6 @@
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "type": "object",
       "properties": {
-        "cwd": {
-          "type": "string"
-        },
         "inputPath": {
           "type": "string",
           "minLength": 1,
@@ -2244,9 +2211,6 @@
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "type": "object",
       "properties": {
-        "cwd": {
-          "type": "string"
-        },
         "inputPath": {
           "type": "string",
           "minLength": 1,
@@ -2268,7 +2232,7 @@
           "maximum": 200
         },
         "autoRefresh": {
-          "description": "描述：生成 HTML 预览时是否加入自动刷新脚本。\n\n用法：\n- 便于在浏览器中查看最新预览。",
+          "description": "描述：生成 HTML 预览时是否加入自动刷新脚本，缺省不加。\n\n用法：\n- 只有需要在浏览器里盯着预览随源文件更新时才传 true。",
           "type": "boolean"
         }
       },
@@ -2323,9 +2287,6 @@
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "type": "object",
       "properties": {
-        "cwd": {
-          "type": "string"
-        },
         "inputPath": {
           "type": "string",
           "minLength": 1,

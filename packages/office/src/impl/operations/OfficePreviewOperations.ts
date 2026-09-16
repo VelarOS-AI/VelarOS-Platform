@@ -62,67 +62,65 @@ export class OfficePreviewOperations implements OfficePreviewOperationsApi {
 
     if (input.outputPath) {
       const denied = await this.workspace.authorizeMutation(ctx, {
-        cwd: input.cwd,
         operation: '生成 Office 预览',
         targetPath: input.outputPath,
       })
       if (denied) return denied
     }
 
-    return this.workspace.runInDirectory(ctx, input.cwd, async () => {
-      const inputPath = await this.workspace.resolveInput(
-        ctx,
-        input.inputPath,
-        OfficePreviewOperations.InputExtensions
+    const inputPath = await this.workspace.resolveInput(
+      ctx,
+      input.inputPath,
+      OfficePreviewOperations.InputExtensions
+    )
+    const normalized = await this.normalizeInput(ctx, inputPath)
+    if (!normalized.success) return normalized.result
+
+    try {
+      const parsed = await this.renderer.parsePreview(
+        normalized.path,
+        normalized.kind,
+        input.maxItems ?? OfficeTuning.preview.items
       )
-      const normalized = await this.normalizeInput(ctx, inputPath)
-      if (!normalized.success) return normalized.result
+      const html = this.renderer.buildPreviewHtml({
+        parsed,
+        inputPath,
+        normalizedInput: toNullable(normalized.wordInput),
+        // 缺省不塞自动刷新脚本：它会往用户自己的 HTML 文件里写一段定时 reload。
+        autoRefresh: !!input.autoRefresh,
+      })
+      const output = input.outputPath
+        ? await this.writePreview(ctx, input.outputPath, html, parsed, input.overwrite)
+        : null
 
-      try {
-        const parsed = await this.renderer.parsePreview(
-          normalized.path,
-          normalized.kind,
-          input.maxItems ?? OfficeTuning.preview.items
-        )
-        const html = this.renderer.buildPreviewHtml({
-          parsed,
-          inputPath,
-          normalizedInput: toNullable(normalized.wordInput),
-          autoRefresh: input.autoRefresh ?? true,
-        })
-        const output = input.outputPath
-          ? await this.writePreview(ctx, input.outputPath, html, parsed, input.overwrite)
-          : null
-
-        return {
-          changed: !!output?.changed,
-          inputPath,
-          kind: normalized.kind,
-          normalizedInput: normalized.wordInput
-            ? {
-                originalPath: normalized.wordInput.originalPath,
-                sourceExtension: normalized.wordInput.sourceExtension,
-                convertedFromLegacyDoc: normalized.wordInput.convertedFromLegacyDoc,
-                intermediateFormat: 'docx',
-                converter: toNullable(normalized.wordInput.converter),
-              }
-            : null,
-          preview: {
-            title: parsed.title,
-            summary: parsed.summary,
-            outline: parsed.outline,
-            slides: parsed.slides,
-            sheets: parsed.sheets,
-            messages: parsed.messages,
-            contentHtml: parsed.htmlBody.slice(0, OfficeTuning.preview.contentHtmlChars),
-            contentTruncated: parsed.htmlBody.length > OfficeTuning.preview.contentHtmlChars,
-          },
-          previewArtifact: output,
-        }
-      } finally {
-        if (normalized.wordInput) await this.converters.cleanupNormalizedWordInput(normalized.wordInput)
+      return {
+        changed: !!output?.changed,
+        inputPath,
+        kind: normalized.kind,
+        normalizedInput: normalized.wordInput
+          ? {
+              originalPath: normalized.wordInput.originalPath,
+              sourceExtension: normalized.wordInput.sourceExtension,
+              convertedFromLegacyDoc: normalized.wordInput.convertedFromLegacyDoc,
+              intermediateFormat: 'docx',
+              converter: toNullable(normalized.wordInput.converter),
+            }
+          : null,
+        preview: {
+          title: parsed.title,
+          summary: parsed.summary,
+          outline: parsed.outline,
+          slides: parsed.slides,
+          sheets: parsed.sheets,
+          messages: parsed.messages,
+          contentHtml: parsed.htmlBody.slice(0, OfficeTuning.preview.contentHtmlChars),
+          contentTruncated: parsed.htmlBody.length > OfficeTuning.preview.contentHtmlChars,
+        },
+        previewArtifact: output,
       }
-    })
+    } finally {
+      if (normalized.wordInput) await this.converters.cleanupNormalizedWordInput(normalized.wordInput)
+    }
   }
 
   /** 认出输入类型；旧版 .doc 先借 LibreOffice 转成临时 .docx 再解析。 */

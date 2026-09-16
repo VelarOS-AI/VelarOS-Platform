@@ -4,6 +4,7 @@ import { createRequire } from 'node:module'
 import { dirname, resolve } from 'node:path'
 
 import { DOMMatrix, ImageData, Path2D } from '@napi-rs/canvas'
+import * as pdfjsModule from 'pdfjs-dist/legacy/build/pdf.mjs'
 
 import { isFunction, isPlainObject, Log } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
@@ -42,18 +43,17 @@ export function ensurePdfjsNodeGlobals(): void {
 }
 
 /**
- * 懒加载 pdfjs，并在加载前先把 Node 运行时的图形全局补齐。
+ * 取到可用的 pdfjs：交出去之前先把 Node 运行时缺的那三个图形全局补齐。
  *
- * 这里的 `import()` 是**故意的动态加载**：pdfjs 的模块体在求值时就会摸 DOMMatrix 这类全局，
- * 改成文件头的静态 import 会让它在 `ensurePdfjsNodeGlobals()` 之前求值，直接炸。
+ * 依赖写在文件头（`pdfjs-dist/legacy/build/pdf.mjs`）。pdfjs 6.x 的模块体求值时不再摸
+ * DOMMatrix 这类全局，只有真正渲染时才用，所以补全局放在这里就够了，不需要动态 `import()`。
  */
 export async function loadPdfjs(): Promise<PdfjsModule> {
   ensurePdfjsNodeGlobals()
-  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs')
-  if (!isPdfjsModule(pdfjs)) {
+  if (!isPdfjsModule(pdfjsModule)) {
     throw new AppError('EXECUTION_FAILED', 'pdfjs-dist 没有暴露 getDocument，PDF 运行时不可用。')
   }
-  return pdfjs
+  return pdfjsModule
 }
 
 /** pdfjs 的标准字体目录；从环境变量（登记在 OfficeEnvironmentVariables）或包安装位置推导，失败时交给 pdfjs 用它的默认策略。 */

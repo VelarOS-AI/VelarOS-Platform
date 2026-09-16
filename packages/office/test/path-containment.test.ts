@@ -4,6 +4,7 @@ import { join } from 'node:path'
 
 import { afterEach, describe, expect, test } from 'bun:test'
 import { PDFDocument, StandardFonts } from 'pdf-lib'
+import { z } from 'zod'
 
 import type { OfficeToolContext } from '../src/index'
 import { officeTools } from '../src/index'
@@ -12,7 +13,6 @@ interface Harness {
   root: string
   outside: string
   context: OfficeToolContext
-  directorySwitches: string[]
 }
 
 const createdRoots: string[] = []
@@ -30,23 +30,10 @@ async function createHarness(): Promise<Harness> {
   const outside = join(base, 'outside')
   await mkdir(root, { recursive: true })
   await mkdir(outside, { recursive: true })
-  const directorySwitches: string[] = []
-  let currentRoot = root
   const context: OfficeToolContext = {
     abortSignal: new AbortController().signal,
     office: {
-      getRootPath: () => currentRoot,
-      runInDirectory: async <T>(cwd: string, action: () => Promise<T>) => {
-        // 照 Desktop 的语义扮演：runInDirectory 把 cwd 当成**新的执行根**，
-        // 包含判断随之以它为准。记下调用是为了断言越界的 cwd 根本没有走到这里。
-        directorySwitches.push(cwd)
-        currentRoot = cwd
-        try {
-          return await action()
-        } finally {
-          currentRoot = root
-        }
-      },
+      getRootPath: () => root,
       prepareMutation: async () => ({
         approved: true,
         rootPath: root,
@@ -57,7 +44,7 @@ async function createHarness(): Promise<Harness> {
       }),
     },
   }
-  return { root, outside, context, directorySwitches }
+  return { root, outside, context }
 }
 
 async function writePdf(path: string, text: string): Promise<void> {
@@ -107,33 +94,39 @@ describe('office 路径包含门', () => {
     expect(result).toMatchObject({ created: true, kind: 'xlsx' })
   })
 
-  test('只读工具不能用根外的 cwd 把执行根换出去', async () => {
+  test('只读工具读不到工作区外的文件', async () => {
     const harness = await createHarness()
     await writePdf(join(harness.outside, 'secret.pdf'), 'SECRET-OUTSIDE')
 
     await expect(
       officeTools['office:extract_pdf_text'].execute(
-        { cwd: harness.outside, inputPath: 'secret.pdf' },
+        { inputPath: '../outside/secret.pdf' },
         harness.context
       )
-    ).rejects.toMatchObject({ code: 'PERMISSION', message: expect.stringContaining('工作目录') })
-    // 越界的 cwd 必须在进宿主之前就被挡住：走到 runInDirectory 就已经换过根了。
-    expect(harness.directorySwitches).toEqual([])
+    ).rejects.toMatchObject({ code: 'PERMISSION', message: expect.stringContaining('超出工作区') })
   })
 
-  test('根内的 cwd 仍然交给宿主切换', async () => {
+  test('根内的相对路径照常读取', async () => {
     const harness = await createHarness()
     const inside = join(harness.root, 'docs')
     await mkdir(inside, { recursive: true })
     await writePdf(join(inside, 'paper.pdf'), 'INSIDE')
 
     const result = (await officeTools['office:extract_pdf_text'].execute(
-      { cwd: inside, inputPath: 'paper.pdf' },
+      { inputPath: 'docs/paper.pdf' },
       harness.context
     )) as { pageCount: number; pages: Array<{ text: string }> }
 
     expect(result.pageCount).toBe(1)
     expect(result.pages[0]?.text).toContain('INSIDE')
-    expect(harness.directorySwitches).toEqual([inside])
+  })
+
+  test('十个工具的入参里都没有 cwd', () => {
+    for (const [name, tool] of Object.entries(officeTools)) {
+      const schema = z.toJSONSchema(tool.schema as z.ZodType, { io: 'input' }) as {
+        properties?: Record<string, unknown>
+      }
+      expect(`${name}:${Object.hasOwn(schema.properties ?? {}, 'cwd')}`).toBe(`${name}:false`)
+    }
   })
 })

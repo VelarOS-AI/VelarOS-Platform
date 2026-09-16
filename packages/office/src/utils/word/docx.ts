@@ -370,7 +370,7 @@ export function buildWordDocument(
 
   return new Document({
     title: input.title,
-    creator: input.author ?? 'VelarOS',
+    creator: input.author ?? '',
     keywords: input.keywords?.join(', '),
     description: input.abstract,
     features: optionalWhenLazy(shouldIncludeAcademicToc(input), () => ({ updateFields: true })),
