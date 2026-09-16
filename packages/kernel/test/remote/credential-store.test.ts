@@ -7,7 +7,7 @@ import { afterEach, describe, expect, test } from 'bun:test'
 import {
   defaultRemoteNodeCredentialsPath,
   FileRemoteNodeCredentialStore,
-} from '../../src/remote/client/credential-store'
+} from '../../src/impl/remote-client/FileRemoteNodeCredentialStore'
 
 const directories: string[] = []
 

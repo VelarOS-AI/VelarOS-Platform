@@ -6,14 +6,14 @@ import { join } from 'node:path'
 
 import { afterEach, describe, expect, test } from 'bun:test'
 
-import { downloadKernelArtifact } from '../../../src/serve/updater/download'
-import { KernelArtifactVerificationError } from '../../../src/serve/updater/errors'
-import { kernelArtifactFileName } from '../../../src/serve/updater/extraction'
+import { kernelArtifactFileName } from '../../../src/impl/updater/PassthroughKernelArtifactExtractor'
+import { UnverifiedKernelArtifactSignatureVerifier } from '../../../src/impl/updater/UnverifiedKernelArtifactSignatureVerifier'
+import { KernelArtifactVerificationError } from '../../../src/utils/errors-updater'
+import { downloadKernelArtifact } from '../../../src/utils/updater/download'
 import {
   parseKernelUpdateManifest,
   selectKernelArtifact,
-} from '../../../src/serve/updater/manifest'
-import { UnverifiedKernelArtifactSignatureVerifier } from '../../../src/serve/updater/signature'
+} from '../../../src/utils/updater/manifest'
 
 import {
   artifactOf,

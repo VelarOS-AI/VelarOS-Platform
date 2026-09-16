@@ -11,62 +11,63 @@
     "node": ">=20.0.0"
   },
   "type": "module",
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "main": "./dist/exports/index.js",
+  "types": "./dist/exports/index.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "types": "./dist/exports/index.d.ts",
+      "import": "./dist/exports/index.js"
     },
     "./contracts": {
-      "types": "./dist/contracts/index.d.ts",
-      "import": "./dist/contracts/index.js"
+      "types": "./dist/exports/contracts.d.ts",
+      "import": "./dist/exports/contracts.js"
     },
     "./contracts/abi": {
-      "types": "./dist/contracts/abi/index.d.ts",
-      "import": "./dist/contracts/abi/index.js"
+      "types": "./dist/exports/contracts-abi.d.ts",
+      "import": "./dist/exports/contracts-abi.js"
     },
     "./contracts/protocol": {
-      "types": "./dist/contracts/protocol/index.d.ts",
-      "import": "./dist/contracts/protocol/index.js"
+      "types": "./dist/exports/contracts-protocol.d.ts",
+      "import": "./dist/exports/contracts-protocol.js"
     },
     "./runtime": {
-      "types": "./dist/runtime/index.d.ts",
-      "import": "./dist/runtime/index.js"
+      "types": "./dist/exports/runtime.d.ts",
+      "import": "./dist/exports/runtime.js"
     },
     "./client": {
-      "types": "./dist/client/index.d.ts",
-      "import": "./dist/client/index.js"
+      "types": "./dist/exports/client.d.ts",
+      "import": "./dist/exports/client.js"
     },
     "./client/contracts": {
-      "types": "./dist/client/contracts/index.d.ts",
-      "import": "./dist/client/contracts/index.js"
+      "types": "./dist/exports/client-contracts.d.ts",
+      "import": "./dist/exports/client-contracts.js"
     },
     "./serve": {
-      "types": "./dist/serve/index.d.ts",
-      "import": "./dist/serve/index.js"
+      "types": "./dist/exports/serve.d.ts",
+      "import": "./dist/exports/serve.js"
     },
     "./serve/updater": {
-      "types": "./dist/serve/updater/index.d.ts",
-      "import": "./dist/serve/updater/index.js"
+      "types": "./dist/exports/serve-updater.d.ts",
+      "import": "./dist/exports/serve-updater.js"
     },
     "./remote": {
-      "types": "./dist/remote/index.d.ts",
-      "import": "./dist/remote/index.js"
+      "types": "./dist/exports/remote.d.ts",
+      "import": "./dist/exports/remote.js"
     },
     "./remote/client": {
-      "types": "./dist/remote/client/index.d.ts",
-      "import": "./dist/remote/client/index.js"
+      "types": "./dist/exports/remote-client.d.ts",
+      "import": "./dist/exports/remote-client.js"
     },
     "./remote/node": {
-      "types": "./dist/remote/node/index.d.ts",
-      "import": "./dist/remote/node/index.js"
+      "types": "./dist/exports/remote-node.d.ts",
+      "import": "./dist/exports/remote-node.js"
     }
   },
   "bin": {
-    "velaros-kernel-daemon": "./dist/serve/main.js"
+    "velaros-kernel-daemon": "./bin/velaros-kernel-daemon.mjs"
   },
   "files": [
+    "bin",
     "dist",
     "README.md",
     "docs",

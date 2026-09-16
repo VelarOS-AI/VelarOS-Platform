@@ -4,16 +4,16 @@ import { join } from 'node:path'
 
 import { afterEach, describe, expect, test } from 'bun:test'
 
-import { KernelClient } from '../../../src/client/KernelClient'
-import { SocketKernelTransport } from '../../../src/client/socket-transport'
-import { createCapabilityToken } from '../../../src/contracts/abi/capability'
-import { defineKernelModule } from '../../../src/contracts/abi/module'
-import { KernelProtocolVersion } from '../../../src/contracts/protocol/version'
-import { KernelModuleHost } from '../../../src/runtime/host/KernelModuleHost'
-import { KernelService } from '../../../src/runtime/service/KernelService'
-import { bootKernelDaemon } from '../../../src/serve/daemon/boot'
-import { InProcessKernelTransport } from '../../../src/serve/internal/in-process-transport'
-import { KernelLocalRpcServer } from '../../../src/serve/rpc/local-rpc-server'
+import { KernelClient } from '../../../src/impl/client/KernelClient'
+import { SocketKernelTransport } from '../../../src/impl/client/SocketKernelTransport'
+import { KernelModuleHost } from '../../../src/impl/runtime/KernelModuleHost'
+import { createCapabilityToken } from '../../../src/impl/runtime/KernelModuleKit'
+import { InProcessKernelTransport } from '../../../src/impl/serve/InProcessKernelTransport'
+import { bootKernelDaemon } from '../../../src/impl/serve/KernelDaemonAssembly'
+import { KernelLocalRpcServer } from '../../../src/impl/serve/KernelLocalRpcServer'
+import { KernelService } from '../../../src/impl/serve/KernelService'
+import { defineKernelModule } from '../../../src/types/abi-module'
+import { KernelProtocolVersion } from '../../../src/utils/wire/version'
 
 const directories: string[] = []
 

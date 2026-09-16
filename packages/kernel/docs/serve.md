@@ -7,7 +7,7 @@
 | `@velaros-ai/kernel/serve` | daemon 生命周期、本机 RPC、ModStore 与进程内 transport |
 | `@velaros-ai/kernel/serve/updater` | artifact 校验、安装、激活指针与回滚 |
 
-`velaros-kernel-daemon` 指向 `dist/serve/main.js`。完整宿主不需要该入口，直接组合
+`velaros-kernel-daemon` 指向 `bin/velaros-kernel-daemon.mjs`。完整宿主不需要该入口，直接组合
 `@velaros-ai/kernel/runtime`。
 
 ```ts

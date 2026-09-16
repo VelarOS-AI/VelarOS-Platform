@@ -1,14 +1,15 @@
 import { describe, expect, test } from 'bun:test'
 
-import { type CapabilityToken, createCapabilityToken } from '../../src/contracts/abi/capability'
+import { KernelModuleHost } from '../../src/impl/runtime/KernelModuleHost'
+import { createCapabilityToken } from '../../src/impl/runtime/KernelModuleKit'
+import type { CapabilityToken } from '../../src/types/abi-capability'
 import type {
   KernelModuleActivateContext,
   KernelModuleDefinition,
   KernelModuleIsolation,
-} from '../../src/contracts/abi/module'
-import type { KernelPermissionBroker } from '../../src/contracts/abi/permissions'
-import { KernelHostError, KernelStartupError } from '../../src/runtime/host/errors'
-import { KernelModuleHost } from '../../src/runtime/host/KernelModuleHost'
+} from '../../src/types/abi-module'
+import type { KernelPermissionBroker } from '../../src/types/abi-permissions'
+import { KernelHostError, KernelStartupError } from '../../src/utils/errors'
 
 interface ValueService {
   read(): string

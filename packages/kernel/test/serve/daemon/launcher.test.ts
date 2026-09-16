@@ -5,20 +5,20 @@ import { join } from 'node:path'
 
 import { afterEach, describe, expect, test } from 'bun:test'
 
-import {
-  createDefaultKernelDaemonPaths,
-  type KernelDaemonPaths,
-} from '../../../src/client/contracts/descriptor'
-import { connectToKernelDaemon } from '../../../src/client/discovery'
+import { connectToKernelDaemon } from '../../../src/impl/client/KernelDaemonDirectory'
+import { KernelModuleHost } from '../../../src/impl/runtime/KernelModuleHost'
 import {
   KernelLauncher,
   KernelLauncherError,
   type KernelVersionTarget,
-} from '../../../src/client/KernelLauncher'
-import { KernelProtocolVersion } from '../../../src/contracts/protocol/version'
-import { KernelModuleHost } from '../../../src/runtime/host/KernelModuleHost'
-import { KernelService } from '../../../src/runtime/service/KernelService'
-import { KernelLocalDaemon } from '../../../src/serve/daemon/daemon'
+} from '../../../src/impl/serve/KernelLauncher'
+import { KernelLocalDaemon } from '../../../src/impl/serve/KernelLocalDaemon'
+import { KernelService } from '../../../src/impl/serve/KernelService'
+import {
+  createDefaultKernelDaemonPaths,
+  type KernelDaemonPaths,
+} from '../../../src/utils/rpc/descriptor'
+import { KernelProtocolVersion } from '../../../src/utils/wire/version'
 
 const temporaryDirectories: string[] = []
 const runningDaemons: KernelLocalDaemon[] = []

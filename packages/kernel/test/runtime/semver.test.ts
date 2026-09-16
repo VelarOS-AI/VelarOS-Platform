@@ -1,16 +1,16 @@
 import { describe, expect, test } from 'bun:test'
 
-import { parseVelarosModEnvelope } from '../../src/contracts/protocol/mod-manifest'
 import {
   assertSemanticVersion,
   satisfiesVersionRange,
-} from '../../src/runtime/host/version'
+} from '../../src/utils/runtime/version'
 import {
   compareKernelVersions,
   isKernelVersion,
   parseKernelVersion,
   satisfiesKernelVersionRange,
-} from '../../src/serve/updater/version'
+} from '../../src/utils/updater/version'
+import { parseVelarosModEnvelope } from '../../src/utils/wire/mod-envelope'
 
 describe('语义化版本口径', () => {
   test('宿主与更新器对同一个版本号给同一个结论', () => {

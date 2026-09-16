@@ -4,14 +4,14 @@ import { join } from 'node:path'
 
 import { afterEach, describe, expect, test } from 'bun:test'
 
-import { defineKernelModule } from '../../../src/contracts/abi/module'
+import { KernelModLoader, persistModIndex } from '../../../src/impl/serve/KernelModLoader'
+import { KernelModStore, registerSystemModPacks } from '../../../src/impl/serve/KernelModStore'
+import { defineKernelModule } from '../../../src/types/abi-module'
 import {
   createBundledModPack,
   registerBundledPacks,
   toBundledPackRecords,
-} from '../../../src/serve/daemon/bundled-packs'
-import { KernelModLoader, persistModIndex } from '../../../src/serve/daemon/mod-loader'
-import { KernelModStore, registerSystemModPacks } from '../../../src/serve/daemon/mod-store'
+} from '../../../src/utils/serve/mod-packs'
 
 const directories: string[] = []
 

@@ -1,14 +1,14 @@
 import { describe, expect, test } from 'bun:test'
 
-import { createKernelCallableCapability } from '../../src/contracts/abi/callable'
-import { createCapabilityToken } from '../../src/contracts/abi/capability'
-import { defineKernelModule } from '../../src/contracts/abi/module'
-import type { KernelPermissionBroker } from '../../src/contracts/abi/permissions'
+import { Kernel } from '../../src/impl/runtime/Kernel'
+import { createKernelCallableCapability } from '../../src/impl/runtime/KernelCallableCapability'
 import {
   KernelCapabilityPermissionDeniedError,
   KernelCapabilityUnavailableError,
-} from '../../src/runtime/capability-invocation'
-import { Kernel } from '../../src/runtime/Kernel'
+} from '../../src/impl/runtime/KernelCapabilityInvoker'
+import { createCapabilityToken } from '../../src/impl/runtime/KernelModuleKit'
+import { defineKernelModule } from '../../src/types/abi-module'
+import type { KernelPermissionBroker } from '../../src/types/abi-permissions'
 
 const ValueCapability = createCapabilityToken('test.value', '2.4.0')
 

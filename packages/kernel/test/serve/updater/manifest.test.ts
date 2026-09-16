@@ -3,7 +3,7 @@ import { join } from 'node:path'
 
 import { afterEach, describe, expect, test } from 'bun:test'
 
-import { KernelUpdaterError } from '../../../src/serve/updater/errors'
+import { KernelUpdaterError } from '../../../src/utils/errors-updater'
 import {
   listKernelManifestVersions,
   loadKernelUpdateManifest,
@@ -11,7 +11,7 @@ import {
   resolveKernelArtifactTarget,
   selectKernelArtifact,
   selectKernelManifestVersion,
-} from '../../../src/serve/updater/manifest'
+} from '../../../src/utils/updater/manifest'
 
 import {
   artifactOf,

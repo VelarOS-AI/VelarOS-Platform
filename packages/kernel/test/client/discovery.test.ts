@@ -3,12 +3,12 @@ import { join } from 'node:path'
 
 import { afterEach, describe, expect, test } from 'bun:test'
 
-import { createDefaultKernelDaemonPaths } from '../../src/client/contracts/descriptor'
 import {
   connectToKernelDaemon,
   discoverKernelDaemon,
-} from '../../src/client/discovery'
-import { KernelProtocolVersion } from '../../src/contracts/protocol/version'
+} from '../../src/impl/client/KernelDaemonDirectory'
+import { createDefaultKernelDaemonPaths } from '../../src/utils/rpc/descriptor'
+import { KernelProtocolVersion } from '../../src/utils/wire/version'
 
 import {
   descriptorFor,

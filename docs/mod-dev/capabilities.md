@@ -3,7 +3,7 @@
 轴是**贡献**（我给平台加东西）；capability 是**服务**（我提供 / 我要用一个能力实现）。
 两者正交：一个 mod 可以只贡献轴、只提供 capability，或两者都有。
 
-契约面：`@velaros-ai/kernel/contracts/abi`（`packages/kernel/src/contracts/abi/`）。
+契约面：`@velaros-ai/kernel/contracts/abi`（`packages/kernel/src/exports/contracts-abi.ts`）。
 
 ---
 

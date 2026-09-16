@@ -216,7 +216,7 @@
       "name": "@velaros-ai/kernel",
       "version": "0.2.3",
       "bin": {
-        "velaros-kernel-daemon": "./dist/serve/main.js",
+        "velaros-kernel-daemon": "./bin/velaros-kernel-daemon.mjs",
       },
       "dependencies": {
         "@velaros-ai/core": "workspace:*",

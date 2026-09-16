@@ -1,18 +1,18 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 
-import { KernelModuleApiVersion } from '../../src/contracts/abi/version-axis'
+import { KernelModuleApiVersion } from '../../src/contract/constants'
+import { RemoteNodeClient } from '../../src/impl/remote-client/RemoteNodeClient'
+import { RemoteNodeModuleApiVersion } from '../../src/impl/remote-client/RemoteNodeProjection'
+import { RemoteNodeServer } from '../../src/impl/remote-node/RemoteNodeServer'
 import type {
   RemoteNodeCredentials,
   RemoteNodeCredentialStore,
-} from '../../src/remote/client/contracts'
-import { RemoteNodeClient } from '../../src/remote/client/RemoteNodeClient'
-import { RemoteNodeModuleApiVersion } from '../../src/remote/module-projection'
+} from '../../src/types/remote-client'
 import type {
   RemoteNodeCredentialStore as NodeCredentialStore,
   RemoteNodePairedCredential,
-} from '../../src/remote/node/contracts'
-import { RemoteNodeServer } from '../../src/remote/node/RemoteNodeServer'
-import { computeManifestRevision, createManifest } from '../../src/remote/shared/manifest'
+} from '../../src/types/remote-node'
+import { computeManifestRevision, createManifest } from '../../src/utils/remote/manifest'
 
 const PairingCode = '123456'
 

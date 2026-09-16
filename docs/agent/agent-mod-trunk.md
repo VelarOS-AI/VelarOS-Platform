@@ -10,7 +10,7 @@
 所有顶层应用（Desktop / Workbench / Extension / CLI）都需要 agent，因此**领域轴的注册机住 agent 域**。
 
 ```
-第一级  Kernel Module Host（packages/kernel/src/runtime/host/）
+第一级  Kernel Module Host（packages/kernel/src/impl/runtime/）
         只解析窄 KernelModuleDescriptor { id, version, apiVersion, provides, requires, permissions, isolation }
         管 pack 的安装/启停/发现，永不解析领域贡献轴
 

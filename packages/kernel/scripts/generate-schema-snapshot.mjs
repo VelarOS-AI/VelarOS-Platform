@@ -8,8 +8,8 @@ import { fileURLToPath } from 'node:url'
 
 import { z } from 'zod'
 
-import { KernelProtocolVersion } from '../src/contracts/protocol/handshake.ts'
-import { KernelProtocolWireSchemas } from '../src/contracts/protocol/schema-snapshot.ts'
+import { KernelProtocolVersion } from '../src/utils/wire/handshake.ts'
+import { KernelProtocolWireSchemas } from '../src/utils/wire/snapshot.ts'
 
 const scriptDir = dirname(fileURLToPath(import.meta.url))
 const outDir = resolve(scriptDir, '../dist')

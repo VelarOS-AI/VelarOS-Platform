@@ -1,22 +1,25 @@
 #!/usr/bin/env bun
 // 用途:Kernel 架构边界哨兵。基线=零违规。
 //
-// Kernel 域只占一个包,用子路径表达职责,不再用多个平铺包表达内部切片:
-//   packages/kernel/src/contracts  ABI、wire protocol、service contracts
-//   packages/kernel/src/runtime    进程内 Kernel runtime
-//   packages/kernel/src/client     serve 模式的瘦客户端
-//   packages/kernel/src/serve      可选 daemon / RPC / updater 部署组合
+// Kernel 域只占一个包,src 下是仓库标准的五目录,职责由 impl / utils 的域子目录表达:
+//   packages/kernel/src/contract、types    对外合同与类型(不认识任何实现)
+//   packages/kernel/src/impl/runtime       进程内 Kernel runtime
+//   packages/kernel/src/impl/client        serve 模式的瘦客户端
+//   packages/kernel/src/impl/serve         daemon / 本机 RPC / ModStore / 启动器
+//   packages/kernel/src/impl/updater       共享 Runtime 安装器
+//   packages/kernel/src/impl/remote-client、remote-node   远程节点两端
 //
 // 八道防线:
 //  ① 包集合冻结:Kernel 域只能有 packages/kernel 一个包。
 //  ② host 无关:整个 Kernel 禁 import Electron / Desktop renderer/main 路径。
-//  ③ 依赖方向:core → kernel 禁止;contracts → runtime/client/serve 禁止;
-//     runtime → client/serve 禁止;client → runtime/serve 禁止;updater 不得触达其它切片。
-//  ④ 协议单一事实来源:wire schema 只能定义在 packages/kernel/src/contracts/protocol。
+//  ③ 依赖方向:core → kernel 禁止;contract/types → impl/utils 禁止;
+//     impl/runtime 与 utils/runtime → serve/client/updater/remote-* 禁止;impl/client → runtime/serve 禁止;
+//     updater 不得触达别的切片;remote 两侧互不引用。
+//  ④ 协议单一事实来源:wire schema 只能定义在 packages/kernel/src/utils/wire。
 //  ⑤ 审批端口教义(宪章 §4 ApprovalPort 默认 deny):审批动词必须经 ctx.approval.*。
 //  ⑥ Kernel 不得依赖任何具体能力实现(browser / workspace / memory / model 等由产品装配根注入)。
 //  ⑦ 发布必须绑定精确 source/ref/tag 和同一已验明 tarball。
-//  ⑧ 单内核运行语义:new Kernel / serve 共用一条 capability invoker;module ABI 版本只认常量。
+//  ⑧ 单内核运行语义:进程内 Kernel 与 serve 装配共用一条 capability invoker;module ABI 版本只认常量。
 //
 // 有意的基线变化:VELAROS_ARCH_BASELINE_UPDATE=1 bun scripts/check-arch-boundaries.mjs 重生成基线,
 // 并在提交信息里说明差异。
@@ -34,9 +37,9 @@ const SourceExtensions = new Set(['.ts', '.tsx'])
 /** Kernel 域唯一包。职责通过公开 subpath 切片表达。 */
 const PublicPackages = ['kernel']
 
-/** updater 子路径相对 import 触达 daemon 切片即违规。 */
-const UpdaterReachesDaemonPattern =
-  /(?:from\s+|import\s*\(|require\()\s*['"]\.{1,2}(?:\/\.\.)*\/daemon(?:\/[^'"]*)?['"]/
+/** updater 相对 import 触达别的实现切片即违规(同层与上层都不许)。 */
+const UpdaterReachesOtherSlicePattern =
+  /(?:from\s+|import\s*\(|require\()\s*['"]\.{1,2}(?:\/\.\.)*\/(?:runtime|client|serve|remote-client|remote-node)(?:\/[^'"]*)?['"]/
 
 /** Kernel 唯一源码根。 */
 const KernelLibraryRoot = 'packages/kernel/src'
@@ -227,10 +230,10 @@ function scanDependencyDirection() {
     ),
   )
 
-  // contracts 是最内层稳定面,不得认识实现或部署切片。
+  // contract 与 types 是最内层稳定面,不得认识实现或部署切片。
   violations.push(
     ...scanLines(
-      ['packages/kernel/src/contracts'],
+      ['packages/kernel/src/contract', 'packages/kernel/src/types'],
       (line) =>
         InternalImplementationPattern.test(line)
         || importsPackage(line, [
@@ -238,65 +241,81 @@ function scanDependencyDirection() {
           '@velaros-ai/kernel/client',
           '@velaros-ai/kernel/serve',
         ])
-        || /(?:from\s+|import\s*\(|require\()\s*['"]\.\.(?:\/\.\.)*\/(?:runtime|client|serve)(?:\/[^'"]*)?['"]/.test(line),
+        // types 目前还从 utils/wire 引 zod 推断出来的 wire 类型;wire 类型改成手写进 types 之后
+        // 这条一并收紧成 (?:impl|utils)。
+        || /(?:from\s+|import\s*\(|require\()\s*['"]\.\.(?:\/\.\.)*\/impl(?:\/[^'"]*)?['"]/.test(line),
       (file, line) => ({
         rule: 'contracts-dependency-direction',
         fingerprint: `contracts-dependency-direction::${file}:${line}`,
-        message: `${file}:${line}: Kernel contracts 不得依赖 runtime、client 或 serve。`,
+        message: `${file}:${line}: Kernel 的 contract 与 types 不得依赖 impl。`,
       }),
     ),
   )
 
-  // runtime 是库形态实现,不得反向依赖接入与部署组合。
+  // 进程内内核在最底层,不得反向依赖接入与部署组合。
   violations.push(
     ...scanLines(
-      ['packages/kernel/src/runtime'],
+      ['packages/kernel/src/impl/runtime', 'packages/kernel/src/utils/runtime'],
       (line) =>
         importsPackage(line, ['@velaros-ai/kernel/client', '@velaros-ai/kernel/serve'])
-        || /(?:from\s+|import\s*\(|require\()\s*['"]\.\.(?:\/\.\.)*\/(?:client|serve)(?:\/[^'"]*)?['"]/.test(line),
+        || /(?:from\s+|import\s*\(|require\()\s*['"]\.\.(?:\/\.\.)*\/(?:client|serve|updater|remote-client|remote-node|rpc)(?:\/[^'"]*)?['"]/.test(line),
       (file, line) => ({
         rule: 'runtime-dependency-direction',
         fingerprint: `runtime-dependency-direction::${file}:${line}`,
-        message: `${file}:${line}: Kernel runtime 不得依赖 client 或 serve。`,
+        message: `${file}:${line}: Kernel 的进程内内核不得依赖 client、serve、updater 或远程节点两端。`,
       }),
     ),
   )
 
-  // client 只依赖 contracts;不能绕回 runtime 或 serve 实现。
+  // 瘦客户端只依赖合同与 utils;不能绕回进程内内核或 serve 实现。
   violations.push(
     ...scanLines(
-      ['packages/kernel/src/client'],
+      ['packages/kernel/src/impl/client'],
       (line) =>
         importsPackage(line, ['@velaros-ai/kernel/runtime', '@velaros-ai/kernel/serve'])
         || /(?:from\s+|import\s*\(|require\()\s*['"]\.\.(?:\/\.\.)*\/(?:runtime|serve)(?:\/[^'"]*)?['"]/.test(line),
       (file, line) => ({
         rule: 'client-dependency-direction',
         fingerprint: `client-dependency-direction::${file}:${line}`,
-        message: `${file}:${line}: Kernel client 只能依赖 contracts,不得依赖 runtime 或 serve。`,
+        message: `${file}:${line}: Kernel 瘦客户端只能依赖合同与 utils,不得依赖进程内内核或 serve。`,
       }),
     ),
   )
 
-  // updater 只负责字节、签名与版本指针,不得触达 daemon/client/runtime。
+  // updater 只负责字节、签名与版本指针,不得触达别的实现切片。
   violations.push(
     ...scanLines(
-      ['packages/kernel/src/serve/updater'],
+      ['packages/kernel/src/impl/updater', 'packages/kernel/src/utils/updater'],
       (line) =>
-        UpdaterReachesDaemonPattern.test(line)
+        UpdaterReachesOtherSlicePattern.test(line)
         || importsPackage(line, [
           '@velaros-ai/kernel/runtime',
           '@velaros-ai/kernel/client',
           '@velaros-ai/kernel/contracts',
           '@velaros-ai/kernel/serve',
-        ])
-        || /(?:from\s+|import\s*\(|require\()\s*['"]\.\.(?:\/\.\.)*\/(?:client|contracts|runtime|daemon|rpc|internal)(?:\/[^'"]*)?['"]/.test(line),
+        ]),
       (file, line) => ({
         rule: 'updater-dependency-direction',
         fingerprint: `updater-dependency-direction::${file}:${line}`,
-        message: `${file}:${line}: Kernel updater 不得依赖 contracts、runtime、client 或其它 serve 切片。`,
+        message: `${file}:${line}: Kernel updater 不得依赖别的实现切片。`,
       }),
     ),
   )
+
+  // 远程节点两端互不引用:共用的只许放在 utils/remote/。
+  for (const [side, other] of [['remote-client', 'remote-node'], ['remote-node', 'remote-client']]) {
+    violations.push(
+      ...scanLines(
+        [`packages/kernel/src/impl/${side}`],
+        (line) => new RegExp(`(?:from\\s+|import\\s*\\(|require\\()\\s*['"]\\.\\.(?:\\/\\.\\.)*\\/${other}(?:\\/[^'"]*)?['"]`).test(line),
+        (file, line) => ({
+          rule: 'remote-sides-independence',
+          fingerprint: `remote-sides-independence::${file}:${line}`,
+          message: `${file}:${line}: 远程节点两端互不引用,共用的放 utils/remote/。`,
+        }),
+      ),
+    )
+  }
 
   // package.json 层面的 Core 反向依赖同样是违规。
   const manifestBans = { core: ['@velaros-ai/kernel'] }
@@ -323,12 +342,12 @@ function scanDependencyDirection() {
 function scanProtocolSingleSource() {
   const violations = []
 
-  const protocolHome = resolve(RepoRoot, KernelLibraryRoot, 'contracts', 'protocol')
+  const protocolHome = resolve(RepoRoot, KernelLibraryRoot, 'utils', 'wire')
   if (!existsSync(protocolHome)) {
     violations.push({
       rule: 'protocol-single-source',
       fingerprint: 'protocol-single-source::missing-home',
-      message: `wire 协议实现目录 ${KernelLibraryRoot}/contracts/protocol 不存在;协议必须有唯一实现处。`,
+      message: `wire 协议实现目录 ${KernelLibraryRoot}/utils/wire 不存在;协议必须有唯一实现处。`,
     })
     return violations
   }
@@ -344,7 +363,7 @@ function scanProtocolSingleSource() {
       violations.push({
         rule: 'protocol-single-source',
         fingerprint: `protocol-single-source::duplicate::${relativeFile}:${index + 1}`,
-        message: `${relativeFile}:${index + 1}: wire schema 只能定义在 ${KernelLibraryRoot}/contracts/protocol。`,
+        message: `${relativeFile}:${index + 1}: wire schema 只能定义在 ${KernelLibraryRoot}/utils/wire。`,
       })
     })
   }
@@ -606,8 +625,8 @@ function scanRuntimeSinglePath() {
     .filter((entry) => entry.isDirectory())
     .map((entry) => `packages/${entry.name}/src`)
   const allowedHostConstructors = new Set([
-    'packages/kernel/src/runtime/Kernel.ts',
-    'packages/kernel/src/serve/daemon/boot.ts',
+    'packages/kernel/src/impl/runtime/Kernel.ts',
+    'packages/kernel/src/impl/serve/KernelDaemonAssembly.ts',
   ])
 
   for (const file of collectSourceFiles(resolve(RepoRoot, KernelLibraryRoot))) {
@@ -627,11 +646,11 @@ function scanRuntimeSinglePath() {
 
   const sharedInvocationContracts = [
     {
-      file: 'packages/kernel/src/runtime/Kernel.ts',
+      file: 'packages/kernel/src/impl/runtime/Kernel.ts',
       marker: 'new KernelCapabilityInvoker(this.host)',
     },
     {
-      file: 'packages/kernel/src/runtime/service/KernelService.ts',
+      file: 'packages/kernel/src/impl/serve/KernelService.ts',
       marker: 'new KernelCapabilityInvoker(options.host)',
     },
   ]

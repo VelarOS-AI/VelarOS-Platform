@@ -13,8 +13,18 @@
     "paths": {
       "@velaros-ai/core": ["../core/src/index.ts"],
       "@velaros-ai/core/*": ["../core/src/*"],
-      "@velaros-ai/kernel": ["./src/index.ts"],
-      "@velaros-ai/kernel/*": ["./src/*"]
+      "@velaros-ai/kernel": ["./src/exports/index.ts"],
+      "@velaros-ai/kernel/contracts": ["./src/exports/contracts.ts"],
+      "@velaros-ai/kernel/contracts/abi": ["./src/exports/contracts-abi.ts"],
+      "@velaros-ai/kernel/contracts/protocol": ["./src/exports/contracts-protocol.ts"],
+      "@velaros-ai/kernel/runtime": ["./src/exports/runtime.ts"],
+      "@velaros-ai/kernel/client": ["./src/exports/client.ts"],
+      "@velaros-ai/kernel/client/contracts": ["./src/exports/client-contracts.ts"],
+      "@velaros-ai/kernel/serve": ["./src/exports/serve.ts"],
+      "@velaros-ai/kernel/serve/updater": ["./src/exports/serve-updater.ts"],
+      "@velaros-ai/kernel/remote": ["./src/exports/remote.ts"],
+      "@velaros-ai/kernel/remote/client": ["./src/exports/remote-client.ts"],
+      "@velaros-ai/kernel/remote/node": ["./src/exports/remote-node.ts"]
     },
     "types": ["node", "bun"]
   },

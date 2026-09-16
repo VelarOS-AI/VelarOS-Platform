@@ -3,9 +3,9 @@ import { join } from 'node:path'
 
 import { afterEach, describe, expect, test } from 'bun:test'
 
-import { KernelClient } from '../../src/client/KernelClient'
-import { SocketKernelTransport } from '../../src/client/socket-transport'
-import { KernelProtocolVersion } from '../../src/contracts/protocol/version'
+import { KernelClient } from '../../src/impl/client/KernelClient'
+import { SocketKernelTransport } from '../../src/impl/client/SocketKernelTransport'
+import { KernelProtocolVersion } from '../../src/utils/wire/version'
 
 import {
   FakeKernelEndpoint,

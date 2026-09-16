@@ -3,12 +3,12 @@ import { createServer, type Server, type Socket } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
+import type { KernelRpcEndpoint } from '../../src/types/client-endpoint'
+import type { KernelRpcServerFrame } from '../../src/types/client-rpc-frames'
 import type {
   KernelDaemonEndpointDescriptor,
   KernelDaemonPaths,
-} from '../../src/client/contracts/descriptor'
-import type { KernelRpcEndpoint } from '../../src/client/contracts/endpoint'
-import type { KernelRpcServerFrame } from '../../src/client/contracts/rpc-frames'
+} from '../../src/utils/rpc/descriptor'
 
 export interface ReceivedRequest {
   readonly requestId: string

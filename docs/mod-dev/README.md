@@ -47,7 +47,7 @@ manifest 是**分节单文件**，内分三节，**各 owner 只读各节**：
 （诊断码 `mod.envelope-id-mismatch`），因为一个 mod 不能有两个身份。
 
 信封与 `module` schema 的唯一事实源在
-`packages/kernel/src/contracts/protocol/mod-manifest.ts`：`VelarosModEnvelopeSchema`
+`packages/kernel/src/utils/wire/mod-envelope.ts`：`VelarosModEnvelopeSchema`
 （`z.strictObject`，发明第四节即拒载）、`VelarosModModuleSectionSchema` 与文件名常量。
 Agent 只拥有 `packages/agent/src/utils/wire/mods.ts` 里的 `AgentModManifestSchema`。
 

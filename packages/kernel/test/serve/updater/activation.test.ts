@@ -11,11 +11,11 @@ import {
   type KernelHealthCheckContext,
   KernelUpdater,
   type KernelUpdaterOptions,
-} from '../../../src/serve/updater/KernelUpdater'
+} from '../../../src/impl/updater/KernelUpdater'
 import {
   parseKernelActivePointer,
   readKernelActivePointer,
-} from '../../../src/serve/updater/pointer'
+} from '../../../src/utils/updater/pointer'
 
 import {
   artifactOf,

@@ -9,7 +9,7 @@ import { parseAgentModManifest } from '../../packages/agent/src/utils/wire/mods.
 import {
   parseVelarosModEnvelope,
   VelarosModManifestFileName,
-} from '../../packages/kernel/src/contracts/protocol/mod-manifest.ts'
+} from '../../packages/kernel/src/utils/wire/mod-envelope.ts'
 
 const ArchiveExtension = '.velarmod'
 const DeterministicDate = new Date('1980-01-01T00:00:00.000Z')

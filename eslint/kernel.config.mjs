@@ -307,9 +307,9 @@ export default [
       'no-var': 'off',
     },
   },
-  // 子路径边界:client 只依赖 contracts,不得反向依赖 runtime 或 serve。
+  // 子路径边界:瘦客户端只依赖合同与 utils,不得反向依赖进程内内核或 serve。
   {
-    files: ['src/client/**/*.{ts,tsx}'],
+    files: ['src/impl/client/**/*.{ts,tsx}'],
     rules: {
       'no-restricted-imports': [
         'error',
@@ -318,25 +318,25 @@ export default [
             {
               group: ['@velaros-ai/kernel/runtime', '@velaros-ai/kernel/runtime/*', '@velaros-ai/kernel/serve', '@velaros-ai/kernel/serve/*', '../runtime/*', '../serve/*'],
               message:
-                'Kernel client 只能依赖 contracts;runtime 与 serve 是更外层实现。',
+                'Kernel 瘦客户端只能依赖合同与 utils;进程内内核与 serve 是更外层实现。',
             },
           ],
         },
       ],
     },
   },
-  // contracts 是最内层稳定契约,不得依赖任何实现与部署切片。
+  // contract 与 types 是最内层稳定契约,不得依赖任何实现与部署切片。
   {
-    files: ['src/contracts/**/*.{ts,tsx}'],
+    files: ['src/contract/**/*.{ts,tsx}', 'src/types/**/*.{ts,tsx}'],
     rules: {
       'no-restricted-imports': [
         'error',
         {
           patterns: [
             {
-              group: ['@velaros-ai/kernel/runtime', '@velaros-ai/kernel/runtime/*', '@velaros-ai/kernel/client', '@velaros-ai/kernel/client/*', '@velaros-ai/kernel/serve', '@velaros-ai/kernel/serve/*', '../runtime/*', '../client/*', '../serve/*'],
+              group: ['@velaros-ai/kernel/runtime', '@velaros-ai/kernel/runtime/*', '@velaros-ai/kernel/client', '@velaros-ai/kernel/client/*', '@velaros-ai/kernel/serve', '@velaros-ai/kernel/serve/*', '../impl/*'],
               message:
-                'Kernel contracts 不得依赖 runtime、client 或 serve。',
+                'Kernel 的 contract 与 types 不得依赖 impl。',
             },
           ],
         },

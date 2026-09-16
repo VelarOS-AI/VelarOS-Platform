@@ -1,15 +1,15 @@
 import { describe, expect, test } from 'bun:test'
 
-import { KernelClient } from '../../../src/client/KernelClient'
-import { createKernelCallableCapability } from '../../../src/contracts/abi/callable'
-import { createCapabilityToken } from '../../../src/contracts/abi/capability'
-import type { KernelModuleDefinition } from '../../../src/contracts/abi/module'
-import type { KernelPermissionBroker } from '../../../src/contracts/abi/permissions'
-import type { CapabilityCallRequest } from '../../../src/contracts/protocol/capability'
-import { KernelProtocolVersion } from '../../../src/contracts/protocol/version'
-import { KernelModuleHost } from '../../../src/runtime/host/KernelModuleHost'
-import { KernelService } from '../../../src/runtime/service/KernelService'
-import { InProcessKernelTransport } from '../../../src/serve/internal/in-process-transport'
+import { KernelClient } from '../../../src/impl/client/KernelClient'
+import { createKernelCallableCapability } from '../../../src/impl/runtime/KernelCallableCapability'
+import { KernelModuleHost } from '../../../src/impl/runtime/KernelModuleHost'
+import { createCapabilityToken } from '../../../src/impl/runtime/KernelModuleKit'
+import { InProcessKernelTransport } from '../../../src/impl/serve/InProcessKernelTransport'
+import { KernelService } from '../../../src/impl/serve/KernelService'
+import type { KernelModuleDefinition } from '../../../src/types/abi-module'
+import type { KernelPermissionBroker } from '../../../src/types/abi-permissions'
+import type { CapabilityCallRequest } from '../../../src/utils/wire/capability'
+import { KernelProtocolVersion } from '../../../src/utils/wire/version'
 
 const CallableToken = createCapabilityToken('test.callable', '1.2.0')
 const PlainToken = createCapabilityToken('test.plain')

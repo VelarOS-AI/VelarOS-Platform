@@ -3,7 +3,7 @@ import { describe, expect, test } from 'bun:test'
 import {
   parseVelarosModEnvelope,
   VelarosModManifestFileName,
-} from '../../src/contracts/protocol/mod-manifest'
+} from '../../src/utils/wire/mod-envelope'
 
 function baseModuleSection(overrides: Record<string, unknown> = {}) {
   return {

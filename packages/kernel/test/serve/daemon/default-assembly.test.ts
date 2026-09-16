@@ -4,15 +4,15 @@ import { join } from 'node:path'
 
 import { afterEach, describe, expect, test } from 'bun:test'
 
-import { connectToKernelDaemon } from '../../../src/client/discovery'
-import { createKernelCallableCapability } from '../../../src/contracts/abi/callable'
-import { createCapabilityToken } from '../../../src/contracts/abi/capability'
-import { defineKernelModule } from '../../../src/contracts/abi/module'
-import { KernelProtocolVersion } from '../../../src/contracts/protocol/version'
-import { bootKernelDaemon } from '../../../src/serve/daemon/boot'
-import { createBundledModPack } from '../../../src/serve/daemon/bundled-packs'
-import { loadModIndexIntoStore } from '../../../src/serve/daemon/mod-loader'
-import { KernelModStore } from '../../../src/serve/daemon/mod-store'
+import { connectToKernelDaemon } from '../../../src/impl/client/KernelDaemonDirectory'
+import { createKernelCallableCapability } from '../../../src/impl/runtime/KernelCallableCapability'
+import { createCapabilityToken } from '../../../src/impl/runtime/KernelModuleKit'
+import { bootKernelDaemon } from '../../../src/impl/serve/KernelDaemonAssembly'
+import { loadModIndexIntoStore } from '../../../src/impl/serve/KernelModLoader'
+import { KernelModStore } from '../../../src/impl/serve/KernelModStore'
+import { defineKernelModule } from '../../../src/types/abi-module'
+import { createBundledModPack } from '../../../src/utils/serve/mod-packs'
+import { KernelProtocolVersion } from '../../../src/utils/wire/version'
 
 const directories: string[] = []
 
