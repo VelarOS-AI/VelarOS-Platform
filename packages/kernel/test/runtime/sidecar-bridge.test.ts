@@ -9,11 +9,26 @@ import {
   createCapabilityToken,
   defineKernelModule,
 } from '../../src/contracts/abi'
+import { KernelCapabilityInvoker } from '../../src/runtime/capability-invocation'
 import { KernelModuleHost } from '../../src/runtime/host'
 import {
   HostBridgeClient,
   SidecarIsolationAdapter,
 } from '../../src/runtime/host/sidecar-bridge'
+
+/**
+ * 桥这一侧「登记过」的操作名。
+ *
+ * `execute` 在适配器的探测清单里，`echo` 不在：两者一起用来把「探测得到 → 可调用」和
+ * 「探测不到 → 一律拒绝」两条分支分开。
+ */
+const ProbedBridgeOperation = 'execute'
+const UnprobedBridgeOperation = 'echo'
+
+function isEchoOperation(operation: LooseOptional<string>): boolean {
+  return operation === ProbedBridgeOperation
+    || operation === UnprobedBridgeOperation
+}
 
 class MiniHostBridgeServer {
   private readonly socketPath: string
@@ -21,6 +36,10 @@ class MiniHostBridgeServer {
   private readonly sockets = new Set<Socket>()
   private readonly inflight = new Map<string, AbortController>()
   private started = false
+  /** 桥这一侧真正收到的 `capability.invoke` 操作名（权限闸有没有被绕过的证据）。 */
+  public readonly invokedOperations: string[] = []
+  /** 桥为已登记操作声明的权限。 */
+  public operationPermissions: readonly string[] = []
   /** When true, echo emits an event frame before resolving. */
   public emitEventOnEcho = false
   /** When true, echo waits until cancelled. */
@@ -92,16 +111,16 @@ class MiniHostBridgeServer {
         result = { ok: true }
       } else if (method === 'capability.metadata') {
         const params = raw.params as { operation?: string }
-        result =
-          params.operation === 'echo'
-            ? { permissions: [], reason: 'echo' }
-            : null
+        result = isEchoOperation(params.operation)
+          ? { permissions: [...this.operationPermissions], reason: 'echo' }
+          : null
       } else if (method === 'capability.invoke') {
         const params = raw.params as {
           operation?: string
           input?: unknown
         }
-        if (params.operation !== 'echo') {
+        this.invokedOperations.push(params.operation ?? '<missing>')
+        if (!isEchoOperation(params.operation)) {
           throw Object.assign(new Error('unknown op'), { code: 'UNKNOWN_OP' })
         }
         if (this.emitEventOnEcho) {
@@ -240,16 +259,112 @@ describe('HostBridge sidecar', () => {
         signal: AbortSignal,
       ): Promise<unknown>
     }
-    expect(service.getOperationMetadata('echo')).toEqual({
+    expect(service.getOperationMetadata(ProbedBridgeOperation)).toEqual({
       permissions: [],
+      reason: 'echo',
     })
     const result = await service.invoke(
-      'echo',
+      ProbedBridgeOperation,
       undefined,
       { hello: 'world' },
       new AbortController().signal,
     )
     expect(result).toEqual({ echoed: { hello: 'world' } })
+    await host.dispose()
+  })
+
+  test('sidecar adapter denies operations the bridge never declared', async () => {
+    const path = join(tmpdir(), `velaros-sidecar-deny-${process.pid}-${Date.now()}.sock`)
+    const server = new MiniHostBridgeServer(path)
+    server.operationPermissions = ['bridge:execute']
+    sockets.push(server)
+    await server.start()
+
+    const askedPermissions: string[] = []
+    const host = new KernelModuleHost({
+      apiVersion: 1,
+      isolationAdapters: [
+        new SidecarIsolationAdapter({ endpoint: { kind: 'unix', path } }),
+      ],
+      permissionBroker: {
+        request: async (request) => {
+          askedPermissions.push(request.permission)
+          return { status: 'granted' }
+        },
+      },
+    })
+    host.registerModules([
+      defineKernelModule({
+        manifest: {
+          id: 'module.deny.sidecar',
+          version: '1.0.0',
+          apiVersion: 1,
+          provides: [createCapabilityToken('test.deny')],
+          requires: [],
+          optionalRequires: [],
+          permissions: ['bridge:execute'],
+          isolation: 'sidecar',
+        },
+        activate() {
+          throw new Error('sidecar activate must not run locally')
+        },
+      }),
+    ])
+    await host.start()
+    const invoker = new KernelCapabilityInvoker(host)
+
+    // 桥没有登记过的操作：连元数据都不该有，否则调用器会把它当成「零权限操作」。
+    const service = host.getService(createCapabilityToken('test.deny')) as {
+      getOperationMetadata(operation: string): unknown
+    }
+    expect(service.getOperationMetadata('delete_everything')).toBeUndefined()
+    // `toString` 这类继承键同样在白名单之外。
+    expect(service.getOperationMetadata('toString')).toBeUndefined()
+
+    await expect(
+      invoker.invoke({
+        capabilityId: 'test.deny',
+        operation: 'delete_everything',
+        input: {},
+        signal: new AbortController().signal,
+      }),
+    ).rejects.toMatchObject({
+      name: 'UnknownKernelCapabilityOperationError',
+    })
+
+    // 拒绝发生在权限闸之前，而且桥那一侧一次都没被调到。
+    expect(askedPermissions).toEqual([])
+    expect(server.invokedOperations).toEqual([])
+
+    // 直接打服务面（绕开调用器）也必须拒绝。
+    const callable = host.getService(createCapabilityToken('test.deny')) as {
+      invoke(
+        operation: string,
+        scope: undefined,
+        input: unknown,
+        signal: AbortSignal,
+      ): Promise<unknown>
+    }
+    await expect(
+      callable.invoke(
+        'delete_everything',
+        undefined,
+        {},
+        new AbortController().signal,
+      ),
+    ).rejects.toMatchObject({ name: 'UnknownKernelCapabilityOperationError' })
+    expect(server.invokedOperations).toEqual([])
+
+    // 探测得到的操作照常走完权限闸再到桥。
+    await invoker.invoke({
+      capabilityId: 'test.deny',
+      operation: ProbedBridgeOperation,
+      input: { ok: true },
+      signal: new AbortController().signal,
+    })
+    expect(askedPermissions).toEqual(['bridge:execute'])
+    expect(server.invokedOperations).toEqual([ProbedBridgeOperation])
+
     await host.dispose()
   })
 
@@ -396,7 +511,12 @@ describe('HostBridge sidecar', () => {
         signal: AbortSignal,
       ): Promise<unknown>
     }
-    await service.invoke('echo', undefined, { ok: true }, new AbortController().signal)
+    await service.invoke(
+      ProbedBridgeOperation,
+      undefined,
+      { ok: true },
+      new AbortController().signal,
+    )
     expect(seen).toEqual([{ echoed: { ok: true } }])
     subscription.dispose()
     await host.dispose()

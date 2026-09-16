@@ -122,7 +122,10 @@ export class KernelCapabilityInvoker {
       )
     }
     if (isUndefined(metadata)) {
-      throw new UnknownKernelCapabilityOperationError()
+      throw new UnknownKernelCapabilityOperationError(
+        call.capabilityId,
+        call.operation,
+      )
     }
 
     let reason: string | undefined

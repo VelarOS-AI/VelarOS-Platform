@@ -46,8 +46,15 @@ export interface KernelCallableCapabilityService {
 }
 
 export class UnknownKernelCapabilityOperationError extends Error {
-  public constructor() {
-    super('Kernel capability operation is not available')
+  public constructor(
+    public readonly capabilityId?: string,
+    public readonly operation?: string,
+  ) {
+    super(
+      isUndefined(capabilityId) || isUndefined(operation)
+        ? '该 Kernel 能力没有登记这个操作，已在求权限之前拒绝。'
+        : `Kernel 能力 "${capabilityId}" 没有登记操作 "${operation}"，已在求权限之前拒绝。`,
+    )
     this.name = 'UnknownKernelCapabilityOperationError'
   }
 }

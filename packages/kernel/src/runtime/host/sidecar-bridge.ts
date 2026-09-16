@@ -27,6 +27,7 @@ import {
   type KernelModuleDefinition,
   type KernelModuleLifecycle,
   type ScopeRef,
+  UnknownKernelCapabilityOperationError,
 } from '../../contracts/abi'
 
 import type { KernelModuleIsolationAdapter } from './isolation'
@@ -376,7 +377,7 @@ export class SidecarIsolationAdapter implements KernelModuleIsolationAdapter {
       const capabilityId = token.id
       const version = token.version
       const operations = await discoverBridgeOperations(this.client, capabilityId)
-      const table: Record<
+      const table = new Map<
         string,
         {
           metadata: KernelCapabilityOperationMetadata
@@ -386,9 +387,9 @@ export class SidecarIsolationAdapter implements KernelModuleIsolationAdapter {
             signal: AbortSignal,
           ) => Promise<unknown>
         }
-      > = {}
+      >()
       for (const [operation, metadata] of Object.entries(operations)) {
-        table[operation] = {
+        table.set(operation, {
           metadata,
           invoke: (scope, input, signal) =>
             this.client.invoke(
@@ -399,11 +400,11 @@ export class SidecarIsolationAdapter implements KernelModuleIsolationAdapter {
               signal,
               publishEvent,
             ),
-        }
+        })
       }
       context.registerService(
         createCapabilityToken(capabilityId, version),
-        createBridgeProxyService(this.client, capabilityId, table, publishEvent),
+        createBridgeProxyService(capabilityId, table),
       )
     }
 
@@ -427,10 +428,19 @@ function createOfflineStub(capabilityId: string) {
   })
 }
 
+/**
+ * 桥代理服务：**只有探测到的操作才存在**。
+ *
+ * ABI 约定（`contracts/abi/callable.ts`）是「`getOperationMetadata` 返回 `undefined` 就在求
+ * 权限之前拒绝」。这里一度对未登记的操作返回 `{ permissions: [] }`，等于把任何操作名都当成
+ * 零权限操作放行——宿主的权限 broker 一次都问不到，整条权限闸被绕过。现在按白名单来：
+ * 表里没有的操作既拿不到元数据，也不会被转发给桥。
+ *
+ * 表用 `Map`（不是对象字面量）装，`toString`、`constructor` 这类继承键同样落在白名单外。
+ */
 function createBridgeProxyService(
-  client: HostBridgeClient,
   capabilityId: string,
-  known: Record<
+  known: ReadonlyMap<
     string,
     {
       metadata: KernelCapabilityOperationMetadata
@@ -441,12 +451,10 @@ function createBridgeProxyService(
       ) => Promise<unknown>
     }
   >,
-  publishEvent: HostBridgeOnEvent,
 ) {
   return {
     getOperationMetadata(operation: string) {
-      if (isNotUndefined(known[operation])) return known[operation].metadata
-      return { permissions: [] }
+      return known.get(operation)?.metadata
     },
     async invoke(
       operation: string,
@@ -454,16 +462,11 @@ function createBridgeProxyService(
       input: unknown,
       signal: AbortSignal,
     ) {
-      if (isNotUndefined(known[operation]))
-        return known[operation].invoke(scope, input, signal)
-      return client.invoke(
-        capabilityId,
-        operation,
-        scope,
-        input,
-        signal,
-        publishEvent,
-      )
+      const entry = known.get(operation)
+      if (isUndefined(entry)) {
+        throw new UnknownKernelCapabilityOperationError(capabilityId, operation)
+      }
+      return entry.invoke(scope, input, signal)
     },
   }
 }
