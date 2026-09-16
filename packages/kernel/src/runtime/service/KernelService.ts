@@ -408,7 +408,7 @@ export class KernelService {
       if (error instanceof KernelCapabilityPermissionDeniedError) return failure(
           request.callId,
           'PERMISSION_DENIED',
-          'Capability call permission was denied',
+          `能力调用被权限策略拒绝：${error.reason}`,
           false,
           { permission: error.permission, reason: error.reason },
         )
