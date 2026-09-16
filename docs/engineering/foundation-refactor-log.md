@@ -10,6 +10,13 @@
 
 （按时间追加。每条写：改了什么、为什么、影响谁。）
 
+- **六个包收口完成，全仓 22 个包全部达标（09-17 03:30，95b8280a、eb2eb2fb、e19f3d1c、6da334c1、c9ac6c51、248c7362、df9c410d、d06ed55f；入口数、版本、燃尽、全量门禁均已实测核对）。** 一个「迁移中」都不剩。
+  - **入口与版本**：browser 6→4（0.3.0）、memory 6→2（0.6.0）、knowledge（0.6.0）、model 9→3（0.7.0）、office 6→3（**2.0.0**）、computer 3→2（0.3.0）。三包合计下线 339 个导出名（browser 177、memory 77、knowledge 85），model/office/computer 再下线 98 个。
+  - **模型面**：office **删掉十个工具的 `cwd`**（13 处、全都没有参数说明）；computer **删 `computer:screen_size`**，`move` 改成必须带同一次截图的标识（原来可以凭空给坐标）、四处「启用即授权」从工具说明里拿掉改由卡片表达；memory 删 `workspaceRoot`（模型传什么都不生效）、删 `privacyClass`（没有行为读它）、删 `search.mode`，并把「同一来源幂等」这句失实的说明连同实现一起改成按「作用域+类别+标题+正文」判重。browser 的 32 份 schema 逐字节不变。
+  - **产物内容**：office 生成的文档不再默认盖 `VelarOS` 作者与公司、标题不再写产物的绝对路径、模板首页不再盖生成水印；预览的自动刷新缺省关掉。
+  - 每个包都附了逐符号迁移表（`refactor-plans/*-migration.md`，六份合计约 1,200 行），产品仓要改的文件逐个列了出来。
+  - **两件明确没做、留给产品同车那一轮**：browser 的 `bindToolApi`（把 50 个方法在包内绑一遍，正确性只能在产品仓跑 Electron 会话才验得了）、用户脚本高风险操作走审批端口（加一个没有宿主实现的端口就是一道恒空的门）。
+
 - **kernel 收口 0.3.0，第一个走完全程的包（09-17 00:40，1efbde80、6b6778b7、2929a93e；入口数、版本、燃尽、测试均已实测核对）。** 入口 **12 → 5**（`.`、`./contracts`、`./client`、`./serve`、`./remote`），**288 个导出名下线、23 个新名字**，燃尽 255 → 0、摘掉「迁移中」，测试 173 条不减。带 `/` 的六个子路径（`./contracts/abi` 这类）全部并掉。逐符号迁移表在 `refactor-plans/kernel-migration.md`（366 行）：入口对照、新名、59 个有替代的旧名（每条带各仓消费点数）、229 个已删无替代的名字、三个产品仓逐文件要改的 import。
   **产品侧要改**：Desktop 13 个源文件 + 3 个测试 + 两处 tsconfig 路径；Workbench 5 个源文件（**三处 `instanceof` 必须改按错误码判断**）；Termel 7 个文件；VelarScript-Libraries 钉的那个协议产物路径没了，迁移表 §7 给了两条改法。
 - **`@velaros-ai/tool-contract` 独立成包（09-17 00:10，50c57331、6e19ebd3、d15fd04f）。** 七个空间包不再为「写工具」依赖整个 agent 运行时；五份同构的 `defineXTool`、三份逐行一样的内核模块样板、各写一遍的失败回执信封合成一份，**净删约 1600 行**。模型面字节不变有凭据（七个空间的 schema 门全过、browser 32 份基线逐字节不变、project 的三项内容指纹与重算前完全相同）。两处对外可见的删除：system 的 `SystemFailureLimits` 改取公共的 `ToolFailureLimits`；领域错误的上下文键从 `projectError` 中立化成 `toolDomainError`（产品侧若读过旧键要跟着改）。
