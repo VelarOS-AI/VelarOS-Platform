@@ -18,7 +18,7 @@ import { join } from 'node:path'
 
 import { afterAll, describe, expect, test } from 'bun:test'
 
-import { createInMemoryMemoryFilesIo } from '../../src/contract/files-io'
+import { createInMemoryMemoryFilesIo } from '../../src/impl/files/InMemoryMemoryFilesIo'
 import { createMemoryFilesBackend, type MemoryFilesScopeRoot } from '../../src/impl/files/MemoryFilesBackend'
 import { createNodeMemoryFilesIo } from '../../src/impl/files/NodeMemoryFilesIo'
 import { isMemoryEntryPath } from '../../src/utils/files/entry-path'

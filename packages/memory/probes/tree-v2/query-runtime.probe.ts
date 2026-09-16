@@ -6,8 +6,8 @@ import { join } from 'node:path'
 
 import { isEmpty } from '@velaros-ai/core'
 
-import { openMemorySystemRuntimeV2 } from '../../src/impl/tree-v2/MemorySystemRuntimeV2'
-import type { MemoryWrappingRootV2 } from '../../src/utils/tree-v2/storage/wrapping-root'
+import { MemorySystemRuntimeV2 } from '../../src/impl/tree-v2/MemorySystemRuntimeV2'
+import type { MemoryWrappingRootV2 } from '../../src/types/tree-v2/storage'
 
 const ExpectedMinimumAssertionsV2 = 35
 let assertionCount = 0
@@ -47,16 +47,16 @@ function runQueryRuntimeProbeV2(): void {
   const probeRoot = mkdtempSync(join(tmpdir(), 'velaros-memory-query-v2-'))
   const wrappingRoot = createProbeWrappingRootV2()
   try {
-    const opened = openMemorySystemRuntimeV2({
+    const opened = new MemorySystemRuntimeV2({
       dataRoot: probeRoot,
       wrappingRoot,
       now: () => 1,
     })
-    const runtime = opened.runtime
-    check(opened.report.authority.databaseCreated, '首次 open 应创建 authority')
-    equal(opened.report.tree.treeVersion, 0, '首次 open 应为空树')
-    equal(opened.report.recoveredOrphanBlobCount, 0, '首次 open 无孤儿 blob')
-    equal(opened.report.resumedErasureCount, 0, '首次 open 无待恢复擦除')
+    const runtime = opened
+    check(opened.openReport.authority.databaseCreated, '首次 open 应创建 authority')
+    equal(opened.openReport.tree.treeVersion, 0, '首次 open 应为空树')
+    equal(opened.openReport.recoveredOrphanBlobCount, 0, '首次 open 无孤儿 blob')
+    equal(opened.openReport.resumedErasureCount, 0, '首次 open 无待恢复擦除')
     const empty = runtime.query.recall({ query: 'VelarOS' })
     equal(empty.snapshotVersion, 0, '空树 recall 版本为零')
     equal(empty.indexState, 'missing', '空树尚无查询 index')
@@ -247,25 +247,25 @@ function runQueryRuntimeProbeV2(): void {
     )
     runtime.close()
 
-    const reopened = openMemorySystemRuntimeV2({
+    const reopened = new MemorySystemRuntimeV2({
       dataRoot: probeRoot,
       wrappingRoot,
       now: () => 50,
     })
-    check(!reopened.report.authority.databaseCreated, '重开应复用同一 authority')
-    equal(reopened.report.tree.treeVersion, 2, '重开恢复擦除后的树版本')
-    equal(reopened.report.resumedErasureCount, 1, '组合根应幂等恢复待 purge saga')
+    check(!reopened.openReport.authority.databaseCreated, '重开应复用同一 authority')
+    equal(reopened.openReport.tree.treeVersion, 2, '重开恢复擦除后的树版本')
+    equal(reopened.openReport.resumedErasureCount, 1, '组合根应幂等恢复待 purge saga')
     equal(
-      reopened.runtime.query.recall({ query: 'S8 查询' }).indexState,
+      reopened.query.recall({ query: 'S8 查询' }).indexState,
       'missing',
       '进程内 index 不得跨重启伪装持久化'
     )
     equal(
-      reopened.runtime.query.refreshSearchIndex().skippedDeniedCount,
+      reopened.query.refreshSearchIndex().skippedDeniedCount,
       1,
       '重建 index 应跳过已 redacted 节点'
     )
-    reopened.runtime.close()
+    reopened.close()
   } finally {
     rmSync(probeRoot, { recursive: true, force: true })
   }

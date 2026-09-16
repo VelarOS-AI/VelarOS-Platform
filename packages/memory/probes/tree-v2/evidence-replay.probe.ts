@@ -6,22 +6,20 @@ import { join } from 'node:path'
 
 import BetterSqlite3 from 'better-sqlite3'
 
-import { openMemoryAuthorityV2 } from '../../src/impl/tree-v2/MemoryAuthorityDatabaseV2'
+import { LegacyMemoryEvidenceSqliteReaderV2 } from '../../src/impl/tree-v2/LegacyMemoryEvidenceSqliteReaderV2'
+import { MemoryAuthorityDatabaseV2 } from '../../src/impl/tree-v2/MemoryAuthorityDatabaseV2'
 import { MemoryDreamRunCoordinatorV2 } from '../../src/impl/tree-v2/MemoryDreamRunCoordinatorV2'
 import { MemoryEvidenceIngestServiceV2 } from '../../src/impl/tree-v2/MemoryEvidenceIngestServiceV2'
-import {
-  evaluateMemoryAuthorityCutoverV2,
-  LegacyMemoryEvidenceSqliteReaderV2,
-  MemoryEvidenceReplayMigrationV2,
-} from '../../src/impl/tree-v2/MemoryEvidenceReplayMigrationV2'
+import { MemoryEvidenceReplayMigrationV2 } from '../../src/impl/tree-v2/MemoryEvidenceReplayMigrationV2'
 import { MemoryIdentityKeyServiceV2 } from '../../src/impl/tree-v2/MemoryIdentityKeyServiceV2'
 import { MemoryMeaningCurationServiceV2 } from '../../src/impl/tree-v2/MemoryMeaningCurationServiceV2'
 import { MemoryTreeStoreV2 } from '../../src/impl/tree-v2/MemoryTreeStoreV2'
 import { ContentKeyServiceV2 } from '../../src/impl/tree-v2/storage/ContentKeyServiceV2'
 import { MemoryBlobStoreV2 } from '../../src/impl/tree-v2/storage/MemoryBlobStoreV2'
 import { MemoryKeyringStoreV2 } from '../../src/impl/tree-v2/storage/MemoryKeyringStoreV2'
+import type { MemoryWrappingRootV2 } from '../../src/types/tree-v2/storage'
 import { MemoryTreeSchemaSql } from '../../src/utils/tree/schema'
-import type { MemoryWrappingRootV2 } from '../../src/utils/tree-v2/storage/wrapping-root'
+import { evaluateMemoryAuthorityCutoverV2 } from '../../src/utils/tree-v2/evidence-replay'
 
 const ExpectedMinimumAssertionsV2 = 58
 let assertionCount = 0
@@ -69,22 +67,18 @@ function runEvidenceReplayProbeV2(): void {
     seedLegacyDatabaseV2(legacyPath, join(probeRoot, 'missing-workspace'))
     const legacyHashBefore = fileSha256V2(legacyPath)
     const sourceDatabaseId = `sha256:${legacyHashBefore}`
-    const reader = LegacyMemoryEvidenceSqliteReaderV2.open(legacyPath, sourceDatabaseId)
+    const reader = new LegacyMemoryEvidenceSqliteReaderV2(legacyPath, sourceDatabaseId)
 
-    const authority = openMemoryAuthorityV2(join(probeRoot, 'v2')).store
-    const keyring = MemoryKeyringStoreV2.open(
+    const authority = new MemoryAuthorityDatabaseV2(join(probeRoot, 'v2'))
+    const keyring = new MemoryKeyringStoreV2(
       authority.roots.keyringDir,
       createProbeWrappingRootV2()
-    ).store
+    )
     const blobs = new MemoryBlobStoreV2(authority.roots.blobsDir)
     const contentKeys = new ContentKeyServiceV2(keyring, blobs)
     const identityKeys = new MemoryIdentityKeyServiceV2(keyring)
     const ingest = new MemoryEvidenceIngestServiceV2(authority, contentKeys, identityKeys, blobs)
-    const tree = MemoryTreeStoreV2.open({
-      authority,
-      contentKeys,
-      keyring,
-    }).store
+    const tree = new MemoryTreeStoreV2(authority, contentKeys, keyring)
     const dream = new MemoryDreamRunCoordinatorV2(authority, contentKeys, tree)
     const curation = new MemoryMeaningCurationServiceV2(
       authority,
@@ -514,7 +508,7 @@ function seedLegacyDatabaseV2(databasePath: string, missingWorkspace: string): v
 }
 
 function readReplayMetadataV2(
-  authority: ReturnType<typeof openMemoryAuthorityV2>['store'],
+  authority: MemoryAuthorityDatabaseV2,
   contentKeys: ContentKeyServiceV2,
   legacyEvidenceId: string
 ): Record<string, unknown> {

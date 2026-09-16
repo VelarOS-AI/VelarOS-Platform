@@ -1,59 +1,56 @@
-import { isArray, isNotNull, isPlainObject, isString } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
-
-import {
-  assertForwardReplayResultForPersistenceV2,
-  canonicalStringifyV2,
-  hashTreeStateV2,
-  isMemoryTreeNodeStructV2,
-  type MemoryTreeNodeStructV2,
-  type MemoryTreeReplayResultV2,
-} from '../../utils/tree-v2/diff-chain'
+import type { MemoryTreeReplayResultV2 } from '../../types/tree-v2/diff'
+import type {
+  MemoryTreeCheckpointV2,
+  MemoryTreeProjectionArtifactV2,
+  MemoryTreeProjectionInspectionV2,
+} from '../../types/tree-v2/store'
+import { assertPositiveSafeIntegerV2 } from '../../utils/tree-v2/checks'
+import { canonicalStringifyV2 } from '../../utils/tree-v2/diff-chain'
 import { readCurrentGenerationV2 } from '../../utils/tree-v2/storage/generation-pointer'
 import {
   openCurrentMemoryIndexGenerationV2,
   pruneMemoryIndexGenerationsV2,
   sealMemoryIndexGenerationV2,
 } from '../../utils/tree-v2/storage/index-generation'
+import {
+  parseTreeProjectionArtifactV2,
+  TreeProjectionArtifactFormatV2,
+} from '../../utils/tree-v2/tree-store'
 
-import type { MemoryKeyringStoreV2 } from './storage/MemoryKeyringStoreV2'
-
-const TreeProjectionArtifactFormatV2 = 'velaros.memory.tree-projection-index.v2'
-export const MemoryTreeCheckpointIntervalV2 = 64
-
-export interface MemoryTreeCheckpointV2 {
-  readonly version: number
-  readonly replay: MemoryTreeReplayResultV2
-}
-
-interface PersistedMemoryTreeCheckpointV2 {
-  readonly version: number
-  readonly treeHash: string
-  readonly nodes: readonly MemoryTreeNodeStructV2[]
-}
-
-interface MemoryTreeProjectionArtifactV2 {
-  readonly format: typeof TreeProjectionArtifactFormatV2
-  readonly treeVersion: number
-  readonly treeHash: string
-  readonly nodes: readonly MemoryTreeNodeStructV2[]
-  readonly checkpoints: readonly PersistedMemoryTreeCheckpointV2[]
-}
-
-export interface MemoryTreeProjectionInspectionV2 {
-  readonly generation: number
-  readonly matchesAuthority: boolean
-  readonly checkpointCount: number
-}
+import type { MemoryKeyringStoreV2Api } from './storage/MemoryKeyringStoreV2'
+import type { MemoryTreeReplayV2Api } from './MemoryTreeReplayV2'
 
 /**
- * 当前树物化视图与 checkpoint cache 的派生存储 owner。
- * authority 正向链永远是事实源；本层损坏、缺失或落后只触发重建。
+ * 当前树物化视图与检查点缓存的派生存储 owner：一个 index 目录一份实例。
+ *
+ * authority 的正向链永远是事实源；本层损坏、缺失或落后都只触发重建，绝不反向污染权威。
+ * 实例归 `MemoryTreeStoreV2` 所有，与它共用同一份密钥环。
  */
-export class MemoryTreeProjectionIndexV2 {
+export interface MemoryTreeProjectionIndexV2Api {
+  /**
+   * 把当前树与检查点封成新的一代派生索引，返回新代号，并清掉旧代。
+   * 传进来的重放结果必须是本进程正向产出的（INV-BR），否则抛 INVARIANT。
+   */
+  persist(
+    treeVersion: number,
+    current: MemoryTreeReplayResultV2,
+    checkpoints: readonly MemoryTreeCheckpointV2[]
+  ): number
+  /**
+   * 解开当前派生代，核对它与权威链是否一致；一代都没有返回 null。
+   * 派生代损坏会抛 VALIDATION / INVARIANT，调用方按"不匹配"处理即可。
+   */
+  inspect(
+    treeVersion: number,
+    authority: MemoryTreeReplayResultV2
+  ): Nullable<MemoryTreeProjectionInspectionV2>
+}
+
+export class MemoryTreeProjectionIndexV2 implements MemoryTreeProjectionIndexV2Api {
   constructor(
     private readonly indexDir: string,
-    private readonly keyring: MemoryKeyringStoreV2
+    private readonly keyring: MemoryKeyringStoreV2Api,
+    private readonly replay: MemoryTreeReplayV2Api
   ) {}
 
   public persist(
@@ -61,11 +58,11 @@ export class MemoryTreeProjectionIndexV2 {
     current: MemoryTreeReplayResultV2,
     checkpoints: readonly MemoryTreeCheckpointV2[]
   ): number {
-    assertTreeVersionV2(treeVersion)
-    assertForwardReplayResultForPersistenceV2(current)
+    assertPositiveSafeIntegerV2(treeVersion, '树投影版本')
+    this.replay.assertForwardResultForPersistence(current)
     for (const checkpoint of checkpoints) {
-      assertTreeVersionV2(checkpoint.version)
-      assertForwardReplayResultForPersistenceV2(checkpoint.replay)
+      assertPositiveSafeIntegerV2(checkpoint.version, '树投影版本')
+      this.replay.assertForwardResultForPersistence(checkpoint.replay)
     }
 
     const artifact: MemoryTreeProjectionArtifactV2 = {
@@ -97,101 +94,22 @@ export class MemoryTreeProjectionIndexV2 {
     treeVersion: number,
     authority: MemoryTreeReplayResultV2
   ): Nullable<MemoryTreeProjectionInspectionV2> {
-    assertTreeVersionV2(treeVersion)
-    assertForwardReplayResultForPersistenceV2(authority)
+    assertPositiveSafeIntegerV2(treeVersion, '树投影版本')
+    this.replay.assertForwardResultForPersistence(authority)
     const opened = openCurrentMemoryIndexGenerationV2(this.indexDir, this.keyring)
     if (!opened) return null
     try {
       const artifact = parseTreeProjectionArtifactV2(opened.plaintextArtifact)
-      const matchesAuthority =
-        artifact.treeVersion === treeVersion &&
-        artifact.treeHash === authority.stateHash &&
-        canonicalStringifyV2(artifact.nodes) === canonicalStringifyV2(authority.nodes)
       return {
         generation: opened.generation,
-        matchesAuthority,
+        matchesAuthority:
+          artifact.treeVersion === treeVersion &&
+          artifact.treeHash === authority.stateHash &&
+          canonicalStringifyV2(artifact.nodes) === canonicalStringifyV2(authority.nodes),
         checkpointCount: artifact.checkpoints.length,
       }
     } finally {
       opened.plaintextArtifact.fill(0)
     }
   }
-}
-
-function parseTreeProjectionArtifactV2(raw: Buffer): MemoryTreeProjectionArtifactV2 {
-  const source = raw.toString('utf8')
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(source)
-  } catch (error) {
-    throw new AppError('VALIDATION', '树投影派生代不是合法 JSON。', error)
-  }
-  if (
-    !isStrictRecordV2(parsed, ['checkpoints', 'format', 'nodes', 'treeHash', 'treeVersion']) ||
-    parsed['format'] !== TreeProjectionArtifactFormatV2 ||
-    !Number.isSafeInteger(parsed['treeVersion']) ||
-    (parsed['treeVersion'] as number) < 1 ||
-    !isString(parsed['treeHash']) ||
-    !/^[0-9a-f]{64}$/.test(parsed['treeHash']) ||
-    !isArray(parsed['nodes']) ||
-    !parsed['nodes'].every(isMemoryTreeNodeStructV2) ||
-    !isArray(parsed['checkpoints'])
-  ) {
-    throw new AppError('VALIDATION', '树投影派生代不符合 v2 严格格式。')
-  }
-  const checkpoints: PersistedMemoryTreeCheckpointV2[] = []
-  for (const candidate of parsed['checkpoints']) {
-    if (
-      !isStrictRecordV2(candidate, ['nodes', 'treeHash', 'version']) ||
-      !Number.isSafeInteger(candidate['version']) ||
-      (candidate['version'] as number) < 1 ||
-      !isString(candidate['treeHash']) ||
-      !/^[0-9a-f]{64}$/.test(candidate['treeHash']) ||
-      !isArray(candidate['nodes']) ||
-      !candidate['nodes'].every(isMemoryTreeNodeStructV2)
-    ) {
-      throw new AppError('VALIDATION', '树投影 checkpoint 不符合 v2 严格格式。')
-    }
-    if (hashTreeStateV2(candidate['nodes']) !== candidate['treeHash']) {
-      throw new AppError('INVARIANT', '树投影 checkpoint 状态哈希失配。')
-    }
-    checkpoints.push({
-      version: candidate['version'] as number,
-      treeHash: candidate['treeHash'],
-      nodes: candidate['nodes'],
-    })
-  }
-  if (hashTreeStateV2(parsed['nodes']) !== parsed['treeHash']) {
-    throw new AppError('INVARIANT', '树投影派生代当前状态哈希失配。')
-  }
-  if (source !== canonicalStringifyV2(parsed)) {
-    throw new AppError('INVARIANT', '树投影派生代不是规范 canonical 字节。')
-  }
-  return {
-    format: TreeProjectionArtifactFormatV2,
-    treeVersion: parsed['treeVersion'] as number,
-    treeHash: parsed['treeHash'],
-    nodes: parsed['nodes'],
-    checkpoints,
-  }
-}
-
-function assertTreeVersionV2(version: number): void {
-  if (!Number.isSafeInteger(version) || version < 1) {
-    throw new AppError('VALIDATION', '树投影版本必须是正整数。', undefined, {
-      version,
-    })
-  }
-}
-
-function isStrictRecordV2(
-  value: unknown,
-  expectedKeys: readonly string[]
-): value is Record<string, unknown> {
-  if (!isPlainObject(value)) return false
-  const prototype: unknown = Object.getPrototypeOf(value)
-  if (prototype !== Object.prototype && isNotNull(prototype)) return false
-  const actual = Object.keys(value).sort()
-  const expected = [...expectedKeys].sort()
-  return actual.length === expected.length && actual.every((key, index) => key === expected[index])
 }

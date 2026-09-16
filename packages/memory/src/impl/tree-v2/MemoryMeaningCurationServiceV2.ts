@@ -1,278 +1,100 @@
 import { randomBytes } from 'node:crypto'
 
-import { AppError, isEmpty, isNull, isPresent, toNullable } from '@velaros-ai/core'
+import { AppError, isEmpty, isNull, toNullable } from '@velaros-ai/core'
 
-import type { MemoryTreeDiffOpV2, MemoryTreeNodeStructV2 } from '../../utils/tree-v2/diff-chain'
-import { canonicalStringifyV2, quantizeTreeScoreV2 } from '../../utils/tree-v2/diff-chain'
-
-import type { ContentKeyServiceV2, MemorySealedContentV2 } from './storage/ContentKeyServiceV2'
-import type { MemoryAuthorityDatabaseV2 } from './MemoryAuthorityDatabaseV2'
-import type { MemoryDreamRunCoordinatorV2, MemoryDreamValidationStatsV2 } from './MemoryDreamRunCoordinatorV2'
-import type { MemoryPrivacyClassV2 } from './MemoryEvidenceIngestServiceV2'
+import type { MemoryDreamValidationStatsV2 } from '../../types/tree-v2/dream'
+import type { MemoryIdRowV2 } from '../../types/tree-v2/erasure'
+import type { MemoryClaimStableKeyInputV2 } from '../../types/tree-v2/evidence'
+import type {
+  AcceptedMeaningProposalV2,
+  ActiveIdentityEpochRowV2,
+  CurateAndCommitMemoryMeaningInputV2,
+  EvidenceTrustRowV2,
+  LegacyGovernanceTypeRowV2,
+  MemoryClaimCandidateV2,
+  MemoryConceptCandidateV2,
+  MemoryEpisodeCandidateV2,
+  MemoryEvidenceTrustSummaryV2,
+  MemoryIdentityCandidateV2,
+  MemoryMeaningCandidateDecisionV2,
+  MemoryMeaningCurationResultV2,
+  MemoryMeaningEntityKindV2,
+  MemoryMeaningProposalV2,
+  MemoryMeaningScopeV2,
+  MemoryRelationCandidateV2,
+  PreparedBlobV2,
+  PreparedClaimV2,
+  PreparedConceptV2,
+  PreparedEpisodeV2,
+  PreparedIdentityV2,
+  PreparedMeaningCommitV2,
+  PreparedRelationV2,
+  ResolvedMeaningScopeV2,
+} from '../../types/tree-v2/meaning'
+import type { MemoryTreeAuthorityCommitParticipantV2 } from '../../types/tree-v2/store'
+import { registerMemoryContentBlobV2 } from '../../utils/tree-v2/checks'
+import { canonicalStringifyV2 } from '../../utils/tree-v2/diff-chain'
 import {
   canonicalizeWorkspacePathV2,
-  type MemoryClaimStableKeyInputV2,
-  type MemoryIdentityKeyServiceV2,
   normalizeOriginV2,
-} from './MemoryIdentityKeyServiceV2'
-import type {
-  MemoryTreeAuthorityCommitParticipantV2,
-  MemoryTreeIdentityChangeV2,
-  MemoryTreeStoreV2,
-} from './MemoryTreeStoreV2'
+} from '../../utils/tree-v2/identity-keys'
+import {
+  applyExternalContentCapV2,
+  buildMeaningTreeNodesV2,
+  buildMeaningTreeOpsV2,
+  MemoryCandidateLedgerFormatV2,
+  MemoryMeaningTrustLevelsV2,
+  persistClaimsV2,
+  persistConceptsV2,
+  persistEpisodesV2,
+  persistIdentityV2,
+  persistRelationsV2,
+  rejectBrokenDependenciesV2,
+  requiredMapValueV2,
+  validateCandidateShapeV2,
+  validateIdentityShapeV2,
+} from '../../utils/tree-v2/meaning-curation'
 
-const ConceptTypesV2 = new Set([
-  'user',
-  'project',
-  'task',
-  'goal',
-  'interest',
-  'preference',
-  'procedure',
-  'entity',
-  'artifact',
-])
-const TrustLevelsV2 = new Set([
-  'user_stated',
-  'system_observed',
-  'agent_derived',
-  'external_content',
-])
-const EpistemicStatusesV2 = new Set([
-  'user_confirmed',
-  'observed',
-  'derived',
-  'inferred',
-  'disputed',
-])
-const LifecycleStatesV2 = new Set([
-  'transient',
-  'candidate',
-  'active',
-  'consolidated',
-  'dormant',
-  'reactivated',
-])
-
-export type MemoryMeaningScopeV2 =
-  | { readonly type: 'global' }
-  | { readonly type: 'workspace'; readonly rootPath: string }
-  | { readonly type: 'origin'; readonly origin: string }
-
-interface MemoryMeaningCandidateBaseV2 {
-  readonly candidateKey: string
-  readonly evidenceIds: readonly string[]
-}
-
-export interface MemoryConceptCandidateV2 extends MemoryMeaningCandidateBaseV2 {
-  readonly kind: 'concept'
-  readonly conceptType: string
-  readonly name: string
-  readonly description?: LooseOptional<string>
-  readonly scope: MemoryMeaningScopeV2
-  readonly privacyClass: MemoryPrivacyClassV2
-  readonly lifecycleState: string
-  readonly firstSeenAt: number
-  readonly lastActiveAt: number
-  readonly salience: number
-  readonly activation: number
-}
-
-export interface MemoryEpisodeCandidateV2 extends MemoryMeaningCandidateBaseV2 {
-  readonly kind: 'episode'
-  readonly episodeType: string
-  readonly title: string
-  readonly summary?: LooseOptional<string>
-  readonly state: string
-  readonly startedAt: number
-  readonly endedAt?: LooseOptional<number>
-  readonly scope: MemoryMeaningScopeV2
-  readonly primaryConceptKey: string
-  readonly phase: string
-  readonly result?: LooseOptional<string>
-  readonly salience: number
-  readonly activation: number
-}
-
-export interface MemoryClaimCandidateV2 extends MemoryMeaningCandidateBaseV2 {
-  readonly kind: 'claim'
-  readonly subjectConceptKey: string
-  readonly predicate: string
-  readonly title: string
-  readonly value: unknown
-  readonly summary?: LooseOptional<string>
-  readonly storageMode: 'full' | 'index_only' | 'reference'
-  readonly payloadRef?: LooseOptional<string>
-  readonly epistemicStatus: string
-  readonly confidence: number
-  readonly privacyClass: MemoryPrivacyClassV2
-  readonly lifecycleState: string
-  readonly validFrom: number
-  readonly validTo?: LooseOptional<number>
-  readonly salience: number
-  readonly consolidationStrength: number
-  readonly activation: number
-}
-
-export type MemoryMeaningEntityKindV2 = 'concept' | 'episode' | 'claim'
-
-export interface MemoryRelationCandidateV2 extends MemoryMeaningCandidateBaseV2 {
-  readonly kind: 'relation'
-  readonly source: {
-    readonly kind: MemoryMeaningEntityKindV2
-    readonly candidateKey: string
-  }
-  readonly target: {
-    readonly kind: MemoryMeaningEntityKindV2
-    readonly candidateKey: string
-  }
-  readonly relationType: string
-  readonly confidence: number
-  readonly epistemicStatus: string
-  readonly validFrom: number
-  readonly validTo?: LooseOptional<number>
-  readonly activation: number
-}
-
-export type MemoryMeaningCandidateV2 =
-  | MemoryConceptCandidateV2
-  | MemoryEpisodeCandidateV2
-  | MemoryClaimCandidateV2
-  | MemoryRelationCandidateV2
-
-export interface MemoryIdentityCandidateV2 {
-  readonly statement: string
-  readonly globalMainline: string
-  readonly confidence: number
-  readonly evidenceIds: readonly string[]
-  readonly supportingConceptKeys: readonly string[]
-  readonly supportingEpisodeKeys: readonly string[]
-  readonly supportingClaimKeys: readonly string[]
-}
-
-export interface MemoryMeaningProposalV2 {
-  readonly candidates: readonly MemoryMeaningCandidateV2[]
-  readonly identity?: LooseOptional<MemoryIdentityCandidateV2>
-}
-
-export interface MemoryMeaningCandidateDecisionV2 {
-  readonly candidateKey: string
-  readonly kind: MemoryMeaningCandidateV2['kind'] | 'identity'
-  readonly decision: 'accepted' | 'rejected' | 'revised'
-  readonly reasons: readonly string[]
-}
-
-export interface MemoryMeaningCurationResultV2 {
-  readonly treeVersion: number
-  readonly acceptedCount: number
-  readonly rejectedCount: number
-  readonly decisions: readonly MemoryMeaningCandidateDecisionV2[]
-}
-
-interface EvidenceTrustRowV2 {
-  id: string
-  trust_level: string
-  eligibility_state: string
-}
-
-interface AcceptedMeaningProposalV2 {
-  concepts: MemoryConceptCandidateV2[]
-  episodes: MemoryEpisodeCandidateV2[]
-  claims: MemoryClaimCandidateV2[]
-  relations: MemoryRelationCandidateV2[]
-  identity: Nullable<MemoryIdentityCandidateV2>
-  decisions: MemoryMeaningCandidateDecisionV2[]
-  candidateCount: number
-}
-
-interface ResolvedMeaningScopeV2 {
-  scopeType: string
-  scopeId: string
-  scopeMatchKey: Nullable<string>
-}
-
-interface PreparedBlobV2 extends MemorySealedContentV2 {
-  content: string
-}
-
-interface PreparedConceptV2 {
-  candidate: MemoryConceptCandidateV2
-  id: string
-  stableKey: string
-  scope: ResolvedMeaningScopeV2
-  nameMatchKey: string
-  name: PreparedBlobV2
-  description: Nullable<PreparedBlobV2>
-}
-
-interface PreparedEpisodeV2 {
-  candidate: MemoryEpisodeCandidateV2
-  id: string
-  stableKey: string
-  scope: ResolvedMeaningScopeV2
-  primaryConcept: PreparedConceptV2
-  title: PreparedBlobV2
-  summary: Nullable<PreparedBlobV2>
-  result: Nullable<PreparedBlobV2>
-}
-
-interface PreparedClaimV2 {
-  candidate: MemoryClaimCandidateV2
-  id: string
-  stableKey: string
-  groupKey: string
-  subjectConcept: PreparedConceptV2
-  value: PreparedBlobV2
-  summary: Nullable<PreparedBlobV2>
-}
-
-interface PreparedRelationV2 {
-  candidate: MemoryRelationCandidateV2
-  id: string
-  sourceId: string
-  targetId: string
-}
-
-interface PreparedIdentityV2 {
-  candidate: MemoryIdentityCandidateV2
-  id: string
-  sequence: number
-  predecessorId: Nullable<string>
-  statement: PreparedBlobV2
-  globalMainline: PreparedBlobV2
-  supportingConceptIds: readonly string[]
-  supportingEpisodeIds: readonly string[]
-  supportingClaimIds: readonly string[]
-}
-
-interface PreparedMeaningCommitV2 {
-  participant: MemoryTreeAuthorityCommitParticipantV2
-  ops: readonly MemoryTreeDiffOpV2[]
-  identityChange: Nullable<MemoryTreeIdentityChangeV2>
-  activeIdentityEpochId: string
-  globalMainlineNodeId: string
-  cleanupAfterFailure(): void
-}
+import type { ContentKeyServiceV2Api } from './storage/ContentKeyServiceV2'
+import type { MemoryAuthorityDatabaseV2Api } from './MemoryAuthorityDatabaseV2'
+import type { MemoryDreamRunCoordinatorV2Api } from './MemoryDreamRunCoordinatorV2'
+import type { MemoryIdentityKeyServiceV2Api } from './MemoryIdentityKeyServiceV2'
+import type { MemoryTreeStoreV2Api } from './MemoryTreeStoreV2'
 
 /**
- * 模型只提供候选；本服务重新计算身份、信任上限、谱系、密文与树投影，并原子发布。
+ * 意义整理的裁决与发布：模型只提供候选，身份键、信任上限、谱系、密文与树投影都在这里重算。
+ *
+ * 一次调用要么整体发布成一个新树版本（或空提交），要么把已经封好的密文全部擦掉并让运行失败；
+ * 中间不留半成品。实例归 `MemorySystemRuntimeV2`（或探针）所有。
  */
-export class MemoryMeaningCurationServiceV2 {
+export interface MemoryMeaningCurationServiceV2Api {
+  /**
+   * 裁决一份提案并原子发布：形态校验 → 信任与治理判据 → 依赖裁剪 → 封密文与算身份键
+   * → 记候选账本 → 提交树版本（没有结构变更就空提交）。
+   * 中途任何失败都会擦掉本次封的密文、把运行标成 failed，再把原错误抛出去。
+   */
+  curateAndCommit(input: CurateAndCommitMemoryMeaningInputV2): MemoryMeaningCurationResultV2
+}
+
+export class MemoryMeaningCurationServiceV2 implements MemoryMeaningCurationServiceV2Api {
+  /** 行 id 的随机字节数（128 位）。 */
+  private static readonly EntityIdByteLength = 16
+
+  /** 只有外部内容支撑的主张，置信度最高压到这个值（并改判成 inferred）。 */
+  private static readonly ExternalContentConfidenceCap = 0.4
+
   constructor(
-    private readonly authority: MemoryAuthorityDatabaseV2,
-    private readonly contentKeys: ContentKeyServiceV2,
-    private readonly identityKeys: MemoryIdentityKeyServiceV2,
-    private readonly treeStore: MemoryTreeStoreV2,
-    private readonly dreamRuns: MemoryDreamRunCoordinatorV2,
+    private readonly authority: MemoryAuthorityDatabaseV2Api,
+    private readonly contentKeys: ContentKeyServiceV2Api,
+    private readonly identityKeys: MemoryIdentityKeyServiceV2Api,
+    private readonly treeStore: MemoryTreeStoreV2Api,
+    private readonly dreamRuns: MemoryDreamRunCoordinatorV2Api,
     private readonly random: (byteLength: number) => Buffer = randomBytes
   ) {}
 
-  public curateAndCommit(input: {
-    runId: string
-    proposal: MemoryMeaningProposalV2
-    tokenUsage: number
-    committedAt?: number
-  }): MemoryMeaningCurationResultV2 {
+  public curateAndCommit(
+    input: CurateAndCommitMemoryMeaningInputV2
+  ): MemoryMeaningCurationResultV2 {
     const accepted = this.validateProposal(input.proposal)
     const stats: MemoryDreamValidationStatsV2 = {
       tokenUsage: input.tokenUsage,
@@ -286,7 +108,7 @@ export class MemoryMeaningCurationServiceV2 {
       this.dreamRuns.markValidating(
         input.runId,
         {
-          format: 'velaros.memory.candidate-ledger.v2',
+          format: MemoryCandidateLedgerFormatV2,
           readSet: [
             ...new Set([
               ...input.proposal.candidates.flatMap((candidate) => candidate.evidenceIds),
@@ -334,6 +156,7 @@ export class MemoryMeaningCurationServiceV2 {
     }
   }
 
+  /** 逐候选裁决：形态、证据信任、外部内容上限、敏感主张门槛、旧库治理拒绝，再裁剪断链依赖。 */
   private validateProposal(proposal: MemoryMeaningProposalV2): AcceptedMeaningProposalV2 {
     const decisions: MemoryMeaningCandidateDecisionV2[] = []
     const seen = new Set<string>()
@@ -353,26 +176,12 @@ export class MemoryMeaningCurationServiceV2 {
       seen.add(candidate.candidateKey)
       const trust = this.readEvidenceTrust(candidate.evidenceIds)
       reasons.push(...trust.reasons)
-      let revised = false
-      let acceptedCandidate: MemoryMeaningCandidateV2 = candidate
-      if (trust.externalOnly) {
-        if (
-          candidate.kind === 'concept' &&
-          (candidate.conceptType === 'user' || candidate.conceptType === 'preference')
-        ) {
-          reasons.push('external_content_cannot_create_profile')
-        }
-        if (candidate.kind === 'claim') {
-          acceptedCandidate = {
-            ...candidate,
-            epistemicStatus: 'inferred',
-            confidence: Math.min(candidate.confidence, 0.4),
-          }
-          revised =
-            acceptedCandidate.epistemicStatus !== candidate.epistemicStatus ||
-            acceptedCandidate.confidence !== candidate.confidence
-        }
-      }
+      const capped = applyExternalContentCapV2(
+        candidate,
+        trust,
+        MemoryMeaningCurationServiceV2.ExternalContentConfidenceCap,
+        reasons
+      )
       if (
         candidate.kind === 'claim' &&
         candidate.privacyClass === 'sensitive' &&
@@ -385,9 +194,7 @@ export class MemoryMeaningCurationServiceV2 {
           candidate,
           conceptCandidates.get(candidate.subjectConceptKey)
         )
-        if (governanceType) {
-          reasons.push(`legacy_governance_denied:${governanceType}`)
-        }
+        if (governanceType) reasons.push(`legacy_governance_denied:${governanceType}`)
       }
       if (!isEmpty(reasons)) {
         decisions.push({
@@ -401,13 +208,13 @@ export class MemoryMeaningCurationServiceV2 {
       decisions.push({
         candidateKey: candidate.candidateKey,
         kind: candidate.kind,
-        decision: revised ? 'revised' : 'accepted',
-        reasons: revised ? ['external_content_trust_cap'] : [],
+        decision: capped.revised ? 'revised' : 'accepted',
+        reasons: capped.revised ? ['external_content_trust_cap'] : [],
       })
-      if (acceptedCandidate.kind === 'concept') concepts.push(acceptedCandidate)
-      if (acceptedCandidate.kind === 'episode') episodes.push(acceptedCandidate)
-      if (acceptedCandidate.kind === 'claim') claims.push(acceptedCandidate)
-      if (acceptedCandidate.kind === 'relation') relations.push(acceptedCandidate)
+      if (capped.candidate.kind === 'concept') concepts.push(capped.candidate)
+      if (capped.candidate.kind === 'episode') episodes.push(capped.candidate)
+      if (capped.candidate.kind === 'claim') claims.push(capped.candidate)
+      if (capped.candidate.kind === 'relation') relations.push(capped.candidate)
     }
 
     const acceptedKeys = new Set([
@@ -419,42 +226,7 @@ export class MemoryMeaningCurationServiceV2 {
     const rejectedKeys = new Set(
       decisions.filter((item) => item.decision === 'rejected').map((item) => item.candidateKey)
     )
-    let identity: Nullable<MemoryIdentityCandidateV2> = null
-    if (proposal.identity) {
-      const reasons = validateIdentityShapeV2(proposal.identity)
-      const trust = this.readEvidenceTrust(proposal.identity.evidenceIds)
-      reasons.push(...trust.reasons)
-      if (trust.externalOnly) reasons.push('external_content_cannot_support_identity')
-      if (
-        [
-          ...proposal.identity.supportingConceptKeys,
-          ...proposal.identity.supportingEpisodeKeys,
-          ...proposal.identity.supportingClaimKeys,
-        ].some((key) => rejectedKeys.has(key))
-      ) {
-        reasons.push('identity_depends_on_rejected_candidate')
-      }
-      if (
-        proposal.identity.supportingConceptKeys.some(
-          (key) => !concepts.some((item) => item.candidateKey === key)
-        ) ||
-        proposal.identity.supportingEpisodeKeys.some(
-          (key) => !episodes.some((item) => item.candidateKey === key)
-        ) ||
-        proposal.identity.supportingClaimKeys.some(
-          (key) => !claims.some((item) => item.candidateKey === key)
-        )
-      ) {
-        reasons.push('identity_depends_on_missing_candidate')
-      }
-      decisions.push({
-        candidateKey: 'identity',
-        kind: 'identity',
-        decision: isEmpty(reasons) ? 'accepted' : 'rejected',
-        reasons,
-      })
-      if (isEmpty(reasons)) identity = proposal.identity
-    }
+    const identity = this.decideIdentity(proposal, concepts, episodes, claims, rejectedKeys, decisions)
 
     return {
       concepts: concepts.filter((item) => !rejectedKeys.has(item.candidateKey)),
@@ -467,14 +239,55 @@ export class MemoryMeaningCurationServiceV2 {
     }
   }
 
-  private readEvidenceTrust(evidenceIds: readonly string[]): {
-    levels: string[]
-    externalOnly: boolean
-    reasons: string[]
-  } {
+  /** 裁决身份候选：形态、证据信任，以及它引用的支撑候选有没有被拒或缺席。 */
+  private decideIdentity(
+    proposal: MemoryMeaningProposalV2,
+    concepts: readonly MemoryConceptCandidateV2[],
+    episodes: readonly MemoryEpisodeCandidateV2[],
+    claims: readonly MemoryClaimCandidateV2[],
+    rejectedKeys: ReadonlySet<string>,
+    decisions: MemoryMeaningCandidateDecisionV2[]
+  ): Nullable<MemoryIdentityCandidateV2> {
+    if (!proposal.identity) return null
+    const reasons = validateIdentityShapeV2(proposal.identity)
+    const trust = this.readEvidenceTrust(proposal.identity.evidenceIds)
+    reasons.push(...trust.reasons)
+    if (trust.externalOnly) reasons.push('external_content_cannot_support_identity')
+    if (
+      [
+        ...proposal.identity.supportingConceptKeys,
+        ...proposal.identity.supportingEpisodeKeys,
+        ...proposal.identity.supportingClaimKeys,
+      ].some((key) => rejectedKeys.has(key))
+    ) {
+      reasons.push('identity_depends_on_rejected_candidate')
+    }
+    if (
+      proposal.identity.supportingConceptKeys.some(
+        (key) => !concepts.some((item) => item.candidateKey === key)
+      ) ||
+      proposal.identity.supportingEpisodeKeys.some(
+        (key) => !episodes.some((item) => item.candidateKey === key)
+      ) ||
+      proposal.identity.supportingClaimKeys.some(
+        (key) => !claims.some((item) => item.candidateKey === key)
+      )
+    ) {
+      reasons.push('identity_depends_on_missing_candidate')
+    }
+    decisions.push({
+      candidateKey: 'identity',
+      kind: 'identity',
+      decision: isEmpty(reasons) ? 'accepted' : 'rejected',
+      reasons,
+    })
+    return isEmpty(reasons) ? proposal.identity : null
+  }
+
+  /** 读一批证据的信任级别，顺带查它们在不在、还可用不可用、有没有进擦除名单。 */
+  private readEvidenceTrust(evidenceIds: readonly string[]): MemoryEvidenceTrustSummaryV2 {
     const reasons: string[] = []
-    if (evidenceIds.length === 0)
-      return { levels: [], externalOnly: false, reasons: ['missing_evidence'] }
+    if (evidenceIds.length === 0) return { levels: [], externalOnly: false, reasons: ['missing_evidence'] }
     const lookup = this.authority.database.prepare(
       `SELECT id, trust_level, eligibility_state
        FROM memory_evidence
@@ -493,7 +306,9 @@ export class MemoryMeaningCurationServiceV2 {
         reasons.push(`evidence_not_found:${evidenceId}`)
         continue
       }
-      if (!TrustLevelsV2.has(row.trust_level)) reasons.push(`unknown_trust_level:${evidenceId}`)
+      if (!MemoryMeaningTrustLevelsV2.has(row.trust_level)) {
+        reasons.push(`unknown_trust_level:${evidenceId}`)
+      }
       if (row.eligibility_state !== 'active') reasons.push(`evidence_not_active:${evidenceId}`)
       if (denied.get(evidenceId)) reasons.push(`evidence_denied:${evidenceId}`)
       levels.push(row.trust_level)
@@ -505,6 +320,10 @@ export class MemoryMeaningCurationServiceV2 {
     }
   }
 
+  /**
+   * 旧库治理拒绝：同一语义身份在旧库里被 forgotten / superseded / erased 过，就不许写回。
+   * 比的是治理匹配键，不看旧的稳定键，也不依赖模型写的标题。
+   */
   private readLegacyGovernanceDeny(
     claim: MemoryClaimCandidateV2,
     concept: Optional<MemoryConceptCandidateV2>
@@ -517,14 +336,13 @@ export class MemoryMeaningCurationServiceV2 {
       // arch-guard:silent-catch-ok 遗留治理项的 scope 不可解析时按“未命中 deny”处理。
       return null
     }
-    const conceptStableKey = this.identityKeys.conceptStableKey({
-      conceptType: concept.conceptType,
-      scopeType: scope.scopeType,
-      scopeId: scope.scopeId,
-      discriminator: concept.name,
-    })
     const targetMatchKey = this.identityKeys.claimGovernanceMatchKey({
-      conceptStableKey,
+      conceptStableKey: this.identityKeys.conceptStableKey({
+        conceptType: concept.conceptType,
+        scopeType: scope.scopeType,
+        scopeId: scope.scopeId,
+        discriminator: concept.name,
+      }),
       predicate: claim.predicate,
       content: canonicalStringifyV2(claim.value),
     })
@@ -542,10 +360,14 @@ export class MemoryMeaningCurationServiceV2 {
          ORDER BY deny_generation DESC, governance_type
          LIMIT 1`
       )
-      .get(targetMatchKey) as { governance_type: 'forgotten' | 'superseded' | 'erased' } | undefined
+      .get(targetMatchKey) as LegacyGovernanceTypeRowV2 | undefined
     return toNullable(row?.governance_type)
   }
 
+  /**
+   * 把通过裁决的候选变成可提交的东西：算身份键、封密文、推出目标树节点与结构事件，
+   * 并把落库动作打包成权威事务的参与者。任何一步失败都把已封的密文擦掉。
+   */
   private prepareCommit(
     runId: string,
     proposal: AcceptedMeaningProposalV2
@@ -553,178 +375,66 @@ export class MemoryMeaningCurationServiceV2 {
     const createdAt = Date.now()
     const blobs: PreparedBlobV2[] = []
     const seal = (content: string): PreparedBlobV2 => {
-      const sealed = this.contentKeys.sealContent(content)
-      const prepared = { ...sealed, content }
+      const prepared = { ...this.contentKeys.sealContent(content), content }
       blobs.push(prepared)
       return prepared
     }
     try {
-      const concepts = proposal.concepts.map((candidate) => {
-        const scope = this.resolveScope(candidate.scope)
-        const stableKey = this.identityKeys.conceptStableKey({
-          conceptType: candidate.conceptType,
-          scopeType: scope.scopeType,
-          scopeId: scope.scopeId,
-          discriminator: candidate.name,
-        })
-        return {
-          candidate,
-          id: this.existingId('memory_concepts', stableKey) ?? this.randomId(),
-          stableKey,
-          scope,
-          nameMatchKey: this.identityKeys.conceptNameMatchKey(candidate.name),
-          name: seal(candidate.name),
-          description: candidate.description ? seal(candidate.description) : null,
-        }
-      })
+      const concepts = this.prepareConcepts(proposal.concepts, seal)
       const conceptByCandidate = new Map(
         concepts.map((item) => [item.candidate.candidateKey, item])
       )
-      const episodes = proposal.episodes.map((candidate) => {
-        const primaryConcept = requiredMapValueV2(
-          conceptByCandidate,
-          candidate.primaryConceptKey,
-          'episode primary concept'
-        )
-        const scope = this.resolveScope(candidate.scope)
-        const stableKey = this.identityKeys.episodeStableKey({
-          scopeType: scope.scopeType,
-          scopeId: scope.scopeId,
-          conceptStableKey: primaryConcept.stableKey,
-          episodeRoot: candidate.candidateKey,
-          phase: candidate.phase,
-        })
-        return {
-          candidate,
-          id: this.existingId('memory_episodes', stableKey) ?? this.randomId(),
-          stableKey,
-          scope,
-          primaryConcept,
-          title: seal(candidate.title),
-          summary: candidate.summary ? seal(candidate.summary) : null,
-          result: candidate.result ? seal(candidate.result) : null,
-        }
-      })
+      const episodes = this.prepareEpisodes(proposal.episodes, conceptByCandidate, seal)
       const episodeByCandidate = new Map(
         episodes.map((item) => [item.candidate.candidateKey, item])
       )
-      const claims = proposal.claims.map((candidate) => {
-        const subjectConcept = requiredMapValueV2(
-          conceptByCandidate,
-          candidate.subjectConceptKey,
-          'claim subject concept'
-        )
-        const stableInput: MemoryClaimStableKeyInputV2 = {
-          conceptStableKey: subjectConcept.stableKey,
-          predicate: candidate.predicate,
-          title: candidate.title,
-          content: canonicalStringifyV2(candidate.value),
-        }
-        const stableKey = this.identityKeys.claimStableKey(stableInput)
-        return {
-          candidate,
-          id: this.existingId('memory_claims', stableKey) ?? this.randomId(),
-          stableKey,
-          groupKey: this.identityKeys.claimGroupKey({
-            conceptStableKey: subjectConcept.stableKey,
-            predicate: candidate.predicate,
-            title: candidate.title,
-          }),
-          subjectConcept,
-          value: seal(canonicalStringifyV2(candidate.value)),
-          summary: candidate.summary ? seal(candidate.summary) : null,
-        }
-      })
+      const claims = this.prepareClaims(proposal.claims, conceptByCandidate, seal)
       const claimByCandidate = new Map(claims.map((item) => [item.candidate.candidateKey, item]))
       const entityMaps: Record<MemoryMeaningEntityKindV2, ReadonlyMap<string, { id: string }>> = {
         concept: conceptByCandidate,
         episode: episodeByCandidate,
         claim: claimByCandidate,
       }
-      const relations = proposal.relations.map((candidate) => {
-        const sourceId = requiredMapValueV2(
-          entityMaps[candidate.source.kind],
-          candidate.source.candidateKey,
-          'relation source'
-        ).id
-        const targetId = requiredMapValueV2(
-          entityMaps[candidate.target.kind],
-          candidate.target.candidateKey,
-          'relation target'
-        ).id
-        const existing = this.authority.database
-          .prepare(
-            `SELECT id FROM memory_relations
-             WHERE source_type = ? AND source_id = ?
-               AND target_type = ? AND target_id = ? AND relation_type = ?`
+      const relations = this.prepareRelations(proposal.relations, entityMaps)
+      const activeIdentity = this.readActiveIdentityEpoch()
+      const identity = proposal.identity
+        ? this.prepareIdentity(
+            proposal.identity,
+            activeIdentity,
+            conceptByCandidate,
+            episodeByCandidate,
+            claimByCandidate,
+            seal
           )
-          .get(
-            candidate.source.kind,
-            sourceId,
-            candidate.target.kind,
-            targetId,
-            candidate.relationType
-          ) as { id: string } | undefined
-        return {
-          candidate,
-          id: existing?.id ?? this.randomId(),
-          sourceId,
-          targetId,
-        }
-      })
-      const activeIdentity = this.authority.database
-        .prepare(
-          `SELECT id, sequence
-           FROM memory_identity_epochs
-           WHERE ended_at IS NULL
-           LIMIT 1`
-        )
-        .get() as { id: string; sequence: number } | undefined
-      let identity: Nullable<PreparedIdentityV2> = null
-      if (proposal.identity) {
-        identity = {
-          candidate: proposal.identity,
-          id: this.randomId(),
-          sequence: (activeIdentity?.sequence ?? 0) + 1,
-          predecessorId: toNullable(activeIdentity?.id),
-          statement: seal(proposal.identity.statement),
-          globalMainline: seal(proposal.identity.globalMainline),
-          supportingConceptIds: proposal.identity.supportingConceptKeys.map(
-            (key) => requiredMapValueV2(conceptByCandidate, key, 'identity concept').id
-          ),
-          supportingEpisodeIds: proposal.identity.supportingEpisodeKeys.map(
-            (key) => requiredMapValueV2(episodeByCandidate, key, 'identity episode').id
-          ),
-          supportingClaimIds: proposal.identity.supportingClaimKeys.map(
-            (key) => requiredMapValueV2(claimByCandidate, key, 'identity claim').id
-          ),
-        }
-      }
+        : null
       if (!identity && !activeIdentity) {
         throw new AppError('VALIDATION', '首个意义提交必须建立 Identity Epoch。')
       }
 
-      const activeIdentityEpochId = identity?.id ?? activeIdentity!.id
+      const activeIdentityEpochId = identity?.id ?? (activeIdentity as ActiveIdentityEpochRowV2).id
       const globalMainlineNodeId = `identity:${activeIdentityEpochId}`
-      const desiredNodes = buildMeaningTreeNodesV2({
-        current: this.treeStore.current.nodes,
-        concepts,
-        episodes,
-        claims,
-        identity,
-        activeIdentityEpochId,
-        globalMainlineNodeId,
-        createdAt,
-      })
-      const ops = buildMeaningTreeOpsV2(this.treeStore.current.nodes, desiredNodes)
+      const ops = buildMeaningTreeOpsV2(
+        this.treeStore.current.nodes,
+        buildMeaningTreeNodesV2({
+          current: this.treeStore.current.nodes,
+          concepts,
+          episodes,
+          claims,
+          identity,
+          activeIdentityEpochId,
+          globalMainlineNodeId,
+          createdAt,
+        })
+      )
       const participant: MemoryTreeAuthorityCommitParticipantV2 = {
         apply: () => {
-          for (const blob of blobs) registerBlobV2(this.authority, blob, createdAt)
-          persistConceptsV2(this.authority, concepts, runId, createdAt)
-          persistEpisodesV2(this.authority, episodes, runId, createdAt)
-          persistClaimsV2(this.authority, claims, runId, createdAt)
-          persistRelationsV2(this.authority, relations, runId, createdAt)
-          if (identity) persistIdentityV2(this.authority, identity, runId, createdAt)
+          const database = this.authority.database
+          for (const blob of blobs) registerMemoryContentBlobV2(database, blob, createdAt)
+          persistConceptsV2(database, concepts, createdAt)
+          persistEpisodesV2(database, episodes, runId, createdAt)
+          persistClaimsV2(database, claims, runId, createdAt)
+          persistRelationsV2(database, relations, runId, createdAt)
+          if (identity) persistIdentityV2(database, identity, runId, createdAt)
         },
       }
       return {
@@ -749,9 +459,177 @@ export class MemoryMeaningCurationServiceV2 {
     }
   }
 
+  /** 为每个概念候选算作用域、稳定键与名字盲索引键，并封好名称与描述。 */
+  private prepareConcepts(
+    candidates: readonly MemoryConceptCandidateV2[],
+    seal: (content: string) => PreparedBlobV2
+  ): PreparedConceptV2[] {
+    return candidates.map((candidate) => {
+      const scope = this.resolveScope(candidate.scope)
+      const stableKey = this.identityKeys.conceptStableKey({
+        conceptType: candidate.conceptType,
+        scopeType: scope.scopeType,
+        scopeId: scope.scopeId,
+        discriminator: candidate.name,
+      })
+      return {
+        candidate,
+        id: this.existingId('memory_concepts', stableKey) ?? this.randomId(),
+        stableKey,
+        scope,
+        nameMatchKey: this.identityKeys.conceptNameMatchKey(candidate.name),
+        name: seal(candidate.name),
+        description: candidate.description ? seal(candidate.description) : null,
+      }
+    })
+  }
+
+  /** 为每个情节候选找到它挂的概念，算稳定键并封好标题、摘要与结果。 */
+  private prepareEpisodes(
+    candidates: readonly MemoryEpisodeCandidateV2[],
+    conceptByCandidate: ReadonlyMap<string, PreparedConceptV2>,
+    seal: (content: string) => PreparedBlobV2
+  ): PreparedEpisodeV2[] {
+    return candidates.map((candidate) => {
+      const primaryConcept = requiredMapValueV2(
+        conceptByCandidate,
+        candidate.primaryConceptKey,
+        'episode primary concept'
+      )
+      const scope = this.resolveScope(candidate.scope)
+      const stableKey = this.identityKeys.episodeStableKey({
+        scopeType: scope.scopeType,
+        scopeId: scope.scopeId,
+        conceptStableKey: primaryConcept.stableKey,
+        episodeRoot: candidate.candidateKey,
+        phase: candidate.phase,
+      })
+      return {
+        candidate,
+        id: this.existingId('memory_episodes', stableKey) ?? this.randomId(),
+        stableKey,
+        scope,
+        primaryConcept,
+        title: seal(candidate.title),
+        summary: candidate.summary ? seal(candidate.summary) : null,
+        result: candidate.result ? seal(candidate.result) : null,
+      }
+    })
+  }
+
+  /** 为每条主张候选算稳定键与分组键，并封好值与摘要。 */
+  private prepareClaims(
+    candidates: readonly MemoryClaimCandidateV2[],
+    conceptByCandidate: ReadonlyMap<string, PreparedConceptV2>,
+    seal: (content: string) => PreparedBlobV2
+  ): PreparedClaimV2[] {
+    return candidates.map((candidate) => {
+      const subjectConcept = requiredMapValueV2(
+        conceptByCandidate,
+        candidate.subjectConceptKey,
+        'claim subject concept'
+      )
+      const stableInput: MemoryClaimStableKeyInputV2 = {
+        conceptStableKey: subjectConcept.stableKey,
+        predicate: candidate.predicate,
+        title: candidate.title,
+        content: canonicalStringifyV2(candidate.value),
+      }
+      const stableKey = this.identityKeys.claimStableKey(stableInput)
+      return {
+        candidate,
+        id: this.existingId('memory_claims', stableKey) ?? this.randomId(),
+        stableKey,
+        groupKey: this.identityKeys.claimGroupKey({
+          conceptStableKey: subjectConcept.stableKey,
+          predicate: candidate.predicate,
+          title: candidate.title,
+        }),
+        subjectConcept,
+        value: seal(canonicalStringifyV2(candidate.value)),
+        summary: candidate.summary ? seal(candidate.summary) : null,
+      }
+    })
+  }
+
+  /** 把关系两端的候选键解析成行 id；同样两端同类型的关系已存在就复用它的 id。 */
+  private prepareRelations(
+    candidates: readonly MemoryRelationCandidateV2[],
+    entityMaps: Record<MemoryMeaningEntityKindV2, ReadonlyMap<string, { id: string }>>
+  ): PreparedRelationV2[] {
+    return candidates.map((candidate) => {
+      const sourceId = requiredMapValueV2(
+        entityMaps[candidate.source.kind],
+        candidate.source.candidateKey,
+        'relation source'
+      ).id
+      const targetId = requiredMapValueV2(
+        entityMaps[candidate.target.kind],
+        candidate.target.candidateKey,
+        'relation target'
+      ).id
+      const existing = this.authority.database
+        .prepare(
+          `SELECT id FROM memory_relations
+           WHERE source_type = ? AND source_id = ?
+             AND target_type = ? AND target_id = ? AND relation_type = ?`
+        )
+        .get(
+          candidate.source.kind,
+          sourceId,
+          candidate.target.kind,
+          targetId,
+          candidate.relationType
+        ) as MemoryIdRowV2 | undefined
+      return { candidate, id: existing?.id ?? this.randomId(), sourceId, targetId }
+    })
+  }
+
+  /** 为身份候选分配新纪元、解析它的支撑实体行 id，并封好自述与主线。 */
+  private prepareIdentity(
+    candidate: MemoryIdentityCandidateV2,
+    activeIdentity: Nullable<ActiveIdentityEpochRowV2>,
+    conceptByCandidate: ReadonlyMap<string, PreparedConceptV2>,
+    episodeByCandidate: ReadonlyMap<string, PreparedEpisodeV2>,
+    claimByCandidate: ReadonlyMap<string, PreparedClaimV2>,
+    seal: (content: string) => PreparedBlobV2
+  ): PreparedIdentityV2 {
+    return {
+      candidate,
+      id: this.randomId(),
+      sequence: (activeIdentity?.sequence ?? 0) + 1,
+      predecessorId: toNullable(activeIdentity?.id),
+      statement: seal(candidate.statement),
+      globalMainline: seal(candidate.globalMainline),
+      supportingConceptIds: candidate.supportingConceptKeys.map(
+        (key) => requiredMapValueV2(conceptByCandidate, key, 'identity concept').id
+      ),
+      supportingEpisodeIds: candidate.supportingEpisodeKeys.map(
+        (key) => requiredMapValueV2(episodeByCandidate, key, 'identity episode').id
+      ),
+      supportingClaimIds: candidate.supportingClaimKeys.map(
+        (key) => requiredMapValueV2(claimByCandidate, key, 'identity claim').id
+      ),
+    }
+  }
+
+  /** 读当前还没收尾的身份纪元；一个都没有就是这个库还没建过身份。 */
+  private readActiveIdentityEpoch(): Nullable<ActiveIdentityEpochRowV2> {
+    return toNullable(
+      this.authority.database
+        .prepare(
+          `SELECT id, sequence
+           FROM memory_identity_epochs
+           WHERE ended_at IS NULL
+           LIMIT 1`
+        )
+        .get() as ActiveIdentityEpochRowV2 | undefined
+    )
+  }
+
+  /** 把意义候选的作用域解析成「类型 + 作用域 id + 盲索引键」。 */
   private resolveScope(scope: MemoryMeaningScopeV2): ResolvedMeaningScopeV2 {
-    if (scope.type === 'global')
-      return { scopeType: 'global', scopeId: 'global', scopeMatchKey: null }
+    if (scope.type === 'global') return { scopeType: 'global', scopeId: 'global', scopeMatchKey: null }
     if (scope.type === 'workspace') {
       const scopeId = canonicalizeWorkspacePathV2(scope.rootPath)
       return {
@@ -768,610 +646,26 @@ export class MemoryMeaningCurationServiceV2 {
     }
   }
 
+  /** 同一个稳定键已经有行就复用它的 id，让 upsert 不至于造出第二行。 */
   private existingId(
     table: 'memory_concepts' | 'memory_episodes' | 'memory_claims',
     stableKey: string
   ): Nullable<string> {
     const row = this.authority.database
       .prepare(`SELECT id FROM ${table} WHERE stable_key = ?`)
-      .get(stableKey) as { id: string } | undefined
+      .get(stableKey) as MemoryIdRowV2 | undefined
     return toNullable(row?.id)
   }
 
+  /** 从注入的随机源取行 id；长度不对就是随机源坏了。 */
   private randomId(): string {
-    const value = this.random(16)
-    if (!Buffer.isBuffer(value) || value.length !== 16) {
+    const value = this.random(MemoryMeaningCurationServiceV2.EntityIdByteLength)
+    if (
+      !Buffer.isBuffer(value) ||
+      value.length !== MemoryMeaningCurationServiceV2.EntityIdByteLength
+    ) {
       throw new AppError('INVARIANT', 'Meaning 随机源必须返回 16 字节。')
     }
     return value.toString('hex')
   }
-}
-
-function validateCandidateShapeV2(candidate: MemoryMeaningCandidateV2): string[] {
-  const reasons: string[] = []
-  if (!candidate.candidateKey) reasons.push('missing_candidate_key')
-  if (isEmpty(candidate.evidenceIds)) reasons.push('missing_evidence')
-  if (candidate.kind === 'concept') {
-    if (!ConceptTypesV2.has(candidate.conceptType)) reasons.push('invalid_concept_type')
-    if (!candidate.name) reasons.push('missing_concept_name')
-    if (!LifecycleStatesV2.has(candidate.lifecycleState)) reasons.push('invalid_lifecycle')
-    validateScoreV2(candidate.salience, 'salience', reasons)
-    validateScoreV2(candidate.activation, 'activation', reasons)
-  }
-  if (candidate.kind === 'episode') {
-    if (!candidate.episodeType || !candidate.title || !candidate.state || !candidate.phase) {
-      reasons.push('missing_episode_structure')
-    }
-    if (isPresent(candidate.endedAt) && candidate.endedAt < candidate.startedAt) {
-      reasons.push('episode_time_reversed')
-    }
-    validateScoreV2(candidate.salience, 'salience', reasons)
-    validateScoreV2(candidate.activation, 'activation', reasons)
-  }
-  if (candidate.kind === 'claim') {
-    if (!candidate.predicate || !candidate.title) reasons.push('missing_claim_structure')
-    if (!EpistemicStatusesV2.has(candidate.epistemicStatus))
-      reasons.push('invalid_epistemic_status')
-    if (!LifecycleStatesV2.has(candidate.lifecycleState)) reasons.push('invalid_lifecycle')
-    validateScoreV2(candidate.confidence, 'confidence', reasons)
-    validateScoreV2(candidate.salience, 'salience', reasons)
-    validateScoreV2(candidate.consolidationStrength, 'consolidation', reasons)
-    validateScoreV2(candidate.activation, 'activation', reasons)
-  }
-  if (candidate.kind === 'relation') {
-    if (!candidate.relationType) reasons.push('missing_relation_type')
-    if (!EpistemicStatusesV2.has(candidate.epistemicStatus))
-      reasons.push('invalid_epistemic_status')
-    validateScoreV2(candidate.confidence, 'confidence', reasons)
-    validateScoreV2(candidate.activation, 'activation', reasons)
-  }
-  return reasons
-}
-
-function validateIdentityShapeV2(candidate: MemoryIdentityCandidateV2): string[] {
-  const reasons: string[] = []
-  if (!candidate.statement || !candidate.globalMainline) reasons.push('missing_identity_content')
-  if (isEmpty(candidate.evidenceIds)) reasons.push('missing_evidence')
-  validateScoreV2(candidate.confidence, 'confidence', reasons)
-  return reasons
-}
-
-function validateScoreV2(value: number, label: string, reasons: string[]): void {
-  if (!Number.isFinite(value) || value < 0 || value > 1) reasons.push(`invalid_${label}`)
-}
-
-function rejectBrokenDependenciesV2(
-  episodes: readonly MemoryEpisodeCandidateV2[],
-  claims: readonly MemoryClaimCandidateV2[],
-  relations: readonly MemoryRelationCandidateV2[],
-  acceptedKeys: Set<string>,
-  decisions: MemoryMeaningCandidateDecisionV2[]
-): void {
-  const reject = (candidateKey: string, reason: string): void => {
-    const index = decisions.findIndex((item) => item.candidateKey === candidateKey)
-    const decision = decisions[index]
-    if (index < 0 || !decision || decision.decision === 'rejected') return
-    decisions[index] = { ...decision, decision: 'rejected', reasons: [reason] }
-  }
-  for (const episode of episodes) {
-    if (!acceptedKeys.has(episode.primaryConceptKey)) {
-      reject(episode.candidateKey, 'missing_primary_concept')
-    }
-  }
-  for (const claim of claims) {
-    if (!acceptedKeys.has(claim.subjectConceptKey)) {
-      reject(claim.candidateKey, 'missing_subject_concept')
-    }
-  }
-  const rejected = new Set(
-    decisions.filter((item) => item.decision === 'rejected').map((item) => item.candidateKey)
-  )
-  for (const relation of relations) {
-    if (
-      !acceptedKeys.has(relation.source.candidateKey) ||
-      !acceptedKeys.has(relation.target.candidateKey) ||
-      rejected.has(relation.source.candidateKey) ||
-      rejected.has(relation.target.candidateKey)
-    ) {
-      reject(relation.candidateKey, 'missing_relation_endpoint')
-    }
-  }
-}
-
-function buildMeaningTreeNodesV2(input: {
-  current: readonly MemoryTreeNodeStructV2[]
-  concepts: readonly PreparedConceptV2[]
-  episodes: readonly PreparedEpisodeV2[]
-  claims: readonly PreparedClaimV2[]
-  identity: Nullable<PreparedIdentityV2>
-  activeIdentityEpochId: string
-  globalMainlineNodeId: string
-  createdAt: number
-}): MemoryTreeNodeStructV2[] {
-  const nodes: MemoryTreeNodeStructV2[] = []
-  if (!input.current.some((node) => node.stableKey === 'root')) {
-    nodes.push({
-      stableKey: 'root',
-      parentKey: null,
-      nodeType: 'root',
-      namespace: 'root',
-      subjectType: 'root',
-      subjectId: 'root',
-      content: {
-        blobRef: null,
-        commitment: `c2:${'0'.repeat(64)}`,
-        redacted: false,
-      },
-      mainlineScore: 1,
-      confidence: 1,
-      activation: 1,
-      firstSeenAt: input.createdAt,
-      lastActiveAt: input.createdAt,
-      visibilityState: 'active',
-    })
-  }
-  if (input.identity) {
-    nodes.push({
-      stableKey: input.globalMainlineNodeId,
-      parentKey: 'root',
-      nodeType: 'mainline',
-      namespace: 'identity',
-      subjectType: 'identity_epoch',
-      subjectId: input.activeIdentityEpochId,
-      content: {
-        blobRef: input.identity.globalMainline.blobId,
-        commitment: input.identity.globalMainline.commitment,
-        redacted: false,
-      },
-      mainlineScore: 1,
-      confidence: quantizeTreeScoreV2(input.identity.candidate.confidence),
-      activation: 1,
-      firstSeenAt: input.createdAt,
-      lastActiveAt: input.createdAt,
-      visibilityState: 'active',
-    })
-  }
-  for (const concept of input.concepts) {
-    nodes.push({
-      stableKey: `concept:${concept.stableKey}`,
-      parentKey: input.globalMainlineNodeId,
-      nodeType: concept.candidate.conceptType,
-      namespace: 'concept',
-      subjectType: 'concept',
-      subjectId: concept.id,
-      content: {
-        blobRef: concept.name.blobId,
-        commitment: concept.name.commitment,
-        redacted: false,
-      },
-      mainlineScore: quantizeTreeScoreV2(concept.candidate.salience),
-      confidence: quantizeTreeScoreV2(concept.candidate.salience),
-      activation: quantizeTreeScoreV2(concept.candidate.activation),
-      firstSeenAt: concept.candidate.firstSeenAt,
-      lastActiveAt: concept.candidate.lastActiveAt,
-      visibilityState: concept.candidate.lifecycleState === 'dormant' ? 'dormant' : 'active',
-    })
-  }
-  for (const episode of input.episodes) {
-    const content = episode.summary ?? episode.title
-    nodes.push({
-      stableKey: `episode:${episode.stableKey}`,
-      parentKey: `concept:${episode.primaryConcept.stableKey}`,
-      nodeType: 'episode',
-      namespace: 'episode',
-      subjectType: 'episode',
-      subjectId: episode.id,
-      content: {
-        blobRef: content.blobId,
-        commitment: content.commitment,
-        redacted: false,
-      },
-      mainlineScore: quantizeTreeScoreV2(episode.candidate.salience),
-      confidence: quantizeTreeScoreV2(episode.candidate.salience),
-      activation: quantizeTreeScoreV2(episode.candidate.activation),
-      firstSeenAt: episode.candidate.startedAt,
-      lastActiveAt: episode.candidate.endedAt ?? episode.candidate.startedAt,
-      visibilityState: 'active',
-    })
-  }
-  for (const claim of input.claims) {
-    const content = claim.summary ?? claim.value
-    nodes.push({
-      stableKey: `claim:${claim.stableKey}`,
-      parentKey: `concept:${claim.subjectConcept.stableKey}`,
-      nodeType: 'claim',
-      namespace: 'claim',
-      subjectType: 'claim',
-      subjectId: claim.id,
-      content: {
-        blobRef: content.blobId,
-        commitment: content.commitment,
-        redacted: false,
-      },
-      mainlineScore: quantizeTreeScoreV2(claim.candidate.salience),
-      confidence: quantizeTreeScoreV2(claim.candidate.confidence),
-      activation: quantizeTreeScoreV2(claim.candidate.activation),
-      firstSeenAt: claim.candidate.validFrom,
-      lastActiveAt: claim.candidate.validTo ?? claim.candidate.validFrom,
-      visibilityState: claim.candidate.lifecycleState === 'dormant' ? 'dormant' : 'active',
-    })
-  }
-  return nodes
-}
-
-function buildMeaningTreeOpsV2(
-  current: readonly MemoryTreeNodeStructV2[],
-  desired: readonly MemoryTreeNodeStructV2[]
-): MemoryTreeDiffOpV2[] {
-  const currentByKey = new Map(current.map((node) => [node.stableKey, node]))
-  return [...desired]
-    .sort((left, right) =>
-      left.stableKey < right.stableKey ? -1 : left.stableKey > right.stableKey ? 1 : 0
-    )
-    .flatMap((node): MemoryTreeDiffOpV2[] => {
-      const existing = currentByKey.get(node.stableKey)
-      if (!existing) return [{ type: 'add', before: [], after: [node] }]
-      if (canonicalStringifyV2(existing) === canonicalStringifyV2(node)) return []
-      return [{ type: 'update', before: [existing], after: [node] }]
-    })
-}
-
-function persistConceptsV2(
-  authority: MemoryAuthorityDatabaseV2,
-  concepts: readonly PreparedConceptV2[],
-  runId: string,
-  createdAt: number
-): void {
-  for (const item of concepts) {
-    authority.database
-      .prepare(
-        `INSERT INTO memory_concepts(
-           id, stable_key, concept_type,
-           name_blob_ref, name_commitment, name_match_key,
-           description_blob_ref, description_commitment,
-           scope_type, scope_match_key, privacy_class, lifecycle_state,
-           first_seen_at, last_active_at, evidence_count,
-           salience, activation, created_at, updated_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT(stable_key) DO UPDATE SET
-           name_blob_ref = excluded.name_blob_ref,
-           name_commitment = excluded.name_commitment,
-           name_match_key = excluded.name_match_key,
-           description_blob_ref = excluded.description_blob_ref,
-           description_commitment = excluded.description_commitment,
-           lifecycle_state = excluded.lifecycle_state,
-           last_active_at = MAX(memory_concepts.last_active_at, excluded.last_active_at),
-           salience = MAX(memory_concepts.salience, excluded.salience),
-           activation = excluded.activation,
-           updated_at = excluded.updated_at`
-      )
-      .run(
-        item.id,
-        item.stableKey,
-        item.candidate.conceptType,
-        item.name.blobId,
-        item.name.commitment,
-        item.nameMatchKey,
-        toNullable(item.description?.blobId),
-        toNullable(item.description?.commitment),
-        item.scope.scopeType,
-        item.scope.scopeMatchKey,
-        item.candidate.privacyClass,
-        item.candidate.lifecycleState,
-        item.candidate.firstSeenAt,
-        item.candidate.lastActiveAt,
-        item.candidate.evidenceIds.length,
-        item.candidate.salience,
-        item.candidate.activation,
-        createdAt,
-        createdAt
-      )
-    const persisted = authority.database
-      .prepare(`SELECT id FROM memory_concepts WHERE stable_key = ?`)
-      .pluck()
-      .get(item.stableKey) as string
-    for (const evidenceId of item.candidate.evidenceIds) {
-      authority.database
-        .prepare(
-          `INSERT INTO memory_concept_evidence(concept_id, evidence_id, weight, created_at)
-           VALUES (?, ?, 1, ?)
-           ON CONFLICT(concept_id, evidence_id) DO NOTHING`
-        )
-        .run(persisted, evidenceId, createdAt)
-    }
-    authority.database
-      .prepare(
-        `UPDATE memory_concepts
-         SET evidence_count = (
-           SELECT count(*) FROM memory_concept_evidence WHERE concept_id = ?
-         )
-         WHERE id = ?`
-      )
-      .run(persisted, persisted)
-    void runId
-  }
-}
-
-function persistEpisodesV2(
-  authority: MemoryAuthorityDatabaseV2,
-  episodes: readonly PreparedEpisodeV2[],
-  runId: string,
-  createdAt: number
-): void {
-  for (const item of episodes) {
-    authority.database
-      .prepare(
-        `INSERT INTO memory_episodes(
-           id, stable_key, episode_type, title_blob_ref, title_commitment,
-           summary_blob_ref, summary_commitment, state, started_at, ended_at,
-           scope_type, scope_match_key, primary_concept_id,
-           result_blob_ref, result_commitment, created_by_run_id,
-           salience, activation, last_reinforced_at, created_at, updated_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT(stable_key) DO UPDATE SET
-           title_blob_ref = excluded.title_blob_ref,
-           title_commitment = excluded.title_commitment,
-           summary_blob_ref = excluded.summary_blob_ref,
-           summary_commitment = excluded.summary_commitment,
-           state = excluded.state,
-           ended_at = excluded.ended_at,
-           result_blob_ref = excluded.result_blob_ref,
-           result_commitment = excluded.result_commitment,
-           salience = MAX(memory_episodes.salience, excluded.salience),
-           activation = excluded.activation,
-           last_reinforced_at = excluded.last_reinforced_at,
-           updated_at = excluded.updated_at`
-      )
-      .run(
-        item.id,
-        item.stableKey,
-        item.candidate.episodeType,
-        item.title.blobId,
-        item.title.commitment,
-        toNullable(item.summary?.blobId),
-        toNullable(item.summary?.commitment),
-        item.candidate.state,
-        item.candidate.startedAt,
-        toNullable(item.candidate.endedAt),
-        item.scope.scopeType,
-        item.scope.scopeMatchKey,
-        item.primaryConcept.id,
-        toNullable(item.result?.blobId),
-        toNullable(item.result?.commitment),
-        runId,
-        item.candidate.salience,
-        item.candidate.activation,
-        item.candidate.endedAt ?? item.candidate.startedAt,
-        createdAt,
-        createdAt
-      )
-    const persisted = authority.database
-      .prepare(`SELECT id FROM memory_episodes WHERE stable_key = ?`)
-      .pluck()
-      .get(item.stableKey) as string
-    authority.database
-      .prepare(
-        `INSERT INTO memory_episode_concepts(episode_id, concept_id, role, weight)
-         VALUES (?, ?, 'primary', 1)
-         ON CONFLICT(episode_id, concept_id, role) DO UPDATE SET weight = excluded.weight`
-      )
-      .run(persisted, item.primaryConcept.id)
-    for (const evidenceId of item.candidate.evidenceIds) {
-      authority.database
-        .prepare(
-          `INSERT INTO memory_episode_evidence(episode_id, evidence_id, weight, created_at)
-           VALUES (?, ?, 1, ?)
-           ON CONFLICT(episode_id, evidence_id) DO NOTHING`
-        )
-        .run(persisted, evidenceId, createdAt)
-    }
-  }
-}
-
-function persistClaimsV2(
-  authority: MemoryAuthorityDatabaseV2,
-  claims: readonly PreparedClaimV2[],
-  runId: string,
-  createdAt: number
-): void {
-  for (const item of claims) {
-    authority.database
-      .prepare(
-        `INSERT INTO memory_claims(
-           id, stable_key, claim_group_key, subject_concept_id, predicate,
-           value_blob_ref, value_commitment, storage_mode, payload_ref,
-           summary_blob_ref, summary_commitment, epistemic_status, confidence,
-           privacy_class, lifecycle_state, valid_from, valid_to,
-           created_by_run_id, salience, consolidation_strength, activation,
-           last_reinforced_at, created_at, updated_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT(stable_key) DO UPDATE SET
-           value_blob_ref = excluded.value_blob_ref,
-           value_commitment = excluded.value_commitment,
-           summary_blob_ref = excluded.summary_blob_ref,
-           summary_commitment = excluded.summary_commitment,
-           epistemic_status = excluded.epistemic_status,
-           confidence = excluded.confidence,
-           lifecycle_state = excluded.lifecycle_state,
-           valid_to = excluded.valid_to,
-           salience = MAX(memory_claims.salience, excluded.salience),
-           consolidation_strength = MAX(
-             memory_claims.consolidation_strength,
-             excluded.consolidation_strength
-           ),
-           activation = excluded.activation,
-           last_reinforced_at = excluded.last_reinforced_at,
-           updated_at = excluded.updated_at`
-      )
-      .run(
-        item.id,
-        item.stableKey,
-        item.groupKey,
-        item.subjectConcept.id,
-        item.candidate.predicate,
-        item.value.blobId,
-        item.value.commitment,
-        item.candidate.storageMode,
-        toNullable(item.candidate.payloadRef),
-        toNullable(item.summary?.blobId),
-        toNullable(item.summary?.commitment),
-        item.candidate.epistemicStatus,
-        item.candidate.confidence,
-        item.candidate.privacyClass,
-        item.candidate.lifecycleState,
-        item.candidate.validFrom,
-        toNullable(item.candidate.validTo),
-        runId,
-        item.candidate.salience,
-        item.candidate.consolidationStrength,
-        item.candidate.activation,
-        item.candidate.validTo ?? item.candidate.validFrom,
-        createdAt,
-        createdAt
-      )
-    const persisted = authority.database
-      .prepare(`SELECT id FROM memory_claims WHERE stable_key = ?`)
-      .pluck()
-      .get(item.stableKey) as string
-    for (const evidenceId of item.candidate.evidenceIds) {
-      authority.database
-        .prepare(
-          `INSERT INTO memory_claim_evidence(
-             claim_id, evidence_id, relation, weight, created_at
-           )
-           VALUES (?, ?, 'supports', 1, ?)
-           ON CONFLICT(claim_id, evidence_id) DO UPDATE SET weight = excluded.weight`
-        )
-        .run(persisted, evidenceId, createdAt)
-    }
-  }
-}
-
-function persistRelationsV2(
-  authority: MemoryAuthorityDatabaseV2,
-  relations: readonly PreparedRelationV2[],
-  runId: string,
-  createdAt: number
-): void {
-  for (const item of relations) {
-    authority.database
-      .prepare(
-        `INSERT INTO memory_relations(
-           id, source_type, source_id, target_type, target_id, relation_type,
-           confidence, epistemic_status, valid_from, valid_to,
-           created_by_run_id, activation, last_reinforced_at, created_at, updated_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT(source_type, source_id, target_type, target_id, relation_type)
-         DO UPDATE SET
-           confidence = excluded.confidence,
-           epistemic_status = excluded.epistemic_status,
-           valid_to = excluded.valid_to,
-           activation = excluded.activation,
-           last_reinforced_at = excluded.last_reinforced_at,
-           updated_at = excluded.updated_at`
-      )
-      .run(
-        item.id,
-        item.candidate.source.kind,
-        item.sourceId,
-        item.candidate.target.kind,
-        item.targetId,
-        item.candidate.relationType,
-        item.candidate.confidence,
-        item.candidate.epistemicStatus,
-        item.candidate.validFrom,
-        toNullable(item.candidate.validTo),
-        runId,
-        item.candidate.activation,
-        item.candidate.validTo ?? item.candidate.validFrom,
-        createdAt,
-        createdAt
-      )
-    const persisted = authority.database
-      .prepare(
-        `SELECT id FROM memory_relations
-         WHERE source_type = ? AND source_id = ?
-           AND target_type = ? AND target_id = ? AND relation_type = ?`
-      )
-      .pluck()
-      .get(
-        item.candidate.source.kind,
-        item.sourceId,
-        item.candidate.target.kind,
-        item.targetId,
-        item.candidate.relationType
-      ) as string
-    for (const evidenceId of item.candidate.evidenceIds) {
-      authority.database
-        .prepare(
-          `INSERT INTO memory_relation_evidence(relation_id, evidence_id, weight)
-           VALUES (?, ?, 1)
-           ON CONFLICT(relation_id, evidence_id) DO UPDATE SET weight = excluded.weight`
-        )
-        .run(persisted, evidenceId)
-    }
-  }
-}
-
-function persistIdentityV2(
-  authority: MemoryAuthorityDatabaseV2,
-  identity: PreparedIdentityV2,
-  runId: string,
-  createdAt: number
-): void {
-  if (identity.predecessorId) {
-    const ended = authority.database
-      .prepare(`UPDATE memory_identity_epochs SET ended_at = ? WHERE id = ? AND ended_at IS NULL`)
-      .run(createdAt, identity.predecessorId)
-    if (ended.changes !== 1) throw new AppError('CONFLICT', 'Identity predecessor CAS 失败。')
-  }
-  authority.database
-    .prepare(
-      `INSERT INTO memory_identity_epochs(
-         id, sequence,
-         identity_statement_blob_ref, identity_statement_commitment,
-         global_mainline_blob_ref, global_mainline_commitment,
-         confidence, supporting_concept_ids_json,
-         supporting_episode_ids_json, supporting_claim_ids_json,
-         predecessor_id, started_at, created_by_run_id, created_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    )
-    .run(
-      identity.id,
-      identity.sequence,
-      identity.statement.blobId,
-      identity.statement.commitment,
-      identity.globalMainline.blobId,
-      identity.globalMainline.commitment,
-      identity.candidate.confidence,
-      canonicalStringifyV2(identity.supportingConceptIds),
-      canonicalStringifyV2(identity.supportingEpisodeIds),
-      canonicalStringifyV2(identity.supportingClaimIds),
-      identity.predecessorId,
-      createdAt,
-      runId,
-      createdAt
-    )
-}
-
-function registerBlobV2(
-  authority: MemoryAuthorityDatabaseV2,
-  blob: MemorySealedContentV2,
-  createdAt: number
-): void {
-  authority.database
-    .prepare(
-      `INSERT INTO memory_content_blobs(blob_id, byte_length, state, created_at)
-       VALUES (?, ?, 'active', ?)`
-    )
-    .run(blob.blobId, blob.byteLength, createdAt)
-}
-
-function requiredMapValueV2<T>(map: ReadonlyMap<string, T>, key: string, label: string): T {
-  const value = map.get(key)
-  if (!value)
-    throw new AppError('VALIDATION', `${label} 引用了未接受候选。`, undefined, {
-      key,
-    })
-  return value
 }

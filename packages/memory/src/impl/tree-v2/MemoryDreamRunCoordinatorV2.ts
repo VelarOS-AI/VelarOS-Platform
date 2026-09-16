@@ -1,135 +1,117 @@
 import { randomBytes } from 'node:crypto'
 
-import { isEmpty, isString } from '@velaros-ai/core'
+import { isEmpty } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import { canonicalStringifyV2, type MemoryTreeDiffOpV2 } from '../../utils/tree-v2/diff-chain'
-
-import type { ContentKeyServiceV2, MemorySealedContentV2 } from './storage/ContentKeyServiceV2'
-import type { MemoryAuthorityDatabaseV2 } from './MemoryAuthorityDatabaseV2'
-import { computeDreamInputFingerprintV2 } from './MemoryIdentityKeyServiceV2'
+import type {
+  CommitMemoryDreamTreeInputV2,
+  MaterializedMemoryDreamEvidenceV2,
+  MemoryDreamEvidenceDescriptorV2,
+  MemoryDreamEvidenceRowV2,
+  MemoryDreamRunRowV2,
+  MemoryDreamValidationStatsV2,
+  StartMemoryDreamBatchInputV2,
+  StartMemoryDreamRunResultV2,
+} from '../../types/tree-v2/dream'
+import type {
+  CommitMemoryTreeVersionResultV2,
+  MemoryTreeAuthorityCommitParticipantV2,
+} from '../../types/tree-v2/store'
 import {
-  type CommitMemoryTreeVersionResultV2,
-  type MemoryTreeAuthorityCommitParticipantV2,
-  type MemoryTreeIdentityChangeV2,
-  type MemoryTreeStoreV2,
-} from './MemoryTreeStoreV2'
+  assertNonEmptyStringV2,
+  assertNonNegativeSafeIntegerV2,
+  assertPositiveSafeIntegerV2,
+  registerMemoryContentBlobV2,
+} from '../../utils/tree-v2/checks'
+import { canonicalStringifyV2 } from '../../utils/tree-v2/diff-chain'
+import { mapDreamEvidenceV2, validateDreamStatsV2 } from '../../utils/tree-v2/dream-runs'
+import { computeDreamInputFingerprintV2 } from '../../utils/tree-v2/identity-keys'
+import { readMemoryMetaV2 } from '../../utils/tree-v2/tree-store'
 
-export const MemoryDreamPipelineVersionV2 = 1
-
-export interface MemoryDreamModelProfileV2 {
-  readonly provider: Nullable<string>
-  readonly model: Nullable<string>
-}
-
-export interface MemoryDreamEvidenceDescriptorV2 {
-  readonly id: string
-  readonly ingestSequence: number
-  readonly eligibilityState: 'active' | 'source_deleted' | 'excluded' | 'erased'
-  readonly payloadBlobRef: Nullable<string>
-  readonly payloadCommitment: Nullable<string>
-  readonly metadataBlobRef: Nullable<string>
-  readonly metadataCommitment: Nullable<string>
-}
-
-export interface MemoryDreamStartedRunV2 {
-  readonly kind: 'started'
-  readonly runId: string
-  readonly inputFingerprint: string
-  readonly frontierBefore: number
-  readonly frontierAfter: number
-  readonly treeVersionBefore: number
-  readonly evidence: readonly MemoryDreamEvidenceDescriptorV2[]
-  readonly eligibleEvidence: readonly MemoryDreamEvidenceDescriptorV2[]
-}
-
-export interface MemoryDreamSkippedRunV2 {
-  readonly kind: 'skipped'
-  readonly runId: string
-  readonly inputFingerprint: string
-  readonly frontierBefore: number
-  readonly frontierAfter: number
-  readonly treeVersionBefore: number
-}
-
-export type StartMemoryDreamRunResultV2 = Nullable<
-  MemoryDreamStartedRunV2 | MemoryDreamSkippedRunV2
->
-
-export interface MemoryDreamValidationStatsV2 {
-  readonly tokenUsage: number
-  readonly candidateCount: number
-  readonly acceptedCount: number
-  readonly rejectedCount: number
-}
-
-export interface CommitMemoryDreamTreeInputV2 extends MemoryDreamValidationStatsV2 {
-  readonly ops: readonly MemoryTreeDiffOpV2[]
-  readonly identityChange?: LooseOptional<MemoryTreeIdentityChangeV2>
-  readonly activeIdentityEpochId: string
-  readonly globalMainlineNodeId: string
-  readonly committedAt?: number
-  readonly authorityCommit?: MemoryTreeAuthorityCommitParticipantV2
-}
-
-export interface MaterializedMemoryDreamEvidenceV2 {
-  readonly payload: Buffer
-  readonly metadata: Nullable<Buffer>
-}
-
-interface MemoryDreamRunRowV2 {
-  id: string
-  state: string
-  input_fingerprint: string
-  frontier_before: number
-  frontier_after: number
-  tree_version_before: number
-  tree_version_after: number
-  model_provider: Nullable<string>
-  model: Nullable<string>
-  token_usage: number
-  candidate_count: number
-  accepted_count: number
-  rejected_count: number
-}
-
-interface MemoryDreamEvidenceRowV2 {
-  id: string
-  ingest_sequence: number
-  eligibility_state: MemoryDreamEvidenceDescriptorV2['eligibilityState']
-  payload_blob_ref: Nullable<string>
-  payload_commitment: Nullable<string>
-  metadata_blob_ref: Nullable<string>
-  metadata_commitment: Nullable<string>
-}
+import type { ContentKeyServiceV2Api } from './storage/ContentKeyServiceV2'
+import type { MemoryAuthorityDatabaseV2Api } from './MemoryAuthorityDatabaseV2'
+import type { MemoryTreeStoreV2Api } from './MemoryTreeStoreV2'
 
 /**
- * Dream run 账本与 I1-I6 事务编排。模型推理仍由上层注入；本层只拥有批次、状态机与提交。
+ * 整理运行的账本与事务编排：开批次、封候选账本、把结果提交成树版本或空提交。
+ *
+ * 模型推理仍由上层注入；这个类只拥有批次边界、状态机与提交时机。
+ * 实例归 `MemorySystemRuntimeV2`（或探针）所有，与一条权威连接、一份树存储成组。
  */
-export class MemoryDreamRunCoordinatorV2 {
+export interface MemoryDreamRunCoordinatorV2Api {
+  /**
+   * 按 frontier 之后的到达序开一个批次；没有新证据返回 null，同输入已提交过返回 skipped。
+   * 到达序有空洞抛 INVARIANT，同输入已有在跑的批次抛 CONFLICT。
+   */
+  startNextBatch(input: StartMemoryDreamBatchInputV2): StartMemoryDreamRunResultV2
+  /**
+   * 解开一条证据的正文与元数据，交给上层去推理；调用方用完要清零。
+   * 非 active 或缺正文的证据抛 VALIDATION。
+   */
+  materializeEvidence(
+    descriptor: MemoryDreamEvidenceDescriptorV2
+  ): MaterializedMemoryDreamEvidenceV2
+  /**
+   * 把候选账本封成密文并把这次运行推进到 validating。
+   * 统计不守恒抛 VALIDATION，运行不在 running 抛 CONFLICT（此时刚封的密文会被擦掉）。
+   */
+  markValidating(runId: string, candidateLedger: unknown, stats: MemoryDreamValidationStatsV2): void
+  /**
+   * 把这次运行的结构变更提交成新树版本。零结构变更要走 `commitNoop`，从这里进抛 VALIDATION。
+   * 运行不在 validating 或统计与账本对不上抛 CONFLICT / VALIDATION。
+   */
+  commitTree(
+    runId: string,
+    input: CommitMemoryDreamTreeInputV2
+  ): CommitMemoryTreeVersionResultV2
+  /**
+   * 这一批被完整消化但没产生结构变更：树 head 不动，frontier 与运行一起推进。
+   * 运行不在 validating 抛 CONFLICT。
+   */
+  commitNoop(
+    runId: string,
+    stats: MemoryDreamValidationStatsV2,
+    committedAt?: number,
+    authorityCommit?: MemoryTreeAuthorityCommitParticipantV2
+  ): void
+  /** 把一次运行收口成 failed；不在 running / validating 抛 CONFLICT。 */
+  failRun(runId: string, errorCode: string, finishedAt?: number): void
+  /**
+   * I3：把上次进程留下的孤儿运行统一翻成 failed，返回翻了几条。
+   * 只翻运行状态，不碰 frontier、树版本或 diff / snapshot。
+   */
+  recoverOrphanedRuns(recoveredAt?: number): number
+}
+
+export class MemoryDreamRunCoordinatorV2 implements MemoryDreamRunCoordinatorV2Api {
+  /**
+   * 整理管线的版本号（格式身份）：它进输入指纹，改了就等于换了一条管线，
+   * 同样的证据集会重新被整理一遍。
+   */
+  private static readonly PipelineVersion = 1
+
+  /** 运行 id 的随机字节数（128 位）。 */
+  private static readonly RunIdByteLength = 16
+
   constructor(
-    private readonly authority: MemoryAuthorityDatabaseV2,
-    private readonly contentKeys: ContentKeyServiceV2,
-    private readonly treeStore: MemoryTreeStoreV2,
+    private readonly authority: MemoryAuthorityDatabaseV2Api,
+    private readonly contentKeys: ContentKeyServiceV2Api,
+    private readonly treeStore: MemoryTreeStoreV2Api,
     private readonly random: (byteLength: number) => Buffer = randomBytes
   ) {}
 
-  public startNextBatch(input: {
-    trigger: string
-    batchSize: number
-    modelProfile: MemoryDreamModelProfileV2
-    startedAt?: number
-  }): StartMemoryDreamRunResultV2 {
+  public startNextBatch(input: StartMemoryDreamBatchInputV2): StartMemoryDreamRunResultV2 {
     assertNonEmptyStringV2(input.trigger, 'trigger')
     assertPositiveSafeIntegerV2(input.batchSize, 'batchSize')
     const startedAt = input.startedAt ?? Date.now()
     assertNonNegativeSafeIntegerV2(startedAt, 'startedAt')
-    const frontierBefore = this.readMeta('dream_frontier')
-    const ingestHead = this.readMeta('evidence_ingest_sequence')
+    const database = this.authority.database
+    const frontierBefore = readMemoryMetaV2(database, 'dream_frontier')
+    const ingestHead = readMemoryMetaV2(database, 'evidence_ingest_sequence')
     if (ingestHead <= frontierBefore) return null
     const frontierAfter = Math.min(ingestHead, frontierBefore + input.batchSize)
     const evidence = (
-      this.authority.database
+      database
         .prepare(
           `SELECT id, ingest_sequence, eligibility_state,
                   payload_blob_ref, payload_commitment,
@@ -151,14 +133,13 @@ export class MemoryDreamRunCoordinatorV2 {
       frontierBefore,
       evidenceIds: evidence.map((item) => item.id),
       modelProfile: input.modelProfile,
-      pipelineVersion: MemoryDreamPipelineVersionV2,
+      pipelineVersion: MemoryDreamRunCoordinatorV2.PipelineVersion,
     })
     const treeVersionBefore = this.treeStore.version
-    const existing = this.authority.database
+    const existing = database
       .prepare(`SELECT * FROM memory_dream_runs WHERE input_fingerprint = ?`)
       .get(fingerprint) as MemoryDreamRunRowV2 | undefined
-    if (existing?.state === 'committed')
-      return {
+    if (existing?.state === 'committed') return {
         kind: 'skipped',
         runId: existing.id,
         inputFingerprint: fingerprint,
@@ -174,65 +155,39 @@ export class MemoryDreamRunCoordinatorV2 {
     }
 
     const runId = existing?.id ?? this.randomId()
-    const start = this.authority.database.transaction(() => {
+    const start = database.transaction(() => {
       if (
-        this.readMeta('dream_frontier') !== frontierBefore ||
-        this.readMeta('tree_version') !== treeVersionBefore
+        readMemoryMetaV2(database, 'dream_frontier') !== frontierBefore ||
+        readMemoryMetaV2(database, 'tree_version') !== treeVersionBefore
       ) {
         throw new AppError('CONFLICT', 'Dream 批次建立时 frontier/tree head 已变化。')
       }
       if (existing) {
-        const updated = this.authority.database
-          .prepare(
-            `UPDATE memory_dream_runs
-             SET trigger = ?, state = 'running',
-                 frontier_before = ?, frontier_after = ?,
-                 error_code = NULL,
-                 model_provider = ?, model = ?,
-                 token_usage = 0, candidate_count = 0,
-                 accepted_count = 0, rejected_count = 0,
-                 tree_version_before = ?, tree_version_after = ?,
-                 started_at = ?, finished_at = NULL
-             WHERE id = ? AND state IN ('failed', 'cancelled', 'skipped')`
-          )
-          .run(
-            input.trigger,
-            frontierBefore,
-            frontierAfter,
-            input.modelProfile.provider,
-            input.modelProfile.model,
-            treeVersionBefore,
-            treeVersionBefore,
-            startedAt,
-            runId
-          )
-        if (updated.changes !== 1) {
-          throw new AppError('CONFLICT', 'Dream failed run 重试 CAS 失败。')
-        }
-      } else {
-        this.authority.database
-          .prepare(
-            `INSERT INTO memory_dream_runs(
-               id, trigger, state, input_fingerprint,
-               frontier_before, frontier_after,
-               model_provider, model,
-               tree_version_before, tree_version_after,
-               started_at
-             ) VALUES (?, ?, 'running', ?, ?, ?, ?, ?, ?, ?, ?)`
-          )
-          .run(
-            runId,
-            input.trigger,
-            fingerprint,
-            frontierBefore,
-            frontierAfter,
-            input.modelProfile.provider,
-            input.modelProfile.model,
-            treeVersionBefore,
-            treeVersionBefore,
-            startedAt
-          )
+        this.restartFailedRun(runId, input, frontierBefore, frontierAfter, treeVersionBefore, startedAt)
+        return
       }
+      database
+        .prepare(
+          `INSERT INTO memory_dream_runs(
+             id, trigger, state, input_fingerprint,
+             frontier_before, frontier_after,
+             model_provider, model,
+             tree_version_before, tree_version_after,
+             started_at
+           ) VALUES (?, ?, 'running', ?, ?, ?, ?, ?, ?, ?, ?)`
+        )
+        .run(
+          runId,
+          input.trigger,
+          fingerprint,
+          frontierBefore,
+          frontierAfter,
+          input.modelProfile.provider,
+          input.modelProfile.model,
+          treeVersionBefore,
+          treeVersionBefore,
+          startedAt
+        )
     })
     start()
     return {
@@ -278,13 +233,14 @@ export class MemoryDreamRunCoordinatorV2 {
     candidateLedger: unknown,
     stats: MemoryDreamValidationStatsV2
   ): void {
-    validateStatsV2(stats)
+    validateDreamStatsV2(stats)
+    const database = this.authority.database
     const sealed = this.contentKeys.sealContent(canonicalStringifyV2(candidateLedger))
     let committed = false
     try {
-      const mark = this.authority.database.transaction(() => {
-        registerBlobV2(this.authority, sealed, Date.now())
-        const result = this.authority.database
+      const mark = database.transaction(() => {
+        registerMemoryContentBlobV2(database, sealed, Date.now())
+        const result = database
           .prepare(
             `UPDATE memory_dream_runs
              SET state = 'validating',
@@ -320,7 +276,7 @@ export class MemoryDreamRunCoordinatorV2 {
     runId: string,
     input: CommitMemoryDreamTreeInputV2
   ): CommitMemoryTreeVersionResultV2 {
-    validateStatsV2(input)
+    validateDreamStatsV2(input)
     if (isEmpty(input.ops) && !input.identityChange) {
       throw new AppError('VALIDATION', '零结构变更批次必须使用 commitNoop。')
     }
@@ -354,7 +310,7 @@ export class MemoryDreamRunCoordinatorV2 {
     committedAt = Date.now(),
     authorityCommit?: MemoryTreeAuthorityCommitParticipantV2
   ): void {
-    validateStatsV2(stats)
+    validateDreamStatsV2(stats)
     const row = this.readValidatingRun(runId, stats)
     this.treeStore.commitDreamNoop({
       expectedTreeVersion: row.tree_version_before,
@@ -389,7 +345,6 @@ export class MemoryDreamRunCoordinatorV2 {
     }
   }
 
-  /** I3：只翻 run 状态，不触碰 frontier、tree_version 或 diff/snapshot。 */
   public recoverOrphanedRuns(recoveredAt = Date.now()): number {
     assertNonNegativeSafeIntegerV2(recoveredAt, 'recoveredAt')
     const result = this.authority.database
@@ -402,6 +357,45 @@ export class MemoryDreamRunCoordinatorV2 {
     return result.changes
   }
 
+  /** 同输入的旧运行是 failed / cancelled / skipped 时，原地重置成新的 running 批次。 */
+  private restartFailedRun(
+    runId: string,
+    input: StartMemoryDreamBatchInputV2,
+    frontierBefore: number,
+    frontierAfter: number,
+    treeVersionBefore: number,
+    startedAt: number
+  ): void {
+    const updated = this.authority.database
+      .prepare(
+        `UPDATE memory_dream_runs
+         SET trigger = ?, state = 'running',
+             frontier_before = ?, frontier_after = ?,
+             error_code = NULL,
+             model_provider = ?, model = ?,
+             token_usage = 0, candidate_count = 0,
+             accepted_count = 0, rejected_count = 0,
+             tree_version_before = ?, tree_version_after = ?,
+             started_at = ?, finished_at = NULL
+         WHERE id = ? AND state IN ('failed', 'cancelled', 'skipped')`
+      )
+      .run(
+        input.trigger,
+        frontierBefore,
+        frontierAfter,
+        input.modelProfile.provider,
+        input.modelProfile.model,
+        treeVersionBefore,
+        treeVersionBefore,
+        startedAt,
+        runId
+      )
+    if (updated.changes !== 1) {
+      throw new AppError('CONFLICT', 'Dream failed run 重试 CAS 失败。')
+    }
+  }
+
+  /** 读一条必须处于 validating 的运行，并核对提交统计与已封存的候选账本一致。 */
   private readValidatingRun(
     runId: string,
     stats: MemoryDreamValidationStatsV2
@@ -423,72 +417,15 @@ export class MemoryDreamRunCoordinatorV2 {
     return row
   }
 
-  private readMeta(key: string): number {
-    const row = this.authority.database
-      .prepare(`SELECT integer_value FROM memory_meta WHERE key = ?`)
-      .get(key) as { integer_value: number } | undefined
-    if (!row) throw new AppError('INVARIANT', `memory_meta 缺少 ${key}。`)
-    return row.integer_value
-  }
-
+  /** 从注入的随机源取运行 id；长度不对就是随机源坏了。 */
   private randomId(): string {
-    const value = this.random(16)
-    if (!Buffer.isBuffer(value) || value.length !== 16) {
+    const value = this.random(MemoryDreamRunCoordinatorV2.RunIdByteLength)
+    if (
+      !Buffer.isBuffer(value) ||
+      value.length !== MemoryDreamRunCoordinatorV2.RunIdByteLength
+    ) {
       throw new AppError('INVARIANT', 'Dream run 随机源必须返回 16 字节。')
     }
     return value.toString('hex')
-  }
-}
-
-function mapDreamEvidenceV2(row: MemoryDreamEvidenceRowV2): MemoryDreamEvidenceDescriptorV2 {
-  return {
-    id: row.id,
-    ingestSequence: row.ingest_sequence,
-    eligibilityState: row.eligibility_state,
-    payloadBlobRef: row.payload_blob_ref,
-    payloadCommitment: row.payload_commitment,
-    metadataBlobRef: row.metadata_blob_ref,
-    metadataCommitment: row.metadata_commitment,
-  }
-}
-
-function registerBlobV2(
-  authority: MemoryAuthorityDatabaseV2,
-  sealed: MemorySealedContentV2,
-  createdAt: number
-): void {
-  authority.database
-    .prepare(
-      `INSERT INTO memory_content_blobs(blob_id, byte_length, state, created_at)
-       VALUES (?, ?, 'active', ?)`
-    )
-    .run(sealed.blobId, sealed.byteLength, createdAt)
-}
-
-function validateStatsV2(stats: MemoryDreamValidationStatsV2): void {
-  assertNonNegativeSafeIntegerV2(stats.tokenUsage, 'tokenUsage')
-  assertNonNegativeSafeIntegerV2(stats.candidateCount, 'candidateCount')
-  assertNonNegativeSafeIntegerV2(stats.acceptedCount, 'acceptedCount')
-  assertNonNegativeSafeIntegerV2(stats.rejectedCount, 'rejectedCount')
-  if (stats.acceptedCount + stats.rejectedCount !== stats.candidateCount) {
-    throw new AppError('VALIDATION', 'candidate 统计不守恒。')
-  }
-}
-
-function assertNonEmptyStringV2(value: unknown, label: string): asserts value is string {
-  if (!isString(value) || value.length === 0) {
-    throw new AppError('VALIDATION', `${label} 不得为空。`)
-  }
-}
-
-function assertPositiveSafeIntegerV2(value: number, label: string): void {
-  if (!Number.isSafeInteger(value) || value < 1) {
-    throw new AppError('VALIDATION', `${label} 必须是正安全整数。`)
-  }
-}
-
-function assertNonNegativeSafeIntegerV2(value: number, label: string): void {
-  if (!Number.isSafeInteger(value) || value < 0) {
-    throw new AppError('VALIDATION', `${label} 必须是非负安全整数。`)
   }
 }

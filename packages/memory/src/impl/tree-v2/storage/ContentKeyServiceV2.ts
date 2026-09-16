@@ -1,61 +1,74 @@
-import {
-  createCipheriv,
-  createDecipheriv,
-  createHmac,
-  randomBytes,
-  timingSafeEqual,
-} from 'node:crypto'
+import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto'
 
-import { isNotNull, isPlainObject, isString } from '@velaros-ai/core'
+import { isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
+import type {
+  MemoryContentKeyServiceOptionsV2,
+  MemoryContentPayloadV2,
+  MemorySealedContentV2,
+} from '../../../types/tree-v2/storage'
 import { canonicalStringifyV2 } from '../../../utils/tree-v2/diff-chain'
+import { generateMemoryBlobIdV2 } from '../../../utils/tree-v2/storage/blob-id'
+import {
+  ContentCommitmentPatternV2,
+  contentEnvelopeAadV2,
+  ContentEnvelopeAlgorithmV2,
+  ContentEnvelopeFormatV2,
+  ContentPayloadFormatV2,
+  createContentCommitmentV2,
+  decodeContentBase64V2,
+  parseContentEnvelopeV2,
+  verifyContentCommitmentV2,
+} from '../../../utils/tree-v2/storage/content-key'
 import { MemoryStorageErrorCodesV2 } from '../../../utils/tree-v2/storage/error-codes'
-import { decodeCanonicalBase64V2 } from '../../../utils/tree-v2/storage/wrapping-root'
 
-import { generateMemoryBlobIdV2, type MemoryBlobStoreV2 } from './MemoryBlobStoreV2'
-import { type MemoryKeyringStoreV2 } from './MemoryKeyringStoreV2'
-
-const ContentCommitmentDomainV2 = 'velaros.memory.content-commitment.v2'
-const ContentPayloadFormatV2 = 'velaros.memory.content.v2'
-const ContentEnvelopeFormatV2 = 'velaros.memory.envelope.v2'
-const ContentEnvelopeAlgorithmV2 = 'A256GCM'
-const CommitmentPatternV2 = /^c2:[0-9a-f]{64}$/
-
-interface MemoryContentPayloadV2 {
-  readonly format: typeof ContentPayloadFormatV2
-  readonly commitmentNonce: string
-  readonly content: string
-}
-
-interface MemoryContentEnvelopeV2 {
-  readonly format: typeof ContentEnvelopeFormatV2
-  readonly algorithm: typeof ContentEnvelopeAlgorithmV2
-  readonly iv: string
-  readonly tag: string
-  readonly ciphertext: string
-}
-
-export interface MemorySealedContentV2 {
-  readonly blobId: string
-  readonly commitment: string
-  readonly byteLength: number
-}
-
-export interface MemoryContentKeyServiceOptionsV2 {
-  readonly random?: (byteLength: number) => Buffer
-}
+import type { MemoryBlobStoreV2Api } from './MemoryBlobStoreV2'
+import type { MemoryKeyringStoreV2Api } from './MemoryKeyringStoreV2'
 
 /**
- * per-blob DEK 的唯一 owner：生成/包装/解包、AES-256-GCM 信封、承诺 nonce 与 crypto-shred。
- * 调用方只拿 blob id、承诺和解密后的正文；DEK 与 commitment nonce 不跨出本服务。
+ * per-blob DEK 的唯一 owner：生成、包装、解包、AES-256-GCM 信封、承诺 nonce 与 crypto-shred。
+ *
+ * 调用方只拿得到 blob id、承诺与解密后的正文；DEK 与承诺 nonce 不跨出这个类。
+ * 实例归 `MemorySystemRuntimeV2`（或探针）所有，与一份 keyring、一个 blob 目录成组。
  */
-export class ContentKeyServiceV2 {
+export interface ContentKeyServiceV2Api {
+  /**
+   * 封存一段正文：随机 blob id 与 DEK → GCM 信封 → 登记 DEK → 写 blob。
+   * 返回 blob id、随机化承诺与明文字节数；写 blob 失败会回滚刚登记的 DEK。
+   */
+  sealContent(content: Buffer | string): MemorySealedContentV2
+  /**
+   * 按承诺取回正文：解 DEK → 验 GCM tag → 常数时间比对承诺。
+   * 承诺形态非法抛 VALIDATION，密钥已销毁抛 MEMORY_DEK_DESTROYED，
+   * 信封坏抛 MEMORY_BLOB_CORRUPTED，承诺不符抛 MEMORY_COMMITMENT_MISMATCH。
+   */
+  openContent(blobId: string, expectedCommitment: string): Buffer
+  /**
+   * 擦除一段正文：先销毁 DEK（这一刻起内容不可恢复），再删物理 blob。
+   * 返回这次是不是真的销毁了一把还在的密钥。
+   */
+  eraseContent(blobId: string): boolean
+}
+
+export class ContentKeyServiceV2 implements ContentKeyServiceV2Api {
+  /** DEK、承诺 nonce 的字节长度（AES-256 与 HMAC-SHA256 的密钥长度）。 */
+  private static readonly KeyByteLength = 32
+
+  /** GCM IV 的字节长度。 */
+  private static readonly IvByteLength = 12
+
+  /** GCM tag 的字节长度。 */
+  private static readonly TagByteLength = 16
+
+  /** 信封算法名，传给 node:crypto。 */
+  private static readonly CipherAlgorithm = 'aes-256-gcm'
+
   private readonly random: (byteLength: number) => Buffer
 
   constructor(
-    private readonly keyring: MemoryKeyringStoreV2,
-    private readonly blobs: MemoryBlobStoreV2,
+    private readonly keyring: MemoryKeyringStoreV2Api,
+    private readonly blobs: MemoryBlobStoreV2Api,
     options: MemoryContentKeyServiceOptionsV2 = {}
   ) {
     this.random = options.random ?? randomBytes
@@ -64,9 +77,9 @@ export class ContentKeyServiceV2 {
   public sealContent(content: Buffer | string): MemorySealedContentV2 {
     const contentBytes = isString(content) ? Buffer.from(content, 'utf8') : Buffer.from(content)
     const blobId = generateMemoryBlobIdV2(this.random)
-    const dek = this.randomExact(32)
-    const commitmentNonce = this.randomExact(32)
-    const iv = this.randomExact(12)
+    const dek = this.randomExact(ContentKeyServiceV2.KeyByteLength)
+    const commitmentNonce = this.randomExact(ContentKeyServiceV2.KeyByteLength)
+    const iv = this.randomExact(ContentKeyServiceV2.IvByteLength)
     const commitment = createContentCommitmentV2(commitmentNonce, contentBytes)
 
     try {
@@ -75,13 +88,13 @@ export class ContentKeyServiceV2 {
         commitmentNonce: commitmentNonce.toString('base64'),
         content: contentBytes.toString('base64'),
       }
-      const cipher = createCipheriv('aes-256-gcm', dek, iv)
+      const cipher = createCipheriv(ContentKeyServiceV2.CipherAlgorithm, dek, iv)
       cipher.setAAD(contentEnvelopeAadV2(blobId))
       const ciphertext = Buffer.concat([
         cipher.update(Buffer.from(canonicalStringifyV2(payload), 'utf8')),
         cipher.final(),
       ])
-      const envelope: MemoryContentEnvelopeV2 = {
+      const envelope = {
         format: ContentEnvelopeFormatV2,
         algorithm: ContentEnvelopeAlgorithmV2,
         iv: iv.toString('base64'),
@@ -106,7 +119,7 @@ export class ContentKeyServiceV2 {
   }
 
   public openContent(blobId: string, expectedCommitment: string): Buffer {
-    if (!CommitmentPatternV2.test(expectedCommitment)) {
+    if (!ContentCommitmentPatternV2.test(expectedCommitment)) {
       throw new AppError('VALIDATION', 'content commitment 形态非法。')
     }
     const dek = this.keyring.getContentDek(blobId)
@@ -115,7 +128,10 @@ export class ContentKeyServiceV2 {
       const iv = decodeContentBase64V2(envelope.iv, 'content envelope iv')
       const tag = decodeContentBase64V2(envelope.tag, 'content envelope tag')
       const ciphertext = decodeContentBase64V2(envelope.ciphertext, 'content envelope ciphertext')
-      if (iv.length !== 12 || tag.length !== 16) {
+      if (
+        iv.length !== ContentKeyServiceV2.IvByteLength ||
+        tag.length !== ContentKeyServiceV2.TagByteLength
+      ) {
         throw new AppError(
           MemoryStorageErrorCodesV2.blobCorrupted,
           'content envelope IV/tag 长度非法。'
@@ -124,7 +140,7 @@ export class ContentKeyServiceV2 {
 
       let plaintext: Buffer
       try {
-        const decipher = createDecipheriv('aes-256-gcm', dek, iv)
+        const decipher = createDecipheriv(ContentKeyServiceV2.CipherAlgorithm, dek, iv)
         decipher.setAAD(contentEnvelopeAadV2(blobId))
         decipher.setAuthTag(tag)
         plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()])
@@ -137,32 +153,12 @@ export class ContentKeyServiceV2 {
         )
       }
       try {
-        const payload = parseContentPayloadV2(plaintext)
-        const nonce = decodeContentBase64V2(payload.commitmentNonce, 'content commitment nonce')
-        const content = decodeContentBase64V2(payload.content, 'content bytes')
-        let verified = false
-        try {
-          if (nonce.length !== 32) {
-            throw new AppError(
-              MemoryStorageErrorCodesV2.blobCorrupted,
-              'content commitment nonce 长度非法。'
-            )
-          }
-          const actualCommitment = createContentCommitmentV2(nonce, content)
-          if (!constantTimeCommitmentEqualV2(actualCommitment, expectedCommitment)) {
-            throw new AppError(
-              MemoryStorageErrorCodesV2.commitmentMismatch,
-              '解密正文与结构承诺不一致。',
-              undefined,
-              { blobId }
-            )
-          }
-          verified = true
-          return content
-        } finally {
-          nonce.fill(0)
-          if (!verified) content.fill(0)
-        }
+        return verifyContentCommitmentV2(
+          plaintext,
+          blobId,
+          expectedCommitment,
+          ContentKeyServiceV2.KeyByteLength
+        )
       } finally {
         plaintext.fill(0)
       }
@@ -173,7 +169,7 @@ export class ContentKeyServiceV2 {
 
   /**
    * 删除顺序刻意是 key first：destroyContentDek 成功即内容不可恢复；物理 blob 删除失败只留
-   * 无密钥密文，后台可重试卫生清理，不会把“删除文件成功”误当 crypto-shred 生效点。
+   * 无密钥密文，后台可重试卫生清理，不会把"删除文件成功"误当 crypto-shred 生效点。
    */
   public eraseContent(blobId: string): boolean {
     const destroyed = this.keyring.destroyContentDek(blobId)
@@ -181,6 +177,8 @@ export class ContentKeyServiceV2 {
     return destroyed
   }
 
+
+  /** 从注入的随机源取指定长度的字节；长度不对就是随机源坏了，抛 INVARIANT。 */
   private randomExact(byteLength: number): Buffer {
     const value = this.random(byteLength)
     if (!Buffer.isBuffer(value) || value.length !== byteLength) {
@@ -188,102 +186,4 @@ export class ContentKeyServiceV2 {
     }
     return Buffer.from(value)
   }
-}
-
-export function createContentCommitmentV2(nonce: Buffer, content: Buffer): string {
-  if (nonce.length !== 32) {
-    throw new AppError('VALIDATION', 'content commitment nonce 必须是 32 字节。')
-  }
-  const message = Buffer.concat([
-    Buffer.from(ContentCommitmentDomainV2, 'utf8'),
-    Buffer.from([0]),
-    content,
-  ])
-  return `c2:${createHmac('sha256', nonce).update(message).digest('hex')}`
-}
-
-function constantTimeCommitmentEqualV2(left: string, right: string): boolean {
-  if (!CommitmentPatternV2.test(left) || !CommitmentPatternV2.test(right)) return false
-  const leftBytes = Buffer.from(left.slice(3), 'hex')
-  const rightBytes = Buffer.from(right.slice(3), 'hex')
-  return timingSafeEqual(leftBytes, rightBytes)
-}
-
-function contentEnvelopeAadV2(blobId: string): Buffer {
-  return Buffer.from(`${ContentEnvelopeFormatV2}\0${blobId}`, 'utf8')
-}
-
-function decodeContentBase64V2(value: string, label: string): Buffer {
-  try {
-    return decodeCanonicalBase64V2(value, label)
-  } catch (error) {
-    throw new AppError(MemoryStorageErrorCodesV2.blobCorrupted, `${label} 不是规范 base64。`, error)
-  }
-}
-
-function parseContentEnvelopeV2(raw: Buffer): MemoryContentEnvelopeV2 {
-  const parsed = parseStrictJsonV2(raw, ['format', 'algorithm', 'iv', 'tag', 'ciphertext'])
-  if (
-    parsed['format'] !== ContentEnvelopeFormatV2 ||
-    parsed['algorithm'] !== ContentEnvelopeAlgorithmV2 ||
-    !isString(parsed['iv']) ||
-    !isString(parsed['tag']) ||
-    !isString(parsed['ciphertext'])
-  ) {
-    throw new AppError(MemoryStorageErrorCodesV2.blobCorrupted, 'content envelope 字段非法。')
-  }
-  return {
-    format: ContentEnvelopeFormatV2,
-    algorithm: ContentEnvelopeAlgorithmV2,
-    iv: parsed['iv'] as string,
-    tag: parsed['tag'] as string,
-    ciphertext: parsed['ciphertext'] as string,
-  }
-}
-
-function parseContentPayloadV2(raw: Buffer): MemoryContentPayloadV2 {
-  const parsed = parseStrictJsonV2(raw, ['format', 'commitmentNonce', 'content'])
-  if (
-    parsed['format'] !== ContentPayloadFormatV2 ||
-    !isString(parsed['commitmentNonce']) ||
-    !isString(parsed['content'])
-  ) {
-    throw new AppError(MemoryStorageErrorCodesV2.blobCorrupted, 'content payload 字段非法。')
-  }
-  return {
-    format: ContentPayloadFormatV2,
-    commitmentNonce: parsed['commitmentNonce'] as string,
-    content: parsed['content'] as string,
-  }
-}
-
-function parseStrictJsonV2(raw: Buffer, expectedKeys: readonly string[]): Record<string, unknown> {
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(raw.toString('utf8'))
-  } catch (error) {
-    throw new AppError(
-      MemoryStorageErrorCodesV2.blobCorrupted,
-      'content envelope JSON 无法解析。',
-      error
-    )
-  }
-  if (!isPlainObject(parsed)) {
-    throw new AppError(MemoryStorageErrorCodesV2.blobCorrupted, 'content envelope 必须是纯对象。')
-  }
-  const prototype: unknown = Object.getPrototypeOf(parsed)
-  const record = parsed as Record<string, unknown>
-  const actual = Object.keys(record).sort()
-  const expected = [...expectedKeys].sort()
-  if (
-    (prototype !== Object.prototype && isNotNull(prototype)) ||
-    actual.length !== expected.length ||
-    !actual.every((key, index) => key === expected[index])
-  ) {
-    throw new AppError(
-      MemoryStorageErrorCodesV2.blobCorrupted,
-      'content envelope 含未知或缺失字段。'
-    )
-  }
-  return record
 }

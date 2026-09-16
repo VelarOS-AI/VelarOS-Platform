@@ -1,11 +1,11 @@
 import {
-  MemoryAdapterRuntime,
-  type MountMemoryAdapterInput,
+  type MemoryAdapterMountInput,
+  mountMemoryAdapter,
 } from '../src/exports/adapter-kernel'
 
-declare const input: MountMemoryAdapterInput
+declare const input: MemoryAdapterMountInput
 
-const adapter = new MemoryAdapterRuntime(input)
+const adapter = mountMemoryAdapter(input)
 
 await adapter.service?.warmup()
 const source = adapter.turnRecall.createTurnContextSource()

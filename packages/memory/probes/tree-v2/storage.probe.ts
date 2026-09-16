@@ -17,9 +17,9 @@ import { AppError } from '@velaros-ai/core/error'
 import { ContentKeyServiceV2 } from '../../src/impl/tree-v2/storage/ContentKeyServiceV2'
 import { MemoryBlobStoreV2 } from '../../src/impl/tree-v2/storage/MemoryBlobStoreV2'
 import { MemoryKeyringStoreV2 } from '../../src/impl/tree-v2/storage/MemoryKeyringStoreV2'
+import type { MemoryWrappingRootV2 } from '../../src/types/tree-v2/storage'
 import { MemoryStorageErrorCodesV2 } from '../../src/utils/tree-v2/storage/error-codes'
 import { formatBackupSnapshotNameV2, openMemoryPhysicalRootsV2 } from '../../src/utils/tree-v2/storage/physical-roots'
-import type { MemoryWrappingRootV2 } from '../../src/utils/tree-v2/storage/wrapping-root'
 
 const CrashStepsV2 = [
   'keyring-generation-3:write-temp',
@@ -132,12 +132,12 @@ function runPhysicalRootProbeV2(dataRoot: string): void {
 function runContentEnvelopeProbeV2(dataRoot: string): void {
   const { roots } = openMemoryPhysicalRootsV2(dataRoot)
   const firstRoot = createProbeWrappingRootV2()
-  const opened = MemoryKeyringStoreV2.open(roots.keyringDir, firstRoot)
-  equal(opened.report.generation, 1, '初始 keyring 代号')
-  check(opened.report.created, '初始 keyring 应标为新建')
+  const opened = new MemoryKeyringStoreV2(roots.keyringDir, firstRoot)
+  equal(opened.openReport.generation, 1, '初始 keyring 代号')
+  check(opened.openReport.created, '初始 keyring 应标为新建')
 
-  const identity = opened.store.getIdentityKey()
-  const matchRoot = opened.store.getMatchRootKey()
+  const identity = opened.getIdentityKey()
+  const matchRoot = opened.getMatchRootKey()
   try {
     equal(identity.length, 32, 'identity key 长度')
     equal(matchRoot.length, 32, 'match root key 长度')
@@ -154,7 +154,7 @@ function runContentEnvelopeProbeV2(dataRoot: string): void {
   }
 
   const blobs = new MemoryBlobStoreV2(roots.blobsDir)
-  const contentKeys = new ContentKeyServiceV2(opened.store, blobs)
+  const contentKeys = new ContentKeyServiceV2(opened, blobs)
   const secret = 'low-entropy-secret: 0000'
   const sealed = contentKeys.sealContent(secret)
   equal(sealed.byteLength, Buffer.byteLength(secret), 'seal 应返回明文字节长度')
@@ -185,9 +185,9 @@ function runContentEnvelopeProbeV2(dataRoot: string): void {
   writeFileSync(blobPath, originalEnvelope)
 
   const secondRoot = createProbeWrappingRootV2()
-  const identityBeforeRotation = opened.store.getIdentityKey()
-  opened.store.rotateWrappingRoot(secondRoot)
-  const identityAfterRotation = opened.store.getIdentityKey()
+  const identityBeforeRotation = opened.getIdentityKey()
+  opened.rotateWrappingRoot(secondRoot)
+  const identityAfterRotation = opened.getIdentityKey()
   try {
     check(
       identityBeforeRotation.equals(identityAfterRotation),
@@ -197,13 +197,13 @@ function runContentEnvelopeProbeV2(dataRoot: string): void {
     identityBeforeRotation.fill(0)
     identityAfterRotation.fill(0)
   }
-  equal(opened.store.wrappingRootId, secondRoot.id, '轮换后记录新 wrapping root id')
+  equal(opened.wrappingRootId, secondRoot.id, '轮换后记录新 wrapping root id')
   expectCode(
     MemoryStorageErrorCodesV2.wrappingRootMismatch,
-    () => MemoryKeyringStoreV2.open(roots.keyringDir, firstRoot),
+    () => new MemoryKeyringStoreV2(roots.keyringDir, firstRoot),
     '旧 wrapping root 不得重开 keyring'
   )
-  const reopened = MemoryKeyringStoreV2.open(roots.keyringDir, secondRoot).store
+  const reopened = new MemoryKeyringStoreV2(roots.keyringDir, secondRoot)
   equal(
     new ContentKeyServiceV2(reopened, blobs)
       .openContent(sealed.blobId, sealed.commitment)
@@ -216,7 +216,7 @@ function runContentEnvelopeProbeV2(dataRoot: string): void {
   check(!blobs.hasBlob(sealed.blobId), 'crypto-shred 后应卫生删除密文 blob')
   expectCode(
     MemoryStorageErrorCodesV2.dekDestroyed,
-    () => opened.store.getContentDek(sealed.blobId),
+    () => opened.getContentDek(sealed.blobId),
     '销毁后的 DEK 不可读取'
   )
   const keyringText = readFileSync(
@@ -230,14 +230,14 @@ function runContentEnvelopeProbeV2(dataRoot: string): void {
 function runKeyringStrictnessProbeV2(dataRoot: string): void {
   const { roots } = openMemoryPhysicalRootsV2(dataRoot)
   const root = createProbeWrappingRootV2()
-  MemoryKeyringStoreV2.open(roots.keyringDir, root)
+  new MemoryKeyringStoreV2(roots.keyringDir, root)
   const filePath = join(roots.keyringDir, 'generation-1.keyring.json')
   const original = readFileSync(filePath, 'utf8')
   const parsed = JSON.parse(original) as Record<string, unknown>
   writeFileSync(filePath, JSON.stringify({ ...parsed, unknown: true }))
   expectCode(
     MemoryStorageErrorCodesV2.corruption,
-    () => MemoryKeyringStoreV2.open(roots.keyringDir, root),
+    () => new MemoryKeyringStoreV2(roots.keyringDir, root),
     'keyring 未知字段必须拒绝'
   )
   writeFileSync(filePath, original)
@@ -247,7 +247,7 @@ function runKeyringStrictnessProbeV2(dataRoot: string): void {
   writeFileSync(filePath, JSON.stringify(integrityDamaged))
   expectCode(
     MemoryStorageErrorCodesV2.corruption,
-    () => MemoryKeyringStoreV2.open(roots.keyringDir, root),
+    () => new MemoryKeyringStoreV2(roots.keyringDir, root),
     'keyring integrity 失配必须拒绝'
   )
 }
@@ -255,7 +255,7 @@ function runKeyringStrictnessProbeV2(dataRoot: string): void {
 function runCrashRecoveryProbeV2(dataRoot: string, crashStep: string): void {
   const { roots } = openMemoryPhysicalRootsV2(dataRoot)
   const root = createProbeWrappingRootV2()
-  const seed = MemoryKeyringStoreV2.open(roots.keyringDir, root).store
+  const seed = new MemoryKeyringStoreV2(roots.keyringDir, root)
   const blobId = createHash('sha256').update(crashStep).digest('hex').slice(0, 32)
   const dek = randomBytes(32)
   try {
@@ -263,23 +263,23 @@ function runCrashRecoveryProbeV2(dataRoot: string, crashStep: string): void {
   } finally {
     dek.fill(0)
   }
-  const crashing = MemoryKeyringStoreV2.open(roots.keyringDir, root, {
+  const crashing = new MemoryKeyringStoreV2(roots.keyringDir, root, {
     hooks: {
       beforeStep(step): void {
         if (step === crashStep) throw new Error(`simulated crash before ${step}`)
       },
     },
-  }).store
+  })
   assert.throws(() => crashing.destroyContentDek(blobId), /simulated crash/)
   assertionCount += 1
 
-  const recovered = MemoryKeyringStoreV2.open(roots.keyringDir, root)
+  const recovered = new MemoryKeyringStoreV2(roots.keyringDir, root)
   check(!hasTempResidue(roots.keyringDir), `${crashStep}: 恢复后不得留 temp`)
   equal(generationFiles(roots.keyringDir).length, 1, `${crashStep}: 恢复后只留 CURRENT`)
-  if (recovered.store.describe().contentDekCount > 0) {
-    check(recovered.store.destroyContentDek(blobId), `${crashStep}: 未提交销毁应可重试`)
+  if (recovered.describe().contentDekCount > 0) {
+    check(recovered.destroyContentDek(blobId), `${crashStep}: 未提交销毁应可重试`)
   }
-  const final = MemoryKeyringStoreV2.open(roots.keyringDir, root).store
+  const final = new MemoryKeyringStoreV2(roots.keyringDir, root)
   expectCode(
     MemoryStorageErrorCodesV2.dekDestroyed,
     () => final.getContentDek(blobId),
@@ -292,7 +292,7 @@ function runCrashRecoveryProbeV2(dataRoot: string, crashStep: string): void {
     ),
     `${crashStep}: 可存活代际中不得含已销毁 DEK`
   )
-  const reopened = MemoryKeyringStoreV2.open(roots.keyringDir, root).store
+  const reopened = new MemoryKeyringStoreV2(roots.keyringDir, root)
   expectCode(
     MemoryStorageErrorCodesV2.dekDestroyed,
     () => reopened.getContentDek(blobId),

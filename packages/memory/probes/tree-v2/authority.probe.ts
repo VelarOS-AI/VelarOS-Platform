@@ -8,22 +8,22 @@ import BetterSqlite3 from 'better-sqlite3'
 
 import { AppError, isNotNull } from '@velaros-ai/core'
 
-import { assertMemoryAuthoritySchemaV2, openMemoryAuthorityV2 } from '../../src/impl/tree-v2/MemoryAuthorityDatabaseV2'
+import { MemoryAuthorityDatabaseV2 } from '../../src/impl/tree-v2/MemoryAuthorityDatabaseV2'
 import { ContentKeyServiceV2 } from '../../src/impl/tree-v2/storage/ContentKeyServiceV2'
 import { MemoryBlobStoreV2 } from '../../src/impl/tree-v2/storage/MemoryBlobStoreV2'
 import { MemoryKeyringStoreV2 } from '../../src/impl/tree-v2/storage/MemoryKeyringStoreV2'
+import type { MemoryWrappingRootV2 } from '../../src/types/tree-v2/storage'
+import { assertMemoryAuthoritySchemaV2 } from '../../src/utils/tree-v2/authority-database'
 import {
-  MemoryAuthorityApplicationIdV2,
   MemoryAuthorityBlindIndexColumnsV2,
   MemoryAuthorityForbiddenPlaintextColumnsV2,
-  MemoryAuthoritySchemaVersionV2,
+  MemoryAuthorityFormatIdentityV2,
 } from '../../src/utils/tree-v2/authority-schema'
 import {
   MemoryIndexStoragePolicyV2,
   openCurrentMemoryIndexGenerationV2,
   sealMemoryIndexGenerationV2,
 } from '../../src/utils/tree-v2/storage/index-generation'
-import type { MemoryWrappingRootV2 } from '../../src/utils/tree-v2/storage/wrapping-root'
 
 const ExpectedMinimumAssertionsV2 = 54
 let assertionCount = 0
@@ -101,9 +101,9 @@ function runAuthorityProbeV2(): void {
 }
 
 function runV1UpgradeProbeV2(dataRoot: string): void {
-  const created = openMemoryAuthorityV2(dataRoot)
-  const databasePath = created.store.roots.authorityDatabasePath
-  created.store.close()
+  const created = new MemoryAuthorityDatabaseV2(dataRoot)
+  const databasePath = created.roots.authorityDatabasePath
+  created.close()
   const v1 = new BetterSqlite3(databasePath)
   v1.exec(`
     DROP TABLE memory_replay_governance;
@@ -115,11 +115,11 @@ function runV1UpgradeProbeV2(dataRoot: string): void {
   `)
   v1.close()
 
-  const upgraded = openMemoryAuthorityV2(dataRoot)
-  equal(upgraded.report.previousSchemaVersion, 1, 'v1 库应识别为追加迁移起点')
-  equal(upgraded.report.appliedMigrations.length, 2, 'v1 库只应用 migration 2/3')
+  const upgraded = new MemoryAuthorityDatabaseV2(dataRoot)
+  equal(upgraded.openReport.previousSchemaVersion, 1, 'v1 库应识别为追加迁移起点')
+  equal(upgraded.openReport.appliedMigrations.length, 2, 'v1 库只应用 migration 2/3')
   check(
-    upgraded.store.database
+    upgraded.database
       .prepare(
         `SELECT 1 FROM sqlite_master
          WHERE type = 'table' AND name = 'memory_concept_evidence'`
@@ -128,7 +128,7 @@ function runV1UpgradeProbeV2(dataRoot: string): void {
     'v1 升级后 concept evidence 表存在'
   )
   check(
-    upgraded.store.database
+    upgraded.database
       .prepare(
         `SELECT 1 FROM sqlite_master
          WHERE type = 'table' AND name = 'memory_episode_evidence'`
@@ -137,38 +137,38 @@ function runV1UpgradeProbeV2(dataRoot: string): void {
     'v1 升级后 episode evidence 表存在'
   )
   equal(
-    upgraded.store.database.pragma('user_version', { simple: true }),
-    MemoryAuthoritySchemaVersionV2,
+    upgraded.database.pragma('user_version', { simple: true }),
+    MemoryAuthorityFormatIdentityV2.schemaVersion,
     'v1 升级后 user_version 应到当前版本'
   )
-  upgraded.store.close()
+  upgraded.close()
 }
 
 function runOpenAndSchemaProbeV2(dataRoot: string): void {
-  const first = openMemoryAuthorityV2(dataRoot, {
+  const first = new MemoryAuthorityDatabaseV2(dataRoot, {
     now: () => 1_753_500_000_000,
   })
-  equal(first.report.databaseCreated, true, '首次 open 应创建独立 authority 数据库')
-  equal(first.report.previousSchemaVersion, 0, '首次 open 的前版本应为 0')
-  equal(first.report.schemaVersion, MemoryAuthoritySchemaVersionV2, 'schema 版本')
-  equal(first.report.appliedMigrations.length, 3, '首次 open 应顺序应用三条 migration')
+  equal(first.openReport.databaseCreated, true, '首次 open 应创建独立 authority 数据库')
+  equal(first.openReport.previousSchemaVersion, 0, '首次 open 的前版本应为 0')
+  equal(first.openReport.schemaVersion, MemoryAuthorityFormatIdentityV2.schemaVersion, 'schema 版本')
+  equal(first.openReport.appliedMigrations.length, 3, '首次 open 应顺序应用三条 migration')
   equal(
-    first.store.database.pragma('application_id', { simple: true }),
-    MemoryAuthorityApplicationIdV2,
+    first.database.pragma('application_id', { simple: true }),
+    MemoryAuthorityFormatIdentityV2.applicationId,
     'application_id 应锁定 Memory Tree v2 数据库身份'
   )
   equal(
-    first.store.database.pragma('user_version', { simple: true }),
-    MemoryAuthoritySchemaVersionV2,
+    first.database.pragma('user_version', { simple: true }),
+    MemoryAuthorityFormatIdentityV2.schemaVersion,
     'user_version 应与 migration 账本一致'
   )
-  equal(first.store.database.pragma('foreign_keys', { simple: true }), 1, '外键必须启用')
-  equal(first.store.database.pragma('journal_mode', { simple: true }), 'wal', 'authority 使用 WAL')
-  equal(first.store.database.pragma('synchronous', { simple: true }), 2, 'authority 使用 FULL 同步')
-  equal(first.store.database.pragma('secure_delete', { simple: true }), 1, 'secure_delete 必须启用')
+  equal(first.database.pragma('foreign_keys', { simple: true }), 1, '外键必须启用')
+  equal(first.database.pragma('journal_mode', { simple: true }), 'wal', 'authority 使用 WAL')
+  equal(first.database.pragma('synchronous', { simple: true }), 2, 'authority 使用 FULL 同步')
+  equal(first.database.pragma('secure_delete', { simple: true }), 1, 'secure_delete 必须启用')
 
   const tables = (
-    first.store.database
+    first.database
       .prepare(
         `SELECT name FROM sqlite_schema
          WHERE type = 'table' AND name NOT LIKE 'sqlite_%'
@@ -200,18 +200,18 @@ function runOpenAndSchemaProbeV2(dataRoot: string): void {
 
   const forbidden = new Set<string>(MemoryAuthorityForbiddenPlaintextColumnsV2)
   for (const table of tables) {
-    const columns = first.store.database.pragma(`table_info("${table}")`) as Array<{
+    const columns = first.database.pragma(`table_info("${table}")`) as Array<{
       name: string
     }>
     for (const column of columns) {
       check(!forbidden.has(column.name), `authority 不得出现明文语义列：${table}.${column.name}`)
     }
   }
-  assertMemoryAuthoritySchemaV2(first.store.database)
+  assertMemoryAuthoritySchemaV2(first.database)
 
   expectThrows(
     () =>
-      first.store.database
+      first.database
         .prepare(
           `INSERT INTO memory_concepts(
              id, stable_key, concept_type, scope_type, privacy_class, lifecycle_state,
@@ -234,7 +234,7 @@ function runOpenAndSchemaProbeV2(dataRoot: string): void {
   )
   expectThrows(
     () =>
-      first.store.database
+      first.database
         .prepare(
           `INSERT INTO memory_evidence(
              id, source_type, trust_level, scope_type, scope_match_key, occurred_at,
@@ -257,7 +257,7 @@ function runOpenAndSchemaProbeV2(dataRoot: string): void {
   )
   expectThrows(
     () =>
-      first.store.database
+      first.database
         .prepare(
           `INSERT INTO memory_episodes(
              id, stable_key, episode_type, state, started_at, scope_type,
@@ -281,22 +281,22 @@ function runOpenAndSchemaProbeV2(dataRoot: string): void {
     'authority 外键必须真实生效'
   )
 
-  first.store.close()
-  const reopened = openMemoryAuthorityV2(dataRoot)
-  equal(reopened.report.databaseCreated, false, '重复 open 不应重建数据库')
+  first.close()
+  const reopened = new MemoryAuthorityDatabaseV2(dataRoot)
+  equal(reopened.openReport.databaseCreated, false, '重复 open 不应重建数据库')
   equal(
-    reopened.report.previousSchemaVersion,
-    MemoryAuthoritySchemaVersionV2,
+    reopened.openReport.previousSchemaVersion,
+    MemoryAuthorityFormatIdentityV2.schemaVersion,
     '重复 open 应识别现版本'
   )
-  equal(reopened.report.appliedMigrations.length, 0, '重复 open 不应重复迁移')
-  reopened.store.close()
+  equal(reopened.openReport.appliedMigrations.length, 0, '重复 open 不应重复迁移')
+  reopened.close()
 }
 
 function runMigrationRecoveryProbeV2(dataRoot: string): void {
   expectAppError(
     () =>
-      openMemoryAuthorityV2(dataRoot, {
+      new MemoryAuthorityDatabaseV2(dataRoot, {
         migrationHooks: {
           afterApplyBeforeCommit() {
             throw new AppError('INVARIANT', 'probe crash before migration commit')
@@ -321,15 +321,15 @@ function runMigrationRecoveryProbeV2(dataRoot: string): void {
   equal(tableCount, 0, '失败迁移不得留下半套 authority 表')
   afterCrash.close()
 
-  const recovered = openMemoryAuthorityV2(dataRoot)
-  equal(recovered.report.appliedMigrations.length, 3, '崩溃后重开应完整重跑 migration')
-  recovered.store.close()
+  const recovered = new MemoryAuthorityDatabaseV2(dataRoot)
+  equal(recovered.openReport.appliedMigrations.length, 3, '崩溃后重开应完整重跑 migration')
+  recovered.close()
 }
 
 function runForeignDatabaseRefusalProbeV2(dataRoot: string): void {
   const authorityDir = join(dataRoot, 'memory', 'authority')
-  const layout = openMemoryAuthorityV2(dataRoot)
-  layout.store.close()
+  const layout = new MemoryAuthorityDatabaseV2(dataRoot)
+  layout.close()
   const databasePath = join(authorityDir, 'authority.sqlite3')
   const database = new BetterSqlite3(databasePath)
   database.exec('DROP TABLE memory_schema_migrations; CREATE TABLE foreign_table(id TEXT);')
@@ -337,37 +337,37 @@ function runForeignDatabaseRefusalProbeV2(dataRoot: string): void {
   database.pragma('user_version = 0')
   database.close()
   expectAppError(
-    () => openMemoryAuthorityV2(dataRoot),
+    () => new MemoryAuthorityDatabaseV2(dataRoot),
     '未知数据库不得被 destructive reset 或猜测接管'
   )
 }
 
 function runFutureVersionRefusalProbeV2(dataRoot: string): void {
-  const opened = openMemoryAuthorityV2(dataRoot)
-  const path = opened.store.roots.authorityDatabasePath
-  opened.store.close()
+  const opened = new MemoryAuthorityDatabaseV2(dataRoot)
+  const path = opened.roots.authorityDatabasePath
+  opened.close()
   const database = new BetterSqlite3(path)
-  database.pragma(`user_version = ${MemoryAuthoritySchemaVersionV2 + 1}`)
+  database.pragma(`user_version = ${MemoryAuthorityFormatIdentityV2.schemaVersion + 1}`)
   database.close()
-  expectAppError(() => openMemoryAuthorityV2(dataRoot), '未来 authority schema 必须 fail closed')
+  expectAppError(() => new MemoryAuthorityDatabaseV2(dataRoot), '未来 authority schema 必须 fail closed')
 }
 
 function runEncryptedPayloadProbeV2(dataRoot: string): void {
-  const opened = openMemoryAuthorityV2(dataRoot)
+  const opened = new MemoryAuthorityDatabaseV2(dataRoot)
   const root = createProbeWrappingRootV2()
-  const keyring = MemoryKeyringStoreV2.open(opened.store.roots.keyringDir, root).store
-  const blobs = new MemoryBlobStoreV2(opened.store.roots.blobsDir)
+  const keyring = new MemoryKeyringStoreV2(opened.roots.keyringDir, root)
+  const blobs = new MemoryBlobStoreV2(opened.roots.blobsDir)
   const contentKeys = new ContentKeyServiceV2(keyring, blobs)
   const secret = 'S2-PROBE-用户语义正文-不许进入-authority/WAL'
   const sealed = contentKeys.sealContent(secret)
 
-  opened.store.database
+  opened.database
     .prepare(
       `INSERT INTO memory_content_blobs(blob_id, byte_length, state, created_at)
        VALUES (?, ?, 'active', ?)`
     )
     .run(sealed.blobId, sealed.byteLength, 1)
-  opened.store.database
+  opened.database
     .prepare(
       `INSERT INTO memory_evidence(
          id, source_type, trust_level, source_id, scope_type, occurred_at,
@@ -394,15 +394,15 @@ function runEncryptedPayloadProbeV2(dataRoot: string): void {
     secret,
     '正文应可经 keyring + blob 正确恢复'
   )
-  opened.store.close()
+  opened.close()
 
   for (const suffix of ['', '-wal', '-shm']) {
-    const file = `${opened.store.roots.authorityDatabasePath}${suffix}`
+    const file = `${opened.roots.authorityDatabasePath}${suffix}`
     if (!existsSync(file)) continue
     check(!readFileSync(file).includes(secret), `authority${suffix || '.sqlite3'} 不得含正文`)
   }
   const blobPath = join(
-    opened.store.roots.blobsDir,
+    opened.roots.blobsDir,
     sealed.blobId.slice(0, 2),
     `${sealed.blobId}.blob`
   )
@@ -410,20 +410,20 @@ function runEncryptedPayloadProbeV2(dataRoot: string): void {
 }
 
 function runIndexGenerationEncryptionProbeV2(dataRoot: string): void {
-  const opened = openMemoryAuthorityV2(dataRoot)
+  const opened = new MemoryAuthorityDatabaseV2(dataRoot)
   const root = createProbeWrappingRootV2()
-  const keyring = MemoryKeyringStoreV2.open(opened.store.roots.keyringDir, root).store
+  const keyring = new MemoryKeyringStoreV2(opened.roots.keyringDir, root)
   const secret = Buffer.from('S2-PROBE-index-generation-明文投影', 'utf8')
-  const sealed = sealMemoryIndexGenerationV2(opened.store.roots.indexDir, 1, secret, keyring)
+  const sealed = sealMemoryIndexGenerationV2(opened.roots.indexDir, 1, secret, keyring)
   equal(sealed.generation, 1, '首个 index generation 代号')
   equal(sealed.replacedGeneration, null, '首代不替换旧代')
   equal(MemoryIndexStoragePolicyV2.buildMode, 'memory-only', 'index 必须只在内存构建')
   equal(MemoryIndexStoragePolicyV2.plaintextWalAllowed, false, 'index 不允许明文 WAL')
 
-  const sealedPath = join(opened.store.roots.indexDir, 'generation-1', 'index-generation.sealed')
+  const sealedPath = join(opened.roots.indexDir, 'generation-1', 'index-generation.sealed')
   const onDisk = readFileSync(sealedPath)
   check(!onDisk.includes(secret), 'index generation 磁盘产物不得含明文投影')
-  const restored = openCurrentMemoryIndexGenerationV2(opened.store.roots.indexDir, keyring)
+  const restored = openCurrentMemoryIndexGenerationV2(opened.roots.indexDir, keyring)
   check(isNotNull(restored), 'CURRENT index generation 应可打开')
   equal(restored.generation, 1, '打开的 index generation 代号')
   equal(restored.plaintextArtifact.toString('utf8'), secret.toString('utf8'), 'index 解封')
@@ -436,10 +436,10 @@ function runIndexGenerationEncryptionProbeV2(dataRoot: string): void {
     envelope.ciphertext.slice(0, -2) + (envelope.ciphertext.endsWith('AA') ? 'AQ' : 'AA')
   writeFileSync(sealedPath, JSON.stringify(envelope))
   expectAppError(
-    () => openCurrentMemoryIndexGenerationV2(opened.store.roots.indexDir, keyring),
+    () => openCurrentMemoryIndexGenerationV2(opened.roots.indexDir, keyring),
     'index generation 篡改必须被 GCM 拒绝'
   )
-  opened.store.close()
+  opened.close()
 }
 
 function runStaticSqlBoundaryProbeV2(): void {

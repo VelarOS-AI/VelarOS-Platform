@@ -1,210 +1,73 @@
-import { createHash, randomUUID } from 'node:crypto'
+/**
+ * 记忆树 v1 的确定性整理：`MemoryDream`。接口 `MemoryDreamApi` 在本文件的类上方。
+ * 它把未整理的证据变成概念、经历、主张与关系，再投影出新一版树；用到的判断规则都在 `utils/tree/dream-rules.ts`。
+ */
+
+import { randomUUID } from 'node:crypto'
 import { basename } from 'node:path'
 
-import { first, isEmpty, last, toNullable,trimmedStringOrEmpty } from '@velaros-ai/core'
+import { first, isEmpty, last, Log, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
-import { logRuntime } from '@velaros-ai/core/logger'
 
 import type {
-  MemoryConceptType,
   MemoryDreamRunOptions,
   MemoryDreamRunResult,
-  MemoryEvidenceCategory,
   MemoryEvidenceRecord,
   MemoryTreeNodeRecord,
 } from '../../types/memory'
+import type {
+  ConsolidationResult,
+  ConsolidationViewOptions,
+  MemoryConceptRow,
+  MemoryEpisodeRow,
+  MemoryIdentityEpochRow,
+} from '../../types/tree'
 import {
-  extractDeterministicSemanticCandidates,
-  type MemorySemanticCandidate,
-} from '../../utils/tree/semantic-extraction'
+  confidenceForEvidence,
+  epistemicStatusForEvidence,
+  evidenceTitle,
+  normalizeIdentityText,
+  predicateForCategory,
+  readMetadataString,
+  resolveConceptDescriptor,
+  salienceForEvidence,
+  sha256,
+  stableId,
+  truncate,
+} from '../../utils/tree/dream-rules'
+import { extractDeterministicSemanticCandidates } from '../../utils/tree/semantic-extraction'
 import {
   buildTreeOps,
   hashTreeEvent,
   hashTreeNodes,
   validateTreeProjection,
 } from '../../utils/tree/tree-projection'
+import { MemoryTuning } from '../../utils/tuning'
 
-import type {
-  MemoryClaimRow,
-  MemoryConceptRow,
-  MemoryEpisodeRow,
-  MemoryIdentityEpochRow,
-} from './MemoryTreeRepository'
 import { type MemoryTreeRepository } from './MemoryTreeRepository'
 
-const log = logRuntime.tag('MemoryDream')
-const DefaultDreamBatchSize = 200
+const log = Log.tag('MemoryDream')
 
-interface ConsolidationResult {
-  evidence: MemoryEvidenceRecord
-  concept: MemoryConceptRow
-  episode: MemoryEpisodeRow
-  claim: MemoryClaimRow
+/**
+ * 记忆树 v1 的整理器：把攒下的证据确定性地整理成意义对象，并投影出新一版树。
+ *
+ * 实现是 `MemoryDream`，由 `MemoryTreeDomain` 独占持有；同一实例同时只跑一次整理，重入时直接给 skipped。
+ * 整个过程没有模型参与：同样的证据永远得到同样的树，失败与中止都在整理账本里留痕。
+ */
+export interface MemoryDreamApi {
+  /**
+   * 不消费新证据，只把当前意义模型重新投影成一个新树版本，返回新版本号。
+   * 衰减、遗忘、来源失效之后的重算走这里；没有身份纪元时原样返回当前版本。
+   */
+  reproject(runId?: string): number
+  /**
+   * 跑一次整理：取一批未整理的证据，整理成意义对象后投影出新一版树，返回这次整理的账本。
+   * 已经有一次在跑时直接给 `skipped`；中止给 `cancelled`；失败会先把账本收成 failed 再把错抛出去。
+   */
+  run(options: MemoryDreamRunOptions): MemoryDreamRunResult
 }
 
-interface ConsolidationViewOptions {
-  semantic?: MemorySemanticCandidate
-  sharedEpisode?: MemoryEpisodeRow
-}
-
-interface ConceptDescriptor {
-  type: MemoryConceptType
-  name: string
-  stableDiscriminator: string
-}
-
-function sha256(value: string): string {
-  return createHash('sha256').update(value).digest('hex')
-}
-
-function stableId(prefix: string, value: string): string {
-  return `${prefix}_${sha256(value).slice(0, 24)}`
-}
-
-function normalizeIdentityText(value: string): string {
-  // 保留字母/数字与 + # . 等区分性符号，其余标点/空白折叠为单空格。
-  // 旧实现剥掉全部 \p{P}\p{S}，会让 C++ / C# / C 归一成同一 stable_key 而被错误合并。
-  return value
-    .normalize('NFKC')
-    .toLocaleLowerCase()
-    .replace(/[^\p{L}\p{N}+#.]+/gu, ' ')
-    .trim()
-}
-
-function truncate(value: string, maxLength: number): string {
-  const normalized = value.replace(/\s+/g, ' ').trim()
-  if (normalized.length <= maxLength) return normalized
-  return `${normalized.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`
-}
-
-function readMetadataString(evidence: MemoryEvidenceRecord, key: string): string {
-  const value = evidence.metadata[key]
-  return trimmedStringOrEmpty(value)
-}
-
-function evidenceTitle(evidence: MemoryEvidenceRecord): string {
-  return (
-    evidence.title.trim() ||
-    readMetadataString(evidence, 'sessionTitle') ||
-    truncate(first(evidence.content.split('\n')) ?? evidence.content, 72) ||
-    '未命名记忆'
-  )
-}
-
-function resolveConceptDescriptor(evidence: MemoryEvidenceRecord): ConceptDescriptor {
-  const title = evidenceTitle(evidence)
-  const projectName = evidence.workspaceRoot ? basename(evidence.workspaceRoot) : ''
-  switch (evidence.category) {
-    case 'preference':
-      return { type: 'user', name: '用户偏好', stableDiscriminator: 'user:preferences' }
-    case 'feedback':
-      return { type: 'user', name: '协作方式', stableDiscriminator: 'user:collaboration' }
-    case 'interest':
-      return { type: 'interest', name: title, stableDiscriminator: title }
-    case 'procedure':
-      return { type: 'procedure', name: title, stableDiscriminator: title }
-    case 'goal':
-      return { type: 'goal', name: title, stableDiscriminator: title }
-    case 'task':
-      return {
-        type: 'task',
-        name: title,
-        stableDiscriminator: readMetadataString(evidence, 'taskKey') || title,
-      }
-    case 'project':
-      return {
-        type: 'project',
-        name: projectName || title,
-        stableDiscriminator: evidence.workspaceRoot || title,
-      }
-    case 'entity':
-      return { type: 'entity', name: title, stableDiscriminator: title }
-    case 'artifact':
-      return { type: 'artifact', name: title, stableDiscriminator: title }
-    case 'conversation': {
-      const sessionTitle = readMetadataString(evidence, 'sessionTitle')
-      if (evidence.workspaceRoot) return {
-          type: 'task',
-          name: sessionTitle || title,
-          stableDiscriminator: evidence.sessionId || sessionTitle || title,
-        }
-      return {
-        type: 'conversation',
-        name: sessionTitle || title,
-        stableDiscriminator: evidence.sessionId || sessionTitle || title,
-      }
-    }
-    case 'fact':
-    default:
-      if (evidence.workspaceRoot) return {
-          type: 'project',
-          name: projectName || title,
-          stableDiscriminator: evidence.workspaceRoot,
-        }
-      return { type: 'entity', name: title, stableDiscriminator: title }
-  }
-}
-
-function predicateForCategory(category: MemoryEvidenceCategory): string {
-  const predicates: Record<MemoryEvidenceCategory, string> = {
-    conversation: 'conversation_observation',
-    fact: 'has_fact',
-    preference: 'prefers',
-    feedback: 'collaboration_feedback',
-    procedure: 'uses_procedure',
-    project: 'works_on',
-    task: 'performs_task',
-    goal: 'pursues_goal',
-    interest: 'interested_in',
-    entity: 'knows_entity',
-    artifact: 'produces_artifact',
-  }
-  return predicates[category]
-}
-
-function confidenceForEvidence(evidence: MemoryEvidenceRecord): number {
-  switch (evidence.trustLevel) {
-    case 'user_stated':
-      return 0.96
-    case 'system_observed':
-      return 0.88
-    case 'agent_derived':
-      return 0.68
-    case 'external_content':
-      return 0.42
-  }
-}
-
-function epistemicStatusForEvidence(evidence: MemoryEvidenceRecord): string {
-  switch (evidence.trustLevel) {
-    case 'user_stated':
-      return 'user_confirmed'
-    case 'system_observed':
-      return 'observed'
-    case 'agent_derived':
-    case 'external_content':
-      return 'inferred'
-  }
-}
-
-function salienceForEvidence(evidence: MemoryEvidenceRecord): number {
-  const categoryWeight: Record<MemoryEvidenceCategory, number> = {
-    conversation: 0.46,
-    fact: 0.62,
-    preference: 0.82,
-    feedback: 0.86,
-    procedure: 0.72,
-    project: 0.76,
-    task: 0.7,
-    goal: 0.88,
-    interest: 0.68,
-    entity: 0.58,
-    artifact: 0.66,
-  }
-  return Math.min(1, categoryWeight[evidence.category] + (evidence.trustLevel === 'user_stated' ? 0.06 : 0))
-}
-
-export class MemoryDream {
+export class MemoryDream implements MemoryDreamApi {
   private running = false
   constructor(private readonly repository: MemoryTreeRepository) {}
 
@@ -255,7 +118,7 @@ export class MemoryDream {
     const frontierBefore = this.repository.getMetaInteger('dream_frontier')
     const treeVersionBefore = this.repository.getMetaInteger('tree_version')
     const evidence = this.repository.listPendingEvidence(
-      Math.max(1, options.maxEvidence ?? DefaultDreamBatchSize)
+      Math.max(1, options.maxEvidence ?? MemoryTuning.dream.defaultBatchSize)
     )
     if (isEmpty(evidence)) {
       if (options.trigger === 'idle') return this.runIdleMaintenance(options, frontierBefore, treeVersionBefore)
@@ -706,6 +569,7 @@ export class MemoryDream {
     consolidated: ConsolidationResult[],
     allowAdvance: boolean = true
   ): MemoryIdentityEpochRow {
+    // 挑主线只看最活跃的一小撮概念：比树投影用的缺省条数更窄，免得长尾概念把身份带偏。
     const topConcepts = this.repository.getTopActiveConcepts(8)
     const identityCandidates = topConcepts.filter(
       (concept) => !['user', 'interest'].includes(concept.concept_type)

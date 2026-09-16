@@ -13,8 +13,10 @@
 
 import assert from 'node:assert/strict'
 
-import { createInMemoryMemoryFilesIo, type InMemoryMemoryFilesIo } from '../src/contract/files-io'
-import { createMemoryFilesBackend, type MemoryFilesScopeRoot } from '../src/impl/files/MemoryFilesBackend'
+import type { InMemoryMemoryFilesIoApi } from '../src/impl/files/InMemoryMemoryFilesIo'
+import { createInMemoryMemoryFilesIo } from '../src/impl/files/InMemoryMemoryFilesIo'
+import { createMemoryFilesBackend } from '../src/impl/files/MemoryFilesBackend'
+import type { MemoryFilesScopeRoot } from '../src/types/memory'
 import type { MemoryEvidenceInput } from '../src/types/memory'
 import { parseMemoryFileDocument, serializeMemoryFileDocument } from '../src/utils/files/frontmatter'
 import { parseMemoryIndex } from '../src/utils/files/index-file'
@@ -52,7 +54,7 @@ function evidence(overrides: Partial<MemoryEvidenceInput> = {}): MemoryEvidenceI
   }
 }
 
-function createBackend(io: InMemoryMemoryFilesIo, roots = [GlobalRoot, ProjectRoot]) {
+function createBackend(io: InMemoryMemoryFilesIoApi, roots = [GlobalRoot, ProjectRoot]) {
   return createMemoryFilesBackend({ roots, io, now: () => 1_700_000_000_000 })
 }
 

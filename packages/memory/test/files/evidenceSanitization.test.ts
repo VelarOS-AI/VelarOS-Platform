@@ -10,7 +10,7 @@
 
 import { describe, expect, test } from 'bun:test'
 
-import { createInMemoryMemoryFilesIo } from '../../src/contract/files-io'
+import { createInMemoryMemoryFilesIo } from '../../src/impl/files/InMemoryMemoryFilesIo'
 import { createMemoryFilesBackend, type MemoryFilesScopeRoot } from '../../src/impl/files/MemoryFilesBackend'
 import type { MemoryEvidenceInput } from '../../src/types/memory'
 import { parseMemoryFileDocument } from '../../src/utils/files/frontmatter'

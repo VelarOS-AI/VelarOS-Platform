@@ -1,122 +1,108 @@
-import type { MemoryWrappingRootV2 } from '../../utils/tree-v2/storage/wrapping-root'
+import type {
+  MemorySystemRuntimeOpenReportV2,
+  OpenMemorySystemRuntimeOptionsV2,
+} from '../../types/tree-v2/store'
 
 import { ContentKeyServiceV2 } from './storage/ContentKeyServiceV2'
 import { MemoryBlobStoreV2 } from './storage/MemoryBlobStoreV2'
 import { MemoryKeyringStoreV2 } from './storage/MemoryKeyringStoreV2'
-import { type MemoryAuthorityOpenReportV2, openMemoryAuthorityV2 } from './MemoryAuthorityDatabaseV2'
+import { MemoryAuthorityDatabaseV2 } from './MemoryAuthorityDatabaseV2'
+import type { MemoryDreamRunCoordinatorV2Api } from './MemoryDreamRunCoordinatorV2'
 import { MemoryDreamRunCoordinatorV2 } from './MemoryDreamRunCoordinatorV2'
+import type { MemoryErasureServiceV2Api } from './MemoryErasureServiceV2'
 import { MemoryErasureServiceV2 } from './MemoryErasureServiceV2'
+import type { MemoryEvidenceIngestServiceV2Api } from './MemoryEvidenceIngestServiceV2'
 import { MemoryEvidenceIngestServiceV2 } from './MemoryEvidenceIngestServiceV2'
+import type { MemoryEvidenceReplayMigrationV2Api } from './MemoryEvidenceReplayMigrationV2'
 import { MemoryEvidenceReplayMigrationV2 } from './MemoryEvidenceReplayMigrationV2'
 import { MemoryIdentityKeyServiceV2 } from './MemoryIdentityKeyServiceV2'
+import type { MemoryMeaningCurationServiceV2Api } from './MemoryMeaningCurationServiceV2'
 import { MemoryMeaningCurationServiceV2 } from './MemoryMeaningCurationServiceV2'
+import type { MemoryQueryFacadeV2Api } from './MemoryQueryFacadeV2'
 import { MemoryQueryFacadeV2 } from './MemoryQueryFacadeV2'
-import { type MemoryTreeStoreOpenReportV2, MemoryTreeStoreV2 } from './MemoryTreeStoreV2'
-
-export interface OpenMemorySystemRuntimeOptionsV2 {
-  readonly dataRoot: string
-  readonly wrappingRoot: MemoryWrappingRootV2
-  readonly now?: () => number
-}
-
-export interface MemorySystemRuntimeOpenReportV2 {
-  readonly authority: MemoryAuthorityOpenReportV2
-  readonly tree: MemoryTreeStoreOpenReportV2
-  readonly recoveredOrphanBlobCount: number
-  readonly resumedErasureCount: number
-}
+import { MemoryTreeStoreV2 } from './MemoryTreeStoreV2'
 
 /**
- * Memory v2 的包内组合根。
+ * 记忆 v2 的包内组合根：构造即打开数据根、装配全部服务并把半途崩溃的状态收敛回来。
  *
- * 宿主只注入数据根与操作系统包装根；SQLite、密钥环、密文块、证据、梦境整理、
- * 意义整理、擦除、重灌与查询的所有权都留在 memory 包内。此组合根不包含
- * 产品宿主的权威切换或旧表删除动词。
+ * 宿主只注入数据根与操作系统包装根；SQLite、密钥环、密文块、证据、整理运行、意义整理、
+ * 擦除、重灌与查询的所有权都留在本包内。这个组合根不含产品宿主的权威切换或旧表删除动词。
+ * 实例归调用方所有，用完必须 `close()`。
  */
-export class MemorySystemRuntimeV2 {
-  public readonly ingest: MemoryEvidenceIngestServiceV2
-  public readonly dream: MemoryDreamRunCoordinatorV2
-  public readonly meaning: MemoryMeaningCurationServiceV2
-  public readonly erasure: MemoryErasureServiceV2
-  public readonly replay: MemoryEvidenceReplayMigrationV2
-  public readonly query: MemoryQueryFacadeV2
+export interface MemorySystemRuntimeV2Api {
+  /** 构造时那一次打开的读数：权威库、树存储、回收的孤儿 blob 数、续跑的擦除 saga 数。 */
+  readonly openReport: MemorySystemRuntimeOpenReportV2
+  /** 证据摄入服务。 */
+  readonly ingest: MemoryEvidenceIngestServiceV2Api
+  /** 整理运行的开启与提交协调者。 */
+  readonly dream: MemoryDreamRunCoordinatorV2Api
+  /** 意义候选的裁决与落库服务。 */
+  readonly meaning: MemoryMeaningCurationServiceV2Api
+  /** 彻底清除 saga。 */
+  readonly erasure: MemoryErasureServiceV2Api
+  /** 旧库证据回放与权威切换判定。 */
+  readonly replay: MemoryEvidenceReplayMigrationV2Api
+  /** 召回与树结构查询门面。 */
+  readonly query: MemoryQueryFacadeV2Api
+  /** 清掉查询缓存并关闭权威连接；重复调用是空操作。 */
+  close(): void
+}
 
-  private constructor(
-    private readonly authority: ReturnType<typeof openMemoryAuthorityV2>['store'],
-    services: {
-      ingest: MemoryEvidenceIngestServiceV2
-      dream: MemoryDreamRunCoordinatorV2
-      meaning: MemoryMeaningCurationServiceV2
-      erasure: MemoryErasureServiceV2
-      replay: MemoryEvidenceReplayMigrationV2
-      query: MemoryQueryFacadeV2
-    }
-  ) {
-    this.ingest = services.ingest
-    this.dream = services.dream
-    this.meaning = services.meaning
-    this.erasure = services.erasure
-    this.replay = services.replay
-    this.query = services.query
-  }
+export class MemorySystemRuntimeV2 implements MemorySystemRuntimeV2Api {
+  public readonly openReport: MemorySystemRuntimeOpenReportV2
+  public readonly ingest: MemoryEvidenceIngestServiceV2Api
+  public readonly dream: MemoryDreamRunCoordinatorV2Api
+  public readonly meaning: MemoryMeaningCurationServiceV2Api
+  public readonly erasure: MemoryErasureServiceV2Api
+  public readonly replay: MemoryEvidenceReplayMigrationV2Api
+  public readonly query: MemoryQueryFacadeV2Api
 
-  public static open(options: OpenMemorySystemRuntimeOptionsV2): {
-    runtime: MemorySystemRuntimeV2
-    report: MemorySystemRuntimeOpenReportV2
-  } {
-    const authorityOpen = openMemoryAuthorityV2(options.dataRoot, {
-      now: options.now,
-    })
+  private readonly authority: MemoryAuthorityDatabaseV2
+
+  constructor(options: OpenMemorySystemRuntimeOptionsV2) {
+    const authority = new MemoryAuthorityDatabaseV2(options.dataRoot, { now: options.now })
+    this.authority = authority
     try {
-      const authority = authorityOpen.store
-      const keyring = MemoryKeyringStoreV2.open(authority.roots.keyringDir, options.wrappingRoot, {
-        now: options.now,
-      }).store
+      const keyring = new MemoryKeyringStoreV2(
+        authority.roots.keyringDir,
+        options.wrappingRoot,
+        { now: options.now }
+      )
       const blobs = new MemoryBlobStoreV2(authority.roots.blobsDir)
       const contentKeys = new ContentKeyServiceV2(keyring, blobs)
       const identityKeys = new MemoryIdentityKeyServiceV2(keyring)
       const ingest = new MemoryEvidenceIngestServiceV2(authority, contentKeys, identityKeys, blobs)
       const recoveredOrphanBlobCount = ingest.recoverOrphanedBlobs()
-      const treeOpen = MemoryTreeStoreV2.open({
-        authority,
-        contentKeys,
-        keyring,
-      })
-      const dream = new MemoryDreamRunCoordinatorV2(authority, contentKeys, treeOpen.store)
+      const tree = new MemoryTreeStoreV2(authority, contentKeys, keyring)
+      const dream = new MemoryDreamRunCoordinatorV2(authority, contentKeys, tree)
       const meaning = new MemoryMeaningCurationServiceV2(
         authority,
         contentKeys,
         identityKeys,
-        treeOpen.store,
+        tree,
         dream
       )
-      const erasure = new MemoryErasureServiceV2(authority, contentKeys, keyring, treeOpen.store)
+      const erasure = new MemoryErasureServiceV2(authority, contentKeys, keyring, tree)
       const resumedErasureCount = erasure.resumePending(options.now?.() ?? Date.now()).length
-      const replay = new MemoryEvidenceReplayMigrationV2(
+      this.ingest = ingest
+      this.dream = dream
+      this.meaning = meaning
+      this.erasure = erasure
+      this.replay = new MemoryEvidenceReplayMigrationV2(
         authority,
         ingest,
         contentKeys,
         identityKeys
       )
-      const query = new MemoryQueryFacadeV2(authority, contentKeys, treeOpen.store)
-      return {
-        runtime: new MemorySystemRuntimeV2(authority, {
-          ingest,
-          dream,
-          meaning,
-          erasure,
-          replay,
-          query,
-        }),
-        report: {
-          authority: authorityOpen.report,
-          tree: treeOpen.report,
-          recoveredOrphanBlobCount,
-          resumedErasureCount,
-        },
+      this.query = new MemoryQueryFacadeV2(authority, contentKeys, tree)
+      this.openReport = {
+        authority: authority.openReport,
+        tree: tree.openReport,
+        recoveredOrphanBlobCount,
+        resumedErasureCount,
       }
     } catch (error) {
-      authorityOpen.store.close()
+      authority.close()
       throw error
     }
   }
@@ -125,11 +111,4 @@ export class MemorySystemRuntimeV2 {
     this.query.clearSearchIndex()
     this.authority.close()
   }
-}
-
-export function openMemorySystemRuntimeV2(options: OpenMemorySystemRuntimeOptionsV2): {
-  runtime: MemorySystemRuntimeV2
-  report: MemorySystemRuntimeOpenReportV2
-} {
-  return MemorySystemRuntimeV2.open(options)
 }

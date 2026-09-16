@@ -10,8 +10,8 @@
 
 import { describe, expect, test } from 'bun:test'
 
-import { createInMemoryMemoryFilesIo } from '../../src/contract/files-io'
 import type { MemoryApi, MemoryToolContext } from '../../src/contract/requires'
+import { createInMemoryMemoryFilesIo } from '../../src/impl/files/InMemoryMemoryFilesIo'
 import { createMemoryFilesBackend, type MemoryFilesScopeRoot } from '../../src/impl/files/MemoryFilesBackend'
 import { memoryTools } from '../../src/impl/MemoryTools'
 import type { MemoryRecallItem } from '../../src/types/memory'

@@ -16,18 +16,19 @@ import assert from 'node:assert/strict'
 import { KernelModuleApiVersion } from '@velaros-ai/kernel/contracts/abi'
 import { KernelModuleHost } from '@velaros-ai/kernel/runtime'
 
-import type { MemoryStoreBackend } from '../src/contract/backend'
-import { createInMemoryMemoryFilesIo } from '../src/contract/files-io'
-import { MemoryVectorBackendId } from '../src/contract/vector'
-import { createMemoryTreeStoreBackend, MemoryTreeBackendId } from '../src/impl/backends/MemoryTreeStoreBackend'
-import { createMemoryFilesBackend, MemoryFilesBackendId } from '../src/impl/files/MemoryFilesBackend'
+import { MemoryVectorBackendId } from '../src/contract/constants'
+import { MemoryStoreCapabilityNamespace, MemoryTreeBackendId } from '../src/contract/constants'
+import { MemoryFilesBackendId } from '../src/contract/constants'
+import type { MemoryStoreBackend } from '../src/contract/requires'
+import { createMemoryTreeStoreBackend } from '../src/impl/backends/MemoryTreeStoreBackend'
+import { createInMemoryMemoryFilesIo } from '../src/impl/files/InMemoryMemoryFilesIo'
+import { createMemoryFilesBackend } from '../src/impl/files/MemoryFilesBackend'
 import { mountMemoryAdapter } from '../src/impl/host/MemoryAdapterRuntime'
 import {
   createMemoryStoreCapabilityToken,
   createMemoryStoreKernelModule,
   listRegisteredMemoryStoreBackends,
   memoryStoreCapabilityId,
-  MemoryStoreCapabilityNamespace,
   resolveMemoryDerivedIndexBackends,
   resolveMemoryStoreBackend,
 } from '../src/impl/host/MemoryStoreCapabilities'

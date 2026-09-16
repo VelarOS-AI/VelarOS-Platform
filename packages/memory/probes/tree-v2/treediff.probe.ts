@@ -1,6 +1,11 @@
 import { isEmpty, isNull, isUndefined } from '@velaros-ai/core'
 
-import type { MemoryTreeDiffOpV2, MemoryTreeDiffV2, MemoryTreeNodeStructV2 } from '../../src/utils/tree-v2/diff-chain'
+import { MemoryTreeReplayV2 } from '../../src/impl/tree-v2/MemoryTreeReplayV2'
+import type {
+  MemoryTreeDiffOpV2,
+  MemoryTreeDiffV2,
+  MemoryTreeNodeStructV2,
+} from '../../src/types/tree-v2/diff'
 import {
   buildRedactTreeDiffOpV2,
   canonicalStringifyV2,
@@ -8,8 +13,6 @@ import {
   hashTreeStateV2,
   invertTreeDiffOpV2,
   quantizeTreeScoreV2,
-  replayTreeDiffsBackwardV2,
-  replayTreeDiffsForwardV2,
   TreeDiffGenesisEventHashV2,
   validateTreeDiffOpV2,
 } from '../../src/utils/tree-v2/diff-chain'
@@ -254,14 +257,15 @@ export function runTreeDiffV2Probe(): TreeDiffV2ProbeReport {
   )
 
   // ── §3/§8 重放 · 求逆 · redact 承诺保留（7）：把锚点绑定到正逆重放管线 ──
-  const forward = replayTreeDiffsForwardV2([], [TreeDiffV2ProbeFixture.genesisDiff])
+  const treeReplay = new MemoryTreeReplayV2()
+  const forward = treeReplay.replayForward([], [TreeDiffV2ProbeFixture.genesisDiff])
   check(
     '§8 正向重放 stateHash 命中 tree_hash 锚点（锚点↔管线绑定）',
     forward.stateHash === TreeDiffV2ProbeAnchors.treeHash,
     forward.stateHash
   )
   check('§8 正向重放节点数 = 2', forward.nodes.length === 2)
-  const backward = replayTreeDiffsBackwardV2(TreeDiffV2ProbeFixture.nodes, [
+  const backward = treeReplay.replayBackward(TreeDiffV2ProbeFixture.nodes, [
     TreeDiffV2ProbeFixture.genesisDiff,
   ])
   check('§8 逆向重建回到空树（0 节点）', isEmpty(backward.nodes))

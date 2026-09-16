@@ -4,84 +4,96 @@
  * 它做且只做一件事：把权威层已经落地的条目嵌成向量，让「意思相近但用词不同」也能召回。
  * 因此它：
  * - **不是权威层**：`role = 'derived-index'`，`descriptor.verbs` 不含 `capture`——它不吃原始
- *   证据，只吃权威层 capture 之后的 `MemoryEvidenceRecord`（那里才有指针）；
+ *   证据，只吃权威层 capture 之后的记录（那里才有指针）；
  * - **不持内容副本**：索引记录只有 `{指针, 作用域, 向量}`。卸载 = `dropIndex()` = 删派生文件，
  *   权威内容一个字节没动；
  * - **不写迁移器**：换嵌入模型或升级索引 schema → 版本戳对不上 → `isStale()` 为真 → 全量重建。
  *
  * 缺席时会怎样已经由 §九 写死：recall 退回权威层的索引行匹配，**功能面不缺，只是召回变笨**。
- * 这个后端因此从不承担「没有我就不行」的角色，也没有任何调用点需要判断它在不在。
  */
 
-import { isBoolean, isEmpty, isNull, isNumber, isString,isUndefined } from '@velaros-ai/core'
+import { isEmpty } from '@velaros-ai/core'
 
-import type { MemoryBackendDescriptor, MemoryBackendStats } from '../../contract/backend'
+import { MemoryVectorBackendId, MemoryVectorIndex } from '../../contract/constants'
 import type {
   MemoryAuthorityEnumeration,
   MemoryDerivedIndexBackend,
-  MemoryDerivedIndexRebuildResult,
-  MemoryDerivedIndexVersion,
-} from '../../contract/derived-index'
-import { formatMemoryDerivedIndexVersion } from '../../contract/derived-index'
-import { type MemoryEmbedder, MemoryVectorBackendId, type MemoryVectorIndexRecord, type MemoryVectorIndexStore } from '../../contract/vector'
+  MemoryEmbedder,
+  MemoryVectorIndexStore,
+} from '../../contract/requires'
 import type {
+  MemoryBackendDescriptor,
+  MemoryBackendStats,
   MemoryCaptureBatchResult,
   MemoryCaptureResult,
+  MemoryDerivedIndexRebuildResult,
+  MemoryDerivedIndexVersion,
   MemoryEvidenceRecord,
+  MemoryForgetResult,
   MemoryRecallItem,
   MemoryRecallOptions,
-  MemoryScopeType,
+  MemoryVectorIndexRecord,
 } from '../../types/memory'
-import { isMemoryVisibleInScope } from '../../utils/scope'
+import type { PendingIndexEntry } from '../../types/vector'
+import { formatMemoryDerivedIndexVersion } from '../../utils/backends'
+import { MemoryTuning } from '../../utils/tuning'
+import {
+  buildIndexText,
+  dot,
+  matchesVectorScope,
+  normalizeVector,
+  stringifyValue,
+  toAsyncIterable,
+  toPointerItem,
+} from '../../utils/vector'
 
-import { createInMemoryVectorIndexStore } from './VectorIndexStores'
+import { createInMemoryVectorIndexStore } from './InMemoryVectorIndexStore'
 
-/** 索引记录形状的版本。改了记录字段就 +1——老索引因此自动作废重建，不写迁移器。 */
-export const MemoryVectorIndexSchemaVersion = 1
-
-/** 一次嵌入调用最多送多少条：批太大撞 provider 上限，批太小把往返次数变成瓶颈。 */
-const DefaultEmbedBatchSize = 64
-const DefaultRecallLimit = 10
-const MaxRecallLimit = 200
-/** 相似度地板：低于它的命中不如不给——语义召回给一堆不相关的东西比空手更坏。 */
-const DefaultMinimumSimilarity = 0.2
-/** 单条送嵌入的正文上限：记忆条目本就短，超长的多半是误采集，截断好过把 token 烧在噪声上。 */
-const MaxEmbeddedTextLength = 4000
-
+/** 一个向量派生索引后端要什么。 */
 export interface MemoryVectorBackendOptions {
   /** 嵌入端口（宿主注入；包内零模型假设）。 */
   readonly embedder: MemoryEmbedder
   /** 索引存储；缺省用纯内存实现（宿主须显式注入 `createFileVectorIndexStore(...)` 才有持久化）。 */
   readonly store?: MemoryVectorIndexStore
+  /** 一次嵌入调用最多送多少条；缺省取可调参数表。 */
   readonly embedBatchSize?: number
+  /** 相似度地板；低于它的命中直接丢掉。缺省取可调参数表。 */
   readonly minimumSimilarity?: number
 }
 
-const vectorDescriptor: MemoryBackendDescriptor & { role: 'derived-index' } = Object.freeze({
-  id: MemoryVectorBackendId,
-  role: 'derived-index' as const,
-  displayName: 'Memory vector (semantic derived index)',
-  // capture 不在列:派生索引不吃原始证据。声明缺席让 supportsMemoryBackendVerb 机械可查,
-  // 不是靠读文档才知道 captureBatch 会拒收。
-  verbs: Object.freeze(['recall', 'inspect', 'archive'] as const),
-})
+/** 语义派生索引后端；实例由 `createMemoryVectorBackend` 造，一个实例管一份索引。 */
+export class MemoryVectorBackend implements MemoryDerivedIndexBackend {
+  /** 派生索引的自述：不声明 capture，机械可查「这个后端不吃原始证据」。 */
+  private static readonly Descriptor: MemoryBackendDescriptor & { readonly role: 'derived-index' } = Object.freeze({
+    id: MemoryVectorBackendId,
+    role: 'derived-index' as const,
+    displayName: '记忆向量索引（语义派生索引）',
+    verbs: Object.freeze(['recall', 'inspect', 'archive'] as const),
+  })
 
-class MemoryVectorBackend implements MemoryDerivedIndexBackend {
-  public readonly descriptor = vectorDescriptor
+  /** 装错后端时的拒收说明：两条 capture 路径同一句话。 */
+  private static readonly RejectCaptureMessage =
+    'memory-vector 是派生索引，不接受原始证据；双写的第二写请走 indexEvidence()。'
+
+  public readonly descriptor = MemoryVectorBackend.Descriptor
+
   public readonly indexVersion: MemoryDerivedIndexVersion
 
   private readonly store: MemoryVectorIndexStore
+
   private readonly embedder: MemoryEmbedder
+
   private readonly embedBatchSize: number
+
   private readonly minimumSimilarity: number
 
   public constructor(options: MemoryVectorBackendOptions) {
     this.embedder = options.embedder
     this.store = options.store ?? createInMemoryVectorIndexStore()
-    this.embedBatchSize = Math.max(1, options.embedBatchSize ?? DefaultEmbedBatchSize)
-    this.minimumSimilarity = options.minimumSimilarity ?? DefaultMinimumSimilarity
+    this.embedBatchSize = Math.max(1, options.embedBatchSize ?? MemoryTuning.vector.embedBatchSize)
+    this.minimumSimilarity = options.minimumSimilarity ?? MemoryTuning.vector.minimumSimilarity
     this.indexVersion = Object.freeze({
-      schema: MemoryVectorIndexSchemaVersion,
+      schema: MemoryVectorIndex.schemaVersion,
       embedding: options.embedder.identity,
     })
   }
@@ -93,21 +105,15 @@ class MemoryVectorBackend implements MemoryDerivedIndexBackend {
   /**
    * 窄端口的 `capture`：**显式拒收，且是抛错**。
    *
-   * 原始证据还没有指针（指针由权威层在落地时分配），派生索引接了也不知道该指向谁。这条路只有
-   * 「把派生索引当权威后端装」才会走到——而那已经被 `resolveMemoryStoreBackend` 的角色门挡在
-   * 前面；这里是第二道门。**不静默返回 `inserted: false`**：那会让「装错了后端」表现为
-   * 「记忆写了但一条都没存下」，而这是最不该安静失败的一件事。
+   * 原始证据还没有指针（指针由权威层在落地时分配），派生索引接了也不知道该指向谁。
+   * **不静默返回 `inserted: false`**：那会让「装错了后端」表现为「记忆写了但一条都没存下」。
    */
   public capture(): MemoryCaptureResult {
-    throw new Error(
-      'memory-vector 是派生索引，不接受原始证据；双写的第二写请走 indexEvidence()。',
-    )
+    throw new Error(MemoryVectorBackend.RejectCaptureMessage)
   }
 
   public captureBatch(): MemoryCaptureBatchResult {
-    throw new Error(
-      'memory-vector 是派生索引，不接受原始证据；双写的第二写请走 indexEvidence()。',
-    )
+    throw new Error(MemoryVectorBackend.RejectCaptureMessage)
   }
 
   public async indexEvidence(records: readonly MemoryEvidenceRecord[]): Promise<number> {
@@ -127,7 +133,7 @@ class MemoryVectorBackend implements MemoryDerivedIndexBackend {
     source: MemoryAuthorityEnumeration,
   ): Promise<MemoryDerivedIndexRebuildResult> {
     const before = this.store.list().length
-    // 先清空后灌入:孤儿因此自然消失,不需要一套「比对权威层再删」的对账逻辑。
+    // 先清空后灌入：孤儿因此自然消失，不需要一套「比对权威层再删」的对账逻辑。
     this.store.clear()
 
     let indexedCount = 0
@@ -163,15 +169,18 @@ class MemoryVectorBackend implements MemoryDerivedIndexBackend {
     const trimmed = (query ?? '').trim()
     if (isEmpty(trimmed)) return []
 
-    const records = this.store.list().filter((record) => matchesScope(record, options))
+    const records = this.store.list().filter((record) => matchesVectorScope(record, options))
     if (isEmpty(records)) return []
 
     const [embedded] = await this.embedder.embed([trimmed])
-    const queryVector = normalize(embedded ?? [])
+    const queryVector = normalizeVector(embedded ?? [])
     if (queryVector.length === 0) return []
 
-    const limit = Math.max(1, Math.min(options.limit ?? DefaultRecallLimit, MaxRecallLimit))
-    const scored: Array<{ record: MemoryVectorIndexRecord; score: number }> = []
+    const limit = Math.max(
+      1,
+      Math.min(options.limit ?? MemoryTuning.vector.defaultRecallLimit, MemoryTuning.vector.maxRecallLimit),
+    )
+    const scored: Array<{ record: MemoryVectorIndexRecord, score: number }> = []
     for (const record of records) {
       const score = dot(queryVector, record.vector)
       if (score >= this.minimumSimilarity) scored.push({ record, score })
@@ -192,7 +201,7 @@ class MemoryVectorBackend implements MemoryDerivedIndexBackend {
       backendId: MemoryVectorBackendId,
       itemCount: records.length,
       pendingCount: 0,
-      version: MemoryVectorIndexSchemaVersion,
+      version: MemoryVectorIndex.schemaVersion,
       details: {
         embedding: this.embedder.identity,
         dimensions: this.embedder.dimensions,
@@ -202,7 +211,7 @@ class MemoryVectorBackend implements MemoryDerivedIndexBackend {
   }
 
   /** `archive` = 剔一个指针。派生层不持内容，「归档」在这里就只是让指针不再参与语义召回。 */
-  public archive(id: string) {
+  public archive(id: string): MemoryForgetResult {
     const removed = this.store.remove([id])
     return { claimId: id, affectedEvidenceIds: removed > 0 ? [id] : [], treeVersion: 0 }
   }
@@ -215,6 +224,7 @@ class MemoryVectorBackend implements MemoryDerivedIndexBackend {
     this.store.clear()
   }
 
+  /** 分批嵌入并写进索引；返回实际写入条数。 */
   private async embedAndUpsert(entries: readonly PendingIndexEntry[]): Promise<number> {
     if (entries.length === 0) return 0
 
@@ -229,7 +239,7 @@ class MemoryVectorBackend implements MemoryDerivedIndexBackend {
       }
       const records: MemoryVectorIndexRecord[] = []
       for (const [index, entry] of slice.entries()) {
-        const vector = normalize(vectors[index])
+        const vector = normalizeVector(vectors[index])
         if (vector.length === 0) continue
         records.push({
           id: entry.id,
@@ -246,14 +256,6 @@ class MemoryVectorBackend implements MemoryDerivedIndexBackend {
   }
 }
 
-interface PendingIndexEntry {
-  id: string
-  scopeType: MemoryScopeType
-  scopeId: string
-  updatedAt: number
-  text: string
-}
-
 /**
  * 构造一个 `memory-vector` 派生索引后端。
  *
@@ -263,100 +265,4 @@ export function createMemoryVectorBackend(
   options: MemoryVectorBackendOptions,
 ): MemoryDerivedIndexBackend {
   return new MemoryVectorBackend(options)
-}
-
-function buildIndexText(title: string, summary: string, body: string): string {
-  return [title, summary, body]
-    .map((part) => (part ?? '').trim())
-    .filter((part) => part.length > 0)
-    .join('\n')
-    .slice(0, MaxEmbeddedTextLength)
-}
-
-function stringifyValue(value: unknown): string {
-  if (isString(value)) return value
-  if (isNull(value) || isUndefined(value)) return ''
-  if (isNumber(value) || isBoolean(value)) return String(value)
-  try {
-    return JSON.stringify(value) ?? ''
-  } catch {
-    // arch-guard:silent-catch-ok 任意元数据无法序列化时使用空文本，向量正文仍可继续索引。
-    return ''
-  }
-}
-
-/**
- * 作用域过滤 —— 与权威层**同一个函数**，不是「同一套语义」的口头承诺。
- *
- * 语义召回如果不认作用域，就会把别的项目的记忆捞进来；这是**隔离**问题，不是相关性问题，
- * 所以它在打分之前就发生。派生索引横跨历史上索引过的每一个项目，因此这里的判据只要比
- * 权威层松一点，泄漏面就是全库——曾经的 `scopeId.endsWith(workspaceRoot)` 正是这样一格。
- */
-function matchesScope(record: MemoryVectorIndexRecord, options: MemoryRecallOptions): boolean {
-  return isMemoryVisibleInScope(record, {
-    scopeId: options.scopeId,
-    workspaceRoot: options.workspaceRoot,
-    includeGlobal: options.includeGlobal,
-  })
-}
-
-/**
- * 指针条目：只有 id / 作用域 / 相似度，**没有内容**。
- *
- * 编排层拿它回权威层 `getItem` 取全文。直接把这个东西当召回结果给用户是错的——那正是
- * 「索引持了内容副本」的反面失败：什么都没有。
- */
-function toPointerItem(record: MemoryVectorIndexRecord, score: number): MemoryRecallItem {
-  return {
-    id: record.id,
-    claimId: record.id,
-    conceptId: record.id,
-    conceptType: 'entity',
-    predicate: 'memory',
-    title: '',
-    summary: '',
-    value: null,
-    scopeType: record.scopeType,
-    scopeId: record.scopeId,
-    confidence: score,
-    salience: score,
-    activation: 1,
-    updatedAt: record.updatedAt,
-    snapshotVersion: 0,
-    retrievalReason: 'deep',
-    evidenceIds: [record.id],
-    sourceTypes: [],
-    path: [],
-  }
-}
-
-function normalize(values: readonly number[]): Float32Array {
-  let sum = 0
-  for (const value of values) sum += value * value
-  const magnitude = Math.sqrt(sum)
-  if (!Number.isFinite(magnitude) || magnitude === 0) return new Float32Array(0)
-
-  const normalized = new Float32Array(values.length)
-  for (let index = 0; index < values.length; index += 1) {
-    normalized[index] = values[index] / magnitude
-  }
-  return normalized
-}
-
-/** 两个已归一化向量的点积 = 余弦相似度。维度不符按最短的算（换模型的索引本就该重建）。 */
-function dot(left: Float32Array, right: Float32Array): number {
-  const length = Math.min(left.length, right.length)
-  let sum = 0
-  for (let index = 0; index < length; index += 1) sum += left[index] * right[index]
-  return sum
-}
-
-async function* toAsyncIterable<T>(
-  source: AsyncIterable<T> | Iterable<T>,
-): AsyncIterable<T> {
-  if (Symbol.asyncIterator in source) {
-    yield* source as AsyncIterable<T>
-    return
-  }
-  yield* source as Iterable<T>
 }

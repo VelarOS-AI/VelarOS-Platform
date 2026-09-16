@@ -7,18 +7,15 @@
 
 import { describe, expect, test } from 'bun:test'
 
-import {
-  listMissingAuthorityMemoryVerbs,
-  type MemoryBackendVerb,
-  type MemoryStoreBackend,
-  RequiredAuthorityMemoryVerbs,
-  supportsMemoryBackendVerb,
-} from '../../src/contract/backend'
+import type { MemoryBackendVerb } from '../../src/contract/constants'
+import { RequiredAuthorityMemoryVerbs } from '../../src/contract/constants'
+import type { MemoryStoreBackend } from '../../src/contract/requires'
 import { createMemoryFilesBackend } from '../../src/impl/files/MemoryFilesBackend'
 import {
   createMemoryStoreCapabilityToken,
   resolveMemoryStoreBackend,
 } from '../../src/impl/host/MemoryStoreCapabilities'
+import { listMissingAuthorityMemoryVerbs, supportsMemoryBackendVerb } from '../../src/utils/backends'
 
 function createStubBackend(
   verbs: readonly MemoryBackendVerb[],

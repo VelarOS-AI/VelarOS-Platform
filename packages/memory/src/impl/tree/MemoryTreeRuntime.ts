@@ -1,26 +1,29 @@
+/**
+ * 记忆树 v1 的运行时组装：`DefaultMemoryRuntime` 与工厂 `createMemoryRuntime`。
+ * 接口 `MemoryRuntime` 在本文件的类上方；文件名与类名不一致是入口收口轮要改的旧账。
+ */
+
 import type { MemoryTreeRuntimeProviders } from '../../contract/requires'
 
-import { MemoryTreeDomain } from './MemoryTreeDomain'
+import { MemoryTreeDomain, type MemoryTreeDomainApi } from './MemoryTreeDomain'
 import { MemoryTreeRepository } from './MemoryTreeRepository'
 
 /**
- * 已发布的最小运行时契约。
+ * 一个宿主独占的长期记忆运行时：拿宿主给的数据库解析器组装出记忆树的门面。
  *
- * 该接口有意只保留 0.3.2 已公开的成员，使既有结构化实现继续可赋值。
- * 新代码通常直接使用 {@link DefaultMemoryRuntime}。
+ * 实现是 `DefaultMemoryRuntime`，经 `createMemoryRuntime` 取得；运行时本身不读进程全局配置，也不持有产品状态。
+ * 接口有意只保留已公开的成员，让既有的结构化实现继续可赋值。
  */
 export interface MemoryRuntime {
-  readonly memoryDomainService: MemoryTreeDomain
+  /** 这个宿主的记忆树门面，整个运行时只有这一份，生命周期跟着运行时走。 */
+  readonly memoryDomainService: MemoryTreeDomainApi
+  /** `memoryDomainService` 的旧名，指向同一个门面；入口收口轮会删掉它。 */
+  readonly domain: MemoryTreeDomainApi
 }
 
-/**
- * 一个宿主独占的长期记忆运行时。
- *
- * 数据库连接由宿主注入；运行时本身不读取进程全局配置，也不持有产品状态。
- */
 export class DefaultMemoryRuntime implements MemoryRuntime {
-  public readonly domain: MemoryTreeDomain
-  public readonly memoryDomainService: MemoryTreeDomain
+  public readonly domain: MemoryTreeDomainApi
+  public readonly memoryDomainService: MemoryTreeDomainApi
 
   constructor(providers: MemoryTreeRuntimeProviders) {
     this.domain = new MemoryTreeDomain(
@@ -39,6 +42,6 @@ export const MemoryRuntime = DefaultMemoryRuntime
 
 export function createMemoryRuntime(
   providers: MemoryTreeRuntimeProviders
-): DefaultMemoryRuntime {
+): MemoryRuntime {
   return new DefaultMemoryRuntime(providers)
 }

@@ -20,48 +20,35 @@ import {
 } from '@velaros-ai/kernel/contracts/abi'
 
 // 值导入指向具体模块（见 EvidenceBridge 同款注释：`from '..'` 在 dist 里是目录 import）。
-import {
-  listMissingAuthorityMemoryVerbs,
-  type MemoryBackendDescriptor,
-  type MemoryStoreBackend,
-} from '../../contract/backend'
+import { MemoryStoreCapabilityIdentity } from '../../contract/constants'
+import type {
+  CreateMemoryStoreKernelModuleOptions,
+  MemoryStoreBackend,
+  MemoryStoreCapabilityRegistry,
+  MemoryStoreCapabilityService,
+  ResolveMemoryStoreBackendInput,
+} from '../../contract/requires'
+import type { MemoryBackendDescriptor } from '../../types/memory'
+import { listMissingAuthorityMemoryVerbs } from '../../utils/backends'
 
-/** token 族前缀。完整 id = `${MemoryStoreCapabilityNamespace}.${backendId}`。 */
-export const MemoryStoreCapabilityNamespace = 'velaros.memory.store'
-
-export const DefaultMemoryStoreCapabilityVersion = '1.0.0'
-
-/** 注册进 kernel service registry 的服务形状：一层薄包装，便于将来加后端级元数据。 */
-export interface MemoryStoreCapabilityService {
-  readonly backend: MemoryStoreBackend
-}
-
+/** 一个后端的能力 id：`velaros.memory.store.<后端 id>`；后端 id 为空时当场判错。 */
 export function memoryStoreCapabilityId(backendId: string): string {
   const normalized = backendId.trim()
   if (isEmpty(normalized)) {
-    throw new Error('Memory store backend id must not be empty')
+    throw new Error('记忆后端 id 不能为空：能力令牌要用它拼 id。')
   }
-  return `${MemoryStoreCapabilityNamespace}.${normalized}`
+  return `${MemoryStoreCapabilityIdentity.namespace}.${normalized}`
 }
 
 /** 为一个后端档铸 token。同 id 同 version 铸出的 token 可互换解析。 */
 export function createMemoryStoreCapabilityToken(
   backendId: string,
-  version: string = DefaultMemoryStoreCapabilityVersion,
+  version: string = MemoryStoreCapabilityIdentity.defaultVersion,
 ): CapabilityToken<MemoryStoreCapabilityService> {
   return createCapabilityToken<MemoryStoreCapabilityService>(
     memoryStoreCapabilityId(backendId),
     version,
   )
-}
-
-export interface CreateMemoryStoreKernelModuleOptions {
-  readonly backend: MemoryStoreBackend
-  /** 缺省 = capability id，保证同一后端档在两个注册表里同名可追。 */
-  readonly moduleId?: string
-  readonly moduleVersion?: string
-  readonly capabilityVersion?: string
-  readonly apiVersion?: number
 }
 
 /**
@@ -83,7 +70,7 @@ export function createMemoryStoreKernelModule(
   return defineKernelModule({
     manifest: {
       id: options.moduleId ?? token.id,
-      version: options.moduleVersion ?? DefaultMemoryStoreCapabilityVersion,
+      version: options.moduleVersion ?? MemoryStoreCapabilityIdentity.defaultVersion,
       apiVersion: options.apiVersion ?? KernelModuleApiVersion,
       provides: [token],
       requires: [],
@@ -95,24 +82,6 @@ export function createMemoryStoreKernelModule(
       context.registerService(token, service)
     },
   })
-}
-
-/**
- * 解析后端所需的最窄注册表面。
- *
- * `KernelModuleHost` 结构上就满足它——适配器因此既不持有整个 host，也不需要为测试造一个假 host。
- */
-export interface MemoryStoreCapabilityRegistry {
-  getOptionalService<TService extends object>(
-    token: CapabilityToken<TService>,
-  ): TService | undefined
-}
-
-export interface ResolveMemoryStoreBackendInput {
-  readonly registry: MemoryStoreCapabilityRegistry
-  /** 后端 id 优先序；首个已注册的胜出。 */
-  readonly preference: readonly string[]
-  readonly capabilityVersion?: string
 }
 
 /**
@@ -180,3 +149,69 @@ export function listRegisteredMemoryStoreBackends(
   }
   return descriptors
 }
+
+/**
+ * 记忆后端的注册与解析面：铸令牌、包内核模块、按优先序解析权威层与派生索引、枚举在册后端。
+ *
+ * 工具函数不出包，宿主拿到的是这一个整件能力。整个进程共用 `memoryStoreCapabilities` 这一份。
+ */
+export interface MemoryStoreCapabilitiesApi {
+  /** 一个后端的能力 id。 */
+  capabilityId(backendId: string): string
+  /** 为一个后端档铸能力令牌；同 id 同 version 铸出的令牌可互换解析。 */
+  token(backendId: string, version?: string): CapabilityToken<MemoryStoreCapabilityService>
+  /** 把一个后端包成可注册进内核的模块。 */
+  createKernelModule(options: CreateMemoryStoreKernelModuleOptions): KernelModuleDefinition
+  /** 按优先序解析权威层后端；一个都没注册时返回 undefined。 */
+  resolveAuthority(input: ResolveMemoryStoreBackendInput): MemoryStoreBackend | undefined
+  /** 解析已注册的派生索引后端（叠加编排的第二层）。 */
+  resolveDerivedIndexes(
+    registry: MemoryStoreCapabilityRegistry,
+    backendIds: readonly string[],
+    capabilityVersion?: string,
+  ): readonly MemoryStoreBackend[]
+  /** 枚举在册后端的自述，供宿主诊断面使用。 */
+  listRegistered(
+    registry: MemoryStoreCapabilityRegistry,
+    backendIds: readonly string[],
+    capabilityVersion?: string,
+  ): readonly MemoryBackendDescriptor[]
+}
+
+/** 记忆后端注册与解析面的对外实例实现。 */
+export class MemoryStoreCapabilities implements MemoryStoreCapabilitiesApi {
+  public capabilityId(backendId: string): string {
+    return memoryStoreCapabilityId(backendId)
+  }
+
+  public token(backendId: string, version?: string): CapabilityToken<MemoryStoreCapabilityService> {
+    return createMemoryStoreCapabilityToken(backendId, version)
+  }
+
+  public createKernelModule(options: CreateMemoryStoreKernelModuleOptions): KernelModuleDefinition {
+    return createMemoryStoreKernelModule(options)
+  }
+
+  public resolveAuthority(input: ResolveMemoryStoreBackendInput): MemoryStoreBackend | undefined {
+    return resolveMemoryStoreBackend(input)
+  }
+
+  public resolveDerivedIndexes(
+    registry: MemoryStoreCapabilityRegistry,
+    backendIds: readonly string[],
+    capabilityVersion?: string,
+  ): readonly MemoryStoreBackend[] {
+    return resolveMemoryDerivedIndexBackends(registry, backendIds, capabilityVersion)
+  }
+
+  public listRegistered(
+    registry: MemoryStoreCapabilityRegistry,
+    backendIds: readonly string[],
+    capabilityVersion?: string,
+  ): readonly MemoryBackendDescriptor[] {
+    return listRegisteredMemoryStoreBackends(registry, backendIds, capabilityVersion)
+  }
+}
+
+/** 整个进程共用的后端注册与解析实例。 */
+export const memoryStoreCapabilities: MemoryStoreCapabilitiesApi = new MemoryStoreCapabilities()

@@ -6,7 +6,7 @@ import { join } from 'node:path'
 
 import { AppError } from '@velaros-ai/core/error'
 
-import { openMemoryAuthorityV2 } from '../../src/impl/tree-v2/MemoryAuthorityDatabaseV2'
+import { MemoryAuthorityDatabaseV2 } from '../../src/impl/tree-v2/MemoryAuthorityDatabaseV2'
 import { MemoryDreamRunCoordinatorV2 } from '../../src/impl/tree-v2/MemoryDreamRunCoordinatorV2'
 import { MemoryEvidenceIngestServiceV2 } from '../../src/impl/tree-v2/MemoryEvidenceIngestServiceV2'
 import { MemoryIdentityKeyServiceV2 } from '../../src/impl/tree-v2/MemoryIdentityKeyServiceV2'
@@ -15,7 +15,7 @@ import { MemoryTreeStoreV2 } from '../../src/impl/tree-v2/MemoryTreeStoreV2'
 import { ContentKeyServiceV2 } from '../../src/impl/tree-v2/storage/ContentKeyServiceV2'
 import { MemoryBlobStoreV2 } from '../../src/impl/tree-v2/storage/MemoryBlobStoreV2'
 import { MemoryKeyringStoreV2 } from '../../src/impl/tree-v2/storage/MemoryKeyringStoreV2'
-import type { MemoryWrappingRootV2 } from '../../src/utils/tree-v2/storage/wrapping-root'
+import type { MemoryWrappingRootV2 } from '../../src/types/tree-v2/storage'
 
 const ExpectedMinimumAssertionsV2 = 42
 let assertionCount = 0
@@ -66,7 +66,7 @@ function createProbeWrappingRootV2(secret = randomBytes(32)): MemoryWrappingRoot
 function runMeaningCurationProbeV2(): void {
   const probeRoot = mkdtempSync(join(tmpdir(), 'velaros-memory-meaning-v2-'))
   try {
-    const authority = openMemoryAuthorityV2(probeRoot).store
+    const authority = new MemoryAuthorityDatabaseV2(probeRoot)
     check(
       authority.database
         .prepare(
@@ -85,19 +85,15 @@ function runMeaningCurationProbeV2(): void {
         .get(),
       'migration 2 应创建 episode evidence 谱系表'
     )
-    const keyring = MemoryKeyringStoreV2.open(
+    const keyring = new MemoryKeyringStoreV2(
       authority.roots.keyringDir,
       createProbeWrappingRootV2()
-    ).store
+    )
     const blobs = new MemoryBlobStoreV2(authority.roots.blobsDir)
     const contentKeys = new ContentKeyServiceV2(keyring, blobs)
     const identityKeys = new MemoryIdentityKeyServiceV2(keyring)
     const ingest = new MemoryEvidenceIngestServiceV2(authority, contentKeys, identityKeys, blobs)
-    const tree = MemoryTreeStoreV2.open({
-      authority,
-      contentKeys,
-      keyring,
-    }).store
+    const tree = new MemoryTreeStoreV2(authority, contentKeys, keyring)
     const dream = new MemoryDreamRunCoordinatorV2(authority, contentKeys, tree)
     const curation = new MemoryMeaningCurationServiceV2(
       authority,
@@ -337,7 +333,7 @@ function runMeaningCurationProbeV2(): void {
       '树节点使用确定性 stable key'
     )
     equal(
-      MemoryTreeStoreV2.open({ authority, contentKeys, keyring }).store.version,
+      new MemoryTreeStoreV2(authority, contentKeys, keyring).version,
       1,
       '意义提交后的 authority 链可重开'
     )
@@ -492,7 +488,7 @@ function runMeaningCurationProbeV2(): void {
 }
 
 function readMetaV2(
-  authority: ReturnType<typeof openMemoryAuthorityV2>['store'],
+  authority: MemoryAuthorityDatabaseV2,
   key: string
 ): number {
   return authority.database
@@ -502,7 +498,7 @@ function readMetaV2(
 }
 
 function readRunStateV2(
-  authority: ReturnType<typeof openMemoryAuthorityV2>['store'],
+  authority: MemoryAuthorityDatabaseV2,
   runId: string
 ): string {
   return authority.database

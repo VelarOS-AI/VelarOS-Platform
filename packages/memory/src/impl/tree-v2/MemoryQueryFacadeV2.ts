@@ -1,146 +1,92 @@
-import { isEmpty, isPresent, isString } from '@velaros-ai/core'
+import { isEmpty } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import type { MemoryTreeNodeStructV2 } from '../../utils/tree-v2/diff-chain'
+import type { MemoryTreeNodeStructV2 } from '../../types/tree-v2/diff'
+import type {
+  HydrateMemoryRecallProjectionInputV2,
+  MemoryErasureTargetRowV2,
+  MemoryQueryPathNodeV2,
+  MemoryRecallIndexRefreshReportV2,
+  MemoryRecallIndexStateV2,
+  MemoryRecallProjectionV2,
+  MemoryRecallQueryResultV2,
+  MemoryRecallQueryV2,
+  MemoryRecallReasonV2,
+  MemoryTreeStructureProjectionV2,
+  PrivacyProjectionV2,
+  QueryAuthoritySnapshotRowV2,
+  QueryAuthoritySnapshotV2,
+  SearchIndexEntryV2,
+  SearchIndexGenerationV2,
+} from '../../types/tree-v2/query'
+import { compareCodeUnitV2 } from '../../utils/tree-v2/checks'
+import {
+  buildPathV2,
+  collectEntityIdsV2,
+  countTokenOverlapV2,
+  isDeniedNodeV2,
+  isQueryableNodeV2,
+  resolveFallbackNodesV2,
+  SensitiveLabelV2,
+  subjectKeyV2,
+  tokenizeMemoryQueryV2,
+  validateRecallQueryV2,
+} from '../../utils/tree-v2/query'
+import { MemoryTuning } from '../../utils/tuning'
 
-import type { ContentKeyServiceV2 } from './storage/ContentKeyServiceV2'
-import type { MemoryAuthorityDatabaseV2 } from './MemoryAuthorityDatabaseV2'
-import type { MemoryTreeStoreV2 } from './MemoryTreeStoreV2'
-
-const DefaultRecallLimitV2 = 3
-const MaximumRecallLimitV2 = 12
-const MaximumPathNodesV2 = 16
-const SensitiveLabelV2 = '敏感记忆'
-
-export type MemoryRecallReasonV2 = 'branch' | 'search' | 'active-path-fallback'
-
-export type MemoryRecallIndexStateV2 = 'ready' | 'missing' | 'stale'
-
-export interface MemoryQueryPathNodeV2 {
-  readonly treeNodeId: string
-  readonly parentTreeNodeId: Nullable<string>
-  readonly nodeType: string
-  readonly namespace: string
-  readonly subjectType: string
-  readonly subjectId: string
-  readonly label: Nullable<string>
-  readonly sensitive: boolean
-  readonly confidence: number
-  readonly activation: number
-  readonly firstSeenAt: number
-  readonly lastActiveAt: number
-}
-
-export interface MemoryRecallProjectionV2 {
-  readonly treeNodeId: string
-  readonly snapshotVersion: number
-  readonly denyGeneration: number
-  readonly retrievalReason: MemoryRecallReasonV2
-  readonly confidence: number
-  readonly conceptIds: readonly string[]
-  readonly episodeIds: readonly string[]
-  readonly claimIds: readonly string[]
-  readonly evidenceIds: readonly string[]
-  readonly path: readonly MemoryQueryPathNodeV2[]
-}
-
-export interface MemoryRecallQueryV2 {
-  readonly query: string
-  readonly branchTreeNodeId?: string
-  readonly limit?: number
-  /**
-   * 只有宿主已完成当前 surface 的隐私授权判定时才可开启。
-   * 默认输出稳定模糊标签，不解密 sensitive 节点。
-   */
-  readonly revealSensitive?: boolean
-}
-
-export interface MemoryRecallQueryResultV2 {
-  readonly snapshotVersion: number
-  readonly denyGeneration: number
-  readonly indexState: MemoryRecallIndexStateV2
-  readonly degraded: boolean
-  readonly candidateCount: number
-  readonly hydratedNodeCount: number
-  readonly items: readonly MemoryRecallProjectionV2[]
-}
-
-export interface MemoryRecallIndexRefreshReportV2 {
-  readonly snapshotVersion: number
-  readonly denyGeneration: number
-  readonly indexedNodeCount: number
-  readonly skippedSensitiveCount: number
-  readonly skippedDeniedCount: number
-}
-
-export interface MemoryTreeStructureNodeV2 {
-  readonly treeNodeId: string
-  readonly parentTreeNodeId: Nullable<string>
-  readonly nodeType: string
-  readonly namespace: string
-  readonly subjectType: string
-  readonly subjectId: string
-  readonly visibilityState: string
-}
-
-export interface MemoryTreeStructureProjectionV2 {
-  readonly snapshotVersion: number
-  readonly denyGeneration: number
-  readonly nodes: readonly MemoryTreeStructureNodeV2[]
-}
-
-interface SearchIndexEntryV2 {
-  readonly treeNodeId: string
-  readonly tokens: ReadonlySet<string>
-  readonly activation: number
-  readonly mainlineScore: number
-  readonly lastActiveAt: number
-}
-
-interface SearchIndexGenerationV2 {
-  readonly snapshotVersion: number
-  readonly denyGeneration: number
-  readonly entries: readonly SearchIndexEntryV2[]
-}
-
-interface PrivacyProjectionV2 {
-  readonly sensitiveSubjectKeys: ReadonlySet<string>
-}
-
-interface QueryAuthoritySnapshotV2 {
-  readonly version: number
-  readonly globalMainlineNodeId: Nullable<string>
-}
+import type { ContentKeyServiceV2Api } from './storage/ContentKeyServiceV2'
+import type { MemoryAuthorityDatabaseV2Api } from './MemoryAuthorityDatabaseV2'
+import type { MemoryTreeStoreV2Api } from './MemoryTreeStoreV2'
 
 /**
- * v2 已提交树的唯一查询门面。
+ * 已提交树的唯一查询门面：召回、树结构投影与内存搜索索引的持有者。
  *
- * 同步 recall 从不启动模型、网络或全库解密：搜索只读显式后台刷新出的内存 index；
- * index 缺失/陈旧时确定性降级到当前主线路径。每次只解密最终 top-K 路径，且按
- * tree version + privacy generation 双键判断缓存是否仍可消费。
+ * 同步召回从不启动模型、网络或全库解密：搜索只读显式后台刷新出来的内存索引；
+ * 索引缺失或陈旧时确定性降级到当前主线路径。每次只解密最终 top-K 路径，
+ * 并按「树版本 + 隐私代」双键判断缓存还能不能用。
+ * 实例归 `MemorySystemRuntimeV2`（或探针）所有，索引随实例存活。
  */
-export class MemoryQueryFacadeV2 {
+export interface MemoryQueryFacadeV2Api {
+  /**
+   * 显式后台入口：按当前树重建内存搜索索引，返回这一代的读数。
+   * 调用方应该放在空闲或整理调度路径上；同步召回永远不会隐式调它。
+   * 只在进程内留归一化 token，不产生明文磁盘索引。
+   */
+  refreshSearchIndex(): MemoryRecallIndexRefreshReportV2
+  /** 丢掉内存搜索索引（关闭前调用，避免 token 留在进程里）。 */
+  clearSearchIndex(): void
+  /**
+   * 只给稳定结构标识、不解密正文的树投影，给宿主维护树选择态、并为分支召回提供节点 id。
+   * 在擦除名单里的节点不会出现在投影里。
+   */
+  inspectTreeStructure(): MemoryTreeStructureProjectionV2
+  /**
+   * 召回：指定分支就只取那个节点，否则按内存索引打分；索引没就绪时降级到主线路径。
+   * 入参不合法抛 VALIDATION；当前树版本缺 snapshot 权威行抛 INVARIANT。
+   */
+  recall(input: MemoryRecallQueryV2): MemoryRecallQueryResultV2
+}
+
+export class MemoryQueryFacadeV2 implements MemoryQueryFacadeV2Api {
+  /** 打分里激活度的权重（相对 token 覆盖率）。 */
+  private static readonly ActivationWeight = 0.08
+
+  /** 打分里主线权重的权重（相对 token 覆盖率）。 */
+  private static readonly MainlineWeight = 0.04
+
   private searchIndex: Nullable<SearchIndexGenerationV2> = null
 
   constructor(
-    private readonly authority: MemoryAuthorityDatabaseV2,
-    private readonly contentKeys: ContentKeyServiceV2,
-    private readonly tree: MemoryTreeStoreV2
+    private readonly authority: MemoryAuthorityDatabaseV2Api,
+    private readonly contentKeys: ContentKeyServiceV2Api,
+    private readonly tree: MemoryTreeStoreV2Api
   ) {}
 
-  /**
-   * 显式后台入口。调用方应在 idle/Dream 调度路径执行；同步 recall 永远不会隐式调用。
-   * 只在进程内保留规范化 token，不产生明文磁盘索引。
-   */
   public refreshSearchIndex(): MemoryRecallIndexRefreshReportV2 {
     const snapshot = this.readSnapshot()
     const denyGeneration = this.readDenyGeneration()
     if (snapshot.version === 0) {
-      this.searchIndex = {
-        snapshotVersion: 0,
-        denyGeneration,
-        entries: [],
-      }
+      this.searchIndex = { snapshotVersion: 0, denyGeneration, entries: [] }
       return {
         snapshotVersion: 0,
         denyGeneration,
@@ -149,13 +95,12 @@ export class MemoryQueryFacadeV2 {
         skippedDeniedCount: 0,
       }
     }
-    const nodes = this.tree.current.nodes
     const denied = this.readDeniedSubjects()
     const privacy = this.readPrivacyProjection()
     const entries: SearchIndexEntryV2[] = []
     let skippedSensitiveCount = 0
     let skippedDeniedCount = 0
-    for (const node of nodes) {
+    for (const node of this.tree.current.nodes) {
       if (!isQueryableNodeV2(node) || isDeniedNodeV2(node, denied)) {
         if (node.visibilityState === 'redacted' || isDeniedNodeV2(node, denied)) {
           skippedDeniedCount += 1
@@ -182,11 +127,7 @@ export class MemoryQueryFacadeV2 {
         plaintext.fill(0)
       }
     }
-    this.searchIndex = {
-      snapshotVersion: snapshot.version,
-      denyGeneration,
-      entries,
-    }
+    this.searchIndex = { snapshotVersion: snapshot.version, denyGeneration, entries }
     return {
       snapshotVersion: snapshot.version,
       denyGeneration,
@@ -200,10 +141,6 @@ export class MemoryQueryFacadeV2 {
     this.searchIndex = null
   }
 
-  /**
-   * 只暴露稳定结构标识，不解密节点正文。用于宿主维护树选择态，并为 branch recall
-   * 提供 treeNodeId；deny-set 中的节点不会出现在投影里。
-   */
   public inspectTreeStructure(): MemoryTreeStructureProjectionV2 {
     const snapshot = this.readSnapshot()
     const denyGeneration = this.readDenyGeneration()
@@ -246,7 +183,10 @@ export class MemoryQueryFacadeV2 {
     const byStableKey = new Map(nodes.map((node) => [node.stableKey, node]))
     const denied = this.readDeniedSubjects()
     const privacy = this.readPrivacyProjection()
-    const limit = Math.min(input.limit ?? DefaultRecallLimitV2, MaximumRecallLimitV2)
+    const limit = Math.min(
+      input.limit ?? MemoryTuning.treeV2.recallDefaultLimit,
+      MemoryTuning.treeV2.recallMaxLimit
+    )
     const indexState = this.readIndexState(snapshot.version, denyGeneration)
     let reason: MemoryRecallReasonV2
     let candidates: MemoryTreeNodeStructV2[]
@@ -291,6 +231,7 @@ export class MemoryQueryFacadeV2 {
     }
   }
 
+  /** 按 token 覆盖率加激活度、主线权重打分排序，再映射回当前树上还能查的节点。 */
   private rankSearchCandidates(
     queryTokens: ReadonlySet<string>,
     byStableKey: ReadonlyMap<string, MemoryTreeNodeStructV2>,
@@ -302,16 +243,18 @@ export class MemoryQueryFacadeV2 {
         const overlap = countTokenOverlapV2(queryTokens, entry.tokens)
         return {
           entry,
-          score: overlap / queryTokens.size + entry.activation * 0.08 + entry.mainlineScore * 0.04,
+          score:
+            overlap / queryTokens.size +
+            entry.activation * MemoryQueryFacadeV2.ActivationWeight +
+            entry.mainlineScore * MemoryQueryFacadeV2.MainlineWeight,
           overlap,
         }
       })
       .filter((candidate) => candidate.overlap > 0)
       .sort((left, right) => {
         if (left.score !== right.score) return right.score - left.score
-        if (left.entry.lastActiveAt !== right.entry.lastActiveAt)
-          return right.entry.lastActiveAt - left.entry.lastActiveAt
-        return compareTextV2(left.entry.treeNodeId, right.entry.treeNodeId)
+        if (left.entry.lastActiveAt !== right.entry.lastActiveAt) return right.entry.lastActiveAt - left.entry.lastActiveAt
+        return compareCodeUnitV2(left.entry.treeNodeId, right.entry.treeNodeId)
       })
       .flatMap((candidate) => {
         const node = byStableKey.get(candidate.entry.treeNodeId)
@@ -319,16 +262,10 @@ export class MemoryQueryFacadeV2 {
       })
   }
 
-  private hydrateProjection(input: {
-    candidate: MemoryTreeNodeStructV2
-    nodesByStableKey: ReadonlyMap<string, MemoryTreeNodeStructV2>
-    denied: ReadonlySet<string>
-    privacy: PrivacyProjectionV2
-    revealSensitive: boolean
-    snapshotVersion: number
-    denyGeneration: number
-    reason: MemoryRecallReasonV2
-  }): MemoryRecallProjectionV2 {
+  /** 把一个候选补全成召回结果：解路径、收实体 id、查还可用的证据。 */
+  private hydrateProjection(
+    input: HydrateMemoryRecallProjectionInputV2
+  ): MemoryRecallProjectionV2 {
     const pathNodes = buildPathV2(input.candidate, input.nodesByStableKey).filter(
       (node) => !isDeniedNodeV2(node, input.denied)
     )
@@ -350,6 +287,7 @@ export class MemoryQueryFacadeV2 {
     }
   }
 
+  /** 解一个路径节点的正文：敏感且未授权给模糊标签，redact 过的给 null。 */
   private hydratePathNode(
     node: MemoryTreeNodeStructV2,
     privacy: PrivacyProjectionV2,
@@ -387,6 +325,7 @@ export class MemoryQueryFacadeV2 {
     }
   }
 
+  /** 收路径上各实体牵连的证据 id，并滤掉不再可用或已进擦除名单的。 */
   private readActiveEvidenceIds(nodes: readonly MemoryTreeNodeStructV2[]): readonly string[] {
     const evidenceIds = new Set<string>()
     const queries: Partial<Record<string, string>> = {
@@ -415,9 +354,10 @@ export class MemoryQueryFacadeV2 {
     )
     return [...evidenceIds]
       .filter((evidenceId) => Boolean(eligible.get(evidenceId)))
-      .sort(compareTextV2)
+      .sort(compareCodeUnitV2)
   }
 
+  /** 读当前树版本对应的 snapshot 权威行；空树返回零值，缺行抛 INVARIANT。 */
   private readSnapshot(): QueryAuthoritySnapshotV2 {
     if (this.tree.version === 0) return { version: 0, globalMainlineNodeId: null }
     const row = this.authority.database
@@ -426,7 +366,7 @@ export class MemoryQueryFacadeV2 {
          FROM memory_tree_snapshots
          WHERE version = ?`
       )
-      .get(this.tree.version) as { version: number; global_mainline_node_id: string } | undefined
+      .get(this.tree.version) as QueryAuthoritySnapshotRowV2 | undefined
     if (!row) {
       throw new AppError('INVARIANT', '当前树版本缺少 snapshot 权威行。')
     }
@@ -436,6 +376,7 @@ export class MemoryQueryFacadeV2 {
     }
   }
 
+  /** 读隐私代：擦除与隐私分级每变一次它就推进一格，用来判断缓存还能不能用。 */
   private readDenyGeneration(): number {
     return this.authority.database
       .prepare(`SELECT integer_value FROM memory_meta WHERE key = 'privacy_generation'`)
@@ -443,6 +384,7 @@ export class MemoryQueryFacadeV2 {
       .get() as number
   }
 
+  /** 判断内存索引相对当前树版本与隐私代是就绪、缺失还是陈旧。 */
   private readIndexState(
     snapshotVersion: number,
     denyGeneration: number
@@ -454,6 +396,7 @@ export class MemoryQueryFacadeV2 {
       : 'stale'
   }
 
+  /** 读当前生效的擦除名单，拼成 `<type>\0<id>` 的键集。 */
   private readDeniedSubjects(): ReadonlySet<string> {
     const rows = this.authority.database
       .prepare(
@@ -461,10 +404,11 @@ export class MemoryQueryFacadeV2 {
          FROM memory_erasure_targets
          WHERE state = 'active'`
       )
-      .all() as Array<{ target_type: string; target_id: string }>
+      .all() as MemoryErasureTargetRowV2[]
     return new Set(rows.map((row) => `${row.target_type}\0${row.target_id}`))
   }
 
+  /** 读敏感实体投影：概念与主张看自己的隐私分级，情节看它挂的证据。 */
   private readPrivacyProjection(): PrivacyProjectionV2 {
     const sensitive = new Set<string>()
     const conceptRows = this.authority.database
@@ -495,127 +439,4 @@ export class MemoryQueryFacadeV2 {
     for (const id of episodeRows) sensitive.add(`episode\0${id}`)
     return { sensitiveSubjectKeys: sensitive }
   }
-}
-
-function validateRecallQueryV2(input: MemoryRecallQueryV2): void {
-  if (!isString(input.query)) {
-    throw new AppError('VALIDATION', 'memory recall query 必须是字符串。')
-  }
-  if (isPresent(input.branchTreeNodeId) && isEmpty(input.branchTreeNodeId)) {
-    throw new AppError('VALIDATION', 'branchTreeNodeId 不得为空。')
-  }
-  if (isPresent(input.limit) && (!Number.isSafeInteger(input.limit) || input.limit < 1)) {
-    throw new AppError('VALIDATION', 'memory recall limit 必须是正安全整数。')
-  }
-}
-
-function resolveFallbackNodesV2(
-  snapshot: QueryAuthoritySnapshotV2,
-  nodes: readonly MemoryTreeNodeStructV2[],
-  denied: ReadonlySet<string>
-): MemoryTreeNodeStructV2[] {
-  const mainline = snapshot.globalMainlineNodeId
-    ? nodes.find(
-        (node) =>
-          node.stableKey === snapshot.globalMainlineNodeId &&
-          isQueryableNodeV2(node) &&
-          !isDeniedNodeV2(node, denied)
-      )
-    : null
-  if (mainline) return [mainline]
-  const fallback = [...nodes]
-    .filter(
-      (node) =>
-        isQueryableNodeV2(node) && !isDeniedNodeV2(node, denied) && node.namespace !== 'root'
-    )
-    .sort((left, right) => {
-      if (left.mainlineScore !== right.mainlineScore)
-        return right.mainlineScore - left.mainlineScore
-      if (left.lastActiveAt !== right.lastActiveAt) return right.lastActiveAt - left.lastActiveAt
-      return compareTextV2(left.stableKey, right.stableKey)
-    })[0]
-  return fallback ? [fallback] : []
-}
-
-function buildPathV2(
-  anchor: MemoryTreeNodeStructV2,
-  byStableKey: ReadonlyMap<string, MemoryTreeNodeStructV2>
-): MemoryTreeNodeStructV2[] {
-  const reversed: MemoryTreeNodeStructV2[] = []
-  const visited = new Set<string>()
-  let cursor: MemoryTreeNodeStructV2 | undefined = anchor
-  while (cursor && reversed.length < MaximumPathNodesV2) {
-    if (visited.has(cursor.stableKey)) {
-      throw new AppError('INVARIANT', '记忆树路径出现环。')
-    }
-    visited.add(cursor.stableKey)
-    reversed.push(cursor)
-    cursor = cursor.parentKey ? byStableKey.get(cursor.parentKey) : undefined
-  }
-  return reversed.reverse()
-}
-
-function collectEntityIdsV2(nodes: readonly MemoryTreeNodeStructV2[]): {
-  conceptIds: readonly string[]
-  episodeIds: readonly string[]
-  claimIds: readonly string[]
-} {
-  const conceptIds = new Set<string>()
-  const episodeIds = new Set<string>()
-  const claimIds = new Set<string>()
-  for (const node of nodes) {
-    if (node.subjectType === 'concept') conceptIds.add(node.subjectId)
-    if (node.subjectType === 'episode') episodeIds.add(node.subjectId)
-    if (node.subjectType === 'claim') claimIds.add(node.subjectId)
-  }
-  return {
-    conceptIds: [...conceptIds].sort(compareTextV2),
-    episodeIds: [...episodeIds].sort(compareTextV2),
-    claimIds: [...claimIds].sort(compareTextV2),
-  }
-}
-
-function isQueryableNodeV2(node: MemoryTreeNodeStructV2): boolean {
-  return node.visibilityState !== 'redacted' && !node.content.redacted
-}
-
-function isDeniedNodeV2(node: MemoryTreeNodeStructV2, denied: ReadonlySet<string>): boolean {
-  return denied.has(subjectKeyV2(node)) || denied.has(`tree_node\0${node.stableKey}`)
-}
-
-function subjectKeyV2(node: MemoryTreeNodeStructV2): string {
-  return `${node.subjectType}\0${node.subjectId}`
-}
-
-function tokenizeMemoryQueryV2(value: string): ReadonlySet<string> {
-  const normalized = value
-    .normalize('NFKC')
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}+#.]+/gu, ' ')
-    .trim()
-  const tokens = new Set<string>()
-  for (const word of normalized.split(/\s+/u)) {
-    if (!word) continue
-    tokens.add(word)
-    const characters = [...word]
-    if (characters.some((character) => /\p{Script=Han}/u.test(character))) {
-      for (const character of characters) tokens.add(character)
-      for (let index = 0; index < characters.length - 1; index += 1) {
-        tokens.add(`${characters[index]}${characters[index + 1]}`)
-      }
-    }
-  }
-  return tokens
-}
-
-function countTokenOverlapV2(left: ReadonlySet<string>, right: ReadonlySet<string>): number {
-  let count = 0
-  for (const token of left) {
-    if (right.has(token)) count += 1
-  }
-  return count
-}
-
-function compareTextV2(left: string, right: string): number {
-  return left < right ? -1 : left > right ? 1 : 0
 }

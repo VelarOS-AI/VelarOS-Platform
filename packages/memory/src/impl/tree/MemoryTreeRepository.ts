@@ -1,15 +1,16 @@
+/**
+ * 记忆树 v1 的 SQLite 仓：`MemoryTreeRepository`。接口 `MemoryTreeRepositoryApi` 在本文件的类上方。
+ * 只管读写与事务，不含整理与投影的判断——那些在 `MemoryDream` 里，纯规则在 `utils/tree/` 下。
+ */
+
 import { randomUUID } from 'node:crypto'
 
-import type BetterSqlite3 from 'better-sqlite3'
-
-import { first,isArray, isBlank, isEmpty, isPlainObject,isString, toNullable } from '@velaros-ai/core'
+import { first, isBlank, isEmpty, isString, Log, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
-import { logRuntime } from '@velaros-ai/core/logger'
 
 import type { MemoryDatabaseProvider } from '../../contract/requires'
 import type {
   MemoryCaptureResult,
-  MemoryDreamRunOptions,
   MemoryEvidenceEligibilityState,
   MemoryEvidenceInput,
   MemoryEvidenceRecord,
@@ -21,271 +22,164 @@ import type {
   MemoryTreeSnapshotRecord,
   MemoryTreeState,
 } from '../../types/memory'
+import type {
+  EvidenceRow,
+  MemoryClaimRow,
+  MemoryClaimUpsertInput,
+  MemoryConceptAliasUpsertInput,
+  MemoryConceptRow,
+  MemoryConceptUpsertInput,
+  MemoryDreamRunFinishInput,
+  MemoryDreamRunResultRow,
+  MemoryDreamRunStartInput,
+  MemoryEpisodeRow,
+  MemoryEpisodeUpsertInput,
+  MemoryIdentityEpochCreateInput,
+  MemoryIdentityEpochRow,
+  MemoryIdentitySupportUpdateInput,
+  MemoryRelationEnsureInput,
+  MemorySessionEligibilityChange,
+  MemoryTreeDiffOp,
+  MemoryTreePathIndex,
+  MemoryTreeProjectionReplaceInput,
+  RecallRow,
+  SnapshotRow,
+  SQLiteDatabase,
+  TreeDiffRow,
+  TreeNodeRow,
+} from '../../types/tree'
 import { inferEvidenceScope } from '../../utils/evidence'
 import { resolveMemoryScopeFilterValue } from '../../utils/scope'
+import { predicateForCategory } from '../../utils/tree/dream-rules'
+import {
+  buildFtsQuery,
+  buildSearchTerms,
+  mapEvidenceRow,
+  mapSnapshot,
+  mapTreeNode,
+  parseJsonValue,
+  parseTreeOps,
+} from '../../utils/tree/repository-rows'
 import {
   applyTreeOps,
+  buildTreePathIndex,
   hashTreeEvent,
   hashTreeNodes,
-  isMemoryTreeDiffOp,
-  type MemoryTreeDiffOp,
+  treePathFromIndex,
 } from '../../utils/tree/tree-projection'
+import { MemoryTuning } from '../../utils/tuning'
 
-const log = logRuntime.tag('MemoryTreeRepository')
+const log = Log.tag('MemoryTreeRepository')
 
-type SQLiteDatabase = InstanceType<typeof BetterSqlite3>
-
-interface EvidenceRow {
-  id: string
-  source_type: MemoryEvidenceRecord['sourceType']
-  trust_level: MemoryEvidenceRecord['trustLevel']
-  source_id: string
-  session_id: string
-  execution_id: string
-  workspace_root: string
-  scope_type: MemoryEvidenceRecord['scopeType']
-  scope_id: string
-  occurred_at: number
-  title: string
-  content: string
-  category: MemoryEvidenceRecord['category']
-  privacy_class: MemoryEvidenceRecord['privacyClass']
-  eligibility_state: MemoryEvidenceRecord['eligibilityState']
-  metadata_json: string
-  ingest_sequence: number
-  created_at: number
-  processed_at: Nullable<number>
-  processed_by_run_id: string
+/**
+ * 记忆树 v1 的唯一落库处：证据、概念、经历、主张、关系、身份纪元、整理账本与树投影都经它读写。
+ *
+ * 实现是 `MemoryTreeRepository`，一个宿主一份，由 `MemoryTreeDomain` 独占持有；数据库连接由宿主注入。
+ * 方法本身不开事务（除写明的几个），成组的写入由调用方用 `transaction` 包起来，全成或全不成。
+ */
+export interface MemoryTreeRepositoryApi {
+  /** 在一个 SQLite 事务里跑一段同步逻辑并返回它的结果；回调里抛错则整段回滚。 */
+  transaction<T>(callback: () => T): T
+  /** 落一条证据（自带事务）。同来源同 sourceId 已存在时不重复写入，回执里 `inserted` 为 false。 */
+  captureEvidence(input: MemoryEvidenceInput): MemoryCaptureResult
+  /** 同一宿主快照内的证据原子落库（自带事务）；任一条写入失败整批回滚。 */
+  captureEvidenceBatch(inputs: readonly MemoryEvidenceInput[]): MemoryCaptureResult[]
+  /** 按摄入顺序取出还没整理过的证据，最多 limit 条；以 processed_at 为准，恢复旧证据也不会漏。 */
+  listPendingEvidence(limit: number): MemoryEvidenceRecord[]
+  /** 把这批证据标成已被某次整理消费；空数组直接返回。 */
+  markEvidenceProcessed(evidenceIds: readonly string[], runId: string): void
+  /** 还没整理的证据条数，给诊断与空闲调度看。 */
+  countPendingEvidence(): number
+  /** 读一个整数账本位（摄入前沿、整理前沿、树版本…）；没有这一项时给 0。 */
+  getMetaInteger(key: string): number
+  /** 写一个整数账本位，同时记下写入时刻。 */
+  setMetaInteger(key: string, value: number, now?: number): void
+  /** 按输入指纹找已有的整理账本行；找不到给 null。用它把重复的整理认出来。 */
+  findDreamRunByFingerprint(fingerprint: string): Nullable<MemoryDreamRunResultRow>
+  /** 开一次整理并返回账本行 id；同指纹已存在时复用原来那一行重跑，不会被唯一键卡死。 */
+  startDreamRun(input: MemoryDreamRunStartInput): string
+  /** 把崩溃时停在 queued/running 的整理账本改判为可重试的 failed，返回改了几行。 */
+  recoverOrphanDreamRuns(): number
+  /** 按巩固强度与显著度做一次自然衰减，返回改动的主张数；正文与证据永不删除，低激活只转 dormant。 */
+  applyNaturalDecay(now: number): number
+  /** 收一次整理账本：写终态、条数、落到的前沿与树版本，失败时附上原因。 */
+  finishDreamRun(input: MemoryDreamRunFinishInput): void
+  /** 按稳定键找概念行；找不到给 null。 */
+  findConceptByStableKey(stableKey: string): Nullable<MemoryConceptRow>
+  /** 写入或加强一个概念（按 stableKey 合并），返回落库后的整行。 */
+  upsertConcept(input: MemoryConceptUpsertInput): MemoryConceptRow
+  /** 给概念登记一个别名；别名为空白时什么都不做。 */
+  upsertConceptAlias(input: MemoryConceptAliasUpsertInput): void
+  /** 写入或加强一段经历（按 stableKey 合并），返回落库后的整行；主概念首次写入后不再覆写。 */
+  upsertEpisode(input: MemoryEpisodeUpsertInput): MemoryEpisodeRow
+  /** 把一段经历和一个概念按角色挂上，权重取大值。 */
+  linkEpisodeConcept(episodeId: string, conceptId: string, role: string, weight: number): void
+  /** 写入或加强一条主张（按 stableKey 合并），顺带刷新它的召回索引，返回落库后的整行。 */
+  upsertClaim(input: MemoryClaimUpsertInput): MemoryClaimRow
+  /** 把一条主张和一条证据按关系挂上，权重取大值。 */
+  linkClaimEvidence(claimId: string, evidenceId: string, relation: string, weight: number): void
+  /** 把一条主张挂到一段经历上；已经挂过就跳过。 */
+  linkClaimEpisode(claimId: string, episodeId: string): void
+  /** 列出稳定键以某个前缀开头的主张（含 dormant），用来找同题竞争的旧主张。 */
+  listClaimsByStableKeyPrefix(prefix: string): MemoryClaimRow[]
+  /** 把一条主张判为被取代：转 dormant、写上失效时刻并把激活度压到底。 */
+  supersedeClaim(claimId: string, occurredAt: number): void
+  /** 给每条主张挑一段代表经历（最近的那段），返回主张 id 到经历 id 的表。 */
+  getClaimEpisodeIds(): Map<string, string>
+  /** 建立或加强一条关系（五元组唯一），登记它的支撑证据，返回关系 id。 */
+  ensureRelation(input: MemoryRelationEnsureInput): string
+  /** 按 id 找概念行；找不到给 null。 */
+  findConceptById(id: string): Nullable<MemoryConceptRow>
+  /** 按激活度、显著度与证据量排序取前若干个活跃概念；不传 limit 时用可调参数表里的缺省值。 */
+  getTopActiveConcepts(limit?: number): MemoryConceptRow[]
+  /** 取当前还没结束的身份纪元；一个都没有时给 null。 */
+  getActiveIdentityEpoch(): Nullable<MemoryIdentityEpochRow>
+  /** 开一个新的身份纪元并返回它；序号在库里自增。 */
+  createIdentityEpoch(input: MemoryIdentityEpochCreateInput): MemoryIdentityEpochRow
+  /** 给一个身份纪元写上结束时刻。 */
+  closeIdentityEpoch(id: string, endedAt: number): void
+  /** 不开新纪元，只刷新当前纪元的陈述、主线、置信度与支撑概念。 */
+  updateIdentitySupport(input: MemoryIdentitySupportUpdateInput): void
+  /** 列出全部活跃概念，按激活度倒序。 */
+  listActiveConcepts(): MemoryConceptRow[]
+  /** 列出投影要用的主张（含 dormant），按激活度倒序。 */
+  listActiveClaims(): MemoryClaimRow[]
+  /** 列出投影要用的经历（active 与 completed），按激活度倒序。 */
+  listActiveEpisodes(): MemoryEpisodeRow[]
+  /** 读出当前这一版的全部树节点。 */
+  getCurrentTreeNodes(): MemoryTreeNodeRecord[]
+  /** 取最新一版树快照；一版都没有时给 null。 */
+  getLatestSnapshot(): Nullable<MemoryTreeSnapshotRecord>
+  /** 取指定版本的树快照；没有这一版时给 null。 */
+  getSnapshot(version: number): Nullable<MemoryTreeSnapshotRecord>
+  /** 从 diff 链回放出某一版的整棵树。版本不存在抛 NOT_FOUND，链断了抛 INTERNAL。 */
+  getTreeStateAtVersion(version: number): MemoryTreeState
+  /** 从头回放整条 diff 链，核对基线、事件哈希与每一版的树哈希；不抛错，问题都写进回执的 errors。 */
+  verifyTreeIntegrity(): MemoryTreeIntegrityReport
+  /** 用一版新投影整体替换树：重写全部节点，追加快照与 diff，推进树版本账本位。 */
+  replaceTreeProjection(input: MemoryTreeProjectionReplaceInput): void
+  /** 按查询词与作用域召回主张行：先走 FTS，命中不够再用 LIKE 兜底，合并去重后按活跃度排序截断。 */
+  recall(query: string, options?: MemoryRecallOptions): RecallRow[]
+  /** 把召回行补成对外的召回结果：带上证据来源、树路径与当前树版本。 */
+  toRecallItems(rows: RecallRow[], reason: MemoryRecallItem['retrievalReason']): MemoryRecallItem[]
+  /** 按主张 id 直接取一条召回结果；主张不存在时给 null。 */
+  getRecallItem(claimId: string): Nullable<MemoryRecallItem>
+  /** 取当前树状态：最新快照加当前全部节点。 */
+  getTreeState(): MemoryTreeState
+  /** 各表的条数、两个前沿、树版本与卡住的整理数，给诊断页与后端回执用。 */
+  getDiagnostics(): MemoryTreeDiagnostics
+  /** 改一条证据的可用状态并向上回算支撑，返回受影响的主张 id；证据不存在抛 NOT_FOUND。 */
+  setEvidenceEligibility(evidenceId: string, state: MemoryEvidenceEligibilityState): string[]
+  /** 改整个会话的证据可用状态并向上回算支撑，返回受影响的证据与主张 id。 */
+  setSessionEvidenceEligibility(
+    sessionId: string,
+    state: MemoryEvidenceEligibilityState
+  ): MemorySessionEligibilityChange
+  /** 自然遗忘一条主张：转 dormant 并退出普通召回，返回它的支撑证据 id；主张不存在抛 NOT_FOUND。 */
+  markClaimDormant(claimId: string): string[]
 }
 
-export interface MemoryConceptRow {
-  id: string
-  stable_key: string
-  concept_type: MemoryRecallItem['conceptType']
-  canonical_name: string
-  description: string
-  scope_type: MemoryEvidenceRecord['scopeType']
-  scope_id: string
-  privacy_class: MemoryEvidenceRecord['privacyClass']
-  lifecycle_state: string
-  first_seen_at: number
-  last_active_at: number
-  evidence_count: number
-  salience: number
-  activation: number
-  created_at: number
-  updated_at: number
-}
-
-export interface MemoryClaimRow {
-  id: string
-  stable_key: string
-  subject_concept_id: string
-  predicate: string
-  value_json: string
-  summary: string
-  epistemic_status: string
-  confidence: number
-  privacy_class: MemoryEvidenceRecord['privacyClass']
-  lifecycle_state: string
-  lifecycle_reason: string
-  valid_from: number
-  valid_to: Nullable<number>
-  salience: number
-  consolidation_strength: number
-  activation: number
-  last_reinforced_at: number
-  created_at: number
-  updated_at: number
-}
-
-export interface MemoryIdentityEpochRow {
-  id: string
-  sequence: number
-  identity_statement: string
-  global_mainline: string
-  confidence: number
-  supporting_concept_ids_json: string
-  supporting_episode_ids_json: string
-  supporting_claim_ids_json: string
-  predecessor_id: Nullable<string>
-  started_at: number
-  ended_at: Nullable<number>
-  created_by_run_id: string
-  created_at: number
-}
-
-export interface MemoryEpisodeRow {
-  id: string
-  stable_key: string
-  episode_type: string
-  title: string
-  summary: string
-  state: string
-  started_at: number
-  ended_at: Nullable<number>
-  scope_type: MemoryEvidenceRecord['scopeType']
-  scope_id: string
-  primary_concept_id: string
-  source_session_id: string
-  source_execution_id: string
-  created_by_run_id: string
-  salience: number
-  activation: number
-  last_reinforced_at: number
-  created_at: number
-  updated_at: number
-}
-
-interface RecallRow extends MemoryClaimRow {
-  concept_id: string
-  concept_type: MemoryRecallItem['conceptType']
-  canonical_name: string
-  scope_type: MemoryEvidenceRecord['scopeType']
-  scope_id: string
-  concept_activation: number
-  rank: number
-}
-
-interface TreeNodeRow {
-  id: string
-  stable_key: string
-  parent_id: Nullable<string>
-  node_type: MemoryTreeNodeRecord['nodeType']
-  namespace: string
-  title: string
-  summary: string
-  subject_type: string
-  subject_id: string
-  mainline_score: number
-  confidence: number
-  first_seen_at: number
-  last_active_at: number
-  projection_version: number
-  activation: number
-  visibility_state: MemoryTreeNodeRecord['visibilityState']
-}
-
-interface SnapshotRow {
-  version: number
-  root_node_id: string
-  active_identity_epoch_id: string
-  global_mainline_node_id: string
-  frontier_evidence_sequence: number
-  tree_hash: string
-  event_head_hash: string
-  created_at: number
-}
-
-interface TreeDiffRow {
-  version: number
-  base_version: number
-  ops_json: string
-  previous_event_hash: string
-  event_hash: string
-}
-
-const RecallPredicateByCategory: Record<MemoryEvidenceRecord['category'], string> = {
-  conversation: 'conversation_observation',
-  fact: 'has_fact',
-  preference: 'prefers',
-  feedback: 'collaboration_feedback',
-  procedure: 'uses_procedure',
-  project: 'works_on',
-  task: 'performs_task',
-  goal: 'pursues_goal',
-  interest: 'interested_in',
-  entity: 'knows_entity',
-  artifact: 'produces_artifact',
-}
-
-function parseJsonObject(value: string): Record<string, unknown> {
-  try {
-    const parsed = JSON.parse(value)
-    return isPlainObject(parsed) ? (parsed) : {}
-  } catch (error) {
-    log.warn('invalid JSON in memory tree row', { error })
-    return {}
-  }
-}
-
-function parseJsonValue(value: string): unknown {
-  try {
-    return JSON.parse(value)
-  } catch {
-    // arch-guard:silent-catch-ok value_json 兼容原始字符串值，解析失败时原样返回。
-    return value
-  }
-}
-
-function parseStringArray(value: string): string[] {
-  try {
-    const parsed = JSON.parse(value)
-    return isArray(parsed) ? parsed.filter(isString) : []
-  } catch {
-    // arch-guard:silent-catch-ok 损坏的辅助数组按空值降级，权威正文不在此字段。
-    return []
-  }
-}
-
-function mapEvidenceRow(row: EvidenceRow): MemoryEvidenceRecord {
-  return {
-    id: row.id,
-    sourceType: row.source_type,
-    trustLevel: row.trust_level,
-    sourceId: row.source_id,
-    sessionId: row.session_id,
-    executionId: row.execution_id,
-    workspaceRoot: row.workspace_root,
-    scopeType: row.scope_type,
-    scopeId: row.scope_id,
-    occurredAt: row.occurred_at,
-    title: row.title,
-    content: row.content,
-    category: row.category,
-    privacyClass: row.privacy_class,
-    eligibilityState: row.eligibility_state,
-    metadata: parseJsonObject(row.metadata_json),
-    ingestSequence: row.ingest_sequence,
-    createdAt: row.created_at,
-  }
-}
-
-function mapTreeNode(row: TreeNodeRow): MemoryTreeNodeRecord {
-  return {
-    id: row.id,
-    stableKey: row.stable_key,
-    parentId: row.parent_id,
-    nodeType: row.node_type,
-    namespace: row.namespace,
-    title: row.title,
-    summary: row.summary,
-    subjectType: row.subject_type,
-    subjectId: row.subject_id,
-    mainlineScore: row.mainline_score,
-    confidence: row.confidence,
-    firstSeenAt: row.first_seen_at,
-    lastActiveAt: row.last_active_at,
-    projectionVersion: row.projection_version,
-    activation: row.activation,
-    visibilityState: row.visibility_state,
-  }
-}
-
-function mapSnapshot(row: SnapshotRow): MemoryTreeSnapshotRecord {
-  return {
-    version: row.version,
-    rootNodeId: row.root_node_id,
-    activeIdentityEpochId: row.active_identity_epoch_id,
-    globalMainlineNodeId: row.global_mainline_node_id,
-    frontierEvidenceSequence: row.frontier_evidence_sequence,
-    treeHash: row.tree_hash,
-    eventHeadHash: row.event_head_hash,
-    createdAt: row.created_at,
-  }
-}
-
-export class MemoryTreeRepository {
+export class MemoryTreeRepository implements MemoryTreeRepositoryApi {
   constructor(private readonly resolveDatabase: MemoryDatabaseProvider) {}
 
   private get db(): SQLiteDatabase {
@@ -413,16 +307,7 @@ export class MemoryTreeRepository {
   }
 
   /** 失败/崩溃后的同一输入可复用原账本行重试，不被 fingerprint 唯一键卡死。 */
-  public startDreamRun(input: {
-    id: string
-    trigger: MemoryDreamRunOptions['trigger']
-    fingerprint: string
-    frontierBefore: number
-    frontierAfter: number
-    candidateCount: number
-    treeVersionBefore: number
-    startedAt: number
-  }): string {
+  public startDreamRun(input: MemoryDreamRunStartInput): string {
     const existing = this.findDreamRunByFingerprint(input.fingerprint)
     if (existing) {
       this.db
@@ -545,15 +430,7 @@ export class MemoryTreeRepository {
     return changed
   }
 
-  public finishDreamRun(input: {
-    id: string
-    state: 'committed' | 'skipped' | 'failed' | 'cancelled'
-    acceptedCount: number
-    rejectedCount: number
-    frontierAfter: number
-    treeVersionAfter: number
-    error?: string
-  }): void {
+  public finishDreamRun(input: MemoryDreamRunFinishInput): void {
     this.db
       .prepare(
         `UPDATE memory_dream_runs SET
@@ -581,19 +458,7 @@ export class MemoryTreeRepository {
     )
   }
 
-  public upsertConcept(input: {
-    id: string
-    stableKey: string
-    conceptType: MemoryRecallItem['conceptType']
-    canonicalName: string
-    description: string
-    scopeType: MemoryEvidenceRecord['scopeType']
-    scopeId: string
-    privacyClass: MemoryEvidenceRecord['privacyClass']
-    occurredAt: number
-    salience: number
-    activation: number
-  }): MemoryConceptRow {
+  public upsertConcept(input: MemoryConceptUpsertInput): MemoryConceptRow {
     const now = Date.now()
     this.db
       .prepare(
@@ -632,13 +497,7 @@ export class MemoryTreeRepository {
     return this.findConceptByStableKey(input.stableKey)!
   }
 
-  public upsertConceptAlias(input: {
-    conceptId: string
-    alias: string
-    source: string
-    confidence: number
-    validFrom: number
-  }): void {
+  public upsertConceptAlias(input: MemoryConceptAliasUpsertInput): void {
     if (isBlank(input.alias)) return
     this.db
       .prepare(
@@ -651,22 +510,7 @@ export class MemoryTreeRepository {
       .run(input.conceptId, input.alias, input.source, input.confidence, input.validFrom)
   }
 
-  public upsertEpisode(input: {
-    id: string
-    stableKey: string
-    episodeType: string
-    title: string
-    summary: string
-    scopeType: MemoryEvidenceRecord['scopeType']
-    scopeId: string
-    primaryConceptId: string
-    sessionId: string
-    executionId: string
-    runId: string
-    occurredAt: number
-    salience: number
-    activation: number
-  }): MemoryEpisodeRow {
+  public upsertEpisode(input: MemoryEpisodeUpsertInput): MemoryEpisodeRow {
     const now = Date.now()
     this.db
       .prepare(
@@ -722,21 +566,7 @@ export class MemoryTreeRepository {
       .run(episodeId, conceptId, role, weight)
   }
 
-  public upsertClaim(input: {
-    id: string
-    stableKey: string
-    conceptId: string
-    predicate: string
-    value: unknown
-    summary: string
-    epistemicStatus: string
-    confidence: number
-    privacyClass: MemoryEvidenceRecord['privacyClass']
-    runId: string
-    occurredAt: number
-    salience: number
-    activation: number
-  }): MemoryClaimRow {
+  public upsertClaim(input: MemoryClaimUpsertInput): MemoryClaimRow {
     const now = Date.now()
     const valueJson = JSON.stringify(input.value)
     this.db
@@ -849,19 +679,7 @@ export class MemoryTreeRepository {
     return result
   }
 
-  public ensureRelation(input: {
-    id: string
-    sourceType: string
-    sourceId: string
-    targetType: string
-    targetId: string
-    relationType: string
-    confidence: number
-    epistemicStatus: string
-    runId: string
-    evidenceId: string
-    occurredAt: number
-  }): string {
+  public ensureRelation(input: MemoryRelationEnsureInput): string {
     const now = Date.now()
     this.db
       .prepare(
@@ -922,7 +740,7 @@ export class MemoryTreeRepository {
     )
   }
 
-  public getTopActiveConcepts(limit: number = 12): MemoryConceptRow[] {
+  public getTopActiveConcepts(limit: number = MemoryTuning.tree.topConcepts): MemoryConceptRow[] {
     return this.db
       .prepare(
         `SELECT * FROM memory_concepts
@@ -942,18 +760,7 @@ export class MemoryTreeRepository {
     )
   }
 
-  public createIdentityEpoch(input: {
-    id: string
-    identityStatement: string
-    globalMainline: string
-    confidence: number
-    supportingConceptIds: string[]
-    supportingEpisodeIds: string[]
-    supportingClaimIds: string[]
-    predecessorId: Nullable<string>
-    runId: string
-    startedAt: number
-  }): MemoryIdentityEpochRow {
+  public createIdentityEpoch(input: MemoryIdentityEpochCreateInput): MemoryIdentityEpochRow {
     const sequence =
       ((this.db.prepare(`SELECT max(sequence) AS value FROM memory_identity_epochs`).get() as {
         value: Nullable<number>
@@ -987,13 +794,7 @@ export class MemoryTreeRepository {
     this.db.prepare(`UPDATE memory_identity_epochs SET ended_at = ? WHERE id = ?`).run(endedAt, id)
   }
 
-  public updateIdentitySupport(input: {
-    id: string
-    identityStatement: string
-    globalMainline: string
-    confidence: number
-    supportingConceptIds: string[]
-  }): void {
+  public updateIdentitySupport(input: MemoryIdentitySupportUpdateInput): void {
     this.db
       .prepare(
         `UPDATE memory_identity_epochs SET
@@ -1071,7 +872,7 @@ export class MemoryTreeRepository {
           `记忆树 diff 链断裂：v${diff.version} 的基线为 ${diff.base_version}，期望 ${expectedBase}`
         )
       }
-      nodes = applyTreeOps(nodes, this.parseTreeOps(diff), diff.version)
+      nodes = applyTreeOps(nodes, parseTreeOps(diff), diff.version)
       expectedBase = diff.version
     }
     return {
@@ -1090,7 +891,7 @@ export class MemoryTreeRepository {
     for (const diff of this.listTreeDiffRows(latest.version)) {
       let ops: MemoryTreeDiffOp[] = []
       try {
-        ops = this.parseTreeOps(diff)
+        ops = parseTreeOps(diff)
       } catch (error) {
         log.warn('memory tree diff could not be parsed during integrity verification', {
           version: diff.version,
@@ -1133,29 +934,7 @@ export class MemoryTreeRepository {
       .all(throughVersion) as TreeDiffRow[]
   }
 
-  private parseTreeOps(diff: TreeDiffRow): MemoryTreeDiffOp[] {
-    let parsed: unknown
-    try {
-      parsed = JSON.parse(diff.ops_json)
-    } catch (error) {
-      throw new AppError('INTERNAL', `记忆树 v${diff.version} diff JSON 损坏`, { cause: error })
-    }
-    if (!isArray(parsed) || !parsed.every(isMemoryTreeDiffOp)) {
-      throw new AppError('INTERNAL', `记忆树 v${diff.version} diff 操作不合法`)
-    }
-    return parsed
-  }
-
-  public replaceTreeProjection(input: {
-    nodes: MemoryTreeNodeRecord[]
-    snapshot: MemoryTreeSnapshotRecord
-    baseVersion: number
-    ops: MemoryTreeDiffOp[]
-    identityChange: Nullable<Record<string, unknown>>
-    previousEventHash: string
-    eventHash: string
-    runId: string
-  }): void {
+  public replaceTreeProjection(input: MemoryTreeProjectionReplaceInput): void {
     this.db.exec(`PRAGMA defer_foreign_keys = ON`)
     this.db.prepare(`DELETE FROM memory_tree_nodes`).run()
     const insert = this.db.prepare(
@@ -1227,7 +1006,10 @@ export class MemoryTreeRepository {
   }
 
   public recall(query: string, options: MemoryRecallOptions = {}): RecallRow[] {
-    const limit = Math.min(100, Math.max(1, options.limit ?? 12))
+    const limit = Math.min(
+      MemoryTuning.tree.recallMaxLimit,
+      Math.max(1, options.limit ?? MemoryTuning.tree.recallDefaultLimit)
+    )
     const lifecycle = options.includeDormant ? `('active', 'dormant')` : `('active')`
     const workspaceRoot = options.workspaceRoot?.trim() ?? ''
     const scopeId = options.scopeId?.trim() ?? ''
@@ -1242,7 +1024,7 @@ export class MemoryTreeRepository {
       ? `AND (? = '' OR concept.scope_id = ? OR concept.scope_type = 'global')`
       : `AND (? = '' OR concept.scope_id = ?)`
     const predicates = [
-      ...new Set((options.categories ?? []).map((category) => RecallPredicateByCategory[category])),
+      ...new Set((options.categories ?? []).map((category) => predicateForCategory(category))),
     ]
     const predicateClause = isEmpty(predicates)
       ? ''
@@ -1310,8 +1092,8 @@ export class MemoryTreeRepository {
           limit
         ) as RecallRow[]
 
-    const searchTerms = this.buildSearchTerms(normalizedQuery)
-    const matchQuery = this.buildFtsQuery(searchTerms)
+    const searchTerms = buildSearchTerms(normalizedQuery)
+    const matchQuery = buildFtsQuery(searchTerms)
     let ftsRows: RecallRow[] = []
     if (matchQuery) {
       try {
@@ -1350,7 +1132,7 @@ export class MemoryTreeRepository {
     // FTS 已召满时跳过 LIKE 兜底：LIKE 是全表扫描，只在 FTS 命中不足时补充，
     // 避免每次召回都做一次数万行的长文本全表匹配拖垮同步路径。
     const likeTerms = (isEmpty(searchTerms) ? [normalizedQuery] : searchTerms)
-      .slice(0, 12)
+      .slice(0, MemoryTuning.tree.likeTermsMax)
       .map((term) => {
         let escaped = ''
         for (const character of term) {
@@ -1385,7 +1167,8 @@ export class MemoryTreeRepository {
         effectiveScope,
         ...provenanceParameters,
         ...predicates,
-        Math.min(100, limit * 2)
+        // LIKE 兜底多取一倍候选，和 FTS 命中合并去重后再截到 limit；总量仍受召回上限约束。
+        Math.min(MemoryTuning.tree.recallMaxLimit, limit * 2)
       ) as RecallRow[]
 
     const merged = new Map<string, RecallRow>()
@@ -1407,7 +1190,9 @@ export class MemoryTreeRepository {
     const snapshotVersion = this.getMetaInteger('tree_version')
     // 整棵树只加载一次并索引：否则每条召回结果都会全表扫描 memory_tree_nodes 一遍，
     // limit=12 的一次召回会把整棵树加载 12 遍，是同步召回毫秒预算的主要杀手。
-    const treeIndex = isEmpty(rows) ? null : this.buildTreePathIndex()
+    const treeIndex: Nullable<MemoryTreePathIndex> = isEmpty(rows)
+      ? null
+      : buildTreePathIndex(this.getCurrentTreeNodes())
     return rows.map((row) => ({
       id: row.id,
       claimId: row.id,
@@ -1427,7 +1212,7 @@ export class MemoryTreeRepository {
       retrievalReason: reason,
       evidenceIds: this.listClaimEvidenceIds(row.id),
       sourceTypes: this.listClaimEvidenceSourceTypes(row.id),
-      path: treeIndex ? this.treePathFromIndex(treeIndex, 'claim', row.id) : [],
+      path: treeIndex ? treePathFromIndex(treeIndex, 'claim', row.id) : [],
     }))
   }
 
@@ -1496,7 +1281,7 @@ export class MemoryTreeRepository {
   public setSessionEvidenceEligibility(
     sessionId: string,
     state: MemoryEvidenceEligibilityState
-  ): { evidenceIds: string[]; claimIds: string[] } {
+  ): MemorySessionEligibilityChange {
     const evidenceIds = (
       this.db
         .prepare(`SELECT id FROM memory_evidence WHERE session_id = ? ORDER BY ingest_sequence`)
@@ -1736,38 +1521,6 @@ export class MemoryTreeRepository {
     }
   }
 
-  private buildTreePathIndex(): {
-    byId: Map<string, MemoryTreeNodeRecord>
-    bySubject: Map<string, MemoryTreeNodeRecord>
-  } {
-    const nodes = this.getCurrentTreeNodes()
-    const byId = new Map(nodes.map((node) => [node.id, node]))
-    const bySubject = new Map(nodes.map((node) => [`${node.subjectType}:${node.subjectId}`, node]))
-    return { byId, bySubject }
-  }
-
-  private treePathFromIndex(
-    index: { byId: Map<string, MemoryTreeNodeRecord>; bySubject: Map<string, MemoryTreeNodeRecord> },
-    subjectType: string,
-    subjectId: string
-  ): MemoryRecallItem['path'] {
-    let current = index.bySubject.get(`${subjectType}:${subjectId}`)
-    const path: MemoryRecallItem['path'] = []
-    const seen = new Set<string>()
-    while (current && !seen.has(current.id)) {
-      seen.add(current.id)
-      path.unshift({
-        id: current.id,
-        nodeType: current.nodeType,
-        title: current.title,
-        subjectType: current.subjectType,
-        subjectId: current.subjectId,
-      })
-      current = current.parentId ? index.byId.get(current.parentId) : undefined
-    }
-    return path
-  }
-
   private replaceRecallIndex(input: {
     subjectType: string
     subjectId: string
@@ -1786,44 +1539,4 @@ export class MemoryTreeRepository {
       .run(input.subjectType, input.subjectId, input.title, input.body, input.scopeId)
   }
 
-  private buildSearchTerms(query: string): string[] {
-    const asciiTerms = query.match(/[A-Za-z0-9][A-Za-z0-9_.:/-]{1,}/g) ?? []
-    const semanticTerms = (query.match(
-      /长期目标|偏好|目标|项目|任务|兴趣|习惯|职业|身份|方法|结论|证据/gu
-    ) ?? []).flatMap((term) => term === '长期目标' ? [term, '目标'] : [term])
-    const chineseRuns = query.match(/[\p{Script=Han}]{2,12}/gu) ?? []
-    return [...new Set([...asciiTerms, ...semanticTerms, ...chineseRuns])]
-      .map((term) => term.trim())
-      .filter((term) => term.length >= 2)
-      .slice(0, 12)
-  }
-
-  private buildFtsQuery(terms: readonly string[]): string {
-    return terms
-      .map((term) => term.replace(/["*:^(){}]/g, '').replaceAll('[', '').replaceAll(']', '').trim())
-      .filter((term) => term.length >= 2)
-      .map((term) => `"${term}"*`)
-      .join(' OR ')
-  }
-}
-
-export interface MemoryDreamRunResultRow {
-  id: string
-  trigger: MemoryDreamRunOptions['trigger']
-  state: 'queued' | 'running' | 'committed' | 'failed' | 'cancelled' | 'skipped'
-  input_fingerprint: string
-  frontier_before: number
-  frontier_after: number
-  candidate_count: number
-  accepted_count: number
-  rejected_count: number
-  tree_version_before: number
-  tree_version_after: number
-  error: string
-  started_at: number
-  finished_at: Nullable<number>
-}
-
-export function readIdentitySupportingConceptIds(epoch: MemoryIdentityEpochRow): string[] {
-  return parseStringArray(epoch.supporting_concept_ids_json)
 }

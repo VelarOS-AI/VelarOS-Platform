@@ -17,13 +17,14 @@ import assert from 'node:assert/strict'
 
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
-import { createInMemoryMemoryFilesIo } from '../src/contract/files-io'
-import type { MemoryEmbedder } from '../src/contract/vector'
-import type { MemoryDerivedIndexFailure } from '../src/impl/backends/LayeredMemoryStore'
+import type { MemoryEmbedder } from '../src/contract/requires'
 import { createLayeredMemoryStoreBackend } from '../src/impl/backends/LayeredMemoryStore'
+import { createInMemoryMemoryFilesIo } from '../src/impl/files/InMemoryMemoryFilesIo'
 import { createMemoryFilesBackend } from '../src/impl/files/MemoryFilesBackend'
+import { createFileVectorIndexStore } from '../src/impl/vector/FileVectorIndexStore'
+import { createInMemoryVectorIndexStore } from '../src/impl/vector/InMemoryVectorIndexStore'
 import { createMemoryVectorBackend } from '../src/impl/vector/MemoryVectorBackend'
-import { createFileVectorIndexStore, createInMemoryVectorIndexStore } from '../src/impl/vector/VectorIndexStores'
+import type { MemoryDerivedIndexFailure } from '../src/types/backends'
 import type { MemoryEvidenceInput } from '../src/types/memory'
 
 /** 假嵌入器维度：够大才不让散列碰撞给「不相关」也凑出相似度（那会把地板断言测成噪声）。 */

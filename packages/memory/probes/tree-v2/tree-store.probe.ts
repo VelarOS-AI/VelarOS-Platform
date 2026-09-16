@@ -6,21 +6,19 @@ import { join } from 'node:path'
 
 import { AppError, isNotNull, isPresent } from '@velaros-ai/core'
 
-import { openMemoryAuthorityV2 } from '../../src/impl/tree-v2/MemoryAuthorityDatabaseV2'
-import { MemoryTreeCheckpointIntervalV2, MemoryTreeProjectionIndexV2 } from '../../src/impl/tree-v2/MemoryTreeProjectionIndexV2'
+import { MemoryAuthorityDatabaseV2 } from '../../src/impl/tree-v2/MemoryAuthorityDatabaseV2'
+import { MemoryTreeProjectionIndexV2 } from '../../src/impl/tree-v2/MemoryTreeProjectionIndexV2'
+import { MemoryTreeReplayV2 } from '../../src/impl/tree-v2/MemoryTreeReplayV2'
 import { MemoryTreeStoreV2 } from '../../src/impl/tree-v2/MemoryTreeStoreV2'
 import { ContentKeyServiceV2 } from '../../src/impl/tree-v2/storage/ContentKeyServiceV2'
 import { MemoryBlobStoreV2 } from '../../src/impl/tree-v2/storage/MemoryBlobStoreV2'
 import { MemoryKeyringStoreV2 } from '../../src/impl/tree-v2/storage/MemoryKeyringStoreV2'
-import {
-  buildBasicTreeDiffOpsV2,
-  type MemoryTreeDiffV2,
-  type MemoryTreeNodeStructV2,
-  replayTreeDiffsBackwardV2,
-} from '../../src/utils/tree-v2/diff-chain'
+import type { MemoryTreeDiffV2, MemoryTreeNodeStructV2 } from '../../src/types/tree-v2/diff'
+import type { MemoryWrappingRootV2 } from '../../src/types/tree-v2/storage'
+import { buildBasicTreeDiffOpsV2 } from '../../src/utils/tree-v2/diff-chain'
 import { readCurrentGenerationV2 } from '../../src/utils/tree-v2/storage/generation-pointer'
-import type { MemoryWrappingRootV2 } from '../../src/utils/tree-v2/storage/wrapping-root'
 import { buildMemoryTreeBaseStateV2, computeMemoryTreeBaseHashesV2 } from '../../src/utils/tree-v2/tree-manifest'
+import { MemoryTuning } from '../../src/utils/tuning'
 
 const ExpectedMinimumAssertionsV2 = 73
 let assertionCount = 0
@@ -86,9 +84,9 @@ function runTreeStoreProbeV2(): void {
 }
 
 function runAuthorityChainProbeV2(dataRoot: string): void {
-  const authority = openMemoryAuthorityV2(dataRoot).store
+  const authority = new MemoryAuthorityDatabaseV2(dataRoot)
   const wrappingRoot = createProbeWrappingRootV2()
-  const keyring = MemoryKeyringStoreV2.open(authority.roots.keyringDir, wrappingRoot).store
+  const keyring = new MemoryKeyringStoreV2(authority.roots.keyringDir, wrappingRoot)
   const contentKeys = new ContentKeyServiceV2(
     keyring,
     new MemoryBlobStoreV2(authority.roots.blobsDir)
@@ -101,12 +99,12 @@ function runAuthorityChainProbeV2(dataRoot: string): void {
   )
   const root = createRootNodeV2()
   const leaf = createLeafNodeV2(leafContent.blobId, leafContent.commitment)
-  const opened = MemoryTreeStoreV2.open({ authority, contentKeys, keyring })
-  equal(opened.report.treeVersion, 0, '空 authority 的树版本应为 0')
-  equal(opened.report.replayedDiffCount, 0, '空 authority 不重放 diff')
-  equal(opened.report.projectionRebuilt, false, '空树不生成派生代')
+  const opened = new MemoryTreeStoreV2(authority, contentKeys, keyring)
+  equal(opened.openReport.treeVersion, 0, '空 authority 的树版本应为 0')
+  equal(opened.openReport.replayedDiffCount, 0, '空 authority 不重放 diff')
+  equal(opened.openReport.projectionRebuilt, false, '空树不生成派生代')
 
-  const first = opened.store.commitVersion({
+  const first = opened.commitVersion({
     expectedBaseVersion: 0,
     ops: [
       { type: 'add', before: [], after: [root] },
@@ -125,7 +123,7 @@ function runAuthorityChainProbeV2(dataRoot: string): void {
   })
   equal(first.version, 1, '创世提交版本')
   equal(first.projectionPersisted, true, '创世提交后应刷新加密投影')
-  equal(opened.store.version, 1, '内存 head 应推进')
+  equal(opened.version, 1, '内存 head 应推进')
   equal(
     authority.database
       .prepare(`SELECT integer_value FROM memory_meta WHERE key = 'tree_version'`)
@@ -147,14 +145,14 @@ function runAuthorityChainProbeV2(dataRoot: string): void {
 
   leaf.lastActiveAt = 999
   equal(
-    opened.store.current.nodes.find((node) => node.stableKey === leaf.stableKey)?.lastActiveAt,
+    opened.current.nodes.find((node) => node.stableKey === leaf.stableKey)?.lastActiveAt,
     1,
     '提交后状态不得继续引用调用方可变节点'
   )
   expectAppErrorCode(
     'CONFLICT',
     () =>
-      opened.store.commitVersion({
+      opened.commitVersion({
         expectedBaseVersion: 0,
         ops: [],
         identityChange: {
@@ -169,10 +167,15 @@ function runAuthorityChainProbeV2(dataRoot: string): void {
       }),
     '陈旧基线必须在写入前被 CAS 拒绝'
   )
-  equal(opened.store.version, 1, 'CAS 冲突不得推进内存版本')
+  equal(opened.version, 1, 'CAS 冲突不得推进内存版本')
 
-  const projection = new MemoryTreeProjectionIndexV2(authority.roots.indexDir, keyring)
-  const publicCopy = opened.store.current
+  const treeReplay = new MemoryTreeReplayV2()
+  const projection = new MemoryTreeProjectionIndexV2(
+    authority.roots.indexDir,
+    keyring,
+    treeReplay
+  )
+  const publicCopy = opened.current
   expectAppErrorCode(
     'INVARIANT',
     () => projection.persist(1, publicCopy, []),
@@ -180,56 +183,56 @@ function runAuthorityChainProbeV2(dataRoot: string): void {
   )
 
   let latestDiff: Nullable<MemoryTreeDiffV2> = null
-  while (opened.store.version < MemoryTreeCheckpointIntervalV2) {
-    const before = opened.store.current.nodes
+  while (opened.version < MemoryTuning.treeV2.checkpointInterval) {
+    const before = opened.current.nodes
     const beforeLeaf = before.find((node) => node.stableKey === 'concept:k2:leaf')
     check(isPresent(beforeLeaf), '循环提交前 leaf 必须存在')
     const afterLeaf: MemoryTreeNodeStructV2 = {
       ...beforeLeaf,
       content: { ...beforeLeaf.content },
-      lastActiveAt: opened.store.version + 1,
-      activation: Number((0.5 + (opened.store.version % 10) / 100).toFixed(6)),
+      lastActiveAt: opened.version + 1,
+      activation: Number((0.5 + (opened.version % 10) / 100).toFixed(6)),
     }
     const after = before.map((node) => (node.stableKey === afterLeaf.stableKey ? afterLeaf : node))
     const ops = buildBasicTreeDiffOpsV2(before, after)
     latestDiff = {
-      version: opened.store.version + 1,
-      baseVersion: opened.store.version,
+      version: opened.version + 1,
+      baseVersion: opened.version,
       ops,
     }
-    const committed = opened.store.commitVersion({
-      expectedBaseVersion: opened.store.version,
+    const committed = opened.commitVersion({
+      expectedBaseVersion: opened.version,
       ops,
       activeIdentityEpochId: 'epoch-1',
       globalMainlineNodeId: 'root',
       frontierEvidenceSequence: 0,
-      createdByRunId: `run-${opened.store.version + 1}`,
-      createdAt: 100 + opened.store.version,
+      createdByRunId: `run-${opened.version + 1}`,
+      createdAt: 100 + opened.version,
     })
     check(committed.projectionPersisted, '正常提交应刷新派生投影')
   }
-  equal(opened.store.version, MemoryTreeCheckpointIntervalV2, '应推进到首个 checkpoint 间隔')
-  const inspection = opened.store.inspectProjection()
+  equal(opened.version, MemoryTuning.treeV2.checkpointInterval, '应推进到首个 checkpoint 间隔')
+  const inspection = opened.inspectProjection()
   check(isNotNull(inspection), '投影代应存在')
   equal(inspection.checkpointCount, 1, 'v64 应产生一个 checkpoint')
 
   check(isNotNull(latestDiff), '应记录最后一条 diff')
-  const backward = replayTreeDiffsBackwardV2(opened.store.current.nodes, [latestDiff])
+  const backward = treeReplay.replayBackward(opened.current.nodes, [latestDiff])
   equal(backward.direction, 'backward', '逆放结果必须带 backward 来源')
   expectAppErrorCode(
     'INVARIANT',
-    () => projection.persist(opened.store.version - 1, backward, []),
+    () => projection.persist(opened.version - 1, backward, []),
     'INV-BR 必须阻止逆放结果写入派生投影'
   )
 
-  const beforeInvalidCommit = opened.store.version
-  const invalidBeforeLeaf = opened.store.current.nodes.find(
+  const beforeInvalidCommit = opened.version
+  const invalidBeforeLeaf = opened.current.nodes.find(
     (node) => node.stableKey === 'concept:k2:leaf'
   )
   check(isPresent(invalidBeforeLeaf), 'FK 回滚负控前 leaf 必须存在')
   expectThrows(
     () =>
-      opened.store.commitVersion({
+      opened.commitVersion({
         expectedBaseVersion: beforeInvalidCommit,
         ops: [
           {
@@ -259,17 +262,17 @@ function runAuthorityChainProbeV2(dataRoot: string): void {
     beforeInvalidCommit,
     '失败事务不得推进 tree_version meta'
   )
-  equal(opened.store.version, beforeInvalidCommit, '失败事务不得推进内存 head')
+  equal(opened.version, beforeInvalidCommit, '失败事务不得推进内存 head')
 
-  const stateBeforeCompaction = opened.store.current
-  const compaction = opened.store.compactHead({
+  const stateBeforeCompaction = opened.current
+  const compaction = opened.compactHead({
     compactionId: 'compaction-64',
     createdAt: 1_000,
   })
-  equal(compaction.baseVersion, MemoryTreeCheckpointIntervalV2, '基点版本')
+  equal(compaction.baseVersion, MemoryTuning.treeV2.checkpointInterval, '基点版本')
   equal(
     compaction.deletedDiffCount,
-    MemoryTreeCheckpointIntervalV2,
+    MemoryTuning.treeV2.checkpointInterval,
     'head 压缩应删除基点之前的全部细粒度 diff'
   )
   equal(
@@ -289,7 +292,7 @@ function runAuthorityChainProbeV2(dataRoot: string): void {
   )
   const baseRow = authority.database
     .prepare(`SELECT * FROM memory_tree_bases WHERE base_version = ?`)
-    .get(MemoryTreeCheckpointIntervalV2) as {
+    .get(MemoryTuning.treeV2.checkpointInterval) as {
     state_blob_ref: string
     state_commitment: string
     prior_segment_event_head: string
@@ -309,13 +312,13 @@ function runAuthorityChainProbeV2(dataRoot: string): void {
   )
   basePlaintext.fill(0)
 
-  const reopened = MemoryTreeStoreV2.open({ authority, contentKeys, keyring })
-  equal(reopened.report.baseVersion, MemoryTreeCheckpointIntervalV2, '重开应从基点起步')
-  equal(reopened.report.replayedDiffCount, 0, '基点 head 重开无需旧 diff')
-  equal(reopened.store.current.stateHash, stateBeforeCompaction.stateHash, '基点重建状态')
-  equal(reopened.report.projectionRebuilt, false, '未损坏投影无需重建')
+  const reopened = new MemoryTreeStoreV2(authority, contentKeys, keyring)
+  equal(reopened.openReport.baseVersion, MemoryTuning.treeV2.checkpointInterval, '重开应从基点起步')
+  equal(reopened.openReport.replayedDiffCount, 0, '基点 head 重开无需旧 diff')
+  equal(reopened.current.stateHash, stateBeforeCompaction.stateHash, '基点重建状态')
+  equal(reopened.openReport.projectionRebuilt, false, '未损坏投影无需重建')
 
-  const before65 = reopened.store.current.nodes
+  const before65 = reopened.current.nodes
   const leaf64 = before65.find((node) => node.stableKey === 'concept:k2:leaf')
   check(isPresent(leaf64), 'v64 leaf 存在')
   const leaf65 = {
@@ -323,7 +326,7 @@ function runAuthorityChainProbeV2(dataRoot: string): void {
     content: { ...leaf64.content },
     lastActiveAt: 65,
   }
-  const commit65 = reopened.store.commitVersion({
+  const commit65 = reopened.commitVersion({
     expectedBaseVersion: 64,
     ops: buildBasicTreeDiffOpsV2(
       before65,
@@ -358,9 +361,9 @@ function runAuthorityChainProbeV2(dataRoot: string): void {
   envelope.ciphertext =
     envelope.ciphertext.slice(0, -2) + (envelope.ciphertext.endsWith('AA') ? 'AQ' : 'AA')
   writeFileSync(sealedPath, JSON.stringify(envelope))
-  const recovered = MemoryTreeStoreV2.open({ authority, contentKeys, keyring })
-  equal(recovered.report.projectionRebuilt, true, '损坏派生代应从 authority 正向链重建')
-  equal(recovered.store.version, 65, '派生代损坏不得影响 authority head')
+  const recovered = new MemoryTreeStoreV2(authority, contentKeys, keyring)
+  equal(recovered.openReport.projectionRebuilt, true, '损坏派生代应从 authority 正向链重建')
+  equal(recovered.version, 65, '派生代损坏不得影响 authority head')
   const generationAfterRecovery = readCurrentGenerationV2(authority.roots.indexDir)
   check(
     isNotNull(generationAfterRecovery) && generationAfterRecovery > generationBeforeTamper,
@@ -377,7 +380,7 @@ function runAuthorityChainProbeV2(dataRoot: string): void {
     .run('f'.repeat(64), 64)
   expectAppErrorCode(
     'INVARIANT',
-    () => MemoryTreeStoreV2.open({ authority, contentKeys, keyring }),
+    () => new MemoryTreeStoreV2(authority, contentKeys, keyring),
     '基点 manifest_hash 漂移必须在 open 时拒绝'
   )
   authority.database
@@ -388,15 +391,15 @@ function runAuthorityChainProbeV2(dataRoot: string): void {
     )
     .run(originalManifestHash, 64)
   equal(
-    MemoryTreeStoreV2.open({ authority, contentKeys, keyring }).store.version,
+    new MemoryTreeStoreV2(authority, contentKeys, keyring).version,
     65,
     '恢复 manifest 后 authority 链应可重开'
   )
 
-  const manifestState = buildMemoryTreeBaseStateV2(65, [...recovered.store.current.nodes].reverse())
+  const manifestState = buildMemoryTreeBaseStateV2(65, [...recovered.current.nodes].reverse())
   const hashesA = computeMemoryTreeBaseHashesV2(manifestState, commit65.eventHash)
   const hashesB = computeMemoryTreeBaseHashesV2(
-    buildMemoryTreeBaseStateV2(65, recovered.store.current.nodes),
+    buildMemoryTreeBaseStateV2(65, recovered.current.nodes),
     commit65.eventHash
   )
   equal(hashesA.manifestHash, hashesB.manifestHash, 'manifest 必须与节点输入顺序无关')
@@ -405,7 +408,7 @@ function runAuthorityChainProbeV2(dataRoot: string): void {
 }
 
 function seedIdentityEpochV2(
-  database: ReturnType<typeof openMemoryAuthorityV2>['store']['database'],
+  database: MemoryAuthorityDatabaseV2['database'],
   contentKeys: ContentKeyServiceV2
 ): void {
   const identity = sealAndRegisterV2(database, contentKeys, '我是持续帮助用户完成项目的 AI')
@@ -434,7 +437,7 @@ function seedIdentityEpochV2(
 }
 
 function sealAndRegisterV2(
-  database: ReturnType<typeof openMemoryAuthorityV2>['store']['database'],
+  database: MemoryAuthorityDatabaseV2['database'],
   contentKeys: ContentKeyServiceV2,
   content: string
 ): { blobId: string; commitment: string } {

@@ -1,11 +1,11 @@
 import {
-  DefaultMemoryRuntime,
+  createMemoryRuntime,
   type MemoryTreeRuntimeProviders,
 } from '../src/exports/index'
 
 declare const providers: MemoryTreeRuntimeProviders
 
-const memory = new DefaultMemoryRuntime(providers)
+const memory = createMemoryRuntime(providers)
 
 memory.memoryDomainService.captureEvidence({
   scopeId: 'user:demo',
@@ -15,5 +15,5 @@ memory.memoryDomainService.captureEvidence({
   content: '用户偏好简洁的技术说明。',
 })
 
-const items = memory.domain.recall('技术说明偏好')
+const items = memory.memoryDomainService.recall('技术说明偏好')
 console.info(items)

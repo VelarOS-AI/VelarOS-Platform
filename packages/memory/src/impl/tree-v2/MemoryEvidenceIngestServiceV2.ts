@@ -1,100 +1,74 @@
 import { randomBytes } from 'node:crypto'
 
-import { isString, isUndefined, toNullable } from '@velaros-ai/core'
+import { isUndefined, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
+import type {
+  IngestMemoryEvidenceInputV2,
+  MemoryBlobIdRowV2,
+  MemoryEvidenceRecordV2,
+  MemoryEvidenceRowV2,
+  MemoryEvidenceScopeInputV2,
+  MemoryEvidenceTrustLevelV2,
+  MemoryResolvedEvidenceScopeV2,
+  MemoryTrustLevelRowV2,
+  ReactivateMemoryEvidenceResultV2,
+} from '../../types/tree-v2/evidence'
+import type { MemorySealedContentV2 } from '../../types/tree-v2/storage'
+import type { MemoryMetaIntegerRowV2 } from '../../types/tree-v2/store'
+import {
+  assertNonEmptyStringV2,
+  assertNonNegativeSafeIntegerV2,
+  registerMemoryContentBlobV2,
+} from '../../utils/tree-v2/checks'
 import { canonicalStringifyV2 } from '../../utils/tree-v2/diff-chain'
-
-import type { ContentKeyServiceV2, MemorySealedContentV2 } from './storage/ContentKeyServiceV2'
-import type { MemoryBlobStoreV2 } from './storage/MemoryBlobStoreV2'
-import type { MemoryAuthorityDatabaseV2 } from './MemoryAuthorityDatabaseV2'
+import {
+  isMemoryEvidenceTrustLevelV2,
+  mapEvidenceRowV2,
+  validateIngestInputV2,
+} from '../../utils/tree-v2/evidence-ingest'
 import {
   canonicalizeWorkspacePathV2,
-  type MemoryIdentityKeyServiceV2,
   normalizeOriginV2,
-} from './MemoryIdentityKeyServiceV2'
+} from '../../utils/tree-v2/identity-keys'
+import { readMemoryMetaV2 } from '../../utils/tree-v2/tree-store'
 
-export type MemoryEvidenceEligibilityStateV2 = 'active' | 'source_deleted' | 'excluded' | 'erased'
-
-export type MemoryPrivacyClassV2 = 'standard' | 'personal' | 'sensitive'
-export type MemoryEvidenceTrustLevelV2 =
-  'user_stated' | 'system_observed' | 'agent_derived' | 'external_content'
-
-export type MemoryEvidenceScopeInputV2 =
-  | { readonly type: 'global' }
-  | { readonly type: 'workspace'; readonly rootPath: string }
-  | { readonly type: 'origin'; readonly origin: string }
-
-export interface IngestMemoryEvidenceInputV2 {
-  readonly sourceType: string
-  readonly trustLevel: MemoryEvidenceTrustLevelV2
-  readonly sourceId?: LooseOptional<string>
-  readonly sourceReference?: LooseOptional<string>
-  readonly sessionId?: LooseOptional<string>
-  readonly executionId?: LooseOptional<string>
-  readonly scope: MemoryEvidenceScopeInputV2
-  readonly occurredAt: number
-  readonly payload: Buffer | string
-  readonly metadata?: unknown
-  readonly privacyClass: MemoryPrivacyClassV2
-  readonly eligibilityState?: Exclude<MemoryEvidenceEligibilityStateV2, 'erased'>
-  readonly createdAt?: number
-}
-
-export interface MemoryEvidenceRecordV2 {
-  readonly id: string
-  readonly ingestSequence: number
-  readonly sourceType: string
-  readonly sourceId: Nullable<string>
-  readonly sourceMatchKey: Nullable<string>
-  readonly sessionId: Nullable<string>
-  readonly executionId: Nullable<string>
-  readonly scopeType: string
-  readonly scopeMatchKey: Nullable<string>
-  readonly occurredAt: number
-  readonly payloadBlobRef: string
-  readonly payloadCommitment: string
-  readonly metadataBlobRef: Nullable<string>
-  readonly metadataCommitment: Nullable<string>
-  readonly privacyClass: MemoryPrivacyClassV2
-  readonly eligibilityState: MemoryEvidenceEligibilityStateV2
-  readonly createdAt: number
-}
-
-export interface ReactivateMemoryEvidenceResultV2 {
-  readonly mode: 'in_place' | 'reingested'
-  readonly evidence: MemoryEvidenceRecordV2
-}
-
-interface MemoryEvidenceRowV2 {
-  id: string
-  ingest_sequence: number
-  source_type: string
-  source_id: Nullable<string>
-  source_match_key: Nullable<string>
-  session_id: Nullable<string>
-  execution_id: Nullable<string>
-  scope_type: string
-  scope_match_key: Nullable<string>
-  occurred_at: number
-  payload_blob_ref: Nullable<string>
-  payload_commitment: Nullable<string>
-  metadata_blob_ref: Nullable<string>
-  metadata_commitment: Nullable<string>
-  privacy_class: MemoryPrivacyClassV2
-  eligibility_state: MemoryEvidenceEligibilityStateV2
-  created_at: number
-}
+import type { ContentKeyServiceV2Api } from './storage/ContentKeyServiceV2'
+import type { MemoryBlobStoreV2Api } from './storage/MemoryBlobStoreV2'
+import type { MemoryAuthorityDatabaseV2Api } from './MemoryAuthorityDatabaseV2'
+import type { MemoryIdentityKeyServiceV2Api } from './MemoryIdentityKeyServiceV2'
 
 /**
- * Evidence 的唯一采集入口：先密封正文，再在一个 authority 事务里分配序号、登记 blob 与写行。
+ * 证据的唯一采集入口：先密封正文与元数据，再在一个权威事务里分配序号、登记 blob 与写行。
+ *
+ * 密文先落盘、权威行后提交，所以崩溃窗口里可能留下没人引用的 blob；
+ * `recoverOrphanedBlobs` 在打开时把它们擦掉。实例归 `MemorySystemRuntimeV2`（或探针）所有。
  */
-export class MemoryEvidenceIngestServiceV2 {
+export interface MemoryEvidenceIngestServiceV2Api {
+  /**
+   * 采集一条证据：校验 → 解析作用域 → 封正文与元数据 → 单事务分配序号并写行。
+   * 入参不合法抛 VALIDATION；写行失败会把刚封的密文擦掉再上抛。
+   */
+  ingest(input: IngestMemoryEvidenceInputV2): MemoryEvidenceRecordV2
+  /**
+   * 恢复一条不合格的证据。
+   * 序号在 frontier 之上就原地翻活；已经被消化过的则解密重封成一条新序号的证据（I6）。
+   * 证据不存在抛 NOT_FOUND，已是 active 抛 CONFLICT，erased 是终态抛 VALIDATION。
+   */
+  reactivate(evidenceId: string, createdAt?: number): ReactivateMemoryEvidenceResultV2
+  /** 擦掉物理上存在但权威库里没登记的孤儿 blob，返回清掉的个数。 */
+  recoverOrphanedBlobs(): number
+}
+
+export class MemoryEvidenceIngestServiceV2 implements MemoryEvidenceIngestServiceV2Api {
+  /** 证据 id 的随机字节数（128 位）。 */
+  private static readonly EvidenceIdByteLength = 16
+
   constructor(
-    private readonly authority: MemoryAuthorityDatabaseV2,
-    private readonly contentKeys: ContentKeyServiceV2,
-    private readonly identityKeys: MemoryIdentityKeyServiceV2,
-    private readonly blobs: MemoryBlobStoreV2,
+    private readonly authority: MemoryAuthorityDatabaseV2Api,
+    private readonly contentKeys: ContentKeyServiceV2Api,
+    private readonly identityKeys: MemoryIdentityKeyServiceV2Api,
+    private readonly blobs: MemoryBlobStoreV2Api,
     private readonly random: (byteLength: number) => Buffer = randomBytes
   ) {}
 
@@ -110,19 +84,16 @@ export class MemoryEvidenceIngestServiceV2 {
       if (!isUndefined(input.metadata)) {
         metadata = this.contentKeys.sealContent(canonicalStringifyV2(input.metadata))
       }
-      const id = this.randomId()
-      const createdAt = input.createdAt ?? Date.now()
-      const record = this.insertEvidence({
-        id,
+      return this.insertEvidence({
+        id: this.randomId(),
         input,
         scopeType: scope.scopeType,
         scopeMatchKey: scope.scopeMatchKey,
         sourceMatchKey,
         payload,
         metadata,
-        createdAt,
+        createdAt: input.createdAt ?? Date.now(),
       })
-      return record
     } catch (error) {
       this.contentKeys.eraseContent(payload.blobId)
       if (metadata) this.contentKeys.eraseContent(metadata.blobId)
@@ -130,19 +101,17 @@ export class MemoryEvidenceIngestServiceV2 {
     }
   }
 
-  /**
-   * I6：frontier 以下的可逆不合格行不原地翻活，解密并重新密封成一条新序号 Evidence。
-   */
   public reactivate(evidenceId: string, createdAt = Date.now()): ReactivateMemoryEvidenceResultV2 {
     assertNonEmptyStringV2(evidenceId, 'evidenceId')
     assertNonNegativeSafeIntegerV2(createdAt, 'createdAt')
     const row = this.authority.database
       .prepare(`SELECT * FROM memory_evidence WHERE id = ?`)
       .get(evidenceId) as MemoryEvidenceRowV2 | undefined
-    if (!row)
+    if (!row) {
       throw new AppError('NOT_FOUND', '待恢复 Evidence 不存在。', undefined, {
         evidenceId,
       })
+    }
     if (row.eligibility_state === 'active') {
       throw new AppError('CONFLICT', 'Evidence 已处于 active。', undefined, {
         evidenceId,
@@ -153,82 +122,22 @@ export class MemoryEvidenceIngestServiceV2 {
         evidenceId,
       })
     }
-    const frontier = this.readMeta('dream_frontier')
-    if (row.ingest_sequence > frontier) {
-      const updated = this.authority.database
-        .prepare(
-          `UPDATE memory_evidence
-           SET eligibility_state = 'active'
-           WHERE id = ? AND ingest_sequence > ? AND eligibility_state IN ('excluded', 'source_deleted')`
-        )
-        .run(evidenceId, frontier)
-      if (updated.changes !== 1) {
-        throw new AppError('CONFLICT', 'Evidence 原地恢复 CAS 失败。', undefined, { evidenceId })
-      }
-      return {
-        mode: 'in_place',
-        evidence: mapEvidenceRowV2({ ...row, eligibility_state: 'active' }),
-      }
-    }
+    const frontier = readMemoryMetaV2(this.authority.database, 'dream_frontier')
+    if (row.ingest_sequence > frontier) return this.reactivateInPlace(row, frontier)
     if (!row.payload_blob_ref || !row.payload_commitment) {
       throw new AppError('INVARIANT', '可逆 Evidence 缺少 payload blob。', undefined, {
         evidenceId,
       })
     }
-
-    const payload = this.contentKeys.openContent(row.payload_blob_ref, row.payload_commitment)
-    const metadata =
-      row.metadata_blob_ref && row.metadata_commitment
-        ? this.contentKeys.openContent(row.metadata_blob_ref, row.metadata_commitment)
-        : null
-    try {
-      const resealedPayload = this.contentKeys.sealContent(payload)
-      let resealedMetadata: Nullable<MemorySealedContentV2> = null
-      try {
-        if (metadata) resealedMetadata = this.contentKeys.sealContent(metadata)
-        const record = this.insertEvidence({
-          id: this.randomId(),
-          input: {
-            sourceType: row.source_type,
-            trustLevel: this.readTrustLevel(row.id),
-            sourceId: row.source_id,
-            sessionId: row.session_id,
-            executionId: row.execution_id,
-            scope: { type: 'global' },
-            occurredAt: row.occurred_at,
-            payload: Buffer.alloc(0),
-            privacyClass: row.privacy_class,
-            eligibilityState: 'active',
-            createdAt,
-          },
-          scopeType: row.scope_type,
-          scopeMatchKey: row.scope_match_key,
-          sourceMatchKey: row.source_match_key,
-          payload: resealedPayload,
-          metadata: resealedMetadata,
-          createdAt,
-        })
-        return { mode: 'reingested', evidence: record }
-      } catch (error) {
-        this.contentKeys.eraseContent(resealedPayload.blobId)
-        if (resealedMetadata) this.contentKeys.eraseContent(resealedMetadata.blobId)
-        throw error
-      }
-    } finally {
-      payload.fill(0)
-      metadata?.fill(0)
-    }
+    return this.reingestFromCiphertext(row, createdAt)
   }
 
-  /**
-   * 崩溃可能发生在密文原子落盘后、authority 引用提交前。只清理没有权威登记的物理 blob。
-   */
   public recoverOrphanedBlobs(): number {
     const registered = new Set(
       (
-        this.authority.database.prepare(`SELECT blob_id FROM memory_content_blobs`).all() as Array<{
-          blob_id: string
-        }>
+        this.authority.database
+          .prepare(`SELECT blob_id FROM memory_content_blobs`)
+          .all() as MemoryBlobIdRowV2[]
       ).map((row) => row.blob_id)
     )
     let recovered = 0
@@ -240,32 +149,106 @@ export class MemoryEvidenceIngestServiceV2 {
     return recovered
   }
 
-  private insertEvidence(input: {
-    id: string
-    input: IngestMemoryEvidenceInputV2
-    scopeType: string
-    scopeMatchKey: Nullable<string>
-    sourceMatchKey: Nullable<string>
-    payload: MemorySealedContentV2
-    metadata: Nullable<MemorySealedContentV2>
+  /** frontier 之上的不合格行还没被消化过，直接 CAS 改回 active 即可。 */
+  private reactivateInPlace(
+    row: MemoryEvidenceRowV2,
+    frontier: number
+  ): ReactivateMemoryEvidenceResultV2 {
+    const updated = this.authority.database
+      .prepare(
+        `UPDATE memory_evidence
+         SET eligibility_state = 'active'
+         WHERE id = ? AND ingest_sequence > ? AND eligibility_state IN ('excluded', 'source_deleted')`
+      )
+      .run(row.id, frontier)
+    if (updated.changes !== 1) {
+      throw new AppError('CONFLICT', 'Evidence 原地恢复 CAS 失败。', undefined, {
+        evidenceId: row.id,
+      })
+    }
+    return {
+      mode: 'in_place',
+      evidence: mapEvidenceRowV2({ ...row, eligibility_state: 'active' }),
+    }
+  }
+
+  /**
+   * I6：frontier 以下的行不原地翻活——解开密文重新密封成一条新序号证据，
+   * 让它像新证据一样重新排队被消化。旧行保持原状，历史不被改写。
+   */
+  private reingestFromCiphertext(
+    row: MemoryEvidenceRowV2,
     createdAt: number
-  }): MemoryEvidenceRecordV2 {
+  ): ReactivateMemoryEvidenceResultV2 {
+    const payload = this.contentKeys.openContent(
+      row.payload_blob_ref as string,
+      row.payload_commitment as string
+    )
+    const metadata =
+      row.metadata_blob_ref && row.metadata_commitment
+        ? this.contentKeys.openContent(row.metadata_blob_ref, row.metadata_commitment)
+        : null
+    try {
+      const resealedPayload = this.contentKeys.sealContent(payload)
+      let resealedMetadata: Nullable<MemorySealedContentV2> = null
+      try {
+        if (metadata) resealedMetadata = this.contentKeys.sealContent(metadata)
+        return {
+          mode: 'reingested',
+          evidence: this.insertEvidence({
+            id: this.randomId(),
+            input: {
+              sourceType: row.source_type,
+              trustLevel: this.readTrustLevel(row.id),
+              sourceId: row.source_id,
+              sessionId: row.session_id,
+              executionId: row.execution_id,
+              scope: { type: 'global' },
+              occurredAt: row.occurred_at,
+              payload: Buffer.alloc(0),
+              privacyClass: row.privacy_class,
+              eligibilityState: 'active',
+              createdAt,
+            },
+            scopeType: row.scope_type,
+            scopeMatchKey: row.scope_match_key,
+            sourceMatchKey: row.source_match_key,
+            payload: resealedPayload,
+            metadata: resealedMetadata,
+            createdAt,
+          }),
+        }
+      } catch (error) {
+        this.contentKeys.eraseContent(resealedPayload.blobId)
+        if (resealedMetadata) this.contentKeys.eraseContent(resealedMetadata.blobId)
+        throw error
+      }
+    } finally {
+      payload.fill(0)
+      metadata?.fill(0)
+    }
+  }
+
+  /** 单事务：递增采集序号、登记两个 blob、写证据行；序号 meta 缺失就是库被动过。 */
+  private insertEvidence(input: MemoryEvidenceIngestServiceV2InsertInput): MemoryEvidenceRecordV2 {
     assertNonNegativeSafeIntegerV2(input.createdAt, 'createdAt')
-    const insert = this.authority.database.transaction(() => {
-      const sequenceRow = this.authority.database
+    const database = this.authority.database
+    const eligibilityState = input.input.eligibilityState ?? 'active'
+    const insert = database.transaction(() => {
+      const sequenceRow = database
         .prepare(
           `UPDATE memory_meta
            SET integer_value = integer_value + 1, updated_at = ?
            WHERE key = 'evidence_ingest_sequence'
            RETURNING integer_value`
         )
-        .get(input.createdAt) as { integer_value: number } | undefined
+        .get(input.createdAt) as MemoryMetaIntegerRowV2 | undefined
       if (!sequenceRow) {
         throw new AppError('INVARIANT', 'evidence_ingest_sequence meta 缺失。')
       }
-      registerBlobV2(this.authority, input.payload, input.createdAt)
-      if (input.metadata) registerBlobV2(this.authority, input.metadata, input.createdAt)
-      this.authority.database
+      registerMemoryContentBlobV2(database, input.payload, input.createdAt)
+      if (input.metadata) registerMemoryContentBlobV2(database, input.metadata, input.createdAt)
+      database
         .prepare(
           `INSERT INTO memory_evidence(
              id, source_type, trust_level, source_id, source_match_key,
@@ -290,7 +273,7 @@ export class MemoryEvidenceIngestServiceV2 {
           toNullable(input.metadata?.blobId),
           toNullable(input.metadata?.commitment),
           input.input.privacyClass,
-          input.input.eligibilityState ?? 'active',
+          eligibilityState,
           sequenceRow.integer_value,
           input.createdAt
         )
@@ -313,130 +296,67 @@ export class MemoryEvidenceIngestServiceV2 {
       metadataBlobRef: toNullable(input.metadata?.blobId),
       metadataCommitment: toNullable(input.metadata?.commitment),
       privacyClass: input.input.privacyClass,
-      eligibilityState: input.input.eligibilityState ?? 'active',
+      eligibilityState,
       createdAt: input.createdAt,
     }
   }
 
-  private resolveScope(scope: MemoryEvidenceScopeInputV2): {
-    scopeType: string
-    scopeMatchKey: Nullable<string>
-  } {
+  /** 把采集入参里的作用域解析成落库的类型名与盲索引键。 */
+  private resolveScope(scope: MemoryEvidenceScopeInputV2): MemoryResolvedEvidenceScopeV2 {
     if (scope.type === 'global') return { scopeType: 'global', scopeMatchKey: null }
-    if (scope.type === 'workspace') {
-      const canonicalPath = canonicalizeWorkspacePathV2(scope.rootPath)
-      return {
+    if (scope.type === 'workspace') return {
         scopeType: 'workspace',
-        scopeMatchKey: this.identityKeys.workspaceScopeMatchKey(canonicalPath),
+        scopeMatchKey: this.identityKeys.workspaceScopeMatchKey(
+          canonicalizeWorkspacePathV2(scope.rootPath)
+        ),
       }
-    }
-    const origin = normalizeOriginV2(scope.origin)
     return {
       scopeType: 'origin',
-      scopeMatchKey: this.identityKeys.originScopeMatchKey(origin),
+      scopeMatchKey: this.identityKeys.originScopeMatchKey(normalizeOriginV2(scope.origin)),
     }
   }
 
-  private readMeta(key: string): number {
-    const row = this.authority.database
-      .prepare(`SELECT integer_value FROM memory_meta WHERE key = ?`)
-      .get(key) as { integer_value: number } | undefined
-    if (!row) throw new AppError('INVARIANT', `memory_meta 缺少 ${key}。`)
-    return row.integer_value
-  }
-
+  /** 重封时把旧行的信任级别读回来；读不到或值非法都是不变量破坏。 */
   private readTrustLevel(evidenceId: string): MemoryEvidenceTrustLevelV2 {
     const row = this.authority.database
       .prepare(`SELECT trust_level FROM memory_evidence WHERE id = ?`)
-      .get(evidenceId) as { trust_level: string } | undefined
+      .get(evidenceId) as MemoryTrustLevelRowV2 | undefined
     if (!row) throw new AppError('INVARIANT', 'Evidence trust_level 在复活时消失。')
-    if (
-      !['user_stated', 'system_observed', 'agent_derived', 'external_content'].includes(
-        row.trust_level
-      )
-    ) {
+    if (!isMemoryEvidenceTrustLevelV2(row.trust_level)) {
       throw new AppError('INVARIANT', 'Evidence trust_level 非法。')
     }
-    return row.trust_level as MemoryEvidenceTrustLevelV2
+    return row.trust_level
   }
 
+  /** 从注入的随机源取证据 id；长度不对就是随机源坏了。 */
   private randomId(): string {
-    const value = this.random(16)
-    if (!Buffer.isBuffer(value) || value.length !== 16) {
+    const value = this.random(MemoryEvidenceIngestServiceV2.EvidenceIdByteLength)
+    if (
+      !Buffer.isBuffer(value) ||
+      value.length !== MemoryEvidenceIngestServiceV2.EvidenceIdByteLength
+    ) {
       throw new AppError('INVARIANT', 'Evidence 随机源必须返回 16 字节。')
     }
     return value.toString('hex')
   }
 }
 
-function registerBlobV2(
-  authority: MemoryAuthorityDatabaseV2,
-  sealed: MemorySealedContentV2,
-  createdAt: number
-): void {
-  authority.database
-    .prepare(
-      `INSERT INTO memory_content_blobs(blob_id, byte_length, state, created_at)
-       VALUES (?, ?, 'active', ?)`
-    )
-    .run(sealed.blobId, sealed.byteLength, createdAt)
-}
-
-function mapEvidenceRowV2(row: MemoryEvidenceRowV2): MemoryEvidenceRecordV2 {
-  if (!row.payload_blob_ref || !row.payload_commitment) {
-    throw new AppError('INVARIANT', '未擦除 Evidence 缺少 payload blob。')
-  }
-  return {
-    id: row.id,
-    ingestSequence: row.ingest_sequence,
-    sourceType: row.source_type,
-    sourceId: row.source_id,
-    sourceMatchKey: row.source_match_key,
-    sessionId: row.session_id,
-    executionId: row.execution_id,
-    scopeType: row.scope_type,
-    scopeMatchKey: row.scope_match_key,
-    occurredAt: row.occurred_at,
-    payloadBlobRef: row.payload_blob_ref,
-    payloadCommitment: row.payload_commitment,
-    metadataBlobRef: row.metadata_blob_ref,
-    metadataCommitment: row.metadata_commitment,
-    privacyClass: row.privacy_class,
-    eligibilityState: row.eligibility_state,
-    createdAt: row.created_at,
-  }
-}
-
-function validateIngestInputV2(input: IngestMemoryEvidenceInputV2): void {
-  assertNonEmptyStringV2(input.sourceType, 'sourceType')
-  assertNonEmptyStringV2(input.trustLevel, 'trustLevel')
-  if (
-    !['user_stated', 'system_observed', 'agent_derived', 'external_content'].includes(
-      input.trustLevel
-    )
-  ) {
-    throw new AppError('VALIDATION', 'trustLevel 非法。')
-  }
-  assertNonNegativeSafeIntegerV2(input.occurredAt, 'occurredAt')
-  if (!['standard', 'personal', 'sensitive'].includes(input.privacyClass)) {
-    throw new AppError('VALIDATION', 'privacyClass 非法。')
-  }
-  if (
-    !isUndefined(input.eligibilityState) &&
-    !['active', 'source_deleted', 'excluded'].includes(input.eligibilityState)
-  ) {
-    throw new AppError('VALIDATION', 'eligibilityState 非法。')
-  }
-}
-
-function assertNonEmptyStringV2(value: unknown, label: string): asserts value is string {
-  if (!isString(value) || value.length === 0) {
-    throw new AppError('VALIDATION', `${label} 不得为空。`)
-  }
-}
-
-function assertNonNegativeSafeIntegerV2(value: number, label: string): void {
-  if (!Number.isSafeInteger(value) || value < 0) {
-    throw new AppError('VALIDATION', `${label} 必须是非负安全整数。`)
-  }
+/** 写一行证据要的全部材料（已经封好的密文引用加上解析好的作用域）。 */
+export interface MemoryEvidenceIngestServiceV2InsertInput {
+  /** 新证据的 id。 */
+  readonly id: string
+  /** 原始采集入参（正文字段此时已经封好，不再使用）。 */
+  readonly input: IngestMemoryEvidenceInputV2
+  /** 解析后的作用域类型。 */
+  readonly scopeType: string
+  /** 解析后的作用域盲索引键。 */
+  readonly scopeMatchKey: Nullable<string>
+  /** 来源引用的盲索引键。 */
+  readonly sourceMatchKey: Nullable<string>
+  /** 封好的正文。 */
+  readonly payload: MemorySealedContentV2
+  /** 封好的元数据；没有就是 null。 */
+  readonly metadata: Nullable<MemorySealedContentV2>
+  /** 落库时刻（毫秒）。 */
+  readonly createdAt: number
 }

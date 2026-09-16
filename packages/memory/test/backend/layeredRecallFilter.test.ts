@@ -11,9 +11,9 @@
 
 import { describe, expect, test } from 'bun:test'
 
-import { createInMemoryMemoryFilesIo } from '../../src/contract/files-io'
-import type { MemoryEmbedder } from '../../src/contract/vector'
+import type { MemoryEmbedder } from '../../src/contract/requires'
 import { createLayeredMemoryStoreBackend } from '../../src/impl/backends/LayeredMemoryStore'
+import { createInMemoryMemoryFilesIo } from '../../src/impl/files/InMemoryMemoryFilesIo'
 import { createMemoryFilesBackend } from '../../src/impl/files/MemoryFilesBackend'
 import { createMemoryVectorBackend } from '../../src/impl/vector/MemoryVectorBackend'
 import type { MemoryEvidenceInput, MemoryRecallItem } from '../../src/types/memory'

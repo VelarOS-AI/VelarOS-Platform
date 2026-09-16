@@ -1,16 +1,30 @@
 import { z } from 'zod'
 
-import { renderParameterDescription as parameterDescription } from '@velaros-ai/agent/tool-contract'
-import { isEmpty, isNumber, optionalWhen, toNullable } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
-
-import { defineMemoryTool, type MemoryToolContext } from '../contract/requires'
-import type { MemoryEvidenceCategory, MemoryRecallItem } from '../types/memory'
 import {
-  GLOBAL_MEMORY_SCOPE,
-  isMemoryVisibleInScope,
-  scopeTypeForScopeId,
-} from '../utils/scope'
+  renderParameterDescription as parameterDescription,
+  structureToolDescriptionsForCategory,
+} from '@velaros-ai/agent/tool-contract'
+
+import {
+  MemoryEvidenceCategories,
+  MemoryEvidenceCategoryAliases,
+  MemoryEvidenceLimits,
+  MemoryPrivacyClasses,
+  MemorySearchModes,
+  MemoryToolCategoryId,
+  MemoryToolLimits,
+  MemoryToolNames,
+} from '../contract/constants'
+import type { MemoryToolCollection } from '../contract/provides'
+import type {
+  ForgetMemoryInput,
+  GetMemoryInput,
+  SaveMemoryInput,
+  SearchMemoriesInput,
+} from '../types/tool'
+import { defineMemoryTool } from '../utils/tool'
+
+import { memoryToolOperations } from './MemoryToolOperations'
 
 /** 只读记忆的能力声明：读记忆、可并发。 */
 const MemoryReadCapability = {
@@ -18,7 +32,7 @@ const MemoryReadCapability = {
   readScopes: ['memory'],
   memoryAccess: 'read',
   concurrency: 'safe',
-  reason: 'memory read',
+  reason: '读取长期记忆',
 } as const
 
 /** 写记忆的能力声明：读写记忆、不可并发。 */
@@ -28,117 +42,19 @@ const MemoryWriteCapability = {
   writeScopes: ['memory'],
   memoryAccess: 'write',
   concurrency: 'unsafe',
-  reason: 'memory write',
+  reason: '写入长期记忆',
 } as const
 
+// 旧调用兼容只存在于工具输入边界，进入内核前立即归一化。
 const memoryCategorySchema = z.enum([
-  'conversation',
-  'fact',
-  'preference',
-  'feedback',
-  'procedure',
-  'project',
-  'task',
-  'goal',
-  'interest',
-  'entity',
-  'artifact',
-  // 旧调用兼容只存在于工具输入边界，进入内核前立即归一化。
-  'session',
-  'user',
-  'reference',
+  ...MemoryEvidenceCategories,
+  ...(Object.keys(MemoryEvidenceCategoryAliases) as Array<keyof typeof MemoryEvidenceCategoryAliases>),
 ])
 
-type MemoryToolCategory = z.infer<typeof memoryCategorySchema>
-
-export interface SaveMemoryInput extends Record<string, unknown> {
-  kind: MemoryToolCategory
-  title: string
-  content: string
-  summary?: string
-  source?: string
-  tags?: string[]
-  workspaceRoot?: string
-  taskKey?: string
-  privacyClass?: 'standard' | 'personal' | 'sensitive'
-}
-
-export interface SearchMemoriesInput extends Record<string, unknown> {
-  query?: string
-  mode?: 'search' | 'browse' | 'profile'
-  limit?: number
-  workspaceRoot?: string
-  deep?: boolean
-  categories?: MemoryToolCategory[]
-}
-
-export interface GetMemoryInput extends Record<string, unknown> {
-  id: string
-}
-
-export interface ForgetMemoryInput extends Record<string, unknown> {
-  id: string
-  reason?: string
-}
-
-function normalizeCategory(category: MemoryToolCategory): MemoryEvidenceCategory {
-  if (category === 'session') return 'conversation'
-  if (category === 'user') return 'preference'
-  if (category === 'reference') return 'artifact'
-  return category
-}
-
-function inferWorkspaceRoot(input: SaveMemoryInput | SearchMemoriesInput, ctx: MemoryToolContext): string {
-  const explicit = input.workspaceRoot?.trim()
-  if (explicit) return explicit
-  const scope = ctx.memoryScope?.trim() ?? ''
-  return scope.startsWith('project:') ? scope.slice('project:'.length) : ''
-}
-
-function compactRecall(item: MemoryRecallItem): Record<string, unknown> {
-  return {
-    id: item.id,
-    title: item.title,
-    summary: item.summary,
-    conceptType: item.conceptType,
-    predicate: item.predicate,
-    scopeType: item.scopeType,
-    scopeId: item.scopeId,
-    confidence: item.confidence,
-    activation: item.activation,
-    retrievalReason: item.retrievalReason,
-    sources: item.evidenceIds,
-    // 树路径只有树档有；文件档如实返回空数组，投影成缺席而不是一串空节点。
-    path: optionalWhen(
-      !isEmpty(item.path),
-      item.path.map((node) => ({ type: node.nodeType, title: node.title }))
-    ),
-  }
-}
-
-// @arch-guard:suspend code-style/require-chinese-comments 理由：本块为中文说明，反引号内技术标识符密度触发启发式误报。
-/**
- * 跨作用域读门 —— **全仓唯一一处**。
- *
- * 召回本身已按当前空间收敛（`memory:search` 传 scopeId）；`memory:get` 收的是模型手里的一个
- * id，没有这道门就等于「拿到任何 id 都能跨项目/跨站点读全文」。global 作用域的记忆按设计
- * 处处可读，`global` 记忆管理面（memoryScope = global）则代表「全部」，两者都放行。
- *
- * 判据本身住 `isMemoryVisibleInScope`（两轴单源），这里只把工具面的入参喂进去：读门与后端
- * 过滤必须是同一条真值表，否则「search 看不见但 get 读得到」就是一个可利用的越界口。
- * `memory:get` 只有会话身份轴（模型给的是 id，不是根），因此不传 workspaceRoot。
- */
-function isMemoryReadableInScope(
-  item: MemoryRecallItem,
-  memoryScope: LooseOptional<string>,
-): boolean {
-  return isMemoryVisibleInScope(item, { scopeId: memoryScope })
-}
-
 const saveMemory = defineMemoryTool<SaveMemoryInput>({
-  name: 'memory:save',
-  role: 'memory',
-  category: 'memory',
+  name: MemoryToolNames.save,
+  role: MemoryToolCategoryId,
+  category: MemoryToolCategoryId,
   summary: '写入一条带来源的长期记忆。',
   suitable: [
     '用户明确表达长期偏好、纠正、目标或稳定事实。',
@@ -177,102 +93,41 @@ const saveMemory = defineMemoryTool<SaveMemoryInput>({
     kind: memoryCategorySchema.describe(
       parameterDescription({ description: '记忆类别。' })
     ),
-    title: z.string().min(1).max(240).describe(
+    title: z.string().min(1).max(MemoryEvidenceLimits.titleChars).describe(
       parameterDescription({ description: '这条记忆的简短主题。' })
     ),
-    content: z.string().min(1).max(24_000).describe(
+    content: z.string().min(1).max(MemoryEvidenceLimits.contentChars).describe(
       parameterDescription({ description: '要记住的内容正文。' })
     ),
-    summary: z.string().max(1_000).optional().describe(
+    summary: z.string().max(MemoryToolLimits.summaryChars).optional().describe(
       parameterDescription({ description: '可选的人类可读摘要。' })
     ),
-    source: z.string().max(240).optional().describe(
+    source: z.string().max(MemoryToolLimits.sourceChars).optional().describe(
       parameterDescription({ description: '可选来源说明。' })
     ),
-    tags: z.array(z.string().max(80)).max(24).optional().describe(
+    tags: z.array(z.string().max(MemoryToolLimits.tagChars)).max(MemoryToolLimits.tagCount).optional().describe(
       parameterDescription({ description: '可选标签，只作为记忆元数据。' })
     ),
     workspaceRoot: z.string().optional().describe(
       parameterDescription({ description: '可选工作区根；默认从当前项目空间派生。' })
     ),
-    taskKey: z.string().max(240).optional().describe(
+    taskKey: z.string().max(MemoryToolLimits.sourceChars).optional().describe(
       parameterDescription({ description: '可选任务稳定键。' })
     ),
-    privacyClass: z.enum(['standard', 'personal', 'sensitive']).optional().describe(
+    privacyClass: z.enum(MemoryPrivacyClasses).optional().describe(
       parameterDescription({ description: '可选隐私级；秘密信息无论级别都禁止写入。' })
     ),
   }),
   permissions: ['memory:write'],
   capabilities: MemoryWriteCapability,
   isConcurrencySafe: () => false,
-  execute: async (input, ctx) => {
-    ctx.abortSignal.throwIfAborted()
-    const workspaceRoot = inferWorkspaceRoot(input, ctx)
-    const memoryScope = ctx.memoryScope?.trim()
-    const backend = ctx.memory.describeBackend()
-    const result = await ctx.memory.captureEvidence({
-      // 工具内容的作者是模型，不是用户：信任级封顶在 agent_derived，绝不由模型自报的
-      // 「用户已确认」铸造 user_stated/user_correction。真实用户确认经聊天消息采集独立进入
-      // user_stated 证据；放行自报会给 prompt injection 一条伪造「用户已确认」的提权通道。
-      // 2026-08-05：连同那个从没有读者的 userConfirmed 参数一起删掉——留在模型面上只会让
-      // 每次调用多推理一个参数、并诱使模型在回答里承诺一件工具没做的事。
-      sourceType: 'agent_tool',
-      trustLevel: 'agent_derived',
-      sessionId: ctx.sessionId,
-      workspaceRoot,
-      scopeType: memoryScope ? scopeTypeForScopeId(memoryScope) : undefined,
-      scopeId: memoryScope,
-      title: input.title,
-      content: input.content,
-      category: normalizeCategory(input.kind),
-      privacyClass: input.privacyClass ?? (['preference', 'feedback', 'user'].includes(input.kind) ? 'personal' : 'standard'),
-      metadata: {
-        summary: input.summary ?? '',
-        source: input.source ?? 'memory tool',
-        tags: input.tags ?? [],
-        taskKey: input.taskKey ?? '',
-        sessionLineage: toNullable(ctx.sessionLineage),
-      },
-    })
-    // 后端拒收（证据的作用域没有对应的可写记忆目录）时不给条目 id：当场如实报错，
-    // 绝不回一句「已记下」让模型去向用户承诺一件没发生的事。
-    if (!result.evidence.id) {
-      throw new AppError(
-        'VALIDATION',
-        `当前空间（${memoryScope || '未指定作用域'}）没有对应的记忆目录，这条记忆没有写下来；`
-          + '请如实告诉用户，不要说已经记住了。',
-      )
-    }
-    // 有整理管线的后端（树档）写入即入队、由 Dream 择时纳入；没有的后端写入即最终态。
-    // 对模型只说这一件能兑现的事，treeVersion 这类某一档的 schema 只在该档在跑时才回。
-    const consolidating = backend.verbs.includes('dream')
-    const treeVersion = consolidating ? (await ctx.memory.getDiagnostics()).treeVersion : undefined
-    const written: {
-      accepted: true
-      inserted: boolean
-      memoryId: string
-      availability: 'consolidating' | 'immediate'
-      message: string
-      treeVersion?: number
-    } = {
-      accepted: true,
-      inserted: result.inserted,
-      memoryId: result.evidence.id,
-      availability: consolidating ? 'consolidating' : 'immediate',
-      message: consolidating
-        ? '已记下；由后台整理管线择时纳入长期结论。'
-        : '已记下，现在就能被召回。',
-    }
-    // 「没有整理管线的后端不回 treeVersion」是契约（`in` 判定为假），所以只在有版本号时写这个键。
-    if (isNumber(treeVersion)) written.treeVersion = treeVersion
-    return written
-  },
+  execute: async (input, ctx) => memoryToolOperations.save(input, ctx),
 })
 
 const searchMemories = defineMemoryTool<SearchMemoriesInput>({
-  name: 'memory:search',
-  role: 'memory',
-  category: 'memory',
+  name: MemoryToolNames.search,
+  role: MemoryToolCategoryId,
+  category: MemoryToolCategoryId,
   summary: '召回当前空间可见的长期记忆。',
   suitable: ['回答依赖用户历史、项目连续性、任务演化、偏好或既有结论。'],
   forbidden: ['不要把召回结果当成无来源的绝对事实；注意 confidence 与 sources。'],
@@ -289,9 +144,9 @@ const searchMemories = defineMemoryTool<SearchMemoriesInput>({
   ],
   schema: z
     .object({
-      query: z.string().max(500).optional(),
-      mode: z.enum(['search', 'browse', 'profile']).optional(),
-      limit: z.number().int().min(1).max(50).optional(),
+      query: z.string().max(MemoryToolLimits.queryChars).optional(),
+      mode: z.enum(MemorySearchModes).optional(),
+      limit: z.number().int().min(1).max(MemoryToolLimits.recallItems).optional(),
       workspaceRoot: z.string().optional(),
       deep: z.boolean().optional(),
       categories: z.array(memoryCategorySchema).optional(),
@@ -308,40 +163,13 @@ const searchMemories = defineMemoryTool<SearchMemoriesInput>({
   permissions: ['memory:read'],
   capabilities: MemoryReadCapability,
   isConcurrencySafe: () => true,
-  execute: async (input, ctx) => {
-    ctx.abortSignal.throwIfAborted()
-    const mode = input.mode ?? 'search'
-    const workspaceRoot = inferWorkspaceRoot(input, ctx)
-    const query = mode === 'profile' ? '' : input.query?.trim() ?? ''
-    const categories =
-      mode === 'profile'
-        ? (['preference', 'feedback', 'interest'] as MemoryEvidenceCategory[])
-        : input.categories?.map(normalizeCategory)
-    // 按当前空间作用域收敛召回：browser/system 空间若不传 scopeId，recall 的 effectiveScope
-    // 为空 = 无作用域过滤，会翻出所有项目/站点的 claim。global（记忆管理面）才代表「全部」。
-    const memoryScope = ctx.memoryScope?.trim()
-    const scopeId = memoryScope && memoryScope !== GLOBAL_MEMORY_SCOPE ? memoryScope : undefined
-    const memories = await ctx.memory.recall(query, {
-      limit: input.limit ?? (mode === 'browse' ? 20 : 10),
-      workspaceRoot,
-      scopeId,
-      categories,
-      includeDormant: input.deep,
-      deep: input.deep,
-    })
-    return {
-      mode,
-      query,
-      count: memories.length,
-      memories: memories.map(compactRecall),
-    }
-  },
+  execute: async (input, ctx) => memoryToolOperations.search(input, ctx),
 })
 
 const getMemory = defineMemoryTool<GetMemoryInput>({
-  name: 'memory:get',
-  role: 'memory',
-  category: 'memory',
+  name: MemoryToolNames.get,
+  role: MemoryToolCategoryId,
+  category: MemoryToolCategoryId,
   summary: '按 id 读取一条记忆的全文与来源。',
   suitable: ['memory:search 返回候选后，需要检查完整内容和来源。'],
   forbidden: ['不要用它搜索未知记忆。'],
@@ -352,21 +180,13 @@ const getMemory = defineMemoryTool<GetMemoryInput>({
   permissions: ['memory:read'],
   capabilities: MemoryReadCapability,
   isConcurrencySafe: () => true,
-  execute: async ({ id }, ctx) => {
-    ctx.abortSignal.throwIfAborted()
-    const memory = await ctx.memory.getMemory(id)
-    // 越界与不存在回同一个 NOT_FOUND：分开回等于把「这条存在但不属于你」当成信息泄漏出去。
-    if (!memory || !isMemoryReadableInScope(memory, ctx.memoryScope)) {
-      throw new AppError('NOT_FOUND', `记忆不存在：${id}`)
-    }
-    return { memory }
-  },
+  execute: async (input, ctx) => memoryToolOperations.get(input, ctx),
 })
 
 const forgetMemory = defineMemoryTool<ForgetMemoryInput>({
-  name: 'memory:archive',
-  role: 'memory',
-  category: 'memory',
+  name: MemoryToolNames.archive,
+  role: MemoryToolCategoryId,
+  category: MemoryToolCategoryId,
   summary: '归档一条记忆，让它退出日常召回。',
   suitable: ['用户明确表示某条记忆过时、暂时不希望它继续影响日常回答。'],
   forbidden: ['不要把归档描述成删除——内容一个字节都还在。'],
@@ -379,40 +199,20 @@ const forgetMemory = defineMemoryTool<ForgetMemoryInput>({
   examples: [{ id: 'project:/repo::entries/回复风格.md', reason: '该偏好只适用于旧项目' }],
   schema: z.object({
     id: z.string().min(1),
-    reason: z.string().max(500).optional(),
+    reason: z.string().max(MemoryToolLimits.archiveReasonChars).optional(),
   }),
   permissions: ['memory:write'],
   capabilities: MemoryWriteCapability,
   isConcurrencySafe: () => false,
-  execute: async ({ id, reason }, ctx) => {
-    ctx.abortSignal.throwIfAborted()
-    // 归档是写动作，先过和 `memory:get` 同一条可见性读门：没有这一道，项目会话拿到一个
-    // 系统池的 id 就能把别人空间的记忆归档掉（系统根总在根列表里）。越界与不存在回同一个
-    // NOT_FOUND——分开回等于把「这条存在但不属于你」当成信息泄漏出去。
-    const memory = await ctx.memory.getMemory(id)
-    if (!memory || !isMemoryReadableInScope(memory, ctx.memoryScope)) {
-      throw new AppError('NOT_FOUND', `记忆不存在：${id}`)
-    }
-    const result = await ctx.memory.archiveMemory(id)
-    // 后端一条都没归档到（例如只读根）时如实回 false，别再对模型说「已归档」。
-    const archived = !isEmpty(result.affectedEvidenceIds)
-    return {
-      archived,
-      physicalDelete: false,
-      reason: toNullable(reason),
-      ...result,
-      message: archived
-        ? '已归档：这条记忆退出日常召回，内容仍在，深层召回仍可翻到。'
-        : '没有归档成：这条记忆所在的作用域根是只读的，请如实告诉用户，别说已经归档。',
-    }
-  },
+  execute: async (input, ctx) => memoryToolOperations.archive(input, ctx),
 })
 
-const memoryTools = {
-  'memory:save': saveMemory,
-  'memory:search': searchMemories,
-  'memory:get': getMemory,
-  'memory:archive': forgetMemory,
-}
+/** 四个记忆工具连同分组与挂载：说明按类别渲染一次，宿主拿到的就是模型看到的字节。 */
+const memoryTools: MemoryToolCollection = structureToolDescriptionsForCategory({
+  [MemoryToolNames.save]: saveMemory,
+  [MemoryToolNames.search]: searchMemories,
+  [MemoryToolNames.get]: getMemory,
+  [MemoryToolNames.archive]: forgetMemory,
+}, MemoryToolCategoryId)
 
 export { memoryTools }

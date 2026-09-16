@@ -7,7 +7,9 @@
 
 import { describe, expect, test } from 'bun:test'
 
-import { createInMemoryMemoryFilesIo, type InMemoryMemoryFilesIo } from '../../src/contract/files-io'
+import type { MemoryFilesIo } from '../../src/contract/requires'
+import type { InMemoryMemoryFilesIoApi } from '../../src/impl/files/InMemoryMemoryFilesIo'
+import { createInMemoryMemoryFilesIo } from '../../src/impl/files/InMemoryMemoryFilesIo'
 import { createMemoryFilesBackend, type MemoryFilesScopeRoot } from '../../src/impl/files/MemoryFilesBackend'
 import type { MemoryEvidenceInput } from '../../src/types/memory'
 import { parseMemoryFileDocument } from '../../src/utils/files/frontmatter'
@@ -43,7 +45,7 @@ function evidence(overrides: Partial<MemoryEvidenceInput> = {}): MemoryEvidenceI
   }
 }
 
-function entryFiles(io: InMemoryMemoryFilesIo): string[] {
+function entryFiles(io: InMemoryMemoryFilesIoApi): string[] {
   return Object.keys(io.snapshot()).filter((path) => path.includes('/entries/'))
 }
 
@@ -186,7 +188,15 @@ describe('D-10 稳定键映射（进程内）', () => {
   test('已有 200 条时再写一条不会把每个条目都读一遍', async () => {
     const io = createInMemoryMemoryFilesIo()
     let reads = 0
-    const counted = { ...io, readTextFile: (path: string) => { reads += 1; return io.readTextFile(path) } }
+    const counted: MemoryFilesIo = {
+      join: (...segments: readonly string[]) => io.join(...segments),
+      ensureDirectory: (directory: string) => { io.ensureDirectory(directory) },
+      listFiles: (directory: string) => io.listFiles(directory),
+      readTextFile: (path: string) => { reads += 1; return io.readTextFile(path) },
+      writeTextFile: (path: string, content: string) => { io.writeTextFile(path, content) },
+      deleteFile: (path: string) => { io.deleteFile(path) },
+      isInsideDirectory: (path: string, root: string) => io.isInsideDirectory?.(path, root) ?? true,
+    }
     const backend = createMemoryFilesBackend({
       roots: [ProjectRoot],
       io: counted,

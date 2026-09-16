@@ -5,7 +5,7 @@ import { describe, test } from 'bun:test'
 import { KernelModuleApiVersion } from '@velaros-ai/kernel/contracts/abi'
 import { KernelModuleHost } from '@velaros-ai/kernel/runtime'
 
-import { createInMemoryMemoryFilesIo } from '../../src/contract/files-io'
+import { createInMemoryMemoryFilesIo } from '../../src/impl/files/InMemoryMemoryFilesIo'
 import { createMemoryFilesBackend } from '../../src/impl/files/MemoryFilesBackend'
 import { mountMemoryAdapter, type MountMemoryAdapterInput } from '../../src/impl/host/MemoryAdapterRuntime'
 import { createMemoryStoreKernelModule } from '../../src/impl/host/MemoryStoreCapabilities'
@@ -69,12 +69,12 @@ describe('Memory adapter optional tree governance', () => {
   })
 
   test('rejects missing authority and ambiguous selection instead of inventing a tree', () => {
-    assert.throws(() => mountMemoryAdapter(hostPorts()), /no authority backend/u)
+    assert.throws(() => mountMemoryAdapter(hostPorts()), /没有权威层后端/u)
     const store = { registry: { getOptionalService: () => undefined }, preference: ['files'] }
-    assert.throws(() => mountMemoryAdapter({ ...hostPorts(), store }), /no authority backend/u)
+    assert.throws(() => mountMemoryAdapter({ ...hostPorts(), store }), /没有权威层后端/u)
     assert.throws(
       () => mountMemoryAdapter({ ...hostPorts(), backend: filesBackend(), store }),
-      /one backend selection source/u
+      /backend 与 store 二选一/u
     )
   })
 
@@ -85,13 +85,13 @@ describe('Memory adapter optional tree governance', () => {
     })
     assert.throws(
       () => mountMemoryAdapter({ ...hostPorts(), backend: derived }),
-      /complete authority backend/u
+      /完整的权威层后端/u
     )
     const incomplete = filesBackend()
     Object.defineProperty(incomplete, 'archive', { value: undefined })
     assert.throws(
       () => mountMemoryAdapter({ ...hostPorts(), backend: incomplete }),
-      /complete authority backend/u
+      /完整的权威层后端/u
     )
   })
 

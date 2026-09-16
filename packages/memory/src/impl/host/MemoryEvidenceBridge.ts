@@ -1,23 +1,40 @@
-import { isArray, isBlank, isEmpty, isFiniteNumber,isNonBlankString, isPresent, isString, Log, toNullable } from '@velaros-ai/core'
+import { isArray, isBlank, isEmpty,isNonBlankString, isPresent, Log, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 // 值导入必须指向具体模块：`from '..'` 在 dist 里会解析成目录 import
 // （fix-esm-extensions 只改写带 `/` 的相对说明符），Node ESM 直接报 ERR_UNSUPPORTED_DIR_IMPORT。
-import { type MemoryStoreBackend, supportsMemoryBackendVerb } from '../../contract/backend'
+import type { MemoryStoreBackend } from '../../contract/requires'
+import type { MemoryHostScopeResolver } from '../../contract/requires'
 import type {
-  MemoryHostScopeResolver,
+  ComputerUseObservationInput,
+  ExecutionObservationInput,
   MemoryHostSessionSnapshot,
   MemoryHostTranscriptMessage,
   MemoryHostUserMessageEvent,
+  WorkspaceToolObservationInput,
 } from '../../types/host'
 import type { MemoryEvidenceInput } from '../../types/memory'
+import { supportsMemoryBackendVerb } from '../../utils/backends'
+import {
+  describeComputerUseObservation,
+  describeWorkspaceObservation,
+  titleFromContent,
+} from '../../utils/capture'
+import { MemoryTuning } from '../../utils/tuning'
 
-interface MemoryEvidenceBridgeOptions {
+/** 一个证据采集桥要什么。 */
+export interface MemoryEvidenceBridgeOptions {
+  /** 自动记忆总开关。 */
   isEnabled: () => boolean
+  /** 后台生长开关；关掉后照常采集，只是不触发即时整理。 */
   isGrowthEnabled?: () => boolean
+  /** 聊天消息采集开关。 */
   isChatCaptureEnabled?: () => boolean
+  /** 工作区工具观察采集开关。 */
   isWorkspaceCaptureEnabled?: () => boolean
+  /** 桌面操作观察采集开关。 */
   isComputerUseCaptureEnabled?: () => boolean
+  /** 执行生命周期采集开关。 */
   isExecutionCaptureEnabled?: () => boolean
   /**
    * 单条会话的采集豁免（宿主态，逐会话覆盖全局采集开关）。
@@ -26,36 +43,10 @@ interface MemoryEvidenceBridgeOptions {
    * 本门答「这一条会话要不要记」。缺席 = 不豁免（宿主没有会话级策略时行为与从前一致）。
    */
   isSessionCaptureAllowed?: (sessionId: string) => boolean
+  /** 上下文 → 作用域的解析器。 */
   resolveScope: MemoryHostScopeResolver
-  /** Host protocol marker excluded from user-stated Evidence. */
+  /** 环境上下文块的起始标签；带这个前缀的正文块不按用户陈述采集。 */
   environmentContextBlockOpenTag?: string
-}
-
-interface ComputerUseObservationInput {
-  sessionId: string
-  toolCallId: string
-  toolName: string
-  args: Record<string, unknown>
-  workspaceRoot?: LooseOptional<string>
-  occurredAt?: number
-  taskTitle?: LooseOptional<string>
-  contextId?: LooseOptional<string>
-}
-
-interface WorkspaceToolObservationInput extends ComputerUseObservationInput {
-  categoryId: 'project-files' | 'project-changes' | 'project-execution' | 'development-code'
-  taskTitle: string
-}
-
-interface ExecutionObservationInput {
-  sessionId: string
-  sourceEventId: string
-  kind: string
-  taskTitle: string
-  workspaceRoot?: LooseOptional<string>
-  executionId?: LooseOptional<string>
-  occurredAt?: number
-  contextId?: LooseOptional<string>
 }
 
 /**
@@ -68,7 +59,25 @@ interface ExecutionObservationInput {
  * 的 capture / dream / govern 三个动词：后端没有整理管线（如 `memory-files`）时 dream 动词
  * 缺席，采集照常，不走「降级」分支。
  */
-export class MemoryEvidenceBridge {
+export interface MemoryEvidenceBridgeApi {
+  /** 采集一批用户或助手消息。 */
+  captureUserMessage(payload: MemoryHostUserMessageEvent): void
+  /** 采集一次会话快照（整段对话）。 */
+  captureSessionSnapshot(snapshot: MemoryHostSessionSnapshot): void
+  /** 采集一次桌面操作观察。 */
+  captureComputerUseObservation(input: ComputerUseObservationInput): void
+  /** 采集一次工作区工具观察。 */
+  captureWorkspaceToolObservation(input: WorkspaceToolObservationInput): void
+  /** 采集一次执行生命周期观察。 */
+  captureExecutionObservation(input: ExecutionObservationInput): void
+  /** 会话被删除：把这个来源的证据整体标成不可用。 */
+  markSessionSourceDeleted(sessionId: string): void
+  /** 等排队中的采集全部落地（收尾与测试用）。 */
+  flush(): Promise<void>
+}
+
+/** 证据采集桥实现。 */
+export class MemoryEvidenceBridge implements MemoryEvidenceBridgeApi {
   private readonly log = Log.tag('MemoryEvidenceBridge')
   private pending: Promise<void> = Promise.resolve()
 
@@ -93,7 +102,7 @@ export class MemoryEvidenceBridge {
         workspaceRoot: payload.workspaceRoot?.trim(),
         ...this.resolveScope(payload.sessionId, payload.workspaceRoot, payload.contextId),
         occurredAt: message.timestamp,
-        title: this.titleFromContent(content),
+        title: titleFromContent(content),
         content,
         category: 'conversation',
         privacyClass: 'personal',
@@ -130,7 +139,7 @@ export class MemoryEvidenceBridge {
    */
   public captureComputerUseObservation(input: ComputerUseObservationInput): void {
     if (!this.canCapture(this.options.isComputerUseCaptureEnabled, input.sessionId)) return
-    const description = this.describeComputerUseObservation(input.toolName, input.args)
+    const description = describeComputerUseObservation(input.toolName, input.args)
     if (!description) return
 
     this.enqueue([
@@ -160,7 +169,7 @@ export class MemoryEvidenceBridge {
   /** 工作区工具只记录已完成动作及最小目标线索，不复制命令输出或文件正文。 */
   public captureWorkspaceToolObservation(input: WorkspaceToolObservationInput): void {
     if (!this.canCapture(this.options.isWorkspaceCaptureEnabled, input.sessionId)) return
-    const description = this.describeWorkspaceObservation(input)
+    const description = describeWorkspaceObservation(input)
     this.enqueue([
       {
         sourceType: 'workspace_event',
@@ -201,7 +210,7 @@ export class MemoryEvidenceBridge {
         ...this.resolveScope(input.sessionId, input.workspaceRoot, input.contextId),
         occurredAt: input.occurredAt,
         title: input.taskTitle || '执行任务',
-        content: `任务执行状态进入「${kind.slice(0, 80)}」。`,
+        content: `任务执行状态进入「${kind.slice(0, MemoryTuning.capture.phaseMaxChars)}」。`,
         category: 'task',
         privacyClass: 'personal',
         metadata: {
@@ -263,7 +272,7 @@ export class MemoryEvidenceBridge {
       workspaceRoot,
       ...this.resolveScope(sessionId, workspaceRoot, contextId),
       occurredAt: message.timestamp,
-      title: sessionTitle || this.titleFromContent(content),
+      title: sessionTitle || titleFromContent(content),
       content,
       category: 'conversation',
       privacyClass: 'personal',
@@ -280,7 +289,7 @@ export class MemoryEvidenceBridge {
         && (this.options.isGrowthEnabled?.() ?? true)
         && supportsMemoryBackendVerb(this.store, 'dream')
       ) {
-        await this.store.dream?.({ trigger: 'immediate', maxEvidence: 25 })
+        await this.store.dream?.({ trigger: 'immediate', maxEvidence: MemoryTuning.capture.immediateDreamBatch })
       }
     })
   }
@@ -302,60 +311,10 @@ export class MemoryEvidenceBridge {
     return this.options.isSessionCaptureAllowed?.(sessionId) ?? true
   }
 
-  private titleFromContent(content: string): string {
-    const line = content.split('\n').find((item) => !isBlank(item.trim())) ?? content
-    const normalized = line.replace(/\s+/g, ' ').trim()
-    return normalized.length <= 72 ? normalized : `${normalized.slice(0, 71).trimEnd()}…`
-  }
 
-  private describeComputerUseObservation(
-    toolName: string,
-    args: Record<string, unknown>
-  ): Nullable<string> {
-    switch (toolName) {
-      case 'computer:screenshot':
-        return '为当前任务观察了主屏幕；原始截图未进入长期记忆。'
-      case 'computer:screen_size':
-        return '为当前任务读取了主屏幕几何信息。'
-      case 'computer:move':
-        return `为当前任务移动了鼠标到 (${this.numberOrUnknown(args.x)}, ${this.numberOrUnknown(args.y)})。`
-      case 'computer:click':
-        return `为当前任务在 (${this.numberOrUnknown(args.x)}, ${this.numberOrUnknown(args.y)}) 执行了 ${isString(args.button) ? args.button : 'left'} 点击。`
-      case 'computer:type':
-        return `为当前任务向桌面焦点输入了文本；仅保留长度 ${isString(args.text) ? args.text.length : 0}，原文未进入长期记忆。`
-      case 'computer:key':
-        return `为当前任务发送了按键 ${isString(args.keys) ? args.keys.slice(0, 100) : 'unknown'}。`
-      default:
-        return null
-    }
-  }
 
-  private describeWorkspaceObservation(input: WorkspaceToolObservationInput): string {
-    const target = this.readWorkspaceTarget(input.args)
-    const targetText = target ? `，目标 ${target}` : ''
-    switch (input.categoryId) {
-      case 'project-changes':
-        return `通过 ${input.toolName} 完成了一次项目修改${targetText}；文件正文未复制进长期记忆。`
-      case 'project-execution':
-        return `通过 ${input.toolName} 完成了一次项目执行${targetText}；命令和输出原文未复制进长期记忆。`
-      case 'development-code':
-        return `通过 ${input.toolName} 检查了代码结构${targetText}；查询结果原文未复制进长期记忆。`
-      case 'project-files':
-        return `通过 ${input.toolName} 检查了项目文件${targetText}；读取内容未复制进长期记忆。`
-    }
-  }
 
-  private readWorkspaceTarget(args: Record<string, unknown>): string {
-    for (const key of ['path', 'filePath', 'rootPath', 'cwd']) {
-      const value = args[key]
-      if (isString(value) && !isBlank(value.trim())) return value.trim().slice(0, 240)
-    }
-    return ''
-  }
 
-  private numberOrUnknown(value: unknown): string {
-    return isFiniteNumber(value) ? String(value) : 'unknown'
-  }
 
   private resolveScope(
     sessionId: string,
@@ -366,9 +325,3 @@ export class MemoryEvidenceBridge {
   }
 }
 
-export type {
-  ComputerUseObservationInput,
-  ExecutionObservationInput,
-  MemoryEvidenceBridgeOptions,
-  WorkspaceToolObservationInput,
-}

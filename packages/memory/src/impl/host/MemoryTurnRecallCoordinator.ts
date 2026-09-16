@@ -3,85 +3,17 @@ import { isEmpty, Log } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
-import type { MemoryStoreBackend } from '../../contract/backend'
-import type { MemoryHostScopeResolver } from '../../types/host'
-import type { MemoryRecallItem } from '../../types/memory'
+import { MemoryToolNames, MemoryTurnContextSourceId } from '../../contract/constants'
+import type { MemoryTurnContextDeltaSource } from '../../contract/provides'
+import type { MemoryTurnRecallDeps } from '../../types/host'
+import type {
+  MemoryTurnRecallInput,
+  MemoryTurnRecallResult,
+} from '../../types/memory'
+import { formatRecallSummary, truncateRecallText } from '../../utils/recall'
+import { MemoryTuning } from '../../utils/tuning'
 
 const log = Log.tag('MemoryTurnRecall')
-
-/** 短于该长度的用户消息（如“继续”“好的”）不值得触发召回。 */
-const RecallMinQueryChars = 4
-/** 召回查询截断长度：只取用户消息头部，避免长粘贴文本拖慢全文检索。 */
-const RecallQueryMaxChars = 600
-/** 树路径召回候选上限。 */
-const RecallCandidateLimit = 12
-/** 单轮最多注入条数。 */
-const RecallMaxInjectPerTurn = 3
-/** delta 账本容量：注入是低频小量事件，16 条足够覆盖积压。 */
-const RecallLedgerMaxEntries = 16
-/** 已注入去重集的会话数上限，超出按插入序淘汰。 */
-const InjectedSessionsMax = 128
-/** 引擎发送前可等待召回的硬预算；超时后本轮跳过，不阻塞发送、不重试。 */
-const AwaitableRecallTimeoutMs = 2_000
-/**
- * 在途闩的看门狗预算：闩比它还老就当那次召回不会回来了，就地放行。
- *
- * 解闩原本完全依赖 promise settle，而召回一路打到 embedding 网关的 HTTP 请求上，
- * Node fetch 没有默认超时——远端 TCP 挂起（不断也不回）时 `.finally` 永不执行，此后该会话的
- * 自动记忆召回在进程剩余生命周期内彻底静默失效（审计 U38）。取值比 `AwaitableRecallTimeoutMs`
- * 宽得多：这道门防的是"永远不回来"，不是"慢"，误伤一次在跑的召回比闩死一个会话更亏。
- */
-const InFlightLatchWatchdogMs = 30_000
-/** 运行轨迹可供审计/手动召回，但不应作为下一项任务的自动语义上下文。 */
-const AutomaticRecallExcludedSourceTypes = [
-  'workspace_event',
-  'execution_event',
-  'computer_use',
-] as const
-
-export interface MemoryTurnRecallDeps {
-  /**
-   * 召回动词。由 capability token 解析出的后端提供——本协调器不认识后端是树、文件还是
-   * 并联了向量索引，只认窄端口的 `recall`。
-   */
-  recall: MemoryStoreBackend['recall']
-  /** 自动记忆总开关；关闭后不采集也不注入召回。 */
-  isEnabled?: () => boolean
-  isSessionRecallAllowed?: (sessionId: string) => boolean
-  isAutomaticDeepRecallEnabled?: () => boolean
-  resolveScope: MemoryHostScopeResolver
-  turnContextScopes: readonly string[]
-}
-
-export interface MemoryTurnRecallInput {
-  sessionId: string
-  /** 用户本轮输入的原始文本（不含冻结的环境块）。 */
-  query: string
-  workspaceRoot?: LooseOptional<string>
-  contextId?: LooseOptional<string>
-}
-
-/** 供外部引擎 prompt 前缀消费的只读召回结果；空数组表示关闭、跳过、失败或超时。 */
-export interface MemoryTurnRecallResult {
-  summaries: string[]
-  sources?: Array<{ sourceId: string; label: string }>
-}
-
-/**
- * Structural view of Kernel's generic turn-context source contract.
- * Keeping it local lets this adapter compile while Core moves from product
- * workspace enums to opaque capability scope ids.
- */
-export interface MemoryTurnContextDeltaSource {
-  id: string
-  scopes: readonly string[]
-  rendererVisible?: boolean
-  peekCached: (input: {
-    sessionId: string
-    afterSeq: number
-    generation: Nullable<string>
-  }) => ReturnType<TurnContextSessionLedgers['peek']> & { anchors: [] }
-}
 
 /**
  * 回合开始记忆自动召回协调器。
@@ -91,9 +23,28 @@ export interface MemoryTurnContextDeltaSource {
  *
  * 同一记忆每个会话只注入一次；召回失败只记日志，绝不影响发送。
  */
-export class MemoryTurnRecallCoordinator {
-  private readonly ledgers = new TurnContextSessionLedgers('memory.recall', {
-    maxEntries: RecallLedgerMaxEntries,
+export interface MemoryTurnRecallCoordinatorApi {
+  /** 发送被接受后调用；同步返回，召回在后台完成。 */
+  notifyUserMessage(input: MemoryTurnRecallInput): void
+  /** 可等待的召回：给外部引擎在拼提示词之前用，超过硬预算就返回空。 */
+  recallUserMessage(input: MemoryTurnRecallInput): Promise<MemoryTurnRecallResult>
+  /** 造一个回合上下文增量源，交给宿主注册。 */
+  createTurnContextSource(): MemoryTurnContextDeltaSource
+  /** 会话结束：清掉这个会话的账本与去重表。 */
+  clearSession(sessionId: string): void
+}
+
+/** 回合召回协调器实现。 */
+export class MemoryTurnRecallCoordinator implements MemoryTurnRecallCoordinatorApi {
+  /** 运行轨迹可供审计/手动召回，但不应作为下一项任务的自动语义上下文。 */
+  private static readonly AutomaticRecallExcludedSourceTypes = [
+    'workspace_event',
+    'execution_event',
+    'computer_use',
+  ] as const
+
+  private readonly ledgers = new TurnContextSessionLedgers(MemoryTurnContextSourceId, {
+    maxEntries: MemoryTuning.recall.ledgerMaxEntries,
     notifyRenderer: false,
   })
   private readonly injectedIdsBySession = new Map<string, Set<string>>()
@@ -107,8 +58,8 @@ export class MemoryTurnRecallCoordinator {
   public notifyUserMessage(input: MemoryTurnRecallInput): void {
     // 自动记忆关闭时既不采集也不注入，与 EvidenceBridge.canCapture 语义一致。
     if (!this.isRecallAllowed(input.sessionId)) return
-    const query = input.query.trim().slice(0, RecallQueryMaxChars)
-    if (query.length < RecallMinQueryChars) return
+    const query = input.query.trim().slice(0, MemoryTuning.recall.queryMaxChars)
+    if (query.length < MemoryTuning.recall.minQueryChars) return
     // 上一轮召回还在跑（模型选择最长 4s）说明用户在快速连发，跳过本轮避免堆积。
     if (this.isRecallInFlight(input.sessionId)) return
 
@@ -132,7 +83,7 @@ export class MemoryTurnRecallCoordinator {
   private isRecallInFlight(sessionId: string): boolean {
     const latch = this.inFlightSessions.get(sessionId)
     if (!latch) return false
-    if (Date.now() - latch.startedAt < InFlightLatchWatchdogMs) return true
+    if (Date.now() - latch.startedAt < MemoryTuning.recall.inFlightWatchdogMs) return true
 
     log.debug('turn memory recall latch expired by watchdog; recall never settled', { sessionId })
     this.inFlightSessions.delete(sessionId)
@@ -165,11 +116,11 @@ export class MemoryTurnRecallCoordinator {
    */
   public async recallUserMessage(
     input: MemoryTurnRecallInput,
-    timeoutMs = AwaitableRecallTimeoutMs
+    timeoutMs = MemoryTuning.recall.awaitableTimeoutMs
   ): Promise<MemoryTurnRecallResult> {
     if (!this.isRecallAllowed(input.sessionId)) return { summaries: [] }
-    const query = input.query.trim().slice(0, RecallQueryMaxChars)
-    if (query.length < RecallMinQueryChars || this.isRecallInFlight(input.sessionId))
+    const query = input.query.trim().slice(0, MemoryTuning.recall.queryMaxChars)
+    if (query.length < MemoryTuning.recall.minQueryChars || this.isRecallInFlight(input.sessionId))
       return { summaries: [] }
 
     // 这一路同样只在 settle 时解闩：等待超时只是本轮放弃，闩还挂在那条永不回来的请求上。
@@ -192,7 +143,7 @@ export class MemoryTurnRecallCoordinator {
       return await Promise.race([
         recallTask,
         new Promise<MemoryTurnRecallResult>((resolve) => {
-          timers.after(Math.min(timeoutMs, AwaitableRecallTimeoutMs), () => {
+          timers.after(Math.min(timeoutMs, MemoryTuning.recall.awaitableTimeoutMs), () => {
             expired = true
             resolve({ summaries: [] })
           })
@@ -242,23 +193,23 @@ export class MemoryTurnRecallCoordinator {
       contextId: input.contextId,
     })
     let candidates = await this.deps.recall(query, {
-      limit: RecallCandidateLimit,
+      limit: MemoryTuning.recall.candidateLimit,
       workspaceRoot: input.workspaceRoot?.trim() || undefined,
       scopeId: scope.scopeId,
       excludeSessionId: input.sessionId,
       excludeAgentConversationEchoes: true,
       excludeConversationObservations: true,
-      excludeSourceTypes: [...AutomaticRecallExcludedSourceTypes],
+      excludeSourceTypes: [...MemoryTurnRecallCoordinator.AutomaticRecallExcludedSourceTypes],
     })
     if (isEmpty(candidates) && (this.deps.isAutomaticDeepRecallEnabled?.() ?? true)) {
       candidates = await this.deps.recall(query, {
-        limit: RecallCandidateLimit,
+        limit: MemoryTuning.recall.candidateLimit,
         workspaceRoot: input.workspaceRoot?.trim() || undefined,
         scopeId: scope.scopeId,
         excludeSessionId: input.sessionId,
         excludeAgentConversationEchoes: true,
         excludeConversationObservations: true,
-        excludeSourceTypes: [...AutomaticRecallExcludedSourceTypes],
+        excludeSourceTypes: [...MemoryTurnRecallCoordinator.AutomaticRecallExcludedSourceTypes],
         includeDormant: true,
         deep: true,
       })
@@ -266,7 +217,7 @@ export class MemoryTurnRecallCoordinator {
     if (isExpired() || !this.isRecallAllowed(input.sessionId)) return []
 
     const injectedIds = this.injectedIdsFor(input.sessionId)
-    const excludedSourceTypes = new Set<string>(AutomaticRecallExcludedSourceTypes)
+    const excludedSourceTypes = new Set<string>(MemoryTurnRecallCoordinator.AutomaticRecallExcludedSourceTypes)
     const freshCandidates = candidates.filter((candidate) =>
       !injectedIds.has(candidate.id)
       && candidate.predicate !== 'conversation_observation'
@@ -277,36 +228,22 @@ export class MemoryTurnRecallCoordinator {
     if (isEmpty(freshCandidates)) return []
 
     const summaries: string[] = []
-    for (const memory of freshCandidates.slice(0, RecallMaxInjectPerTurn)) {
+    for (const memory of freshCandidates.slice(0, MemoryTuning.recall.maxInjectPerTurn)) {
       injectedIds.add(memory.id)
-      const summaryText = this.formatSummary(memory)
+      const summaryText = formatRecallSummary(memory)
       summaries.push(summaryText)
-      selectedSources?.push({ sourceId: 'memory.recall', label: `记忆：${this.truncate(memory.title, 16)}` })
+      selectedSources?.push({ sourceId: 'memory.recall', label: `记忆：${truncateRecallText(memory.title, MemoryTuning.recall.summaryLabelChars)}` })
       if (appendToLedger) {
         this.ledgers.append(input.sessionId, {
-          label: `记忆：${this.truncate(memory.title, 16)}`,
+          label: `记忆：${truncateRecallText(memory.title, MemoryTuning.recall.summaryLabelChars)}`,
           summaryText,
-          inspect: { tool: 'memory:get', argsHint: { id: memory.id } },
+          inspect: { tool: MemoryToolNames.get, argsHint: { id: memory.id } },
         })
       }
     }
     return summaries
   }
 
-  private formatSummary(memory: MemoryRecallItem): string {
-    const body = (memory.summary || '')
-      .replace(/\s+/g, ' ')
-      .trim()
-    const path = memory.path.map((node) => node.title).filter(Boolean).join(' → ')
-    return [
-      memory.retrievalReason === 'deep'
-        ? '这是一次模糊的深层回忆；若用于回答，必须向用户说明它可能已经过时。'
-        : '',
-      `相关记忆「${this.truncate(memory.title, 48)}」：${this.truncate(body, 200)}`,
-      path ? `树路径：${this.truncate(path, 160)}` : '',
-      `来源：${memory.evidenceIds.length} 条 Evidence；置信度 ${memory.confidence.toFixed(2)}`,
-    ].filter(Boolean).join('\n')
-  }
 
   private injectedIdsFor(sessionId: string): Set<string> {
     const existing = this.injectedIdsBySession.get(sessionId)
@@ -314,7 +251,7 @@ export class MemoryTurnRecallCoordinator {
 
     const created = new Set<string>()
     this.injectedIdsBySession.set(sessionId, created)
-    while (this.injectedIdsBySession.size > InjectedSessionsMax) {
+    while (this.injectedIdsBySession.size > MemoryTuning.recall.injectedSessionsMax) {
       const oldest = this.injectedIdsBySession.keys().next().value
       if (!oldest) break
       this.injectedIdsBySession.delete(oldest)
@@ -322,9 +259,4 @@ export class MemoryTurnRecallCoordinator {
     return created
   }
 
-  private truncate(value: string, maxLength: number): string {
-    const normalized = value.trim()
-    if (normalized.length <= maxLength) return normalized
-    return `${normalized.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`
-  }
 }

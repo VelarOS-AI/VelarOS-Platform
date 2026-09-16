@@ -1,155 +1,73 @@
-import { createHash, createHmac } from 'node:crypto'
-import { realpathSync } from 'node:fs'
-import { parse as parsePath } from 'node:path'
+import { createHmac } from 'node:crypto'
 
-import { isEmpty, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
+import type {
+  MemoryClaimGovernanceMatchInputV2,
+  MemoryClaimGroupKeyInputV2,
+  MemoryClaimStableKeyInputV2,
+  MemoryConceptStableKeyInputV2,
+  MemoryEpisodeStableKeyInputV2,
+  MemoryMatchKeyPurposeV2,
+} from '../../types/tree-v2/evidence'
+import { assertStringV2 } from '../../utils/tree-v2/checks'
 import { canonicalStringifyV2 } from '../../utils/tree-v2/diff-chain'
+import {
+  ClaimGroupKeyPrefixV2,
+  GovernanceMatchKeyPrefixV2,
+  identityTopicSegmentV2,
+  MatchKeyDomainV2,
+  MatchKeyPrefixV2,
+  MemoryMatchKeyPurposesV2,
+  normalizeCanonicalPathV2,
+  normalizedContentHashV2,
+  normalizeIdentityTextV2,
+  normalizeOriginV2,
+  normalizeSourceReferenceV2,
+  StableKeyDomainV2,
+  StableKeyPrefixV2,
+} from '../../utils/tree-v2/identity-keys'
 
-import type { MemoryKeyringStoreV2 } from './storage/MemoryKeyringStoreV2'
-
-const MatchKeyPrefixV2 = 'm2:'
-const StableKeyPrefixV2 = 'k2:'
-const ClaimGroupKeyPrefixV2 = 'g2:'
-const GovernanceMatchKeyPrefixV2 = 'd2:'
-const DreamFingerprintPrefixV2 = 'f2:'
-const MatchKeyDomainV2 = 'velaros.memory.match-key.v2'
-const StableKeyDomainV2 = 'velaros.memory.stable-key.v2'
-const DreamFingerprintDomainV2 = 'velaros.memory.dream-input.v2'
-
-export const MemoryMatchKeyPurposesV2 = Object.freeze([
-  'concept-name',
-  'concept-alias',
-  'scope',
-  'source-ref',
-] as const)
-
-export type MemoryMatchKeyPurposeV2 = (typeof MemoryMatchKeyPurposesV2)[number]
-
-export interface MemoryDreamFingerprintInputV2 {
-  readonly frontierBefore: number
-  readonly evidenceIds: readonly string[]
-  readonly modelProfile: {
-    readonly provider: Nullable<string>
-    readonly model: Nullable<string>
-  }
-  readonly pipelineVersion: number
-}
-
-export interface MemoryConceptStableKeyInputV2 {
-  readonly conceptType: string
-  readonly scopeType: string
-  readonly scopeId: string
-  readonly discriminator: string
-}
-
-export interface MemoryEpisodeStableKeyInputV2 {
-  readonly scopeType: string
-  readonly scopeId: string
-  readonly conceptStableKey: string
-  readonly episodeRoot: string
-  readonly phase: string
-}
-
-export interface MemoryClaimStableKeyInputV2 {
-  readonly conceptStableKey: string
-  readonly predicate: string
-  readonly title: string
-  readonly content: string
-}
-
-export interface MemoryClaimGovernanceMatchInputV2 {
-  readonly conceptStableKey: string
-  readonly predicate: string
-  readonly content: string
-}
+import type { MemoryKeyringStoreV2Api } from './storage/MemoryKeyringStoreV2'
 
 /**
- * §4.2 identity-text 的唯一实现。这里刻意使用 toLowerCase 而不是 locale 版本。
+ * 身份密钥与匹配键根密钥的窄能力面：把归一化过的语义身份变成带密钥的稳定键与盲索引键。
+ *
+ * 每次派生都现取现擦密钥字节，调用结束立刻清零；密钥本身绝不跨出这个类。
+ * 实例归 `MemorySystemRuntimeV2`（或探针）所有，与一份密钥环成对。
  */
-export function normalizeIdentityTextV2(value: string): string {
-  assertStringV2(value, 'identity text')
-  return value
-    .normalize('NFKC')
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}+#.]+/gu, ' ')
-    .trim()
+export interface MemoryIdentityKeyServiceV2Api {
+  /** 算一个概念的稳定键 `k2:<32 hex>`。 */
+  conceptStableKey(input: MemoryConceptStableKeyInputV2): string
+  /** 算一个情节的稳定键 `k2:<32 hex>`。 */
+  episodeStableKey(input: MemoryEpisodeStableKeyInputV2): string
+  /** 算一条主张的稳定键 `k2:<32 hex>`。 */
+  claimStableKey(input: MemoryClaimStableKeyInputV2): string
+  /** 算一条主张的分组键 `g2:<32 hex>`：同概念同谓词同话题的主张归一组。 */
+  claimGroupKey(input: MemoryClaimGroupKeyInputV2): string
+  /**
+   * 算跨库治理的匹配键 `d2:<32 hex>`。
+   * 只比较语义身份，不继承旧稳定键、也不依赖模型写的标题；
+   * 这个键只用于 forgotten / superseded / erased 的候选写回拒绝。
+   */
+  claimGovernanceMatchKey(input: MemoryClaimGovernanceMatchInputV2): string
+  /** 算概念名的盲索引键 `m2:<64 hex>`。 */
+  conceptNameMatchKey(value: string): string
+  /** 算概念别名的盲索引键 `m2:<64 hex>`。 */
+  conceptAliasMatchKey(value: string): string
+  /** 算工作区作用域的盲索引键；传进来的路径要先经权威路径归一化。 */
+  workspaceScopeMatchKey(canonicalPath: string): string
+  /** 算站点作用域的盲索引键；opaque origin 抛 VALIDATION。 */
+  originScopeMatchKey(origin: string): string
+  /** 算来源引用的盲索引键；不是合法 URL 抛 VALIDATION。 */
+  sourceReferenceMatchKey(sourceReference: string): string
 }
 
-/**
- * 采集边界的路径真值收敛：先由文件系统解析符号链接与权威大小写，再进入密码学归一化。
- */
-export function canonicalizeWorkspacePathV2(value: string): string {
-  assertNonEmptyStringV2(value, 'workspace path')
-  let canonical: string
-  try {
-    canonical = realpathSync.native(value)
-  } catch (error) {
-    throw new AppError('VALIDATION', 'workspace path 无法解析为文件系统权威路径。', error, {
-      value,
-    })
-  }
-  return normalizeCanonicalPathV2(canonical)
-}
+export class MemoryIdentityKeyServiceV2 implements MemoryIdentityKeyServiceV2Api {
+  /** 稳定键与分组键截取的十六进制位数（128 位身份空间）。 */
+  private static readonly IdentityHmacHexLength = 32
 
-export function normalizeCanonicalPathV2(value: string): string {
-  assertNonEmptyStringV2(value, 'canonical workspace path')
-  const normalized = value.normalize('NFC')
-  const root = parsePath(normalized).root
-  if (normalized === root) return normalized
-  return normalized.replace(/[\\/]{1}$/, '')
-}
-
-export function normalizeOriginV2(value: string): string {
-  assertNonEmptyStringV2(value, 'origin')
-  let origin: string
-  try {
-    origin = new URL(value).origin
-  } catch (error) {
-    throw new AppError('VALIDATION', 'site origin 不是合法 URL。', error)
-  }
-  if (origin === 'null') {
-    throw new AppError('VALIDATION', 'opaque origin 不得进入 scope 盲索引。')
-  }
-  return origin
-}
-
-export function normalizeSourceReferenceV2(value: string): string {
-  assertNonEmptyStringV2(value, 'source reference')
-  try {
-    const url = new URL(value)
-    url.hash = ''
-    return url.toString()
-  } catch (error) {
-    throw new AppError('VALIDATION', 'source reference 不是合法 URL。', error)
-  }
-}
-
-export function computeDreamInputFingerprintV2(input: MemoryDreamFingerprintInputV2): string {
-  assertNonNegativeIntegerV2(input.frontierBefore, 'frontierBefore')
-  assertPositiveIntegerV2(input.pipelineVersion, 'pipelineVersion')
-  for (const evidenceId of input.evidenceIds) {
-    assertNonEmptyStringV2(evidenceId, 'evidenceId')
-  }
-  const body = canonicalStringifyV2({
-    domain: DreamFingerprintDomainV2,
-    frontierBefore: input.frontierBefore,
-    evidenceIds: [...input.evidenceIds],
-    modelProfile: {
-      provider: input.modelProfile.provider,
-      model: input.modelProfile.model,
-    },
-    pipelineVersion: input.pipelineVersion,
-  })
-  return `${DreamFingerprintPrefixV2}${createHash('sha256').update(body, 'utf8').digest('hex')}`
-}
-
-/**
- * K_identity / K_match_root 的窄能力面。调用结束立即擦除解包后的 key bytes。
- */
-export class MemoryIdentityKeyServiceV2 {
-  constructor(private readonly keyring: MemoryKeyringStoreV2) {}
+  constructor(private readonly keyring: MemoryKeyringStoreV2Api) {}
 
   public conceptStableKey(input: MemoryConceptStableKeyInputV2): string {
     return this.stableKey([
@@ -173,45 +91,31 @@ export class MemoryIdentityKeyServiceV2 {
   }
 
   public claimStableKey(input: MemoryClaimStableKeyInputV2): string {
-    const topicSegment = normalizeIdentityTextV2(input.title) || 'untitled'
-    const normalizedContentHash = createHash('sha256')
-      .update(normalizeIdentityTextV2(input.content), 'utf8')
-      .digest('hex')
     return this.stableKey([
       'claim',
       input.conceptStableKey,
       input.predicate,
-      topicSegment,
-      normalizedContentHash,
+      identityTopicSegmentV2(input.title),
+      normalizedContentHashV2(input.content),
     ])
   }
 
-  public claimGroupKey(input: {
-    conceptStableKey: string
-    predicate: string
-    title: string
-  }): string {
-    const topicSegment = normalizeIdentityTextV2(input.title) || 'untitled'
-    return this.identityHmac(
-      ClaimGroupKeyPrefixV2,
-      ['claim-group', input.conceptStableKey, input.predicate, topicSegment],
-      32
-    )
+  public claimGroupKey(input: MemoryClaimGroupKeyInputV2): string {
+    return this.identityHmac(ClaimGroupKeyPrefixV2, [
+      'claim-group',
+      input.conceptStableKey,
+      input.predicate,
+      identityTopicSegmentV2(input.title),
+    ])
   }
 
-  /**
-   * 跨库治理只比较语义身份，不继承旧 stable_key，也不依赖模型生成的标题。
-   * 该 keyed token 只用于 forgotten/superseded/erased 的候选写回 deny。
-   */
   public claimGovernanceMatchKey(input: MemoryClaimGovernanceMatchInputV2): string {
-    const normalizedContentHash = createHash('sha256')
-      .update(normalizeIdentityTextV2(input.content), 'utf8')
-      .digest('hex')
-    return this.identityHmac(
-      GovernanceMatchKeyPrefixV2,
-      ['claim-governance', input.conceptStableKey, input.predicate, normalizedContentHash],
-      32
-    )
+    return this.identityHmac(GovernanceMatchKeyPrefixV2, [
+      'claim-governance',
+      input.conceptStableKey,
+      input.predicate,
+      normalizedContentHashV2(input.content),
+    ])
   }
 
   public conceptNameMatchKey(value: string): string {
@@ -237,16 +141,13 @@ export class MemoryIdentityKeyServiceV2 {
     return this.matchKey('source-ref', normalizeSourceReferenceV2(sourceReference))
   }
 
+  /** 稳定键 = 身份密钥对各段 canonical 序列化后的 HMAC，带 `k2:` 前缀。 */
   private stableKey(segments: readonly string[]): string {
-    return this.identityHmac(StableKeyPrefixV2, segments, 32)
+    return this.identityHmac(StableKeyPrefixV2, segments)
   }
 
-  private identityHmac(
-    prefix:
-      typeof StableKeyPrefixV2 | typeof ClaimGroupKeyPrefixV2 | typeof GovernanceMatchKeyPrefixV2,
-    segments: readonly string[],
-    hexLength: number
-  ): string {
+  /** 用身份密钥对各段算 HMAC，截成固定长度并加前缀；密钥用完立刻清零。 */
+  private identityHmac(prefix: string, segments: readonly string[]): string {
     for (const segment of segments) assertStringV2(segment, 'identity segment')
     const key = this.keyring.getIdentityKey()
     try {
@@ -255,12 +156,17 @@ export class MemoryIdentityKeyServiceV2 {
         Buffer.from([0]),
         Buffer.from(canonicalStringifyV2(segments), 'utf8'),
       ])
-      return `${prefix}${createHmac('sha256', key).update(message).digest('hex').slice(0, hexLength)}`
+      const digest = createHmac('sha256', key)
+        .update(message)
+        .digest('hex')
+        .slice(0, MemoryIdentityKeyServiceV2.IdentityHmacHexLength)
+      return `${prefix}${digest}`
     } finally {
       key.fill(0)
     }
   }
 
+  /** 先由匹配键根密钥派出这个用途的子密钥，再对归一化输入算 HMAC；两把密钥都清零。 */
   private matchKey(purpose: MemoryMatchKeyPurposeV2, normalizedInput: string): string {
     if (!MemoryMatchKeyPurposesV2.includes(purpose)) {
       throw new AppError('VALIDATION', '未知 match-key purpose。', undefined, {
@@ -280,29 +186,5 @@ export class MemoryIdentityKeyServiceV2 {
       root.fill(0)
       purposeKey?.fill(0)
     }
-  }
-}
-
-function assertStringV2(value: unknown, label: string): asserts value is string {
-  if (!isString(value)) {
-    throw new AppError('VALIDATION', `${label} 必须是字符串。`)
-  }
-}
-
-function assertNonEmptyStringV2(value: unknown, label: string): asserts value is string {
-  if (!isString(value) || isEmpty(value)) {
-    throw new AppError('VALIDATION', `${label} 不得为空。`)
-  }
-}
-
-function assertNonNegativeIntegerV2(value: number, label: string): void {
-  if (!Number.isSafeInteger(value) || value < 0) {
-    throw new AppError('VALIDATION', `${label} 必须是非负安全整数。`)
-  }
-}
-
-function assertPositiveIntegerV2(value: number, label: string): void {
-  if (!Number.isSafeInteger(value) || value < 1) {
-    throw new AppError('VALIDATION', `${label} 必须是正安全整数。`)
   }
 }

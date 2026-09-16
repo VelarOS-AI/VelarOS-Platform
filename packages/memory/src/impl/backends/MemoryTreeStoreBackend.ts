@@ -8,50 +8,28 @@
  * 迁移都必须先完成数据迁移和宿主切换，再调整这里的注册角色。
  */
 
-import type {
-  MemoryBackendDescriptor,
-  MemoryBackendStats,
-  MemoryStoreBackend,
-} from '../../contract/backend'
-import type { MemoryTreeDomain } from '../tree/MemoryTreeDomain'
+import { MemoryBackendIds } from '../../contract/constants'
+import type { MemoryStoreBackend, MemoryTreeStoreDomain } from '../../contract/requires'
+import type { MemoryBackendDescriptor, MemoryBackendStats } from '../../types/memory'
 
-/**
- * 树后端实际消费的领域方法集合。
- *
- * 刻意用 `Pick` 而不是整个 `MemoryTreeDomain`：窄端口只应该够着自己要转发的动词，
- * warmup / 树版本 / 完整性校验属于树档自己的治理面，仍由 `MemoryService` 直接持有。
- */
-export type MemoryTreeStoreDomain = Pick<
-  MemoryTreeDomain,
-  | 'captureEvidence'
-  | 'captureEvidenceBatch'
-  | 'recall'
-  | 'getClaim'
-  | 'getDiagnostics'
-  | 'forgetClaim'
-  | 'runDream'
-  | 'setEvidenceEligibility'
-  | 'setSessionEvidenceEligibility'
->
+/** 把记忆树领域服务包成窄端口后端；实例由 `createMemoryTreeStoreBackend` 造，不持额外状态。 */
+export class MemoryTreeStoreBackend implements MemoryStoreBackend {
+  /** 树后端的自述：六个动词全有（树档自带整理管线与证据可用性状态机）。 */
+  private static readonly Descriptor: MemoryBackendDescriptor = Object.freeze({
+    id: MemoryBackendIds.tree,
+    role: 'authority',
+    displayName: '记忆树（SQLite 证据/整理权威层）',
+    verbs: Object.freeze([
+      'capture',
+      'recall',
+      'inspect',
+      'archive',
+      'dream',
+      'govern',
+    ] as const),
+  })
 
-export const MemoryTreeBackendId = 'tree'
-
-const treeDescriptor: MemoryBackendDescriptor = Object.freeze({
-  id: MemoryTreeBackendId,
-  role: 'authority',
-  displayName: 'Memory tree (SQLite Evidence/Dream authority)',
-  verbs: Object.freeze([
-    'capture',
-    'recall',
-    'inspect',
-    'archive',
-    'dream',
-    'govern',
-  ] as const),
-})
-
-class MemoryTreeStoreBackend implements MemoryStoreBackend {
-  public readonly descriptor = treeDescriptor
+  public readonly descriptor = MemoryTreeStoreBackend.Descriptor
 
   public constructor(private readonly domain: MemoryTreeStoreDomain) {}
 
@@ -84,7 +62,7 @@ class MemoryTreeStoreBackend implements MemoryStoreBackend {
   public inspect(): MemoryBackendStats {
     const diagnostics = this.domain.getDiagnostics()
     return {
-      backendId: MemoryTreeBackendId,
+      backendId: MemoryBackendIds.tree,
       itemCount: diagnostics.claimCount,
       pendingCount: diagnostics.pendingEvidenceCount,
       version: diagnostics.treeVersion,

@@ -1,17 +1,24 @@
-import { createHash, randomBytes } from 'node:crypto'
-import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs'
-import { join } from 'node:path'
+import { randomBytes } from 'node:crypto'
+import { mkdirSync, readFileSync, rmSync } from 'node:fs'
 
-import { AppError, isEmpty, isNull, isPlainObject, isString } from '@velaros-ai/core'
+import { AppError, isEmpty, isNull } from '@velaros-ai/core'
 
-import { canonicalStringifyV2 } from '../../../utils/tree-v2/diff-chain'
+import type {
+  MemoryKeyringDescriptionV2,
+  MemoryKeyringFileV2,
+  MemoryKeyringKeysV2,
+  MemoryKeyringOpenReportV2,
+  MemoryKeyringStoreOptionsV2,
+  MemoryWrappingRootV2,
+  StorageStepHooksV2,
+} from '../../../types/tree-v2/storage'
+import { assertPositiveSafeIntegerV2 } from '../../../utils/tree-v2/checks'
 import {
   fsyncDirectoryV2,
   invokeStorageStepV2,
   removeStaleTempFilesV2,
-  type StorageStepHooksV2,
-  writeFileAtomicV2,
 } from '../../../utils/tree-v2/storage/atomic-file'
+import { assertMemoryBlobIdV2 } from '../../../utils/tree-v2/storage/blob-id'
 import { MemoryStorageErrorCodesV2 } from '../../../utils/tree-v2/storage/error-codes'
 import {
   commitCurrentGenerationV2,
@@ -19,61 +26,62 @@ import {
   readCurrentGenerationV2,
 } from '../../../utils/tree-v2/storage/generation-pointer'
 import {
+  createInitialKeyringV2,
+  KeyringGenerationSuffixV2,
+  MemoryKeyringFormatV2,
+  parseKeyringFileV2,
+  sealKeyringFileV2,
+  writeKeyringGenerationV2,
+} from '../../../utils/tree-v2/storage/keyring'
+import {
   assertMemoryWrappingRootV2,
-  decodeCanonicalBase64V2,
-  MemoryWrappingRootIdPatternV2,
-  type MemoryWrappingRootV2,
   unwrapMemoryKeyV2,
   wrapMemoryKeyV2,
 } from '../../../utils/tree-v2/storage/wrapping-root'
 
-import { assertMemoryBlobIdV2 } from './MemoryBlobStoreV2'
-
-const MemoryKeyringFormatV2 = 'velaros.memory.keyring.v2'
-const KeyringGenerationSuffixV2 = '.keyring.json'
-const IntegrityPatternV2 = /^[0-9a-f]{64}$/
-const PositiveIntegerPatternV2 = /^[1-9][0-9]*$/
-
-interface MemoryKeyringKeysV2 {
-  readonly identity: string
-  readonly matchRoot: string
-  readonly indexGenerations: Readonly<Record<string, string>>
-  readonly contentDeks: Readonly<Record<string, string>>
-}
-
-interface MemoryKeyringUnsignedV2 {
-  readonly format: typeof MemoryKeyringFormatV2
-  readonly generation: number
-  readonly createdAt: number
-  readonly wrappingRootId: string
-  readonly keys: MemoryKeyringKeysV2
-}
-
-interface MemoryKeyringFileV2 extends MemoryKeyringUnsignedV2 {
-  readonly integrity: string
-}
-
-export interface MemoryKeyringOpenReportV2 {
-  readonly generation: number
-  readonly created: boolean
-  readonly cleanedResidueCount: number
-}
-
-export interface MemoryKeyringStoreOptionsV2 {
-  readonly hooks?: StorageStepHooksV2
-  readonly now?: () => number
-  readonly random?: (byteLength: number) => Buffer
-}
-
 /**
- * keyring 唯一物理 owner。
+ * 密钥环的唯一物理 owner：构造即打开（或新建）一个 keyring 目录并接管它的换代。
  *
- * 安全取舍：keyring 只保留 CURRENT 指向的一代。普通换代在 CURRENT 原子切换前旧代仍权威，
- * 切换后旧代立即删除；若崩溃落在删除窗口，下一次 open 以 CURRENT 为唯一裁决并清掉其它代。
- * 这牺牲“任意历史代回滚”，换来更强的不复活性质：成功剔除的 DEK 不可能藏在可回滚旧代。
- * storage/index 的回滚必须与一个仍含完整密钥集的新 keyring 代成对创建，不能回滚 keyring 文件。
+ * 安全取舍：keyring 只保留 CURRENT 指向的那一代。普通换代在 CURRENT 原子切换前旧代仍权威，
+ * 切换后旧代立即删除；崩溃落在删除窗口时，下一次构造以 CURRENT 为唯一裁决并清掉其它代。
+ * 这牺牲"任意历史代回滚"，换来更强的不复活性质：成功剔除的 DEK 不可能藏在可回滚旧代里。
+ * 实例归创建它的运行时（`MemorySystemRuntimeV2` 或探针）所有，一个 keyring 目录一份。
  */
-export class MemoryKeyringStoreV2 {
+export interface MemoryKeyringStoreV2Api {
+  /** 构造时那一次打开的读数：生效代号、是不是新建、清了几个残留。 */
+  readonly openReport: MemoryKeyringOpenReportV2
+  /** 当前生效的代号。 */
+  readonly generation: number
+  /** 当前包装这些密钥的 wrapping root id。 */
+  readonly wrappingRootId: string
+  /** 取身份密钥（32 字节明文）；调用方用完要清零。 */
+  getIdentityKey(): Buffer
+  /** 取匹配键根密钥（32 字节明文）；调用方用完要清零。 */
+  getMatchRootKey(): Buffer
+  /** 取这个 blob 的内容密钥；已 crypto-shred 抛 MEMORY_DEK_DESTROYED。 */
+  getContentDek(blobId: string): Buffer
+  /** 登记一个 blob 的内容密钥，触发一次换代；同 blob 已有密钥抛 INVARIANT。 */
+  addContentDek(blobId: string, dek: Buffer): void
+  /** crypto-shred 生效点：剔掉这个 blob 的密钥并换代；本来就没有返回 false。 */
+  destroyContentDek(blobId: string): boolean
+  /** 取（没有就造并换代）这一代派生索引的密钥；返回的明文由调用方清零。 */
+  getOrCreateIndexGenerationKey(generation: number): Buffer
+  /** 取这一代派生索引的密钥；已销毁抛 MEMORY_DEK_DESTROYED。 */
+  getIndexGenerationKey(generation: number): Buffer
+  /** 销毁这一代派生索引的密钥并换代；本来就没有返回 false。 */
+  destroyIndexGenerationKey(generation: number): boolean
+  /** 轮换 wrapping root：只把全部密钥重新包装一遍，不改密钥字节；同一个 root 是空操作。 */
+  rotateWrappingRoot(nextRoot: MemoryWrappingRootV2): void
+  /** 只读诊断：只给代号、root id 与两类密钥的条数，不返回任何包装字节。 */
+  describe(): MemoryKeyringDescriptionV2
+}
+
+export class MemoryKeyringStoreV2 implements MemoryKeyringStoreV2Api {
+  /** 随机出来的密钥字节长度（AES-256 与 HMAC-SHA256 的密钥长度）。 */
+  private static readonly KeyByteLength = 32
+
+  public readonly openReport: MemoryKeyringOpenReportV2
+
   private readonly keyringDir: string
   private readonly hooks?: StorageStepHooksV2
   private readonly now: () => number
@@ -81,27 +89,19 @@ export class MemoryKeyringStoreV2 {
   private root: MemoryWrappingRootV2
   private current: MemoryKeyringFileV2
 
-  private constructor(
-    keyringDir: string,
-    root: MemoryWrappingRootV2,
-    current: MemoryKeyringFileV2,
-    options: MemoryKeyringStoreOptionsV2
-  ) {
-    this.keyringDir = keyringDir
-    this.root = root
-    this.current = current
-    this.hooks = options.hooks
-    this.now = options.now ?? Date.now
-    this.random = options.random ?? randomBytes
-  }
-
-  public static open(
+  constructor(
     keyringDir: string,
     root: MemoryWrappingRootV2,
     options: MemoryKeyringStoreOptionsV2 = {}
-  ): { store: MemoryKeyringStoreV2; report: MemoryKeyringOpenReportV2 } {
+  ) {
     assertMemoryWrappingRootV2(root)
     mkdirSync(keyringDir, { recursive: true })
+    this.keyringDir = keyringDir
+    this.root = root
+    this.hooks = options.hooks
+    this.now = options.now ?? Date.now
+    this.random = options.random ?? randomBytes
+
     let cleanedResidueCount = removeStaleTempFilesV2(keyringDir)
     const currentGeneration = readCurrentGenerationV2(keyringDir)
     const entries = listGenerationEntriesV2(keyringDir, {
@@ -124,14 +124,13 @@ export class MemoryKeyringStoreV2 {
         label: 'keyring-current',
         hooks: options.hooks,
       })
-      return {
-        store: new MemoryKeyringStoreV2(keyringDir, root, initial, options),
-        report: {
-          generation: initial.generation,
-          created: true,
-          cleanedResidueCount,
-        },
+      this.current = initial
+      this.openReport = {
+        generation: initial.generation,
+        created: true,
+        cleanedResidueCount,
       }
+      return
     }
 
     const currentEntry = entries.find((entry) => entry.generation === currentGeneration)
@@ -160,13 +159,11 @@ export class MemoryKeyringStoreV2 {
     }
     if (entries.length > 1) fsyncDirectoryV2(keyringDir)
 
-    return {
-      store: new MemoryKeyringStoreV2(keyringDir, root, current, options),
-      report: {
-        generation: current.generation,
-        created: false,
-        cleanedResidueCount,
-      },
+    this.current = current
+    this.openReport = {
+      generation: current.generation,
+      created: false,
+      cleanedResidueCount,
     }
   }
 
@@ -214,7 +211,6 @@ export class MemoryKeyringStoreV2 {
     })
   }
 
-  /** crypto-shred 生效点：新代提交后，旧代在本次调用或下次 open 时全部清理。 */
   public destroyContentDek(blobId: string): boolean {
     assertMemoryBlobIdV2(blobId)
     if (!this.current.keys.contentDeks[blobId]) return false
@@ -225,7 +221,7 @@ export class MemoryKeyringStoreV2 {
   }
 
   public getOrCreateIndexGenerationKey(generation: number): Buffer {
-    assertGenerationV2(generation)
+    assertPositiveSafeIntegerV2(generation, 'keyring generation')
     const key = String(generation)
     const existing = this.current.keys.indexGenerations[key]
     if (existing) return unwrapMemoryKeyV2(this.root, existing)
@@ -246,7 +242,7 @@ export class MemoryKeyringStoreV2 {
   }
 
   public getIndexGenerationKey(generation: number): Buffer {
-    assertGenerationV2(generation)
+    assertPositiveSafeIntegerV2(generation, 'keyring generation')
     const wrapped = this.current.keys.indexGenerations[String(generation)]
     if (!wrapped) {
       throw new AppError(
@@ -260,7 +256,7 @@ export class MemoryKeyringStoreV2 {
   }
 
   public destroyIndexGenerationKey(generation: number): boolean {
-    assertGenerationV2(generation)
+    assertPositiveSafeIntegerV2(generation, 'keyring generation')
     const key = String(generation)
     if (!this.current.keys.indexGenerations[key]) return false
     const indexGenerations = { ...this.current.keys.indexGenerations }
@@ -269,7 +265,6 @@ export class MemoryKeyringStoreV2 {
     return true
   }
 
-  /** wrapping root 轮换只重包全部 key，不改 key 字节。 */
   public rotateWrappingRoot(nextRoot: MemoryWrappingRootV2): void {
     assertMemoryWrappingRootV2(nextRoot)
     if (nextRoot.id === this.root.id) return
@@ -303,13 +298,7 @@ export class MemoryKeyringStoreV2 {
     }
   }
 
-  /** 探针/诊断只读：不返回包装字节，避免诊断面变成密钥旁路。 */
-  public describe(): {
-    generation: number
-    wrappingRootId: string
-    contentDekCount: number
-    indexGenerationCount: number
-  } {
+  public describe(): MemoryKeyringDescriptionV2 {
     return {
       generation: this.current.generation,
       wrappingRootId: this.current.wrappingRootId,
@@ -318,9 +307,10 @@ export class MemoryKeyringStoreV2 {
     }
   }
 
+  /** 封一代新密钥环、切 CURRENT、删掉其余代；这是 keyring 唯一的写路径。 */
   private commitKeys(keys: MemoryKeyringKeysV2, wrappingRootId = this.root.id): void {
     const nextGeneration = this.current.generation + 1
-    assertGenerationV2(nextGeneration)
+    assertPositiveSafeIntegerV2(nextGeneration, 'keyring generation')
     const next = sealKeyringFileV2({
       format: MemoryKeyringFormatV2,
       generation: nextGeneration,
@@ -347,196 +337,12 @@ export class MemoryKeyringStoreV2 {
     fsyncDirectoryV2(this.keyringDir)
   }
 
+  /** 从注入的随机源取一把密钥；长度不对就是随机源坏了，抛 INVARIANT。 */
   private randomKey(): Buffer {
-    const key = this.random(32)
-    if (!Buffer.isBuffer(key) || key.length !== 32) {
+    const key = this.random(MemoryKeyringStoreV2.KeyByteLength)
+    if (!Buffer.isBuffer(key) || key.length !== MemoryKeyringStoreV2.KeyByteLength) {
       throw new AppError('INVARIANT', 'keyring 随机源必须返回 32 字节。')
     }
     return Buffer.from(key)
-  }
-}
-
-function createInitialKeyringV2(
-  root: MemoryWrappingRootV2,
-  options: MemoryKeyringStoreOptionsV2
-): MemoryKeyringFileV2 {
-  const random = options.random ?? randomBytes
-  const identity = random(32)
-  const matchRoot = random(32)
-  if (identity.length !== 32 || matchRoot.length !== 32) {
-    throw new AppError('INVARIANT', 'keyring 随机源必须返回 32 字节。')
-  }
-  try {
-    return sealKeyringFileV2({
-      format: MemoryKeyringFormatV2,
-      generation: 1,
-      createdAt: (options.now ?? Date.now)(),
-      wrappingRootId: root.id,
-      keys: {
-        identity: wrapMemoryKeyV2(root, identity),
-        matchRoot: wrapMemoryKeyV2(root, matchRoot),
-        indexGenerations: {},
-        contentDeks: {},
-      },
-    })
-  } finally {
-    identity.fill(0)
-    matchRoot.fill(0)
-  }
-}
-
-function writeKeyringGenerationV2(
-  keyringDir: string,
-  file: MemoryKeyringFileV2,
-  hooks?: StorageStepHooksV2
-): void {
-  const path = join(keyringDir, `generation-${file.generation}${KeyringGenerationSuffixV2}`)
-  if (existsSync(path)) {
-    throw new AppError('INVARIANT', 'keyring 代际文件已存在，禁止覆盖。', undefined, {
-      generation: file.generation,
-    })
-  }
-  writeFileAtomicV2(path, canonicalStringifyV2(file), {
-    label: `keyring-generation-${file.generation}`,
-    hooks,
-  })
-}
-
-function sealKeyringFileV2(unsigned: MemoryKeyringUnsignedV2): MemoryKeyringFileV2 {
-  return {
-    ...unsigned,
-    integrity: createHash('sha256').update(canonicalStringifyV2(unsigned)).digest('hex'),
-  }
-}
-
-function parseKeyringFileV2(raw: string, expectedGeneration: number): MemoryKeyringFileV2 {
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(raw)
-  } catch (error) {
-    throw new AppError(MemoryStorageErrorCodesV2.corruption, 'keyring JSON 无法解析。', error)
-  }
-  if (
-    !isStrictRecordV2(parsed, [
-      'format',
-      'generation',
-      'createdAt',
-      'wrappingRootId',
-      'keys',
-      'integrity',
-    ])
-  ) {
-    throw new AppError(MemoryStorageErrorCodesV2.corruption, 'keyring 顶层字段不符合 v2 严格格式。')
-  }
-  if (
-    parsed['format'] !== MemoryKeyringFormatV2 ||
-    parsed['generation'] !== expectedGeneration ||
-    !Number.isSafeInteger(parsed['createdAt']) ||
-    (parsed['createdAt'] as number) < 0 ||
-    !isString(parsed['wrappingRootId']) ||
-    !MemoryWrappingRootIdPatternV2.test(parsed['wrappingRootId'] as string) ||
-    !isString(parsed['integrity']) ||
-    !IntegrityPatternV2.test(parsed['integrity'] as string)
-  ) {
-    throw new AppError(MemoryStorageErrorCodesV2.corruption, 'keyring 标量字段不符合 v2 严格格式。')
-  }
-  const keys = parseKeyringKeysV2(parsed['keys'])
-  const unsigned: MemoryKeyringUnsignedV2 = {
-    format: MemoryKeyringFormatV2,
-    generation: expectedGeneration,
-    createdAt: parsed['createdAt'] as number,
-    wrappingRootId: parsed['wrappingRootId'] as string,
-    keys,
-  }
-  const expectedIntegrity = createHash('sha256')
-    .update(canonicalStringifyV2(unsigned))
-    .digest('hex')
-  if (parsed['integrity'] !== expectedIntegrity) {
-    throw new AppError(MemoryStorageErrorCodesV2.corruption, 'keyring integrity 校验失败。')
-  }
-  return { ...unsigned, integrity: expectedIntegrity }
-}
-
-function parseKeyringKeysV2(input: unknown): MemoryKeyringKeysV2 {
-  if (!isStrictRecordV2(input, ['identity', 'matchRoot', 'indexGenerations', 'contentDeks'])) {
-    throw new AppError(
-      MemoryStorageErrorCodesV2.corruption,
-      'keyring keys 字段不符合 v2 严格格式。'
-    )
-  }
-  if (!isString(input['identity']) || !isString(input['matchRoot'])) {
-    throw new AppError(MemoryStorageErrorCodesV2.corruption, 'keyring 基础密钥信封缺失。')
-  }
-  assertWrappedKeyEnvelopeV2(input['identity'], 'identity')
-  assertWrappedKeyEnvelopeV2(input['matchRoot'], 'matchRoot')
-  const indexGenerations = parseWrappedMapV2(input['indexGenerations'], (key) =>
-    PositiveIntegerPatternV2.test(key)
-  )
-  const contentDeks = parseWrappedMapV2(input['contentDeks'], (key) => {
-    try {
-      assertMemoryBlobIdV2(key)
-      return true
-    } catch {
-      // arch-guard:silent-catch-ok 这是 Map key 的验证谓词，false 会触发上层 corruption 诊断。
-      return false
-    }
-  })
-  return {
-    identity: input['identity'],
-    matchRoot: input['matchRoot'],
-    indexGenerations,
-    contentDeks,
-  }
-}
-
-function parseWrappedMapV2(
-  input: unknown,
-  validateKey: (key: string) => boolean
-): Record<string, string> {
-  if (!isPlainRecordV2(input)) {
-    throw new AppError(MemoryStorageErrorCodesV2.corruption, 'keyring wrapped map 不是纯对象。')
-  }
-  const result: Record<string, string> = {}
-  for (const [key, value] of Object.entries(input)) {
-    if (!validateKey(key) || !isString(value) || isEmpty(value)) {
-      throw new AppError(MemoryStorageErrorCodesV2.corruption, 'keyring wrapped map 含非法条目。')
-    }
-    assertWrappedKeyEnvelopeV2(value, key)
-    result[key] = value
-  }
-  return result
-}
-
-function assertWrappedKeyEnvelopeV2(value: string, label: string): void {
-  try {
-    decodeCanonicalBase64V2(value, `keyring wrapped key ${label}`)
-  } catch (error) {
-    throw new AppError(
-      MemoryStorageErrorCodesV2.corruption,
-      'keyring 密钥信封不是规范 base64。',
-      error
-    )
-  }
-}
-
-function isStrictRecordV2(
-  input: unknown,
-  expectedKeys: readonly string[]
-): input is Record<string, unknown> {
-  if (!isPlainRecordV2(input)) return false
-  const actual = Object.keys(input).sort()
-  const expected = [...expectedKeys].sort()
-  return actual.length === expected.length && actual.every((key, index) => key === expected[index])
-}
-
-function isPlainRecordV2(input: unknown): input is Record<string, unknown> {
-  if (!isPlainObject(input)) return false
-  const prototype: unknown = Object.getPrototypeOf(input)
-  return prototype === Object.prototype || isNull(prototype)
-}
-
-function assertGenerationV2(generation: number): void {
-  if (!Number.isSafeInteger(generation) || generation < 1) {
-    throw new AppError('VALIDATION', 'keyring generation 必须是正整数。')
   }
 }

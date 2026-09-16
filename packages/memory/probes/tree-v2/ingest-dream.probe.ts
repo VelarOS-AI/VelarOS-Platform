@@ -6,23 +6,23 @@ import { join } from 'node:path'
 
 import { AppError } from '@velaros-ai/core/error'
 
-import { openMemoryAuthorityV2 } from '../../src/impl/tree-v2/MemoryAuthorityDatabaseV2'
+import { MemoryAuthorityDatabaseV2 } from '../../src/impl/tree-v2/MemoryAuthorityDatabaseV2'
 import { MemoryDreamRunCoordinatorV2 } from '../../src/impl/tree-v2/MemoryDreamRunCoordinatorV2'
 import { MemoryEvidenceIngestServiceV2 } from '../../src/impl/tree-v2/MemoryEvidenceIngestServiceV2'
-import {
-  canonicalizeWorkspacePathV2,
-  computeDreamInputFingerprintV2,
-  MemoryIdentityKeyServiceV2,
-  normalizeIdentityTextV2,
-  normalizeOriginV2,
-  normalizeSourceReferenceV2,
-} from '../../src/impl/tree-v2/MemoryIdentityKeyServiceV2'
+import { MemoryIdentityKeyServiceV2 } from '../../src/impl/tree-v2/MemoryIdentityKeyServiceV2'
 import { MemoryTreeStoreV2 } from '../../src/impl/tree-v2/MemoryTreeStoreV2'
 import { ContentKeyServiceV2 } from '../../src/impl/tree-v2/storage/ContentKeyServiceV2'
 import { MemoryBlobStoreV2 } from '../../src/impl/tree-v2/storage/MemoryBlobStoreV2'
 import { MemoryKeyringStoreV2 } from '../../src/impl/tree-v2/storage/MemoryKeyringStoreV2'
-import type { MemoryTreeNodeStructV2 } from '../../src/utils/tree-v2/diff-chain'
-import type { MemoryWrappingRootV2 } from '../../src/utils/tree-v2/storage/wrapping-root'
+import type { MemoryTreeNodeStructV2 } from '../../src/types/tree-v2/diff'
+import type { MemoryWrappingRootV2 } from '../../src/types/tree-v2/storage'
+import {
+  canonicalizeWorkspacePathV2,
+  computeDreamInputFingerprintV2,
+  normalizeIdentityTextV2,
+  normalizeOriginV2,
+  normalizeSourceReferenceV2,
+} from '../../src/utils/tree-v2/identity-keys'
 
 const ExpectedMinimumAssertionsV2 = 54
 let assertionCount = 0
@@ -78,20 +78,16 @@ function runIngestDreamProbeV2(): void {
     mkdirSync(workspace)
     symlinkSync(workspace, workspaceLink)
 
-    const authority = openMemoryAuthorityV2(join(probeRoot, 'data')).store
-    const keyring = MemoryKeyringStoreV2.open(
+    const authority = new MemoryAuthorityDatabaseV2(join(probeRoot, 'data'))
+    const keyring = new MemoryKeyringStoreV2(
       authority.roots.keyringDir,
       createProbeWrappingRootV2()
-    ).store
+    )
     const blobs = new MemoryBlobStoreV2(authority.roots.blobsDir)
     const contentKeys = new ContentKeyServiceV2(keyring, blobs)
     const identityKeys = new MemoryIdentityKeyServiceV2(keyring)
     const ingest = new MemoryEvidenceIngestServiceV2(authority, contentKeys, identityKeys, blobs)
-    const tree = MemoryTreeStoreV2.open({
-      authority,
-      contentKeys,
-      keyring,
-    }).store
+    const tree = new MemoryTreeStoreV2(authority, contentKeys, keyring)
     const dream = new MemoryDreamRunCoordinatorV2(authority, contentKeys, tree)
 
     equal(normalizeIdentityTextV2('  Ｖelar—OS  '), 'velar os', 'identity NFKC/空白')
@@ -382,7 +378,7 @@ function runIngestDreamProbeV2(): void {
   }
 }
 
-function seedIdentityEpochV2(authority: ReturnType<typeof openMemoryAuthorityV2>['store']): void {
+function seedIdentityEpochV2(authority: MemoryAuthorityDatabaseV2): void {
   authority.database
     .prepare(
       `INSERT INTO memory_identity_epochs(
@@ -416,7 +412,7 @@ function createRootNodeV2(): MemoryTreeNodeStructV2 {
 }
 
 function readMetaV2(
-  authority: ReturnType<typeof openMemoryAuthorityV2>['store'],
+  authority: MemoryAuthorityDatabaseV2,
   key: string
 ): number {
   return authority.database
@@ -426,7 +422,7 @@ function readMetaV2(
 }
 
 function readRunStateV2(
-  authority: ReturnType<typeof openMemoryAuthorityV2>['store'],
+  authority: MemoryAuthorityDatabaseV2,
   runId: string
 ): string {
   return authority.database

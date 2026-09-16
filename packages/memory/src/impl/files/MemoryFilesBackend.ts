@@ -12,58 +12,73 @@
  */
 
 import {
-  isArray,
   isEmpty,
   isFalse,
   isFunction,
   isNotNull,
   isNull,
-  isString,
   isTrue,
   Log,
   toNullable,
-  trimmedStringOrEmpty,
 } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
+import { MemoryBackendIds, MemoryFilesLayout } from '../../contract/constants'
+import type {
+  MemoryAuthorityEnumeration,
+  MemoryFilesIo,
+  MemoryStoreBackend,
+} from '../../contract/requires'
+import type {
+  MemoryFileDocument,
+  MemoryFilesBackendOptions,
+  MemoryIndexEntry,
+  ScoredCandidate,
+  StableKeyCacheEntry,
+} from '../../types/files'
 import type {
   MemoryBackendCaptureBatchOptions,
   MemoryBackendDescriptor,
   MemoryBackendStats,
-  MemoryStoreBackend,
-} from '../../contract/backend'
-import type { MemoryAuthorityEnumeration } from '../../contract/derived-index'
-import { createInMemoryMemoryFilesIo, type MemoryFilesIo } from '../../contract/files-io'
-import type {
   MemoryCaptureBatchResult,
   MemoryCaptureResult,
   MemoryEvidenceCategory,
   MemoryEvidenceInput,
   MemoryEvidenceRecord,
+  MemoryFilesScopeRoot,
   MemoryForgetResult,
   MemoryRecallItem,
   MemoryRecallOptions,
-  MemoryScopeType,
 } from '../../types/memory'
 import {
   isMemoryRecallItemExcluded,
-  memoryConceptTypeByCategory,
 } from '../../utils/backends'
 import { redactMemorySecrets, sanitizeMemoryEvidenceInput } from '../../utils/evidence'
 import {
-  DefaultMemoryEntriesDirectoryName,
+  firstLine,
+  hasContentFilter,
+  hashStableKey,
+  MemoryFilesArchivedStatus,
+  MemoryFilesEntryIdSeparator,
+  optionalTags,
+  readMetadataString,
+  redactAttributes,
+  scoreIndexEntry,
+  slugify,
+  toEvidenceRecord,
+  tokenize,
+  toRecallItem,
+} from '../../utils/files/entries'
+import {
   isMemoryEntryFileName,
   isMemoryEntryPath,
   isMemoryFileSegment,
 } from '../../utils/files/entry-path'
 import {
-  type MemoryFileDocument,
   parseMemoryFileDocument,
   serializeMemoryFileDocument,
 } from '../../utils/files/frontmatter'
 import {
-  type MemoryIndexEntry,
-  MemoryIndexFileName,
   parseMemoryIndex,
   removeMemoryIndexEntry,
   serializeMemoryIndex,
@@ -71,133 +86,32 @@ import {
 } from '../../utils/files/index-file'
 import {
   isMemoryVisibleInScope,
-  type MemoryScopeId,
   resolveMemoryScopeSelector,
   scopeTypeForScopeId,
 } from '../../utils/scope'
+import { MemoryTuning } from '../../utils/tuning'
 
-export const MemoryFilesBackendId = 'files'
-
-/** id 分隔符：`<scopeId>::<相对路径>`。scopeId 里可能有 `:`（`project:/a/b`），故用双冒号。 */
-const IdSeparator = '::'
-/** 索引命中后最多读多少个全文——「按需全文」的上限，防止一次召回把整个记忆库读进内存。 */
-const MaxFullTextReadsPerRecall = 24
-/** 带内容级过滤时的扫描上限：过滤发生在全文上，24 份窗口会让偏好被最近的会话条目挤光。 */
-const MaxFilteredFullTextScansPerRecall = 200
-const ArchivedStatus = 'archived'
-/** 越界路径的诊断去重表上限：同一个坏索引每次召回都会再撞一次，日志不该跟着涨。 */
-const MaxReportedOutOfBoundsPaths = 200
+import { createInMemoryMemoryFilesIo } from './InMemoryMemoryFilesIo'
 
 /**
- * 一个作用域的磁盘落点。
+ * 文件权威层对外的整件能力：窄端口的六个动词，外加「把权威层从头读一遍」的全量枚举。
  *
- * `directory` 由宿主注入：全局 = `<userData>/memory`，项目 = `<repoRoot>/.velaros/memory`。
+ * 本档**自带全量枚举**，因此叠加编排不需要宿主再注入一个枚举源，装上派生索引即可重建。
+ * 实例由 `createMemoryFilesBackend` 造，一个实例管一组作用域根。
  */
-export interface MemoryFilesScopeRoot {
-  readonly scopeType: MemoryScopeType
-  readonly scopeId: MemoryScopeId
-  readonly directory: string
-  /** 只读根（如别人 clone 来的共享记忆）不接受写入；缺省可写。 */
-  readonly readOnly?: boolean
-}
+export interface MemoryFilesBackendApi extends MemoryStoreBackend, MemoryAuthorityEnumeration {}
 
-export interface MemoryFilesBackendOptions {
-  /**
-   * 作用域根。传函数时每次调用都会重新求值——项目根随会话切换，宿主不必重建后端。
-   */
-  readonly roots:
-    | readonly MemoryFilesScopeRoot[]
-    | (() => readonly MemoryFilesScopeRoot[])
-  /** 文件系统端口；缺省用纯内存实现（宿主须显式注入 `createNodeMemoryFilesIo()`）。 */
-  readonly io?: MemoryFilesIo
-  readonly indexFileName?: string
-  readonly entriesDirectoryName?: string
-  readonly now?: () => number
-}
+/** 文件权威层：每个作用域一个目录，条目是带 frontmatter 的 markdown，索引是一份 `MEMORY.md`。 */
+export class MemoryFilesBackend implements MemoryFilesBackendApi {
+  /** 后端自述：dream / govern 缺席 = 「没装就没有」，不是降级——文件档没有整理管线。 */
+  private static readonly Descriptor: MemoryBackendDescriptor = Object.freeze({
+    id: MemoryBackendIds.files,
+    role: 'authority',
+    displayName: '记忆文件（markdown 权威层）',
+    verbs: Object.freeze(['capture', 'recall', 'inspect', 'archive'] as const),
+  })
 
-const filesDescriptor: MemoryBackendDescriptor = Object.freeze({
-  id: MemoryFilesBackendId,
-  role: 'authority',
-  displayName: 'Memory files (markdown authority)',
-  // dream / govern 缺席 = partial activation 的「没装就没有」，不是降级：
-  // 文件后端没有整理管线，也没有证据可用性状态机。
-  verbs: Object.freeze(['capture', 'recall', 'inspect', 'archive'] as const),
-})
-
-function slugify(value: string): string {
-  const replaced = value
-    .toLowerCase()
-    .replace(/[^\p{Letter}\p{Number}]+/gu, '-')
-  let start = 0
-  let end = replaced.length
-  while (replaced[start] === '-') start += 1
-  while (end > start && replaced[end - 1] === '-') end -= 1
-  const normalized = replaced.slice(start, end) || 'memory'
-  const limited = normalized.slice(0, 60)
-  let limitedEnd = limited.length
-  while (limitedEnd > 0 && limited[limitedEnd - 1] === '-') limitedEnd -= 1
-  return limited.slice(0, limitedEnd) || 'memory'
-}
-
-function hash(value: string): string {
-  // 稳定键只需要「同输入同输出、碰撞概率够低」，不做密码学承诺；权威层不靠它做安全判定。
-  let h1 = 0x81_1c_9d_c5
-  let h2 = 0x01_00_01_93
-  for (let index = 0; index < value.length; index += 1) {
-    const code = value.charCodeAt(index)
-    h1 = Math.imul(h1 ^ code, 0x01_00_01_93)
-    h2 = Math.imul(h2 ^ (code + index), 0x85_eb_ca_6b)
-  }
-  return `${(h1 >>> 0).toString(36)}${(h2 >>> 0).toString(36)}`
-}
-
-/**
- * 查询分词：空白/标点切词，CJK 连续段额外产生 2-gram。
- *
- * 中文不带空格，纯按空白切会把整句当成一个 token 而永不命中；2-gram 是零依赖前提下
- * 最便宜的可用近似。语义匹配由可选的 `memory-vector` 负责，本层提供可靠的词法回退。
- */
-function tokenize(value: string): string[] {
-  const lowered = value.toLowerCase()
-  const tokens = new Set<string>()
-  for (const raw of lowered.split(/[^\p{Letter}\p{Number}]+/u)) {
-    if (raw.length === 0) continue
-    if (/^[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]+$/u.test(raw)) {
-      if (raw.length === 1) tokens.add(raw)
-      for (let index = 0; index + 1 < raw.length; index += 1) {
-        tokens.add(raw.slice(index, index + 2))
-      }
-      continue
-    }
-    if (raw.length >= 2) tokens.add(raw)
-  }
-  return [...tokens]
-}
-
-interface ScoredCandidate {
-  readonly root: MemoryFilesScopeRoot
-  readonly entry: MemoryIndexEntry
-  readonly score: number
-  readonly order: number
-}
-
-interface StableKeyCacheEntry {
-  /** 条目集合的指纹（索引文本 + 条目目录清单）；对不上就整份重建。 */
-  signature: string
-  readonly paths: Map<string, string>
-}
-
-/** 这次召回带不带「要读到全文才判得了」的过滤。带的话读取上限按筛过的算。 */
-function hasContentFilter(options: MemoryRecallOptions): boolean {
-  return (
-    !isEmpty(options.categories ?? [])
-    || !isEmpty(options.excludeSourceTypes ?? [])
-    || isTrue(options.excludeConversationObservations)
-  )
-}
-
-class MemoryFilesBackend implements MemoryStoreBackend {
-  public readonly descriptor = filesDescriptor
+  public readonly descriptor = MemoryFilesBackend.Descriptor
 
   private readonly log = Log.tag('MemoryFilesBackend')
   private readonly io: MemoryFilesIo
@@ -211,8 +125,8 @@ class MemoryFilesBackend implements MemoryStoreBackend {
 
   public constructor(private readonly options: MemoryFilesBackendOptions) {
     this.io = options.io ?? createInMemoryMemoryFilesIo()
-    this.indexFileName = options.indexFileName ?? MemoryIndexFileName
-    this.entriesDirectoryName = options.entriesDirectoryName ?? DefaultMemoryEntriesDirectoryName
+    this.indexFileName = options.indexFileName ?? MemoryFilesLayout.indexFileName
+    this.entriesDirectoryName = options.entriesDirectoryName ?? MemoryFilesLayout.entriesDirectoryName
     this.now = options.now ?? (() => Date.now())
     // 目录名与索引文件名由宿主注入，同样要过一段名字的判定：宿主传进一个 `../..`
     // 就等于把后面每一道条目路径判定都建在沙子上。
@@ -232,7 +146,7 @@ class MemoryFilesBackend implements MemoryStoreBackend {
     const title = (evidenceInput.title ?? '').trim() || firstLine(evidenceInput.content) || 'memory'
     const category: MemoryEvidenceCategory = evidenceInput.category ?? 'fact'
     const stableKey = (evidenceInput.sourceId ?? '').trim()
-      || hash(`${evidenceInput.sourceType}|${title}|${evidenceInput.content}`)
+      || hashStableKey(`${evidenceInput.sourceType}|${title}|${evidenceInput.content}`)
 
     const root = this.resolveWriteRoot(evidenceInput)
     if (isNull(root))
@@ -259,11 +173,11 @@ class MemoryFilesBackend implements MemoryStoreBackend {
         readMetadataString(evidenceInput.metadata, 'summary')
         || previous?.description
         || firstLine(evidenceInput.content)
-      ).slice(0, 400),
+      ).slice(0, MemoryTuning.files.descriptionMaxChars),
     )
     // 归档是用户的决定：同一来源再采集只更新内容，不解除归档、也不把索引行放回去。
     // （Desktop 每次保存会话状态都重放整段对话，不守住这一条，用户归档的条目下一次保存就复活。）
-    const archived = previous?.attributes.status === ArchivedStatus
+    const archived = previous?.attributes.status === MemoryFilesArchivedStatus
 
     const document = serializeMemoryFileDocument({
       name: title,
@@ -280,7 +194,7 @@ class MemoryFilesBackend implements MemoryStoreBackend {
         sourceType: evidenceInput.sourceType,
         trust: evidenceInput.trustLevel,
         privacy: evidenceInput.privacyClass ?? 'standard',
-        status: archived ? ArchivedStatus : 'active',
+        status: archived ? MemoryFilesArchivedStatus : 'active',
         created: previous?.attributes.created ?? String(timestamp),
         updated: String(timestamp),
         ...optionalTags(evidenceInput.metadata),
@@ -302,11 +216,11 @@ class MemoryFilesBackend implements MemoryStoreBackend {
     }
 
     return {
-      evidence: this.toEvidenceRecord({
+      evidence: toEvidenceRecord({
         input: evidenceInput,
         scopeType: root.scopeType,
         scopeId: root.scopeId,
-        id: `${root.scopeId}${IdSeparator}${relativePath}`,
+        id: `${root.scopeId}${MemoryFilesEntryIdSeparator}${relativePath}`,
         title,
         category,
         timestamp,
@@ -335,7 +249,7 @@ class MemoryFilesBackend implements MemoryStoreBackend {
     const roots = this.resolveReadRoots(options)
     if (isEmpty(roots)) return []
 
-    const limit = Math.max(1, Math.min(options.limit ?? 10, 100))
+    const limit = Math.max(1, Math.min(options.limit ?? MemoryTuning.files.defaultRecallLimit, MemoryTuning.files.maxRecallLimit))
     const tokens = tokenize(query ?? '')
     const candidates: ScoredCandidate[] = []
     let order = 0
@@ -360,14 +274,14 @@ class MemoryFilesBackend implements MemoryStoreBackend {
     // 24 份是个先截断后过滤的窗口，聊天采集开着的时候最近 24 条全是会话条目，`memory:search`
     // 的画像召回（`categories`）于是稳定返回 0 条。带过滤时按筛过的算，扫描量另有上限。
     const budget = hasContentFilter(options)
-      ? MaxFilteredFullTextScansPerRecall
-      : MaxFullTextReadsPerRecall
+      ? MemoryTuning.files.maxFilteredFullTextScansPerRecall
+      : MemoryTuning.files.maxFullTextReadsPerRecall
     const items: MemoryRecallItem[] = []
     for (const candidate of candidates.slice(0, budget)) {
       if (items.length >= limit) break
       const loaded = this.loadEntry(candidate.root, candidate.entry)
       if (!loaded) continue
-      const item = this.toRecallItem(
+      const item = toRecallItem(
         candidate.root,
         candidate.entry,
         loaded.document,
@@ -389,7 +303,7 @@ class MemoryFilesBackend implements MemoryStoreBackend {
     const entry = this.readIndex(root).find((candidate) => candidate.path === parsed.path)
       ?? { path: parsed.path, name: parsed.path, description: '' }
     const loaded = this.loadEntry(root, entry)
-    return loaded ? this.toRecallItem(root, entry, loaded.document, 'scope') : null
+    return loaded ? toRecallItem(root, entry, loaded.document, 'scope') : null
   }
 
   /**
@@ -407,7 +321,7 @@ class MemoryFilesBackend implements MemoryStoreBackend {
       for (const entry of this.listCandidateEntries(root, true)) {
         const loaded = this.loadEntry(root, entry)
         if (!loaded) continue
-        yield this.toRecallItem(root, entry, loaded.document, 'scope')
+        yield toRecallItem(root, entry, loaded.document, 'scope')
       }
     }
   }
@@ -422,7 +336,7 @@ class MemoryFilesBackend implements MemoryStoreBackend {
       details[`scope:${root.scopeId}`] = count
     }
     return {
-      backendId: MemoryFilesBackendId,
+      backendId: MemoryBackendIds.files,
       itemCount,
       // 文件后端没有待整理队列：写入即最终态。
       pendingCount: 0,
@@ -462,7 +376,7 @@ class MemoryFilesBackend implements MemoryStoreBackend {
         type: document.type,
         attributes: {
           ...document.attributes,
-          status: ArchivedStatus,
+          status: MemoryFilesArchivedStatus,
           updated: String(this.now()),
         },
         body: document.body,
@@ -483,9 +397,9 @@ class MemoryFilesBackend implements MemoryStoreBackend {
    * id 的分隔符是双冒号，scopeId 里可能自带 `:`（`project:/a/b`），因此取**最后一个**分隔符。
    */
   private parseEntryId(id: string): Nullable<{ scopeId: string; path: string }> {
-    const separator = id.lastIndexOf(IdSeparator)
+    const separator = id.lastIndexOf(MemoryFilesEntryIdSeparator)
     if (separator <= 0) return null
-    const path = id.slice(separator + IdSeparator.length)
+    const path = id.slice(separator + MemoryFilesEntryIdSeparator.length)
     if (!isMemoryEntryPath(path, this.entriesDirectoryName)) {
       this.reportOutOfBoundsPath(id)
       return null
@@ -505,12 +419,12 @@ class MemoryFilesBackend implements MemoryStoreBackend {
     relativePath: string,
   ): Nullable<string> {
     if (!isMemoryEntryPath(relativePath, this.entriesDirectoryName)) {
-      this.reportOutOfBoundsPath(`${root.scopeId}${IdSeparator}${relativePath}`)
+      this.reportOutOfBoundsPath(`${root.scopeId}${MemoryFilesEntryIdSeparator}${relativePath}`)
       return null
     }
     const absolutePath = this.io.join(root.directory, relativePath)
     if (this.io.isInsideDirectory && !this.io.isInsideDirectory(absolutePath, root.directory)) {
-      this.reportOutOfBoundsPath(`${root.scopeId}${IdSeparator}${relativePath}`)
+      this.reportOutOfBoundsPath(`${root.scopeId}${MemoryFilesEntryIdSeparator}${relativePath}`)
       return null
     }
     return absolutePath
@@ -518,7 +432,7 @@ class MemoryFilesBackend implements MemoryStoreBackend {
 
   /** 越界路径记一条诊断；同一条只报一次，报满上限后停手（日志不跟着坏索引涨）。 */
   private reportOutOfBoundsPath(reference: string): void {
-    if (this.reportedOutOfBoundsPaths.size >= MaxReportedOutOfBoundsPaths) return
+    if (this.reportedOutOfBoundsPaths.size >= MemoryTuning.files.reportedOutOfBoundsPaths) return
     if (this.reportedOutOfBoundsPaths.has(reference)) return
     this.reportedOutOfBoundsPaths.add(reference)
     this.log.warn('记忆条目路径越界，已跳过', { reference })
@@ -563,7 +477,7 @@ class MemoryFilesBackend implements MemoryStoreBackend {
       sourceType: context.input.sourceType,
     })
     return {
-      evidence: this.toEvidenceRecord({
+      evidence: toEvidenceRecord({
         ...context,
         scopeType: context.input.scopeType ?? scopeTypeForScopeId(scopeId),
         scopeId,
@@ -590,7 +504,7 @@ class MemoryFilesBackend implements MemoryStoreBackend {
     const entries = parseMemoryIndex(raw, {
       entriesDirectoryName: this.entriesDirectoryName,
       onRejectedPath: (path) =>
-        this.reportOutOfBoundsPath(`${root.scopeId}${IdSeparator}${path}`),
+        this.reportOutOfBoundsPath(`${root.scopeId}${MemoryFilesEntryIdSeparator}${path}`),
     })
     if (!isEmpty(entries) || isNotNull(raw)) return entries
     // 索引缺席但目录里有条目文件（用户手动拷进来 / 索引被误删）：按目录重建，绝不当作空记忆。
@@ -698,13 +612,13 @@ class MemoryFilesBackend implements MemoryStoreBackend {
   ): string {
     const base = slugify(title)
     const taken = new Set(entries.map((entry) => entry.path))
-    for (let suffix = 0; suffix < 1000; suffix += 1) {
+    for (let suffix = 0; suffix < MemoryTuning.files.pathAllocationAttempts; suffix += 1) {
       const path = `${this.entriesDirectoryName}/${suffix === 0 ? base : `${base}-${suffix + 1}`}.md`
       const absolutePath = this.resolveEntryPath(root, path)
       if (taken.has(path) || isNull(absolutePath)) continue
       if (isNull(this.io.readTextFile(absolutePath))) return path
     }
-    return `${this.entriesDirectoryName}/${base}-${hash(title)}.md`
+    return `${this.entriesDirectoryName}/${base}-${hashStableKey(title)}.md`
   }
 
   private loadDocument(
@@ -726,117 +640,7 @@ class MemoryFilesBackend implements MemoryStoreBackend {
     return document ? { document } : null
   }
 
-  private toRecallItem(
-    root: MemoryFilesScopeRoot,
-    entry: MemoryIndexEntry,
-    document: MemoryFileDocument,
-    retrievalReason: MemoryRecallItem['retrievalReason'],
-  ): MemoryRecallItem {
-    const id = `${root.scopeId}${IdSeparator}${entry.path}`
-    const updatedAt = Number.parseInt(document.attributes.updated ?? '', 10)
-    return {
-      id,
-      claimId: id,
-      conceptId: entry.path,
-      conceptType: memoryConceptTypeByCategory[document.type] ?? 'entity',
-      predicate: 'memory',
-      title: document.name || entry.name,
-      summary: document.description || entry.description,
-      value: document.body,
-      scopeType: root.scopeType,
-      scopeId: root.scopeId,
-      // 权威层的内容是被写下来的原文，不存在树后端那种「由证据推断」的置信度衰减。
-      confidence: 1,
-      salience: 1,
-      activation: document.attributes.status === ArchivedStatus ? 0 : 1,
-      updatedAt: Number.isFinite(updatedAt) ? updatedAt : 0,
-      snapshotVersion: 0,
-      retrievalReason,
-      evidenceIds: [id],
-      sourceTypes: document.attributes.sourceType
-        ? [document.attributes.sourceType as MemoryEvidenceInput['sourceType']]
-        : [],
-      // 文件后端没有树投影：路径为空是诚实回答，不是缺陷。
-      path: [],
-    }
-  }
 
-  private toEvidenceRecord(input: {
-    input: MemoryEvidenceInput
-    scopeType: MemoryScopeType
-    scopeId: string
-    /** 条目 id；拒收时为空串（磁盘上没有这条）。 */
-    id: string
-    title: string
-    category: MemoryEvidenceCategory
-    timestamp: number
-    stableKey: string
-  }): MemoryEvidenceRecord {
-    return {
-      id: input.id,
-      sourceType: input.input.sourceType,
-      trustLevel: input.input.trustLevel,
-      sourceId: input.stableKey,
-      sessionId: input.input.sessionId ?? '',
-      executionId: input.input.executionId ?? '',
-      workspaceRoot: input.input.workspaceRoot ?? '',
-      scopeType: input.scopeType,
-      scopeId: input.scopeId,
-      occurredAt: input.timestamp,
-      title: input.title,
-      content: input.input.content,
-      category: input.category,
-      privacyClass: input.input.privacyClass ?? 'standard',
-      eligibilityState: 'active',
-      metadata: input.input.metadata ?? {},
-      // 文件后端没有全局摄入序列：条目之间没有全序关系。
-      ingestSequence: 0,
-      createdAt: input.timestamp,
-    }
-  }
-}
-
-function scoreIndexEntry(entry: MemoryIndexEntry, tokens: readonly string[]): number {
-  const name = entry.name.toLowerCase()
-  const description = entry.description.toLowerCase()
-  const path = entry.path.toLowerCase()
-  let score = 0
-  for (const token of tokens) {
-    if (name.includes(token)) score += 3
-    else if (path.includes(token)) score += 2
-    else if (description.includes(token)) score += 1
-  }
-  return score
-}
-
-/** frontmatter 的每个值都过一遍打码：摘要、来源、标签同样来自聊天正文。 */
-function redactAttributes(
-  attributes: Readonly<Record<string, string>>,
-): Record<string, string> {
-  return Object.fromEntries(
-    Object.entries(attributes).map(([key, value]) => [key, redactMemorySecrets(value)]),
-  )
-}
-
-function firstLine(content: string): string {
-  return (content ?? '').split('\n').map((line) => line.trim()).find(Boolean)?.slice(0, 120) ?? ''
-}
-
-function readMetadataString(
-  metadata: LooseOptional<Record<string, unknown>>,
-  key: string,
-): string {
-  const value = metadata?.[key]
-  return trimmedStringOrEmpty(value)
-}
-
-function optionalTags(
-  metadata: LooseOptional<Record<string, unknown>>,
-): Record<string, string> {
-  const tags = metadata?.tags
-  if (!isArray(tags) || isEmpty(tags)) return {}
-  const joined = tags.filter(isString).join(', ')
-  return joined ? { tags: joined } : {}
 }
 
 /**
@@ -847,6 +651,6 @@ function optionalTags(
  */
 export function createMemoryFilesBackend(
   options: MemoryFilesBackendOptions,
-): MemoryStoreBackend & MemoryAuthorityEnumeration {
+): MemoryFilesBackendApi {
   return new MemoryFilesBackend(options)
 }

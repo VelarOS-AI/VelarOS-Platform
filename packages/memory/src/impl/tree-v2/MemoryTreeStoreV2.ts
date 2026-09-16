@@ -1,29 +1,28 @@
-import type BetterSqlite3 from 'better-sqlite3'
+import { AppError, isEmpty, isNull, isTrue, toNullable } from '@velaros-ai/core'
 
+import type { MemoryTreeDiffV2, MemoryTreeReplayResultV2 } from '../../types/tree-v2/diff'
+import type {
+  CommitMemoryDreamNoopInputV2,
+  CommitMemoryTreeVersionInputV2,
+  CommitMemoryTreeVersionResultV2,
+  CompactMemoryTreeHeadInputV2,
+  CompactMemoryTreeHeadResultV2,
+  MemoryCountRowV2,
+  MemoryTreeBaseRowV2,
+  MemoryTreeCheckpointV2,
+  MemoryTreeDiffRowV2,
+  MemoryTreeProjectionInspectionV2,
+  MemoryTreeSnapshotRowV2,
+  MemoryTreeStoreOpenReportV2,
+  ReconstructedTreeV2,
+} from '../../types/tree-v2/store'
 import {
-  AppError,
-  isArray,
-  isEmpty,
-  isNotNull,
-  isNull,
-  isPlainObject,
-  isString,
-  isTrue,
-  isUndefined,
-  toNullable,
-} from '@velaros-ai/core'
-
+  assertNonEmptyStringV2,
+  assertNonNegativeSafeIntegerV2,
+} from '../../utils/tree-v2/checks'
 import {
-  assertForwardReplayResultForPersistenceV2,
   canonicalStringifyV2,
   hashTreeEventV2,
-  isMemoryTreeDiffOpV2,
-  type MemoryTreeDiffOpTypeV2,
-  type MemoryTreeDiffOpV2,
-  type MemoryTreeDiffV2,
-  type MemoryTreeNodeStructV2,
-  type MemoryTreeReplayResultV2,
-  replayTreeDiffsForwardV2,
   TreeDiffGenesisEventHashV2,
   validateTreeDiffOpV2,
 } from '../../utils/tree-v2/diff-chain'
@@ -32,214 +31,111 @@ import {
   computeMemoryTreeBaseHashesV2,
   parseMemoryTreeBaseStateV2,
 } from '../../utils/tree-v2/tree-manifest'
-
-import type { ContentKeyServiceV2 } from './storage/ContentKeyServiceV2'
-import type { MemoryKeyringStoreV2 } from './storage/MemoryKeyringStoreV2'
-import type { MemoryAuthorityDatabaseV2 } from './MemoryAuthorityDatabaseV2'
 import {
-  MemoryTreeCheckpointIntervalV2,
-  type MemoryTreeCheckpointV2,
-  MemoryTreeProjectionIndexV2,
-  type MemoryTreeProjectionInspectionV2,
-} from './MemoryTreeProjectionIndexV2'
+  assertFrontierAdvanceIsValidV2,
+  assertReferencedBlobsExistV2,
+  assertSnapshotAnchorsV2,
+  commitDreamRunRowV2,
+  parseIdentityChangeJsonV2,
+  parseMemoryTreeDiffRowV2,
+  readMemoryMetaV2,
+  summarizeTreeDiffOpsV2,
+  validateCommittedTreeStateV2,
+  validateDreamRunCommitV2,
+  validateIdentityChangeV2,
+} from '../../utils/tree-v2/tree-store'
+import { MemoryTuning } from '../../utils/tuning'
 
-type SQLiteDatabase = InstanceType<typeof BetterSqlite3>
-
-interface MemoryTreeDiffRowV2 {
-  version: number
-  base_version: number
-  ops_json: string
-  identity_change_json: Nullable<string>
-  op_count: number
-  previous_event_hash: string
-  event_hash: string
-  created_by_run_id: string
-  created_at: number
-}
-
-interface MemoryTreeSnapshotRowV2 {
-  version: number
-  root_node_id: string
-  active_identity_epoch_id: string
-  global_mainline_node_id: string
-  frontier_evidence_sequence: number
-  created_by_run_id: string
-  tree_hash: string
-  event_head_hash: string
-  diff_summary_json: string
-  created_at: number
-}
-
-interface MemoryTreeBaseRowV2 {
-  base_version: number
-  state_blob_ref: string
-  state_commitment: string
-  tree_hash: string
-  compacted_from_version: number
-  compacted_to_version: number
-  prior_segment_event_head: string
-  base_event_hash: string
-  canonical_version: number
-  compaction_version: number
-  manifest_hash: string
-  created_at: number
-}
-
-export interface MemoryTreeIdentityChangeV2 {
-  readonly epochId: string
-  readonly sequence: number
-  readonly predecessorId: Nullable<string>
-}
-
-export interface CommitMemoryTreeVersionInputV2 {
-  readonly expectedBaseVersion: number
-  readonly ops: readonly MemoryTreeDiffOpV2[]
-  readonly identityChange?: LooseOptional<MemoryTreeIdentityChangeV2>
-  readonly activeIdentityEpochId: string
-  readonly globalMainlineNodeId: string
-  readonly frontierEvidenceSequence: number
-  readonly createdByRunId: string
-  readonly createdAt?: number
-  readonly dreamRunCommit?: MemoryDreamRunCommitV2
-  /** package-owned 参与者；在 tree CAS 后、snapshot/diff 前运行，抛错即整事务回滚。 */
-  readonly authorityCommit?: MemoryTreeAuthorityCommitParticipantV2
-  /** Erasure 第一段专用：即使没有投影节点命中，也推进事件版本使并发 Dream CAS 失效。 */
-  readonly erasureCommit?: boolean
-}
-
-export interface MemoryTreeAuthorityCommitParticipantV2 {
-  apply(): void
-  applyAfterSnapshot?(): void
-}
-
-export interface MemoryDreamRunCommitV2 {
-  readonly runId: string
-  readonly inputFingerprint: string
-  readonly frontierBefore: number
-  readonly tokenUsage: number
-  readonly candidateCount: number
-  readonly acceptedCount: number
-  readonly rejectedCount: number
-  readonly finishedAt?: number
-}
-
-export interface CommitMemoryTreeVersionResultV2 {
-  readonly version: number
-  readonly treeHash: string
-  readonly eventHash: string
-  readonly projectionPersisted: boolean
-}
-
-export interface CommitMemoryDreamNoopInputV2 {
-  readonly expectedTreeVersion: number
-  readonly frontierEvidenceSequence: number
-  readonly dreamRunCommit: MemoryDreamRunCommitV2
-  readonly committedAt?: number
-  readonly authorityCommit?: MemoryTreeAuthorityCommitParticipantV2
-}
-
-export interface CompactMemoryTreeHeadInputV2 {
-  readonly compactionId: string
-  readonly createdAt?: number
-}
-
-export interface CompactMemoryTreeHeadResultV2 {
-  readonly baseVersion: number
-  readonly baseEventHash: string
-  readonly manifestHash: string
-  readonly deletedDiffCount: number
-}
-
-export interface MemoryTreeStoreOpenReportV2 {
-  readonly treeVersion: number
-  readonly baseVersion: number
-  readonly replayedDiffCount: number
-  readonly checkpointCount: number
-  readonly projectionRebuilt: boolean
-}
-
-interface ReconstructedTreeV2 {
-  readonly version: number
-  readonly baseVersion: number
-  readonly eventHead: string
-  readonly current: MemoryTreeReplayResultV2
-  readonly checkpoints: readonly MemoryTreeCheckpointV2[]
-  readonly replayedDiffCount: number
-}
+import type { ContentKeyServiceV2Api } from './storage/ContentKeyServiceV2'
+import type { MemoryKeyringStoreV2Api } from './storage/MemoryKeyringStoreV2'
+import type { MemoryAuthorityDatabaseV2Api } from './MemoryAuthorityDatabaseV2'
+import { MemoryTreeProjectionIndexV2 } from './MemoryTreeProjectionIndexV2'
+import { MemoryTreeReplayV2 } from './MemoryTreeReplayV2'
 
 /**
- * Memory Tree v2 的 snapshot/diff/base authority owner。
+ * 记忆树 v2 的 snapshot / diff / base 权威 owner：构造即从权威链重建出当前树。
  *
  * 所有写入先在内存正向应用并校验，再以 SQLite 单事务提交 snapshot + diff + meta CAS；
- * index projection 只在 authority 成功后刷新，失败时标记可重建，不反向污染权威提交。
+ * 派生投影只在权威提交成功后刷新，刷新失败只降级不回滚，绝不反向污染权威提交。
+ * 实例归 `MemorySystemRuntimeV2`（或探针）所有，与一条权威连接一一对应。
  */
-export class MemoryTreeStoreV2 {
+export interface MemoryTreeStoreV2Api {
+  /** 构造时那一次从权威链重建的读数：树版本、基点、重放条数、检查点数、投影有没有被重建。 */
+  readonly openReport: MemoryTreeStoreOpenReportV2
+  /** 当前树版本；空树是 0。 */
+  readonly version: number
+  /** 当前树的一份深拷贝，改它不影响内部状态。 */
+  readonly current: MemoryTreeReplayResultV2
+  /** 核对派生投影与权威链是否一致；空树或一代都没有时返回 null。 */
+  inspectProjection(): Nullable<MemoryTreeProjectionInspectionV2>
+  /** 强制按当前权威状态重建一代派生投影，返回新代号；空树返回 null。 */
+  rebuildProjection(): Nullable<number>
+  /**
+   * 提交一个新树版本：校验 → 内存正向重放 → 单事务写 meta CAS、snapshot、diff、整理运行。
+   * 基线过期或事务内 CAS 失败抛 CONFLICT，入参或提交后树形不合法抛 VALIDATION。
+   */
+  commitVersion(input: CommitMemoryTreeVersionInputV2): CommitMemoryTreeVersionResultV2
+  /**
+   * 一批证据被完整消化但没产生树事件：树 head 不动，frontier 与整理运行在同一事务推进。
+   * 树版本 CAS 失败抛 CONFLICT。
+   */
+  commitDreamNoop(input: CommitMemoryDreamNoopInputV2): void
+  /**
+   * 在当前 head 建物化基点：封存状态 blob、写基点与压缩账本、删掉被吃掉的 diff 与旧 snapshot。
+   * 空树抛 VALIDATION，当前版本已是基点抛 CONFLICT；事务没提交成功会把刚封的 blob 擦掉。
+   */
+  compactHead(input: CompactMemoryTreeHeadInputV2): CompactMemoryTreeHeadResultV2
+}
+
+export class MemoryTreeStoreV2 implements MemoryTreeStoreV2Api {
+  /** 物化基点写入时记的 canonical 序列化规范版本。 */
+  private static readonly CanonicalVersion = 2
+
+  /** 物化基点写入时记的压缩协议版本。 */
+  private static readonly CompactionVersion = 1
+
+  public readonly openReport: MemoryTreeStoreOpenReportV2
+
+  private readonly projectionIndex: MemoryTreeProjectionIndexV2
+  private readonly replay = new MemoryTreeReplayV2()
   private currentVersion: number
   private baseVersion: number
   private eventHead: string
   private currentReplay: MemoryTreeReplayResultV2
   private checkpoints: MemoryTreeCheckpointV2[]
 
-  private constructor(
-    private readonly authority: MemoryAuthorityDatabaseV2,
-    private readonly contentKeys: ContentKeyServiceV2,
-    private readonly projectionIndex: MemoryTreeProjectionIndexV2,
-    reconstructed: ReconstructedTreeV2
+  constructor(
+    private readonly authority: MemoryAuthorityDatabaseV2Api,
+    private readonly contentKeys: ContentKeyServiceV2Api,
+    keyring: MemoryKeyringStoreV2Api
   ) {
+    const reconstructed = this.reconstructFromAuthority()
+    this.projectionIndex = new MemoryTreeProjectionIndexV2(
+      authority.roots.indexDir,
+      keyring,
+      this.replay
+    )
     this.currentVersion = reconstructed.version
     this.baseVersion = reconstructed.baseVersion
     this.eventHead = reconstructed.eventHead
     this.currentReplay = reconstructed.current
     this.checkpoints = [...reconstructed.checkpoints]
-  }
 
-  public static open(input: {
-    authority: MemoryAuthorityDatabaseV2
-    contentKeys: ContentKeyServiceV2
-    keyring: MemoryKeyringStoreV2
-  }): { store: MemoryTreeStoreV2; report: MemoryTreeStoreOpenReportV2 } {
-    const reconstructed = reconstructTreeFromAuthorityV2(
-      input.authority.database,
-      input.contentKeys
-    )
-    const projectionIndex = new MemoryTreeProjectionIndexV2(
-      input.authority.roots.indexDir,
-      input.keyring
-    )
     let projectionRebuilt = false
-    if (reconstructed.version > 0) {
-      let projectionMatches = false
-      try {
-        projectionMatches = isTrue(
-          projectionIndex.inspect(reconstructed.version, reconstructed.current)?.matchesAuthority
-        )
-      } catch {
-        // arch-guard:silent-catch-ok 派生投影损坏等价于不匹配，下方会从 authority 立即重建。
-        projectionMatches = false
-      }
-      if (!projectionMatches) {
-        projectionIndex.persist(
-          reconstructed.version,
-          reconstructed.current,
-          reconstructed.checkpoints
-        )
-        projectionRebuilt = true
-      }
+    if (reconstructed.version > 0 && !this.projectionMatchesAuthority(reconstructed)) {
+      this.projectionIndex.persist(
+        reconstructed.version,
+        reconstructed.current,
+        reconstructed.checkpoints
+      )
+      projectionRebuilt = true
     }
-    return {
-      store: new MemoryTreeStoreV2(
-        input.authority,
-        input.contentKeys,
-        projectionIndex,
-        reconstructed
-      ),
-      report: {
-        treeVersion: reconstructed.version,
-        baseVersion: reconstructed.baseVersion,
-        replayedDiffCount: reconstructed.replayedDiffCount,
-        checkpointCount: reconstructed.checkpoints.length,
-        projectionRebuilt,
-      },
+    this.openReport = {
+      treeVersion: reconstructed.version,
+      baseVersion: reconstructed.baseVersion,
+      replayedDiffCount: reconstructed.replayedDiffCount,
+      checkpointCount: reconstructed.checkpoints.length,
+      projectionRebuilt,
     }
   }
 
@@ -275,39 +171,7 @@ export class MemoryTreeStoreV2 {
         currentVersion: this.currentVersion,
       })
     }
-    if (isEmpty(input.ops) && !input.identityChange && !input.erasureCommit) {
-      throw new AppError('VALIDATION', '空树变更不得创建新版本。')
-    }
-    if (
-      input.erasureCommit &&
-      input.ops.some(
-        (op) =>
-          op.type !== 'redact' &&
-          !(
-            op.type === 'add' &&
-            op.after.every(
-              (node) =>
-                (node.namespace === 'identity' && node.nodeType === 'mainline') ||
-                (node.namespace === 'root' && node.nodeType === 'root')
-            )
-          )
-      )
-    ) {
-      throw new AppError('VALIDATION', 'Erasure 版本只允许 redact 与中性身份主线 add。')
-    }
-    assertNonEmptyV2(input.activeIdentityEpochId, 'activeIdentityEpochId')
-    assertNonEmptyV2(input.globalMainlineNodeId, 'globalMainlineNodeId')
-    assertNonEmptyV2(input.createdByRunId, 'createdByRunId')
-    assertNonNegativeIntegerV2(input.frontierEvidenceSequence, 'frontierEvidenceSequence')
-    assertFrontierAdvanceIsValidV2(this.authority.database, input.frontierEvidenceSequence)
-    if (input.dreamRunCommit) {
-      validateDreamRunCommitV2(input.dreamRunCommit, input.createdByRunId)
-    }
-    if (input.identityChange) validateIdentityChangeV2(input.identityChange)
-    if (input.identityChange && input.identityChange.epochId !== input.activeIdentityEpochId) {
-      throw new AppError('VALIDATION', 'identityChange epochId 必须与 activeIdentityEpochId 一致。')
-    }
-    for (const op of input.ops) validateTreeDiffOpV2(op)
+    this.validateCommitInput(input)
 
     const version = this.currentVersion + 1
     const diff: MemoryTreeDiffV2 = {
@@ -315,7 +179,7 @@ export class MemoryTreeStoreV2 {
       baseVersion: this.currentVersion,
       ops: input.ops,
     }
-    const next = replayTreeDiffsForwardV2(this.currentReplay.nodes, [diff], {
+    const next = this.replay.replayForward(this.currentReplay.nodes, [diff], {
       persistenceBase: this.currentReplay,
     })
     validateCommittedTreeStateV2(next.nodes)
@@ -334,13 +198,14 @@ export class MemoryTreeStoreV2 {
       ops: input.ops,
     })
     const createdAt = input.createdAt ?? Date.now()
-    assertNonNegativeIntegerV2(createdAt, 'createdAt')
+    assertNonNegativeSafeIntegerV2(createdAt, 'createdAt')
     const opsJson = canonicalStringifyV2(input.ops)
     const identityChangeJson = isNull(identityChange) ? null : canonicalStringifyV2(identityChange)
     const diffSummaryJson = canonicalStringifyV2(summarizeTreeDiffOpsV2(input.ops))
 
-    const commit = this.authority.database.transaction(() => {
-      const cas = this.authority.database
+    const database = this.authority.database
+    const commit = database.transaction(() => {
+      const cas = database
         .prepare(
           `UPDATE memory_meta
            SET integer_value = ?, updated_at = ?
@@ -350,7 +215,7 @@ export class MemoryTreeStoreV2 {
       if (cas.changes !== 1) {
         throw new AppError('CONFLICT', '树版本 CAS 在事务提交点失败。')
       }
-      const frontier = this.authority.database
+      const frontier = database
         .prepare(
           `UPDATE memory_meta
            SET integer_value = MAX(integer_value, ?), updated_at = ?
@@ -361,8 +226,8 @@ export class MemoryTreeStoreV2 {
         throw new AppError('INVARIANT', 'dream_frontier meta 缺失。')
       }
       input.authorityCommit?.apply()
-      assertReferencedBlobsExistV2(this.authority.database, next.nodes)
-      this.authority.database
+      assertReferencedBlobsExistV2(database, next.nodes)
+      database
         .prepare(
           `INSERT INTO memory_tree_snapshots(
              version, root_node_id, active_identity_epoch_id, global_mainline_node_id,
@@ -383,7 +248,7 @@ export class MemoryTreeStoreV2 {
           createdAt
         )
       input.authorityCommit?.applyAfterSnapshot?.()
-      this.authority.database
+      database
         .prepare(
           `INSERT INTO memory_tree_diffs(
              version, base_version, ops_json, identity_change_json, op_count,
@@ -403,7 +268,7 @@ export class MemoryTreeStoreV2 {
         )
       if (input.dreamRunCommit) {
         commitDreamRunRowV2(
-          this.authority.database,
+          database,
           input.dreamRunCommit,
           input.expectedBaseVersion,
           version,
@@ -417,7 +282,7 @@ export class MemoryTreeStoreV2 {
     this.currentVersion = version
     this.eventHead = eventHash
     this.currentReplay = next
-    if (version % MemoryTreeCheckpointIntervalV2 === 0) {
+    if (version % MemoryTuning.treeV2.checkpointInterval === 0) {
       this.checkpoints.push({ version, replay: next })
     }
     let projectionPersisted = true
@@ -435,10 +300,6 @@ export class MemoryTreeStoreV2 {
     }
   }
 
-  /**
-   * 一批 Evidence 被完整考虑但没有产生树事件时，树 head 保持不变；frontier 与 run
-   * 仍在同一事务推进。这个动词是 I1 对“零候选/全拒绝”批次的显式落点。
-   */
   public commitDreamNoop(input: CommitMemoryDreamNoopInputV2): void {
     if (input.expectedTreeVersion !== this.currentVersion) {
       throw new AppError('CONFLICT', 'Dream no-op 树版本 CAS 失败。', undefined, {
@@ -446,17 +307,18 @@ export class MemoryTreeStoreV2 {
         currentVersion: this.currentVersion,
       })
     }
-    assertNonNegativeIntegerV2(input.frontierEvidenceSequence, 'frontierEvidenceSequence')
-    assertFrontierAdvanceIsValidV2(this.authority.database, input.frontierEvidenceSequence)
+    const database = this.authority.database
+    assertNonNegativeSafeIntegerV2(input.frontierEvidenceSequence, 'frontierEvidenceSequence')
+    assertFrontierAdvanceIsValidV2(database, input.frontierEvidenceSequence)
     validateDreamRunCommitV2(input.dreamRunCommit, input.dreamRunCommit.runId)
     const committedAt = input.committedAt ?? Date.now()
-    assertNonNegativeIntegerV2(committedAt, 'committedAt')
-    const commit = this.authority.database.transaction(() => {
-      const treeVersion = readMemoryMetaV2(this.authority.database, 'tree_version')
+    assertNonNegativeSafeIntegerV2(committedAt, 'committedAt')
+    const commit = database.transaction(() => {
+      const treeVersion = readMemoryMetaV2(database, 'tree_version')
       if (treeVersion !== input.expectedTreeVersion) {
         throw new AppError('CONFLICT', 'Dream no-op 在事务提交点树版本 CAS 失败。')
       }
-      const frontier = this.authority.database
+      const frontier = database
         .prepare(
           `UPDATE memory_meta
            SET integer_value = MAX(integer_value, ?), updated_at = ?
@@ -468,7 +330,7 @@ export class MemoryTreeStoreV2 {
       }
       input.authorityCommit?.apply()
       commitDreamRunRowV2(
-        this.authority.database,
+        database,
         input.dreamRunCommit,
         input.expectedTreeVersion,
         input.expectedTreeVersion,
@@ -479,17 +341,14 @@ export class MemoryTreeStoreV2 {
     commit()
   }
 
-  /**
-   * 只允许在当前 head 建基点，因此不需要改写尚存后继 diff 的 event_hash。
-   * 细粒度 diff 删除、snapshot 收窄与 base_event_hash 切换在同一 authority 事务完成。
-   */
   public compactHead(input: CompactMemoryTreeHeadInputV2): CompactMemoryTreeHeadResultV2 {
-    assertNonEmptyV2(input.compactionId, 'compactionId')
+    assertNonEmptyStringV2(input.compactionId, 'compactionId')
     if (this.currentVersion < 1) {
       throw new AppError('VALIDATION', '空树没有可压缩的历史。')
     }
-    assertForwardReplayResultForPersistenceV2(this.currentReplay)
-    const duplicate = this.authority.database
+    this.replay.assertForwardResultForPersistence(this.currentReplay)
+    const database = this.authority.database
+    const duplicate = database
       .prepare(
         `SELECT 1 AS present
          FROM memory_tree_bases
@@ -500,7 +359,7 @@ export class MemoryTreeStoreV2 {
       throw new AppError('CONFLICT', '当前树版本已经是物化基点。')
     }
     const createdAt = input.createdAt ?? Date.now()
-    assertNonNegativeIntegerV2(createdAt, 'createdAt')
+    assertNonNegativeSafeIntegerV2(createdAt, 'createdAt')
     const state = buildMemoryTreeBaseStateV2(this.currentVersion, this.currentReplay.nodes)
     const hashes = computeMemoryTreeBaseHashesV2(state, this.eventHead)
     if (hashes.treeHash !== this.currentReplay.stateHash) {
@@ -513,23 +372,23 @@ export class MemoryTreeStoreV2 {
     let committed = false
     try {
       const deletedDiffCount = (
-        this.authority.database
+        database
           .prepare(
             `SELECT count(*) AS count
              FROM memory_tree_diffs
              WHERE version <= ?`
           )
-          .get(this.currentVersion) as { count: number }
+          .get(this.currentVersion) as MemoryCountRowV2
       ).count
-      const compact = this.authority.database.transaction(() => {
-        this.authority.database
+      const compact = database.transaction(() => {
+        database
           .prepare(
             `INSERT INTO memory_content_blobs(
                blob_id, byte_length, state, created_at
              ) VALUES (?, ?, 'active', ?)`
           )
           .run(sealed.blobId, sealed.byteLength, createdAt)
-        this.authority.database
+        database
           .prepare(
             `INSERT INTO memory_tree_bases(
                base_version, state_blob_ref, state_commitment, tree_hash,
@@ -547,12 +406,12 @@ export class MemoryTreeStoreV2 {
             this.currentVersion,
             this.eventHead,
             hashes.baseEventHash,
-            2,
-            1,
+            MemoryTreeStoreV2.CanonicalVersion,
+            MemoryTreeStoreV2.CompactionVersion,
             hashes.manifestHash,
             createdAt
           )
-        this.authority.database
+        database
           .prepare(
             `INSERT INTO memory_tree_compactions(
                id, base_version, source_from_version, source_to_version,
@@ -567,13 +426,11 @@ export class MemoryTreeStoreV2 {
             deletedDiffCount,
             createdAt
           )
-        this.authority.database
-          .prepare(`DELETE FROM memory_tree_diffs WHERE version <= ?`)
-          .run(this.currentVersion)
-        this.authority.database
+        database.prepare(`DELETE FROM memory_tree_diffs WHERE version <= ?`).run(this.currentVersion)
+        database
           .prepare(`DELETE FROM memory_tree_snapshots WHERE version < ?`)
           .run(this.currentVersion)
-        const anchor = this.authority.database
+        const anchor = database
           .prepare(
             `UPDATE memory_tree_snapshots
              SET event_head_hash = ?
@@ -601,25 +458,157 @@ export class MemoryTreeStoreV2 {
       if (!committed) this.contentKeys.eraseContent(sealed.blobId)
     }
   }
-}
 
-function reconstructTreeFromAuthorityV2(
-  database: SQLiteDatabase,
-  contentKeys: ContentKeyServiceV2
-): ReconstructedTreeV2 {
-  const base = database
-    .prepare(
-      `SELECT *
-       FROM memory_tree_bases
-       ORDER BY base_version DESC
-       LIMIT 1`
-    )
-    .get() as MemoryTreeBaseRowV2 | undefined
-  let baseVersion = 0
-  let eventHead = TreeDiffGenesisEventHashV2
-  let current = replayTreeDiffsForwardV2([], [])
-  if (base) {
-    const plaintext = contentKeys.openContent(base.state_blob_ref, base.state_commitment)
+  /** 提交前的入参自检：空变更、Erasure 版本的事件白名单、各字段形态与 frontier 推进。 */
+  private validateCommitInput(input: CommitMemoryTreeVersionInputV2): void {
+    if (isEmpty(input.ops) && !input.identityChange && !input.erasureCommit) {
+      throw new AppError('VALIDATION', '空树变更不得创建新版本。')
+    }
+    if (
+      input.erasureCommit &&
+      input.ops.some(
+        (op) =>
+          op.type !== 'redact' &&
+          !(
+            op.type === 'add' &&
+            op.after.every(
+              (node) =>
+                (node.namespace === 'identity' && node.nodeType === 'mainline') ||
+                (node.namespace === 'root' && node.nodeType === 'root')
+            )
+          )
+      )
+    ) {
+      throw new AppError('VALIDATION', 'Erasure 版本只允许 redact 与中性身份主线 add。')
+    }
+    assertNonEmptyStringV2(input.activeIdentityEpochId, 'activeIdentityEpochId')
+    assertNonEmptyStringV2(input.globalMainlineNodeId, 'globalMainlineNodeId')
+    assertNonEmptyStringV2(input.createdByRunId, 'createdByRunId')
+    assertNonNegativeSafeIntegerV2(input.frontierEvidenceSequence, 'frontierEvidenceSequence')
+    assertFrontierAdvanceIsValidV2(this.authority.database, input.frontierEvidenceSequence)
+    if (input.dreamRunCommit) {
+      validateDreamRunCommitV2(input.dreamRunCommit, input.createdByRunId)
+    }
+    if (input.identityChange) validateIdentityChangeV2(input.identityChange)
+    if (input.identityChange && input.identityChange.epochId !== input.activeIdentityEpochId) {
+      throw new AppError('VALIDATION', 'identityChange epochId 必须与 activeIdentityEpochId 一致。')
+    }
+    for (const op of input.ops) validateTreeDiffOpV2(op)
+  }
+
+  /** 派生投影是不是和刚重建出来的权威状态一致；解析失败等价于不一致。 */
+  private projectionMatchesAuthority(reconstructed: ReconstructedTreeV2): boolean {
+    try {
+      return isTrue(
+        this.projectionIndex.inspect(reconstructed.version, reconstructed.current)
+          ?.matchesAuthority
+      )
+    } catch {
+      // arch-guard:silent-catch-ok 派生投影损坏等价于不匹配，调用方会从 authority 立即重建。
+      return false
+    }
+  }
+
+  /**
+   * 从权威链重建当前树：先解物化基点，再逐条重放 diff，逐版核对事件哈希与 snapshot 双锚点。
+   * 任何一处对不上都抛 INVARIANT——重放本身就是权威库的完整性自检。
+   */
+  private reconstructFromAuthority(): ReconstructedTreeV2 {
+    const database = this.authority.database
+    const base = database
+      .prepare(
+        `SELECT *
+         FROM memory_tree_bases
+         ORDER BY base_version DESC
+         LIMIT 1`
+      )
+      .get() as MemoryTreeBaseRowV2 | undefined
+    let baseVersion = 0
+    let eventHead = TreeDiffGenesisEventHashV2
+    let current = this.replay.replayForward([], [])
+    if (base) {
+      current = this.replayMaterializedBase(base)
+      baseVersion = base.base_version
+      eventHead = base.base_event_hash
+    }
+
+    const rows = database
+      .prepare(
+        `SELECT *
+         FROM memory_tree_diffs
+         WHERE version > ?
+         ORDER BY version`
+      )
+      .all(baseVersion) as MemoryTreeDiffRowV2[]
+    const checkpoints: MemoryTreeCheckpointV2[] = []
+    let version = baseVersion
+    for (const row of rows) {
+      const parsed = parseMemoryTreeDiffRowV2(row)
+      if (
+        parsed.baseVersion !== version ||
+        row.previous_event_hash !== eventHead ||
+        row.op_count !== parsed.ops.length
+      ) {
+        throw new AppError('INVARIANT', 'TreeDiff v2 authority 链断裂或 op_count 失配。', undefined, {
+          version: row.version,
+        })
+      }
+      const expectedEventHash = hashTreeEventV2({
+        previousEventHash: eventHead,
+        version: row.version,
+        baseVersion: row.base_version,
+        identityChange: parseIdentityChangeJsonV2(row.identity_change_json),
+        ops: parsed.ops,
+      })
+      if (expectedEventHash !== row.event_hash) {
+        throw new AppError('INVARIANT', 'TreeDiff v2 event_hash 自检失败。', undefined, {
+          version: row.version,
+        })
+      }
+      current = this.replay.replayForward(current.nodes, [parsed], {
+        persistenceBase: current,
+      })
+      validateCommittedTreeStateV2(current.nodes)
+      assertSnapshotAnchorsV2(database, row, parsed.ops, current)
+      version = row.version
+      eventHead = row.event_hash
+      if (version % MemoryTuning.treeV2.checkpointInterval === 0) {
+        checkpoints.push({ version, replay: current })
+      }
+    }
+
+    const metaVersion = readMemoryMetaV2(database, 'tree_version')
+    if (metaVersion !== version) {
+      throw new AppError('INVARIANT', 'tree_version meta 与 authority 链 head 不一致。', undefined, {
+        metaVersion,
+        replayedVersion: version,
+      })
+    }
+    if (version > 0 && isEmpty(rows)) {
+      const snapshot = database
+        .prepare(`SELECT * FROM memory_tree_snapshots WHERE version = ?`)
+        .get(version) as MemoryTreeSnapshotRowV2 | undefined
+      if (
+        !snapshot ||
+        snapshot.tree_hash !== current.stateHash ||
+        snapshot.event_head_hash !== eventHead
+      ) {
+        throw new AppError('INVARIANT', '物化基点 head snapshot 锚点失配。')
+      }
+    }
+    return {
+      version,
+      baseVersion,
+      eventHead,
+      current,
+      checkpoints,
+      replayedDiffCount: rows.length,
+    }
+  }
+
+  /** 解开物化基点的状态 blob，核对四个哈希锚点，再把它重放成起点状态。 */
+  private replayMaterializedBase(base: MemoryTreeBaseRowV2): MemoryTreeReplayResultV2 {
+    const plaintext = this.contentKeys.openContent(base.state_blob_ref, base.state_commitment)
     try {
       const state = parseMemoryTreeBaseStateV2(plaintext)
       const hashes = computeMemoryTreeBaseHashesV2(state, base.prior_segment_event_head)
@@ -628,14 +617,12 @@ function reconstructTreeFromAuthorityV2(
         hashes.treeHash !== base.tree_hash ||
         hashes.manifestHash !== base.manifest_hash ||
         hashes.baseEventHash !== base.base_event_hash ||
-        base.canonical_version !== 2 ||
-        base.compaction_version !== 1
+        base.canonical_version !== MemoryTreeStoreV2.CanonicalVersion ||
+        base.compaction_version !== MemoryTreeStoreV2.CompactionVersion
       ) {
         throw new AppError('INVARIANT', '物化基点行、state blob 与哈希锚点不一致。')
       }
-      baseVersion = base.base_version
-      eventHead = base.base_event_hash
-      current = replayTreeDiffsForwardV2(
+      const replayed = this.replay.replayForward(
         [],
         [
           {
@@ -649,363 +636,11 @@ function reconstructTreeFromAuthorityV2(
           },
         ]
       )
-      validateCommittedTreeStateV2(current.nodes)
+      validateCommittedTreeStateV2(replayed.nodes)
+      return replayed
     } finally {
       plaintext.fill(0)
     }
   }
 
-  const rows = database
-    .prepare(
-      `SELECT *
-       FROM memory_tree_diffs
-       WHERE version > ?
-       ORDER BY version`
-    )
-    .all(baseVersion) as MemoryTreeDiffRowV2[]
-  const checkpoints: MemoryTreeCheckpointV2[] = []
-  let version = baseVersion
-  for (const row of rows) {
-    const parsed = parseMemoryTreeDiffRowV2(row)
-    if (
-      parsed.baseVersion !== version ||
-      row.previous_event_hash !== eventHead ||
-      row.op_count !== parsed.ops.length
-    ) {
-      throw new AppError('INVARIANT', 'TreeDiff v2 authority 链断裂或 op_count 失配。', undefined, {
-        version: row.version,
-      })
-    }
-    const expectedEventHash = hashTreeEventV2({
-      previousEventHash: eventHead,
-      version: row.version,
-      baseVersion: row.base_version,
-      identityChange: parseIdentityChangeJsonV2(row.identity_change_json),
-      ops: parsed.ops,
-    })
-    if (expectedEventHash !== row.event_hash) {
-      throw new AppError('INVARIANT', 'TreeDiff v2 event_hash 自检失败。', undefined, {
-        version: row.version,
-      })
-    }
-    current = replayTreeDiffsForwardV2(current.nodes, [parsed], {
-      persistenceBase: current,
-    })
-    validateCommittedTreeStateV2(current.nodes)
-    const snapshot = database
-      .prepare(`SELECT * FROM memory_tree_snapshots WHERE version = ?`)
-      .get(row.version) as MemoryTreeSnapshotRowV2 | undefined
-    if (
-      !snapshot ||
-      snapshot.tree_hash !== current.stateHash ||
-      snapshot.event_head_hash !== row.event_hash ||
-      snapshot.root_node_id !== current.nodes.find((node) => isNull(node.parentKey))?.stableKey ||
-      !current.nodes.some((node) => node.stableKey === snapshot.global_mainline_node_id) ||
-      snapshot.created_by_run_id !== row.created_by_run_id ||
-      snapshot.created_at !== row.created_at ||
-      snapshot.diff_summary_json !== canonicalStringifyV2(summarizeTreeDiffOpsV2(parsed.ops))
-    ) {
-      throw new AppError('INVARIANT', 'TreeDiff v2 snapshot 双锚点失配。', undefined, {
-        version: row.version,
-      })
-    }
-    version = row.version
-    eventHead = row.event_hash
-    if (version % MemoryTreeCheckpointIntervalV2 === 0) {
-      checkpoints.push({ version, replay: current })
-    }
-  }
-
-  const metaVersion = (
-    database.prepare(`SELECT integer_value FROM memory_meta WHERE key = 'tree_version'`).get() as
-      { integer_value: number } | undefined
-  )?.integer_value
-  if (metaVersion !== version) {
-    throw new AppError('INVARIANT', 'tree_version meta 与 authority 链 head 不一致。', undefined, {
-      metaVersion,
-      replayedVersion: version,
-    })
-  }
-  if (version > 0 && isEmpty(rows)) {
-    const snapshot = database
-      .prepare(`SELECT * FROM memory_tree_snapshots WHERE version = ?`)
-      .get(version) as MemoryTreeSnapshotRowV2 | undefined
-    if (
-      !snapshot ||
-      snapshot.tree_hash !== current.stateHash ||
-      snapshot.event_head_hash !== eventHead
-    ) {
-      throw new AppError('INVARIANT', '物化基点 head snapshot 锚点失配。')
-    }
-  }
-  return {
-    version,
-    baseVersion,
-    eventHead,
-    current,
-    checkpoints,
-    replayedDiffCount: rows.length,
-  }
-}
-
-function parseMemoryTreeDiffRowV2(row: MemoryTreeDiffRowV2): MemoryTreeDiffV2 {
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(row.ops_json)
-  } catch (error) {
-    throw new AppError('INVARIANT', 'TreeDiff v2 ops_json 无法解析。', error, {
-      version: row.version,
-    })
-  }
-  if (!isArray(parsed) || !parsed.every(isMemoryTreeDiffOpV2)) {
-    throw new AppError('INVARIANT', 'TreeDiff v2 ops_json 含非法结构事件。', undefined, {
-      version: row.version,
-    })
-  }
-  if (row.ops_json !== canonicalStringifyV2(parsed)) {
-    throw new AppError('INVARIANT', 'TreeDiff v2 ops_json 不是规范 canonical 字节。', undefined, {
-      version: row.version,
-    })
-  }
-  for (const op of parsed) validateTreeDiffOpV2(op)
-  return {
-    version: row.version,
-    baseVersion: row.base_version,
-    ops: parsed,
-  }
-}
-
-function parseIdentityChangeJsonV2(raw: Nullable<string>): Nullable<MemoryTreeIdentityChangeV2> {
-  if (isNull(raw)) return null
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(raw)
-  } catch (error) {
-    throw new AppError('INVARIANT', 'identity_change_json 无法解析。', error)
-  }
-  if (!isIdentityChangeV2(parsed)) {
-    throw new AppError('INVARIANT', 'identity_change_json 不符合严格结构。')
-  }
-  if (raw !== canonicalStringifyV2(parsed)) {
-    throw new AppError('INVARIANT', 'identity_change_json 不是规范 canonical 字节。')
-  }
-  return parsed
-}
-
-function validateIdentityChangeV2(change: MemoryTreeIdentityChangeV2): void {
-  if (!isIdentityChangeV2(change)) {
-    throw new AppError('VALIDATION', 'identityChange 不符合严格结构。')
-  }
-}
-
-function isIdentityChangeV2(value: unknown): value is MemoryTreeIdentityChangeV2 {
-  if (!isPlainObject(value)) return false
-  const record = value
-  const keys = Object.keys(record).sort()
-  return (
-    keys.length === 3 &&
-    keys[0] === 'epochId' &&
-    keys[1] === 'predecessorId' &&
-    keys[2] === 'sequence' &&
-    isString(record.epochId) &&
-    !isEmpty(record.epochId) &&
-    Number.isSafeInteger(record.sequence) &&
-    (record.sequence as number) > 0 &&
-    (isNull(record.predecessorId) ||
-      (isString(record.predecessorId) && !isEmpty(record.predecessorId)))
-  )
-}
-
-function validateCommittedTreeStateV2(nodes: readonly MemoryTreeNodeStructV2[]): void {
-  if (isEmpty(nodes)) {
-    throw new AppError('VALIDATION', '已提交树状态不得为空。')
-  }
-  const byKey = new Map<string, MemoryTreeNodeStructV2>()
-  for (const node of nodes) {
-    if (byKey.has(node.stableKey)) {
-      throw new AppError('VALIDATION', '已提交树存在重复 stableKey。', undefined, {
-        stableKey: node.stableKey,
-      })
-    }
-    if (
-      node.mainlineScore < 0 ||
-      node.mainlineScore > 1 ||
-      node.confidence < 0 ||
-      node.confidence > 1 ||
-      node.activation < 0 ||
-      node.activation > 1
-    ) {
-      throw new AppError('VALIDATION', '树节点评分必须位于 [0, 1]。')
-    }
-    if (
-      node.content.redacted !== (node.visibilityState === 'redacted') ||
-      (node.content.redacted && isNotNull(node.content.blobRef))
-    ) {
-      throw new AppError('VALIDATION', '树节点 redact 状态位与内容引用不一致。')
-    }
-    byKey.set(node.stableKey, node)
-  }
-  const roots = nodes.filter((node) => isNull(node.parentKey))
-  if (roots.length !== 1 || roots[0]?.stableKey !== 'root' || roots[0].nodeType !== 'root') {
-    throw new AppError('VALIDATION', '已提交树必须且只能有一个 stableKey=root 的根节点。')
-  }
-  for (const node of nodes) {
-    if (isNotNull(node.parentKey) && !byKey.has(node.parentKey)) {
-      throw new AppError('VALIDATION', '树节点引用了不存在的父节点。', undefined, {
-        stableKey: node.stableKey,
-        parentKey: node.parentKey,
-      })
-    }
-    const visited = new Set<string>()
-    let cursor: MemoryTreeNodeStructV2 | undefined = node
-    while (cursor && isNotNull(cursor.parentKey)) {
-      if (visited.has(cursor.stableKey)) {
-        throw new AppError('VALIDATION', '已提交树存在父链环。', undefined, {
-          stableKey: node.stableKey,
-        })
-      }
-      visited.add(cursor.stableKey)
-      cursor = byKey.get(cursor.parentKey)
-    }
-  }
-}
-
-function assertReferencedBlobsExistV2(
-  database: SQLiteDatabase,
-  nodes: readonly MemoryTreeNodeStructV2[]
-): void {
-  const blobRefs = [
-    ...new Set(
-      nodes.flatMap((node) => (isNull(node.content.blobRef) ? [] : [node.content.blobRef]))
-    ),
-  ]
-  const lookup = database.prepare(`SELECT state FROM memory_content_blobs WHERE blob_id = ?`)
-  for (const blobRef of blobRefs) {
-    const row = lookup.get(blobRef) as { state: string } | undefined
-    if (!row || row.state !== 'active') {
-      throw new AppError('VALIDATION', '树节点引用了缺失或已擦除的内容 blob。', undefined, {
-        blobRef,
-      })
-    }
-  }
-}
-
-function summarizeTreeDiffOpsV2(ops: readonly MemoryTreeDiffOpV2[]): Record<string, number> {
-  const summary: Record<MemoryTreeDiffOpTypeV2 | 'total', number> = {
-    total: ops.length,
-    add: 0,
-    update: 0,
-    move: 0,
-    merge: 0,
-    split: 0,
-    dormant: 0,
-    reactivate: 0,
-    remove: 0,
-    redact: 0,
-  }
-  for (const op of ops) summary[op.type] += 1
-  return summary
-}
-
-function assertNonEmptyV2(value: string, field: string): void {
-  if (!value) {
-    throw new AppError('VALIDATION', `${field} 不得为空。`)
-  }
-}
-
-function assertNonNegativeIntegerV2(value: number, field: string): void {
-  if (!Number.isSafeInteger(value) || value < 0) {
-    throw new AppError('VALIDATION', `${field} 必须是非负安全整数。`)
-  }
-}
-
-function assertFrontierAdvanceIsValidV2(
-  database: SQLiteDatabase,
-  frontierEvidenceSequence: number
-): void {
-  const current = readMemoryMetaV2(database, 'dream_frontier')
-  const ingested = readMemoryMetaV2(database, 'evidence_ingest_sequence')
-  if (frontierEvidenceSequence < current || frontierEvidenceSequence > ingested) {
-    throw new AppError(
-      'VALIDATION',
-      'frontier 必须只进不退且不得越过已采集 Evidence。',
-      undefined,
-      { current, requested: frontierEvidenceSequence, ingested }
-    )
-  }
-}
-
-function readMemoryMetaV2(database: SQLiteDatabase, key: string): number {
-  const row = database.prepare(`SELECT integer_value FROM memory_meta WHERE key = ?`).get(key) as
-    { integer_value: number } | undefined
-  if (!row) throw new AppError('INVARIANT', `memory_meta 缺少 ${key}。`)
-  return row.integer_value
-}
-
-function validateDreamRunCommitV2(commit: MemoryDreamRunCommitV2, createdByRunId: string): void {
-  assertNonEmptyV2(commit.runId, 'dreamRunCommit.runId')
-  if (commit.runId !== createdByRunId) {
-    throw new AppError('VALIDATION', 'Dream run id 必须与 tree createdByRunId 一致。')
-  }
-  if (!/^f2:[0-9a-f]{64}$/.test(commit.inputFingerprint)) {
-    throw new AppError('VALIDATION', 'Dream input fingerprint 形态非法。')
-  }
-  assertNonNegativeIntegerV2(commit.frontierBefore, 'dreamRunCommit.frontierBefore')
-  assertNonNegativeIntegerV2(commit.tokenUsage, 'dreamRunCommit.tokenUsage')
-  assertNonNegativeIntegerV2(commit.candidateCount, 'dreamRunCommit.candidateCount')
-  assertNonNegativeIntegerV2(commit.acceptedCount, 'dreamRunCommit.acceptedCount')
-  assertNonNegativeIntegerV2(commit.rejectedCount, 'dreamRunCommit.rejectedCount')
-  if (commit.acceptedCount + commit.rejectedCount !== commit.candidateCount) {
-    throw new AppError('VALIDATION', 'Dream 候选接受/拒绝计数与总数不一致。')
-  }
-  if (!isUndefined(commit.finishedAt)) {
-    assertNonNegativeIntegerV2(commit.finishedAt, 'dreamRunCommit.finishedAt')
-  }
-}
-
-function commitDreamRunRowV2(
-  database: SQLiteDatabase,
-  commit: MemoryDreamRunCommitV2,
-  treeVersionBefore: number,
-  treeVersionAfter: number,
-  frontierAfter: number,
-  defaultFinishedAt: number
-): void {
-  const result = database
-    .prepare(
-      `UPDATE memory_dream_runs
-       SET state = 'committed',
-           frontier_after = ?,
-           token_usage = ?,
-           candidate_count = ?,
-           accepted_count = ?,
-           rejected_count = ?,
-           tree_version_after = ?,
-           finished_at = ?
-       WHERE id = ?
-         AND state = 'validating'
-         AND input_fingerprint = ?
-         AND frontier_before = ?
-         AND tree_version_before = ?`
-    )
-    .run(
-      frontierAfter,
-      commit.tokenUsage,
-      commit.candidateCount,
-      commit.acceptedCount,
-      commit.rejectedCount,
-      treeVersionAfter,
-      commit.finishedAt ?? defaultFinishedAt,
-      commit.runId,
-      commit.inputFingerprint,
-      commit.frontierBefore,
-      treeVersionBefore
-    )
-  if (result.changes !== 1) {
-    throw new AppError('CONFLICT', 'Dream run 提交 CAS 失败。', undefined, {
-      runId: commit.runId,
-      treeVersionBefore,
-      frontierBefore: commit.frontierBefore,
-    })
-  }
 }
