@@ -57,14 +57,14 @@ describe('browser kernel module', () => {
     )).toEqual({ closed: true, sessionId: 'browser-1' })
     expect(service.getOperationMetadata('close_session')).toEqual({
       permissions: ['browser:control'],
-      reason: 'Close one product-owned browser session.',
+      reason: '关掉一个由产品持有的浏览器会话。',
     })
     await expect(service.invoke(
       'close_session',
       undefined,
       { sessionId: ' browser-1 ' },
       new AbortController().signal,
-    )).rejects.toThrow('Browser capability input is invalid')
+    )).rejects.toThrow('浏览器能力的入参形状不对。')
     expect(await service.invoke(
       'close_all_sessions',
       undefined,

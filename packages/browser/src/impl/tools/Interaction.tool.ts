@@ -552,7 +552,7 @@ const browserAct = defineBrowserTool<z.input<typeof browserActSchema>>({
         })
       default:
         parsed satisfies never
-        throw new AppError('VALIDATION', 'Unsupported browser:act action.')
+        throw new AppError('VALIDATION', 'browser:act 不认识这个 action。')
     }
   },
 })

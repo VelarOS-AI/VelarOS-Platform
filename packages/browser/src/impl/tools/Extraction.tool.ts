@@ -293,7 +293,7 @@ const browserExtract = defineBrowserTool<z.input<typeof browserExtractSchema>>({
         )
       default:
         parsed satisfies never
-        throw new AppError('VALIDATION', 'Unsupported browser:extract action.')
+        throw new AppError('VALIDATION', 'browser:extract 不认识这个 action。')
     }
   },
 })

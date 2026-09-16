@@ -170,7 +170,7 @@ const browserPerformance = defineBrowserTool<{
     // schema 已保证:action 缺失只在带 insight 字段时被推断补全,否则 superRefine 拦下;
     // 这里的空值分支只是类型收窄兜底。
     const action = args.action
-    if (!action) throw new AppError('VALIDATION', 'Unsupported browser:performance action.')
+    if (!action) throw new AppError('VALIDATION', 'browser:performance 不认识这个 action。')
 
     switch (action) {
       case 'start_trace':
@@ -189,7 +189,7 @@ const browserPerformance = defineBrowserTool<{
         return ctx.browser.captureHeapSnapshot({ path: args.path })
       default:
         action satisfies never
-        throw new AppError('VALIDATION', 'Unsupported browser:performance action.')
+        throw new AppError('VALIDATION', 'browser:performance 不认识这个 action。')
     }
   },
 })

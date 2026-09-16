@@ -193,7 +193,7 @@ function buildBrowserRecipeSteps(
     {
       id: 'review-page',
       kind: 'review_page',
-      title: 'Review current page',
+      title: '看一眼当前页面',
       instruction: `确认当前页面标题、正文摘要和整体布局是否符合预期：${inspection.title || inspection.url}`,
     },
   ]
@@ -202,7 +202,7 @@ function buildBrowserRecipeSteps(
     steps.push({
       id: 'review-primary-section',
       kind: 'review_section',
-      title: 'Review primary section',
+      title: '看一眼正文主区',
       heading: sectionHeadings[0],
       instruction: `优先检查主要分区“${sectionHeadings[0]}”中的结构和关键交互点。`,
     })
@@ -218,7 +218,7 @@ function buildBrowserRecipeSteps(
     steps.push({
       id: index === 0 ? 'fill-primary-field' : `fill-field-${inputName.replace(/_/g, '-')}`,
       kind: 'fill_field',
-      title: index === 0 ? 'Fill primary field' : `Fill ${field.label}`,
+      title: index === 0 ? '填第一个字段' : `填「${field.label}」`,
       text: field.label,
       target: (toNullable(field.target)),
       input: {
@@ -236,7 +236,7 @@ function buildBrowserRecipeSteps(
     steps.push({
       id: 'click-primary-action',
       kind: 'click_action',
-      title: 'Click primary action',
+      title: '点主操作按钮',
       text: action.text,
       target: (toNullable(action.target)),
       instruction: `在确认前置条件后，点击主要动作“${action.text}”，并记录触发后的页面变化。`,
@@ -247,7 +247,7 @@ function buildBrowserRecipeSteps(
     steps.push({
       id: 'follow-primary-link',
       kind: 'follow_link',
-      title: 'Follow primary link',
+      title: '点进主链接',
       href: primaryLinks[0].href,
       text: primaryLinks[0].text,
       target: (toNullable(primaryLinks[0].target)),
@@ -259,7 +259,7 @@ function buildBrowserRecipeSteps(
     steps.push({
       id: 'extract-link-options',
       kind: 'extract_links',
-      title: 'Extract alternative links',
+      title: '提取备选链接',
       instruction: '整理当前页面其余可操作链接，作为后续流程分支候选。',
     })
   }

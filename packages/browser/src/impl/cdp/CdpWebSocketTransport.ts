@@ -101,7 +101,7 @@ class CdpWebSocketTransport implements CdpBrowserPageDriverTransport {
     return new Promise<T>((resolve, reject) => {
       const timeout = this.timers.after(this.timeoutMs, () => {
         this.pending.delete(id)
-        reject(new AppError('TIMEOUT', `CDP command timed out: ${method}`))
+        reject(new AppError('TIMEOUT', `浏览器 CDP 命令超时：${method}`))
       }, {
         label: `cdp.${method}`,
         unref: true,
@@ -148,7 +148,7 @@ class CdpWebSocketTransport implements CdpBrowserPageDriverTransport {
     this.options.socket.removeEventListener('error', this.handleError)
     this.closeListeners.clear()
     this.eventListeners.clear()
-    this.rejectAll(new AppError('EXECUTION_ABORTED', 'CDP transport disposed.'))
+    this.rejectAll(new AppError('EXECUTION_ABORTED', '浏览器 CDP 连接已释放。'))
     this.timers.dispose()
     this.options.socket.close()
   }
@@ -175,8 +175,8 @@ class CdpWebSocketTransport implements CdpBrowserPageDriverTransport {
     if (message.error) {
       const messageText = isString(message.error.message)
         ? message.error.message
-        : 'unknown CDP error'
-      pending.reject(new AppError('EXECUTION_FAILED', `CDP command failed: ${messageText}`))
+        : '未知的 CDP 错误'
+      pending.reject(new AppError('EXECUTION_FAILED', `浏览器 CDP 命令失败：${messageText}`))
       return
     }
 
@@ -206,21 +206,21 @@ class CdpWebSocketTransport implements CdpBrowserPageDriverTransport {
   }
 
   private readonly handleClose = (): void => {
-    this.rejectAll(new AppError('EXECUTION_ABORTED', 'CDP transport closed.'))
+    this.rejectAll(new AppError('EXECUTION_ABORTED', '浏览器 CDP 连接已关闭。'))
     for (const listener of [...this.closeListeners]) {
       listener()
     }
   }
 
   private readonly handleError = (): void => {
-    this.rejectAll(new AppError('NETWORK', 'CDP transport socket error.'))
+    this.rejectAll(new AppError('NETWORK', '浏览器 CDP 连接出错。'))
   }
 
   private parseMessage(rawData: string): Nullable<CdpJsonRpcMessage> | AppError {
     try {
       return JSON.parse(rawData) as CdpJsonRpcMessage
     } catch (error) {
-      return new AppError('VALIDATION', 'Invalid CDP JSON-RPC message.', error)
+      return new AppError('VALIDATION', '收到无法解析的 CDP JSON-RPC 消息。', error)
     }
   }
 

@@ -41,7 +41,7 @@ export function buildTableExtractionScript(args: {
     ${buildScopedSelectorResolverScript()}
     const tables = resolveScopedSelector(payload.selector, 'table')
     const target = tables[payload.tableIndex] || tables[0]
-    if (!target) return { ok: false, error: 'no table found', tables: tables.length, selector: payload.selector || null, headers: [], rows: [], capturedAt: Date.now() }
+    if (!target) return { ok: false, error: '页面上没找到表格', tables: tables.length, selector: payload.selector || null, headers: [], rows: [], capturedAt: Date.now() }
     const allRows = Array.from(target.querySelectorAll('tr'))
     const headers = []
     let dataRowStart = 0

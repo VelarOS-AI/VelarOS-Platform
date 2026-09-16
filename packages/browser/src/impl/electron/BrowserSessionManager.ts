@@ -921,7 +921,7 @@ class BrowserSessionManager implements BrowserSessionManagerApi {
         this.diagnostics.record(session, {
           kind: 'load-error',
           level: 'error',
-          message: errorDescription || `load failed with code ${errorCode}`,
+          message: errorDescription || `页面加载失败，错误码 ${errorCode}`,
           url: validatedURL || webContents.getURL() || null,
           line: null,
           column: null,

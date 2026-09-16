@@ -212,7 +212,7 @@ ${functionBody}
       return Promise.race([
         userScript.call(window),
         new Promise((_, reject) => {
-          timeoutHandle = setTimeout(() => reject(new Error('browser evaluate timeout after ' + payload.timeoutMs + 'ms')), payload.timeoutMs)
+          timeoutHandle = setTimeout(() => reject(new Error('页面脚本执行超时（' + payload.timeoutMs + ' 毫秒）')), payload.timeoutMs)
         }),
       ]).finally(() => {
         if (timeoutHandle !== undefined) clearTimeout(timeoutHandle)

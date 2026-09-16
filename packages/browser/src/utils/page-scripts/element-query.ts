@@ -153,7 +153,7 @@ export function buildElementQueryScript(options: BrowserElementQueryOptions): st
           root: null,
           selector: parts[parts.length - 1],
           frame: null,
-          selectorError: 'Only one iframe selector hop is supported',
+          selectorError: '选择器只支持跨一层 iframe',
         }
       }
       let root = document

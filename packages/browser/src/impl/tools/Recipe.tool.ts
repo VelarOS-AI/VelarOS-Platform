@@ -120,7 +120,7 @@ const browserRecipe = defineBrowserTool<z.input<typeof browserRecipeSchema>>({
         )
       default:
         parsed satisfies never
-        throw new AppError('VALIDATION', 'Unsupported browser:recipe action.')
+        throw new AppError('VALIDATION', 'browser:recipe 不认识这个 action。')
     }
   },
 })

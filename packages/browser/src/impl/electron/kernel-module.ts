@@ -17,7 +17,7 @@ export const BrowserRuntimeCapability =
 
 /** 能力边界的入参一律拒绝而非纠正：这里收到的形状不对，意味着调用方与本版本 ABI 已不同步。 */
 function invalidCapabilityInput(): AppError {
-  return new AppError('VALIDATION', 'Browser capability input is invalid')
+  return new AppError('VALIDATION', '浏览器能力的入参形状不对。')
 }
 
 /**
@@ -75,7 +75,7 @@ export function createBrowserKernelModule(
         close_session: {
           metadata: {
             permissions: ['browser:control'],
-            reason: 'Close one product-owned browser session.',
+            reason: '关掉一个由产品持有的浏览器会话。',
           },
           async invoke(_scope, input) {
             const sessionId = parseSessionInput(input)
@@ -86,7 +86,7 @@ export function createBrowserKernelModule(
         close_all_sessions: {
           metadata: {
             permissions: ['browser:control'],
-            reason: 'Close every product-owned browser session.',
+            reason: '关掉全部由产品持有的浏览器会话。',
           },
           invoke: (_scope, input) => {
             parseEmptyInput(input)

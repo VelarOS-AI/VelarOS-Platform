@@ -291,7 +291,7 @@ test('a missing table reports ok=false and writes no artifact', async () => {
   const result = await browserTools['browser:extract'].execute({ action: 'table', save: true }, ctx)
 
   assert.equal(result.ok, false)
-  assert.equal(result.error, 'no table found')
+  assert.equal(result.error, '页面上没找到表格')
   assert.equal('savedPath' in result, false)
   assert.equal(files.size, 0)
 })

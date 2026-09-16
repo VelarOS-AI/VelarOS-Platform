@@ -602,7 +602,7 @@ export class BrowserCdpNetworkController implements BrowserCdpNetworkControllerA
     this.settlePendingNetworkRequest(requestId)
     const request = requestId ? this.networkRequests.get(requestId) : null
     const resourceType = this.normalizeNetworkResourceType(event.type, request)
-    const errorText = isString(event.errorText) ? event.errorText : 'unknown network error'
+    const errorText = isString(event.errorText) ? event.errorText : '未知的网络错误'
     const details: Record<string, unknown> = {
       requestId,
       resourceType,
