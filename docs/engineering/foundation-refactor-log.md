@@ -91,6 +91,7 @@
 
 | 时间 | 决策 | 理由 |
 | --- | --- | --- |
+| 09-16 17:20 | 用户把剩下的拍板项全权交给我，逐条裁决写进 `foundation-pending-decisions.md` 的「裁决一览」：大项是 agent 入口收口 1.0.0 与工具契约拆包、kernel 入口 12→5 并删 HostBridge/sidecar、memory 拆出 knowledge 包、browser 工具面 40→32、三个能力包收口，公共件三件进拆出来的 tool-contract | 包内步骤先走完再统一收口，产品只迁一次；kernel 的 `./contracts/abi` 被八个能力包引用，它的收口排最前 |
 | 09-16 16:55 | **用户拍板**：project 工具面归并 J1–J5——改动三合一收成 `project:edit`（action: apply/inspect/undo）、`project:code` 改 9 个命名意图、`project:code-analysis` 保持独立、`project:list` 的 recursive+maxDepth 收成 `depth` | `change` 本来就是 `file ∪ edit` 的超集，模型每次改代码都要先做一道无谓的选择题；`project:code` 70 多个字段全无说明、旋钮交叉，模型基本只能瞎填 |
 | 09-16 16:55 | **用户立的两条规矩进标准**（`module-ownership.md` 规矩 2、3）：① 写一堆说明不如写清楚示例——先给能照着填的真实示例，说明只补示例讲不出来的；② 一件事只给一个入口，批量维度只留一个字段名 | 模型填错的代价是重来一轮；条文写得再全也不如一个能照抄的例子 |
 | 09-16 14:40 | 「目录被忽略则里面的一切被忽略」按各级上级目录推，不再展开成 `pattern/**` | 展开会让名叫 `build` 的**文件**被 `build/` 命中；git 的语义是目录限定 |
