@@ -4,11 +4,9 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
 
-import {
-  EmbeddingApi,
-  Embeddings,
-  KnowledgeWorkspace,
-} from '@velaros-ai/knowledge'
+import { KnowledgeWorkspace } from '../dist/impl/domain/KnowledgeWorkspace.js'
+import { KnowledgeEmbeddingClient as EmbeddingApi } from '../dist/impl/storage/KnowledgeEmbeddingClient.js'
+import { KnowledgeEmbeddings as Embeddings } from '../dist/impl/storage/KnowledgeEmbeddings.js'
 
 test('embedding runtime is fully resolved by the injected host port', async () => {
   const requests = []

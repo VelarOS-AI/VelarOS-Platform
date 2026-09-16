@@ -241,7 +241,7 @@
       "domain": "memory",
       "directory": "packages/knowledge",
       "name": "@velaros-ai/knowledge",
-      "version": "0.5.0",
+      "version": "0.6.0",
       "description": "Workspace knowledge index for VelarOS-compatible runtimes: incremental ingestion of documents and code, chunking, SQLite full-text plus vector hybrid retrieval with embedding profile isolation, diagnostics and explicit rebuild, and the knowledge agent tools.",
       "exportSubpaths": [
         ".",

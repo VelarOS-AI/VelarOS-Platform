@@ -29,16 +29,6 @@ export interface KnowledgeRecord {
   lastAccessedAt: number
 }
 
-export interface KnowledgeUpsertInput {
-  workspaceRoot: string
-  path: string
-  title: string
-  summary?: string
-  content: string
-  sourceKind: KnowledgeSourceKind
-  tags?: string[]
-}
-
 export interface KnowledgeSearchOptions {
   workspaceRoot: string
   limit?: number

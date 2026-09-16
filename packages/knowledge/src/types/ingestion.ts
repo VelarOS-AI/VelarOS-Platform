@@ -1,6 +1,17 @@
 /** 摄入层的数据形状：工作区文件快照、准备好的文档、代码候选、路径平台与目录读取口。 */
 
-import type { KnowledgeSourceKind, KnowledgeUpsertInput } from './knowledge.js'
+import type { KnowledgeSourceKind } from './knowledge.js'
+
+/** 写入或更新一份知识文档的入参；只在包内的摄入与写入链路上流动，不经宿主端口出去。 */
+export interface KnowledgeUpsertInput {
+  workspaceRoot: string
+  path: string
+  title: string
+  summary?: string
+  content: string
+  sourceKind: KnowledgeSourceKind
+  tags?: string[]
+}
 
 /** 工作区里一个可索引文件的文件系统快照。 */
 export interface KnowledgeWorkspaceFileEntry {

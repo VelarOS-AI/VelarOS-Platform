@@ -4,11 +4,8 @@ import { Result } from '@velaros-ai/core/result'
 
 import { KnowledgeIndexStatuses } from '../../contract/constants.js'
 import type { EmbeddingRuntimeSelection } from '../../types/host.js'
-import type {
-  KnowledgeIndexRuntime,
-  KnowledgeRecord,
-  KnowledgeUpsertInput,
-} from '../../types/knowledge.js'
+import type { KnowledgeUpsertInput } from '../../types/ingestion.js'
+import type { KnowledgeIndexRuntime, KnowledgeRecord } from '../../types/knowledge.js'
 import type { KnowledgeChunk } from '../../types/storage.js'
 import {
   buildIndexTextHash,

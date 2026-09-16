@@ -10,20 +10,22 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
 import type { KnowledgeToolContext } from '../src/contract/requires'
+// 工具面经根入口；INV-3、INV-4、INV-6 盯的是嵌入 profile、工作区摄入与嵌入配置解析这三段包内行为，
+// 0.6.0 之后它们不再出包（要它们的能力走 createKnowledgeRuntime），所以这里按相对路径直接引实现。
+import { KnowledgeWorkspace } from '../src/impl/domain/KnowledgeWorkspace'
+import { KnowledgeEmbeddingClient as EmbeddingApi } from '../src/impl/storage/KnowledgeEmbeddingClient'
+import { KnowledgeEmbeddings as Embeddings } from '../src/impl/storage/KnowledgeEmbeddings'
+import { knowledgeTools } from '../src/index'
+import type {
+  KnowledgeSearchResult,
+  KnowledgeWorkspaceSyncResult,
+} from '../src/types/knowledge'
 import {
   buildDocumentRevisionKey,
   buildEmbeddingProfileIdentity,
   buildIndexTextHash,
   canReuseReadyContentIndex,
-  EmbeddingApi,
-  Embeddings,
-  knowledgeTools,
-  KnowledgeWorkspace,
-} from '../src/index'
-import type {
-  KnowledgeSearchResult,
-  KnowledgeWorkspaceSyncResult,
-} from '../src/types/knowledge'
+} from '../src/utils/indexing'
 
 let root = ''
 beforeEach(async () => {

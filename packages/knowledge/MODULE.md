@@ -1,10 +1,10 @@
 # @velaros-ai/knowledge 模块卡片
 
 > 这一页是本模块的压缩表示：读完就知道它是什么、给了外面什么、骨干链路怎么走、靠什么、状态在哪、失败什么样、哪些承诺不能破。
-> 门禁：`bun run check:module-ownership`。
+> 门禁：`bun run check:module-ownership`（本模块零条）。
 >
-> **本模块仍登记为改造中**（登记表里 `status: 'migrating'`）：五个目录、合同三件套、类上方接口、可调参数表与工具执行类都已经落地；
-> 还欠「入口收口」那一轮——把类与工具函数从对外入口收窄成按接口标注的实例与工厂（见文末「改造欠账」）。
+> 0.6.0 是一次**破坏性**发布：类与工具函数不再出包，对外只剩工具集合、两个工厂、常量表与接口。
+> 逐符号去向见 `docs/engineering/refactor-plans/knowledge-migration.md`。
 
 ## 这是什么
 
@@ -23,7 +23,7 @@
 
 | 入口 | 给谁用 | 里面有什么 |
 | --- | --- | --- |
-| `.` | Node 宿主（Desktop 主进程） | 运行时、领域门面、嵌入客户端、存储、三个工具与全部注入端口 |
+| `.` | Node 宿主（Desktop 主进程） | 三个工具、运行时与嵌入客户端两个工厂、常量表、产品面与注入面的全部接口 |
 | `./contracts` | 任何进程，含渲染进程与 IPC 契约 | **浏览器安全的纯类型** Knowledge DTO（运行时 JavaScript 为空） |
 
 ### 导出的值
@@ -31,29 +31,26 @@
 | 分组 | 名字 |
 | --- | --- |
 | 工具集合 | `knowledgeTools` |
-| 运行时 | `createKnowledgeRuntime`、`KnowledgeRuntime`、`DefaultKnowledgeRuntime` |
-| 常量表 | `KnowledgeIndexConfig`、`KnowledgeIndexStatuses`、`KnowledgeMatchTypes`、`KnowledgeEmbeddingProfileIsolationMigration` |
-| 领域实现 | `KnowledgeDomain`、`KnowledgeQuery`、`KnowledgeMutation`、`KnowledgeMaintenance`、`KnowledgeIngestion`、`KnowledgeWorkspace`、`KnowledgeWorkspaceStore`、`KnowledgeChunkBuilder`、`KnowledgeChunks`、`KnowledgeContext`、`AgentKnowledgeHelper`、`KnowledgeQueryHelper` |
-| 存储实现 | `KnowledgeRepository`、`KnowledgeRepo`、`KnowledgeRows`、`KnowledgeRepositoryHelper`、`KnowledgeVectors`、`KnowledgeVectorStore`、`KnowledgeVectorQuery`、`KnowledgeVectorHelper`、`Embeddings`、`EmbeddingService`、`EmbeddingApi`、`EmbeddingApiHelper`、`VectorFailureMonitor`、`VectorFailureLogWindowMs` |
-| 索引与代码工具函数 | `buildIndexTextHash`、`buildDocumentRevisionKey`、`buildEmbeddingProfileIdentity`、`canReuseReadyContentIndex`、`buildVectorStoreStats`、`mergeHybridCandidates`、`extractSymbols`、`extractImports`、`createImportTargetCandidates`、`getCodeExtensions`、`isCodeFile`、`isLikelyTextFile`、`scorePathMatch` |
+| 工厂 | `createKnowledgeRuntime`、`createKnowledgeEmbeddingClient` |
+| 常量表 | `KnowledgeToolNames`、`KnowledgeToolCategoryId`、`KnowledgeToolLimits`、`KnowledgeSourceKinds`、`KnowledgeIndexStatuses`、`KnowledgeMatchTypes`、`KnowledgeIndexConfig`、`KnowledgeEmbeddingProfileIsolationMigration` |
+
+类一个都不出包：领域门面、分块、行映射、召回拼装、向量查询、嵌入服务与向量告警都是运行时自己装好的零件，
+装配者不需要认识它们；工具函数（索引哈希、代码扫描、混合排序、向量统计）同理。
 
 ### 产品面接口（`contract/provides.ts` 登记，定义在各自的类上方）
 
-`KnowledgeRuntimeApi`、`KnowledgeDomainApi`、`KnowledgeQueryApi`、`KnowledgeMutationApi`、`KnowledgeMaintenanceApi`、
-`KnowledgeIngestionApi`、`KnowledgeWorkspaceApi`、`KnowledgeChunkBuilderApi`、`KnowledgeContextApi`、`KnowledgeQueryHelperApi`、
-`KnowledgeRepositoryApi`、`KnowledgeRowsApi`、`KnowledgeVectorsApi`、`KnowledgeVectorQueryApi`、
-`KnowledgeEmbeddingsApi`、`KnowledgeEmbeddingClientApi`、`VectorFailureMonitorApi`、`VectorFailureMonitorOptions`。
+`KnowledgeRuntimeApi`、`KnowledgeDomainApi`、`KnowledgeVectorsApi`、`KnowledgeEmbeddingClientApi`。
 
 ### 注入面接口（`contract/requires.ts`）
 
 `KnowledgeRuntimeProviders` 把下面这些合成一份——
 `KnowledgeDatabaseProvider`（关系库连接）、`KnowledgeStoragePathProvider`（向量库路径）、
 `KnowledgeEmbeddingConfigPort`（**已经解析好**的 provider / model / profile）、
-`EmbeddingRequestFactory` 与 `KnowledgeHttpClient`（嵌入协议与网络）、
+`KnowledgeEmbeddingRequestFactory` 与 `KnowledgeHttpClient`（嵌入协议与网络）、
 可选的 `KnowledgeLanceDbLoader`（连带 `KnowledgeLanceDbModule`、`KnowledgeLanceDbConnection`）、
 `KnowledgeCodeIntelligenceApi`（代码智能）与 `KnowledgeIndexingPolicy`（可见性策略）。
 
-工具经上下文 `KnowledgeToolContext` 里的 `ctx.knowledge`（宿主端口 `KnowledgeToolApi`，旧名字 `KnowledgeApi` 是它的别名）
+工具经上下文 `KnowledgeToolContext` 里的 `ctx.knowledge`（宿主端口 `KnowledgeToolApi`）
 与 `ctx.project`（`KnowledgeProjectApi`）调宿主。
 
 ## 骨干链路
@@ -147,8 +144,4 @@ examples/minimal.ts   随包发布，发布门禁用 NodeNext 编译
 **分层**（登记在 `scripts/ownership/governed-modules.mjs`，上层可以引下层与同层，下层不许引上层）：
 `KnowledgeTools.ts` → `KnowledgeToolOperations.ts` → `KnowledgeRuntime.ts` → `domain/` → `storage/`；utils 在所有层下面。
 
-**改造欠账**（「入口收口」那一轮做）：把 17 个类与 13 个工具函数从对外入口收窄成按公开接口标注的实例与工厂，
-连带删掉只为它们出包的数据类型（`EmbeddingProfileIdentity`、`IndexedRecordIdentity`、`HybridCandidate`、
-`LanceIndexDescriptor`、`VectorStoreStatsInput`、`VectorStoreStatsOutput`、`RankedKnowledgeCandidate`、
-`KnowledgeCodeSymbol`、`KnowledgeCodeSymbolKind`）与 9 个类别名；
-以及 `knowledge:sync` 的任意 `workspaceRoot` 是否要限制在宿主登记过的根里。
+**改造欠账**：`knowledge:sync` 的任意 `workspaceRoot` 是否要限制在宿主登记过的根里（属产品层裁决，本包只保证拒收时说清楚）。

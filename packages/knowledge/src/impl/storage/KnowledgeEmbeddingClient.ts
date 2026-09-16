@@ -1,7 +1,7 @@
 import { isArray, isNull, isObject, isPresent } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import type { EmbeddingRequestFactory } from '../../contract/requires.js'
+import type { KnowledgeEmbeddingRequestFactory } from '../../contract/requires.js'
 import type { EmbeddingApiResponse, EmbeddingRequest } from '../../types/host.js'
 import type { KnowledgeEmbeddingProviderId } from '../../types/knowledge.js'
 import { isFiniteNumberArray, normalizeEmbeddingVector } from '../../utils/embedding.js'
@@ -28,7 +28,7 @@ export interface KnowledgeEmbeddingClientApi {
 
 /** 见 {@link KnowledgeEmbeddingClientApi}。 */
 export class KnowledgeEmbeddingClient implements KnowledgeEmbeddingClientApi {
-  constructor(private readonly requestFactory: EmbeddingRequestFactory) {}
+  constructor(private readonly requestFactory: KnowledgeEmbeddingRequestFactory) {}
 
   public buildEmbeddingRequest(
     config: {
@@ -100,4 +100,11 @@ export class KnowledgeEmbeddingClient implements KnowledgeEmbeddingClientApi {
 
     return { data: items }
   }
+}
+
+/** 按宿主的请求工厂造一个嵌入协议客户端；记忆的向量嵌入器与知识库运行时共用同一份协议实现。 */
+export function createKnowledgeEmbeddingClient(
+  requestFactory: KnowledgeEmbeddingRequestFactory
+): KnowledgeEmbeddingClientApi {
+  return new KnowledgeEmbeddingClient(requestFactory)
 }

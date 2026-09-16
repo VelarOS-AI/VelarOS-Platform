@@ -28,10 +28,6 @@ export interface KnowledgeRuntimeApi {
   readonly knowledgeDomainService: KnowledgeDomainApi
   /** 向量库：宿主做存储迁移与诊断时会直接用到。 */
   readonly knowledgeVectors: KnowledgeVectorsApi
-  /** `knowledgeDomainService` 的短名别名，保留给已经接线的宿主。 */
-  readonly domain: KnowledgeDomainApi
-  /** `knowledgeVectors` 的短名别名，保留给已经接线的宿主。 */
-  readonly vectorStore: KnowledgeVectorsApi
   /** 预热向量库，一般在应用启动时调用。 */
   warmup(): Promise<void>
   /** 关闭这一份运行时占用的连接。 */
@@ -42,8 +38,6 @@ export interface KnowledgeRuntimeApi {
 export class KnowledgeRuntime implements KnowledgeRuntimeApi {
   public readonly knowledgeDomainService: KnowledgeDomainApi
   public readonly knowledgeVectors: KnowledgeVectorsApi
-  public readonly domain: KnowledgeDomainApi
-  public readonly vectorStore: KnowledgeVectorsApi
 
   constructor(providers: KnowledgeRuntimeProviders) {
     const repository = new KnowledgeRepository(
@@ -61,7 +55,6 @@ export class KnowledgeRuntime implements KnowledgeRuntimeApi {
       providers.storagePathProvider,
       providers.loadLanceDb
     )
-    this.vectorStore = this.knowledgeVectors
     const mutationService = new KnowledgeMutation(
       repository,
       embeddingService,
@@ -90,7 +83,6 @@ export class KnowledgeRuntime implements KnowledgeRuntimeApi {
       maintenanceService,
       this.knowledgeVectors
     )
-    this.domain = this.knowledgeDomainService
   }
 
   public async warmup(): Promise<void> {

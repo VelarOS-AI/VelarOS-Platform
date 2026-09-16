@@ -7,20 +7,14 @@
 import { describe, expect, test } from 'bun:test'
 
 import { unique } from '@velaros-ai/core'
-import type {
-  KnowledgeChunkRecord,
-  KnowledgeEmbeddingProviderId,
-  KnowledgeRecord,
-  KnowledgeVectorIndexRecord,
-} from '@velaros-ai/knowledge'
-import {
-  buildDocumentRevisionKey,
-  buildEmbeddingProfileIdentity,
-  KnowledgeChunkBuilder,
-  KnowledgeIndexStatuses,
-  KnowledgeMutation,
-  KnowledgeVectorQuery,
-} from '@velaros-ai/knowledge'
+
+import { KnowledgeIndexStatuses } from '../src/contract/constants'
+import { KnowledgeChunkBuilder } from '../src/impl/domain/KnowledgeChunkBuilder'
+import { KnowledgeMutation } from '../src/impl/domain/KnowledgeMutation'
+import { KnowledgeVectorQuery } from '../src/impl/storage/KnowledgeVectorQuery'
+import type { KnowledgeEmbeddingProviderId, KnowledgeRecord } from '../src/types/knowledge'
+import type { KnowledgeChunkRecord, KnowledgeVectorIndexRecord } from '../src/types/storage'
+import { buildDocumentRevisionKey, buildEmbeddingProfileIdentity } from '../src/utils/indexing'
 
 const workspaceRoot = '/tmp/profile-isolation'
 const documentPath = 'memory.md'

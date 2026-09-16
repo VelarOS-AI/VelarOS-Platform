@@ -14,19 +14,16 @@ import { pathToFileURL } from 'node:url'
 
 import Database from 'better-sqlite3'
 
-import type {
-  KnowledgeEmbeddingProviderId,
-  KnowledgeRecord,
-} from '@velaros-ai/knowledge'
 import {
-  buildDocumentRevisionKey,
   KnowledgeEmbeddingProfileIsolationMigration,
   KnowledgeIndexStatuses,
-  KnowledgeRepo,
-  KnowledgeRows,
-  KnowledgeVectorQuery,
-  KnowledgeVectors,
-} from '@velaros-ai/knowledge'
+} from '../src/contract/constants'
+import { KnowledgeRepository as KnowledgeRepo } from '../src/impl/storage/KnowledgeRepository'
+import { KnowledgeRows } from '../src/impl/storage/KnowledgeRows'
+import { KnowledgeVectorQuery } from '../src/impl/storage/KnowledgeVectorQuery'
+import { KnowledgeVectors } from '../src/impl/storage/KnowledgeVectors'
+import type { KnowledgeEmbeddingProviderId, KnowledgeRecord } from '../src/types/knowledge'
+import { buildDocumentRevisionKey } from '../src/utils/indexing'
 
 let storagePath = ''
 const knowledgePackageRequire = createRequire(resolve('packages/knowledge/package.json'))

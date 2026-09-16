@@ -1,19 +1,16 @@
 /**
  * @test-meta
  * title: Knowledge package consumer API
- * summary: 通过发布入口验证运行时的 class/factory API 与实例级故障状态。
+ * summary: 通过发布入口验证运行时工厂的成员，以及实例级向量故障告警状态。
  * area: package
  */
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import {
-  createKnowledgeRuntime,
-  KnowledgeRuntime,
-  VectorFailureMonitor,
-} from '../dist/index.js'
+import { VectorFailureMonitor } from '../dist/impl/storage/VectorFailureMonitor.js'
+import { createKnowledgeRuntime } from '../dist/index.js'
 
-test('package root exposes a class-first runtime while retaining the factory', () => {
+test('package root exposes the runtime factory only, and it hands back one domain facade', () => {
   const databaseProvider = () => {
     throw new Error('consumer fixture does not open storage')
   }
@@ -45,9 +42,10 @@ test('package root exposes a class-first runtime while retaining the factory', (
     },
   })
 
-  assert.ok(knowledge instanceof KnowledgeRuntime)
-  assert.equal(knowledge.domain, knowledge.knowledgeDomainService)
-  assert.equal(knowledge.vectorStore, knowledge.knowledgeVectors)
+  assert.equal(typeof knowledge.knowledgeDomainService, 'object')
+  assert.equal(typeof knowledge.knowledgeVectors, 'object')
+  assert.equal(knowledge.domain, undefined)
+  assert.equal(knowledge.vectorStore, undefined)
   assert.equal(typeof knowledge.warmup, 'function')
   assert.equal(typeof knowledge.close, 'function')
 })

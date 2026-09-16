@@ -508,8 +508,6 @@ export const GovernedModules = [
   {
     directory: 'knowledge',
     name: '@velaros-ai/knowledge',
-    // 改造中：刚从 @velaros-ai/memory 的 /knowledge 子路径整体搬出来成独立包，
-    // 源码还是原来的目录形状，五个目录与工具文件是下一段的事（方案 §2.7、附录 B）
     toolsFile: 'src/impl/KnowledgeTools.ts',
     contract: 'src/contract',
     types: 'src/types',
@@ -537,7 +535,6 @@ export const GovernedModules = [
     card: 'MODULE.md',
     invariants: 'spec/invariants.md',
     acceptance: 'spec/acceptance.test.ts',
-    status: 'migrating',
   },
   {
     directory: 'model',

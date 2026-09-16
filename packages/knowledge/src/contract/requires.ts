@@ -101,7 +101,7 @@ export interface KnowledgeHttpClient {
 }
 
 /** 按服务商协议拼一条嵌入请求。必给：不同服务商的请求形状由宿主的适配层决定。 */
-export interface EmbeddingRequestFactory {
+export interface KnowledgeEmbeddingRequestFactory {
   /** 按配置、模型与待嵌入文本拼出一条请求。 */
   createEmbeddingRequest: (
     config: EmbeddingRequestConfig,
@@ -149,7 +149,7 @@ export interface KnowledgeRuntimeProviders {
   /** 由向量插件注入；缺席表示只启用文本检索。 */
   loadLanceDb?: KnowledgeLanceDbLoader
   /** 嵌入请求工厂。 */
-  embeddingRequestFactory: EmbeddingRequestFactory
+  embeddingRequestFactory: KnowledgeEmbeddingRequestFactory
   /** 可选的代码智能能力。 */
   codeIntelligence?: KnowledgeCodeIntelligenceApi
   /** 可选的工作区可见性策略。 */
@@ -175,9 +175,6 @@ export interface KnowledgeToolApi {
     options: KnowledgeSearchOptions
   ) => Promise<KnowledgeSearchResult[]>
 }
-
-/** 宿主端口的旧名字，保留给已经接线的宿主；形状与 `KnowledgeToolApi` 完全一样。 */
-export type KnowledgeApi = KnowledgeToolApi
 
 /** 宿主当前激活的工作区；工具没拿到 workspaceRoot 时向它要一个根。 */
 export interface KnowledgeProjectApi {

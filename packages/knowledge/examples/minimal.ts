@@ -1,15 +1,15 @@
 import {
-  DefaultKnowledgeRuntime,
+  createKnowledgeRuntime,
   type KnowledgeRuntimeProviders,
 } from '../src/index'
 
 declare const providers: KnowledgeRuntimeProviders
 
-const knowledge = new DefaultKnowledgeRuntime(providers)
+const knowledge = createKnowledgeRuntime(providers)
 
 await knowledge.warmup()
-await knowledge.domain.ensureWorkspaceSynced('/srv/project')
-const results = await knowledge.domain.searchKnowledge('认证流程', {
+await knowledge.knowledgeDomainService.ensureWorkspaceSynced('/srv/project')
+const results = await knowledge.knowledgeDomainService.searchKnowledge('认证流程', {
   workspaceRoot: '/srv/project',
 })
 knowledge.close()
