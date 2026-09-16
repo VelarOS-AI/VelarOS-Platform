@@ -8,7 +8,6 @@ import { DOMMatrix, ImageData, Path2D } from '@napi-rs/canvas'
 import { isFunction, isPlainObject, Log } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import { OfficeEnvironmentVariables } from '../../contract/constants.js'
 import type { PdfjsModule, PdfjsNodeGlobals } from '../../types/pdf.js'
 
 const log = Log.tag('OfficePdfRuntime')
@@ -57,9 +56,9 @@ export async function loadPdfjs(): Promise<PdfjsModule> {
   return pdfjs
 }
 
-/** pdfjs 的标准字体目录；从环境变量或包安装位置推导，失败时交给 pdfjs 用它的默认策略。 */
+/** pdfjs 的标准字体目录；从环境变量（登记在 OfficeEnvironmentVariables）或包安装位置推导，失败时交给 pdfjs 用它的默认策略。 */
 export function getPdfjsStandardFontDataUrl(): string | undefined {
-  const packagedRoot = process.env[OfficeEnvironmentVariables.pdfjsStandardFontsRoot]?.trim()
+  const packagedRoot = process.env.VELAROS_PDFJS_STANDARD_FONTS_ROOT?.trim()
   if (packagedRoot) return `${resolve(packagedRoot).replaceAll('\\', '/')}/`
   try {
     const packageJsonPath = requireFromOfficeModule.resolve('pdfjs-dist/package.json')

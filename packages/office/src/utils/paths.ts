@@ -9,7 +9,7 @@ import { resolveRealPath } from '@velaros-ai/core/utils/RealPath'
 import { currentPlatform } from '@velaros-ai/platform'
 
 import type { CreateWordDocumentInput } from '../types/inputs.js'
-import type { OfficeOutput } from '../types/office.js'
+import type { OfficeOutput } from '../types/workspace.js'
 
 /**
  * 真实路径意义上的「在不在根里」。

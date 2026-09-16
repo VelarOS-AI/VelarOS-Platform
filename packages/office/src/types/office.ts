@@ -90,15 +90,6 @@ export interface OfficeNativeCommand {
   env?: Record<string, string>
 }
 
-/** office 工具写出文件后的统一回执。 */
-export type OfficeOutput = {
-  path: string
-  bytes: number
-  created: boolean
-  changed: boolean
-  kind: 'docx' | 'pptx' | 'xlsx' | 'pdf'
-}
-
 /** 已安装的 MarkItDown runtime：可执行文件、包根与版本号。 */
 export interface MarkItDownLaunchSpec {
   command: string
@@ -116,13 +107,3 @@ export type NormalizedWordInput = {
   converter?: string
   conversionCommandResult?: OfficeSystemCommandResult
 }
-
-/** Word 输入归一化的结果：成功给归一化后的输入，失败给原路径、待回收的临时目录与命令结果。 */
-export type NormalizeWordInputResult =
-  | { success: true; input: NormalizedWordInput }
-  | {
-      success: false
-      originalPath: string
-      tempDir: Nullable<string>
-      commandResult: OfficeSystemCommandResult
-    }

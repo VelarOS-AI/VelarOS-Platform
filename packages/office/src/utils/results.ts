@@ -1,11 +1,11 @@
 /** 统一的工具返回结构：授权被拒、外部命令失败、缺少转换器时给模型看的形状。 */
 
 import type {
-  OfficeOutput,
   OfficeProjectAuthorizationDecision,
   OfficeSystemCommandResult,
   OfficeSystemToolInstallAlternative,
 } from '../types/office.js'
+import type { OfficeOutput } from '../types/workspace.js'
 
 /** Office 写操作被授权拒绝时的统一返回结构：一个字节都没写。 */
 export function buildProjectMutationSkippedResult(

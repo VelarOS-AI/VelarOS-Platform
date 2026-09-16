@@ -1,22 +1,58 @@
-import { describe, expect, test } from 'bun:test'
+import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 
-import { OfficeResourceRuntimeRegistry } from '../src/exports'
+import { afterEach, describe, expect, test } from 'bun:test'
 
-describe('OfficeResourceRuntimeRegistry', () => {
-  test('owns isolated, idempotent resource state', () => {
-    const registry = new OfficeResourceRuntimeRegistry({
-      extraResourceRoots: ['/opt/office', ' /opt/office '],
-      disabledResources: ['markitdown'],
-    })
+import type { OfficeResourcePort } from '../src/exports'
+import { createMarkItDownLocator } from '../src/exports'
 
-    expect(registry.extraResourceRoots()).toEqual(['/opt/office'])
-    expect(registry.isDisabled('markitdown')).toBe(true)
+let createdRoot: Nullable<string> = null
 
-    const snapshot = registry.extraResourceRoots()
-    snapshot.push('/mutated-outside')
-    expect(registry.extraResourceRoots()).toEqual(['/opt/office'])
+afterEach(async () => {
+  if (createdRoot) {
+    await rm(createdRoot, { recursive: true, force: true })
+    createdRoot = null
+  }
+})
 
-    registry.setDisabledResources([])
-    expect(registry.isDisabled('markitdown')).toBe(false)
+/** 造一份「已安装」的 MarkItDown 资源包，返回它所在的资源根。 */
+async function installFakeMarkItDown(): Promise<string> {
+  const resourceRoot = await mkdtemp(join(tmpdir(), 'velaros-office-resource-port-'))
+  createdRoot = resourceRoot
+  const packageRoot = join(resourceRoot, 'markitdown', `markitdown-${process.platform}-${process.arch}`)
+  await mkdir(join(packageRoot, 'bin'), { recursive: true })
+  await writeFile(join(packageRoot, 'package.json'), JSON.stringify({ version: '1.2.3' }), 'utf8')
+  for (const name of ['markitdown', 'markitdown.cmd', 'markitdown.exe']) {
+    const binary = join(packageRoot, 'bin', name)
+    await writeFile(binary, '#!/bin/sh\n', 'utf8')
+    await chmod(binary, 0o755)
+  }
+  return resourceRoot
+}
+
+describe('MarkItDown 定位器的注入面', () => {
+  test('宿主给的额外资源根会被搜到，停用开关只挡 resolve', async () => {
+    const resourceRoot = await installFakeMarkItDown()
+    let disabled = false
+    const resources: OfficeResourcePort = {
+      extraResourceRoots: () => [resourceRoot],
+      isDisabled: (id) => id === 'markitdown' && disabled,
+    }
+    const locator = createMarkItDownLocator({ resources })
+
+    expect(locator.resolve()?.version).toBe('1.2.3')
+
+    disabled = true
+    // 用户在设置里停用后 resolve 返回 null，但「物理上装没装」仍然如实回答。
+    expect(locator.resolve()).toBeNull()
+    expect(locator.resolveIgnoringDisabled()?.packageRoot).toContain(resourceRoot)
+  })
+
+  test('没有资源端口时不看停用开关，只按显式资源根找', async () => {
+    const resourceRoot = await installFakeMarkItDown()
+
+    expect(createMarkItDownLocator({ resourceRoots: [resourceRoot] }).resolve()).not.toBeNull()
+    expect(createMarkItDownLocator({ resourceRoots: [join(resourceRoot, 'nowhere')] }).resolve()).toBeNull()
   })
 })

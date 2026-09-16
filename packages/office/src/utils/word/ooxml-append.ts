@@ -32,8 +32,8 @@ import JSZip from 'jszip'
 import { isEmpty, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import type { OfficeOutput } from '../../types/office.js'
 import type { WordSupportPart } from '../../types/word.js'
+import type { OfficeOutput } from '../../types/workspace.js'
 import { writeOfficeBuffer } from '../paths.js'
 
 /** document.xml 在 docx 包里的路径。 */

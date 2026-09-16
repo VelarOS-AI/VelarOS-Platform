@@ -2,9 +2,8 @@ import { spawnSync } from 'node:child_process'
 
 import { describe, expect, test } from 'bun:test'
 
-import type { OfficeNativeCommand } from '../src/exports'
-import type { OfficeToolContext } from '../src/exports'
-import { runLibreOfficeSystemCommand, runOfficeSystemCommand } from '../src/impl/officeShared'
+import type { OfficeNativeCommand, OfficeToolContext } from '../src/exports'
+import { officeConverters } from '../src/impl/operations/OfficeConverters'
 import { describeOfficeNativeCommand } from '../src/utils/commands'
 import { buildLatexCompileCommands } from '../src/utils/pdf/latex'
 
@@ -35,7 +34,7 @@ describe('Office 命令描述串', () => {
       } },
     } as unknown as OfficeToolContext
 
-    await runLibreOfficeSystemCommand(context, command, process.cwd())
+    await officeConverters.runLibreOffice(context, command, process.cwd())
 
     expect(seen).not.toBeNull()
     const observed = seen as unknown as { command: string; nativeCommand: OfficeNativeCommand }
@@ -65,7 +64,7 @@ describe('Office native process bridge', () => {
         },
       } },
     } as unknown as OfficeToolContext
-    const result = await runOfficeSystemCommand(context, nativeCommand, process.cwd())
+    const result = await officeConverters.runCommand(context, nativeCommand, process.cwd())
     expect(result.success).toBe(true)
     expect(JSON.parse(result.stdout)).toEqual(argumentsToEcho)
   })

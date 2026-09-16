@@ -7,12 +7,9 @@ import { extname } from 'node:path'
 
 import { AppError } from '@velaros-ai/core'
 import {
-  buildOfficePreviewHtml,
-  OfficePdfPageRenderError,
+  officeDocumentRenderer,
+  OfficeErrorCodes,
   type OfficePreviewKind,
-  parseOfficePreview,
-  renderOfficePreviewPng,
-  renderPdfPagePng,
 } from '@velaros-ai/office/renderer'
 
 import {
@@ -44,6 +41,14 @@ export interface OfficeRendererApi {
 }
 
 class OfficeRenderer implements OfficeRendererApi {
+  /** office 的 PDF 单页渲染拒绝这一页时用的错误码；命中就收成 UNSUPPORTED_FORMAT。 */
+  private static readonly PdfPageRenderErrorCodes = new Set<string>([
+    OfficeErrorCodes.pdfPageInvalid,
+    OfficeErrorCodes.pdfPageOutOfRange,
+    OfficeErrorCodes.pdfRenderScaleInvalid,
+    OfficeErrorCodes.pdfRenderPixelLimit,
+  ])
+
   /** 三种输入扩展名各自对应 office 的哪一种预览。 */
   private static readonly InputKinds = new Map<string, OfficePreviewKind>([
     ['.docx', 'docx'],
@@ -71,13 +76,13 @@ class OfficeRenderer implements OfficeRendererApi {
       )
     }
 
-    const parsed = await parseOfficePreview(
+    const parsed = await officeDocumentRenderer.parsePreview(
       paths.inputPath,
       kind,
       request.maxItems ?? DocumentRendererTuning.office.defaultMaxItems,
     )
     if (outputExtension === '.html') {
-      const html = buildOfficePreviewHtml({
+      const html = officeDocumentRenderer.buildPreviewHtml({
         parsed,
         inputPath: paths.inputPath,
         normalizedInput: null,
@@ -94,7 +99,7 @@ class OfficeRenderer implements OfficeRendererApi {
       }
     }
 
-    const image = await renderOfficePreviewPng(parsed)
+    const image = await officeDocumentRenderer.renderPreviewPng(parsed)
     await writeFile(paths.outputPath, image.buffer)
     return {
       kind: 'png',
@@ -123,7 +128,7 @@ class OfficeRenderer implements OfficeRendererApi {
     }
 
     try {
-      const rendered = await renderPdfPagePng({
+      const rendered = await officeDocumentRenderer.renderPdfPagePng({
         inputPath: paths.inputPath,
         maximumPixels: DocumentRendererLimits.maximumPdfPixels,
         page: request.page,
@@ -142,7 +147,7 @@ class OfficeRenderer implements OfficeRendererApi {
         scale: rendered.scale,
       }
     } catch (error) {
-      if (error instanceof OfficePdfPageRenderError) {
+      if (error instanceof AppError && OfficeRenderer.PdfPageRenderErrorCodes.has(error.code)) {
         throw new AppError(DocumentRendererErrorCodes.unsupportedFormat, error.message)
       }
       throw error

@@ -6,7 +6,7 @@ import { isEmpty, isPlainObject, isPresent, isString, optionalWhenLazy, toNullab
 import { AppError } from '@velaros-ai/core/error'
 
 import { OfficeInputLimits, OfficeToolNames } from '../../contract/constants.js'
-import type { ExcelCellBuildResult, ExcelCellInput } from '../../types/spreadsheet.js'
+import type { ExcelCellBuildResult, ExcelCellInput, SpreadsheetSheetInput } from '../../types/spreadsheet.js'
 
 import { buildExcelCellStyle, toArgbColor } from './style.js'
 
@@ -112,4 +112,73 @@ export function applyAutoWidths(sheet: ReturnType<Workbook['addWorksheet']>): vo
     })
     if (!column.width || column.width < maxLength) column.width = maxLength
   })
+}
+
+/** 建一张工作表并应用冻结窗格、网格线开关与标签颜色。 */
+export function addSpreadsheetWorksheet(
+  workbook: Workbook,
+  sheetInput: SpreadsheetSheetInput,
+  sheetIndex: number
+): Worksheet {
+  const freezeRows = sheetInput.freezeRows ?? 0
+  const freezeCols = sheetInput.freezeCols ?? 0
+  const hasFreezeRows = freezeRows > 0
+  const hasFreezeCols = freezeCols > 0
+  // showGridLines 曾是 schema 收但从不使用的死参数（静默否决显式意图）；统一接进 view。
+  const showGridLines = sheetInput.showGridLines ?? true
+  const hasFrozenPanes = hasFreezeRows || hasFreezeCols
+  return workbook.addWorksheet(normalizeSheetName(sheetInput.name, sheetIndex), {
+    views:
+      optionalWhenLazy(hasFrozenPanes || !showGridLines, () => [
+            {
+              ...(hasFrozenPanes
+                ? {
+                    state: 'frozen' as const,
+                    xSplit: hasFreezeCols ? freezeCols : 0,
+                    ySplit: hasFreezeRows ? freezeRows : 0,
+                  }
+                : {}),
+              showGridLines,
+            },
+          ]),
+    properties: optionalWhenLazy(sheetInput.tabColor, () => ({
+      tabColor: { argb: toArgbColor(sheetInput.tabColor!) },
+    })),
+  })
+}
+
+/** 写一行单元格：值、样式、超链接、行高与合并范围。 */
+export function writeSpreadsheetRow(sheet: Worksheet, rowData: ExcelCellInput[]): void {
+  const excelRow = sheet.addRow([])
+  let firstRowHeight: number | undefined
+  // 合并单元格要等当前行所有 cell 写完后再执行，避免覆盖未初始化的格子。
+  const mergeOps: Array<{ startCol: number; colSpan: number; rowSpan: number; rowNum: number }> = []
+
+  for (let colIdx = 0; colIdx < rowData.length; colIdx++) {
+    const cellInput = rowData[colIdx]!
+    const cell = excelRow.getCell(colIdx + 1)
+    const { excelValue, cellStyle, rowHeight, link, colSpan, rowSpan } = buildExcelCellValue(cellInput)
+    cell.value = excelValue
+    // 超链接在 ExcelJS 中是一种特殊 value，需要在基础值之后覆盖。
+    if (link)
+      cell.value = {
+        text: String(excelValue ?? ''),
+        hyperlink: link.hyperlink,
+        tooltip: link.tooltip,
+      }
+    Object.assign(cell, cellStyle)
+    if (isPresent(rowHeight) && !isPresent(firstRowHeight)) firstRowHeight = rowHeight
+    if ((colSpan && colSpan > 1) || (rowSpan && rowSpan > 1))
+      mergeOps.push({
+        startCol: colIdx + 1,
+        colSpan: colSpan ?? 1,
+        rowSpan: rowSpan ?? 1,
+        rowNum: excelRow.number,
+      })
+  }
+
+  if (firstRowHeight) excelRow.height = firstRowHeight
+  // 统一执行本行声明的合并范围。
+  for (const m of mergeOps)
+    sheet.mergeCells(m.rowNum, m.startCol, m.rowNum + m.rowSpan - 1, m.startCol + m.colSpan - 1)
 }

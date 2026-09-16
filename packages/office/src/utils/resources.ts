@@ -1,11 +1,19 @@
 /** MarkItDown 资源根的推导：环境变量根、Electron 资源目录、VelarOS 家族共用的资源安装根。 */
 
+import { existsSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { delimiter, join, resolve } from 'node:path'
 
-import { isEmpty } from '@velaros-ai/core'
+import { isEmpty, Log, toNullable } from '@velaros-ai/core'
+import { asRecord, readString } from '@velaros-ai/core/utils/unknownJsonRecord'
 import { velarosSharedResources } from '@velaros-ai/platform/shared-resources'
 
-import { OfficeEnvironmentVariables } from '../contract/constants.js'
+const log = Log.tag('OfficeResources')
+
+/** 以本模块为基准创建的 require，用来读已安装资源包的 package.json。 */
+const requireFromOfficeModule = createRequire(
+  typeof __filename === 'string' ? __filename : import.meta.url
+)
 
 /** 读 Electron 打包产物的 resources 目录；不在 Electron 里跑时返回 null。 */
 export function readElectronResourcesPath(): Nullable<string> {
@@ -13,9 +21,9 @@ export function readElectronResourcesPath(): Nullable<string> {
   return resourcesPath?.trim() ? resourcesPath : null
 }
 
-/** 读环境变量里配置的资源根；配了就只认它，不再猜默认根。 */
+/** 读环境变量里配置的资源根（登记在 OfficeEnvironmentVariables）；配了就只认它，不再推导默认根。 */
 export function readEnvironmentResourceRoots(): string[] {
-  const configured = process.env[OfficeEnvironmentVariables.markItDownResourceRoot]?.trim()
+  const configured = process.env.VELAROS_MARKITDOWN_RESOURCE_ROOT?.trim()
   if (!configured) return []
   return configured
     .split(delimiter)
@@ -40,4 +48,31 @@ export function buildDefaultResourceRoots(): string[] {
   }
   roots.add(resolve(process.cwd(), 'out', 'resources'))
   return [...roots]
+}
+
+/** 在 MarkItDown 包目录里找可执行文件，Windows 与类 Unix 的候选名不同。 */
+export function findMarkItDownCommand(packageRoot: string): Nullable<string> {
+  const candidates =
+    process.platform === 'win32'
+      ? [
+          join(packageRoot, 'bin', 'markitdown.cmd'),
+          join(packageRoot, 'bin', 'markitdown.exe'),
+          join(packageRoot, 'venv', 'Scripts', 'markitdown.exe'),
+          join(packageRoot, 'venv', 'Scripts', 'markitdown.cmd'),
+        ]
+      : [join(packageRoot, 'bin', 'markitdown'), join(packageRoot, 'venv', 'bin', 'markitdown')]
+
+  return toNullable(candidates.find((candidate) => existsSync(candidate)))
+}
+
+/** 读已安装资源包的版本号，只用于诊断展示；读不到回落占位值。 */
+export function readResourcePackageVersion(packageRoot: string): string {
+  try {
+    const pkg: unknown = requireFromOfficeModule(join(packageRoot, 'package.json'))
+    return readString(asRecord(pkg), 'version') ?? '0.0.0'
+  } catch (error) {
+    // arch-guard:silent-catch-ok 版本号只用于诊断展示，读不到时回落占位值不影响可用性判定。
+    log.debug('读取资源包版本失败，使用占位版本号', { error })
+    return '0.0.0'
+  }
 }

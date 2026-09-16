@@ -72,10 +72,17 @@ export type OfficeErrorCode = (typeof OfficeErrorCodes)[keyof typeof OfficeError
 
 /** 本包读的环境变量；宿主要改本包行为只能经这张表，代码里冒出未登记的名字门禁会拦。 */
 export const OfficeEnvironmentVariables = Object.freeze({
-  /** MarkItDown runtime 的额外资源根，多个用平台的路径分隔符隔开；配了就只认它，不再猜默认根。 */
-  markItDownResourceRoot: 'VELAROS_MARKITDOWN_RESOURCE_ROOT',
-  /** pdfjs 标准字体目录的根；打包产物把字体挪了位置时用它指过去。 */
-  pdfjsStandardFontsRoot: 'VELAROS_PDFJS_STANDARD_FONTS_ROOT',
+  markItDownResourceRoot: {
+    name: 'VELAROS_MARKITDOWN_RESOURCE_ROOT',
+    direction: 'input',
+    description:
+      'MarkItDown runtime 的额外资源根，多个用平台的路径分隔符隔开；配了就只认它，不再推导默认根。',
+  },
+  pdfjsStandardFontsRoot: {
+    name: 'VELAROS_PDFJS_STANDARD_FONTS_ROOT',
+    direction: 'input',
+    description: 'pdfjs 标准字体目录的根；打包产物把字体挪了位置时用它指过去。',
+  },
 } as const)
 
 /** 三个创建工具的入参上限，工具 schema 直接引用，是模型看到的数字。 */
