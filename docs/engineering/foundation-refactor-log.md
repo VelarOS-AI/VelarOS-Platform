@@ -10,6 +10,20 @@
 
 （按时间追加。每条写：改了什么、为什么、影响谁。）
 
+- **全仓扫「工具说明指向不存在的东西」，确证五条（09-17 05:20，`3ca63703` 修掉四条；每条都在仓库里逐条核过才动手）。** 起因是 `shell` 那一轮抓到的同类缺陷——说明指着一个实际不存在的东西，模型照做就落空。
+  - **`tooling:map` 教模型传 `op="read"`**，可它的枚举只有 `map/find/page`，照做**当场被 Zod 拒**。讽刺的是紧挨着枚举那行的代码注释本来就写着「read 不在模型面」。
+  - **`tooling:map` 还留着 `ids`、`detail` 两个参数**，说明写的是「read 模式下…」。read 到不了，这两个参数归一时按 strip **静默丢掉**——模型以为自己指定了正文和详情级别，其实什么都没发生，拿回一份完整工具地图。已从模型面删掉。
+  - **`tooling:replace` 让模型「按依赖与 nextActions 处理」**，但这条成功回执里没有 `nextActions`（那是失败回执信封的字段）。改成实际有的 `activation.dependencies` / 每条的 `nextAction`，整体下一步看 `nextTurnHint`。
+  - **`browser:user_scripts` 说「按『文档 + 版本号』幂等」**，实际幂等键是内部自增的 `revision`；模型能填的 `version` 只做展示、不参与去重，连参数说明都没有。**模型想靠调 `version` 控制要不要重跑是无效的**。说明改成真规矩。
+  - **第五条还在做**：agent 包里**五处写死了 `interaction:show_action_cards`**，而这个工具**只有 Desktop 有**（Workbench、Termel 没有）——在别的宿主里模型被指去换入一个不存在的工具页。写死它的那个文件，开头第一条不变量恰恰是「本文件不认识任何具体能力，工具名全部来自宿主注入的描述符」，语义中立门只扫产品词、没扫工具名。**正在改成宿主声明制**：宿主声明了就点名，没声明就只说「做什么」不说「调什么」。改完 Desktop 要补一处声明。
+  - 一并核实**不算缺陷**的（免得重复查）：office 说明里的 `direct`/`expert` 是真实存在的 surface profile（只是模型自己切不了，由宿主定）；`system:run` 的 `statusContinuation` 存在，只是挂在 `backgroundProcess` 下；browser 说明里引用的 26 个工具名、`project:read` 的 `continuation`、`agent:dispatch` 的三个回执字段等全部对得上。
+
+- **`reasoningLevel: ultra` 目前是个空档（09-17 05:20，调查结论，修复在做）。** 这条你多半想知道：**在 Anthropic / OpenAI / Google 上，选 `ultra` 和选 `high` 发出去的请求字节完全一样**——用户在界面上选了 ultra，什么也没发生。
+  - 根因：算 ultra 预算的 `resolveReasoningBudget` **只暴露给用户自写的 provider script**，三个内置适配器一个都没调；它们拼请求时只看 `depth`（fast/balanced/deep），`level` 只在判 `off` 时读一次。
+  - 唯一今天真对 ultra 做了事的是 OpenRouter / Velar 路由层：请求体里多一个 `reasoning.max_tokens: 24000`。
+  - 而且有**三处测试正把这个现状钉死**（其中一条直接断言 `level='ultra'` 时 Anthropic 拿到的是 balanced 档的力度）——等于把「ultra 没用」写成了预期行为。修复要连这三处断言一起改。
+  - 口径已定：OpenAI 只有力度枚举没有数字预算，**ultra 与 high 在 OpenAI 上无法区分是接受的**（provider 能力所限，会在代码里写明），Anthropic 非自适应与 Google 这两家有数字预算，必须体现出差别，且钳位不得破坏「预算 < maxOutputTokens」。
+
 - **跑命令可以挑用哪个 shell（09-17 04:20，`ba7ac608` + 本轮 agent 接线；提交、燃尽、不变量、门禁均已实测核对）。** 你早先提的「命令执行应该允许模型指定使用哪个可用终端」。
   - **模型面**：`system:run`、`project:run`、`project:sandbox` 的 run 各加一个可选字段 `shell`，词表固定五个 `git-bash | pwsh | powershell | cmd | posix`。不填就用环境报告里的默认那个，只有一个可用时模型根本不会去填。词表**不按机器动态生成**——schema 是按字节冻结的，随机器变会让门禁失效，也会让同一个模型在不同机器上看到不同的契约。
   - **合同是报错，不是忽略**：填了本机没有的那个，宿主必须在起进程之前以 `VALIDATION` 拒绝，报错点名可用的有哪些、哪个是默认、下一步怎么改。理由：模型是按那个 shell 的语法写的命令，换一个跑出来的是**错的结果**而不是报错。新增 INV-30。
