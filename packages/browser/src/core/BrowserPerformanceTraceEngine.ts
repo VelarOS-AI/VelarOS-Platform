@@ -133,19 +133,6 @@ export class BrowserPerformanceTraceEngine {
   }
 }
 
-const compatibilityTraceEngine = new BrowserPerformanceTraceEngine()
-
-/**
- * @deprecated Prefer a host-owned `BrowserPerformanceTraceEngine`, or let
- * `BrowserPerformanceOrchestrator` own one per runtime.
- */
-export function parseBrowserTraceEvents(
-  events: unknown[],
-  metadata: BrowserTraceParseMetadata = {}
-): Promise<BrowserParsedTraceRecording> {
-  return compatibilityTraceEngine.parse(events, metadata)
-}
-
 /** 生成整体 trace 摘要（含 available insights 清单与调用树/网络格式说明）。 */
 export async function formatBrowserTraceSummary(
   recording: BrowserParsedTraceRecording

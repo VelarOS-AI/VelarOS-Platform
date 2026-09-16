@@ -1,6 +1,5 @@
-import { z } from 'zod'
+import type { z } from 'zod'
 
-import { renderParameterDescription as parameterDescription } from '@velaros-ai/agent/tool-contract'
 import { isArray, isTrue, stringifyPretty } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
@@ -8,7 +7,7 @@ import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 import { encodeBrowserScriptStringLiteral } from '../core/BrowserScriptLiteral'
 
 import { browserExtractSchema, parseBrowserExtractInput } from './BrowserExtractSchema'
-import { BrowserArtifactWriteCapability, BrowserControlCapability } from './Capabilities'
+import { BrowserArtifactWriteCapability } from './Capabilities'
 import { requireActiveBrowserSite } from './Context'
 import {
   extractBrowserList,
@@ -16,7 +15,7 @@ import {
   extractBrowserTable,
   saveBrowserExtraction,
 } from './PageExtraction'
-import { defineBrowserTool } from './Types'
+import { type BrowserToolContext, defineBrowserTool } from './Types'
 
 /**
  * 翻页缺省的「下一页」选择器：只认明确自称下一页的元素。
@@ -33,353 +32,179 @@ const BrowserNextPageSelector = [
   'button[aria-label*="下一页"]',
 ].join(', ')
 
-/** 从页面表格提取 headers/rows 结构。 */
-const browserExtractTable = defineBrowserTool<{
-  selector?: string
-  tableIndex?: number
-  maxRows?: number
-  save?: boolean
-  name?: string
-}>({
-  name: 'browser:extract_table',
-  role: 'inspect',
-  summary: '从当前页面提取表格数据。',
-  suitable: ['需要把页面表格转成 headers 和 rows 的结构化结果。'],
-  forbidden: ['不要用它解析非表格列表；列表用 browser:extract_list。'],
-  usage: ['可传 selector 或 tableIndex；需要保存时传 save=true。'],
-  examples: [{ maxRows: 200, save: true }],
-  notes: [
-    '提取脚本在当前网页上下文中运行。',
-    '返回 headers、rows、rowCount；没找到表格时 ok=false 并附 error。save=true 且提取成功时追加 savedPath、savedRelativePath。',
-  ],
-  schema: z.object({
-    selector: z.string().optional().describe(
-      parameterDescription({
-        description: '定位目标表格的 CSS selector 或 XPath（//... 或 xpath=...）。',
-        notes: ['省略时按 tableIndex 选择页面表格。'],
-      })
-    ),
-    tableIndex: z
-      .number()
-      .transform((value) => Math.min(50, Math.max(0, Math.round(value))))
-      .optional()
-      .describe(
-        parameterDescription({
-          description: '当页面有多张表格时选择第几张。',
-          notes: ['从 0 开始，默认 0。', '范围 [0,50],超出自动钳制。'],
-        })
-      ),
-    maxRows: z.number().transform((value) => Math.min(2000, Math.max(1, Math.round(value)))).optional().describe(
-      parameterDescription({
-        description: '最多提取多少行。',
-        notes: ['默认 200。', '上限 2000,超出自动钳制。'],
-      })
-    ),
-    save: z.boolean().optional().describe(
-      parameterDescription({
-        description: '是否把提取结果保存为 extract 产物。',
-        notes: ['默认 false。'],
-      })
-    ),
-    name: z.string().min(1).max(120).optional().describe(
-      parameterDescription({
-        description: '保存 extract 产物时使用的名称。',
-        usage: ['仅 save=true 时使用。'],
-      })
-    ),
-  }),
-  permissions: ['network', 'fs:read', 'fs:write'],
-  capabilities: BrowserArtifactWriteCapability,
-  isAvailable: (ctx) => ctx.browser.isActive(),
-  isConcurrencySafe: () => true,
-  execute: async ({ selector, tableIndex = 0, maxRows = 200, save = false, name }, ctx) => {
-    ctx.abortSignal.throwIfAborted()
-    requireActiveBrowserSite(ctx)
+/**
+ * browser:extract 的四个动作分支。
+ *
+ * 这些分支只被本文件的 `browser:extract` 调用，不是模型面工具：入参已由
+ * `parseBrowserExtractInput` 校验并归一。
+ */
 
-    return extractBrowserTable(ctx, { selector, tableIndex, maxRows, save, name })
+/** 从页面表格提取 headers/rows 结构。 */
+async function browserExtractTable(
+  {
+    selector,
+    tableIndex = 0,
+    maxRows = 200,
+    save = false,
+    name,
+  }: {
+    selector?: string
+    tableIndex?: number
+    maxRows?: number
+    save?: boolean
+    name?: string
   },
-})
+  ctx: BrowserToolContext
+) {
+  ctx.abortSignal.throwIfAborted()
+  requireActiveBrowserSite(ctx)
+
+  return extractBrowserTable(ctx, { selector, tableIndex, maxRows, save, name })
+}
 
 /** 从页面列表/搜索结果提取结构化条目。 */
-const browserExtractList = defineBrowserTool<{
-  selector?: string
-  maxItems?: number
-  save?: boolean
-  name?: string
-}>({
-  name: 'browser:extract_list',
-  role: 'inspect',
-  summary: '从当前页面提取列表条目。',
-  suitable: ['需要提取新闻、电商、搜索结果等列表的标题、链接和描述。'],
-  forbidden: ['不要用它提取表格；表格用 browser:extract_table。'],
-  usage: ['可传 selector 限定列表容器；需要保存时传 save=true。'],
-  examples: [{ selector: ".result", maxItems: 50 }],
-  notes: [
-    '省略 selector 时会自动检测常见列表结构。',
-    '返回 items（title、href、description）与 itemCount；save=true 时追加 savedPath、savedRelativePath。',
-  ],
-  schema: z.object({
-    selector: z
-      .string()
-      .optional()
-      .describe(
-        parameterDescription({
-          description: '定位列表容器的 CSS selector 或 XPath（//... 或 xpath=...）。',
-          notes: ['省略时自动检测 ul、ol、article、.item 等常见结构。'],
-        })
-      ),
-    maxItems: z.number().transform((value) => Math.min(500, Math.max(1, Math.round(value)))).optional().describe(
-      parameterDescription({
-        description: '最多提取多少条。',
-        notes: ['默认 50。', '上限 500,超出自动钳制。'],
-      })
-    ),
-    save: z.boolean().optional().describe(
-      parameterDescription({
-        description: '是否把提取结果保存为 extract 产物。',
-        notes: ['默认 false。'],
-      })
-    ),
-    name: z.string().min(1).max(120).optional().describe(
-      parameterDescription({
-        description: '保存 extract 产物时使用的名称。',
-        usage: ['仅 save=true 时使用。'],
-      })
-    ),
-  }),
-  permissions: ['network', 'fs:read', 'fs:write'],
-  capabilities: BrowserArtifactWriteCapability,
-  isAvailable: (ctx) => ctx.browser.isActive(),
-  isConcurrencySafe: () => true,
-  execute: async ({ selector, maxItems = 50, save = false, name }, ctx) => {
-    ctx.abortSignal.throwIfAborted()
-    requireActiveBrowserSite(ctx)
-
-    return extractBrowserList(ctx, { selector, maxItems, save, name })
+async function browserExtractList(
+  {
+    selector,
+    maxItems = 50,
+    save = false,
+    name,
+  }: {
+    selector?: string
+    maxItems?: number
+    save?: boolean
+    name?: string
   },
-})
+  ctx: BrowserToolContext
+) {
+  ctx.abortSignal.throwIfAborted()
+  requireActiveBrowserSite(ctx)
+
+  return extractBrowserList(ctx, { selector, maxItems, save, name })
+}
 
 /** 翻页提取列表数据，并合并多页结果。 */
-const browserPaginateExtract = defineBrowserTool<{
-  selector?: string
-  maxPages?: number
-  maxItemsPerPage?: number
-  nextPageSelector?: string
-  save?: boolean
-  name?: string
-}>({
-  name: 'browser:paginate_extract',
-  role: 'inspect',
-  summary: '翻页提取列表数据并合并结果。',
-  suitable: ['需要跨多页收集搜索结果、商品列表或文章列表。'],
-  forbidden: ['不要在会产生不可逆提交的分页流程中使用。'],
-  protocol: ['先确认当前页是列表第一页；必要时提供 nextPageSelector；运行后读取 pagesVisited 和 totalItems。'],
-  usage: ['设置 maxPages、maxItemsPerPage；需要自定义下一页按钮时传 nextPageSelector。'],
-  examples: [{ maxPages: 3, maxItemsPerPage: 40 }],
-  notes: [
-    '默认会把合并结果保存为 extract 产物。',
-    '返回 pagesVisited、totalItems、items；保存时追加 savedPath、savedRelativePath。',
-  ],
-  schema: z.object({
-    selector: z.string().optional().describe(
-      parameterDescription({
-        description: '列表容器 CSS selector 或 XPath（//... 或 xpath=...）。',
-        usage: ['会透传给每页列表提取。'],
-      })
-    ),
-    maxPages: z.number().transform((value) => Math.min(20, Math.max(1, Math.round(value)))).optional().describe(
-      parameterDescription({
-        description: '最多翻几页。',
-        notes: ['默认 5。', '上限 20,超出自动钳制。'],
-      })
-    ),
-    maxItemsPerPage: z
-      .number()
-      .transform((value) => Math.min(500, Math.max(1, Math.round(value))))
-      .optional()
-      .describe(
-        parameterDescription({
-          description: '每页最多提取多少条。',
-          notes: ['默认 50。', '上限 500,超出自动钳制。'],
-        })
-      ),
-    nextPageSelector: z.string().optional().describe(
-      parameterDescription({
-        description: '下一页按钮的 CSS selector。',
-        notes: ['省略时只认 rel="next" 与 aria-label 含 next / 下一页 的按钮或链接；页面用别的写法就要显式传。'],
-      })
-    ),
-    save: z.boolean().optional().describe(
-      parameterDescription({
-        description: '是否把合并结果保存为 extract 产物。',
-        notes: ['默认 true。'],
-      })
-    ),
-    name: z.string().min(1).max(120).optional().describe(
-      parameterDescription({
-        description: '保存 extract 产物时使用的名称。',
-      })
-    ),
-  }),
-  permissions: ['network', 'fs:read', 'fs:write'],
-  capabilities: BrowserControlCapability,
-  isAvailable: (ctx) => ctx.browser.isActive(),
-  isConcurrencySafe: () => false,
-  execute: async (
-    { selector, maxPages = 5, maxItemsPerPage = 50, nextPageSelector, save = true, name },
-    ctx
-  ) => {
-    ctx.abortSignal.throwIfAborted()
-    requireActiveBrowserSite(ctx)
-
-    // 每页复用列表提取，翻页只负责寻找/点击下一页按钮。
-    const allItems: unknown[] = []
-    let pagesVisited = 0
-    let previousPageItems: Nullable<string> = null
-    // 缺省只认「明确自称下一页」的元素：rel=next 与英文/中文 aria-label。
-    // 曾经的 `[class*="next"]` 会匹配 class 里带 next 的任何元素（例如「next-article」推荐卡片），
-    // `[class*="pagination"] a:last-child` 会点到「末页」；翻页点错一次，后面几页收的就全是别的内容。
-    const nextBtnSelector = nextPageSelector || BrowserNextPageSelector
-    const nextButtonSelectorLiteral = encodeBrowserScriptStringLiteral(nextBtnSelector)
-    const nextPageTarget = {
-      css: nextBtnSelector,
-      role: null,
-      text: null,
-      name: null,
-      attributes: {},
-    }
-
-    for (let page = 0; page < maxPages; page++) {
-      ctx.abortSignal.throwIfAborted()
-
-      // 先提取当前页条目。
-      const pageResult = await extractBrowserList(ctx, { selector, maxItems: maxItemsPerPage, save: false })
-      const items = isArray(pageResult.items) ? pageResult.items : []
-      // 翻页没生效（按钮点了没反应、链接指回当前页）时条目不变：停下，别把同一页重复收集。
-      const pageItems = JSON.stringify(items)
-      if (pageItems === previousPageItems) break
-      previousPageItems = pageItems
-      pagesVisited++
-      allItems.push(...items)
-
-      // 当前页没有条目时认为提取结束，避免空页继续翻。
-      if (items.length === 0) break
-
-      // 检查下一页按钮是否存在且未禁用；disabled 是布尔属性、值常为空串，只能用 hasAttribute 判断。
-      const hasNext = await ctx.browser.evaluateScript({
-        script: `(() => { const el = document.querySelector(${nextButtonSelectorLiteral}); return !!(el && !el.hasAttribute('disabled') && el.getAttribute('aria-disabled') !== 'true') })()`,
-        mode: 'expression',
-        timeoutMs: 5000,
-      })
-      if (!isTrue(hasNext.result)) break
-
-      // 点击走宿主端口而不是页面里的 el.click()：后者在宿主的动作策略里被当成「执行脚本」，
-      // 绕开了点击该有的遮挡检测与效果指纹。点不中就停，别把同一页再收一遍。
-      const clicked = await ctx.browser.performTargetAction({
-        action: 'click',
-        target: nextPageTarget,
-      })
-      if (!clicked.matched) break
-
-      // 点击下一页后短暂等待页面内容更新。
-      await TimerScope.sleep(1_200, { signal: ctx.abortSignal })
-    }
-
-    const summary = { pagesVisited, totalItems: allItems.length, items: allItems }
-    // 默认保存批量提取结果，方便用户后续读取 artifact 而不是重新跑翻页。
-    if (!save) return summary
-
-    const saved = await saveBrowserExtraction(ctx, {
-      format: 'json',
-      content: `${stringifyPretty(summary)}\n`,
-      name,
-    })
-    return { ...summary, ...saved }
+async function browserPaginateExtract(
+  {
+    selector,
+    maxPages = 5,
+    maxItemsPerPage = 50,
+    nextPageSelector,
+    save = true,
+    name,
+  }: {
+    selector?: string
+    maxPages?: number
+    maxItemsPerPage?: number
+    nextPageSelector?: string
+    save?: boolean
+    name?: string
   },
-})
+  ctx: BrowserToolContext
+) {
+  ctx.abortSignal.throwIfAborted()
+  requireActiveBrowserSite(ctx)
+
+  // 每页复用列表提取，翻页只负责寻找/点击下一页按钮。
+  const allItems: unknown[] = []
+  let pagesVisited = 0
+  let previousPageItems: Nullable<string> = null
+  // 缺省只认「明确自称下一页」的元素：rel=next 与英文/中文 aria-label。
+  // 曾经的 `[class*="next"]` 会匹配 class 里带 next 的任何元素（例如「next-article」推荐卡片），
+  // `[class*="pagination"] a:last-child` 会点到「末页」；翻页点错一次，后面几页收的就全是别的内容。
+  const nextBtnSelector = nextPageSelector || BrowserNextPageSelector
+  const nextButtonSelectorLiteral = encodeBrowserScriptStringLiteral(nextBtnSelector)
+  const nextPageTarget = {
+    css: nextBtnSelector,
+    role: null,
+    text: null,
+    name: null,
+    attributes: {},
+  }
+
+  for (let page = 0; page < maxPages; page++) {
+    ctx.abortSignal.throwIfAborted()
+
+    // 先提取当前页条目。
+    const pageResult = await extractBrowserList(ctx, {
+      selector,
+      maxItems: maxItemsPerPage,
+      save: false,
+    })
+    const items = isArray(pageResult.items) ? pageResult.items : []
+    // 翻页没生效（按钮点了没反应、链接指回当前页）时条目不变：停下，别把同一页重复收集。
+    const pageItems = JSON.stringify(items)
+    if (pageItems === previousPageItems) break
+    previousPageItems = pageItems
+    pagesVisited++
+    allItems.push(...items)
+
+    // 当前页没有条目时认为提取结束，避免空页继续翻。
+    if (items.length === 0) break
+
+    // 检查下一页按钮是否存在且未禁用；disabled 是布尔属性、值常为空串，只能用 hasAttribute 判断。
+    const hasNext = await ctx.browser.evaluateScript({
+      script: `(() => { const el = document.querySelector(${nextButtonSelectorLiteral}); return !!(el && !el.hasAttribute('disabled') && el.getAttribute('aria-disabled') !== 'true') })()`,
+      mode: 'expression',
+      timeoutMs: 5000,
+    })
+    if (!isTrue(hasNext.result)) break
+
+    // 点击走宿主端口而不是页面里的 el.click()：后者在宿主的动作策略里被当成「执行脚本」，
+    // 绕开了点击该有的遮挡检测与效果指纹。点不中就停，别把同一页再收一遍。
+    const clicked = await ctx.browser.performTargetAction({
+      action: 'click',
+      target: nextPageTarget,
+    })
+    if (!clicked.matched) break
+
+    // 点击下一页后短暂等待页面内容更新。
+    await TimerScope.sleep(1_200, { signal: ctx.abortSignal })
+  }
+
+  const summary = { pagesVisited, totalItems: allItems.length, items: allItems }
+  // 默认保存批量提取结果，方便用户后续读取 artifact 而不是重新跑翻页。
+  if (!save) return summary
+
+  const saved = await saveBrowserExtraction(ctx, {
+    format: 'json',
+    content: `${stringifyPretty(summary)}\n`,
+    name,
+  })
+  return { ...summary, ...saved }
+}
 
 /** 提取页面可见正文为 plain/markdown/html。 */
-const browserExtractPageContent = defineBrowserTool<{
-  format?: 'plain' | 'markdown' | 'html'
-  selector?: string
-  ignoreSelectors?: string[]
-  maxChars?: number
-  save?: boolean
-  name?: string
-}>({
-  name: 'browser:extract_page_content',
-  role: 'inspect',
-  summary: '提取当前页面可见正文并保存为 plain/markdown/html。',
-  suitable: [
-    '需要把文章、详情页或选中区块导出为可读文本。',
-    '用户要求保存页面文字内容而非截图。',
-  ],
-  forbidden: [
-    '不要用于表格结构化数据；表格用 browser:extract_table。',
-    '跨域 iframe、canvas 渲染内容无法提取。',
-  ],
-  usage: [
-    '默认提取 main/article 区域；传 selector 限定 DOM 子树。',
-    '传 ignoreSelectors 过滤导航、侧栏、cookie banner、广告等噪音子树。',
-    'format 选 plain/markdown/html；save=true 写入 extracts/。',
-  ],
-  examples: [{ format: 'markdown', save: true }],
-  notes: [
-    '懒加载内容需先 browser:act action=scroll 滚到可见区域。',
-    '返回 content、format、truncated 与 contentBoundary；save=true 且正文非空时追加 savedPath、savedRelativePath。',
-  ],
-  schema: z.object({
-    format: z.enum(['plain', 'markdown', 'html']).optional().describe(
-      parameterDescription({
-        description: '输出格式。',
-        notes: ['默认 markdown。'],
-      })
-    ),
-    selector: z.string().optional().describe(
-      parameterDescription({
-        description: '限定提取范围的 CSS selector 或 XPath（//... 或 xpath=...）。',
-        notes: ['省略时自动选择 main/article 或 body。'],
-      })
-    ),
-    ignoreSelectors: z.array(z.string().min(1).max(1000)).max(50).optional().describe(
-      parameterDescription({
-        description: '需要从正文提取结果中排除的 CSS selector 或 XPath（//... 或 xpath=...）列表。',
-        notes: ['适合过滤导航、侧栏、cookie banner、广告等重复噪音。'],
-      })
-    ),
-    maxChars: z.number().transform((value) => Math.min(200000, Math.max(1, Math.round(value)))).optional().describe(
-      parameterDescription({
-        description: '最多返回多少字符。',
-        notes: ['默认 50000。', '上限 200000,超出自动钳制。'],
-      })
-    ),
-    save: z.boolean().optional().describe(
-      parameterDescription({
-        description: '是否保存到 extracts/ 目录。',
-        notes: ['默认 false。'],
-      })
-    ),
-    name: z.string().min(1).max(120).optional().describe(
-      parameterDescription({
-        description: '保存时的产物名称。',
-        usage: ['仅 save=true 时使用。'],
-      })
-    ),
-  }),
-  permissions: ['network', 'fs:read', 'fs:write'],
-  capabilities: BrowserArtifactWriteCapability,
-  isAvailable: (ctx) => ctx.browser.isActive(),
-  isConcurrencySafe: () => true,
-  execute: async (
-    { format = 'markdown', selector, ignoreSelectors, maxChars = 50_000, save = false, name },
-    ctx
-  ) => {
-    ctx.abortSignal.throwIfAborted()
-    requireActiveBrowserSite(ctx)
-
-    return extractBrowserPageContent(ctx, { format, selector, ignoreSelectors, maxChars, save, name })
+async function browserExtractPageContent(
+  {
+    format = 'markdown',
+    selector,
+    ignoreSelectors,
+    maxChars = 50_000,
+    save = false,
+    name,
+  }: {
+    format?: 'plain' | 'markdown' | 'html'
+    selector?: string
+    ignoreSelectors?: string[]
+    maxChars?: number
+    save?: boolean
+    name?: string
   },
-})
+  ctx: BrowserToolContext
+) {
+  ctx.abortSignal.throwIfAborted()
+  requireActiveBrowserSite(ctx)
+
+  return extractBrowserPageContent(ctx, {
+    format,
+    selector,
+    ignoreSelectors,
+    maxChars,
+    save,
+    name,
+  })
+}
 
 /** 页面结构化抽取工具出口。 */
 const browserExtract = defineBrowserTool<z.input<typeof browserExtractSchema>>({
@@ -422,7 +247,7 @@ const browserExtract = defineBrowserTool<z.input<typeof browserExtractSchema>>({
 
     switch (parsed.action) {
       case 'table':
-        return browserExtractTable.execute(
+        return browserExtractTable(
           {
             selector: parsed.selector,
             tableIndex: parsed.tableIndex,
@@ -433,7 +258,7 @@ const browserExtract = defineBrowserTool<z.input<typeof browserExtractSchema>>({
           ctx
         )
       case 'list':
-        return browserExtractList.execute(
+        return browserExtractList(
           {
             selector: parsed.selector,
             maxItems: parsed.maxItems,
@@ -443,7 +268,7 @@ const browserExtract = defineBrowserTool<z.input<typeof browserExtractSchema>>({
           ctx
         )
       case 'paginate':
-        return browserPaginateExtract.execute(
+        return browserPaginateExtract(
           {
             selector: parsed.selector,
             maxPages: parsed.maxPages,
@@ -455,7 +280,7 @@ const browserExtract = defineBrowserTool<z.input<typeof browserExtractSchema>>({
           ctx
         )
       case 'content':
-        return browserExtractPageContent.execute(
+        return browserExtractPageContent(
           {
             format: parsed.format,
             selector: parsed.selector,
