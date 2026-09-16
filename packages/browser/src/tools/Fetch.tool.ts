@@ -23,7 +23,7 @@ const browserFetchResource = defineBrowserTool<{
   ],
   forbidden: [
     "不要用于 blob:、data: 或 DRM 受保护流。",
-    "savePath 必须位于当前 browser workspace 内。",
+    "savePath 只能是当前站点工作区里的相对路径；指向区外的符号链接会被拒绝。",
   ],
   usage: [
     "先用 browser:list_media_sources 或 browser:read_page_data preset=media_sources 找 URL。",

@@ -105,6 +105,7 @@
       "dependencies": {
         "@velaros-ai/core": "workspace:*",
         "@velaros-ai/kernel": "workspace:*",
+        "@velaros-ai/platform": "workspace:*",
         "gifenc": "^1.0.3",
         "zod": "^4.3.6",
       },

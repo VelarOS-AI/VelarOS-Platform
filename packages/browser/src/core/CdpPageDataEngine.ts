@@ -295,7 +295,11 @@ export class CdpPageDataEngine {
     _abortSignal?.throwIfAborted()
     const externalSession = this.requireExternalPageSession(sessionId)
     const targetUrl = this.normalizeFetchResourceUrl(options.url)
-    const artifactPath = resolveWorkspaceFilePath(context.workspaceRoot, options.savePath)
+    const artifactPath = await resolveWorkspaceFilePath(
+      context.workspaceRoot,
+      options.savePath,
+      'savePath'
+    )
     if (!externalSession.driver.fetchResource) {
       throw new AppError('VALIDATION', '当前外部浏览器 driver 不支持资源抓取。')
     }
@@ -629,7 +633,7 @@ export class CdpPageDataEngine {
   ): Promise<BrowserUploadFileResult> {
     _abortSignal?.throwIfAborted()
     const externalSession = this.requireExternalPageSession(sessionId)
-    const absolutePath = this.resolveUploadFilePath(context.workspaceRoot, options.filePath)
+    const absolutePath = await this.resolveUploadFilePath(context.workspaceRoot, options.filePath)
     const hydratedTarget = this.targetRefs.hydrateTarget(sessionId, options.target, 'target')
     if (!externalSession.driver.setFileInputFiles) {
       throw new AppError('VALIDATION', '当前外部浏览器 driver 不支持文件上传。')
@@ -668,8 +672,8 @@ export class CdpPageDataEngine {
     }
   }
 
-  protected resolveUploadFilePath(workspaceRoot: string, requestedPath: string): string {
-    return resolveWorkspaceFilePath(workspaceRoot, requestedPath).path
+  protected async resolveUploadFilePath(workspaceRoot: string, requestedPath: string): Promise<string> {
+    return (await resolveWorkspaceFilePath(workspaceRoot, requestedPath, 'filePath')).path
   }
 
   public async exportPagePdf(
@@ -687,9 +691,10 @@ export class CdpPageDataEngine {
       printBackground: !isFalse(options.printBackground),
     })
     const defaultPath = `artifacts/exports/page-${new Date().toISOString().replace(/[:.]/g, '-')}.pdf`
-    const artifactPath = resolveWorkspaceFilePath(
+    const artifactPath = await resolveWorkspaceFilePath(
       context.workspaceRoot,
-      options.savePath ?? defaultPath
+      options.savePath ?? defaultPath,
+      'savePath'
     )
     const state = await this.refreshExternalPageState(sessionId, externalSession, context.url)
 

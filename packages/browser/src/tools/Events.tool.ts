@@ -144,7 +144,7 @@ const browserHandleDownload = defineBrowserTool<{
   forbidden: ['accept 时不要省略 savePath。'],
   usage: ['action=accept 时传 savePath（浏览器工作区相对路径）；action=cancel 取消下载。'],
   examples: [{ action: 'accept', savePath: 'downloads/report.pdf' }],
-  notes: ['savePath 必须位于当前 browser workspace 内。'],
+  notes: ['savePath 只能是当前站点工作区里的相对路径；指向区外的符号链接会被拒绝。'],
   schema: z
     .object({
       eventId: z.string().optional().describe(

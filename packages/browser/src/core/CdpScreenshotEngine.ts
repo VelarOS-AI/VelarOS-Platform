@@ -1,5 +1,5 @@
 import { mkdir, writeFile } from 'node:fs/promises'
-import { dirname, isAbsolute, resolve } from 'node:path'
+import { dirname } from 'node:path'
 
 import { isFiniteNumber, isObject, isPlainObject } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
@@ -8,10 +8,8 @@ import { logRuntime } from '@velaros-ai/core/logger'
 import type {
   BrowserPageDriverScreenshotOptions,
 } from './BrowserPageDriver'
-import {
-  getRelativePathInsideRoot,
-  toPortableRelativePath,
-} from './BrowserPathContainment'
+import type { BrowserWorkspacePath } from './BrowserPathContainment'
+import { resolveBrowserWorkspacePath } from './BrowserPathContainment'
 import {
   type BrowserPageDriverKernel,
   DEFAULT_BROWSER_VIEWPORT,
@@ -69,7 +67,7 @@ export class CdpScreenshotEngine {
     const screenshotOptions = this.resolveScreenshotOptions(metadata, options)
     const captured = await session.driver.captureScreenshot(screenshotOptions)
     const bytes = Buffer.from(captured.bytes)
-    const artifactPath = this.resolveScreenshotPath(context.workspaceRoot, options.path)
+    const artifactPath = await this.resolveScreenshotPath(context.workspaceRoot, options.path)
 
     await mkdir(dirname(artifactPath.path), { recursive: true })
     await writeFile(artifactPath.path, bytes)
@@ -234,33 +232,15 @@ export class CdpScreenshotEngine {
     }
   }
 
-  private resolveScreenshotPath(
+  /** 解析截图落盘路径：与站点工作区的其它落盘同一份判定（按真实路径，解开符号链接）。 */
+  private async resolveScreenshotPath(
     workspaceRoot: string,
     requestedPath?: string
-  ): {
-    path: string
-    relativePath: string
-  } {
+  ): Promise<BrowserWorkspacePath> {
     const relativePath =
       requestedPath?.trim() ||
       `artifacts/screenshots/browser-${new Date().toISOString().replace(/[:.]/g, '-')}.png`
 
-    if (isAbsolute(relativePath)) {
-      throw new AppError('VALIDATION', '截图路径必须是当前浏览器工作区内的相对路径。')
-    }
-
-    const resolvedRoot = resolve(workspaceRoot)
-    const resolvedPath = resolve(resolvedRoot, relativePath)
-    const pathFromRoot = getRelativePathInsideRoot(resolvedRoot, resolvedPath)
-
-    if (!pathFromRoot) {
-      // 防止 ../../ 逃出工作区。
-      throw new AppError('PERMISSION', '截图路径不能离开当前浏览器工作区。')
-    }
-
-    return {
-      path: resolvedPath,
-      relativePath: toPortableRelativePath(pathFromRoot),
-    }
+    return resolveBrowserWorkspacePath(workspaceRoot, relativePath, '截图路径')
   }
 }

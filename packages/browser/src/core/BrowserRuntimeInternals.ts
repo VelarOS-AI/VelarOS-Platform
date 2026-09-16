@@ -1,16 +1,11 @@
-import { isAbsolute, resolve } from 'node:path'
-
 import { isFiniteNumber, isString, optionalWhen } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
 
 import type {
   BrowserPageDriver,
   BrowserPageDriverState,
 } from './BrowserPageDriver'
-import {
-  getRelativePathInsideRoot,
-  toPortableRelativePath,
-} from './BrowserPathContainment'
+import type { BrowserWorkspacePath } from './BrowserPathContainment'
+import { resolveBrowserWorkspacePath } from './BrowserPathContainment'
 import type { BrowserViewportOptions } from './types.js'
 
 /** 内嵌浏览器默认视口，和桌面常见窗口比例接近。 */
@@ -153,32 +148,16 @@ export function resolveExternalPageUrl(
   return session.url || session.driver.getURL() || fallbackUrl
 }
 
-/** 解析浏览器工作区内的相对保存路径，防目录穿越。 */
-export function resolveWorkspaceFilePath(
+/**
+ * 解析站点工作区内的相对保存路径，防目录穿越。
+ *
+ * 判定走 {@link resolveBrowserWorkspacePath}（按真实路径，解开符号链接）：与 `browser:files`
+ * 同一份实现，工作区里指向外面的符号链接读写都拒绝。
+ */
+export async function resolveWorkspaceFilePath(
   workspaceRoot: string,
-  requestedPath: string
-): {
-  path: string
-  relativePath: string
-} {
-  const trimmed = requestedPath.trim()
-  if (!trimmed) {
-    throw new AppError('VALIDATION', 'savePath 不能为空。')
-  }
-
-  if (isAbsolute(trimmed)) {
-    throw new AppError('VALIDATION', '路径必须是当前浏览器工作区内的相对路径。')
-  }
-
-  const resolvedRoot = resolve(workspaceRoot)
-  const resolvedPath = resolve(resolvedRoot, trimmed)
-  const pathFromRoot = getRelativePathInsideRoot(resolvedRoot, resolvedPath)
-  if (!pathFromRoot) {
-    throw new AppError('PERMISSION', '路径不能离开当前浏览器工作区。')
-  }
-
-  return {
-    path: resolvedPath,
-    relativePath: toPortableRelativePath(pathFromRoot),
-  }
+  requestedPath: string,
+  label = '路径'
+): Promise<BrowserWorkspacePath> {
+  return resolveBrowserWorkspacePath(workspaceRoot, requestedPath, label)
 }

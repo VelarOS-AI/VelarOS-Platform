@@ -13,7 +13,10 @@ import { dirname, isAbsolute, resolve } from 'node:path'
 import { isEmpty, isNotNull, isNull, isObject } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import { getRelativePathInsideRoot } from './BrowserPathContainment.js'
+import {
+  getRelativePathInsideRoot,
+  resolveBrowserWorkspacePath,
+} from './BrowserPathContainment.js'
 import type {
   BrowserSiteContext,
   ProjectReadFileResult,
@@ -444,8 +447,12 @@ class BrowserWorkspaceFileAccess {
     path: string,
   ): Promise<BrowserWorkspaceResolvedPath> {
     const root = await this.ensureRoot(workspaceRoot)
-    const resolvedPath = this.resolveInsideRoot(root, path)
-    const existingStats = await lstat(resolvedPath).catch((error: any) => {
+    const target = await resolveBrowserWorkspacePath(
+      root,
+      normalizeRelativePath(path),
+      '浏览器工作区文件路径',
+    )
+    const existingStats = await lstat(target.literalPath).catch((error: any) => {
       if (isMissingFileError(error)) return null
       throw error
     })
@@ -457,44 +464,25 @@ class BrowserWorkspaceFileAccess {
         { path },
       )
     }
-    const realTarget = existingStats
-      ? await realpath(resolvedPath)
-      : resolvedPath
 
-    if (!getRelativePathInsideRoot(root, realTarget)) {
-      throw new AppError(
-        'PERMISSION',
-        '浏览器工作区文件路径不能离开当前站点目录。',
-        undefined,
-        {
-          path,
-        },
-      )
-    }
-
-    return { path: realTarget, root }
+    return { path: target.path, root }
   }
 
   private async resolveWritablePath(
     path: string,
   ): Promise<BrowserWorkspaceResolvedPath> {
     const root = await this.ensureRoot()
-    const resolvedPath = this.resolveInsideRoot(root, path)
-    await mkdir(dirname(resolvedPath), { recursive: true })
+    const relativePath = normalizeRelativePath(path)
+    // 先建目录再判定：路径还不存在时 resolveRealPath 解到最近一个存在的祖先，
+    // 建完目录判出来的才是「写进去真正会落到哪」。
+    await mkdir(dirname(resolve(root, relativePath)), { recursive: true })
+    const target = await resolveBrowserWorkspacePath(
+      root,
+      relativePath,
+      '浏览器工作区写入路径',
+    )
 
-    const parentRealPath = await realpath(dirname(resolvedPath))
-    if (!getRelativePathInsideRoot(root, parentRealPath)) {
-      throw new AppError(
-        'PERMISSION',
-        '浏览器工作区写入路径不能离开当前站点目录。',
-        undefined,
-        {
-          path,
-        },
-      )
-    }
-
-    const existingStats = await lstat(resolvedPath).catch((error: any) => {
+    const existingStats = await lstat(target.literalPath).catch((error: any) => {
       if (isMissingFileError(error)) return null
       throw error
     })
@@ -507,7 +495,7 @@ class BrowserWorkspaceFileAccess {
       )
     }
 
-    return { path: resolvedPath, root }
+    return { path: target.path, root }
   }
 
   private async ensureRoot(
@@ -515,23 +503,6 @@ class BrowserWorkspaceFileAccess {
   ): Promise<string> {
     await mkdir(workspaceRoot, { recursive: true })
     return realpath(workspaceRoot)
-  }
-
-  private resolveInsideRoot(root: string, path: string): string {
-    const relativePath = normalizeRelativePath(path)
-    const resolvedPath = resolve(root, relativePath)
-    if (!getRelativePathInsideRoot(root, resolvedPath)) {
-      throw new AppError(
-        'PERMISSION',
-        '浏览器工作区文件路径不能离开当前站点目录。',
-        undefined,
-        {
-          path,
-        },
-      )
-    }
-
-    return resolvedPath
   }
 }
 

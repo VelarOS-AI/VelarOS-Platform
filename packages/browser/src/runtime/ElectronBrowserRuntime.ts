@@ -1423,7 +1423,7 @@ class ElectronBrowserRuntime {
 
       const savePath =
         options.action === 'accept' && options.savePath
-          ? resolveWorkspaceFilePath(context.workspaceRoot, options.savePath).path
+          ? (await resolveWorkspaceFilePath(context.workspaceRoot, options.savePath, 'savePath')).path
           : options.savePath
 
       return this.sessionManager.getPendingEventsBroker().resolveDownload({

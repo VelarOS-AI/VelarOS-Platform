@@ -193,7 +193,11 @@ export class BrowserPageDataEngine extends CdpPageDataEngine {
     abortSignal?.throwIfAborted()
     const externalSession = this.getExternalPageSession(sessionId)
     const targetUrl = this.normalizeFetchResourceUrl(options.url)
-    const artifactPath = resolveWorkspaceFilePath(context.workspaceRoot, options.savePath)
+    const artifactPath = await resolveWorkspaceFilePath(
+      context.workspaceRoot,
+      options.savePath,
+      'savePath'
+    )
     if (externalSession) return super.fetchResource(sessionId, context, options, abortSignal)
 
     const session = await this.getLivePageSessionUnlocked(sessionId, abortSignal)
@@ -366,7 +370,7 @@ export class BrowserPageDataEngine extends CdpPageDataEngine {
   ): Promise<BrowserUploadFileResult> {
     abortSignal?.throwIfAborted()
     const externalSession = this.getExternalPageSession(sessionId)
-    const absolutePath = this.resolveUploadFilePath(context.workspaceRoot, options.filePath)
+    const absolutePath = await this.resolveUploadFilePath(context.workspaceRoot, options.filePath)
     if (externalSession) return super.uploadFile(sessionId, context, options, abortSignal)
 
     const session = await this.getLivePageSessionUnlocked(sessionId, abortSignal)
@@ -454,9 +458,10 @@ export class BrowserPageDataEngine extends CdpPageDataEngine {
       printBackground: !isFalse(options.printBackground),
     })
     const defaultPath = `artifacts/exports/page-${new Date().toISOString().replace(/[:.]/g, '-')}.pdf`
-    const artifactPath = resolveWorkspaceFilePath(
+    const artifactPath = await resolveWorkspaceFilePath(
       context.workspaceRoot,
-      options.savePath ?? defaultPath
+      options.savePath ?? defaultPath,
+      'savePath'
     )
 
     await mkdir(dirname(artifactPath.path), { recursive: true })

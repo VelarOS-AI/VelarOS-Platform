@@ -19,10 +19,10 @@ const browserUploadFile = defineBrowserTool<{
     'target 来自 inspect/query 或元素选择器。',
   ],
   forbidden: [
-    'filePath 必须在当前 browser workspace 内。',
+    '不要传绝对路径或站点工作区外的文件；工作区里指向区外的符号链接同样会被拒绝。',
     '不要用于非 file input 元素。',
   ],
-  usage: ['传 target 定位 file input；filePath 为工作区内相对或绝对路径。'],
+  usage: ['传 target 定位 file input；filePath 是当前站点工作区里的相对路径，例如 downloads/report.pdf。'],
   examples: [
     {
       target: { css: 'input[type=file][name=document]' },

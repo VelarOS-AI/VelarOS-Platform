@@ -1,11 +1,11 @@
 import { mkdir, writeFile } from 'node:fs/promises'
-import { dirname, isAbsolute, resolve } from 'node:path'
+import { dirname, resolve } from 'node:path'
 
 import { isEmpty, isFiniteNumber, isNull, isPresent, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import type { BrowserPageDriverEmulationState } from './BrowserPageDriver'
-import { getRelativePathInsideRoot } from './BrowserPathContainment'
+import { resolveBrowserWorkspacePath } from './BrowserPathContainment'
 import {
   type BrowserParsedTraceRecording,
   BrowserPerformanceTraceEngine,
@@ -203,15 +203,12 @@ export class BrowserPerformanceOrchestrator {
     abortSignal?.throwIfAborted()
 
     const stamp = new Date().toISOString().replace(/[:.]/g, '-')
-    const relativePath = options.path?.trim() || `artifacts/memory/heap-${stamp}.heapsnapshot`
-    if (isAbsolute(relativePath)) {
-      throw new AppError('VALIDATION', '堆快照路径必须是当前浏览器工作区内的相对路径。')
-    }
-    const resolvedRoot = resolve(context.workspaceRoot)
-    const resolvedPath = resolve(resolvedRoot, relativePath)
-    if (!getRelativePathInsideRoot(resolvedRoot, resolvedPath)) {
-      throw new AppError('PERMISSION', '堆快照路径不能离开当前浏览器工作区。')
-    }
+    const artifact = await resolveBrowserWorkspacePath(
+      context.workspaceRoot,
+      options.path?.trim() || `artifacts/memory/heap-${stamp}.heapsnapshot`,
+      '堆快照路径'
+    )
+    const { path: resolvedPath, relativePath } = artifact
     await mkdir(dirname(resolvedPath), { recursive: true })
 
     const chunks: string[] = []

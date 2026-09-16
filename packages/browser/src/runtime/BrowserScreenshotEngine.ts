@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import { mkdir, writeFile } from 'node:fs/promises'
-import { basename, dirname, isAbsolute, resolve } from 'node:path'
+import { basename, dirname, resolve } from 'node:path'
 
 import electron from 'electron'
 
@@ -20,8 +20,8 @@ import {
 } from '../core'
 import { browserLoginDetectionScriptFragment } from '../core'
 import {
-  getRelativePathInsideRoot,
-  toPortableRelativePath,
+  type BrowserWorkspacePath,
+  resolveBrowserWorkspacePath,
 } from '../core'
 
 import type { BrowserPageWaiter } from './BrowserPageWaiter'
@@ -349,12 +349,12 @@ export class BrowserScreenshotEngine {
       .replace(/[^\w一-龥-]+/g, '-')
       .slice(0, 60)
     const stamp = new Date().toISOString().replace(/[:.]/g, '-')
-    const relativePath = `artifacts/recordings/${stem || `screencast-${stamp}`}.gif`
-    const resolvedRoot = resolve(context.workspaceRoot)
-    const gifPath = resolve(resolvedRoot, relativePath)
-    if (!getRelativePathInsideRoot(resolvedRoot, gifPath)) {
-      throw new AppError('PERMISSION', '录屏产物路径不能离开当前浏览器工作区。')
-    }
+    const artifact = await resolveBrowserWorkspacePath(
+      context.workspaceRoot,
+      `artifacts/recordings/${stem || `screencast-${stamp}`}.gif`,
+      '录屏产物路径'
+    )
+    const { path: gifPath, relativePath } = artifact
     await mkdir(dirname(gifPath), { recursive: true })
     await writeFile(gifPath, gif)
 
@@ -453,7 +453,7 @@ export class BrowserScreenshotEngine {
       )
       const imageSize = image.getSize()
       const bytes = image.toPNG()
-      const artifactPath = this.resolveScreenshotPath(context.workspaceRoot, options.path)
+      const artifactPath = await this.resolveScreenshotPath(context.workspaceRoot, options.path)
       const diff = optionalWhenLazy(options.compareWithPrevious, () =>
         this.buildScreenshotDiff(sessionId, image, bytes)
       )
@@ -518,7 +518,7 @@ export class BrowserScreenshotEngine {
 
     const imageSize = image.getSize()
     const bytes = Buffer.from(captured.bytes)
-    const artifactPath = this.resolveScreenshotPath(context.workspaceRoot, options.path)
+    const artifactPath = await this.resolveScreenshotPath(context.workspaceRoot, options.path)
     const diff = optionalWhenLazy(options.compareWithPrevious, () =>
       this.buildScreenshotDiff(sessionId, image, bytes)
     )
@@ -1796,33 +1796,15 @@ ${browserLoginDetectionScriptFragment}
 })()`
   }
 
-  private resolveScreenshotPath(
+  /** 解析截图落盘路径：与站点工作区的其它落盘同一份判定（按真实路径，解开符号链接）。 */
+  private async resolveScreenshotPath(
     workspaceRoot: string,
     requestedPath?: string
-  ): {
-    path: string
-    relativePath: string
-  } {
+  ): Promise<BrowserWorkspacePath> {
     const relativePath =
       requestedPath?.trim() ||
       `artifacts/screenshots/browser-${new Date().toISOString().replace(/[:.]/g, '-')}.png`
 
-    if (isAbsolute(relativePath)) {
-      throw new AppError('VALIDATION', '截图路径必须是当前浏览器工作区内的相对路径。')
-    }
-
-    const resolvedRoot = resolve(workspaceRoot)
-    const resolvedPath = resolve(resolvedRoot, relativePath)
-    const pathFromRoot = getRelativePathInsideRoot(resolvedRoot, resolvedPath)
-
-    if (!pathFromRoot) {
-      // 防止 ../../ 逃出工作区。
-      throw new AppError('PERMISSION', '截图路径不能离开当前浏览器工作区。')
-    }
-
-    return {
-      path: resolvedPath,
-      relativePath: toPortableRelativePath(pathFromRoot),
-    }
+    return resolveBrowserWorkspacePath(workspaceRoot, relativePath, '截图路径')
   }
 }
