@@ -2,8 +2,7 @@ import { isFalse, isPlainObject,toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
-import { BrowserPageScriptBuilder } from '../core'
-
+import { extractBrowserList, extractBrowserTable } from './PageExtraction'
 import type {
   BrowserRecipeRunStepResult,
   BrowserRecipeStepOperation,
@@ -83,29 +82,22 @@ async function executeRecipeStepOperation(
       return ctx.browser.scrollPage(operation.options)
     case 'wait_for_selector':
       return ctx.browser.waitForSelector(operation.options)
-    case 'extract_table': {
-      const scripts = new BrowserPageScriptBuilder()
-      return ctx.browser.evaluateScript({
-        script: scripts.buildTableExtractionScript({
-          selector: operation.selector,
-          tableIndex: operation.tableIndex ?? 0,
-          maxRows: operation.maxRows ?? 200,
-        }),
-        mode: 'expression',
-        timeoutMs: 10_000,
+    // 提取步骤与 browser:extract 共用 PageExtraction 的取回口径：求值通道恒返回信封，
+    // 直接读信封会把「第 100 行之后的表格行」「超上限的长结果」静默丢掉，run 记录里存下的
+    // 也就成了信封而不是数据。helper 负责拆信封、按最大上限申请、超限明确失败。
+    case 'extract_table':
+      return extractBrowserTable(ctx, {
+        selector: operation.selector,
+        tableIndex: operation.tableIndex ?? 0,
+        maxRows: operation.maxRows ?? 200,
+        save: false,
       })
-    }
-    case 'extract_list': {
-      const scripts = new BrowserPageScriptBuilder()
-      return ctx.browser.evaluateScript({
-        script: scripts.buildListExtractionScript({
-          selector: operation.selector,
-          maxItems: operation.maxItems ?? 50,
-        }),
-        mode: 'expression',
-        timeoutMs: 10_000,
+    case 'extract_list':
+      return extractBrowserList(ctx, {
+        selector: operation.selector,
+        maxItems: operation.maxItems ?? 50,
+        save: false,
       })
-    }
   }
 }
 
