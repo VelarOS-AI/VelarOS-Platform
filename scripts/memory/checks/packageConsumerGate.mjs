@@ -41,8 +41,8 @@ const PackageSpecifications = [
     },
   },
   {
-    name: '@velaros-ai/memory/knowledge',
-    directory: resolve(RepositoryRoot, 'packages/memory'),
+    name: '@velaros-ai/knowledge',
+    directory: resolve(RepositoryRoot, 'packages/knowledge'),
     example: 'knowledge.ts',
     expectedDependencies: {
       '@velaros-ai/core': '^0.4.0',
@@ -508,7 +508,7 @@ async function writeConsumerProject(consumerDirectory) {
     `import assert from 'node:assert/strict'
 
 const memory = await import('@velaros-ai/memory')
-const knowledge = await import('@velaros-ai/memory/knowledge')
+const knowledge = await import('@velaros-ai/knowledge')
 const adapter = await import('@velaros-ai/memory/adapter-kernel')
 
 assert.equal(typeof memory.DefaultMemoryRuntime, 'function')
@@ -526,7 +526,7 @@ async function writeCombinedConsumer(consumerDirectory) {
   await writeFile(
     join(consumerDirectory, 'combined-consumer.ts'),
     `import { isBlank } from '@velaros-ai/core'
-import * as Knowledge from '@velaros-ai/memory/knowledge'
+import * as Knowledge from '@velaros-ai/knowledge'
 import * as Memory from '@velaros-ai/memory'
 import * as MemoryAdapter from '@velaros-ai/memory/adapter-kernel'
 import * as UI from '@velaros-ai/ui'

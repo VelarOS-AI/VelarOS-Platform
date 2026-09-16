@@ -29,8 +29,8 @@ const PortablePackages = [
     name: '@velaros-ai/memory',
   },
   {
-    directory: resolve(RepositoryRoot, 'packages/memory'),
-    name: '@velaros-ai/memory/knowledge',
+    directory: resolve(RepositoryRoot, 'packages/knowledge'),
+    name: '@velaros-ai/knowledge',
   },
 ]
 
@@ -52,6 +52,21 @@ export class PortableContractsGate {
       command: process.execPath,
       cwd: this.repositoryRoot,
       operation: 'Memory portable-contract package build',
+      stdio: 'inherit',
+      timeoutMs: 300_000,
+    })
+    await runGuardedCommand({
+      args: [
+        resolve(
+          this.repositoryRoot,
+          'scripts/build/buildPackageTopology.mjs'
+        ),
+        '--for',
+        '@velaros-ai/knowledge',
+      ],
+      command: process.execPath,
+      cwd: this.repositoryRoot,
+      operation: 'Knowledge portable-contract package build',
       stdio: 'inherit',
       timeoutMs: 300_000,
     })
@@ -153,7 +168,7 @@ export class PortableContractsGate {
     )
     await writeFile(
       join(consumerRoot, 'browser-contracts.ts'),
-      `import * as KnowledgeContracts from '@velaros-ai/memory/knowledge/contracts'
+      `import * as KnowledgeContracts from '@velaros-ai/knowledge/contracts'
 import * as MemoryContracts from '@velaros-ai/memory/contracts'
 import type {
   KnowledgeDiagnostics,
@@ -161,7 +176,7 @@ import type {
   KnowledgeReindexResult,
   KnowledgeWorkspaceSyncOptions,
   KnowledgeWorkspaceSyncResult,
-} from '@velaros-ai/memory/knowledge/contracts'
+} from '@velaros-ai/knowledge/contracts'
 import type {
   MemoryDreamRunResult,
   MemoryTreeDiagnostics,

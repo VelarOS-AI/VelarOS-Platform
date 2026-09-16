@@ -25,7 +25,7 @@ VelarOS Platform 包含 17 个 package workspace，其中 16 个独立发布。�
 | 能力公共件 | `@velaros-ai/shell-command`、`@velaros-ai/rehearsal-sandbox`、`@velaros-ai/text-files`、`@velaros-ai/path-rules` |
 | 模型供应方 | `@velaros-ai/model` |
 | 能力 | `@velaros-ai/browser`、`@velaros-ai/cli`、`@velaros-ai/computer`、`@velaros-ai/development`、`@velaros-ai/office`、`@velaros-ai/project`、`@velaros-ai/system` |
-| 记忆 | `@velaros-ai/memory` |
+| 记忆 | `@velaros-ai/memory`、`@velaros-ai/knowledge` |
 | UI | `@velaros-ai/ui` |
 | HTML 工件 | `@velaros-ai/html-artifacts` |
 | Surface 协议 | `@velaros-ai/surface-protocol` |

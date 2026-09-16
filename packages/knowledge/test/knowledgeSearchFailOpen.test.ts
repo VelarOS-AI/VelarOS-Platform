@@ -11,9 +11,9 @@ import { describe, expect, test } from 'bun:test'
 import type {
   KnowledgeSearchResult,
   KnowledgeWorkspaceSyncResult,
-} from '../../src/knowledge/knowledge/domain/Types'
-import { knowledgeTools } from '../../src/knowledge/tools/knowledge/Knowledge.tool'
-import type { KnowledgeToolContext } from '../../src/knowledge/Types'
+} from '../src/knowledge/domain/Types'
+import { knowledgeTools } from '../src/tools/knowledge/Knowledge.tool'
+import type { KnowledgeToolContext } from '../src/Types'
 
 function createSyncResult(patch: Partial<KnowledgeWorkspaceSyncResult> = {}): KnowledgeWorkspaceSyncResult {
   return {

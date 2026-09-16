@@ -84,6 +84,7 @@ const Domains = [
     config: memoryConfig,
     globs: [
       'packages/memory/**',
+      'packages/knowledge/**',
       'tests/memory/**',
     ],
   },

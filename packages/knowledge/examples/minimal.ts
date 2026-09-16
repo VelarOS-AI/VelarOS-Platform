@@ -1,7 +1,7 @@
 import {
   DefaultKnowledgeRuntime,
   type KnowledgeRuntimeProviders,
-} from '../src/knowledge'
+} from '../src'
 
 declare const providers: KnowledgeRuntimeProviders
 

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import { extractImports } from '../../src/knowledge/knowledge/domain/CodeHelper'
+import { extractImports } from '../src/knowledge/domain/CodeHelper'
 
 describe('knowledge code import extraction', () => {
   test('extracts side-effect imports, from specifiers, and direct require assignments', () => {

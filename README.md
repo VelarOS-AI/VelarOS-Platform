@@ -25,7 +25,7 @@ packages declare a shared `velaros.platform` generation for cross-package compat
 | Shared capability foundations | `@velaros-ai/shell-command`, `@velaros-ai/rehearsal-sandbox`, `@velaros-ai/text-files`, `@velaros-ai/path-rules` |
 | Model providers | `@velaros-ai/model` |
 | Capabilities | `@velaros-ai/browser`, `@velaros-ai/cli`, `@velaros-ai/computer`, `@velaros-ai/development`, `@velaros-ai/office`, `@velaros-ai/project`, `@velaros-ai/system` |
-| Memory | `@velaros-ai/memory` |
+| Memory | `@velaros-ai/memory`, `@velaros-ai/knowledge` |
 | UI | `@velaros-ai/ui` |
 | HTML artifacts | `@velaros-ai/html-artifacts` |
 | Surface protocol | `@velaros-ai/surface-protocol` |

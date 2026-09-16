@@ -1,10 +1,10 @@
 {
   "name": "@velaros-ai/memory",
-  "version": "0.4.6",
+  "version": "0.5.0",
   "velaros": {
     "platform": "0.6"
   },
-  "description": "Evidence-grounded long-term memory tree, recall, and governance for VelarOS-compatible runtimes, with the workspace knowledge/vector product under ./knowledge and the kernel three-port glue under ./adapter-kernel.",
+  "description": "Evidence-grounded long-term memory tree, recall, and governance for VelarOS-compatible runtimes, with pluggable store backends under ./backend, ./files and ./vector, and the kernel three-port glue under ./adapter-kernel.",
   "license": "Apache-2.0",
   "sideEffects": false,
   "engines": {
@@ -41,14 +41,6 @@
     "./vector": {
       "types": "./dist/vector/index.d.ts",
       "import": "./dist/vector/index.js"
-    },
-    "./knowledge": {
-      "types": "./dist/knowledge/index.d.ts",
-      "import": "./dist/knowledge/index.js"
-    },
-    "./knowledge/contracts": {
-      "types": "./dist/knowledge/contracts.d.ts",
-      "import": "./dist/knowledge/contracts.js"
     },
     "./adapter-kernel": {
       "types": "./dist/adapter-kernel/index.d.ts",
@@ -89,19 +81,11 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@lancedb/lancedb": "^0.27.2",
     "@types/node": "^22.19.17",
-    "apache-arrow": "^18.1.0",
     "typescript": "^5.7.0"
   },
   "peerDependencies": {
-    "@velaros-ai/agent": "workspace:^",
-    "@lancedb/lancedb": "^0.27.2"
-  },
-  "peerDependenciesMeta": {
-    "@lancedb/lancedb": {
-      "optional": true
-    }
+    "@velaros-ai/agent": "workspace:^"
   },
   "repository": {
     "type": "git",

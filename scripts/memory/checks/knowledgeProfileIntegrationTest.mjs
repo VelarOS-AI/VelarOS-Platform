@@ -12,11 +12,9 @@ const buildDir = mkdtempSync(
 const outputFile = join(buildDir, 'knowledge-profile-integration.test.mjs')
 const entryFile = join(
   repoRoot,
-  'tests',
-  'memory',
-  'maintained',
   'packages',
-  'memory',
+  'knowledge',
+  'test',
   'KnowledgeVectorsProfileIntegration.test.ts'
 )
 const electronBinary = join(repoRoot, 'node_modules', '.bin', 'electron')

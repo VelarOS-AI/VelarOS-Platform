@@ -1276,10 +1276,10 @@ Evidence（权威事实来源）
 | `MemoryGraphTimeline` 时间泳道                                                              | 删除                   | 时间能力进入树年轮和分支聚焦                                                                                         |
 | 前端临时相似度连线（`useMemoryGraphLinks`）                                                 | 删除为权威关系         | 只有持久化且带证据的 lineage 才能影响树                                                                              |
 | `Embeddings` / `EmbeddingApi` / provider 跟随与生成门禁（`EmbeddingChatProviderContext`）   | 复用                   | 干净的注入式基础设施；向量行 runtime 版本元数据延续现有行级 reindex 思路                                             |
-| `packages/memory/src/knowledge/shared/**`（HybridQuery / Indexing / VectorStats）                  | 已迁至 Knowledge       | 混合融合评分与索引复用判定属于工作区知识检索                                                                         |
+| `packages/knowledge/src/shared/**`（HybridQuery / Indexing / VectorStats）                  | 已迁至 Knowledge       | 混合融合评分与索引复用判定属于工作区知识检索                                                                         |
 | `DeterministicCurator` 的确定性脱敏正则                                                     | 重构后复用             | 作为确定性隐私入口（secret redaction + privacy classification）的种子实现                                            |
 | `TurnRecallCoordinator` + `MemoryRelevanceSelector`（turn-context 第八源 `memory.recall`）  | 复用形态               | “同步零 LLM、异步严格选择注入”正是新召回性能契约的原型；数据源改为树路径 facade                                      |
-| `packages/memory/src/knowledge/knowledge/**`（知识域）                                             | 已拆为独立包           | 树保存用户与任务上下文，Knowledge 保存权威资料                                                                       |
+| `packages/knowledge/src/knowledge/**`（知识域）                                             | 已拆为独立包           | 树保存用户与任务上下文，Knowledge 保存权威资料                                                                       |
 | 测试版 v1 存储基线                                                                          | 已落地                 | 直接创建当前 authority schema；开发期旧数据不转换、不备份、不带入正式迁移链                                          |
 | Electron `safeStorage`（现有 CloudAccountTokenStore 用法）                                  | 只作 seed              | 适合保护单个 wrapping root，不等同于十万级 per-blob DEK 的完整 ContentKeyService                                     |
 | renderer 侧自动沉淀（`useChatMemoryBridge` 计划构建）                                       | 删除                   | 采集职责移到 main 侧 `MemoryEvidenceBridge`；renderer 不再决定“什么值得记”，浏览器与系统空间会话因此首次获得平等采集 |
@@ -1317,7 +1317,7 @@ product-host/memory-ui/
   detail/             # 按需详情界面
 ```
 
-`packages/memory` 继续拥有产品无关的数据治理与树投影算法；“树长什么样”和页面交互属于宿主产品。R-memory 后它只承载长期记忆域；knowledge、`shared/` 与 embedding 基础设施已经迁入兄弟包 `@velaros-ai/memory/knowledge`，两域只在宿主工具上下文中组合，不互相 import。
+`packages/memory` 继续拥有产品无关的数据治理与树投影算法；“树长什么样”和页面交互属于宿主产品。R-memory 后它只承载长期记忆域；knowledge、`shared/` 与 embedding 基础设施已经迁入兄弟包 `@velaros-ai/knowledge`，两域只在宿主工具上下文中组合，不互相 import。
 
 ## 相邻记忆机制边界
 

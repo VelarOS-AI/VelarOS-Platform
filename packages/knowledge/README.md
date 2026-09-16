@@ -1,28 +1,30 @@
-# @velaros-ai/memory/knowledge
+# @velaros-ai/knowledge
 
-> `@velaros-ai/memory` 的一个导入切片(`packages/memory/src/knowledge`)。包总览见
-> [包 README](../../README.md)。
+> **位置**:VelarOS-Platform 单版本火车 · `memory` 域 · 目录 `packages/knowledge`。
+> 它原来是 `@velaros-ai/memory` 的 `/knowledge` 子路径,现在是独立包——导出名一个没变,只换了包名。
+> 长期记忆在兄弟包 [`@velaros-ai/memory`](../memory/README.md);
+> 模块卡片见 [`MODULE.md`](./MODULE.md)。
 
-## 这个切片是什么
+## 这个包是什么
 
 **工作区资料与代码的知识域**:把一个工作区里的文件增量摄取、分块、建 SQLite FTS 与 LanceDB
 向量索引,提供混合检索、索引诊断与显式重建,并附带一组 agent 工具。
 
 它**不拥有跨会话长期记忆,也不拥有 MemoryDream**——那些是记忆产品(包根入口)的事。
-`workspaceRoot` 在这里只是调用方给的**隔离键 + 文件根**,不代表本切片依赖任何 Workspace 实现。
+`workspaceRoot` 在这里只是调用方给的**隔离键 + 文件根**,不代表本包依赖任何 Workspace 实现。
 
 ## 公共入口
 
-- `@velaros-ai/memory/knowledge` —— 运行时、领域、embedding、存储与注入端口
-- `@velaros-ai/memory/knowledge/contracts` —— **浏览器安全的纯类型** Knowledge DTO
+- `@velaros-ai/knowledge` —— 运行时、领域、embedding、存储与注入端口
+- `@velaros-ai/knowledge/contracts` —— **浏览器安全的纯类型** Knowledge DTO
 
 `/contracts` 的运行时 JavaScript 为空:不会加载 SQLite、LanceDB、Apache Arrow、
 embedding 请求或索引实现。renderer、Web Worker、RPC schema 与前端测试从这里取类型。
-**不要深层导入 `dist/knowledge/**`。**
+**不要深层导入 `dist/**`,只走这两个入口。**
 
 ## 核心概念
 
-### embedding profile 隔离(本切片最重要的设计)
+### embedding profile 隔离(本包最重要的设计)
 
 **profile 身份恒为 `provider + model + dimensions`**,查询还额外绑定当前内容 revision。
 
@@ -49,12 +51,12 @@ embedding 请求或索引实现。renderer、Web Worker、RPC schema 与前端�
 
 ## 边界
 
-- 文档、索引状态、检索结果、provider / model profile 身份**均由本切片拥有**。
+- 文档、索引状态、检索结果、provider / model profile 身份**均由本包拥有**。
 - **embedding 模型选择、provider 凭证与运行时可用性必须先由宿主解析**,再经
   `KnowledgeEmbeddingConfigPort.resolveEmbeddingRuntime()` 注入。
-  本切片**不读模型环境变量,也不会自动挑 provider**。
-- 工作区可见性经 `KnowledgeIndexingPolicy` 注入;**本切片不依赖 Workspace 实现**。
-- **本切片不依赖 `@velaros-ai/memory`(包根)**,也不从 Kernel Core 导入
+  本包**不读模型环境变量,也不会自动挑 provider**。
+- 工作区可见性经 `KnowledgeIndexingPolicy` 注入;**本包不依赖 Workspace 实现**。
+- **本包不依赖 `@velaros-ai/memory`(包根)**,也不从 Kernel Core 导入
   Model / Knowledge / Workspace DTO。
 
 ## 生命周期与并发
@@ -68,7 +70,7 @@ embedding 请求或索引实现。renderer、Web Worker、RPC schema 与前端�
 import {
   DefaultKnowledgeRuntime,
   type KnowledgeRuntimeProviders,
-} from '@velaros-ai/memory/knowledge'
+} from '@velaros-ai/knowledge'
 
 declare const providers: KnowledgeRuntimeProviders
 

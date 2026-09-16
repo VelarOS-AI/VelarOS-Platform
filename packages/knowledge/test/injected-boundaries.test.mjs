@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
@@ -8,7 +8,7 @@ import {
   EmbeddingApi,
   Embeddings,
   KnowledgeWorkspace,
-} from '@velaros-ai/memory/knowledge'
+} from '@velaros-ai/knowledge'
 
 test('embedding runtime is fully resolved by the injected host port', async () => {
   const requests = []

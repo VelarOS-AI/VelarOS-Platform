@@ -12,7 +12,7 @@ VelarOS Platform is a flat Bun workspace. Every publishable package lives direct
 | Foundations | `packages/shell-command`, `packages/rehearsal-sandbox`, `packages/text-files`, `packages/path-rules` |
 | Model | `packages/model` |
 | Capabilities | `packages/browser`, `packages/cli`, `packages/computer`, `packages/development`, `packages/office`, `packages/project`, `packages/system` |
-| Memory | `packages/memory` |
+| Memory | `packages/memory`, `packages/knowledge` |
 | UI | `packages/ui` |
 | HTML artifacts | `packages/html-artifacts` |
 | Surface | `packages/surface-protocol` |

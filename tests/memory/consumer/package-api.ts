@@ -4,7 +4,7 @@ import {
   type KnowledgeRuntimeProviders,
   VectorFailureMonitor,
   type VectorFailureMonitorOptions,
-} from '@velaros-ai/memory/knowledge'
+} from '@velaros-ai/knowledge'
 import {
   createMemoryRuntime,
   MemoryRuntime,

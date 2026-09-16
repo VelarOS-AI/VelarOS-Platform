@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// 用途：锁定 @velaros-ai/memory 三切片（主干 / knowledge / adapter-kernel）的职责与宿主无关边界。
+// 用途：锁定 @velaros-ai/memory 与 @velaros-ai/knowledge 两个包的职责与宿主无关边界。
 
 import {
   existsSync,
@@ -34,46 +34,27 @@ const ProductToolNames = [
   'workspace_add_root',
 ]
 
-// P7a 合包后:Memory 产品是**一个安装单元、三个切片**(主干 / knowledge / adapter-kernel)。
-// 包清单层再也承载不了「主干不得依赖向量域」——knowledge 切片自己就要 lancedb;边界因此整条
-// 下沉到**切片源码层**:每条规则只扫自己的源码子树,跨切片访问按 forbiddenReach / mustStayInSlice
-// 方向矩阵裁决(相对说明符解析成绝对路径后比对)。这是「记忆与上下文永不合并」的接缝在合包后的
-// 落点,方向与合包前逐条等价,不是放宽。
-const MemoryPackageRoot = 'packages/memory'
+// 「记忆与上下文永不合并」是域宪章级的判决。合包那一轮它靠切片源码层的方向矩阵守着；
+// 知识库拆成 @velaros-ai/knowledge 之后，这条接缝回到包边界上——两个包互不 import，
+// 各自保持宿主无关。方向与合包前逐条等价，不是放宽。
 const ProductRules = [
   {
-    label: 'Memory 主干',
+    label: 'Memory 包',
+    packageRoot: 'packages/memory',
     sourceRoot: 'src',
-    excludeRoots: ['src/knowledge', 'src/adapter-kernel'],
     forbidden: [
-      '@velaros-ai/memory/knowledge',
+      '@velaros-ai/knowledge',
       '@lancedb/lancedb',
       'apache-arrow',
     ],
-    forbiddenReach: ['src/knowledge', 'src/adapter-kernel'],
-    message: 'Memory 主干不得包含或依赖 Knowledge/向量域(也不得反向依赖 Kernel 适配器)。',
+    message: '长期记忆不得包含或依赖 Knowledge/向量域。',
   },
   {
-    label: 'Knowledge 切片',
-    sourceRoot: 'src/knowledge',
-    excludeRoots: [],
+    label: 'Knowledge 包',
+    packageRoot: 'packages/knowledge',
+    sourceRoot: 'src',
     forbidden: ['@velaros-ai/memory'],
-    forbiddenReach: [],
-    // 合包前 Knowledge 是独立包,物理上够不着记忆树;等价约束 = 相对说明符不得逃出本切片。
-    mustStayInSlice: true,
-    message: 'Knowledge 切片不得反向依赖长期记忆树或 Kernel 适配器。',
-  },
-  {
-    label: 'Memory Kernel 适配器切片',
-    sourceRoot: 'src/adapter-kernel',
-    excludeRoots: [],
-    forbidden: [
-      '@velaros-ai/memory/knowledge',
-      '@lancedb/lancedb',
-      'apache-arrow',
-    ],
-    forbiddenReach: ['src/knowledge'],
-    message: 'Memory Kernel 适配器不得依赖 Knowledge/向量域。',
+    message: 'Knowledge 不得反向依赖长期记忆树或它的 Kernel 适配器。',
   },
 ]
 const PortableContractRules = [
@@ -94,13 +75,13 @@ const PortableContractRules = [
     ],
   },
   {
-    packageName: '@velaros-ai/memory/knowledge',
-    packageRoot: 'packages/memory',
-    exportKey: './knowledge/contracts',
-    contractsFile: 'src/knowledge/contracts.ts',
+    packageName: '@velaros-ai/knowledge',
+    packageRoot: 'packages/knowledge',
+    exportKey: './contracts',
+    contractsFile: 'src/contracts.ts',
     sourceModules: new Map([
       ['./knowledge/domain/Types.js', {
-        path: 'src/knowledge/knowledge/domain/Types.ts',
+        path: 'src/knowledge/domain/Types.ts',
         allowedImports: new Set(['../../Constants']),
       }],
     ]),
@@ -119,21 +100,17 @@ export function collectProductBoundaryViolations(
 ) {
   const violations = []
 
-  const packageRoot = resolve(repoRoot, MemoryPackageRoot)
-  const manifestPath = resolve(packageRoot, 'package.json')
-  if (!existsSync(manifestPath)) {
-    violations.push(`${MemoryPackageRoot}/package.json：缺少包清单。`)
-    return violations
-  }
-
   for (const rule of ProductRules) {
+    const packageRoot = resolve(repoRoot, rule.packageRoot)
+    const manifestPath = resolve(packageRoot, 'package.json')
+    if (!existsSync(manifestPath)) {
+      violations.push(`${rule.packageRoot}/package.json：缺少包清单。`)
+      continue
+    }
     const sliceRoot = resolve(packageRoot, rule.sourceRoot)
-    const excluded = rule.excludeRoots.map((entry) => resolve(packageRoot, entry))
-    const forbiddenReach = rule.forbiddenReach.map((entry) => resolve(packageRoot, entry))
 
     for (const file of walkFiles(sliceRoot)) {
       if (!SourceFilePattern.test(file)) continue
-      if (excluded.some((entry) => file.startsWith(`${entry}${sep}`))) continue
       const source = readFileSync(file, 'utf8')
       for (const toolName of ProductToolNames) {
         if (!source.includes(toolName)) continue
@@ -158,15 +135,11 @@ export function collectProductBoundaryViolations(
           )
         }
         if (!specifier.startsWith('.')) continue
+        // 拆包之后，「逃不出自己的源码树」就是包边界本身：相对 import 不许跨包。
         const reached = resolve(dirname(file), specifier)
-        if (rule.mustStayInSlice && !reached.startsWith(`${sliceRoot}${sep}`)) {
+        if (!reached.startsWith(`${sliceRoot}${sep}`)) {
           violations.push(
-            `${relative(repoRoot, file)}：相对 import ${specifier} 逃出 ${rule.sourceRoot}/ 切片；${rule.message}`,
-          )
-        }
-        if (forbiddenReach.some((entry) => reached.startsWith(`${entry}${sep}`))) {
-          violations.push(
-            `${relative(repoRoot, file)}：相对 import ${specifier} 触达禁止切片；${rule.message}`,
+            `${relative(repoRoot, file)}：相对 import ${specifier} 逃出 ${rule.packageRoot}/${rule.sourceRoot}/；${rule.message}`,
           )
         }
       }
@@ -372,7 +345,7 @@ function run() {
     return
   }
 
-  process.stdout.write('Memory 产品边界检查通过：三切片职责与宿主边界无漂移。\n')
+  process.stdout.write('Memory 产品边界检查通过：记忆与知识两个包的职责与宿主边界无漂移。\n')
 }
 
 const invokedPath = process.argv[1] ? resolve(process.argv[1]) : undefined

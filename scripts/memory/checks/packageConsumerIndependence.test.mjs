@@ -11,6 +11,7 @@ const NoSiblingSourceFiles = [
   GateRelativePath,
   'tsconfig.eslint.json',
   'packages/memory/tsconfig.json',
+  'packages/knowledge/tsconfig.json',
 ]
 const MaintainedConsumerRelativePath =
   'tests/memory/maintained/packages/memory/package-consumer.test.mjs'
@@ -29,7 +30,6 @@ test('maintained package test resolves explicit grouped-package build entries', 
   )
   for (const packageEntry of [
     'packages/memory/dist/index.js',
-    'packages/memory/dist/knowledge/index.js',
     'packages/memory/dist/adapter-kernel/index.js',
   ]) {
     assert.match(

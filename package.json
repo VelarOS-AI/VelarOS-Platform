@@ -48,7 +48,8 @@
         "development"
       ],
       "memory": [
-        "memory"
+        "memory",
+        "knowledge"
       ],
       "ui": [
         "ui"
@@ -98,7 +99,7 @@
     "check:model-arch": "bun scripts/model/check-arch-boundaries.mjs",
     "check:memory-boundaries": "node scripts/memory/checkProductBoundaries.mjs",
     "check:memory-knowledge-profile": "node scripts/memory/checks/knowledgeProfileIntegrationTest.mjs",
-    "test:memory": "bun test tests/memory/maintained/packages/memory/EmbeddingProfileIsolation.test.ts && node --test tests/memory/maintained/packages/memory/*.mjs tests/memory/maintained/packages/memory/knowledge/*.mjs",
+    "test:memory": "node --test tests/memory/maintained/packages/memory/*.mjs",
     "probe:memory": "bun run --cwd packages/memory probe:storage-v2 && bun run --cwd packages/memory probe:authority-v2 && bun run --cwd packages/memory probe:tree-store-v2 && bun run --cwd packages/memory probe:ingest-dream-v2 && bun run --cwd packages/memory probe:meaning-curation-v2 && bun run --cwd packages/memory probe:erasure-saga-v2 && bun run --cwd packages/memory probe:evidence-replay-v2 && bun run --cwd packages/memory probe:query-runtime-v2 && bun run --cwd packages/memory probe:files && bun run --cwd packages/memory probe:vector && bun run --cwd packages/memory probe:store-capability",
     "test:capabilities": "bun test tests/capabilities",
     "test:ui": "bun test tests/ui packages/ui/test",
@@ -194,6 +195,7 @@
     "@velaros-ai/core": "workspace:*",
     "@velaros-ai/html-artifacts": "workspace:*",
     "@velaros-ai/kernel": "workspace:*",
+    "@velaros-ai/knowledge": "workspace:*",
     "@velaros-ai/memory": "workspace:*",
     "@velaros-ai/model": "workspace:*",
     "@velaros-ai/office": "workspace:*",

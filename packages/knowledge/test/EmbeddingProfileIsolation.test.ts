@@ -6,12 +6,13 @@
  */
 import { describe, expect, test } from 'bun:test'
 
+import { unique } from '@velaros-ai/core'
 import type {
   KnowledgeChunkRecord,
   KnowledgeEmbeddingProviderId,
   KnowledgeRecord,
   KnowledgeVectorIndexRecord,
-} from '@velaros-ai/memory/knowledge'
+} from '@velaros-ai/knowledge'
 import {
   buildDocumentRevisionKey,
   buildEmbeddingProfileIdentity,
@@ -19,8 +20,7 @@ import {
   KnowledgeIndexStatuses,
   KnowledgeMutation,
   KnowledgeVectorQuery,
-} from '@velaros-ai/memory/knowledge'
-import { unique } from '@velaros-ai/core'
+} from '@velaros-ai/knowledge'
 
 const workspaceRoot = '/tmp/profile-isolation'
 const documentPath = 'memory.md'

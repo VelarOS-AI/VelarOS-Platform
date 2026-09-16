@@ -67,10 +67,40 @@
         "./packages/core/src/*"
       ],
       "@velaros-ai/kernel": [
-        "./packages/kernel/src/index.ts"
+        "./packages/kernel/src/exports/index.ts"
       ],
-      "@velaros-ai/kernel/*": [
-        "./packages/kernel/src/*"
+      "@velaros-ai/kernel/contracts": [
+        "./packages/kernel/src/exports/contracts.ts"
+      ],
+      "@velaros-ai/kernel/contracts/abi": [
+        "./packages/kernel/src/exports/contracts-abi.ts"
+      ],
+      "@velaros-ai/kernel/contracts/protocol": [
+        "./packages/kernel/src/exports/contracts-protocol.ts"
+      ],
+      "@velaros-ai/kernel/runtime": [
+        "./packages/kernel/src/exports/runtime.ts"
+      ],
+      "@velaros-ai/kernel/client": [
+        "./packages/kernel/src/exports/client.ts"
+      ],
+      "@velaros-ai/kernel/client/contracts": [
+        "./packages/kernel/src/exports/client-contracts.ts"
+      ],
+      "@velaros-ai/kernel/serve": [
+        "./packages/kernel/src/exports/serve.ts"
+      ],
+      "@velaros-ai/kernel/serve/updater": [
+        "./packages/kernel/src/exports/serve-updater.ts"
+      ],
+      "@velaros-ai/kernel/remote": [
+        "./packages/kernel/src/exports/remote.ts"
+      ],
+      "@velaros-ai/kernel/remote/client": [
+        "./packages/kernel/src/exports/remote-client.ts"
+      ],
+      "@velaros-ai/kernel/remote/node": [
+        "./packages/kernel/src/exports/remote-node.ts"
       ],
       "@velaros-ai/platform": [
         "./packages/platform/src/exports/index.ts"
@@ -108,11 +138,11 @@
       "@velaros-ai/surface-protocol/*": [
         "./packages/surface-protocol/src/*"
       ],
-      "@velaros-ai/memory/knowledge": [
-        "./packages/memory/src/knowledge/index.ts"
+      "@velaros-ai/knowledge": [
+        "./packages/knowledge/src/index.ts"
       ],
-      "@velaros-ai/memory/knowledge/*": [
-        "./packages/memory/src/knowledge/*"
+      "@velaros-ai/knowledge/*": [
+        "./packages/knowledge/src/*"
       ],
       "@velaros-ai/memory": [
         "./packages/memory/src/index.ts"

@@ -1,8 +1,9 @@
 # @velaros-ai/memory
 
-> **位置**:VelarOS-Platform 单版本火车 · `memory` 域唯一包 · 目录 `packages/memory`。
-> 它同时装三样东西:**长期记忆产品**(根入口)、**工作区知识库**(`/knowledge`)、
+> **位置**:VelarOS-Platform 单版本火车 · `memory` 域 · 目录 `packages/memory`。
+> 它装两样东西:**长期记忆产品**(根入口与三个后端子路径)、
 > 以及**接进 Kernel 的三端口胶水**(`/adapter-kernel`)。
+> 工作区知识库已经拆成兄弟包 [`@velaros-ai/knowledge`](../knowledge/README.md)。
 
 ## 这个包解决什么问题
 
@@ -11,10 +12,8 @@
 不是让模型自由发挥地"总结"出来。配套的还有 MemoryDream(后台整理)、统一意义模型、
 版本化树投影、召回、以及**真正删得掉**的遗忘治理。
 
-**知识**(`/knowledge`):把一个工作区的文件与代码增量摄取、分块、做 FTS + 向量混合检索。
-
-**记忆与知识永不合并**——这是域宪章级的判决。它们的生命周期、权威源、隐私含义都不一样,
-共用一个包只是因为它们共享嵌入与存储基础设施,不是因为它们是一回事。
+**记忆与知识永不合并**——这是域宪章级的判决。它们的生命周期、权威源、隐私含义都不一样;
+工作区知识库现在是独立包 `@velaros-ai/knowledge`,两边代码零共享、互不 import。
 
 ## 对外分区
 
@@ -25,16 +24,12 @@
 | `@velaros-ai/memory/backend` | 实现无关的后端动词端口 `MemoryStoreBackend` + 派生索引契约 + 叠加编排 |
 | `@velaros-ai/memory/files` | bundled 默认权威档 `memory-files`(宿主注入路径与文件 IO) |
 | `@velaros-ai/memory/vector` | **市场可选**派生索引 `memory-vector`(宿主注入嵌入端口与索引存储) |
-| `@velaros-ai/memory/knowledge` | 工作区资料与代码知识域(摄取 / 检索 / 诊断 / 工具) |
-| `@velaros-ai/memory/knowledge/contracts` | 浏览器安全的纯类型 Knowledge DTO |
 | `@velaros-ai/memory/adapter-kernel` | **唯一合法的** kernel ↔ memory 双向胶水 |
 
-`/contracts` 与 `/knowledge/contracts` 的**运行时 JavaScript 为空**——不会加载 SQLite、
-LanceDB、Apache Arrow、Dream 执行器或工具实现。renderer、Web Worker、RPC schema 与前端测试
-从这两个入口取类型;Node 宿主继续从包根入口取完整能力。
+`/contracts` 的**运行时 JavaScript 为空**——不会加载 SQLite、Dream 执行器或工具实现。
+renderer、Web Worker、RPC schema 与前端测试从这个入口取类型;Node 宿主继续从包根入口取完整能力。
 
-切片细节见 [`docs/knowledge/README.md`](./docs/knowledge/README.md) 与
-[`docs/adapter-kernel/README.md`](./docs/adapter-kernel/README.md)。
+切片细节见 [`docs/adapter-kernel/README.md`](./docs/adapter-kernel/README.md)。
 
 ## 核心概念
 
@@ -103,7 +98,7 @@ const items = memory.domain.recall('技术说明偏好')
 ## 边界:本包不负责什么
 
 - **不私有安装 `@velaros-ai/agent`**、不碰 Desktop IPC、不碰渲染层代码、不认识应用私有的提示词 manifest；Agent 契约由宿主 peer 提供。
-- 根入口**不依赖 `/knowledge`**;工作区知识与嵌入是那边的事。
+- **不依赖 `@velaros-ai/knowledge`**;工作区知识与嵌入是那个包的事。
 - **不拥有数据库连接**:打开、事务调度、关闭都归宿主;写入串行化也由宿主在数据库层做,
   领域方法**不创建隐藏的全局锁**。
 - 不读环境变量,不去发现 Desktop / Workbench / Workspace。数据库是唯一必需端口。
@@ -124,7 +119,7 @@ kernel 对记忆的**全部**接口就是三个端口——证据采集 / 回合
 ## 生命周期与并发
 
 每个数据库或租户创建**一个** runtime,不要跨不相关租户共享实例。
-Knowledge 侧启动时 `warmup()`、退出时 `close()`。
+适配器 `service` 启动时 `warmup()`、退出时 `close()`。
 
 ## 错误模型
 

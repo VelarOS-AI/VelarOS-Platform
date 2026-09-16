@@ -4,12 +4,12 @@
  * summary: 使用真实 LanceDB 验证多模型分表、内容版本过滤与跨 profile 隐私删除。
  * area: packages
  */
-import { after, before, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
+import { after, before, test } from 'node:test'
 import { pathToFileURL } from 'node:url'
 
 import Database from 'better-sqlite3'
@@ -17,7 +17,7 @@ import Database from 'better-sqlite3'
 import type {
   KnowledgeEmbeddingProviderId,
   KnowledgeRecord,
-} from '@velaros-ai/memory/knowledge'
+} from '@velaros-ai/knowledge'
 import {
   buildDocumentRevisionKey,
   KnowledgeEmbeddingProfileIsolationMigration,
@@ -26,13 +26,13 @@ import {
   KnowledgeRows,
   KnowledgeVectorQuery,
   KnowledgeVectors,
-} from '@velaros-ai/memory/knowledge'
+} from '@velaros-ai/knowledge'
 
 let storagePath = ''
-const memoryPackageRequire = createRequire(resolve('packages/memory/package.json'))
+const knowledgePackageRequire = createRequire(resolve('packages/knowledge/package.json'))
 
 function loadLanceDb() {
-  return import(pathToFileURL(memoryPackageRequire.resolve('@lancedb/lancedb')).href)
+  return import(pathToFileURL(knowledgePackageRequire.resolve('@lancedb/lancedb')).href)
 }
 
 before(async () => {
@@ -79,7 +79,7 @@ function buildChunk(model: string, content: string, vector: number[]) {
   }
 }
 
-test('keeps profiles and revisions isolated in real LanceDB tables', async () => {
+void test('keeps profiles and revisions isolated in real LanceDB tables', async () => {
   const store = new KnowledgeVectors(
     new KnowledgeVectorQuery(),
     {
@@ -162,7 +162,7 @@ test('keeps profiles and revisions isolated in real LanceDB tables', async () =>
   store.close()
 })
 
-test('repository exposes only current revision rows from the active provider/model', () => {
+void test('repository exposes only current revision rows from the active provider/model', () => {
   const database = new Database(':memory:')
   database.exec(`
     CREATE TABLE knowledge_documents (
@@ -220,7 +220,7 @@ test('repository exposes only current revision rows from the active provider/mod
   database.close()
 })
 
-test('v3 removes SQLite embedding placeholders and starts with an empty vector registry', () => {
+void test('v3 removes SQLite embedding placeholders and starts with an empty vector registry', () => {
   const database = new Database(':memory:')
   database.exec(`
     CREATE TABLE knowledge_documents (

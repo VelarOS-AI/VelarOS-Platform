@@ -264,18 +264,28 @@
     },
     {
       "domain": "memory",
+      "directory": "packages/knowledge",
+      "name": "@velaros-ai/knowledge",
+      "version": "0.5.0",
+      "description": "Workspace knowledge index for VelarOS-compatible runtimes: incremental ingestion of documents and code, chunking, SQLite full-text plus vector hybrid retrieval with embedding profile isolation, diagnostics and explicit rebuild, and the knowledge agent tools.",
+      "exportSubpaths": [
+        ".",
+        "./contracts"
+      ],
+      "repositoryDirectory": "packages/knowledge"
+    },
+    {
+      "domain": "memory",
       "directory": "packages/memory",
       "name": "@velaros-ai/memory",
-      "version": "0.4.6",
-      "description": "Evidence-grounded long-term memory tree, recall, and governance for VelarOS-compatible runtimes, with the workspace knowledge/vector product under ./knowledge and the kernel three-port glue under ./adapter-kernel.",
+      "version": "0.5.0",
+      "description": "Evidence-grounded long-term memory tree, recall, and governance for VelarOS-compatible runtimes, with pluggable store backends under ./backend, ./files and ./vector, and the kernel three-port glue under ./adapter-kernel.",
       "exportSubpaths": [
         ".",
         "./adapter-kernel",
         "./backend",
         "./contracts",
         "./files",
-        "./knowledge",
-        "./knowledge/contracts",
         "./vector"
       ],
       "repositoryDirectory": "packages/memory"
