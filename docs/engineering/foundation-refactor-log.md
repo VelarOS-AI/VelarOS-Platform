@@ -15,8 +15,16 @@
   - **`tooling:map` 还留着 `ids`、`detail` 两个参数**，说明写的是「read 模式下…」。read 到不了，这两个参数归一时按 strip **静默丢掉**——模型以为自己指定了正文和详情级别，其实什么都没发生，拿回一份完整工具地图。已从模型面删掉。
   - **`tooling:replace` 让模型「按依赖与 nextActions 处理」**，但这条成功回执里没有 `nextActions`（那是失败回执信封的字段）。改成实际有的 `activation.dependencies` / 每条的 `nextAction`，整体下一步看 `nextTurnHint`。
   - **`browser:user_scripts` 说「按『文档 + 版本号』幂等」**，实际幂等键是内部自增的 `revision`；模型能填的 `version` 只做展示、不参与去重，连参数说明都没有。**模型想靠调 `version` 控制要不要重跑是无效的**。说明改成真规矩。
-  - **第五条还在做**：agent 包里**五处写死了 `interaction:show_action_cards`**，而这个工具**只有 Desktop 有**（Workbench、Termel 没有）——在别的宿主里模型被指去换入一个不存在的工具页。写死它的那个文件，开头第一条不变量恰恰是「本文件不认识任何具体能力，工具名全部来自宿主注入的描述符」，语义中立门只扫产品词、没扫工具名。**正在改成宿主声明制**：宿主声明了就点名，没声明就只说「做什么」不说「调什么」。改完 Desktop 要补一处声明。
+  - **第五条已做完（`3d265469` + `092698e1`，agent 1.1.0 → 1.2.0）**：agent 包里**五处写死了 `interaction:show_action_cards`**，而这个工具**只有 Desktop 有**（Workbench、Termel 没有）——在别的宿主里模型被指去换入一个不存在的工具页。写死它的那个文件，开头第一条不变量恰恰是「本文件不认识任何具体能力，工具名全部来自宿主注入的描述符」，语义中立门只扫产品词、没扫工具名。**已改成宿主声明制**：新增可选字段 `userActionRequestToolName`（加性，宿主不填不会坏）。声明了就点名那个工具、给出换入路径；没声明**不猜名字**，改成「读出阻塞原因，把要用户做的那一步直接说清楚」——仍是一条可执行的下一步。顺带删掉了指引里替 Desktop 描述的动作卡私有参数（`blocking`、`enable_prompt_features` 这些）：换入之后模型看得到真实 schema，内核不该另写一份可能对不上的。**Desktop 要补一行** `userActionRequestToolName: 'interaction:show_action_cards'`（见 X6）。
+  - 同一批里我另改了一处：新写的两句指引拿「他」指代用户。用户是谁、性别如何我们并不知道，而这两句还会被模型照着复述给用户本人，改成不带人称的写法。
+  - **故意留着一处**：`solo-run-plan-preparer.ts` 里还有三处同名字面量，但那是「预算裁剪不许砍」的保底名单，宿主没有这个工具时名字压根匹配不上、不产生任何模型面文字。现在就改成读声明，会在 Desktop 补上声明之前**先丢掉** plan 模式/首轮/技能门下对动作卡工具的保护——拿一个真实回归换当前无害的洁癖，不值。排在 Desktop 接线之后。
   - 一并核实**不算缺陷**的（免得重复查）：office 说明里的 `direct`/`expert` 是真实存在的 surface profile（只是模型自己切不了，由宿主定）；`system:run` 的 `statusContinuation` 存在，只是挂在 `backgroundProcess` 下；browser 说明里引用的 26 个工具名、`project:read` 的 `continuation`、`agent:dispatch` 的三个回执字段等全部对得上。
+
+- **kernel `./serve` 收窄到四个值（09-17 07:10，`5b1020f3`，kernel 0.3.0 → **0.4.0**；导出数、版本、燃尽、不变量、测试数均已实测核对）。** 这是上一轮 kernel 收口时明确留下的最后一处偏离方案的地方，仓内已知欠账到此清零。
+  - `./serve` 10 → **4** 个值，每件都是一次部署动作：`bootKernelDaemon`、`kernelDaemonProcess`、`createKernelLauncher`、`createKernelUpdater`。对外的值 39 → 33。
+  - 六个装配零件的去向：三个真属于 ModStore 的收成它的方法；两个（`registerSystemModPacks`、`registerBundledPacks`）**直接删掉**——本来就只是转发壳，没有自己的逻辑；`createDefaultKernelModStorePaths` **没有硬做成方法**（它是纯路径计算），改成选项面顶替。这一条是做对的判断：为了凑「四个值」把纯函数硬塞成方法，是把形状做坏。
+  - **一处口径收紧**：`KernelDaemonAssemblyOptions` 从收两条路径改成收一个 `modsRoot`，目录布局归内核（pack 恒在 `<root>/mods`、索引恒在 `<root>/mod-index.json`）。代价是不能再分别指定两条路径、也不能靠不给索引路径来关掉持久化——本仓五个调用点没有一处用得上那个自由度。
+  - **Termel 要改两行**（跨仓唯一受影响处，逐字写在 `kernel-migration.md` 第 6 节）：删掉 `createDefaultKernelModStorePaths` 的 import，`modStorePaths: createDefaultKernelModStorePaths(paths.modsRoot)` 改成 `modsRoot: paths.modsRoot`。Termel 还停在 0.2.3，这一刀可以和 0.3.0 那一刀一次做完。
 
 - **`ultra` 空档已补上（09-17 06:00，`da5bbd3b`，model 0.7.0 → **0.8.0**；提交内容、版本、测试数、数值表均已实测核对，数值表我另写脚本独立复算过一遍）。**
   - **实测数值**（无输出上限可换算时）：Anthropic 非自适应与 Google 的数字预算 low 2048 / medium 4096 / high 8192 / **ultra 16000**；OpenAI 与 Anthropic 自适应那一代只有力度枚举没有数字预算，**ultra 与 high 仍然相同**——这是 provider 能力所限，代码里写明了，没有硬造厂商不认的值。有输出上限时按 `ultraRatio 0.6` 换算再钳（例：上限 24000 → high 12000、ultra 14400）。

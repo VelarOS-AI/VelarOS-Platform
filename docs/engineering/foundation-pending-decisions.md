@@ -127,6 +127,8 @@
 | X2 | Desktop 的 `arch-guard-velaros` 两处按 dist 布局钉路径（memory 三切片、`memory/dist/memory-tree/v2/storage/AtomicFile.js`），以及 browser 的 `dist/composition/`、`dist/tools/` | 三个包的 dist 布局都变了 | Desktop：随升级重写这几处检查 |
 | X4 | browser 工具面 40→32 之后，Desktop 与 Workbench 里点名了被删工具的地方 | Desktop：`UnattendedTaskToolPolicy.ts` 的名单、两份技能文档（a11y-debugging、debug-optimize-lcp）、`docs/modules/infrastructure-browser.md`；Workbench：`WorkbenchBrowserToolHost.ts` 的初始可见工具名单含 `browser:site_context` 及其测试 | 两个产品：随升级改名或删名 |
 | X3 | Desktop 14 个文件 + 两份 package.json 把 `@velaros-ai/memory/knowledge` 换成 `@velaros-ai/knowledge`（导出名不变） | knowledge 已独立成包 | Desktop：随升级机械替换 |
+| X6 | 宿主声明「请求用户动作该调哪个工具」 | agent 1.2.0 加了可选字段 `userActionRequestToolName`（`AgentRuntimeCapabilityPorts` 与 `AgentRuntimeCapabilityExtension` 各一个）；不填不会坏，只是指引改走不点名那条路 | Desktop：组装 `AgentRuntimeCapabilityPorts` 时填 `userActionRequestToolName: 'interaction:show_action_cards'`。补上之后再回头把 `solo-run-plan-preparer.ts` 里三处保底名单也改成读声明（现在改会先丢保护） |
+| X7 | kernel `./serve` 收窄，Termel 改两行 | `5b1020f3`，kernel 0.4.0 | Termel `packages/serve-host/src/host.ts`：删掉 `createDefaultKernelModStorePaths` 的 import；`modStorePaths: createDefaultKernelModStorePaths(paths.modsRoot)` → `modsRoot: paths.modsRoot`。依赖版本提到 `^0.4.0`（两个 `package.json` 与 `bun.lock`）。Termel 还停在 0.2.3，与 0.3.0 那一刀一次做完 |
 | X5 | `run` 的 `shell` 字段要能用起来，产品端三处接线 | 字段、词表、拒绝语义、可用性探测都在包内了（`ba7ac608`），但值在产品端 | ① 把 `inspectEnvironment().shells` 的种类按原序写进 `AppRuntimeFacts.availableShells`（第一项是默认那个），**不写则 Windows 上这个能力等于没有**；② project 宿主的 `runCommand` / `runInSandbox` 透传 `options.shell`，做不到就拒绝、别忽略换默认 shell 照跑；③ `SystemEnvironmentInspection` 多了必填的 `shells`，测试替身与 IPC 镜像形状要补 |
 
 ## 八、产品层接线（本仓不改，列给你排期）
