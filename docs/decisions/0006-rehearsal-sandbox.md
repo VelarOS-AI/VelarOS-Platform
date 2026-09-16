@@ -57,7 +57,7 @@
 
 ### 第二阶段：project 空间
 
-project 与 system 互不知道对方，所以 project 空间不直接用系统工具。做法与命令策略镜像一致：`@velaros-ai/project` 的宿主端口加一个沙箱端口 `ProjectSandboxPort`（同样的数据形状），`project:sandbox` 工具调它；Desktop 用本地内核的沙箱能力实现这个端口，宿主没接时工具不出现。项目工具出不了项目边界，镜像根又在临时区，所以 project 版多一个 `run` 动作在镜像里跑命令（宿主用本地内核的 `runCommand` 把 cwd 指到镜像根），脚本先用 `project:file` 写进项目再 `create`，随镜像一起进沙箱；`apply` 先过项目的修改授权再向用户确认，不经过 `project:change` 的撤销账本。仓库层 `tests/capabilities/sandbox-contract-parity.test.ts` 核对两份 schema 与数据形状没有漂移。
+project 与 system 互不知道对方，所以 project 空间不直接用系统工具。做法与命令策略镜像一致：`@velaros-ai/project` 的宿主端口加一个沙箱端口 `ProjectSandboxPort`（同样的数据形状），`project:sandbox` 工具调它；Desktop 用本地内核的沙箱能力实现这个端口，宿主没接时工具不出现。项目工具出不了项目边界，镜像根又在临时区，所以 project 版多一个 `run` 动作在镜像里跑命令（宿主用本地内核的 `runCommand` 把 cwd 指到镜像根），脚本先用 `project:edit` 写进项目再 `create`，随镜像一起进沙箱；`apply` 先过项目的修改授权再向用户确认，不经过 `project:edit` 的撤销账本。仓库层 `tests/capabilities/sandbox-contract-parity.test.ts` 核对两份 schema 与数据形状没有漂移。
 
 ## Alternatives
 
