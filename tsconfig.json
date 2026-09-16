@@ -151,10 +151,10 @@
         "./packages/memory/src/exports/*"
       ],
       "@velaros-ai/office": [
-        "./packages/office/src/index.ts"
+        "./packages/office/src/exports/index.ts"
       ],
       "@velaros-ai/office/*": [
-        "./packages/office/src/*"
+        "./packages/office/src/exports/*"
       ],
       "@velaros-ai/system": [
         "./packages/system/src/exports/index.ts"

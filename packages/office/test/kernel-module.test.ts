@@ -17,7 +17,7 @@ import {
   OfficeCapability,
   type OfficeCapabilityService,
   type OfficeToolContext,
-} from '../src'
+} from '../src/exports'
 
 function createCaptureContext(
   capture: (tokenId: string, service: object) => void,

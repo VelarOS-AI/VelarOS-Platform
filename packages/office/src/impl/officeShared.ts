@@ -34,7 +34,8 @@ import type {
   OfficeSystemCommandResult,
   OfficeSystemToolInstallAlternative,
   OfficeSystemToolInstallSuggestion,
-} from './OfficeContracts'
+} from '../types/office'
+
 import { officePlatformCompatibility } from './OfficePlatformCompatibility'
 
 // 集中再导出常用依赖，减少子模块重复导入。

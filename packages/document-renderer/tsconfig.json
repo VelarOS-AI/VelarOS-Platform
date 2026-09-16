@@ -10,7 +10,7 @@
     "baseUrl": "../..",
     "types": ["node", "bun"],
     "paths": {
-      "@velaros-ai/office/renderer": ["./packages/office/src/renderer.ts"]
+      "@velaros-ai/office/renderer": ["./packages/office/src/exports/renderer.ts"]
     }
   },
   "include": ["../../types/velaros-globals.d.ts", "src/**/*.ts", "test/**/*.ts"]

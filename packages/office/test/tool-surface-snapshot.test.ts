@@ -11,7 +11,7 @@ import { join } from 'node:path'
 import { describe, expect, test } from 'bun:test'
 import { z } from 'zod'
 
-import { officeTools } from '../src'
+import { officeTools } from '../src/exports'
 
 type ToolSurfaceSnapshot = {
   description: string

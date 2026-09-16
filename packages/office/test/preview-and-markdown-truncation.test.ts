@@ -4,8 +4,8 @@ import { join } from 'node:path'
 
 import { afterEach, describe, expect, test } from 'bun:test'
 
-import type { OfficeToolContext } from '../src'
-import { officeTools } from '../src'
+import type { OfficeToolContext } from '../src/exports'
+import { officeTools } from '../src/exports'
 
 const createdRoots: string[] = []
 let restoreMarkItDownRoot: Nullable<string | undefined> = null

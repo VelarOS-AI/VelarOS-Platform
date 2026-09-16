@@ -1,4 +1,3 @@
-export type * from './OfficeContracts'
 export type {
   OfficeHostApi,
   OfficeProjectApi,
@@ -7,4 +6,5 @@ export type {
   OfficeToolPermission,
   ToolContext,
   VelaTool,
-} from './officeShared'
+} from '../impl/officeShared'
+export type * from '../types/office'

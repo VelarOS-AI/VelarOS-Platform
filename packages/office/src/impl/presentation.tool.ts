@@ -9,7 +9,7 @@ import { stat } from 'node:fs/promises'
 import { isEmpty, isPresent } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import PptxGenJS from '../vendor/pptxgenjs/pptxgen.es.js'
+import PptxGenJS from '../../vendor/pptxgenjs/pptxgen.es.js'
 
 import {
   buildProjectMutationSkippedResult,

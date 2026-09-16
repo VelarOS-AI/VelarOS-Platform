@@ -7,7 +7,7 @@
  *
  * 依赖共享办公工具模块提供的类型、路径和系统辅助能力。
  */
-/// <reference path="./pdfjs-dist.d.ts" />
+/// <reference path="../pdfjs-dist.d.ts" />
 
 import { readFile } from 'node:fs/promises'
 
@@ -24,7 +24,8 @@ import { logRuntime } from '@velaros-ai/core/logger'
 import type {
   OfficeEnvironmentCommandAvailability,
   OfficeSystemCommandResult,
-} from './OfficeContracts'
+} from '../types/office'
+
 import {
   dirname,
   extname,

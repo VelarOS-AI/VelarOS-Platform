@@ -4,4 +4,4 @@ export {
   OfficeCapability,
   type OfficeCapabilityService,
   type OfficeToolContextResolver,
-} from './kernel-module'
+} from '../impl/kernel-module'

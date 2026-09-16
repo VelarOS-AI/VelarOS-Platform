@@ -558,14 +558,14 @@ requirePublicTypeContracts(
 );
 requirePublicTypeContracts(
   "office",
-  "src/index.ts",
-  "src/contracts.ts",
-  "src/OfficeContracts.ts",
+  "src/exports/index.ts",
+  "src/exports/contracts.ts",
+  "src/types/office.ts",
   ["OfficeEnvironmentInspection"],
 );
 
 const officeContractsSource = readFileSync(
-  resolve(PackagesRoot, "office/src/OfficeContracts.ts"),
+  resolve(PackagesRoot, "office/src/types/office.ts"),
   "utf8",
 );
 if (/\bNodeJS\./u.test(officeContractsSource)) {

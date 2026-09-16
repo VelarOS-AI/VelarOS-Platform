@@ -9,11 +9,11 @@ export {
   type RenderedPdfPagePng,
   renderPdfPagePng,
   type RenderPdfPagePngInput,
-} from './pdfPageRenderer'
+} from '../impl/pdfPageRenderer'
 export {
   buildOfficePreviewHtml,
   type OfficePreviewKind,
   type ParsedOfficePreview,
   parseOfficePreview,
   renderOfficePreviewPng,
-} from './previewTool'
+} from '../impl/previewTool'

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import { OfficeResourceRuntimeRegistry } from '../src'
+import { OfficeResourceRuntimeRegistry } from '../src/exports'
 
 describe('OfficeResourceRuntimeRegistry', () => {
   test('owns isolated, idempotent resource state', () => {

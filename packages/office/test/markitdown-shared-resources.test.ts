@@ -6,7 +6,7 @@ import { afterEach, describe, expect, test } from 'bun:test'
 
 import { velarosSharedResources } from '@velaros-ai/platform/shared-resources'
 
-import { markItDownBinaryResolver } from '../src'
+import { markItDownBinaryResolver } from '../src/exports'
 
 let restoreSharedDataRoot: Nullable<string | undefined> = null
 let createdRoot: Nullable<string> = null

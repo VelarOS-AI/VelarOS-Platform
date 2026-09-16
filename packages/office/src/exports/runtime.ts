@@ -3,11 +3,11 @@ export {
   markItDownBinaryResolver,
   type MarkItDownBinaryResolverOptions,
   type MarkItDownLaunchSpec,
-} from './markitdownResolver'
+} from '../impl/markitdownResolver'
 export {
   type OfficeResourceId,
   type OfficeResourceRuntime,
   officeResourceRuntime,
   OfficeResourceRuntimeRegistry,
   type OfficeResourceRuntimeRegistryOptions,
-} from './OfficeResourceRuntime'
+} from '../impl/OfficeResourceRuntime'

@@ -10,7 +10,7 @@ import {
   htmlToText,
   parseDocxPreview,
   sanitizePreviewHtml,
-} from '../src/previewTool'
+} from '../src/impl/previewTool'
 
 const OnePixelPng = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',

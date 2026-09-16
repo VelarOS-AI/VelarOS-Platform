@@ -2,9 +2,9 @@ import { spawnSync } from 'node:child_process'
 
 import { describe, expect, test } from 'bun:test'
 
-import { OfficePlatformCompatibility } from '../src/OfficePlatformCompatibility'
-import { describeOfficeNativeCommand, type OfficeNativeCommand, type OfficeToolContext, runOfficeSystemCommand } from '../src/officeShared'
-import { buildLatexCompileCommands } from '../src/pdfTools'
+import { OfficePlatformCompatibility } from '../src/impl/OfficePlatformCompatibility'
+import { describeOfficeNativeCommand, type OfficeNativeCommand, type OfficeToolContext, runOfficeSystemCommand } from '../src/impl/officeShared'
+import { buildLatexCompileCommands } from '../src/impl/pdfTools'
 
 describe('Office Bash command quoting', () => {
   test.skipIf(process.platform === 'win32')('preserves literal argument text through Bash on every platform', () => {

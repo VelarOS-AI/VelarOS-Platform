@@ -14,7 +14,7 @@ import {
   createOfficeKernelModule,
   type OfficeCapabilityService,
   type OfficeToolContext,
-} from '../src'
+} from '../src/exports'
 
 function captureOfficeService(
   capture: (service: OfficeCapabilityService) => void,

@@ -9,7 +9,7 @@ import { join } from 'node:path'
 
 import { z } from 'zod'
 
-import { officeTools } from '../../src'
+import { officeTools } from '../../src/exports'
 
 const snapshot: Record<string, unknown> = {}
 for (const [name, raw] of Object.entries(officeTools)) {
