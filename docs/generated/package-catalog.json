@@ -55,11 +55,11 @@
       "domain": "capabilities",
       "directory": "packages/cli",
       "name": "@velaros-ai/cli",
-      "version": "0.2.18",
-      "description": "Official VelarOS command-line distribution and extensible operational namespace router.",
+      "version": "0.3.0",
+      "description": "VelarOS 官方命令行发行包：velaros 可执行文件与可嵌入的运维命名空间路由器。",
       "exportSubpaths": [
         ".",
-        "./cli"
+        "./contracts"
       ],
       "repositoryDirectory": "packages/cli"
     },

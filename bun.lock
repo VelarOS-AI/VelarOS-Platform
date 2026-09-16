@@ -130,9 +130,9 @@
     },
     "packages/cli": {
       "name": "@velaros-ai/cli",
-      "version": "0.2.18",
+      "version": "0.3.0",
       "bin": {
-        "velaros": "./dist/bin.js",
+        "velaros": "./bin/velaros.mjs",
       },
       "dependencies": {
         "@velaros-ai/core": "workspace:*",
