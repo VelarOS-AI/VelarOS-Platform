@@ -9,6 +9,7 @@ import {
 import { dirname } from 'node:path'
 
 import { isNotUndefined, isNull, isNumber, isObject, Log } from '@velaros-ai/core'
+import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
 import { KernelUpdateLockError } from './errors'
 import {
@@ -29,7 +30,15 @@ export interface KernelUpdateLockOptions {
   readonly holderId?: string
   readonly isProcessAlive?: (pid: number) => boolean
   readonly now?: () => number
+  /** 读不出锁属主时重读几次（对方可能刚 open('wx') 还没写进 pid）。 */
+  readonly ownerReadRetries?: number
+  readonly ownerReadRetryMs?: number
+  readonly sleep?: (ms: number) => Promise<void>
 }
+
+/** 读不出属主时的重读次数与间隔：够覆盖 open→write 这一小段，又不至于把调用方挂住。 */
+const defaultOwnerReadRetries = 5
+const defaultOwnerReadRetryMs = 20
 
 /**
  * Exclusive file lock guarding every mutation of `versions/` and
@@ -64,14 +73,29 @@ export class KernelUpdateLock {
         return new KernelUpdateLock(options.lockPath, handle, record)
       } catch (error) {
         if (!isNodeError(error, 'EEXIST')) throw error
-        const ownerPid = await readLockOwnerPid(options.lockPath)
-        if (isNotUndefined(ownerPid) && isAlive(ownerPid)) {
-          throw new KernelUpdateLockError(
-            `Kernel update lock is held by process ${ownerPid}`,
-            { path: options.lockPath, ownerPid },
-          )
+        const owner = await resolveLockOwner(options.lockPath, {
+          isAlive,
+          retries: options.ownerReadRetries ?? defaultOwnerReadRetries,
+          retryMs: options.ownerReadRetryMs ?? defaultOwnerReadRetryMs,
+          sleep: options.sleep ?? sleep,
+        })
+        switch (owner.status) {
+          case 'held':
+            throw new KernelUpdateLockError(
+              `Kernel 更新锁正被进程 ${owner.pid} 持有`,
+              { path: options.lockPath, ownerPid: owner.pid },
+            )
+          case 'unreadable':
+            // 读不出属主：对方很可能刚 open('wx') 还没来得及写 pid。删掉它等于两个进程同时
+            // 持锁，所以按「被占用」处理；真是崩溃残留时由人删掉这个文件。
+            throw new KernelUpdateLockError(
+              `Kernel 更新锁存在但读不出属主，按被占用处理；若确认没有更新在跑，删掉 ${options.lockPath} 后重试`,
+              { path: options.lockPath },
+            )
+          case 'stale':
+            await unlink(options.lockPath).catch(ignoreMissing)
+            break
         }
-        await unlink(options.lockPath).catch(ignoreMissing)
       }
     }
 
@@ -101,6 +125,43 @@ export async function withKernelUpdateLock<T>(
   } finally {
     await lock.release()
   }
+}
+
+type KernelUpdateLockOwner =
+  | { readonly status: 'held'; readonly pid: number }
+  /** 属主进程已经不在，锁可以回收。 */
+  | { readonly status: 'stale' }
+  /** 重读多次仍读不出属主（文件为空或内容损坏）。 */
+  | { readonly status: 'unreadable' }
+
+/**
+ * 判定一个已存在的锁文件归谁。
+ *
+ * `open(path, 'wx')` 成功与「把 pid 写进去」之间有一小段窗口。原来只读一次，读不出就当死锁
+ * 删掉——真实竞态下两个进程会同时拿到锁。这里读不出就短暂重读几次。
+ * （`serve/daemon/daemon.ts` 的守护进程锁有同一段逻辑；合并成一处留给改造。）
+ */
+async function resolveLockOwner(
+  path: string,
+  options: {
+    readonly isAlive: (pid: number) => boolean
+    readonly retries: number
+    readonly retryMs: number
+    readonly sleep: (ms: number) => Promise<void>
+  },
+): Promise<KernelUpdateLockOwner> {
+  for (let attempt = 0; attempt <= options.retries; attempt += 1) {
+    const pid = await readLockOwnerPid(path)
+    if (isNotUndefined(pid)) return options.isAlive(pid)
+      ? { status: 'held', pid }
+      : { status: 'stale' }
+    if (attempt < options.retries) await options.sleep(options.retryMs)
+  }
+  return { status: 'unreadable' }
+}
+
+function sleep(ms: number): Promise<void> {
+  return TimerScope.sleep(ms, { label: 'KernelUpdateLock.ownerRead' })
 }
 
 async function readLockOwnerPid(path: string): Promise<number | undefined> {

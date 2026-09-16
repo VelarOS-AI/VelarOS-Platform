@@ -320,6 +320,32 @@ describe('Kernel version retention', () => {
       .toMatchObject({ version: '2.0.0', previousVersion: '1.1.0' })
   })
 
+  test('prunes the pointer backups that every activation leaves behind', async () => {
+    const root = await directories.create()
+    let clock = 1700000000000
+    const updater = createUpdater(root, {
+      retainedVersions: 2,
+      now: () => (clock += 1000),
+    })
+    for (const release of releases) {
+      await updater.ensureInstalled(release.version)
+    }
+    // 每次激活写一份指针备份；原来从不清理，长跑的安装根里无限堆积。
+    await updater.activateVersion('1.0.0')
+    await updater.activateVersion('1.1.0')
+    await updater.activateVersion('1.2.0')
+    await updater.activateVersion('2.0.0')
+    expect((await readdir(join(root, 'backups'))).length).toBe(3)
+
+    await updater.pruneVersions({ retain: 2 })
+
+    const kept = (await readdir(join(root, 'backups'))).sort()
+    expect(kept.length).toBe(2)
+    // 留下的是最近两份（备份文件名里带被替换掉的那个版本）。
+    expect(kept.some((name) => name.startsWith('current.1.1.0.'))).toBe(true)
+    expect(kept.some((name) => name.startsWith('current.1.2.0.'))).toBe(true)
+  })
+
   test('honours a per-call retention count', async () => {
     const root = await directories.create()
     const updater = createUpdater(root)

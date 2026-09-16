@@ -2,6 +2,7 @@ import {
   createConnection,
   type Socket,
 } from 'node:net'
+import { homedir } from 'node:os'
 
 import {
   isArray,
@@ -509,8 +510,13 @@ export function parseHostBridgeEndpoint(
   return { kind: 'unix', path: trimmed }
 }
 
-/** Shared well-known Desktop HostBridge socket path. */
-export function defaultHostBridgeSocketPath(home = process.env.HOME): string {
-  const root = isNotUndefined(home) && !isBlank(home.trim()) ? home.trim() : '/tmp'
+/**
+ * Shared well-known Desktop HostBridge socket path.
+ *
+ * 用 `os.homedir()` 而不是 `process.env.HOME`：没有 HOME 时原来的 `'/tmp'` 兜底会把 socket
+ * 放进共享目录（Windows 上是当前盘根的 `\tmp\`），谁都能建、谁都能顶替。
+ */
+export function defaultHostBridgeSocketPath(home = homedir()): string {
+  const root = isNotUndefined(home) && !isBlank(home.trim()) ? home.trim() : homedir()
   return `${root}/.velaros/host-bridge.sock`
 }

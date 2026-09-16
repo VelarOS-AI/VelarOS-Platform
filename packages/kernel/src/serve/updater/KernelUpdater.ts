@@ -266,6 +266,9 @@ export class KernelUpdater {
   /**
    * Removes the oldest installs beyond the retention count. The active version
    * and the recorded rollback target are always kept.
+   *
+   * `backups/` 里的指针备份跟着一起收：每次激活都会写一份（{@link backupPointer}），从来
+   * 没人清理，长跑的安装根里会无限堆积。
    */
   public async pruneVersions(
     options: KernelPruneOptions = {},
@@ -291,8 +294,31 @@ export class KernelUpdater {
         await rm(entry.path, { recursive: true, force: true })
         removed.push(entry.version)
       }
+      await this.prunePointerBackups(retain)
       return removed
     })
+  }
+
+  /** 只留最近 `retain` 份指针备份，其余删掉。 */
+  private async prunePointerBackups(retain: number): Promise<void> {
+    let entries: string[]
+    try {
+      entries = await readdir(this.layout.backupsDirectory)
+    } catch (error) {
+      ignoreMissing(error)
+      log.debug('Kernel pointer backups directory does not exist', {
+        error,
+        path: this.layout.backupsDirectory,
+      })
+      return
+    }
+    const backups = entries
+      .filter((name) => name.startsWith('current.') && name.endsWith('.json'))
+      .map((name) => ({ name, updatedAt: readPointerBackupTimestamp(name) }))
+      .sort((left, right) => left.updatedAt - right.updatedAt)
+    for (const backup of backups.slice(0, Math.max(0, backups.length - retain))) {
+      await rm(join(this.layout.backupsDirectory, backup.name), { force: true })
+    }
   }
 
   private async resolveCompatible(
@@ -569,6 +595,17 @@ export class KernelUpdater {
     this.queue = run.then(() => undefined, () => undefined)
     return run
   }
+}
+
+/**
+ * 从备份文件名里取回写入时刻：`current.<version>.<updatedAt>.json`。
+ *
+ * 版本号自己带点，所以按最后一段取；取不出就当 0（排在最旧，优先被清掉）。
+ */
+function readPointerBackupTimestamp(name: string): number {
+  const segments = name.slice(0, -'.json'.length).split('.')
+  const updatedAt = Number(segments.at(-1))
+  return Number.isFinite(updatedAt) ? updatedAt : 0
 }
 
 function runningKernelOutcome(

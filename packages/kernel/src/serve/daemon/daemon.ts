@@ -5,12 +5,21 @@ import {
   open,
   readFile,
   rename,
+  stat,
   unlink,
   writeFile,
 } from 'node:fs/promises'
 import { dirname } from 'node:path'
 
-import { isNotUndefined, isNull, isObject, isUndefined, Log } from '@velaros-ai/core'
+import {
+  isFunction,
+  isNotUndefined,
+  isNull,
+  isObject,
+  isUndefined,
+  Log,
+} from '@velaros-ai/core'
+import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 import {
   createDefaultKernelDaemonPaths,
   type KernelDaemonEndpointDescriptor,
@@ -73,10 +82,12 @@ export class KernelLocalDaemon {
         break
     }
 
-    await mkdir(dirname(this.paths.lockPath), {
+    const runtimeDirectory = dirname(this.paths.lockPath)
+    await mkdir(runtimeDirectory, {
       recursive: true,
       mode: 0o700,
     })
+    await assertRuntimeDirectoryIsPrivate(runtimeDirectory)
     this.lockHandle = await acquireDaemonLock(
       this.paths.lockPath,
       this.instanceId,
@@ -148,6 +159,10 @@ export class KernelLocalDaemon {
   }
 }
 
+/** 读不出属主时的重读次数与间隔（见 {@link acquireDaemonLock}）。 */
+const lockOwnerReadRetries = 5
+const lockOwnerReadRetryMs = 20
+
 async function acquireDaemonLock(
   lockPath: string,
   instanceId: string,
@@ -162,20 +177,73 @@ async function acquireDaemonLock(
       return handle
     } catch (error) {
       if (!isNodeError(error, 'EEXIST')) throw error
-      const ownerPid = await readLockOwnerPid(lockPath)
-      if (isNotUndefined(ownerPid) && isProcessAlive(ownerPid)) {
-        throw new KernelDaemonError(
-          'DAEMON_ALREADY_RUNNING',
-          'A Kernel daemon already owns the local endpoint',
-        )
+      // `open('wx')` 成功与「写进 pid」之间有一小段窗口：读不出属主时短暂重读，别把对方正在
+      // 成型的锁当死锁删掉（真实竞态下会变成两个守护进程同时持锁）。
+      // 同一段逻辑在 `serve/updater/lock.ts` 也有一份；合并成一处留给改造。
+      const ownerPid = await readLockOwnerPidWithRetry(lockPath)
+      if (isNotUndefined(ownerPid)) {
+        if (isProcessAlive(ownerPid)) {
+          throw new KernelDaemonError(
+            'DAEMON_ALREADY_RUNNING',
+            '本机端点已经被另一个 Kernel 守护进程占用',
+          )
+        }
+        await unlink(lockPath).catch(ignoreMissing)
+        continue
       }
-      await unlink(lockPath).catch(ignoreMissing)
+      throw new KernelDaemonError(
+        'DAEMON_LOCK_FAILED',
+        `Kernel 守护进程锁存在但读不出属主，按被占用处理；若确认没有 Kernel 在跑，删掉 ${lockPath} 后重试`,
+      )
     }
   }
   throw new KernelDaemonError(
     'DAEMON_LOCK_FAILED',
-    'Kernel daemon lock could not be acquired',
+    'Kernel 守护进程锁获取失败',
   )
+}
+
+async function readLockOwnerPidWithRetry(
+  path: string,
+): Promise<number | undefined> {
+  for (let attempt = 0; attempt <= lockOwnerReadRetries; attempt += 1) {
+    const pid = await readLockOwnerPid(path)
+    if (isNotUndefined(pid)) return pid
+    if (attempt < lockOwnerReadRetries) {
+      await TimerScope.sleep(lockOwnerReadRetryMs, {
+        label: 'KernelDaemon.lockOwnerRead',
+      })
+    }
+  }
+  return undefined
+}
+
+/**
+ * 运行目录必须归自己所有、且只有自己能进。
+ *
+ * 缺省落点在共享的 `<tmpdir>/velaros-kernel-<uid>`：另一个用户预先建好这个目录，就能替换
+ * descriptor 把客户端引到自己的 socket，客户端会把认证令牌发过去。`mkdir` 的 `mode` 只在
+ * **新建**时生效，目录已存在时既不改权限也不核属主——这里补上这道闸。
+ *
+ * Windows 没有 POSIX 属主与模式位（`process.getuid` 不存在），跳过。
+ */
+async function assertRuntimeDirectoryIsPrivate(directory: string): Promise<void> {
+  if (!isFunction(process.getuid)) return
+  const stats = await stat(directory)
+  const uid = process.getuid()
+  if (stats.uid !== uid) {
+    throw new KernelDaemonError(
+      'DAEMON_LOCK_FAILED',
+      `Kernel 运行目录 ${directory} 属于 uid ${stats.uid}，不是当前用户（uid ${uid}），拒绝使用`,
+    )
+  }
+  const groupAndOtherBits = stats.mode & 0o077
+  if (groupAndOtherBits !== 0) {
+    throw new KernelDaemonError(
+      'DAEMON_LOCK_FAILED',
+      `Kernel 运行目录 ${directory} 的权限是 ${(stats.mode & 0o777).toString(8)}，对同机其他用户开放，拒绝使用（应为 700）`,
+    )
+  }
 }
 
 async function readLockOwnerPid(path: string): Promise<number | undefined> {

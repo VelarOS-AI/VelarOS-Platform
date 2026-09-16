@@ -1,9 +1,10 @@
 import {
+  mkdir,
   readFile,
   stat,
   writeFile,
 } from 'node:fs/promises'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 
 import { afterEach, describe, expect, test } from 'bun:test'
 
@@ -100,19 +101,56 @@ describe('Kernel update lock', () => {
     }
   })
 
-  test('reclaims a lock left with an unreadable payload', async () => {
+  test('refuses a lock whose owner cannot be read instead of stealing it', async () => {
+    // 对方刚 `open(path, 'wx')` 成功、还没来得及写进 pid 的那一小段窗口长这样。
+    // 原来会读一次读不出就把锁删掉，真实竞态下两个进程同时持锁。
     const path = await lockPath()
     const first = await KernelUpdateLock.acquire({ lockPath: path })
     await first.release()
-    await writeFile(path, 'not json', 'utf8')
+    await writeFile(path, '', 'utf8')
 
-    const reclaimed = await KernelUpdateLock.acquire({
+    const contention = KernelUpdateLock.acquire({
       lockPath: path,
       holderId: 'product-b',
+      ownerReadRetries: 2,
+      ownerReadRetryMs: 1,
     })
-    await reclaimed.release()
+    await expect(contention).rejects.toMatchObject({
+      code: 'UPDATE_LOCK_HELD',
+      details: { path },
+    })
+    // 锁文件必须原样留着——它是对方的。
+    expect(await readFile(path, 'utf8')).toBe('')
+  })
 
-    await expect(readFile(path, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
+  test('waits out a half-written lock and then reads its owner', async () => {
+    const path = await lockPath()
+    await mkdir(dirname(path), { recursive: true })
+    await writeFile(path, '', 'utf8')
+    // 对方在第二次重读之前把 pid 写了进去。
+    let reads = 0
+    const contention = KernelUpdateLock.acquire({
+      lockPath: path,
+      holderId: 'product-b',
+      ownerReadRetries: 5,
+      ownerReadRetryMs: 1,
+      sleep: async () => {
+        reads += 1
+        if (reads === 2) {
+          await writeFile(
+            path,
+            JSON.stringify({ holderId: 'product-a', pid: 424242, acquiredAt: 1 }),
+            'utf8',
+          )
+        }
+      },
+      isProcessAlive: () => true,
+    })
+
+    await expect(contention).rejects.toMatchObject({
+      code: 'UPDATE_LOCK_HELD',
+      details: { path, ownerPid: 424242 },
+    })
   })
 
   test('releases idempotently and removes the lock file', async () => {

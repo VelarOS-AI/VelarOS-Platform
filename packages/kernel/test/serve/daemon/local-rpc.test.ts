@@ -1,4 +1,6 @@
 import {
+  chmod,
+  mkdir,
   mkdtemp,
   rm,
   stat,
@@ -258,6 +260,37 @@ describe('Kernel local RPC', () => {
     await expect(discoverKernelDaemon(paths)).rejects.toMatchObject({
       code: 'DAEMON_NOT_RUNNING',
     })
+  })
+
+  test.skipIf(process.platform === 'win32')('refuses a runtime directory that other local users can enter', async () => {
+    // 缺省落点在共享的 <tmpdir>/velaros-kernel-<uid>：别的用户预先建好这个目录，就能替换
+    // descriptor 把客户端引到自己的 socket，客户端会把认证令牌发过去。
+    const directory = await temporaryDirectory()
+    const runtimeDirectory = join(directory, 'shared-runtime')
+    await mkdir(runtimeDirectory, { recursive: true, mode: 0o700 })
+    await chmod(runtimeDirectory, 0o755)
+    const paths = createDefaultKernelDaemonPaths('test-kernel', runtimeDirectory)
+    const { service } = createRpcService()
+    const daemon = new KernelLocalDaemon({ paths, service })
+
+    try {
+      await expect(daemon.start()).rejects.toMatchObject({
+        name: 'KernelDaemonError',
+        code: 'DAEMON_LOCK_FAILED',
+      })
+      // 目录已存在时 mkdir 的 mode 不生效，所以拒绝之后它仍然是 0755，没有被悄悄改掉。
+      expect((await stat(runtimeDirectory)).mode & 0o777).toBe(0o755)
+      await expect(discoverKernelDaemon(paths)).rejects.toMatchObject({
+        code: 'DAEMON_NOT_RUNNING',
+      })
+
+      // 收紧到 0700 之后照常起来。
+      await chmod(runtimeDirectory, 0o700)
+      await daemon.start()
+      expect((await discoverKernelDaemon(paths)).pid).toBe(process.pid)
+    } finally {
+      await daemon.dispose()
+    }
   })
 
   test('supports the explicit loopback TCP fallback', async () => {
