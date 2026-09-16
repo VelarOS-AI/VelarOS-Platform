@@ -1,6 +1,6 @@
 
 import type { ApplySoloContextDegradeActionContext, ContextDegradeAction,SoloContextDegradeToolContext } from '../../types/loop.js'
-import { ContextWorkingSetBudgetGovernor } from '../context/context-working-set-budget-governor'
+import { resolveContextWorkingSetZoneCharBudget } from '../context/context-working-set-budget-governor'
 import { resolveGovernanceSessionKey } from '../residency/session-key'
 import { applyRunProfileToolExposure } from '../runner/run-profile'
 
@@ -46,7 +46,7 @@ function applySoloContextDegradeAction<TContext extends SoloContextDegradeToolCo
           ctx.toolContext,
           ctx.baseAllowedTools
         ),
-        maxToolSchemaCharsOverride: ContextWorkingSetBudgetGovernor.resolveZoneCharBudget(
+        maxToolSchemaCharsOverride: resolveContextWorkingSetZoneCharBudget(
           ctx.zoneAllocation,
           'tool-schemas'
         ),

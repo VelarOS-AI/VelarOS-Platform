@@ -167,7 +167,7 @@ class ToolArgsSchemaValidator {
     for (const key of keys) {
       if (candidates.every(({ issues }) => !isEmpty(rejections(issues, key)))) {
         const allowed = [...new Set(candidates.flatMap(({ issues }) => rejections(issues, key).flatMap((issue) => isArray(issue.values) ? issue.values : [])))]
-        return { branches: [], merged: { path: [key], message: `Invalid option: expected one of ${allowed.map((option) => JSON.stringify(option)).join('|')}` } }
+        return { branches: [], merged: { path: [key], message: `选项不合法：只能填 ${allowed.map((option) => JSON.stringify(option)).join('|')} 之一` } }
       }
       const accepting = candidates.filter(({ issues }) => !touches(issues, key))
       if (!isEmpty(accepting)) candidates = candidates.filter(({ issues }) => isEmpty(rejections(issues, key)))
@@ -181,7 +181,7 @@ class ToolArgsSchemaValidator {
       only.every((issue) => issue?.code === 'invalid_type' && isString(issue.expected) && JSON.stringify(issue.path) === JSON.stringify(only[0]!.path))) {
       const received = /received (\S+)$/u.exec(only[0]!.message)?.[1]
       const expected = [...new Set(only.map((issue) => String(issue!.expected)))].join(' | ')
-      return { branches: [], merged: { path: only[0]!.path, message: `Invalid input: expected ${expected}${received ? `, received ${received}` : ''}` } }
+      return { branches: [], merged: { path: only[0]!.path, message: `输入类型不对：应为 ${expected}${received ? `，实际收到 ${received}` : ''}` } }
     }
     return { branches: selected }
   }

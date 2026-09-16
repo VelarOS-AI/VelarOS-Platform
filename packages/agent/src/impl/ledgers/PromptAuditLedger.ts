@@ -80,51 +80,66 @@ function isValidPromptAuditRecord(value: unknown): value is PromptAuditRecord {
 }
 
 /**
- * 一个打开的 prompt 审计侧信道 handle（每会话一文件 append-only）。
+ * 一个打开的 prompt 审计侧信道 handle（每会话一文件 append-only）：span scope 工厂在装配了
+ * `resolvePromptAuditPath` 时才按会话开一份并缓存复用，没装配就整条审计链降级 no-op。
  *
- * 纪律对齐 {@link ExecutionSpanLedger}：串行写队列 + 每条 fsync + 开档尾行修复；但更轻——记录是本地形状、
- * 无 schema 校验（审计内容态不进 wire）。`append` 同步入队（产 span 侧零 await），`drain`/`close` 供排空。
+ * 建出来后必须先 `openHandle()` 才能写。纪律对齐 `ExecutionSpanLedger`：串行写队列 + 每条 fsync + 开档尾行
+ * 修复；但更轻——记录是本地形状、无 schema 校验（审计内容态不进 wire）。
  */
-export class PromptAuditLedger {
+export interface PromptAuditLedgerApi {
+  /**
+   * 开档：建好父目录、文件不存在就建空文件、半截尾行 ftruncate 修掉，最后以 'a' 模式拿到写句柄。
+   *
+   * 每个实例只该调一次，await 成功后才可以 `append`；失败原样抛出，此账本作废。
+   */
+  openHandle(): Promise<void>
+  /**
+   * 追加一条审计记录（系统提示词全文等重内容）：同步入队立即返回，落盘 + fsync 在串行队列里异步完成。
+   *
+   * 记录原样落盘、不做脱敏（访问面只有本机 debug，见文件头裁决点）；关闭后再 append 抛 `INVARIANT`。
+   */
+  append(record: PromptAuditRecord): void
+  /** 等此刻已入队的写全部落定（不关句柄）；读回审计文件前先调它。 */
+  drain(): Promise<void>
+  /** 排空写队列再关句柄；幂等，关后本账本不再可写。宿主 dispose 时调。 */
+  close(): Promise<void>
+}
+
+export class PromptAuditLedger implements PromptAuditLedgerApi {
   private readonly writeQueue = new SerialWriteQueue()
   private appendHandle: Nullable<FileHandle> = null
   private closed = false
 
-  private constructor(
+  constructor(
     private readonly path: string,
-    private readonly warn: SpanLedgerWarn
+    private readonly warn: SpanLedgerWarn = () => undefined
   ) {}
 
-  public static async open(
-    path: string,
-    warn: SpanLedgerWarn = () => undefined
-  ): Promise<PromptAuditLedger> {
-    const ledger = new PromptAuditLedger(path, warn)
-    await mkdir(dirname(path), { recursive: true })
+  public async openHandle(): Promise<void> {
+    await mkdir(dirname(this.path), { recursive: true })
 
-    if (existsSync(path)) {
-      const read = await readPromptAuditFile(path)
+    if (existsSync(this.path)) {
+      const read = await readPromptAuditFile(this.path)
       if (read.truncatedTail) {
         // 尾行修复：ftruncate 到最后完整记录的字节边界（只缩短、不重写已提交前缀），后续 append 才安全。
-        await truncateJsonlToLineCount(path, read.records.length)
-        ledger.warn('prompt audit ledger tail truncated and repaired on open', {
-          path,
+        await truncateJsonlToLineCount(this.path, read.records.length)
+        this.warn('prompt audit ledger tail truncated and repaired on open', {
+          path: this.path,
           recoveredRecords: read.records.length,
         })
       }
     } else {
-      await writeFile(path, '')
+      await writeFile(this.path, '')
     }
 
-    ledger.appendHandle = await open(path, 'a')
-    return ledger
+    this.appendHandle = await open(this.path, 'a')
   }
 
   public append(record: PromptAuditRecord): void {
     this.assertOpen()
     void this.writeQueue.enqueue(async () => {
       if (!this.appendHandle) {
-        throw new AppError('INVARIANT', `prompt audit ledger append handle is closed: ${this.path}`)
+        throw new AppError('INVARIANT', `prompt 审计账本的追加句柄已经关闭，这条审计记录落不了盘：${this.path}。`)
       }
       await this.appendHandle.write(serializePromptAuditLine(record))
       await this.appendHandle.datasync()
@@ -146,6 +161,6 @@ export class PromptAuditLedger {
   }
 
   private assertOpen(): void {
-    if (this.closed) throw new AppError('INVARIANT', `prompt audit ledger is closed: ${this.path}`)
+    if (this.closed) throw new AppError('INVARIANT', `prompt 审计账本已关闭，不再接受追加：${this.path}。`)
   }
 }

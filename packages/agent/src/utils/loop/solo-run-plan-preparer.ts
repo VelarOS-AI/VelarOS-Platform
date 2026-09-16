@@ -24,7 +24,7 @@ import {
   RunProfileDefinitions,
 } from '../runner/runtime-profiles'
 
-import { agentRunPlanComposer } from './agent-run-planner'
+import { buildAgentRunPlan } from './agent-run-planner'
 import { extractLatestUserTextFromMessages, isLowSignalIntentText } from './intent-signals'
 import { resolveSoloLoopTools } from './loop-runtime'
 
@@ -36,6 +36,12 @@ const BootstrapSharedToolNames = [
   'interaction:ask_user',
   'interaction:show_action_cards',
 ] as const
+/**
+ * 按本轮上下文档位削工具面：`operational` 原样全放；非 operational（即全新交互任务的第一次请求）
+ * 只留 `BootstrapSharedToolNames` 与能力端口声明的 baseline 工具，其余全部滤掉。
+ * 被削掉的工具这一轮模型看不见，但下一轮档位一定回到 operational 就全回来——这是省首轮 schema 开销，
+ * 不是禁用；所以任何"必须能调到"的工具都得同时进 `resolvePromptFeatureProtectedToolNames`。
+ */
 function filterToolsForContextPhase(input: {
   tools: readonly string[]
   contextPhase: AgentContextPhase
@@ -61,6 +67,11 @@ const SkillGateAlwaysKeptToolNames = new Set<string>([
   'context:handoff',
 ])
 
+/**
+ * 把多份类别清单（运行时那份 + catalog 那份）按类别 id 并成一张目录：同 id 只认第一次出现的类别元数据
+ * 与 enabled 态，工具按 name 去重后按出现顺序追加。
+ * 后来者只补工具、不覆盖已有条目，所以运行时的真实启用态不会被 catalog 里的静态声明冲掉。
+ */
 function mergeToolCategoryCatalog(
   categories: ReadonlyArray<SoloRunPlanToolCategory<ToolDescriptor>>
 ): Array<SoloRunPlanToolCategory<ToolDescriptor>> {
@@ -91,10 +102,18 @@ function mergeToolCategoryCatalog(
   return [...merged.values()]
 }
 
+/**
+ * 把一串字符串去空白、去空、去重后按字典序排好。只服务于规划快照指纹：
+ * 同一份配置换个枚举顺序不能算「变了」，否则指纹每轮都不同，跨轮缓存永远命不中。
+ */
 function sortedStrings(values: Iterable<string>): string[] {
   return [...new Set([...values].map((value) => value.trim()).filter(Boolean))].sort()
 }
 
+/**
+ * 按 `isAllowed` 过出当前会话许可的类别 id，保持入参顺序。
+ * 这批 id 是交给工具分配器的「可申请范围」，只说明允许换入，不等于本轮已启用。
+ */
 function collectAllowedToolCategoryIds(
   categories: ReadonlyArray<SoloRunPlanToolCategory<ToolDescriptor>>,
   isAllowed: (categoryId: ToolCategoryId) => boolean
@@ -110,6 +129,10 @@ function collectAllowedToolCategoryIds(
   return categoryIds
 }
 
+/**
+ * 把若干类别里的工具名平铺成一串（不去重、保持顺序），作为 `resolveSoloLoopTools` 的「已启用工具」入参，
+ * 最终定出要估算 schema 字符数的候选集。
+ */
 function collectToolNamesFromCategories(
   categories: ReadonlyArray<SoloRunPlanToolCategory<ToolDescriptor>>
 ): string[] {
@@ -124,6 +147,14 @@ function collectToolNamesFromCategories(
   return toolNames
 }
 
+/**
+ * 汇出这一轮「预算裁剪不许砍」的工具名：会话自己的豁免名单，加上显式选中的技能所声明的工具，
+ * 加上非 operational 档位下的 `BootstrapSharedToolNames`，再按激活的执行模式补上该模式的命脉工具
+ * （plan 模式的 `plan:update` 与 `interaction:show_action_cards`，goal 模式的三个 `goal:*`）。
+ *
+ * 不保这些工具的后果是实打实的：工具面一旦被 schema 预算削到它们，模式自己就再也收不了尾——
+ * 目标模式调不到 `goal:update`，收尾门会永远判目标未收束，直到连拦三次熔断。
+ */
 function resolvePromptFeatureProtectedToolNames(input: {
   executionModes: readonly ExecutionModeId[]
   contextPhase: AgentContextPhase
@@ -156,6 +187,10 @@ function resolvePromptFeatureProtectedToolNames(input: {
   return [...toolNames]
 }
 
+/**
+ * 从全量运行时类别里挑出本轮实际启用的那些，同时把它们的工具描述符平铺出来。
+ * 两份产物一次遍历得出：类别列表进提示词渲染，描述符进执行器。
+ */
 function collectEnabledRuntimeCategoryArtifacts(
   categories: ReadonlyArray<SoloRunPlanToolCategory<ToolDescriptor>>,
   enabledCategoryIds: readonly ToolCategoryId[]
@@ -180,7 +215,12 @@ function collectEnabledRuntimeCategoryArtifacts(
   return { enabledToolDescriptors, enabledToolCategories }
 }
 
-/** Removes tools whose result cannot be consumed by the selected concrete model. */
+/**
+ * 滤掉本轮所选具体模型吃不下其结果的工具：工具声明的 `requiredModelInputModalities` 必须被模型支持的
+ * 模态全覆盖，否则从所在类别里摘除；摘空了的类别整个不再出现在结果里。
+ * 挡的是「截图工具返回图片、而这个模型只收文本」这类一调用就废的暴露——与其让模型调完拿不到结果，
+ * 不如一开始就别给它看见。
+ */
 function filterToolCategoriesForModelInputs(
   categories: ReadonlyArray<SoloRunPlanToolCategory<ToolDescriptor>>,
   supportedInputModalities: readonly AgentModelInputModality[]
@@ -194,6 +234,11 @@ function filterToolCategoriesForModelInputs(
   })
 }
 
+/**
+ * 把类别压成 `{ id, toolCount }` 的摘要供遥测记录：同名工具算一个、无名的不计，
+ * 最后按 id 的码元序（`compareStableStrings`）排好。排序是为了让同一份工具面在不同机器、不同轮次
+ * 产出逐字节一致的摘要，否则遥测里每轮都像"类别变了"。
+ */
 function toolCategorySummary(
   categories: ReadonlyArray<SoloRunPlanToolCategory<ToolDescriptor>>
 ): Array<{ id: ToolCategoryId; toolCount: number }> {
@@ -215,10 +260,19 @@ function toolCategorySummary(
   return summary.sort((left, right) => compareStableStrings(left.id, right.id))
 }
 
+/**
+ * 把一张 `名字 → 数值` 的表求和，其中负值按 0 计，整张表缺席按 0。
+ * 用来把每个工具的 schema 字符数加成本轮总量；负值一律不抵扣，免得某个估算器给出负数把总量做低。
+ */
 function sumPositiveRecordValues(values: LooseOptional<Readonly<Record<string, number>>>): number {
   return Object.values(values ?? {}).reduce((sum, value) => sum + Math.max(0, value), 0)
 }
 
+/**
+ * 把（可能很长的）规划快照指纹压成定长短串 `turn-plan:fnv1a32:xxxxxxxx`（FNV-1a 32 位）。
+ * 只进遥测、用来在日志里对比「这两轮是不是同一份规划」；缓存命中判定用的始终是原始指纹串，
+ * 所以这里即便哈希碰撞也不会让两轮规划互相串用。
+ */
 function buildTurnPlanningTelemetrySignature(signature: string): string {
   let hash = 0x811c9dc5
 
@@ -230,6 +284,14 @@ function buildTurnPlanningTelemetrySignature(signature: string): string {
   return `turn-plan:fnv1a32:${(hash >>> 0).toString(16).padStart(8, '0')}`
 }
 
+/**
+ * 把「决定本轮工具面长什么样」的全部输入序列化成一个指纹串，作为回合规划快照的缓存键：能力表修订号、
+ * provider / 模型 / 窗口 / 输入模态、请求档与实际 run profile、角色与配置工具、当前可见工具、
+ * 已启用与豁免的类别和工具、promptFeatures、执行模式、上下文档位。
+ *
+ * 清单类字段一律过 `sortedStrings` 去重排序，让枚举顺序的抖动不至于打穿缓存；
+ * 但凡有一项真的变了指纹就变，上一轮那份类别枚举与 schema 估算全部作废重算（这两件事正是规划里最贵的）。
+ */
 function buildTurnPlanningSnapshotSignature(input: {
   capabilityRevision?: string | number
   providerId: string
@@ -268,6 +330,22 @@ function buildTurnPlanningSnapshotSignature(input: {
   })
 }
 
+/**
+ * 每一轮发模型之前的总装配，产出这一轮的工具面、上下文分区与提示词预算。
+ * 流程：定 run profile 与可用上下文窗口 → 清掉过期的工具租约、把思考深度与 tool surface 档写回会话 →
+ * 枚举工具类别（先按模型输入模态滤一遍）→ 必要时跑工具分配器换入类别/工具 → 交给 `buildAgentRunPlan`
+ * 算出运行计划 → 把 before-model 的内部提醒压进 history，最后记一条规划遥测。
+ *
+ * 几处不显然的取舍：
+ * - 类别枚举与 schema 估算是规划里最贵的两件事，所以按 `buildTurnPlanningSnapshotSignature` 的指纹做
+ *   跨轮缓存；但只要本轮有工具分配器请求就既不复用也不写回——换入结果必须当场生效，缓存会把它盖掉。
+ * - 工具分配器只在 operational 档、且「有显式请求」或「用户这句话确有意图」时才跑；打招呼、说"继续"
+ *   这类低信号轮次直接跳过，不白烧一次分配。
+ * - 技能门（`skillAllowedToolNames`）之外的工具会被收掉，只留 `SkillGateAlwaysKeptToolNames` 那几个
+ *   交互必备的——显式选中技能即用户对工具面划定的授权边界。
+ * - 强制工具选择只有在它确实还在本轮 allowedTools 里时才作数，否则退化成不强制：逼模型去调一个它
+ *   根本看不见的工具，只会白费一轮。
+ */
 async function prepareSoloRunPlanForTurn<TContext extends SoloRunPlanToolContext>(
   input: PrepareSoloRunPlanForTurnInput<TContext>
 ): Promise<PrepareSoloRunPlanForTurnResult> {
@@ -510,11 +588,12 @@ async function prepareSoloRunPlanForTurn<TContext extends SoloRunPlanToolContext
     BuildAgentRunPlanInput,
     'bootstrapState' | 'capabilityEvidenceSnapshot' | 'collectNewlyEvictedPagedInTools'
   >
-  const runPlan = agentRunPlanComposer.build({
+  const runPlan = buildAgentRunPlan({
     ...runPlanTurnInput,
     ...runPlanRuntimeInput,
     ...runPlanToolInput,
     ...runPlanRecoveryInput,
+    ledgerFactory: input.ledgerFactory,
   })
 
   if (!isEmpty(runPlan.capabilities.requestedCategories)) {

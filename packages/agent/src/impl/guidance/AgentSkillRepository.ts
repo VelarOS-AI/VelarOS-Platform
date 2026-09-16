@@ -1,9 +1,11 @@
-import { isEmpty,isFalse, isPresent, toNullable } from '@velaros-ai/core'
+import { isFalse, isPresent, toNullable } from '@velaros-ai/core'
 
 import type { AgentSkillProvider } from '../../contract/requires.js'
 import type { ChatPromptFeatureId } from '../../types/agent'
 import type { AgentRoleId, AgentSkillDescriptor,CapabilityScopeId } from '../../types/agent.js'
 import type { AgentSkillDefinition } from '../../types/guidance.js'
+import { formatLinkedSkillPrompt, toSkillDescriptor } from '../../utils/guidance/skill-index-prompt'
+import { hasAutoInjectPromptFeature, isSkillVisibleForPromptFeatures, isSkillVisibleForResource, isSkillVisibleInScope } from '../../utils/guidance/skill-visibility'
 import { compareStableStrings } from '../../utils/residency/determinism'
 
 /**
@@ -36,7 +38,64 @@ import { compareStableStrings } from '../../utils/residency/determinism'
  * `skillKind` 的执行门生效，不能只在某个宿主适配器预处理；否则另一条供应方装配线可能让
  * 第三方文本获得每回合全文常驻的提示词位置。
  */
-class AgentSkillRepository {
+
+/**
+ * 技能仓库对外的面：把内置 catalog、文件式技能等各路供应方聚成一张按角色可查的表，
+ * 对外只给「这个角色现在能看见哪些技能」「这一轮往提示词里注什么」「按 id 读全文」三件事。
+ *
+ * 一份仓库归一条装配线持有，状态（技能表、角色索引、各供应方版本快照）全在实例内存里；
+ * 每次对外查询前先比对供应方版本，变了才重载，供应方没实现 `getVersion` 就退回每次都重载。
+ * 同 id 技能后注册者覆盖先注册者，顺序即供应方数组顺序。实现是 `AgentSkillRepository`。
+ */
+export interface AgentSkillRepositoryApi {
+  /** 丢掉现有技能表，按供应方数组顺序全量重建，并记下这一次的各供应方版本快照。装配完或想强制刷新时调。 */
+  reload(): void
+  /**
+   * 列出某角色此刻可见的技能 descriptor（不含全文），按 priority 升序、同优先级按 id 码元序排。
+   * 走完整可见性漏斗（启用 → 空间作用域 → 资源根 → prompt feature），但不按选中过滤：
+   * 模型据这张索引决定要不要 tooling:read 正文。
+   */
+  listSkillsForRole(
+    roleId: AgentRoleId,
+    selectedSkillIds?: string[],
+    capabilityScope?: CapabilityScopeId,
+    resourceId?: LooseOptional<string>,
+    promptFeatures?: readonly ChatPromptFeatureId[]
+  ): AgentSkillDescriptor[]
+  /**
+   * 生成这一轮要注入 system prompt 的技能段：受信任供应方的角色身份技能注入全文常驻，
+   * 其余命中的只挂 `skill:<id>` 链接，正文按需 tooling:read。
+   * 用户显式选中的技能即使不在当前空间的索引里也会被补挂进来（作用域收敛的是索引不是权限）。
+   * 一条都没命中时返回空串。
+   */
+  getSkillMarkdownForRole(
+    roleId: AgentRoleId,
+    selectedSkillIds?: string[],
+    promptFeatures?: readonly ChatPromptFeatureId[],
+    capabilityScope?: CapabilityScopeId,
+    resourceId?: LooseOptional<string>
+  ): string
+  /**
+   * 按 id 读一条技能的完整定义，供 `tooling:read skill:<id>` 落地。角色可见即可读，不要求选中；
+   * 显式选中的技能另有一条跳过空间过滤的逃生口——必须与注入侧同形，否则提示词让模型去读却读回 404。
+   * id 空白、角色看不见、被禁用或资源根不匹配时返回 null。返回的是浅拷贝，调用方改它不影响仓库。
+   */
+  readSkillForRole(
+    roleId: AgentRoleId,
+    skillId: string,
+    selectedSkillIds?: string[],
+    capabilityScope?: CapabilityScopeId,
+    resourceId?: LooseOptional<string>,
+    promptFeatures?: readonly ChatPromptFeatureId[]
+  ): Nullable<AgentSkillDefinition>
+  /**
+   * 读技能随附的资源文件，由它的来源供应方去落盘取，调用方不直接碰文件系统。
+   * 只认这条技能 `resourcePaths` 里已经枚举过的路径，其余一律返回 null——防止拼路径越界读。
+   */
+  readSkillResource(skill: AgentSkillDefinition, resourcePath: string): Nullable<string>
+}
+
+class AgentSkillRepository implements AgentSkillRepositoryApi {
   private readonly skillsById = new Map<string, AgentSkillDefinition>()
   private readonly roleSkillIds = new Map<AgentRoleId, Set<string>>()
   /**
@@ -86,7 +145,7 @@ class AgentSkillRepository {
       resourceId,
       selected,
       featureSet
-    ).map((skill) => this.toDescriptor(skill))
+    ).map((skill) => toSkillDescriptor(skill))
   }
 
   /** 注入系统提示的技能段：角色身份技能注入全文，普通 skill 命中后只注入读取链接。 */
@@ -116,7 +175,7 @@ class AgentSkillRepository {
         continue
       }
 
-      if (selected.has(skill.id) || this.hasAutoInjectPromptFeature(skill, featureSet)) {
+      if (selected.has(skill.id) || hasAutoInjectPromptFeature(skill, featureSet)) {
         linkedSkills.push(skill)
       }
     }
@@ -130,7 +189,7 @@ class AgentSkillRepository {
       if (skill && !this.shouldInjectFullMarkdown(skill)) linkedSkills.push(skill)
     }
 
-    return [...fullMarkdown, this.formatLinkedSkillPrompt(linkedSkills, selected)]
+    return [...fullMarkdown, formatLinkedSkillPrompt(linkedSkills, selected)]
       .filter(Boolean)
       .join('\n\n')
   }
@@ -240,26 +299,12 @@ class AgentSkillRepository {
       .map((skillId) => this.skillsById.get(skillId))
       .filter((skill): skill is AgentSkillDefinition => !!skill)
       .filter((skill) => !isFalse(skill.enabled))
-      .filter((skill) => this.isSkillVisibleInScope(skill, capabilityScope))
-      .filter((skill) => this.isSkillVisibleForResource(skill, resourceId))
+      .filter((skill) => isSkillVisibleInScope(skill, capabilityScope))
+      .filter((skill) => isSkillVisibleForResource(skill, resourceId))
       .filter((skill) =>
-        this.isSkillVisibleForPromptFeatures(skill, selectedSkillIds, promptFeatures)
+        isSkillVisibleForPromptFeatures(skill, selectedSkillIds, promptFeatures)
       )
       .sort((left, right) => left.priority - right.priority || compareStableStrings(left.id, right.id))
-  }
-
-  /**
-   * 带 autoInjectPromptFeatures 的 Skill 是已启用插件的操作手册：插件未启用时不进入
-   * 当前 Skills 索引。插件是否存在、如何申请由宿主注入的 plugin prompt 段说明。
-   */
-  private isSkillVisibleForPromptFeatures(
-    skill: AgentSkillDefinition,
-    selectedSkillIds: ReadonlySet<string>,
-    promptFeatures: ReadonlySet<ChatPromptFeatureId>
-  ): boolean {
-    const requiredFeatures = skill.autoInjectPromptFeatures ?? []
-    if (isEmpty(requiredFeatures) || selectedSkillIds.has(skill.id)) return true
-    return requiredFeatures.some((feature) => promptFeatures.has(feature))
   }
 
   /**
@@ -274,33 +319,8 @@ class AgentSkillRepository {
     if (!this.roleSkillIds.get(roleId)?.has(skillId)) return null
     const skill = this.skillsById.get(skillId)
     if (!skill || isFalse(skill.enabled)) return null
-    if (!this.isSkillVisibleForResource(skill, resourceId)) return null
+    if (!isSkillVisibleForResource(skill, resourceId)) return null
     return skill
-  }
-
-  /** 项目级技能根级精筛：只在会话活跃根等于其来源项目根时可见（多项目互不泄漏）。 */
-  private isSkillVisibleForResource(
-    skill: AgentSkillDefinition,
-    resourceId?: LooseOptional<string>
-  ): boolean {
-    if (!skill.sourceResourceId) return true
-    if (!resourceId?.trim()) return false
-    return resourceId.trim() === skill.sourceResourceId.trim()
-  }
-
-  private isSkillVisibleInScope(
-    skill: AgentSkillDefinition,
-    capabilityScope?: CapabilityScopeId
-  ): boolean {
-    if (!capabilityScope) return false
-    return skill.capabilityScopes.includes(capabilityScope)
-  }
-
-  private hasAutoInjectPromptFeature(
-    skill: AgentSkillDefinition,
-    promptFeatures: ReadonlySet<ChatPromptFeatureId>
-  ): boolean {
-    return !!skill.autoInjectPromptFeatures?.some((feature) => promptFeatures.has(feature))
   }
 
   private shouldInjectFullMarkdown(skill: AgentSkillDefinition): boolean {
@@ -308,54 +328,6 @@ class AgentSkillRepository {
     // 正文按需 tooling:read。声明 role 但来源未盖章 = 按 capability 处理（静默降级，
     // 不抛错：一条技能的档位声明错了不该让整个技能库不可用）。
     return skill.skillKind === 'role' && this.trustedRoleSkillProviderIds.has(skill.sourceId)
-  }
-
-  private formatLinkedSkillPrompt(
-    skills: readonly AgentSkillDefinition[],
-    selected: ReadonlySet<string> = new Set()
-  ): string {
-    if (isEmpty(skills)) return ''
-
-    const formatLine = (skill: AgentSkillDefinition): string => {
-      const description = skill.description?.replace(/\s+/gu, ' ').trim()
-      return description
-        ? `- skill:${skill.id}：${skill.label}。${description}`
-        : `- skill:${skill.id}：${skill.label}`
-    }
-    const selectedSkills = skills.filter((skill) => selected.has(skill.id))
-    const matchedSkills = skills.filter((skill) => !selected.has(skill.id))
-
-    const lines = ['# 命中 Skill']
-    if (!isEmpty(selectedSkills)) {
-      // 用户显式选中 ≠ 泛化命中：选中即指令，回答前必须先读并遵循——措辞太软会被模型自主裁量跳过。
-      lines.push(
-        '',
-        '用户为本次请求**显式选择**了以下 Skill。开始实质回答前必须先用 tooling:read 读取其正文并严格遵循（读取已免确认）：',
-        ...selectedSkills.map(formatLine)
-      )
-    }
-    if (!isEmpty(matchedSkills)) {
-      lines.push(
-        '',
-        '以下 Skill 与当前请求匹配，正文不直接注入；需要时调用 tooling:read 读取：',
-        ...matchedSkills.map(formatLine)
-      )
-    }
-
-    lines.push('', '读取格式：tooling:read({ ids: ["skill:<id>"], detail: "full" })')
-    return lines.join('\n')
-  }
-
-  private toDescriptor(skill: AgentSkillDefinition): AgentSkillDescriptor {
-    const {
-      markdown: _markdown,
-      skillKind: _skillKind,
-      autoInjectPromptFeatures: _autoInjectPromptFeatures,
-      enabled: _enabled,
-      capabilityScopes: _capabilityScopes,
-      ...descriptor
-    } = skill
-    return descriptor
   }
 }
 

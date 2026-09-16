@@ -13,6 +13,11 @@ import { isNumber, isPlainObject, isString,isTrue } from '@velaros-ai/core'
 
 import type { ContextRefEnvelope } from '../../types/context.js'
 
+/**
+ * 造一个统一折叠桩信封：补上版本号 `v: 1`，其余字段原样带入（入参不含 `v`，版本号只由这里写）。
+ * 所有新产出的折叠桩都必须经这里生成，各层才有唯一可认的形状与一致的召回入口——
+ * 机器生成的桩还必须自己在 `retrieval.args.refKind` 里写明引用类型，不能让消费方按 id 前缀去猜。
+ */
 export function buildContextRefEnvelope(
   input: Omit<ContextRefEnvelope, 'v'>
 ): ContextRefEnvelope {

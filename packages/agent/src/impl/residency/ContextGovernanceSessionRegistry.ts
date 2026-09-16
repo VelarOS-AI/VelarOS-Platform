@@ -1,18 +1,27 @@
 import { toNullable } from '@velaros-ai/core'
 
 import type { ContextMigrationEventSink } from '../../contract/requires.js'
-import type { ContextDistiller, ContextGovernanceConfig, ContextGovernanceConfigInput, ContextHandoffSignal, ContextRecordClassifier, GovernanceEpochReport, GovernanceEpochSource } from '../../types/residency.js'
+import type { ContextDistiller, ContextGovernanceConfig, ContextGovernanceConfigInput, ContextGovernanceSessionRegistryApi as ContextGovernanceSessionRegistryContract, ContextHandoffSignal, ContextRecordClassifier, GovernanceEpochReport, GovernanceEpochSource } from '../../types/residency.js'
 import { resolveContextGovernanceConfig } from '../../utils/residency/governance-config'
 
 import type { ContextGovernanceSessionRegistryOptions } from './ContextGovernanceSession'
 import { ContextGovernanceSession, DefaultMaxTrackedSessions } from './ContextGovernanceSession'
 
 /**
+ * 治理会话登记处对外这一面：按会话 id 取（或新建）治理面、晚绑配置与蒸馏器、代转几个常用查询。
+ *
+ * 实现是 `ContextGovernanceSessionRegistry`，宿主级单实例；会话表只在内存里，超过 `maxTrackedSessions`
+ * 按最近使用淘汰最旧的（`resolve` 命中会把条目挪到尾部）。编译器、召回服务和转交信号读的都是这一份状态。
+ * 形状与对外公开的 `ContextGovernanceSessionRegistryApi` 同源，这里把它挪到类上方当本类的接口。
+ */
+export interface ContextGovernanceSessionRegistryApi extends ContextGovernanceSessionRegistryContract {}
+
+/**
  * 治理会话登记处（宿主级单实例）。
  *
  * 取代 `ContextAttentionSessionRegistry` 的注入位：编译器、召回服务与转交信号消费同一份状态。
  */
-export class ContextGovernanceSessionRegistry {
+export class ContextGovernanceSessionRegistry implements ContextGovernanceSessionRegistryApi {
   private readonly sessions = new Map<string, ContextGovernanceSession>()
   private config: ContextGovernanceConfig
   private readonly classifier: Nullable<ContextRecordClassifier>

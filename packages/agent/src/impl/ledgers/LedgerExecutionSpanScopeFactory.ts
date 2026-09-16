@@ -40,21 +40,34 @@ export interface LedgerExecutionSpanScopeFactoryDeps {
   resolvePromptAuditPath?: (sessionId: string) => string
   /** 非致命恢复事件回落（尾行修复等）；缺省进 warn 日志。 */
   warn?: SpanLedgerWarn
+  /** 取当前时刻（epoch 毫秒）的时钟，交给录制器算 span 时长；缺省 `Date.now`，property 电池注入确定性时钟复现字节。 */
   now?: () => number
+  /** 分配 span 身份的工厂；缺省由录制器回落到 `randomUUID`，测试注入递增序号让落盘 span 逐字节可比。 */
   nextSpanId?: () => string
 }
 
 /**
- * 账本落盘的 span scope 工厂——把生产侧 scope 动词桥到 {@link ExecutionSpanRecorder} +
- * {@link ExecutionSpanLedger}（旁账本，每会话一文件 append-only）。
+ * 账本落盘的 span scope 工厂的完整面：注入端口要的 `beginRun`、宿主级能力观测 `recordCapabilitySpan`，
+ * 外加两个生命周期动词。
  *
- * 失败隔离是**唯一边界**：每个生产侧动词内 try/catch 吞异常（best-effort warn），故 SoloLoop /
- * ToolExecutor 侧可直呼不设防（对齐「code like one author，不散落 try/catch」）。账本按会话缓存句柄、
- * 每条 span fsync 落盘；`drain` / `close` 供宿主 dispose 与探针读回前排空。
+ * 宿主装配一台、整个进程共用；按会话惰性开账本句柄并缓存（一个会话多次 run 追加同一文件）。
+ * 失败隔离是**唯一边界**：每个生产侧动词内吞异常（best-effort warn），故 SoloLoop / ToolExecutor 侧可直呼不设防。
  */
-export class LedgerExecutionSpanScopeFactory
-  implements ExecutionSpanScopeFactory, ExecutionCapabilitySpanRecorder
-{
+export interface LedgerExecutionSpanScopeFactoryApi
+  extends ExecutionSpanScopeFactory,
+    ExecutionCapabilitySpanRecorder {
+  /**
+   * 排空所有已入队的 span 写（不关句柄）。
+   *
+   * `append` 是 fire-and-forget，写盘在串行队列里异步落定；探针 / 测试在读回账本文件前必须先 await 它，
+   * 否则读到的可能少了最后几条。
+   */
+  drain(): Promise<void>
+  /** 排空并关闭全部账本句柄（含 prompt 审计侧信道），同时清空缓存；宿主 dispose 时调一次。 */
+  close(): Promise<void>
+}
+
+export class LedgerExecutionSpanScopeFactory implements LedgerExecutionSpanScopeFactoryApi {
   private readonly resolveLedgerPath: (sessionId: string) => string
   private readonly resolvePromptAuditPath: Nullable<(sessionId: string) => string>
   private readonly warn: SpanLedgerWarn
@@ -161,7 +174,8 @@ export class LedgerExecutionSpanScopeFactory
   private ledgerFor(sessionId: string): Promise<ExecutionSpanLedger> {
     const existing = this.ledgers.get(sessionId)
     if (existing) return existing
-    const opened = ExecutionSpanLedger.open(this.resolveLedgerPath(sessionId), this.warn)
+    const ledger = new ExecutionSpanLedger(this.resolveLedgerPath(sessionId), this.warn)
+    const opened = ledger.openHandle().then(() => ledger)
     this.ledgers.set(sessionId, opened)
     return opened
   }
@@ -170,8 +184,9 @@ export class LedgerExecutionSpanScopeFactory
     const existing = this.promptAuditLedgers.get(sessionId)
     if (existing) return existing
     const resolve = this.resolvePromptAuditPath
-    if (!resolve) throw new AppError('INVARIANT', 'prompt audit path resolver not configured')
-    const opened = PromptAuditLedger.open(resolve(sessionId), this.warn)
+    if (!resolve) throw new AppError('INVARIANT', '没有配置 prompt 审计账本的路径解析器，无法确定这条审计记录该写到哪个文件：装配本工厂时必须传入 resolvePromptAuditPath。')
+    const ledger = new PromptAuditLedger(resolve(sessionId), this.warn)
+    const opened = ledger.openHandle().then(() => ledger)
     this.promptAuditLedgers.set(sessionId, opened)
     return opened
   }

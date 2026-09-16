@@ -2,16 +2,17 @@ import { toNullable } from '@velaros-ai/core'
 
 import type { ContextPayloadStore } from '../../contract/requires.js'
 import type { ContextPayloadRecord, ContextUserTextRecord } from '../../types/context.js'
+import { buildContextPayloadRef, buildContextUserTextRef } from '../../utils/context/payload-ref'
 function createStoreKey(sessionId: string, hash: string): string {
   return `${sessionId}:${hash}`
 }
 
 export function createContextPayloadRef(sessionId: string, hash: string): string {
-  return `ctx-payload:${encodeURIComponent(sessionId)}:${hash}`
+  return buildContextPayloadRef(sessionId, hash)
 }
 
 export function createContextUserTextRef(sessionId: string, hash: string): string {
-  return `ctx-user-payload:${encodeURIComponent(sessionId)}:${hash}`
+  return buildContextUserTextRef(sessionId, hash)
 }
 
 const ContextUserTextToolName = '__context_user_text__'

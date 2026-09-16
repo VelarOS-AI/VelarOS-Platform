@@ -48,6 +48,11 @@ export const ToolSpaceQueryPageLimitMax = 50
 
 export const toolAvailabilitySchema = z.enum(ToolDiscoveryAvailabilityValues)
 
+/**
+ * 判定 find 的查询串合不合法：必须**至少含一个汉字或拉丁字母**（纯数字、纯标点召不回任何东西），
+ * 且整串只由汉字、字母、数字、空白和工具名常见符号（`_ - . / \ : ： , ， 。 ; ； | () [] {} " ' \` + * # @ ! ? = & % < > $ ~`）
+ * 组成。其他文字（日文假名、西里尔等）会被判假——召回层的词干与 n-gram 只覆盖中英两种。
+ */
 function isChineseOrEnglishToolSearchQuery(query: string): boolean {
   return ToolFindQueryHasSearchLanguage.test(query) && ToolFindQueryAllowedCharacters.test(query)
 }
@@ -369,6 +374,11 @@ const toolSpaceQueryMethodObjectSchema = z.object({
     ),
 }).strip()
 
+/**
+ * 复制一份对象，只留值不是 `undefined` 的键（`null` 保留）。
+ * 各 op 的精确 schema 用 `.strip()`，键**存在但值为 undefined** 仍会参与校验并报「类型不对」，
+ * 所以分派前必须先把这些空键抹掉。
+ */
 function stripUndefinedFields(input: Record<string, unknown>): Record<string, unknown> {
   const result: Record<string, unknown> = {}
   for (const [key, value] of Object.entries(input)) {
@@ -377,6 +387,12 @@ function stripUndefinedFields(input: Record<string, unknown>): Record<string, un
   return result
 }
 
+/**
+ * 把一份宽松解析过的查询入参分派到对应 op 的精确 schema 上 `safeParse`（返回结果而不抛）。
+ * 省略 `op` 时按参数推断：带了 `query` 判 `find`（模型的意图就是按短语搜），否则默认 `map`。
+ * 不这么推断的话 `tooling:map({query})` 会落到严格的 map schema 上被 "Unrecognized key: query" 拒掉，
+ * 模型白白多花一轮改 op——这是高频可观测的失败模式。分派前会先抹掉值为 undefined 的键。
+ */
 function parseToolSpaceQueryByOp(input: z.output<typeof toolSpaceQueryMethodObjectSchema>) {
   // 省略 op 但带了 query → 模型意图就是按短语搜索，按 find 解析。否则默认 map（按分类展开）。
   // 不这样推断的话，tooling:map({query}) 会落到严格的 map schema 上被 "Unrecognized key: query" 拒绝，
@@ -410,6 +426,12 @@ export const toolSpaceQueryMethodSchema = toolSpaceQueryMethodObjectSchema.super
   }
 )
 
+/**
+ * 查询方法（find/page/map/read，不含 replace）的解析入口：先过宽松的联合 schema，
+ * 再按 op 用精确 schema 复核，最后把补全了 `op`（推断不出时落 `map`）的结果过一遍完整的
+ * `toolSpaceSchema` 定形。任一步不过都**抛** ZodError——与 `parseToolSpaceQueryByOp` 的 safeParse 不同，
+ * 这里是给工具执行用的，参数不合法必须报给模型改。
+ */
 export function parseToolSpaceQueryMethodInput(input: unknown): z.output<typeof toolSpaceSchema> {
   const parsed = toolSpaceQueryMethodSchema.parse(input)
   const exactParseResult = parseToolSpaceQueryByOp(parsed)

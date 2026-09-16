@@ -15,7 +15,7 @@ import { logRuntime } from '@velaros-ai/core/logger'
 
 import type { AgentChatRuntimeConfig, AgentModelRequestOptions, AgentSystemRuntimeConfig,ExecutionSpanScopeFactory } from '../../contract/requires.js'
 import type { AgentModelInputModality } from '../../types/agent.js'
-import type { AgentExecutionLimitOverrides, AgentExecutionLimits, AgentLoopSurface, ExecuteQueryLoopArgs, ExecuteQueryTurnArgs, LoopTurnVerdict, QueryLoopRoleEngine, QueryLoopToolCategoryResolver, QueryLoopToolContext, QueryLoopToolRegistry, QueryTurnEvents, QueryTurnProvider } from '../../types/loop.js'
+import type { AgentExecutionLimitOverrides, AgentExecutionLimits, AgentLoopSurface, ExecuteQueryLoopArgs, ExecuteQueryTurnArgs, LoopTurnVerdict, QueryLoopApi as QueryLoopContract, QueryLoopRoleEngine, QueryLoopToolCategoryResolver, QueryLoopToolContext, QueryLoopToolRegistry, QueryTurnEvents, QueryTurnProvider } from '../../types/loop.js'
 import type { AgentModSeamDispatcherApi } from '../../types/mods.js'
 import type { ContextGovernanceSessionRegistryApi } from '../../types/residency.js'
 import type { AgentRoleResolution } from '../../types/runner.js'
@@ -38,19 +38,26 @@ import {
 import { resolveContextDegradeAction } from '../../utils/loop/context-degrade-ladder'
 import { resolveAgentExecutionLimits } from '../../utils/loop/execution-limits'
 import { buildSubAgentInstruction, createSubAgentContext, resolveSubAgentDelegation, resolveSubAgentToolScope } from '../../utils/loop/loop-runtime'
+import { prepareQueryLoopToolSchemaChars } from '../../utils/loop/loop-turn-assembly'
+import {
+  buildSubAgentReasoningOnlyVisibleAnswerRecoveryPrompt,
+  buildSubAgentWindDownReminder,
+  shouldRecoverReasoningOnlyEmptyResponse,
+} from '../../utils/loop/loop-turn-recovery'
 import { captureAgentTurnCapabilityContext, captureAgentTurnCapabilitySnapshot } from '../../utils/loop/turn-capability-snapshot'
 import { resolveGovernanceSessionKey } from '../../utils/residency/session-key'
 import { applyRunProfileToolExposure } from '../../utils/runner/run-profile'
 import { resolveRunProfilePolicyForRuntime } from '../../utils/runner/runtime-profiles'
 import { tickLoopReminders } from '../../utils/session/auto-verification'
-import { isReasoningOnlyEmptyResponseError } from '../../utils/stream/empty-stream-recovery'
 import { DefaultModelInputModalities } from '../../utils/tools/model-input-policy'
 import { ChatRuntimeEvents } from '../../utils/wire/chat-runtime.js'
 import { AgentLoopContextUsageManager } from '../context/AgentLoopContextUsageManager'
+import { forkFileContext } from '../context/FileContextCoordinator'
 import { KernelToolLoopGuard } from '../tools/KernelToolLoopGuard'
 
 import { loopContinue, loopFinish, LoopWindDownGuard } from './LoopWindDownGuard'
 import type { QueryTurnResult } from './QueryTurn'
+import { isContextOverflowError, isContextOverflowReplayUnsafe } from './RetryPolicy'
 
 const MaxQueryLoopReasoningOnlyVisibleAnswerRecoveryAttempts = 2
 const MaxSubAgentStructuredOutputRepairAttempts = 2
@@ -60,35 +67,66 @@ const MaxSubAgentStructuredOutputRepairAttempts = 2
  */
 const SubAgentFallbackContextWindow = 128_000
 
+/** 子 Agent 的提示词装配面：本 loop 只管什么时候要提示词，怎么拼由宿主注入的这一件决定。 */
 interface QueryLoopRunContext<TContext extends QueryLoopToolContext, TSignals> {
+  /**
+   * 建本轮子 Agent 的 system prompt。每轮开头、在工具面定下来之后调一次（工具面会进提示词，顺序反了就对不上）。
+   * 只读不写：不改历史、不碰工具上下文；抛错等于本轮失败，由 `execute` 冒泡给派发器。
+   */
   buildSystemPrompt(args: {
+    /** 本次会话的聊天配置（模型选择、开关等），用于挑提示词形态。 */
     chatConfig: AgentChatRuntimeConfig
+    /** 系统级运行配置（语言、思考深度缺省、环境信息等）。 */
     systemConfig: AgentSystemRuntimeConfig
+    /** 到本轮为止的完整历史；提示词可据此决定要不要复述任务。 */
     messages: ModelMessage[]
+    /** 已锁定的目标角色解析结果（角色 id、默认工具、人格片段）。 */
     roleResolution: AgentRoleResolution
+    /** 本轮的工具上下文快照，提示词按它列当前可用能力。 */
     toolContext: TContext
+    /** 派发方给这个子 Agent 起的名字（有就用它自称），缺省用角色 id。 */
     identity?: string
+    /** 代码等能力上下文信号；只有声明需要的角色才收集，其余传 null。 */
     capabilityContext: Nullable<TSignals>
+    /** 本轮思考力度：派发方指定 ?? 系统设置。 */
     thinkingDepth?: LooseOptional<AgentSystemRuntimeConfig['thinkingDepth']>
+    /** 是否目标模式。子 Agent 永远传 false——目标是父会话的状态，一次委派只是有界子任务。 */
     goalMode?: boolean
   }): Promise<{ systemPrompt: string }>
 }
 
+/** 一次委派锁定的模型运行时：整次子 Agent 运行都用这一份，中途不换模型。 */
 interface QueryLoopRoleRuntime {
+  /** 建模型实例的工厂：每轮发请求前用它把模型 id + 请求选项变成 SDK 能收的 model。 */
   provider: QueryTurnProvider
+  /** 供应方 id（anthropic / openai / 托管服务等），进日志与 span 标注。 */
   providerId: string
+  /** 对内对外统一的模型 id，也是用量与估算系数的索引键。 */
   model: string
+  /** 供应方侧的真实模型名；经托管转发时可能与 `model` 不同，只用于观测。 */
   providerModel?: string
+  /** 模型上下文窗口（token）。未知时（注入式派发）编辑预算与判档共用一个保守回退值。 */
   contextWindow?: number
+  /** 模型吃得下的输入模态；工具目录据此滤掉结果它读不了的截图/音频类工具。 */
   supportedInputModalities: readonly AgentModelInputModality[]
+  /** 温度、思考深度、providerOptions 等请求策略；逐轮原样透传给 turn。 */
   modelRequestOptions?: AgentModelRequestOptions
+  /** 这份运行时是怎么定下来的，`injected` 表示派发方直接指定（team worker 路径）。 */
   resolutionSource: string
+  /** 解析过程的留痕，原样交给调试面板；本 loop 不解读。 */
   resolutionTrace: readonly unknown[]
+  /** 为什么退到了兜底模型（首选不可用时才有）；只用于解释，不影响执行。 */
   fallbackReason?: LooseOptional<string>
 }
 
+/** 模型运行时解析面（宿主注入）：本 loop 不认识具体 provider，只经它拿到可执行的模型。 */
 interface QueryLoopRuntime {
+  /** 由模型选择直接造一个 provider；派发方已自带 provider 时用不到这条路。 */
   createAgentProvider(input: unknown): QueryTurnProvider
+  /**
+   * 按聊天配置里的模型选择解析出本次委派的运行时。在首轮请求之前调一次，
+   * 传入的 signal 一断即放弃解析；派发方给了 `runtimeOverride` 时整条路都不走。
+   */
   resolveRoleRuntime(
     selection: unknown,
     runtimeContext?: unknown,
@@ -96,16 +134,24 @@ interface QueryLoopRuntime {
   ): Promise<QueryLoopRoleRuntime>
 }
 
+/** 回合执行面：本 loop 只经它发请求，实现是 `TurnRunner`（与主面同一实例）。 */
 interface QueryLoopTurnRunner<
   TContext extends QueryLoopToolContext,
   TEvents extends QueryTurnEvents,
 > {
+  /**
+   * 跑子 Agent 的一轮：返回时工具结果已在本轮内接回历史，本 loop 只看 `hasToolUse` 决定是否继续。
+   * 抛错交给缺页恢复包装器处理，压不下去就终止本次委派。
+   */
   executeQueryTurn(
     args: Omit<ExecuteQueryTurnArgs<TContext>, 'toolContext' | 'events'> & {
+      /** 子 Agent 自己的工具上下文（由 `createSubAgentContext` 派生，带收窄后的工具面）。 */
       toolContext: TContext
+      /** 事件面，缺省不投影界面；子 Agent 只在显式打开流式文本时才推 delta。 */
       events?: TEvents & QueryTurnEvents
     }
   ): Promise<QueryTurnResult>
+  /** 子 Agent 能用的工具名单：在传入列表（或全量）基础上滤掉父级编排类工具，防止子 Agent 反向操纵父会话。 */
   getAllowedSubAgentTools(tools?: string[]): string[]
 }
 
@@ -119,11 +165,32 @@ interface QueryLoopTurnRunner<
  * - 中止收敛 = 抛 EXECUTION_ABORTED 冒泡给派发器（主面 = 状态化 + UI 事件）。
  * - 轮次上限多一根时间轴（softDeadlineAt），机制与主面同一份 LoopWindDownGuard。
  */
+export interface QueryLoopApi<
+  TContext extends QueryLoopToolContext = QueryLoopToolContext,
+  TEvents extends QueryTurnEvents = QueryTurnEvents,
+  TSignals = unknown,
+> extends QueryLoopContract<TContext, TEvents, TSignals> {
+  /**
+   * 跑完一次子 Agent 委派，返回交回父 Agent 的最终文本（结构化输出模式下另经 `onStructuredOutput` 回调）。
+   *
+   * 谁调：`SubAgentDispatcher` 每次派发调一次，一次调用 = 一棵独立的 run span 树、一本独立的治理账本
+   * （键是本次派发的 `contextEpochScope`，`finally` 里必定作废，不留到下次续跑）。
+   * 一轮的次序：拿工具面快照 → 建 system prompt → `executeQueryTurn` → 累加用量、收敛 span →
+   * 有工具调用就继续，没有就过收尾提醒与结构化输出校验后收尾。
+   * 失败与中断：中止（父信号或 worker 信号）一律抛 `EXECUTION_ABORTED` 冒泡给派发器，不返回半成品；
+   * 上下文超限先走一次「强开治理 epoch」再重试，压不下去就把原错误抛出；
+   * 只出思考没有可见答复、结构化输出不合格各有有限次自纠，用尽即抛。
+   * 达到运行软上限时不硬杀：注入收尾提醒，宽限轮用尽就带着当前进展正常返回。
+   */
+  execute(args: ExecuteQueryLoopArgs<TContext, TEvents, TSignals>): Promise<string>
+}
+
 class QueryLoop<
   TContext extends QueryLoopToolContext = QueryLoopToolContext,
   TEvents extends QueryTurnEvents = QueryTurnEvents,
   TSignals = unknown,
-> {
+> implements QueryLoopApi<TContext, TEvents, TSignals>
+{
   private readonly log = logRuntime.tag('QueryLoop')
   private readonly contextUsage: AgentLoopContextUsageManager<TContext>
   private readonly executionLimits: AgentExecutionLimits
@@ -163,20 +230,6 @@ class QueryLoop<
   ) {
     this.executionLimits = resolveAgentExecutionLimits(executionLimitOverrides)
     this.contextUsage = new AgentLoopContextUsageManager(toolRegistry)
-  }
-
-  /**
-   * 收尾提醒：到运行软上限（时间或步数，先到先触发）后注入，要求模型立刻停止调用工具、
-   * 用一段话汇报进展，并在开头注明因运行上限提前收尾，便于父 Agent 判断是否续派。
-   */
-  private buildWindDownReminder(startedAt: number): string {
-    const minutes = Math.max(1, Math.round((Date.now() - startedAt) / 60_000))
-    return [
-      `[系统] 你已运行约 ${minutes} 分钟或较多步骤，达到本次子任务的运行软上限。`,
-      '请立即停止调用任何工具，用一段话向上级汇报：',
-      '1) 已完成了什么；2) 当前卡在哪一步/还差什么；3) 建议的下一步。',
-      '在汇报开头注明「因运行上限提前收尾」，然后结束本次回复。',
-    ].join('\n')
   }
 
   /** 执行一次子 Agent 委派任务。 */
@@ -267,6 +320,7 @@ class QueryLoop<
       allowedCategories,
       getAllowedSubAgentTools: (tools) => this.turnHelper.getAllowedSubAgentTools(tools),
       getToolNamesForCategories: this.getToolNamesForCategories,
+      forkFileContext,
       requestToolCategories: args.opts.requestToolCategories,
       blockedToolNames: delegationPolicy.blockedToolNames,
       blockedCategoryIds: delegationPolicy.blockedCategoryIds,
@@ -382,7 +436,7 @@ class QueryLoop<
             (modality) => supportedInputModalities.has(modality)
           )
       )
-      const candidateToolSchemaChars = this.prepareToolSchemaChars(
+      const candidateToolSchemaChars = prepareQueryLoopToolSchemaChars(
         turnToolRegistry,
         turnToolContext,
         candidateToolsForTurn
@@ -459,6 +513,7 @@ class QueryLoop<
           result = await executeLoopTurnWithContextOverflowRecovery({
             turn,
             abortSignal,
+            overflowRules: { isContextOverflowError, isContextOverflowReplayUnsafe },
             executeTurn: () =>
               this.turnHelper.executeQueryTurn({
                 provider: roleRuntime.provider,
@@ -518,15 +573,20 @@ class QueryLoop<
           const appError = AppError.from(error)
           if (
             (args.modelRetry?.allowPartialContinuation ?? true) &&
-            this.shouldRecoverReasoningOnlyEmptyResponse(
+            shouldRecoverReasoningOnlyEmptyResponse({
               error,
-              args,
-              reasoningOnlyVisibleAnswerRecoveries
-            )
+              phase: 'query',
+              aborted:
+                args.parentCtx.abortSignal.aborted || !!args.opts.workerAbortSignal?.aborted,
+              recoveryAttempts: reasoningOnlyVisibleAnswerRecoveries,
+              maxAttempts: MaxQueryLoopReasoningOnlyVisibleAnswerRecoveryAttempts,
+            })
           ) {
             reasoningOnlyVisibleAnswerRecoveries += 1
             history.push(
-              createInternalFollowUpMessage(this.buildReasoningOnlyVisibleAnswerRecoveryPrompt())
+              createInternalFollowUpMessage(
+                buildSubAgentReasoningOnlyVisibleAnswerRecoveryPrompt()
+              )
             )
             args.opts.events?.emitRuntime(
               ChatRuntimeEvents.retryingTurn(
@@ -713,7 +773,7 @@ class QueryLoop<
       windDown: {
         guard: windDownGuard,
         onTriggered: (reason, turn) => {
-          history.push(createInternalFollowUpMessage(this.buildWindDownReminder(startedAt)))
+          history.push(createInternalFollowUpMessage(buildSubAgentWindDownReminder(startedAt)))
           this.log.info('sub-agent wind-down triggered', {
             reason,
             turns: turn,
@@ -738,44 +798,6 @@ class QueryLoop<
     }
   }
 
-  private prepareToolSchemaChars(
-    toolRegistry: QueryLoopToolRegistry<TContext>,
-    toolContext: TContext,
-    allowedTools: string[]
-  ): Readonly<Record<string, number>> | undefined {
-    const measured = toolRegistry.estimateToolSerializedCharsByName?.(
-      toolContext,
-      allowedTools
-    )
-    if (!measured) return undefined
-
-    if (!allowedTools.every((toolName) => Object.prototype.hasOwnProperty.call(measured, toolName)))
-      return undefined
-
-    return Object.fromEntries(
-      allowedTools.map((toolName) => [toolName, Math.max(0, measured[toolName] ?? 0)])
-    )
-  }
-
-  private shouldRecoverReasoningOnlyEmptyResponse(
-    error: unknown,
-    args: ExecuteQueryLoopArgs<TContext, TEvents, TSignals>,
-    recoveryAttempts: number
-  ): boolean {
-    if (args.parentCtx.abortSignal.aborted || args.opts.workerAbortSignal?.aborted) return false
-    if (recoveryAttempts >= MaxQueryLoopReasoningOnlyVisibleAnswerRecoveryAttempts) return false
-
-    return isReasoningOnlyEmptyResponseError(error, 'query')
-  }
-
-  private buildReasoningOnlyVisibleAnswerRecoveryPrompt(): string {
-    return [
-      'The previous sub-agent response was reasoning-only and did not include any visible answer for the parent agent.',
-      'Continue now with a visible answer in normal assistant text.',
-      'Do not return reasoning-only output again.',
-      'If a tool is still needed, emit a fresh complete tool call with full valid arguments; otherwise answer directly.',
-    ].join('\n')
-  }
 }
 
 async function consumeQueryLoopRelayedGuidance(input: {

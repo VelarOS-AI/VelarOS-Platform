@@ -86,6 +86,11 @@ const ToolSearchSynonyms = new Map<string, string[]>(
   )
 )
 
+/**
+ * 把一个标识符拆成小写词片：先在小写/数字与大写的交界处插空格拆驼峰，再按空白、`_`、`.`、`-` 切分，
+ * 逐片 trim 后丢掉空片。`readDocument` / `read_document` / `read.document` 都拆成 `read` + `document`，
+ * 好让模型用空格短语的说法命中开发者写的标识符。
+ */
 export function splitIdentifierSearchTerm(term: string): string[] {
   return term
     .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
@@ -95,6 +100,12 @@ export function splitIdentifierSearchTerm(term: string): string[] {
     .filter(Boolean)
 }
 
+/**
+ * 极简英文词干：只对纯小写字母且长度 > 3 的词动手，按 `ies→y`、`ing→`（去重复辅音，如 running→run）、
+ * `ed→`、`es→`、`s→`（`ss` 结尾除外）依次剥后缀，其余原样返回。
+ * 刻意不用完整 Porter——这里的下游是**子串匹配**，过度还原（`parse`→`par`）会把不相干的页也召回来；
+ * 每条规则上的长度下限（ing 要 > 5，其余 > 4）就是防过度还原的闸。
+ */
 function stemEnglishSearchTerm(term: string): string {
   if (!/^[a-z]+$/.test(term) || term.length <= 3) return term
   if (term.endsWith('ies') && term.length > 4) return `${term.slice(0, -3)}y`
@@ -108,6 +119,13 @@ function stemEnglishSearchTerm(term: string): string {
   return term
 }
 
+/**
+ * 把一个查询词扩成候选词集合（去重后返回）：小写原词 + 英文词干 + 标识符拆分出的各片；
+ * 含中文且长度 ≥ 3 时再加上 2-gram 与 3-gram 滑窗切片（中文没有空格分词，靠滑窗让「读取文档」
+ * 命中「文档读取」；只切 2 和 3 是因为更长的窗口必然包含短片段，对子串匹配没有增量）；
+ * 最后并入同义词表里原词与词干各自的同义词。宁可多给候选——多一个不命中的词只是白算一次
+ * `includes`，少一个词则整张工具页召不回来。
+ */
 function expandSearchTerm(term: string): string[] {
   const normalized = term.toLowerCase()
   const stemmed = stemEnglishSearchTerm(normalized)
@@ -130,6 +148,10 @@ function expandSearchTerm(term: string): string[] {
   ]
 }
 
+/**
+ * 把相邻词按原顺序拼成 2 词与 3 词短语（空格连接），词数不够某个窗口就不产出该窗口的短语。
+ * 用途是让「user action card」整体命中带空格的字段值——拆成单词后这几个常见词会被噪音淹没。
+ */
 function phraseSearchTerms(terms: readonly string[]): string[] {
   const phrases: string[] = []
   for (const size of [2, 3]) {
@@ -140,6 +162,12 @@ function phraseSearchTerms(terms: readonly string[]): string[] {
   return phrases
 }
 
+/**
+ * 召回层入口：把一句自然语言查询炸成候选词集合。先拆驼峰、转小写，按空白与
+ * `, ， 。 / \ : ： ; ； | _` 切成原始词；再把原始词与它们拼出的 2/3 词短语各自过一遍
+ * `expandSearchTerm`（词干、标识符拆分、中文 n-gram、同义词），最后整体去重。
+ * 查询为空或全是分隔符时返回空数组——调用方据此不做打分。
+ */
 export function splitSearchTerms(query: string): string[] {
   const rawTerms = query
     .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
@@ -151,6 +179,11 @@ export function splitSearchTerms(query: string): string[] {
   return [...new Set([...rawTerms, ...phraseSearchTerms(rawTerms)].flatMap(expandSearchTerm))]
 }
 
+/**
+ * 在一个字段值里挑出命中的候选词：字段值转小写后做**子串包含**判定（不是分词匹配，
+ * 所以词干与 n-gram 才有意义），返回全部命中的词。命中**条数**乘以字段权重即该字段得分，
+ * 因此同一个词命中多次只算一次。一个都没中就返回空数组。
+ */
 export function matchedTermsForField(value: string, terms: readonly string[]): string[] {
   const normalized = value.toLowerCase()
   return terms.filter((term) => normalized.includes(term))

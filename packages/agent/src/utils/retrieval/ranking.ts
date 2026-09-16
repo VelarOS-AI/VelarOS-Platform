@@ -13,6 +13,10 @@ const PathHintExtensions = new Set([
 ]);
 const PathHintTrailingPunctuation = `),.;:'"\`]`;
 
+/**
+ * 判一个字符能否出现在路径段里：ASCII 字母、数字，或 `_` `.` `-` 三者之一；空值一律为假。
+ * 刻意只认 ASCII——路径提示是从自由文本里扫出来的，放开非 ASCII 会把整句中文当成一个路径段吃进去。
+ */
 function isAsciiPathSegmentCharacter(character: LooseOptional<string>): boolean {
   if (!character) return false;
   const code = character.charCodeAt(0);
@@ -26,6 +30,12 @@ function isAsciiPathSegmentCharacter(character: LooseOptional<string>): boolean 
   );
 }
 
+/**
+ * 判一个 token 是不是一条**完整可用**的路径提示：可以 `~/` 或 `/` 开头，其余字符必须全是合法路径段字符，
+ * 并且**至少含一个目录分隔符**、最后一段非空。
+ * 两条硬要求都是为压误报：没有分隔符的裸单词不算路径；以 `/` 结尾或出现连续 `//` 的判假——
+ * 前者是目录不是文件，后者多半是从 URL 或散文里切坏的碎片。
+ */
 function isCompletePathToken(value: string): boolean {
   let start = 0;
   if (value.startsWith("~/")) start = 2;
@@ -47,12 +57,22 @@ function isCompletePathToken(value: string): boolean {
   return hasDirectorySeparator && segmentLength > 0;
 }
 
+/**
+ * 从右往左逐个剥掉路径提示尾部的标点（`)` `,` `.` `;` `:` 引号 反引号 `]`）。
+ * 路径出现在自由文本里几乎总跟着标点（`见 src/a.ts。`、`（见 src/a.ts）`），不剥就永远匹配不上真实文件名。
+ * 只剥尾部，不动开头与中间——路径中间的点是扩展名分隔符，剥掉就毁了。
+ */
 function trimPathHintPunctuation(value: string): string {
   let end = value.length;
   while (end > 0 && PathHintTrailingPunctuation.includes(value[end - 1] ?? "")) end -= 1;
   return value.slice(0, end);
 }
 
+/**
+ * 判这个 token 的**文件名部分**是否带一个已知扩展名（小写比对，白名单见 `PathHintExtensions`）。
+ * 点必须落在最后一个 `/` 之后（否则那是目录名里的点，不是扩展名），也不能是整串的最后一个字符（`a.` 不算）。
+ * 用白名单而不是"有点就算"：`v1.2.3`、`example.com` 这类形状与文件名一模一样，放进来就是满地假路径提示。
+ */
 function hasCompletePathHintExtension(value: string): boolean {
   const basenameStart = value.lastIndexOf("/") + 1;
   const extensionStart = value.lastIndexOf(".");

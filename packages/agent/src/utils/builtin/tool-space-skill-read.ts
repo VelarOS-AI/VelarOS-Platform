@@ -34,6 +34,11 @@ import {
 } from './skill-load-confirmation'
 import { type toolSpaceReadSchema } from './tool-space-schemas'
 
+/**
+ * 把一条技能的 descriptor 加正文定形成模型能看到的 `SkillReadPage`：id 统一带 `skill:` 前缀，
+ * `description` 缺省时退回 `label`（不留空字段）。只有 `detail === 'full'` 才附上 `readGuidance`
+ * 两句——提醒模型按需取用步骤、且技能正文**不改变工具可见性**；这两句是不变量②的落点。
+ */
 function buildSkillReadPage(
   descriptor: AgentSkillDescriptor,
   markdown: string,
@@ -59,6 +64,11 @@ function buildSkillReadPage(
   }
 }
 
+/**
+ * 读单个技能页：id 不带 `skill:` 前缀、或当前角色的 `skills.readRoleSkill` 取不到正文，都返回 null；
+ * 两种 null 上游一律归到 `missingIds`，不区分「不是技能页」和「技能不存在」——对模型来说都是这个
+ * id 读不出东西，得回工具空间流程重找。
+ */
 function readRequestedSkillPage(
   ctx: ToolContext,
   id: string,

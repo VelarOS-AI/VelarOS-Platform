@@ -44,13 +44,21 @@ import type { KernelBackgroundJob, KernelBackgroundJobOutputSnapshot, KernelBack
 import { appendArtifactError, assertNonBlank, cloneJob, compareTerminalJobs, formatDuration, normalizeOutputMaxChars, normalizeTerminalJobLimit, normalizeTerminalJobTtlMs, normalizeWaitTimeoutMs, trimOptional, truncateJobPreview } from '../../utils/records/background-jobs'
 
 import { TurnContextSessionLedgers } from './TurnContextSessionLedgers'
+/** 建后台任务管理器时可以拧的几项；全部可选，不给就按默认值走。 */
 export interface KernelBackgroundJobManagerOptions {
+  /** 取当前时刻的函数（毫秒）。测试传一个可控的时钟，就能不真等地验证停滞告警和终态淘汰。默认 `Date.now`。 */
   now?: () => number
+  /** 任务多久没有可见输出就算「疑似停滞」（毫秒）。`recordStalledJobs` 按它判断并往环境上下文里记一条提示；传 0 或不传表示不做停滞判断。 */
   stalledAfterMs?: number
+  /** 终态任务在表里留多久（毫秒），超时被 `pruneTerminalJobs` 清掉。 */
   terminalJobTtlMs?: number
+  /** 终态任务最多留几条，超出时从最旧的开始清。运行中的任务不受这条限制。 */
   terminalJobLimit?: number
+  /** 一个任务在内存里最多留多少字符的输出；超了从头截，被截掉的量会在读输出时如实报给调用方。 */
   outputMaxChars?: number
+  /** 把任务输出落到内存之外的存储（宿主实现）。给了就优先写它、从它读；读写一旦出错就对这个任务停用存储并回退到内存，同时把错误挂在快照的 `artifactError` 上。 */
   outputStore?: KernelBackgroundJobOutputStore
+  /** 任务进入终态（完成、失败、取消）时回调一次，参数是该任务的快照；宿主用它做收尾通知。回调抛错不影响任务本身收尾。 */
   onTerminal?: (job: KernelBackgroundJob) => void
   /** task.lifecycle 可见 delta 的写入广播总线（每宿主一个实例，由宿主装配注入）；缺省则不通知 renderer。 */
   turnContextAppendHub?: TurnContextAppendBus
@@ -65,7 +73,56 @@ export interface KernelBackgroundJobManagerOptions {
 
 
 
-class KernelBackgroundJobManager {
+/**
+ * 后台任务登记处：谁在跑、跑到哪、输出攒了多少，全在这里；同时把任务的完成与失败写成 `task.lifecycle` 环境 delta，
+ * 让模型在下一回合自然读到「那个后台任务结束了」。
+ *
+ * 任务按谱系成串：子 Agent 会拿父任务 id 或父会话 id 再起任务，取消和清理都走传递闭包，孙代不会漏。
+ * 终态任务按 TTL 和条数上限淘汰，运行中的永不淘汰。输出优先落 `outputStore`，出错就对那个任务回退到内存并记下 `artifactError`。
+ * 全部状态都在内存里，进程重启即空。实现是 `KernelBackgroundJobManager`。
+ */
+export interface KernelBackgroundJobManagerApi {
+  /** 登记一个新开的后台任务并返回它的快照：`sessionId` / `kind` / `label` 不能是空白，`id` 不给就按 `<sessionId>:background:<序号>` 自动编。同 id 已存在时抛 `INVARIANT`。登记时就把这个任务的谱系（自己、所属会话、父会话，以及父辈的谱系）算好存下，之后祖先被淘汰也不影响正在跑的子代归属。 */
+  start(input: StartKernelBackgroundJobInput): KernelBackgroundJob
+  /** 这个会话名下还在跑的任务快照列表（拷贝，改它不影响内部状态）。 */
+  runningForSession(sessionId: string): KernelBackgroundJob[]
+  /** 打一次「刚有可见输出」的时间戳，用来推后停滞判断；`input.at` 不给就取当前时刻。任务不在跑时抛错。 */
+  recordVisibleOutput(id: string, input?: { at?: number }): KernelBackgroundJob
+  /** 追加一段任务输出：空串不写。任务还在跑时顺带刷新停滞时间戳。输出优先进 `outputStore`，写不进去就退回内存，超过 `outputMaxChars` 从头截。 */
+  appendOutput(id: string, output: string, input?: { at?: number }): KernelBackgroundJob
+  /** 给已经收尾的任务补一段结构化结果：终态可能被取消竞态先发布，worker 随后才把结果拼好，这条路给它补。任务还在跑时抛 `CONFLICT`。 */
+  appendTerminalArtifact(id: string, artifact: string): KernelBackgroundJob
+  /** 读走这个任务还没被读过的输出（读完游标前移，同一段不会读第二遍）。任务不存在、或不属于这个会话时返回 null。 */
+  readOutputForSession(sessionId: string, id: string): Nullable<KernelBackgroundJobOutputSnapshot>
+  /** 从头看一遍这个任务的输出，不动读取游标；界面刷新用它，模型取增量用 `readOutputForSession`。 */
+  snapshotOutputForSession(sessionId: string, id: string): Nullable<KernelBackgroundJobOutputSnapshot>
+  /** 等这个会话上选中的任务全部收尾，然后一次性交出它们的输出快照。`input.jobIds` 不给就等调用瞬间所有在跑的；超时（`timeoutMs`）到了就按当时状态返回，不抛错；`timeoutMs` 为 0 表示不等，立刻取快照。 */
+  waitForSession(sessionId: string, input?: WaitForKernelBackgroundJobsInput): Promise<KernelBackgroundJobOutputSnapshot[]>
+  /** 等这个会话上「任意一个」在跑的任务收尾就返回，给主循环停泊用：一个子 Agent 收敛就唤醒模型重新决策。返回的是不带输出的薄快照。调用时没有在跑的任务、超时、任务被删掉、或 `signal` 已中止都返回 null——收到 null 后调用方要再 drain 一次 `task.lifecycle`，盖住「先 drain、随后完成」的那个窗口。 */
+  waitForNextTerminalForSession(sessionId: string, input?: WaitForNextKernelBackgroundJobInput): Promise<Nullable<KernelBackgroundJob>>
+  /** 扫一遍在跑的任务，把「距上次可见输出已超过 `stalledAfterMs`」的各记一条环境提示（带上去看输出的工具线索），返回这次记了几条。每个任务只提醒一次；没配 `stalledAfterMs` 时直接返回 0。`input.sessionId` 可以只扫一个会话。 */
+  recordStalledJobs(input?: { sessionId?: string; now?: number }): number
+  /** 把任务收成 completed：`result` 是给模型看的结果预览（过长会截），`artifact` 是完整产物，追加到输出里。任务不在跑时抛错。收尾会写一条 `task.lifecycle` delta 并唤醒等待方。 */
+  complete(id: string, input?: { result?: string; artifact?: string }): KernelBackgroundJob
+  /** 把任务收成 failed：`error` 是失败原因，`artifact` 是失败现场的完整输出。任务不在跑时抛错。 */
+  fail(id: string, input?: { error?: string; artifact?: string }): KernelBackgroundJob
+  /** 取消这个会话谱系下所有还在跑的任务（含子任务、孙任务），返回取消了几个。每个被取消的任务都会调它登记的 `onCancel`。 */
+  cancelSession(sessionId: string): number
+  /** 把这个任务实际的 worker Promise 登记进来：生命周期终态可能先于工具清理发布，`awaitSessionSettled` 靠它等到真正收干净。任务不存在时抛 `NOT_FOUND`。传进来的 Promise 失败也当收束，不会向外抛。 */
+  trackExecution(jobId: string, execution: Promise<unknown>): void
+  /** 等这个会话谱系下所有被 `trackExecution` 登记过的 worker 真正收束；期间新冒出来的子任务也一并等，等到一轮下来没有在途的为止。 */
+  awaitSessionSettled(sessionId: string): Promise<void>
+  /** 取消这个会话里指定的那个任务：任务不存在或不属于这个会话时返回 null；已经是终态时原样返回它的快照，不重复取消。 */
+  cancelForSession(sessionId: string, id: string): Nullable<KernelBackgroundJob>
+  /** 做出 `task.lifecycle` 这个环境上下文 source：delta 是任务完成/失败（收尾时就定稿），anchors 是当前在跑的任务（最多列三个，余下折成「等 N 个」）。`scopes` 是声明了这个 source 的空间清单，必须由宿主显式传——传空数组会让上游的空间过滤恒为假，整条通道静默失联，所以空数组直接抛 `VALIDATION`。 */
+  createTurnContextSource(scopes: readonly CapabilityScopeId[]): TurnContextDeltaSource
+  /** 会话结束时整段清掉：这个会话谱系下的任务状态、输出、账本一并丢弃，并让 `outputStore` 也清掉这个会话的产物（清不掉只记日志，不抛）。返回丢了几个任务。 */
+  dropSession(sessionId: string): number
+  /** 清理终态任务：先按 TTL 清过期的，再按条数上限从最旧的开始清，返回清掉几个。运行中的任务一个都不动。起新任务和取消任务时会自动调它。 */
+  pruneTerminalJobs(input?: { now?: number }): number
+}
+
+class KernelBackgroundJobManager implements KernelBackgroundJobManagerApi {
   private readonly jobs = new Map<string, KernelBackgroundJob>()
   /** 子任务创建时保留祖先身份；祖先终态淘汰不改变正在运行子代的所有权。 */
   private readonly lineageKeysByJob = new Map<string, ReadonlySet<string>>()
@@ -112,7 +169,7 @@ class KernelBackgroundJobManager {
     const startedAt = input.startedAt ?? this.now()
 
     if (this.jobs.has(id)) {
-      throw new AppError('INVARIANT', `Kernel background job "${id}" already exists`, undefined, { jobId: id })
+      throw new AppError('INVARIANT', `内核后台任务 "${id}" 已经登记过，不能用同一个 id 再起一次。任务 id 必须唯一，撞车说明 id 分配逻辑出了问题，这是实现缺陷，不是用户操作错误。`, undefined, { jobId: id })
     }
 
     const job: KernelBackgroundJob = {
@@ -176,7 +233,7 @@ class KernelBackgroundJobManager {
     if (job.status === 'running') {
       throw new AppError(
         'CONFLICT',
-        `Kernel background job "${id}" is still running`,
+        `内核后台任务 "${id}" 还在运行，此时不能补写终态产物：终态产物只允许在任务收束成终态之后追加。`,
         undefined,
         { jobId: id, jobStatus: job.status }
       )
@@ -361,7 +418,7 @@ class KernelBackgroundJobManager {
   /** 生命周期终态可能先于工具清理；取消回执等待实际 worker Promise 收束。 */
   public trackExecution(jobId: string, execution: Promise<unknown>): void {
     const job = this.jobs.get(jobId)
-    if (!job) throw new AppError('NOT_FOUND', `Unknown background job: ${jobId}`)
+    if (!job) throw new AppError('NOT_FOUND', `找不到后台任务 ${jobId}，无法给它挂上执行跟踪：它可能已经收束成终态并被保留策略清掉，也可能这个 id 从未在本管理器里登记过。`)
     const settled = execution.then(() => undefined, () => undefined)
     const entry = { job: cloneJob(job), promise: settled }
     this.executionSettlements.set(jobId, entry)
@@ -416,7 +473,7 @@ class KernelBackgroundJobManager {
     if (isEmpty(scopes))
       throw new AppError(
         'VALIDATION',
-        'task.lifecycle turn-context source requires at least one capability scope'
+        'task.lifecycle 回合上下文源至少要带一个 capability scope：scopes 为空会让 FanIn 的空间匹配恒不成立，整条 task delta 通道会静默失联。请由宿主装配把「声明了 task.lifecycle 的全部空间」显式传进来。'
       )
 
     return {
@@ -707,7 +764,7 @@ class KernelBackgroundJobManager {
       // 「任务已被取消所以收尾更新无意义」与真失败，必须读 code+context，不许回去 sniff message 文案。
       throw new AppError(
         'CONFLICT',
-        `Kernel background job "${id}" is already ${job.status}`,
+        `内核后台任务 "${id}" 已经是 ${job.status} 终态，不再接受只有运行中才允许的更新。`,
         undefined,
         { jobId: id, jobStatus: job.status }
       )
@@ -718,7 +775,7 @@ class KernelBackgroundJobManager {
   private requireJob(id: string): KernelBackgroundJob {
     const job = this.jobs.get(id)
     if (!job) {
-      throw new AppError('NOT_FOUND', `Kernel background job "${id}" does not exist`, undefined, {
+      throw new AppError('NOT_FOUND', `内核后台任务 "${id}" 不存在：它可能已经收束成终态并被保留策略清掉，也可能这个 id 从未登记过。`, undefined, {
         jobId: id,
       })
     }

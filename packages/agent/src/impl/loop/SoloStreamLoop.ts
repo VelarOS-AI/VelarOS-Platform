@@ -19,7 +19,7 @@ import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 
 import type {ExecutionSpanScopeFactory } from '../../contract/requires.js'
-import type { AgentExecutionLimitOverrides, AgentExecutionLimits, AgentLoopSurface, ExecuteSoloModeStreamLoopArgs, LoopTurnVerdict, SoloInterruptedToolCallRecoveryKind, SoloLoopEvents, SoloLoopRoleRuntime, SoloLoopRunContext, SoloLoopRuntime, SoloLoopToolContext, SoloLoopToolRegistry, SoloLoopTurnRunner, SoloModeStreamLoopResult, StreamTurnResult, ToolSpaceBootstrapState } from '../../types/loop.js'
+import type { AgentExecutionLimitOverrides, AgentExecutionLimits, AgentLoopSurface, ExecuteSoloModeStreamLoopArgs, LoopTurnVerdict, SoloInterruptedToolCallRecoveryKind, SoloLoopEvents, SoloLoopRoleRuntime, SoloLoopRunContext, SoloLoopRuntime, SoloLoopToolContext, SoloLoopToolRegistry, SoloLoopTurnRunner, SoloModeStreamLoopResult, SoloStreamLoopApi as SoloStreamLoopContract, StreamTurnResult, ToolSpaceBootstrapState } from '../../types/loop.js'
 import type { AgentModSeamDispatcherApi } from '../../types/mods.js'
 import type { ContextGovernanceSessionRegistryApi } from '../../types/residency.js'
 import { createInternalFollowUpMessage } from '../../utils/history/internal-messages'
@@ -34,7 +34,7 @@ import {
 import { resolveAgentContextPhase } from '../../utils/loop/context-phase'
 import { resolveAgentExecutionLimits } from '../../utils/loop/execution-limits'
 import { extractLatestUserTextFromMessages } from '../../utils/loop/intent-signals'
-import { recoveryRunPlanner } from '../../utils/loop/runtime-run-planner'
+import { resolveLoopSessionStateKey, sumPreparedToolSchemaChars } from '../../utils/loop/loop-turn-assembly'
 import { runSoloBackgroundCompletionGate } from '../../utils/loop/solo-background-completion-gate'
 import { applySoloContextDegradeAction } from '../../utils/loop/solo-context-degrade-action-executor'
 import {
@@ -68,7 +68,10 @@ import { SessionToolAllocator } from '../tools/SessionToolAllocator'
 import { ToolExecutionPolicy } from '../tools/ToolExecutionPolicy'
 import { ToolExecutor } from '../tools/ToolExecutor'
 
+import { agentRunPlanLedgerFactory } from './AgentRunPlanLedgerFactory'
 import { loopContinue, loopFinish, LoopWindDownGuard } from './LoopWindDownGuard'
+import { recoveryRunPlanner } from './RecoveryRunPlanner'
+import { isContextOverflowError, isContextOverflowReplayUnsafe } from './RetryPolicy'
 import { SoloGoalLifecycle } from './SoloGoalLifecycle'
 
 /**
@@ -126,10 +129,37 @@ function buildInterruptedToolCallRecoveryGuidance(
   ].join('\n')
 }
 
+/**
+ * 主会话循环面：一次「用户发了话，跑到给出答复为止」的完整执行。
+ *
+ * 谁建：`AgentExecutionStack` 组装时建一个，整个宿主共用；实例里只存会话级缓存
+ * （工具空间引导状态、工具分配器），每条会话一格，`clearSession` 清。
+ * 一轮的次序：解析模型运行时 → 定运行档与工具面 → 建 system prompt 与 turn context（投给界面）→
+ * 新建本轮 `ToolExecutor` → `executeStreamTurn` → 有工具调用则接回结果进下一轮，
+ * 没有则过引导兜底与收尾门（自动验证、后台任务、目标模式）再决定收尾还是继续。
+ * 失败与中断：模型与工具的失败不往外抛——就地收敛成 `status:'error'`（同时把目标封成 blocked），
+ * 中止收敛成 `status:'aborted'` 加一条中止事件；两者都照常发 `turnEnd`，避免界面停在「进行中」。
+ * （轮与轮之间的中止检查仍会直接抛中止错误，那是引擎的轮首中止门，不经本面收敛。）
+ * 工具参数被安全拒绝时另给有限次自纠机会；上下文超限走运行档降级阶梯，压不下去才算本轮错误。
+ */
+export interface SoloStreamLoopApi<
+  TContext extends SoloLoopToolContext = SoloLoopToolContext,
+  TEvents extends SoloLoopEvents = SoloLoopEvents,
+> extends SoloStreamLoopContract<TContext, TEvents> {
+  /** 丢掉这条会话在本 loop 里攒的工具空间引导状态与工具分配器；会话结束或要从干净状态重来时调。 */
+  clearSession(sessionId: string): void
+  /**
+   * 跑完一次主会话执行，返回终态（completed / aborted / error）：界面事件与目标终态在返回前就地落定。
+   * 目标模式下会先把用户这句话建成目标，收尾门不放行就继续跑，而不是提前给答复。
+   */
+  execute(args: ExecuteSoloModeStreamLoopArgs<TContext, TEvents>): Promise<SoloModeStreamLoopResult>
+}
+
 class SoloStreamLoop<
   TContext extends SoloLoopToolContext = SoloLoopToolContext,
   TEvents extends SoloLoopEvents = SoloLoopEvents,
-> {
+> implements SoloStreamLoopApi<TContext, TEvents>
+{
   private readonly log = logRuntime.tag('SoloStreamLoop')
   private readonly contextUsage: AgentLoopContextUsageManager<TContext>
   private readonly toolSpaceBootstrapStates = new Map<string, ToolSpaceBootstrapState>()
@@ -168,24 +198,16 @@ class SoloStreamLoop<
     this.contextUsage = new AgentLoopContextUsageManager(toolRegistry)
   }
 
-  private getSessionStateKey(sessionId: LooseOptional<string>): string {
-    return sessionId ?? '__default__'
-  }
-
-  private getToolSpaceBootstrapStateKey(toolContext: TContext): string {
-    return this.getSessionStateKey(toolContext.sessionId)
-  }
-
   private getToolSpaceBootstrapState(toolContext: TContext): ToolSpaceBootstrapState {
-    return this.toolSpaceBootstrapStates.get(this.getToolSpaceBootstrapStateKey(toolContext)) ?? {}
+    return this.toolSpaceBootstrapStates.get(resolveLoopSessionStateKey(toolContext.sessionId)) ?? {}
   }
 
   private setToolSpaceBootstrapState(toolContext: TContext, state: ToolSpaceBootstrapState): void {
-    this.toolSpaceBootstrapStates.set(this.getToolSpaceBootstrapStateKey(toolContext), state)
+    this.toolSpaceBootstrapStates.set(resolveLoopSessionStateKey(toolContext.sessionId), state)
   }
 
   private getToolAllocator(toolContext: TContext): SessionToolAllocator {
-    const key = this.getSessionStateKey(toolContext.sessionId)
+    const key = resolveLoopSessionStateKey(toolContext.sessionId)
     const existing = this.toolAllocators.get(key)
     if (existing) return existing
     const created = new SessionToolAllocator({
@@ -195,21 +217,9 @@ class SoloStreamLoop<
     return created
   }
 
-  private sumPreparedToolSchemaChars(
-    allowedTools: readonly string[],
-    toolSchemaChars?: Readonly<Record<string, number>>
-  ): Nullable<number> {
-    if (!toolSchemaChars) return null
-
-    return allowedTools.reduce(
-      (sum, toolName) => sum + Math.max(0, toolSchemaChars[toolName] ?? 0),
-      0
-    )
-  }
-
   /** 清理指定会话在 loop 生命周期内缓存的工具空间和分配器状态。 */
   public clearSession(sessionId: string): void {
-    const key = this.getSessionStateKey(sessionId)
+    const key = resolveLoopSessionStateKey(sessionId)
     this.toolSpaceBootstrapStates.delete(key)
     this.toolAllocators.delete(key)
   }
@@ -299,6 +309,7 @@ class SoloStreamLoop<
       const activeThinkingDepth = args.config.thinkingDepth ?? args.systemConfig.thinkingDepth
       const preparedRunPlan = await prepareSoloRunPlanForTurn({
         turn,
+        ledgerFactory: agentRunPlanLedgerFactory,
         history: args.history,
         configuredTools: args.config.tools,
         roleAllowedTools: args.resolution.allowedTools,
@@ -405,7 +416,7 @@ class SoloStreamLoop<
         toolContext: args.toolContext,
         allowedTools,
         estimateCurrentSerializedChars: (_toolContext, tools) =>
-          this.sumPreparedToolSchemaChars(tools, toolSchemaChars),
+          sumPreparedToolSchemaChars(tools, toolSchemaChars),
         estimateBaselineSerializedChars: (toolContext, profile, tools) =>
           turnToolRegistry.estimateToolsSerializedCharsForProfile?.(toolContext, profile, tools),
       })
@@ -493,6 +504,7 @@ class SoloStreamLoop<
           turnResult = await executeLoopTurnWithContextOverflowRecovery({
             turn,
             abortSignal: args.abortController.signal,
+            overflowRules: { isContextOverflowError, isContextOverflowReplayUnsafe },
             executeTurn: () =>
               this.turnHelper.executeStreamTurn({
                 provider: roleRuntime.provider,

@@ -19,6 +19,10 @@ import type { LeakedToolMarkupFilterState } from '../../types/loop.js'
 
 const LeakedToolMarkupAnchor = '<｜DSML｜'
 
+/**
+ * 建一份泄漏工具标记过滤器的初始状态（未抑制、尾巴为空）。
+ * 每条模型流单独持有一份——状态里记着"是否已进入抑制态"和跨增量承接的尾巴，跨流复用会把上一轮的抑制态带进来。
+ */
 export function createLeakedToolMarkupFilterState(): LeakedToolMarkupFilterState {
   return { suppressing: false, tail: '' }
 }

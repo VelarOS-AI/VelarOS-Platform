@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
+import { forkFileContext } from '../src/impl/context/FileContextCoordinator'
 import type { SubAgentContextBase } from '../src/types/loop.js'
 import { createSubAgentContext } from '../src/utils/loop/loop-runtime'
 
@@ -33,6 +34,7 @@ function childOf(ports: { system: CommandPort; project: CommandPort }) {
     allowedCategories: [],
     getAllowedSubAgentTools: (tools) => tools ?? [],
     getToolNamesForCategories: () => [],
+    forkFileContext,
   })
 }
 

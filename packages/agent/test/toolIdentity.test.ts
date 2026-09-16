@@ -57,7 +57,7 @@ describe('canonical tool identity', () => {
     expect(expanded.visibleCanonicalToProvider['mcp..github:read']).toBe(providerName)
     expect(() =>
       createToolTransportProjection(registered, ['browser:inspect_page'])
-    ).toThrow('absent from the registered transport plan')
+    ).toThrow('不在已登记的传输名方案里')
   })
 
   it('compiles page-out historical tools without advertising them as callable', () => {

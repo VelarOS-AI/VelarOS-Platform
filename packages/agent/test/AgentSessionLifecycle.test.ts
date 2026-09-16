@@ -63,6 +63,6 @@ describe('Agent Session application lifecycle', () => {
     expect(parseAgentSessionArchiveEnvelope(archive, { expectedProductId: 'termel' }))
       .toMatchObject({ format: 'velaros.agent-session', productId: 'termel', sanitized: true })
     expect(() => parseAgentSessionArchiveEnvelope(archive, { expectedProductId: 'desktop' }))
-      .toThrow('belongs to product termel')
+      .toThrow('这份会话归档属于产品 termel')
   })
 })

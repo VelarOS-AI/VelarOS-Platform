@@ -8,6 +8,11 @@ import type { AgentExecutionConfig,AgentModelRequestOptions } from '../../contra
  */
 const HtmlArtifactMinimumOutputTokens = 24_000
 
+/**
+ * 只在用户开了 `html-artifact` 能力时抬高这一轮的输出 token 下限：没开这个能力、或现有上限本就已达
+ * `HtmlArtifactMinimumOutputTokens`（24k），就把 options 原样放行；否则复制一份把
+ * `requestPolicy.maxOutputTokens` 顶到 24k。抬的是下限不是定值——宿主配得更高的照样保留。
+ */
 function resolveSoloTurnModelRequestOptions(
   options: Optional<AgentModelRequestOptions>,
   promptFeatures: Optional<AgentExecutionConfig['promptFeatures']>

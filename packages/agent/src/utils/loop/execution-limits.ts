@@ -38,6 +38,11 @@ const DefaultAgentExecutionLimits = Object.freeze({
   subAgentRetainedHistoryMaxChars: 600_000,
 }) satisfies Readonly<AgentExecutionLimits>
 
+/**
+ * 校验一个最终要喂给 `setTimeout` 的毫秒值：必须是正安全整数且不大于 `MaxNativeTimerDelayMs`
+ * （2^31-1），越界当场抛 `RangeError` 并点名字段。超过这个上限 Node 的定时器会立刻触发，
+ * 闸门等于形同虚设，所以在配置期就拒绝，而不是留到运行期悄悄失灵。
+ */
 function assertPositiveTimerDelay(value: number, field: string): number {
   if (!Number.isSafeInteger(value) || value <= 0 || value > MaxNativeTimerDelayMs) {
     throw new RangeError(`${field} 必须是正安全整数，且不大于 ${MaxNativeTimerDelayMs}。`)
@@ -45,6 +50,10 @@ function assertPositiveTimerDelay(value: number, field: string): number {
   return value
 }
 
+/**
+ * 校验不进定时器的正整数配置（保留线程的空闲 TTL、保留历史的字符上限）：必须是正安全整数，
+ * 否则抛 `RangeError`。这里不设 2^31-1 上限——这些值只参与比较与截断，不喂 `setTimeout`。
+ */
 function assertPositiveInteger(value: number, field: string): number {
   if (!Number.isSafeInteger(value) || value <= 0) {
     throw new RangeError(`${field} 必须是正安全整数。`)
@@ -52,6 +61,10 @@ function assertPositiveInteger(value: number, field: string): number {
   return value
 }
 
+/**
+ * 校验子 Agent 保留线程的条数：非负安全整数，`0` 合法且表示「执行结束即丢」（关闭跨执行保留）。
+ * 与 `assertPositiveInteger` 的唯一差别就在这个 0——在这几格里 0 是一档有意义的配置，不是漏配。
+ */
 function assertRetainedThreadCount(value: number, field: string): number {
   if (!Number.isSafeInteger(value) || value < 0) {
     throw new RangeError(`${field} 必须是非负安全整数（0 表示不保留）。`)
@@ -59,6 +72,10 @@ function assertRetainedThreadCount(value: number, field: string): number {
   return value
 }
 
+/**
+ * 校验轮数上限：`null` 原样放行（= 不设轮数闸，理由见本文件顶部「轮数是代价的坏代理」），
+ * 否则必须是正安全整数；`0` 与负数抛 `RangeError`，挡住「一轮都不许跑」这种一写就锁死执行的配置。
+ */
 function assertOptionalMaxTurns(value: Nullable<number>, field: string): Nullable<number> {
   if (isNull(value)) return null
   if (!Number.isSafeInteger(value) || value <= 0) {
@@ -67,6 +84,14 @@ function assertOptionalMaxTurns(value: Nullable<number>, field: string): Nullabl
   return value
 }
 
+/**
+ * 把宿主给的部分覆盖合到 `DefaultAgentExecutionLimits` 上，逐项校验后交出一份完整的执行闸门配置；
+ * 任一项越界即抛 `RangeError` 中止（配置期暴露，不留到运行期才发现闸门是坏的）。
+ *
+ * 两处不显然的地方：两个 maxTurns 用 `isUndefined` 判缺席而不是 `??`，所以显式传 `null` 表示
+ * 「关掉轮数闸」而不会被默认值顶回来；另外强制 goal 墙钟不得小于 standard 墙钟，否则目标模式的
+ * 多日任务反而比普通执行先被砍，等于配反了。
+ */
 function resolveAgentExecutionLimits(
   overrides: AgentExecutionLimitOverrides = {}
 ): AgentExecutionLimits {

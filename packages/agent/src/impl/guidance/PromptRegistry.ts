@@ -33,7 +33,9 @@
 import { AppError } from '@velaros-ai/core/error'
 
 import type { PromptSegmentOverride } from '../../types/agent.js'
-import type { PromptCompositionResult,PromptContribution, PromptRenderContext, PromptSegmentDefinition, PromptSegmentProvider, PromptSegmentStability, PromptSegmentTier, PromptSuppression } from '../../types/guidance.js'
+import type { BuiltInPromptOptions,PromptCompositionResult,PromptContribution,PromptRenderContext, PromptSegmentDefinition, PromptSegmentProvider, PromptSegmentStability, PromptSegmentTier, PromptSuppression } from '../../types/guidance.js'
+import { createBuiltInPromptSegments } from '../../utils/guidance/catalog'
+import { createSkippedPromptSegment } from '../../utils/guidance/shared'
 import { compareStableStrings } from '../../utils/residency/determinism'
 /** 层序即块序：Tier0 在稳定前缀，Tier1/Tier2 在活动尾且 Tier2 恒排 Tier1 之后。 */
 const PromptSegmentTierRank: Readonly<Record<PromptSegmentTier, number>> = {
@@ -75,6 +77,47 @@ function assertCorePromptSegmentHasNoPredicate(definition: PromptSegmentDefiniti
 const PromptSegmentIdAliases: Readonly<Record<string, string | undefined>> = {}
 
 /**
+ * Prompt 段注册表对外的面：装配期把各处的段注册进来，每一轮再按 `(tierRank, priority, id)`
+ * 组合出这轮 system prompt 的稳定前缀与活动尾。
+ *
+ * 一份注册表归一个 ContextBuilder 持有，状态（静态段、provider、运行时压制）全在实例内存里、
+ * 不落盘；派生子 Agent 或换 surface 时用 `clone()` 隔离，免得一次 `suppress` 泄漏到别的变体。
+ * 排序键与分层规则见文件头，破坏它等于让前缀缓存跨机器失效。实现是 `PromptRegistry`。
+ */
+export interface PromptRegistryApi {
+  /**
+   * 注册或按 id 覆盖一个静态段，返回自身好串着写。
+   * Tier0（`core`）段带 `when` 谓词时当场抛 `VALIDATION`——稳定前缀必须逐轮字节不变。
+   */
+  register(definition: PromptSegmentDefinition): this
+  /** 按数组顺序逐个 `register`，返回自身；同 id 后来者覆盖先来者。 */
+  registerMany(definitions: PromptSegmentDefinition[]): this
+  /**
+   * 注册一个动态段 provider，返回自身。provider 在每次 `compose` 时才按当轮上下文吐段，
+   * 吐出来的段同样要过 Tier0 无谓词断言；同 id 的 provider 后注册的覆盖先注册的。
+   */
+  registerProvider(provider: PromptSegmentProvider): this
+  /**
+   * 运行时临时关掉某个段并记下原因，返回自身。优先级最高：盖过持久化 overrides 与 `when` 谓词。
+   * 被关掉的段会带着这条 reason 进 `skipped`，不是凭空消失。
+   */
+  suppress(id: string, reason: string): this
+  /** 撤销一次 `suppress`，返回自身；该段此后重新受 overrides 与 `when` 支配。没压制过也不报错。 */
+  restore(id: string): this
+  /**
+   * 组合出这一轮的提示词段：静态段并上 provider 当轮吐的段，按层序→priority→id 排定，
+   * 逐段过压制 / 持久化 overrides / `when` 谓词 / 空渲染四道闸，通过的按稳定性分进
+   * `stableParts` 与 `dynamicParts`，被拦下的连同 reason 进 `skipped`。不传上下文即按空上下文算。
+   */
+  compose(context?: PromptRenderContext): PromptCompositionResult
+  /**
+   * 复制一份注册表：定义与运行时压制态各复制一份，provider 引用共享（provider 无状态）。
+   * ContextBuilder 派生变体时用它做隔离，改克隆体不会碰到原表。
+   */
+  clone(): PromptRegistry
+}
+
+/**
  * Prompt 段注册表。
  *
  * ContextBuilder 使用它组合 system prompt：
@@ -82,7 +125,7 @@ const PromptSegmentIdAliases: Readonly<Record<string, string | undefined>> = {}
  * - providers 可按当前上下文动态生成段。
  * - suppressions/overrides 可以禁用某些段。
  */
-class PromptRegistry {
+class PromptRegistry implements PromptRegistryApi {
   /** 静态 prompt 段定义。 */
   private readonly definitions = new Map<string, PromptSegmentDefinition>()
   /** 动态 prompt 段 provider。 */
@@ -144,16 +187,23 @@ class PromptRegistry {
       // suppressions 是运行时临时禁用，优先级高于配置覆盖。
       const suppression = this.suppressions.get(definition.id)
       if (suppression) {
-        skipped.push(this.createSkipped(definition, suppression.reason))
+        skipped.push(
+          createSkippedPromptSegment(
+            definition,
+            suppression.reason,
+            resolvePromptSegmentStability(definition.tier)
+          )
+        )
         continue
       }
 
       const override = overrides.get(definition.id)
       if (override && !override.enabled) {
         skipped.push(
-          this.createSkipped(
+          createSkippedPromptSegment(
             definition,
-            override.reason ?? 'disabled by persisted prompt configuration'
+            override.reason ?? 'disabled by persisted prompt configuration',
+            resolvePromptSegmentStability(definition.tier)
           )
         )
         continue
@@ -161,14 +211,26 @@ class PromptRegistry {
 
       // when 可以根据 facts/context 决定是否注入。
       if (definition.when && !definition.when(context)) {
-        skipped.push(this.createSkipped(definition, 'activation predicate returned false'))
+        skipped.push(
+          createSkippedPromptSegment(
+            definition,
+            'activation predicate returned false',
+            resolvePromptSegmentStability(definition.tier)
+          )
+        )
         continue
       }
 
       // 空渲染结果会进入 skipped trace，方便调试为什么没进 prompt。
       const text = definition.render(context)?.trim()
       if (!text) {
-        skipped.push(this.createSkipped(definition, 'empty render result'))
+        skipped.push(
+          createSkippedPromptSegment(
+            definition,
+            'empty render result',
+            resolvePromptSegmentStability(definition.tier)
+          )
+        )
         continue
       }
 
@@ -226,20 +288,16 @@ class PromptRegistry {
     })
   }
 
-  /** 构建 skipped trace。 */
-  private createSkipped(
-    definition: PromptSegmentDefinition,
-    reason: string
-  ): PromptCompositionResult['skipped'][number] {
-    return {
-      id: definition.id,
-      label: definition.label,
-      stability: resolvePromptSegmentStability(definition.tier),
-      source: definition.source,
-      priority: definition.priority,
-      reason,
-    }
-  }
 }
 
-export { PromptRegistry, PromptSegmentTierRank, resolvePromptSegmentStability }
+/**
+ * 建一份带内置段的提示词目录：段目录（`utils/guidance/catalog.ts`）算出内置段，这里装进登记处。
+ *
+ * 返回类型保持具体类而不是 `PromptRegistryApi`：宿主（Desktop）把它标注成 `PromptRegistry` 存字段，
+ * 收窄成接口会让那边编译不过。等导出面收口那一轮把类整体收进接口时再一起改。
+ */
+function createBuiltInPromptRegistry(options: BuiltInPromptOptions = {}): PromptRegistry {
+  return new PromptRegistry(createBuiltInPromptSegments(options))
+}
+
+export { createBuiltInPromptRegistry,PromptRegistry, PromptSegmentTierRank, resolvePromptSegmentStability }

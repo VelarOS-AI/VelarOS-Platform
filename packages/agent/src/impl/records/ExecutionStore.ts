@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, renameSync } from 'node:fs'
 
-import { isArray, isEmpty, isFiniteNumber,isNull, isObject, isPlainObject,isPresent, isString, toNullable } from '@velaros-ai/core'
+import { toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 import { writeJsonFileAtomically } from '@velaros-ai/core/utils/FilePersistence'
@@ -8,6 +8,7 @@ import { type TimerLease, TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
 import type { ExecutionEventRecord, ExecutionRecord, ExecutionTaskRecord, StreamStatePayload } from '../../types/agent.js'
 import type { AppendExecutionEventInput, ExecutionDebugListener, ExecutionStateListener, ExecutionStoreOptions, PersistedExecutionStoreFile } from '../../types/records.js'
+import { isExecutionRecord, isPersistedExecutionStoreFile, isTerminalExecutionStatus, isTerminalExecutionTaskStatus, resolveExecutionEventRetentionLimit, resolveExecutionRecordRetentionLimit } from '../../utils/records/execution-store-validation'
 import { compareStableStrings } from '../../utils/residency/determinism'
 
 import { ExecDebugPayload } from './ExecDebugPayload'
@@ -15,39 +16,50 @@ import { ExecDebugPayload } from './ExecDebugPayload'
 const DEFAULT_EXECUTION_EVENT_RETENTION_LIMIT = 500
 const DEFAULT_EXECUTION_RECORD_RETENTION_LIMIT = 200
 const PERSISTED_EXECUTION_STORE_VERSION = 1
-const ExecutionStatuses = new Set<ExecutionRecord['status']>([
-  'pending',
-  'awaiting_confirmation',
-  'running',
-  'awaiting_input',
-  'aborted',
-  'completed',
-  'failed',
-])
-const ExecutionTaskStatuses = new Set<ExecutionTaskRecord['status']>([
-  'pending',
-  'running',
-  'awaiting_confirmation',
-  'awaiting_input',
-  'aborted',
-  'completed',
-  'failed',
-])
-const ExecutionEventSeverities = new Set<ExecutionEventRecord['severity']>([
-  'info',
-  'success',
-  'warning',
-  'error',
-])
 
 
 /**
- * 执行记录存储。
+ * 执行记录的存放处：内存里一张 `executionId → ExecutionRecord` 的表，外加可选的磁盘持久化。
+ * 同时替领域层保管每个执行的 state / debug 监听器，让领域层不必认识 renderer。
  *
- * 这是 ExecutionRecord 的内存源和可选磁盘持久化层。
- * 它还保存 executionId 级别的 state/debug listener，让领域层不直接依赖 renderer。
+ * 写盘是节流的（250ms 内的多次改动合成一次原子写），所以进程退出前必须 `await disposeAsync()`，否则最后几条事件会丢。
+ * 每条执行的事件超过上限就从最旧的开始丢，终态执行的条数也有上限（running / awaiting_* / pending 永远不裁，界面还要读）。
+ * 持久化文件读坏时隔离成 `.corrupt-*` 并清空内存表，不让启动失败。实现是 `ExecutionStore`。
  */
-class ExecutionStore {
+export interface ExecutionStoreApi {
+  /** 整条覆盖保存一条执行记录：顺带裁掉超限事件、裁掉多余的终态记录，并排一次节流写盘。 */
+  save(execution: ExecutionRecord): void
+  /** 按 id 取执行记录，没有就返回 null。 */
+  get(executionId: string): Nullable<ExecutionRecord>
+  /** 按 id 取执行记录，没有就抛 `NOT_FOUND`。调用方确定它该存在时用这个，省掉判空。 */
+  require(executionId: string): ExecutionRecord
+  /** 登记这个执行的 state 监听器，界面据此收等待、完成等控制态；同一个 executionId 只留最后登记的那个。 */
+  setStateListener(executionId: string, listener: ExecutionStateListener): void
+  /** 注销这个执行的 state 监听器，界面断开时调。 */
+  clearStateListener(executionId: string): void
+  /** 登记这个执行的调试图监听器，只有调试面板打开时才有人登记。 */
+  setDebugListener(executionId: string, listener: ExecutionDebugListener): void
+  /** 注销这个执行的调试图监听器。 */
+  clearDebugListener(executionId: string): void
+  /** 把一条 state payload 发给这个执行的监听器；没人登记时静默丢弃。 */
+  emitState(executionId: string, payload: StreamStatePayload): void
+  /** 现算一份调试图快照发给这个执行的调试监听器；执行不存在时抛 `NOT_FOUND`，没人登记调试监听器时算白算一次。 */
+  emitDebug(executionId: string): void
+  /** 往执行的时间线追一条事件：这里补上 id 和 timestamp（`input.timestamp` 没给就取当前时刻），返回补齐后的完整记录。追加同时触发裁剪与节流写盘。 */
+  appendEvent(executionId: string, input: AppendExecutionEventInput): ExecutionEventRecord
+  /** 改一条执行记录的唯一入口：`updater` 拿到当前记录、返回新记录，落表前裁事件、裁终态记录，并排一次写盘。执行不存在时抛 `NOT_FOUND`。 */
+  updateExecution(executionId: string, updater: (execution: ExecutionRecord) => ExecutionRecord): ExecutionRecord
+  /** 改执行里的某一个任务，返回改完后的整条执行记录。任务不在记录里时抛 `INVARIANT`——那说明账本坏了，不是调用方传错。 */
+  updateTask(executionId: string, taskId: string, updater: (task: ExecutionTaskRecord) => ExecutionTaskRecord): ExecutionRecord
+  /** 在某个来源会话上，找状态落在 `statuses` 里、`updatedAt` 最新的那条执行；没有就返回 null。 */
+  findLatestBySourceSession(sourceSessionId: string, statuses: Array<ExecutionRecord['status']>): Nullable<ExecutionRecord>
+  /** 排一次节流写盘：250ms 内的多次改动只写一次。没开持久化、或已经 dispose 过时什么都不做。正常改动路径已经自动调它，外部一般不用直接调。 */
+  schedulePersist(): void
+  /** 收尾：取消待触发的节流定时器、立刻把积压的改动写完并等落盘，然后关掉定时器作用域。退出前必须 await，否则最后 250ms 内的事件会丢在内存里。 */
+  disposeAsync(): Promise<void>
+}
+
+class ExecutionStore implements ExecutionStoreApi {
   private readonly persistThrottleMs = 250
 
   /** executionId -> record。 */
@@ -81,12 +93,12 @@ class ExecutionStore {
 
   constructor(options: ExecutionStoreOptions = {}) {
     if (options.persist && !options.persistencePath) {
-      throw new Error('ExecutionStore persistencePath is required when persist is enabled.')
+      throw new Error('ExecutionStore 开了 persist 却没给 persistencePath：不知道往哪写盘，执行记录会在进程退出时全部丢失。要么补上 persistencePath，要么把 persist 关掉走纯内存模式。')
     }
     this.persistencePath = options.persist ? options.persistencePath! : null
     this.now = options.now ?? Date.now
-    this.eventRetentionLimit = this.resolveEventRetentionLimit(options.eventRetentionLimit)
-    this.recordRetentionLimit = this.resolveRecordRetentionLimit(options.recordRetentionLimit)
+    this.eventRetentionLimit = resolveExecutionEventRetentionLimit(options.eventRetentionLimit, DEFAULT_EXECUTION_EVENT_RETENTION_LIMIT)
+    this.recordRetentionLimit = resolveExecutionRecordRetentionLimit(options.recordRetentionLimit, DEFAULT_EXECUTION_RECORD_RETENTION_LIMIT)
 
     if (this.persistencePath) {
       // 先加载历史记录，再把未完成记录统一恢复成 aborted。
@@ -113,7 +125,7 @@ class ExecutionStore {
   public require(executionId: string): ExecutionRecord {
     const execution = this.executions.get(executionId)
     if (!execution) {
-      throw new AppError('NOT_FOUND', `Execution not found: ${executionId}`, undefined, {
+      throw new AppError('NOT_FOUND', `找不到执行记录 ${executionId}：它可能已经被保留策略裁掉，也可能这个 id 根本不属于当前存储。`, undefined, {
         executionId,
         operation: 'requireExecution',
       })
@@ -198,7 +210,7 @@ class ExecutionStore {
     return this.updateExecution(executionId, (execution) => {
       const taskIndex = execution.tasks.findIndex((task) => task.id === taskId)
       if (taskIndex < 0) {
-        throw new AppError('INVARIANT', `Execution task not found: ${executionId}/${taskId}`, undefined, {
+        throw new AppError('INVARIANT', `执行 ${executionId} 里找不到任务 ${taskId}，无法更新它。任务 id 由本存储自己发放，找不到说明执行账本已经自相矛盾——这是实现缺陷，不是用户操作错误。`, undefined, {
           executionId,
           taskId,
           operation: 'updateTask',
@@ -240,12 +252,12 @@ class ExecutionStore {
       if (!raw) return
 
       const parsed = JSON.parse(raw) as unknown
-      if (!this.isPersistedExecutionStoreFile(parsed)) return
+      if (!isPersistedExecutionStoreFile(parsed, PERSISTED_EXECUTION_STORE_VERSION)) return
 
       let changed = false
 
       parsed.executions
-        .filter((execution): execution is ExecutionRecord => this.isExecutionRecord(execution))
+        .filter((execution): execution is ExecutionRecord => isExecutionRecord(execution))
         .forEach((execution) => {
           const trimmedExecution = this.trimExecutionEvents(execution)
           if (trimmedExecution.events.length !== execution.events.length) {
@@ -306,7 +318,7 @@ class ExecutionStore {
   private recoverInterruptedExecutions(): void {
     let changed = false
     for (const execution of [...this.executions.values()]) {
-      if (this.isTerminalStatus(execution.status)) {
+      if (isTerminalExecutionStatus(execution.status)) {
         continue
       }
 
@@ -335,7 +347,7 @@ class ExecutionStore {
       error: message,
       updatedAt: now,
       tasks: execution.tasks.map((task) =>
-        !this.isTerminalTaskStatus(task.status)
+        !isTerminalExecutionTaskStatus(task.status)
           ? {
               ...task,
               status: 'aborted',
@@ -474,30 +486,12 @@ class ExecutionStore {
     return events.slice(-this.eventRetentionLimit)
   }
 
-  private resolveEventRetentionLimit(limit: Optional<number>): number {
-    if (!isPresent(limit)) return DEFAULT_EXECUTION_EVENT_RETENTION_LIMIT
-    if (!Number.isFinite(limit) || limit < 1) {
-      throw new Error('ExecutionStore eventRetentionLimit must be a positive number.')
-    }
-
-    return Math.floor(limit)
-  }
-
-  private resolveRecordRetentionLimit(limit: Optional<number>): number {
-    if (!isPresent(limit)) return DEFAULT_EXECUTION_RECORD_RETENTION_LIMIT
-    if (!Number.isFinite(limit) || limit < 1) {
-      throw new Error('ExecutionStore recordRetentionLimit must be a positive number.')
-    }
-
-    return Math.floor(limit)
-  }
-
   /**
    * 只裁剪终态 execution：running / awaiting_* / pending 仍可能被 UI 或交互恢复路径读取。
    */
   private pruneRetainedExecutionRecords(): boolean {
     const terminalExecutions = [...this.executions.values()].filter((execution) =>
-      this.isTerminalStatus(execution.status)
+      isTerminalExecutionStatus(execution.status)
     )
     if (terminalExecutions.length <= this.recordRetentionLimit) return false
 
@@ -529,111 +523,6 @@ class ExecutionStore {
     return changed
   }
 
-  private isPersistedExecutionStoreFile(value: unknown): value is PersistedExecutionStoreFile {
-    if (!isPlainObject(value)) return false
-    const record = value
-    return (
-      record.version === PERSISTED_EXECUTION_STORE_VERSION &&
-      this.isFiniteNumber(record.savedAt) &&
-      isArray(record.executions)
-    )
-  }
-
-  /** 校验持久化对象是否能安全进入恢复和调试图投影。 */
-  private isExecutionRecord(value: unknown): value is ExecutionRecord {
-    if (!isPlainObject(value)) return false
-    const record = value
-    const executionId = record.id
-    const currentTaskId = record.currentTaskId
-    if (
-      !isString(executionId) ||
-      !isString(record.sourceSessionId) ||
-      !this.isExecutionStatus(record.status) ||
-      !isString(record.summary) ||
-      !this.isNullableString(record.resourceId) ||
-      !this.isFiniteNumber(record.createdAt) ||
-      !this.isFiniteNumber(record.updatedAt) ||
-      !isString(currentTaskId) ||
-      !isArray(record.tasks) ||
-      isEmpty(record.tasks) ||
-      !isArray(record.events)
-    ) return false
-
-    const tasks = record.tasks
-    if (!tasks.every((task) => this.isExecutionTaskRecord(task))) return false
-    if (!tasks.some((task) => task.id === currentTaskId)) return false
-
-    return record.events.every((event) => this.isExecutionEventRecord(event, executionId))
-  }
-
-  private isExecutionTaskRecord(value: unknown): value is ExecutionTaskRecord {
-    if (!isPlainObject(value)) return false
-    const task = value
-    return (
-      isString(task.id) &&
-      (task.kind === 'root' || task.kind === 'delegated') &&
-      isString(task.title) &&
-      isString(task.instruction) &&
-      isArray(task.executionPlan) &&
-      this.isExecutionTaskStatus(task.status) &&
-      this.isFiniteNumber(task.createdAt) &&
-      this.isFiniteNumber(task.updatedAt) &&
-      (isNull(task.startedAt) || this.isFiniteNumber(task.startedAt)) &&
-      (isNull(task.completedAt) || this.isFiniteNumber(task.completedAt)) &&
-      this.isNullableString(task.result) &&
-      this.isNullableString(task.error)
-    )
-  }
-
-  private isExecutionEventRecord(
-    value: unknown,
-    executionId: string
-  ): value is ExecutionEventRecord {
-    if (!isPlainObject(value)) return false
-    const event = value
-    return (
-      isString(event.id) &&
-      event.executionId === executionId &&
-      isString(event.kind) &&
-      this.isExecutionEventSeverity(event.severity) &&
-      isString(event.title) &&
-      isString(event.message) &&
-      this.isFiniteNumber(event.timestamp) &&
-      this.isNullableString(event.taskId) &&
-      this.isNullableString(event.planStepId) &&
-      isObject(event.payload)
-    )
-  }
-
-  private isExecutionStatus(value: unknown): value is ExecutionRecord['status'] {
-    return isString(value) && ExecutionStatuses.has(value as ExecutionRecord['status'])
-  }
-
-  private isExecutionTaskStatus(value: unknown): value is ExecutionTaskRecord['status'] {
-    return isString(value) && ExecutionTaskStatuses.has(value as ExecutionTaskRecord['status'])
-  }
-
-  private isExecutionEventSeverity(value: unknown): value is ExecutionEventRecord['severity'] {
-    return isString(value) && ExecutionEventSeverities.has(value as ExecutionEventRecord['severity'])
-  }
-
-  private isNullableString(value: unknown): value is Nullable<string> {
-    return isNull(value) || isString(value)
-  }
-
-  private isFiniteNumber(value: unknown): value is number {
-    return isFiniteNumber(value)
-  }
-
-  /** execution 终态判断。 */
-  private isTerminalStatus(status: ExecutionRecord['status']): boolean {
-    return status === 'aborted' || status === 'completed' || status === 'failed'
-  }
-
-  /** task 终态判断。 */
-  private isTerminalTaskStatus(status: ExecutionTaskRecord['status']): boolean {
-    return status === 'aborted' || status === 'completed' || status === 'failed'
-  }
 }
 
 export { ExecutionStore }

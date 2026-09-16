@@ -91,6 +91,12 @@ export function resolveRecordKind(message: ModelMessage): ContextRecordKind {
   return hasToolCallParts(message) ? 'tool-call' : 'assistant'
 }
 
+/**
+ * 判这条消息是不是一轮的开始：只有**真实**用户消息算（`sys_note` 信封、`velarosInternal.kind === 'follow-up'`
+ * 这类内部续跑一律不算）。
+ * 内部续跑若也计一轮，一次用户会话里的多次自动续跑就会把「最近 N 轮」的尾保护窗口挤空，
+ * 用户刚说过的话反而先被降级。
+ */
 function isTurnBoundary(message: ModelMessage): boolean {
   return message.role === 'user' && !isInternalFollowUpMessage(message)
 }

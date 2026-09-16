@@ -59,7 +59,45 @@ function readAxisEntries(
  * 逐 mod activate → 封存并推进 generation。任一 mod 在 resolve 阶段冲突即整包拒载
  * （不部分注册），保证注册表永远不落半个 mod。
  */
-class AgentModLoader {
+
+/**
+ * Agent 领域 mod 装载器对外的面：从「宿主已经发现的候选包」开始，把它们判定、去冲突、
+ * 落进贡献注册表与 Hook 派发器，并交出一份可读的装载报告。
+ *
+ * 一个宿主一份，装配期建、长期持有；状态（已激活 mod、拒载记录、诊断）全在实例内存里，不落盘。
+ * 判定全程同步且不抛错：任何拒绝都变成带 code 与人话 message 的诊断进报告，宿主照单展示。
+ * `requiredAxes` 命中本宿主不支持的轴一律拒载，不做残废激活；某轴只是没落点则该轴缺席、
+ * 其余轴照常激活（partial）。实现是 `AgentModLoader`。
+ */
+export interface AgentModLoaderApi {
+  /** 这台 Loader 写入的贡献注册表；消费者从它取按回合冻结的快照。装配期传入或由 Loader 自建。 */
+  readonly registry: AgentModRegistry
+  /** 这台 Loader 写入的 Hook 派发器；主链在各派发点向它要钩子。装配期传入或由 Loader 自建。 */
+  readonly hooks: AgentModHookDispatcher
+  /** @deprecated 与 `hooks` 是同一个对象，留给旧调用方；新代码一律用 `hooks`。 */
+  readonly seams: AgentModHookDispatcher
+  /**
+   * 装一批候选包，返回本次之后的完整装载报告。
+   * 整个过程是一个 registration 阶段：开注册面 → 逐包判定 → 跨包查主键冲突 → 逐个激活 →
+   * 封存并推进 generation（此前发出去的快照全部失效）。
+   * 可以重复调，会在既有注册表之上继续追加；mod id 或轴主键撞上已装的，照样整包拒载。
+   */
+  load(packages: readonly AgentModPackage[]): AgentModLoadReport
+  /**
+   * 停用一个 mod：摘掉它在注册表与 Hook 派发器上的全部贡献，并记一条 `mod.deactivated` 诊断。
+   * 它产出的持久化数据按孤儿保全语义一律保留，绝不静默硬删。没装过这个 mod 时返回 false。
+   */
+  deactivate(modId: string): boolean
+  /**
+   * 取一份冻结的装载报告：当前 generation、已激活 mod（含 partial 与各轴贡献数）、
+   * 拒载记录，以及 Loader 自己的诊断并上 Hook 派发器的诊断。宿主的 mod 页直接渲染它。
+   */
+  getReport(): AgentModLoadReport
+  /** 取注册表当前 generation 的冻结快照，等价于 `registry.snapshot()`，给只拿到 Loader 的调用方用。 */
+  snapshot(): AgentModRegistrySnapshot
+}
+
+class AgentModLoader implements AgentModLoaderApi {
   public readonly registry: AgentModRegistry
   public readonly hooks: AgentModHookDispatcher
   /** @deprecated 新调用方使用 `hooks`。 */

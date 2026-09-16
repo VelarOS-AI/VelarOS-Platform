@@ -5,7 +5,26 @@
  * 纯累加计数，与会话其余可变状态无耦合，单独持有便于测试与推理。
  * 后续可按同样方式逐块剥离 turn-planning journal、工具租约、能力验证跟踪等关注点。
  */
-class SessionTelemetryCounters {
+export interface SessionTelemetryCountersApi {
+  /** 模型每调一次 `tooling:replace` 记一笔；编辑跟踪器在工具调用落定时调，读数即本会话换入能力的次数。 */
+  recordToolReplaceCall(): void
+  /** 每拦下一次重复调用（重复工具页请求或重复验证）记一笔，由跟踪器生成拦截文案时调。 */
+  recordDedupeHit(): void
+  /** 模型调到当前不可见工具时记一笔；数字偏高说明工具页换入换出策略没跟上模型的意图。 */
+  recordInvisibleToolCall(): void
+  /** 每向用户出示一张确认卡记一笔；数字偏高说明授权面太碎，用户被打断得太频繁。 */
+  recordConfirmationCard(): void
+  /** 本会话累计的 `tooling:replace` 次数（= 能力启用次数）。 */
+  readonly enableToolsPerSession: number
+  /** 本会话累计的去重拦截次数。 */
+  readonly dedupeHitCount: number
+  /** 本会话累计的不可见工具调用次数。 */
+  readonly invisibleToolCallCount: number
+  /** 本会话累计出示的确认卡数量。 */
+  readonly confirmCardsPerSession: number
+}
+
+class SessionTelemetryCounters implements SessionTelemetryCountersApi {
   private toolReplaceCalls = 0
   private dedupeHits = 0
   private invisibleToolCalls = 0

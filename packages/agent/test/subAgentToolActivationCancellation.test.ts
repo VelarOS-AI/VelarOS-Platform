@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
+import { forkFileContext } from '../src/impl/context/FileContextCoordinator'
 import type { SubAgentContextBase } from '../src/types/loop.js'
 import { createSubAgentContext } from '../src/utils/loop/loop-runtime'
 
@@ -57,6 +58,7 @@ function fixture() {
     allowedCategories: [],
     getAllowedSubAgentTools: (tools) => tools ?? [],
     getToolNamesForCategories: () => ['probe:read'],
+    forkFileContext,
     requestToolCategories: async (categories) => {
       requests += 1
       await decisionReady

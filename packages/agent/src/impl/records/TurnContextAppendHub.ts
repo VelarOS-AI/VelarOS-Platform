@@ -1,5 +1,18 @@
 import type { TurnContextSourceId } from '../../types/agent.js'
-import type { TurnContextAppendBus, TurnContextAppendListener } from '../../types/records.js'
+import type { TurnContextAppendListener } from '../../types/records.js'
+
+/**
+ * 环境 delta 写入的通知面：账本每写进一条可见 source 的 delta 就广播一次，订阅方（IPC 推送层）据此去重新 peek。
+ * 只发「有变化」这个信号，不带内容；形状与公开端口 `TurnContextAppendBus` 一致，注入时按那个类型传。
+ *
+ * 实现是 `TurnContextAppendHub`，每宿主一个实例，状态只在实例里。
+ */
+export interface TurnContextAppendHubApi {
+  /** 订阅任意 source 的 delta 写入通知；订阅时不补发历史，返回的函数用来退订。 */
+  subscribe(listener: TurnContextAppendListener): () => void
+  /** 广播一次「某会话的某个 source 刚写入」的通知；逐个监听器隔离异常，监听器抛错不影响其余监听器，也不回传给账本。 */
+  emit(sessionId: string, sourceId: TurnContextSourceId): void
+}
 
 /**
  * 环境 delta 写入通知总线（每宿主一个实例，经 composition 注入给账本与订阅方）。
@@ -8,7 +21,7 @@ import type { TurnContextAppendBus, TurnContextAppendListener } from '../../type
  * 状态收进实例后，多宿主同进程装配各持一份、互不串会话/串宿主——不再靠模块级全局 Set。
  * 监听器异常逐个隔离，绝不冒泡进账本写入。
  */
-export class TurnContextAppendHub implements TurnContextAppendBus {
+export class TurnContextAppendHub implements TurnContextAppendHubApi {
   private readonly listeners = new Set<TurnContextAppendListener>()
 
   /** 订阅任意 source 的 delta 写入；返回退订函数。 */

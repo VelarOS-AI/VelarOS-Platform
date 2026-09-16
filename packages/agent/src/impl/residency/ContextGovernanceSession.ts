@@ -21,7 +21,7 @@ import type { ModelMessage } from 'ai'
 import { isEmpty, isNotNull, isNull, isPresent, toNullable } from '@velaros-ai/core'
 
 import type { ContextMigrationEventSink } from '../../contract/requires.js'
-import type { ContextDistiller, ContextGovernanceConfig, ContextGovernanceConfigInput, ContextGovernanceSyncInput, ContextGovernanceSyncResult, ContextHandoffSignal, ContextRecord, ContextRecordClassifier, GovernanceEpochReport, GovernanceEpochSource,GovernanceWindowDerivation, GovernanceWindowInput } from '../../types/residency.js'
+import type { ContextDistiller, ContextGovernanceConfig, ContextGovernanceConfigInput, ContextGovernanceSessionApi as ContextGovernanceSessionContract, ContextGovernanceSyncInput, ContextGovernanceSyncResult, ContextHandoffSignal, ContextRecord, ContextRecordClassifier, GovernanceEpochReport, GovernanceEpochSource,GovernanceWindowDerivation, GovernanceWindowInput } from '../../types/residency.js'
 import { stableFingerprint } from '../../utils/residency/determinism'
 import { planContextDistillation } from '../../utils/residency/distill'
 import { measureProjectedTokens, resolveProjectionBudget, runGovernanceEpoch, shouldOpenGovernanceEpoch } from '../../utils/residency/governance-epoch'
@@ -39,17 +39,7 @@ export const ContextEpochRequestToolName = 'context:distill'
 const MaxRetainedEpochReports = 32
 export const DefaultMaxTrackedSessions = 128
 
-/**
- * 消息 → 指纹的对象身份缓存。
- *
- * `syncHistory` 每轮要对**整条历史**逐条 `stableFingerprint`（键排序递归序列化），而 99% 的轮次
- * 结论都是"前缀完全一致，只追加了尾巴"。清洗链在稳态下保持对象身份（每层都 `changed ? next :
- * original`），所以已摄入那截绝大多数轮次是同一批引用——按身份缓存即可把每轮成本从 O(整条历史
- * 字节数) 降到 O(新增尾巴)。WeakMap：消息被丢弃时条目自动回收，缓存不构成泄漏。
- *
- * 前提（也是全链既有纪律）：**没有人原地改写已经进过历史的消息对象**——要改就产生新对象。原地
- * 改会让缓存给出陈旧指纹，前缀比对把已经变了的那截当成没变。
- */
+/** 建 `ContextGovernanceSession` 时可选的两项（配置、分类器、事件汇走构造函数的前三个位置参数，不在这里）。 */
 export interface ContextGovernanceSessionOptions {
   /**
    * I2 蒸馏器解析器（晚绑）。
@@ -58,11 +48,20 @@ export interface ContextGovernanceSessionOptions {
    * 要到执行栈那一步才有。传实例意味着"注册表建好那一刻蒸馏器必须已经存在"，那就把装配顺序钉死了。
    */
   resolveDistiller?: LooseOptional<() => Nullable<ContextDistiller>>
+  /** 这个治理会话对应哪条会话；只往下传给蒸馏端口当遥测上下文，治理本身不用它做索引（登记表在外面按 id 存）。空白串按缺席处理。 */
   sessionId?: LooseOptional<string>
 }
 
+/**
+ * 单个会话的上下文治理面：把本轮历史同步进账本、算治理窗口 G、到点跑一次 epoch 把该降的降下去、记缺页、给转交信号。
+ *
+ * 实现是 `ContextGovernanceSession`，登记处按会话 id 各持一个；账本、轮序、epoch 报告和在飞的蒸馏全在这个实例里，只在内存。
+ * 形状与对外公开的 `ContextGovernanceSessionApi` 同源，这里把它挪到类上方当本类的接口。
+ */
+export interface ContextGovernanceSessionApi extends ContextGovernanceSessionContract {}
+
 /** 单会话治理状态。 */
-export class ContextGovernanceSession {
+export class ContextGovernanceSession implements ContextGovernanceSessionApi {
   public readonly config: ContextGovernanceConfig
   private ledgerRef: ContextResidencyLedger
   private ingestedFingerprints: string[] = []
@@ -82,8 +81,15 @@ export class ContextGovernanceSession {
   public updatedAt = 0
 
   /**
-   * 按消息身份缓存指纹（本会话内）。WeakMap：消息被丢弃时条目自动回收，缓存不构成泄漏。
-   * 前提是没有人原地改写已经进过历史的消息对象——要改就产生新对象。
+   * 消息 → 指纹的对象身份缓存（本会话内）。
+   *
+   * `syncHistory` 每轮要对**整条历史**逐条 `stableFingerprint`（键排序递归序列化），而 99% 的轮次
+   * 结论都是"前缀完全一致，只追加了尾巴"。清洗链在稳态下保持对象身份（每层都 `changed ? next :
+   * original`），所以已摄入那截绝大多数轮次是同一批引用——按身份缓存即可把每轮成本从 O(整条历史
+   * 字节数) 降到 O(新增尾巴)。WeakMap：消息被丢弃时条目自动回收，缓存不构成泄漏。
+   *
+   * 前提（也是全链既有纪律）：**没有人原地改写已经进过历史的消息对象**——要改就产生新对象。原地
+   * 改会让缓存给出陈旧指纹，前缀比对把已经变了的那截当成没变。
    */
   private readonly fingerprintByMessage = new WeakMap<ModelMessage, string>()
   /**
@@ -479,6 +485,10 @@ export class ContextGovernanceSession {
   }
 }
 
+/**
+ * 建 `ContextGovernanceSessionRegistry` 时给的一组宿主注入；全部可省，整个对象也能不传。
+ * 除 `distiller` 外都只在建表那一刻读一次，之后新建的会话继承当时的值。
+ */
 export interface ContextGovernanceSessionRegistryOptions {
   /** 宿主注入的治理配置（宽容解析 + 默认值兜底）。 */
   config?: LooseOptional<ContextGovernanceConfigInput>

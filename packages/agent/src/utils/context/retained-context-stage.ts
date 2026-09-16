@@ -21,6 +21,13 @@ function isProviderVisibleRetainedBlock(block: ContextWorkingSetBlock): boolean 
   return block.zone === 'active-task' || block.zone === 'pinned-evidence'
 }
 
+/**
+ * 把 active-task 与 pinned-evidence 两区的块拼成一条要追加到消息尾部的 user 消息；一块都没有（或正文全是空白）时返回 null。
+ * 每块只投影出 id/zone/来源/句柄/文件路径/内容哈希/资源版本/是否陈旧与正文，正文两端去空白、空正文整块丢弃。
+ * `kind` 只对 pinned-evidence 标注：带用户指令的记 `user-constraint`，其余记 `evidence`；`verified` 也只对非用户指令的证据块给值——
+ * 用户约束不该被当成「已核验的事实」呈现给模型。
+ * 正文前三行是固定说明：这是上下文而非新指令、陈旧证据描述的是旧快照、payloadRef 指向存档原文。
+ */
 function buildProviderVisibleRetainedContextMessage(
   blocks: readonly ContextWorkingSetBlock[]
 ): Nullable<ModelMessage> {

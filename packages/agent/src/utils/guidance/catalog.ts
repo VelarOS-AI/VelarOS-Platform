@@ -6,7 +6,6 @@
 import { isArray, isEmpty, isTrue } from '@velaros-ai/core'
 
 import type { AppRuntimeFacts } from '../../contract/requires.js'
-import { PromptRegistry } from '../../impl/guidance/PromptRegistry'
 import type { BuiltInPromptOptions,PromptRenderContext, PromptSegmentDefinition } from '../../types/guidance.js'
 import { readAppRuntimeFacts } from '../runner/app-runtime-facts'
 
@@ -46,6 +45,7 @@ const RuntimePlatformLabels: Readonly<Record<string, string | undefined>> = {
   win32: 'Windows',
 }
 
+/** 把一条宿主运行事实压成单行文本进提示词：换行会破坏段落结构，压完为空就返回 null，让调用方整条略过而不是塞一行空白。 */
 function formatRuntimeFact(value: LooseOptional<string>): Nullable<string> {
   const normalized = value?.trim().replace(/[\r\n]+/gu, ' ')
   return normalized || null
@@ -74,6 +74,7 @@ function formatRuntimeEnvironment(facts: AppRuntimeFacts): Nullable<string> {
   ].join('\n')
 }
 
+/** 只有当宿主把这个技能列进「可读」名单时，才在提示词里加一句「先读 skill:<id>」；不可读时返回空串，不给模型一条它调不动的指令。 */
 function formatReadableSkillInstruction(context: PromptRenderContext, skillId: string): string {
   const readableSkillIds = context.facts?.readableSkillIds
   return isArray(readableSkillIds) && readableSkillIds.includes(skillId)
@@ -195,14 +196,8 @@ function createIdentityPromptSegment(identity: string): PromptSegmentDefinition 
   })
 }
 
-/** 创建带内置段的 SegmentRegistry。 */
-function createBuiltInPromptRegistry(options: BuiltInPromptOptions = {}): PromptRegistry {
-  return new PromptRegistry(createBuiltInPromptSegments(options))
-}
-
 export {
   PromptCatalog as BuiltInPromptCatalog,
-  createBuiltInPromptRegistry,
   createBuiltInPromptSegments,
   createIdentityPromptSegment,
 }

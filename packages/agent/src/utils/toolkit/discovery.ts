@@ -38,6 +38,11 @@ export const ToolContractDiscoveryDescriptors: readonly ToolCatalogEntry[] = Obj
   },
 ])
 
+/**
+ * 从模型调用 schema 自恢复工具时给的参数里读出要查的工具名单：只收字符串项、逐个 trim、丢掉空串、
+ * 去重后**截到前 12 个**（与 inputSchema 的 maxItems 一致）。`names` 不是数组时返回空数组而不是抛错——
+ * 这条工具是模型 schema 漂移后的恢复路径，宁可让它查个空也不能把它自己变成一次报错。
+ */
 export function readToolSchemaDiscoveryNames(input: Record<string, unknown>): string[] {
   if (!isArray(input.names)) return []
   return [

@@ -15,14 +15,12 @@ import { isEmpty } from '@velaros-ai/core'
 
 import type { HistorySanitizationIssue, HistorySanitizationResult, HistoryStructureRepairOptions,HistoryToolCallReference } from '../../types/history.js'
 
-import { HistoryMessages } from './messages'
+import { extractAssistantToolCallIds, extractAssistantToolCalls, extractToolResultIds } from './messages'
 import { isReplayUnsafeAssistantMessage, sanitizeModelMessage } from './sanitize'
 import { stripOrphanToolResultParts } from './validate'
 
 const InterruptedToolResultValue =
   '[no result: the previous turn was interrupted before this tool call completed]'
-
-const messageHelper = new HistoryMessages()
 
 /**
  * 回填判据：tool-call 组里缺结果的调用能否用「被中断」占位结果补齐。
@@ -46,6 +44,13 @@ function resolveBackfillableInterruptedToolCalls(
   return missingToolCalls
 }
 
+/**
+ * 为一组「有 tool-call 却没等到结果」的调用造一条占位 tool 消息，每个缺的调用配一条
+ * `output: { type: 'error-text', value: InterruptedToolResultValue }` 的 tool-result。
+ * 供应方要求 tool-call 与 tool-result 严格成对，补占位是为了**把这组调用整组保下来**——
+ * 否则只能把整组（连同助手那条消息）从历史里删掉，模型就彻底看不见自己上一轮调过什么了。
+ * 写成 error-text 而不是空结果，是要让模型明白这次调用是被中断的、需要时得重调，而不是真的返回了空。
+ */
 function buildInterruptedToolResultMessage(
   toolCalls: readonly HistoryToolCallReference[]
 ): ModelMessage {
@@ -63,6 +68,19 @@ function buildInterruptedToolResultMessage(
   }
 }
 
+/**
+ * 结构自愈的主扫描：顺序走一遍历史，把每个 assistant tool-call 组连同紧随其后的 tool 消息当作一个整体处理，
+ * 保证交出去的历史里 tool-call 与 tool-result **严格成对**（供应方的硬要求，缺一个整轮请求被拒）。
+ * 处理规则：
+ * - 整条无前驱的 `tool` 消息 = 孤儿，直接丢弃并记一条 `orphan-tool-result`；
+ * - `isReplayUnsafeAssistantMessage` 认定不可重放的 assistant 消息丢弃（记 `unsafe-assistant-message`）；
+ * - tool-call 组缺结果时，先问 `resolveBackfillableInterruptedToolCalls` 能不能回填：能就补占位结果**整组留下**，
+ *   不能（toolCallId 有空或重复，回填会张冠李戴）就整组移除；
+ * - 组内每条消息都过 `sanitizeModelMessage`（跳过 tool-result 预算裁剪——这里只管结构，不管长度）。
+ *
+ * `stableLength` 是移除整组时的回退水位：它只在「一个完整单元收尾」时推进，所以一旦判定要丢整组，
+ * 把 `sanitized` 截回该水位就能连带丢掉本组已经推进去的助手消息，不会留下半组。
+ */
 function repairHistoryStructure(
   history: ModelMessage[],
   options: HistoryStructureRepairOptions = {}
@@ -99,7 +117,7 @@ function repairHistoryStructure(
         role: message.role,
         removedMessages: 1,
         reason: 'tool result message appeared without a preceding assistant tool-call group',
-        toolCallIds: messageHelper.extractToolResultIds(message),
+        toolCallIds: extractToolResultIds(message),
       })
       continue
     }
@@ -112,13 +130,13 @@ function repairHistoryStructure(
         role: message.role,
         removedMessages: 1,
         reason: 'assistant message is unsafe for provider replay and was removed',
-        toolCallIds: messageHelper.extractAssistantToolCallIds(message),
+        toolCallIds: extractAssistantToolCallIds(message),
       })
       stableLength = sanitized.length
       continue
     }
 
-    const toolCalls = messageHelper.extractAssistantToolCalls(message)
+    const toolCalls = extractAssistantToolCalls(message)
     const toolCallIds = toolCalls.map((toolCall) => toolCall.toolCallId)
     if (isEmpty(toolCallIds)) {
       pushSanitized(message)
@@ -137,7 +155,7 @@ function repairHistoryStructure(
       }
 
       collectedMessages.push(nextMessage)
-      for (const resultId of messageHelper.extractToolResultIds(nextMessage)) {
+      for (const resultId of extractToolResultIds(nextMessage)) {
         resultIds.add(resultId)
       }
       nextIndex += 1

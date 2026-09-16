@@ -42,6 +42,10 @@ const AllowedSchemaTypes = new Set([
   'null',
 ])
 
+/**
+ * 校验 schema 里的数值约束关键字：`undefined`（没写）直接放行，写了就必须是 [min, max] 闭区间内的整数，
+ * 否则抛 `VALIDATION` 并在消息里点名是哪个字段。用来挡住 `maxLength: 1e9` 这类把上限写飞的 schema。
+ */
 function assertIntegerBound(
   value: unknown,
   label: string,
@@ -54,6 +58,14 @@ function assertIntegerBound(
   }
 }
 
+/**
+ * 递归校验一个 JSON Schema 节点是否落在首版支持的子集内，不合规就抛 `VALIDATION`（消息里带 `$.a.b` 这样的路径）。
+ *
+ * 把关六项：节点必须是对象、深度不超过 MaxStructuredOutputSchemaDepth、关键字必须在 AllowedSchemaKeywords 内
+ * （`$ref`/`oneOf`/`allOf` 等一律拒绝，不做静默忽略——忽略会让调用方以为约束生效了）、`type` 在 AllowedSchemaTypes 内、
+ * `required`/`additionalProperties`/`enum` 形状正确、以及各数值边界合法。properties 总数用 `state` 跨递归累加，
+ * 因此上限是**整棵树**的属性数而不是每层各自的数。
+ */
 function inspectSchemaNode(
   node: unknown,
   path: string,
@@ -126,6 +138,12 @@ function inspectSchemaNode(
   }
 }
 
+/**
+ * 把调用方给的 JSON Schema 编译成可反复校验的 zod schema，同时留下序列化原文（修复提示词要把它原样贴给模型）。
+ *
+ * 顺序是先序列化并卡 MaxStructuredOutputSchemaBytes 字节上限，再逐节点做子集校验，最后交给 `z.fromJSONSchema`。
+ * 任一步不过都抛 `VALIDATION`，绝不返回一个"半能用"的 schema——契约在派发前就失败，好过子 Agent 跑完才发现校验不了。
+ */
 function compileSubAgentOutputSchema(
   schema: AgentOutputJsonSchema
 ): CompiledSubAgentOutputSchema {
@@ -156,6 +174,11 @@ function compileSubAgentOutputSchema(
   }
 }
 
+/**
+ * 从子 Agent 的最终回复里挑出待解析的 JSON 文本：全文恰好只有**一个** ``` 代码块时取块内内容（并剥掉语言标注），
+ * 其余情况（没有代码块、或有多个）原样返回去空白后的全文。
+ * 只认"唯一一个"是刻意的——有多个块时无从判断哪个才是交付物，交给 JSON.parse 去失败、走修复轮，比猜错一个块更安全。
+ */
 function extractJsonCandidate(text: string): string {
   const trimmed = text.trim()
   const fenced: string[] = []
@@ -173,6 +196,10 @@ function extractJsonCandidate(text: string): string {
   return trimmed
 }
 
+/**
+ * 剥掉代码块正文开头的语言标注（`markdown` / `json` / `md`，大小写不敏感），返回去空白后的正文。
+ * 不在这三种之内的标注保持原样——那更可能是内容本身而不是标注，剥错会直接破坏 JSON。
+ */
 function stripStructuredOutputFenceLanguage(value: string): string {
   const trimmed = value.trim()
   const lower = trimmed.toLowerCase()
@@ -184,6 +211,13 @@ function stripStructuredOutputFenceLanguage(value: string): string {
   return trimmed
 }
 
+/**
+ * 把子 Agent 的最终回复解析并校验成结构化输出。
+ *
+ * 三道关：超过 MaxStructuredOutputBytes 直接判失败（不截断——半个 JSON 没有意义）、JSON 解析失败、schema 校验失败。
+ * 失败时不抛异常，而是回 `{ success: false, issues }`，**最多带三条** issue（够模型定位问题，又不会让修复提示词喧宾夺主），
+ * 由调用方拿去拼修复轮提示词。
+ */
 function parseSubAgentStructuredOutput(
   text: string,
   compiled: CompiledSubAgentOutputSchema
@@ -216,6 +250,10 @@ function parseSubAgentStructuredOutput(
   }
 }
 
+/**
+ * 结构化输出没通过校验时，拼一条追加给子 Agent 的修复提示：列出编号后的问题、附上必须满足的 schema 原文，
+ * 并明确要求这一轮只返回 JSON、不调用工具、不加解释——修复轮再去调工具只会把上下文越滚越大。
+ */
 function buildStructuredOutputRepairPrompt(
   serializedSchema: string,
   issues: readonly string[]

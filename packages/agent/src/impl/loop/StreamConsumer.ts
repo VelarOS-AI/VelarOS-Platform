@@ -2,11 +2,6 @@ import type { TextStreamPart, ToolSet } from "ai";
 
 import {
   isEmpty,
-  isNotNull,
-  isNull,
-  isObject,
-  isPresent,
-  isString,
   toNullable,
 } from "@velaros-ai/core";
 import { AppError } from "@velaros-ai/core/error";
@@ -14,9 +9,10 @@ import { logRuntime } from "@velaros-ai/core/logger";
 import { TimerScope } from "@velaros-ai/core/utils/TimerScope";
 
 import type { AssistantContentPart } from '../../types/history.js'
-import type { ConsumeAssistantStreamArgs, InlineReasoningSegment, PendingStreamToolCall, ProviderToolInputDraft, ProviderToolNameResolution,StreamConsumerEvents, StreamDiagnostics, StreamIdleThinkingNotifier } from '../../types/loop.js'
-import type { ProviderTurnRecorder, ProviderTurnUsage } from '../../types/records.js'
+import type { ConsumeAssistantStreamArgs, InlineReasoningSegment, PendingStreamToolCall, ProviderToolInputDraft, ProviderToolNameResolution, StreamDiagnostics, StreamIdleThinkingNotifier } from '../../types/loop.js'
+import type { ProviderTurnRecorder } from '../../types/records.js'
 import type { ToolExecutionPolicyRegistry } from '../../types/tools.js'
+import { appendStreamTextDelta, emitStreamUsageTelemetry } from '../../utils/loop/stream-consumer-emit'
 import { normalizeModelRequestError } from "../../utils/model/model-request-error";
 import {
   buildEmptyAssistantStreamError,
@@ -57,18 +53,28 @@ const InlineReasoningTagStreamId = "inline-think";
 /** 从 raw 分片兜底抽出的思考增量共用的 reasoning stream id（取值沿用历史）。 */
 const RawReasoningStreamId = "deepseek-reasoning";
 
+/**
+ * 一次尝试的流消费状态：由 turn helper 在每次尝试前整体新建（不是复用后重置），
+ * 交给 `consumeAssistantStream` 逐块就地写入，消费结束后由 turn helper 读出来组装本轮结果。
+ *
+ * 它同时是重试与恢复的判据来源：`RetryPolicy` 靠 hasVisibleOutput / hasToolUse 决定能不能重发，
+ * 所以这份状态必须诚实反映「已经泼出去的水」——每次尝试整体新建正是为了让失败尝试的残留不误导下一次。
+ */
 interface StreamConsumerTurnState {
   /**
    * 面向界面的轮次计数轴；主 Agent 是确定 turn（number），子 Agent（QueryTurn 装配）没有 UI 轮次轴，
    * 传 null——telemetry / 日志 / 错误上下文一路容忍 nullable turn。
    */
   turn: Nullable<number>;
+  /** 本轮是否接下过合法工具调用（含流结束后从草稿抢救出来的）。true 则本轮结果要走工具结果回填那条路。 */
   hasToolUse: boolean;
-  /** At least one accepted tool call crossed into ToolExecutor and may already have side effects. */
+  /** 是否已有工具调用真的交给 ToolExecutor、可能产生副作用；运行时插话能否算「安全截断」看它。 */
   hasDispatchedToolUse?: boolean;
+  /** 本轮累计的可见正文（过滤泄漏标记、抽走内联思考之后的净文本）；子 Agent 直接拿它当返回文本。 */
   accumulatedText: string;
+  /** 本轮有没有产出过可见输出（正文、生成文件或已接受的工具调用）。它一旦为真，这次请求就不能重放。 */
   hasVisibleOutput: boolean;
-  /** Reasoning actually projected to the event bus; distinct from a visible answer. */
+  /** 本轮有没有向事件总线投过思考增量。思考不算可见答复：只出思考时要再要一次可见回答。 */
   hasReasoningOutput?: boolean;
   /** 供应方返回的真实输入 token 数（若有）；用于 MMU 用量校准反馈。 */
   inputTokens?: LooseOptional<number>;
@@ -78,12 +84,20 @@ interface StreamConsumerTurnState {
    * 与既有 inputTokens 走同一条回传通道。缺席一律 null。
    */
   outputTokens?: LooseOptional<number>;
+  /** 本轮的美元成本，来自网关回报；自建 provider 通常没有这笔账，缺席即 null。 */
   costUsd?: LooseOptional<number>;
   /** 推理 token（已含在 outputTokens 里）与输入里命中 / 写入缓存的部分：计价时按各自单价拆开算。 */
   reasoningTokens?: LooseOptional<number>;
+  /** 输入里命中缓存的 token 数（便宜的那部分）。 */
   cacheReadInputTokens?: LooseOptional<number>;
+  /** 输入里写入缓存的 token 数（首次建缓存要额外计价的那部分）。 */
   cacheWriteInputTokens?: LooseOptional<number>;
+  /**
+   * 供应方给的结束原因（取第一个，拿不到就退回 raw 里的那个）。与 usage 无关，所以在 usage 门之前就写：
+   * 即便这一轮没有任何 token 回报，收敛态也要带着它，否则截断事故事后零痕迹。
+   */
   finishReason?: LooseOptional<string>;
+  /** 本次请求指纹的稳定 id；出事后按它把 model span、回合账本、上下文回放三处对上号。 */
   requestFingerprint?: LooseOptional<string>;
 }
 
@@ -102,7 +116,7 @@ interface RejectedStreamToolCall {
  * 职责：把 `streamText` 返回的 `AsyncIterable<TextStreamPart>` 转换成
  *   1) 推送到 UI 的 textDelta / reasoningDelta 事件（通过 ExecutionEventBus），
  *   2) 推送到 ToolExecutor 的 tool-call（统一在这里通过 ToolExecutionPolicy 做参数校验和权限检查），
- *   3) 累积出 assistant 这一轮的 content parts，供 AgentTurnHistoryHelper 写回 history。
+ *   3) 累积出 assistant 这一轮的 content parts，供 TurnHistory 写回 history。
  *
  * 设计要点：
  * - 通过 AgentStreamDiagnosticHelper 同步记录每个 chunk 的诊断信息，
@@ -113,7 +127,29 @@ interface RejectedStreamToolCall {
  * - tool-call 不在这里同步执行，仅注册到 ToolExecutor；执行/取消由外层 ToolExecutor 统一调度，
  *   保证“并发安全工具并发执行 / 非并发安全工具串行” 的策略一致。
  */
-class StreamConsumer {
+export interface StreamConsumerApi {
+  /**
+   * 把一条 provider 流从头消费到尾：文本与思考增量投给事件总线、工具调用校验后排进
+   * `args.executor`、用量与结束原因写进 `turnState`，最后返回本轮的 assistant 内容供上层写回历史。
+   *
+   * 全内核唯一的流消费引擎：主面（`StreamTurn`）与子 Agent 面（`QueryTurn`）共用它，
+   * 差异只在装配（是否投影界面、turn 轴、空流来源标签），消费规则逐字一致。
+   *
+   * 什么时候返回、什么时候抛：
+   *  - 正常收尾 → 返回 assistant 内容；期间每个分片都复核上下文纪元，被插队即抛陈旧错打断本轮。
+   *  - 中断信号亮起 → 立刻停止消费并把已有内容收成 partial（不再推送任何界面事件）。
+   *  - 工具参数不完整、流在工具可执行前结束、整条流没有可展示输出、上游 length 截断 →
+   *    抛对应的 AppError，抛之前先经 `onInterruptedPartial` 把已产出的部分交出去，
+   *    好让 turn helper 保住已展示的正文再去续写。
+   */
+  consumeAssistantStream(
+    fullStream: AsyncIterable<TextStreamPart<ToolSet>>,
+    turnState: StreamConsumerTurnState,
+    args: ConsumeAssistantStreamArgs,
+  ): Promise<AssistantContentPart[]>
+}
+
+class StreamConsumer implements StreamConsumerApi {
   private readonly log = logRuntime.tag("StreamConsumer");
   private readonly streamDiagnosticHelper = new AgentStreamDiagnosticHelper();
   private readonly executionPolicy: ToolExecutionPolicy;
@@ -200,7 +236,7 @@ class StreamConsumer {
           emitInlineReasoningDelta(segment.text);
           continue;
         }
-        this.appendTextDelta(
+        appendStreamTextDelta(
           segment.text,
           turnState,
           args.events,
@@ -373,11 +409,15 @@ class StreamConsumer {
     try {
       // 消费 AI SDK fullStream；文本和 reasoning 形成宿主增量，tool-call 进入 ToolExecutor。
       while (true) {
-        const next = await this.readNextStreamPart(
-          streamIterator,
-          args,
-          turnState,
-        );
+        const next = await readNextStreamPartWithIdleTimeout(streamIterator, {
+          abortSignal: args.abortSignal,
+          idleStallTimeoutMs: args.idleStallTimeoutMs,
+          model: args.model,
+          requestFingerprint: args.requestFingerprint,
+          source: "stream-idle-stall",
+          timerName: "StreamConsumer.idleStall",
+          turn: turnState.turn,
+        });
         if (next.done) {
           shouldReturnStreamIterator =
             args.abortSignal.aborted && shouldReturnStreamIterator;
@@ -568,7 +608,7 @@ class StreamConsumer {
         diagnostics,
         args.providerTurnReducer,
       );
-      this.emitUsageTelemetry(diagnostics, turnState, args);
+      emitStreamUsageTelemetry(diagnostics, turnState, args);
       captureInterruptedPartial();
       this.log.warn(
         "provider finalized an invalid tool-call input; rejecting before execution",
@@ -656,7 +696,7 @@ class StreamConsumer {
               ),
             contextPressure: args.contextPressure,
           });
-          this.emitUsageTelemetry(diagnostics, turnState, args);
+          emitStreamUsageTelemetry(diagnostics, turnState, args);
           throw buildEmptyAssistantStreamError({
             diagnostics,
             contextPressure: args.contextPressure,
@@ -676,7 +716,7 @@ class StreamConsumer {
           diagnostics:
             this.streamDiagnosticHelper.summarizeStreamDiagnostics(diagnostics),
         });
-        this.emitUsageTelemetry(diagnostics, turnState, args);
+        emitStreamUsageTelemetry(diagnostics, turnState, args);
         throw buildEmptyAssistantStreamError({
           diagnostics,
           contextPressure: args.contextPressure,
@@ -711,7 +751,7 @@ class StreamConsumer {
       outputTokens: diagnostics.outputTokens,
       reasoningTokens: diagnostics.reasoningTokens,
     });
-    this.emitUsageTelemetry(diagnostics, turnState, args);
+    emitStreamUsageTelemetry(diagnostics, turnState, args);
     if (
       !turnState.hasToolUse &&
       isRecoverableOutputTruncationDiagnostic(finishDiagnostic)
@@ -780,95 +820,6 @@ class StreamConsumer {
       providerToolName: toolName,
       requestAdvertised: true,
     };
-  }
-
-  private async readNextStreamPart(
-    iterator: AsyncIterator<TextStreamPart<ToolSet>>,
-    args: ConsumeAssistantStreamArgs,
-    turnState: StreamConsumerTurnState,
-  ): Promise<IteratorResult<TextStreamPart<ToolSet>>> {
-    return readNextStreamPartWithIdleTimeout(iterator, {
-      abortSignal: args.abortSignal,
-      idleStallTimeoutMs: args.idleStallTimeoutMs,
-      model: args.model,
-      requestFingerprint: args.requestFingerprint,
-      source: "stream-idle-stall",
-      timerName: "StreamConsumer.idleStall",
-      turn: turnState.turn,
-    });
-  }
-
-  private emitUsageTelemetry(
-    diagnostics: StreamDiagnostics,
-    turnState: StreamConsumerTurnState,
-    args: ConsumeAssistantStreamArgs,
-  ): void {
-    // 观测富化（#37 阶段 C 片 1）：finishReason / 请求指纹与 usage 无关，先于 usage 门捕获，
-    // 供 SoloLoop 挂 model span（即便供应方未回 token，收敛态仍应带 finishReason/fingerprint）。
-    turnState.finishReason = toNullable(
-      diagnostics.finishReasons[0] ?? diagnostics.rawFinishReasons[0],
-    );
-    turnState.requestFingerprint = readRequestFingerprintId(
-      args.requestFingerprint,
-    );
-
-    const hasProviderUsage =
-      isNotNull(diagnostics.inputTokens) ||
-      isNotNull(diagnostics.outputTokens) ||
-      isNotNull(diagnostics.totalTokens) ||
-      isNotNull(diagnostics.reasoningTokens) ||
-      isNotNull(toNullable(diagnostics.cacheReadInputTokens)) ||
-      isNotNull(toNullable(diagnostics.cacheWriteInputTokens)) ||
-      isNotNull(diagnostics.costUsd);
-
-    if (!hasProviderUsage) return;
-
-    // 把真实输入 token 暴露给上层 turn helper，用于 MMU 用量校准反馈。
-    turnState.inputTokens = diagnostics.inputTokens;
-    // 观测富化：outputTokens / costUsd 与 inputTokens 同源同回传通道（#37 阶段 C 片 1）。
-    turnState.outputTokens = diagnostics.outputTokens;
-    turnState.costUsd = diagnostics.costUsd;
-    turnState.reasoningTokens = diagnostics.reasoningTokens;
-    turnState.cacheReadInputTokens = toNullable(diagnostics.cacheReadInputTokens);
-    turnState.cacheWriteInputTokens = toNullable(diagnostics.cacheWriteInputTokens);
-    const usage: ProviderTurnUsage = {};
-    if (isPresent(diagnostics.inputTokens)) {
-      usage.inputTokens = diagnostics.inputTokens;
-    }
-    if (isPresent(diagnostics.outputTokens)) {
-      usage.outputTokens = diagnostics.outputTokens;
-    }
-    if (isPresent(diagnostics.totalTokens)) {
-      usage.totalTokens = diagnostics.totalTokens;
-    }
-    args.providerTurnReducer?.apply({
-      type: "usage",
-      ...usage,
-    });
-
-    args.events.emitRuntime?.(
-      ChatRuntimeEvents.usageTelemetry({
-        turn: turnState.turn,
-        model: args.model,
-        inputTokens: diagnostics.inputTokens,
-        outputTokens: diagnostics.outputTokens,
-        visibleOutputTokens: diagnostics.visibleOutputTokens,
-        totalTokens: diagnostics.totalTokens,
-        reasoningTokens: diagnostics.reasoningTokens,
-        cachedInputTokens: diagnostics.cachedInputTokens,
-        cacheReadInputTokens: diagnostics.cacheReadInputTokens,
-        cacheWriteInputTokens: diagnostics.cacheWriteInputTokens,
-        costUsd: diagnostics.costUsd,
-        finishReasons: isEmpty(diagnostics.finishReasons)
-          ? undefined
-          : [...diagnostics.finishReasons],
-        rawFinishReasons: isEmpty(diagnostics.rawFinishReasons)
-          ? undefined
-          : [...diagnostics.rawFinishReasons],
-        source: isNull(diagnostics.costUsd) ? "provider" : "gateway-cost",
-        confidence: "high",
-      }),
-    );
   }
 
   private recordAbnormalFinishReasonDiagnostic(
@@ -959,38 +910,12 @@ class StreamConsumer {
     };
   }
 
-  private appendTextDelta(
-    text: string,
-    turnState: StreamConsumerTurnState,
-    events: Pick<StreamConsumerEvents, "emitTextDelta">,
-    appendCurrentText: (text: string) => void,
-    providerTurnReducer?: ProviderTurnRecorder,
-  ): void {
-    if (!text) return;
-
-    appendCurrentText(text);
-    turnState.accumulatedText += text;
-    turnState.hasVisibleOutput = true;
-    providerTurnReducer?.apply({ type: "assistant-text-delta", text });
-    events.emitTextDelta(text);
-  }
-
   private isToolConcurrencySafe(
     toolName: string,
     input: Record<string, unknown>,
   ): boolean {
     return this.executionPolicy.resolveConcurrencySafe(toolName, input);
   }
-}
-
-/**
- * 从传入的请求指纹取稳定 id 字符串（{@link ProviderRequestFingerprint} 的 `id`），供 model span
- * 的 `requestFingerprint` 字段（与 context-replays 对齐）。类型是 `unknown`，非对象/无 id 返回 null。
- */
-function readRequestFingerprintId(fingerprint: unknown): Nullable<string> {
-  if (!isObject(fingerprint)) return null;
-  const id = (fingerprint as { id?: unknown }).id;
-  return isString(id) ? id : null;
 }
 
 export { StreamConsumer };

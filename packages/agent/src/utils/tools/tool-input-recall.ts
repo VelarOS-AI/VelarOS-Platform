@@ -1,11 +1,15 @@
 import type { ContextPayloadStore } from '../../contract/requires.js'
-import { createContextPayloadRef } from '../../impl/context/InMemoryContextPayloadStore'
 import { sha256 } from '../context/content-hash'
+import { buildContextPayloadRef } from '../context/payload-ref'
 
 import { findHistoryPreviewPlaceholderArgumentPaths } from './history-preview-placeholder'
 import { compactToolInputForModel } from './tool-result-serialization'
 
-/** Save only inputs shortened in model history, before any tool side effect. */
+/**
+ * 只把「在模型历史里被压缩过」的工具入参落一份可召回的载荷，而且必须赶在工具产生任何副作用之前存。
+ *
+ * 没被压缩的入参模型自己就看得全，不必占存储；存晚了则可能工具已经改过东西、原参数却没留下，失败后无从复用。
+ */
 export async function persistToolInputForRecall(input: {
   store: ContextPayloadStore
   sessionId: string
@@ -28,7 +32,7 @@ export async function persistToolInputForRecall(input: {
   await input.store.put({
     sessionId: input.sessionId,
     hash,
-    payloadRef: createContextPayloadRef(input.sessionId, hash),
+    payloadRef: buildContextPayloadRef(input.sessionId, hash),
     toolCallId: ref,
     toolName: input.toolName,
     serializedResult,

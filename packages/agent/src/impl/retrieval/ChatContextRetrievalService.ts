@@ -1,31 +1,26 @@
 import {
   isEmpty,
-  isFiniteNumber,
   isNotNull,
-  isPositiveNumber,
-  numberOrNull,
   optionalWhen,
   toNullable,
 } from "@velaros-ai/core";
 
 import type { RetrievalPayloadStorePort, RetrievalStateStorePort } from '../../contract/requires.js'
-import type { ChatContextReadEvidenceRequest, ChatContextReadEvidenceResult, ChatContextReadToolPayloadRequest, ChatContextRetrievalIndexDiagnostics, ChatContextRetrievalIndexSourceFingerprint, ChatContextRetrievedPayload, ChatContextRetrievePayloadRequest, ChatContextSearchConversationHistoryItem, ChatContextSearchConversationHistoryRequest, ChatContextSearchConversationHistoryResult, ChatContextSearchTerminalOutputItem, ChatContextSearchTerminalOutputRequest, ChatContextSearchTerminalOutputResult,SessionLineageContext } from '../../types/agent.js'
-import type { ContextGovernanceSessionRegistryApi, ResidencyLedgerView } from '../../types/residency.js'
-import type { CachedRetrievalIndex, ChatContextRetrievalIndexSnapshot, ChatContextRetrievalIndexStore, ChatContextRetrievalIndexToolPayload, LogReadSnippet, ReferencedLogPath,ResolvedLedgerRecord, RetrievalIndexBuildTelemetry } from '../../types/retrieval.js'
-import {
-  normalizeSessionLineageId,
-  normalizeSessionLineageIdList,
-} from "../../utils/chat/session-lineage";
+import type { ChatContextReadEvidenceRequest, ChatContextReadEvidenceResult, ChatContextReadToolPayloadRequest, ChatContextRetrievalIndexDiagnostics, ChatContextRetrievalIndexSourceFingerprint, ChatContextRetrievedPayload, ChatContextRetrievePayloadRequest, ChatContextSearchConversationHistoryItem, ChatContextSearchConversationHistoryRequest, ChatContextSearchConversationHistoryResult, ChatContextSearchTerminalOutputItem, ChatContextSearchTerminalOutputRequest, ChatContextSearchTerminalOutputResult } from '../../types/agent.js'
+import type { ContextGovernanceSessionRegistryApi } from '../../types/residency.js'
+import type { CachedRetrievalIndex, ChatContextRetrievalIndexSnapshot, ChatContextRetrievalIndexStore, ChatContextRetrievalIndexToolPayload, LogReadSnippet, ReferencedLogPath, RetrievalIndexBuildTelemetry } from '../../types/retrieval.js'
 import { compareStableStrings } from "../../utils/residency/determinism";
 import {
   readMessageText,
   readToolResultFacts,
 } from "../../utils/residency/message-facts";
-import { ChatContextRetrievalIndexVersion, contextRetrievalFingerprintIsComparable, contextRetrievalFingerprintsEqual } from "../../utils/retrieval/index-snapshot";
+import { contextRetrievalFingerprintIsComparable, contextRetrievalFingerprintsEqual, isServiceableCachedRetrievalIndex } from "../../utils/retrieval/index-snapshot";
+import { findLedgerRecordByRef } from "../../utils/retrieval/ledger-records";
+import { normalizeRetrievalLimit } from "../../utils/retrieval/limits";
 import { paginateJsonPathSelection, paginateSerializedText } from "../../utils/retrieval/pagination";
 import { chatSearchRanking } from "../../utils/retrieval/ranking";
-import { ContextRetrievalReferenceReader } from "../../utils/retrieval/reference-reader";
-import { contextRetrievalReferences } from "../../utils/retrieval/references";
+import { resolveRetrievalScopeId } from "../../utils/retrieval/scope";
+import { buildEmptySearchRetryHints, combineSearchWarnings } from "../../utils/retrieval/search-hints";
 import { chatSearchText } from "../../utils/retrieval/text";
 
 import { ContextRetrievalBoundedCounter } from "./ContextRetrievalBoundedCounter"
@@ -39,6 +34,8 @@ import {
   ContextRetrievalQueryTraceStore,
   type ContextRetrievalQueryTraceStoreOptions,
 } from "./ContextRetrievalQueryTraceStore";
+import { ContextRetrievalReferenceReader } from "./ContextRetrievalReferenceReader";
+import { contextRetrievalReferences } from "./ContextRetrievalReferences";
 
 const DefaultRetrievalCountEntryLimit = 4_096;
 const DefaultIndexBuildTelemetrySessionLimit = 512;
@@ -51,12 +48,47 @@ const DefaultTerminalOutputPayloadCandidateLimit = 64;
  */
 const DefaultCachedIndexSessionLimit = 8;
 
+/** 建 `ChatContextRetrievalService` 时给的一组进程内容量上限；全部可以不传，不传就用本文件的缺省值。 */
 interface ChatContextRetrievalServiceOptions {
+  /** handle/证据重复读取计数最多记多少个键，缺省 4096；键是「会话+scope+handle+jsonPath+offset」，满了按最近使用淘汰，被淘汰的 handle 重新从 1 数起（重复告警会漏报一次）。 */
   maxRetrievalCountEntries?: LooseOptional<number>;
+  /** 索引构建遥测最多留多少个会话，缺省 512；只影响 `getRetrievalIndexDiagnostics` 能不能报出上次构建的来源和耗时。 */
   maxIndexBuildTelemetrySessions?: LooseOptional<number>;
+  /** 搜终端输出时，每次最多挑多少条工具 payload 去读盘，缺省 64；这是读盘量的闸门，调大更全但更慢。 */
   maxTerminalOutputPayloadCandidates?: LooseOptional<number>;
+  /** 内存里最多缓存几个会话的索引快照，缺省 8；一份快照长会话可达数 MB，热点其实只有当前在跑的那个，调大只是拿内存换命不中的概率。 */
   maxCachedIndexSessions?: LooseOptional<number>;
+  /** 转给内部 `ContextRetrievalQueryTraceStore` 的容量上限，管查询计数表和每会话 trace 条数。 */
   queryTrace?: ContextRetrievalQueryTraceStoreOptions;
+}
+
+/**
+ * 单会话上下文检索的门面：按句柄取回正文、在历史消息和终端输出里搜、读证据、报索引诊断、会话没了就清场。
+ * IPC 层直接调它，模型面的 `context:*` 工具最终都落到这几个方法上。
+ *
+ * 实现是 `ChatContextRetrievalService`，宿主进程持一个；它自己编排索引的加载与重建、句柄的重复计数，
+ * 具体活分给 `ContextRetrievalIndexBuilder`、`ContextRetrievalPayloadReader` 和 `ContextRetrievalQueryTraceStore`。
+ * 索引快照按会话缓存在内存里，指纹一致就复用。
+ *
+ * 失败语义统一是「不抛，带着解释返回」：句柄找不到给 `found: false` 加可用候选，搜不到给 `retryHints`，
+ * 第二次取同一个东西给 `warning`——都是为了让模型自纠，而不是拿着幻觉 id 空转。
+ * 它只看**一个 sessionId** 的会话上下文；跨会话扫持久层是 `SessionSearchService` 的事。
+ */
+export interface ChatContextRetrievalServiceApi {
+  /** 按动态上下文 handle 取回完整正文：`tool:`/`ctx-payload:`/`ctx-user-payload:`/`input:` 走工具 payload，`message:` 走历史消息，前两条都没命中时兜底问驻留账本（全保真层被 GC 不等于内容没了），再不行返回 `found: false` + `kind: 'unknown'` 并列出有效句柄样本。同一 scope 内重复取同一 handle 会带 warning，但翻页续读（offset 不同）不算重复。 */
+  retrieveContextPayload(request: ChatContextRetrievePayloadRequest): Promise<ChatContextRetrievedPayload>;
+  /** 在当前会话已索引的消息里做关键词搜索（无向量）：按 `searchableText` 打分并带时间衰减，得分不为正的丢掉，按分数和消息序号降序取前 maxResults。返回命中项和这次搜索的 trace；一条没搜到时给出改写查询的 retryHints。 */
+  searchConversationHistory(request: ChatContextSearchConversationHistoryRequest): Promise<ChatContextSearchConversationHistoryResult>;
+  /** 读一条 Context OS 证据记录，只给截断后的摘录，不自动展开全文；命中时附一个 `payloadHandleId` 供后续 retrieve 取全文。记录生命周期是 stale/reread-required 时额外带过期 warning；找不到时列出现有证据样本供自纠。 */
+  readEvidence(request: ChatContextReadEvidenceRequest): Promise<ChatContextReadEvidenceResult>;
+  /** 便捷入口：用 `payloadRef` 或 `toolCallId` 拼出句柄再走 `retrieveContextPayload`，payloadRef 优先。传进来的 toolCallId 已经带 `tool:` 前缀时不会再加一层。 */
+  readToolPayload(request: ChatContextReadToolPayloadRequest): Promise<ChatContextRetrievedPayload>;
+  /** 在工具结果引用到的内部命令日志里搜：和搜历史不同，这条路要**读盘**，所以先按候选上限挑一批 payload，再对「可搜文本+路径+日志正文」打分。命中项带 logPath、是否被截断，以及读盘层自己的 warning。 */
+  searchTerminalOutput(request: ChatContextSearchTerminalOutputRequest): Promise<ChatContextSearchTerminalOutputResult>;
+  /** 取这个会话的索引诊断：新鲜度、上次从哪儿加载的、构建耗时、最近几条查询 trace。索引报告不新鲜时会先触发一次重建再读。宿主没提供诊断端口时返回 null。 */
+  getRetrievalIndexDiagnostics(sessionId: string): Promise<Nullable<ChatContextRetrievalIndexDiagnostics>>;
+  /** 硬失效通道：会话被删除或重置时，丢掉这个 sessionId 的缓存快照、构建遥测和在飞的加载。不调的话同名会话复用、或目录被原样恢复成旧 mtime 时，进程内会继续供应上一段对话的索引。幂等，空 id 直接忽略。 */
+  invalidateSession(sessionId: LooseOptional<string>): void;
 }
 
 /**
@@ -80,7 +112,7 @@ interface ChatContextRetrievalServiceOptions {
  * ## 与 SessionSearchService 的区别
  * 本服务仅操作**单个 `sessionId`** 的会话上下文索引；`SessionSearchService` 跨会话扫持久层。
  */
-class ChatContextRetrievalService {
+class ChatContextRetrievalService implements ChatContextRetrievalServiceApi {
   /**
    * handle / evidence 重复读取计数。
    * 键：`{sessionId}:{retrievalScopeId}:{handleId}` 或 `…:evidence:{evidenceId}`。
@@ -129,7 +161,7 @@ class ChatContextRetrievalService {
     options: ChatContextRetrievalServiceOptions = {},
   ) {
     this.retrievalCounts = new ContextRetrievalBoundedCounter(
-      this.normalizeLimit(
+      normalizeRetrievalLimit(
         options.maxRetrievalCountEntries,
         DefaultRetrievalCountEntryLimit,
       ),
@@ -138,17 +170,17 @@ class ChatContextRetrievalService {
       options.queryTrace,
     );
     this.indexBuildTelemetryBySession = new ContextRetrievalBoundedRecentMap(
-      this.normalizeLimit(
+      normalizeRetrievalLimit(
         options.maxIndexBuildTelemetrySessions,
         DefaultIndexBuildTelemetrySessionLimit,
       ),
     );
-    this.terminalOutputPayloadCandidateLimit = this.normalizeLimit(
+    this.terminalOutputPayloadCandidateLimit = normalizeRetrievalLimit(
       options.maxTerminalOutputPayloadCandidates,
       DefaultTerminalOutputPayloadCandidateLimit,
     );
     this.cachedIndexBySession = new ContextRetrievalBoundedRecentMap(
-      this.normalizeLimit(
+      normalizeRetrievalLimit(
         options.maxCachedIndexSessions,
         DefaultCachedIndexSessionLimit,
       ),
@@ -182,7 +214,7 @@ class ChatContextRetrievalService {
     const sessionId = request.sessionId.trim();
     const handleId = request.handleId.trim();
     const jsonPath = request.jsonPath?.trim() || null;
-    const retrievalScopeId = this.resolveRetrievalScopeId(
+    const retrievalScopeId = resolveRetrievalScopeId(
       sessionId,
       request.retrievalScopeId,
       request.sessionLineage,
@@ -330,7 +362,7 @@ class ChatContextRetrievalService {
     const session = this.governanceSessions.peek(input.sessionId);
     if (!session) return null;
 
-    const resolved = this.findLedgerRecordByRef(session.ledger, input.handleId);
+    const resolved = findLedgerRecordByRef(session.ledger, input.handleId);
     if (!resolved) return null;
 
     const record = resolved.record;
@@ -508,69 +540,6 @@ class ChatContextRetrievalService {
     };
   }
 
-  /**
-   * 账本记录的 ref 解析：认记录 id、payloadRef、toolCallId（含 `tool:` 前缀形态）与折叠信封的
-   * excerpt.ref —— 与 `ContextGovernanceSession.recordFault` 的缺页记账口径逐条对齐
-   * （那边认哪几种，这边就必须能取回哪几种，否则会出现"记了 fault 却取不回"的错位）。
-   */
-  private findLedgerRecordByRef(
-    ledger: ResidencyLedgerView,
-    ref: string,
-  ): Nullable<ResolvedLedgerRecord> {
-    const key = ref.trim();
-    if (!key) return null;
-
-    const direct = ledger.get(key);
-    if (direct)
-      return {
-        record: direct,
-        payloadRef: direct.payloadRef,
-        toolCallId: direct.toolCallId,
-        toolName: direct.toolName,
-      };
-
-    const bare = key.startsWith("tool:") ? key.slice("tool:".length) : key;
-    // **从新往旧扫**：同一个 toolCallId 会同时出现在 tool-call 与 tool-result 两条记录上，
-    // 正序扫必然先撞上只有参数、没有正文的那条调用记录（模型要的是结果）。倒序还顺带让
-    // "最近一次出现"胜出，符合模型手里的 ref 总是来自最近投影这一事实。
-    const records = ledger.list();
-    for (let index = records.length - 1; index >= 0; index -= 1) {
-      const record = records[index]!;
-      if (record.payloadRef === key || record.excerpt?.ref === key)
-        return {
-          record,
-          payloadRef: record.payloadRef,
-          toolCallId: record.toolCallId,
-          toolName: record.toolName,
-        };
-
-      // per-part 命中优先用**这一份**结果的 payloadRef：一条 role:'tool' 消息可装 N 份结果，
-      // 用记录级 ref 会把第 2..N 份指向第一份的 payload（S2 修的 V12 同款错位）。
-      const part = record.toolParts.find(
-        (candidate) =>
-          candidate.toolCallId === bare ||
-          candidate.payloadRef === key ||
-          candidate.excerpt?.ref === key,
-      );
-      if (part)
-        return {
-          record,
-          payloadRef: part.payloadRef,
-          toolCallId: part.toolCallId,
-          toolName: part.toolName,
-        };
-      if (record.toolCallId === bare)
-        return {
-          record,
-          payloadRef: record.payloadRef,
-          toolCallId: record.toolCallId,
-          toolName: record.toolName,
-        };
-    }
-
-    return null;
-  }
-
   /** 有效句柄样本(≤10):动态工具 payload handle + evidence id,供召回失败时模型自纠。 */
   private async listValidHandleSamples(sessionId: string): Promise<string[]> {
     try {
@@ -602,7 +571,7 @@ class ChatContextRetrievalService {
   ): Promise<ChatContextSearchConversationHistoryResult> {
     const sessionId = request.sessionId.trim();
     const query = request.query.trim();
-    const retrievalScopeId = this.resolveRetrievalScopeId(
+    const retrievalScopeId = resolveRetrievalScopeId(
       sessionId,
       request.retrievalScopeId,
       request.sessionLineage,
@@ -683,7 +652,7 @@ class ChatContextRetrievalService {
         matchReasons: item.matchReasons,
       })),
     });
-    const retryHints = this.buildEmptySearchRetryHints({
+    const retryHints = buildEmptySearchRetryHints({
       kind: "conversation-history",
       matchedCount: matchedItems.length,
       totalCandidates: totalMessages,
@@ -696,7 +665,7 @@ class ChatContextRetrievalService {
       items,
       trace,
       retryHints: isEmpty(retryHints) ? undefined : retryHints,
-      warning: this.combineSearchWarnings(trace.warning, retryHints),
+      warning: combineSearchWarnings(trace.warning, retryHints),
     };
   }
 
@@ -713,7 +682,7 @@ class ChatContextRetrievalService {
   ): Promise<ChatContextReadEvidenceResult> {
     const sessionId = request.sessionId.trim();
     const evidenceId = request.evidenceId.trim();
-    const retrievalScopeId = this.resolveRetrievalScopeId(
+    const retrievalScopeId = resolveRetrievalScopeId(
       sessionId,
       request.retrievalScopeId,
       request.sessionLineage,
@@ -828,7 +797,7 @@ class ChatContextRetrievalService {
   ): Promise<ChatContextSearchTerminalOutputResult> {
     const sessionId = request.sessionId.trim();
     const query = request.query.trim();
-    const retrievalScopeId = this.resolveRetrievalScopeId(
+    const retrievalScopeId = resolveRetrievalScopeId(
       sessionId,
       request.retrievalScopeId,
       request.sessionLineage,
@@ -926,7 +895,7 @@ class ChatContextRetrievalService {
         matchReasons: item.matchReasons,
       })),
     });
-    const retryHints = this.buildEmptySearchRetryHints({
+    const retryHints = buildEmptySearchRetryHints({
       kind: "terminal-output",
       matchedCount: sortedItems.length,
       totalCandidates: totalLogReferences,
@@ -938,7 +907,7 @@ class ChatContextRetrievalService {
       items: returnedItems,
       trace,
       retryHints: isEmpty(retryHints) ? undefined : retryHints,
-      warning: this.combineSearchWarnings(trace.warning, retryHints),
+      warning: combineSearchWarnings(trace.warning, retryHints),
     };
   }
 
@@ -1029,7 +998,7 @@ class ChatContextRetrievalService {
     const cached = this.cachedIndexBySession.get(normalizedSessionId);
     if (
       cached &&
-      this.isServiceableCachedIndex(cached, normalizedSessionId) &&
+      isServiceableCachedRetrievalIndex(cached, normalizedSessionId) &&
       contextRetrievalFingerprintsEqual(cached.fingerprint, fingerprint)
     ) {
       this.indexBuildTelemetryBySession.set(normalizedSessionId, {
@@ -1089,22 +1058,6 @@ class ChatContextRetrievalService {
     );
   }
 
-  /**
-   * 缓存条目自校验：快照的身份与 schema 版本必须与当前要的这一份对得上。
-   *
-   * 指纹只回答"源变没变"，回答不了"这份快照是谁的、还是不是当前结构"。同一 sessionId 复用、
-   * 或索引 schema 升级后旧条目继续服役，都是零报错的静默错答（审计 R8）。
-   */
-  private isServiceableCachedIndex(
-    cached: CachedRetrievalIndex,
-    sessionId: string,
-  ): boolean {
-    return (
-      cached.snapshot.sessionId === sessionId &&
-      cached.snapshot.version === ChatContextRetrievalIndexVersion
-    );
-  }
-
   private cacheRetrievalIndex(
     sessionId: string,
     snapshot: ChatContextRetrievalIndexSnapshot,
@@ -1156,50 +1109,6 @@ class ChatContextRetrievalService {
       .map((item) => item.toolPayload);
   }
 
-  private buildEmptySearchRetryHints(input: {
-    kind: "conversation-history" | "terminal-output";
-    matchedCount: number;
-    totalCandidates: number;
-  }): string[] {
-    if (input.matchedCount > 0) return [];
-
-    const hints = [
-      "0 条召回不代表事件没有发生；只表示当前已索引范围和本次 query 没命中。",
-      "请换用更少、更罕见的文件名、符号名、错误指纹或用户原话关键词重新搜索。",
-    ];
-
-    if (input.totalCandidates <= 0) {
-      hints.push(
-        input.kind === "terminal-output"
-          ? "当前会话没有可搜索的内部终端日志引用；需要命令输出时应先确认相关工具结果是否保存了 logPath。"
-          : "当前会话还没有可搜索的历史消息；需要当前状态时请改用对应的注入检查能力。",
-      );
-    }
-
-    if (input.kind === "terminal-output") {
-      hints.push(
-        "terminal 搜索只覆盖内部命令日志；如果要找对话结论、普通工具摘要或保存 payload，请用 context:recall kind=conversation/all 或按 ref 精确取回。",
-      );
-    } else {
-      hints.push(
-        "conversation 搜索只覆盖已索引聊天记录；如果要找命令输出或测试日志，请用 context:recall kind=terminal/all。",
-      );
-    }
-
-    return hints;
-  }
-
-  private combineSearchWarnings(
-    traceWarning: LooseOptional<string>,
-    retryHints: string[],
-  ): LooseOptional<string> {
-    const parts = [traceWarning, ...retryHints].filter((part): part is string =>
-      Boolean(part?.trim()),
-    );
-
-    return isEmpty(parts) ? null : parts.join(" ");
-  }
-
   private async readReferencedLogsOnce(input: {
     references: ReferencedLogPath[];
     cacheByPath: Map<string, LogReadSnippet>;
@@ -1235,54 +1144,6 @@ class ChatContextRetrievalService {
       .filter((snippet): snippet is LogReadSnippet => isNotNull(snippet));
   }
 
-  private resolveRetrievalScopeId(
-    sessionId: string,
-    retrievalScopeId: LooseOptional<string>,
-    lineage: LooseOptional<SessionLineageContext>,
-  ): string {
-    const baseScope = retrievalScopeId?.trim() || sessionId;
-    const lineageScope = this.buildLineageScopeKey(sessionId, lineage);
-    return [baseScope, lineageScope]
-      .filter((item): item is string => !!item)
-      .join(":");
-  }
-
-  private buildLineageScopeKey(
-    sessionId: string,
-    lineage: LooseOptional<SessionLineageContext>,
-  ): Nullable<string> {
-    const lineageSessionId = lineage?.sessionId?.trim();
-    if (!lineage || !lineageSessionId || lineageSessionId !== sessionId)
-      return null;
-
-    const branchId =
-      normalizeSessionLineageId(lineage.activeBranchId) || "branch:unknown";
-    const checkpointId =
-      normalizeSessionLineageId(lineage.activeCheckpointId) || "head";
-    const cutoffTimestamp = numberOrNull(lineage.cutoffTimestamp);
-    const cutoff = isPositiveNumber(cutoffTimestamp)
-      ? String(cutoffTimestamp)
-      : "none";
-    const visibleBranchKey = normalizeSessionLineageIdList(
-      lineage.visibleBranchIds,
-    ).join(",");
-
-    return [
-      `branch=${branchId}`,
-      `checkpoint=${checkpointId}`,
-      `cutoff=${cutoff}`,
-      `visible=${visibleBranchKey}`,
-    ].join("|");
-  }
-
-  private normalizeLimit(
-    value: LooseOptional<number>,
-    fallback: number,
-  ): number {
-    if (!isFiniteNumber(value)) return fallback;
-
-    return Math.max(1, Math.floor(value));
-  }
 }
 
 export { ChatContextRetrievalService, type ChatContextRetrievalServiceOptions };

@@ -24,7 +24,6 @@
 // 派发点与 seam 闭集见 `../mods/AgentModSeams.ts` 与 docs/agent-mod-trunk.md；
 // 策略门与审批语义见 `./ExecutionPolicy.ts`。
 import {
-  isArray,
   isEmpty,
   isPlainObject,
   isPresent,
@@ -36,19 +35,17 @@ import {
 } from "@velaros-ai/core";
 import { AppError } from "@velaros-ai/core/error";
 import { logRuntime } from "@velaros-ai/core/logger";
-import { TimerScope } from "@velaros-ai/core/utils/TimerScope";
 
 import type { ContextPayloadStore, KernelToolOutputStore, ToolResultMiddleware } from '../../contract/requires.js'
-import type { ExecutionSpanStatus } from '../../types/agent.js'
 import type { ToolSpanOpener } from '../../types/ledgers.js'
 import type { KernelToolLoopGuardApi } from '../../types/loop.js'
 import type { AgentModSeamDispatcherApi } from '../../types/mods.js'
 import type { ProviderTurnSnapshot } from '../../types/records.js'
-import type { ActiveToolExecutionContext, KernelToolFailureBatchEntry, ScheduledTool, ToolExecutionPolicyContext, ToolExecutionPrepared, ToolExecutionSettlement, ToolExecutorEvents, ToolFailureBuildOptions, ToolFailureResult,ToolInputReuseContext, ToolResult } from '../../types/tools.js'
+import type { ActiveToolExecutionContext, ScheduledTool, ToolExecutionPolicyContext, ToolExecutionPrepared, ToolExecutionSettlement, ToolExecutorEvents,ToolInputReuseContext, ToolResult } from '../../types/tools.js'
 import { resolveToolResultMiddlewares } from "../../utils/capabilities";
 import { buildToolFailureResult as buildStructuredToolFailureResult } from "../../utils/tools/execution-policy-failures";
-import { findHistoryPreviewPlaceholderArgumentPaths } from "../../utils/tools/history-preview-placeholder";
 import { liftGenericModelContent } from "../../utils/tools/model-image-lift";
+import { buildExecutionAppError, buildInputReuseFailure, createToolAbortSettlement, endToolSpan, readProviderToolArgs, toLoopGuardFailureBatch } from "../../utils/tools/tool-execution-runtime";
 import { persistToolInputForRecall } from "../../utils/tools/tool-input-recall";
 import { completeProviderTurnSnapshot, type ProviderTurnEventReducer } from "../records/ProviderTurnEventReducer";
 
@@ -63,34 +60,12 @@ const ToolAbortSettlementGraceMs = 250;
 const ToolCancelledByUserReason = "Cancelled by user";
 const MaxConcurrentConcurrencySafeTools = 8;
 
-// 历史压缩后的预览不能作为源码重放：说明缺失内容与恢复路径，在执行前拒绝。
-function buildHistoryPlaceholderArgsFailure(
-  toolName: string,
-  placeholderPaths: string[],
-): { ok: false; reason: string; result: ToolFailureResult } {
-  const shownPaths = placeholderPaths.slice(0, 10);
-  const reason = `参数 ${shownPaths.join("、")} 是对话历史里的省略占位串（"[history preview omitted …]"），不是真实内容，工具未执行。历史中的旧调用只保留了参数预览，原文不在上下文里。`;
-  return {
-    ok: false,
-    reason,
-    result: buildStructuredToolFailureResult(
-      "history_placeholder_argument",
-      reason,
-      toolName,
-      {
-        code: "VALIDATION",
-        details: { placeholderPaths: shownPaths },
-        nextActions: [
-          "这些参数来自压缩后的历史预览，缺少可执行的完整内容；恢复真实内容后重新调用。",
-          "需要旧内容时先重新读取目标文件或片段，以读到的原文为准构造参数。",
-          "历史调用带有 __historyInputRef 时，用 context:recall 的 ref 与 jsonPath 找回原始参数；按返回的 nextOffset 续读。",
-        ],
-      },
-    ),
-  };
-}
-
-interface ToolExecutorPayloadContext {
+/**
+ * 执行上下文里可能捎带的 payload 店位面：宿主装配时给了就用它归档超预算的工具输出，
+ * 没给就退回内存店。上下文类型本身不声明这项，所以这里按「可能有」窄化一次再读。
+ */
+export interface ToolExecutorPayloadContext {
+  /** 宿主注入的上下文 payload 店；缺席（不传或 null）时本轮工具输出不落盘，只走内存句柄。 */
   contextPayloadStore?: LooseOptional<ContextPayloadStore>;
 }
 
@@ -99,6 +74,50 @@ interface ToolExecutorPayloadContext {
  * 界面算单个工具耗时时优先用它。
  */
 const ToolExecutionStartedAtMetadataKey = "executionStartedAt";
+
+/**
+ * 一轮工具调用的执行中枢：从模型吐出 tool-call 到结果回到历史之间的全部编排都归它。
+ *
+ * **按轮建、按轮弃**——它持有本轮的队列、兄弟取消控制器、终止错误与供应商回合快照，
+ * 不跨轮复用。片段一到就入队开跑（不等模型流收尾），并发安全的并行、有副作用的串行，
+ * 结果一律按**接收顺序**返回，保证下一轮历史里调用与结果不错位。
+ * 所有成功/失败/中止路径都在内部的唯一终结点收敛，因此调用方只需要下面这五个口子。
+ */
+export interface ToolExecutorApi {
+  /**
+   * 换上本轮的供应商回合归约器与快照回调，并把「快照已发」标记清零。
+   * 循环在每轮开始时调一次；不调的话本轮就不产供应商回合快照，执行本身不受影响。
+   */
+  configureProviderTurnReducer(
+    input: ProviderTurnEventReducer,
+    onSnapshot?: LooseOptional<(snapshot: ProviderTurnSnapshot) => void>
+  ): void
+  /**
+   * 收下一次工具调用并立刻尝试开跑：还原真名、读出供应商参数、判定并发安全，然后入队。
+   * 立即返回，不等执行完成——真正的结果要到 `collectAll` 才收齐。
+   * 参数不合法、工具不可见这类问题不在这里抛，会变成一条失败结果按序回到 `collectAll`。
+   */
+  enqueue(
+    toolCallId: string,
+    toolName: string,
+    args: LooseOptional<Record<string, unknown>>,
+    isConcurrencySafe: boolean,
+    authorization?: {
+      requestAdvertised: boolean
+      providerToolName: string
+    }
+  ): void
+  /**
+   * 等本轮所有工具收敛，按接收顺序返回全部结果，顺带过一遍重复失败批次的成环闸并发出回合快照。
+   * 每一次 `enqueue` 都必有一条结果；调度器少给了任何一条都抛 `TOOL_INVARIANT` 让本轮判失败——
+   * 宁可整轮失败，也不能让半截历史写回去破坏 tool-call / tool-result 配对。
+   */
+  collectAll(): Promise<ToolResult[]>
+  /** 取本轮记下的终止错误（用户中止、结果收敛失败等）；没有则返回空。循环据此决定是停整条链还是把错误交给模型自己修。 */
+  getTerminalError(): LooseOptional<AppError>
+  /** 还有没有没跑完的工具（排队中或执行中）；`collectAll` 的等待条件就是它。 */
+  readonly hasPending: boolean
+}
 
 /**
  * 工具执行编排器。
@@ -110,7 +129,7 @@ const ToolExecutionStartedAtMetadataKey = "executionStartedAt";
  * 4. 结果按工具接收顺序输出，保证消息历史一致性
  * 5. 某个工具出错时，取消其他正在执行的同轮工具
  */
-export class ToolExecutor {
+export class ToolExecutor implements ToolExecutorApi {
   private readonly tools: ScheduledTool[] = [];
   private readonly ctx: ToolExecutionPolicyContext;
   private readonly events: ToolExecutorEvents;
@@ -205,7 +224,7 @@ export class ToolExecutor {
       this.ctx.capabilityPorts,
       this.ctx,
     );
-    const providerArgs = this.readProviderToolArgs(canonicalToolName, args);
+    const providerArgs = readProviderToolArgs(canonicalToolName, args);
     const pendingArgs = providerArgs.ok ? providerArgs.args : {};
     const canonicalConcurrencySafe = !providerArgs.ok
       ? false
@@ -282,6 +301,7 @@ export class ToolExecutor {
           executionToolName,
           unavailableDecision.error,
           this.ctx,
+          unavailableDecision.failureKind,
         ),
       }).finally(() => {
         this.releaseEffectiveAdmission(pending);
@@ -340,7 +360,7 @@ export class ToolExecutor {
     if (results.length !== this.tools.length) {
       throw this.terminalError ?? new AppError(
         "TOOL_INVARIANT",
-        "Tool settlement completed without a result for every accepted call.",
+        `工具收敛结束时还有已受理的调用没有结果：本轮受理 ${this.tools.length} 个工具调用，只收回 ${results.length} 条结果。缺结果会让历史里的 tool-call 与 tool-result 配不上对，因此终止本轮，不把半截历史写回去。`,
       );
     }
     this.applyRepeatedFailureBatchGuard(results);
@@ -394,7 +414,7 @@ export class ToolExecutor {
         toolCallId: tool.toolCallId,
         toolName: tool.toolName,
         error: reason,
-        result: this.buildToolFailureResult(
+        result: buildStructuredToolFailureResult(
           "tool_cancelled",
           reason,
           tool.toolName,
@@ -408,7 +428,7 @@ export class ToolExecutor {
         toolCallId: tool.toolCallId,
         toolName: tool.toolName,
         error: reason,
-        result: this.buildToolFailureResult(
+        result: buildStructuredToolFailureResult(
           "tool_cancelled",
           reason,
           tool.toolName,
@@ -451,7 +471,7 @@ export class ToolExecutor {
             toolCallId: tool.toolCallId,
             toolName: tool.toolName,
             error: error.message,
-            result: this.buildInputReuseFailure(tool.toolName, error),
+            result: buildInputReuseFailure(tool.toolName, error, ToolInputReuseNote),
           });
         }
       }
@@ -476,7 +496,7 @@ export class ToolExecutor {
             toolCallId: tool.toolCallId,
             toolName: tool.toolName,
             error: reason,
-            result: this.buildToolFailureResult("tool_cancelled", reason, tool.toolName),
+            result: buildStructuredToolFailureResult("tool_cancelled", reason, tool.toolName),
           });
         }
         if (outcome.args) tool.args = outcome.args;
@@ -486,7 +506,7 @@ export class ToolExecutor {
             toolCallId: tool.toolCallId,
             toolName: tool.toolName,
             error: reason,
-            result: this.buildToolFailureResult(
+            result: buildStructuredToolFailureResult(
               "tool_blocked",
               reason,
               tool.toolName,
@@ -546,6 +566,7 @@ export class ToolExecutor {
             executionToolName,
             decision.error,
             this.ctx,
+            decision.failureKind,
           ),
         });
       }
@@ -574,18 +595,19 @@ export class ToolExecutor {
           toolName: executionToolName,
           args: effectiveArgs,
           error: reason,
-          result: this.buildToolFailureResult(
+          result: buildStructuredToolFailureResult(
             "tool_cancelled",
             reason,
             executionToolName,
           ),
         });
       }
-      const revalidationError = this.executionPolicy.revalidatePreparedExecution(
-        decision.prepared,
-        effectiveArgs,
-      );
-      if (revalidationError) {
+      const revalidationRejection =
+        this.executionPolicy.revalidatePreparedExecution(
+          decision.prepared,
+          effectiveArgs,
+        );
+      if (revalidationRejection) {
         log.warn("tool execute end", {
           name: executionToolName,
           id: tool.toolCallId,
@@ -597,11 +619,12 @@ export class ToolExecutor {
           toolCallId: tool.toolCallId,
           toolName: executionToolName,
           args: effectiveArgs,
-          error: revalidationError,
+          error: revalidationRejection.error,
           result: this.executionPolicy.buildBlockedFailureResult(
             executionToolName,
-            revalidationError,
+            revalidationRejection.error,
             this.ctx,
+            revalidationRejection.failureKind,
           ),
         });
       }
@@ -629,7 +652,7 @@ export class ToolExecutor {
           toolName: executionToolName,
           args: effectiveArgs,
           error: loopGuardMessage,
-          result: this.buildToolFailureResult(
+          result: buildStructuredToolFailureResult(
             "tool_loop_guard",
             loopGuardMessage,
             executionToolName,
@@ -669,7 +692,7 @@ export class ToolExecutor {
         durationMs: Date.now() - startedAt,
       });
     } catch (err) {
-      const appError = this.buildExecutionAppError(
+      const appError = buildExecutionAppError(
         err,
         activeExecutionContext?.toolContext,
       );
@@ -836,13 +859,6 @@ export class ToolExecutor {
     );
   }
 
-  private buildExecutionAppError(
-    error: unknown,
-    _toolContext?: LooseOptional<ToolExecutionPolicyContext>,
-  ): AppError {
-    return AppError.from(error);
-  }
-
   private applyExecutionFailureSideEffects(input: {
     toolName: string;
     args: Record<string, unknown>;
@@ -959,7 +975,7 @@ export class ToolExecutor {
         );
       const finalizationError = new AppError(
         "TOOL_RESULT_FINALIZATION_FAILED",
-        `Tool result finalization failed for "${toolName}". The operation may already have taken effect; inspect its state before retrying.`,
+        `工具 ${toolName} 的结果收敛失败：工具本体可能已经执行并产生了副作用，只是结果没能落地。重试前先确认它的实际状态，不要直接重跑。`,
         error,
       );
       this.applyExecutionFailureSideEffects({
@@ -1000,7 +1016,7 @@ export class ToolExecutor {
       (result): ToolExecutionSettlement => ({ status: "completed", result }),
       (error): ToolExecutionSettlement => ({ status: "failed", error }),
     );
-    const abortSettlement = this.createAbortSettlement(abortSignal);
+    const abortSettlement = createToolAbortSettlement(abortSignal, ToolAbortSettlementGraceMs);
 
     try {
       const settlement = await Promise.race([
@@ -1030,7 +1046,7 @@ export class ToolExecutor {
             toolName,
             args: prepared.effectiveArgs ?? args ?? {},
             error: reason,
-            result: this.buildToolFailureResult(
+            result: buildStructuredToolFailureResult(
               "tool_cancelled",
               reason,
               toolName,
@@ -1048,47 +1064,6 @@ export class ToolExecutor {
     }
   }
 
-  private createAbortSettlement(abortSignal: AbortSignal): {
-    promise: Promise<ToolExecutionSettlement>;
-    cleanup: () => void;
-  } {
-    const timers = new TimerScope({ name: "ToolExecutor.abortSettlement" });
-    let onAbort: Nullable<() => void> = null;
-    let cleaned = false;
-    const promise = new Promise<ToolExecutionSettlement>((resolve) => {
-      const scheduleSettlement = (): void => {
-        if (cleaned) return;
-
-        timers.after(
-          ToolAbortSettlementGraceMs,
-          () => resolve({ status: "aborted" }),
-          {
-            label: "ToolExecutor.abortSettlement.grace",
-          },
-        );
-      };
-
-      if (abortSignal.aborted) {
-        scheduleSettlement();
-        return;
-      }
-
-      onAbort = scheduleSettlement;
-      abortSignal.addEventListener("abort", onAbort, { once: true });
-    });
-
-    return {
-      promise,
-      cleanup: () => {
-        cleaned = true;
-        if (onAbort) {
-          abortSignal.removeEventListener("abort", onAbort);
-        }
-        timers.dispose();
-      },
-    };
-  }
-
   private resolveAbortSettlementReason(): string {
     if (this.siblingErrored && this.siblingAbort.signal.aborted)
       return `Cancelled: sibling tool "${this.siblingErrorName}" failed`;
@@ -1103,7 +1078,7 @@ export class ToolExecutor {
     try {
       return await this.materializeResult(tool, result);
     } catch (error) {
-      const reason = `Tool result finalization failed for "${result.toolName}". The operation may already have taken effect; inspect its state before retrying.`;
+      const reason = `工具 ${result.toolName} 的结果收敛失败：工具本体可能已经执行并产生了副作用，只是结果没能落地。重试前先确认它的实际状态，不要直接重跑。`;
       this.terminalError ??= new AppError("TOOL_RESULT_FINALIZATION_FAILED", reason, error);
       this.siblingErrored = true;
       this.siblingErrorName = result.toolName;
@@ -1116,7 +1091,7 @@ export class ToolExecutor {
       // 发布方可能在提交结果之后才抛错：保留已提交的结果，由历史的所有者通过 getTerminalError() 终止运行。
       if (tool.result) return tool.result;
 
-      const failure = this.buildToolFailureResult(
+      const failure = buildStructuredToolFailureResult(
         "tool_result_finalization_failed", reason, result.toolName,
         { details: { executionError: toNullable(result.error) } },
       );
@@ -1129,7 +1104,7 @@ export class ToolExecutor {
       };
       tool.result = fallback;
       try {
-        this.endToolSpan(tool, fallback);
+        endToolSpan(tool, fallback);
         this.settleProviderTurnTool(fallback);
         this.events.emitToolDone({
           toolCallId: fallback.toolCallId,
@@ -1233,7 +1208,7 @@ export class ToolExecutor {
     // 唯一终结点收敛 tool span：所有终结路径（sibling/abort/blocked/loop-guard/正常/异常）都汇到此。
     // 用未物化的原始 result 派生状态/错误码（结构化失败码在 result.result.error），收敛后置空 handle，
     // 纵使某路径二次 finalize 也不会双闭（防双计时/双落盘）。
-    this.endToolSpan(tool, result);
+    endToolSpan(tool, result);
     this.settleProviderTurnTool(finalResult);
 
     this.events.emitToolDone({
@@ -1250,27 +1225,6 @@ export class ToolExecutor {
       modelContent: finalResult.modelContent,
     });
     return finalResult;
-  }
-
-  /** 收敛一条 tool span（唯一终结点调用；无 handle 直接跳过，端口内部已隔离失败）。 */
-  private endToolSpan(tool: ScheduledTool, result: ToolResult): void {
-    const handle = tool.spanHandle;
-    if (!handle) return;
-    tool.spanHandle = null;
-    const errorCode = this.readToolSpanErrorCode(result);
-    const status: ExecutionSpanStatus = !result.error
-      ? "ok"
-      : errorCode === "tool_cancelled"
-        ? "aborted"
-        : "error";
-    handle.end({ status, errorCode });
-  }
-
-  /** 从结果派生 tool span 结构化错误码（成功 null；取结构化失败的 error 码，否则兜 'ERROR'）。 */
-  private readToolSpanErrorCode(result: ToolResult): Nullable<string> {
-    if (!result.error) return null;
-    const structured = isPlainObject(result.result) ? result.result : null;
-    return isString(structured?.error) ? structured.error : "ERROR";
   }
 
   private createContextPayloadOutputStore(): Nullable<KernelToolOutputStore> {
@@ -1350,94 +1304,12 @@ export class ToolExecutor {
     return trimmed || null;
   }
 
-  private buildToolFailureResult(
-    error: string,
-    reason: string,
-    toolName: string,
-    options: ToolFailureBuildOptions = {},
-  ): ToolFailureResult {
-    return buildStructuredToolFailureResult(error, reason, toolName, options);
-  }
-
-  /** 复用请求本身有误时按参数校验失败回执；原调用仍未被认领就放回同一个 inputReuse，模型只改 changes。 */
-  private buildInputReuseFailure(
-    toolName: string,
-    error: ToolInputReuseError,
-  ): ToolFailureResult & { inputReuse?: { reuse: string; note: string } } {
-    const failure = this.buildToolFailureResult("schema_validation_failed", error.message, toolName, {
-      code: "VALIDATION",
-      details: error.context,
-      nextActions: [error.reusableAttempt
-        ? "原调用没有执行过：保持同一个 reuse，只修正回执指出的那一项 changes 后重试。"
-        : "这次调用不能复用：按原因查看原回执或当前状态，再构造完整参数。"],
-    });
-    if (!error.reusableAttempt) return failure;
-    return { ...failure, inputReuse: { reuse: error.reusableAttempt, note: ToolInputReuseNote } };
-  }
-
-  private readProviderToolArgs(
-    toolName: string,
-    args: unknown,
-  ):
-    | { ok: true; args: Record<string, unknown> }
-    | { ok: false; reason: string; result: ToolFailureResult } {
-    if (!isPresent(args)) return { ok: true, args: {} };
-    if (isPlainObject(args)) {
-      const record = args as Record<string, unknown>;
-      if (["__historyInputOmissions", "__historyInputPreview", "__historyInputRef", "__historyInputRecall", "__toolReceivedFullInput"].some((key) => Object.hasOwn(record, key))) {
-        const reason = "历史参数视图省略了原始字段，不能作为完整工具输入执行；工具未执行。";
-        return {
-          ok: false, reason,
-          result: this.buildToolFailureResult("history_input_preview_argument", reason, toolName, {
-            code: "VALIDATION",
-            details: { inputRef: optionalWhen(isString, record.__historyInputRef) },
-            nextActions: ["用 context:recall 的 ref 与 jsonPath 召回省略字段的完整原文，再构造符合当前 schema 的完整参数；历史视图元数据不属于执行参数。"],
-          }),
-        };
-      }
-      const placeholderPaths = findHistoryPreviewPlaceholderArgumentPaths(record);
-      return isEmpty(placeholderPaths)
-        ? { ok: true, args: record }
-        : buildHistoryPlaceholderArgsFailure(toolName, placeholderPaths);
-    }
-
-    const receivedType = this.describeProviderToolArgsType(args);
-    const reason = `Tool arguments for "${toolName}" must be a JSON object; received ${receivedType}.`;
-    return {
-      ok: false,
-      reason,
-      result: this.buildToolFailureResult(
-        "schema_validation_failed",
-        reason,
-        toolName,
-        {
-          code: "VALIDATION",
-          details: {
-            receivedType,
-            schemaIssues: [{ path: "", message: reason }],
-          },
-          nextActions: [
-            "重建 args：读取当前可见工具 schema，只传 schema.properties 声明的字段。",
-            "不要把整段 JSON、数组或自然语言字符串作为工具参数；工具参数必须是 object。",
-            "如果参数流像是截断或串行化错误，重新发起该工具调用。",
-          ],
-        },
-      ),
-    };
-  }
-
-  private describeProviderToolArgsType(value: unknown): string {
-    if (!isPresent(value)) return "null";
-    if (isArray(value)) return "array";
-    return typeof value;
-  }
-
   private applyRepeatedFailureBatchGuard(results: ToolResult[]): void {
     const currentResults = results.slice(this.failureBatchResultCursor);
     this.failureBatchResultCursor = results.length;
     if (isEmpty(currentResults)) return;
 
-    const failureBatch = this.toLoopGuardFailureBatch(currentResults);
+    const failureBatch = toLoopGuardFailureBatch(currentResults);
     const message = this.loopGuard.recordFailureBatch(failureBatch);
     if (!message || isEmpty(currentResults)) return;
 
@@ -1445,7 +1317,7 @@ export class ToolExecutor {
     const reason = [target.error, `[loop guard] ${message}`]
       .filter(isString)
       .join("\n\n");
-    const guardedResult = this.buildToolFailureResult(
+    const guardedResult = buildStructuredToolFailureResult(
       "tool_loop_guard",
       reason,
       target.toolName,
@@ -1454,34 +1326,6 @@ export class ToolExecutor {
     target.modelResult = target.result;
   }
 
-  private toLoopGuardFailureBatch(
-    results: readonly ToolResult[],
-  ): KernelToolFailureBatchEntry[] {
-    if (isEmpty(results)) return [];
-
-    const failures: KernelToolFailureBatchEntry[] = [];
-    for (const result of results) {
-      if (!result.error || this.isLoopGuardBlockedResult(result)) return [];
-      failures.push({
-        toolName: result.toolName,
-        args: result.args,
-        error: result.error,
-      });
-    }
-    return failures;
-  }
-
-  private isLoopGuardBlockedResult(result: ToolResult): boolean {
-    const record = isPlainObject(result.result) ? result.result : null;
-    const error = isString(record?.error) ? record.error : "";
-    return [
-      "tool_cancelled",
-      "tool_blocked",
-      "tool_denied",
-      "tool_loop_guard",
-      "tool_unavailable",
-    ].includes(error);
-  }
 }
 
 export function emitToolProgressEvent(

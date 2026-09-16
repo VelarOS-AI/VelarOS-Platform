@@ -2,6 +2,12 @@
 import type { ToolCategoryId } from '../../types/agent.js'
 import type { ToolSpaceRecoveryGuide } from '../../types/tools.js'
 
+/**
+ * 模型调了一个当前拿不到的工具时，给它拼一份「怎么把这个工具弄到手」的恢复指引（随失败结果一起进模型上下文）。
+ * 四条固定动作按 tooling:map 定位 → 满足 activation.dependencies → 按 visible/loadable 分支调用或换页 → requires_approval/requires_user_action 的处理排；
+ * 给了 `categoryId` 才会带上 `capability:<id>` 这一层（否则 capabilityId 为 null，指引退化成只针对单个工具页）；
+ * 给了 `unavailableReason` 再追加一条原因说明，明确告诉模型别再原样重试同一个被隔离的工具。
+ */
 function buildToolSpaceRecoveryGuide(input: {
   toolName: string
   categoryId?: LooseOptional<ToolCategoryId>

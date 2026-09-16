@@ -13,19 +13,14 @@
 //  - **裁剪必须出 trace**（`SkippedPromptSegmentTrace`）：静默裁剪的后果是行为莫名变化且
 //    无从复现——这是历史上最难查的一类问题。
 //  - **组装是纯函数**：同一输入恒得同一提示词（金标轨迹逐字节比对依赖它）。
-import { isEmpty } from '@velaros-ai/core'
-
 import type { AgentChatRuntimeConfig } from '../../contract/requires.js'
 import type { PromptBudgetOptions, PromptCompositionResult, PromptContribution, PromptRegistryApi, PromptRenderContext, PromptSegmentDefinition, PromptSegmentProvider } from '../../types/guidance.js'
-import type { AgentModSeamDispatcherApi, AgentModTurnContextAppendage } from '../../types/mods.js'
+import type { AgentModSeamDispatcherApi } from '../../types/mods.js'
 import type { BuiltContext } from '../../types/runner.js'
 import { createIdentityPromptSegment } from '../../utils/guidance/catalog'
-import { applyPromptBudget, buildStructuredSystemPrompt } from '../../utils/runner/prompt-assembly'
+import { appendModTurnContextParts, finalizePromptBuild } from '../../utils/runner/prompt-assembly'
 
 import { ContextBuilderParts } from './ContextBuilderParts'
-
-/** mod 追加段的缺省优先级：排在内置 dynamic 段之后、便于识别来源。 */
-const ModTurnContextDefaultPriority = 9_000
 
 
 const contextBuilderHelper = new ContextBuilderParts()
@@ -50,7 +45,26 @@ const contextBuilderHelper = new ContextBuilderParts()
  * system prompt 由多个稳定性不同的段动态组装：
  * stable 段放前面，dynamic 段放末尾，让 prompt cache 更容易命中稳定前缀。
  */
-class ContextBuilder {
+export interface ContextBuilderApi {
+  /** 往**本 builder 自己的**注册表里加一个段定义，返回自身便于链式调用；宿主装配期用它安装长期存在的段，回合级的段走 `withPromptSegments`。 */
+  registerPromptSegment(segment: PromptSegmentDefinition): this
+  /** 派生一个带上这批回合级段的新 builder：宿主 builder 的注册表不受影响，因此上一轮的段不会残留到下一轮。 */
+  withPromptSegments(segments: readonly PromptSegmentDefinition[]): ContextBuilder
+  /** 注册一个能一次贡献多个段的 provider（例如按能力开关动态出段），返回自身便于链式调用。 */
+  registerPromptProvider(provider: PromptSegmentProvider): this
+  /** 派生一个换了身份段的新 builder：子 Agent 用它改写 Tier0 身份，而不是在渲染期按上下文改文本——后者会让稳定前缀不再逐字不变。 */
+  withIdentity(identity: string): ContextBuilder
+  /** 派生一个屏蔽了某个段的新 builder；`reason` 会写进 `skippedSegments`，调试面据此回答「为什么模型没看到这条」。 */
+  withoutPromptSegment(id: string, reason: string): ContextBuilder
+  /** 同步组装一次 system prompt：段排序 → mod 同步 seam 追加 → 预算裁剪 → 拼装，同一输入恒得同一结果。无 mod 钩子时与 `buildAsync` 结果一致。 */
+  build(config?: Pick<AgentChatRuntimeConfig, 'systemPromptAppend'>, context?: Omit<PromptRenderContext, 'chatConfig'>, options?: { promptBudget?: LooseOptional<PromptBudgetOptions> }): BuiltContext
+  /** 与 `build` 同一条装配路径，但 `turn-context:assemble` 走异步派发，允许 mod 的钩子里做 IO；实际运行的回合上下文都走这条。 */
+  buildAsync(config?: Pick<AgentChatRuntimeConfig, 'systemPromptAppend'>, context?: Omit<PromptRenderContext, 'chatConfig'>, options?: { promptBudget?: LooseOptional<PromptBudgetOptions> }): Promise<BuiltContext>
+}
+
+class ContextBuilder implements ContextBuilderApi {
+  /** mod 追加段的缺省优先级：排在内置 dynamic 段之后、便于识别来源。 */
+  private static readonly ModTurnContextDefaultPriority = 9_000
   /** prompt 段注册表，负责排序、过滤和 tier 分组。 */
   private readonly registry: PromptRegistryApi
   /**
@@ -68,20 +82,17 @@ class ContextBuilder {
     this.seams = seams
   }
 
-  /** 注册结构化 prompt 段定义。 */
   public registerPromptSegment(segment: PromptSegmentDefinition): this {
     this.registry.register(segment)
     return this
   }
 
-  /** 派生本轮贡献段的独立注册表；下一轮未提供的段不会残留在宿主 builder 中。 */
   public withPromptSegments(segments: readonly PromptSegmentDefinition[]): ContextBuilder {
     const clone = this.clone()
     for (const segment of segments) clone.registry.register(segment)
     return clone
   }
 
-  /** 注册一个 prompt provider，它可以一次提供多个段。 */
   public registerPromptProvider(provider: PromptSegmentProvider): this {
     this.registry.registerProvider(provider)
     return this
@@ -103,14 +114,12 @@ class ContextBuilder {
     return clone
   }
 
-  /** 禁用某个 prompt segment，通常由系统配置的 segmentOverrides 驱动。 */
   public withoutPromptSegment(id: string, reason: string): ContextBuilder {
     const clone = this.clone()
     clone.registry.suppress(id, reason)
     return clone
   }
 
-  /** 组装最终 system prompt，并返回段 trace，供调试面板展示。 */
   public build(
     config?: Pick<AgentChatRuntimeConfig, 'systemPromptAppend'>,
     context: Omit<PromptRenderContext, 'chatConfig'> = {},
@@ -121,10 +130,13 @@ class ContextBuilder {
       chatConfig: config,
     })
     const dynamicParts = this.appendModTurnContext(composition)
-    return this.finalizeBuild(composition, dynamicParts, options)
+    return finalizePromptBuild({
+      composition,
+      dynamicParts,
+      budget: options.promptBudget,
+    })
   }
 
-  /** 支持外部 command Hook 的宿主入口；不阻塞主进程。 */
   public async buildAsync(
     config?: Pick<AgentChatRuntimeConfig, 'systemPromptAppend'>,
     context: Omit<PromptRenderContext, 'chatConfig'> = {},
@@ -135,47 +147,11 @@ class ContextBuilder {
       chatConfig: config,
     })
     const dynamicParts = await this.appendModTurnContextAsync(composition)
-    return this.finalizeBuild(composition, dynamicParts, options)
-  }
-
-  private finalizeBuild(
-    composition: PromptCompositionResult,
-    dynamicParts: PromptContribution[],
-    options: { promptBudget?: LooseOptional<PromptBudgetOptions> }
-  ): BuiltContext {
-    const budgeted = applyPromptBudget({
-      stableParts: composition.stableParts,
+    return finalizePromptBuild({
+      composition,
       dynamicParts,
-      skipped: composition.skipped,
       budget: options.promptBudget,
     })
-    const { systemPrompt, stableCutoff } = buildStructuredSystemPrompt({
-      stableParts: budgeted.stableParts,
-      dynamicParts: budgeted.dynamicParts,
-    })
-
-    return {
-      systemPrompt,
-      stableCutoff,
-      segments: [...budgeted.stableParts, ...budgeted.dynamicParts].map((part) => ({
-        id: part.id,
-        label: part.label,
-        stability: part.stability,
-        source: part.source,
-        priority: part.priority,
-        retention: part.retention,
-        text: part.text,
-      })),
-      skippedSegments: budgeted.skipped.map((part) => ({
-        id: part.id,
-        label: part.label,
-        stability: part.stability,
-        source: part.source,
-        priority: part.priority,
-        reason: part.reason,
-      })),
-      promptBudget: budgeted.budgetTrace,
-    }
   }
 
   /**
@@ -198,7 +174,11 @@ class ContextBuilder {
       stableSegments: composition.stableParts.map(toView),
       dynamicSegments: composition.dynamicParts.map(toView),
     })
-    return this.applyModTurnContextOutcome(composition, outcome)
+    return appendModTurnContextParts({
+      composition,
+      appended: outcome.append ?? [],
+      defaultPriority: ContextBuilder.ModTurnContextDefaultPriority,
+    })
   }
 
   private async appendModTurnContextAsync(
@@ -216,40 +196,11 @@ class ContextBuilder {
       stableSegments: composition.stableParts.map(toView),
       dynamicSegments: composition.dynamicParts.map(toView),
     })
-    return this.applyModTurnContextOutcome(composition, outcome)
-  }
-
-  private applyModTurnContextOutcome(
-    composition: PromptCompositionResult,
-    outcome: { append?: readonly AgentModTurnContextAppendage[] }
-  ): PromptContribution[] {
-    const appended = outcome.append ?? []
-    if (appended.length === 0) return composition.dynamicParts
-
-    const known = new Set(
-      [...composition.stableParts, ...composition.dynamicParts].map((part) => part.id)
-    )
-    const extras: PromptContribution[] = []
-    for (const item of appended) {
-      const text = item.text.trim()
-      if (isEmpty(text) || known.has(item.id)) continue
-      known.add(item.id)
-      extras.push({
-        id: item.id,
-        label: item.label,
-        tier: 'runtime',
-        stability: 'dynamic',
-        source: 'mod',
-        priority: item.priority ?? ModTurnContextDefaultPriority,
-        retention: 'normal',
-        text,
-      })
-    }
-    if (isEmpty(extras)) return composition.dynamicParts
-
-    return [...composition.dynamicParts, ...extras].sort(
-      (left, right) => left.priority - right.priority
-    )
+    return appendModTurnContextParts({
+      composition,
+      appended: outcome.append ?? [],
+      defaultPriority: ContextBuilder.ModTurnContextDefaultPriority,
+    })
   }
 
   /** 克隆 registry，保证链式构建不会修改原始 builder。 */

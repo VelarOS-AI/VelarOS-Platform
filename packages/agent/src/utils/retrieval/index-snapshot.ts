@@ -1,7 +1,7 @@
 import { isPresent } from '@velaros-ai/core'
 
 import type { ChatContextRetrievalIndexSourceFingerprint } from '../../types/agent.js'
-import type { ChatContextRetrievalIndexSnapshot } from '../../types/retrieval.js'
+import type { CachedRetrievalIndex, ChatContextRetrievalIndexSnapshot } from '../../types/retrieval.js'
 
 /** 索引 snapshot schema 版本；与 {@link ContextRetrievalIndexBuilder} 产出一致。 */
 const ChatContextRetrievalIndexVersion = 2 satisfies ChatContextRetrievalIndexSnapshot['version']
@@ -34,6 +34,12 @@ function contextRetrievalFingerprintIsComparable(
   return !!fingerprint && !isBlankFingerprint(fingerprint)
 }
 
+/**
+ * 判一份源指纹是不是三项（`stateMtimeMs` / `payloadMtimeMs` / `payloadFingerprint`）**全都缺席**。
+ * 全空意味着"这份指纹不可比"：它既可能是会话真没数据，也可能是目录读失败，两者分不开，
+ * 所以调用方一律按不新鲜处理、强制 rebuild——宁可白建一次索引，也不拿一份可能来自读失败的指纹去判命中。
+ * 只要有一项在就返回 false（可比）。
+ */
 function isBlankFingerprint(fingerprint: ChatContextRetrievalIndexSourceFingerprint): boolean {
   return (
     !isPresent(fingerprint.stateMtimeMs) &&
@@ -42,4 +48,17 @@ function isBlankFingerprint(fingerprint: ChatContextRetrievalIndexSourceFingerpr
   )
 }
 
-export { ChatContextRetrievalIndexVersion, contextRetrievalFingerprintIsComparable, contextRetrievalFingerprintsEqual }
+/**
+ * 内存里缓存的这份索引还能不能拿来用：快照自报的 sessionId 得就是要找的这个，schema 版本得是当前这版。
+ *
+ * 指纹只回答「源变没变」，回答不了「这份快照是谁的、还是不是当前结构」。同一 sessionId 被复用、
+ * 或索引 schema 升级后旧条目继续服役，都是零报错的静默错答，所以复用前必须再过这一道。
+ */
+function isServiceableCachedRetrievalIndex(cached: CachedRetrievalIndex, sessionId: string): boolean {
+  return (
+    cached.snapshot.sessionId === sessionId &&
+    cached.snapshot.version === ChatContextRetrievalIndexVersion
+  )
+}
+
+export { ChatContextRetrievalIndexVersion, contextRetrievalFingerprintIsComparable, contextRetrievalFingerprintsEqual, isServiceableCachedRetrievalIndex }

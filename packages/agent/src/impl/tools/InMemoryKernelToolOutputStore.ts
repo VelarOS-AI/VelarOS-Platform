@@ -29,8 +29,27 @@ import { buildContextRefEnvelope } from '../../utils/context/context-ref-envelop
 import { resolveGovernanceSessionKey } from '../../utils/residency/session-key'
 import { fitSourceWindowsWithinProjection, normalizeProjectionChars, projectSerializedPreview, serializeOutput } from '../../utils/tools/tool-output-store'
 
+/** 构造参数：只有一项，决定多长的输出才开始句柄化。 */
 export interface InMemoryKernelToolOutputStoreOptions {
+  /**
+   * 当轮句柄化阈值，单位是序列化后的字符数：结果超过它才存全文并换成摘要，否则原样内联。
+   * 不传时用 `normalizeProjectionChars` 的缺省（24_000，略低于模型档序列化预算）；
+   * 只有测试和特殊宿主才该显式调它，调低不是「更省」，见本文件头部的不变量。
+   */
   projectionChars?: number
+}
+
+/**
+ * 进程内工具输出店：没有 `ContextPayloadStore` 的装配（测试、轻量宿主）用它顶上。
+ *
+ * 全文只留在本实例的 Map 里，随实例消失；召回走 `toolCallId` 的 tool-payload 通道，
+ * 不落盘也不跨会话。除合同要求的 `project` 外，另开两个只读口子给测试与诊断查账。
+ */
+export interface InMemoryKernelToolOutputStoreApi extends KernelToolOutputStore {
+  /** 按 `project` 返回的 `outputId` 取回那次的完整存档；没存过或已随实例消失时返回 null。 */
+  get(outputId: string): Nullable<KernelStoredToolOutput>
+  /** 列出本实例存过的全部输出，按存入顺序；给测试与诊断查账用，不参与召回链路。 */
+  list(): KernelStoredToolOutput[]
 }
 
 
@@ -49,10 +68,7 @@ export interface InMemoryKernelToolOutputStoreOptions {
 
 
 
-
-
-
-export class InMemoryKernelToolOutputStore implements KernelToolOutputStore {
+export class InMemoryKernelToolOutputStore implements InMemoryKernelToolOutputStoreApi {
   private readonly outputs = new Map<string, KernelStoredToolOutput>()
   private readonly projectionChars: number
   private nextOutputId = 1

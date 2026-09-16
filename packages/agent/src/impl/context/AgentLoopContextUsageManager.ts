@@ -24,7 +24,7 @@ import {
   DefaultContextSafetyMarginPercent,
   resolveReservedOutputTokens,
 } from '../../utils/context/context-budget'
-import { estimateContextUsage } from '../../utils/context/context-usage'
+import { estimateContextUsage, sumToolSchemaChars } from '../../utils/context/context-usage'
 
 import { ContextUsageCalibrator } from './ContextUsageCalibrator'
 
@@ -40,7 +40,44 @@ function resolveModelContextUsageOptions(
   return { ...options, reservedOutputTokens: maxOutputTokens }
 }
 
-class AgentLoopContextUsageManager<TToolContext> {
+/**
+ * 回合级上下文用量估算器：组装每轮预算判断要用的 `EstimateContextUsageOptions`，并把真实用量回灌给校准器。
+ *
+ * 由 SoloLoop / QueryLoop 各构造一份长期持有（它按会话/循环攥着那份 `ContextUsageCalibrator`，
+ * 学习才能跨请求累积）。不改写历史、不做治理判决——那是驻留账本与 `GovernanceEpoch` 的事。
+ */
+export interface AgentLoopContextUsageManagerApi<TToolContext> {
+  /** 估一组消息在指定模型下的用量；纯计算，不碰历史。传进来的 options 要与真正发出去那次请求同源，否则校准对不上账。 */
+  estimateUsage(
+    model: string,
+    systemPrompt: string,
+    history: readonly ModelMessage[],
+    options: EstimateContextUsageOptions
+  ): ContextUsageEstimate
+  /** 用供应方回传的真实 input tokens 校准该模型的估算系数；两个数任一缺席或不是数字就整条样本丢掉，不学。 */
+  recordActualUsage(
+    model: string,
+    predictedInputTokens: LooseOptional<number>,
+    actualInputTokens: Nullable<number>
+  ): void
+  /**
+   * 组装本轮估算入参：工具清单 + 工具 schema 字节预留 + 输出预留 + 当前校准系数。
+   * schema 预留优先用调用方给的实测表，缺项时退到注册表的实测接口，都没有才按「工具数 × 800」估；
+   * 输出预留按有效窗口推导，本轮显式给了 `maxOutputTokens` 时以它为准。
+   * `turnToolRegistry` 不传就用构造时那份，本轮临时换过工具表的场合才需要显式传。
+   */
+  buildContextUsageOptions(
+    model: string,
+    toolContext: TToolContext,
+    allowedTools: string[],
+    contextWindow?: number,
+    toolSchemaChars?: Readonly<Record<string, number>>,
+    turnToolRegistry?: AgentLoopToolRegistry<TToolContext>,
+    modelRequestOptions?: LooseOptional<AgentModelRequestOptions>
+  ): EstimateContextUsageOptions
+}
+
+class AgentLoopContextUsageManager<TToolContext> implements AgentLoopContextUsageManagerApi<TToolContext> {
   /**
    * MMU 校准器：跨轮、按模型学习"估算↔真实"偏差。
    * 由本管理器持有；SoloLoop/QueryLoop 在 Runtime 中各构造一次后长期复用，因此学习可跨请求累积。
@@ -90,7 +127,7 @@ class AgentLoopContextUsageManager<TToolContext> {
     // 优先用 registry 提供的精确测量（按 zod -> JSON Schema 实测，结果带缓存）；
     // 缺省时回落到旧版 `工具数 × 800` 平均估算，保持兼容。
     const schemaReserveChars =
-      this.sumToolSchemaChars(allowedTools, toolSchemaChars) ??
+      sumToolSchemaChars(allowedTools, toolSchemaChars) ??
       turnToolRegistry.estimateToolsSerializedChars?.(toolContext, allowedTools) ??
       tools.length * 800
     // 输出预留按“有效窗口”推导：优先用 runtime 解析出的 contextWindow，否则回落模型目录值。
@@ -110,21 +147,6 @@ class AgentLoopContextUsageManager<TToolContext> {
       safetyMarginPercent: DefaultContextSafetyMarginPercent,
       calibrationFactor: this.calibrator.getFactor(model),
     }, modelRequestOptions)
-  }
-
-  private sumToolSchemaChars(
-    allowedTools: readonly string[],
-    toolSchemaChars?: Readonly<Record<string, number>>
-  ): Nullable<number> {
-    if (!toolSchemaChars) return null
-
-    let total = 0
-    for (const toolName of allowedTools) {
-      if (!Object.prototype.hasOwnProperty.call(toolSchemaChars, toolName)) return null
-      total += Math.max(0, toolSchemaChars[toolName] ?? 0)
-    }
-
-    return total
   }
 }
 

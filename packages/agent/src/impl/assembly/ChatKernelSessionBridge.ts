@@ -33,7 +33,9 @@ import { AppError } from '@velaros-ai/core/error'
 
 import type { KernelSessionInputStore } from '../../contract/requires.js'
 import type { ChatSendRequest, ExecutionPendingInteractionKind, ExecutionPendingInteractionSnapshot, ExecutionProvideGuidanceRequest, ExecutionProvideInputRequest, ExecutionResolveConfirmationRequest,UserActionCardResult } from '../../types/agent.js'
-import type { KernelCancelResult, KernelChatExecutionCoordinator, KernelChatExecutionService, KernelChatRunOptions, KernelChatSubmission, KernelChatSubmissionDeferred, KernelControllerAnswerInput, KernelControllerApprovalInput, KernelControllerSendInput, KernelRuntimeStatus,KernelSessionAuthorization, PendingKernelChatRun } from '../../types/execution.js'
+import type { KernelCancelResult, KernelChatExecutionCoordinator, KernelChatExecutionService, KernelChatRunOptions, KernelChatSubmission, KernelControllerAnswerInput, KernelControllerApprovalInput, KernelControllerSendInput, KernelRuntimeStatus,KernelSessionAuthorization, PendingKernelChatRun } from '../../types/execution.js'
+import { acceptPendingChatRun, findLatestUserMessage } from '../../utils/execution/chat-bridge-runs'
+import { createSubmissionDeferred } from '../../utils/execution/session-lane'
 import { InMemoryKernelSessionInputStore } from '../execution/InMemoryKernelSessionInputStore'
 import { KernelSessionPolicy } from '../execution/KernelSessionPolicy'
 import { KernelSessionRunCoordinator } from '../execution/KernelSessionRunCoordinator'
@@ -43,31 +45,78 @@ import { KernelBackgroundJobManager as DefaultKernelBackgroundJobManager } from 
 
 import { KernelSessionController } from './KernelSessionController'
 
-function createSubmissionDeferred(): KernelChatSubmissionDeferred {
-  let resolve!: () => void
-  let reject!: (error: unknown) => void
-  const promise = new Promise<void>((onResolve, onReject) => {
-    resolve = onResolve
-    reject = onReject
-  })
-  void promise.catch(() => {
-    // arch-guard:silent-catch-ok send 调用者只观察 accepted；原 promise 的拒绝仍供 submit 调用者读取。
-  })
-  return { promise, resolve, reject }
-}
-
 const DefaultKernelBackgroundJobStalledAfterMs = 120_000
 
+/**
+ * 建桥时的装配单：前两项是宿主必须给的两块（执行服务与执行协调器），后四项是内核侧的控制件，
+ * 缺省一律回落到内存实现——语义与持久实现一致，只是不落盘，让 headless 与探针零装配就能跑。
+ */
 interface ChatKernelSessionBridgeOptions<TRenderTarget> {
+  /** 宿主的会话执行服务：桥经它读在途交互、投递引导/回答/批准、中止并等某个 source session 收敛。 */
   executionService: KernelChatExecutionService
+  /** 宿主的执行协调器：桥把一条 run 真正跑起来就是回调它的 `run`，渲染目标与事件渲染全归它管。 */
   executionCoordinator: KernelChatExecutionCoordinator<TRenderTarget>
+  /** 输入账本：谁先谁后、能不能插队、还有几条排队都存在它里面。缺省是进程内内存账本。 */
   inputStore?: KernelSessionInputStore
+  /** 运行协调器：按 seq 唤醒 drain、判断会话在不在跑、中止与等空闲。缺省是进程内实现。 */
   runCoordinator?: KernelSessionRunCoordinator
+  /** 投递与运行态策略：一条输入是插队还是排队、一份运行态快照怎么归约，都问它。缺省是包内默认策略。 */
   policy?: KernelSessionPolicy
+  /** 后台 job 管理器：子 Agent 的后台任务注册、停滞记账、读输出与取消都在它上面。缺省是内存实现，停滞判定用 `DefaultKernelBackgroundJobStalledAfterMs`。 */
   backgroundJobManager?: KernelBackgroundJobManager
 }
 
-class ChatKernelSessionBridge<TRenderTarget = unknown> {
+/**
+ * 聊天面 → 内核会话通道的跨层接缝：宿主的一次「发消息 / 中断 / 回答 / 批准」落在这里，
+ * 经内核控制面排队、去重、唤醒，最终回调宿主注入的执行协调器真正跑一轮。
+ *
+ * 桥自己不持有业务状态，只有一队「已被账本接纳、等着被 drain 消费」的 run；`sessionId` 是全链路唯一键，
+ * 桥不做任何 id 映射。`TRenderTarget` 对桥完全不透明，只原样透传给协调器。一个宿主建一座桥，长期存活。
+ */
+interface ChatKernelSessionBridgeApi<TRenderTarget = unknown> {
+  /**
+   * 发一条聊天消息并等它被账本接纳（不等这轮跑完）。等价于 `submit(...).accepted`。
+   * 被取消或账本拒收时抛 `EXECUTION_ABORTED` 一类的 AppError。
+   */
+  send(renderTarget: TRenderTarget, payload: ChatSendRequest): Promise<void>
+  /**
+   * 发一条聊天消息并同时拿到「准入」与「跑完」两个句柄：要在准入那一刻做事（比如清输入框）的宿主用它。
+   * `onAccepted` 在准入生效的同一拍同步回调；空消息（没有可用的用户文本）不进账本，直接排进执行。
+   */
+  submit(
+    renderTarget: TRenderTarget,
+    payload: ChatSendRequest,
+    onAccepted?: () => void
+  ): KernelChatSubmission
+  /**
+   * 中断一个会话：清空排队的 run、中止在跑的执行与后台 job、吊销账本里的待消费输入，
+   * 等全部落地后返回是否真的中止了，以及被保留下来的输入 id（下次可以原样重放，不算丢消息）。
+   */
+  cancel(input: string | { sessionId: string }): Promise<KernelCancelResult>
+  /**
+   * 投一条引导（steer）：插到排队消息前面生效，并同步告诉宿主执行服务把消息塞进当前这轮。
+   * 带 `authorization` 时每步都重校当前性，失效就吊销这条输入再抛错，避免把过期 Hook 的引导送进新一轮。
+   */
+  provideGuidance(
+    payload: ExecutionProvideGuidanceRequest,
+    message: ModelMessage,
+    authorization?: KernelSessionAuthorization
+  ): Promise<void>
+  /** 回答一个在途的追问：把用户填的内容交给宿主执行服务，解开那一轮的等待。 */
+  answer(payload: ExecutionProvideInputRequest): Promise<void>
+  /** 批准或拒绝一个在途的确认：拒绝时带上给模型看的理由，批准时带上用户动作卡的结果。 */
+  approve(payload: ExecutionResolveConfirmationRequest): Promise<void>
+  /** 取一份会话运行态快照：在不在跑、有没有待确认/待输入、还排着几条、还有几个后台 job，以及能不能取消。 */
+  runtimeStatus(sessionId: string): Promise<KernelRuntimeStatus>
+  /** 读一个会话当前挂着的那类交互（确认或追问）的快照；没有就返回 null。给界面重连后恢复提示框用。 */
+  pendingInteraction(
+    sessionId: string,
+    kind: ExecutionPendingInteractionKind
+  ): Nullable<ExecutionPendingInteractionSnapshot>
+}
+
+class ChatKernelSessionBridge<TRenderTarget = unknown>
+  implements ChatKernelSessionBridgeApi<TRenderTarget> {
   private readonly log = Log.tag('ChatKernelSessionBridge')
   private readonly inputStore: KernelSessionInputStore
   private readonly runCoordinator: KernelSessionRunCoordinator
@@ -115,7 +164,7 @@ class ChatKernelSessionBridge<TRenderTarget = unknown> {
     }
     if (!isPresent(input)) {
       try {
-        this.acceptRun(run)
+        acceptPendingChatRun(run)
         void this.runExecutionCoordinator(run)
       } catch (error) {
         run.admission.reject(error)
@@ -131,13 +180,6 @@ class ChatKernelSessionBridge<TRenderTarget = unknown> {
     }
   }
 
-  /** 宿主接收回执先于运行唤醒生效，失败或已取消的输入不消费宿主上下文。 */
-  private acceptRun(run: PendingKernelChatRun<TRenderTarget>): void {
-    if (run.cancelled) throw new AppError('EXECUTION_ABORTED', 'Chat admission was cancelled')
-    run.onAccepted?.()
-    run.admission.resolve()
-  }
-
   private async admitRun(
     sessionId: string,
     input: KernelControllerSendInput,
@@ -145,7 +187,7 @@ class ChatKernelSessionBridge<TRenderTarget = unknown> {
   ): Promise<void> {
     try {
       await this.controller.send(input)
-      this.acceptRun(run)
+      acceptPendingChatRun(run)
     } catch (error) {
       this.removePending(sessionId, run)
       run.admission.reject(error)
@@ -314,13 +356,13 @@ class ChatKernelSessionBridge<TRenderTarget = unknown> {
         const active = this.activeRuns.get(target.sessionId)
         if (active) {
           if (!active.started) {
-            const inputId = this.findLatestUserMessage(active.payload.messages)?.messageId
+            const inputId = findLatestUserMessage(active.payload.messages)?.messageId
             if (inputId) retainedInputIds.push(inputId)
           }
           active.cancelled = true
           // 后来的输入可能先获准并唤醒 drain，此时 active 仍在等待自己的准入。
           // 立即结清等待，取消不应依赖已取消的存储请求何时返回。
-          active.admission.reject(new AppError('EXECUTION_ABORTED', 'Chat admission was cancelled'))
+          active.admission.reject(new AppError('EXECUTION_ABORTED', '这次聊天提交在获准入之前已被取消：本轮不会运行，要继续请重新发送。'))
         }
         this.backgroundJobManager.cancelSession(target.sessionId)
         const aborted = this.options.executionService.abortSourceSession(target.sessionId)
@@ -349,7 +391,7 @@ class ChatKernelSessionBridge<TRenderTarget = unknown> {
   ): Nullable<KernelControllerSendInput> {
     if (!isArray(payload.messages)) return null
 
-    const latestUserMessage = this.findLatestUserMessage(payload.messages)
+    const latestUserMessage = findLatestUserMessage(payload.messages)
     if (!isPresent(latestUserMessage)) return null
 
     const content = latestUserMessage.textBlocks.join('\n').trim()
@@ -374,16 +416,6 @@ class ChatKernelSessionBridge<TRenderTarget = unknown> {
     return inputId
   }
 
-  private findLatestUserMessage(
-    messages: ChatSendRequest['messages']
-  ): Nullable<ChatSendRequest['messages'][number]> {
-    for (let index = messages.length - 1; index >= 0; index -= 1) {
-      const message = messages[index]
-      if (message?.role === 'user') return message
-    }
-    return null
-  }
-
   private enqueue(sessionId: string, run: PendingKernelChatRun<TRenderTarget>): void {
     const queue = this.pendingRuns.get(sessionId) ?? []
     queue.push(run)
@@ -404,10 +436,10 @@ class ChatKernelSessionBridge<TRenderTarget = unknown> {
   private clearPending(sessionId: string): string[] {
     const retainedInputIds: string[] = []
     for (const run of this.pendingRuns.get(sessionId) ?? []) {
-      const inputId = this.findLatestUserMessage(run.payload.messages)?.messageId
+      const inputId = findLatestUserMessage(run.payload.messages)?.messageId
       if (inputId) retainedInputIds.push(inputId)
       run.cancelled = true
-      const error = new AppError('EXECUTION_ABORTED', 'Queued chat execution was cancelled')
+      const error = new AppError('EXECUTION_ABORTED', '这次聊天执行还在排队时就被取消了，从未开始运行。')
       run.admission.reject(error)
       run.completion.reject(error)
     }
@@ -440,7 +472,7 @@ class ChatKernelSessionBridge<TRenderTarget = unknown> {
           await this.inputStore.promoteNextQueued(sessionId)
           if (run.cancelled) {
             run.completion.reject(
-              new AppError('EXECUTION_ABORTED', 'Chat execution was cancelled before starting')
+              new AppError('EXECUTION_ABORTED', '这次聊天执行在获准之后、真正开跑之前被取消了，没有产生任何执行。')
             )
             continue
           }
@@ -520,4 +552,4 @@ class ChatKernelSessionBridge<TRenderTarget = unknown> {
 }
 
 export { ChatKernelSessionBridge }
-export type { ChatKernelSessionBridgeOptions }
+export type { ChatKernelSessionBridgeApi, ChatKernelSessionBridgeOptions }

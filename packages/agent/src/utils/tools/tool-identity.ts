@@ -11,6 +11,11 @@ import { assertCanonicalToolId, isCanonicalToolId } from '../toolkit/identity'
 
 const ProviderToolNamePattern = /^[a-zA-Z0-9_-]{1,64}$/
 
+/**
+ * 对 canonical 工具 id 算一个稳定的短指纹（FNV-1a 32 位，转 36 进制并左补零到 7 位）。
+ * 只求同一个 id 在任何进程、任何轮次都得到同一串——传输名碰撞时靠它消歧，名字必须跨请求稳定，否则历史里的旧工具名就解码不回来。
+ * 不是密码学哈希，也不承诺全局无碰撞（碰撞由调用方显式检测并抛错）。
+ */
 function stableToolNameHash(value: string): string {
   let hash = 0x811c9dc5
   for (let index = 0; index < value.length; index += 1) {
@@ -20,6 +25,12 @@ function stableToolNameHash(value: string): string {
   return (hash >>> 0).toString(36).padStart(7, '0')
 }
 
+/**
+ * 把 `namespace:tool` 形式的 canonical id 编译成一个候选 provider 传输名：两段各自把非 `[a-zA-Z0-9_-]` 字符换成下划线、
+ * 折叠连续下划线并去首尾下划线，再用 `__` 连接（某段被净化成空时分别兜底为 `tool` / `call`）。
+ * 净化结果超过 64 字符上限就截断并接上 canonical 指纹，保证长名字也能稳定落在 provider 的字符集与长度限制内。
+ * 只保证「合法且稳定」，不保证唯一——净化后撞名由 createToolTransportNamePlan 负责消歧。
+ */
 function providerToolNameCandidate(canonicalId: string): string {
   const separatorIndex = canonicalId.indexOf(':')
   const namespace = canonicalId
@@ -61,7 +72,7 @@ function createToolTransportNamePlan(canonicalIds: readonly string[]): ToolTrans
     const finalOccupiedBy = providerToCanonical[providerName]
     if (finalOccupiedBy && finalOccupiedBy !== canonicalId)
       throw new Error(
-        `provider tool name collision: "${canonicalId}" and "${finalOccupiedBy}" both compile to "${providerName}"`
+        `provider 传输名撞车："${canonicalId}" 与 "${finalOccupiedBy}" 都会编译成 "${providerName}"；加指纹消歧后仍然撞上，请改掉其中一个工具的 canonical id。`
       )
 
     canonicalToProvider[canonicalId] = providerName
@@ -93,7 +104,7 @@ function completeToolTransportNameAliases(
     const occupiedBy = occupiedByProviderName.get(providerName)
     if (occupiedBy && occupiedBy !== canonicalId)
       throw new Error(
-        `provider tool name collision: "${canonicalId}" and "${occupiedBy}" both compile to "${providerName}"`
+        `provider 传输名撞车："${canonicalId}" 与 "${occupiedBy}" 都会编译成 "${providerName}"；加指纹消歧后仍然撞上，请改掉其中一个工具的 canonical id。`
       )
     occupiedByProviderName.set(providerName, canonicalId)
   }
@@ -117,7 +128,7 @@ function completeToolTransportNameAliases(
     const finalOccupiedBy = occupiedByProviderName.get(providerName)
     if (finalOccupiedBy && finalOccupiedBy !== canonicalId)
       throw new Error(
-        `provider tool name collision: "${canonicalId}" and "${finalOccupiedBy}" both compile to "${providerName}"`
+        `provider 传输名撞车："${canonicalId}" 与 "${finalOccupiedBy}" 都会编译成 "${providerName}"；加指纹消歧后仍然撞上，请改掉其中一个工具的 canonical id。`
       )
 
     completed[canonicalId] = providerName
@@ -143,7 +154,7 @@ function createToolTransportProjection(
     const providerName = plan.canonicalToProvider[canonicalId]
     if (!providerName)
       throw new Error(
-        `visible tool is absent from the registered transport plan: ${canonicalId}`
+        `可见工具 ${canonicalId} 不在已登记的传输名方案里：传输名只从完整注册目录编译，这个工具没登记过，请先把它注册进工具注册表再让它可见。`
       )
     visibleCanonicalToProvider[canonicalId] = providerName
   }
@@ -157,6 +168,10 @@ function createToolTransportProjection(
 const ToolIdentityTokenCharacters = 'a-zA-Z0-9._:-'
 const ProviderToolIdentityTokenCharacters = 'a-zA-Z0-9_-'
 
+/**
+ * 转义字符串里的正则元字符（`. * + ? ^ $ { } ( ) | [ ] \`），让它能安全地嵌进 RegExp 字面量当纯文本匹配。
+ * 工具 id 里的 `.` 之类字符若不转义会退化成通配，替换就会误伤别的工具名。
+ */
 function escapeRegularExpression(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
@@ -182,6 +197,12 @@ function rewriteProviderToolReferences(
   return rewriteToolReferences(text, providerToCanonical, ProviderToolIdentityTokenCharacters)
 }
 
+/**
+ * 在文本里按替换表改写工具引用，两个方向（canonical→provider、provider→canonical）共用这一支，
+ * 差别只在 `tokenCharacters`——它定义什么字符算 identity token 的一部分。
+ * 只替换完整 token：匹配要求左边界是行首或非 token 字符、右边界是行尾或非 token 字符，所以 `project:read` 不会误伤 `project:read_more`。
+ * 源与目标相同的条目跳过；其余按源串长度降序（同长按字典序）替换，长名先替，避免短名先替把长名劈开。
+ */
 function rewriteToolReferences(
   text: string,
   replacements: Readonly<Record<string, string>>,

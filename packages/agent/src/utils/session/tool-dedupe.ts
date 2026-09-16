@@ -10,6 +10,10 @@ export const IDEMPOTENT_TOOL_CALLS = new Set([
   'plan:update',
 ])
 
+/**
+ * 递归把对象键按码元序排好，让"同一份参数、键序不同"算出同一个指纹。
+ * 数组保持原序（顺序在工具参数里通常是语义的一部分），标量原样返回。
+ */
 export function normalizeToolCallFingerprintValue(value: unknown): unknown {
   if (isArray(value)) return value.map(normalizeToolCallFingerprintValue)
 
@@ -22,6 +26,14 @@ export function normalizeToolCallFingerprintValue(value: unknown): unknown {
   )
 }
 
+/**
+ * 算出一次工具调用的去重指纹（相同指纹的连续调用会被重复调用过滤器拦下）。
+ *
+ * 只有 IDEMPOTENT_TOOL_CALLS 里登记的幂等工具才参与去重，其余一律返回 null = 不去重
+ * （有副作用的工具重复调用可能是刻意的，不能替模型否决）。`tool_*` 系工具额外把
+ * ids/pageIn/pageOut/categoryIds 这几个集合语义字段排序后再比，免得只是顺序不同就算两次不同调用。
+ * plan:update 只比 plan/complete_step/lifecycle 三项，取舍见下方块注释。
+ */
 export function buildToolFingerprint(
   toolName: string,
   args: Record<string, unknown>

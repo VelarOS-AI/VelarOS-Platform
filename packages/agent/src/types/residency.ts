@@ -256,6 +256,19 @@ export interface ContextProjectionBudget {
   charsPerToken?: LooseOptional<number>
 }
 
+/**
+ * 渲染长度的复用缓存，由调用方持有并跨次投影复用（投影本身是纯函数，不留状态）。
+ *
+ * 键是「记录对象身份 + 驻留态」：记录一旦入账永不改写（P1），所以同一条记录同一驻留态的渲染长度恒定。
+ * 不传就每次重新渲染一遍——只影响耗时，不影响结果。
+ */
+export interface ContextProjectionRenderCache {
+  /** 取这条记录在该驻留态下已经量过的字符数；没量过返回 undefined。 */
+  get(record: ContextRecord, residency: ContextResidency): Optional<number>
+  /** 记下这条记录在该驻留态下的字符数，供后续投影与度量直接取用。 */
+  set(record: ContextRecord, residency: ContextResidency, chars: number): void
+}
+
 export interface ProjectContextLedgerInput {
   records: readonly ContextRecord[]
   residency: ContextResidencyVector
@@ -264,6 +277,8 @@ export interface ProjectContextLedgerInput {
   stablePrefix?: readonly ModelMessage[]
   /** 活动尾的外部注入块挂载点（context-dashboard / turn-context delta）。 */
   tailBlocks?: readonly ModelMessage[]
+  /** 渲染长度缓存（可选）：由调用方持有，跨轮复用才有意义；不传就每条记录现场渲染。 */
+  renderCache?: ContextProjectionRenderCache
 }
 
 export interface ContextProjectionStats {

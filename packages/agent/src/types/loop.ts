@@ -7,7 +7,7 @@ import type { AgentChatRuntimeConfig, AgentExecutionConfig, AgentModelProvider, 
 
 import type { ActiveContextArtifact, ActiveContextArtifactKind, ActiveContextArtifactStatus, ActiveContextUpsertInput, AgentContextPhase, AgentContextPhaseReason,AgentDelegationContract, AgentEvent, AgentModelInputModality, AgentRoleId, AgentSurfaceId, AppLocale, CapabilityScopeId, ChatPromptFeatureId, ChatRuntimeEvent, ControlPlaneLedgerEntry, ControlPlaneLedgerSource, ExecutionModeId, PromptSegmentTrace, RunProfileDefinition, RunProfileId, RunProfileRuntimePolicy, RunProfileSelectionId, SkippedPromptSegmentTrace, StreamAssistantGeneratedFilePayload, StreamAssistantRawPayload, StreamAssistantSourcePayload, StreamReasoningPayload, StreamToolCallPayload, StreamToolMetadataPayload, StreamToolProgressPayload, StreamToolResultPayload, StreamTurnContextPayload, StreamTurnEndPayload, SubAgentStructuredOutputContract, SubAgentUsage, ThinkingDepth, ToolAvailabilityScope, ToolCategoryId, ToolCategoryOverview, ToolDescriptor, ToolLayerTelemetryMetrics, ToolSurfaceProfileId, TurnPlanningTelemetryPayload } from './agent.js'
 import type { GoalStatus } from './builtin.js'
-import type { AgentLoopToolRegistry,ContextActiveTaskInput, ContextPinnedEvidenceInput, ContextWorkingSetBudgetAllocation, EstimateContextUsageOptions, ProviderRequestPressureKind, ProviderRequestSnapshot } from './context.js'
+import type { AgentLoopToolRegistry,ContextActiveTaskInput, ContextPinnedEvidenceInput, ContextWorkingSetBudgetAllocation, EstimateContextUsageOptions, ForkFileContext, ProviderRequestPressureKind, ProviderRequestSnapshot } from './context.js'
 import type { AgentHistoryToolContext, AgentTurnToolExecutor, AgentTurnToolResult, AssistantContentPart } from './history.js'
 import type { ModelSpanHandle,ToolSpanOpener, TurnSpanScope } from './ledgers.js'
 import type { AgentModSeamDispatcherApi } from './mods.js'
@@ -1681,6 +1681,8 @@ export interface PrepareSoloRunPlanForTurnInput<TContext extends SoloRunPlanTool
   log: Pick<ScopedLog, 'info'>
   toolAllocator?: SoloRunPlanToolAllocator
   toolAllocatorRequests?: readonly ToolAllocatorRequest[]
+  /** 本轮账本条目往哪记，原样转给运行计划组合器，见 {@link AgentRunPlanLedgerRecorder}。 */
+  ledgerFactory: AgentRunPlanLedgerRecorder
 }
 
 export interface PrepareSoloRunPlanForTurnResult {
@@ -1817,6 +1819,8 @@ export interface CreateSubAgentContextArgs<TContext extends SubAgentContextBase>
   allowedCategories: readonly ToolCategoryId[]
   getAllowedSubAgentTools: (tools?: string[]) => string[]
   getToolNamesForCategories: (categories: ToolCategoryId[]) => string[]
+  /** 子上下文建好后据此继承父侧已读文件的来源，见 {@link ForkFileContext}。 */
+  forkFileContext: ForkFileContext
   log: TContext['log']
   requestToolCategories?: SubAgentOptionsLike['requestToolCategories']
   blockedToolNames?: readonly string[]
@@ -1920,12 +1924,37 @@ export interface PlanAgentIntentInput {
   capabilityScopeId?: string
 }
 
+/**
+ * 运行计划账本的记账口（规划器只认这个最小形状）。
+ *
+ * 规划器在做出取舍的当下记一条，汇成 `AgentRunPlan.ledger` 随 turn context 投给调试面板，用来事后解释
+ * 「这轮为什么只给了这些工具」。条目 id 的自增序号是实现侧的状态，规划器自己不持有它。
+ */
+export interface AgentRunPlanLedgerRecorder {
+  /**
+   * 记一条决策并返回条目；同步、不做 IO、不抛错。
+   * id 按「来源:动作:自增序号」拼，同一轮里多条同名动作靠序号区分先后。
+   */
+  createEntry(input: {
+    /** 哪个规划面写的（intent / capability / context / prompt / recovery），也是条目 id 的第一段。 */
+    source: AgentRunPlanLedgerSource
+    /** 这条记的动作名，如 `classify`、`narrow-tools`；id 的第二段，面板按它归类。 */
+    action: string
+    /** 为什么这么定，一句给人读的话，原样显示在调试面板上。 */
+    reason: string
+    /** 佐证这次取舍的结构化数据（候选数、预算、被淘汰项等）；不传就不写 details 字段。 */
+    details?: Record<string, unknown>
+  }): AgentRunPlanLedgerEntry
+}
+
 export interface BuildAgentRunPlanLedgerInput {
   intent: AgentIntentPlan
   context: ContextRunPlan
   capabilities: CapabilityRunPlan
   recovery: RecoveryRunPlan
   capabilityEvidenceSnapshot?: CapabilityEvidenceSnapshot
+  /** 本轮账本条目往哪记，见 {@link AgentRunPlanLedgerRecorder}。 */
+  ledgerFactory: AgentRunPlanLedgerRecorder
 }
 
 export interface BuildAgentRunPlanInput
@@ -1935,6 +1964,8 @@ export interface BuildAgentRunPlanInput
   requestedRunProfile: RunProfileSelectionId
   capabilityEvidenceSnapshot?: CapabilityEvidenceSnapshot
   toolSchemaBudgetScale?: number
+  /** 本轮账本条目往哪记，见 {@link AgentRunPlanLedgerRecorder}。 */
+  ledgerFactory: AgentRunPlanLedgerRecorder
 }
 
 export interface SoloFinishingGateEvents {
@@ -2029,9 +2060,24 @@ export interface ResolveAgentContextPhaseInput {
   hasActiveContext?: boolean
 }
 
+/**
+ * 上下文溢出的判定规则（循环引擎只认这个最小形状）。
+ *
+ * 引擎只问两件事：这个错误算不算缺页、这一轮还能不能安全重放；具体的重试策略由装配面传进来，
+ * 引擎因此不直接依赖任何实现。
+ */
+export interface ContextOverflowRules {
+  /** 这个错误是不是上下文溢出（缺页）；不是就原样上抛，不进降级阶梯。 */
+  isContextOverflowError(error: unknown): boolean
+  /** 本轮是否已有可见输出或工具副作用致重放不安全；true 时即便是溢出也原样上抛。 */
+  isContextOverflowReplayUnsafe(error: unknown): boolean
+}
+
 export interface ExecuteLoopTurnWithContextOverflowRecoveryInput<TTurnResult> {
   turn: number
   abortSignal: AbortSignal
+  /** 溢出判定规则；由面装配，见 {@link ContextOverflowRules}。 */
+  overflowRules: ContextOverflowRules
   /** 发起一次单轮模型调用；溢出恢复后会用同一轮重试。 */
   executeTurn(): Promise<TTurnResult>
   /** 第 attempt 次缺页（从 0 起）应采取的降级动作（面提供阶梯：solo=RecoveryRunPlan，query=chain 表）。 */

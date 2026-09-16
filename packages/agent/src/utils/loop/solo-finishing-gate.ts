@@ -13,6 +13,10 @@ import { consumeSoloRuntimeGuidance } from './solo-runtime-guidance'
 
 const RepeatedFinishingGateBlockLimit = 3
 
+/**
+ * 起一个空的「收尾门连拦」计数器：记住上一次是被哪条理由拦下的、它连着命中了几轮。
+ * 整个执行共用同一个对象跨轮累加，是熔断「模型被同一条要求推回却毫无进展」的唯一依据。
+ */
 function createSoloFinishingGateBlockTracker(): SoloFinishingGateBlockTracker {
   return {
     reason: null,
@@ -20,11 +24,21 @@ function createSoloFinishingGateBlockTracker(): SoloFinishingGateBlockTracker {
   }
 }
 
+/**
+ * 把连拦计数清零。调用时机只有一个：模型这一轮真的调了工具（`SoloStreamLoop` 里 `hasToolUse` 分支）。
+ * 有实际推进就不该记账，否则跨越好几轮的零散拦截会被累加成熔断，把正常会话判成 error。
+ */
 function resetSoloFinishingGateBlockTracker(tracker: SoloFinishingGateBlockTracker): void {
   tracker.reason = null
   tracker.count = 0
 }
 
+/**
+ * 判定某条拦截理由要不要计入连拦熔断：只有三条算——验证追问、内核收尾就绪、目标状态未收束。
+ * 这三条都是「把同一条要求原样推回去」，反复命中就说明模型在原地打转。
+ * 其余理由（收尾提醒、后台任务、用户插话）每次带来的都是新输入，重复出现不代表空转，
+ * 计进去反而会把一场活跃会话误判成 error。
+ */
 function isRepeatableFinishingGateReason(
   reason: SoloFinishingGateContinueReason
 ): reason is SoloFinishingGateRepeatableReason {
@@ -35,6 +49,13 @@ function isRepeatableFinishingGateReason(
   )
 }
 
+/**
+ * 把一次「收尾被拦下」翻成给主循环的裁决，并顺手维护连拦计数。
+ * 不可重复的理由（或宿主没给 tracker）先清零计数再让循环续一轮；可重复的理由同理由累加、换理由归 1，
+ * 连续第 3 次（`RepeatedFinishingGateBlockLimit`）不再续轮，记一条 warn 并改判
+ * `error` / `repeated-finishing-gate`，把原拦截理由一并带出去。
+ * 这一档是硬熔断：同一条要求推回三轮仍不满足，再推只会空烧额度，交由上层收敛执行。
+ */
 function resolveBlockedFinishingGateResult(
   input: Pick<RunSoloFinishingGateInput<unknown>, 'finishingGateBlockTracker' | 'log' | 'turn'>,
   reason: SoloFinishingGateContinueReason
@@ -68,6 +89,12 @@ function resolveBlockedFinishingGateResult(
   return { status: 'continue', reason }
 }
 
+/**
+ * 拼目标模式下「目标还没收束、这一轮不许结束回复」的推回消息：先报当前目标状态与目标正文
+ * （压根没有目标就直说），再给四条出路——先 `goal:create` 建目标 / 继续干 /
+ * `goal:update({status:"complete"})` / 确有真实阻碍就 `goal:update({status:"blocked"})`。
+ * 明写 blocked 也算收束、且不必等多轮审计，是为了不把遇到硬阻碍的会话锁死在收尾环上。
+ */
 function buildGoalStatusRequiredReminder(state: SoloGoalFinishingState): string {
   const objective = state.objective?.trim()
   const statusLine = state.exists
@@ -85,6 +112,20 @@ function buildGoalStatusRequiredReminder(state: SoloGoalFinishingState): string 
   ].join('\n')
 }
 
+/**
+ * 主 Agent 的收尾门：模型这一轮没有再调工具、看样子要结束回复时跑一遍，判「真的收」还是「推回去再跑一轮」。
+ *
+ * 检查顺序是固定的，每一档拦下的动作都一样——先发 turnEnd 事件、把一条内部消息压进 history，
+ * 再交给 `resolveBlockedFinishingGateResult` 决定是续轮还是已经连拦三次该熔断：
+ * 1. finishing 阶段的 loop reminder（改完文件的收尾提醒等）；
+ * 2. 自动验证门给出的追问；
+ * 3. 内核收尾就绪（`evaluateKernelFinalReadiness`，只拦验证正红）；
+ * 4. 后台任务停泊——必须排在 `before-complete` 的 `takeOrSeal` 之前，否则停泊期间用户的 steer 唤不醒循环；
+ * 5. 目标模式下先消费一次用户插话，再查目标是否已进终态；
+ * 6. 最后一次 `before-complete` 取输入并封口。
+ *
+ * 中途只要 abort 信号亮起就发出中止事件并返回 `aborted`；六档全过才返回 `completed`，本次执行到此结束。
+ */
 async function runSoloFinishingGate<
   TToolContext,
   TEvents extends SoloFinishingGateEvents = SoloFinishingGateEvents,
@@ -214,6 +255,11 @@ async function runSoloFinishingGate<
   return { status: 'completed' }
 }
 
+/**
+ * 从不透明的 toolContext 里尽力取一份 coding session 快照供收尾判据用：结构对不上（没有
+ * codingSession、或它没有 `getSnapshot`）返回 `null`；取的过程中抛错也只记一条 warn 后返回 `null`。
+ * 取不到快照等于这一档放行——观测缺失不该反过来变成挡住模型收尾的理由。
+ */
 function readCodingSessionSnapshot(
   toolContext: unknown,
   log: Pick<ScopedLog, 'warn'>

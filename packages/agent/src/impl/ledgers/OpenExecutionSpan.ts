@@ -14,11 +14,26 @@ import type { ExecutionSpanOutcome,ExecutionSpanStart } from '../../types/ledger
 import { emptyExecutionSpanMetrics, ExecutionSpanSchema } from '../../utils/wire/observability'
 
 /**
- * 一条进行中的 span handle。
+ * 一条**进行中**的 span handle：由 `ExecutionSpanRecorder.open` 造出，身份与起始时刻在那一刻就定死。
  *
- * `end` 幂等前置：重复收敛抛错（防止同一 span 双计时/双落盘）。`spanId` 暴露给调用方作子 span 的 `parentSpanId`。
+ * 持有者是产 span 的生产侧（run/turn scope），拿着它做两件事：给子 span 当父指针，以及在动作结束时收敛。
+ * 进行中的状态只在内存里，不落盘——账本里永远只有已收敛的完整 span。
  */
-export class OpenExecutionSpan {
+export interface OpenExecutionSpanApi {
+  /** 本条 span 的身份，录制器开 span 时分配；子 span 把它填进自己的 `parentSpanId` 来结成树。 */
+  readonly spanId: string
+  /** 开 span 的时刻（epoch 毫秒，取注入时钟）；收敛时 `latencyMs` 就按「收敛时刻 − 它」算。 */
+  readonly startedAt: number
+  /**
+   * 收敛并落定本 span：补齐 endedAt / status / metrics → `ExecutionSpanSchema.parse` → 交给 sink，返回完整记录。
+   *
+   * 每条 span 只许收敛一次，重复调用抛 `INVARIANT`（同一 span 双计时、双落盘是观测数据坏掉的根源）；
+   * schema 不过也抛——绝不 emit 半成品。`outcome` 省略时按成功（status='ok'）记。
+   */
+  end(outcome?: ExecutionSpanOutcome): ExecutionSpan
+}
+
+export class OpenExecutionSpan implements OpenExecutionSpanApi {
   private ended = false
 
   constructor(
@@ -31,7 +46,7 @@ export class OpenExecutionSpan {
 
   /** 收敛并落定本 span：组装 → 校验 → emit，返回完整记录。 */
   public end(outcome: ExecutionSpanOutcome = {}): ExecutionSpan {
-    if (this.ended) throw new AppError('INVARIANT', `execution span ${this.spanId} already ended`)
+    if (this.ended) throw new AppError('INVARIANT', `执行 span ${this.spanId} 已经收敛过，不能再收敛一次：一个 span 只允许落定一条记录，重复收敛会让账本里出现重复 span。`)
     this.ended = true
 
     const endedAt = this.now()

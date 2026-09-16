@@ -16,22 +16,37 @@ export function isExternalAgentBridgeExtensionOrigin(origin: unknown): origin is
   return isString(origin) && /^chrome-extension:\/\/[a-p]{32}$/u.test(origin)
 }
 
+/** 建 `ExternalAgentBridgeLoopbackServer` 时一次性交的参数：端口范围、握手路径、单帧上限和两个回调；建好之后不再变。 */
 export interface ExternalAgentBridgeLoopbackServerOptions {
+  /** 端口扫描的起点（含），缺省 `ExternalAgentBridgeDefaultPortStart`；`start()` 从这里往上逐个试，谁先空着用谁。 */
   readonly portStart?: number
+  /** 端口扫描的终点（含），缺省 `ExternalAgentBridgeDefaultPortEnd`；扫到这里还全被占就抛错。必须 >= `portStart`，否则 `start()` 直接拒。 */
   readonly portEnd?: number
+  /** WebSocket 握手只认这一个 URL path，缺省 `ExternalAgentBridgeProtocolDescriptor.socketPath`；其余路径的 Upgrade 一律回 403。改它等于换协议端点，客户端要跟着改。 */
   readonly socketPath?: string
+  /** 单条 WebSocket 消息的字节上限，缺省 `ExternalAgentBridgeMaxSocketPayloadBytes`（32 MB）；超了由 ws 关连接，不会进 `onConnection` 那条流。 */
   readonly maxPayloadBytes?: number
+  /** 一条连接通过 Origin 和 path 校验、升级成功后回调，把 socket 交给宿主；配对、凭据校验、设备/会话绑定和工具执行全在这条回调之后由宿主做。 */
   readonly onConnection: (socket: WebSocket) => void
+  /** 传输层出错时回调（HTTP clientError、socket error、WebSocketServer error）；只用来记日志或上报，服务器自己会销毁坏掉的 socket，不调用方也不影响运行。 */
   readonly onError?: (error: Error) => void
 }
 
 /**
- * External Agent Bridge 的公共 loopback transport owner。
+ * 外部 Agent 桥的 loopback 传输层：在 127.0.0.1 上挑一个空端口起 HTTP 服务，只放行来自 Chrome 扩展 Origin、且打在约定 path 上的 WebSocket Upgrade，其余一律 403。
  *
- * 只负责 127.0.0.1 端口选择、Origin/path admission、Upgrade、socket 追踪和释放；
- * 配对、凭据、设备/Session 与工具执行全部通过产品回调留在宿主。
+ * 实现是 `ExternalAgentBridgeLoopbackServer`，宿主进程持一个；只管端口选择、准入、升级、socket 追踪和释放，配对、凭据、设备/会话与工具执行全部经 `onConnection` 回调留在宿主那边。
  */
-export class ExternalAgentBridgeLoopbackServer {
+export interface ExternalAgentBridgeLoopbackServerApi {
+  /** 当前监听地址，形如 `ws://127.0.0.1:<port><socketPath>`，发给客户端去连；没 `start()` 或已 `close()` 时是 null。 */
+  readonly endpoint: Nullable<string>
+  /** 起服务：在 `portStart`–`portEnd` 里逐个试，第一个没被占的就绑上并返回它的 endpoint；已经在跑就原样返回当前 endpoint（可重复调）。端口范围非法、或整段都被占时抛错。 */
+  start(): Promise<string>
+  /** 停服务：踢掉全部 WebSocket 客户端、销毁还挂着的 TCP socket、关掉两层 server，并把 `endpoint` 清成 null。可重复调；关完还能再 `start()` 重新选端口。 */
+  close(): void
+}
+
+export class ExternalAgentBridgeLoopbackServer implements ExternalAgentBridgeLoopbackServerApi {
   private server: Nullable<Server> = null
   private webSocketServer: Nullable<WebSocketServer> = null
   private readonly networkSockets = new Set<Socket>()
@@ -48,13 +63,13 @@ export class ExternalAgentBridgeLoopbackServer {
     const portStart = this.options.portStart ?? ExternalAgentBridgeDefaultPortStart
     const portEnd = this.options.portEnd ?? ExternalAgentBridgeDefaultPortEnd
     if (!Number.isInteger(portStart) || !Number.isInteger(portEnd) || portStart > portEnd) {
-      throw new Error('Invalid External Agent Bridge port range')
+      throw new Error('External Agent Bridge 端口区间非法：portStart 与 portEnd 必须都是整数，且 portStart 不能大于 portEnd。')
     }
     for (let port = portStart; port <= portEnd; port += 1) {
       const started = await this.tryStart(port)
       if (started) return started
     }
-    throw new Error(`No External Agent Bridge port is available in ${portStart}-${portEnd}`)
+    throw new Error(`External Agent Bridge 在 ${portStart}-${portEnd} 区间里找不到可用端口：这些端口都被占着，先腾出一个或把区间调大。`)
   }
 
   public close(): void {
@@ -129,7 +144,7 @@ export class ExternalAgentBridgeLoopbackServer {
     if (!address || isString(address)) {
       webSocketServer.close()
       server.close()
-      throw new Error('External Agent Bridge did not bind a TCP port')
+      throw new Error('External Agent Bridge 没能绑上 TCP 端口：server.address() 返回的不是网络地址，这次监听用不了，已回滚。')
     }
     this.server = server
     this.webSocketServer = webSocketServer

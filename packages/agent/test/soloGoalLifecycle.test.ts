@@ -77,7 +77,7 @@ describe('SoloGoalLifecycle explicit goal control plane', () => {
         artifact: harness.readArtifact()!, steps: [{ step: '交付文件', status }],
       }))
       const before = harness.readWrites()
-      await expect(lifecycle.recordSuccessfulCompletion()).rejects.toThrow('unresolved goal steps')
+      await expect(lifecycle.recordSuccessfulCompletion()).rejects.toThrow('还有未解决的目标步骤')
       expect(harness.readWrites()).toBe(before)
       expect(harness.readArtifact()?.metadata?.steps).toEqual([{ step: '交付文件', status }])
       expect((await lifecycle.inspect()).status).toBe('active')

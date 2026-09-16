@@ -16,7 +16,7 @@ import { compareStableStrings } from '../residency/determinism'
 
 import { estimateBlockTokens } from './context-ledger'
 import { ContextUsageCompactionPercent, estimateContextUsage } from './context-usage'
-import { ContextWorkingSetBudgetGovernor } from './context-working-set-budget-governor'
+import { allocateContextWorkingSetBudget, annotateContextWorkingSetBudgetLedger } from './context-working-set-budget-governor'
 import { sumPositive } from './message-scan'
 
 const log = logRuntime.tag('ProviderRequestBudget')
@@ -150,13 +150,13 @@ export function runBudgetStage(params: {
     hash: block.hash,
     ref: block.payloadRef,
   }))
-  const budgetAllocation = ContextWorkingSetBudgetGovernor.allocate({
+  const budgetAllocation = allocateContextWorkingSetBudget({
     contextWindow: estimate.contextWindow,
     usableContextWindow: estimate.usableContextWindow,
     reservedOutputTokens: estimate.reservedOutputTokens,
     ledger,
   })
-  const annotatedLedger = ContextWorkingSetBudgetGovernor.annotateLedger(ledger, budgetAllocation)
+  const annotatedLedger = annotateContextWorkingSetBudgetLedger(ledger, budgetAllocation)
   const pressureKind = resolvePressureKind(estimate, toolSchemaChars)
   const okToSend = estimate.estimatedTokens <= estimate.usableContextWindow
 

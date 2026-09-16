@@ -8,6 +8,12 @@ import type { ProviderRequestFingerprint } from '../../types/records.js'
 
 import { encodeProviderRequestAuditValue } from './serialization'
 
+/**
+ * 把这次真正要发给 provider 的请求整份编成可落盘、可反解的审计快照（schemaVersion 恒为 1）。
+ * messages、各工具的 inputSchema 与 toolChoice 都过 `encodeProviderRequestAuditValue`（带类型标签、对象键排序），
+ * 工具列表按 name 升序重排，指纹做浅拷贝——目的是同一份模型可见输入在任何进程都编出同一字节序，缓存命中判定与金标比对才可信。
+ * 没给 tools 时记空数组。这里只如实记录，不做体积裁剪，也不校验是否可重建（那是 assertProviderRequestSnapshotReconstructable 的事）。
+ */
 export function buildProviderRequestSnapshot(input: {
   model: string
   system: string

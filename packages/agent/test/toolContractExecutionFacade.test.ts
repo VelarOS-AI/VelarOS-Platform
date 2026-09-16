@@ -3,11 +3,11 @@ import { describe, expect, test } from 'bun:test'
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 
-import { AgentProtocolVersion } from '../src/contract/constants.js'
 import { ToolContractExecutionFacade } from '../src/impl/assembly/ToolContractExecutionFacade'
 import type { VelarToolCallEnvelope } from '../src/types/agent.js'
 import type { ToolContractExecutionBinding, ToolContractExecutionContext, ToolContractExecutionRegistry } from '../src/types/execution.js'
 import { ToolCatalogDiscoveryToolName, ToolSchemaDiscoveryToolName } from '../src/utils/wire/lease'
+import { AgentProtocolVersion } from '../src/utils/wire/version'
 
 const ProbeToolName = 'probe:read'
 const ProbeSignature = 'probe:read@1'

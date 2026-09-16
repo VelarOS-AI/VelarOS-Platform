@@ -20,6 +20,12 @@ const ToolExposureTierRank: Record<ToolExposureTier, number> = {
   experimental: 4_000,
 }
 
+/**
+ * 按传入顺序叠加多份工具暴露策略，**后者覆盖前者**（所以越靠后的越像"更具体的一层"）。
+ * 只有显式给了值的字段才参与覆盖：tier 非空、rank 是数字、alwaysResident 是布尔才写入，
+ * 因此上一层的设置不会被下一层的缺省字段抹掉。`profiles` 逐档位浅合并而不是整块替换，
+ * 一层只调某一档的 rankBoost 时，其余档位保持原样。
+ */
 function mergeToolExposurePolicies(
   ...policies: Array<LooseOptional<ToolExposurePolicy>>
 ): ToolExposurePolicy {
@@ -55,6 +61,13 @@ function mergeToolExposurePolicies(
   return merged
 }
 
+/**
+ * 算出某个工具在某个运行档下的最终暴露参数（tier / rank / rankBoost / 是否常驻）。
+ *
+ * 描述符没声明时的缺省是刻意保守的：tier 取 `specialized`、rank 取 `MAX_SAFE_INTEGER`，
+ * 也就是**没登记过暴露策略的工具排在最后**，预算紧张时最先被换出——新工具想常驻必须显式声明。
+ * alwaysResident 由档位级设置优先，档位没说才看工具的全局设置。
+ */
 function resolveToolExposure(
   toolName: string,
   profile: RunProfileId,
@@ -72,10 +85,19 @@ function resolveToolExposure(
   }
 }
 
+/**
+ * 把暴露参数压成一个排序分：tier 基分 + rank + 该档位的 rankBoost。**分越低越优先**（越不易被换出）。
+ * tier 基分之间隔 1000，所以同一 tier 内的 rank 微调不会越过 tier 边界；要跨 tier 提优先级只能靠
+ * 负的 rankBoost 或常驻标记。
+ */
 function getToolExposureScore(exposure: ResolvedToolExposure): number {
   return ToolExposureTierRank[exposure.tier] + exposure.rank + exposure.rankBoost
 }
 
+/**
+ * schema 体积罚分：每满 1000 字符加 1 分（向上取整），让同等价值下"schema 更胖"的工具先被换出。
+ * 没有实测字节或字节数 ≤ 0 时不罚——量不到就别猜，宁可按纯能力分级排。
+ */
 function getSchemaSizePenalty(
   toolName: string,
   toolSchemaChars?: Readonly<Record<string, number>>
@@ -104,6 +126,13 @@ function getToolHotnessBoost(
   return Math.min(MaxToolHotnessBoost, uses * ToolHotnessUnit)
 }
 
+/**
+ * 按"该不该留在提示词里"给工具排序（升序，**排在前面的先存活**），不改入参数组。
+ *
+ * 分数 = 能力分级分 + schema 体积罚分 − 本会话热度减分 − 常驻保护减分，四项合起来表达
+ * 「越重要、越小、越常用、越受保护的越靠前」。分数相同时按 {@link compareStableStrings} 的码元序定序：
+ * 工具序会进提示词字节，必须跨机器稳定，因此不用 `localeCompare`。
+ */
 function sortToolsByBudgetPriority(
   tools: string[],
   profile: RunProfileId,
@@ -136,6 +165,10 @@ function sortToolsByBudgetPriority(
 
 const ToolResidentBoost = 1_500
 
+/**
+ * 受保护工具的排序减分：命中保护集给 1500，否则 0。
+ * 1500 比一个 tier 的间隔（1000）还大，保证被保护的工具能跨越一整级 tier 排到前面去。
+ */
 function getToolResidentBoost(toolName: string, protectedToolSet?: ReadonlySet<string>): number {
   return protectedToolSet?.has(toolName) ? ToolResidentBoost : 0
 }
@@ -143,6 +176,11 @@ function getToolResidentBoost(toolName: string, protectedToolSet?: ReadonlySet<s
 const ToolCountSoftOverageRatio = 0.15
 const ToolCountSoftOverageMin = 2
 
+/**
+ * 把工具数量硬上限放宽成"软上限"：额外允许超出 15%，且至少多给 2 个。
+ * 字节预算生效时数量只是护栏，主约束是 schema 字节；留这点余量是为了不让一两个的数量差
+ * 把字节预算内本可暴露的工具挡在外面。`maxToolCount` 为空（该档不限数量）时返回 null，照样不限。
+ */
 function getSoftToolCountLimit(maxToolCount: Nullable<number>): Nullable<number> {
   if (!isNumber(maxToolCount)) return null
 
@@ -152,6 +190,11 @@ function getSoftToolCountLimit(maxToolCount: Nullable<number>): Nullable<number>
   )
 }
 
+/**
+ * 按数量上限截断已排好序的工具表：`soft` 为真时用放宽后的软上限，否则用硬上限。
+ * 上限为空表示不限数量，原样返回。直接 `slice` 掐尾，所以**必须先排序再调**——
+ * 顺序就是优先级，掉在后面的即被淘汰（它们会进 droppedTools，模型仍可按需换页调回来）。
+ */
 function applyToolCountBudget(
   tools: string[],
   maxToolCount: Nullable<number>,
@@ -163,6 +206,10 @@ function applyToolCountBudget(
   return tools.slice(0, limit)
 }
 
+/**
+ * 累加一组工具的 schema 字符数。表里查不到的工具按 0 计，负数也夹到 0，
+ * 保证总和不会因为个别脏数据变成负值而把预算算大。
+ */
 function sumToolSchemaChars(
   tools: readonly string[],
   toolSchemaChars: Readonly<Record<string, number>>
@@ -170,6 +217,10 @@ function sumToolSchemaChars(
   return tools.reduce((total, toolName) => total + Math.max(0, toolSchemaChars[toolName] ?? 0), 0)
 }
 
+/**
+ * 定本次生效的工具 schema 字节上限：档位静态值与 ContextOS 动态值都在就**取较小者**（两边都是上限，谁更紧听谁的），
+ * 只有一个就用那个，都没有返回 null = 不启用字节预算（此时只剩数量护栏）。
+ */
 function resolveEffectiveMaxToolSchemaChars(input: {
   profile: RunProfileId
   profileMaxToolSchemaChars: Nullable<number>
@@ -182,6 +233,17 @@ function resolveEffectiveMaxToolSchemaChars(input: {
   return numberOrNull(input.dynamicMaxToolSchemaChars)
 }
 
+/**
+ * 工具换页的总入口：把"本次允许的全部工具"按运行档预算裁成"这一轮真正写进提示词的那些"，
+ * 并原样交回被换出的名单（`droppedTools` 不是丢弃，模型可按需把它们换页调回来）。
+ *
+ * 工具分两角色：pinned（受保护或声明了 alwaysResident）先占预算、永不淘汰；其余全是 pooled，
+ * 按 {@link sortToolsByBudgetPriority} 排队，预算装得下就常驻、装不下才掉进 droppedTools。
+ * 字节预算只在"有字节上限且调用方给了各工具实测字节"时才生效，生效时它是主约束、数量上限退为软护栏；
+ * 不生效时退化成纯按数量截断。pinned 占用会先从字节预算里扣掉，剩下的才给 pooled 用。
+ * 边界：pinned 为空时允许第一个 pooled 工具超额入选（`allowOversizeFirst`），避免预算太小导致
+ * **一个工具都暴露不出来**——没有工具的模型比超一点预算糟得多。
+ */
 function applyRunProfileToolExposure(
   allowedTools: string[],
   profile: RunProfileId,

@@ -59,6 +59,11 @@ export function renderContextDashboardText(input: ContextDashboardInput): string
   return lines.join('\n')
 }
 
+/**
+ * 渲染"上一次治理周期干了什么"那一行：来源、是否真的应用了、跳过原因、迁移条数，以及三档器械各降了几条。
+ * 从没跑过治理时返回 null（整行不出现，不是印一行全零）；跑过但被跳过时 `applied=no` 加上具体 `skip=` 原因，
+ * 没有跳过原因就印 `skip=none`——让模型看见"治理试过了但没省下东西"，而不是误以为压根没治理。
+ */
 function renderLastEpochAttempt(
   attempt: ContextDashboardInput['lastEpochAttempt']
 ): Nullable<string> {
@@ -110,6 +115,10 @@ function collectHoldings(input: ContextDashboardInput): DashboardHolding[] {
   })
 }
 
+/**
+ * 按**有效**驻留态数五档各有几条，五个键一律出现（没有的记 0，不省字段）。
+ * 刻意不用账本上的声明态：dashboard 报的数必须等于真发出去的形态，否则模型会照着一份假账判断自己还撑不撑得住。
+ */
 function countByEffectiveResidency(
   holdings: readonly DashboardHolding[]
 ): Record<ContextResidency, number> {
@@ -124,6 +133,11 @@ function countByEffectiveResidency(
   return counts
 }
 
+/**
+ * 渲染"谁最占空间"那一行：占用为 0 的记录先剔掉（已折掉的没必要上榜），按实际字符数降序取前 `TopHoldingCount` 条，
+ * 字符数并列时按记录 id 的码元序兜底，保证同一份账本在任何机器上排出同一张榜。
+ * 字符数按千位四舍五入印成 `12k`——这行是给模型看的量级感，不是精确账。一条都没有时返回 null，整行不出现。
+ */
 function renderTopHoldings(holdings: readonly DashboardHolding[]): Nullable<string> {
   const top = [...holdings]
     .filter((holding) => holding.chars > 0)

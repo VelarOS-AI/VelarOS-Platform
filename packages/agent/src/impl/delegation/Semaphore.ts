@@ -14,7 +14,37 @@
 //    （worker 拿到槽位后立刻自查取消标记）。刻意如此：让信号量兼管取消会把两套生命周期缠在一起，
 //    而信号量是唯一保证「槽位一定还回来」的地方，不该有第二条退出路径。
 
-class Semaphore {
+/**
+ * 并发闸门原语：占一个槽位才能跑，占不到就排队等。
+ *
+ * 每个顶层执行由派发器惰性建一把、随 `clearExecution` 一起丢，所以不同会话/窗口互不阻塞。
+ * 上限在建的时候定死，之后不改；本闸不认识取消（等待中的 acquire 不会因中断提前返回），
+ * 取消由派发器侧的 relay handle 负责。
+ */
+export interface SemaphoreApi {
+  /**
+   * 本闸的并发上限——**全系统唯一的那个数**。
+   *
+   * 对外可读是刻意的：工作流的 lane 调度器按它开 runner，而不是自带第二个常量。
+   * 加第二个并发上限前先回答「两个数漂移时以谁为准」，答不上就是不该加。
+   */
+  readonly maxConcurrency: number
+  /**
+   * 占一个槽位；未达上限立即返回，否则挂进先进先出队列等前面的人还槽。
+   *
+   * 派发顺序即用户看到的完成顺序，所以队列不能换成后进先出或优先级队列。
+   */
+  acquire(): Promise<void>
+  /**
+   * 还一个槽位并唤醒队首等待者。
+   *
+   * **必须写在调用方的 `finally` 里**、与 `acquire` 一一配对：漏一次就永久少一个槽位，
+   * 攒满之后该执行再也派不出子 Agent，而且不抛错不打日志，只表现为「卡住」。
+   */
+  release(): void
+}
+
+class Semaphore implements SemaphoreApi {
   private active = 0
   private readonly queue: Array<() => void> = []
 

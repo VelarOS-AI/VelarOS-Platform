@@ -175,7 +175,7 @@ async function upsertActiveDirective(
   if (existing && !isActiveDirectiveArtifact(existing)) {
     throw new AppError(
       'VALIDATION',
-      `Active directive id conflicts with non-directive active context: ${id}`
+      `活动指令 id ${id} 与一条非指令的活动上下文撞车：这个 id 上已经存在别的活动上下文条目（例如决策记录），指令不能顶掉它。换一个 id，或者先把那条已有条目归档。`
     )
   }
 
@@ -185,7 +185,7 @@ async function upsertActiveDirective(
   if (existing?.status !== 'active' && activeDirectives.length >= ActiveDirectiveLimits.maxActive) {
     throw new AppError(
       'VALIDATION',
-      `Context protection area already contains ${ActiveDirectiveLimits.maxActive} active directives. Archive or merge one before adding another.`
+      `上下文保护区里已经有 ${ActiveDirectiveLimits.maxActive} 条活动指令，到达上限，加不进新的。先归档或合并掉其中一条，再添加。`
     )
   }
 

@@ -7,6 +7,7 @@ import type { OverriddenToolMap,RegisteredToolMap } from '../../types/tools.js'
 import { resolveCapabilityCategoryDefinitions } from '../../utils/capabilities'
 import { compareStableStrings } from '../../utils/residency/determinism'
 import { isToolCategoryAvailable } from '../../utils/tools/access-policy'
+import { activeDescriptorForRegisteredTool } from '../../utils/tools/capability-registry'
 import { isToolCompatibleWithModelInputs } from '../../utils/tools/model-input-policy'
 
 import { defaultRuntimePromptFeaturePolicy } from './DefaultPromptFeaturePolicy'
@@ -26,12 +27,60 @@ function resolveCategoryDefinition(
 }
 
 /**
+ * 工具可见性过滤器（别名 `ToolRegistryHelper`）：回答「这个上下文下哪些工具该出现」。
+ *
+ * 自己不存工具——注册表按名存工具、管 provider 生命周期，这里每次都从调用方传进来的
+ * `registry` 现算。只读一份 prompt feature 策略作为构造依赖，除此之外无状态，可安全共用一份实例。
+ * 过滤顺序从便宜到昂贵（allowList → 类别 → 系统开关 → 模型可消费性 → 工具自判 → 会话授权），
+ * 判不出结论一律按「不可见」收敛。
+ */
+export interface ToolRegistryApi {
+  /** 这个工具类别在当前上下文（角色、能力作用域、注入端口）下是否整体可见；整类不可见时里面的工具一个都不出现。 */
+  isCategoryAvailable(ctx: ToolRegistryContext, categoryId: RegisteredTool['categoryId']): boolean
+  /**
+   * 列出当前上下文可用的注册表 entry（名字 + 原始条目），是 `listAvailable` / `listCategories` 的共同底座。
+   * `allowList` 非空时先按名收窄（子 Agent 与反射调用用它划边界）；`scope` 为 `enabled` 时还要过会话类别授权、
+   * 本轮 active 类别与 prompt feature 三道，`all` 只过前面那几道硬门。
+   */
+  listAvailableEntries<TContext extends ToolRegistryContext, TTool extends RegistryTool<TContext>>(
+    registry: RegisteredToolMap<TTool>,
+    ctx: TContext,
+    allowList?: string[],
+    scope?: ToolAvailabilityScope
+  ): Array<[string, RegisteredTool<TTool>]>
+  /** 把可用 entry 渲染成 descriptor 列表，供模型工具表、UI 与 list_tools 类工具展示；顺序跟随注册表插入序。 */
+  listAvailable<TContext extends ToolRegistryContext, TTool extends RegistryTool<TContext>>(
+    registry: RegisteredToolMap<TTool>,
+    ctx: TContext,
+    allowList?: string[],
+    scope?: ToolAvailabilityScope
+  ): ToolDescriptor[]
+  /** 同 `listAvailable`，但按类别聚合并按类别名、工具名稳定排序；一个工具都不剩的类别整条丢掉。 */
+  listCategories<TContext extends ToolRegistryContext, TTool extends RegistryTool<TContext>>(
+    registry: RegisteredToolMap<TTool>,
+    ctx: TContext,
+    allowList?: string[],
+    scope?: ToolAvailabilityScope
+  ): ToolCategoryOverview[]
+  /**
+   * 设置页用的全量概览：不看会话上下文，所以不会因为当前授权隐藏任何工具，只按 `disabledToolNames`
+   * 标出系统层禁用。被覆盖的注册（`overriddenRegistry`）也一并列出并标 `overridden`，供用户看清是谁顶掉了谁。
+   */
+  getOverviewWithDisabledTools<TTool extends RegistryTool<any>>(
+    registry: RegisteredToolMap<TTool>,
+    disabledToolNames: string[],
+    overriddenRegistry?: OverriddenToolMap<TTool>,
+    capabilityPorts?: AgentRuntimeCapabilityPorts
+  ): ToolCategoryOverview[]
+}
+
+/**
  * 工具注册表辅助类。
  *
  * 这里集中处理“某个上下文下哪些工具可见”的过滤规则，ToolRegistry 本身只负责
  * 存储和 provider 生命周期，避免注册表类膨胀。
  */
-class ToolRegistry {
+class ToolRegistry implements ToolRegistryApi {
   constructor(
     private readonly promptFeaturePolicy: RuntimePromptFeaturePolicy = defaultRuntimePromptFeaturePolicy
   ) {}
@@ -154,7 +203,7 @@ class ToolRegistry {
     scope: ToolAvailabilityScope = 'enabled'
   ): ToolDescriptor[] {
     return this.listAvailableEntries(registry, ctx, allowList, scope).map(([name, entry]) =>
-      this.createActiveDescriptor(name, entry)
+      activeDescriptorForRegisteredTool(name, entry)
     )
   }
 
@@ -170,7 +219,7 @@ class ToolRegistry {
     // 复用 listAvailableEntries 的过滤逻辑，但直接分组，避免先构造一整份 flat descriptors。
     for (const [name, entry] of this.listAvailableEntries(registry, ctx, allowList, scope)) {
       const bucket = grouped.get(entry.categoryId) ?? []
-      bucket.push(this.createActiveDescriptor(name, entry))
+      bucket.push(activeDescriptorForRegisteredTool(name, entry))
       grouped.set(entry.categoryId, bucket)
     }
 
@@ -188,28 +237,6 @@ class ToolRegistry {
         }
       })
       .filter((entry) => !isEmpty(entry.tools))
-  }
-
-  private createActiveDescriptor<TTool extends RegistryTool<any>>(
-    name: string,
-    entry: RegisteredTool<TTool>
-  ): ToolDescriptor {
-    return {
-      descriptorId: entry.descriptorId ?? name,
-      name,
-      description: entry.tool.description,
-      usageSkillId: entry.tool.usageSkillId,
-      role: entry.tool.role,
-      permissions: entry.tool.permissions,
-      capabilities: entry.tool.capabilities,
-      requiredModelInputModalities: entry.tool.requiredModelInputModalities,
-      exposure: entry.tool.exposure,
-      categoryId: entry.categoryId,
-      systemEnabled: true,
-      providerId: entry.providerId,
-      providerKind: entry.providerKind,
-      registrationStatus: 'active',
-    }
   }
 
   /**

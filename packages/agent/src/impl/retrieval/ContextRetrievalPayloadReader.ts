@@ -9,9 +9,10 @@ import { normalizeLegacyFoldStub } from '../../utils/context/context-ref-envelop
 import { isPrivateFileContextRecord } from '../../utils/context/private-file-records'
 import { chatSearchMessages } from '../../utils/retrieval/messages'
 import { paginateJsonPathValue, paginateSerializedText } from '../../utils/retrieval/pagination'
-import { type ContextRetrievalReferenceReader } from '../../utils/retrieval/reference-reader'
-import { contextRetrievalReferences } from '../../utils/retrieval/references'
 import { chatSearchText } from '../../utils/retrieval/text'
+
+import { type ContextRetrievalReferenceReader } from './ContextRetrievalReferenceReader'
+import { contextRetrievalReferences } from './ContextRetrievalReferences'
 
 function readJsonPathIdentifier(path: string, start: number): Nullable<{ key: string; next: number }> {
   let index = start
@@ -147,7 +148,7 @@ export function selectJsonPath(serialized: string, path: string): JsonPathSelect
     return {
       found: false,
       value: null,
-      reason: `serializedResult is not valid JSON: ${AppError.getMessage(error)}`,
+      reason: `serializedResult 不是合法 JSON，按 jsonPath 取值前解析就失败了：${AppError.getMessage(error)}`,
     }
   }
 
@@ -155,7 +156,7 @@ export function selectJsonPath(serialized: string, path: string): JsonPathSelect
   if (!segments) return {
       found: false,
       value: null,
-      reason: 'jsonPath is invalid. Use paths like $.a.b[0] or $["complex.key"].',
+      reason: 'jsonPath 写法不对：请写成 $.a.b[0] 或 $["complex.key"] 这样的路径。',
     }
 
   let current = root
@@ -164,7 +165,7 @@ export function selectJsonPath(serialized: string, path: string): JsonPathSelect
       if (!isArray(current) || segment >= current.length) return {
           found: false,
           value: null,
-          reason: `jsonPath segment [${segment}] was not found.`,
+          reason: `jsonPath 的 [${segment}] 这一段取不到：这里不是数组，或者下标越界了。`,
         }
       current = current[segment]
       continue
@@ -173,12 +174,58 @@ export function selectJsonPath(serialized: string, path: string): JsonPathSelect
     if (!isPlainObject(current) || !Object.prototype.hasOwnProperty.call(current, segment)) return {
         found: false,
         value: null,
-        reason: `jsonPath segment ${segment} was not found.`,
+        reason: `jsonPath 的 ${segment} 这一段取不到：这里不是对象，或者对象上没有这个键。`,
       }
     current = current[segment]
   }
 
   return { found: true, value: current }
+}
+
+/**
+ * 按 handle 把藏在宿主资源区的正文取回来这一面：工具结果、内容寻址的大 payload、超大 user 正文和单条历史消息，四类各有自己的前缀。
+ *
+ * 实现是 `ContextRetrievalPayloadReader`，每个 `ChatContextRetrievalService` 实例持一个；本身不缓存，每次都现读存储端口。
+ * 取不到不抛：返回 `found: false` 并在 `warning` 里给出可召回的候选，让模型自纠而不是拿着幻觉 id 空转。
+ * 真正抛错的只有三种坏输入：payload 引用成环、链路超过 8 跳、以及拿通用 handle 去读内部文件记录（都是 `VALIDATION`）。
+ */
+export interface ContextRetrievalPayloadReaderApi {
+  /** 从一条证据记录推断后续该用哪个 handle 去 retrieve：`fullPayloadRef` 已经是 `tool:`/`ctx-payload:` 就原样用，否则退回用 `toolCallId` 拼 `tool:{id}`，都没有时给 null（调用方只能拿摘录，取不到全文）。 */
+  resolveEvidencePayloadHandle(evidence: ChatContextEvidenceRecord): LooseOptional<string>
+  /** 把一条工具结果展开成模型能读的大段文本：定位存储条目、重新收集日志/制品引用（防索引过期）、读盘、再按引用有无分配字符预算拼出 content。 */
+  retrieveToolPayload(input: {
+    /** 在哪个会话里找这条 payload。 */
+    sessionId: string
+    /** 要取的句柄：`tool:{toolCallId}` 或 `ctx-payload:`/`ctx-user-payload:` 打头的内容寻址键。 */
+    handleId: string
+    /** 这次召回属于哪个执行范围，原样写进 metadata，用来分辨「同一个 handle 在同一范围里被重复取」。 */
+    retrievalScopeId: string
+    /** 整段 content 的字符预算（调用方已钳过）；有日志/制品引用时按比例分给正文、显示结果和读盘内容。 */
+    maxChars: number
+    /** 只取 serializedResult 里的某个 JSON 路径，如 `data.items[0].name`；命中数组时按条目分页。留空取整段正文。 */
+    jsonPath?: LooseOptional<string>
+    /** 续读起点，0 起：jsonPath 命中数组时是条目下标，其余情况是正文字符下标。两条路都会在 metadata 里回带 `nextOffset`，照着它推进即可。 */
+    offset?: LooseOptional<number>
+    /** 这个 scope 里是不是第二次及以后取同一个 handle；true 时结果里会带上「别再重复召回」的 warning。 */
+    repeated: boolean
+    /** 这个 handle 在这个 scope 里累计被取了几次，原样写进结果供诊断。 */
+    retrievalCount: number
+  }): Promise<ChatContextRetrievedPayload>
+  /** 按 `message:{index}` 取回单条会话消息：拼出 messageIndex、role、timestamp、正文、provider 序列化形态和工具块摘要，整体截到 maxChars。索引不是合法非负整数、或那条消息不在已保存状态里时返回 `found: false`。 */
+  retrieveMessagePayload(input: {
+    /** 在哪个会话里找这条消息。 */
+    sessionId: string
+    /** 要取的句柄，形如 `message:{index}`；冒号后必须是十进制非负整数。 */
+    handleId: string
+    /** 这次召回属于哪个执行范围，原样写进 metadata。 */
+    retrievalScopeId: string
+    /** 整段 content 的字符预算；序列化形态和工具块摘要各有更小的分配。 */
+    maxChars: number
+    /** 这个 scope 里是不是第二次及以后取同一个 handle；true 时结果里会带上劝阻重复召回的 warning。 */
+    repeated: boolean
+    /** 这个 handle 在这个 scope 里累计被取了几次，原样写进结果供诊断。 */
+    retrievalCount: number
+  }): Promise<ChatContextRetrievedPayload>
 }
 
 /**
@@ -200,7 +247,7 @@ export function selectJsonPath(serialized: string, path: string): JsonPathSelect
  *
  * 每 `Service` 实例一个 `PayloadReader`。
  */
-class ContextRetrievalPayloadReader {
+class ContextRetrievalPayloadReader implements ContextRetrievalPayloadReaderApi {
   /** handle 前缀：按 toolCallId 寻址，如 `tool:abc-123`。 */
   private readonly toolPayloadHandlePrefix = 'tool:'
   /** handle 前缀：按内容 hash 寻址，如 `ctx-payload:sha256:…`。 */
@@ -459,12 +506,12 @@ class ContextRetrievalPayloadReader {
     const visited = new Set<string>()
     let current = handleId
     for (let depth = 0; depth < 8; depth += 1) {
-      if (visited.has(current)) throw new AppError('VALIDATION', 'Context payload reference cycle detected.')
+      if (visited.has(current)) throw new AppError('VALIDATION', '上下文 payload 的引用链成环了：它绕回了已经解析过的句柄，为避免死循环已中止解析。')
       visited.add(current)
       const resolved = await this.resolveSingleToolPayload(sessionId, current)
       if (!resolved) return null
       if (isPrivateFileContextRecord(resolved.payload.toolName))
-        throw new AppError('VALIDATION', 'Use context:recall with path and revision for historical files; internal file records are not generic payloads.')
+        throw new AppError('VALIDATION', '读历史文件请改用 context:recall 并带上 path 与 revision：内部文件记录不是通用 payload，不能拿这个句柄直接取。')
       const text = resolved.payload.serializedResult
       if (!text.includes('ctx-payload:')) return resolved
       let ref: string | undefined
@@ -477,7 +524,7 @@ class ContextRetrievalPayloadReader {
       if (!ref?.startsWith('ctx-payload:')) return resolved
       current = ref
     }
-    throw new AppError('VALIDATION', 'Context payload reference chain requires more than 8 lookups.')
+    throw new AppError('VALIDATION', '上下文 payload 的引用链跳了 8 次还没落到真正的结果：链路太长，已停止解析。')
   }
 
   private async resolveSingleToolPayload(

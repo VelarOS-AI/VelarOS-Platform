@@ -5,12 +5,11 @@ import { AppError } from '@velaros-ai/core/error'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
 import type { AgentExecutionConfig, AgentRuntimeCapabilityPorts, AgentSurfaceProfileProvider, RunnerConfigService, RunnerExecutionEnvironmentPort, RunnerSubAgentDispatcher, RunnerToolContextBuilder, RunnerToolRegistry } from '../../contract/requires.js'
-import type { ChatPromptFeatureId } from '../../types/agent'
 import type { ToolCategoryId } from '../../types/agent.js'
 import type { QueryLoopApi, SoloStreamLoopApi } from '../../types/loop.js'
 import type { AgentExecutionLimits } from '../../types/loop.js'
 import type { ExecutionEventBusApi } from '../../types/records.js'
-import type { AgentRunnerComponents, AgentRunnerConfig, AgentRunnerDomainServices, AgentRunnerInfrastructure, AgentSurfaceProfile, PrimaryAgentProfileApi, RunnerCodingSessionPolicyBundle, RunnerExecutionScope, RunnerSubAgentOptions, RunnerToolContext, StreamSoloWorkerOptions } from '../../types/runner.js'
+import type { AgentRunnerApi as RunnerAgentRunnerContract, AgentRunnerComponents, AgentRunnerConfig, AgentRunnerDomainServices, AgentRunnerInfrastructure, AgentSurfaceProfile, PrimaryAgentProfileApi, RunnerCodingSessionPolicyBundle, RunnerExecutionScope, RunnerSubAgentOptions, RunnerToolContext, StreamSoloWorkerOptions } from '../../types/runner.js'
 import { findCurrentGoalArtifact, toGoalSnapshot } from '../../utils/builtin/goals'
 import { collectCapabilityContext, resolveCapabilityCategoryDefinitions, resolveCapabilityContextCollectors, resolveCapabilityValidationInterpreters } from '../../utils/capabilities'
 import { resolveAgentContextPhase } from '../../utils/loop/context-phase'
@@ -18,6 +17,7 @@ import { resolveAgentExecutionLimits } from '../../utils/loop/execution-limits'
 import { buildRunVerificationSummary } from '../../utils/loop/run-completion'
 import { buildApprovalRegistryKey, resolveSubAgentExecutionKey } from '../../utils/runner/coding-tracking'
 import { hasActiveExecutionGoal, resolveExecutionWallClockDeadlineMs } from '../../utils/runner/goal-lifecycle'
+import { dedupeRuntimePromptFeatures } from '../../utils/runner/prompt-state'
 import { ChatRuntimeEvents } from '../../utils/wire/chat-runtime.js'
 import { forkFileContext } from '../context/FileContextCoordinator'
 import { CodingSessionTracker } from '../session/CodingSessionTracker'
@@ -29,7 +29,17 @@ const passthroughExecutionEnvironment: RunnerExecutionEnvironmentPort = {
   run: (_input, action) => action({}),
 }
 
-class AgentRunner<TToolContext extends RunnerToolContext = RunnerToolContext> {
+/**
+ * 主 Agent 运行器的对外面：一次主 Agent 运行的入口、子 Agent 委派入口，以及会话级任务审批的读写。
+ *
+ * 形状与 `types/runner.ts` 的 `AgentRunnerApi` 是同一份（宿主与执行栈按那个名字拿到本类），
+ * 这里按模块所有权制把它落在类的正上方，成员说明见那份合同，不在两处各写一遍。
+ */
+export interface AgentRunnerApi<TToolContext extends RunnerToolContext = RunnerToolContext>
+  extends RunnerAgentRunnerContract<TToolContext> {}
+
+class AgentRunner<TToolContext extends RunnerToolContext = RunnerToolContext>
+  implements AgentRunnerApi<TToolContext> {
   private readonly sessionApprovalRegistry = new Map<string, TaskApprovalState>()
   private readonly taskApprovalListeners = new Set<(sessionId: string) => void>()
   private readonly sessionPageInRegistry = new Map<
@@ -106,7 +116,7 @@ class AgentRunner<TToolContext extends RunnerToolContext = RunnerToolContext> {
     executionScope: RunnerExecutionScope
   ): Promise<void> {
     const { surfaceProfile: resolvedSurfaceProfile, ...runtimeConfig } = config
-    const requestedPromptFeatures = this.resolveRuntimePromptFeatures(runtimeConfig.promptFeatures)
+    const requestedPromptFeatures = dedupeRuntimePromptFeatures(runtimeConfig.promptFeatures)
     const surfaceProfile =
       resolvedSurfaceProfile ?? this.resolveAgentSurfaceProfile(runtimeConfig)
     const loopConfig: AgentRunnerConfig = {
@@ -207,7 +217,7 @@ class AgentRunner<TToolContext extends RunnerToolContext = RunnerToolContext> {
           : async () => {
               throw new AppError(
                 'PERMISSION',
-                `Agent surface "${surfaceProfile.id}" does not allow sub-agent queries.`
+                `当前 agent 界面 "${surfaceProfile.id}" 不允许发起子 agent 查询：这个界面的运行策略关掉了子 agent，请改在允许子 agent 的界面上跑，或者自己把这一步做完。`
               )
             },
         dispatchSubAgent: optionalWhen(surfaceRunPolicy.allowSubAgents, async (input) =>
@@ -327,7 +337,7 @@ class AgentRunner<TToolContext extends RunnerToolContext = RunnerToolContext> {
           goalStatus: goal ? toGoalSnapshot(goal).status : undefined,
         }))
       } else if (loopResult.status === 'error') {
-        throw new AppError('RUNTIME', 'Agent execution was blocked.')
+        throw new AppError('RUNTIME', 'Agent 主循环以错误状态收尾，本次执行没有跑完：具体原因见这一轮更早的运行时事件与诊断。')
       }
     } finally {
       this.persistSessionLeases(approvalRegistryKey, codingSession)
@@ -381,12 +391,6 @@ class AgentRunner<TToolContext extends RunnerToolContext = RunnerToolContext> {
     if (config.agentSurfaceId)
       return this.surfaceProfileProvider.resolve({ agentSurfaceId: config.agentSurfaceId })
     return this.surfaceProfileProvider.resolve({ developerContext: config.developerContext })
-  }
-
-  private resolveRuntimePromptFeatures(
-    promptFeatures?: readonly ChatPromptFeatureId[]
-  ): ChatPromptFeatureId[] {
-    return [...new Set(promptFeatures ?? [])]
   }
 
   public async query(

@@ -17,15 +17,19 @@ import { isFiniteNumber, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import type { ContextMigrationEventSink } from '../../contract/requires.js'
-import type { ContextAdmissionInput, ContextGovernanceConfig,ContextLedgerAppendResult, ContextLedgerStats, ContextMigrationCause, ContextMigrationOutcome, ContextRecord, ContextRecordClassifier, ContextResidency, ContextResidencyMigrationEvent, ContextResidencyVector } from '../../types/residency.js'
+import type { ContextAdmissionInput, ContextGovernanceConfig,ContextLedgerAppendResult, ContextLedgerStats, ContextMigrationCause, ContextMigrationOutcome, ContextRecord, ContextRecordClassifier, ContextResidency, ContextResidencyMigrationEvent, ContextResidencyVector, ResidencyLedgerView } from '../../types/residency.js'
 import { admitContextRecord } from '../../utils/residency/admission'
 import { clampResidencyForRecord, DefaultResidencyCharsPerToken, estimateResidencyTokens, isResidencyDowngrade, residencyRank } from '../../utils/residency/context-record'
 import { DefaultContextGovernanceConfig } from '../../utils/residency/governance-config'
 import { residentChars } from '../../utils/residency/projection'
 
+/** 建 `ContextResidencyLedger` 时一次性交的几项，全部可省；整个对象都能不传（全走缺省）。 */
 export interface ContextResidencyLedgerOptions {
+  /** 这本账本用哪套治理配置（准入阈值、fault 恢复参数等），缺省 `DefaultContextGovernanceConfig`；建好之后不再变，换配置要换一本账本。 */
   config?: LooseOptional<ContextGovernanceConfig>
+  /** 准入时给记录分类的钩子，决定它初始落在哪一层；不传就只按配置里的机械规则判。 */
   classifier?: LooseOptional<ContextRecordClassifier>
+  /** 迁移与 fault 事件往哪儿写；不传就不落事件（账本照常工作，只是没有可观测和可重放的那条流）。 */
   sink?: LooseOptional<ContextMigrationEventSink>
   /**
    * 本账本的代数：一本账本 = 一代，会话整本重建时递增。
@@ -41,7 +45,28 @@ export interface ContextResidencyLedgerOptions {
   charsPerToken?: LooseOptional<number>
 }
 
-export class ContextResidencyLedger {
+/**
+ * 驻留账本对外这一面：在 `ResidencyLedgerView`（追加、查、迁移、统计）之上，再加只有账本主人用得着的几个口子——
+ * 刷量纲、查升温租约与粘滞状态、标待逐出、记缺页。
+ *
+ * 实现是 `ContextResidencyLedger`，一个治理会话持一本，整本重建时换新的一本（代数 +1）。状态全在内存里。
+ * 记录一旦入账永不改写：降级是向量上的迁移事件，fault 后的提升是在尾部追加新副本，两者都不动历史前缀，所以都缓存安全。
+ * 传进来的 recordId 不在账本里时一律抛 `AppError('INVARIANT', …)`——那说明调用方拿着另一代的 id。
+ */
+export interface ContextResidencyLedgerApi extends ResidencyLedgerView {
+  /** 刷新记账量纲（字符/token 密度），由会话每轮按实测值喂进来。非法或缺席的值**保持当前值**而不是打回缺省 4：治理链路上「这一次没量出密度」是常态（手动 epoch、空账本轮次），解释成「密度回到 4」会让同一本账的统计在轮次之间跳。 */
+  setCharsPerToken(value: LooseOptional<number>): void
+  /** 这条记录的升温租约保到第几个 turn（含）；没有租约时返回 null。租约由准入和 fault 退避共同写，查它是为了解释「为什么这条还逐不掉」。 */
+  warmUntilTurnOf(recordId: string): Nullable<number>
+  /** 这条记录是不是已经因为反复缺页升级成了本代内不再逐出；账本整本重建后自然清零。 */
+  isStickyAfterFault(recordId: string): boolean
+  /** epoch 排序阶段调用，把一条记录标进待逐出集；幂等，重复标不出错。记录不存在时抛 `INVARIANT`。 */
+  markPendingEvict(recordId: string): void
+  /** 记一次缺页（`context:recall` 命中了非 INLINE 的记录）并返回这条记录累计的缺页次数：落一条 fault 事件、按次数指数延长升温租约（到配置上限封顶）、够次数就转粘滞，并且——只要它还没 EXPIRED——当场升回它的准入驻留态（超长内容只回到 EXCERPT，不会把几十万字正文突然塞回 prompt）。 */
+  recordFault(recordId: string, at: number): number
+}
+
+export class ContextResidencyLedger implements ContextResidencyLedgerApi {
   private readonly records: ContextRecord[] = []
   private readonly recordsById = new Map<string, ContextRecord>()
   private readonly residency = new Map<string, ContextResidency>()

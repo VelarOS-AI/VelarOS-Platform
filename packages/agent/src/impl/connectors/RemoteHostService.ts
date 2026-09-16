@@ -13,6 +13,23 @@ import { createRemoteHostTool } from './RemoteHostToolFactory.js'
 const log = Log.tag('RemoteHostService')
 
 /**
+ * 远程能力节点的领域服务对外这一面：连哪几台机器、什么时候配对、断开谁，以及把各台机器的能力清单投影成本地工具面。
+ *
+ * 实现是 `RemoteHostService`，宿主进程持一个，连接表只在内存里；任何一台连不上都只记 warn 不抛，远端离线是常态不是故障。
+ * 授权判定不在这层：出网前过宿主的审批端口，落地时过目标机器自己的 permission broker。
+ */
+export interface RemoteHostServiceApi {
+  /** 启动时按配置逐台点火，只连 `enabled` 的；单台失败只记 warn 继续下一台，整体不抛。已经连着的主机不会被重复点火。 */
+  start(definitions: readonly RemoteHostDefinition[]): Promise<void>
+  /** 首次配对：配对码只在这一次上线，先断掉这台已有的连接再带码重连；成功后凭据落盘，之后每次连接改走 challenge 签名。失败会原样抛给调用方（配对界面要显示）。 */
+  pair(definition: RemoteHostDefinition, pairingCode: string): Promise<void>
+  /** 断开某台主机并把它的工具从工具面摘掉；没连过这个 hostId 就什么都不做。用户手动断开、以及远端进入停机终态时都会走到这里。 */
+  disconnectHost(hostId: string): void
+  /** 关停整个服务：逐台断开、清空工具面。进程退出或 mod 卸载时调。 */
+  dispose(): void
+}
+
+/**
  * 远程能力节点的领域服务。
  *
  * 职责边界:只做**连接生命周期 + 工具面投影**。授权判定不在这里——出网前过宿主的审批端口
@@ -22,7 +39,7 @@ const log = Log.tag('RemoteHostService')
  * 住在包里而不是宿主里是薄壳可拆铁律②的要求:命名空间化、清单投影、重连语义都是领域判断,
  * 散到宿主就等于把 mod 焊死在 Desktop 上。
  */
-export class RemoteHostService {
+export class RemoteHostService implements RemoteHostServiceApi {
   private readonly hosts = new Map<string, ConnectedHost>()
 
   public constructor(private readonly ports: RemoteHostServicePorts) {}

@@ -71,7 +71,7 @@ describe('VelarModArchiveImporter', () => {
       digest: report.digest,
       trustConfirmed: true,
       grantedPermissions: [],
-    })).rejects.toThrow('changed after confirmation')
+    })).rejects.toThrow('确认之后包又被改过了')
   })
 
   test('rejects a traversal entry using its original ZIP path', async () => {
@@ -83,7 +83,7 @@ describe('VelarModArchiveImporter', () => {
     zip.file('../escape.txt', 'escape')
     await writeFile(archive, await zip.generateAsync({ type: 'nodebuffer' }))
 
-    await expect(createImporter().scan(archive)).rejects.toThrow('escapes its root')
+    await expect(createImporter().scan(archive)).rejects.toThrow('逃出了安装根目录')
   })
 })
 

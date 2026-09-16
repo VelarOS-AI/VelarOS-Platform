@@ -5,12 +5,15 @@ import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 
 import type {ProviderRequestSnapshot } from '../../types/context.js'
-import type { AgentModelRequestPort, AgentModelStreamInput, ExecuteQueryTurnArgs, InterruptedStreamPartial, QueryTurnToolContext, QueryTurnToolRegistry, StreamConsumerEvents } from '../../types/loop.js'
+import type { AgentModelRequestPort, AgentModelStreamInput, ExecuteQueryTurnArgs, InterruptedStreamPartial, QueryTurnToolContext, QueryTurnToolRegistry } from '../../types/loop.js'
 import type { ContextGovernanceSessionRegistryApi } from '../../types/residency.js'
-import type { ToolExecutorEvents } from '../../types/tools.js'
 import { assertProviderRequestSnapshotReconstructable } from '../../utils/context/provider-request-snapshot'
 import { createInternalFollowUpMessage } from '../../utils/history/internal-messages'
-import type { AgentTurnHistoryHelper } from '../../utils/history/turn'
+import {
+  buildProviderTurnId,
+  createQueryTurnStreamConsumerEvents,
+  createQueryTurnToolExecutorEvents,
+} from '../../utils/loop/loop-turn-assembly'
 import { assertModelInputCompatibility } from '../../utils/model/model-input-compatibility'
 import { normalizeModelRequestError } from '../../utils/model/model-request-error'
 import { mergeSessionPromptCacheProviderOptions } from '../../utils/model/prompt-cache'
@@ -22,9 +25,9 @@ import {
 } from '../../utils/stream/output-truncation-recovery'
 import { ChatRuntimeEvents } from '../../utils/wire/chat-runtime.js'
 import { resolveModelContextUsageOptions } from '../context/AgentLoopContextUsageManager'
-import { ProviderRequestCompiler } from '../context/ProviderRequestCompiler'
-import { compileProviderSendRequest } from '../context/ProviderSendRequest'
+import { compileProviderSendRequest, ProviderRequestCompiler } from '../context/ProviderRequestCompiler'
 import { emitCompletedProviderTurnSnapshot, ProviderTurnEventReducer } from '../records/ProviderTurnEventReducer'
+import type { TurnHistoryApi } from '../records/TurnHistory'
 import { KernelToolLoopGuard } from '../tools/KernelToolLoopGuard'
 import { ToolExecutionPolicy } from '../tools/ToolExecutionPolicy'
 import { ToolExecutor } from '../tools/ToolExecutor'
@@ -47,8 +50,14 @@ import {
 } from './RetryPolicy'
 import { StreamConsumer, type StreamConsumerTurnState } from './StreamConsumer'
 
+/**
+ * 子 Agent 一轮的收敛结果：`QueryLoop` 拿它判「还要不要再来一轮」，并把用量挂到本轮 model span。
+ * 除 hasToolUse / text 外都是观测字段，供应方没回报就缺席（null），消费方一律容忍缺席。
+ */
 export interface QueryTurnResult {
+  /** 本轮模型有没有发起工具调用。true = 工具结果已接回历史、循环继续；false = 这轮就是答复，可以收尾。 */
   hasToolUse: boolean
+  /** 本轮累计的可见正文。它就是子 Agent 交回父 Agent 的工具结果；被中断时是空串。 */
   text: string
   /** 供应方返回的真实输入 token 数（若有）；用于 MMU 用量校准反馈。 */
   inputTokens?: LooseOptional<number>
@@ -59,13 +68,19 @@ export interface QueryTurnResult {
    * 结束原因 / 请求指纹。交由 QueryLoop 挂到子 Agent 本确定 turn 的 model span。缺席用 null。
    */
   outputTokens?: LooseOptional<number>
+  /** 本轮的美元成本，来自网关回报（自建 provider 通常没有）；`QueryLoop` 跨轮累加后随派发结果冒泡。 */
   costUsd?: LooseOptional<number>
   /** 推理 token（含在 outputTokens 里）与输入中命中 / 写入缓存的 token；子 Agent 用量据此分项计价。 */
   reasoningTokens?: LooseOptional<number>
+  /** 输入里命中缓存的 token 数（便宜的那部分）。 */
   cacheReadInputTokens?: LooseOptional<number>
+  /** 输入里写入缓存的 token 数（首次建缓存要额外计价的那部分）。 */
   cacheWriteInputTokens?: LooseOptional<number>
+  /** 供应方给的结束原因（`stop` / `length` / `tool-calls` …），原样透传；事后区分「自己停」和「被截断」全靠它。 */
   finishReason?: LooseOptional<string>
+  /** 本次请求指纹的稳定 id，与 context-replays 对齐；出事后按它把 span、账本、回放三处对上号。 */
   requestFingerprint?: LooseOptional<string>
+  /** 本次真正发出去的请求快照（可重建校验已通过）；写进回合审计，供事后逐字节复现这一次请求。 */
   providerRequestSnapshot?: LooseOptional<ProviderRequestSnapshot>
 }
 
@@ -82,13 +97,30 @@ const MaxQueryOutputTruncationRecoveryAttempts = 2
  *   2. 工具结果直接在本轮内追加进历史，调用方不需要再单独追加工具结果。
  *
  * 用量遥测里 `turn: null` 也是这个原因：子智能体没有面向界面的轮次计数轴。
- *
+ */
+export interface QueryTurnApi<TToolContext extends QueryTurnToolContext = QueryTurnToolContext> {
+  /**
+   * 跑完子 Agent 的一轮：编译请求 → 校验上下文纪元 → 开流 → 由 `StreamConsumer` 消费 →
+   * 把 assistant 内容与工具结果接回 `args.history`，返回本轮收敛结果。
+   *
+   * 由 `TurnRunner.executeQueryTurn` 转交，一轮一次。三层恢复自内向外：连接重试（`RetryPolicy`，
+   * 仅限本轮尚无可见输出与工具调用时）→ 流中断/输出截断的续写（保留已出正文，追一条内部续写指令重来，
+   * 次数有限）→ 都不适用就把错误原样抛给 `QueryLoop`，由它决定缺页降级还是终止。
+   * 中断：`args.toolContext.abortSignal` 一断即丢弃未完成的 assistant 内容并返回空结果（不抛），
+   * 以免历史里留下没有 tool-result 的孤儿 tool-call。
+   */
+  executeQueryTurn(args: ExecuteQueryTurnArgs<TToolContext>): Promise<QueryTurnResult>
+}
+
+/**
  * 流消费单脑化（S1）：本类**不再自带流消费状态机**——那份内联复制曾漂移出 4 处缺陷侧行为
  * （不过滤 DSML 泄漏标记 / 不抽内联 <think> / 工具入参硬 cast 放行 / locale 写死 zh-CN）。
  * 现统一走 {@link StreamConsumer}（全内核唯一流消费引擎），本类只保留子 Agent 独有的装配：
  * turn:null 轴语义、UI 投影按 events 装配面收敛、空流来源标签 'query'。
  */
-class QueryTurn<TToolContext extends QueryTurnToolContext = QueryTurnToolContext> {
+class QueryTurn<TToolContext extends QueryTurnToolContext = QueryTurnToolContext>
+  implements QueryTurnApi<TToolContext>
+{
   private readonly connectionRetryHelper = new AgentConnectionRetryHelper()
   private readonly executionPolicy: ToolExecutionPolicy
   /** 逐块消费 fullStream 的唯一引擎（与 StreamTurn 共用同一实现）。 */
@@ -100,7 +132,7 @@ class QueryTurn<TToolContext extends QueryTurnToolContext = QueryTurnToolContext
 
   constructor(
     private readonly toolRegistry: QueryTurnToolRegistry<TToolContext>,
-    private readonly turnHistoryHelper: AgentTurnHistoryHelper,
+    private readonly turnHistoryHelper: TurnHistoryApi,
     /** 治理会话登记处（宿主级单实例，驻留账本与 epoch 状态跨回合共享一份，必传）。 */
     private readonly governanceSessions: ContextGovernanceSessionRegistryApi,
     private readonly modelRequestService: AgentModelRequestPort =
@@ -128,7 +160,12 @@ class QueryTurn<TToolContext extends QueryTurnToolContext = QueryTurnToolContext
         const result = await this.connectionRetryHelper.runWithConnectionRetry(
           () => {
             interrupted.partial = null
-            const turnState = this.createTurnState(args)
+            const turnState: StreamConsumerTurnState = {
+              turn: toNullable(args.turn),
+              hasToolUse: false,
+              accumulatedText: '',
+              hasVisibleOutput: false,
+            }
             activeTurnState = turnState
             return this.executeStreamingQueryTurn({ ...args, toolLoopGuard }, turnState, (partial) => {
               interrupted.partial = partial
@@ -324,7 +361,13 @@ class QueryTurn<TToolContext extends QueryTurnToolContext = QueryTurnToolContext
       })
       this.turnRequestHelper.assertProviderRequestAllowed(compiledRequest, args.turn)
       assertProviderRequestSnapshotReconstructable(compiledRequest.providerRequest)
-      providerTurnReducer = this.createProviderTurnReducer(args)
+      providerTurnReducer = new ProviderTurnEventReducer({
+        turnId: buildProviderTurnId(
+          resolveGovernanceSessionKey(args.toolContext.sessionId),
+          'query',
+          args.turn
+        ),
+      })
       providerTurnReducer.apply({ type: 'turn-started' })
       providerTurnReducer.apply({
         type: 'request',
@@ -408,7 +451,7 @@ class QueryTurn<TToolContext extends QueryTurnToolContext = QueryTurnToolContext
 
       const executor = new ToolExecutor(
         args.toolContext,
-        this.createToolExecutorEvents(args),
+        createQueryTurnToolExecutorEvents(args.events),
         executionPolicy,
         {
           providerTurnReducer,
@@ -431,7 +474,7 @@ class QueryTurn<TToolContext extends QueryTurnToolContext = QueryTurnToolContext
         {
           abortSignal: requestAbortScope.signal,
           executor,
-          events: this.createStreamConsumerEvents(args),
+          events: createQueryTurnStreamConsumerEvents(args.events, !!args.streamTextDeltas),
           idleStallTimeoutMs: toOptional(args.idleStallTimeoutMs),
           model: args.model,
           contextPressure: {
@@ -514,15 +557,6 @@ class QueryTurn<TToolContext extends QueryTurnToolContext = QueryTurnToolContext
     }
   }
 
-  private createTurnState(args: ExecuteQueryTurnArgs<TToolContext>): StreamConsumerTurnState {
-    return {
-      turn: toNullable(args.turn),
-      hasToolUse: false,
-      accumulatedText: '',
-      hasVisibleOutput: false,
-    }
-  }
-
   private shouldRecoverInterruptedStream(
     error: unknown,
     args: ExecuteQueryTurnArgs<TToolContext>,
@@ -572,48 +606,6 @@ class QueryTurn<TToolContext extends QueryTurnToolContext = QueryTurnToolContext
     lines.push('Continue the subtask now and finish the requested answer.')
     history.push(createInternalFollowUpMessage(lines.join('\n')))
     return appendedAssistant
-  }
-
-  private createToolExecutorEvents(args: ExecuteQueryTurnArgs<TToolContext>): ToolExecutorEvents {
-    return {
-      emitRuntime: (event) => args.events?.emitRuntime?.(event),
-      emitNotice: (event) => args.events?.emitNotice?.(event),
-      emitToolStart: (payload) => args.events?.emitToolStart?.(payload),
-      emitToolProgress: (payload) => args.events?.emitToolProgress?.(payload),
-      emitToolMetadata: (payload) => args.events?.emitToolMetadata?.(payload),
-      emitToolDone: (payload) => args.events?.emitToolDone?.(payload),
-    }
-  }
-
-  /**
-   * 把子 Agent 的 {@link QueryTurnEvents} 装配成 StreamConsumer 的 {@link StreamConsumerEvents}。
-   * 这一层就是「是否投影 UI」的装配面：文本增量只在 streamTextDeltas 打开时才投影（其余转发到
-   * 可选监听器，缺省 no-op）；reducer 累积与 turnState 更新在引擎内无条件发生，不受投影开关影响。
-   */
-  private createStreamConsumerEvents(
-    args: ExecuteQueryTurnArgs<TToolContext>
-  ): StreamConsumerEvents {
-    const events = args.events
-    return {
-      emitRuntime: (event) => events?.emitRuntime?.(event),
-      emitReasoningDelta: (payload) => events?.emitReasoningDelta?.(payload),
-      emitTextDelta: (text) => {
-        if (args.streamTextDeltas) events?.emitTextDelta?.(text)
-      },
-      emitGeneratedFile: (payload) => events?.emitGeneratedFile?.(payload),
-      emitSource: (payload) => events?.emitSource?.(payload),
-      emitToolStart: (payload) => events?.emitToolStart?.(payload),
-      emitToolMetadata: (payload) => events?.emitToolMetadata?.(payload),
-    }
-  }
-
-  private createProviderTurnReducer(
-    args: ExecuteQueryTurnArgs<TToolContext>
-  ): ProviderTurnEventReducer {
-    const sessionId = resolveGovernanceSessionKey(args.toolContext.sessionId)
-    return new ProviderTurnEventReducer({
-      turnId: `${sessionId}:query:${args.turn ?? 'internal'}`,
-    })
   }
 
   private emitProviderTurnSnapshot(

@@ -256,7 +256,7 @@ export interface ReferencedArtifactPath {
 }
 
 /**
- * {@link ContextRetrievalReferenceReader.readReferencedLog} 的读盘结果。
+ * {@link ContextRetrievalReferenceReader.readReferencedLogs} 的单条读盘结果。
  * content 为 null 时表示未读到有效文本（不存在、二进制、非内部路径等）。
  */
 export interface LogReadSnippet {
@@ -273,7 +273,7 @@ export interface LogReadSnippet {
 }
 
 /**
- * {@link ContextRetrievalReferenceReader.readReferencedArtifactManifest} 的结果。
+ * {@link ContextRetrievalReferenceReader.readReferencedArtifactManifests} 的单条结果。
  * 非文本 artifact 仅有 metadata，preview 为 null。
  */
 export interface ArtifactManifestSnippet {

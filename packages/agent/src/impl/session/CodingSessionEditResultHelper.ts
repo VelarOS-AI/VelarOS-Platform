@@ -2,7 +2,38 @@ import { isArray, isEmpty, isFalse, isObject, isPlainObject,isString,isTrue } fr
 
 import { hasVerificationRelevantModifiedPaths } from '../../utils/session/paths'
 
-class CodingSessionEditResultHelper {
+/**
+ * 判读「一次工具调用到底算不算改了代码」的那把尺子：编辑跟踪器拿它决定要不要推进 editVersion。
+ *
+ * 只认构造时传进来的两份工具名清单（可变更工具、非代码变更工具），不认工具语义；结果形状则按几种历史形态
+ * 逐个嗅探。每个编辑跟踪器持一份，跟着会话活。
+ */
+export interface CodingSessionEditResultHelperApi {
+  /** 这个工具名是否属于「会改代码」的那一类；是的话它的成功结果就该让编辑版本 +1。 */
+  isCapabilityMutationTool(toolName: string): boolean
+  /**
+   * 这次调用是不是「其实什么都没改」：结果里 `skipped` 为真或 `changed` 为假。
+   *
+   * 命中时跟踪器整条跳过——既不算新编辑，也不算检查或验证，避免空转把待验证状态重置掉。
+   */
+  isSkippedOrUnchangedResult(result: unknown): boolean
+  /**
+   * 这次变更是否只动了「不值得跑验证」的东西（文档、配置之类的非代码产物）。
+   *
+   * 两条判据：工具名本身就在非代码变更清单里，或者它虽是编辑工具但改到的路径全都与验证无关。
+   * 命中时不推进编辑版本，模型就不会被提醒去跑一遍构建/测试。
+   */
+  isNonCodeArtifactMutation(toolName: string, result: unknown): boolean
+  /**
+   * 从工具结果里把被改到的路径挖出来（去重）。
+   *
+   * 兼容几种历史形态：`changedFiles` 数组、顶层 `path`/`fromPath`/`toPath`、以及 `files[]` 里每项的同名字段。
+   * 认不出来就返回空数组，调用方据此当作「没有路径信息」。
+   */
+  extractModifiedPaths(result: unknown): string[]
+}
+
+class CodingSessionEditResultHelper implements CodingSessionEditResultHelperApi {
   private readonly editTools: Set<string>
   private readonly nonCodeMutationTools: Set<string>
 

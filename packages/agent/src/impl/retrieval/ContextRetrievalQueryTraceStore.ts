@@ -1,16 +1,70 @@
-import { isFiniteNumber } from '@velaros-ai/core'
-
 import type { ChatContextRetrievalQueryKind, ChatContextRetrievalQueryTraceEntry } from '../../types/agent.js'
 import type { RetrievalQueryRegistration } from '../../types/retrieval.js'
+import { normalizeRetrievalLimit } from '../../utils/retrieval/limits'
 import { chatSearchRanking } from '../../utils/retrieval/ranking'
 
 import { ContextRetrievalBoundedCounter } from './ContextRetrievalBoundedCounter'
 const DefaultMaxRecentQueryTracesPerSession = 24
 const DefaultMaxQueryCountEntries = 4_096
 
+/** 建 `ContextRetrievalQueryTraceStore` 时给的两个容量上限；两项都可以不传，不传就用本文件的缺省值。 */
 interface ContextRetrievalQueryTraceStoreOptions {
+  /** 查询计数表最多记多少个键，缺省 4096；键是「会话+scope+kind+归一化查询」，满了按最近使用淘汰，被淘汰的查询重新从 1 数起。 */
   maxQueryCountEntries?: LooseOptional<number>
+  /** 每个会话保留多少条最近的 trace，缺省 24；只影响 `getRecent` 能回溯多远，超出的从最旧的丢。 */
   maxRecentQueryTracesPerSession?: LooseOptional<number>
+}
+
+/**
+ * 搜索查询的计数与 trace 存档对外这一面：搜之前登记一次拿到重复次数，搜完记一条 trace，诊断时把最近几条取回来。
+ *
+ * 实现是 `ContextRetrievalQueryTraceStore`，每个 `ChatContextRetrievalService` 实例持一个；只在内存里、进程重启清零。
+ * 它按 **query 文本**去重（键是 `{sessionId}:{retrievalScopeId}:{kind}:{normalizedQuery}`），跟按 handle/证据 id 去重的 `retrievalCounts` 分工不同。
+ */
+export interface ContextRetrievalQueryTraceStoreApi {
+  /** 在 `search*` 开始前调：按归一化后的查询签名把计数加一，返回这次的 registration（带 `retrievalCount` 和 `repeated`），调用方要原样带到 `record` 里去。 */
+  register(input: {
+    /** 这次搜索属于哪个会话；trace 按它分桶，`getRecent` 也按它取。 */
+    sessionId: string
+    /** 去重的作用范围 id：通常等于 sessionId，agent 也可以传更窄的（比如单次工具执行的 id），换一个 scope 计数就从头数。 */
+    retrievalScopeId: string
+    /** 搜的是哪一类内容：`conversation-history` 还是 `terminal-output`；同样的词在两类里分开计数。 */
+    kind: ChatContextRetrievalQueryKind
+    /** 用户/模型原样给的查询串，只用来算签名，不做展示。 */
+    query: string
+    /** 已经过 `normalizeSearchTerms` 拆好的检索词；和 query 一起决定归一化签名，所以换个写法搜同一批词会算成重复。 */
+    terms: string[]
+  }): RetrievalQueryRegistration
+  /** 在 `search*` 结束后调：把这次搜索的规模、命中和返回项组装成一条 trace 追加到该会话的环形队列并返回它；`retrievalCount` 到 2 次起 trace 里会带上「换个查法」的 warning。 */
+  record(input: {
+    /** 这次搜索属于哪个会话；决定 trace 进哪个队列。 */
+    sessionId: string
+    /** 与 `register` 时同一个 scope id，原样回传。 */
+    retrievalScopeId: string
+    /** 与 `register` 时同一个 kind，原样回传。 */
+    kind: ChatContextRetrievalQueryKind
+    /** 原始查询串，会原样记进 trace 供诊断页展示。 */
+    query: string
+    /** `register` 返回的那个对象；重复次数和归一化签名都从它来，不要自己拼。 */
+    registration: RetrievalQueryRegistration
+    /** 这次搜索的搜索空间大小：history 是消息总数，terminal 是 logReference 总数。用来判断「搜遍了还是没搜到」。 */
+    totalCandidates: number
+    /** semanticScore > 0 的条数，含没返回给调用方的那些；和 returnedCount 一比就知道是不是被截断了。 */
+    matchedCount: number
+    /** 全部命中项的分数，供 `buildRetrievalScoreStats` 分桶统计；不排序要求。 */
+    matchedScores: number[]
+    /** 真正返回给调用方的 top 项，按分数从高到低；trace 只留前几条的 handleId 和去重后的 matchReasons。 */
+    returnedItems: Array<{
+      /** 这条结果的句柄 id，模型后续引用它而不是再搜一遍。 */
+      handleId: string
+      /** 这条结果的综合得分，第一条的分数会记成 trace 的 topScore。 */
+      score: number
+      /** 这条为什么被判为命中（词命中、路径命中等），跨条目去重后留前 10 条进 trace。 */
+      matchReasons: string[]
+    }>
+  }): ChatContextRetrievalQueryTraceEntry
+  /** 取某个会话最近的搜索 trace，按记录先后排；没搜过或已被挤掉时给空数组（不抛）。诊断面板和自检用。 */
+  getRecent(sessionId: string): ChatContextRetrievalQueryTraceEntry[]
 }
 
 /**
@@ -27,7 +81,7 @@ interface ContextRetrievalQueryTraceStoreOptions {
  *
  * 每 `Service` 实例一个 `Store`；进程重启后计数清零。
  */
-class ContextRetrievalQueryTraceStore {
+class ContextRetrievalQueryTraceStore implements ContextRetrievalQueryTraceStoreApi {
   /** 每个 session 保留的最近 trace 条数（环形队列 tail）。 */
   private readonly maxRecentQueryTracesPerSession: number
   /** retrievalCount 达到此值时在 trace.warning 提示重复搜索。 */
@@ -39,12 +93,12 @@ class ContextRetrievalQueryTraceStore {
   private readonly recentQueryTracesBySession = new Map<string, ChatContextRetrievalQueryTraceEntry[]>()
 
   constructor(options: ContextRetrievalQueryTraceStoreOptions = {}) {
-    this.maxRecentQueryTracesPerSession = this.normalizeLimit(
+    this.maxRecentQueryTracesPerSession = normalizeRetrievalLimit(
       options.maxRecentQueryTracesPerSession,
       DefaultMaxRecentQueryTracesPerSession
     )
     this.queryCounts = new ContextRetrievalBoundedCounter(
-      this.normalizeLimit(options.maxQueryCountEntries, DefaultMaxQueryCountEntries)
+      normalizeRetrievalLimit(options.maxQueryCountEntries, DefaultMaxQueryCountEntries)
     )
   }
 
@@ -139,12 +193,6 @@ class ContextRetrievalQueryTraceStore {
    */
   public getRecent(sessionId: string): ChatContextRetrievalQueryTraceEntry[] {
     return this.recentQueryTracesBySession.get(sessionId.trim()) ?? []
-  }
-
-  private normalizeLimit(value: LooseOptional<number>, fallback: number): number {
-    if (!isFiniteNumber(value)) return fallback
-
-    return Math.max(1, Math.floor(value))
   }
 }
 

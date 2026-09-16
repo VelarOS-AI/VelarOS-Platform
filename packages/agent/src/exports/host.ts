@@ -16,6 +16,7 @@ export {
   AgentKernelModuleId,
   createAgentKernelModule,
 } from '../impl/assembly/AgentKernelModule'
+export { AgentRuntimeEvents } from '../impl/runner/AgentRuntimeEvents'
 export type { AgentModelInputModality } from '../types/agent.js'
 export type { CapabilityCommandResult, CapabilityValidationGoal, CapabilityValidationRunResult, CapabilityValidationStatus, CapabilityValidationSuggestion, CapabilityValidationSummary } from '../types/capabilities.js'
 export type { AgentRuntimeCapabilityDescriptor, AgentRuntimeCapabilityExtension, CapabilityIntentClassifierContext, CapabilityIntentSignal, CapabilityScopeCategoryDecision, CapabilityScopeResidency, CapabilityScopeRuntimeFacts, CapabilityValidationInterpretation, ToolAllocationDelegation, ToolAllocationPrerequisite, ToolResultMiddlewareContext, ToolResultMiddlewareResult, ToolResultModelImage, ToolValidationHintContext, ToolValidationIssueDetail, ToolValidationRecovery } from '../types/capabilities.js'
@@ -26,5 +27,4 @@ export type { AgentSurfaceProfile, DerivedAgentSurfaceRunPolicy, DeriveSurfaceRu
 export type { AgentRuntimeInputInterruptScope, AgentRuntimeInputResult } from '../types/runner.js'
 export type { AgentRuntimeEventBus } from '../types/runner.js'
 export type { collectCapabilityContext, decideCapabilityScopeCategory, expandCapabilityCategoryIds, resolveCapabilityCategoryDefinitions, resolveCapabilityContextCollectors, resolveCapabilityDelegationPolicy, resolveCapabilityIntentClassifiers, resolveCapabilityPromptSegments, resolveCapabilityScopeId, resolveCapabilityScopePolicy, resolveCapabilityScopeResidency, resolveCapabilityValidationInterpreters, resolveToolAliases, resolveToolAllocationMetadata, resolveToolResultMiddlewares, resolveToolValidationHintProviders } from '../utils/capabilities'
-export { AgentRuntimeEvents } from '../utils/runner/runtime-events'
 export { createAgentRuntimeInputInterruptScope } from '../utils/runner/runtime-input-port'

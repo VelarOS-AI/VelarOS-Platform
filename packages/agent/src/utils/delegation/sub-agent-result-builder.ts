@@ -4,6 +4,11 @@ import type { SubAgentTaskArtifacts, SubAgentTaskResult } from '../../types/agen
 import type { BuildSubAgentTaskResultInput,SubAgentThreadRetention } from '../../types/delegation.js'
 import type { CodingSessionSnapshot } from '../../types/session.js'
 
+/**
+ * 从子 Agent 的编码会话快照里提炼父 Agent 要看的结构化制品：改动路径清单 + 验证结论。
+ * 验证状态收成三档：passed 原样；failed / timed-out 都算 failed（超时对父的决策等价于没过）；
+ * 其余（跳过、进行中等）算 skipped。两项都没有时返回 undefined，让结果里干脆不出 artifacts 这一格。
+ */
 function buildArtifactsFromSnapshot(
   snapshot: Optional<CodingSessionSnapshot>
 ): SubAgentTaskArtifacts | undefined {
@@ -35,6 +40,11 @@ function resolveRetainedUntil(retention: Optional<SubAgentThreadRetention>): Opt
   return toOptional(retention.retainedUntil)
 }
 
+/**
+ * 把一次子 Agent 运行的各路结果装配成对外的 SubAgentTaskResult。
+ * summary 取子 Agent 最终文本去空白后的内容，**空文本兜底成一句占位**——父 Agent 拿到空摘要无从判断，
+ * 宁可明说"已完成但没有返回文本"。其余字段（结构化输出、用量、工具摘要、模型轨迹、收尾原因、续跑保留期）原样带出。
+ */
 function buildSubAgentTaskResult(input: BuildSubAgentTaskResultInput): SubAgentTaskResult {
   const summary = input.text.trim() || '子智能体已完成，但没有返回文本。'
   return {
@@ -52,11 +62,21 @@ function buildSubAgentTaskResult(input: BuildSubAgentTaskResultInput): SubAgentT
   }
 }
 
+/**
+ * 序列化成工具返回文本：人读的 summary 在前，完整结果以 `<subagent-result type="application/json">`
+ * 包一段 JSON 跟在后面。双层是刻意的——模型直接读上半段就够，下游要精确字段时再用
+ * parseSubAgentToolResult 把下半段解回来。
+ */
 function formatSubAgentToolResult(result: SubAgentTaskResult): string {
   const payload = JSON.stringify(result)
   return `${result.summary}\n\n<subagent-result type="application/json">\n${payload}\n</subagent-result>`
 }
 
+/**
+ * formatSubAgentToolResult 的逆操作：从工具返回文本里取出 `<subagent-result>` 包裹的 JSON。
+ * 找不到标记、标记未闭合、正文为空或不是合法 JSON 一律返回 null——这是"这段不是结构化子 Agent 结果"
+ * 的正常信号（输入本就是模型产出的文本），调用方据此回落到纯文本路径，不当故障处理。
+ */
 function parseSubAgentToolResult(value: string): Nullable<SubAgentTaskResult> {
   const openMarker = '<subagent-result type="application/json">'
   const closeMarker = '</subagent-result>'

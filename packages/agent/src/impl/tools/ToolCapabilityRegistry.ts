@@ -1,6 +1,7 @@
 import { toNullable } from '@velaros-ai/core'
 
 import type { RuntimePromptFeaturePolicy } from '../../contract/requires.js'
+import type { ToolCategoryOverview, ToolDescriptor } from '../../types/agent.js'
 import type { RegistryTool, ToolRegistryContext } from '../../types/tools'
 import type { RegisteredToolMap, ToolCapabilityPage, ToolCapabilityRegistryContext, ToolCapabilityRegistryListOptions, ToolDiscoveryToolAvailabilityInput } from '../../types/tools.js'
 import { decideToolCategoryAccess } from '../../utils/tools/access-policy'
@@ -26,7 +27,42 @@ import { ToolRegistryHelper } from './ToolRegistry'
 
 
 
-class ToolCapabilityRegistry {
+/**
+ * 工具能力发现面：给「模型现在能用什么、还能换入什么」这个问题出数据。
+ *
+ * 可见性判定本身复用 `ToolRegistry`（本类构造时自建一份持有），这里只多做一件事——
+ * 把不可见的工具也按页列出来，并说清它为什么不可见、下一步该做什么（`tooling:map` 的数据源）。
+ * 无自有状态，按会话或按需建都行。
+ */
+export interface ToolCapabilityRegistryApi {
+  /** 列当前可见的工具 descriptor；`scope` 缺省 `enabled`（只算本轮真驻留的），`all` 连可换入的一起算。 */
+  listTools<TContext extends ToolRegistryContext, TTool extends RegistryTool<TContext>>(
+    registry: RegisteredToolMap<TTool>,
+    ctx: TContext,
+    options?: ToolCapabilityRegistryListOptions
+  ): ToolDescriptor[]
+  /** 同 `listTools`，但按类别聚合，供设置页与类别概览用。 */
+  listCategories<TContext extends ToolRegistryContext, TTool extends RegistryTool<TContext>>(
+    registry: RegisteredToolMap<TTool>,
+    ctx: TContext,
+    options?: ToolCapabilityRegistryListOptions
+  ): ToolCategoryOverview[]
+  /**
+   * 列能力页：每个工具一页，带可用性档位（visible / loadable / requires_approval …）、schema 给多少、
+   * 下一步动作与不可用原因。模型消费不了输出的工具（多模态不匹配）直接不出现——让它发现了也没用；
+   * 声明了 `hideWhenUnavailable` 且当前运行态不可用的同样不出现，其余一律留在页表里并附原因。
+   */
+  listCapabilityPages<
+    TContext extends ToolCapabilityRegistryContext,
+    TTool extends RegistryTool<TContext>,
+  >(
+    registry: RegisteredToolMap<TTool>,
+    ctx: TContext,
+    options?: Pick<ToolCapabilityRegistryListOptions, 'allowList'>
+  ): ToolCapabilityPage[]
+}
+
+class ToolCapabilityRegistry implements ToolCapabilityRegistryApi {
   private readonly helper: ToolRegistryHelper
 
   constructor(promptFeaturePolicy: RuntimePromptFeaturePolicy = defaultRuntimePromptFeaturePolicy) {

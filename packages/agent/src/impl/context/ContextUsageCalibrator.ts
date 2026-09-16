@@ -27,7 +27,26 @@ const MaxCalibrationFactor = 3
 const MinResidual = 0.25
 const MaxResidual = 4
 
-class ContextUsageCalibrator {
+/**
+ * 上下文用量校准器：用供应方回传的真实 input tokens 校准本地估算，按模型各学一套系数。
+ *
+ * 由 `AgentLoopContextUsageManager` 按循环持有一份，学习跨回合累积；只在进程内，不持久化，
+ * 重启后几轮即可重新收敛。样本不合法（模型名为空、数值非有限或非正）时整条样本丢弃，系数不动。
+ */
+export interface ContextUsageCalibratorApi {
+  /** 取某模型当前的校准系数，估算时乘上它；没学过或模型名为空时返回 1（等于不校准）。 */
+  getFactor(model: string): number
+  /**
+   * 拿一轮的「估算值 vs 真实值」更新该模型的系数：残差先夹在 [0.25, 4] 以免单个异常样本带偏，
+   * 再按 EMA 朝 `当前系数 × 残差` 移动，最后把系数夹在 [0.5, 3]。
+   * 传入的估算值必须是**已经乘过旧系数**的那份，系数才会自我收敛。
+   */
+  record(model: string, predictedInputTokens: number, actualInputTokens: number): void
+  /** 清空已学到的全部系数，回到「都不校准」的初始态；给测试与诊断用，正常链路不调。 */
+  reset(): void
+}
+
+class ContextUsageCalibrator implements ContextUsageCalibratorApi {
   private readonly factorByModel = new Map<string, number>()
 
   /** 返回某模型当前的校准系数；未学习过时为 1。 */

@@ -17,17 +17,51 @@
 //
 import type { KernelCancelResult, KernelControllerAnswerInput, KernelControllerApprovalInput, KernelControllerSendInput, KernelControllerTarget, KernelInputReceipt, KernelRuntimeStatus } from '../../types/execution.js'
 
+/**
+ * 宿主为这组控制面动词提供的实现。由持有门面的那一方（桥）在建门面时一次性交进来，
+ * 之后只被门面调用；适配器绝不反向持有门面。每个方法都按「失败就抛」约定，门面不吞异常。
+ */
 export interface KernelSessionControllerAdapter<TApproval = unknown> {
+  /** 把一条输入写进账本并拿回回执（含单调 seq）。同一条输入重复 admit 应当幂等地给回同一个 seq。 */
   admit(input: KernelControllerSendInput): Promise<KernelInputReceipt>
+  /** 唤醒这个会话的消费循环，从 `target.seq` 起把账本里已获准的输入跑掉。必须在 admit 之后调用。 */
   wake(target: KernelControllerTarget): Promise<void>
+  /** 把一条已按 `steer` 入账的输入提到排队消息前面，让它在当前这一轮就生效。 */
   steer(input: KernelControllerSendInput): Promise<void>
+  /** 把用户对某个在途追问的回答交给运行时，解开那一轮的等待。 */
   answer(input: KernelControllerAnswerInput): Promise<void>
+  /** 把用户对某个在途确认的批准/拒绝交给运行时；`approvalPayload` 由 `TApproval` 定形，门面不解释它。 */
   approve(input: KernelControllerApprovalInput<TApproval>): Promise<void>
+  /** 归约并返回这个会话此刻的运行态（在不在跑、有没有待确认、排队条数、后台任务数等）。 */
   runtimeStatus(target: KernelControllerTarget): Promise<KernelRuntimeStatus>
+  /** 中断这个会话；返回中止结论，宿主也可以什么都不返回，门面会当作「没中止成功」。 */
   cancel(target: KernelControllerTarget): Promise<KernelCancelResult | void>
 }
 
-export class KernelSessionController<TApproval = unknown> {
+/**
+ * 会话控制面的窄门面：把「外部意图 → 会话运行时」收敛成一组闭集动词，实现全部经
+ * {@link KernelSessionControllerAdapter} 注入。门面自己不存状态，只负责调用顺序与缺省归一。
+ * 每座桥建一个，和桥同生命周期。
+ */
+export interface KernelSessionControllerApi<TApproval = unknown> {
+  /** 发一条消息：先 admit 落账拿到 seq，再用该 seq 唤醒。顺序反了会让唤醒跑在入账之前，那一轮读不到东西。 */
+  send(input: KernelControllerSendInput): Promise<KernelInputReceipt>
+  /** 插一条话：以 `steer` 投递方式入账，再让适配器把它提到排队消息前面；返回入账回执。 */
+  steer(input: KernelControllerSendInput): Promise<KernelInputReceipt>
+  /** 单独唤醒一个会话的消费循环，不带新输入。用于账本已有内容但没人驱动的场合。 */
+  wake(target: KernelControllerTarget): Promise<void>
+  /** 转投一条对在途追问的回答。 */
+  answer(input: KernelControllerAnswerInput): Promise<void>
+  /** 转投一次对在途确认的批准或拒绝。 */
+  approve(input: KernelControllerApprovalInput<TApproval>): Promise<void>
+  /** 取一份会话运行态快照，原样来自适配器。 */
+  runtimeStatus(target: KernelControllerTarget): Promise<KernelRuntimeStatus>
+  /** 中断一个会话；适配器没给结论时归一成 `{ aborted: false }`——缺席回落到「没中止成功」是安全方向。 */
+  cancel(target: KernelControllerTarget): Promise<KernelCancelResult>
+}
+
+export class KernelSessionController<TApproval = unknown>
+  implements KernelSessionControllerApi<TApproval> {
   constructor(private readonly adapter: KernelSessionControllerAdapter<TApproval>) {}
 
   public async send(input: KernelControllerSendInput): Promise<KernelInputReceipt> {

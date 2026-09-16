@@ -31,7 +31,7 @@ describe('MonotonicExecutionIdFactory', () => {
 
   test('rejects an empty runtime namespace', () => {
     expect(() => new MonotonicExecutionIdFactory(new FixedClock(7), '')).toThrow(
-      'namespace must not be empty'
+      'instanceNamespace 不能是空串'
     )
   })
 })

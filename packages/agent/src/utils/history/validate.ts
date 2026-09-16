@@ -6,6 +6,7 @@ import { coerceTrimmedString, isRecord } from '@velaros-ai/core/utils/unknownJso
 
 import type { AssertValidModelHistoryOptions,ModelHistoryValidationIssue, ModelHistoryValidationResult, ToolCallReference } from '../../types/history.js'
 
+/** 往问题清单里追加一条校验问题（消息序号、角色、说明，`toolCallId` 可缺）。`toOptional` 把各种缺席形态归一成省略位的 `undefined`，避免问题详情里出现 `toolCallId: null` 这种第三态。 */
 function addIssue(
   issues: ModelHistoryValidationIssue[],
   messageIndex: number,
@@ -21,10 +22,12 @@ function addIssue(
   })
 }
 
+/** 把从 0 开始的消息下标写成给人看的「第 N 条消息」（下标 +1）。报错要让人能直接数到那一条，不是让人自己换算。 */
 function formatMessagePosition(messageIndex: number): string {
   return `第 ${messageIndex + 1} 条消息`
 }
 
+/** 把一条校验问题拼成一行人话：`第 N 条消息 <角色>: <说明>`，有 `toolCallId` 时在末尾补上 `（toolCallId: …）`。带上 id 是为了在一条消息里有多个工具调用时，能指明是哪一个坏了。 */
 function formatIssue(issue: ModelHistoryValidationIssue): string {
   const suffix = issue.toolCallId ? `（toolCallId: ${issue.toolCallId}）` : ''
   return `${formatMessagePosition(issue.messageIndex)} ${issue.role}: ${issue.message}${suffix}`
@@ -102,6 +105,18 @@ export function stripOrphanToolResultParts(
   return { history: result, changedMessages }
 }
 
+/**
+ * 在发请求**之前**把整份历史按供应方的配对规则核一遍，返回全部问题（不抛，也不在第一条就停——
+ * 一次把问题列全，才不用修一条发一次、被拒一次）。
+ *
+ * 核心是一张「待结果的 tool-call」台账：assistant 的每个 tool-call 入账，tool-result 命中就销账；
+ * 遇到非 tool 消息说明这组本该已经闭合，台账里还剩的一律记「缺少紧随其后的 tool-result」并清空；
+ * 扫完历史还剩的记「到历史末尾仍缺少 tool-result」。
+ * 另外还查：tool-call/tool-result 缺 `toolCallId` 或 `toolName`、同一 id 被重复 replay、
+ * tool 消息 content 不是数组或为空、tool 消息里混进非 tool-result 片段、没有对应 tool-call 的孤儿 tool-result，
+ * 以及 tool-result 的 `toolName` 与对应 tool-call 不一致。
+ * 这些每一条都会让供应方整轮请求 400，本地先查是为了当场说清哪条消息坏了，而不是把一句供应方错误码丢给用户。
+ */
 export function validateModelHistory(
   history: ModelMessage[]
 ): ModelHistoryValidationResult {
@@ -238,6 +253,15 @@ export function validateModelHistory(
   }
 }
 
+/**
+ * `validateModelHistory` 的抛错版，外加一条它不查的规则：历史**不能以 assistant 或 system 消息收尾**。
+ * 以 assistant 收尾会被供应方当成 assistant prefill（要求模型接着这半句往下写）而报错；
+ * 内部续跑提醒必须作为 user/tool 后续输入发出去，不能直接挂成 system 垫在最后。
+ *
+ * 有问题就抛 `AppError('VALIDATION')`，消息里摘前 5 条问题、其余只报个数（错误提示本身不该长得没法读），
+ * 详情里再带上 `phase`、`turn` 与前 20 条问题供排查。抛出即意味着这一轮请求**根本没发出去**，
+ * 宁可当场失败也不让一份坏历史撞上供应方。
+ */
 export function assertValidModelHistory(
   history: ModelMessage[],
   options: AssertValidModelHistoryOptions

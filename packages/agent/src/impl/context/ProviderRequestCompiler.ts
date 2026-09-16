@@ -16,16 +16,17 @@
  */
 import type { ModelMessage } from 'ai'
 
-import { isNotNull } from '@velaros-ai/core'
+import { isEmpty, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 
 import type { ContextUsageEstimate } from '../../types/agent.js'
-import type { CompiledProviderRequest, CompileProviderRequestInput, ContextGovernanceRuler } from '../../types/context.js'
+import type { CompiledProviderRequest, CompiledProviderSendRequest, CompileProviderRequestInput, CompileProviderSendRequestInput, ContextGovernanceRuler } from '../../types/context.js'
+import type { SanitizeModelHistoryOptions, UserTextPayloadReference } from '../../types/history.js'
 import type { ContextGovernanceSessionApi, ContextGovernanceSessionRegistryApi } from '../../types/residency.js'
-import type { ContextProjectionStats, GovernanceEpochReport,GovernanceWindowDerivation } from '../../types/residency.js'
+import type { GovernanceEpochReport,GovernanceWindowDerivation } from '../../types/residency.js'
 import { estimateProviderRequestUsage, runBudgetStage } from '../../utils/context/budget-stage'
-import { ContextWorkingSetOS } from '../../utils/context/context-working-set-os'
+import { projectFileContext } from '../../utils/context/file-context-projection'
 import {
   assertProviderRequestInvariants,
   buildProviderRequestFingerprint,
@@ -36,19 +37,33 @@ import {
   createProviderRequestScratch,
   resolveSharedToolReferenceScan,
 } from '../../utils/context/pipeline'
-import { applySendTransportDecorations, buildGovernanceRewriteSignals, measureGovernanceRuler, partitionStablePrefix, rewriteProviderToolNames } from '../../utils/context/provider-request-compile'
+import { applySendTransportDecorations, buildGovernanceRewriteSignals, buildProviderRequestTailBlocks, measureGovernanceRuler, partitionStablePrefix, rewriteProviderToolNames } from '../../utils/context/provider-request-compile'
 import { buildProviderRequestSnapshot } from '../../utils/context/provider-request-snapshot'
 import {
   buildRetainedContextRewriteSignals,
   withProviderVisibleRetainedContext,
 } from '../../utils/context/retained-context-stage'
+import { sanitizeHistoryForProvider } from '../../utils/history/request'
 import { assertValidModelHistory } from '../../utils/history/validate'
-import { buildContextDashboardMessage } from '../../utils/residency/dashboard'
 import { resolveProjectionBudget } from '../../utils/residency/governance-epoch'
 import { resolveGovernanceWindow } from '../../utils/residency/governance-window'
 import { projectContextLedger } from '../../utils/residency/projection'
 import { rewriteCanonicalToolReferences } from '../../utils/tools/tool-identity'
+import { readReusableAttemptInput } from '../../utils/tools/tool-input-reuse'
+import {
+  projectTransientRecoveryHistory,
+  restoreReusableInputsForNextDecision,
+} from '../../utils/tools/transient-recovery-projection'
 import { ContextGovernanceSessionRegistry } from '../residency/ContextGovernanceSessionRegistry'
+import { ContextProjectionRenderCache } from '../residency/ContextProjectionRenderCache'
+
+import { ContextWorkingSetOS } from './ContextWorkingSetOS'
+import { fileContextFor } from './FileContextCoordinator'
+import { buildToolPayloadRefsForProviderMessages } from './ToolPayloadReferencePlanner'
+import {
+  OversizedUserTextSafetyValveChars,
+  UserTextPayloadPlanner,
+} from './UserTextPayloadPlanner'
 
 export {
   collectProviderRequestHistoryToolNames,
@@ -66,8 +81,47 @@ interface ProviderMessageProjection {
   providerMessages: ModelMessage[]
 }
 
-export class ProviderRequestCompiler {
+/**
+ * 供应商请求编译器：第一环治理管线的装配入口，也是 `ContextAssembler` 的正式实现。
+ *
+ * 由宿主或循环持有（构造时收下治理会话登记处，不传就自建一份），账本跨回合的家在登记处而不在本实例，
+ * 所以同一份编译器可以服务多个会话。一次编译 = 结构自愈 → 账本摄入 → 轮边界治理 → 确定性投影 →
+ * 保留上下文与活动尾 → 预算核算；治理没触发时结果与清洗后的历史逐字节等价。
+ * 历史结构修不好（孤儿 tool-result 之类）会抛错终止本轮，绝不把半截历史发出去。
+ */
+export interface ProviderRequestCompilerApi {
+  /** 编译一次供应商请求：吃会话历史与本轮入参，出可直接发送的 system / messages / 工具与预算快照。 */
+  compile(input: CompileProviderRequestInput): CompiledProviderRequest
+  /**
+   * 与 `compile` 同一条路，名字为兼容旧调用面保留。
+   * B1 起**没有回收阶梯**：仍超预算说明该开新会话（转交信号），不是再压一遍。
+   */
+  compileWithReclaim(input: CompileProviderRequestInput): CompiledProviderRequest
+  /**
+   * 给已编译结果封一份最终投影：重算指纹、重跑不变量断言与预算核算，但**不重跑治理、不改显示字节**。
+   * 用在发送前消息又被下游动过（例如补了来源引用）的场合，让快照与真正发出去的那份对齐。
+   */
+  finalizeProjectedMessages(
+    input: CompileProviderRequestInput,
+    compiled: CompiledProviderRequest,
+    messages: ModelMessage[]
+  ): CompiledProviderRequest
+  /**
+   * 统一的模型请求发送路径：先持久化超大用户文本，再清洗历史消息，按需构建工具引用与源码窗口，
+   * 最后走 `compileWithReclaim` 编译出可发送请求。调用方不该在此之前重复做历史清洗或用户文本安全阀。
+   * 与 `compile` 的区别是它吃**未清洗的原始历史**（`rawHistoryMessages`），并额外回报清洗后的历史
+   * 与本轮持久化的用户文本条数。
+   */
+  compileSendRequest(input: CompileProviderSendRequestInput): Promise<CompiledProviderSendRequest>
+}
+
+export class ProviderRequestCompiler implements ProviderRequestCompilerApi {
   private readonly workingSetOS = new ContextWorkingSetOS()
+  /**
+   * 投影渲染长度的复用缓存。投影本身是纯函数，缓存的家在这里：编译器长活，账本记录一旦入账不再改写，
+   * 所以同一条记录同一驻留态只渲染一次，之后每轮（以及同一轮里治理前预判与治理后发送两次投影）直接命中。
+   */
+  private readonly renderCache = new ContextProjectionRenderCache()
 
   constructor(
     /**
@@ -114,6 +168,118 @@ export class ProviderRequestCompiler {
         model: input.model, system: compiled.system, messages,
         tools: input.providerTools, toolChoice: input.providerToolChoice, requestFingerprint,
       }),
+    }
+  }
+
+  /**
+   * 统一模型请求发送路径：先持久化超大用户文本，再清洗历史消息，再按需构建工具引用，最后编译可发送请求。
+   * 调用方不应在此之前重复执行历史清洗或用户文本安全阀逻辑。
+   */
+  public async compileSendRequest(
+    input: CompileProviderSendRequestInput
+  ): Promise<CompiledProviderSendRequest> {
+    let userTextPayloadRefs: UserTextPayloadReference[] = []
+    let storedToolPayloadRefs: Record<string, string> = {}
+    const mergedSanitizeOptions: SanitizeModelHistoryOptions = {
+      stripProviderSpecificMetadata: true,
+      ...(input.sanitizeOptions ?? {}),
+    }
+
+    const sanitizedHistoryMessages = sanitizeHistoryForProvider(
+      input.rawHistoryMessages,
+      input.phase,
+      toNullable(input.turn),
+      mergedSanitizeOptions
+    )
+    if (input.payloadStore && !input.skipUserTextPersistence) {
+      const planner = new UserTextPayloadPlanner(input.payloadStore)
+      const persisted = await planner.persistOversizedUserTexts({
+        sessionId: input.sessionId,
+        // 先做结构/Unicode 清洗再计算内容哈希，准入期对同一份正文重算时才能稳定命中。
+        messages: sanitizedHistoryMessages,
+        thresholdChars: OversizedUserTextSafetyValveChars,
+      })
+      userTextPayloadRefs = persisted.references
+    }
+    // 生产发送路径会注入 buildToolPayloadRefs，并由工具描述决定 outputInline；此时不能再跑一遍不懂
+    // 工具策略的通用规划器，否则会给本应永久内联的结果补上 ref。无宿主回调时才用通用持久化兜底。
+    if (input.payloadStore && !input.buildToolPayloadRefs) {
+      storedToolPayloadRefs = await buildToolPayloadRefsForProviderMessages({
+        sessionId: input.sessionId,
+        messages: input.rawHistoryMessages,
+        store: input.payloadStore,
+      })
+    }
+    const leadingMessages = input.leadingMessages ?? []
+    // 交给编译器的是**未装饰**的历史：prompt-cache 断点每轮换位，贴在这里
+    // 会让驻留账本的前缀指纹在每个新用户回合分叉、整本重建（审计 V10/U2/U4）。装饰改由编译器在
+    // 投影之后贴（`applySendTransportDecorations`），provider 收到的字节不变。
+    const fileContext = input.toolContext ? fileContextFor(input.toolContext) : undefined
+    await fileContext?.seedHistory(sanitizedHistoryMessages)
+    await fileContext?.prepare()
+    const fileViews = fileContext?.currentViews() ?? []
+    const measurementInput = { ...input, messages: sanitizedHistoryMessages }
+    const fixedEstimate = estimateProviderRequestUsage(measurementInput, [...leadingMessages, ...(input.tailBlocks ?? [])])
+    const fileTokenBudget = Math.max(0, Math.min(fixedEstimate.usableContextWindow * 0.15,
+      fixedEstimate.usableContextWindow - fixedEstimate.estimatedTokens))
+    let fileChars = Math.min(32_000, Math.floor(fileTokenBudget * 3))
+    // 失败回执与被复用的原参数只陪紧接着的那一次决策；attempt 记录与工具执行共用同一会话的存储。
+    const attemptStore = input.toolContext?.contextPayloadStore ?? input.payloadStore
+    const attemptSessionId = input.toolContext?.sessionId ?? input.sessionId
+    const recovery = await restoreReusableInputsForNextDecision(
+      projectTransientRecoveryHistory(sanitizedHistoryMessages),
+      async (toolCallId) => attemptStore
+        ? readReusableAttemptInput(attemptStore, attemptSessionId, toolCallId)
+        : undefined,
+    )
+    const recoveryHistory = recovery.messages
+    let fileProjection = projectFileContext(recoveryHistory, fileViews, fileChars)
+    // 与最终发送门共用分词尺；源码预算是总输入容量的一部分，最后仍由编译器统一准入。
+    while (fileChars > 0 && estimateProviderRequestUsage(measurementInput,
+      [...leadingMessages, ...(input.tailBlocks ?? []), ...fileProjection.tail]).estimatedTokens
+        - fixedEstimate.estimatedTokens > fileTokenBudget) {
+      fileChars = Math.floor(fileChars / 2)
+      fileProjection = projectFileContext(recoveryHistory, fileViews, fileChars)
+    }
+    const undecoratedMessages = [...leadingMessages, ...fileProjection.history]
+    const callbackToolPayloadRefs = input.buildToolPayloadRefs
+      ? await input.buildToolPayloadRefs(undecoratedMessages)
+      : undefined
+    const mergedToolPayloadRefs = {
+      ...storedToolPayloadRefs,
+      ...(callbackToolPayloadRefs ?? {}),
+    }
+    const toolPayloadRefsByToolCallId = isEmpty(Object.keys(mergedToolPayloadRefs))
+      ? undefined
+      : mergedToolPayloadRefs
+    const userTextPayloadRefsByHash = Object.fromEntries(
+      userTextPayloadRefs.map((reference) => [reference.hash, reference.payloadRef])
+    )
+
+    const compileInput = {
+      ...input,
+      messages: undecoratedMessages,
+      tailBlocks: [...(input.tailBlocks ?? []), ...fileProjection.tail],
+      preserveToolCallInputIds: recovery.restoredToolCallIds,
+      applySendTransportDecorations: true,
+      toolPayloadRefsByToolCallId,
+      userTextPayloadRefsByHash,
+      toolNameAliases:
+        input.toolNameAliases ?? input.toolContext?.getCurrentVisibleToolTransportNames?.(),
+    }
+    let compiled = this.compileWithReclaim(compileInput)
+
+    // 全部裁剪完成后再签发引用，并按最终字节重新封存 token 估计
+    // 与完整性指纹，避免源码授权破坏发送边界快照。
+    if (fileContext) compiled = this.finalizeProjectedMessages(
+      compileInput, compiled, await fileContext.finalizeMessages(compiled.messages)
+    )
+
+    return {
+      ...compiled,
+      sanitizedHistoryMessages,
+      providerMessages: compiled.messages,
+      userTextPayloadRefs: userTextPayloadRefs.length,
     }
   }
 
@@ -295,9 +461,10 @@ export class ProviderRequestCompiler {
       residency: session.ledger.residencyVector(),
       budget: resolveProjectionBudget(session.config, window.windowTokens, charsPerToken),
       stablePrefix,
+      renderCache: this.renderCache,
     })
     const projectedMessages = applySendTransportDecorations(projection.messages, input)
-    const tailBlocks = this.buildTailBlocks(input, { session, window }, projection.stats)
+    const tailBlocks = buildProviderRequestTailBlocks(input, { session, window }, projection.stats)
     const canonicalMessages = applyHistoryStructureRepair(
       [...projectedMessages, ...retainedMessages, ...tailBlocks],
       { log: false, preserveToolCallInputIds: input.preserveToolCallInputIds }
@@ -309,35 +476,13 @@ export class ProviderRequestCompiler {
     }
   }
 
-  private buildTailBlocks(
-    input: CompileProviderRequestInput,
-    governance: {
-      session: ContextGovernanceSessionApi
-      window: GovernanceWindowDerivation
-    },
-    stats: ContextProjectionStats
-  ): ModelMessage[] {
-    const blocks = [...(input.tailBlocks ?? [])]
-    if (!governance.session.config.dashboard) return blocks
+}
 
-    const ledger = governance.session.ledger
-    const lastEpochAttempt = governance.session
-      .epochReports()
-      .findLast((report) =>
-        isNotNull(report.trigger) && report.ledgerGeneration === governance.session.generation
-      )
-    const dashboard = buildContextDashboardMessage({
-      epoch: governance.session.epoch,
-      stats: ledger.stats(),
-      records: ledger.list(),
-      residency: ledger.residencyVector(),
-      projectedTokens: stats.projectedTokens,
-      budgetTokens: governance.window.windowTokens,
-      lastEpochAttempt,
-    })
-    if (dashboard) blocks.push(dashboard)
-    return blocks
-  }
+export function compileProviderSendRequest(
+  input: CompileProviderSendRequestInput,
+  compiler: ProviderRequestCompiler
+): Promise<CompiledProviderSendRequest> {
+  return compiler.compileSendRequest(input)
 }
 
 

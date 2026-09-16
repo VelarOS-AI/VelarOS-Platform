@@ -106,6 +106,13 @@ function resolveRunProfileWorkingSetContextWindow(input: {
     : physicalContextWindow
 }
 
+/**
+ * 判本次运行用哪个运行档，并把该档的默认值与预算一并带出（档位判定的唯一权威）。
+ *
+ * 显式指定了 compact/balanced/expanded 就用它（reason 记 `explicit`）；`auto` 或没指定时按模型上下文窗口分档：
+ * < 192K 走 compact、≥ 1M 走 expanded、之间走 balanced。窗口未知时按 128_000 兜底——**兜底值落在 compact 区间**，
+ * 即拿不准就保守收紧，而不是放开预算去赌窗口够大。`reason` 会写明分档依据（含阈值），供诊断复盘为什么是这一档。
+ */
 function resolveRunProfilePolicyForRuntime(input: {
   requested?: LooseOptional<unknown>
   contextWindow?: LooseOptional<number>
@@ -147,6 +154,10 @@ function resolveRunProfilePolicyForRuntime(input: {
   }
 }
 
+/**
+ * {@link resolveRunProfilePolicyForRuntime} 的轻量出口：只要档位 id 与判档理由，不带默认值与预算。
+ * 判档逻辑完全复用，不存在两套口径。
+ */
 function resolveRunProfileForRuntime(input: {
   requested?: LooseOptional<unknown>
   contextWindow?: LooseOptional<number>
@@ -166,6 +177,11 @@ const ToolSurfaceFallbackChains: Record<
   expert: ['expert', 'direct'],
 }
 
+/**
+ * 取某个工具面档位的回退链：首项是它自己，后面是该面不可用时依次降级的目标
+ * （如 `preset` → `guided` → `direct`；`direct` 是链底，不再降级）。
+ * 传入未登记的档位时给 `[guided, direct]` 兜底，保证调用方永远拿得到一条非空链。
+ */
 function getToolSurfaceFallbackChain(
   profile: ToolSurfaceProfileId
 ): readonly ToolSurfaceProfileId[] {

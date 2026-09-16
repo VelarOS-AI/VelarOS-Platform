@@ -25,6 +25,12 @@ function resolveToolReadOnly(tool: ToolReadOnlyClassification): boolean {
   return tool.role === 'inspect'
 }
 
+/**
+ * 在工具注册期校验契约里写的示例入参：每条示例先按**模型实际会发的那份 JSON**序列化再解析回来
+ * （这样 Date、undefined 之类只在内存里成立的值会现原形），再交给工具自己的 schema `safeParse`。
+ * 有一条不过就抛 `VALIDATION` AppError，message 里带工具名、原示例和逐条 `路径: 原因`
+ * （根级路径记作 `<root>`）。示例是直接给模型抄的范本，坏示例必须在装配时炸，不能等模型照着抄才发现。
+ */
 function validateToolContractExamples(
   toolName: string,
   schema: {
@@ -52,7 +58,7 @@ function validateToolContractExamples(
 
     throw new AppError(
       'VALIDATION',
-      `Tool contract ${toolName} example does not satisfy schema: ${JSON.stringify(example)} (${issues})`
+      `工具契约 ${toolName} 的示例不满足自己的 schema：${JSON.stringify(example)}（${issues}）。示例是按模型实际发送的形状校验的，请改示例或改 schema，让两者对上。`
     )
   }
 }
@@ -92,6 +98,14 @@ function withUsageSkillNote(
   return [...(notes ?? []), renderUsageSkillNote(usageSkillId)] as ToolContractDescriptionSpec['notes']
 }
 
+/**
+ * 把描述规格编译成模型最终看到的那段工具描述，并**登记示例**（`examples.set(name, …)`，
+ * 供 tool_map / schema 自恢复等处回查）。companion skill 指路会追加进「注意」分节末尾，
+ * 而不是另起一段（另起会被判非结构化）。
+ * 这是全部工具（含各 surface）描述的唯一构造点，所以两道长度闸门只能在这里拦：
+ * `assertToolDescriptionWithinLimit` 是硬上限，`assertToolDescriptionWithinBudget` 是预算闸、
+ * 可由契约的 `descriptionBudgetWaiver` 豁免。描述从不压缩，写下来那一刻不拦就永远拦不住。
+ */
 function buildToolContractDescription(
   name: string,
   categoryId: DefineToolContractInput['category'],
@@ -115,6 +129,12 @@ function buildToolContractDescription(
   return description
 }
 
+/**
+ * 声明一条工具**契约**（只有形状与描述，配 execute 但不含 runtime 独有字段如 outputInline）。
+ * 装配时依次做三件会抛错的事：断言 name 是 canonical 工具 id、校验示例能过自己的 schema、
+ * 编译描述并过长度/预算两道闸——任一不过就直接抛，坏工具进不了注册表。
+ * 其余字段原样透传，只有 `permissions` 缺省会补成空数组。
+ */
 function defineToolContract<TInput extends Record<string, unknown>, TContext = unknown>(
   input: DefineToolContractInput<TInput, TContext>,
   examples: ToolContractExampleRegistry = DefaultToolContractExampleRegistry
@@ -188,6 +208,13 @@ function buildToolRuntimeSurfaces<TInput extends Record<string, unknown>, TConte
   )
 }
 
+/**
+ * 声明一条工具的**运行期规格**——`defineToolContract` 那套校验（canonical id、示例过 schema、
+ * 描述两道闸）全都照做，另外多两件事：逐 surface 编译各自的描述与示例（surface 未声明时保持 undefined
+ * 而不是空对象），以及由 `resolveToolReadOnly` 定出 `readOnly`——以 `capabilities.effectKind === 'read'`
+ * 为准，没声明 effectKind 才看显式 `readOnly`，再没有就按 `role === 'inspect'` 兜底。
+ * 内置工具都经由 `defineVelaTool` 走到这里。
+ */
 function defineToolRuntimeSpec<
   TInput extends Record<string, unknown>,
   TContext = unknown,
@@ -237,6 +264,11 @@ function defineToolRuntimeSpec<
   }
 }
 
+/**
+ * 鸭子判定一个值是否是工具契约：同时具备 `name`、`category`、`role`、`description`、`schema`、
+ * `execute` 六个键即为真。只看键在不在、不看值的类型，用于从混杂导出里筛出工具——
+ * 真正的形状保证来自 `defineToolContract` 那条构造路径。
+ */
 function isToolContractSpec(
   value: unknown
 ): value is ToolContractSpec<Record<string, unknown>, unknown> {

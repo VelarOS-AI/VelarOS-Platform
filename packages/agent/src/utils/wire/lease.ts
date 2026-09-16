@@ -1,29 +1,31 @@
 // 域：Agent 工具契约租约；属于 Agent capability protocol，不属于 Kernel protocol。
 import { z } from 'zod'
 
-import { AgentProtocolVersion } from '../../contract/constants.js'
+import { AgentLeasePolicy, AgentToolNames } from '../../contract/constants.js'
 import type { ContractLease, LeaseDenialReason, LeaseDeniedResponse,ToolCatalogEntry, ToolCatalogSnapshot, VelarToolCallEnvelope, VelarToolResultEnvelope, VelarToolResultStatus } from '../../types/agent.js'
+
+import { AgentProtocolVersion } from './version'
 
 
 /**
- * 租约强制续租时间窗口：10 分钟。
+ * 租约强制续租时间窗口，等价于 `AgentLeasePolicy.renewalWindowMs`。
  *
  * 宪章 §10 守护清单校准值，**原样带走、禁顺手重估**；只能被新实验推翻，不能被新架构删除。
  */
-export const LeaseRenewalWindowMs = 10 * 60 * 1000
+export const LeaseRenewalWindowMs = AgentLeasePolicy.renewalWindowMs
 
 /**
- * 租约强制续租轮次上限：6 轮。
+ * 租约强制续租轮次上限，等价于 `AgentLeasePolicy.renewalTurnLimit`。
  *
  * 宪章 §10 守护清单校准值，与 {@link LeaseRenewalWindowMs} 同源，原样。
  */
-export const LeaseRenewalTurnLimit = 6
+export const LeaseRenewalTurnLimit = AgentLeasePolicy.renewalTurnLimit
 
 /** 目录自恢复发现工具名：拉取当前完整工具清单（宪章 §3）。 */
-export const ToolCatalogDiscoveryToolName = 'tooling:catalog'
+export const ToolCatalogDiscoveryToolName = AgentToolNames.toolingCatalog
 
 /** schema 自恢复发现工具名：按需拉取某工具的精确输入 schema（宪章 §3）。 */
-export const ToolSchemaDiscoveryToolName = 'tooling:schema'
+export const ToolSchemaDiscoveryToolName = AgentToolNames.toolingSchema
 
 /**
  * 单个工具目录条目。

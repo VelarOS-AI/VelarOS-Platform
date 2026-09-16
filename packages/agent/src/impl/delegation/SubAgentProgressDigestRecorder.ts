@@ -20,7 +20,23 @@ function pickArgsHint(args: Record<string, unknown>): Nullable<string> {
  * 父 Agent 用现有 job:read_output 即可随时窥视运行中子 Agent 的进展，
  * 不需要新工具、不打断子 Agent。sink 绑定前的行先缓冲，绑定时一次性冲刷。
  */
-class SubAgentProgressDigestRecorder {
+export interface SubAgentProgressDigestRecorderApi {
+  /**
+   * 绑定输出去处（后台 job 的 appendOutput），并把绑定前缓冲的行一次性冲刷出去。
+   *
+   * 派发器在拿到 job id 之后调一次。绑定前记下的事件不会丢——正因为 worker 可能比 job 先开始跑。
+   */
+  bindSink(sink: (chunk: string) => void): void
+  /**
+   * 吃一条 worker 事件，挑出工具轨迹写成一行摘要。
+   *
+   * 只认两种：工具开始（记「→ 工具名 + 入参里第一个非空字符串」）和工具失败（记「✗ 工具名 + 错误」）。
+   * 每行带相对启动的秒数；到 200 行上限后停记并留一句说明，最终结果仍以子 Agent 的返回为准。
+   */
+  record(event: AgentEvent): void
+}
+
+class SubAgentProgressDigestRecorder implements SubAgentProgressDigestRecorderApi {
   private readonly startedAt = Date.now()
   private readonly toolNamesByCallId = new Map<string, string>()
   private pendingLines: string[] = []

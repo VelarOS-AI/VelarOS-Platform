@@ -293,6 +293,12 @@ function appendSummaryRecord(
   return archiveOldSummaries(ledger, maxResidentSummaries, input.at)
 }
 
+/**
+ * 把超出常驻上限的**最老**摘要整条转入隐藏冷层（迁成 SUMMARIZED，cause `summary-archive`），返回实际归档了几条。
+ * 按账本序从老到新归档，且**至少保留 1 条**（上限配成 0 或负数时按 1 处理）——一条摘要都不留，等于这段历史在 prompt 里彻底无人代表。
+ * 归档掉的只是 prompt 里的摘要视图：原始成员仍在账本与检索层，摘要本身也仍可按记录 id 召回，所以这里不产生不可回的损失。
+ * 刻意不做"摘要叠摘要"：那是有损叠有损。
+ */
 function archiveOldSummaries(
   ledger: ResidencyLedgerView,
   maxResidentSummaries: number,
@@ -314,6 +320,11 @@ function archiveOldSummaries(
   return archived
 }
 
+/**
+ * 定一条摘要记录该挂在哪一轮：取它所代表成员里**最早**的 turn；成员一条都查不到时回落账本的最新轮。
+ * 必须取最早而不是最新——摘要是旧历史的替身，挂到最新轮会让它落进活动尾、排在受尾保护的当前任务之后，
+ * 语序整个错乱，还可能让 provider 看到的历史以 assistant 收尾。
+ */
 function resolveSummaryTurn(
   ledger: ResidencyLedgerView,
   memberIds: readonly string[]
@@ -522,14 +533,31 @@ function isSkeletonMember(record: ContextRecord): boolean {
   return record.kind === 'user' || record.kind === 'assistant'
 }
 
+/**
+ * 账本当前的最新轮次（全部记录 turn 的最大值），空账本返回 0。
+ * 陈旧判据与逐出保护里的"多久以前"都以它为基准。
+ */
 function resolveLatestTurn(ledger: ResidencyLedgerView): number {
   return resolveLatestTurnOf(ledger.list())
 }
 
+/**
+ * 一批记录里的最新轮次（turn 最大值），空数组返回 0。
+ * 与 {@link resolveLatestTurn} 是同一条公式，只是直接吃已经取好的记录数组——候选收集在一次遍历里要反复用它，
+ * 不必每次再走一遍 `ledger.list()`。
+ */
 function resolveLatestTurnOf(records: readonly ContextRecord[]): number {
   return records.reduce((latest, record) => Math.max(latest, record.turn), 0)
 }
 
+/**
+ * 把这一次 epoch 的结果拼成报告：触发方式、前后占用与占比、省了多少、三档器械各迁了几条、有没有达标、蒸馏产物落地情况。
+ *
+ * 两处判定值得说清：`applied` 只看**迁移条数是否大于 0**——真迁了东西就算应用过，哪怕收益很小、哪怕同时带着跳过原因；
+ * `savedTokens` 用 `max(0, before - after)` 夹底，治理后占用反而变大（例如产物比原段落长）不报负收益，按 0 记。
+ * 记账口径（charsPerToken、窗口推导、账本代数）一并写进报告：这几项读不出来，离线重放就分不清
+ * 「触发线改了」与「送核门余量变了」。
+ */
 function buildReport(
   input: RunGovernanceEpochInput,
   budgetTokens: number,
@@ -585,6 +613,10 @@ function buildReport(
   }
 }
 
+/**
+ * 算 `value / total` 的百分比，保留一位小数，供报告里的收益率与前后占用率共用一把尺子。
+ * `total <= 0` 返回 0 而不是除零：空账本的收益率与占用率一律报 0，报告里不会出现 NaN / Infinity。
+ */
 function toPercent(value: number, total: number): number {
   if (total <= 0) return 0
   return Math.round((value / total) * 1000) / 10

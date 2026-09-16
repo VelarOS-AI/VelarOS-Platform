@@ -378,6 +378,14 @@ export interface ToolExecutionPrepared {
   toolContext: ToolExecutionPolicyContext
 }
 
+/**
+ * 准入失败的归类：由**做出判定的那一处**直接声明，下游据此选失败码。
+ *
+ * 不变量：归类只能来自判定现场，绝不允许下游拿 `error` 文案回猜——
+ * 文案改一个字（翻译、润色）就会让归类静默漂移。缺席时下游按 `tool_blocked` 收敛。
+ */
+export type ToolExecutionFailureKind = 'tool_unavailable' | 'tool_not_found' | 'tool_blocked'
+
 export type ToolExecutionDecision =
   | {
       allowed: true
@@ -388,6 +396,8 @@ export type ToolExecutionDecision =
       error: string
       /** 若模型工具名已修复为 canonical 名，这里用于失败结果继续使用同一个名字。 */
       toolName?: string
+      /** 这次拒绝属于哪一类准入失败；缺席表示由下游按「被拦下」处理。 */
+      failureKind?: ToolExecutionFailureKind
     }
 
 export interface ToolExecutionSuccessInput {

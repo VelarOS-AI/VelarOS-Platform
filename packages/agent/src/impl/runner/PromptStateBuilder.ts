@@ -1,23 +1,29 @@
-import type { ModelMessage } from 'ai'
-
-import { isArray, isEmpty, isObject, isString, isTrue, toNullable, truncate } from '@velaros-ai/core'
+import { isEmpty, isTrue, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 
 import type {RuntimePromptFeaturePolicy } from '../../contract/requires.js'
-import type { ExecutionTaskPlanStep, ExecutionTaskPlanStepStatus, RunProfileId, RunProfileSelectionId, ToolCategoryOverview, ToolDescriptor } from '../../types/agent.js'
-import type { RuntimePromptSnapshot, RuntimePromptToolCategorySummary } from '../../types/guidance.js'
-import type { BuildRuntimePromptStateArgs, HtmlArtifactPromptTurnInput,PromptStatePreparedToolCategories, PromptStateToolContext } from '../../types/runner.js'
+import type { RuntimePromptSnapshot } from '../../types/guidance.js'
+import type { BuildRuntimePromptStateArgs, HtmlArtifactPromptTurnInput } from '../../types/runner.js'
 import { resolveCapabilityPromptSegments } from '../../utils/capabilities'
 import { createRuntimePromptSegments } from '../../utils/guidance/runtime'
-import { CompactionSummaryMarker } from '../../utils/history/context-os-message'
-import { isInternalFollowUpMessage } from '../../utils/history/internal-messages'
 import {
   isExecutionModeActive,
   resolveExecutionModes,
   stripExecutionModePromptFeatures,
 } from '../../utils/runner/execution-mode-registry'
-import { isRunProfileId } from '../../utils/wire/typed-field-asserts'
+import {
+  collectRecentToolFailures,
+  collectToolNames,
+  filterToolCategoryOverviewsByAllowedTools,
+  formatExecutionPlanPreview,
+  hasCompactedContextInHistory,
+  readLatestUserTurnText,
+  resolveSnapshotRunProfile,
+  resolveToolCategoryOverviews,
+  summarizeRequestableToolCategories,
+  summarizeToolCategories,
+} from '../../utils/runner/prompt-state'
 import { defaultRuntimePromptFeaturePolicy } from '../tools/DefaultPromptFeaturePolicy'
 
 interface RuntimeStateContextResult {
@@ -30,31 +36,6 @@ interface RuntimeStateContextResult {
 const HtmlArtifactVisualSignal =
   /(?:可视化|图表|架构图|流程图|原型|看板|仪表盘|页面|网页|卡片|落地页|实时预览|复杂说明|复杂展示|交互|互动|讲解|演示|动态效果|实时效果|chart|diagram|dashboard|prototype|preview|artifact|html|svg|canvas|page|card|landing page|real-time|interactive|interaction|explain|explanation|demo|visual)/iu
 
-function readPromptMessageText(message: ModelMessage): string {
-  if (isString(message.content)) return message.content
-  if (!isArray(message.content)) return ''
-  return message.content
-    .map((part) => {
-      if (isString(part)) return part
-      if (!isObject(part)) return ''
-      // @arch-guard:suspend code-style/prefer-is-plain-object-over-guarded-record-cast 理由：part 是 ai-SDK 的判别联合，isPlainObject 会把它收窄到不含 text 的成员，`type === 'text'` 直接被判成无重叠；断言是这条守卫唯一能读到字段的写法。
-      const record = part as Record<string, unknown>
-      return record.type === 'text' && isString(record.text) ? record.text : ''
-    })
-    .filter(Boolean)
-    .join('\n')
-}
-
-function readLatestUserTurnText(messages: ModelMessage[]): Nullable<string> {
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const message = messages[index]
-    if (message.role !== 'user' || isInternalFollowUpMessage(message)) continue
-    const text = readPromptMessageText(message).trim()
-    return text || null
-  }
-  return null
-}
-
 function shouldInjectHtmlArtifactPromptForTurn({
   selectedPromptFeatureSet,
   messages,
@@ -64,7 +45,24 @@ function shouldInjectHtmlArtifactPromptForTurn({
   return !!latest && HtmlArtifactVisualSignal.test(latest)
 }
 
-class PromptStateBuilder {
+/**
+ * 运行态提示词状态的装配件：把「本轮到底开了什么、模型手上有什么、计划走到哪」收敛成一份快照，
+ * 再渲染成提示词的 dynamic 段与判定用的 facts。由 `RunContext` 持有一份，跨轮复用，本身不存回合状态。
+ *
+ * 两条注入面：提示词特性策略（宿主可换，决定 feature 的归一与展示）与自定义子 Agent 清单（列不出来时降级成空表，不阻断整轮）。
+ */
+export interface PromptStateBuilderApi {
+  /**
+   * 装配本轮的运行态提示词状态。
+   *
+   * 先把执行模式轴从 feature 轴里折出来并按当前能力作用域收口，再用角色允许的工具面过滤分类总览，
+   * 最后产出三样东西：给段落谓词用的 `facts`、真正要拼进提示词的 `segments`、以及已停用的 `devEnvironmentContext`（恒为 null）。
+   * `contextPhase` 缺省按 `operational` 处理；`bootstrap` 阶段不注入技能目录与自定义子 Agent 目录。
+   */
+  build(args: BuildRuntimePromptStateArgs): Promise<RuntimeStateContextResult>
+}
+
+class PromptStateBuilder implements PromptStateBuilderApi {
   private readonly promptFeaturePolicy: RuntimePromptFeaturePolicy
 
   constructor(
@@ -116,17 +114,17 @@ class PromptStateBuilder {
       (feature) => this.promptFeaturePolicy.shouldDescribeAsSelected?.(feature) ?? true
     )
     const selectedPromptFeatureSet = new Set(enabledPromptFeatures)
-    const toolCategoryOverviews = this.resolveToolCategoryOverviews(
+    const toolCategoryOverviews = resolveToolCategoryOverviews(
       toolContext,
       preparedToolCategories
     )
     const allowedToolNames = new Set(roleResolution.allowedTools)
-    const enabledCategories = this.filterToolCategoryOverviewsByAllowedTools(
+    const enabledCategories = filterToolCategoryOverviewsByAllowedTools(
       toolCategoryOverviews.enabled,
       allowedToolNames
     )
-    const enabledToolNames = this.collectToolNames(enabledCategories)
-    const executionPlanPreview = this.formatExecutionPlanPreview(
+    const enabledToolNames = collectToolNames(enabledCategories)
+    const executionPlanPreview = formatExecutionPlanPreview(
       toolContext.execution.getCurrentPlan()
     )
     const currentExecutionAdvice = toNullable(toolContext.execution.getCurrentExecutionAdvice())
@@ -144,9 +142,9 @@ class PromptStateBuilder {
       toolCategories: enabledCategories.map((entry) => entry.category.id),
       toolSurfaceProfile: toolContext.codingSession.getToolSurfaceProfile(),
       runProfile:
-        runProfile ?? this.resolveSnapshotRunProfile(toolContext.codingSession.getRunProfile()),
-      toolCapabilityCategories: this.summarizeToolCategories(enabledCategories),
-      requestableToolCapabilityCategories: this.summarizeRequestableToolCategories(
+        runProfile ?? resolveSnapshotRunProfile(toolContext.codingSession.getRunProfile()),
+      toolCapabilityCategories: summarizeToolCategories(enabledCategories),
+      requestableToolCapabilityCategories: summarizeRequestableToolCategories(
         toolCategoryOverviews.all,
         enabledToolNames
       ),
@@ -170,8 +168,8 @@ class PromptStateBuilder {
       currentExecutionAdvice: currentExecutionAdvice
         ? `${currentExecutionAdvice.mode} / ${currentExecutionAdvice.title}`
         : null,
-      recentToolFailures: this.collectRecentToolFailures(messages),
-      hasCompactedContext: this.hasCompactedContextInHistory(messages),
+      recentToolFailures: collectRecentToolFailures(messages),
+      hasCompactedContext: hasCompactedContextInHistory(messages),
     }
 
     return {
@@ -219,123 +217,6 @@ class PromptStateBuilder {
         })
       return []
     }
-  }
-
-  private resolveSnapshotRunProfile(selection: LooseOptional<RunProfileSelectionId>): RunProfileId {
-    return isRunProfileId(selection) ? selection : 'balanced'
-  }
-
-  private resolveToolCategoryOverviews(
-    toolContext: PromptStateToolContext,
-    prepared?: PromptStatePreparedToolCategories
-  ): PromptStatePreparedToolCategories {
-    return (
-      prepared ?? {
-        enabled: toolContext.listToolCategories('enabled'),
-        all: toolContext.listToolCategories('all'),
-      }
-    )
-  }
-
-  private summarizeToolCategories(
-    categories: ToolCategoryOverview[]
-  ): RuntimePromptToolCategorySummary[] {
-    return categories.map((entry) => ({
-      id: entry.category.id,
-      label: entry.category.label,
-      description: entry.category.description,
-      enabled: entry.enabled,
-      toolOsDefaultState: entry.category.toolOs.defaultState,
-      tools: entry.tools.map((tool) => ({
-        name: tool.name,
-        description: tool.description.replace(/\s+/g, ' ').trim(),
-      })),
-      hiddenToolCount: 0,
-    }))
-  }
-
-  private summarizeRequestableToolCategories(
-    categories: ToolCategoryOverview[],
-    enabledToolNames: ReadonlySet<string>
-  ): RuntimePromptToolCategorySummary[] {
-    return categories
-      .filter((entry) => entry.category.toolOs.defaultState !== 'resident')
-      .map((entry) => ({
-        id: entry.category.id,
-        label: entry.category.label,
-        description: entry.category.description,
-        enabled: entry.enabled,
-        toolOsDefaultState: entry.category.toolOs.defaultState,
-        tools: [],
-        hiddenToolCount: entry.tools.filter((tool) => !enabledToolNames.has(tool.name)).length,
-      }))
-      .filter((entry) => entry.hiddenToolCount > 0)
-  }
-
-  private filterToolCategoryOverviewsByAllowedTools(
-    categories: ToolCategoryOverview[],
-    allowedToolNames: ReadonlySet<string>
-  ): ToolCategoryOverview[] {
-    return categories
-      .map((entry) => ({
-        ...entry,
-        tools: entry.tools.filter((tool) => allowedToolNames.has(tool.name)),
-      }))
-      .filter((entry) => !isEmpty(entry.tools))
-  }
-
-  private collectToolNames(categories: ToolCategoryOverview[]): Set<string> {
-    return new Set(categories.flatMap((entry) => entry.tools.map((tool: ToolDescriptor) => tool.name)))
-  }
-
-  private formatExecutionPlanPreview(plan: ExecutionTaskPlanStep[]): Nullable<string> {
-    if (isEmpty(plan)) return null
-    const preview = plan.slice(0, 6).map(
-      (step, index) => `${index + 1}. ${step.title}(${this.formatExecutionPlanStatus(step.status)})`
-    )
-    if (plan.length > preview.length) preview.push(`还有 ${plan.length - preview.length} 步`)
-    return preview.join(' | ')
-  }
-
-  private formatExecutionPlanStatus(status: ExecutionTaskPlanStepStatus): string {
-    const labels: Record<ExecutionTaskPlanStepStatus, string> = {
-      pending: '待处理',
-      delegated: '已委派',
-      running: '进行中',
-      completed: '完成',
-      failed: '失败',
-      skipped: '跳过',
-    }
-    return labels[status]
-  }
-
-  private hasCompactedContextInHistory(messages: ModelMessage[]): boolean {
-    return messages.some((message) =>
-      readPromptMessageText(message).startsWith(CompactionSummaryMarker)
-    )
-  }
-
-  private collectRecentToolFailures(messages: ModelMessage[]): string[] {
-    const failures: string[] = []
-    for (const message of messages.slice(-24).reverse()) {
-      if (message.role !== 'tool' || !isArray(message.content)) continue
-      for (const part of [...message.content].reverse()) {
-        if (part.type !== 'tool-result') continue
-        const output = isObject(part.output)
-          ? (part.output as { type?: unknown; value?: unknown })
-          : null
-        const value = String(output?.value ?? '')
-        if (
-          output?.type === 'error-text' ||
-          /^Error:/i.test(value) ||
-          /command not found|"success"\s*:\s*false/i.test(value)
-        ) {
-          failures.push(`${part.toolName}: ${truncate(value.replace(/\s+/g, ' ').trim(), 140)}`)
-          if (failures.length >= 4) return failures
-        }
-      }
-    }
-    return failures
   }
 }
 

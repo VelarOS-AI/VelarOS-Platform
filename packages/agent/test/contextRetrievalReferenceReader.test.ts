@@ -4,8 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, test } from "node:test";
 
+import { ContextRetrievalReferenceReader } from "../src/impl/retrieval/ContextRetrievalReferenceReader";
 import { chatSearchRanking } from "../src/utils/retrieval/ranking";
-import { ContextRetrievalReferenceReader } from "../src/utils/retrieval/reference-reader";
 
 const temporaryRoots: string[] = [];
 

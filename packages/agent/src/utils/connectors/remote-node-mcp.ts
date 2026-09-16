@@ -15,6 +15,10 @@ export function toMcpToolName(descriptor: RemoteNodeToolDescriptor): string {
   return descriptor.name.replaceAll(/[^a-zA-Z\d_-]/gu, '_')
 }
 
+/**
+ * 拼远程节点工具在 MCP 面上的描述：固定前缀点明"跑在远程主机 X 上、跨机调用、不作用于本机"，后接节点自报的说明（去首尾空白）。
+ * 前缀不能省——这一条正是模型最容易搞错的地方：把跨机工具当本机工具用，会在错误的机器上改文件或跑命令。
+ */
 export function describeTool(
   descriptor: RemoteNodeToolDescriptor,
   nodeName: string,
@@ -39,6 +43,11 @@ export function explainFailure(error: unknown, nodeName: string): string {
   return `远程调用失败:${error instanceof Error ? error.message : String(error)}`
 }
 
+/**
+ * 把远程工具的输出摊成一段可读文本：本来就是字符串就原样返回，否则做美化序列化。
+ * 序列化抛错（输出里混进循环引用或 BigInt）时**不把这次调用判失败**——调用本身已经成功了，
+ * 为一个序列化问题谎报失败会诱导调用方重试一次已经执行过的远程操作。这一档退回 `String(output)`，故障只留在 debug 日志里。
+ */
 export function stringifyOutput(output: unknown): string {
   if (isString(output)) return output
   try {

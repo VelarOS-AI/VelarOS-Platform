@@ -8,8 +8,39 @@ import type { ExecutionRecords } from '../records/ExecutionRecords'
 import type { ExecutionStore } from '../records/ExecutionStore'
 import type { SourceSessionGuard } from '../records/SourceSessionGuard'
 
-/** 聚合用户确认、追问输入与 sourceSession 级 IPC 解析。 */
-class ExecutionInteractionFacade {
+/**
+ * 「执行在等用户」这一面的聚合入口：工具要确认、要追问时在这里挂起；renderer 只知道 sessionId 时也从这里找回对应的执行。
+ *
+ * 由 `ExecutionService` 持有一份。按 sourceSession 找执行统一走 active guard 优先、再退回最近一条的顺序，
+ * 因此由外部入口发起、宿主后分配 scope 的执行也能被正确找到。
+ */
+export interface ExecutionInteractionFacadeApi {
+  /** 工具需要「用户确认后继续」时在这里挂起：批准才 resolve，拒绝按约定终止执行；中止信号到达即 reject。 */
+  awaitConfirmation(executionId: string, message: string, abortSignal?: AbortSignal, options?: ToolConfirmationDecisionOptions): Promise<void>
+  /** 同样是等确认，但把批准/拒绝**作为结果返回**而不终止执行——用于「拒绝了也要继续跑」的工具，`message` 带回用户的理由或卡片结果。 */
+  awaitConfirmationDecision(executionId: string, message: string, abortSignal?: AbortSignal, options?: ToolConfirmationDecisionOptions): Promise<{ approved: boolean; message: Nullable<string> }>
+  /** 需要用户补一段文本时在这里挂起，返回用户答的原文；中止信号到达即 reject。 */
+  awaitUserInput(executionId: string, question: string, abortSignal?: AbortSignal): Promise<string>
+  /** renderer 对**指定执行**的确认应答；`confirmationId` 用于对上具体那一次确认，过期的卡片不会误唤醒新的等待。 */
+  resolveConfirmation(executionId: string, approved: boolean, rejectionMessage?: LooseOptional<string>, confirmationId?: string): ExecutionRecord
+  /** renderer 对**指定执行**的追问应答。 */
+  provideInput(executionId: string, answer: string): ExecutionRecord
+  /** renderer 只有 sessionId 时的追问应答：先找到该会话正在等输入的执行，没有就抛 `NOT_FOUND`。 */
+  provideInputForSourceSession(request: ExecutionProvideInputRequest): ExecutionRecord
+  /** 该会话此刻是否挂着某一类待处理交互（确认或追问）；UI 据此决定要不要显示等待态。 */
+  hasPendingInteractionForSourceSession(sessionId: string, kind: ExecutionPendingInteractionKind): boolean
+  /** 该会话是否有正在跑（pending / running）的执行。用 source-aware 查找，不依赖精确 scope key，避免外部入口发起的运行被误判成未运行。 */
+  isRunningForSourceSession(sessionId: string): boolean
+  /** 取该会话待处理交互的展示快照（确认文案与卡片，或追问问题）；没有待处理的返回 null。 */
+  getPendingInteractionForSourceSession(sessionId: string, kind: ExecutionPendingInteractionKind): Nullable<ExecutionPendingInteractionSnapshot>
+  /**
+   * renderer 只有 sessionId 时的确认应答。会先校验卡片 id 属于当前这组确认（过期卡片一律拒绝，抛 `VALIDATION`），
+   * 再把结构化的卡片结果与拒绝理由一起序列化进 decision message——两者并存，不做二选一。
+   */
+  resolveConfirmationForSourceSession(request: ExecutionResolveConfirmationRequest): ExecutionRecord
+}
+
+class ExecutionInteractionFacade implements ExecutionInteractionFacadeApi {
   constructor(
     private readonly interactions: ExecutionInteractions,
     private readonly records: ExecutionRecords,
@@ -59,7 +90,6 @@ class ExecutionInteractionFacade {
     return this.interactions.provideInput(executionId, answer)
   }
 
-  /** renderer 按 sessionId 回答工具追问；要求存在 awaiting_input 的活跃 execution。 */
   public provideInputForSourceSession(request: ExecutionProvideInputRequest): ExecutionRecord {
     const execution = this.findExecutionForSourceSession(
       request.sessionId,
@@ -82,11 +112,6 @@ class ExecutionInteractionFacade {
     )
   }
 
-  /**
-   * 该 source session 是否有正在执行（pending/running）的 execution。
-   * 用 source-aware 查找（同 confirmation 路径），不依赖 runCoordinator 的精确 scope key——
-   * 否则由外部入口发起、再由宿主分配 scope id 的 run 会因 scope 不匹配被误判为未运行。
-   */
   public isRunningForSourceSession(
     sessionId: string,
   ): boolean {

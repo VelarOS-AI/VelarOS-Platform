@@ -328,7 +328,7 @@ const updateGoal = defineVelaTool<{
     const artifact = findCurrentGoalArtifact(artifacts)
     const currentStatus = artifact ? toGoalSnapshot(artifact).status : null
     if (!artifact || (currentStatus !== 'active' && currentStatus !== 'paused')) {
-      throw new AppError('VALIDATION', 'No active goal exists. Use goal:create first.')
+      throw new AppError('VALIDATION', '当前没有进行中的目标可以更新：本会话要么从没建过目标，要么已有目标已经完成或被放弃。先用 goal:create 建一个新目标。')
     }
 
     const hasStatus = !!input.status

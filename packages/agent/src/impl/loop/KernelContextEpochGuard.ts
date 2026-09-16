@@ -22,16 +22,34 @@ import { isPresent } from '@velaros-ai/core'
 
 import type { BuildKernelContextEpochInput, KernelContextEpoch, KernelContextEpochClaim, KernelContextEpochGuardLike, RecordKernelContextEpochDiagnosticOptions } from '../../types/loop.js'
 import type { ProviderTurnRecorder } from '../../types/records.js'
-import { normalizeLabel, normalizeNonNegativeInteger, normalizeOptionalLabel, normalizeOptionalNonNegativeInteger, normalizePercent, sortedUnique } from '../../utils/loop/context-epoch'
+import { normalizeLabel, normalizeNonNegativeInteger, normalizeOptionalLabel, normalizeOptionalNonNegativeInteger, normalizePercent, resolveKernelContextEpochKey, sortedUnique } from '../../utils/loop/context-epoch'
 import { UnknownGovernanceSessionId } from '../../utils/residency/session-key'
 import { KernelContextEpochStaleError } from '../errors/KernelContextEpochStaleError'
 
 
-export class KernelContextEpochGuard implements KernelContextEpochGuardLike {
+/**
+ * 上下文纪元看门人：管「我拼装请求时看到的上下文，到真正发出去时还是不是同一份」。
+ *
+ * 谁持有：`TurnRunner` 一个实例，主面与子 Agent 面的每轮都用它（args 没带时回落到这一份），
+ * 修订号按 `scope ?? sessionId` + `phase` 分格存在实例里，跨回合累积、不落盘。
+ * 一轮里的用法固定两步：`StreamTurn` / `QueryTurn` 编译完请求后 `claim()` 领一张凭据，发给 provider 前
+ * `assertCurrent()` 复核；流消费期间每个分片再复核一次。期间有人插队（新消息、换工具页、压缩）就会
+ * 重新 claim 让在途凭据作废，复核处抛 `KernelContextEpochStaleError` 把这轮打断——宁可重来，不许发陈旧上下文。
+ */
+export interface KernelContextEpochGuardApi extends KernelContextEpochGuardLike {
+  /** 领一张凭据并把这把键的修订号 +1（同一把键上的前一张立即作废）；在请求编译完、发送前调。 */
+  claim(epoch: KernelContextEpoch): KernelContextEpochClaim
+  /** 只问不抛：这张凭据是不是仍是最新的。用于把「本轮是否仍当值」写进诊断。 */
+  isCurrent(claim: KernelContextEpochClaim): boolean
+  /** 复核凭据，过期就抛 `KernelContextEpochStaleError` 打断本轮；发送前与流消费每个分片处各调一次。 */
+  assertCurrent(claim: KernelContextEpochClaim): void
+}
+
+export class KernelContextEpochGuard implements KernelContextEpochGuardApi {
   private readonly revisions = new Map<string, number>()
 
   public claim(epoch: KernelContextEpoch): KernelContextEpochClaim {
-    const key = this.keyFor(epoch)
+    const key = resolveKernelContextEpochKey(epoch)
     const revision = (this.revisions.get(key) ?? 0) + 1
     this.revisions.set(key, revision)
     return { key, revision, epoch }
@@ -45,10 +63,6 @@ export class KernelContextEpochGuard implements KernelContextEpochGuardLike {
     const currentRevision = this.revisions.get(claim.key) ?? 0
     if (currentRevision === claim.revision) return
     throw new KernelContextEpochStaleError(claim, currentRevision)
-  }
-
-  private keyFor(epoch: KernelContextEpoch): string {
-    return [epoch.scope ?? epoch.sessionId, epoch.phase].join(':')
   }
 }
 
@@ -94,7 +108,7 @@ export function recordKernelContextEpochDiagnostic(
   reducer.apply({
     type: 'diagnostic',
     code: 'context-epoch',
-    message: 'provider request context epoch recorded',
+    message: '已记下这次发往供应方的请求所处的上下文纪元',
     details: {
       sessionId: epoch.sessionId,
       scope: epoch.scope,

@@ -57,6 +57,12 @@ export function hasToolCallParts(message: ModelMessage): boolean {
   return !isEmpty(readToolCallFacts(message))
 }
 
+/**
+ * 读出这条消息里的全部工具调用事实（toolCallId / toolName / 入参），按片段出现序返回。
+ * 只认 assistant 角色 + 数组正文，其余形态返回空数组（不是错，只是这条消息没带调用）。
+ * 身份缺一不可：`toolCallId` 或 `toolName` 读不出来的片段整条跳过——半个身份的调用没法配对，留着只会误导后续判定。
+ * 入参兼容 `input` 与旧字段 `args` 两种写法。
+ */
 export function readToolCallFacts(message: ModelMessage): ToolCallFact[] {
   if (message.role !== 'assistant' || !isArray(message.content)) return []
 
@@ -72,6 +78,12 @@ export function readToolCallFacts(message: ModelMessage): ToolCallFact[] {
   return facts
 }
 
+/**
+ * 读出这条消息里的全部工具结果事实（身份、原始 value、文本投影、是否报错），按片段出现序返回。
+ * 只认 tool 角色 + 数组正文，其余形态返回空数组。身份读不全的片段整条跳过，同 {@link readToolCallFacts}。
+ * 一条 tool 消息可以装多份并行结果，所以返回的是数组——账本的 per-part 摘录与 per-part 召回引用都建立在这份清单上。
+ * `isError` 只认 `output.type === 'error-text'` 这一个结构信号，不去猜正文里的"失败"字样。
+ */
 export function readToolResultFacts(message: ModelMessage): ToolResultFact[] {
   if (message.role !== 'tool' || !isArray(message.content)) return []
 
@@ -111,6 +123,11 @@ export function extractResourceLocator(value: unknown): Nullable<string> {
   return toNullable(path?.[1])
 }
 
+/**
+ * 把一个 URL 归一成去重用的目标串：去掉 `#` 及其后的片段，再去掉结尾的斜杠。
+ * 两处取舍都服务于"这两次调用取的是不是同一份事实"：同页锚点（`#section`）不是不同目标，尾斜杠有无也不是；
+ * 但 query 一律保留——`?page=2` 与 `?page=3` 确实是两份不同的内容，合并会把前一页当成过时快照折掉。
+ */
 function normalizeUrlLocator(raw: string): string {
   const hashIndex = raw.indexOf('#')
   const withoutHash = hashIndex >= 0 ? raw.slice(0, hashIndex) : raw
@@ -119,6 +136,16 @@ function normalizeUrlLocator(raw: string): string {
   return withoutHash.slice(0, end)
 }
 
+/**
+ * 把任意形态的消息正文递归投影成一段保真文本（**不 trim**，正文不许被读取路径篡改）。
+ *
+ * 逐级尝试：字符串原样返回 → 数组逐项递归后换行拼接 → 对象先取 `text` / `value` 字段 →
+ * 再解包 `output.value`（tool-result 片段的正文藏在这里，不解包就会退化成整个 part 的 JSON 转储，
+ * 摘录预算被结构包裹和转义吃掉一大截，模型拿到的头尾全是 JSON 碎片而不是工具输出本身）→
+ * 最后才整体 JSON 序列化。序列化也失败时回落 `String(content)` 并记一条 debug，绝不抛错——
+ * 读取路径抛错会把整条准入链路打死，而这里只是要一段用于抽锚点与算长度的文本。
+ * 拿不到任何文本时返回空串。
+ */
 function readContentText(content: unknown): string {
   if (isString(content)) return content
 

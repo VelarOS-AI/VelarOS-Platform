@@ -1,11 +1,26 @@
 /**
- * 来源作用域执行互斥守卫。
+ * 来源作用域上的执行互斥：一个作用域同一时刻只留一个活跃执行，新执行开始就把旧的 abort 掉。
+ * 作用域键由上层定，可以是 sessionId，也可以是 `{sessionId, resourceContextId}` 拼出来的组合键。
  *
- * 同一个来源作用域同一时间只能有一个活跃执行；新执行开始时会中断旧执行。
- * 上层可把作用域设为 sessionId，也可设为 `{sessionId, resourceContextId}` 组合键。
- * generation 用来防止旧执行 finally 时清掉新执行的 active 状态。
+ * 状态只在内存里（作用域 → 活跃执行 + AbortController + generation），进程重启即清空。
+ * 实现是 `SourceSessionGuard`，执行服务持一份。
  */
-class SourceSessionGuard {
+export interface SourceSessionGuardApi {
+  /** 登记一个新执行并挤掉同作用域的旧执行：旧执行的 AbortController 会以「运行被新的请求取代。」中断。返回新执行自己的 AbortController、递增后的 generation，以及被挤掉的那个 executionId（没有就是 null）。 */
+  start(sourceScopeId: string, executionId: string): StartSourceSessionExecutionResult
+  /** 用户按停止时中断这个作用域的活跃执行，返回被中断的 executionId；作用域上没有活跃执行时返回 null。`reason` 会传给 AbortController，模型侧看得到。 */
+  abort(sourceScopeId: string, reason?: string): Nullable<string>
+  /** 宿主级中断：把这个 source session 名下的活跃执行全部中断，返回被中断的 executionId 列表。 */
+  abortAllForSourceSession(sourceSessionId: string, reason?: string): string[]
+  /** 账号失效或进程进入安全停用态时，中断所有作用域的活跃执行，返回被中断的 executionId 列表。 */
+  abortAll(reason?: string): string[]
+  /** 执行收尾时清掉活跃标记：`generation` 与登记时拿到的那个对不上，说明自己早被新执行取代了，此时什么都不做并返回 false。 */
+  finish(sourceScopeId: string, generation: number): boolean
+  /** 这个作用域当前活跃的 executionId；没有活跃执行时返回 null。 */
+  getActiveExecutionId(sourceScopeId: string): Nullable<string>
+}
+
+class SourceSessionGuard implements SourceSessionGuardApi {
   /** 来源作用域 id -> 当前活跃执行。 */
   private readonly activeExecutions = new Map<string, ActiveSourceSessionExecution>()
 

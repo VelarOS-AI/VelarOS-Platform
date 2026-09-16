@@ -6,13 +6,13 @@ import { logRuntime } from '@velaros-ai/core/logger'
 
 import { InMemoryContextPayloadStore } from '../src/impl/context/InMemoryContextPayloadStore'
 import { AgentModSeamDispatcher } from '../src/impl/mods/AgentModSeamDispatcher'
+import { AgentTurnHistoryHelper } from '../src/impl/records/TurnHistory'
 import { KernelToolLoopGuard } from '../src/impl/tools/KernelToolLoopGuard'
 import { ToolExecutionPolicy } from '../src/impl/tools/ToolExecutionPolicy'
 import { ToolExecutor } from '../src/impl/tools/ToolExecutor'
 import { saveToolAttemptInput, saveToolAttemptOutcome, withToolInputReuse } from '../src/impl/tools/ToolInputReuseStore'
 import type { ToolInputReuseContract } from '../src/types/toolkit.js'
 import type { ToolExecutionPolicyContext, ToolExecutorEvents, ToolResult } from '../src/types/tools.js'
-import { AgentTurnHistoryHelper } from '../src/utils/history/turn'
 import { clampedInt } from '../src/utils/toolkit/forgiving-schema'
 import { compactToolInputForModel } from '../src/utils/tools/tool-result-serialization'
 
@@ -721,7 +721,7 @@ describe('tool execution lifecycle', () => {
     const results = await executor.collectAll()
     expect(executed).toEqual(['first'])
     expect(results[1]?.error).toBe(
-      'Tool is not available in the current context: probe:write'
+      '工具 probe:write 在当前上下文里不可用：它没有通过本轮的可见性过滤（权限、能力作用域、角色白名单或工具自身的可用性判定），请先满足其中不足的那一项。'
     )
   })
 
@@ -834,7 +834,7 @@ describe('tool execution lifecycle', () => {
     expect(results[0]?.error).toBeUndefined()
     expect(results[1]?.result).toMatchObject({ error: 'tool_cancelled' })
     expect(executor.getTerminalError()?.code).toBe('TOOL_RESULT_FINALIZATION_FAILED')
-    expect(executor.getTerminalError()?.message).toContain('may already have taken effect')
+    expect(executor.getTerminalError()?.message).toContain('可能已经执行并产生了副作用')
     expect(h.emitted).toHaveLength(2)
     expect(h.emitted.find((item) => (item as { toolCallId: string }).toolCallId === 'first')).toMatchObject({ result: { ok: true } })
     const history: any[] = []
@@ -1055,7 +1055,7 @@ test('failed large input retries by field amendment through current schema and p
   expect(calls).toHaveLength(0)
   const recovery = (failure.result as { inputReuse: { reuse: string; note: string; example?: unknown } }).inputReuse
   expect(recovery.reuse).toBe('attempt:bad')
-  expect(recovery.note).toContain('actual saved field path')
+  expect(recovery.note).toContain('已保存参数里的真实字段路径')
   expect(recovery.example).toBeUndefined()
   const second = new ToolExecutor(h.context, h.events, h.policy)
   second.enqueue('fixed', 'probe:write', { reuse: 'attempt:bad', changes: [{ op: 'set', path: ['line'], value: 1 }] }, false)
@@ -1138,7 +1138,7 @@ test('Executor migrates trusted failed input before the current schema and persi
   expect(writes).toBe(2)
   const fresh = new ToolExecutor(h.context, h.events, h.policy)
   fresh.enqueue('fresh-old-input', 'probe:write', { oldField: body }, false)
-  expect((await fresh.collectAll()).at(-1)?.error).toContain('arguments validation failed')
+  expect((await fresh.collectAll()).at(-1)?.error).toContain('参数没通过 schema 校验')
   expect(migrations).toBe(1)
   expect(writes).toBe(2)
 })

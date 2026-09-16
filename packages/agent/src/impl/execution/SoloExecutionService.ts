@@ -20,7 +20,17 @@ import type { ExecutionService } from './ExecutionService'
  *
  * 复杂任务通过主 Agent 的 `agent:dispatch` 工具按需派发子 Agent。
  */
-class SoloExecutionService {
+export interface SoloExecutionServiceApi {
+  /**
+   * 跑一轮主 Agent 聊天执行，返回终态 {@link ExecutionRecord}（`completed` / `aborted` / `failed` 都从这里正常返回）。
+   *
+   * 自身不管生命周期：互斥、记录、收尾全由 `ExecutionService.runManagedExecution` 负责，本方法只在它给的 run 回调里
+   * 补齐 sessionId / abortController / execution API，再把外部传来的 `abortSignal` 绑到托管的 controller 上（回调结束即解绑）。
+   */
+  run(params: RunSoloExecutionParams): Promise<ExecutionRecord>
+}
+
+class SoloExecutionService implements SoloExecutionServiceApi {
   constructor(
     /** 执行生命周期托管：create record、session 互斥、complete/fail/abort。 */
     private readonly executionService: ExecutionService,
@@ -28,12 +38,6 @@ class SoloExecutionService {
     private readonly agentRunner: SoloExecutionAgentRunner
   ) {}
 
-  /**
-   * 启动一轮主 Agent 聊天执行并返回最终 {@link ExecutionRecord}。
-   *
-   * run 回调内补齐 AgentExecutionConfig.sessionId / abortController / execution API，
-   * 再委托 `streamSoloWorker`；`consumeGuidance` 消费用户中途注入的 guidance 消息。
-   */
   public async run(params: RunSoloExecutionParams): Promise<ExecutionRecord> {
     return this.executionService.runManagedExecution({
       sourceSessionId: params.sourceSessionId,

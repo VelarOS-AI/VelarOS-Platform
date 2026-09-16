@@ -195,12 +195,24 @@ export const ExternalAgentBridgeMessageSchema = z.union([
   ExternalAgentBridgeClientMessageSchema,
   ExternalAgentBridgeHostMessageSchema,
 ]) satisfies z.ZodType<ExternalAgentBridgeMessage>
+/**
+ * 解析**外部 agent 客户端 → 宿主**方向的一条桥消息（probe/pair/resume/ping/ack/event/disconnect）。
+ * 走 `strictObject` 判别联合：`version` 对不上、`type` 不在客户端方向的集合里、或多带了未知字段，
+ * 一律抛 ZodError（不返回 null，也不静默丢未知字段）——桥两端必须同版本，含糊接收会把版本错配
+ * 拖到更深的地方才炸。调用方负责 catch 后按错误回 `error` 消息。
+ */
 export function parseExternalAgentBridgeClientMessage(
   value: unknown
 ): ExternalAgentBridgeClientMessage {
   return ExternalAgentBridgeClientMessageSchema.parse(value)
 }
 
+/**
+ * 解析**宿主 → 外部 agent 客户端**方向的一条桥消息
+ * （hello/paired/resumed/pong/event_ack/command/disconnected/error）。
+ * 严格程度与客户端方向那条一致：类型走错方向、版本不符、字段多余都抛 ZodError。
+ * 两个方向分开解析，是为了让一端永远收不下本该由自己发出的消息类型。
+ */
 export function parseExternalAgentBridgeHostMessage(
   value: unknown
 ): ExternalAgentBridgeHostMessage {

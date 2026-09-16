@@ -18,7 +18,6 @@
 //  - **自动批准必须留痕**（`CapabilityAutoApprovalNotice`）：无痕迹的自动批准等于没有审批。
 //  - **本门不认识 mod**：mod 贡献在装载期已被宿主收窄，到这里与内置工具同权。
 import {
-  isEmpty,
   isPlainObject,
   isPresent,
   optionalWhenLazy,
@@ -32,16 +31,116 @@ import type { AgentRuntimeCapabilityPorts } from '../../contract/requires.js'
 import type { ToolConfirmationDecisionOptions } from '../../types/agent'
 import type {CapabilityAutoApprovalNotice, ToolCapabilityEffectKind, ToolCategoryId, ToolRole } from '../../types/agent.js'
 import type { ToolInputReuseContract } from '../../types/toolkit.js'
-import type { AnyVelaTool, ToolArgsValidationResult, ToolExecutionDecision, ToolExecutionFailureInput, ToolExecutionPolicyContext, ToolExecutionPolicyRegistry, ToolExecutionPolicySurface, ToolExecutionPrepared, ToolExecutionRequest, ToolExecutionSuccessInput, ToolFailureResult } from '../../types/tools.js'
+import type { ToolExecutionDecision, ToolExecutionFailureInput, ToolExecutionFailureKind, ToolExecutionPolicyContext, ToolExecutionPolicyRegistry, ToolExecutionPrepared, ToolExecutionRequest, ToolExecutionSuccessInput, ToolFailureResult } from '../../types/tools.js'
 import { resolveCapabilityCategoryDefinitions, resolveToolAliases, resolveToolValidationHintProviders } from '../../utils/capabilities'
-import { getToolSurfaceFallbackChain } from '../../utils/runner/runtime-profiles'
 import { createApprovalOperationKey } from '../../utils/toolkit/task-approval'
 import { decideToolCategoryAccess } from '../../utils/tools/access-policy'
 import { buildExecutionFailureResult, buildToolFailureResult } from '../../utils/tools/execution-policy-failures'
+import { createToolContext, evaluatePlanningModeToolPolicy, formatSessionToolApprovalMessage, resolveToolSurface, validateAndNormalizeToolInput } from '../../utils/tools/execution-policy-preparation'
 import { toolArgsSchemaValidator } from '../../utils/tools/tool-args-schema-validator'
 import { buildToolSpaceRecoveryGuide } from '../../utils/tools/tool-space-recovery'
 
 import { supportsToolInputReuse } from './ToolInputReuseStore'
+
+/**
+ * 工具执行的策略与审批门：单个工具「能不能执行、怎样执行、失败了怎么说」全在这里判。
+ *
+ * 由 `ToolExecutor` 持有一份（每条执行链一份），唯一依赖是构造时注入的工具注册表；
+ * 本会话已授权的工具类别记在实例里，跨调用复用。判定一律 fail-closed——查不到工具、
+ * 拿不到可见性结论、审批没点头都按拒绝收敛，并且拒绝一定带可读的补救说明。
+ */
+interface ToolExecutionPolicyApi {
+  /**
+   * 把模型报的工具名还原成注册表里的真名：原名存在就原样返回，否则依次试本轮投递的别名、
+   * 全小写名、能力端口登记的别名表；都不中就把原名退回去，由调用方按「没有这个工具」处理。
+   */
+  resolveCanonicalToolName(
+    toolName: string,
+    capabilityPorts?: AgentRuntimeCapabilityPorts,
+    context?: Pick<ToolExecutionPolicyContext, 'resolveCurrentVisibleCanonicalToolName'>
+  ): string
+  /**
+   * 排队之前的快速体检：只查「这次调用是不是已经废了」——注册签名过期、工具不存在、当前上下文不可见。
+   * 命中任意一条就返回现成的拒绝判决（`allowed: false`），让执行器立刻落地不必进队；都没命中返回 null。
+   * 无副作用，可随时调。
+   */
+  prepareUnavailableExecution(
+    request: ToolExecutionRequest
+  ): LooseOptional<Extract<ToolExecutionDecision, { allowed: false }>>
+  /**
+   * 完整准备一次执行：还原真名 → 查注册签名与可见性 → 选表面 → 校验并归一化参数 → 查重复调用 → 计划模式判定。
+   * 全过时返回 `allowed: true` 与准备件（工具、表面、真正会执行的参数、上下文），供执行器排队后直接开跑；
+   * 任一环不过返回 `allowed: false` 与给模型看的 error，执行器把它当作工具结果写回历史。
+   * 有副作用：归一化后的参数会原地写回 `request.args`（仅 base 表面），并通过 `updateMetadata` 回显调整项。
+   */
+  prepareExecution(request: ToolExecutionRequest): ToolExecutionDecision
+  /**
+   * 拿到执行槽之后的轻量复检，关的是「排队期间世界变了」这个窗口：注册签名漂移、工具被卸载、
+   * 已经不可见、或这次调用在排队期间变成了重复调用。有问题时返回那条拒绝判决（含拒绝原因与失败归类），
+   * 没问题返回 null。绝不重跑 schema 或表面归一化，只认 prepare 时算好的 `effectiveArgs`。
+   */
+  revalidatePreparedExecution(
+    prepared: ToolExecutionPrepared,
+    effectiveArgs: Record<string, unknown>
+  ): LooseOptional<Extract<ToolExecutionDecision, { allowed: false }>>
+  /**
+   * 真正执行已准备好的工具：先补一次参数校验（流被截断时 provider 会交上残缺 JSON，这里拦成 VALIDATION），
+   * 再过会话级类别审批，最后带着收窄过的审批/执行端口调工具本体，成功后把结果记进会话去重账。
+   * 用户拒绝授权时不执行，返回结构化的「已跳过」结果；开始前或审批途中被取消一律抛 `EXECUTION_ABORTED`。
+   */
+  executePrepared(
+    prepared: ToolExecutionPrepared,
+    args: LooseOptional<Record<string, unknown>>,
+    toolName: string
+  ): Promise<unknown>
+  /**
+   * 取走该工具类别待发的自动批准通知（整会话只发一次）。由执行器在收敛结果时调，
+   * 通知走 emitNotice 推给界面而不嵌进工具结果；没有待发通知或工具没有类别时返回 null。
+   */
+  consumePendingAutoApprovalNotice(
+    toolName: string,
+    toolContext: ToolExecutionPolicyContext
+  ): LooseOptional<CapabilityAutoApprovalNotice>
+  /** 记一次成功或「已跳过」的结果，让会话更新提醒与重复调用判定；执行成功路径与拒绝授权路径都会调。 */
+  recordSuccess(input: ToolExecutionSuccessInput): void
+  /** 这个工具的 schema 支不支持「复用上次调用参数」（`inputReuse`）；工具不存在时按不支持处理。 */
+  supportsInputReuse(toolName: string): boolean
+  /** 取这个工具的参数复用契约（契约版本、可复用的来源工具、迁移函数）；工具不存在时三项都是 undefined。 */
+  inputReuseContract(toolName: string): ToolInputReuseContract<any>
+  /**
+   * 这次失败要不要连带取消同轮其他工具。只有终止类错误才取消——普通的参数或逻辑错误只报给模型，
+   * 不该因为一个文件没找到就杀掉整批编辑。
+   */
+  shouldAbortSiblings(input: ToolExecutionFailureInput): boolean
+  /** 这个错误是不是「整条执行链该停」的那种（用户中止、结果收敛失败），而不是交给模型自己修的普通工具错误。 */
+  isTerminalExecutionError(error: AppError): boolean
+  /**
+   * 把准入失败（不存在、类别不可用、被拦下）变成模型和界面都读得懂的结构化结果：
+   * 按 `failureKind` 选 `tool_not_found` / `tool_unavailable` / `tool_blocked`，并附上该换哪个空间、缺哪个授权的补救指引。
+   * 归类只认判定现场给的 `failureKind`（不给按 `tool_blocked`），绝不从 `reason` 文案回猜——文案改一个字就会让归类漂移。
+   */
+  buildBlockedFailureResult(
+    toolName: string,
+    reason: string,
+    toolContext: ToolExecutionPolicyContext,
+    failureKind?: ToolExecutionFailureKind
+  ): ToolFailureResult
+  /** 把执行期抛出的异常变成结构化工具结果，避免失败路径在历史里显示成 null。 */
+  buildExecutionFailureResult(toolName: string, error: AppError): ToolFailureResult
+  /** 查工具所属类别 id，供执行开始事件带给界面；工具或 descriptor 不在时返回空。 */
+  getToolCategoryId(toolName: string): LooseOptional<ToolCategoryId>
+  /** 查工具 owner 声明的副作用类型（读/写/外部动作），供执行观测与评测判定；没声明时返回空。 */
+  getToolEffectKind(toolName: string): LooseOptional<ToolCapabilityEffectKind>
+  /** 这个工具是否声明了 `outputInline`：声明了的输出禁止句柄化，必须原样内联给模型。 */
+  isToolOutputInline(toolName: string): boolean
+  /** 查工具角色（如 `control`），执行器据此判定嵌套/包装调用有没有触到控制类工具。 */
+  getToolRole(toolName: string): LooseOptional<ToolRole>
+  /**
+   * 问工具自己「带这份参数能不能与别人并行」。工具没声明判定函数时返回 `fallback`（缺省 false）；
+   * 参数不是对象、或判定函数自己抛错，一律按不安全处理并留一条 warn 日志——失败方向必须是串行。
+   */
+  resolveConcurrencySafe(toolName: string, input: unknown, fallback?: boolean): boolean
+}
 
 /**
  * 工具执行策略。
@@ -54,7 +153,7 @@ import { supportsToolInputReuse } from './ToolInputReuseStore'
  * - 处理会话级工具类别授权。
  * - 记录 coding session 状态和 sibling cancel 策略。
  */
-class ToolExecutionPolicy {
+class ToolExecutionPolicy implements ToolExecutionPolicyApi {
   /** 会话级类别审批的扩展点；默认不再使用粗类别审批，避免低风险能力反复阻塞。 */
   private readonly sessionApprovalToolCategories = new Set<ToolCategoryId>()
   private readonly log = logRuntime.tag('ToolExecutionPolicy')
@@ -95,60 +194,6 @@ class ToolExecutionPolicy {
     return toolName
   }
 
-  private resolveToolSurface(
-    tool: AnyVelaTool,
-    context: ToolExecutionPolicyContext,
-    toolName: string
-  ): LooseOptional<ToolExecutionPolicySurface<any, any>> {
-    const visibleSurfaceProfile = context.getCurrentVisibleToolSurfaceProfile(toolName)
-    if (visibleSurfaceProfile === 'base') return null
-    if (visibleSurfaceProfile) return tool.surfaces![visibleSurfaceProfile]!
-
-    const activeProfile = context.codingSession.getToolSurfaceProfile()
-    for (const profileId of getToolSurfaceFallbackChain(activeProfile)) {
-      const surface = tool.surfaces?.[profileId]
-      if (surface) return surface
-    }
-
-    return null
-  }
-
-  private validateAndNormalizeToolInput(input: {
-    tool: AnyVelaTool
-    selectedSurface?: LooseOptional<ToolExecutionPolicySurface<any, any>>
-    args?: Record<string, unknown>
-    toolContext: ToolExecutionPolicyContext
-  }): ToolArgsValidationResult<any> {
-    const selectedSurface = input.selectedSurface
-    if (!selectedSurface) return toolArgsSchemaValidator.validateWithNormalization(input.tool.schema, input.args)
-
-    const surfaceResult = toolArgsSchemaValidator.validateWithNormalization(
-      selectedSurface.schema,
-      input.args
-    )
-    if (!surfaceResult.success) return surfaceResult
-
-    const normalizedInput = selectedSurface.normalize
-      ? selectedSurface.normalize(surfaceResult.data, input.toolContext)
-      : surfaceResult.data
-    const baseArgs = isPlainObject(normalizedInput) ? normalizedInput : {}
-    const baseResult = toolArgsSchemaValidator.validateWithNormalization(input.tool.schema, baseArgs)
-    if (!baseResult.success) return baseResult
-
-    const requestedArgs = surfaceResult.requestedArgs
-    const adjustments = toolArgsSchemaValidator.describeAdjustments(
-      requestedArgs,
-      baseResult.args
-    )
-
-    return {
-      ...baseResult,
-      requestedArgs,
-      normalized: !isEmpty(adjustments),
-      adjustments,
-    }
-  }
-
   /** 只做无副作用的当前可见性检查，供 ToolExecutor 在排队前快速落地不可用工具。 */
   public prepareUnavailableExecution(
     request: ToolExecutionRequest
@@ -162,7 +207,7 @@ class ToolExecutionPolicy {
       if (currentRegistrationSignature !== advertisedRegistrationSignature)
         return {
           allowed: false,
-          error: `Stale tool call: ${toolName}`,
+          error: `工具调用已过期：${toolName} 的注册状态在这次调用排队期间变了，请按当前工具清单重新发起调用。`,
           ...canonicalNamePatch,
         }
     }
@@ -172,12 +217,12 @@ class ToolExecutionPolicy {
       request.baseContext.codingSession.recordInvisibleToolCall?.(request.toolName)
       return {
         allowed: false,
-        error: `No such tool: ${request.toolName}`,
+        error: `没有名为 ${request.toolName} 的工具：请在当前工具清单里确认名字，或先把它所属的能力页调进来再调用。`,
         ...canonicalNamePatch,
       }
     }
 
-    const toolContext = this.createToolContext(
+    const toolContext = createToolContext(
       request.baseContext,
       request.toolCallId,
       toolName,
@@ -194,7 +239,8 @@ class ToolExecutionPolicy {
       toolContext.codingSession.recordInvisibleToolCall?.(toolName)
       return {
         allowed: false,
-        error: `Tool is not available in the current context: ${toolName}`,
+        error: `工具 ${toolName} 在当前上下文里不可用：它没有通过本轮的可见性过滤（权限、能力作用域、角色白名单或工具自身的可用性判定），请先满足其中不足的那一项。`,
+        failureKind: 'tool_unavailable',
         ...canonicalNamePatch,
       }
     }
@@ -213,7 +259,7 @@ class ToolExecutionPolicy {
       if (currentRegistrationSignature !== advertisedRegistrationSignature)
         return {
           allowed: false,
-          error: `Stale tool call: ${toolName}`,
+          error: `工具调用已过期：${toolName} 的注册状态在这次调用排队期间变了，请按当前工具清单重新发起调用。`,
           ...canonicalNamePatch,
         }
     }
@@ -222,11 +268,11 @@ class ToolExecutionPolicy {
       request.baseContext.codingSession.recordInvisibleToolCall?.(request.toolName)
       return {
         allowed: false,
-        error: `No such tool: ${request.toolName}`,
+        error: `没有名为 ${request.toolName} 的工具：请在当前工具清单里确认名字，或先把它所属的能力页调进来再调用。`,
       }
     }
 
-    const toolContext = this.createToolContext(
+    const toolContext = createToolContext(
       request.baseContext,
       request.toolCallId,
       toolName,
@@ -234,7 +280,7 @@ class ToolExecutionPolicy {
       request.emitProgress,
       request.updateMetadata
     )
-    const selectedSurface = this.resolveToolSurface(tool, toolContext, toolName)
+    const selectedSurface = resolveToolSurface(tool, toolContext, toolName)
     const requestArgs = request.args ?? {}
 
     // 走一遍 Registry 可见性过滤，覆盖权限、系统禁用、角色 allowList、isAvailable。
@@ -248,12 +294,13 @@ class ToolExecutionPolicy {
       toolContext.codingSession.recordInvisibleToolCall?.(toolName)
       return {
         allowed: false,
-        error: `Tool is not available in the current context: ${toolName}`,
+        error: `工具 ${toolName} 在当前上下文里不可用：它没有通过本轮的可见性过滤（权限、能力作用域、角色白名单或工具自身的可用性判定），请先满足其中不足的那一项。`,
+        failureKind: 'tool_unavailable',
         ...canonicalNamePatch,
       }
     }
 
-    const normalizedForPolicy = this.validateAndNormalizeToolInput({
+    const normalizedForPolicy = validateAndNormalizeToolInput({
       tool,
       selectedSurface,
       args: request.args,
@@ -298,7 +345,7 @@ class ToolExecutionPolicy {
       }
     }
 
-    const planningModeDecision = this.evaluatePlanningModeToolPolicy(toolContext)
+    const planningModeDecision = evaluatePlanningModeToolPolicy(toolContext)
     if (!planningModeDecision.allowed) return {
         allowed: false,
         error: planningModeDecision.reason,
@@ -328,7 +375,7 @@ class ToolExecutionPolicy {
   public revalidatePreparedExecution(
     prepared: ToolExecutionPrepared,
     effectiveArgs: Record<string, unknown>
-  ): LooseOptional<string> {
+  ): LooseOptional<Extract<ToolExecutionDecision, { allowed: false }>> {
     const toolName = prepared.toolName
     const currentRegistrationSignature = this.readCurrentRegistrationSignature(toolName)
     if (
@@ -337,18 +384,18 @@ class ToolExecutionPolicy {
         isPresent(currentRegistrationSignature)
       ) &&
       currentRegistrationSignature !== prepared.registrationSignature
-    ) return `Stale tool call: ${toolName}`
+    ) return { allowed: false, error: `工具调用已过期：${toolName} 的注册状态在这次调用排队期间变了，请按当前工具清单重新发起调用。` }
 
     const currentTool = this.toolRegistry.get(toolName)
     if (!currentTool) {
       prepared.toolContext.codingSession.recordInvisibleToolCall?.(toolName)
-      return `No such tool: ${toolName}`
+      return { allowed: false, error: `没有名为 ${toolName} 的工具：请在当前工具清单里确认名字，或先把它所属的能力页调进来再调用。` }
     }
     if (
       !isPresent(prepared.registrationSignature) &&
       !isPresent(currentRegistrationSignature) &&
       currentTool !== prepared.tool
-    ) return `Stale tool call: ${toolName}`
+    ) return { allowed: false, error: `工具调用已过期：${toolName} 的注册状态在这次调用排队期间变了，请按当前工具清单重新发起调用。` }
 
     const available = this.toolRegistry.listAvailable(
       prepared.toolContext,
@@ -357,7 +404,11 @@ class ToolExecutionPolicy {
     )
     if (!available.some((entry) => entry.name === toolName)) {
       prepared.toolContext.codingSession.recordInvisibleToolCall?.(toolName)
-      return `Tool is not available in the current context: ${toolName}`
+      return {
+        allowed: false,
+        error: `工具 ${toolName} 在当前上下文里不可用：它没有通过本轮的可见性过滤（权限、能力作用域、角色白名单或工具自身的可用性判定），请先满足其中不足的那一项。`,
+        failureKind: 'tool_unavailable',
+      }
     }
 
     const redundantToolCallMessage =
@@ -369,7 +420,7 @@ class ToolExecutionPolicy {
       toolCallId: prepared.toolContext.toolCallId,
       message: redundantToolCallMessage.slice(0, 200),
     })
-    return redundantToolCallMessage
+    return { allowed: false, error: redundantToolCallMessage }
   }
 
   /** 执行已经准备好的工具定义。 */
@@ -379,13 +430,16 @@ class ToolExecutionPolicy {
     toolName: string
   ): Promise<unknown> {
     if (prepared.toolContext.abortSignal.aborted) {
-      throw new AppError('EXECUTION_ABORTED', 'Tool execution cancelled before start')
+      throw new AppError(
+        'EXECUTION_ABORTED',
+        `工具 ${toolName} 还没开始执行就被取消：拿到执行槽时本轮已经中止（用户停止或上层取消），工具本体没跑，没有产生任何副作用。`
+      )
     }
     // 在执行前用工具自身的 zod schema 校验参数完整性。
     // 当 LLM 流式传输中途被截断时，@ai-sdk 会将不完整的 JSON 解析为
     // 部分对象（例如 blocks 变成空数组），导致工具静默产出损坏的文件。
     // 在这里拦截为 VALIDATION，并把 schema issues 放进结构化工具失败结果。
-    const parseResult = prepared.validationResult ?? this.validateAndNormalizeToolInput({
+    const parseResult = prepared.validationResult ?? validateAndNormalizeToolInput({
       tool: prepared.tool,
       selectedSurface: prepared.selectedSurface,
       args: toOptional(args),
@@ -404,7 +458,7 @@ class ToolExecutionPolicy {
       )
       throw new AppError(
         'VALIDATION',
-        `Tool arguments validation failed for "${toolName}". ${hint}Schema errors: ${issues}`,
+        `工具 ${toolName} 的参数没通过 schema 校验，本次调用未执行。${hint}schema 报错：${issues}`,
         parseResult.error,
         {
           schemaIssues: issueDetails,
@@ -432,7 +486,10 @@ class ToolExecutionPolicy {
     })
     // 审批是异步的：等待期间被取消就不能再产生副作用。
     if (prepared.toolContext.abortSignal.aborted) {
-      throw new AppError('EXECUTION_ABORTED', 'Tool execution cancelled before start')
+      throw new AppError(
+        'EXECUTION_ABORTED',
+        `工具 ${toolName} 在等待授权期间被取消：授权流程还没走完本轮就已中止，工具本体没跑，没有产生任何副作用。`
+      )
     }
     if (approvalSkipped) {
       // 用户拒绝授权时不执行工具，但返回结构化“已跳过”结果给模型。
@@ -545,11 +602,18 @@ class ToolExecutionPolicy {
       || error.code === 'TOOL_RESULT_FINALIZATION_FAILED'
   }
 
-  /** 把准入失败变成模型和 UI 都能读懂的结构化工具结果。 */
+  /**
+   * 把准入失败变成模型和 UI 都能读懂的结构化工具结果。
+   *
+   * 归类只认判定现场传来的 `failureKind`（不给按 `tool_blocked`）。这里曾经用正则嗅 `reason`
+   * 文案来判「是不是不可用」，那等于把失败码绑死在一句话的措辞上——润色或翻译一次文案，
+   * `tool_unavailable` 就会静默退化成 `tool_blocked`，界面的补救指引跟着变错。
+   */
   public buildBlockedFailureResult(
     toolName: string,
     reason: string,
-    toolContext: ToolExecutionPolicyContext
+    toolContext: ToolExecutionPolicyContext,
+    failureKind?: ToolExecutionFailureKind
   ): ToolFailureResult {
     const canonicalToolName = this.resolveCanonicalToolName(toolName)
     const tool = this.toolRegistry.get(canonicalToolName)
@@ -584,12 +648,7 @@ class ToolExecutionPolicy {
       }
     }
 
-    if (/not available|不可使用|不可用/i.test(reason)) return buildToolFailureResult('tool_unavailable', reason, canonicalToolName, {
-        details: optionalWhenLazy(categoryId, () => ({ categoryId })),
-        recovery: buildToolSpaceRecoveryGuide({ toolName: canonicalToolName, categoryId }),
-      })
-
-    return buildToolFailureResult('tool_blocked', reason, canonicalToolName, {
+    return buildToolFailureResult(failureKind ?? 'tool_blocked', reason, canonicalToolName, {
       details: optionalWhenLazy(categoryId, () => ({ categoryId })),
       recovery: buildToolSpaceRecoveryGuide({ toolName: canonicalToolName, categoryId }),
     })
@@ -616,20 +675,6 @@ class ToolExecutionPolicy {
   public isToolOutputInline(toolName: string): boolean {
     const canonicalToolName = this.resolveCanonicalToolName(toolName)
     return !!this.toolRegistry.getDescriptor(canonicalToolName)?.outputInline
-  }
-
-  private evaluatePlanningModeToolPolicy(
-    toolContext: ToolExecutionPolicyContext
-  ): { allowed: boolean; reason: string } {
-    if (!toolContext.planningMode) return {
-        allowed: true,
-        reason: 'planning mode is off',
-      }
-
-    return {
-      allowed: true,
-      reason: 'planning mode does not restrict tool execution',
-    }
   }
 
   /**
@@ -694,7 +739,7 @@ class ToolExecutionPolicy {
 
     // awaitConfirmationDecision 不会在拒绝时自动终止执行，模型可以拿到拒绝原因继续处理。
     const decision = await execution.awaitConfirmationDecision(
-      this.formatSessionToolApprovalMessage({
+      formatSessionToolApprovalMessage({
         toolName: input.toolName,
         categoryId,
         categoryLabel,
@@ -735,42 +780,7 @@ class ToolExecutionPolicy {
     return null
   }
 
-  /** 生成会话级工具类别授权卡片文案。 */
-  private formatSessionToolApprovalMessage(input: {
-    toolName: string
-    categoryId: ToolCategoryId
-    categoryLabel: string
-  }): string {
-    return [
-      '工具授权请求',
-      `类型：${input.categoryLabel}`,
-      `工具：${input.toolName}`,
-      `授权范围：当前会话内的全部 ${input.categoryLabel} 工具`,
-      '同意后，本会话内同类工具不再重复询问。',
-      '拒绝时可以填写原因；留空时模型会自行决定追问、结束或跳过。',
-    ].join('\n')
-  }
-
-  /** 为单个工具派生上下文：使用独立 abortSignal 和工具专属日志 tag。 */
-  private createToolContext(
-    baseContext: ToolExecutionPolicyContext,
-    toolCallId: string,
-    toolName: string,
-    abortSignal: AbortSignal,
-    emitProgress?: (chunk: string) => void,
-    updateMetadata?: (payload: { title?: string; metadata?: Record<string, unknown> }) => void
-  ): ToolExecutionPolicyContext {
-    // 查询上下文从冻结的父上下文继承宿主端口，要保留这条原型链。
-    return Object.create(baseContext, {
-      toolCallId: { value: toolCallId, enumerable: true },
-      abortSignal: { value: abortSignal, enumerable: true },
-      log: { value: logRuntime.tag(`Tool:${toolName}`), enumerable: true },
-      emitProgress: { value: emitProgress ?? baseContext.emitProgress, enumerable: true },
-      updateMetadata: { value: updateMetadata ?? baseContext.updateMetadata, enumerable: true },
-    })
-  }
-
 }
 
 export { ToolExecutionPolicy }
-export type { ToolFailureResult }
+export type { ToolExecutionPolicyApi, ToolFailureResult }

@@ -6,6 +6,14 @@ import { ChatRuntimeEvents } from '../wire/chat-runtime.js'
 
 import { markToolSpaceBootstrapDiscoverySatisfied } from './tool-space-bootstrap-planner'
 
+/**
+ * 模型这一轮确实调了工具之后的续轮处理：先把工具空间侦察标记为已满足（模型已经动手，不必再强制它先查地图），
+ * 执行并把工具结果追加进 history，再压入 after-tool 阶段的 loop reminder。
+ *
+ * 正常返回 `continue` 进下一轮；只有隐藏轮数帽已经耗尽（`shouldForceStopAfterToolTurn`）时才记一条 warn，
+ * 返回 `completed` / `wind-down-cap` 就地收尾——此时不再走收尾门，因为收的理由是帽子到顶而非模型答完了。
+ * 两条路都会先发 turnEnd 事件，也都把本轮工具结果原样带出去。
+ */
 async function runSoloToolUseContinuation<
   TExecutor,
   TToolContext,

@@ -53,7 +53,7 @@ export function parseJsonlWithTailTolerance<T>(input: {
       if (index === lines.length - 1) return { records, truncatedTail: true }
       throw new AppError(
         'INVARIANT',
-        `${input.ledgerLabel} corrupted at interior line ${index + 1} of ${lines.length} (${input.path})`,
+        `账本 ${input.ledgerLabel} 的第 ${index + 1} 行损坏（共 ${lines.length} 行，文件 ${input.path}）：坏在中段而不是最后一行，不是写到一半的半截尾行，无法安全截断修复。`,
         undefined,
         { path: input.path, line: index + 1, lineCount: lines.length }
       )

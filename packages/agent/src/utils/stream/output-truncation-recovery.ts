@@ -6,6 +6,11 @@ import type { OutputTruncationErrorContext,StreamFinishReasonDiagnostic } from '
 const RecoverableOutputTruncationFinishReasons = new Set(['length', 'repetition_truncation'])
 const ModelOutputTruncatedErrorCode = 'MODEL_OUTPUT_TRUNCATED'
 
+/**
+ * 判断这次收流是不是"被输出长度掐断、可以续写"的那一类：归一后的 finishReason 是 `length`
+ * 或 `repetition_truncation` 时为真。其余结束原因（stop / tool-calls / error / content-filter 等）一律为假——
+ * 那些是模型自己收的尾，续写只会重复或跑偏。
+ */
 export function isRecoverableOutputTruncationDiagnostic(
   diagnostic: Nullable<StreamFinishReasonDiagnostic>
 ): diagnostic is StreamFinishReasonDiagnostic {
@@ -15,6 +20,10 @@ export function isRecoverableOutputTruncationDiagnostic(
   )
 }
 
+/**
+ * 造一个 `MODEL_OUTPUT_TRUNCATED` 信号错误，作为"从截断处自动续写"这条恢复路径的载体。
+ * 它不是给用户看的故障——文案就写明正在自动续写；诊断细节（finishReason、模型、轮次）原样并进 context 供排查。
+ */
 export function createOutputTruncationError(
   diagnostic: StreamFinishReasonDiagnostic,
   context: OutputTruncationErrorContext
@@ -32,10 +41,22 @@ export function createOutputTruncationError(
   )
 }
 
+/**
+ * 认出上面那个截断续写信号：任意错误归一后 code 是 `MODEL_OUTPUT_TRUNCATED` 才为真。
+ * 循环据此把它分流到续写路径而不是当本轮失败上报。
+ */
 export function isOutputTruncationError(error: unknown): boolean {
   return AppError.from(error).code === ModelOutputTruncatedErrorCode
 }
 
+/**
+ * 拼续写轮要追加的英文提示词，告诉模型上一段是被供应方的输出上限掐断的、请接着写。
+ *
+ * `appendedAssistant` 指截断前已流给用户的那段文本是否已作为 assistant 消息进了历史：
+ * 进了就要求**从断点接着写、不要重复或重述**（否则用户会看到同一段被写两遍）；
+ * 没进则只要求"继续，别从头重来"。两种情况都强调剩余内容用正常可见文本写完，
+ * 且工具调用要么完整要么不发——半个工具调用比没有更糟。
+ */
 export function buildOutputTruncationContinuationPrompt(appendedAssistant: boolean): string {
   const lines = [
     'The previous assistant response stopped because the provider hit an output limit.',

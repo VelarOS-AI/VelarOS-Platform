@@ -85,6 +85,13 @@ export function diagnoseProviderJsonText(
   };
 }
 
+/**
+ * 一次工具参数被拒之后，把 final 值与流式草稿各做一遍结构诊断并放在一起，便于判断是谁坏了。
+ *
+ * final 不是字符串（比如已经是对象、或干脆缺席）时不出 `final` 这一格；没有流式草稿时不出 `streamDraft`。
+ * `identicalToFinal` 指出"两边是同一份坏文本"还是"供应方 final 与 delta 给了不同内容"——后者是
+ * 部分兼容网关的已知分叉行为。全程只记结构事实，不带正文。
+ */
 export function diagnoseRejectedProviderToolInput(
   finalValue: unknown,
   streamedDraft: Nullable<ProviderToolInputDraft>,
@@ -185,6 +192,10 @@ export function resolveProviderExecutableToolInput(
   };
 }
 
+/**
+ * 工具参数流完时挂在事件上的元数据：阶段标记、参数字符数、以及"这份参数是流式收齐的"。
+ * 只带长度不带正文——工具参数里常有整文件内容，进日志会直接爆量并带出源码。
+ */
 export function buildToolInputReadyMetadata(
   inputText: string,
 ): Record<string, unknown> {
@@ -195,6 +206,10 @@ export function buildToolInputReadyMetadata(
   };
 }
 
+/**
+ * 把一份流式工具参数草稿摘成可记录的字段集：调用 id、归一后与供应方原始的工具名、是否在请求里声明过、
+ * 参数字符数（含去空白后的长度）、以及是否已收到 `tool-input-end`。同样只出长度不出正文。
+ */
 export function summarizeProviderToolInputDraft(
   draft: ProviderToolInputDraft,
 ): Record<string, unknown> {
@@ -209,6 +224,13 @@ export function summarizeProviderToolInputDraft(
   };
 }
 
+/**
+ * 造工具调用身份/参数协议违例的错误（统一 `MODEL_STREAM_INTERRUPTED`，本轮请求就此中止）。
+ *
+ * `reason` 是机读的违例码（如 `tool_input_delta_before_start`、`tool_input_name_mismatch`），
+ * 连同模型、toolCallId、轮次一起进 context；toolName / finalToolName 有值才写，避免落一堆空字段。
+ * 这类错刻意不做自愈：工具身份对不上时继续执行等于拿错参数调错工具。
+ */
 export function buildToolInputProtocolError(input: {
   reason: string;
   toolCallId: string;
@@ -235,6 +257,11 @@ export function buildToolInputProtocolError(input: {
   );
 }
 
+/**
+ * 要求供应方给的工具名非空后再交给调用方的解析器（做别名归一等）。
+ * 名字缺席或全是空白时按传入的 `reason` 抛协议违例——空工具名没有任何可回落的目标，
+ * 猜一个只会把调用路由到错误的工具上。
+ */
 function resolveNonBlankProviderToolName(
   toolName: unknown,
   input: {
@@ -257,6 +284,10 @@ function resolveNonBlankProviderToolName(
   return input.resolveToolName(toolName);
 }
 
+/**
+ * 解析一份**已收到 `tool-input-end`** 的参数草稿：空参数合法（视作 `{}`，无参工具的正常形态），
+ * 但 JSON 残缺或不是对象一律抛协议违例——流都结束了还不完整，只能是坏数据，不能补齐后执行。
+ */
 export function parseEndedProviderToolInputDraft(
   draft: ProviderToolInputDraft,
   input: {
@@ -272,6 +303,11 @@ export function parseEndedProviderToolInputDraft(
   );
 }
 
+/**
+ * 在流被中断等场景下尽力解析残留草稿，两档宽容度按是否已 `tool-input-end` 自动切换：
+ * 已结束 → 空参数算 `{}`、但残缺 JSON 仍抛错；未结束 → 残缺 JSON 返回 null（本来就还没收完，不算错），
+ * 空参数也返回 null。返回 null 表示"这份草稿现在不可用"，调用方据此丢弃而非执行。
+ */
 export function parseRecoverableProviderToolInputDraft(
   draft: ProviderToolInputDraft,
   input: {
@@ -285,6 +321,13 @@ export function parseRecoverableProviderToolInputDraft(
   });
 }
 
+/**
+ * 上面两个入口共用的解析实现：草稿文本 → 工具参数对象，宽容度全由 options 两个开关决定。
+ *
+ * 空文本按 `allowEmptyInput` 决定给 `{}` 还是 null；JSON 解析失败按 `allowIncompleteJson` 决定回 null
+ * 还是抛 `tool_input_json_parse_failed`；解析出来不是对象则无论如何都抛 `tool_input_json_not_object`
+ * （数组或标量当参数传给工具没有意义，且不像截断那样可能是"还没收完"）。
+ */
 function parseProviderToolInputDraft(
   draft: ProviderToolInputDraft,
   input: {
@@ -328,6 +371,15 @@ function parseProviderToolInputDraft(
   return parsed;
 }
 
+/**
+ * 收到 final `tool-call` 时定这次调用的身份，并把配对的流式草稿从 drafts 表里摘出来（**就地 delete**，
+ * 交出所有权，避免同一个 id 被二次消费）。
+ *
+ * 优先用 final 给的工具名解析；final 没给名字就沿用草稿里记下的——部分供应方 final 分片只带 id 不带名字。
+ * 两边都没有则抛 `final_tool_name_missing`；两边都有但对不上则抛 `tool_input_name_mismatch`
+ * （身份分叉时执行任何一边都可能是错的，只能中止）。有名字但没有草稿是合法的：那是没有流式参数的调用，
+ * 返回 `streamedInput: null`，参数由 final 值提供。
+ */
 export function resolveProviderFinalToolCallIdentity(
   drafts: Map<string, ProviderToolInputDraft>,
   input: {
@@ -376,6 +428,15 @@ export function resolveProviderFinalToolCallIdentity(
   return { toolNameResolution, streamedInput: draft };
 }
 
+/**
+ * 把一个流分片喂给工具参数状态机，就地维护 drafts 表；**认领了返回 true，不是这三类分片返回 false**
+ * 让调用方接着按自己的逻辑处理。
+ *
+ * 三类分片各自建/追加/封口一份草稿：`tool-input-start` 建（工具名必须非空，且同 id 不得重复 start）、
+ * `tool-input-delta` 往 inputText 追加（必须先 start 过、且尚未 end）、`tool-input-end` 封口（必须存在且未封过）。
+ * 任何一条时序不成立都抛协议违例中止本轮，不做容错拼接——乱序的参数拼出来的 JSON 无法判断是否完整。
+ * 三类分片都会调 `markVisibleOutput`：工具调用属于"模型确实产出了东西"，否则会被空流检测误判为空响应。
+ */
 export function applyProviderToolInputStreamPart(
   part: { type: string },
   drafts: Map<string, ProviderToolInputDraft>,

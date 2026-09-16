@@ -94,6 +94,13 @@ function indexPromptAudit(
   return byFingerprint.size > 0 ? byFingerprint : null
 }
 
+/**
+ * 把一条 turn span 与它的直属子 span 摊平成 get_debug 的一条逐轮记录。
+ *
+ * 指标优先取 model span（token/cost/finishReason/指纹/延迟），model span 缺席时回落到 turn span 自己的
+ * 状态与延迟，字段缺失就置 null 而不是编造。非 full 档到此为止；full 档再展开工具/能力/策略明细，
+ * 并按 requestFingerprint 关联 prompt 审计重内容——sidecar 缺失或指纹对不上时该字段直接缺席。
+ */
 function projectTurn(
   turnSpan: Extract<ExecutionSpan, { category: 'turn' }>,
   children: ExecutionSpan[],

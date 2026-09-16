@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test'
 
 import type { CustomSubAgentRegistry, SubAgentTypeProvider } from '../src/contract/requires.js'
 import { SubAgentDispatcher } from '../src/impl/delegation/SubAgentDispatcher'
+import { createBuiltInPromptRegistry } from '../src/impl/guidance/PromptRegistry'
 import { ContextBuilder } from '../src/impl/runner/ContextBuilder'
 import { PrimaryAgentProfile } from '../src/impl/runner/PrimaryAgentProfile'
 import { RunContext } from '../src/impl/runner/RunContext'
@@ -12,7 +13,6 @@ import type { CustomSubAgentDefinition,ToolCategoryOverview } from '../src/types
 import type { SubAgentTypeDescriptor } from '../src/types/delegation.js'
 import type { RunContextToolContext } from '../src/types/runner.js'
 import { agentWorkflowSchema } from '../src/utils/builtin/workflow-schemas'
-import { createBuiltInPromptRegistry } from '../src/utils/guidance/catalog'
 
 function descriptor(id: string, readonlyDefault = true): SubAgentTypeDescriptor {
   return {

@@ -8,9 +8,11 @@ export class AgentSessionLeaseConflictError extends Error {
   public constructor(
     public readonly sessionId: string,
     public readonly ownerPid: number,
-    productName = 'Agent host'
+    productName = 'Agent 宿主'
   ) {
-    super(`Session ${sessionId} is active in another ${productName} process (PID ${ownerPid}).`)
+    super(
+      `会话 ${sessionId} 正被另一个 ${productName} 进程（PID ${ownerPid}）持有：同一会话同一时刻只允许一个进程执行。请切换到那个进程继续，或等它退出、租约过期后再重试。`
+    )
     this.name = 'AgentSessionLeaseConflictError'
   }
 }
@@ -27,10 +29,10 @@ export function resolveAgentSessionLeaseClaim(
   productName?: string
 ): AgentSessionLease {
   const ownerId = claim.ownerId.trim()
-  if (!claim.sessionId.trim()) throw new Error('Session lease Session ID cannot be empty.')
-  if (!ownerId) throw new Error('Session lease owner ID cannot be empty.')
+  if (!claim.sessionId.trim()) throw new Error('会话租约申领缺少 sessionId：无法判断这份租约属于哪个会话。')
+  if (!ownerId) throw new Error('会话租约申领缺少 ownerId：没有 owner 就无法在冲突时分辨谁持有租约。')
   if (!Number.isInteger(claim.ownerPid) || claim.ownerPid <= 0) {
-    throw new Error('Session lease owner PID must be a positive integer.')
+    throw new Error(`会话租约申领的 ownerPid 必须是正整数，当前收到 ${claim.ownerPid}：抢占判定要靠它探测持有者进程是否还活着。`)
   }
   if (current && current.ownerId !== ownerId && isProcessAlive(current.ownerPid)) {
     throw new AgentSessionLeaseConflictError(claim.sessionId, current.ownerPid, productName)

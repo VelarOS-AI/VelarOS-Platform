@@ -11,6 +11,16 @@ function copyNonEmpty<T>(values: Optional<readonly T[]>): Optional<T[]> {
   return [...values]
 }
 
+/**
+ * 建一条技能定义：把供应方身份（`sourceKind` / `sourceId`）与各项默认值一次补齐，是全部技能供应方的唯一建法。
+ *
+ * **`capabilityScopes` 为空直接抛 `TypeError`**：作用域是这条技能在哪些空间可见的唯一依据，
+ * 省略它等于"到处都看得见"，那不该由一次忘写来决定——这是有意的构造期硬失败，不做默认值兜底。
+ * 其余字段都有缺省：`priority` 100、`userVisible` / `enabled` 为真、`skillKind` 为 `'capability'`（指针 + 按需读取，
+ * `'role'` 只该由内置角色供应方显式声明）、`autoInjectPromptFeatures` 空数组。
+ * 空白的可选串按缺席处理（不写成空串），列表字段全部**复制一份**存入——技能定义会被长期持有，
+ * 直接存调用方的数组会让它此后被改到。`markdown` 去首尾空白。
+ */
 function createSkillDefinition(args: {
   id: string
   label: string

@@ -50,6 +50,10 @@ export function isContextSummaryText(value: string): boolean {
   return isContextSkeletonText(value) || isContextDistillText(value)
 }
 
+/**
+ * 建一份全零的蒸馏统计（requested / accepted / rejected / timedOut / failed / staleDropped 六项）。
+ * 会话开局与重置都从这里拿，好让六个字段永远齐整——各处自己写零值迟早漏项，报表上会表现为"某一类从来没发生过"。
+ */
 export function createEmptyDistillTotals(): ContextDistillTotals {
   return { requested: 0, accepted: 0, rejected: 0, timedOut: 0, failed: 0, staleDropped: 0 }
 }
@@ -241,6 +245,11 @@ export function extractDistilledBody(text: string): string {
   return unfenced
 }
 
+/**
+ * 剥掉整段外层的 ``` 围栏，并去掉紧跟其后的语言标注（markdown / json / md，大小写不敏感）。
+ * 不是完整围栏包裹（不以 ``` 一头一尾、或总长不足 6）时返回 null，调用方按原文继续解析。
+ * 只剥最外面这一层：辅助模型爱顺手裹一层 Markdown，为一个围栏丢掉整次调用不划算；正文内部的代码块要原样留着。
+ */
 function extractDistillFenceBody(value: string): Nullable<string> {
   if (!value.startsWith('```') || !value.endsWith('```') || value.length < 6) return null
 
@@ -312,6 +321,13 @@ function isDistillable(record: ContextRecord, residency: ContextResidency): bool
   return !(isString(content) && isContextSummaryText(content))
 }
 
+/**
+ * 把一段选好的成员拼成一次蒸馏请求：锚点并集截到 `maxRequiredAnchors` 条，附上目标长度、段落原长与收益/成本估算。
+ * 并集已按类别优先序（路径 → 命令 → 标识符 → 数字）排好，所以截断先丢数字锚、绝不会先丢路径；被截掉的锚点不再要求模型复现，
+ * 但原文仍可按成员的召回指针取回。
+ * 收益与成本刻意分开量纲：收益 =（段落原长 − 目标长度）× 摊销窗口，因为折下去之后**此后每一次请求**都少发这些 token；
+ * 成本 = 一次调用的输入 + 输出，只付一次。不摊销直接比，比值恒小于 1（成本 ≥ 段落本身），adaptive 判据会退化成"永远不值得"。
+ */
 function buildDistillRequest(
   segment: DistillSegment,
   context: {
@@ -352,11 +368,20 @@ function buildDistillRequest(
   }
 }
 
+/**
+ * 算这次蒸馏的"摊销后省下的 token ÷ 这一跳花掉的 token"，保留两位小数交给 adaptive 判据比阈值。
+ * 成本估算 ≤ 0 时返回 0 而不是除零得 Infinity——0 必然过不了阈值，等于按"不值得花"保守处理。
+ */
 function resolveSavingToCostRatio(request: ContextDistillRequest): number {
   if (request.estimatedCostTokens <= 0) return 0
   return Math.round((request.estimatedSavingTokens / request.estimatedCostTokens) * 100) / 100
 }
 
+/**
+ * 数这一段成员里**去重后**的锚点条数，供 adaptive 判据算锚点密度——密度太高说明这段几乎全是硬事实，
+ * 叙事压缩讨不到好（模型得逐字复现的部分本来就压不下去），判据会据此拦下这一跳。
+ * 按 `normalizeAnchorText` 归一后去重（剥引号、压空白），同一条路径在多条记录里重复出现只算一次；归一后为空的锚点直接丢掉。
+ */
 function countSegmentAnchors(members: readonly ContextRecord[]): number {
   const seen = new Set<string>()
   for (const member of members) {
@@ -388,6 +413,10 @@ function resolveGoalHint(ledger: ResidencyLedgerView): Nullable<string> {
   return null
 }
 
+/**
+ * 从数组形态的消息正文里按原序把所有 `text` 片段拼成一段文本（换行分隔），非文本片段（图片、文件等）整个跳过。
+ * 传进来不是数组就返回空串——字符串正文由调用方走另一条路，这里只管多片段形态。
+ */
 function readTextParts(content: unknown): string {
   if (!isArray(content)) return ''
 
@@ -397,10 +426,19 @@ function readTextParts(content: unknown): string {
     .join('\n')
 }
 
+/**
+ * 建一份"这一跳不蒸馏"的空计划，并记下跳过原因（off / no-distiller / in-flight / pending-full / target-reached / no-segment）。
+ * `gate` 给 null 表示判据根本没跑到（被前置条件挡在门外），与"跑了判据但没过"（`skipReason: 'not-worth'` 且带 gate 信号）是两回事。
+ * 这个原因会进 epoch 报告，离线重放据此还原"当时为什么没花这一跳"。
+ */
 function emptyPlan(skipReason: ContextDistillSkipReason): ContextDistillPlan {
   return { requests: [], skipReason, gate: null }
 }
 
+/**
+ * 算 `value / total` 的百分比，保留一位小数。用来把"离目标水位还差多少 token"折成 adaptive 判据要比的缺口百分比。
+ * `total <= 0` 返回 0 而不是除零——没有预算基数时缺口一律按 0 报，判据据此判"不值得花"，保守而不是乱花。
+ */
 function toPercent(value: number, total: number): number {
   if (total <= 0) return 0
   return Math.round((value / total) * 1000) / 10

@@ -17,10 +17,20 @@ function isErrorResult(raw: McpRawCallResult): boolean {
   return isBoolean(raw.isError) && raw.isError
 }
 
+/**
+ * 给一个 MCP resource 块拼一行占位说明：有 uri 就写进去（`[MCP resource: …]`），没有就只留 `[MCP resource]`。
+ * 永远返回非空串——resource 块即便取不到 uri 也得在文本里留个痕，否则模型只会看到内容凭空少了一段。
+ */
 function describeResource(uri: Nullable<string>): string {
   return uri ? `[MCP resource: ${uri}]` : '[MCP resource]'
 }
 
+/**
+ * 把一个 MCP 媒体块转成模型面的内容片段（图片走 `image-data`、音频走 `file-data`）。
+ * 三个条件缺一即返回 null：拿得到 `data`、拿得到 `mimeType`、且 mimeType 确实以要求的前缀开头（大小写不敏感）。
+ * 声明的类型与 mimeType 对不上时宁可判 null——调用方会退回一行文本占位，
+ * 把音频当图片塞给 provider 只会换来一次整请求失败，而模型至少还能从占位文本里知道"这里有个媒体块"。
+ */
 function mediaPart(
   type: 'image-data' | 'file-data',
   record: Record<string, unknown>,

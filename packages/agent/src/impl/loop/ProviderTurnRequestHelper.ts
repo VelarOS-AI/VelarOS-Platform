@@ -44,7 +44,110 @@ function resolveActiveContextProvider(
     : null;
 }
 
-class ProviderTurnRequestHelper {
+/**
+ * 「把一个 turn 组装成 provider 请求」的公共件：工具面、schema 账、payload 引用、发送前的拦截与上报。
+ *
+ * 谁持有：`StreamTurn` 与 `QueryTurn` 各建一个（只差一个 `label`，用来分辨日志出自哪条链路）。
+ * 什么时候调：每轮在请求编译之前按顺序走一遍——先定工具名单与传输身份，再算 schema 字符与哈希、
+ * 物化工具定义，编译出请求后由 `assertProviderRequestAllowed` 决定放不放行，放行前后各上报一次用量估算。
+ * 它自己不发请求、不碰历史、不持有跨轮状态；除了拦截那一步会抛 `context_length_exceeded`，
+ * 其余方法一律不抛：外部依赖（activeContext、序列化）出问题就记一条 warn 并退到保守结果。
+ */
+export interface ProviderTurnRequestHelperApi {
+  /** 估一个值序列化后的字符数；`JSON.stringify` 失败（循环引用等）时退回字符串长度，不抛错。 */
+  estimateSerializedChars(value: unknown): number
+  /**
+   * 本轮真正要给 provider 的工具名单（`resolveProviderToolNamePlan` 的简写）。
+   * 传了 allow-list 才有名单；没传表示不限制，返回缺席。
+   */
+  resolveProviderToolNames(
+    history: readonly ModelMessage[],
+    allowTools?: readonly string[],
+  ): LooseOptional<string[]>
+  /**
+   * 同时给出「本轮能力面」和「历史里出现过的工具名」两份清单。
+   * 历史名只用于把旧 tool-call/result 编译成合法输入名与诊断，**绝不**反向并回能力面——
+   * 否则一次越界或幻觉调用会在下一轮自动获得执行能力，绕过工具分页的正式边界。
+   */
+  resolveProviderToolNamePlan(
+    history: readonly ModelMessage[],
+    allowTools?: readonly string[],
+  ): ProviderToolNamePlan
+  /**
+   * 在注册表刚生成本轮 tools 之后立刻冻结一份「规范名 ↔ provider 名」双向映射。
+   * provider 的响应可能在工具面又翻过一页之后才回来，解码必须认这份请求内的快照，而不是当时的「当前可见工具」。
+   */
+  captureToolTransportPlan(toolContext: ProviderToolTransportContext): ProviderToolTransportPlan
+  /** 把历史里已换出的工具名也补成 provider-safe 输入名（只为让旧消息合法），不扩大响应解码认的工具面。 */
+  resolveProviderRequestToolNameAliases(
+    transportPlan: ProviderToolTransportPlan,
+    historyToolNames: readonly string[],
+  ): Readonly<Record<string, string>>
+  /**
+   * 逐工具的 schema 字符账，键是 provider-safe 名：优先用 run plan 预备好的值，其次问注册表实测，
+   * 都没有才逐个序列化兜底。上下文预算与前缀形状哈希都读这本账。
+   */
+  resolveToolSchemaChars<TContext>(
+    toolRegistry: ToolSchemaCharEstimatorRegistry<TContext>,
+    toolContext: TContext,
+    canonicalToolNames: LooseOptional<readonly string[]>,
+    tools: ToolSet,
+    transportPlan: ProviderToolTransportPlan,
+    preparedToolSchemaChars?: Readonly<Record<string, number>>,
+  ): Record<string, number>
+  /** 把 canonical 的 schema 哈希账投影到 provider-safe 工具名；注册表不提供哈希能力时返回 undefined。 */
+  resolveToolSchemaHashes<TContext>(
+    toolRegistry: ToolSchemaHashEstimatorRegistry<TContext>,
+    toolContext: TContext,
+    canonicalToolNames: LooseOptional<readonly string[]>,
+    tools: ToolSet,
+    transportPlan: ProviderToolTransportPlan,
+  ): Record<string, string> | undefined
+  /**
+   * 把本次请求的工具定义（含 JSON Schema）就地物化成审计快照，名字按码元序排定。
+   * 先抓定义对象再等异步 schema：等待期间宿主注册表更新也不会改写这一份。
+   */
+  resolveProviderToolDefinitions(
+    tools: ToolSet,
+    transportPlan: ProviderToolTransportPlan,
+    toolSchemaChars: Readonly<Record<string, number>>,
+    toolSchemaHashes?: Readonly<Record<string, string>>,
+  ): Promise<ProviderToolDefinitionSnapshotInput[]>
+  /** 强制工具选择也换成与 tools 键一致的 provider-safe 身份；不是 `{type:'tool'}` 形态就原样返回。 */
+  resolveProviderToolChoice<TToolChoice>(
+    transportPlan: ProviderToolTransportPlan,
+    toolChoice: TToolChoice,
+  ): TToolChoice
+  /** 为本轮消息里的大块工具产物建 payload 引用（正文换成句柄）；没有会话或没有 store 时返回 undefined。 */
+  buildToolPayloadRefs(
+    toolContext: ProviderTurnPayloadContext,
+    messages: ModelMessage[],
+    isOutputInlineToolName?: (toolName: string) => boolean,
+  ): Promise<LooseOptional<Record<string, string>>>
+  /**
+   * 从 activeContext 读出本轮要常驻上下文的工作集：当前目标 + 最近的约束/证据（至多 8 条）。
+   * 读不到或读失败都返回空对象并记一条 warn——工作集缺席只是少一点上下文，不该让一轮请求失败。
+   */
+  resolveContextWorkingSetInputs(toolContext: unknown): Promise<ProviderTurnContextWorkingSetInputs>
+  /**
+   * 发送前最后一道闸：编译器判定不可发送（压不下去的上下文超限）时抛 `context_length_exceeded`，
+   * 由 loop 面的缺页阶梯接住；可发送则什么都不做。
+   */
+  assertProviderRequestAllowed(
+    compiledRequest: CompiledProviderRequest,
+    turn: LooseOptional<number>,
+  ): void
+  /**
+   * 把本轮上下文用量估算发给壳侧（来源标记 `provider-request-compiler`），附带治理状态块。
+   * 逐轮必须到达：壳侧的转交卡只靠这条消息布防，缺一轮就少一次挽救机会。
+   */
+  emitContextUsageEstimate(
+    compiledRequest: CompiledProviderRequest,
+    target: ContextUsageEmitTarget,
+  ): void
+}
+
+class ProviderTurnRequestHelper implements ProviderTurnRequestHelperApi {
   constructor(
     private readonly log: ScopedLog,
     private readonly label: "stream" | "query",
@@ -94,11 +197,10 @@ class ProviderTurnRequestHelper {
   }
 
   /**
-   * Freeze the transport identity immediately after the registry builds this request's tools.
+   * 在注册表刚生成本轮 tools 之后立刻冻结传输身份。
    *
-   * ToolContext keeps a mutable projection for UI/planning compatibility, but provider responses
-   * may arrive after another projection has been built. Response decoding must therefore use this
-   * request-local snapshot rather than reading mutable "current visible tools" state later.
+   * ToolContext 为了 UI 与规划兼容保留着一份可变投影，而 provider 的响应可能在下一份投影建好之后才回来；
+   * 因此响应解码必须认这份「请求内快照」，不能事后再去读可变的「当前可见工具」。
    */
   public captureToolTransportPlan(
     toolContext: ProviderToolTransportContext,

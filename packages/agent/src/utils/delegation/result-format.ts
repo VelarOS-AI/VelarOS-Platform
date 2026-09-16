@@ -116,6 +116,10 @@ function formatSubAgentThreadUnresumableMessage(
   }
 }
 
+/**
+ * 子 Agent 卡在高风险操作待确认时，给父线程看的一行状态文案。
+ * 明细截到 180 字符（状态行不是详情页，长明细留在确认卡里）；明细为空时退化成不带明细的那句。
+ */
 function formatSubAgentHighRiskConfirmationStatus(message: string): string {
   const detail = message.trim()
   return detail
@@ -123,6 +127,13 @@ function formatSubAgentHighRiskConfirmationStatus(message: string): string {
     : '等待父线程确认高风险操作。'
 }
 
+/**
+ * 派发成功后立刻回给父 Agent 的「已启动」回执。
+ *
+ * async 模式说明结果会自动注入；sync 模式说明它同样在后台跑、父可以先做别的。拿到 backgroundJobId
+ * 时附上 job:read_output / job:wait 的具体调用方式。结尾那句「不要 sleep、不要轮询、不要重复它正在处理的
+ * 同一文件」是刻意保留的——不写就会出现父 Agent 原地空转等子 Agent 的行为。
+ */
 function formatSubAgentStartedMessage(
   title: string,
   backgroundJobId: Nullable<string>,

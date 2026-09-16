@@ -19,7 +19,27 @@ function buildUserTextMessageKey(sessionId: string, messageIndex: number, hash: 
   return `${sessionId}:user:${messageIndex}:${hash.slice(0, 12)}`
 }
 
-export class UserTextPayloadPlanner {
+/**
+ * 超长用户正文的归档规划器：把历史里过长的用户消息原文存进 payload 店，换回一串「位置 → 地址」的引用。
+ *
+ * 由编译链按会话建（构造时收一份 `ContextPayloadStore`），自身无状态。
+ * 按内容哈希去重——同一段正文在会话里只存一份，重复出现的位置共用同一个 `payloadRef`。
+ * 只负责存与给地址，**不改消息**；发送时正文以哪种形态出现由完整请求的容量治理决定。
+ */
+export interface UserTextPayloadPlannerApi {
+  /**
+   * 扫一遍消息，把超过 `thresholdChars` 的用户正文存好并返回引用清单（消息下标、哈希、地址、原长）。
+   * 先按哈希查会话里已有的记录，只存真正缺的那些；店支持批量接口就走批量，不支持就逐条退化。
+   * 没有超长正文时返回空清单。存完仍取不到某条的地址属于不变量被破坏，抛 `INVARIANT` 而不是静默跳过。
+   */
+  persistOversizedUserTexts(input: {
+    sessionId: string
+    messages: readonly ModelMessage[]
+    thresholdChars: number
+  }): Promise<PersistUserTextPayloadsResult>
+}
+
+export class UserTextPayloadPlanner implements UserTextPayloadPlannerApi {
   public constructor(private readonly payloadStore: ContextPayloadStore) {}
 
   public async persistOversizedUserTexts(input: {
@@ -92,7 +112,7 @@ export class UserTextPayloadPlanner {
     const references = candidates.map(({ messageIndex, hash, text }) => {
       const payloadRef = referencesByHash.get(hash)
       if (!payloadRef)
-        throw new AppError('INVARIANT', 'User text persistence missed a payload reference')
+        throw new AppError('INVARIANT', `用户长文落盘后少了一条 payload 引用：hash ${hash} 既没查到已有记录，写入也没回填引用；缺引用会让这条正文在历史里无法召回，因此中止而不是写一份取不回的历史。`)
       return { messageIndex, hash, payloadRef, originalChars: text.length }
     })
     return { references }

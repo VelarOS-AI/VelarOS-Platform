@@ -4,7 +4,8 @@ import { asRecord } from '@velaros-ai/core/utils/unknownJsonRecord'
 import type { RunnerModelRuntimePort } from '../../contract/requires.js'
 import type { ExecutionEventBusApi } from '../../types/records.js'
 import type { RunnerAgentProvider, RunnerModelCapabilityPort, RunnerResolvedAgentRuntime } from '../../types/runner.js'
-import { AgentRuntimeEvents } from '../../utils/runner/runtime-events'
+
+import { AgentRuntimeEvents } from './AgentRuntimeEvents'
 
 /**
  * Agent 运行配置、运行事件与注入 Model capability 的唯一组合桥。

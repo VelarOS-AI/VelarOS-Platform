@@ -20,7 +20,26 @@ import { buildToolFingerprint } from '../../utils/session/tool-dedupe'
  * fingerprint 规范化通过 `normalizeToolCallFingerprintValue` 对对象 key 排序，
  * 保证模型用不同 key 顺序生成的参数仍可命中同一指纹。
  */
-class CodingToolCallDeduper {
+export interface CodingToolCallDeduperApi {
+  /**
+   * 记下一次幂等工具调用的入参指纹（每个工具名只留最近一条）。
+   *
+   * 由编辑跟踪器在每次工具调用落定时调用；算不出指纹（入参无法规范化）就什么都不记。
+   */
+  recordIdempotentToolCall(toolName: string, args: Record<string, unknown>): void
+  /**
+   * 这次调用是不是和刚才那次**完全一样**；是的话返回一段给模型看的拦截文案，不是则返回 null。
+   *
+   * 调用方拿到文案后用它顶替真正的工具执行结果，模型就会看到「别再重复了，换个动作」。
+   * 只比「上一次同名调用」，不查工具页驻留状态——那是 ToolSpaceReplace 的事。
+   */
+  getRepeatedIdempotentToolCallMessage(
+    toolName: string,
+    args: Record<string, unknown>
+  ): LooseOptional<string>
+}
+
+class CodingToolCallDeduper implements CodingToolCallDeduperApi {
   private readonly lastIdempotentToolCallFingerprints = new Map<string, string>()
 
   public recordIdempotentToolCall(toolName: string, args: Record<string, unknown>): void {

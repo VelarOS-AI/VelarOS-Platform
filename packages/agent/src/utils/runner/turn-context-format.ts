@@ -43,6 +43,10 @@ export function stripTurnContextBlocks(text: string): string {
   return visibleText.replaceAll(TurnContextMidRunNoteLead, '').trim()
 }
 
+/**
+ * 环境变化条目因容量上限被丢弃时，生成放进块内的那句说明（"较早的 N 条已省略"）。
+ * 明说省略过、省了多少，比悄悄少给几条强——否则模型会把残缺的变化列表当成完整事实。
+ */
 export function formatTurnContextOmittedNote(count: number): string {
   return `较早的 ${count} 条环境变化已因容量限制省略，以下仅包含最新变化。`
 }

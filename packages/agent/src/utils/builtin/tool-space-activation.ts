@@ -30,23 +30,35 @@ import type { ToolActivationGuide, ToolActivationMethod, ToolActivationRef,ToolD
 import type { KernelToolContext as ToolContext } from '../../types/tool-context.js'
 import { buildToolSpacePages } from '../tools/tool-space-resolver'
 
+/**
+ * 取当前上下文下的全部工具页，直通 `buildToolSpacePages`、**不做任何加工**。
+ * 它是工具空间全部页的唯一来源：可用性与 reasons 都由 resolver 定，这里只转手，
+ * 在本层加工会与 resolver 打架（不变量②）。
+ */
 export function buildToolDiscoveryCards(ctx: ToolContext): ToolDiscoveryCard[] {
   return buildToolSpacePages(ctx)
 }
 
+/** 由工具分类 id 拼出对应的能力页 id（`capability:<categoryId>`）——申请启用时 page-in 的就是它。 */
 export function activationCapabilityIdForCategory(categoryId: ToolCategoryId): string {
   return `capability:${categoryId}`
 }
 
+/**
+ * 取一张页对应的能力页 id：**插件页返回 null**（插件不按分类授权，它自己就是启用单位），
+ * 其余按页所属分类拼 `capability:<categoryId>`。返回 null 时调用方退回用页自身的 id。
+ */
 function activationCapabilityIdForCard(card: ToolDiscoveryCard): Nullable<string> {
   if (card.kind === 'plugin') return null
   return activationCapabilityIdForCategory(card.categoryId)
 }
 
+/** 把一条不可用原因压成 `<layer>.<code>` 的扁平键（如 `approval.required`），供依赖项回带给模型对账。 */
 function reasonKey(reason: ToolDiscoveryReason): string {
   return `${reason.layer}.${reason.code}`
 }
 
+/** 判断这张页的 reasons 里是否有某个 `layer` + `code` 的信号（精确匹配两项，一条都没有即为假）。 */
 function hasReason(
   card: ToolDiscoveryCard,
   layer: ToolDiscoveryReason['layer'],
@@ -55,6 +67,16 @@ function hasReason(
   return card.reasons.some((reason) => reason.layer === layer && reason.code === code)
 }
 
+/**
+ * 由页的 reasons 推出依赖清单（每条都带 pageIn / nextTool / activationHint，是能直接执行的指令）。
+ * 只认四组信号，且可叠加：`approval.required` → 申请能力页（必需）；
+ * `plugin.user_action_required` → 走动作卡请求用户动作（必需）；
+ * `runtime.unavailable` / `runtime.no_available_tools` → 运行态阻塞、回 map 找替代（必需，pageId 为 null）；
+ * `resident.loadable` → 已授权未驻留、page-in 即可（**非必需**，不进 activationFlow 的前置段）；
+ * `resident.visible` / `capability.enabled` → 记一条 `satisfied` 的非必需项，纯粹告诉模型这条已经就绪。
+ * 刻意不推断能力自有的前置资源——「缺什么前置」属于能力描述符的表达力，在这里补本地表必然与注入侧
+ * 打架且会过时。一条信号都没有时返回空数组。
+ */
 function buildToolDependencyGuides(card: ToolDiscoveryCard): ToolDependencyGuide[] {
   const dependencies: ToolDependencyGuide[] = []
   const capabilityId = activationCapabilityIdForCard(card)
@@ -144,6 +166,14 @@ function buildToolDependencyGuides(card: ToolDiscoveryCard): ToolDependencyGuide
   return dependencies
 }
 
+/**
+ * 拼出给模型照做的分步激活流程：先放**必需且尚未满足**的依赖的 activationHint（satisfied 的不占位），
+ * 再按激活方式追加最后一步——`direct_call` 直接调用、`page_in_only` 换入本页（能力页额外提醒下一轮
+ * 还要看目标工具页）、`request_approval` 换入能力页申请、`request_user_action` 换入前置入口再请求用户动作
+ * （没有 pageIn 时退化成「看 reasons」）、其余走 `inspect_reasons` 让模型改查替代。最后整体去重。
+ * **每个分支都至少 push 一条可执行指令**是硬不变量：空流程会让模型自己猜，实测会退化成反复 page-in
+ * 同一张不可用页。
+ */
 function buildActivationFlow(input: {
   card: ToolDiscoveryCard
   method: ToolActivationMethod
@@ -185,6 +215,11 @@ function buildActivationFlow(input: {
   return [...new Set(flow)]
 }
 
+/**
+ * 给一份只写了 method / summary / pageIn / nextTool / notes 的半成品激活指引补齐后两块：
+ * 由页推出的 `dependencies`，以及据此拼出的 `activationFlow`。
+ * 各个 availability 分支只需描述「怎么用」，依赖与流程统一在这里长出来，不必各分支重复一遍。
+ */
 function withActivationDependencies(
   card: ToolDiscoveryCard,
   guide: Omit<ToolActivationGuide, 'dependencies' | 'activationFlow'>
@@ -203,6 +238,16 @@ function withActivationDependencies(
   }
 }
 
+/**
+ * 把一张工具页翻译成完整的激活指引——「这张页现在能不能用、用不了该做什么」的唯一推导处。
+ * 按 `card.availability` 分派激活方式：`visible` → `direct_call`；
+ * `loadable` → `page_in_only`，并按页种类（plugin / capability / tool）给不同的说明，
+ * 其中能力页与插件页本身不可执行，启用后还得回看目标工具页；
+ * `requires_approval` → `request_approval`（page-in 能力页，插件页退回页自身 id）；
+ * `requires_user_action` → `request_user_action`，其中由插件声明的用户动作走动作卡、
+ * 其余只能让模型看 reasons；其他一切情况兜底到 `inspect_reasons`，指回 tooling:map 找替代。
+ * 每条出口都过 `withActivationDependencies` 补依赖与流程。本函数只做翻译，不自行推断可用性。
+ */
 export function buildToolActivationGuide(card: ToolDiscoveryCard): ToolActivationGuide {
   if (card.availability === 'visible') return withActivationDependencies(card, {
       method: 'direct_call',
@@ -297,6 +342,10 @@ export function buildToolActivationGuide(card: ToolDiscoveryCard): ToolActivatio
   })
 }
 
+/**
+ * 把一条不可用原因瘦身成模型面的 ref：只留 layer / code / message，
+ * 内部诊断字段不带出去（模型需要的是「哪一层挡住了、怎么说的」，不是排障细节）。
+ */
 export function summarizeReasonRef(reason: ToolDiscoveryReason): ToolReasonRef {
   return {
     layer: reason.layer,
@@ -305,6 +354,11 @@ export function summarizeReasonRef(reason: ToolDiscoveryReason): ToolReasonRef {
   }
 }
 
+/**
+ * 把一条依赖瘦身成模型面的 ref：保留 id/kind/state/required/pageId/pageIn/nextTool/reasonKeys
+ * 这些**可执行**的部分，丢掉 `summary` 与 `activationHint` 两段散文——它们已经在 activationFlow 里
+ * 逐条出现过，在每条依赖上再重复一遍纯属占预算。
+ */
 function summarizeDependencyRef(dependency: ToolDependencyGuide): ToolDependencyRef {
   return {
     id: dependency.id,
@@ -318,6 +372,11 @@ function summarizeDependencyRef(dependency: ToolDependencyGuide): ToolDependency
   }
 }
 
+/**
+ * 把完整激活指引瘦身成模型面的 ref：留 method/pageIn/capabilityId/nextTool 与瘦身后的依赖清单，
+ * 丢掉 summary、notes 与 activationFlow 三段文本。工具页清单里每张页都要带一份 activation，
+ * 散文在这个位置太贵——需要完整版的地方（如单页详情）另走 `buildToolActivationGuide`。
+ */
 function summarizeActivationRef(activation: ToolActivationGuide): ToolActivationRef {
   return {
     method: activation.method,
@@ -328,6 +387,10 @@ function summarizeActivationRef(activation: ToolActivationGuide): ToolActivation
   }
 }
 
+/**
+ * 一步取出某页的**模型面**激活 ref：先推完整指引再瘦身。
+ * 工具页清单、find 结果等每页都要带一份 activation 的地方用它。
+ */
 export function buildToolActivationRef(card: ToolDiscoveryCard): ToolActivationRef {
   return summarizeActivationRef(buildToolActivationGuide(card))
 }

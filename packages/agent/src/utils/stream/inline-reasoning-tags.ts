@@ -13,10 +13,15 @@ import type { InlineReasoningSegment, InlineReasoningSegmentKind, InlineReasonin
 
 const InlineReasoningOpenTags = ['<think>', '<thinking>'] as const
 
+/** 给开标签配对应的闭标签：`<thinking>` 配 `</thinking>`，其余（即 `<think>`）配 `</think>`。 */
 function closeTagFor(openTag: string): string {
   return openTag === '<thinking>' ? '</thinking>' : '</think>'
 }
 
+/**
+ * 建一份内联思考标签切分器的初始状态（不在思考段内、无待闭合标签、尾巴为空）。
+ * 每条模型流单独持有一份——`inReasoning` 跨流复用会让新一轮的开头被误判成还在上一轮的思考段里。
+ */
 export function createInlineReasoningTagSplitState(): InlineReasoningTagSplitState {
   return { inReasoning: false, activeCloseTag: '', tail: '' }
 }
@@ -54,6 +59,11 @@ function openTagTailHoldLength(s: string): number {
   return max
 }
 
+/**
+ * 往结果里追加一段切分产物，**空文本直接跳过**。
+ * 切分过程中每个分支都会调它，空串很常见（比如增量正好以开标签起头），
+ * 把空段过滤在这一处，下游就不必再判空、也不会收到长度为 0 的 emit。
+ */
 function pushSegment(
   segments: InlineReasoningSegment[],
   kind: InlineReasoningSegmentKind,

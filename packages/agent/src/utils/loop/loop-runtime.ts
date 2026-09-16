@@ -12,7 +12,6 @@ import {
 } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import { forkFileContext } from '../../impl/context/FileContextCoordinator'
 import type { AgentDelegationContract, AgentRoleExpectedOutputKind, AgentRoleId, ToolCategoryId } from '../../types/agent.js'
 import type { FileContextCarrier } from '../../types/context.js'
 import type { CommandRunningPort,CreateSubAgentContextArgs, ResolveSoloLoopToolsArgs, ResolveSubAgentDelegationArgs, ResolveSubAgentToolScopeArgs, SubAgentContextBase, SubAgentToolCategoryRequestResult, SubAgentToolScope } from '../../types/loop.js'
@@ -295,10 +294,10 @@ function createSubAgentContext<TContext extends SubAgentContextBase>(
     runAgentWorkflow: undefined,
     requestToolCategoryAccess,
     query: async () => {
-      throw new AppError('VALIDATION', 'Sub-agent cannot spawn further agents')
+      throw new AppError('VALIDATION', '子 Agent 不能再派生新的 Agent：嵌套派发已被禁止，请把要委派的活儿交回父 Agent 去编排。')
     },
   }
-  forkFileContext(args.parentCtx as FileContextCarrier, childCtx as FileContextCarrier)
+  args.forkFileContext(args.parentCtx as FileContextCarrier, childCtx as FileContextCarrier)
   return childCtx
 }
 

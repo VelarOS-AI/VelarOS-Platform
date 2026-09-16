@@ -1,6 +1,6 @@
 import { toNullable } from '@velaros-ai/core'
 
-import type { AgentRoleId } from '../../types/agent.js'
+import type { AgentRoleId, AgentSkillDescriptor } from '../../types/agent.js'
 import type { AgentRoleDefinition, ResolveAgentRoleOptions, RoutedAgentRoleResult } from '../../types/runner.js'
 
 /**
@@ -30,3 +30,27 @@ function resolveLockedAgentRole(
 }
 
 export { resolveLockedAgentRole }
+
+/**
+ * 显式选中技能的 allowed-tools 并集：用户挑了技能，且这些技能里**至少有一个**声明了工具门控时，
+ * 返回它们允许的工具并集（只在这批工具里给模型）；一个都没声明门控就返回 null，表示本轮不额外限制工具面。
+ *
+ * 没有选中任何技能时同样返回 null——「没选技能」不该被当成「什么工具都不许用」。
+ */
+function resolveSelectedSkillAllowedTools(
+  skillDescriptors: readonly AgentSkillDescriptor[],
+  selectedSkillIds: Optional<readonly string[]>
+): Nullable<string[]> {
+  const selected = new Set((selectedSkillIds ?? []).map((id) => id.trim()).filter(Boolean))
+  if (selected.size === 0) return null
+  const union = new Set<string>()
+  let declared = false
+  for (const descriptor of skillDescriptors) {
+    if (!selected.has(descriptor.id) || !descriptor.allowedTools?.length) continue
+    declared = true
+    for (const toolName of descriptor.allowedTools) union.add(toolName)
+  }
+  return declared ? [...union] : null
+}
+
+export { resolveSelectedSkillAllowedTools }

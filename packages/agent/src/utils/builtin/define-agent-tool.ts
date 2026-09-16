@@ -6,6 +6,11 @@ import type { DefineVelaToolInput,VelaTool } from '../../types/builtin.js'
 import type { KernelToolContext } from '../../types/tool-context.js'
 import { defineToolRuntimeSpec } from '../toolkit/define-tool-contract'
 
+/**
+ * 内置工具的声明入口：把 `DefineVelaToolInput`（name/description/schema/execute 等）原样交给
+ * `defineToolRuntimeSpec` 生成运行期工具对象，本身不做任何加工，只负责把工具上下文类型钉到
+ * host-neutral 的 `KernelToolContext`。`TCtx` 逆变，所以装进产品宿主更宽的 ToolContext 时仍然可用。
+ */
 export function defineVelaTool<
   TInput extends Record<string, any>,
   TCtx extends KernelToolContext = KernelToolContext,

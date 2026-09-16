@@ -15,8 +15,13 @@ import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 
 import type { SkillFileRecord, SkillFrontmatter } from '../../types/guidance.js'
+import { normalizeSkillFileId } from '../../utils/guidance/skill-file-paths'
 import { compareStableStrings } from '../../utils/residency/determinism'
 
+/**
+ * 建 `SkillFileStore` 要的外部依赖：技能目录在哪、以及外部 Skill 没声明 spaces 时兜底给哪些空间。
+ * 由宿主在装配期一次性递入，建好之后不再变。
+ */
 interface SkillFileStoreDependencies {
   /** 技能目录解析器由宿主递入；桌面和 headless 宿主可使用各自的数据根。 */
   skillsDir: () => string
@@ -129,7 +134,7 @@ function slugify(name: string): string {
  * （也就不会在用户用版本控制管理技能目录时制造无谓 diff）。
  *
  * ## 两条安全线
- *  - **id 一律过 `normalizeSkillId`（= `basename`）**：id 来自 IPC/模型，不收敛就能拼出
+ *  - **id 一律过 `normalizeSkillFileId`（= `basename`）**：id 来自 IPC/模型，不收敛就能拼出
  *    `../../` 越出技能目录。所有落到路径拼接的 id 都必须先过它。
  *  - **写盘走临时文件 + rename**：`saveContent` 先写 `<path>.tmp-<ts>` 再原子改名，避免并发扫描
  *    读到半写文件（临时后缀不以 `.md` 结尾，因此也不会被 `scanFiles` 捡走）。
@@ -138,7 +143,64 @@ function slugify(name: string): string {
  * 解析/扫描/资源读取的异常一律**降级成"这一项缺席"并留日志**，不向上抛：技能目录是用户可以
  * 随手编辑的普通目录，一个坏文件或一个不可读子目录不配让整条技能链路瘫痪。
  */
-class SkillFileStore {
+
+/**
+ * 文件式技能仓库对外的面：技能目录里的 markdown 就是已安装技能，磁盘是唯一真相，
+ * 这个面上的每个方法都直接读写那个目录，不在内存里另存一份「已安装清单」。
+ *
+ * 宿主装配期建一个、长期持有；实例内只缓存按 `路径 + mtime` 命中的解析结果和变更订阅者。
+ * 平铺 `<id>.md` 与目录式 `<id>/SKILL.md` 两种形态每个入口都认。
+ * 解析、扫描、资源读取出错一律降级成「这一项缺席」并留日志，只有参数明显不合法才抛
+ * `AppError`。实现是 `SkillFileStore`。
+ */
+export interface SkillFileStoreApi {
+  /** 订阅技能集合的变更（写入、删除、启停都会触发），返回退订函数。回调里抛错只记日志，不影响别的订阅者。 */
+  subscribe(listener: () => void): () => void
+  /** 扫一遍技能目录并解析出全部技能记录，按 id 码元序排；解析不了的文件直接缺席，不抛错。 */
+  list(): SkillFileRecord[]
+  /**
+   * 技能集合的内容指纹，给上层判缓存失效用：覆盖文件增删、mtime/size 变化、目录式技能的
+   * 捆绑资源变化，以及启停状态文件。指纹没变就代表技能集合没变。
+   */
+  version(): string
+  /** 这条技能当前启没启用。启停记在独立的状态文件里，不改用户的技能正文。id 空白时按启用算。 */
+  isSkillEnabled(id: string): boolean
+  /** 启用或停用一条技能并落盘、清解析缓存、通知订阅者。状态没变化时什么都不做；id 空白抛 `VALIDATION`。 */
+  setSkillEnabled(id: string, enabled: boolean): void
+  /** 读一条技能的原始文件内容（含 frontmatter），导出用。技能不存在时抛 `VALIDATION`。 */
+  readRaw(id: string): string
+  /** 按 id 取一条解析好的技能记录；两种形态都认，不存在或解析失败返回 null。 */
+  get(id: string): Nullable<SkillFileRecord>
+  /**
+   * 用一段原始 markdown 安装或覆盖一条技能：先写临时文件再原子改名，避免并发扫描读到半截文件。
+   * frontmatter 必须有 name，正文不能为空，spaces 未声明且没有兜底空间时拒绝写入（一律抛 `VALIDATION`）。
+   * 不指定 id 时从 name 派生 slug。写完通知订阅者并返回刚落盘那条的解析结果。
+   */
+  saveContent(content: string, options?: { id?: string }): SkillFileRecord
+  /** 把本地一个 `.md` 文件复制进技能目录（等价于读出内容再 `saveContent`）。非 md 或读不动时抛 `VALIDATION`。 */
+  importFile(sourcePath: string): SkillFileRecord
+  /**
+   * 卸载一条技能 = 删掉它在磁盘上的存在：目录式技能连同捆绑资源整个目录删掉，
+   * 顺手清掉它的解析缓存与启停记录。技能本来就不存在时静默返回。
+   */
+  remove(id: string): void
+  /**
+   * 一次性迁移：把旧配置里的 skill 条目落成文件，返回真正写下去的条数。
+   * 靠技能目录里的 marker 文件防重复，跑过一次之后恒返回 0；已存在同名文件的条目跳过（用户文件优先）。
+   * `spaces` 为空时抛 `VALIDATION`；单条迁移失败只记日志并继续。
+   */
+  migrateLegacyEntries(
+    entries: ReadonlyArray<{ label?: unknown; description?: unknown; markdown?: unknown }>,
+    spaces: readonly string[]
+  ): number
+  /**
+   * 读目录式技能的捆绑资源正文。只认这条技能已枚举过的 `resourcePaths`，别的路径一律返回 null
+   * （天然防目录穿越）；读不动也返回 null 并留日志。
+   */
+  readSkillResource(id: string, resourcePath: string): Nullable<string>
+}
+
+class SkillFileStore implements SkillFileStoreApi {
   private readonly log = logRuntime.tag('SkillFileStore')
   private readonly skillsDir: () => string
   private readonly defaultSpaces: readonly string[]
@@ -194,13 +256,13 @@ class SkillFileStore {
   }
 
   public isSkillEnabled(id: string): boolean {
-    const normalizedId = this.normalizeSkillId(id)
+    const normalizedId = normalizeSkillFileId(id)
     if (!normalizedId) return true
     return !this.readDisabledSkillIds().has(normalizedId)
   }
 
   public setSkillEnabled(id: string, enabled: boolean): void {
-    const normalizedId = this.normalizeSkillId(id)
+    const normalizedId = normalizeSkillFileId(id)
     if (!normalizedId) {
       throw new AppError('VALIDATION', '缺少技能 id。')
     }
@@ -239,18 +301,18 @@ class SkillFileStore {
     const { data, body } = parseFrontmatter(content)
     const name = data.name?.trim()
     if (!name) {
-      throw new AppError('VALIDATION', 'skill-frontmatter-name-missing')
+      throw new AppError('VALIDATION', 'skill-frontmatter-name-missing：技能 frontmatter 里没有 name，它既是显示名也是缺省 id 的来源，必须写。')
     }
     if (isBlank(body)) {
-      throw new AppError('VALIDATION', 'skill-body-empty')
+      throw new AppError('VALIDATION', 'skill-body-empty：技能正文是空的，frontmatter 之后必须写内容，只有头部的文件装了也没用。')
     }
     if (isEmpty(parseFrontmatterList(data.spaces)) && isEmpty(this.defaultSpaces)) {
-      throw new AppError('VALIDATION', 'skill-frontmatter-spaces-missing')
+      throw new AppError('VALIDATION', 'skill-frontmatter-spaces-missing：技能没声明生效空间，frontmatter 的 spaces 为空且宿主也没给缺省空间，这样它在任何空间里都不会被加载。')
     }
 
     const id = options.id?.trim() || slugify(name)
     if (!id) {
-      throw new AppError('VALIDATION', 'skill-id-invalid')
+      throw new AppError('VALIDATION', 'skill-id-invalid：从 name 派生出来的 slug 是空的，请显式传 id，或把 name 改成含字母数字的名字。')
     }
 
     const filePath = this.filePathOf(id)
@@ -270,14 +332,14 @@ class SkillFileStore {
   /** 导入本地 md 文件（复制进 skills 目录）。 */
   public importFile(sourcePath: string): SkillFileRecord {
     if (extname(sourcePath).toLowerCase() !== '.md') {
-      throw new AppError('VALIDATION', 'skill-import-md-only')
+      throw new AppError('VALIDATION', 'skill-import-md-only：只能导入 .md 技能文件，所选文件的扩展名不是 .md。')
     }
 
     let content: string
     try {
       content = readFileSync(sourcePath, 'utf8')
     } catch {
-      throw new AppError('VALIDATION', 'skill-import-unreadable')
+      throw new AppError('VALIDATION', 'skill-import-unreadable：技能文件读不出来，确认路径还在、且当前用户有读权限。')
     }
     return this.saveContent(content)
   }
@@ -300,7 +362,7 @@ class SkillFileStore {
     }
     this.parseCache.delete(filePath)
     const disabledSkillIds = this.readDisabledSkillIds()
-    if (disabledSkillIds.delete(this.normalizeSkillId(id))) {
+    if (disabledSkillIds.delete(normalizeSkillFileId(id))) {
       this.writeDisabledSkillIds(disabledSkillIds)
     }
     this.notify()
@@ -315,7 +377,7 @@ class SkillFileStore {
     spaces: readonly string[]
   ): number {
     if (isEmpty(spaces)) {
-      throw new AppError('VALIDATION', 'legacy-skill-spaces-missing')
+      throw new AppError('VALIDATION', 'legacy-skill-spaces-missing：迁移旧配置式技能必须指定生效空间，spaces 为空迁出来的技能在任何空间都用不上，本次迁移已中止。')
     }
     const markerPath = join(this.dir(), '.migrated-config-skills')
     if (existsSync(markerPath)) return 0
@@ -359,7 +421,7 @@ class SkillFileStore {
 
   private filePathOf(id: string): string {
     // 只允许纯 slug，防目录穿越。
-    const safe = this.normalizeSkillId(id)
+    const safe = normalizeSkillFileId(id)
     return join(this.dir(), `${safe}.md`)
   }
 
@@ -374,16 +436,12 @@ class SkillFileStore {
     const flatPath = this.filePathOf(id)
     if (existsSync(flatPath)) return flatPath
 
-    const dirStylePath = join(this.dir(), this.normalizeSkillId(id), SkillDirEntryFileName)
+    const dirStylePath = join(this.dir(), normalizeSkillFileId(id), SkillDirEntryFileName)
     return existsSync(dirStylePath) ? dirStylePath : null
   }
 
   private disabledStatePath(): string {
     return join(this.dir(), DisabledSkillStateFileName)
-  }
-
-  private normalizeSkillId(id: string): string {
-    return basename(id.trim())
   }
 
   private readDisabledSkillIds(): Set<string> {
@@ -396,7 +454,7 @@ class SkillFileStore {
       return new Set(
         parsed
           .filter((entry): entry is string => isString(entry) && !isBlank(entry.trim()))
-          .map((entry) => this.normalizeSkillId(entry))
+          .map((entry) => normalizeSkillFileId(entry))
           .filter((entry) => !isBlank(entry))
       )
     } catch (error) {

@@ -8,7 +8,7 @@ export class KernelContextEpochStaleError extends Error {
     public readonly currentRevision: number
   ) {
     super(
-      `Stale provider request context epoch for ${claim.key}: claim revision ${claim.revision}, current revision ${currentRevision}.`
+      `provider 请求携带的上下文纪元已过期：${claim.key} 声称的修订号是 ${claim.revision}，但当前修订号已经推进到 ${currentRevision}。说明上下文在本次请求组装期间被改写，请用最新上下文重新组装后再发。`
     )
     this.name = 'KernelContextEpochStaleError'
   }

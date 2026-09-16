@@ -13,7 +13,17 @@ const log = Log.tag('AgentCapabilityEventPublisher')
  * 所有通道共用同一条 Promise 尾链，因而保持跨通道顺序。单次投递失败只记入诊断，不会
  * 截断已接受的后续事件或产生未处理拒绝；关闭后不再接收迟到事件，并等待现有队列排空。
  */
-export class AgentCapabilityEventPublisher {
+export interface AgentCapabilityEventPublisherApi {
+  /**
+   * 接一条事件进队：返回 `true` 表示已接受并排进尾链（**不代表已投递成功**），`false` 表示已经关闭、这条被丢弃。
+   * 投递失败只走诊断回调与日志，不会中断尾链，也不会向调用方抛错。
+   */
+  enqueue(channel: AgentCapabilityExecutionChannel, payload: unknown): boolean
+  /** 关闭准入并等待队列排空；之后的 `enqueue` 一律返回 false。重复调用返回同一个 Promise，多处收尾可以各等各的。 */
+  closeAndDrain(): Promise<void>
+}
+
+export class AgentCapabilityEventPublisher implements AgentCapabilityEventPublisherApi {
   private tail: Promise<void> = Promise.resolve()
   private accepting = true
   private drainPromise?: Promise<void>

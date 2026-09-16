@@ -12,12 +12,24 @@ import { SessionEntrySchema } from '../../utils/wire/session'
 import { SerialWriteQueue } from './SerialWriteQueue'
 
 /**
- * 一个打开的会话账本 handle。
+ * 一个打开的会话账本 handle 的**完整**面：对外契约 `SessionLedgerApi` 的全部动词，外加只给 `SessionStore`
+ * 用的开档步骤。
  *
  * 「当前位置 = 叶子」：内存态 `currentLeaf` 指向最近追加或 branch 选中的 entry；append 以它为父并原子推进，
  * branch 把它移到既有 entry 上（后续 append 就此分叉），fork 把当前谱系复制成新会话。
+ * 拿到本 handle 的调用方只该用到 `SessionLedgerApi` 那一面；`openAppendHandle` 属于装配期，工厂调一次就完了。
  */
-export class SessionLedger {
+export interface SessionLedgerHandleApi extends SessionLedgerApi {
+  /**
+   * 开档：以 'a' 模式打开账本文件（写恒追加至末尾），拿到写句柄。
+   *
+   * 由 `SessionStore` 在把 handle 交出去之前调一次；失败时工厂负责撤销该 path 的「已开档」登记，
+   * 本 handle 作废。调用它之前 append/branch/fork 会因为没有句柄而抛错。
+   */
+  openAppendHandle(): Promise<void>
+}
+
+export class SessionLedger implements SessionLedgerHandleApi {
   private readonly writeQueue = new SerialWriteQueue()
   private readonly entries: SessionEntry[]
   private readonly warningsList: string[]
@@ -25,17 +37,14 @@ export class SessionLedger {
   private currentLeaf: Nullable<string>
   private closed = false
 
-  private constructor(private readonly ctx: SessionLedgerContext) {
+  constructor(private readonly ctx: SessionLedgerContext) {
     this.entries = ctx.entries
     this.warningsList = ctx.warnings
     this.currentLeaf = resolveCurrentLeafId(ctx.entries)
   }
 
-  /** 引擎内部工厂：构建 handle 并打开 append FileHandle（'a' 模式，写恒追加至末尾）。 */
-  public static async openHandle(ctx: SessionLedgerContext): Promise<SessionLedger> {
-    const ledger = new SessionLedger(ctx)
-    ledger.appendHandle = await open(ctx.path, 'a')
-    return ledger
+  public async openAppendHandle(): Promise<void> {
+    this.appendHandle = await open(this.ctx.path, 'a')
   }
 
   get sessionId(): string {
@@ -78,7 +87,7 @@ export class SessionLedger {
       if (!this.entries.some((entry) => entry.id === entryId)) {
         throw new AppError(
           'NOT_FOUND',
-          `cannot branch: entry ${entryId} not found in session ${this.ctx.sessionId}`,
+          `无法分叉：条目 ${entryId} 不在会话 ${this.ctx.sessionId} 的账本里。分叉点必须是这个会话已经提交过的条目 id。`,
           undefined,
           { sessionId: this.ctx.sessionId, entryId }
         )
@@ -139,12 +148,12 @@ export class SessionLedger {
   }
 
   private async writeLine(entry: SessionEntry): Promise<void> {
-    if (!this.appendHandle) throw new AppError('INVARIANT', `session ledger ${this.ctx.sessionId} append handle is closed`)
+    if (!this.appendHandle) throw new AppError('INVARIANT', `会话账本 ${this.ctx.sessionId} 的追加句柄已经关闭，这条记录落不了盘：账本关闭之后不许再写。`)
     await this.appendHandle.write(serializeLedgerLine(entry))
     await this.appendHandle.datasync() // 崩溃安全：每条落盘后 fsync 数据页
   }
 
   private assertOpen(): void {
-    if (this.closed) throw new AppError('INVARIANT', `session ledger ${this.ctx.sessionId} is closed`)
+    if (this.closed) throw new AppError('INVARIANT', `会话账本 ${this.ctx.sessionId} 已关闭，不再接受追加或分叉：需要继续写请重新打开这个会话的账本。`)
   }
 }

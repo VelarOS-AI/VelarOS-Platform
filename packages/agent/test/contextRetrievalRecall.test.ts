@@ -16,8 +16,7 @@ import { describe, test } from 'bun:test'
 
 import type { RetrievalPayloadStorePort, RetrievalStateStorePort } from '../src/contract/requires.js'
 import { InMemoryContextPayloadStore } from '../src/impl/context/InMemoryContextPayloadStore'
-import { ProviderRequestCompiler } from '../src/impl/context/ProviderRequestCompiler'
-import { compileProviderSendRequest } from '../src/impl/context/ProviderSendRequest'
+import { compileProviderSendRequest, ProviderRequestCompiler } from '../src/impl/context/ProviderRequestCompiler'
 import { ContextGovernanceSessionRegistry } from '../src/impl/residency/ContextGovernanceSessionRegistry'
 import { ChatContextRetrievalService } from '../src/impl/retrieval/ChatContextRetrievalService'
 import type { ChatContextRetrievalIndexSourceFingerprint, ChatSessionPayloadSnapshot, ChatSessionToolResultPayload } from '../src/types/agent.js'
@@ -606,7 +605,7 @@ describe('legacy archived reference envelopes', () => {
     const payloadStore = createPayloadStore({ toolResults: {
       [ref]: { serializedResult: JSON.stringify({ __contextRef: 'tool-output', ref }), displayResult: null, payloadRef: ref },
     } })
-    await assert.rejects(createService({ payloadStore }).retrieveContextPayload({ sessionId: SessionId, handleId: ref }), /cycle/u)
+    await assert.rejects(createService({ payloadStore }).retrieveContextPayload({ sessionId: SessionId, handleId: ref }), /成环/u)
   })
 
   test('a missing original is not reported as a successful recall of its wrapper', async () => {

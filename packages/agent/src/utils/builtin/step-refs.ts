@@ -55,11 +55,20 @@ function findStepIndex(steps: readonly UserStep[], stepRef: StepRef): number {
   return containing.length === 1 ? containing[0]!.index : -1
 }
 
+/**
+ * 把模型给的 1-based 序号换成数组下标：必须是整数且落在 1..steps.length 内，否则返回 -1。
+ * 越界不夹取——夹到首尾会把「引用错了」变成「静默收尾了另一步」，只能判不匹配让上层报可操作错误。
+ */
 function validStepIndex(steps: readonly UserStep[], oneBased: number): number {
   if (!Number.isInteger(oneBased) || oneBased < 1 || oneBased > steps.length) return -1
   return oneBased - 1
 }
 
+/**
+ * 归一步骤标题以便宽容匹配：NFKC 正规化（全角字母数字折成半角）→ trim → 连续空白折成一个空格 →
+ * 全角冒号 `：` 换半角 `:` → 转小写。缺席返回空串。
+ * 这几刀专治中英混排标题：模型复述标题时常在冒号、空格、全半角上与原文差一点。
+ */
 function normalizeStepText(text: LooseOptional<string>): string {
   return (
     text
@@ -71,6 +80,11 @@ function normalizeStepText(text: LooseOptional<string>): string {
   )
 }
 
+/**
+ * 判断一个步骤状态能否被 complete_step 收尾：`pending`、`in_progress`、`completed` 三种为真。
+ * `completed` 也算真是刻意的——重复收尾同一步是幂等 no-op，不该报错。
+ * `skipped` / `failed` 为假，它们要么已由本引擎算作已解决、要么得先在 steps 里改状态。
+ */
 function isCompletableStepStatus(status: UserPlanStatus): boolean {
   return status === 'pending' || status === 'in_progress' || status === 'completed'
 }
@@ -83,7 +97,7 @@ function completeSteps<T extends UserStep>(
 ): StepCompletionResult<T> {
   const refs: readonly StepRef[] = isArray(stepRefs) ? (stepRefs as readonly StepRef[]) : [stepRefs as StepRef]
   if (isEmpty(refs)) {
-    throw new AppError('VALIDATION', 'complete_step requires at least one plan step reference.')
+    throw new AppError('VALIDATION', 'complete_step 至少要给一个计划步骤引用（步骤 id 或序号），这次一个都没传。')
   }
 
   let nextSteps = steps.map((step) => ({ ...step }))
@@ -106,6 +120,16 @@ function completeSteps<T extends UserStep>(
   }
 }
 
+/**
+ * 收尾一个被引用的步骤，返回全新的步骤数组（不改入参）。三条分支：
+ * ① 引用匹配不上 → 抛 `VALIDATION`，错误里附**当前全部步骤的可引用清单**（序号+标题+状态），
+ *    让模型照着改而不是自造 id；步骤列表为空时抛 options 里那句 `emptyMessage`。
+ * ② 目标步骤已处在本引擎语义下的「已解决」态（plan 的 failed、goal 的 skipped 等，`completed` 除外）
+ *    → 幂等 no-op，保留原状态不报错——steps 与 complete_step 同轮提交时这是常态。
+ * ③ 状态不可收尾（如 goals 的 failed）→ 抛 `VALIDATION` 并给出路：先在 steps 里改成 completed/skipped。
+ * 正常收尾把该步置 `completed`。以上三种落地路径（②与正常收尾）都会顺带做一件事：
+ * 当前**没有任何 in_progress** 时自动晋升下一个 pending 步为 in_progress，模型不必额外发一轮。
+ */
 function completeSingleStep<T extends UserStep>(
   steps: readonly T[],
   stepRef: StepRef,
@@ -182,6 +206,11 @@ function completeSingleStep<T extends UserStep>(
   }
 }
 
+/**
+ * 挑出自动晋升为 in_progress 的下一步：优先取**刚收尾那步之后**的第一个 pending。
+ * 后面没有了才看 `promoteFallbackAnywhere`——为 true 时回头找全表第一个 pending（goals 用），
+ * 为 false 就返回 -1、不晋升（plans 用，计划步骤有先后，往回跳会打乱模型自己的顺序）。
+ */
 function findPromotableStepIndex(
   steps: readonly UserStep[],
   completedIndex: number,
@@ -195,6 +224,10 @@ function findPromotableStepIndex(
   return steps.findIndex((step) => step.status === 'pending')
 }
 
+/**
+ * 判断是否每一步都落到了本引擎的「已解决」状态集（`options.resolvedStatuses`，plan 含 failed、
+ * goal 含 skipped）。空步骤列表按 `every` 语义为真。为真意味着整个计划/目标可以收口了。
+ */
 function allResolved(steps: readonly UserStep[], options: StepEngineOptions): boolean {
   return steps.every((step) => options.resolvedStatuses.includes(step.status))
 }

@@ -9,23 +9,20 @@ import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js'
 import { getDefaultEnvironment, StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js'
-import { ErrorCode } from '@modelcontextprotocol/sdk/types.js'
 
 import {
   isArray,
-  isBoolean,
   isPresent,
   isRecord,
-  isString,
   Log,
   toNullable,
   toOptional,
 } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
-import { asRecord, readString } from '@velaros-ai/core/utils/unknownJsonRecord'
 
 import type { McpAuthorizationProvider } from '../../contract/requires.js'
 import type { McpConnectionSpec, McpPendingAuthorization, McpPendingConnection,McpRawCallResult, McpRemoteTransport, McpResourceContent, McpResourceDescriptor, McpToolDescriptor, McpTransportKind } from '../../types/connectors.js'
+import { isMcpTimeoutError, parseMcpToolDescriptor } from '../../utils/connectors/mcp-protocol'
 import { McpAuthorizationRequiredError } from '../errors/McpAuthorizationRequiredError'
 
 /** 连接超时（ms）——server 起不来时不无限挂起。 */
@@ -36,8 +33,36 @@ export const McpCallTimeoutMs = 120_000
 const log = Log.tag('McpClientConnection')
 
 
+/**
+ * 单个外部 MCP 服务器的进程外连接：起 transport、initialize、枚举工具和资源、发调用、收尾。
+ *
+ * 实现是 `McpClientConnection`，宿主给每个已配置的 server 建一个，连接状态只在这个实例里；
+ * server 配置与凭据存储、OAuth 的用户交互与回调、自动批准策略和产品状态文案都不在这层。
+ * 失败一律是 `AppError`：没连上是 `UNAVAILABLE`，调用超时是 `TIMEOUT`，需要 OAuth 是 `McpAuthorizationRequiredError`。
+ */
+export interface McpClientConnectionApi {
+  /** 现在有没有一条 initialize 完成、可以发请求的连接；连接被对端关掉后会自动变回 false。 */
+  readonly isConnected: boolean
+  /** 是不是卡在 OAuth 上：连接因 401 挂起、正等宿主把用户换来的 code 交回来。true 时 `connect()` 只会重新抛授权错误，得先走 `completeAuthorization`。 */
+  readonly hasPendingAuthorization: boolean
+  /** 连上并 initialize：已连着就直接返回，正在连就并到同一个 Promise 上（不会重复起进程）。`transport: 'auto'` 时先试 Streamable HTTP，非鉴权失败才回退 SSE。需要 OAuth 时抛 `McpAuthorizationRequiredError`，全部 transport 都失败时抛 `UNAVAILABLE` 并把每种的原因拼进文案。 */
+  connect(): Promise<void>
+  /** 宿主拿到用户授权的 code 之后调这里推进 OAuth：交给挂起的 transport 去换 token，然后释放这条挑战连接（换完还要再 `connect()` 一次）。当前没有挂起的授权时抛 `INVALID_STATE`。 */
+  completeAuthorization(code: string): Promise<void>
+  /** 列出这个 server 暴露的全部工具，自动跟随 cursor 翻完所有页；缺 `name` 的条目直接跳过。server 重复回同一个 cursor（会翻不完）时抛 `EXECUTION`。没连接时抛 `UNAVAILABLE`。 */
+  listTools(): Promise<McpToolDescriptor[]>
+  /** 列出这个 server 暴露的全部资源，同样跟随 cursor 翻完所有页；`name` 缺失时退回用 uri 当名字。没连接时抛 `UNAVAILABLE`。 */
+  listResources(): Promise<McpResourceDescriptor[]>
+  /** 读一个资源，把 SDK 的 text/blob 联合收敛成固定形状（两个字段都在，没有的那个是 null）；超过 `callTimeoutMs` 或 `abortSignal` 取消时抛错。 */
+  readResource(uri: string, abortSignal?: AbortSignal): Promise<McpResourceContent[]>
+  /** 调一个工具，原样把 server 的结果记录交回（不是记录就给空对象），解析和 isError 判定在 `translateMcpCallResult` 那层做。有进度上报会重置超时；真超时抛 `TIMEOUT` 并带上服务器名、工具名和毫秒数。 */
+  callTool(toolName: string, args: Record<string, unknown>, abortSignal?: AbortSignal): Promise<McpRawCallResult>
+  /** 关连接：中断还在进行的连接尝试、关掉 client 与 transport、丢掉挂起的授权。关闭过程中的错误一律吞掉（释放优先），可重复调，也可以关完再 `connect()`。 */
+  close(): Promise<void>
+}
+
 /** 单个 MCP 服务器的 host 无关协议连接。 */
-export class McpClientConnection {
+export class McpClientConnection implements McpClientConnectionApi {
   private client: Nullable<Client> = null
   private transport: Nullable<Transport> = null
   private pendingAuthorization: Nullable<McpPendingAuthorization> = null
@@ -106,7 +131,7 @@ export class McpClientConnection {
           signal: pending.controller.signal,
         })
         pending.controller.signal.throwIfAborted()
-        if (!client.transport) throw new AppError('UNAVAILABLE', 'MCP connection closed during startup.')
+        if (!client.transport) throw new AppError('UNAVAILABLE', 'MCP 连接在握手完成前就断了：transport 已关闭，这次连接不算建立成功。')
         this.client = client
         this.transport = transport
         return
@@ -134,7 +159,7 @@ export class McpClientConnection {
         await this.closeClientQuietly(client)
         await this.closeTransportQuietly(transport)
         errors.push(`${transportKind}: ${AppError.getMessage(error)}`)
-        if (this.isMcpTimeoutError(error)) {
+        if (isMcpTimeoutError(error)) {
           errors[errors.length - 1] = `${transportKind}: 连接超时（${this.options.connectTimeoutMs ?? McpConnectTimeoutMs}ms）`
         }
       }
@@ -152,7 +177,7 @@ export class McpClientConnection {
    */
   public async completeAuthorization(code: string): Promise<void> {
     const pending = this.pendingAuthorization
-    if (!pending) throw new AppError('INVALID_STATE', 'No MCP OAuth authorization is pending.')
+    if (!pending) throw new AppError('INVALID_STATE', '当前没有待完成的 MCP OAuth 授权：它可能已经完成或已被取消，重新发起连接拿一个新的授权链接。')
     this.pendingAuthorization = null
     try {
       await pending.transport.finishAuth(code)
@@ -173,7 +198,7 @@ export class McpClientConnection {
         : await client.listTools()
       const rawTools = isArray(response.tools) ? response.tools : []
       for (const raw of rawTools) {
-        const descriptor = this.parseToolDescriptor(raw)
+        const descriptor = parseMcpToolDescriptor(raw)
         if (descriptor) descriptors.push(descriptor)
       }
       cursor = this.advanceListCursor(response.nextCursor, seenCursors)
@@ -210,7 +235,7 @@ export class McpClientConnection {
   ): Nullable<string> {
     if (!isPresent(cursor)) return null
     if (seen.has(cursor)) {
-      throw new AppError('EXECUTION', `Repeated MCP pagination cursor from server ${this.serverName}.`)
+      throw new AppError('EXECUTION', `MCP 服务器「${this.serverName}」重复返回同一个分页 cursor：为避免无限翻页已中止这次枚举，拿到的结果可能不完整。`)
     }
     seen.add(cursor)
     return cursor
@@ -255,7 +280,7 @@ export class McpClientConnection {
       )
       return isRecord(result) ? result : {}
     } catch (error) {
-      if (this.isMcpTimeoutError(error)) {
+      if (isMcpTimeoutError(error)) {
         throw new AppError(
           'TIMEOUT',
           `MCP 工具调用超时：${this.serverName}/${toolName}（${this.options.callTimeoutMs ?? McpCallTimeoutMs}ms）。`,
@@ -276,7 +301,7 @@ export class McpClientConnection {
     this.client = null
     this.transport = null
     this.pendingAuthorization = null
-    pendingConnection?.controller.abort(new AppError('ABORTED', 'MCP connection closed.'))
+    pendingConnection?.controller.abort(new AppError('ABORTED', 'MCP 连接已关闭：正在进行的连接请求被主动中止。'))
     const closing = this.closeOwnedConnections(client, transport, pendingAuthorization, pendingConnection)
     this.closing = closing
     try {
@@ -334,36 +359,6 @@ export class McpClientConnection {
       throw new AppError('UNAVAILABLE', `MCP 服务器「${this.serverName}」尚未连接。`)
     }
     return this.client
-  }
-
-  private parseToolDescriptor(raw: unknown): Nullable<McpToolDescriptor> {
-    const record = asRecord(raw) ?? {}
-    const name = readString(record, 'name')
-    if (!name) return null
-
-    const inputSchema = isRecord(record.inputSchema) ? record.inputSchema : { type: 'object' }
-    const description = readString(record, 'description') || readString(record, 'title')
-    const annotations = isRecord(record.annotations) ? record.annotations : {}
-
-    return {
-      name,
-      description: description || null,
-      inputSchema,
-      annotations: {
-        title: readString(annotations, 'title') || null,
-        readOnlyHint: isBoolean(annotations.readOnlyHint) ? annotations.readOnlyHint : false,
-        destructiveHint: isBoolean(annotations.destructiveHint) ? annotations.destructiveHint : false,
-        idempotentHint: isBoolean(annotations.idempotentHint) ? annotations.idempotentHint : false,
-      },
-    }
-  }
-
-  private isMcpTimeoutError(error: unknown): boolean {
-    const record = isRecord(error) ? error : {}
-    return (
-      record.code === ErrorCode.RequestTimeout ||
-      (isString(record.name) && (record.name === 'TimeoutError' || record.name === 'AbortError'))
-    )
   }
 
   private async closeClientQuietly(client: Client): Promise<void> {

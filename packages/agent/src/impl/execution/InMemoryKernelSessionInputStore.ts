@@ -5,7 +5,18 @@ import type { KernelSessionInputStore } from '../../contract/requires.js'
 import type { AdmitKernelSessionInput, KernelAdmittedInput, KernelSessionInputSnapshot, PromoteKernelInputOptions } from '../../types/execution.js'
 import { assertInputContent, cloneInput, cloneSnapshot, isSameAdmission, sortInputs } from '../../utils/execution/session-lane'
 
-export class InMemoryKernelSessionInputStore implements KernelSessionInputStore {
+/**
+ * 内存版会话输入账本的对外面：在 `KernelSessionInputStore` 之上多一个 `snapshot`。
+ *
+ * 落盘版把它当内核用（每次写完取一份快照交给持久化层），所以快照必须留在接口里；
+ * 而快照不属于通用的输入账本合同——别的实现没有义务提供它，因此只写在这一层。
+ */
+export interface InMemoryKernelSessionInputStoreApi extends KernelSessionInputStore {
+  /** 导出当前全量输入的深拷贝，按 sessionId、seq 稳定排序。给落盘版在每次写入后取一份用；调用方拿到的是副本，改它不影响账本。 */
+  snapshot(): KernelSessionInputSnapshot
+}
+
+export class InMemoryKernelSessionInputStore implements InMemoryKernelSessionInputStoreApi {
   private readonly inputsBySession = new Map<string, KernelAdmittedInput[]>()
   private readonly seqBySession = new Map<string, number>()
 
@@ -16,7 +27,7 @@ export class InMemoryKernelSessionInputStore implements KernelSessionInputStore 
       if (seenIds.has(input.id)) {
         throw new AppError(
           'VALIDATION',
-          `Kernel session input "${input.id}" is duplicated in snapshot`,
+          `快照里的会话输入 "${input.id}" 出现了两次：输入 id 在一份快照内必须唯一，重复会让重放出的输入序列与真实历史对不上。`,
           undefined,
           { inputId: input.id }
         )
@@ -44,14 +55,14 @@ export class InMemoryKernelSessionInputStore implements KernelSessionInputStore 
       const existing = this.findInputById(input.id)
       if (existing) {
         if (isSameAdmission(existing, input, role, delivery)) return cloneInput(existing)
-        throw new AppError('INVARIANT', `Kernel session input "${input.id}" is already admitted`)
+        throw new AppError('INVARIANT', `会话输入 "${input.id}" 已经被准入过，且这次的内容与上次不一致：同一个输入 id 只能准入一次，要改内容请换一个 id。`)
       }
     }
 
     const seq = (this.seqBySession.get(input.sessionId) ?? 0) + 1
     const id = input.id ?? `${input.sessionId}:input:${seq}`
     if (this.findInputById(id)) {
-      throw new AppError('INVARIANT', `Kernel session input "${id}" is already admitted`)
+      throw new AppError('INVARIANT', `自动分配出的会话输入 id "${id}" 已经被占用：序号分配与既有输入撞车了，这是实现缺陷，不是用户操作错误。`)
     }
     const sessionInputs = this.inputsBySession.get(input.sessionId) ?? []
 

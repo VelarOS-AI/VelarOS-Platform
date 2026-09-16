@@ -5,7 +5,62 @@ import type { CapabilitySpanInput, LedgerTurnSpanScopeDeps, ModelSpanHandle, Spa
 import { type ExecutionSpanRecorder } from './ExecutionSpanRecorder'
 import { runIsolatedSpanOp } from './LedgerExecutionSpanScopeFactory'
 
-export class LedgerTurnSpanScope implements TurnSpanScope {
+/**
+ * 一轮 provider 生成（turn）的 span 作用域：本轮的 model / tool / capability / policy span 都从这里开。
+ *
+ * 由 run scope 的 `beginTurn` 造，跟着这一轮活；turn span 开不出来时整体降级 no-op（构造时传进来的
+ * turnSpan 为 null，所有动词直接返回）。动词内失败一律吞成 warn，绝不冒泡进执行主路。
+ */
+export interface LedgerTurnSpanScopeApi extends TurnSpanScope {
+  /**
+   * 开本轮 provider 请求的 model span；返回的 handle 在拿到回包（或失败）时 `end`，token 用量与终止原因那时补。
+   *
+   * 观测停用或开失败时返回 null，调用方跳过收敛即可。
+   */
+  beginModelSpan(input: {
+    provider: string
+    model: string
+    requestFingerprint: Nullable<string>
+  }): Nullable<ModelSpanHandle>
+  /**
+   * 开一条挂在本轮下的 tool span；ToolExecutor 只依赖这一个动词，不认 runId / parentSpanId。
+   *
+   * 返回的 handle 在工具执行结束时 `end`（成功或带 errorCode 的失败）；开不出来时返回 null。
+   */
+  beginToolSpan(input: {
+    toolCallId: string
+    toolName: string
+    toolCategoryId: Nullable<string>
+    toolEffectKind: Nullable<string>
+  }): Nullable<ToolSpanHandle>
+  /** 记一条 policy 决策的点事件 span（起止同刻）：谁判的、判成什么、为什么，供事后复盘一次执行被哪些策略改过道。 */
+  recordPolicySpan(input: {
+    name: string
+    source: string
+    action: string
+    reason: string
+  }): void
+  /** 记一条宿主能力调用的点事件 span；`operationId` 与 `metadata` 由宿主定义，观测侧只原样落盘不解释。 */
+  recordCapabilitySpan(input: CapabilitySpanInput): void
+  /**
+   * 把本轮的**重内容**（系统提示词全文 / promptSegments / capabilityContextAudit / provider 请求快照）
+   * 写进 prompt 审计侧信道，靠 `requestFingerprint` 关联回本轮 model span。
+   *
+   * 未装配侧信道路径时直接 no-op（不落重内容）；**绝不写进会话账本**。
+   */
+  recordPromptAudit(input: {
+    requestFingerprint: Nullable<string>
+    systemPrompt: string
+    promptSegments: readonly unknown[]
+    skippedPromptSegments: readonly unknown[]
+    capabilityContextAudit: readonly unknown[]
+    providerRequest: Nullable<ProviderRequestSnapshot>
+  }): void
+  /** 收敛 turn span：本轮收尾时按最终状态调一次，本 scope 之后作废。 */
+  end(outcome: { status: ExecutionSpanStatus }): void
+}
+
+export class LedgerTurnSpanScope implements LedgerTurnSpanScopeApi {
   constructor(
     private readonly recorder: ExecutionSpanRecorder,
     private readonly run: { runId: string; sessionId: string },

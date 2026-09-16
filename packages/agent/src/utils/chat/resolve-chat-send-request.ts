@@ -16,6 +16,11 @@ import {
 
 const DefaultRunProfileSelectionId: RunProfileSelectionId = 'auto'
 
+/**
+ * 取这次 `chat:send` 的作用域 id：请求里给了非空串就去掉首尾空白用它，否则回落 `'default'`。
+ * 空白与缺席同等对待（都回落），不抛错——作用域本就是宿主可省的字段，缺席等于"用默认空间"，不是请求非法。
+ * 内核不解释这个串的含义，只负责把它原样传下去。
+ */
 function resolveRequestScope(request: ChatSendRequest): CapabilityScopeId {
   return isNonBlankString(request.scope) ? request.scope.trim() : 'default'
 }

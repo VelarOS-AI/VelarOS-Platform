@@ -14,8 +14,23 @@ import type { ContextMigrationEventSink } from '../../contract/requires.js'
 import type { ContextFaultEvent,ContextResidencyMigrationEvent } from '../../types/residency.js'
 import { stableStringify } from '../../utils/residency/determinism'
 
+/**
+ * 内存版的迁移事件汇：`ContextMigrationEventSink` 端口的全部方法，外加三个把事件读回来的口子。
+ *
+ * 实现是 `InMemoryContextMigrationEventSink`，测试、离线重放和 headless 实验各自新建一个；事件只堆在数组里，
+ * 不落盘、不设上限，跑久了会一直涨——所以它只用于这三个短生命周期场景，产线那条是 `JsonlContextMigrationEventSink`。
+ */
+export interface InMemoryContextMigrationEventSinkApi extends ContextMigrationEventSink {
+  /** 按记录顺序取回攒下的全部迁移事件；返回的是内部数组本身的只读视图，别存着它跨 `clear` 用。 */
+  listMigrations(): readonly ContextResidencyMigrationEvent[]
+  /** 按记录顺序取回攒下的全部 fault 事件（召回命中了非 INLINE 的记录），断言召回口径和调策略分数时读它。 */
+  listFaults(): readonly ContextFaultEvent[]
+  /** 两条队列都清空，实例可以接着用；用例之间复用同一个汇时靠它隔离。 */
+  clear(): void
+}
+
 /** 内存汇：测试、离线重放与 headless 实验用。 */
-export class InMemoryContextMigrationEventSink implements ContextMigrationEventSink {
+export class InMemoryContextMigrationEventSink implements InMemoryContextMigrationEventSinkApi {
   private readonly migrations: ContextResidencyMigrationEvent[] = []
   private readonly faults: ContextFaultEvent[] = []
 

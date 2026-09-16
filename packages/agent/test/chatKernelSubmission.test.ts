@@ -80,8 +80,8 @@ describe('kernel chat submission receipts', () => {
     const receipt = bridge.submit(null, request('cancelled-context'), () => { consumed = true })
     await bridge.cancel('session')
     pending.resolve()
-    await assert.rejects(receipt.accepted, /cancelled/u)
-    await assert.rejects(receipt.completed, /cancelled/u)
+    await assert.rejects(receipt.accepted, /取消/u)
+    await assert.rejects(receipt.completed, /取消/u)
     await Promise.resolve()
     assert.equal(consumed, false)
   })
@@ -110,9 +110,9 @@ describe('kernel chat submission receipts', () => {
     await second.accepted
     try {
       await bridge.cancel('session')
-      await assert.rejects(first.accepted, /cancelled/u)
-      await assert.rejects(first.completed, /cancelled/u)
-      await assert.rejects(second.completed, /cancelled/u)
+      await assert.rejects(first.accepted, /取消/u)
+      await assert.rejects(first.completed, /取消/u)
+      await assert.rejects(second.completed, /取消/u)
       assert.equal(consumed, 1)
     } finally {
       releaseFirst.resolve()
@@ -212,7 +212,7 @@ describe('kernel chat submission receipts', () => {
     await queued.accepted
     await bridge.cancel('session')
     await first.completed
-    await assert.rejects(queued.completed, /cancelled/u)
+    await assert.rejects(queued.completed, /取消/u)
     assert.deepEqual(runs, ['active'])
   })
 
@@ -233,7 +233,7 @@ describe('kernel chat submission receipts', () => {
     cleanup.resolve()
     const receipt = await cancelling
     await first.completed
-    await assert.rejects(pending.completed, /cancelled/u)
+    await assert.rejects(pending.completed, /取消/u)
     assert.deepEqual(receipt.retainedInputIds, ['retained'])
   })
 
@@ -280,6 +280,6 @@ describe('kernel chat submission receipts', () => {
     const cancelling = bridge.cancel('session')
     release.resolve()
     await cancelling
-    await assert.rejects(receipt.completed, /cancelled before starting/u)
+    await assert.rejects(receipt.completed, /开跑之前被取消/u)
   })
 })

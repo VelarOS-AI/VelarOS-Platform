@@ -1,16 +1,79 @@
 import type { SerializedError } from '@velaros-ai/core/error'
-import { toOptional } from '@velaros-ai/core/utils/nullish'
 
 import type { AgentEvent } from '../../types/agent'
 import type { ChatStreamEvent, StreamDebugPayload, StreamDonePayload, StreamErrorPayload, StreamFailureRuntimeStateKind, StreamReasoningPayload, StreamStateKind, StreamStatePayload, StreamToolCallPayload, StreamToolMetadataPayload, StreamToolProgressPayload, StreamToolResultPayload,TerminalStreamRuntimeStateKind } from '../../types/agent.js'
-import type { AgentBridgeDispatch, AgentBridgeOutput, StreamObservabilityEntry, TerminalRuntimeExecutionAction } from '../../types/chat.js'
+import type { AgentBridgeDispatch, AgentBridgeOutput, TerminalRuntimeExecutionAction } from '../../types/chat.js'
+import { readAgentEventObservability, readStreamEventObservability } from '../../utils/chat/stream-observability'
 import { ALL_STREAM_RUNTIME_STATE_KINDS, STREAM_FAILURE_RUNTIME_STATE_KINDS, TERMINAL_STREAM_RUNTIME_STATE_KINDS } from '../../utils/wire/chat-runtime.js'
 
 /**
- * Chat stream 协议：终态判定、runtime 物化、AgentEvent → IPC 翻译。
- * 无 session 状态；有状态的部分见 {@link ChatStreamSessionLog} / {@link ChatStreamConsumer}。
+ * Chat stream 协议面：一套关于「流走到哪儿了」的判定与翻译规则——判终态、把 runtime payload
+ * 物化成要投出去的事件、把 AgentEvent 翻成渲染进程收的 IPC 输出。
+ *
+ * 它不记任何一条会话的状态，所以全进程共用一个实例（`chatStreamProtocol`）即可；
+ * 带状态的那半边在 `ChatStreamSessionLog`（主进程侧追加日志）和 `ChatStreamConsumer`
+ * （渲染进程侧生命周期）里。实现是 `ChatStreamProtocol`。
  */
-export class ChatStreamProtocol {
+export interface ChatStreamProtocolApi {
+  /** 会让流收尾的三种 runtime kind（done / aborted / error）；调用方拿它做穷举校验，不要改动内容。 */
+  readonly terminalRuntimeKinds: readonly TerminalStreamRuntimeStateKind[]
+  /** 算作「这轮失败了」的 runtime kind（error / aborted）；用来抑制重复的 error 广播。 */
+  readonly failureRuntimeKinds: readonly StreamFailureRuntimeStateKind[]
+  /** 协议认得的全部 runtime kind；契约测试与 bridge 的 exhaustive switch 靠它兜底。 */
+  readonly allRuntimeKinds: readonly StreamStateKind[]
+  /** 判断某个 runtime kind 是不是终态；返回 true 表示这条之后不会再有同一轮的事件。 */
+  isTerminalRuntimeKind(kind: StreamStateKind): kind is TerminalStreamRuntimeStateKind
+  /** 判断某个 runtime kind 是不是失败态（error / aborted），用于决定要不要再往上报一次错。 */
+  isFailureRuntimeKind(kind: StreamStateKind): kind is StreamFailureRuntimeStateKind
+  /** 判断一条 runtime payload 是不是正常收尾的 `done`，收窄成 `StreamDonePayload` 好取里面的结论字段。 */
+  isDonePayload(payload: StreamStatePayload): payload is StreamDonePayload
+  /** 判断一条 IPC 事件是不是终止事件：`end`、`error`，或者载着终态 kind 的 `state`。 */
+  isTerminalEvent(event: ChatStreamEvent): boolean
+  /** 判断一条 IPC 事件是不是收口标记 `end`；收到它才算这条流的通道关上了。 */
+  isCloseMarkerEvent(event: ChatStreamEvent): boolean
+  /** 判断一条 AgentEvent 是不是失败态的 runtime 事件。 */
+  isFailureAgentEvent(event: AgentEvent): boolean
+  /** 从 AgentEvent 里取终态 kind；不是 runtime 事件、或者不是终态时返回 null。 */
+  readTerminalKindFromAgent(event: AgentEvent): Nullable<TerminalStreamRuntimeStateKind>
+  /** 把终态 kind 翻成执行侧该做的收尾动作：done→complete、aborted→abort、error→fail。 */
+  resolveExecutionAction(kind: TerminalStreamRuntimeStateKind): TerminalRuntimeExecutionAction
+  /**
+   * 把一条 runtime payload 物化成要按序投出去的 IPC 事件。终态会额外补一条 `end` 收口，
+   * `error` 还要先经 `toSerializedError` 把错误压成可跨进程传的形状；遇到不认得的 kind 直接抛错。
+   */
+  materializeRuntimeEvents(
+    payload: StreamStatePayload,
+    toSerializedError: (payload: StreamErrorPayload) => SerializedError
+  ): ChatStreamEvent[]
+  /**
+   * StreamBridge 的唯一入口：一条 AgentEvent 进来，出去的是该投的 IPC 输出加上该落的日志条目。
+   * 日志既取自 AgentEvent 本身（中止），也取自翻译出来的事件（失败）。
+   */
+  bridgeAgentEvent(
+    event: AgentEvent,
+    options: {
+      /** 把 error payload 压成可跨进程传输的序列化错误；由持有错误映射表的那一层提供。 */
+      toSerializedError: (payload: StreamErrorPayload) => SerializedError
+    }
+  ): AgentBridgeDispatch
+  /**
+   * 只做 AgentEvent → IPC 输出的翻译，不带日志。文本增量走 `delta` 通道，其余一律包成 `events`。
+   * 这里是 exhaustive switch：AgentEvent 加了新类型而没在这儿接上，编译期就会报。
+   */
+  mapAgentEvent(
+    event: AgentEvent,
+    options: {
+      /** 把 error payload 压成可跨进程传输的序列化错误；由持有错误映射表的那一层提供。 */
+      toSerializedError: (payload: StreamErrorPayload) => SerializedError
+    }
+  ): AgentBridgeOutput[]
+  /** 把执行侧的调试 payload 包成一条 `debug` 事件；只给开发面板看，不进模型历史。 */
+  mapExecutionDebug(payload: StreamDebugPayload): ChatStreamEvent[]
+  /** 把执行侧直接给出的 runtime payload 包成一条 `state` 事件；不做终态判定，也不补 `end`。 */
+  mapExecutionState(payload: StreamStatePayload): ChatStreamEvent[]
+}
+
+export class ChatStreamProtocol implements ChatStreamProtocolApi {
   readonly terminalRuntimeKinds = TERMINAL_STREAM_RUNTIME_STATE_KINDS
   readonly failureRuntimeKinds = STREAM_FAILURE_RUNTIME_STATE_KINDS
   readonly allRuntimeKinds = ALL_STREAM_RUNTIME_STATE_KINDS
@@ -84,7 +147,7 @@ export class ChatStreamProtocol {
       case 'awaiting-input':
         return [{ type: 'state', payload }]
       default: {
-        throw new Error(`Unhandled stream runtime state kind: ${String(payload)}`)
+        throw new Error(`没有处理的流式运行态：${String(payload)}；给 StreamStatePayload 加了新的 kind 之后，这里的分支要同步补上。`)
       }
     }
   }
@@ -96,10 +159,10 @@ export class ChatStreamProtocol {
   ): AgentBridgeDispatch {
     const outputs = this.mapAgentEvent(event, options)
     const observability = [
-      ...this.readAgentEventObservability(event),
+      ...readAgentEventObservability(event),
       ...outputs.flatMap((output) =>
         output.kind === 'events'
-          ? output.events.flatMap((streamEvent) => this.readStreamEventObservability(streamEvent))
+          ? output.events.flatMap((streamEvent) => readStreamEventObservability(streamEvent))
           : []
       ),
     ]
@@ -238,38 +301,6 @@ export class ChatStreamProtocol {
 
   public mapExecutionState(payload: StreamStatePayload): ChatStreamEvent[] {
     return [{ type: 'state', payload }]
-  }
-
-  private readAgentEventObservability(event: AgentEvent): StreamObservabilityEntry[] {
-    if (event.type !== 'runtime' || event.payload.kind !== 'aborted') return []
-
-    return [
-      {
-        level: 'info',
-        message: 'stream aborted',
-        context: {
-          code: event.payload.code,
-          message: event.payload.message,
-          executionId: event.payload.executionId,
-        },
-      },
-    ]
-  }
-
-  private readStreamEventObservability(event: ChatStreamEvent): StreamObservabilityEntry[] {
-    if (event.type !== 'error') return []
-
-    return [
-      {
-        level: 'error',
-        message: 'stream failed',
-        context: {
-          code: event.payload.code,
-          message: event.payload.message,
-          errorContext: toOptional(event.payload.context),
-        },
-      },
-    ]
   }
 }
 

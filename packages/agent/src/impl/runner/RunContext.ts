@@ -5,6 +5,7 @@ import type {
   AgentContextPhase,
   ChatPromptFeatureId,
   ExecutionModeId,
+  StreamTurnContextPayload,
 } from '../../types/agent'
 import type { RunProfileId } from '../../types/agent.js'
 import type { PromptSegmentDefinition } from '../../types/guidance.js'
@@ -13,18 +14,43 @@ import {
   createSelectedSkillPromptSegment,
   createSkillPromptSegment,
 } from '../../utils/guidance/shared'
-import { TurnPayload } from '../../utils/runner/turn-payload'
 
 import type { ContextBuilder } from './ContextBuilder'
 import { PromptStateBuilder } from './PromptStateBuilder'
+import { TurnPayload } from './TurnPayload'
 
 /**
  * 智能体运行上下文构建器。
  *
  * 负责把角色、技能、运行时状态和能力包注入的上下文拼成最终系统提示词，
  * 同时生成轮次上下文调试载荷，供执行图/调试面板使用。
+ *
+ * 由执行栈在装配期建一份、整条运行链复用；本身不存回合状态，每次调用都按传入的历史与开关重新装配。
  */
-class RunContext<TContext extends RunContextToolContext = RunContextToolContext> {
+export interface RunContextApi<TContext extends RunContextToolContext = RunContextToolContext> {
+  /**
+   * 装配常规/子智能体这条入口的系统提示词：注入角色技能段（角色全文 + 命中的 skill 指针），不做阶段门控。
+   * `identity` 给子 Agent 换身份用。返回的 `AssembledSystemPrompt` 同时带着进/未进提示词的段落 trace。
+   */
+  buildSystemPrompt(args: BuildSystemPromptArgs<TContext>): Promise<AssembledSystemPrompt>
+  /**
+   * 装配统一主 Agent 的系统提示词：主 Agent 没有角色 Skill，只在 `contextPhase === 'operational'` 这一阶段
+   * 注入本轮命中的能力 Skill 指针与编码召回；其余装配步骤与 `buildSystemPrompt` 完全同一条路径。
+   */
+  buildPrimaryAgentSystemPrompt(
+    args: Omit<BuildSystemPromptArgs<TContext>, 'identity'> & { contextPhase: AgentContextPhase }
+  ): Promise<AssembledSystemPrompt>
+  /**
+   * 生成本轮的轮次上下文调试载荷（真正送进模型的系统提示词、可见工具、消息快照等）。
+   * 只供调试面板与执行图展示，不参与推理，因此失败也不该影响这一轮的执行。
+   */
+  buildTurnContextPayload(
+    args: Omit<BuildTurnContextPayloadArgs, 'toolContext'> & { toolContext: TContext }
+  ): StreamTurnContextPayload
+}
+
+class RunContext<TContext extends RunContextToolContext = RunContextToolContext>
+  implements RunContextApi<TContext> {
   /** 构建轮次上下文调试载荷。 */
   private readonly turnContextPayloadBuilder = new TurnPayload()
   /** 收集运行时提示词片段，例如工具提示、系统状态、开发环境上下文。 */
@@ -44,7 +70,6 @@ class RunContext<TContext extends RunContextToolContext = RunContextToolContext>
     )
   }
 
-  /** 构建常规/子智能体系统提示词。 */
   public async buildSystemPrompt({
     chatConfig,
     systemConfig,
@@ -83,7 +108,6 @@ class RunContext<TContext extends RunContextToolContext = RunContextToolContext>
     })
   }
 
-  /** 构建统一主 Agent 系统提示词。 */
   public async buildPrimaryAgentSystemPrompt({
     chatConfig,
     systemConfig,
@@ -242,8 +266,7 @@ class RunContext<TContext extends RunContextToolContext = RunContextToolContext>
     }
   }
 
-  /** 构建本轮轮次上下文载荷。 */
-  public buildTurnContextPayload(args: Omit<BuildTurnContextPayloadArgs, 'toolContext'> & { toolContext: TContext }) {
+  public buildTurnContextPayload(args: Omit<BuildTurnContextPayloadArgs, 'toolContext'> & { toolContext: TContext }): StreamTurnContextPayload {
     return this.turnContextPayloadBuilder.build(args)
   }
 

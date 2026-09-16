@@ -1,14 +1,21 @@
 import { toNullable, toOptional } from '@velaros-ai/core'
 
 import type { ContextPayloadStore, KernelToolOutputStore } from '../../contract/requires.js'
-import type { ContextPayloadRecord } from '../../types/context.js'
-import type { ContextPayloadKernelToolOutputStoreOptions, KernelStoredToolOutput, ProjectKernelToolOutputInput, ProjectKernelToolOutputResult } from '../../types/tools.js'
+import type { ContextPayloadKernelToolOutputStoreOptions, ProjectKernelToolOutputInput, ProjectKernelToolOutputResult } from '../../types/tools.js'
 import { buildContextRefEnvelope } from '../../utils/context/context-ref-envelope'
 import { resolveGovernanceSessionKey } from '../../utils/residency/session-key'
-import { fitSourceWindowsWithinProjection, normalizeProjectionChars, projectSerializedPreview, serializeOutput } from '../../utils/tools/tool-output-store'
+import { buildStoredToolOutput, fitSourceWindowsWithinProjection, normalizeProjectionChars, projectSerializedPreview, serializeOutput } from '../../utils/tools/tool-output-store'
 import { ToolResultCanonicalizer } from '../context/ToolResultCanonicalizer'
 
-export class ContextPayloadKernelToolOutputStore implements KernelToolOutputStore {
+/**
+ * 落盘版工具输出店：全文交给宿主的 `ContextPayloadStore` 归档，模型侧只留摘要与 payloadRef。
+ *
+ * 宿主注入了 payload 店时，`ToolExecutor` 为每条执行链建一份；同一段正文按内容哈希去重，
+ * 重复输出只留一份原文，回执里用 `sameAsToolCallId` 指回最早那次。
+ */
+export interface ContextPayloadKernelToolOutputStoreApi extends KernelToolOutputStore {}
+
+export class ContextPayloadKernelToolOutputStore implements ContextPayloadKernelToolOutputStoreApi {
   private readonly canonicalizer: ToolResultCanonicalizer
   private readonly projectionChars: number
 
@@ -40,7 +47,7 @@ export class ContextPayloadKernelToolOutputStore implements KernelToolOutputStor
       toolName: input.toolName,
       serializedResult: serialized,
     })
-    const stored = this.toStoredOutput({
+    const stored = buildStoredToolOutput({
       input: { ...input, output },
       sessionId,
       serialized,
@@ -82,30 +89,5 @@ export class ContextPayloadKernelToolOutputStore implements KernelToolOutputStor
       output: projection,
       stored,
     }
-  }
-
-  private toStoredOutput(input: {
-    input: ProjectKernelToolOutputInput
-    sessionId: string
-    serialized: string
-    record: ContextPayloadRecord
-    sameAsToolCallId?: string
-  }): KernelStoredToolOutput {
-    const stored: KernelStoredToolOutput = {
-      outputId: input.record.payloadRef,
-      payloadRef: input.record.payloadRef,
-      hash: input.record.hash,
-      sessionId: input.sessionId,
-      toolCallId: input.input.toolCallId,
-      toolName: input.input.toolName,
-      output: input.input.output,
-      serialized: input.serialized,
-      chars: input.record.chars,
-      createdAt: input.record.createdAt,
-    }
-    if (input.sameAsToolCallId) {
-      stored.sameAsToolCallId = input.sameAsToolCallId
-    }
-    return stored
   }
 }

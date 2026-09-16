@@ -15,8 +15,8 @@ import { isEmpty, isFunction, isString, optionalWhen, toNullable } from '@velaro
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
 import type { AgentModDiagnostic, AgentModSeamKind } from '../../types/agent.js'
-import type { AgentModHookContext, AgentModSeamDispatchMethodName,AgentModSeamHandler, AgentModSeamRegistration, AgentModSeamRegistrationInput, AgentModSessionLifecycleEvent, AgentModToolCallBeforeEvent, AgentModToolCallBeforeOutcome, AgentModToolResultAfterEvent, AgentModToolResultAfterOutcome, AgentModTurnContextAppendage, AgentModTurnContextAssembleEvent, AgentModTurnContextAssembleOutcome } from '../../types/mods.js'
-import { isThenable, matchesHook, readErrorMessage, resolveHookTimeoutMs } from '../../utils/mods/seams'
+import type { AgentModSeamDispatchMethodName,AgentModSeamHandler, AgentModSeamRegistration, AgentModSeamRegistrationInput, AgentModSessionLifecycleEvent, AgentModToolCallBeforeEvent, AgentModToolCallBeforeOutcome, AgentModToolResultAfterEvent, AgentModToolResultAfterOutcome, AgentModTurnContextAppendage, AgentModTurnContextAssembleEvent, AgentModTurnContextAssembleOutcome } from '../../types/mods.js'
+import { createHookContext, isThenable, matchesHook, readErrorMessage, resolveHookTimeoutMs } from '../../utils/mods/seams'
 import { compareStableStrings } from '../../utils/residency/determinism'
 
 // ─── 已接线 seam 的事件/结果契约 ──────────────────────────────────────────────
@@ -57,11 +57,64 @@ const WiredSeamKinds: ReadonlySet<AgentModSeamKind> = new Set<AgentModSeamKind>(
 
 
 /**
- * seam 派发器。
+ * Hook 派发器对外的面：mod 的钩子按事件登记在这里，主链走到各派发点时按优先级逐个调它们。
  *
- * 缺省实例零钩子——所有 `dispatch*` 走空数组快路径返回空结果，主链零开销、行为逐字节不变。
+ * 一个宿主一份，由 Loader 持有；状态（各事件的钩子桶、封存标记、诊断环形缓冲）全在实例内存里。
+ * 注册只在 registration 阶段，`seal()` 之后再写即抛。缺省实例零钩子，所有 `dispatch*` 走空数组
+ * 快路径返回空结果，主链零开销、行为逐字节不变。
+ *
+ * 结果面只有「拦下」和「改写入参/结果」，**没有放行字段**——被策略门拒绝的调用，任何钩子都翻不了案。
+ * 单个钩子抛错或超时只记一条诊断并跳过它，绝不冒泡打断主链。实现是 `AgentModSeamDispatcher`。
  */
-class AgentModSeamDispatcher {
+export interface AgentModSeamDispatcherApi {
+  /** 打开 registration 阶段（解除封存），Loader 装载前调。 */
+  beginRegistration(): void
+  /** 封存注册面：此后再 `register` / `removeMod` 一律抛错，防运行中改钩子表。 */
+  seal(): void
+  /** 注册面是不是已经封存。 */
+  isSealed(): boolean
+  /**
+   * 挂一个钩子。同一 mod 在同一事件上重复用同一个 id、或注册面已封存，都当场抛错。
+   * handler 不是函数则记 `mod.seam-handler-invalid` 诊断并丢弃这次注册（不抛）。
+   * 事件在闭集里但本宿主还没接派发点时照样收下，并记一条 `mod.seam-not-wired`——
+   * 否则 mod 作者唯一的线索是钩子一辈子不响。同事件内按 priority 升序、同优先级按 modId/id 码元序排定。
+   */
+  register<TKind extends AgentModSeamKind>(input: AgentModSeamRegistrationInput<TKind>): void
+  /** 摘掉某个 mod 的全部钩子（停用时用），返回摘掉的条数。注册面已封存时抛错。 */
+  removeMod(modId: string): number
+  /** 这个事件上有没有挂着钩子。派发点用它走快路径。 */
+  has(kind: AgentModSeamKind): boolean
+  /** 列出这个事件上已排序的钩子登记，顺序即将来的调用顺序；没有则返回空数组。 */
+  list(kind: AgentModSeamKind): readonly AgentModSeamRegistration[]
+  /** 读累积的诊断（未接线、handler 非法、抛错、超时、同步契约违规），宿主的 mod 页据此给作者反馈。 */
+  listDiagnostics(): readonly AgentModDiagnostic[]
+  /**
+   * 工具调用前派发。第一个给出 `block` 的钩子即短路返回（拦下只减不增，无需继续折叠）；
+   * `args` 沿优先级顺序逐个折叠，后一个钩子看到的是前面改过的入参。
+   * 改写后的入参照样走完整的策略/校验管线。没钩子时返回空对象。
+   */
+  dispatchToolCallBefore(event: AgentModToolCallBeforeEvent): Promise<AgentModToolCallBeforeOutcome>
+  /**
+   * 工具结果派发。`result` 与 `error` 沿优先级顺序折叠，谁都没改就返回空对象（调用方据此保留原结果）。
+   */
+  dispatchToolResultAfter(event: AgentModToolResultAfterEvent): Promise<AgentModToolResultAfterOutcome>
+  /**
+   * 回合上下文组装派发（同步入口）。各钩子追加的段取并集，段 id 统一加 `<modId>.` 前缀防撞。
+   * 钩子返回 Promise 视为契约违规：记一条诊断并忽略这次结果。
+   */
+  dispatchTurnContextAssemble(event: AgentModTurnContextAssembleEvent): AgentModTurnContextAssembleOutcome
+  /**
+   * 回合上下文组装的异步入口，折叠顺序与同步入口逐字一致。
+   * 支持外部 command 载体的宿主（如 Desktop）必须走这条，免得为了对齐外部 Hook 在主进程用 spawnSync。
+   */
+  dispatchTurnContextAssembleAsync(event: AgentModTurnContextAssembleEvent): Promise<AgentModTurnContextAssembleOutcome>
+  /**
+   * 会话开始/结束派发，纯通知没有结果面。`blocking` 模式的钩子会被等齐，`background` 的发出去就不管。
+   */
+  dispatchSessionLifecycle(event: AgentModSessionLifecycleEvent): Promise<void>
+}
+
+class AgentModSeamDispatcher implements AgentModSeamDispatcherApi {
   private readonly handlers = new Map<AgentModSeamKind, AgentModSeamRegistration[]>()
   private sealed = false
   private readonly diagnostics: AgentModDiagnostic[] = []
@@ -185,18 +238,6 @@ class AgentModSeamDispatcher {
     })
   }
 
-  private createContext(
-    entry: AgentModSeamRegistration,
-    signal: AbortSignal
-  ): AgentModHookContext {
-    return {
-      modId: entry.modId,
-      hookId: entry.id,
-      event: entry.event,
-      signal,
-    }
-  }
-
   /** 异步派发单个钩子；异常/超时被隔离成诊断（性质③）。 */
   private async invoke(
     entry: AgentModSeamRegistration,
@@ -212,7 +253,7 @@ class AgentModSeamDispatcher {
         timers.after(entry.timeoutMs, () => resolve(timedOut))
       })
       const outcome = await Promise.race([
-        Promise.resolve(entry.handler(event, this.createContext(entry, controller.signal))),
+        Promise.resolve(entry.handler(event, createHookContext(entry, controller.signal))),
         timeout,
       ])
       if (outcome === timedOut) {
@@ -237,7 +278,7 @@ class AgentModSeamDispatcher {
   private invokeSync(entry: AgentModSeamRegistration, event: never): unknown {
     const controller = new AbortController()
     try {
-      const outcome = entry.handler(event, this.createContext(entry, controller.signal))
+      const outcome = entry.handler(event, createHookContext(entry, controller.signal))
       if (isThenable(outcome)) {
         this.record({
           code: 'mod.seam-sync-contract-violation',

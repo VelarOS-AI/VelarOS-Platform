@@ -18,7 +18,25 @@ const WorkflowAgentCodenames = [
   'Iris',
 ] as const
 
-class AgentWorkflowCoordinator<TToolContext extends RunnerToolContext> {
+/**
+ * Workflow 与子 Agent 派发器之间的接线件：把 IR 解释器要的「派一个节点」翻译成一次真实的子 Agent 派发，
+ * 并把派发结果的信封解析回节点结果。由 `AgentRunner` 在构造时建一份，每次 `run` 现建一个解释器实例。
+ *
+ * 并发与总量上限**不在这里定**：跑之前向派发器要一次运行时真值（同一把信号量、同一本派发总量账），
+ * 因此模型拿到的 `effective_limits` 是真实可用额度，而不是它自己申请的数字。
+ */
+export interface AgentWorkflowCoordinatorApi<TToolContext extends RunnerToolContext> {
+  /**
+   * 跑完一份已通过 schema 校验的 workflow 定义，返回逐步骤结果树。
+   *
+   * 没给名字的节点按固定代号表依次取名，保证同一次运行里的节点名稳定可读。中断与预算耗尽都不抛给调用方，
+   * 而是落成结果里的 `status`（`aborted` / `budget_exhausted`）——调用方据此决定要不要重跑。
+   */
+  run(request: AgentWorkflowRunRequest<TToolContext>): Promise<AgentWorkflowRunResult>
+}
+
+class AgentWorkflowCoordinator<TToolContext extends RunnerToolContext>
+  implements AgentWorkflowCoordinatorApi<TToolContext> {
   constructor(
     private readonly subAgentDispatcher: RunnerSubAgentDispatcher<TToolContext>
   ) {}

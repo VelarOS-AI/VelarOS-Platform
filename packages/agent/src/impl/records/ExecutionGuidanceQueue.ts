@@ -14,7 +14,31 @@ function hasUserVisibleGuidance(message: ModelMessage): boolean {
   return isNonEmptyArray(message.content)
 }
 
-class ExecutionGuidanceQueue {
+/**
+ * 运行中补话的队列：一次执行一条 lane，用户在模型跑着的时候补的消息先进队，
+ * 由运行时在下一次取输入时消费掉；执行收尾后 lane 会被封口（sealed），之后再补的一律拒收。
+ *
+ * 队列和回执都只在内存里；正文另有宿主侧副本，这里的回执只带身份（inputId / sourceSessionId）和消费回调。
+ * 实现是 `ExecutionGuidanceQueue`，执行服务持一份，并用 `port()` 把它包成运行时要的输入端口。
+ */
+export interface ExecutionGuidanceQueueApi {
+  /** 入队一条补话：不是 user 消息或内容为空时返回 `invalid`；lane 不存在或已封口时返回 `closed`（执行已经收尾了）；入队成功返回 `accepted` 并唤醒正在等输入的运行时。`receipt.onConsumed` 在这条被消费时回调一次。 */
+  enqueue(executionId: string, message: ModelMessage, receipt?: { inputId?: string; sourceSessionId?: string; onConsumed?: () => void }): ExecutionGuidanceEnqueueResult
+  /** 取走队首那条补话（先进先出）并触发它的 `onConsumed`；lane 不存在或队列空时返回 null。 */
+  consume(executionId: string): Nullable<ModelMessage>
+  /** 运行时每轮要输入时调它：有补话就返回 `input`；没有就顺手把 lane 封口并返回 `sealed`，本次执行从此不再收补话。 */
+  consumeOrSeal(executionId: string): AgentRuntimeInputResult
+  /** 执行收尾时封口：返回 `sealed` 表示已经清干净；返回 `pending` 并带上剩余条数，表示还有没被消费的补话，调用方负责交代它们的去向。 */
+  finalize(executionId: string): ExecutionGuidanceFinalizationResult
+  /** 开一条 lane 并包成运行时要的输入端口。只有执行启动时该调它：迟到的生产者拿不到重新打开的通道。 */
+  port(executionId: string): AgentRuntimeInputPort
+  /** 丢弃这次执行的 lane：还有没消费的补话时先封口并返回 `retained` 带剩余条数（lane 留着等 `takeRetainedInputIds` 收），否则直接删掉返回 `cleared`。 */
+  clear(executionId: string): ExecutionGuidanceClearResult
+  /** 收尾后把某个来源会话上那些没被消费的补话的 inputId 交回给宿主（正文宿主自己有），同时删掉对应的 lane。返回交回的 inputId 列表。 */
+  takeRetainedInputIds(sourceSessionId: string): string[]
+}
+
+class ExecutionGuidanceQueue implements ExecutionGuidanceQueueApi {
   private readonly lanesByExecutionId = new Map<string, ExecutionGuidanceLane>()
 
   public enqueue(

@@ -70,7 +70,7 @@ void describe('agent turn capability snapshot', () => {
 
     assert.deepEqual(decision, {
       allowed: false,
-      error: 'Stale tool call: fixture',
+      error: '工具调用已过期：fixture 的注册状态在这次调用排队期间变了，请按当前工具清单重新发起调用。',
     })
   })
 })

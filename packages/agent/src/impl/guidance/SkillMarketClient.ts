@@ -23,10 +23,34 @@ interface SkillMarketClientDependencies {
 }
 
 /**
- * 技能市场客户端：拉 skills-manifest.json，合成本地安装状态；
- * install(id) 下载单个 md（可选 sha256 校验）后写入 SkillFileStore。
+ * 技能市场客户端对外的面：从宿主配的市场根拉 `skills-manifest.json`，和本地已安装技能对账，
+ * 并把选中的技能下载、校验、写进 `SkillFileStore`。
+ *
+ * 宿主装配期建一个、长期持有；实例内只记各技能的安装进度（installing / failed）与变更订阅者，
+ * 目录本身不缓存、每次现拉。宿主没配市场根时整个市场是禁用态，一次网络请求都不会发。
+ * `install` 刻意不抛错：失败落进安装态并通知订阅者，调用方从订阅或目录里读结果。
+ * 实现是 `SkillMarketClient`。
  */
-class SkillMarketClient {
+export interface SkillMarketClientApi {
+  /** 市场能不能用：宿主没配端点时返回不可用并带上 `endpoint-not-configured`，界面据此隐藏或禁用入口。 */
+  getAvailability(): SkillMarketAvailability
+  /** 订阅安装状态变化（installing / 成功清除 / failed），返回退订函数。回调抛错只记日志。 */
+  subscribe(listener: () => void): () => void
+  /**
+   * 拉一份市场目录：远端 manifest 与本地已安装记录对账，逐条标上
+   * `not-installed` / `installed` / `update-available`（本地有版本号且与远端不同即算可更新），
+   * 正在安装或安装失败的条目再带上当前安装态。市场禁用或拉取失败时抛 `AppError`。
+   */
+  listCatalog(): Promise<SkillMarketCatalog>
+  /**
+   * 安装一条技能：拉 manifest 找到它 → 下载正文 → 声明了 sha256 就校验 → 写进本地技能仓库。
+   * 全程刻意不抛：失败只把 `failed` 与原因记进安装态并通知订阅者，所以 `await` 正常返回
+   * **不代表装上了**——要判成功看 `listCatalog()` 的 installState 或订阅推送。
+   */
+  install(id: string): Promise<void>
+}
+
+class SkillMarketClient implements SkillMarketClientApi {
   private readonly log = logRuntime.tag('SkillMarketClient')
   private readonly store: SkillFileStore
   private readonly marketBase?: () => string
@@ -97,14 +121,14 @@ class SkillMarketClient {
     try {
       const entry = (await this.fetchManifest()).find((candidate) => candidate.id === id)
       if (!entry) {
-        throw new AppError('VALIDATION', 'skill-market-entry-missing')
+        throw new AppError('VALIDATION', 'skill-market-entry-missing：市场清单里没有这个技能，它可能已经下架，或者本地清单是旧的，刷新后再装。')
       }
 
       const content = await this.readTextResource(new URL(entry.file, this.normalizedBase()))
       if (entry.sha256) {
         const actual = createHash('sha256').update(content, 'utf8').digest('hex')
         if (actual !== entry.sha256.trim().toLowerCase()) {
-          throw new AppError('VALIDATION', 'skill-checksum-mismatch')
+          throw new AppError('VALIDATION', 'skill-checksum-mismatch：下载到的技能正文与清单登记的 sha256 对不上，文件可能损坏或被改过，已放弃安装。')
         }
       }
 
@@ -112,7 +136,7 @@ class SkillMarketClient {
       this.installStates.delete(id)
       this.notify()
     } catch (error) {
-      const reason = error instanceof AppError ? error.message : 'skill-install-failed'
+      const reason = error instanceof AppError ? error.message : 'skill-install-failed：技能安装失败，原因未知。'
       this.log.warn('技能安装失败', { id, error })
       this.installStates.set(id, { phase: 'failed', error: reason })
       this.notify()
@@ -124,7 +148,7 @@ class SkillMarketClient {
     if (!base) {
       throw new AppError(
         'UNAVAILABLE',
-        'skill-market-disabled',
+        'skill-market-disabled：宿主没有配置技能市场地址，市场处于关闭状态，装不了远程技能。',
         undefined,
         { reason: 'endpoint-not-configured' }
       )
@@ -136,7 +160,7 @@ class SkillMarketClient {
     } catch (error) {
       throw new AppError(
         'VALIDATION',
-        'skill-market-endpoint-invalid',
+        'skill-market-endpoint-invalid：宿主配置的技能市场地址不是合法 URL，解析失败。',
         error,
         { endpoint: base }
       )
@@ -153,12 +177,12 @@ class SkillMarketClient {
     try {
       parsed = JSON.parse(raw)
     } catch {
-      throw new AppError('VALIDATION', 'skill-manifest-invalid')
+      throw new AppError('VALIDATION', 'skill-manifest-invalid：skills-manifest.json 不是合法 JSON，解析失败。')
     }
 
     const skills = asRecord(parsed)?.skills
     if (!isArray(skills)) {
-      throw new AppError('VALIDATION', 'skill-manifest-invalid')
+      throw new AppError('VALIDATION', 'skill-manifest-invalid：skills-manifest.json 里的 skills 不是数组，清单格式不对。')
     }
 
     return skills.flatMap((item): RemoteSkillEntry[] => {
@@ -185,13 +209,13 @@ class SkillMarketClient {
       try {
         return await readFile(fileURLToPath(url), 'utf8')
       } catch {
-        throw new AppError('VALIDATION', 'skill-market-unavailable')
+        throw new AppError('VALIDATION', 'skill-market-unavailable：本地技能市场文件读不出来，确认路径还在、且当前用户有读权限。')
       }
     }
 
     const response = await this.fetchImpl(url).catch(() => null)
     if (!response?.ok) {
-      throw new AppError('VALIDATION', 'skill-market-unavailable')
+      throw new AppError('VALIDATION', 'skill-market-unavailable：技能市场请求失败，网络不通或服务端返回了错误状态码。')
     }
     return response.text()
   }

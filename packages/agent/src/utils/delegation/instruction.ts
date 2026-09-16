@@ -6,11 +6,17 @@ import type { ResolvedSubAgentTypeConfig,SubAgentDispatchInput, SubAgentResumeBr
 
 const ResumeFailureReasonMaxChars = 200
 
+/** 把调用方带来的附件上下文渲染成一个「附件上下文：」列表段；没有附件时返回 null，让拼装处直接过滤掉这一段。 */
 function formatAttachments(attachments: LooseOptional<readonly string[]>): Nullable<string> {
   if (!attachments?.length) return null
   return `附件上下文：\n${attachments.map((item) => `- ${item.trim()}`).join('\n')}`
 }
 
+/**
+ * 把结构化交付契约渲染成写给子 Agent 的一段约束：要求最终回复只含一个 JSON 值，
+ * 并附上 schema 名称、说明与序列化后的 JSON Schema 原文（名称/说明缺省时那两行不出现）。
+ * 没有契约时返回 null——此时子 Agent 走自由文本摘要那条路。
+ */
 function formatStructuredOutputContract(
   contract: LooseOptional<SubAgentStructuredOutputContract>
 ): Nullable<string> {
@@ -25,6 +31,10 @@ function formatStructuredOutputContract(
     .join('\n')
 }
 
+/**
+ * 指令结尾那句「最后该怎么交付」：有结构化契约就要求只回 JSON、不加 fence 与解释；
+ * 没有契约则要求回一段简洁摘要（做了什么 / 关键发现 / 未完成项与下一步）。始终有文案，不返回空。
+ */
 function formatDeliveryInstruction(
   contract: LooseOptional<SubAgentStructuredOutputContract>
 ): string {
@@ -33,6 +43,10 @@ function formatDeliveryInstruction(
     : '完成后返回简洁摘要：做了什么、关键发现/改动、未完成项与下一步建议。'
 }
 
+/**
+ * 续跑时提醒子 Agent 上一次是怎么结束的：failed 附上截断过的失败原因，aborted 说明最后一步可能只做了一半，
+ * 两者都要求先核对当前实际状态再往下做。正常结束（completed 等）返回 null，不必打扰。
+ */
 function formatPreviousRunNote(briefing: SubAgentResumeBriefing): Nullable<string> {
   switch (briefing.previousStatus) {
     case 'failed':
@@ -46,6 +60,11 @@ function formatPreviousRunNote(briefing: SubAgentResumeBriefing): Nullable<strin
   }
 }
 
+/**
+ * 拼出首次派发给子 Agent 的完整任务指令：委派外壳（子任务标题、类型/自定义 agent、只读模式、
+ * 初始授权工具分类）+ 说明 + 附件 + 类型自带的 promptAppend + 已知上下文简报 + 任务正文 +
+ * 结构化契约 + 交付要求，段间空行隔开。值为空的段（null）整段不出现，指令里不留空壳标题。
+ */
 function buildSubAgentDispatchInstruction(
   input: SubAgentDispatchInput,
   typeConfig: ResolvedSubAgentTypeConfig,

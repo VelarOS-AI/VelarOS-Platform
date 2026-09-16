@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test'
 
 import type { ApprovalPort } from '../src/contract/requires.js'
 import { ExecutionRoutingCoordinator } from '../src/impl/records/ExecRouting'
+import { ExecutionStateMachine } from '../src/impl/records/ExecStateMachine'
 import { ExecutionInteractions } from '../src/impl/records/ExecutionInteractions'
 import { ExecutionRecords } from '../src/impl/records/ExecutionRecords'
 import { ExecutionStore } from '../src/impl/records/ExecutionStore'
@@ -9,7 +10,6 @@ import { CodingSessionTracker } from '../src/impl/session/CodingSessionTracker'
 import { TaskApprovalState } from '../src/impl/session/TaskApprovalState'
 import { createUnattendedSubAgentApprovalPort } from '../src/impl/tools/UnattendedSubAgentApprovalPort'
 import type { ApprovalDecision, ToolConfirmationDecisionOptions } from '../src/types/agent'
-import { ExecutionStateMachine } from '../src/utils/records/state-machine'
 import { createApprovalOperationKey, createTaskApprovalPort } from '../src/utils/toolkit/task-approval'
 
 function harness(decide: (options?: ToolConfirmationDecisionOptions) => ApprovalDecision | Promise<ApprovalDecision>) {

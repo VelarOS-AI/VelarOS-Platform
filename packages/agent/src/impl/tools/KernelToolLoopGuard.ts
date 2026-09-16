@@ -1,6 +1,7 @@
 import { isArray, isEmpty,isPlainObject } from '@velaros-ai/core'
 
 import type { ToolCapabilitySchema } from '../../types/agent.js'
+import type { KernelToolLoopGuardApi as KernelToolLoopGuardContract } from '../../types/loop.js'
 import type { KernelToolFailureBatchEntry, KernelToolLoopGuardInput } from '../../types/tools.js'
 import { compareStableStrings } from '../../utils/residency/determinism'
 
@@ -52,7 +53,16 @@ function isKernelWriteLikeTool(input: {
   return !!input.capabilities?.writeScopes?.length
 }
 
-class KernelToolLoopGuard {
+/**
+ * 工具成环闸：按「同一写型工具重复成功」「同一批失败重复出现」「同一资源反复修不好」三条线认出空转。
+ *
+ * 由 `ToolExecutor` 每条执行链持有一份（宿主没注入就自建），状态只在这一份实例里跨回合累积。
+ * 三条线都只返回给模型看的提示，不阻断执行；判不出结论时返回 null。
+ * 形状与 `ToolExecutor` 注入面用的 `KernelToolLoopGuardApi` 同源，这里把它挪到类上方当本类的接口。
+ */
+export interface KernelToolLoopGuardApi extends KernelToolLoopGuardContract {}
+
+class KernelToolLoopGuard implements KernelToolLoopGuardApi {
   private readonly progress = new ExecutionProgress()
   public recordOutcome(input: Parameters<ExecutionProgress['record']>[0]): string | undefined { return this.progress.record(input) }
 

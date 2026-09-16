@@ -57,7 +57,7 @@ describe('tool description soft budget', () => {
 
   test('rejects an over-budget description that declares no waiver', () => {
     expect(() => defineProbeTool({ fillerChars: 2_000 })).toThrow(
-      /over the 1800 soft budget/
+      /超过 1800 字符的软预算/
     )
   })
 
@@ -83,14 +83,14 @@ describe('tool description soft budget', () => {
           note: '历史遗留。',
         },
       })
-    ).toThrow(/is not recognized/)
+    ).toThrow(/不被认可/)
 
     expect(() =>
       defineProbeTool({
         fillerChars: 2_000,
         descriptionBudgetWaiver: { reason: 'meta-tool', note: '   ' },
       })
-    ).toThrow(/must carry a note/)
+    ).toThrow(/必须带上 note/)
   })
 
   test('keeps the 6000-char hard limit above the soft budget', () => {
@@ -99,7 +99,7 @@ describe('tool description soft budget', () => {
         fillerChars: 8_000,
         descriptionBudgetWaiver: { reason: 'meta-tool', note: '自举工具没有先读技能的余地。' },
       })
-    ).toThrow(/over the 6000 hard limit/)
+    ).toThrow(/超过 6000 字符的硬上限/)
   })
 })
 
@@ -277,6 +277,6 @@ describe('usageSkillId companion skill pointer', () => {
     const fillerJustUnderBudget = 1_500 + (ToolDescriptionBudgetChars - budgetEdge.description.length)
     expect(() =>
       defineProbeTool({ fillerChars: fillerJustUnderBudget, usageSkillId: 'probe-authoring' })
-    ).toThrow(/over the 1800 soft budget/)
+    ).toThrow(/超过 1800 字符的软预算/)
   })
 })

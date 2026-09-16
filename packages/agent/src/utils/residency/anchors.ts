@@ -63,6 +63,12 @@ const PackageRunnerCommands = new Set(['bun', 'npm', 'pnpm', 'yarn'])
 const DirectVerificationCommands = new Set(['pytest', 'jest', 'vitest', 'tsc'])
 const CommandArgumentPattern = /^[A-Za-z0-9_./:=@-]+$/u
 
+/**
+ * 剥掉一个 token 外层的包裹字符，还原成裸命令片段：先按 `](` 切掉 Markdown 链接的地址部分（只留链接文字），
+ * 再从两端逐个剥反引号、括号、引号、星号、尖括号与句末标点。
+ * 命令在正文里几乎总被 `` ` `` 或 `(…)` 裹着，不剥就会抽出 ``` `bun ``` 这种永远比对不上的锚点。
+ * 整个 token 全是包裹字符时返回空串。
+ */
 function unwrapCommandToken(value: string): string {
   const markdownLinkBoundary = value.indexOf('](')
   const token = markdownLinkBoundary >= 0 ? value.slice(0, markdownLinkBoundary) : value
@@ -75,11 +81,21 @@ function unwrapCommandToken(value: string): string {
   return token.slice(start, end)
 }
 
+/**
+ * 判一个（已剥壳的）token 还算不算命令的一部分，用来决定命令锚往后吃到哪里：
+ * 形状像命令参数（只含字母数字与 `_./:=@-`）**且**不在散文停止词表里时为真。
+ * 停止词那一关是要害：`bun test and then check` 里的 `and` 形状上完全像参数，不拦就会把后半句自然语言拼进命令锚。
+ */
 function isCommandContinuation(value: string): boolean {
   if (!CommandArgumentPattern.test(value)) return false
   return !CommandAnchorStopWords.has(value.toLowerCase())
 }
 
+/**
+ * 判这个**未剥壳**的原始 token 是不是已经把包裹结构关上了——含 `](`（Markdown 链接到此为止），
+ * 或以反引号 / 右括号 / 右方括号 / 右花括号 / 引号 / 星号 / `>` 结尾。为真就停止继续往后吃 token。
+ * 必须看原始 token 而非剥壳后的：剥壳恰好把这些收尾标记去掉了，看剥完的永远判不出边界在哪。
+ */
 function closesWrappedCommand(value: string): boolean {
   if (value.includes('](')) return true
   const last = value.at(-1)
@@ -87,6 +103,15 @@ function closesWrappedCommand(value: string): boolean {
     || last === '"' || last === "'" || last === '*' || last === '>'
 }
 
+/**
+ * 逐行扫出可验证的命令锚，按出现序返回（可能重复，去重在调用方做）。
+ *
+ * 只认三类起手式：包管理器（bun/npm/pnpm/yarn，可带 `run`，其后必须再跟一个合法参数）、
+ * 直接跑的验证命令（pytest/jest/vitest/tsc，命令名本身就够）、以及 `cargo test` / `go test`。
+ * 认出起手式后继续往后吃 token，遇到三件事之一即停：原始 token 关掉了包裹结构、下一个 token 不像参数（或是散文停止词）、
+ * 或已经多吃了 5 个 token（硬上限，防止把整句话拼进来）。
+ * 不匹配起手式的行直接跳过——宁可漏抽也不抽假命令：锚点是后续摘要必须逐字复现的硬事实，多一条假的就多一次无谓拒收。
+ */
 function extractCommandAnchors(text: string): string[] {
   const commands: string[] = []
   for (const line of text.split('\n')) {
@@ -157,6 +182,14 @@ const NumberAnchorPatterns = [
   /\b\d{3,}\b/g,
 ]
 
+/**
+ * 抽"带语义前缀的数"这一类数字锚（`exit code 1` / `port: 5173` / `行 42`），**连前缀一起**原样收进锚点文本——
+ * 光一个 `1` 对后续对齐毫无意义，前缀才是它的语义。
+ *
+ * 前缀与数字之间必须隔着空白或 `:` `=` `#` 之一，两样都没有就跳过（避免把 `code2x` 这类粘连串误收）；
+ * 数字后面若紧跟字母、数字或下划线也跳过——那说明这串数字只是某个标识符的一截，不是独立的值。
+ * 抽不到就返回空数组，宁缺勿滥。
+ */
 function extractSemanticNumberAnchors(text: string): string[] {
   const anchors: string[] = []
   for (const match of text.matchAll(SemanticNumberPrefixPattern)) {
@@ -247,6 +280,12 @@ export function anchorDensityPerKiloChar(anchorCount: number, chars: number): nu
   return (anchorCount * 1000) / chars
 }
 
+/**
+ * 给抽出来的命令锚做最后一次收边：归一（剥引号、压空白）+ 去掉句末标点（`.,;` 与中文 `，。；` 一并算），
+ * 再从第 N 个 token 起找第一个散文停止词，在那里截断。
+ * N 的取法：`bun run <脚本名>` 这类必须留满 3 个 token 才开始找（否则 `run` 后面的脚本名会被误当停止词截掉），其余留 2 个。
+ * 两个 token 以内的命令原样返回、不做截断——短命令没有被自然语言污染的余地。
+ */
 function trimCommandAnchor(value: string): string {
   const trimPunctuation = (text: string): string => {
     let end = text.length

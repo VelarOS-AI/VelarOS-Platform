@@ -23,14 +23,15 @@ import type {
   ToolConfirmationDecisionOptions,
   ToolExecutionPlanUpdate,
 } from '../../types/agent'
-import type { ExecutionProvideInputRequest, ExecutionRecord, ExecutionResolveConfirmationRequest, ExecutionTaskExecutionAdvice, ExecutionTaskRecord,StreamStatePayload } from '../../types/agent.js'
+import type { ExecutionPendingInteractionSnapshot, ExecutionProvideInputRequest, ExecutionRecord, ExecutionResolveConfirmationRequest, ExecutionTaskExecutionAdvice, ExecutionTaskPlanStep, ExecutionTaskRecord,StreamStatePayload } from '../../types/agent.js'
 import type { ExecutionAbortOptions, ExecutionGuidanceRelayPlanInput, RunManagedExecutionParams } from '../../types/execution.js'
 import type { AgentModSeamDispatcherApi } from '../../types/mods.js'
 import type { ExecutionRouteProvider } from '../../types/records.js'
+import { assertGuidanceEnqueued, isTerminalExecutionStatus } from '../../utils/execution/managed-execution'
 import { extractGuidanceUserText } from '../../utils/records/guidance-relay'
-import { ExecutionStateMachine } from '../../utils/records/state-machine'
 import { ChatRuntimeEvents } from '../../utils/wire/chat-runtime.js'
 import { ExecutionRoutingCoordinator } from '../records/ExecRouting'
+import { ExecutionStateMachine } from '../records/ExecStateMachine'
 import { ExecutionGuidanceQueue } from '../records/ExecutionGuidanceQueue'
 import { ExecutionInteractions } from '../records/ExecutionInteractions'
 import { ExecutionRecords } from '../records/ExecutionRecords'
@@ -45,16 +46,23 @@ import { ExecutionStateFacade } from './ExecutionStateFacade'
 import { ExecutionTaskFacade } from './ExecutionTaskFacade'
 import { ManagedExecutionRunner } from './ManagedExecutionRunner'
 
+/** `ExecutionService` 的装配参数：两个必填端口由产品宿主给，其余可选项不给就各自走内置实现或整条链路 no-op。 */
 interface ExecutionServiceOptions {
   /** 准入断言端口：托管执行启动前由产品宿主确认当前运行态已获授权。 */
   authGate: AuthGatePort
   /** 执行记录落盘路径端口：未显式传 store 时用于构建默认持久化 ExecutionStore。 */
   executionRecordsPath: ExecutionRecordsPathPort
+  /** 自带的执行记录存储；测试与多运行时隔离用它换掉默认的落盘 store，不传则按 `executionRecordsPath` 现建一个持久化的。 */
   store?: ExecutionStore
+  /** 活跃子 Agent 注册表：主 Agent 收到运行中引导时按它找出该转给哪些 worker。不传则自建一份空的。 */
   guidanceRelayRegistry?: SubAgentGuidanceRelayRegistry
+  /** 引导转发规划器（通常是一次辅助模型调用）：决定用户这句话该转给哪个 worker、怎么措辞。不传则只入主 Agent 队列，不转发。 */
   guidanceRelayService?: ExecutionGuidanceRelayPlanner
+  /** 协作协调器：注入后每次托管执行会登记成一个主 Agent 协作者，供协作面展示与冲突判定；不传则整条协作面不参与。 */
   collaborationCoordinator?: ExecutionCollaborationPort
+  /** 终态回调：执行落终态时通知宿主（发系统通知等）。它自己抛错不影响执行收尾。 */
   notifyTerminalExecution?: (execution: ExecutionRecord) => void
+  /** 路由 provider：把当前任务算成「下一步建议」。不传则路由协调器给不出建议，提示词里对应的那句就不出。 */
   routeProvider?: ExecutionRouteProvider
   /** 可选 ID 工厂；用于多运行时隔离、确定性测试或接入宿主 ID 体系。 */
   idFactory?: ExecutionIdFactory
@@ -75,7 +83,79 @@ interface ExecutionServiceOptions {
  * - ExecutionInteractions 管理“等待用户输入/确认”的 Promise。
  * - ExecutionAgentEventFacade 把 agent 事件写入调试时间线并同步 turn context。
  */
-class ExecutionService {
+export interface ExecutionServiceApi {
+  /** 跑一次托管执行：建记录、领会话互斥、收尾落终态全在里面。返回终态记录；回调抛出的异常在记录落终态后继续外抛。服务正在关闭时直接抛 `EXECUTION_ABORTED`。 */
+  runManagedExecution(params: RunManagedExecutionParams): Promise<ExecutionRecord>
+  /** 等某个来源会话上所有在飞的托管执行结束（成功失败都算）；没有在飞的立即返回。用于需要顺序化的外部操作。 */
+  awaitSourceSessionSettled(sessionId: string): Promise<void>
+  /** 标记执行失败，并把原因同步到当前任务和所有在等的交互。 */
+  failExecution(executionId: string, error: string): ExecutionRecord
+  /** 标记执行中断，并默认向 renderer 发一条 aborted 事件（`emitStreamState: false` 可关掉，用于事件流里已经有那条的场合）。 */
+  abortExecution(executionId: string, reason: string, options?: ExecutionAbortOptions): ExecutionRecord
+  /** 标记执行完成，并完成当前任务、清掉等待状态。 */
+  completeExecution(executionId: string): ExecutionRecord
+  /** 工具需要「用户确认后继续」时在这里挂起；拒绝按约定终止执行。 */
+  awaitConfirmation(executionId: string, message: string, abortSignal?: AbortSignal, options?: ToolConfirmationDecisionOptions): Promise<void>
+  /** 同样等确认，但把批准/拒绝作为结果返回而不终止执行，`message` 带回用户理由或卡片结果。 */
+  awaitConfirmationDecision(executionId: string, message: string, abortSignal?: AbortSignal, options?: ToolConfirmationDecisionOptions): Promise<{ approved: boolean; message: Nullable<string> }>
+  /** 需要用户补一段文本时在这里挂起，返回用户答的原文。 */
+  awaitUserInput(executionId: string, question: string, abortSignal?: AbortSignal): Promise<string>
+  /** renderer 对指定执行的确认应答；`confirmationId` 用来对上具体那一次确认。 */
+  resolveConfirmation(executionId: string, approved: boolean, rejectionMessage?: LooseOptional<string>, confirmationId?: string): ExecutionRecord
+  /** renderer 对指定执行的追问应答。 */
+  provideInput(executionId: string, answer: string): ExecutionRecord
+  /** renderer 只有 sessionId 时的追问应答：找不到在等输入的执行就抛 `NOT_FOUND`。 */
+  provideInputForSourceSession(request: ExecutionProvideInputRequest): ExecutionRecord
+  /**
+   * 用户在运行中途插一句话：先入主 Agent 的引导队列（抢占下一轮），再按活跃 worker 决定要不要另行转发给子 Agent。
+   * 会话没有在跑、消息为空或不是用户消息、执行已进入收尾，都抛 `VALIDATION`。`authorization` 让调用方在每个可能让步的点上复核这次请求是否仍然当前。
+   */
+  provideGuidanceForSourceSession(request: { sessionId: string; message: ModelMessage; inputId?: string }, authorization?: { assertCurrent(): void }): Promise<void>
+  /** 用户单独中断某个子 Agent 线程，不影响主执行；返回是否真的中断到了那条线程。会话没在跑或 threadId 为空时抛 `VALIDATION`。 */
+  abortSubAgentWorkerForSourceSession(request: { sessionId: string; threadId: string; reason?: LooseOptional<string> }): { aborted: boolean }
+  /** 用户直接把一句话转给某个子 Agent 线程，不经主控规划器；返回是否真的投递到了那条线程。 */
+  relaySubAgentGuidanceForSourceSession(request: { sessionId: string; threadId: string; message: string }): { relayed: boolean }
+  /** 收尾后把该会话上没被消费掉的引导 inputId 交回给宿主（宿主据此把这些输入还给用户），同时清掉对应队列。 */
+  takeRetainedGuidanceInputIdsForSourceSession(sessionId: string): string[]
+  /** renderer 只有 sessionId 时的确认应答：过期卡片抛 `VALIDATION`，找不到在等确认的执行抛 `NOT_FOUND`。 */
+  resolveConfirmationForSourceSession(request: ExecutionResolveConfirmationRequest): ExecutionRecord
+  /** 该会话此刻是否挂着某一类待处理交互；UI 据此显示等待态。 */
+  hasPendingInteractionForSourceSession(sessionId: string, kind: 'confirmation' | 'input'): boolean
+  /** 该会话是否有正在跑（pending / running）的执行。 */
+  isRunningForSourceSession(sessionId: string): boolean
+  /** 取该会话待处理交互的展示快照（确认文案与卡片，或追问问题）；没有则返回 null。 */
+  getPendingInteractionForSourceSession(sessionId: string, kind: 'confirmation' | 'input'): Nullable<ExecutionPendingInteractionSnapshot>
+  /** 用户点停止：中断该会话当前活跃的那次执行，返回是否真的有执行被中断。 */
+  abortSourceSession(sourceSessionId: string): boolean
+  /** 宿主安全模块用：中断同一来源会话下**所有**资源上下文里的活跃执行。 */
+  abortSourceSessionAllContexts(sourceSessionId: string, reason?: string): boolean
+  /** 系统级边界（如 Cloud 登录失效）用：一次中断所有活跃执行，返回被中断的 executionId 列表。 */
+  abortAllActive(reason?: string): readonly string[]
+  /** 读一条执行记录；不存在时由记录层抛错。 */
+  getExecution(executionId: string): ExecutionRecord
+  /** 标记某条任务开始执行。 */
+  startTask(executionId: string, taskId: string): void
+  /** 标记某条任务完成，可附结果摘要。 */
+  completeTask(executionId: string, taskId: string, result?: LooseOptional<string>): void
+  /** 标记某条任务失败并记下原因。 */
+  failTask(executionId: string, taskId: string, error: string): void
+  /** 取执行当前指向的那条任务记录。 */
+  getCurrentTask(executionId: string): ExecutionTaskRecord
+  /** 取当前计划图。 */
+  getCurrentPlan(executionId: string): ExecutionTaskPlanStep[]
+  /** 按模型给的增量更新当前计划图并返回更新后的整份，UI 随即同步。 */
+  updateCurrentPlan(executionId: string, input: ToolExecutionPlanUpdate): ExecutionTaskPlanStep[]
+  /** 取当前任务上记着的推荐下一步动作，供工具与角色路由参考。 */
+  getCurrentRecommendedAction(executionId: string): ExecutionTaskRecord['recommendedAction']
+  /** 按当前任务算一条执行建议；算不出来返回 null。 */
+  getCurrentExecutionAdvice(executionId: string): Nullable<ExecutionTaskExecutionAdvice>
+  /** 供外部 supervisor 调试：读该会话最近一次真实送进模型的轮次上下文；本进程内没缓存过就返回 null。 */
+  getLatestTurnContextForSourceSession(sourceSessionId: string): Nullable<{ execution: ExecutionRecord; turnContext: StreamTurnContextPayload }>
+  /** 停止准入、中断所有活跃执行、等它们收尾，最后把记录落盘。重复调用返回同一个 Promise。 */
+  disposeAsync(): Promise<void>
+}
+
+class ExecutionService implements ExecutionServiceApi {
   private readonly log = Log.tag('ExecutionService')
   /** 限制执行状态只能按合法方向变化。 */
   private readonly stateMachine = new ExecutionStateMachine()
@@ -190,7 +270,7 @@ class ExecutionService {
       runtimeInputForExecution: (executionId) => this.guidanceQueue.port(executionId),
       finalizeExecutionGuidance: (executionId) => this.guidanceQueue.finalize(executionId),
       clearExecutionGuidance: (executionId) => this.guidanceQueue.clear(executionId),
-      isTerminalStatus: (status) => this.isTerminalStatus(status),
+      isTerminalStatus: (status) => isTerminalExecutionStatus(status),
       notifyTerminalExecution: options.notifyTerminalExecution,
     })
   }
@@ -343,7 +423,7 @@ class ExecutionService {
     authorization?.assertCurrent()
     const sourceScopeId = request.sessionId
     const executionId = this.sourceSessionGuard.getActiveExecutionId(sourceScopeId)
-    if (!executionId || this.isTerminalStatus(this.getExecution(executionId).status)) {
+    if (!executionId || isTerminalExecutionStatus(this.getExecution(executionId).status)) {
       throw new AppError('VALIDATION', '当前会话没有正在运行的执行，无法发送引导。')
     }
 
@@ -362,7 +442,7 @@ class ExecutionService {
             this.emitExecutionState(executionId, ChatRuntimeEvents.inputApplied(request.inputId!))
         : undefined,
     })
-    this.assertGuidanceEnqueued(enqueued, '引导消息为空或不是用户消息。')
+    assertGuidanceEnqueued(enqueued, '引导消息为空或不是用户消息。')
 
     this.log.info('main-agent guidance enqueued', {
       executionId,
@@ -395,7 +475,7 @@ class ExecutionService {
       authorization?.assertCurrent()
       if (
         this.sourceSessionGuard.getActiveExecutionId(sessionId) !== executionId ||
-        this.isTerminalStatus(this.getExecution(executionId).status)
+        isTerminalExecutionStatus(this.getExecution(executionId).status)
       )
         return
 
@@ -491,17 +571,6 @@ class ExecutionService {
 
   public takeRetainedGuidanceInputIdsForSourceSession(sessionId: string): string[] {
     return this.guidanceQueue.takeRetainedInputIds(sessionId)
-  }
-
-  private assertGuidanceEnqueued(
-    result: ReturnType<ExecutionGuidanceQueue['enqueue']>,
-    invalidMessage: string
-  ): void {
-    if (result.status === 'accepted') return
-    if (result.status === 'closed') {
-      throw new AppError('VALIDATION', '当前执行已进入收尾，无法再接受运行中引导。')
-    }
-    throw new AppError('VALIDATION', invalidMessage)
   }
 
   /** renderer 只知道 sessionId 时，通过当前/最近执行找到等待确认的 execution。 */
@@ -632,11 +701,6 @@ class ExecutionService {
   /** 重新构建并发送 debug payload。 */
   private emitExecutionDebug(executionId: string): void {
     this.store.emitDebug(executionId)
-  }
-
-  /** completed/failed/aborted 都是终态，终态不再被自动覆盖。 */
-  private isTerminalStatus(status: ExecutionRecord['status']): boolean {
-    return status === 'aborted' || status === 'completed' || status === 'failed'
   }
 
   /** 停止准入并取消执行，等待所有执行收尾后持久化最终记录。 */

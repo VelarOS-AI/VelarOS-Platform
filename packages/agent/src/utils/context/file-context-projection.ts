@@ -8,6 +8,10 @@ import { fitProjectReadsForModel, hasProjectSourceWindows } from '../tools/proje
 /** 当前视图列出被省略文件路径的上限；总数仍由 omittedFiles 给出。 */
 const MaxListedOmittedPaths = 40
 
+/**
+ * 该值是否是一条合法的源码片段记录：纯对象、`line` 是数字、`text` 是字符串，且 `columns` 恰好是两个数字的数组。
+ * 形状必须严到这个程度——去重判定要按 `columns` 的起止列做包含与切片比较，少一个端点或类型不对就会误判「这段已经展示过」而把真正没给模型看的代码丢掉。
+ */
 function isSourceFragment(value: unknown): value is SourceFragment {
   return isPlainObject(value) && isNumber(value.line) && isString(value.text)
     && isArray(value.columns) && value.columns.length === 2 && value.columns.every(isNumber)
@@ -61,7 +65,7 @@ export function projectFileContext(
         complete: snapshot.complete,
         redacted: snapshot.redacted,
         historicalRef: view.refs[view.snapshots.indexOf(snapshot)],
-        note: snapshot.redacted ? 'Redacted source; do not overwrite redacted lines from this view.' : undefined,
+        note: snapshot.redacted ? '这份源码已脱敏；不要拿这个视图去覆盖被脱敏的那些行。' : undefined,
       }, remaining)
       if (JSON.stringify([...entries, { ...entry, excerpts: [...entry.excerpts, excerpt] }]).length + header.length > viewBudget) {
         entry.omitted = true
@@ -153,7 +157,7 @@ export function projectFileContext(
       if (callId && latestReads.get(record.path) === callId && currentRevisions.get(record.path) === record.revision && !isRepresented(record)) return record
       return {
         kind: 'file-view-receipt', historical: true, path: record.path, revision: record.revision,
-        note: 'Current source and fileRef are in Current project files; if this path is absent there or listed in omittedPaths, project:read the needed range first. Recall path and revision only for historical text.',
+        note: '当前源码与 fileRef 都在 Current project files 里；这个 path 如果不在那里、或出现在 omittedPaths 中，先用 project:read 读一遍所需范围再动手。这里的 path 与 revision 只用于召回历史文本。',
       }
     }
     return Object.fromEntries(Object.entries(record).map(([key, item]) => [key, archiveWindow(item, callId)]))
@@ -175,7 +179,7 @@ export function projectFileContext(
       if (part.toolName !== 'project:read' || !isString(result.rootPath) || !roots.has(result.rootPath) || !isArray(result.files)) return part
       return withValue({
         kind: 'file-read-receipt', historical: true, rootPath: result.rootPath,
-        note: 'Source text is maintained in Current project files. Historical text: context:recall with path and revision. A receipt is not current source.',
+        note: '源码正文以 Current project files 里的为准。要看历史文本用 context:recall 带上 path 与 revision。这条回执不是当前源码，不能据它编辑。',
         files: result.files.filter(isPlainObject).map((file) => {
           const snapshot = optionalWhen(isPlainObject, file.snapshot)
           return { path: snapshot?.path, revision: snapshot?.revision, range: file.range, editTarget: file.editTarget }

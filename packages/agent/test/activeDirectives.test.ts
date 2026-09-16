@@ -98,7 +98,7 @@ describe('active directive domain service', () => {
         content: 'Must fail',
         directiveType: 'other',
       })
-    ).rejects.toThrow('already contains')
+    ).rejects.toThrow('到达上限，加不进新的')
 
     const collisionId = createDirectiveArtifactId('id:collision')
     const collisionHarness = createHarness([
@@ -123,6 +123,6 @@ describe('active directive domain service', () => {
         content: 'Must fail closed',
         directiveType: 'other',
       })
-    ).rejects.toThrow('conflicts with non-directive')
+    ).rejects.toThrow('与一条非指令的活动上下文撞车')
   })
 })

@@ -79,8 +79,8 @@ describe('McpClientConnection', () => {
     })
     try {
       await connection.connect()
-      await expect(connection.listTools()).rejects.toThrow(/Repeated MCP pagination cursor/u)
-      await expect(connection.listResources()).rejects.toThrow(/Repeated MCP pagination cursor/u)
+      await expect(connection.listTools()).rejects.toThrow(/重复返回同一个分页 cursor/u)
+      await expect(connection.listResources()).rejects.toThrow(/重复返回同一个分页 cursor/u)
     } finally {
       await connection.close()
     }

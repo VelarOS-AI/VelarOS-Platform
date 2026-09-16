@@ -313,12 +313,22 @@ function resolveDistillationConfig(
   }
 }
 
+/**
+ * 把外部传来的蒸馏档位字符串归一成合法档（去空白 + 转小写后与 `off / aux / main / adaptive` 精确比对）。
+ * 认不出的一律回落默认档（当前是 `'aux'`）而**不报错**：一个手滑的档位名不该把整条治理链路打死——
+ * 宿主没注入蒸馏器时它本来就会自动退化成纯机械（`skipReason: 'no-distiller'`），所以回落开档对无模型环境也是安全的。
+ */
 function resolveDistillInstrument(value: LooseOptional<string>): ContextDistillInstrument {
   const normalized = value?.trim().toLowerCase()
   const matched = DistillInstruments.find((instrument) => instrument === normalized)
   return matched ?? DefaultContextGovernanceConfig.instruments.distill
 }
 
+/**
+ * 整数旋钮的宽容钳制：缺席或非有限数（undefined / null / NaN / Infinity）取 `fallback`，
+ * 其余先向下取整再夹进 `[min, max]`。**钳制不拒绝**——越界值夹到合法区间继续可用，不为一个手滑的配置抛错把治理链路打死。
+ * 向下取整只用于真正的整数量纲（轮距、字符数、次数）；比率类阈值必须走 `clampNumber` 保小数。
+ */
 function clampInteger(
   value: LooseOptional<number>,
   fallback: number,
@@ -340,6 +350,11 @@ function clampNumber(
   return Math.min(max, Math.max(min, value))
 }
 
+/**
+ * 百分比旋钮的钳制：整数化后夹进 `[1, 100]`，缺席取 `fallback`。
+ * 下界是 1 而不是 0——水位类百分比取 0 会让 epoch 一开机就恒定触发/恒定达标，等于把那道闸拧死。
+ * 真正允许配到 0 的百分比（如 `handoff.occupancyPercent`，0 = 只看收益不看占用）必须绕开本函数走 `clampNumber`。
+ */
 function clampPercent(value: LooseOptional<number>, fallback: number): number {
   return clampInteger(value, fallback, 1, 100)
 }

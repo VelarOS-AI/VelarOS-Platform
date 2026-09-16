@@ -13,7 +13,6 @@
 //  - **surface 不得持有回合状态**：状态归引擎，壳只做 IO 与投影；壳存状态 = 两份真相。
 import { toNullable } from '@velaros-ai/core'
 
-import { isContextOverflowError, isContextOverflowReplayUnsafe } from '../../impl/loop/RetryPolicy'
 import type { RunSpanScope } from '../../types/ledgers.js'
 import type { AgentLoopSurface, ExecuteLoopTurnWithContextOverflowRecoveryInput, LoopTurnPromptAudit, LoopTurnSpanFailure,LoopTurnSpans, LoopTurnSpanUsage } from '../../types/loop.js'
 
@@ -64,8 +63,8 @@ async function executeLoopTurnWithContextOverflowRecovery<TTurnResult>(
     } catch (error) {
       if (
         input.abortSignal.aborted ||
-        !isContextOverflowError(error) ||
-        isContextOverflowReplayUnsafe(error)
+        !input.overflowRules.isContextOverflowError(error) ||
+        input.overflowRules.isContextOverflowReplayUnsafe(error)
       ) {
         throw error
       }

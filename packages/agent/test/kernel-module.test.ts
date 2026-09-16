@@ -93,7 +93,7 @@ describe('agent kernel module', () => {
       scope,
       executionInput,
       controller.signal,
-    )).rejects.toThrow('Agent capability is not ready')
+    )).rejects.toThrow('Agent 能力尚未就绪')
 
     await lifecycle?.ready?.()
     expect(service?.isReady()).toBe(true)
@@ -123,7 +123,7 @@ describe('agent kernel module', () => {
       undefined,
       { includeSecrets: true },
       controller.signal,
-    )).rejects.toThrow('Agent health input is invalid')
+    )).rejects.toThrow('health 这个调用不收任何参数')
 
     await lifecycle?.suspend?.()
     expect(service?.isReady()).toBe(false)

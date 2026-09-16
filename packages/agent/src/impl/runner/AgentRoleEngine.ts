@@ -15,7 +15,17 @@ import { AgentRoleRegistry } from './AgentRoleRegistry'
  * 工具集合经 {@link AgentRoleToolBindings} 端口注入——内核不硬依赖任何具体工具库，
  * 宿主在装配点提供内置工具集与分类映射。
  */
-class AgentRoleEngine {
+export interface AgentRoleEngineApi {
+  /**
+   * 解析本轮角色：按 `selectedSkillIds` / `promptFeatures` / 能力作用域现建一次角色注册表，
+   * 走锁定路由选出角色（子 Agent 恒 locked），再按宿主真实开放的工具面收窄工具与分类。
+   *
+   * 返回值是提示词装配、工具换入与调试面板共用的一份角色快照；角色路由不出结果时由路由层抛错，本方法不返回空。
+   */
+  resolve(options: ResolveAgentRoleOptions): AgentRoleResolution
+}
+
+class AgentRoleEngine implements AgentRoleEngineApi {
   /** 角色工具策略：按角色/环境过滤工具并判断是否需要代码上下文。 */
   private readonly policy: AgentRolePolicy
 
@@ -31,7 +41,6 @@ class AgentRoleEngine {
     })
   }
 
-  /** 解析完整角色运行结果。 */
   public resolve(options: ResolveAgentRoleOptions): AgentRoleResolution {
     // 注册表每次基于 selectedSkillIds 构建，保证技能开关实时生效。
     const registry = new AgentRoleRegistry(this.roleProvider, {

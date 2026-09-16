@@ -1,9 +1,21 @@
 import { isArray, isBoolean, isFunction,isNumber, isObject, isPlainObject,isPresent, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
-import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
-import type { ConnectionRetryBlockReason,ConnectionRetryOptions, ContextOverflowReplayUnsafeDetails, NonConnectionApiErrorMatcher } from '../../types/loop.js'
+import type { ConnectionRetryBlockReason,ConnectionRetryOptions, ContextOverflowReplayUnsafeDetails } from '../../types/loop.js'
+import {
+  isNonConnectionApiCode,
+  isNonConnectionApiMessage,
+  isNonConnectionApiStatus,
+  isRetryableEmptyPreOutputStream,
+  isRetryAbortError,
+  isTransientApiCode,
+  isTransientApiMessage,
+  isTransientApiStatus,
+  readRetryAfterDelayMsFromRecord,
+  resolveReplaySafetyBlockReason,
+  waitForRetryDelay,
+} from '../../utils/loop/model-retry-classification'
 
 /** 第一次重试的基础延迟。 */
 const ConnectionRetryBaseDelayMs = 3_000
@@ -14,37 +26,6 @@ const ConnectionRetryJitterMs = 750
 const ConnectionRetryHeaderMaxDelayMs = 2_147_483_647
 const MaxConnectionRetryAttempts = 5
 const AiSdkMaxRetries = 0
-
-const NonConnectionApiErrorCodes = new Set([
-  'authentication_error',
-  'authentication_required',
-  'bad_request',
-  'billing_error',
-  'billing_hard_limit_reached',
-  'content_policy_violation',
-  'context_length_exceeded',
-  'dependency_unavailable',
-  'desktop_offline_seat_occupied',
-  'forbidden',
-  'insufficient_quota',
-  'internal_error',
-  'invalid_api_key',
-  'invalid_prompt',
-  'invalid_request_error',
-  'model_not_available',
-  'model_not_found',
-  'not_configured',
-  'not_found',
-  'not_found_error',
-  'permission_denied',
-  'permission_error',
-  'rate_limited',
-  'unauthorized',
-  'unsupported_parameter',
-  'validation_failed',
-])
-
-const TransientApiErrorCodes = new Set(['rate_limit_error', 'rate_limit_exceeded'])
 
 /** 上下文超限专用错误码：与 NonConnectionApiErrorCodes 的“context”子集对应。 */
 const ContextOverflowErrorCodes = new Set(['context_length_exceeded'])
@@ -64,36 +45,57 @@ const ContextOverflowMessageMatchers: RegExp[] = [
 const ContextOverflowReplayUnsafeSymbol = Symbol.for('velaros.contextOverflowReplayUnsafe')
 
 /**
- * 命中以下匹配器即视为“鉴权/配额/上下文超限”类错误，不应重试。
+ * 模型请求的重试判官：一次 provider 请求失败之后，「还能不能原样再发一遍」由它说了算。
  *
- * 使用 RegExp 而不是单纯字符串，是为了让分类对未来扩展（例如携带版本号
- * 的鉴权错误描述）保持稳定；reason 用于日志归因。
+ * 谁持有：`StreamTurn` 从构造参数拿一份（`TurnRunner` 建的那个），`QueryTurn` 自己 new 一份；
+ * 本身无状态，重试计数活在 `runWithConnectionRetry` 的调用栈里，不跨轮累计。
+ * 什么时候调：整个「开流 + 消费完 fullStream」被 `runWithConnectionRetry` 包住，一轮一次；
+ * 失败后它当场判、当场退避、当场重发，对上层就是一次调用。
+ *
+ * 三条不许破的线：
+ *  - **有可见副作用就不重试**：本轮已经推过文本或派过工具调用，重放会让 UI 出现重复增量、
+ *    让工具二次执行；此时原样抛给上层，由续写恢复接手。
+ *  - **只重试连接类错误**：鉴权、计费、配额、上下文超限重发同样的请求必然再失败，直接抛。
+ *  - **中断优先于重试**：等退避期间 abortSignal 一断立刻抛 `EXECUTION_ABORTED`，不再发下一次。
  */
-const NonConnectionApiErrorMessageMatchers: NonConnectionApiErrorMatcher[] = [
-  { pattern: /check your plan and billing/i, reason: 'billing' },
-  { pattern: /context length/i, reason: 'context-length' },
-  { pattern: /context window/i, reason: 'context-length' },
-  { pattern: /maximum context/i, reason: 'context-length' },
-  { pattern: /exceeded your current quota/i, reason: 'quota' },
-  { pattern: /401\s+unauthorized/i, reason: 'unauthorized' },
-  { pattern: /403\s+forbidden/i, reason: 'forbidden' },
-  { pattern: /auth credentials/i, reason: 'authentication' },
-  { pattern: /authentication/i, reason: 'authentication' },
-  { pattern: /authorization/i, reason: 'authorization' },
-  { pattern: /expired token/i, reason: 'expired-token' },
-  { pattern: /forbidden/i, reason: 'forbidden' },
-  { pattern: /incorrect api key/i, reason: 'invalid-api-key' },
-  { pattern: /insufficient_quota/i, reason: 'quota' },
-  { pattern: /invalid api key/i, reason: 'invalid-api-key' },
-  { pattern: /invalid_api_key/i, reason: 'invalid-api-key' },
-  { pattern: /jwt expired/i, reason: 'expired-token' },
-  { pattern: /missing authentication header/i, reason: 'authentication' },
-  { pattern: /not authorized/i, reason: 'unauthorized' },
-  { pattern: /permission denied/i, reason: 'permission-denied' },
-  { pattern: /permission_denied/i, reason: 'permission-denied' },
-  { pattern: /too many tokens/i, reason: 'context-length' },
-  { pattern: /unauthorized/i, reason: 'unauthorized' },
-]
+export interface RetryPolicyApi {
+  /**
+   * 包住一次模型请求：成功即返回；失败则判是否可重试，可以就按退避等待后重发，不可以就把原错误抛出。
+   * 退避时长优先听 provider 的 `retry-after` 响应头，否则指数退避加抖动；等待期间响应中断信号。
+   * 传了 `options.policy`（宿主自带重试策略）时改由它决定要不要再来一次、等多久，本类只做安全前置判定。
+   */
+  runWithConnectionRetry<T>(operation: () => Promise<T>, options: ConnectionRetryOptions): Promise<T>
+  /** 单独问一次「这个错现在能重试吗」：中断、已出可见输出/工具调用、次数用尽、非连接类错误都返回 false。 */
+  shouldRetryConnectionError(
+    error: unknown,
+    attempt: number,
+    options: {
+      /** 本轮的中断信号；已中断一律不许重试。 */
+      abortSignal: AbortSignal
+      /** 本轮是否已经把文本推给了界面；推过就不能重放。 */
+      hasVisibleOutput?: () => boolean
+      /** 本轮是否已经接下过工具调用；接过就可能已有副作用，不能重放。 */
+      hasToolUse?: () => boolean
+    }
+  ): boolean
+  /**
+   * 判是不是「上下文超限」这一类错（缺页信号）。与连接重试相互独立：这类错重发同样的历史只会再炸，
+   * 得先沿降级阶梯腾出空间再重来，两个 loop 面的缺页兜底都以它为判据。
+   */
+  isContextOverflowError(error: unknown, depth?: number): boolean
+  /** 判是不是值得重发的瞬态连接错（网络、超时、限流、半开流被判死、开流前空响应等）。 */
+  isTransientConnectionError(error: AppError): boolean
+  /**
+   * 把错误连同 cause / errors / lastError 一层层摊平成一串可匹配的文本，用于关键词归类。
+   * 只读不改，深度有限；给的不是错误对象时按字符串处理。
+   */
+  buildErrorFingerprint(error: unknown, depth?: number): string
+  /**
+   * 下一次重试等多久（毫秒）。provider 给了 `retry-after` / `retry-after-ms` 就听它（有上限钳制），
+   * 否则按 base × 2^(attempt-1) 指数退避、封顶后再叠 ±jitter 打散并发。
+   */
+  getRetryDelayMs(attempt: number, error?: unknown): number
+}
 
 /**
  * 重试策略：模型调用层的“瞬态网络错误”重试器。
@@ -113,7 +115,7 @@ const NonConnectionApiErrorMessageMatchers: NonConnectionApiErrorMatcher[] = [
  * 中断处理：等待重试时监听中断信号，触发时立即抛出执行中断错误，
  * 避免在用户已取消的情况下还在等下一次重试。
  */
-class RetryPolicy {
+class RetryPolicy implements RetryPolicyApi {
   private readonly log = logRuntime.tag('RetryPolicy')
 
   public async runWithConnectionRetry<T>(
@@ -127,7 +129,7 @@ class RetryPolicy {
         return await operation()
       } catch (error) {
         const blockReason = options.policy
-          ? this.getReplaySafetyBlockReason(error, options)
+          ? resolveReplaySafetyBlockReason(error, options)
           : this.getConnectionRetryBlockReason(error, attempt, options)
         if (blockReason) {
           const appError = AppError.from(error)
@@ -150,7 +152,7 @@ class RetryPolicy {
           : { delayMs: this.getRetryDelayMs(attempt, error) }
         if (!decision) throw error
         if (!Number.isFinite(decision.delayMs) || decision.delayMs < 0) {
-          throw new AppError('VALIDATION', 'Model retry delay must be finite and non-negative.')
+          throw new AppError('VALIDATION', '重试策略给出的 delayMs 不合法：必须是有限且非负的毫秒数。这是注入的重试策略自己的缺陷，不是模型供应方的行为。')
         }
         const delayMs = decision.delayMs
         options.onRetry?.(appError, attempt)
@@ -162,7 +164,7 @@ class RetryPolicy {
           code: appError.code,
           message: appError.message,
         })
-        await this.waitForRetry(delayMs, options.abortSignal)
+        await waitForRetryDelay(delayMs, options.abortSignal)
         attempt += 1
       }
     }
@@ -180,17 +182,6 @@ class RetryPolicy {
     return !this.getConnectionRetryBlockReason(error, attempt, options)
   }
 
-  private getReplaySafetyBlockReason(
-    error: unknown,
-    options: Pick<ConnectionRetryOptions, 'abortSignal' | 'hasVisibleOutput' | 'hasToolUse'>
-  ): Nullable<ConnectionRetryBlockReason> {
-    if (options.abortSignal.aborted) return 'abort_signal'
-    if (this.isAbortError(AppError.from(error))) return 'abort_error'
-    if (options.hasToolUse?.()) return 'tool_use_emitted'
-    if (options.hasVisibleOutput?.()) return 'visible_output_emitted'
-    return null
-  }
-
   private getConnectionRetryBlockReason(
     error: unknown,
     attempt: number,
@@ -203,7 +194,7 @@ class RetryPolicy {
     if (options.abortSignal.aborted) return 'abort_signal'
 
     const appError = AppError.from(error)
-    if (this.isAbortError(appError)) return 'abort_error'
+    if (isRetryAbortError(appError)) return 'abort_error'
 
     // 一次 idle stall 已经消耗完整判死窗口；只允许一次安全重发，避免同一半开上游连续空等。
     if (appError.code === 'MODEL_STREAM_STALLED' && attempt > 1)
@@ -262,7 +253,7 @@ class RetryPolicy {
     if (error.code === 'MODEL_STREAM_STALLED') return true
     if (error.code === 'NETWORK' || error.code === 'TIMEOUT') return true
     if (this.hasTransientApiFailure(error)) return true
-    if (this.isRetryableEmptyPreOutputStream(error)) return true
+    if (isRetryableEmptyPreOutputStream(error)) return true
 
     const fingerprint = this.buildErrorFingerprint(error).toLowerCase()
     if (!fingerprint) return false
@@ -376,7 +367,7 @@ class RetryPolicy {
     if (error instanceof Error) {
       const record = error as Error & Record<string, unknown>
       return (
-        this.readRetryAfterDelayMsFromRecord(record) ??
+        readRetryAfterDelayMsFromRecord(record, ConnectionRetryHeaderMaxDelayMs) ??
         this.readRetryAfterDelayMs(record.cause, depth + 1) ??
         this.readRetryAfterDelayMs(record.error, depth + 1) ??
         this.readRetryAfterDelayMs(record.lastError, depth + 1) ??
@@ -396,7 +387,7 @@ class RetryPolicy {
 
     const record = error
     return (
-      this.readRetryAfterDelayMsFromRecord(record) ??
+      readRetryAfterDelayMsFromRecord(record, ConnectionRetryHeaderMaxDelayMs) ??
       this.readRetryAfterDelayMs(record.cause, depth + 1) ??
       this.readRetryAfterDelayMs(record.error, depth + 1) ??
       this.readRetryAfterDelayMs(record.lastError, depth + 1) ??
@@ -404,73 +395,10 @@ class RetryPolicy {
     )
   }
 
-  private readRetryAfterDelayMsFromRecord(record: Record<string, unknown>): Nullable<number> {
-    const headers =
-      record.responseHeaders ??
-      record.headers ??
-      (isPlainObject(record.response) ? (record.response).headers : null) ??
-      (isPlainObject(record.data) ? (record.data).responseHeaders : null)
-    const retryAfterMs = this.parseRetryAfterMsHeader(this.readHeader(headers, 'retry-after-ms'))
-    if (isPresent(retryAfterMs)) return retryAfterMs
-
-    return this.parseRetryAfterHeader(this.readHeader(headers, 'retry-after'))
-  }
-
-  private readHeader(headers: unknown, name: string): Nullable<string> {
-    if (!isPresent(headers)) return null
-    const key = name.toLowerCase()
-
-    if (isObject(headers)) {
-      const get = (headers as { get?: unknown }).get
-      if (isFunction(get)) {
-        const value = get.call(headers, name) ?? get.call(headers, key)
-        if (isPresent(value)) return String(value)
-      }
-    }
-
-    if (isArray(headers)) {
-      for (const entry of headers) {
-        if (!isArray(entry) || entry.length < 2) continue
-        if (String(entry[0]).toLowerCase() === key) return String(entry[1])
-      }
-      return null
-    }
-
-    if (!isPlainObject(headers)) return null
-
-    for (const [candidate, value] of Object.entries(headers)) {
-      if (candidate.toLowerCase() === key && isPresent(value)) return String(value)
-    }
-    return null
-  }
-
-  private parseRetryAfterMsHeader(value: Nullable<string>): Nullable<number> {
-    if (!value) return null
-
-    const parsed = Number.parseFloat(value)
-    if (!Number.isFinite(parsed) || parsed < 0) return null
-    return Math.min(Math.ceil(parsed), ConnectionRetryHeaderMaxDelayMs)
-  }
-
-  private parseRetryAfterHeader(value: Nullable<string>): Nullable<number> {
-    if (!value) return null
-
-    const seconds = Number.parseFloat(value)
-    if (Number.isFinite(seconds) && seconds >= 0)
-      return Math.min(Math.ceil(seconds * 1_000), ConnectionRetryHeaderMaxDelayMs)
-
-    const timestamp = Date.parse(value)
-    if (!Number.isFinite(timestamp)) return null
-
-    const delay = timestamp - Date.now()
-    if (delay <= 0) return null
-    return Math.min(Math.ceil(delay), ConnectionRetryHeaderMaxDelayMs)
-  }
-
   private hasExplicitNonConnectionApiFailure(error: unknown, depth = 0): boolean {
     if (depth > 5 || !isPresent(error)) return false
 
-    if (isString(error)) return this.isNonConnectionApiMessage(error)
+    if (isString(error)) return isNonConnectionApiMessage(error)
 
     if (!isPlainObject(error)) return false
 
@@ -491,11 +419,11 @@ class RetryPolicy {
       }
 
       return (
-        this.isNonConnectionApiCode(withDetails.code) ||
-        this.isNonConnectionApiCode(withDetails.type) ||
-        this.isNonConnectionApiStatus(withDetails.status) ||
-        this.isNonConnectionApiStatus(withDetails.statusCode) ||
-        this.isNonConnectionApiMessage(error.message) ||
+        isNonConnectionApiCode(withDetails.code) ||
+        isNonConnectionApiCode(withDetails.type) ||
+        isNonConnectionApiStatus(withDetails.status) ||
+        isNonConnectionApiStatus(withDetails.statusCode) ||
+        isNonConnectionApiMessage(error.message) ||
         this.hasExplicitNonConnectionApiFailure(withDetails.data, depth + 1) ||
         this.hasExplicitNonConnectionApiFailure(withDetails.cause, depth + 1) ||
         this.hasExplicitNonConnectionApiFailure(withDetails.error, depth + 1) ||
@@ -506,11 +434,11 @@ class RetryPolicy {
 
     const record = error
     return (
-      this.isNonConnectionApiCode(record.code) ||
-      this.isNonConnectionApiCode(record.type) ||
-      this.isNonConnectionApiStatus(record.status) ||
-      this.isNonConnectionApiStatus(record.statusCode) ||
-      this.isNonConnectionApiMessage(record.message) ||
+      isNonConnectionApiCode(record.code) ||
+      isNonConnectionApiCode(record.type) ||
+      isNonConnectionApiStatus(record.status) ||
+      isNonConnectionApiStatus(record.statusCode) ||
+      isNonConnectionApiMessage(record.message) ||
       this.hasExplicitNonConnectionApiFailure(record.data, depth + 1) ||
       this.hasExplicitNonConnectionApiFailure(record.error, depth + 1) ||
       this.hasExplicitNonConnectionApiFailure(record.cause, depth + 1) ||
@@ -519,18 +447,10 @@ class RetryPolicy {
     )
   }
 
-  private isNonConnectionApiCode(code: unknown): boolean {
-    return isString(code) && NonConnectionApiErrorCodes.has(code.trim().toLowerCase())
-  }
-
-  private isTransientApiCode(code: unknown): boolean {
-    return isString(code) && TransientApiErrorCodes.has(code.trim().toLowerCase())
-  }
-
   private hasTransientApiFailure(error: unknown, depth = 0): boolean {
     if (depth > 5 || !isPresent(error)) return false
 
-    if (isString(error)) return this.isTransientApiMessage(error)
+    if (isString(error)) return isTransientApiMessage(error)
 
     if (!isPlainObject(error)) return false
 
@@ -549,11 +469,11 @@ class RetryPolicy {
       }
 
       return (
-        this.isTransientApiCode(withDetails.code) ||
-        this.isTransientApiCode(withDetails.type) ||
-        this.isTransientApiStatus(withDetails.status) ||
-        this.isTransientApiStatus(withDetails.statusCode) ||
-        this.isTransientApiMessage(error.message) ||
+        isTransientApiCode(withDetails.code) ||
+        isTransientApiCode(withDetails.type) ||
+        isTransientApiStatus(withDetails.status) ||
+        isTransientApiStatus(withDetails.statusCode) ||
+        isTransientApiMessage(error.message) ||
         this.hasTransientApiFailure(withDetails.cause, depth + 1) ||
         this.hasTransientApiFailure(withDetails.error, depth + 1) ||
         this.hasTransientApiFailure(withDetails.lastError, depth + 1) ||
@@ -563,11 +483,11 @@ class RetryPolicy {
 
     const record = error
     return (
-      this.isTransientApiCode(record.code) ||
-      this.isTransientApiCode(record.type) ||
-      this.isTransientApiStatus(record.status) ||
-      this.isTransientApiStatus(record.statusCode) ||
-      this.isTransientApiMessage(record.message) ||
+      isTransientApiCode(record.code) ||
+      isTransientApiCode(record.type) ||
+      isTransientApiStatus(record.status) ||
+      isTransientApiStatus(record.statusCode) ||
+      isTransientApiMessage(record.message) ||
       this.hasTransientApiFailure(record.error, depth + 1) ||
       this.hasTransientApiFailure(record.cause, depth + 1) ||
       this.hasTransientApiFailure(record.lastError, depth + 1) ||
@@ -575,57 +495,6 @@ class RetryPolicy {
     )
   }
 
-  private isTransientApiStatus(status: unknown): boolean {
-    if (!isNumber(status)) return false
-    return status === 408 || status === 425 || status === 429 || (status >= 500 && status <= 599)
-  }
-
-  private isTransientApiMessage(message: unknown): boolean {
-    if (!isString(message)) return false
-    return /rate limit/i.test(message) || /too many requests/i.test(message)
-  }
-
-  // 5xx / 408 / 425 / 429 是网关、限流或瞬时超时，应交给连接层重试；4xx 其它视为终止以避免对鉴权或配额错误硬撞。
-  private isNonConnectionApiStatus(status: unknown): boolean {
-    if (!isNumber(status)) return false
-    if (status >= 500 && status <= 599) return false
-    if (status === 408 || status === 425 || status === 429) return false
-    return status >= 400 && status <= 499
-  }
-
-  private isNonConnectionApiMessage(message: unknown): boolean {
-    if (!isString(message)) return false
-
-    return NonConnectionApiErrorMessageMatchers.some(({ pattern }) => pattern.test(message))
-  }
-
-  private isAbortError(error: AppError): boolean {
-    if (error.code === 'EXECUTION_ABORTED') return true
-
-    const normalized = error.message.toLowerCase()
-    return normalized.includes('abort') || normalized.includes('cancelled')
-  }
-
-  private isRetryableEmptyPreOutputStream(error: AppError): boolean {
-    if (error.code !== 'MODEL_EMPTY_RESPONSE') return false
-
-    const source = error.context?.source
-    return (
-      source === 'stream-empty-before-first-chunk' || source === 'query-empty-before-first-chunk'
-    )
-  }
-
-  private async waitForRetry(delayMs: number, abortSignal: AbortSignal): Promise<void> {
-    if (abortSignal.aborted) {
-      throw new AppError('EXECUTION_ABORTED', '运行被终止')
-    }
-
-    try {
-      await TimerScope.sleep(delayMs, { signal: abortSignal })
-    } catch {
-      throw new AppError('EXECUTION_ABORTED', '运行被终止')
-    }
-  }
 }
 
 const sharedRetryPolicy = new RetryPolicy()

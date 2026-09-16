@@ -129,7 +129,7 @@ function hasHistoryOmissions(input: unknown): boolean {
 
 /**
  * 最近一次模型决策里若有「可原地修正」的工具失败，把那几次调用在历史中被省略的入参读回来填回去，
- * 让模型改一处重发即可，而不必凭记忆把整份大参数重写一遍。
+ * 让模型改一处重发即可，而不必凭印象把整份大参数重写一遍。
  * 判定很窄：只看最近一条 assistant 决策之后的 tool 回执，且回执必须自报 `inputReuse.reuse === 'attempt:<toolCallId>'`
  * 并确证 `executionOutcome === 'not-applied'`（真没写入）——已经产生副作用的失败绝不回填。
  * 回填还有两道闸：原参数序列化后超过 RestoredInputMaxChars 就放弃（保持省略形态，模型按省略元数据自己召回需要的字段）；

@@ -49,18 +49,13 @@
 // 需要时按 `status` 自行滤除。
 
 import {
-  isArray,
-  isEmpty,
-  isNumber,
-  isPresent,
   isUndefined,
   Log,
 } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
 
-import type { AgentWorkflowAgentCall, AgentWorkflowAgentResult, AgentWorkflowDedupeStep, AgentWorkflowDefinition, AgentWorkflowMajorityVoteStep, AgentWorkflowRepeatConvergence, AgentWorkflowRunResult, AgentWorkflowStep, AgentWorkflowStepResult, AgentWorkflowValueRef } from '../../types/agent.js'
+import type { AgentWorkflowAgentCall, AgentWorkflowAgentResult, AgentWorkflowDefinition, AgentWorkflowRunResult, AgentWorkflowStep, AgentWorkflowStepResult } from '../../types/agent.js'
 import type { AgentWorkflowDispatchPort, AgentWorkflowRunOptions } from '../../types/runner.js'
-import { asArray, boundedClone, clampDeclaredLimit, comparePredicate, isSuccessful, mapWithConcurrency, MaxWorkflowValueBytes, stableJson, valueAtPath } from '../../utils/runner/workflow-runtime'
+import { asArray, boundedClone, clampDeclaredLimit, comparePredicate, dedupeWorkflowItems, evaluateWorkflowConvergence, isSuccessful, mapWithConcurrency, MaxWorkflowValueBytes, resolveWorkflowMajorityVote, resolveWorkflowRunStatus, resolveWorkflowSource, validateWorkflowDefinition } from '../../utils/runner/workflow-runtime'
 import { WorkflowAbortedError } from '../errors/WorkflowAbortedError'
 import { WorkflowBudgetExhaustedError } from '../errors/WorkflowBudgetExhaustedError'
 
@@ -88,7 +83,24 @@ const log = Log.tag('AgentWorkflowRuntime')
 
 
 
-class AgentWorkflowRuntime {
+/**
+ * 声明式多 Agent Workflow 的 IR 解释器：输入一份已过 schema 校验的定义，顺序执行 steps，输出逐步骤结果树。
+ *
+ * 每次运行现建一个实例（`agentCount` / 两条生效上限 / abortSignal 都是**本次运行**的状态，实例不可复用）。
+ * 唯一的对外副作用是构造时注入的 `dispatch` 端口；解释器本身没有任何通用代码执行能力。
+ */
+export interface AgentWorkflowRuntimeApi {
+  /**
+   * 跑完一份 workflow 定义。
+   *
+   * 先按派发器给的运行时真值把 `max_agents` / `max_concurrency` 钳到实际可用额度（声明值只能调小不能调大，
+   * 钳制结果如实回报在 `effective_limits` 里），再逐 step 执行；任一 step 落 `failed` 即停止后续步骤。
+   * 中断与预算耗尽不向外抛，而是写进该步骤与整次 run 的 `status`；IR 非法则抛 `VALIDATION`（那是调用前就该拦住的错）。
+   */
+  run(definition: AgentWorkflowDefinition, options: AgentWorkflowRunOptions): Promise<AgentWorkflowRunResult>
+}
+
+class AgentWorkflowRuntime implements AgentWorkflowRuntimeApi {
   private agentCount = 0
   private maxAgents = MaxWorkflowAgents
   private maxConcurrency = 1
@@ -115,7 +127,7 @@ class AgentWorkflowRuntime {
       1
     )
     this.abortSignal = options.abortSignal
-    this.validateDefinition(definition)
+    validateWorkflowDefinition(definition)
 
     const outputs = new Map<string, unknown>()
     const stepResults: AgentWorkflowStepResult[] = []
@@ -147,7 +159,7 @@ class AgentWorkflowRuntime {
     }
 
     const last = stepResults.at(-1)
-    const status = this.resolveRunStatus(stepResults)
+    const status = resolveWorkflowRunStatus(stepResults)
     return {
       workflow_run_id: options.runId,
       name: definition.name,
@@ -162,26 +174,6 @@ class AgentWorkflowRuntime {
       steps: stepResults,
       output: last ? last.output : null,
     }
-  }
-
-  private validateDefinition(definition: AgentWorkflowDefinition): void {
-    if (isEmpty(definition.steps)) throw new AppError('VALIDATION', 'Workflow 至少需要一个 step。')
-    const ids = new Set<string>()
-    for (const step of definition.steps) {
-      if (ids.has(step.id)) throw new AppError('VALIDATION', `Workflow step id 重复：${step.id}。`)
-      this.validateSourceReference(step, ids)
-      ids.add(step.id)
-    }
-    boundedClone(definition, 'Workflow IR')
-  }
-
-  private validateSourceReference(step: AgentWorkflowStep, priorIds: ReadonlySet<string>): void {
-    if (step.operation !== 'filter' && step.operation !== 'dedupe' && step.operation !== 'majority_vote') return
-    if (priorIds.has(step.source.step_id)) return
-    const available = [...priorIds]
-    throw new AppError('VALIDATION', 
-      `step "${step.id}" 引用了尚不可用的 source "${step.source.step_id}"。可用 step id：${available.join(', ') || '（无）'}。`
-    )
   }
 
   private async executeStep(
@@ -266,7 +258,7 @@ class AgentWorkflowRuntime {
           rounds.push(result)
           if (!isSuccessful(result)) break
           current = result.structured_output
-          const convergence = this.evaluateConvergence(
+          const convergence = evaluateWorkflowConvergence(
             current,
             step.convergence,
             seenKeys,
@@ -283,19 +275,19 @@ class AgentWorkflowRuntime {
         break
       }
       case 'filter': {
-        const source = this.resolveSource(outputs, step.source, step.id)
+        const source = resolveWorkflowSource(outputs, step.source, step.id)
         output = asArray(source, `filter step "${step.id}" source`).filter((item) =>
           comparePredicate(item, step.predicate)
         )
         break
       }
       case 'dedupe': {
-        output = this.dedupe(asArray(this.resolveSource(outputs, step.source, step.id), `dedupe step "${step.id}" source`), step)
+        output = dedupeWorkflowItems(asArray(resolveWorkflowSource(outputs, step.source, step.id), `dedupe step "${step.id}" source`), step)
         break
       }
       case 'majority_vote': {
-        output = this.majorityVote(
-          asArray(this.resolveSource(outputs, step.source, step.id), `majority_vote step "${step.id}" source`),
+        output = resolveWorkflowMajorityVote(
+          asArray(resolveWorkflowSource(outputs, step.source, step.id), `majority_vote step "${step.id}" source`),
           step
         )
         status = (output as { status: string }).status === 'decided' ? 'completed' : 'partial'
@@ -338,118 +330,8 @@ class AgentWorkflowRuntime {
     }
   }
 
-  private resolveSource(
-    outputs: ReadonlyMap<string, unknown>,
-    source: AgentWorkflowValueRef,
-    stepId: string
-  ): unknown {
-    if (!outputs.has(source.step_id)) {
-      throw new AppError('VALIDATION', `step "${stepId}" 找不到 source "${source.step_id}"。`)
-    }
-    const value = valueAtPath(outputs.get(source.step_id), source.path)
-    // @arch-guard:suspend code-style/forbid-redundant-strict-literal-comparison 理由：null 是 workflow 数据面的合法值，只有 undefined 表示缺席。
-    if (value === undefined) {
-      throw new AppError('VALIDATION', `step "${stepId}" 的 source path 不存在：${source.path?.join('.') || '（根）'}。`)
-    }
-    return value
-  }
-
-  private dedupe(items: unknown[], step: AgentWorkflowDedupeStep): unknown[] {
-    const result: unknown[] = []
-    const indexByKey = new Map<string, number>()
-    for (const item of items) {
-      const key = stableJson(step.key_paths.map((path) => valueAtPath(item, path)))
-      const existingIndex = indexByKey.get(key)
-      if (isUndefined(existingIndex)) {
-        indexByKey.set(key, result.length)
-        result.push(item)
-        continue
-      }
-      if (step.keep !== 'highest_confidence' || !step.confidence_path) continue
-      const existingScore = valueAtPath(result[existingIndex], step.confidence_path)
-      const candidateScore = valueAtPath(item, step.confidence_path)
-      if (isNumber(candidateScore) && (!isNumber(existingScore) || candidateScore > existingScore)) {
-        result[existingIndex] = item
-      }
-    }
-    return result
-  }
-
-  private majorityVote(items: unknown[], step: AgentWorkflowMajorityVoteStep): unknown {
-    const groups = new Map<string, { value: unknown; votes: Map<string, { value: unknown; count: number }> }>()
-    for (const item of items) {
-      const vote = valueAtPath(item, step.vote_path)
-      if (!isPresent(vote)) continue
-      const groupValue = !isEmpty(step.group_path ?? [])
-        ? valueAtPath(item, step.group_path)
-        : '__all__'
-      const groupKey = stableJson(groupValue)
-      const group = groups.get(groupKey) ?? { value: groupValue, votes: new Map() }
-      const voteKey = stableJson(vote)
-      const current = group.votes.get(voteKey)
-      group.votes.set(voteKey, { value: vote, count: (current?.count ?? 0) + 1 })
-      groups.set(groupKey, group)
-    }
-
-    const quorum = Math.max(1, step.quorum ?? 2)
-    const threshold = Math.min(1, Math.max(0.5, step.majority_threshold ?? 0.5))
-    const decisions = [...groups.values()].map((group) => {
-      const votes = [...group.votes.values()].sort((left, right) => right.count - left.count)
-      const totalVotes = votes.reduce((sum, vote) => sum + vote.count, 0)
-      const top = votes[0]
-      const tied = !!top && votes.filter((vote) => vote.count === top.count).length > 1
-      const decided = !!top && totalVotes >= quorum && !tied && top.count / totalVotes >= threshold
-      return {
-        group: group.value,
-        status: decided ? 'decided' : 'inconclusive',
-        total_votes: totalVotes,
-        quorum,
-        counts: votes.map((vote) => ({ vote: vote.value, count: vote.count })),
-        winner: decided ? top.value : undefined,
-      }
-    })
-    const decided = !isEmpty(decisions) && decisions.every((decision) => decision.status === 'decided')
-    return { status: decided ? 'decided' : 'inconclusive', groups: decisions }
-  }
-
-  private evaluateConvergence(
-    output: unknown,
-    convergence: AgentWorkflowRepeatConvergence,
-    seenKeys: Set<string>,
-    previousNoNewRounds: number
-  ): { converged: boolean; noNewRounds: number } {
-    if (convergence.kind === 'predicate') return { converged: comparePredicate(output, convergence.predicate), noNewRounds: 0 }
-    if (convergence.kind === 'count_at_least') {
-      const value = valueAtPath(output, convergence.path)
-      const count = isArray(value) ? value.length : isNumber(value) ? value : 0
-      return { converged: count >= convergence.count, noNewRounds: 0 }
-    }
-
-    const items = asArray(valueAtPath(output, convergence.items_path), 'repeat no_new_items items')
-    let newItems = 0
-    for (const item of items) {
-      const key = stableJson(valueAtPath(item, convergence.key_path))
-      if (seenKeys.has(key)) continue
-      seenKeys.add(key)
-      newItems += 1
-    }
-    const noNewRounds = newItems === 0 ? previousNoNewRounds + 1 : 0
-    return {
-      converged: noNewRounds >= Math.max(1, convergence.patience ?? 1),
-      noNewRounds,
-    }
-  }
-
   private assertCanContinue(): void {
     if (this.abortSignal?.aborted) throw new WorkflowAbortedError('Workflow 已随父执行中断。')
-  }
-
-  private resolveRunStatus(steps: AgentWorkflowStepResult[]): AgentWorkflowRunResult['status'] {
-    if (steps.some((step) => step.status === 'aborted')) return 'aborted'
-    if (steps.some((step) => step.status === 'budget_exhausted')) return 'budget_exhausted'
-    if (steps.some((step) => step.status === 'failed')) return 'failed'
-    if (steps.some((step) => step.status === 'partial')) return 'partial'
-    return 'completed'
   }
 }
 

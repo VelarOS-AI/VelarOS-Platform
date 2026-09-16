@@ -50,10 +50,16 @@ const ReadBoundJsonSchemaAnyOf = [
   },
 ] as const
 
+/** 把值收窄成 JSON Schema 节点：判据就是「是个普通对象」，数组与标量为假（不校验 schema 关键字本身）。 */
 function isJsonSchemaObject(value: unknown): value is JsonSchemaObject {
   return isPlainObject(value)
 }
 
+/**
+ * 深拷贝一段 JSON Schema：数组与普通对象逐层重建，其余标量原样返回。
+ * 用来把 `as const` 冻结的常量模板拷成可写副本再拼进目标 schema，免得注入后被下游改坏共享常量。
+ * 只认数组和普通对象，不处理循环引用（schema 常量里没有）。
+ */
 function cloneJsonSchemaValue(value: unknown): unknown {
   if (isArray(value)) return value.map(cloneJsonSchemaValue)
   if (!isJsonSchemaObject(value)) return value
@@ -62,10 +68,16 @@ function cloneJsonSchemaValue(value: unknown): unknown {
   )
 }
 
+/** 判断某 schema 的 `properties` 下是否自有这个属性名（`properties` 不是对象时为假，不查原型链）。 */
 function schemaHasProperty(schema: JsonSchemaObject, propertyName: string): boolean {
   return isJsonSchemaObject(schema.properties) && Object.hasOwn(schema.properties, propertyName)
 }
 
+/**
+ * 按**字段形态**认出「这是一份有界读取的入参 schema」：`path`、`range`、`maxBytes`、`maxChars`、
+ * `allowUnbounded` 五个属性必须齐备，缺一即为假。不看工具名也不看任何标记，所以任何工具只要长成
+ * 这个样子都会被补上有界分支；反过来说，少写一个字段就整个不认，宁可漏注入也不错注入。
+ */
 function isReadInputJsonSchema(schema: JsonSchemaObject): boolean {
   if (!isJsonSchemaObject(schema.properties)) return false
   return (
@@ -77,6 +89,11 @@ function isReadInputJsonSchema(schema: JsonSchemaObject): boolean {
   )
 }
 
+/**
+ * 判断有界读取的 `anyOf` 分支是否已经注入过：把现有 anyOf 各分支的 `required` 并成一个集合，
+ * `range`、`maxBytes`、`maxChars`、`allowUnbounded` 四个都出现才算有。只看字段名不看分支结构，
+ * 所以调用方自己手写过等价约束时也能识别出来、不会被重复注入一遍。
+ */
 function hasReadBoundJsonSchemaAnyOf(schema: JsonSchemaObject): boolean {
   if (!isArray(schema.anyOf)) return false
   const requiredFields = new Set(
@@ -94,6 +111,11 @@ function hasReadBoundJsonSchemaAnyOf(schema: JsonSchemaObject): boolean {
   )
 }
 
+/**
+ * 把「读取必须有上界」的四选一分支（给 range.endLine / 给 maxBytes / 给 maxChars /
+ * 显式 `allowUnbounded: true`）追加进 schema 的 `anyOf`，返回新对象，原字段平铺形态不变。
+ * 已注入过就原样返回同一引用；原有 anyOf 分支保留在前，追加的是常量模板的深拷贝。
+ */
 function addReadBoundJsonSchemaAnyOf(schema: JsonSchemaObject): JsonSchemaObject {
   if (hasReadBoundJsonSchemaAnyOf(schema)) return schema
   return {
@@ -141,6 +163,14 @@ function normalizeParameterDescription(description: string): string {
     : parameterDescription({ description })
 }
 
+/**
+ * 造一条「有界结果上限」参数 schema（典型用途 maxResults）：**可选**，省略时默认取 `max`；
+ * 传了就取整并钳进 [1, max]，超限不报错只夹回上限。这样既没有「首次漏传 limit 直接 schema 报错」，
+ * 也没有「limit 给大一点整个调用作废」两道摩擦，结果始终有界。
+ * 描述文案会先过 `normalizeParameterDescription` 归成结构化形式再 `describe`——
+ * transform 之后 JSON Schema 里不再保留 minimum/maximum，上下界只能靠描述让模型看到。
+ * 名字里的 `required` 只为兼容既有引用，语义上它是可选参数。
+ */
 function requiredResultLimit(max: number, description: string) {
   // 可选 + 以 max 为默认上限:省略按 max 兜底,超限钳到 max(结果仍有界),
   // 消除"首漏 limit 报 schema 错"与"limit 给大即整调用报废"两个门槛。

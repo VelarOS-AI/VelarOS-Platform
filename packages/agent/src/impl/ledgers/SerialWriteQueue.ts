@@ -4,8 +4,29 @@
 // 每次 enqueue 挂在 mutationTail promise 链尾，前序落定后才跑。前序 rejection 不断链——由其自身
 // awaiter 上报，队列续跑后续任务。
 
-/** 串行写队列：mutationTail promise 链，保证追加/修复/关闭按提交序不交错执行。 */
-export class SerialWriteQueue {
+/**
+ * 串行写队列：一条账本内的全部写任务排在同一条 promise 链上，按入队（提交）序一个接一个跑完。
+ *
+ * 每个打开的账本 handle 自己持一条，随 handle 建随 handle 弃；队列只保证「不交错」，不保证「不失败」——
+ * 前序任务 reject 不断链，错误由它自己的调用方接住，后续任务照跑。
+ */
+export interface SerialWriteQueueApi {
+  /**
+   * 把一个写任务挂到链尾：前序全部落定后才开始跑。
+   *
+   * 返回的 promise 就是该任务自己的结果，成功给 `T`、失败原样 reject——调用方必须 await 它才能拿到错误，
+   * 队列本身吞掉 rejection 只为让后续任务继续。
+   */
+  enqueue<T>(task: () => Promise<T>): Promise<T>
+  /**
+   * 等此刻已入队的任务全部落定（成功或失败都算落定），永不 reject。
+   *
+   * 关闭句柄前先调它，避免关了文件还有在途的写；调用之后新入队的任务不在这次等待范围内。
+   */
+  drain(): Promise<void>
+}
+
+export class SerialWriteQueue implements SerialWriteQueueApi {
   private tail: Promise<unknown> = Promise.resolve()
 
   /** 入队一个写任务；返回的 promise 携带该任务的结果或 rejection。 */

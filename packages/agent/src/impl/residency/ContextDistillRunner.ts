@@ -31,11 +31,13 @@ const log = logRuntime.tag('ContextDistillRunner')
 /** 等应用的产物上限：产物本身占内存，且积压超过几个就说明 epoch 根本没在跑。 */
 const DefaultMaxPendingProducts = 4
 
+/** 建 `ContextDistillRunner` 时一次性交的三项：怎么拿到蒸馏器、这个 runner 属于哪个会话、积压上限。 */
 export interface ContextDistillRunnerOptions {
   /** 蒸馏器解析器（晚绑：registry 是宿主级单实例，比模型运行时先造出来）。 */
   resolveDistiller: () => Nullable<ContextDistiller>
   /** 会话标识（进端口的遥测上下文）。 */
   sessionId: Nullable<string>
+  /** 最多攒几个等应用的产物，缺省 4（小数向下取整，至少 1）；产物本身占内存，而积压超过几个就说明 epoch 根本没在跑，超限时丢最旧的那些。 */
   maxPendingProducts?: LooseOptional<number>
 }
 
@@ -44,7 +46,36 @@ function isTimeoutError(error: unknown): boolean {
   return isRecord(error) && isString(error.name) && error.name === 'TimeoutError'
 }
 
-export class ContextDistillRunner {
+/**
+ * 异步蒸馏调度这一面：把非折不可的段落排进队列、在回合之外一次跑一个、产物攒着等下一个 epoch 边界来取。
+ *
+ * 实现是 `ContextDistillRunner`，每个治理会话持一个；队列、在飞状态、待应用产物和计数全在内存里。
+ * 回合**永远不等**它：`schedule` 立即返回，慢一个 epoch 落地是设计。同一会话并发恒为 1。
+ * 失败方向固定是「一律产出回落骨架」——拒收、超时、端口抛错都照样给一份产物，绝不空手而归，
+ * 因为段落在规划期就已经被判定非折不可，什么都不给等于把压力原样留到下一轮。
+ */
+export interface ContextDistillRunnerApi {
+  /** 最多能攒几个待应用产物（构造时定死，至少 1）；超过就从最旧的开始丢。 */
+  readonly maxPendingProducts: number
+  /** 现在有没有在飞的或排着队的请求；这是并发 1 的判据，规划期据它决定还要不要再排。 */
+  readonly busy: boolean
+  /** 当前攒了几个待应用产物，等下一个 epoch 边界被 `takePending` 取走。 */
+  readonly pendingCount: number
+  /** 现在到底有没有可用的蒸馏器（模型运行时可能还没造好或被换掉）；规划期先问它，没有就别排队。 */
+  hasDistiller(): boolean
+  /** 取一份计数快照：请求过多少、接受/拒收/超时/失败各多少、因过代被丢弃多少。返回的是拷贝，随便存。 */
+  totals(): ContextDistillTotals
+  /** 把一批段落排进队列并启动跑动，**不 await**（回合永远不等蒸馏）；requests 为空时直接返回。已经在跑时只入队，跑完自然接上。 */
+  schedule(requests: readonly ContextDistillRequest[], config: ContextGovernanceConfig): void
+  /** epoch 边界上取走待应用产物：只给 `generation` 对得上的那些，对不上的直接丢弃并计入 staleDropped——账本整本重建后记录 id 会重新发号，把上一代的摘要贴到这一代记录上比不摘要更糟。取完队列清空。 */
+  takePending(generation: number): ContextDistillProduct[]
+  /** 丢掉全部在途状态（账本重建、会话失效时调）：清队列、清待应用产物并计入 staleDropped；已经在飞的那一次仍会跑完，它的产物会落到清空后的队列里。 */
+  reset(): void
+  /** 等到队列跑空为止。只给测试和 headless 实验用，产品路径永远不 await 它。 */
+  settled(): Promise<void>
+}
+
+export class ContextDistillRunner implements ContextDistillRunnerApi {
   private readonly timers = new TimerScope({ name: 'ContextDistillRunner' })
   private readonly queue: ContextDistillRequest[] = []
   private readonly pending: ContextDistillProduct[] = []

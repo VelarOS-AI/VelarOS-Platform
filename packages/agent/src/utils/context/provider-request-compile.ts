@@ -1,11 +1,13 @@
 import type { ModelMessage } from 'ai'
 
-import { isArray, isEmpty, isPlainObject, isString } from '@velaros-ai/core'
+import { isArray, isEmpty, isNotNull, isPlainObject, isString } from '@velaros-ai/core'
 
 import type { CompileProviderRequestInput, ContextGovernanceRuler, EstimateContextUsageOptions, ProviderHistoryRewriteSignal } from '../../types/context.js'
-import type { GovernanceEpochReport } from '../../types/residency.js'
+import type { ContextGovernanceSessionApi } from '../../types/residency.js'
+import type { ContextProjectionStats, GovernanceEpochReport, GovernanceWindowDerivation } from '../../types/residency.js'
 import { markLatestUserMessagePromptCacheBreakpoint } from '../model/prompt-cache'
 import { DefaultResidencyCharsPerToken } from '../residency/context-record'
+import { buildContextDashboardMessage } from '../residency/dashboard'
 import { estimateMessageBudgetChars } from '../residency/message-facts'
 import { rewriteCanonicalToolReferences } from '../tools/tool-identity'
 
@@ -72,6 +74,12 @@ export function measureGovernanceRuler(
 
 }
 
+/**
+ * 实测本轮历史的「字符 / token」密度：拿同一把分词尺与校准系数对这批消息估一次 token，再用正文字符数去除。
+ * 估出 0 token（消息为空等）时回落到 DefaultResidencyCharsPerToken；结果夹在 MinHistoryCharsPerToken 与 MaxHistoryCharsPerToken 之间，
+ * 免得极端 tokenizer 或异常样本把治理器推到无穷敏感或彻底失明。
+ * 必须实测而不能固定按 4 折算——中文与结构化载荷会被固定口径低估数倍，治理 epoch 就会等到模型已被旧轨迹淹没才触发。
+ */
 export function resolveMeasuredCharsPerToken(
   input: CompileProviderRequestInput,
   messages: readonly ModelMessage[],
@@ -90,10 +98,21 @@ export function resolveMeasuredCharsPerToken(
   )
 }
 
+/**
+ * 把一批消息的预算字符数加总，逐条走 `estimateMessageBudgetChars`（账本口径，只算正文，不含系统提示词与工具清单那些固定开销）。
+ * 这个和是密度实测的分母，也是治理窗口里「历史正文占了多少」的基准。
+ */
 export function sumMessageChars(messages: readonly ModelMessage[]): number {
   return messages.reduce((total, message) => total + estimateMessageBudgetChars(message), 0)
 }
 
+/**
+ * 把历史消息里的 canonical 工具名改写成本次请求的 provider 传输别名：
+ * tool-call / tool-result 片段换 `toolName`，text 片段与字符串型 content 按完整 token 改写其中的工具引用。
+ * user 消息整条跳过——用户原话不是编译产物，改了会让持久历史与界面显示跟着变味。
+ * 别名表为空时直接返回浅拷；没有任何改动的消息返回原对象引用，只有真改了才产生新对象（省掉无谓的结构变更与缓存失效）。
+ * 这层只作用于发往 provider 的那一份，映射不回写注册表、权限策略或持久历史。
+ */
 export function rewriteProviderToolNames(
   messages: readonly ModelMessage[],
   aliases: Readonly<Record<string, string>>
@@ -179,4 +198,40 @@ export function buildGovernanceRewriteSignals(
       },
     },
   ]
+}
+
+/**
+ * 拼这次请求的活动尾：调用方自带的尾块打底，治理会话开了 dashboard 就再追加一条上下文仪表盘消息。
+ *
+ * 仪表盘里的「上一次治理尝试」只认**当前这一代账本**的报告——账本重建后的代际不同，
+ * 拿旧代的报告去说明现状会把人和模型一起带偏。生成不出仪表盘（没数据）时只返回打底的那些尾块。
+ */
+export function buildProviderRequestTailBlocks(
+  input: CompileProviderRequestInput,
+  governance: {
+    session: ContextGovernanceSessionApi
+    window: GovernanceWindowDerivation
+  },
+  stats: ContextProjectionStats
+): ModelMessage[] {
+  const blocks = [...(input.tailBlocks ?? [])]
+  if (!governance.session.config.dashboard) return blocks
+
+  const ledger = governance.session.ledger
+  const lastEpochAttempt = governance.session
+    .epochReports()
+    .findLast((report) =>
+      isNotNull(report.trigger) && report.ledgerGeneration === governance.session.generation
+    )
+  const dashboard = buildContextDashboardMessage({
+    epoch: governance.session.epoch,
+    stats: ledger.stats(),
+    records: ledger.list(),
+    residency: ledger.residencyVector(),
+    projectedTokens: stats.projectedTokens,
+    budgetTokens: governance.window.windowTokens,
+    lastEpochAttempt,
+  })
+  if (dashboard) blocks.push(dashboard)
+  return blocks
 }

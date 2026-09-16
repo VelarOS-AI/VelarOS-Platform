@@ -258,7 +258,7 @@ describe('trusted saved input contract migration', () => {
         return { files: request.input.edits }
       },
     }
-    await expect(resolveToolInputReuse(ctx, toolName, retry, 'untrusted', options)).rejects.toThrow('different tool')
+    await expect(resolveToolInputReuse(ctx, toolName, retry, 'untrusted', options)).rejects.toThrow('另一个工具')
     expect(migratedSource).toBe('')
     await resolveToolInputReuse(ctx, toolName, retry, 'trusted', { ...options, inputReuseSourceTools: ['project:write'] })
     expect(migratedSource).toBe('project:write')
@@ -276,13 +276,13 @@ describe('trusted saved input contract migration', () => {
     const ctx = { sessionId: 's', resourceId: 'resource:one', contextPayloadStore: new InMemoryContextPayloadStore() }
     await saveToolAttemptInput(ctx, 'first', toolName, input)
     await saveToolAttemptOutcome(ctx, 'first', 'not-applied')
-    await expect(resolveToolInputReuse({ ...ctx, resourceId: 'resource:two' }, toolName, retry, 'retry', options)).rejects.toThrow('resource scope')
+    await expect(resolveToolInputReuse({ ...ctx, resourceId: 'resource:two' }, toolName, retry, 'retry', options)).rejects.toThrow('资源作用域')
     expect(migrations).toBe(0)
     expect(await resolveToolInputReuse(ctx, toolName, retry)).toMatchObject({ edits: [{ oldText: 'right' }] })
     const legacy = { sessionId: 'legacy', contextPayloadStore: new InMemoryContextPayloadStore() }
     await saveToolAttemptInput(legacy, 'first', toolName, input)
     await saveToolAttemptOutcome(legacy, 'first', 'not-applied')
-    await expect(resolveToolInputReuse({ ...legacy, resourceId: 'resource:one' }, toolName, retry, 'retry', options)).rejects.toThrow('no verified resource scope')
+    await expect(resolveToolInputReuse({ ...legacy, resourceId: 'resource:one' }, toolName, retry, 'retry', options)).rejects.toThrow('没有记录资源作用域')
     expect(migrations).toBe(0)
   })
 
@@ -290,7 +290,7 @@ describe('trusted saved input contract migration', () => {
     const ctx = context()
     await saveToolAttemptInput(ctx, 'first', toolName, input, 2)
     await saveToolAttemptOutcome(ctx, 'first', 'not-applied')
-    await expect(resolveToolInputReuse(context(ctx.contextPayloadStore), toolName, retry)).rejects.toThrow('contract 2')
+    await expect(resolveToolInputReuse(context(ctx.contextPayloadStore), toolName, retry)).rejects.toThrow('第 2 版参数契约')
     expect(await resolveToolInputReuse(context(ctx.contextPayloadStore), toolName, retry, 'second', { inputContractVersion: 2 })).toEqual({ edits: [{ ...input.edits[0], oldText: 'right' }] })
   })
 })

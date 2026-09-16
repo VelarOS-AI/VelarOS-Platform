@@ -23,19 +23,48 @@ export function nextTurnContextLedgerGeneration(): string {
   return `${TurnContextProcessGeneration}.${ledgerInstanceSeq.toString(36)}`
 }
 
+/** 往账本里记一条环境变化要填的东西：正文在这一刻就定稿，之后谁都不许重排版。 */
 export interface TurnContextLedgerAppendInput {
+  /** 这件事发生的时刻（毫秒时间戳）；不填就取写入时刻。事后补记时才需要显式传。 */
   occurredAt?: number
+  /** 这条 delta 的短标签，投给模型时当这一行的抬头，例如来源名或操作名。 */
   label: string
+  /** 投给模型的正文，`append` 时就得是最终形态：消费方原样投递，不再截断、不再拼接、不再改格式。 */
   summaryText: string
+  /** 可选的细看线索：告诉模型想看全貌该调哪个工具、带什么参数。不填表示这条看完就够了。 */
   inspect?: TurnContextInspectHint
 }
 
+/** `peek` 的结果：既给这次要投的 delta，也给回下次 peek 该带的游标基底。 */
 export interface TurnContextLedgerPeekResult {
+  /** 本账本的代次；和消费方手里的对不上，说明账本换过一茬，消费方要整段替换自己的 cursor 而不是接着往下读。 */
   generation: string
+  /** 当前还留着的最旧那条的 seq；账本空时等于下一个要发的 seq。 */
   headSeq: number
+  /** 至今发出过的最大 seq；消费方消费完这批后把 cursor 记到这里。 */
   tailSeq: number
+  /** 有 delta 因容量被淘汰、而且正好落在这次请求的区间里时，给出最旧保留项的 seq，表示「这条之前的你没看到」。没缺口时不带这个字段。 */
   droppedBeforeSeq?: number
+  /** 这次该投的 delta，按 seq 从小到大；`afterSeq` 之后的全部，可能为空数组。 */
   deltas: TurnContextDelta[]
+}
+
+/**
+ * 一个会话里一个 source 的环境 delta 账本，内存 ring buffer：seq 从 1 单调递增，
+ * 超过 `maxEntries` 就淘汰最旧的并记下缺口边界，`peek` 纯内存读、不做任何 IO。
+ *
+ * 正文在 `append` 那一刻定稿（事件发生时就格式化好），消费方只管原样投给模型。
+ * 实现是 `TurnContextLedger`，由 `TurnContextSessionLedgers` 按「会话 × source」建和管。
+ */
+export interface TurnContextLedgerApi {
+  /** 本账本的代次，建的时候定死不再变。消费方拿它判断自己的 cursor 还算不算数：对不上就整段换掉，不做增量回放。 */
+  readonly generation: string
+  /** 记一条新的环境变化，分配下一个 seq 并返回落好的 delta；超出容量时淘汰最旧的几条，并把缺口边界记到 `droppedBeforeSeq`，下次 peek 会如实报给消费方。 */
+  append(input: TurnContextLedgerAppendInput): TurnContextDelta
+  /** 状态型 source 专用：先清空整本账，再记这一条，永远只留最新的一份事实。刻意不动 `droppedBeforeSeq`——容量淘汰是「你漏看了」要报缺口，取代是「那条已经不成立」，消费方本来就不该再看到它。 */
+  replaceLatest(input: TurnContextLedgerAppendInput): TurnContextDelta
+  /** 取消费方还没看过的那批 delta：`afterSeq` 是它上次消费到的位置，`generation` 是它手里的代次。代次对不上时不回放任何旧 delta，只交出当前基底让它重新对齐。纯读，不改账本状态。 */
+  peek(input: Pick<TurnContextSourcePeekInput, 'afterSeq' | 'generation'>): TurnContextLedgerPeekResult
 }
 
 /**
@@ -45,7 +74,7 @@ export interface TurnContextLedgerPeekResult {
  * - summaryText/label 在 append 时一次性定稿（事件时格式化），此后任何消费方不得重排版。
  * - peek 为纯内存读取，无任何 IO。
  */
-export class TurnContextLedger {
+export class TurnContextLedger implements TurnContextLedgerApi {
   private nextSeq = 1
   private items: TurnContextDelta[] = []
   /** 有淘汰发生时，最旧保留项的 seq；无淘汰为 null。 */

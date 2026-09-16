@@ -1,7 +1,16 @@
 import { isEmpty } from '@velaros-ai/core'
 
-import type { ProviderToolReferenceCanonicalizer as ProviderToolReferenceCanonicalizerApi } from '../../types/tools.js'
+import type { ProviderToolReferenceCanonicalizer as ProviderToolReferenceCanonicalizerContract } from '../../types/tools.js'
 import { ProviderToolIdentityTokenCharacters, rewriteProviderToolReferences } from '../../utils/tools/tool-identity'
+
+/**
+ * 一条流式还原通道：把供应商侧的工具别名换回 canonical identity token。
+ *
+ * 由 `createProviderToolReferenceCanonicalizer` 按一次请求的别名映射建一条，状态（尚未闭合的尾巴）
+ * 只属于这条通道，正文必须按到达顺序喂进来，收尾时调 `flush` 把尾巴吐干净。
+ * 形状与对外公开的 `ProviderToolReferenceCanonicalizer` 同源，这里只把它挪到类上方当本类的接口。
+ */
+export interface ProviderToolReferenceCanonicalizerApi extends ProviderToolReferenceCanonicalizerContract {}
 
 /**
  * 流式正文按完整 identity token 还原，避免别名跨 chunk 时漏回用户界面或持久历史。
@@ -41,7 +50,7 @@ class ProviderToolReferenceCanonicalizer implements ProviderToolReferenceCanonic
 /** 按一次请求的别名映射开一条还原通道。 */
 function createProviderToolReferenceCanonicalizer(
   providerToCanonical: Readonly<Record<string, string>>
-): ProviderToolReferenceCanonicalizerApi {
+): ProviderToolReferenceCanonicalizerContract {
   return new ProviderToolReferenceCanonicalizer(providerToCanonical)
 }
 

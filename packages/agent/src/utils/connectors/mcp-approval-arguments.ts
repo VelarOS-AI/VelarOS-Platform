@@ -3,7 +3,14 @@ const MaxStringChars = 400
 const SensitiveArgumentKey =
   /password|passwd|secret|token|authorization|credential|api[-_]?key|cookie/i
 
-/** Approval text is a bounded, redacted view. Never invokes argument getters or toJSON hooks. */
+/**
+ * 把 MCP 工具的调用参数摊成一段**有界且脱敏**的审批预览文本——这是用户在确认弹窗里唯一看得见的东西。
+ *
+ * 五道上限一起收口：单个字符串超 400 字截断、每层最多列 20 个键、总条目 80 个、嵌套超过 4 层写 `[nested value omitted]`，
+ * 最后整段再截到 4000 字；环引用写 `[circular]`。键名命中敏感词（password / token / api-key / cookie 等）的值一律换成 `[redacted]`。
+ * **绝不触发取值器或 toJSON**：只读自有属性描述符，遇到 getter 就写 `[accessor omitted]`——渲染一段审批预览本身不该产生任何副作用。
+ * 截掉的内容不提供找回途径，也不需要：这段文本只供人眼确认，真正发给 server 的始终是原始参数。
+ */
 export function describeMcpApprovalArguments(args: Record<string, unknown>): string {
   const visited = new WeakSet<object>()
   let remainingEntries = 80

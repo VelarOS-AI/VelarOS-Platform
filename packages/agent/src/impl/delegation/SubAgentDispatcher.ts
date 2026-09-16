@@ -51,10 +51,8 @@ import { randomUUID } from 'node:crypto'
 import {
   isBoolean,
   isEmpty,
-  isFunction,
   isPresent,
   Log,
-  optionalWhen,
   toNullable,
   toOptional,
   truncate,
@@ -62,18 +60,36 @@ import {
 import { AppError } from '@velaros-ai/core/error'
 
 import type { AgentRuntimeCapabilityPorts, CustomSubAgentRegistry, SubAgentConfigPort, SubAgentQueryRunner, SubAgentTypeProvider } from '../../contract/requires.js'
-import type { AgentEvent } from '../../types/agent'
-import type {SubAgentTaskResult, SubAgentUsage, TeamModelRouteCategory, TeamModelSelectionTrace, ThinkingDepth, ToolCategoryId, UserActionCard } from '../../types/agent.js'
-import type { DangerousConfirmationStatusSink, DispatchPlan, ResolvedDispatchPlan, ResolvedSubAgentTypeConfig, SubAgentDispatchCatalog, SubAgentDispatchLimitsSnapshot, SubAgentDispatchRequest, SubAgentModelChoice, SubAgentResumeBriefing, SubAgentRetryState, SubAgentThreadRetention, SubAgentToolCategoryRequestResult, SubAgentToolContext, SubAgentWorkerExecutionOutput, TeamModelRouteResult, WorkerStatusArgs } from '../../types/delegation.js'
+import type {SubAgentTaskResult, SubAgentUsage, TeamModelSelectionTrace, ThinkingDepth, ToolCategoryId } from '../../types/agent.js'
+import type { DispatchPlan, ResolvedDispatchPlan, ResolvedSubAgentTypeConfig, SubAgentDispatchCatalog, SubAgentDispatchLimitsSnapshot, SubAgentDispatchRequest, SubAgentModelChoice, SubAgentResumeBriefing, SubAgentRetryState, SubAgentThreadRetention, SubAgentToolCategoryRequestResult, SubAgentToolContext, SubAgentWorkerExecutionOutput, TeamModelRouteResult, WorkerStatusArgs } from '../../types/delegation.js'
 import type { AgentExecutionLimitOverrides, AgentExecutionLimits } from '../../types/loop.js'
 import type { ExecutionEventBusApi, SubAgentGuidanceRelayWorkerHandle } from '../../types/records.js'
 import { resolveCapabilityDelegationPolicy } from '../../utils/capabilities'
-import { dedupeToolCategories, formatModelFallbackNote, normalizeResumeIdentityString, sameStringSet } from '../../utils/delegation/dispatcher'
+import {
+  applySubAgentEffortOverride,
+  applySubAgentModelOverride,
+  buildResumeDispatchRequest,
+  resolveEffectiveSubAgentTypeConfig,
+  resolveInitialSubAgentToolCategories,
+  resolveSubAgentRouteCategory,
+  resolveSubAgentTypeKey,
+  validateSubAgentResumeIdentity,
+} from '../../utils/delegation/dispatch-plan'
+import {
+  attachSubAgentWorkerProbes,
+  buildAutonomousSubAgentParentCtx,
+  buildSubAgentAsyncThreadKey,
+  combineAbortSignals,
+  emitSubAgentDangerousConfirmationCard,
+  emitSubAgentWorkerStatus,
+  formatSubAgentTransientRetryStatus,
+  isSubAgentAbortError,
+} from '../../utils/delegation/dispatch-worker'
+import { dedupeToolCategories, formatModelFallbackNote } from '../../utils/delegation/dispatcher'
 import { buildSubAgentDispatchInstruction, buildSubAgentResumeBriefing, buildSubAgentResumeInstruction } from '../../utils/delegation/instruction'
 import {
   formatSubAgentBackgroundArtifact,
   formatSubAgentFailureRedispatchGuidance,
-  formatSubAgentHighRiskConfirmationStatus,
   formatSubAgentStartedMessage,
   formatSubAgentTaskResultForParent,
   formatSubAgentThreadUnavailableMessage,
@@ -138,7 +154,53 @@ function resolveSubAgentExecutionKey(args: {
  * 主智能体通过 agent:dispatch 工具触发；负责并发上界（按执行隔离）、类型路由、
  * 模型路由健康度反馈、写租约、工作线程事件投影，以及失败/中断的回灌处理。
  */
-class SubAgentDispatcher {
+export interface SubAgentDispatcherApi {
+  /**
+   * 绑定真正跑 Agent 的 runner；宿主装配收尾时调一次。
+   *
+   * 派发器建出来时还没有 runner（二者互相依赖），没绑就 `dispatch` 会抛 `INTERNAL`。
+   */
+  bindAgentRunner(agentRunner: SubAgentQueryRunner): void
+  /**
+   * 某次执行此刻的**真实**派发配额（并发上限 / 总量上限 / 还能派几个）。
+   *
+   * 存在的唯一理由：工作流的 lane 调度器不许自带第二本并发账，它按这份真值开 runner、钳自己的 max_agents。
+   * **只读、不建闸**——查配额不该给一个可能永远不派子 Agent 的执行留下信号量记录。
+   */
+  describeExecutionLimits(args: {
+    executionId?: LooseOptional<string>
+    sessionId: string
+  }): SubAgentDispatchLimitsSnapshot
+  /** 给正在跑的某条线程发中断信号，成功发出返回 true；线程不在跑返回 false。用户点停止、父会话释放、后台任务取消都走它。 */
+  abortWorker(executionKey: string, threadId: string, reason?: string): boolean
+  /** 给正在跑的某条线程追加一条指令（relay），入队成功返回 true；线程不在跑或队列不可用返回 false。 */
+  relayGuidance(executionKey: string, threadId: string, message: string): boolean
+  /**
+   * 派发（或续跑、中断）一个子 Agent，返回**给父 Agent 看的文本结果**——唯一入口。
+   *
+   * 顺序是：解析身份与类型 → 过并发/总量/熔断三道闸 → 建线程与事件面 → 跑 worker。
+   * `sync` 阻塞到子 Agent 收尾并把结果内联返回；`async` 立刻返回一条可等待的后台任务说明。
+   * 被闸拦下、类型未知、thread_id 查无此线程等情况一律返回一段说明文字而不是抛错——父 Agent 据此改道。
+   */
+  dispatch(request: SubAgentDispatchRequest): Promise<string>
+  /** 可派发的子 Agent 类型目录（内置 + 自定义）与默认类型 id；id 冲突时内置优先，与执行期的解析口径一致。 */
+  describeDispatchCatalog(): SubAgentDispatchCatalog
+  /**
+   * 父会话被删除时由宿主调用：中断该会话仍在跑的子 Agent，并丢掉它的全部线程（含保留期内的）。
+   *
+   * 执行作用域的计数、信号量与账本不在这里回收，它们仍跟着各自执行的 `clearExecution` 走。
+   */
+  releaseParentSession(parentSessionId: string): void
+  /**
+   * 顶层执行结束：中断仍在跑的 worker，回收本次执行的计数、信号量、进展账本与取消标记。
+   *
+   * 子 Agent 线程**不删**——脱离执行转入保留期，供同一父会话的后续执行带 thread_id 续跑。
+   * executionKey 必须与 `dispatch` 用同一个解析函数算出来，key 漂移会误清别的执行或漏清导致计数永不归零。
+   */
+  clearExecution(executionKey: string): void
+}
+
+class SubAgentDispatcher implements SubAgentDispatcherApi {
   /** 每个顶层执行独立的并发信号量，避免跨会话/窗口互相阻塞排队。 */
   private readonly semaphores = new Map<string, Semaphore>()
   private readonly dispatchCountByExecution = new Map<string, number>()
@@ -260,7 +322,7 @@ class SubAgentDispatcher {
     const resumeBriefing = isResume ? buildSubAgentResumeBriefing(existingSession!) : null
 
     const dispatchRequest = isResume
-      ? this.buildResumeDispatchRequest(request, existingSession!)
+      ? buildResumeDispatchRequest(request, existingSession!)
       : request
 
     const requestedType = dispatchRequest.input.subagentType?.trim()
@@ -290,11 +352,11 @@ class SubAgentDispatcher {
       ? dispatchRequest.input.readonly
       : toOptional(customAgent?.readonly)
     const readonlyMode = resolveReadonlyMode(baseTypeConfig.readonlyDefault, readonlyOverride)
-    const typeConfig = this.resolveEffectiveTypeConfig(baseTypeConfig, readonlyMode)
-    const initialToolCategories = this.resolveInitialToolCategories(dispatchRequest, typeConfig)
+    const typeConfig = resolveEffectiveSubAgentTypeConfig(baseTypeConfig, readonlyMode)
+    const initialToolCategories = resolveInitialSubAgentToolCategories(dispatchRequest, typeConfig)
 
     if (isResume && requestedThreadId) {
-      const resumeIdentityError = this.validateResumeIdentity(
+      const resumeIdentityError = validateSubAgentResumeIdentity(
         dispatchRequest,
         requestedThreadId,
         existingSession!,
@@ -337,7 +399,7 @@ class SubAgentDispatcher {
       `${typeConfig.subagentType} sub-agent`
 
     const signature = this.progressLedger.buildSignature(
-      this.resolveTypeKey(typeConfig),
+      resolveSubAgentTypeKey(typeConfig),
       dispatchRequest.input.prompt,
       dispatchRequest.input.description
     )
@@ -381,7 +443,7 @@ class SubAgentDispatcher {
       hasToolUse: false,
     }
     const progressDigest = new SubAgentProgressDigestRecorder()
-    const workerEvents = this.attachWorkerProbes(
+    const workerEvents = attachSubAgentWorkerProbes(
       request.events.forWorkerExecution({
         threadId,
         activationId,
@@ -411,14 +473,15 @@ class SubAgentDispatcher {
       resolvedModel,
     }
 
-    this.emitWorkerStatus({ ...statusBase, status: 'pending', summary: title })
+    emitSubAgentWorkerStatus({ ...statusBase, status: 'pending', summary: title })
 
-    const autonomousParentCtx = this.buildAutonomousParentCtx(
+    const autonomousParentCtx = buildAutonomousSubAgentParentCtx(
       dispatchRequest.parentCtx,
+      createUnattendedSubAgentApprovalPort,
       (status, summary) => {
-        this.emitWorkerStatus({ ...statusBase, status, summary })
+        emitSubAgentWorkerStatus({ ...statusBase, status, summary })
         if (status === 'awaiting_confirmation') {
-          this.emitDangerousConfirmationWorkerCard({ ...statusBase, summary })
+          emitSubAgentDangerousConfirmationCard({ ...statusBase, summary })
         }
       },
       { agentId: threadId, label: agentName }
@@ -451,7 +514,7 @@ class SubAgentDispatcher {
         toolScope: dispatchRequest.input.toolScope ?? 'type_default',
         toolCategories: initialToolCategories,
         model: resolvedModel,
-        routeCategory: this.resolveRouteCategory(dispatchRequest, typeConfig),
+        routeCategory: resolveSubAgentRouteCategory(dispatchRequest, typeConfig),
         agentName,
         request: {
           custom_agent_id: toNullable(typeConfig.customAgentId),
@@ -577,14 +640,14 @@ class SubAgentDispatcher {
         description: args.request.input.description?.trim() || null,
         prompt: args.request.input.prompt,
         agentName: args.statusBase.agentName,
-        subagentType: this.resolveTypeKey(args.typeConfig),
+        subagentType: resolveSubAgentTypeKey(args.typeConfig),
       })
-      const asyncThreadKey = this.asyncThreadKey(executionKey, args.threadId)
+      const asyncThreadKey = buildSubAgentAsyncThreadKey(executionKey, args.threadId)
       if (this.cancelledAsyncThreads.delete(asyncThreadKey)) {
         relayHandle.abort('Background sub-agent job cancelled')
       }
       this.sessionStore.setStatus(args.threadId, 'running')
-      this.emitWorkerStatus({ ...args.statusBase, status: 'running', summary: args.title })
+      emitSubAgentWorkerStatus({ ...args.statusBase, status: 'running', summary: args.title })
 
       if (args.backgroundJobId && this.backgroundJobManager) {
         const jobId = args.backgroundJobId
@@ -617,10 +680,14 @@ class SubAgentDispatcher {
           resolvedModelOverride: args.resolvedModel,
           resolvedEffortOverride: args.resolvedEffort,
           onTransientRetry: (error, attempt) => {
-            this.emitWorkerStatus({
+            emitSubAgentWorkerStatus({
               ...args.statusBase,
               status: 'running',
-              summary: this.formatTransientRetryStatus(error, attempt),
+              summary: formatSubAgentTransientRetryStatus(
+                error,
+                attempt,
+                SubAgentTransientRetryMaxAttempts
+              ),
               error: error.message,
             })
           },
@@ -650,7 +717,7 @@ class SubAgentDispatcher {
 
       if (!args.resumeBriefing) {
         this.progressLedger.recordFinding(executionKey, {
-          type: this.resolveTypeKey(args.typeConfig),
+          type: resolveSubAgentTypeKey(args.typeConfig),
           title: args.title,
           summary: rawText,
         })
@@ -659,7 +726,7 @@ class SubAgentDispatcher {
       // 先把完整结构化结果写入 job artifact，再发布 terminal worker 事件。
       // 这样 UI/父 Agent 看到 completed 时，job:read_output 已经可读，不存在「先通知后落盘」窗口。
       this.completeSubAgentBackgroundJob(args.backgroundJobId, taskResult)
-      this.emitWorkerStatus({
+      emitSubAgentWorkerStatus({
         ...args.statusBase,
         status: 'completed',
         summary: truncate(taskResult.summary.trim(), 200),
@@ -686,7 +753,7 @@ class SubAgentDispatcher {
         this.sessionStore.appendRunResult(args.threadId, taskResult)
         this.sessionStore.setStatus(args.threadId, 'aborted')
         this.failSubAgentBackgroundJob(args.backgroundJobId, taskResult)
-        this.emitWorkerStatus({
+        emitSubAgentWorkerStatus({
           ...args.statusBase,
           status: 'aborted',
           summary: '子智能体已中断。',
@@ -709,7 +776,7 @@ class SubAgentDispatcher {
       this.sessionStore.appendRunResult(args.threadId, taskResult)
       this.sessionStore.setStatus(args.threadId, 'failed')
       this.failSubAgentBackgroundJob(args.backgroundJobId, taskResult)
-      this.emitWorkerStatus({
+      emitSubAgentWorkerStatus({
         ...args.statusBase,
         status: 'failed',
         summary: truncate(message, 200),
@@ -719,7 +786,7 @@ class SubAgentDispatcher {
       return formatSubAgentTaskResultForParent(taskResult, args.statusBase.agentName)
     } finally {
       relayHandle = null
-      this.cancelledAsyncThreads.delete(this.asyncThreadKey(executionKey, args.threadId))
+      this.cancelledAsyncThreads.delete(buildSubAgentAsyncThreadKey(executionKey, args.threadId))
       this.guidanceRelayRegistry.unregisterWorker(executionKey, args.threadId)
       semaphore.release()
     }
@@ -832,12 +899,8 @@ class SubAgentDispatcher {
   }
 
   private cancelAsyncWorker(executionKey: string, threadId: string): void {
-    this.cancelledAsyncThreads.add(this.asyncThreadKey(executionKey, threadId))
+    this.cancelledAsyncThreads.add(buildSubAgentAsyncThreadKey(executionKey, threadId))
     this.abortWorker(executionKey, threadId, 'Background sub-agent job cancelled')
-  }
-
-  private asyncThreadKey(executionKey: string, threadId: string): string {
-    return `${executionKey}\u0000${threadId}`
   }
 
   private handleInterruptDispatch(
@@ -866,101 +929,6 @@ class SubAgentDispatcher {
       this.sessionStore.setStatus(threadId, 'aborted')
     }
     return formatSubAgentTaskResultForParent(taskResult)
-  }
-
-  private buildResumeDispatchRequest(
-    request: SubAgentDispatchRequest,
-    session: NonNullable<ReturnType<SubAgentSessionStore['getSession']>>
-  ): SubAgentDispatchRequest {
-    const storedRequest = session.request
-    const storedToolCategories = storedRequest.tool_categories
-      ? [...storedRequest.tool_categories]
-      : undefined
-    const storedReadonly = optionalWhen(isBoolean, storedRequest.readonly)
-    return {
-      ...request,
-      input: {
-        ...request.input,
-        // 自定义 agent 会话续跑时优先还原 custom id（stored subagent_type 只是它的 base）。
-        subagentType:
-          request.input.subagentType ??
-          toOptional(storedRequest.custom_agent_id) ??
-          storedRequest.subagent_type,
-        toolScope: request.input.toolScope ?? storedRequest.tool_scope ?? 'type_default',
-        toolCategories: request.input.toolCategories ?? storedToolCategories,
-        readonly: isBoolean(request.input.readonly)
-          ? request.input.readonly
-          : storedReadonly,
-        model: request.input.model ?? toOptional(storedRequest.model),
-        effort: request.input.effort ?? toOptional(storedRequest.effort),
-        routeCategory: request.input.routeCategory ?? toOptional(storedRequest.route_category),
-      },
-    }
-  }
-
-  private validateResumeIdentity(
-    request: SubAgentDispatchRequest,
-    threadId: string,
-    session: NonNullable<ReturnType<SubAgentSessionStore['getSession']>>,
-    typeConfig: ResolvedSubAgentTypeConfig,
-    readonlyMode: boolean,
-    toolCategories: readonly ToolCategoryId[]
-  ): Nullable<string> {
-    const reject = (reason: string): string =>
-      `不能续跑子智能体 ${threadId}：${reason}。请新派发一个子 Agent。`
-
-    if (session.parent_session_id !== request.parentCtx.sessionId) return reject(
-        `threadId 属于 parent session "${session.parent_session_id}"，当前 parent session 是 "${request.parentCtx.sessionId}"`
-      )
-
-    const storedResource = normalizeResumeIdentityString(session.resource_id)
-    const currentResource = normalizeResumeIdentityString(request.parentCtx.resourceId)
-    if (storedResource !== currentResource) return reject(
-        `threadId 是在资源 "${storedResource || '（无）'}" 上派发的，当前资源是 "${currentResource || '（无）'}"`
-      )
-
-    if (session.subagent_type !== typeConfig.subagentType) return reject(
-        `threadId 属于 sub-agent type "${session.subagent_type}"，当前请求是 "${typeConfig.subagentType}"`
-      )
-
-    const storedCustomAgentId = toNullable(session.request.custom_agent_id)
-    const currentCustomAgentId = toNullable(typeConfig.customAgentId)
-    if (storedCustomAgentId !== currentCustomAgentId) return reject(
-        `threadId 属于自定义 agent "${storedCustomAgentId ?? '（无）'}"，当前请求是 "${currentCustomAgentId ?? '（无）'}"`
-      )
-
-    const storedRequest = session.request
-    const storedReadonly = isBoolean(storedRequest.readonly)
-      ? storedRequest.readonly
-      : typeConfig.readonlyDefault
-    if (storedReadonly !== readonlyMode) return reject(
-        `threadId 的 readonly=${storedReadonly}，当前请求 readonly=${readonlyMode}`
-      )
-
-    const storedToolScope = storedRequest.tool_scope ?? 'type_default'
-    const currentToolScope = request.input.toolScope ?? 'type_default'
-    if (storedToolScope !== currentToolScope) return reject(
-        `threadId 使用 tool_scope "${storedToolScope}"，当前请求是 "${currentToolScope}"`
-      )
-
-    const storedToolCategories = storedRequest.tool_categories ?? []
-    if (!sameStringSet(storedToolCategories, toolCategories)) return reject(
-        `threadId 使用工具分类 "${storedToolCategories.join(', ')}"，当前请求是 "${toolCategories.join(', ')}"`
-      )
-
-    const storedModel = normalizeResumeIdentityString(storedRequest.model)
-    const currentModel = normalizeResumeIdentityString(request.input.model)
-    if (storedModel !== currentModel) return reject(
-        `threadId 使用 model "${storedModel || 'default'}"，当前请求是 "${currentModel || 'default'}"`
-      )
-
-    const storedRouteCategory = storedRequest.route_category ?? typeConfig.routeCategory
-    const currentRouteCategory = this.resolveRouteCategory(request, typeConfig)
-    if (storedRouteCategory !== currentRouteCategory) return reject(
-        `threadId 使用 route_category "${storedRouteCategory}"，当前请求是 "${currentRouteCategory}"`
-      )
-
-    return null
   }
 
   private tryResumeExistingSession(
@@ -1001,19 +969,6 @@ class SubAgentDispatcher {
       .some((worker) => worker.threadId === threadId)
   }
 
-  private resolveEffectiveTypeConfig(
-    base: ResolvedSubAgentTypeConfig,
-    readonlyMode: boolean
-  ): ResolvedSubAgentTypeConfig {
-    if (!readonlyMode) return base
-    return { ...base, resourceLeaseScope: null }
-  }
-
-  /** 派发时展示/记账用的类型键：自定义 agent 用其 id，内置类型用类型名。 */
-  private resolveTypeKey(typeConfig: ResolvedSubAgentTypeConfig): string {
-    return typeConfig.customAgentId ?? typeConfig.subagentType
-  }
-
   /** 类型目录与执行解析读取同一供应方；自定义 id 与内置 id 冲突时遵从执行侧内置优先。 */
   public describeDispatchCatalog(): SubAgentDispatchCatalog {
     const types = new Map<string, SubAgentDispatchCatalog['types'][number]>()
@@ -1050,184 +1005,6 @@ class SubAgentDispatcher {
     ].join('\n')
   }
 
-  private resolveRouteCategory(
-    request: SubAgentDispatchRequest,
-    typeConfig: ResolvedSubAgentTypeConfig
-  ): TeamModelRouteCategory {
-    return request.input.routeCategory ?? typeConfig.routeCategory
-  }
-
-  private applyModelOverride(
-    route: TeamModelRouteResult,
-    modelOverride: LooseOptional<string>
-  ): TeamModelRouteResult {
-    const normalized = modelOverride?.trim()
-    if (!normalized) return route
-    return {
-      ...route,
-      runtimeOverride: {
-        ...route.runtimeOverride,
-        model: normalized,
-      },
-    }
-  }
-
-  /**
-   * reasoning effort 覆盖（D7）：把派发面指定的 effort 覆盖进 runtimeOverride.thinkingDepth，
-   * 该字段被 QueryLoop 用于 createAgentProvider / buildSystemPrompt。缺省（null/undefined）时
-   * 保留模型路由已填的 systemConfig.thinkingDepth（= 继承会话 effort），不改行为。
-   */
-  private applyEffortOverride(
-    route: TeamModelRouteResult,
-    effortOverride: LooseOptional<ThinkingDepth>
-  ): TeamModelRouteResult {
-    if (!effortOverride) return route
-    return {
-      ...route,
-      runtimeOverride: {
-        ...route.runtimeOverride,
-        thinkingDepth: effortOverride,
-      },
-    }
-  }
-
-  /**
-   * 合并父线程与 worker 中断信号为一个复合信号。
-   *
-   * 用 `AbortSignal.any()`（Node 20.3+/Electron 已达，全仓首次引入）替代手写
-   * `addEventListener('abort', …, {once})`：原生复合信号**弱引用**持有源信号，复合信号被 GC
-   * 时监听自动摘除，不会往长命的父 execution 信号上每次派发净增一个从不摘除的监听器
-   * （S5 监听器泄漏根治，对照 SoloExecutionService.bindAbortSignal 的 unbind 先例——此处用
-   * 原生弱引用语义免去手动 dispose）。已中断的源仍原样透传其 reason。
-   */
-  private combineAbortSignals(
-    parentSignal: AbortSignal,
-    workerSignal?: AbortSignal
-  ): AbortSignal {
-    if (!workerSignal) return parentSignal
-    return AbortSignal.any([parentSignal, workerSignal])
-  }
-
-  private attachWorkerProbes(
-    workerEvents: ExecutionEventBusApi,
-    retryState: SubAgentRetryState,
-    progressDigest: SubAgentProgressDigestRecorder
-  ): ExecutionEventBusApi {
-    if (!isFunction(workerEvents.withAgentTap)) return workerEvents
-
-    return workerEvents.withAgentTap((event: AgentEvent) => {
-      progressDigest.record(event)
-
-      if (event.type === 'text-delta' && event.text) {
-        retryState.hasVisibleOutput = true
-        return
-      }
-
-      if (event.type === 'reasoning-delta' && event.text) {
-        retryState.hasVisibleOutput = true
-        return
-      }
-
-      if (event.type === 'tool-progress' && event.chunk) {
-        retryState.hasVisibleOutput = true
-      }
-
-      if (
-        event.type === 'tool-start' ||
-        event.type === 'tool-progress' ||
-        event.type === 'tool-done'
-      ) {
-        retryState.hasToolUse = true
-      }
-    })
-  }
-
-  /**
-   * 统一发送 worker 线程状态事件。
-   *
-   * 状态事件必须走父总线（request.events）：worker 子总线只透传
-   * 文本增量/重连/工具完成，worker 线程状态会被其智能体 handler 丢弃
-   * （详见 ExecutionEventBusApi.forWorkerExecution）。
-   */
-  private emitWorkerStatus(args: WorkerStatusArgs): void {
-    const { threadId, activationId, title, agentName, status, summary, error, result } = args
-    args.request.events.emitWorkerThread({
-      kind: 'worker-thread',
-      event: 'status',
-      ...{ threadId, activationId, title, agentName, status, summary, error, result },
-      taskId: args.executionKey,
-      roleId: args.typeConfig.roleId,
-      phase: args.typeConfig.workerPhase,
-      timestamp: Date.now(),
-      input: args.request.input.prompt,
-      subagentType: this.resolveTypeKey(args.typeConfig),
-      customAgentName: toNullable(args.typeConfig.customAgentName),
-      mode: args.dispatchMode,
-      model: toNullable(args.resolvedModel ?? args.request.input.model),
-    })
-  }
-
-  private emitDangerousConfirmationWorkerCard(
-    args: Omit<WorkerStatusArgs, 'status' | 'summary' | 'error' | 'result'> & {
-      summary: string
-    }
-  ): void {
-    const timestamp = Date.now()
-    args.request.events.emitWorkerThread({
-      kind: 'worker-thread',
-      event: 'chat-event',
-      threadId: args.threadId,
-      activationId: args.activationId,
-      taskId: args.executionKey,
-      title: args.title,
-      agentName: args.agentName,
-      roleId: args.typeConfig.roleId,
-      phase: args.typeConfig.workerPhase,
-      status: 'awaiting_confirmation',
-      timestamp,
-      input: args.request.input.prompt,
-      summary: args.summary,
-      subagentType: this.resolveTypeKey(args.typeConfig),
-      customAgentName: toNullable(args.typeConfig.customAgentName),
-      mode: args.dispatchMode,
-      model: toNullable(args.resolvedModel ?? args.request.input.model),
-      chatEvent: {
-        type: 'notice',
-        kind: 'user-action-card',
-        payload: this.buildDangerousConfirmationWorkerCard(
-          args.activationId,
-          args.summary,
-          timestamp
-        ),
-      },
-    })
-  }
-
-  private buildDangerousConfirmationWorkerCard(
-    activationId: string,
-    summary: string,
-    timestamp: number
-  ): UserActionCard {
-    return {
-      id: `${activationId}:dangerous-confirmation:${timestamp}`,
-      title: '等待父线程确认危险指令',
-      description: `${summary}\n请在父线程授权卡片中处理；这里仅同步子 Agent 当前阻塞原因。`,
-      tone: 'warning',
-      icon: 'danger',
-      blocking: false,
-      actions: [
-        {
-          kind: 'acknowledge',
-          label: '知道了',
-          completedLabel: '已知晓',
-          icon: 'confirm',
-          disableAfterClick: true,
-        },
-      ],
-      createdAt: timestamp,
-    }
-  }
-
   private formatWorkerFailureMessage(error: AppError): string {
     if (!this.connectionRetryHelper.isTransientConnectionError(error)) return error.message
 
@@ -1235,13 +1012,6 @@ class SubAgentDispatcher {
       `模型/provider 连接中断（${error.code}）：${error.message}`,
       '安全自动恢复未能完成；这不是子 Agent 时间预算到期，也不是本地取消。',
     ].join('\n')
-  }
-
-  private formatTransientRetryStatus(error: AppError, attempt: number): string {
-    return [
-      `网络连接失败，正在重试子 Agent（${attempt + 1}/${SubAgentTransientRetryMaxAttempts}）`,
-      truncate(error.message, 120),
-    ].join('：')
   }
 
   /**
@@ -1296,7 +1066,7 @@ class SubAgentDispatcher {
           prompt.priorFindingsBriefing,
           type.readonlyMode
         )
-    const routeCategory = this.resolveRouteCategory(request, typeConfig)
+    const routeCategory = resolveSubAgentRouteCategory(request, typeConfig)
     // 路由端口收的是模型选择本身，不是整份 chatConfig：传整份时两端端口都在根上找不到 provider，
     // 子 Agent 一律报「模型 selection.provider 必须显式提供」。
     const inheritedRoute = this.modelRouter.resolve(
@@ -1309,8 +1079,8 @@ class SubAgentDispatcher {
       modelSelection,
       control.resolvedModelOverride ?? request.input.model
     )
-    const route = this.applyEffortOverride(
-      this.applyModelOverride(inheritedRoute, modelChoice.model),
+    const route = applySubAgentEffortOverride(
+      applySubAgentModelOverride(inheritedRoute, modelChoice.model),
       control.resolvedEffortOverride ?? request.input.effort
     )
     const resolvedModel = route.runtimeOverride.model
@@ -1328,7 +1098,7 @@ class SubAgentDispatcher {
     this.sessionStore.updateSession(threadId, {
       request: {
         model: resolvedModel,
-        route_category: this.resolveRouteCategory(request, typeConfig),
+        route_category: resolveSubAgentRouteCategory(request, typeConfig),
       },
     })
 
@@ -1417,7 +1187,7 @@ class SubAgentDispatcher {
     const effectiveParentCtx = workerAbortSignal
       ? {
           ...parentCtx,
-          abortSignal: this.combineAbortSignals(parentCtx.abortSignal, workerAbortSignal),
+          abortSignal: combineAbortSignals(parentCtx.abortSignal, workerAbortSignal),
         }
       : parentCtx
 
@@ -1465,7 +1235,7 @@ class SubAgentDispatcher {
       return text
     } catch (error) {
       const appError = AppError.from(error)
-      if (this.isAbortError(appError, effectiveParentCtx)) {
+      if (isSubAgentAbortError(appError, effectiveParentCtx)) {
         throw appError
       }
       this.modelRouter.markFailure(execution.route.runtimeOverride.providerId, appError.message)
@@ -1489,7 +1259,7 @@ class SubAgentDispatcher {
         return text
       } catch (retryError) {
         const retryAppError = AppError.from(retryError)
-        if (this.isAbortError(retryAppError, effectiveParentCtx)) {
+        if (isSubAgentAbortError(retryAppError, effectiveParentCtx)) {
           throw retryAppError
         }
         this.modelRouter.markFailure(relaxed.runtimeOverride.providerId, retryAppError.message)
@@ -1511,7 +1281,7 @@ class SubAgentDispatcher {
         return await runWithRoute(route)
       } catch (error) {
         const appError = AppError.from(error)
-        if (this.isAbortError(appError, effectiveParentCtx)) throw appError
+        if (isSubAgentAbortError(appError, effectiveParentCtx)) throw appError
 
         lastError = appError
         if (!this.shouldRetrySubAgentConnectionError(appError, attempt, plan, effectiveParentCtx)) {
@@ -1537,25 +1307,6 @@ class SubAgentDispatcher {
       hasToolUse: () => plan.control.retryState.hasToolUse,
       hasVisibleOutput: () => plan.control.retryState.hasVisibleOutput,
     })
-  }
-
-  private isAbortError(error: AppError, parentCtx: SubAgentToolContext): boolean {
-    return parentCtx.abortSignal.aborted || error.code === 'EXECUTION_ABORTED'
-  }
-
-  private resolveInitialToolCategories(
-    request: SubAgentDispatchRequest,
-    typeConfig: ResolvedSubAgentTypeConfig
-  ): ToolCategoryId[] {
-    switch (request.input.toolScope ?? 'type_default') {
-      case 'inherit':
-        return dedupeToolCategories(request.parentCtx.codingSession.getEnabledToolCategories())
-      case 'custom':
-        return dedupeToolCategories(request.input.toolCategories ?? [])
-      case 'type_default':
-      default:
-        return dedupeToolCategories([...typeConfig.toolCategories])
-    }
   }
 
   private async requestToolCategoriesForSubAgent(
@@ -1602,48 +1353,6 @@ class SubAgentDispatcher {
     return resolveCapabilityDelegationPolicy(this.capabilityPorts).blockedCategoryIds.includes(
       categoryId
     )
-  }
-
-  /**
-   * 构造子智能体运行用的工具上下文：所有确认使用父任务策略，并把等待状态投影到子任务。
-   */
-  private buildAutonomousParentCtx(
-    parentCtx: SubAgentToolContext,
-    onDangerousConfirmation?: DangerousConfirmationStatusSink,
-    requester?: { agentId: string; label?: string }
-  ): SubAgentToolContext {
-    const execution = parentCtx.execution
-    if (!execution) return parentCtx
-    const shared = this.buildAutonomousExecution(execution, onDangerousConfirmation, requester)
-    return {
-      ...parentCtx,
-      execution: shared,
-      approval: shared,
-    }
-  }
-
-  private buildAutonomousExecution(
-    execution: NonNullable<SubAgentToolContext['execution']>,
-    onDangerousConfirmation?: DangerousConfirmationStatusSink,
-    requester?: { agentId: string; label?: string }
-  ): NonNullable<SubAgentToolContext['execution']> {
-    // 审批与旧 execution 门统一委托父任务，工具能力启用不参与此判定。
-    const approvalPort = createUnattendedSubAgentApprovalPort(execution, {
-      onEscalationPending: (message) =>
-        onDangerousConfirmation?.(
-          'awaiting_confirmation',
-          formatSubAgentHighRiskConfirmationStatus(message)
-        ),
-      onEscalationResolved: () =>
-        onDangerousConfirmation?.('running', '高风险操作确认已返回，子 Agent 继续处理。'),
-    })
-    return {
-      ...execution,
-      awaitConfirmation: (message, signal, options) =>
-        approvalPort.awaitConfirmation(message, signal, { ...options, requester }),
-      awaitConfirmationDecision: (message, signal, options) =>
-        approvalPort.awaitConfirmationDecision(message, signal, { ...options, requester }),
-    }
   }
 
 }

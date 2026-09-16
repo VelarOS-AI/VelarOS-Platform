@@ -8,14 +8,26 @@ import type {
 import type { AgentContextPhaseDecision, ResolveAgentContextPhaseInput } from '../../types/loop.js'
 import { resolveExecutionModes } from '../runner/execution-mode-registry'
 
+/**
+ * 包一条「本轮走完整 operational 上下文」的裁决，并把命中的那条判据原样带出去。
+ * reason 会进日志与遥测，是事后解释「为什么这一轮没能省下 bootstrap 开销」的唯一线索。
+ */
 function operational(reason: AgentContextPhaseReason): AgentContextPhaseDecision {
   return { phase: 'operational', reason }
 }
 
+/**
+ * 历史里出现过 assistant 回复或 tool 结果即为真：说明模型已经在半途，不是一次全新提问。
+ * 这种轮次若按 bootstrap 削工具面，会把它上一轮刚建立起来的工具面抽走，所以必须回到 operational。
+ */
 function hasConversationContinuation(history: readonly ModelMessage[]): boolean {
   return history.some((message) => message.role === 'assistant' || message.role === 'tool')
 }
 
+/**
+ * 历史里存在 user 消息才为真。为假说明这一轮不是用户发起的（系统注入、恢复重放等），
+ * 既没有「新问题」可省，也无从判断该留哪些工具，于是宁可走完整 operational 而不是轻量 bootstrap。
+ */
 function hasUserRequest(history: readonly ModelMessage[]): boolean {
   return history.some((message) => message.role === 'user')
 }

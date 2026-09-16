@@ -40,12 +40,27 @@ function existingPayloadRef(serializedResult: string): Nullable<string> {
 }
 
 /**
+ * 工具结果原文归档规划器：一次 provider 请求建一个（`buildToolPayloadRefsForProviderMessages` 的内部实现），
+ * 收下这批消息里所有文本型工具结果，存进 payload 店，返回「出现位置 → 原文地址」的映射。
+ * 自身只持有一个归一化器，无跨请求状态。
+ */
+export interface ToolPayloadReferencePlannerApi {
+  /**
+   * 扫一遍消息里的工具结果并归档，返回引用映射：键既有「消息下标:片段下标」的出现位置，
+   * 也有 `toolCallId`（仅当那次调用在这批消息里只对应一个地址时才给，多个地址时留空免得指错）。
+   * 已经是引用包装的正文直接复用原地址，不再另存一份；`isOutputInlineToolName` 认下的工具整条跳过。
+   * `sessionId` 去空白后为空时不归档，返回空映射。
+   */
+  buildRefs(input: BuildToolPayloadRefsForProviderMessagesInput): Promise<Record<string, string>>
+}
+
+/**
  * 把一批 provider 消息里的工具结果原文归档，产出「出现位置 → 原文地址」的映射。
  *
  * 持有归一化器（而不是每次现 new 一个）：同一份 store 上的归档要走同一条去重路径，
  * 否则同一段正文会在账本里留下两份地址。
  */
-class ToolPayloadReferencePlanner {
+class ToolPayloadReferencePlanner implements ToolPayloadReferencePlannerApi {
   private readonly canonicalizer: ToolResultCanonicalizer
 
   constructor(store: ContextPayloadStore) {

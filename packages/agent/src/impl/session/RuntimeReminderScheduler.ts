@@ -1,7 +1,8 @@
 import { isNull, toNullable } from '@velaros-ai/core'
 
 import type { RuntimeReminderProducer } from '../../contract/requires.js'
-import type { ReminderScope, ReminderTrigger, RuntimeReminderConsumeResult,RuntimeReminderInput } from '../../types/session.js'
+import type { ReminderTrigger, RuntimeReminderConsumeResult,RuntimeReminderInput } from '../../types/session.js'
+import { resolveReminderScopeKey } from '../../utils/session/reminder-scope'
 
 /**
  * 运行时提醒调度器：**每触发点最多注入一条**提醒的仲裁者。
@@ -24,7 +25,41 @@ import type { ReminderScope, ReminderTrigger, RuntimeReminderConsumeResult,Runti
  *
  * 每会话一实例；生命周期跟着会话走，不跨会话共享（`issued` 是会话内的已发账）。
  */
-export class RuntimeReminderScheduler {
+export interface RuntimeReminderSchedulerApi {
+  /** 注册一个 producer；同 id 覆盖旧的。宿主装配时把本产品的全套提醒一次性灌进来。 */
+  register(producer: RuntimeReminderProducer): void
+  /** 摘掉一个 producer 并清掉它的已发账；主要给测试用，产品运行期一般不摘。 */
+  unregister(producerId: string): void
+  /**
+   * 在某个触发点取一条提醒并**标记已发**：按 priority 选第一条可注入的，返回 producerId 与渲染文本。
+   *
+   * 每个触发点最多出一条（理由见类说明）；没有可发的返回 null。拿到结果后调用方必须回头调
+   * `finalizeReminderConsumeResult`，否则跟踪器那边的旁路标记会和这里的已发账漂移。
+   */
+  consume(
+    trigger: ReminderTrigger,
+    input: RuntimeReminderInput
+  ): Nullable<RuntimeReminderConsumeResult>
+  /**
+   * 指名消费某个 producer（「我知道我要哪条」的兼容入口），不挑触发点，其余流程与 `consume` 一致。
+   *
+   * producer 不存在、scope 判定为已发过、`when` 不成立或渲染为空时返回 null。
+   */
+  consumeProducer(producerId: string, input: RuntimeReminderInput): Nullable<string>
+  /** 只看这个触发点此刻有没有可发的提醒，**不标已发**；用于「先看再决定要不要真发」。 */
+  peek(trigger: ReminderTrigger, input: RuntimeReminderInput): Nullable<string>
+  /** 同 `peek`，但连 producerId 一起返回，供调用方比对是不是它关心的那一条。 */
+  peekWithProducer(
+    trigger: ReminderTrigger,
+    input: RuntimeReminderInput
+  ): Nullable<RuntimeReminderConsumeResult>
+  /** 清掉某个 producer 的已发账，让它下次重新可发；`one-shot` 的提醒要再发一次只能走这条。 */
+  resetScope(producerId: string): void
+  /** 列出已注册的全部 producer 及其触发点；调试与自检用，不参与选择逻辑。 */
+  listRegisteredProducers(): Array<{ id: string; triggers: readonly ReminderTrigger[] }>
+}
+
+export class RuntimeReminderScheduler implements RuntimeReminderSchedulerApi {
   private readonly producers = new Map<string, RuntimeReminderProducer>()
   /** producer id -> 已发 key 集合；key 由 scope 派生（version 号 / 'one-shot'）。 */
   private readonly issued = new Map<string, Set<string>>()
@@ -116,7 +151,7 @@ export class RuntimeReminderScheduler {
     producer: RuntimeReminderProducer,
     input: RuntimeReminderInput
   ): Nullable<{ scopeKey: Nullable<string>; text: string }> {
-    const scopeKey = this.resolveScopeKey(producer.scope, input)
+    const scopeKey = resolveReminderScopeKey(producer.scope, input)
     if (this.hasIssued(producer.id, scopeKey)) return null
 
     if (!producer.when(input)) return null
@@ -125,24 +160,6 @@ export class RuntimeReminderScheduler {
     if (!text) return null
 
     return { scopeKey, text }
-  }
-
-  /**
-   * scope → 去重键。`null` = **本 scope 不参与去重**（`always`：每次匹配都重新渲染）。
-   *
-   * 曾用 `floating:${Math.random()}` 前缀把「不去重」编码进字符串、再靠 `startsWith` 嗅回来——
-   * 控制流藏在字符串里，且给一个纯判定函数塞了随机源（§3.4 纯函数优先）。现在语义直接进类型。
-   */
-  private resolveScopeKey(scope: ReminderScope, input: RuntimeReminderInput): Nullable<string> {
-    switch (scope) {
-      case 'one-shot':
-        return 'one-shot'
-      case 'per-edit-version':
-        return `edit-version:${input.editVersion}`
-      case 'always':
-      default:
-        return null
-    }
   }
 
   private hasIssued(producerId: string, scopeKey: Nullable<string>): boolean {

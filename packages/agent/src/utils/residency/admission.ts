@@ -289,6 +289,13 @@ function resolveOversizeKind(
   return null
 }
 
+/**
+ * 为一条判超长的记录建摘录素材：先定召回 ref 与 refKind（`payloadRef → toolCallId → 记录 id` 逐级回退，
+ * 对应 `'payload-ref' / 'tool-payload' / 'context-handle'`），再按记录类型切正文。
+ * user 记录切完还要拼一段"怎么取回全文"的提示（见 {@link buildUserTextSafetyValveText}），存的就是最终要贴进消息的文本；
+ * 其余记录按 `maxChars` 做头尾对半切。`truncated` 只有真的短了才为 true。
+ * 裁掉的部分一律能用 `context:recall(ref, refKind)` 原样取回——这里裁的是 prompt 占用，不是信息。
+ */
 function buildRecordExcerpt(input: {
   id: string
   kind: ContextRecordKind
@@ -330,6 +337,11 @@ function buildRecordExcerpt(input: {
   }
 }
 
+/**
+ * 拼出 user 正文安全阀的最终文本：头尾摘录 + 空行 + 一行"原长多少、可见的只是头尾、怎么召回全文"的提示。
+ * 提示语本身也占预算，所以先从 `maxChars` 里扣掉它再切正文（至少给正文留 1 个字符）——不扣就会整体越过安全阀。
+ * 保头尾而不是只保头：结尾处的约束、附件说明、临时纠正往往才是最关键的一句，只截头部会把它整段吞掉。
+ */
 function buildUserTextSafetyValveText(
   original: string,
   maxChars: number,
@@ -342,6 +354,11 @@ function buildUserTextSafetyValveText(
   return [excerpt, '', guidance].join('\n')
 }
 
+/**
+ * 定出这条消息的记录级工具身份（toolName + toolCallId）：先认 tool-result 的第一份结果，
+ * 没有就认 assistant 消息里的第一个 tool-call，都没有返回两个 null（非工具记录，身份缺席不算错）。
+ * 只认"第一份"——多结果消息的记录级身份由调用方另行判空，每份结果各自的真身份落在 `toolParts` 上。
+ */
 function resolveToolIdentity(
   input: ContextAdmissionInput,
   results: readonly ToolResultFact[]
@@ -359,6 +376,13 @@ function resolveToolIdentity(
   return { toolName: null, toolCallId: null }
 }
 
+/**
+ * 算语义去重键 `工具名::目标`，用来认出"同一份事实的旧快照"。目标三级取：
+ * 调用方显式给的 `dedupeTarget` → 注入分类器的表态 → 参数里的结构信号（url / path 之类资源定位符）。
+ * 分类器给 {@link ContextDedupeVetoTarget} 是**否决**（我认识这个工具，但它不该按目标去重），到此为止不再回落结构信号；
+ * 给 nullish 是**弃权**，才继续回落——两态混一起就会把 `system:read` 的续读页当成前一页的过时快照折掉。
+ * 没有工具名或取不到目标时返回 null = 这条记录不参与去重（保守，宁可不折也不误折）。
+ */
 function resolveDedupeKey(
   classification: ContextClassificationInput,
   input: ContextAdmissionInput,
@@ -380,6 +404,12 @@ function resolveDedupeKey(
   return `${classification.toolName}::${target}`
 }
 
+/**
+ * 判这条记录的正文"丢了还能原样重取回来吗"——只有为真，它才允许被同 `dedupeKey` 的新快照取代（标 pending-EVICT）。
+ * 三级：调用方显式声明 → 注入分类器表态 → **一律 false**。
+ * 刻意不按"参数里带资源定位符"猜：有副作用的能力同样带定位符，猜错会把不可重现的结果当陈旧快照折掉。
+ * 未知工具保守留在普通驻留档；真有 payloadRef 时治理器仍能走内容寻址的无副作用 page-out，不依赖这个标记。
+ */
 function resolveRefetchable(
   classification: ContextClassificationInput,
   input: ContextAdmissionInput,
@@ -397,6 +427,12 @@ function resolveRefetchable(
   return false
 }
 
+/**
+ * 定这条记录在尾保护窗口滑出之后还要"温存"几轮不参与降级。三级：调用方显式给 → 注入分类器表态 → 按类型兜底；
+ * 前两条路径都会过一次 `max(0, floor(...))`，负数与小数不会流到下游。
+ * 兜底值的取舍：user 轮给 4 轮（多阶段任务刚进执行就把中途纠正折掉最伤），带失败证据的记录给 8 轮
+ * （错误正文通常还要在下一批修复与验证里被读），其余给 0（滑出窗口即可降）。
+ */
 function resolveWarmLeaseTurns(
   classification: ContextClassificationInput,
   input: ContextAdmissionInput,
@@ -414,6 +450,13 @@ function resolveWarmLeaseTurns(
   return 0
 }
 
+/**
+ * 判这条记录是否 pinned。注意 pinned 的真实语义是**治理器完全免疫**——连 EXCERPT 都降不了，不是"最低降到 EXCERPT"。
+ * 判定次序：调用方显式声明 → 账本第一条 user 记录（任务陈述，结构性 pinned）→ 注入分类器表态 → `kind === 'governance'`。
+ * 第一条 user 记录这档**不交给分类器表态**：它是 provider 的结构约束而非领域语义（折掉它投影就以 assistant 开头，
+ * Anthropic 直接 400，会话砖化；模型也再看不见任务是什么）。代价照实说：一条超长任务陈述会整段占住预算且压不下去，
+ * 出路是转交（handoff），不是压它。
+ */
 function resolvePinned(
   classification: ContextClassificationInput,
   input: ContextAdmissionInput,
@@ -463,6 +506,11 @@ function collectSupersededIds(
     .map((prior) => prior.id)
 }
 
+/**
+ * 取开头 `maxChars` 个 UTF-16 码元，但**不切开代理对**：切点正好落在代理对中间时少取一个码元。
+ * 宁可少一个字符也不留半个代理对——半个会渲染成乱码，还会在下游 JSON 序列化里带出非法串。
+ * `maxChars <= 0` 返回空串；正文本来就不够长时原样返回。
+ */
 function sliceHead(text: string, maxChars: number): string {
   if (maxChars <= 0) return ''
 
@@ -471,6 +519,10 @@ function sliceHead(text: string, maxChars: number): string {
   return text.slice(0, end)
 }
 
+/**
+ * 取结尾 `maxChars` 个 UTF-16 码元，代理对保护同 {@link sliceHead}：起点落在代理对中间时**往后**挪一格（同样是少取一个字符）。
+ * `maxChars <= 0` 返回空串。
+ */
 function sliceTail(text: string, maxChars: number): string {
   if (maxChars <= 0) return ''
 
@@ -479,6 +531,11 @@ function sliceTail(text: string, maxChars: number): string {
   return text.slice(start)
 }
 
+/**
+ * 判 `highIndex` 与其后一位是否构成一对合法的 UTF-16 代理对（高位落在 0xD800–0xDBFF 且低位落在 0xDC00–0xDFFF）。
+ * 越界读出 NaN 会让两侧比较都为假，所以在字符串末尾调用也安全，不必先判长度。
+ * 头尾切片靠它避免把一个字符劈成两半。
+ */
 function isSurrogatePair(text: string, highIndex: number): boolean {
   const high = text.charCodeAt(highIndex)
   const low = text.charCodeAt(highIndex + 1)

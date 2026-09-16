@@ -65,6 +65,11 @@ function projectAgentModPromptSegments(
   return segments
 }
 
+/**
+ * 类别 id → 类别定义（主键即类别 id，全宿主唯一由 Loader 保证）。
+ * 只收有运行态载荷的记录，纯声明记录整条跳过——类别定义是代码，没有载荷就是这个 mod 没真正提供它。
+ * 载荷对象**原样放进表里，不复制不包装**：同一性保持是"随包内置经 Loader 装载后行为零变化"的结构性依据。
+ */
 function projectAgentModToolCategories(
   snapshot: AgentModRegistrySnapshot
 ): Record<string, ToolCategoryDefinition> {
@@ -76,6 +81,11 @@ function projectAgentModToolCategories(
   return categories
 }
 
+/**
+ * 工具名 → 它被划进哪个工具类别的归属表，读的是**声明**里的 `categoryId`（不需要运行态载荷）。
+ * 没声明类别的工具整条不出现在表里，而不是记一个空串或默认类别——"没声明"与"声明成某类"是两件事，
+ * 由分配器那边按缺省规则处理，这里不替它做决定。
+ */
 function projectAgentModToolCategoryAssignments(
   snapshot: AgentModRegistrySnapshot
 ): Record<string, string> {
@@ -86,12 +96,20 @@ function projectAgentModToolCategoryAssignments(
   )
 }
 
+/**
+ * 技能定义清单：按快照里的注册序取各记录的运行态载荷，没有载荷的整条滤掉。
+ * 载荷原样透传（同一性保持，不复制不包装）；顺序即注册序，投影不重排——排序语义归消费方，投影只负责把该有的摊出来。
+ */
 function projectAgentModSkills(snapshot: AgentModRegistrySnapshot): AgentSkillDefinition[] {
   return snapshot.skills
     .map((record) => record.payload)
     .filter((payload): payload is AgentSkillDefinition => isNotNull(payload))
 }
 
+/**
+ * 子 Agent 工种目录：按注册序取各记录的运行态载荷，没有载荷的整条滤掉，载荷原样透传。
+ * Agent 运行时自己不内置任何工种分类，这份投影就是宿主派发子 Agent 时能选的全部工种；返回空数组即没有工种可派。
+ */
 function projectAgentModSubAgentTypes(
   snapshot: AgentModRegistrySnapshot
 ): SubAgentTypeDescriptor[] {
@@ -100,6 +118,10 @@ function projectAgentModSubAgentTypes(
     .filter((payload): payload is SubAgentTypeDescriptor => isNotNull(payload))
 }
 
+/**
+ * 执行模式描述符清单：按注册序取各记录的运行态载荷，没有载荷的整条滤掉，载荷原样透传。
+ * 模式描述符要参与会话的模式轴解析，必须是代码而不能只是声明——所以纯声明记录在这里不算数。
+ */
 function projectAgentModExecutionModes(
   snapshot: AgentModRegistrySnapshot
 ): ExecutionModeDescriptor[] {
@@ -184,12 +206,26 @@ function composeAgentModSpaces(snapshot: AgentModRegistrySnapshot): AgentModSpac
   }))
 }
 
+/**
+ * 每回合上下文来源清单。**纯数据轴**：直接返回各记录的声明，不看运行态载荷——
+ * 这一轴描述的是"每回合该去问哪些来源"，本身是配置而非代码，声明就是全部内容。
+ * 顺序即注册序，投影不重排。
+ */
 function projectAgentModTurnContextSources(
   snapshot: AgentModRegistrySnapshot
 ): AgentModTurnContextSourceContribution[] {
   return snapshot.turnContextSources.map((record) => record.declaration)
 }
 
+/**
+ * 把注册表快照一次性投影成各领域的消费面，并整体 `Object.freeze`（连同每个子表）。
+ *
+ * 装配链只读这份投影、不直接遍历注册表，`generation` 随快照一起带出来——「每回合固定 generation」的消费纪律靠它兑现：
+ * 一回合之内看到的工具面、技能、空间配方必须是同一代，中途换代会让同一回合的前后两次询问给出不同答案。
+ * 冻结是防御性的：消费方拿到的是只读视图，谁想改工具面都得回到注册表走装载流程，而不是就地改一份投影。
+ * 注意 `spaces` 走的是 {@link composeAgentModSpaces} 而不是纯声明投影（要做可用性 / 常驻性汇入与继承展开），
+ * `hooks` 则原样透传不做投影。
+ */
 function createAgentModSurfaceSnapshot(
   snapshot: AgentModRegistrySnapshot
 ): AgentModSurfaceSnapshot {

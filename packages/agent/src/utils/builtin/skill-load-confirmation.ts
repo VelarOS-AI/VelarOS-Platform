@@ -12,6 +12,11 @@ function readSkillPageId(id: string): Nullable<string> {
   return skillId || null
 }
 
+/**
+ * 拼给**用户**看的技能加载确认弹窗正文：标题 + 技能名与 id + 可选用途 + 两句后果说明
+ * （批准后本会话同一技能不再询问、拒绝后模型不用它继续）。`description` 为空就整行不出现，
+ * 不留空标签。这段文案只进审批界面，不进模型上下文。
+ */
 function buildSkillLoadConfirmationMessage(skill: {
   label: string
   id: string

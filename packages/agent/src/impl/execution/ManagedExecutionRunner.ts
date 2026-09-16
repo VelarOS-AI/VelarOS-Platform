@@ -13,35 +13,65 @@ import type { ExecutionRecords } from '../records/ExecutionRecords'
 import type { ExecutionStore } from '../records/ExecutionStore'
 import type { SourceSessionGuard } from '../records/SourceSessionGuard'
 
+/**
+ * `ManagedExecutionRunner` 的注入面，由 `ExecutionService` 在构造时一次填齐。
+ *
+ * 全是**服务自己的能力**：本类不持有任何状态，生命周期模板要做的每一步都经这些回调打回服务，
+ * 因此「谁是记录与终态的唯一所有者」这件事不会因为多一个模板类而分叉。
+ */
 interface ManagedExecutionRunnerDependencies {
+  /** 服务的日志器（只用 info / warn）：启动、结束、被取代、收尾异常都从这里出，是排查执行串台的主线索。 */
   log: Pick<Logger, 'info' | 'warn'>
+  /** 执行记录的高层读写口：创建 execution、流转 running、启动 root task 都走它。 */
   records: ExecutionRecords
+  /** 会话级互斥：`start` 领运行权并拿到 abortController 与代次，`finish` 按代次释放，保证旧执行的收尾不会清掉新执行的互斥位。 */
   sourceSessionGuard: SourceSessionGuard
+  /** 执行记录存储：本次执行期间在这里挂 executionId 级的 state / debug 监听，收尾时解绑。 */
   store: ExecutionStore
+  /** 执行资源端口：用于把这次执行映射到协作面的资源 id；取不到时只跳过协作者登记，不影响执行本身。 */
   executionResource: ExecutionResourcePort
+  /** 活跃信号端口：开跑时开一段执行会话（宿主据此判定「有事在做」），收尾时释放。 */
   activitySignals: ExecutionActivitySignalsPort
+  /** 可选协作协调器：注入时把本次执行登记成一个主 Agent 协作者，收尾时 complete；缺省则整条协作面不参与。 */
   collaborationCoordinator?: ExecutionCollaborationPort
+  /** 为本次执行造一份工具侧的 execution API（计划、确认、追问等工具经它回到本执行）。 */
   createToolExecutionApi: (execution: ExecutionRecord) => ToolExecutionApi
+  /** 每条 agent 事件的落点：在转发给订阅者**之前**先过一遍，写账本并按终态事件流转记录。 */
   handleAgentEvent: (executionId: string, event: AgentEvent) => void
+  /** 向指定执行的 state 监听者发一条状态事件；本类只在通知「你被新请求取代了」时对**旧**执行用它。 */
   emitExecutionState: (executionId: string, payload: StreamStatePayload) => void
+  /** 通知某条执行的调试快照需要重建并下发。 */
   emitExecutionDebug: (executionId: string) => void
+  /** 读一条执行记录的当前状态；回调返回后与 finally 里都要先读它再决定怎么收尾。 */
   getExecution: (executionId: string) => ExecutionRecord
+  /** 标记中止：回调返回时发现已被 abort、或捕获到 `EXECUTION_ABORTED` 时走这条。 */
   abortExecution: (
     executionId: string,
     reason: string,
     options?: ExecutionAbortOptions
   ) => ExecutionRecord
+  /** 标记完成：只有回调正常返回、没被 abort、且记录仍是 running 时才调用。 */
   completeExecution: (executionId: string) => ExecutionRecord
+  /** 标记失败：捕获到非中止类异常且记录尚未终结时走这条；异常随后仍向上抛。 */
   failExecution: (executionId: string, error: string) => ExecutionRecord
+  /** 取一条用户中途注入的引导消息给 agent loop 消费；没有就返回 null。每条只会被取走一次。 */
   consumeExecutionGuidance: (executionId: string) => Nullable<ModelMessage>
+  /** 取本次执行的运行时输入端口，交给 agent loop 在轮次边界读取用户追加的输入。 */
   runtimeInputForExecution: (executionId: string) => AgentRuntimeInputPort
+  /**
+   * 封口运行时输入并回报结果：`sealed` = 没有欠账；`pending` = 还有已接纳但没被消费的输入。
+   * 刻意调两次（成功路径一次、finally 一次），必须幂等——只留一处就会漏掉抛出/中断那类路径。
+   */
   finalizeExecutionGuidance: (
     executionId: string
   ) => { status: 'sealed' } | { status: 'pending'; pendingCount: number }
+  /** 收尾期清理本次执行的输入队列；`retained` 表示还留着没清掉的条目，只记 warn 不阻断收尾。 */
   clearExecutionGuidance: (
     executionId: string
   ) => { status: 'cleared' } | { status: 'retained'; pendingCount: number }
+  /** completed / aborted / failed 是否已经是终态：终态判定先于 complete，避免把已中断的执行改写成完成。 */
   isTerminalStatus: (status: ExecutionRecord['status']) => boolean
+  /** 可选的终态通知（宿主用来发系统通知等）；只在记录确实处于终态时调用一次，它自己抛错只记 warn，不影响收尾。 */
   notifyTerminalExecution?: (execution: ExecutionRecord) => void
 }
 
@@ -71,17 +101,20 @@ interface ManagedExecutionRunnerDependencies {
  * 收尾期的每一件事（终态通知、guard 释放、输入清理、listener 解绑、协作者注销）都在 finally 里
  * 且各自不抛：收尾漏一步的代价是**该会话此后永久占着互斥位**，比丢一条通知严重得多。
  */
-class ManagedExecutionRunner {
+export interface ManagedExecutionRunnerApi {
+  /**
+   * 跑一次完整的托管执行，返回终态 `ExecutionRecord`。
+   *
+   * 顺序：建记录 → 领会话运行权（顺带通知被取代的旧执行）→ 挂 state/debug 监听 → 跑 `params.run` →
+   * 按 abort 信号与记录状态落 completed / aborted / failed → finally 收尾。
+   * 回调抛出的异常在记录落终态后**继续向上抛**，调用方不会拿到一个「看起来正常」的返回值。
+   */
+  run(params: RunManagedExecutionParams): Promise<ExecutionRecord>
+}
+
+class ManagedExecutionRunner implements ManagedExecutionRunnerApi {
   constructor(private readonly dependencies: ManagedExecutionRunnerDependencies) {}
 
-  /**
-   * 执行一次完整托管 `run`。
-   *
-   * 流程：`createExecution` → `sourceSessionGuard.start` → 绑定 `store listeners` →
-   * `params.run(controller)` → 根据 `abort`/`status` 标记 `completed`/`aborted`/`failed` → `finally` 清理。
-   *
-   * @returns 终态 `ExecutionRecord`（含 `status`、`error` 等）
-   */
   public async run(params: RunManagedExecutionParams): Promise<ExecutionRecord> {
     const {
       abortExecution,
@@ -187,7 +220,7 @@ class ManagedExecutionRunner {
         if (inputSettlement.status === 'pending') {
           throw new AppError(
             'INVARIANT',
-            `Execution "${execution.id}" returned with ${inputSettlement.pendingCount} accepted runtime input(s) still pending.`
+            `执行 "${execution.id}" 已经返回，却还有 ${inputSettlement.pendingCount} 条被接收的运行时输入停在未结清状态。每条接收下来的输入都必须在执行收尾前有结论，否则调用方会一直等一个永远不来的回执——这是实现缺陷，不是用户操作错误。`
           )
         }
         completeExecution(execution.id)

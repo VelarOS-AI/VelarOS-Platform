@@ -24,7 +24,7 @@ export class MonotonicExecutionIdFactory implements ExecutionIdFactory {
     private readonly instanceNamespace: string = randomUUID()
   ) {
     if (!instanceNamespace) {
-      throw new TypeError('Execution ID namespace must not be empty')
+      throw new TypeError('执行 id 的 instanceNamespace 不能是空串：它是同一时钟下区分不同运行时的唯一来源，为空会让两个运行时生成出完全相同的执行 id。')
     }
   }
 

@@ -1,7 +1,28 @@
 import { isArray, isEmpty, isPlainObject, isString,Log } from '@velaros-ai/core'
 
-/** 按资源和前置条件识别没有新证据的重试；只给恢复建议，不禁止正常探索。 */
-export class ExecutionProgress {
+/**
+ * 执行进展账本：按「资源 + 失败条件」认出没有新证据的重试。
+ *
+ * 由 `KernelToolLoopGuard` 在循环里持有一份，随那条循环存活；账目只在内存里，按插入序裁到 128 条。
+ * 它只给恢复建议，从不阻断调用——判不出结论时返回 undefined，正常探索照跑。
+ */
+export interface ExecutionProgressApi {
+  /**
+   * 记一次工具结果。
+   *
+   * 成功且产出与上次不同（指纹变了）时，把同一资源上的失败计数清掉——模型看到了新状态，重试不算空转。
+   * 失败时按「工具 + 资源 + 失败条件 + 版本」累计；同一条连续到第 3 次仍是同样的失败，返回一句给模型看的
+   * 换路建议，否则返回 undefined。
+   */
+  record(input: {
+    toolName: string
+    args: Record<string, unknown>
+    error?: string
+    result: unknown
+  }): string | undefined
+}
+
+export class ExecutionProgress implements ExecutionProgressApi {
   private readonly episodes = new Map<string, number>()
   private readonly observations = new Map<string, string>()
 

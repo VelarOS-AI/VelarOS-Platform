@@ -6,6 +6,13 @@ import type { ChatPromptFeatureId } from '../../types/agent'
 import type { ReasoningLevel, RunProfileId, RunProfileSelectionId,ThinkingDepth, ToolSurfaceProfileId } from '../../types/agent.js'
 import type { TypedEnumAsserts } from '../../types/runner.js'
 
+/**
+ * 为一组字面量枚举值造一套四件校验器：`is`（类型守卫，非字符串或不在集合内为假）、
+ * `assert`（不合法就抛 `VALIDATION` AppError，文案为「无效的 <字段名>：<原值>」）、
+ * `parseOptional`（值缺席返回 undefined，存在则走 assert）、`resolve`（缺席落到 fallback，存在但非法仍抛）。
+ * `defaultFieldName` 只用于错误文案，每个方法都能在调用点传 `field` 覆盖它，好让嵌套字段报出完整路径。
+ * 注意 `resolve` 的 fallback 不做校验，由调用方保证它本身合法。
+ */
 function createTypedEnumAsserts<const T extends string>(
   values: readonly T[],
   defaultFieldName: string

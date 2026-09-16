@@ -4,13 +4,27 @@ import type { ToolCategoryId } from '../../types/agent.js'
 import type { AgentRoleDefinition, AgentRoleToolCategoryResolver } from '../../types/runner.js'
 import { compareStableStrings } from '../../utils/residency/determinism'
 
-/** 角色策略：按宿主作用域和工具分类计算角色可用能力。 */
-class AgentRolePolicy {
+/**
+ * 角色策略：把角色声明的工具面，收窄成当前运行态真正可用的那一份，并反推出要展示给模型的工具分类。
+ *
+ * 由 `AgentRoleEngine` / `PrimaryAgentProfile` 在解析角色时各持一份，无状态、可反复调用。
+ * 失败语义是**不阻断**：分类解析抛错时记 debug 日志并放行该工具，避免新工具还没补分类映射就整个不可用。
+ */
+export interface AgentRolePolicyApi {
+  /**
+   * 从角色声明的 `toolNames` 里过滤出本轮真正能给模型的工具：未注册（插件缺失、宿主没装）的直接丢掉，
+   * 分类解析失败的保留。返回顺序与角色声明顺序一致，供提示词稳定渲染。
+   */
+  buildAllowedTools(role: AgentRoleDefinition, options: { knownToolNames: string[] }): string[]
+  /** 从一批工具名反推它们所属的启用分类；分类未知的工具跳过，结果按稳定序排序（禁 locale 比较），保证提示词逐字节可复现。 */
+  getEnabledCategories(toolNames: string[]): ToolCategoryId[]
+}
+
+class AgentRolePolicy implements AgentRolePolicyApi {
   private readonly log = logRuntime.tag('AgentRolePolicy')
 
   constructor(private readonly categoryResolver: AgentRoleToolCategoryResolver) {}
 
-  /** 从角色声明的工具里过滤出当前上下文真正可用的工具。 */
   public buildAllowedTools(
     role: AgentRoleDefinition,
     options: {
@@ -39,7 +53,6 @@ class AgentRolePolicy {
     })
   }
 
-  /** 从工具名反推启用分类，并按 ToolCatalog 中的顺序稳定排序。 */
   public getEnabledCategories(toolNames: string[]): ToolCategoryId[] {
     const categories = new Set<ToolCategoryId>()
 

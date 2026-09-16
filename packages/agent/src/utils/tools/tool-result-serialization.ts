@@ -66,6 +66,12 @@ const DisplayToolResultLimits: ToolResultCompactionLimits = {
   preserveLargeContent: true,
 };
 
+/**
+ * 判断这份结果是不是 ContextOS 工具空间协议的返回（tooling:find/page/map/read/replace 那一族）。
+ * 认定条件：顶层是纯对象、`op` 是上述五个操作之一，且至少带 pages / categories / guide /
+ * requiresApprovalDetails / requiresUserActionDetails / skippedPageDetails / preparedTools 其一。
+ * 为真的结果会走更宽的压缩档（见 applyToolSpaceResultLimits）——它是页表元数据，裁深了模型下一步就不知道该怎么换页。
+ */
 function isToolSpaceProtocolResult(result: unknown): boolean {
   if (!isPlainObject(result)) return false;
 
@@ -83,6 +89,12 @@ function isToolSpaceProtocolResult(result: unknown): boolean {
   );
 }
 
+/**
+ * 结果是工具空间页表时把压缩限额放宽到「原限额与 ToolSpaceModelResultLimits 逐项取大」，并强制 `preserveLargeContent: true`；
+ * 不是页表就原样返回传入的限额。
+ * 只放宽不收紧：调用方给的档位若本来就更宽（例如展示档）不会被这条规则压回去。理由见函数体内注释——
+ * schema / activation / dependencyRules 这些深层结构直接决定模型下一步换入什么工具，被浅层保护替成 "[Depth limit reached]" 就等于断了路。
+ */
 function applyToolSpaceResultLimits(
   result: unknown,
   limits: ToolResultCompactionLimits,
@@ -111,16 +123,27 @@ function applyToolSpaceResultLimits(
   };
 }
 
+/**
+ * 往 jsonPath 上接一段对象键：合法标识符用点号（`$.foo`），否则用带引号的方括号（`$["a-b"]`）。
+ * 这条路径会原样写进截断标记，模型拿它当 context:recall 的 jsonPath 续读，所以必须是可直接回填的合法表达式。
+ */
 function appendJsonPathKey(parent: string, key: string): string {
   if (/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(key)) return `${parent}.${key}`;
 
   return `${parent}[${JSON.stringify(key)}]`;
 }
 
+/**
+ * 往 jsonPath 上接一段数组下标（`$.items[3]`）；与 appendJsonPathKey 成对，供截断标记里的召回路径使用。
+ */
 function appendJsonPathIndex(parent: string, index: number): string {
   return `${parent}[${index}]`;
 }
 
+/**
+ * 给被裁掉的值起一个类型名写进截断标记：数组 → `"array"`、null → `"null"`、其余对象 → `"object"`，基础类型用 `typeof` 的结果。
+ * 单列 array/null 是因为 `typeof` 对它们都只会给 `"object"`，模型据此判断不出该不该继续展开。
+ */
 function describeTruncatedValueType(value: unknown): string {
   if (isArray(value)) return "array";
   if (isNull(value)) return "null";
@@ -129,6 +152,12 @@ function describeTruncatedValueType(value: unknown): string {
   return typeof value;
 }
 
+/**
+ * 造一块替换掉「超过深度上限的子树」的占位标记：`__truncated/reason: 'depth-limit'/jsonPath/omittedType`，
+ * 外加一段 `retrieval` 召回指引（context:recall + 该 jsonPath，ref 用 `<toolCallId>` 占位由模型代入本次调用 id）。
+ * 数组另记 `omittedLength`，纯对象另记前 12 个键名 `omittedKeys`（超过 12 个再补 `omittedKeyCount`），
+ * 让模型不展开也能判断这块值不值得召回。裁掉的子树在完整 serializedResult 里仍在，沿 jsonPath 可原样取回。
+ */
 function buildDepthLimitMarker(
   value: unknown,
   jsonPath: string,
@@ -164,6 +193,12 @@ function buildDepthLimitMarker(
   return marker;
 }
 
+/**
+ * 按限额递归深拷工具结果的结构：超过 `maxDepth` 的对象/数组换成可召回的深度截断标记（基础类型原样保留），
+ * 数组只留前 `maxArrayItems` 项并在尾部追加 `{ __truncatedItems, jsonPath, nextOffset }`——模型照这个标记用 context:recall + jsonPath + nextOffset 就能续读后面的条目。
+ * 遍历同时剥掉三个只给宿主 UI 用的副作用键（systemToolSuggestion / capabilityAutoApprovalNotice / userActionCards），它们不该占模型上下文。
+ * 非纯对象（Date、类实例等）不拆解、原样传下去，交给后面的 JSON.stringify 处理。这一步只裁结构，字符串长度由 trimToolResultStrings 管。
+ */
 function cloneToolResult(
   value: unknown,
   depth: number,
@@ -243,6 +278,13 @@ const LargeContentKeys = new Set([
   "body",
 ]);
 
+/**
+ * 递归把结果里的字符串截到 `maxStringLength`（超出补 `…`），深度超过 `limits.maxDepth` 的子树原样返回不再下探。
+ * `preserveLargeContent` 为真时，直接挂在 LargeContentKeys（content/diff/stdout/stderr/patch 等）下的字符串整条豁免——
+ * 这些正是模型真正要读的正文，截成几百字符等于白读；它们的体积兜底交给 maxSerializedLength 那一层。
+ * 注意豁免只认「父键」：数组元素的 parentKey 传 undefined，所以 `content: [...]` 里的字符串不豁免。
+ * 这里截掉的字符在本视图内不可召回，完整正文在全保真档的 serializedResult 里。
+ */
 function trimToolResultStrings(
   value: unknown,
   depth: number,
@@ -292,6 +334,10 @@ function trimToolResultStrings(
   return record;
 }
 
+/**
+ * 序列化失败时描述「失败在什么值上」：给出 `valueType`（null 单列，其余按 typeof）与对象的 `constructorName`。
+ * 拿不到构造器名时整个键不出现。只取类型不取内容——正文本身可能就是序列化不了的那个东西。
+ */
 function describeSerializationValue(value: unknown): Record<string, unknown> {
   const valueType = isNull(value) ? "null" : typeof value;
   const constructorName = isObject(value) ? value.constructor?.name : undefined;
@@ -301,6 +347,10 @@ function describeSerializationValue(value: unknown): Record<string, unknown> {
   };
 }
 
+/**
+ * 从捕获到的任意抛出物里抠一句人话错误信息：优先 `Error.message`，否则把它自身当字符串读；
+ * 都拿不到时 null / undefined 各给一句固定说明，其余回退到 `String(error)`。保证永远返回非空字符串，不会再抛。
+ */
 function serializationErrorMessage(error: unknown): string {
   const message = readFirstString(
     error instanceof Error ? error.message : null,
@@ -314,6 +364,10 @@ function serializationErrorMessage(error: unknown): string {
   return String(error);
 }
 
+/**
+ * 把「序列化失败说明」本身序列化成字符串；连这一步都失败（或得到空串）时返回一段写死的静态 JSON 兜底。
+ * 存在意义是保证这条链路绝不再抛第二次错——工具结果哪怕全丢，也得给模型留一句能读的失败说明，而不是让整轮崩掉。
+ */
 function stringifySerializationError(payload: Record<string, unknown>): string {
   try {
     const serialized = JSON.stringify(payload);
@@ -324,6 +378,11 @@ function stringifySerializationError(payload: Record<string, unknown>): string {
   return '{"serializationError":true,"reason":"tool_result_serialization_fallback_failed","message":"Tool result serialization failed and the structured fallback could not be serialized."}';
 }
 
+/**
+ * 拼一份给模型看的序列化失败结果体：`serializationError: true` + 机器码 reason + 人话 message + 出错值的类型描述，
+ * 抛出物是 Error 且有 name 时附 `errorName`（否则该键不出现）。
+ * 它是模型唯一能看到的「这次结果为什么没正文」的解释，所以只带类型与原因，不带可能本身就有问题的原值。
+ */
 function buildSerializationErrorResult(
   reason: string,
   message: string,
@@ -342,6 +401,12 @@ function buildSerializationErrorResult(
   };
 }
 
+/**
+ * `JSON.stringify` 的不抛错版本，三种坏情况都换成模型可见的失败说明而不是静默丢结果：
+ * 结果本身是顶层 null → `tool_result_returned_null`；stringify 返回 undefined（函数、undefined 等）→ `json_stringify_returned_undefined`；
+ * stringify 抛错（循环引用、BigInt、toJSON 出错）→ `json_stringify_threw` 并带上原始错误信息。
+ * 永远返回一个非空的合法 JSON 字符串。
+ */
 function stringifyToolResult(value: unknown): string {
   try {
     const serialized = JSON.stringify(value);
@@ -368,6 +433,12 @@ function stringifyToolResult(value: unknown): string {
   }
 }
 
+/**
+ * 常规压缩仍然超预算时的最后一手：把整份已序列化文本换成 `{ __truncated, originalLength, preview, retrieval }` 存根，
+ * preview 先按 `maxSerializedLength - 160` 取头部，序列化后仍超就按实际溢出量（每轮至少砍 128）缩短预览再试，直到装得下。
+ * 预览缩到 0 还装不下就退成只有 `__truncated + originalLength`，再不行退成写死的 `{"__truncated":true}`（保证一定有返回，不会死循环）。
+ * 存根里的 retrieval 指向 context:recall（ref 用 `<toolCallId>` 占位），完整正文仍在归档里可整份召回。
+ */
 function buildTruncatedToolResult(
   serialized: string,
   maxSerializedLength: number,
@@ -415,6 +486,14 @@ function buildTruncatedToolResult(
   };
 }
 
+/**
+ * 按给定档位把工具结果压进预算，同时给出压缩后的值与其序列化文本。
+ * 三级递进：① cloneToolResult 裁结构 + trimToolResultStrings 裁字符串，装得下就收工；
+ * ② 仍超预算就对同一份结构反复重裁字符串，长度每轮对半砍（下限 96）并关掉大内容豁免；
+ * ③ 还超就整份换成 buildTruncatedToolResult 的可召回存根。
+ * 全程任何异常都不外抛：记一条 debug 日志后改吐序列化失败说明（说明本身超预算也会被压成存根）。
+ * 裁掉的内容在这一份视图里不可召回，但全保真档的 serializedResult 未被裁，模型可用 context:recall 取回。
+ */
 function compactToolResult(
   result: unknown,
   limits: ToolResultCompactionLimits,
@@ -483,6 +562,10 @@ function compactToolResult(
   }
 }
 
+/**
+ * 把归档的 serializedResult 解回原值：能 `JSON.parse` 就 parse，parse 不了就把这段文本本身当结果返回。
+ * 后一种不是错误分支——工具本来就允许返回纯字符串，序列化时是原样落盘的（见 serializeOutput）。
+ */
 export function deserializeSerializedToolResult(serialized: string): unknown {
   try {
     return JSON.parse(serialized);
@@ -554,6 +637,11 @@ function fixReadFilesMetadata(result: unknown, contentBudget: number): unknown {
   };
 }
 
+/**
+ * 从模型这次的工具入参里读出它自己要的输出体量：认 `maxOutputChars`（优先），否则认 `maxChars`，再否则把 `maxBytes` 当字符数用。
+ * 入参不是纯对象、或三个字段都没有/不是数字时返回 undefined（表示走默认档）。
+ * 有了这条提示，模型显式要更大输出时序列化层才会放宽预算，而不是静默否决它的 limit。
+ */
 export function extractSerializationHintsFromToolInput(
   toolInput?: unknown,
 ): SerializationHints | undefined {
@@ -600,6 +688,13 @@ function buildModelLimitsWithHints(
   });
 }
 
+/**
+ * 产出直接进模型上下文的那份工具结果文本：先按 hints 与结果形态定档，再修 read_file / read_files / project:read 的元数据
+ * （内容被裁时同步把 truncated/hasMore/returnedChars/nextStartLine 改对，不让序列化层替工具撒谎），最后统一压缩。
+ * 结果带源码窗口时走快路：窗口已按整行分好预算，只要整体装得下就直接 JSON.stringify——
+ * 通用的字符串截断和数组裁剪会改动原文或留下对不上的续读位置，对源码来说比省下的字符更伤。
+ * 装不下才回到 compactToolResult 的通用压缩，被裁部分仍可经 context:recall 从全保真归档取回。
+ */
 export function serializeToolResultForModel(
   result: unknown,
   hints?: SerializationHints,
@@ -628,6 +723,10 @@ export function serializeToolResultForRecall(result: unknown): string {
   return compactToolResult(result, RecallToolResultLimits).serialized;
 }
 
+/**
+ * 把一次工具调用的入参压成回放进模型历史的那一份，直接转交 `projectToolInputForHistory`。
+ * 给了 `toolCallId` 时被摘掉的大字段会留下可 context:recall 的句柄，模型需要原参数时还能取回。
+ */
 export function compactToolInputForModel(
   input: Record<string, unknown>,
   toolCallId?: string,
@@ -635,6 +734,11 @@ export function compactToolInputForModel(
   return projectToolInputForHistory(input, toolCallId);
 }
 
+/**
+ * 压出给界面展示用的那一份结果（返回压缩后的值而非字符串）。
+ * 用的是展示档：总长更宽（60K）、字符串更短（1.2K）、数组只留 20 项，但保留大内容字段——
+ * 人眼要的是「看得见正文、列表不刷屏」，与模型档的取舍正好相反；这份不进模型上下文。
+ */
 export function compactToolResultForDisplay(result: unknown): unknown {
   return compactToolResult(result, DisplayToolResultLimits).compacted;
 }

@@ -40,6 +40,11 @@ import { expandCapabilityCategoryIds } from '../capabilities'
 import { buildToolActivationRef, buildToolDiscoveryCards, summarizeReasonRef } from './tool-space-activation'
 import { type toolSpaceReplaceSchema } from './tool-space-schemas'
 
+/**
+ * 为一张插件页找一个入口工具：在全部页里取**第一个**与它同分类的 `kind === 'tool'` 页。
+ * 一个都没有返回 null（插件启用后就没有工具可挂起换入）。只按分类取首个、不排序不择优——
+ * 「哪个才是入口」属于能力描述符的表达力，本层没有这份知识。
+ */
 function findPluginEntryTool(
   card: ToolDiscoveryCard,
   cardsById: ReadonlyMap<string, ToolDiscoveryCard>
@@ -51,6 +56,11 @@ function findPluginEntryTool(
   return null
 }
 
+/**
+ * 把一张页压成 replace 结果里的模型面详情：身份（id/kind/name/categoryId/summary）、四个状态字段
+ * （availability / toolOsState / schemaState / schemaPolicy）、nextAction、resident，
+ * 外加瘦身后的 reasons 与 activation ref。给的是「为什么没换成、下一步做什么」，不是完整页。
+ */
 function summarizeReplacePage(card: ToolDiscoveryCard): ToolSpaceReplacePageDetail {
   return {
     id: card.id,
@@ -69,6 +79,10 @@ function summarizeReplacePage(card: ToolDiscoveryCard): ToolSpaceReplacePageDeta
   }
 }
 
+/**
+ * 批量把页 id 转成模型面详情：先去重，再按 id 取页，**查不到的 id 直接丢掉**（不产出占位条目），
+ * 最后逐张压成详情。所以返回条数可能少于传入的 id 数——那些 id 已由调用方另计进 skippedPages。
+ */
 function summarizeReplacePages(
   ids: readonly string[],
   cardsById: ReadonlyMap<string, ToolDiscoveryCard>
@@ -184,6 +198,22 @@ function buildReplaceNextTurnHint(input: {
   return hints.join('\n')
 }
 
+/**
+ * 执行一次工具页换入换出——工具空间五个 op 里**唯一会改会话状态**的一个（其余四个只读）。
+ * 依次做四件事：① 分拣 pageIn，按 `kind` × `availability` 判成 prepared / 待授权 / 待用户动作 / 跳过，
+ * 需要先开能力的工具先挂起；② 集中申请能力授权——注入了 `requestToolCategoryAccess` 就走它
+ * （用户可能拒），否则直接开，随后按实际开成的能力回填挂起的工具，回填不上的记 requiresApproval；
+ * ③ 对称处理 pageOut 的关停；④ 组装结果与 `nextTurnHint`。
+ * pageIn / pageOut 先各自去重，且两者目标不得交叠（含能力分类展开），交叠会抛错。
+ * 未知 id 与不可换入的页都记进 skippedPages，不抛错。
+ * **换入是下一轮生效**（`effectiveTurn` 恒为 `'next'`）：真实 schema 要等下一轮工具列表重建才暴露；
+ * 唯一的快路径是目标本轮已驻留，那批工具名放在 `alreadyResidentTools` 并把 `activeThisTurn` 置真——
+ * 不明说的代价实测是模型连着四轮重复换入同一个已可用的工具。
+ * 结果里的 `preparedToolExamples` 会把工具描述的「示例：」整段带上，省掉首调凭摘要猜参数被 schema 打回
+ * 那一整轮。`recommendedPageIn` / `recommendedTools` / `userActionHint` 在本层恒为空（形状契约，
+ * 「推荐替代页」属于能力描述符的表达力），`unavailableTargets` 与 `skippedPages` 是同一批东西的两个名字。
+ * 进入时与授权返回后各检查一次中止信号，中止即抛，不再继续改驻留状态。
+ */
 export async function replaceToolSpacePages(
   ctx: ToolContext,
   input: z.output<typeof toolSpaceReplaceSchema>

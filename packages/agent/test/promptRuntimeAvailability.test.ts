@@ -5,6 +5,7 @@ import { describe, test } from 'bun:test'
 
 import type { AgentSkillProvider,AgentSystemRuntimeConfig } from '../src/contract/requires.js'
 import { AgentSkillRepository } from '../src/impl/guidance/AgentSkillRepository'
+import { createBuiltInPromptRegistry } from '../src/impl/guidance/PromptRegistry'
 import { ContextBuilder } from '../src/impl/runner/ContextBuilder'
 import { PrimaryAgentProfile } from '../src/impl/runner/PrimaryAgentProfile'
 import { RunContext } from '../src/impl/runner/RunContext'
@@ -13,7 +14,6 @@ import type { ChatPromptFeatureId } from '../src/types/agent'
 import type { ToolCategoryOverview } from '../src/types/agent.js'
 import type { RunContextToolContext } from '../src/types/runner.js'
 import { createSkillDefinition } from '../src/utils/guidance/agent-skill-provider'
-import { createBuiltInPromptRegistry } from '../src/utils/guidance/catalog'
 import { createInternalFollowUpMessage } from '../src/utils/history/internal-messages'
 
 const VisualRequest: ModelMessage = {

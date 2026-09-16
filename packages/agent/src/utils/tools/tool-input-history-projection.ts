@@ -11,6 +11,10 @@ const MaximumOmissions = 100
 const LargeFields = new Set(['content', 'data', 'image', 'base64', 'latexSource', 'widget_code', 'html', 'svg', 'source', 'newContent', 'replacement', 'replace'])
 const MetadataKeys = new Set(['__historyInputOmissions', '__historyInputRef', '__historyInputRecall', '__historyInputPreview', '__toolReceivedFullInput'])
 const Omitted = Symbol('omitted historical input')
+/**
+ * 把「键/下标」路径数组拼成从 `$` 起的 JSON 路径串：数字用 `[3]`，合法标识符用 `.key`，其余键用带引号的 `["a-b"]`。
+ * 这串会写进省略记录的 `jsonPath`，模型拿它当 context:recall 的参数去取原值，所以必须是可直接回填的合法表达式。
+ */
 function jsonPath(path: Array<string | number>): string {
   return path.reduce<string>((result, key) => isNumber(key)
     ? `${result}[${key}]` : /^[A-Za-z_$][A-Za-z0-9_$]*$/u.test(key)

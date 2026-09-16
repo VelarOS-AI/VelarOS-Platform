@@ -39,12 +39,23 @@ function parseSemverVersion(text: string): Nullable<SemverVersion> {
   }
 }
 
+/**
+ * 按 major → minor → patch 依次比较两个已解析版本，返回负数 / 0 / 正数（`left` 小于 / 等于 / 大于 `right`）。
+ * 返回的是差值不是固定的 -1/1，只该用来判符号。预发布与构建元数据在解析阶段已被丢弃，这里不参与比较，
+ * 所以 `1.2.3-beta` 与 `1.2.3` 判为相等。
+ */
 function compareSemver(left: SemverVersion, right: SemverVersion): number {
   if (left.major !== right.major) return left.major - right.major
   if (left.minor !== right.minor) return left.minor - right.minor
   return left.patch - right.patch
 }
 
+/**
+ * 解析一条比较子句：空串、`*`、`x` 视为 `{ kind: 'any' }`（任意版本都满足）；否则按
+ * `>=` `<=` `^` `~` `>` `<` `=` 的顺序取前缀运算符（长的先匹配，`>=` 不会被 `>` 抢走），
+ * 剩下部分按 `x.y.z` 解析。没写运算符时默认 `=`。版本号部分解析不出来返回 null——
+ * 由调用方决定是拒载还是判不兼容，本函数不抛错。
+ */
 function parseSemverComparator(text: string): Nullable<SemverComparator> {
   const trimmed = text.trim()
   if (isEmpty(trimmed) || trimmed === '*' || trimmed === 'x') return { kind: 'any' }
@@ -56,6 +67,11 @@ function parseSemverComparator(text: string): Nullable<SemverComparator> {
   return { kind, version }
 }
 
+/**
+ * 判定某版本是否落在一条比较子句里。`any` 恒真；`=` `>` `>=` `<` `<=` 按 `compareSemver` 的符号判。
+ * `^` 要求不低于基准且 **major 相同**，但 0.x 按 npm 语义收紧到 minor 相同（0.x 的 minor 视同破坏性升级）；
+ * `~` 要求不低于基准且 major、minor 都相同。
+ */
 function satisfiesComparator(version: SemverVersion, comparator: SemverComparator): boolean {
   if (comparator.kind === 'any') return true
   const delta = compareSemver(version, comparator.version)
@@ -185,6 +201,11 @@ function tolerantArray<TSchema extends z.ZodTypeAny>(schema: TSchema) {
   )
 }
 
+/**
+ * `tolerantArray` 再加一条非空约束：单个标量照样宽容成单元素数组，但解析结果是空数组时报
+ * 「匹配列表不能为空」。宽容只在形态层——写成裸字符串可以，写成 `[]` 不行，因为空匹配列表在语义上
+ * 等于「这条贡献永不生效」，属于 manifest 写错而不是省略。
+ */
 function tolerantNonEmptyArray<TSchema extends z.ZodTypeAny>(schema: TSchema) {
   return tolerantArray(schema).refine((value) => !isEmpty(value), {
     message: '匹配列表不能为空',
@@ -468,6 +489,10 @@ const AgentModManifestSchema = z.strictObject({
 }) satisfies z.ZodType<AgentModManifest>
 // ─── 诊断与解析 ──────────────────────────────────────────────────────────────
 
+/**
+ * 在 manifest 还没通过校验时，尽力从原始输入里捞出 mod 的 `id`，只为把它写进诊断信息。
+ * 非对象、`id` 不是字符串或为空白时返回 undefined——拿不到 id 不影响拒载判定，只是诊断里少一条线索。
+ */
 function readOptionalModId(input: unknown) {
   if (!isPlainObject(input)) return undefined
   const id = Reflect.get(input, 'id')

@@ -106,10 +106,18 @@ function categoryDomainEntries(ctx: ToolContext): Array<[ToolCategoryId, ToolCat
     ])
 }
 
+/**
+ * 把「分类 → 域 id」做成 Map 便于按分类查。同一分类重复出现时后者覆盖前者（注入侧保证不重）。
+ * map 结果里每个分类头的 `toolOs.domain` 就从这儿取。
+ */
 function categoryDomainById(ctx: ToolContext): Map<ToolCategoryId, ToolCategoryDomainId> {
   return new Map(categoryDomainEntries(ctx))
 }
 
+/**
+ * 摘出一张页的访问判定：`finalState`、`toolOsState`、`nextAction` 与逐道 `gates`。
+ * 这是「为什么这张页现在是这个状态」的可对账明细，只在 page op 里带（find 与 map 都嫌它太重）。
+ */
 function summarizeToolAccessRef(card: ToolDiscoveryCard) {
   return {
     finalState: card.access.finalState,
@@ -119,6 +127,12 @@ function summarizeToolAccessRef(card: ToolDiscoveryCard) {
   }
 }
 
+/**
+ * 三个只读 op 的返回条目都由它产出——**模型看到的页形状就是这里定的**：身份、summary、
+ * `usageSkillId`（没声明 companion skill 的页恒为 null；透出来是免得模型换入工具、读完描述才发现
+ * 深度用法在别处）、五个状态字段、nextAction、resident，加上瘦身后的 reasons 与 activation ref。
+ * `access` 明细默认带、`includeAccess: false` 时整个字段不出现（map 用它省预算）。
+ */
 function summarizeToolSpacePageRef(
   card: ToolDiscoveryCard,
   options: { includeAccess?: boolean } = {}
@@ -182,6 +196,11 @@ function summarizeToolSpaceFindRef(
   }
 }
 
+/**
+ * 统计一批页的状态分布：总数（`total` 与 `totalPages` 同值，两个名字都对外保留）、
+ * 按 kind（tool / capability / plugin）、按 availability、按 toolOsState 各自计数。
+ * 三张分布表都**按枚举全量出键**，没有的状态记 0 而不是缺席，模型读的时候不必判 undefined。
+ */
 function buildToolSpaceStatusSummary(cards: readonly ToolDiscoveryCard[]) {
   const byKind = Object.fromEntries(
     ToolDiscoveryKindValues.map((kind) => [kind, cards.filter((card) => card.kind === kind).length])
@@ -208,6 +227,15 @@ function buildToolSpaceStatusSummary(cards: readonly ToolDiscoveryCard[]) {
   }
 }
 
+/**
+ * `op:"find"` 的编排：查询词扩展 → 按 kind / toolOsState / 分类过滤 → 逐页打分 → 排序分页 → 出模型面条目。
+ * 只保留得分 > 0 的页，同分时按工具名稳定排序（同一查询两次结果一致）。
+ * **低置信截断**：以最高分的 30%（`ToolFindLowConfidenceScoreRatio`，向上取整）为门槛丢掉长尾，
+ * 丢了多少条与门槛值都回报给模型（`lowConfidenceDiscarded` / `confidenceCutoffScore`）——
+ * 不截断时长尾噪音会把「看起来相关」的页塞满上下文；最高分为 0（一条都没匹配上）时不截断。
+ * 分页用纯偏移量游标，`hasMore` 为假时 `nextCursor` 为 null。
+ * 统计给两份：过滤后整个搜索域的 `statusSummary`，以及命中集的 `matchedStatusSummary`。
+ */
 export function searchToolDiscoveryCards(
   ctx: ToolContext,
   input: z.output<typeof toolSpaceFindSchema>
@@ -286,6 +314,12 @@ export function searchToolDiscoveryCards(
   }
 }
 
+/**
+ * 把游标串解析成偏移量：缺席、非数字、负数、超出安全整数一律**回落到 0**（从头开始）而不是报错——
+ * 游标拼错的代价是重看第一页，比让模型卡在一个参数错误上便宜。
+ * 游标就是纯偏移量：页集合在同一会话内由同一份注入描述符生成，偏移量足够稳定，
+ * 换成不透明游标只会多一层无人能读的编码。
+ */
 function parseToolSpaceCursor(cursor: LooseOptional<string>): number {
   if (!cursor) return 0
 
@@ -319,6 +353,12 @@ function filterToolSpaceCards(
     })
 }
 
+/**
+ * `op:"page"` 的编排：按 kind / toolOsState / 分类过滤后**平铺**（不打分、不分组），
+ * 按 kind → categoryId → name 稳定排序，再按偏移量游标切一页。
+ * 返回条目带完整 `access` 明细——page 是「细看某一批页」的 op，预算花在这里划算。
+ * `statusSummary` 统计的是过滤后的**全集**而非当前页。
+ */
 export function pageToolDiscoveryCards(
   ctx: ToolContext,
   input: z.output<typeof toolSpacePageSchema>
@@ -355,10 +395,20 @@ export function pageToolDiscoveryCards(
   }
 }
 
+/**
+ * map 专用的页摘要：就是 `summarizeToolSpacePageRef` 去掉 `access` 明细。
+ * map 一次会展开几十张页，每张都带逐道 gates 会把预算吃光；要看明细走 page op。
+ */
 function summarizeToolSpaceMapPage(card: ToolDiscoveryCard) {
   return summarizeToolSpacePageRef(card, { includeAccess: false })
 }
 
+/**
+ * 按行预算压低 map 每个分类实际展开的工具数：把 `ToolMapTargetToolRows`（32 行）平摊到本页返回的
+ * 分类数上（至少 1），再与模型请求的 `maxToolsPerCategory` 取小。
+ * 所以分类越多每类展开越少，整页总行数大致恒定。本页一个分类都没有时原样返回请求值。
+ * 压低的事实必须由 `toolMapParameterAdjustments` 回报，不能静默生效。
+ */
 function effectiveToolMapToolsPerCategory(
   input: z.output<typeof toolSpaceMapSchema>,
   returnedCategoryCount: number
@@ -369,6 +419,12 @@ function effectiveToolMapToolsPerCategory(
   return Math.min(input.maxToolsPerCategory, rowBudgetForCategory)
 }
 
+/**
+ * 生成「系统压低了哪个参数」的回显条目：实际值与请求值一致时返回空数组，被行预算压低了才产出一条
+ * `{parameter, requested, effective, reason:'category_row_budget', message}`，
+ * message 里直接给出路（用 categoryIds 收窄，或改走 `tooling:map(op:"page")` 看完整分类）。
+ * 静默压低会让模型以为自己看到了该分类的全部工具（不变量②）。
+ */
 function toolMapParameterAdjustments(
   input: z.output<typeof toolSpaceMapSchema>,
   effectiveMaxToolsPerCategory: number
@@ -382,11 +438,19 @@ function toolMapParameterAdjustments(
       effective: effectiveMaxToolsPerCategory,
       reason: 'category_row_budget',
       message:
-        'maxToolsPerCategory was capped by the map row budget; use categoryIds or tooling:map(op:"page") to inspect a category in full.',
+        'maxToolsPerCategory 被工具图的行预算压低了，本次每个分类只列出了一部分工具；要看某个分类的全部工具，请用 categoryIds 收窄范围，或改用 tooling:map(op:"page")。',
     },
   ]
 }
 
+/**
+ * 拼 map 结果里那份**读图说明**：`fixedToolSpace.kernelTools` 列出本轮真实可见的工具名
+ * （与宿主的 `getCurrentVisibleToolNames` 对齐，取不到时按空处理）；
+ * `stateLegend` 给四种 toolOsState 各自的含义与下一步；
+ * `dependencyRules` 给两条通用前置规则——隐藏工具要先开能力页，插件类工具要先备好用户动作入口，
+ * 后者的 `status` / `pageId` / `availability` / `pageIn` 会按动作卡工具当前的真实状态填。
+ * 说明本身不含任何具体能力知识，只有形状与状态映射。
+ */
 function buildToolSpaceMapGuide(ctx: ToolContext, cards: readonly ToolDiscoveryCard[]) {
   const visibleToolNames = new Set(ctx.getCurrentVisibleToolNames?.() ?? [])
   const showUserActionTool = cards.find((card) => card.id === 'tool:interaction:show_action_cards')
@@ -458,6 +522,18 @@ function buildToolSpaceMapGuide(ctx: ToolContext, cards: readonly ToolDiscoveryC
   }
 }
 
+/**
+ * `op:"map"` 的编排：把页按分类分组展开成系统工具地图，分类按 id 稳定排序后用游标分页
+ * （游标走的是**分类**偏移，不是工具偏移）。
+ * 三处刻意不跟随 kind / toolOsStates 过滤：① 每个分类的 `toolNames` 完整索引取自**全集**——
+ * 模型常用 resident 过滤快速看常驻面，索引若跟着变空它会误判该分类没有 loadable 工具；
+ * ② 分类头的 capability 页也从全集取，它是这一类的身份与激活路径，不该被状态过滤裁掉；
+ * ③ 统计与 guide 各有各的取数范围。
+ * 每类实际展开的状态页数受行预算压低，压低情况写进 `filters.parameterAdjustments`；
+ * 被截断的分类会给一个 `toolPage`——可直接执行的 `{tool, input}` 续页调用，模型不必自己拼参数。
+ * `categoryKind` / `parentCategoryId` / `subCategoryIds` / `childStatusSummary` / `childToolCount`
+ * 恒为叶子常量：分类树属于注入侧描述符的表达力，保留字段是模型面形状契约，不是没写完的洞。
+ */
 export function mapToolDiscoveryCards(
   ctx: ToolContext,
   input: z.output<typeof toolSpaceMapSchema>

@@ -15,7 +15,7 @@ import type { ModelMessage } from 'ai'
 
 import { isArray, isEmpty, isFiniteNumber, isNull, isRecord, isString } from '@velaros-ai/core'
 
-import type { ContextProjectionBudget, ContextProjectionMeasurement, ContextProjectionResult, ContextRecord, ContextRecordToolPart, ContextResidency, ContextResidencyVector,ProjectContextLedgerInput, RenderedRecord } from '../../types/residency.js'
+import type { ContextProjectionBudget, ContextProjectionMeasurement, ContextProjectionRenderCache, ContextProjectionResult, ContextRecord, ContextRecordToolPart, ContextResidency, ContextResidencyVector,ProjectContextLedgerInput, RenderedRecord } from '../../types/residency.js'
 import { buildContextRefEnvelope } from '../context/context-ref-envelope'
 
 import {
@@ -68,7 +68,7 @@ export function projectContextLedger(
       continue
     }
 
-    projectedChars += residentChars(record, effective)
+    projectedChars += residentChars(record, effective, input.renderCache)
     if (isTailProtected) {
       tailMessages.push(rendered.message)
       continue
@@ -113,6 +113,8 @@ export function measureLedgerProjection(input: {
   records: readonly ContextRecord[]
   residency: ContextResidencyVector
   budget: ContextProjectionBudget
+  /** 渲染长度缓存（可选）：与投影同一份缓存传进来才有复用价值，不传就现场渲染。 */
+  renderCache?: ContextProjectionRenderCache
 }): ContextProjectionMeasurement {
   const ordered = orderBySeq(input.records)
   const tailProtectedRecordIds = resolveTailProtectedRecordIds(ordered, input.budget)
@@ -127,7 +129,7 @@ export function measureLedgerProjection(input: {
     if (!record.message) continue
     if (isHiddenInProjection(record, effective)) continue
 
-    projectedChars += residentChars(record, effective)
+    projectedChars += residentChars(record, effective, input.renderCache)
   }
 
   return {
@@ -176,25 +178,27 @@ export function resolveEffectiveResidency(
  * 参数**。实测记账比真实小 2.7~4.3 倍（审计 V3/V11/U1/U5/U17/U26），于是"达标即停"在真实占用
  * 远高于目标线时提前收手、savingPercent 与 dashboard 一起骗人、handoff 该布防时不布防。
  *
- * 缓存按记录对象身份 memo：记录一旦入账永不改写（P1），所以同一条记录同一驻留态的渲染长度恒定。
+ * 渲染长度可按记录对象身份 memo（记录一旦入账永不改写，P1，所以同一条记录同一驻留态的渲染长度恒定）。
+ * 缓存**由调用方传进来**（`ContextProjectionRenderCache`）——投影是纯函数，状态不留在这里；
+ * 不传就现场渲染，结果完全一致，只是多花一次渲染。
  */
-export function residentChars(record: ContextRecord, residency: ContextResidency): number {
+export function residentChars(
+  record: ContextRecord,
+  residency: ContextResidency,
+  renderCache?: ContextProjectionRenderCache
+): number {
   // INLINE 使用归一化附件后的字符量；原文长度独立保留在 bytes.full。
   if (residency === 'INLINE') return record.bytes.budget ?? (record.message ? estimateMessageBudgetChars(record.message) : record.bytes.full)
 
-  const cached = renderedCharsByRecord.get(record)
-  const hit = cached?.get(residency)
+  const hit = renderCache?.get(record, residency)
   if (isFiniteNumber(hit)) return hit
 
   const rendered = renderRecord(record, residency)
   const chars = rendered.kind === 'hidden' ? 0 : estimateMessageBudgetChars(rendered.message)
-  if (cached) cached.set(residency, chars)
-  else renderedCharsByRecord.set(record, new Map([[residency, chars]]))
+  renderCache?.set(record, residency, chars)
 
   return chars
 }
-
-const renderedCharsByRecord = new WeakMap<ContextRecord, Map<ContextResidency, number>>()
 
 /**
  * 尾保护窗口：最近 `tailProtectTurns` 轮**与**最近 `tailProtectMaxRecords` 条记录的**交集**。
@@ -243,6 +247,15 @@ function isHiddenInProjection(record: ContextRecord, residency: ContextResidency
   return residency === 'SUMMARIZED'
 }
 
+/**
+ * 把一条账本记录按给定驻留态渲染成 provider 能收的消息，并标出它落在哪一档（inline / excerpt / tombstone / hidden）。
+ *
+ * 分档的取舍：INLINE 原样发；EXCERPT 换成信封，**拿不到素材时回落 INLINE 发全文**（宁可这条不省，也不发一个空壳）；
+ * SUMMARIZED / EVICTED / EXPIRED 三档冷驻留里，tool-call 与 tool-result 只降级成结构墓碑——消息壳与 `toolCallId`
+ * 逐字保留，否则调用与结果配不成对，历史结构校验会拒掉整个请求；非工具记录在 SUMMARIZED 下整条消失（已被 summary 代表），
+ * 在 EVICTED / EXPIRED 下换成一条带召回指针的墓碑消息。`hidden` 档的 message 是 null，调用方必须跳过而不是发空消息。
+ * 纯函数：同一条记录 + 同一驻留态恒得同一条消息，`residentChars` 正是靠这一点按记录身份 memo 渲染长度。
+ */
 function renderRecord(record: ContextRecord, residency: ContextResidency): RenderedRecord {
   const message = record.message
   if (!message) return { kind: 'hidden', message: null }
@@ -273,6 +286,14 @@ function renderRecord(record: ContextRecord, residency: ContextResidency): Rende
   return { kind: 'tombstone', message: buildTombstoneMessage(record, residency) }
 }
 
+/**
+ * 把一条记录渲染成"摘录"形态；素材不足时返回 null，由 {@link renderRecord} 回落 INLINE 发全文。
+ *
+ * 按 `record.kind` 走三条路：user 记录只替换正文文本、**角色不可改写**，且摘录只写进第一个 text part，其余附件原序保留；
+ * tool-result 带 `toolParts` 时**每个 part 各拿各的信封**，一个 part 都没改动就返回 null，没有 per-part 素材时才退回
+ * 记录级信封套用到全部 part；其余记录整条换成一条 assistant 角色的信封 JSON。
+ * 信封里带 ref 与 `context:recall` 参数，所以裁掉的正文不是丢了，是随时能取回。
+ */
 function renderExcerptMessage(record: ContextRecord, message: ModelMessage): Nullable<ModelMessage> {
   // user 记录（48K 安全阀）：**角色不可改写**。把正文换成 v1 同形的"摘录 + 存储提示"纯文本，
   // 信封 JSON 留给工具结果——把一条用户指令渲染成 assistant JSON 会同时丢角色与可读性。
@@ -383,6 +404,11 @@ function buildTombstoneText(
   )
 }
 
+/**
+ * 定出墓碑里交给模型的召回指针，按"越能直接取回原文的越优先"逐级回退：
+ * 给了 part 就走 `part.excerpt.ref → payloadRef → toolCallId`，否则走记录级 `excerpt.ref → payloadRef → toolCallId → record.id`。
+ * 永远返回非空串——宁可给一个只定位到记录的弱指针，也不产出没有指针的死信封。
+ */
 function resolveTombstoneRef(
   record: ContextRecord,
   part: LooseOptional<ContextRecordToolPart>
@@ -391,6 +417,12 @@ function resolveTombstoneRef(
   return record.excerpt?.ref ?? record.payloadRef ?? record.toolCallId ?? record.id
 }
 
+/**
+ * 标出 {@link resolveTombstoneRef} 给出的 ref 属于哪一类，好让 `context:recall` 知道去哪儿取：
+ * 有 payloadRef 就是 `'payload-ref'`（落盘的完整 payload），否则凭 toolCallId 算 `'tool-payload'`，
+ * 记录级两者都没有时只剩 `'context-handle'`（只能按账本记录召回）。
+ * part 路径不会出 `'context-handle'`——每个 part 至少带得出 toolCallId。
+ */
 function resolveTombstoneRefKind(
   record: ContextRecord,
   part: LooseOptional<ContextRecordToolPart>
@@ -401,6 +433,11 @@ function resolveTombstoneRefKind(
   return 'context-handle'
 }
 
+/**
+ * 把墓碑文本包成一条独立的 assistant 消息，专用于 EVICTED / EXPIRED 的**非工具**记录：
+ * 这类记录没有必须保住的配对结构，整条消息都可以换掉，只留下 id + 原因 + 召回指针那一行。
+ * 工具类记录不走这里——它们必须在原消息壳里就地改正文（见 `rewriteToolResultOutputs`）。
+ */
 function buildTombstoneMessage(record: ContextRecord, residency: ContextResidency): ModelMessage {
   return { role: 'assistant', content: buildTombstoneText(record, residency) }
 }
@@ -440,11 +477,19 @@ function stripAssistantTextParts(message: ModelMessage): ModelMessage {
   return { ...message, content } as ModelMessage
 }
 
+/**
+ * 归一化预算 token 数：非有限数或 ≤ 0 一律当"这次没有预算线"返回 null，合法值向下取整。
+ * 刻意不回落成 0——0 会让占用率变成除零；null 一路传到 `occupancyPercent`，下游据此判断"没有线可对"而不是"占满了"。
+ */
 function normalizeBudgetTokens(value: LooseOptional<number>): Nullable<number> {
   if (!isFiniteNumber(value) || value <= 0) return null
   return Math.floor(value)
 }
 
+/**
+ * 算本次投影的预算占用率（百分比，保留一位小数）。没有预算线时返回 null，不编一个 0 或 100 出来。
+ * 超预算照实返回大于 100 的值，**不夹到 100**——夹了治理器就看不出到底超了多少，也就判不出还要降几轮。
+ */
 function resolveOccupancyPercent(
   projectedTokens: number,
   budgetTokens: Nullable<number>

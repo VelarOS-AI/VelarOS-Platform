@@ -12,11 +12,13 @@ import { AgentLoopContextUsageManager } from '../src/impl/context/AgentLoopConte
 import { SubAgentDispatcher } from '../src/impl/delegation/SubAgentDispatcher'
 import { TeamModelRouter } from '../src/impl/delegation/TeamModelRouter'
 import { WriteLeaseCoordinator } from '../src/impl/delegation/WriteLeaseCoordinator'
+import { createBuiltInPromptRegistry } from '../src/impl/guidance/PromptRegistry'
 import { QueryTurn } from '../src/impl/loop/QueryTurn'
-import { isContextOverflowReplayUnsafe } from '../src/impl/loop/RetryPolicy'
+import { isContextOverflowError, isContextOverflowReplayUnsafe } from '../src/impl/loop/RetryPolicy'
 import { AgentModSeamDispatcher } from '../src/impl/mods/AgentModSeamDispatcher'
 import { ExecutionEventBus } from '../src/impl/records/ExecutionEventBus'
 import { SubAgentGuidanceRelayRegistry } from '../src/impl/records/SubAgentGuidanceRelayRegistry'
+import { AgentTurnHistoryHelper } from '../src/impl/records/TurnHistory'
 import { ContextGovernanceSessionRegistry } from '../src/impl/residency/ContextGovernanceSessionRegistry'
 import { ContextBuilder } from '../src/impl/runner/ContextBuilder'
 import { PrimaryAgentProfile } from '../src/impl/runner/PrimaryAgentProfile'
@@ -28,8 +30,6 @@ import type { AgentModelInputModality } from '../src/types/agent.js'
 import type { SubAgentTypeDescriptor } from '../src/types/delegation.js'
 import type { AgentExecutionStackToolContext } from '../src/types/runner.js'
 import { parseSubAgentToolResult } from '../src/utils/delegation/sub-agent-result-builder'
-import { createBuiltInPromptRegistry } from '../src/utils/guidance/catalog'
-import { AgentTurnHistoryHelper } from '../src/utils/history/turn'
 import { executeLoopTurnWithContextOverflowRecovery } from '../src/utils/loop/agent-loop'
 import { resolveContextDegradeAction } from '../src/utils/loop/context-degrade-ladder'
 
@@ -193,8 +193,13 @@ describe('default Agent execution stack', () => {
   test('Solo-only host executes a real model stream without Query dependencies and can release its session', async () => {
     const model = createModel()
     const stack = createAgentExecutionStack({ model: model.port, toolRegistry })
-    expect('executeQuery' in stack).toBe(false)
-    expect('createRunner' in stack).toBe(false)
+    // 没配 query 的栈仍带着查询面的方法（它们在同一个类上），但一调就抛 INVALID_STATE。
+    const queryFace = stack as unknown as {
+      executeQuery: (args: never) => Promise<string>
+      createRunner: (options: never) => unknown
+    }
+    await expect(queryFace.executeQuery(undefined as never)).rejects.toThrow('只能跑 Solo')
+    expect(() => queryFace.createRunner(undefined as never)).toThrow('只能跑 Solo')
     await runSolo(stack, 'solo-only')
     expect(model.requests).toEqual([
       { selection: chatConfig.modelSelection, context: systemConfig.modelRuntimeContext },
@@ -579,6 +584,7 @@ test('Query overflow after visible output never replays that output through the 
   try {
     await executeLoopTurnWithContextOverflowRecovery({
       turn: 1, abortSignal: context.abortSignal,
+      overflowRules: { isContextOverflowError, isContextOverflowReplayUnsafe },
       executeTurn: () => query.executeQueryTurn({
         provider: fixture.provider, model: 'probe', systemPrompt: 'probe',
         history: [{ role: 'user', content: 'work' }], toolContext: context,
@@ -680,6 +686,7 @@ for (const scenario of ['recovers', 'exhausts', 'preserves-write'] as const) {
     const run = executeLoopTurnWithContextOverflowRecovery({
       turn: 1,
       abortSignal: context.abortSignal,
+      overflowRules: { isContextOverflowError, isContextOverflowReplayUnsafe },
       executeTurn,
       resolveAction: (attempt) => resolveContextDegradeAction('query', attempt),
       applyAction: async () => {

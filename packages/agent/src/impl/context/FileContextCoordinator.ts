@@ -15,6 +15,8 @@ import {
   tryParseFileSnapshot,
 } from '../../utils/context/file-snapshot-archive'
 
+import { fileContextRegistry } from './FileContextRegistry'
+
 function key(workspaceId: string, path: string): string {
   return JSON.stringify([workspaceId, path])
 }
@@ -32,8 +34,92 @@ function tierRank(view: FileContextView): number {
   return view.tier === 'incidental' ? 0 : 1
 }
 
+/**
+ * 一个执行分支的文件上下文协调器：维护「这个分支现在看得见哪些文件的哪些片段」（活跃工作集），
+ * 把每次读到的源码归档进会话的 payload 存储，并在每次发送前重新确认这些文件还是不是那个版本。
+ *
+ * 由 `fileContextRegistry` 按执行 tracker 建、按 tracker 生命周期回收；工作集与档案分离——工作集有
+ * 上限会淘汰，档案一直留着，历史片段只能经 `recall` 作为证据取回。
+ * 归档失败不阻断读取：当次读取照常可用，只是那条视图会带上 error。
+ */
+export interface FileContextCoordinatorApi {
+  /** 这条协调器的作用域标识；发给来源的每次读取都带上它，宿主据此判断这次读取属于哪个执行分支。 */
+  readonly scopeId: string
+  /** 登记一个资源来源（读取、路径归一、归档校验入口）；同一 workspaceId 再登记即覆盖。 */
+  registerSource(source: FileContextSource): void
+  /**
+   * 子分支继承父分支的来源访问口（不继承活跃工作集）。`canRead` 在每次读取与召回时重新求值，
+   * 返回 false 就拒绝——子 agent 的可见工具一变，它对源码的访问权限当场跟着变。
+   */
+  inheritSources(parent: FileContextCoordinator, canRead: () => boolean): void
+  /**
+   * 领一个观察序号，读之前领、读完把它交给 `observe`。序号用来判定迟到的读取结果：
+   * 序号比当前视图旧的结果只进档案，不改当前指针。
+   */
+  beginObservation(): number
+  /** 只归档、不进工作集：把快照写进会话存储留作证据，来源未登记的快照直接跳过。 */
+  archive(snapshots: readonly FileContextSnapshot[], toolCallId?: string): Promise<void>
+  /**
+   * 归档并把这批快照并进活跃工作集。同一文件的多个片段按版本合并，版本不一致判 dirty；
+   * `refresh` 为 true 表示这是发送前的重新确认，不抬高文件在工作集里的优先级。
+   * 结果在协调器的串行队列里应用，失败不会卡住后续任务。
+   */
+  observe(
+    snapshots: readonly FileContextSnapshot[],
+    sequence: number,
+    toolCallId?: string,
+    refresh?: boolean,
+    tier?: FileContextViewTier
+  ): Promise<void>
+  /**
+   * 标记这些路径「内容已变，现有片段作废」（写入、编辑、重命名之后调）。视图转 dirty 并排到工作集
+   * 最前，下次发送前会重新读；`ranges` 给出本次 diff 证实可用的行范围，没给就从文件首部重新确认。
+   */
+  touch(
+    workspaceId: string,
+    paths: readonly string[],
+    ranges?: Readonly<Record<string, FileContextRange[]>>
+  ): void
+  /**
+   * 当前工作集的视图副本（深拷贝，调用方改不动内部状态），按「显式读取过的在前、最近用过的在前」排序，
+   * 活动尾预算不够时从尾部开始省略。
+   */
+  currentViews(): FileContextView[]
+  /**
+   * 给一份工具结果签发源码引用：先把内联的 `__contextRef` 片段解码成结构，交给各来源授权，
+   * 再把不该出核的字段（viewSource、不可用的续读引用）抹掉后重新序列化。
+   * 在提供方编译器完成最终裁剪之后跑，被裁掉的正文不会拿到授权。
+   */
+  finalizeModelResult(value: unknown): Promise<unknown>
+  /** 对整批待发消息做同一次签发，让同一版本的多个不连续窗口共用一份引用；消息壳与角色逐字保留。 */
+  finalizeMessages(messages: ModelMessage[]): Promise<ModelMessage[]>
+  /**
+   * 发送前重新读一遍工作集里的每个文件。watcher 丢事件、外部改动保留 mtime 都骗不过它；
+   * 读失败的文件标成 unavailable 并带上原因，不会让整次发送失败。
+   */
+  prepare(toolCallId?: string): Promise<void>
+  /**
+   * 从这条分支的历史里恢复它实际读过的文件（不把同会话其他分支的文件拉进来）。
+   * 历史里带完整正文的 `project:read` 结果会被补归档一次，之后只留路径与范围，正文靠 `prepare` 重新确认。
+   */
+  seedHistory(history: readonly ModelMessage[]): Promise<void>
+  /** 记一次重命名，把旧路径的历史快照串到新路径上，`recall` 按新路径也能找回改名前的版本。 */
+  recordRename(
+    workspaceId: string,
+    from: string,
+    to: string,
+    beforeRevision: string,
+    afterRevision: string
+  ): Promise<void>
+  /**
+   * 召回历史快照：不带 ref/revision 时返回版本目录，带 revision 返回该版本的片段目录，
+   * 带 ref 返回那一片的正文（按 offset/maxChars 切片）。当前权限读不到的快照算受限而不是不存在。
+   */
+  recall(input: FileSnapshotRecallInput): Promise<unknown>
+}
+
 /** 每个执行分支持有自己的活跃范围；刷新只读授权来源，原文仍由宿主持久化。 */
-export class FileContextCoordinator {
+export class FileContextCoordinator implements FileContextCoordinatorApi {
   public readonly scopeId = globalThis.crypto.randomUUID()
   private readonly sources = new Map<string, FileContextSource>()
   private readonly views = new Map<string, FileContextView>()
@@ -55,11 +141,11 @@ export class FileContextCoordinator {
         ...source,
         read: (path, ranges, scopeId) => {
           if (!canRead())
-            return Promise.reject(new Error('File reading is outside this agent scope'))
+            return Promise.reject(new Error('读文件的授权已不在当前 agent 的作用域内：这个文件来源是从父 agent 继承的，父级的读取窗口已经关闭，本次读取被拒绝。'))
           return source.read(path, ranges, scopeId)
         },
         validateArchive: async (snapshot) => {
-          if (!canRead()) throw new Error('File recall is outside this agent scope')
+          if (!canRead()) throw new Error('召回文件快照的授权已不在当前 agent 的作用域内：这个文件来源是从父 agent 继承的，父级的读取窗口已经关闭，本次召回被拒绝。')
           await source.validateArchive?.(snapshot)
         },
       })
@@ -588,30 +674,9 @@ export class FileContextCoordinator {
   }
 }
 
-const coordinators = new WeakMap<
-  object,
-  { sessionId: string; store: ContextPayloadStore; coordinator: FileContextCoordinator }
->()
-
 /** 按执行 tracker 隔离；上下文浅拷贝不会丢服务，tracker 回收后也不会残留全局会话。 */
 export function fileContextFor(context: FileContextCarrier): FileContextCoordinator | undefined {
-  const owner = context.fileContextScope ?? context.codingSession
-  if (!owner || !isPlainObject(owner)  || !context.sessionId || !context.contextPayloadStore)
-    return undefined
-  const existing = coordinators.get(owner)
-  if (
-    existing &&
-    existing.sessionId === context.sessionId &&
-    existing.store === context.contextPayloadStore
-  )
-    return existing.coordinator
-  const coordinator = new FileContextCoordinator(context.contextPayloadStore, context.sessionId)
-  coordinators.set(owner, {
-    sessionId: context.sessionId,
-    store: context.contextPayloadStore,
-    coordinator,
-  })
-  return coordinator
+  return fileContextRegistry.for(context)
 }
 
 /** 子分支继承来源访问口，不继承父分支的活跃源码与预算。 */

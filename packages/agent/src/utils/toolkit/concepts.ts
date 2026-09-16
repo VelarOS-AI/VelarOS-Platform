@@ -10,10 +10,18 @@ const GlobalToolConcepts = {
   schemaBoundExamples: '示例必须是可被工具 schema 解析的参数对象。',
 } as const
 
+/**
+ * 登记一张工具概念表（概念 id → 写给模型看的中文约束句）。运行期原样返回入参，唯一作用是让 TS
+ * 推出字面量 key 类型，这样后续 `createToolConceptLookup` 取值时写错概念名会在编译期就报错。
+ */
 function defineToolConcepts<TConcepts extends ToolConceptRegistry>(concepts: TConcepts): TConcepts {
   return concepts
 }
 
+/**
+ * 基于一张概念表造一个取值函数：传概念 id 返回那句约束文案，id 必须是表里已登记的 key，
+ * 拿不到就是编译期错误而不是运行期 undefined。工具描述拼装时用它把共用约束引进去。
+ */
 function createToolConceptLookup<TConcepts extends ToolConceptRegistry>(concepts: TConcepts) {
   return <TId extends keyof TConcepts & string>(id: TId): TConcepts[TId] => concepts[id]
 }

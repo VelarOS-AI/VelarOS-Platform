@@ -34,6 +34,13 @@ const GuidanceRelayPlanSchema = z
   })
   .passthrough() satisfies z.ZodType<GuidanceRelayPlan>
 
+/**
+ * 从一条 `ModelMessage` 里取出用户敲的那段引导文字：非 user 角色、内容为空白、或多段内容里一个 text 段都没有，
+ * 一律返回 `null`；字符串内容去空白直接用，数组内容只收 `type === 'text'` 的段（图片、工具结果等一概略过），
+ * 逐段去空白后用换行拼起来。
+ * 返回 `null` 是 `provideGuidanceForSourceSession` 拒绝这次引导的判据——挡的是把一条空消息或助手消息
+ * 当引导入队，占掉一次抢占主轮的机会却什么都没说。
+ */
 function extractGuidanceUserText(message: ModelMessage): Nullable<string> {
   if (message.role !== 'user') return null
 
@@ -56,6 +63,13 @@ function extractGuidanceUserText(message: ModelMessage): Nullable<string> {
   return parts.join('\n')
 }
 
+/**
+ * 拼出交给小辅助模型的那条提示词：先把每个在跑的子 Agent 列成一段（threadId、agent、type、title、可选 description，
+ * 以及截到 600 字符的 task——任务原文可以很长，不截会把提示词本身撑爆），再附上规则与用户原话。
+ * 规则里最要紧的两条是「不得逐字照抄用户原文到 relay 里」和「主控必然收到这条消息，mainAgent 只决定收到的是改写还是原文」，
+ * 后者对应下游 `resolveMainAgentGuidanceDelivery` 的无条件投递——提示词与实现必须同时说同一件事，
+ * 否则模型会以为填 `mode: "none"` 就能把消息拦下来。
+ */
 function buildGuidanceRelayPrompt(input: BuildGuidanceRelayPromptInput): string {
   const workerLines = input.workers.map((worker, index) => {
     const description = worker.description?.trim()
@@ -97,6 +111,7 @@ function buildGuidanceRelayPrompt(input: BuildGuidanceRelayPromptInput): string 
   ].join('\n')
 }
 
+/** 把辅助模型吐回来的原始结构按 `GuidanceRelayPlanSchema` 解析：`understanding` 必须非空，`relays` 与 `dependsOnThreadIds` 缺省补空数组，`mainAgent.mode` 缺省补 `immediate`；schema 走 passthrough，模型多写的字段原样留着。不合就抛，由调用方回落到「只投原文给主控」。 */
 function parseGuidanceRelayPlan(raw: unknown): GuidanceRelayPlan {
   return GuidanceRelayPlanSchema.parse(raw)
 }
@@ -137,6 +152,11 @@ function resolveMainAgentGuidanceDelivery(input: {
   return { message: input.originalMessage, kind: 'verbatim' }
 }
 
+/**
+ * 把规划里的 relay 逐条去空白后筛一遍，只留 `threadId` 确实还在跑、且 `message` 非空的那些。
+ * 模型会编出已结束或根本不存在的 threadId；照单全收会投到一个没人接的线程上，引导就此静默消失——
+ * 这里当场丢掉，主控那条投递不受影响（它是无条件的），所以用户的话不会因为筛掉 relay 而丢失。
+ */
 function filterValidGuidanceRelays(
   plan: GuidanceRelayPlan,
   workers: readonly SubAgentGuidanceRelayWorkerSnapshot[]
@@ -150,6 +170,7 @@ function filterValidGuidanceRelays(
     .filter((relay) => activeThreadIds.has(relay.threadId) && !isBlank(relay.message))
 }
 
+/** 规划的统一收敛入口：`relays` 过 `filterValidGuidanceRelays`、`mainAgent` 过 `normalizeMainAgentGuidance`，其余字段（含 passthrough 带进来的）原样保留。解析之后、使用之前必须过一次，下游就不用各自再去防模型编造的 threadId。 */
 function normalizeGuidanceRelayPlan(
   plan: GuidanceRelayPlan,
   workers: readonly SubAgentGuidanceRelayWorkerSnapshot[]
@@ -161,6 +182,12 @@ function normalizeGuidanceRelayPlan(
   }
 }
 
+/**
+ * 收敛规划里的 `mainAgent` 这一格：模型没填就保持缺席（缺席有自己的 fail-open 含义，见
+ * `resolveMainAgentGuidanceMessage`，绝不能在这里补一个默认对象把它抹掉）；`message`/`reason` 去空白后
+ * 只在非空时保留（空白值直接省略键，不写空串）；`dependsOnThreadIds` 只有 `mode === 'deferred'` 时才留，
+ * 其余模式一律清空——非 deferred 的依赖没有任何人会去等，留着只会让主控读到一份假的等待清单。
+ */
 function normalizeMainAgentGuidance(
   mainAgent: GuidanceRelayPlan['mainAgent'],
   workers: readonly SubAgentGuidanceRelayWorkerSnapshot[]
@@ -182,6 +209,7 @@ function normalizeMainAgentGuidance(
   }
 }
 
+/** 把模型填的依赖线程列表逐个去空白、丢掉空串、只留当前还在跑的 threadId，再按首次出现顺序去重。留下已结束或编造的 id，主控就会去等一个永不到来的结果而卡死。 */
 function normalizeActiveThreadIds(
   threadIds: readonly string[],
   workers: readonly SubAgentGuidanceRelayWorkerSnapshot[]
@@ -196,6 +224,12 @@ function normalizeActiveThreadIds(
   ]
 }
 
+/**
+ * 模型**确实填了** `mainAgent` 时，算出主控该收到的改写文本；返回 `null` 表示「没有可用改写」，
+ * 调用方改投用户原文（不是「不投」——投递本身是无条件的）。
+ * `mode: 'none'` 直接给 `null`；`message` 空白就退回用 `understanding` 顶上；
+ * 再按 `deferred` / `immediate` 分别交给两个 build 函数加上前缀与说明。
+ */
 function resolveExplicitMainAgentGuidanceMessage(
   plan: GuidanceRelayPlan,
   understanding: string
@@ -215,6 +249,7 @@ function resolveExplicitMainAgentGuidanceMessage(
   return buildImmediateMainAgentGuidanceMessage(plan, message)
 }
 
+/** 拼「主控下一轮就纳入」的那条补充文本：统一加 `[主控补充]` 前缀；有 relay 时再补一句说明已经 relay 给了几个子任务，好让主控知道同一条引导子 Agent 那边也收到了，不必再转发一遍。 */
 function buildImmediateMainAgentGuidanceMessage(
   plan: GuidanceRelayPlan,
   message: string
@@ -228,6 +263,12 @@ function buildImmediateMainAgentGuidanceMessage(
   ].join('\n')
 }
 
+/**
+ * 拼「搁置给主控的后续事项」那条文本：加 `[主控搁置补充]` 前缀，并把处理时机写明白——
+ * 有依赖线程就列出 threadId 并说清要等它们完成、读到结果后再继续；没有依赖就说成当前运行收敛后由主控自行判断。
+ * 有 relay 时再补一句区分「已经 relay 出去的是当下可执行的部分，本条是留给主控的后续」。
+ * 时机必须写进正文：这是一条塞进历史的普通用户消息，除了这几句话没有别的地方告诉主控它不该立刻动手。
+ */
 function buildDeferredMainAgentGuidanceMessage(
   plan: GuidanceRelayPlan,
   message: string,

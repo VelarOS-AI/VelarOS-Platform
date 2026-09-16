@@ -1,20 +1,25 @@
-import { isArray, isBlank, isObject, isString, toNullable, toOptional, truncate } from '@velaros-ai/core'
+import { toNullable, toOptional } from '@velaros-ai/core'
 
 import type { AgentEvent } from '../../types/agent'
-import type { ExecutionEventSeverity,StreamStatePayload } from '../../types/agent.js'
 import type { ExecutionAgentEventLedgerStore } from '../../types/records.js'
+import { describeAssistantRawContent, extractAssistantRawTextSummary, resolveRuntimeEventSeverity } from '../../utils/records/agent-event-payload'
 import { compactToolResultForDisplay } from '../../utils/tools/tool-result-serialization'
 
 const MaxAssistantOutputSummaryChars = 500
 
 /**
- * Agent 事件账本。
+ * Agent 事件落账：把 AgentRunner 流出来的事件翻成 `ExecutionRecord.events` 上的一条条时间线记录，
+ * 供调试面板回放。事件挂在执行当前的任务（`currentTaskId`）下，不挂计划步骤。
  *
- * AgentRunner 在执行过程中发出的事件（turn-context/assistant-raw/runtime/tool-start/tool-done）
- * 会经过 ExecutionService 的 tap 转交给本类，落到 ExecutionRecord.events 时间线供调试面板回放。
- * 高频的 text-delta/reasoning-delta 不入账本，避免账本爆炸。
+ * 自己不存东西，写入走构造时注入的 `ExecutionAgentEventLedgerStore`；每落一条（turn-context 除外）就触发一次调试快照重发。
+ * 实现是 `ExecAgentEvents`（对外别名 `ExecutionAgentEventLedger`），由 `ExecutionService` 的 tap 调用。
  */
-class ExecAgentEvents {
+export interface ExecAgentEventsApi {
+  /** 把一条 agent 事件落进这次执行的时间线：text-delta、reasoning-delta、生成文件、来源这四类高频事件直接丢弃（不然账本会爆），其余按类型翻成 turn-context-captured / assistant-output-captured / runtime-state-captured / tool-call-* 记录。执行不存在时由 store 抛错。 */
+  appendAgentEvent(executionId: string, event: AgentEvent): void
+}
+
+class ExecAgentEvents implements ExecAgentEventsApi {
   constructor(
     private readonly store: ExecutionAgentEventLedgerStore,
     private readonly emitExecutionDebug: (executionId: string) => void
@@ -53,7 +58,7 @@ class ExecAgentEvents {
         return
       }
       case 'assistant-raw': {
-        const textSummary = this.extractAssistantRawTextSummary(event.payload.content)
+        const textSummary = extractAssistantRawTextSummary(event.payload.content, MaxAssistantOutputSummaryChars)
         this.store.appendEvent(executionId, {
           kind: 'assistant-output-captured',
           severity: 'info',
@@ -63,7 +68,7 @@ class ExecAgentEvents {
           planStepId: null,
           payload: {
             turn: event.payload.turn,
-            contentShape: this.describeAssistantRawContent(event.payload.content),
+            contentShape: describeAssistantRawContent(event.payload.content),
             textSummary: toOptional(textSummary),
           },
         })
@@ -73,7 +78,7 @@ class ExecAgentEvents {
       case 'runtime':
         this.store.appendEvent(executionId, {
           kind: 'runtime-state-captured',
-          severity: this.resolveRuntimeEventSeverity(event.payload.kind),
+          severity: resolveRuntimeEventSeverity(event.payload.kind),
           title: '运行状态已记录',
           message: event.payload.kind,
           taskId: currentTaskId,
@@ -151,58 +156,6 @@ class ExecAgentEvents {
         return
     }
   }
-
-  private resolveRuntimeEventSeverity(kind: StreamStatePayload['kind']): ExecutionEventSeverity {
-    switch (kind) {
-      case 'done':
-        return 'success'
-      case 'aborted':
-        return 'warning'
-      case 'error':
-        return 'error'
-      default:
-        return 'info'
-    }
-  }
-
-  private describeAssistantRawContent(content: unknown): Record<string, unknown> {
-    if (!isArray(content))
-      return {
-        type: typeof content,
-      }
-
-    return {
-      type: 'array',
-      count: content.length,
-      itemTypes: content
-        .map((item) =>
-          item && isObject(item) ? String((item as { type?: unknown }).type) : typeof item
-        )
-        .slice(0, 20),
-    }
-  }
-
-  private extractAssistantRawTextSummary(content: unknown): Nullable<string> {
-    if (isString(content)) return normalizeAssistantOutputSummary(content)
-    if (!isArray(content)) return null
-
-    const text = content
-      .map((item) => {
-        if (!item || !isObject(item)) return ''
-        const record = item as { type?: unknown; text?: unknown }
-        return record.type === 'text' && isString(record.text) ? record.text : ''
-      })
-      .filter((item) => item.trim())
-      .join('\n')
-
-    return normalizeAssistantOutputSummary(text)
-  }
-}
-
-function normalizeAssistantOutputSummary(value: string): Nullable<string> {
-  const normalized = value.replace(/\s+/g, ' ').trim()
-  if (isBlank(normalized)) return null
-  return truncate(normalized, MaxAssistantOutputSummaryChars)
 }
 
 export { ExecAgentEvents }

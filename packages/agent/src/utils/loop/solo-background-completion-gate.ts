@@ -75,6 +75,14 @@ function combineAbortSignals(signals: readonly AbortSignal[]): AbortSignalScope 
   }
 }
 
+/**
+ * 等下一个后台任务进入终态，同时随时可被打断。返回 `settled` 并带上「这次等待里是否真的观察到终态」，
+ * 或在 abort / 新运行时输入到达时返回 `interrupted`；`wait` 自己抛的错原样抛出
+ * （迟到的 rejection 由 guardedWait 消化，不会变成 unhandled）。
+ *
+ * `wait` 必须同步调用（见函数体内注释）：推到 microtask 会让已排队的完成先跑掉，wait-any 只盯住还在跑的那个，
+ * 主 Agent 就会平白多等一个任务。
+ */
 async function awaitPendingBackgroundJobsOrInterrupt(
   wait: SoloAwaitPendingBackgroundJobs,
   signal: AbortSignal,
@@ -108,6 +116,11 @@ async function awaitPendingBackgroundJobsOrInterrupt(
   return outcome
 }
 
+/**
+ * 取一条待投递的回合上下文便签（若有），以 user 消息压进 history，并记一条日志标明是在等待前还是等待后注入的。
+ * 返回值即「有没有真的注入」：为真表示上下文已经变了，停泊门据此让主循环再跑一轮去消化它，而不是就地收尾；
+ * 没有便签时返回 false 且一个字都不碰 history。
+ */
 function injectTurnContextNote(
   input: Pick<
     RunSoloBackgroundCompletionGateInput,

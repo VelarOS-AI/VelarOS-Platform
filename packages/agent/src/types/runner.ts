@@ -7,7 +7,7 @@ import type { AgentContextPhase, AgentDeveloperContext, AgentRoleExpectedOutputK
 import type { SubAgentDispatchCatalog, SubAgentDispatchInput, SubAgentDispatchLimitsSnapshot } from './delegation.js'
 import type { PromptSegmentStability, RuntimePromptSnapshot } from './guidance.js'
 import type { PromptRegistryApi } from './guidance.js'
-import type { AgentExecutionLimitOverrides, ExecuteQueryLoopArgs, ExecuteSoloModeStreamLoopArgs, QueryLoopApi, QueryLoopRoleEngine, QueryLoopSubAgentOptions, QueryLoopToolCategoryResolver, QueryLoopToolContext, ResolvedAgentModelRuntime, SoloAwaitPendingBackgroundJobs, SoloLoopToolContext, SoloModeStreamLoopResult, SoloStreamLoopApi } from './loop.js'
+import type { AgentExecutionLimitOverrides, QueryLoopApi, QueryLoopRoleEngine, QueryLoopSubAgentOptions, QueryLoopToolCategoryResolver, QueryLoopToolContext, ResolvedAgentModelRuntime, SoloAwaitPendingBackgroundJobs, SoloLoopToolContext, SoloStreamLoopApi } from './loop.js'
 import type { AgentModSeamDispatcherApi } from './mods.js'
 import type { ExecutionEventBusApi } from './records.js'
 import type { ContextGovernanceSessionRegistryApi } from './residency.js'
@@ -418,23 +418,6 @@ export interface AgentExecutionStackRunnerOptions<
   executionEnvironment?: RunnerExecutionEnvironmentPort
   /** 提示词策略取自栈配置，避免两个执行面或 Runner 各持一份。 */
   codingSessionPolicy: Omit<RunnerCodingSessionPolicyBundle, 'promptFeaturePolicy'>
-}
-
-export interface AgentExecutionStack<TContext extends AgentExecutionStackToolContext> {
-  readonly promptRegistry: PromptRegistryApi
-  readonly governanceSessions: ContextGovernanceSessionRegistryApi
-  executeSolo(
-    args: ExecuteSoloModeStreamLoopArgs<TContext, ExecutionEventBusApi>
-  ): Promise<SoloModeStreamLoopResult>
-  /** 删除/替换宿主会话时调用，释放本栈的会话状态及治理账本。 */
-  clearSession(sessionId: string): void
-}
-
-export interface AgentExecutionStackWithQuery<
-  TContext extends AgentExecutionStackToolContext,
-> extends AgentExecutionStack<TContext> {
-  executeQuery(args: ExecuteQueryLoopArgs<TContext, ExecutionEventBusApi>): Promise<string>
-  createRunner(options: AgentExecutionStackRunnerOptions<TContext>): AgentRunnerApi<TContext>
 }
 
 export interface PromptStateRoleResolution {

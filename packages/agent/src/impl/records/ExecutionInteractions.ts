@@ -12,12 +12,30 @@ function buildConfirmationDenialMessage(rejectionMessage: Nullable<string>): str
 }
 
 /**
- * 执行交互协调器。
+ * 执行里「停下来问用户」的那一半：工具要确认或要用户打字时，先把执行和当前任务切到 `awaiting_*` 状态、
+ * 把等待事件发给界面，再返回一个挂着的 Promise；renderer 经 IPC 回传结果时才 resolve。
  *
- * 工具需要用户确认或输入时，会把 execution 状态切到 awaiting_*，
- * 同时返回一个 Promise。renderer 后续通过 IPC 提交确认/输入，本类再 resolve/reject。
+ * 一次执行同时只许有一个待办交互，第二个发起会抛 `EXECUTION_INTERACTION_PENDING`。
+ * 待办 resolver 只在内存里（executionId → resolver），进程重启即失效。
+ * abort 信号到达时一律清掉 awaiting 状态再 reject，否则界面会残留一张点不动的确认卡。
+ * 实现是 `ExecutionInteractions`，执行服务持一份。
  */
-class ExecutionInteractions {
+export interface ExecutionInteractionsApi {
+  /** 执行失败或被中断时兜底：把这次执行上等待中的确认和输入全部以 `EXECUTION_ABORTED` 拒绝，免得调用方永远挂着。 */
+  failPending(executionId: string, error: string): void
+  /** 等用户确认，拒绝即取消当前操作：用户点同意时正常返回；点拒绝时抛 `EXECUTION_DENIED`，错误正文是「用户拒绝了本次确认请求」加上用户填的理由。 */
+  awaitConfirmation(executionId: string, message: string, abortSignal?: AbortSignal, options?: ToolConfirmationDecisionOptions): Promise<void>
+  /** 等用户确认，但拒绝也算正常结果：返回 `{ approved, message }`，调用方自己决定后续。被 abort 时抛 `EXECUTION_ABORTED`；这次执行已有待办交互时抛 `EXECUTION_INTERACTION_PENDING`。 */
+  awaitConfirmationDecision(executionId: string, message: string, abortSignal?: AbortSignal, options?: ToolConfirmationDecisionOptions & { rejectTerminatesExecution?: boolean }): Promise<ConfirmationDecision>
+  /** 等用户打一段文本：兑现值就是用户输入的原文。被 abort 时抛 `EXECUTION_ABORTED`；已有待办交互时抛 `EXECUTION_INTERACTION_PENDING`。 */
+  awaitUserInput(executionId: string, question: string, abortSignal?: AbortSignal): Promise<string>
+  /** renderer 回传确认结果：`confirmationId` 必须对得上当前那张卡，对不上抛 `VALIDATION`（旧卡片的回复不许猜是在答哪一张）。执行上已经没有待办确认时原样返回当前记录，迟到或重复的回复不会把停掉的执行救活。同意与拒绝都把状态切回 running，真正停止只走取消通道。 */
+  resolveConfirmation(executionId: string, approved: boolean, rejectionMessage?: LooseOptional<string>, confirmationId?: string): ExecutionRecord
+  /** renderer 回传用户输入：有等待中的 resolver 就兑现它；无论有没有，都把执行和当前任务切回 running 并清掉等待输入的标记，返回更新后的执行记录。 */
+  provideInput(executionId: string, answer: string): ExecutionRecord
+}
+
+class ExecutionInteractions implements ExecutionInteractionsApi {
   /** executionId -> 等待文本输入的 resolver。 */
   private readonly pendingInputResolvers: PendingInputResolvers = new Map()
   /** executionId -> 等待确认的 resolver。 */

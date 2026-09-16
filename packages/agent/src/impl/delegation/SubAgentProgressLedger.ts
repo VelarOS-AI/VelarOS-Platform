@@ -35,7 +35,47 @@ function hashText(value: string): string {
  *
  * 纯内存、无副作用、可独立单测；生命周期与 dispatchCountByExecution 对齐，由 clear() 回收。
  */
-class SubAgentProgressLedger {
+export interface SubAgentProgressLedgerApi {
+  /**
+   * 把一次派发的原始入参压成归一化指纹（类型 + 提示词指纹 + 目标键），后续判重全看它。
+   *
+   * 提示词先小写、折空白再散列，所以排版不同、语义相同的两次派发命中同一指纹；
+   * 有 description 时用它做目标键（同一个目标换不同角度也能认出来），没有就退回提示词。
+   */
+  buildSignature(
+    type: SubAgentTypeKey,
+    prompt: string,
+    description: LooseOptional<string>
+  ): DispatchSignature
+  /**
+   * 判这次该不该派：`run` 放行、`soft-nudge` 放行但附一句收口提醒、`hard-stop` 拒派并退回引导文案。
+   *
+   * **只判不记**（记账走 `recordDispatch`），所以可以先问再决定。
+   * 同一 (类型 + 提示词) 攒到上限 = 纯重复，硬拦；同一目标往返到阈值且换过 ≥2 种子 Agent 类型 = 典型横跳，软提醒。
+   */
+  evaluate(executionKey: string, signature: DispatchSignature): DispatchDecision
+  /** 记一次「确定要跑」的派发；条目超上限时从最早的开始丢（只是内存兜底，远大于派发硬上限）。 */
+  recordDispatch(executionKey: string, signature: DispatchSignature): void
+  /**
+   * 子 Agent 收尾后留一条发现摘要（标题截断到 80 字、正文 480 字，每次执行只留最近 8 条）。
+   *
+   * 摘要空白时不记。留它是为了下一次派发能把「前面已经查到什么」带给新 worker。
+   */
+  recordFinding(
+    executionKey: string,
+    finding: { type: SubAgentTypeKey; title: string; summary: string }
+  ): void
+  /**
+   * 把本次执行已留存的发现拼成一段「已知上下文」前缀，注入新派 worker 的指令；一条发现都没有时返回 null。
+   *
+   * 只给**新派**的 worker——续跑的 worker 自己的历史里已经有这些了，再塞一遍是纯浪费。
+   */
+  buildPriorFindingsBriefing(executionKey: string): Nullable<string>
+  /** 回收某次执行的两本账（派发记录 + 发现摘要）；顶层执行收尾时调，避免跨执行串味与无界增长。 */
+  clear(executionKey: string): void
+}
+
+class SubAgentProgressLedger implements SubAgentProgressLedgerApi {
   private readonly dispatches = new Map<string, LedgerEntry[]>()
   private readonly findings = new Map<string, FindingRecord[]>()
 

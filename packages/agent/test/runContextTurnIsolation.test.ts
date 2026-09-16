@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { test } from 'bun:test'
 
 import type { AgentSystemRuntimeConfig } from '../src/contract/requires.js'
+import { createBuiltInPromptRegistry } from '../src/impl/guidance/PromptRegistry'
 import { AgentModSeamDispatcher } from '../src/impl/mods/AgentModSeamDispatcher'
 import { ContextBuilder } from '../src/impl/runner/ContextBuilder'
 import { PrimaryAgentProfile } from '../src/impl/runner/PrimaryAgentProfile'
@@ -10,7 +11,6 @@ import { RunContext } from '../src/impl/runner/RunContext'
 import { CodingSessionTracker } from '../src/impl/session/CodingSessionTracker'
 import { defaultRuntimePromptFeaturePolicy } from '../src/impl/tools/DefaultPromptFeaturePolicy'
 import type { RunContextToolContext } from '../src/types/runner.js'
-import { createBuiltInPromptRegistry } from '../src/utils/guidance/catalog'
 import { createTextPromptSegment } from '../src/utils/guidance/shared'
 
 const systemConfig: AgentSystemRuntimeConfig = {

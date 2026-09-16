@@ -22,26 +22,17 @@ const AllowedTransitions: Record<ExecutionStatus, ExecutionStatus[]> = {
   failed: [],
 }
 
-/**
- * 执行状态机。
- *
- * 提供合法状态迁移校验，防止 ExecutionRecord 从终态被错误地拉回到中间态，
- * 或跳过必要中间态（如直接从 pending 跳到 completed）。
- */
-class ExecStateMachine {
-  public canTransition(from: ExecutionStatus, to: ExecutionStatus): boolean {
-    return AllowedTransitions[from].includes(to)
-  }
-
-  public assertCanTransition(from: ExecutionStatus, to: ExecutionStatus): void {
-    if (!this.canTransition(from, to)) {
-      throw new AppError(
-        'VALIDATION',
-        `非法的执行状态流转：${from} -> ${to}`
-      )
-    }
-  }
+/** 问一次「from 能不能走到 to」：只认迁移表里登记的去向，三个终态没有任何去向。 */
+export function canTransitionExecutionStatus(from: ExecutionStatus, to: ExecutionStatus): boolean {
+  return AllowedTransitions[from].includes(to)
 }
 
-export { ExecStateMachine }
-export { ExecStateMachine as ExecutionStateMachine }
+/** 写入新状态前的把门：非法迁移抛 VALIDATION，防止记录从终态被拉回中间态或跳过必要中间态。 */
+export function assertCanTransitionExecutionStatus(from: ExecutionStatus, to: ExecutionStatus): void {
+  if (!canTransitionExecutionStatus(from, to)) {
+    throw new AppError(
+      'VALIDATION',
+      `非法的执行状态流转：${from} -> ${to}`
+    )
+  }
+}

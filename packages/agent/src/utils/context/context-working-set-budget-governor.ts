@@ -5,14 +5,21 @@ import type { ContextLedgerEntry, ContextWorkingSetBudgetAllocation,ContextWorki
 import { resolveContextWindowBudget } from './context-budget'
 import { ContextWorkingSetZoneIds, DefaultContextWorkingSetZonePolicies } from './context-working-set-zones'
 
+/** 把任意值收成非负整数 token 数：不是有限数（undefined / NaN / Infinity）一律当 0，负数夹到 0，小数向下取整。 */
 function positiveFloor(value: unknown): number {
   return isFiniteNumber(value) ? Math.max(0, Math.floor(value)) : 0
 }
 
+/** 判定一个字符串是不是登记在册的分区 id：在 `ContextWorkingSetZoneIds` 名单里才算，账本里认不出的分区据此丢弃。 */
 function isContextWorkingSetZoneId(value: string): value is ContextWorkingSetZoneId {
   return (ContextWorkingSetZoneIds as readonly string[]).includes(value)
 }
 
+/**
+ * 定出本轮的预算外壳（总窗口 / 可用窗口 / 预留输出 / 安全边际）。
+ * 调用方显式给了正的 `usableContextWindow` 就以它为准（总窗口至少放大到不小于它），预留与边际只做记账；
+ * 没给才回落到 `resolveContextWindowBudget`，由窗口扣掉预留输出与安全边际算出可用窗口。
+ */
 function resolveBudgetEnvelope(input: ContextWorkingSetBudgetGovernorInput): {
   contextWindow: number
   usableContextWindow: number
@@ -37,6 +44,10 @@ function resolveBudgetEnvelope(input: ContextWorkingSetBudgetGovernorInput): {
   })
 }
 
+/**
+ * 把账本按分区汇总成实占 token 表：每个在册分区都有一项（没有账目的是 0），认不出分区的账目直接跳过。
+ * 汇总时对每条的 `estimatedTokens` 先夹成非负整数，账本里的脏数据不会把某个分区的实占压成负数。
+ */
 function resolveUsedTokensByZone(
   ledger: readonly ContextWorkingSetBudgetLedgerEntry[]
 ): Record<ContextWorkingSetZoneId, number> {
@@ -55,6 +66,11 @@ function resolveUsedTokensByZone(
   return usedByZone
 }
 
+/**
+ * 按各分区策略里的占比，把可用窗口折成每个分区的保底额度与软上限（外加优先级与回收阶梯）。
+ * 占比为负时按 0 算；软上限低于保底时抬到保底——保证份额不会被一个写反的占比剥夺。
+ * 这里只算「自己那份」，借用别人余量后的有效上限由 `resolveZoneEffectiveLimit` 另算。
+ */
 function resolveBaseZoneBudgets(
   usableContextWindow: number,
   policies: Record<ContextWorkingSetZoneId, ContextWorkingSetZonePolicy>
@@ -130,70 +146,80 @@ function resolveZoneEffectiveLimit(input: {
   return Math.min(input.usableContextWindow, Math.max(target.limitTokens, globalRemainder))
 }
 
-export class ContextWorkingSetBudgetGovernor {
-  public static allocate(input: ContextWorkingSetBudgetGovernorInput): ContextWorkingSetBudgetAllocation {
-    const envelope = resolveBudgetEnvelope(input)
-    const usableContextWindow = Math.max(1, Math.floor(envelope.usableContextWindow))
-    const policies = input.policies ?? DefaultContextWorkingSetZonePolicies
-    const usedByZone = resolveUsedTokensByZone(input.ledger)
-    const baseBudgets = resolveBaseZoneBudgets(usableContextWindow, policies)
+/**
+ * 按本轮账本算出各分区的预算快照：先定可用窗口（显式给了 `usableContextWindow` 就用它，否则从
+ * 窗口减去预留输出与安全边际算），再按分区策略折出保底与软上限，最后给每个分区算出借用之后的
+ * 有效上限与超额。账本里认不出的 `zone` 直接跳过，不计入任何分区的实占。
+ */
+export function allocateContextWorkingSetBudget(
+  input: ContextWorkingSetBudgetGovernorInput
+): ContextWorkingSetBudgetAllocation {
+  const envelope = resolveBudgetEnvelope(input)
+  const usableContextWindow = Math.max(1, Math.floor(envelope.usableContextWindow))
+  const policies = input.policies ?? DefaultContextWorkingSetZonePolicies
+  const usedByZone = resolveUsedTokensByZone(input.ledger)
+  const baseBudgets = resolveBaseZoneBudgets(usableContextWindow, policies)
 
-    const zones = Object.fromEntries(
-      ContextWorkingSetZoneIds.map((zone) => {
-        const base = baseBudgets[zone]
-        const usedTokens = usedByZone[zone]
-        const effectiveLimitTokens = resolveZoneEffectiveLimit({
-          zone,
-          usableContextWindow,
-          baseBudgets,
-          usedByZone,
-        })
-        const snapshot: ContextWorkingSetZoneBudgetSnapshot = {
-          ...base,
-          effectiveLimitTokens,
-          usedTokens,
-          overBudgetTokens: Math.max(0, usedTokens - effectiveLimitTokens),
-        }
-        return [zone, snapshot]
+  const zones = Object.fromEntries(
+    ContextWorkingSetZoneIds.map((zone) => {
+      const base = baseBudgets[zone]
+      const usedTokens = usedByZone[zone]
+      const effectiveLimitTokens = resolveZoneEffectiveLimit({
+        zone,
+        usableContextWindow,
+        baseBudgets,
+        usedByZone,
       })
-    ) as Record<ContextWorkingSetZoneId, ContextWorkingSetZoneBudgetSnapshot>
-
-    return {
-      ...envelope,
-      usableContextWindow,
-      totalUsedTokens: ContextWorkingSetZoneIds.reduce(
-        (sum, zone) => sum + zones[zone].usedTokens,
-        0
-      ),
-      totalOverBudgetTokens: ContextWorkingSetZoneIds.reduce(
-        (sum, zone) => sum + zones[zone].overBudgetTokens,
-        0
-      ),
-      zones,
-    }
-  }
-
-  public static annotateLedger<TEntry extends ContextLedgerEntry>(
-    ledger: readonly TEntry[],
-    allocation: ContextWorkingSetBudgetAllocation
-  ): TEntry[] {
-    return ledger.map((entry) => {
-      const budget = allocation.zones[entry.zone]
-      return {
-        ...entry,
-        zoneReservedTokens: budget.reservedTokens,
-        zoneLimitTokens: budget.limitTokens,
-        zoneEffectiveLimitTokens: budget.effectiveLimitTokens,
-        zoneUsedTokens: budget.usedTokens,
-        zoneOverBudgetTokens: budget.overBudgetTokens,
+      const snapshot: ContextWorkingSetZoneBudgetSnapshot = {
+        ...base,
+        effectiveLimitTokens,
+        usedTokens,
+        overBudgetTokens: Math.max(0, usedTokens - effectiveLimitTokens),
       }
+      return [zone, snapshot]
     })
-  }
+  ) as Record<ContextWorkingSetZoneId, ContextWorkingSetZoneBudgetSnapshot>
 
-  public static resolveZoneCharBudget(
-    allocation: ContextWorkingSetBudgetAllocation,
-    zone: ContextWorkingSetZoneId
-  ): number {
-    return Math.max(0, allocation.zones[zone].effectiveLimitTokens) * 4
+  return {
+    ...envelope,
+    usableContextWindow,
+    totalUsedTokens: ContextWorkingSetZoneIds.reduce(
+      (sum, zone) => sum + zones[zone].usedTokens,
+      0
+    ),
+    totalOverBudgetTokens: ContextWorkingSetZoneIds.reduce(
+      (sum, zone) => sum + zones[zone].overBudgetTokens,
+      0
+    ),
+    zones,
   }
+}
+
+/**
+ * 把分配结果抄回账本的每一条上（保底、软上限、有效上限、实占、超额五项），让一条账目自己就能解释
+ * 「它属于的分区当时有多少额度、超了多少」。返回新数组，原账本不变。
+ */
+export function annotateContextWorkingSetBudgetLedger<TEntry extends ContextLedgerEntry>(
+  ledger: readonly TEntry[],
+  allocation: ContextWorkingSetBudgetAllocation
+): TEntry[] {
+  return ledger.map((entry) => {
+    const budget = allocation.zones[entry.zone]
+    return {
+      ...entry,
+      zoneReservedTokens: budget.reservedTokens,
+      zoneLimitTokens: budget.limitTokens,
+      zoneEffectiveLimitTokens: budget.effectiveLimitTokens,
+      zoneUsedTokens: budget.usedTokens,
+      zoneOverBudgetTokens: budget.overBudgetTokens,
+    }
+  })
+}
+
+/** 把一个分区的有效上限（token）折成字符预算，供工具描述预算与溢出降级阶梯直接按字符裁剪。 */
+export function resolveContextWorkingSetZoneCharBudget(
+  allocation: ContextWorkingSetBudgetAllocation,
+  zone: ContextWorkingSetZoneId
+): number {
+  return Math.max(0, allocation.zones[zone].effectiveLimitTokens) * 4
 }

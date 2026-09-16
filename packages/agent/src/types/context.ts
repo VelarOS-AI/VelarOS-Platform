@@ -54,6 +54,17 @@ export interface FileContextCarrier {
   toolCallId?: string
 }
 
+/**
+ * 文件上下文的过继能力（调用方只认这个最小形状）。
+ *
+ * 新建一个派生上下文（子 Agent、换 surface）时调用一次：子侧先拿到自己的作用域，再按当前可见工具面
+ * 决定继承父侧哪些已读文件的来源，从而既不串用父的作用域，也不丢掉父已经读过的文件。
+ */
+export interface ForkFileContext {
+  /** 把父载体上的文件来源过继给刚建好的子载体；父侧没有文件上下文时只清空子侧作用域，不抛错。 */
+  (parent: FileContextCarrier, child: FileContextCarrier): void
+}
+
 export interface FileSnapshotArchive extends FileContextSnapshot {
   kind: 'file-snapshot'
   version: 1

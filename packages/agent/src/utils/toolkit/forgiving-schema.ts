@@ -84,6 +84,11 @@ export function inferActionFromFields(
   return hits.length === 1 ? hits[0]![0] : undefined
 }
 
+/**
+ * 铁律⑧(回显):把本次系统替模型做的调整（钳过的值、补过的默认、忽略的等价参数）打成工具结果里
+ * 的 `appliedAdjustments` 字段。一条都没有时返回**空对象**而不是空数组，好让调用方直接展开进结果
+ * 而不在 payload 里留一个空字段占位。传入数组会浅拷贝，调用方之后再改原数组不影响已产出的结果。
+ */
 export function buildAppliedAdjustments(
   adjustments: readonly AppliedAdjustment[]
 ): { appliedAdjustments: AppliedAdjustment[] } | Record<string, never> {

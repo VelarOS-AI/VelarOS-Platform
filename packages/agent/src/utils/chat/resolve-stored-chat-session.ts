@@ -21,8 +21,14 @@ function resolveStoredBoolean(value: unknown, field: string): boolean {
   return value
 }
 
-// 宽松恢复：feature 清单会随版本演进，磁盘里出现未知 id（升级/降级跨版本）时静默剔除
-// 而不是抛错锁死会话加载；非数组一律当作未设置。
+/**
+ * 从磁盘 JSON 恢复提示词能力清单（`promptFeatures`）。
+ *
+ * 宽松恢复：feature 清单会随版本演进，磁盘里出现未知 id（升级 / 降级跨版本）时静默剔除
+ * 而不是抛错锁死会话加载；非数组一律当作未设置返回空清单，非字符串项先滤掉再交给归一。
+ * 与同文件的布尔字段刻意不同调——布尔坏值照抛 VALIDATION，因为那是"写错了"；
+ * 而未知 feature id 只是"这个版本还不认识它"，剔掉就好，不该让一整条会话打不开。
+ */
 function resolveStoredPromptFeatures(value: unknown): ChatPromptFeatureId[] {
   if (!isArray(value)) return []
 

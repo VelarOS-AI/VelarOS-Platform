@@ -2,6 +2,10 @@ import { isArray, isEmpty, isNumber, isPlainObject, isString } from '@velaros-ai
 
 import type { Fragment,Line, RecordValue } from '../../types/tools.js'
 
+/**
+ * 该值是否是新式源码窗口记录——纯对象且 `kind === 'project-source-window'`。
+ * 只认这一个判别字段，不看里面有没有 lines/fragments（空窗口也算窗口）。
+ */
 function isWindow(value: unknown): boolean {
   return isPlainObject(value) && value.kind === 'project-source-window'
 }
@@ -56,6 +60,11 @@ function withReadCursor(value: RecordValue, line: number, column: number): Recor
   return result
 }
 
+/**
+ * 把一个被裁短的源码窗口标成「还有下文」：置 `truncated`/`hasMore` 为真，按实际显示末尾重算读取游标，
+ * 并写出指向 `line`/`column` 的 `continuation`（沿用原 continuation 的其余 range 字段，并把当前 revision 记进 baseRevisions）。
+ * 有了这段，模型续读拿到的是同一版本的下一段，而不是对着改动过的文件接着读。
+ */
 function nextPage(value: RecordValue, line: number, column = 1): RecordValue {
   const prior = isPlainObject(value.continuation) ? value.continuation : {}
   const priorRange = isPlainObject(prior.range) ? prior.range : {}
@@ -69,6 +78,10 @@ function nextPage(value: RecordValue, line: number, column = 1): RecordValue {
   }
 }
 
+/**
+ * 取一行正文的前 units 个 UTF-16 码元，但刀口落在代理对中间、或正好把 `\r\n` 劈开时回退一位。
+ * 单行长到一整行都放不下时才用它切片段；少切一个码元换「片段是合法文本、列范围不错位」。
+ */
 function safePrefix(text: string, units: number): string {
   let end = Math.min(text.length, units)
   const last = text.charCodeAt(end - 1)
@@ -124,12 +137,23 @@ function fitWindow(value: RecordValue, maximum: number): RecordValue {
   return partial(low)
 }
 
+/**
+ * 结果里（任意层级的数组/对象中）是否出现过源码窗口记录。
+ * 为真时序列化链路要走保行号的专用路径，而不是通用的字符串截断与数组裁剪——后者会改动源码原文、留下对不上的续读位置。
+ * 注意只认新式 `kind: 'project-source-window'`，尚未升级的旧式窗口在这里不算（它们要先过 fitProjectReadsForModel 的归一化）。
+ */
 export function hasProjectSourceWindows(value: unknown): boolean {
   if (isWindow(value)) return true
   if (isArray(value)) return value.some(hasProjectSourceWindows)
   return isPlainObject(value) && Object.values(value).some(hasProjectSourceWindows)
 }
 
+/**
+ * 把一份含源码读取结果的返回值整体收进 `maximum` 字符预算：先递归归一化（旧式 `content + snapshot` 窗口升级成行记录窗口），
+ * 没有任何窗口就原样返回归一化结果。
+ * 有窗口时先量出「把所有窗口挖空后」的元数据体积，再把剩余预算按窗口数均分（每个至少 256 字符），逐个交给 fitWindow 按整行裁。
+ * 裁掉的行不是丢失：每个被裁的窗口都带 continuation 指向确切的续读行列与文件 revision，模型照它接着读就行。
+ */
 export function fitProjectReadsForModel(result: unknown, maximum: number): unknown {
   const windows: RecordValue[] = []
   const normalize = (value: unknown): unknown => {

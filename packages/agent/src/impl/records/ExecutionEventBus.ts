@@ -11,6 +11,10 @@ import type {
 import type { ChatRuntimeEvent, StreamExecutionGraphPayload, StreamReasoningPayload, StreamStatePayload, StreamToolCallPayload, StreamToolMetadataPayload, StreamToolProgressPayload, StreamToolResultPayload } from '../../types/agent.js'
 import type { WorkerExecutionStreamOptions, WorkerThreadProjection } from '../../types/records.js'
 
+/**
+ * 总线的三条出口：构造 `ExecutionEventBus` 时由宿主填，哪条不填哪条就静默丢弃。
+ * 派发是同步的，handler 抛错会冒泡回发事件的那一方。
+ */
 interface ExecutionEventBusHandlers {
   /** Agent 文本、工具、runtime、turn context 等流式事件。 */
   agent?: (event: AgentEvent) => void
@@ -128,21 +132,52 @@ function projectWorkerThreadEvent(event: AgentEvent): Nullable<WorkerThreadProje
 }
 
 /**
- * 执行事件总线。
+ * 执行事件的出口：执行服务、AgentRunner、工具执行器都不认宿主视图，只往这条总线上发事件，
+ * 再由聊天执行协调器转给渲染进程。事件分 agent（流式片段）、state（界面控制态）、debug（执行图快照）三条通道。
  *
- * 执行服务、智能体运行器和工具执行器不直接依赖宿主视图；
- * 它们只向这个总线发送事件。聊天执行协调器再把事件转给渲染进程。
- *
- * 事件分三类通道：
- *  - `agent`：模型文本、工具调用、运行时和通知等流式片段，对应渲染进程的流协议。
- *  - `state`：执行阶段、等待输入、完成态等状态机切换，用于界面控制态。
- *  - `debug`：执行图调试快照，仅在调试面板订阅时使用。
- *
- * 总线本身是同步派发——handler 抛错会冒泡到调用方；调用方（如 streamHelper）必须
- * 自己捕获异常，否则会中断一次 agent loop。使用 withAgentTap 可以插入旁路监听（账本写入）
- * 而不影响最终 forward 行为。
+ * 派发是同步的，handler 抛错会冒泡到发事件的那一方，调用方必须自己兜住，否则会打断一整轮 agent loop。
+ * 总线本身不存事件，只有构造时传入的三个 handler；`withAgentTap` / `forWorkerExecution` 都是返回新实例，原实例不变。
  */
-class ExecutionEventBus {
+export interface ExecutionEventBusApi {
+  /** 派生一条新总线：agent 事件先给 `tap` 看一眼再原样转发，state / debug 直通。`ExecutionService` 用它在不改变转发行为的前提下把事件写进账本。 */
+  withAgentTap(tap: (event: AgentEvent) => void): ExecutionEventBusApi
+  /** 派生给团队 worker 内部模型循环用的静默总线：worker 的输出默认不冒到主聊天流。给了 `options` 才把白名单内的事件投影成 worker 线程事件；无论给不给，工具副作用里的 contextInvalidated 都会上浮成父级 tool-done（这是正确性通道，不能随线程详情一起关）。两条上浮的先后顺序是契约：先线程事件，后 contextInvalidated。 */
+  forWorkerExecution(options?: WorkerExecutionStreamOptions): ExecutionEventBusApi
+  /** 原样发一条 agent 事件；下面各 `emitXxx` 最后都落到这里。没接 agent handler 时静默丢弃。 */
+  emitAgent(event: AgentEvent): void
+  /** 发 runtime 级事件（done / error / aborted / reconnecting 等），宿主据此切换整轮的运行状态。 */
+  emitRuntime(payload: ChatRuntimeEvent): void
+  /** 发一段助手文本增量；高频事件，不入账本，只往渲染端流。 */
+  emitTextDelta(text: string): void
+  /** 发一段思考（reasoning）增量，供支持展示思考流的界面用；同样不入账本。 */
+  emitReasoningDelta(payload: StreamReasoningPayload): void
+  /** 发一份模型生成的文件，展示与持久化都由 renderer 负责。 */
+  emitGeneratedFile(payload: StreamAssistantGeneratedFilePayload): void
+  /** 发一条模型实际引用到的 URL 来源，供界面标注出处。 */
+  emitSource(payload: StreamAssistantSourcePayload): void
+  /** 发这一轮的角色与上下文信息；`ExecutionService` 据此更新任务的角色归属，账本也会留一条。 */
+  emitTurnContext(payload: StreamTurnContextPayload): void
+  /** 发模型这一轮的原始输出片段，主要给调试面板和回放用。 */
+  emitAssistantRaw(payload: StreamAssistantRawPayload): void
+  /** 发一条 worker 线程生命周期事件，主聊天页据此渲染并行执行的线程详情。 */
+  emitWorkerThread(payload: StreamWorkerThreadPayload): void
+  /** 工具开始执行时发，界面据此建出这次调用的工具卡。 */
+  emitToolStart(payload: StreamToolCallPayload): void
+  /** 工具执行期间的增量输出；`payload.timestamp` 是事件自带的顺序依据，乱序到达时按它排。 */
+  emitToolProgress(payload: StreamToolProgressPayload): void
+  /** 工具执行期间的结构化展示信息（标题、元数据），用来把工具卡从「运行中」刷成有内容的样子。 */
+  emitToolMetadata(payload: StreamToolMetadataPayload): void
+  /** 工具执行完成或失败时发；`payload.error` 有值即失败。宿主收到后，历史那边才会把结果写进下一轮的消息。 */
+  emitToolDone(payload: StreamToolResultPayload): void
+  /** 发一条独立的 notice 事件（能力自动批准、用户动作卡等），不再塞进工具结果里。 */
+  emitNotice(event: Extract<AgentEvent, { type: 'notice' }>): void
+  /** 发执行阶段、等待输入、收尾等状态；走 state 通道，界面用来切控制态。没接 state handler 时静默丢弃。 */
+  emitState(payload: StreamStatePayload): void
+  /** 发一份执行图调试快照；走 debug 通道，只有调试面板订阅时才有人接。 */
+  emitDebug(payload: StreamExecutionGraphPayload): void
+}
+
+class ExecutionEventBus implements ExecutionEventBusApi {
   constructor(private readonly handlers: ExecutionEventBusHandlers = {}) {}
 
   /** 测试或后台执行不需要事件输出时使用的空总线。 */

@@ -1,6 +1,6 @@
-import type { ModelMessage, TextStreamPart, ToolChoice, ToolSet } from 'ai'
+import type { ModelMessage, TextStreamPart, ToolSet } from 'ai'
 
-import { isBlank, isEmpty, isObject, isPositiveNumber, isString, isTrue, toNullable, toOptional } from '@velaros-ai/core'
+import { isBlank, isEmpty, isPositiveNumber, isTrue, toNullable, toOptional } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 
@@ -10,7 +10,16 @@ import type { AgentModelRequestPort, AgentModelStreamInput, ConsumeAssistantStre
 import type { ContextGovernanceSessionRegistryApi } from '../../types/residency.js'
 import { assertProviderRequestSnapshotReconstructable } from '../../utils/context/provider-request-snapshot'
 import { createInternalFollowUpMessage } from '../../utils/history/internal-messages'
-import type { AgentTurnHistoryHelper } from '../../utils/history/turn'
+import {
+  buildProviderTurnId,
+  resolveProviderToolChoiceName,
+} from '../../utils/loop/loop-turn-assembly'
+import {
+  buildInterruptedStreamRecoveryPrompt,
+  buildPrimaryReasoningOnlyVisibleAnswerRecoveryPrompt,
+  shouldRecoverReasoningOnlyEmptyResponse,
+  wasStreamTurnInterruptedByRuntimeInput,
+} from '../../utils/loop/loop-turn-recovery'
 import { assertModelInputCompatibility } from '../../utils/model/model-input-compatibility'
 import { normalizeModelRequestError } from '../../utils/model/model-request-error'
 import {
@@ -19,16 +28,15 @@ import {
 } from '../../utils/model/prompt-cache'
 import { compareStableStrings } from '../../utils/residency/determinism'
 import { resolveGovernanceSessionKey } from '../../utils/residency/session-key'
-import { isReasoningOnlyEmptyResponseError } from '../../utils/stream/empty-stream-recovery'
 import {
   buildOutputTruncationContinuationPrompt,
   isOutputTruncationError,
 } from '../../utils/stream/output-truncation-recovery'
 import { ChatRuntimeEvents } from '../../utils/wire/chat-runtime.js'
 import { resolveModelContextUsageOptions } from '../context/AgentLoopContextUsageManager'
-import { ProviderRequestCompiler } from '../context/ProviderRequestCompiler'
-import { compileProviderSendRequest } from '../context/ProviderSendRequest'
+import { compileProviderSendRequest, ProviderRequestCompiler } from '../context/ProviderRequestCompiler'
 import { emitCompletedProviderTurnSnapshot, ProviderTurnEventReducer } from '../records/ProviderTurnEventReducer'
+import type { TurnHistoryApi } from '../records/TurnHistory'
 
 import { AiSdkAgentModelRequestPort, applyModelRequestPolicy } from './AiSdkAgentModelRequestPort'
 import { buildKernelContextEpoch, recordKernelContextEpochDiagnostic } from './KernelContextEpochGuard'
@@ -98,12 +106,45 @@ function buildDynamicPromptLayerMessage(dynamicPart: string): ModelMessage {
 }
 
 /**
+ * 主会话的一轮模型调用：从「把上下文编译成请求」到「assistant 内容写回历史」这一整段。
+ *
+ * 谁持有：`TurnRunner` 建一个，主面每轮经它下单。一轮里的次序固定为
+ * 准备工具面与系统提示词 → 编译请求（含上下文用量估算与不可发送拦截）→ 领上下文纪元凭据 →
+ * `AgentModelRequestPort` 开流 → `StreamConsumer` 逐块消费（文本投给界面、工具调用排进传入的 executor）→
+ * 把 assistant 内容追加进 `args.history`。工具结果由外层 loop 面接着追加。
+ *
+ * 恢复与中断，由内向外三层：
+ *  - 连接重试：`RetryPolicy` 包住整段请求，只在本轮尚未产出可见输出与工具调用时允许重发；
+ *    每次尝试整体新建 turnState，失败尝试的 usage 绝不带进成功的那次。
+ *  - 续写恢复：流被打断或输出被截断且已有部分正文时，保留已展示内容 + 追一条内部续写指令重来（次数有限）；
+ *    只出思考不给可见答复也按同一路子要一次可见答复。
+ *  - 都不适用：错误原样抛给 loop 面；上下文超限且本轮已有可见副作用时先打上「不可重放」标记再抛。
+ * 中断有两根信号：执行中止（丢弃未完成 assistant 内容，返回 `hasToolUse:false`）与运行时插话
+ * （仅在工具尚未派发时算数，本轮按被引导截断收尾，已出的正文保留）。
+ */
+export interface StreamTurnApi<TToolContext extends StreamTurnToolContext = StreamTurnToolContext> {
+  /** 执行一轮流式模型调用；返回时 assistant 内容已写回历史，工具调用已排进 `args.executor`。 */
+  executeStreamTurn(args: ExecuteStreamTurnArgs<TToolContext>): Promise<StreamTurnResult>
+  /**
+   * 直接消费一条已经开好的 provider 流（给 `TurnRunner` 用的转发入口）：把文本与思考增量投给事件总线、
+   * 把工具调用排进 executor，并返回本轮的 assistant 内容。只消费，不负责发请求也不写历史。
+   */
+  consumeAssistantStream(
+    fullStream: AsyncIterable<TextStreamPart<ToolSet>>,
+    turnState: StreamConsumerTurnState,
+    args: ConsumeAssistantStreamArgs
+  ): Promise<AssistantContentPart[]>
+}
+
+/**
  * 单轮流式模型调用 helper。
  *
  * 它负责通过 AgentModelRequestPort 发起流式请求、处理连接重试、消费 fullStream、
  * 追加 assistant 消息，并把原始 assistant 内容发到 debug stream。
  */
-class StreamTurn<TToolContext extends StreamTurnToolContext = StreamTurnToolContext> {
+class StreamTurn<TToolContext extends StreamTurnToolContext = StreamTurnToolContext>
+  implements StreamTurnApi<TToolContext>
+{
   /** 逐块消费 fullStream，并把文本/tool call 分发到事件总线和 ToolExecutor。 */
   private readonly streamConsumerHelper: StreamConsumer
   private readonly requestCompiler: ProviderRequestCompiler
@@ -117,7 +158,7 @@ class StreamTurn<TToolContext extends StreamTurnToolContext = StreamTurnToolCont
     /** 网络/供应商瞬断重试策略。 */
     private readonly connectionRetryHelper: AgentConnectionRetryHelper,
     /** assistant/tool 历史拼接工具。 */
-    private readonly turnHistoryHelper: AgentTurnHistoryHelper,
+    private readonly turnHistoryHelper: TurnHistoryApi,
     /** 治理会话登记处（宿主级单实例，驻留账本与 epoch 状态跨回合共享一份，必传）。 */
     private readonly governanceSessions: ContextGovernanceSessionRegistryApi,
     /** 后端统一模型请求层。 */
@@ -141,7 +182,12 @@ class StreamTurn<TToolContext extends StreamTurnToolContext = StreamTurnToolCont
     // accumulatedText / hasVisibleOutput），连接重试后一次失败尝试残留的 inputTokens /
     // outputTokens / costUsd / finishReason / requestFingerprint 会污染成功尝试的 span 记账
     // （usage 门在无 provider usage 时提前返回、不清残留）。整体新建 = 零残留。
-    let turnState = this.createTurnState(args.turn)
+    let turnState: StreamConsumerTurnState = {
+      turn: args.turn,
+      hasToolUse: false,
+      accumulatedText: '',
+      hasVisibleOutput: false,
+    }
     const startedAt = Date.now()
     let didLogTurnEnd = false
     let providerTurnReducer: LooseOptional<ProviderTurnEventReducer> = null
@@ -168,7 +214,12 @@ class StreamTurn<TToolContext extends StreamTurnToolContext = StreamTurnToolCont
             async () => {
               const requestAbortScope = createLinkedAbortScope(turnAbortScope.signal)
               // 每次尝试整体新建 turnState（S7），彻底消除失败尝试的 usage 残留。
-              turnState = this.createTurnState(args.turn)
+              turnState = {
+                turn: args.turn,
+                hasToolUse: false,
+                accumulatedText: '',
+                hasVisibleOutput: false,
+              }
               try {
                 requestAbortScope.signal.throwIfAborted()
                 // system、history、tools 和 model 在这里交给统一请求层；重试边界由 AgentConnectionRetryHelper 控制。
@@ -233,7 +284,7 @@ class StreamTurn<TToolContext extends StreamTurnToolContext = StreamTurnToolCont
                   toolTransportPlan,
                   args.toolChoice
                 )
-                const toolChoiceName = this.resolveToolChoiceName(providerToolChoice)
+                const toolChoiceName = resolveProviderToolChoiceName(providerToolChoice)
                 const compiledRequest = await compileProviderSendRequest(
                   {
                     sessionId: resolveGovernanceSessionKey(args.toolContext.sessionId),
@@ -281,7 +332,13 @@ class StreamTurn<TToolContext extends StreamTurnToolContext = StreamTurnToolCont
                 assertProviderRequestSnapshotReconstructable(compiledRequest.providerRequest)
                 providerRequestSnapshot = compiledRequest.providerRequest
                 predictedInputTokens = compiledRequest.estimate.estimatedTokens
-                providerTurnReducer = this.createProviderTurnReducer(args)
+                providerTurnReducer = new ProviderTurnEventReducer({
+                  turnId: buildProviderTurnId(
+                    resolveGovernanceSessionKey(args.toolContext.sessionId),
+                    'stream',
+                    args.turn
+                  ),
+                })
                 providerTurnReducer.apply({ type: 'turn-started' })
                 providerTurnReducer.apply({
                   type: 'request',
@@ -417,23 +474,27 @@ class StreamTurn<TToolContext extends StreamTurnToolContext = StreamTurnToolCont
           break
         } catch (error) {
           const appError = AppError.from(error)
-          if (this.wasInterruptedByRuntimeInput(args, turnState)) {
+          if (wasStreamTurnInterruptedByRuntimeInput(args, turnState)) {
             assistantContent = interrupted.partial?.assistantContent ?? assistantContent
             break
           }
           if (!(args.modelRetry?.allowPartialContinuation ?? true)) throw error
           if (
-            this.shouldRecoverReasoningOnlyEmptyResponse(
+            shouldRecoverReasoningOnlyEmptyResponse({
               error,
-              args,
-              reasoningOnlyVisibleAnswerRecoveries
-            )
+              phase: 'stream',
+              aborted: args.abortSignal.aborted,
+              recoveryAttempts: reasoningOnlyVisibleAnswerRecoveries,
+              maxAttempts: MaxReasoningOnlyVisibleAnswerRecoveryAttempts,
+            })
           ) {
             reasoningOnlyVisibleAnswerRecoveries += 1
             this.emitProviderTurnSnapshot(args, providerTurnReducer, { requirePendingTools: true })
             providerTurnReducer = null
             args.history.push(
-              createInternalFollowUpMessage(this.buildReasoningOnlyVisibleAnswerRecoveryPrompt())
+              createInternalFollowUpMessage(
+                buildPrimaryReasoningOnlyVisibleAnswerRecoveryPrompt()
+              )
             )
             args.events.emitRuntime(
               ChatRuntimeEvents.retryingTurn(
@@ -508,7 +569,7 @@ class StreamTurn<TToolContext extends StreamTurnToolContext = StreamTurnToolCont
         turn: args.turn,
         status: args.abortSignal.aborted
           ? 'aborted'
-          : this.wasInterruptedByRuntimeInput(args, turnState)
+          : wasStreamTurnInterruptedByRuntimeInput(args, turnState)
             ? 'steered'
             : 'completed',
         durationMs: Date.now() - startedAt,
@@ -520,7 +581,7 @@ class StreamTurn<TToolContext extends StreamTurnToolContext = StreamTurnToolCont
         return { hasToolUse: false }
       }
 
-      const interruptedByRuntimeInput = this.wasInterruptedByRuntimeInput(args, turnState)
+      const interruptedByRuntimeInput = wasStreamTurnInterruptedByRuntimeInput(args, turnState)
 
       // stream 结束后把 assistant 文本和 tool-call 写回 history；外层 loop 继续追加 tool result。
       this.turnHistoryHelper.appendAssistantMessage(args.history, assistantContent)
@@ -568,17 +629,6 @@ class StreamTurn<TToolContext extends StreamTurnToolContext = StreamTurnToolCont
     }
   }
 
-  private wasInterruptedByRuntimeInput(
-    args: ExecuteStreamTurnArgs<TToolContext>,
-    turnState: StreamConsumerTurnState
-  ): boolean {
-    return !!(
-      !args.abortSignal.aborted &&
-      args.runtimeInputInterruptSignal?.aborted &&
-      !turnState.hasDispatchedToolUse
-    )
-  }
-
   /** 对外暴露给 TurnRunner 的 stream 消费入口。 */
   public async consumeAssistantStream(
     fullStream: AsyncIterable<TextStreamPart<ToolSet>>,
@@ -586,36 +636,6 @@ class StreamTurn<TToolContext extends StreamTurnToolContext = StreamTurnToolCont
     args: ConsumeAssistantStreamArgs
   ): Promise<AssistantContentPart[]> {
     return this.streamConsumerHelper.consumeAssistantStream(fullStream, turnState, args)
-  }
-
-  /** 初始化本轮状态。 */
-  private createTurnState(turn: number): StreamConsumerTurnState {
-    return {
-      turn,
-      hasToolUse: false,
-      accumulatedText: '',
-      hasVisibleOutput: false,
-    }
-  }
-
-  private shouldRecoverReasoningOnlyEmptyResponse(
-    error: unknown,
-    args: ExecuteStreamTurnArgs<TToolContext>,
-    recoveryAttempts: number
-  ): boolean {
-    if (args.abortSignal.aborted) return false
-    if (recoveryAttempts >= MaxReasoningOnlyVisibleAnswerRecoveryAttempts) return false
-
-    return isReasoningOnlyEmptyResponseError(error, 'stream')
-  }
-
-  private buildReasoningOnlyVisibleAnswerRecoveryPrompt(): string {
-    return [
-      'The previous assistant response was reasoning-only and did not include any visible answer for the user.',
-      'Continue now with a visible answer in normal assistant text.',
-      'Do not return reasoning-only output again.',
-      'If a tool is still needed, emit a fresh complete tool call with full valid arguments; otherwise answer directly.',
-    ].join('\n')
   }
 
   private shouldRecoverInterruptedStream(
@@ -649,68 +669,10 @@ class StreamTurn<TToolContext extends StreamTurnToolContext = StreamTurnToolCont
       createInternalFollowUpMessage(
         reason === 'output-truncation'
           ? buildOutputTruncationContinuationPrompt(appendedAssistant)
-          : this.buildInterruptedStreamRecoveryPrompt(partial, appendedAssistant)
+          : buildInterruptedStreamRecoveryPrompt(partial, appendedAssistant)
       )
     )
     return appendedAssistant
-  }
-
-  private buildInterruptedStreamRecoveryPrompt(
-    partial: InterruptedStreamPartial,
-    appendedAssistant: boolean
-  ): string {
-    const lines = [
-      'The previous assistant stream was interrupted by a transient provider connection failure.',
-    ]
-
-    if (appendedAssistant) {
-      lines.push(
-        [
-          'The visible assistant text that was already streamed has been preserved in the conversation history.',
-          'Continue from that point.',
-          'Do not repeat the already streamed text.',
-        ].join(' ')
-      )
-    } else if (!partial.hasPendingToolCalls) {
-      lines.push(
-        [
-          'Continue the answer now.',
-          'Do not repeat any visible text that may already have been streamed.',
-        ].join(' ')
-      )
-    }
-
-    if (partial.hasPendingToolCalls) {
-      lines.push(
-        [
-          'A tool call was started but the stream ended before VelarOS accepted it.',
-          'It was not executed and no tool result exists.',
-          'If a tool is still needed, emit a fresh complete tool call with full valid arguments.',
-        ].join(' ')
-      )
-    }
-
-    lines.push('Continue now.')
-    return lines.join('\n')
-  }
-
-  private resolveToolChoiceName(toolChoice?: ToolChoice<ToolSet>): LooseOptional<string> {
-    if (!toolChoice || !isObject(toolChoice)) return undefined
-
-    const candidate = toolChoice as { type?: unknown; toolName?: unknown }
-    if (candidate.type !== 'tool' || !isString(candidate.toolName)) return undefined
-
-    const trimmed = candidate.toolName.trim()
-    return trimmed || undefined
-  }
-
-  private createProviderTurnReducer(
-    args: ExecuteStreamTurnArgs<TToolContext>
-  ): ProviderTurnEventReducer {
-    const sessionId = resolveGovernanceSessionKey(args.toolContext.sessionId)
-    return new ProviderTurnEventReducer({
-      turnId: `${sessionId}:stream:${args.turn}`,
-    })
   }
 
   private emitProviderTurnSnapshot(

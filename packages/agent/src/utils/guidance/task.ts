@@ -4,8 +4,10 @@ import type { PromptSegmentDefinition, RuntimePromptSnapshot } from '../../types
 import { createTextPromptSegment, PromptSegmentPriority } from './shared'
 
 /**
- * Kernel owns only execution-mode guidance. Capability packages contribute
- * domain-specific task context through CapabilityPromptContributor.
+ * 产出与**执行模式**相关的两段运行态提示词：计划预览（快照里有预览才渲染）与目标模式纪律（目标模式开启才渲染）。
+ *
+ * 内核只管执行模式这一类指导，**不认识任何领域任务语义**——各能力域自己的任务上下文走 `CapabilityPromptContributor` 贡献，
+ * 不往这里加。两段都带 `when`：条件不满足时整段不渲染，而不是渲染一句空洞的占位。
  */
 export function createTaskRuntimePromptSegments(
   snapshot: RuntimePromptSnapshot

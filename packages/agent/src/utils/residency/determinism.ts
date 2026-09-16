@@ -46,6 +46,13 @@ export function stableFingerprint(value: unknown): string {
   return shortHash(stableStringify(value))
 }
 
+/**
+ * 把任意值递归投影成"同输入必得同输出"的 JSON 可序列化结构：对象键按 UTF-16 码元序重排、
+ * `undefined` 字段整条丢掉（JSON 本来也不保留它，显式丢弃让键集合稳定）、`Date` 转 ISO 串（不读当前时钟）。
+ * 用 `seen` 沿路径记录正在展开的容器来防环：命中已在路径上的对象就写 `[circular]` 占位——
+ * 序列化走的是诊断与指纹路径，遇环降级成占位远好过抛断整条 prompt 组装。
+ * 出了这一层就从 `seen` 删掉，所以同一个对象在两个并列分支里重复出现会各自完整展开，不会被误判成环。
+ */
 function toStableJsonValue(value: unknown, seen: Set<object>): unknown {
   if (value instanceof Date) return value.toISOString()
 

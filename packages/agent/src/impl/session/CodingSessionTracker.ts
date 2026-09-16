@@ -24,6 +24,7 @@ import {
   DefaultRunProfileSelectionId,
   DefaultToolSurfaceProfileId,
 } from '../../utils/runner/runtime-profiles'
+import { shouldTrackDynamicToolCategoryLease } from '../../utils/session/tool-lease'
 import { defaultRuntimePromptFeaturePolicy } from '../tools/DefaultPromptFeaturePolicy'
 
 import { CodingSessionEditResultHelper } from './CodingSessionEditResultHelper'
@@ -33,29 +34,56 @@ import { RuntimeReminderScheduler } from './RuntimeReminderScheduler'
 import { SessionTelemetryCounters } from './SessionTelemetryCounters'
 import { TaskApprovalState } from './TaskApprovalState'
 
+/**
+ * 建一台 {@link CodingSessionTracker} 时宿主交给它的全部装配项。
+ *
+ * 全是可选：产品把自己的工具目录、活动分类、授权与提醒策略灌进来，跟踪器自己不认识任何具体工具名。
+ * 构造后除 `taskApprovals`（可由 fork 共享同一份）外都不再变——运行期改这些要新建跟踪器。
+ */
 interface CodingSessionTrackerOptions {
+  /** 共享的任务授权账本；子 Agent fork 时把父的这份接过来，批准/拒绝对主子立即同时生效。缺省自建一份。 */
   taskApprovals?: TaskApprovalState
+  /** 工具类别 → 该类别下的工具名清单（静态目录）。用于把工具名反查成类别，以及没绑 ToolContext 时兜底。 */
   toolCategoryToolNames?: CodingSessionToolCategoryToolNames
+  /** 提示能力的归一化与「这个能力要开哪些工具类别」策略，由产品提供；缺省用运行时自带的那份。 */
   promptFeaturePolicy?: RuntimePromptFeaturePolicy
+  /** 本会话起始的思考力度；运行期可由 `setThinkingDepth` 改。缺省 `balanced`。 */
   thinkingDepth?: ThinkingDepth
+  /** 白名单：给了就只有名单内的类别可被启用，名单外的一律拒绝。缺省不限。 */
   allowedToolCategories?: ToolCategoryId[]
+  /** 能力自身写盘后多久内忽略文件系统外部触碰回声（毫秒）；太短会把自己的写入误判成外部修改。 */
   externalTouchCooldownMs?: number
+  /** 把宿主给的原始路径归一成会话内统一的资源 id；缺省用跟踪器自带的相对路径归一（拒绝 `..`）。 */
   normalizeResourceId?: LooseOptional<(raw: string) => LooseOptional<string>>
+  /** 工具呈现档位的初值（决定工具面怎么铺开）；非法值会被断言拦下。 */
   toolSurfaceProfile?: ToolSurfaceProfileId
+  /** 运行档位的初值；非法值会被断言拦下。 */
   runProfile?: RunProfileSelectionId
+  /** 起始就处于「激活」的类别（已启用里再挑一层）；缺省等于全部已启用类别。 */
   activeToolCategories?: ToolCategoryId[]
+  /** 黑名单：名单内的类别一律不许启用，优先级高于白名单。 */
   deniedToolCategories?: readonly ToolCategoryId[]
+  /** 常驻类别：不会被关停、也不会被轮次租约到期换出（但具体工具 schema 仍受预算约束）。 */
   residentToolCategories?: readonly ToolCategoryId[]
+  /** 按名换入的工具租约能撑几轮不被用到就到期；至少 1，缺省 64。 */
   toolNameLeaseTurns?: number
+  /** 轮次规划快照最多留几份（按最近使用淘汰）；至少 1，缺省 8。 */
   maxTurnPlanningSnapshots?: number
   /** 本次执行当前拥有的互斥能力作用域身份。 */
   activeCapabilityScope?: CapabilityScopeId
+  /** 产品提供的验证结果解释器；空表示本产品没有「验证」概念，验证相关提醒全部不触发。 */
   validationInterpreters?: readonly CapabilityValidationInterpreter[]
+  /** 产品提供的运行时提醒 producer；构造时一次性注册进调度器。 */
   reminderProducers?: readonly RuntimeReminderProducer[]
+  /** 按「这类工具算哪种活动」给工具类别分组，决定一次调用推进编辑版本、算检查还是算验证。 */
   activityCategories?: {
+    /** 算「检查改动」的类别（读、列目录、看 diff 之类）；调过就把已检查版本推到当前编辑版本。 */
     inspection?: readonly ToolCategoryId[]
+    /** 算「改代码」的类别；成功一次编辑版本 +1，并进入外部触碰冷却。 */
     mutation?: readonly ToolCategoryId[]
+    /** 算「跑验证」的类别；调过就把已验证版本推到当前编辑版本，并收集验证结论。 */
     validation?: readonly ToolCategoryId[]
+    /** 虽然会改东西、但改的是非代码产物的类别；不推进编辑版本，不触发「改完记得验证」。 */
     nonCodeMutation?: readonly ToolCategoryId[]
   }
 }
@@ -64,6 +92,273 @@ function normalizeResourceIdForTracker(raw: string): LooseOptional<string> {
   const rel = raw.replace(/\\/g, '/').replace(/^\/+/, '').trim()
   if (!rel || rel.includes('..')) return null
   return rel
+}
+
+/**
+ * 编码会话跟踪器对外的全部面：一次主 Agent 执行期间，谁都经这一份问「改了什么、查没查、验没验、现在能用哪些工具、
+ * 用户批了什么」。
+ *
+ * 持有者是 AgentRunner（每次执行新建一台），读者遍布提示段拼装、工具注册表、执行策略与自动验证闸。
+ * 状态全在内存、跟着这次执行生死；跨 turn 要留住的只有工具类别授权，由外层的 sessionApprovalRegistry 负责存取。
+ * 所有 `_reason` 参数只用于人看的说明，不参与判定。
+ */
+export interface CodingSessionTrackerApi {
+  /**
+   * 为子 Agent 派生一台跟踪器：编辑、检查、验证、提醒状态各自独立，工具启用面与档位照抄父的当前值。
+   *
+   * 授权账本**共享同一份**（同一个任务的事实），所以批准、拒绝、收回对主子立即同时生效。
+   */
+  forkForSubAgent(): CodingSessionTracker
+  /**
+   * 会话内已知的资源最新 revision（资源 id → revision）。
+   *
+   * 历史清洗阶段拿它把「读到的是旧版本」的工具结果重写成过期占位，免得模型拿旧 revision 当 baseRevision 去改文件。
+   */
+  getResourceRevisionHints(): Record<string, string>
+  /** 被宿主或外部编辑器改过、但本会话还没重新读过的资源 id；清洗阶段据此把对应的读结果标成过期。 */
+  getExternallyTouchedResourceIds(): readonly string[]
+  /**
+   * 用上一轮结束时推给宿主真值注册表的快照给新建的跟踪器打底（revision 表 + 外部触碰集合）。
+   *
+   * 每轮执行都会新建一台跟踪器，不打底的话第二轮头一次清洗看不到第一轮已经把文件推进的事实。
+   * 语义是**补字典、不清空**：多次调用互相叠加，没有「先 reset 再 seed」这回事；打底只给起点，
+   * 之后的推进仍走工具结果与外部触碰通知。
+   */
+  seedResourceTruth(snapshot: {
+    revisionsByResource?: Readonly<Record<string, string>>
+    externallyTouchedResourceIds?: readonly string[]
+  }): void
+  /**
+   * 把文件监听收到的外部改动灌进「外部触碰集合」；有新路径时编辑版本 +1 并清掉已有验证结论。
+   *
+   * 能力自己写盘后的冷却期内一律丢弃（那是自家写入的回声，不是外部修改）；代价是冷却期内真的外部写入会漏掉一轮，
+   * 下一轮监听仍会捕获，且能力侧的 revision 校验是硬保底。
+   */
+  notifyExternalFilesystemTouches(relativePaths: readonly string[]): void
+  /** 本会话记录过的文件变更明细（最近 60 条，工具名 / 路径 / 是否新建 / 增删行数 / 变更 id），供「本轮改动」面板与编辑日志读取。 */
+  getRecentFileChanges(): Array<{
+    toolName: string
+    path: string
+    created: boolean
+    added: number
+    removed: number
+    changeId: string
+  }>
+  /** 最近用过的工具名，最新在前、已去重、最多 12 个；能力扩展拿它过滤无关上下文噪声。 */
+  getRecentToolNames(): string[]
+  /**
+   * 记一次工具执行结果，并据此推进整台状态机：热度计数、租约续期、编辑/检查/验证版本、改动路径与验证结论。
+   *
+   * 结果自称「跳过」或「没变化」的直接不算数；只动了非代码产物的也不推进编辑版本。
+   * 每次工具执行落定后由执行链调一次。
+   */
+  recordToolResult(toolName: string, result: unknown): void
+  /**
+   * 记一次工具**调用**（带入参）：喂去重指纹，并在这次是「跑通了的验证」时把它的指纹与命令记进当前编辑版本。
+   *
+   * 与 `recordToolResult` 分两个动词是因为这里要看入参（去重与验证指纹都从入参算），那边只关心结果。
+   */
+  recordToolCallResult(toolName: string, args: Record<string, unknown>, result: unknown): void
+  /**
+   * 这次调用要不要被拦下来；要拦则返回给模型看的说明文案，不拦返回 null。
+   *
+   * 两种拦法：和上一次完全相同的幂等调用，或同一批改动后重复跑一个已经跑通的验证。
+   * 入参带 `allowRepeat` 为真时不拦。调用方拿到文案就用它顶替真正执行。
+   */
+  getRedundantToolCallMessage(toolName: string, args: Record<string, unknown>): Nullable<string>
+  /** 提醒发出去之后回调一次，把调度器的已发账与跟踪器这边的旁路标记对齐；传 null 即无事发生。 */
+  finalizeReminderConsumeResult(result: LooseOptional<RuntimeReminderConsumeResult>): void
+  /**
+   * 执行开始时把 ToolContext 绑进来，此后「某个类别下有哪些工具」按运行时真实可见的工具集合算。
+   *
+   * 不绑也能跑——退回构造时给的静态目录，测试与早期启动阶段因此不必造一整个 ToolContext。
+   */
+  attachToolContext(toolContext: CodingSessionToolContext): void
+  /** 取出提醒调度器本体，供自动验证等外部逻辑复用同一批 producer，而不是各自再拼一套。 */
+  getReminderScheduler(): RuntimeReminderScheduler
+  /** 把当前快照、编辑版本、思考力度与工具名解析器打包成 producer 需要的输入；每次要问提醒之前现算。 */
+  buildReminderInput(): RuntimeReminderInput
+  /** 记下「验证提醒已经针对当前这批改动发过了」，同一批改动不再重复提醒；没有任何改动时不记。 */
+  recordVerificationReminderIssued(): void
+  /** 记一次验证计划的运行结果：把已验证版本推到当前编辑版本，并按结果更新验证结论与连续失败计数。 */
+  recordVerificationPlanResult(toolName: string, result: CapabilityValidationRunResult): void
+  /**
+   * 记一次验证失败（失败或超时）：留下命令、状态与最多 5 条问题摘要，连续失败计数 +1。
+   *
+   * 连续失败到阈值后提醒文案会升级成「建议停下来问用户」；成功一次即清零。
+   */
+  recordVerificationFailure(
+    command: string,
+    status: Extract<CapabilityValidationStatus, 'failed' | 'timed-out'>,
+    issues: string[]
+  ): void
+  /** 汇总当前编辑/检查/验证状态的快照；提示段与自动验证闸都读它，不直接问跟踪器内部字段。 */
+  getSnapshot(): CodingSessionSnapshot
+  /**
+   * 把另一处（通常是子 Agent）的快照并进本跟踪器：路径求并集、状态按「更保守的一方」取。
+   *
+   * 对方有改动就让本方编辑版本 +1，再按对方是否已检查/已验证把相应版本跟上；连续失败次数取较大值。
+   */
+  mergeSnapshot(snapshot: CodingSessionSnapshot): void
+  /**
+   * 启用若干工具类别（同时置为激活），返回启用后的完整类别清单。
+   *
+   * 黑白名单拦下的直接跳过。`_reason` 只在它表示「模型自己换入」时额外发一张按轮次到期的临时租约；
+   * 由运行档位铺开的类别不发租约（见 `shouldTrackDynamicToolCategoryLease`）。
+   */
+  enableToolCategories(categories: ToolCategoryId[], _reason?: string): ToolCategoryId[]
+  /**
+   * 关停若干工具类别并撤掉它们的会话授权与预算覆盖，返回剩下的启用清单。
+   *
+   * 常驻类别不受影响——它们按定义关不掉。
+   */
+  disableToolCategories(categories: ToolCategoryId[], _reason?: string): ToolCategoryId[]
+  /**
+   * 按**工具名**换入（给它驻留优先级并续租），返回当前全部被换入的工具名。
+   *
+   * 顺带给该工具所属类别的租约续期，免得下一轮类别到期反过来把刚换入的工具清掉。
+   */
+  enableToolNames(toolNames: string[], _reason?: string): string[]
+  /** 这个工具名此刻是不是被显式换入过；注册表据此区分「模型点名要的」和「整类默认暴露的」。 */
+  hasToolNameAccess(toolName: string): boolean
+  /** 按工具名换出（撤掉驻留优先级与缺页上报记录），返回剩下被换入的工具名。 */
+  disableToolNames(toolNames: string[], _reason?: string): string[]
+  /**
+   * 推进到第 `turn` 轮，清掉超过租期没被用过的**工具名**租约，返回本轮到期的工具名。
+   *
+   * 每轮规划开始时调；到期只是失去驻留优先级，不影响类别授权。
+   */
+  pruneExpiredToolNameLeases(turn: number): string[]
+  /**
+   * 推进到第 `turn` 轮，清掉超过租期没被用过的**类别**租约，返回本轮到期的类别。
+   *
+   * 非常驻类别到期会连同启用与激活一起撤掉，该类别下的工具名租约也一并清除。
+   */
+  pruneExpiredToolCategoryLeases(turn: number): ToolCategoryId[]
+  /** 按签名取一份轮次规划快照并刷新它的最近使用位次（取不到返回 null）；签名相同即可复用上一轮的规划结果。 */
+  getTurnPlanningSnapshot<TSnapshot = unknown>(signature: string): Nullable<TSnapshot>
+  /** 按签名存一份轮次规划快照；超出上限时从最久没被取过的那份开始丢。空签名不存。 */
+  setTurnPlanningSnapshot(signature: string, snapshot: unknown): void
+  /** 记一条本轮工具规划的遥测（签名、丢掉多少工具、各类别工具数等）；只留最近 8 条，用于算压力与缓存失效率。 */
+  recordTurnPlanningTelemetry(entry: TurnPlanningTelemetryPayload): void
+  /** 最近一条轮次规划遥测的深拷贝；没有过返回 null。调试面板与自检读它。 */
+  getLastTurnPlanningTelemetry(): Nullable<TurnPlanningTelemetryPayload>
+  /**
+   * 工具 schema 预算的缩放系数：连续多轮都有工具被挤掉时主动调小，给下一轮留余量。
+   *
+   * 连续 4 轮压力返回 0.7，连续 2 轮返回 0.85，否则 1（不缩放）。
+   */
+  getToolSchemaBudgetScale(): number
+  /** 排队一条工具分配请求（模型说它下一轮想要什么），返回排队后的总条数。存的是深拷贝，调用方之后改入参不影响它。 */
+  enqueueToolAllocatorRequest(request: ToolAllocatorRequest): number
+  /** 取走并清空全部排队中的工具分配请求（深拷贝）；下一轮规划开始时调一次。 */
+  drainToolAllocatorRequests(): ToolAllocatorRequest[]
+  /**
+   * 从本轮被预算挤掉的工具名里挑出「这次才新掉的」并标记已上报，返回给上层去提醒模型。
+   *
+   * 已报过的不重复报；某个工具重新回到驻留集合后记录会被清掉，将来再掉可以再报一次。
+   * 不报的话模型只会看到「我换入的工具怎么下一轮没了」而无从解释。
+   */
+  collectNewlyEvictedPagedInTools(evictedToolNames: readonly string[]): string[]
+  /** 这个类别此刻是不是已启用（启用 = 本会话开过，未必在本轮激活）。 */
+  hasToolCategoryAccess(category: ToolCategoryId): boolean
+  /** 这个类别此刻是不是处于激活（激活 = 已启用里本轮真正参与工具面铺开的那一层）。 */
+  hasActiveToolCategoryAccess(category: ToolCategoryId): boolean
+  /** 这个类别在黑白名单下允不允许被启用；黑名单优先于白名单，两者都没配就一律允许。 */
+  isToolCategoryAllowed(category: ToolCategoryId): boolean
+  /** 当前已启用的工具类别清单（拷贝）。 */
+  getEnabledToolCategories(): ToolCategoryId[]
+  /** 当前处于激活的工具类别清单（拷贝）。 */
+  getActiveToolCategories(): ToolCategoryId[]
+  /** 本次执行选中的能力作用域身份；具体含义由能力包定义，跟踪器只原样保管不解释。 */
+  getActiveCapabilityScope(): CapabilityScopeId
+  /** 当前工具呈现档位。 */
+  getToolSurfaceProfile(): ToolSurfaceProfileId
+  /** 改思考力度并返回改后的值；下一轮拼提示词与建 provider 时生效。 */
+  setThinkingDepth(thinkingDepth: ThinkingDepth): ThinkingDepth
+  /** 改工具呈现档位并返回改后的值；传非法档位 id 会被断言拦下抛错。 */
+  setToolSurfaceProfile(profile: ToolSurfaceProfileId, _reason?: string): ToolSurfaceProfileId
+  /** 当前运行档位。 */
+  getRunProfile(): RunProfileSelectionId
+  /** 临时切档后要回到的档位；没安排回切时为 null。 */
+  getRunProfileRestoreTarget(): Nullable<RunProfileSelectionId>
+  /** 安排（或用 null 取消）临时切档后要回到的档位并返回设定值；传非法档位 id 会被断言拦下抛错。 */
+  setRunProfileRestoreTarget(
+    profile: Nullable<RunProfileSelectionId>
+  ): Nullable<RunProfileSelectionId>
+  /** 当前持有预算覆盖（驻留优先级）的工具类别清单。 */
+  getBudgetOverrideToolCategories(): ToolCategoryId[]
+  /** 当前持有预算覆盖（驻留优先级）的工具名清单。 */
+  getBudgetOverrideToolNames(): string[]
+  /** 工具名 → 本会话累计调用次数；换页时据此优先保住用过的热工具、淘汰从没调过的冷工具。 */
+  getToolUsageScores(): Record<string, number>
+  /** 模型调到当前不可见工具时记一笔遥测；工具名只为可读性，不参与统计。 */
+  recordInvisibleToolCall(_toolName: string): void
+  /** 向用户出示一张确认卡时记一笔遥测。 */
+  recordConfirmationCard(): void
+  /** 直接批准一个风险作用域（落一条 approved 记录），返回批准后的全部作用域；空白作用域名直接忽略。 */
+  grantConfirmedRiskScope(scope: string, _reason?: string): string[]
+  /** 这个风险作用域此刻是不是已批准；空白作用域名一律为否。 */
+  hasConfirmedRiskScope(scope: string): boolean
+  /** 当前已批准的全部风险作用域。 */
+  getConfirmedRiskScopes(): string[]
+  /** 接过另一台跟踪器的授权账本（共享同一个对象）；新一轮与子 Agent 用它保持授权归属一致，其余状态仍各自独立。 */
+  useTaskApprovalStateFrom(source: CodingSessionTracker): void
+  /** 全部授权记录（含已拒绝、已收回）的深拷贝，供授权面板渲染。 */
+  getTaskApprovalRecords(): TaskApprovalRecord[]
+  /** 落一条审批结论（批准或拒绝）；`message` 是拒绝理由。同一个 key 重复落时沿用首次的记录 id。 */
+  recordTaskApproval(
+    key: string,
+    approved: boolean,
+    options: ToolConfirmationDecisionOptions,
+    message?: LooseOptional<string>
+  ): void
+  /** 这个 key 被拒了的话给出返回给模型的理由文案；没拒过返回 null。 */
+  getTaskApprovalDenial(key: string): Nullable<string>
+  /** 按记录 id 收回一条授权；找不到或已收回返回 false。 */
+  revokeTaskApproval(id: string): boolean
+  /**
+   * 汇总本会话的工具层遥测指标（能力启用次数、去重命中、不可见调用、确认卡数、工具块缓存失效率）。
+   *
+   * `turnsPerCompletedTask` 由调用方给（跟踪器不知道任务何时算完成），非有限数按 null 记。
+   */
+  getToolLayerTelemetryMetrics(turnsPerCompletedTask?: number): ToolLayerTelemetryMetrics
+  /** 每轮解析出模型输入侧真正可用的窗口（token）后写进来；传非正数视为未知（记 null）。 */
+  setUsableContextWindowTokens(tokens: Nullable<number>): void
+  /** 本轮模型输入侧可用窗口（token）；未知时为 null，编辑预算门控应退回保守默认窗口。 */
+  getUsableContextWindowTokens(): Nullable<number>
+  /** 切运行档位并返回改后的值；传非法档位 id 会被断言拦下抛错。 */
+  setRunProfile(profile: RunProfileSelectionId, _reason?: string): RunProfileSelectionId
+  /**
+   * 给一个工具类别发会话级授权（顺带落一条 `tool-category:<id>` 的风险作用域批准），返回当前已授权清单。
+   *
+   * 黑白名单拦下的类别直接不授权。授权跨 turn 由外层注册表负责存取。
+   */
+  grantSessionToolCategoryApproval(category: ToolCategoryId, _reason?: string): ToolCategoryId[]
+  /** 这个类别此刻有没有会话级授权；授权账本里有明确结论时以账本为准（含用户后来撤销的情况）。 */
+  hasSessionToolCategoryApproval(category: ToolCategoryId): boolean
+  /** 当前仍然有效的会话级已授权类别（已被收回的会被过滤掉）。 */
+  getSessionApprovedToolCategories(): ToolCategoryId[]
+  /**
+   * 取走并清空自动批准提示卡；整会话只发一次，第一次工具调用消费掉。
+   *
+   * 参数保留只为兼容按类别调用的老签名，实际不参与判断。没有待发的返回 null。
+   */
+  consumePendingAutoApprovalNotice(
+    _category: ToolCategoryId
+  ): Nullable<CapabilityAutoApprovalNotice>
+  /** 开启若干提示能力（归一化后），顺带把它们要的工具类别加进预算覆盖，返回开启后的完整能力清单。 */
+  enablePromptFeatures(features: ChatPromptFeatureId[], _reason?: string): ChatPromptFeatureId[]
+  /**
+   * 关闭若干提示能力，返回剩下的能力清单。
+   *
+   * 只有在没有别的能力还需要某个工具类别时才撤掉那个类别的预算覆盖，避免关一个能力误伤另一个。
+   */
+  disablePromptFeatures(features: ChatPromptFeatureId[], _reason?: string): ChatPromptFeatureId[]
+  /** 这个提示能力此刻是不是开着；提示段拼装按它决定要不要渲染对应片段。 */
+  hasPromptFeatureAccess(feature: ChatPromptFeatureId): boolean
+  /** 当前开启的提示能力清单（拷贝）。 */
+  getEnabledPromptFeatures(): ChatPromptFeatureId[]
 }
 
 /**
@@ -83,7 +378,7 @@ function normalizeResourceIdForTracker(raw: string): LooseOptional<string> {
  * 该实例与一次主 Agent 执行同生命周期；跨 turn 的工具类别授权由
  * AgentRunner.sessionApprovalRegistry 在外层负责恢复/保存。
  */
-class CodingSessionTracker {
+class CodingSessionTracker implements CodingSessionTrackerApi {
   private static readonly DefaultToolNameLeaseTurns = 64
   private static readonly DefaultMaxTurnPlanningSnapshots = 8
   private static readonly MaxRecentToolNames = 12
@@ -735,7 +1030,7 @@ class CodingSessionTracker {
   }
 
   public enableToolCategories(categories: ToolCategoryId[], _reason?: string): ToolCategoryId[] {
-    const dynamicLease = this.shouldTrackDynamicToolCategoryLease(_reason)
+    const dynamicLease = shouldTrackDynamicToolCategoryLease(_reason)
     categories.forEach((categoryId) => {
       if (!this.isToolCategoryAllowed(categoryId)) return
       this.enabledToolCategories.add(categoryId)
@@ -873,12 +1168,6 @@ class CodingSessionTracker {
     }
 
     return expired
-  }
-
-  private shouldTrackDynamicToolCategoryLease(reason?: string): boolean {
-    const normalized = reason?.trim()
-    if (!normalized) return false
-    return !normalized.toLowerCase().startsWith('run profile ')
   }
 
   private resolveToolCategoryForToolName(toolName: string): LooseOptional<ToolCategoryId> {

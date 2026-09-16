@@ -191,6 +191,14 @@ export function renderContextRecallLine(members: readonly ContextRecord[]): Null
   return `- 召回：${refs.join(' | ')}（context:recall）`
 }
 
+/**
+ * 把一批成员摊成骨架的六个栏目（目标 / 决策 / 文件 / 命令 / 未决 / 验证），零 LLM、纯规则。
+ *
+ * 两条素材来源：锚点按**准入期就定下的类别**逐字入栏（command → 命令栏、path → 文件栏），标识符与数字不入栏、留在锚点行——
+ * 刻意不做正则二次分类，那会把 `0.24.0` 的 `.0` 当扩展名，版本号占满「文件」栏而真实路径一条都进不去；
+ * 正文则按行扫标志词（中英各一组），命中哪组进哪栏，一行可同时进多栏。「目标」栏只取 user 记录的第一条有效行。
+ * 每栏有条数上限与单条字符上限（见 {@link pushSkeletonItem}），抽不到的栏留空数组，渲染时整行不出现。
+ */
 function collectSkeletonFields(
   members: readonly ContextRecord[],
   anchors: readonly ContextAnchor[]
@@ -253,6 +261,10 @@ function readRecordSkeletonText(record: ContextRecord): string {
     .join('\n')
 }
 
+/**
+ * 把一段正文切成可入栏的候选行：按换行拆，剥掉行首的列表符号与序号（`- * 1.` 之类），再去掉首尾空白。
+ * **丢掉长度不足 8 的行**——「好的」「嗯」「done」这类短行进栏只是噪声，占着条数上限却不带任何信息。
+ */
 function splitSkeletonLines(text: string): string[] {
   return text
     .split(/\r?\n/)
@@ -260,15 +272,29 @@ function splitSkeletonLines(text: string): string[] {
     .filter((line) => line.length >= 8)
 }
 
+/**
+ * 取一段文本里第一条够长的有效行（切法同 {@link splitSkeletonLines}），用作「目标」栏的素材。
+ * 整段都没有够长的行时回落到去空白后的整段原文——宁可给一句短的，也不让目标栏空着：目标是骨架里最不能缺的一栏。
+ */
 function firstMeaningfulLine(text: string): string {
   const lines = splitSkeletonLines(text)
   return lines[0] ?? text.trim()
 }
 
+/**
+ * 判这一行（调用方已转小写）里是否**逐字**出现任一标志词；为真即归入对应栏目。
+ * 纯子串比对，不分词也不管词边界——标志词表中英混排，中文本来就没有词边界可依。
+ * 代价是偶有误收（比如「不再」出现在别的语境里），这是刻意的取舍：骨架宁可多收一条，也不愿漏掉一条决策或一条未决。
+ */
 function hasMarker(lowerLine: string, markers: readonly string[]): boolean {
   return markers.some((marker) => lowerLine.includes(marker))
 }
 
+/**
+ * 往某个栏目压一条条目，顺带做完全部归一与限额：把 ` | ` 换成 ` / `（管道是栏内分隔符，正文里的管道会串格式）、
+ * 压平空白，归一后为空直接丢弃；超过 `SkeletonItemMaxChars` 的截断并补省略号。
+ * 栏目已满额或已有一模一样的条目时**静默跳过**，既不报错也不替换——骨架是尽力而为的规则产物，先到先得。
+ */
 function pushSkeletonItem(
   fields: Record<ContextSkeletonField, string[]>,
   field: ContextSkeletonField,
@@ -286,12 +312,21 @@ function pushSkeletonItem(
   bucket.push(item)
 }
 
+/**
+ * 渲染一个栏目行，形如 `- 文件：a.ts | b.ts`。
+ * 栏目为空时返回 null，整行不出现——只有标签没有内容的行是纯噪声，还占着骨架本就不多的字符预算。
+ */
 function renderSkeletonField(field: ContextSkeletonField, items: readonly string[]): Nullable<string> {
   if (isEmpty(items)) return null
 
   return `- ${SkeletonFieldLabels[field]}：${items.join(' | ')}`
 }
 
+/**
+ * 把骨架文本夹进 `MaxSkeletonChars`（骨架自己超预算就不叫压缩了），超了就截断并补省略号。
+ * 要害在于**召回行永不被截**：有 `protectedTail` 时先从总预算里扣掉它，只截正文，最后把整行原样接回去。
+ * 反过来（先拼好再一刀切）会把末尾的召回指针切掉，被折叠的内容就真的取不回来了——那是有损，不是压缩。
+ */
 function clampSkeletonText(body: string, protectedTail: Nullable<string>): string {
   if (!protectedTail) {
     if (body.length <= MaxSkeletonChars) return body

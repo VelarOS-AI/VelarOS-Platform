@@ -1,6 +1,5 @@
 
 import { isEmpty, toNullable } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 
 import type { ExecutionIdFactory } from '../../contract/requires.js'
@@ -11,11 +10,12 @@ import type {
 } from '../../types/agent'
 import type { ExecutionRecord, ExecutionTaskPlanStep, ExecutionTaskRecord,UserActionCard } from '../../types/agent.js'
 import type { CreateExecutionArgs,ExecutionResourceProvider } from '../../types/records.js'
-import { type ExecutionStateMachine } from '../../utils/records/state-machine'
+import { requireCurrentTask } from '../../utils/records/execution-tasks'
 
 import { ExecutionPlanLedgerHelper } from './ExecPlanLedger'
 import { ExecutionRecordSeverityHelper } from './ExecRecordSeverity'
 import { type ExecutionRoutingCoordinator } from './ExecRouting'
+import { type ExecutionStateMachine } from './ExecStateMachine'
 import { ExecutionTaskLedgerHelper } from './ExecTaskLedger'
 import { ExecutionRecordSummaryHelper } from './ExecutionRecordSummaryHelper'
 import { type ExecutionStore } from './ExecutionStore'
@@ -23,16 +23,53 @@ import { MonotonicExecutionIdFactory } from './MonotonicExecutionIdFactory'
 
 
 /**
- * 执行记录管理器。
+ * 执行记录的写入口：`ExecutionService` 管生命周期编排，真正改 `ExecutionRecord` 的活全在这里——
+ * 建执行与 root 任务、走状态迁移、任务的起止成败、角色与执行计划的更新，每一步该配的账本事件和调试快照都一并发掉。
  *
- * ExecutionService 负责生命周期编排；本类负责具体修改 ExecutionRecord：
- * - 创建 execution/root task。
- * - 执行状态转移。
- * - 创建/启动/完成/失败任务。
- * - 更新角色和执行计划。
- * - 写入事件 ledger 并触发 debug 刷新。
+ * 自己不存数据（都在注入的 `ExecutionStore` 上），状态迁移合法性交给 `ExecutionStateMachine` 判，
+ * 执行与任务 id 由注入的 `ExecutionIdFactory` 生成（宿主可以换成可复现实现）。
+ * `currentTaskId` 指不到任务时抛 `INVARIANT`——那说明账本本身坏了，不是调用方用错。
  */
-class ExecutionRecords {
+export interface ExecutionRecordsApi {
+  /** 建一条新执行：连带建好 root 任务（标题「主执行」，指令取最后一条用户消息的摘要），落库后补 execution-created 与 task-created 两条事件，再推一次调试快照。 */
+  createExecution(args: CreateExecutionArgs): ExecutionRecord
+  /** 读一条执行记录；不存在时由 store 抛错，不返回 null。 */
+  getExecution(executionId: string): ExecutionRecord
+  /** 走一次执行状态迁移：状态没变就是幂等写入，不校验也不记事件；真变了才过状态机（非法迁移由状态机抛错）并补一条 execution-status-changed。 */
+  transition(executionId: string, nextStatus: ExecutionRecord['status']): ExecutionRecord
+  /** 在记录上标记「正在等用户确认」，把要显示的正文、动作卡、细节和这张卡的 `confirmationId` 一并存下，供界面重连后还原确认卡。 */
+  setAwaitingConfirmation(executionId: string, message: string, userActionCards?: UserActionCard[], detail?: ConfirmationRequestDetail, confirmationId?: string): ExecutionRecord
+  /** 清掉等待确认的标记；用户答完、或交互被中止时都要调，否则界面会残留一张点不动的卡。 */
+  clearAwaitingConfirmation(executionId: string): ExecutionRecord
+  /** 在记录上标记「正在等用户打字」，存下问题正文和发问时刻。 */
+  setAwaitingInput(executionId: string, question: string): ExecutionRecord
+  /** 清掉等待输入的标记。 */
+  clearAwaitingInput(executionId: string): ExecutionRecord
+  /** 把一句执行级错误写进记录；任务级的错误各自记在任务上，这里只放整次执行的失败原因。 */
+  setExecutionError(executionId: string, error: string): ExecutionRecord
+  /** 清掉执行级错误，用在重试前把上一次的失败抹掉。 */
+  clearExecutionError(executionId: string): ExecutionRecord
+  /** 把焦点切到某个任务并把它置 running：焦点真变了才补一条 task-focus-changed。这个任务挂在父任务的计划步骤上时，顺带把那一步也点成 running；否则改为点亮它自己的自执行步骤。 */
+  startTask(executionId: string, taskId: string): void
+  /** 任务成功收尾：写 completed 和结果，同步父任务里对应的计划步骤（没有就收掉自己的自执行步骤），最后把焦点还给父任务。`result` 不传就保留任务原有的结果。 */
+  completeTask(executionId: string, taskId: string, result?: LooseOptional<string>): void
+  /** 任务失败收尾：写 failed 和错误原因，父计划步骤同步标 failed，焦点还给父任务。 */
+  failTask(executionId: string, taskId: string, error: string): void
+  /** 任务被中断收尾：任务本身记 aborted，但父计划步骤按 failed 标——界面用同一条失败路径处理这两种情况。`reason` 是给用户看的中断原因。 */
+  abortTask(executionId: string, taskId: string, reason: string): void
+  /** 直接改任务状态，不动计划步骤、不还焦点：留给少数低层工具和计划同步场景，正常收尾请走 complete / fail / abort。置 running 时会补上首次的 `startedAt`。 */
+  setTaskStatus(executionId: string, taskId: string, status: ExecutionTaskRecord['status']): void
+  /** 按这一轮的 turn context 更新执行的角色，并把角色带来的 workflow 路线合进当前任务（已有步骤的状态一律保留），随后确认当前任务的自执行步骤已经开跑。 */
+  updateRole(executionId: string, payload: StreamTurnContextPayload): void
+  /** 读当前任务的执行计划；`currentTaskId` 指不到任务时抛 `INVARIANT`。 */
+  getCurrentPlan(executionId: string): ExecutionTaskPlanStep[]
+  /** 用模型或界面提交的计划覆盖当前任务的执行计划：保留同名步骤的状态，新增步骤归到当前角色，写一条 plan-updated 事件（有步骤被删时严重度记 warning），返回落好的新计划。 */
+  updateCurrentPlan(executionId: string, input: ToolExecutionPlanUpdate): ExecutionTaskPlanStep[]
+  /** 在某个来源会话上找状态落在 `statuses` 里的最近一条执行；没有就返回 null。用来判断「这个会话现在是不是还有活着的执行」。 */
+  findLatestBySourceSession(sourceSessionId: string, statuses: Array<ExecutionRecord['status']>): Nullable<ExecutionRecord>
+}
+
+class ExecutionRecords implements ExecutionRecordsApi {
   private readonly log = logRuntime.tag('ExecutionRecords')
   /** 根据消息生成执行摘要。 */
   private readonly summaryHelper = new ExecutionRecordSummaryHelper()
@@ -390,7 +427,7 @@ class ExecutionRecords {
       updatedAt: Date.now(),
     }))
     const currentTaskId = execution.currentTaskId
-    this.requireCurrentTask(execution, 'update role')
+    requireCurrentTask(execution, 'update role')
     this.taskLedgerHelper.updateTask(execution.id, currentTaskId, (task) => ({
       ...task,
       roleId: payload.roleId,
@@ -411,14 +448,14 @@ class ExecutionRecords {
   /** 读取当前任务的执行计划。 */
   public getCurrentPlan(executionId: string): ExecutionTaskPlanStep[] {
     const execution = this.getExecution(executionId)
-    const task = this.requireCurrentTask(execution, 'read current plan')
+    const task = requireCurrentTask(execution, 'read current plan')
     return task.executionPlan
   }
 
   /** 用工具传入的计划更新当前任务执行计划，并写入 plan-updated 事件。 */
   public updateCurrentPlan(executionId: string, input: ToolExecutionPlanUpdate): ExecutionTaskPlanStep[] {
     const execution = this.getExecution(executionId)
-    const task = this.requireCurrentTask(execution, 'update current plan')
+    const task = requireCurrentTask(execution, 'update current plan')
 
     const now = Date.now()
     const roleId = task.roleId ?? execution.roleId ?? 'chat'
@@ -488,26 +525,6 @@ class ExecutionRecords {
     return this.store.updateExecution(executionId, updater)
   }
 
-  /** currentTaskId 必须指向现存 task；否则执行账本已损坏，抛出可诊断的领域错误。 */
-  private requireCurrentTask(
-    execution: ExecutionRecord,
-    operation: string
-  ): ExecutionTaskRecord {
-    const currentTaskId = execution.currentTaskId
-    const task = execution.tasks.find((item) => item.id === currentTaskId)
-    if (task) return task
-
-    throw new AppError(
-      'INVARIANT',
-      `Execution current task not found: ${execution.id}/${currentTaskId}`,
-      undefined,
-      {
-        executionId: execution.id,
-        currentTaskId,
-        operation,
-      }
-    )
-  }
 }
 
 export { ExecutionRecords }

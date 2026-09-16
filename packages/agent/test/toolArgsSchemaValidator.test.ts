@@ -59,11 +59,11 @@ describe('ToolArgsSchemaValidator effective arguments', () => {
 
     const unknownOp = validator.validateWithNormalization(schema, { edits: [{ op: 'delete', range: 2, text: '' }] })
     expect(unknownOp.success).toBe(false)
-    if (!unknownOp.success) expect(unknownOp.issues).toEqual([{ path: 'edits.0.op', message: 'Invalid option: expected one of "replace"|"insert"' }])
+    if (!unknownOp.success) expect(unknownOp.issues).toEqual([{ path: 'edits.0.op', message: '选项不合法：只能填 "replace"|"insert" 之一' }])
 
     const scalarRange = validator.validateWithNormalization(schema, { edits: [{ op: 'replace', range: '2', text: 'x' }] })
     expect(scalarRange.success).toBe(false)
-    if (!scalarRange.success) expect(scalarRange.issues).toEqual([{ path: 'edits.0.range', message: 'Invalid input: expected number | tuple, received string' }])
+    if (!scalarRange.success) expect(scalarRange.issues).toEqual([{ path: 'edits.0.range', message: '输入类型不对：应为 number | tuple，实际收到 string' }])
   })
 
   test('bounds feedback for deeply nested external union schemas', () => {

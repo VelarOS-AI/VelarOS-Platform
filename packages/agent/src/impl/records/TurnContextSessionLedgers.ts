@@ -6,8 +6,26 @@ import type { TurnContextAppendBus } from '../../types/records.js'
 import type { TurnContextLedgerAppendInput, TurnContextLedgerPeekResult } from './TurnContextLedger'
 import { DefaultLedgerMaxEntries, DefaultMaxSessions, TurnContextLedger, TurnContextProcessGeneration } from './TurnContextLedger'
 
+/**
+ * 一个 source 在各会话上的账本登记处：按 sessionId 惰性建 `TurnContextLedger`，会话数超上限时按插入序淘汰最旧的那本。
+ * 每开一本就换一个代次（进程代次 + 本实例的账本序号），重建后的账本才不会被消费方的旧 cursor 静默吞掉前几条。
+ *
+ * 写入是唯一入口：落账之后顺手经 `appendHub` 广播一次变更（`notifyRenderer` 显式传 false 才不广播），
+ * 让发送前的环境提示能立刻刷新。实现是 `TurnContextSessionLedgers`，每个 source 一份。
+ */
+export interface TurnContextSessionLedgersApi {
+  /** 往这个会话的账本记一条 delta（没有就先建一本），并广播一次变更通知。返回落好的 delta。 */
+  append(sessionId: string, input: TurnContextLedgerAppendInput): TurnContextDelta
+  /** 状态型 source 的写入口：清空这个会话的账本只留这一条，同样广播变更——界面上的状态提示要立刻换成新的，而不是等下一次事件。 */
+  replaceLatest(sessionId: string, input: TurnContextLedgerAppendInput): TurnContextDelta
+  /** 读这个会话还没被消费的 delta。这个会话还没有账本时交出一份空基底（generation 为进程代次、headSeq 1、tailSeq 0），不会为一次只读 peek 建账本。 */
+  peek(sessionId: string, input: Pick<TurnContextSourcePeekInput, 'afterSeq' | 'generation'>): TurnContextLedgerPeekResult
+  /** 丢掉这个会话的账本；会话关闭或重置时调。下次再写会建一本新的、带新代次的。 */
+  clearSession(sessionId: string): void
+}
+
 /** 按 sessionId 惰性建账本；超出会话数按插入序淘汰最旧（Map 迭代序即插入序）。 */
-export class TurnContextSessionLedgers {
+export class TurnContextSessionLedgers implements TurnContextSessionLedgersApi {
   private readonly ledgers = new Map<string, TurnContextLedger>()
 
   /**

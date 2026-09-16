@@ -8,6 +8,10 @@ const VisibleProcessUpdateReminder = [
   '阶段汇报后可以在同一条回复中继续调用工具。',
 ].join('\n')
 
+/**
+ * 起一份「连续纯工具回合」的计数状态（从 0 开始）。模型一旦输出了可见正文，
+ * `advanceSoloProcessUpdateCadence` 也是换成这个初值来复位的，所以它同时是初始态与复位态。
+ */
 function createSoloProcessUpdateCadenceState(): SoloProcessUpdateCadenceState {
   return { consecutiveToolOnlyTurns: 0 }
 }

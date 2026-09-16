@@ -46,6 +46,12 @@ export function readVerbatimString(value: unknown): Nullable<string> {
   return isString(value) ? value : null
 }
 
+/**
+ * 这段文本值不值得 JSON.parse 进去数折叠句柄——先做一道廉价预筛。
+ * 为真需同时满足：包含 `__contextRef` / `__kernelRef` / `__truncated` / `__contextSummary` 四个标记键之一，
+ * 且 trim 后以 `{` 或 `[` 开头。两条都是必要不充分条件，真正是不是句柄由解析后逐层判定。
+ * 宁可偶尔多 parse 一次，也不能漏掉句柄导致 fingerprint.contextRefCount 少计。
+ */
 export function isSerializedContextRefCandidateText(value: string): boolean {
   const trimmed = value.trim()
   // B3:计数纳入旧键代际(先决已证:QueryTurn/StreamTurn 对一切显式 allowTools 强插

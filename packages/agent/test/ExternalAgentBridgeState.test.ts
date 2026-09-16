@@ -17,7 +17,7 @@ describe('External Agent Bridge shared state', () => {
     expect(queue.after(0).map((command) => command.sequence)).toEqual([2, 3])
     queue.acknowledge(2)
     expect(queue.after(0).map((command) => command.sequence)).toEqual([3])
-    expect(() => queue.acknowledge(4)).toThrow('out of range')
+    expect(() => queue.acknowledge(4)).toThrow('确认序号超出范围')
   })
 
   test('deduplicates a bounded event window', () => {

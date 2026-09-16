@@ -1,3 +1,6 @@
+export type { AgentEnvironmentVariable, AgentErrorCode, AgentToolCategoryId, AgentToolName } from '../contract/constants.js'
+export { AgentCapabilityApiVersionString, AgentContextThresholds, AgentEnvironmentVariables, AgentErrorCodes, AgentIdentity, AgentLeasePolicy, AgentProtocolVersions, AgentSkillFiles, AgentStepLimits, AgentToolCategoryByName, AgentToolLimits, AgentToolNames, AgentToolTransport, ExternalAgentBridgeLimits, TurnContextFormat, VelarModArchiveLimits } from '../contract/constants.js'
+export type { AgentBackgroundAgent, AgentBackgroundAgentControlPort, AgentBackgroundAgentPort, AgentBackgroundAgentState, AgentSessionCatalogPort, AgentSessionCatalogQuery, AgentSessionEventPort, AgentSessionLease, AgentSessionLeaseClaim, AgentSessionLeasePort, AgentSessionLifecycleStatus, AgentSessionMetadata, AgentSessionResourceReference, CreateAgentSessionMetadataInput, RemoteHostServicePorts, ToolExecutionApi } from '../contract/requires.js'
 export { createAgentExecutionStack } from '../impl/assembly/AgentExecutionStack'
 export {
   AgentCapability,
@@ -54,14 +57,15 @@ export {
   MaxCalibrationFactor,
   MinCalibrationFactor,
 } from '../impl/context/ContextUsageCalibrator'
+export { ContextWorkingSetBudgetGovernor } from '../impl/context/ContextWorkingSetBudgetGovernor'
+export { ContextWorkingSetOS } from '../impl/context/ContextWorkingSetOS'
 export { fileContextFor } from '../impl/context/FileContextCoordinator'
 export {
   createContextPayloadRef,
   createContextUserTextRef,
   InMemoryContextPayloadStore,
 } from '../impl/context/InMemoryContextPayloadStore'
-export { ProviderRequestCompiler } from '../impl/context/ProviderRequestCompiler'
-export { compileProviderSendRequest } from '../impl/context/ProviderSendRequest'
+export { compileProviderSendRequest, ProviderRequestCompiler } from '../impl/context/ProviderRequestCompiler'
 export {
   buildToolPayloadRefsForProviderMessages,
 } from '../impl/context/ToolPayloadReferencePlanner'
@@ -104,6 +108,7 @@ export { SoloExecutionService } from '../impl/execution/SoloExecutionService'
 export { AgentSkillRepository } from '../impl/guidance/AgentSkillRepository'
 export { FileSkillProvider } from '../impl/guidance/FileSkillProvider'
 export {
+  createBuiltInPromptRegistry,
   PromptRegistry,
   PromptSegmentTierRank,
   resolvePromptSegmentStability,
@@ -135,6 +140,16 @@ export {
 export { SerialWriteQueue } from '../impl/ledgers/SerialWriteQueue'
 export { SessionLedger } from '../impl/ledgers/SessionLedger'
 export { SessionStore } from '../impl/ledgers/SessionStore'
+export { AgentIntentPlanner, agentIntentPlanner } from '../impl/loop/AgentIntentPlanner'
+export {
+  AgentRawStreamTextExtractor,
+  AgentRawStreamTextExtractor as RawStreamText,
+} from '../impl/loop/AgentRawStreamTextExtractor'
+export { AgentRunPlanComposer, agentRunPlanComposer } from '../impl/loop/AgentRunPlanComposer'
+export {
+  AgentRunPlanLedgerComposer,
+  agentRunPlanLedgerComposer,
+} from '../impl/loop/AgentRunPlanLedgerComposer'
 export {
   AgentRunPlanLedgerFactory,
   agentRunPlanLedgerFactory,
@@ -144,6 +159,8 @@ export {
   AiSdkAgentModelRequestPort,
   applyModelRequestPolicy,
 } from '../impl/loop/AiSdkAgentModelRequestPort'
+export { CapabilityRunPlanner, capabilityRunPlanner } from '../impl/loop/CapabilityRunPlanner'
+export { ContextRunPlanner, contextRunPlanner } from '../impl/loop/ContextRunPlanner'
 export { buildKernelContextEpoch, KernelContextEpochGuard, recordKernelContextEpochDiagnostic } from '../impl/loop/KernelContextEpochGuard'
 export type { KernelPrefixShapeTrackerRecord, KernelPrefixShapeTrackerRecordInput } from '../impl/loop/KernelPrefixShapeTracker'
 export {
@@ -154,6 +171,7 @@ export {
 } from '../impl/loop/KernelPrefixShapeTracker'
 export type { LoopWindDownGuardOptions } from '../impl/loop/LoopWindDownGuard'
 export { loopContinue, loopFinish, LoopWindDownGuard } from '../impl/loop/LoopWindDownGuard'
+export { PromptRunPlanner, promptRunPlanner } from '../impl/loop/PromptRunPlanner'
 export type { QueryLoopRoleRuntime, QueryLoopRunContext, QueryLoopRuntime, QueryLoopTurnRunner } from '../impl/loop/QueryLoop'
 export { QueryLoop } from '../impl/loop/QueryLoop'
 export { isBlockedFetchIpAddress } from '../utils/connectors/fetch-safety'
@@ -163,6 +181,7 @@ export type { QueryTurnResult } from '../impl/loop/QueryTurn'
 export { QueryTurn } from '../impl/loop/QueryTurn'
 /** @deprecated 请改用 `QueryTurn`；该别名保留至 Agent 1.0。 */
 export { QueryTurn as AgentQueryTurnHelper } from '../impl/loop/QueryTurn'
+export { RecoveryRunPlanner, recoveryRunPlanner } from '../impl/loop/RecoveryRunPlanner'
 export {
   AgentConnectionRetryHelper,
   AiSdkMaxRetries,
@@ -181,6 +200,10 @@ export {
   StreamConsumer as AgentStreamConsumerHelper,
   StreamConsumer,
 } from '../impl/loop/StreamConsumer'
+export {
+  AgentStreamDiagnosticRecorder,
+  AgentStreamDiagnosticRecorder as StreamDiagnosticRecorder,
+} from '../impl/loop/StreamDiagnosticRecorder'
 export {
   AgentStreamDiagnosticHelper,
   AgentStreamDiagnosticHelper as StreamDiagnosticsHelper,
@@ -279,6 +302,7 @@ export { AgentRolePolicy } from '../impl/runner/AgentRolePolicy'
 export { AgentRoleRegistry } from '../impl/runner/AgentRoleRegistry'
 export type { AgentRunnerConfig } from '../impl/runner/AgentRunner'
 export { AgentRunner } from '../impl/runner/AgentRunner'
+export { AgentRuntimeEvents } from '../impl/runner/AgentRuntimeEvents'
 export { AgentWorkflowCoordinator } from '../impl/runner/AgentWorkflowCoordinator'
 export {
   AgentWorkflowRuntime,
@@ -305,6 +329,7 @@ export {
   PromptStateBuilder as AgentRuntimePromptStateBuilder,
 } from '../impl/runner/PromptStateBuilder'
 export { AgentRunContextHelper, RunContext } from '../impl/runner/RunContext'
+export { AgentTurnContextPayloadBuilder, TurnPayload } from '../impl/runner/TurnPayload'
 export { CodingSessionEditResultHelper } from '../impl/session/CodingSessionEditResultHelper'
 export type { CodingSessionTrackerOptions } from '../impl/session/CodingSessionTracker'
 export { CodingSessionTracker } from '../impl/session/CodingSessionTracker'
@@ -352,6 +377,7 @@ export { defineVelaTool } from '../utils/builtin/define-agent-tool'
 export { buildToolFingerprint } from '../utils/session/tool-dedupe'
 export { createManualApprovalOptions } from '../utils/toolkit/approval'
 // agentWorkflowSchema：check-schemas.mjs 契约门消费的权威 schema（agent:run_workflow）。
+export type { AgentExecutionStack, AgentExecutionStackApi, AgentExecutionStackWithQuery, AgentExecutionStackWithQueryApi } from '../contract/provides.js'
 export type { SessionLedgerLocator, SessionStoreDeps } from '../contract/requires.js'
 export type { AgentModelProvider, AgentModelRequestOptions, AgentModelRequestPolicy, AgentModelResolverPort } from '../contract/requires.js'
 export type { ToolConversationContextApi } from '../contract/requires.js'
@@ -391,6 +417,26 @@ export type { AgentRuntimeCapabilityPorts, CapabilityContextCollector, Capabilit
 export type { SubAgentTypeProvider } from '../contract/requires.js'
 export type { AgentTurnCapabilitySnapshotSource } from '../contract/requires.js'
 export { KernelSessionPolicy } from '../impl/execution/KernelSessionPolicy'
+export {
+  ExecutionPlanStateHelper as ExecPlanState,
+  ExecutionPlanStateHelper,
+} from '../impl/records/ExecPlanState'
+export {
+  ExecutionStateMachine as ExecStateMachine,
+  ExecutionStateMachine,
+} from '../impl/records/ExecStateMachine'
+export {
+  AgentHistoryMessageHelper,
+  AgentHistoryMessageHelper as HistoryMessages,
+} from '../impl/records/HistoryMessages'
+export {
+  AgentToolResultHelper,
+  agentToolResultHelper,
+} from '../impl/records/ToolResults'
+export {
+  AgentTurnHistoryHelper,
+  AgentTurnHistoryHelper as TurnHistory,
+} from '../impl/records/TurnHistory'
 export type { AgentModelInputModality } from '../types/agent.js'
 export type { ActiveDirectiveType } from '../types/agent.js'
 export type { AgentDelegationContract, AgentRoleExpectedOutputKind, WorkflowType } from '../types/agent.js'
@@ -556,7 +602,7 @@ export type { ExecutionModeDescriptor, ExecutionModePromptProjection, ExecutionM
 export type { RunContextCodingSession, RunContextToolContext } from '../types/runner.js'
 export type { AgentTurnBoundary, AgentTurnSettlement } from '../types/runner.js'
 export type { AgentSurfaceProfile, DerivedAgentSurfaceRunPolicy, DeriveSurfaceRunPolicyInput, ResolveAgentSurfaceInput } from '../types/runner.js'
-export type { AgentExecutionStack, AgentExecutionStackOptions, AgentExecutionStackRunnerOptions, AgentExecutionStackToolContext, AgentExecutionStackWithQuery } from '../types/runner.js'
+export type { AgentExecutionStackOptions, AgentExecutionStackRunnerOptions, AgentExecutionStackToolContext } from '../types/runner.js'
 export type { BuildRuntimePromptStateArgs, PromptStateCodingSession, PromptStateExecutionApi, PromptStatePreparedToolCategories, PromptStateRoleResolution, PromptStateToolContext } from '../types/runner.js'
 export type { AgentRoleToolCategoryResolver } from '../types/runner.js'
 export type { AgentRoleDescriptorProviderContext, AgentRoleToolBindings } from '../types/runner.js'
@@ -664,10 +710,6 @@ export {
   resolveContextUsageWindow,
 } from '../utils/context/context-usage'
 export {
-  ContextWorkingSetBudgetGovernor,
-} from '../utils/context/context-working-set-budget-governor'
-export { ContextWorkingSetOS } from '../utils/context/context-working-set-os'
-export {
   ContextWorkingSetZoneIds,
   DefaultContextWorkingSetZonePolicies,
 } from '../utils/context/context-working-set-zones'
@@ -703,7 +745,6 @@ export {
 export { createSkillDefinition } from '../utils/guidance/agent-skill-provider'
 export {
   BuiltInPromptCatalog,
-  createBuiltInPromptRegistry,
   createBuiltInPromptSegments,
   createIdentityPromptSegment,
 } from '../utils/guidance/catalog'
@@ -736,10 +777,6 @@ export {
   isInternalFollowUpMessage,
   mapInternalFollowUpsForProvider,
 } from '../utils/history/internal-messages'
-export {
-  AgentHistoryMessageHelper,
-  AgentHistoryMessageHelper as HistoryMessages,
-} from '../utils/history/messages'
 export { repairHistoryStructureForProvider } from '../utils/history/repair'
 export { sanitizeHistoryForProvider } from '../utils/history/request'
 export {
@@ -749,14 +786,13 @@ export {
   sanitizeModelMessage,
   sanitizeModelMessageForProvider,
 } from '../utils/history/sanitize'
-export {
-  AgentToolResultHelper,
-  agentToolResultHelper,
-  AgentTurnHistoryHelper,
-  AgentTurnHistoryHelper as TurnHistory,
-} from '../utils/history/turn'
 /** @deprecated 请改用 `AgentToolResultHelper`；该别名保留至 Agent 1.0。 */
-export { AgentToolResultHelper as ToolResults } from '../utils/history/turn'
+export { AgentToolResultHelper as ToolResults } from '../impl/records/ToolResults'
+export { ContextRetrievalReferenceReader } from '../impl/retrieval/ContextRetrievalReferenceReader'
+export {
+  ContextRetrievalReferences,
+  contextRetrievalReferences,
+} from '../impl/retrieval/ContextRetrievalReferences'
 export {
   assertValidModelHistory,
   assertValidModelHistoryForProvider,
@@ -803,15 +839,6 @@ export {
   runAgentLoop,
 } from '../utils/loop/agent-loop'
 export {
-  AgentIntentPlanner,
-  agentIntentPlanner,
-  AgentRunPlanComposer,
-  agentRunPlanComposer,
-  AgentRunPlanLedgerComposer,
-  agentRunPlanLedgerComposer,
-} from '../utils/loop/agent-run-planner'
-export { CapabilityRunPlanner,capabilityRunPlanner } from '../utils/loop/capability-run-planner'
-export {
   contextDegradeStaircaseLength,
   resolveContextDegradeAction,
 } from '../utils/loop/context-degrade-ladder'
@@ -836,14 +863,6 @@ export {
   resolveSubAgentDelegation,
   resolveSubAgentToolScope,
 } from '../utils/loop/loop-runtime'
-export {
-  ContextRunPlanner,
-  contextRunPlanner,
-  PromptRunPlanner,
-  promptRunPlanner,
-  RecoveryRunPlanner,
-  recoveryRunPlanner,
-} from '../utils/loop/runtime-run-planner'
 export { applySoloContextDegradeAction } from '../utils/loop/solo-context-degrade-action-executor'
 export {
   createSoloFinishingGateBlockTracker,
@@ -911,14 +930,6 @@ export {
   resolveMainAgentGuidanceDelivery,
   resolveMainAgentGuidanceMessage,
 } from '../utils/records/guidance-relay'
-export {
-  ExecutionPlanStateHelper as ExecPlanState,
-  ExecutionPlanStateHelper,
-} from '../utils/records/plan-state'
-export {
-  ExecutionStateMachine as ExecStateMachine,
-  ExecutionStateMachine,
-} from '../utils/records/state-machine'
 export {
   admitContextRecord,
   buildExcerptEnvelope,
@@ -1033,11 +1044,6 @@ export {
 export { chatSearchMessages } from '../utils/retrieval/messages'
 export { paginateJsonPathSelection, paginateSerializedText } from '../utils/retrieval/pagination'
 export { chatSearchRanking } from '../utils/retrieval/ranking'
-export { ContextRetrievalReferenceReader } from '../utils/retrieval/reference-reader'
-export {
-  ContextRetrievalReferences,
-  contextRetrievalReferences,
-} from '../utils/retrieval/references'
 export { chatSearchText } from '../utils/retrieval/text'
 export {
   configureAppRuntimeFacts,
@@ -1066,7 +1072,6 @@ export {
 } from '../utils/runner/goal-lifecycle-projection'
 export { resolveLockedAgentRole } from '../utils/runner/role-router'
 export { applyRunProfileToolExposure } from '../utils/runner/run-profile'
-export { AgentRuntimeEvents } from '../utils/runner/runtime-events'
 export {
   describeRunProfiles,
   resolveRunProfileForRuntime,
@@ -1081,7 +1086,6 @@ export {
   TurnContextBlockOpenTag,
   TurnContextMidRunNoteLead,
 } from '../utils/runner/turn-context-format'
-export { AgentTurnContextPayloadBuilder, TurnPayload } from '../utils/runner/turn-payload'
 export {
   runAutomaticVerification,
   shouldBlockOnVerificationState,
@@ -1120,14 +1124,6 @@ export {
   isOutputTruncationError,
   isRecoverableOutputTruncationDiagnostic,
 } from '../utils/stream/output-truncation-recovery'
-export {
-  AgentRawStreamTextExtractor,
-  AgentRawStreamTextExtractor as RawStreamText,
-} from '../utils/stream/raw-text'
-export {
-  AgentStreamDiagnosticRecorder,
-  AgentStreamDiagnosticRecorder as StreamDiagnosticRecorder,
-} from '../utils/stream/recorder'
 export {
   applyProviderToolInputStreamPart,
   buildToolInputReadyMetadata,

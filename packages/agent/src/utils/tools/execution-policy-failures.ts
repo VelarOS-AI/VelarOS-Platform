@@ -5,6 +5,10 @@ import { readStringScalar } from '@velaros-ai/core/utils/unknownJsonRecord'
 import type { ErrorCauseRecord, RuntimeToolIssue, ToolFailureBuildOptions,ToolFailureResult, ToolSpaceRecoveryGuide } from '../../types/tools.js'
 
 
+/**
+ * 沿 `cause` 链自外向内找第一个非空的 `reason` 字段并去掉首尾空白，找不到返回 null。
+ * 领域包常把稳定机器码放在 reason 上，而包装成 AppError 后它只剩在 cause 链里；用 Set 记已访问对象，cause 成环也不会死循环。
+ */
 function extractNestedErrorReason(error: unknown): LooseOptional<string> {
   const seen = new Set<unknown>()
   let current: unknown = error
@@ -17,6 +21,10 @@ function extractNestedErrorReason(error: unknown): LooseOptional<string> {
   return null
 }
 
+/**
+ * 沿 `cause` 链自外向内找第一个是纯对象的 `details` 并原样返回（不做拷贝也不裁剪，裁剪交给 boundToolFailureDetails），找不到返回 null。
+ * 取的是最外层那份：包装者比被包装者更贴近调用现场；同样用 Set 防 cause 成环。
+ */
 function extractNestedErrorDetails(error: unknown): LooseOptional<Record<string, unknown>> {
   const seen = new Set<unknown>()
   let current: unknown = error
@@ -29,6 +37,10 @@ function extractNestedErrorDetails(error: unknown): LooseOptional<Record<string,
   return null
 }
 
+/**
+ * 沿 `cause` 链自外向内找第一个非空的 `suggestedNextAction`（去首尾空白），找不到返回 null。
+ * 这是领域包写给模型的「下一步该干什么」，会被提升成失败结果的 nextActions；同样用 Set 防 cause 成环。
+ */
 function extractNestedSuggestedNextAction(error: unknown): LooseOptional<string> {
   const seen = new Set<unknown>()
   let current: unknown = error
@@ -54,6 +66,13 @@ const MaxDetailsObjectKeys = 50
 const MaxDetailsStringLength = 2_000
 const MaxDetailsDepth = 6
 
+/**
+ * 递归把领域错误 details 裁成可安全 JSON 化的有界值：长字符串截到 MaxDetailsStringLength 并补省略号、BigInt 转 `123n` 形式、
+ * 数组只留前 MaxDetailsArrayItems 项并追加 `__omittedItems` 计数、对象只留前 MaxDetailsObjectKeys 个键并写 `__truncatedKeys`/`__originalKeyCount`、
+ * 超过 MaxDetailsDepth 换成占位串、循环引用换成 `[circular reference omitted]`。
+ * 有 `toJSON` 的对象（Date/URL 等）先走 toJSON 再裁（toJSON 自己抛错则降级为不支持对象标记），非纯对象直接标记类名丢弃。
+ * 裁掉的内容在这一层不可召回——截断发生在结果落盘之前，所以标记键刻意避开 `__truncatedItems`（那是 context:recall 的续读协议标记，模型看到会白跑一轮）。
+ */
 function boundDetailsValue(value: unknown, depth: number, seen: WeakSet<object>): unknown {
   if (isString(value))
     return value.length > MaxDetailsStringLength
@@ -130,6 +149,11 @@ function boundToolFailureDetails(details: Record<string, unknown>): Record<strin
   return isPlainObject(bounded) ? bounded : details
 }
 
+/**
+ * 这条失败是不是「模型把工具调错了」而非「工具跑起来出了错」——只有 error 属于 schema_validation_failed、
+ * tool_unavailable、tool_not_found、tool_call_invalid、tool_chain_invalid 这五种调用面故障时为真。
+ * 为真才值得给模型补一段通用的自纠指引；执行期的业务失败不补，免得把噪声塞进上下文。
+ */
 function shouldAnnotateRuntimeToolIssue(result: ToolFailureResult): boolean {
   return [
     'schema_validation_failed',
@@ -140,6 +164,10 @@ function shouldAnnotateRuntimeToolIssue(result: ToolFailureResult): boolean {
   ].includes(result.error)
 }
 
+/**
+ * 给调用面故障的失败结果补两条通用自纠指引（先按实际错误改调用、只在真需要用户介入时才说阻塞），放在原有 nextActions 之前并整体去重。
+ * 不属于调用面故障（见 shouldAnnotateRuntimeToolIssue）或结果已经带了 `runtimeToolIssue` 的原样返回；返回的是新对象，不改入参。
+ */
 function withRuntimeToolIssue(result: ToolFailureResult): ToolFailureResult {
   if (!shouldAnnotateRuntimeToolIssue(result) || result.runtimeToolIssue) return result
 
@@ -153,6 +181,11 @@ function withRuntimeToolIssue(result: ToolFailureResult): ToolFailureResult {
   }
 }
 
+/**
+ * 把某个已经由下游构造好、塞在 `AppError.context.toolFailure` 里的失败结果重新读回强类型 `ToolFailureResult`。
+ * 必须同时有非空 `error` 与 `reason` 才认（否则返回 null，让调用方回落到从 cause 链重建）；`toolName` 缺失时补 `'unknown'`，
+ * code/details/nextActions/toolSpaceRecovery/runtimeToolIssue 按类型逐个挑，类型不对的字段直接丢，不会把脏数据带进模型上下文。
+ */
 function readEmbeddedToolFailure(value: unknown): Nullable<ToolFailureResult> {
   if (!isObject(value)) return null
   const record = value as Partial<ToolFailureResult>
@@ -189,6 +222,11 @@ function readEmbeddedToolFailure(value: unknown): Nullable<ToolFailureResult> {
   return result
 }
 
+/**
+ * 组装一条要交给模型的工具失败结果：error/reason/toolName 必填，可选的 code/details/nextActions 只在有值时才写进去（不留空字段）。
+ * 传了 `options.recovery` 时用恢复指引的 nextActions **覆盖** 传入的 nextActions，并把整份指引挂到 toolSpaceRecovery——
+ * 工具压根拿不到时，"怎么把工具弄到手"优先于其他建议。最后统一过 withRuntimeToolIssue 补调用面自纠指引。
+ */
 function buildToolFailureResult(
   error: string,
   reason: string,
@@ -218,6 +256,14 @@ function buildToolFailureResult(
   return withRuntimeToolIssue(result)
 }
 
+/**
+ * 把执行期抛出的 `AppError` 翻译成给模型看的 `ToolFailureResult`。
+ * 优先直接取 `context.toolFailure` 里已成型的失败结果；否则沿 cause 链（外加 `context.projectError` 这个跨 IPC 往返后仍在的镜像）
+ * 捞 reason/details/suggestedNextAction，`code === 'UNKNOWN'` 时把领域 reason 提升成有效 code。
+ * 有效 code 决定对外的 error 分类：EXECUTION_ABORTED→`tool_cancelled`、UNAVAILABLE→`tool_unavailable`、
+ * EXECUTION_DENIED/PERMISSION_DENIED/PERMISSION→`tool_denied`、TOOL_RESULT_FINALIZATION_FAILED→同名，其余归 `tool_execution_failed`。
+ * details 先单独做有界投影再追加 reason/code（顺序不能反，否则领域字段一多就把这两个关键字段挤出键数上限），全空时干脆不带 details。
+ */
 function buildExecutionFailureResult(toolName: string, error: AppError): ToolFailureResult {
   const embeddedFailure = readEmbeddedToolFailure(error.context.toolFailure)
   if (embeddedFailure) return withRuntimeToolIssue(embeddedFailure)

@@ -1,16 +1,23 @@
 import type { ChatPromptFeatureId } from '../../types/agent'
 import type { AgentRoleId, AgentSkillDescriptor,CapabilityScopeId } from '../../types/agent.js'
 import type { AgentRoleDefinition, AgentRoleResolution, AgentRoleToolCategoryResolver } from '../../types/runner.js'
+import { resolveSelectedSkillAllowedTools } from '../../utils/runner/role-router'
 
 import { AgentRolePolicy } from './AgentRolePolicy'
 
+/**
+ * 主 Agent 需要的那一小面技能仓库：只用来取角色技能全文与本轮可见的技能清单，不承担安装、校验、落盘。
+ * 由装配点注入真实仓库；参数一律透传给仓库，本件不解释它们的语义。
+ */
 interface PrimaryAgentProfileSkillRepository {
+  /** 取某个角色的技能 Markdown 全文（按本轮选中的技能、提示词特性与能力作用域裁剪后的那一份）；没有内容时返回空串，调用方原样进提示词。 */
   getSkillMarkdownForRole(
     roleId: AgentRoleId,
     selectedSkillIds?: string[],
     promptFeatures?: readonly ChatPromptFeatureId[],
     capabilityScope?: CapabilityScopeId
   ): string
+  /** 列出本轮该角色可见的技能描述（id、说明、可选的 allowed-tools 门控）；提示词的技能目录与技能工具门控都读这一份。 */
   listSkillsForRole(
     roleId: AgentRoleId,
     selectedSkillIds?: string[],
@@ -19,24 +26,31 @@ interface PrimaryAgentProfileSkillRepository {
   ): AgentSkillDescriptor[]
 }
 
-/** 显式选中技能的 allowed-tools 并集；没有任何选中技能声明门控时返回 null（不限制）。 */
-function resolveSelectedSkillAllowedTools(
-  skillDescriptors: readonly AgentSkillDescriptor[],
-  selectedSkillIds: Optional<readonly string[]>
-): Nullable<string[]> {
-  const selected = new Set((selectedSkillIds ?? []).map((id) => id.trim()).filter(Boolean))
-  if (selected.size === 0) return null
-  const union = new Set<string>()
-  let declared = false
-  for (const descriptor of skillDescriptors) {
-    if (!selected.has(descriptor.id) || !descriptor.allowedTools?.length) continue
-    declared = true
-    for (const toolName of descriptor.allowedTools) union.add(toolName)
-  }
-  return declared ? [...union] : null
+/**
+ * 当前作用域主 Agent 的角色画像：主 Agent 没有预设角色表，它的「角色」就是当前运行态实际开放的那一面能力。
+ *
+ * 由 `AgentRunner` 每轮调一次；无状态，工具面完全由入参（已知工具名、surface 隐藏名单、能否派子 Agent）决定。
+ */
+export interface PrimaryAgentProfileApi {
+  /**
+   * 解析本轮主 Agent 的角色结论：先按 surface 的隐藏名单剔掉不该让模型看见的工具，再交给角色策略过滤与分类，
+   * 最后拼出一份 `AgentRoleResolution`（提示词、工具面、技能目录共用的同一份快照）。
+   *
+   * `allowSubAgents` 只影响职责文案，不改工具面本身——工具能不能用由 surface 的名单说了算。
+   */
+  resolve(options: {
+    knownToolNames: string[]
+    selectedSkillIds?: string[]
+    promptFeatures?: readonly ChatPromptFeatureId[]
+    activeCapabilityScope?: CapabilityScopeId
+    /** 当前 surface 必须从模型和发现面移除的工具。 */
+    hiddenToolNames?: readonly string[]
+    /** 是否允许模型把复杂任务继续派发给子 Agent。 */
+    allowSubAgents: boolean
+  }): AgentRoleResolution
 }
 
-class PrimaryAgentProfile {
+class PrimaryAgentProfile implements PrimaryAgentProfileApi {
   private readonly policy: AgentRolePolicy
 
   constructor(

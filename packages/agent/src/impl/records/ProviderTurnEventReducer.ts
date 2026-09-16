@@ -24,9 +24,11 @@ import { isEmpty,isPresent, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import type { CompleteProviderTurnSnapshotOptions, CompleteProviderTurnSnapshotResult, EmitCompletedProviderTurnSnapshotInput,ProviderRequestFingerprint, ProviderTurnEvent, ProviderTurnRecorder, ProviderTurnRequestSnapshot, ProviderTurnSnapshot, ProviderTurnStatus, ProviderTurnToolSnapshot, ProviderTurnUsage } from '../../types/records.js'
-export const ProviderTurnInterruptedToolError = 'Tool execution interrupted'
+export const ProviderTurnInterruptedToolError = '工具执行被打断：回合中止时这次调用还没拿到结果，不代表工具本身失败。'
 
+/** 建归约器时要交代的身份。 */
 export interface ProviderTurnEventReducerOptions {
+  /** 这一次 provider 生成回合的 id；快照上带着它，也是所有不变量报错里指认「是哪一轮出的问题」的那个值。 */
   turnId: string
 }
 
@@ -65,12 +67,37 @@ function buildInterruptedToolsDiagnostic(
 ): { code: string; message: string; details?: Record<string, unknown> } {
   return {
     code: 'provider-turn-tools-interrupted',
-    message: `Interrupted ${toolCallIds.length} pending provider tool call${toolCallIds.length === 1 ? '' : 's'}.`,
+    message: `本回合被中止时还有 ${toolCallIds.length} 个 provider 工具调用停在 pending，已按「被打断」收尾；它们的真实结果不会再回来，快照里这几条的失败原因不代表工具本身出错。`,
     details: { toolCallIds },
   }
 }
 
-export class ProviderTurnEventReducer {
+/**
+ * 一次 provider 生成回合的事件归约器：把流式事件收敛成一份可落盘、可回放的回合快照。
+ * 回合只有 `pending → completed` 一条边，且必须先收到 `turn-started`；工具子状态机是 `pending → succeeded | failed`。
+ *
+ * 违反顺序一律抛 `INVARIANT` 而不是容错：快照是事后唯一能复原「模型那一轮到底看到、做了什么」的证据，
+ * 错的证据比没有更坏。唯一的降级路径是流被中止后把在途工具按「被打断」收尾，且只在调用方显式要求时发生。
+ * 交出去的快照全是浅拷贝，读侧可以长期持有，不会被后续写入改掉。
+ */
+export interface ProviderTurnEventReducerApi {
+  /** 吃进一条回合事件并更新内部状态。除 `turn-started` 外都要求回合已经开始，否则抛 `INVARIANT`；重复 `turn-started`、同一个 toolCallId 重复开始、给没开始或已收敛的工具报结果，都是同样的抛错。 */
+  apply(event: ProviderTurnEvent): void
+  /** 收束本回合并交出快照：还有 `pending` 的工具时抛 `INVARIANT`（回合不许带着悬空工具收尾）。回合没开始过同样抛错。 */
+  complete(): ProviderTurnSnapshot
+  /** 当前还没拿到结果的工具调用 id；中止路径用它判断该不该走打断收尾。 */
+  pendingToolCallIds(): string[]
+  /** 这一回合是否已经收到过 `turn-started`。 */
+  hasStarted(): boolean
+  /** 这一回合是否攒下过诊断；发射器用它决定错误分支要不要发快照。 */
+  hasDiagnostics(): boolean
+  /** 中止路径专用：把所有 `pending` 工具按 `error` 记成 failed，补一条 `provider-turn-tools-interrupted` 诊断，再走 `complete`。`error` 是写进每个工具的失败原因，默认「工具执行被打断」那句。 */
+  completeWithInterruptedPendingTools(error?: string): ProviderTurnSnapshot
+  /** 取当前快照但不收束回合，随时可调；返回的是浅拷贝，工具与诊断都另起了数组。 */
+  snapshot(): ProviderTurnSnapshot
+}
+
+export class ProviderTurnEventReducer implements ProviderTurnEventReducerApi {
   private status: ProviderTurnStatus = 'pending'
   private started = false
   private assistantText = ''
@@ -90,7 +117,10 @@ export class ProviderTurnEventReducer {
     switch (event.type) {
       case 'turn-started': {
         if (this.started) {
-          throw new AppError('INVARIANT', `Provider turn "${this.options.turnId}" has already started`)
+          throw new AppError(
+            'INVARIANT',
+            `provider 回合 "${this.options.turnId}" 收到了第二次 turn-started。归约器的回合状态机只允许开启一次，这是事件生产方的实现缺陷，不是用户操作错误。`
+          )
         }
         this.started = true
         return
@@ -113,7 +143,10 @@ export class ProviderTurnEventReducer {
       case 'tool-started': {
         this.assertStarted()
         if (this.tools.has(event.toolCallId)) {
-          throw new AppError('INVARIANT', `Provider turn tool call "${event.toolCallId}" already exists`)
+          throw new AppError(
+            'INVARIANT',
+            `provider 工具调用 "${event.toolCallId}" 被重复登记为 tool-started。同一个 toolCallId 在一个回合里只能开始一次，这是事件生产方的实现缺陷，不是用户操作错误。`
+          )
         }
         const tool: ProviderTurnToolSnapshot = {
           toolCallId: event.toolCallId,
@@ -171,8 +204,9 @@ export class ProviderTurnEventReducer {
 
     const unsettled = [...this.tools.values()].find((tool) => tool.status === 'pending')
     if (unsettled) {
-      throw new AppError('INVARIANT', 
-        `Provider turn "${this.options.turnId}" has unsettled tool call "${unsettled.toolCallId}"`
+      throw new AppError(
+        'INVARIANT',
+        `provider 回合 "${this.options.turnId}" 要收尾，但工具调用 "${unsettled.toolCallId}" 还停在 pending。回合不许带着悬空工具收敛，否则快照会与真实回合对不上；这是调用方的实现缺陷，不是用户操作错误。中止路径应走 completeWithInterruptedPendingTools。`
       )
     }
 
@@ -237,7 +271,10 @@ export class ProviderTurnEventReducer {
 
   private assertStarted(): void {
     if (!this.started) {
-      throw new AppError('INVARIANT', `Provider turn "${this.options.turnId}" has not started`)
+      throw new AppError(
+        'INVARIANT',
+        `provider 回合 "${this.options.turnId}" 还没收到 turn-started 就被写入或收尾。除 turn-started 外的事件都必须排在回合开始之后，这是事件生产方的实现缺陷，不是用户操作错误。`
+      )
     }
   }
 
@@ -245,10 +282,16 @@ export class ProviderTurnEventReducer {
     this.assertStarted()
     const tool = this.tools.get(toolCallId)
     if (!tool) {
-      throw new AppError('INVARIANT', `Provider turn tool call "${toolCallId}" was not started`)
+      throw new AppError(
+        'INVARIANT',
+        `provider 工具调用 "${toolCallId}" 没有对应的 tool-started 就报了结果。工具子状态机必须从 pending 起步，这是事件生产方的实现缺陷，不是用户操作错误。`
+      )
     }
     if (tool.status !== 'pending') {
-      throw new AppError('INVARIANT', `Provider turn tool call "${toolCallId}" is already settled`)
+      throw new AppError(
+        'INVARIANT',
+        `provider 工具调用 "${toolCallId}" 已经收敛过（当前 ${tool.status}），不能再报一次结果。工具子状态机只允许 pending → succeeded | failed 收敛一次，这是事件生产方的实现缺陷，不是用户操作错误。`
+      )
     }
     return tool
   }

@@ -3,8 +3,20 @@ import type { ChatContextRetrievalIndexSnapshot } from '../../types/retrieval.js
 import { isPrivateFileContextRecord } from '../../utils/context/private-file-records'
 import { ChatContextRetrievalIndexVersion } from '../../utils/retrieval/index-snapshot'
 import { chatSearchMessages } from '../../utils/retrieval/messages'
-import { contextRetrievalReferences } from '../../utils/retrieval/references'
 import { chatSearchText } from '../../utils/retrieval/text'
+
+import { contextRetrievalReferences } from './ContextRetrievalReferences'
+
+/**
+ * 会话检索索引的构建面：把一个会话的消息和工具 payload 读出来，预算好可搜文本与日志/制品引用，产出一份快照。
+ *
+ * 实现是 `ContextRetrievalIndexBuilder`，每个 `ChatContextRetrievalService` 实例持一个；它自己不落盘也不缓存，
+ * 存哪儿、什么时候重建由调用方决定。
+ */
+export interface ContextRetrievalIndexBuilderApi {
+  /** 现读现算一个会话的完整索引快照：并行拉消息和 payload，逐条算出 handleId、可搜文本、摘要和引用列表；调用方拿到后自己决定存不存。私有文件类的 payload 会被滤掉，`evidence` 恒为空数组（喂它的端口已下线）。会话不存在时给的是一份空快照，不抛。 */
+  build(sessionId: string): Promise<ChatContextRetrievalIndexSnapshot>
+}
 
 /**
  * 构建单会话**检索索引快照** {@link ChatContextRetrievalIndexSnapshot}。
@@ -22,7 +34,7 @@ import { chatSearchText } from '../../utils/retrieval/text'
  *
  * 每 {@link ChatContextRetrievalService} 实例一个 `Builder`。
  */
-class ContextRetrievalIndexBuilder {
+class ContextRetrievalIndexBuilder implements ContextRetrievalIndexBuilderApi {
   /** 索引内 serializedResult 截断上限（仅影响 searchableText，非 retrieve 全文）。 */
   private readonly indexedToolResultChars = 12_000
   /** 索引内 displayResult stringify 上限。 */

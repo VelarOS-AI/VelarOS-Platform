@@ -1,12 +1,14 @@
 import { isArray, isBoolean, isString,Log } from '@velaros-ai/core'
 
 import type { ContextPayloadStore } from '../../contract/requires.js'
-import { createContextPayloadRef } from '../../impl/context/InMemoryContextPayloadStore'
 import type { FileRenameArchive,FileSnapshotArchive } from '../../types/context.js'
+
+import { buildContextPayloadRef } from './payload-ref'
 
 export const FileSnapshotToolName = '__file_snapshot__'
 export const FileObservationToolName = '__file_observation__'
 
+/** 算一段正文的 SHA-256 十六进制摘要：同一份文件内容只存一份载荷，靠它做去重键。 */
 async function contentHash(text: string): Promise<string> {
   const digest = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(text))
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('')
@@ -25,7 +27,7 @@ async function saveObservation(
   await store.put({
     sessionId,
     hash,
-    payloadRef: createContextPayloadRef(sessionId, hash),
+    payloadRef: buildContextPayloadRef(sessionId, hash),
     toolCallId: snapshot.sourceToolCallId,
     toolName: FileObservationToolName,
     serializedResult,
@@ -51,11 +53,11 @@ export async function saveFileSnapshot(
       existing.serializedResult
     )
     if (JSON.stringify(previous) !== JSON.stringify(identity))
-      throw new Error('File snapshot archive identity conflict')
+      throw new Error('文件快照归档的身份冲突：同一个内容哈希下已存在一条身份字段不一样的快照，说明哈希键和正文对不上，不能覆盖已归档的原文。')
     await saveObservation(store, sessionId, snapshot, existing.payloadRef)
     return existing.payloadRef
   }
-  const payloadRef = createContextPayloadRef(sessionId, hash)
+  const payloadRef = buildContextPayloadRef(sessionId, hash)
   const saved = await store.put({
     sessionId,
     hash,
@@ -70,11 +72,12 @@ export async function saveFileSnapshot(
     saved.serializedResult
   )
   if (JSON.stringify(savedIdentity) !== JSON.stringify(identity))
-    throw new Error('File snapshot archive identity conflict')
+    throw new Error('文件快照归档的身份冲突：同一个内容哈希下已存在一条身份字段不一样的快照，说明哈希键和正文对不上，不能覆盖已归档的原文。')
   await saveObservation(store, sessionId, snapshot, payloadRef)
   return payloadRef
 }
 
+/** 把一条归档正文解析成文件快照；字段缺失或形状不对一律抛错，不返回半截对象。 */
 export function parseFileSnapshot(text: string): FileSnapshotArchive {
   const value = JSON.parse(text) as FileSnapshotArchive
   if (
@@ -95,11 +98,12 @@ export function parseFileSnapshot(text: string): FileSnapshotArchive {
     !Number.isInteger(value.range.endLine) ||
     value.range.endLine < value.range.startLine
   ) {
-    throw new Error('Invalid file snapshot archive')
+    throw new Error('文件快照归档记录不合法：kind、version、workspaceId、path、revision、content、exists、complete、totalLines 或 range 里有字段缺失或形状不对，这条记录已经坏了，不返回半截对象。')
   }
   return value
 }
 
+/** 宽容版的文件快照解析：解不出来时返回 undefined 并留一条 debug 日志，让投影跳过这条记录而不是整轮失败。 */
 export function tryParseFileSnapshot(text: string): FileSnapshotArchive | undefined {
   try {
     return parseFileSnapshot(text)
@@ -112,7 +116,7 @@ export function tryParseFileSnapshot(text: string): FileSnapshotArchive | undefi
 /** 自动边界不拆 UTF-16 代理对或 CRLF；offset 必须由本函数的 nextOffset 续读。 */
 export function sliceFileSnapshot(text: string, offset: number, maxChars: number) {
   if (offset < 0 || offset > text.length || !Number.isInteger(offset))
-    throw new Error('Invalid snapshot offset')
+    throw new Error('快照续读的 offset 不合法：它必须是 0 到正文长度之间的整数，请用上一次返回的 nextOffset 续读。')
   const splitsPair = (at: number) =>
     at > 0 &&
     at < text.length &&
@@ -122,12 +126,13 @@ export function sliceFileSnapshot(text: string, offset: number, maxChars: number
       text.charCodeAt(at) <= 0xdfff) ||
       (text[at - 1] === '\r' && text[at] === '\n'))
   if (splitsPair(offset))
-    throw new Error('Snapshot offset splits a character or CRLF; use the returned nextOffset')
+    throw new Error('快照续读的 offset 落在一个字符或 CRLF 中间：请用上一次返回的 nextOffset 继续读，不要自己算偏移。')
   let end = Math.min(text.length, offset + Math.max(2, maxChars))
   if (splitsPair(end)) end -= 1
   return { content: text.slice(offset, end), offset, nextOffset: end < text.length ? end : null }
 }
 
+/** 宽容版的文件改名记录解析：解不出来时返回 undefined，调用方按「这条不是改名记录」继续往下走。 */
 export function tryParseFileRename(text: string): FileRenameArchive | undefined {
   try {
     const value = JSON.parse(text) as FileRenameArchive
@@ -184,7 +189,7 @@ export async function saveFileRename(
   await store.put({
     sessionId,
     hash,
-    payloadRef: createContextPayloadRef(sessionId, hash),
+    payloadRef: buildContextPayloadRef(sessionId, hash),
     toolCallId: `file-rename:${hash}`,
     toolName: '__file_rename__',
     serializedResult,

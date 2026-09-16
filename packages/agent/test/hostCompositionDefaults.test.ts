@@ -6,11 +6,11 @@ import { describe, expect, test } from 'bun:test'
 
 import { AppError } from '@velaros-ai/core/error'
 
+import { createBuiltInPromptRegistry } from '../src/impl/guidance/PromptRegistry'
 import { SkillFileStore } from '../src/impl/guidance/SkillFileStore'
 import { SkillMarketClient } from '../src/impl/guidance/SkillMarketClient'
 import { ContextBuilder } from '../src/impl/runner/ContextBuilder'
 import type { RuntimePromptSnapshot } from '../src/types/guidance.js'
-import { createBuiltInPromptRegistry } from '../src/utils/guidance/catalog'
 import { createRuntimePromptSegments } from '../src/utils/guidance/runtime'
 
 describe('host-owned Agent identity', () => {
@@ -111,7 +111,7 @@ describe('host-owned skill market endpoint', () => {
     } catch (error) {
       expect(error).toBeInstanceOf(AppError)
       expect((error as AppError).code).toBe('UNAVAILABLE')
-      expect((error as AppError).message).toBe('skill-market-disabled')
+      expect((error as AppError).message).toStartWith('skill-market-disabled：')
     }
     expect(requestCount).toBe(0)
   })

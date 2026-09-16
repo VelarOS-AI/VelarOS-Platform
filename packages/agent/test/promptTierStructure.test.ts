@@ -13,12 +13,13 @@ import assert from 'node:assert/strict'
 import { describe, test } from 'bun:test'
 
 import type { RuntimePromptFeaturePolicy } from '../src/contract/requires.js'
+import { createBuiltInPromptRegistry } from '../src/impl/guidance/PromptRegistry'
 import { PromptRegistry } from '../src/impl/guidance/PromptRegistry'
 import { AgentModSeamDispatcher } from '../src/impl/mods/AgentModSeamDispatcher'
 import { ContextBuilder } from '../src/impl/runner/ContextBuilder'
 import { PromptStateBuilder, shouldInjectHtmlArtifactPromptForTurn } from '../src/impl/runner/PromptStateBuilder'
 import type { BuildRuntimePromptStateArgs } from '../src/types/runner.js'
-import { createBuiltInPromptRegistry, createBuiltInPromptSegments } from '../src/utils/guidance/catalog'
+import { createBuiltInPromptSegments } from '../src/utils/guidance/catalog'
 import {
   createSelectedSkillPromptSegment,
   createTextPromptSegment,

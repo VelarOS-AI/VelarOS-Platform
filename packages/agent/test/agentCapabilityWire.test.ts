@@ -71,7 +71,7 @@ describe('Agent capability wire', () => {
       },
     ]) {
       expect(() => parseAgentCapabilityExecuteEnvelopeV1(invalid)).toThrow(
-        'Agent capability execution input is invalid',
+        'Agent capability 执行入参不合法',
       )
     }
   })
@@ -102,7 +102,7 @@ describe('Agent capability wire', () => {
       },
     ]) {
       expect(() => parseAgentCapabilityExecuteEnvelopeV1(invalid)).toThrow(
-        'Agent capability execution input is invalid',
+        'Agent capability 执行入参不合法',
       )
     }
   })
