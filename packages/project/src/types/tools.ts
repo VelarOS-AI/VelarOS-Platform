@@ -13,13 +13,12 @@ export type ProjectReadInput = {
   maxChars?: number
 }
 
-/** project:list 的入参：目录、include/exclude glob、是否递归与最大深度、每页条数；续页只传 cursor 和可选 limit。 */
+/** project:list 的入参：目录、include/exclude glob、往下列几层、每页条数；续页只传 cursor 和可选 limit。 */
 export type ProjectListInput = {
   path?: string
   include?: string[]
   exclude?: string[]
-  recursive: boolean
-  maxDepth?: number
+  depth?: number | 'all'
   limit: number
   cursor?: string
 }

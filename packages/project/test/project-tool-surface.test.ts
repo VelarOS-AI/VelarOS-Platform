@@ -305,6 +305,25 @@ describe('actual Project tool surface with final model references', () => {
     await expect(call('project:list', { cursor: second.cursor })).rejects.toMatchObject({ reason: 'BASE_REVISION_MISMATCH' })
   })
 
+  test('depth 一个字段说清楚往下列几层：1 只列当前目录，缺省 3 层，all 是整棵树', async () => {
+    await mkdir(join(root, 'src/deep/deeper/deepest'), { recursive: true })
+    await writeFile(join(root, 'src/top.ts'), 'export {}\n')
+    await writeFile(join(root, 'src/deep/deeper/deepest/leaf.ts'), 'export {}\n')
+    const { call } = await fixture()
+    const paths = async (args: Record<string, unknown>) =>
+      (await call('project:list', args)).entries.map((entry: { path: string }) => entry.path)
+    expect(await paths({ path: 'src', depth: 1 })).toEqual(['src/deep', 'src/top.ts'])
+    // 缺省三层：第四层的 leaf.ts 还看不到。
+    expect(await paths({ path: 'src' })).toEqual(['src/deep', 'src/deep/deeper', 'src/deep/deeper/deepest', 'src/top.ts'])
+    expect(await paths({ path: 'src', depth: 'all' })).toContain('src/deep/deeper/deepest/leaf.ts')
+    // recursive、maxDepth 已经并进 depth，不再收。
+    const list = projectTools['project:list']!.schema
+    expect(list.safeParse({ path: 'src', recursive: true }).success).toBe(false)
+    expect(list.safeParse({ path: 'src', maxDepth: 2 }).success).toBe(false)
+    expect(list.safeParse({ path: 'src', depth: 0 }).success).toBe(false)
+    expect(list.safeParse({ cursor: 'list-page:x', depth: 2 }).success).toBe(false)
+  })
+
   test('search results authorize only returned source and support literal and regex queries', async () => {
     await writeFile(join(root, 'a.txt'), 'first\nneedle A\nsecond\nneedle B\nend\n')
     const { call } = await fixture()

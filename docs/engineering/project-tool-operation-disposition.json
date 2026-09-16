@@ -39,7 +39,7 @@
         "name": "project:list",
         "input": {
           "path": "src",
-          "recursive": true,
+          "depth": "all",
           "limit": 10
         }
       }

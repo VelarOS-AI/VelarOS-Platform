@@ -125,7 +125,7 @@ test('project:list 显式子目录不列出被根 .gitignore 忽略的构建产�
     },
     approval: defaultDenyApprovalPort,
   } as unknown as ProjectToolContext
-  const result = await projectTools[ProjectToolNames.list].execute({ path: 'pkg', recursive: true }, context) as {
+  const result = await projectTools[ProjectToolNames.list].execute({ path: 'pkg', depth: 'all' }, context) as {
     entries: Array<{ path: string }>
   }
 

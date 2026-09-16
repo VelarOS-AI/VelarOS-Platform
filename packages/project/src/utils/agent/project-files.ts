@@ -149,12 +149,14 @@ export async function listProjectEntries(input: ProjectListInput, context: Proje
   const saved = input.cursor
     ? await readProjectReceipt(context, 'list-page', input.cursor) as ListCursor
     : undefined
+  const depth = input.depth ?? ProjectFileLimits.listDepthDefault
   const query: ObserveInput = saved?.query ?? {
     path: input.path,
     include: scopeProjectListPatterns(input.path, input.include),
     exclude: scopeProjectListPatterns(input.path, input.exclude),
-    recursive: input.recursive,
-    maxDepth: input.maxDepth,
+    recursive: true,
+    // 列举按层推进，第 1 层就是 path 这一层：'all' 交给列举的整体上限收着。
+    maxDepth: depth === 'all' ? Number.MAX_SAFE_INTEGER : depth,
   }
   const kernel = await context.project.kernel()
   const scanned = await kernel.listFiles({ ...query, maxFiles: ProjectTuning.list.maxEntries + 1 })

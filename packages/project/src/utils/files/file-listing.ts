@@ -65,7 +65,7 @@ export async function listProjectFiles(
   const out: FileListEntry[] = []
   const max = input.maxFiles ?? ProjectTuning.files.listMaxFiles
   const recursive = !!input.recursive
-  const maxDepth = input.maxDepth ?? (recursive ? ProjectFileLimits.listRecursiveDepthDefault : 1)
+  const maxDepth = input.maxDepth ?? (recursive ? ProjectFileLimits.listDepthDefault : 1)
   const include = normalizeFilterList(input.include)
   const exclude = normalizeFilterList(input.exclude)
   const startPathInput = input.path?.trim()

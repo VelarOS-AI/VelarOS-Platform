@@ -203,24 +203,23 @@ const listTool = defineProjectTool<ProjectListInput>({
   summary: '列出项目文件和目录，支持路径、glob、深度及稳定分页。',
   suitable: ['看项目的目录结构、按 glob 找文件、翻大目录的下一页。'],
   usage: [
-    `path 缺省是项目根。recursive 缺省 false，只列一层；recursive=true 不给 maxDepth 时只往下 ${ProjectFileLimits.listRecursiveDepthDefault} 层，要更深就给 maxDepth（最多 ${ProjectFileLimits.listDepth}）。`,
+    `path 缺省是项目根；depth 往下几层，缺省 ${ProjectFileLimits.listDepthDefault}，只要当前目录写 1，整棵树写 "all"。`,
     `include/exclude 的 glob 相对 path 写，写成项目根相对路径也行。有下一页时回执带 cursor，续页只传 cursor（可带 limit），缺省每页 ${ProjectFileLimits.listPageDefault} 条。`,
   ],
-  examples: [{ path: 'src', recursive: true, limit: 100 }],
+  examples: [{ path: 'src', depth: 'all', limit: 100 }],
   schema: z.strictObject({
     path: z.string().optional().describe('要列的目录，相对项目根；缺省是项目根。指向文件时返回空列表。'),
     include: z.array(z.string().min(1).describe('一条 glob，如 **/*.ts。')).max(ProjectFileLimits.patterns).optional()
       .describe(`只要匹配这些 glob 的条目，相对 path 写，最多 ${ProjectFileLimits.patterns} 条；不给就都要。`),
     exclude: z.array(z.string().min(1).describe('一条 glob，如 **/*.test.ts。')).max(ProjectFileLimits.patterns).optional()
       .describe(`去掉匹配这些 glob 的条目，相对 path 写，最多 ${ProjectFileLimits.patterns} 条；.gitignore 忽略的条目本来就不列。`),
-    recursive: z.boolean().optional().default(false).describe('要不要往下递归，缺省 false（只列一层）。'),
-    maxDepth: z.number().int().nonnegative().max(ProjectFileLimits.listDepth).optional()
-      .describe(`递归时往下几层，最多 ${ProjectFileLimits.listDepth}；不给时只到第 ${ProjectFileLimits.listRecursiveDepthDefault} 层，更深的不出现在结果里。`),
+    depth: z.union([z.number().int().positive().max(ProjectFileLimits.listDepth), z.literal('all')]).optional()
+      .describe(`从 path 往下列几层：1 是只列当前目录，"all" 是整棵树，缺省 ${ProjectFileLimits.listDepthDefault}、数字最多 ${ProjectFileLimits.listDepth}；更深的不出现在结果里。`),
     limit: z.number().int().positive().max(ProjectFileLimits.listPage).optional().default(ProjectFileLimits.listPageDefault)
       .describe(`这一页最多几条，缺省 ${ProjectFileLimits.listPageDefault}、最多 ${ProjectFileLimits.listPage}。`),
     cursor: z.string().min(1).optional().describe('上一页回执里的 cursor，原样传回取下一页；其余查询条件由它保存，不要再传。'),
   }).superRefine((input, context) => {
-    if (input.cursor && (isNotUndefined(input.path) || input.include || input.exclude || isNotUndefined(input.maxDepth) || input.recursive))
+    if (input.cursor && (isNotUndefined(input.path) || input.include || input.exclude || isNotUndefined(input.depth)))
       context.addIssue({ code: 'custom', path: ['cursor'], message: '续页只传 cursor 和可选 limit；修改过滤条件请重新查询。' })
   }),
   permissions: ['fs:read'],

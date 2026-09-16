@@ -130,10 +130,10 @@ export const ProjectFileLimits = Object.freeze({
   readCharsDefault: 24_000,
   /** project:list、project:search 的 include / exclude 各最多几条 glob。 */
   patterns: 20,
-  /** project:list 递归时最多往下几层。 */
+  /** project:list 的 depth 最多给到几层（depth='all' 不受它限制）。 */
   listDepth: 30,
-  /** project:list 递归时不给 maxDepth 只往下几层。 */
-  listRecursiveDepthDefault: 3,
+  /** project:list 不给 depth 时往下几层。 */
+  listDepthDefault: 3,
   /** project:list 每页最多几条。 */
   listPage: 2_000,
   /** project:list 不给 limit 时每页几条。 */
