@@ -374,6 +374,99 @@ export const GovernedModules = [
     acceptance: 'spec/acceptance.test.ts',
     status: 'migrating',
   },
+  {
+    directory: 'model',
+    name: '@velaros-ai/model',
+    // 没有模型面工具：不登记 toolsFile、toolDefiner、hostPort（同 platform、kernel）。
+    // 内核只有一个可调用操作 supports_provider，它的定义跟着组合层的内核能力类走。
+    contract: 'src/contract',
+    types: 'src/types',
+    portable: 'model.ts',
+    impl: 'src/impl',
+    utils: 'src/utils',
+    tuning: 'tuning.ts',
+    exports: 'src/exports',
+    // 根入口的装配链带 node:vm / node:fs，渲染进程只能加载可移植数据与目录逻辑
+    browserSafeEntries: ['contracts.ts', 'catalog.ts'],
+    environmentTable: 'ModelEnvironmentVariables',
+    layers: [
+      // 装配、解析、内核能力；通用请求客户端与产品共用机制（两组互不引用）
+      ['composition/', 'requests/'],
+      // 各厂商适配器与两个 LanguageModel 包装类
+      ['adapters/'],
+      // provider 集合、静态目录、环境快照、script 注册表、Cloud 绑定、远端目录服务与缓存
+      ['providers/'],
+    ],
+    // 卡片与不变量登记是入口收口那一轮的事，这三份现在还不存在，照样登记，燃尽表里看得到
+    card: 'MODULE.md',
+    invariants: 'spec/invariants.md',
+    acceptance: 'spec/acceptance.test.ts',
+    status: 'migrating',
+  },
+  {
+    directory: 'office',
+    name: '@velaros-ai/office',
+    toolsFile: 'src/impl/OfficeTools.ts',
+    contract: 'src/contract',
+    types: 'src/types',
+    portable: 'office.ts',
+    impl: 'src/impl',
+    utils: 'src/utils',
+    tuning: 'tuning.ts',
+    exports: 'src/exports',
+    // 根入口要 docx / exceljs / pdfjs 与磁盘，只给 Node；渲染进程只能加载可移植数据
+    browserSafeEntries: ['contracts.ts'],
+    environmentTable: 'OfficeEnvironmentVariables',
+    hostPort: 'OfficeHostApi',
+    hostPortField: 'office',
+    layers: [
+      // 工具：十个 office 工具的定义、分组与挂载
+      ['OfficeTools.ts'],
+      // 工具执行：授权、写盘、跑外部命令，全经宿主端口 ctx.office
+      ['operations/'],
+      // 运行时：pdfjs 装载、MarkItDown 定位、给 Document Renderer 的渲染面
+      ['runtime/'],
+    ],
+    toolDefiner: 'defineOfficeTool',
+    // 卡片与不变量登记是入口收口那一轮的事，这三份现在还不存在，照样登记，燃尽表里看得到
+    card: 'MODULE.md',
+    invariants: 'spec/invariants.md',
+    acceptance: 'spec/acceptance.test.ts',
+    status: 'migrating',
+  },
+  {
+    directory: 'computer',
+    name: '@velaros-ai/computer',
+    toolsFile: 'src/impl/ComputerTools.ts',
+    contract: 'src/contract',
+    types: 'src/types',
+    portable: 'computer.ts',
+    impl: 'src/impl',
+    utils: 'src/utils',
+    tuning: 'tuning.ts',
+    exports: 'src/exports',
+    // 根入口要 child_process 拉起 helper，只给 Node；渲染进程只能加载可移植数据
+    browserSafeEntries: ['contracts.ts'],
+    environmentTable: 'ComputerEnvironmentVariables',
+    hostPort: 'ComputerToolComputerApi',
+    hostPortField: 'computer',
+    layers: [
+      // 工具：六个桌面控制工具的定义、分组与挂载
+      ['ComputerTools.ts'],
+      // 工具执行：可用性门禁、坐标解析、结果投影，经宿主端口 ctx.computer
+      ['ComputerInputOperations.ts'],
+      // 运行时：拉起 Python helper、JSON Lines 协议、按 id 关联请求
+      ['ComputerSidecarManager.ts'],
+      // helper 定位：按平台与资源根找脚本与自带 venv
+      ['ComputerHelperLocator.ts'],
+    ],
+    toolDefiner: 'defineComputerTool',
+    // 卡片与不变量登记是入口收口那一轮的事，这三份现在还不存在，照样登记，燃尽表里看得到
+    card: 'MODULE.md',
+    invariants: 'spec/invariants.md',
+    acceptance: 'spec/acceptance.test.ts',
+    status: 'migrating',
+  },
 ]
 
 /** 模块卡片必须有的十节标题，顺序不限。 */
