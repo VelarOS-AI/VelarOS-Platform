@@ -10,6 +10,12 @@
 
 （按时间追加。每条写：改了什么、为什么、影响谁。）
 
+- **model、office、computer 三包包内改造完成（09-16 23:10，930ff594 等 16 个提交；提交、燃尽、全量门禁均已实测核对）。** 燃尽：model 91→58、office 71→7、computer 33→35（逆增是登记口径变化，其中 20 条是「没有根入口」——收口那轮自动清零）。
+  - **模型面零变化，有硬凭据**：office 与 computer 在动源码之前先把渲染后的说明与 schema 逐字节冻成快照（office 88KB、computer 10KB），改造全程那两份快照一次都没动过，HEAD 上仍然通过。
+  - 删掉的重复与死代码（都逐名核过三个产品零引用）：model 的 353 行能力画像表、两处流解析、四个转发端口、`fetchTavily`；office 的整份平台兼容层（路径包含改用公共实现）、六个归一函数、三处中英双语的安装卡草稿；computer 内核里 14 个手写解析（两套入参契约合一，「`computer:move` 经内核必失败」那条缺陷随之消失）。
+  - 新增三张错误码表：`ModelErrorCodes` 8 个（Desktop 以后按码判断「缺 key」，不再按报错文字）、`OfficeErrorCodes` 13 个、`ComputerErrorCodes` 8 个＋helper 6 个（helper 的英文按码在 sidecar 翻成中文，没动 Python 资产）。
+  - **要你知道的一处口径变化**：computer 内核操作的权限从「逐操作带进程执行权」改成「等于工具自己的权限」，拉子进程写在内核模块清单上——对调用方是放宽不是收紧，Termel 现有范围不受影响。
+
 - **browser 工具面 40 → 32，提示词整片重写（09-16 21:40，3e150765、9290fc1e、ec00214a、4ee28401、0f9ccb9a；工具数、基线、测试、燃尽均已实测核对）。**
   - **删 3**：`export_page`（八种导出里七种和别的工具重复，唯一独有的 PDF 挪成 `files action=save_pdf`）、`get_element_bounds`（与 `read_page_data preset=selector_box` 是同一段实现，后者还多给可见性）、`space_manifest`（`enter_site` 回执已带清单，而且它自称只读却每次重写清单文件）。
   - **并 5**：三个诊断列表工具并进 `get_page_diagnostics`（本来就读同一份缓存，只是过滤不同，改用 `kind` 选种类）；`capture_region` 并进 `capture_screenshot`（多一个 region 选项）；`site_context` 并进 `get_page_state`，并改成始终可用（原来没进站点时反而隐身）。
