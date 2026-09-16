@@ -45,8 +45,8 @@ if (manifest.publishConfig?.registry !== 'https://npm.pkg.github.com') {
   failures.push('publishConfig.registry must remain GitHub Packages')
 }
 for (const [subpath, target] of [
-  ['./contracts', './dist/contracts.js'],
-  ['./catalog', './dist/catalog.js'],
+  ['./contracts', './dist/exports/contracts.js'],
+  ['./catalog', './dist/exports/catalog.js'],
 ]) {
   if (manifest.exports?.[subpath]?.import !== target) {
     failures.push(`${subpath} must export ${target}`)
@@ -113,15 +113,15 @@ for (const file of sourceFiles) {
   }
 }
 
-const entrySource = await readFile(path.join(packageDirectory, 'src/index.ts'), 'utf8')
+const entrySource = await readFile(path.join(packageDirectory, 'src/exports/index.ts'), 'utf8')
 for (const ownedExport of [
-  './LocalModelEnvironment',
-  './ModelCatalog',
-  './ModelContracts',
-  './ModelProviderCollection',
-  './EmbeddingModelSelection',
-  './ProviderRuntimeAvailability',
-  './ProviderManifest',
+  '../impl/providers/LocalModelEnvironment',
+  '../impl/providers/ModelCatalog',
+  '../types/ModelContracts',
+  '../impl/providers/ModelProviderCollection',
+  '../impl/providers/EmbeddingModelSelection',
+  '../impl/providers/ProviderRuntimeAvailability',
+  '../impl/providers/ProviderManifest',
 ]) {
   if (!entrySource.includes(ownedExport)) {
     failures.push(`public entry must export Model-owned contract ${ownedExport}`)
@@ -129,10 +129,10 @@ for (const ownedExport of [
 }
 
 for (const nodeOnlyModule of [
-  './ModelAdapterRegistry',
-  './ModelRuntimeComposition',
-  './ProviderScriptRegistry',
-  './UserJsModelAdapter',
+  '../impl/composition/ModelAdapterRegistry',
+  '../impl/composition/ModelRuntimeComposition',
+  '../impl/providers/ProviderScriptRegistry',
+  '../impl/adapters/UserJsModelAdapter',
 ]) {
   if (
     entrySource.includes(`from '${nodeOnlyModule}'`)
@@ -141,15 +141,15 @@ for (const nodeOnlyModule of [
     failures.push(`portable public entry must not export Node-only module ${nodeOnlyModule}`)
   }
 }
-if (!entrySource.includes('./ProviderScriptRegistryPort')) {
+if (!entrySource.includes('../impl/providers/ProviderScriptRegistryPort')) {
   failures.push('portable public entry must export ProviderScriptRegistryPort')
 }
-if (!entrySource.includes('./ModelAdapterRegistryPort')) {
+if (!entrySource.includes('../types/ModelAdapterRegistryPort')) {
   failures.push('portable public entry must export ModelAdapterRegistryPort')
 }
 
 const contractsSource = await readFile(
-  path.join(packageDirectory, 'src/contracts.ts'),
+  path.join(packageDirectory, 'src/exports/contracts.ts'),
   'utf8',
 )
 const contractsStatements = contractsSource
@@ -163,9 +163,9 @@ if (
   failures.push('contracts entry must contain type-only exports and emit no runtime surface')
 }
 for (const requiredContractOwner of [
-  './ModelContracts',
-  './ModelProviderCollection',
-  './ProviderManifest',
+  '../types/ModelContracts',
+  '../impl/providers/ModelProviderCollection',
+  '../impl/providers/ProviderManifest',
 ]) {
   if (!contractsSource.includes(requiredContractOwner)) {
     failures.push(`contracts entry must export types from ${requiredContractOwner}`)
@@ -173,16 +173,16 @@ for (const requiredContractOwner of [
 }
 
 const catalogSource = await readFile(
-  path.join(packageDirectory, 'src/catalog.ts'),
+  path.join(packageDirectory, 'src/exports/catalog.ts'),
   'utf8',
 )
 const catalogOwners = new Set(
   [...catalogSource.matchAll(/from\s+['"]([^'"]+)['"]/gu)].map((match) => match[1]),
 )
 const expectedCatalogOwners = new Set([
-  './LocalModelEnvironment',
-  './ModelCatalog',
-  './ProviderManifest',
+  '../impl/providers/LocalModelEnvironment',
+  '../impl/providers/ModelCatalog',
+  '../impl/providers/ProviderManifest',
 ])
 if (
   catalogOwners.size !== expectedCatalogOwners.size
@@ -194,7 +194,7 @@ if (
 }
 for (const catalogOwner of expectedCatalogOwners) {
   const source = await readFile(
-    path.join(packageDirectory, `src/${catalogOwner.slice(2)}.ts`),
+    path.join(packageDirectory, `src/${catalogOwner.slice(3)}.ts`),
     'utf8',
   )
   const executableSource = stripTypeScriptComments(source)
@@ -211,14 +211,14 @@ for (const catalogOwner of expectedCatalogOwners) {
 }
 
 const nodeEntrySource = await readFile(
-  path.join(packageDirectory, 'src/node.ts'),
+  path.join(packageDirectory, 'src/exports/node.ts'),
   'utf8',
 )
 for (const nodeHostModule of [
-  './ModelAdapterRegistry',
-  './ModelRuntimeComposition',
-  './NodeLocalModelEnvironment',
-  './ProviderScriptRegistry',
+  '../impl/composition/ModelAdapterRegistry',
+  '../impl/composition/ModelRuntimeComposition',
+  '../impl/providers/NodeLocalModelEnvironment',
+  '../impl/providers/ProviderScriptRegistry',
 ]) {
   if (!nodeEntrySource.includes(nodeHostModule)) {
     failures.push(`Node entry must export host module ${nodeHostModule}`)
@@ -226,10 +226,10 @@ for (const nodeHostModule of [
 }
 
 const allowedNodeSources = new Set([
-  path.join(packageDirectory, 'src/ModelRuntimeComposition.ts'),
-  path.join(packageDirectory, 'src/NodeLocalModelEnvironment.ts'),
-  path.join(packageDirectory, 'src/ProviderScriptRegistry.ts'),
-  path.join(packageDirectory, 'src/UserJsModelAdapter.ts'),
+  path.join(packageDirectory, 'src/impl/composition/ModelRuntimeComposition.ts'),
+  path.join(packageDirectory, 'src/impl/providers/NodeLocalModelEnvironment.ts'),
+  path.join(packageDirectory, 'src/impl/providers/ProviderScriptRegistry.ts'),
+  path.join(packageDirectory, 'src/impl/adapters/UserJsModelAdapter.ts'),
 ])
 for (const file of sourceFiles) {
   const source = await readFile(file, 'utf8')
@@ -250,7 +250,7 @@ for (const helperName of [
   'ProviderRuntimeAvailability',
 ]) {
   const helperSource = await readFile(
-    path.join(packageDirectory, `src/${helperName}.ts`),
+    path.join(packageDirectory, `src/impl/providers/${helperName}.ts`),
     'utf8',
   )
   if (!helperSource.includes('providerCollection: ModelProviderCollection')) {
@@ -275,7 +275,7 @@ for (const helperName of [
 }
 
 const compositionSource = await readFile(
-  path.join(packageDirectory, 'src/ModelRuntimeComposition.ts'),
+  path.join(packageDirectory, 'src/impl/composition/ModelRuntimeComposition.ts'),
   'utf8',
 )
 if (
@@ -296,7 +296,7 @@ if (!compositionSource.includes('readonly velarCloudRuntime: VelarCloudModelRunt
 }
 
 const runtimeSource = await readFile(
-  path.join(packageDirectory, 'src/AgentModelRuntime.ts'),
+  path.join(packageDirectory, 'src/impl/composition/AgentModelRuntime.ts'),
   'utf8',
 )
 if (runtimeSource.includes("?? 'openrouter'") || runtimeSource.includes("|| 'openrouter'")) {

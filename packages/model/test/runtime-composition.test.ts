@@ -2,12 +2,12 @@ import { describe, expect, test } from 'bun:test'
 
 import {
   type ChatProviderId,
-} from '../src'
+} from '../src/exports/index'
 import {
   createModelRuntimeComposition,
   DefaultModelRuntimeComposition,
   ModelRuntimeComposition,
-} from '../src/node'
+} from '../src/exports/node'
 
 const IsolatedProviderId = 'test-isolated-provider' as ChatProviderId
 

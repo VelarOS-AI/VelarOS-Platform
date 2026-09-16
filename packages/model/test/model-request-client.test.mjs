@@ -8,8 +8,8 @@ import assert from 'node:assert/strict'
 
 import { test } from 'bun:test'
 
-import { ModelRequestClient } from '../src/ModelRequestClient'
-import { ModelRequestService } from '../src/ModelRequestService'
+import { ModelRequestClient } from '../src/impl/requests/ModelRequestClient'
+import { ModelRequestService } from '../src/impl/requests/ModelRequestService'
 
 test('accepts a third-party transport and preserves caller endpoint', async () => {
   const envelopes = []

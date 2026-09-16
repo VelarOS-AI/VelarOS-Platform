@@ -8,7 +8,7 @@ import {
   resolveModelProfileCredentialSource,
   runModelConnectionProbe,
   summarizeModelUsage,
-} from '../src'
+} from '../src/exports/index'
 
 describe('Model profiles and usage common layer', () => {
   test('resolves credentials without exposing them in public profiles', () => {

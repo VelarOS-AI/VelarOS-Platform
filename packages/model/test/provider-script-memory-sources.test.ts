@@ -6,8 +6,8 @@
  */
 import { describe, expect, test } from 'bun:test'
 
-import type { ChatProviderId } from '../src'
-import { ProviderScriptRegistry } from '../src/ProviderScriptRegistry'
+import type { ChatProviderId } from '../src/exports/index'
+import { ProviderScriptRegistry } from '../src/impl/providers/ProviderScriptRegistry'
 
 const MemoryProviderId = 'memory-source-probe' as ChatProviderId
 const MemoryScriptPath = '/tmp/velaros-model-memory-source.cjs'

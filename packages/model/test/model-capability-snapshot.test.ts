@@ -1,7 +1,7 @@
 import { describe, expect, spyOn, test } from 'bun:test'
 
-import type { ChatProviderId, ListProviderModelsRequest, ModelInputModality } from '../src'
-import { createModelRuntimeComposition } from '../src/node'
+import type { ChatProviderId, ListProviderModelsRequest, ModelInputModality } from '../src/exports/index'
+import { createModelRuntimeComposition } from '../src/exports/node'
 
 const Model = 'fixture/text-only-8k'
 

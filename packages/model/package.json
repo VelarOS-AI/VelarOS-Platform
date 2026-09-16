@@ -20,44 +20,44 @@
     "velaros"
   ],
   "type": "module",
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "main": "./dist/exports/index.js",
+  "types": "./dist/exports/index.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "types": "./dist/exports/index.d.ts",
+      "import": "./dist/exports/index.js"
     },
     "./catalog": {
-      "types": "./dist/catalog.d.ts",
-      "import": "./dist/catalog.js"
+      "types": "./dist/exports/catalog.d.ts",
+      "import": "./dist/exports/catalog.js"
     },
     "./contracts": {
-      "types": "./dist/contracts.d.ts",
-      "import": "./dist/contracts.js"
+      "types": "./dist/exports/contracts.d.ts",
+      "import": "./dist/exports/contracts.js"
     },
     "./profiles": {
-      "types": "./dist/ModelProfiles.d.ts",
-      "import": "./dist/ModelProfiles.js"
+      "types": "./dist/exports/profiles.d.ts",
+      "import": "./dist/exports/profiles.js"
     },
     "./provider-retry": {
-      "types": "./dist/ModelProviderRetry.d.ts",
-      "import": "./dist/ModelProviderRetry.js"
+      "types": "./dist/exports/provider-retry.d.ts",
+      "import": "./dist/exports/provider-retry.js"
     },
     "./usage": {
-      "types": "./dist/ModelUsage.d.ts",
-      "import": "./dist/ModelUsage.js"
+      "types": "./dist/exports/usage.d.ts",
+      "import": "./dist/exports/usage.js"
     },
     "./node": {
-      "types": "./dist/node.d.ts",
-      "import": "./dist/node.js"
+      "types": "./dist/exports/node.d.ts",
+      "import": "./dist/exports/node.js"
     },
     "./provider-scripts/node": {
-      "types": "./dist/provider-scripts/node.d.ts",
-      "import": "./dist/provider-scripts/node.js"
+      "types": "./dist/exports/provider-scripts-node.d.ts",
+      "import": "./dist/exports/provider-scripts-node.js"
     },
     "./ProviderScriptContextWindow": {
-      "types": "./dist/ProviderScriptContextWindow.d.ts",
-      "import": "./dist/ProviderScriptContextWindow.js"
+      "types": "./dist/exports/ProviderScriptContextWindow.d.ts",
+      "import": "./dist/exports/ProviderScriptContextWindow.js"
     }
   },
   "files": [

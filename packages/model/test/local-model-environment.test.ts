@@ -11,7 +11,7 @@ import {
   OllamaEnvNames,
   resolveOllamaChatModel,
   resolveOllamaContextWindow,
-} from '../src/LocalModelEnvironment'
+} from '../src/impl/providers/LocalModelEnvironment'
 
 const OriginalChatModel = process.env[OllamaEnvNames.chatModel]
 const OriginalContextWindow = process.env[OllamaEnvNames.contextWindow]

@@ -6,7 +6,7 @@
  */
 import { describe, expect, test } from 'bun:test'
 
-import { injectVelarThinkingRouting } from '../src/VelarModelAdapter.ts'
+import { injectVelarThinkingRouting } from '../src/impl/adapters/VelarModelAdapter.ts'
 
 describe('Velar thinking routing', () => {
   test.each([

@@ -4,7 +4,7 @@ import {
   ModelProviderCollection,
   ProviderModelCatalogService,
   type ProviderScriptRegistryPort,
-} from '../src'
+} from '../src/exports/index'
 
 const EmptyProviderScripts: ProviderScriptRegistryPort = {
   supportsProvider: () => false,
