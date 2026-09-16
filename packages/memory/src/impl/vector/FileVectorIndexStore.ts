@@ -1,6 +1,6 @@
 import { isNull } from '@velaros-ai/core'
 
-import { MemoryVectorIndexFileName } from '../../contract/constants'
+import { MemoryFilesLayout } from '../../contract/constants'
 import type { MemoryFilesIo, MemoryVectorIndexStore } from '../../contract/requires'
 import type { MemoryVectorIndexRecord } from '../../types/memory'
 import type { PersistedVectorIndex } from '../../types/vector'
@@ -39,7 +39,7 @@ export class FileVectorIndexStore implements MemoryVectorIndexStore {
   constructor(options: FileVectorIndexStoreOptions) {
     this.io = options.io
     this.directory = options.directory
-    this.path = options.io.join(options.directory, options.fileName ?? MemoryVectorIndexFileName)
+    this.path = options.io.join(options.directory, options.fileName ?? MemoryFilesLayout.vectorIndexFileName)
   }
 
   public readVersion(): Nullable<string> {

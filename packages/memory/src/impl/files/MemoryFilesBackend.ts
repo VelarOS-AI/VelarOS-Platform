@@ -91,7 +91,7 @@ import {
 } from '../../utils/scope'
 import { MemoryTuning } from '../../utils/tuning'
 
-import { createInMemoryMemoryFilesIo } from './InMemoryMemoryFilesIo'
+import { InMemoryMemoryFilesIo } from './InMemoryMemoryFilesIo'
 
 /**
  * 文件权威层对外的整件能力：窄端口的六个动词，外加「把权威层从头读一遍」的全量枚举。
@@ -124,7 +124,7 @@ export class MemoryFilesBackend implements MemoryFilesBackendApi {
   private readonly stableKeyCache = new Map<string, StableKeyCacheEntry>()
 
   public constructor(private readonly options: MemoryFilesBackendOptions) {
-    this.io = options.io ?? createInMemoryMemoryFilesIo()
+    this.io = options.io ?? new InMemoryMemoryFilesIo()
     this.indexFileName = options.indexFileName ?? MemoryFilesLayout.indexFileName
     this.entriesDirectoryName = options.entriesDirectoryName ?? MemoryFilesLayout.entriesDirectoryName
     this.now = options.now ?? (() => Date.now())

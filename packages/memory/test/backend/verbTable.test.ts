@@ -11,11 +11,11 @@ import type { MemoryBackendVerb } from '../../src/contract/constants'
 import { RequiredAuthorityMemoryVerbs } from '../../src/contract/constants'
 import type { MemoryStoreBackend } from '../../src/contract/requires'
 import { createMemoryFilesBackend } from '../../src/impl/files/MemoryFilesBackend'
+import { listMissingAuthorityMemoryVerbs, supportsMemoryBackendVerb } from '../../src/utils/backends'
 import {
   createMemoryStoreCapabilityToken,
   resolveMemoryStoreBackend,
-} from '../../src/impl/host/MemoryStoreCapabilities'
-import { listMissingAuthorityMemoryVerbs, supportsMemoryBackendVerb } from '../../src/utils/backends'
+} from '../../src/utils/store-capabilities'
 
 function createStubBackend(
   verbs: readonly MemoryBackendVerb[],

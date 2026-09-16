@@ -8,7 +8,7 @@
 
 import { describe, expect, test } from 'bun:test'
 
-import { createInMemoryMemoryFilesIo } from '../../src/impl/files/InMemoryMemoryFilesIo'
+import { InMemoryMemoryFilesIo } from '../../src/impl/files/InMemoryMemoryFilesIo'
 import { createMemoryFilesBackend, type MemoryFilesScopeRoot } from '../../src/impl/files/MemoryFilesBackend'
 import { parseMemoryFileDocument, serializeMemoryFileDocument } from '../../src/utils/files/frontmatter'
 
@@ -60,7 +60,7 @@ describe('引号往返', () => {
 
 describe('经后端归档一轮之后标题不变', () => {
   test('归档会重写文件，撇号不该翻倍', async () => {
-    const io = createInMemoryMemoryFilesIo()
+    const io = new InMemoryMemoryFilesIo()
     const backend = createMemoryFilesBackend({ roots: [Root], io, now: () => 1_700_000_000_000 })
     const captured = backend.capture({
       sourceType: 'agent_tool',

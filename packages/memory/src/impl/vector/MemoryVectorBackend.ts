@@ -14,7 +14,7 @@
 
 import { isEmpty } from '@velaros-ai/core'
 
-import { MemoryVectorBackendId, MemoryVectorIndex } from '../../contract/constants'
+import { MemoryBackendIds, MemoryVectorIndex } from '../../contract/constants'
 import type {
   MemoryAuthorityEnumeration,
   MemoryDerivedIndexBackend,
@@ -47,7 +47,7 @@ import {
   toPointerItem,
 } from '../../utils/vector'
 
-import { createInMemoryVectorIndexStore } from './InMemoryVectorIndexStore'
+import { InMemoryVectorIndexStore } from './InMemoryVectorIndexStore'
 
 /** 一个向量派生索引后端要什么。 */
 export interface MemoryVectorBackendOptions {
@@ -65,7 +65,7 @@ export interface MemoryVectorBackendOptions {
 export class MemoryVectorBackend implements MemoryDerivedIndexBackend {
   /** 派生索引的自述：不声明 capture，机械可查「这个后端不吃原始证据」。 */
   private static readonly Descriptor: MemoryBackendDescriptor & { readonly role: 'derived-index' } = Object.freeze({
-    id: MemoryVectorBackendId,
+    id: MemoryBackendIds.vector,
     role: 'derived-index' as const,
     displayName: '记忆向量索引（语义派生索引）',
     verbs: Object.freeze(['recall', 'inspect', 'archive'] as const),
@@ -89,7 +89,7 @@ export class MemoryVectorBackend implements MemoryDerivedIndexBackend {
 
   public constructor(options: MemoryVectorBackendOptions) {
     this.embedder = options.embedder
-    this.store = options.store ?? createInMemoryVectorIndexStore()
+    this.store = options.store ?? new InMemoryVectorIndexStore()
     this.embedBatchSize = Math.max(1, options.embedBatchSize ?? MemoryTuning.vector.embedBatchSize)
     this.minimumSimilarity = options.minimumSimilarity ?? MemoryTuning.vector.minimumSimilarity
     this.indexVersion = Object.freeze({
@@ -198,7 +198,7 @@ export class MemoryVectorBackend implements MemoryDerivedIndexBackend {
   public inspect(): MemoryBackendStats {
     const records = this.store.list()
     return {
-      backendId: MemoryVectorBackendId,
+      backendId: MemoryBackendIds.vector,
       itemCount: records.length,
       pendingCount: 0,
       version: MemoryVectorIndex.schemaVersion,

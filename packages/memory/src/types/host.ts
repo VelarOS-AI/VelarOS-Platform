@@ -94,15 +94,6 @@ export interface MemoryExecutionObservationInput {
   contextId?: LooseOptional<string>
 }
 
-/** 桌面操作观察的历史名字。 */
-export type ComputerUseObservationInput = MemoryComputerUseObservationInput
-
-/** 工作区工具观察的历史名字。 */
-export type WorkspaceToolObservationInput = MemoryWorkspaceToolObservationInput
-
-/** 执行生命周期观察的历史名字。 */
-export type ExecutionObservationInput = MemoryExecutionObservationInput
-
 /** 回合召回协调器要什么。 */
 export interface MemoryTurnRecallDeps {
   /**

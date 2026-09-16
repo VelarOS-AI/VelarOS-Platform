@@ -1,7 +1,7 @@
 import { isEmpty, isNumber, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import { GLOBAL_MEMORY_SCOPE } from '../contract/constants'
+import { MemoryScopeIds } from '../contract/constants'
 import type { MemoryToolContext } from '../contract/requires'
 import type { MemoryEvidenceCategory } from '../types/memory'
 import type {
@@ -14,6 +14,7 @@ import type {
   SearchMemoriesInput,
   SearchMemoriesResult,
 } from '../types/tool'
+import { hashStableKey } from '../utils/files/entries'
 import { scopeTypeForScopeId } from '../utils/scope'
 import {
   compactRecallItem,
@@ -21,7 +22,6 @@ import {
   inferWorkspaceRoot,
   isMemoryReadableInScope,
   normalizeMemoryCategory,
-  ProfileCategories,
 } from '../utils/tools'
 import { MemoryTuning } from '../utils/tuning'
 
@@ -49,8 +49,10 @@ export class MemoryToolOperations implements MemoryToolOperationsApi {
 
   public async save(input: SaveMemoryInput, ctx: MemoryToolContext): Promise<SaveMemoryResult> {
     ctx.abortSignal.throwIfAborted()
-    const workspaceRoot = inferWorkspaceRoot(input.workspaceRoot, ctx.memoryScope)
+    // 落点只由作用域两轴决定：模型传什么根都改变不了写到哪，所以这个参数不进模型面。
+    const workspaceRoot = inferWorkspaceRoot(undefined, ctx.memoryScope)
     const memoryScope = ctx.memoryScope?.trim()
+    const category = normalizeMemoryCategory(input.kind)
     const backend = ctx.memory.describeBackend()
     const result = await ctx.memory.captureEvidence({
       // 工具内容的作者是模型，不是用户：信任级封顶在 agent_derived，绝不由模型自报的
@@ -58,14 +60,20 @@ export class MemoryToolOperations implements MemoryToolOperationsApi {
       // user_stated 证据；放行自报会给 prompt injection 一条伪造「用户已确认」的提权通道。
       sourceType: 'agent_tool',
       trustLevel: 'agent_derived',
+      // 稳定去重键：同一个作用域里，类别、标题、正文都一样的内容再写一次不会多出一条。
+      // 两个后端据此得到同一个判据——树档按 (sourceType, sourceId) 去重，文件档按同一把键找回条目。
+      sourceId: hashStableKey(
+        `${memoryScope ?? ''}|${category}|${input.title}|${input.content}`,
+      ),
       sessionId: ctx.sessionId,
       workspaceRoot,
       scopeType: memoryScope ? scopeTypeForScopeId(memoryScope) : undefined,
       scopeId: memoryScope,
       title: input.title,
       content: input.content,
-      category: normalizeMemoryCategory(input.kind),
-      privacyClass: input.privacyClass ?? defaultPrivacyClassFor(input.kind),
+      category,
+      // 隐私级不进模型面：没有任何行为读它，缺省按类别推，披露闸门接线时再由宿主决定要不要开。
+      privacyClass: defaultPrivacyClassFor(input.kind),
       metadata: {
         summary: input.summary ?? '',
         source: input.source ?? MemoryToolOperations.DefaultSource,
@@ -103,18 +111,16 @@ export class MemoryToolOperations implements MemoryToolOperationsApi {
 
   public async search(input: SearchMemoriesInput, ctx: MemoryToolContext): Promise<SearchMemoriesResult> {
     ctx.abortSignal.throwIfAborted()
-    const mode = input.mode ?? 'search'
-    const workspaceRoot = inferWorkspaceRoot(input.workspaceRoot, ctx.memoryScope)
-    const query = mode === 'profile' ? '' : input.query?.trim() ?? ''
-    const categories: LooseOptional<MemoryEvidenceCategory[]> = mode === 'profile'
-      ? [...ProfileCategories]
-      : input.categories?.map(normalizeMemoryCategory)
+    const workspaceRoot = inferWorkspaceRoot(undefined, ctx.memoryScope)
+    const query = input.query?.trim() ?? ''
+    const categories: LooseOptional<MemoryEvidenceCategory[]> = input.categories?.map(normalizeMemoryCategory)
     // 按当前空间作用域收敛召回：browser/system 空间若不传 scopeId，recall 的有效作用域
     // 为空 = 无作用域过滤，会翻出所有项目/站点的条目。global（记忆管理面）才代表「全部」。
     const memoryScope = ctx.memoryScope?.trim()
-    const scopeId = memoryScope && memoryScope !== GLOBAL_MEMORY_SCOPE ? memoryScope : undefined
+    const scopeId = memoryScope && memoryScope !== MemoryScopeIds.global ? memoryScope : undefined
+    // 不传 query 就是「看最近记了什么」，缺省条数按浏览算。
     const limit = input.limit
-      ?? (mode === 'search' ? MemoryTuning.tools.searchDefaultLimit : MemoryTuning.tools.browseDefaultLimit)
+      ?? (query ? MemoryTuning.tools.searchDefaultLimit : MemoryTuning.tools.browseDefaultLimit)
     const memories = await ctx.memory.recall(query, {
       limit,
       workspaceRoot,
@@ -123,7 +129,7 @@ export class MemoryToolOperations implements MemoryToolOperationsApi {
       includeDormant: input.deep,
       deep: input.deep,
     })
-    return { mode, query, count: memories.length, memories: memories.map(compactRecallItem) }
+    return { query, count: memories.length, memories: memories.map(compactRecallItem) }
   }
 
   public async get(input: GetMemoryInput, ctx: MemoryToolContext): Promise<GetMemoryResult> {
@@ -151,7 +157,6 @@ export class MemoryToolOperations implements MemoryToolOperationsApi {
     return {
       archived,
       physicalDelete: false as const,
-      reason: toNullable(input.reason),
       ...result,
       message: archived
         ? '已归档：这条记忆退出日常召回，内容仍在，深层召回仍可翻到。'

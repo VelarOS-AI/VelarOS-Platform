@@ -4,11 +4,11 @@ import { describe, test } from 'bun:test'
 
 import { createKernel } from '@velaros-ai/kernel'
 
-import { createInMemoryMemoryFilesIo } from '../../src/impl/files/InMemoryMemoryFilesIo'
+import { InMemoryMemoryFilesIo } from '../../src/impl/files/InMemoryMemoryFilesIo'
 import { createMemoryFilesBackend } from '../../src/impl/files/MemoryFilesBackend'
 import { mountMemoryAdapter, type MountMemoryAdapterInput } from '../../src/impl/host/MemoryAdapterRuntime'
-import { createMemoryStoreKernelModule } from '../../src/impl/host/MemoryStoreCapabilities'
 import type { MemoryTreeDomain as MemoryDomain } from '../../src/impl/tree/MemoryTreeDomain'
+import { createMemoryStoreKernelModule } from '../../src/utils/store-capabilities'
 
 function hostPorts(): Pick<MountMemoryAdapterInput, 'config' | 'hostContext'> {
   return {
@@ -32,7 +32,7 @@ function hostPorts(): Pick<MountMemoryAdapterInput, 'config' | 'hostContext'> {
 function filesBackend(): ReturnType<typeof createMemoryFilesBackend> {
   return createMemoryFilesBackend({
     roots: [{ scopeType: 'global', scopeId: 'global', directory: '/memory' }],
-    io: createInMemoryMemoryFilesIo(),
+    io: new InMemoryMemoryFilesIo(),
   })
 }
 

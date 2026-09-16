@@ -1,8 +1,9 @@
 # @velaros-ai/memory
 
 > **位置**:VelarOS-Platform 单版本火车 · `memory` 域 · 目录 `packages/memory`。
-> 它装两样东西:**长期记忆产品**(根入口与三个后端子路径)、
-> 以及**接进 Kernel 的三端口胶水**(`/adapter-kernel`)。
+> 它装两样东西:**长期记忆产品**(工具、运行时、三档可插拔后端)、
+> 以及**接进 Kernel 的三端口胶水**(`mountMemoryAdapter`)。
+> 0.6.0 起入口只有两个,逐符号去向见 `docs/engineering/refactor-plans/memory-migration.md`。
 > 工作区知识库已经拆成兄弟包 [`@velaros-ai/knowledge`](../knowledge/README.md)。
 
 ## 这个包解决什么问题
@@ -19,24 +20,23 @@
 
 | 子路径 | 一句话职责 |
 | --- | --- |
-| `@velaros-ai/memory` | 记忆运行时、领域类型、scope、记忆工具 |
-| `@velaros-ai/memory/contracts` | **浏览器安全的纯类型** Memory DTO(运行时 JS 为空) |
-| `@velaros-ai/memory/backend` | 实现无关的后端动词端口 `MemoryStoreBackend` + 派生索引契约 + 叠加编排 |
-| `@velaros-ai/memory/files` | bundled 默认权威档 `memory-files`(宿主注入路径与文件 IO) |
-| `@velaros-ai/memory/vector` | **市场可选**派生索引 `memory-vector`(宿主注入嵌入端口与索引存储) |
-| `@velaros-ai/memory/adapter-kernel` | **唯一合法的** kernel ↔ memory 双向胶水 |
+| `@velaros-ai/memory` | 四个记忆工具、运行时与三档后端的工厂、作用域与后端规则实例、三端口装配 `mountMemoryAdapter` |
+| `@velaros-ai/memory/contracts` | **浏览器安全的纯类型** Memory DTO 加常量表(运行时 JS 为空) |
+
+0.6.0 之前的 `/backend`、`/files`、`/vector`、`/adapter-kernel` 四个子路径已经并进根入口:
+它们的消费方全在宿主主进程,与根入口同一个进程,按「确有独立消费方的才多开」没有一个站得住。
 
 `/contracts` 的**运行时 JavaScript 为空**——不会加载 SQLite、Dream 执行器或工具实现。
 renderer、Web Worker、RPC schema 与前端测试从这个入口取类型;Node 宿主继续从包根入口取完整能力。
 
-切片细节见 [`docs/adapter-kernel/README.md`](./docs/adapter-kernel/README.md)。
+三端口胶水的细节见 [`docs/adapter-kernel/README.md`](./docs/adapter-kernel/README.md)。
 
 ## 核心概念
 
 ### 后端可插拔,而且是「叠加」不是「竞争」
 
-存储是**后端可插拔**的。`./backend` 是实现无关的动词端口 `MemoryStoreBackend`;
-`./files` 是随包发布的默认**权威档**(`memory-files`:markdown + frontmatter + 一个 `MEMORY.md` 索引);
+存储是**后端可插拔**的。`MemoryStoreBackend` 是实现无关的动词端口;
+`createMemoryFilesBackend` 是随包发布的默认**权威档**(`memory-files`:markdown + frontmatter + 一个 `MEMORY.md` 索引);
 既有的 SQLite 记忆树被逐字包成 `tree` 后端。
 Kernel 适配器经 `velaros.memory.store.<backendId>` 这一族 capability token 解析出**一个**后端,
 没有后端 mod 注册时回落到 tree ——**不 opt-in 的宿主行为完全不变**。
@@ -52,7 +52,7 @@ Kernel 适配器经 `velaros.memory.store.<backendId>` 这一族 capability toke
 `./vector` 是第一个派生索引(`memory-vector`,市场可选):采集时**双写**,召回时并行跑、
 再经指针回权威档取全文,**卸载只掉索引,权威内容一根毫毛都不动**。
 嵌入是注入端口(BYOK)——本包不假设任何模型,也不拉任何原生模块。
-叠加编排住 `createLayeredMemoryStoreBackend`(`./backend`)。
+叠加编排住 `createLayeredMemoryStoreBackend`。
 
 `memory-vector` **不在 bundled 恒装清单里**:新用户开箱是 files-only,装了才有语义召回。
 
@@ -63,7 +63,7 @@ Kernel 适配器经 `velaros.memory.store.<backendId>` 这一族 capability toke
 
 `MemoryScopeId` 与它的构造器(`buildProjectMemoryScope` / `buildSiteMemoryScope`、
 `GLOBAL_MEMORY_SCOPE` / `SYSTEM_MEMORY_SCOPE`)**由本包拥有**。
-但**产品上下文到 scope 的映射刻意不归本包**——宿主经 adapter-kernel 的
+但**产品上下文到 scope 的映射刻意不归本包**——宿主经 `mountMemoryAdapter` 的
 `MemoryHostScopeResolver` 把自己的上下文映射到一个 scope。本包不认识"聊天会话"是什么。
 
 ### v2 权威实现与 legacy 迁移
@@ -109,12 +109,12 @@ const items = memory.domain.recall('技术说明偏好')
 ```
 @velaros-ai/core   ← 唯一平台上游(AppError 等)
       ↓
-@velaros-ai/memory ────────── /adapter-kernel ──────→ @velaros-ai/agent
+@velaros-ai/memory ────── mountMemoryAdapter ──────→ @velaros-ai/agent
    (记忆产品本体)              三端口胶水              (kernel 侧持有零个 memory import)
 ```
 
 kernel 对记忆的**全部**接口就是三个端口——证据采集 / 回合召回 / Dream 调度。
-这条接缝是 `@velaros-ai/memory/adapter-kernel` 存在的唯一理由,也是它唯一被允许做的事。
+这条接缝是 `mountMemoryAdapter` 存在的唯一理由,也是它唯一被允许做的事。
 
 ## 生命周期与并发
 

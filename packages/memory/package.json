@@ -1,10 +1,10 @@
 {
   "name": "@velaros-ai/memory",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "velaros": {
     "platform": "0.6"
   },
-  "description": "Evidence-grounded long-term memory tree, recall, and governance for VelarOS-compatible runtimes, with pluggable store backends under ./backend, ./files and ./vector, and the kernel three-port glue under ./adapter-kernel.",
+  "description": "Evidence-grounded long-term memory for VelarOS-compatible runtimes: four model-facing tools, the three-port host adapter, pluggable store backends (tree, files, vector) and turn recall, all behind a single Node entry plus a portable ./contracts entry.",
   "license": "Apache-2.0",
   "sideEffects": false,
   "engines": {
@@ -29,22 +29,6 @@
     "./contracts": {
       "types": "./dist/contracts.d.ts",
       "import": "./dist/contracts.js"
-    },
-    "./backend": {
-      "types": "./dist/backend.d.ts",
-      "import": "./dist/backend.js"
-    },
-    "./files": {
-      "types": "./dist/files.d.ts",
-      "import": "./dist/files.js"
-    },
-    "./vector": {
-      "types": "./dist/vector.d.ts",
-      "import": "./dist/vector.js"
-    },
-    "./adapter-kernel": {
-      "types": "./dist/adapter-kernel.d.ts",
-      "import": "./dist/adapter-kernel.js"
     }
   },
   "files": [
@@ -59,7 +43,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "clean": "rm -rf dist",
     "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/memory/build/fix-esm-extensions.mjs dist && node ../../scripts/build/normalize-package-declarations.mjs",
-    "test": "bun run build && node --test ../../tests/memory/maintained/packages/memory/*.mjs && bun test test",
+    "test": "bun run build && node --test ../../tests/memory/maintained/packages/memory/*.mjs && bun test spec/acceptance.test.ts test",
     "probe:authority-v2": "node ../../scripts/memory/checks/memoryAuthorityV2Probe.mjs",
     "probe:ingest-dream-v2": "node ../../scripts/memory/checks/memoryIngestDreamV2Probe.mjs",
     "probe:meaning-curation-v2": "node ../../scripts/memory/checks/memoryMeaningCurationV2Probe.mjs",

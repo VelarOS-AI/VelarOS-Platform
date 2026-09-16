@@ -6,12 +6,12 @@ import { AppError } from '@velaros-ai/core/error'
 import type { MemoryStoreBackend } from '../../contract/requires'
 import type { MemoryHostScopeResolver } from '../../contract/requires'
 import type {
-  ComputerUseObservationInput,
-  ExecutionObservationInput,
+  MemoryComputerUseObservationInput,
+  MemoryExecutionObservationInput,
   MemoryHostSessionSnapshot,
   MemoryHostTranscriptMessage,
   MemoryHostUserMessageEvent,
-  WorkspaceToolObservationInput,
+  MemoryWorkspaceToolObservationInput,
 } from '../../types/host'
 import type { MemoryEvidenceInput } from '../../types/memory'
 import { supportsMemoryBackendVerb } from '../../utils/backends'
@@ -65,11 +65,11 @@ export interface MemoryEvidenceBridgeApi {
   /** 采集一次会话快照（整段对话）。 */
   captureSessionSnapshot(snapshot: MemoryHostSessionSnapshot): void
   /** 采集一次桌面操作观察。 */
-  captureComputerUseObservation(input: ComputerUseObservationInput): void
+  captureComputerUseObservation(input: MemoryComputerUseObservationInput): void
   /** 采集一次工作区工具观察。 */
-  captureWorkspaceToolObservation(input: WorkspaceToolObservationInput): void
+  captureWorkspaceToolObservation(input: MemoryWorkspaceToolObservationInput): void
   /** 采集一次执行生命周期观察。 */
-  captureExecutionObservation(input: ExecutionObservationInput): void
+  captureExecutionObservation(input: MemoryExecutionObservationInput): void
   /** 会话被删除：把这个来源的证据整体标成不可用。 */
   markSessionSourceDeleted(sessionId: string): void
   /** 等排队中的采集全部落地（收尾与测试用）。 */
@@ -137,7 +137,7 @@ export class MemoryEvidenceBridge implements MemoryEvidenceBridgeApi {
    * Computer Use 只落最小动作证据：不保存截图、模型图像、工具结果或输入文本原文。
    * 同一 toolCallId 重放时由来源唯一键幂等去重。
    */
-  public captureComputerUseObservation(input: ComputerUseObservationInput): void {
+  public captureComputerUseObservation(input: MemoryComputerUseObservationInput): void {
     if (!this.canCapture(this.options.isComputerUseCaptureEnabled, input.sessionId)) return
     const description = describeComputerUseObservation(input.toolName, input.args)
     if (!description) return
@@ -167,7 +167,7 @@ export class MemoryEvidenceBridge implements MemoryEvidenceBridgeApi {
   }
 
   /** 工作区工具只记录已完成动作及最小目标线索，不复制命令输出或文件正文。 */
-  public captureWorkspaceToolObservation(input: WorkspaceToolObservationInput): void {
+  public captureWorkspaceToolObservation(input: MemoryWorkspaceToolObservationInput): void {
     if (!this.canCapture(this.options.isWorkspaceCaptureEnabled, input.sessionId)) return
     const description = describeWorkspaceObservation(input)
     this.enqueue([
@@ -195,7 +195,7 @@ export class MemoryEvidenceBridge implements MemoryEvidenceBridgeApi {
   }
 
   /** 执行生命周期只记录阶段/终态，不保存错误正文、模型输出或上下文载荷。 */
-  public captureExecutionObservation(input: ExecutionObservationInput): void {
+  public captureExecutionObservation(input: MemoryExecutionObservationInput): void {
     if (!this.canCapture(this.options.isExecutionCaptureEnabled, input.sessionId)) return
     const kind = input.kind.trim()
     if (isBlank(kind)) return

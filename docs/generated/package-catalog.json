@@ -249,15 +249,11 @@
       "domain": "memory",
       "directory": "packages/memory",
       "name": "@velaros-ai/memory",
-      "version": "0.5.0",
-      "description": "Evidence-grounded long-term memory tree, recall, and governance for VelarOS-compatible runtimes, with pluggable store backends under ./backend, ./files and ./vector, and the kernel three-port glue under ./adapter-kernel.",
+      "version": "0.6.0",
+      "description": "Evidence-grounded long-term memory for VelarOS-compatible runtimes: four model-facing tools, the three-port host adapter, pluggable store backends (tree, files, vector) and turn recall, all behind a single Node entry plus a portable ./contracts entry.",
       "exportSubpaths": [
         ".",
-        "./adapter-kernel",
-        "./backend",
-        "./contracts",
-        "./files",
-        "./vector"
+        "./contracts"
       ],
       "repositoryDirectory": "packages/memory"
     },

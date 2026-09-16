@@ -7,7 +7,7 @@ import { normalizeMemoryFilePath } from '../../utils/files/entry-path'
  * 纯内存的文件 IO：探针与 headless 宿主用，一个真实文件都不落。
  *
  * 目录以「存在过写入」隐式表达——权威层没有空目录语义，索引文件缺席就等于该作用域没记忆。
- * 实例由 `createInMemoryMemoryFilesIo` 造，每个实例各持一份自己的文件表。
+ * 每个实例各持一份自己的文件表；只在包内的探针与测试里直接 new，不出包。
  */
 export interface InMemoryMemoryFilesIoApi extends MemoryFilesIo {
   /** 当前所有文件的快照（路径 → 内容，按路径排序），供探针断言。 */
@@ -69,11 +69,4 @@ export class InMemoryMemoryFilesIo implements InMemoryMemoryFilesIoApi {
       [...this.files.entries()].sort(([left], [right]) => (left < right ? -1 : 1)),
     )
   }
-}
-
-/** 造一份纯内存的文件 IO；`seed` 里的路径与内容作为初始文件表。 */
-export function createInMemoryMemoryFilesIo(
-  seed: Readonly<Record<string, string>> = {},
-): InMemoryMemoryFilesIoApi {
-  return new InMemoryMemoryFilesIo(seed)
 }

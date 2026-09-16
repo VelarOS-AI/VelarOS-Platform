@@ -11,7 +11,7 @@
 import { describe, expect, test } from 'bun:test'
 
 import type { MemoryApi, MemoryToolContext } from '../../src/contract/requires'
-import { createInMemoryMemoryFilesIo } from '../../src/impl/files/InMemoryMemoryFilesIo'
+import { InMemoryMemoryFilesIo } from '../../src/impl/files/InMemoryMemoryFilesIo'
 import { createMemoryFilesBackend, type MemoryFilesScopeRoot } from '../../src/impl/files/MemoryFilesBackend'
 import { memoryTools } from '../../src/impl/MemoryTools'
 import type { MemoryRecallItem } from '../../src/types/memory'
@@ -123,7 +123,7 @@ describe('文件后端的归档回执', () => {
   }
 
   function createBackend(readOnly = false) {
-    const io = createInMemoryMemoryFilesIo()
+    const io = new InMemoryMemoryFilesIo()
     const backend = createMemoryFilesBackend({
       roots: [readOnly ? { ...root, readOnly: true } : root],
       io,

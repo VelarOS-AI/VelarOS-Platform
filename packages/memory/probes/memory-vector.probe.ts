@@ -19,10 +19,10 @@ import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
 import type { MemoryEmbedder } from '../src/contract/requires'
 import { createLayeredMemoryStoreBackend } from '../src/impl/backends/LayeredMemoryStore'
-import { createInMemoryMemoryFilesIo } from '../src/impl/files/InMemoryMemoryFilesIo'
+import { InMemoryMemoryFilesIo } from '../src/impl/files/InMemoryMemoryFilesIo'
 import { createMemoryFilesBackend } from '../src/impl/files/MemoryFilesBackend'
 import { createFileVectorIndexStore } from '../src/impl/vector/FileVectorIndexStore'
-import { createInMemoryVectorIndexStore } from '../src/impl/vector/InMemoryVectorIndexStore'
+import { InMemoryVectorIndexStore } from '../src/impl/vector/InMemoryVectorIndexStore'
 import { createMemoryVectorBackend } from '../src/impl/vector/MemoryVectorBackend'
 import type { MemoryDerivedIndexFailure } from '../src/types/backends'
 import type { MemoryEvidenceInput } from '../src/types/memory'
@@ -103,12 +103,12 @@ function evidence(title: string, content: string): MemoryEvidenceInput {
 }
 
 function createStack(embedderIdentity = 'fake:v1') {
-  const io = createInMemoryMemoryFilesIo()
+  const io = new InMemoryMemoryFilesIo()
   const authority = createMemoryFilesBackend({
     roots: [{ scopeType: 'global', scopeId: 'global', directory: '/memory' }],
     io,
   })
-  const indexStore = createInMemoryVectorIndexStore()
+  const indexStore = new InMemoryVectorIndexStore()
   const embedder = createFakeEmbedder(embedderIdentity)
   const derived = createMemoryVectorBackend({ embedder, store: indexStore })
   const failures: MemoryDerivedIndexFailure[] = []
@@ -175,7 +175,7 @@ async function probeDualWrite(): Promise<void> {
 
 // ── ① 反面：派生层炸了不影响权威层 ────────────────────────────────────────
 async function probeDerivedFailureIsolation(): Promise<void> {
-  const io = createInMemoryMemoryFilesIo()
+  const io = new InMemoryMemoryFilesIo()
   const authority = createMemoryFilesBackend({
     roots: [{ scopeType: 'global', scopeId: 'global', directory: '/memory' }],
     io,
@@ -298,7 +298,7 @@ async function probeRebuild(): Promise<void> {
 
 // ── ⑤ 卸载：只删派生数据，权威零损失 ──────────────────────────────────────
 async function probeUninstall(): Promise<void> {
-  const io = createInMemoryMemoryFilesIo()
+  const io = new InMemoryMemoryFilesIo()
   const authority = createMemoryFilesBackend({
     roots: [{ scopeType: 'global', scopeId: 'global', directory: '/memory' }],
     io,

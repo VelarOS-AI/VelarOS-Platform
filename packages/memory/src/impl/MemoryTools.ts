@@ -1,5 +1,6 @@
 import { z } from 'zod'
 
+import { isString } from '@velaros-ai/core'
 import {
   renderParameterDescription as parameterDescription,
   toolDescriptions,
@@ -7,10 +8,7 @@ import {
 
 import {
   MemoryEvidenceCategories,
-  MemoryEvidenceCategoryAliases,
   MemoryEvidenceLimits,
-  MemoryPrivacyClasses,
-  MemorySearchModes,
   MemoryToolCategoryId,
   MemoryToolLimits,
   MemoryToolNames,
@@ -23,6 +21,8 @@ import type {
   SearchMemoriesInput,
 } from '../types/tool'
 import { defineMemoryTool } from '../utils/tool'
+import { normalizeMemoryCategory } from '../utils/tools'
+import { MemoryTuning } from '../utils/tuning'
 
 import { memoryToolOperations } from './MemoryToolOperations'
 
@@ -45,11 +45,31 @@ const MemoryWriteCapability = {
   reason: '写入长期记忆',
 } as const
 
-// 旧调用兼容只存在于工具输入边界，进入内核前立即归一化。
-const memoryCategorySchema = z.enum([
-  ...MemoryEvidenceCategories,
-  ...(Object.keys(MemoryEvidenceCategoryAliases) as Array<keyof typeof MemoryEvidenceCategoryAliases>),
-])
+/**
+ * 类别的入参边界：**只宣传**正式类别，旧别名（`session` / `user` / `reference`）照收但不进 schema。
+ *
+ * `preprocess` 在校验之前把别名折成正式值，`io: 'input'` 的 JSON Schema 因此只列正式类别——
+ * 模型不必在 `user` 与 `preference` 之间做一道无意义的选择题，老会话传旧值也不会被判错。
+ */
+const memoryCategorySchema = z.preprocess(
+  (value) => (isString(value) ? normalizeMemoryCategory(value as never) : value),
+  z.enum(MemoryEvidenceCategories),
+)
+
+/** 类别逐个是什么意思：`kind` 的字段说明照 `values` 的写法列出来。 */
+const MemoryCategoryMeanings = [
+  'fact 稳定事实',
+  'preference 偏好',
+  'feedback 对协作方式的反馈',
+  'procedure 做法',
+  'project 项目',
+  'task 任务',
+  'goal 目标',
+  'interest 兴趣',
+  'entity 人与事物',
+  'artifact 产出物',
+  'conversation 对话要点',
+].join('、')
 
 const saveMemory = defineMemoryTool<SaveMemoryInput>({
   name: MemoryToolNames.save,
@@ -81,17 +101,16 @@ const saveMemory = defineMemoryTool<SaveMemoryInput>({
       kind: 'task',
       title: '重构记忆系统',
       content: '第一版只实现后端统一记忆内核，Canvas 可视化后置。',
-      workspaceRoot: '/workspace/VelarOS',
     },
   ],
   notes: [
-    '同一来源重复提交按来源幂等，不会写出两条。',
+    '同一空间里标题和正文都相同的内容再写一次，不会多出一条；措辞变了就是新的一条。',
     '本工具写下的内容作者是你，不是用户；真实的用户确认由聊天消息采集独立记录，'
       + '不要在这里声称「用户已确认」。',
   ],
   schema: z.object({
     kind: memoryCategorySchema.describe(
-      parameterDescription({ description: '记忆类别。' })
+      parameterDescription({ description: `记忆类别：${MemoryCategoryMeanings}。` })
     ),
     title: z.string().min(1).max(MemoryEvidenceLimits.titleChars).describe(
       parameterDescription({ description: '这条记忆的简短主题。' })
@@ -103,19 +122,13 @@ const saveMemory = defineMemoryTool<SaveMemoryInput>({
       parameterDescription({ description: '可选的人类可读摘要。' })
     ),
     source: z.string().max(MemoryToolLimits.sourceChars).optional().describe(
-      parameterDescription({ description: '可选来源说明。' })
+      parameterDescription({ description: '可选来源说明，只写进记忆文件给人看，不影响召回。' })
     ),
     tags: z.array(z.string().max(MemoryToolLimits.tagChars)).max(MemoryToolLimits.tagCount).optional().describe(
-      parameterDescription({ description: '可选标签，只作为记忆元数据。' })
-    ),
-    workspaceRoot: z.string().optional().describe(
-      parameterDescription({ description: '可选工作区根；默认从当前项目空间派生。' })
+      parameterDescription({ description: '可选标签，只写进记忆文件给人看，不影响召回。' })
     ),
     taskKey: z.string().max(MemoryToolLimits.sourceChars).optional().describe(
       parameterDescription({ description: '可选任务稳定键。' })
-    ),
-    privacyClass: z.enum(MemoryPrivacyClasses).optional().describe(
-      parameterDescription({ description: '可选隐私级；秘密信息无论级别都禁止写入。' })
     ),
   }),
   permissions: ['memory:write'],
@@ -132,34 +145,36 @@ const searchMemories = defineMemoryTool<SearchMemoriesInput>({
   suitable: ['回答依赖用户历史、项目连续性、任务演化、偏好或既有结论。'],
   forbidden: ['不要把召回结果当成无来源的绝对事实；注意 confidence 与 sources。'],
   protocol: [
-    '召回按当前空间作用域收敛，外加全局记忆；不跨项目/跨站点翻找。',
+    '只召回当前空间（当前项目、当前站点或系统空间）的记忆，别的空间的看不到。',
     '普通召回只返回在用的记忆；deep=true 才把已归档的一并翻出来。',
   ],
-  usage: ['search 模式传 query；browse/profile 可以省略 query。'],
+  usage: [
+    '有明确话题就传 query；想看最近记了什么就不传 query；'
+      + '只看用户画像就传 categories: ["preference","feedback","interest"]。',
+  ],
   notes: ['需要核对某条的全文与来源时继续调用 memory:get。'],
   examples: [
     { query: '记忆系统重构', limit: 8 },
-    { mode: 'profile', limit: 12 },
+    { categories: ['preference', 'feedback', 'interest'], limit: 12 },
     { query: '之前暂停的任务', deep: true },
   ],
-  schema: z
-    .object({
-      query: z.string().max(MemoryToolLimits.queryChars).optional(),
-      mode: z.enum(MemorySearchModes).optional(),
-      limit: z.number().int().min(1).max(MemoryToolLimits.recallItems).optional(),
-      workspaceRoot: z.string().optional(),
-      deep: z.boolean().optional(),
-      categories: z.array(memoryCategorySchema).optional(),
-    })
-    .superRefine((input, context) => {
-      if ((input.mode ?? 'search') === 'search' && !input.query?.trim()) {
-        context.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ['query'],
-          message: 'search 模式必须提供 query。',
-        })
-      }
-    }),
+  schema: z.object({
+    query: z.string().max(MemoryToolLimits.queryChars).optional().describe(
+      parameterDescription({ description: '要找的话题，用用户原话或关键词；不传就是看最近记了什么。' })
+    ),
+    limit: z.number().int().min(1).max(MemoryToolLimits.recallItems).optional().describe(
+      parameterDescription({
+        description: `返回多少条，缺省 ${MemoryTuning.tools.searchDefaultLimit} 条`
+          + `（不传 query 时 ${MemoryTuning.tools.browseDefaultLimit} 条），最多 ${MemoryToolLimits.recallItems} 条。`,
+      })
+    ),
+    deep: z.boolean().optional().describe(
+      parameterDescription({ description: '为真时连已归档的一起找，缺省只找在用的。' })
+    ),
+    categories: z.array(memoryCategorySchema).optional().describe(
+      parameterDescription({ description: '只看这些类别，不传就是全部类别。' })
+    ),
+  }),
   permissions: ['memory:read'],
   capabilities: MemoryReadCapability,
   isConcurrencySafe: () => true,
@@ -174,7 +189,7 @@ const getMemory = defineMemoryTool<GetMemoryInput>({
   suitable: ['memory:search 返回候选后，需要检查完整内容和来源。'],
   forbidden: ['不要用它搜索未知记忆。'],
   usage: ['传 memory:search 返回的 id。'],
-  notes: ['只能读当前空间可见的记忆（本空间 + 全局）；别的空间的 id 一律当作不存在。'],
+  notes: ['只能读当前空间的记忆；别的空间的 id 一律当作不存在。'],
   examples: [{ id: 'project:/repo::entries/回复风格.md' }],
   schema: z.object({ id: z.string().min(1) }),
   permissions: ['memory:read'],
@@ -189,18 +204,16 @@ const forgetMemory = defineMemoryTool<ForgetMemoryInput>({
   category: MemoryToolCategoryId,
   summary: '归档一条记忆，让它退出日常召回。',
   suitable: ['用户明确表示某条记忆过时、暂时不希望它继续影响日常回答。'],
-  forbidden: ['不要把归档描述成删除——内容一个字节都还在。'],
-  usage: ['传 memory:search 返回的 id；reason 只写入本次工具结果，不另建秘密日志。'],
-  notes: [
-    '归档不是删除：内容仍在，deep=true 的深层召回仍能翻到。',
-    '用户要求「彻底删掉」时如实说明当前只能归档，别承诺物理删除。',
-    '只能归档当前空间可见的记忆（本空间 + 全局）；别的空间的 id 一律当作不存在。',
+  forbidden: [
+    '不要说成删除：归档后内容还在，deep=true 仍能找到；用户要彻底删除时如实说明现在只能归档。',
   ],
-  examples: [{ id: 'project:/repo::entries/回复风格.md', reason: '该偏好只适用于旧项目' }],
-  schema: z.object({
-    id: z.string().min(1),
-    reason: z.string().max(MemoryToolLimits.archiveReasonChars).optional(),
-  }),
+  usage: ['传 memory:search 返回的 id。'],
+  notes: [
+    '回执的 archived 为 false 表示这个 id 不存在或不在当前空间，要如实告诉用户没有归档成。',
+    '只能归档当前空间的记忆；别的空间的 id 一律当作不存在。',
+  ],
+  examples: [{ id: 'project:/repo::entries/回复风格.md' }],
+  schema: z.object({ id: z.string().min(1) }),
   permissions: ['memory:write'],
   capabilities: MemoryWriteCapability,
   isConcurrencySafe: () => false,

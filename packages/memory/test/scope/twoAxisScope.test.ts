@@ -12,7 +12,7 @@
 
 import { describe, expect, test } from 'bun:test'
 
-import { createInMemoryMemoryFilesIo } from '../../src/impl/files/InMemoryMemoryFilesIo'
+import { InMemoryMemoryFilesIo } from '../../src/impl/files/InMemoryMemoryFilesIo'
 import { createMemoryFilesBackend } from '../../src/impl/files/MemoryFilesBackend'
 import {
   buildProjectMemoryScope,
@@ -119,7 +119,7 @@ describe('文件后端按两轴选根', () => {
   ]
 
   function createBackend() {
-    return createMemoryFilesBackend({ io: createInMemoryMemoryFilesIo(), roots })
+    return createMemoryFilesBackend({ io: new InMemoryMemoryFilesIo(), roots })
   }
 
   test('写入落在轴一选定的根，不被轴二拽走', () => {

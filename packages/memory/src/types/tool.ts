@@ -1,8 +1,24 @@
-/** 四个记忆工具的入参形状（模型面 schema 的 TypeScript 映射）。 */
+/** 四个记忆工具的入参形状（模型面 schema 的 TypeScript 映射）与工具定义的入参。 */
+
+import type { DefineToolRuntimeSpecInput } from '@velaros-ai/tool-contract'
 
 import type { MemoryEvidenceCategories, MemoryEvidenceCategoryAliases } from '../contract/constants'
+import type { MemoryToolContext } from '../contract/requires'
 
 import type { MemoryForgetResult, MemoryRecallItem } from './memory'
+
+/** 定义一个记忆工具要填的东西；类别固定为 `memory`。 */
+export type DefineMemoryToolInput<
+  TInput extends Record<string, unknown> = Record<string, unknown>,
+> = DefineToolRuntimeSpecInput<
+  TInput,
+  MemoryToolContext,
+  unknown,
+  string
+> & {
+  /** 记忆工具的唯一职责类别。 */
+  category: 'memory'
+}
 
 /** 工具入参边界上认的类别：正式类别加三个旧别名。 */
 export type MemoryToolCategory =
@@ -23,24 +39,16 @@ export interface SaveMemoryInput extends Record<string, unknown> {
   source?: string
   /** 可选标签，只作为记忆元数据。 */
   tags?: string[]
-  /** 可选工作区根；缺省从当前项目空间派生。 */
-  workspaceRoot?: string
   /** 可选任务稳定键。 */
   taskKey?: string
-  /** 可选隐私级。 */
-  privacyClass?: 'standard' | 'personal' | 'sensitive'
 }
 
 /** `memory:search` 的入参。 */
 export interface SearchMemoriesInput extends Record<string, unknown> {
-  /** 查询词；search 模式必填。 */
+  /** 要找的话题；不传就是「看最近记了什么」。 */
   query?: string
-  /** 检索、浏览还是画像。 */
-  mode?: 'search' | 'browse' | 'profile'
   /** 返回多少条。 */
   limit?: number
-  /** 可选工作区根。 */
-  workspaceRoot?: string
   /** 是否把已归档的一并翻出来。 */
   deep?: boolean
   /** 只要这些类别。 */
@@ -57,8 +65,6 @@ export interface GetMemoryInput extends Record<string, unknown> {
 export interface ForgetMemoryInput extends Record<string, unknown> {
   /** `memory:search` 返回的条目 id。 */
   id: string
-  /** 归档理由，只写入本次工具结果。 */
-  reason?: string
 }
 
 /** `memory:save` 的回执。 */
@@ -79,9 +85,7 @@ export interface SaveMemoryResult extends Record<string, unknown> {
 
 /** `memory:search` 的回执。 */
 export interface SearchMemoriesResult extends Record<string, unknown> {
-  /** 这次用的是哪种模式。 */
-  mode: string
-  /** 实际拿去检索的查询词（画像模式为空串）。 */
+  /** 实际拿去检索的查询词（不传 query 时是空串）。 */
   query: string
   /** 返回了多少条。 */
   count: number
@@ -101,8 +105,6 @@ export type ForgetMemoryResult = MemoryForgetResult & {
   archived: boolean
   /** 固定为 false：归档从不物理删除。 */
   physicalDelete: false
-  /** 模型给的归档理由，只回显在本次结果里。 */
-  reason: Nullable<string>
   /** 给模型看的一句话回执。 */
   message: string
 }

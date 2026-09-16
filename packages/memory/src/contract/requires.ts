@@ -10,10 +10,7 @@ import type BetterSqlite3 from 'better-sqlite3'
 import type {
   CapabilityToken,
 } from '@velaros-ai/kernel/contracts'
-import type {
-  DefineToolRuntimeSpecInput,
-  ToolContractRuntimeSpec,
-} from '@velaros-ai/tool-contract'
+import type { ToolContractRuntimeSpec } from '@velaros-ai/tool-contract'
 
 import type { MemoryHostScope, MemoryHostScopeInput } from '../types/host'
 import type {
@@ -39,8 +36,6 @@ import type {
   MemorySessionLineageContext,
   MemorySourceEligibilityResult,
   MemoryTreeDiagnostics,
-  MemoryTreeIntegrityReport,
-  MemoryTreeState,
   MemoryVectorIndexRecord,
 } from '../types/memory'
 
@@ -261,40 +256,14 @@ export interface MemoryToolApi {
   getMemory: (
     memoryId: string
   ) => Promise<Nullable<MemoryRecallItem>> | Nullable<MemoryRecallItem>
-  /** 读树档的完整状态（版本回看用）。 */
-  getTreeState: () => Promise<MemoryTreeState> | MemoryTreeState
-  /** 读树档在某个版本上的状态。 */
-  getTreeStateAtVersion: (
-    version: number
-  ) => Promise<MemoryTreeState> | MemoryTreeState
-  /** 校验树档的完整性。 */
-  verifyTreeIntegrity: (
-  ) => Promise<MemoryTreeIntegrityReport> | MemoryTreeIntegrityReport
   /** 读诊断读数；工具只用其中的 `treeVersion`，且只在后端有整理管线时读。 */
   getDiagnostics: (
   ) => Promise<MemoryTreeDiagnostics> | MemoryTreeDiagnostics
-  /** 立即跑一次整理。 */
-  runDream: (
-    options: MemoryDreamRunOptions
-  ) => Promise<MemoryDreamRunResult> | MemoryDreamRunResult
   /** 归档一条记忆：退出普通召回，内容不删（窄端口 `archive` 动词，后端可缺席）。 */
   archiveMemory: (
     memoryId: string
   ) => Promise<MemoryForgetResult> | MemoryForgetResult
-  /** 改单条证据的可用性。 */
-  setEvidenceEligibility: (
-    evidenceId: string,
-    state: MemoryEvidenceEligibilityState
-  ) => Promise<MemoryEvidenceEligibilityResult> | MemoryEvidenceEligibilityResult
-  /** 按会话批量改证据的可用性。 */
-  setSessionEvidenceEligibility: (
-    sessionId: string,
-    state: MemoryEvidenceEligibilityState
-  ) => Promise<MemorySourceEligibilityResult> | MemorySourceEligibilityResult
 }
-
-/** 宿主端口的历史名字；等同 {@link MemoryToolApi}，入口收口那一轮删。 */
-export type MemoryApi = MemoryToolApi
 
 /** 记忆工具每次执行时拿到的上下文；宿主每次调用工具时给。 */
 export interface MemoryToolContext {
@@ -310,9 +279,6 @@ export interface MemoryToolContext {
   memory: MemoryToolApi
 }
 
-/** 工具上下文的历史名字；等同 {@link MemoryToolContext}，入口收口那一轮删。 */
-export type ToolContext = MemoryToolContext
-
 /** 一个记忆工具的运行期形状（定义、schema、权限、执行）。 */
 export type VelaTool<
   TInput extends Record<string, unknown> = Record<string, unknown>,
@@ -322,19 +288,6 @@ export type VelaTool<
   unknown,
   string
 >
-
-/** 定义一个记忆工具要填的东西；类别固定为 `memory`。 */
-export type DefineMemoryToolInput<
-  TInput extends Record<string, unknown> = Record<string, unknown>,
-> = DefineToolRuntimeSpecInput<
-  TInput,
-  MemoryToolContext,
-  unknown,
-  string
-> & {
-  /** 记忆工具的唯一职责类别。 */
-  category: 'memory'
-}
 
 /**
  * 解析后端所需的**最窄**注册表面。
@@ -385,7 +338,7 @@ export interface ResolveMemoryStoreBackendInput {
  * 是否有前台聚焦窗口。记忆适配器本体必须与宿主无关，因此这些读数经窄接口注入，具体平台实现留在
  * 产品宿主适配层。该端口无状态、无生命周期。
  */
-export interface HostIdleSignalPort {
+export interface MemoryHostIdleSignalPort {
   /** 系统连续空闲秒数。读取失败由调用方兜底为 0。 */
   getIdleSeconds(): number
   /** 设备当前是否电池供电。 */
@@ -458,7 +411,7 @@ export interface MemoryAdapterTreePort {
   /** 宿主已打开的记忆树领域服务。 */
   domain: MemoryTreeDomainApi
   /** 空闲/电池/前台读数端口，后台整理调度器用。 */
-  idleSignal: HostIdleSignalPort
+  idleSignal: MemoryHostIdleSignalPort
 }
 
 /** 装配一次记忆适配器要什么。 */

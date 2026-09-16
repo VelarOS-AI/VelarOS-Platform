@@ -3,11 +3,11 @@ import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 
-const adapterEntry = pathToFileURL(resolve(
+const packageEntry = pathToFileURL(resolve(
   import.meta.dirname,
-  '../../../../../packages/memory/dist/adapter-kernel.js',
+  '../../../../../packages/memory/dist/index.js',
 )).href
-const { MemoryEvidenceBridge } = await import(adapterEntry)
+const { mountMemoryAdapter } = await import(packageEntry)
 
 test('host events and scope mapping are injected without Chat or Workspace DTOs', async () => {
   const captured = []
@@ -19,7 +19,7 @@ test('host events and scope mapping are injected without Chat or Workspace DTOs'
       id: 'probe',
       role: 'authority',
       displayName: 'probe backend',
-      verbs: ['capture', 'recall', 'inspect', 'dream', 'govern'],
+      verbs: ['capture', 'recall', 'inspect', 'archive', 'dream', 'govern'],
     },
     captureBatch(inputs) {
       captured.push(...inputs)
@@ -37,17 +37,33 @@ test('host events and scope mapping are injected without Chat or Workspace DTOs'
     inspect() {
       return { backendId: 'probe', itemCount: 0, pendingCount: 0, version: 0 }
     },
+    archive() {
+      return { affectedEvidenceIds: [] }
+    },
     dream() {},
     governSourceEligibility() {},
   }
-  const bridge = new MemoryEvidenceBridge(backend, {
-    isEnabled: () => true,
-    isChatCaptureEnabled: () => true,
-    environmentContextBlockOpenTag: '<environment-context>',
-    resolveScope: ({ contextId }) => ({
-      scopeType: 'site',
-      scopeId: `host:${contextId}`,
-    }),
+  const always = () => true
+  const { evidenceBridge: bridge } = mountMemoryAdapter({
+    backend,
+    config: {
+      isEnabled: always,
+      isBackgroundGrowthEnabled: always,
+      allowBatteryGrowth: always,
+      isAutomaticDeepRecallEnabled: always,
+      isChatCaptureEnabled: always,
+      isWorkspaceCaptureEnabled: always,
+      isComputerUseCaptureEnabled: always,
+      isExecutionCaptureEnabled: always,
+    },
+    hostContext: {
+      environmentContextBlockOpenTag: '<environment-context>',
+      resolveScope: ({ contextId }) => ({
+        scopeType: 'site',
+        scopeId: `host:${contextId}`,
+      }),
+      turnContextScopes: ['user'],
+    },
   })
 
   bridge.captureUserMessage({

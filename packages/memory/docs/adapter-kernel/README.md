@@ -1,4 +1,4 @@
-# @velaros-ai/memory/adapter-kernel
+# 记忆的三端口胶水（`mountMemoryAdapter`）
 
 > `@velaros-ai/memory` 的一个导入切片(源码在 `packages/memory/src/impl/host/`)。包总览见
 > [包 README](../../README.md)。
@@ -33,7 +33,7 @@
 宿主一次调用完成接线：提供权威后端、配置与作用域端口；树治理按宿主需求显式接入。
 
 ```ts
-import { mountMemoryAdapter } from '@velaros-ai/memory/adapter-kernel'
+import { mountMemoryAdapter } from '@velaros-ai/memory'
 
 const memory = mountMemoryAdapter({
   tree: {
@@ -59,7 +59,7 @@ turnContextFanIn.register(memory.turnRecall.createTurnContextSource())
 
 自记忆后端 mod 化判决(kernel-contract §15.7 / 蓝图 §九)起,适配器**不再为采集与召回直接
 跟记忆树对话**。它经一族 capability token 解析出**一个** `MemoryStoreBackend`
-(`@velaros-ai/memory/backend` 里那个实现无关的动词端口):
+(根入口那个实现无关的动词端口 `MemoryStoreBackend`):
 
 ```ts
 host.registerModule(createMemoryStoreKernelModule({

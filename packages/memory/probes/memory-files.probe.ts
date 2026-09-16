@@ -14,7 +14,7 @@
 import assert from 'node:assert/strict'
 
 import type { InMemoryMemoryFilesIoApi } from '../src/impl/files/InMemoryMemoryFilesIo'
-import { createInMemoryMemoryFilesIo } from '../src/impl/files/InMemoryMemoryFilesIo'
+import { InMemoryMemoryFilesIo } from '../src/impl/files/InMemoryMemoryFilesIo'
 import { createMemoryFilesBackend } from '../src/impl/files/MemoryFilesBackend'
 import type { MemoryFilesScopeRoot } from '../src/types/memory'
 import type { MemoryEvidenceInput } from '../src/types/memory'
@@ -60,7 +60,7 @@ function createBackend(io: InMemoryMemoryFilesIoApi, roots = [GlobalRoot, Projec
 
 // ── ① 写入 → 索引 → 召回往返 ────────────────────────────────────────────────
 async function probeRoundTrip(): Promise<void> {
-  const io = createInMemoryMemoryFilesIo()
+  const io = new InMemoryMemoryFilesIo()
   const backend = createBackend(io)
 
   const captured = backend.capture(
@@ -204,7 +204,7 @@ async function probeForgivingFrontmatter(): Promise<void> {
 
 // ── ③ 作用域双轨 ───────────────────────────────────────────────────────────
 async function probeDualScope(): Promise<void> {
-  const io = createInMemoryMemoryFilesIo()
+  const io = new InMemoryMemoryFilesIo()
   const backend = createBackend(io)
 
   await backend.capture(evidence({ title: '全局偏好', content: '全局内容。', scopeId: 'global' }))
@@ -249,7 +249,7 @@ async function probeDualScope(): Promise<void> {
 
   // 只读根不接受写入（别人 clone 来的共享记忆）：作用域指名的根不可写 = 没有对应的可写根，
   // 于是**拒收**——绝不改写作用域落进别的池子。
-  const readOnlyIo = createInMemoryMemoryFilesIo()
+  const readOnlyIo = new InMemoryMemoryFilesIo()
   const readOnlyBackend = createMemoryFilesBackend({
     roots: [GlobalRoot, { ...ProjectRoot, readOnly: true }],
     io: readOnlyIo,
@@ -269,7 +269,7 @@ async function probeDualScope(): Promise<void> {
 
   // 根解析是每次调用重新求值：宿主换项目不必重建后端。
   let activeRoots: MemoryFilesScopeRoot[] = [GlobalRoot]
-  const dynamicIo = createInMemoryMemoryFilesIo()
+  const dynamicIo = new InMemoryMemoryFilesIo()
   const dynamic = createMemoryFilesBackend({ roots: () => activeRoots, io: dynamicIo })
   await dynamic.capture(evidence({ title: '第一处', content: 'a' }))
   activeRoots = [ProjectRoot]
@@ -284,7 +284,7 @@ async function probeDualScope(): Promise<void> {
 
 // ── ④ 归档语义 ─────────────────────────────────────────────────────────────
 async function probeArchive(): Promise<void> {
-  const io = createInMemoryMemoryFilesIo()
+  const io = new InMemoryMemoryFilesIo()
   const backend = createBackend(io, [GlobalRoot])
   const captured = backend.capture(
     evidence({ title: '过时结论', content: '旧项目才适用的偏好。', scopeId: 'global' }),
@@ -315,7 +315,7 @@ async function probeArchive(): Promise<void> {
 
 // ── 后端自述 ───────────────────────────────────────────────────────────────
 async function probeDescriptor(): Promise<void> {
-  const backend = createBackend(createInMemoryMemoryFilesIo())
+  const backend = createBackend(new InMemoryMemoryFilesIo())
   equal(backend.descriptor.id, 'files', '后端 id 为 files')
   equal(backend.descriptor.role, 'authority', 'files 是权威层')
   check(backend.descriptor.verbs.includes('capture'), 'capture 在动词表内')

@@ -8,7 +8,6 @@
 
 import type { TurnContextSessionLedgersApi } from '@velaros-ai/agent'
 
-import type { MemoryAdapterApi } from '../impl/host/MemoryAdapterRuntime.js'
 import type {
   ForgetMemoryInput,
   GetMemoryInput,
@@ -24,28 +23,18 @@ export type {
 } from '../impl/backends/LayeredMemoryStore.js'
 export type { MemoryBackendsApi } from '../impl/backends/MemoryBackends.js'
 export type { MemoryScopesApi } from '../impl/backends/MemoryScopes.js'
-export type { InMemoryMemoryFilesIoApi } from '../impl/files/InMemoryMemoryFilesIo.js'
 export type { MemoryFilesBackendApi } from '../impl/files/MemoryFilesBackend.js'
 export type { MemoryAdapterApi } from '../impl/host/MemoryAdapterRuntime.js'
-export type {
-  MemoryDreamSchedulerApi,
-  MemoryDreamSchedulerOptions,
-} from '../impl/host/MemoryDreamScheduler.js'
-export type {
-  MemoryEvidenceBridgeApi,
-  MemoryEvidenceBridgeOptions,
-} from '../impl/host/MemoryEvidenceBridge.js'
+export type { MemoryEvidenceBridgeApi } from '../impl/host/MemoryEvidenceBridge.js'
 export type { MemoryStoreCapabilitiesApi } from '../impl/host/MemoryStoreCapabilities.js'
 export type {
-  MemoryServiceOptions,
   MemoryTreeServiceApi,
+  MemoryTreeServiceOptions,
 } from '../impl/host/MemoryTreeService.js'
 export type { MemoryTurnRecallCoordinatorApi } from '../impl/host/MemoryTurnRecallCoordinator.js'
-export type { MemoryToolOperationsApi } from '../impl/MemoryToolOperations.js'
 export type { MemoryTreeDomainApi } from '../impl/tree/MemoryTreeDomain.js'
-export type { MemoryRuntime } from '../impl/tree/MemoryTreeRuntime.js'
+export type { MemoryTreeRuntimeApi } from '../impl/tree/MemoryTreeRuntime.js'
 export type { FileVectorIndexStoreOptions } from '../impl/vector/FileVectorIndexStore.js'
-export type { InMemoryVectorIndexStoreApi } from '../impl/vector/InMemoryVectorIndexStore.js'
 export type { MemoryVectorBackendOptions } from '../impl/vector/MemoryVectorBackend.js'
 
 /**
@@ -67,9 +56,6 @@ export interface MemoryTurnContextDeltaSource {
     generation: Nullable<string>
   }) => ReturnType<TurnContextSessionLedgersApi['peek']> & { anchors: [] }
 }
-
-/** 装配结果的历史名字；等同 {@link MemoryAdapterApi}，入口收口那一轮删。 */
-export type MemoryAdapterMount = MemoryAdapterApi
 
 /** 记忆包交给宿主的四个模型面工具，键就是工具名。 */
 export interface MemoryToolCollection {

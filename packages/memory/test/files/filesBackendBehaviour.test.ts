@@ -9,7 +9,7 @@ import { describe, expect, test } from 'bun:test'
 
 import type { MemoryFilesIo } from '../../src/contract/requires'
 import type { InMemoryMemoryFilesIoApi } from '../../src/impl/files/InMemoryMemoryFilesIo'
-import { createInMemoryMemoryFilesIo } from '../../src/impl/files/InMemoryMemoryFilesIo'
+import { InMemoryMemoryFilesIo } from '../../src/impl/files/InMemoryMemoryFilesIo'
 import { createMemoryFilesBackend, type MemoryFilesScopeRoot } from '../../src/impl/files/MemoryFilesBackend'
 import type { MemoryEvidenceInput } from '../../src/types/memory'
 import { parseMemoryFileDocument } from '../../src/utils/files/frontmatter'
@@ -27,7 +27,7 @@ const SystemRoot: MemoryFilesScopeRoot = {
 }
 
 function createBackend(roots: MemoryFilesScopeRoot[] = [SystemRoot, ProjectRoot]) {
-  const io = createInMemoryMemoryFilesIo()
+  const io = new InMemoryMemoryFilesIo()
   return {
     io,
     backend: createMemoryFilesBackend({ roots, io, now: () => 1_700_000_000_000 }),
@@ -186,7 +186,7 @@ describe('D-8 先筛后截断', () => {
 
 describe('D-10 稳定键映射（进程内）', () => {
   test('已有 200 条时再写一条不会把每个条目都读一遍', async () => {
-    const io = createInMemoryMemoryFilesIo()
+    const io = new InMemoryMemoryFilesIo()
     let reads = 0
     const counted: MemoryFilesIo = {
       join: (...segments: readonly string[]) => io.join(...segments),

@@ -4,7 +4,7 @@ import type { MemoryVectorIndexRecord } from '../../types/memory'
 /**
  * 纯内存的向量索引存储：探针与 headless 宿主用，一个文件都不落。
  *
- * 实例由 `createInMemoryVectorIndexStore` 造；进程退出即丢，正合派生物的语义。
+ * 只在包内的探针与测试里直接 new，不出包；进程退出即丢，正合派生物的语义。
  */
 export interface InMemoryVectorIndexStoreApi extends MemoryVectorIndexStore {
   /** 当前记录数，供探针断言。 */
@@ -49,9 +49,4 @@ export class InMemoryVectorIndexStore implements InMemoryVectorIndexStoreApi {
   public size(): number {
     return this.records.size
   }
-}
-
-/** 造一份纯内存的向量索引存储。 */
-export function createInMemoryVectorIndexStore(): InMemoryVectorIndexStoreApi {
-  return new InMemoryVectorIndexStore()
 }

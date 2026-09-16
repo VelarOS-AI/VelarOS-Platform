@@ -15,13 +15,6 @@ import { isMemoryVisibleInScope, MemoryScopePrefixes } from './scope'
 /** 默认落 personal 隐私级的类别：这几类天然是关于用户本人的。 */
 const PersonalCategories: readonly string[] = ['preference', 'feedback', 'user']
 
-/** 画像模式固定看这几类。 */
-export const ProfileCategories: readonly MemoryEvidenceCategory[] = [
-  'preference',
-  'feedback',
-  'interest',
-]
-
 /** 把工具入参上的类别归一到后端认的类别；旧别名只在这一层存在。 */
 export function normalizeMemoryCategory(category: MemoryToolCategory): MemoryEvidenceCategory {
   const alias = (MemoryEvidenceCategoryAliases as Readonly<Record<string, MemoryEvidenceCategory>>)[category]

@@ -2,7 +2,7 @@ import { Log } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { type TimerLease,TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
-import type { HostIdleSignalPort } from '../../contract/requires'
+import type { MemoryHostIdleSignalPort } from '../../contract/requires'
 import type { MemoryDreamRunResult } from '../../types/memory'
 import { MemoryTuning } from '../../utils/tuning'
 import type { MemoryTreeDomainApi as MemoryDomain } from '../tree/MemoryTreeDomain'
@@ -12,7 +12,7 @@ export interface MemoryDreamSchedulerOptions {
   /** 现在允不允许后台整理（自动记忆总开关与后台生长开关的合取）。 */
   isEnabled: () => boolean
   /** 空闲、电池和前台状态端口；具体实现由宿主注入，适配器本体不触碰平台 API。 */
-  idleSignal: HostIdleSignalPort
+  idleSignal: MemoryHostIdleSignalPort
   /** 电池供电时允不允许继续整理；缺席按不允许。 */
   allowBatteryGrowth?: () => boolean
   /** 巡检间隔，毫秒；缺省取可调参数表。 */
@@ -48,7 +48,7 @@ export interface MemoryDreamSchedulerApi {
 export class MemoryDreamScheduler implements MemoryDreamSchedulerApi {
   private readonly log = Log.tag('MemoryDreamScheduler')
   private readonly timers: TimerScope
-  private readonly idleSignal: HostIdleSignalPort
+  private readonly idleSignal: MemoryHostIdleSignalPort
   private readonly tickIntervalMs: number
   private readonly idleThresholdSeconds: number
   private readonly idleBatchSize: number
@@ -81,7 +81,7 @@ export class MemoryDreamScheduler implements MemoryDreamSchedulerApi {
    * 停掉定时巡检。**只取消租约，不释放定时器作用域**——释放是真正的销毁（`dispose`）才做的事。
    *
    * 从前 `stop()` 直接 `TimerScope.dispose()`，之后 `start()` 里的 `every()` 会抛
-   * `INVARIANT`（「已释放」）；`MemoryService.warmup()` 在 `finally` 里调 `start()`，
+   * `INVARIANT`（「已释放」）；`MemoryTreeService.warmup()` 在 `finally` 里调 `start()`，
    * 于是「关掉后台整理再 warmup」就是一次未处理的拒绝。停了还能再起是调度器的基本契约。
    */
   public stop(): void {

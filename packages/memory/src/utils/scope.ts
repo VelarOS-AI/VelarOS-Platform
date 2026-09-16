@@ -4,11 +4,7 @@
  */
 import { isFalse } from '@velaros-ai/core'
 
-import {
-  GLOBAL_MEMORY_SCOPE,
-  MemoryScopePrefixes,
-  SYSTEM_MEMORY_SCOPE,
-} from '../contract/constants'
+import { MemoryScopeIds, MemoryScopePrefixes } from '../contract/constants'
 import type {
   MemoryScopeId,
   MemoryScopeSelectorInput,
@@ -17,7 +13,7 @@ import type {
   MemoryScopeVisibilityInput,
 } from '../types/memory'
 
-export { GLOBAL_MEMORY_SCOPE, MemoryScopePrefixes, SYSTEM_MEMORY_SCOPE } from '../contract/constants'
+export { MemoryScopeIds, MemoryScopePrefixes } from '../contract/constants'
 export type {
   MemoryScopeId,
   MemoryScopeSelectorInput,
@@ -48,7 +44,7 @@ export function scopeTypeForScopeId(
   for (const [prefix, scopeType] of ScopeTypeByPrefix) {
     if (normalized.startsWith(prefix)) return scopeType
   }
-  if (!normalized || normalized === GLOBAL_MEMORY_SCOPE) return 'global'
+  if (!normalized || normalized === MemoryScopeIds.global) return 'global'
   return 'system'
 }
 
@@ -57,7 +53,7 @@ export function buildProjectMemoryScope(
   root: LooseOptional<string>
 ): MemoryScopeId {
   const normalized = root?.trim()
-  return normalized ? `${MemoryScopePrefixes.project}${normalized}` : SYSTEM_MEMORY_SCOPE
+  return normalized ? `${MemoryScopePrefixes.project}${normalized}` : MemoryScopeIds.system
 }
 
 /** 站点源 → 站点作用域 id；源为空时回落到系统池。 */
@@ -65,7 +61,7 @@ export function buildSiteMemoryScope(
   origin: LooseOptional<string>
 ): MemoryScopeId {
   const normalized = origin?.trim()
-  return normalized ? `${MemoryScopePrefixes.site}${normalized}` : SYSTEM_MEMORY_SCOPE
+  return normalized ? `${MemoryScopePrefixes.site}${normalized}` : MemoryScopeIds.system
 }
 
 /**
@@ -95,7 +91,7 @@ export function resolveMemoryScopeFilterValue(
   input: MemoryScopeSelectorInput
 ): MemoryScopeId {
   const selector = resolveMemoryScopeSelector(input)
-  return selector === GLOBAL_MEMORY_SCOPE ? '' : selector
+  return selector === MemoryScopeIds.global ? '' : selector
 }
 
 /**
@@ -118,11 +114,11 @@ export function isMemoryVisibleInScope(
   input: MemoryScopeVisibilityInput
 ): boolean {
   const selector = resolveMemoryScopeSelector(input)
-  if (!selector || selector === GLOBAL_MEMORY_SCOPE) return true
+  if (!selector || selector === MemoryScopeIds.global) return true
   const targetScopeId = target.scopeId?.trim() ?? ''
   if (targetScopeId === selector) return true
   if (isFalse(input.includeGlobal)) return false
   return targetScopeId
-    ? targetScopeId === GLOBAL_MEMORY_SCOPE
+    ? targetScopeId === MemoryScopeIds.global
     : target.scopeType === 'global'
 }

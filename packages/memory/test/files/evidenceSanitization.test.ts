@@ -10,7 +10,7 @@
 
 import { describe, expect, test } from 'bun:test'
 
-import { createInMemoryMemoryFilesIo } from '../../src/impl/files/InMemoryMemoryFilesIo'
+import { InMemoryMemoryFilesIo } from '../../src/impl/files/InMemoryMemoryFilesIo'
 import { createMemoryFilesBackend, type MemoryFilesScopeRoot } from '../../src/impl/files/MemoryFilesBackend'
 import type { MemoryEvidenceInput } from '../../src/types/memory'
 import { parseMemoryFileDocument } from '../../src/utils/files/frontmatter'
@@ -25,7 +25,7 @@ const ProjectRoot: MemoryFilesScopeRoot = {
 const ApiKey = `sk-${'abcdefghijklmnopqrstuvwx'}1234`
 
 function createBackend() {
-  const io = createInMemoryMemoryFilesIo()
+  const io = new InMemoryMemoryFilesIo()
   return { io, backend: createMemoryFilesBackend({ roots: [ProjectRoot], io, now: () => 1_700_000_000_000 }) }
 }
 
@@ -40,7 +40,7 @@ function evidence(overrides: Partial<MemoryEvidenceInput> = {}): MemoryEvidenceI
   }
 }
 
-function onlyEntry(io: ReturnType<typeof createInMemoryMemoryFilesIo>): string {
+function onlyEntry(io: InMemoryMemoryFilesIoApi): string {
   const snapshot = io.snapshot()
   const path = Object.keys(snapshot).find((candidate) => candidate.includes('/entries/'))
   expect(path).toBeTruthy()

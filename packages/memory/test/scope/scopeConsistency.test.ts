@@ -14,7 +14,7 @@
 
 import { describe, expect, test } from 'bun:test'
 
-import { createInMemoryMemoryFilesIo } from '../../src/impl/files/InMemoryMemoryFilesIo'
+import { InMemoryMemoryFilesIo } from '../../src/impl/files/InMemoryMemoryFilesIo'
 import { createMemoryFilesBackend } from '../../src/impl/files/MemoryFilesBackend'
 import {
   isMemoryVisibleInScope,
@@ -96,7 +96,7 @@ describe('D-13 跨后端同一裁决', () => {
   })
 
   test('文件档真跑一遍：选定 global 看得见所有池子', async () => {
-    const io = createInMemoryMemoryFilesIo()
+    const io = new InMemoryMemoryFilesIo()
     const backend = createMemoryFilesBackend({
       roots: [
         { scopeType: 'system', scopeId: 'system', directory: '/userData/memory' },

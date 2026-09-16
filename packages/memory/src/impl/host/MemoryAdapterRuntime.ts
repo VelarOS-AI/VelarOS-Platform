@@ -9,15 +9,15 @@ import type {
 } from '../../contract/requires'
 import type { MemoryBackendDescriptor } from '../../types/memory'
 import { listMissingAuthorityMemoryVerbs } from '../../utils/backends'
+import { resolveMemoryStoreBackend } from '../../utils/store-capabilities'
 import {
   createMemoryTreeStoreBackend,
 } from '../backends/MemoryTreeStoreBackend'
 
 import type { MemoryEvidenceBridgeApi } from './MemoryEvidenceBridge'
 import { MemoryEvidenceBridge } from './MemoryEvidenceBridge'
-import { resolveMemoryStoreBackend } from './MemoryStoreCapabilities'
 import type { MemoryTreeServiceApi } from './MemoryTreeService'
-import { MemoryService } from './MemoryTreeService'
+import { MemoryTreeService } from './MemoryTreeService'
 import type { MemoryTurnRecallCoordinatorApi } from './MemoryTurnRecallCoordinator'
 import { MemoryTurnRecallCoordinator } from './MemoryTurnRecallCoordinator'
 
@@ -46,7 +46,7 @@ export interface MemoryAdapterApi {
 
 /** 记忆适配器句柄实现。 */
 export class MemoryAdapterRuntime implements MemoryAdapterApi {
-  public readonly service: Nullable<MemoryService>
+  public readonly service: Nullable<MemoryTreeService>
   public readonly evidenceBridge: MemoryEvidenceBridge
   public readonly turnRecall: MemoryTurnRecallCoordinator
   /** 本次装配实际选中的记忆后端（采集 / 召回两端口的落点）。 */
@@ -96,7 +96,7 @@ export class MemoryAdapterRuntime implements MemoryAdapterApi {
 
     // 宿主可显式保留树档治理，或只挂载独立后端；后端名称不决定其它存储的生命周期。
     this.service = tree
-      ? new MemoryService(tree.domain, {
+      ? new MemoryTreeService(tree.domain, {
           idleSignal: tree.idleSignal,
           isAutoMemoryEnabled: config.isEnabled,
           isBackgroundGrowthEnabled: config.isBackgroundGrowthEnabled,

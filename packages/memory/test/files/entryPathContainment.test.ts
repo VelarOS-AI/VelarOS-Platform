@@ -18,7 +18,7 @@ import { join } from 'node:path'
 
 import { afterAll, describe, expect, test } from 'bun:test'
 
-import { createInMemoryMemoryFilesIo } from '../../src/impl/files/InMemoryMemoryFilesIo'
+import { InMemoryMemoryFilesIo } from '../../src/impl/files/InMemoryMemoryFilesIo'
 import { createMemoryFilesBackend, type MemoryFilesScopeRoot } from '../../src/impl/files/MemoryFilesBackend'
 import { createNodeMemoryFilesIo } from '../../src/impl/files/NodeMemoryFilesIo'
 import { isMemoryEntryPath } from '../../src/utils/files/entry-path'
@@ -76,7 +76,7 @@ describe('索引行越界即跳过', () => {
   })
 
   test('召回不会因为索引里写着就去读仓外的文件', () => {
-    const io = createInMemoryMemoryFilesIo({
+    const io = new InMemoryMemoryFilesIo({
       '/repo/.velaros/memory/MEMORY.md':
         '# Memory index\n\n- [项目部署约定](../../../home/.aws/credentials) — 部署约定\n',
       '/home/.aws/credentials': '[default]\naws_secret_access_key = fake\n',
@@ -91,7 +91,7 @@ describe('索引行越界即跳过', () => {
 
 describe('越界 id 当作不存在', () => {
   test('getItem 读不到记忆目录外的文件', () => {
-    const io = createInMemoryMemoryFilesIo({
+    const io = new InMemoryMemoryFilesIo({
       '/userData/home/id_rsa': '-----BEGIN OPENSSH PRIVATE KEY-----\nfake\n-----END OPENSSH PRIVATE KEY-----\n',
     })
     const backend = createMemoryFilesBackend({ roots: [SystemRoot], io })
@@ -99,7 +99,7 @@ describe('越界 id 当作不存在', () => {
   })
 
   test('archive 不改写记忆目录外的文件，越界 id 抛 NOT_FOUND', () => {
-    const io = createInMemoryMemoryFilesIo({
+    const io = new InMemoryMemoryFilesIo({
       '/userData/home/settings.json': '{"theme":"dark"}\n',
     })
     const backend = createMemoryFilesBackend({ roots: [SystemRoot], io })
@@ -161,7 +161,7 @@ describe('宿主注入的目录名同样过判定', () => {
     expect(() =>
       createMemoryFilesBackend({
         roots: [SystemRoot],
-        io: createInMemoryMemoryFilesIo(),
+        io: new InMemoryMemoryFilesIo(),
         entriesDirectoryName: '../..',
       })
     ).toThrow(/单段安全名字/u)

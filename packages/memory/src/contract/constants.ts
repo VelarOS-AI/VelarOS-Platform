@@ -27,15 +27,6 @@ export const MemoryBackendIds = Object.freeze({
   vector: 'vector',
 } as const)
 
-/** 树权威层的后端 id。 */
-export const MemoryTreeBackendId = 'tree' as const
-
-/** 文件权威层（出厂默认）的后端 id。 */
-export const MemoryFilesBackendId = 'files' as const
-
-/** 向量派生索引的后端 id；渲染进程的嵌入设置页按它判断这一档装没装。 */
-export const MemoryVectorBackendId = 'vector' as const
-
 /**
  * 窄端口的全部动词。
  *
@@ -73,12 +64,6 @@ export const MemoryScopeIds = Object.freeze({
   system: 'system',
 } as const)
 
-/** 全局作用域 id：这一档的记忆处处可见，`global` 记忆管理面同时代表「全部」。 */
-export const GLOBAL_MEMORY_SCOPE = 'global' as const
-
-/** 系统作用域 id：与项目、站点互不可见的独立池。 */
-export const SYSTEM_MEMORY_SCOPE = 'system' as const
-
 /**
  * 带参数的作用域前缀。
  *
@@ -98,12 +83,6 @@ export const MemoryStoreCapabilityIdentity = Object.freeze({
   defaultVersion: '1.0.0',
 } as const)
 
-/** 能力令牌族前缀；完整 id = `${MemoryStoreCapabilityNamespace}.${backendId}`。 */
-export const MemoryStoreCapabilityNamespace = 'velaros.memory.store' as const
-
-/** 没写版本时能力令牌用的缺省版本号。 */
-export const DefaultMemoryStoreCapabilityVersion = '1.0.0' as const
-
 /** 回合召回写进回合上下文账本时用的来源 id；宿主按它认这一路增量。 */
 export const MemoryTurnContextSourceId = 'memory.recall' as const
 
@@ -114,15 +93,6 @@ export const MemoryFilesLayout = Object.freeze({
   entriesDirectoryName: 'entries',
   vectorIndexFileName: 'vector-index.json',
 } as const)
-
-/** 文件权威层的索引文件名。 */
-export const MemoryIndexFileName = 'MEMORY.md' as const
-
-/** 文件权威层索引文件的一级标题，解析与写回都认它。 */
-export const MemoryIndexHeading = '# Memory index' as const
-
-/** 向量派生索引落盘的文件名（每个作用域一份）。 */
-export const MemoryVectorIndexFileName = 'vector-index.json' as const
 
 /** 向量索引的记录形状版本；变了就重建，不写迁移器。 */
 export const MemoryVectorIndex = Object.freeze({
@@ -154,8 +124,6 @@ export const MemoryToolLimits = Object.freeze({
   queryChars: 500,
   /** `memory:search` 一次最多返回多少条。 */
   recallItems: 50,
-  /** `memory:archive` 的 reason 最多多少字符。 */
-  archiveReasonChars: 500,
 } as const)
 
 /** 记忆的类别表；模型面的枚举与后端的类别用同一份。 */
@@ -190,13 +158,6 @@ export const MemoryPrivacyClasses = Object.freeze([
   'standard',
   'personal',
   'sensitive',
-] as const)
-
-/** `memory:search` 的三种模式：检索、浏览、画像。 */
-export const MemorySearchModes = Object.freeze([
-  'search',
-  'browse',
-  'profile',
 ] as const)
 
 /** 记忆树 v1 的存储约定：建表 SQL 由产品宿主内联进自己的迁移链，全仓只有这一份。 */

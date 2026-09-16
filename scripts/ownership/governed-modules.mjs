@@ -471,8 +471,6 @@ export const GovernedModules = [
   {
     directory: 'memory',
     name: '@velaros-ai/memory',
-    // 改造中：下面这些是目标位置，还没到位的照报条数、不计入失败
-    // （方案 docs/engineering/refactor-plans/memory.md §2.2–2.6、附录 A）
     toolsFile: 'src/impl/MemoryTools.ts',
     contract: 'src/contract',
     types: 'src/types',
@@ -499,11 +497,9 @@ export const GovernedModules = [
       ['tree-v2/'],
     ],
     toolDefiner: 'defineMemoryTool',
-    // 卡片与不变量登记是改造最后一段的事，这三份现在还不存在，照样登记，燃尽表里看得到
     card: 'MODULE.md',
     invariants: 'spec/invariants.md',
     acceptance: 'spec/acceptance.test.ts',
-    status: 'migrating',
   },
   {
     directory: 'knowledge',

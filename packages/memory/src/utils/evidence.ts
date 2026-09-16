@@ -6,8 +6,8 @@ import type { MemoryEvidenceInput } from '../types/memory'
 
 import {
   buildProjectMemoryScope,
+  MemoryScopeIds,
   scopeTypeForScopeId,
-  SYSTEM_MEMORY_SCOPE,
 } from './scope'
 import { MemoryTuning } from './tuning'
 
@@ -106,6 +106,6 @@ export function inferEvidenceScope(input: MemoryEvidenceInput): {
   if (input.scopeId?.trim()) return { scopeType: scopeTypeForScopeId(input.scopeId), scopeId: input.scopeId.trim() }
   if (input.workspaceRoot?.trim()) return { scopeType: 'workspace', scopeId: buildProjectMemoryScope(input.workspaceRoot) }
   // system 池是自成一类的作用域，不能贴 'global'（否则会走召回的 global 逃逸泄漏到一切会话）。
-  if (input.sessionId?.trim() || input.executionId?.trim()) return { scopeType: 'system', scopeId: SYSTEM_MEMORY_SCOPE }
+  if (input.sessionId?.trim() || input.executionId?.trim()) return { scopeType: 'system', scopeId: MemoryScopeIds.system }
   return { scopeType: 'global', scopeId: 'global' }
 }

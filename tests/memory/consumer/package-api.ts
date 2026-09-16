@@ -5,18 +5,16 @@ import {
 } from '@velaros-ai/knowledge'
 import {
   createMemoryRuntime,
-  MemoryRuntime,
-  type MemoryTreeRuntimeProviders,
-} from '@velaros-ai/memory'
-import {
-  MemoryAdapterRuntime,
   mountMemoryAdapter,
+  type MemoryAdapterApi,
   type MemoryAdapterConfigPort,
   type MemoryAdapterHostContextPort,
   type MemoryAdapterTreePort,
+  type MemoryStoreBackend,
+  type MemoryTreeRuntimeApi,
+  type MemoryTreeRuntimeProviders,
   type MountMemoryAdapterInput,
-} from '@velaros-ai/memory/adapter-kernel'
-import type { MemoryStoreBackend } from '@velaros-ai/memory/backend'
+} from '@velaros-ai/memory'
 
 declare const memoryProviders: MemoryTreeRuntimeProviders
 declare const knowledgeProviders: KnowledgeRuntimeProviders
@@ -27,14 +25,14 @@ declare const backend: MemoryStoreBackend
 declare const tree: MemoryAdapterTreePort
 
 const memory = createMemoryRuntime(memoryProviders)
-const memoryContract: MemoryRuntime = memory
+const memoryContract: MemoryTreeRuntimeApi = memory
 const knowledge = createKnowledgeRuntime(knowledgeProviders)
 const knowledgeContract: KnowledgeRuntimeApi = knowledge
-const adapter: MemoryAdapterRuntime = mountMemoryAdapter(adapterInput)
+const adapter: MemoryAdapterApi = mountMemoryAdapter(adapterInput)
 const standalone = mountMemoryAdapter({ backend, config, hostContext })
 const withGovernance = mountMemoryAdapter({ backend, tree, config, hostContext })
 
-void memory.domain
+void memory.memoryDomainService
 void knowledge.knowledgeDomainService
 void knowledge.knowledgeVectors
 void adapter.service

@@ -1,7 +1,7 @@
 import { Log } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import type { HostIdleSignalPort } from '../../contract/requires'
+import type { MemoryHostIdleSignalPort } from '../../contract/requires'
 import type {
   MemoryDreamRunOptions,
   MemoryDreamRunResult,
@@ -19,9 +19,9 @@ import type { MemoryTreeDomainApi as MemoryDomain } from '../tree/MemoryTreeDoma
 import { MemoryDreamScheduler } from './MemoryDreamScheduler'
 
 /** 一个树治理门面要什么。 */
-export interface MemoryServiceOptions {
+export interface MemoryTreeServiceOptions {
   /** 空闲/电池/前台读数端口；后台整理调度器判定时机时消费。 */
-  idleSignal: HostIdleSignalPort
+  idleSignal: MemoryHostIdleSignalPort
   /** 自动记忆总开关；缺席按开。 */
   isAutoMemoryEnabled?: () => boolean
   /** 后台生长开关；缺席按开。 */
@@ -65,14 +65,14 @@ export interface MemoryTreeServiceApi {
 }
 
 /** 记忆树治理门面实现。 */
-export class MemoryService implements MemoryTreeServiceApi {
-  private readonly log = Log.tag('MemoryService')
+export class MemoryTreeService implements MemoryTreeServiceApi {
+  private readonly log = Log.tag('MemoryTreeService')
   private readonly scheduler: MemoryDreamScheduler
   private readonly isGrowthEnabled: () => boolean
 
   constructor(
     private readonly domain: MemoryDomain,
-    options: MemoryServiceOptions
+    options: MemoryTreeServiceOptions
   ) {
     const isAutoMemoryEnabled = options.isAutoMemoryEnabled ?? (() => true)
     const isBackgroundGrowthEnabled = options.isBackgroundGrowthEnabled ?? (() => true)

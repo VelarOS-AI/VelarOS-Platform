@@ -16,15 +16,15 @@ import assert from 'node:assert/strict'
 import type { KernelApi } from '@velaros-ai/kernel'
 import { createKernel } from '@velaros-ai/kernel'
 
-import { MemoryVectorBackendId } from '../src/contract/constants'
-import { MemoryStoreCapabilityNamespace, MemoryTreeBackendId } from '../src/contract/constants'
-import { MemoryFilesBackendId } from '../src/contract/constants'
+import { MemoryBackendIds, MemoryStoreCapabilityIdentity } from '../src/contract/constants'
 import type { MemoryStoreCapabilityRegistry } from '../src/contract/requires'
 import type { MemoryStoreBackend } from '../src/contract/requires'
 import { createMemoryTreeStoreBackend } from '../src/impl/backends/MemoryTreeStoreBackend'
-import { createInMemoryMemoryFilesIo } from '../src/impl/files/InMemoryMemoryFilesIo'
+import { InMemoryMemoryFilesIo } from '../src/impl/files/InMemoryMemoryFilesIo'
 import { createMemoryFilesBackend } from '../src/impl/files/MemoryFilesBackend'
 import { mountMemoryAdapter } from '../src/impl/host/MemoryAdapterRuntime'
+import { MemoryTreeDomain as MemoryDomain } from '../src/impl/tree/MemoryTreeDomain'
+import { createMemoryVectorBackend } from '../src/impl/vector/MemoryVectorBackend'
 import {
   createMemoryStoreCapabilityToken,
   createMemoryStoreKernelModule,
@@ -32,9 +32,7 @@ import {
   memoryStoreCapabilityId,
   resolveMemoryDerivedIndexBackends,
   resolveMemoryStoreBackend,
-} from '../src/impl/host/MemoryStoreCapabilities'
-import { MemoryTreeDomain as MemoryDomain } from '../src/impl/tree/MemoryTreeDomain'
-import { createMemoryVectorBackend } from '../src/impl/vector/MemoryVectorBackend'
+} from '../src/utils/store-capabilities'
 
 const ExpectedAssertionCount = 37
 let assertionCount = 0
@@ -117,7 +115,7 @@ function createFakeDomain(): { domain: MemoryDomain; calls: DomainCallLog } {
 function createFilesBackend(): MemoryStoreBackend {
   return createMemoryFilesBackend({
     roots: [{ scopeType: 'global', scopeId: 'global', directory: '/memory' }],
-    io: createInMemoryMemoryFilesIo(),
+    io: new InMemoryMemoryFilesIo(),
   })
 }
 
@@ -150,7 +148,7 @@ function mountInput(domain: MemoryDomain) {
 
 // ── token 族形状 ───────────────────────────────────────────────────────────
 function probeTokenShape(): void {
-  equal(MemoryStoreCapabilityNamespace, 'velaros.memory.store', 'token 族前缀按宪章命名')
+  equal(MemoryStoreCapabilityIdentity.namespace, 'velaros.memory.store', 'token 族前缀按宪章命名')
   equal(memoryStoreCapabilityId('files'), 'velaros.memory.store.files', 'id 由后端 id 派生')
   equal(
     createMemoryStoreCapabilityToken('tree').id,
@@ -197,18 +195,18 @@ async function probeRegistryResolution(): Promise<void> {
 
   const descriptors = listRegisteredMemoryStoreBackends(registryOf(kernel), ['files', 'tree'])
   equal(descriptors.length, 2, '两个后端档并存注册在同一个内核上')
-  equal(descriptors[0].id, MemoryFilesBackendId, '枚举保持请求顺序')
+  equal(descriptors[0].id, MemoryBackendIds.files, '枚举保持请求顺序')
   equal(descriptors[0].role, 'authority', 'files 是权威层')
-  equal(descriptors[1].id, MemoryTreeBackendId, '树档同时在册')
+  equal(descriptors[1].id, MemoryBackendIds.tree, '树档同时在册')
 
   equal(
     resolveMemoryStoreBackend({ registry: registryOf(kernel), preference: ['files', 'tree'] })?.descriptor.id,
-    MemoryFilesBackendId,
+    MemoryBackendIds.files,
     'files 优先时解析到文件后端',
   )
   equal(
     resolveMemoryStoreBackend({ registry: registryOf(kernel), preference: ['tree', 'files'] })?.descriptor.id,
-    MemoryTreeBackendId,
+    MemoryBackendIds.tree,
     '优先序反过来就换后端，调用点一行不改',
   )
   equal(
@@ -233,7 +231,7 @@ async function probeDefaultFallback(): Promise<void> {
   const { domain, calls } = createFakeDomain()
   const adapter = mountMemoryAdapter(mountInput(domain))
 
-  equal(adapter.storeDescriptor.id, MemoryTreeBackendId, '不传 store → 回落默认树后端')
+  equal(adapter.storeDescriptor.id, MemoryBackendIds.tree, '不传 store → 回落默认树后端')
   check(adapter.isDefaultStore, 'isDefaultStore 如实回报回落')
 
   await adapter.store.recall('查询词')
@@ -257,7 +255,7 @@ async function probeDefaultFallback(): Promise<void> {
   equal(calls.setSessionEvidenceEligibility, 1, 'govern 动词逐字转发')
 
   const stats = await adapter.store.inspect()
-  equal(stats.backendId, MemoryTreeBackendId, 'inspect 自报树后端')
+  equal(stats.backendId, MemoryBackendIds.tree, 'inspect 自报树后端')
   equal(stats.itemCount, 5, '树诊断投影到 itemCount=claimCount')
   equal(stats.version, 42, 'treeVersion 投影到 version')
   equal(stats.pendingCount, 6, 'pendingEvidenceCount 投影到 pendingCount')
@@ -275,7 +273,7 @@ async function probeFilesRouting(): Promise<void> {
     ...mountInput(domain),
     store: { registry: registryOf(kernel), preference: ['files', 'tree'] },
   })
-  equal(adapter.storeDescriptor.id, MemoryFilesBackendId, '解析到 files 后端')
+  equal(adapter.storeDescriptor.id, MemoryBackendIds.files, '解析到 files 后端')
   check(!adapter.isDefaultStore, 'isDefaultStore 为假')
 
   adapter.evidenceBridge.captureUserMessage({
@@ -317,7 +315,7 @@ async function probeDerivedIndexRoleGate(): Promise<void> {
   )
   equal(
     resolveMemoryStoreBackend({ registry: registryOf(kernel), preference: ['vector', 'files'] })?.descriptor.id,
-    MemoryFilesBackendId,
+    MemoryBackendIds.files,
     '权威解析跳过派生索引,哪怕优先序里点名了它',
   )
   equal(
@@ -327,7 +325,7 @@ async function probeDerivedIndexRoleGate(): Promise<void> {
   )
   const derivedBackends = resolveMemoryDerivedIndexBackends(registryOf(kernel), ['files', 'vector'])
   equal(derivedBackends.length, 1, '派生解析只收 derived-index 角色')
-  equal(derivedBackends[0].descriptor.id, MemoryVectorBackendId, '解析到 vector')
+  equal(derivedBackends[0].descriptor.id, MemoryBackendIds.vector, '解析到 vector')
 
   await kernel.dispose()
 }

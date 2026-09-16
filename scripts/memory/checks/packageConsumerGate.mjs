@@ -48,15 +48,6 @@ const PackageSpecifications = [
       '@velaros-ai/core': '^0.4.0',
     },
   },
-  {
-    name: '@velaros-ai/memory/adapter-kernel',
-    directory: resolve(RepositoryRoot, 'packages/memory'),
-    example: 'adapter-kernel.ts',
-    expectedDependencies: {
-      '@velaros-ai/core': '^0.4.0',
-      '@velaros-ai/kernel': '^0.1.0',
-    },
-  },
 ]
 
 const SupportPackageSpecifications = [
@@ -360,9 +351,6 @@ async function auditPackageRoot(
     )) {
       assert.equal(manifest.dependencies?.[name], version)
     }
-    if (specification.name === '@velaros-ai/memory/adapter-kernel') {
-      assert.equal(manifest.dependencies?.['@velaros-ai/memory'], rootVersion)
-    }
     assert.ok(manifest.files.includes('docs'))
     assert.ok(manifest.files.includes('examples'))
   }
@@ -514,7 +502,6 @@ async function writeConsumerProject(consumerDirectory) {
 
 const memory = await import('@velaros-ai/memory')
 const knowledge = await import('@velaros-ai/knowledge')
-const adapter = await import('@velaros-ai/memory/adapter-kernel')
 
 assert.equal(typeof memory.createMemoryRuntime, 'function')
 assert.equal(typeof memory.mountMemoryAdapter, 'function')
@@ -532,7 +519,6 @@ async function writeCombinedConsumer(consumerDirectory) {
     `import { isBlank } from '@velaros-ai/core'
 import * as Knowledge from '@velaros-ai/knowledge'
 import * as Memory from '@velaros-ai/memory'
-import * as MemoryAdapter from '@velaros-ai/memory/adapter-kernel'
 import * as UI from '@velaros-ai/ui'
 import type { Nullable as UiNullable } from '@velaros-ai/ui/utility-types'
 
@@ -542,7 +528,6 @@ void nullableText
 void isBlank('text')
 void Knowledge
 void Memory
-void MemoryAdapter
 void UI
 `
   )

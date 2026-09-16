@@ -23,12 +23,6 @@ import { DefaultMemoryEntriesDirectoryName, isMemoryEntryPath } from './entry-pa
 
 export type { MemoryIndexEntry, ParseMemoryIndexOptions } from '../../types/files'
 
-/** 索引文件名（常量表 MemoryFilesLayout.indexFileName 的别名）。 */
-export const MemoryIndexFileName = MemoryFilesLayout.indexFileName
-
-/** 索引文件的一级标题（常量表 MemoryFilesLayout.indexHeading 的别名）。 */
-export const MemoryIndexHeading = MemoryFilesLayout.indexHeading
-
 
 const LinkedLine =
   /^\s*[-*+]\s*\[(?<name>(?:\\.|[^\\\]])*)\]\((?<path>[^)]+)\)\s*(?:[—–:-]\s*(?<description>.*))?$/u
@@ -86,7 +80,7 @@ export function parseMemoryIndex(
 /** 序列化索引文件。顺序即写入顺序（最近 upsert 的排在最后）。 */
 export function serializeMemoryIndex(
   entries: readonly MemoryIndexEntry[],
-  heading = MemoryIndexHeading,
+  heading = MemoryFilesLayout.indexHeading,
 ): string {
   const lines = [heading, '']
   for (const entry of entries) {

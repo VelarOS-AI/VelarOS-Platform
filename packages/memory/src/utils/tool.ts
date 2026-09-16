@@ -6,7 +6,8 @@
 
 import { toolContracts } from '@velaros-ai/tool-contract'
 
-import type { DefineMemoryToolInput, VelaTool } from '../contract/requires'
+import type { VelaTool } from '../contract/requires'
+import type { DefineMemoryToolInput } from '../types/tool'
 
 /** 定义一个记忆工具：把工具契约 SDK 的通用定义收窄到记忆的上下文与类别上。 */
 export function defineMemoryTool<

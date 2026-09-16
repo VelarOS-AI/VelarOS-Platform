@@ -13,7 +13,7 @@ import { describe, expect, test } from 'bun:test'
 
 import type { MemoryEmbedder } from '../../src/contract/requires'
 import { createLayeredMemoryStoreBackend } from '../../src/impl/backends/LayeredMemoryStore'
-import { createInMemoryMemoryFilesIo } from '../../src/impl/files/InMemoryMemoryFilesIo'
+import { InMemoryMemoryFilesIo } from '../../src/impl/files/InMemoryMemoryFilesIo'
 import { createMemoryFilesBackend } from '../../src/impl/files/MemoryFilesBackend'
 import { createMemoryVectorBackend } from '../../src/impl/vector/MemoryVectorBackend'
 import type { MemoryEvidenceInput, MemoryRecallItem } from '../../src/types/memory'
@@ -31,7 +31,7 @@ const Scope = 'project:/repo'
 function createStack() {
   const authority = createMemoryFilesBackend({
     roots: [{ scopeType: 'workspace', scopeId: Scope, directory: '/repo/.velaros/memory' }],
-    io: createInMemoryMemoryFilesIo(),
+    io: new InMemoryMemoryFilesIo(),
     now: () => 1_700_000_000_000,
   })
   return createLayeredMemoryStoreBackend({
