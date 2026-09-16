@@ -20,6 +20,7 @@ import {
   isNull,
   isString,
   isTrue,
+  Log,
   trimmedStringOrEmpty,
 } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
@@ -31,6 +32,7 @@ import type {
   MemoryStoreBackend,
 } from '../backend/Contract'
 import type { MemoryAuthorityEnumeration } from '../backend/DerivedIndex'
+import { redactMemorySecrets, sanitizeMemoryEvidenceInput } from '../memory-tree/Sanitizer'
 import type {
   MemoryCaptureBatchResult,
   MemoryCaptureResult,
@@ -50,6 +52,12 @@ import {
 } from '../MemoryScope'
 
 import {
+  DefaultMemoryEntriesDirectoryName,
+  isMemoryEntryFileName,
+  isMemoryEntryPath,
+  isMemoryFileSegment,
+} from './EntryPath'
+import {
   type MemoryFileDocument,
   parseMemoryFileDocument,
   serializeMemoryFileDocument,
@@ -68,10 +76,11 @@ export const MemoryFilesBackendId = 'files'
 
 /** id 分隔符：`<scopeId>::<相对路径>`。scopeId 里可能有 `:`（`project:/a/b`），故用双冒号。 */
 const IdSeparator = '::'
-const DefaultEntriesDirectory = 'entries'
 /** 索引命中后最多读多少个全文——「按需全文」的上限，防止一次召回把整个记忆库读进内存。 */
 const MaxFullTextReadsPerRecall = 24
 const ArchivedStatus = 'archived'
+/** 越界路径的诊断去重表上限：同一个坏索引每次召回都会再撞一次，日志不该跟着涨。 */
+const MaxReportedOutOfBoundsPaths = 200
 
 /**
  * 一个作用域的磁盘落点。
@@ -183,63 +192,85 @@ interface ScoredCandidate {
 class MemoryFilesBackend implements MemoryStoreBackend {
   public readonly descriptor = filesDescriptor
 
+  private readonly log = Log.tag('MemoryFilesBackend')
   private readonly io: MemoryFilesIo
   private readonly indexFileName: string
   private readonly entriesDirectoryName: string
   private readonly now: () => number
+  /** 已经报过的越界路径；同一个坏索引不必每次召回都刷一条日志。 */
+  private readonly reportedOutOfBoundsPaths = new Set<string>()
 
   public constructor(private readonly options: MemoryFilesBackendOptions) {
     this.io = options.io ?? createInMemoryMemoryFilesIo()
     this.indexFileName = options.indexFileName ?? MemoryIndexFileName
-    this.entriesDirectoryName = options.entriesDirectoryName ?? DefaultEntriesDirectory
+    this.entriesDirectoryName = options.entriesDirectoryName ?? DefaultMemoryEntriesDirectoryName
     this.now = options.now ?? (() => Date.now())
+    // 目录名与索引文件名由宿主注入，同样要过一段名字的判定：宿主传进一个 `../..`
+    // 就等于把后面每一道条目路径判定都建在沙子上。
+    if (!isMemoryFileSegment(this.entriesDirectoryName) || !isMemoryFileSegment(this.indexFileName)) {
+      throw new AppError(
+        'INVARIANT',
+        'memory-files 后端的条目目录名与索引文件名必须是单段安全名字（不含路径分隔符、`.`、`..`）。',
+      )
+    }
   }
 
   public capture(input: MemoryEvidenceInput): MemoryCaptureResult {
-    const root = this.resolveWriteRoot(input)
-    const timestamp = input.occurredAt ?? this.now()
-    const title = (input.title ?? '').trim() || firstLine(input.content) || 'memory'
-    const category: MemoryEvidenceCategory = input.category ?? 'fact'
-    const stableKey = (input.sourceId ?? '').trim()
-      || hash(`${input.sourceType}|${title}|${input.content}`)
+    // 落盘前先过全仓同一道证据清洗：秘密打码、正文与标题截断、空内容拒收。
+    // 文件后端是出厂默认的权威层，清洗漏在这里 = 用户在聊天里贴的 key 原样进了跟着 git 走的目录。
+    const evidenceInput = sanitizeMemoryEvidenceInput(input)
+    const root = this.resolveWriteRoot(evidenceInput)
+    const timestamp = evidenceInput.occurredAt ?? this.now()
+    const title = (evidenceInput.title ?? '').trim() || firstLine(evidenceInput.content) || 'memory'
+    const category: MemoryEvidenceCategory = evidenceInput.category ?? 'fact'
+    const stableKey = (evidenceInput.sourceId ?? '').trim()
+      || hash(`${evidenceInput.sourceType}|${title}|${evidenceInput.content}`)
 
     const index = this.readIndex(root)
     const existingPath = this.findPathByStableKey(root, index, stableKey)
     const relativePath = existingPath ?? this.allocatePath(root, index, title)
-    const absolutePath = this.io.join(root.directory, relativePath)
+    const absolutePath = this.resolveEntryPath(root, relativePath)
+    if (isNull(absolutePath)) {
+      throw new AppError(
+        'INVARIANT',
+        `memory-files 算出了越界的条目路径：${relativePath}`,
+      )
+    }
 
     const previousRaw = this.io.readTextFile(absolutePath)
     const previous = isNull(previousRaw)
       ? undefined
       : parseMemoryFileDocument(previousRaw, title)
 
-    const description = (
-      readMetadataString(input.metadata, 'summary')
-      || previous?.description
-      || firstLine(input.content)
-    ).slice(0, 400)
+    const description = redactMemorySecrets(
+      (
+        readMetadataString(evidenceInput.metadata, 'summary')
+        || previous?.description
+        || firstLine(evidenceInput.content)
+      ).slice(0, 400),
+    )
 
     const document = serializeMemoryFileDocument({
       name: title,
       description,
       type: category,
-      attributes: {
+      attributes: redactAttributes({
         // 未知字段原样带回：用户或未来档写下的东西不归本后端处置。
         ...previous?.attributes,
         id: stableKey,
         scope: root.scopeId,
         scopeType: root.scopeType,
         stableKey,
-        source: readMetadataString(input.metadata, 'source') || input.sourceType,
-        sourceType: input.sourceType,
-        trust: input.trustLevel,
-        privacy: input.privacyClass ?? 'standard',
+        source: readMetadataString(evidenceInput.metadata, 'source') || evidenceInput.sourceType,
+        sourceType: evidenceInput.sourceType,
+        trust: evidenceInput.trustLevel,
+        privacy: evidenceInput.privacyClass ?? 'standard',
         status: 'active',
         created: previous?.attributes.created ?? String(timestamp),
         updated: String(timestamp),
-        ...optionalTags(input.metadata),
-      },
-      body: input.content.trim(),
+        ...optionalTags(evidenceInput.metadata),
+      }),
+      body: evidenceInput.content.trim(),
     })
 
     const inserted = isNull(previousRaw) || previousRaw !== document
@@ -254,7 +285,7 @@ class MemoryFilesBackend implements MemoryStoreBackend {
 
     return {
       evidence: this.toEvidenceRecord({
-        input,
+        input: evidenceInput,
         root,
         relativePath,
         title,
@@ -336,7 +367,7 @@ class MemoryFilesBackend implements MemoryStoreBackend {
   }
 
   public getItem(id: string): Nullable<MemoryRecallItem> {
-    const parsed = parseEntryId(id)
+    const parsed = this.parseEntryId(id)
     if (!parsed) return null
     const root = this.listRoots().find((candidate) => candidate.scopeId === parsed.scopeId)
     if (!root) return null
@@ -390,32 +421,38 @@ class MemoryFilesBackend implements MemoryStoreBackend {
    *
    * **文件不删**。这是 §九 9.4「权威内容永不静默硬删」的落点，也和 `memory:archive` 工具
    * 「自然遗忘不是物理删除」的产品语义对齐——归档后仍可被 `includeDormant` 深层召回捞回。
+   *
+   * 认不出、越界、不存在的 id 一律抛 `NOT_FOUND`（与树后端同口径）：从前回一个空的
+   * `affectedEvidenceIds`、工具照样对用户说「已归档」，模型拿错 id 也不会发现。
    */
   public archive(id: string): MemoryForgetResult {
-    const parsed = parseEntryId(id)
-    if (!parsed) return { claimId: id, affectedEvidenceIds: [], treeVersion: 0 }
-    const root = this.listRoots().find((candidate) => candidate.scopeId === parsed.scopeId)
-    if (!root || root.readOnly) return { claimId: id, affectedEvidenceIds: [], treeVersion: 0 }
-
-    const absolutePath = this.io.join(root.directory, parsed.path)
-    const raw = this.io.readTextFile(absolutePath)
-    if (isNotNull(raw)) {
-      const document = parseMemoryFileDocument(raw, parsed.path)
-      this.io.writeTextFile(
-        absolutePath,
-        serializeMemoryFileDocument({
-          name: document.name,
-          description: document.description,
-          type: document.type,
-          attributes: {
-            ...document.attributes,
-            status: ArchivedStatus,
-            updated: String(this.now()),
-          },
-          body: document.body,
-        }),
-      )
+    const parsed = this.parseEntryId(id)
+    const root = parsed
+      ? this.listRoots().find((candidate) => candidate.scopeId === parsed.scopeId)
+      : undefined
+    const absolutePath = parsed && root ? this.resolveEntryPath(root, parsed.path) : null
+    const raw = isNotNull(absolutePath) ? this.io.readTextFile(absolutePath) : null
+    if (!parsed || !root || isNull(absolutePath) || isNull(raw)) {
+      throw new AppError('NOT_FOUND', `记忆不存在：${id}`)
     }
+    // 只读根（别人 clone 来的共享记忆）不接受写入：条目在，但归档不成，如实回空。
+    if (root.readOnly) return { claimId: id, affectedEvidenceIds: [], treeVersion: 0 }
+
+    const document = parseMemoryFileDocument(raw, parsed.path)
+    this.io.writeTextFile(
+      absolutePath,
+      serializeMemoryFileDocument({
+        name: document.name,
+        description: document.description,
+        type: document.type,
+        attributes: {
+          ...document.attributes,
+          status: ArchivedStatus,
+          updated: String(this.now()),
+        },
+        body: document.body,
+      }),
+    )
     this.writeIndex(root, removeMemoryIndexEntry(this.readIndex(root), parsed.path))
     return { claimId: id, affectedEvidenceIds: [id], treeVersion: 0 }
   }
@@ -423,6 +460,53 @@ class MemoryFilesBackend implements MemoryStoreBackend {
   private listRoots(): readonly MemoryFilesScopeRoot[] {
     const { roots } = this.options
     return isFunction(roots) ? roots() : roots
+  }
+
+  /**
+   * 条目 id → 作用域与相对路径；路径形状不合的一律当作认不出（返回 null）。
+   *
+   * id 的分隔符是双冒号，scopeId 里可能自带 `:`（`project:/a/b`），因此取**最后一个**分隔符。
+   */
+  private parseEntryId(id: string): Nullable<{ scopeId: string; path: string }> {
+    const separator = id.lastIndexOf(IdSeparator)
+    if (separator <= 0) return null
+    const path = id.slice(separator + IdSeparator.length)
+    if (!isMemoryEntryPath(path, this.entriesDirectoryName)) {
+      this.reportOutOfBoundsPath(id)
+      return null
+    }
+    return { scopeId: id.slice(0, separator), path }
+  }
+
+  /**
+   * 条目相对路径 → 磁盘绝对路径；越界回 null（调用方当作不存在）。
+   *
+   * 两道判定：① 路径形状只认 `<条目目录>/<名>.md`，文本判定挡住 `..`、绝对路径、反斜杠与子目录；
+   * ② 端口能解符号链接时，真实路径必须还在本作用域根里——条目目录里一个指向仓外凭据文件的
+   * 符号链接，文本判定看不出来。
+   */
+  private resolveEntryPath(
+    root: MemoryFilesScopeRoot,
+    relativePath: string,
+  ): Nullable<string> {
+    if (!isMemoryEntryPath(relativePath, this.entriesDirectoryName)) {
+      this.reportOutOfBoundsPath(`${root.scopeId}${IdSeparator}${relativePath}`)
+      return null
+    }
+    const absolutePath = this.io.join(root.directory, relativePath)
+    if (this.io.isInsideDirectory && !this.io.isInsideDirectory(absolutePath, root.directory)) {
+      this.reportOutOfBoundsPath(`${root.scopeId}${IdSeparator}${relativePath}`)
+      return null
+    }
+    return absolutePath
+  }
+
+  /** 越界路径记一条诊断；同一条只报一次，报满上限后停手（日志不跟着坏索引涨）。 */
+  private reportOutOfBoundsPath(reference: string): void {
+    if (this.reportedOutOfBoundsPaths.size >= MaxReportedOutOfBoundsPaths) return
+    if (this.reportedOutOfBoundsPaths.has(reference)) return
+    this.reportedOutOfBoundsPaths.add(reference)
+    this.log.warn('记忆条目路径越界，已跳过', { reference })
   }
 
   private resolveWriteRoot(input: MemoryEvidenceInput): MemoryFilesScopeRoot {
@@ -463,7 +547,11 @@ class MemoryFilesBackend implements MemoryStoreBackend {
 
   private readIndex(root: MemoryFilesScopeRoot): MemoryIndexEntry[] {
     const raw = this.io.readTextFile(this.io.join(root.directory, this.indexFileName))
-    const entries = parseMemoryIndex(raw)
+    const entries = parseMemoryIndex(raw, {
+      entriesDirectoryName: this.entriesDirectoryName,
+      onRejectedPath: (path) =>
+        this.reportOutOfBoundsPath(`${root.scopeId}${IdSeparator}${path}`),
+    })
     if (!isEmpty(entries) || isNotNull(raw)) return entries
     // 索引缺席但目录里有条目文件（用户手动拷进来 / 索引被误删）：按目录重建，绝不当作空记忆。
     return this.scanEntriesDirectory(root)
@@ -491,7 +579,7 @@ class MemoryFilesBackend implements MemoryStoreBackend {
   private scanEntriesDirectory(root: MemoryFilesScopeRoot): MemoryIndexEntry[] {
     return this.io
       .listFiles(this.io.join(root.directory, this.entriesDirectoryName))
-      .filter((name) => name.endsWith('.md'))
+      .filter((name) => isMemoryEntryFileName(name, this.entriesDirectoryName))
       .map((name) => {
         const path = `${this.entriesDirectoryName}/${name}`
         const document = this.loadDocument(root, path)
@@ -532,10 +620,9 @@ class MemoryFilesBackend implements MemoryStoreBackend {
     const taken = new Set(entries.map((entry) => entry.path))
     for (let suffix = 0; suffix < 1000; suffix += 1) {
       const path = `${this.entriesDirectoryName}/${suffix === 0 ? base : `${base}-${suffix + 1}`}.md`
-      if (
-        !taken.has(path)
-        && isNull(this.io.readTextFile(this.io.join(root.directory, path)))
-      ) return path
+      const absolutePath = this.resolveEntryPath(root, path)
+      if (taken.has(path) || isNull(absolutePath)) continue
+      if (isNull(this.io.readTextFile(absolutePath))) return path
     }
     return `${this.entriesDirectoryName}/${base}-${hash(title)}.md`
   }
@@ -544,9 +631,11 @@ class MemoryFilesBackend implements MemoryStoreBackend {
     root: MemoryFilesScopeRoot,
     relativePath: string,
   ): Nullable<MemoryFileDocument> {
-    const raw = this.io.readTextFile(this.io.join(root.directory, relativePath))
+    const absolutePath = this.resolveEntryPath(root, relativePath)
+    if (isNull(absolutePath)) return null
+    const raw = this.io.readTextFile(absolutePath)
     if (isNull(raw)) return null
-    return parseMemoryFileDocument(raw, relativePath.replace(/^.*\//u, '').replace(/\.md$/u, ''))
+    return parseMemoryFileDocument(raw, relativePath.replace(/^.*\//u, '').replace(/\.md$/iu, ''))
   }
 
   private loadEntry(
@@ -638,13 +727,13 @@ function scoreIndexEntry(entry: MemoryIndexEntry, tokens: readonly string[]): nu
   return score
 }
 
-function parseEntryId(id: string): Nullable<{ scopeId: string; path: string }> {
-  const separator = id.lastIndexOf(IdSeparator)
-  if (separator <= 0) return null
-  return {
-    scopeId: id.slice(0, separator),
-    path: id.slice(separator + IdSeparator.length),
-  }
+/** frontmatter 的每个值都过一遍打码：摘要、来源、标签同样来自聊天正文。 */
+function redactAttributes(
+  attributes: Readonly<Record<string, string>>,
+): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(attributes).map(([key, value]) => [key, redactMemorySecrets(value)]),
+  )
 }
 
 function firstLine(content: string): string {

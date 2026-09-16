@@ -347,6 +347,7 @@ const forgetMemory = defineMemoryTool<ForgetMemoryInput>({
   notes: [
     '归档不是删除：内容仍在，deep=true 的深层召回仍能翻到。',
     '用户要求「彻底删掉」时如实说明当前只能归档，别承诺物理删除。',
+    '只能归档当前空间可见的记忆（本空间 + 全局）；别的空间的 id 一律当作不存在。',
   ],
   examples: [{ id: 'project:/repo::entries/回复风格.md', reason: '该偏好只适用于旧项目' }],
   schema: z.object({
@@ -358,13 +359,24 @@ const forgetMemory = defineMemoryTool<ForgetMemoryInput>({
   isConcurrencySafe: () => false,
   execute: async ({ id, reason }, ctx) => {
     ctx.abortSignal.throwIfAborted()
+    // 归档是写动作，先过和 `memory:get` 同一条可见性读门：没有这一道，项目会话拿到一个
+    // 系统池的 id 就能把别人空间的记忆归档掉（系统根总在根列表里）。越界与不存在回同一个
+    // NOT_FOUND——分开回等于把「这条存在但不属于你」当成信息泄漏出去。
+    const memory = await ctx.memory.getMemory(id)
+    if (!memory || !isMemoryReadableInScope(memory, ctx.memoryScope)) {
+      throw new AppError('NOT_FOUND', `记忆不存在：${id}`)
+    }
     const result = await ctx.memory.archiveMemory(id)
+    // 后端一条都没归档到（例如只读根）时如实回 false，别再对模型说「已归档」。
+    const archived = !isEmpty(result.affectedEvidenceIds)
     return {
-      archived: true,
+      archived,
       physicalDelete: false,
       reason: toNullable(reason),
       ...result,
-      message: '已归档：这条记忆退出日常召回，内容仍在，深层召回仍可翻到。',
+      message: archived
+        ? '已归档：这条记忆退出日常召回，内容仍在，深层召回仍可翻到。'
+        : '没有归档成：这条记忆所在的作用域根是只读的，请如实告诉用户，别说已经归档。',
     }
   },
 })

@@ -16,6 +16,8 @@
  * 文件系统上两者会撞成同一个文件。
  */
 
+import { DefaultMemoryEntriesDirectoryName, isMemoryEntryPath } from './EntryPath'
+
 export const MemoryIndexFileName = 'MEMORY.md'
 export const MemoryIndexHeading = '# Memory index'
 
@@ -26,14 +28,30 @@ export interface MemoryIndexEntry {
   readonly description: string
 }
 
+export interface ParseMemoryIndexOptions {
+  /** 条目目录名；索引行必须指向 `<目录>/<名>.md`，别的形状一律跳过。 */
+  readonly entriesDirectoryName?: string
+  /** 越界行的诊断口：路径逃出条目目录时先跳过、再把它交给这里（后端记日志）。 */
+  readonly onRejectedPath?: (path: string) => void
+}
+
 const LinkedLine =
   /^\s*[-*+]\s*\[(?<name>[^\]]*)\]\((?<path>[^)]+)\)\s*(?:[—–:-]\s*(?<description>.*))?$/u
 const BareLine =
   /^\s*[-*+]\s*(?<path>\S+\.md)\s*(?:[—–:-]\s*(?<description>.*))?$/u
 
-/** 解析索引文件；非条目行（标题、空行、说明段落）一律忽略。 */
-export function parseMemoryIndex(raw: Nullable<string>): MemoryIndexEntry[] {
+/**
+ * 解析索引文件；非条目行（标题、空行、说明段落）一律忽略。
+ *
+ * 路径过 `isMemoryEntryPath` 这一道全仓单源判定：索引文件跟着仓库走，一行链接就能指到记忆目录外
+ * 去，因此越界的行**跳过并记诊断**，绝不因为「文件里写着」就读它。
+ */
+export function parseMemoryIndex(
+  raw: Nullable<string>,
+  options: ParseMemoryIndexOptions = {},
+): MemoryIndexEntry[] {
   if (!raw) return []
+  const entriesDirectoryName = options.entriesDirectoryName ?? DefaultMemoryEntriesDirectoryName
   const entries: MemoryIndexEntry[] = []
   const seen = new Set<string>()
   for (const line of raw.replaceAll('\r\n', '\n').split('\n')) {
@@ -42,6 +60,10 @@ export function parseMemoryIndex(raw: Nullable<string>): MemoryIndexEntry[] {
     const path = match.groups.path.trim()
     if (!path || seen.has(path)) continue
     seen.add(path)
+    if (!isMemoryEntryPath(path, entriesDirectoryName)) {
+      options.onRejectedPath?.(path)
+      continue
+    }
     entries.push({
       path,
       name: (match.groups.name ?? '').trim() || path.replace(/\.md$/u, ''),

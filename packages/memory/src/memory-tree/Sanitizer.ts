@@ -53,7 +53,13 @@ function normalizeEvidenceText(value: string, maxChars: number): string {
   return value.replaceAll('\0', '').replace(/\r\n/g, '\n').trim().slice(0, maxChars)
 }
 
-function redactSecrets(value: string): string {
+/**
+ * 秘密打码 —— **全仓唯一实现**。
+ *
+ * 落盘的每一处都必须经这里：正文、标题、元数据由 `sanitizeMemoryEvidenceInput` 带过，
+ * 文件后端写进 frontmatter 的摘要、来源、标签这些派生字段自己调（那些值同样来自聊天正文）。
+ */
+export function redactMemorySecrets(value: string): string {
   return SecretPatterns.reduce(
     (current, entry) => current.replace(entry.pattern, entry.replacement),
     value
@@ -62,7 +68,7 @@ function redactSecrets(value: string): string {
 
 function sanitizeMetadataValue(value: unknown, depth: number = 0): unknown {
   if (depth > 5) return '[TRUNCATED_METADATA]'
-  if (isString(value)) return redactSecrets(normalizeEvidenceText(value, 2_000))
+  if (isString(value)) return redactMemorySecrets(normalizeEvidenceText(value, 2_000))
   if (isArray(value)) return value.slice(0, 100).map((item) => sanitizeMetadataValue(item, depth + 1))
   if (!isPlainObject(value)) return value
   return Object.fromEntries(
@@ -73,7 +79,7 @@ function sanitizeMetadataValue(value: unknown, depth: number = 0): unknown {
 }
 
 export function sanitizeMemoryEvidenceInput(input: MemoryEvidenceInput): MemoryEvidenceInput {
-  const content = redactSecrets(normalizeEvidenceText(input.content, MaxEvidenceContentChars))
+  const content = redactMemorySecrets(normalizeEvidenceText(input.content, MaxEvidenceContentChars))
   if (isBlank(content)) throw new AppError('VALIDATION', '记忆证据内容不能为空。')
 
   return {
@@ -83,7 +89,7 @@ export function sanitizeMemoryEvidenceInput(input: MemoryEvidenceInput): MemoryE
     executionId: input.executionId?.trim(),
     workspaceRoot: input.workspaceRoot?.trim(),
     scopeId: input.scopeId?.trim(),
-    title: redactSecrets(normalizeEvidenceText(input.title ?? '', MaxEvidenceTitleChars)),
+    title: redactMemorySecrets(normalizeEvidenceText(input.title ?? '', MaxEvidenceTitleChars)),
     content,
     metadata: sanitizeMetadataValue(input.metadata ?? {}) as Record<string, unknown>,
   }

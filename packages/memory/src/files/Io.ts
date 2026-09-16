@@ -6,9 +6,10 @@ import { toNullable } from '@velaros-ai/core'
  * `.velaros/memory/`，§九 9.5），文件读写本身也走这个窄端口——探针据此用纯内存实现直驱，
  * 不落一个真实文件；Node 宿主注入 `createNodeMemoryFilesIo()`（住 `./NodeIo`，本文件不碰 fs）。
  *
- * 端口刻意只有六个方法：拼路径、目录创建、列目录、读文本、写文本、删文件。
+ * 端口刻意只有六个必备方法：拼路径、目录创建、列目录、读文本、写文本、删文件。
  * 没有 stat/watch/权限——权威层是「一堆 markdown」，多一个方法就多一条把后端绑死在
- * 某个文件系统语义上的绳子。
+ * 某个文件系统语义上的绳子。第七个方法 `isInsideDirectory` 可选，只为「真实路径必须在根里」
+ * 这一道安全判定而存在：解符号链接要碰真实文件系统，纯内存实现按字面路径回答即可。
  */
 
 export interface MemoryFilesIo {
@@ -24,6 +25,13 @@ export interface MemoryFilesIo {
   writeTextFile(path: string, content: string): void
   /** 删文件；不存在时静默成功。 */
   deleteFile(path: string): void
+  /**
+   * `path` 解开符号链接之后是不是确实落在 `root` 之内（含 root 本身）。
+   *
+   * 后端在读写每一个条目之前问这一句：路径文本判定挡得住 `../`，挡不住条目目录里一个指向
+   * `~/.aws/credentials` 的符号链接。缺席时后端只用文本判定（内存实现没有符号链接可解）。
+   */
+  isInsideDirectory?(path: string, root: string): boolean
 }
 
 export interface InMemoryMemoryFilesIo extends MemoryFilesIo {
@@ -67,6 +75,12 @@ export function createInMemoryMemoryFilesIo(
     },
     deleteFile(path) {
       files.delete(normalize(path))
+    },
+    isInsideDirectory(path, root) {
+      // 内存实现没有符号链接：规整后按段比较即可，判据与 Node 实现同形。
+      const base = normalize(root).replace(/\/$/u, '')
+      const target = normalize(path)
+      return target === base || target.startsWith(`${base}/`)
     },
     snapshot() {
       return Object.fromEntries(
