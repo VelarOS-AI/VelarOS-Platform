@@ -20,6 +20,15 @@
   - **故意留着一处**：`solo-run-plan-preparer.ts` 里还有三处同名字面量，但那是「预算裁剪不许砍」的保底名单，宿主没有这个工具时名字压根匹配不上、不产生任何模型面文字。现在就改成读声明，会在 Desktop 补上声明之前**先丢掉** plan 模式/首轮/技能门下对动作卡工具的保护——拿一个真实回归换当前无害的洁癖，不值。排在 Desktop 接线之后。
   - 一并核实**不算缺陷**的（免得重复查）：office 说明里的 `direct`/`expert` 是真实存在的 surface profile（只是模型自己切不了，由宿主定）；`system:run` 的 `statusContinuation` 存在，只是挂在 `backgroundProcess` 下；browser 说明里引用的 26 个工具名、`project:read` 的 `continuation`、`agent:dispatch` 的三个回执字段等全部对得上。
 
+- **A4 空间知识搬家完成，马拉松最后一件（09-17 08:00，`baab2dd6`，agent 1.2.0 → **1.3.0**、project 2.2.0 → **2.3.0**；提交、版本、测试数、燃尽、指纹均已实测核对）。**
+  - **模型面零变化，证据是最硬的那种**：重签后的审核文件里**三份内容指纹一行都没出现在 diff 里**，只有源文件哈希变了。而 `fingerprints.agent` 内含一次真实渲染的 `[Current project files]` 正文——所以这段整文逐字未变是被门自己证明的，不是靠人比对。重放基线 `provider-request-basic.json` 一个字节没动。
+  - **那个 `project:write` 死名的来历**：第一版模型工具的遗名，工具面重做时删了工具、判定里却留着——「子 agent 还能不能继承父分支的文件读取口」这个判定里，有一个永远匹配不上的名字。改成来源声明制：project 自己声明「我的哪些工具算能把源码交到模型手上」（read / search / code / edit 四个；`list` 只给文件名，`run`/`sandbox` 跑的是命令，`code-analysis` 只回图分析结果，都不算）。**实际判定集合前后相同**（幽灵名字本来就不匹配），变的是它不再可能随工具面改名悄悄失准。project 侧加了一道门钉住「声明的名字必须是真实存在的工具」——正是当初能拦下这个 bug 的那道门。
+  - **42 + 27 张代码文件知识表整体搬进 project**，agent 改从注入的判据拿结论。搬之前先跑清楚了一件事：**没有宿主注入时这条链整体不起作用，那两张表一次也查不到**——所以不是「循环必须自带兜底」，而是「没有注入本来就不该有这个判定」，可以整体搬走。agent 那份 `utils/session/paths.ts` 整个删除。
+  - **正文搬了、排版没搬**，分界是「谁拥有这段文本的语义」：四段逐字进模型请求的文字（标题、两份回执说明、续读引用抹掉后那句）改由来源声明；而「尾块排在历史之后」「易变内容只进 tailBlocks」「按字符预算收窗口」是 agent 的编译规矩，留着。`'[Current project files]\n'` 这个字面量在 agent 里已消失。
+  - **一处判断我认同**：`project-read-serialization.ts` 没搬——`kind: 'project-source-window'` 是跨包的记录格式，agent 的通用工具结果序列化对任何工具的结果都得认它，否则通用字符串截断会改动源码原文、留下对不上的续读位置。把它挪出去等于让 agent 的核心序列化依赖某个空间已登记。
+  - **同族缺陷还剩六处**（`file-context-projection.ts` 与 `FileContextCoordinator.ts` 里认读取回执用的 `project:` 前缀），本轮有意没动：它们是历史扫描的机制而非文案，改它们要再加两份声明，而且「未声明就不恢复历史文件」是个行为悬崖。留给下一轮用同一套声明制收。
+  - **Desktop 要跟一条**（X8）：升到 agent 1.3.0 后若不接上验证判据，行为偏**保守**一侧——验证失败之后只改 `.png` 这类非代码资产也仍算「有待验证的改动」。不丢功能，但提醒会比现在多。
+
 - **kernel `./serve` 收窄到四个值（09-17 07:10，`5b1020f3`，kernel 0.3.0 → **0.4.0**；导出数、版本、燃尽、不变量、测试数均已实测核对）。** 这是上一轮 kernel 收口时明确留下的最后一处偏离方案的地方，仓内已知欠账到此清零。
   - `./serve` 10 → **4** 个值，每件都是一次部署动作：`bootKernelDaemon`、`kernelDaemonProcess`、`createKernelLauncher`、`createKernelUpdater`。对外的值 39 → 33。
   - 六个装配零件的去向：三个真属于 ModStore 的收成它的方法；两个（`registerSystemModPacks`、`registerBundledPacks`）**直接删掉**——本来就只是转发壳，没有自己的逻辑；`createDefaultKernelModStorePaths` **没有硬做成方法**（它是纯路径计算），改成选项面顶替。这一条是做对的判断：为了凑「四个值」把纯函数硬塞成方法，是把形状做坏。
