@@ -158,4 +158,6 @@ export interface AgentRuntimeCapabilityExtension {
   intentClassifiers?: readonly CapabilityIntentClassifier[]
   allocation?: ToolAllocationMetadata
   scopePolicy?: CapabilityScopePolicy
+  /** 本扩展提供的「请求用户动作」角色工具名；语义与 `AgentRuntimeCapabilityPorts.userActionRequestToolName` 完全一致。 */
+  userActionRequestToolName?: string
 }

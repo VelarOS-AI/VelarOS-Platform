@@ -86,7 +86,7 @@
     },
     {
       "path": "packages/agent/src/impl/AgentTools.ts",
-      "fingerprint": "154745cdf0dfcf03bc37ebe9d59b42d90261f69e04e7e8a2f7f1bec21008a2fe"
+      "fingerprint": "df494122480152a25e3fa00e1a308e5a4cfff93e0c68c512ba12b90a9316a18e"
     },
     {
       "path": "packages/agent/src/impl/builtin/ContextOperations.ts",

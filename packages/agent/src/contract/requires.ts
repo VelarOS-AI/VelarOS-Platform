@@ -1461,6 +1461,15 @@ export interface AgentRuntimeCapabilityPorts {
   delegationPolicy?: CapabilityDelegationPolicy
   /** 本次执行已满足的分配前置事实 id（宿主填，如「已连上调试器」「已选定资源根」）；分配器拿它和 `allocation.prerequisites` 对表。 */
   satisfiedAllocationPrerequisiteIds?: readonly string[]
+  /**
+   * 承担「向用户发起一次要他本人完成的动作请求、并等到结果」这一角色的工具名。
+   *
+   * 声明的是**角色**不是某个实现形态：内核只知道「有个工具能把球踢给用户」，它长什么样、收哪些参数一概不问。
+   * 声明了，工具页的激活指引就点名它、把页 id 一起给出；不声明，指引改成「把要用户做的事直接说给用户」
+   * 且不点名任何工具——两条路都完整可执行，所以没有这类工具的宿主**不要**随便填一个。
+   * 与扩展里的同名声明合并时按装配顺序取最后一个非空值（顶层排在最后，故顶层说了算）。
+   */
+  userActionRequestToolName?: string
 }
 
 /** 子 Agent 类型目录端口。Agent 运行时不内置任何工种分类，宿主必须注入一份完整目录。 */

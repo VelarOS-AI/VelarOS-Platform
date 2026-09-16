@@ -1065,7 +1065,9 @@ export const requestConfirmationTool: VelaTool<{ message: string }> = defineVela
   examples: [{ message: '即将运行会改写文件的命令，确认继续吗？' }],
   notes: [
     '用户批准后继续，拒绝时终止本次 execution。',
-    '表单/多卡改用 interaction:show_action_cards。',
+    // notes 是静态数组，渲染时拿不到宿主声明，所以这里一律不点名工具：
+    // 「请求用户动作的工具」叫什么由宿主声明，工具页的 activation 会在需要时点名它。
+    '它只做一次「是/否」确认：要用户填表单、或要一次给出多个可选动作，都不要拿它硬凑，改用工具页里标着请求用户动作的那个工具。',
   ],
   schema: z.object({
     message: z.string().min(1).describe(

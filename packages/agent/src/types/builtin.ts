@@ -237,6 +237,16 @@ export type ToolDependencyState =
   | 'requires_user_action'
   | 'blocked'
 
+/**
+ * 激活指引要用到的**宿主声明**：内核不认识任何具体工具，指引里点不点名全看这里有没有值。
+ * 每个字段都可能为 null——为 null 表示本宿主没有这个角色的工具，指引改成说「做什么」而不是「调什么」，
+ * 但一条都不许落空（`ToolActivationGuide.activationFlow` 的硬不变量）。
+ */
+export interface ToolActivationHostBindings {
+  /** 承担「向用户发起一次要他本人完成的动作请求」这一角色的工具名；宿主没声明时为 null。 */
+  userActionRequestToolName: Nullable<string>
+}
+
 export interface ToolDependencyGuide {
   id: string
   kind: ToolDependencyKind

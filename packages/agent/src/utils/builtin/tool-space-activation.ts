@@ -13,6 +13,9 @@
 // ## 关键不变量
 //  1. **本文件不认识任何具体能力**。分类 id、域 id、工具名全部来自宿主注入的描述符；出现在这里的
 //     只有形状与流程。语义中立门（`check:agent-arch` 防线⑤）连注释一起扫，改这里时别写具体产品词。
+//     唯一会出现在指引里的宿主工具名来自 `ToolActivationHostBindings`（宿主在能力注入面声明），
+//     声明缺席时指引只说「做什么」不说「调什么」——**永远不要在这里写死一个工具名**：它在别的宿主
+//     里未必存在，模型会被指去换入一张不存在的页，白花一整轮。
 //  2. **页是唯一真相，激活指引是纯派生**。`ToolDiscoveryCard.availability / reasons` 由 resolver 定，
 //     本文件只把它翻译成"下一步调什么"。反过来在这里推断可用性会与 resolver 打架。
 //  3. **`activationFlow` 一条都不许落空**。空流程等于让模型自己猜下一步，实测会退化成重复
@@ -26,8 +29,9 @@
 import { isEmpty } from '@velaros-ai/core'
 
 import type { ToolCategoryId } from '../../types/agent.js'
-import type { ToolActivationGuide, ToolActivationMethod, ToolActivationRef,ToolDependencyGuide, ToolDependencyRef, ToolDiscoveryCard, ToolDiscoveryReason, ToolReasonRef } from '../../types/builtin.js'
+import type { ToolActivationGuide, ToolActivationHostBindings, ToolActivationMethod, ToolActivationRef,ToolDependencyGuide, ToolDependencyRef, ToolDiscoveryCard, ToolDiscoveryReason, ToolReasonRef } from '../../types/builtin.js'
 import type { KernelToolContext as ToolContext } from '../../types/tool-context.js'
+import { resolveUserActionRequestToolName } from '../capabilities'
 import { buildToolSpacePages } from '../tools/tool-space-resolver'
 
 /**
@@ -37,6 +41,17 @@ import { buildToolSpacePages } from '../tools/tool-space-resolver'
  */
 export function buildToolDiscoveryCards(ctx: ToolContext): ToolDiscoveryCard[] {
   return buildToolSpacePages(ctx)
+}
+
+/**
+ * 从能力注入面读出这一轮激活指引可以点名哪些宿主工具。
+ * 每个 op 的入口取一次，再往下传——不要在每张页上各读一遍：读的是同一份装配声明，
+ * 一轮之内不会变，逐页重读只是把同一件事算 N 遍。
+ */
+export function resolveToolActivationHostBindings(ctx: ToolContext): ToolActivationHostBindings {
+  return {
+    userActionRequestToolName: resolveUserActionRequestToolName(ctx.capabilityPorts),
+  }
 }
 
 /** 由工具分类 id 拼出对应的能力页 id（`capability:<categoryId>`）——申请启用时 page-in 的就是它。 */
@@ -68,16 +83,81 @@ function hasReason(
 }
 
 /**
+ * 没有可代为发起请求的工具时，「缺一次用户侧动作」这条路唯一的可执行指令。
+ * 依赖项与激活方式两处共用同一份字面量，`buildActivationFlow` 末尾的去重才能把它收成一条；
+ * 各写各的会让同一件事在流程里说两遍，纯占预算。
+ */
+const AskUserDirectlyActivationHint =
+  '先读 reasons 定位到底缺哪一项，再把需要用户亲自完成的那一步直接说给用户；他完成后重新查看工具页状态，别重复调用当前用不了的工具。'
+
+/**
+ * 「这条路缺一次用户侧动作」的依赖项——**本文件唯一会出现宿主工具名的地方**，点不点名只看宿主声明了没有。
+ *
+ * 声明了：pageId / pageIn / nextTool 三件套齐全，模型换入即可执行。
+ * 没声明（传 null）：三件套一律给空，**绝不猜一个名字顶上**——猜错等于指模型去换一张不存在的页，
+ * 实测白花一整轮。此时指引改成「读出阻塞原因，再把要用户做的那一步直接说给用户」，
+ * 仍是一条可执行的下一步（不变量③）。
+ */
+function userActionDependencyGuide(userActionToolName: Nullable<string>): ToolDependencyGuide {
+  if (!userActionToolName) return {
+    id: 'plugin_user_action',
+    kind: 'plugin',
+    state: 'requires_user_action',
+    required: true,
+    summary: '目标能力在等一个外部连接或用户侧动作；当前宿主没有可代为发起请求的工具。',
+    pageId: null,
+    pageIn: [],
+    nextTool: null,
+    reasonKeys: ['plugin.user_action_required'],
+    activationHint: AskUserDirectlyActivationHint,
+  }
+
+  const pageId = `tool:${userActionToolName}`
+  return {
+    id: 'plugin_user_action',
+    kind: 'plugin',
+    state: 'requires_user_action',
+    required: true,
+    summary: `目标能力依赖外部连接或用户侧动作；由宿主声明的 ${userActionToolName} 向用户发起请求。`,
+    pageId,
+    pageIn: [pageId],
+    nextTool: userActionToolName,
+    reasonKeys: ['plugin.user_action_required'],
+    activationHint: `先读 reasons 定位阻塞项；再 tooling:replace(pageIn:["${pageId}"]) 换入 ${userActionToolName}，按它下一轮暴露的真实 schema 发起一次阻塞式的用户动作请求，等用户完成后再回来看工具页状态。`,
+  }
+}
+
+/**
+ * `request_user_action` 这条出口的一句话说明，三种写法各对一种事实：
+ * 能力方声明了缺用户动作**且**宿主给了承担这个角色的工具 → 点名它；
+ * 声明了但宿主没有这类工具 → 明说没有，并把下一步改成「直接说给用户」；
+ * 不是能力方声明的用户动作 → 本层无从知道缺什么，只能让模型去读 reasons。
+ */
+function userActionActivationSummary(
+  pluginUserAction: boolean,
+  userActionToolName: Nullable<string>
+): string {
+  if (!pluginUserAction) return '需要先完成能力提供方声明的用户动作；查看 reasons 和 dependencies。'
+  if (userActionToolName)
+    return `外部连接或用户侧动作尚未完成；先用宿主声明的 ${userActionToolName} 向用户发起请求。`
+  return '外部连接或用户侧动作尚未完成；当前宿主没有可代为发起请求的工具，按 reasons 把要用户做的那一步直接说给他。'
+}
+
+/**
  * 由页的 reasons 推出依赖清单（每条都带 pageIn / nextTool / activationHint，是能直接执行的指令）。
  * 只认四组信号，且可叠加：`approval.required` → 申请能力页（必需）；
- * `plugin.user_action_required` → 走动作卡请求用户动作（必需）；
+ * `plugin.user_action_required` → 请求一次用户侧动作（必需，见 `userActionDependencyGuide`：
+ * 宿主声明了承担这个角色的工具就点名它，没声明就只说要用户做什么）；
  * `runtime.unavailable` / `runtime.no_available_tools` → 运行态阻塞、回 map 找替代（必需，pageId 为 null）；
  * `resident.loadable` → 已授权未驻留、page-in 即可（**非必需**，不进 activationFlow 的前置段）；
  * `resident.visible` / `capability.enabled` → 记一条 `satisfied` 的非必需项，纯粹告诉模型这条已经就绪。
  * 刻意不推断能力自有的前置资源——「缺什么前置」属于能力描述符的表达力，在这里补本地表必然与注入侧
  * 打架且会过时。一条信号都没有时返回空数组。
  */
-function buildToolDependencyGuides(card: ToolDiscoveryCard): ToolDependencyGuide[] {
+function buildToolDependencyGuides(
+  card: ToolDiscoveryCard,
+  bindings: ToolActivationHostBindings
+): ToolDependencyGuide[] {
   const dependencies: ToolDependencyGuide[] = []
   const capabilityId = activationCapabilityIdForCard(card)
 
@@ -97,19 +177,7 @@ function buildToolDependencyGuides(card: ToolDiscoveryCard): ToolDependencyGuide
   }
 
   if (hasReason(card, 'plugin', 'user_action_required')) {
-    dependencies.push({
-      id: 'plugin_user_action',
-      kind: 'plugin',
-      state: 'requires_user_action',
-      required: true,
-      summary: '目标能力依赖外部连接器或用户侧动作，必须向用户展示动作卡。',
-      pageId: 'tool:interaction:show_action_cards',
-      pageIn: ['tool:interaction:show_action_cards'],
-      nextTool: 'interaction:show_action_cards',
-      reasonKeys: ['plugin.user_action_required'],
-      activationHint:
-        '先定位阻塞页；再换入 interaction:show_action_cards，构造 blocking=true 的插件卡（enable_prompt_features 标"批准" + 一个 reject 标"拒绝"）等待用户完成。',
-    })
+    dependencies.push(userActionDependencyGuide(bindings.userActionRequestToolName))
   }
 
   if (
@@ -206,7 +274,7 @@ function buildActivationFlow(input: {
         `先 tooling:replace(pageIn:${JSON.stringify(input.pageIn)}) 换入前置入口，再调用 ${input.nextTool ?? '对应工具'} 完成用户动作。`
       )
     } else {
-      flow.push('查看 reasons，按能力提供方声明的阻塞项请求用户动作。')
+      flow.push(AskUserDirectlyActivationHint)
     }
   } else {
     flow.push('查看 reasons 和 dependency guide，改查替代工具或处理阻塞条件。')
@@ -222,9 +290,10 @@ function buildActivationFlow(input: {
  */
 function withActivationDependencies(
   card: ToolDiscoveryCard,
-  guide: Omit<ToolActivationGuide, 'dependencies' | 'activationFlow'>
+  guide: Omit<ToolActivationGuide, 'dependencies' | 'activationFlow'>,
+  bindings: ToolActivationHostBindings
 ): ToolActivationGuide {
-  const dependencies = buildToolDependencyGuides(card)
+  const dependencies = buildToolDependencyGuides(card, bindings)
   return {
     ...guide,
     dependencies,
@@ -244,11 +313,17 @@ function withActivationDependencies(
  * `loadable` → `page_in_only`，并按页种类（plugin / capability / tool）给不同的说明，
  * 其中能力页与插件页本身不可执行，启用后还得回看目标工具页；
  * `requires_approval` → `request_approval`（page-in 能力页，插件页退回页自身 id）；
- * `requires_user_action` → `request_user_action`，其中由插件声明的用户动作走动作卡、
- * 其余只能让模型看 reasons；其他一切情况兜底到 `inspect_reasons`，指回 tooling:map 找替代。
+ * `requires_user_action` → `request_user_action`，其中由插件声明的用户动作在宿主声明了承担该角色的工具时
+ * 点名它、否则只说要用户做什么，非插件声明的则让模型看 reasons；
+ * 其他一切情况兜底到 `inspect_reasons`，指回 tooling:map 找替代。
  * 每条出口都过 `withActivationDependencies` 补依赖与流程。本函数只做翻译，不自行推断可用性。
+ * `bindings` 是必传的：宿主声明缺席时传 `{ userActionRequestToolName: null }`，
+ * 让「没有这类工具」是一个明写出来的事实，而不是某处忘了接线的默认值。
  */
-export function buildToolActivationGuide(card: ToolDiscoveryCard): ToolActivationGuide {
+export function buildToolActivationGuide(
+  card: ToolDiscoveryCard,
+  bindings: ToolActivationHostBindings
+): ToolActivationGuide {
   if (card.availability === 'visible') return withActivationDependencies(card, {
       method: 'direct_call',
       summary: '已在本轮 AI SDK tools 中暴露完整 schema，可直接调用。',
@@ -256,7 +331,7 @@ export function buildToolActivationGuide(card: ToolDiscoveryCard): ToolActivatio
       capabilityId: activationCapabilityIdForCard(card),
       nextTool: card.kind === 'tool' ? card.name : null,
       notes: ['按当前工具 schema 直接构造参数。'],
-    })
+    }, bindings)
 
   if (card.availability === 'loadable') {
     switch (card.kind) {
@@ -271,7 +346,7 @@ export function buildToolActivationGuide(card: ToolDiscoveryCard): ToolActivatio
           notes: [
             '插件页本身不是可执行工具；启用后重新查看目标工具页，或直接调用下一轮暴露的入口工具。',
           ],
-        })
+        }, bindings)
       case 'capability':
         return withActivationDependencies(card, {
           method: 'page_in_only',
@@ -283,7 +358,7 @@ export function buildToolActivationGuide(card: ToolDiscoveryCard): ToolActivatio
           notes: [
             '能力页本身不是可执行工具；启用后重新查看目标工具页，按目标工具的 toolOsState、activation 和真实 schema 执行。',
           ],
-        })
+        }, bindings)
       case 'tool':
         return withActivationDependencies(card, {
           method: 'page_in_only',
@@ -296,7 +371,7 @@ export function buildToolActivationGuide(card: ToolDiscoveryCard): ToolActivatio
             '主模型不通过反射代理或单工具详情读取来构造参数。',
             '需要执行该工具时，用 replace page-in，让真实 schema 在下一轮暴露。',
           ],
-        })
+        }, bindings)
     }
   }
 
@@ -309,27 +384,25 @@ export function buildToolActivationGuide(card: ToolDiscoveryCard): ToolActivatio
       capabilityId,
       nextTool: 'tooling:replace',
       notes: ['replace 通过后，下一轮再调用真实工具；未通过则按 requiresApprovalDetails 处理。'],
-    })
+    }, bindings)
   }
 
   if (card.availability === 'requires_user_action') {
     const pluginUserAction = card.reasons.some(
       (reason) => reason.layer === 'plugin' && reason.code === 'user_action_required'
     )
+    // 只有「插件声明的用户动作」这一路才可能点名工具，且必须宿主声明过；
+    // 其余两种情况（非插件声明、宿主没声明）一律给空 pageIn / nextTool，
+    // 由 activationFlow 的空 pageIn 分支给出「把要用户做的事直接说给用户」这条可执行指令。
+    const userActionToolName = pluginUserAction ? bindings.userActionRequestToolName : null
     return withActivationDependencies(card, {
       method: 'request_user_action',
-      summary: pluginUserAction
-          ? '外部连接器或用户侧动作尚未完成；先用 interaction:show_action_cards 请求用户动作。'
-          : '需要先完成能力提供方声明的用户动作；查看 reasons 和 dependencies。',
-      pageIn: pluginUserAction
-          ? ['tool:interaction:show_action_cards']
-          : [],
+      summary: userActionActivationSummary(pluginUserAction, userActionToolName),
+      pageIn: userActionToolName ? [`tool:${userActionToolName}`] : [],
       capabilityId: activationCapabilityIdForCard(card),
-      nextTool: pluginUserAction
-          ? 'interaction:show_action_cards'
-          : null,
+      nextTool: userActionToolName,
       notes: ['完成用户动作后重新查看工具页状态，不要重复调用当前不可用工具。'],
-    })
+    }, bindings)
   }
 
   return withActivationDependencies(card, {
@@ -339,7 +412,7 @@ export function buildToolActivationGuide(card: ToolDiscoveryCard): ToolActivatio
     capabilityId: activationCapabilityIdForCard(card),
     nextTool: 'tooling:map',
     notes: ['用 tooling:map 或 tooling:map(op:"find"/"page") 查看系统所有工具状态、功能摘要和替代路径。'],
-  })
+  }, bindings)
 }
 
 /**
@@ -391,6 +464,9 @@ function summarizeActivationRef(activation: ToolActivationGuide): ToolActivation
  * 一步取出某页的**模型面**激活 ref：先推完整指引再瘦身。
  * 工具页清单、find 结果等每页都要带一份 activation 的地方用它。
  */
-export function buildToolActivationRef(card: ToolDiscoveryCard): ToolActivationRef {
-  return summarizeActivationRef(buildToolActivationGuide(card))
+export function buildToolActivationRef(
+  card: ToolDiscoveryCard,
+  bindings: ToolActivationHostBindings
+): ToolActivationRef {
+  return summarizeActivationRef(buildToolActivationGuide(card, bindings))
 }

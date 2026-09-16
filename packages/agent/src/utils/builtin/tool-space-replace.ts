@@ -33,11 +33,11 @@ import { AppError } from '@velaros-ai/core/error'
 
 import type { ChatPromptFeatureId } from '../../types/agent'
 import type { ToolCategoryId } from '../../types/agent.js'
-import type { ToolDiscoveryCard,ToolSpaceReplacePageDetail } from '../../types/builtin.js'
+import type { ToolActivationHostBindings,ToolDiscoveryCard,ToolSpaceReplacePageDetail } from '../../types/builtin.js'
 import type { KernelToolContext as ToolContext } from '../../types/tool-context.js'
 import { expandCapabilityCategoryIds } from '../capabilities'
 
-import { buildToolActivationRef, buildToolDiscoveryCards, summarizeReasonRef } from './tool-space-activation'
+import { buildToolActivationRef, buildToolDiscoveryCards, resolveToolActivationHostBindings, summarizeReasonRef } from './tool-space-activation'
 import { type toolSpaceReplaceSchema } from './tool-space-schemas'
 
 /**
@@ -61,7 +61,10 @@ function findPluginEntryTool(
  * （availability / toolOsState / schemaState / schemaPolicy）、nextAction、resident，
  * 外加瘦身后的 reasons 与 activation ref。给的是「为什么没换成、下一步做什么」，不是完整页。
  */
-function summarizeReplacePage(card: ToolDiscoveryCard): ToolSpaceReplacePageDetail {
+function summarizeReplacePage(
+  card: ToolDiscoveryCard,
+  bindings: ToolActivationHostBindings
+): ToolSpaceReplacePageDetail {
   return {
     id: card.id,
     kind: card.kind,
@@ -75,7 +78,7 @@ function summarizeReplacePage(card: ToolDiscoveryCard): ToolSpaceReplacePageDeta
     nextAction: card.nextAction,
     resident: card.resident,
     reasons: card.reasons.map(summarizeReasonRef),
-    activation: buildToolActivationRef(card),
+    activation: buildToolActivationRef(card, bindings),
   }
 }
 
@@ -85,12 +88,13 @@ function summarizeReplacePage(card: ToolDiscoveryCard): ToolSpaceReplacePageDeta
  */
 function summarizeReplacePages(
   ids: readonly string[],
-  cardsById: ReadonlyMap<string, ToolDiscoveryCard>
+  cardsById: ReadonlyMap<string, ToolDiscoveryCard>,
+  bindings: ToolActivationHostBindings
 ): ToolSpaceReplacePageDetail[] {
   return [...new Set(ids)]
     .map((id) => cardsById.get(id))
     .filter(isPresent)
-    .map(summarizeReplacePage)
+    .map((card) => summarizeReplacePage(card, bindings))
 }
 
 /** 在授权和驻留变更前检查换入/换出的有效目标，包含宿主声明的类别展开。 */
@@ -388,9 +392,10 @@ export async function replaceToolSpacePages(
     ctx.codingSession.disableToolNames?.([...new Set(pageOutTools)], input.reason)
   }
 
-  const requiresApprovalDetails = summarizeReplacePages(requiresApproval, cardsById)
-  const requiresUserActionDetails = summarizeReplacePages(requiresUserAction, cardsById)
-  const skippedPageDetails = summarizeReplacePages(skippedPages, cardsById)
+  const activationBindings = resolveToolActivationHostBindings(ctx)
+  const requiresApprovalDetails = summarizeReplacePages(requiresApproval, cardsById, activationBindings)
+  const requiresUserActionDetails = summarizeReplacePages(requiresUserAction, cardsById, activationBindings)
+  const skippedPageDetails = summarizeReplacePages(skippedPages, cardsById, activationBindings)
   const preparedToolSet = new Set(preparedTools)
 
   return {

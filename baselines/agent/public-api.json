@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "packageName": "@velaros-ai/agent",
-  "acceptedPackageVersion": "1.1.0",
+  "acceptedPackageVersion": "1.2.0",
   "entries": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -180,8 +180,8 @@
         "AgentRunnerContract\ttype\t0e348f93534d612910d9843d0292863db9f0b871074583bbe44d9f10255916a5",
         "AgentRunnerInfrastructure\ttype\t3a7ff1a73a9c230920a229955a6c9895a15c26a847a23b39af902a5e4d2eff7b",
         "AgentRuntimeCapabilityDescriptor\ttype\t223c5b78570d14a282bdb4505e46ecdac866014f333486a4206ecf33f5e7dc0a",
-        "AgentRuntimeCapabilityExtension\ttype\t12649a978869a8bc2526e7cf08faba7ef0240b7e4c50eba57e2a046d48817349",
-        "AgentRuntimeCapabilityPorts\ttype\tc646b3e48ccbb04c459857d27c53d89fea0532c39e16bd8d67bb2d90aa25e508",
+        "AgentRuntimeCapabilityExtension\ttype\t5b73bdd78b8ff499cb5e3d1fc4f8fc2cfb0dd1e3c8c02f0b76cdaf043c94c93b",
+        "AgentRuntimeCapabilityPorts\ttype\t60c1497f9f5960408fb76a5b05fc510a64e2dde8e1baa5365cc7e84326014c44",
         "AgentRuntimeInputPort\ttype\t7658cdf7398298a32c1f40ae1c787d2286f5a9caad6522945c478a90d0af8780",
         "AgentRuntimeInputResult\ttype\t5e4b02bf13cd013a0c0386d38c17e1fa8dcefc4598784bb3b6cc6242d954fd56",
         "AgentRuntimeKitApi\ttype\t754886bb5c88b01ed32f32d19c4d9278a54a93c494ae4c09e2f931aa04c8f6f7",

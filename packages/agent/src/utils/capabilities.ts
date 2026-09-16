@@ -276,3 +276,25 @@ export function resolveToolAllocationMetadata(
     prerequisites,
   }
 }
+
+/**
+ * 取宿主声明的「请求用户动作」角色由哪个工具承担：按装配顺序（扩展在前、顶层在最后）取**最后一个非空**声明，
+ * 去首尾空白后返回；一处都没声明（或只声明了空白串）返回 null。
+ *
+ * 返回 null 是**正常状态**而不是配置缺失——不是每个宿主都有这样一个工具。读取方必须在 null 时仍给出
+ * 完整可执行的指引，只是不点名任何工具；拿 null 当错误、或就地编一个工具名，都会把模型指向一个不存在的工具。
+ */
+export function resolveUserActionRequestToolName(
+  ports?: LooseOptional<AgentRuntimeCapabilityPorts>
+): Nullable<string> {
+  const declarations = [
+    ...(ports?.extensions?.map((extension) => extension.userActionRequestToolName) ?? []),
+    ports?.userActionRequestToolName,
+  ]
+  let resolved: Nullable<string> = null
+  for (const declaration of declarations) {
+    const toolName = declaration?.trim()
+    if (toolName) resolved = toolName
+  }
+  return resolved
+}

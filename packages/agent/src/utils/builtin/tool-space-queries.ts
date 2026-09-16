@@ -30,14 +30,14 @@ import { isEmpty, optionalWhen, toNullable } from '@velaros-ai/core'
 
 import { AgentToolLimits } from '../../contract/constants.js'
 import type { ToolCategoryDomainId, ToolCategoryId, ToolOsState } from '../../types/agent.js'
-import type { ToolCategoryFilterResolution, ToolDiscoveryCard, ToolMapCategoryKind, ToolSearchResultEntry } from '../../types/builtin.js'
+import type { ToolActivationHostBindings, ToolCategoryFilterResolution, ToolDiscoveryCard, ToolMapCategoryKind, ToolSearchResultEntry } from '../../types/builtin.js'
 import type { KernelToolContext as ToolContext } from '../../types/tool-context.js'
 import { compareStableStrings } from '../residency/determinism'
 import { ToolDiscoveryAvailabilityValues } from '../tools/discovery-availability'
 import { PluginBackedToolCategoryIds } from '../tools/tool-space-resolver'
 
 import { splitSearchTerms } from './tool-search-terms'
-import { activationCapabilityIdForCategory, buildToolActivationRef, buildToolDiscoveryCards, summarizeReasonRef } from './tool-space-activation'
+import { activationCapabilityIdForCategory, buildToolActivationRef, buildToolDiscoveryCards, resolveToolActivationHostBindings, summarizeReasonRef } from './tool-space-activation'
 import {
   ToolDiscoveryKindValues,
   type toolSpaceFindSchema,
@@ -137,6 +137,7 @@ function summarizeToolAccessRef(card: ToolDiscoveryCard) {
  */
 function summarizeToolSpacePageRef(
   card: ToolDiscoveryCard,
+  bindings: ToolActivationHostBindings,
   options: { includeAccess?: boolean } = {}
 ) {
   const includeAccess = options.includeAccess ?? true
@@ -158,7 +159,7 @@ function summarizeToolSpacePageRef(
     resident: card.resident,
     access: optionalWhen(includeAccess, summarizeToolAccessRef(card)),
     reasons: card.reasons.map(summarizeReasonRef),
-    activation: buildToolActivationRef(card),
+    activation: buildToolActivationRef(card, bindings),
   }
 }
 
@@ -169,10 +170,11 @@ function summarizeToolSpacePageRef(
  */
 function summarizeToolSpaceFindRef(
   card: ToolDiscoveryCard,
+  bindings: ToolActivationHostBindings,
   score: number,
   matchedFields: ToolSearchResultEntry['matchedFields']
 ): ToolSearchResultEntry {
-  const activation = buildToolActivationRef(card)
+  const activation = buildToolActivationRef(card, bindings)
   return {
     id: card.id,
     kind: card.kind,
@@ -248,6 +250,7 @@ export function searchToolDiscoveryCards(
   const kindFilter = input.kind === 'all' ? null : input.kind
   const toolOsStateFilter = isEmpty(input.toolOsStates) ? null : new Set(input.toolOsStates)
   const cards = buildToolDiscoveryCards(ctx)
+  const activationBindings = resolveToolActivationHostBindings(ctx)
   const scoreContext = buildToolSearchScoreContext(ctx, cards)
   const domainCards = cards
     .filter((card) => !kindFilter || card.kind === kindFilter)
@@ -305,6 +308,7 @@ export function searchToolDiscoveryCards(
     pages: page.map(({ card, score }) =>
       summarizeToolSpaceFindRef(
         card,
+        activationBindings,
         score,
         [...new Set(buildMatchSignals(card, terms, scoreContext).map((signal) => signal.field))]
       )
@@ -368,6 +372,7 @@ export function pageToolDiscoveryCards(
   const categoryResolution = resolveToolCategoryFilterInput(ctx, input)
   const { categoryFilter, expandedCategoryIds } = categoryResolution
   const cards = filterToolSpaceCards(buildToolDiscoveryCards(ctx), categoryFilter, input)
+  const activationBindings = resolveToolActivationHostBindings(ctx)
   const offset = parseToolSpaceCursor(input.cursor)
   const page = cards.slice(offset, offset + input.limit)
   const nextOffset = offset + page.length
@@ -391,7 +396,7 @@ export function pageToolDiscoveryCards(
       hasMore: nextOffset < cards.length,
       nextCursor: nextOffset < cards.length ? String(nextOffset) : null,
     },
-    pages: page.map((card) => summarizeToolSpacePageRef(card)),
+    pages: page.map((card) => summarizeToolSpacePageRef(card, activationBindings)),
     statusSummary: buildToolSpaceStatusSummary(cards),
     message: '这是工具页索引；需要执行 loadable 工具时用 tooling:replace 换入，下一轮通过真实 schema 调用。',
   }
@@ -401,8 +406,8 @@ export function pageToolDiscoveryCards(
  * map 专用的页摘要：就是 `summarizeToolSpacePageRef` 去掉 `access` 明细。
  * map 一次会展开几十张页，每张都带逐道 gates 会把预算吃光；要看明细走 page op。
  */
-function summarizeToolSpaceMapPage(card: ToolDiscoveryCard) {
-  return summarizeToolSpacePageRef(card, { includeAccess: false })
+function summarizeToolSpaceMapPage(card: ToolDiscoveryCard, bindings: ToolActivationHostBindings) {
+  return summarizeToolSpacePageRef(card, bindings, { includeAccess: false })
 }
 
 /**
@@ -446,16 +451,37 @@ function toolMapParameterAdjustments(
 }
 
 /**
+ * 「插件类工具要先备好用户动作入口」这条规则此刻处于什么状态：
+ * 宿主压根没声明承担这个角色的工具 → `ask_user_directly`（这条路上没有工具可走，直接找用户）；
+ * 声明了且那张页本轮已驻留 → `ready`；声明了但还没驻留 → `load_tool_entry`（先把入口换进来）。
+ */
+function userActionRuleStatus(
+  userActionToolName: Nullable<string>,
+  availability: LooseOptional<ToolDiscoveryCard['availability']>
+): 'ask_user_directly' | 'ready' | 'load_tool_entry' {
+  if (!userActionToolName) return 'ask_user_directly'
+  return availability === 'visible' ? 'ready' : 'load_tool_entry'
+}
+
+/**
  * 拼 map 结果里那份**读图说明**：`fixedToolSpace.kernelTools` 列出本轮真实可见的工具名
  * （与宿主的 `getCurrentVisibleToolNames` 对齐，取不到时按空处理）；
  * `stateLegend` 给四种 toolOsState 各自的含义与下一步；
  * `dependencyRules` 给两条通用前置规则——隐藏工具要先开能力页，插件类工具要先备好用户动作入口，
- * 后者的 `status` / `pageId` / `availability` / `pageIn` 会按动作卡工具当前的真实状态填。
+ * 后者的 `status` / `pageId` / `availability` / `pageIn` 会按宿主声明的那个工具当前的真实状态填；
+ * 宿主没声明这类工具时该条规则整体退化成「直接说给用户」，**不点名任何工具**。
  * 说明本身不含任何具体能力知识，只有形状与状态映射。
  */
-function buildToolSpaceMapGuide(ctx: ToolContext, cards: readonly ToolDiscoveryCard[]) {
+function buildToolSpaceMapGuide(
+  ctx: ToolContext,
+  cards: readonly ToolDiscoveryCard[],
+  bindings: ToolActivationHostBindings
+) {
   const visibleToolNames = new Set(ctx.getCurrentVisibleToolNames?.() ?? [])
-  const showUserActionTool = cards.find((card) => card.id === 'tool:interaction:show_action_cards')
+  const userActionToolName = bindings.userActionRequestToolName
+  const userActionTool = userActionToolName
+    ? cards.find((card) => card.id === `tool:${userActionToolName}`)
+    : undefined
   const kernelTools = cards
     .filter((card) => card.kind === 'tool' && visibleToolNames.has(card.name))
     .map((card) => ({ name: card.name, visible: true }))
@@ -503,21 +529,22 @@ function buildToolSpaceMapGuide(ctx: ToolContext, cards: readonly ToolDiscoveryC
           nextTool: 'tooling:replace',
         },
       },
+      // 宿主没声明「请求用户动作」的工具时，这条规则仍然出（形状是契约），但三件套全给空、
+      // status 明说要直接找用户——点一个本宿主没有的工具名，只会让模型去换一张不存在的页。
       {
         id: 'plugin-before-plugin-tools',
         appliesToCategoryIds: [...PluginBackedToolCategoryIds],
         requiredBefore: ['capability_activation', 'tool_call'],
-        status: showUserActionTool?.availability === 'visible' ? 'ready' : 'load_tool_entry',
+        status: userActionRuleStatus(userActionToolName, userActionTool?.availability),
         prerequisite: {
           id: 'plugin_user_action',
           kind: 'plugin',
-          pageId: showUserActionTool?.id ?? 'tool:interaction:show_action_cards',
-          availability: showUserActionTool?.availability ?? 'unavailable',
+          pageId: userActionToolName ? `tool:${userActionToolName}` : null,
+          availability: userActionTool?.availability ?? 'unavailable',
+          // 页不在本轮页集里就别给 pageIn：那说明这个工具压根没进工具空间，换入换不出来。
           pageIn:
-            showUserActionTool && showUserActionTool.availability !== 'visible'
-              ? ['tool:interaction:show_action_cards']
-              : [],
-          nextTool: 'interaction:show_action_cards',
+            userActionTool && userActionTool.availability !== 'visible' ? [userActionTool.id] : [],
+          nextTool: toNullable(userActionToolName),
         },
       },
     ],
@@ -541,6 +568,7 @@ export function mapToolDiscoveryCards(
   input: z.output<typeof toolSpaceMapSchema>
 ) {
   const allCards = buildToolDiscoveryCards(ctx)
+  const activationBindings = resolveToolActivationHostBindings(ctx)
   // toolOsState/kind 是“本次展开哪些状态页”的过滤器，不得把分类的完整工具名索引一起裁掉。
   // 模型常用 resident 过滤快速看常驻面；若 toolNames 也跟着变空，它会误判该能力没有 loadable 工具。
   const allToolNamesByCategoryId = new Map<ToolCategoryId, string[]>()
@@ -618,9 +646,9 @@ export function mapToolDiscoveryCards(
       toolOs: toNullable(definition?.toolOs),
       statusSummary: buildToolSpaceStatusSummary(cards),
       childStatusSummary: null,
-      capability: capability ? summarizeToolSpaceMapPage(capability) : null,
+      capability: capability ? summarizeToolSpaceMapPage(capability, activationBindings) : null,
       activation: capability
-        ? buildToolActivationRef(capability)
+        ? buildToolActivationRef(capability, activationBindings)
         : {
             method: 'inspect_reasons' as const,
             pageIn: [],
@@ -629,8 +657,8 @@ export function mapToolDiscoveryCards(
             dependencies: [],
           },
       toolNames,
-      tools: visibleTools.map(summarizeToolSpaceMapPage),
-      plugins: plugins.map(summarizeToolSpaceMapPage),
+      tools: visibleTools.map((card) => summarizeToolSpaceMapPage(card, activationBindings)),
+      plugins: plugins.map((card) => summarizeToolSpaceMapPage(card, activationBindings)),
       totalToolCount: tools.length,
       totalToolNameCount: toolNames.length,
       childToolCount: 0,
@@ -688,7 +716,7 @@ export function mapToolDiscoveryCards(
       truncatedInCategories,
     },
     statusSummary: buildToolSpaceStatusSummary(filteredCards),
-    guide: buildToolSpaceMapGuide(ctx, allCards),
+    guide: buildToolSpaceMapGuide(ctx, allCards, activationBindings),
     categories,
     message:
       '这是分页工具页索引；每个分类附带完整 toolNames，详细状态页仍按 maxToolsPerCategory 展开，toolPage 是可直接执行的 {tool,input} 续页调用；需要执行 loadable 工具时用 tooling:replace 换入，下一轮通过真实 schema 调用；需要更多分类时用 page.nextCursor 继续。',

@@ -38,7 +38,7 @@ import { AgentTuning } from '../tuning'
 
 import { readToolInputSchema } from './tool-read-details'
 import { matchedTermsForField, splitIdentifierSearchTerm } from './tool-search-terms'
-import { buildToolActivationGuide } from './tool-space-activation'
+import { buildToolActivationGuide, resolveToolActivationHostBindings } from './tool-space-activation'
 
 /** 低置信截断比例：值在 AgentTuning.toolkit.lowConfidenceScoreRatio，只影响排序不进模型面文案。 */
 export const ToolFindLowConfidenceScoreRatio = AgentTuning.toolkit.lowConfidenceScoreRatio
@@ -237,11 +237,12 @@ export function buildToolSearchScoreContext(
   const schemaTextById = new Map<string, string>()
   const activationTextById = new Map<string, string>()
   const reverseActivationTextByName = new Map<string, string[]>()
+  const activationBindings = resolveToolActivationHostBindings(ctx)
 
   for (const card of cards) {
     schemaTextById.set(card.id, schemaSearchText(readToolInputSchema(ctx, card)))
 
-    const activation = buildToolActivationGuide(card)
+    const activation = buildToolActivationGuide(card, activationBindings)
     const activationText = activationSearchText(activation)
     activationTextById.set(card.id, activationText)
 

@@ -242,7 +242,7 @@ Agent **不依赖任何空间包**：依赖方向单向，空间包引 Agent，A
 packages/agent/
   MODULE.md                       本卡片
   spec/  invariants.md  acceptance.test.ts
-  test/                           实现测试（118 个文件）
+  test/                           实现测试（119 个文件）
   src/
     contract/  provides.ts  requires.ts  constants.ts
     types/     agent.ts（可移植）+ 21 个按域的类型文件

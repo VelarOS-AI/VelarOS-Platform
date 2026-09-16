@@ -673,7 +673,7 @@ class ToolExecutionPolicy implements ToolExecutionPolicyApi {
   /**
    * 获取工具角色（如 `control`）。
    * 供 ToolExecutor 判定嵌套/包装调用（timed/chain/reflect）是否触达控制类工具——
-   * 控制/编排类工具（agent:dispatch、plan:update、interaction:show_action_cards 等）不应被嵌套调用。
+   * 控制/编排类工具（agent:dispatch、plan:update，以及宿主声明的请求用户动作的工具等）不应被嵌套调用。
    */
   public getToolRole(toolName: string): LooseOptional<ToolRole> {
     const canonicalToolName = this.resolveCanonicalToolName(toolName)
