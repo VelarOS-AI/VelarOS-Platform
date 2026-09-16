@@ -60,8 +60,9 @@ export function withBrowserLoginGate(
   /**
    * 同一站点的并发征询去重。
    *
-   * `browser:inspect_page` 与 `browser:capture_screenshot` 都声明 `isConcurrencySafe: true`，
-   * 两个并发调用同时撞上登录墙会弹两张卡；这里让后来者直接 await 同一次征询。
+   * `browser:inspect_page` 声明 `isConcurrencySafe: true`（`browser:capture_screenshot` 是
+   * false，走会话队列），同一会话的多次 inspect 与跨会话的调用都可能同时撞上同一个站点的
+   * 登录墙，那就会弹两张卡；这里让后来者直接 await 同一次征询。
    */
   const pendingByOrigin = new Map<string, Promise<BrowserLoginGateRecord>>()
 

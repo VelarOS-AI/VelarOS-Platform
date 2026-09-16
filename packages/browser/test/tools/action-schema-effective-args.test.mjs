@@ -37,6 +37,23 @@ test('browser:act overwrite keeps the flat shape while returning the exact navig
   assert.deepEqual(parseBrowserActInput(input), expected)
 })
 
+test('browser:act 的 target 分支：扁平 parse 的输出就是 execute 拿到的精确分支', () => {
+  // execute 直接用扁平 parse 的结果（不再为了拿精确分支重新解析一遍），这条等式是它的前提。
+  const input = { action: 'target', targetAction: 'click', targetCss: '#buy', text: 'belongs to type' }
+  const expected = { action: 'target', targetAction: 'click', target: { css: '#buy', ref: undefined } }
+
+  assert.deepEqual(browserActSchema.parse(input), expected)
+  assert.deepEqual(parseBrowserActInput(input), expected)
+})
+
+test('browser:act 精确分支的校验错误照样拦在扁平 schema 上', () => {
+  const result = browserActSchema.safeParse({ action: 'target' })
+
+  assert.equal(result.success, false)
+  assert.ok(result.error.issues.length > 0)
+  assert.throws(() => parseBrowserActInput({ action: 'target' }))
+})
+
 test('browser:act overwrite expands drag aliases in the first schema parse', () => {
   const parsed = browserActSchema.parse({
     action: 'drag',

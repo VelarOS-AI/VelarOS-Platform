@@ -632,6 +632,31 @@ const browserActConfigureEmulationSchema = z
     }
   })
 
+/**
+ * 精确分支解析的一次记账。
+ *
+ * 公开的扁平 schema 要在三处用到同一份精确分支解析：superRefine（把分支错误映射成
+ * 结构化 issue）、overwrite（把入参收敛成真正执行的分支）、工具 execute（拿最终入参）。
+ * zod 在同一次 parse 里把**同一个对象**交给 superRefine 与 overwrite，所以结果挂在这张
+ * WeakMap 上就够了：一次调用解析一遍，而不是三遍。缓存没命中（zod 换了对象）就照常再解析，
+ * 只是慢一点，不会算错。
+ */
+const browserActExactParseResults = new WeakMap<
+  object,
+  ReturnType<typeof browserActExactSchema.safeParse>
+>()
+
+function parseExactBrowserActBranch(
+  input: object
+): ReturnType<typeof browserActExactSchema.safeParse> {
+  const cached = browserActExactParseResults.get(input)
+  if (cached) return cached
+
+  const result = browserActExactSchema.safeParse(expandBrowserActTargetAliases(input))
+  browserActExactParseResults.set(input, result)
+  return result
+}
+
 const browserActExactSchema = z.discriminatedUnion('action', [
   browserActTargetSchema,
   browserActNavigateSchema,
@@ -963,7 +988,7 @@ const browserActSchema = z
     ),
   })
   .superRefine((input, ctx) => {
-    const exactParseResult = browserActExactSchema.safeParse(expandBrowserActTargetAliases(input))
+    const exactParseResult = parseExactBrowserActBranch(input)
     if (exactParseResult.success) return
 
     for (const issue of exactParseResult.error.issues) {
@@ -975,7 +1000,7 @@ const browserActSchema = z
     }
   })
   .overwrite((input) => {
-    const exactParseResult = browserActExactSchema.safeParse(expandBrowserActTargetAliases(input))
+    const exactParseResult = parseExactBrowserActBranch(input)
     // superRefine 已经把精确分支错误映射到公开扁平 schema；失败时必须原样返回，让
     // safeParse 以结构化 issue 收口，不能在 overwrite 内再 throw 破坏 safeParse 契约。
     if (!exactParseResult.success) return input
@@ -1096,11 +1121,9 @@ function normalizeBrowserActInput(input: BrowserActExactInput): ParsedBrowserAct
 }
 
 function parseBrowserActInput(input: unknown): ParsedBrowserActInput {
-  const parsed = browserActSchema.parse(input)
-  const exactParseResult = browserActExactSchema.safeParse(expandBrowserActTargetAliases(parsed))
-  if (!exactParseResult.success) throw exactParseResult.error
-
-  return normalizeBrowserActInput(exactParseResult.data)
+  // browserActSchema 的 overwrite 已经把入参收敛成精确分支并补齐缺省（见上面的 .overwrite）；
+  // 校验不过时 parse 直接抛错，所以走到这里的值就是 ParsedBrowserActInput，不再解析一遍。
+  return browserActSchema.parse(input) as ParsedBrowserActInput
 }
 
 export {
