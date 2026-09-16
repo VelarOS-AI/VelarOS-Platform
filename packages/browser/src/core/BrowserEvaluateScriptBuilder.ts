@@ -157,7 +157,6 @@ class BrowserEvaluateScriptBuilder {
         ok: false,
         mode: ${JSON.stringify(mode)},
         result: null,
-        resultText: '',
         resultTruncated: false,
         error: { name: 'SyntaxError', message: ${JSON.stringify(syntaxError)}, stack: null },
         durationMs: 0,
@@ -196,11 +195,14 @@ class BrowserEvaluateScriptBuilder {
         }
         if (resultText === undefined) resultText = 'undefined'
         const truncated = truncateText(resultText, payload.maxResultChars)
-        return {
+        // 没截断时 result 就是完整内容，再附一份缩进 JSON 只是把回执体积翻倍还多；
+        // 截断时 result 置 null，这时 resultText 才是模型唯一能看到的内容。
+        const serialized = {
           result: truncated.truncated ? null : simplified,
-          resultText: truncated.text,
           resultTruncated: truncated.truncated,
         }
+        if (truncated.truncated) serialized.resultText = truncated.text
+        return serialized
       }
       const userScript = async function () {
 ${functionBody}
@@ -238,7 +240,6 @@ ${functionBody}
             ok: false,
             mode: payload.mode,
             result: null,
-            resultText: '',
             resultTruncated: false,
             error: {
               name: err.name || 'Error',

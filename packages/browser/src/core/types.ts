@@ -1661,7 +1661,13 @@ export interface BrowserEvaluateScriptResult {
   ok: boolean
   mode: BrowserEvaluateScriptMode
   result: unknown
-  resultText: string
+  /**
+   * 结果的缩进 JSON 文本，**只在 resultTruncated 为 true 时给出**。
+   *
+   * 没截断时 `result` 就是完整内容，再附一份同内容的文本只是把回执体积翻倍还多
+   * （evaluate_script、read_page_data、get_element_bounds 每次都要付这份钱）。
+   */
+  resultText?: LooseOptional<string>
   resultTruncated: boolean
   error: LooseOptional<{
     name: string
