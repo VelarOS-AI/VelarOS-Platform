@@ -7,7 +7,9 @@
 
 import type BetterSqlite3 from 'better-sqlite3'
 
-import type { CapabilityToken } from '@velaros-ai/kernel/contracts/abi'
+import type {
+  CapabilityToken,
+} from '@velaros-ai/kernel/contracts'
 import type {
   DefineToolRuntimeSpecInput,
   ToolContractRuntimeSpec,

@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'bun:test'
 
-import type { KernelModuleActivateContext } from '@velaros-ai/kernel/contracts/abi'
+import type {
+  KernelModuleActivateContext,
+} from '@velaros-ai/kernel'
 
 import { BrowserRuntimeCapability, createBrowserKernelModule } from '../../src/impl/electron/kernel-module'
 import type { BrowserRuntimeCapabilityService } from '../../src/types/electron.js'

@@ -9,8 +9,15 @@ import { z } from 'zod'
 
 import type { AgentModManifest, ToolCapabilitySchema, ToolCategoryDefinition } from '@velaros-ai/agent/protocol'
 import { isNotUndefined, isUndefined, optionalWhen } from '@velaros-ai/core'
-import type { CapabilityToken, KernelModuleDefinition } from '@velaros-ai/kernel/contracts/abi'
-import { createCapabilityToken } from '@velaros-ai/kernel/contracts/abi'
+import type {
+  KernelModuleDefinition,
+} from '@velaros-ai/kernel'
+import {
+  kernelModules,
+} from '@velaros-ai/kernel'
+import type {
+  CapabilityToken,
+} from '@velaros-ai/kernel/contracts'
 import { RehearsalSandboxLimits } from '@velaros-ai/rehearsal-sandbox/contracts'
 import { shellCommandPolicy } from '@velaros-ai/shell-command'
 import { toolKernelModules } from '@velaros-ai/tool-contract'
@@ -674,7 +681,7 @@ export function createProjectBundledModDefinition(): ProjectBundledModDefinition
 
 /** 项目能力服务在内核里的身份令牌，宿主按它取到注入的项目工具集合。 */
 export const ProjectCapability: CapabilityToken<ProjectCapabilityService> =
-  createCapabilityToken<ProjectCapabilityService>(ProjectModId)
+  kernelModules.token<ProjectCapabilityService>(ProjectModId)
 
 /** 创建项目空间的内核模块：激活时把七个工具登记成能力服务；每次调用先严格解析入参，再向宿主解析一次上下文。 */
 export function createProjectKernelModule(options: CreateProjectKernelModuleOptions): KernelModuleDefinition {

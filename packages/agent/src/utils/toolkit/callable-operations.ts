@@ -2,7 +2,9 @@
 
 import type { z } from 'zod'
 
-import type { KernelCallableCapabilityOperation } from '@velaros-ai/kernel/contracts/abi'
+import type {
+  KernelCallableCapabilityOperation,
+} from '@velaros-ai/kernel'
 import { toolKernelModules } from '@velaros-ai/tool-contract'
 
 import type { ToolCallableOperationsOptions, ToolContextResolver } from '../../types/toolkit.js'

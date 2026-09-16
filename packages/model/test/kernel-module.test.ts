@@ -1,9 +1,11 @@
 import { describe, expect, test } from 'bun:test'
 
 import type {
-  CapabilityToken,
   KernelModuleActivateContext,
-} from '@velaros-ai/kernel/contracts/abi'
+} from '@velaros-ai/kernel'
+import type {
+  CapabilityToken,
+} from '@velaros-ai/kernel/contracts'
 
 import {
   createModelKernelModule,

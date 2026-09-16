@@ -15,10 +15,10 @@
 //
 // IO 全部经 `AgentModPackReader` 注入：主干零文件系统依赖，宿主决定怎么读、读不读得动。
 import { isUndefined, toOptional } from '@velaros-ai/core'
+import { velarosModEnvelopes } from '@velaros-ai/kernel'
 import {
-  parseVelarosModEnvelope,
   VelarosModManifestFileName,
-} from '@velaros-ai/kernel/contracts/protocol'
+} from '@velaros-ai/kernel/contracts'
 
 import type { AgentModPackReader } from '../../contract/requires.js'
 import type { AgentModDiagnostic } from '../../types/agent.js'
@@ -88,7 +88,7 @@ class AgentModHostAssembler implements AgentModHostAssemblerApi {
         continue
       }
 
-      const envelope = parseVelarosModEnvelope(raw, { origin: descriptor.specifier })
+      const envelope = velarosModEnvelopes.parse(raw, { origin: descriptor.specifier })
       if (!envelope.ok) {
         for (const diagnostic of envelope.diagnostics) {
           diagnostics.push({ ...diagnostic, modId: diagnostic.modId ?? descriptor.id })

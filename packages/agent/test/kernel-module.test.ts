@@ -1,11 +1,13 @@
 import { describe, expect, test } from 'bun:test'
 
 import type {
-  CapabilityToken,
   KernelModuleActivateContext,
+} from '@velaros-ai/kernel'
+import type {
+  CapabilityToken,
   KernelModuleHealth,
   ScopeRef,
-} from '@velaros-ai/kernel/contracts/abi'
+} from '@velaros-ai/kernel/contracts'
 
 import type { AgentCapabilityRuntime } from '../src/contract/requires.js'
 import { AgentCapability, createAgentKernelModule } from '../src/impl/assembly/AgentKernelModule'

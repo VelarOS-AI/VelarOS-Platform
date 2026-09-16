@@ -191,7 +191,7 @@ const segments = projectAgentModPromptSegments(snapshot)
   另给 `mod.pack-agent-section-absent`——两者都不静默跳过。
 - **IO 全注入**：`AgentModPackReader.readManifest` / `loadBindings` 由宿主实现。主干零 fs 依赖，
   因此在没有 Kernel daemon 的宿主（headless / 测试台）里同样可用；信封验证复用
-  `@velaros-ai/kernel/contracts/protocol` 的唯一 schema，pack descriptor 仍以结构化契约声明。
+  `@velaros-ai/kernel` 的 `velarosModEnvelopes.parse`（唯一 schema），pack descriptor 仍以结构化契约声明。
   `readManifest` 返回的是**整份信封**，取 `agent` 节是主干的事。
   产品宿主必须公开自己是否实现 `loadBindings`。未实现时，外部 pack 不能贡献需要代码绑定的
   `tools` 或 `hooks`；实现 command Hook 的宿主必须先将其适配为 `AgentModHookHandler`，

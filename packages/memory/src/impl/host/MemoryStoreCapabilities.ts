@@ -11,13 +11,18 @@
  */
 
 import { isEmpty } from '@velaros-ai/core'
+import type {
+  KernelModuleDefinition,
+} from '@velaros-ai/kernel'
 import {
-  type CapabilityToken,
-  createCapabilityToken,
-  defineKernelModule,
-  KernelModuleApiVersion,
-  type KernelModuleDefinition,
-} from '@velaros-ai/kernel/contracts/abi'
+  kernelModules,
+} from '@velaros-ai/kernel'
+import type {
+  CapabilityToken,
+} from '@velaros-ai/kernel/contracts'
+import {
+  KernelVersionAxes,
+} from '@velaros-ai/kernel/contracts'
 
 // 值导入指向具体模块（见 EvidenceBridge 同款注释：`from '..'` 在 dist 里是目录 import）。
 import { MemoryStoreCapabilityIdentity } from '../../contract/constants'
@@ -45,7 +50,7 @@ export function createMemoryStoreCapabilityToken(
   backendId: string,
   version: string = MemoryStoreCapabilityIdentity.defaultVersion,
 ): CapabilityToken<MemoryStoreCapabilityService> {
-  return createCapabilityToken<MemoryStoreCapabilityService>(
+  return kernelModules.token<MemoryStoreCapabilityService>(
     memoryStoreCapabilityId(backendId),
     version,
   )
@@ -67,11 +72,11 @@ export function createMemoryStoreKernelModule(
   )
   const service: MemoryStoreCapabilityService = Object.freeze({ backend })
 
-  return defineKernelModule({
+  return kernelModules.define({
     manifest: {
       id: options.moduleId ?? token.id,
       version: options.moduleVersion ?? MemoryStoreCapabilityIdentity.defaultVersion,
-      apiVersion: options.apiVersion ?? KernelModuleApiVersion,
+      apiVersion: options.apiVersion ?? KernelVersionAxes.moduleApi,
       provides: [token],
       requires: [],
       optionalRequires: [],

@@ -1,5 +1,5 @@
 /**
- * 记忆后端能力令牌的构造探针（由 Bun 直接运行，使用进程内 `KernelModuleHost`）。
+ * 记忆后端能力令牌的构造探针（由 Bun 直接运行，使用进程内内核 `createKernel()`）。
  *
  * 验证后端能力端口：
  *  ① 两个后端档（默认树档 + `memory-files`）**并存注册**在同一个宿主上——叠加语义要成立，
@@ -13,12 +13,13 @@
 
 import assert from 'node:assert/strict'
 
-import { KernelModuleApiVersion } from '@velaros-ai/kernel/contracts/abi'
-import { KernelModuleHost } from '@velaros-ai/kernel/runtime'
+import type { KernelApi } from '@velaros-ai/kernel'
+import { createKernel } from '@velaros-ai/kernel'
 
 import { MemoryVectorBackendId } from '../src/contract/constants'
 import { MemoryStoreCapabilityNamespace, MemoryTreeBackendId } from '../src/contract/constants'
 import { MemoryFilesBackendId } from '../src/contract/constants'
+import type { MemoryStoreCapabilityRegistry } from '../src/contract/requires'
 import type { MemoryStoreBackend } from '../src/contract/requires'
 import { createMemoryTreeStoreBackend } from '../src/impl/backends/MemoryTreeStoreBackend'
 import { createInMemoryMemoryFilesIo } from '../src/impl/files/InMemoryMemoryFilesIo'
@@ -165,17 +166,22 @@ function probeTokenShape(): void {
   assertionCount += 1
 }
 
+/** 把一个进程内内核收成解析后端只要的那一面：按令牌取服务，没注册就是 undefined。 */
+function registryOf(kernel: KernelApi): MemoryStoreCapabilityRegistry {
+  return { getOptionalService: (token) => kernel.getCapability(token) }
+}
+
 // ── ①②③ 并存注册 / 优先序解析 / 没装就没有 ────────────────────────────────
 async function probeRegistryResolution(): Promise<void> {
-  const empty = new KernelModuleHost({ apiVersion: KernelModuleApiVersion })
+  const empty = createKernel()
   await empty.start()
   equal(
-    resolveMemoryStoreBackend({ registry: empty, preference: ['files', 'tree'] }),
+    resolveMemoryStoreBackend({ registry: registryOf(empty), preference: ['files', 'tree'] }),
     undefined,
     '一个后端都没装 → undefined（没装就没有，不编造空后端）',
   )
   equal(
-    listRegisteredMemoryStoreBackends(empty, ['files', 'tree']).length,
+    listRegisteredMemoryStoreBackends(registryOf(empty), ['files', 'tree']).length,
     0,
     '诊断面如实回报零后端',
   )
@@ -184,42 +190,42 @@ async function probeRegistryResolution(): Promise<void> {
   const treeBackend = createMemoryTreeStoreBackend(domain)
   const filesBackend = createFilesBackend()
 
-  const host = new KernelModuleHost({ apiVersion: KernelModuleApiVersion })
-  host.registerModule(createMemoryStoreKernelModule({ backend: treeBackend }))
-  host.registerModule(createMemoryStoreKernelModule({ backend: filesBackend }))
-  await host.start()
+  const kernel = createKernel()
+  kernel.registerModule(createMemoryStoreKernelModule({ backend: treeBackend }))
+  kernel.registerModule(createMemoryStoreKernelModule({ backend: filesBackend }))
+  await kernel.start()
 
-  const descriptors = listRegisteredMemoryStoreBackends(host, ['files', 'tree'])
-  equal(descriptors.length, 2, '两个后端档并存注册在同一个 host 上')
+  const descriptors = listRegisteredMemoryStoreBackends(registryOf(kernel), ['files', 'tree'])
+  equal(descriptors.length, 2, '两个后端档并存注册在同一个内核上')
   equal(descriptors[0].id, MemoryFilesBackendId, '枚举保持请求顺序')
   equal(descriptors[0].role, 'authority', 'files 是权威层')
   equal(descriptors[1].id, MemoryTreeBackendId, '树档同时在册')
 
   equal(
-    resolveMemoryStoreBackend({ registry: host, preference: ['files', 'tree'] })?.descriptor.id,
+    resolveMemoryStoreBackend({ registry: registryOf(kernel), preference: ['files', 'tree'] })?.descriptor.id,
     MemoryFilesBackendId,
     'files 优先时解析到文件后端',
   )
   equal(
-    resolveMemoryStoreBackend({ registry: host, preference: ['tree', 'files'] })?.descriptor.id,
+    resolveMemoryStoreBackend({ registry: registryOf(kernel), preference: ['tree', 'files'] })?.descriptor.id,
     MemoryTreeBackendId,
     '优先序反过来就换后端，调用点一行不改',
   )
   equal(
-    resolveMemoryStoreBackend({ registry: host, preference: ['vector'] }),
+    resolveMemoryStoreBackend({ registry: registryOf(kernel), preference: ['vector'] }),
     undefined,
     '未注册的档（如可选的 memory-vector）解析为缺席',
   )
   equal(
     resolveMemoryStoreBackend({
-      registry: host,
+      registry: registryOf(kernel),
       preference: ['files'],
       capabilityVersion: '2.0.0',
     }),
     undefined,
     '版本不匹配视为缺席（token 版本参与解析）',
   )
-  await host.dispose()
+  await kernel.dispose()
 }
 
 // ── ④ 默认回落 = 行为零变化 ────────────────────────────────────────────────
@@ -261,13 +267,13 @@ async function probeDefaultFallback(): Promise<void> {
 async function probeFilesRouting(): Promise<void> {
   const { domain, calls } = createFakeDomain()
   const filesBackend = createFilesBackend()
-  const host = new KernelModuleHost({ apiVersion: KernelModuleApiVersion })
-  host.registerModule(createMemoryStoreKernelModule({ backend: filesBackend }))
-  await host.start()
+  const kernel = createKernel()
+  kernel.registerModule(createMemoryStoreKernelModule({ backend: filesBackend }))
+  await kernel.start()
 
   const adapter = mountMemoryAdapter({
     ...mountInput(domain),
-    store: { registry: host, preference: ['files', 'tree'] },
+    store: { registry: registryOf(kernel), preference: ['files', 'tree'] },
   })
   equal(adapter.storeDescriptor.id, MemoryFilesBackendId, '解析到 files 后端')
   check(!adapter.isDefaultStore, 'isDefaultStore 为假')
@@ -284,7 +290,7 @@ async function probeFilesRouting(): Promise<void> {
   equal(recalled.length, 1, '写入的证据可被文件后端召回')
   equal(calls.recall.length, 0, '召回没有落到树 domain')
 
-  await host.dispose()
+  await kernel.dispose()
 }
 
 // ── ⑥ 角色门:派生索引永远当不成权威后端 ────────────────────────────────────
@@ -299,31 +305,31 @@ async function probeDerivedIndexRoleGate(): Promise<void> {
     },
   })
 
-  const host = new KernelModuleHost({ apiVersion: KernelModuleApiVersion })
-  host.registerModule(createMemoryStoreKernelModule({ backend: filesBackend }))
-  host.registerModule(createMemoryStoreKernelModule({ backend: vectorBackend }))
-  await host.start()
+  const kernel = createKernel()
+  kernel.registerModule(createMemoryStoreKernelModule({ backend: filesBackend }))
+  kernel.registerModule(createMemoryStoreKernelModule({ backend: vectorBackend }))
+  await kernel.start()
 
   equal(
-    listRegisteredMemoryStoreBackends(host, ['files', 'vector']).length,
+    listRegisteredMemoryStoreBackends(registryOf(kernel), ['files', 'vector']).length,
     2,
     '权威档与派生档并存注册(叠加语义的前提)',
   )
   equal(
-    resolveMemoryStoreBackend({ registry: host, preference: ['vector', 'files'] })?.descriptor.id,
+    resolveMemoryStoreBackend({ registry: registryOf(kernel), preference: ['vector', 'files'] })?.descriptor.id,
     MemoryFilesBackendId,
     '权威解析跳过派生索引,哪怕优先序里点名了它',
   )
   equal(
-    resolveMemoryStoreBackend({ registry: host, preference: ['vector'] }),
+    resolveMemoryStoreBackend({ registry: registryOf(kernel), preference: ['vector'] }),
     undefined,
     '只有派生索引在册 = 没有权威层 = 缺席(而不是拿不持内容的索引冒充权威)',
   )
-  const derivedBackends = resolveMemoryDerivedIndexBackends(host, ['files', 'vector'])
+  const derivedBackends = resolveMemoryDerivedIndexBackends(registryOf(kernel), ['files', 'vector'])
   equal(derivedBackends.length, 1, '派生解析只收 derived-index 角色')
   equal(derivedBackends[0].descriptor.id, MemoryVectorBackendId, '解析到 vector')
 
-  await host.dispose()
+  await kernel.dispose()
 }
 
 await probeTokenShape()

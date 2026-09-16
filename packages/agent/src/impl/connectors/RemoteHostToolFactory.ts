@@ -1,7 +1,6 @@
-import { RemoteNodeClientError } from '@velaros-ai/kernel/remote/client'
-
 import type { RemoteHostTool, RemoteHostToolContext, RemoteHostToolInput } from '../../types/connectors.js'
 import { convertMcpInputSchema } from '../../utils/connectors/mcp-tool-translation'
+import { isRemoteNodeClientFailure } from '../../utils/connectors/remote-node-mcp'
 
 /**
  * 远程主机工具的翻译面：把远程节点广播的一条工具描述翻成一条标准 VelaTool。
@@ -60,7 +59,7 @@ class RemoteHostToolFactory implements RemoteHostToolFactoryApi {
         } catch (error) {
           // 「可能已半执行」必须原样上抛给模型：一次可能跑了一半的构建或代码签名，如果被压成
           // 普通失败，模型的下一步几乎必然是重试——那正是最不该自动做的动作。
-          if (error instanceof RemoteNodeClientError && error.resultUnknown) return {
+          if (isRemoteNodeClientFailure(error) && error.resultUnknown) return {
               failed: true,
               resultUnknown: true,
               host: hostLabel,

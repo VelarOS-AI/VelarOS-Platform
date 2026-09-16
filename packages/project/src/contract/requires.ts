@@ -16,7 +16,9 @@ import type {
   ApprovalPort,
   FileContextCarrier,
 } from '@velaros-ai/agent/tool-contract'
-import type { ScopeRef } from '@velaros-ai/kernel/contracts/abi'
+import type {
+  ScopeRef,
+} from '@velaros-ai/kernel/contracts'
 import type { RehearsalSandboxHostPort } from '@velaros-ai/rehearsal-sandbox'
 
 import type { AdapterCapability, AdapterKind, AdapterPrepareEditInput, AdapterSearchHit, AdapterSearchInput, AdapterValidateInput, ParseInput, ParseResult, ProjectSymbol } from '../types/adapter.js'

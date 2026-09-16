@@ -1,19 +1,23 @@
+import type {
+  KernelModuleDefinition,
+} from '@velaros-ai/kernel'
 import {
-  type CapabilityToken,
-  createCapabilityToken,
-  createKernelCallableCapability,
-  defineKernelModule,
-  KernelModuleApiVersion,
-  type KernelModuleDefinition,
-  type ScopeRef,
-} from '@velaros-ai/kernel/contracts/abi'
+  kernelModules,
+} from '@velaros-ai/kernel'
+import type {
+  CapabilityToken,
+  ScopeRef,
+} from '@velaros-ai/kernel/contracts'
+import {
+  KernelVersionAxes,
+} from '@velaros-ai/kernel/contracts'
 
 import type { BrowserRuntimeCapabilityService, CreateBrowserKernelModuleOptions } from '../../types/electron.js'
 import { parseEmptyInput, parseSessionInput } from '../../utils/electron/kernel-input'
 
 /** 浏览器运行时在内核里的能力令牌：宿主经它拿到本进程唯一的那份运行时。 */
 export const BrowserRuntimeCapability: CapabilityToken<BrowserRuntimeCapabilityService> =
-  createCapabilityToken<BrowserRuntimeCapabilityService>('velaros.browser')
+  kernelModules.token<BrowserRuntimeCapabilityService>('velaros.browser')
 
 /**
  * Registers the Electron browser runtime as an optional, product-local module.
@@ -25,11 +29,11 @@ export const BrowserRuntimeCapability: CapabilityToken<BrowserRuntimeCapabilityS
 export function createBrowserKernelModule(
   options: CreateBrowserKernelModuleOptions,
 ): KernelModuleDefinition {
-  return defineKernelModule({
+  return kernelModules.define({
     manifest: {
       id: 'velaros.browser.electron',
       version: '0.2.4',
-      apiVersion: KernelModuleApiVersion,
+      apiVersion: KernelVersionAxes.moduleApi,
       provides: [BrowserRuntimeCapability],
       requires: [],
       optionalRequires: [],
@@ -37,7 +41,7 @@ export function createBrowserKernelModule(
       isolation: 'in-process',
     },
     activate(context) {
-      const callable = createKernelCallableCapability({
+      const callable = kernelModules.callable({
         close_session: {
           metadata: {
             permissions: ['browser:control'],

@@ -5,7 +5,9 @@
 
 import type { z } from 'zod'
 
-import type { CapabilityToken } from '@velaros-ai/kernel/contracts/abi'
+import type {
+  CapabilityToken,
+} from '@velaros-ai/kernel/contracts'
 
 import type { ToolContextResolver } from '../contract/requires.js'
 

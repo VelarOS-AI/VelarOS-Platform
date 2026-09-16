@@ -1,8 +1,7 @@
 import { isPresent, Log, toOptional } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
-import {
-  RemoteNodeClient,
-} from '@velaros-ai/kernel/remote/client'
+import type { RemoteNodeClientApi } from '@velaros-ai/kernel'
+import { createRemoteNodeClient } from '@velaros-ai/kernel/remote'
 
 import type { RemoteHostServicePorts } from '../../contract/requires.js'
 import type { ConnectedHost,RemoteHostDefinition, RemoteHostToolEntry, RemoteHostToolInvoker } from '../../types/connectors.js'
@@ -88,7 +87,7 @@ export class RemoteHostService implements RemoteHostServiceApi {
     definition: RemoteHostDefinition,
     pairingCode?: string,
   ): Promise<void> {
-    const client = new RemoteNodeClient({
+    const client = createRemoteNodeClient({
       url: definition.url,
       clientName: this.ports.clientName,
       credentials: this.ports.createCredentialStore(definition.id),
@@ -152,7 +151,7 @@ export class RemoteHostService implements RemoteHostServiceApi {
   }
 }
 
-function createInvoker(client: RemoteNodeClient): RemoteHostToolInvoker {
+function createInvoker(client: RemoteNodeClientApi): RemoteHostToolInvoker {
   return {
     invoke: (descriptor, input, signal) =>
       client.invoke(

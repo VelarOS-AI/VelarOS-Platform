@@ -68,7 +68,7 @@
 ## 依赖什么
 
 - `@velaros-ai/core`：类型守卫、缺席值、日志、`AppError`。
-- `@velaros-ai/kernel` 的 `contracts/abi`：能力令牌、内核模块定义。
+- `@velaros-ai/kernel`：内核模块定义与模块 SDK `kernelModules`；`@velaros-ai/kernel/contracts` 出能力令牌等可移植数据。
 - `@velaros-ai/agent` 的 `protocol` 与 `tool-contract` 子路径：工具运行时规格、mod 清单、审批端口类型、入参描述辅助。
 - `@velaros-ai/shell-command`：命令的只读、危险、长驻判定，确认文案，危险命令的审批请求；system:run 与演练沙箱里的命令都经它。
 - `@velaros-ai/rehearsal-sandbox`：演练沙箱的数据形状、公开上限，落回前的核对与确认请求（确认的就是要落的）；镜像、差量、落回的引擎仍在本包。

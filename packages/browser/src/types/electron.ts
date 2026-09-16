@@ -1,6 +1,8 @@
 import type electron from 'electron'
 
-import type { KernelCallableCapabilityService } from '@velaros-ai/kernel/contracts/abi'
+import type {
+  KernelCallableCapabilityService,
+} from '@velaros-ai/kernel'
 
 import type { BrowserPageDriver, BrowserSystemPointerDriver } from '../contract/requires.js'
 import type { ElectronBrowserRuntime } from '../impl/electron/ElectronBrowserRuntime.js'

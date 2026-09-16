@@ -7,9 +7,11 @@ import { EventEmitter } from 'node:events'
 import { PassThrough } from 'node:stream'
 
 import type {
-  CapabilityToken,
   KernelModuleActivateContext,
-} from '@velaros-ai/kernel/contracts/abi'
+} from '@velaros-ai/kernel'
+import type {
+  CapabilityToken,
+} from '@velaros-ai/kernel/contracts'
 
 /** 捕获内核模块 activate 时注册的服务，测试用来拿到能力服务实例。 */
 export function captureService(

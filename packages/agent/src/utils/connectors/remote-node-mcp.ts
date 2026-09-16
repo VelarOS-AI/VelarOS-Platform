@@ -1,9 +1,29 @@
-import { isPresent, isString, stringifyPretty } from '@velaros-ai/core'
+import { isBoolean, isPresent, isString, stringifyPretty } from '@velaros-ai/core'
 import { Log } from '@velaros-ai/core/logger'
-import type { RemoteNodeToolDescriptor } from '@velaros-ai/kernel/contracts/protocol'
-import { RemoteNodeClientError } from '@velaros-ai/kernel/remote/client'
+import type {
+  RemoteNodeClientFailure,
+  RemoteNodeToolDescriptor,
+} from '@velaros-ai/kernel'
+import { RemoteNodeClientErrorCodes } from '@velaros-ai/kernel/contracts'
 
 export const log = Log.tag('RemoteNodeMcpBridge')
+
+/**
+ * 判一次失败是不是远程节点客户端抛的。
+ *
+ * 内核的错误类不出包(类不出包是仓库标准),外面一律按形状与码判:`code` 落在
+ * `RemoteNodeClientErrorCodes` 里、并且带着 `resultUnknown` 这一档,就是它。
+ */
+export function isRemoteNodeClientFailure(
+  error: unknown,
+): error is RemoteNodeClientFailure {
+  if (!(error instanceof Error)) return false
+  const candidate = error as Partial<RemoteNodeClientFailure>
+  const codes: readonly string[] = Object.values(RemoteNodeClientErrorCodes)
+  return isString(candidate.code)
+    && codes.includes(candidate.code)
+    && isBoolean(candidate.resultUnknown)
+}
 
 /**
  * MCP 工具名的合法字符面比我们的 canonical id 窄,且各家客户端宽严不一。
@@ -35,9 +55,9 @@ export function describeTool(
  * 正是最不该自动做的动作。所以这一档在文本里说死。
  */
 export function explainFailure(error: unknown, nodeName: string): string {
-  if (error instanceof RemoteNodeClientError && error.resultUnknown) return `与远程主机「${nodeName}」的连接在调用期间中断,该操作**可能已经执行了一部分**。`
+  if (isRemoteNodeClientFailure(error) && error.resultUnknown) return `与远程主机「${nodeName}」的连接在调用期间中断,该操作**可能已经执行了一部分**。`
       + '不要直接重试:先在目标机器上确认当前状态,再决定是否重来。'
-  if (error instanceof RemoteNodeClientError) return isPresent(error.nodeError)
+  if (isRemoteNodeClientFailure(error)) return isPresent(error.nodeError)
       ? `远程调用失败(${error.code}):${error.nodeError.message}`
       : `远程调用失败(${error.code}):${error.message}`
   return `远程调用失败:${error instanceof Error ? error.message : String(error)}`

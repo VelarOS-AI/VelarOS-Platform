@@ -19,7 +19,9 @@ import {
   isString,
   isUndefined,
 } from '@velaros-ai/core'
-import { VelarosModManifestFileName } from '@velaros-ai/kernel/contracts/protocol'
+import {
+  VelarosModManifestFileName,
+} from '@velaros-ai/kernel/contracts'
 
 import { AgentModAxes, AgentProtocolVersions } from '../../contract/constants.js'
 import type { AgentModCommandHandler, AgentModContributes, AgentModContributionAxisName, AgentModDiagnostic, AgentModEngines, AgentModExecutionModeContribution, AgentModHookContribution, AgentModHookEvent, AgentModHookExecutionMode, AgentModHookMatcher, AgentModManifest, AgentModManifestParseResult, AgentModPromptSegmentContribution, AgentModSkillContribution, AgentModSpaceContribution, AgentModSubAgentTypeContribution, AgentModToolCategoryContribution, AgentModToolContribution, AgentModTrustLevel, AgentModTurnContextSourceContribution, ParseAgentModManifestOptions,SemverComparator, SemverVersion } from '../../types/agent.js'

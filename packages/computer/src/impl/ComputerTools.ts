@@ -9,14 +9,18 @@ import { z } from 'zod'
 
 import type { ToolCapabilitySchema } from '@velaros-ai/agent/protocol'
 import { isPresent } from '@velaros-ai/core'
+import type {
+  KernelModuleDefinition,
+} from '@velaros-ai/kernel'
 import {
-  type CapabilityToken,
-  createCapabilityToken,
-  createKernelCallableCapability,
-  defineKernelModule,
-  KernelModuleApiVersion,
-  type KernelModuleDefinition,
-} from '@velaros-ai/kernel/contracts/abi'
+  kernelModules,
+} from '@velaros-ai/kernel'
+import type {
+  CapabilityToken,
+} from '@velaros-ai/kernel/contracts'
+import {
+  KernelVersionAxes,
+} from '@velaros-ai/kernel/contracts'
 import {
   renderParameterDescription as parameterDescription,
   toolDescriptions,
@@ -287,7 +291,7 @@ export const computerTools: ComputerToolCollection = toolDescriptions.forCategor
 
 /** 桌面控制能力服务在内核里的身份令牌，宿主按它取到服务。 */
 export const ComputerCapability: CapabilityToken<ComputerCapabilityService> =
-  createCapabilityToken<ComputerCapabilityService>(ComputerCapabilityId)
+  kernelModules.token<ComputerCapabilityService>(ComputerCapabilityId)
 
 /**
  * 创建桌面控制的内核模块：激活时把六个工具登记成能力服务。
@@ -299,11 +303,11 @@ export const ComputerCapability: CapabilityToken<ComputerCapabilityService> =
 export function createComputerKernelModule(
   options: CreateComputerKernelModuleOptions = {},
 ): KernelModuleDefinition {
-  return defineKernelModule({
+  return kernelModules.define({
     manifest: {
       id: ComputerKernelModuleId,
       version: ComputerKernelModuleVersion,
-      apiVersion: KernelModuleApiVersion,
+      apiVersion: KernelVersionAxes.moduleApi,
       provides: [ComputerCapability],
       requires: [],
       optionalRequires: [],
@@ -318,7 +322,7 @@ export function createComputerKernelModule(
           abortSignal: signal,
           computer: computerHostPortFromRuntime(runtime),
         }))
-      const callable = createKernelCallableCapability(
+      const callable = kernelModules.callable(
         toolKernelModules.callableOperations(computerTools, resolveContext, { label: '桌面控制' }),
       )
       const service: ComputerCapabilityService = Object.freeze({

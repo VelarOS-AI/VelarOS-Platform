@@ -11,7 +11,9 @@
  */
 
 import type { ApprovalPort } from '@velaros-ai/agent/tool-contract'
-import type { ScopeRef } from '@velaros-ai/kernel/contracts/abi'
+import type {
+  ScopeRef,
+} from '@velaros-ai/kernel/contracts'
 import type { RehearsalSandboxHostPort } from '@velaros-ai/rehearsal-sandbox'
 import type { SandboxApplyOptions, SandboxApplyResult, SandboxCreateOptions, SandboxDiff, SandboxDiffOptions, SandboxDiscardResult, SandboxRecord } from '@velaros-ai/rehearsal-sandbox/contracts'
 

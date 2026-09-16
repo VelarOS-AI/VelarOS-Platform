@@ -1,14 +1,18 @@
 import { AppError } from '@velaros-ai/core/error'
+import type {
+  KernelCallableCapabilityService,
+  KernelModuleDefinition,
+} from '@velaros-ai/kernel'
 import {
-  type CapabilityToken,
-  createCapabilityToken,
-  createKernelCallableCapability,
-  defineKernelModule,
-  type KernelCallableCapabilityService,
-  KernelModuleApiVersion,
-  type KernelModuleDefinition,
-  type ScopeRef,
-} from '@velaros-ai/kernel/contracts/abi'
+  kernelModules,
+} from '@velaros-ai/kernel'
+import type {
+  CapabilityToken,
+  ScopeRef,
+} from '@velaros-ai/kernel/contracts'
+import {
+  KernelVersionAxes,
+} from '@velaros-ai/kernel/contracts'
 
 import {
   ModelCapabilityId,
@@ -37,7 +41,7 @@ export interface ModelRuntimeCapabilityService
 
 /** 模型能力的服务身份；宿主按它取注册表。 */
 export const ModelCapability: CapabilityToken<ModelRuntimeCapabilityService> =
-  createCapabilityToken<ModelRuntimeCapabilityService>(ModelCapabilityId)
+  kernelModules.token<ModelRuntimeCapabilityService>(ModelCapabilityId)
 
 /**
  * 把产品自己的适配器注册表包成内核服务。
@@ -45,7 +49,7 @@ export const ModelCapability: CapabilityToken<ModelRuntimeCapabilityService> =
  * 只是转发：不复制注册表状态，也不替宿主造一个。
  */
 class ModelKernelCapability implements ModelRuntimeCapabilityService {
-  private readonly callable = createKernelCallableCapability({
+  private readonly callable = kernelModules.callable({
     supports_provider: {
       metadata: {
         permissions: [],
@@ -102,11 +106,11 @@ export function createModelKernelModule(
     throw new AppError('VALIDATION', '模型内核模块必须显式注入适配器注册表。')
   }
 
-  return defineKernelModule({
+  return kernelModules.define({
     manifest: {
       id: ModelKernelModuleId,
       version: ModelKernelModuleVersion,
-      apiVersion: KernelModuleApiVersion,
+      apiVersion: KernelVersionAxes.moduleApi,
       provides: [ModelCapability],
       requires: [],
       optionalRequires: [],

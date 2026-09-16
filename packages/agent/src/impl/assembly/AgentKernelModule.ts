@@ -1,16 +1,20 @@
+import type {
+  KernelModuleActivateContext,
+  KernelModuleDefinition,
+  KernelModuleLifecycle,
+} from '@velaros-ai/kernel'
 import {
-  type CapabilityToken,
-  createCapabilityToken,
-  createKernelCallableCapability,
-  defineKernelModule,
-  type KernelModuleActivateContext,
-  KernelModuleApiVersion,
-  type KernelModuleDefinition,
-  type KernelModuleHealth,
-  type KernelModuleLifecycle,
-  type KernelModuleManifest,
-  type ScopeRef,
-} from '@velaros-ai/kernel/contracts/abi'
+  kernelModules,
+} from '@velaros-ai/kernel'
+import type {
+  CapabilityToken,
+  KernelModuleHealth,
+  KernelModuleManifest,
+  ScopeRef,
+} from '@velaros-ai/kernel/contracts'
+import {
+  KernelVersionAxes,
+} from '@velaros-ai/kernel/contracts'
 
 import { AgentIdentity } from '../../contract/constants.js'
 import type { CreateAgentKernelModuleOptions } from '../../contract/requires.js'
@@ -19,7 +23,7 @@ import { parseEmptyInput } from '../../utils/execution/kernel-capability'
 
 /** Stable identity for an independently injected Agent execution capability. */
 export const AgentCapability: CapabilityToken<AgentCapabilityService> =
-  createCapabilityToken<AgentCapabilityService>(AgentIdentity.capabilityId)
+  kernelModules.token<AgentCapabilityService>(AgentIdentity.capabilityId)
 
 /** Stable module identity used by host permission policies；等价于 `AgentIdentity.kernelModuleId`。 */
 export const AgentKernelModuleId: string = AgentIdentity.kernelModuleId
@@ -48,7 +52,7 @@ class AgentKernelModule implements AgentKernelModuleApi {
   public readonly manifest: KernelModuleManifest = {
     id: AgentKernelModuleId,
     version: '0.3.2',
-    apiVersion: KernelModuleApiVersion,
+    apiVersion: KernelVersionAxes.moduleApi,
     provides: [AgentCapability],
     requires: [],
     optionalRequires: [],
@@ -61,7 +65,7 @@ class AgentKernelModule implements AgentKernelModuleApi {
   public constructor(private readonly options: CreateAgentKernelModuleOptions) {}
 
   public activate(context: KernelModuleActivateContext): KernelModuleLifecycle {
-    const callable = createKernelCallableCapability({
+    const callable = kernelModules.callable({
       health: {
         metadata: {
           permissions: [],
@@ -146,5 +150,5 @@ class AgentKernelModule implements AgentKernelModuleApi {
 export function createAgentKernelModule(
   options: CreateAgentKernelModuleOptions,
 ): KernelModuleDefinition {
-  return defineKernelModule(new AgentKernelModule(options))
+  return kernelModules.define(new AgentKernelModule(options))
 }

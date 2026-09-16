@@ -4,7 +4,9 @@
  */
 
 import type { AgentModManifest, ToolCategoryDefinition, ToolPermission } from '@velaros-ai/agent/protocol'
-import type { KernelCallableCapabilityService } from '@velaros-ai/kernel/contracts/abi'
+import type {
+  KernelCallableCapabilityService,
+} from '@velaros-ai/kernel'
 import type { ToolContractRuntimeSpec } from '@velaros-ai/tool-contract'
 
 import type { ProjectChangeListener, ProjectChangeListOptions, ProjectChangeRecord } from '../types/change-feed.js'

@@ -7,9 +7,11 @@ import { describe, expect, test } from 'bun:test'
 import { defaultDenyApprovalPort } from '@velaros-ai/agent/tool-contract'
 import { AppError } from '@velaros-ai/core/error'
 import type {
-  CapabilityToken,
   KernelModuleActivateContext,
-} from '@velaros-ai/kernel/contracts/abi'
+} from '@velaros-ai/kernel'
+import type {
+  CapabilityToken,
+} from '@velaros-ai/kernel/contracts'
 
 import type { ProjectToolContext } from '../src/contract/requires'
 import {

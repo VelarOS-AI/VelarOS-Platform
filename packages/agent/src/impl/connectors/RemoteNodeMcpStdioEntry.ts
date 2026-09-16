@@ -11,10 +11,9 @@ import process from 'node:process'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 
 import {
-  defaultRemoteNodeCredentialsPath,
-  FileRemoteNodeCredentialStore,
-  RemoteNodeClient,
-} from '@velaros-ai/kernel/remote/client'
+  createRemoteNodeClient,
+  createRemoteNodeClientCredentialStore,
+} from '@velaros-ai/kernel/remote'
 
 import { readArguments, seizeStdout } from '../../utils/connectors/stdio-entry'
 
@@ -40,12 +39,12 @@ class RemoteNodeMcpStdioEntry implements RemoteNodeMcpStdioEntryApi {
   public async run(argv: readonly string[] = process.argv.slice(2)): Promise<void> {
     const mcpStdout = seizeStdout()
     const args = readArguments(argv)
-    const client = new RemoteNodeClient({
+    const client = createRemoteNodeClient({
       url: args.url,
       clientName: args.clientName,
-      credentials: new FileRemoteNodeCredentialStore(
-        defaultRemoteNodeCredentialsPath(args.hostSlug),
-      ),
+      credentials: createRemoteNodeClientCredentialStore({
+        hostSlug: args.hostSlug,
+      }),
       pairingCode: args.pairingCode,
     })
     const server = createRemoteNodeMcpServer({ client })

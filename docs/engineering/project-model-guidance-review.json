@@ -150,7 +150,7 @@
     },
     {
       "path": "packages/project/src/impl/ProjectTools.ts",
-      "fingerprint": "1ecf47c371f9e37f7c3535ab5fa4ed9289af31266c7272e5da575f6248501742"
+      "fingerprint": "204d60498374ba3ca59671ae055120a8bf3afe09c75ee399a29ab92149225793"
     },
     {
       "path": "packages/project/src/impl/operations/ProjectChangeOperations.ts",

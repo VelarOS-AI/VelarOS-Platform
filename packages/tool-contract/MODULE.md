@@ -65,7 +65,7 @@ system、project、browser、office、memory、computer、knowledge 七个空间
 
 ## 依赖什么
 
-- 上游包：`@velaros-ai/core`（类型守卫、`AppError`、数值钳制）、`@velaros-ai/kernel`（内核模块与能力服务的 ABI）。
+- 上游包：`@velaros-ai/core`（类型守卫、`AppError`、数值钳制）、`@velaros-ai/kernel`（内核模块与能力服务的 ABI，版本轴常量走 `@velaros-ai/kernel/contracts`）。
 - `zod`（入参 schema 与 JSON Schema 输出）。
 - 不碰 Node 内置模块、不读环境变量、不起子进程、不落盘。两个入口都能在渲染进程里加载。
 

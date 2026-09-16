@@ -7,8 +7,16 @@ import { z } from 'zod'
 
 import { isFalse, isPlainObject } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
-import type { KernelCallableCapabilityOperation, KernelModuleDefinition } from '@velaros-ai/kernel/contracts/abi'
-import { createKernelCallableCapability, defineKernelModule, KernelModuleApiVersion } from '@velaros-ai/kernel/contracts/abi'
+import type {
+  KernelCallableCapabilityOperation,
+  KernelModuleDefinition,
+} from '@velaros-ai/kernel'
+import {
+  kernelModules,
+} from '@velaros-ai/kernel'
+import {
+  KernelVersionAxes,
+} from '@velaros-ai/kernel/contracts'
 
 import type { ToolContextResolver } from '../contract/requires.js'
 import type {
@@ -102,11 +110,11 @@ class ToolKernelModules implements ToolKernelModulesApi {
   >(
     options: ToolKernelModuleOptions<TContext, TService>
   ): KernelModuleDefinition {
-    return defineKernelModule({
+    return kernelModules.define({
       manifest: {
         id: options.id,
         version: options.version,
-        apiVersion: KernelModuleApiVersion,
+        apiVersion: KernelVersionAxes.moduleApi,
         provides: [options.token],
         requires: [],
         optionalRequires: [],
@@ -114,7 +122,7 @@ class ToolKernelModules implements ToolKernelModulesApi {
         isolation: 'in-process',
       },
       activate: (context) => {
-        const callable = createKernelCallableCapability(
+        const callable = kernelModules.callable(
           this.callableOperations(
             options.tools as Readonly<Record<string, unknown>>,
             options.resolveContext,

@@ -71,7 +71,7 @@ overwrite 要求看过全文，move、delete 只核对版本。
 ## 依赖什么
 
 - `@velaros-ai/core`：类型守卫、缺席值、日志、`AppError`。
-- `@velaros-ai/kernel` 的 `contracts/abi`：能力令牌、内核模块定义、可调用能力服务。
+- `@velaros-ai/kernel`：内核模块定义与可调用能力服务；`@velaros-ai/kernel/contracts` 出能力令牌等可移植数据。
 - `@velaros-ai/agent` 的 `protocol` 与 `tool-contract` 子路径（peer）：工具运行时规格、mod 清单、审批端口、文件上下文协调器、入参复用、挂进内核时的可调用操作表。
 - `@velaros-ai/shell-command`：命令的只读、危险、长驻判定，确认文案，危险命令的审批请求。
 - `@velaros-ai/rehearsal-sandbox`：沙箱数据形状、公开上限、宿主沙箱端口形状，落回前的核对与确认请求。

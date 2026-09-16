@@ -61,7 +61,7 @@ const dependencySections = [
 ]
 // 单版本火车:Core、Kernel 与 Model 同仓,同仓依赖一律 workspace:*
 // (发布时由包管理器代换成具体版本)。Module ABI 的唯一入口是
-// @velaros-ai/kernel/contracts/abi。
+// @velaros-ai/kernel 与 @velaros-ai/kernel/contracts。
 const allowedVelarosDependencies = new Map([
   ['@velaros-ai/core', 'workspace:*'],
   ['@velaros-ai/kernel', 'workspace:*'],
@@ -104,7 +104,8 @@ for (const file of sourceFiles) {
       specifier === '@velaros-ai/core/error' ||
       specifier === '@velaros-ai/core/logger' ||
       specifier === '@velaros-ai/core/utils/TimerScope' ||
-      specifier === '@velaros-ai/kernel/contracts/abi'
+      specifier === '@velaros-ai/kernel'
+      || specifier === '@velaros-ai/kernel/contracts'
     if (!allowed) {
       failures.push(
         `${path.relative(root, file)} imports forbidden VelarOS implementation ${specifier}`,

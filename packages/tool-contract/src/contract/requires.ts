@@ -4,7 +4,9 @@
  * 这里的每个类型都必须从根入口导出。
  */
 
-import type { ScopeRef } from '@velaros-ai/kernel/contracts/abi'
+import type {
+  ScopeRef,
+} from '@velaros-ai/kernel/contracts'
 
 /**
  * 按作用域给出这次调用的工具上下文。

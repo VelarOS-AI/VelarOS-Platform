@@ -2,8 +2,7 @@ import assert from 'node:assert/strict'
 
 import { describe, test } from 'bun:test'
 
-import { KernelModuleApiVersion } from '@velaros-ai/kernel/contracts/abi'
-import { KernelModuleHost } from '@velaros-ai/kernel/runtime'
+import { createKernel } from '@velaros-ai/kernel'
 
 import { createInMemoryMemoryFilesIo } from '../../src/impl/files/InMemoryMemoryFilesIo'
 import { createMemoryFilesBackend } from '../../src/impl/files/MemoryFilesBackend'
@@ -53,18 +52,21 @@ describe('Memory adapter optional tree governance', () => {
 
   test('retains capability-registry selection without requiring a tree fallback', async () => {
     const backend = filesBackend()
-    const host = new KernelModuleHost({ apiVersion: KernelModuleApiVersion })
-    host.registerModule(createMemoryStoreKernelModule({ backend }))
-    await host.start()
+    const kernel = createKernel()
+    kernel.registerModule(createMemoryStoreKernelModule({ backend }))
+    await kernel.start()
     try {
       const adapter = mountMemoryAdapter({
         ...hostPorts(),
-        store: { registry: host, preference: ['files'] },
+        store: {
+          registry: { getOptionalService: (token) => kernel.getCapability(token) },
+          preference: ['files'],
+        },
       })
       assert.equal(adapter.store, backend)
       assert.equal(adapter.service, null)
     } finally {
-      await host.dispose()
+      await kernel.dispose()
     }
   })
 

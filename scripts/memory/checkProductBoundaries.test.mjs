@@ -124,7 +124,7 @@ test('allows each package to keep its own dependencies and relative imports', ()
     },
     source: `
       import { z } from 'zod'
-      import { createCapabilityToken } from '@velaros-ai/kernel/contracts/abi'
+      import { kernelModules } from '@velaros-ai/kernel'
       import { helper } from './helper'
     `,
     extraFiles: { 'helper.ts': 'export const helper = 1' },

@@ -3,8 +3,13 @@ import type { OAuthClientProvider } from '@modelcontextprotocol/sdk/client/auth.
 import type { LanguageModel, ModelMessage } from 'ai'
 
 import type { ScopedLog } from '@velaros-ai/core/logger'
-import type { KernelModuleHealth,ScopeRef } from '@velaros-ai/kernel/contracts/abi'
-import type { RemoteNodeCredentialStore } from '@velaros-ai/kernel/remote/client'
+import type {
+  RemoteNodeClientCredentialStore,
+} from '@velaros-ai/kernel'
+import type {
+  KernelModuleHealth,
+  ScopeRef,
+} from '@velaros-ai/kernel/contracts'
 
 import type { ActiveContextArchiveFilter, ActiveContextArtifact, ActiveContextGovernanceOptions, ActiveContextGovernanceReport, ActiveContextListOptions, ActiveContextUpsertInput, AgentDeveloperContext, AgentRoleId, AgentSkillDescriptor, AgentSkillSourceKind, AgentSurfaceId, AppLocale, ApprovalDecision, CapabilityScopeId, ChatContextReadEvidenceRequest, ChatContextReadEvidenceResult, ChatContextReadToolPayloadRequest, ChatContextRetrievedPayload, ChatContextRetrievePayloadRequest, ChatContextSearchConversationHistoryRequest, ChatContextSearchConversationHistoryResult, ChatContextSearchTerminalOutputRequest, ChatContextSearchTerminalOutputResult, ChatMessage, ChatPromptFeatureId, ChatSessionPayloadSnapshot, ChatSessionToolResultPayload, CustomSubAgentDefinition, CustomSubAgentDescriptor, ExecutionModeId, ExecutionTaskExecutionAdvice, ExecutionTaskPlanStep, ExecutionTaskRecommendedAction, ExecutionTaskRecord, PermissionConfirmationMode, PromptSegmentOverride, ReasoningLevel, RunProfileSelectionId, SessionLineageContext, SubAgentTypeId,ThinkingDepth, ToolCategoryId, ToolConfirmationDecisionOptions, ToolExecutionPlanUpdate, ToolSurfaceProfileId } from '../types/agent.js'
 import type { AgentRuntimeCapabilityExtension,CapabilityIntentClassifierContext, CapabilityIntentSignal, CapabilityScopeCategoryDecision, CapabilityScopeResidency, CapabilityScopeRuntimeFacts, CapabilityValidationInterpretation, ToolAllocationDelegation, ToolAllocationPrerequisite, ToolResultMiddlewareContext, ToolResultMiddlewareResult, ToolValidationHintContext, ToolValidationRecovery } from '../types/capabilities.js'
@@ -853,7 +858,7 @@ export interface RemoteHostServicePorts {
    */
   readonly publishTools: (entries: readonly RemoteHostToolEntry[]) => void
   /** 为某台远程主机造一个凭据仓；配对成功后的长期凭据由它落盘，之后每次连接靠 challenge 签名。hostId 相同必须拿到同一份凭据。 */
-  readonly createCredentialStore: (hostId: string) => RemoteNodeCredentialStore
+  readonly createCredentialStore: (hostId: string) => RemoteNodeClientCredentialStore
   /** 本客户端对远端自报的名字，出现在对端的连接列表与审计里；宿主填成可辨识的产品名，不是随机 id。 */
   readonly clientName: string
 }

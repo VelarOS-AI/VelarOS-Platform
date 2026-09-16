@@ -18,7 +18,9 @@ import {
 import {
   isUndefined,
 } from '@velaros-ai/core'
-import type { RemoteNodeToolDescriptor } from '@velaros-ai/kernel/contracts/protocol'
+import type {
+  RemoteNodeToolDescriptor,
+} from '@velaros-ai/kernel'
 
 import type { RemoteNodeMcpBridgeOptions } from '../../types/connectors.js'
 import { describeTool, explainFailure, log, stringifyOutput, toMcpToolName } from '../../utils/connectors/remote-node-mcp'

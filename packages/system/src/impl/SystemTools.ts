@@ -11,8 +11,15 @@ import { z } from 'zod'
 
 import type { AgentModManifest, ToolCategoryDefinition } from '@velaros-ai/agent/protocol'
 import { isEmpty, optionalWhen } from '@velaros-ai/core'
-import type { CapabilityToken, KernelModuleDefinition } from '@velaros-ai/kernel/contracts/abi'
-import { createCapabilityToken } from '@velaros-ai/kernel/contracts/abi'
+import type {
+  KernelModuleDefinition,
+} from '@velaros-ai/kernel'
+import {
+  kernelModules,
+} from '@velaros-ai/kernel'
+import type {
+  CapabilityToken,
+} from '@velaros-ai/kernel/contracts'
 import { RehearsalSandboxLimits } from '@velaros-ai/rehearsal-sandbox/contracts'
 import { shellCommandPolicy } from '@velaros-ai/shell-command'
 import { toolDescriptions, toolKernelModules } from '@velaros-ai/tool-contract'
@@ -443,7 +450,7 @@ export function createSystemBundledModDefinition(): SystemBundledModDefinition {
 
 /** 系统能力服务在内核里的身份令牌，宿主按它取到注入的系统工具集合。 */
 export const SystemCapability: CapabilityToken<SystemCapabilityService> =
-  createCapabilityToken<SystemCapabilityService>(SystemModId)
+  kernelModules.token<SystemCapabilityService>(SystemModId)
 
 /** 创建系统空间的内核模块：激活时把七个工具登记成能力服务；宿主给了上下文解析器，工具才能被按名调用。 */
 export function createSystemKernelModule(

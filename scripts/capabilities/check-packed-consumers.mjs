@@ -811,7 +811,7 @@ void [AppError, BrowserSessionManager, probe, uiConflictProbe]
     path.join(consumerRoot, 'runtime.mjs'),
     `await Promise.all([
   import('@velaros-ai/core'),
-  import('@velaros-ai/kernel/contracts/abi'),
+  import('@velaros-ai/kernel/contracts'),
   import('@velaros-ai/browser/core'),
   import('${targetName}'),
   import('@velaros-ai/ui-conflict-probe'),

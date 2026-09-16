@@ -5,7 +5,9 @@
 
 import type { AgentModManifest, ToolCategoryDefinition } from '@velaros-ai/agent/protocol'
 import type { ToolPermission } from '@velaros-ai/agent/protocol'
-import type { KernelCallableCapabilityService } from '@velaros-ai/kernel/contracts/abi'
+import type {
+  KernelCallableCapabilityService,
+} from '@velaros-ai/kernel'
 import type { ToolContractRuntimeSpec } from '@velaros-ai/tool-contract'
 
 import type { SystemModId, SystemToolCategoryId, SystemToolName } from './constants.js'

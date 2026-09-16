@@ -10,7 +10,9 @@
  * 这里的每个接口都必须从入口导出。
  */
 
-import type { ScopeRef } from '@velaros-ai/kernel/contracts/abi'
+import type {
+  ScopeRef,
+} from '@velaros-ai/kernel/contracts'
 
 import type {
   ComputerAvailability,

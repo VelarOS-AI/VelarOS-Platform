@@ -1,6 +1,12 @@
 import type { ModelMessage } from 'ai'
 
-import type { KernelCallableCapabilityService, KernelModuleHealth,ScopeRef } from '@velaros-ai/kernel/contracts/abi'
+import type {
+  KernelCallableCapabilityService,
+} from '@velaros-ai/kernel'
+import type {
+  KernelModuleHealth,
+  ScopeRef,
+} from '@velaros-ai/kernel/contracts'
 
 import type { AgentExecutionConfig, AgentRuntimeInputPort,ToolExecutionApi } from '../contract/requires.js'
 

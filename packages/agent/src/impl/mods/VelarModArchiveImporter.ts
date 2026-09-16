@@ -13,10 +13,10 @@ import {
   stringifyPretty,
 } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
+import { velarosModEnvelopes } from '@velaros-ai/kernel'
 import {
-  parseVelarosModEnvelope,
   VelarosModManifestFileName,
-} from '@velaros-ai/kernel/contracts/protocol'
+} from '@velaros-ai/kernel/contracts'
 
 import { VelarModArchiveFiles, VelarModArchiveLimits } from '../../contract/constants.js'
 import type { VelarModArchiveSignatureVerifier } from '../../contract/requires.js'
@@ -300,7 +300,7 @@ export class VelarModArchiveImporter implements VelarModArchiveImporterApi {
     } catch (error) {
       throw new AppError('VALIDATION', `${VelarosModManifestFileName} 不是合法 JSON：清单解析失败。`, error)
     }
-    const parsedEnvelope = parseVelarosModEnvelope(manifest, { origin: path })
+    const parsedEnvelope = velarosModEnvelopes.parse(manifest, { origin: path })
     if (!parsedEnvelope.ok) {
       throw new AppError('VALIDATION', parsedEnvelope.diagnostics
         .map((diagnostic) => `${diagnostic.path ?? '<root>'}: ${diagnostic.message}`)

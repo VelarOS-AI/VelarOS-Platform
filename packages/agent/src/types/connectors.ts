@@ -10,8 +10,11 @@ import type { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js
 import type { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js'
 
-import type { RemoteNodeManifest,RemoteNodeToolDescriptor } from '@velaros-ai/kernel/contracts/protocol'
-import type { RemoteNodeClient } from '@velaros-ai/kernel/remote/client'
+import type {
+  RemoteNodeClientApi,
+  RemoteNodeManifest,
+  RemoteNodeToolDescriptor,
+} from '@velaros-ai/kernel'
 
 import type { ApprovalPort } from '../contract/requires.js'
 
@@ -38,7 +41,7 @@ export interface RemoteHostStatus {
 }
 
 export interface RemoteNodeMcpBridgeOptions {
-  readonly client: RemoteNodeClient
+  readonly client: RemoteNodeClientApi
   readonly serverName?: string
   readonly serverVersion?: string
 }
@@ -168,7 +171,7 @@ export interface RemoteHostToolEntry {
 
 export interface ConnectedHost {
   readonly definition: RemoteHostDefinition
-  readonly client: RemoteNodeClient
+  readonly client: RemoteNodeClientApi
   manifest: Nullable<RemoteNodeManifest>
   dispose: () => void
 }

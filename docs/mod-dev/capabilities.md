@@ -3,7 +3,8 @@
 轴是**贡献**（我给平台加东西）；capability 是**服务**（我提供 / 我要用一个能力实现）。
 两者正交：一个 mod 可以只贡献轴、只提供 capability，或两者都有。
 
-契约面：`@velaros-ai/kernel/contracts/abi`（`packages/kernel/src/contracts-abi.ts`）。
+契约面：`@velaros-ai/kernel`（`packages/kernel/src/index.ts`）；只要数据不要值的调用方走
+`@velaros-ai/kernel/contracts`（`packages/kernel/src/contracts.ts`）。
 
 ---
 
@@ -71,7 +72,7 @@ manifest 的 `module` 节 schema（`VelarosModModuleSectionSchema`）与它一�
 bundled pack 走构建图，没有寻址问题。
 
 > **单一事实来源在 `@velaros-ai/kernel`**：ABI 定义运行态形状，
-> `@velaros-ai/kernel/contracts/protocol` 的 `mod-manifest` 是唯一磁盘 JSON schema。
+> 同一个包里的 `mod-manifest` wire schema 是唯一磁盘 JSON schema（`velarosModEnvelopes.parse`）。
 > Agent 与产品壳只消费统一入口路由给自己的不透明 section，不再各抄一份 module parser。
 
 ### `isolation` 是部署轴，不是架构轴

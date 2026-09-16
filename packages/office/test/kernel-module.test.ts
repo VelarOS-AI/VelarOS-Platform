@@ -8,9 +8,11 @@ import JSZip from 'jszip'
 import { PDFDocument, StandardFonts } from 'pdf-lib'
 
 import type {
-  CapabilityToken,
   KernelModuleActivateContext,
-} from '@velaros-ai/kernel/contracts/abi'
+} from '@velaros-ai/kernel'
+import type {
+  CapabilityToken,
+} from '@velaros-ai/kernel/contracts'
 
 import {
   createOfficeKernelModule,

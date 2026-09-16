@@ -8,11 +8,15 @@
 import { z } from 'zod'
 
 import { isNonBlankString, isPresent } from '@velaros-ai/core'
+import type {
+  KernelModuleDefinition,
+} from '@velaros-ai/kernel'
 import {
-  type CapabilityToken,
-  createCapabilityToken,
-  type KernelModuleDefinition,
-} from '@velaros-ai/kernel/contracts/abi'
+  kernelModules,
+} from '@velaros-ai/kernel'
+import type {
+  CapabilityToken,
+} from '@velaros-ai/kernel/contracts'
 import {
   renderParameterDescription as parameterDescription,
   toolDescriptions,
@@ -1279,7 +1283,7 @@ export const officeTools: OfficeToolCollection = toolDescriptions.forCategory(
 
 /** office 能力服务在内核里的身份令牌，宿主按它取到注入的 office 工具集合。 */
 export const OfficeCapability: CapabilityToken<OfficeCapabilityService> =
-  createCapabilityToken<OfficeCapabilityService>(OfficeModId)
+  kernelModules.token<OfficeCapabilityService>(OfficeModId)
 
 /** 创建 office 空间的内核模块：激活时把十个工具登记成能力服务；宿主给了上下文解析器，工具才能被按名调用。 */
 export function createOfficeKernelModule(
