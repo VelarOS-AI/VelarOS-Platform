@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "packageName": "@velaros-ai/agent",
-  "acceptedPackageVersion": "0.6.43",
+  "acceptedPackageVersion": "0.6.44",
   "entries": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -849,7 +849,7 @@
         "ReminderCapabilityResolver\ttype\t515173a3e1052d6505c57948745e0c3057d50ef34288e97fbc878526db7eb2af",
         "ReminderScope\ttype\t0d29a6cd466a53d557188b9481b5d5c5a7c654bcdf9ba57a550d906f9094b900",
         "ReminderTrigger\ttype\ta7421c3d6d3ca75d11ef880e04868184bef3ea36401498c6980dfada98d4b06e",
-        "RemoteHostServicePorts\ttype\t4b76ca72b8f0ac01809cb6469ad4ad419f5d605827732918ef11025ff8f8ab19",
+        "RemoteHostServicePorts\ttype\t10c13b601462599ae84d48885242ccd9c245df0368cd969b8bfab715e68b2f24",
         "ResolveAgentContextPhaseInput\ttype\tef094edfb5203f294f9b7a3449f7916feec723f4300913e564735a30274427f9",
         "ResolveAgentRoleOptions\ttype\tdf4d3fd69926be0e88c4d18a8438058c322bdf0b82f9850252a7c980b80285f3",
         "ResolveAgentSurfaceInput\ttype\t19d3357337281c64b8ff8997f984072c7d9025ac0e0f6986bcb4dd84cc1705cc",
@@ -2915,7 +2915,7 @@
       "symbols": [
         "RemoteHostDefinition\ttype\t2e827e656fc21ea3474f22e8c32b60bb431673fe6ee91d02976a07e58258ad82",
         "RemoteHostService\ttype,value\t1e1435d03ad4dedb9203b1d82aaf27be2f02900b0576f3666c0aea9c8cdb7410",
-        "RemoteHostServicePorts\ttype\t4b76ca72b8f0ac01809cb6469ad4ad419f5d605827732918ef11025ff8f8ab19",
+        "RemoteHostServicePorts\ttype\t10c13b601462599ae84d48885242ccd9c245df0368cd969b8bfab715e68b2f24",
         "RemoteHostStatus\ttype\t1ab61f3f5255b3959497fa2efdcb75e80ac5129b6976fdccf0c66f69f2cdb7b9",
         "RemoteHostTool\ttype\t592afccf7ffb7c49b1e6c3efdf2fdc56603874419b2618a304391356194282ee",
         "RemoteHostToolCategoryId\tvalue\t002993da11213674e86dcc2c3f20f7d9bcfbdd8fb64029ab1a5710b01b340a1f",
@@ -2930,7 +2930,7 @@
       "types": "./dist/remote/mcp.d.ts",
       "import": "./dist/remote/mcp.js",
       "symbols": [
-        "RemoteNodeMcpBridgeOptions\ttype\t0661fe6e6aab87f730a694a9ee00b409a554a7a4781194496d43a201efbb7318",
+        "RemoteNodeMcpBridgeOptions\ttype\t04adc3658ca8110b20e1c4448d064a42987741e168caeed22dbab6d1984b4db9",
         "createRemoteNodeMcpServer\tvalue\taef0fa6db35015f31f97d1c2fd7dfadf742ff1c67f4b934e1721e9462d7070ec",
         "runRemoteNodeMcpStdio\tvalue\t5899725fff56fd6d3aacc70d7608a4c16b8ee3b2570b07db47316a83a3129028"
       ]

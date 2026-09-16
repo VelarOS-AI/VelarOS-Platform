@@ -5,6 +5,11 @@
 > 方法：只读。数字来自脚本实测（TypeScript AST 与类型检查器；消费方扫描覆盖 Platform 的 `packages/*`、`tests/`、`scripts/`、`products/`，另加 Desktop、Workbench、Termel、Extension、VelarScript-Libraries，跳过 `scratchpad/`、`node_modules`、`dist`）。缺陷凡是标了探针的都复现过；探针只 import 源码，落盘只在草稿区。脚本与原始数据见附录 B。
 > 基线：`packages/kernel` 下 `bun test test`：144 pass / 0 fail（23 个测试文件，0.45 秒），跑完工作区干净。
 
+> **收口已经做完（0.3.0）**：入口 12 → 5、288 个导出名下线、23 个新名字、登记表摘掉
+> `status: 'migrating'`。逐符号迁移表与三个产品仓的调用点清单在 `kernel-migration.md`；
+> 本文往下是改造前的现状与方案，读的时候按「已执行」看，落地与方案有出入的地方以
+> `kernel-migration.md` §6 为准。
+
 ## 0. 结论先行
 
 1. **规模**：`src/` 106 个 `.ts`（外加 `velaros-globals.d.ts`）14,096 行、18 个子目录；38 个类另 20 个错误类，实现接口的只有 12 个；18 个 `index.ts`（12 个是入口、6 个是中间 barrel）；53 处包名自引用。12 个入口共导出 777 个名字，按声明去重 500 个（类 37、错误类 20、函数 91、常量 102、接口 140、类型别名 108、命名空间 2）。测试 25 个文件 5,394 行，`bun test test` 144 pass / 0 fail；远程节点 17 个文件 2,478 行在本仓零测试。
