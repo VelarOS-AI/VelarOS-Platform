@@ -10,19 +10,22 @@ import { isEmpty, isPresent } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import PptxGenJS from '../../vendor/pptxgenjs/pptxgen.es.js'
+import type { CreatePresentationInput } from '../types/inputs.js'
+import type { OfficeOutput } from '../types/office.js'
+import { normalizePresentationSlides } from '../utils/presentation/content.js'
+import { addSlideElements } from '../utils/presentation/elements.js'
+import { buildPresentationTheme } from '../utils/presentation/templates.js'
+import { buildProjectMutationSkippedResult } from '../utils/results.js'
 
 import {
-  buildProjectMutationSkippedResult,
   defineOfficeTool,
   OfficeDocumentWriteCapability,
-  type OfficeOutput,
   type OfficeToolContext,
   prepareOfficeOutputPath,
   runWithDirectory,
   toolRequiresProject,
 } from './officeShared'
-import type { CreatePresentationInput } from './presentationTool'
-import { addSlideElements, buildPresentationTheme, createPresentationGuidedSchema, createPresentationPresetSchema, createPresentationSchema, normalizeCreatePresentationGuided, normalizeCreatePresentationPreset, normalizePresentationSlides } from './presentationTool'
+import { createPresentationGuidedSchema, createPresentationPresetSchema, createPresentationSchema } from './presentationTool'
 
 // ─── Tool definition ────────────────────────────────────────────────────────────
 
@@ -73,7 +76,13 @@ const createPresentation = defineOfficeTool<CreatePresentationInput>({
       examples: [{ outputPath: "brief.pptx", content: "# Brief\n---\nDetails" }],
       notes: ['content 会用 # 标题和 --- 自动拆页。'],
       schema: createPresentationPresetSchema,
-      normalize: normalizeCreatePresentationPreset,
+      normalize: (input): CreatePresentationInput => ({
+        outputPath: input.outputPath,
+        title: input.title,
+        content: input.content,
+        template: input.template,
+        overwrite: input.overwrite,
+      }),
     },
     guided: {
       role: 'render',
@@ -84,7 +93,7 @@ const createPresentation = defineOfficeTool<CreatePresentationInput>({
       examples: [{ outputPath: "deck.pptx", content: "# Plan", template: "consulting" }],
       notes: ['复杂元素保留给 direct/expert。'],
       schema: createPresentationGuidedSchema,
-      normalize: normalizeCreatePresentationGuided,
+      normalize: (input): CreatePresentationInput => ({ ...input, content: input.content }),
     },
   },
   permissions: ['fs:read', 'fs:write'],

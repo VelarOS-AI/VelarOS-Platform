@@ -10,50 +10,22 @@ import { type z } from 'zod'
 import { isEmpty, isPresent, isString, optionalWhenLazy } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
+import type { CreateSpreadsheetInput } from '../types/inputs.js'
+import { writeOfficeBuffer } from '../utils/paths.js'
+import { buildProjectMutationSkippedResult } from '../utils/results.js'
+import { normalizeSpreadsheetSheets } from '../utils/spreadsheet/content.js'
+import { applyAutoWidths, applyNumberFormats, buildExcelCellValue, normalizeSheetName } from '../utils/spreadsheet/sheet.js'
+import { buildExcelCellStyle, toArgbColor } from '../utils/spreadsheet/style.js'
+
 import {
-  buildProjectMutationSkippedResult,
   defineOfficeTool,
   OfficeDocumentWriteCapability,
   type OfficeToolContext,
   prepareOfficeOutputPath,
   runWithDirectory,
   toolRequiresProject,
-  writeOfficeBuffer,
 } from './officeShared'
-import type { CreateSpreadsheetInput } from './spreadsheetTool'
-import { applyAutoWidths, buildExcelCellStyle, buildExcelCellValue, createSpreadsheetGuidedSchema, createSpreadsheetPresetSchema, createSpreadsheetSchema, normalizeCreateSpreadsheetGuided, normalizeCreateSpreadsheetPreset, normalizeSheetName, normalizeSpreadsheetSheets, toArgbColor } from './spreadsheetTool'
-
-const ExcelAddressPattern = /^([A-Z]+)([1-9]\d*)(?::([A-Z]+)([1-9]\d*))?$/iu
-const MaxNumberFormatCells = 100_000
-
-function excelColumnNumber(name: string): number {
-  let value = 0
-  for (const char of name.toUpperCase()) value = value * 26 + char.charCodeAt(0) - 64
-  return value
-}
-
-function applyNumberFormats(
-  sheet: ExcelJS.Worksheet,
-  numberFormats?: Readonly<Record<string, string>>,
-): void {
-  for (const [address, numFmt] of Object.entries(numberFormats ?? {})) {
-    const match = ExcelAddressPattern.exec(address)
-    if (!match) continue
-    const startColumn = excelColumnNumber(match[1]!)
-    const startRow = Number(match[2])
-    const endColumn = excelColumnNumber(match[3] ?? match[1]!)
-    const endRow = Number(match[4] ?? match[2])
-    const left = Math.min(startColumn, endColumn)
-    const right = Math.max(startColumn, endColumn)
-    const top = Math.min(startRow, endRow)
-    const bottom = Math.max(startRow, endRow)
-    if ((right - left + 1) * (bottom - top + 1) > MaxNumberFormatCells)
-      throw new AppError('VALIDATION', `office:create_spreadsheet: numberFormats 范围过大：${address}`)
-    for (let row = top; row <= bottom; row++)
-      for (let column = left; column <= right; column++)
-        sheet.getRow(row).getCell(column).numFmt = numFmt
-  }
-}
+import { createSpreadsheetGuidedSchema, createSpreadsheetPresetSchema, createSpreadsheetSchema } from './spreadsheetTool'
 
 // ─── Tool definition ────────────────────────────────────────────────────────────
 
@@ -99,7 +71,12 @@ const createSpreadsheet = defineOfficeTool<CreateSpreadsheetInput>({
       examples: [{ outputPath: "table.xlsx", content: "a,b\n1,2" }],
       notes: ['content 支持 CSV、TSV、Markdown 表格或 JSON rows。'],
       schema: createSpreadsheetPresetSchema,
-      normalize: normalizeCreateSpreadsheetPreset,
+      normalize: (input): CreateSpreadsheetInput => ({
+        outputPath: input.outputPath,
+        title: input.title,
+        content: input.content,
+        overwrite: input.overwrite,
+      }),
     },
     guided: {
       role: 'render',
@@ -110,7 +87,7 @@ const createSpreadsheet = defineOfficeTool<CreateSpreadsheetInput>({
       examples: [{ outputPath: "metrics.xlsx", content: "| k | v |\n|---|---|\n| a | 1 |" }],
       notes: ['复杂工作簿保留给 direct/expert。'],
       schema: createSpreadsheetGuidedSchema,
-      normalize: normalizeCreateSpreadsheetGuided,
+      normalize: (input): CreateSpreadsheetInput => ({ ...input, content: input.content }),
     },
   },
   permissions: ['fs:read', 'fs:write'],

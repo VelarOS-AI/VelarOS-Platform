@@ -1,6 +1,7 @@
+import type { ConvertDocumentToMarkdownInput } from '../types/inputs.js'
+
 import { markItDownBinaryResolver } from './markitdownResolver'
 import {
-  type ConvertDocumentToMarkdownInput,
   convertDocumentToMarkdownSchema,
   executeConvertDocumentToMarkdown,
 } from './markitdownTool'

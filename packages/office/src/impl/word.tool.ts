@@ -1,9 +1,4 @@
-/**
- * wordTool.ts
- *
- * Word (.docx) 文档生成工具。
- * 依赖：officeShared（共享类型 + 路径辅助）
- */
+/** office:create_word_document 的工具定义。 */
 
 import {
   Document,
@@ -14,17 +9,21 @@ import { type z } from 'zod'
 import { isEmpty } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
+import type { CreateWordDocumentInput } from '../types/inputs.js'
+import { prepareWordDocumentOutputPath, writeOfficeBuffer } from '../utils/paths.js'
+import { buildProjectMutationSkippedResult } from '../utils/results.js'
+import { normalizeWordBlocks } from '../utils/word/content.js'
+import { buildWordChildren, buildWordDocument } from '../utils/word/docx.js'
+import { appendWordDocumentBuffer } from '../utils/word/ooxml-append.js'
+
 import {
-  buildProjectMutationSkippedResult,
   defineOfficeTool,
   OfficeDocumentWriteCapability,
   type OfficeToolContext,
   runWithDirectory,
   toolRequiresProject,
-  writeOfficeBuffer,
 } from './officeShared'
-import type { CreateWordDocumentInput } from './wordTool'
-import { appendWordDocumentBuffer, buildWordChildren, buildWordDocument, createWordDocumentGuidedSchema, createWordDocumentPresetSchema, createWordDocumentSchema, normalizeCreateWordDocumentGuided, normalizeCreateWordDocumentPreset, normalizeWordBlocks, prepareWordDocumentOutputPath } from './wordTool'
+import { createWordDocumentGuidedSchema, createWordDocumentPresetSchema, createWordDocumentSchema } from './wordTool'
 
 // ─── Tool definition ────────────────────────────────────────────────────────────
 
@@ -69,7 +68,12 @@ const createWordDocument = defineOfficeTool<CreateWordDocumentInput>({
       examples: [{ outputPath: "note.docx", content: "# Note\nBody" }],
       notes: ['content 支持 Markdown 和纯文本自动排版。'],
       schema: createWordDocumentPresetSchema,
-      normalize: normalizeCreateWordDocumentPreset,
+      normalize: (input): CreateWordDocumentInput => ({
+        outputPath: input.outputPath,
+        title: input.title,
+        content: input.content,
+        overwrite: input.overwrite,
+      }),
     },
     guided: {
       role: 'render',
@@ -80,7 +84,7 @@ const createWordDocument = defineOfficeTool<CreateWordDocumentInput>({
       examples: [{ outputPath: "paper.docx", content: "# Abstract", profile: "academic-paper" }],
       notes: ['复杂内容块保留给 direct/expert。'],
       schema: createWordDocumentGuidedSchema,
-      normalize: normalizeCreateWordDocumentGuided,
+      normalize: (input): CreateWordDocumentInput => ({ ...input, content: input.content }),
     },
   },
   permissions: ['fs:read', 'fs:write'],
@@ -104,7 +108,7 @@ const createWordDocument = defineOfficeTool<CreateWordDocumentInput>({
     if (!authorization.approved) return buildProjectMutationSkippedResult(authorization)
 
     return runWithDirectory(ctx, input.cwd, async () => {
-      const output = await prepareWordDocumentOutputPath(ctx, input)
+      const output = await prepareWordDocumentOutputPath(ctx.office.project.getRootPath(), input)
       if (output.append) {
         // append 模式先生成临时 fragment docx，再把 XML body 合并进原文档。
         const fragmentDocument = new Document({

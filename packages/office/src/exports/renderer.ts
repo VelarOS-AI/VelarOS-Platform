@@ -10,10 +10,7 @@ export {
   renderPdfPagePng,
   type RenderPdfPagePngInput,
 } from '../impl/pdfPageRenderer'
-export {
-  buildOfficePreviewHtml,
-  type OfficePreviewKind,
-  type ParsedOfficePreview,
-  parseOfficePreview,
-  renderOfficePreviewPng,
-} from '../impl/previewTool'
+export type { OfficePreviewKind, ParsedOfficePreview } from '../types/preview.js'
+export { buildOfficePreviewHtml } from '../utils/preview/html.js'
+export { parseOfficePreview } from '../utils/preview/parse.js'
+export { renderOfficePreviewPng } from '../utils/preview/png.js'

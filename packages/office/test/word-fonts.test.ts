@@ -2,11 +2,8 @@ import { describe, expect, test } from 'bun:test'
 import { Packer } from 'docx'
 import JSZip from 'jszip'
 
-import { buildMacLibreOfficeFontConfig } from '../src/impl/officeShared'
-import {
-  buildWordDocument,
-  resolveWordFontFamilies,
-} from '../src/impl/wordTool'
+import { buildWordDocument } from '../src/utils/word/docx'
+import { buildMacLibreOfficeFontConfig, resolveWordFontFamilies } from '../src/utils/word/fonts'
 
 describe('Word document font portability', () => {
   test('selects a native CJK family for each supported host platform', () => {

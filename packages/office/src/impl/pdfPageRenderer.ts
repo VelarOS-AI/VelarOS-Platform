@@ -2,7 +2,9 @@ import { readFile } from 'node:fs/promises'
 
 import { createCanvas } from '@napi-rs/canvas'
 
-import { getPdfjsStandardFontDataUrl, loadPdfjs } from './pdfTools'
+import type { RenderedPdfPagePng, RenderPdfPagePngInput } from '../types/preview.js'
+import { getPdfjsStandardFontDataUrl, loadPdfjs } from '../utils/pdf/pdfjs-globals.js'
+import { OfficeTuning } from '../utils/tuning.js'
 
 export type OfficePdfPageRenderErrorCode =
   | 'INVALID_PAGE'
@@ -20,41 +22,26 @@ export class OfficePdfPageRenderError extends Error {
   }
 }
 
-export type RenderPdfPagePngInput = {
-  readonly inputPath: string
-  readonly page?: number
-  readonly scale?: number
-  readonly maximumPixels?: number
-  readonly standardFontDataUrl?: string
-}
-
-export type RenderedPdfPagePng = {
-  readonly buffer: Buffer
-  readonly width: number
-  readonly height: number
-  readonly page: number
-  readonly pageCount: number
-  readonly scale: number
-}
+export type { RenderedPdfPagePng, RenderPdfPagePngInput }
 
 /**
- * Office owns the PDF.js + Canvas runtime pair. Product renderers call this narrow operation instead
- * of installing another native Canvas and another PDF.js font tree beside the Office dependency.
+ * pdfjs 与 Canvas 这对运行时由 office 持有。产品侧的渲染器调这一个窄操作，
+ * 而不是在 office 依赖旁边再装一份原生 Canvas 和一棵 pdfjs 字体树。
  */
 export async function renderPdfPagePng(
   input: RenderPdfPagePngInput
 ): Promise<RenderedPdfPagePng> {
   const pageNumber = input.page ?? 1
   if (!Number.isInteger(pageNumber) || pageNumber < 1) {
-    throw new OfficePdfPageRenderError('INVALID_PAGE', 'PDF page must be a positive integer.')
+    throw new OfficePdfPageRenderError('INVALID_PAGE', 'PDF 页码必须是正整数。')
   }
 
-  const scale = input.scale ?? 1.5
+  const scale = input.scale ?? OfficeTuning.pdf.renderScale
   if (!Number.isFinite(scale) || scale <= 0) {
-    throw new OfficePdfPageRenderError('INVALID_SCALE', 'PDF scale must be greater than zero.')
+    throw new OfficePdfPageRenderError('INVALID_SCALE', 'PDF 渲染倍率必须大于零。')
   }
 
-  const maximumPixels = input.maximumPixels ?? 40_000_000
+  const maximumPixels = input.maximumPixels ?? OfficeTuning.pdf.renderPixels
   const pdfjs = await loadPdfjs()
   const task = pdfjs.getDocument({
     data: new Uint8Array(await readFile(input.inputPath)),
@@ -68,7 +55,7 @@ export async function renderPdfPagePng(
     if (pageNumber > document.numPages) {
       throw new OfficePdfPageRenderError(
         'PAGE_OUT_OF_RANGE',
-        `PDF contains ${document.numPages} page(s); requested page ${pageNumber}.`
+        `PDF 共 ${document.numPages} 页，请求的是第 ${pageNumber} 页。`
       )
     }
 
@@ -79,7 +66,7 @@ export async function renderPdfPagePng(
     if (width * height > maximumPixels) {
       throw new OfficePdfPageRenderError(
         'PIXEL_LIMIT',
-        `Rendered PDF page exceeds the ${maximumPixels.toLocaleString('en-US')} pixel safety limit.`
+        `渲染这一页会超过 ${maximumPixels.toLocaleString('en-US')} 像素的安全上限。`
       )
     }
 

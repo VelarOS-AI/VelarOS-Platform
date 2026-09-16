@@ -1,3 +1,8 @@
+/**
+ * 经宿主端口流动的数据，随 `./contracts` 入口出包：授权请求与决定、环境探测、命令结果、
+ * 原生命令、产物回执、MarkItDown 定位结果。不 import、不带行为、不用 Node 专属类型。
+ */
+
 export interface OfficeProjectMutationAuthorizationInput {
   cwd?: string
   operation: string
@@ -77,3 +82,47 @@ export interface OfficeSystemCommandResult {
   }
   systemToolSuggestion?: LooseOptional<OfficeSystemToolInstallSuggestion>
 }
+
+/** 交给宿主执行的原生命令：可执行文件、参数数组和额外环境变量，不经 shell 拼串。 */
+export interface OfficeNativeCommand {
+  file: string
+  args: string[]
+  env?: Record<string, string>
+}
+
+/** office 工具写出文件后的统一回执。 */
+export type OfficeOutput = {
+  path: string
+  bytes: number
+  created: boolean
+  changed: boolean
+  kind: 'docx' | 'pptx' | 'xlsx' | 'pdf'
+}
+
+/** 已安装的 MarkItDown runtime：可执行文件、包根与版本号。 */
+export interface MarkItDownLaunchSpec {
+  command: string
+  packageRoot: string
+  version: string
+}
+
+/** 归一化后的 Word 输入：.docx 直接用，.doc 先转成临时 .docx，临时目录用完要回收。 */
+export type NormalizedWordInput = {
+  path: string
+  originalPath: string
+  sourceExtension: '.docx' | '.doc'
+  convertedFromLegacyDoc: boolean
+  tempDir: Nullable<string>
+  converter?: string
+  conversionCommandResult?: OfficeSystemCommandResult
+}
+
+/** Word 输入归一化的结果：成功给归一化后的输入，失败给原路径、待回收的临时目录与命令结果。 */
+export type NormalizeWordInputResult =
+  | { success: true; input: NormalizedWordInput }
+  | {
+      success: false
+      originalPath: string
+      tempDir: Nullable<string>
+      commandResult: OfficeSystemCommandResult
+    }

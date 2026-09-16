@@ -1,62 +1,40 @@
-import { readFile, stat, writeFile } from 'node:fs/promises'
+/**
+ * office:convert_document_to_markdown 的入参 schema 与执行主体：调随应用安装的 MarkItDown runtime，
+ * 走 stdout 或写临时文件两条路，再按 maxChars 截断返回给模型。
+ */
+
+import { readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { mkdtemp } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { basename, extname, join } from 'node:path'
 
 import { z } from 'zod'
 
 import { renderParameterDescription as parameterDescription } from '@velaros-ai/agent/tool-contract'
 
-import { markItDownBinaryResolver, type MarkItDownLaunchSpec } from './markitdownResolver'
+import { OfficeInputLimits, OfficeMarkdownLimits, OfficeMarkItDownInputExtensions } from '../contract/constants.js'
+import type { ConvertDocumentToMarkdownInput } from '../types/inputs.js'
+import type { MarkItDownLaunchSpec } from '../types/office.js'
+import { buildMarkItDownCommand, describeOfficeNativeCommand } from '../utils/commands.js'
+import { truncateMarkdown } from '../utils/markdown.js'
+import { buildProjectMutationSkippedResult } from '../utils/results.js'
+import { OfficeTuning } from '../utils/tuning.js'
+
+import { markItDownBinaryResolver } from './markitdownResolver'
 import {
-  buildProjectMutationSkippedResult,
-  describeOfficeNativeCommand,
-  mkdtemp,
-  type OfficeNativeCommand,
   type OfficeToolContext,
   outputPathSchema,
   prepareOfficeOutputPath,
   resolveOfficeInputPathWithExtensions,
-  rm,
   runWithDirectory,
-  tmpdir,
 } from './officeShared'
-import { basename, extname, join } from './officeShared'
-
-const DEFAULT_MAX_CHARS = 60_000
-const MAX_RETURN_CHARS = 200_000
-
-const MARKITDOWN_INPUT_EXTENSIONS = [
-  '.pdf',
-  '.doc',
-  '.docx',
-  '.ppt',
-  '.pptx',
-  '.xls',
-  '.xlsx',
-  '.html',
-  '.htm',
-  '.csv',
-  '.json',
-  '.xml',
-  '.zip',
-  '.epub',
-  '.txt',
-  '.md',
-  '.markdown',
-] as const
-
-export type ConvertDocumentToMarkdownInput = {
-  cwd?: string
-  inputPath: string
-  outputPath?: string
-  overwrite?: boolean
-  maxChars?: number
-}
 
 export const convertDocumentToMarkdownSchema = z.object({
   cwd: z.string().optional(),
   inputPath: z
     .string()
     .min(1)
-    .max(1200)
+    .max(OfficeInputLimits.pathChars)
     .describe(
       parameterDescription({
         description: '输入文件路径。',
@@ -74,8 +52,8 @@ export const convertDocumentToMarkdownSchema = z.object({
   maxChars: z
     .number()
     .int()
-    .min(1_000)
-    .max(MAX_RETURN_CHARS)
+    .min(OfficeMarkdownLimits.minReturnChars)
+    .max(OfficeMarkdownLimits.maxReturnChars)
     .optional()
     .describe(
       parameterDescription({
@@ -89,26 +67,7 @@ export const convertDocumentToMarkdownSchema = z.object({
 const OutputWindowTruncatedNotice =
   '<!-- 以下是文档的结尾部分：完整输出超过宿主的命令输出窗口，开头已被丢弃。需要完整内容请传 outputPath 写入文件后再读。 -->'
 
-function truncateMarkdown(
-  markdown: string,
-  maxChars: number
-): { markdown: string; truncated: boolean } {
-  if (markdown.length <= maxChars) return { markdown, truncated: false }
-
-  return {
-    markdown: `${markdown.slice(0, maxChars)}\n\n<!-- 后续内容已按 maxChars 截断 -->`,
-    truncated: true,
-  }
-}
-
-function buildMarkItDownCommand(input: {
-  launch: MarkItDownLaunchSpec
-  inputPath: string
-  outputPath?: string
-}): OfficeNativeCommand {
-  return { file: input.launch.command, args: [input.inputPath, ...(input.outputPath ? ['-o', input.outputPath] : [])] }
-}
-
+/** MarkItDown runtime 没装或被停用时的跳过结果。 */
 function buildBundledRuntimeUnavailableResult(): {
   changed: false
   skipped: true
@@ -121,7 +80,7 @@ function buildBundledRuntimeUnavailableResult(): {
     skipped: true,
     missingRuntime: 'markitdown',
     message:
-      '内置 MarkItDown runtime 未找到。请确认应用构建产物包含 out/resources/markitdown/markitdown-<platform>-<arch> 资源包。',
+      '未找到 MarkItDown runtime。请在插件市场安装 MarkItDown，或确认它没有在设置里被停用。',
     systemToolSuggestion: null,
   }
 }
@@ -146,8 +105,8 @@ async function runMarkItDownToStdout(input: {
     describeOfficeNativeCommand(nativeCommand),
     {
       cwd: input.cwd,
-      timeoutMs: 180_000,
-      maxOutputChars: input.maxChars + 4_000,
+      timeoutMs: OfficeTuning.command.markItDownTimeoutMs,
+      maxOutputChars: input.maxChars + OfficeTuning.markdown.stdoutHeadroomChars,
       nativeCommand,
     },
     false
@@ -205,8 +164,8 @@ async function runMarkItDownToFile(input: {
       describeOfficeNativeCommand(nativeCommand),
       {
         cwd: input.ctx.office.project.getRootPath(),
-        timeoutMs: 180_000,
-        maxOutputChars: 20_000,
+        timeoutMs: OfficeTuning.command.markItDownTimeoutMs,
+        maxOutputChars: OfficeTuning.command.outputChars,
         nativeCommand,
       },
       false
@@ -253,7 +212,8 @@ async function runMarkItDownToFile(input: {
   }
 }
 
-async function executeConvertDocumentToMarkdown(
+/** office:convert_document_to_markdown 的执行主体。 */
+export async function executeConvertDocumentToMarkdown(
   input: ConvertDocumentToMarkdownInput,
   ctx: OfficeToolContext
 ) {
@@ -268,12 +228,14 @@ async function executeConvertDocumentToMarkdown(
     if (!authorization.approved) return buildProjectMutationSkippedResult(authorization)
   }
 
-  const maxChars = input.maxChars ?? DEFAULT_MAX_CHARS
+  const maxChars = input.maxChars ?? OfficeTuning.markdown.returnChars
 
   return runWithDirectory(ctx, input.cwd, async () => {
-    const inputPath = await resolveOfficeInputPathWithExtensions(ctx, input.inputPath, [
-      ...MARKITDOWN_INPUT_EXTENSIONS,
-    ])
+    const inputPath = await resolveOfficeInputPathWithExtensions(
+      ctx,
+      input.inputPath,
+      OfficeMarkItDownInputExtensions
+    )
     const launch = markItDownBinaryResolver.resolve()
     if (!launch) return buildBundledRuntimeUnavailableResult()
 
@@ -295,5 +257,3 @@ async function executeConvertDocumentToMarkdown(
     })
   })
 }
-
-export { executeConvertDocumentToMarkdown }

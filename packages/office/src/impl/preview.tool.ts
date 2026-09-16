@@ -7,8 +7,13 @@
 
 import { toNullable } from '@velaros-ai/core'
 
+import type { PreviewOfficeDocumentInput } from '../types/inputs.js'
+import { buildOfficePreviewHtml } from '../utils/preview/html.js'
+import { parseOfficePreview } from '../utils/preview/parse.js'
+import { buildProjectMutationSkippedResult } from '../utils/results.js'
+import { OfficeTuning } from '../utils/tuning.js'
+
 import {
-  buildProjectMutationSkippedResult,
   cleanupNormalizedWordInput,
   defineOfficeTool,
   OfficeDocumentProcessCapability,
@@ -17,10 +22,7 @@ import {
   runWithDirectory,
   toolRequiresProject,
 } from './officeShared'
-import type { PreviewOfficeDocumentInput } from './previewTool'
-import { buildOfficePreviewHtml, normalizePreviewInput, parseOfficePreview, previewOfficeDocumentSchema, writeOfficePreview } from './previewTool'
-
-const PreviewContentMaxChars = 16_000
+import { normalizePreviewInput, previewOfficeDocumentSchema, writeOfficePreview } from './previewTool'
 
 const previewOfficeDocument = defineOfficeTool<PreviewOfficeDocumentInput>({
   name: 'office:preview_document',
@@ -68,7 +70,7 @@ const previewOfficeDocument = defineOfficeTool<PreviewOfficeDocumentInput>({
         const parsed = await parseOfficePreview(
           normalized.path,
           normalized.kind,
-          input.maxItems ?? 80
+          input.maxItems ?? OfficeTuning.preview.items
         )
         const html = buildOfficePreviewHtml({
           parsed,
@@ -100,8 +102,8 @@ const previewOfficeDocument = defineOfficeTool<PreviewOfficeDocumentInput>({
             slides: parsed.slides,
             sheets: parsed.sheets,
             messages: parsed.messages,
-            contentHtml: parsed.htmlBody.slice(0, PreviewContentMaxChars),
-            contentTruncated: parsed.htmlBody.length > PreviewContentMaxChars,
+            contentHtml: parsed.htmlBody.slice(0, OfficeTuning.preview.contentHtmlChars),
+            contentTruncated: parsed.htmlBody.length > OfficeTuning.preview.contentHtmlChars,
           },
           previewArtifact: output,
         }

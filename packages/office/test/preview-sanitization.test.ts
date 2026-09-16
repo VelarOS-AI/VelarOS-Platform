@@ -5,12 +5,8 @@ import { join } from 'node:path'
 import { describe, expect, test } from 'bun:test'
 import { Document, ImageRun, Packer, Paragraph } from 'docx'
 
-import {
-  decodeHtmlText,
-  htmlToText,
-  parseDocxPreview,
-  sanitizePreviewHtml,
-} from '../src/impl/previewTool'
+import { parseDocxPreview } from '../src/utils/preview/parse'
+import { decodeHtmlText, htmlToText, sanitizePreviewHtml } from '../src/utils/preview/sanitize'
 
 const OnePixelPng = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',

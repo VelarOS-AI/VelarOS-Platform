@@ -2,32 +2,49 @@ import { spawnSync } from 'node:child_process'
 
 import { describe, expect, test } from 'bun:test'
 
-import { OfficePlatformCompatibility } from '../src/impl/OfficePlatformCompatibility'
-import { describeOfficeNativeCommand, type OfficeNativeCommand, type OfficeToolContext, runOfficeSystemCommand } from '../src/impl/officeShared'
-import { buildLatexCompileCommands } from '../src/impl/pdfTools'
+import type { OfficeNativeCommand } from '../src/exports'
+import type { OfficeToolContext } from '../src/exports'
+import { runLibreOfficeSystemCommand, runOfficeSystemCommand } from '../src/impl/officeShared'
+import { describeOfficeNativeCommand } from '../src/utils/commands'
+import { buildLatexCompileCommands } from '../src/utils/pdf/latex'
 
-describe('Office Bash command quoting', () => {
-  test.skipIf(process.platform === 'win32')('preserves literal argument text through Bash on every platform', () => {
-    const argument = "中文 O'Brien $HOME `printf injected` $(printf injected) \\n\nnext"
-    for (const platform of ['win32', 'darwin', 'linux'] as const) {
-      const compatibility = new OfficePlatformCompatibility(platform)
-      const result = spawnSync('/bin/bash', [
-        '--noprofile', '--norc', '-c', `printf '%s' ${compatibility.quoteShellArg(argument)}`,
-      ], { encoding: 'utf8' })
-
-      expect(result.status).toBe(0)
-      expect(result.stdout).toBe(argument)
+describe('Office 命令描述串', () => {
+  test('每个参数都渲染成 JSON 字面量，注入片段不会变成 shell 语法', () => {
+    const command: OfficeNativeCommand = {
+      file: "/Applications/LibreOffice.app/Contents/MacOS/soffice",
+      args: ["中文 O'Brien", '$HOME `printf injected` $(printf injected)', 'a"b\\c'],
     }
+    const described = describeOfficeNativeCommand(command)
+
+    expect(described).toBe(
+      '"/Applications/LibreOffice.app/Contents/MacOS/soffice" "中文 O\'Brien" "$HOME `printf injected` $(printf injected)" "a\\"b\\\\c"'
+    )
+    // 反引号、$(...) 与引号全部落在 JSON 字面量里，描述串只用于展示与审批。
+    for (const argument of command.args) expect(described).toContain(JSON.stringify(argument))
   })
 
-  test('uses forward slashes only for Windows shell paths', () => {
-    const windows = new OfficePlatformCompatibility('win32')
-    const macOS = new OfficePlatformCompatibility('darwin')
-    const executable = "C:\\Program Files\\中文 O'Brien\\tool.exe"
+  test('LibreOffice 调用把 FONTCONFIG_FILE 放进 env，不拼进命令串', async () => {
+    const command: OfficeNativeCommand = { file: '/bin/echo', args: ['ok'] }
+    let seen: Nullable<{ command: string; nativeCommand: OfficeNativeCommand }> = null
+    const context = {
+      office: { system: {
+        runCommand: async (described: string, options: { nativeCommand: OfficeNativeCommand }) => {
+          seen = { command: described, nativeCommand: options.nativeCommand }
+          return { success: true, exitCode: 0, stdout: '', stderr: '' }
+        },
+      } },
+    } as unknown as OfficeToolContext
 
-    expect(windows.quoteShellPath(executable)).toBe("'C:/Program Files/中文 O'\\''Brien/tool.exe'")
-    expect(windows.quoteShellArg(executable)).toBe("'C:\\Program Files\\中文 O'\\''Brien\\tool.exe'")
-    expect(macOS.quoteShellPath(executable)).toBe(macOS.quoteShellArg(executable))
+    await runLibreOfficeSystemCommand(context, command, process.cwd())
+
+    expect(seen).not.toBeNull()
+    const observed = seen as unknown as { command: string; nativeCommand: OfficeNativeCommand }
+    expect(observed.command).not.toContain('FONTCONFIG_FILE=')
+    expect(observed.nativeCommand.file).toBe(command.file)
+    expect(observed.nativeCommand.args).toEqual(command.args)
+    if (process.platform === 'darwin') {
+      expect(observed.nativeCommand.env?.FONTCONFIG_FILE).toMatch(/velaros-office-fontconfig-/)
+    }
   })
 })
 

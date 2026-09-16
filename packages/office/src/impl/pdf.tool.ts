@@ -8,7 +8,9 @@
  *
  * 依赖：`officeShared`，提供共享类型、路径处理和系统辅助能力。
  */
-import { readFile } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { basename, dirname, extname, join } from 'node:path'
 
 // docx 必须与 wordTool 同一种导入方式（静态）:曾用动态 import('docx') 拿 Document/Packer,
 // 在 packages:'external' 构建下解析到 ESM 副本,与 buildWordChildren 产的 CJS 实例原型不匹配,
@@ -19,20 +21,19 @@ import { degrees, PDFDocument, StandardFonts } from 'pdf-lib'
 import { toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
+import { OfficePdfLimits } from '../contract/constants.js'
+import type { ConvertPdfToWordInput, ConvertWordToPdfInput, CreateLatexPdfInput, EditPdfDocumentInput, ExtractPdfTextInput } from '../types/inputs.js'
+import { copyOfficeOutput, findGeneratedPdf, writeOfficeBuffer } from '../utils/paths.js'
+import { buildLatexCompileCommands, getDefaultLatexSourcePath } from '../utils/pdf/latex.js'
+import { applyPdfMetadata, applyPdfTextStamp, extractPdfTextPages, resolvePdfPageNumbers } from '../utils/pdf/pages.js'
+import { buildProjectMutationSkippedResult, createBrowserOnlineAlternative, createCommandFailureResult } from '../utils/results.js'
+import { OfficeTuning } from '../utils/tuning.js'
+import { buildWordChildren } from '../utils/word/docx.js'
+
 import {
-  basename,
   buildMissingSystemToolResult,
-  buildProjectMutationSkippedResult,
   cleanupNormalizedWordInput,
-  copyOfficeOutput,
-  createBrowserOnlineAlternative,
-  createCommandFailureResult,
   defineOfficeTool,
-  dirname,
-  extname,
-  findGeneratedPdf,
-  join,
-  mkdtemp,
   normalizeWordInputToDocx,
   OfficeDocumentProcessCapability,
   OfficeDocumentReadCapability,
@@ -42,17 +43,11 @@ import {
   resolveLibreOfficeCommand,
   resolveOfficeInputPath,
   resolveOfficeInputPathWithExtensions,
-  rm,
   runLibreOfficeSystemCommand,
   runWithDirectory,
-  tmpdir,
   toolRequiresProject,
-  writeFile,
-  writeOfficeBuffer,
 } from './officeShared'
-import type { ConvertPdfToWordInput, ConvertWordToPdfInput, CreateLatexPdfInput, EditPdfDocumentInput, ExtractPdfTextInput } from './pdfTools'
-import { applyPdfMetadata, applyPdfTextStamp, buildLatexCompileCommands, convertPdfToWordSchema, convertWordToPdfSchema, createLatexPdfSchema, editPdfDocumentSchema, extractPdfTextPages, extractPdfTextSchema, getDefaultLatexSourcePath, resolveLatexCompiler, resolvePdfPageNumbers, runLatexCompileCommands } from './pdfTools'
-import { buildWordChildren } from './wordTool'
+import { convertPdfToWordSchema, convertWordToPdfSchema, createLatexPdfSchema, editPdfDocumentSchema, extractPdfTextSchema, resolveLatexCompiler, runLatexCompileCommands } from './pdfTools'
 
 // ─── Tool: convertWordToPdf ────────────────────────────────────────────────────
 
@@ -115,7 +110,7 @@ const convertWordToPdf = defineOfficeTool<ConvertWordToPdfInput>({
         ctx,
         inputPath,
         libreOffice,
-        timeoutMs: 180_000,
+        timeoutMs: OfficeTuning.command.libreOfficeTimeoutMs,
       })
       if (!normalizedWord.success) {
         if (normalizedWord.tempDir) {
@@ -140,7 +135,7 @@ const convertWordToPdf = defineOfficeTool<ConvertWordToPdfInput>({
           ctx,
           command,
           dirname(normalizedInputPath),
-          180_000
+          OfficeTuning.command.libreOfficeTimeoutMs
         )
         if (!commandResult.success)
           return createCommandFailureResult({
@@ -209,17 +204,17 @@ const convertPdfToWord = defineOfficeTool<ConvertPdfToWordInput>({
       // 先把 PDF 中可提取文本按页读出，再映射成 Word 段落块。
       const { pages } = await extractPdfTextPages(inputPath, { maxPages: input.maxPages })
       const blocks = pages.flatMap((page) => [
-        { kind: 'heading' as const, text: `Page ${page.page}`, level: 2 as const },
+        { kind: 'heading' as const, text: `第 ${page.page} 页`, level: 2 as const },
         {
           kind: 'paragraph' as const,
-          text: page.text || '(No extractable text on this page.)',
+          text: page.text || '（本页没有可提取的文本。）',
           spaceAfter: 180,
         },
       ])
 
       // 复用 wordTool 的 block -> docx children 构建逻辑，保持 Word 输出样式一致。
       const document = new Document({
-        title: input.title ?? `Converted from ${input.inputPath}`,
+        title: input.title ?? `由 ${input.inputPath} 转换`,
         creator: input.author ?? 'VelarOS',
         sections: [
           {
@@ -259,7 +254,7 @@ const extractPdfText = defineOfficeTool<ExtractPdfTextInput>({
       const inputPath = await resolveOfficeInputPath(ctx, input.inputPath, '.pdf')
       const extracted = await extractPdfTextPages(inputPath, {
         pages: input.pages,
-        maxPages: input.pages ? undefined : (input.maxPages ?? 20),
+        maxPages: input.pages ? undefined : (input.maxPages ?? OfficePdfLimits.defaultReadPages),
       })
       return {
         inputPath,
