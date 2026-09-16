@@ -11,8 +11,20 @@ export interface CapabilityValidationFailure {
   issues: string[]
 }
 
+/**
+ * 「改到这个文件之后要不要再跑一次验证」的判据：由做这次改动的空间声明，Agent 只调用。
+ * 收的是会话里记下的改动路径（相对根或绝对都可能）。
+ */
+export type VerificationRelevantPathPredicate = (path: string) => boolean
+
 export interface CodingSessionSnapshot {
   modifiedPaths: string[]
+  /**
+   * `modifiedPaths` 里有几条按宿主声明的判据算「值得再跑一次验证」
+   * （见 {@link CodingSessionTrackerOptions.isVerificationRelevantPath}）。
+   * 缺省（快照不是跟踪器出的）时按「每条都算」读。
+   */
+  verificationRelevantPathCount?: number
   hasCapabilityMutations: boolean
   hasCapabilityInspection: boolean
   needsChangeInspection: boolean
@@ -156,7 +168,8 @@ export interface AutoVerificationEvents {
  *  - 上一轮验证仍在失败 → 插入失败提醒（顽固失败保护，活跃失败由 CodingSessionTracker 维护）；
  *  - 其余情况不注入。
  *
- * 用 `hasVerificationRelevantModifiedPaths` 过滤掉只改了非代码资产（如 .png、随机文本）的场景，
+ * 用 `hasVerificationRelevantModifiedPaths` 过滤掉只改了非代码资产（如 .png、随机文本）的场景——
+ * 哪些文件算代码由宿主经 `isVerificationRelevantPath` 声明，本包不持有这张名单；
  * 避免对非验证相关编辑插入噪声 reminder。历史上曾有 quick/standard 模式在收尾时**自动代跑**验证
  * 并把结果续发进下一轮——已按用户要求移除，收尾只提醒、是否验证交回模型决定。
  */
@@ -245,4 +258,12 @@ export interface CodingSessionTrackerOptions {
     /** 虽然会改东西、但改的是非代码产物的类别；不推进编辑版本，不触发「改完记得验证」。 */
     nonCodeMutation?: readonly ToolCategoryId[]
   }
+  /**
+   * 「改到这个文件之后要不要再跑一次验证」的判据，由做这次改动的空间给出（项目空间是
+   * `@velaros-ai/project` 的 `projectVerificationPolicy.isVerificationRelevantPath`）。
+   *
+   * Agent 只知道自己收集到了哪些改动路径，不知道哪些文件算代码，所以这条判据不在包内；
+   * 不给就把每条改动路径都算成要验证的——看不见哪些改动无关紧要，不等于可以把验证告警吞掉。
+   */
+  isVerificationRelevantPath?: VerificationRelevantPathPredicate
 }

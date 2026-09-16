@@ -1,4 +1,9 @@
-import { isEmpty } from '@velaros-ai/core'
+/**
+ * 「什么算代码文件」这条判据：改到哪些文件之后值得再跑一次验证命令（构建、测试、lint）。
+ * 名单是规则本身的数据，跟着规则留在这里——加一种语言、加一个构建清单，和判定一起审。
+ */
+
+/** 源码与配置格式的扩展名：改到它们就可能改变构建结果。 */
 const CodeVerificationExtensions = new Set([
   '.c',
   '.cc',
@@ -44,6 +49,7 @@ const CodeVerificationExtensions = new Set([
   '.zsh',
 ])
 
+/** 构建、依赖与配置清单的文件名（全名认，没有扩展名可认）：改到它们同样要重新验证。 */
 const CodeVerificationFilenames = new Set([
   '.babelrc',
   '.env',
@@ -77,9 +83,9 @@ const CodeVerificationFilenames = new Set([
 /**
  * 取路径的文件名部分并转小写：Windows 反斜杠先归一成 `/`，再取最后一个非空段
  * （所以尾随斜杠不会取到空串）。整条路径全是分隔符时返回 `''`。
- * 转小写是为了让下面两张白名单只写一种大小写就能命中 macOS/Windows 上的大小写变体。
+ * 转小写是为了让上面两张白名单只写一种大小写就能命中 macOS/Windows 上的大小写变体。
  */
-function getPortableBasename(path: string): string {
+function portableBasename(path: string): string {
   return [...path.replace(/\\/g, '/').split('/')].reverse().find(Boolean)?.toLowerCase() ?? ''
 }
 
@@ -88,7 +94,7 @@ function getPortableBasename(path: string): string {
  * `.` 落在首位（`.env`、`.gitignore` 这类点开头文件）也返回 `''`——它们整体是文件名不是扩展名，
  * 由 CodeVerificationFilenames 那张表按全名认。
  */
-function getExtension(filename: string): string {
+function fileExtension(filename: string): string {
   const index = filename.lastIndexOf('.')
   if (index <= 0) return ''
 
@@ -100,24 +106,12 @@ function getExtension(filename: string): string {
  * （构建/依赖/配置清单）或扩展名命中 CodeVerificationExtensions（源码与配置格式）时为真。
  * 图片、文档、日志等不影响构建结果的改动为假，用来避免为纯资源改动重复催验证。
  */
-function isVerificationRelevantPath(path: string): boolean {
-  const filename = getPortableBasename(path)
+export function isVerificationRelevantProjectPath(path: string): boolean {
+  const filename = portableBasename(path)
   if (!filename) return false
 
   return (
     CodeVerificationFilenames.has(filename) ||
-    CodeVerificationExtensions.has(getExtension(filename))
+    CodeVerificationExtensions.has(fileExtension(filename))
   )
 }
-
-/**
- * 这批改动路径里是否有值得验证的。**空列表返回 true**（保守放行）：路径没被采集到
- * 不等于没改代码，此时宁可保留验证失败告警，也不要因为"看不见改了什么"就把告警吞掉。
- */
-function hasVerificationRelevantModifiedPaths(paths: string[]): boolean {
-  if (isEmpty(paths)) return true
-
-  return paths.some(isVerificationRelevantPath)
-}
-
-export { hasVerificationRelevantModifiedPaths, isVerificationRelevantPath }

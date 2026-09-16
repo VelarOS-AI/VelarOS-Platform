@@ -8,9 +8,10 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { compileProviderSendRequest, createContextGovernanceSessionRegistry, createInMemoryContextPayloadStore, createProviderRequestCompiler } from '@velaros-ai/agent'
 import { fileContextRegistry } from '@velaros-ai/agent/tool-contract'
 
+import { ProjectCodeAnalysisToolName, ProjectToolNames } from '../src/contract/constants'
 import type { ProjectToolContext } from '../src/contract/requires'
 import { createProjectKernel } from '../src/index'
-import { registerProjectFileContext } from '../src/utils/agent/file-context'
+import { ProjectFileContextPresentation, registerProjectFileContext } from '../src/utils/agent/file-context'
 
 import { legacyProjectTools as projectTools } from './support/legacy-tools'
 
@@ -96,6 +97,23 @@ async function fixture(options: Parameters<typeof createProjectKernel>[0] = { ro
 }
 
 describe('Project tools maintain current file context', () => {
+  test('登记给 agent 的工具名与模型面正文只提真实存在的项目工具', async () => {
+    const { files } = await fixture()
+    const known = new Set<string>([...Object.values(ProjectToolNames), ProjectCodeAnalysisToolName])
+    const registered = files.listSources().find((item) => item.presentation)
+    expect(registered?.presentation).toBe(ProjectFileContextPresentation)
+    expect(registered?.fileAccessToolNames?.length).toBeGreaterThan(0)
+    // 子 agent 还能不能继承读取口按这份名单判；名单里写一个不存在的工具，判定就永远差一条。
+    for (const name of registered?.fileAccessToolNames ?? []) expect(known).toContain(name)
+    const prose = [
+      ProjectFileContextPresentation.header,
+      ProjectFileContextPresentation.viewReceiptNote,
+      ProjectFileContextPresentation.readReceiptNote,
+      ProjectFileContextPresentation.continuationUnavailableNote ?? '',
+    ].join('\n')
+    for (const name of prose.match(/project:[a-z-]+/gu) ?? []) expect(known).toContain(name)
+  })
+
   test('read A, edit B, provider sees B, edit C without another read; A stays recallable', async () => {
     const original = 'const ready = false\n// 尾部🙂\\n\n'
     await writeFile(join(root, 'a.ts'), original)

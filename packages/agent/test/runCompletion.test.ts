@@ -8,7 +8,8 @@ describe('execution completion verification facts', () => {
     expect(buildRunVerificationSummary(new CodingSessionTracker().getSnapshot())).toBeUndefined()
   })
   test('code changes with no validation report not-run while a prior pass becomes stale after new edits', () => {
-    const snapshot = { ...new CodingSessionTracker().getSnapshot(), hasCapabilityMutations: true, modifiedPaths: ['src/app.ts'], needsVerificationCommand: true }
+    // verificationRelevantPathCount 是跟踪器按宿主声明的判据数好放进快照的；手搭快照要一起给。
+    const snapshot = { ...new CodingSessionTracker().getSnapshot(), hasCapabilityMutations: true, modifiedPaths: ['src/app.ts'], verificationRelevantPathCount: 1, needsVerificationCommand: true }
     expect(buildRunVerificationSummary(snapshot)).toEqual({ status: 'not-run' })
     expect(buildRunVerificationSummary({ ...snapshot, latestVerificationStatus: 'passed' })).toEqual({ status: 'stale' })
     expect(buildRunVerificationSummary({ ...snapshot, latestVerificationStatus: 'passed', needsVerificationCommand: false })).toEqual({ status: 'passed' })

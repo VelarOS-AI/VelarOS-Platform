@@ -3,7 +3,7 @@ import { isArray, isEmpty, isFiniteNumber, isNumber, isPlainObject, isPositiveNu
 import type { ReminderCapabilityResolver, RuntimePromptFeaturePolicy } from '../../contract/requires.js'
 import type { CapabilityAutoApprovalNotice, CapabilityScopeId, ChatPromptFeatureId, RunProfileSelectionId, TaskApprovalRecord, ThinkingDepth, ToolCategoryId, ToolConfirmationDecisionOptions, ToolLayerTelemetryMetrics, ToolSurfaceProfileId, TurnPlanningTelemetryPayload } from '../../types/agent'
 import type { CapabilityValidationRunResult, CapabilityValidationStatus } from '../../types/capabilities.js'
-import type { CapabilityValidationFailure, CodingSessionSnapshot, CodingSessionToolCategoryToolNames, CodingSessionToolContext, CodingSessionTrackerOptions, RuntimeReminderConsumeResult, RuntimeReminderInput } from '../../types/session.js'
+import type { CapabilityValidationFailure, CodingSessionSnapshot, CodingSessionToolCategoryToolNames, CodingSessionToolContext, CodingSessionTrackerOptions, RuntimeReminderConsumeResult, RuntimeReminderInput, VerificationRelevantPathPredicate } from '../../types/session.js'
 import type { ToolAllocatorRequest } from '../../types/tools.js'
 import { DefaultRunProfileSelectionId, DefaultToolSurfaceProfileId } from '../../utils/runner/runtime-profiles'
 import { normalizeResourceIdForTracker } from '../../utils/session/coding-session-tracker'
@@ -329,6 +329,8 @@ class CodingSessionTracker implements CodingSessionTrackerApi {
   /** 本会话内是否调用过任何 inspection 工具；用于 preflight reminder 判断。 */
   private hasCapabilityInspection = false
   private readonly modifiedPaths = new Set<string>()
+  /** 「改到这个文件要不要再跑一次验证」的判据，由宿主注入；没注入时每条改动路径都算。 */
+  private readonly isVerificationRelevantPath: VerificationRelevantPathPredicate
   private latestVerificationStatus: LooseOptional<CapabilityValidationStatus> = null
   private activeVerificationFailure: LooseOptional<CapabilityValidationFailure> = null
   /**
@@ -462,9 +464,11 @@ class CodingSessionTracker implements CodingSessionTrackerApi {
       options.externalTouchCooldownMs ?? AgentTuning.session.externalTouchCooldownMs
     this.normalizeResourceId =
       options.normalizeResourceId ?? normalizeResourceIdForTracker
+    this.isVerificationRelevantPath = options.isVerificationRelevantPath ?? (() => true)
     this.editResultHelper = new CodingSessionEditResultHelper({
       mutationToolNames: toolNamesFor(activityCategories.mutation),
       nonCodeMutationToolNames: toolNamesFor(activityCategories.nonCodeMutation),
+      isVerificationRelevantPath: this.isVerificationRelevantPath,
     })
     this.capabilityToolNamesResolver = (category) => [
       ...(this.toolCategoryToolNames[category] ?? []),
@@ -903,8 +907,10 @@ class CodingSessionTracker implements CodingSessionTrackerApi {
   }
 
   public getSnapshot(): CodingSessionSnapshot {
+    const modifiedPaths = Array.from(this.modifiedPaths)
     return {
-      modifiedPaths: Array.from(this.modifiedPaths),
+      modifiedPaths,
+      verificationRelevantPathCount: modifiedPaths.filter((path) => this.isVerificationRelevantPath(path)).length,
       hasCapabilityMutations: this.editVersion > 0,
       hasCapabilityInspection: this.hasCapabilityInspection,
       needsChangeInspection: this.editVersion > this.lastInspectionVersion,

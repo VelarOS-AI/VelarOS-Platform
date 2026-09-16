@@ -118,7 +118,7 @@
     },
     {
       "path": "packages/agent/src/utils/context/file-context-projection.ts",
-      "fingerprint": "8564b59ca6f876283428226785da86d2eec5da9e06d29f6bcd235fd8c03302eb"
+      "fingerprint": "7a7cb9cf5e48ee403ecd8f0d4c4054e644077fac4bfb59a7e1dc28f1b081b1df"
     },
     {
       "path": "packages/agent/src/utils/guidance/catalog.ts",
@@ -177,6 +177,10 @@
       "fingerprint": "65f0730a2b582b69eeeee337b0068854edf072da9c19ad950434cab8f0a1904a"
     },
     {
+      "path": "packages/project/src/impl/operations/ProjectVerificationPolicy.ts",
+      "fingerprint": "c4813033e7884eeb9448a2b4b08e8460bdd77800d497d7cddabbb2ea288dc3c7"
+    },
+    {
       "path": "packages/project/src/utils/agent/code-query.ts",
       "fingerprint": "25193de4795a48eed4f813aed90f2ed171007a7f4cf3e2482f07d9326f4cd64d"
     },
@@ -190,7 +194,7 @@
     },
     {
       "path": "packages/project/src/utils/agent/file-context.ts",
-      "fingerprint": "581df4affb3faa5cd125c81eead8e2fab19ce900bb74a19a362238c6b5769e12"
+      "fingerprint": "63d529b22768f3dcd212a9a5ce16f8372252aeb3980732e81a306eb87d6c5754"
     },
     {
       "path": "packages/project/src/utils/agent/file-refs.ts",

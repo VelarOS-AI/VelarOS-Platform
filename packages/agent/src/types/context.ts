@@ -35,10 +35,34 @@ export interface FileContextSnapshot {
   }
 }
 
+/**
+ * 来源对「当前文件」这段正文的表达：标题与几处短回执的说明，逐字进模型请求。
+ *
+ * 这段文字里出现的工具名、引用名和该怎么接着做，只有来源自己说得准，所以由来源声明、Agent 照抄。
+ * 来源不声明就不组装这段正文，也不改写它在历史里的工具结果——Agent 不替来源编模型看的话。
+ */
+export interface FileContextPresentation {
+  /** 尾块的标题与说明；正文紧接其后，所以它必须以换行结尾。 */
+  header: string
+  /** 历史里已被当前视图覆盖的源码窗口收成短回执时，给模型的说明。 */
+  viewReceiptNote: string
+  /** 历史里整条读取回执收成短回执时，给模型的说明。 */
+  readReceiptNote: string
+  /** 出核时抹掉不可用的续读引用后留给模型的说明；不声明就只抹掉、不留话。 */
+  continuationUnavailableNote?: string
+}
+
 /** 来源负责项目边界、权限和版本一致性；Agent 不直接访问文件系统。 */
 export interface FileContextSource {
   workspaceId: string
   normalizePath(path: string): string
+  /**
+   * 子分支还看得见其中任一工具时，才继承这个来源的访问口（读取与召回）。
+   * 不声明就不设这道闸：一个来源的工具面只有它自己知道，Agent 不拿猜出来的名单去撤权。
+   */
+  fileAccessToolNames?: readonly string[]
+  /** 这个来源在模型面的表达；不声明就不为它组装「当前文件」正文。 */
+  presentation?: FileContextPresentation
   validateArchive?(snapshot: FileContextSnapshot): Promise<void>
   read(path: string, ranges: readonly FileContextRange[], scopeId?: string): Promise<FileContextSnapshot[]>
   finalizeModelResult?(value: unknown, scopeId: string): Promise<unknown>

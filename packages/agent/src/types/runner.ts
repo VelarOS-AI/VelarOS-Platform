@@ -11,7 +11,7 @@ import type { AgentExecutionLimitOverrides, QueryLoopApi, QueryLoopRoleEngine, Q
 import type { AgentModSeamDispatcherContract } from './mods.js'
 import type { ExecutionEventBusContract } from './records.js'
 import type { ContextGovernanceSessionRegistryContract } from './residency.js'
-import type { CodingSessionSnapshot, CodingSessionToolCategoryToolNames, CodingSessionToolContext } from './session.js'
+import type { CodingSessionSnapshot, CodingSessionToolCategoryToolNames, CodingSessionToolContext, VerificationRelevantPathPredicate } from './session.js'
 
 /**
  * 主 Agent 角色画像的最小形状：一次解析出本轮角色、工具面与提示词特性。
@@ -133,6 +133,12 @@ export interface RunnerCodingSessionPolicyBundle {
     validation?: readonly ToolCategoryId[]
     nonCodeMutation?: readonly ToolCategoryId[]
   }
+  /**
+   * 「改到这个文件之后要不要再跑一次验证」的判据，由做这次改动的空间给出
+   * （项目空间是 `@velaros-ai/project` 的 `projectVerificationPolicy.isVerificationRelevantPath`）。
+   * 不给就把每条改动路径都算成要验证的。
+   */
+  isVerificationRelevantPath?: VerificationRelevantPathPredicate
 }
 
 export type RunnerSubAgentOptions = QueryLoopSubAgentOptions<ExecutionEventBusContract>

@@ -176,6 +176,7 @@ class AgentRunner<TToolContext extends RunnerToolContext = RunnerToolContext>
           ...resolveCapabilityValidationInterpreters(this.capabilityPorts),
         ],
         activityCategories: this.codingSessionPolicy.activityCategories,
+        isVerificationRelevantPath: this.codingSessionPolicy.isVerificationRelevantPath,
         reminderProducers: this.codingSessionPolicy.reminderProducers,
       }
     )

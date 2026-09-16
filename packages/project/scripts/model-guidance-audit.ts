@@ -17,6 +17,7 @@ import { schemaToInputSchema } from '../../agent/src/utils/toolkit/schema-bundle
 import { buildValidationNextActions } from '../../agent/src/utils/tools/tool-args-schema-validator'
 import { toolExamples as sourceToolExamples } from '../../tool-contract/src/impl/ToolExampleRegistry'
 import { projectTools } from '../src/impl/ProjectTools'
+import { ProjectFileContextPresentation } from '../src/utils/agent/file-context'
 
 const root = resolve(import.meta.dir, '../../..')
 export const ProjectGuidanceReviewPath = resolve(root, 'docs/engineering/project-model-guidance-review.json')
@@ -122,7 +123,7 @@ export async function collectGuidanceReview(reviewTools = registeredGuidanceTool
   const matrix = promptMatrix()
   const currentView = projectFileContext([], [{
     workspaceId: '/audit', path: 'source.ts', status: 'fresh', refs: [], sequence: 1, priority: 1, ranges: [{ startLine: 1, endLine: 1 }], snapshots: [{ workspaceId: '/audit', path: 'source.ts', revision: 'audit', content: 'source', exists: true, complete: true, range: { startLine: 1, endLine: 1 }, totalLines: 1 }],
-  }], 8000).tail[0]?.content
+  }], 8000, ProjectFileContextPresentation).tail[0]?.content
   const guidance = { builtin, matrix, currentView, validationActions: buildValidationNextActions('tool:example') }
   const documents = await Promise.all(['packages/project/README.md', 'docs/engineering/project-tool-surface-redesign-proposal.md'].map(async (path) => {
     const text = await readFile(resolve(root, path), 'utf8')

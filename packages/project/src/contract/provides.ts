@@ -20,6 +20,7 @@ export type { ProjectKernel } from '../impl/kernel/LocalProjectKernel.js'
 export type { ProjectApprovalBridgeApi } from '../impl/kernel/ProjectApprovalBridge.js'
 export type { ProjectTransactionControllerApi } from '../impl/kernel/ProjectTransactionController.js'
 export type { ProjectFileContextApi } from '../impl/operations/ProjectFileContext.js'
+export type { ProjectVerificationPolicyApi } from '../impl/operations/ProjectVerificationPolicy.js'
 export type { FileProjectChangeFeedApi } from '../impl/persistence/FileProjectChangeFeed.js'
 
 // ── 工具 ────────────────────────────────────────────────────────

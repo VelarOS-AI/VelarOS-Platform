@@ -261,7 +261,7 @@ export type { CreateAgentExecutionStack, PrimaryAgentProfileSkillRepository } fr
 export type { AutoVerificationCodingSession, AutoVerificationEvents, AutoVerificationToolContext,
  CapabilityValidationFailure, CodingSessionSnapshot, CodingSessionToolCategoryToolNames,
  CodingSessionToolContext, ReminderScope, ReminderTrigger, RuntimeReminderConsumeResult, RuntimeReminderInput,
- RuntimeReminderSchedulerContract } from './types/session.js'
+ RuntimeReminderSchedulerContract, VerificationRelevantPathPredicate } from './types/session.js'
 export type { CodingSessionTrackerOptions } from './types/session.js'
 export type { CancelToolBackgroundJobInput, KernelToolContext, ReadToolBackgroundJobOutputInput,
  SubAgentOptions, ToolBackgroundJobOutputSnapshot, ToolCodingSessionApi, ToolConversationHandoffRequest,

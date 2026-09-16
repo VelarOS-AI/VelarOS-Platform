@@ -3,18 +3,17 @@ import { isPresent } from '@velaros-ai/core'
 import type { EvaluateKernelFinalReadinessInput,KernelFinalReadinessAudit, KernelFinalReadinessReason, KernelFinalReadinessResult } from '../../types/loop.js'
 import type { CodingSessionSnapshot } from '../../types/session.js'
 import {
+  countVerificationRelevantPaths,
   hasVerificationRelevantModifiedPaths,
-  isVerificationRelevantPath,
-} from '../session/paths'
+} from '../session/verification-relevance'
 
 /**
  * 起一份「默认放行」的审计底稿，并顺手数出快照里有多少条改动落在需要验证的路径上
- * （`isVerificationRelevantPath`）；没有快照按 0 计。
+ * （判据由宿主声明，见 `countVerificationRelevantPaths`）；没有快照按 0 计。
  * 放行与拦下两条路都从这份底稿出发，保证两种结局带出的审计字段形状一致，遥测不必分支解析。
  */
 function buildBaseAudit(snapshot?: LooseOptional<CodingSessionSnapshot>): KernelFinalReadinessAudit {
-  const verificationRelevantPaths =
-    snapshot?.modifiedPaths.filter(isVerificationRelevantPath).length ?? 0
+  const verificationRelevantPaths = snapshot ? countVerificationRelevantPaths(snapshot) : 0
   return {
     result: 'allowed',
     recovered: false,
@@ -91,7 +90,7 @@ function evaluateKernelFinalReadiness(
   const audit = buildBaseAudit(snapshot)
   if (!snapshot) return allowFinalReadiness(audit)
 
-  const relevant = hasVerificationRelevantModifiedPaths(snapshot.modifiedPaths)
+  const relevant = hasVerificationRelevantModifiedPaths(snapshot)
   if (!snapshot.hasCapabilityMutations || !relevant) return allowFinalReadiness(audit)
 
   // 已按用户决策移除「缺验证」的收尾硬拦截——不再因为「改了代码但没跑验证」阻止模型收尾。

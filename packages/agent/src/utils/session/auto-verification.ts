@@ -3,7 +3,7 @@ import type { ReminderCapabilityResolver } from '../../contract/requires.js'
 import type {ToolCategoryId } from '../../types/agent.js'
 import type { AutoVerificationGateResult, AutoVerificationToolContext, CodingSessionSnapshot, RuntimeReminderInput, TickLoopRemindersArgs } from '../../types/session.js'
 
-import { hasVerificationRelevantModifiedPaths } from './paths'
+import { hasVerificationRelevantModifiedPaths } from './verification-relevance'
 
 /** 是否整体压掉本轮运行期提醒：只在 fast 思考档为真——快档求的就是少注入、别打断。 */
 function shouldSuppressRuntimeReminder(input: RuntimeReminderInput): boolean {
@@ -41,7 +41,7 @@ function buildAutoVerificationReminderInput(
 export function shouldBlockOnVerificationState(snapshot: CodingSessionSnapshot): boolean {
   return (
     !!snapshot.activeVerificationFailure &&
-    hasVerificationRelevantModifiedPaths(snapshot.modifiedPaths)
+    hasVerificationRelevantModifiedPaths(snapshot)
   )
 }
 
@@ -53,7 +53,7 @@ export function shouldRequestVerificationReminder(snapshot: CodingSessionSnapsho
   return (
     snapshot.hasCapabilityMutations &&
     snapshot.needsVerificationCommand &&
-    hasVerificationRelevantModifiedPaths(snapshot.modifiedPaths) &&
+    hasVerificationRelevantModifiedPaths(snapshot) &&
     !snapshot.verificationReminderIssuedForCurrentEdits
   )
 }

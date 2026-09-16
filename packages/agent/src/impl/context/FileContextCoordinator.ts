@@ -4,7 +4,7 @@ import { isArray, isEmpty, isPlainObject, isString,Log } from '@velaros-ai/core'
 
 import { AgentToolLimits } from '../../contract/constants.js'
 import type { ContextPayloadStore } from '../../contract/requires.js'
-import type { FileContextRange, FileContextSnapshot, FileContextSource, FileContextView, FileContextViewTier, FileSnapshotRecallInput } from '../../types/context.js'
+import type { FileContextPresentation, FileContextRange, FileContextSnapshot, FileContextSource, FileContextView, FileContextViewTier, FileSnapshotRecallInput } from '../../types/context.js'
 import { key, resolveViewTier, tierRank } from '../../utils/context/file-context-coordinator'
 import { FileObservationToolName, FileSnapshotToolName, type parseFileSnapshot,saveFileRename, saveFileSnapshot, sliceFileSnapshot, tryParseFileRename, tryParseFileSnapshot } from '../../utils/context/file-snapshot-archive'
 
@@ -25,10 +25,10 @@ export interface FileContextCoordinatorApi {
   /** 列出本协调器登记过的全部来源；子分支继承来源时按它逐个包一层授权判定。 */
   listSources(): readonly FileContextSource[]
   /**
-   * 子分支继承父分支的来源访问口（不继承活跃工作集）。`canRead` 在每次读取与召回时重新求值，
-   * 返回 false 就拒绝——子 agent 的可见工具一变，它对源码的访问权限当场跟着变。
+   * 子分支继承父分支的来源访问口（不继承活跃工作集）。`canRead` 逐个来源地在每次读取与召回时重新求值，
+   * 返回 false 就拒绝——子 agent 的可见工具一变，它对那个来源的访问权限当场跟着变。
    */
-  inheritSources(parent: FileContextCoordinatorApi, canRead: () => boolean): void
+  inheritSources(parent: FileContextCoordinatorApi, canRead: (source: FileContextSource) => boolean): void
   /**
    * 领一个观察序号，读之前领、读完把它交给 `observe`。序号用来判定迟到的读取结果：
    * 序号比当前视图旧的结果只进档案，不改当前指针。
@@ -117,17 +117,22 @@ export class FileContextCoordinator implements FileContextCoordinatorApi {
     return [...this.sources.values()]
   }
 
-  public inheritSources(parent: FileContextCoordinatorApi, canRead: () => boolean): void {
+  /** 已登记来源声明过的模型面表达；没有来源声明时为空，对应「这条链不出正文」。 */
+  private presentations(): FileContextPresentation[] {
+    return [...this.sources.values()].flatMap((source) => source.presentation ? [source.presentation] : [])
+  }
+
+  public inheritSources(parent: FileContextCoordinatorApi, canRead: (source: FileContextSource) => boolean): void {
     for (const source of parent.listSources())
       this.registerSource({
         ...source,
         read: (path, ranges, scopeId) => {
-          if (!canRead())
+          if (!canRead(source))
             return Promise.reject(new Error('读文件的授权已不在当前 agent 的作用域内：这个文件来源是从父 agent 继承的，父级的读取窗口已经关闭，本次读取被拒绝。'))
           return source.read(path, ranges, scopeId)
         },
         validateArchive: async (snapshot) => {
-          if (!canRead()) throw new Error('召回文件快照的授权已不在当前 agent 的作用域内：这个文件来源是从父 agent 继承的，父级的读取窗口已经关闭，本次召回被拒绝。')
+          if (!canRead(source)) throw new Error('召回文件快照的授权已不在当前 agent 的作用域内：这个文件来源是从父 agent 继承的，父级的读取窗口已经关闭，本次召回被拒绝。')
           await source.validateArchive?.(snapshot)
         },
       })
@@ -289,7 +294,8 @@ export class FileContextCoordinator implements FileContextCoordinatorApi {
         delete mapped.viewSource
         if (mapped.continuation && isPlainObject(mapped.continuation)) {
           delete mapped.continuation
-          mapped.continuationUnavailable = '重新读一次当前路径；这个窗口没有可用的续读引用。'
+          const note = this.presentations().find((item) => item.continuationUnavailableNote)?.continuationUnavailableNote
+          if (note) mapped.continuationUnavailable = note
         }
       }
       if (!record.__contextRef) return mapped
@@ -325,12 +331,15 @@ export class FileContextCoordinator implements FileContextCoordinatorApi {
             } catch { Log.tag('FileContext').debug('工具文本不是 JSON，不授予结构化源码范围') }
           }
         }
-      } else if (message.role === 'user' && isString(message.content) && message.content.startsWith('[Current project files]\n')) {
-        const boundary = message.content.indexOf('\n{')
+      } else if (message.role === 'user' && isString(message.content)) {
+        const content = message.content
+        // 活动尾按来源声明的标题认，Agent 不持有任何空间的标题字面量。
+        if (!this.presentations().some((item) => content.startsWith(item.header))) continue
+        const boundary = content.indexOf('\n{')
         if (boundary < 0) continue
         try {
-          values.push(JSON.parse(message.content.slice(boundary + 1)))
-          const prefix = message.content.slice(0, boundary + 1)
+          values.push(JSON.parse(content.slice(boundary + 1)))
+          const prefix = content.slice(0, boundary + 1)
           replacements.push((value) => { message.content = prefix + JSON.stringify(value) })
         } catch { Log.tag('FileContext').debug('当前源码尾部不完整，不授予结构化源码范围') }
       }

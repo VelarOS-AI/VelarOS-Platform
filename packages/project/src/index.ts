@@ -19,6 +19,8 @@ export type { ProjectTransactionControllerApi } from './impl/kernel/ProjectTrans
 export { createProjectTransactionController } from './impl/kernel/ProjectTransactionController.js'
 export type { ProjectFileContextApi } from './impl/operations/ProjectFileContext.js'
 export { projectFileContext } from './impl/operations/ProjectFileContext.js'
+export type { ProjectVerificationPolicyApi } from './impl/operations/ProjectVerificationPolicy.js'
+export { projectVerificationPolicy } from './impl/operations/ProjectVerificationPolicy.js'
 export type { FileProjectChangeFeedApi } from './impl/persistence/FileProjectChangeFeed.js'
 export { createFileProjectChangeFeed } from './impl/persistence/FileProjectChangeFeed.js'
 export { typescriptPlugin } from './impl/plugins/TypeScriptProjectPlugin.js'

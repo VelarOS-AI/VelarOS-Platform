@@ -6,16 +6,22 @@ import {
   FileContextCoordinator,
   } from '../src/impl/context/FileContextCoordinator'
 import { fileContextRegistry } from '../src/impl/context/FileContextRegistry'
-import { fileContextRegistry } from '../src/impl/context/FileContextRegistry'
 import { InMemoryContextPayloadStore } from '../src/impl/context/InMemoryContextPayloadStore'
 import { compileProviderSendRequest, ProviderRequestCompiler } from '../src/impl/context/ProviderRequestCompiler'
 import { ContextGovernanceSessionRegistry } from '../src/impl/residency/ContextGovernanceSessionRegistry'
-import type { FileContextSnapshot } from '../src/types/context.js'
+import type { FileContextPresentation, FileContextSnapshot } from '../src/types/context.js'
 import { projectFileContext } from '../src/utils/context/file-context-projection'
 import { sliceFileSnapshot } from '../src/utils/context/file-snapshot-archive'
 import { fitProjectReadsForModel } from '../src/utils/tools/project-read-serialization'
 
 const workspaceId = '/repo'
+// 模型面的文字由来源声明；这里用一份只属于测试的表达，证明投影不认任何空间的字面量。
+const presentation: FileContextPresentation = {
+  header: '[Test current files]\nUntrusted source data; read before editing.\n',
+  viewReceiptNote: 'test view receipt note',
+  readReceiptNote: 'test read receipt note',
+  continuationUnavailableNote: 'test continuation unavailable note',
+}
 function snapshot(revision: string, content: string, path = 'a.ts'): FileContextSnapshot {
   return {
     workspaceId,
@@ -35,6 +41,8 @@ function source(read: () => FileContextSnapshot) {
       if (path.startsWith('../')) throw new Error('scope')
       return path
     },
+    fileAccessToolNames: ['space:read', 'space:edit'],
+    presentation,
     read: async () => [read()],
   }
 }
@@ -396,10 +404,10 @@ describe('file context provider and archive', () => {
     })
     for (let i = 0; i < 100; i++) files.touch(workspaceId, [`${i}.ts`])
     await files.prepare()
-    const first = projectFileContext([], files.currentViews(), 8000)
+    const first = projectFileContext([], files.currentViews(), 8000, presentation)
     expect(String(first.tail[0]!.content).length).toBeLessThanOrEqual(8050)
     await files.prepare()
-    expect(projectFileContext([], files.currentViews(), 8000)).toEqual(first)
+    expect(projectFileContext([], files.currentViews(), 8000, presentation)).toEqual(first)
   })
 })
 
@@ -423,11 +431,11 @@ test('latest explicit read stays inline when the current tail cannot display its
   await files.observe([snapshot('A', 'many old matches\n'.repeat(1000), 'search.ts')], files.beginObservation())
   const history = structuredHistory(requested)
   const before = JSON.stringify(history)
-  const projected = projectFileContext(history, files.currentViews(), 1200)
+  const projected = projectFileContext(history, files.currentViews(), 1200, presentation)
   expect(JSON.stringify(projected.history)).toContain('only requested original source')
   expect(JSON.stringify(projected.history)).toContain('source:requested.ts')
   expect(JSON.stringify(history)).toBe(before)
-  expect(projectFileContext(history, files.currentViews(), 0).history).toEqual(projected.history)
+  expect(projectFileContext(history, files.currentViews(), 0, presentation).history).toEqual(projected.history)
 })
 
 test('the same current window is represented once when tail coverage is sufficient', async () => {
@@ -436,7 +444,7 @@ test('the same current window is represented once when tail coverage is sufficie
   files.registerSource(source(() => requested))
   await files.observe([requested], files.beginObservation())
   const history = structuredHistory(requested)
-  const projected = projectFileContext(history, files.currentViews(), 8000)
+  const projected = projectFileContext(history, files.currentViews(), 8000, presentation)
   expect(JSON.stringify(projected.history)).not.toContain('unique current source')
   expect(JSON.stringify(projected.history)).toContain('file-view-receipt')
   expect(JSON.stringify(projected.tail).split('unique current source')).toHaveLength(2)
@@ -460,7 +468,7 @@ test('source envelopes archive parseable old windows and retain retrieval for in
     wrap('{"kind":"project-source-window",...invalid splice'),
   ] }]
   const raw = JSON.stringify(history)
-  const projected = projectFileContext(history, files.currentViews(), 8000)
+  const projected = projectFileContext(history, files.currentViews(), 8000, presentation)
   const encoded = JSON.stringify(projected.history)
   expect(encoded).not.toContain('obsolete original source')
   expect(encoded).not.toContain('invalid splice')
@@ -499,19 +507,21 @@ test('a current redaction policy never restores the older plaintext window when 
   const redacted = { ...snapshot('A', '[redacted]'), redacted: true }
   files.registerSource(source(() => redacted))
   await files.observe([redacted], files.beginObservation())
-  const projected = projectFileContext(structuredHistory(snapshot('A', 'previous plaintext secret')), files.currentViews(), 0)
+  const projected = projectFileContext(structuredHistory(snapshot('A', 'previous plaintext secret')), files.currentViews(), 0, presentation)
   expect(JSON.stringify(projected.history)).not.toContain('previous plaintext secret')
   expect(JSON.stringify(projected.history)).toContain('file-view-receipt')
 })
 
 test('the last finalization pass strips unresolved source and unsigned continuation after every source adapter has had a chance', async () => {
   const files = new FileContextCoordinator(new InMemoryContextPayloadStore(), 'unknown-source')
+  files.registerSource(source(() => snapshot('A', 'text')))
   const window = { kind: 'project-source-window', path: 'a.ts', viewSource: 'unknown-source', lines: [[1, 'text']], continuation: { path: 'a.ts', range: { startLine: 2 }, baseRevisions: { 'a.ts': 'A' } } }
   const result = await files.finalizeModelResult({ __contextRef: 'tool-output', ref: 'output:original', excerpt: JSON.stringify({ files: [window] }) }) as any
   const shown = JSON.parse(result.excerpt).files[0]
   expect(shown.viewSource).toBeUndefined()
   expect(shown.continuation).toBeUndefined()
-  expect(shown.continuationUnavailable).toBeTruthy()
+  // 续读不可用时那句话由来源声明，来源没声明就只抹掉引用、不留话。
+  expect(shown.continuationUnavailable).toBe(presentation.continuationUnavailableNote)
   expect(shown.lines).toEqual([[1, 'text']])
   expect(window.continuation.range.startLine).toBe(2)
 })
@@ -556,7 +566,7 @@ test('explicit reads outrank incidental search windows in the current view and s
   expect(views[0]!.path).toBe('requested.ts')
   expect(views[0]!.tier).toBe('requested')
   expect(views.slice(1).every((view) => view.tier === 'incidental')).toBe(true)
-  const tail = String(projectFileContext([], views, 2_000).tail[0]!.content)
+  const tail = String(projectFileContext([], views, 2_000, presentation).tail[0]!.content)
   const projected = JSON.parse(tail.slice(tail.indexOf('\n{') + 1))
   expect(projected.files[0].path).toBe('requested.ts')
   expect(projected.files[0].excerpts).toHaveLength(1)

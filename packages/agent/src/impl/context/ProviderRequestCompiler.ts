@@ -216,13 +216,15 @@ export class ProviderRequestCompiler implements ProviderRequestCompilerApi {
         : undefined,
     )
     const recoveryHistory = recovery.messages
-    let fileProjection = projectFileContext(recoveryHistory, fileViews, fileChars)
+    // 标题与回执说明由登记来源声明；来源不声明就不出这段正文（见 FileContextPresentation）。
+    const filePresentation = fileContext?.listSources().find((source) => source.presentation)?.presentation
+    let fileProjection = projectFileContext(recoveryHistory, fileViews, fileChars, filePresentation)
     // 与最终发送门共用分词尺；源码预算是总输入容量的一部分，最后仍由编译器统一准入。
     while (fileChars > 0 && estimateProviderRequestUsage(measurementInput,
       [...leadingMessages, ...(input.tailBlocks ?? []), ...fileProjection.tail]).estimatedTokens
         - fixedEstimate.estimatedTokens > fileTokenBudget) {
       fileChars = Math.floor(fileChars / 2)
-      fileProjection = projectFileContext(recoveryHistory, fileViews, fileChars)
+      fileProjection = projectFileContext(recoveryHistory, fileViews, fileChars, filePresentation)
     }
     const undecoratedMessages = [...leadingMessages, ...fileProjection.history]
     const callbackToolPayloadRefs = input.buildToolPayloadRefs

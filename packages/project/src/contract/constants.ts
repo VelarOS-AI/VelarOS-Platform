@@ -21,7 +21,7 @@ export type ProjectToolName = (typeof ProjectToolNames)[keyof typeof ProjectTool
 export const ProjectCodeAnalysisToolName = 'project:code-analysis' as const
 
 /** 本包的版本，写进 mod 清单、内核模块清单和内置插件；和 package.json 的 version 一致，check:arch 核对。 */
-export const ProjectPackageVersion = '2.2.0' as const
+export const ProjectPackageVersion = '2.3.0' as const
 
 /** 项目空间作为官方内置 mod 的身份。 */
 export const ProjectModId = 'velaros.project' as const

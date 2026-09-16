@@ -59,7 +59,7 @@ class FileContextRegistry implements FileContextRegistryApi {
     const previous = this.for(parent)
     child.fileContextScope = {}
     if (!previous) return
-    this.for(child)?.inheritSources(previous, () => childKeepsFileSources(child))
+    this.for(child)?.inheritSources(previous, (source) => childKeepsFileSources(child, source))
   }
 }
 

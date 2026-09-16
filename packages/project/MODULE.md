@@ -31,6 +31,7 @@ overwrite 要求看过全文，move、delete 只核对版本。
 | `createFileProjectChangeFeed` | `FileProjectChangeFeedApi` | 落盘的变更记录，事务跨进程重启后仍能列出和回滚 |
 | `projectApprovalBridge` | `ProjectApprovalBridgeApi` | 把内核的审批请求接到当前那次工具调用的审批端口 |
 | `projectFileContext` | `ProjectFileContextApi` | 把项目登记成 agent 文件上下文的来源 |
+| `projectVerificationPolicy` | `ProjectVerificationPolicyApi` | 「改到这个文件之后要不要再跑一次验证」的判据，交给 agent 的编码会话 |
 | `typescriptPlugin` | `ProjectPlugin` | TypeScript 适配器、补丁策略与语法校验器 |
 | `createSecretRedactionProvider` | `SecretRedactionProvider` | 按内容正则给 API key、token 打码的脱敏后端 |
 
