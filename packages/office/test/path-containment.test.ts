@@ -120,7 +120,7 @@ describe('office 路径包含门', () => {
         { cwd: harness.outside, inputPath: 'secret.pdf' },
         harness.context
       )
-    ).rejects.toMatchObject({ code: 'PERMISSION' })
+    ).rejects.toMatchObject({ code: 'PERMISSION', message: expect.stringContaining('工作目录') })
     // 越界的 cwd 必须在进宿主之前就被挡住：走到 runInDirectory 就已经换过根了。
     expect(harness.directorySwitches).toEqual([])
   })

@@ -295,7 +295,11 @@ export async function runWithDirectory<T>(
   action: () => Promise<T>
 ): Promise<T> {
   if (!cwd) return action()
-  await assertOfficePathInsideProject(ctx.office.project.getRootPath(), resolve(cwd), cwd)
+  if (!(await isOfficePathInsideProject(ctx.office.project.getRootPath(), resolve(cwd))))
+    throw new AppError(
+      'PERMISSION',
+      `工作目录超出工作区范围：${cwd}。去掉 cwd 让工具在当前工作区内执行，或先切换到该目录所属的工作区。`
+    )
   // project 层负责临时切换目录并恢复。
   return ctx.office.project.runInDirectory(cwd, action)
 }
@@ -346,13 +350,21 @@ export async function assertOfficePathInsideProject(
   resolvedPath: string,
   originalPath: string
 ): Promise<void> {
-  const [realRootPath, realResolvedPath] = await Promise.all([
-    resolveRealPath(rootPath),
-    resolveRealPath(resolvedPath),
-  ])
-  if (!currentPlatform.isPathTextInside(realResolvedPath, realRootPath)) {
+  if (!(await isOfficePathInsideProject(rootPath, resolvedPath))) {
     throw new AppError('PERMISSION', `路径超出工作区范围：${originalPath}`)
   }
+}
+
+/** 真实路径意义上的「在不在根里」；判据见 assertOfficePathInsideProject。 */
+export async function isOfficePathInsideProject(
+  rootPath: string,
+  candidatePath: string
+): Promise<boolean> {
+  const [realRootPath, realCandidatePath] = await Promise.all([
+    resolveRealPath(rootPath),
+    resolveRealPath(candidatePath),
+  ])
+  return currentPlatform.isPathTextInside(realCandidatePath, realRootPath)
 }
 
 /** 准备 Office 输出路径：校验扩展名、覆盖策略并创建父目录。 */
