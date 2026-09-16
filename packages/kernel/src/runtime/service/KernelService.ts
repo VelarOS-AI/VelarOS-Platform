@@ -57,11 +57,17 @@ import {
   type KernelClientAccessBroker,
 } from './client-access'
 import { KernelIdentityRegistry } from './identity-registry'
-import type { KernelModCatalog } from './mod-catalog'
+import { type KernelModCatalog, KernelModCatalogError } from './mod-catalog'
 
 const log = Log.tag('KernelService')
 
-export type KernelServiceStatus = 'idle' | 'started' | 'disposed'
+/**
+ * `failed` 是启动失败后的终态。
+ *
+ * 少了它，启动失败后的状态一直停在 `idle`，于是会话打开与能力调用都回「可重试」，而
+ * `start()` 只会重放同一个失败——调用方按提示重试，永远得到同一句话。
+ */
+export type KernelServiceStatus = 'idle' | 'started' | 'failed' | 'disposed'
 
 export interface KernelServiceOptions {
   readonly host: KernelModuleHost
@@ -79,6 +85,18 @@ export class KernelServiceLifecycleError extends Error {
   public constructor() {
     super('Kernel service is not started')
     this.name = 'KernelServiceLifecycleError'
+  }
+}
+
+/** 之前已经启动失败过；这不是可重试的状态，要换一个新的 host / service。 */
+export class KernelServiceStartFailedError extends Error {
+  public readonly code = 'KERNEL_START_FAILED'
+
+  public constructor(cause: unknown) {
+    super('Kernel service 已经启动失败过，不会重试；请重建 Kernel 再启动', {
+      cause,
+    })
+    this.name = 'KernelServiceStartFailedError'
   }
 }
 
@@ -117,6 +135,7 @@ function failure(
   code: string,
   message: string,
   retryable = false,
+  details: Nullable<Readonly<Record<string, unknown>>> = null,
 ): CapabilityCallFailure {
   return {
     protocolVersion: KernelProtocolVersion,
@@ -126,7 +145,7 @@ function failure(
       code,
       message,
       retryable,
-      details: null,
+      details,
     },
   }
 }
@@ -165,6 +184,7 @@ function readCallId(input: unknown): string {
  */
 export class KernelService {
   private status: KernelServiceStatus = 'idle'
+  private startFailure?: unknown
   private startPromise?: Promise<void>
   private disposePromise?: Promise<void>
   private readonly identities: KernelIdentityRegistry
@@ -188,7 +208,11 @@ export class KernelService {
   public start(): Promise<void> {
     switch (this.status) {
       case 'disposed':
-        return Promise.reject(new Error('Disposed kernel service cannot be started'))
+        return Promise.reject(new Error('已回收的 Kernel service 不能再启动'))
+      case 'failed':
+        return Promise.reject(
+          new KernelServiceStartFailedError(this.startFailure),
+        )
       case 'started':
         return Promise.resolve()
       case 'idle':
@@ -199,7 +223,16 @@ export class KernelService {
   }
 
   private async startOnce(): Promise<void> {
-    await this.options.host.start()
+    try {
+      await this.options.host.start()
+    } catch (error) {
+      // 启动失败是终态：同一个 host 不会因为再调一次 start() 就变好。
+      if (this.status === 'idle') {
+        this.status = 'failed'
+        this.startFailure = error
+      }
+      throw error
+    }
     if (this.status === 'idle') this.status = 'started'
   }
 
@@ -370,10 +403,14 @@ export class KernelService {
           'Capability operation metadata could not be resolved',
         )
       }
+      // 进程内路径的错误消息就是 broker 给的原因；serve 路径不能把它丢掉，否则同一次拒绝
+      // 在两条路径上说的不是一回事，模型也拿不到「为什么被拒」。
       if (error instanceof KernelCapabilityPermissionDeniedError) return failure(
           request.callId,
           'PERMISSION_DENIED',
           'Capability call permission was denied',
+          false,
+          { permission: error.permission, reason: error.reason },
         )
       if (error instanceof KernelCapabilityPermissionCheckError) {
         log.warn('Capability permission check failed', {
@@ -482,18 +519,38 @@ export class KernelService {
     return this.requireModCatalog().setEnabled(id, enabled)
   }
 
-  public installModFromDirectory(
+  /**
+   * 从目录安装一个 mod pack。
+   *
+   * 失败原因（目录不存在、`velaros.mod.json` 不合法、入口导不出模块定义……）必须随错误一起
+   * 回到调用方：原来它是一个无码的普通错误，RPC 那侧统一投影成「INTERNAL_ERROR，可重试」，
+   * 真正的原因只进了守护进程日志。
+   */
+  public async installModFromDirectory(
     directory: string,
   ): ReturnType<KernelModCatalog['installFromDirectory']> {
     this.assertStarted()
-    return this.requireModCatalog().installFromDirectory(directory)
+    try {
+      return await this.requireModCatalog().installFromDirectory(directory)
+    } catch (error) {
+      if (error instanceof KernelModCatalogError) throw error
+      const reason = error instanceof Error ? error.message : String(error)
+      log.warn('Mod pack install failed', { directory, error })
+      throw new KernelModCatalogError(
+        'MOD_INSTALL_FAILED',
+        `从目录安装 mod pack 失败：${reason}`,
+        { directory, reason },
+        { cause: error },
+      )
+    }
   }
 
   private requireModCatalog(): KernelModCatalog {
     if (isUndefined(this.options.modCatalog)) {
-      throw Object.assign(new Error('Mod catalog is not available'), {
-        code: 'MODS_UNAVAILABLE',
-      })
+      throw new KernelModCatalogError(
+        'MODS_UNAVAILABLE',
+        '本 Kernel 没有接 ModStore，mods.* 不可用',
+      )
     }
     return this.options.modCatalog
   }

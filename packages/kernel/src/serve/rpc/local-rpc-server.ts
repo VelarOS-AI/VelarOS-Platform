@@ -59,8 +59,10 @@ import {
 import {
   CapabilitySessionLedger,
   KernelIdentityRegistryError,
+  KernelModCatalogError,
   type KernelService,
   KernelServiceLifecycleError,
+  KernelServiceStartFailedError,
 } from '@velaros-ai/kernel/runtime'
 
 import {
@@ -586,6 +588,13 @@ function readRequestId(input: unknown): string {
     : 'invalid-frame'
 }
 
+/**
+ * 把内核侧的错误投影成 wire 失败帧。
+ *
+ * 带码的错误一律按自己的码投影：原来只认三个错误类，`mods.*` 那条线的失败（没接 ModStore、
+ * 目录安装失败）全被吞成「INTERNAL_ERROR，可重试」，真正的原因只进守护进程日志，调用方
+ * 重试多少次都一样。
+ */
 function toRpcFailure(
   requestId: string,
   error: unknown,
@@ -593,6 +602,14 @@ function toRpcFailure(
   if (error instanceof KernelRpcProtocolError) return rpcFailure(requestId, error.code, error.message)
   if (error instanceof KernelIdentityRegistryError) return rpcFailure(requestId, error.code, error.message)
   if (error instanceof KernelServiceLifecycleError) return rpcFailure(requestId, error.code, error.message, true)
+  if (error instanceof KernelModCatalogError) return rpcFailure(
+    requestId,
+    error.code,
+    error.message,
+    false,
+    error.details,
+  )
+  if (error instanceof KernelServiceStartFailedError) return rpcFailure(requestId, error.code, error.message)
   return rpcFailure(
     requestId,
     'INTERNAL_ERROR',

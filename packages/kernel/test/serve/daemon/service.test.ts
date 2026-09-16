@@ -108,7 +108,7 @@ describe('KernelService', () => {
     expect(service.getStatus()).toBe('disposed')
     expect(disposalCount).toBe(1)
     await expect(service.start()).rejects.toThrow(
-      'Disposed kernel service cannot be started',
+      '已回收的 Kernel service 不能再启动',
     )
   })
 
@@ -290,15 +290,63 @@ describe('KernelService', () => {
     const service = new KernelService({ host, kernelVersion: '0.1.0' })
     await service.start()
 
+    // 拒绝原因必须随失败一起下发：serve 路径原来统一成一句英文、details: null，
+    // 和进程内路径（消息就是 broker 给的原因）说的不是一回事。
     expect(await service.handleCapabilityCall(call(CallableToken.id)))
       .toMatchObject({
         status: 'error',
-        error: { code: 'PERMISSION_DENIED' },
+        error: {
+          code: 'PERMISSION_DENIED',
+          details: { permission: 'test.denied', reason: 'blocked' },
+        },
       })
     expect(observed).toEqual([
       'module.protected:1:test.allowed',
       'module.protected:1:test.denied',
     ])
+  })
+
+  test('启动失败后进入 failed 终态，不再谎称可重试', async () => {
+    const host = new KernelModuleHost({ apiVersion: 1 })
+    host.registerModule(
+      moduleDefinition({
+        id: 'module.boom',
+        token: CallableToken,
+        service: { invoke: () => 'ok' },
+        ready: () => {
+          throw new Error('ready boom')
+        },
+      }),
+    )
+    const service = new KernelService({ host, kernelVersion: '0.1.0' })
+
+    const failure = await service.start().catch((error: unknown) => error)
+    expect(failure).toMatchObject({ name: 'KernelStartupError' })
+    expect(service.getStatus()).toBe('failed')
+
+    // 会话打开与能力调用都不再标「可重试」。
+    expect(
+      await service.evaluateCapabilitySessionOpen({
+        protocolVersion: KernelProtocolVersion,
+        requires: [
+          { capabilityId: CallableToken.id, operations: null, scope: null },
+        ],
+      }),
+    ).toMatchObject({
+      status: 'error',
+      error: { code: 'KERNEL_NOT_STARTED', retryable: false },
+    })
+    expect(await service.handleCapabilityCall(call(CallableToken.id)))
+      .toMatchObject({
+        status: 'error',
+        error: { code: 'KERNEL_NOT_STARTED', retryable: false },
+      })
+
+    // 再 start() 说明白「不会重试」，而不是重放同一个启动失败。
+    await expect(service.start()).rejects.toMatchObject({
+      name: 'KernelServiceStartFailedError',
+      code: 'KERNEL_START_FAILED',
+    })
   })
 
   test('disposes modules once and rejects calls after disposal', async () => {

@@ -10,6 +10,7 @@ import {
   isNotUndefined,
   isNull,
   isObject,
+  isRecord,
   isString,
   isTrue,
   isUndefined,
@@ -530,6 +531,9 @@ function decodeResponse(input: object): KernelRpcResponse {
   if (!isBoolean(retryable)) {
     throw invalidResponse('RPC error retryable flag is invalid')
   }
+  // details 是服务端交代「为什么失败」的地方（权限拒绝的原因、安装失败的目录与原因……）。
+  // 原来这里一律写死 null，服务端说什么都到不了调用方手上。
+  const details = Reflect.get(errorInput, 'details')
   return {
     type: 'response',
     requestId,
@@ -538,7 +542,7 @@ function decodeResponse(input: object): KernelRpcResponse {
       code: readRequiredString(errorInput, 'code'),
       message: readRequiredString(errorInput, 'message', true),
       retryable,
-      details: null,
+      details: isRecord(details) ? details : null,
     },
   }
 }

@@ -71,6 +71,7 @@ export function rpcFailure(
   code: string,
   message: string,
   retryable = false,
+  details: Nullable<Readonly<Record<string, unknown>>> = null,
 ): KernelRpcFailure {
   return {
     type: 'response',
@@ -80,7 +81,7 @@ export function rpcFailure(
       code,
       message,
       retryable,
-      details: null,
+      details,
     },
   }
 }
