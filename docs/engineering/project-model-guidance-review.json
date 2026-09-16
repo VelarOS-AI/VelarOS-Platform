@@ -68,7 +68,7 @@
   ],
   "fingerprints": {
     "project": "925b79022faf40a79759265eee4ca25c6b118a628e652b5b15ace36611d1f772",
-    "agent": "bb977b690e1acd5acaace6f768d21d8b1a3a1a0a8365e48f8070165603b9b6e8",
+    "agent": "b85b4d488451640842f665af03a64211010d1fae8215f6cfbe66ba85fc97156b",
     "documents": "0b21de94640e41de1b8c3981391f7d28c40d81006b1cedf7ace5abf19fc87732"
   },
   "sourceArtifacts": [
@@ -86,15 +86,15 @@
     },
     {
       "path": "packages/agent/src/impl/AgentTools.ts",
-      "fingerprint": "cbfbf0771a0d7a19ea5e97e5c6c96d8efd82899988b61cc8690c16336f215add"
+      "fingerprint": "06498c11583f3d9e286ffad0ab4db610a819a14035d307f5858cb6e44d42c670"
     },
     {
       "path": "packages/agent/src/impl/builtin/ContextOperations.ts",
-      "fingerprint": "8f1c5b0fb52eef51e21ef5d1f61786c75b3048555d87e24c85db57d65ae09c8f"
+      "fingerprint": "50a125a512e0f8dd08f47b520cd4e37865d1e7404c192114f52fa49afcbea5b0"
     },
     {
       "path": "packages/agent/src/impl/builtin/PlanOperations.ts",
-      "fingerprint": "d73e9a3b453804cf6cec9a8119849a54c597537810b5e8db98a2a69173c78c85"
+      "fingerprint": "e2658fefa39a113b3fbcd74300edace8b836f3a465436ce8b631523a5f9b0df0"
     },
     {
       "path": "packages/agent/src/impl/runner/PromptStateBuilder.ts",

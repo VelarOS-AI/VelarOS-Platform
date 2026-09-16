@@ -1,6 +1,9 @@
 import { z } from 'zod'
 
+import { isArray, isEmpty, isPresent } from '@velaros-ai/core'
+
 import { AgentToolLimits } from '../../contract/constants.js'
+import type { InteractionPort } from '../../contract/requires.js'
 import type { ActiveContextArtifact, ExecutionTaskPlanStep } from '../../types/agent.js'
 import type { PlanLifecycle, PlanStepCompletionResult, PlanStepRef, StepEngineOptions,UpdatePlanInput, UserPlanStatus, UserPlanStep } from '../../types/builtin.js'
 
@@ -163,4 +166,51 @@ export function describePlanStepRefsForModel(
   plan: ReadonlyArray<{ title: string; status: string }>
 ): Array<{ ref: number; title: string; status: string }> {
   return describeStepRefsForModel(plan, (step) => step.title)
+}
+
+/** 这次 `plan:update` 有没有任何要改的东西；一件都没有就是读取。 */
+export function hasPlanUpdateChange(input: UpdatePlanInput): boolean {
+  return !isEmpty(input.plan ?? []) || hasPlanStepCompletion(input) || !!input.lifecycle || !!input.explanation
+}
+
+/** 空数组视为「没有要完成的步骤」（宽容：模型重报计划时常带 complete_step: []）。 */
+export function hasPlanStepCompletion(input: UpdatePlanInput): boolean {
+  return isPresent(input.complete_step)
+    && !(isArray(input.complete_step) && isEmpty(input.complete_step))
+}
+
+/** 读计划的统一回执：计划、可引用步骤，外加任务、推荐动作与执行建议，方便模型恢复当前执行上下文。 */
+export function projectCurrentPlanRead(
+  interaction: InteractionPort,
+  plan: readonly ExecutionTaskPlanStep[],
+  lifecycle: PlanLifecycle
+): Record<string, unknown> {
+  return {
+    noop: true,
+    lifecycle,
+    plan,
+    // 显式可引用 ref(1-based 序号):complete_step 直接照 ref 传,别自造 id。
+    steps: describePlanStepRefsForModel(plan),
+    task: interaction.getCurrentTask(),
+    recommendedAction: interaction.getCurrentRecommendedAction(),
+    executionAdvice: interaction.getCurrentExecutionAdvice(),
+  }
+}
+
+/**
+ * lifecycle 省略 = 保留已有状态。首次建计划时根据步骤推导；已有 active 计划在全部步骤终态时
+ * 可自动收尾为 completed。paused/archived/completed 只能由显式 lifecycle 迁移，更新说明、步骤或
+ * complete_step 都不会暗中恢复。
+ */
+export function resolveNextPlanLifecycle(
+  input: UpdatePlanInput,
+  updateWithPlan: UpdatePlanInput,
+  state: { previousPlan: readonly unknown[]; previousLifecycle: PlanLifecycle; hasStoredPlanArtifact: boolean }
+): PlanLifecycle {
+  if (input.lifecycle) return input.lifecycle
+  const inferredLifecycle = resolvePlanLifecycle(updateWithPlan)
+  const isInitialPlan = isEmpty(state.previousPlan) && !state.hasStoredPlanArtifact
+  return isInitialPlan || (state.previousLifecycle === 'active' && inferredLifecycle === 'completed')
+    ? inferredLifecycle
+    : state.previousLifecycle
 }

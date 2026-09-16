@@ -104,7 +104,6 @@ function buildGoalStatusRequiredReminder(state: SoloGoalFinishingState): string 
     '[系统] 目标模式收尾检查未通过。',
     statusLine,
     '必须继续推进，不能直接结束本次回复：',
-    '- 如果还没有目标，先调用 goal:create 创建本次目标。',
     '- 如果目标尚未完成，继续读取、修改、执行或验证。',
     '- 如果目标已经真正完成，调用 goal:update({status:"complete"}) 后再收尾。',
     '- 如果确认存在无法继续推进的真实阻碍，可以自行调用 goal:update({status:"blocked"}) 后再收尾；不需要等待多轮审计。',

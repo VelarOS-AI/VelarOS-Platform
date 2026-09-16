@@ -1,9 +1,11 @@
-import { isArray, isEmpty,isFiniteNumber, isObject, isString, isTrue, toNullable } from '@velaros-ai/core'
+import { isArray, isEmpty,isFiniteNumber, isObject, isPresent, isString, isTrue, toNullable, toOptional } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
+import type { ToolActiveContextApi } from '../../contract/requires.js'
 import type { ActiveContextArtifact, ActiveContextUpsertInput } from '../../types/agent.js'
-import type { GoalConstraint, GoalMetadata, GoalSnapshot, GoalStatus, GoalStep, GoalStepCompletionResult,StepEngineOptions } from '../../types/builtin.js'
+import type { GoalConstraint, GoalMetadata, GoalSnapshot, GoalStatus, GoalStep, GoalStepCompletionResult,GoalUpdateRequest, StepEngineOptions } from '../../types/builtin.js'
 
+import { describeGoalStepRefsForModel } from './goal-schemas'
 import { completeSteps } from './step-refs'
 
 const GoalArtifactId = 'active-goal'
@@ -301,8 +303,9 @@ function buildGoalTerminalUpsertInput(input: {
 
 /**
  * 目标收尾前的闸门：还有未解决步骤（非 completed / skipped，含 failed 与 pending）就抛 `VALIDATION`，
- * 错误里**最多列前 4 条**未解决步骤的 `<id 或标题>: <状态>` 并给出三条出路
- * （complete_step / 跳过 / 先更新失败步骤）。只列 4 条是为了把错误压在模型一眼能读完的长度内。
+ * 错误里**最多列前 4 条**未解决步骤的 `<id 或标题>: <状态>`。`status=complete` 会把还没收尾的
+ * pending/in_progress 自动标完成，所以真能拦到这里的只剩 failed，指路也只指它（修好改 completed，
+ * 或确认不做改 skipped）。只列 4 条是为了把错误压在模型一眼能读完的长度内。
  * 步骤全解决或压根没有步骤时静默通过。
  */
 function assertGoalCanComplete(goal: GoalSnapshot): void {
@@ -315,7 +318,7 @@ function assertGoalCanComplete(goal: GoalSnapshot): void {
     .join(', ')
   throw new AppError(
     'VALIDATION',
-    `还有未解决的目标步骤，不能收尾这个目标。请先用 complete_step 完成、跳过，或更新失败的步骤：${labels}。`
+    `还有失败的目标步骤，不能收尾这个目标：${labels}。先把它们修好并改成 completed，或者确认不做、改成 skipped，再收尾。`
   )
 }
 
@@ -330,4 +333,88 @@ export {
   GoalArtifactId,
   isGoalArtifact,
   toGoalSnapshot,
+}
+
+/** 把一条目标条目（可能没有）投影成读取回执：没有目标时 status 是 'none'，不报错。 */
+export function projectGoalRead(artifact: LooseOptional<ActiveContextArtifact>): unknown {
+  const goal = artifact ? toGoalSnapshot(artifact) : null
+
+  return {
+    status: goal?.status ?? 'none',
+    goal,
+    steps: goal ? describeGoalStepRefsForModel(goal.steps) : [],
+    noop: true,
+  }
+}
+
+/** 从活动上下文里取当前目标条目。 */
+export async function readCurrentGoalArtifact(
+  activeContext: ToolActiveContextApi
+): Promise<LooseOptional<ActiveContextArtifact>> {
+  const artifacts = await activeContext.listActiveContextArtifacts({
+    status: 'all',
+    kinds: ['requirement'],
+  })
+  return findCurrentGoalArtifact(artifacts)
+}
+
+/** 这次 `goal:update` 有没有任何要改的东西；一件都没有就是读取。 */
+export function hasGoalUpdateChange(input: GoalUpdateRequest): boolean {
+  return !!input.status
+    || isPresent(input.steps)
+    || isPresent(input.complete_step)
+    || !!input.objective
+    || isPresent(input.constraints)
+}
+
+/**
+ * 定出这次要写回的步骤列表。
+ *
+ * `status=complete` 时把还没收尾的 pending/in_progress 步骤自动标 completed：模型宣布目标完成
+ * 即隐含这些步骤已做，不该因为没逐个 complete_step 就被拦（failed 步骤仍保留、由收尾门判定）。
+ */
+export function resolveGoalNextSteps(
+  input: GoalUpdateRequest,
+  artifact: ActiveContextArtifact,
+  steps: LooseOptional<GoalStep[]>
+): LooseOptional<GoalStep[]> {
+  if (input.status !== 'complete') return steps
+  const source = steps ?? [...toGoalSnapshot(artifact).steps]
+  return source.map((step) =>
+    step.status === 'pending' || step.status === 'in_progress'
+      ? { ...step, status: 'completed' as const }
+      : step
+  )
+}
+
+/** 先写内容再写生命周期：`complete` 前要过收尾门，过不了就抛，不会留下半个终态。 */
+export async function applyGoalUpdate(
+  input: GoalUpdateRequest,
+  activeContext: ToolActiveContextApi,
+  artifact: ActiveContextArtifact,
+  nextSteps: LooseOptional<GoalStep[]>
+): Promise<GoalSnapshot> {
+  let currentArtifact = artifact
+  if (input.objective || nextSteps || isPresent(input.constraints)) {
+    currentArtifact = await activeContext.upsertActiveContextArtifact(
+      buildGoalStateUpsertInput({
+        artifact,
+        objective: input.objective,
+        steps: toOptional(nextSteps),
+        constraints: input.constraints,
+      })
+    )
+  }
+
+  if (input.status === 'complete') assertGoalCanComplete(toGoalSnapshot(currentArtifact))
+  const updatedArtifact = input.status
+    ? await activeContext.upsertActiveContextArtifact(
+        buildGoalLifecycleUpsertInput({
+          artifact: currentArtifact,
+          status: input.status,
+          now: Date.now(),
+        })
+      )
+    : currentArtifact
+  return toGoalSnapshot(updatedArtifact)
 }

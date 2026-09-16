@@ -38,6 +38,20 @@ export interface BackgroundJobOutputFilterResult {
   ignoredReason: Nullable<string>
 }
 
+/** `goal:update` 的模型面入参：全部字段可省，全省就是一次读取。 */
+export interface GoalUpdateRequest {
+  /** 目标生命周期状态；不传时只更新内容字段。 */
+  status?: 'active' | 'paused' | 'complete' | 'blocked' | 'cancelled'
+  /** 新的目标描述；省略则保留当前的。 */
+  objective?: string
+  /** 完整的步骤列表；传 [] 清空，省略则保留。 */
+  steps?: GoalStep[]
+  /** 要完成的那个步骤：1-based 序号或精确标题。 */
+  complete_step?: string | number
+  /** 完整的目标约束列表；传 [] 清空，省略则保留。 */
+  constraints?: GoalConstraint[]
+}
+
 export interface ActiveDirectiveContext {
   listActiveContextArtifacts(options?: ActiveContextListOptions): Promise<ActiveContextArtifact[]>
   upsertActiveContextArtifact(input: ActiveContextUpsertInput): Promise<ActiveContextArtifact>

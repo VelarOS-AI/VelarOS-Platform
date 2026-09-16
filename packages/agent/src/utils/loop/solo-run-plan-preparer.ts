@@ -29,7 +29,7 @@ import { extractLatestUserTextFromMessages, isLowSignalIntentText } from './inte
 import { resolveSoloLoopTools } from './loop-runtime'
 
 const PlanModeRequiredToolNames = ['plan:update', 'interaction:show_action_cards'] as const
-const GoalModeRequiredToolNames = ['goal:get', 'goal:create', 'goal:update'] as const
+const GoalModeRequiredToolNames = ['goal:create', 'goal:update'] as const
 const BootstrapSharedToolNames = [
   'tooling:map',
   'plan:update',

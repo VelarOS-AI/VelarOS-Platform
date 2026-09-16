@@ -116,7 +116,8 @@ function markToolSpaceBootstrapDiscoverySatisfied(
 /**
  * 拼强制侦察那一轮压进 history 的内部提醒：说明为什么要先查（跨域任务先建全局地图 / 需先确认工具空间）、
  * 本轮已经预换入了哪些候选类别（一个都没有就写明不会自动换入高风险或需用户动作的类别），
- * 并明确要求先调 `tooling:map`、按意图选 `op="find"` 或 `op="map"`，不许拿现有工具凑答案。
+ * 并明确要求先调 `tooling:map`、按意图选 `op="find"` 或 `op="map"`，但只查这一轮缺的能力——
+ * 当前工具列表里参数已经齐全的工具直接调用（否则这句会和工具说明里那句直接打架）。
  */
 function buildDiscoveryReminder(input: {
   toolName: 'tooling:map'
@@ -135,7 +136,7 @@ function buildDiscoveryReminder(input: {
     `[系统] ContextOS 工具空间启动：${scopeText}`,
     categoryText,
     `本轮必须先调用 ${input.toolName}，按最近用户意图选择 op="find" 或 op="map"，必要时用 domainIds、toolOsStates 或 categoryIds 收窄。`,
-    '不要在未确认工具页状态、依赖和 schema 前直接用现有工具凑答案。',
+    '只查这一轮缺的能力；当前工具列表里参数已经齐全的工具直接调用，不必先确认工具页。',
   ].join('\n')
 }
 

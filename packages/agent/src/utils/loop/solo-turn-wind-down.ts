@@ -12,7 +12,8 @@ function buildSoloTurnCapWindDownReminder(): string {
   return [
     '[系统] 本次执行已进行很多步，接近内部步数上限。',
     '请立即停止调用工具，基于现有进展给出结论或可交付结果；',
-    '若确实受阻，请说明卡点并向用户提出下一步建议，然后结束本次回复。',
+    '若确实受阻，请说明卡点并向用户提出下一步建议，然后结束本次回复；',
+    '目标模式下先调用 goal:update({status:"blocked"}) 或 ({status:"complete"}) 再收尾，否则收尾门会把你推回来。',
   ].join('\n')
 }
 

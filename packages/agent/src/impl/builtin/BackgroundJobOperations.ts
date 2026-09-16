@@ -3,7 +3,7 @@ import { AppError } from '@velaros-ai/core/error'
 import { AgentToolLimits } from '../../contract/constants.js'
 import type { CancelBackgroundJobInput, ReadBackgroundJobOutputInput, WaitBackgroundJobsInput } from '../../types/builtin.js'
 import type { KernelToolContext } from '../../types/tool-context.js'
-import { filterBackgroundJobOutput, formatBackgroundJobOutput, formatBackgroundJobWaitResults } from '../../utils/builtin/background-jobs'
+import { describeMissingBackgroundJob, filterBackgroundJobOutput, formatBackgroundJobOutput, formatBackgroundJobWaitResults } from '../../utils/builtin/background-jobs'
 
 /**
  * 后台作业三个工具（`job:read_output` / `job:wait` / `job:cancel`）的执行面。
@@ -37,7 +37,7 @@ class BackgroundJobOperations implements BackgroundJobOperationsApi {
       jobId: input.job_id,
       mode: input.mode ?? 'incremental',
     })
-    if (!snapshot) return this.notFound(input.job_id)
+    if (!snapshot) return describeMissingBackgroundJob(input.job_id)
     return formatBackgroundJobOutput(snapshot, filterBackgroundJobOutput(snapshot.output, input.filter))
   }
 
@@ -57,14 +57,10 @@ class BackgroundJobOperations implements BackgroundJobOperationsApi {
     if (!cancelBackgroundJob) throw new AppError('VALIDATION', BackgroundJobOperations.UnavailableMessages.cancel)
 
     const snapshot = await cancelBackgroundJob({ jobId: input.job_id })
-    if (!snapshot) return this.notFound(input.job_id)
+    if (!snapshot) return describeMissingBackgroundJob(input.job_id)
     return formatBackgroundJobOutput(snapshot, filterBackgroundJobOutput(snapshot.output))
   }
 
-  /** 作业不属于本会话或根本不存在时给模型的那句话；不抛错，模型据此换 id 或改路。 */
-  private notFound(jobId: string): string {
-    return `本会话里没有 id 为 "${jobId}" 的后台任务。`
-  }
 }
 
 /** 进程内唯一一份后台作业执行面；工具文件按它一行委托。 */

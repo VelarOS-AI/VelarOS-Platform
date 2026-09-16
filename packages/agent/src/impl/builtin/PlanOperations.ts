@@ -1,4 +1,4 @@
-import { isArray, isEmpty, isPresent, toNullable } from '@velaros-ai/core'
+import { isEmpty, toNullable } from '@velaros-ai/core'
 
 import { AgentToolNames } from '../../contract/constants.js'
 import type { UpdatePlanInput } from '../../types/builtin.js'
@@ -8,9 +8,12 @@ import {
   describePlanStepRefsForModel,
   findPlanArtifact,
   formatActivePlanContent,
+  hasPlanStepCompletion,
+  hasPlanUpdateChange,
   PlanArtifactId,
+  projectCurrentPlanRead,
   readPlanLifecycle,
-  resolvePlanLifecycle,
+  resolveNextPlanLifecycle,
   toUserPlanSteps,
 } from '../../utils/builtin/plans'
 
@@ -25,10 +28,10 @@ export interface PlanOperationsApi {
    * 更新当前 execution 的可见计划。
    *
    * 传完整 `plan` 就按它重建；`complete_step` 可与 `plan` 同传（先重建再完成引用的步骤）。
-   * 什么都不传、或重建后没有任何步骤时按无操作回带当前计划，不报错。
+   * 什么都不传就是一次读取：回带当前计划、可引用步骤、任务、推荐动作与执行建议，不报错。
    */
   update(input: UpdatePlanInput, ctx: KernelToolContext): Promise<unknown>
-  /** 读当前 execution 的计划、任务、推荐动作与执行建议。 */
+  /** 读当前 execution 的计划、任务、推荐动作与执行建议。与 `update` 的空调用同一条路。 */
   read(ctx: KernelToolContext): Promise<unknown>
 }
 
@@ -48,32 +51,21 @@ class PlanOperations implements PlanOperationsApi {
     })
     const previousLifecycle = readPlanLifecycle(artifacts, previousPlan, interaction.executionId)
 
-    // 空调用 = 无操作:回带当前计划状态,不报错(宽容:模型偶尔空传不该被判失败)。
-    if (!this.hasAnyChange(input))
-      return {
-        updated: false,
-        noop: true,
-        lifecycle: previousLifecycle,
-        plan: previousPlan,
-        steps: describePlanStepRefsForModel(previousPlan),
-      }
+    // 空调用 = 读取:回带当前计划、任务、推荐动作与执行建议,不报错。
+    if (!hasPlanUpdateChange(input))
+      return { updated: false, ...projectCurrentPlanRead(ctx.interaction, previousPlan, previousLifecycle) }
 
     // 基线列表:传了完整 plan 就用它重建,否则沿用旧计划。
     // complete_step 与 plan 可组合:先重建、再针对重建后的列表完成引用步骤。
     const basePlan = input.plan?.length ? input.plan : toUserPlanSteps(previousPlan)
-    const stepCompletion = this.hasStepCompletion(input)
+    const stepCompletion = hasPlanStepCompletion(input)
       ? completePlanSteps(basePlan, input.complete_step!)
       : null
     const effectivePlan = stepCompletion ? stepCompletion.plan : basePlan
 
-    if (!effectivePlan.length)
+    if (isEmpty(effectivePlan))
       // 只更新 lifecycle/explanation 却没有任何步骤且无旧计划:无步骤可维护,回带当前(no-op)。
-      return {
-        updated: false,
-        noop: true,
-        plan: previousPlan,
-        steps: describePlanStepRefsForModel(previousPlan),
-      }
+      return { updated: false, ...projectCurrentPlanRead(ctx.interaction, previousPlan, previousLifecycle) }
 
     return this.commitPlan(input, ctx, {
       effectivePlan,
@@ -85,35 +77,17 @@ class PlanOperations implements PlanOperationsApi {
   }
 
   public async read(ctx: KernelToolContext): Promise<unknown> {
-    const interaction = ctx.interaction
-
-    // 同时返回任务、推荐动作和执行建议，方便模型恢复当前执行上下文。
-    const currentPlan = interaction.getCurrentPlan()
+    const currentPlan = ctx.interaction.getCurrentPlan()
     const artifacts = await ctx.activeContext.listActiveContextArtifacts({
       status: 'all',
       kinds: [...PlanOperations.PlanArtifactKinds],
     })
-    return {
-      lifecycle: readPlanLifecycle(artifacts, currentPlan, interaction.executionId),
-      plan: currentPlan,
-      // 显式可引用 ref(1-based 序号):complete_step 直接照 ref 传,别自造 id。
-      steps: describePlanStepRefsForModel(currentPlan),
-      task: interaction.getCurrentTask(),
-      recommendedAction: interaction.getCurrentRecommendedAction(),
-      executionAdvice: interaction.getCurrentExecutionAdvice(),
-    }
+    const lifecycle = readPlanLifecycle(artifacts, currentPlan, ctx.interaction.executionId)
+    return projectCurrentPlanRead(ctx.interaction, currentPlan, lifecycle)
   }
 
-  /** 这次调用有没有任何要改的东西；一件都没有就是读取。 */
-  private hasAnyChange(input: UpdatePlanInput): boolean {
-    return !!input.plan?.length || this.hasStepCompletion(input) || !!input.lifecycle || !!input.explanation
-  }
 
-  /** 空数组视为"没有要完成的步骤"(宽容:模型重报计划时常带 complete_step: [])。 */
-  private hasStepCompletion(input: UpdatePlanInput): boolean {
-    return isPresent(input.complete_step)
-      && !(isArray(input.complete_step) && isEmpty(input.complete_step))
-  }
+
 
   /** 写界面上的计划与落盘条目，并定出这次之后的生命周期。 */
   private async commitPlan(
@@ -137,7 +111,7 @@ class PlanOperations implements PlanOperationsApi {
       plan: state.effectivePlan,
     }
     const plan = interaction.updateCurrentPlan(updateWithPlan)
-    const lifecycle = this.resolveNextLifecycle(input, updateWithPlan, state)
+    const lifecycle = resolveNextPlanLifecycle(input, updateWithPlan, state)
     await ctx.activeContext.upsertActiveContextArtifact({
       id: PlanArtifactId,
       kind: 'plan',
@@ -175,23 +149,6 @@ class PlanOperations implements PlanOperationsApi {
     }
   }
 
-  /**
-   * lifecycle 省略 = 保留已有状态。首次建计划时根据步骤推导；已有 active 计划在全部步骤终态时
-   * 可自动收尾为 completed。paused/archived/completed 只能由显式 lifecycle 迁移，更新说明、步骤或
-   * complete_step 都不会暗中恢复。
-   */
-  private resolveNextLifecycle(
-    input: UpdatePlanInput,
-    updateWithPlan: UpdatePlanInput,
-    state: { previousPlan: readonly unknown[]; previousLifecycle: ReturnType<typeof readPlanLifecycle>; hasStoredPlanArtifact: boolean }
-  ): ReturnType<typeof readPlanLifecycle> {
-    if (input.lifecycle) return input.lifecycle
-    const inferredLifecycle = resolvePlanLifecycle(updateWithPlan)
-    const isInitialPlan = isEmpty(state.previousPlan) && !state.hasStoredPlanArtifact
-    return isInitialPlan || (state.previousLifecycle === 'active' && inferredLifecycle === 'completed')
-      ? inferredLifecycle
-      : state.previousLifecycle
-  }
 }
 
 /** 进程内唯一一份计划执行面；工具文件按它一行委托。 */

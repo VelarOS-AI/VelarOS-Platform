@@ -1,24 +1,10 @@
-import { isPresent, toNullable, toOptional } from '@velaros-ai/core'
+import { isPresent, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import type { GoalConstraint, GoalStep } from '../../types/builtin.js'
+import type { GoalConstraint, GoalStep, GoalUpdateRequest } from '../../types/builtin.js'
 import type { KernelToolContext } from '../../types/tool-context.js'
 import { describeGoalStepRefsForModel } from '../../utils/builtin/goal-schemas'
-import { assertGoalCanComplete, buildGoalLifecycleUpsertInput, buildGoalStateUpsertInput, buildGoalUpsertInput, completeGoalStep, findCurrentGoalArtifact, toGoalSnapshot } from '../../utils/builtin/goals'
-
-/** `goal:update` 的模型面入参：全部字段可省，全省就是一次读取。 */
-export interface GoalUpdateRequest {
-  /** 目标生命周期状态；不传时只更新内容字段。 */
-  status?: 'active' | 'paused' | 'complete' | 'blocked' | 'cancelled'
-  /** 新的目标描述；省略则保留当前的。 */
-  objective?: string
-  /** 完整的步骤列表；传 [] 清空，省略则保留。 */
-  steps?: GoalStep[]
-  /** 要完成的那个步骤：1-based 序号或精确标题。 */
-  complete_step?: string | number
-  /** 完整的目标约束列表；传 [] 清空，省略则保留。 */
-  constraints?: GoalConstraint[]
-}
+import { applyGoalUpdate, buildGoalUpsertInput, completeGoalStep, hasGoalUpdateChange, projectGoalRead, readCurrentGoalArtifact, resolveGoalNextSteps, toGoalSnapshot } from '../../utils/builtin/goals'
 
 /**
  * 目标三个工具（`goal:get` / `goal:create` / `goal:update`）的执行面。
@@ -27,7 +13,7 @@ export interface GoalUpdateRequest {
  * 整个进程一份，自身不持有状态：每次都从工具上下文现读现写。
  */
 export interface GoalOperationsApi {
-  /** 读当前目标；没有目标时返回 `status:'none'`，不报错。 */
+  /** 读当前目标；没有目标时返回 `status:'none'`，不报错。与 `update` 的空调用同一条路。 */
   read(ctx: KernelToolContext): Promise<unknown>
   /**
    * 建立当前目标。
@@ -41,21 +27,16 @@ export interface GoalOperationsApi {
   /**
    * 更新当前目标的内容、步骤、约束或生命周期。
    *
-   * 所有字段都不传就是一次读取，不报错；没有可更新的目标（从没建过、或已终态）时抛 `VALIDATION`。
+   * 所有字段都不传就是一次读取：没有目标时回 `status:'none'`，也不报错。真要改而没有可改的目标
+   * （从没建过、或已终态）时抛 `VALIDATION`。
    * `status=complete` 会把还没收尾的 pending/in_progress 步骤一并标完成，failed 步骤仍会拦住收尾。
    */
   update(input: GoalUpdateRequest, ctx: KernelToolContext): Promise<unknown>
 }
 
 class GoalOperations implements GoalOperationsApi {
-  /** 目标存在这一类活动上下文条目里。 */
-  private static readonly GoalArtifactKinds = ['requirement'] as const
-
   public async read(ctx: KernelToolContext): Promise<unknown> {
-    const artifact = await this.findGoalArtifact(ctx)
-    const goal = artifact ? toGoalSnapshot(artifact) : null
-
-    return { status: goal?.status ?? 'none', goal }
+    return projectGoalRead(await readCurrentGoalArtifact(ctx.activeContext))
   }
 
   public async create(
@@ -63,7 +44,7 @@ class GoalOperations implements GoalOperationsApi {
     ctx: KernelToolContext
   ): Promise<unknown> {
     ctx.abortSignal.throwIfAborted()
-    const current = await this.findGoalArtifact(ctx)
+    const current = await readCurrentGoalArtifact(ctx.activeContext)
     if (current && toGoalSnapshot(current).status === 'active') {
       const goal = toGoalSnapshot(current)
       return {
@@ -90,21 +71,14 @@ class GoalOperations implements GoalOperationsApi {
 
   public async update(input: GoalUpdateRequest, ctx: KernelToolContext): Promise<unknown> {
     ctx.abortSignal.throwIfAborted()
-    const artifact = await this.findGoalArtifact(ctx)
+    const artifact = await readCurrentGoalArtifact(ctx.activeContext)
+
+    // 空调用 = 读取：没有目标时也照样答「没有」，不报错——读一件不存在的东西不是错误。
+    if (!hasGoalUpdateChange(input)) return projectGoalRead(artifact)
+
     const currentStatus = artifact ? toGoalSnapshot(artifact).status : null
     if (!artifact || (currentStatus !== 'active' && currentStatus !== 'paused')) {
       throw new AppError('VALIDATION', '当前没有进行中的目标可以更新：本会话要么从没建过目标，要么已有目标已经完成或被放弃。先用 goal:create 建一个新目标。')
-    }
-
-    // 空调用 = 无操作:回带当前目标状态,不报错(宽容)。
-    if (!this.hasAnyChange(input)) {
-      const goal = toGoalSnapshot(artifact)
-      return {
-        status: goal.status,
-        goal,
-        steps: describeGoalStepRefsForModel(goal.steps),
-        noop: true,
-      }
     }
 
     // 基线步骤:传了 steps 就用它重建,否则沿用当前;complete_step 可与 steps 组合(先重建再完成)。
@@ -113,8 +87,8 @@ class GoalOperations implements GoalOperationsApi {
     const stepCompletion = isPresent(input.complete_step)
       ? completeGoalStep(baseSteps, input.complete_step!)
       : null
-    const nextSteps = this.resolveNextSteps(input, artifact, stepCompletion ? [...stepCompletion.steps] : hasSteps ? baseSteps : undefined)
-    const goal = await this.applyUpdate(input, ctx, artifact, nextSteps)
+    const nextSteps = resolveGoalNextSteps(input, artifact, stepCompletion ? [...stepCompletion.steps] : hasSteps ? baseSteps : undefined)
+    const goal = await applyGoalUpdate(input, ctx.activeContext, artifact, nextSteps)
 
     return {
       status: goal.status,
@@ -132,75 +106,6 @@ class GoalOperations implements GoalOperationsApi {
     }
   }
 
-  /** 从活动上下文里取当前目标条目。 */
-  private async findGoalArtifact(ctx: KernelToolContext) {
-    const artifacts = await ctx.activeContext.listActiveContextArtifacts({
-      status: 'all',
-      kinds: [...GoalOperations.GoalArtifactKinds],
-    })
-    return findCurrentGoalArtifact(artifacts)
-  }
-
-  /** 这次调用有没有任何要改的东西；一件都没有就是读取。 */
-  private hasAnyChange(input: GoalUpdateRequest): boolean {
-    return !!input.status
-      || isPresent(input.steps)
-      || isPresent(input.complete_step)
-      || !!input.objective
-      || isPresent(input.constraints)
-  }
-
-  /**
-   * 定出这次要写回的步骤列表。
-   *
-   * `status=complete` 时把还没收尾的 pending/in_progress 步骤自动标 completed：模型宣布目标完成
-   * 即隐含这些步骤已做，不该因为没逐个 complete_step 就被拦（failed 步骤仍保留、由收尾门判定）。
-   */
-  private resolveNextSteps(
-    input: GoalUpdateRequest,
-    artifact: Parameters<typeof toGoalSnapshot>[0],
-    steps: LooseOptional<GoalStep[]>
-  ): LooseOptional<GoalStep[]> {
-    if (input.status !== 'complete') return steps
-    const source = steps ?? [...toGoalSnapshot(artifact).steps]
-    return source.map((step) =>
-      step.status === 'pending' || step.status === 'in_progress'
-        ? { ...step, status: 'completed' as const }
-        : step
-    )
-  }
-
-  /** 先写内容再写生命周期：`complete` 前要过收尾门，过不了就抛，不会留下半个终态。 */
-  private async applyUpdate(
-    input: GoalUpdateRequest,
-    ctx: KernelToolContext,
-    artifact: Parameters<typeof toGoalSnapshot>[0],
-    nextSteps: LooseOptional<GoalStep[]>
-  ) {
-    let currentArtifact = artifact
-    if (input.objective || nextSteps || isPresent(input.constraints)) {
-      currentArtifact = await ctx.activeContext.upsertActiveContextArtifact(
-        buildGoalStateUpsertInput({
-          artifact,
-          objective: input.objective,
-          steps: toOptional(nextSteps),
-          constraints: input.constraints,
-        })
-      )
-    }
-
-    if (input.status === 'complete') assertGoalCanComplete(toGoalSnapshot(currentArtifact))
-    const updatedArtifact = input.status
-      ? await ctx.activeContext.upsertActiveContextArtifact(
-          buildGoalLifecycleUpsertInput({
-            artifact: currentArtifact,
-            status: input.status,
-            now: Date.now(),
-          })
-        )
-      : currentArtifact
-    return toGoalSnapshot(updatedArtifact)
-  }
 }
 
 /** 进程内唯一一份目标执行面；工具文件按它一行委托。 */

@@ -228,11 +228,9 @@ function buildCapabilityPageFaultReminder(input: {
       ? '当前角色或工具边界无法恢复该缺页。不要用现有工具凑答案；直接说明无法继续，并指出需要调整角色允许工具或工具空间边界。'
       : action === 'request-user-action'
         ? '需要用户动作或授权后再继续。'
-        : action === 'read-page'
-          ? '先读取对应工具页确认依赖和 schema。'
-          : needsToolSpaceAdjustment
-            ? '先用 tooling:replace page-out 暂时不需要的工具腾出工具空间，再重新 page-in 或发现目标能力。'
-            : '先重新发现或调整工具空间后再继续。'
+        : needsToolSpaceAdjustment
+          ? '先用 tooling:replace page-out 暂时不需要的工具腾出工具空间，再重新 page-in 或发现目标能力。'
+          : '先重新发现或调整工具空间后再继续。'
 
   return `[系统] Capability page fault：${faultText}。恢复策略：${action}。${actionText}`
 }

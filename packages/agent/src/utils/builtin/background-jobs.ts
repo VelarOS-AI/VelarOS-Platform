@@ -166,4 +166,9 @@ function formatBackgroundJobWaitResults(
     .join('\n\n')
 }
 
-export { filterBackgroundJobOutput, formatBackgroundJobOutput, formatBackgroundJobWaitResults }
+/** 作业不属于本会话或根本不存在时给模型的那句话；不抛错，模型据此换 id 或改路。 */
+function describeMissingBackgroundJob(jobId: string): string {
+  return `本会话里没有 id 为 "${jobId}" 的后台任务。`
+}
+
+export { describeMissingBackgroundJob,filterBackgroundJobOutput, formatBackgroundJobOutput, formatBackgroundJobWaitResults }

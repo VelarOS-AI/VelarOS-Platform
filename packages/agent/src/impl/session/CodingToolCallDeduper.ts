@@ -63,6 +63,12 @@ class CodingToolCallDeduper implements CodingToolCallDeduperApi {
         '不要继续重复 plan:update；请直接调用实际执行工具推进任务，或在无法推进时说明阻塞点并询问用户。',
       ].join('\n')
       }
+      case 'tooling:read': {
+        return [
+          '已拦截重复技能读取：同一个技能刚才已经读过，正文就在上面的回执里。',
+          '不要继续重复 tooling:read；按读到的正文往下做，需要别的技能再换 id。',
+        ].join('\n')
+      }
       default: {
         return [
       '已拦截重复工具空间操作：相同的工具页请求刚才已经处理过。',

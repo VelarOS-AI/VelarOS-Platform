@@ -117,6 +117,6 @@ export async function readRequestedSkillPages(
       ? `用户拒绝读取技能：${deniedSkillIds.join('、')}。不要再次尝试读取这些技能，按用户意图继续当前任务。`
       : isEmpty(missingIds)
         ? '已读取技能正文。'
-        : `部分技能 id 不存在：${missingIds.join('、')}。技能列表见任务提示词里的「可按需读取的技能」索引；tooling:read 只读 skill:<id>，工具能力请用 tooling:map 发现、tooling:replace 换入。`,
+        : `部分技能 id 不存在：${missingIds.join('、')}。技能列表见任务提示词里「# 命中 Skill」那一段；tooling:read 只读 skill:<id>，工具能力请用 tooling:map 发现、tooling:replace 换入。`,
   }
 }

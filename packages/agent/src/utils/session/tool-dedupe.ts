@@ -1,4 +1,4 @@
-import { isArray, isEmpty, isPlainObject, toNullable } from '@velaros-ai/core'
+import { isArray, isEmpty, isNotNull, isPlainObject, toNullable } from '@velaros-ai/core'
 import { normalizeUnknownStringArray as readStringArray } from '@velaros-ai/core/utils/unknownJsonRecord'
 
 import { compareStableStrings } from '../residency/determinism'
@@ -55,12 +55,16 @@ export function buildToolFingerprint(
   // 「同计划 + complete_step 完成某步」误判成重复提交而拦截——自动过滤器不得静默否决
   // 显式收尾/完成意图(真机踩过:收尾调用被拦成"重复计划")。explanation 是纯注释,刻意排除,
   // 保证"只换说明的刷屏重复"仍会被拦。
-  if (toolName === 'plan:update') return JSON.stringify(
-      normalizeToolCallFingerprintValue({
-        plan: toNullable(args.plan),
-        complete_step: toNullable(args.complete_step),
-        lifecycle: toNullable(args.lifecycle),
-      })
-    )
+  if (toolName === 'plan:update') {
+    const semanticFields = {
+      plan: toNullable(args.plan),
+      complete_step: toNullable(args.complete_step),
+      lifecycle: toNullable(args.lifecycle),
+    }
+    // 三项全空 = 空调用 = 读当前计划，不是重复提交：读两次计划完全合法，拦下来只会逼模型改用别的路。
+    if (!isNotNull(semanticFields.plan) && !isNotNull(semanticFields.complete_step) && !isNotNull(semanticFields.lifecycle)) return null
+
+    return JSON.stringify(normalizeToolCallFingerprintValue(semanticFields))
+  }
   return JSON.stringify(normalizeToolCallFingerprintValue(args))
 }

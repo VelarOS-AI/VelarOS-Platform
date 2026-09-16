@@ -70,7 +70,7 @@ const toolSpaceBaseSchema = z.object({
         'find：按意图查找工具页。',
         'page：分页读取工具页表。',
         'map：按工具类别结构化展开系统工具地图、完整 toolNames 索引、状态和激活方法。',
-        'read：读取指定工具页元数据。',
+        'read：读取指定技能正文（skill:<id>）；只由 tooling:read 使用。',
         'replace：换入/换出工具页，影响后续 AI SDK 暴露的 tools。',
       ],
     })
@@ -284,17 +284,13 @@ const toolSpaceFindQueryMethodSchema = toolSpaceFindMethodSchema
 const toolSpacePageQueryMethodSchema = toolSpacePageMethodSchema
   .extend({ op: z.literal('page') })
   .strip()
-const toolSpaceReadQueryMethodSchema = toolSpaceReadMethodSchema
-  .extend({ op: z.literal('read') })
-  .strip()
-
+// read 不在模型面：读技能正文只有 tooling:read 一个入口，两条路同一实现只会让模型先挑一个。
 const toolSpaceQueryOperationSchema = z
-  .enum(['map', 'find', 'page', 'read'])
+  .enum(['map', 'find', 'page'])
   .optional()
   .describe(
     parameterDescription({
-      description:
-        '查询模式；省略时等同 map。find 按意图搜索，page 分页列页，read 读取指定技能正文（skill:<id>）。',
+      description: '查询模式；省略时等同 map。find 按意图搜索，page 分页列页。',
     })
   )
 
@@ -406,8 +402,6 @@ function parseToolSpaceQueryByOp(input: z.output<typeof toolSpaceQueryMethodObje
       return toolSpaceFindQueryMethodSchema.safeParse(normalized)
     case 'page':
       return toolSpacePageQueryMethodSchema.safeParse(normalized)
-    case 'read':
-      return toolSpaceReadQueryMethodSchema.safeParse(normalized)
     case 'map':
       return toolSpaceMapQueryMethodSchema.safeParse(normalized)
   }

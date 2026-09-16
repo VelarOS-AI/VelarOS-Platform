@@ -52,7 +52,6 @@ import {
 } from '../utils/builtin/tool-space-run'
 import { agentWorkflowSchema } from '../utils/builtin/workflow-schemas'
 import { createBuiltInPromptSegments } from '../utils/guidance/catalog'
-import { DynamicHandlesMarker, PinnedEvidenceMarker } from '../utils/history/context-os-message'
 import { listExecutionModes } from '../utils/runner/execution-mode-registry'
 import { createManualApprovalOptions } from '../utils/toolkit/approval'
 import { renderParameterDescription as parameterDescription } from '../utils/toolkit/tool-description'
@@ -251,7 +250,7 @@ export const toolSpaceRead: VelaTool<z.input<typeof toolSpaceReadMethodSchema>> 
     '不要猜技能正文或不存在的 id；读取前只把索引当目录。',
   ],
   protocol: ['detail="full" 时技能页额外返回按需读取说明；默认 brief 即技能正文。'],
-  usage: ['传 skill:<id>（来自任务提示词里的「可按需读取的技能」索引）。'],
+  usage: ['传 skill:<id>（来自任务提示词里「# 命中 Skill」那一段列出的 id）。'],
   examples: [{ ids: ['skill:global:coding-style'], detail: 'full' }],
   notes: [
     '内置技能和用户显式选择的技能直接读取；只有未选择的外部技能首次读取时弹确认卡，用户拒绝后不要重试。',
@@ -327,7 +326,6 @@ export const recallContext: VelaTool<RecallContextInput> = defineVelaTool<Recall
     { ref: "<toolCallId>", jsonPath: "$.entries", offset: 400, reason: "接着读被截断的数组" },
   ],
   notes: [
-    `优先阅读 ${PinnedEvidenceMarker}/${DynamicHandlesMarker} 摘要；不足时再取回详情。`,
     '返回的是历史上下文，不代表当前文件或终端状态。',
     '示例中的 <...> 是占位符，必须替换为历史回执中的实际引用；主动召回的旧候选按普通资料预算处理。',
   ],
@@ -368,30 +366,33 @@ export const handoffContext: VelaTool<HandoffContextInput> = defineVelaTool<Hand
 })
 
 /**
- * 兼容已发布的事实便签工具。默认工具面由目标、证据与召回工具维护；旧宿主显式注册此导出时，
- * 仅在工具结果中保留事实与进度，不再请求压缩。容量治理统一由运行时自动决定。
+ * 已退出模型面的事实便签工具。
+ *
+ * 上下文折叠由运行时按实际容量自己做，让模型再手工声明一次「我消化完了」只剩仪式感，
+ * 所以 `isAvailable` 恒假：它不进任何一轮的工具面，模型看不到也调不到。定义与导出名留着
+ * 只为让已经装好的旧宿主不至于在升级时崩在 import 上，第 6 步入口收口时整体删掉。
  */
 export const distillContext: VelaTool<DistillContextInput> = defineVelaTool<DistillContextInput>({
   name: AgentToolNames.contextDistill,
   role: 'control',
   category: 'context',
-  summary: '记录已确认的关键事实与进度便签。',
+  summary: '（已退役）记录已确认的关键事实与进度便签。',
   outputInline: true,
-  suitable: [
-    '旧宿主使用此事实便签接口，需要记录已确认结论和当前进度时。',
-  ],
-  forbidden: ['不要将尚未验证的推测记录为事实。'],
-  usage: ['facts 传增量事实（代码事实带 file:line），note 传一句话进度便签。'],
+  suitable: ['无：上下文折叠已由运行时自动完成，不需要模型声明。'],
+  forbidden: ['不要调用它；它不会出现在任何一轮的工具面。'],
+  usage: ['无：本工具已退出模型面。'],
   examples: [
     {
       facts: ['治理 epoch 状态机在 GovernanceEpoch.ts，按 I0 逐出 → I1 骨架顺序执行'],
       note: '机制已完成，下一步补常驻注册',
     },
   ],
-  notes: ['蒸馏便签本身不会被折叠，是压缩后仍在的断点锚；不要重复记录同一事实。'],
+  notes: ['已退役：系统按实际容量自动整理上下文，原文可按需使用 context:recall 取回。'],
   schema: distillContextSchema,
   permissions: [],
   capabilities: AgentContextSignalCapability,
+  // 恒假 = 退出模型面：注册表的可见性过滤会把它从发现面与执行面一起去掉。
+  isAvailable: () => false,
   isConcurrencySafe: () => true,
   // 保留旧结果的事实字段供历史记录与召回读取；兼容调用不能绕过自动容量治理。
   execute: async (input, ctx) => {
@@ -536,9 +537,9 @@ export const archiveActiveDirective: VelaTool<{
   summary: '取消当前 session 上下文保护区中一个或多个已固定的长期指令。',
   suitable: ['用户明确说取消限制、不需要禁令、以后可以、刚才那条不要固定。'],
   forbidden: ['不要归档普通 active context；只处理 metadata.directive=true 的条目。'],
-  usage: ['session directive；goal.constraints 用 goal:update。'],
+  usage: ['三个筛选条件至少给一个：ids 精确归档，title 按标题包含匹配，directiveType 按类型整批归档。'],
   examples: [{ title: '禁止自动重建索引' }, { directiveType: 'prohibition' }],
-  notes: ['归档 session directive；goal.constraints 用 goal:update。'],
+  notes: ['只归档 session 级长期指令；当前目标里的约束用 goal:update 的 constraints 改。'],
   schema: z
     .object({
       ids: z
@@ -578,19 +579,27 @@ export const archiveActiveDirective: VelaTool<{
 
 // ── 目标（goal:get / goal:create / goal:update）──────────────────────────────
 
+/**
+ * 已并入 `goal:update` 的读目标工具。
+ *
+ * `goal:update` 不传任何字段就是一次读取，两个入口做同一件事，模型还要先挑一个——挑错就白跑一轮。
+ * `isAvailable` 恒假：它不进任何一轮的工具面。定义与导出名留到第 6 步入口收口时删。
+ */
 export const getGoal: VelaTool<Record<string, never>> = defineVelaTool<Record<string, never>>({
   name: AgentToolNames.goalGet,
   role: 'inspect',
   category: 'planning',
-  summary: '读取当前 session 的目标模式目标状态。',
-  suitable: ['目标模式下需要确认目标是否已创建、完成或进入受阻审计。'],
-  forbidden: ['不要用它修改目标状态。'],
-  usage: ['无需参数。'],
+  summary: '（已并入 goal:update）读取当前目标。',
+  suitable: ['无：改用 goal:update 的空调用读取当前目标。'],
+  forbidden: ['不要调用它；它不会出现在任何一轮的工具面。'],
+  usage: ['无：本工具已退出模型面。'],
   examples: [{}],
-  notes: ['目标模式下收尾前应先确认当前目标状态。'],
+  notes: ['已并入 goal:update：不传任何字段调用 goal:update 即为读取。'],
   schema: z.object({}),
   permissions: [],
   capabilities: AgentPlanningReadCapability,
+  // 恒假 = 退出模型面：读目标由 goal:update 的空调用覆盖。
+  isAvailable: () => false,
   isConcurrencySafe: () => true,
   execute: async (_input, ctx) => goalOperations.read(ctx),
 })
@@ -896,20 +905,27 @@ export const updatePlan: VelaTool<UpdatePlanInput> = defineVelaTool<UpdatePlanIn
   execute: async (input, ctx) => planOperations.update(input, ctx),
 })
 
-/** 读取当前 execution 的计划和执行建议。 */
+/**
+ * 已并入 `plan:update` 的读计划工具。
+ *
+ * `plan:update` 不传任何字段就是一次读取，且回带的字段已经覆盖这里多出的 task、recommendedAction
+ * 与 executionAdvice。`isAvailable` 恒假：它不进任何一轮的工具面。定义与导出名留到第 6 步删。
+ */
 export const getPlan: VelaTool<Record<string, never>> = defineVelaTool<Record<string, never>>({
   name: AgentToolNames.planGet,
   role: 'inspect',
   category: 'planning',
-  summary: '读取当前 execution 的可见执行计划。',
-  suitable: ['需要确认当前任务步骤、状态或系统推荐下一步。'],
-  forbidden: ['不要用它修改计划。'],
-  usage: ['无需参数。'],
+  summary: '（已并入 plan:update）读取当前执行计划。',
+  suitable: ['无：改用 plan:update 的空调用读取当前计划。'],
+  forbidden: ['不要调用它；它不会出现在任何一轮的工具面。'],
+  usage: ['无：本工具已退出模型面。'],
   examples: [{}],
-  notes: ['需要 execution 上下文。'],
+  notes: ['已并入 plan:update：不传任何字段调用 plan:update 即为读取，回执里带任务、推荐动作与执行建议。'],
   schema: z.object({}),
   permissions: [],
   capabilities: AgentPlanningReadCapability,
+  // 恒假 = 退出模型面：读计划由 plan:update 的空调用覆盖。
+  isAvailable: () => false,
   isConcurrencySafe: () => true,
   execute: async (_input, ctx) => planOperations.read(ctx),
 })
@@ -934,7 +950,8 @@ export const dispatchAgent: VelaTool<DispatchAgentInput> = defineVelaTool<Dispat
   usage: [
     '新派时 prompt 必须自洽：子 Agent 看不到你的会话历史，目标/已知事实/范围边界/成功标准/输出长度都要写进去；续跑只写追加的任务。',
     '同一轮可多次调用 agent:dispatch 实现并行；系统会自动限制并发数。',
-    'mode=sync（默认）阻塞到完成并内联返回结果——不要再调 job:wait，也不要因为没立刻拿到就重派；mode=async 立即返回可等待 job，之后用 job:read_output/job:wait 收束。',
+    'mode=sync（默认）阻塞到完成并内联返回结果——不要再调 job:wait，也不要因为没立刻拿到就重派。',
+    'mode=async 立即返回一个可等待的 job：本轮可以直接结束，作业收尾时系统会叫醒你；回合中途要定点等某个作业才用 job:wait，想先看进展用 job:read_output。',
     'subagent_type 选择本轮提示目录中的精确 id；新建省略使用宿主默认类型，续跑省略继承原线程。tool_scope 用 type_default、inherit 或 custom（custom 时填 tool_categories）。',
     '优先复用：同一工作线上的追问、补做、纠偏、修复后复验，用 thread_id 续跑已派的子 Agent（它保留着读过的上下文，不必重读）；复验就续跑原验证者。',
     '需要独立上下文才新派：独立复核/第二意见（不让产出者复核自己的产出）、原线程跑偏或上下文过大、换了作用域或无关新任务。',
@@ -969,7 +986,6 @@ export const dispatchAgent: VelaTool<DispatchAgentInput> = defineVelaTool<Dispat
   notes: [
     '子 Agent 在独立上下文中运行；回传为 summary 文本 + 结构化 `<subagent-result>` 块（含 thread_id、status、resumable、artifacts）。',
     '失败、中断或 wind_down 也返回结构化结果；resumable=true 可带 thread_id 续跑，否则新派或自行接手。线程只保留有限时间，过期续跑会明确报错。',
-    '跨作用域派发属于具体能力，由能力包注册专用工具并注入端口。',
   ],
   usageSkillId: 'sub-agent-orchestration',
   schema: dispatchAgentSchema,
@@ -1133,37 +1149,34 @@ export const waitBackgroundJobs: VelaTool<WaitBackgroundJobsInput> = defineVelaT
   execute: async (input, ctx) => backgroundJobOperations.wait(input, ctx),
 })
 
+/**
+ * 已退出模型面的后台作业取消工具。
+ *
+ * 后台作业只有子 Agent 一种来源，中断走的也是同一个 `abortWorker`；留两条路等于让模型同时记住
+ * thread_id 和 job_id，挑错一个就白跑一轮。中断统一用 `agent:dispatch({thread_id, interrupt:true})`，
+ * 它覆盖同步与异步两种子 Agent。`isAvailable` 恒假；定义与导出名留到第 6 步入口收口时删。
+ */
 export const cancelBackgroundJob: VelaTool<CancelBackgroundJobInput> = defineVelaTool<CancelBackgroundJobInput>({
   name: AgentToolNames.jobCancel,
   role: 'control',
   category: 'agent-control',
-  summary: '取消当前会话内核后台 job。',
-  suitable: [
-    'agent:dispatch 启动的后台子 Agent 已不需要继续运行。',
-    '后台 job 可能卡住或处理了错误方向，需要按 job id 中断。',
-    '后台通知提示 job 仍在运行，而用户或主任务已经切换目标。',
-  ],
-  forbidden: [
-    '不要用它取消系统后台命令；系统后台命令使用对应系统任务工具。',
-    '不要猜测 job_id；先从 agent:dispatch 返回或后台通知中取得 job id。',
-  ],
-  usage: [
-    '只取消当前会话拥有的 job；跨会话或不存在的 job 会返回 not found。',
-    '取消 async 子 Agent job 会向对应 worker 发送中断信号。',
-    '已完成或已失败的 job 不会重新运行，返回其当前状态。',
-  ],
+  summary: '（已退役）取消当前会话内核后台 job。',
+  suitable: ['无：中断子 Agent 用 agent:dispatch({thread_id, interrupt:true})。'],
+  forbidden: ['不要调用它；它不会出现在任何一轮的工具面。'],
+  usage: ['无：本工具已退出模型面。'],
   examples: [
     {
       job_id: 'subagent:abc:background:123',
     },
   ],
   notes: [
-    '取消后可用 job:read_output 或 job:wait 查看最终可读输出。',
+    '已退役：中断子 Agent 用 agent:dispatch({thread_id, interrupt:true})，之后仍可用 job:read_output 查看最终输出。',
   ],
   schema: cancelBackgroundJobSchema,
   permissions: [],
   capabilities: AgentBackgroundJobCancelCapability,
-  isAvailable: (ctx) => !!ctx.cancelBackgroundJob,
+  // 恒假 = 退出模型面：中断统一由 agent:dispatch 的 interrupt 覆盖。
+  isAvailable: () => false,
   isConcurrencySafe: () => false,
   execute: async (input, ctx) => backgroundJobOperations.cancel(input, ctx),
 })
@@ -1291,6 +1304,7 @@ export const BuiltinAgentModToolCollections: ReadonlyArray<Readonly<
   { ...agentWorkflowTools },
   backgroundJobTools,
   categoriesTools,
+  confirmationTools,
   contextHandoffTools,
   contextRetrievalTools,
   dispatchAgentTools,
