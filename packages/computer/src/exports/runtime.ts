@@ -7,22 +7,19 @@
 export { ComputerKernelModuleVersion } from '../contract/constants.js'
 export type {
   ComputerCapabilityService,
+  ComputerHelperLocatorApi,
+  ComputerRuntimeApi,
   ComputerRuntimeCapabilityService,
 } from '../contract/provides.js'
 export {
   ComputerHelperLocator,
-  type ComputerHelperLocatorApi,
   ComputerHelperLocator as ComputerHelperResolver,
   computerHelperResolver,
   createComputerHelperLocator,
   resolveBundledComputerRuntimeSourceRoot,
   resolveComputerHelper,
 } from '../impl/ComputerHelperLocator.js'
-export {
-  type ComputerRuntimeApi,
-  ComputerSidecarManager,
-  createComputerRuntime,
-} from '../impl/ComputerSidecarManager.js'
+export { ComputerSidecarManager, createComputerRuntime } from '../impl/ComputerSidecarManager.js'
 export { ComputerCapability, createComputerKernelModule } from '../impl/ComputerTools.js'
 
 // ── 注入面：宿主要给的东西 ──────────────────────────────────────

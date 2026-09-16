@@ -128,6 +128,8 @@ describe('computer sidecar screenshot binding', () => {
       ).rejects.toMatchObject({
         code: 'VALIDATION',
         context: { helperErrorCode: 'screen_snapshot_stale' },
+        // helper 的英文原文按码翻成中文：模型要照着这句决定「重新截图」。
+        message: expect.stringContaining('重新 computer:screenshot'),
       })
     } finally {
       harness.manager.dispose()

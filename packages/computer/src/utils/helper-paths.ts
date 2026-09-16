@@ -2,16 +2,13 @@
 
 import { existsSync } from 'node:fs'
 import { createRequire } from 'node:module'
-import { delimiter, join, resolve } from 'node:path'
+import { delimiter, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { isEmpty, isNonBlankString, isString } from '@velaros-ai/core'
 import { velarosSharedResources } from '@velaros-ai/platform/shared-resources'
 
-import {
-  ComputerEnvironmentVariables,
-  ComputerResourceLayout,
-} from '../contract/constants.js'
+import { ComputerResourceLayout } from '../contract/constants.js'
 import type { ComputerResourcePort } from '../contract/requires.js'
 
 /** 读不到平台包 package.json 时的占位版本；只影响展示，不影响可用性判定。 */
@@ -42,7 +39,7 @@ export function readElectronResourcesPath(): Nullable<string> {
 
 /** 环境变量指定的资源根；设了就整组接管，不与默认根合并。 */
 export function readEnvironmentResourceRoots(): string[] {
-  const configured = process.env[ComputerEnvironmentVariables.resourceRoot.name]?.trim()
+  const configured = process.env.VELAROS_COMPUTER_RESOURCE_ROOT?.trim()
   if (!configured) return []
   return configured
     .split(delimiter)
@@ -83,7 +80,7 @@ export function resolvePythonCommand(
   packageRoot: string,
   platform: NodeJS.Platform
 ): Nullable<string> {
-  const configured = process.env[ComputerEnvironmentVariables.python.name]?.trim()
+  const configured = process.env.VELAROS_COMPUTER_PYTHON?.trim()
   if (configured) return configured
 
   const venvPython =
@@ -105,9 +102,22 @@ export function readPackageVersion(packageRoot: string): string {
   }
 }
 
-/** 随本包发布的 helper 资产目录（各平台的 Python 脚本），宿主的安装器按它取源。 */
+/**
+ * 随本包发布的 helper 资产目录（各平台的 Python 脚本），宿主的安装器按它取源。
+ *
+ * 从**包根的 package.json** 往回定位，而不是数 `../..` 几层：编译产物的目录深度会随结构改变，
+ * 数层数的写法一改目录就悄悄指错地方（原来的 `new URL('../../runtime')` 就是这样）。
+ */
 export function bundledRuntimeSourceRoot(): string {
-  const packagedRoot = process.env[ComputerEnvironmentVariables.runtimeSourceRoot.name]?.trim()
+  const packagedRoot = process.env.VELAROS_COMPUTER_RUNTIME_SOURCE_ROOT?.trim()
   if (packagedRoot) return resolve(packagedRoot)
-  return resolve(fileURLToPath(new URL('../../runtime', import.meta.url)))
+
+  let directory = dirname(fileURLToPath(import.meta.url))
+  // 包根的标志是 package.json；根目录的 dirname 等于自身，用它兜住循环。
+  while (!existsSync(join(directory, 'package.json'))) {
+    const parent = dirname(directory)
+    if (parent === directory) break
+    directory = parent
+  }
+  return resolve(join(directory, ComputerResourceLayout.bundledRuntimeDirectory))
 }

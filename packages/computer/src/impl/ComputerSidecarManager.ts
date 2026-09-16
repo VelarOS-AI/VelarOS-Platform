@@ -21,7 +21,7 @@ import type {
   ComputerTypeResult,
 } from '../types/computer.js'
 import type { ComputerCommand } from '../types/protocol.js'
-import { classifyStartError, permissionMissingDetail } from '../utils/availability.js'
+import { classifyStartError, describeHelperError, permissionMissingDetail } from '../utils/availability.js'
 import { spawnComputerHelperProcess } from '../utils/process.js'
 import {
   decodeComputerResponse,
@@ -158,7 +158,7 @@ export class ComputerSidecarManager implements ComputerRuntimeApi {
     if (!spec) return {
         available: false,
         reason: 'helper-missing',
-        detail: 'Desktop-control helper script was not found.',
+        detail: '没有找到桌面控制 helper 脚本（插件未安装或已被停用）。',
       }
 
     try {
@@ -227,7 +227,7 @@ export class ComputerSidecarManager implements ComputerRuntimeApi {
   public dispose(): void {
     this.disposed = true
     this.rejectAllPending(
-      new AppError(ComputerErrorCodes.sidecarDisposed, 'Computer sidecar disposed.')
+      new AppError(ComputerErrorCodes.sidecarDisposed, '桌面控制 sidecar 已释放，这次请求不再继续。')
     )
     this.timers.dispose()
     this.teardown()
@@ -295,9 +295,9 @@ export class ComputerSidecarManager implements ComputerRuntimeApi {
     const startPromise = new Promise<void>((resolvePromise, rejectPromise) => {
       const spec = this.resolveHelper()
       if (!spec) {
-        // 消息文本被 classifyStartError 按关键字分类，改词会改可用性判定，别润色。
+        // 这条失败由错误码分类（见 classifyStartError），不靠文字，所以文案可以是中文。
         rejectPromise(
-          new AppError(ComputerErrorCodes.helperMissing, 'Desktop-control helper script was not found.')
+          new AppError(ComputerErrorCodes.helperMissing, '没有找到桌面控制 helper 脚本（插件未安装或已被停用）。')
         )
         return
       }
@@ -374,12 +374,13 @@ export class ComputerSidecarManager implements ComputerRuntimeApi {
       })
       child.on('exit', (code) => {
         this.log(`sidecar exited with code ${code ?? 'null'}`)
+        // helper 自己打在 stderr 上的话（多半是 Python 报错）比任何转述都有用，优先原样带出。
         const reason =
           this.stderrBuffer.trim() ||
-          `Computer sidecar exited before becoming ready (code ${code ?? 'null'}).`
+          `桌面控制 helper 在准备就绪前退出（退出码 ${code ?? 'null'}）。`
         onFail(new AppError(ComputerErrorCodes.sidecarExited, reason, undefined, { exitCode: code }))
         this.rejectAllPending(
-          new AppError(ComputerErrorCodes.sidecarExited, 'Computer sidecar exited.', undefined, {
+          new AppError(ComputerErrorCodes.sidecarExited, '桌面控制 helper 进程已退出，这次请求没有完成。', undefined, {
             exitCode: code,
           })
         )
@@ -438,8 +439,9 @@ export class ComputerSidecarManager implements ComputerRuntimeApi {
           ComputerSidecarManager.SnapshotValidationErrorCodes.has(response.error.code)
             ? 'VALIDATION'
             : ComputerErrorCodes.helperError
+        // helper 资产是 Python，报错是英文；模型要照着它决定「重新截图还是换个做法」，所以在这里按码翻成中文。
         pending.reject(
-          new AppError(errorCode, `${response.error.code}: ${response.error.message}`, undefined, {
+          new AppError(errorCode, describeHelperError(response.error.code, response.error.message), undefined, {
             helperErrorCode: response.error.code,
           })
         )

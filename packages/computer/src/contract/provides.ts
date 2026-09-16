@@ -10,6 +10,10 @@ import type { KernelCallableCapabilityService } from '@velaros-ai/kernel/contrac
 import type { ComputerToolName } from './constants.js'
 import type { ComputerRuntimePort, ComputerToolContext } from './requires.js'
 
+// ── 类实现的产品面接口：定义在类上方，这里登记 ────────────────
+export type { ComputerHelperLocatorApi } from '../impl/ComputerHelperLocator.js'
+export type { ComputerRuntimeApi } from '../impl/ComputerSidecarManager.js'
+
 /** 一个桌面控制工具的运行时规格：模型看到的信息面、入参 schema、权限、能力声明和 execute；上下文固定是宿主注入的 `ComputerToolContext`。 */
 export type VelaTool<TInput extends Record<string, unknown> = Record<string, unknown>> =
   ToolContractRuntimeSpec<TInput, ComputerToolContext, unknown, ToolPermission>

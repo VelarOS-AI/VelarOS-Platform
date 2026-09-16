@@ -40,7 +40,7 @@ export function decodeComputerResponse<TResult = unknown>(
   line: string
 ): ComputerHelperResponse<TResult> {
   const trimmed = line.trim()
-  if (!trimmed) throw new AppError(ComputerErrorCodes.protocolInvalid, 'Empty computer-helper response line')
+  if (!trimmed) throw new AppError(ComputerErrorCodes.protocolInvalid, '桌面控制 helper 的应答是空行。')
 
   let parsed: unknown
   try {
@@ -48,13 +48,13 @@ export function decodeComputerResponse<TResult = unknown>(
   } catch (error) {
     throw new AppError(
       ComputerErrorCodes.protocolInvalid,
-      `Invalid computer-helper response JSON: ${AppError.getMessage(error)}`,
+      `桌面控制 helper 的应答不是合法 JSON：${AppError.getMessage(error)}`,
       error
     )
   }
 
   if (!isPlainObject(parsed))
-    throw new AppError(ComputerErrorCodes.protocolInvalid, 'Computer-helper response is not an object')
+    throw new AppError(ComputerErrorCodes.protocolInvalid, '桌面控制 helper 的应答不是一个对象。')
 
   const id = numberOrNull(parsed.id)
 
@@ -67,14 +67,14 @@ export function decodeComputerResponse<TResult = unknown>(
       ok: false,
       error: {
         code: isString(error.code) ? error.code : 'helper_error',
-        message: isString(error.message) ? error.message : 'Unknown computer-helper error',
+        message: isString(error.message) ? error.message : '桌面控制 helper 报了一个没有说明的错误。',
       },
     }
   }
 
   throw new AppError(
     ComputerErrorCodes.protocolInvalid,
-    'Computer-helper response missing boolean "ok" field'
+    '桌面控制 helper 的应答缺少布尔字段 ok，无法判断这一帧是成功还是失败。'
   )
 }
 
