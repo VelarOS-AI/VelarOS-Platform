@@ -3,7 +3,6 @@
  *
  * 本入口在可移植包根能力上补充基于文件系统的提供方脚本加载、虚拟机适配器和默认运行时装配。
  */
-export type { NodeLocalModelEnvironmentApi } from '../contract/provides'
 export { ProviderScriptModelAdapter } from '../impl/adapters/ProviderScriptModelAdapter'
 export { UserJsModelAdapter } from '../impl/adapters/UserJsModelAdapter'
 export {
