@@ -152,11 +152,12 @@ function createFakePage(body) {
       () => ({ display: 'block', visibility: 'visible' })
     )
   }
-  return { evaluateScript, forwarded }
+  return { document, evaluateScript, forwarded }
 }
 
 function createToolContext(page) {
   const files = new Map()
+  const targetActions = []
   const workspaceRoot = '/workspace/example.test'
   const browser = {
     isActive: () => true,
@@ -171,8 +172,33 @@ function createToolContext(page) {
       return { path: `${workspaceRoot}/${path}`, bytes: content.length, created: true, changed: true }
     },
     listFiles: async () => [],
+    // 翻页的点击走宿主端口（不再在页面里 el.click()）：这里按 target.css 找到元素并触发它。
+    performTargetAction: async ({ action, target }) => {
+      targetActions.push({ action, target })
+      const element = page.document.querySelector(target.css)
+      if (!element)
+        return {
+          action,
+          url: PAGE_URL,
+          matched: false,
+          selector: target.css,
+          text: null,
+          failureReason: 'not-found',
+          capturedAt: Date.now(),
+        }
+
+      element.click()
+      return {
+        action,
+        url: PAGE_URL,
+        matched: true,
+        selector: target.css,
+        text: null,
+        capturedAt: Date.now(),
+      }
+    },
   }
-  return { ctx: { abortSignal: new AbortController().signal, browser }, files }
+  return { ctx: { abortSignal: new AbortController().signal, browser }, files, targetActions }
 }
 
 function assertNoEnvelopeKeys(value) {
@@ -336,7 +362,7 @@ test('browser:extract paginate collects every page and stops at a disabled next 
     next.setAttribute('disabled', '')
   }
   const page = createFakePage(h('body', {}, list, next))
-  const { ctx, files } = createToolContext(page)
+  const { ctx, files, targetActions } = createToolContext(page)
 
   const result = await browserTools['browser:extract'].execute(
     { action: 'paginate', selector: '.result', nextPageSelector: 'button.next', maxPages: 5, name: 'pages' },
@@ -346,7 +372,8 @@ test('browser:extract paginate collects every page and stops at a disabled next 
   assert.equal(result.pagesVisited, 2)
   assert.equal(result.totalItems, 3)
   assert.deepEqual(result.items.map((item) => item.title), ['p1-a', 'p1-b', 'p2-a'])
-  assert.equal(page.forwarded.filter((options) => options.script.includes('el.click()')).length, 1)
+  assert.equal(page.forwarded.filter((options) => options.script.includes('el.click()')).length, 0)
+  assert.deepEqual(targetActions.map((entry) => entry.action), ['click'])
   assert.equal(result.savedRelativePath, 'extracts/pages.json')
   assert.equal(JSON.parse(files.get('extracts/pages.json')).totalItems, 3)
 })

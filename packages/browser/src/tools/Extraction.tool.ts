@@ -18,6 +18,21 @@ import {
 } from './PageExtraction'
 import { defineBrowserTool } from './Types'
 
+/**
+ * 翻页缺省的「下一页」选择器：只认明确自称下一页的元素。
+ *
+ * 宁可翻不动也不要翻错：点错一次之后收集到的就全是别的页面的内容，而回执上看不出来。
+ * 页面用别的写法时由模型显式传 nextPageSelector。
+ */
+const BrowserNextPageSelector = [
+  'a[rel="next"]',
+  'button[rel="next"]',
+  'a[aria-label*="next" i]',
+  'button[aria-label*="next" i]',
+  'a[aria-label*="下一页"]',
+  'button[aria-label*="下一页"]',
+].join(', ')
+
 /** 从页面表格提取 headers/rows 结构。 */
 const browserExtractTable = defineBrowserTool<{
   selector?: string
@@ -191,7 +206,7 @@ const browserPaginateExtract = defineBrowserTool<{
     nextPageSelector: z.string().optional().describe(
       parameterDescription({
         description: '下一页按钮的 CSS selector。',
-        notes: ['省略时自动检测常见分页控件。'],
+        notes: ['省略时只认 rel="next" 与 aria-label 含 next / 下一页 的按钮或链接；页面用别的写法就要显式传。'],
       })
     ),
     save: z.boolean().optional().describe(
@@ -221,11 +236,18 @@ const browserPaginateExtract = defineBrowserTool<{
     const allItems: unknown[] = []
     let pagesVisited = 0
     let previousPageItems: Nullable<string> = null
-    // 默认 selector 覆盖英文/中文 aria-label 和常见 class 分页命名。
-    const nextBtnSelector =
-      nextPageSelector ||
-      'a[rel="next"], button[aria-label*="next" i], button[aria-label*="下一页"], a[aria-label*="next" i], [class*="next"]:not([disabled]), [class*="pagination"] a:last-child'
+    // 缺省只认「明确自称下一页」的元素：rel=next 与英文/中文 aria-label。
+    // 曾经的 `[class*="next"]` 会匹配 class 里带 next 的任何元素（例如「next-article」推荐卡片），
+    // `[class*="pagination"] a:last-child` 会点到「末页」；翻页点错一次，后面几页收的就全是别的内容。
+    const nextBtnSelector = nextPageSelector || BrowserNextPageSelector
     const nextButtonSelectorLiteral = encodeBrowserScriptStringLiteral(nextBtnSelector)
+    const nextPageTarget = {
+      css: nextBtnSelector,
+      role: null,
+      text: null,
+      name: null,
+      attributes: {},
+    }
 
     for (let page = 0; page < maxPages; page++) {
       ctx.abortSignal.throwIfAborted()
@@ -251,12 +273,15 @@ const browserPaginateExtract = defineBrowserTool<{
       })
       if (!isTrue(hasNext.result)) break
 
-      // 点击下一页后短暂等待页面内容更新。
-      await ctx.browser.evaluateScript({
-        script: `(() => { const el = document.querySelector(${nextButtonSelectorLiteral}); if (el) { el.click(); return true } return false })()`,
-        mode: 'expression',
-        timeoutMs: 5000,
+      // 点击走宿主端口而不是页面里的 el.click()：后者在宿主的动作策略里被当成「执行脚本」，
+      // 绕开了点击该有的遮挡检测与效果指纹。点不中就停，别把同一页再收一遍。
+      const clicked = await ctx.browser.performTargetAction({
+        action: 'click',
+        target: nextPageTarget,
       })
+      if (!clicked.matched) break
+
+      // 点击下一页后短暂等待页面内容更新。
       await TimerScope.sleep(1_200, { signal: ctx.abortSignal })
     }
 

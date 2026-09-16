@@ -92,7 +92,7 @@ const browserExtractExactSchema = z.discriminatedUnion('action', [
       nextPageSelector: z.string().optional().describe(
         parameterDescription({
           description: '下一页按钮的 CSS selector。',
-          notes: ['省略时自动检测常见分页控件。'],
+          notes: ['省略时只认 rel="next" 与 aria-label 含 next / 下一页 的按钮或链接；页面用别的写法就要显式传。'],
         })
       ),
       ...commonSaveFields,
@@ -188,6 +188,7 @@ const browserExtractSchema = z
     nextPageSelector: z.string().optional().describe(
       parameterDescription({
         description: 'paginate 动作下一页按钮的 CSS selector。',
+        notes: ['省略时只认 rel="next" 与 aria-label 含 next / 下一页 的按钮或链接；页面用别的写法就要显式传。'],
       })
     ),
     format: z.enum(['plain', 'markdown', 'html']).optional().describe(
