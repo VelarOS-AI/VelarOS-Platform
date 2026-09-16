@@ -176,6 +176,31 @@ export const GovernedModules = [
     invariants: 'spec/invariants.md',
     acceptance: 'spec/acceptance.test.ts',
   },
+  {
+    directory: 'path-rules',
+    name: '@velaros-ai/path-rules',
+    // 没有工具：不登记 toolsFile、toolDefiner、hostPort
+    contract: 'src/contract',
+    types: 'src/types',
+    portable: 'path-rules.ts',
+    impl: 'src/impl',
+    utils: 'src/utils',
+    tuning: 'tuning.ts',
+    exports: 'src/exports',
+    // 遍历要读 .gitignore，根入口只给 Node；渲染进程只能加载可移植数据
+    browserSafeEntries: ['contracts.ts'],
+    layers: [
+      // 遍历忽略策略：找规则根、攒规则、问 git
+      ['IgnorePolicy.ts'],
+      // .gitignore 的解析与判定
+      ['GitignoreRules.ts'],
+      // glob 匹配
+      ['PathMatcher.ts'],
+    ],
+    card: 'MODULE.md',
+    invariants: 'spec/invariants.md',
+    acceptance: 'spec/acceptance.test.ts',
+  },
 ]
 
 /** 模块卡片必须有的十节标题，顺序不限。 */

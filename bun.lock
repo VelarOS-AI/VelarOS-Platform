@@ -37,6 +37,7 @@
         "@typescript-eslint/eslint-plugin": "^8.67.0",
         "@typescript-eslint/parser": "^8.67.0",
         "@velaros-ai/arch-guard": "github:VelarOS-AI/VelarOS-Arch-Guard#ce2b221d99c1b93736568f281a180ad3593f086f",
+        "@velaros-ai/path-rules": "workspace:*",
         "@velaros-ai/rehearsal-sandbox": "workspace:*",
         "@velaros-ai/shell-command": "workspace:*",
         "@velaros-ai/text-files": "workspace:*",
@@ -286,6 +287,20 @@
       },
       "peerDependencies": {
         "@velaros-ai/agent": "workspace:^",
+      },
+    },
+    "packages/path-rules": {
+      "name": "@velaros-ai/path-rules",
+      "version": "0.1.0",
+      "dependencies": {
+        "@velaros-ai/core": "workspace:*",
+        "@velaros-ai/platform": "workspace:*",
+        "picomatch": "^4.0.3",
+      },
+      "devDependencies": {
+        "@types/node": "^22.19.17",
+        "@types/picomatch": "^3.0.1",
+        "typescript": "^5.7.0",
       },
     },
     "packages/platform": {
@@ -1064,6 +1079,8 @@
     "@velaros-ai/model": ["@velaros-ai/model@workspace:packages/model"],
 
     "@velaros-ai/office": ["@velaros-ai/office@workspace:packages/office"],
+
+    "@velaros-ai/path-rules": ["@velaros-ai/path-rules@workspace:packages/path-rules"],
 
     "@velaros-ai/platform": ["@velaros-ai/platform@workspace:packages/platform"],
 

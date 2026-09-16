@@ -84,6 +84,12 @@
       "@velaros-ai/platform/*": [
         "./packages/platform/src/exports/*"
       ],
+      "@velaros-ai/path-rules": [
+        "./packages/path-rules/src/exports/index.ts"
+      ],
+      "@velaros-ai/path-rules/*": [
+        "./packages/path-rules/src/exports/*"
+      ],
       "@velaros-ai/rehearsal-sandbox": [
         "./packages/rehearsal-sandbox/src/exports/index.ts"
       ],

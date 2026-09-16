@@ -179,6 +179,18 @@
     },
     {
       "domain": "foundations",
+      "directory": "packages/path-rules",
+      "name": "@velaros-ai/path-rules",
+      "version": "0.1.0",
+      "description": "Path rules shared by capability spaces: glob matching with directory-prefix semantics, .gitignore parsing and evaluation (negation, anchoring, directory-only, character classes), traversal ignore policy backed by git itself when available, and the directory names traversal skips by default.",
+      "exportSubpaths": [
+        ".",
+        "./contracts"
+      ],
+      "repositoryDirectory": "packages/path-rules"
+    },
+    {
+      "domain": "foundations",
       "directory": "packages/rehearsal-sandbox",
       "name": "@velaros-ai/rehearsal-sandbox",
       "version": "0.1.0",

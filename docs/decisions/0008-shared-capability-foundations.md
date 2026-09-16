@@ -64,3 +64,13 @@ project 改用两个公共件：命令判定、危险命令审批请求走 `@vel
 - project 已改用它：`utils/files/atomic-writer.ts`、`private-byte-io.ts`、`text-stream.ts` 删除，`utils/text.ts` 的编码部分与 `byte-codec.ts` 的字节保留编码删除，`ProjectTextEncoding`、`ProjectTextEncodingProbe`、`ProjectExpectedBytes` 删除改用 `TextEncoding`、`ExpectedBytes`（根入口不再导出 `ProjectTextEncoding`，宿主改从 `@velaros-ai/text-files/contracts` 取 `TextEncoding`）；本包的码在 `utils/errors.ts` 的 `projectErrorFromTextFile` 一处翻成 `ProjectError`（notText、notRegular → NOT_SUPPORTED，lossy、invalidMode → INVALID_INPUT，externalEdit、tooLarge → CONFLICT_WITH_EXTERNAL_EDIT），按 `ProjectError` 分支的逻辑一处未改。
 - system 已改用它：`utils/text-file.ts` 的编码识别、编解码、BOM 与 UTF-16 处理、二进制判定、读文件头删除，`SystemTextEncoding` 删除改用 `TextEncoding`，`writeSystemFileAtomically` 改走 `textFileIo.writeBytes`（EACCES、EPERM 仍翻 PERMISSION，拒写的多硬链接文件翻 VALIDATION），有界读的超限翻回原来那句「用 system:run 截取」。随之而来的行为变化：GBK/GB18030 文件能读能改、整份写入不再悄悄改存成 UTF-8；非法 UTF-8 字节按二进制报错而不是读成替换字符；孤立代理项与多硬链接文件在计划期就拒绝（not-applied）；写入 fsync、已有文件权限位精确保留、新文件权限由 umask 定；极短的无 BOM UTF-16 能认出。
 
+
+## Addendum（2026-09-16）：`@velaros-ai/path-rules`
+
+第四个公共件：路径命中规则——glob 匹配、.gitignore 的解析与判定、遍历时的忽略策略、默认跳过的 23 个目录名。实现以 project 那份 glob/gitignore 引擎为底（system 那份逐段精确比较的解析器认不出 `/build*`、`docs/*.md`、`**/tmp`、`a/**/b`、`[Dd]ist`、转义的尾随空格），补上 system 那份唯一做对的 directoryOnly（`build/` 只匹配目录）。
+
+- 产品面：`pathMatcher`（`PathMatcherApi`）、`gitignoreRules`（`GitignoreRulesApi`）、`createIgnorePolicy` 造的 `IgnorePolicyApi`；注入面 `GitCheckIgnoreRunner`（批量问 `git check-ignore --no-index --stdin -z`，拿不到 git 返回 null 由本地规则兜底——本包不起子进程）；可移植数据 `GitignoreRule`、`PathMatchOptions`、`IgnoreCandidate`、`IgnoreRulesOrigin`，常量 `DiscoverySkippedDirectoryNames`，从 `./contracts` 取。
+- glob 匹配多了大小写敏感开关：缺省区分（git 自己就是这么判的），大小写不敏感的盘上按路径身份判定时传 `caseSensitive: false`。编译缓存是 `PathMatcher` 实例的状态，不再是模块级可变状态。
+- 「目录被忽略则里面的一切跟着被忽略」由判定时按各级上级目录推，不再给每条规则额外展开一条 `pattern/**`——那种展开会让名叫 `build` 的**文件**被 `build/` 命中。
+- 注释与取反判在还原转义之前：`\#foo`、`\!foo` 是字面量（project 那份先还原转义，`\#foo` 被当成注释整行丢掉）。
+- 真实路径与「在不在根里」不进本包：前者在 `@velaros-ai/core/utils/RealPath`，后者在 `@velaros-ai/platform` 的 `isPathTextInside`／`relativePathTextInside`（ADR 0005）。
