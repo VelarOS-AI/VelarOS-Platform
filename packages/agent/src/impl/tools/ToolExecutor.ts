@@ -52,7 +52,7 @@ import { liftGenericModelContent } from "../../utils/tools/model-image-lift";
 import { persistToolInputForRecall } from "../../utils/tools/tool-input-recall";
 import { completeProviderTurnSnapshot, type ProviderTurnEventReducer } from "../records/ProviderTurnEventReducer";
 
-import { ContextPayloadKernelToolOutputStore } from "./InMemoryKernelToolOutputStore";
+import { ContextPayloadKernelToolOutputStore } from "./ContextPayloadKernelToolOutputStore"
 import { isKernelWriteLikeTool, KernelToolLoopGuard } from "./KernelToolLoopGuard";
 import { KernelToolResultMaterializer } from "./KernelToolResultMaterializer";
 import type { ToolExecutionPolicy } from "./ToolExecutionPolicy";

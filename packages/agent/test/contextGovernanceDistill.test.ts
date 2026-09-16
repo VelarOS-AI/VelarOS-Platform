@@ -16,10 +16,8 @@ import assert from 'node:assert/strict'
 import type { ModelMessage } from 'ai'
 import { describe, test } from 'bun:test'
 
-import {
-  ContextGovernanceSession,
-  ContextGovernanceSessionRegistry,
-} from '../src/impl/residency/ContextGovernanceSession'
+import { ContextGovernanceSession } from '../src/impl/residency/ContextGovernanceSession'
+import { ContextGovernanceSessionRegistry } from '../src/impl/residency/ContextGovernanceSessionRegistry'
 import { ContextResidencyLedger } from '../src/impl/residency/ContextResidencyLedger'
 import { InMemoryContextMigrationEventSink } from '../src/impl/residency/InMemoryContextMigrationEventSink'
 import type { ContextDistiller, ContextDistillInput, ContextGovernanceConfigInput } from '../src/types/residency.js'

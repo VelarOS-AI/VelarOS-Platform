@@ -45,12 +45,7 @@ export { ChatMessageHelper, ChatMessageHelper as ChatMessages } from '../impl/ch
 export { ChatStreamConsumer } from '../impl/chat/ChatStreamConsumer'
 export { ChatStreamProtocol,chatStreamProtocol } from '../impl/chat/ChatStreamProtocol'
 export { ChatStreamSessionLog } from '../impl/chat/ChatStreamSessionLog'
-export {
-  McpAuthorizationRequiredError,
-  McpCallTimeoutMs,
-  McpClientConnection,
-  McpConnectTimeoutMs,
-} from '../impl/connectors/McpClientConnection'
+export { McpCallTimeoutMs, McpClientConnection, McpConnectTimeoutMs } from '../impl/connectors/McpClientConnection'
 export {
   assertSafeHttpFetchUrl,
   isBlockedFetchIpAddress,
@@ -91,6 +86,10 @@ export type { SubAgentSessionStoreOptions } from '../impl/delegation/SubAgentSes
 export { SubAgentSessionStore } from '../impl/delegation/SubAgentSessionStore'
 export { TeamModelRouter } from '../impl/delegation/TeamModelRouter'
 export { WriteLeaseCoordinator } from '../impl/delegation/WriteLeaseCoordinator'
+export { AgentModStaleSnapshotError } from '../impl/errors/AgentModStaleSnapshotError'
+export { KernelContextEpochStaleError } from '../impl/errors/KernelContextEpochStaleError'
+export { KernelSessionRunInterruptedError } from '../impl/errors/KernelSessionRunInterruptedError'
+export { McpAuthorizationRequiredError } from '../impl/errors/McpAuthorizationRequiredError'
 export { AgentCapabilityEventPublisher } from '../impl/execution/AgentCapabilityEventPublisher'
 export type {
   ExecutionAgentEventFacadeDependencies,
@@ -101,14 +100,11 @@ export type { ExecutionServiceOptions } from '../impl/execution/ExecutionService
 export { ExecutionService } from '../impl/execution/ExecutionService'
 export { ExecutionStateFacade } from '../impl/execution/ExecutionStateFacade'
 export { ExecutionTaskFacade } from '../impl/execution/ExecutionTaskFacade'
-export {
-  InMemoryKernelSessionInputStore,
-  KernelSessionRunCoordinator,
-  KernelSessionRunInterruptedError,
-  PersistentKernelSessionInputStore,
-} from '../impl/execution/KernelSessionRunCoordinator'
+export { InMemoryKernelSessionInputStore } from '../impl/execution/InMemoryKernelSessionInputStore'
+export { KernelSessionRunCoordinator } from '../impl/execution/KernelSessionRunCoordinator'
 export type { ManagedExecutionRunnerDependencies } from '../impl/execution/ManagedExecutionRunner'
 export { ManagedExecutionRunner } from '../impl/execution/ManagedExecutionRunner'
+export { PersistentKernelSessionInputStore } from '../impl/execution/PersistentKernelSessionInputStore'
 export { SoloExecutionService } from '../impl/execution/SoloExecutionService'
 export { AgentSkillRepository } from '../impl/guidance/AgentSkillRepository'
 export { FileSkillProvider } from '../impl/guidance/FileSkillProvider'
@@ -128,12 +124,13 @@ export {
 export type { SkillMarketClientDependencies } from '../impl/guidance/SkillMarketClient'
 export { SkillMarketClient } from '../impl/guidance/SkillMarketClient'
 export { ExecutionSpanLedger } from '../impl/ledgers/ExecutionSpanLedger'
+export { ExecutionSpanRecorder } from '../impl/ledgers/ExecutionSpanRecorder'
 export type { LedgerExecutionSpanScopeFactoryDeps } from '../impl/ledgers/LedgerExecutionSpanScopeFactory'
 export {
   LedgerExecutionSpanScopeFactory,
   NOOP_TOOL_OPENER,
 } from '../impl/ledgers/LedgerExecutionSpanScopeFactory'
-export { ExecutionSpanRecorder, OpenExecutionSpan } from '../impl/ledgers/OpenExecutionSpan'
+export { OpenExecutionSpan } from '../impl/ledgers/OpenExecutionSpan'
 export {
   parsePromptAuditText,
   PromptAuditLedger,
@@ -141,7 +138,8 @@ export {
   serializePromptAuditLine,
 } from '../impl/ledgers/PromptAuditLedger'
 export { SerialWriteQueue } from '../impl/ledgers/SerialWriteQueue'
-export { SessionLedger, SessionStore } from '../impl/ledgers/SessionStore'
+export { SessionLedger } from '../impl/ledgers/SessionLedger'
+export { SessionStore } from '../impl/ledgers/SessionStore'
 export {
   AgentRunPlanLedgerFactory,
   agentRunPlanLedgerFactory,
@@ -151,12 +149,7 @@ export {
   AiSdkAgentModelRequestPort,
   applyModelRequestPolicy,
 } from '../impl/loop/AiSdkAgentModelRequestPort'
-export {
-  buildKernelContextEpoch,
-  KernelContextEpochGuard,
-  KernelContextEpochStaleError,
-  recordKernelContextEpochDiagnostic,
-} from '../impl/loop/KernelContextEpochGuard'
+export { buildKernelContextEpoch, KernelContextEpochGuard, recordKernelContextEpochDiagnostic } from '../impl/loop/KernelContextEpochGuard'
 export type { KernelPrefixShapeTrackerRecord, KernelPrefixShapeTrackerRecordInput } from '../impl/loop/KernelPrefixShapeTracker'
 export {
   buildKernelPrefixShape,
@@ -207,7 +200,7 @@ export { TurnRunner } from '../impl/loop/TurnRunner'
 /** @deprecated 请改用 `TurnRunner`；该别名保留至 Agent 1.0。 */
 export { TurnRunner as AgentTurnHelper } from '../impl/loop/TurnRunner'
 export { AgentModLoader, DataOnlyAxes, PayloadRequiredAxes } from '../impl/mods/AgentModLoader'
-export { AgentModRegistry, AgentModStaleSnapshotError } from '../impl/mods/AgentModRegistry'
+export { AgentModRegistry } from '../impl/mods/AgentModRegistry'
 export {
   AgentModHookDispatcher,
   AgentModSeamDispatcher,
@@ -224,16 +217,14 @@ export {
   ExecutionAgentEventLedger as ExecAgentEvents,
   ExecutionAgentEventLedger,
 } from '../impl/records/ExecAgentEvents'
+export { ExecutionDebugPayloadBuilder as ExecDebugPayload, ExecutionDebugPayloadBuilder } from '../impl/records/ExecDebugPayload'
 export {
   ExecutionPlanLedgerHelper as ExecPlanLedger,
   ExecutionPlanLedgerHelper,
 } from '../impl/records/ExecPlanLedger'
-export {
-  ExecutionRecordSeverityHelper as ExecRecordSeverity,
-  ExecutionTaskLedgerHelper as ExecTaskLedger,
-  ExecutionRecordSeverityHelper,
-  ExecutionTaskLedgerHelper,
-} from '../impl/records/ExecTaskLedger'
+export { ExecutionRecordSeverityHelper as ExecRecordSeverity, ExecutionRecordSeverityHelper } from '../impl/records/ExecRecordSeverity'
+export { ExecutionRoutingCoordinator as ExecRouting, ExecutionRoutingCoordinator } from '../impl/records/ExecRouting'
+export { ExecutionTaskLedgerHelper as ExecTaskLedger, ExecutionTaskLedgerHelper } from '../impl/records/ExecTaskLedger'
 export type { ExecutionEventBusHandlers } from '../impl/records/ExecutionEventBus'
 export { ExecutionEventBus } from '../impl/records/ExecutionEventBus'
 export { ExecutionGuidanceQueue } from '../impl/records/ExecutionGuidanceQueue'
@@ -241,29 +232,13 @@ export {
   ExecutionInteractions as ExecInteractions,
   ExecutionInteractions,
 } from '../impl/records/ExecutionInteractions'
-export {
-  ExecutionRecords as ExecRecords,
-  ExecutionRecordSummaryHelper as ExecRecordSummary,
-  ExecutionRecords,
-  ExecutionRecordSummaryHelper,
-} from '../impl/records/ExecutionRecords'
-export {
-  ExecutionDebugPayloadBuilder as ExecDebugPayload,
-  ExecutionStore as ExecStore,
-  ExecutionDebugPayloadBuilder,
-  ExecutionStore,
-} from '../impl/records/ExecutionStore'
-export {
-  ExecutionRoutingCoordinator as ExecRouting,
-  ExecutionRoutingCoordinator,
-  ExecutionWorkflowRouteHelper,
-  ExecutionWorkflowRouteHelper as ExecWorkflowRoute,
-} from '../impl/records/ExecWorkflowRoute'
+export { ExecutionRecords as ExecRecords, ExecutionRecords } from '../impl/records/ExecutionRecords'
+export { ExecutionRecordSummaryHelper as ExecRecordSummary, ExecutionRecordSummaryHelper } from '../impl/records/ExecutionRecordSummaryHelper'
+export { ExecutionStore as ExecStore, ExecutionStore } from '../impl/records/ExecutionStore'
+export { ExecutionWorkflowRouteHelper, ExecutionWorkflowRouteHelper as ExecWorkflowRoute } from '../impl/records/ExecWorkflowRoute'
+export { InMemoryKernelBackgroundJobOutputStore } from '../impl/records/InMemoryKernelBackgroundJobOutputStore'
 export type { KernelBackgroundJobManagerOptions } from '../impl/records/KernelBackgroundJobManager'
-export {
-  InMemoryKernelBackgroundJobOutputStore,
-  KernelBackgroundJobManager,
-} from '../impl/records/KernelBackgroundJobManager'
+export { KernelBackgroundJobManager } from '../impl/records/KernelBackgroundJobManager'
 export { MonotonicExecutionIdFactory } from '../impl/records/MonotonicExecutionIdFactory'
 export type { ProviderTurnEventReducerOptions } from '../impl/records/ProviderTurnEventReducer'
 export {
@@ -277,38 +252,25 @@ export {
   SourceSessionGuard,
 } from '../impl/records/SourceSessionGuard'
 export { SubAgentGuidanceRelayRegistry } from '../impl/records/SubAgentGuidanceRelayRegistry'
+export { TurnContextAppendHub } from '../impl/records/TurnContextAppendHub'
 export type { TurnContextLedgerAppendInput, TurnContextLedgerPeekResult } from '../impl/records/TurnContextLedger'
-export {
-  nextTurnContextLedgerGeneration,
-  TurnContextAppendHub,
-  TurnContextLedger,
-  TurnContextProcessGeneration,
-  TurnContextSessionLedgers,
-} from '../impl/records/TurnContextLedger'
+export { nextTurnContextLedgerGeneration, TurnContextLedger, TurnContextProcessGeneration } from '../impl/records/TurnContextLedger'
+export { TurnContextSessionLedgers } from '../impl/records/TurnContextSessionLedgers'
 export type { ContextDistillRunnerOptions } from '../impl/residency/ContextDistillRunner'
 export { ContextDistillRunner } from '../impl/residency/ContextDistillRunner'
 export type { ContextGovernanceSessionOptions, ContextGovernanceSessionRegistryOptions } from '../impl/residency/ContextGovernanceSession'
-export {
-  ContextEpochRequestToolName,
-  ContextGovernanceSession,
-  ContextGovernanceSessionRegistry,
-} from '../impl/residency/ContextGovernanceSession'
+export { ContextEpochRequestToolName, ContextGovernanceSession } from '../impl/residency/ContextGovernanceSession'
+export { ContextGovernanceSessionRegistry } from '../impl/residency/ContextGovernanceSessionRegistry'
 export type { ContextResidencyLedgerOptions } from '../impl/residency/ContextResidencyLedger'
 export { ContextResidencyLedger } from '../impl/residency/ContextResidencyLedger'
-export {
-  formatFaultEventLine,
-  formatMigrationEventLine,
-  InMemoryContextMigrationEventSink,
-  JsonlContextMigrationEventSink,
-} from '../impl/residency/InMemoryContextMigrationEventSink'
+export { formatFaultEventLine, formatMigrationEventLine, InMemoryContextMigrationEventSink } from '../impl/residency/InMemoryContextMigrationEventSink'
+export { JsonlContextMigrationEventSink } from '../impl/residency/JsonlContextMigrationEventSink'
 export type {
   ChatContextRetrievalServiceOptions,
 } from '../impl/retrieval/ChatContextRetrievalService'
 export { ChatContextRetrievalService } from '../impl/retrieval/ChatContextRetrievalService'
-export {
-  ContextRetrievalBoundedCounter,
-  ContextRetrievalBoundedRecentMap,
-} from '../impl/retrieval/ContextRetrievalBoundedRecentMap'
+export { ContextRetrievalBoundedCounter } from '../impl/retrieval/ContextRetrievalBoundedCounter'
+export { ContextRetrievalBoundedRecentMap } from '../impl/retrieval/ContextRetrievalBoundedRecentMap'
 export { ContextRetrievalIndexBuilder } from '../impl/retrieval/ContextRetrievalIndexBuilder'
 export {
   ContextRetrievalPayloadReader,
@@ -328,14 +290,11 @@ export {
   MaxWorkflowRounds,
   MaxWorkflowValueBytes,
 } from '../impl/runner/AgentWorkflowRuntime'
-export {
-  ContextBuilder,
-  contextBuilderHelper,
-  ContextBuilderParts,
-} from '../impl/runner/ContextBuilder'
+export { ContextBuilder, contextBuilderHelper } from '../impl/runner/ContextBuilder'
+export { ContextBuilderParts } from '../impl/runner/ContextBuilderParts'
 export type { AgentModHookEventMap, AgentModHookGenericEvent, AgentModHookHandler, AgentModHookOutcomeMap, AgentModHookRegistration, AgentModHookRegistrationInput } from '../types/mods.js'
 /** @deprecated 请改用 `ContextBuilderParts`；该别名保留至 Agent 1.0。 */
-export { ContextBuilderParts as ContextBuilderHelper } from '../impl/runner/ContextBuilder'
+export { ContextBuilderParts as ContextBuilderHelper } from '../impl/runner/ContextBuilderParts'
 export type { AgentProvider, ResolvedAgentRuntime } from '../impl/runner/ModelRuntime'
 export { AgentRuntimeHelper, ModelRuntime } from '../impl/runner/ModelRuntime'
 export type { PrimaryAgentProfileSkillRepository } from '../impl/runner/PrimaryAgentProfile'
@@ -356,6 +315,7 @@ export { CodingSessionTracker } from '../impl/session/CodingSessionTracker'
 export { CodingSessionVerificationHelper } from '../impl/session/CodingSessionVerificationHelper'
 export { buildToolFingerprint, CodingToolCallDeduper } from '../impl/session/CodingToolCallDeduper'
 export { RuntimeReminderScheduler } from '../impl/session/RuntimeReminderScheduler'
+export { ContextPayloadKernelToolOutputStore } from '../impl/tools/ContextPayloadKernelToolOutputStore'
 export {
   createManualApprovalOptions,
   createUnattendedSubAgentApprovalPort,
@@ -363,10 +323,7 @@ export {
 } from '../impl/tools/DefaultDenyApprovalPort'
 export { defaultRuntimePromptFeaturePolicy } from '../impl/tools/DefaultPromptFeaturePolicy'
 export type { InMemoryKernelToolOutputStoreOptions } from '../impl/tools/InMemoryKernelToolOutputStore'
-export {
-  ContextPayloadKernelToolOutputStore,
-  InMemoryKernelToolOutputStore,
-} from '../impl/tools/InMemoryKernelToolOutputStore'
+export { InMemoryKernelToolOutputStore } from '../impl/tools/InMemoryKernelToolOutputStore'
 export { isKernelWriteLikeTool, KernelToolLoopGuard } from '../impl/tools/KernelToolLoopGuard'
 export type { KernelToolResultMaterializerOptions } from '../impl/tools/KernelToolResultMaterializer'
 export { KernelToolResultMaterializer } from '../impl/tools/KernelToolResultMaterializer'

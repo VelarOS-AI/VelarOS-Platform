@@ -3,7 +3,8 @@ import assert from 'node:assert/strict'
 import { describe, test } from 'bun:test'
 
 import type { KernelBackgroundJobOutputStore } from '../src/contract/requires.js'
-import { InMemoryKernelBackgroundJobOutputStore, KernelBackgroundJobManager } from '../src/impl/records/KernelBackgroundJobManager'
+import { InMemoryKernelBackgroundJobOutputStore } from '../src/impl/records/InMemoryKernelBackgroundJobOutputStore'
+import { KernelBackgroundJobManager } from '../src/impl/records/KernelBackgroundJobManager'
 import type { KernelBackgroundJobStoredOutput } from '../src/types/records.js'
 import { formatSubAgentBackgroundArtifact } from '../src/utils/delegation/result-format'
 

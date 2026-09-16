@@ -6,8 +6,9 @@ import {
   collectBuiltinAgentModTools,
   createBuiltinAgentModPackage,
 } from '../src/impl/builtin/BuiltinAgentMod'
+import { AgentModStaleSnapshotError } from '../src/impl/errors/AgentModStaleSnapshotError'
 import { AgentModLoader } from '../src/impl/mods/AgentModLoader'
-import { AgentModRegistry, AgentModStaleSnapshotError } from '../src/impl/mods/AgentModRegistry'
+import { AgentModRegistry } from '../src/impl/mods/AgentModRegistry'
 import { AgentModSeamDispatcher } from '../src/impl/mods/AgentModSeamDispatcher'
 import type { AgentModContributionAxisName, AgentModManifest } from '../src/types/agent.js'
 import type { AgentModHostProfile } from '../src/types/mods.js'

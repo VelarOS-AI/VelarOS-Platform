@@ -50,7 +50,7 @@ import { resolveProjectionBudget } from '../../utils/residency/governance-epoch'
 import { resolveGovernanceWindow } from '../../utils/residency/governance-window'
 import { estimateMessageBudgetChars } from '../../utils/residency/message-facts'
 import { projectContextLedger } from '../../utils/residency/projection'
-import { ContextGovernanceSessionRegistry } from '../residency/ContextGovernanceSession'
+import { ContextGovernanceSessionRegistry } from '../residency/ContextGovernanceSessionRegistry'
 import { rewriteCanonicalToolReferences } from '../tools/ProviderToolReferenceCanonicalizer'
 
 export {

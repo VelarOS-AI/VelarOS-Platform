@@ -12,20 +12,9 @@ import { isTrue,toNullable } from '@velaros-ai/core'
 import type { AgentModContributionAxisName } from '../../types/agent.js'
 import type { AgentModAxisRecord, AgentModContributionRecord, AgentModRegistryPhase, AgentModRegistrySnapshot } from '../../types/mods.js'
 import { AgentModContributionAxisNames } from '../../utils/wire/mods'
+import { AgentModStaleSnapshotError } from '../errors/AgentModStaleSnapshotError'
 
 
-/** 快照失效（generation 已推进）；stale-reject 走它，绝不静默回退到旧值。 */
-class AgentModStaleSnapshotError extends Error {
-  constructor(
-    public readonly snapshotGeneration: number,
-    public readonly currentGeneration: number
-  ) {
-    super(
-      `Agent mod 注册表快照已失效：快照 generation=${snapshotGeneration}，当前 generation=${currentGeneration}。`
-    )
-    this.name = 'AgentModStaleSnapshotError'
-  }
-}
 
 class AgentModRegistry {
   private readonly axes = new Map<
@@ -147,4 +136,4 @@ class AgentModRegistry {
   }
 }
 
-export { AgentModRegistry, AgentModStaleSnapshotError }
+export { AgentModRegistry }

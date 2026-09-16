@@ -5,7 +5,7 @@ import { test } from 'bun:test'
 
 import { createContextPayloadRef } from '../src/impl/context/InMemoryContextPayloadStore'
 import { ProviderRequestCompiler } from '../src/impl/context/ProviderRequestCompiler'
-import { ContextGovernanceSessionRegistry } from '../src/impl/residency/ContextGovernanceSession'
+import { ContextGovernanceSessionRegistry } from '../src/impl/residency/ContextGovernanceSessionRegistry'
 import { ChatContextRetrievalService } from '../src/impl/retrieval/ChatContextRetrievalService'
 import type { ChatSessionToolResultPayload } from '../src/types/agent.js'
 

@@ -9,10 +9,9 @@
  * 落盘端口而不是落盘实现：agent 包 host 无关，写文件是宿主的事。本文件只负责把事件序列化成
  * **确定性 JSONL**（键排序），交给注入的行写入器。
  */
-import { Log } from '@velaros-ai/core'
 
 import type { ContextMigrationEventSink } from '../../contract/requires.js'
-import type { ContextFaultEvent, ContextMigrationEventLineWriter,ContextResidencyMigrationEvent } from '../../types/residency.js'
+import type { ContextFaultEvent,ContextResidencyMigrationEvent } from '../../types/residency.js'
 import { stableStringify } from '../../utils/residency/determinism'
 
 /** 内存汇：测试、离线重放与 headless 实验用。 */
@@ -52,33 +51,4 @@ export function formatFaultEventLine(event: ContextFaultEvent): string {
   return stableStringify({ type: 'fault', ...event })
 }
 
-/**
- * JSONL 汇：把事件序列化成稳定行交给注入的写入器。
- * 写入器抛错时只记日志不外抛——治理不能被日志拖死（失败方向安全）。
- */
-export class JsonlContextMigrationEventSink implements ContextMigrationEventSink {
-  private readonly log = Log.tag('ContextMigrationEventSink')
 
-  public constructor(private readonly writer: ContextMigrationEventLineWriter) {}
-
-  public recordMigration(event: ContextResidencyMigrationEvent): void {
-    this.writeLine(formatMigrationEventLine(event))
-  }
-
-  public recordFault(event: ContextFaultEvent): void {
-    this.writeLine(formatFaultEventLine(event))
-  }
-
-  private writeLine(line: string): void {
-    try {
-      const result = this.writer.write(line)
-      if (result instanceof Promise) {
-        result.catch((error: unknown) => {
-          this.log.warn('迁移事件异步写入失败，已丢弃该行', { error: String(error) })
-        })
-      }
-    } catch (error) {
-      this.log.warn('迁移事件写入失败，已丢弃该行', { error: String(error) })
-    }
-  }
-}

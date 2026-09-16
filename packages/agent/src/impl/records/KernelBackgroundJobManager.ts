@@ -42,11 +42,10 @@ import { type TimerLease, TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
 import type { KernelBackgroundJobOutputStore } from '../../contract/requires.js'
 import type { CapabilityScopeId } from '../../types/agent.js'
-import type { KernelBackgroundJob, KernelBackgroundJobOutputSnapshot, KernelBackgroundJobStatus, KernelBackgroundJobStoredOutput, StartKernelBackgroundJobInput, TurnContextAppendBus, TurnContextDeltaSource, WaitForKernelBackgroundJobsInput, WaitForNextKernelBackgroundJobInput } from '../../types/records.js'
+import type { KernelBackgroundJob, KernelBackgroundJobOutputSnapshot, KernelBackgroundJobStatus, StartKernelBackgroundJobInput, TurnContextAppendBus, TurnContextDeltaSource, WaitForKernelBackgroundJobsInput, WaitForNextKernelBackgroundJobInput } from '../../types/records.js'
 import { compareStableStrings } from '../../utils/residency/determinism'
 
-import { TurnContextSessionLedgers } from './TurnContextLedger'
-
+import { TurnContextSessionLedgers } from './TurnContextSessionLedgers'
 export interface KernelBackgroundJobManagerOptions {
   now?: () => number
   stalledAfterMs?: number
@@ -864,57 +863,6 @@ class KernelBackgroundJobManager {
   }
 }
 
-class InMemoryKernelBackgroundJobOutputStore implements KernelBackgroundJobOutputStore {
-  private readonly outputs = new Map<string, string>()
-  private readonly sessionByJob = new Map<
-    string,
-    { sessionId: string; parentSessionId?: string }
-  >()
-
-  public append(input: {
-    jobId: string
-    sessionId: string
-    parentSessionId?: string
-    chunk: string
-  }): void {
-    const existing = this.outputs.get(input.jobId) ?? ''
-    this.outputs.set(input.jobId, `${existing}${input.chunk}`)
-    this.sessionByJob.set(input.jobId, {
-      sessionId: input.sessionId,
-      parentSessionId: input.parentSessionId,
-    })
-  }
-
-  public read(input: { jobId: string; offset: number }): Nullable<KernelBackgroundJobStoredOutput> {
-    if (!this.outputs.has(input.jobId)) return null
-
-    const output = this.outputs.get(input.jobId) ?? ''
-
-    const offset = normalizeReadOffset(input.offset, output.length)
-    return {
-      output: output.slice(offset),
-      chars: output.length,
-      nextOffset: output.length,
-    }
-  }
-
-  public readAll(input: { jobId: string }): Nullable<KernelBackgroundJobStoredOutput> {
-    return this.read({ jobId: input.jobId, offset: 0 })
-  }
-
-  public dropJob(jobId: string): void {
-    this.outputs.delete(jobId)
-    this.sessionByJob.delete(jobId)
-  }
-
-  public dropSession(sessionId: string): void {
-    for (const [jobId, owner] of this.sessionByJob.entries()) {
-      if (owner.sessionId !== sessionId && owner.parentSessionId !== sessionId) continue
-      this.dropJob(jobId)
-    }
-  }
-}
-
 
 function formatDuration(ms: number): string {
   const seconds = Math.max(1, Math.round(ms / 1_000))
@@ -927,7 +875,7 @@ function trimOptional(value: LooseOptional<string>): string | undefined {
   return toOptional(trimmed)
 }
 
-function normalizeReadOffset(offset: number, length: number): number {
+export function normalizeReadOffset(offset: number, length: number): number {
   if (!isFiniteNumber(offset)) return 0
   return Math.max(0, Math.min(Math.floor(offset), length))
 }
@@ -981,4 +929,4 @@ function appendArtifactError(output: string, error: LooseOptional<string>): stri
   return `${output}${separator}job artifact incomplete: ${normalizedError}`
 }
 
-export { InMemoryKernelBackgroundJobOutputStore, KernelBackgroundJobManager }
+export { KernelBackgroundJobManager }

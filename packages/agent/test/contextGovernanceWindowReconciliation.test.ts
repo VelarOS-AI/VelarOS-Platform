@@ -5,7 +5,7 @@ import type { ModelMessage } from 'ai'
 import { test } from 'bun:test'
 
 import { ProviderRequestCompiler } from '../src/impl/context/ProviderRequestCompiler'
-import { ContextGovernanceSessionRegistry } from '../src/impl/residency/ContextGovernanceSession'
+import { ContextGovernanceSessionRegistry } from '../src/impl/residency/ContextGovernanceSessionRegistry'
 import type { CompileProviderRequestInput } from '../src/types/context.js'
 import { estimateContextUsage, resolveContextUsageWindow } from '../src/utils/context/context-usage'
 import { resolveContextGovernanceConfig } from '../src/utils/residency/governance-config'

@@ -1,10 +1,8 @@
 import { expect, test } from 'bun:test'
 
 import type { ContextPayloadStore } from '../src/contract/requires.js'
-import {
-  ContextPayloadKernelToolOutputStore,
-  InMemoryKernelToolOutputStore,
-} from '../src/impl/tools/InMemoryKernelToolOutputStore'
+import { ContextPayloadKernelToolOutputStore } from '../src/impl/tools/ContextPayloadKernelToolOutputStore'
+import { InMemoryKernelToolOutputStore } from '../src/impl/tools/InMemoryKernelToolOutputStore'
 import { ToolExecutionPolicy } from '../src/impl/tools/ToolExecutionPolicy'
 import { ToolExecutor } from '../src/impl/tools/ToolExecutor'
 import type { ToolExecutionPolicyContext } from '../src/types/tools.js'

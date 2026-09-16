@@ -1,8 +1,7 @@
 import type { ToolExecutionPlanUpdate } from '../../types/agent'
 import type { ExecutionTaskExecutionAdvice, ExecutionTaskPlanStep, ExecutionTaskRecord } from '../../types/agent.js'
+import type { ExecutionRoutingCoordinator } from '../records/ExecRouting'
 import type { ExecutionRecords } from '../records/ExecutionRecords'
-import type { ExecutionRoutingCoordinator } from '../records/ExecWorkflowRoute'
-
 /** 围绕 execution 聚合任务、计划更新与执行建议。 */
 class ExecutionTaskFacade {
   constructor(

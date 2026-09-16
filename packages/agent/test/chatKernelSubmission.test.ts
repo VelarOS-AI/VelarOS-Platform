@@ -4,7 +4,7 @@ import { describe, test } from 'bun:test'
 
 import type { KernelSessionInputStore } from '../src/contract/requires.js'
 import { ChatKernelSessionBridge } from '../src/impl/assembly/ChatKernelSessionBridge'
-import { InMemoryKernelSessionInputStore } from '../src/impl/execution/KernelSessionRunCoordinator'
+import { InMemoryKernelSessionInputStore } from '../src/impl/execution/InMemoryKernelSessionInputStore'
 import type { ChatSendRequest } from '../src/types/agent.js'
 import type { KernelChatExecutionService } from '../src/types/execution.js'
 

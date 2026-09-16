@@ -4,8 +4,7 @@ import type { ChatContextRetrievalQueryKind, ChatContextRetrievalQueryTraceEntry
 import type { RetrievalQueryRegistration } from '../../types/retrieval.js'
 import { chatSearchRanking } from '../../utils/retrieval/ranking'
 
-import { ContextRetrievalBoundedCounter } from './ContextRetrievalBoundedRecentMap'
-
+import { ContextRetrievalBoundedCounter } from './ContextRetrievalBoundedCounter'
 const DefaultMaxRecentQueryTracesPerSession = 24
 const DefaultMaxQueryCountEntries = 4_096
 

@@ -1,7 +1,6 @@
-import { isEmpty, isFalse, isNotNull, isUndefined } from '@velaros-ai/core'
+import { isEmpty, isNotNull } from '@velaros-ai/core'
 
 import type { TurnContextDelta, TurnContextInspectHint, TurnContextSourceId, TurnContextSourcePeekInput } from '../../types/agent.js'
-import type { TurnContextAppendBus,TurnContextAppendListener } from '../../types/records.js'
 
 
 /** 进程代次：重启后与持久化旧 cursor 不匹配，消费方不回放旧 delta 只重发 anchors。 */
@@ -126,106 +125,8 @@ export class TurnContextLedger {
   }
 }
 
-const DefaultLedgerMaxEntries = 100
-const DefaultMaxSessions = 64
+export const DefaultLedgerMaxEntries = 100
+export const DefaultMaxSessions = 64
 
-/**
- * 环境 delta 写入通知总线（每宿主一个实例，经 composition 注入给账本与订阅方）。
- *
- * 可见 source 的 append 广播给订阅方（IPC 推送层自行防抖后通知 renderer 重新 peek）。
- * 状态收进实例后，多宿主同进程装配各持一份、互不串会话/串宿主——不再靠模块级全局 Set。
- * 监听器异常逐个隔离，绝不冒泡进账本写入。
- */
-export class TurnContextAppendHub implements TurnContextAppendBus {
-  private readonly listeners = new Set<TurnContextAppendListener>()
 
-  /** 订阅任意 source 的 delta 写入；返回退订函数。 */
-  public subscribe(listener: TurnContextAppendListener): () => void {
-    this.listeners.add(listener)
-    return () => this.listeners.delete(listener)
-  }
 
-  /** 广播一次写入通知；逐监听器隔离异常。 */
-  public emit(sessionId: string, sourceId: TurnContextSourceId): void {
-    for (const listener of this.listeners) {
-      try {
-        listener(sessionId, sourceId)
-      } catch {
-        // arch-guard:silent-catch-ok 通知失败不影响账本写入。
-      }
-    }
-  }
-}
-
-/** 按 sessionId 惰性建账本；超出会话数按插入序淘汰最旧（Map 迭代序即插入序）。 */
-export class TurnContextSessionLedgers {
-  private readonly ledgers = new Map<string, TurnContextLedger>()
-
-  constructor(
-    private readonly sourceId: TurnContextSourceId,
-    private readonly options: {
-      maxEntries?: number
-      maxSessions?: number
-      notifyRenderer?: boolean
-      /** 可见 source 的写入广播总线（每宿主一个实例，经 composition 注入）；缺省则不广播。 */
-      appendHub?: TurnContextAppendBus
-    } = {},
-  ) {}
-
-  /** 唯一写入口：定稿 delta 并广播变更通知（供 pre-send chips 实时刷新）。 */
-  public append(sessionId: string, input: TurnContextLedgerAppendInput): TurnContextDelta {
-    const delta = this.for(sessionId).append(input)
-    if (!isFalse(this.options.notifyRenderer)) this.options.appendHub?.emit(sessionId, this.sourceId)
-    return delta
-  }
-
-  /**
-   * 状态型 source 的写入口：语义见 {@link TurnContextLedger.replaceLatest}。
-   *
-   * 与 {@link append} 一样广播——pre-send chips 要立刻换成新状态，而不是等下一次事件。
-   */
-  public replaceLatest(sessionId: string, input: TurnContextLedgerAppendInput): TurnContextDelta {
-    const delta = this.for(sessionId).replaceLatest(input)
-    if (!isFalse(this.options.notifyRenderer)) this.options.appendHub?.emit(sessionId, this.sourceId)
-    return delta
-  }
-
-  private for(sessionId: string): TurnContextLedger {
-    const existing = this.ledgers.get(sessionId)
-    if (existing) return existing
-
-    // 每个账本实例一个代次：容量淘汰后重建的这一本 seq 从 1 起，旧 cursor 必须失配才不会吞它。
-    const ledger = new TurnContextLedger(
-      this.sourceId,
-      this.options.maxEntries ?? DefaultLedgerMaxEntries,
-      nextTurnContextLedgerGeneration(),
-    )
-    this.ledgers.set(sessionId, ledger)
-    while (this.ledgers.size > (this.options.maxSessions ?? DefaultMaxSessions)) {
-      const oldest = this.ledgers.keys().next().value
-      if (isUndefined(oldest)) break
-      this.ledgers.delete(oldest)
-    }
-    return ledger
-  }
-
-  public peek(
-    sessionId: string,
-    input: Pick<TurnContextSourcePeekInput, 'afterSeq' | 'generation'>,
-  ): TurnContextLedgerPeekResult {
-    const existing = this.ledgers.get(sessionId)
-    if (existing) return existing.peek(input)
-
-    // 无账本 = 该会话尚无事件：交出空基底，不为只读 peek 创建实例。
-    return {
-      generation: TurnContextProcessGeneration,
-      headSeq: 1,
-      tailSeq: 0,
-      deltas: [],
-    }
-  }
-
-  public clearSession(sessionId: string): void {
-    this.ledgers.delete(sessionId)
-  }
-}

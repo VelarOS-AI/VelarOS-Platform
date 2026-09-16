@@ -1,11 +1,8 @@
 import { describe, expect, test } from 'bun:test'
 
 import { InMemoryContextPayloadStore } from '../src/impl/context/InMemoryContextPayloadStore'
-import {
-  ContextPayloadKernelToolOutputStore,
-  InMemoryKernelToolOutputStore,
-} from '../src/impl/tools/InMemoryKernelToolOutputStore'
-
+import { ContextPayloadKernelToolOutputStore } from '../src/impl/tools/ContextPayloadKernelToolOutputStore'
+import { InMemoryKernelToolOutputStore } from '../src/impl/tools/InMemoryKernelToolOutputStore'
 function window(path: string, lines: number) {
   return {
     kind: 'project-source-window',

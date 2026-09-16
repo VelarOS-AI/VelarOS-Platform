@@ -1,10 +1,10 @@
 import { toNullable } from '@velaros-ai/core'
 
-import type { ExecutionEventSeverity, ExecutionRecord, ExecutionTaskPlanStep, ExecutionTaskPlanStepStatus, ExecutionTaskRecord } from '../../types/agent.js'
+import type { ExecutionRecord, ExecutionTaskPlanStep, ExecutionTaskRecord } from '../../types/agent.js'
 import type { ExecutionTaskLedgerStore } from '../../types/records.js'
 
-import { type ExecRouting } from './ExecWorkflowRoute'
-
+import { type ExecRecordSeverity } from './ExecRecordSeverity'
+import { type ExecRouting } from './ExecRouting'
 export function hasRunningOwnSelfStep(
   plan: readonly ExecutionTaskPlanStep[],
   roleId: string
@@ -14,54 +14,6 @@ export function hasRunningOwnSelfStep(
   )
 }
 
-class ExecRecordSeverity {
-  public getExecutionStatusSeverity(status: ExecutionRecord['status']): ExecutionEventSeverity {
-    switch (status) {
-      case 'completed':
-        return 'success'
-      case 'failed':
-        return 'error'
-      case 'aborted':
-      case 'awaiting_confirmation':
-      case 'awaiting_input':
-        return 'warning'
-      case 'pending':
-      case 'running':
-        return 'info'
-    }
-  }
-
-  public getTaskStatusSeverity(status: ExecutionTaskRecord['status']): ExecutionEventSeverity {
-    switch (status) {
-      case 'completed':
-        return 'success'
-      case 'failed':
-        return 'error'
-      case 'aborted':
-      case 'awaiting_confirmation':
-      case 'awaiting_input':
-        return 'warning'
-      case 'pending':
-      case 'running':
-        return 'info'
-    }
-  }
-
-  public getPlanStepStatusSeverity(status: ExecutionTaskPlanStepStatus): ExecutionEventSeverity {
-    switch (status) {
-      case 'completed':
-        return 'success'
-      case 'failed':
-        return 'error'
-      case 'skipped':
-        return 'warning'
-      case 'pending':
-      case 'delegated':
-      case 'running':
-        return 'info'
-    }
-  }
-}
 
 /**
  * 任务账本辅助器。
@@ -269,5 +221,5 @@ class ExecTaskLedger {
   }
 }
 
-export { ExecRecordSeverity, ExecTaskLedger,ExecRecordSeverity as ExecutionRecordSeverityHelper }
+export { ExecTaskLedger }
 export { ExecTaskLedger as ExecutionTaskLedgerHelper }

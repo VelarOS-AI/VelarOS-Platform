@@ -9,8 +9,9 @@ export {
   collectBuiltinAgentModTools,
   createBuiltinAgentModPackage,
 } from '../impl/builtin/BuiltinAgentMod'
+export { AgentModStaleSnapshotError } from '../impl/errors/AgentModStaleSnapshotError'
 export { AgentModLoader, DataOnlyAxes, PayloadRequiredAxes } from '../impl/mods/AgentModLoader'
-export { AgentModRegistry, AgentModStaleSnapshotError } from '../impl/mods/AgentModRegistry'
+export { AgentModRegistry } from '../impl/mods/AgentModRegistry'
 export {
   AgentModHookDispatcher,
   AgentModSeamDispatcher,

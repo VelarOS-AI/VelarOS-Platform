@@ -28,10 +28,8 @@ import { ContextRetrievalReferenceReader } from "../../utils/retrieval/reference
 import { contextRetrievalReferences } from "../../utils/retrieval/references";
 import { chatSearchText } from "../../utils/retrieval/text";
 
-import {
-  ContextRetrievalBoundedCounter,
-  ContextRetrievalBoundedRecentMap,
-} from "./ContextRetrievalBoundedRecentMap";
+import { ContextRetrievalBoundedCounter } from "./ContextRetrievalBoundedCounter"
+import { ContextRetrievalBoundedRecentMap } from "./ContextRetrievalBoundedRecentMap"
 import { ContextRetrievalIndexBuilder } from "./ContextRetrievalIndexBuilder";
 import {
   ContextRetrievalPayloadReader,

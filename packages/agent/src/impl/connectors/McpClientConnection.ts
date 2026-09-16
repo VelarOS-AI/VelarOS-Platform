@@ -26,6 +26,7 @@ import { asRecord, readString } from '@velaros-ai/core/utils/unknownJsonRecord'
 
 import type { McpAuthorizationProvider } from '../../contract/requires.js'
 import type { McpConnectionSpec, McpPendingAuthorization, McpPendingConnection,McpRawCallResult, McpRemoteTransport, McpResourceContent, McpResourceDescriptor, McpToolDescriptor, McpTransportKind } from '../../types/connectors.js'
+import { McpAuthorizationRequiredError } from '../errors/McpAuthorizationRequiredError'
 
 /** 连接超时（ms）——server 起不来时不无限挂起。 */
 export const McpConnectTimeoutMs = 30_000
@@ -34,13 +35,6 @@ export const McpCallTimeoutMs = 120_000
 
 const log = Log.tag('McpClientConnection')
 
-/** 远程 MCP 明确要求 OAuth 时抛出；登录流程仍由产品宿主拥有。 */
-export class McpAuthorizationRequiredError extends Error {
-  public constructor(readonly authorizationUrl: Nullable<string>) {
-    super('MCP OAuth authorization is required.')
-    this.name = 'McpAuthorizationRequiredError'
-  }
-}
 
 /** 单个 MCP 服务器的 host 无关协议连接。 */
 export class McpClientConnection {

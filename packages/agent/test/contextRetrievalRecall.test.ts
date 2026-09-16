@@ -18,7 +18,7 @@ import type { RetrievalPayloadStorePort, RetrievalStateStorePort } from '../src/
 import { InMemoryContextPayloadStore } from '../src/impl/context/InMemoryContextPayloadStore'
 import { ProviderRequestCompiler } from '../src/impl/context/ProviderRequestCompiler'
 import { compileProviderSendRequest } from '../src/impl/context/ProviderSendRequest'
-import { ContextGovernanceSessionRegistry } from '../src/impl/residency/ContextGovernanceSession'
+import { ContextGovernanceSessionRegistry } from '../src/impl/residency/ContextGovernanceSessionRegistry'
 import { ChatContextRetrievalService } from '../src/impl/retrieval/ChatContextRetrievalService'
 import type { ChatContextRetrievalIndexSourceFingerprint, ChatSessionPayloadSnapshot, ChatSessionToolResultPayload } from '../src/types/agent.js'
 import type { ChatContextRetrievalIndexSaveOptions, ChatContextRetrievalIndexSnapshot, ChatContextRetrievalIndexStore } from '../src/types/retrieval.js'

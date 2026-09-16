@@ -21,17 +21,15 @@
 //    每个窗口自带 `continuation`；完整输出照常归档，仍可召回。
 //  - 两种实现只在「全文存哪」上分叉：InMemory 走 toolCallId 的 tool-payload 通道，ContextPayload 走
 //    payloadRef。**refKind 必须显式传**——outputId 形如 `session:tool-output:1` 会被前缀推断误判。
-import { isFiniteNumber, isString, toNullable, toOptional } from '@velaros-ai/core'
+import { isFiniteNumber, isString, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import type { ContextPayloadStore,KernelToolOutputStore } from '../../contract/requires.js'
-import type { ContextPayloadRecord } from '../../types/context.js'
-import type { ContextPayloadKernelToolOutputStoreOptions,KernelStoredToolOutput, ProjectKernelToolOutputInput, ProjectKernelToolOutputResult } from '../../types/tools.js'
+import type {KernelToolOutputStore } from '../../contract/requires.js'
+import type {KernelStoredToolOutput, ProjectKernelToolOutputInput, ProjectKernelToolOutputResult } from '../../types/tools.js'
 import { buildContextRefEnvelope } from '../../utils/context/context-ref-envelope'
 import { resolveGovernanceSessionKey } from '../../utils/residency/session-key'
 import { fitProjectReadsForModel, hasProjectSourceWindows } from '../../utils/tools/project-read-serialization'
 import { ModelToolResultMaxSerializedLength } from '../../utils/tools/tool-result-serialization'
-import { ToolResultCanonicalizer } from '../context/ToolResultCanonicalizer'
 
 export interface InMemoryKernelToolOutputStoreOptions {
   projectionChars?: number
@@ -52,7 +50,7 @@ function isLowSurrogate(codeUnit: number): boolean {
   return codeUnit >= 0xdc00 && codeUnit <= 0xdfff
 }
 
-function normalizeProjectionChars(value: LooseOptional<number>): number {
+export function normalizeProjectionChars(value: LooseOptional<number>): number {
   const candidate = value ?? DefaultProjectionChars
   if (!isFiniteNumber(candidate)) return DefaultProjectionChars
   return Math.max(0, Math.floor(candidate))
@@ -90,7 +88,7 @@ function sliceTailOnCharacterBoundary(text: string, maxChars: number): string {
   return text.slice(start)
 }
 
-function projectSerializedPreview(serialized: string, projectionChars: number): string {
+export function projectSerializedPreview(serialized: string, projectionChars: number): string {
   if (projectionChars <= 0) return ''
   if (serialized.length <= projectionChars) return serialized
   if (projectionChars <= ProjectionTruncationMarker.length) return sliceHeadOnCharacterBoundary(serialized, projectionChars)
@@ -110,7 +108,7 @@ function projectSerializedPreview(serialized: string, projectionChars: number): 
  * 此时退到模型档序列化预算：结构化结果在那一档仍会按行裁剪，比头尾拼接的残片有用得多。两档都装不下
  * 才走普通句柄化。
  */
-function fitSourceWindowsWithinProjection(
+export function fitSourceWindowsWithinProjection(
   output: unknown,
   projectionChars: number
 ): Nullable<{ output: unknown; serialized: string }> {
@@ -123,7 +121,7 @@ function fitSourceWindowsWithinProjection(
   return null
 }
 
-function serializeOutput(output: unknown): string {
+export function serializeOutput(output: unknown): string {
   if (isString(output)) return output
 
   try {
@@ -203,104 +201,4 @@ export class InMemoryKernelToolOutputStore implements KernelToolOutputStore {
   }
 }
 
-export class ContextPayloadKernelToolOutputStore implements KernelToolOutputStore {
-  private readonly canonicalizer: ToolResultCanonicalizer
-  private readonly projectionChars: number
 
-  public constructor(
-    private readonly payloadStore: ContextPayloadStore,
-    options: ContextPayloadKernelToolOutputStoreOptions = {}
-  ) {
-    this.projectionChars = normalizeProjectionChars(options.projectionChars)
-    this.canonicalizer = new ToolResultCanonicalizer(this.payloadStore, {
-      inlineBudgetChars: this.projectionChars,
-    })
-  }
-
-  public async project(
-    input: ProjectKernelToolOutputInput
-  ): Promise<ProjectKernelToolOutputResult> {
-    const output = toNullable(input.output)
-    const serialized = serializeOutput(output)
-    if (serialized.length <= this.projectionChars)
-      return {
-        output,
-        stored: null,
-      }
-
-    const sessionId = resolveGovernanceSessionKey(input.sessionId)
-    const canonical = await this.canonicalizer.canonicalize({
-      sessionId,
-      toolCallId: input.toolCallId,
-      toolName: input.toolName,
-      serializedResult: serialized,
-    })
-    const stored = this.toStoredOutput({
-      input: { ...input, output },
-      sessionId,
-      serialized,
-      record: canonical.record,
-      sameAsToolCallId: canonical.visible.sameAsToolCallId,
-    })
-
-    const fitted = fitSourceWindowsWithinProjection(output, this.projectionChars)
-    if (fitted) return { output: fitted.output, stored }
-
-    const payloadRef = stored.payloadRef ?? stored.outputId
-    const preview = projectSerializedPreview(serialized, this.projectionChars)
-    const projection = buildContextRefEnvelope({
-      __contextRef: 'tool-output',
-      ref: payloadRef,
-      toolCallId: input.toolCallId,
-      toolName: input.toolName,
-      payloadRef: stored.payloadRef,
-      payloadHash: stored.hash,
-      excerpt: preview,
-      excerptKind: 'head',
-      excerptTruncated: stored.chars > preview.length,
-      originalLength: stored.chars,
-      retrieval: {
-        tool: 'context:recall',
-        args: {
-          ref: payloadRef,
-          refKind: 'payload-ref',
-          reason: `need full ${input.toolName} output`,
-        },
-      },
-      meta: {
-        outputId: stored.outputId,
-        sameAsToolCallId: toOptional(stored.sameAsToolCallId),
-      },
-    })
-
-    return {
-      output: projection,
-      stored,
-    }
-  }
-
-  private toStoredOutput(input: {
-    input: ProjectKernelToolOutputInput
-    sessionId: string
-    serialized: string
-    record: ContextPayloadRecord
-    sameAsToolCallId?: string
-  }): KernelStoredToolOutput {
-    const stored: KernelStoredToolOutput = {
-      outputId: input.record.payloadRef,
-      payloadRef: input.record.payloadRef,
-      hash: input.record.hash,
-      sessionId: input.sessionId,
-      toolCallId: input.input.toolCallId,
-      toolName: input.input.toolName,
-      output: input.input.output,
-      serialized: input.serialized,
-      chars: input.record.chars,
-      createdAt: input.record.createdAt,
-    }
-    if (input.sameAsToolCallId) {
-      stored.sameAsToolCallId = input.sameAsToolCallId
-    }
-    return stored
-  }
-}

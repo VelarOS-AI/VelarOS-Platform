@@ -1,6 +1,5 @@
-import type { ModelMessage } from 'ai'
 
-import { isArray, isBlank, isEmpty,isObject, isPresent, isString, toNullable, truncate } from '@velaros-ai/core'
+import { isEmpty, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 
@@ -15,46 +14,13 @@ import type { CreateExecutionArgs,ExecutionResourceProvider } from '../../types/
 import { type ExecutionStateMachine } from '../../utils/records/state-machine'
 
 import { ExecutionPlanLedgerHelper } from './ExecPlanLedger'
-import {
-  ExecutionRecordSeverityHelper,
-  ExecutionTaskLedgerHelper,
-} from './ExecTaskLedger'
+import { ExecutionRecordSeverityHelper } from './ExecRecordSeverity'
+import { type ExecutionRoutingCoordinator } from './ExecRouting'
+import { ExecutionTaskLedgerHelper } from './ExecTaskLedger'
+import { ExecutionRecordSummaryHelper } from './ExecutionRecordSummaryHelper'
 import { type ExecutionStore } from './ExecutionStore'
-import { type ExecutionRoutingCoordinator } from './ExecWorkflowRoute'
 import { MonotonicExecutionIdFactory } from './MonotonicExecutionIdFactory'
 
-/** 从模型消息序列提取最近一条用户消息作为 execution summary。 */
-class ExecutionRecordSummaryHelper {
-  public buildExecutionSummary(messages: ModelMessage[]): string {
-    for (let index = messages.length - 1; index >= 0; index -= 1) {
-      const message = messages[index]
-      if (message.role !== 'user') {
-        continue
-      }
-
-      if (isString(message.content)) return truncate(message.content.trim(), 80) || '执行任务'
-
-      if (!isArray(message.content)) {
-        continue
-      }
-
-      const text = message.content
-        .filter((part): part is { type: 'text'; text: string } => {
-          if (!isObject(part) || !isPresent(part)) return false
-          const record = part as { type?: unknown; text?: unknown }
-          return record.type === 'text' && isString(record.text)
-        })
-        .map((part) => part.text.trim())
-        .filter(Boolean)
-        .join('\n')
-        .trim()
-
-      if (!isBlank(text)) return truncate(text, 80)
-    }
-
-    return '执行任务'
-  }
-}
 
 /**
  * 执行记录管理器。
@@ -544,5 +510,4 @@ class ExecutionRecords {
   }
 }
 
-export { ExecutionRecords, ExecutionRecordSummaryHelper }
-export { ExecutionRecordSummaryHelper as ExecRecordSummary }
+export { ExecutionRecords }

@@ -2,12 +2,8 @@
 // 以及把翻译后的工具注册到自己的工具提供器。
 
 export type { McpAuthorizationProvider } from '../contract/requires.js'
-export {
-  McpAuthorizationRequiredError,
-  McpCallTimeoutMs,
-  McpClientConnection,
-  McpConnectTimeoutMs,
-} from '../impl/connectors/McpClientConnection'
+export { McpCallTimeoutMs, McpClientConnection, McpConnectTimeoutMs } from '../impl/connectors/McpClientConnection'
+export { McpAuthorizationRequiredError } from '../impl/errors/McpAuthorizationRequiredError'
 export type { McpConnectionSpec, McpRawCallResult, McpResourceContent, McpResourceDescriptor, McpToolAnnotations, McpToolDescriptor, McpTransportKind } from '../types/connectors.js'
 export type { McpAutoApprovePolicy, TranslatedMcpTool, TranslateMcpToolInput } from '../types/connectors.js'
 export { translateMcpCallResult } from '../utils/connectors/mcp-call-result'

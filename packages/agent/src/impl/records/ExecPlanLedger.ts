@@ -5,7 +5,7 @@ import type { ToolExecutionPlanItemStatus, ToolExecutionPlanUpdate } from '../..
 import type { AgentRoleId,ExecutionTaskPlanStep, ExecutionTaskRecord } from '../../types/agent.js'
 import type { PlanChangePayload } from '../../types/records.js'
 
-import type { ExecRouting } from './ExecWorkflowRoute'
+import type { ExecRouting } from './ExecRouting'
 import { MonotonicExecutionIdFactory } from './MonotonicExecutionIdFactory'
 
 /**

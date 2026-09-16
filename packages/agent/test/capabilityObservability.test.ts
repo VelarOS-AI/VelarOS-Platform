@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import { ExecutionSpanRecorder } from '../src/impl/ledgers/OpenExecutionSpan'
+import { ExecutionSpanRecorder } from '../src/impl/ledgers/ExecutionSpanRecorder'
 import type { ExecutionSpan } from '../src/types/agent.js'
 import { projectExecutionSpanDebug } from '../src/utils/ledgers/execution-span-debug'
 

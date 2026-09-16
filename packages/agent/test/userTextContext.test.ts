@@ -8,7 +8,7 @@ import { InMemoryContextPayloadStore } from '../src/impl/context/InMemoryContext
 import { ProviderRequestCompiler } from '../src/impl/context/ProviderRequestCompiler'
 import { compileProviderSendRequest } from '../src/impl/context/ProviderSendRequest'
 import { UserTextPayloadPlanner } from '../src/impl/context/UserTextPayloadPlanner'
-import { ContextGovernanceSessionRegistry } from '../src/impl/residency/ContextGovernanceSession'
+import { ContextGovernanceSessionRegistry } from '../src/impl/residency/ContextGovernanceSessionRegistry'
 import { hashUserMessageText } from '../src/utils/context/user-message-text'
 
 const SessionId = 'user-text-regressions'

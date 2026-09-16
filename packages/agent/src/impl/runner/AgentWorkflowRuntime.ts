@@ -64,6 +64,8 @@ import { AppError } from '@velaros-ai/core/error'
 import type { AgentWorkflowAgentCall, AgentWorkflowAgentResult, AgentWorkflowDedupeStep, AgentWorkflowDefinition, AgentWorkflowMajorityVoteStep, AgentWorkflowPredicate, AgentWorkflowRepeatConvergence, AgentWorkflowRunResult, AgentWorkflowStep, AgentWorkflowStepResult, AgentWorkflowValuePath, AgentWorkflowValueRef } from '../../types/agent.js'
 import type { AgentWorkflowDispatchPort, AgentWorkflowRunOptions } from '../../types/runner.js'
 import { compareStableStrings } from '../../utils/residency/determinism'
+import { WorkflowAbortedError } from '../errors/WorkflowAbortedError'
+import { WorkflowBudgetExhaustedError } from '../errors/WorkflowBudgetExhaustedError'
 
 const MaxWorkflowAgents = 8
 const MaxWorkflowRounds = 6
@@ -71,8 +73,7 @@ const MaxWorkflowValueBytes = 32 * 1024
 const Utf8ByteCounter = new TextEncoder()
 const log = Log.tag('AgentWorkflowRuntime')
 
-class WorkflowBudgetExhaustedError extends Error {}
-class WorkflowAbortedError extends Error {}
+
 
 /**
  * 有界深拷贝：解释器**每一次跨步骤传值都经过这里**，包括步骤输出、管线条目、调用输入与种子值。

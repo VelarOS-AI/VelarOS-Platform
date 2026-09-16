@@ -10,7 +10,7 @@ import {
   serializePromptAuditLine,
 } from '../src/impl/ledgers/PromptAuditLedger'
 import { ProviderTurnRequestHelper } from '../src/impl/loop/ProviderTurnRequestHelper'
-import { ContextGovernanceSessionRegistry } from '../src/impl/residency/ContextGovernanceSession'
+import { ContextGovernanceSessionRegistry } from '../src/impl/residency/ContextGovernanceSessionRegistry'
 import { ToolExecutionPolicy } from '../src/impl/tools/ToolExecutionPolicy'
 import { assertProviderRequestSnapshotReconstructable } from '../src/utils/context/provider-request-snapshot'
 import { decodeProviderRequestAuditValue } from '../src/utils/context/serialization'

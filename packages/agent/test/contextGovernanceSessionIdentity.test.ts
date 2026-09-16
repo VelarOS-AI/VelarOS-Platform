@@ -17,10 +17,8 @@ import { describe, test } from 'bun:test'
 
 import { ProviderRequestCompiler } from '../src/impl/context/ProviderRequestCompiler'
 import { compileProviderSendRequest } from '../src/impl/context/ProviderSendRequest'
-import {
-  ContextGovernanceSession,
-  ContextGovernanceSessionRegistry,
-} from '../src/impl/residency/ContextGovernanceSession'
+import { ContextGovernanceSession } from '../src/impl/residency/ContextGovernanceSession'
+import { ContextGovernanceSessionRegistry } from '../src/impl/residency/ContextGovernanceSessionRegistry'
 import { resolveContextGovernanceConfig } from '../src/utils/residency/governance-config'
 
 function userMessage(text: string): ModelMessage {

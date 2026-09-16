@@ -10,7 +10,7 @@ import {
 import { InMemoryContextPayloadStore } from '../src/impl/context/InMemoryContextPayloadStore'
 import { ProviderRequestCompiler } from '../src/impl/context/ProviderRequestCompiler'
 import { compileProviderSendRequest } from '../src/impl/context/ProviderSendRequest'
-import { ContextGovernanceSessionRegistry } from '../src/impl/residency/ContextGovernanceSession'
+import { ContextGovernanceSessionRegistry } from '../src/impl/residency/ContextGovernanceSessionRegistry'
 import type { FileContextSnapshot } from '../src/types/context.js'
 import { projectFileContext } from '../src/utils/context/file-context-projection'
 import { sliceFileSnapshot } from '../src/utils/context/file-snapshot-archive'

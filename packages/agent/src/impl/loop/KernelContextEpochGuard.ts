@@ -24,20 +24,8 @@ import type { BuildKernelContextEpochInput, KernelContextEpoch, KernelContextEpo
 import type { ProviderTurnRecorder } from '../../types/records.js'
 import { compareStableStrings } from '../../utils/residency/determinism'
 import { UnknownGovernanceSessionId } from '../../utils/residency/session-key'
+import { KernelContextEpochStaleError } from '../errors/KernelContextEpochStaleError'
 
-export class KernelContextEpochStaleError extends Error {
-  public readonly code = 'KERNEL_CONTEXT_EPOCH_STALE'
-
-  constructor(
-    public readonly claim: KernelContextEpochClaim,
-    public readonly currentRevision: number
-  ) {
-    super(
-      `Stale provider request context epoch for ${claim.key}: claim revision ${claim.revision}, current revision ${currentRevision}.`
-    )
-    this.name = 'KernelContextEpochStaleError'
-  }
-}
 
 export class KernelContextEpochGuard implements KernelContextEpochGuardLike {
   private readonly revisions = new Map<string, number>()

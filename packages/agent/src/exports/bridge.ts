@@ -1,14 +1,5 @@
-export {
-  ExternalAgentBridgeCommandQueue,
-  ExternalAgentBridgeEventWindow,
-  ExternalAgentBridgeMaxCommands,
-  ExternalAgentBridgeMaxProcessedEvents,
-  ExternalAgentBridgePairingBlockMs,
-  ExternalAgentBridgePairingLifetimeMs,
-  ExternalAgentBridgePairingMaxFailures,
-  ExternalAgentBridgePairingThrottle,
-  externalAgentBridgeTokensEqual,
-} from '../impl/connectors/ExternalAgentBridgeCommandQueue'
+export { ExternalAgentBridgeCommandQueue, ExternalAgentBridgeMaxCommands, ExternalAgentBridgeMaxProcessedEvents, ExternalAgentBridgePairingBlockMs, ExternalAgentBridgePairingLifetimeMs, ExternalAgentBridgePairingMaxFailures, externalAgentBridgeTokensEqual } from '../impl/connectors/ExternalAgentBridgeCommandQueue'
+export { ExternalAgentBridgeEventWindow } from '../impl/connectors/ExternalAgentBridgeEventWindow'
 export type {
   ExternalAgentBridgeLoopbackServerOptions,
 } from '../impl/connectors/ExternalAgentBridgeLoopbackServer'
@@ -20,3 +11,4 @@ export {
   ExternalAgentBridgeMaxSocketPayloadBytes,
   isExternalAgentBridgeExtensionOrigin,
 } from '../impl/connectors/ExternalAgentBridgeLoopbackServer'
+export { ExternalAgentBridgePairingThrottle } from '../impl/connectors/ExternalAgentBridgePairingThrottle'

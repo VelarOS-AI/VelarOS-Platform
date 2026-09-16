@@ -14,10 +14,8 @@ import { describe, test } from 'bun:test'
 import { ProviderRequestCompiler } from '../src/impl/context/ProviderRequestCompiler'
 import { buildKernelPrefixShape } from '../src/impl/loop/KernelPrefixShapeTracker'
 import { buildSystemPromptDelivery } from '../src/impl/loop/StreamTurn'
-import {
-  ContextGovernanceSession,
-  ContextGovernanceSessionRegistry,
-} from '../src/impl/residency/ContextGovernanceSession'
+import { ContextGovernanceSession } from '../src/impl/residency/ContextGovernanceSession'
+import { ContextGovernanceSessionRegistry } from '../src/impl/residency/ContextGovernanceSessionRegistry'
 import { ContextResidencyLedger } from '../src/impl/residency/ContextResidencyLedger'
 import { InMemoryContextMigrationEventSink } from '../src/impl/residency/InMemoryContextMigrationEventSink'
 import type { ContextRecordClassifier } from '../src/types/residency.js'
