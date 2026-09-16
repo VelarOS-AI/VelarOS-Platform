@@ -1,140 +1,146 @@
 import { isEmpty, isTrue, isUndefined, Log } from '@velaros-ai/core'
 
-import type { CapabilityToken } from '../../types/abi-capability'
-import type { KernelEventHandler } from '../../types/abi-events'
+import { KernelErrorCodes } from '../../contract/constants'
+import type { KernelModuleActivateContext, KernelRegistration, KernelServiceHandle } from '../../contract/provides'
+import type { KernelEventHandler } from '../../contract/requires'
+import type { KernelModuleDefinition, KernelModuleLifecycle } from '../../contract/requires'
+import type { KernelPermissionBroker } from '../../contract/requires'
+import type { KernelModuleIsolationAdapter } from '../../contract/requires'
+import type { KernelStateBackend } from '../../contract/requires'
+import type { ExternalKernelModuleIsolation } from '../../types/kernel'
 import type {
-  KernelModuleActivateContext,
-  KernelModuleDefinition,
+  CapabilityToken,
+  KernelCompositionSnapshot,
   KernelModuleHealth,
-  KernelModuleLifecycle,
-  KernelModuleManifest,
-  KernelModuleStatus,
-  KernelRegistration,
-  KernelServiceHandle,
-} from '../../types/abi-module'
-import type {
   KernelModulePermissionRequest,
-  KernelPermissionBroker,
+  KernelModuleSnapshot,
   KernelPermissionDecision,
-} from '../../types/abi-permissions'
-import {
-  type ExternalKernelModuleIsolation,
-  type KernelModuleIsolationAdapter,
-} from '../../types/runtime-isolation'
+} from '../../types/kernel.js'
+import type { ModuleRecord } from '../../types/runtime'
 import {
   KernelError,
   lifecycleFailure,
   startupFailure,
   toError,
 } from '../../utils/errors'
+import { cloneManifest } from '../../utils/runtime/manifest'
 import {
   type KernelModulePlan,
   resolveKernelModulePlan,
   validateManifest,
 } from '../../utils/runtime/module-plan'
+import {
+  assertModuleContextActive,
+  createModuleRecord,
+  disposeModuleLifecycle,
+  failModuleRecord,
+  HealthyModuleHealth,
+  toModuleSnapshot,
+  UnknownModuleHealth,
+} from '../../utils/runtime/module-record'
 
-import {
-  createScopedPermissionBroker,
-  DenyAllKernelPermissionBroker,
-} from './DenyAllKernelPermissionBroker'
-import {
-  createNamespacedStateStore,
-  InMemoryKernelStateBackend,
-  type KernelStateBackend,
-} from './InMemoryKernelStateBackend'
+import { DenyAllKernelPermissionBroker } from './DenyAllKernelPermissionBroker'
+import { InMemoryKernelStateBackend } from './InMemoryKernelStateBackend'
 import { KernelEventHub } from './KernelEventHub'
 import {
   KernelServiceStore,
 } from './KernelServiceStore'
+import { createNamespacedStateStore } from './NamespacedKernelStateStore'
+import { createScopedPermissionBroker } from './ScopedKernelPermissionBroker'
 import { ScopedKernelServiceResolver } from './ScopedKernelServiceResolver'
-
-export type { KernelModuleStatus } from '../../types/abi-module'
 
 const log = Log.tag('KernelModuleHost')
 
-export interface KernelModuleSnapshot {
-  readonly manifest: KernelModuleManifest
-  readonly status: KernelModuleStatus
-  readonly health: KernelModuleHealth
-  readonly generation: number
-  readonly error?: string
-}
-
-export interface KernelCompositionCapabilitySnapshot {
-  readonly id: string
-  readonly version: string
-  readonly providerModuleId: string
-  readonly active: boolean
-  readonly activeGeneration: Nullable<number>
-}
-
-/**
- * 运行组合的只读机器视图。它描述“装了什么、按什么顺序、哪些服务真的活动”，不接受 patch，
- * 因而不能绕过 Ring 0 的模块注册、权限或生命周期裁决。
- */
-export interface KernelCompositionSnapshot {
-  readonly schemaVersion: 1
-  readonly apiVersion: number
-  readonly moduleOrder: readonly string[]
-  readonly modules: readonly KernelModuleSnapshot[]
-  readonly capabilities: readonly KernelCompositionCapabilitySnapshot[]
-  /**
-   * 依赖图这一次没解析出来的原因；解析成功是 `null`。
-   *
-   * 快照最该有用的时刻就是降级态（`lifecycleFailureMode: 'degrade'` 的宿主启动失败后正要
-   * 看诊断），所以解析失败不再向外抛，而是把原因摆在这里，`moduleOrder` / `capabilities`
-   * 退回按登记顺序给出。
-   */
-  readonly resolutionError: Nullable<string>
-}
-
-interface ModuleRecord {
-  readonly definition: KernelModuleDefinition
-  readonly generation: number
-  status: KernelModuleStatus
-  health: KernelModuleHealth
-  contextActive: boolean
-  lifecycleDisposed: boolean
-  error?: string
-  lifecycle?: KernelModuleLifecycle
-  controller?: AbortController
-}
-
+/** 装配宿主时交进来的东西：ABI 版本必填，三个策略件缺省用包内的安全默认。 */
 export interface KernelModuleHostOptions {
+  /** 本宿主认的模块清单 ABI 版本；清单上对不上的模块一律拒绝注册。 */
   readonly apiVersion: number
+  /** 权限裁决；不给就是全拒（`DenyAllKernelPermissionBroker`）。 */
   readonly permissionBroker?: KernelPermissionBroker
+  /** 模块状态的持久化后端；不给就用进程内内存。 */
   readonly stateBackend?: KernelStateBackend
+  /** 非进程内模块的激活适配器，按隔离形态各一个。 */
   readonly isolationAdapters?: readonly KernelModuleIsolationAdapter[]
 }
 
-const unknownHealth: KernelModuleHealth = Object.freeze({ status: 'unknown' })
-const healthyHealth: KernelModuleHealth = Object.freeze({ status: 'healthy' })
-
-function cloneManifest(manifest: KernelModuleManifest): KernelModuleManifest {
-  return Object.freeze({
-    ...manifest,
-    provides: Object.freeze(
-      manifest.provides.map((capability) =>
-        Object.freeze({ id: capability.id, version: capability.version })),
-    ),
-    requires: Object.freeze(
-      manifest.requires.map((requirement) => Object.freeze({ ...requirement })),
-    ),
-    optionalRequires: Object.freeze(
-      manifest.optionalRequires.map((requirement) =>
-        Object.freeze({ ...requirement })),
-    ),
-    permissions: Object.freeze([...manifest.permissions]),
-  })
+/**
+ * 内核模块的组合根：只管顺序、生命周期、登记归属与回滚，不认识图里流过的任何能力。
+ *
+ * 实例由 `Kernel` 与守护进程装配各持一份，别处不自己 new。
+ */
+export interface KernelModuleHostApi {
+  /** 注册一个模块；只能在 `start()` 之前调用，清单不合法或 id 重复时抛错。 */
+  registerModule(definition: KernelModuleDefinition): void
+  /** 按顺序注册一批模块，等价于逐个调 `registerModule`。 */
+  registerModules(definitions: Iterable<KernelModuleDefinition>): void
+  /** 解析依赖图，给出激活顺序与每件能力的提供方；成环或缺能力时抛错。 */
+  resolvePlan(): KernelModulePlan
+  /** 按解析出的顺序激活并就绪全部模块；只真正跑一次，失败时已激活的按逆序回滚。 */
+  start(): Promise<void>
+  /**
+   * 用新的一代替换一个在跑的模块。
+   *
+   * 新代在暂存门后面激活并就绪，其间旧代照常提供服务；就绪之后同步切换可见性与事件归属，
+   * 再释放旧代。替换失败只丢掉新代，现有图不受影响。
+   */
+  replaceModule(definition: KernelModuleDefinition): Promise<void>
+  /** 按激活的逆序挂起全部模块；有模块挂起失败时收齐再一起抛。 */
+  suspend(): Promise<void>
+  /** 释放整个宿主；只真正跑一次，之后任何操作都拒绝。 */
+  dispose(): Promise<void>
+  /** 取一件能力当前活动的服务；没有或版本对不上时抛错。 */
+  getService<TService extends object>(token: CapabilityToken<TService>): TService
+  /** 取一件能力的服务句柄；句柄绑死在取的那一代，换代之后就失效。 */
+  getServiceHandle<TService extends object>(
+    token: CapabilityToken<TService>,
+  ): KernelServiceHandle<TService>
+  /** 取一件能力当前活动的服务，没有就返回 undefined，不抛错。 */
+  getOptionalService<TService extends object>(
+    token: CapabilityToken<TService>,
+  ): TService | undefined
+  /**
+   * 把能力 id 解析成当前活动提供方的那一枚令牌。
+   *
+   * 调用方不许自己按缺省版本拼令牌：只有服务登记表知道现在活动的是哪一代、哪个版本。
+   */
+  getActiveCapabilityToken(capabilityId: string): CapabilityToken | undefined
+  /**
+   * 经宿主的权限权威判一次能力调用。
+   *
+   * 提供方模块身份与代际由活动服务句柄推出来，调用方伪造不了；`attribution` 是单独一个参数、
+   * 不在 `request` 里，正是为了让模块自己的作用域 broker 够不着它。
+   */
+  requestCapabilityPermission(
+    token: CapabilityToken,
+    request: KernelModulePermissionRequest,
+    attribution?: { readonly callerModuleId: string },
+  ): Promise<KernelPermissionDecision>
+  /** 以宿主身份订阅一类事件；返回的登记用完要 dispose。 */
+  subscribe<TPayload>(
+    type: string,
+    handler: KernelEventHandler<TPayload>,
+  ): KernelRegistration
+  /** 取一个模块的只读快照，没注册过返回 undefined。 */
+  getModule(moduleId: string): KernelModuleSnapshot | undefined
+  /** 按模块 id 排序列出全部模块的只读快照。 */
+  listModules(): readonly KernelModuleSnapshot[]
+  /**
+   * 运行组合的只读快照；**任何状态下都不抛错**，包括依赖图不合法和 dispose 之后。
+   *
+   * 快照最该有用的时刻就是降级态的宿主启动失败后要看诊断，所以解析失败不外抛，
+   * 原因摆在 `resolutionError` 里。
+   */
+  describeComposition(): KernelCompositionSnapshot
+  /** 逐个问一遍已就绪模块的健康度并写回快照；模块自己抛错算 unhealthy，不影响别人。 */
+  checkHealth(): Promise<readonly KernelModuleSnapshot[]>
 }
 
-/**
- * Product-neutral composition root for injected kernel modules.
- *
- * The host owns ordering, lifecycle, registration attribution, and rollback. It
- * deliberately has no knowledge of the capabilities carried by the graph.
- */
-export class KernelModuleHost {
+export class KernelModuleHost implements KernelModuleHostApi {
+  /** 还没问过健康度（刚注册、已挂起、已释放）时的占位值。 */
+  private static readonly unknownHealth: KernelModuleHealth = Object.freeze({ status: 'unknown' })
+  /** 模块就绪但自己没实现 `health()` 时的默认值。 */
+  private static readonly healthyHealth: KernelModuleHealth = Object.freeze({ status: 'healthy' })
+
   private readonly modules = new Map<string, ModuleRecord>()
   private readonly serviceStore = new KernelServiceStore()
   private readonly eventHub = new KernelEventHub()
@@ -152,7 +158,7 @@ export class KernelModuleHost {
   public constructor(private readonly options: KernelModuleHostOptions) {
     if (!Number.isInteger(options.apiVersion) || options.apiVersion <= 0) {
       throw new KernelError(
-        'INVALID_MANIFEST',
+        KernelErrorCodes.invalidManifest,
         '内核宿主的 apiVersion 必须是正整数',
       )
     }
@@ -163,7 +169,7 @@ export class KernelModuleHost {
     for (const adapter of options.isolationAdapters ?? []) {
       if (this.isolationAdapters.has(adapter.isolation)) {
         throw new KernelError(
-          'INVALID_MANIFEST',
+          KernelErrorCodes.invalidManifest,
           `隔离形态 "${adapter.isolation}" 注册了两个适配器`,
         )
       }
@@ -175,7 +181,7 @@ export class KernelModuleHost {
     this.assertNotDisposed()
     if (!isUndefined(this.startPromise)) {
       throw new KernelError(
-        'MODULE_STATE',
+        KernelErrorCodes.moduleState,
         '内核模块必须在宿主启动之前注册',
       )
     }
@@ -183,13 +189,13 @@ export class KernelModuleHost {
     validateManifest(manifest, this.options.apiVersion)
     if (this.modules.has(manifest.id)) {
       throw new KernelError(
-        'DUPLICATE_MODULE',
+        KernelErrorCodes.duplicateModule,
         `内核模块 "${manifest.id}" 已经注册过了`,
         { moduleId: manifest.id },
       )
     }
 
-    this.modules.set(manifest.id, this.createRecord(definition, manifest, 1))
+    this.modules.set(manifest.id, createModuleRecord(definition, manifest, 1))
   }
 
   public registerModules(definitions: Iterable<KernelModuleDefinition>): void {
@@ -233,7 +239,7 @@ export class KernelModuleHost {
         record.status = 'active'
         activatedModuleIds.push(moduleId)
       } catch (error) {
-        this.failRecord(record, error)
+        failModuleRecord(record, error)
         this.cleanupModule(record)
         const rollbackErrors = await this.rollback(activatedModuleIds)
         throw startupFailure({
@@ -251,9 +257,9 @@ export class KernelModuleHost {
       try {
         await record.lifecycle?.ready?.()
         record.status = 'ready'
-        record.health = healthyHealth
+        record.health = HealthyModuleHealth
       } catch (error) {
-        this.failRecord(record, error)
+        failModuleRecord(record, error)
         const rollbackErrors = await this.rollback(
           activatedModuleIds,
           moduleId,
@@ -285,7 +291,7 @@ export class KernelModuleHost {
     const previous = this.modules.get(manifest.id)
     if (isUndefined(previous)) {
       throw new KernelError(
-        'MODULE_STATE',
+        KernelErrorCodes.moduleState,
         `模块 "${manifest.id}" 没注册过，替换不了`,
         { moduleId: manifest.id },
       )
@@ -296,13 +302,13 @@ export class KernelModuleHost {
       && previous.status !== 'suspended'
     ) {
       throw new KernelError(
-        'MODULE_STATE',
+        KernelErrorCodes.moduleState,
         `内核模块 "${manifest.id}" 当前是 "${previous.status}" 状态，不能替换`,
         { moduleId: manifest.id },
       )
     }
 
-    const replacement = this.createRecord(
+    const replacement = createModuleRecord(
       definition,
       manifest,
       previous.generation + 1,
@@ -336,12 +342,12 @@ export class KernelModuleHost {
       failedPhase = 'ready'
       await replacement.lifecycle.ready?.()
       replacement.status = 'ready'
-      replacement.health = healthyHealth
+      replacement.health = HealthyModuleHealth
     } catch (error) {
-      this.failRecord(replacement, error)
+      failModuleRecord(replacement, error)
       const rollbackErrors: Error[] = []
       try {
-        await this.disposeLifecycle(replacement)
+        await disposeModuleLifecycle(replacement)
       } catch (rollbackError) {
         const normalized = toError(rollbackError)
         rollbackErrors.push(normalized)
@@ -371,11 +377,11 @@ export class KernelModuleHost {
     previous.status = 'disposing'
     previous.controller?.abort()
     try {
-      await this.disposeLifecycle(previous)
+      await disposeModuleLifecycle(previous)
       previous.status = 'disposed'
     } catch (error) {
       // 旧代释放失败只是旧代的事：新代已经在提供服务，替换本身是成功的。
-      this.failRecord(previous, error)
+      failModuleRecord(previous, error)
       log.error('Kernel module previous generation failed to dispose', {
         error: toError(error),
         generation: previous.generation,
@@ -397,9 +403,9 @@ export class KernelModuleHost {
       try {
         await record.lifecycle?.suspend?.()
         record.status = 'suspended'
-        record.health = unknownHealth
+        record.health = UnknownModuleHealth
       } catch (error) {
-        this.failRecord(record, error)
+        failModuleRecord(record, error)
         failures.push({ moduleId, error: toError(error) })
       }
     }
@@ -443,11 +449,11 @@ export class KernelModuleHost {
       record.status = 'disposing'
       record.controller?.abort()
       try {
-        await this.disposeLifecycle(record)
+        await disposeModuleLifecycle(record)
         record.status = 'disposed'
-        record.health = unknownHealth
+        record.health = UnknownModuleHealth
       } catch (error) {
-        this.failRecord(record, error)
+        failModuleRecord(record, error)
         failures.push({ moduleId, error: toError(error) })
       } finally {
         this.cleanupModule(record)
@@ -541,7 +547,7 @@ export class KernelModuleHost {
 
   public getModule(moduleId: string): KernelModuleSnapshot | undefined {
     const record = this.modules.get(moduleId)
-    return isUndefined(record) ? undefined : this.snapshot(record)
+    return isUndefined(record) ? undefined : toModuleSnapshot(record)
   }
 
   public listModules(): readonly KernelModuleSnapshot[] {
@@ -553,7 +559,7 @@ export class KernelModuleHost {
         if (leftId > rightId) return 1
         return 0
       })
-      .map((record) => this.snapshot(record))
+      .map((record) => toModuleSnapshot(record))
   }
 
   /**
@@ -655,7 +661,7 @@ export class KernelModuleHost {
       if (record.status !== 'ready') continue
       try {
         record.health = isUndefined(record.lifecycle?.health)
-          ? healthyHealth
+          ? HealthyModuleHealth
           : await record.lifecycle.health()
       } catch (error) {
         log.warn('Kernel module health check failed', {
@@ -673,7 +679,7 @@ export class KernelModuleHost {
 
   private assertNotDisposed(): void {
     if (!this.disposed) return
-    throw new KernelError('HOST_DISPOSED', '内核模块宿主已回收')
+    throw new KernelError(KernelErrorCodes.hostDisposed, '内核模块宿主已回收')
   }
 
   private assertStartable(): void {
@@ -682,7 +688,7 @@ export class KernelModuleHost {
     )
     if (isUndefined(invalid)) return
     throw new KernelError(
-      'MODULE_STATE',
+      KernelErrorCodes.moduleState,
       `内核模块 "${invalid.definition.manifest.id}" 当前是 "${invalid.status}" 状态，起不来`,
       { moduleId: invalid.definition.manifest.id },
     )
@@ -705,7 +711,7 @@ export class KernelModuleHost {
       manifest.id,
       readableCapabilityIds,
       this.serviceStore,
-      () => this.assertModuleContextActive(record),
+      () => assertModuleContextActive(record),
     )
 
     return Object.freeze({
@@ -716,25 +722,25 @@ export class KernelModuleHost {
       events: this.eventHub.forModule(
         manifest.id,
         record.generation,
-        () => this.assertModuleContextActive(record),
+        () => assertModuleContextActive(record),
         options.isEventDeliveryEnabled,
       ),
       permissions: createScopedPermissionBroker({
         manifest,
         generation: record.generation,
         broker: this.permissionBroker,
-        assertActive: () => this.assertModuleContextActive(record),
+        assertActive: () => assertModuleContextActive(record),
       }),
       state: createNamespacedStateStore({
         namespace: manifest.id,
         backend: this.stateBackend,
-        assertActive: () => this.assertModuleContextActive(record),
+        assertActive: () => assertModuleContextActive(record),
       }),
       registerService: <TService extends object>(
         token: CapabilityToken<TService>,
         service: TService,
       ) => {
-        this.assertModuleContextActive(record)
+        assertModuleContextActive(record)
         const declaredCapability = manifest.provides.find(
           (capability) => capability.id === token.id,
         )
@@ -743,7 +749,7 @@ export class KernelModuleHost {
           || declaredCapability.version !== token.version
         ) {
           throw new KernelError(
-            'UNDECLARED_CAPABILITY_PROVIDER',
+            KernelErrorCodes.undeclaredCapabilityProvider,
             `模块 "${manifest.id}" 注册了自己没声明提供的能力 "${token.id}"（版本 "${token.version}"）`,
             { moduleId: manifest.id, capabilityId: token.id },
           )
@@ -759,25 +765,7 @@ export class KernelModuleHost {
     })
   }
 
-  private assertModuleContextActive(record: ModuleRecord): void {
-    if (record.contextActive) return
-    throw new KernelError(
-      'MODULE_STATE',
-      `内核模块上下文 "${record.definition.manifest.id}" 已经失效`,
-      { moduleId: record.definition.manifest.id },
-    )
-  }
 
-  private failRecord(record: ModuleRecord, error: unknown): void {
-    const normalized = toError(error)
-    record.status = 'failed'
-    record.error = normalized.message
-    record.health = {
-      status: 'unhealthy',
-      message: normalized.message,
-    }
-    record.controller?.abort()
-  }
 
   private async rollback(
     activatedModuleIds: readonly string[],
@@ -788,16 +776,16 @@ export class KernelModuleHost {
       const record = this.modules.get(moduleId)!
       record.controller?.abort()
       try {
-        await this.disposeLifecycle(record)
+        await disposeModuleLifecycle(record)
         if (moduleId !== failedModuleId) {
           record.status = 'disposed'
-          record.health = unknownHealth
+          record.health = UnknownModuleHealth
         }
       } catch (error) {
         const normalized = toError(error)
         rollbackErrors.push(normalized)
         log.warn('Kernel module rollback failed', { error: normalized, moduleId })
-        if (moduleId !== failedModuleId) this.failRecord(record, normalized)
+        if (moduleId !== failedModuleId) failModuleRecord(record, normalized)
       } finally {
         this.cleanupModule(record)
       }
@@ -812,39 +800,8 @@ export class KernelModuleHost {
     this.eventHub.removeOwner(id, record.generation)
   }
 
-  private async disposeLifecycle(record: ModuleRecord): Promise<void> {
-    if (record.lifecycleDisposed) return
-    record.lifecycleDisposed = true
-    await record.lifecycle?.dispose?.()
-  }
 
-  private snapshot(record: ModuleRecord): KernelModuleSnapshot {
-    return Object.freeze({
-      manifest: record.definition.manifest,
-      status: record.status,
-      health: record.health,
-      generation: record.generation,
-      error: record.error,
-    })
-  }
 
-  private createRecord(
-    definition: KernelModuleDefinition,
-    manifest: KernelModuleManifest,
-    generation: number,
-  ): ModuleRecord {
-    return {
-      definition: {
-        manifest,
-        activate: (context) => definition.activate(context),
-      },
-      generation,
-      status: 'registered',
-      health: unknownHealth,
-      contextActive: false,
-      lifecycleDisposed: false,
-    }
-  }
 
   private activateRecord(
     record: ModuleRecord,
@@ -860,7 +817,7 @@ export class KernelModuleHost {
     const adapter = this.isolationAdapters.get(isolation)
     if (isUndefined(adapter)) {
       throw new KernelError(
-        'MISSING_ISOLATION_ADAPTER',
+        KernelErrorCodes.missingIsolationAdapter,
         `Module "${record.definition.manifest.id}" requires a "${isolation}" isolation adapter`,
         { moduleId: record.definition.manifest.id },
       )

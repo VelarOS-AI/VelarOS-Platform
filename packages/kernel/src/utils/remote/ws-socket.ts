@@ -5,8 +5,9 @@
 // factory 即可,不必把整包拖上 `ws` 的类型。
 import { WebSocket } from 'ws'
 
-import type { RemoteNodeSocket, RemoteNodeSocketFactory } from '../../types/remote-client'
+import { isPresent } from '@velaros-ai/core'
 
+import type { RemoteNodeSocket, RemoteNodeSocketFactory } from '../../contract/requires'
 /**
  * 建立到 Node 的 WebSocket。
  *
@@ -17,3 +18,11 @@ import type { RemoteNodeSocket, RemoteNodeSocketFactory } from '../../types/remo
 export const createRemoteNodeWebSocket: RemoteNodeSocketFactory = (
   url: string,
 ): RemoteNodeSocket => new WebSocket(url)
+
+/** 摘掉一条 socket 上的全部监听;换连接前必须先摘,否则旧 socket 的 close 会干扰新连接。 */
+export function detachRemoteNodeSocket(
+  socket: LooseOptional<RemoteNodeSocket>,
+): void {
+  if (!isPresent(socket)) return
+  socket.removeAllListeners()
+}

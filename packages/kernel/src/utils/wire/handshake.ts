@@ -1,8 +1,12 @@
 // 域：协议版本与能力协商握手（宪章 §1 能力协商）。
 import { z } from 'zod'
 
+import type { KernelHandshake } from '../../types/wire'
+
 import { KernelModuleDescriptorSchema } from './capability'
 import { KernelProtocolVersion } from './version'
+
+export type { KernelHandshake } from '../../types/wire'
 
 /**
  * kernel 协议主版本号。
@@ -22,5 +26,4 @@ export const KernelHandshakeSchema = z.strictObject({
   protocolVersion: z.number().int().positive(),
   kernelVersion: z.string(),
   modules: z.array(KernelModuleDescriptorSchema),
-})
-export type KernelHandshake = z.infer<typeof KernelHandshakeSchema>
+}) satisfies z.ZodType<KernelHandshake>

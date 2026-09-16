@@ -8,8 +8,24 @@ import {
   toOptional,
 } from '@velaros-ai/core'
 
-/** One signed, versioned declaration per Mod. Every domain routes from this envelope. */
-export const VelarosModManifestFileName = 'velaros.mod.json' as const
+import { VelarosModManifestFileName } from '../../contract/constants'
+import type {
+  VelarosModCapabilityRequirement,
+  VelarosModCapabilityToken,
+  VelarosModEnvelope,
+  VelarosModEnvelopeParseResult,
+  VelarosModModuleSection,
+} from '../../types/wire'
+
+export type {
+  VelarosModEnvelope,
+  VelarosModEnvelopeParseResult,
+  VelarosModManifestDiagnostic,
+  VelarosModModuleSection,
+} from '../../types/wire'
+
+/** mod 清单在包里的固定文件名；打包、导入、市场三条路都按它找清单。 */
+export { VelarosModManifestFileName }
 
 const TrimmedIdSchema = z.string().transform((value) => value.trim()).pipe(z.string().min(1))
 const SemverVersionPattern = /^(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$/u
@@ -19,6 +35,7 @@ const SemverVersionSchema = TrimmedIdSchema.refine(
   { message: '不是合法的 x.y.z 版本号' },
 )
 
+/** 判断一个版本范围串解析得了吗；只看写法，不判具体版本满不满足。 */
 function isSemverRangeParsable(range: string): boolean {
   return range.split('||').every((clause) => {
     const comparators = clause.trim().split(/\s+/u).filter(Boolean)
@@ -34,6 +51,7 @@ const SemverRangeSchema = TrimmedIdSchema.refine(isSemverRangeParsable, {
   message: '不是可解析的 semver range',
 })
 
+/** 宽容数组：清单里写成单个字符串时当成只有一项的数组。 */
 function tolerantArray<TSchema extends z.ZodTypeAny>(schema: TSchema) {
   return z.preprocess(
     (value) => isString(value) ? [value] : value,
@@ -41,6 +59,7 @@ function tolerantArray<TSchema extends z.ZodTypeAny>(schema: TSchema) {
   )
 }
 
+/** 宽容能力引用：清单里写成裸字符串时当成 `{ id: 那个字符串 }`。 */
 function tolerantCapabilityRef<TSchema extends z.ZodTypeAny>(schema: TSchema) {
   return z.preprocess(
     (value) => isString(value) ? { id: value } : value,
@@ -52,13 +71,13 @@ function tolerantCapabilityRef<TSchema extends z.ZodTypeAny>(schema: TSchema) {
 export const VelarosModCapabilityTokenSchema = z.strictObject({
   id: TrimmedIdSchema,
   version: TrimmedIdSchema.default('1.0.0'),
-})
+}) satisfies z.ZodType<VelarosModCapabilityToken>
 
 /** JSON projection of a Kernel capability requirement. */
 export const VelarosModCapabilityRequirementSchema = z.strictObject({
   id: TrimmedIdSchema,
   versionRange: SemverRangeSchema.optional(),
-})
+}) satisfies z.ZodType<VelarosModCapabilityRequirement>
 
 /**
  * Kernel-owned section of the Mod envelope.
@@ -85,7 +104,7 @@ export const VelarosModModuleSectionSchema = z.strictObject({
     .default('in-process'),
   entry: TrimmedIdSchema.optional(),
   exportName: TrimmedIdSchema.optional(),
-})
+}) satisfies z.ZodType<VelarosModModuleSection>
 
 /**
  * The only public Mod manifest envelope. Kernel validates `module`; domain
@@ -95,23 +114,9 @@ export const VelarosModEnvelopeSchema = z.strictObject({
   module: VelarosModModuleSectionSchema,
   agent: z.unknown().optional(),
   ui: z.unknown().optional(),
-})
+}) satisfies z.ZodType<VelarosModEnvelope>
 
-export type VelarosModModuleSection = z.infer<typeof VelarosModModuleSectionSchema>
-export type VelarosModEnvelope = z.infer<typeof VelarosModEnvelopeSchema>
-
-export interface VelarosModManifestDiagnostic {
-  readonly code: string
-  readonly message: string
-  readonly path?: string
-  readonly modId?: string
-  readonly origin?: string
-}
-
-export type VelarosModEnvelopeParseResult =
-  | { readonly ok: true; readonly envelope: VelarosModEnvelope }
-  | { readonly ok: false; readonly diagnostics: readonly VelarosModManifestDiagnostic[] }
-
+/** 读一个不透明节里的 `id` 字段；不是对象或没有 id 就返回 undefined。 */
 function readSectionId(input: unknown): string | undefined {
   if (!isPlainObject(input)) return undefined
   const id = Reflect.get(input, 'id')
@@ -119,6 +124,7 @@ function readSectionId(input: unknown): string | undefined {
 }
 
 /** Validate once at the shared entry, then route opaque sections to their owners. */
+/** 在共享入口把整份清单校验一次，之后各域只拿自己那一节；失败不抛，原因在 `diagnostics` 里。 */
 export function parseVelarosModEnvelope(
   input: unknown,
   options: { readonly origin?: string } = {},

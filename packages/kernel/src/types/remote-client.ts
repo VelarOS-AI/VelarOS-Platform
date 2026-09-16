@@ -1,3 +1,9 @@
+import type {
+  RemoteNodeClientCredentialStore as RemoteNodeCredentialStore,
+  RemoteNodeSocketFactory,
+} from '../contract/requires.js'
+
+export type { RemoteNodeClientCredentialStore as RemoteNodeCredentialStore } from '../contract/requires.js'
 // Platform Kernel 统一持有与宿主无关的远程节点实现。
 // 域:远程能力节点 Client 侧的本地契约面——可替换端口、失败分档与事件形状。
 //
@@ -7,33 +13,19 @@
 // 值得读两遍的只有 `resultUnknown`:它把「没执行」与「可能已半执行」分成两档。跨机调用里
 // 构建、代码签名这类动作一旦落在后者,重试就不是无害动作——把两者混成一个"失败"上抛,
 // 等于让调用方在不知情的情况下做第二次签名。
-import type { RemoteNodeClientError } from '../utils/errors'
+import type { RemoteNodeClientErrorCode } from '../contract/constants'
+
+import type { ScopeRef } from './kernel.js'
 import type {
   RemoteNodeError,
   RemoteNodeIdentity,
   RemoteNodeManifest,
   RemoteNodePlatform,
-} from '../utils/wire/remote-node'
+} from './wire.js'
 
-import type { ScopeRef } from './abi-references'
 
-/**
- * socket 端口。
- *
- * 只声明本传输真正用到的方法,形状对齐 `ws` 的 EventEmitter 面(Electron 主进程没有可用的
- * DOM WebSocket)。收窄成端口是为了让测试替身与未来的 TLS/代理实现可以整体换掉。
- */
-export interface RemoteNodeSocket {
-  send(data: string): void
-  close(code?: number, reason?: string): void
-  on(event: 'open', listener: () => void): unknown
-  on(event: 'message', listener: (data: unknown) => void): unknown
-  on(event: 'close', listener: (code: number, reason: unknown) => void): unknown
-  on(event: 'error', listener: (error: Error) => void): unknown
-  removeAllListeners(): unknown
-}
 
-export type RemoteNodeSocketFactory = (url: string) => RemoteNodeSocket
+
 
 /**
  * 设备凭据。
@@ -46,18 +38,6 @@ export interface RemoteNodeCredentials {
   readonly privateKey: string
   readonly publicKey: string
   readonly node: RemoteNodeIdentity
-}
-
-/**
- * 凭据存储端口。
- *
- * 刻意只有三个动作:Desktop 后续换 Electron `safeStorage` 时只需换实现,调用点零改动。
- * `load` 在缺席与损坏时都返回 `null`——损坏等同未配对,重新走人工配对仪式,不半信半疑地用。
- */
-export interface RemoteNodeCredentialStore {
-  load(): Promise<Nullable<RemoteNodeCredentials>>
-  save(credentials: RemoteNodeCredentials): Promise<void>
-  clear(): Promise<void>
 }
 
 /** 连接态。`stopped` 是终态:只有 dispose 与重建能离开它。 */
@@ -74,12 +54,29 @@ export interface RemoteNodeSession {
   readonly manifest: RemoteNodeManifest
 }
 
+/**
+ * 客户端失败的只读形状。
+ *
+ * 与实现里的 `RemoteNodeClientError` 同构:`types/` 不许引实现层的错误类,判决表、停手通知与
+ * 健康投影因此都按这个形状交接;运行期流过的仍是那个错误实例,`instanceof` 照旧成立。
+ */
+export interface RemoteNodeClientFailure extends Error {
+  /** 失败码;见 `contract/constants.ts` 的 `RemoteNodeClientErrorCodes`。 */
+  readonly code: string
+  /** 这次失败重试有没有意义。 */
+  readonly retryable: boolean
+  /** 调用已上过线但拿不到终态:重试可能造成第二次副作用。 */
+  readonly resultUnknown: boolean
+  /** Node 侧回的失败信封原样;链路故障(还没上线)时是 `null`。 */
+  readonly nodeError: Nullable<RemoteNodeError>
+}
+
 export type RemoteNodeProgressListener = (event: unknown) => void
 export type RemoteNodeManifestListener = (manifest: RemoteNodeManifest) => void
 export type RemoteNodeStateListener = (
   state: RemoteNodeConnectionState,
 ) => void
-export type RemoteNodeStopListener = (error: RemoteNodeClientError) => void
+export type RemoteNodeStopListener = (error: RemoteNodeClientFailure) => void
 export type RemoteNodeUnsubscribe = () => void
 
 /**
@@ -96,27 +93,6 @@ export interface RemoteNodeInvokeRequest {
   readonly deadlineMs?: number
   readonly onProgress?: RemoteNodeProgressListener
 }
-
-export const RemoteNodeClientErrorCodes = {
-  /** 对端重启,在途调用结果永远不会再来。 */
-  NodeRestarted: 'NODE_RESTARTED',
-  ProtocolMismatch: 'REMOTE_NODE_PROTOCOL_MISMATCH',
-  Unauthorized: 'REMOTE_NODE_UNAUTHORIZED',
-  /** 需要人工配对码才能继续(未配对,或本机凭据已丢)。 */
-  PairingRequired: 'REMOTE_NODE_PAIRING_REQUIRED',
-  /** 被同一 Client 的新连接顶替。 */
-  Superseded: 'REMOTE_NODE_SUPERSEDED',
-  Disposed: 'REMOTE_NODE_DISPOSED',
-  /** 本机凭据读不出来（钥匙串锁着、文件权限不对……），连都还没连上。 */
-  CredentialsUnavailable: 'REMOTE_NODE_CREDENTIALS_UNAVAILABLE',
-  CallTimeout: 'REMOTE_NODE_CALL_TIMEOUT',
-  CallFailed: 'REMOTE_NODE_CALL_FAILED',
-  /** Node 侧派发后被自己的策略拒绝——是策略事实,不是链路故障。 */
-  CallDenied: 'REMOTE_NODE_CALL_DENIED',
-} as const
-
-export type RemoteNodeClientErrorCode =
-  (typeof RemoteNodeClientErrorCodes)[keyof typeof RemoteNodeClientErrorCodes]
 
 export interface RemoteNodeClientErrorInit {
   readonly code: RemoteNodeClientErrorCode

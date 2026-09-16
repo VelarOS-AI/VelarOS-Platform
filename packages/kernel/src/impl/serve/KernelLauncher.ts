@@ -1,105 +1,80 @@
 import { type ChildProcess, spawn } from 'node:child_process'
 
-import { isNotNull, isNotUndefined, isObject, isUndefined, Log } from '@velaros-ai/core'
+import { isNotUndefined, isUndefined, Log } from '@velaros-ai/core'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
 import { KernelClientErrorCodes } from '../../contract/constants'
+import type { KernelDaemonEndpointDescriptor, KernelDaemonPaths } from '../../types/kernel'
+import type { KernelVersionResolver, KernelVersionTarget } from '../../types/serve'
 import { KernelClientError } from '../../utils/errors'
+import { createDefaultKernelDaemonPaths } from '../../utils/rpc/descriptor'
 import {
-  createDefaultKernelDaemonPaths,
-  type KernelDaemonEndpointDescriptor,
-  type KernelDaemonPaths,
-} from '../../utils/rpc/descriptor'
+  hasChildProcessExited,
+  isKernelDaemonProcessAlive,
+  meansKernelDaemonIsNotRunning,
+} from '../../utils/serve/daemon-process'
 import { KernelTuning } from '../../utils/tuning'
-import { type ConnectedKernelDaemon,connectToKernelDaemon, discoverKernelDaemon } from '../client/KernelDaemonDirectory'
+import { type ConnectedKernelDaemon, connectToKernelDaemon, discoverKernelDaemon } from '../client/KernelDaemonDirectory'
 
 const log = Log.tag('KernelLauncher')
 
-/**
- * Resolves which installed Kernel version the launcher should run.
- *
- * The launcher deliberately does not know the install layout; `kernel-updater`
- * owns that and supplies the resolved entry point. Keeping the two apart means
- * a version switch never races a process start.
- */
-export interface KernelVersionResolver {
-  resolveActiveVersion(): Promise<KernelVersionTarget>
-}
-
-export interface KernelVersionTarget {
-  readonly version: string
-  /** Absolute path to the Kernel entry script or executable. */
-  readonly entryPoint: string
-  readonly execPath?: string
-  readonly args?: readonly string[]
-  readonly env?: Readonly<Record<string, string>>
-}
-
+/** 起一个 Kernel 启动器要交进来的东西：版本解析器，外加一组可替换的超时与进程原语。 */
 export interface KernelLauncherOptions {
+  /** descriptor、锁与 socket 的落点；不给就用缺省的运行目录。 */
   readonly paths?: KernelDaemonPaths
+  /** 由谁回答「这次该跑哪个版本」。 */
   readonly resolver: KernelVersionResolver
-  /** How long to wait for the descriptor to appear after spawning. */
+  /** spawn 之后等 descriptor 出现多久，毫秒；不给取可调参数表里的值。 */
   readonly startTimeoutMs?: number
+  /** 轮询 descriptor 的间隔，毫秒；不给取可调参数表里的值。 */
   readonly pollIntervalMs?: number
   /** SIGTERM 之后等它自己退的宽限期，过期改发 SIGKILL。 */
   readonly stopGraceMs?: number
   /** SIGKILL 之后还等多久；再不退就不等了。 */
   readonly stopKillGraceMs?: number
+  /** 起子进程用哪个实现；测试替换它，不然就是 `node:child_process` 的 `spawn`。 */
   readonly spawnProcess?: typeof spawn
+  /** 现在几点；测试替换它来控制超时。 */
   readonly now?: () => number
+  /** 等一会儿；测试替换它来跳过真实等待。 */
   readonly sleep?: (ms: number) => Promise<void>
 }
 
-export interface KernelLaunchResult extends ConnectedKernelDaemon {
-  /** Undefined when an already-running daemon was reused. */
+/** 一次启动的结果：连上的客户端，加上这次是不是由本启动器起的那个进程。 */
+export interface KernelLauncherResult extends ConnectedKernelDaemon {
+  /** 复用了已经在跑的守护进程时没有这个字段。 */
   readonly process?: ChildProcess
+  /** true = 这次是本启动器起的，false = 附着到已有的守护进程。 */
   readonly started: boolean
 }
 
-
-function hasExited(child: ChildProcess): boolean {
-  return isNotNull(child.exitCode) || isNotNull(child.signalCode)
-}
+export type { KernelLauncherResult as KernelLaunchResult }
 
 /**
- * descriptor 里记的守护进程还活着吗。
+ * 起（或附着到）共享的 Kernel 进程，并交回一个验过健康的客户端；实例归要用 Kernel 的产品。
  *
- * EPERM 表示进程存在但属于别人（共享守护进程的正常情形），照样算活着。
+ * 安装、切版本与回滚归 `kernel-updater`；这个类只负责选中已激活的版本、持有子进程，并在任何
+ * 产品流量进去之前证明那个端点答得出一次健康的握手。
  */
-function isProcessAlive(pid: number): boolean {
-  if (!Number.isInteger(pid) || pid <= 0) return false
-  try {
-    process.kill(pid, 0)
-    return true
-  } catch (error) {
-    return isObject(error) && Reflect.get(error, 'code') === 'EPERM'
-  }
+export interface KernelLauncherApi {
+  /** 真的有守护进程在跑吗：既要 descriptor 读得出来，也要它记的 pid 还活着。 */
+  isRunning(): Promise<boolean>
+  /** 连上共享 Kernel，没在跑就先起一个；起不来或超时抛带码的错误。 */
+  ensureRunning(): Promise<KernelLauncherResult>
+  /** 核一次连上的 Kernel 自报的健康；自报已停止时抛 `KERNEL_UNHEALTHY`。 */
+  verifyHealthy(connection: ConnectedKernelDaemon): Promise<void>
+  /** 停掉本启动器起的那个进程：SIGTERM → 宽限 → SIGKILL → 再等一小段就不等了。 */
+  stop(): Promise<void>
+  /** 停掉当前进程，再按重新解析出来的版本起一个。 */
+  restart(): Promise<KernelLauncherResult>
+  /** 回收启动器：停掉进程，之后再调 `ensureRunning` 一律抛 `LAUNCHER_DISPOSED`。 */
+  dispose(): Promise<void>
+  /** 回当前发布着的端点 descriptor；没有守护进程在跑时抛带码的错误。 */
+  getDescriptor(): Promise<KernelDaemonEndpointDescriptor>
 }
 
-/**
- * 这个错误是不是「守护进程没在跑」。
- *
- * 崩溃后残留的 descriptor 指着一个没人听的端点：连接会以
- * `TRANSPORT_CONNECT_FAILED` 失败，而不是 `DAEMON_NOT_RUNNING`。原来只吞后者，于是
- * `ensureRunning()` 直接把连接错误抛出去，一次都不 spawn，启动器被一份陈旧文件卡死。
- */
-function meansDaemonIsNotRunning(error: unknown): boolean {
-  if (!(error instanceof KernelClientError)) return false
-  return error.code === KernelClientErrorCodes.daemonNotRunning
-    || error.code === KernelClientErrorCodes.daemonDescriptorInvalid
-    || error.code === KernelClientErrorCodes.transportConnectFailed
-    || error.code === KernelClientErrorCodes.transportDisconnected
-}
-
-/**
- * Starts (or attaches to) the shared Kernel process and hands back a verified client.
- *
- * Installation, version switching, and rollback belong to `kernel-updater`;
- * this class only selects the already-activated version, owns the child
- * process, and proves the endpoint answers a healthy handshake before any
- * product traffic reaches it.
- */
-export class KernelLauncher {
+/** 共享 Kernel 进程的启动器。 */
+export class KernelLauncher implements KernelLauncherApi {
   private readonly paths: KernelDaemonPaths
   private readonly startTimeoutMs: number
   private readonly pollIntervalMs: number
@@ -131,7 +106,7 @@ export class KernelLauncher {
   public async isRunning(): Promise<boolean> {
     try {
       const descriptor = await discoverKernelDaemon(this.paths)
-      return isProcessAlive(descriptor.pid)
+      return isKernelDaemonProcessAlive(descriptor.pid)
     } catch (error) {
       if (error instanceof KernelClientError) return false
       throw error
@@ -139,12 +114,11 @@ export class KernelLauncher {
   }
 
   /**
-   * Connects to the shared Kernel, starting it first when nothing is running.
+   * 连上共享 Kernel，没在跑就先起一个。
    *
-   * Reusing a live daemon is the normal path: several products share one
-   * Kernel, so the first one in starts it and the rest attach.
+   * 复用活着的守护进程是常态：几个产品共用一个 Kernel，第一个进来的把它起起来，其余的附着上去。
    */
-  public async ensureRunning(): Promise<KernelLaunchResult> {
+  public async ensureRunning(): Promise<KernelLauncherResult> {
     this.assertUsable()
     const existing = await this.tryConnect()
     if (isNotUndefined(existing)) return { ...existing, started: false }
@@ -166,7 +140,7 @@ export class KernelLauncher {
     const deadline = this.now() + this.startTimeoutMs
     while (this.now() < deadline) {
       // 子进程可能在监听器挂载前退出，因此循环内也要检查退出状态。
-      if (isUndefined(exitFailure) && hasExited(child)) {
+      if (isUndefined(exitFailure) && hasChildProcessExited(child)) {
         exitFailure = new KernelClientError({
           code: KernelClientErrorCodes.kernelStartFailed,
           message: `Kernel 进程在启动过程中退出（${
@@ -187,7 +161,6 @@ export class KernelLauncher {
     })
   }
 
-  /** Verifies the connected Kernel reports a usable health status. */
   public async verifyHealthy(
     connection: ConnectedKernelDaemon,
   ): Promise<void> {
@@ -211,7 +184,7 @@ export class KernelLauncher {
     const child = this.child
     if (isUndefined(child)) return
     this.child = undefined
-    if (hasExited(child)) return
+    if (hasChildProcessExited(child)) return
 
     child.kill('SIGTERM')
     if (await this.waitForExit(child, this.stopGraceMs)) return
@@ -224,20 +197,20 @@ export class KernelLauncher {
     log.error('Kernel 进程在 SIGKILL 之后仍未退出，不再等待', { pid: child.pid })
   }
 
+  /** 按轮询间隔等一个子进程退出，超过给定期限就回 false。 */
   private async waitForExit(
     child: ChildProcess,
     timeoutMs: number,
   ): Promise<boolean> {
     const deadline = this.now() + timeoutMs
     while (this.now() < deadline) {
-      if (hasExited(child)) return true
+      if (hasChildProcessExited(child)) return true
       await this.sleep(this.pollIntervalMs)
     }
-    return hasExited(child)
+    return hasChildProcessExited(child)
   }
 
-  /** Stops the current process and starts a freshly resolved version. */
-  public async restart(): Promise<KernelLaunchResult> {
+  public async restart(): Promise<KernelLauncherResult> {
     await this.stop()
     return this.ensureRunning()
   }
@@ -252,11 +225,12 @@ export class KernelLauncher {
     return discoverKernelDaemon(this.paths)
   }
 
+  /** 试着连已有的守护进程；「没在跑」一类的失败当作没连上，别的照抛。 */
   private async tryConnect(): Promise<ConnectedKernelDaemon | undefined> {
     try {
       return await connectToKernelDaemon(this.paths)
     } catch (error) {
-      if (meansDaemonIsNotRunning(error)) {
+      if (meansKernelDaemonIsNotRunning(error)) {
         log.debug('未能连上已有的 Kernel 守护进程，按「没在跑」处理', { error })
         return undefined
       }
@@ -264,6 +238,7 @@ export class KernelLauncher {
     }
   }
 
+  /** 起一个脱离父进程的守护进程；起不来时折成 `KERNEL_START_FAILED`。 */
   private spawnKernel(target: KernelVersionTarget): ChildProcess {
     try {
       const child = this.spawnProcess(
@@ -287,6 +262,7 @@ export class KernelLauncher {
     }
   }
 
+  /** 回收之后不许再起 Kernel。 */
   private assertUsable(): void {
     if (!this.disposed) return
     throw new KernelClientError({

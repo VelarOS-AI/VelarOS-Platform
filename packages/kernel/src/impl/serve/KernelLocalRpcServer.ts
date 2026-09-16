@@ -1,51 +1,38 @@
-import {
-  createHash,
-  timingSafeEqual,
-} from 'node:crypto'
-import {
-  chmod,
-  lstat,
-  unlink,
-} from 'node:fs/promises'
-import {
-  type AddressInfo,
-  createServer,
-  type Server,
-  type Socket,
-} from 'node:net'
+import { chmod, unlink } from 'node:fs/promises'
+import { createServer, type Server, type Socket } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-import {
-  isBlank,
-  isEmpty,
-  isNotUndefined,
-  isNull,
-  isObject,
-  isString,
-  isUndefined,
-  Log,
-} from '@velaros-ai/core'
+import { isBlank, isNotUndefined, isUndefined, Log } from '@velaros-ai/core'
 
-import { KernelClientErrorCodes, KernelErrorCodes, KernelRpcLimits } from '../../contract/constants'
-import type { KernelRegistration } from '../../types/abi-module'
-import type { KernelRpcEndpoint } from '../../types/client-endpoint'
-import type {
-  KernelRpcEventFrame,
-  KernelRpcFailure,
-  KernelRpcRequest,
-  KernelRpcServerFrame,
-  KernelRpcSuccess,
-} from '../../types/client-rpc-frames'
-import { KernelClientError, KernelError } from '../../utils/errors'
+import { KernelRpcLimits } from '../../contract/constants'
+import type { KernelRegistration } from '../../contract/provides'
+import type { KernelRpcEndpoint } from '../../types/kernel'
+import type { KernelRpcEventFrame, KernelRpcRequest, KernelRpcSuccess } from '../../types/wire'
+import { KernelClientError } from '../../utils/errors'
+import { isNodeError } from '../../utils/fs'
+import {
+  closeKernelRpcServer,
+  kernelRpcTokensMatch,
+  listenOnKernelRpcEndpoint,
+  removeStaleKernelRpcSocket,
+  resolveBoundKernelRpcEndpoint,
+  sendKernelRpcFrame,
+} from '../../utils/rpc/endpoint'
 import {
   decodeKernelRpcRequest,
+  readKernelRpcRequestId,
+  readRequiredKernelRpcId,
   requireNonEmptyString,
   requireRecord,
   rpcFailure,
+  toKernelRpcFailure,
 } from '../../utils/rpc/frames'
 import {
-  type CapabilityCallFailure,
+  capabilityCallFailure,
+  readCapabilityCallId,
+} from '../../utils/serve/service'
+import {
   CapabilityCallRequestSchema,
   type CapabilityCallResponse,
   CapabilitySessionCloseRequestSchema,
@@ -60,30 +47,39 @@ import {
 import { KernelProtocolVersion } from '../../utils/wire/version'
 
 import { CapabilitySessionLedger } from './CapabilitySessionLedger'
-import {
-  type KernelService,
-} from './KernelService'
+import type { KernelServiceApi } from './KernelService'
 
 const log = Log.tag('KernelLocalRpcServer')
 
+/** 起一个本机 RPC 服务端要交进来的东西。 */
 export interface KernelLocalRpcServerOptions {
+  /** 每一帧请求都要带上的认证令牌；少于 32 个字符直接抛错。 */
   readonly authToken: string
+  /** 监听哪个端点；不给就按平台选一个缺省端点。 */
   readonly endpoint?: KernelRpcEndpoint
+  /** 单帧字节上限；超过就回 `FRAME_TOO_LARGE` 并断开。不给取合同里的上限。 */
   readonly maxFrameBytes?: number
-  readonly service: KernelService
+  /** 这个服务端代理的内核服务面。 */
+  readonly service: KernelServiceApi
 }
 
-interface ConnectionContext {
+/** 一条连接的在途状态：socket、订阅表、在途调用的中止器、会话账本与半行缓冲。 */
+export interface KernelLocalRpcServerConnection {
+  /** 这条连接的 socket。 */
   readonly socket: Socket
+  /** 订阅 id → 退订句柄。 */
   readonly subscriptions: Map<string, KernelRegistration>
+  /** 请求 id → 中止器，`capability.cancel` 靠它中止在途调用。 */
   readonly controllers: Map<string, AbortController>
+  /** 这条连接自己的能力会话账本；断开即全部作废。 */
   readonly sessions: CapabilitySessionLedger
+  /** 还没读到换行的半行数据。 */
   buffer: string
 }
 
-
+/** 按平台折一个缺省的本机 RPC 端点：Windows 走回环 TCP，其余走临时目录下的 unix socket。 */
 export function createDefaultKernelRpcEndpoint(
-  name = 'velaros-kernel',
+  name: string = 'velaros-kernel',
 ): KernelRpcEndpoint {
   if (process.platform === 'win32') return { kind: 'tcp', host: '127.0.0.1', port: 0 }
   const safeName = name.replaceAll(/[^a-zA-Z0-9._-]/g, '-')
@@ -94,22 +90,36 @@ export function createDefaultKernelRpcEndpoint(
 }
 
 /**
- * Newline-delimited JSON RPC server for the local Kernel sidecar.
+ * 本机 sidecar 的换行分隔 JSON RPC 服务端；实例归守护进程。
  *
- * Unix domain sockets are the default. Windows uses an explicit loopback-only
- * TCP endpoint whose resolved port is returned after start.
+ * 缺省走 unix domain socket；Windows 用一个只绑回环的 TCP 端点，真正绑上的端口在启动后返回。
  */
-export class KernelLocalRpcServer {
+export interface KernelLocalRpcServerApi {
+  /** 先起服务面，再监听端点；已在监听就回现有端点，已回收则抛错。中途失败会回收服务面并清掉 socket。 */
+  start(): Promise<KernelRpcEndpoint>
+  /** 回真正绑上的端点；还没启动时抛错。 */
+  getEndpoint(): KernelRpcEndpoint
+  /** 断开全部连接、关掉监听、回收服务面、清掉 socket 文件；重复调用无副作用。 */
+  dispose(): Promise<void>
+}
+
+/** 本机 sidecar 的 RPC 服务端。 */
+export class KernelLocalRpcServer implements KernelLocalRpcServerApi {
+  /** 令牌至少这么长；短令牌猜得出来，宁可起不来也不将就。 */
+  private static readonly MinimumAuthTokenLength = 32
+
   private readonly server: Server
-  private readonly connections = new Set<ConnectionContext>()
+  private readonly connections = new Set<KernelLocalRpcServerConnection>()
   private readonly maxFrameBytes: number
   private readonly requestedEndpoint: KernelRpcEndpoint
   private resolvedEndpoint?: KernelRpcEndpoint
   private state: 'idle' | 'listening' | 'disposed' = 'idle'
 
   public constructor(private readonly options: KernelLocalRpcServerOptions) {
-    if (options.authToken.length < 32) {
-      throw new Error('Kernel RPC 的认证令牌至少要 32 个字符')
+    if (options.authToken.length < KernelLocalRpcServer.MinimumAuthTokenLength) {
+      throw new Error(
+        `Kernel RPC 的认证令牌至少要 ${KernelLocalRpcServer.MinimumAuthTokenLength} 个字符`,
+      )
     }
     this.maxFrameBytes = options.maxFrameBytes ?? KernelRpcLimits.maxFrameBytes
     if (!Number.isInteger(this.maxFrameBytes) || this.maxFrameBytes <= 0) {
@@ -139,21 +149,22 @@ export class KernelLocalRpcServer {
     await this.options.service.start()
     try {
       if (this.requestedEndpoint.kind === 'unix') {
-        await removeStaleSocket(this.requestedEndpoint.path)
+        await removeStaleKernelRpcSocket(this.requestedEndpoint.path)
       }
-      await listen(this.server, this.requestedEndpoint)
-      this.resolvedEndpoint = resolveBoundEndpoint(
+      await listenOnKernelRpcEndpoint(this.server, this.requestedEndpoint)
+      this.resolvedEndpoint = resolveBoundKernelRpcEndpoint(
         this.server,
         this.requestedEndpoint,
       )
       if (this.resolvedEndpoint.kind === 'unix') {
+        // socket 就是进内核的门：只给属主读写。
         await chmod(this.resolvedEndpoint.path, 0o600)
       }
       this.state = 'listening'
       return this.resolvedEndpoint
     } catch (error) {
       await this.options.service.dispose().catch((cleanupError) => {
-        log.warn('Kernel service cleanup failed after RPC startup error', { error: cleanupError })
+        log.warn('RPC 启动出错后回收 Kernel 服务面时又失败了', { error: cleanupError })
       })
       await this.cleanupSocketPath()
       throw error
@@ -170,13 +181,13 @@ export class KernelLocalRpcServer {
   public async dispose(): Promise<void> {
     if (this.state === 'disposed') return
     this.state = 'disposed'
-    for (const context of this.connections) {
-      cleanupConnection(context)
+    for (const context of [...this.connections]) {
+      this.closeConnection(context)
       context.socket.destroy()
     }
     this.connections.clear()
     try {
-      await closeServer(this.server)
+      await closeKernelRpcServer(this.server)
     } finally {
       try {
         await this.options.service.dispose()
@@ -186,9 +197,10 @@ export class KernelLocalRpcServer {
     }
   }
 
+  /** 接一条新连接，挂上读、错与关的处理。 */
   private accept(socket: Socket): void {
     socket.setEncoding('utf8')
-    const context: ConnectionContext = {
+    const context: KernelLocalRpcServerConnection = {
       socket,
       subscriptions: new Map(),
       controllers: new Map(),
@@ -198,13 +210,23 @@ export class KernelLocalRpcServer {
     this.connections.add(context)
     socket.on('data', (chunk: string) => this.read(context, chunk))
     socket.on('error', () => undefined)
-    socket.on('close', () => {
-      cleanupConnection(context)
-      this.connections.delete(context)
-    })
+    socket.on('close', () => this.closeConnection(context))
   }
 
-  private read(context: ConnectionContext, chunk: string): void {
+  /** 断开一条连接：中止在途调用、退订、清会话，并把它从连接表里摘掉。 */
+  private closeConnection(context: KernelLocalRpcServerConnection): void {
+    for (const controller of context.controllers.values()) controller.abort()
+    context.controllers.clear()
+    for (const registration of context.subscriptions.values()) {
+      registration.dispose()
+    }
+    context.subscriptions.clear()
+    context.sessions.clear()
+    this.connections.delete(context)
+  }
+
+  /** 按换行切帧；单帧或缓冲超过上限就断开这条连接。 */
+  private read(context: KernelLocalRpcServerConnection, chunk: string): void {
     context.buffer += chunk
 
     let newlineIndex = context.buffer.indexOf('\n')
@@ -225,33 +247,35 @@ export class KernelLocalRpcServer {
     }
   }
 
-  private rejectOversizedFrame(context: ConnectionContext): void {
-    sendFrame(
+  /** 回一帧「超长」失败并断开：超限的连接不值得继续读下去，回执里点明上限是多少。 */
+  private rejectOversizedFrame(context: KernelLocalRpcServerConnection): void {
+    sendKernelRpcFrame(
       context.socket,
       rpcFailure(
         'invalid-frame',
         'FRAME_TOO_LARGE',
-        'RPC frame exceeds the configured size limit',
+        `RPC 帧超过了 ${this.maxFrameBytes} 字节的上限`,
       ),
     )
     context.socket.destroy()
   }
 
+  /** 解一帧、验令牌、派发、回响应；任何失败都折成失败帧写回去。 */
   private async handleLine(
-    context: ConnectionContext,
+    context: KernelLocalRpcServerConnection,
     line: string,
   ): Promise<void> {
     let raw: unknown
     try {
       raw = JSON.parse(line) as unknown
     } catch (error) {
-      log.debug('Rejected malformed Kernel RPC JSON', { error })
-      sendFrame(
+      log.debug('挡下一帧不是合法 JSON 的 Kernel RPC', { error })
+      sendKernelRpcFrame(
         context.socket,
         rpcFailure(
           'invalid-frame',
           'INVALID_JSON',
-          'RPC frame is not valid JSON',
+          'RPC 帧不是合法的 JSON',
         ),
       )
       return
@@ -261,20 +285,20 @@ export class KernelLocalRpcServer {
     try {
       request = decodeKernelRpcRequest(raw)
     } catch (error) {
-      log.debug('Rejected invalid Kernel RPC request', { error })
-      sendFrame(
+      log.debug('挡下一帧不合协议的 Kernel RPC 请求', { error })
+      sendKernelRpcFrame(
         context.socket,
-        toRpcFailure(readRequestId(raw), error),
+        toKernelRpcFailure(readKernelRpcRequestId(raw), error),
       )
       return
     }
-    if (!tokensMatch(request.authToken, this.options.authToken)) {
-      sendFrame(
+    if (!kernelRpcTokensMatch(request.authToken, this.options.authToken)) {
+      sendKernelRpcFrame(
         context.socket,
         rpcFailure(
           request.requestId,
           'UNAUTHORIZED',
-          'Kernel RPC authentication failed',
+          'Kernel RPC 认证失败',
         ),
       )
       return
@@ -294,26 +318,27 @@ export class KernelLocalRpcServer {
         status: 'ok',
         result,
       }
-      if (!sendFrame(context.socket, response)) {
-        sendFrame(
+      if (!sendKernelRpcFrame(context.socket, response)) {
+        sendKernelRpcFrame(
           context.socket,
           rpcFailure(
             request.requestId,
             'RESPONSE_SERIALIZATION_FAILED',
-            'RPC result is not serializable',
+            'RPC 的结果序列化不了',
           ),
         )
       }
     } catch (error) {
-      log.caught('Kernel RPC request failed', error, { method: request.method })
-      sendFrame(context.socket, toRpcFailure(request.requestId, error))
+      log.caught('Kernel RPC 请求失败', error, { method: request.method })
+      sendKernelRpcFrame(context.socket, toKernelRpcFailure(request.requestId, error))
     } finally {
       context.controllers.delete(request.requestId)
     }
   }
 
+  /** 按方法名把请求派给对应的处理。 */
   private dispatch(
-    context: ConnectionContext,
+    context: KernelLocalRpcServerConnection,
     request: KernelRpcRequest,
     signal?: AbortSignal,
   ): unknown | Promise<unknown> {
@@ -324,16 +349,40 @@ export class KernelLocalRpcServer {
         return this.options.service.health()
       case 'capability.session.open':
         return this.openCapabilitySession(context, request.params)
-      case 'capability.session.close':
-        return this.closeCapabilitySession(context, request.params)
+      case 'capability.session.close': {
+        const parsed = CapabilitySessionCloseRequestSchema.safeParse(request.params)
+        if (!parsed.success) {
+          throw new KernelClientError({
+            code: 'INVALID_PARAMS',
+            message: '关闭能力会话的请求不符合 Kernel 协议 v2',
+          })
+        }
+        return {
+          protocolVersion: KernelProtocolVersion,
+          closed: context.sessions.close(parsed.data.sessionId),
+        } satisfies CapabilitySessionCloseResponse
+      }
       case 'capability.call':
         return this.callCapability(context, request.params, signal)
-      case 'capability.cancel':
-        return this.cancelCall(context, request.params)
+      case 'capability.cancel': {
+        // 中止一次在途调用；回它当时在不在途。
+        const controller = context.controllers.get(
+          readRequiredKernelRpcId(request.params, 'requestId'),
+        )
+        controller?.abort()
+        return isNotUndefined(controller)
+      }
       case 'events.subscribe':
         return this.subscribe(context, request)
-      case 'events.unsubscribe':
-        return this.unsubscribe(context, request.params)
+      case 'events.unsubscribe': {
+        // 退订；回它当时在不在订阅表里。
+        const subscriptionId = readRequiredKernelRpcId(request.params, 'subscriptionId')
+        const registration = context.subscriptions.get(subscriptionId)
+        if (isUndefined(registration)) return false
+        registration.dispose()
+        context.subscriptions.delete(subscriptionId)
+        return true
+      }
       case 'mods.list':
         return this.listMods(request.params)
       case 'mods.setEnabled':
@@ -343,6 +392,7 @@ export class KernelLocalRpcServer {
     }
   }
 
+  /** `mods.list`：校验入参后列出仓库里的 pack。 */
   private listMods(params: unknown) {
     const parsed = ModsListRequestSchema.safeParse(params ?? {
       protocolVersion: KernelProtocolVersion,
@@ -359,6 +409,7 @@ export class KernelLocalRpcServer {
     }
   }
 
+  /** `mods.setEnabled`：校验入参后开关一个 pack。 */
   private async setModEnabled(params: unknown) {
     const parsed = ModsSetEnabledRequestSchema.safeParse(params)
     if (!parsed.success) {
@@ -377,6 +428,7 @@ export class KernelLocalRpcServer {
     }
   }
 
+  /** `mods.installFromDirectory`：校验入参后从目录装一个 pack。 */
   private async installModFromDirectory(params: unknown) {
     const parsed = ModsInstallFromDirectoryRequestSchema.safeParse(params)
     if (!parsed.success) {
@@ -394,8 +446,9 @@ export class KernelLocalRpcServer {
     }
   }
 
+  /** `capability.session.open`：服务面判准入，判过了在这条连接的账本上记一条。 */
   private async openCapabilitySession(
-    context: ConnectionContext,
+    context: KernelLocalRpcServerConnection,
     params: unknown,
   ): Promise<CapabilitySessionOpenResponse> {
     const evaluated = await this.options.service.evaluateCapabilitySessionOpen(
@@ -411,54 +464,31 @@ export class KernelLocalRpcServer {
     }
   }
 
-  private closeCapabilitySession(
-    context: ConnectionContext,
-    params: unknown,
-  ): CapabilitySessionCloseResponse {
-    const parsed = CapabilitySessionCloseRequestSchema.safeParse(params)
-    if (!parsed.success) {
-      throw new KernelClientError({
-        code: 'INVALID_PARAMS',
-        message: '关闭能力会话的请求不符合 Kernel 协议 v2',
-      })
-    }
-    return {
-      protocolVersion: KernelProtocolVersion,
-      closed: context.sessions.close(parsed.data.sessionId),
-    }
-  }
 
+  /** `capability.call`：先核这条连接的会话覆不覆盖这次调用，过了才进服务面。 */
   private async callCapability(
-    context: ConnectionContext,
+    context: KernelLocalRpcServerConnection,
     params: unknown,
     signal?: AbortSignal,
   ): Promise<CapabilityCallResponse> {
     const parsed = CapabilityCallRequestSchema.safeParse(params)
-    if (!parsed.success) return callGrantFailure(
-        readCallIdFromParams(params),
+    if (!parsed.success) return capabilityCallFailure(
+        readCapabilityCallId(params),
         'INVALID_REQUEST',
         '能力调用请求不符合 Kernel 协议 v2',
       )
-    if (!context.sessions.covers(parsed.data)) return callGrantFailure(
+    if (!context.sessions.covers(parsed.data)) return capabilityCallFailure(
         parsed.data.callId,
         'CAPABILITY_NOT_GRANTED',
-        `Capability "${parsed.data.capabilityId}" is not bound on session "${parsed.data.sessionId}"`,
+        `能力 "${parsed.data.capabilityId}" 没有绑定在会话 "${parsed.data.sessionId}" 上`,
       )
     return this.options.service.handleCapabilityCall(parsed.data, signal)
   }
 
-  private cancelCall(
-    context: ConnectionContext,
-    params: unknown,
-  ): boolean {
-    const requestId = readRequiredId(params, 'requestId')
-    const controller = context.controllers.get(requestId)
-    controller?.abort()
-    return isNotUndefined(controller)
-  }
 
+  /** `events.subscribe`：订阅一类事件，事件经这条连接以 event 帧推回去。 */
   private subscribe(
-    context: ConnectionContext,
+    context: KernelLocalRpcServerConnection,
     request: KernelRpcRequest,
   ): { readonly subscriptionId: string } {
     const params = requireRecord(request.params)
@@ -472,25 +502,15 @@ export class KernelLocalRpcServer {
           subscriptionId,
           event,
         }
-        sendFrame(context.socket, frame)
+        sendKernelRpcFrame(context.socket, frame)
       },
     )
     context.subscriptions.set(subscriptionId, registration)
     return { subscriptionId }
   }
 
-  private unsubscribe(
-    context: ConnectionContext,
-    params: unknown,
-  ): boolean {
-    const subscriptionId = readRequiredId(params, 'subscriptionId')
-    const registration = context.subscriptions.get(subscriptionId)
-    if (isUndefined(registration)) return false
-    registration.dispose()
-    context.subscriptions.delete(subscriptionId)
-    return true
-  }
 
+  /** 清掉自己留下的 unix socket 文件；不是 unix 端点或文件已经没了就什么也不做。 */
   private async cleanupSocketPath(): Promise<void> {
     const endpoint = this.resolvedEndpoint ?? this.requestedEndpoint
     if (endpoint.kind !== 'unix') return
@@ -498,167 +518,4 @@ export class KernelLocalRpcServer {
       if (!isNodeError(error, 'ENOENT')) throw error
     })
   }
-}
-
-/** 从 RPC 参数里读一个必填的非空字符串 id（取消调用的 requestId、退订的 subscriptionId）。 */
-function readRequiredId(params: unknown, field: string): string {
-  return requireNonEmptyString(requireRecord(params)[field], field)
-}
-
-function readRequestId(input: unknown): string {
-  if (!isObject(input) && !isNull(input) || isNull(input)) return 'invalid-frame'
-  const requestId = Reflect.get(input, 'requestId')
-  return isString(requestId) && !isEmpty(requestId)
-    ? requestId
-    : 'invalid-frame'
-}
-
-/**
- * 把内核侧的错误投影成 wire 失败帧。
- *
- * 带码的错误一律按自己的码投影：原来只认三个错误类，`mods.*` 那条线的失败（没接 ModStore、
- * 目录安装失败）全被吞成「INTERNAL_ERROR，可重试」，真正的原因只进守护进程日志，调用方
- * 重试多少次都一样。
- */
-function toRpcFailure(
-  requestId: string,
-  error: unknown,
-): KernelRpcFailure {
-  if (error instanceof KernelClientError) return rpcFailure(requestId, error.code, error.message)
-  if (error instanceof KernelError) return rpcFailure(
-    requestId,
-    error.code,
-    error.message,
-    // 「还没启动」是等一等就好的状态；别的带码失败重试也是同一个结果。
-    error.code === KernelErrorCodes.kernelNotStarted,
-    error.details as Readonly<Record<string, unknown>>,
-  )
-  return rpcFailure(
-    requestId,
-    KernelClientErrorCodes.internalError,
-    'Kernel RPC 请求失败',
-    true,
-  )
-}
-
-function sendFrame(socket: Socket, frame: KernelRpcServerFrame): boolean {
-  try {
-    socket.write(`${JSON.stringify(frame)}\n`)
-    return true
-  } catch (error) {
-    log.warn('Kernel RPC response could not be serialized or written', { error })
-    return false
-  }
-}
-
-function cleanupConnection(context: ConnectionContext): void {
-  for (const controller of context.controllers.values()) controller.abort()
-  context.controllers.clear()
-  for (const registration of context.subscriptions.values()) {
-    registration.dispose()
-  }
-  context.subscriptions.clear()
-  context.sessions.clear()
-}
-
-function callGrantFailure(
-  callId: string,
-  code: string,
-  message: string,
-): CapabilityCallFailure {
-  return {
-    protocolVersion: KernelProtocolVersion,
-    callId,
-    status: 'error',
-    error: {
-      code,
-      message,
-      retryable: false,
-      details: null,
-    },
-  }
-}
-
-function readCallIdFromParams(input: unknown): string {
-  if (!isObject(input) && !isNull(input) || isNull(input)) return 'invalid-call'
-  const callId = Reflect.get(input, 'callId')
-  return isString(callId) && !isEmpty(callId)
-    ? callId
-    : 'invalid-call'
-}
-
-async function removeStaleSocket(path: string): Promise<void> {
-  try {
-    const stat = await lstat(path)
-    if (!stat.isSocket()) {
-      throw new Error(
-        `Kernel RPC 路径 "${path}" 不是 socket，拒绝覆盖`,
-      )
-    }
-    await unlink(path)
-  } catch (error) {
-    if (!isNodeError(error, 'ENOENT')) throw error
-  }
-}
-
-function listen(
-  server: Server,
-  endpoint: KernelRpcEndpoint,
-): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const onError = (error: Error) => {
-      server.off('listening', onListening)
-      reject(error)
-    }
-    const onListening = () => {
-      server.off('error', onError)
-      resolve()
-    }
-    server.once('error', onError)
-    server.once('listening', onListening)
-    if (endpoint.kind === 'unix') {
-      server.listen(endpoint.path)
-    } else {
-      server.listen(endpoint.port, endpoint.host)
-    }
-  })
-}
-
-function resolveBoundEndpoint(
-  server: Server,
-  requested: KernelRpcEndpoint,
-): KernelRpcEndpoint {
-  if (requested.kind === 'unix') return requested
-  const address = server.address() as Nullable<AddressInfo>
-  if (isNull(address)) throw new Error('Kernel RPC 服务端没有地址')
-  return {
-    kind: 'tcp',
-    host: '127.0.0.1',
-    port: address.port,
-  }
-}
-
-function closeServer(server: Server): Promise<void> {
-  if (!server.listening) return Promise.resolve()
-  return new Promise((resolve, reject) => {
-    server.close((error) => {
-      if (isUndefined(error)) resolve()
-      else reject(error)
-    })
-  })
-}
-
-function isNodeError(
-  error: unknown,
-  code: string,
-): error is NodeJS.ErrnoException {
-  return error instanceof Error
-    && 'code' in error
-    && error.code === code
-}
-
-function tokensMatch(left: string, right: string): boolean {
-  const leftDigest = createHash('sha256').update(left).digest()
-  const rightDigest = createHash('sha256').update(right).digest()
-  return timingSafeEqual(leftDigest, rightDigest)
 }

@@ -10,6 +10,7 @@ import { join } from 'node:path'
 
 import { afterEach, describe, expect, test } from 'bun:test'
 
+import type { KernelModuleDefinition } from '../../../src/contract/requires'
 import { connectToKernelDaemon, discoverKernelDaemon } from '../../../src/impl/client/KernelDaemonDirectory'
 import { SocketKernelTransport } from '../../../src/impl/client/SocketKernelTransport'
 import { createKernelCallableCapability } from '../../../src/impl/runtime/KernelCallableCapability'
@@ -19,7 +20,6 @@ import { AllowLoadedKernelClientAccessBroker } from '../../../src/impl/serve/All
 import { KernelLocalDaemon } from '../../../src/impl/serve/KernelLocalDaemon'
 import { KernelLocalRpcServer } from '../../../src/impl/serve/KernelLocalRpcServer'
 import { KernelService } from '../../../src/impl/serve/KernelService'
-import type { KernelModuleDefinition } from '../../../src/types/abi-module'
 import { KernelClientError } from '../../../src/utils/errors'
 import { createDefaultKernelDaemonPaths } from '../../../src/utils/rpc/descriptor'
 import type { CapabilityCallRequest } from '../../../src/utils/wire/capability'

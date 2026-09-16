@@ -2,25 +2,11 @@
 //
 // 握手 schema 先读出对端版本，再由本层做精确版本判定并给出升级方向。
 // 不接受历史版本，也不维护滑动兼容窗口。
-import type { KernelHandshake } from './handshake'
+import type { KernelHandshake, KernelProtocolNegotiation } from '../../types/wire'
+
 import { KernelProtocolVersion } from './version'
 
-/** 握手判定结果：接受，或带升级指引的拒绝（`reason` 指出哪一侧过时）。 */
-export type KernelProtocolNegotiation =
-  | {
-      status: 'accepted'
-      localVersion: number
-      peerVersion: number
-    }
-  | {
-      status: 'rejected'
-      /** `peer-too-old`：须对端升级；`peer-too-new`：须本端升级。 */
-      reason: 'peer-too-old' | 'peer-too-new'
-      localVersion: number
-      peerVersion: number
-      /** 面向操作者的升级指引（哪一侧该升到哪个版本）。 */
-      guidance: string
-    }
+export type { KernelProtocolNegotiation } from '../../types/wire'
 
 /**
  * 只有与本端完全相同的协议版本才接受。

@@ -1,44 +1,39 @@
 /** 进程内 Kernel 实现。 */
 export type { KernelCallErrorCode, KernelErrorCode } from '../contract/constants'
-export {
-  createScopedPermissionBroker,
-  DenyAllKernelPermissionBroker,
-} from '../impl/runtime/DenyAllKernelPermissionBroker'
-export type { KernelStateBackend } from '../impl/runtime/InMemoryKernelStateBackend'
-export { createNamespacedStateStore, InMemoryKernelStateBackend } from '../impl/runtime/InMemoryKernelStateBackend'
-export type { KernelLifecycleFailure, KernelOptions, KernelStatus } from '../impl/runtime/Kernel'
+export type { KernelStateBackend } from '../contract/requires'
+export type { KernelModuleIsolationAdapter } from '../contract/requires'
+export type { KernelClientAccessBroker } from '../contract/requires'
+export { DenyAllKernelPermissionBroker } from '../impl/runtime/DenyAllKernelPermissionBroker'
+export { InMemoryKernelStateBackend } from '../impl/runtime/InMemoryKernelStateBackend'
+export type { KernelOptions } from '../impl/runtime/Kernel'
+export { createKernel } from '../impl/runtime/Kernel'
 export { Kernel } from '../impl/runtime/Kernel'
-export type { KernelCapabilityCall } from '../impl/runtime/KernelCapabilityInvoker'
 export { KernelEventHub } from '../impl/runtime/KernelEventHub'
-export type {
-  KernelCompositionCapabilitySnapshot,
-  KernelCompositionSnapshot,
-  KernelModuleHostOptions,
-  KernelModuleSnapshot,
-} from '../impl/runtime/KernelModuleHost'
+export type { KernelModuleHostOptions } from '../impl/runtime/KernelModuleHost'
 export { KernelModuleHost } from '../impl/runtime/KernelModuleHost'
-export type { KernelActiveServiceSnapshot } from '../impl/runtime/KernelServiceStore'
 export { KernelServiceStore } from '../impl/runtime/KernelServiceStore'
+export { createNamespacedStateStore } from '../impl/runtime/NamespacedKernelStateStore'
+export { createScopedPermissionBroker } from '../impl/runtime/ScopedKernelPermissionBroker'
 export { ScopedKernelServiceResolver } from '../impl/runtime/ScopedKernelServiceResolver'
+export { velarosModEnvelopes } from '../impl/runtime/VelarosModEnvelopeParser'
 export { AllowLoadedKernelClientAccessBroker } from '../impl/serve/AllowLoadedKernelClientAccessBroker'
-export type {
-  BoundCapabilityRequirement,
-  CapabilitySessionRecord,
-} from '../impl/serve/CapabilitySessionLedger'
 export { CapabilitySessionLedger } from '../impl/serve/CapabilitySessionLedger'
-export type {
-  KernelClientAccessBroker,
-  KernelClientAccessDecision,
-  KernelClientCapabilityBindRequest,
-} from '../impl/serve/DenyAllKernelClientAccessBroker'
 export { DenyAllKernelClientAccessBroker } from '../impl/serve/DenyAllKernelClientAccessBroker'
-export type { KernelServiceOptions, KernelServiceStatus } from '../impl/serve/KernelService'
+export type { KernelServiceOptions } from '../impl/serve/KernelService'
 export {
   KernelService,
 } from '../impl/serve/KernelService'
-export type { KernelModuleStatus } from '../types/abi-module'
-export type { ExternalKernelModuleIsolation, KernelModuleIsolationAdapter } from '../types/runtime-isolation'
-export type { KernelModCatalog } from '../types/serve-mod-catalog'
+export type { KernelStatus } from '../types/kernel'
+export type { KernelCompositionCapabilitySnapshot, KernelCompositionSnapshot, KernelModuleSnapshot } from '../types/kernel'
+export type { ExternalKernelModuleIsolation } from '../types/kernel'
+export type { KernelModuleStatus } from '../types/kernel.js'
+export type { KernelLifecycleFailure } from '../types/runtime'
+export type { KernelCapabilityCall } from '../types/runtime'
+export type { KernelActiveServiceSnapshot } from '../types/runtime'
+export type { BoundCapabilityRequirement, CapabilitySessionRecord } from '../types/serve'
+export type { KernelClientAccessDecision, KernelClientCapabilityBindRequest } from '../types/serve'
+export type { KernelServiceStatus } from '../types/serve'
+export type { KernelModCatalog } from '../types/serve'
 export type { KernelErrorDetails } from '../utils/errors'
 export { KernelError, toError } from '../utils/errors'
 export type { KernelCapabilityProvider, KernelModulePlan } from '../utils/runtime/module-plan'

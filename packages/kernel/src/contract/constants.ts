@@ -17,8 +17,11 @@
  */
 export const KernelVersionAxes = Object.freeze({
   kernel: '0.3.0',
+  /** 模块清单 ABI 版本；清单里 `apiVersion` 不等于它的模块一律拒绝注册。 */
   moduleApi: 1,
+  /** 本机 RPC 的 wire 协议主版本；两端必须完全相同，不做滑动兼容。 */
   protocol: 2,
+  /** 远程节点帧协议版本；两端必须完全相同，与本机 RPC 各走各的。 */
   remoteNodeTransport: 1,
 })
 
@@ -35,8 +38,20 @@ export const KernelModuleIsolations = Object.freeze({
   remote: 'remote',
 })
 
+/**
+ * 合法隔离形态的运行期单源。
+ *
+ * descriptor 校验读这一份而不是自己抄一遍字面量数组：抄出来的那份不会跟着类型走，
+ * 加了新值就会出现「类型允许、校验拒绝」的死角（`remote` 落地时就踩过）。
+ */
+export const KernelModuleIsolationValues = Object.freeze([
+  'in-process',
+  'worker',
+  'remote',
+] as const)
+
 /** mod 清单在包里的固定文件名；打包、导入、市场三条路都按它找清单。 */
-export const VelarosModManifestFileName = 'velaros.mod.json'
+export const VelarosModManifestFileName = 'velaros.mod.json' as const
 
 /** 模块宿主自己抛出的失败；外面按码判断，文字只给人看。 */
 export const KernelErrorCodes = Object.freeze({
@@ -254,13 +269,61 @@ export const RemoteNodeCloseCodes = Object.freeze({
   superseded: 4003,
   /** Node 侧主动停机。 */
   nodeStopped: 4004,
-})
+} as const)
 
-/** 远程节点的连线地址与进度事件名。 */
-export const RemoteNodeSocketPath = '/v1/remote-node/ws'
+/**
+ * 远程节点 WebSocket 的升级路径。
+ *
+ * 两端写死同一个常量，不做发现也不做协商：路径不是安全边界（真正的门是 challenge 签名），
+ * 它只负责把同一进程里可能并存的别的 HTTP 面区分开。
+ */
+export const RemoteNodeSocketPath = '/v1/remote-node/ws' as const
 
 /** 远程调用进度事件的类型名；两端与宿主都按它认。 */
-export const RemoteNodeProgressEventType = 'remote-node.progress'
+export const RemoteNodeProgressEventType = 'remote-node.progress' as const
+
+/**
+ * 远程节点 Client 侧的失败码，是 {@link RemoteNodeErrorCodes} 里 Client 那一段的同义表。
+ *
+ * 保留这张表是为了让 agent 与 Termel 这一轮零改动；入口收口那一轮统一改读 `RemoteNodeErrorCodes`。
+ */
+export const RemoteNodeClientErrorCodes = Object.freeze({
+  /** 对端重启，在途调用的结果永远不会再来。 */
+  NodeRestarted: 'NODE_RESTARTED',
+  /** 两端协议版本不同。 */
+  ProtocolMismatch: 'REMOTE_NODE_PROTOCOL_MISMATCH',
+  /** 签名认证没过。 */
+  Unauthorized: 'REMOTE_NODE_UNAUTHORIZED',
+  /** 需要人工配对码才能继续（没配过对，或本机凭据丢了）。 */
+  PairingRequired: 'REMOTE_NODE_PAIRING_REQUIRED',
+  /** 被同一 Client 的新连接顶替。 */
+  Superseded: 'REMOTE_NODE_SUPERSEDED',
+  /** Client 已回收。 */
+  Disposed: 'REMOTE_NODE_DISPOSED',
+  /** 本机凭据读不出来（钥匙串锁着、文件权限不对），连都还没连上。 */
+  CredentialsUnavailable: 'REMOTE_NODE_CREDENTIALS_UNAVAILABLE',
+  /** 调用超过 Client 侧截止时间。 */
+  CallTimeout: 'REMOTE_NODE_CALL_TIMEOUT',
+  /** 调用在 Node 侧执行失败。 */
+  CallFailed: 'REMOTE_NODE_CALL_FAILED',
+  /** Node 侧派发后被自己的策略拒绝——是策略事实，不是链路故障。 */
+  CallDenied: 'REMOTE_NODE_CALL_DENIED',
+} as const)
+
+/** 本机 RPC 的方法名表；客户端只发这些，服务端只认这些。 */
+export const KernelRpcMethods = Object.freeze([
+  'handshake',
+  'health',
+  'capability.session.open',
+  'capability.session.close',
+  'capability.call',
+  'capability.cancel',
+  'events.subscribe',
+  'events.unsubscribe',
+  'mods.list',
+  'mods.setEnabled',
+  'mods.installFromDirectory',
+] as const)
 
 /**
  * 远程节点两端共同遵守的协议数字。
@@ -286,6 +349,19 @@ export const RemoteNodeLimits = Object.freeze({
   defaultPortEnd: 43_190,
 })
 
+/**
+ * 落盘文件与目录的权限位：这是安全承诺，不是可调参数。
+ *
+ * 守护进程的 descriptor 里有认证令牌、凭据文件里有私钥，同机别的用户读到就等于拿到内核；
+ * 运行目录也必须只有属主进得去，不然别人能替换 descriptor 把客户端引到自己的 socket。
+ */
+export const KernelFileModes = Object.freeze({
+  /** 只有属主可读写的文件（descriptor、锁文件、凭据、审计）。 */
+  privateFile: 0o600,
+  /** 只有属主可进的目录（运行目录、凭据目录）。 */
+  privateDirectory: 0o700,
+})
+
 /** 本机 RPC 的协议上限：客户端与服务端读同一份。 */
 export const KernelRpcLimits = Object.freeze({
   /** 单帧字节上限 4 MiB。 */
@@ -299,18 +375,36 @@ export const KernelRpcLimits = Object.freeze({
  * `VELAROS_KERNEL_HOME` 任何宿主都可以设。家目录一律走 `os.homedir()`，不直接读 `HOME`。
  */
 export const KernelEnvironmentVariables = Object.freeze({
-  /** 守护进程运行目录（socket、descriptor、锁文件）。 */
-  runtimeDirectory: 'VELAROS_KERNEL_RUNTIME_DIR',
-  /** 共享 Runtime 的安装根。 */
-  installRoot: 'VELAROS_KERNEL_HOME',
-  /** 可执行文件自报的内核版本。 */
-  kernelVersion: 'VELAROS_KERNEL_VERSION',
-  /** 用户 mod 目录。 */
-  userMods: 'VELAROS_KERNEL_USER_MODS',
-  /** 启动时从这个目录安装一个 mod pack。 */
-  installPack: 'VELAROS_KERNEL_INSTALL_PACK',
-  /** 以 JSON 数组交进来的系统 pack 清单。 */
-  systemPacks: 'VELAROS_KERNEL_SYSTEM_PACKS',
+  runtimeDirectory: {
+    name: 'VELAROS_KERNEL_RUNTIME_DIR',
+    direction: 'input',
+    description: '守护进程运行目录（socket、descriptor、锁文件都落在这里）；不设时按平台默认位置算。',
+  },
+  installRoot: {
+    name: 'VELAROS_KERNEL_HOME',
+    direction: 'input',
+    description: '共享 Runtime 的安装根；更新器在它下面放版本目录与激活指针。',
+  },
+  kernelVersion: {
+    name: 'VELAROS_KERNEL_VERSION',
+    direction: 'input',
+    description: '守护进程可执行文件自报的内核版本，只给 `bin/velaros-kernel-daemon.mjs` 用。',
+  },
+  userMods: {
+    name: 'VELAROS_KERNEL_USER_MODS',
+    direction: 'input',
+    description: '用户 mod 目录；守护进程启动时从这里装载用户 pack。',
+  },
+  installPack: {
+    name: 'VELAROS_KERNEL_INSTALL_PACK',
+    direction: 'input',
+    description: '守护进程启动时先从这个目录安装一个 mod pack，装完再进正常装载流程。',
+  },
+  systemPacks: {
+    name: 'VELAROS_KERNEL_SYSTEM_PACKS',
+    direction: 'input',
+    description: '以 JSON 数组交进来的系统 pack 清单；数组每项是一个 pack 目录。',
+  },
 })
 
 /** 模块宿主自己抛出的失败码。 */
@@ -324,6 +418,12 @@ export type KernelClientErrorCode = (typeof KernelClientErrorCodes)[keyof typeof
 
 /** 共享 Runtime 安装器的失败码。 */
 export type KernelUpdaterErrorCode = (typeof KernelUpdaterErrorCodes)[keyof typeof KernelUpdaterErrorCodes]
+
+/** 远程节点 Client 侧的失败码。 */
+export type RemoteNodeClientErrorCode = (typeof RemoteNodeClientErrorCodes)[keyof typeof RemoteNodeClientErrorCodes]
+
+/** 本机 RPC 的方法名。 */
+export type KernelRpcMethod = (typeof KernelRpcMethods)[number]
 
 /** 远程节点两端的失败码。 */
 export type RemoteNodeErrorCode = (typeof RemoteNodeErrorCodes)[keyof typeof RemoteNodeErrorCodes]

@@ -2,34 +2,53 @@
 // 配对闸:一次性人工仪式的节奏控制(六位码 + 有效期 + 失败锁定)。
 //
 // 单独成文是因为这里的每一条判断都是安全语义,不该淹没在连接状态机里。
-import { timingSafeEqual } from 'node:crypto'
-
 import { isPresent, toNullable } from '@velaros-ai/core'
 import type { TimerLease, TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
-import { createPairingCode } from '../../utils/remote/crypto'
+import {
+  createPairingCode,
+  remoteNodeCodesEqual,
+} from '../../utils/remote/crypto'
 import {
   RemoteNodePairingLifetimeMs,
   RemoteNodePairingLockoutMs,
   RemoteNodePairingMaxFailures,
 } from '../../utils/wire/remote-node'
 
-/** 定长常数时间比较:长度不等直接判否,避免 `timingSafeEqual` 因长度差异抛出。 */
-function codesEqual(left: string, right: string): boolean {
-  const leftBytes = Buffer.from(left)
-  const rightBytes = Buffer.from(right)
-  return leftBytes.length === rightBytes.length
-    && timingSafeEqual(leftBytes, rightBytes)
-}
-
+/** 装配一道配对闸要的三样:计时作用域、时钟源,以及可选的固定码。 */
 export interface RemoteNodePairingGateOptions {
+  /** 计时作用域;配对窗口的过期定时器挂在它名下,随服务端一起释放。 */
   readonly timers: TimerScope
+  /** 时钟源;测试里可以推着走,生产里就是 `Date.now`。 */
   readonly now: () => number
   /** 确定性测试缝;生产环境自生成六位码。 */
   readonly pairingCode?: string
 }
 
-export class RemoteNodePairingGate {
+/**
+ * 一次性人工配对仪式的节奏控制。
+ *
+ * 一个服务端一道闸。里面每一条判断都是安全语义:六位码、有效期、失败锁定,
+ * 不该淹没在连接状态机里。
+ */
+export interface RemoteNodePairingGateApi {
+  /** 现在能不能接受配对:有活码、没过期、没在锁定窗口里。 */
+  readonly available: boolean
+  /** 对外可见的码;锁定或过期期间一律不再展示,返回 `null`。 */
+  readonly code: Nullable<string>
+  /** 当前码的过期时刻;没有可用码时是 `null`。 */
+  readonly expiresAt: Nullable<number>
+  /** 开一次配对窗口;刷新码与有效期,但**不**清零失败计数。 */
+  open(): void
+  /** 核一枚码:对上返回 true,否则累计失败并在超限时进锁定窗口。 */
+  accept(supplied: string): boolean
+  /** 配对成功:收窗并清零失败计数。 */
+  close(): void
+  /** 收窗:丢掉当前码与定时器,失败计数原封不动。 */
+  cancel(): void
+}
+
+export class RemoteNodePairingGate implements RemoteNodePairingGateApi {
   private activeCode?: string
   private activeExpiresAt?: number
   private timer?: TimerLease
@@ -79,7 +98,7 @@ export class RemoteNodePairingGate {
     if (
       isPresent(expected)
       && (this.activeExpiresAt ?? 0) > now
-      && codesEqual(expected, supplied)
+      && remoteNodeCodesEqual(expected, supplied)
     ) return true
     this.failures += 1
     if (this.failures >= RemoteNodePairingMaxFailures) {

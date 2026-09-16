@@ -1,34 +1,23 @@
 import { isBlank, isEmpty,isNotUndefined, isUndefined } from '@velaros-ai/core';
 
-import type { CapabilityRequirement, CapabilityToken } from '../../types/abi-capability'
-import {
-  type KernelModuleDefinition,
-  KernelModuleIsolationValues,
-  type KernelModuleManifest,
-} from '../../types/abi-module'
+import { KernelModuleIsolationValues } from '../../contract/constants'
+import type { KernelModuleDefinition } from '../../contract/requires'
+import type { CapabilityRequirement, CapabilityToken, KernelModuleManifest } from '../../types/kernel.js'
+import type { KernelCapabilityProvider, KernelModulePlan } from '../../types/runtime'
 import { KernelError } from '../errors'
 
 import { assertSemanticVersion, satisfiesVersionRange } from './version'
 
-export interface KernelModulePlan {
-  readonly order: readonly string[]
-  readonly capabilityProviders: ReadonlyMap<
-    string,
-    KernelCapabilityProvider
-  >
-}
+export type { KernelCapabilityProvider, KernelModulePlan } from '../../types/runtime'
 
-export interface KernelCapabilityProvider {
-  readonly moduleId: string
-  readonly capability: CapabilityToken
-}
-
+/** 按字典序比较两个标识符，给稳定排序用。 */
 function compareIdentifiers(left: string, right: string): number {
   if (left < right) return -1
   if (left > right) return 1
   return 0
 }
 
+/** 断言一个清单字段非空；空了就抛 `INVALID_MANIFEST`。 */
 function assertNonEmpty(value: string, label: string, moduleId?: string): void {
   if (!isBlank(value.trim())) return
 
@@ -39,6 +28,7 @@ function assertNonEmpty(value: string, label: string, moduleId?: string): void {
   )
 }
 
+/** 断言一组值里没有重复；重了就抛 `INVALID_MANIFEST`。 */
 function assertUniqueValues(
   values: readonly string[],
   label: string,
@@ -58,6 +48,7 @@ function assertUniqueValues(
   }
 }
 
+/** 校验一组依赖声明：id 非空、版本范围写法合法、同一个 id 不重复。 */
 function assertRequirements(
   requirements: readonly CapabilityRequirement[],
   label: string,
@@ -70,6 +61,7 @@ function assertRequirements(
   )
 }
 
+/** 校验清单声明提供的能力令牌：id 与版本非空、版本是合法语义化版本、id 不重复。 */
 function assertProvidedCapabilities(
   capabilities: readonly CapabilityToken[],
   moduleId: string,
@@ -84,6 +76,7 @@ function assertProvidedCapabilities(
   }
 }
 
+/** 整份模块清单的校验：ABI 版本、id、版本、隔离形态、provides 与两组 requires 逐项过一遍。 */
 export function validateManifest(
   manifest: KernelModuleManifest,
   apiVersion: number,
@@ -134,6 +127,7 @@ export function validateManifest(
   }
 }
 
+/** 往依赖图里加一条边，同时把入度记上。 */
 function addDependencyEdge(
   providerId: string,
   consumerId: string,
@@ -148,6 +142,7 @@ function addDependencyEdge(
   indegree.set(consumerId, indegree.get(consumerId)! + 1)
 }
 
+/** 解析一条依赖：找到提供方、核对版本范围；必需的解析不到就抛。 */
 function resolveRequirement(
   consumer: KernelModuleDefinition,
   requirement: CapabilityRequirement,
@@ -185,6 +180,7 @@ function resolveRequirement(
 }
 
 /** Resolves a stable topological order with lexical tie-breaking. */
+/** 解析整张依赖图，给出稳定的激活顺序与每件能力的提供方；成环或缺必需能力时抛。 */
 export function resolveKernelModulePlan(
   modules: ReadonlyMap<string, KernelModuleDefinition>,
   apiVersion: number,

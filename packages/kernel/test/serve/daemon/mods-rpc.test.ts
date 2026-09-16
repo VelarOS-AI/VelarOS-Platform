@@ -8,11 +8,11 @@ import { KernelClient } from '../../../src/impl/client/KernelClient'
 import { SocketKernelTransport } from '../../../src/impl/client/SocketKernelTransport'
 import { KernelModuleHost } from '../../../src/impl/runtime/KernelModuleHost'
 import { createCapabilityToken } from '../../../src/impl/runtime/KernelModuleKit'
+import { defineKernelModule } from '../../../src/impl/runtime/KernelModuleKit'
 import { InProcessKernelTransport } from '../../../src/impl/serve/InProcessKernelTransport'
 import { bootKernelDaemon } from '../../../src/impl/serve/KernelDaemonAssembly'
 import { KernelLocalRpcServer } from '../../../src/impl/serve/KernelLocalRpcServer'
 import { KernelService } from '../../../src/impl/serve/KernelService'
-import { defineKernelModule } from '../../../src/types/abi-module'
 import { KernelProtocolVersion } from '../../../src/utils/wire/version'
 
 const directories: string[] = []

@@ -10,43 +10,32 @@ import { randomUUID } from 'node:crypto'
 
 import {
   isNull,
-  isPresent,
   isTrue,
   isUndefined,
   Log,
-  toNullable,
 } from '@velaros-ai/core'
-import type { TimerLease, TimerScope } from '@velaros-ai/core/utils/TimerScope'
+import type { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
-import type { ScopeRef } from '../../types/abi-references'
-import {
-  type RemoteNodeClientErrorCode,
-  RemoteNodeClientErrorCodes,
-  type RemoteNodeInvokeRequest,
-} from '../../types/remote-client'
+import type { RemoteNodeClientErrorCode } from '../../contract/constants'
+import { RemoteNodeClientErrorCodes } from '../../contract/constants'
+import type { RemoteNodePendingCall } from '../../types/remote'
+import { type RemoteNodeInvokeRequest } from '../../types/remote-client'
 import { RemoteNodeClientError } from '../../utils/errors'
+import {
+  describeRemoteNodeCall,
+  describeRemoteNodeError,
+  resolveRemoteNodeDeadlineMs,
+  toRemoteNodeWireScope,
+} from '../../utils/remote/calls'
 import { KernelTuning } from '../../utils/tuning'
 import type {
   RemoteNodeCancel,
-  RemoteNodeError,
   RemoteNodeInvoke,
   RemoteNodeProgress,
   RemoteNodeResult,
 } from '../../utils/wire/remote-node'
 
 const log = Log.tag('RemoteNodeCalls')
-
-interface PendingCall {
-  readonly callId: string
-  readonly request: RemoteNodeInvokeRequest
-  readonly resolve: (output: unknown) => void
-  readonly reject: (error: Error) => void
-  readonly deadline: TimerLease
-  readonly detach: () => void
-  /** 首次派发时定型,重连后原样重放——Node 按 callId 幂等去重,回放已有结果。 */
-  frame: Nullable<RemoteNodeInvoke>
-  dispatched: boolean
-}
 
 /** 簿对连接层的两点依赖;其余一概不知道,便于单独推演。 */
 export interface RemoteNodePendingCallsHost {
@@ -56,8 +45,34 @@ export interface RemoteNodePendingCallsHost {
   currentRevision(): Nullable<string>
 }
 
-export class RemoteNodePendingCalls {
-  private readonly entries = new Map<string, PendingCall>()
+/**
+ * 在途调用簿。
+ *
+ * 一条连接一本;它看守「每个调用恰好 settle 一次」这条纪律,并把「上过线没有」
+ * 记成 `resultUnknown` 的唯一依据。
+ */
+export interface RemoteNodePendingCallsApi {
+  /** 已经写上线的调用数;只用于诊断与日志。 */
+  readonly dispatchedCount: number
+  /** 登记一次调用并尝试立刻派发,兑现能力输出;超时、中止与对端终态都从这里结算。 */
+  track(
+    request: RemoteNodeInvokeRequest,
+    signal: LooseOptional<AbortSignal>,
+  ): Promise<unknown>
+  /** 连接就绪后冲刷:排队的首次派发,已上线的按 callId 幂等重放。 */
+  flush(): void
+  /** 收一帧终态:成功兑现输出,否则按 denied / failed 分档拒绝;未知 callId 静默。 */
+  settleResult(frame: RemoteNodeResult): void
+  /** 把一帧进度派给对应调用的 `onProgress`;未知 callId 静默丢弃。 */
+  routeProgress(frame: RemoteNodeProgress): void
+  /** 对端重启后清账:已上线的按「结果未知」判死,未上线的清掉旧帧重排。 */
+  failRestarted(): void
+  /** 连接进入终态时清空全簿;上过线的一律标成结果未知。 */
+  failAll(code: RemoteNodeClientErrorCode | string, message: string): void
+}
+
+export class RemoteNodePendingCalls implements RemoteNodePendingCallsApi {
+  private readonly entries = new Map<string, RemoteNodePendingCall>()
 
   public constructor(
     private readonly timers: TimerScope,
@@ -87,7 +102,7 @@ export class RemoteNodePendingCalls {
         })
       }
       const deadline = this.timers.after(
-        resolveDeadlineMs(request) + KernelTuning.remoteClientDeadlineGraceMs,
+        resolveRemoteNodeDeadlineMs(request) + KernelTuning.remoteClientDeadlineGraceMs,
         () => this.settleTimeout(callId),
         { label: 'remote-node.call-deadline', unref: true },
       )
@@ -122,7 +137,7 @@ export class RemoteNodePendingCalls {
         code: denied
           ? RemoteNodeClientErrorCodes.CallDenied
           : RemoteNodeClientErrorCodes.CallFailed,
-        message: describeNodeError(
+        message: describeRemoteNodeError(
           frame.error,
           denied ? '远程节点拒绝了这次调用' : '远程节点调用失败',
         ),
@@ -156,7 +171,7 @@ export class RemoteNodePendingCalls {
       this.settle(entry.callId, (pending) => {
         pending.reject(new RemoteNodeClientError({
           code: RemoteNodeClientErrorCodes.NodeRestarted,
-          message: `"${describeCall(pending)}" 还在途时远程节点重启了，结果未知`,
+          message: `"${describeRemoteNodeCall(pending.request)}" 还在途时远程节点重启了，结果未知`,
           resultUnknown: true,
           retryable: false,
         }))
@@ -191,9 +206,9 @@ export class RemoteNodePendingCalls {
         manifestRevision: revision,
         capabilityId: pending.request.capabilityId,
         operation: pending.request.operation,
-        scope: toWireScope(pending.request.scope),
+        scope: toRemoteNodeWireScope(pending.request.scope),
         input: pending.request.input,
-        deadlineMs: resolveDeadlineMs(pending.request),
+        deadlineMs: resolveRemoteNodeDeadlineMs(pending.request),
       }
     }
     if (this.host.send(pending.frame)) pending.dispatched = true
@@ -209,7 +224,7 @@ export class RemoteNodePendingCalls {
       })
       pending.reject(new RemoteNodeClientError({
         code: RemoteNodeClientErrorCodes.CallTimeout,
-        message: `远程节点调用 "${describeCall(pending)}" 超过了客户端侧的截止时间`,
+        message: `远程节点调用 "${describeRemoteNodeCall(pending.request)}" 超过了客户端侧的截止时间`,
         resultUnknown: pending.dispatched,
         retryable: false,
       }))
@@ -217,7 +232,7 @@ export class RemoteNodePendingCalls {
   }
 
   /** 唯一出口:先摘簿、停表、摘中止监听,再回调。 */
-  private settle(callId: string, apply: (pending: PendingCall) => void): void {
+  private settle(callId: string, apply: (pending: RemoteNodePendingCall) => void): void {
     const pending = this.entries.get(callId)
     if (isUndefined(pending)) return
     this.entries.delete(callId)
@@ -227,36 +242,8 @@ export class RemoteNodePendingCalls {
   }
 }
 
-function describeCall(pending: PendingCall): string {
-  return `${pending.request.capabilityId}.${pending.request.operation}`
-}
 
-function resolveDeadlineMs(request: RemoteNodeInvokeRequest): number {
-  const requested = request.deadlineMs
-  if (isUndefined(requested) || !Number.isFinite(requested) || requested <= 0) return KernelTuning.remoteClientDefaultDeadlineMs
-  return Math.round(requested)
-}
-
-/** ABI 的 `kind?: string` 与 wire 的 `kind: string | null` 在此对齐,只此一处。 */
-function toWireScope(
-  scope: LooseOptional<ScopeRef>,
-): RemoteNodeInvoke['scope'] {
-  if (!isPresent(scope)) return null
-  return {
-    id: scope.id,
-    ownerModuleId: scope.ownerModuleId,
-    kind: toNullable(scope.kind),
-  }
-}
-
-function describeNodeError(
-  error: Nullable<RemoteNodeError>,
-  fallback: string,
-): string {
-  if (isNull(error)) return fallback
-  return `${fallback}: ${error.message} (${error.code})`
-}
-
+/** 一次调用被中止时交回调用方的错误;名字按 DOM 约定叫 `AbortError`,上层按它判断。 */
 export function createAbortError(): Error {
   return new DOMException('Remote node call aborted', 'AbortError')
 }

@@ -5,42 +5,31 @@ import { fileURLToPath } from 'node:url'
 
 import { isNotUndefined, isNull } from '@velaros-ai/core'
 
+import type { KernelFetch } from '../../contract/requires'
 import { KernelUpdaterError } from '../errors'
 import { isNodeError } from '../fs'
+import { KernelTuning } from '../tuning'
 
-export interface KernelFetchRequest {
-  readonly url: string
-  readonly signal?: AbortSignal
-}
-
-export interface KernelFetchResponse {
-  readonly status: number
-  readonly body: AsyncIterable<Uint8Array>
-}
-
-/**
- * Byte source for manifests and artifacts. Everything the updater reads from
- * outside the install root goes through this function, so tests and offline
- * hosts substitute their own transport instead of reaching the network.
- */
-export type KernelFetch = (
-  request: KernelFetchRequest,
-) => Promise<KernelFetchResponse>
-
+export type { KernelFetch } from '../../contract/requires'
+export type { KernelFetchRequest, KernelFetchResponse } from '../../types/updater'
+/** URL 前面那段协议名的样子，用来区分「带协议的地址」与「裸路径」。 */
 const SchemePattern = /^[a-zA-Z][a-zA-Z0-9+.-]*:/
 
+/** 读不到东西时给出的空回应体。 */
 const EmptyResponseBody: AsyncIterable<Uint8Array> = {
-   
+
   async *[Symbol.asyncIterator]() {},
 }
 
-export const MaximumKernelManifestBytes = 8 * 1024 * 1024
+/** 一份更新清单最多读这么多字节，超了就当取不到，免得一个坏来源把内存撑爆。 */
+export const MaximumKernelManifestBytes = KernelTuning.updaterMaxManifestBytes
 
+/** 判断一个来源是不是要走网络取（`http://` 或 `https://`）。 */
 export function isRemoteKernelUrl(source: string): boolean {
   return source.startsWith('http://') || source.startsWith('https://')
 }
 
-/** Default transport: HTTP(S) through global `fetch`, everything else from disk. */
+/** 缺省取数实现：`http(s)` 走全局 `fetch`，其余按本机路径读；文件不在时报 404 而不是抛。 */
 export const nodeKernelFetch: KernelFetch = async (request) => {
   if (isRemoteKernelUrl(request.url)) {
     const response = await fetch(request.url, {
@@ -60,6 +49,7 @@ export const nodeKernelFetch: KernelFetch = async (request) => {
   return { status: 200, body: createReadStream(path) }
 }
 
+/** 把一个来源整份读成文本；状态码不是 2xx、读不动或超过体积上限都抛 MANIFEST_UNREACHABLE。 */
 export async function fetchKernelText(
   fetchImplementation: KernelFetch,
   url: string,
@@ -101,6 +91,7 @@ export async function fetchKernelText(
   return Buffer.concat(chunks).toString('utf8')
 }
 
+/** 把一个来源折成本机路径；`file:` URL 与绝对路径都认，别的协议抛 DOWNLOAD_FAILED。 */
 function toLocalPath(source: string): string {
   if (source.startsWith('file:')) return fileURLToPath(source)
   if (!SchemePattern.test(source) || isAbsolute(source)) return source
@@ -111,6 +102,7 @@ function toLocalPath(source: string): string {
   )
 }
 
+/** 把 Web 的 ReadableStream 转成按块产出的异步迭代器；流为空时一个块都不产。 */
 async function* readWebStream(
   stream: Nullable<ReadableStream<Uint8Array>>,
 ): AsyncGenerator<Uint8Array> {

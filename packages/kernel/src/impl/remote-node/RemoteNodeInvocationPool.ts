@@ -4,10 +4,25 @@
 /**
  * 有界并发闸。
  *
+ * 一个 runner 一道闸。不是「队列化整条连接」:只有超过并发上限的**执行**才挂起,
+ * 帧处理与取消走的是另一条路径,永远不会被这里的等待队列拖住。
+ */
+export interface RemoteNodeInvocationPoolApi {
+  /**
+   * 跑一个任务,兑现它的结果。
+   *
+   * 并发满时先排队;任务自己抛错时原样上抛,名额仍会归还。
+   */
+  run<T>(task: () => Promise<T>): Promise<T>
+}
+
+/**
+ * 有界并发闸。
+ *
  * 不是「队列化整条连接」:只有超过并发上限的**执行**才挂起,帧处理与取消走的是另一条路径,
  * 永远不会被这里的等待队列拖住。
  */
-export class RemoteNodeInvocationPool {
+export class RemoteNodeInvocationPool implements RemoteNodeInvocationPoolApi {
   private readonly waiting: Array<() => void> = []
   private active = 0
 

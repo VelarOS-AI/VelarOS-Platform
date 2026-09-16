@@ -5,9 +5,10 @@
 // ModStore + 进程内传输。完整宿主进程内装栈**不经本包**，直接 new 内核。
 //
 // 产品接入远端 Kernel 用 @velaros-ai/kernel/client；Mod 开发用 @velaros-ai/kernel/contracts/abi。
-export type { InProcessKernelService } from '../impl/serve/InProcessKernelTransport'
+export type { InProcessKernelService } from '../contract/provides'
+export type { BootedKernelDaemon,BootKernelDaemonOptions } from '../contract/provides'
+export type { KernelModuleImporter } from '../contract/requires'
 export { InProcessKernelTransport } from '../impl/serve/InProcessKernelTransport'
-export type { BootedKernelDaemon, BootKernelDaemonOptions } from '../impl/serve/KernelDaemonAssembly'
 export { bootKernelDaemon, installKernelShutdownHandlers } from '../impl/serve/KernelDaemonAssembly'
 export type {
   KernelDaemonProcessApi,
@@ -18,35 +19,29 @@ export type { KernelLocalDaemonOptions } from '../impl/serve/KernelLocalDaemon'
 export { KernelLocalDaemon } from '../impl/serve/KernelLocalDaemon'
 export type { KernelLocalRpcServerOptions } from '../impl/serve/KernelLocalRpcServer'
 export { createDefaultKernelRpcEndpoint, KernelLocalRpcServer } from '../impl/serve/KernelLocalRpcServer'
-export type { LoadModsResult } from '../impl/serve/KernelModLoader'
 export {
   installModPackFromDirectory,
   KernelModLoader,
   loadModIndexIntoStore,
   persistModIndex,
 } from '../impl/serve/KernelModLoader'
-export type {
-  KernelModPackLoadFailure,
-  KernelModPackRecord,
-  KernelModStorePaths,
-} from '../impl/serve/KernelModStore'
+export type { KernelModStorePaths } from '../impl/serve/KernelModStore'
 export {
   BundledSpecifierScheme,
   createDefaultKernelModStorePaths,
   KernelModStore,
   registerSystemModPacks,
 } from '../impl/serve/KernelModStore'
+export { registerBundledPacks } from '../impl/serve/KernelModStore'
+export type { LoadModsResult } from '../types/serve'
+export type { KernelModPackLoadFailure, KernelModPackRecord } from '../types/serve'
+export type { KernelBundledPack } from '../types/serve'
+export type { KernelSystemModPackInput } from '../types/serve'
 export {
   decodeKernelRpcRequest,
   requireNonEmptyString,
   requireRecord,
   rpcFailure,
 } from '../utils/rpc/frames'
-export type { KernelBundledPack } from '../utils/serve/mod-packs'
-export {
-  bundledPackSpecifier,
-  createBundledModPack,
-  registerBundledPacks,
-  toBundledPackRecords,
-} from '../utils/serve/mod-packs'
+export { bundledPackSpecifier, createBundledModPack, toBundledPackRecords } from '../utils/serve/mod-packs'
 export type { KernelModPackKind } from '../utils/wire/mods'

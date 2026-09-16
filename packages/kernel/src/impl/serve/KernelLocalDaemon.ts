@@ -1,57 +1,57 @@
 import { randomBytes, randomUUID } from 'node:crypto'
-import {
-  type FileHandle,
-  mkdir,
-  open,
-  readFile,
-  rename,
-  stat,
-  unlink,
-  writeFile,
-} from 'node:fs/promises'
+import { type FileHandle, mkdir, unlink } from 'node:fs/promises'
 import { dirname } from 'node:path'
 
-import {
-  isFunction,
-  isNotUndefined,
-  isNull,
-  isObject,
-  isUndefined,
-  Log,
-} from '@velaros-ai/core'
-import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
+import { isUndefined, Log } from '@velaros-ai/core'
 
-import { KernelClientErrorCodes } from '../../contract/constants'
-import type { KernelRpcEndpoint } from '../../types/client-endpoint'
-import { KernelClientError } from '../../utils/errors'
+import type {
+  KernelDaemonEndpointDescriptor,
+  KernelDaemonPaths,
+  KernelRpcEndpoint,
+} from '../../types/kernel'
+import { ignoreMissing } from '../../utils/fs'
+import { createDefaultKernelDaemonPaths } from '../../utils/rpc/descriptor'
 import {
-  createDefaultKernelDaemonPaths,
-  type KernelDaemonEndpointDescriptor,
-  type KernelDaemonPaths,
-} from '../../utils/rpc/descriptor'
-import { KernelTuning } from '../../utils/tuning'
+  acquireKernelDaemonLock,
+  assertKernelRuntimeDirectoryIsPrivate,
+  writeKernelDaemonDescriptor,
+} from '../../utils/serve/daemon-process'
 
 import { KernelLocalRpcServer } from './KernelLocalRpcServer'
-import type { KernelService } from './KernelService'
+import type { KernelServiceApi } from './KernelService'
 
 const log = Log.tag('KernelDaemon')
 
+/** 起一个本机守护进程要交进来的东西：听哪个端点、三条路径、代理哪个服务面。 */
 export interface KernelLocalDaemonOptions {
+  /** 显式指定的 RPC 端点；不给就按平台选（Windows 走回环 TCP，其余走 unix socket）。 */
   readonly endpoint?: KernelRpcEndpoint
+  /** descriptor、锁与 socket 的落点；不给就用缺省的运行目录。 */
   readonly paths?: KernelDaemonPaths
-  readonly service: KernelService
+  /** 这个守护进程对外暴露的服务面。 */
+  readonly service: KernelServiceApi
 }
 
 /**
- * Single-instance local sidecar lifecycle.
+ * 本机单实例 sidecar 的生命周期；实例归装配 Kernel 进程的那一处。
  *
- * The exclusive lock is acquired before the RPC endpoint starts. Products
- * discover the same descriptor and connect to one Kernel truth rather than
- * silently constructing separate hosts and state stores.
+ * 独占锁在 RPC 端点起来之前就先拿到。产品发现的是同一份 descriptor，于是连到同一个 Kernel
+ * 真身上，而不是各自悄悄建出几份宿主与状态库。
  */
-export class KernelLocalDaemon {
+export interface KernelLocalDaemonApi {
+  /** 抢锁、起 RPC 端点、发布 descriptor；已经在跑就回现有的 descriptor，已回收则抛错。 */
+  start(): Promise<KernelDaemonEndpointDescriptor>
+  /** 回已发布的端点 descriptor；还没启动时抛错。 */
+  getDescriptor(): KernelDaemonEndpointDescriptor
+  /** 停掉 RPC 端点、删掉 descriptor 与锁；重复调用无副作用。 */
+  dispose(): Promise<void>
+}
+
+/** 本机单实例守护进程。 */
+export class KernelLocalDaemon implements KernelLocalDaemonApi {
   private readonly paths: KernelDaemonPaths
   private readonly instanceId = randomUUID()
+  // 认证令牌要够长才挡得住猜：32 字节随机数，按 base64url 编码进 descriptor。
   private readonly authToken = randomBytes(32).toString('base64url')
   private lockHandle?: FileHandle
   private server?: KernelLocalRpcServer
@@ -75,10 +75,11 @@ export class KernelLocalDaemon {
     const runtimeDirectory = dirname(this.paths.lockPath)
     await mkdir(runtimeDirectory, {
       recursive: true,
+      // 运行目录里有令牌与 socket：只给属主进出。
       mode: 0o700,
     })
-    await assertRuntimeDirectoryIsPrivate(runtimeDirectory)
-    this.lockHandle = await acquireDaemonLock(
+    await assertKernelRuntimeDirectoryIsPrivate(runtimeDirectory)
+    this.lockHandle = await acquireKernelDaemonLock(
       this.paths.lockPath,
       this.instanceId,
     )
@@ -105,13 +106,13 @@ export class KernelLocalDaemon {
         startedAt: Date.now(),
         endpoint: resolvedEndpoint,
       }
-      await writeDescriptor(this.paths.descriptorPath, descriptor)
+      await writeKernelDaemonDescriptor(this.paths.descriptorPath, descriptor)
       this.descriptor = descriptor
       this.state = 'running'
       return descriptor
     } catch (error) {
       await this.server?.dispose().catch((cleanupError) => {
-        log.warn('Kernel RPC server cleanup failed after startup error', { error: cleanupError })
+        log.warn('启动出错后回收 Kernel RPC 服务端时又失败了', { error: cleanupError })
       })
       this.server = undefined
       await this.releaseOwnership()
@@ -138,147 +139,14 @@ export class KernelLocalDaemon {
     }
   }
 
+  /** 交还本实例占着的东西：删 descriptor、关锁句柄、删锁文件。 */
   private async releaseOwnership(): Promise<void> {
     if (isUndefined(this.lockHandle)) return
     await unlink(this.paths.descriptorPath).catch(ignoreMissing)
-    await this.lockHandle.close().catch((error) => {
-      log.warn('Kernel daemon lock handle failed to close', { error })
+    await this.lockHandle.close().catch((error: unknown) => {
+      log.warn('Kernel 守护进程的锁句柄关不掉', { error })
     })
     this.lockHandle = undefined
     await unlink(this.paths.lockPath).catch(ignoreMissing)
   }
-}
-
-/** 读不出属主时的重读次数与间隔（见 {@link acquireDaemonLock}）。 */
-
-async function acquireDaemonLock(
-  lockPath: string,
-  instanceId: string,
-): Promise<FileHandle> {
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    try {
-      const handle = await open(lockPath, 'wx', 0o600)
-      await handle.writeFile(
-        JSON.stringify({ instanceId, pid: process.pid }),
-        'utf8',
-      )
-      return handle
-    } catch (error) {
-      if (!isNodeError(error, 'EEXIST')) throw error
-      // `open('wx')` 成功与「写进 pid」之间有一小段窗口：读不出属主时短暂重读，别把对方正在
-      // 成型的锁当死锁删掉（真实竞态下会变成两个守护进程同时持锁）。
-      // 同一段逻辑在 `serve/updater/lock.ts` 也有一份；合并成一处留给改造。
-      const ownerPid = await readLockOwnerPidWithRetry(lockPath)
-      if (isNotUndefined(ownerPid)) {
-        if (isProcessAlive(ownerPid)) {
-          throw new KernelClientError({
-            code: KernelClientErrorCodes.daemonAlreadyRunning,
-            message: '本机端点已经被另一个 Kernel 守护进程占用',
-          })
-        }
-        await unlink(lockPath).catch(ignoreMissing)
-        continue
-      }
-      throw new KernelClientError({
-        code: KernelClientErrorCodes.daemonLockFailed,
-        message: `Kernel 守护进程锁存在但读不出属主，按被占用处理；若确认没有 Kernel 在跑，删掉 ${lockPath} 后重试`,
-      })
-    }
-  }
-  throw new KernelClientError({
-    code: KernelClientErrorCodes.daemonLockFailed,
-    message: 'Kernel 守护进程锁获取失败',
-  })
-}
-
-async function readLockOwnerPidWithRetry(
-  path: string,
-): Promise<number | undefined> {
-  for (let attempt = 0; attempt <= KernelTuning.lockOwnerReadRetries; attempt += 1) {
-    const pid = await readLockOwnerPid(path)
-    if (isNotUndefined(pid)) return pid
-    if (attempt < KernelTuning.lockOwnerReadRetries) {
-      await TimerScope.sleep(KernelTuning.lockOwnerReadRetryMs, {
-        label: 'KernelDaemon.lockOwnerRead',
-      })
-    }
-  }
-  return undefined
-}
-
-/**
- * 运行目录必须归自己所有、且只有自己能进。
- *
- * 缺省落点在共享的 `<tmpdir>/velaros-kernel-<uid>`：另一个用户预先建好这个目录，就能替换
- * descriptor 把客户端引到自己的 socket，客户端会把认证令牌发过去。`mkdir` 的 `mode` 只在
- * **新建**时生效，目录已存在时既不改权限也不核属主——这里补上这道闸。
- *
- * Windows 没有 POSIX 属主与模式位（`process.getuid` 不存在），跳过。
- */
-async function assertRuntimeDirectoryIsPrivate(directory: string): Promise<void> {
-  if (!isFunction(process.getuid)) return
-  const stats = await stat(directory)
-  const uid = process.getuid()
-  if (stats.uid !== uid) {
-    throw new KernelClientError({
-      code: KernelClientErrorCodes.daemonLockFailed,
-      message: `Kernel 运行目录 ${directory} 属于 uid ${stats.uid}，不是当前用户（uid ${uid}），拒绝使用`,
-    })
-  }
-  const groupAndOtherBits = stats.mode & 0o077
-  if (groupAndOtherBits !== 0) {
-    throw new KernelClientError({
-      code: KernelClientErrorCodes.daemonLockFailed,
-      message: `Kernel 运行目录 ${directory} 的权限是 ${(stats.mode & 0o777).toString(8)}，对同机其他用户开放，拒绝使用（应为 700）`,
-    })
-  }
-}
-
-async function readLockOwnerPid(path: string): Promise<number | undefined> {
-  try {
-    const input = JSON.parse(await readFile(path, 'utf8')) as unknown
-    if (!isObject(input) && !isNull(input) || isNull(input)) return undefined
-    const pid = Reflect.get(input, 'pid')
-    return Number.isInteger(pid) && (pid as number) > 0
-      ? pid as number
-      : undefined
-  } catch (error) {
-    log.debug('Kernel daemon lock owner could not be read', { error, path })
-    return undefined
-  }
-}
-
-function isProcessAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0)
-    return true
-  } catch (error) {
-    return isNodeError(error, 'EPERM')
-  }
-}
-
-async function writeDescriptor(
-  path: string,
-  descriptor: KernelDaemonEndpointDescriptor,
-): Promise<void> {
-  const temporaryPath = `${path}.${descriptor.instanceId}.tmp`
-  await writeFile(
-    temporaryPath,
-    `${JSON.stringify(descriptor)}\n`,
-    { encoding: 'utf8', mode: 0o600 },
-  )
-  await rename(temporaryPath, path)
-}
-
-function ignoreMissing(error: unknown): void {
-  if (!isNodeError(error, 'ENOENT')) throw error
-}
-
-function isNodeError(
-  error: unknown,
-  code: string,
-): error is NodeJS.ErrnoException {
-  return error instanceof Error
-    && 'code' in error
-    && error.code === code
 }

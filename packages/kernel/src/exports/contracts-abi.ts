@@ -1,33 +1,22 @@
+export type { KernelModuleIsolation } from '../contract/constants'
 export { KernelModuleApiVersion, KernelVersion } from '../contract/constants'
+export { KernelModuleIsolationValues } from '../contract/constants'
+export type { KernelModuleActivateContext, KernelRegistration, KernelServiceHandle } from '../contract/provides'
+export type { KernelCallableCapabilityOperation, KernelCallableCapabilityService, KernelCapabilityOperationContext, KernelCapabilityOperationMetadata, KernelCapabilityOperationReason } from '../contract/requires'
+export type { KernelEventHandler } from '../contract/requires'
+export type { KernelModuleDefinition, KernelModuleLifecycle } from '../contract/requires'
+export type { KernelPermissionBroker } from '../contract/requires'
 export { createKernelCallableCapability } from '../impl/runtime/KernelCallableCapability'
-export { createCapabilityToken, requireCapability } from '../impl/runtime/KernelModuleKit'
-export type { KernelCallableCapabilityOperation, KernelCallableCapabilityService, KernelCapabilityOperationContext, KernelCapabilityOperationMetadata, KernelCapabilityOperationReason } from '../types/abi-callable'
-export type { CapabilityRequirement, CapabilityToken } from '../types/abi-capability'
-export type { KernelEvent, KernelEventHandler, KernelModuleEventBus } from '../types/abi-events'
-export type {
-  Awaitable,
-  KernelModuleActivateContext,
-  KernelModuleDefinition,
-  KernelModuleHealth,
-  KernelModuleHealthStatus,
-  KernelModuleIsolation,
-  KernelModuleLifecycle,
-  KernelModuleManifest,
-  KernelModuleStatus,
-  KernelRegistration,
-  KernelServiceHandle,
-  KernelServiceResolver,
-} from '../types/abi-module'
-export { defineKernelModule, KernelModuleIsolationValues } from '../types/abi-module'
-export type {
-  KernelModulePermissionBroker,
-  KernelModulePermissionRequest,
-  KernelPermissionBroker,
-  KernelPermissionDecision,
-  KernelPermissionRequest,
-} from '../types/abi-permissions'
-export type { ResourceRef, ScopeRef } from '../types/abi-references'
-export type { KernelStateStore } from '../types/abi-state'
+export { createCapabilityToken, defineKernelModule, kernelModules, requireCapability } from '../impl/runtime/KernelModuleKit'
+export type { KernelStateStore } from '../impl/runtime/NamespacedKernelStateStore'
+export type { KernelModuleEventBus } from '../impl/runtime/ScopedKernelEventBus'
+export type { KernelModulePermissionBroker } from '../impl/runtime/ScopedKernelPermissionBroker'
+export type { KernelServiceResolver } from '../impl/runtime/ScopedKernelServiceResolver'
+export type { CapabilityRequirement, CapabilityToken } from '../types/kernel.js'
+export type { ResourceRef, ScopeRef } from '../types/kernel.js'
+export type { Awaitable, KernelModuleHealth, KernelModuleHealthStatus, KernelModuleManifest, KernelModuleStatus } from '../types/kernel.js'
+export type { KernelModulePermissionRequest, KernelPermissionDecision, KernelPermissionRequest } from '../types/kernel.js'
+export type { KernelEvent } from '../types/kernel.js'
 export {
   isKernelCallableCapabilityService,
   resolveKernelCapabilityOperationReason,

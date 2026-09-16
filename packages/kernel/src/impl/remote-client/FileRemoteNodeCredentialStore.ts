@@ -12,33 +12,16 @@ import { dirname, join } from 'node:path'
 
 import { z } from 'zod'
 
-import { isNonBlankString, isObject, Log } from '@velaros-ai/core'
+import { isNonBlankString, Log } from '@velaros-ai/core'
 import { writeJsonFileAtomically } from '@velaros-ai/core/utils/FilePersistence'
 
-import type {
-  RemoteNodeCredentials,
-  RemoteNodeCredentialStore,
-} from '../../types/remote-client'
+import { KernelFileModes } from '../../contract/constants'
+import type { RemoteNodeClientCredentialStore as RemoteNodeCredentialStore } from '../../contract/requires'
+import type { RemoteNodeCredentials } from '../../types/remote-client'
+import { isNodeError } from '../../utils/fs'
 import { RemoteNodeIdentitySchema } from '../../utils/wire/remote-node'
 
 const log = Log.tag('RemoteNodeCredentials')
-
-const CredentialFileMode = 0o600
-const CredentialDirectoryMode = 0o700
-
-/**
- * 落盘形状。
- *
- * `schemaVersion` 是显式版本位:将来换 Electron `safeStorage` 密封后,旧明文文件靠它被认出来
- * 并迁移,而不是靠字段猜。`strictObject` 让多余字段直接判失败——凭据文件不接受"顺带塞点别的"。
- */
-const StoredRemoteNodeCredentialsSchema = z.strictObject({
-  schemaVersion: z.literal(1),
-  clientId: z.string().min(1),
-  privateKey: z.string().min(1),
-  publicKey: z.string().min(1),
-  node: RemoteNodeIdentitySchema,
-})
 
 /**
  * 默认落点:每台远端主机一份,按 slug 分文件,互不影响。
@@ -49,7 +32,7 @@ const StoredRemoteNodeCredentialsSchema = z.strictObject({
  */
 export function defaultRemoteNodeCredentialsPath(
   hostSlug: string,
-  home = homedir(),
+  home: string = homedir(),
 ): string {
   const root = isNonBlankString(home) ? home.trim() : homedir()
   return join(root, '.velaros', 'remote-nodes', `${hostSlug}.json`)
@@ -62,6 +45,20 @@ export function defaultRemoteNodeCredentialsPath(
  * `RemoteNodeClient` 一行都不动。
  */
 export class FileRemoteNodeCredentialStore implements RemoteNodeCredentialStore {
+  /**
+   * 落盘形状。
+   *
+   * `schemaVersion` 是显式版本位:将来换 Electron `safeStorage` 密封后,旧明文文件靠它被认出来
+   * 并迁移,而不是靠字段猜。`strictObject` 让多余字段直接判失败——凭据文件不接受「顺带塞点别的」。
+   */
+  private static readonly Schema = z.strictObject({
+    schemaVersion: z.literal(1),
+    clientId: z.string().min(1),
+    privateKey: z.string().min(1),
+    publicKey: z.string().min(1),
+    node: RemoteNodeIdentitySchema,
+  })
+
   public constructor(private readonly filePath: string) {}
 
   public async load(): Promise<Nullable<RemoteNodeCredentials>> {
@@ -70,7 +67,7 @@ export class FileRemoteNodeCredentialStore implements RemoteNodeCredentialStore 
       raw = await readFile(this.filePath, 'utf8')
     } catch (error) {
       // 文件不存在是正常起点(尚未配对),其余读失败按同样的"没有凭据"处理但要出声。
-      if (!isFileNotFound(error)) {
+      if (!isNodeError(error, 'ENOENT')) {
         log.warn('Remote node credentials could not be read', {
           error,
           path: this.filePath,
@@ -90,7 +87,7 @@ export class FileRemoteNodeCredentialStore implements RemoteNodeCredentialStore 
       return null
     }
 
-    const result = StoredRemoteNodeCredentialsSchema.safeParse(parsed)
+    const result = FileRemoteNodeCredentialStore.Schema.safeParse(parsed)
     if (!result.success) {
       log.warn('Remote node credentials do not match the expected shape; treating the host as unpaired', {
         path: this.filePath,
@@ -108,7 +105,7 @@ export class FileRemoteNodeCredentialStore implements RemoteNodeCredentialStore 
   public async save(credentials: RemoteNodeCredentials): Promise<void> {
     // 目录先按 0700 建好:原子写只保证文件位,父目录权限得自己钉。
     await mkdir(dirname(this.filePath), {
-      mode: CredentialDirectoryMode,
+      mode: KernelFileModes.privateDirectory,
       recursive: true,
     })
     await writeJsonFileAtomically(
@@ -119,8 +116,12 @@ export class FileRemoteNodeCredentialStore implements RemoteNodeCredentialStore 
         node: credentials.node,
         privateKey: credentials.privateKey,
         publicKey: credentials.publicKey,
-      } satisfies z.infer<typeof StoredRemoteNodeCredentialsSchema>,
-      { mode: CredentialFileMode, space: 2, trailingNewline: true },
+      },
+      {
+        mode: KernelFileModes.privateFile,
+        space: 2,
+        trailingNewline: true,
+      },
     )
     log.info('Remote node credentials stored', {
       clientId: credentials.clientId,
@@ -131,8 +132,4 @@ export class FileRemoteNodeCredentialStore implements RemoteNodeCredentialStore 
   public async clear(): Promise<void> {
     await rm(this.filePath, { force: true })
   }
-}
-
-function isFileNotFound(error: unknown): boolean {
-  return isObject(error) && Reflect.get(error, 'code') === 'ENOENT'
 }

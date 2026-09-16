@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 
 import { createCapabilityToken, requireCapability } from '../../src/impl/runtime/KernelModuleKit'
-import { defineKernelModule } from '../../src/types/abi-module'
+import { defineKernelModule } from '../../src/impl/runtime/KernelModuleKit'
 
 describe('kernel sdk', () => {
   test('creates stable typed capability declarations', () => {

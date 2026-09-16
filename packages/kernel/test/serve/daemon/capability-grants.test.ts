@@ -9,6 +9,7 @@ import { join } from 'node:path'
 
 import { afterEach, describe, expect, test } from 'bun:test'
 
+import type { KernelModuleDefinition } from '../../../src/contract/requires'
 import { KernelClient } from '../../../src/impl/client/KernelClient'
 import { SocketKernelTransport } from '../../../src/impl/client/SocketKernelTransport'
 import { createKernelCallableCapability } from '../../../src/impl/runtime/KernelCallableCapability'
@@ -20,11 +21,13 @@ import { KernelLocalRpcServer } from '../../../src/impl/serve/KernelLocalRpcServ
 import { installModPackFromDirectory, KernelModLoader } from '../../../src/impl/serve/KernelModLoader'
 import { KernelModStore } from '../../../src/impl/serve/KernelModStore'
 import { KernelService } from '../../../src/impl/serve/KernelService'
-import type { KernelModuleDefinition } from '../../../src/types/abi-module'
 import { KernelProtocolVersion } from '../../../src/utils/wire/version'
 
 const Token = createCapabilityToken('test.grants')
 const AuthToken = 'grant-auth-token-0123456789-abcdefgh'
+/** 测试里的模块导入函数；生产里由 `bin/velaros-kernel-daemon.mjs` 注入。 */
+const importModule = (url: string): Promise<Record<string, unknown>> => import(url) as Promise<Record<string, unknown>>
+
 const temporaryDirectories: string[] = []
 
 afterEach(async () => {
@@ -278,7 +281,7 @@ export default {
     expect(pack.id).toBe('user.echo')
     expect(store.listEnabled()).toHaveLength(1)
 
-    const loaded = await new KernelModLoader(store).loadEnabled()
+    const loaded = await new KernelModLoader(store, importModule).loadEnabled()
     expect(loaded.modules).toHaveLength(1)
     expect(loaded.modules[0]?.manifest.id).toBe('module.user-echo')
   })

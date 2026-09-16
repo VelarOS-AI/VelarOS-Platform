@@ -9,8 +9,12 @@ import { createCallbackTransport } from '@velaros-ai/core/logger'
 
 import { bootKernelDaemon } from '../../../src/impl/serve/KernelDaemonAssembly'
 import { KernelModLoader } from '../../../src/impl/serve/KernelModLoader'
-import { type KernelModPackRecord, KernelModStore } from '../../../src/impl/serve/KernelModStore'
+import { KernelModStore } from '../../../src/impl/serve/KernelModStore'
+import type { KernelModPackRecord } from '../../../src/types/serve'
 import { createDefaultKernelDaemonPaths } from '../../../src/utils/rpc/descriptor'
+
+/** 测试里的模块导入函数；生产里由 `bin/velaros-kernel-daemon.mjs` 注入。 */
+const importModule = (url: string): Promise<Record<string, unknown>> => import(url) as Promise<Record<string, unknown>>
 
 const directories: string[] = []
 let logCaptureSequence = 0
@@ -121,7 +125,7 @@ describe('mod loader resilience', () => {
     const capture = captureErrorLog()
     let loaded
     try {
-      loaded = await new KernelModLoader(store).loadEnabled()
+      loaded = await new KernelModLoader(store, importModule).loadEnabled()
     } finally {
       capture.restore()
     }
@@ -138,7 +142,7 @@ describe('mod loader resilience', () => {
     expect(boom?.specifier).toBe(throwing)
     expect(boom?.reason).toContain('pack boom')
     expect(store.getLoadFailure('system.shape')?.reason)
-      .toContain('not a KernelModuleDefinition')
+      .toContain('不是一个 KernelModuleDefinition')
     expect(store.getLoadFailure('system.healthy')).toBeUndefined()
 
     // 不静默:每个失败都留下可读日志。
@@ -164,6 +168,7 @@ describe('mod loader resilience', () => {
     let booted
     try {
       booted = await bootKernelDaemon({
+        importModule,
         kernelVersion: '0.3.0-test',
         paths: createDefaultKernelDaemonPaths('mod-loader-kernel', directory),
         modStorePaths: { userModsDirectory: join(directory, 'mods') },

@@ -48,6 +48,7 @@ function canonicalize(value: unknown): unknown {
   return sorted
 }
 
+/** 把能力表与工具表装成一份清单,`revision` 由内容算出来,调用方不自己填。 */
 export function createManifest(
   capabilities: readonly RemoteNodeCapabilityDescriptor[],
   tools: readonly RemoteNodeToolDescriptor[],

@@ -8,33 +8,17 @@
 //      作为 `isolationAdapters` 注入 Kernel,再注册 `projection.modules`;
 //   ④ `projection.tools` 交给 Agent 主干注册。
 // 清单变更(`client.onManifestChanged`)时从 ② 起整份重来:能力面变化必须走显式注册周期。
+export type { RemoteNodeClientErrorCode } from '../contract/constants'
+export { RemoteNodeClientErrorCodes } from '../contract/constants'
+export type { RemoteNodeClientCredentialStore as RemoteNodeCredentialStore, RemoteNodeSocket, RemoteNodeSocketFactory } from '../contract/requires'
 export { defaultRemoteNodeCredentialsPath, FileRemoteNodeCredentialStore } from '../impl/remote-client/FileRemoteNodeCredentialStore'
 export { RemoteNodeClient } from '../impl/remote-client/RemoteNodeClient'
 export type { RemoteNodePendingCallsHost } from '../impl/remote-client/RemoteNodePendingCalls'
 export { createAbortError, RemoteNodePendingCalls } from '../impl/remote-client/RemoteNodePendingCalls'
-export type {
-  RemoteNodeClientErrorCode,
-  RemoteNodeClientErrorInit,
-  RemoteNodeClientOptions,
-  RemoteNodeConnectionState,
-  RemoteNodeCredentials,
-  RemoteNodeCredentialStore,
-  RemoteNodeInvokeRequest,
-  RemoteNodeManifestListener,
-  RemoteNodeProgressListener,
-  RemoteNodeSession,
-  RemoteNodeSocket,
-  RemoteNodeSocketFactory,
-  RemoteNodeStateListener,
-  RemoteNodeStopListener,
-  RemoteNodeUnsubscribe,
-} from '../types/remote-client'
-export {
-  RemoteNodeClientErrorCodes,
-} from '../types/remote-client'
+export type { RemoteNodeCloseAction } from '../types/remote'
+export type { RemoteNodeHandshakeInput, RemoteNodeHandshakeStep } from '../types/remote'
+export type { RemoteNodeClientErrorInit, RemoteNodeClientOptions, RemoteNodeConnectionState, RemoteNodeCredentials, RemoteNodeInvokeRequest, RemoteNodeManifestListener, RemoteNodeProgressListener, RemoteNodeSession, RemoteNodeStateListener, RemoteNodeStopListener, RemoteNodeUnsubscribe } from '../types/remote-client'
 export { RemoteNodeClientError } from '../utils/errors'
-export type { RemoteNodeCloseAction } from '../utils/remote/close-policy'
 export { computeReconnectDelayMs, planRemoteNodeCloseAction } from '../utils/remote/close-policy'
-export type { RemoteNodeHandshakeInput, RemoteNodeHandshakeStep } from '../utils/remote/handshake'
 export { planRemoteNodeHandshake } from '../utils/remote/handshake'
 export { createRemoteNodeWebSocket } from '../utils/remote/ws-socket'

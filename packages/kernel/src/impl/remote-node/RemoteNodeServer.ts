@@ -5,7 +5,8 @@
 // 因此本文件里没有会话、没有 Agent 主干、没有任何主动向 Client 发起的请求——只有握手、派发,
 // 与一条单向的清单推送。
 //
-// 分工:端口管路见 `listener.ts`,配对节奏见 `pairing.ts`,调用与终态记账见 `call-runner.ts`;
+// 分工:端口管路见 `utils/remote/listener.ts`,配对节奏见 `./RemoteNodePairingGate`,
+// 调用与终态记账见 `./RemoteNodeCallRunner`;
 // 本文件只剩连接状态机与生命周期。
 import type { Server } from 'node:http'
 import type { Socket } from 'node:net'
@@ -15,15 +16,14 @@ import { type RawData, WebSocket, type WebSocketServer } from 'ws'
 import {
   isNotNull,
   isNull,
-  isNumber,
   isPresent,
-  isRecord,
   Log,
   toNullable,
 } from '@velaros-ai/core'
-import { type TimerLease, TimerScope } from '@velaros-ai/core/utils/TimerScope'
+import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
 import { RemoteNodeLimits } from '../../contract/constants'
+import type { RemoteNodeConnection } from '../../types/remote'
 import type {
   RemoteNodePairedCredential,
   RemoteNodeServerOptions,
@@ -36,6 +36,10 @@ import {
   verifyChallengeSignature,
 } from '../../utils/remote/crypto'
 import { decodeClientFrame, sendFrame } from '../../utils/remote/frames'
+import {
+  readMismatchedHelloVersion,
+  resolveRemoteNodePlatform,
+} from '../../utils/remote/handshake'
 import { listenRemoteNode } from '../../utils/remote/listener'
 import { KernelTuning } from '../../utils/tuning'
 import {
@@ -47,8 +51,6 @@ import {
   RemoteNodeIdleTimeoutMs,
   type RemoteNodeManifest,
   type RemoteNodePair,
-  type RemoteNodePlatform,
-  RemoteNodePlatformSchema,
   RemoteNodeProtocolVersion,
   type RemoteNodeResult,
 } from '../../utils/wire/remote-node'
@@ -58,58 +60,32 @@ import { RemoteNodePairingGate } from './RemoteNodePairingGate'
 
 const log = Log.tag('RemoteNodeServer')
 
-const DefaultBindHost = '127.0.0.1'
-/** WebSocket 关闭原因受帧头限制(< 123 字节),超长会被 `ws` 直接抛出。 */
-const MaxCloseReasonLength = 100
-
-type RemoteNodeConnectionPhase =
-  | 'hello'
-  | 'pair'
-  | 'pairing'
-  | 'authenticate'
-  | 'ready'
-  | 'closed'
-
-interface RemoteNodeConnection {
-  readonly socket: WebSocket
-  /** 每连接一枚,签名不可跨连接重放。 */
-  readonly challenge: string
-  phase: RemoteNodeConnectionPhase
-  clientId: Nullable<string>
-  clientName: Nullable<string>
-  idle: Nullable<TimerLease>
-}
-
-function resolveNodePlatform(): RemoteNodePlatform {
-  const parsed = RemoteNodePlatformSchema.safeParse(process.platform)
-  if (!parsed.success) {
-    throw new Error(`远程节点不支持 ${process.platform} 这个平台`)
-  }
-  return parsed.data
-}
-
 /**
- * 从一帧解不开的报文里捞出「这是一帧版本不符的 hello」。
+ * 无头能力节点的监听端。
  *
- * 必要之恶:`RemoteNodeClientFrameSchema` 用 `z.literal` 把版本钉死,版本不符的 hello 连
- * discriminated union 都进不去,只会得到一句「不匹配 schema」。要给对端一个明确的升级方向,
- * 只能在这里对原文做一次窄范围窥视——窥视结果只用于报错,不参与任何授权判断。
+ * 一个进程一个实例,由宿主持有。一条 WebSocket、一台已配对 Client、零会话权威:
+ * 它不认识会话、不持 Agent 主干,只把本机能力面摊给对端。
  */
-function readMismatchedHelloVersion(raw: RawData): Nullable<number> {
-  let value: unknown
-  try {
-    value = JSON.parse(raw.toString()) as unknown
-  } catch (error) {
-    log.debug('远程节点的帧不是合法 JSON', { error })
-    return null
-  }
-  if (!isRecord(value) || value.type !== 'hello') return null
-  const version = value.protocolVersion
-  return isNumber(version) && version !== RemoteNodeProtocolVersion ? version : null
+export interface RemoteNodeServerApi {
+  /** 开监听并读入凭据,兑现当前服务状态;已启动时直接回现状。端口区间全占时抛。 */
+  start(): Promise<RemoteNodeServerStatus>
+  /** 开一次配对窗口,返回含六位码的状态;服务端还没启动时抛。 */
+  startPairing(): RemoteNodeServerStatus
+  /** 解除配对:斩断在线连接、丢终态回放缓存、清掉落盘凭据。 */
+  unpair(): Promise<void>
+  /** 当前服务状态(端点、身份、清单修订号、配对与连接情况);还没启动时抛。 */
+  getStatus(): RemoteNodeServerStatus
+  /** 停机:收配对窗、退清单订阅、中止在途调用、断开全部连接并释放端口。 */
+  stop(): Promise<void>
 }
 
 /** 无头能力节点的监听端:一条 WebSocket,一台已配对 Client,零会话权威。 */
-export class RemoteNodeServer {
+export class RemoteNodeServer implements RemoteNodeServerApi {
+  /** 默认只绑回环;跨机监听必须由宿主显式放开。 */
+  private static readonly DefaultBindHost = '127.0.0.1'
+
+  /** WebSocket 关闭原因受帧头限制(< 123 字节),超长会被 `ws` 直接抛出。 */
+  private static readonly MaxCloseReasonLength = 100
   private timers = new TimerScope({ name: 'RemoteNodeServer' })
   private readonly now: () => number
   private readonly node: RemoteNodeIdentity
@@ -133,7 +109,7 @@ export class RemoteNodeServer {
     this.node = {
       nodeId: options.nodeId ?? createNodeId(),
       nodeName: options.nodeName,
-      platform: resolveNodePlatform(),
+      platform: resolveRemoteNodePlatform(),
       arch: process.arch,
       nodeVersion: options.nodeVersion,
       // 每次进程启动重新生成:Client 一旦发现 epoch 变了,就知道在途调用的结果永远不会再来。
@@ -151,7 +127,7 @@ export class RemoteNodeServer {
     // 凭据一次性读进内存:握手路径因此全同步,不会出现「已收 hello 但还没决定 paired」的窗口。
     this.credential = await this.options.credentialStore.load()
     const listener = await listenRemoteNode({
-      bindHost: this.options.bindHost ?? DefaultBindHost,
+      bindHost: this.options.bindHost ?? RemoteNodeServer.DefaultBindHost,
       portStart: this.options.portStart ?? RemoteNodeLimits.defaultPortStart,
       portEnd: this.options.portEnd ?? RemoteNodeLimits.defaultPortEnd,
       onConnection: (socket) => this.accept(socket),
@@ -526,7 +502,7 @@ export class RemoteNodeServer {
     connection.idle = null
     if (this.ready === connection) this.ready = null
     if (connection.socket.readyState === WebSocket.OPEN) {
-      connection.socket.close(code, reason.slice(0, MaxCloseReasonLength))
+      connection.socket.close(code, reason.slice(0, RemoteNodeServer.MaxCloseReasonLength))
     }
   }
 }

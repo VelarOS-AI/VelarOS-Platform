@@ -1,40 +1,21 @@
 // Platform Kernel 统一持有与宿主无关的远程节点实现。
 // 监听端管路:端口探测 + 升级路径把关。除此之外不含任何协议语义。
 import { createServer, type Server } from 'node:http'
-import type { Socket } from 'node:net'
 
 import type { WebSocket } from 'ws'
 import { WebSocketServer } from 'ws'
 
 import { isNull, isString } from '@velaros-ai/core'
 
-import { RemoteNodeSocketPath } from '../../types/remote-node'
+import { RemoteNodeSocketPath } from '../../contract/constants'
+import type {
+  RemoteNodeListener,
+  RemoteNodeListenerOptions,
+} from '../../types/remote'
+import { isNodeError } from '../fs'
 import { RemoteNodeMaxFrameBytes } from '../wire/remote-node'
 
-function isNodeError(error: unknown, code: string): error is NodeJS.ErrnoException {
-  return error instanceof Error && 'code' in error && error.code === code
-}
-
-export interface RemoteNodeListenerOptions {
-  /**
-   * 绑定地址。
-   *
-   * 默认只回环;要让另一台机器连上来必须由宿主**显式**放开——把「跨机」做成默认值,等于让一次
-   * 无人留意的安装把本机能力面挂到局域网上。
-   */
-  readonly bindHost: string
-  readonly portStart: number
-  readonly portEnd: number
-  readonly onConnection: (socket: WebSocket) => void
-  readonly onNetworkSocket: (socket: Socket) => void
-}
-
-export interface RemoteNodeListener {
-  readonly httpServer: Server
-  readonly webSocketServer: WebSocketServer
-  readonly endpoint: string
-}
-
+/** 把一次 `listen` 包成 promise:绑上了给实际端口,绑不上按原样上抛 errno 错误。 */
 function listenServer(server: Server, host: string, port: number): Promise<number> {
   return new Promise((resolve, reject) => {
     const onError = (error: Error): void => {

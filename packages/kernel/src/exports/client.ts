@@ -2,7 +2,6 @@
 //
 // 产品只依赖本包：发现本机 Kernel、连接、握手、调用能力、订阅事件、启动/附着共享进程。
 // Kernel Host / Runtime / Daemon 实现属于 Kernel 内部基础设施，不从这里暴露。
-export type { KernelModuleHealthStatus } from '../types/abi-module'
 export type {
   CapabilityCallError,
   CapabilityCallFailure,
@@ -152,45 +151,28 @@ export * as KernelProtocol from './contracts-protocol'
  * 每个版本只接受完全相同的 wire 版本。协议变化直接提升版本，旧数据不在运行时迁移。
  */
 export type { KernelClientErrorCode } from '../contract/constants'
+export type { KernelRpcMethod } from '../contract/constants'
 export { KernelClientErrorCodes } from '../contract/constants'
-export type { OpenCapabilitySessionInput } from '../impl/client/CapabilitySession'
+export { KernelRpcMethods } from '../contract/constants'
+export type { ConnectedKernelDaemon } from '../contract/provides'
+export type { KernelLaunchResult } from '../contract/provides'
+export type { KernelEventSubscription } from '../contract/provides'
+export type { KernelClientEventHandler, KernelClientTransport } from '../contract/requires'
 export { CapabilitySession, openCapabilitySessionOnTransport } from '../impl/client/CapabilitySession'
 export { KernelClient } from '../impl/client/KernelClient'
-export type { ConnectedKernelDaemon } from '../impl/client/KernelDaemonDirectory'
 export { connectToKernelDaemon, discoverKernelDaemon } from '../impl/client/KernelDaemonDirectory'
-export type { SocketKernelTransportOptions } from '../impl/client/SocketKernelTransport'
 export { SocketKernelTransport } from '../impl/client/SocketKernelTransport'
-export type {
-  KernelLauncherOptions,
-  KernelLaunchResult,
-  KernelVersionResolver,
-  KernelVersionTarget,
-} from '../impl/serve/KernelLauncher'
+export type { KernelLauncherOptions } from '../impl/serve/KernelLauncher'
 export { KernelLauncher } from '../impl/serve/KernelLauncher'
-export type {
-  KernelRpcEndpoint,
-  TcpKernelRpcEndpoint,
-  UnixKernelRpcEndpoint,
-} from '../types/client-endpoint'
-export type {
-  KernelRpcError,
-  KernelRpcEventFrame,
-  KernelRpcFailure,
-  KernelRpcMethod,
-  KernelRpcRequest,
-  KernelRpcResponse,
-  KernelRpcServerFrame,
-  KernelRpcSuccess,
-} from '../types/client-rpc-frames'
-export { KernelRpcMethods } from '../types/client-rpc-frames'
-export type {
-  KernelClientEventHandler,
-  KernelClientTransport,
-  KernelEventSubscription,
-} from '../types/client-transport'
-export type { KernelServiceHealth, KernelServiceModuleHealth } from '../types/service-health'
+export type { OpenCapabilitySessionInput } from '../types/client'
+export type { SocketKernelTransportOptions } from '../types/client'
+export type { KernelDaemonEndpointDescriptor, KernelDaemonPaths } from '../types/kernel'
+export type { KernelModuleHealthStatus } from '../types/kernel.js'
+export type { KernelServiceHealth, KernelServiceModuleHealth } from '../types/kernel.js'
+export type { KernelRpcEndpoint, TcpKernelRpcEndpoint, UnixKernelRpcEndpoint } from '../types/kernel.js'
+export type { KernelVersionResolver, KernelVersionTarget } from '../types/serve'
+export type { KernelRpcError, KernelRpcEventFrame, KernelRpcFailure, KernelRpcRequest, KernelRpcResponse, KernelRpcServerFrame, KernelRpcSuccess } from '../types/wire'
 export { KernelClientError } from '../utils/errors'
-export type { KernelDaemonEndpointDescriptor, KernelDaemonPaths } from '../utils/rpc/descriptor'
 export {
   createDefaultKernelDaemonPaths,
   defaultKernelRuntimeDirectory,

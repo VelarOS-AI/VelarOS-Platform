@@ -1,23 +1,23 @@
+import type {
+  RemoteNodeActivitySink,
+  RemoteNodeAuditSink,
+  RemoteNodeCapabilityInvoker,
+  RemoteNodeManifestSource,
+  RemoteNodeServerCredentialStore as RemoteNodeCredentialStore,
+} from '../contract/requires.js'
+
+export type { RemoteNodeServerCredentialStore as RemoteNodeCredentialStore } from '../contract/requires.js'
 // Platform Kernel 统一持有与宿主无关的远程节点实现。
 // 域:Node 侧(无头能力提供者)向宿主索取的注入端口。
 //
 // 宪章 §15 原则三:Node 零会话权威——它不认识会话、不持 Agent 主干,只把本机能力面摊开给
 // 唯一一台已配对的 Client。因此本文件的端口全是「被调」方向:没有任何允许 Node 主动向
 // Client 发起请求的回调形状,清单变更也只是单向推送而不是问答。
-import type { ScopeRef } from '../utils/wire/capability'
 import type {
   RemoteNodeError,
   RemoteNodeIdentity,
-  RemoteNodeManifest,
-} from '../utils/wire/remote-node'
-
-/**
- * WebSocket 升级路径。
- *
- * 两端硬编码同一常量,不做发现也不做协商:路径不是安全边界(真正的门是 challenge 签名),
- * 它只负责把本进程里可能并存的其它 HTTP 面区分开。
- */
-export const RemoteNodeSocketPath = '/v1/remote-node/ws'
+  ScopeRef,
+} from './wire.js'
 
 /**
  * 一次能力派发的入参。
@@ -44,24 +44,7 @@ export interface RemoteNodeCapabilityInvokeResult {
   readonly error?: { readonly code: string, readonly message: string }
 }
 
-/** 能力派发端口:把 wire 上的调用交给宿主 Kernel,`signal` 承载取消与超时。 */
-export interface RemoteNodeCapabilityInvoker {
-  invoke(
-    request: RemoteNodeCapabilityInvokeRequest,
-    signal: AbortSignal,
-  ): Promise<RemoteNodeCapabilityInvokeResult>
-}
 
-/**
- * 清单来源。
- *
- * `current()` 必须是同步的:握手末尾要在同一个 tick 内把清单塞进 `ready` 帧,中间插入 await
- * 会让「授予能力面」与「宣告能力面」之间出现可观测的空窗。
- */
-export interface RemoteNodeManifestSource {
-  current(): RemoteNodeManifest
-  onChange(listener: (manifest: RemoteNodeManifest) => void): () => void
-}
 
 /** 已配对客户端的长期凭据。私钥永不上线,Node 侧只存公钥。 */
 export interface RemoteNodePairedCredential {
@@ -71,17 +54,6 @@ export interface RemoteNodePairedCredential {
   readonly pairedAt: number
 }
 
-/**
- * 凭据持久化端口。
- *
- * `load()` 语义是**失败即未配对**:任何读取或校验失败都返回 `null` 而不是抛,让 Node 退回到
- * 「需要重新配对」这一最小权限状态,而不是带着半个凭据继续服务。
- */
-export interface RemoteNodeCredentialStore {
-  load(): Promise<Nullable<RemoteNodePairedCredential>>
-  save(credential: RemoteNodePairedCredential): Promise<void>
-  clear(): Promise<void>
-}
 
 /**
  * 审计行。
@@ -101,21 +73,12 @@ export interface RemoteNodeAuditEntry {
   readonly errorCode: Nullable<string>
 }
 
-/**
- * 审计落盘端口。
- *
- * 返回 `void` 而不是 Promise 是有意的:审计写盘绝不能进入调用路径的关键路径,更不能因为磁盘
- * 满或权限错误把一次正常的能力调用带塌。实现方自行排队并吞掉自身故障(降级为告警)。
- */
-export interface RemoteNodeAuditSink {
-  record(entry: RemoteNodeAuditEntry): void
-}
 
 /**
- * A local, product-facing execution stream. Unlike the security audit, this
- * stream may carry inputs and outputs so an embedding product can project a
- * remote call into its own private session history. The transport never
- * persists these values itself.
+ * 面向产品的本地执行流。
+ *
+ * 与安全审计相反,这条流**可以**带 input / output:嵌入方要把一次远程调用投影进自己的私有会话
+ * 历史。传输层自己永不持久化这些值,落不落盘由产品决定。
  */
 export type RemoteNodeActivityEvent =
   | {
@@ -142,9 +105,6 @@ export type RemoteNodeActivityEvent =
       readonly error: Nullable<RemoteNodeError>
     }
 
-export interface RemoteNodeActivitySink {
-  record(event: RemoteNodeActivityEvent): void
-}
 
 /** 宿主装配 `RemoteNodeServer` 时必须交出来的全部东西。 */
 export interface RemoteNodeServerOptions {
@@ -154,7 +114,7 @@ export interface RemoteNodeServerOptions {
   readonly invoker: RemoteNodeCapabilityInvoker
   readonly credentialStore: RemoteNodeCredentialStore
   readonly audit: RemoteNodeAuditSink
-  /** Optional live projection for an embedding product's private session UI. */
+  /** 可选的实时投影口:嵌入方拿它把远程调用画进自己的私有会话界面。 */
   readonly activity?: RemoteNodeActivitySink
   readonly nodeId?: string
   /** 绑定地址。默认只回环;跨机监听必须由宿主显式放开,不做静默的全网暴露。 */

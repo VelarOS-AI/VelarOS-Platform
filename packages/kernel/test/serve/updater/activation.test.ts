@@ -7,11 +7,8 @@ import { join } from 'node:path'
 
 import { afterEach, describe, expect, test } from 'bun:test'
 
-import {
-  type KernelHealthCheckContext,
-  KernelUpdater,
-  type KernelUpdaterOptions,
-} from '../../../src/impl/updater/KernelUpdater'
+import { KernelUpdater } from '../../../src/impl/updater/KernelUpdater'
+import type { KernelHealthCheckContext, KernelUpdaterOptions } from '../../../src/types/updater'
 import {
   parseKernelActivePointer,
   readKernelActivePointer,

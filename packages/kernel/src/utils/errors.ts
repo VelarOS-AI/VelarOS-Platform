@@ -9,32 +9,10 @@ import {
   type KernelUpdaterErrorCode,
   type RemoteNodeErrorCode,
 } from '../contract/constants'
+import type { KernelErrorDetails, KernelUpdaterErrorDetails } from '../types/runtime'
 
 import type { RemoteNodeError } from './wire/remote-node'
 
-/**
- * 内核侧失败的补充事实。
- *
- * 原来二十个错误子类各带各的专属字段（阶段、回滚错误、失败模块、能力 id、操作名、权限名、
- * 拒绝原因……），合并成四个类之后统一落在这里；外面要读的 `capabilityId`、`operation`、
- * `permission` 一个没少。
- */
-export interface KernelErrorDetails {
-  readonly moduleId?: string
-  readonly capabilityId?: string
-  readonly operation?: string
-  readonly permission?: string
-  readonly reason?: string
-  readonly phase?: 'activate' | 'ready'
-  readonly operationKind?: 'suspend' | 'dispose'
-  readonly relatedModuleIds?: readonly string[]
-  readonly rollbackErrors?: readonly Error[]
-  readonly failures?: ReadonlyArray<{ readonly moduleId: string; readonly error: Error }>
-  readonly source?: string
-  readonly version?: string
-  readonly versionRange?: string
-  readonly [key: string]: unknown
-}
 
 /**
  * 内核侧的统一失败：模块宿主、能力调用、服务面、mod 目录都抛它。
@@ -108,17 +86,6 @@ export class KernelClientError extends Error {
 }
 
 /** 共享 Runtime 安装器的补充事实：算出来的值、期望值、路径、版本。 */
-export interface KernelUpdaterErrorDetails {
-  readonly actual?: string
-  readonly expected?: string
-  readonly ownerPid?: number
-  readonly path?: string
-  readonly previousVersion?: string
-  readonly target?: string
-  readonly url?: string
-  readonly version?: string
-  readonly versionRange?: string
-}
 
 /**
  * 共享 Runtime 安装器这条线上的失败：取清单、校验、解包、落位、切指针、回滚。
@@ -340,3 +307,5 @@ export function startFailedFailure(cause: unknown): KernelError {
     { cause },
   )
 }
+
+export type { KernelErrorDetails, KernelUpdaterErrorDetails } from '../types/runtime'

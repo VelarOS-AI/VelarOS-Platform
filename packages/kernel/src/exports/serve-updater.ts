@@ -1,26 +1,15 @@
 export type { KernelUpdaterErrorCode } from '../contract/constants'
-export type { KernelUpdateLockOptions, KernelUpdateLockRecord } from '../impl/updater/KernelUpdateLock'
+export type { KernelHealthCheck } from '../contract/requires'
+export type { KernelArtifactExtractor } from '../contract/requires'
+export type { KernelArtifactSignatureVerifier } from '../contract/requires'
 export { KernelUpdateLock, withKernelUpdateLock } from '../impl/updater/KernelUpdateLock'
-export type {
-  KernelActivationOptions,
-  KernelCompatibilityOutcome,
-  KernelCompatibilityRequirement,
-  KernelEnsureInstalledOptions,
-  KernelHealthCheck,
-  KernelHealthCheckContext,
-  KernelInstallOutcome,
-  KernelPruneOptions,
-  KernelUpdaterOptions,
-} from '../impl/updater/KernelUpdater'
 export { KernelUpdater } from '../impl/updater/KernelUpdater'
-export type { KernelArtifactExtractionContext, KernelArtifactExtractor } from '../impl/updater/PassthroughKernelArtifactExtractor'
 export { kernelArtifactFileName, PassthroughKernelArtifactExtractor } from '../impl/updater/PassthroughKernelArtifactExtractor'
-export type {
-  KernelArtifactSignatureContext,
-  KernelArtifactSignatureResult,
-  KernelArtifactSignatureVerifier,
-} from '../impl/updater/UnverifiedKernelArtifactSignatureVerifier'
 export { UnverifiedKernelArtifactSignatureVerifier } from '../impl/updater/UnverifiedKernelArtifactSignatureVerifier'
+export type { KernelUpdateLockOptions, KernelUpdateLockRecord } from '../types/updater'
+export type { KernelActivationOptions, KernelCompatibilityOutcome, KernelCompatibilityRequirement, KernelEnsureInstalledOptions, KernelHealthCheckContext, KernelInstallOutcome, KernelPruneOptions, KernelUpdaterOptions } from '../types/updater'
+export type { KernelArtifactExtractionContext } from '../types/updater'
+export type { KernelArtifactSignatureContext, KernelArtifactSignatureResult } from '../types/updater'
 export type { KernelUpdaterErrorDetails } from '../utils/errors'
 export { KernelUpdaterError } from '../utils/errors'
 export type { KernelArtifactDownloadOptions, KernelArtifactDownloadResult } from '../utils/updater/download'

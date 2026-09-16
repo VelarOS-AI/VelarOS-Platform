@@ -14,44 +14,34 @@
 import { isNonBlankString, isNull, isPresent, Log } from '@velaros-ai/core'
 
 import { RemoteNodeProgressEventType } from '../../contract/constants'
-import type { KernelCallableCapabilityOperation } from '../../types/abi-callable'
+import type { KernelModuleActivateContext, KernelRegistration } from '../../contract/provides'
 import type {
-  KernelModuleActivateContext,
+  KernelCallableCapabilityOperation,
   KernelModuleDefinition,
-  KernelModuleHealth,
+  KernelModuleIsolationAdapter,
   KernelModuleLifecycle,
-  KernelRegistration,
-} from '../../types/abi-module'
-import type { ScopeRef } from '../../types/abi-references'
-import {
-  RemoteNodeClientErrorCodes,
-} from '../../types/remote-client'
-import type { KernelModuleIsolationAdapter } from '../../types/runtime-isolation'
-import { RemoteNodeClientError } from '../../utils/errors'
-import { permissionDeniedFailure } from '../../utils/errors'
+} from '../../contract/requires'
+import type { KernelModuleHealth, ScopeRef } from '../../types/kernel.js'
+import type {
+  RemoteNodeBindingResolver,
+  RemoteNodeCapabilityBinding,
+  RemoteNodeProgressEvent,
+} from '../../types/remote'
+import { toRemoteNodeKernelError } from '../../utils/remote/calls'
 import { createKernelCallableCapability } from '../runtime/KernelCallableCapability'
 import { createCapabilityToken } from '../runtime/KernelModuleKit'
 
-import type { RemoteNodeClient } from './RemoteNodeClient'
-import type { RemoteNodeCapabilityBinding } from './RemoteNodeProjection'
+import type { RemoteNodeClientApi } from './RemoteNodeClient'
 
 const log = Log.tag('RemoteNodeIsolation')
 
-
-export interface RemoteNodeProgressEvent {
-  readonly capabilityId: string
-  readonly operation: string
-  readonly event: unknown
-}
-
-export type RemoteNodeBindingResolver = (
-  localCapabilityId: string,
-) => LooseOptional<RemoteNodeCapabilityBinding>
-
+/** 装配一个远程隔离适配器要的三样东西:连哪台机器、怎么找绑定、缺省给多久。 */
 export interface RemoteNodeIsolationAdapterOptions {
-  readonly client: RemoteNodeClient
+  /** 这台远端主机的连接;一台主机一条,adapter 与它一一对应,混用会把调用发到另一台机器。 */
+  readonly client: RemoteNodeClientApi
   /** 由 `createRemoteNodeProjection()` 提供;必须与注册进 Kernel 的那份投影同源。 */
   readonly resolveBinding: RemoteNodeBindingResolver
+  /** 每次调用的缺省截止时长(毫秒);缺席时回落到客户端调用簿自己的缺省值。 */
   readonly defaultDeadlineMs?: number
 }
 
@@ -152,38 +142,8 @@ export class RemoteNodeIsolationAdapter implements KernelModuleIsolationAdapter 
         signal,
       )
     } catch (error) {
-      throw this.toKernelError(binding, operation, error)
+      throw toRemoteNodeKernelError(binding, operation, error)
     }
-  }
-
-  /**
-   * 错误落位。
-   *
-   * `denied` 是 Node 侧派发后的策略事实,必须变成 Kernel 的权限拒绝——它会一路走到模型面前,
-   * 而链路故障不该。其余一律保留 `RemoteNodeClientError` 原样上抛:它的 code / message /
-   * retryable 与 Kernel wire 错误信封同构,`resultUnknown` 这一位也不能在转投中丢掉。
-   */
-  private toKernelError(
-    binding: RemoteNodeCapabilityBinding,
-    operation: string,
-    error: unknown,
-  ): unknown {
-    if (!(error instanceof RemoteNodeClientError)) return error
-    if (error.code !== RemoteNodeClientErrorCodes.CallDenied) return error
-
-    const declared = binding.operations
-      .find((descriptor) => descriptor.name === operation)
-      ?.permissions.at(0)
-    const nodeCode = error.nodeError?.code
-    const permission = isNonBlankString(nodeCode)
-      ? nodeCode
-      : (declared ?? binding.remoteCapabilityId)
-    return permissionDeniedFailure({
-      capabilityId: binding.localCapabilityId,
-      operation,
-      permission,
-      reason: error.message,
-    })
   }
 
   private describeHealth(): KernelModuleHealth {

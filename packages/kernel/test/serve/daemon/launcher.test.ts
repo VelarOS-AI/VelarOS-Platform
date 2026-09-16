@@ -7,17 +7,13 @@ import { afterEach, describe, expect, test } from 'bun:test'
 
 import { connectToKernelDaemon } from '../../../src/impl/client/KernelDaemonDirectory'
 import { KernelModuleHost } from '../../../src/impl/runtime/KernelModuleHost'
-import {
-  KernelLauncher,
-  type KernelVersionTarget,
-} from '../../../src/impl/serve/KernelLauncher'
+import { KernelLauncher } from '../../../src/impl/serve/KernelLauncher'
 import { KernelLocalDaemon } from '../../../src/impl/serve/KernelLocalDaemon'
 import { KernelService } from '../../../src/impl/serve/KernelService'
+import type { KernelDaemonPaths } from '../../../src/types/kernel'
+import type { KernelVersionTarget } from '../../../src/types/serve'
 import { KernelClientError } from '../../../src/utils/errors'
-import {
-  createDefaultKernelDaemonPaths,
-  type KernelDaemonPaths,
-} from '../../../src/utils/rpc/descriptor'
+import { createDefaultKernelDaemonPaths } from '../../../src/utils/rpc/descriptor'
 import { KernelProtocolVersion } from '../../../src/utils/wire/version'
 
 const temporaryDirectories: string[] = []

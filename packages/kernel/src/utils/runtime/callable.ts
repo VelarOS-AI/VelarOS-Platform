@@ -3,12 +3,7 @@
 // 这三件都用不到实例状态，所以不放在类里：宿主、服务面、隔离适配器都要用同一份口径。
 import { isBlank, isFunction, isObject } from '@velaros-ai/core'
 
-import type {
-  KernelCallableCapabilityService,
-  KernelCapabilityOperationContext,
-  KernelCapabilityOperationMetadata,
-} from '../../types/abi-callable'
-
+import type { KernelCallableCapabilityService, KernelCapabilityOperationContext, KernelCapabilityOperationMetadata } from '../../contract/requires'
 /** 规范化一条操作的权限声明：空权限名与重复权限名当场拒绝，结果冻结。 */
 export function normalizeKernelOperationMetadata(
   operation: string,

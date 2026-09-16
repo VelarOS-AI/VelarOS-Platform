@@ -1,13 +1,13 @@
 import { describe, expect, test } from 'bun:test'
 
+import type { KernelModuleDefinition } from '../../../src/contract/requires'
+import type { KernelPermissionBroker } from '../../../src/contract/requires'
 import { KernelClient } from '../../../src/impl/client/KernelClient'
 import { createKernelCallableCapability } from '../../../src/impl/runtime/KernelCallableCapability'
 import { KernelModuleHost } from '../../../src/impl/runtime/KernelModuleHost'
 import { createCapabilityToken } from '../../../src/impl/runtime/KernelModuleKit'
 import { InProcessKernelTransport } from '../../../src/impl/serve/InProcessKernelTransport'
 import { KernelService } from '../../../src/impl/serve/KernelService'
-import type { KernelModuleDefinition } from '../../../src/types/abi-module'
-import type { KernelPermissionBroker } from '../../../src/types/abi-permissions'
 import type { CapabilityCallRequest } from '../../../src/utils/wire/capability'
 import { KernelProtocolVersion } from '../../../src/utils/wire/version'
 
@@ -238,7 +238,7 @@ describe('KernelService', () => {
       status: 'error',
       error: {
         code: 'CAPABILITY_CALL_FAILED',
-        message: 'Capability call failed',
+        message: '能力调用失败',
       },
     })
     expect(JSON.stringify(thrown)).not.toContain('password')

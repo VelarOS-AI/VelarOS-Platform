@@ -1,37 +1,13 @@
 import { isUndefined } from '@velaros-ai/core'
 
-import type {
-  KernelArtifact,
-  KernelArtifactTarget,
-} from '../../utils/updater/manifest'
-
-export interface KernelArtifactSignatureContext {
-  readonly version: string
-  readonly target: KernelArtifactTarget
-  readonly artifact: KernelArtifact
-  readonly payloadPath: string
-  readonly sha256: string
-}
-
-export interface KernelArtifactSignatureResult {
-  readonly verified: boolean
-  readonly method: string
-  readonly reason?: string
-}
-
+import type { KernelArtifactSignatureVerifier } from '../../contract/requires'
+import type { KernelArtifactSignatureContext, KernelArtifactSignatureResult } from '../../types/updater'
 /**
- * Injection point invoked after digest verification and before anything is
- * staged. The updater deliberately ships no cryptographic implementation: a
- * deployment supplies a verifier bound to its own trust root and key rotation
- * policy, and enables `requireSignature` once that verifier is in place.
+ * 缺省签名校验器：一律报「没校验」，但不拦安装。
+ *
+ * 实例由 `KernelUpdater` 在没人注入校验器时兜底建一个；要真的拦下来，部署方注入自己的校验器
+ * 并打开 `requireSignature`。
  */
-export interface KernelArtifactSignatureVerifier {
-  verify(
-    context: KernelArtifactSignatureContext,
-  ): Promise<KernelArtifactSignatureResult>
-}
-
-/** Default verifier: reports every artifact as unverified without failing. */
 export class UnverifiedKernelArtifactSignatureVerifier
 implements KernelArtifactSignatureVerifier {
   public verify(

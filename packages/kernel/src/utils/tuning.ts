@@ -19,6 +19,8 @@ export const KernelTuning = Object.freeze({
   lockOwnerReadRetryMs: 20,
   /** 更新器：本机保留几个已安装版本，多的按时间清掉。 */
   updaterRetainedVersions: 3,
+  /** 更新器：一份更新清单最多读这么多字节，超了就当取不到，免得一个坏来源把内存撑爆。 */
+  updaterMaxManifestBytes: 8_388_608,
   /** 远程 Client：给服务端截止时间加的宽限，毫秒。 */
   remoteClientDeadlineGraceMs: 5_000,
   /** 远程 Client：一次调用的缺省截止时长，毫秒。 */

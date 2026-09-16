@@ -3,35 +3,21 @@ import { open, rm } from 'node:fs/promises'
 
 import { Log } from '@velaros-ai/core'
 
+import type { KernelArtifactDownloadOptions, KernelArtifactDownloadResult } from '../../types/updater'
 import {
   KernelUpdaterError,
 } from '../errors'
 
-import type { KernelArtifact } from './manifest'
-import {
-  type KernelFetch,
-  nodeKernelFetch,
-} from './transport'
+import { nodeKernelFetch } from './transport'
 
+export type { KernelArtifactDownloadOptions, KernelArtifactDownloadResult } from '../../types/updater'
 const log = Log.tag('KernelArtifactDownload')
 
-export interface KernelArtifactDownloadOptions {
-  readonly artifact: KernelArtifact
-  readonly destination: string
-  readonly fetch?: KernelFetch
-  readonly signal?: AbortSignal
-}
-
-export interface KernelArtifactDownloadResult {
-  readonly path: string
-  readonly size: number
-  readonly sha256: string
-}
-
 /**
- * Streams an artifact to `destination`, hashing as it goes, and removes the
- * partial file on any failure. Bytes are never buffered in memory, and a file
- * that survives this call is byte-for-byte what the manifest promised.
+ * 把一份制品边下边算摘要地写到 `destination`，任何失败都把半截文件删掉。
+ *
+ * 字节从不整份留在内存里；活着走出这个函数的文件，逐字节就是清单承诺的那一份。大小对不上抛
+ * ARTIFACT_SIZE_MISMATCH，摘要对不上抛 DIGEST_MISMATCH，取不到抛 DOWNLOAD_FAILED。
  */
 export async function downloadKernelArtifact(
   options: KernelArtifactDownloadOptions,

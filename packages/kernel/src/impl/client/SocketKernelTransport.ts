@@ -16,19 +16,18 @@ import {
   Log,
 } from '@velaros-ai/core'
 
-import type { KernelRpcEndpoint } from '../../types/client-endpoint'
+import type { KernelRpcMethod } from '../../contract/constants'
+import { KernelClientErrorCodes, KernelRpcLimits } from '../../contract/constants'
+import type { KernelEventSubscription } from '../../contract/provides'
+import type { KernelClientEventHandler, KernelClientTransport } from '../../contract/requires'
 import type {
-  KernelRpcEventFrame,
-  KernelRpcMethod,
-  KernelRpcResponse,
-} from '../../types/client-rpc-frames'
-import type {
-  KernelClientEventHandler,
-  KernelClientTransport,
-  KernelEventSubscription,
-} from '../../types/client-transport'
-import type { KernelServiceHealth } from '../../types/service-health'
-import { fromKernelRpcError,type KernelClientError } from '../../utils/errors'
+  KernelClientEventSubscriptionRecord,
+  KernelClientPendingRequest,
+  SocketKernelTransportOptions,
+} from '../../types/client'
+import type { KernelServiceHealth } from '../../types/kernel.js'
+import type { KernelRpcEventFrame, KernelRpcResponse } from '../../types/wire'
+import { fromKernelRpcError, type KernelClientError } from '../../utils/errors'
 import {
   type CapabilityCallRequest,
   type CapabilityCallResponse,
@@ -55,41 +54,30 @@ import {
 
 const log = Log.tag('SocketKernelTransport')
 
-interface PendingRequest {
-  readonly resolve: (result: unknown) => void
-  readonly reject: (error: Error) => void
-  readonly cleanup: () => void
-}
-
 /**
- * 一条订阅的本地记录。
+ * 长连接的本机 RPC 传输：并发请求、取消、服务端推来的内核事件都走它。
  *
- * `subscriptionId` 是服务端发的，断线重连后会换一个，所以它是**可变字段**：本地记录才是
- * 订阅的身份，`dispose()` 关掉的始终是这条记录当前对应的那个服务端订阅。
- */
-interface EventSubscriptionRecord {
-  readonly eventType: string
-  readonly handler: KernelClientEventHandler
-  subscriptionId: string
-  disposed: boolean
-}
-
-export interface SocketKernelTransportOptions {
-  readonly authToken: string
-  readonly endpoint: KernelRpcEndpoint
-  readonly maxFrameBytes?: number
-}
-
-/**
- * Persistent local RPC transport supporting concurrent requests, cancellation,
- * identity APIs, and server-pushed Kernel events.
+ * 断线之后下一次请求会自己重连，还活着的订阅跟着连接一起重建。实例由产品或
+ * `kernelDaemons.connect` 构造，交给 `KernelClient` 用。
  */
 export class SocketKernelTransport implements KernelClientTransport {
-  private readonly pending = new Map<string, PendingRequest>()
+  /** 中止一次请求时抛出的 DOMException 文案。 */
+  private static readonly AbortMessage = 'Kernel RPC 请求已中止'
+
+  /** 传输被回收之后，一切请求的失败文案。 */
+  private static readonly ClosedMessage = 'Kernel RPC 传输已关闭'
+
+  /** 连接中途断开时，在途请求的失败文案。 */
+  private static readonly DisconnectedMessage = 'Kernel RPC 连接已断开'
+
+  /** 连不上端点时的失败文案。 */
+  private static readonly ConnectFailedMessage = '连不上 Kernel RPC 端点'
+
+  private readonly pending = new Map<string, KernelClientPendingRequest>()
   /** 服务端订阅 id → 本地记录；断线时清空（id 随连接作废）。 */
-  private readonly eventHandlers = new Map<string, EventSubscriptionRecord>()
+  private readonly eventHandlers = new Map<string, KernelClientEventSubscriptionRecord>()
   /** 还活着的本地订阅记录；跨断线保留，重连后照原样重建。 */
-  private readonly subscriptions = new Set<EventSubscriptionRecord>()
+  private readonly subscriptions = new Set<KernelClientEventSubscriptionRecord>()
   private readonly maxFrameBytes: number
   private socket?: Socket
   private connecting?: Promise<Socket>
@@ -99,7 +87,7 @@ export class SocketKernelTransport implements KernelClientTransport {
   private disposed = false
 
   public constructor(private readonly options: SocketKernelTransportOptions) {
-    this.maxFrameBytes = options.maxFrameBytes ?? 4 * 1024 * 1024
+    this.maxFrameBytes = options.maxFrameBytes ?? KernelRpcLimits.maxFrameBytes
   }
 
   public async handshake(): Promise<KernelHandshake> {
@@ -164,10 +152,10 @@ export class SocketKernelTransport implements KernelClientTransport {
     handler: KernelClientEventHandler,
   ): Promise<KernelEventSubscription> {
     const result = await this.request('events.subscribe', { eventType })
-    const record: EventSubscriptionRecord = {
+    const record: KernelClientEventSubscriptionRecord = {
       eventType,
       handler,
-      subscriptionId: readSubscriptionId(result),
+      subscriptionId: this.readSubscriptionId(result),
       disposed: false,
     }
     this.subscriptions.add(record)
@@ -201,7 +189,7 @@ export class SocketKernelTransport implements KernelClientTransport {
           eventType: record.eventType,
         })
         if (record.disposed) continue
-        record.subscriptionId = readSubscriptionId(result)
+        record.subscriptionId = this.readSubscriptionId(result)
         this.eventHandlers.set(record.subscriptionId, record)
       } catch (error) {
         log.error('Kernel 事件订阅在重连后未能恢复', {
@@ -224,14 +212,7 @@ export class SocketKernelTransport implements KernelClientTransport {
     this.connectingSocket = undefined
     socket?.destroy()
     connectingSocket?.destroy()
-    this.rejectPending(
-      fromKernelRpcError({
-        code: 'TRANSPORT_CLOSED',
-        message: 'Kernel RPC 传输已关闭',
-        retryable: true,
-        details: null,
-      }),
-    )
+    this.rejectPending(this.closedError())
   }
 
   private async request(
@@ -239,24 +220,17 @@ export class SocketKernelTransport implements KernelClientTransport {
     params: unknown,
     signal?: AbortSignal,
   ): Promise<unknown> {
-    if (this.disposed) {
-      throw fromKernelRpcError({
-        code: 'TRANSPORT_CLOSED',
-        message: 'Kernel RPC 传输已关闭',
-        retryable: true,
-        details: null,
-      })
-    }
-    if (isSignalAborted(signal)) throw abortError()
+    if (this.disposed) throw this.closedError()
+    if (isTrue(signal?.aborted)) throw new DOMException(SocketKernelTransport.AbortMessage, 'AbortError')
     const socket = await this.connect()
-    if (this.disposed) throw transportClosedError()
-    if (isSignalAborted(signal)) throw abortError()
+    if (this.disposed) throw this.closedError()
+    if (isTrue(signal?.aborted)) throw new DOMException(SocketKernelTransport.AbortMessage, 'AbortError')
     const requestId = `${process.pid}-${++this.requestSequence}`
 
     return new Promise((resolve, reject) => {
       const onAbort = () => {
         this.pending.delete(requestId)
-        reject(abortError())
+        reject(new DOMException(SocketKernelTransport.AbortMessage, 'AbortError'))
         this.sendCancellation(requestId)
       }
       const cleanup = () => signal?.removeEventListener('abort', onAbort)
@@ -275,12 +249,11 @@ export class SocketKernelTransport implements KernelClientTransport {
       } catch {
         this.pending.delete(requestId)
         cleanup()
-        reject(fromKernelRpcError({
-          code: 'TRANSPORT_WRITE_FAILED',
-          message: 'Kernel RPC 请求发不出去',
-          retryable: true,
-          details: null,
-        }))
+        reject(this.localFailure(
+          KernelClientErrorCodes.transportWriteFailed,
+          'Kernel RPC 请求发不出去',
+          true,
+        ))
       }
     })
   }
@@ -301,7 +274,7 @@ export class SocketKernelTransport implements KernelClientTransport {
         socket.off('close', onClose)
         this.connectingSocket = undefined
         this.connecting = undefined
-        reject(transportConnectError())
+        reject(this.connectError())
       }
       const onClose = () => {
         socket.off('error', onError)
@@ -309,8 +282,8 @@ export class SocketKernelTransport implements KernelClientTransport {
         this.connecting = undefined
         reject(
           this.disposed
-            ? transportClosedError()
-            : transportConnectError(),
+            ? this.closedError()
+            : this.connectError(),
         )
       }
       socket.once('error', onError)
@@ -321,7 +294,7 @@ export class SocketKernelTransport implements KernelClientTransport {
         this.connectingSocket = undefined
         if (this.disposed) {
           socket.destroy()
-          reject(transportClosedError())
+          reject(this.closedError())
           return
         }
         socket.setEncoding('utf8')
@@ -369,9 +342,9 @@ export class SocketKernelTransport implements KernelClientTransport {
     const type = Reflect.get(input, 'type')
     try {
       if (type === 'response') {
-        this.handleResponse(decodeResponse(input))
+        this.handleResponse(this.decodeResponse(input))
       } else if (type === 'event') {
-        this.handleEvent(decodeEventFrame(input))
+        this.handleEvent(this.decodeEventFrame(input))
       }
     } catch (error) {
       log.warn('Discarding invalid Kernel RPC frame', { error })
@@ -420,14 +393,11 @@ export class SocketKernelTransport implements KernelClientTransport {
     this.buffer = ''
     // 服务端订阅 id 随连接作废，但本地记录留着：下次连上时照原样重建（restoreSubscriptions）。
     this.eventHandlers.clear()
-    this.rejectPending(
-      fromKernelRpcError({
-        code: 'TRANSPORT_DISCONNECTED',
-        message: 'Kernel RPC 连接已断开',
-        retryable: true,
-        details: null,
-      }),
-    )
+    this.rejectPending(this.localFailure(
+      KernelClientErrorCodes.transportDisconnected,
+      SocketKernelTransport.DisconnectedMessage,
+      true,
+    ))
   }
 
   private rejectPending(error: Error): void {
@@ -437,121 +407,141 @@ export class SocketKernelTransport implements KernelClientTransport {
     }
     this.pending.clear()
   }
-}
 
-function decodeResponse(input: object): KernelRpcResponse {
-  const requestId = readRequiredString(input, 'requestId')
-  const status = Reflect.get(input, 'status')
-  if (status === 'ok') return {
+  /** 解出一帧响应；状态、失败信封或必填字段不合格时抛 INVALID_RESPONSE。 */
+  private decodeResponse(input: object): KernelRpcResponse {
+    const requestId = this.readRequiredString(input, 'requestId')
+    const status = Reflect.get(input, 'status')
+    if (status === 'ok') return {
+        type: 'response',
+        requestId,
+        status,
+        result: Reflect.get(input, 'result'),
+      }
+    if (status !== 'error') throw this.invalidResponse('RPC status is invalid')
+    const errorInput = Reflect.get(input, 'error')
+    if (!isObject(errorInput) && !isNull(errorInput) || isNull(errorInput)) {
+      throw this.invalidResponse('RPC error is missing')
+    }
+    const retryable = Reflect.get(errorInput, 'retryable')
+    if (!isBoolean(retryable)) {
+      throw this.invalidResponse('RPC error retryable flag is invalid')
+    }
+    // details 是服务端交代「为什么失败」的地方（权限拒绝的原因、安装失败的目录与原因……）。
+    // 原来这里一律写死 null，服务端说什么都到不了调用方手上。
+    const details = Reflect.get(errorInput, 'details')
+    return {
       type: 'response',
       requestId,
       status,
-      result: Reflect.get(input, 'result'),
+      error: {
+        code: this.readRequiredString(errorInput, 'code'),
+        message: this.readRequiredString(errorInput, 'message', true),
+        retryable,
+        details: isRecord(details) ? details : null,
+      },
     }
-  if (status !== 'error') throw invalidResponse('RPC status is invalid')
-  const errorInput = Reflect.get(input, 'error')
-  if (!isObject(errorInput) && !isNull(errorInput) || isNull(errorInput)) {
-    throw invalidResponse('RPC error is missing')
   }
-  const retryable = Reflect.get(errorInput, 'retryable')
-  if (!isBoolean(retryable)) {
-    throw invalidResponse('RPC error retryable flag is invalid')
+
+  /** 解出一帧服务端推来的事件；事件内容缺失或序号不是整数时抛 INVALID_RESPONSE。 */
+  private decodeEventFrame(input: object): KernelRpcEventFrame {
+    const eventInput = Reflect.get(input, 'event')
+    if (!isObject(eventInput) && !isNull(eventInput) || isNull(eventInput)) {
+      throw this.invalidResponse('事件帧里没有事件内容')
+    }
+    const sourceGeneration = Reflect.get(eventInput, 'sourceGeneration')
+    const sequence = Reflect.get(eventInput, 'sequence')
+    if (
+      !Number.isInteger(sourceGeneration)
+      || !Number.isInteger(sequence)
+    ) {
+      throw this.invalidResponse('Kernel event sequence is invalid')
+    }
+    return {
+      type: 'event',
+      subscriptionId: this.readRequiredString(input, 'subscriptionId'),
+      event: {
+        type: this.readRequiredString(eventInput, 'type'),
+        payload: Reflect.get(eventInput, 'payload'),
+        sourceModuleId: this.readRequiredString(eventInput, 'sourceModuleId'),
+        sourceGeneration: sourceGeneration as number,
+        sequence: sequence as number,
+      },
+    }
   }
-  // details 是服务端交代「为什么失败」的地方（权限拒绝的原因、安装失败的目录与原因……）。
-  // 原来这里一律写死 null，服务端说什么都到不了调用方手上。
-  const details = Reflect.get(errorInput, 'details')
-  return {
-    type: 'response',
-    requestId,
-    status,
-    error: {
-      code: readRequiredString(errorInput, 'code'),
-      message: readRequiredString(errorInput, 'message', true),
+
+  /** 取一个必填的字符串字段；缺席、类型不对或（不允许空时）为空都抛 INVALID_RESPONSE。 */
+  private readRequiredString(
+    input: object,
+    field: string,
+    allowEmpty = false,
+  ): string {
+    const value = Reflect.get(input, field)
+    if (
+      isString(value)
+      && (allowEmpty || value.length > 0)
+    ) return value
+    throw this.invalidResponse(`RPC field "${field}" is invalid`)
+  }
+
+  /** 从订阅回应里取出服务端发的订阅 id；取不出抛 INVALID_RESPONSE。 */
+  private readSubscriptionId(input: unknown): string {
+    if (!isObject(input) && !isNull(input) || isNull(input)) {
+      throw this.invalidResponse('Subscription result is not an object')
+    }
+    const subscriptionId = Reflect.get(input, 'subscriptionId')
+    if (isString(subscriptionId) && subscriptionId.length > 0) return subscriptionId
+    throw this.invalidResponse('Subscription id is missing')
+  }
+
+  /** 收到不合协议的帧时的失败；不可重试，重试同一条连接只会再收到同样的垃圾。 */
+  private invalidResponse(message: string): KernelClientError {
+    return this.localFailure(
+      KernelClientErrorCodes.invalidResponse,
+      message,
+      false,
+    )
+  }
+
+  /** 传输已回收后的失败；可重试的意思是「换一条连接可以再来」。 */
+  private closedError(): KernelClientError {
+    return this.localFailure(
+      KernelClientErrorCodes.transportClosed,
+      SocketKernelTransport.ClosedMessage,
+      true,
+    )
+  }
+
+  /** 连不上端点时的失败。 */
+  private connectError(): KernelClientError {
+    return this.localFailure(
+      KernelClientErrorCodes.transportConnectFailed,
+      SocketKernelTransport.ConnectFailedMessage,
+      true,
+    )
+  }
+
+  /**
+   * 本地产生的失败（连不上、已关闭、帧不合法）包成客户端错误。
+   *
+   * `details` 里带上这条传输连的端点：一个进程里同时挂着几台内核时，光看文案分不出是哪条
+   * 连接出的问题。
+   */
+  private localFailure(
+    code: string,
+    message: string,
+    retryable: boolean,
+  ): KernelClientError {
+    const endpoint = this.options.endpoint
+    return fromKernelRpcError({
+      code,
+      message,
       retryable,
-      details: isRecord(details) ? details : null,
-    },
+      details: {
+        endpoint: endpoint.kind === 'unix'
+          ? endpoint.path
+          : `${endpoint.host}:${endpoint.port}`,
+      },
+    })
   }
-}
-
-function decodeEventFrame(input: object): KernelRpcEventFrame {
-  const eventInput = Reflect.get(input, 'event')
-  if (!isObject(eventInput) && !isNull(eventInput) || isNull(eventInput)) {
-    throw invalidResponse('事件帧里没有事件内容')
-  }
-  const sourceGeneration = Reflect.get(eventInput, 'sourceGeneration')
-  const sequence = Reflect.get(eventInput, 'sequence')
-  if (
-    !Number.isInteger(sourceGeneration)
-    || !Number.isInteger(sequence)
-  ) {
-    throw invalidResponse('Kernel event sequence is invalid')
-  }
-  return {
-    type: 'event',
-    subscriptionId: readRequiredString(input, 'subscriptionId'),
-    event: {
-      type: readRequiredString(eventInput, 'type'),
-      payload: Reflect.get(eventInput, 'payload'),
-      sourceModuleId: readRequiredString(eventInput, 'sourceModuleId'),
-      sourceGeneration: sourceGeneration as number,
-      sequence: sequence as number,
-    },
-  }
-}
-
-function readRequiredString(
-  input: object,
-  field: string,
-  allowEmpty = false,
-): string {
-  const value = Reflect.get(input, field)
-  if (
-    isString(value)
-    && (allowEmpty || value.length > 0)
-  ) return value
-  throw invalidResponse(`RPC field "${field}" is invalid`)
-}
-
-function readSubscriptionId(input: unknown): string {
-  if (!isObject(input) && !isNull(input) || isNull(input)) {
-    throw invalidResponse('Subscription result is not an object')
-  }
-  const subscriptionId = Reflect.get(input, 'subscriptionId')
-  if (isString(subscriptionId) && subscriptionId.length > 0) return subscriptionId
-  throw invalidResponse('Subscription id is missing')
-}
-
-function invalidResponse(message: string): KernelClientError {
-  return fromKernelRpcError({
-    code: 'INVALID_RESPONSE',
-    message,
-    retryable: false,
-    details: null,
-  })
-}
-
-function abortError(): Error {
-  return new DOMException('Kernel RPC 请求已中止', 'AbortError')
-}
-
-function isSignalAborted(signal: LooseOptional<AbortSignal>): boolean {
-  return isTrue(signal?.aborted)
-}
-
-function transportClosedError(): KernelClientError {
-  return fromKernelRpcError({
-    code: 'TRANSPORT_CLOSED',
-    message: 'Kernel RPC 传输已关闭',
-    retryable: true,
-    details: null,
-  })
-}
-
-function transportConnectError(): KernelClientError {
-  return fromKernelRpcError({
-    code: 'TRANSPORT_CONNECT_FAILED',
-    message: '连不上 Kernel RPC 端点',
-    retryable: true,
-    details: null,
-  })
 }

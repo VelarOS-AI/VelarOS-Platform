@@ -1,11 +1,7 @@
 import { isBlank, isUndefined } from '@velaros-ai/core'
 
-import type {
-  KernelCallableCapabilityOperation,
-  KernelCallableCapabilityService,
-  KernelCapabilityOperationMetadata,
-} from '../../types/abi-callable'
-import type { ScopeRef } from '../../types/abi-references.js'
+import type { KernelCallableCapabilityOperation, KernelCallableCapabilityService, KernelCapabilityOperationMetadata } from '../../contract/requires'
+import type { ScopeRef } from '../../types/kernel.js'
 import { unknownOperationFailure } from '../../utils/errors'
 import { normalizeKernelOperationMetadata } from '../../utils/runtime/callable'
 

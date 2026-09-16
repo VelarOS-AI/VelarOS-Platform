@@ -4,32 +4,10 @@ import { join } from 'node:path'
 import { isBlank, isFunction, isNotUndefined, isNull, isObject, isString } from '@velaros-ai/core';
 
 import { KernelClientErrorCodes } from '../../contract/constants'
-import type { KernelRpcEndpoint } from '../../types/client-endpoint'
+import type { KernelDaemonEndpointDescriptor, KernelDaemonPaths, KernelRpcEndpoint } from '../../types/kernel.js'
 import { KernelClientError } from '../errors'
 
-/** Filesystem locations of the single-instance local Kernel daemon. */
-export interface KernelDaemonPaths {
-  readonly descriptorPath: string
-  readonly lockPath: string
-  readonly socketPath: string
-}
-
-/**
- * Endpoint descriptor published by a running Kernel daemon.
- *
- * The daemon writes it; clients read it. Both sides share this one definition
- * so the on-disk contract cannot drift between server and client.
- */
-export interface KernelDaemonEndpointDescriptor {
-  readonly authToken: string
-  readonly instanceId: string
-  readonly protocolVersion: number
-  readonly kernelVersion: string
-  readonly pid: number
-  readonly startedAt: number
-  readonly endpoint: KernelRpcEndpoint
-}
-
+/** Kernel 运行目录：优先用登记过的环境变量，否则按当前用户在临时目录下开一个私有目录。 */
 export function defaultKernelRuntimeDirectory(): string {
   const configured = process.env.VELAROS_KERNEL_RUNTIME_DIR
   if (isNotUndefined(configured) && !isBlank(configured.trim())) return configured
@@ -39,6 +17,7 @@ export function defaultKernelRuntimeDirectory(): string {
   return join(tmpdir(), `velaros-kernel-${userIdentity}`)
 }
 
+/** 按运行目录折出守护进程的三条路径：端点 descriptor、单实例锁、unix socket。 */
 export function createDefaultKernelDaemonPaths(
   name = 'velaros-kernel',
   runtimeDirectory = defaultKernelRuntimeDirectory(),
@@ -51,6 +30,7 @@ export function createDefaultKernelDaemonPaths(
   }
 }
 
+/** 校验并解析端点 descriptor；任何一个字段不合格都抛 `DAEMON_DESCRIPTOR_INVALID`。 */
 export function parseKernelDaemonDescriptor(
   input: unknown,
 ): KernelDaemonEndpointDescriptor {
@@ -88,6 +68,7 @@ export function parseKernelDaemonDescriptor(
   }
 }
 
+/** 解析 descriptor 里的端点：unix 要有路径，tcp 只认回环地址加正整数端口。 */
 function parseEndpoint(input: unknown): KernelRpcEndpoint {
   if (!isObject(input) && !isNull(input) || isNull(input)) throw invalidDescriptor()
   const kind = Reflect.get(input, 'kind')
@@ -111,6 +92,7 @@ function parseEndpoint(input: unknown): KernelRpcEndpoint {
   throw invalidDescriptor()
 }
 
+/** 折一个「descriptor 不合法」的带码错误，上面几处校验共用它。 */
 function invalidDescriptor(): KernelClientError {
   return new KernelClientError({
     code: KernelClientErrorCodes.daemonDescriptorInvalid,

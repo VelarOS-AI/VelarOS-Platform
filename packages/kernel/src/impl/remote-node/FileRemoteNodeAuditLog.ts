@@ -6,21 +6,14 @@ import { join } from 'node:path'
 
 import { Log } from '@velaros-ai/core'
 
-import type { RemoteNodeAuditEntry, RemoteNodeAuditSink } from '../../types/remote-node'
-
+import { KernelFileModes } from '../../contract/constants'
+import type { RemoteNodeAuditSink } from '../../contract/requires'
+import type { RemoteNodeFileAuditLogOptions } from '../../types/remote'
+import type { RemoteNodeAuditEntry } from '../../types/remote-node'
 const log = Log.tag('RemoteNodeAudit')
 
-/** 按 UTC 日切,不按本地时区:两端时区可以不同,日志的可对齐性比可读性重要。 */
-function utcDayStamp(at: number): string {
-  return new Date(at).toISOString().slice(0, 10).replaceAll('-', '')
-}
-
-export interface RemoteNodeFileAuditLogOptions {
-  readonly directory: string
-}
-
 /**
- * 创建文件审计日志。
+ * 文件审计落点。
  *
  * 两条纪律:
  *  ① **只写元数据**。`RemoteNodeAuditEntry` 的字段表是封闭的,`input` / `output` 一律不落盘——
@@ -32,27 +25,49 @@ export interface RemoteNodeFileAuditLogOptions {
  * 关于文件模式:`0o600` 在 Windows 上是惰性的(NTFS 不由 mode 决定可见性),该平台的 ACL 加固
  * 由宿主安装器负责,见 credential-store 的同款说明。
  */
+export class FileRemoteNodeAuditLog implements RemoteNodeAuditSink {
+  /** 写盘串行队列:一条接一条,既防交错也把失败挡在调用路径之外。 */
+  private writing = Promise.resolve()
+
+  public constructor(private readonly options: RemoteNodeFileAuditLogOptions) {}
+
+  public record(entry: RemoteNodeAuditEntry): void {
+    this.writing = this.writing
+      .then(async () => {
+        await mkdir(this.options.directory, {
+          recursive: true,
+          mode: KernelFileModes.privateDirectory,
+        })
+        await appendFile(this.filePathFor(entry.at), `${JSON.stringify(entry)}\n`, {
+          encoding: 'utf8',
+          mode: KernelFileModes.privateFile,
+        })
+      })
+      .catch((error: unknown) => {
+        log.warn('Remote node audit line could not be written', {
+          error,
+          callId: entry.callId,
+        })
+      })
+  }
+
+  /** 按 UTC 日切分文件,不按本地时区:两端时区可以不同,日志的可对齐性比可读性重要。 */
+  private filePathFor(at: number): string {
+    const stamp = new Date(at).toISOString().slice(0, 10).replaceAll('-', '')
+    return join(this.options.directory, `audit-${stamp}.jsonl`)
+  }
+}
+
+/** 建一个文件审计落点;`directory` 不存在时首次写入按 0700 自建。 */
+export function createRemoteNodeAuditLog(
+  options: RemoteNodeFileAuditLogOptions,
+): RemoteNodeAuditSink {
+  return new FileRemoteNodeAuditLog(options)
+}
+
+/** `createRemoteNodeAuditLog` 的现有导出名,保住消费方这一轮零改动。 */
 export function createRemoteNodeFileAuditLog(
   options: RemoteNodeFileAuditLogOptions,
 ): RemoteNodeAuditSink {
-  let writing = Promise.resolve()
-  return {
-    record(entry: RemoteNodeAuditEntry): void {
-      writing = writing
-        .then(async () => {
-          await mkdir(options.directory, { recursive: true, mode: 0o700 })
-          const path = join(options.directory, `audit-${utcDayStamp(entry.at)}.jsonl`)
-          await appendFile(path, `${JSON.stringify(entry)}\n`, {
-            encoding: 'utf8',
-            mode: 0o600,
-          })
-        })
-        .catch((error: unknown) => {
-          log.warn('Remote node audit line could not be written', {
-            error,
-            callId: entry.callId,
-          })
-        })
-    },
-  }
+  return new FileRemoteNodeAuditLog(options)
 }

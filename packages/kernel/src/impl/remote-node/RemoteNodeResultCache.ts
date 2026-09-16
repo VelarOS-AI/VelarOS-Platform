@@ -5,7 +5,21 @@ import { isUndefined, toNullable } from '@velaros-ai/core'
 import { KernelTuning } from '../../utils/tuning'
 import type { RemoteNodeResult } from '../../utils/wire/remote-node'
 
-export class RemoteNodeResultCache {
+/**
+ * callId → 终态结果的有界 FIFO 缓存。
+ *
+ * 一个 runner 一份。这是「重连后按同一 callId 重试是安全的」这条承诺的物质基础。
+ */
+export interface RemoteNodeResultCacheApi {
+  /** 取一条已有终态;没有(或已被淘汰)时返回 `null`。 */
+  get(callId: string): Nullable<RemoteNodeResult>
+  /** 记一条终态;超容量时按最早写入淘汰。 */
+  set(callId: string, result: RemoteNodeResult): void
+  /** 清空缓存。仅用于解除配对与换配对对象——缓存属于上一段信任关系。 */
+  clear(): void
+}
+
+export class RemoteNodeResultCache implements RemoteNodeResultCacheApi {
   private readonly entries = new Map<string, RemoteNodeResult>()
 
   public constructor(

@@ -3,19 +3,17 @@
 import { isString } from '@velaros-ai/core'
 
 import { KernelErrorCodes, KernelUpdaterErrorCodes } from '../../contract/constants'
+import type { KernelSemanticVersion } from '../../types/updater'
 import { KernelError, KernelUpdaterError } from '../errors'
 import {
   compareSemanticVersions,
   isSemanticVersion,
   parseSemanticVersion,
   satisfiesSemanticVersionRange,
-  type SemanticVersion,
   SemanticVersionPattern,
 } from '../semver'
 
-/** 更新器面上的版本号形状，与包内唯一的语义化版本口径同构。 */
-export type KernelSemanticVersion = SemanticVersion
-
+export type { KernelSemanticVersion } from '../../types/updater'
 /** 更新清单校验用的版本号正则，与包内唯一口径同一份。 */
 export const KernelVersionPattern = SemanticVersionPattern
 

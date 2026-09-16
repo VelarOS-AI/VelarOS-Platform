@@ -1,9 +1,30 @@
 import { z } from 'zod'
 
+import type {
+  KernelModPackDescriptor,
+  KernelModPackKind,
+  ModsInstallFromDirectoryRequest,
+  ModsInstallFromDirectoryResponse,
+  ModsListRequest,
+  ModsListResponse,
+  ModsSetEnabledRequest,
+  ModsSetEnabledResponse,
+} from '../../types/wire'
+
 import { KernelProtocolVersion } from './version'
 
-export const KernelModPackKindSchema = z.enum(['system', 'user', 'contrib'])
-export type KernelModPackKind = z.infer<typeof KernelModPackKindSchema>
+export type {
+  KernelModPackDescriptor,
+  KernelModPackKind,
+  ModsInstallFromDirectoryRequest,
+  ModsInstallFromDirectoryResponse,
+  ModsListRequest,
+  ModsListResponse,
+  ModsSetEnabledRequest,
+  ModsSetEnabledResponse,
+} from '../../types/wire'
+
+export const KernelModPackKindSchema = z.enum(['system', 'user', 'contrib']) satisfies z.ZodType<KernelModPackKind>
 
 export const KernelModPackDescriptorSchema = z.strictObject({
   id: z.string().min(1),
@@ -12,47 +33,36 @@ export const KernelModPackDescriptorSchema = z.strictObject({
   enabled: z.boolean(),
   provides: z.array(z.string().min(1)),
   specifier: z.string().min(1),
-})
-export type KernelModPackDescriptor = z.infer<typeof KernelModPackDescriptorSchema>
+}) satisfies z.ZodType<KernelModPackDescriptor>
 
 export const ModsListRequestSchema = z.strictObject({
   protocolVersion: z.literal(KernelProtocolVersion),
-})
-export type ModsListRequest = z.infer<typeof ModsListRequestSchema>
+}) satisfies z.ZodType<ModsListRequest>
 
 export const ModsListResponseSchema = z.strictObject({
   protocolVersion: z.literal(KernelProtocolVersion),
   packs: z.array(KernelModPackDescriptorSchema),
-})
-export type ModsListResponse = z.infer<typeof ModsListResponseSchema>
+}) satisfies z.ZodType<ModsListResponse>
 
 export const ModsSetEnabledRequestSchema = z.strictObject({
   protocolVersion: z.literal(KernelProtocolVersion),
   id: z.string().min(1),
   enabled: z.boolean(),
-})
-export type ModsSetEnabledRequest = z.infer<typeof ModsSetEnabledRequestSchema>
+}) satisfies z.ZodType<ModsSetEnabledRequest>
 
 export const ModsSetEnabledResponseSchema = z.strictObject({
   protocolVersion: z.literal(KernelProtocolVersion),
   ok: z.boolean(),
   reloadRequired: z.boolean(),
-})
-export type ModsSetEnabledResponse = z.infer<typeof ModsSetEnabledResponseSchema>
+}) satisfies z.ZodType<ModsSetEnabledResponse>
 
 export const ModsInstallFromDirectoryRequestSchema = z.strictObject({
   protocolVersion: z.literal(KernelProtocolVersion),
   directory: z.string().min(1),
-})
-export type ModsInstallFromDirectoryRequest = z.infer<
-  typeof ModsInstallFromDirectoryRequestSchema
->
+}) satisfies z.ZodType<ModsInstallFromDirectoryRequest>
 
 export const ModsInstallFromDirectoryResponseSchema = z.strictObject({
   protocolVersion: z.literal(KernelProtocolVersion),
   pack: KernelModPackDescriptorSchema,
   reloadRequired: z.boolean(),
-})
-export type ModsInstallFromDirectoryResponse = z.infer<
-  typeof ModsInstallFromDirectoryResponseSchema
->
+}) satisfies z.ZodType<ModsInstallFromDirectoryResponse>

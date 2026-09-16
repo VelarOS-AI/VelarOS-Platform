@@ -1,12 +1,11 @@
 import { describe, expect, test } from 'bun:test'
 
 import { KernelCallErrorCodes } from '../../src/contract/constants'
+import type { KernelPermissionBroker } from '../../src/contract/requires'
 import { Kernel } from '../../src/impl/runtime/Kernel'
 import { createKernelCallableCapability } from '../../src/impl/runtime/KernelCallableCapability'
 import { createCapabilityToken } from '../../src/impl/runtime/KernelModuleKit'
-import { defineKernelModule } from '../../src/types/abi-module'
-import type { KernelPermissionBroker } from '../../src/types/abi-permissions'
-
+import { defineKernelModule } from '../../src/impl/runtime/KernelModuleKit'
 const ValueCapability = createCapabilityToken('test.value', '2.4.0')
 
 function valueModule(options: {

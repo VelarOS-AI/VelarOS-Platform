@@ -9,8 +9,9 @@ import { join } from 'node:path'
 
 import { afterEach, describe, expect, test } from 'bun:test'
 
-import { KernelUpdater, type KernelUpdaterOptions } from '../../../src/impl/updater/KernelUpdater'
-import type { KernelArtifactExtractor } from '../../../src/impl/updater/PassthroughKernelArtifactExtractor'
+import type { KernelArtifactExtractor } from '../../../src/contract/requires'
+import { KernelUpdater } from '../../../src/impl/updater/KernelUpdater'
+import type { KernelUpdaterOptions } from '../../../src/types/updater'
 import { KernelUpdaterError } from '../../../src/utils/errors'
 import { readKernelActivePointer } from '../../../src/utils/updater/pointer'
 

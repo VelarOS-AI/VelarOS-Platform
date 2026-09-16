@@ -4,29 +4,68 @@
 // 各能力包自行定义，并把其 payload 放入本通用信封。
 import { z } from 'zod'
 
+import type {
+  CapabilityCallError,
+  CapabilityCallFailure,
+  CapabilityCallRequest,
+  CapabilityCallResponse,
+  CapabilityCallSuccess,
+  CapabilityIsolation,
+  CapabilityRequireItem,
+  CapabilityRequirement,
+  CapabilitySessionCloseRequest,
+  CapabilitySessionCloseResponse,
+  CapabilitySessionOpenFailure,
+  CapabilitySessionOpenRequest,
+  CapabilitySessionOpenResponse,
+  CapabilitySessionOpenSuccess,
+  CapabilityToken,
+  KernelModuleDescriptor,
+  ResourceRef,
+  ScopeRef,
+} from '../../types/wire'
+
 import { KernelProtocolVersion } from './version'
+
+export type {
+  CapabilityCallError,
+  CapabilityCallFailure,
+  CapabilityCallRequest,
+  CapabilityCallResponse,
+  CapabilityCallSuccess,
+  CapabilityIsolation,
+  CapabilityRequireItem,
+  CapabilityRequirement,
+  CapabilitySessionCloseRequest,
+  CapabilitySessionCloseResponse,
+  CapabilitySessionOpenFailure,
+  CapabilitySessionOpenRequest,
+  CapabilitySessionOpenResponse,
+  CapabilitySessionOpenSuccess,
+  CapabilityToken,
+  KernelModuleDescriptor,
+  ResourceRef,
+  ScopeRef,
+} from '../../types/wire'
 
 /** 能力模块的进程隔离形态(宪章 Ring 0 第 9 项:部署决策的唯一表达位)。 */
 export const CapabilityIsolationSchema = z.enum([
   'in-process',
   'worker',
   'remote',
-])
-export type CapabilityIsolation = z.infer<typeof CapabilityIsolationSchema>
+]) satisfies z.ZodType<CapabilityIsolation>
 
 /** 模块提供的稳定能力令牌；调用方依赖令牌，不依赖实现包。 */
 export const CapabilityTokenSchema = z.strictObject({
   id: z.string().min(1),
   version: z.string().min(1),
-})
-export type CapabilityToken = z.infer<typeof CapabilityTokenSchema>
+}) satisfies z.ZodType<CapabilityToken>
 
 /** 模块对另一能力令牌的版本化依赖。 */
 export const CapabilityRequirementSchema = z.strictObject({
   id: z.string().min(1),
   versionRange: z.string().min(1).nullable(),
-})
-export type CapabilityRequirement = z.infer<typeof CapabilityRequirementSchema>
+}) satisfies z.ZodType<CapabilityRequirement>
 
 /**
  * Kernel 通用作用域引用。
@@ -37,8 +76,7 @@ export const ScopeRefSchema = z.strictObject({
   id: z.string().min(1),
   ownerModuleId: z.string().min(1),
   kind: z.string().min(1).nullable(),
-})
-export type ScopeRef = z.infer<typeof ScopeRefSchema>
+}) satisfies z.ZodType<ScopeRef>
 
 /** 模块拥有的资源句柄；本地路径、页面实例或数据库主键不穿透信任边界。 */
 export const ResourceRefSchema = z.strictObject({
@@ -46,8 +84,7 @@ export const ResourceRefSchema = z.strictObject({
   ownerModuleId: z.string().min(1),
   scope: ScopeRefSchema.nullable(),
   mediaType: z.string().min(1).nullable(),
-})
-export type ResourceRef = z.infer<typeof ResourceRefSchema>
+}) satisfies z.ZodType<ResourceRef>
 
 /** 可注入模块的完整发现描述符。 */
 export const KernelModuleDescriptorSchema = z.strictObject({
@@ -60,8 +97,7 @@ export const KernelModuleDescriptorSchema = z.strictObject({
   permissions: z.array(z.string().min(1)),
   isolation: CapabilityIsolationSchema,
   catalogRevision: z.string().min(1),
-})
-export type KernelModuleDescriptor = z.infer<typeof KernelModuleDescriptorSchema>
+}) satisfies z.ZodType<KernelModuleDescriptor>
 
 /**
  * 通用能力调用请求。
@@ -77,38 +113,33 @@ export const CapabilityCallRequestSchema = z.strictObject({
   operation: z.string().min(1),
   scope: ScopeRefSchema.nullable(),
   input: z.unknown(),
-})
-export type CapabilityCallRequest = z.infer<typeof CapabilityCallRequestSchema>
+}) satisfies z.ZodType<CapabilityCallRequest>
 
 export const CapabilityCallErrorSchema = z.strictObject({
   code: z.string().min(1),
   message: z.string(),
   retryable: z.boolean(),
   details: z.record(z.string(), z.unknown()).nullable(),
-})
-export type CapabilityCallError = z.infer<typeof CapabilityCallErrorSchema>
+}) satisfies z.ZodType<CapabilityCallError>
 
 export const CapabilityCallSuccessSchema = z.strictObject({
   protocolVersion: z.literal(KernelProtocolVersion),
   callId: z.string().min(1),
   status: z.literal('ok'),
   output: z.unknown(),
-})
-export type CapabilityCallSuccess = z.infer<typeof CapabilityCallSuccessSchema>
+}) satisfies z.ZodType<CapabilityCallSuccess>
 
 export const CapabilityCallFailureSchema = z.strictObject({
   protocolVersion: z.literal(KernelProtocolVersion),
   callId: z.string().min(1),
   status: z.literal('error'),
   error: CapabilityCallErrorSchema,
-})
-export type CapabilityCallFailure = z.infer<typeof CapabilityCallFailureSchema>
+}) satisfies z.ZodType<CapabilityCallFailure>
 
 export const CapabilityCallResponseSchema = z.discriminatedUnion('status', [
   CapabilityCallSuccessSchema,
   CapabilityCallFailureSchema,
-])
-export type CapabilityCallResponse = z.infer<typeof CapabilityCallResponseSchema>
+]) satisfies z.ZodType<CapabilityCallResponse>
 
 /**
  * 场景级能力绑定条目。
@@ -119,8 +150,7 @@ export const CapabilityRequireItemSchema = z.strictObject({
   capabilityId: z.string().min(1),
   operations: z.array(z.string().min(1)).nullable(),
   scope: ScopeRefSchema.nullable(),
-})
-export type CapabilityRequireItem = z.infer<typeof CapabilityRequireItemSchema>
+}) satisfies z.ZodType<CapabilityRequireItem>
 
 /**
  * 打开能力会话：一次声明本连接场景需要的能力集。
@@ -130,50 +160,32 @@ export type CapabilityRequireItem = z.infer<typeof CapabilityRequireItemSchema>
 export const CapabilitySessionOpenRequestSchema = z.strictObject({
   protocolVersion: z.literal(KernelProtocolVersion),
   requires: z.array(CapabilityRequireItemSchema).min(1),
-})
-export type CapabilitySessionOpenRequest = z.infer<
-  typeof CapabilitySessionOpenRequestSchema
->
+}) satisfies z.ZodType<CapabilitySessionOpenRequest>
 
 export const CapabilitySessionOpenSuccessSchema = z.strictObject({
   protocolVersion: z.literal(KernelProtocolVersion),
   status: z.literal('ok'),
   sessionId: z.string().min(1),
   requires: z.array(CapabilityRequireItemSchema),
-})
-export type CapabilitySessionOpenSuccess = z.infer<
-  typeof CapabilitySessionOpenSuccessSchema
->
+}) satisfies z.ZodType<CapabilitySessionOpenSuccess>
 
 export const CapabilitySessionOpenFailureSchema = z.strictObject({
   protocolVersion: z.literal(KernelProtocolVersion),
   status: z.literal('error'),
   error: CapabilityCallErrorSchema,
-})
-export type CapabilitySessionOpenFailure = z.infer<
-  typeof CapabilitySessionOpenFailureSchema
->
+}) satisfies z.ZodType<CapabilitySessionOpenFailure>
 
 export const CapabilitySessionOpenResponseSchema = z.discriminatedUnion(
   'status',
   [CapabilitySessionOpenSuccessSchema, CapabilitySessionOpenFailureSchema],
-)
-export type CapabilitySessionOpenResponse = z.infer<
-  typeof CapabilitySessionOpenResponseSchema
->
+) satisfies z.ZodType<CapabilitySessionOpenResponse>
 
 export const CapabilitySessionCloseRequestSchema = z.strictObject({
   protocolVersion: z.literal(KernelProtocolVersion),
   sessionId: z.string().min(1),
-})
-export type CapabilitySessionCloseRequest = z.infer<
-  typeof CapabilitySessionCloseRequestSchema
->
+}) satisfies z.ZodType<CapabilitySessionCloseRequest>
 
 export const CapabilitySessionCloseResponseSchema = z.strictObject({
   protocolVersion: z.literal(KernelProtocolVersion),
   closed: z.boolean(),
-})
-export type CapabilitySessionCloseResponse = z.infer<
-  typeof CapabilitySessionCloseResponseSchema
->
+}) satisfies z.ZodType<CapabilitySessionCloseResponse>

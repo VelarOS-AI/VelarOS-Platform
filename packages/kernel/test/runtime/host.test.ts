@@ -1,14 +1,12 @@
 import { describe, expect, test } from 'bun:test'
 
+import type { KernelModuleIsolation } from '../../src/contract/constants'
+import type { KernelModuleActivateContext } from '../../src/contract/provides'
+import type { KernelModuleDefinition } from '../../src/contract/requires'
+import type { KernelPermissionBroker } from '../../src/contract/requires'
 import { KernelModuleHost } from '../../src/impl/runtime/KernelModuleHost'
 import { createCapabilityToken } from '../../src/impl/runtime/KernelModuleKit'
-import type { CapabilityToken } from '../../src/types/abi-capability'
-import type {
-  KernelModuleActivateContext,
-  KernelModuleDefinition,
-  KernelModuleIsolation,
-} from '../../src/types/abi-module'
-import type { KernelPermissionBroker } from '../../src/types/abi-permissions'
+import type { CapabilityToken } from '../../src/types/kernel.js'
 import { KernelError } from '../../src/utils/errors'
 
 interface ValueService {

@@ -1,150 +1,113 @@
 import {
   isBlank,
-  isEmpty,
   isNotUndefined,
-  isNull,
-  isObject,
-  isString,
   isUndefined,
   Log,
-  toNullable,
-  toOptional,
 } from '@velaros-ai/core'
 
 import { KernelCallErrorCodes, KernelErrorCodes } from '../../contract/constants'
-import type { KernelEventHandler } from '../../types/abi-events'
-import type { KernelRegistration } from '../../types/abi-module'
-import type { ScopeRef } from '../../types/abi-references'
-import type { KernelModCatalog } from '../../types/serve-mod-catalog'
-import type { KernelServiceHealth, KernelServiceModuleHealth } from '../../types/service-health'
+import type { KernelRegistration } from '../../contract/provides'
+import type { KernelEventHandler } from '../../contract/requires'
+import type { KernelClientAccessBroker } from '../../contract/requires'
+import type {
+  KernelCompositionSnapshot,
+  KernelServiceHealth,
+  KernelServiceModuleHealth,
+} from '../../types/kernel'
+import type { KernelModCatalog, KernelServiceStatus } from '../../types/serve'
 import { KernelError, notStartedFailure, startFailedFailure } from '../../utils/errors'
 import {
-  type CapabilityCallFailure,
-  type CapabilityCallRequest,
+  capabilityCallFailure,
+  capabilitySessionOpenFailure,
+  readCapabilityCallId,
+  toKernelCapabilityScope,
+  toKernelModuleDescriptor,
+  toKernelServiceModuleHealth,
+} from '../../utils/serve/service'
+import {
   CapabilityCallRequestSchema,
   type CapabilityCallResponse,
   type CapabilityRequireItem,
   type CapabilitySessionOpenFailure,
   type CapabilitySessionOpenRequest,
   CapabilitySessionOpenRequestSchema,
-  type KernelModuleDescriptor,
 } from '../../utils/wire/capability'
 import type { KernelHandshake } from '../../utils/wire/handshake'
 import { KernelProtocolVersion } from '../../utils/wire/version'
 import { KernelCapabilityInvoker } from '../runtime/KernelCapabilityInvoker'
-import type {
-  KernelCompositionSnapshot,
-  KernelModuleHost,
-  KernelModuleSnapshot,
-} from '../runtime/KernelModuleHost'
+import type { KernelModuleHostApi } from '../runtime/KernelModuleHost'
 
-import {
-  DenyAllKernelClientAccessBroker,
-  type KernelClientAccessBroker,
-} from './DenyAllKernelClientAccessBroker'
-
+import { DenyAllKernelClientAccessBroker } from './DenyAllKernelClientAccessBroker'
 const log = Log.tag('KernelService')
 
-/**
- * `failed` 是启动失败后的终态。
- *
- * 少了它，启动失败后的状态一直停在 `idle`，于是会话打开与能力调用都回「可重试」，而
- * `start()` 只会重放同一个失败——调用方按提示重试，永远得到同一句话。
- */
-export type KernelServiceStatus = 'idle' | 'started' | 'failed' | 'disposed'
-
+/** 建一个服务面要交进来的东西：宿主、版本号，以及两个可选的注入点。 */
 export interface KernelServiceOptions {
-  readonly host: KernelModuleHost
+  /** 这个服务面对外代理的模块宿主。 */
+  readonly host: KernelModuleHostApi
+  /** 握手里回显的内核版本号；空串直接抛错，不让一个没有身份的 Kernel 起来。 */
   readonly kernelVersion: string
-  /** Gates capability.session.open. Defaults to deny-all. */
+  /** 谁来判 `capability.session.open`；不给就是 deny-all。 */
   readonly clientAccessBroker?: KernelClientAccessBroker
-  /** Optional ModStore catalog for mods.* RPC. */
+  /** `mods.*` 一族 RPC 接到哪个 ModStore；不给就是「本 Kernel 没有接 ModStore」。 */
   readonly modCatalog?: KernelModCatalog
 }
 
-function toCatalogRevision(snapshot: KernelModuleSnapshot): string {
-  const { id, version } = snapshot.manifest
-  return `${id}@${version}#${snapshot.generation}`
-}
-
-function toDescriptor(
-  snapshot: KernelModuleSnapshot,
-): KernelModuleDescriptor {
-  const { manifest } = snapshot
-  return {
-    id: manifest.id,
-    version: manifest.version,
-    apiVersion: manifest.apiVersion,
-    provides: manifest.provides.map(({ id, version }) => ({ id, version })),
-    requires: manifest.requires.map(({ id, versionRange }) => ({
-      id,
-      versionRange: toNullable(versionRange),
-    })),
-    optionalRequires: manifest.optionalRequires.map(
-      ({ id, versionRange }) => ({
-        id,
-        versionRange: toNullable(versionRange),
-      }),
-    ),
-    permissions: [...manifest.permissions],
-    isolation: manifest.isolation,
-    catalogRevision: toCatalogRevision(snapshot),
-  }
-}
-
-function failure(
-  callId: string,
-  code: string,
-  message: string,
-  retryable = false,
-  details: Nullable<Readonly<Record<string, unknown>>> = null,
-): CapabilityCallFailure {
-  return {
-    protocolVersion: KernelProtocolVersion,
-    callId,
-    status: 'error',
-    error: {
-      code,
-      message,
-      retryable,
-      details,
-    },
-  }
-}
-
-function sessionFailure(
-  code: string,
-  message: string,
-  retryable = false,
-): CapabilitySessionOpenFailure {
-  return {
-    protocolVersion: KernelProtocolVersion,
-    status: 'error',
-    error: {
-      code,
-      message,
-      retryable,
-      details: null,
-    },
-  }
-}
-
-function readCallId(input: unknown): string {
-  if (!isObject(input) && !isNull(input) || isNull(input)) return 'invalid-call'
-  const callId = Reflect.get(input, 'callId')
-  return isString(callId) && !isEmpty(callId)
-    ? callId
-    : 'invalid-call'
-}
-
 /**
- * Product-neutral API facade over the module host.
+ * 与产品无关的内核服务面；实例归装配这个 Kernel 进程的那一处。
  *
- * Product clients see protocol objects and callable capabilities only. Host
- * internals, concrete module implementations, and thrown errors remain behind
- * this boundary.
+ * 产品客户端只看得到协议对象与可调用能力；宿主内部、具体模块实现与抛出来的错误都留在这道
+ * 边界之内。
  */
-export class KernelService {
+export interface KernelServiceApi {
+  /** 当前的生命周期状态。 */
+  getStatus(): KernelServiceStatus
+  /** 启动宿主；已启动直接返回，已回收或启动失败过的一律拒绝（失败是终态）。 */
+  start(): Promise<void>
+  /** 回收宿主；重复调用返回同一个 promise。 */
+  dispose(): Promise<void>
+  /** 回握手：协议版本、内核版本与当前模块目录。 */
+  handshake(): KernelHandshake
+  /** 回组合快照，本机诊断与 CLI 可直接 JSON 序列化；远端 wire 仍只走版本化协议。 */
+  describeComposition(): KernelCompositionSnapshot
+  /** 回整机健康；没启动时回 `stopped`，任一模块降级则整机 `degraded`。 */
+  health(): Promise<KernelServiceHealth>
+  /**
+   * 按目录与准入策略判一次「打开能力会话」。
+   *
+   * 判过了回原请求，判不过回失败信封（请求不合协议、Kernel 没启动、能力没装载、绑定被拒、
+   * 策略判不出来）。**本方法不记账**——记账归 RPC 或进程内连接的会话账本。
+   */
+  evaluateCapabilitySessionOpen(
+    input: unknown,
+  ): Promise<
+    | { readonly status: 'ok'; readonly request: CapabilitySessionOpenRequest }
+    | CapabilitySessionOpenFailure
+  >
+  /** 执行一次能力调用；任何失败都折成带码的失败信封回来，不抛。 */
+  handleCapabilityCall(
+    input: unknown,
+    signal?: AbortSignal,
+  ): Promise<CapabilityCallResponse>
+  /** 订阅一类内核事件，返回退订句柄；没启动或事件类型为空时抛错。 */
+  subscribe<TPayload>(
+    type: string,
+    handler: KernelEventHandler<TPayload>,
+  ): KernelRegistration
+  /** 列出 mod pack；没启动或没接 ModStore 时抛带码的错误。 */
+  listMods(): ReturnType<KernelModCatalog['list']>
+  /** 开关一个 mod pack；没启动或没接 ModStore 时抛带码的错误。 */
+  setModEnabled(
+    id: string,
+    enabled: boolean,
+  ): ReturnType<KernelModCatalog['setEnabled']>
+  /** 从目录装一个 mod pack；失败原因随带码的错误回到调用方，不只进日志。 */
+  installModFromDirectory(
+    directory: string,
+  ): ReturnType<KernelModCatalog['installFromDirectory']>
+}
+
+/** 与产品无关的内核服务面。 */
+export class KernelService implements KernelServiceApi {
   private status: KernelServiceStatus = 'idle'
   private startFailure?: unknown
   private startPromise?: Promise<void>
@@ -211,11 +174,10 @@ export class KernelService {
     return {
       protocolVersion: KernelProtocolVersion,
       kernelVersion: this.options.kernelVersion,
-      modules: this.options.host.listModules().map(toDescriptor),
+      modules: this.options.host.listModules().map(toKernelModuleDescriptor),
     }
   }
 
-  /** 本机诊断/CLI 可直接 JSON 序列化；远端 wire 仍只走版本化协议。 */
   public describeComposition(): KernelCompositionSnapshot {
     return this.options.host.describeComposition()
   }
@@ -225,7 +187,7 @@ export class KernelService {
       return { status: 'stopped', modules: this.moduleHealthSnapshots() }
 
     const snapshots = await this.options.host.checkHealth()
-    const modules = snapshots.map(toModuleHealth)
+    const modules = snapshots.map(toKernelServiceModuleHealth)
     const degraded = modules.some(
       (module) =>
         module.status !== 'ready'
@@ -238,11 +200,6 @@ export class KernelService {
     }
   }
 
-  /**
-   * Evaluates a capability session open against catalog + access policy.
-   *
-   * Does not record the session — the RPC / in-process connection ledger owns that.
-   */
   public async evaluateCapabilitySessionOpen(
     input: unknown,
   ): Promise<
@@ -250,15 +207,15 @@ export class KernelService {
     | CapabilitySessionOpenFailure
   > {
     const parsed = CapabilitySessionOpenRequestSchema.safeParse(input)
-    if (!parsed.success) return sessionFailure(
+    if (!parsed.success) return capabilitySessionOpenFailure(
         'INVALID_REQUEST',
         '打开能力会话的请求不符合 Kernel 协议 v2',
       )
 
     const request = parsed.data
-    if (this.status !== 'started') return sessionFailure(
+    if (this.status !== 'started') return capabilitySessionOpenFailure(
         'KERNEL_NOT_STARTED',
-        'Kernel service is not started',
+        'Kernel 服务面还没启动',
         this.status === 'idle',
       )
 
@@ -273,9 +230,9 @@ export class KernelService {
   private async evaluateRequireItem(
     item: CapabilityRequireItem,
   ): Promise<CapabilitySessionOpenFailure | undefined> {
-    if (isUndefined(this.findCapabilityById(item.capabilityId))) return sessionFailure(
+    if (isUndefined(this.findCapabilityById(item.capabilityId))) return capabilitySessionOpenFailure(
         'CAPABILITY_NOT_AVAILABLE',
-        `Capability "${item.capabilityId}" is not loaded`,
+        `能力 "${item.capabilityId}" 当前没有装载`,
       )
 
     try {
@@ -284,15 +241,15 @@ export class KernelService {
         operations: item.operations,
         scope: item.scope,
       })
-      if (decision.status === 'denied') return sessionFailure(
+      if (decision.status === 'denied') return capabilitySessionOpenFailure(
           'CAPABILITY_BIND_DENIED',
           decision.reason,
         )
     } catch (error) {
-      log.warn('Capability bind policy failed', { capabilityId: item.capabilityId, error })
-      return sessionFailure(
+      log.warn('能力绑定策略判定失败', { capabilityId: item.capabilityId, error })
+      return capabilitySessionOpenFailure(
         'CAPABILITY_BIND_FAILED',
-        'Capability session bind could not be resolved',
+        '判不出这次能力绑定的结果',
         true,
       )
     }
@@ -305,18 +262,18 @@ export class KernelService {
   ): Promise<CapabilityCallResponse> {
     const parsed = CapabilityCallRequestSchema.safeParse(input)
     if (!parsed.success)
-      return failure(
-        readCallId(input),
+      return capabilityCallFailure(
+        readCapabilityCallId(input),
         'INVALID_REQUEST',
         '能力调用请求不符合 Kernel 协议 v2',
       )
 
     const request = parsed.data
     if (this.status !== 'started')
-      return failure(
+      return capabilityCallFailure(
         request.callId,
         'KERNEL_NOT_STARTED',
-        'Kernel service is not started',
+        'Kernel 服务面还没启动',
         this.status === 'idle',
       )
 
@@ -324,7 +281,7 @@ export class KernelService {
       const output = await this.capabilityInvoker.invoke({
         capabilityId: request.capabilityId,
         operation: request.operation,
-        scope: toSdkScope(request.scope),
+        scope: toKernelCapabilityScope(request.scope),
         input: request.input,
         signal,
       })
@@ -340,19 +297,19 @@ export class KernelService {
       if (error instanceof KernelError) {
         switch (error.code) {
           case KernelCallErrorCodes.capabilityNotFound:
-            return failure(
+            return capabilityCallFailure(
               request.callId,
               KernelCallErrorCodes.capabilityNotFound,
               `能力 "${request.capabilityId}" 当前不可用`,
             )
           case KernelCallErrorCodes.capabilityNotCallable:
-            return failure(
+            return capabilityCallFailure(
               request.callId,
               KernelCallErrorCodes.capabilityNotCallable,
               `能力 "${request.capabilityId}" 没有可调用接口`,
             )
           case KernelCallErrorCodes.operationNotFound:
-            return failure(
+            return capabilityCallFailure(
               request.callId,
               KernelCallErrorCodes.operationNotFound,
               `能力 "${request.capabilityId}" 上没有操作 "${request.operation}"`,
@@ -363,7 +320,7 @@ export class KernelService {
               error,
               operation: request.operation,
             })
-            return failure(
+            return capabilityCallFailure(
               request.callId,
               KernelCallErrorCodes.operationMetadataFailed,
               '取不到能力操作的元数据',
@@ -371,7 +328,7 @@ export class KernelService {
           // 进程内路径的错误消息就是 broker 给的原因；serve 路径不能把它丢掉，否则同一次拒绝
           // 在两条路径上说的不是一回事，模型也拿不到「为什么被拒」。
           case KernelCallErrorCodes.permissionDenied:
-            return failure(
+            return capabilityCallFailure(
               request.callId,
               KernelCallErrorCodes.permissionDenied,
               `能力调用被权限策略拒绝：${error.message}`,
@@ -387,7 +344,7 @@ export class KernelService {
               error,
               operation: request.operation,
             })
-            return failure(
+            return capabilityCallFailure(
               request.callId,
               KernelCallErrorCodes.permissionCheckFailed,
               '判不出能力调用的授权结果',
@@ -403,12 +360,12 @@ export class KernelService {
         error,
         operation: request.operation,
       })
-      return failure(
+      return capabilityCallFailure(
         request.callId,
         signal.aborted ? 'CALL_ABORTED' : 'CAPABILITY_CALL_FAILED',
         signal.aborted
-          ? 'Capability call was aborted'
-          : 'Capability call failed',
+          ? '能力调用被中止'
+          : '能力调用失败',
         !signal.aborted,
       )
     }
@@ -422,7 +379,7 @@ export class KernelService {
   }
 
   private moduleHealthSnapshots(): readonly KernelServiceModuleHealth[] {
-    return this.options.host.listModules().map(toModuleHealth)
+    return this.options.host.listModules().map(toKernelServiceModuleHealth)
   }
 
   public subscribe<TPayload>(
@@ -488,29 +445,5 @@ export class KernelService {
   private assertStarted(): void {
     if (this.status === 'started') return
     throw notStartedFailure()
-  }
-}
-
-function toModuleHealth(
-  snapshot: KernelModuleSnapshot,
-): KernelServiceModuleHealth {
-  return {
-    id: snapshot.manifest.id,
-    version: snapshot.manifest.version,
-    generation: snapshot.generation,
-    status: snapshot.status,
-    health: snapshot.health,
-    error: snapshot.error,
-  }
-}
-
-function toSdkScope(
-  scope: CapabilityCallRequest['scope'],
-): ScopeRef | undefined {
-  if (isNull(scope)) return undefined
-  return {
-    id: scope.id,
-    ownerModuleId: scope.ownerModuleId,
-    kind: toOptional(scope.kind),
   }
 }

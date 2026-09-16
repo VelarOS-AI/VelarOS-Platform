@@ -6,24 +6,22 @@ import {
   randomBytes,
   randomInt,
   sign as signBytes,
+  timingSafeEqual,
   verify as verifyBytes,
 } from 'node:crypto'
 
 import { Log } from '@velaros-ai/core'
 
+import type { RemoteNodeKeyPair } from '../../types/remote'
+
 const log = Log.tag('RemoteNodeCrypto')
 
 /**
- * 设备身份 = Ed25519 密钥对。
+ * 新生成一对设备身份密钥(Ed25519)。
  *
  * 配对时 Client 只交出公钥;私钥永不上线,也永不进日志或协议帧。这是本传输与插件桥
  * (长期 bearer token 每次连接明文重发)的关键差别——跨机链路上不存在可重放的长期秘密。
  */
-export interface RemoteNodeKeyPair {
-  readonly publicKey: string
-  readonly privateKey: string
-}
-
 export function generateRemoteNodeKeyPair(): RemoteNodeKeyPair {
   const pair = generateKeyPairSync('ed25519')
   return {
@@ -39,10 +37,20 @@ export function createChallenge(): string {
   return randomBytes(32).toString('base64url')
 }
 
+/** 摇一枚六位配对码;用 `randomInt` 而不是 `Math.random`,它是一次性人工仪式里的唯一秘密。 */
 export function createPairingCode(): string {
   return String(randomInt(100_000, 1_000_000))
 }
 
+/** 定长常数时间比较配对码:长度不等直接判否,避免 `timingSafeEqual` 因长度差异抛出。 */
+export function remoteNodeCodesEqual(left: string, right: string): boolean {
+  const leftBytes = Buffer.from(left)
+  const rightBytes = Buffer.from(right)
+  return leftBytes.length === rightBytes.length
+    && timingSafeEqual(leftBytes, rightBytes)
+}
+
+/** 用私钥给一枚 challenge 签名,返回 base64 签名串;私钥不进日志也不进返回值。 */
 export function signChallenge(
   privateKey: string,
   challenge: string,
@@ -90,10 +98,12 @@ export function createEpoch(): string {
   return randomBytes(16).toString('base64url')
 }
 
+/** 本机在这条链路上的身份;只在没有凭据时生成一次,之后随凭据一起落盘。 */
 export function createClientId(): string {
   return `client-${randomBytes(12).toString('base64url')}`
 }
 
+/** Node 的长期身份;宿主没指定 nodeId 时用它,重启不变的那部分由宿主自己保存。 */
 export function createNodeId(): string {
   return `node-${randomBytes(12).toString('base64url')}`
 }

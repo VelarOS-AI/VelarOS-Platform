@@ -4,14 +4,20 @@ import { join } from 'node:path'
 
 import { afterEach, describe, expect, test } from 'bun:test'
 
+import { defineKernelModule } from '../../../src/impl/runtime/KernelModuleKit'
 import { KernelModLoader, persistModIndex } from '../../../src/impl/serve/KernelModLoader'
-import { KernelModStore, registerSystemModPacks } from '../../../src/impl/serve/KernelModStore'
-import { defineKernelModule } from '../../../src/types/abi-module'
+import {
+  KernelModStore,
+  registerBundledPacks,
+  registerSystemModPacks,
+} from '../../../src/impl/serve/KernelModStore'
 import {
   createBundledModPack,
-  registerBundledPacks,
   toBundledPackRecords,
 } from '../../../src/utils/serve/mod-packs'
+
+/** 测试里的模块导入函数；生产里由 `bin/velaros-kernel-daemon.mjs` 注入。 */
+const importModule = (url: string): Promise<Record<string, unknown>> => import(url) as Promise<Record<string, unknown>>
 
 const directories: string[] = []
 
@@ -67,7 +73,7 @@ describe('bundled packs', () => {
     expect(pack.provides).toEqual(['velaros.probe'])
 
     registerBundledPacks(store, [pack])
-    const loaded = await new KernelModLoader(store).loadEnabled()
+    const loaded = await new KernelModLoader(store, importModule).loadEnabled()
 
     expect(loaded.failures).toHaveLength(0)
     expect(loaded.modules).toEqual([probeModule])
@@ -85,7 +91,7 @@ describe('bundled packs', () => {
       provides: ['velaros.gone'],
     })
 
-    const loaded = await new KernelModLoader(store).loadEnabled()
+    const loaded = await new KernelModLoader(store, importModule).loadEnabled()
 
     expect(loaded.modules).toHaveLength(0)
     expect(loaded.failures[0]?.reason).toContain('这次构建里已经没有它了')

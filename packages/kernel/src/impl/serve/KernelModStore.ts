@@ -1,69 +1,39 @@
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 
-import { isBlank,isUndefined } from '@velaros-ai/core';
+import { isBlank, isUndefined } from '@velaros-ai/core'
 
-import type { KernelModuleDefinition } from '../../types/abi-module'
+import type { KernelModuleDefinition } from '../../contract/requires'
+import type {
+  KernelBundledPack,
+  KernelModPackLoadFailure,
+  KernelModPackRecord,
+  KernelSystemModPackInput,
+} from '../../types/serve'
+import { toBundledPackRecords } from '../../utils/serve/mod-packs'
 import type { KernelModPackKind } from '../../utils/wire/mods'
 
 export type { KernelModPackKind }
 
 /**
- * Scheme marking a `specifier` as a bundled pack identity rather than a path.
+ * 把 `specifier` 标成 bundled pack 的**身份**、而不是路径的 scheme。
  *
- * Keeps the two pack channels mechanically apart on the wire: anything under
- * this scheme is compile-time and must never be handed to an importer.
+ * 用一个带 scheme 的形态把两条 pack 通道机械分开：这个 scheme 底下的东西都是编译期的，谁都
+ * 不许拿它去 import。
  */
-export const BundledSpecifierScheme = 'bundled:'
+export const BundledSpecifierScheme: string = 'bundled:'
 
-export interface KernelModPackRecord {
-  readonly id: string
-  readonly kind: KernelModPackKind
-  readonly version: string
-  /**
-   * Installed pack: absolute path / file URL to the entry exporting a
-   * KernelModuleDefinition. Bundled pack: the `bundled:<moduleId>` identity URI,
-   * which is never imported (see {@link KernelModPackRecord.module}).
-   */
-  readonly specifier: string
-  readonly exportName?: string
-  /**
-   * Compile-time module instance — bundled packs only.
-   *
-   * Present = the pack arrived through the build graph, so "loading" it is a
-   * field read: no IO, no runtime failure mode (a broken bundled pack fails the
-   * build instead). Absent = installed pack, loaded by importing `specifier`.
-   */
-  readonly module?: KernelModuleDefinition
-  readonly enabled: boolean
-  /** Capability ids this pack claims to provide (for discovery before load). */
-  readonly provides: readonly string[]
-}
-
-/**
- * A pack that is enabled but could not be turned into a module this boot.
- *
- * Kept in memory only: the `mods.*` wire descriptor has no status field yet, so
- * the reason travels through the Kernel log; in-process callers (boot result,
- * daemon assembly, tests) read it from the store.
- */
-export interface KernelModPackLoadFailure {
-  readonly id: string
-  readonly kind: KernelModPackKind
-  readonly specifier: string
-  /** Human-readable cause (import throw, bad export shape, …). */
-  readonly reason: string
-}
-
+/** ModStore 落盘的两条路径：装好的用户 pack 放哪、持久化的索引写在哪。 */
 export interface KernelModStorePaths {
-  /** Directory of installed user packs (`~/.velaros/mods` by default). */
+  /** 装好的用户 pack 所在目录（缺省 `~/.velaros/mods`）。 */
   readonly userModsDirectory: string
-  /** Optional JSON index overriding / extending discovered packs. */
+  /** 覆盖/补充已发现 pack 的 JSON 索引文件；不给就不做持久化。 */
   readonly indexPath?: string
 }
 
+/** 按根目录折出 ModStore 的缺省路径（缺省根是 `~/.velaros`）。 */
 export function createDefaultKernelModStorePaths(
-  root = join(homedir(), '.velaros'),
+  root: string = join(homedir(), '.velaros'),
 ): KernelModStorePaths {
   return {
     userModsDirectory: join(root, 'mods'),
@@ -72,11 +42,45 @@ export function createDefaultKernelModStorePaths(
 }
 
 /**
- * Installed mod pack index (system / user / contrib).
+ * 已安装 mod pack 的索引（system / user / contrib）；实例归装配守护进程的那一处。
  *
- * Does not load modules — that is ModLoader's job after resolving enabled packs.
+ * 它不装载模块——那是 ModLoader 在解析出「开着的 pack」之后的事。
  */
-export class KernelModStore {
+export interface KernelModStoreApi {
+  /** 本仓库的落盘路径。 */
+  readonly paths: KernelModStorePaths
+  /** 登记（或覆盖登记）一个 pack；id 是空串时抛错。重新登记会清掉它上一次的装载失败。 */
+  register(pack: KernelModPackRecord): void
+  /** 逐个登记一批 pack。 */
+  registerAll(packs: Iterable<KernelModPackRecord>): void
+  /** 按 id 取一个 pack；没有就回 undefined。 */
+  get(id: string): KernelModPackRecord | undefined
+  /** 列出全部 pack（含停用的）。 */
+  list(): readonly KernelModPackRecord[]
+  /** 只列出开着的 pack。 */
+  listEnabled(): readonly KernelModPackRecord[]
+  /** 开一个 pack；pack 不存在时回 false。 */
+  enable(id: string): boolean
+  /** 关一个 pack；pack 不存在时回 false。 */
+  disable(id: string): boolean
+  /** 找出自称提供某件能力的全部 pack（装载前的发现用）。 */
+  findByCapability(capabilityId: string): readonly KernelModPackRecord[]
+  /** 登记一批系统 pack；开关位沿用仓库里已有的值，用户关掉的不会被复活。 */
+  registerSystem(packs: readonly KernelSystemModPackInput[]): void
+  /** 把宿主交来的编译期 pack 登记进来，返回登记后的现值。 */
+  registerBundled(packs: readonly KernelBundledPack[]): readonly KernelModPackRecord[]
+  /** 记下一个开着却装不上的 pack；由 ModLoader 调。 */
+  markLoadFailure(failure: KernelModPackLoadFailure): void
+  /** 清掉某个 pack 的装载失败记录（它这次装上了）。 */
+  clearLoadFailure(id: string): void
+  /** 取某个 pack 这次的装载失败原因；没失败就回 undefined。 */
+  getLoadFailure(id: string): KernelModPackLoadFailure | undefined
+  /** 列出这次启动全部装不上的 pack。 */
+  listLoadFailures(): readonly KernelModPackLoadFailure[]
+}
+
+/** 已安装 mod pack 的索引。 */
+export class KernelModStore implements KernelModStoreApi {
   private readonly packs = new Map<string, KernelModPackRecord>()
   private readonly loadFailures = new Map<string, KernelModPackLoadFailure>()
 
@@ -129,7 +133,48 @@ export class KernelModStore {
     return this.list().filter((pack) => pack.provides.includes(capabilityId))
   }
 
-  /** Records that an enabled pack failed to load; ModLoader owns the call. */
+  /**
+   * 登记系统 pack：随包编译的（`module` 在手）或一份可导入入口的载荷。
+   *
+   * 开关位的优先级：载荷里显式的 `enabled` → 仓库里已有的值（持久化的 mod 索引，在登记之前
+   * 已经载入）→ 头一次登记默认开着。重新登记会刷新版本、入口与 provides，但绝不能把用户
+   * 关掉的 pack 复活。
+   */
+  public registerSystem(packs: readonly KernelSystemModPackInput[]): void {
+    for (const pack of packs) {
+      this.register({
+        id: pack.id,
+        kind: 'system',
+        version: pack.version,
+        specifier: pack.specifier,
+        exportName: pack.exportName,
+        module: pack.module,
+        enabled: pack.enabled ?? this.packs.get(pack.id)?.enabled ?? true,
+        provides: [...pack.provides],
+      })
+    }
+  }
+
+  /**
+   * 把宿主交来的编译期 pack 登记进来。
+   *
+   * 刻意不传 `enabled`：随包默认是「开」，但用户经 `mods.setEnabled` 停用过的 pack（持久化在
+   * mod index 里、本调用之前已载入 store）必须跨重启保持关闭。返回登记后的现值。
+   */
+  public registerBundled(
+    packs: readonly KernelBundledPack[],
+  ): readonly KernelModPackRecord[] {
+    const records = toBundledPackRecords(packs)
+    this.registerSystem(records.map((record) => ({
+      id: record.id,
+      version: record.version,
+      specifier: record.specifier,
+      provides: record.provides,
+      module: record.module as KernelModuleDefinition,
+    })))
+    return records.map((record) => this.packs.get(record.id) ?? record)
+  }
+
   public markLoadFailure(failure: KernelModPackLoadFailure): void {
     this.loadFailures.set(failure.id, Object.freeze({ ...failure }))
   }
@@ -147,40 +192,18 @@ export class KernelModStore {
   }
 }
 
-/**
- * Register system packs — either compile-time bundled (`module` in hand) or a
- * JSON payload of importable entries, without importing capability packages here.
- *
- * Shape: `[{ "id", "version", "specifier", "exportName"?, "module"?,
- * "provides": string[], "enabled"? }]`
- *
- * Enabled-state precedence: explicit `enabled` in the payload → whatever the
- * store already holds (the persisted mod index, loaded before registration) →
- * enabled by default for a first-time registration. Re-registration refreshes
- * version/specifier/provides but must not resurrect a pack the user disabled.
- */
+/** 登记一批系统 pack（`@velaros-ai/kernel/serve` 的入口函数，转交给仓库自己的方法）。 */
 export function registerSystemModPacks(
-  store: KernelModStore,
-  packs: ReadonlyArray<{
-    readonly id: string
-    readonly version: string
-    readonly specifier: string
-    readonly exportName?: string
-    readonly module?: KernelModuleDefinition
-    readonly provides: readonly string[]
-    readonly enabled?: boolean
-  }>,
+  store: KernelModStoreApi,
+  packs: readonly KernelSystemModPackInput[],
 ): void {
-  for (const pack of packs) {
-    store.register({
-      id: pack.id,
-      kind: 'system',
-      version: pack.version,
-      specifier: pack.specifier,
-      exportName: pack.exportName,
-      module: pack.module,
-      enabled: pack.enabled ?? store.get(pack.id)?.enabled ?? true,
-      provides: [...pack.provides],
-    })
-  }
+  store.registerSystem(packs)
+}
+
+/** 把宿主交来的 bundled pack 登记进仓库（`@velaros-ai/kernel/serve` 的入口函数）。 */
+export function registerBundledPacks(
+  store: KernelModStoreApi,
+  packs: readonly KernelBundledPack[],
+): readonly KernelModPackRecord[] {
+  return store.registerBundled(packs)
 }

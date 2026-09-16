@@ -1,16 +1,22 @@
-import { isBlank,isUndefined } from '@velaros-ai/core';
+import { isUndefined } from '@velaros-ai/core'
 
-import type { KernelStateStore } from '../../types/abi-state'
-import { KernelError } from '../../utils/errors'
-
+/**
+ * 宿主没注入持久化时的默认模块状态后端：只活在本进程内存里。
+ *
+ * 由 `KernelModuleHost` 在宿主没给 `stateBackend` 时自己 new 一份；测试与短命进程够用，
+ * 要跨进程留存就由宿主注入自己的实现。
+ */
 export interface KernelStateBackend {
+  /** 读一个命名空间下的键。 */
   get(namespace: string, key: string): Promise<unknown>
+  /** 写一个命名空间下的键。 */
   set(namespace: string, key: string, value: unknown): Promise<void>
+  /** 删一个命名空间下的键；返回原来有没有这个键。 */
   delete(namespace: string, key: string): Promise<boolean>
+  /** 列出一个命名空间下的键，可以按前缀过滤，结果按字典序排好。 */
   list(namespace: string, prefix?: string): Promise<readonly string[]>
 }
 
-/** Non-durable host default suitable for tests and ephemeral processes. */
 export class InMemoryKernelStateBackend implements KernelStateBackend {
   private readonly namespaces = new Map<string, Map<string, unknown>>()
 
@@ -41,41 +47,4 @@ export class InMemoryKernelStateBackend implements KernelStateBackend {
       .filter((key) => isUndefined(prefix) || key.startsWith(prefix))
       .sort()
   }
-}
-
-function assertStateKey(key: string): void {
-  if (!isBlank(key.trim())) return
-  throw new KernelError(
-    'MODULE_STATE',
-    '内核模块的状态键不能为空',
-  )
-}
-
-export function createNamespacedStateStore(options: {
-  readonly namespace: string
-  readonly backend: KernelStateBackend
-  readonly assertActive: () => void
-}): KernelStateStore {
-  return Object.freeze({
-    get: async <TValue = unknown>(key: string) => {
-      options.assertActive()
-      assertStateKey(key)
-      return options.backend.get(options.namespace, key) as
-        Promise<TValue | undefined>
-    },
-    set: async <TValue = unknown>(key: string, value: TValue) => {
-      options.assertActive()
-      assertStateKey(key)
-      await options.backend.set(options.namespace, key, value)
-    },
-    delete: async (key: string) => {
-      options.assertActive()
-      assertStateKey(key)
-      return options.backend.delete(options.namespace, key)
-    },
-    list: async (prefix?: string) => {
-      options.assertActive()
-      return options.backend.list(options.namespace, prefix)
-    },
-  })
 }

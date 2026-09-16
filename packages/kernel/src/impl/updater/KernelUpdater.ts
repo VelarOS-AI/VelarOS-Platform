@@ -20,6 +20,8 @@ import {
   toNullable,
 } from '@velaros-ai/core'
 
+import type { KernelArtifactExtractor, KernelArtifactSignatureVerifier, KernelFetch } from '../../contract/requires'
+import type { KernelActivationOptions, KernelActivePointer, KernelArtifactTarget, KernelCompatibilityOutcome, KernelCompatibilityRequirement, KernelEnsureInstalledOptions, KernelInstalledVersion, KernelInstallLayout, KernelInstallOutcome, KernelInstallRecord, KernelPruneOptions, KernelUpdateManifest, KernelUpdaterOptions } from '../../types/updater'
 import {
   KernelUpdaterError,
 } from '../../utils/errors'
@@ -30,8 +32,6 @@ import {
 import { KernelTuning } from '../../utils/tuning'
 import { downloadKernelArtifact } from '../../utils/updater/download'
 import {
-  type KernelInstalledVersion,
-  type KernelInstallRecord,
   listKernelInstalledVersions,
   readKernelInstallRecord,
   writeKernelInstallRecord,
@@ -39,114 +39,76 @@ import {
 import {
   createKernelInstallLayout,
   ensureKernelInstallLayout,
-  type KernelInstallLayout,
   kernelVersionDirectory,
 } from '../../utils/updater/layout'
 import {
-  type KernelArtifactTarget,
-  type KernelUpdateManifest,
   loadKernelUpdateManifest,
   resolveKernelArtifactTarget,
   selectKernelArtifact,
   selectKernelManifestVersion,
 } from '../../utils/updater/manifest'
 import {
-  type KernelActivePointer,
+  isKernelPointerBackupFileName,
+  kernelPointerBackupFileName,
+  kernelPointerBackupTimestamp,
   readKernelActivePointer,
   writeKernelActivePointer,
 } from '../../utils/updater/pointer'
-import type { KernelFetch } from '../../utils/updater/transport'
 import {
   assertKernelVersion,
   satisfiesKernelVersionRange,
 } from '../../utils/updater/version'
 
 import { KernelUpdateLock } from './KernelUpdateLock'
-import {
-  type KernelArtifactExtractor,
-  PassthroughKernelArtifactExtractor,
-} from './PassthroughKernelArtifactExtractor'
-import {
-  type KernelArtifactSignatureVerifier,
-  UnverifiedKernelArtifactSignatureVerifier,
-} from './UnverifiedKernelArtifactSignatureVerifier'
-
-export interface KernelHealthCheckContext {
-  readonly version: string
-  readonly path: string
-  readonly previousVersion: Nullable<string>
-}
-
-/** Caller-supplied predicate deciding whether a freshly activated Kernel works. */
-export type KernelHealthCheck = (
-  context: KernelHealthCheckContext,
-) => Promise<boolean> | boolean
-
-export interface KernelActivationOptions {
-  readonly healthCheck?: KernelHealthCheck
-}
-
-export interface KernelEnsureInstalledOptions {
-  readonly manifest?: KernelUpdateManifest
-  readonly manifestSource?: string
-  readonly force?: boolean
-  readonly signal?: AbortSignal
-}
-
-export interface KernelCompatibilityRequirement {
-  readonly range: string
-  readonly manifestSource?: string
-  readonly healthCheck?: KernelHealthCheck
-  readonly allowInstall?: boolean
-  readonly signal?: AbortSignal
-}
-
-export interface KernelInstallOutcome {
-  readonly version: string
-  readonly path: string
-  readonly installed: boolean
-  readonly record: KernelInstallRecord
-}
-
-export interface KernelCompatibilityOutcome {
-  readonly version: string
-  readonly installed: boolean
-  readonly activated: boolean
-  readonly pointer: KernelActivePointer
-}
-
-export interface KernelPruneOptions {
-  readonly retain?: number
-}
-
-export interface KernelUpdaterOptions {
-  readonly root?: string
-  readonly layout?: KernelInstallLayout
-  readonly manifestSource?: string
-  readonly platform?: string
-  readonly architecture?: string
-  readonly target?: KernelArtifactTarget
-  readonly fetch?: KernelFetch
-  readonly extractor?: KernelArtifactExtractor
-  readonly signatureVerifier?: KernelArtifactSignatureVerifier
-  readonly requireSignature?: boolean
-  readonly retainedVersions?: number
-  readonly holderId?: string
-  readonly now?: () => number
-  readonly isProcessAlive?: (pid: number) => boolean
-}
+import { PassthroughKernelArtifactExtractor } from './PassthroughKernelArtifactExtractor'
+import { UnverifiedKernelArtifactSignatureVerifier } from './UnverifiedKernelArtifactSignatureVerifier'
 
 const log = Log.tag('KernelUpdater')
 
 /**
- * Façade over the shared Kernel install root.
+ * 共享内核安装根的门面。
  *
- * The updater owns bytes on disk and the active version pointer; it never
- * starts, stops, or calls into a Kernel. Every mutating operation runs under
- * the cross-process update lock, installs land through an atomic rename, and
- * the pointer is only ever replaced whole.
+ * 实例由要装或要切共享 Runtime 的宿主自己建一台（安装根 + 制品目标 + 几个注入口）。它只管盘上
+ * 的字节与激活指针，从不启动、停止或调用内核。每一次写都在跨进程更新锁下面跑，安装经原子改名
+ * 落位，指针永远整份替换。
  */
-export class KernelUpdater {
+export interface KernelUpdaterApi {
+  /** 这台更新器用的路径布局（安装根、版本目录、指针、锁……）。 */
+  getLayout(): KernelInstallLayout
+  /** 这台更新器认的制品目标（`<平台>-<架构>`）。 */
+  getArtifactTarget(): KernelArtifactTarget
+  /** 读当前的激活指针；从来没激活过时是 undefined，指针内容不合法时抛 INVALID_POINTER。 */
+  getActivePointer(): Promise<KernelActivePointer | undefined>
+  /** 当前激活的版本号；没激活过是 undefined。 */
+  getActiveVersion(): Promise<string | undefined>
+  /** 列出本机装了哪些版本，按版本升序；半截的安装也在列，用 `complete` 区分。 */
+  listInstalledVersions(): Promise<readonly KernelInstalledVersion[]>
+  /** 取一份发布清单；没给来源、也没在构造时配来源时抛 MANIFEST_UNREACHABLE。 */
+  loadManifest(
+    source?: string,
+    signal?: AbortSignal,
+  ): Promise<KernelUpdateManifest>
+  /** 保证某个版本装好（已经装好且是整的就直接复用）；下载、校验、解包、落位全程在更新锁下面跑。 */
+  ensureInstalled(
+    version: string,
+    options?: KernelEnsureInstalledOptions,
+  ): Promise<KernelInstallOutcome>
+  /** 保证有一个满足版本范围的内核处于激活状态：先用正在跑的，再用本机最新的合格版本，最后才去装发布的。都没有时抛 VERSION_UNAVAILABLE。 */
+  ensureCompatible(
+    requirement: KernelCompatibilityRequirement | string,
+  ): Promise<KernelCompatibilityOutcome>
+  /** 把 `current.json` 切到一个已安装的版本；带了健康检查就切完跑一遍，没过先把指针恢复再抛 HEALTH_CHECK_FAILED。版本没装抛 VERSION_NOT_INSTALLED。 */
+  activateVersion(
+    version: string,
+    options?: KernelActivationOptions,
+  ): Promise<KernelActivePointer>
+  /** 回滚到指针里记的 `previousVersion`；没有可回滚的目标时抛 NO_ROLLBACK_TARGET。 */
+  rollback(options?: KernelActivationOptions): Promise<KernelActivePointer>
+  /** 清掉超出保留条数的旧安装与旧指针备份，返回删掉的版本号；激活版本与回滚目标永远保留。 */
+  pruneVersions(options?: KernelPruneOptions): Promise<readonly string[]>
+}
+
+export class KernelUpdater implements KernelUpdaterApi {
   private readonly layout: KernelInstallLayout
   private readonly target: KernelArtifactTarget
   private readonly fetch?: KernelFetch
@@ -211,7 +173,6 @@ export class KernelUpdater {
     return loadKernelUpdateManifest(resolved, { fetch: this.fetch, signal })
   }
 
-  /** Installs `version` side by side if it is not already installed and whole. */
   public async ensureInstalled(
     version: string,
     options: KernelEnsureInstalledOptions = {},
@@ -219,11 +180,6 @@ export class KernelUpdater {
     return this.exclusively(() => this.installVersion(version, options))
   }
 
-  /**
-   * Guarantees an active Kernel satisfying `requirement`, preferring the
-   * running version, then the newest acceptable local install, then the newest
-   * acceptable published release.
-   */
   public async ensureCompatible(
     requirement: KernelCompatibilityRequirement | string,
   ): Promise<KernelCompatibilityOutcome> {
@@ -233,11 +189,6 @@ export class KernelUpdater {
     return this.exclusively(() => this.resolveCompatible(resolved))
   }
 
-  /**
-   * Switches `current.json` to an installed version. When a health check is
-   * supplied it runs after the switch and a failure restores the previous
-   * pointer before the call rejects.
-   */
   public async activateVersion(
     version: string,
     options: KernelActivationOptions = {},
@@ -245,7 +196,6 @@ export class KernelUpdater {
     return this.exclusively(() => this.activate(version, options))
   }
 
-  /** Restores the pointer recorded as `previousVersion`. */
   public async rollback(
     options: KernelActivationOptions = {},
   ): Promise<KernelActivePointer> {
@@ -263,13 +213,6 @@ export class KernelUpdater {
     })
   }
 
-  /**
-   * Removes the oldest installs beyond the retention count. The active version
-   * and the recorded rollback target are always kept.
-   *
-   * `backups/` 里的指针备份跟着一起收：每次激活都会写一份（{@link backupPointer}），从来
-   * 没人清理，长跑的安装根里会无限堆积。
-   */
   public async pruneVersions(
     options: KernelPruneOptions = {},
   ): Promise<readonly string[]> {
@@ -313,8 +256,8 @@ export class KernelUpdater {
       return
     }
     const backups = entries
-      .filter((name) => name.startsWith('current.') && name.endsWith('.json'))
-      .map((name) => ({ name, updatedAt: readPointerBackupTimestamp(name) }))
+      .filter(isKernelPointerBackupFileName)
+      .map((name) => ({ name, updatedAt: kernelPointerBackupTimestamp(name) }))
       .sort((left, right) => left.updatedAt - right.updatedAt)
     for (const backup of backups.slice(0, Math.max(0, backups.length - retain))) {
       await rm(join(this.layout.backupsDirectory, backup.name), { force: true })
@@ -336,7 +279,12 @@ export class KernelUpdater {
       && acceptable.some((entry) => entry.version === pointer.version)
       ? pointer
       : undefined
-    if (isNotUndefined(running)) return runningKernelOutcome(running)
+    if (isNotUndefined(running)) return {
+        version: running.version,
+        installed: false,
+        activated: false,
+        pointer: running,
+      }
 
     const local = acceptable.at(-1)
     if (isNotUndefined(local)) return this.switchTo(local.version, false, requirement)
@@ -550,7 +498,7 @@ export class KernelUpdater {
     await writeJsonFileAtomic(
       join(
         this.layout.backupsDirectory,
-        `current.${previous.version}.${previous.updatedAt}.json`,
+        kernelPointerBackupFileName(previous),
       ),
       previous,
     )
@@ -580,12 +528,13 @@ export class KernelUpdater {
   private async exclusively<T>(operation: () => Promise<T>): Promise<T> {
     const run = this.queue.then(async () => {
       await ensureKernelInstallLayout(this.layout)
-      const lock = await KernelUpdateLock.acquire({
+      const lock = new KernelUpdateLock({
         lockPath: this.layout.lockPath,
         holderId: this.holderId,
         isProcessAlive: this.isProcessAlive,
         now: this.now,
       })
+      await lock.acquire()
       try {
         return await operation()
       } finally {
@@ -594,27 +543,5 @@ export class KernelUpdater {
     })
     this.queue = run.then(() => undefined, () => undefined)
     return run
-  }
-}
-
-/**
- * 从备份文件名里取回写入时刻：`current.<version>.<updatedAt>.json`。
- *
- * 版本号自己带点，所以按最后一段取；取不出就当 0（排在最旧，优先被清掉）。
- */
-function readPointerBackupTimestamp(name: string): number {
-  const segments = name.slice(0, -'.json'.length).split('.')
-  const updatedAt = Number(segments.at(-1))
-  return Number.isFinite(updatedAt) ? updatedAt : 0
-}
-
-function runningKernelOutcome(
-  pointer: KernelActivePointer,
-): KernelCompatibilityOutcome {
-  return {
-    version: pointer.version,
-    installed: false,
-    activated: false,
-    pointer,
   }
 }

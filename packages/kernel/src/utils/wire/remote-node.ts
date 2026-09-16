@@ -13,30 +13,89 @@
 // 因此 Node 永不发起调用,只应答;所有 invoke 由 Client 发出。
 import { z } from 'zod'
 
+import { KernelVersionAxes, RemoteNodeCloseCodes, RemoteNodeLimits } from '../../contract/constants'
+import type {
+  RemoteNodeAuthenticate,
+  RemoteNodeCancel,
+  RemoteNodeCapabilityDescriptor,
+  RemoteNodeChallenge,
+  RemoteNodeClientFrame,
+  RemoteNodeError,
+  RemoteNodeFatal,
+  RemoteNodeHello,
+  RemoteNodeIdentity,
+  RemoteNodeInvoke,
+  RemoteNodeManifest,
+  RemoteNodeManifestChanged,
+  RemoteNodeOperationDescriptor,
+  RemoteNodePair,
+  RemoteNodePaired,
+  RemoteNodePing,
+  RemoteNodePlatform,
+  RemoteNodePong,
+  RemoteNodeProgress,
+  RemoteNodeReady,
+  RemoteNodeResult,
+  RemoteNodeServerFrame,
+  RemoteNodeToolDescriptor,
+} from '../../types/wire'
+
+export type { RemoteNodeCloseCodeValue } from '../../types/wire'
+export type {
+  RemoteNodeAuthenticate,
+  RemoteNodeCancel,
+  RemoteNodeCapabilityDescriptor,
+  RemoteNodeChallenge,
+  RemoteNodeClientFrame,
+  RemoteNodeError,
+  RemoteNodeFatal,
+  RemoteNodeHello,
+  RemoteNodeIdentity,
+  RemoteNodeInvoke,
+  RemoteNodeManifest,
+  RemoteNodeManifestChanged,
+  RemoteNodeOperationDescriptor,
+  RemoteNodePair,
+  RemoteNodePaired,
+  RemoteNodePing,
+  RemoteNodePlatform,
+  RemoteNodePong,
+  RemoteNodeProgress,
+  RemoteNodeReady,
+  RemoteNodeResult,
+  RemoteNodeServerFrame,
+  RemoteNodeToolDescriptor,
+} from '../../types/wire'
+
 import { ScopeRefSchema } from './capability'
 
 /**
- * Remote Node transport 绑定版本。
+ * 远程节点 transport 绑定版本，等于 `KernelVersionAxes.remoteNodeTransport`。
  *
- * 与 KernelProtocolVersion 是两根轴。帧形状、握手与重连细节变化提升本号;
- * 能力调用信封的语义变化提升 KernelProtocolVersion。两端只接受完全相同的本号。
+ * 与 `KernelProtocolVersion` 是两根轴：帧形状、握手与重连细节变化提升本号；
+ * 能力调用信封的语义变化提升 `KernelProtocolVersion`。两端只接受完全相同的本号。
  */
-export const RemoteNodeProtocolVersion = 1
+export const RemoteNodeProtocolVersion = KernelVersionAxes.remoteNodeTransport
 
-/** 单帧上限:截图类输出走同一条连接,故按图片体量给,不按文本给。 */
-export const RemoteNodeMaxFrameBytes = 32 * 1_024 * 1_024
+/** 单帧上限；截图类输出走同一条连接，所以按图片体量给，不按文本给。 */
+export const RemoteNodeMaxFrameBytes = RemoteNodeLimits.maxFrameBytes
 
-/** 配对码有效期与失败锁定,和插件桥同一套人机节奏。 */
-export const RemoteNodePairingLifetimeMs = 5 * 60 * 1_000
-export const RemoteNodePairingMaxFailures = 5
-export const RemoteNodePairingLockoutMs = 30 * 1_000
+/** 配对码有效期。 */
+export const RemoteNodePairingLifetimeMs = RemoteNodeLimits.pairingWindowMs
 
-/** 心跳:Client 主动发,Node 侧据此判活。 */
-export const RemoteNodeHeartbeatIntervalMs = 15 * 1_000
-export const RemoteNodeIdleTimeoutMs = 60 * 1_000
+/** 配对连续失败多少次就锁定。 */
+export const RemoteNodePairingMaxFailures = RemoteNodeLimits.pairingFailureLimit
 
-export const RemoteNodePlatformSchema = z.enum(['darwin', 'linux', 'win32'])
-export type RemoteNodePlatform = z.infer<typeof RemoteNodePlatformSchema>
+/** 配对锁定时长。 */
+export const RemoteNodePairingLockoutMs = RemoteNodeLimits.pairingLockoutMs
+
+/** 心跳间隔；Client 主动发，Node 侧据此判活。 */
+export const RemoteNodeHeartbeatIntervalMs = RemoteNodeLimits.heartbeatIntervalMs
+
+/** 空闲多久判死。 */
+export const RemoteNodeIdleTimeoutMs = RemoteNodeLimits.idleTimeoutMs
+
+export const RemoteNodePlatformSchema = z.enum(['darwin', 'linux', 'win32']) satisfies z.ZodType<RemoteNodePlatform>
 
 /**
  * 节点身份。
@@ -51,17 +110,13 @@ export const RemoteNodeIdentitySchema = z.strictObject({
   arch: z.string().min(1),
   nodeVersion: z.string().min(1),
   epoch: z.string().min(1),
-})
-export type RemoteNodeIdentity = z.infer<typeof RemoteNodeIdentitySchema>
+}) satisfies z.ZodType<RemoteNodeIdentity>
 
 /** 能力操作:名字 + 该操作声明的权限位(Client 侧 broker 据此逐权限判定)。 */
 export const RemoteNodeOperationDescriptorSchema = z.strictObject({
   name: z.string().min(1),
   permissions: z.array(z.string().min(1)),
-})
-export type RemoteNodeOperationDescriptor = z.infer<
-  typeof RemoteNodeOperationDescriptorSchema
->
+}) satisfies z.ZodType<RemoteNodeOperationDescriptor>
 
 /**
  * 远端能力描述符。
@@ -74,10 +129,7 @@ export const RemoteNodeCapabilityDescriptorSchema = z.strictObject({
   capabilityId: z.string().min(1),
   version: z.string().min(1),
   operations: z.array(RemoteNodeOperationDescriptorSchema).min(1),
-})
-export type RemoteNodeCapabilityDescriptor = z.infer<
-  typeof RemoteNodeCapabilityDescriptorSchema
->
+}) satisfies z.ZodType<RemoteNodeCapabilityDescriptor>
 
 /**
  * 远端工具描述符:把一个能力操作投影成 Agent 主干可注册的工具。
@@ -93,10 +145,7 @@ export const RemoteNodeToolDescriptorSchema = z.strictObject({
   readOnly: z.boolean(),
   capabilityId: z.string().min(1),
   operation: z.string().min(1),
-})
-export type RemoteNodeToolDescriptor = z.infer<
-  typeof RemoteNodeToolDescriptorSchema
->
+}) satisfies z.ZodType<RemoteNodeToolDescriptor>
 
 /**
  * 节点能力清单。
@@ -108,16 +157,14 @@ export const RemoteNodeManifestSchema = z.strictObject({
   revision: z.string().min(1),
   capabilities: z.array(RemoteNodeCapabilityDescriptorSchema),
   tools: z.array(RemoteNodeToolDescriptorSchema),
-})
-export type RemoteNodeManifest = z.infer<typeof RemoteNodeManifestSchema>
+}) satisfies z.ZodType<RemoteNodeManifest>
 
 /** 错误信封;`retryable` 是给传输层重试策略读的,不是给模型读的。 */
 export const RemoteNodeErrorSchema = z.strictObject({
   code: z.string().min(1),
   message: z.string(),
   retryable: z.boolean(),
-})
-export type RemoteNodeError = z.infer<typeof RemoteNodeErrorSchema>
+}) satisfies z.ZodType<RemoteNodeError>
 
 // ---------------------------------------------------------------------------
 // Client → Node
@@ -133,8 +180,7 @@ export const RemoteNodeHelloSchema = z.strictObject({
   clientId: z.string().min(1),
   clientName: z.string().min(1),
   platform: RemoteNodePlatformSchema,
-})
-export type RemoteNodeHello = z.infer<typeof RemoteNodeHelloSchema>
+}) satisfies z.ZodType<RemoteNodeHello>
 
 /**
  * 配对:一次性人工仪式。Client 交出**公钥**,私钥永不上线。
@@ -145,17 +191,13 @@ export const RemoteNodePairSchema = z.strictObject({
   type: z.literal('pair'),
   pairingCode: z.string().regex(/^\d{6}$/u),
   publicKey: z.string().min(1),
-})
-export type RemoteNodePair = z.infer<typeof RemoteNodePairSchema>
+}) satisfies z.ZodType<RemoteNodePair>
 
 /** 认证:对 Node 下发的 challenge 做签名。每次连接一枚新 challenge,防重放。 */
 export const RemoteNodeAuthenticateSchema = z.strictObject({
   type: z.literal('authenticate'),
   signature: z.string().min(1),
-})
-export type RemoteNodeAuthenticate = z.infer<
-  typeof RemoteNodeAuthenticateSchema
->
+}) satisfies z.ZodType<RemoteNodeAuthenticate>
 
 /**
  * 能力调用。
@@ -173,22 +215,19 @@ export const RemoteNodeInvokeSchema = z.strictObject({
   scope: ScopeRefSchema.nullable(),
   input: z.unknown(),
   deadlineMs: z.number().int().positive(),
-})
-export type RemoteNodeInvoke = z.infer<typeof RemoteNodeInvokeSchema>
+}) satisfies z.ZodType<RemoteNodeInvoke>
 
 /** 取消在途调用。best-effort:Node 侧 abort 后仍会回一帧终态 result。 */
 export const RemoteNodeCancelSchema = z.strictObject({
   type: z.literal('cancel'),
   callId: z.string().min(1),
   reason: z.string(),
-})
-export type RemoteNodeCancel = z.infer<typeof RemoteNodeCancelSchema>
+}) satisfies z.ZodType<RemoteNodeCancel>
 
 export const RemoteNodePingSchema = z.strictObject({
   type: z.literal('ping'),
   at: z.number().int().nonnegative(),
-})
-export type RemoteNodePing = z.infer<typeof RemoteNodePingSchema>
+}) satisfies z.ZodType<RemoteNodePing>
 
 export const RemoteNodeClientFrameSchema = z.discriminatedUnion('type', [
   RemoteNodeHelloSchema,
@@ -197,8 +236,7 @@ export const RemoteNodeClientFrameSchema = z.discriminatedUnion('type', [
   RemoteNodeInvokeSchema,
   RemoteNodeCancelSchema,
   RemoteNodePingSchema,
-])
-export type RemoteNodeClientFrame = z.infer<typeof RemoteNodeClientFrameSchema>
+]) satisfies z.ZodType<RemoteNodeClientFrame>
 
 // ---------------------------------------------------------------------------
 // Node → Client
@@ -216,23 +254,20 @@ export const RemoteNodeChallengeSchema = z.strictObject({
   node: RemoteNodeIdentitySchema,
   challenge: z.string().min(1),
   paired: z.boolean(),
-})
-export type RemoteNodeChallenge = z.infer<typeof RemoteNodeChallengeSchema>
+}) satisfies z.ZodType<RemoteNodeChallenge>
 
 /** 配对成功。Client 据此把公钥/节点身份落盘,下次直接走 authenticate。 */
 export const RemoteNodePairedSchema = z.strictObject({
   type: z.literal('paired'),
   node: RemoteNodeIdentitySchema,
-})
-export type RemoteNodePaired = z.infer<typeof RemoteNodePairedSchema>
+}) satisfies z.ZodType<RemoteNodePaired>
 
 /** 认证通过,授予能力面。清单随本帧一次性下发。 */
 export const RemoteNodeReadySchema = z.strictObject({
   type: z.literal('ready'),
   node: RemoteNodeIdentitySchema,
   manifest: RemoteNodeManifestSchema,
-})
-export type RemoteNodeReady = z.infer<typeof RemoteNodeReadySchema>
+}) satisfies z.ZodType<RemoteNodeReady>
 
 /**
  * 清单变更主动推送(Node 侧开关被人改动时)。
@@ -242,10 +277,7 @@ export type RemoteNodeReady = z.infer<typeof RemoteNodeReadySchema>
 export const RemoteNodeManifestChangedSchema = z.strictObject({
   type: z.literal('manifest_changed'),
   manifest: RemoteNodeManifestSchema,
-})
-export type RemoteNodeManifestChanged = z.infer<
-  typeof RemoteNodeManifestChangedSchema
->
+}) satisfies z.ZodType<RemoteNodeManifestChanged>
 
 /**
  * 调用终态。
@@ -259,29 +291,25 @@ export const RemoteNodeResultSchema = z.strictObject({
   status: z.enum(['success', 'error', 'denied']),
   output: z.unknown().optional(),
   error: RemoteNodeErrorSchema.nullable(),
-})
-export type RemoteNodeResult = z.infer<typeof RemoteNodeResultSchema>
+}) satisfies z.ZodType<RemoteNodeResult>
 
 /** 逐调用进度事件。长任务(构建/签名)靠它出声,不靠拉长超时。 */
 export const RemoteNodeProgressSchema = z.strictObject({
   type: z.literal('progress'),
   callId: z.string().min(1),
   event: z.unknown(),
-})
-export type RemoteNodeProgress = z.infer<typeof RemoteNodeProgressSchema>
+}) satisfies z.ZodType<RemoteNodeProgress>
 
 export const RemoteNodePongSchema = z.strictObject({
   type: z.literal('pong'),
   at: z.number().int().nonnegative(),
-})
-export type RemoteNodePong = z.infer<typeof RemoteNodePongSchema>
+}) satisfies z.ZodType<RemoteNodePong>
 
 /** 连接级错误(认证失败、协议不符、帧超限)。发出后 Node 通常随即关闭连接。 */
 export const RemoteNodeFatalSchema = z.strictObject({
   type: z.literal('fatal'),
   error: RemoteNodeErrorSchema,
-})
-export type RemoteNodeFatal = z.infer<typeof RemoteNodeFatalSchema>
+}) satisfies z.ZodType<RemoteNodeFatal>
 
 export const RemoteNodeServerFrameSchema = z.discriminatedUnion('type', [
   RemoteNodeChallengeSchema,
@@ -292,19 +320,17 @@ export const RemoteNodeServerFrameSchema = z.discriminatedUnion('type', [
   RemoteNodeProgressSchema,
   RemoteNodePongSchema,
   RemoteNodeFatalSchema,
-])
-export type RemoteNodeServerFrame = z.infer<typeof RemoteNodeServerFrameSchema>
+]) satisfies z.ZodType<RemoteNodeServerFrame>
 
-/** 关闭码:4001 起是应用层语义,Client 据此决定是重连还是停手等人。 */
-export const RemoteNodeCloseCode = {
-  /** 协议版本不匹配——重连无用,必须升级某一端。 */
-  ProtocolMismatch: 4001,
-  /** 认证失败——重连无用,需要重新配对。 */
-  Unauthorized: 4002,
+/** 关闭码：4001 起是应用层语义，Client 据此决定是重连还是停手等人。 */
+export const RemoteNodeCloseCode = Object.freeze({
+  /** 协议版本不匹配——重连无用，必须升级某一端。 */
+  ProtocolMismatch: RemoteNodeCloseCodes.protocolMismatch,
+  /** 认证失败——重连无用，需要重新配对。 */
+  Unauthorized: RemoteNodeCloseCodes.unauthorized,
   /** 被同一 Client 的新连接顶替——不重连。 */
-  Replaced: 4003,
+  Replaced: RemoteNodeCloseCodes.superseded,
   /** 空闲超时或 Node 正常停机——可重连。 */
-  Transient: 4004,
-} as const
-export type RemoteNodeCloseCodeValue =
-  (typeof RemoteNodeCloseCode)[keyof typeof RemoteNodeCloseCode]
+  Transient: RemoteNodeCloseCodes.nodeStopped,
+})
+

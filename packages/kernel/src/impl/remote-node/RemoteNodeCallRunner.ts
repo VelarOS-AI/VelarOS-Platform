@@ -4,14 +4,11 @@
 // 刻意不认识连接:终态从哪条 socket 出去是 Server 的判断(断线期间产生的结果要留在缓存里等重连
 // 来取),runner 只负责执行、计时、去重与审计。
 import { isNotNull, isUndefined, Log, optionalWhen, toNullable } from '@velaros-ai/core'
-import type { TimerLease, TimerScope } from '@velaros-ai/core/utils/TimerScope'
+import type { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
-import type {
-  RemoteNodeActivityEvent,
-  RemoteNodeActivitySink,
-  RemoteNodeAuditSink,
-  RemoteNodeCapabilityInvoker,
-} from '../../types/remote-node'
+import type { RemoteNodeActivitySink, RemoteNodeAuditSink, RemoteNodeCapabilityInvoker } from '../../contract/requires'
+import type { RemoteNodeInFlightCall } from '../../types/remote'
+import type { RemoteNodeActivityEvent } from '../../types/remote-node'
 import type {
   RemoteNodeCancel,
   RemoteNodeError,
@@ -24,32 +21,53 @@ import { RemoteNodeResultCache } from './RemoteNodeResultCache'
 
 const log = Log.tag('RemoteNodeCallRunner')
 
+/** 装配一个调用执行器要的全部端口与参数。 */
 export interface RemoteNodeCallRunnerOptions {
+  /** 能力派发端口:把 wire 上的调用交给宿主 Kernel。 */
   readonly invoker: RemoteNodeCapabilityInvoker
+  /** 安全审计落点;每一条终态记一行元数据。 */
   readonly audit: RemoteNodeAuditSink
+  /** 可选的产品执行流;只做可观测性,失败不影响执行。 */
   readonly activity?: RemoteNodeActivitySink
+  /** 计时作用域;每次调用的截止定时器挂在它名下。 */
   readonly timers: TimerScope
+  /** 时钟源;耗时与审计时刻都从它取。 */
   readonly now: () => number
+  /** 同时执行的调用上限;超出的排队,不拒绝。 */
   readonly maxConcurrent: number
   /** 终态出口。可能一条连接都没有——那样结果就只留在回放缓存里,等重连后的重试来取。 */
   readonly deliver: (clientId: string, result: RemoteNodeResult) => void
 }
 
-/** 能力调用的执行与终态记账。 */
-
-interface RemoteNodeInFlightCall {
-  readonly callId: string
-  readonly clientId: string
-  readonly clientName: string
-  readonly capabilityId: string
-  readonly operation: string
-  readonly startedAt: number
-  readonly controller: AbortController
-  deadline: Nullable<TimerLease>
-  settled: boolean
+/**
+ * 能力调用的执行与终态记账。
+ *
+ * 一个服务端一个实例。刻意不认识连接:终态从哪条 socket 出去是 Server 的判断,
+ * runner 只负责执行、计时、去重与审计。
+ */
+export interface RemoteNodeCallRunnerApi {
+  /** 当前在途调用数;服务状态里展示的就是它。 */
+  readonly inFlight: number
+  /**
+   * 收一帧 invoke 并排进执行。
+   *
+   * 已有终态的 callId 直接回放;在途重复的一律忽略;清单修订号对不上时当场拒。
+   */
+  submit(
+    frame: RemoteNodeInvoke,
+    clientId: string,
+    clientName: string,
+    manifestRevision: string,
+  ): void
+  /** 收一帧 cancel:best-effort 中止后立刻回终态;未知或已终态的 callId 静默。 */
+  cancel(frame: RemoteNodeCancel): void
+  /** 停机:中止全部在途调用并写一条产品执行流终态,但**不**写安全审计。 */
+  abortAll(reason: string): void
+  /** 丢弃终态回放缓存。仅用于解除配对——缓存属于上一段信任关系。 */
+  forgetCompleted(): void
 }
 
-export class RemoteNodeCallRunner {
+export class RemoteNodeCallRunner implements RemoteNodeCallRunnerApi {
   private readonly pool: RemoteNodeInvocationPool
   private readonly completed = new RemoteNodeResultCache()
   private readonly calls = new Map<string, RemoteNodeInFlightCall>()

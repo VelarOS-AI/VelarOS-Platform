@@ -1,41 +1,48 @@
-import { randomUUID } from 'node:crypto'
-
 import { isNull, isUndefined } from '@velaros-ai/core'
 
 import type {
+  BoundCapabilityRequirement,
+  CapabilitySessionRecord,
+} from '../../types/serve'
+import {
+  capabilityOperationsCover,
+  capabilityScopesCover,
+} from '../../utils/serve/service'
+import type {
   CapabilityCallRequest,
   CapabilityRequireItem,
-  ScopeRef,
 } from '../../utils/wire/capability'
 
-export interface BoundCapabilityRequirement {
-  readonly capabilityId: string
-  /** `null` means every operation on the capability. */
-  readonly operations: Nullable<ReadonlySet<string>>
-  readonly scope: Nullable<ScopeRef>
-}
-
-export interface CapabilitySessionRecord {
-  readonly sessionId: string
-  readonly requires: readonly BoundCapabilityRequirement[]
-}
-
 /**
- * Per-connection ledger of capability sessions.
+ * 一条连接上的能力会话账本；实例归那条连接（RPC 连接或进程内传输各持一份）。
  *
- * Sessions never cross connections: clearing the ledger (disconnect) drops
- * every binding for that client.
+ * 会话永远不跨连接：清空账本（断线）就等于作废这个客户端的全部绑定。
  */
-export class CapabilitySessionLedger {
+export interface CapabilitySessionLedgerApi {
+  /** 开一条会话，把这批能力要求绑进去；返回带新会话 id 的记录。 */
+  open(requires: readonly CapabilityRequireItem[]): CapabilitySessionRecord
+  /** 关掉一条会话；返回它本来在不在账本里。 */
+  close(sessionId: string): boolean
+  /** 判这次调用在不在它声称的那条会话的授权范围内（能力、操作、作用域三项都要对上）。 */
+  covers(request: CapabilityCallRequest): boolean
+  /** 清掉全部会话（连接断开时调）。 */
+  clear(): void
+  /** 当前还开着几条会话。 */
+  size(): number
+}
+
+/** 按连接记账的能力会话账本。 */
+export class CapabilitySessionLedger implements CapabilitySessionLedgerApi {
   private readonly sessions = new Map<string, CapabilitySessionRecord>()
 
   public open(
     requires: readonly CapabilityRequireItem[],
   ): CapabilitySessionRecord {
-    const sessionId = randomUUID()
+    // 会话 id 只要在本进程内不撞；用平台自带的 UUID，免得根入口的引用链上多一个 node:crypto。
+    const sessionId = globalThis.crypto.randomUUID()
     const record: CapabilitySessionRecord = {
       sessionId,
-      requires: requires.map((item) => ({
+      requires: requires.map((item): BoundCapabilityRequirement => ({
         capabilityId: item.capabilityId,
         operations: isNull(item.operations)
           ? null
@@ -56,8 +63,8 @@ export class CapabilitySessionLedger {
     if (isUndefined(session)) return false
     for (const requirement of session.requires) {
       if (requirement.capabilityId !== request.capabilityId) continue
-      if (!operationsCover(requirement.operations, request.operation)) continue
-      if (!scopesCover(requirement.scope, request.scope)) continue
+      if (!capabilityOperationsCover(requirement.operations, request.operation)) continue
+      if (!capabilityScopesCover(requirement.scope, request.scope)) continue
       return true
     }
     return false
@@ -70,25 +77,4 @@ export class CapabilitySessionLedger {
   public size(): number {
     return this.sessions.size
   }
-}
-
-function operationsCover(
-  granted: Nullable<ReadonlySet<string>>,
-  operation: string,
-): boolean {
-  if (isNull(granted)) return true
-  return granted.has(operation)
-}
-
-function scopesCover(
-  granted: Nullable<ScopeRef>,
-  requested: Nullable<ScopeRef>,
-): boolean {
-  if (isNull(granted)) return true
-  if (isNull(requested)) return false
-  return (
-    granted.id === requested.id
-    && granted.ownerModuleId === requested.ownerModuleId
-    && granted.kind === requested.kind
-  )
 }

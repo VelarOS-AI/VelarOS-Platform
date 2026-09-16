@@ -4,20 +4,11 @@
 // 角色分工见 `@velaros-ai/kernel/contracts/protocol` 的 remote-node 契约:
 // `./node` 是无头能力提供者(被调),`./client` 是完整宿主侧的 isolation adapter(主调)。
 export { RemoteNodeProgressEventType } from '../contract/constants'
-export type {
-  RemoteNodeBindingResolver,
-  RemoteNodeIsolationAdapterOptions,
-  RemoteNodeProgressEvent,
-} from '../impl/remote-client/RemoteNodeIsolationAdapter'
+export type { RemoteNodeIsolationAdapterOptions } from '../impl/remote-client/RemoteNodeIsolationAdapter'
 export {
   RemoteNodeIsolationAdapter,
 } from '../impl/remote-client/RemoteNodeIsolationAdapter'
-export type {
-  RemoteNodeCapabilityBinding,
-  RemoteNodeProjection,
-  RemoteNodeProjectionInput,
-  RemoteNodeToolProjection,
-} from '../impl/remote-client/RemoteNodeProjection'
+export type { RemoteNodeProjection } from '../impl/remote-client/RemoteNodeProjection'
 export {
   createRemoteNodeProjection,
   namespaceRemoteId,
@@ -26,7 +17,12 @@ export {
   RemoteNodeModuleVersion,
   slugifyRemoteHostName,
 } from '../impl/remote-client/RemoteNodeProjection'
-export type { RemoteNodeKeyPair } from '../utils/remote/crypto'
+export { createRemoteNodeAuditLog } from '../impl/remote-node/FileRemoteNodeAuditLog'
+export { createRemoteNodeServerCredentialStore } from '../impl/remote-node/FileRemoteNodeServerCredentialStore'
+export type { RemoteNodeBindingResolver, RemoteNodeProgressEvent } from '../types/remote'
+export type { RemoteNodeCapabilityBinding, RemoteNodeProjectionInput, RemoteNodeToolProjection } from '../types/remote'
+export type { RemoteNodeKeyPair } from '../types/remote'
+export type { FrameDecodeResult } from '../types/remote'
 export {
   createChallenge,
   createClientId,
@@ -37,6 +33,5 @@ export {
   signChallenge,
   verifyChallengeSignature,
 } from '../utils/remote/crypto'
-export type { FrameDecodeResult } from '../utils/remote/frames'
 export { decodeClientFrame, decodeServerFrame, sendFrame } from '../utils/remote/frames'
 export { computeManifestRevision, createManifest } from '../utils/remote/manifest'

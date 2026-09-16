@@ -6,40 +6,23 @@
 //
 // 私钥出现在本文件的唯一形式是「进 signChallenge 产出一段签名」;新生成的密钥对随
 // `pair` 决定一起交还调用方,由调用方在 `paired` 到达后才落盘——配对没成就该被丢掉。
-import { isNonBlankString, isPresent } from '@velaros-ai/core'
+import { isNonBlankString, isNumber, isPresent, isRecord, Log } from '@velaros-ai/core'
 
-import {
-  RemoteNodeClientErrorCodes,
-  type RemoteNodeCredentials,
-} from '../../types/remote-client'
+import { RemoteNodeClientErrorCodes } from '../../contract/constants'
+import type {
+  RemoteNodeHandshakeInput,
+  RemoteNodeHandshakeStep,
+} from '../../types/remote'
 import { RemoteNodeClientError } from '../errors'
 import {
-  type RemoteNodeAuthenticate,
-  type RemoteNodeChallenge,
-  type RemoteNodePair,
+  type RemoteNodePlatform,
+  RemoteNodePlatformSchema,
   RemoteNodeProtocolVersion,
 } from '../wire/remote-node'
 
-import {
-  generateRemoteNodeKeyPair,
-  type RemoteNodeKeyPair,
-  signChallenge,
-} from './crypto'
+import { generateRemoteNodeKeyPair, signChallenge } from './crypto'
 
-export type RemoteNodeHandshakeStep =
-  | { readonly kind: 'authenticate', readonly frame: RemoteNodeAuthenticate }
-  | {
-      readonly kind: 'pair'
-      readonly frame: RemoteNodePair
-      readonly keyPair: RemoteNodeKeyPair
-    }
-  | { readonly kind: 'stop', readonly error: RemoteNodeClientError }
-
-export interface RemoteNodeHandshakeInput {
-  readonly challenge: RemoteNodeChallenge
-  readonly credentials: Nullable<RemoteNodeCredentials>
-  readonly pairingCode: LooseOptional<string>
-}
+const log = Log.tag('RemoteNodeHandshake')
 
 /**
  * 判定本次 challenge 该怎么应答。
@@ -93,4 +76,40 @@ export function planRemoteNodeHandshake(
       publicKey: keyPair.publicKey,
     },
   }
+}
+
+/** Node 侧只认三种平台;本机不在其列时按 darwin 上报,握手不该因为一个展示字段失败。 */
+export function resolveRemoteNodeHostPlatform(): RemoteNodePlatform {
+  const platform = process.platform
+  if (platform === 'linux' || platform === 'win32') return platform
+  return 'darwin'
+}
+
+/** Node 自报平台;不在协议认得的三种之内直接抛,监听端不该带着一个说不清的身份上线。 */
+export function resolveRemoteNodePlatform(): RemoteNodePlatform {
+  const parsed = RemoteNodePlatformSchema.safeParse(process.platform)
+  if (!parsed.success) {
+    throw new Error(`远程节点不支持 ${process.platform} 这个平台`)
+  }
+  return parsed.data
+}
+
+/**
+ * 从一帧解不开的报文里捞出「这是一帧版本不符的 hello」,捞不出就是 `null`。
+ *
+ * 必要之恶:`RemoteNodeClientFrameSchema` 用 `z.literal` 把版本钉死,版本不符的 hello 连
+ * discriminated union 都进不去,只会得到一句「不匹配 schema」。要给对端一个明确的升级方向,
+ * 只能在这里对原文做一次窄范围窥视——窥视结果只用于报错,不参与任何授权判断。
+ */
+export function readMismatchedHelloVersion(raw: { toString(): string }): Nullable<number> {
+  let value: unknown
+  try {
+    value = JSON.parse(raw.toString()) as unknown
+  } catch (error) {
+    log.debug('远程节点的帧不是合法 JSON', { error })
+    return null
+  }
+  if (!isRecord(value) || value.type !== 'hello') return null
+  const version = value.protocolVersion
+  return isNumber(version) && version !== RemoteNodeProtocolVersion ? version : null
 }

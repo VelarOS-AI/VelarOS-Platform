@@ -8,25 +8,14 @@
 // clientId 的另一条连接,抢回来只会两边互踢。
 import { isUndefined } from '@velaros-ai/core'
 
-import {
-  RemoteNodeClientErrorCodes,
-} from '../../types/remote-client'
+import { RemoteNodeClientErrorCodes } from '../../contract/constants'
+import type { RemoteNodeCloseAction } from '../../types/remote'
 import { RemoteNodeClientError } from '../errors'
 import { KernelTuning } from '../tuning'
 import {
   RemoteNodeCloseCode,
   type RemoteNodeCloseCodeValue,
 } from '../wire/remote-node'
-
-
-export type RemoteNodeCloseAction =
-  | { readonly kind: 'reconnect' }
-  | {
-      readonly kind: 'stop'
-      readonly error: RemoteNodeClientError
-      /** 停手同时该不该把本机凭据一并清掉(Node 已经不认它了)。 */
-      readonly clearCredentials: boolean
-    }
 
 const StopTable: Readonly<Record<number, {
   readonly code: RemoteNodeClientError['code']
@@ -51,6 +40,7 @@ const StopTable: Readonly<Record<number, {
   },
 }
 
+/** 按关闭码判「还试不试」:表里有的停手(带因由与要不要清凭据),表外一律重连。 */
 export function planRemoteNodeCloseAction(
   code: number | RemoteNodeCloseCodeValue,
 ): RemoteNodeCloseAction {
@@ -75,5 +65,8 @@ export function computeReconnectDelayMs(attempt: number): number {
       * 2 ** Math.min(Math.max(attempt, 0), KernelTuning.remoteClientReconnectMaxExponent),
   )
   const jitter = base * KernelTuning.remoteClientReconnectJitterRatio * (Math.random() * 2 - 1)
-  return Math.max(KernelTuning.remoteClientReconnectInitialDelayMs, Math.round(base + jitter))
+  return Math.min(
+    KernelTuning.remoteClientReconnectMaxDelayMs,
+    Math.max(KernelTuning.remoteClientReconnectInitialDelayMs, Math.round(base + jitter)),
+  )
 }

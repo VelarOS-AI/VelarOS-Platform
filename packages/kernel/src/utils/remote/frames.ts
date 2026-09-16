@@ -1,6 +1,7 @@
 // Platform Kernel 统一持有与宿主无关的远程节点实现。
 import { isString, isUndefined, Log } from '@velaros-ai/core'
 
+import type { FrameDecodeResult } from '../../types/remote'
 import {
   type RemoteNodeClientFrame,
   RemoteNodeClientFrameSchema,
@@ -11,10 +12,7 @@ import {
 
 const log = Log.tag('RemoteNodeFrames')
 
-export type FrameDecodeResult<TFrame> =
-  | { readonly ok: true, readonly frame: TFrame }
-  | { readonly ok: false, readonly reason: string }
-
+/** 把一帧原始载荷解成协议帧:先判类型与体积,再解 JSON,最后过 schema;任何一步失败都给可读因由。 */
 function decode<TFrame>(
   raw: unknown,
   parse: (input: unknown) => { success: boolean, data?: TFrame },
@@ -33,12 +31,14 @@ function decode<TFrame>(
   return { ok: true, frame: parsed.data }
 }
 
+/** 解一帧 Client 发来的报文(Node 侧收帧用);解不开只返回因由,不抛。 */
 export function decodeClientFrame(
   raw: unknown,
 ): FrameDecodeResult<RemoteNodeClientFrame> {
   return decode(raw, (input) => RemoteNodeClientFrameSchema.safeParse(input))
 }
 
+/** 解一帧 Node 发来的报文(Client 侧收帧用);解不开只返回因由,不抛。 */
 export function decodeServerFrame(
   raw: unknown,
 ): FrameDecodeResult<RemoteNodeServerFrame> {

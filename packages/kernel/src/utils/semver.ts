@@ -11,18 +11,11 @@
 import { isBlank, isEmpty, isNull, isUndefined } from '@velaros-ai/core'
 
 import { KernelErrorCodes } from '../contract/constants'
+import type { SemanticVersion } from '../types/runtime'
 
 import { KernelError } from './errors'
 
-export interface SemanticVersion {
-  readonly major: number
-  readonly minor: number
-  readonly patch: number
-  /** `-` 之后的预发布标识；没有就是 undefined（正式版）。 */
-  readonly prerelease?: string
-  /** `+` 之后的 build 元数据；按 SemVer §10 不参与比较。 */
-  readonly build?: string
-}
+export type { SemanticVersion } from '../types/runtime'
 
 /** `major.minor.patch[-prerelease][+build]`，允许一个前导 `v`。 */
 export const SemanticVersionPattern =
@@ -44,6 +37,7 @@ function invalidSemanticVersion(
   )
 }
 
+/** 解析一个语义化版本号；允许一个前导 `v`，解析不了就带码抛。 */
 export function parseSemanticVersion(
   source: string,
   kind: 'version' | 'range' = 'version',
@@ -60,6 +54,7 @@ export function parseSemanticVersion(
   }
 }
 
+/** 判断一个字符串是不是合法的语义化版本号，不抛错。 */
 export function isSemanticVersion(source: string): boolean {
   return SemanticVersionPattern.test(source)
 }
@@ -78,6 +73,7 @@ export function compareParsedSemanticVersions(
   return left.prerelease < right.prerelease ? -1 : 1
 }
 
+/** 比较两个版本号字符串，返回负数、0、正数；解析不了就带码抛。 */
 export function compareSemanticVersions(left: string, right: string): number {
   return compareParsedSemanticVersions(
     parseSemanticVersion(left),
@@ -101,6 +97,7 @@ export function satisfiesSemanticVersionRange(
     .some((clause) => satisfiesClause(parsed, clause))
 }
 
+/** 判断一个版本满不满足一个 `||` 分句（分句内的比较符之间是交集）。 */
 function satisfiesClause(version: SemanticVersion, clause: string): boolean {
   const normalized = clause.trim()
   if (isEmpty(normalized) || normalized === '*') return true
@@ -111,6 +108,7 @@ function satisfiesClause(version: SemanticVersion, clause: string): boolean {
     .every((comparator) => satisfiesComparator(version, comparator))
 }
 
+/** 判断一个版本满不满足单个比较符（`>=`、`<`、`=` 等）。 */
 function satisfiesComparator(
   version: SemanticVersion,
   comparator: string,
@@ -138,6 +136,7 @@ function satisfiesComparator(
   }
 }
 
+/** caret 范围：不改最左边那位非零数字。 */
 function satisfiesCaret(version: SemanticVersion, source: string): boolean {
   const lower = parseSemanticVersion(source, 'range')
   const upper: SemanticVersion = lower.major > 0
@@ -149,6 +148,7 @@ function satisfiesCaret(version: SemanticVersion, source: string): boolean {
     && compareParsedSemanticVersions(version, upper) < 0
 }
 
+/** tilde 范围：允许 patch 位往上走。 */
 function satisfiesTilde(version: SemanticVersion, source: string): boolean {
   const lower = parseSemanticVersion(source, 'range')
   const upper: SemanticVersion = {

@@ -1,28 +1,11 @@
-import type { ScopeRef } from '../../utils/wire/capability'
+import type { KernelClientAccessBroker } from '../../contract/requires'
+import type {
+  KernelClientAccessDecision,
+  KernelClientCapabilityBindRequest,
+} from '../../types/serve'
 
-export interface KernelClientCapabilityBindRequest {
-  readonly capabilityId: string
-  readonly operations: Nullable<readonly string[]>
-  readonly scope: Nullable<ScopeRef>
-}
 
-export type KernelClientAccessDecision =
-  | { readonly status: 'granted' }
-  | { readonly status: 'denied'; readonly reason: string }
-
-/**
- * Product / composition-root policy for external capability session binds.
- *
- * Distinct from the Host module permission broker: this gates whether a
- * connected Client may bind a loaded capability into a session.
- */
-export interface KernelClientAccessBroker {
-  requestBind(
-    request: KernelClientCapabilityBindRequest,
-  ): Promise<KernelClientAccessDecision>
-}
-
-/** Secure default: no external Client may bind without an injected policy. */
+/** 安全缺省：没注入策略时，任何外部 Client 都绑不上任何能力。 */
 export class DenyAllKernelClientAccessBroker
   implements KernelClientAccessBroker
 {
@@ -31,8 +14,7 @@ export class DenyAllKernelClientAccessBroker
   ): Promise<KernelClientAccessDecision> {
     return {
       status: 'denied',
-      reason:
-        `Capability "${request.capabilityId}" bind is denied by the host default`,
+      reason: `能力 "${request.capabilityId}" 的绑定被宿主的缺省策略拒绝`,
     }
   }
 }

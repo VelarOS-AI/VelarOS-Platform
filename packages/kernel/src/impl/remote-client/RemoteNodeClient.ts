@@ -1,7 +1,8 @@
 // Platform Kernel 统一持有与宿主无关的远程节点实现。
 // 域:跨机能力节点的 Client 侧连接——握手、判活、重连与会话状态。
 //
-// 在途调用簿在 `./pending-calls`,握手判定表在 `./handshake`;本文件只管这条链路本身。
+// 在途调用簿在 `./RemoteNodePendingCalls`,握手与关闭判定表在 `utils/remote/` 的 handshake
+// 与 close-policy;本文件只管这条链路本身。
 //
 // ## 不变量(改这些会破什么)
 //  - **epoch 是重连后唯一的可信性判据**:同 epoch 才允许按 callId 幂等重放(Node 侧回放已有
@@ -21,29 +22,26 @@ import {
 } from '@velaros-ai/core'
 import { type TimerLease, TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
-import {
-  RemoteNodeClientErrorCodes,
-  type RemoteNodeClientOptions,
-  type RemoteNodeConnectionState,
-  type RemoteNodeCredentials,
-  type RemoteNodeInvokeRequest,
-  type RemoteNodeManifestListener,
-  type RemoteNodeSession,
-  type RemoteNodeSocket,
-  type RemoteNodeSocketFactory,
-  type RemoteNodeStateListener,
-  type RemoteNodeStopListener,
-  type RemoteNodeUnsubscribe,
-} from '../../types/remote-client'
+import { RemoteNodeClientErrorCodes } from '../../contract/constants'
+import type { RemoteNodeSocket, RemoteNodeSocketFactory } from '../../contract/requires'
+import type { RemoteNodeKeyPair, RemoteNodeReadyWaiter } from '../../types/remote'
+import { type RemoteNodeClientFailure, type RemoteNodeClientOptions, type RemoteNodeConnectionState, type RemoteNodeCredentials, type RemoteNodeInvokeRequest, type RemoteNodeManifestListener, type RemoteNodeSession, type RemoteNodeStateListener, type RemoteNodeStopListener, type RemoteNodeUnsubscribe } from '../../types/remote-client'
 import { RemoteNodeClientError } from '../../utils/errors'
+import { remoteNodeDisposedError } from '../../utils/remote/calls'
 import {
   computeReconnectDelayMs,
   planRemoteNodeCloseAction,
 } from '../../utils/remote/close-policy'
-import { createClientId, type RemoteNodeKeyPair } from '../../utils/remote/crypto'
+import { createClientId } from '../../utils/remote/crypto'
 import { decodeServerFrame, sendFrame } from '../../utils/remote/frames'
-import { planRemoteNodeHandshake } from '../../utils/remote/handshake'
-import { createRemoteNodeWebSocket } from '../../utils/remote/ws-socket'
+import {
+  planRemoteNodeHandshake,
+  resolveRemoteNodeHostPlatform,
+} from '../../utils/remote/handshake'
+import {
+  createRemoteNodeWebSocket,
+  detachRemoteNodeSocket,
+} from '../../utils/remote/ws-socket'
 import {
   type RemoteNodeCancel,
   type RemoteNodeChallenge,
@@ -62,9 +60,34 @@ import { createAbortError, RemoteNodePendingCalls } from './RemoteNodePendingCal
 
 const log = Log.tag('RemoteNodeClient')
 
-interface ReadyWaiter {
-  readonly resolve: (session: RemoteNodeSession) => void
-  readonly reject: (error: Error) => void
+/**
+ * 一条到远程能力节点的长连接。
+ *
+ * 一台远端主机一个实例,由装配方持有并在多个远端模块之间共享;断线重连是它自己的事,
+ * 调用方只管调。
+ */
+export interface RemoteNodeClientApi {
+  /** 当前连接态;`stopped` 是终态,只有 dispose 与重建能离开它。 */
+  readonly connectionState: RemoteNodeConnectionState
+  /** 当前会话(对端身份与清单);没握上手时是 `null`。 */
+  readonly currentSession: Nullable<RemoteNodeSession>
+  /** 停手因由;非空即表示本实例已进入终态,不会再自行重连。 */
+  readonly stopReason: Nullable<RemoteNodeClientFailure>
+  /** 点火并等首次 `ready`,兑现本次会话;凭据读不出或对端判决停手时拒绝。 */
+  connect(): Promise<RemoteNodeSession>
+  /** 发起一次远端能力调用,兑现能力输出;失败一律是 `RemoteNodeClientError`,带 `resultUnknown`。 */
+  invoke(
+    request: RemoteNodeInvokeRequest,
+    signal?: LooseOptional<AbortSignal>,
+  ): Promise<unknown>
+  /** 订阅清单变更(含重连后发现 revision 已变);返回退订函数。 */
+  onManifestChanged(listener: RemoteNodeManifestListener): RemoteNodeUnsubscribe
+  /** 订阅连接态变化;返回退订函数。 */
+  onStateChanged(listener: RemoteNodeStateListener): RemoteNodeUnsubscribe
+  /** 订阅停手通知:协议不符 / 认证失败 / 被顶替——这三种都要人来处理;返回退订函数。 */
+  onStopped(listener: RemoteNodeStopListener): RemoteNodeUnsubscribe
+  /** 回收本实例:断连、清簿、判死全部在途调用;重复调用无副作用。 */
+  dispose(): void
 }
 
 /**
@@ -73,10 +96,10 @@ interface ReadyWaiter {
  * 生命周期:`connect()` 点火并在首次 `ready` 兑现;此后断线由本对象自行退避重连,调用方
  * 不需要(也不应该)重建实例——重建会丢掉在途调用簿与 epoch 记忆。
  */
-export class RemoteNodeClient {
+export class RemoteNodeClient implements RemoteNodeClientApi {
   private readonly timers = new TimerScope({ name: 'RemoteNodeClient' })
   private readonly calls: RemoteNodePendingCalls
-  private readonly readyWaiters = new Set<ReadyWaiter>()
+  private readonly readyWaiters = new Set<RemoteNodeReadyWaiter>()
   private readonly manifestListeners = new Set<RemoteNodeManifestListener>()
   private readonly stateListeners = new Set<RemoteNodeStateListener>()
   private readonly stopListeners = new Set<RemoteNodeStopListener>()
@@ -99,7 +122,7 @@ export class RemoteNodeClient {
 
   public constructor(private readonly options: RemoteNodeClientOptions) {
     this.socketFactory = options.socketFactory ?? createRemoteNodeWebSocket
-    this.platform = options.platform ?? resolveHostPlatform()
+    this.platform = options.platform ?? resolveRemoteNodeHostPlatform()
     this.calls = new RemoteNodePendingCalls(this.timers, {
       send: (frame) => this.write(frame),
       // 只有就绪时才交出摘要;其余状态返回 null,调用留在簿里排队。
@@ -117,8 +140,7 @@ export class RemoteNodeClient {
     return this.session
   }
 
-  /** 停手因由;非空即表示本实例已进入终态,不会再自行重连。 */
-  public get stopReason(): Nullable<RemoteNodeClientError> {
+  public get stopReason(): Nullable<RemoteNodeClientFailure> {
     return this.stopError
   }
 
@@ -128,7 +150,7 @@ export class RemoteNodeClient {
    * 重复调用共享同一条连接:已就绪直接返回当前会话,未就绪则挂在同一批 waiter 上。
    */
   public async connect(): Promise<RemoteNodeSession> {
-    if (this.disposed) throw this.disposedError()
+    if (this.disposed) throw remoteNodeDisposedError()
     if (isPresent(this.stopError)) throw this.stopError
     if (isPresent(this.session) && this.state === 'ready') return this.session
 
@@ -171,7 +193,7 @@ export class RemoteNodeClient {
     request: RemoteNodeInvokeRequest,
     signal?: LooseOptional<AbortSignal>,
   ): Promise<unknown> {
-    if (this.disposed) throw this.disposedError()
+    if (this.disposed) throw remoteNodeDisposedError()
     if (isPresent(this.stopError)) throw this.stopError
     if (isTrue(signal?.aborted)) throw createAbortError()
     return this.calls.track(request, signal)
@@ -208,10 +230,10 @@ export class RemoteNodeClient {
     this.reconnect = null
     this.timers.dispose()
     this.setState('stopped')
-    const error = this.disposedError()
+    const error = remoteNodeDisposedError()
     this.rejectReadyWaiters(error)
     this.calls.failAll(error.code, error.message)
-    this.detachSocket(socket)
+    detachRemoteNodeSocket(socket)
     socket?.close(1000, '客户端已回收')
     this.manifestListeners.clear()
     this.stateListeners.clear()
@@ -369,7 +391,7 @@ export class RemoteNodeClient {
 
   private handleClose(socket: RemoteNodeSocket, code: number): void {
     if (this.socket !== socket) return
-    this.detachSocket(socket)
+    detachRemoteNodeSocket(socket)
     this.socket = null
     this.stopHeartbeat()
     if (this.disposed) return
@@ -387,11 +409,6 @@ export class RemoteNodeClient {
       })
     }
     this.stop(action.error)
-  }
-
-  private detachSocket(socket: LooseOptional<RemoteNodeSocket>): void {
-    if (!isPresent(socket)) return
-    socket.removeAllListeners()
   }
 
   private write(frame: RemoteNodeInvoke | RemoteNodeCancel): boolean {
@@ -470,7 +487,7 @@ export class RemoteNodeClient {
     const socket = this.socket
     this.socket = null
     this.session = null
-    this.detachSocket(socket)
+    detachRemoteNodeSocket(socket)
     socket?.close(1000, '客户端已停止')
     this.setState('stopped')
     this.rejectReadyWaiters(error)
@@ -510,20 +527,4 @@ export class RemoteNodeClient {
     this.readyWaiters.clear()
     for (const waiter of waiters) waiter.reject(error)
   }
-
-  private disposedError(): RemoteNodeClientError {
-    return new RemoteNodeClientError({
-      code: RemoteNodeClientErrorCodes.Disposed,
-      message: '远程节点客户端已回收',
-      resultUnknown: false,
-      retryable: false,
-    })
-  }
-}
-
-/** Node 侧只认三种平台;本机不在其列时按 darwin 上报,握手不该因为一个展示字段失败。 */
-function resolveHostPlatform(): RemoteNodePlatform {
-  const platform = process.platform
-  if (platform === 'linux' || platform === 'win32') return platform
-  return 'darwin'
 }
