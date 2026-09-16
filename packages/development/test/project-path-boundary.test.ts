@@ -9,8 +9,7 @@ import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from '
 
 import { createProjectKernel } from '@velaros-ai/project'
 
-import { executeProjectCodeLanguageQuery, type LanguageToolContext } from '../src'
-import { clearTypeScriptProjectCache } from '../src/runtime/TypeScriptProjectHost'
+import { languageQueries, type LanguageToolContext, typeScriptProjects } from '../src/exports/index'
 
 setDefaultTimeout(30_000)
 
@@ -33,7 +32,7 @@ async function createContext(projectRoot: string): Promise<LanguageToolContext> 
 }
 
 async function diagnose(path: string): Promise<{ scannedFiles: number; note?: string }> {
-  return (await executeProjectCodeLanguageQuery(
+  return (await languageQueries.run(
     { action: 'language_diagnostics', path },
     await createContext(root)
   )) as unknown as { scannedFiles: number; note?: string }
@@ -59,7 +58,7 @@ beforeAll(async () => {
 })
 
 afterAll(async () => {
-  clearTypeScriptProjectCache()
+  typeScriptProjects.release()
   // 只删本测试自己在系统临时目录下建的目录
   const temporaryRoot = await realpath(tmpdir())
   await Promise.all(

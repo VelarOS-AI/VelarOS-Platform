@@ -332,6 +332,37 @@ export const GovernedModules = [
     acceptance: 'spec/acceptance.test.ts',
   },
   {
+    directory: 'development',
+    name: '@velaros-ai/development',
+    // 没有模型面工具：不登记 toolsFile、toolDefiner、hostPort。模型看到的 project:code 归 @velaros-ai/project，
+    // 本包只提供它背后的语言服务实现（宿主拿 createProjectCodeQuery 去实现 ProjectToolApi.queryCode）
+    contract: 'src/contract',
+    types: 'src/types',
+    portable: 'development.ts',
+    impl: 'src/impl',
+    utils: 'src/utils',
+    tuning: 'tuning.ts',
+    exports: 'src/exports',
+    // 根入口要读磁盘、要拉语言服务子进程，只给 Node；渲染进程只能加载可移植数据
+    browserSafeEntries: ['contracts.ts'],
+    // 不读环境变量：标准库目录读的是 Electron 的 process.resourcesPath，不是环境变量
+    layers: [
+      // 代码查询的两路分派；外部语言服务集合（两者互不依赖）
+      ['ProjectCodeQuery.ts', 'ExternalLanguageService.ts'],
+      // 语言查询的分派与合并；一个外部语言服务进程的客户端
+      ['LanguageQueries.ts', 'ExternalLanguageServerClient.ts'],
+      // 内置语言服务的登记处：这次查询该由谁答
+      ['LanguageServiceRegistry.ts'],
+      // 两个内置语言服务
+      ['JsTsLanguageService.ts', 'PythonLanguageService.ts'],
+      // ts.LanguageService 池
+      ['TypeScriptProjectPool.ts'],
+    ],
+    card: 'MODULE.md',
+    invariants: 'spec/invariants.md',
+    acceptance: 'spec/acceptance.test.ts',
+  },
+  {
     directory: 'browser',
     name: '@velaros-ai/browser',
     // 改造中：卡片与验收还没写；status 标 migrating，门禁照查照报剩下多少条，不计入失败。
@@ -359,8 +390,8 @@ export const GovernedModules = [
       ['engines/'],
       // 协议、会话状态、站点工作区，互不依赖
       ['cdp/', 'session/', 'workspace/'],
-      // 纯策略门面与 React 合成
-      ['policies/', 'BrowserComposition.ts'],
+      // React 合成
+      ['BrowserComposition.ts'],
     ],
     toolDefiner: 'defineBrowserTool',
     // 卡片与不变量登记是改造最后一段的事，这三份现在还不存在，照样登记，燃尽表里看得到

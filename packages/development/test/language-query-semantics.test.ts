@@ -11,11 +11,8 @@ import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from '
 
 import { createProjectKernel } from '@velaros-ai/project'
 
-import { executeProjectCodeLanguageQuery, type LanguageToolContext } from '../src'
-import {
-  acquireTypeScriptLanguageService,
-  clearTypeScriptProjectCache,
-} from '../src/runtime/TypeScriptProjectHost'
+import { languageQueries, type LanguageToolContext, typeScriptProjects } from '../src/exports/index'
+import { typeScriptProjectPool } from '../src/impl/TypeScriptProjectPool'
 
 setDefaultTimeout(30_000)
 
@@ -55,7 +52,7 @@ async function createContext(): Promise<LanguageToolContext> {
 }
 
 async function run(input: Record<string, unknown>): Promise<Record<string, any>> {
-  return (await executeProjectCodeLanguageQuery(
+  return (await languageQueries.run(
     input as never,
     await createContext()
   )) as Record<string, any>
@@ -76,7 +73,7 @@ beforeAll(async () => {
 })
 
 afterAll(async () => {
-  clearTypeScriptProjectCache()
+  typeScriptProjects.release()
   const temporaryRoot = await realpath(tmpdir())
   if (root.startsWith(temporaryRoot)) await rm(root, { recursive: true, force: true })
 })
@@ -111,7 +108,7 @@ describe('find_symbols / list_exports', () => {
 
 describe('TypeScript 语言服务池', () => {
   test('超过上限时淘汰最久未用的项目，池不再只增不减', async () => {
-    clearTypeScriptProjectCache()
+    typeScriptProjects.release()
     const roots: string[] = []
     const temporaryRoot = await realpath(tmpdir())
 
@@ -126,7 +123,7 @@ describe('TypeScript 语言服务池', () => {
         await writeFile(join(projectRoot, 'main.ts'), `export const value${index} = ${index}\n`)
       }
 
-      const first = acquireTypeScriptLanguageService(
+      const first = typeScriptProjectPool.acquire(
         roots[0],
         join(roots[0], 'main.ts'),
         [join(roots[0], 'main.ts')],
@@ -135,7 +132,7 @@ describe('TypeScript 语言服务池', () => {
       expect(first.isCurrent()).toBe(true)
 
       for (const projectRoot of roots.slice(1)) {
-        acquireTypeScriptLanguageService(
+        typeScriptProjectPool.acquire(
           projectRoot,
           join(projectRoot, 'main.ts'),
           [join(projectRoot, 'main.ts')],
@@ -146,7 +143,7 @@ describe('TypeScript 语言服务池', () => {
       // 第一个项目已经被挤出池子：调用方本来就按 isCurrent() 处理服务被回收的情况。
       expect(first.isCurrent()).toBe(false)
     } finally {
-      clearTypeScriptProjectCache()
+      typeScriptProjects.release()
       await Promise.all(
         roots
           .filter((path) => path.startsWith(temporaryRoot))

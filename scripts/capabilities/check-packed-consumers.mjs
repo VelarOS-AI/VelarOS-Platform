@@ -180,10 +180,11 @@ const consumerTypeFixtures = new Map([
   [
     '@velaros-ai/development',
     `import {
-  executeProjectCodeLanguageQuery,
+  languageQueries,
   type LanguageReadPort,
   type LanguageToolContext,
-} from '@velaros-ai/development/runtime'
+} from '@velaros-ai/development'
+import { BuiltinExternalLanguageServers } from '@velaros-ai/development/contracts'
 
 declare const source: LanguageReadPort
 
@@ -191,12 +192,12 @@ const languageContext: LanguageToolContext = {
   abortSignal: new AbortController().signal,
   project: {
     getRootPath: () => '/workspace/example',
-    runInDirectory: async (_path, action) => action(),
     kernel: async () => source,
   },
 }
 
-void executeProjectCodeLanguageQuery({ action: 'find_symbols' }, languageContext)
+void languageQueries.run({ action: 'find_symbols' }, languageContext)
+void BuiltinExternalLanguageServers.length
 `,
   ],
   [

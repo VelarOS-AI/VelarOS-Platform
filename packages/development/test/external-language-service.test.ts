@@ -4,7 +4,7 @@ import { join } from 'node:path'
 
 import { afterEach, describe, expect, test } from 'bun:test'
 
-import { ExternalLanguageService } from '../src/runtime/ExternalLanguageService'
+import { createExternalLanguageService } from '../src/exports/index'
 
 const roots: string[] = []
 
@@ -20,7 +20,7 @@ describe('ExternalLanguageService', () => {
     await writeFile(join(root, 'sample.foo'), 'example')
     const outsideFile = join(outsideRoot, 'outside.foo')
     await writeFile(outsideFile, 'outside')
-    const service = new ExternalLanguageService(root, [{
+    const service = createExternalLanguageService(root, [{
       id: 'missing-test-server',
       command: 'velaros-definitely-missing-language-server',
       args: [],

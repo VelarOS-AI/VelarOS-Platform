@@ -9,9 +9,9 @@ import { ProjectCodeLanguageActions } from '@velaros-ai/project/contracts'
 
 import {
   createProjectCodeQuery,
-  executeProjectCodeLanguageQuery,
+  languageQueries,
   type LanguageToolContext,
-} from '../src'
+} from '../src/exports/index'
 
 describe('@velaros-ai/development', () => {
   test('routes CodeGraph actions through the optional Project index overlay', async () => {
@@ -25,9 +25,9 @@ describe('@velaros-ai/development', () => {
     })
 
     await expect(
-      queryCode({ action: 'index_status' }, {} as never)
-    ).resolves.toEqual({ source: 'codegraph', action: 'index_status' })
-    expect(calls).toEqual(['index_status'])
+      queryCode({ action: 'explore', nodeIds: ['n1'] }, {} as never)
+    ).resolves.toEqual({ source: 'codegraph', action: 'explore' })
+    expect(calls).toEqual(['explore'])
     expect(ProjectCodeLanguageActions).toContain('find_symbols')
     expect(ProjectCodeLanguageActions).not.toContain('build_index' as never)
   })
@@ -38,7 +38,7 @@ describe('@velaros-ai/development', () => {
       query: async () => null,
     })
 
-    await expect(queryCode({ action: 'index_status' }, {} as never)).rejects.toThrow(
+    await expect(queryCode({ action: 'explore', nodeIds: ['n1'] }, {} as never)).rejects.toThrow(
       '需要安装并启用 CodeGraph'
     )
   })
@@ -61,7 +61,7 @@ describe('@velaros-ai/development', () => {
       }
 
       // 端口上只剩项目根与内核读端口：路径一律相对项目根，没有「按目录执行」。
-      const result = await executeProjectCodeLanguageQuery(
+      const result = await languageQueries.run(
         { action: 'find_symbols', query: 'UserService', exact: true },
         context
       )
@@ -95,7 +95,7 @@ describe('@velaros-ai/development', () => {
       },
     }
     await expect(
-      executeProjectCodeLanguageQuery({ action: 'find_symbols' }, context)
+      languageQueries.run({ action: 'find_symbols' }, context)
     ).rejects.toThrow('language query cancelled')
     expect(reads).toBe(0)
   })

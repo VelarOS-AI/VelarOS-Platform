@@ -7,16 +7,9 @@ import * as ts from 'typescript'
 
 import { createProjectKernel, typescriptPlugin } from '@velaros-ai/project'
 
-import {
-  configureTypeScriptLibraryDirectory,
-  executeProjectCodeLanguageQuery,
-  type LanguageToolContext,
-} from '../src'
-import { resolveLanguageServices } from '../src/runtime/LanguageNavigation'
-import {
-  clearTypeScriptProjectCache,
-  groupFilesByTypeScriptProject,
-} from '../src/runtime/TypeScriptProjectHost'
+import { languageQueries, type LanguageToolContext, typeScriptProjects } from '../src/exports/index'
+import { languageServiceRegistry } from '../src/impl/LanguageServiceRegistry'
+import { groupFilesByTypeScriptProject } from '../src/utils/typescript-config'
 
 // 用例跑的是真实类型检查与数百个文件的夹具，机器繁忙时会超过默认的 5 秒。
 setDefaultTimeout(30_000)
@@ -78,7 +71,7 @@ async function diagnoseWith(
   context: LanguageToolContext,
   input: DiagnosticsInput
 ): Promise<DiagnosticsPayload> {
-  return (await executeProjectCodeLanguageQuery(
+  return (await languageQueries.run(
     { action: 'language_diagnostics', ...input },
     context
   )) as unknown as DiagnosticsPayload
@@ -188,11 +181,11 @@ afterEach(() => {
   ts.sys.getExecutingFilePath = originalExecutingFilePath
   // Electron 的类型把 resourcesPath 声明为只读必选，delete 运算符过不了类型检查。
   Reflect.deleteProperty(process, 'resourcesPath')
-  configureTypeScriptLibraryDirectory(null)
+  typeScriptProjects.configureLibraryDirectory(null)
 })
 
 afterAll(async () => {
-  clearTypeScriptProjectCache()
+  typeScriptProjects.release()
   await Promise.all(
     [root, workspace, scratch].map((path) => rm(path, { recursive: true, force: true }))
   )
@@ -212,7 +205,7 @@ describe('language_diagnostics 标准库定位', () => {
 
   test('typescript 包旁缺标准库时回退到宿主声明的目录', async () => {
     simulatePackagedTypeScript()
-    configureTypeScriptLibraryDirectory(bundledLibraryDirectory)
+    typeScriptProjects.configureLibraryDirectory(bundledLibraryDirectory)
 
     const result = await diagnose({ path: 'src/typed.ts' })
 
@@ -227,7 +220,7 @@ describe('language_diagnostics 标准库定位', () => {
     await symlink(bundledLibraryDirectory, join(resourcesPath, 'typescript', 'lib'))
     simulatePackagedTypeScript()
     electronProcess.resourcesPath = resourcesPath
-    clearTypeScriptProjectCache()
+    typeScriptProjects.release()
 
     const result = await diagnose({ path: 'src/typed.ts' })
 
@@ -240,7 +233,7 @@ describe('language_diagnostics 标准库定位', () => {
     await writeFile(join(root, 'src', 'syntax.ts'), 'export const value = (1\n')
     try {
       simulatePackagedTypeScript()
-      clearTypeScriptProjectCache()
+      typeScriptProjects.release()
 
       const typed = await diagnose({ path: 'src/typed.ts' })
       expect(typed.degraded).toContain('未找到 TypeScript 标准库声明')
@@ -266,7 +259,7 @@ describe('language_diagnostics 标准库定位', () => {
       await symlink(join(bundledLibraryDirectory, fileName), join(partialLibraryDirectory, fileName))
     }
     simulatePackagedTypeScript()
-    configureTypeScriptLibraryDirectory(partialLibraryDirectory)
+    typeScriptProjects.configureLibraryDirectory(partialLibraryDirectory)
 
     const result = await diagnose({ path: 'src/typed.ts' })
 
@@ -275,7 +268,7 @@ describe('language_diagnostics 标准库定位', () => {
   })
 
   test('宿主声明的标准库目录必须是绝对路径', () => {
-    expect(() => configureTypeScriptLibraryDirectory('typescript/lib')).toThrow('绝对路径')
+    expect(() => typeScriptProjects.configureLibraryDirectory('typescript/lib')).toThrow('绝对路径')
   })
 })
 
@@ -452,10 +445,10 @@ describe('language_diagnostics 目录扫描', () => {
 describe('language 参数', () => {
   test('服务 id、语言名与扩展名简写都选中同一个语言服务', () => {
     for (const language of ['jsts', 'JSTS', 'typescript', 'TypeScript', 'javascript', 'ts', 'tsx', '.mjs'])
-      expect(resolveLanguageServices(language).map((service) => service.id)).toEqual(['jsts'])
+      expect(languageServiceRegistry.resolveLanguageServices(language).map((service) => service.id)).toEqual(['jsts'])
     for (const language of ['python', 'Python', 'py'])
-      expect(resolveLanguageServices(language).map((service) => service.id)).toEqual(['python'])
-    expect(resolveLanguageServices('cobol')).toEqual([])
+      expect(languageServiceRegistry.resolveLanguageServices(language).map((service) => service.id)).toEqual(['python'])
+    expect(languageServiceRegistry.resolveLanguageServices('cobol')).toEqual([])
   })
 
   test('language 写成 typescript 时照常诊断，而不是返回零文件', async () => {
@@ -534,7 +527,7 @@ describe('language_diagnostics 多配置与并发', () => {
   for (const [interference, path, expectedErrors] of interferences) {
     test(`让出期间并发查询${interference}后，目录诊断仍然完整`, async () => {
       // 先由只拥有 src 的请求建池：tests 文件只作为 overlay 进入程序，而不在磁盘快照里。
-      clearTypeScriptProjectCache()
+      typeScriptProjects.release()
       await diagnose({ path: 'pkg/src/b.ts' }, 'core', workspace)
       const concurrentContext = await createContext('core', workspace)
       let concurrent: Nullable<Promise<DiagnosticsPayload>> = null

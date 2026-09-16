@@ -5,7 +5,7 @@ import {
 } from '@velaros-ai/agent/runtime'
 import { fileContextFor, ToolContractDiscoveryDescriptors, readToolSchemaDiscoveryNames } from '@velaros-ai/agent/tool-contract'
 import { ModelRequestClient } from '@velaros-ai/model'
-import { executeProjectCodeLanguageQuery, type LanguageReadPort, type LanguageToolContext } from '@velaros-ai/development/runtime'
+import { languageQueries, type LanguageReadPort, type LanguageToolContext } from '@velaros-ai/development'
 import { mountMemoryAdapter, type MountMemoryAdapterInput } from '@velaros-ai/memory/adapter-kernel'
 import { ComputerOperationMetadata, ComputerToolOperations, type ComputerOperation } from '@velaros-ai/computer/contracts'
 import { projectFileContext, type ProjectFileContextCarrier } from '@velaros-ai/project'
@@ -21,7 +21,7 @@ const languageContext: LanguageToolContext = {
     kernel: async () => source,
   },
 }
-void executeProjectCodeLanguageQuery({ action: 'find_symbols' }, languageContext)
+void languageQueries.run({ action: 'find_symbols' }, languageContext)
 
 declare const backend: NonNullable<MountMemoryAdapterInput['backend']>
 declare const config: MountMemoryAdapterInput['config']

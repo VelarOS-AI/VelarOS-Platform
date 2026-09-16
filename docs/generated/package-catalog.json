@@ -80,11 +80,11 @@
       "domain": "capabilities",
       "directory": "packages/development",
       "name": "@velaros-ai/development",
-      "version": "1.2.0",
-      "description": "Reusable language-service runtime for the Project code-understanding tool.",
+      "version": "2.0.0",
+      "description": "Project 代码理解背后的语言服务库：JavaScript/TypeScript 与 Python 的即时导航与诊断。",
       "exportSubpaths": [
         ".",
-        "./runtime"
+        "./contracts"
       ],
       "repositoryDirectory": "packages/development"
     },

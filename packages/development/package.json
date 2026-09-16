@@ -1,10 +1,10 @@
 {
   "name": "@velaros-ai/development",
-  "version": "1.2.0",
+  "version": "2.0.0",
   "velaros": {
     "platform": "0.6"
   },
-  "description": "Reusable language-service runtime for the Project code-understanding tool.",
+  "description": "Project 代码理解背后的语言服务库：JavaScript/TypeScript 与 Python 的即时导航与诊断。",
   "license": "Apache-2.0",
   "author": "VelarOS",
   "type": "module",
@@ -12,16 +12,16 @@
   "engines": {
     "node": ">=20.0.0"
   },
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "main": "./dist/exports/index.js",
+  "types": "./dist/exports/index.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "types": "./dist/exports/index.d.ts",
+      "import": "./dist/exports/index.js"
     },
-    "./runtime": {
-      "types": "./dist/runtime/index.d.ts",
-      "import": "./dist/runtime/index.js"
+    "./contracts": {
+      "types": "./dist/exports/contracts.d.ts",
+      "import": "./dist/exports/contracts.js"
     }
   },
   "files": [
@@ -35,7 +35,7 @@
     "lint": "eslint . --quiet",
     "clean": "rm -rf dist",
     "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/capabilities/build/fix-esm-extensions.mjs dist && node ../../scripts/build/normalize-package-declarations.mjs",
-    "test": "bun run build && bun test test/development.test.ts test/language-diagnostics.test.ts test/project-path-boundary.test.ts test/language-query-semantics.test.ts test/ExternalLanguageService.test.ts",
+    "test": "bun run build && bun test spec/acceptance.test.ts test/development.test.ts test/language-diagnostics.test.ts test/project-path-boundary.test.ts test/language-query-semantics.test.ts test/external-language-service.test.ts",
     "check": "bun run typecheck && bun run lint && bun run test",
     "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/development"
   },
