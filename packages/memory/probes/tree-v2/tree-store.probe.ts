@@ -489,13 +489,10 @@ function createLeafNodeV2(blobRef: string, commitment: string): MemoryTreeNodeSt
 }
 
 function runStaticBackwardWriteBoundaryProbeV2(): void {
-  const sourceRoot = join(process.cwd(), 'packages', 'memory', 'src', 'memory-tree', 'v2')
-  const productionSources = collectTypeScriptSourcesV2(sourceRoot).filter(
-    (path) =>
-      !path.endsWith('DiffChain.ts') &&
-      !path.endsWith('-probe.ts') &&
-      !path.endsWith('tree-store-v2-probe.ts')
-  )
+  // 树 v2 的源码搬家后分住 impl 与 utils 两处；两处都必须存在，缺一就报错而不是静默扫空目录。
+  const allSources = MemoryTreeV2SourceRootsV2.flatMap((root) => collectTypeScriptSourcesV2(root))
+  equal(allSources.length > 0, true, `树 v2 源码根扫不到文件：${MemoryTreeV2SourceRootsV2.join('、')}`)
+  const productionSources = allSources.filter((path) => !path.endsWith('diff-chain.ts'))
   const offenders = productionSources.filter((path) =>
     readFileSync(path, 'utf8').includes('replayTreeDiffsBackwardV2')
   )
@@ -505,6 +502,12 @@ function runStaticBackwardWriteBoundaryProbeV2(): void {
     `INV-BR：生产持久化模块不得调用 backward replay：${offenders.join(', ')}`
   )
 }
+
+/** 树 v2 的两处源码根（相对仓库根；搬家时跟着改，扫不到就判退）。 */
+const MemoryTreeV2SourceRootsV2 = [
+  join(process.cwd(), 'packages', 'memory', 'src', 'impl', 'tree-v2'),
+  join(process.cwd(), 'packages', 'memory', 'src', 'utils', 'tree-v2'),
+]
 
 function collectTypeScriptSourcesV2(directory: string): string[] {
   const result: string[] = []

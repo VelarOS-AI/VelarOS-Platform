@@ -443,9 +443,12 @@ function runIndexGenerationEncryptionProbeV2(dataRoot: string): void {
 }
 
 function runStaticSqlBoundaryProbeV2(): void {
-  const sourceRoot = join(process.cwd(), 'packages', 'memory', 'src', 'memory-tree', 'v2')
-  const sources = collectTypeScriptSourcesV2(sourceRoot).filter(
-    (path) => !path.endsWith('authority-v2-probe.ts')
+  // 树 v2 的源码搬家后分住 impl 与 utils 两处；两处都必须存在，缺一就报错而不是静默扫空目录。
+  const sources = MemoryTreeV2SourceRootsV2.flatMap((root) => collectTypeScriptSourcesV2(root))
+  equal(
+    sources.length > 0,
+    true,
+    `树 v2 源码根扫不到文件：${MemoryTreeV2SourceRootsV2.join('、')}`
   )
   const violations = sources.flatMap((path) =>
     auditForbiddenQuerySemanticsV2(readFileSync(path, 'utf8')).map((rule) => `${path}: ${rule}`)
@@ -503,6 +506,12 @@ function auditForbiddenQuerySemanticsV2(source: string): string[] {
   ]
   return rules.filter(([, pattern]) => pattern.test(source)).map(([rule]) => rule)
 }
+
+/** 树 v2 的两处源码根（相对仓库根；搬家时跟着改，扫不到就判退）。 */
+const MemoryTreeV2SourceRootsV2 = [
+  join(process.cwd(), 'packages', 'memory', 'src', 'impl', 'tree-v2'),
+  join(process.cwd(), 'packages', 'memory', 'src', 'utils', 'tree-v2'),
+]
 
 function collectTypeScriptSourcesV2(directory: string): string[] {
   const sources: string[] = []
