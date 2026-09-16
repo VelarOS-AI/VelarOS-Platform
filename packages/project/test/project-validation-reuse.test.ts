@@ -4,18 +4,9 @@ import { join } from 'node:path'
 
 import { afterEach, beforeEach, expect, test } from 'bun:test'
 
-import {
-  AgentTurnHistoryHelper,
-  compileProviderSendRequest,
-  ContextGovernanceSessionRegistry,
-  fileContextFor,
-  InMemoryContextPayloadStore,
-  ProviderRequestCompiler,
-  ToolExecutionPolicy,
-  type ToolExecutionPolicyContext,
-  ToolExecutor,
-  type ToolExecutorEvents,
-} from '@velaros-ai/agent'
+import type { ToolExecutionPolicyContext, ToolExecutorEvents } from '@velaros-ai/agent'
+import { agentTurnHistory, compileProviderSendRequest, createContextGovernanceSessionRegistry, createInMemoryContextPayloadStore, createProviderRequestCompiler,createToolExecutionPolicy, createToolExecutor } from '@velaros-ai/agent'
+import { fileContextRegistry } from '@velaros-ai/agent/tool-contract'
 import { logRuntime } from '@velaros-ai/core/logger'
 
 import type { ProjectToolContext } from '../src/contract/requires'
@@ -33,7 +24,7 @@ async function fixture(plugins: ProjectPlugin[] = []) {
   const kernel = await createProjectKernel({ root, plugins })
   const context: ProjectToolContext & ToolExecutionPolicyContext = {
     sessionId: 'validation-reuse',
-    contextPayloadStore: new InMemoryContextPayloadStore(),
+    contextPayloadStore: createInMemoryContextPayloadStore(),
     abortSignal: new AbortController().signal,
     log: logRuntime.tag('ProjectValidationReuse'),
     role: { id: 'assistant' },
@@ -62,7 +53,7 @@ async function fixture(plugins: ProjectPlugin[] = []) {
     ...tool,
     execute: (args: Record<string, unknown>, executionContext: ToolExecutionPolicyContext) => tool.execute(args, { ...context, ...executionContext }),
   }]))
-  const policy = new ToolExecutionPolicy({
+  const policy = createToolExecutionPolicy({
     get: (name) => tools[name],
     listAvailable: (_context, names) => (names ?? []).filter((name) => !!projectTools[name]).map((name) => ({ name })),
     getDescriptor: () => null,
@@ -76,7 +67,7 @@ async function fixture(plugins: ProjectPlugin[] = []) {
     emitToolDone: () => undefined,
   }
   const call = async (toolCallId: string, name: string, args: Record<string, unknown>) => {
-    const executor = new ToolExecutor(context, events, policy)
+    const executor = createToolExecutor(context, events, policy)
     executor.enqueue(toolCallId, name, args, false)
     const [result] = await executor.collectAll()
     return result!
@@ -108,14 +99,14 @@ test.each([false, true])('candidate syntax failure preserves a large input and s
 
   const history: any[] = [{ role: 'user', content: 'Make the authorized change.' },
     { role: 'assistant', content: [{ type: 'tool-call', toolName: 'project:edit', toolCallId: 'failed-candidate', input }] }]
-  await new AgentTurnHistoryHelper().appendToolResultsToHistory(history, {
+  await agentTurnHistory.appendToolResultsToHistory(history, {
     collectAll: async () => [failed], getTerminalError: () => undefined,
   })
   const output = history[2].content[0].output
   if (wrapped) output.value = JSON.stringify({ __contextRef: 'tool-output', ref: 'failed-candidate', excerpt: output.value,
     retrieval: { tool: 'context:recall', args: { ref: 'failed-candidate' } } })
   const originalFailure = JSON.stringify(history[2])
-  const compiler = new ProviderRequestCompiler(new ContextGovernanceSessionRegistry({ config: { dashboard: false } }))
+  const compiler = createProviderRequestCompiler(createContextGovernanceSessionRegistry({ config: { dashboard: false } }))
   const compile = () => compileProviderSendRequest({
     sessionId: context.sessionId!, toolContext: context as never, payloadStore: context.contextPayloadStore,
     rawHistoryMessages: history, phase: 'stream', model: 'gpt-test', systemPrompt: 'system', contextWindow: 64000,
@@ -139,7 +130,7 @@ test.each([false, true])('candidate syntax failure preserves a large input and s
     expect(window).not.toHaveProperty('fileRef')
     expect(window.kind).not.toBe('project-source-window')
   }
-  expect(fileContextFor(context)!.currentViews().find((view) => view.path === 'example.ts')!.snapshots[0]!.content).toBe(original)
+  expect(fileContextRegistry.for(context)!.currentViews().find((view) => view.path === 'example.ts')!.snapshots[0]!.content).toBe(original)
   expect(JSON.stringify(history[2])).toBe(originalFailure)
 
   const retry = { reuse: 'attempt:failed-candidate', changes: [{ op: 'set', path: ['steps', 0, 'edits', 0, 'range'], value: [2, 5] }] }
@@ -156,7 +147,7 @@ test.each([false, true])('candidate syntax failure preserves a large input and s
   expect(outcomes.map((record) => record.outcome)).toEqual(['not-applied', 'completed'])
   expect(outcomes[1].metrics).toMatchObject({ reused: true, requestedChars: JSON.stringify(retry).length })
   history.push({ role: 'assistant', content: [{ type: 'tool-call', toolName: 'project:edit', toolCallId: 'fixed-candidate', input: retry }] })
-  await new AgentTurnHistoryHelper().appendToolResultsToHistory(history, {
+  await agentTurnHistory.appendToolResultsToHistory(history, {
     collectAll: async () => [completed], getTerminalError: () => undefined,
   })
   const laterSend = await compile()

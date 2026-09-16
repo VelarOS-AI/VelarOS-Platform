@@ -9,7 +9,7 @@
 
 import { z } from 'zod'
 
-import type { AgentModManifest, ToolCategoryDefinition } from '@velaros-ai/agent/protocol'
+import type { AgentModManifest, ToolCategoryDefinition } from '@velaros-ai/agent/contracts'
 import { isEmpty, optionalWhen } from '@velaros-ai/core'
 import type {
   KernelModuleDefinition,

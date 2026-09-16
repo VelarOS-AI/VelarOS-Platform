@@ -4,7 +4,7 @@ import { join } from 'node:path'
 
 import { expect, test } from 'bun:test'
 
-import { InMemoryContextPayloadStore } from '@velaros-ai/agent'
+import { createInMemoryContextPayloadStore } from '@velaros-ai/agent'
 import { textCodec } from '@velaros-ai/text-files'
 
 import type { ProjectToolContext } from '../src/contract/requires'
@@ -24,7 +24,7 @@ test.each(['utf8', 'utf8-bom', 'utf16le', 'utf16be', 'utf16le-nobom', 'utf16be-n
       await writeFile(join(root, 'source.ts'), bytes)
       const kernel = await createProjectKernel({ root, plugins: [typescriptPlugin()] })
       const context: ProjectToolContext = {
-        sessionId: 'text-protocol', codingSession: {}, contextPayloadStore: new InMemoryContextPayloadStore(),
+        sessionId: 'text-protocol', codingSession: {}, contextPayloadStore: createInMemoryContextPayloadStore(),
         abortSignal: new AbortController().signal,
         project: {
           getRootPath: () => root, kernel: async () => kernel,

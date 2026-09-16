@@ -37,7 +37,7 @@ system:run、project:run、两个空间演练沙箱里的 run、宿主的审批�
 | --- | --- |
 | 执行前分类 | `shellCommandPolicy.analyze(command)`：去首尾空白 → 危险黑名单（递归删除、丢未提交改动的 git、提权、格式化磁盘等，给出理由）→ 长驻判定（开发服务器、监听）→ 只读判定（白名单命令，逐段看参数、前缀、环境变量赋值、git 全局选项与子命令、sed 整段脚本，出现重定向、子 shell、后台符、换行整条否决）→ 端口提取 |
 | 并发判定 | `shellCommandPolicy.isParallelSafe(input, { optIn })`：命令必须是字符串、不转后台、只读、无需确认；optIn（缺省）时还要求入参显式 `parallel: true` |
-| 危险命令审批 | `shellCommandApproval.dangerous(input)` → 文案（命令、理由、递归删除的仓库提醒、是否后台、端口）+ `createManualApprovalOptions`（高风险、手动、不记忆）+ 操作身份 `createApprovalOperationKey('shell-command', { 命令, 工作目录, 前后台 })` → 调用方交给自己的审批端口，被拒怎么办调用方定 |
+| 危险命令审批 | `shellCommandApproval.dangerous(input)` → 文案（命令、理由、递归删除的仓库提醒、是否后台、端口）+ `agentToolContracts.createManualApprovalOptions`（高风险、手动、不记忆）+ 操作身份 `agentToolContracts.createApprovalOperationKey('shell-command', { 命令, 工作目录, 前后台 })` → 调用方交给自己的审批端口，被拒怎么办调用方定 |
 
 ## 依赖什么
 

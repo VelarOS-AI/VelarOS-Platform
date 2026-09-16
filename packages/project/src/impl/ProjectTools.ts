@@ -7,7 +7,7 @@
 
 import { z } from 'zod'
 
-import type { AgentModManifest, ToolCapabilitySchema, ToolCategoryDefinition } from '@velaros-ai/agent/protocol'
+import type { AgentModManifest, ToolCapabilitySchema, ToolCategoryDefinition } from '@velaros-ai/agent/contracts'
 import { isNotUndefined, isUndefined, optionalWhen } from '@velaros-ai/core'
 import type {
   KernelModuleDefinition,

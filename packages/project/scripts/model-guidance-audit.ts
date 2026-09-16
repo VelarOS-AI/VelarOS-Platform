@@ -14,7 +14,7 @@ import { createBuiltInPromptSegments } from '../../agent/src/utils/guidance/cata
 import { createRuntimePromptSegments } from '../../agent/src/utils/guidance/runtime'
 import { configureAppRuntimeFacts, readAppRuntimeFacts } from '../../agent/src/utils/runner/app-runtime-facts'
 import { schemaToInputSchema } from '../../agent/src/utils/toolkit/schema-bundle'
-import { ToolArgsSchemaValidator } from '../../agent/src/utils/tools/tool-args-schema-validator'
+import { buildValidationNextActions } from '../../agent/src/utils/tools/tool-args-schema-validator'
 import { toolExamples as sourceToolExamples } from '../../tool-contract/src/impl/ToolExampleRegistry'
 import { projectTools } from '../src/impl/ProjectTools'
 
@@ -123,7 +123,7 @@ export async function collectGuidanceReview(reviewTools = registeredGuidanceTool
   const currentView = projectFileContext([], [{
     workspaceId: '/audit', path: 'source.ts', status: 'fresh', refs: [], sequence: 1, priority: 1, ranges: [{ startLine: 1, endLine: 1 }], snapshots: [{ workspaceId: '/audit', path: 'source.ts', revision: 'audit', content: 'source', exists: true, complete: true, range: { startLine: 1, endLine: 1 }, totalLines: 1 }],
   }], 8000).tail[0]?.content
-  const guidance = { builtin, matrix, currentView, validationActions: new ToolArgsSchemaValidator().buildValidationNextActions('tool:example') }
+  const guidance = { builtin, matrix, currentView, validationActions: buildValidationNextActions('tool:example') }
   const documents = await Promise.all(['packages/project/README.md', 'docs/engineering/project-tool-surface-redesign-proposal.md'].map(async (path) => {
     const text = await readFile(resolve(root, path), 'utf8')
     return { path, text, examples: [...text.matchAll(/```json\s*\n([\s\S]*?)\n```/gu)].map((match) => JSON.parse(match[1]!)) }

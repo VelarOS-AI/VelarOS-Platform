@@ -8,7 +8,7 @@
  */
 import { z } from 'zod'
 
-import type { ToolCategoryDefinition } from '@velaros-ai/agent/protocol'
+import type { ToolCategoryDefinition } from '@velaros-ai/agent/contracts'
 import { isNull, optionalWhen } from '@velaros-ai/core'
 import {
   renderParameterDescription as parameterDescription,

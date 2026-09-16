@@ -1,18 +1,13 @@
 import assert from 'node:assert/strict'
 
 import {
-  CodingSessionTracker,
-  ExecutionEventBus,
-  PrimaryAgentProfile,
+  createAgentExecutionStack,
+  createCodingSessionTracker,
+  createNoopExecutionEventBus,
+  createPrimaryAgentProfile,
+  createToolContractExecutionFacade,
 } from '@velaros-ai/agent'
-import { AgentRuntimeEvents } from '@velaros-ai/agent/host'
-import { ToolContractExecutionFacade } from '@velaros-ai/agent/node'
-import {
-  AgentProtocolVersion,
-  ToolCatalogDiscoveryToolName,
-  ToolSchemaDiscoveryToolName,
-} from '@velaros-ai/agent/protocol'
-import { createAgentExecutionStack } from '@velaros-ai/agent/runtime'
+import { AgentProtocolVersions, AgentToolNames } from '@velaros-ai/agent/contracts'
 import { logRuntime } from '@velaros-ai/core/logger'
 import {
   createInMemoryMemoryFilesIo,
@@ -104,7 +99,7 @@ const toolRegistry = {
   listAvailable: () => [],
   toAiTools: () => ({}),
 }
-const primaryAgentProfile = new PrimaryAgentProfile(
+const primaryAgentProfile = createPrimaryAgentProfile(
   { getSkillMarkdownForRole: () => '', listSkillsForRole: () => [] },
   { getToolCategoryId: () => 'packed-fixture' },
 )
@@ -132,7 +127,7 @@ function createToolContext(sessionId, abortController = new AbortController()) {
     locale: 'en-US',
     abortSignal: abortController.signal,
     log: logRuntime.tag('PackedHostContract'),
-    codingSession: new CodingSessionTracker([], []),
+    codingSession: createCodingSessionTracker([], []),
     role: {
       id: resolution.id,
       label: resolution.label,
@@ -169,7 +164,6 @@ function createToolContext(sessionId, abortController = new AbortController()) {
 }
 
 async function probeAgentExecution() {
-  assert.equal(typeof AgentRuntimeEvents, 'function')
   const stack = createAgentExecutionStack({
     model: modelPort,
     toolRegistry,
@@ -188,7 +182,7 @@ async function probeAgentExecution() {
     abortController: soloAbort,
     toolContext: createToolContext('packed-solo', soloAbort),
     resolution,
-    events: new ExecutionEventBus(),
+    events: createNoopExecutionEventBus(),
   })
   assert.equal(solo.status, 'completed')
   assert.match(JSON.stringify(history), /packed complete/u)
@@ -216,7 +210,7 @@ async function probeAgentExecution() {
     abortController: cancelledController,
     toolContext: createToolContext('packed-cancelled', cancelledController),
     resolution,
-    events: new ExecutionEventBus(),
+    events: createNoopExecutionEventBus(),
   })
   await streamStarted
   cancelledController.abort(new Error('packed cancellation'))
@@ -322,7 +316,7 @@ function createToolContractHarness() {
   return {
     binding,
     executed,
-    facade: new ToolContractExecutionFacade(registry),
+    facade: createToolContractExecutionFacade(registry),
     setSchemaVersion: (version) => {
       schemaVersion = version
     },
@@ -332,7 +326,7 @@ function createToolContractHarness() {
 
 function toolCall(catalogRevision, toolName, input = {}) {
   return {
-    protocolVersion: AgentProtocolVersion,
+    protocolVersion: AgentProtocolVersions.agent,
     contractId: 'packed-contract',
     catalogRevision,
     toolCallId: 'packed-call',
@@ -345,8 +339,8 @@ async function probeToolContracts() {
   const harness = createToolContractHarness()
   const first = harness.facade.resolveCatalog(harness.binding, { readOnly: false })
   assert.deepEqual(first.tools.slice(0, 2).map(({ name }) => name), [
-    ToolCatalogDiscoveryToolName,
-    ToolSchemaDiscoveryToolName,
+    AgentToolNames.toolingCatalog,
+    AgentToolNames.toolingSchema,
   ])
 
   harness.setSchemaVersion(2)
@@ -378,7 +372,7 @@ async function probeToolContracts() {
       output: completed.output,
     },
     {
-      protocolVersion: AgentProtocolVersion,
+      protocolVersion: AgentProtocolVersions.agent,
       contractId: 'packed-contract',
       catalogRevision: second.catalogRevision,
       toolCallId: 'packed-call',

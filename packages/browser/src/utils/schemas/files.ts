@@ -1,13 +1,6 @@
 import { z } from 'zod'
 
-import {
-  applyDefaultRecursiveMaxDepth,
-  optionalReadEndLine,
-  optionalReadMaxChars,
-  optionalReadStartLine,
-  refineBoundedReadInput,
-  requiredResultLimit,
-} from '@velaros-ai/agent/tool-contract'
+import { agentToolContracts } from '@velaros-ai/agent/tool-contract'
 import { renderParameterDescription as parameterDescription } from '@velaros-ai/tool-contract'
 
 import { BrowserFileLimits } from '../../contract/constants'
@@ -41,9 +34,9 @@ const browserFilesExactSchema = z.discriminatedUnion('action', [
           description: '递归最大深度。',
         })
       ),
-      limit: requiredResultLimit(500, '最多返回多少项'),
+      limit: agentToolContracts.requiredResultLimit(500, '最多返回多少项'),
     })
-    .transform(applyDefaultRecursiveMaxDepth),
+    .transform(agentToolContracts.applyDefaultRecursiveMaxDepth),
   z
     .object({
       action: z.literal('read_file'),
@@ -52,11 +45,11 @@ const browserFilesExactSchema = z.discriminatedUnion('action', [
           description: '相对于当前网站工作区的文件路径。',
         })
       ),
-      startLine: optionalReadStartLine('起始行号，从 1 开始'),
-      endLine: optionalReadEndLine('结束行号，包含该行'),
-      maxChars: optionalReadMaxChars(200000, '最多返回多少字符'),
+      startLine: agentToolContracts.optionalReadStartLine('起始行号，从 1 开始'),
+      endLine: agentToolContracts.optionalReadEndLine('结束行号，包含该行'),
+      maxChars: agentToolContracts.optionalReadMaxChars(200000, '最多返回多少字符'),
     })
-    .superRefine(refineBoundedReadInput),
+    .superRefine(agentToolContracts.refineBoundedReadInput),
   z.object({
     action: z.literal('write_file'),
     path: z.string().min(1).describe(
@@ -82,7 +75,7 @@ const browserFilesExactSchema = z.discriminatedUnion('action', [
         description: '要查看的 产物类型。',
       })
     ),
-    limit: requiredResultLimit(300, '最多返回多少项'),
+    limit: agentToolContracts.requiredResultLimit(300, '最多返回多少项'),
   }),
   z.object({
     action: z.literal('write_artifact'),
@@ -187,9 +180,9 @@ const browserFilesSchema = z
         description: 'list_files/list_artifacts 最多返回多少项。',
       })
     ),
-    startLine: optionalReadStartLine('read_file 起始行号，从 1 开始'),
-    endLine: optionalReadEndLine('read_file 结束行号，包含该行'),
-    maxChars: optionalReadMaxChars(200000, 'read_file 最多返回多少字符'),
+    startLine: agentToolContracts.optionalReadStartLine('read_file 起始行号，从 1 开始'),
+    endLine: agentToolContracts.optionalReadEndLine('read_file 结束行号，包含该行'),
+    maxChars: agentToolContracts.optionalReadMaxChars(200000, 'read_file 最多返回多少字符'),
     content: z.string().optional().describe(
       parameterDescription({
         description: 'write_file/write_artifact 要写入的 UTF-8 文本内容。',

@@ -4,17 +4,8 @@ import { join } from 'node:path'
 
 import { afterEach, beforeEach, expect, test } from 'bun:test'
 
-import {
-  AgentTurnHistoryHelper,
-  compileProviderSendRequest,
-  ContextGovernanceSessionRegistry,
-  InMemoryContextPayloadStore,
-  ProviderRequestCompiler,
-  ToolExecutionPolicy,
-  type ToolExecutionPolicyContext,
-  ToolExecutor,
-  type ToolExecutorEvents,
-} from '@velaros-ai/agent'
+import type { ToolExecutionPolicyContext, ToolExecutorEvents } from '@velaros-ai/agent'
+import { agentTurnHistory, compileProviderSendRequest, createContextGovernanceSessionRegistry, createInMemoryContextPayloadStore, createProviderRequestCompiler,createToolExecutionPolicy, createToolExecutor } from '@velaros-ai/agent'
 import { logRuntime } from '@velaros-ai/core/logger'
 
 import type { ProjectToolContext } from '../src/contract/requires'
@@ -30,7 +21,7 @@ async function fixture() {
   const kernel = await createProjectKernel({ root })
   const context: ProjectToolContext & ToolExecutionPolicyContext = {
     sessionId: 'batch-visibility',
-    contextPayloadStore: new InMemoryContextPayloadStore(),
+    contextPayloadStore: createInMemoryContextPayloadStore(),
     abortSignal: new AbortController().signal,
     log: logRuntime.tag('ProjectBatchVisibility'),
     role: { id: 'assistant' },
@@ -60,7 +51,7 @@ async function fixture() {
     ...tool,
     execute: (args: Record<string, unknown>, executionContext: ToolExecutionPolicyContext) => tool.execute(args, { ...context, ...executionContext }),
   }]))
-  const policy = new ToolExecutionPolicy({
+  const policy = createToolExecutionPolicy({
     get: (name) => tools[name],
     listAvailable: (_context, names) => (names ?? []).filter((name) => !!projectTools[name]).map((name) => ({ name })),
     getDescriptor: () => null,
@@ -90,7 +81,7 @@ test('a batch read over the page-out budget and a same-batch search both stay vi
     await writeFile(join(root, `hit-${index}.ts`), `// before\nexport const needle_${index} = ${index}\n// after\n`)
   const { context, policy, events } = await fixture()
 
-  const executor = new ToolExecutor(context, events, policy)
+  const executor = createToolExecutor(context, events, policy)
   const readArgs = { files: modules.map((path) => ({ path })), maxChars: 60_000 }
   const searchArgs = { query: 'needle', limit: 100, contextLines: 3 }
   executor.enqueue('read-batch', 'project:read', readArgs, false)
@@ -107,8 +98,8 @@ test('a batch read over the page-out budget and a same-batch search both stay vi
       { type: 'tool-call', toolName: 'project:search', toolCallId: 'search-needle', input: searchArgs },
     ] },
   ]
-  await new AgentTurnHistoryHelper().appendToolResultsToHistory(history, { collectAll: async () => results, getTerminalError: () => undefined })
-  const compiler = new ProviderRequestCompiler(new ContextGovernanceSessionRegistry({ config: { dashboard: false } }))
+  await agentTurnHistory.appendToolResultsToHistory(history, { collectAll: async () => results, getTerminalError: () => undefined })
+  const compiler = createProviderRequestCompiler(createContextGovernanceSessionRegistry({ config: { dashboard: false } }))
   const compiled = await compileProviderSendRequest({
     sessionId: context.sessionId!, toolContext: context as never, payloadStore: context.contextPayloadStore,
     rawHistoryMessages: history, phase: 'stream', model: 'gpt-test', systemPrompt: 'system', contextWindow: 64000,

@@ -4,8 +4,8 @@ import { join } from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
-import { AgentTurnHistoryHelper, compileProviderSendRequest, ContextGovernanceSessionRegistry, InMemoryContextPayloadStore, ProviderRequestCompiler } from '@velaros-ai/agent'
-import { fileContextFor } from '@velaros-ai/agent/tool-contract'
+import { agentTurnHistory, compileProviderSendRequest, createContextGovernanceSessionRegistry, createInMemoryContextPayloadStore, createProviderRequestCompiler } from '@velaros-ai/agent'
+import { fileContextRegistry } from '@velaros-ai/agent/tool-contract'
 
 import { fitProjectReadsForModel } from '../../agent/src/utils/tools/project-read-serialization'
 import type { ProjectToolContext } from '../src/contract/requires'
@@ -24,7 +24,7 @@ afterEach(async () => { await rm(root, { recursive: true, force: true }) })
 async function fixture() {
   const kernel = await createProjectKernel({ root })
   const context: ProjectToolContext = {
-    sessionId: 'source-test', codingSession: {}, contextPayloadStore: new InMemoryContextPayloadStore(),
+    sessionId: 'source-test', codingSession: {}, contextPayloadStore: createInMemoryContextPayloadStore(),
     abortSignal: new AbortController().signal,
     project: {
       getRootPath: () => root, kernel: async () => kernel,
@@ -146,7 +146,7 @@ describe('Project immutable visible source references', () => {
     const { context } = await fixture()
     const raw = await executeProjectRead({ files: [{ path: 'a.ts' }] }, { ...context, toolCallId: 'read-1' })
     await writeFile(join(root, 'a.ts'), 'other\n')
-    const compiler = new ProviderRequestCompiler(new ContextGovernanceSessionRegistry({ config: { dashboard: false } }))
+    const compiler = createProviderRequestCompiler(createContextGovernanceSessionRegistry({ config: { dashboard: false } }))
     const sent = await compileProviderSendRequest({
       sessionId: context.sessionId!, toolContext: context as never, payloadStore: context.contextPayloadStore,
       rawHistoryMessages: [
@@ -164,7 +164,7 @@ describe('Project immutable visible source references', () => {
     expect(excerpt.lines).toContainEqual([1, 'other'])
     expect(excerpt.viewSource).toBeUndefined()
     expect((await resolveProjectFileRef(context, excerpt.fileRef)).content).toBe('other\n')
-    const archives = await fileContextFor(context)!.recall({ path: 'a.ts', revision: raw.files[0].revision }) as any
+    const archives = await fileContextRegistry.for(context)!.recall({ path: 'a.ts', revision: raw.files[0].revision }) as any
     expect(archives.content).toBe('first\n')
   })
 })
@@ -176,7 +176,7 @@ test('disjoint visible windows share one ref without authorizing the intervening
   expect(result.files[0].fileRef).toBe(result.files[1].fileRef)
   const view = await resolveProjectFileRef(context, result.files[0].fileRef)
   expect(view.coverage.map((range) => [range.startLine, range.endLine])).toEqual([[1, 1], [4, 5]])
-  expect(fileContextFor(context)!.currentViews()[0]!.snapshots.map((snapshot) => snapshot.presentation?.lines)).toEqual([[[1, 'one']], [[4, 'four'], [5, 'five']]])
+  expect(fileContextRegistry.for(context)!.currentViews()[0]!.snapshots.map((snapshot) => snapshot.presentation?.lines)).toEqual([[[1, 'one']], [[4, 'four'], [5, 'five']]])
 })
 
 test('altered line text never inherits the original full line grant', async () => {
@@ -249,7 +249,7 @@ for (const wrapped of [false, true]) test(`real failed-turn provider pipeline ke
     { role: 'user', content: 'Apply the authorized change.' },
     { role: 'assistant', content: [{ type: 'tool-call', toolName: 'project:edit', toolCallId: 'failed-edit', input: { files: [] } }] },
   ]
-  await new AgentTurnHistoryHelper().appendToolResultsToHistory(history, {
+  await agentTurnHistory.appendToolResultsToHistory(history, {
     collectAll: async () => [{ toolName: 'project:edit', toolCallId: 'failed-edit', error: 'stale view', result: failure }],
     getTerminalError: () => undefined,
   })
@@ -260,7 +260,7 @@ for (const wrapped of [false, true]) test(`real failed-turn provider pipeline ke
     retrieval: { tool: 'context:recall', args: { ref: 'failed-edit', refKind: 'tool-payload' } },
   })
   const durableHistory = JSON.stringify(history)
-  const compiler = new ProviderRequestCompiler(new ContextGovernanceSessionRegistry({ config: { dashboard: false } }))
+  const compiler = createProviderRequestCompiler(createContextGovernanceSessionRegistry({ config: { dashboard: false } }))
   const compile = () => compileProviderSendRequest({
     sessionId: context.sessionId!, toolContext: context as never, payloadStore: context.contextPayloadStore,
     rawHistoryMessages: history, phase: 'stream', model: 'gpt-test', systemPrompt: 'system', contextWindow: 64000,

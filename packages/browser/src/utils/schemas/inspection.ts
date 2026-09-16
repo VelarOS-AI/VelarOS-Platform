@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import { requiredResultLimit } from '@velaros-ai/agent/tool-contract'
+import { agentToolContracts } from '@velaros-ai/agent/tool-contract'
 import { renderParameterDescription as parameterDescription } from '@velaros-ai/tool-contract'
 
 import type {
@@ -9,7 +9,6 @@ import type {
   BrowserGetPageDiagnosticsInput,
   BrowserQueryElementsInput,
 } from '../../types/tools'
-
 
 export const browserQueryElementsSchema = z.object({
   selector: z
@@ -37,7 +36,7 @@ export const browserQueryElementsSchema = z.object({
       description: '是否返回每个元素裁剪后的 outerHTML。',
     })
   ),
-  limit: requiredResultLimit(100, '最多返回多少个匹配元素'),
+  limit: agentToolContracts.requiredResultLimit(100, '最多返回多少个匹配元素'),
   maxTextChars: z
     .number()
     .int()
@@ -65,7 +64,6 @@ export const browserQueryElementsSchema = z.object({
     ),
 })
 
-
 export const browserQueryElementsGuidedSchema = browserQueryElementsSchema.extend({
   limit: z
     .number()
@@ -80,7 +78,6 @@ export const browserQueryElementsGuidedSchema = browserQueryElementsSchema.exten
       })
     ),
 })
-
 
 /** guided 面的查元素入参补上缺省条数，转成基础面的形状。 */
 export function normalizeBrowserQueryElementsGuided(
@@ -104,7 +101,7 @@ export const browserGetPageDiagnosticsSchema = z.object({
       ],
     })
   ),
-  limit: requiredResultLimit(300, '按 kind 过滤之后最多返回几条'),
+  limit: agentToolContracts.requiredResultLimit(300, '按 kind 过滤之后最多返回几条'),
   clear: z.boolean().optional().describe(
     parameterDescription({
       description: '读完是否清掉这次所选种类的诊断缓存；别的种类不受影响。',
@@ -177,7 +174,6 @@ export const browserGetNetworkResponseBodySchema = z.object({
   ),
 })
 
-
 export const browserGetNetworkResponseBodyGuidedSchema =
   browserGetNetworkResponseBodySchema.extend({
     maxChars: z.number().int().positive().max(200000).optional().describe(
@@ -187,7 +183,6 @@ export const browserGetNetworkResponseBodyGuidedSchema =
       })
     ),
   })
-
 
 /** guided 面的读响应体入参补上缺省字符数，转成基础面的形状。 */
 export function normalizeBrowserGetNetworkResponseBodyGuided(
@@ -221,7 +216,6 @@ export const browserGetNetworkRequestSchema = z.object({
   ),
 })
 
-
 export const browserGetNetworkRequestGuidedSchema = browserGetNetworkRequestSchema.extend({
   includeResponseBody: z.boolean().optional().describe(
     parameterDescription({
@@ -236,7 +230,6 @@ export const browserGetNetworkRequestGuidedSchema = browserGetNetworkRequestSche
     })
   ),
 })
-
 
 /** guided 面的读请求详情入参补上缺省值，转成基础面的形状。 */
 export function normalizeBrowserGetNetworkRequestGuided(

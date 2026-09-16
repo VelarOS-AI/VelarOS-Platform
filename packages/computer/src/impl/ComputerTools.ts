@@ -7,7 +7,7 @@
 
 import { z } from 'zod'
 
-import type { ToolCapabilitySchema } from '@velaros-ai/agent/protocol'
+import type { ToolCapabilitySchema } from '@velaros-ai/agent/contracts'
 import { isPresent } from '@velaros-ai/core'
 import type {
   KernelModuleDefinition,

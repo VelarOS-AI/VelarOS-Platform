@@ -6,7 +6,7 @@ import { promisify } from 'node:util'
 
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
-import { InMemoryContextPayloadStore } from '@velaros-ai/agent'
+import { createInMemoryContextPayloadStore } from '@velaros-ai/agent'
 
 import type { ProjectToolContext } from '../src/contract/requires'
 import type { ProjectProviders } from '../src/contract/requires.js'
@@ -23,7 +23,7 @@ afterEach(async () => { await rm(root, { recursive: true, force: true }) })
 
 async function fixture(options: { approved?: boolean; readDeny?: string[]; providers?: ProjectProviders } = {}) {
   const kernel = await createProjectKernel({ root, corePolicy: { readDeny: options.readDeny ?? [] }, providers: options.providers })
-  const store = new InMemoryContextPayloadStore()
+  const store = createInMemoryContextPayloadStore()
   const ctx: ProjectToolContext = {
     sessionId: 'project-surface',
     codingSession: {},

@@ -3,7 +3,7 @@
  * 只有 `utils/tool.ts` 用，不出包。
  */
 
-import type { ToolCategoryId } from '@velaros-ai/agent/protocol'
+import type { ToolCategoryId } from '@velaros-ai/agent/contracts'
 
 import type { VelaTool } from '../contract/provides.js'
 

@@ -1,6 +1,6 @@
 /** 落回前核对与确认请求的入参与结果。只放类型。 */
 
-import type { ToolConfirmationDecisionOptions } from '@velaros-ai/agent/protocol'
+import type { ToolConfirmationDecisionOptions } from '@velaros-ai/agent/contracts'
 
 import type { SandboxDiff, SandboxSelection } from './rehearsal-sandbox.js'
 

@@ -5,13 +5,8 @@ import { join } from 'node:path'
 import type { ModelMessage } from 'ai'
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
-import {
-  compileProviderSendRequest,
-  ContextGovernanceSessionRegistry,
-  InMemoryContextPayloadStore,
-  ProviderRequestCompiler,
-} from '@velaros-ai/agent'
-import { fileContextFor } from '@velaros-ai/agent/tool-contract'
+import { compileProviderSendRequest, createContextGovernanceSessionRegistry, createInMemoryContextPayloadStore, createProviderRequestCompiler } from '@velaros-ai/agent'
+import { fileContextRegistry } from '@velaros-ai/agent/tool-contract'
 
 import type { ProjectToolContext } from '../src/contract/requires'
 import { createProjectKernel } from '../src/index'
@@ -29,7 +24,7 @@ afterEach(async () => {
 
 async function fixture(options: Parameters<typeof createProjectKernel>[0] = { root }) {
   const kernel = await createProjectKernel({ ...options, root })
-  const store = new InMemoryContextPayloadStore()
+  const store = createInMemoryContextPayloadStore()
   const ctx: ProjectToolContext = {
     sessionId: 'integration',
     codingSession: {},
@@ -70,8 +65,8 @@ async function fixture(options: Parameters<typeof createProjectKernel>[0] = { ro
     )
     return result as any
   }
-  const compiler = new ProviderRequestCompiler(
-    new ContextGovernanceSessionRegistry({ config: { dashboard: false } })
+  const compiler = createProviderRequestCompiler(
+    createContextGovernanceSessionRegistry({ config: { dashboard: false } })
   )
   const send = async () =>
     compileProviderSendRequest(
@@ -97,7 +92,7 @@ async function fixture(options: Parameters<typeof createProjectKernel>[0] = { ro
       },
       compiler
     )
-  return { kernel, store, ctx, call, send, history, files: fileContextFor(ctx)! }
+  return { kernel, store, ctx, call, send, history, files: fileContextRegistry.for(ctx)! }
 }
 
 describe('Project tools maintain current file context', () => {

@@ -3,7 +3,7 @@
  * 只放类型；后一部分只在包内用，公开签名不引用它们，所以不出包。
  */
 
-import type { ToolResultModelContentPart } from '@velaros-ai/agent/protocol'
+import type { ToolResultModelContentPart } from '@velaros-ai/agent/contracts'
 import type { DecodedText, TextEncoding } from '@velaros-ai/text-files/contracts'
 
 /** 文件里的一段字符范围：从 offset 起到 end 止，end 不含。read 返回它，edit 收它。 */

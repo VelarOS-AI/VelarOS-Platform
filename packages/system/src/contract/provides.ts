@@ -3,8 +3,7 @@
  * 没有类的公开接口（工具集合、内置 mod 定义、能力服务）直接声明在这里。这里的每个接口都必须从根入口导出。
  */
 
-import type { AgentModManifest, ToolCategoryDefinition } from '@velaros-ai/agent/protocol'
-import type { ToolPermission } from '@velaros-ai/agent/protocol'
+import type { AgentModManifest, ToolCategoryDefinition, ToolPermission } from '@velaros-ai/agent/contracts'
 import type {
   KernelCallableCapabilityService,
 } from '@velaros-ai/kernel'

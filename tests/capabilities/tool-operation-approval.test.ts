@@ -9,7 +9,7 @@ import { describe, expect, test } from 'bun:test'
 
 import type { ApprovalPort } from '../../packages/agent/src/contract/requires.js'
 import { CodingSessionTracker } from '../../packages/agent/src/impl/session/CodingSessionTracker'
-import { createTaskApprovalPort } from '../../packages/agent/src/utils/toolkit/task-approval'
+import { agentToolContracts } from '../../packages/agent/src/impl/tools/AgentToolContracts'
 import type { ProjectToolContext } from '../../packages/project/src/contract/requires'
 import { projectTools } from '../../packages/project/src/impl/ProjectTools'
 import type { SystemToolContext } from '../../packages/system/src/index'
@@ -24,7 +24,7 @@ function tools(approved: boolean) {
     awaitConfirmation: async () => { throw new Error('use shared decision channel') },
     awaitConfirmationDecision: async () => { cards++; return { approved, message: 'use a backup' } },
   }
-  const approval = createTaskApprovalPort(delegate, tracker, {
+  const approval = agentToolContracts.createTaskApprovalPort(delegate, tracker, {
     shouldAutoApprove: (options) => tracker.hasConfirmedRiskScope(options.riskScope ?? ''),
   })
   const run = async (command: string) => {

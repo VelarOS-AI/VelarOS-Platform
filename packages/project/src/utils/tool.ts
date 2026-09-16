@@ -3,7 +3,6 @@
  * （只在工具文件里调用）；只写真有内容的说明节，缺的节不补占位句。挂进内核时的调用表用 `@velaros-ai/tool-contract` 的 toolKernelModules，这里只给领域错误的翻译。
  */
 
-
 import { resolveToolInputReuse, withToolInputReuse } from '@velaros-ai/agent/tool-contract'
 import { isUndefined } from '@velaros-ai/core'
 import { toolContracts, toolFailures } from '@velaros-ai/tool-contract'

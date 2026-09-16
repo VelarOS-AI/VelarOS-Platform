@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { requiredResultLimit } from "@velaros-ai/agent/tool-contract";
+import { agentToolContracts } from '@velaros-ai/agent/tool-contract'
 import { renderParameterDescription as parameterDescription } from "@velaros-ai/tool-contract";
 
 import { encodeBrowserScriptStringLiteral } from "../../utils/page-scripts/literal";
@@ -59,7 +59,7 @@ export const browserReadPageStorageSchema = z.object({
         notes: ["仅 includeCookies=true 时生效；默认 current-url。"],
       }),
     ),
-  limit: requiredResultLimit(300, "每类最多返回多少项"),
+  limit: agentToolContracts.requiredResultLimit(300, "每类最多返回多少项"),
   maxValueChars: z
     .number()
     .int()

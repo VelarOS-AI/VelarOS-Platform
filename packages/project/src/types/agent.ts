@@ -1,4 +1,4 @@
-import type { ApprovalPort,FileContextCarrier } from '@velaros-ai/agent/tool-contract'
+import type { ApprovalPort, FileContextCarrier } from '@velaros-ai/agent/tool-contract'
 
 import type { ProjectToolApi } from '../contract/requires.js'
 

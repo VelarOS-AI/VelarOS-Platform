@@ -21,8 +21,13 @@ const InternalImport =
   /(?:from\s+|import\s*\(|require\()\s*['"](@velaros-ai\/[^/'"]+)/;
 const ElectronImport =
   /(?:from\s+|import\s*\(|require\()\s*['"](?:electron(?:\/[^'"]*)?|@electron\/[^'"]*)['"]/;
+// 能力包不许引「带具体域词的公共件」：core 里按空间/模型/记忆/知识命名的常量与工具。
+// `@velaros-ai/agent` 的根入口在 1.0.0 之后不在这条禁令里：收口前它是 19 个子目录的通配聚合
+// （1,607 个名字），引一下等于把整个运行时拖进来，所以当时要求走窄入口；收口后根入口只剩
+// 合同登记的接口与 impl 的实例/工厂（86 个值，`check:module-ownership` 逐个盯着），
+// 而那些窄入口（`./run-context` 等）已经按设计删掉，能力包要拿运行期的值只剩根入口一条路。
 const ConcreteAgentRuntimeImport =
-  /(?:from\s+|import\s*\(|require\()\s*['"](?:@velaros-ai\/agent|@velaros-ai\/core\/(?:constants\/(?:workspace[^'"]*|model[^'"]*|memory[^'"]*|knowledge[^'"]*)|spaces\/[^'"]*|utils\/Browser[^'"]*))['"]/;
+  /(?:from\s+|import\s*\(|require\()\s*['"](?:@velaros-ai\/core\/(?:constants\/(?:workspace[^'"]*|model[^'"]*|memory[^'"]*|knowledge[^'"]*)|spaces\/[^'"]*|utils\/Browser[^'"]*))['"]/;
 const CoreTypesImport =
   /import\s+(?:type\s+)?\{([^}]*)\}\s+from\s+['"]@velaros-ai\/core\/types['"]/g;
 const ConcreteCoreTypeName =
@@ -479,7 +484,7 @@ for (const expected of CapabilityPackages) {
     }
     if (ConcreteAgentRuntimeImport.test(source)) {
       fail(
-        `${expected.name}: capability code must use an explicit Agent contract or runtime subpath in ${relative(packageRoot, path)}`,
+        `${expected.name}: capability code must not import domain-named core helpers in ${relative(packageRoot, path)}`,
       );
     }
     if (

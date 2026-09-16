@@ -6,7 +6,7 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { resolve } from 'node:path'
 
-import {fileContextFor } from '@velaros-ai/agent/tool-contract'
+import { fileContextRegistry } from '@velaros-ai/agent/tool-contract'
 import { isObject } from '@velaros-ai/core'
 
 import type { PageRecord, ProjectFileView, ProjectReferenceContext, ProjectVisibleCoverage, RefRecord,SourceRecord } from '../../types/file-refs.js'
@@ -25,7 +25,7 @@ function owner(context: ProjectReferenceContext): object {
 /** 当前引用作用域的标识：宿主给的、文件上下文协调器的，都没有时为引用的归属对象生成一个随机的。只有同一作用域签发的引用才能解析。 */
 export function projectFileRefScope(context: ProjectReferenceContext): string {
   if (context.fileRefScopeId) return context.fileRefScopeId
-  const coordinator = fileContextFor(context)
+  const coordinator = fileContextRegistry.for(context)
   if (coordinator) return coordinator.scopeId
   const key = owner(context)
   let scope = fallbackScopes.get(key)

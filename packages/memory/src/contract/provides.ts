@@ -6,7 +6,7 @@
  * 改这个文件等于改对外契约。
  */
 
-import type { TurnContextSessionLedgers } from '@velaros-ai/agent/run-context'
+import type { TurnContextSessionLedgersApi } from '@velaros-ai/agent'
 
 import type { MemoryAdapterApi } from '../impl/host/MemoryAdapterRuntime.js'
 import type {
@@ -65,7 +65,7 @@ export interface MemoryTurnContextDeltaSource {
     sessionId: string
     afterSeq: number
     generation: Nullable<string>
-  }) => ReturnType<TurnContextSessionLedgers['peek']> & { anchors: [] }
+  }) => ReturnType<TurnContextSessionLedgersApi['peek']> & { anchors: [] }
 }
 
 /** 装配结果的历史名字；等同 {@link MemoryAdapterApi}，入口收口那一轮删。 */

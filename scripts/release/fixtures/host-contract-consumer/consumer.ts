@@ -2,8 +2,8 @@ import {
   createAgentExecutionStack,
   type AgentModelRetryPolicy,
   type AgentRunLifecycle,
-} from '@velaros-ai/agent/runtime'
-import { fileContextFor, ToolContractDiscoveryDescriptors, readToolSchemaDiscoveryNames } from '@velaros-ai/agent/tool-contract'
+} from '@velaros-ai/agent'
+import { agentToolContracts, fileContextRegistry } from '@velaros-ai/agent/tool-contract'
 import { ModelRequestClient } from '@velaros-ai/model'
 import { languageQueries, type LanguageReadPort, type LanguageToolContext } from '@velaros-ai/development'
 import { mountMemoryAdapter, type MountMemoryAdapterInput } from '@velaros-ai/memory/adapter-kernel'
@@ -11,7 +11,7 @@ import { ComputerOperationMetadata, ComputerToolOperations, type ComputerOperati
 import { projectFileContext, type ProjectFileContextCarrier } from '@velaros-ai/project'
 
 declare const projectContext: ProjectFileContextCarrier
-if (projectFileContext.register(projectContext)) void fileContextFor(projectContext)?.currentViews()
+if (projectFileContext.register(projectContext)) void fileContextRegistry.for(projectContext)?.currentViews()
 
 declare const source: LanguageReadPort
 const languageContext: LanguageToolContext = {
@@ -34,9 +34,9 @@ const retry: AgentModelRetryPolicy = {
  onFailure: () => null,
 }
 const lifecycle: AgentRunLifecycle<object> = {
- beforeTurn: async ({abortSignal}) => {abortSignal.throwIfAborted()},
- onTurnSettled: async ({history}) => history.length ? 'stop' : 'continue',
+ beforeTurn: async ({ abortSignal }: { abortSignal: AbortSignal }) => { abortSignal.throwIfAborted() },
+ onTurnSettled: async ({ history }: { history: readonly unknown[] }) => (history.length ? 'stop' : 'continue'),
 }
 const operation: ComputerOperation = ComputerToolOperations['computer:screenshot']
 void [createAgentExecutionStack, ModelRequestClient, lifecycle, retry,
- ToolContractDiscoveryDescriptors, readToolSchemaDiscoveryNames({names:['project:read']}), ComputerOperationMetadata[operation]]
+ agentToolContracts.discoveryDescriptors, agentToolContracts.readSchemaDiscoveryNames({names:['project:read']}), ComputerOperationMetadata[operation]]

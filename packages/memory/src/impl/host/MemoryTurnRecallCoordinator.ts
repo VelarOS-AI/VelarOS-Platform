@@ -1,4 +1,4 @@
-import { TurnContextSessionLedgers } from '@velaros-ai/agent/run-context'
+import { createTurnContextSessionLedgers } from '@velaros-ai/agent'
 import { isEmpty, Log } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
@@ -43,7 +43,7 @@ export class MemoryTurnRecallCoordinator implements MemoryTurnRecallCoordinatorA
     'computer_use',
   ] as const
 
-  private readonly ledgers = new TurnContextSessionLedgers(MemoryTurnContextSourceId, {
+  private readonly ledgers = createTurnContextSessionLedgers(MemoryTurnContextSourceId, {
     maxEntries: MemoryTuning.recall.ledgerMaxEntries,
     notifyRenderer: false,
   })
@@ -243,7 +243,6 @@ export class MemoryTurnRecallCoordinator implements MemoryTurnRecallCoordinatorA
     }
     return summaries
   }
-
 
   private injectedIdsFor(sessionId: string): Set<string> {
     const existing = this.injectedIdsBySession.get(sessionId)

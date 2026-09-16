@@ -2,7 +2,7 @@
  * 落回前的核对与确认请求：`RehearsalSandboxRules` 与整个进程唯一的 `rehearsalSandboxRules`。接口 `RehearsalSandboxRulesApi` 在本文件的类上方。
  */
 
-import { createApprovalOperationKey, createManualApprovalOptions } from '@velaros-ai/agent/tool-contract'
+import { agentToolContracts } from '@velaros-ai/agent/tool-contract'
 import { isEmpty, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
@@ -43,11 +43,11 @@ export class RehearsalSandboxRules implements RehearsalSandboxRulesApi {
     return {
       selection,
       message: buildSandboxApplyConfirmationMessage(input.targetLabel, selection, sensitive, input.closingNote),
-      options: createManualApprovalOptions({
+      options: agentToolContracts.createManualApprovalOptions({
         approvalRisk: 'high',
         riskScope: input.riskScope,
         operation: {
-          key: createApprovalOperationKey(SandboxApplyOperationKind, {
+          key: agentToolContracts.createApprovalOperationKey(SandboxApplyOperationKind, {
             sandboxId: diff.sandboxId,
             fingerprint: toNullable(diff.fingerprint),
             created: selection.created.length,

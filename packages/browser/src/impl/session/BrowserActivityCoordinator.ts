@@ -1,7 +1,5 @@
-import {
-  type TurnContextAppendBus,
-  TurnContextSessionLedgers,
-} from '@velaros-ai/agent/run-context'
+import type { TurnContextAppendBus, TurnContextSessionLedgersApi } from '@velaros-ai/agent'
+import { createTurnContextSessionLedgers } from '@velaros-ai/agent'
 import { isNumber,toNullable, toOptional } from '@velaros-ai/core'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
@@ -70,14 +68,14 @@ class BrowserActivityCoordinator implements BrowserActivityCoordinatorApi {
   private readonly sleep: (ms: number) => Promise<void>
   private readonly onWaitStateChange?: BrowserActivityCoordinatorOptions['onWaitStateChange']
   private readonly sessions = new Map<string, BrowserActivitySessionState>()
-  private readonly turnContextLedgers: TurnContextSessionLedgers
+  private readonly turnContextLedgers: TurnContextSessionLedgersApi
 
   constructor(options: BrowserActivityCoordinatorOptions = {}) {
     this.idleWindowMs = options.idleWindowMs ?? BrowserTuning.session.userIdleWindowMs
     this.now = options.now ?? (() => Date.now())
     this.sleep = options.sleep ?? ((ms) => TimerScope.sleep(ms))
     this.onWaitStateChange = options.onWaitStateChange
-    this.turnContextLedgers = new TurnContextSessionLedgers('browser.manual-activity', {
+    this.turnContextLedgers = createTurnContextSessionLedgers('browser.manual-activity', {
       maxEntries: 60,
       appendHub: options.turnContextAppendHub,
     })

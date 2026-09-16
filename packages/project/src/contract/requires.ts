@@ -12,10 +12,7 @@
  * 这里的每个接口都必须从根入口导出。
  */
 
-import type {
-  ApprovalPort,
-  FileContextCarrier,
-} from '@velaros-ai/agent/tool-contract'
+import type { ApprovalPort, FileContextCarrier } from '@velaros-ai/agent/tool-contract'
 import type {
   ScopeRef,
 } from '@velaros-ai/kernel/contracts'

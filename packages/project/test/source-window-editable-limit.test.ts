@@ -4,7 +4,7 @@ import { join } from 'node:path'
 
 import { afterEach, beforeEach, expect, test } from 'bun:test'
 
-import { InMemoryContextPayloadStore } from '@velaros-ai/agent'
+import { createInMemoryContextPayloadStore } from '@velaros-ai/agent'
 
 import { ProjectPolicyDefaults } from '../src/contract/constants'
 import type { ProjectToolContext } from '../src/contract/requires'
@@ -24,7 +24,7 @@ afterEach(async () => {
 async function contextFor(): Promise<ProjectToolContext> {
   const kernel = await createProjectKernel({ root })
   return {
-    sessionId: 'editable-limit', codingSession: {}, contextPayloadStore: new InMemoryContextPayloadStore(),
+    sessionId: 'editable-limit', codingSession: {}, contextPayloadStore: createInMemoryContextPayloadStore(),
     abortSignal: new AbortController().signal,
     project: {
       getRootPath: () => root, kernel: async () => kernel,

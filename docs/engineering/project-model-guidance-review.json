@@ -68,7 +68,7 @@
   ],
   "fingerprints": {
     "project": "925b79022faf40a79759265eee4ca25c6b118a628e652b5b15ace36611d1f772",
-    "agent": "b85b4d488451640842f665af03a64211010d1fae8215f6cfbe66ba85fc97156b",
+    "agent": "fe450984e3279ec7624fbe4898b474a9f139811b146bbebaabdd67173b09d335",
     "documents": "0b21de94640e41de1b8c3981391f7d28c40d81006b1cedf7ace5abf19fc87732"
   },
   "sourceArtifacts": [
@@ -86,31 +86,31 @@
     },
     {
       "path": "packages/agent/src/impl/AgentTools.ts",
-      "fingerprint": "06498c11583f3d9e286ffad0ab4db610a819a14035d307f5858cb6e44d42c670"
+      "fingerprint": "26d813d6c6c1a4524e2cb4aabb6bd1863eaf544db3e71c0450f181c17ee3d735"
     },
     {
       "path": "packages/agent/src/impl/builtin/ContextOperations.ts",
-      "fingerprint": "50a125a512e0f8dd08f47b520cd4e37865d1e7404c192114f52fa49afcbea5b0"
+      "fingerprint": "18d8778016722fdc105045b04957ebc2c4b1ba0a0b1d552db016066ca2c90fad"
     },
     {
       "path": "packages/agent/src/impl/builtin/PlanOperations.ts",
-      "fingerprint": "e2658fefa39a113b3fbcd74300edace8b836f3a465436ce8b631523a5f9b0df0"
+      "fingerprint": "199839937073db1bf34c6d4af4f2307e08ac6cf710d865a78ed405f24affff88"
     },
     {
       "path": "packages/agent/src/impl/runner/PromptStateBuilder.ts",
-      "fingerprint": "4395eaa4cd7f8865a1e970ded2881d24cf21c14218cc3039bb6edbf68dc75221"
+      "fingerprint": "c7d37b868b988f95de6ca5d8f91acf8741969cd2448eb22e675ddea1c9e4f751"
     },
     {
       "path": "packages/agent/src/impl/runner/RunContext.ts",
-      "fingerprint": "6c31f84d6b6ed05e9025b8324e5be403726755d523c8da63983c68bc65e44e4c"
+      "fingerprint": "9a3d7ff6c1bf8450eb746759758a43be3887e7401d27692d6a1c649e2a57f18b"
     },
     {
       "path": "packages/agent/src/impl/tools/ToolExecutor.ts",
-      "fingerprint": "f68ae918edbf3b8cd1f062cdf87396ef1a810fb66a0af33e60dc01b04397c068"
+      "fingerprint": "214de2ca0d31fd168bea76c3c1fe9d3f5bf93060d38e812d04af457a03f78c19"
     },
     {
       "path": "packages/agent/src/impl/tools/ToolInputReuseStore.ts",
-      "fingerprint": "b3b2f41747e74d253062582e28edb6ed0e2e0e2c4c2534a9d45ea5c6c7f73123"
+      "fingerprint": "d45087e0ed4844a47d56be6a7ead3f67fa11709de3efd9bd0e52766c3a549255"
     },
     {
       "path": "packages/agent/src/utils/builtin/context-retrieval.ts",
@@ -122,19 +122,19 @@
     },
     {
       "path": "packages/agent/src/utils/guidance/catalog.ts",
-      "fingerprint": "c09db4570153d38b9d7c1f500f3d48c14dff10770dd20e849cc3baa37a1ff709"
+      "fingerprint": "9ccf104031c30ddf8c8062274853abf69643218ab4cbb9444975738d6f5bc949"
     },
     {
       "path": "packages/agent/src/utils/guidance/runtime.ts",
-      "fingerprint": "62d8711394a71df9141bfd4829e2162788afc75723a5fb9ea54455a05bfc2370"
+      "fingerprint": "6efe67f1ecbe21dabe183cf3ba324cb72be402fc0ebf1436307a2c7ba81aee96"
     },
     {
       "path": "packages/agent/src/utils/guidance/task.ts",
-      "fingerprint": "2cc95a141d0581eddb88bdcdc7f0821955953c6c79dee0c86b8297596165750b"
+      "fingerprint": "a35479ceff647c289ce0cd2fa4c5d35e600078f938f21b2ae6b9b3eb508cb451"
     },
     {
       "path": "packages/agent/src/utils/tools/tool-args-schema-validator.ts",
-      "fingerprint": "7a56536be83f708ff46b1cea2ec865b4f20944bb8d18cdd1de5e63c7f085aa37"
+      "fingerprint": "b7f40ad90b2756bb71f7709236ebe61a247084f9aac3fe17898e50b971cd75b9"
     },
     {
       "path": "packages/agent/src/utils/tools/tool-input-history-projection.ts",
@@ -150,7 +150,7 @@
     },
     {
       "path": "packages/project/src/impl/ProjectTools.ts",
-      "fingerprint": "204d60498374ba3ca59671ae055120a8bf3afe09c75ee399a29ab92149225793"
+      "fingerprint": "32d61e7ebc1f2a3884cf8aed6276615594b0911a4213a58a88b09482f485a688"
     },
     {
       "path": "packages/project/src/impl/operations/ProjectChangeOperations.ts",
@@ -190,11 +190,11 @@
     },
     {
       "path": "packages/project/src/utils/agent/file-context.ts",
-      "fingerprint": "8d2df063a44dbc4bbc312e194f24e0622777ef5d5476e6b3beaf82165810b802"
+      "fingerprint": "581df4affb3faa5cd125c81eead8e2fab19ce900bb74a19a362238c6b5769e12"
     },
     {
       "path": "packages/project/src/utils/agent/file-refs.ts",
-      "fingerprint": "cecf0af57749d8fc88c3f0e3b5064248b1eaccac2fab00e32630b390f34d91ef"
+      "fingerprint": "0d069e2ecec17128f46185131e1fb5266defad1bab44b43e788260b9bd9e50e8"
     },
     {
       "path": "packages/project/src/utils/agent/kernel-port.ts",
@@ -230,7 +230,7 @@
     },
     {
       "path": "packages/project/src/utils/tool.ts",
-      "fingerprint": "c9297cfa35e99e597187a2f5853b21119a9af6aad6c02f9dd5e7697eb7e83c92"
+      "fingerprint": "aa027ee15a3c6f4ee4f460b26754dd0cd6c195fa590f30f094b42498e38168f0"
     },
     {
       "path": "packages/project/src/utils/transactions/transaction-errors.ts",

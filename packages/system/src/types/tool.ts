@@ -2,7 +2,7 @@
  * 定义工具时的入参类型：工具运行时规格去掉类别，外加是否支持入参复用。只有 `utils/tool.ts` 用，不出包。
  */
 
-import type { ToolPermission } from '@velaros-ai/agent/protocol'
+import type { ToolPermission } from '@velaros-ai/agent/contracts'
 import type { DefineToolRuntimeSpecInput } from '@velaros-ai/tool-contract'
 
 import type { SystemToolName } from '../contract/constants.js'

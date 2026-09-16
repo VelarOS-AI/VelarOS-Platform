@@ -1,6 +1,6 @@
 /** 工具：定义 office 工具。类别固定填 office，其余交给 `@velaros-ai/tool-contract` 的公共实现。 */
 
-import type { ToolPermission } from '@velaros-ai/agent/protocol'
+import type { ToolPermission } from '@velaros-ai/agent/contracts'
 import { type DefineToolRuntimeSpecInput, toolContracts } from '@velaros-ai/tool-contract'
 
 import { OfficeToolCategoryId } from '../contract/constants.js'

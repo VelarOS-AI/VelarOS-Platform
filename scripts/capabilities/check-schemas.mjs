@@ -4,7 +4,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
-import { createToolSchemaBundle } from '@velaros-ai/agent/tool-contract'
+import { toolSchemas } from '@velaros-ai/tool-contract'
 
 import { CapabilityOwners, capabilitySchemaEntry } from './capability-owners.mjs'
 
@@ -81,7 +81,7 @@ for (const owner of CapabilityOwners) {
           collection,
           `${capability.name}:${exportName}`,
         )
-        const bundle = createToolSchemaBundle(sources)
+        const bundle = toolSchemas.bundle(sources)
         if (bundle.tools.length !== sources.length) {
           throw new Error(
             `${exportName} generated ${bundle.tools.length}/${sources.length} schemas`,

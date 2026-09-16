@@ -28,7 +28,7 @@
 // Electron 原生事件，外部侧只能靠 CDP 回读，强行合并会让其中一侧退化成轮询。
 import electron from 'electron'
 
-import type { TurnContextAppendBus } from '@velaros-ai/agent/run-context'
+import type { TurnContextAppendBus } from '@velaros-ai/agent'
 import { isEmpty, isNonBlankString, isPlainObject, isPresent, isString, optionalWhen, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { Log } from '@velaros-ai/core/logger'

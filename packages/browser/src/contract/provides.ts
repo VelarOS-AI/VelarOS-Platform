@@ -9,7 +9,7 @@
  * 届时这里登记的接口按 `docs/engineering/refactor-plans/browser.md` §3.1 的表再核一遍，
  * 出包的值改成工厂与实例（`createBrowserUserScriptStore` 等），类不再出包。
  */
-import type { ToolPermission } from '@velaros-ai/agent/protocol'
+import type { ToolPermission } from '@velaros-ai/agent/contracts'
 import type { ToolContractRuntimeSpec, ToolContractSurface } from '@velaros-ai/tool-contract'
 
 import type { BrowserToolContext } from './requires.js'

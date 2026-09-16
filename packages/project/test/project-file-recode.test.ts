@@ -4,7 +4,7 @@ import { join } from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
-import { InMemoryContextPayloadStore } from '@velaros-ai/agent'
+import { createInMemoryContextPayloadStore } from '@velaros-ai/agent'
 import { textCodec } from '@velaros-ai/text-files'
 
 import type { ProjectToolContext } from '../src/contract/requires'
@@ -22,7 +22,7 @@ async function fixture() {
   const ctx: ProjectToolContext = {
     sessionId: 'project-recode',
     codingSession: {},
-    contextPayloadStore: new InMemoryContextPayloadStore(),
+    contextPayloadStore: createInMemoryContextPayloadStore(),
     abortSignal: new AbortController().signal,
     project: {
       getRootPath: () => root,

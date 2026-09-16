@@ -4,7 +4,7 @@ import { join } from 'node:path'
 
 import { expect, test } from 'bun:test'
 
-import { InMemoryContextPayloadStore } from '@velaros-ai/agent'
+import { createInMemoryContextPayloadStore } from '@velaros-ai/agent'
 
 import type { ProjectToolContext } from '../src/contract/requires'
 import { projectTools } from '../src/impl/ProjectTools'
@@ -47,7 +47,7 @@ test('real tool returns a new bounded reference for confirmation and never appli
     await writeFile(join(root, 'a.txt'), original)
     const kernel = await createProjectKernel({ root })
     const ctx: ProjectToolContext = {
-      sessionId: 'recovery', codingSession: {}, contextPayloadStore: new InMemoryContextPayloadStore(),
+      sessionId: 'recovery', codingSession: {}, contextPayloadStore: createInMemoryContextPayloadStore(),
       abortSignal: new AbortController().signal,
       project: {
         getRootPath: () => root, kernel: async () => kernel,

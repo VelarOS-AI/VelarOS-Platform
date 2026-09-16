@@ -4,7 +4,7 @@ import { describe, expect, test } from 'bun:test'
 
 import { toolExamples, toolSchemas } from '@velaros-ai/tool-contract'
 
-import { ToolArgsSchemaValidator } from '../../agent/src/utils/tools/tool-args-schema-validator'
+import { validateWithNormalization } from '../../agent/src/utils/tools/tool-args-schema-validator'
 import { ProjectEditSchema, projectTools } from '../src/impl/ProjectTools'
 
 const ProjectReadInputSchema = projectTools['project:read']!.schema
@@ -58,7 +58,7 @@ describe('model-facing Project examples and normalization', () => {
   test('normalization repairs JSON containers without decoding or trimming source strings again', () => {
     const text = '  "literal" \\n \\u0041 C:\\src\\file\r\n中文🙂\n'
     const steps = [{ action: 'edit', fileRef: '<fileRef>', edits: [{ op: 'replace', range: [42, 45], match: '"old"\\n', text }] }]
-    const normalized = new ToolArgsSchemaValidator().validateWithNormalization(ProjectEditSchema, { action: 'apply', steps: JSON.stringify(steps) })
+    const normalized = validateWithNormalization(ProjectEditSchema, { action: 'apply', steps: JSON.stringify(steps) })
     expect(normalized.success).toBe(true)
     if (!normalized.success) return
     expect(normalized.args).toEqual({ action: 'apply', steps })
@@ -67,9 +67,8 @@ describe('model-facing Project examples and normalization', () => {
   })
 
   test('precise selectors and operation choices reject ambiguity instead of stripping, clamping or defaulting', () => {
-    const validate = new ToolArgsSchemaValidator()
     for (const range of [[45, 42], 0, 1.5, [1, 2, 3]]) {
-      expect(validate.validateWithNormalization(ProjectEditSchema, {
+      expect(validateWithNormalization(ProjectEditSchema, {
         action: 'apply', steps: [{ action: 'edit', fileRef: '<fileRef>', edits: [{ op: 'replace', range, text: 'new' }] }],
       }).success).toBe(false)
     }
@@ -77,9 +76,9 @@ describe('model-facing Project examples and normalization', () => {
       [{ op: 'insert', at: 'start', side: 'before', text: 'new' }],
       [{ op: 'replace', range: 1 }],
       [{ op: 'replace_text', match: 'old', text: 'new' }],
-    ]) expect(validate.validateWithNormalization(ProjectEditSchema, { action: 'apply', steps: [{ action: 'edit', fileRef: '<fileRef>', edits }] }).success).toBe(false)
-    expect(validate.validateWithNormalization(ProjectReadInputSchema, { files: [{ path: 'b.ts' }], continuation: 'read-page:abc' }).success).toBe(false)
-    expect(validate.validateWithNormalization(ProjectEditSchema, { action: 'undo', changeRef: '<changeRef>', steps: [{ action: 'create', path: 'new.ts', text: '' }] }).success).toBe(false)
+    ]) expect(validateWithNormalization(ProjectEditSchema, { action: 'apply', steps: [{ action: 'edit', fileRef: '<fileRef>', edits }] }).success).toBe(false)
+    expect(validateWithNormalization(ProjectReadInputSchema, { files: [{ path: 'b.ts' }], continuation: 'read-page:abc' }).success).toBe(false)
+    expect(validateWithNormalization(ProjectEditSchema, { action: 'undo', changeRef: '<changeRef>', steps: [{ action: 'create', path: 'new.ts', text: '' }] }).success).toBe(false)
     expect(projectTools['project:edit'].schema.safeParse({ reuse: 'attempt:failed', changes: [{ op: 'set', path: ['steps', 0, 'edits', 0, 'range'], value: 42 }] }).success).toBe(true)
     expect(projectTools['project:edit'].schema.safeParse({ reuse: 'attempt:failed', changes: [{ op: 'set', path: ['steps'], value: [] }], action: 'apply', steps: [] }).success).toBe(false)
   })

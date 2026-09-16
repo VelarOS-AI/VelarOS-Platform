@@ -4,11 +4,9 @@
 
 import { resolve } from 'node:path'
 
-import {
-  fileContextFor,
-  type FileContextRange,
-  type FileContextSnapshot,
-} from '@velaros-ai/agent/tool-contract'
+import type { FileContextRange, FileContextSnapshot } from '@velaros-ai/agent/tool-contract'
+import type { FileContextCoordinatorApi } from '@velaros-ai/agent/tool-contract'
+import { fileContextRegistry } from '@velaros-ai/agent/tool-contract'
 import { isEmpty, isNull, isUndefined } from '@velaros-ai/core'
 import { currentPlatform } from '@velaros-ai/platform'
 
@@ -20,8 +18,8 @@ import { projectAgentReadResult } from './kernel-port'
 import { finalizeProjectModelResult, presentProjectRead } from './source-window.js'
 
 /** 读取端口仍经过 Project 授权；宿主在发送模型首轮前登记，以支持重启后的视图恢复。 */
-export function registerProjectFileContext(context: ProjectFileContextCarrier): ReturnType<typeof fileContextFor> {
-  const coordinator = fileContextFor(context)
+export function registerProjectFileContext(context: ProjectFileContextCarrier): FileContextCoordinatorApi | undefined {
+  const coordinator = fileContextRegistry.for(context)
   if (!coordinator) return undefined
   const root = resolve(context.project.getRootPath())
   const currentKernel = async () => {

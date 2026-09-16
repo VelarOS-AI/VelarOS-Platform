@@ -3,7 +3,7 @@
  * 没有类的公开接口（工具集合、能力服务）直接声明在这里。
  */
 
-import type { ToolPermission } from '@velaros-ai/agent/protocol'
+import type { ToolPermission } from '@velaros-ai/agent/contracts'
 import type {
   KernelCallableCapabilityService,
 } from '@velaros-ai/kernel'

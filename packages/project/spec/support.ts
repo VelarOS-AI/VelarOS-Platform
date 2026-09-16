@@ -3,8 +3,8 @@
  * 模型看到的回执经 agent 的文件上下文协调器定稿（fileRef 在这一步生成），审批、修改授权、跑命令都记下来给断言用。
  */
 
-import { InMemoryContextPayloadStore } from '@velaros-ai/agent'
-import { fileContextFor } from '@velaros-ai/agent/tool-contract'
+import { createInMemoryContextPayloadStore } from '@velaros-ai/agent'
+import { fileContextRegistry } from '@velaros-ai/agent/tool-contract'
 
 import { createProjectKernel, type CreateProjectKernelOptions, type ProjectCommandResult, projectFileContext, type ProjectProviders, type ProjectSandboxPort, type ProjectToolContext, projectTools } from '../src/index'
 
@@ -36,7 +36,7 @@ export async function createProjectHarness(root: string, options: ProjectHarness
   const context = {
     sessionId: 'project-acceptance',
     codingSession: {},
-    contextPayloadStore: new InMemoryContextPayloadStore(),
+    contextPayloadStore: createInMemoryContextPayloadStore(),
     abortSignal: new AbortController().signal,
     approval: {
       awaitConfirmationDecision: async (message: string, _signal?: AbortSignal, confirmation?: Record<string, unknown>) => {
@@ -66,7 +66,7 @@ export async function createProjectHarness(root: string, options: ProjectHarness
     },
   } as unknown as ProjectToolContext
   projectFileContext.register(context)
-  const coordinator = fileContextFor(context)
+  const coordinator = fileContextRegistry.for(context)
   let callId = 0
   /** 按工具名调用：入参先过工具自己的 schema，回执经文件上下文协调器定稿。 */
   const call = async (name: string, args: Record<string, unknown>): Promise<any> => {
