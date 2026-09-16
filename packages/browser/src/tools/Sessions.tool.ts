@@ -49,8 +49,8 @@ const enterBrowserSite = defineBrowserTool<{ url: string }>({
     ctx.abortSignal.throwIfAborted()
     // enterSite 会打开页面、绑定当前 session，并准备站点级 context。
     const browserContext = await ctx.browser.enterSite(url)
-    // 首次进入站点时确保 manifest 存在，后续 artifact 工具才能按标准目录写入。
-    const workspaceManifest = await createArtifactManager(ctx).ensureManifest(browserContext)
+    // 进入站点：整份写一次 manifest（刷新 lastActivatedAt），后续 artifact 工具才能按标准目录写入。
+    const workspaceManifest = await createArtifactManager(ctx).activateManifest(browserContext)
 
     return {
       active: true,
@@ -213,7 +213,7 @@ const getBrowserWorkspaceManifest = defineBrowserTool<Record<string, never>>({
   forbidden: ['不要在 browser mode 未激活时调用。'],
   usage: ['调用前必须已有 active browser site。'],
   examples: [{}],
-  notes: ['manifest 缺失时会被幂等创建。'],
+  notes: ['manifest 已经存在就原样返回；只有缺失或损坏时才补写一份。'],
   schema: z.object({}),
   permissions: ['fs:read', 'fs:write'],
   capabilities: BrowserArtifactReadCapability,
@@ -221,8 +221,8 @@ const getBrowserWorkspaceManifest = defineBrowserTool<Record<string, never>>({
   isConcurrencySafe: () => true,
   execute: async (_input, ctx) => {
     ctx.abortSignal.throwIfAborted()
-    // ensureManifest 是幂等操作，缺失时会补齐标准目录说明。
-    return createArtifactManager(ctx).ensureManifest(getActiveBrowserContext(ctx))
+    // 读操作：manifest 已经是当前站点的就原样返回，只有缺失、损坏或不是本站点的才补写。
+    return createArtifactManager(ctx).getManifest(getActiveBrowserContext(ctx))
   },
 })
 

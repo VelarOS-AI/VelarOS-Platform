@@ -97,9 +97,46 @@ interface SaveBrowserRecipeSkeletonInput {
 class BrowserWorkspaceArtifactManager {
   constructor(private readonly access: BrowserWorkspaceArtifactAccess) {}
 
-  /** 创建或刷新 manifest。 */
+  /**
+   * 确保 manifest 存在且是当前站点的；**已经对得上就原样返回，不写盘**。
+   *
+   * 这个方法在每次 listArtifacts / writeArtifact / space_manifest 前都会被调用。老写法每次
+   * 整份重写（只为刷新 lastActivatedAt），于是声明 `effectKind: 'read'`、可并发的
+   * `browser:space_manifest` 每调一次就改一次盘，两个并发的 list_artifacts 还会同时整份写
+   * 同一个文件。真正的「进入站点」刷新走 {@link activateManifest}。
+   */
   public async ensureManifest(context: BrowserSiteContext): Promise<BrowserWorkspaceManifest> {
     const existingManifest = await this.tryLoadManifest()
+    if (existingManifest && this.isManifestCurrent(existingManifest, context)) return existingManifest
+
+    return this.writeManifest(context, existingManifest)
+  }
+
+  /** 读取 manifest；缺失、损坏或不是当前站点的才重建。 */
+  public async getManifest(context: BrowserSiteContext): Promise<BrowserWorkspaceManifest> {
+    return this.ensureManifest(context)
+  }
+
+  /** 进入站点：整份写一次 manifest，刷新 lastActivatedAt。只有 browser:enter_site 该调它。 */
+  public async activateManifest(context: BrowserSiteContext): Promise<BrowserWorkspaceManifest> {
+    return this.writeManifest(context, await this.tryLoadManifest())
+  }
+
+  /** manifest 是否描述的就是当前站点（版本由 tryLoadManifest 把关）。 */
+  private isManifestCurrent(
+    manifest: BrowserWorkspaceManifest,
+    context: BrowserSiteContext
+  ): boolean {
+    return (
+      manifest.workspaceRoot === context.workspaceRoot &&
+      manifest.siteOrigin === getBrowserSiteOrigin(context.url)
+    )
+  }
+
+  private async writeManifest(
+    context: BrowserSiteContext,
+    existingManifest: Nullable<BrowserWorkspaceManifest>
+  ): Promise<BrowserWorkspaceManifest> {
     const savedAt = Date.now()
     const manifest: BrowserWorkspaceManifest = {
       version: BrowserWorkspaceManifestVersion,
@@ -121,11 +158,6 @@ class BrowserWorkspaceArtifactManager {
     )
 
     return manifest
-  }
-
-  /** 读取 manifest；缺失或损坏时自动重建。 */
-  public async getManifest(context: BrowserSiteContext): Promise<BrowserWorkspaceManifest> {
-    return (await this.tryLoadManifest()) ?? this.ensureManifest(context)
   }
 
   /** 列出浏览器工作区 artifact。 */
@@ -159,7 +191,7 @@ class BrowserWorkspaceArtifactManager {
 
   /** 写入任意类型 artifact。 */
   public async writeArtifact(input: WriteBrowserArtifactInput): Promise<BrowserWorkspaceArtifactRecord> {
-    const manifest = await this.ensureManifest(input.context)
+    await this.ensureManifest(input.context)
     const relativePath = buildBrowserArtifactRelativePath(input.kind, input.format, input.name)
     const result = await this.access.writeFile(relativePath, input.content, {
       overwrite: !!input.overwrite,
@@ -171,7 +203,9 @@ class BrowserWorkspaceArtifactManager {
       path: result.path,
       relativePath,
       bytes: result.bytes,
-      savedAt: manifest.lastActivatedAt,
+      // 落盘时刻，不是 manifest 的 lastActivatedAt：manifest 不再每次重写，那个时间戳是
+      // 「上次进入站点」，拿它当产物的保存时间会把几小时前的时刻写进记录。
+      savedAt: Date.now(),
     }
   }
 
