@@ -1,4 +1,4 @@
-// 模块结构登记：哪些包已进入治理，工具、契约、实现、对外入口各放在哪。
+// 模块结构登记：哪些包已进入治理，工具、契约、类型、实现、工具函数各放在哪。
 // 方案正文见 docs/architecture/module-ownership.md；本文件是门禁的单一来源。
 //
 // 字段：
@@ -17,8 +17,9 @@
 //   utils           纯工具函数目录：扁平，按类别分文件；只放函数和常量，每个函数上方一句中文说明，只引 utils、types 与合同
 //   tuning          可调参数文件（相对 utils，没有可调参数的包不填）：超时、缓冲、保留条数、缺省条数、阈值集中在这一个冻结表里，每项一句说明、每项有人用；
 //                   数字缺省值不许散在 impl 与 utils。对外承诺的上限不在这里，在 contract/constants.ts
-//   exports         对外入口所在目录，package.json 的 exports 指向这里编译出来的文件
-//   browserSafeEntries  会被渲染进程加载的入口（exports 下的文件名）：整条引用链不许出现 Node 内置模块
+//                   （对外入口不登记：入口文件就是 src 根上的那几个 .ts，与 package.json 的 exports 一一对应，
+//                   多入口只为运行环境隔离而留；它们编译成 dist/<名>.js 与 dist/<名>.d.ts）
+//   browserSafeEntries  会被渲染进程加载的入口（src 根上的入口文件名，嵌套子路径写成 protocol/message.ts）：整条引用链不许出现 Node 内置模块
 //   environmentTable    常量表里登记环境变量的表名（不读环境变量的包不填；不填时代码里出现环境变量名就拦）
 //   environmentPrefixes 除 VELAROS_ 外还要扫的环境变量前缀（读别人定义、改不了的名字时才填）：只扩大扫描面，不是豁免，
 //                       登记的名字照样要有人用、代码里的名字照样要先登记；新起的变量名一律 VELAROS_
@@ -41,7 +42,6 @@ export const GovernedModules = [
     impl: 'src/impl',
     utils: 'src/utils',
     tuning: 'tuning.ts',
-    exports: 'src/exports',
     browserSafeEntries: [],
     environmentTable: 'AgentEnvironmentVariables',
     status: 'migrating',
@@ -76,7 +76,6 @@ export const GovernedModules = [
     utils: 'src/utils',
     // 包内可调参数：超时、缓冲、保留条数、缺省条数、阈值，一处改全包生效
     tuning: 'tuning.ts',
-    exports: 'src/exports',
     browserSafeEntries: ['contracts.ts'],
     // 可移植数据文件里的环境变量表：代码里出现的每个 VELAROS_* 名字都要登记在这里
     environmentTable: 'SystemEnvironmentVariables',
@@ -111,7 +110,6 @@ export const GovernedModules = [
     impl: 'src/impl',
     utils: 'src/utils',
     tuning: 'tuning.ts',
-    exports: 'src/exports',
     browserSafeEntries: ['contracts.ts'],
     hostPort: 'ProjectToolApi',
     hostPortField: 'project',
@@ -136,7 +134,6 @@ export const GovernedModules = [
     portable: 'platform.ts',
     impl: 'src/impl',
     utils: 'src/utils',
-    exports: 'src/exports',
     browserSafeEntries: ['index.ts', 'contracts.ts'],
     environmentTable: 'PlatformEnvironmentVariables',
     layers: [
@@ -156,7 +153,6 @@ export const GovernedModules = [
     portable: 'shell-command.ts',
     impl: 'src/impl',
     utils: 'src/utils',
-    exports: 'src/exports',
     browserSafeEntries: ['index.ts', 'contracts.ts'],
     layers: [
       // 命令策略与审批请求互不依赖
@@ -176,7 +172,6 @@ export const GovernedModules = [
     impl: 'src/impl',
     utils: 'src/utils',
     tuning: 'tuning.ts',
-    exports: 'src/exports',
     browserSafeEntries: ['index.ts', 'contracts.ts'],
     layers: [
       ['RehearsalSandboxRules.ts'],
@@ -195,7 +190,6 @@ export const GovernedModules = [
     impl: 'src/impl',
     utils: 'src/utils',
     tuning: 'tuning.ts',
-    exports: 'src/exports',
     // 根入口读写磁盘，只给 Node；渲染进程只能加载可移植数据
     browserSafeEntries: ['contracts.ts'],
     layers: [
@@ -222,7 +216,6 @@ export const GovernedModules = [
     impl: 'src/impl',
     utils: 'src/utils',
     tuning: 'tuning.ts',
-    exports: 'src/exports',
     // 遍历要读 .gitignore，根入口只给 Node；渲染进程只能加载可移植数据
     browserSafeEntries: ['contracts.ts'],
     layers: [
@@ -246,7 +239,6 @@ export const GovernedModules = [
     portable: 'surface-protocol.ts',
     impl: 'src/impl',
     utils: 'src/utils',
-    exports: 'src/exports',
     // 只依赖 zod，两个入口浏览器扩展与渲染进程都能加载
     browserSafeEntries: ['index.ts', 'contracts.ts'],
     layers: [
@@ -267,7 +259,6 @@ export const GovernedModules = [
     impl: 'src/impl',
     utils: 'src/utils',
     tuning: 'tuning.ts',
-    exports: 'src/exports',
     // 零运行时依赖的浏览器库：两个入口渲染进程与浏览器扩展都能加载
     browserSafeEntries: ['index.ts', 'contracts.ts'],
     layers: [
@@ -292,7 +283,6 @@ export const GovernedModules = [
     impl: 'src/impl',
     utils: 'src/utils',
     tuning: 'tuning.ts',
-    exports: 'src/exports',
     // 根入口要读写磁盘、要 office 的渲染原语，只给 Node；可移植数据那个入口谁都能加载
     browserSafeEntries: ['contracts.ts'],
     environmentTable: 'DocumentRendererEnvironmentVariables',
@@ -315,7 +305,6 @@ export const GovernedModules = [
     portable: 'cli.ts',
     impl: 'src/impl',
     utils: 'src/utils',
-    exports: 'src/exports',
     // 根入口要起子进程（node:child_process），只有可移植数据这一个入口渲染进程能加载
     browserSafeEntries: ['contracts.ts'],
     environmentTable: 'CliEnvironmentVariables',
@@ -342,7 +331,6 @@ export const GovernedModules = [
     impl: 'src/impl',
     utils: 'src/utils',
     tuning: 'tuning.ts',
-    exports: 'src/exports',
     // 根入口要读磁盘、要拉语言服务子进程，只给 Node；渲染进程只能加载可移植数据
     browserSafeEntries: ['contracts.ts'],
     // 不读环境变量：标准库目录读的是 Electron 的 process.resourcesPath，不是环境变量
@@ -372,7 +360,6 @@ export const GovernedModules = [
     impl: 'src/impl',
     utils: 'src/utils',
     tuning: 'tuning.ts',
-    exports: 'src/exports',
     // 根入口读写归档、拉起命令行，只给 Node；渲染进程与第三方工具链只能加载可移植数据
     browserSafeEntries: ['contracts.ts'],
     // 不读任何环境变量：地址、凭据、驱动全部由宿主从注入面塞进来，所以不登记环境变量表
@@ -404,7 +391,6 @@ export const GovernedModules = [
     impl: 'src/impl',
     utils: 'src/utils',
     tuning: 'tuning.ts',
-    exports: 'src/exports',
     // 入口收口（四个入口）是下一段的事；现在六个入口的名字一个不变
     browserSafeEntries: ['core-contracts.ts'],
     hostPort: 'ToolBrowserApi',
@@ -440,7 +426,6 @@ export const GovernedModules = [
     impl: 'src/impl',
     utils: 'src/utils',
     tuning: 'tuning.ts',
-    exports: 'src/exports',
     // 根入口是进程内内核与模块 SDK，渲染进程要加载；serve、client、remote 三个入口是 Node 专用
     browserSafeEntries: ['index.ts', 'contracts.ts'],
     environmentTable: 'KernelEnvironmentVariables',
@@ -471,7 +456,6 @@ export const GovernedModules = [
     impl: 'src/impl',
     utils: 'src/utils',
     tuning: 'tuning.ts',
-    exports: 'src/exports',
     // 根入口要 SQLite 与文件 IO，只给 Node；渲染进程只能加载可移植数据
     browserSafeEntries: ['contracts.ts'],
     hostPort: 'MemoryToolApi',
@@ -509,7 +493,6 @@ export const GovernedModules = [
     impl: 'src/impl',
     utils: 'src/utils',
     tuning: 'tuning.ts',
-    exports: 'src/exports',
     // 根入口要 SQLite 与 LanceDB，只给 Node；渲染进程只能加载可移植数据
     browserSafeEntries: ['contracts.ts'],
     hostPort: 'KnowledgeToolApi',
@@ -543,7 +526,6 @@ export const GovernedModules = [
     impl: 'src/impl',
     utils: 'src/utils',
     tuning: 'tuning.ts',
-    exports: 'src/exports',
     // 根入口的装配链带 node:vm / node:fs，渲染进程只能加载可移植数据与目录逻辑
     browserSafeEntries: ['contracts.ts', 'catalog.ts'],
     environmentTable: 'ModelEnvironmentVariables',
@@ -571,7 +553,6 @@ export const GovernedModules = [
     impl: 'src/impl',
     utils: 'src/utils',
     tuning: 'tuning.ts',
-    exports: 'src/exports',
     // 根入口要 docx / exceljs / pdfjs 与磁盘，只给 Node；渲染进程只能加载可移植数据
     browserSafeEntries: ['contracts.ts'],
     environmentTable: 'OfficeEnvironmentVariables',
@@ -602,7 +583,6 @@ export const GovernedModules = [
     impl: 'src/impl',
     utils: 'src/utils',
     tuning: 'tuning.ts',
-    exports: 'src/exports',
     // 根入口要 child_process 拉起 helper，只给 Node；渲染进程只能加载可移植数据
     browserSafeEntries: ['contracts.ts'],
     environmentTable: 'ComputerEnvironmentVariables',

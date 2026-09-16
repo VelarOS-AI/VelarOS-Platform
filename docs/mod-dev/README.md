@@ -158,5 +158,5 @@ Platform 的安全缺省只允许 `bundled-official`；宿主没有显式放行�
 | 快照 → 各领域消费面的纯函数投影                                                       | `packages/agent/src/utils/mods/agent-mod-projection.ts`                             |
 | 随包官方内置轴（第一个 bundled mod，自食狗粮）                                        | `packages/agent/src/impl/builtin/BuiltinAgentMod.ts`                                |
 | 宿主组装入口                                                                          | `packages/agent/src/impl/assembly/AgentModHostAssembler.ts`                         |
-| 唯一门面                                                                              | `packages/agent/src/exports/mods.ts`                                                |
+| 唯一门面                                                                              | `packages/agent/src/mods.ts`                                                |
 | 本仓落地形态与残余清单                                                                | [`docs/agent/agent-mod-trunk.md`](../agent/agent-mod-trunk.md)                      |

@@ -36,50 +36,50 @@ const RequiredPackageFiles = ["dist", "README.md"];
 const MinimumReadmeCharacters = 400;
 const ChineseCharacter = /[一-鿿]/;
 // 可移植契约入口:exportKey = package.json exports 键,contractsFile = 对应源文件(合包在切片下),
-// modules = 该入口只许 import 的可移植模块集合(相对 contractsFile 所在目录)。
+// modules = 该入口只许 import 的可移植模块集合(相对 contractsFile 所在目录，入口在 src 根上所以是 ./)。
 const PortableContracts = [
   {
     packageDirectory: "project",
     packageName: "@velaros-ai/project",
     exportKey: "./contracts",
-    contractsFile: "src/exports/contracts.ts",
+    contractsFile: "src/contracts.ts",
     modules: new Set([
-      "../types/project.js",
-      "../contract/constants.js",
+      "./types/project.js",
+      "./contract/constants.js",
     ]),
   },
   {
     packageDirectory: "browser",
     packageName: "@velaros-ai/browser/core",
     exportKey: "./core/contracts",
-    contractsFile: "src/exports/core-contracts.ts",
+    contractsFile: "src/core-contracts.ts",
     modules: new Set([
-      "../types/browser.js",
-      "../utils/address.js",
-      "../utils/screenshot-options.js",
+      "./types/browser.js",
+      "./utils/address.js",
+      "./utils/screenshot-options.js",
       // 纯闭集/默认值/宽容守卫,零实现依赖——与 screenshot-options 同性质的契约级模块(2026-08-06 配置单源批)。
-      "../utils/preferences.js",
+      "./utils/preferences.js",
       // mod/空间身份常量:纯字符串,零运行时依赖。产品壳的空间门控声明(renderer 也读)只需要
       // 这一个字符串——从 composition/mod 取会把整条 Node 侧运行时依赖拖进渲染 bundle。
-      "../contract/constants.js",
+      "./contract/constants.js",
       // 「视图没接上」的跨层标记 + 纯判定函数:常量与零依赖 type guard,宿主用它把运行时事实
       // 翻译成可执行指引(见 utils/errors.ts 文件头)。
-      "../utils/errors.js",
+      "./utils/errors.js",
       // 虚拟指针外观常量 + 纯 SVG 拼装函数:26 行、零 import,与上面两条同性质。补登记——
       // 3a864c7 把它从实现里劈出来时漏了登记,与 ModIdentity 是同一笔账。它必须能从契约入口
       // 取到:同一份常量要同时喂给页面注入脚本和宿主预览 UI(见文件头,两处各画一份必然漂移)。
-      "../utils/pointer.js",
+      "./utils/pointer.js",
     ]),
   },
   {
     packageDirectory: "system",
     packageName: "@velaros-ai/system",
     exportKey: "./contracts",
-    contractsFile: "src/exports/contracts.ts",
+    contractsFile: "src/contracts.ts",
     // 可移植入口只许转发可移植数据文件与常量表；两者零依赖（见 packages/system/MODULE.md）。
     modules: new Set([
-      "../types/system.js",
-      "../contract/constants.js",
+      "./types/system.js",
+      "./contract/constants.js",
     ]),
   },
 ];
@@ -544,22 +544,22 @@ for (const contracts of PortableContracts) {
 
 requirePublicTypeContracts(
   "browser",
-  "src/exports/core.ts",
+  "src/core.ts",
   "src/types/browser.ts",
   "src/types/browser.ts",
   ["BrowserActionPolicyConfig", "BrowserAutomationMode"],
 );
 requirePublicTypeContracts(
   "project",
-  "src/exports/index.ts",
-  "src/exports/contracts.ts",
+  "src/index.ts",
+  "src/contracts.ts",
   "src/types/project.ts",
   ["ProjectCommandResult", "ProjectCodeQuery"],
 );
 requirePublicTypeContracts(
   "office",
-  "src/exports/index.ts",
-  "src/exports/contracts.ts",
+  "src/index.ts",
+  "src/contracts.ts",
   "src/types/office.ts",
   ["OfficeEnvironmentInspection"],
 );

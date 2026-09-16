@@ -7,52 +7,52 @@
         "./component-library/src/componentLibrary/*"
       ],
       "@velaros-ai/agent-lab": [
-        "./packages/agent-lab/src/exports/index.ts"
+        "./packages/agent-lab/src/index.ts"
       ],
       "@velaros-ai/agent-lab/*": [
-        "./packages/agent-lab/src/exports/*"
+        "./packages/agent-lab/src/*"
       ],
       "@velaros-ai/agent": [
-        "./packages/agent/src/exports/index.ts"
+        "./packages/agent/src/index.ts"
       ],
       "@velaros-ai/agent/*": [
-        "./packages/agent/src/exports/*"
+        "./packages/agent/src/*"
       ],
       "@velaros-ai/browser/composition": [
-        "./packages/browser/src/exports/composition.ts"
+        "./packages/browser/src/composition.ts"
       ],
       "@velaros-ai/browser/composition/mod": [
-        "./packages/browser/src/exports/composition-mod.ts"
+        "./packages/browser/src/composition-mod.ts"
       ],
       "@velaros-ai/browser/core": [
-        "./packages/browser/src/exports/core.ts"
+        "./packages/browser/src/core.ts"
       ],
       "@velaros-ai/browser/core/contracts": [
-        "./packages/browser/src/exports/core-contracts.ts"
+        "./packages/browser/src/core-contracts.ts"
       ],
       "@velaros-ai/browser/runtime": [
-        "./packages/browser/src/exports/runtime.ts"
+        "./packages/browser/src/runtime.ts"
       ],
       "@velaros-ai/browser/tools": [
-        "./packages/browser/src/exports/tools.ts"
+        "./packages/browser/src/tools.ts"
       ],
       "@velaros-ai/cli": [
-        "./packages/cli/src/exports/index.ts"
+        "./packages/cli/src/index.ts"
       ],
       "@velaros-ai/cli/*": [
-        "./packages/cli/src/exports/*"
+        "./packages/cli/src/*"
       ],
       "@velaros-ai/computer/runtime": [
-        "./packages/computer/src/exports/runtime.ts"
+        "./packages/computer/src/runtime.ts"
       ],
       "@velaros-ai/computer/runtime/*": [
-        "./packages/computer/src/exports/*"
+        "./packages/computer/src/*"
       ],
       "@velaros-ai/computer/tools": [
-        "./packages/computer/src/exports/tools.ts"
+        "./packages/computer/src/tools.ts"
       ],
       "@velaros-ai/computer/tools/*": [
-        "./packages/computer/src/exports/*"
+        "./packages/computer/src/*"
       ],
       "@velaros-ai/ui/conversation": [
         "./packages/ui/src/conversation/index.ts"
@@ -64,121 +64,121 @@
         "./packages/core/src/index.ts"
       ],
       "@velaros-ai/development": [
-        "./packages/development/src/exports/index.ts"
+        "./packages/development/src/index.ts"
       ],
       "@velaros-ai/development/*": [
-        "./packages/development/src/exports/*"
+        "./packages/development/src/*"
       ],
       "@velaros-ai/html-artifacts": [
-        "./packages/html-artifacts/src/exports/index.ts"
+        "./packages/html-artifacts/src/index.ts"
       ],
       "@velaros-ai/html-artifacts/contracts": [
-        "./packages/html-artifacts/src/exports/contracts.ts"
+        "./packages/html-artifacts/src/contracts.ts"
       ],
       "@velaros-ai/core/*": [
         "./packages/core/src/*"
       ],
       "@velaros-ai/kernel": [
-        "./packages/kernel/src/exports/index.ts"
+        "./packages/kernel/src/index.ts"
       ],
       "@velaros-ai/kernel/contracts": [
-        "./packages/kernel/src/exports/contracts.ts"
+        "./packages/kernel/src/contracts.ts"
       ],
       "@velaros-ai/kernel/contracts/abi": [
-        "./packages/kernel/src/exports/contracts-abi.ts"
+        "./packages/kernel/src/contracts-abi.ts"
       ],
       "@velaros-ai/kernel/contracts/protocol": [
-        "./packages/kernel/src/exports/contracts-protocol.ts"
+        "./packages/kernel/src/contracts-protocol.ts"
       ],
       "@velaros-ai/kernel/runtime": [
-        "./packages/kernel/src/exports/runtime.ts"
+        "./packages/kernel/src/runtime.ts"
       ],
       "@velaros-ai/kernel/client": [
-        "./packages/kernel/src/exports/client.ts"
+        "./packages/kernel/src/client.ts"
       ],
       "@velaros-ai/kernel/client/contracts": [
-        "./packages/kernel/src/exports/client-contracts.ts"
+        "./packages/kernel/src/client-contracts.ts"
       ],
       "@velaros-ai/kernel/serve": [
-        "./packages/kernel/src/exports/serve.ts"
+        "./packages/kernel/src/serve.ts"
       ],
       "@velaros-ai/kernel/serve/updater": [
-        "./packages/kernel/src/exports/serve-updater.ts"
+        "./packages/kernel/src/serve-updater.ts"
       ],
       "@velaros-ai/kernel/remote": [
-        "./packages/kernel/src/exports/remote.ts"
+        "./packages/kernel/src/remote.ts"
       ],
       "@velaros-ai/kernel/remote/client": [
-        "./packages/kernel/src/exports/remote-client.ts"
+        "./packages/kernel/src/remote-client.ts"
       ],
       "@velaros-ai/kernel/remote/node": [
-        "./packages/kernel/src/exports/remote-node.ts"
+        "./packages/kernel/src/remote-node.ts"
       ],
       "@velaros-ai/platform": [
-        "./packages/platform/src/exports/index.ts"
+        "./packages/platform/src/index.ts"
       ],
       "@velaros-ai/platform/*": [
-        "./packages/platform/src/exports/*"
+        "./packages/platform/src/*"
       ],
       "@velaros-ai/path-rules": [
-        "./packages/path-rules/src/exports/index.ts"
+        "./packages/path-rules/src/index.ts"
       ],
       "@velaros-ai/path-rules/*": [
-        "./packages/path-rules/src/exports/*"
+        "./packages/path-rules/src/*"
       ],
       "@velaros-ai/rehearsal-sandbox": [
-        "./packages/rehearsal-sandbox/src/exports/index.ts"
+        "./packages/rehearsal-sandbox/src/index.ts"
       ],
       "@velaros-ai/rehearsal-sandbox/*": [
-        "./packages/rehearsal-sandbox/src/exports/*"
+        "./packages/rehearsal-sandbox/src/*"
       ],
       "@velaros-ai/shell-command": [
-        "./packages/shell-command/src/exports/index.ts"
+        "./packages/shell-command/src/index.ts"
       ],
       "@velaros-ai/shell-command/*": [
-        "./packages/shell-command/src/exports/*"
+        "./packages/shell-command/src/*"
       ],
       "@velaros-ai/text-files": [
-        "./packages/text-files/src/exports/index.ts"
+        "./packages/text-files/src/index.ts"
       ],
       "@velaros-ai/text-files/*": [
-        "./packages/text-files/src/exports/*"
+        "./packages/text-files/src/*"
       ],
       "@velaros-ai/surface-protocol": [
-        "./packages/surface-protocol/src/exports/index.ts"
+        "./packages/surface-protocol/src/index.ts"
       ],
       "@velaros-ai/surface-protocol/*": [
-        "./packages/surface-protocol/src/exports/*"
+        "./packages/surface-protocol/src/*"
       ],
       "@velaros-ai/document-renderer": [
-        "./packages/document-renderer/src/exports/index.ts"
+        "./packages/document-renderer/src/index.ts"
       ],
       "@velaros-ai/document-renderer/*": [
-        "./packages/document-renderer/src/exports/*"
+        "./packages/document-renderer/src/*"
       ],
       "@velaros-ai/knowledge": [
-        "./packages/knowledge/src/exports/index.ts"
+        "./packages/knowledge/src/index.ts"
       ],
       "@velaros-ai/knowledge/*": [
-        "./packages/knowledge/src/exports/*"
+        "./packages/knowledge/src/*"
       ],
       "@velaros-ai/memory": [
-        "./packages/memory/src/exports/index.ts"
+        "./packages/memory/src/index.ts"
       ],
       "@velaros-ai/memory/*": [
-        "./packages/memory/src/exports/*"
+        "./packages/memory/src/*"
       ],
       "@velaros-ai/office": [
-        "./packages/office/src/exports/index.ts"
+        "./packages/office/src/index.ts"
       ],
       "@velaros-ai/office/*": [
-        "./packages/office/src/exports/*"
+        "./packages/office/src/*"
       ],
       "@velaros-ai/system": [
-        "./packages/system/src/exports/index.ts"
+        "./packages/system/src/index.ts"
       ],
       "@velaros-ai/system/*": [
-        "./packages/system/src/exports/*"
+        "./packages/system/src/*"
       ],
       "@velaros-ai/ui": [
         "./packages/ui/src/index.ts"
@@ -187,10 +187,10 @@
         "./packages/ui/src/*"
       ],
       "@velaros-ai/project": [
-        "./packages/project/src/exports/index.ts"
+        "./packages/project/src/index.ts"
       ],
       "@velaros-ai/project/*": [
-        "./packages/project/src/exports/*"
+        "./packages/project/src/*"
       ]
     }
   },

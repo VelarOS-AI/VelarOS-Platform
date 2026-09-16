@@ -33,7 +33,7 @@ Agent 轴，再把组装好的 runtime 注入 kernel module。
 | `packages/agent/src/utils/mods/agent-mod-projection.ts` | 快照 → 各领域消费面的纯函数投影 |
 | `packages/agent/src/impl/builtin/BuiltinAgentMod.ts` | 随包官方内置轴 = 第一个 bundled mod（自食狗粮） |
 | `packages/agent/src/impl/assembly/AgentModHostAssembler.ts` | 宿主组装入口：Kernel pack 清单 → Loader |
-| `packages/agent/src/exports/mods.ts` | 唯一门面（再经 `src/exports/index.ts` 出包） |
+| `packages/agent/src/mods.ts` | 唯一门面（再经 `src/index.ts` 出包） |
 
 探针：`packages/agent/test/protocol/mods.test.ts`、`packages/agent/test/mods.test.ts`（构造级，bun 直驱）、
 `packages/agent/test/modSeamToolChain.test.ts`（装配面到工具缝的端到端回归门，见「派发点 ≠ 接线」）。

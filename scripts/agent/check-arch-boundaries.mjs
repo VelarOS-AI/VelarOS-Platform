@@ -533,7 +533,7 @@ function scanConcreteSemanticInjectionBoundary() {
     'packages/agent/src/utils/wire/observability.ts',
     'packages/agent/src/utils/ledgers/execution-span-debug.ts',
     'packages/agent/src/impl/ledgers/LedgerExecutionSpanScopeFactory.ts',
-    'packages/agent/src/exports/index.ts',
+    'packages/agent/src/index.ts',
   ]
   const retiredConcreteObservationPattern =
     /\b(?:MemorySpan(?:Schema)?|ExecutionSpanDebugMemory|recordMemorySpan|recordAttentionOutcomeMirror|ExecutionSpanOutcomeMirror)\b|category:\s*z\.literal\(['"]memory['"]\)|category\s*===\s*['"]memory['"]/u

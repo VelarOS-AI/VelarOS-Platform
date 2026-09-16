@@ -62,15 +62,15 @@ const PortableContractRules = [
     packageName: '@velaros-ai/memory',
     packageRoot: 'packages/memory',
     exportKey: './contracts',
-    contractsFile: 'src/exports/contracts.ts',
+    contractsFile: 'src/contracts.ts',
     // 键是入口里 import 的原文（含 .js），不是磁盘路径：搬家时两者必须一起改，否则这道门必红。
     // `valueExport` 的那一条是常量表：它随 ./contracts 出包，入口里写成 `export *`（不是 type-only）。
     sourceModules: new Map([
-      ['../types/memory.js', {
+      ['./types/memory.js', {
         path: 'src/types/memory.ts',
         allowedImports: new Set(['../contract/constants.js']),
       }],
-      ['../contract/constants.js', {
+      ['./contract/constants.js', {
         path: 'src/contract/constants.ts',
         allowedImports: new Set(),
         valueExport: true,
@@ -85,10 +85,10 @@ const PortableContractRules = [
     packageName: '@velaros-ai/knowledge',
     packageRoot: 'packages/knowledge',
     exportKey: './contracts',
-    contractsFile: 'src/exports/contracts.ts',
+    contractsFile: 'src/contracts.ts',
     // 键是入口里 import 的原文（含 .js），不是磁盘路径：搬家时两者必须一起改，否则这道门必红。
     sourceModules: new Map([
-      ['../types/knowledge.js', {
+      ['./types/knowledge.js', {
         path: 'src/types/knowledge.ts',
         allowedImports: new Set(['../contract/constants.js']),
       }],

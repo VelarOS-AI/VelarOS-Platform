@@ -16,11 +16,12 @@
 //   6. 对外入口由合同控制：入口文件只有转发语句；导出的类型只能来自 provides、requires、公开的 types 文件、常量表派生的别名，或 provides 登记的类上方接口；
 //      导出的值要么是 contract 的常量表，要么是 impl 里显式标注了公开接口类型的实例或工厂，不许导出类、utils 函数和内部接口；
 //      provides 与 requires 里的每个声明都从根入口导出；公开接口引用到的数据类型都导出，导出的数据类型都被公开接口用到；
-//      可移植数据文件里没有公开接口用不到的类型。package.json 的 exports 与入口文件一一对应。
+//      可移植数据文件里没有公开接口用不到的类型。package.json 的 exports 与 src 根上的入口文件一一对应，编译目标是 dist/<名>.js 与 dist/<名>.d.ts。
 //   7. 会被渲染进程加载的入口，整条值引用链里不许出现 Node 内置模块。
 //   8. 环境变量：代码里出现的每个 VELAROS_*（以及登记在 environmentPrefixes 里的别人的前缀）名字都登记在常量表的环境变量表里，登记了的都有人用。
 //      宿主端口：登记的端口接口里的每个方法，都有工具在调（工具文件自己调，或它委托的 impl 类在调）；没人调的方法不许留在注入面。
-//   9. src 下只有 contract、types、impl、utils、exports 五个目录，src 根上不放源文件；依赖只许写在文件头，不许用内联 import 类型和动态 import。
+//   9. src 下只有 contract、types、impl、utils 四个目录加入口文件；src 根上除入口以外不放源文件（src 根与入口目录里的每个 .ts 都要在
+//      package.json 的 exports 里有对应子路径）；依赖只许写在文件头，不许用内联 import 类型和动态 import。
 //      可执行入口放包根 bin/：package.json 的 bin 指 ./bin/<命令>.mjs，文件在、带 #!/usr/bin/env node、files 里有 bin。
 //  10. 模块卡片十节齐全；「提供什么」列出全部入口、导出的每个值和每个公开接口；「骨干链路」点到每个工具；「结构」写明目录树。
 //  11. 不变量登记表每行编号唯一、检验方式合法、检验器真的存在；卡片里的条数如实。包的 test 脚本跑验收测试。
@@ -288,8 +289,15 @@ for (const module of selectedModules) {
   const contractRoot = join(packageRoot, module.contract)
   const typesRoot = join(packageRoot, module.types)
   const implRoot = join(packageRoot, module.impl)
-  const exportsRoot = join(packageRoot, module.exports)
   const utilsRoot = join(packageRoot, module.utils)
+  // 对外入口就是 src 根上的那几个 .ts；嵌套子路径（./protocol/message）的入口住在同名的入口目录里。
+  const subpathName = (subpath) => (subpath === '.' ? 'index' : subpath.replace(/^\.\//u, ''))
+  const manifestSubpaths = Object.keys(manifest.exports ?? {})
+  const entryDirectories = new Set(
+    manifestSubpaths.map(subpathName).filter((name) => name.includes('/')).map((name) => name.split('/')[0]),
+  )
+  const entryNameOf = (file) => relative(srcRoot, file).replace(/\.ts$/u, '')
+  const isEntryFile = (file) => dirname(file) === srcRoot || entryDirectories.has(relative(srcRoot, file).split('/')[0])
   const providesPath = join(contractRoot, 'provides.ts')
   const requiresPath = join(contractRoot, 'requires.ts')
   const constantsPath = join(contractRoot, 'constants.ts')
@@ -590,7 +598,7 @@ for (const module of selectedModules) {
     }
   }
   const publicFactories = new Set()
-  for (const file of sourceFiles.filter((path) => inside(path, exportsRoot))) {
+  for (const file of sourceFiles.filter(isEntryFile)) {
     for (const { statement, specifier } of relativeSpecifiers(parse(file))) {
       const target = resolveRelativeImport(file, specifier)
       if (!target || !inside(target, implRoot) || !ts.isExportDeclaration(statement) || !statement.exportClause) continue
@@ -861,21 +869,24 @@ for (const module of selectedModules) {
   }
 
   // ── 6. 对外入口由接口控制 ───────────────────────────────────────────────
-  const exportFiles = sourceFiles.filter((path) => inside(path, exportsRoot))
-  const entryFileOfSubpath = (subpath) => join(exportsRoot, `${subpath === '.' ? 'index' : subpath.replace(/^\.\//u, '')}.ts`)
-  const subpaths = Object.keys(manifest.exports ?? {})
+  const exportFiles = sourceFiles.filter(isEntryFile)
+  const entryFileOfSubpath = (subpath) => join(srcRoot, `${subpathName(subpath)}.ts`)
+  const subpaths = manifestSubpaths
   for (const subpath of subpaths) {
     const target = manifest.exports[subpath]
-    const name = subpath === '.' ? 'index' : subpath.replace(/^\.\//u, '')
-    const expected = { types: `./dist/${basename(module.exports)}/${name}.d.ts`, import: `./dist/${basename(module.exports)}/${name}.js` }
+    const name = subpathName(subpath)
+    const expected = { types: `./dist/${name}.d.ts`, import: `./dist/${name}.js` }
     for (const key of ['types', 'import']) {
       if (target?.[key] !== expected[key]) fail(`${label}: package.json exports["${subpath}"].${key} 应当是 ${expected[key]}，现在是 ${target?.[key] ?? '(缺)'}`)
     }
     if (!existsSync(entryFileOfSubpath(subpath))) fail(`${label}: package.json 登记了入口 ${subpath}，但没有 ${shortPath(entryFileOfSubpath(subpath))}`)
   }
   for (const file of exportFiles) {
-    const subpath = basename(file, '.ts') === 'index' ? '.' : `./${basename(file, '.ts')}`
-    if (!subpaths.includes(subpath)) fail(`${label}: ${shortPath(file)} 在 package.json 的 exports 里没有对应的 ${subpath}`)
+    const name = entryNameOf(file)
+    const subpath = name === 'index' ? '.' : `./${name}`
+    if (!subpaths.includes(subpath)) {
+      fail(`${label}: ${shortPath(file)} 在 package.json 的 exports 里没有对应的 ${subpath}；src 根上只放对外入口，实现放进 ${module.contract}、${module.types}、${module.impl} 或 ${module.utils}`)
+    }
   }
   const rootEntryPath = entryFileOfSubpath('.')
   const exported = new Map() // 声明 → { name, isValue, entries }
@@ -888,7 +899,7 @@ for (const module of selectedModules) {
         continue
       }
       const target = resolveRelativeImport(file, statement.moduleSpecifier.text)
-      if (!statement.exportClause && target && !inside(target, exportsRoot) && target !== portablePath && target !== constantsPath) {
+      if (!statement.exportClause && target && !isEntryFile(target) && target !== portablePath && target !== constantsPath) {
         fail(`${label}: 入口 ${shortPath(file)} 通配转发了 ${statement.moduleSpecifier.text}；通配只许指向别的入口或可移植数据文件，其余逐个列名`)
       }
     }
@@ -1033,9 +1044,9 @@ for (const module of selectedModules) {
 
   // ── 7. 会被渲染进程加载的入口 ─────────────────────────────────────────
   for (const entry of module.browserSafeEntries ?? []) {
-    const entryFile = join(exportsRoot, entry)
+    const entryFile = join(srcRoot, entry)
     if (!existsSync(entryFile)) {
-      fail(`${label}: 登记为渲染进程可加载的入口 ${module.exports}/${entry} 不存在`)
+      fail(`${label}: 登记为渲染进程可加载的入口 src/${entry} 不存在`)
       continue
     }
     const pending = [[entryFile, [entryFile]]]
@@ -1151,14 +1162,10 @@ for (const module of selectedModules) {
     }
     visitImports(sourceFile)
   }
-  for (const file of sourceFiles) {
-    if (dirname(file) === srcRoot) fail(`${label}: ${shortPath(file)} 放在 src 根上；对外入口放进 ${module.exports}/，其余放进 contract、types、impl 或 utils`)
-  }
-  const allowedSourceDirectories = [module.contract, module.types, module.impl, module.utils, module.exports].map((path) => basename(path))
+  const governedDirectories = [module.contract, module.types, module.impl, module.utils].map((path) => basename(path))
   for (const directory of childDirectories(srcRoot)) {
-    if (!allowedSourceDirectories.includes(directory)) {
-      fail(`${label}: src/${directory}/ 不是登记的目录；src 下只有 ${allowedSourceDirectories.join('、')} 五个目录`)
-    }
+    if (governedDirectories.includes(directory) || entryDirectories.has(directory)) continue
+    fail(`${label}: src/${directory}/ 不是登记的目录；src 下只有 ${governedDirectories.join('、')} 四个目录，外加嵌套子路径入口自己的目录（package.json 的 exports 里有 ./${directory}/… 才算）`)
   }
 
   // ── 9b. 可执行入口放包根 bin/，只当壳 ───────────────────────────────────
@@ -1207,7 +1214,7 @@ for (const module of selectedModules) {
     }
     const structure = sections.get('结构') ?? ''
     if (module.toolsFile && !structure.includes(basename(module.toolsFile))) fail(`${label}: 卡片「结构」没有写明工具文件 ${basename(module.toolsFile)}`)
-    for (const directory of allowedSourceDirectories) {
+    for (const directory of governedDirectories) {
       if (!new RegExp(`^\\s+${directory}/\\s`, 'mu').test(structure)) fail(`${label}: 卡片「结构」的目录树里没有列出 ${directory}/`)
     }
   }
