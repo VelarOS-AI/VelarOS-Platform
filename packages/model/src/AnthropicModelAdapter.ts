@@ -26,7 +26,8 @@ class AnthropicModelAdapter extends ModelAdapter {
           anthropic(modelId),
           config.provider,
           modelId,
-          config.thinkingDepth
+          config.thinkingDepth,
+          config.reasoningLevel
         )
       )
   }

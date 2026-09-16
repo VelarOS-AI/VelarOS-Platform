@@ -26,7 +26,8 @@ class GoogleModelAdapter extends ModelAdapter {
           google(modelId),
           config.provider,
           modelId,
-          config.thinkingDepth
+          config.thinkingDepth,
+          config.reasoningLevel
         )
       )
   }

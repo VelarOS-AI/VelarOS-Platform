@@ -247,7 +247,8 @@ class AgentModelResolver {
       createThinkingDepthProviderOptions(
         input.providerId,
         runtimeModel,
-        input.thinkingDepth ?? 'balanced'
+        input.thinkingDepth ?? 'balanced',
+        input.reasoningLevel
       )
     )
     const metadataFallbackReason = providerScriptMetadata?.fallbackReason

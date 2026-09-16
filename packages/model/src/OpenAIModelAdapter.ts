@@ -19,6 +19,7 @@ import type { ModelProviderCollection } from './ModelProviderCollection'
 import { applyPromptCacheProviderOptions } from './PromptCacheModelOptions'
 import {
   applyThinkingDepthProviderOptions,
+  isReasoningDisabledByLevel,
   mergeOpenRouterReasoning,
 } from './ThinkingDepthModelOptions'
 
@@ -31,6 +32,7 @@ interface NormalizedOpenRouterRouting {
   providerPreferences?: OpenRouterProviderRoutingPreferences
   useFreeModelsForDebug: boolean
   thinkingDepth: ModelAdapterConfig['thinkingDepth']
+  reasoningLevel: ModelAdapterConfig['reasoningLevel']
 }
 
 const OPENROUTER_REASONING_MODEL_MATCHERS = [
@@ -73,12 +75,13 @@ class OpenAIModelAdapter extends ModelAdapter {
             openai(modelId),
             config.provider,
             modelId,
-            config.thinkingDepth
+            config.thinkingDepth,
+            config.reasoningLevel
           )
         )
       }
 
-      const routing = this.normalizeOpenRouterRouting(modelId, options, config.thinkingDepth)
+      const routing = this.normalizeOpenRouterRouting(modelId, options, config)
       const openrouter = createOpenAI({
         apiKey,
         baseURL,
@@ -111,7 +114,7 @@ class OpenAIModelAdapter extends ModelAdapter {
   private normalizeOpenRouterRouting(
     modelId: string,
     options: Optional<ModelRequestOptions>,
-    thinkingDepth: ModelAdapterConfig['thinkingDepth']
+    config: Pick<ModelAdapterConfig, 'thinkingDepth' | 'reasoningLevel'>
   ): NormalizedOpenRouterRouting {
     const routing = options?.openRouter
     const useFreeModelsForDebug = !!routing?.useFreeModelsForDebug
@@ -120,7 +123,8 @@ class OpenAIModelAdapter extends ModelAdapter {
         model: OpenRouterFreeModelId,
         allowedModels: [],
         useFreeModelsForDebug,
-        thinkingDepth,
+        thinkingDepth: config.thinkingDepth,
+        reasoningLevel: config.reasoningLevel,
       }
 
     return {
@@ -128,7 +132,8 @@ class OpenAIModelAdapter extends ModelAdapter {
       allowedModels: this.normalizeAllowedModels(routing?.allowedModels ?? []),
       providerPreferences: routing?.providerPreferences,
       useFreeModelsForDebug,
-      thinkingDepth,
+      thinkingDepth: config.thinkingDepth,
+      reasoningLevel: config.reasoningLevel,
     }
   }
 
@@ -175,7 +180,11 @@ class OpenAIModelAdapter extends ModelAdapter {
       }
 
       if (shouldInjectReasoning) {
-        nextBody.reasoning = mergeOpenRouterReasoning(body.reasoning, routing.thinkingDepth)
+        nextBody.reasoning = mergeOpenRouterReasoning(
+          body.reasoning,
+          routing.thinkingDepth,
+          routing.reasoningLevel
+        )
       }
 
       return {
@@ -226,9 +235,15 @@ class OpenAIModelAdapter extends ModelAdapter {
     }
   }
 
-  /** 仅在 OpenRouter 支持或可能自动路由到 reasoning 模型时注入运行策略。 */
+  /**
+   * 仅在 OpenRouter 支持或可能自动路由到 reasoning 模型时注入运行策略。
+   *
+   * off 档没有 thinkingDepth 也要注入：`reasoning: { enabled: false, exclude: true }` 是 OpenRouter 的关闭
+   * 写法，不发它等于把开关交还给上游模型的默认值（新一代模型默认思考），用户选的"关"就不生效。
+   */
   private shouldInjectOpenRouterReasoning(routing: NormalizedOpenRouterRouting): boolean {
-    if (!routing.thinkingDepth || routing.useFreeModelsForDebug) return false
+    if (routing.useFreeModelsForDebug) return false
+    if (!routing.thinkingDepth && !isReasoningDisabledByLevel(routing.reasoningLevel)) return false
 
     if (routing.model === OpenRouterAutoModelId) return (
         isEmpty(routing.allowedModels) ||

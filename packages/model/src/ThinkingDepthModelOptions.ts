@@ -155,11 +155,38 @@ function mergeOpenRouterReasoning(
   }
 }
 
+/**
+ * off 档各家的写法（查各家 API 语义后逐家定，不是一刀切）：
+ *
+ * - **anthropic 必须显式发关闭**：省略 `thinking` 不等于不思考——新一代模型的自适应思考是默认开的，
+ *   `claude-*-latest` 这类别名更可能指到默认开的那一代。厂商的关闭写法是 `thinking: { type: 'disabled' }`，
+ *   3.7/4.x 都接受；5 一代只在 effort ≤ high 时接受，本档刻意不发 `effort`（服务端默认就是 high），所以也安全。
+ *   **加模型匹配器时要一起查这条**：有的型号（思考永远开的那一代）会直接拒绝 `disabled`，只能省略 `thinking`；
+ *   现在 `matchesClaudeReasoningModel` 匹配不到它们，所以这里没有分支。
+ * - **openai / google 一个推理参数都不发**：两家都没有覆盖本包全部推理模型的通用关闭写法
+ *   （`reasoning_effort: 'none'` 要 GPT-5.1 起才支持，发给 o3/o4 会被拒；`thinkingBudget: 0` 只有
+ *   Gemini 2.5 Flash 一系接受，2.5 Pro 有下限、Gemini 3 改用 `thinkingLevel` 且没有关闭档）。
+ *   发错写法是整条请求被拒，比"这一档少省一点思考"严重得多，所以退回"不发"，由服务端默认值兜底。
+ * - **OpenRouter 与 Velar 不走这里**：它们在请求体里发 `reasoning: { enabled: false, exclude: true }`
+ *   （见 `mergeOpenRouterReasoning`），那是路由层自己的开关，与上游模型默认值无关。
+ */
+function createReasoningDisabledProviderOptions(
+  provider: ChatProviderId,
+  model: string
+): Nullable<Record<string, unknown>> {
+  if (provider !== 'anthropic' || !matchesClaudeReasoningModel(model)) return null
+
+  return { anthropic: { thinking: { type: 'disabled' } } }
+}
+
 function createThinkingDepthProviderOptions(
   provider: ChatProviderId,
   model: string,
-  depth?: LooseOptional<ThinkingDepth>
+  depth?: LooseOptional<ThinkingDepth>,
+  level?: LooseOptional<ReasoningLevel>
 ): Nullable<Record<string, unknown>> {
+  // off 先判：这一档与 thinkingDepth 无关，缺 depth 时也要生效。
+  if (isReasoningDisabledByLevel(level)) return createReasoningDisabledProviderOptions(provider, model)
   if (!depth) return null
 
   switch (provider) {
@@ -198,9 +225,10 @@ function applyThinkingDepthProviderOptions(
   model: LanguageModel,
   provider: ChatProviderId,
   modelId: string,
-  depth?: LooseOptional<ThinkingDepth>
+  depth?: LooseOptional<ThinkingDepth>,
+  level?: LooseOptional<ReasoningLevel>
 ): LanguageModel {
-  const providerOptions = createThinkingDepthProviderOptions(provider, modelId, depth)
+  const providerOptions = createThinkingDepthProviderOptions(provider, modelId, depth, level)
   if (!providerOptions || isString(model) || model.specificationVersion !== 'v3') return model
 
   return new ThinkingDepthLanguageModel(model, providerOptions as ProviderOptions)
