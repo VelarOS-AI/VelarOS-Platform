@@ -18,7 +18,14 @@
   - **第五条还在做**：agent 包里**五处写死了 `interaction:show_action_cards`**，而这个工具**只有 Desktop 有**（Workbench、Termel 没有）——在别的宿主里模型被指去换入一个不存在的工具页。写死它的那个文件，开头第一条不变量恰恰是「本文件不认识任何具体能力，工具名全部来自宿主注入的描述符」，语义中立门只扫产品词、没扫工具名。**正在改成宿主声明制**：宿主声明了就点名，没声明就只说「做什么」不说「调什么」。改完 Desktop 要补一处声明。
   - 一并核实**不算缺陷**的（免得重复查）：office 说明里的 `direct`/`expert` 是真实存在的 surface profile（只是模型自己切不了，由宿主定）；`system:run` 的 `statusContinuation` 存在，只是挂在 `backgroundProcess` 下；browser 说明里引用的 26 个工具名、`project:read` 的 `continuation`、`agent:dispatch` 的三个回执字段等全部对得上。
 
-- **`reasoningLevel: ultra` 目前是个空档（09-17 05:20，调查结论，修复在做）。** 这条你多半想知道：**在 Anthropic / OpenAI / Google 上，选 `ultra` 和选 `high` 发出去的请求字节完全一样**——用户在界面上选了 ultra，什么也没发生。
+- **`ultra` 空档已补上（09-17 06:00，`da5bbd3b`，model 0.7.0 → **0.8.0**；提交内容、版本、测试数、数值表均已实测核对，数值表我另写脚本独立复算过一遍）。**
+  - **实测数值**（无输出上限可换算时）：Anthropic 非自适应与 Google 的数字预算 low 2048 / medium 4096 / high 8192 / **ultra 16000**；OpenAI 与 Anthropic 自适应那一代只有力度枚举没有数字预算，**ultra 与 high 仍然相同**——这是 provider 能力所限，代码里写明了，没有硬造厂商不认的值。有输出上限时按 `ultraRatio 0.6` 换算再钳（例：上限 24000 → high 12000、ultra 14400）。
+  - **不止 ultra 变**：内置适配器现在整体改成读 `level`，所以显式选了 low/medium/high 的会话发出去的数字也跟着按 level 走了（原来只看 `depth`）。优先级是**用户每条消息的显式选择压过系统配置的默认档**，方向是对的；没选 level 的会话数字一个没动。
+  - **新引入一条变量**：预算现在跟随本轮真实的 `maxOutputTokens`（原来是构造时算死一份）。同一会话内它通常稳定，唯一会中途变的是 `html-artifact` 能力开/关让上限在 8k 与 24k 之间跳，那时 ultra 的预算跟着变、消息缓存再掉一次。行为正确的代价，但产品层要知道。
+  - **前缀缓存**：system 与工具定义的字节一个没变；推理参数变化会让**消息块**的缓存断点失效一轮，只掉一次、不会持续抖动。没选 level 的会话零影响。
+  - 三处原本把「ultra 等于 high」钉成预期行为的测试断言改成了新的正确行为，另加 6 条用例守住「同一 depth 下 ultra 的数字预算严格大于 high」。顺带把 `script-authoring.ts` 里「和内置适配器用的是同一套」那句从谎话改成真话——现在真的是同一套了。
+
+- **（调查原文）`reasoningLevel: ultra` 目前是个空档（09-17 05:20）。** 这条你多半想知道：**在 Anthropic / OpenAI / Google 上，选 `ultra` 和选 `high` 发出去的请求字节完全一样**——用户在界面上选了 ultra，什么也没发生。
   - 根因：算 ultra 预算的 `resolveReasoningBudget` **只暴露给用户自写的 provider script**，三个内置适配器一个都没调；它们拼请求时只看 `depth`（fast/balanced/deep），`level` 只在判 `off` 时读一次。
   - 唯一今天真对 ultra 做了事的是 OpenRouter / Velar 路由层：请求体里多一个 `reasoning.max_tokens: 24000`。
   - 而且有**三处测试正把这个现状钉死**（其中一条直接断言 `level='ultra'` 时 Anthropic 拿到的是 balanced 档的力度）——等于把「ultra 没用」写成了预期行为。修复要连这三处断言一起改。
