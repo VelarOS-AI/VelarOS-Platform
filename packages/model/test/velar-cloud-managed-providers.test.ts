@@ -215,7 +215,8 @@ describe('Velar Cloud managed providers', () => {
         url: 'https://cloud.test/v1/model/chat/completions',
         body: expect.objectContaining({
           model: 'velar/auto',
-          reasoning: { effort: 'high', max_tokens: 24_000 },
+          // 这次调用没给 maxOutputTokens，请求体里也就没有 max_tokens，ultra 按 ultraFloor 发。
+          reasoning: { effort: 'high', max_tokens: 16_000 },
         }),
       },
     ])

@@ -43,13 +43,22 @@ export class LanguageModelWrappers implements LanguageModelWrappersApi {
     depth?: LooseOptional<ThinkingDepth>,
     level?: LooseOptional<ReasoningLevel>
   ): LanguageModel {
-    const providerOptions = createThinkingDepthProviderOptions(provider, modelId, depth, level)
-    const wrappable = providerOptions ? asWrappableLanguageModel(model) : null
+    // 包不包只看"这一档到底发不发 reasoning"，那个判断与输出上限无关，先按缺省算一遍即可。
+    const wrappable = createThinkingDepthProviderOptions(provider, modelId, depth, level)
+      ? asWrappableLanguageModel(model)
+      : null
     if (!wrappable) return model
 
     return new ThinkingDepthLanguageModel(
       wrappable,
-      providerOptions as ModelCallProviderOptions
+      (maxOutputTokens) =>
+        createThinkingDepthProviderOptions(
+          provider,
+          modelId,
+          depth,
+          level,
+          maxOutputTokens
+        ) as Nullable<ModelCallProviderOptions>
     )
   }
 }

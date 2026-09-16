@@ -85,17 +85,23 @@ export interface ProviderScriptHelpers {
     /** 宿主应用的版本号。 */
     getAppVersion: ProviderScriptHostBridge['getAppVersion']
   }
-  /** 思考力度与预算的换算，和本包内置适配器用的是同一套。 */
+  /**
+   * 思考力度与预算的换算。
+   *
+   * 这四个就是内置适配器（anthropic / openai / google）与路由层（OpenRouter / Velar）自己在用的那几个
+   * 函数本体，不是另抄一份：脚本照着发，请求字节与内置 provider 对齐。
+   */
   reasoning: {
     /** off 档：这次请求完全不发 reasoning。 */
     isReasoningDisabledByLevel: (level?: LooseOptional<ReasoningLevel>) => boolean
-    /** 合并 OpenRouter 风格的 reasoning 开关。 */
+    /** 合并 OpenRouter 风格的 reasoning 开关；给了 `maxOutputTokens` 才能按比例换算 ultra 的预算。 */
     mergeOpenRouterReasoning: (
       existing: unknown,
       depth?: LooseOptional<ThinkingDepth>,
-      level?: LooseOptional<ReasoningLevel>
+      level?: LooseOptional<ReasoningLevel>,
+      maxOutputTokens?: number
     ) => Record<string, unknown>
-    /** 算这次请求的 thinking budget。 */
+    /** 算这次请求的 thinking budget：`depth` 定基线，`ultra` 在基线之上再抬一档。 */
     resolveReasoningBudget: (
       maxOutputTokens?: number,
       level?: LooseOptional<ReasoningLevel>,

@@ -1,4 +1,4 @@
-import { isArray, isBlank, isEmpty, isPlainObject } from '@velaros-ai/core'
+import { isArray, isBlank, isEmpty, isNumber, isPlainObject, optionalWhen } from '@velaros-ai/core'
 
 import { OpenRouterAutoModelId, OpenRouterFreeModelId } from '../../contract/constants.js'
 import type { OpenAIModelFetch, OpenAIModelFetchInit } from '../../types/adapters'
@@ -164,7 +164,9 @@ export function injectOpenRouterRouting(
       nextBody.reasoning = mergeOpenRouterReasoning(
         body.reasoning,
         routing.thinkingDepth,
-        routing.reasoningLevel
+        routing.reasoningLevel,
+        // 请求体里的输出上限就是这一轮真实的 maxOutputTokens，拿它换算 ultra 的预算。
+        optionalWhen(isNumber, body.max_tokens)
       )
     }
 

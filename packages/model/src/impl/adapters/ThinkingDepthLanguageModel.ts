@@ -5,20 +5,25 @@ import type {
   LanguageModelV3StreamResult,
 } from '@ai-sdk/provider'
 
-import type { ModelCallProviderOptions } from '../../types/adapters'
+import type {
+  ModelCallProviderOptions,
+  ThinkingDepthProviderOptionsResolver,
+} from '../../types/adapters'
 import { mergeProviderOptions } from '../../utils/wire/reasoning'
 
 /**
- * 包着另一个语言模型，每次调用时把这一轮算好的 reasoning 参数合进 providerOptions。
+ * 包着另一个语言模型，每次调用时把这一轮算出的 reasoning 参数合进 providerOptions。
  *
  * 和提示词缓存那一层同样的道理：参数逐轮构造，包一层能让合并落在唯一必经之路上。
+ * 参数是逐轮**算**而不是构造时算死的：ultra 档的 thinking budget 要按这次调用的
+ * `maxOutputTokens` 换算，而输出上限只有走到 `doGenerate` / `doStream` 才知道。
  */
 export interface ThinkingDepthLanguageModelApi extends LanguageModelV3 {}
 
 export class ThinkingDepthLanguageModel implements ThinkingDepthLanguageModelApi {
   constructor(
     private readonly model: LanguageModelV3,
-    private readonly providerOptions: ModelCallProviderOptions
+    private readonly resolveProviderOptions: ThinkingDepthProviderOptionsResolver
   ) {}
 
   public get specificationVersion(): 'v3' {
@@ -48,11 +53,14 @@ export class ThinkingDepthLanguageModel implements ThinkingDepthLanguageModelApi
   }
 
   private mergeOptions(options: LanguageModelV3CallOptions): LanguageModelV3CallOptions {
+    const providerOptions = this.resolveProviderOptions(options.maxOutputTokens)
+    if (!providerOptions) return options
+
     return {
       ...options,
       providerOptions: mergeProviderOptions(
         options.providerOptions,
-        this.providerOptions
+        providerOptions
       ) as ModelCallProviderOptions,
     }
   }

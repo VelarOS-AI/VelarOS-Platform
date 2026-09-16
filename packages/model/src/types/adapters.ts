@@ -76,6 +76,11 @@ export type OpenAIModelFetchInit = Parameters<OpenAIModelFetch>[1]
 /** 一次调用上挂着的厂商选项表。 */
 export type ModelCallProviderOptions = NonNullable<LanguageModelV3CallOptions['providerOptions']>
 
+/** 按这一轮的输出上限算 reasoning 选项；这一档不发 reasoning 时返回 null。 */
+export type ThinkingDepthProviderOptionsResolver = (
+  maxOutputTokens?: number
+) => Nullable<ModelCallProviderOptions>
+
 /**
  * 发给服务商的 reasoning 力度三档；五档 `ReasoningLevel` 与三档 `ThinkingDepth` 都映射到它。
  *

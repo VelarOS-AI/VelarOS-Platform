@@ -17,7 +17,8 @@ describe('Velar thinking routing', () => {
     ['balanced', 'low', { effort: 'low' }],
     ['balanced', 'medium', { effort: 'medium' }],
     ['balanced', 'high', { effort: 'high' }],
-    ['balanced', 'ultra', { effort: 'high', max_tokens: 24_000 }],
+    // 请求体没带 max_tokens 时 ultra 走 ultraFloor；带了就按 ultraRatio 换算（见 reasoning-level-ultra）。
+    ['balanced', 'ultra', { effort: 'high', max_tokens: 16_000 }],
   ])('maps depth=%s level=%s', (depth, level, expected) => {
     const result = injectVelarThinkingRouting(
       { method: 'POST', body: JSON.stringify({ model: 'velar/auto', messages: [] }) },
