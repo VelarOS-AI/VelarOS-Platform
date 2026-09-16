@@ -581,6 +581,122 @@ describe('KernelModuleHost', () => {
       .toBeInstanceOf(KernelHostError)
   })
 
+  test('module permission view cannot name a caller other than itself', async () => {
+    const requests: Array<Record<string, unknown>> = []
+    const host = new KernelModuleHost({
+      apiVersion: 1,
+      permissionBroker: {
+        request: async (request) => {
+          requests.push({ ...request })
+          return { status: 'granted' }
+        },
+      },
+    })
+    host.registerModule(
+      moduleDefinition({
+        id: 'module.impersonator',
+        permissions: ['fs:read'],
+        async activate(context) {
+          await context.permissions.request({
+            permission: 'fs:read',
+            reason: 'probe',
+            // 模块在 JS 里多塞的字段：宿主专用的 callerModuleId 绝不能原样透传。
+            ...({ callerModuleId: 'someone.else' } as Record<string, unknown>),
+          })
+        },
+      }),
+    )
+
+    await host.start()
+
+    expect(requests).toHaveLength(1)
+    expect(requests[0]).toMatchObject({
+      permission: 'fs:read',
+      reason: 'probe',
+      moduleId: 'module.impersonator',
+      generation: 1,
+    })
+    expect(requests[0]?.callerModuleId).toBeUndefined()
+  })
+
+  test('a failing old-generation dispose never keeps the old service live', async () => {
+    const host = new KernelModuleHost({
+      apiVersion: 1,
+      permissionBroker: {
+        request: async () => ({ status: 'granted' }),
+      },
+    })
+    let disposeCalls = 0
+    host.registerModule(
+      moduleDefinition({
+        id: 'module.dispose-boom',
+        permissions: ['use'],
+        provides: [ValueCapability],
+        activate(context) {
+          context.registerService(ValueCapability, { read: () => 'v1' })
+          return {
+            dispose: () => {
+              disposeCalls += 1
+              throw new Error('dispose boom')
+            },
+          }
+        },
+      }),
+    )
+    await host.start()
+
+    // 替换本身是成功的：旧代释放失败只是旧代的事，不该把新代一起拖走。
+    await host.replaceModule(
+      moduleDefinition({
+        id: 'module.dispose-boom',
+        version: '2.0.0',
+        permissions: ['use'],
+        provides: [ValueCapability],
+        activate(context) {
+          context.registerService(ValueCapability, { read: () => 'v2' })
+        },
+      }),
+    )
+
+    expect(disposeCalls).toBe(1)
+    expect(host.getModule('module.dispose-boom')).toMatchObject({
+      generation: 2,
+      status: 'ready',
+    })
+    // 旧代既不再可见，也不再能被授权。
+    expect(host.getService(ValueCapability).read()).toBe('v2')
+    const handle = host.getServiceHandle(ValueCapability)
+    expect(handle.generation).toBe(2)
+    await expect(
+      host.requestCapabilityPermission(ValueCapability, { permission: 'use' }),
+    ).resolves.toMatchObject({ status: 'granted' })
+  })
+
+  test('composition snapshot still answers when the graph does not resolve', async () => {
+    const host = new KernelModuleHost({ apiVersion: 1 })
+    host.registerModule(
+      moduleDefinition({
+        id: 'module.needs-missing',
+        requires: [{ id: 'test.missing', versionRange: '^1.0.0' }],
+      }),
+    )
+
+    // 依赖图不合法：resolvePlan 抛，快照照样给得出，并带上原因。
+    expectHostError(host, 'MISSING_CAPABILITY')
+    const degraded = host.describeComposition()
+    expect(degraded.resolutionError).toContain('test.missing')
+    expect(degraded.moduleOrder).toEqual(['module.needs-missing'])
+    expect(degraded.modules.map((module) => module.manifest.id))
+      .toEqual(['module.needs-missing'])
+    expect(degraded.capabilities).toEqual([])
+    expect(JSON.parse(JSON.stringify(degraded))).toEqual(degraded)
+
+    await host.start().catch(() => undefined)
+    await host.dispose()
+    // dispose 之后也不抛：宿主降级后正是要看它。
+    expect(host.describeComposition().resolutionError).toContain('test.missing')
+  })
+
   test('leases frozen services without violating Proxy invariants', async () => {
     const host = new KernelModuleHost({ apiVersion: 1 })
     host.registerModule(

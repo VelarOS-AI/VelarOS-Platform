@@ -35,8 +35,17 @@ export function createScopedPermissionBroker(options: {
           reason: `Module "${options.manifest.id}" did not declare permission "${request.permission}"`,
         }
 
+      // 逐个字段抄写，不整体展开：`KernelPermissionRequest` 上的 `callerModuleId` 是宿主
+      // 专用字段（`contracts/abi/permissions.ts`：模块永远不能指名自己以外的调用方）。
+      // 原来的 `{ ...request }` 会把模块在 JS 里多塞的任何键原样带到宿主 broker，授权账本
+      // 就按模块自称的调用方记。宿主路径（`KernelModuleHost.requestCapabilityPermission`）
+      // 早已显式清空，这里补齐同一条闸。
       const decision = await options.broker.request({
-        ...request,
+        permission: request.permission,
+        reason: request.reason,
+        scope: request.scope,
+        resource: request.resource,
+        details: request.details,
         moduleId: options.manifest.id,
         generation: options.generation,
       })

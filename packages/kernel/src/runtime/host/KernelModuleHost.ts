@@ -76,6 +76,14 @@ export interface KernelCompositionSnapshot {
   readonly moduleOrder: readonly string[]
   readonly modules: readonly KernelModuleSnapshot[]
   readonly capabilities: readonly KernelCompositionCapabilitySnapshot[]
+  /**
+   * 依赖图这一次没解析出来的原因；解析成功是 `null`。
+   *
+   * 快照最该有用的时刻就是降级态（`lifecycleFailureMode: 'degrade'` 的宿主启动失败后正要
+   * 看诊断），所以解析失败不再向外抛，而是把原因摆在这里，`moduleOrder` / `capabilities`
+   * 退回按登记顺序给出。
+   */
+  readonly resolutionError: Nullable<string>
 }
 
 interface ModuleRecord {
@@ -349,31 +357,32 @@ export class KernelModuleHost {
       })
     }
 
+    // 新代已就绪：**先**同步切换可见性与归属，再去释放旧代。反过来（先释放、后切换）会让
+    // 释放期间到达的调用打在正在释放的旧代上；旧代 dispose 抛错时更糟——旧代服务仍然活动、
+    // 仍然能授权（探针实测：状态 failed，`getOptionalService` 还拿得到，权限还返回 granted）。
+    // 下面四步之间没有 await，不存在「服务已切、归属未切」的窗口。
+    this.serviceStore.activateOwner(manifest.id, replacement.generation)
+    replacementCommitted = true
+    this.modules.set(manifest.id, replacement)
+    this.activationOrder = plan.order
+
     previous.status = 'disposing'
     previous.controller?.abort()
     try {
       await this.disposeLifecycle(previous)
+      previous.status = 'disposed'
     } catch (error) {
+      // 旧代释放失败只是旧代的事：新代已经在提供服务，替换本身是成功的。
       this.failRecord(previous, error)
-      replacement.controller.abort()
-      await this.disposeLifecycle(replacement).catch((rollbackError) => {
-        log.warn('Replacement cleanup failed after prior module disposal error', {
-          error: rollbackError,
-          moduleId: manifest.id,
-        })
+      log.error('Kernel module previous generation failed to dispose', {
+        error: toError(error),
+        generation: previous.generation,
+        moduleId: manifest.id,
       })
-      this.cleanupModule(replacement)
-      throw new KernelOperationError('dispose', [
-        { moduleId: manifest.id, error: toError(error) },
-      ])
+    } finally {
+      // 不论释放成功与否，旧代的服务登记与事件订阅都必须摘掉。
+      this.cleanupModule(previous)
     }
-    previous.status = 'disposed'
-
-    this.serviceStore.activateOwner(manifest.id, replacement.generation)
-    replacementCommitted = true
-    this.cleanupModule(previous)
-    this.modules.set(manifest.id, replacement)
-    this.activationOrder = plan.order
   }
 
   public async suspend(): Promise<void> {
@@ -545,25 +554,59 @@ export class KernelModuleHost {
       .map((record) => this.snapshot(record))
   }
 
+  /**
+   * 运行组合的只读快照。**任何状态下都不抛错**，包括依赖图不合法和 dispose 之后。
+   *
+   * 它一度先 `resolvePlan()` 再组装，于是「启动失败之后要看诊断」的时刻反而抛
+   * `MISSING_CAPABILITY`、dispose 之后抛 `HOST_DISPOSED`——正好把降级态的宿主
+   * （Desktop、Workbench 都用 `lifecycleFailureMode: 'degrade'`）挡在诊断门外。
+   */
   public describeComposition(): KernelCompositionSnapshot {
-    const plan = this.resolvePlan()
+    let plan: KernelModulePlan | undefined
+    let resolutionError: Nullable<string> = null
+    try {
+      plan = resolveKernelModulePlan(
+        new Map(
+          [...this.modules].map(([moduleId, record]) => [
+            moduleId,
+            record.definition,
+          ]),
+        ),
+        this.options.apiVersion,
+      )
+    } catch (error) {
+      // 不外抛：原因随快照一起交给调用方（`resolutionError`），日志留一条便于对账。
+      resolutionError = toError(error).message
+      log.debug('Kernel composition snapshot taken with an unresolved graph', {
+        error: resolutionError,
+      })
+    }
+
     const activeServices = new Map(
       this.serviceStore.listActiveServices().map((service) => [service.capabilityId, service])
     )
-    const capabilities = [...plan.capabilityProviders.entries()]
-      .sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0)
-      .map(([id, provider]) => {
-        const active = activeServices.get(id)
-        return Object.freeze({
+    const providers = isUndefined(plan)
+      ? this.declaredCapabilityProviders()
+      : [...plan.capabilityProviders.entries()].map(([id, provider]) => ({
           id,
           version: provider.capability.version,
           providerModuleId: provider.moduleId,
+        }))
+    const capabilities = providers
+      .sort((left, right) =>
+        left.id < right.id ? -1 : left.id > right.id ? 1 : 0)
+      .map((provider) => {
+        const active = activeServices.get(provider.id)
+        return Object.freeze({
+          id: provider.id,
+          version: provider.version,
+          providerModuleId: provider.providerModuleId,
           active: Boolean(
             active
-            && active.ownerModuleId === provider.moduleId
-            && active.capabilityVersion === provider.capability.version
+            && active.ownerModuleId === provider.providerModuleId
+            && active.capabilityVersion === provider.version
           ),
-          activeGeneration: active?.ownerModuleId === provider.moduleId
+          activeGeneration: active?.ownerModuleId === provider.providerModuleId
             ? active.generation
             : null,
         })
@@ -571,10 +614,38 @@ export class KernelModuleHost {
     return Object.freeze({
       schemaVersion: 1,
       apiVersion: this.options.apiVersion,
-      moduleOrder: Object.freeze([...plan.order]),
+      // 解析不出顺序时退回登记顺序（依赖图不合法时它本来也不存在真正的激活顺序）。
+      moduleOrder: Object.freeze(
+        isUndefined(plan) ? [...this.modules.keys()] : [...plan.order],
+      ),
       modules: Object.freeze([...this.listModules()]),
       capabilities: Object.freeze(capabilities),
+      resolutionError,
     })
+  }
+
+  /** 依赖图解析不了时的退路：直接读每个模块清单自己声明的 provides。 */
+  private declaredCapabilityProviders(): Array<{
+    id: string
+    version: string
+    providerModuleId: string
+  }> {
+    const providers: Array<{
+      id: string
+      version: string
+      providerModuleId: string
+    }> = []
+    for (const record of this.modules.values()) {
+      const { id: moduleId, provides } = record.definition.manifest
+      for (const capability of provides) {
+        providers.push({
+          id: capability.id,
+          version: capability.version,
+          providerModuleId: moduleId,
+        })
+      }
+    }
+    return providers
   }
 
   public async checkHealth(): Promise<readonly KernelModuleSnapshot[]> {
