@@ -16,36 +16,6 @@ import type {
 
 const log = Log.tag('RecipePreview')
 
-/**
- * 标准化 recipe 路径。
- *
- * 只允许访问当前浏览器网站 workspace 的 recipes/ 目录下 JSON 文件，
- * 防止用户用 ../ 或绝对路径读取其他 artifact。
- */
-function normalizeBrowserRecipePath(path: string): string {
-  const normalizedPath = path
-    .trim()
-    .replaceAll('\\', '/')
-    .replace(/\/+$/u, '')
-    .replace(/^\/+/u, '')
-  const segments = normalizedPath.split('/').filter(Boolean)
-
-  if (
-    normalizedPath !== segments.join('/') ||
-    segments.length < 2 ||
-    segments[0] !== 'recipes' ||
-    segments.some((segment) => segment === '.' || segment === '..') ||
-    !normalizedPath.endsWith('.json')
-  ) {
-    throw new AppError(
-      'VALIDATION',
-      '只能预览当前网站工区 recipes/ 目录下的 JSON recipe。',
-    )
-  }
-
-  return normalizedPath
-}
-
 /** 获取 URL origin。 */
 function getBrowserUrlOrigin(url: string): Nullable<string> {
   try {
@@ -141,5 +111,4 @@ function buildRecipeSkeletonPreview(
 export {
   assertSameBrowserOrigin,
   buildRecipeSkeletonPreview,
-  normalizeBrowserRecipePath,
 }
