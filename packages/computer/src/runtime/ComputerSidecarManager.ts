@@ -10,6 +10,7 @@ import {
   drainResponseLines,
   encodeComputerRequest,
 } from './ComputerSidecarProtocol'
+import { ComputerTuning } from './tuning'
 import type {
   ComputerAvailability,
   ComputerClickOptions,
@@ -25,7 +26,16 @@ import type {
 
 /** manager 依赖的最小子进程接口，测试中可注入替身。 */
 export interface ComputerSidecarProcess {
-  stdin: { write(chunk: string): void; end(): void }
+  stdin: {
+    write(chunk: string): void
+    end(): void
+    /**
+     * 管道写错误（helper 关掉 stdin 或已退出时的 `EPIPE`）只经这个事件异步到达：
+     * `write()` 外面的 try/catch 接不住它，没有监听者就是**宿主进程的未捕获异常**
+     * （Electron 主进程会弹错误框）。替身可以不实现，真实 child 一定有。
+     */
+    on?(event: 'error', listener: (error: Error) => void): void
+  }
   stdout: { on(event: 'data', listener: (chunk: Buffer | string) => void): void }
   stderr: { on(event: 'data', listener: (chunk: Buffer | string) => void): void }
   on(event: 'error', listener: (error: Error) => void): void
@@ -42,8 +52,10 @@ export interface ComputerSidecarManagerOptions {
   resolveHelper?: () => Nullable<ComputerHelperLaunchSpec>
   /** 覆盖子进程创建逻辑，测试中注入假 duplex。 */
   spawnProcess?: ComputerSidecarSpawner
-  /** 单个请求超时时间，单位毫秒，默认 15000。 */
+  /** 单个请求超时时间，单位毫秒，默认见 ComputerTuning.requestTimeoutMs。 */
   requestTimeoutMs?: number
+  /** 启动握手超时时间，单位毫秒，默认见 ComputerTuning.startupTimeoutMs。 */
+  startupTimeoutMs?: number
   /** 可选诊断日志接收器。 */
   onLog?: (message: string) => void
 }
@@ -54,9 +66,6 @@ interface PendingRequest {
   timer: TimerLease
 }
 
-const DEFAULT_REQUEST_TIMEOUT_MS = 15_000
-/** stderr 只留尾部这么多字节：它唯一的用途是给启动失败当 detail，不是日志缓冲区。 */
-const STDERR_TAIL_LIMIT = 8_000
 /** helper 启动完成时主动发来的握手行用 id=0，与任何真实请求 id（从 1 递增）不冲突。 */
 const READY_HANDSHAKE_ID = 0
 const SnapshotValidationErrorCodes = new Set([
@@ -113,9 +122,21 @@ function defaultSpawner(spec: ComputerHelperLaunchSpec): ComputerSidecarProcess 
  *    true、`child` 指着死进程：后续每个请求都写进死管道再干等一整个超时，且永不重启。所以
  *    `exit` 处理器结尾无条件 `teardown()`（幂等），把状态机拉回 idle，下一次请求自然重启。
  *
+ * **两条「永远不能无界等待」的闸（2026-09-16 实测后补）**：
+ * 3. `start()` 自带 `startupTimeoutMs` 租约。helper 卡在导入阶段、或握手行被上一轮残片污染时，
+ *    `onReady` 永不触发；而请求的超时租约要等 `await this.start()` 返回才装，于是调用方**永远
+ *    挂起**。启动与请求各自有界，最坏等待是两者之和。
+ * 4. `teardown()` 连同 `stdoutBuffer` / `stderrBuffer` 一起归零，`data` 处理器又按 child 身份
+ *    过滤。上一轮 helper 死在半行 JSON 上时，残片会粘在下一个 helper 的握手行前面，整行解码
+ *    失败被当坏帧丢掉——新进程于是「永远没准备好」。缓冲是进程级流状态，不是管理器级状态。
+ *
  * **时序与关联**：请求 id 从 1 单调递增、不复用；每个请求自带超时租约（`requestTimeoutMs`），
  * 到点就从 `pending` 摘除并拒绝——所以**响应迟到时找不到 pending 会被静默丢弃**，这是设计而非
  * 缺陷（迟到的结果对调用方已无意义）。进程死亡时 `rejectAllPending` 一次性清账，不留悬挂 promise。
+ *
+ * **管道错误不许外溢**：`stdin` 的 `EPIPE`（helper 关掉输入或已退出）是**异步错误事件**，
+ * `write()` 外的 try/catch 接不住；没有 `'error'` 监听者它就是宿主进程的未捕获异常，在 Electron
+ * 主进程会直接弹错误框。`start()` 给 stdin 装了监听器，按「写失败」拒掉在飞请求并 teardown。
  *
  * **失败方向**：`ensureAvailable()` 永不抛，把一切失败翻译成结构化 `ComputerAvailability`
  * （上层据此引导用户装插件或授权）；`request()` 则一律抛——动作类调用没有「降级」这一说。
@@ -127,6 +148,7 @@ export class ComputerSidecarManager {
   private readonly resolveHelper: () => Nullable<ComputerHelperLaunchSpec>
   private readonly spawnProcess: ComputerSidecarSpawner
   private readonly requestTimeoutMs: number
+  private readonly startupTimeoutMs: number
   private readonly onLog?: (message: string) => void
   private readonly timers = new TimerScope({ name: 'ComputerSidecarManager' })
 
@@ -142,7 +164,8 @@ export class ComputerSidecarManager {
   constructor(options: ComputerSidecarManagerOptions = {}) {
     this.resolveHelper = options.resolveHelper ?? (() => resolveComputerHelper())
     this.spawnProcess = options.spawnProcess ?? defaultSpawner
-    this.requestTimeoutMs = options.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS
+    this.requestTimeoutMs = options.requestTimeoutMs ?? ComputerTuning.requestTimeoutMs
+    this.startupTimeoutMs = options.startupTimeoutMs ?? ComputerTuning.startupTimeoutMs
     this.onLog = options.onLog
   }
 
@@ -253,13 +276,25 @@ export class ComputerSidecarManager {
         timer,
       })
 
-      try {
-        this.child!.stdin.write(encodeComputerRequest(id, command, payload))
-      } catch (error) {
-        // arch-guard:silent-catch-ok 写入失败会通过 rejectPromise 作为请求错误返回调用方。
+      const failWrite = (message: string, cause?: unknown) => {
         timer.cancel()
         this.pending.delete(id)
-        rejectPromise(AppError.from(error, 'COMPUTER_SIDECAR_WRITE_FAILED'))
+        rejectPromise(new AppError('COMPUTER_SIDECAR_WRITE_FAILED', message, cause))
+      }
+
+      const child = this.child
+      // start() 成功后才到这里；child 为空说明这中间进程已退出并 teardown，不要写空指针。
+      if (!child) {
+        failWrite('桌面控制 helper 在请求发出前已退出，请重试。')
+        return
+      }
+
+      try {
+        child.stdin.write(encodeComputerRequest(id, command, payload))
+      } catch (error) {
+        // arch-guard:silent-catch-ok 写入失败会通过 rejectPromise 作为请求错误返回调用方。
+        // 同步抛出的只是一部分：管道已断时 EPIPE 走 stdin 的 'error' 事件（见 start()）。
+        failWrite(`向桌面控制 helper 写入请求失败：${AppError.getMessage(error)}`, error)
       }
     })
   }
@@ -294,27 +329,60 @@ export class ComputerSidecarManager {
       this.child = child
 
       let settled = false
+      let startupTimer: Nullable<TimerLease> = null
       const onReady = () => {
         if (settled) return
         settled = true
+        startupTimer?.cancel()
         this.ready = true
         resolvePromise()
       }
       const onFail = (error: Error) => {
         if (settled) return
         settled = true
+        startupTimer?.cancel()
         this.teardown()
         rejectPromise(error)
       }
+      // helper 卡在导入阶段不打握手、或握手行被上一轮残片吞掉时，这道闸是唯一出口：
+      // 没有它 start() 永不 settle，而请求的超时计时器要等 start() 返回才装，调用方永远挂起。
+      startupTimer = this.timers.after(this.startupTimeoutMs, () => {
+        onFail(
+          new AppError(
+            'COMPUTER_SIDECAR_STARTUP_TIMEOUT',
+            `桌面控制 helper 在 ${this.startupTimeoutMs} 毫秒内没有完成启动握手，已终止本次启动。`,
+            undefined,
+            { timeoutMs: this.startupTimeoutMs }
+          )
+        )
+      }, { label: 'computer-startup' })
 
       child.stdout.on('data', (chunk) => {
+        // 上一轮进程被 teardown 后管道里还可能吐出残余数据，它属于已死的那一轮：
+        // 混进共享的行缓冲会把新进程的握手行从中间劈开（C3 的另一半）。
+        if (this.child !== child) return
         this.handleStdout(String(chunk), onReady)
       })
       child.stderr.on('data', (chunk) => {
+        if (this.child !== child) return
         this.stderrBuffer += String(chunk)
-        if (this.stderrBuffer.length > STDERR_TAIL_LIMIT) {
-          this.stderrBuffer = this.stderrBuffer.slice(-STDERR_TAIL_LIMIT)
+        if (this.stderrBuffer.length > ComputerTuning.stderrTailChars) {
+          this.stderrBuffer = this.stderrBuffer.slice(-ComputerTuning.stderrTailChars)
         }
+      })
+      // 管道写错误（EPIPE）是异步事件，不接住就是宿主进程的未捕获异常。接住后按「写失败」
+      // 清账：在飞的请求一次性拒绝、状态机回 idle，下一次调用重新拉起 helper。
+      child.stdin.on?.('error', (error) => {
+        if (this.child !== child) return
+        this.log(`sidecar stdin error: ${error.message}`)
+        const writeError = new AppError(
+          'COMPUTER_SIDECAR_WRITE_FAILED',
+          `桌面控制 helper 的输入管道已断开：${error.message}`,
+          error
+        )
+        onFail(writeError)
+        this.rejectAllPending(writeError)
+        this.teardown()
       })
       child.on('error', (error) => {
         this.log(`sidecar process error: ${error.message}`)
@@ -430,6 +498,10 @@ export class ComputerSidecarManager {
   private teardown(): void {
     this.ready = false
     this.startPromise = null
+    // 两个缓冲是**上一轮进程**的流状态，必须随状态机一起归零：helper 死在半行 JSON 上时，
+    // 残片会粘到下一个 helper 的握手行前面，整行解析失败被当坏帧丢掉，新进程于是「永远没准备好」。
+    this.stdoutBuffer = ''
+    this.stderrBuffer = ''
     if (this.child) {
       try {
         this.child.stdin.end()
