@@ -9,13 +9,10 @@ import type { SessionEntry } from '../utils/wire/session'
 type EngineAssignedField = 'id' | 'parentId' | 'createdAt'
 
 /**
- * 判别联合上的分配式 Omit：逐变体去字段后重新联合，保住判别字段 `type` 的收窄能力。
- *
- * 与 `observability/ExecutionSpanRecorder.ts` 的同名类型是**刻意的两份**：为两行纯类型别名新建
- * 两行局部工具类型不值得额外建立公共模块；保持在所属实现附近，更容易看清使用边界。
- * 改动这一形状时，应同步检查 observability 中的同名局部类型。
+ * 判别联合上的分配式 Omit：逐变体去字段后重新联合，保住判别字段（会话 entry 的 `type`、span 的 `category`）的收窄能力。
+ * 会话账本的追加输入与执行 span 的开 span 输入共用这一份。
  */
-type DistributiveOmit<T, K extends keyof T> = T extends unknown ? Omit<T, K> : never
+export type DistributiveOmit<T, K extends keyof T> = T extends unknown ? Omit<T, K> : never
 
 /**
  * 追加输入：{@link SessionEntry} 去掉引擎负责分配的基字段（id/parentId/createdAt 由账本层填写）。

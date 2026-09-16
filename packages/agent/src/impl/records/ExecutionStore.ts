@@ -16,15 +16,11 @@ import type {
   ExecutionTaskRecord,
 } from '../../types/execution'
 import type { StreamExecutionGraphPayload } from '../../types/protocol'
+import type { AppendExecutionEventInput } from '../../types/store-types'
 import { compareStableStrings } from '../../utils/residency/determinism'
 
 type ExecutionStateListener = (payload: StreamStatePayload) => void
 type ExecutionDebugListener = (payload: StreamExecutionGraphPayload) => void
-
-type AppendExecutionEventInput = Omit<ExecutionEventRecord, 'id' | 'executionId' | 'timestamp'> & {
-  /** 允许调用方传入事件时间；不传则使用 store.now()。 */
-  timestamp?: number
-}
 
 const DEFAULT_EXECUTION_EVENT_RETENTION_LIMIT = 500
 const DEFAULT_EXECUTION_RECORD_RETENTION_LIMIT = 200
@@ -844,4 +840,4 @@ export {
   ExecDebugPayload as ExecutionDebugPayloadBuilder,
   ExecutionStore,
 }
-export type { AppendExecutionEventInput, ExecutionStoreOptions }
+export type { ExecutionStoreOptions }

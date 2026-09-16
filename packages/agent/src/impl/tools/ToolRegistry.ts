@@ -7,6 +7,7 @@ import type {
   ToolCategoryOverview,
   ToolDescriptor,
 } from '../../types/tool'
+import type { RegisteredToolMap } from '../../types/capability-types'
 import type { RegisteredTool, RegistryTool, ToolRegistryContext } from '../../types/tools'
 import {
   type AgentRuntimeCapabilityPorts,
@@ -21,10 +22,6 @@ import {
   type RuntimePromptFeaturePolicy,
 } from './DefaultPromptFeaturePolicy'
 
-type RegisteredToolMap<TTool extends RegistryTool<any> = RegistryTool<any>> = Map<
-  string,
-  RegisteredTool<TTool>
->
 type OverriddenToolMap<TTool extends RegistryTool<any> = RegistryTool<any>> = Map<
   string,
   Array<RegisteredTool<TTool>>
