@@ -1,5 +1,6 @@
 import { isEmpty } from '@velaros-ai/core'
 
+import type { RegisteredToolMap } from '../../types/capability-types'
 import type {
   ToolAvailabilityScope,
   ToolCategoryDefinition,
@@ -7,7 +8,6 @@ import type {
   ToolCategoryOverview,
   ToolDescriptor,
 } from '../../types/tool'
-import type { RegisteredToolMap } from '../../types/capability-types'
 import type { RegisteredTool, RegistryTool, ToolRegistryContext } from '../../types/tools'
 import {
   type AgentRuntimeCapabilityPorts,
