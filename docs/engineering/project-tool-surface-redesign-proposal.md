@@ -162,7 +162,7 @@ file 提供 create、overwrite、move、delete 四个内容动作，支持一次
 
 change 提供 apply、inspect、undo：
 
-- apply 接受有序的 file/edit steps，严格复用两种合同；编译器按顺序在内存未来视图中处理创建、移动和编辑，统一准备、审批、验证、提交。
+- apply 接受有序的 steps，一步一个目标：`create`、`overwrite`、`move`、`delete`、`recode` 五个文件动作的字段与 project:file 一致，`edit` 步是「一个文件加它的 edits」，与 project:edit 的一个 files 项一致；编译器按顺序在内存未来视图中处理创建、移动和编辑，统一准备、审批、验证、提交。一次 apply 就是一次事务：全成或全不成、一次确认、一个撤销句柄。
 - inspect 返回变更回执、状态、有界 diff 和版本，不重发全部文件。
 - undo 承接 rollback，遇到外部修改拒绝覆盖。
 

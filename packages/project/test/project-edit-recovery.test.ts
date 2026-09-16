@@ -56,7 +56,7 @@ test('real tool returns a new bounded reference for confirmation and never appli
       }, approval: {} as never,
     }
     const read = await finalizeProjectModelResult(ctx,
-      await projectTools['project:read'].execute({ path: 'a.txt' }, ctx)) as any
+      await projectTools['project:read'].execute({ files: [{ path: 'a.txt' }] }, ctx)) as any
     const input = { files: [{ fileRef: read.files[0].fileRef, edits: [{ op: 'replace', range: 4, text: 'new' }] }] }
     const current = `extra\n${original}`
     await writeFile(join(root, 'a.txt'), current)

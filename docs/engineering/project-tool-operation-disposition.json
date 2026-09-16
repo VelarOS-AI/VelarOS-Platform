@@ -18,10 +18,14 @@
         "kind": "tool",
         "name": "project:read",
         "input": {
-          "path": "src/service.ts",
-          "range": [
-            1,
-            10
+          "files": [
+            {
+              "path": "src/service.ts",
+              "range": [
+                1,
+                10
+              ]
+            }
           ]
         }
       }

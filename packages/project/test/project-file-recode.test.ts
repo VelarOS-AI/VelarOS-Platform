@@ -66,7 +66,7 @@ describe('project:file recode', () => {
     for (const path of ['gb.txt', 'u16.txt', 'bom.txt']) expect((await bytes(path)).equals(expected), path).toBe(true)
     expect(await readFile(join(root, 'plain.txt'), 'utf8')).toBe('already unicode\n')
     // 转换后的文件仍能正常读取和编辑，正文与原文一致。
-    const read = await call('project:read', { path: 'gb.txt' })
+    const read = await call('project:read', { files: [{ path: 'gb.txt' }] })
     expect(read.files[0].lines).toEqual([[1, '第一行 🙂 C:\\src\\path 字面 \\n'], [2, 'second line'], [3, '']])
     // 撤销恢复原始字节，包括 BOM 与 CRLF。
     const undone = await call('project:change', { action: 'undo', changeRef: result.changeRef })
@@ -99,7 +99,7 @@ describe('project:file recode', () => {
     await writeFile(join(root, 'legacy.txt'), textCodec.encode('legacy 内容\r\n', 'gb18030'))
     const { call } = await fixture()
     const result = await call('project:change', { action: 'apply', steps: [
-      { tool: 'file', actions: [{ op: 'create', path: 'new.txt', text: 'created\n' }, { op: 'recode', paths: ['legacy.txt'], newline: 'lf' }] },
+      { action: 'create', path: 'new.txt', text: 'created\n' }, { action: 'recode', paths: ['legacy.txt'], newline: 'lf' },
     ] })
     expect(result.changed).toBe(true)
     expect(result.recode.converted).toEqual([{ path: 'legacy.txt', from: 'gb18030 crlf', to: 'utf-8 lf' }])

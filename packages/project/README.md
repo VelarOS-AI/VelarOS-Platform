@@ -2,13 +2,13 @@
 
 Project 是 `@velaros-ai` 的项目空间包，统一项目根内的读取、编辑、事务、代码查询与命令执行。只有两个入口：
 
-- `@velaros-ai/project`：给 Node 宿主。产品面（九个模型工具、内置 mod 定义、项目空间、内核模块、领域内核
+- `@velaros-ai/project`：给 Node 宿主。产品面（九个模型工具、内置 mod 定义、内核模块、领域内核
   `createProjectKernel`、有限事务面、落盘变更记录、审批桥、文件上下文登记）、注入面（宿主端口、provider、插件扩展点）
   以及它们用到的数据类型。
 - `@velaros-ai/project/contracts`：可移植数据，浏览器和渲染进程也能用。常量表（工具与 mod 身份、各工具上限、宿主代码查询的
   语言服务动作）和经过宿主端口流动的数据类型。
 
-宿主用 `createProjectSpace` 或 `createProjectBundledModDefinition` 挂载项目空间，工具上下文里注入 `ProjectToolApi`。
+宿主用 `createProjectBundledModDefinition` 挂载项目空间（或者自己 `createProjectKernel` 配上 `projectTools`），工具上下文里注入 `ProjectToolApi`。
 默认提供六个工具，另外三个按任务通过能力目录加载：
 
 ```text
@@ -32,11 +32,12 @@ Provider 不支持冒号时，由 Agent Runtime 在请求编译阶段映射成�
 
 普通命令使用 `project:run`；代码查询使用 `project:code` 的六类 action：
 `symbols/references/dependencies/relations/impact/diagnostics`。结果携带来源、覆盖与降级信息。
-高级 `trace/cycles/deadcode/routing` 由宿主按实际能力提供 `project:code-analysis`，索引生命周期由宿主管理。
+高级 `trace/cycles/deadcode/routing` 由宿主按实际能力提供 `project:code-analysis`；代码索引的建与查是宿主自己的事，本包不发这类查询。
 
 文件创建、整文件覆盖、移动和删除使用 `project:file`。局部修改使用 `project:edit` 的
-`replace/insert`。混合文件动作和编辑的事务计划使用 `project:change.apply`；回执通过
-`change.inspect` 检查、`change.undo` 撤销，共用 Kernel 授权、校验和事务边界。
+`replace/insert`。混合文件动作和编辑的事务计划使用 `project:change.apply`：`steps` 一步一个目标，
+按动作分辨（`create/overwrite/move/delete/recode/edit`），一次 apply 就是一次事务——全成或全不成、一次确认、
+一个撤销句柄；回执通过 `change.inspect` 检查、`change.undo` 撤销，共用 Kernel 授权、校验和事务边界。
 
 批量统一磁盘编码使用 `project:file` 的 `recode` 动作：传 `paths` 与可选 `encoding`
 （utf-8/utf-16le/utf-16be/gb18030，默认 utf-8）、`bom`、`newline`（lf/crlf）。框架探测每个文件
@@ -44,12 +45,15 @@ Provider 不支持冒号时，由 Agent Runtime 在请求编译阶段映射成�
 `recode.converted/unchanged`，可用 `change.undo` 或回滚恢复原字节。这是统一项目编码的备用入口：
 读取、搜索、编辑永远只处理文本，不提供也不接受编码参数。
 
-`project:read.maxChars` 是一次调用中所有文件共享的总预算。能够保存完整源引用时，被截断的文件
-返回可原样传给 `project:read` 的 `continuation`；其中保存续读行列坐标，模型无需补列号。
+`project:read` 的入参只有 `files`（每项一个文件，可带 `range`）与 `continuation` 两种，读一个文件就是只有一项的
+`files`——和 `system:read` 同一种形状。`maxChars` 是一次调用中所有文件共享的总预算（缺省 24000）：预算没取完时只给完整的行，
+某一行本身比预算还长才从行中间截。能够保存完整源引用时，被截断的文件返回可原样传给 `project:read` 的 `continuation`；
+其中保存续读行列坐标，模型无需补列号。
 
 读取结果的 `lines` 每项为 `[行号, 原始行文本]`，数字是定位元数据；`fragments` 包含明确的部分行。
 `match/text` 只填写源码。`fileRef` 绑定路径、版本、会话与最终模型请求实际可见的源码范围。
 正文按一次 JSON 解码后的 Unicode 字面源码表达，跨行使用 LF，反斜杠不再次解码。
+`overwrite` 要求 `fileRef` 覆盖整个文件，`move`、`delete` 只核对版本。
 新建文本文件统一使用 UTF-8、无 BOM、LF；现有文件的磁盘编码、BOM 和换行格式由底层维护。
 无 BOM 的 UTF-16 编辑后若无法可靠识别，底层自动补同字节序 BOM；撤销恢复原始字节。
 差异计算使用有界预算，无法定位的内部片段可能采用等价字节编码；Unicode 正文保持一致，撤销独立使用完整原字节。

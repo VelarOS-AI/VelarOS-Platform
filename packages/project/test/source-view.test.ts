@@ -45,7 +45,7 @@ describe('Project immutable visible source references', () => {
     await writeFile(join(root, 'a.ts'), original)
     const { context, read } = await fixture()
     for (const range of [2, [2], [2, 2]] as const) {
-      const result = await read({ path: 'a.ts', range: range as any })
+      const result = await read({ files: [{ path: 'a.ts', range: range as any }] })
       const file = result.files[0]
       expect(file.lines).toEqual([[2, '123|literal🙂\\n']])
       expect(file.content).toBeUndefined()
@@ -60,7 +60,7 @@ describe('Project immutable visible source references', () => {
   test('source candidates cannot edit and final clipping grants only surviving complete lines', async () => {
     await writeFile(join(root, 'a.ts'), Array.from({ length: 1000 }, (_, i) => `line ${i + 1} 🙂`).join('\n'))
     const { context } = await fixture()
-    const raw = await executeProjectRead({ path: 'a.ts', maxChars: 100_000 }, context)
+    const raw = await executeProjectRead({ files: [{ path: 'a.ts' }], maxChars: 100_000 }, context)
     expect(raw.files[0].fileRef).toBeUndefined()
     await expect(resolveProjectFileRef(context, raw.files[0].viewSource!)).rejects.toThrow()
     const sent = await finalizeProjectModelResult(context, fitProjectReadsForModel(raw, 1800)) as any
@@ -77,7 +77,7 @@ describe('Project immutable visible source references', () => {
     const original = '🙂\\n"'.repeat(1000)
     await writeFile(join(root, 'a.ts'), original)
     const { context, read } = await fixture()
-    const first = (await read({ path: 'a.ts', maxChars: 10000 }, 1200)).files[0]
+    const first = (await read({ files: [{ path: 'a.ts' }], maxChars: 10000 }, 1200)).files[0]
     expect(first.lines).toEqual([])
     expect(first.fragments[0].text.isWellFormed()).toBe(true)
     const view = await resolveProjectFileRef(context, first.fileRef)
@@ -96,11 +96,11 @@ describe('Project immutable visible source references', () => {
       const value = await originalRead({ ...input, baseRevision: undefined })
       return { ...value, snapshot: { ...value.snapshot, revision: 'constant-metadata-revision' } }
     }
-    const file = (await read({ path: 'a.ts' })).files[0]
+    const file = (await read({ files: [{ path: 'a.ts' }] })).files[0]
     await expect(resolveProjectFileRef({ ...context, codingSession: {} }, file.fileRef)).rejects.toThrow('执行分支')
     await writeFile(join(root, 'a.ts'), 'other')
     await expect(resolveProjectFileRef(context, file.fileRef)).rejects.toThrow('显示之后已被修改')
-    const next = (await read({ path: 'a.ts' })).files[0]
+    const next = (await read({ files: [{ path: 'a.ts' }] })).files[0]
     expect(next.fileRef).not.toBe(file.fileRef)
     expect((await resolveProjectFileRef(context, next.fileRef)).content).toBe('other')
   })
@@ -119,7 +119,7 @@ describe('Project immutable visible source references', () => {
     const { context, read } = await fixture()
     for (const original of ['', 'line\n']) {
       await writeFile(join(root, 'a.ts'), original)
-      const file = (await read({ path: 'a.ts' })).files[0]
+      const file = (await read({ files: [{ path: 'a.ts' }] })).files[0]
       const view = await resolveProjectFileRef(context, file.fileRef)
       expect(file.lines.at(-1)).toEqual([original ? 2 : 1, ''])
       expect(view.coverage.at(-1)?.completeLines).toBe(true)
@@ -144,7 +144,7 @@ describe('Project immutable visible source references', () => {
   test('the actual final provider request issues current fileRefs after refresh and keeps old source historical', async () => {
     await writeFile(join(root, 'a.ts'), 'first\n')
     const { context } = await fixture()
-    const raw = await executeProjectRead({ path: 'a.ts' }, { ...context, toolCallId: 'read-1' })
+    const raw = await executeProjectRead({ files: [{ path: 'a.ts' }] }, { ...context, toolCallId: 'read-1' })
     await writeFile(join(root, 'a.ts'), 'other\n')
     const compiler = new ProviderRequestCompiler(new ContextGovernanceSessionRegistry({ config: { dashboard: false } }))
     const sent = await compileProviderSendRequest({
@@ -182,7 +182,7 @@ test('disjoint visible windows share one ref without authorizing the intervening
 test('altered line text never inherits the original full line grant', async () => {
   await writeFile(join(root, 'a.ts'), 'const actual = 123\n')
   const { context } = await fixture()
-  const raw = await executeProjectRead({ path: 'a.ts', range: 1 }, context)
+  const raw = await executeProjectRead({ files: [{ path: 'a.ts', range: 1 }] }, context)
   raw.files[0].lines[0]![1] = 'const actual = …'
   const result = await finalizeProjectModelResult(context, raw) as any
   expect(result.files[0].fileRef).toBeUndefined()
@@ -211,17 +211,17 @@ for (const failedKind of ['project-file-source', 'project-file-view', 'project-r
     if (JSON.parse(record.serializedResult).kind === failedKind) throw new Error('reference store unavailable')
     return put(record)
   }
-  const result = await read({ path: 'large.ts', maxChars: 100 }, 1200)
+  const result = await read({ files: [{ path: 'large.ts' }], maxChars: 100 }, 1200)
   const file = result.files[0]
   expect(file.continuation).toBeUndefined()
   expect(file.continuationUnavailable).toBeTruthy()
-  expect(file.readAgain.path).toBe('large.ts')
+  expect(file.readAgain.files[0].path).toBe('large.ts')
   expect(ProjectReadInputSchema.safeParse(file.readAgain).success).toBe(true)
   expect(JSON.stringify(file.readAgain)).not.toContain('baseRevision')
   context.contextPayloadStore!.put = put
   const resumed = await read(file.readAgain)
   expect(resumed.files[0].fileRef).toStartWith('view:')
-  expect((await resolveProjectFileRef(context, resumed.files[0].fileRef)).coverage[0]?.startLine).toBe(file.readAgain.range)
+  expect((await resolveProjectFileRef(context, resumed.files[0].fileRef)).coverage[0]?.startLine).toBe(file.readAgain.files[0].range)
 })
 
 for (const wrapped of [false, true]) test(`real failed-turn provider pipeline keeps candidates for one decision (${wrapped ? 'payload excerpt' : 'direct'})`, async () => {
@@ -229,7 +229,7 @@ for (const wrapped of [false, true]) test(`real failed-turn provider pipeline ke
   await writeFile(join(root, 'candidate.ts'), 'before\nconst target = 2\nafter\n')
   const { kernel, context } = await fixture()
   // A normal read registers the source adapter. Candidate generation itself must not observe a file.
-  await executeProjectRead({ path: 'active.ts' }, context)
+  await executeProjectRead({ files: [{ path: 'active.ts' }] }, context)
   const current = await kernel.read({ path: 'candidate.ts' })
   const window = {
     kind: 'project-source-window', path: 'candidate.ts', revision: current.snapshot.revision,

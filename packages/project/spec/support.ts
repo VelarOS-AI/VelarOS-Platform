@@ -77,9 +77,9 @@ export async function createProjectHarness(root: string, options: ProjectHarness
   }
   /** 读一个文件的指定行，返回定稿后的那一项（带 fileRef）。 */
   const read = async (path: string, range?: number | [number, number]): Promise<any> => {
-    const args: Record<string, unknown> = { path }
-    if (range !== undefined) args.range = range
-    return (await call('project:read', args)).files[0]
+    const file: Record<string, unknown> = { path }
+    if (range !== undefined) file.range = range
+    return (await call('project:read', { files: [file] })).files[0]
   }
   return { kernel, context, call, read, confirmations, mutations, authorizedPaths, commands }
 }

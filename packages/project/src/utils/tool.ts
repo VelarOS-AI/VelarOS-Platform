@@ -1,6 +1,6 @@
 /**
- * 定义项目工具与挂进内核的辅助：defineProjectTool 把工具说明、schema、权限与 execute 组装成运行时规格，编辑类工具接入入参复用（只在工具文件里调用）；
- * 只写真有内容的说明节，缺的节不补占位句。挂进内核时的调用表用 agent 的 createToolCallableOperations，这里只给领域错误的翻译。
+ * 定义项目工具与挂进内核的辅助：defineProjectTool 把工具说明、schema、权限与 execute 组装成运行时规格，声明了 inputReuse 的工具接入入参复用
+ * （只在工具文件里调用）；只写真有内容的说明节，缺的节不补占位句。挂进内核时的调用表用 agent 的 createToolCallableOperations，这里只给领域错误的翻译。
  */
 
 
@@ -15,10 +15,15 @@ import type { ProjectToolContext } from '../contract/requires.js'
 
 import { ProjectError, toErrorObject } from './errors.js'
 
-/** 定义一个项目工具：把说明、schema、权限、能力声明与 execute 组装成运行时规格；execute 先还原入参复用再严格解析，编辑类工具的 schema 接入入参复用。 */
+/**
+ * 定义一个项目工具：把说明、schema、权限、能力声明与 execute 组装成运行时规格；execute 先还原入参复用再严格解析。
+ * 入参复用的信封（reuse、changes）只给显式声明 `inputReuse: true` 的工具：正文长、改一个字段就要整份重发的那几个。
+ */
 export function defineProjectTool<TInput extends Record<string, any>>(input: {
   name: string
   inputContractVersion?: number
+  /** 失败后入参可复用：失败回执带 inputReuse，下一次用 reuse + changes 只改出问题的字段。执行器在 execute 之前把复用请求还原成完整入参。 */
+  inputReuse?: boolean
   category: ToolCategoryId
   role: 'inspect' | 'edit' | 'execute'
   summary: string
@@ -48,6 +53,7 @@ export function defineProjectTool<TInput extends Record<string, any>>(input: {
     usage,
     examples,
     notes,
+    inputReuse,
     ...tool
   } = input
   const inputContractVersion = input.inputContractVersion ?? ProjectToolContract.inputVersion
@@ -70,8 +76,7 @@ export function defineProjectTool<TInput extends Record<string, any>>(input: {
     tool.execute(tool.schema.parse(await resolveToolInputReuse(context, name, args, context.toolCallId, {
       inputContractVersion,
     })), context)
-  if (role !== 'edit')
-    return Object.freeze({ ...defined, execute })
+  if (!inputReuse) return Object.freeze({ ...defined, execute })
   return Object.freeze({ ...defined, schema: withToolInputReuse(tool.schema), execute })
 }
 

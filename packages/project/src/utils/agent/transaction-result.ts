@@ -40,6 +40,22 @@ export function projectTransactionHasChanges(patches: readonly AgentProjectPrepa
   })
 }
 
+/**
+ * 这次事务新建出来的路径（含重命名落地的新路径）：回执里的 oldRevisions 不放它们——
+ * 界面就是按「不在 oldRevisions 里」认出新建的文件，内核对不存在的路径也会给一个 revision，放进去这条判断就永远为假。
+ */
+export function projectCreatedPaths(patches: readonly AgentProjectPreparedPatch[]): Set<string> {
+  const created = new Set<string>()
+  const seen = new Set<string>()
+  for (const patch of patches) {
+    if (seen.has(patch.path)) continue
+    seen.add(patch.path)
+    if (patch.metadata?.op === 'rename_file_create' || (patch.metadata?.op === 'create_file' && !isTrue(patch.metadata?.replacesExisting)))
+      created.add(patch.path)
+  }
+  return created
+}
+
 /** 宿主或用户拒绝写入：一个文件都没写，按拒绝失败回执；用户改主意后模型可用 inputReuse 原样重提。 */
 export function projectMutationDenied(authorization: ProjectAuthorizationDecision): ProjectError {
   return new ProjectError('PERMISSION_DENIED', authorization.message, { executionOutcome: 'not-applied' },

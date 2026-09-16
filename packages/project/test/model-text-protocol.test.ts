@@ -32,7 +32,7 @@ test.each(['utf8', 'utf8-bom', 'utf16le', 'utf16be', 'utf16le-nobom', 'utf16be-n
           queryCode: async () => ({}), runCommand: async () => ({}) as never,
         }, approval: {} as never,
       }
-      const visible = async () => await finalizeProjectModelResult(context, await executeProjectRead({ path: 'source.ts' }, context)) as {
+      const visible = async () => await finalizeProjectModelResult(context, await executeProjectRead({ files: [{ path: 'source.ts' }] }, context)) as {
         files: Array<{ fileRef: string; lines: Array<[number, string]> }>
       }
       const before = (await visible()).files[0]

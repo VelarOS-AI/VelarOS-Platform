@@ -25,7 +25,7 @@ import { executeAgentProjectRead, executeAgentProjectSearch, toAgentProjectError
 import { readProjectReceipt, saveProjectReceipt } from './receipts.js'
 import { presentProjectRead } from './source-window.js'
 
-/** 读项目文件：path、files、continuation 三选一，按共用的字符预算切窗口，登记进当前文件视图；单个文件失败只进 issues，只读一个文件时直接抛。 */
+/** 读项目文件：files 或 continuation 二选一，按共用的字符预算切窗口，登记进当前文件视图；单个文件失败只进 issues，只读一个文件时直接抛。 */
 export async function readProjectSource(input: ProjectReadInput, context: ProjectToolContext) {
   context.abortSignal.throwIfAborted()
   const parsed = input
@@ -39,8 +39,7 @@ export async function readProjectSource(input: ProjectReadInput, context: Projec
       throw new ProjectError('BASE_REVISION_MISMATCH', '续读页对应的文件已经变了；重新发起一次读取。')
   }
   const requests = page ? [{ path: page.path, range: page.range, baseRevision: page.revision }]
-    : parsed.files?.map((file) => ({ path: file.path, range: readLineRange(file.range), baseRevision: undefined }))
-      ?? [{ path: parsed.path!, range: readLineRange(parsed.range), baseRevision: undefined }]
+    : (parsed.files ?? []).map((file) => ({ path: file.path, range: readLineRange(file.range), baseRevision: undefined }))
   let remaining = parsed.maxChars ?? ProjectFileLimits.readCharsDefault
   const files: ProjectSourceWindow[] = []
   const issues: unknown[] = []

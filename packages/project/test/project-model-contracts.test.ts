@@ -12,10 +12,11 @@ const ProjectReadInputSchema = projectTools['project:read']!.schema
 describe('model-facing Project examples and normalization', () => {
   test('readonly search never mandates discovery tools absent from its role surface', () => {
     const description = projectTools['project:search'].description
-    expect(description).toContain('当前可用的 project:code')
-    expect(description).toContain('本轮已提供的工具发现入口')
-    expect(description).toContain('候选证据')
+    // 只说「本轮有这个工具时用它更准」，不点名发现入口，也不把文本命中说成结论。
+    expect(description).toContain('project:code 更准（本轮有这个工具时）')
+    expect(description).toContain('文本命中只是候选')
     expect(description).not.toMatch(/tooling:(?:map|replace)/u)
+    expect(description).not.toContain('工具发现入口')
   })
 
   test('all nine tool examples survive wire encoding and satisfy their actual schema', () => {
@@ -62,7 +63,7 @@ describe('model-facing Project examples and normalization', () => {
     if (!normalized.success) return
     expect(normalized.args).toEqual({ files })
     expect(normalized.adjustments).toEqual([{ field: 'files', action: 'coerced', detail: expect.any(String) }])
-    expect(ProjectReadInputSchema.parse({ path: 'a.ts', range: [42] }).range).toEqual([42])
+    expect(ProjectReadInputSchema.parse({ files: [{ path: 'a.ts', range: [42] }] }).files[0].range).toEqual([42])
   })
 
   test('precise selectors and operation choices reject ambiguity instead of stripping, clamping or defaulting', () => {
@@ -77,8 +78,8 @@ describe('model-facing Project examples and normalization', () => {
       [{ op: 'replace', range: 1 }],
       [{ op: 'replace_text', match: 'old', text: 'new' }],
     ]) expect(validate.validateWithNormalization(ProjectEditSchema, { files: [{ fileRef: '<fileRef>', edits }] }).success).toBe(false)
-    expect(validate.validateWithNormalization(ProjectReadInputSchema, { path: 'a.ts', files: [{ path: 'b.ts' }] }).success).toBe(false)
-    expect(validate.validateWithNormalization(ProjectChangeSchema, { action: 'undo', changeRef: '<changeRef>', steps: [{ tool: 'file', actions: [{ op: 'create', path: 'new.ts', text: '' }] }] }).success).toBe(false)
+    expect(validate.validateWithNormalization(ProjectReadInputSchema, { files: [{ path: 'b.ts' }], continuation: 'read-page:abc' }).success).toBe(false)
+    expect(validate.validateWithNormalization(ProjectChangeSchema, { action: 'undo', changeRef: '<changeRef>', steps: [{ action: 'create', path: 'new.ts', text: '' }] }).success).toBe(false)
     expect(projectTools['project:edit'].schema.safeParse({ reuse: 'attempt:failed', changes: [{ op: 'set', path: ['files', 0, 'edits', 0, 'range'], value: 42 }] }).success).toBe(true)
     expect(projectTools['project:edit'].schema.safeParse({ reuse: 'attempt:failed', changes: [{ op: 'set', path: ['files'], value: [] }], files: [] }).success).toBe(false)
   })

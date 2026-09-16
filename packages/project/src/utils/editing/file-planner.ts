@@ -5,7 +5,7 @@ import type { TextEncoding } from '@velaros-ai/text-files/contracts'
 
 import { ProjectChangeLimits } from '../../contract/constants.js'
 import type { PrepareEditInput } from '../../types/edit.js'
-import type { FileIdentity, ProjectChangeApplyInput, ProjectContentEdit, ProjectEditView, ProjectFileInput, ProjectFilePlanState, ProjectPlanFileAction, ProjectPlannerResolver, ProjectPlanSource, ProjectRecodeAction, ProjectRecodeNewline, ProjectResolvedMutation, SourceSelection } from '../../types/editing.js'
+import type { FileIdentity, ProjectChangeApplyInput, ProjectChangeStep, ProjectContentEdit, ProjectFileInput, ProjectFilePlanState, ProjectPlanFileAction, ProjectPlannerResolver, ProjectPlanSource, ProjectRecodeAction, ProjectRecodeNewline, SourceSelection } from '../../types/editing.js'
 import { ProjectError } from '../errors.js'
 import { normalizeProjectInputText } from '../text.js'
 
@@ -190,32 +190,24 @@ async function planFileAction(plan: ProjectFilePlanState, action: ProjectPlanFil
   identity.generation += 1
 }
 
-/** 执行一步 edit：先把各文件的编辑全部定位、验证完，再一起推进计划里的文件视图。 */
-async function planEditStep(plan: ProjectFilePlanState, files: ReadonlyArray<ProjectPlanSource & { edits: readonly ProjectContentEdit[] }>): Promise<void> {
-  const groups = new Map<FileIdentity, { view: ProjectEditView; mutations: ProjectResolvedMutation[] }>()
-  for (const [fileIndex, file] of files.entries()) {
-    try {
-      const { identity, view } = await planSource(plan, file, true)
-      const mutations = selectProjectMutations(view, file.edits).map((mutation) => ({ ...mutation, fileIndex }))
-      const previous = groups.get(identity)
-      if (previous) previous.mutations.push(...mutations)
-      else groups.set(identity, { view, mutations })
-    } catch (error) {
-      if (!(error instanceof ProjectError)) throw error
-      throw new ProjectError(error.reason, error.message, { ...error.details, fileIndex }, error.suggestedNextAction)
-    }
+/** 执行一步 edit：一步就是一个文件，先把这个文件的几处编辑全部定位、验证完，再推进计划里的文件视图。 */
+async function planEditStep(plan: ProjectFilePlanState, file: ProjectPlanSource & { edits: readonly ProjectContentEdit[] }): Promise<void> {
+  const { identity, view } = await planSource(plan, file, true)
+  const mutations = selectProjectMutations(view, file.edits)
+  const content = applyProjectMutations(view, mutations)
+  plan.operations.push({ operation: { type: 'replace_content', path: view.path, expectedContent: view.content, content, mode: 'edit' } })
+  identity.view = { ...view, content, coverage: advanceProjectCoverage(view, content, mutations) }
+  identity.history.push({ content, mutations })
+  for (const binding of plan.references.values()) if (binding.identity === identity) binding.view = {
+    ...binding.view, content, coverage: advanceProjectCoverage(binding.view, content, mutations),
   }
-  // 所有分组先完成定位与验证，再推进计划中的文件视图。
-  const ready = [...groups].map(([identity, group]) => ({ identity, ...group, content: applyProjectMutations(group.view, group.mutations) }))
-  for (const { identity, view, content, mutations } of ready) {
-    plan.operations.push({ operation: { type: 'replace_content', path: view.path, expectedContent: view.content, content, mode: 'edit' } })
-    identity.view = { ...view, content, coverage: advanceProjectCoverage(view, content, mutations) }
-    identity.history.push({ content, mutations })
-    for (const binding of plan.references.values()) if (binding.identity === identity) binding.view = {
-      ...binding.view, content, coverage: advanceProjectCoverage(binding.view, content, mutations),
-    }
-    identity.generation += 1
-  }
+  identity.generation += 1
+}
+
+/** 把一步文件动作翻回 project:file 那套形状：字段一样，只是判别键从 action 换回 op。 */
+function stepFileAction(step: Exclude<ProjectChangeStep, { action: 'edit' }>): ProjectPlanFileAction {
+  const { action, ...rest } = step
+  return { op: action, ...rest } as ProjectPlanFileAction
 }
 
 /** 把计划收成 prepareEdit 的输入；metadata 记下契约版本、工具名，有 recode 时带上回执。 */
@@ -244,15 +236,8 @@ export async function compileProjectChange(input: ProjectChangeApplyInput, resol
   const plan = createFilePlan(resolver)
   for (const [stepIndex, step] of input.steps.entries()) {
     try {
-      if (step.tool === 'edit') await planEditStep(plan, step.files)
-      else if (step.tool === 'file') {
-        for (const [actionIndex, action] of step.actions.entries()) {
-          try { await planFileAction(plan, action, true) } catch (error) {
-            if (!(error instanceof ProjectError)) throw error
-            throw new ProjectError(error.reason, error.message, { ...error.details, actionIndex }, error.suggestedNextAction)
-          }
-        }
-      } else throw new ProjectError('INVALID_INPUT', '计划步骤仅支持 file 或 edit。')
+      if (step.action === 'edit') await planEditStep(plan, step)
+      else await planFileAction(plan, stepFileAction(step), true)
     } catch (error) {
       if (!(error instanceof ProjectError)) throw error
       throw new ProjectError(error.reason, error.message, { ...error.details, stepIndex }, error.suggestedNextAction)

@@ -119,7 +119,7 @@ describe('Project Kernel module', () => {
       await service?.invoke('project:file', undefined, {
         actions: [{ op: 'create', path: 'reports/review.md', text: '# Review\n\nPassed.\n' }],
       }, new AbortController().signal)
-      const observed = await service?.invoke('project:read', undefined, { path: 'reports/review.md' }, new AbortController().signal)
+      const observed = await service?.invoke('project:read', undefined, { files: [{ path: 'reports/review.md' }] }, new AbortController().signal)
       const presented: any = await finalizeProjectModelResult(context, observed)
       await service?.invoke('project:edit', undefined, {
         files: [{ fileRef: presented.files[0].fileRef, edits: [{ op: 'insert', at: 'end', text: 'VELAR-WRITE-MARKER' }] }],

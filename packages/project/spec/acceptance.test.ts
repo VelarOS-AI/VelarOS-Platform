@@ -87,8 +87,8 @@ describe('编辑的边界', () => {
       await writeFile(join(outside, 'secret.txt'), 'outside\n')
       await symlink(outside, join(root, 'link'))
       const { call } = await createProjectHarness(root)
-      await expect(call('project:read', { path: '../secret.txt' })).rejects.toThrow()
-      await expect(call('project:read', { path: 'link/secret.txt' })).rejects.toThrow()
+      await expect(call('project:read', { files: [{ path: '../secret.txt' }] })).rejects.toThrow()
+      await expect(call('project:read', { files: [{ path: 'link/secret.txt' }] })).rejects.toThrow()
       await expect(call('project:file', { actions: [{ op: 'create', path: 'link/new.txt', text: 'x\n' }] })).rejects.toThrow()
       await expect(readFile(join(outside, 'new.txt'))).rejects.toThrow()
     } finally {
@@ -120,8 +120,8 @@ describe('编辑的边界', () => {
     await writeFile(join(root, '.env'), 'API_KEY=sk-live-SECRET\n')
     await symlink('.env', join(root, 'env.sample'))
     const denied = await createProjectHarness(root, { corePolicy: { readDeny: ['.env'] } })
-    await expect(denied.call('project:read', { path: '.env' })).rejects.toMatchObject({ reason: 'PERMISSION_DENIED' })
-    await expect(denied.call('project:read', { path: 'env.sample' })).rejects.toMatchObject({ reason: 'PERMISSION_DENIED' })
+    await expect(denied.call('project:read', { files: [{ path: '.env' }] })).rejects.toMatchObject({ reason: 'PERMISSION_DENIED' })
+    await expect(denied.call('project:read', { files: [{ path: 'env.sample' }] })).rejects.toMatchObject({ reason: 'PERMISSION_DENIED' })
   })
 
   test('INV-14 版本库内部缺省不许写，报错说清楚该用 project:run', async () => {
@@ -179,6 +179,25 @@ describe('命令', () => {
     await readOnly.call('project:run', { command: 'ls' })
     expect(readOnly.mutations).toEqual([])
     expect(readOnly.commands).toEqual(['ls'])
+  })
+
+  test('修改授权带着这次要写的文件问，而且问在写之前；命令的 cwd 出了项目先拒绝，不打扰用户', async () => {
+    await writeFile(join(root, 'a.txt'), 'alpha\n')
+    const harness = await createProjectHarness(root)
+    const file = await harness.read('a.txt')
+    await harness.call('project:change', { action: 'apply', steps: [
+      { action: 'create', path: 'created.txt', text: 'new\n' },
+      { action: 'edit', fileRef: file.fileRef, edits: [{ op: 'replace', range: 1, text: 'ALPHA' }] },
+    ] })
+    // 先规划、再带着路径问授权：确认卡片列得出这次会写哪些文件。
+    expect(harness.mutations).toEqual(['项目事务变更'])
+    expect([...harness.authorizedPaths[0]!].sort()).toEqual(['a.txt', 'created.txt'])
+
+    const outside = await createProjectHarness(root)
+    await expect(outside.call('project:run', { command: 'ls', cwd: '..' })).rejects.toMatchObject({ reason: 'PERMISSION_DENIED' })
+    expect(outside.confirmations).toEqual([])
+    expect(outside.mutations).toEqual([])
+    expect(outside.commands).toEqual([])
   })
 
   test('INV-8 同一项目根上写串行、读并发；排队的写者不被后来的读者饿死；取消了的等待者不运行', async () => {

@@ -161,7 +161,7 @@ async function symbols(input: Extract<ProjectCodeInput, { action: 'symbols' }>, 
     const before = await (await context.project.kernel()).read({ path: target.path, maxChars: 1 })
     const symbol = await locate(target, context)
     const detail = symbol as ProjectSymbol & { bodyRange?: ProjectSymbol['range']; statementRange?: ProjectSymbol['range'] }
-    const source = await readProjectSource({ path: symbol.path, range: [symbol.range.startLine, symbol.range.endLine], maxChars: ProjectTuning.codeQuery.symbolSourceChars }, context)
+    const source = await readProjectSource({ files: [{ path: symbol.path, range: [symbol.range.startLine, symbol.range.endLine] }], maxChars: ProjectTuning.codeQuery.symbolSourceChars }, context)
     if (source.files.some((file) => file.revision !== before.snapshot.revision))
       throw new ProjectError('BASE_REVISION_MISMATCH', '符号解析期间文件发生变化，声明范围与源码不属于同一版本。', { path: target.path }, '重新查询该符号详情。')
     return envelope(input, { source: symbol.adapterId, symbols: await symbolRows([{ ...symbol, line: symbol.range.startLine }], context) }, {
@@ -200,12 +200,15 @@ async function symbols(input: Extract<ProjectCodeInput, { action: 'symbols' }>, 
  * 后端给不出边的方向时如实说明，关系后端没启用时返回空关系加降级说明与能力目录。
  */
 async function relations(input: Extract<ProjectCodeInput, { action: 'relations' }>, context: ProjectToolContext) {
+  // 缺省值在这里补：schema 的根是一个平对象，字段级 default 会落到所有动作上，那样反倒说不清哪个动作收哪些字段。
+  const depth = input.depth ?? ProjectCodeLimits.relationDepthDefault
+  const direction = input.direction ?? 'both'
   try {
     const target = await graphTarget(input.target, context)
     if (input.kind === 'calls') {
       const parts: RecordValue = {}
-      if (input.direction !== 'outgoing') parts.incoming = boundRelations(await query({ action: 'callers', nodeId: target.nodeId, depth: input.depth }, context), input.limit ?? ProjectCodeLimits.resultsDefault)
-      if (input.direction !== 'incoming') parts.outgoing = boundRelations(await query({ action: 'callees', nodeId: target.nodeId, depth: input.depth }, context), input.limit ?? ProjectCodeLimits.resultsDefault)
+      if (direction !== 'outgoing') parts.incoming = boundRelations(await query({ action: 'callers', nodeId: target.nodeId, depth }, context), input.limit ?? ProjectCodeLimits.resultsDefault)
+      if (direction !== 'incoming') parts.outgoing = boundRelations(await query({ action: 'callees', nodeId: target.nodeId, depth }, context), input.limit ?? ProjectCodeLimits.resultsDefault)
       return envelope(input, { ...parts, truncated: Object.values(parts).some((part) => record(part).truncated), sources: Object.values(parts).map((part) => ({ backend: record(part).source ?? 'codegraph' })) })
     }
     const result = await query(input.kind === 'types' ? { action: 'type_hierarchy', nodeId: target.nodeId } : { action: 'explore', nodeIds: [target.nodeId] }, context)
@@ -213,20 +216,20 @@ async function relations(input: Extract<ProjectCodeInput, { action: 'relations' 
       const edges = rows(result.relations)
       const selected = new Set<string>([target.nodeId])
       let frontier = new Set(selected)
-      for (let depth = 0; depth < input.depth && frontier.size; depth++) {
+      for (let step = 0; step < depth && frontier.size; step++) {
         const next = new Set<string>()
         for (const edge of edges) {
-          if (input.direction !== 'incoming' && frontier.has(String(edge.from))) next.add(String(edge.to))
-          if (input.direction !== 'outgoing' && frontier.has(String(edge.to))) next.add(String(edge.from))
+          if (direction !== 'incoming' && frontier.has(String(edge.from))) next.add(String(edge.to))
+          if (direction !== 'outgoing' && frontier.has(String(edge.to))) next.add(String(edge.from))
         }
         frontier = new Set([...next].filter((id) => !selected.has(id)))
         for (const id of frontier) selected.add(id)
       }
-      return envelope(input, boundRelations({ ...result, nodes: rows(result.nodes).filter((item) => selected.has(String(item.id))), relations: edges.filter((edge) => selected.has(String(edge.from)) && selected.has(String(edge.to))) }, input.limit ?? ProjectCodeLimits.resultsDefault), { direction: input.direction })
+      return envelope(input, boundRelations({ ...result, nodes: rows(result.nodes).filter((item) => selected.has(String(item.id))), relations: edges.filter((edge) => selected.has(String(edge.from)) && selected.has(String(edge.to))) }, input.limit ?? ProjectCodeLimits.resultsDefault), { direction })
     }
-    return envelope(input, boundRelations(result, input.limit ?? ProjectCodeLimits.resultsDefault), { requestedDirection: input.direction, degraded: [
+    return envelope(input, boundRelations(result, input.limit ?? ProjectCodeLimits.resultsDefault), { requestedDirection: direction, degraded: [
       ...(isString(result.degraded) ? [result.degraded] : []),
-      ...(input.direction === 'both' ? [] : ['当前图后端未提供可验证的边方向，返回双向关系；没有把未分类节点伪装成指定方向。']),
+      ...(direction === 'both' ? [] : ['当前图后端未提供可验证的边方向，返回双向关系；没有把未分类节点伪装成指定方向。']),
     ] })
   } catch (error) {
     if (!unavailable(error)) throw error
@@ -267,7 +270,7 @@ export async function queryProjectCode(input: ProjectCodeInput, context: Project
       let graph: unknown
       try {
         const resolved = await graphTarget(input.target, context)
-        graph = await query({ action: 'impact', nodeId: resolved.nodeId, depth: input.depth }, context)
+        graph = await query({ action: 'impact', nodeId: resolved.nodeId, depth: input.depth ?? ProjectCodeLimits.relationDepthDefault }, context)
       } catch (error) { if (!unavailable(error) && !(error instanceof ProjectError && error.reason === 'TARGET_NOT_FOUND')) throw error }
       return envelope(input, result, { target, graph, resolution: 'impact-candidates', degraded: ['影响候选保留语言服务来源；名称引用不等于精确绑定证明。', ...(isString(result.degraded) ? [result.degraded] : [])] })
     }

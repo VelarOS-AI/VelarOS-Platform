@@ -282,6 +282,7 @@ const projectWrite = defineProjectTool<ProjectWriteInput>({
   name: ProjectToolNames.write,
   category: 'project-changes',
   role: 'edit',
+  inputReuse: true,
   summary: '把一段完整文本创建、覆盖、追加或前置写入一个项目文件。',
   suitable: ['创建报告、配置、源码或其他以完整文本为主体的单文件内容。'],
   forbidden: [
@@ -329,6 +330,7 @@ const projectEdit = defineProjectTool<ProjectModelEditInput>({
   name: ProjectToolNames.edit,
   category: 'project-changes',
   role: 'edit',
+  inputReuse: true,
   summary: '以一个可回滚事务执行精确文本、符号、导入、JSON 或多文件结构化修改。',
   suitable: ['需要精确替换、锚点插入、符号/导入/JSON 修改，或多个操作必须原子提交。'],
   forbidden: [

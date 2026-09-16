@@ -51,7 +51,7 @@ async function fixture(options: { approved?: boolean; readDeny?: string[]; provi
     const result = await tool.execute(tool.schema.parse(args), context)
     return finalize ? finalizeProjectModelResult(context, result) : result
   }
-  const read = async (path: string, range?: unknown) => (await call('project:read', { path, ...(range === undefined ? {} : { range }) })).files[0]
+  const read = async (path: string, range?: unknown) => (await call('project:read', { files: [{ path, ...(range === undefined ? {} : { range }) }] })).files[0]
   return { kernel, store, ctx, call, read }
 }
 
@@ -59,7 +59,7 @@ describe('actual Project tool surface with final model references', () => {
   test('read finalization emits only source records and binds exactly the displayed range', async () => {
     await writeFile(join(root, 'a.txt'), 'first\nsecond\nthird\n')
     const { call, ctx } = await fixture()
-    const raw = await call('project:read', { path: 'a.txt', range: [2] }, false)
+    const raw = await call('project:read', { files: [{ path: 'a.txt', range: [2] }] }, false)
     expect(raw.files[0].fileRef).toBeUndefined()
     expect(raw.files[0].viewSource).toStartWith('source:')
     const final: any = await finalizeProjectModelResult(ctx, raw)
@@ -162,6 +162,41 @@ describe('actual Project tool surface with final model references', () => {
     expect(await readFile(join(root, 'moved.txt'), 'utf8')).toBe('complete\n')
   })
 
+  test('模型面的入参形状：读只有 files 与 continuation，change 的一步一个动作', () => {
+    const read = projectTools['project:read']!.schema
+    // 读一个文件就是只有一项的 files；顶层 path、range 不再存在（与 system:read 同形）。
+    expect(read.safeParse({ files: [{ path: 'a.txt', range: [1, 2] }] }).success).toBe(true)
+    expect(read.safeParse({ path: 'a.txt' }).success).toBe(false)
+    expect(read.safeParse({ path: 'a.txt', range: 1 }).success).toBe(false)
+    expect(read.safeParse({ files: [{ path: 'a.txt' }], continuation: 'read-page:abc' }).success).toBe(false)
+    const change = projectTools['project:change']!.schema
+    expect(change.safeParse({ action: 'apply', steps: [{ action: 'create', path: 'a.txt', text: '' }] }).success).toBe(true)
+    expect(change.safeParse({ action: 'apply', steps: [{ action: 'edit', fileRef: 'view:x', edits: [{ op: 'replace', range: 1, text: 'x' }] }] }).success).toBe(true)
+    // 批量维度只剩 steps 一个：原来的 { tool, actions } / { tool, files } 两层嵌套没了。
+    expect(change.safeParse({ action: 'apply', steps: [{ tool: 'file', actions: [{ op: 'create', path: 'a.txt', text: '' }] }] }).success).toBe(false)
+    expect(change.safeParse({ action: 'apply', steps: [{ tool: 'edit', files: [{ fileRef: 'view:x', edits: [] }] }] }).success).toBe(false)
+  })
+
+  test('改动回执带提交前后的版本：新建的文件不在 oldRevisions 里，撤销两次照样成功', async () => {
+    await writeFile(join(root, 'a.txt'), 'one\n')
+    const { call, read } = await fixture()
+    const file = await read('a.txt')
+    const result = await call('project:change', { action: 'apply', steps: [
+      { action: 'create', path: 'fresh.txt', text: 'new\n' },
+      { action: 'edit', fileRef: file.fileRef, edits: [{ op: 'replace', range: 1, text: 'two' }] },
+    ] })
+    // 界面按 changedFiles 加前后版本画改动摘要：新建的文件「不在 oldRevisions 里」就是它的标志。
+    expect(result.oldRevisions['a.txt']).toBe(file.revision)
+    expect(result.oldRevisions['fresh.txt']).toBeUndefined()
+    expect(result.newRevisions['fresh.txt']).toBeTruthy()
+    expect(result.diffLines).toBeGreaterThan(0)
+    expect(result.risk).toBeUndefined()
+    await call('project:change', { action: 'undo', changeRef: result.changeRef })
+    const again = await call('project:change', { action: 'undo', changeRef: result.changeRef })
+    expect(again).toMatchObject({ status: 'rolled_back', alreadyUndone: true })
+    expect(await readFile(join(root, 'a.txt'), 'utf8')).toBe('one\n')
+  })
+
   test('changed reports net content and file existence, including empty files and cancelling steps', async () => {
     await writeFile(join(root, 'a.txt'), 'same\n')
     const { call, read } = await fixture()
@@ -183,13 +218,13 @@ describe('actual Project tool surface with final model references', () => {
     expect(removed.changed).toBe(true)
 
     const cancelled = await call('project:change', { action: 'apply', steps: [
-      { tool: 'file', actions: [{ op: 'create', path: 'temporary.txt', text: '' }, { op: 'delete', path: 'temporary.txt' }] },
+      { action: 'create', path: 'temporary.txt', text: '' }, { action: 'delete', path: 'temporary.txt' },
     ] })
     expect(cancelled.changed).toBe(false)
     await expect(readFile(join(root, 'temporary.txt'))).rejects.toThrow()
     const movedSource = await read('a.txt')
     const roundTrip = await call('project:change', { action: 'apply', steps: [
-      { tool: 'file', actions: [{ op: 'move', fileRef: movedSource.fileRef, to: 'transit.txt' }, { op: 'move', sourceRef: movedSource.fileRef, to: 'a.txt' }] },
+      { action: 'move', fileRef: movedSource.fileRef, to: 'transit.txt' }, { action: 'move', sourceRef: movedSource.fileRef, to: 'a.txt' },
     ] })
     expect(roundTrip.changed).toBe(false)
     expect(await readFile(join(root, 'a.txt'), 'utf8')).toBe('same\n')
@@ -200,8 +235,8 @@ describe('actual Project tool surface with final model references', () => {
     const { call, read } = await fixture()
     const file = await read('a.txt')
     const result = await call('project:change', { action: 'apply', steps: [
-      { tool: 'file', actions: [{ op: 'create', path: 'new.txt', text: 'created\n' }, { op: 'move', fileRef: file.fileRef, to: 'moved.txt' }] },
-      { tool: 'edit', files: [{ sourceRef: file.fileRef, edits: [{ op: 'replace', range: 1, text: 'moved' }] }, { path: 'new.txt', edits: [{ op: 'insert', at: 'end', text: 'checked' }] }] },
+      { action: 'create', path: 'new.txt', text: 'created\n' }, { action: 'move', fileRef: file.fileRef, to: 'moved.txt' },
+      { action: 'edit', sourceRef: file.fileRef, edits: [{ op: 'replace', range: 1, text: 'moved' }] }, { action: 'edit', path: 'new.txt', edits: [{ op: 'insert', at: 'end', text: 'checked' }] },
     ] })
     expect(result.changedFiles).toEqual(expect.arrayContaining(['a.txt', 'new.txt', 'moved.txt']))
     expect(await readFile(join(root, 'moved.txt'), 'utf8')).toBe('moved\n')
@@ -215,7 +250,7 @@ describe('actual Project tool surface with final model references', () => {
   test('read continuations keep the original version and fragment coverage', async () => {
     await writeFile(join(root, 'a.txt'), 'first\nsecond\nthird\n')
     const { call } = await fixture()
-    const first = (await call('project:read', { path: 'a.txt', maxChars: 6 })).files[0]
+    const first = (await call('project:read', { files: [{ path: 'a.txt' }], maxChars: 6 })).files[0]
     expect(first.lines).toEqual([[1, 'first']])
     expect(first.continuation).toStartWith('read-page:')
     const next = (await call('project:read', { continuation: first.continuation, maxChars: 20 })).files[0]

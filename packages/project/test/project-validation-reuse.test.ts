@@ -82,7 +82,7 @@ async function fixture(plugins: ProjectPlugin[] = []) {
     return result!
   }
   const read = async (path: string) => {
-    const result = await call('read-source', 'project:read', { path })
+    const result = await call('read-source', 'project:read', { files: [{ path }] })
     expect(result.error).toBeUndefined()
     const visible = await finalizeProjectModelResult(context, result.result) as { files: Array<{ fileRef: string }> }
     return visible.files[0]!.fileRef

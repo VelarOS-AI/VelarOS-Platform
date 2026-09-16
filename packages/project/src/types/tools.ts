@@ -6,10 +6,8 @@
 import type { ProjectChangeStep, ProjectLineRange } from './editing.js'
 import type { ProjectCodeScope } from './project.js'
 
-/** project:read 的入参：path（可带 range）、files（每项各自的 range）、continuation 三选一；maxChars 是这次调用所有文件共用的字符预算。 */
+/** project:read 的入参：files（每项一个文件，可带 range）或 continuation 二选一；maxChars 是这次调用所有文件共用的字符预算。 */
 export type ProjectReadInput = {
-  path?: string
-  range?: ProjectLineRange
   files?: Array<{ path: string; range?: ProjectLineRange }>
   continuation?: string
   maxChars?: number
@@ -38,7 +36,7 @@ export type ProjectSearchInput = {
   contextLines?: number
 }
 
-/** project:change 的入参：apply 只带 steps；inspect、undo 只带 changeRef。 */
+/** project:change 的入参：apply 只带 steps（一步一个目标）；inspect、undo 只带 changeRef。 */
 export type ProjectChangeInput = {
   action: 'apply' | 'inspect' | 'undo'
   steps?: ProjectChangeStep[]
@@ -71,7 +69,10 @@ export type ProjectSandboxInput = {
 /** 代码查询的目标符号：前一次查询返回的 symbolRef，或者文件路径加符号名（可带容器名区分同名符号）。 */
 export type ProjectCodeTarget = { symbolRef: string } | { path: string; symbol: string; container?: string }
 
-/** project:code 的入参：symbols、references、dependencies（incoming / outgoing）、relations、impact、diagnostics 六类动作。 */
+/**
+ * project:code 的入参：symbols、references、dependencies（incoming / outgoing）、relations、impact、diagnostics 六类动作。
+ * schema 的根是一个平对象加 action 枚举（宿主扁平化根级组合时不会丢分支），每个动作的必填与互斥由 superRefine 保证，解析之后就是下面这些形状。
+ */
 export type ProjectCodeInput =
   | (ProjectCodeScope & {
     action: 'symbols'
@@ -86,8 +87,8 @@ export type ProjectCodeInput =
   | (ProjectCodeScope & { action: 'references'; target: ProjectCodeTarget; path?: string })
   | (ProjectCodeScope & { action: 'dependencies'; direction: 'incoming'; path?: string; specifier?: string; within?: string; includeReExports?: boolean })
   | (ProjectCodeScope & { action: 'dependencies'; direction: 'outgoing'; path?: string; specifier?: string; kind?: string; includeExternal?: boolean })
-  | { action: 'relations'; cwd?: string; limit?: number; target: ProjectCodeTarget; kind: 'calls' | 'types' | 'related'; direction: 'incoming' | 'outgoing' | 'both'; depth: number }
-  | (ProjectCodeScope & { action: 'impact'; target: ProjectCodeTarget; path?: string; kinds?: string[]; depth: number })
+  | (ProjectCodeScope & { action: 'relations'; target: ProjectCodeTarget; kind: 'calls' | 'types' | 'related'; direction?: 'incoming' | 'outgoing' | 'both'; depth?: number })
+  | (ProjectCodeScope & { action: 'impact'; target: ProjectCodeTarget; path?: string; kinds?: string[]; depth?: number })
   | (ProjectCodeScope & { action: 'diagnostics'; path: string })
 
 /** project:code-analysis 的入参：trace、cycles、deadcode、routing 四类图分析。 */

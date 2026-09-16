@@ -228,9 +228,14 @@ export type ProjectPlanFileAction =
   | ({ op: 'delete' } & ProjectPlanSource)
   | ProjectRecodeAction
 
+/** 一次 change 计划里的一步：一步一个目标。文件动作那五个的字段同 project:file，edit 是一个文件加它的几处编辑。 */
 export type ProjectChangeStep =
-  | { tool: 'file'; actions: readonly ProjectPlanFileAction[] }
-  | { tool: 'edit'; files: ReadonlyArray<ProjectPlanSource & { edits: readonly ProjectContentEdit[] }> }
+  | { action: 'create'; path: string; text: string }
+  | ({ action: 'overwrite'; text: string } & ProjectPlanSource)
+  | ({ action: 'move'; to: string } & ProjectPlanSource)
+  | ({ action: 'delete' } & ProjectPlanSource)
+  | (Omit<ProjectRecodeAction, 'op'> & { action: 'recode' })
+  | ({ action: 'edit'; edits: readonly ProjectContentEdit[] } & ProjectPlanSource)
 
 export interface ProjectChangeApplyInput {
   action: 'apply'

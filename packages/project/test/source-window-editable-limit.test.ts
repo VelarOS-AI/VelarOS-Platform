@@ -36,7 +36,7 @@ async function contextFor(): Promise<ProjectToolContext> {
 
 /** 读一个文件并把回执定稿（fileRef 在这一步签发）。 */
 async function readFinalized(context: ProjectToolContext, path: string): Promise<{ fileRef?: string; editable?: boolean; referenceUnavailable?: string }> {
-  const raw = await readProjectSource({ path, range: [1, 2] }, context)
+  const raw = await readProjectSource({ files: [{ path, range: [1, 2] }] }, context)
   const finalized = await finalizeProjectModelResult(context, raw) as { files: Array<Record<string, unknown>> }
   return finalized.files[0] as never
 }

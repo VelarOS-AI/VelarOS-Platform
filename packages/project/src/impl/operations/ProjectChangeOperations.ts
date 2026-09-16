@@ -18,7 +18,7 @@ import { changedFileContextRanges, committedFileContextSnapshots, registerProjec
 import { projectPlannerResolver } from '../../utils/agent/planner-resolver.js'
 import { readProjectReceipt, saveProjectReceipt } from '../../utils/agent/receipts.js'
 import { presentProjectContextSnapshot } from '../../utils/agent/source-window.js'
-import { projectMutationDenied, projectTransactionHasChanges } from '../../utils/agent/transaction-result.js'
+import { projectCreatedPaths, projectMutationDenied, projectTransactionHasChanges } from '../../utils/agent/transaction-result.js'
 import { compileProjectChange, compileProjectEdit, compileProjectFile } from '../../utils/editing/planner-index.js'
 import { ProjectError } from '../../utils/errors.js'
 import { plannedFilePaths } from '../../utils/transactions/edit-intents.js'
@@ -235,12 +235,13 @@ export class ProjectChangeOperations implements ProjectChangeOperationsApi {
               // 宿主界面按这几个字段画改动摘要（合同在 types/project.ts 的 ProjectChangeReceipt），
               // 字段名与内核 ApplyResult 一致：读结果过期判断、「已编辑」统计和改动摘要都按 newRevisions 读，
               // 新建的文件靠「不在 oldRevisions 里」认出来；以前这里叫 revisions，那几处全都读空。
+              const created = projectCreatedPaths(finalTransaction.patches)
               const receipt: ProjectChangeReceipt = {
                 changeRef: changeRef ?? transaction.transactionId,
                 transactionId: transaction.transactionId,
                 changed: projectTransactionHasChanges(finalTransaction.patches),
                 changedFiles: applied.changedFiles,
-                oldRevisions: applied.oldRevisions,
+                oldRevisions: Object.fromEntries(Object.entries(applied.oldRevisions).filter(([path]) => !created.has(path))),
                 newRevisions: applied.newRevisions,
               }
               const diff = finalTransaction.diff.slice(0, ProjectTuning.transactions.receiptDiffChars)

@@ -18,7 +18,6 @@ const languageContext: LanguageToolContext = {
   abortSignal: new AbortController().signal,
   project: {
     getRootPath: () => '/workspace/example',
-    runInDirectory: async (_path, action) => action(),
     kernel: async () => source,
   },
 }
