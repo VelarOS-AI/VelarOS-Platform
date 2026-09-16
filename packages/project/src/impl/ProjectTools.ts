@@ -20,6 +20,7 @@ import type {
 } from '@velaros-ai/kernel/contracts'
 import { RehearsalSandboxLimits } from '@velaros-ai/rehearsal-sandbox/contracts'
 import { shellCommandPolicy } from '@velaros-ai/shell-command'
+import { ShellCommandKinds } from '@velaros-ai/shell-command/contracts'
 import { toolKernelModules } from '@velaros-ai/tool-contract'
 
 import { ProjectChangeLimits, ProjectCodeAnalysisToolName, ProjectCodeLimits, ProjectCommandLimits, ProjectFileLimits, ProjectModId, ProjectPackageVersion, ProjectPolicyDefaults, ProjectSpaceId, ProjectToolExposure, ProjectToolNames } from '../contract/constants.js'
@@ -457,20 +458,25 @@ const runTool = defineProjectTool<ProjectRunInput>({
   name: ProjectToolNames.run,
   category: 'project-execution',
   role: 'execute',
-  summary: '在项目里跑一条 shell 命令：构建、测试、lint、脚本、包管理，或起开发服务器。',
+  summary: '在项目里跑一条 shell 命令：构建、测试、lint、脚本、包管理，或起开发服务器；不填 shell 就用环境报告里的默认那个。',
   suitable: ['在项目里跑构建、测试、lint、脚本和包管理命令，或者起开发服务器。'],
   protocol: [
-    '生成命令前看宿主报告的 shell.kind/name，按它的语法写：Git Bash/POSIX 用 command -v、$NAME；PowerShell 用 Get-Command、$env:NAME；CMD 用 where、%NAME%。Windows 按 Git Bash、PowerShell 7、Windows PowerShell、CMD 的顺序选，缺 Git Bash 时建议用户装 Git for Windows。',
+    '不传 shell 就用环境报告里的默认 shell，命令按它的语法写：Git Bash/POSIX 用 command -v、$NAME；PowerShell 用 Get-Command、$env:NAME；CMD 用 where、%NAME%。要用别的就填 shell，可用清单见环境报告；Windows 上首选 git-bash，没有时建议用户装 Git for Windows。',
     '失败先看退出码和输出再决定，不要原样重跑有副作用的命令。',
   ],
   usage: [
     'dev、watch 这类长驻命令不传 background 也会自动转后台并立即返回 backgroundProcess；要停就用 project:run 执行回执里的 terminateCommand。',
     '危险命令会先请用户确认；可能改项目的命令先过项目修改授权。被拒时回执是 skipped，命令没有执行。',
   ],
-  examples: [{ command: 'bun test' }],
+  examples: [
+    { command: 'bun test' },
+    // 环境报告把 pwsh 列为可用时，才这么挑
+    { command: 'Get-ChildItem -Recurse -Filter *.log', shell: 'pwsh' },
+  ],
   schema: z.strictObject({
     command: z.string().min(1).describe('要执行的 shell 命令。'),
     cwd: z.string().optional().describe('在项目里的哪个目录执行，相对项目根；缺省是项目根。出了项目就拒绝执行。'),
+    shell: z.enum(ShellCommandKinds).optional().describe('用哪个 shell 执行；不传用环境报告里的默认 shell。只能填环境报告列为可用的那几个，填了本机没有的会在执行之前被拒，报错里给出可用的清单。'),
     timeoutMs: z.number().int().positive().max(ProjectCommandLimits.timeoutMs).optional()
       .describe(`超时毫秒数，最多 ${ProjectCommandLimits.timeoutMs}；不给用宿主的缺省超时。`),
     background: z.boolean().optional().describe('后台启动并立即返回；不传时长驻服务自动转后台，其余在前台跑完。'),
@@ -514,6 +520,7 @@ const sandboxTool = defineProjectTool<ProjectSandboxInput>({
     ignored: z.enum(['link', 'copy', 'skip']).optional().describe('create：gitignore 忽略的目录怎么处理：link 链接到真实目录（能读不能写，缺省）、copy 复制、skip 不要；忽略的文件一律不复制。'),
     sandboxId: z.string().min(1).max(RehearsalSandboxLimits.idChars).optional().describe('run / diff / apply / discard：create 回执里的沙箱 id，原样复制。'),
     command: z.string().min(1).optional().describe('run：在镜像根里执行的 shell 命令。'),
+    shell: z.enum(ShellCommandKinds).optional().describe('run：用哪个 shell 执行，规矩同 project:run；不传用环境报告里的默认 shell。'),
     timeoutMs: z.number().int().positive().max(ProjectCommandLimits.timeoutMs).optional()
       .describe(`run：超时毫秒数，最多 ${ProjectCommandLimits.timeoutMs}；不给用宿主的缺省超时。`),
     maxOutputChars: z.number().int().positive().max(ProjectCommandLimits.outputChars).optional()
@@ -529,7 +536,7 @@ const sandboxTool = defineProjectTool<ProjectSandboxInput>({
       context.addIssue({ code: 'custom', path: ['command'], message: 'run 需要 command。' })
     const scoped = [
       { action: 'create', fields: ['source', 'network', 'ignored'] },
-      { action: 'run', fields: ['command', 'timeoutMs', 'maxOutputChars'] },
+      { action: 'run', fields: ['command', 'shell', 'timeoutMs', 'maxOutputChars'] },
       { action: 'diff', fields: ['maxFiles'] },
       { action: 'apply', fields: ['paths'] },
     ] as const

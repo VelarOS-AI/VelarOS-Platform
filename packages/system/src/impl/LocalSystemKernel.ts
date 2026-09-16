@@ -14,9 +14,9 @@ import type { SandboxApplyOptions, SandboxApplyResult, SandboxCreateOptions, San
 
 import type { LocalSystemKernelOptions, SystemToolSystemApi } from '../contract/requires.js'
 import type { ResolvedSystemShell } from '../types/commands.js'
-import type { SystemBackgroundTaskQueryOptions, SystemBackgroundTaskRecord, SystemBackgroundTaskTerminateRequest, SystemBackgroundTaskTerminateResult, SystemCommandResult, SystemConsoleControlResult, SystemConsoleInputRequest, SystemConsoleInterruptRequest, SystemConsoleOutputChunk, SystemConsoleOutputRequest, SystemEnvironmentInspection, SystemGlobalSearchOptions, SystemGlobalSearchResult, SystemMetricsSnapshot, SystemOpenPortInfo, SystemOpenPortQueryOptions, SystemProcessInfo, SystemProcessQueryOptions, SystemRunCommandOptions, SystemShellEnvironmentRefreshResult } from '../types/system.js'
+import type { SystemBackgroundTaskQueryOptions, SystemBackgroundTaskRecord, SystemBackgroundTaskTerminateRequest, SystemBackgroundTaskTerminateResult, SystemCommandResult, SystemConsoleControlResult, SystemConsoleInputRequest, SystemConsoleInterruptRequest, SystemConsoleOutputChunk, SystemConsoleOutputRequest, SystemEnvironmentInspection, SystemGlobalSearchOptions, SystemGlobalSearchResult, SystemMetricsSnapshot, SystemOpenPortInfo, SystemOpenPortQueryOptions, SystemProcessInfo, SystemProcessQueryOptions, SystemRunCommandOptions, SystemShellDescriptor, SystemShellEnvironmentRefreshResult } from '../types/system.js'
 import { runPlatformCommand } from '../utils/process.js'
-import { replaceEnvironment, toShellDescriptor } from '../utils/shell.js'
+import { detectSystemShells, replaceEnvironment, toShellDescriptor } from '../utils/shell.js'
 import {
   collectPortPids,
   metricLevel,
@@ -57,7 +57,10 @@ export function createLocalSystemKernel(options: LocalSystemKernelOptions): Loca
  * 这些方法都没有工具在调（模型改用 `system:run` 跑系统命令，控制台归用户），是宿主自己的界面要的。由 `createLocalSystemKernel(options)` 创建。
  */
 export interface LocalSystemKernelApi extends SystemToolSystemApi {
-  /** 环境检查：操作系统、经过自检的 shell 和它的 PATH，以及给定的每个命令在不在、在哪。 */
+  /**
+   * 环境检查：操作系统、经过自检的默认 shell 和它的 PATH、本机可用的全部 shell（`shells`，按优先顺序，第一个就是默认那个），
+   * 以及给定的每个命令在不在、在哪。宿主把 `shells` 与默认那个写进每回合给模型的环境报告，`system:run` / `project:run` 的 `shell` 字段就照着这份清单填。
+   */
   inspectEnvironment(commands?: string[]): Promise<SystemEnvironmentInspection>
   /** 系统指标快照：CPU、内存、交换区、系统盘、负载各自的用量和告警级别，外加占用最高的 5 个进程；读不到的项为 null。 */
   getSystemMetrics(): Promise<SystemMetricsSnapshot>
@@ -143,6 +146,7 @@ export class LocalSystemKernel implements LocalSystemKernelApi {
         release: release(),
         homeDir: homedir(),
       },
+      shells: this.detectShells(),
       shell: {
         path: shell.shellPath,
         kind: shell.kind, name: shell.name, readiness: shell.readiness,
@@ -256,6 +260,7 @@ export class LocalSystemKernel implements LocalSystemKernelApi {
     const result: SystemShellEnvironmentRefreshResult = {
       shell: shell.shellPath,
       runtime: toShellDescriptor(shell),
+      shells: this.detectShells(),
       variableCount: Object.keys(shell.env).length,
       refreshedAt: Date.now(),
       revision: refreshed.revision,
@@ -314,6 +319,11 @@ export class LocalSystemKernel implements LocalSystemKernelApi {
   /** 选出本机经过自检、真能工作的 shell。 */
   private resolveShell(): Promise<ResolvedSystemShell> {
     return this.shells.resolveReady({ platform: this.hostPlatform, env: process.env })
+  }
+
+  /** 本机可用的 shell 清单，按挑选优先顺序，第一个就是默认的那个；只查文件不试跑，所以每回合报告都付得起。 */
+  private detectShells(): SystemShellDescriptor[] {
+    return detectSystemShells({ platform: this.hostPlatform, env: process.env }).map(toShellDescriptor)
   }
 
   /** 跑一条读指标的平台命令并解析；平台不支持或读失败时返回 null，指标里对应项留空。 */

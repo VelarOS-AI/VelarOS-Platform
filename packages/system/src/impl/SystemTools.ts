@@ -22,6 +22,7 @@ import type {
 } from '@velaros-ai/kernel/contracts'
 import { RehearsalSandboxLimits } from '@velaros-ai/rehearsal-sandbox/contracts'
 import { shellCommandPolicy } from '@velaros-ai/shell-command'
+import { ShellCommandKinds } from '@velaros-ai/shell-command/contracts'
 import { toolDescriptions, toolKernelModules } from '@velaros-ai/tool-contract'
 
 import type { SystemToolCategoryId } from '../contract/constants.js'
@@ -162,11 +163,11 @@ const editTool = defineSystemTool<SystemEditInput>({
 
 // ── 执行：跑命令、刷新环境 ──────────────────────────────────
 
-/** system:run —— 在宿主报告的系统 shell 中执行命令。 */
+/** system:run —— 在系统 shell 中执行命令，shell 字段挑哪一个。 */
 const runTool = defineSystemTool<SystemRunInput>({
   name: SystemToolNames.run,
   role: 'execute',
-  summary: '在宿主已检测并报告的系统 shell 中执行命令。',
+  summary: '在系统 shell 里执行命令：不填 shell 就用环境报告里的默认那个。',
   suitable: [
     '执行系统诊断、跨目录探测、工具安装后检查或本地脚本。',
     '处理没有专用 primitive 的系统文件操作，例如复制、移动、删除、归档、解压、权限检查或修改。',
@@ -176,9 +177,8 @@ const runTool = defineSystemTool<SystemRunInput>({
   forbidden: ['不要执行危险写命令、长期服务或重复命令，除非已有用户意图或确认。'],
   protocol: [
     '不传 cwd 时用宿主给的默认目录。',
-    '生成命令前读取当前运行环境报告的 shell.kind/name；Windows 按 Git Bash、PowerShell 7、Windows PowerShell、CMD 的可用性选择，并推荐安装 Git for Windows。',
-    '严格使用实际 shell 的语法：Git Bash/POSIX 使用 command -v 和 $NAME；PowerShell 使用 Get-Command 和 $env:NAME；CMD 使用 where 和 %NAME%。刷新环境后按新的 shell 重新生成命令。',
-    '命令执行失败后先诊断原始退出码和输出；切换 shell 需要重新生成匹配语法的命令，避免重复执行副作用。',
+    '不传 shell 就用环境报告里的默认 shell，命令按它的语法写：Git Bash/POSIX 用 command -v、$NAME；PowerShell 用 Get-Command、$env:NAME；CMD 用 where、%NAME%。要用别的就填 shell，可用清单见环境报告；Windows 上首选 git-bash，没有时建议用户装 Git for Windows。',
+    '命令执行失败后先诊断原始退出码和输出；换一个 shell 重跑之前先按新语法重写命令，避免重复执行副作用。',
     `长期服务传 background=true；危险命令会走确认流程。后台命令的状态用返回的 statusContinuation 查；回执里有 outputContinuation 时用它取更多输出，没有就用 system:list-tasks 条目里的 recentOutput（末尾 ${SystemCommandLimits.recentOutputChars} 字符）。不要用 job:*，也不要把内部 logPath 当普通文件读。`,
     '输出可能很长时设置 maxOutputChars；返回窗口固定保留结尾，outputWindow.endPreserved=true 时可直接信任末尾内容。',
   ],
@@ -187,11 +187,16 @@ const runTool = defineSystemTool<SystemRunInput>({
     `命令会问用户口令、y/n 或选项时传 interactive=true：命令在控制台里跑，用户在卡片里输入，本次调用立刻返回，之后用 system:list-tasks 看结果（recentOutput 是末尾 ${SystemCommandLimits.recentOutputChars} 字符）。`,
     '停后台任务时执行 system:list-tasks 条目里的 terminateCommand 或 forceTerminateCommand，不要自己拼 pid。',
   ],
-  examples: [{ command: 'git --version', maxOutputChars: 2000 }],
-  notes: ['实际 shell 由宿主平台决定；cwd 只影响本次命令。'],
+  examples: [
+    { command: 'git --version', maxOutputChars: 2000 },
+    // 环境报告把 pwsh 列为可用时，才这么挑
+    { command: 'Get-ChildItem -Force', shell: 'pwsh' },
+  ],
+  notes: ['cwd 与 shell 只影响本次命令，不改宿主的默认值。'],
   schema: z.strictObject({
     command: z.string().min(1).describe('要执行的 shell 命令。'),
     cwd: z.string().optional().describe('命令的工作目录；不传用宿主给的默认目录。'),
+    shell: z.enum(ShellCommandKinds).optional().describe('用哪个 shell 执行；不传用环境报告里的默认 shell。只能填环境报告列为可用的那几个，填了本机没有的会在执行之前被拒，报错里给出可用的清单。'),
     timeoutMs: z.number().int().positive().max(SystemCommandLimits.timeoutMs).optional().describe('命令超时时间，单位毫秒。'),
     background: z.boolean().optional().describe('后台启动，立即返回后台任务；长驻服务传 true。'),
     interactive: z.boolean().optional().describe('命令需要用户输入时传 true：命令在控制台里跑，用户在卡片里输入。'),

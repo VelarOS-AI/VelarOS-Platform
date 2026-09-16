@@ -19,6 +19,7 @@ system:run、project:run、两个空间演练沙箱里的 run、宿主的审批�
 | `shellCommandPolicy` | `ShellCommandPolicyApi` | 执行前分类（只读、危险、长驻、端口）、并发判定、确认文案 |
 | `shellCommandApproval` | `ShellCommandApprovalApi` | 危险命令的审批请求：文案加高风险手动确认选项，操作身份跨工具一致 |
 | `ShellCommandOperationKind` | 契约常量 | 危险命令审批的操作身份种类 |
+| `ShellCommandKinds` | 契约常量 | 模型能为一条命令挑的 shell 种类封闭词表，两个空间的 `shell` 字段枚举都取它；派生类型 `ShellCommandKind` |
 
 **数据面**是 `types/`：`types/shell-command.ts` 是可移植数据（`ShellCommandPlan`、并发判定的入参与选项），`types/approval.ts` 是审批请求的入参与结果（引用 agent 的确认选项类型，从根入口导出）。
 
@@ -35,6 +36,7 @@ system:run、project:run、两个空间演练沙箱里的 run、宿主的审批�
 
 | 能力 | 链路 |
 | --- | --- |
+| 选哪个 shell | 词表 `ShellCommandKinds` 只定取值，不做判定分叉：判定是这五种语法的并集（`rm -rf`、`rd /s`、`Remove-Item -Recurse` 同时认），模型挑哪一种都不会让判定变松；本机有哪几个由环境报告给出，宿主在执行之前核对 |
 | 执行前分类 | `shellCommandPolicy.analyze(command)`：去首尾空白 → 危险黑名单（递归删除、丢未提交改动的 git、提权、格式化磁盘等，给出理由）→ 长驻判定（开发服务器、监听）→ 只读判定（白名单命令，逐段看参数、前缀、环境变量赋值、git 全局选项与子命令、sed 整段脚本，出现重定向、子 shell、后台符、换行整条否决）→ 端口提取 |
 | 并发判定 | `shellCommandPolicy.isParallelSafe(input, { optIn })`：命令必须是字符串、不转后台、只读、无需确认；optIn（缺省）时还要求入参显式 `parallel: true` |
 | 危险命令审批 | `shellCommandApproval.dangerous(input)` → 文案（命令、理由、递归删除的仓库提醒、是否后台、端口）+ `agentToolContracts.createManualApprovalOptions`（高风险、手动、不记忆）+ 操作身份 `agentToolContracts.createApprovalOperationKey('shell-command', { 命令, 工作目录, 前后台 })` → 调用方交给自己的审批端口，被拒怎么办调用方定 |

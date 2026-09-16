@@ -20,7 +20,7 @@ import type { SystemBackgroundProcessInfo, SystemBackgroundTaskQueryOptions, Sys
 import { buildSystemCommandResult } from '../utils/command-result.js'
 import { buildSystemProcessConfinementSpawnSpec } from '../utils/confinement.js'
 import { buildSystemOwnedProcessSpec, terminateSystemProcessTree, waitForSystemProcessSpawn, writeToChildInput } from '../utils/process.js'
-import { buildSystemNativeCommandSpec, describeSystemNativeCommand, toShellDescriptor } from '../utils/shell.js'
+import { buildSystemNativeCommandSpec, describeSystemNativeCommand, describeUnavailableShellKind, detectSystemShells, toShellDescriptor } from '../utils/shell.js'
 import { selectBackgroundTasks } from '../utils/system-info.js'
 import { appendBoundedOutput, readBoundedOutputSince } from '../utils/text.js'
 import { SystemTuning } from '../utils/tuning.js'
@@ -41,7 +41,8 @@ export interface SystemCommandRunnerApi {
   /**
    * 跑一条命令，返回完整结果。
    *
-   * 链路：选 shell（给了 nativeCommand 就按原生 argv 执行）→ 加进程约束 → Windows 上包进原生进程宿主 → 启动受管子进程。
+   * 链路：选 shell（`options.shell` 挑定哪一种，本机没有它就以 VALIDATION 拒绝、一个进程都不起；给了 nativeCommand 就按原生 argv 执行）
+   * → 加进程约束 → Windows 上包进原生进程宿主 → 启动受管子进程。
    * 前台：有界采集 stdout 与 stderr，超时或取消后在期限内收敛，失败时把输出末尾摘进 verification。
    * 后台（options.background）：进程拉起后登记成后台任务就返回，结果里带任务 id 和终止命令。
    * 交互式（options.interactive，必须和 background 一起）：stdin 留一根保持打开的管道，输出另外存进控制台缓冲区，
@@ -120,7 +121,7 @@ export class SystemCommandRunner implements SystemCommandRunnerApi {
     if (!directory?.isDirectory()) throw new AppError('NOT_FOUND', `工作目录不存在或不是目录：${cwd}`)
     const command = options.nativeCommand ? describeSystemNativeCommand(options.nativeCommand) : commandInput
     const startedAt = Date.now()
-    const prepared = await this.prepare(command, options.nativeCommand)
+    const prepared = await this.prepare(command, options)
     abortSignal?.throwIfAborted()
     if (options.background) {
       const backgroundProcess = await this.startInBackground(command, cwd, prepared, options, startedAt, abortSignal)
@@ -249,13 +250,19 @@ export class SystemCommandRunner implements SystemCommandRunnerApi {
     this.consoles.clear()
   }
 
-  /** 准备一条命令：选出经过自检的 shell（原生调用则按 argv 生成规格）→ 加进程约束 → Windows 上包进原生进程宿主。 */
+  /**
+   * 准备一条命令：核对挑定的 shell 本机有没有 → 选出经过自检的 shell（原生调用则按 argv 生成规格）→ 加进程约束 → Windows 上包进原生进程宿主。
+   * 挑定的 shell 本机没有时在这里就拒绝，一个进程都不起：模型是按那个 shell 的语法写的命令，换一个跑出来的是错的结果而不是报错。
+   */
   private async prepare(
     command: string,
-    nativeCommand: LooseOptional<SystemRunCommandOptions['nativeCommand']>
+    { shell: kind, nativeCommand }: SystemRunCommandOptions
   ): Promise<PreparedSystemCommand> {
     const { platform, platformTools, confinement, confinementProvider, confinementTempDir, extraEnv, shells } = this.options
-    const shell = await shells.resolveReady({ platform, env: process.env })
+    const candidates = detectSystemShells({ platform, env: process.env })
+    if (kind && !candidates.some((candidate) => candidate.kind === kind))
+      throw new AppError('VALIDATION', describeUnavailableShellKind(kind, candidates.map(toShellDescriptor)))
+    const shell = await shells.resolveReady({ platform, env: process.env, kind })
     const commandSpec = nativeCommand ? buildSystemNativeCommandSpec(nativeCommand, shell)
       : { ...platformTools.getShellCommandSpec(command, shell), env: shell.env }
     const env = { ...commandSpec.env, ...extraEnv }

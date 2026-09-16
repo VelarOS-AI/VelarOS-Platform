@@ -29,6 +29,7 @@ import { isCredentialPath, isSensitiveSystemMutationPath } from '../utils/file-s
 export interface SystemExecutionOperationsApi {
   /**
    * 跑一条命令：先按命令策略分类（只读、要不要确认、该不该丢后台），交互式命令一定跑在后台，因为它要一直开着等用户在控制台里输入。
+   * 分类不看挑的是哪个 shell——判定认全部五种语法，所以挑哪个 shell 都不会让危险命令少弹一次确认；`shell` 原样交给宿主，本机没有它由宿主在执行之前拒绝。
    * 要确认的先问用户；危险命令每次都由用户亲自裁决（高风险、手动审批，宿主在任何档位都弹卡）。
    * 交给宿主执行后补上输出窗口说明；进了后台的补上端口、原因、是否自动转后台和查状态的续接（指向 system:list-tasks）；要了控制台却没拿到时 note 说明怎么改写命令。
    */
@@ -48,7 +49,7 @@ export class SystemExecutionOperations implements SystemExecutionOperationsApi {
     private readonly sandboxRules: RehearsalSandboxRulesApi,
   ) {}
 
-  public async run({ command, cwd, timeoutMs, background, interactive, maxOutputChars }: SystemRunInput, ctx: SystemToolContext): Promise<SystemRunResult> {
+  public async run({ command, cwd, shell, timeoutMs, background, interactive, maxOutputChars }: SystemRunInput, ctx: SystemToolContext): Promise<SystemRunResult> {
     ctx.abortSignal.throwIfAborted()
 
     // 执行前分类
@@ -71,7 +72,7 @@ export class SystemExecutionOperations implements SystemExecutionOperationsApi {
     // 交给宿主执行
     const result = await ctx.system.runCommand(
       command,
-      { cwd: commandCwd, timeoutMs, background: shouldRunInBackground, interactive, maxOutputChars, sessionId: ctx.sessionId },
+      { cwd: commandCwd, shell, timeoutMs, background: shouldRunInBackground, interactive, maxOutputChars, sessionId: ctx.sessionId },
       plan.isDangerous,
       ctx.abortSignal
     )

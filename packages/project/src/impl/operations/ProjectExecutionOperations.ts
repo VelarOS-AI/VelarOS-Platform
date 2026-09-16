@@ -21,7 +21,10 @@ import { projectExecutionGate } from './ProjectExecutionGate.js'
  * 前台命令在项目资源门里执行（只读命令走读门，其余走写门），后台命令由宿主的任务管理接手。
  */
 export interface ProjectExecutionOperationsApi {
-  /** 在项目内跑一条命令：cwd 只能在项目之内；用户或宿主拒绝时返回 skipped，不执行。后台命令能不能起由宿主在执行时决定。 */
+  /**
+   * 在项目内跑一条命令：cwd 只能在项目之内；用户或宿主拒绝时返回 skipped，不执行。后台命令能不能起由宿主在执行时决定。
+   * `shell` 原样交给宿主（不填就是宿主的默认 shell），本机没有挑定的那个由宿主在执行之前拒绝；命令判定不看挑的是哪个 shell，它认全部五种语法。
+   */
   run(input: ProjectRunInput, ctx: ProjectToolContext): Promise<unknown>
   /**
    * 演练沙箱：create 只镜像项目之内的目录；run 在镜像里跑命令（危险命令仍然确认）；diff 看变化；
@@ -61,7 +64,7 @@ export class ProjectExecutionOperations implements ProjectExecutionOperationsApi
         return { approved: false, skipped: true, command: input.command, message: authorization.message }
     }
 
-    const invoke = () => context.project.runCommand(input.command, { cwd: input.cwd, timeoutMs: input.timeoutMs, background, maxOutputChars: input.maxOutputChars }, plan.isDangerous, context.abortSignal)
+    const invoke = () => context.project.runCommand(input.command, { cwd: input.cwd, shell: input.shell, timeoutMs: input.timeoutMs, background, maxOutputChars: input.maxOutputChars }, plan.isDangerous, context.abortSignal)
     const run = () => background ? invoke() : this.gate.run(context.project.getRootPath(), !plan.isReadOnly, context.abortSignal, invoke)
     return redactCommandOutput(context, await run())
   }
@@ -93,7 +96,7 @@ export class ProjectExecutionOperations implements ProjectExecutionOperationsApi
       }
       return redactCommandOutput(
         context,
-        await port.runInSandbox({ sandboxId, command, timeoutMs: input.timeoutMs, maxOutputChars: input.maxOutputChars }, context.abortSignal),
+        await port.runInSandbox({ sandboxId, command, shell: input.shell, timeoutMs: input.timeoutMs, maxOutputChars: input.maxOutputChars }, context.abortSignal),
       )
     }
 

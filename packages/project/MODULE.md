@@ -65,8 +65,8 @@ overwrite 要求看过全文，move、delete 只核对版本。
 | `project:edit` | 执行门写锁 → 按 fileRef 取回读取时的版本与可见范围 → 规划成编辑意图（范围越界、定位不唯一在这里拒绝）→ 带着要写的路径过修改授权 → 内核准备事务（补丁、差量、风险，不碰磁盘）→ 应用（校验、审批、按版本核对、全成或全逆序还原）→ 回执带新 fileRef 与 changeRef；失败标 not-applied，入参可复用 |
 | `project:code` | 执行门读锁 → 翻译成宿主代码查询（语言服务类由宿主语言服务执行，代码索引类由代码图谱执行）→ 附来源、覆盖与降级信息 |
 | `project:code-analysis` | 宿主有代码图后端时单独登记 → 执行门读锁 → trace、cycles、deadcode、routing 翻译成代码索引类查询交给宿主 → 附来源与覆盖 |
-| `project:run` | 命令判定（`@velaros-ai/shell-command`）→ 危险命令每次由用户亲自确认 → 会改项目的先过修改授权 → 前台在执行门里跑（只读走读锁）、后台交宿主的任务管理 → 输出经宿主的脱敏后端 |
-| `project:sandbox` | create 只镜像项目之内的目录；run 在镜像里跑（危险命令照样确认）；diff 看变化；apply 向宿主要不截断的完整差量，`rehearsalSandboxRules.prepareApply` 核对并给出确认请求，过修改授权与用户确认后连同差量指纹交给宿主落回；discard 删镜像 |
+| `project:run` | 命令判定（`@velaros-ai/shell-command`，认全部五种 shell 语法，挑了哪个 shell 都是同一个结论）→ 危险命令每次由用户亲自确认 → 会改项目的先过修改授权 → 前台在执行门里跑（只读走读锁）、后台交宿主的任务管理，`shell` 原样交给宿主（不填就是宿主的默认 shell，本机没有挑定的那个由宿主在执行之前拒绝）→ 输出经宿主的脱敏后端 |
+| `project:sandbox` | create 只镜像项目之内的目录；run 在镜像里跑（危险命令照样确认，`shell` 规矩同 project:run）；diff 看变化；apply 向宿主要不截断的完整差量，`rehearsalSandboxRules.prepareApply` 核对并给出确认请求，过修改授权与用户确认后连同差量指纹交给宿主落回；discard 删镜像 |
 
 ## 依赖什么
 

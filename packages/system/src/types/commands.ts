@@ -8,7 +8,7 @@ import type { CommandSpec } from '@velaros-ai/platform/contracts'
 
 import type { SystemProcessConfinementProvider } from '../contract/requires.js'
 
-import type { SystemCommandResult, SystemProcessConfinementEvidence, SystemProcessConfinementMode, SystemProcessOwnership, SystemShellDescriptor } from './system.js'
+import type { SystemCommandResult, SystemProcessConfinementEvidence, SystemProcessConfinementMode, SystemProcessOwnership, SystemShellDescriptor, SystemShellKind } from './system.js'
 
 export interface SystemProcessConfinementPolicy {
   mode: SystemProcessConfinementMode
@@ -121,10 +121,11 @@ export interface SystemProcessConfinementBuildOptions {
 
 // ── 执行类工具的入参与结果 ──────────────────────────────────────
 
-/** system:run 的入参：命令、工作目录（不传用宿主给的默认目录）、超时、是否后台、是否交互式、输出上限，以及只给调度器看的 parallel 与 allowRepeat。 */
+/** system:run 的入参：命令、工作目录（不传用宿主给的默认目录）、用哪个 shell（不传用默认的）、超时、是否后台、是否交互式、输出上限，以及只给调度器看的 parallel 与 allowRepeat。 */
 export type SystemRunInput = {
   command: string
   cwd?: string
+  shell?: SystemShellKind
   timeoutMs?: number
   background?: boolean
   interactive?: boolean

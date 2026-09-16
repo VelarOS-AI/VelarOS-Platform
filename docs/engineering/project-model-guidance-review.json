@@ -67,7 +67,7 @@
     }
   ],
   "fingerprints": {
-    "project": "925b79022faf40a79759265eee4ca25c6b118a628e652b5b15ace36611d1f772",
+    "project": "6881efd6c4b5e3373428590fa9164bd33b6a8481ec575acb91c1424387591e3a",
     "agent": "fe450984e3279ec7624fbe4898b474a9f139811b146bbebaabdd67173b09d335",
     "documents": "0b21de94640e41de1b8c3981391f7d28c40d81006b1cedf7ace5abf19fc87732"
   },
@@ -150,7 +150,7 @@
     },
     {
       "path": "packages/project/src/impl/ProjectTools.ts",
-      "fingerprint": "32d61e7ebc1f2a3884cf8aed6276615594b0911a4213a58a88b09482f485a688"
+      "fingerprint": "00fcbd0e4109158bcd38828686f454d2cf1a7b787a2fdcda92bc5f75aaa1fdef"
     },
     {
       "path": "packages/project/src/impl/operations/ProjectChangeOperations.ts",
@@ -166,7 +166,7 @@
     },
     {
       "path": "packages/project/src/impl/operations/ProjectExecutionOperations.ts",
-      "fingerprint": "c568cae6ea726a8d805289cf15e169c19e994e0ecd7fe23f7300ef626a488ce3"
+      "fingerprint": "02e2a777672bda97f369517ed79e06222d9343cf0a5bf2992b5420b876da976a"
     },
     {
       "path": "packages/project/src/impl/operations/ProjectFileContext.ts",

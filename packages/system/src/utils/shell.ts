@@ -5,7 +5,7 @@
 import { statSync } from 'node:fs'
 import { win32 } from 'node:path'
 
-import { Log } from '@velaros-ai/core'
+import { isEmpty, Log } from '@velaros-ai/core'
 import { createPlatform, currentPlatform } from '@velaros-ai/platform'
 import type { CommandSpec } from '@velaros-ai/platform/contracts'
 
@@ -226,14 +226,18 @@ export function describeSystemNativeCommand(input: { file: string; args: string[
 }
 
 /**
- * 列出本机可用的 shell 候选，只查文件、不试跑。
+ * 列出本机可用的 shell 候选，只查文件、不试跑；第一个就是默认用的那个。
  * POSIX 只有一个：指定的 shellPath 或默认 shell。Windows 按 Git Bash、PowerShell 7、Windows PowerShell、CMD 的顺序，逐个核对文件存在、种类符合、Git Bash 安装完整。
+ * 给了 kind 就只留那一种，一个都不剩表示本机没有它。
  */
 export function detectSystemShells(options: ResolveSystemShellOptions): ResolvedSystemShell[] {
   const env = options.env ?? process.env
   const platform = options.platform ?? process.platform
   const isFile = options.isFile ?? isRegularFile
-  if (platform !== 'win32') return [describeShell(options.shellPath || createPlatform({ platform, env }).getPreferredShellPath(env), env, isFile)]
+  if (platform !== 'win32') {
+    const shell = describeShell(options.shellPath || createPlatform({ platform, env }).getPreferredShellPath(env), env, isFile)
+    return options.kind && shell.kind !== options.kind ? [] : [shell]
+  }
   const selected = options.shellPath || readWindowsEnv(env, 'VELAROS_SHELL_PATH')
   const candidates = selected ? [normalizeWindowsPath(selected)] : windowsCandidates(env, isFile)
   const result: ResolvedSystemShell[] = []
@@ -285,6 +289,16 @@ export function buildSystemNativeCommandSpec(
     env: { ...env, MSYS2_ARG_CONV_EXCL: '*' },
   }
   return { file, args: [...input.args], env }
+}
+
+/**
+ * 挑定的 shell 本机没有时给模型的报错：点名可用的是哪几个、哪个是默认，并说下一步怎么改。
+ * 候选表按挑选优先顺序，第一个就是默认的那个；一个候选都没有时说清楚本机一个 shell 也没找到。
+ */
+export function describeUnavailableShellKind(kind: SystemShellKind, candidates: readonly SystemShellDescriptor[]): string {
+  if (isEmpty(candidates)) return `本机没有 ${kind}，而且一个可用的 shell 都没找到。先让用户装一个 shell，再重试这条命令。`
+  const available = candidates.map((candidate, index) => index === 0 ? `${candidate.kind}（默认）` : candidate.kind).join('、')
+  return `本机没有 ${kind}，可用：${available}。不填 shell 就用默认的那个，要挑别的就从这几个里挑一个，按它的语法重写命令再调一次。`
 }
 
 /** 把解析出的 shell 缩成命令结果里展示的描述：种类、名称、路径、参数、就绪状态、版本、安装建议，不带环境变量。 */

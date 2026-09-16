@@ -7,9 +7,21 @@ import type { ProjectCodeLanguageActions } from '../contract/constants.js'
 
 // ── 命令 ──────────────────────────────────────────────────────────
 
-/** 宿主 runCommand 的选项：工作目录（相对项目根，工具已核对过在项目之内）、超时、是否后台、输出上限。 */
+/**
+ * 用哪个 shell 跑一条命令。可移植文件一个 import 都不许有，所以这里是 `@velaros-ai/shell-command` 的 `ShellCommandKind` 的同形副本
+ * （同 `SystemShellKind` 的先例）；两边的形状由 `project:run` 的 schema 与入参类型在编译期对上，谁改一边没同步另一边，typecheck 立刻红。
+ */
+export type ProjectShellKind = 'git-bash' | 'pwsh' | 'powershell' | 'cmd' | 'posix'
+
+/**
+ * 宿主 runCommand 的选项：工作目录（相对项目根，工具已核对过在项目之内）、用哪个 shell、超时、是否后台、输出上限。
+ *
+ * `shell` 不给就用宿主自己挑的默认 shell。宿主必须在挑定的那个里执行：本机没有它就在执行之前拒绝（报错里点名可用的有哪些、哪个是默认），
+ * 不许忽略它换默认 shell 照跑——模型是按挑定的那个 shell 的语法写的命令，换一个跑出来的是错的结果而不是报错。
+ */
 export interface ProjectRunCommandOptions {
   cwd?: string
+  shell?: ProjectShellKind
   timeoutMs?: number
   background?: boolean
   maxOutputChars?: number
@@ -131,10 +143,11 @@ export interface ProjectChangeReceipt {
 
 // ── 演练沙箱（数据形状在 @velaros-ai/rehearsal-sandbox，这里只有项目空间独有的镜像里跑命令） ──
 
-/** 在镜像里跑一条命令：宿主把它约束在镜像根之内。 */
+/** 在镜像里跑一条命令：宿主把它约束在镜像根之内。`shell` 与 `ProjectRunCommandOptions.shell` 同义、同一套规矩。 */
 export interface ProjectSandboxRunOptions {
   sandboxId: string
   command: string
+  shell?: ProjectShellKind
   timeoutMs?: number
   maxOutputChars?: number
 }

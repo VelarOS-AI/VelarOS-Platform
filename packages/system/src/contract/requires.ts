@@ -57,10 +57,13 @@ export interface SystemToolSystemApi extends RehearsalSandboxHostPort {
   listBackgroundTasks: (
     options?: SystemBackgroundTaskQueryOptions
   ) => Promise<SystemBackgroundTaskRecord[]>
-  /** 重新选定能用的 shell 并读取它的环境变量，返回刷新后的 shell 描述和变量个数。 */
+  /** 重新选定能用的 shell 并读取它的环境变量，返回刷新后的 shell 描述、刷新后本机可用的 shell 清单和变量个数。 */
   refreshShellEnvironment: () => Promise<SystemShellEnvironmentRefreshResult>
   /**
    * 在系统层运行一条命令：前台等它结束并返回输出；background 为真时登记成后台任务后立即返回。命令自己失败不抛错，如实写进结果；宿主不能或不允许跑后台任务时，就在这里以 PERMISSION 拒绝，不另设能力开关。
+   *
+   * `options.shell` 挑定用哪个 shell（不给就用宿主自己挑的默认 shell）。宿主必须在挑定的那个里执行：本机没有它就在执行之前以 `VALIDATION` 拒绝、一个进程都不起，
+   * 报错里点名本机可用的是哪几个、哪个是默认。不许忽略它换默认 shell 照跑——模型是按挑定的那个 shell 的语法写的命令，换一个跑出来的是错的结果而不是报错。
    *
    * `options.interactive` 为真（一定和 background 一起来）时，任务要能接受用户输入：宿主有 PTY 就用 PTY，
    * 没有就让 stdin 保持打开的管道；启动成功后在回执的 `backgroundProcess.console` 里给出这个控制台，

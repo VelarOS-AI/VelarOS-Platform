@@ -437,6 +437,7 @@ export interface ProjectToolApi {
   /**
    * 在 options.cwd（相对项目根，缺省是项目根；工具已经核对过它在项目之内）跑一条 shell 命令，工具把结果原样交给模型。
    * allowDangerous 为真表示这条命令被判为危险、用户已经亲自确认过，宿主不必再问；options.background 为真时宿主把它登记成后台任务后立即返回，做不到就抛错拒绝。
+   * options.shell 挑定用哪个 shell（不给就用宿主自己挑的默认 shell）：宿主必须在挑定的那个里执行，本机没有它就在执行之前拒绝并点名可用的有哪些，不许换默认 shell 照跑。
    * 命令自己失败（非零退出、超时）写进结果，不抛错；abortSignal 触发时尽快停下。
    */
   runCommand: (
@@ -463,7 +464,7 @@ export interface ProjectToolApi {
  * 确认之后把差量指纹随 applySandbox 交回，宿主据此发现确认之后镜像又变了。
  */
 export interface ProjectSandboxPort extends RehearsalSandboxHostPort {
-  /** 在镜像根里跑一条命令，约束钉在镜像根，写到项目会失败；危险命令已由工具向用户确认过，abortSignal 触发时尽快停下。 */
+  /** 在镜像根里跑一条命令，约束钉在镜像根，写到项目会失败；`shell` 的规矩同 `runCommand`；危险命令已由工具向用户确认过，abortSignal 触发时尽快停下。 */
   runInSandbox: (options: ProjectSandboxRunOptions, abortSignal?: AbortSignal) => Promise<ProjectCommandResult>
 }
 

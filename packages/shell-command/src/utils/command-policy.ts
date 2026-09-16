@@ -1,5 +1,10 @@
 /**
  * 命令分类：执行前判断一条 shell 命令是否只读、是否危险、是否该转入后台。
+ *
+ * 判定不分 shell 种类：下面的名单与形态是 `ShellCommandKinds` 那五种语法的并集，一条命令同时按 POSIX、cmd 与 PowerShell 的读法各查一遍
+ * （`rm -rf`、`rd /s`、`Remove-Item -Recurse` 都认），所以模型在 run 里挑了哪一种都不会让判定变松。
+ * 往词表里加新种类的规矩：先在这里补它的形态，补完在 `test/shell-command.test.ts` 的按种类取样里加一行；
+ * 补之前它的命令一律判不了只读（`isShellCommandReadOnly` 的白名单里没有它的命令名，整条按非只读处理），这是刻意的保守。
  */
 import { isEmpty, isFalse, isNull, isString, isTrue, toNullable } from '@velaros-ai/core'
 

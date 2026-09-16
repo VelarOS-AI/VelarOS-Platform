@@ -45,3 +45,4 @@ INV-2（只读判定是白名单加整体否决）、INV-3（递归删除一律�
 | INV-27 | 落回只落用户确认过的那份差量：确认按完整差量计数、列出删除与覆盖、扫敏感路径，确认之后镜像又变过就整批不落（`SYSTEM_SANDBOX_CHANGED`，not-applied） | 测试 | `spec/acceptance.test.ts` |
 | INV-28 | 落回只写在源目录之内、要么全落要么报清落了哪些：上级路径是符号链接或文件（又不在这次删除之列）按冲突整批不落；内容先暂存，拷不全什么都不落；挪到位途中失败在 context.applied 里点名已落回的路径 | 测试 | `spec/acceptance.test.ts` |
 | INV-29 | system:run 只在入参声明 `parallel: true`、命令只读、不转后台、无需确认时才与别的调用并发 | 测试 | `spec/acceptance.test.ts` |
+| INV-30 | 命令只在挑定的那个 shell 里跑：`shell` 给的种类本机没有就在起进程之前拒绝，报错点名可用的有哪些、哪个是默认，绝不换默认 shell 照跑；不给 `shell` 才用默认的那个 | 测试 | `spec/acceptance.test.ts` |

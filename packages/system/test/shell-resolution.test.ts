@@ -1,11 +1,14 @@
+import { tmpdir } from 'node:os'
 import { win32 } from 'node:path'
 
 import { describe, expect, test } from 'bun:test'
 
 import { createPlatform } from '@velaros-ai/platform'
 
+import { createLocalSystemKernel } from '../src/impl/LocalSystemKernel.js'
 import { systemShellResolver } from '../src/impl/SystemShellResolver.js'
 import { SystemShellUnavailableError } from '../src/impl/SystemShellUnavailableError'
+import { describeUnavailableShellKind, detectSystemShells, toShellDescriptor } from '../src/utils/shell.js'
 import { parseOpenPortEntries, parseProcessRows } from '../src/utils/system-info.js'
 
 describe('platform command output parsing', () => {
@@ -124,5 +127,62 @@ describe('Windows Git Bash resolution', () => {
     expect(systemShellResolver.resolve({ platform: 'darwin', env })).toMatchObject({ shellPath: '/bin/zsh', env })
     expect(systemShellResolver.resolve({ platform: 'linux', env, shellPath: '/bin/bash' }))
       .toMatchObject({ shellPath: '/bin/bash', env })
+  })
+})
+
+describe('挑哪个 shell', () => {
+  const windowsFilesystem = (root: string): ((path: string) => boolean) => {
+    const key = (path: string): string => win32.normalize(path).toLowerCase()
+    const files = new Set([
+      ...['bin\\bash.exe', 'usr\\bin\\bash.exe', 'usr\\bin\\msys-2.0.dll', 'git-bash.exe', 'cmd\\git.exe']
+        .map((file) => key(win32.join(root, file))),
+      key('C:\\Windows\\System32\\cmd.exe'),
+      key('C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe'),
+    ])
+    return (path) => files.has(key(path))
+  }
+
+  test('POSIX 机器上清单只有 posix 一项，挑别的就是一个候选都没有', () => {
+    const options = { platform: 'darwin' as const, env: { SHELL: '/bin/zsh' } }
+    expect(detectSystemShells(options).map((shell) => shell.kind)).toEqual(['posix'])
+    expect(detectSystemShells({ ...options, kind: 'posix' })).toHaveLength(1)
+    expect(detectSystemShells({ ...options, kind: 'pwsh' })).toEqual([])
+  })
+
+  test('Windows 上按优先顺序给出清单，挑定一种就只留那一种', () => {
+    const options = { platform: 'win32' as const, env: { PATH: '' }, isFile: windowsFilesystem('C:\\Program Files\\Git') }
+    expect(detectSystemShells(options).map((shell) => shell.kind)).toEqual(['git-bash', 'powershell', 'cmd'])
+    expect(detectSystemShells({ ...options, kind: 'cmd' }).map((shell) => shell.kind)).toEqual(['cmd'])
+    expect(detectSystemShells({ ...options, kind: 'pwsh' })).toEqual([])
+  })
+
+  test('挑了本机没有的那个，报错点名可用的有哪些、哪个是默认，并给下一步', () => {
+    const candidates = detectSystemShells({ platform: 'darwin', env: { SHELL: '/bin/zsh' } }).map(toShellDescriptor)
+    const message = describeUnavailableShellKind('pwsh', candidates)
+    expect(message).toContain('本机没有 pwsh')
+    expect(message).toContain('可用：posix（默认）')
+    expect(message).toContain('不填 shell')
+    expect(describeUnavailableShellKind('cmd', [])).toContain('一个可用的 shell 都没找到')
+  })
+
+  test('挑了本机没有的那个，命令在起进程之前就被拒', async () => {
+    const kernel = createLocalSystemKernel({ cwd: tmpdir() })
+    try {
+      await expect(kernel.runCommand('echo 不该跑起来', { shell: 'pwsh' })).rejects.toThrow('本机没有 pwsh')
+      expect((await kernel.runCommand('echo ok', { shell: 'posix' })).stdout.trim()).toBe('ok')
+    } finally {
+      await kernel.dispose()
+    }
+  })
+
+  test('环境检查报出可用清单，第一项就是默认那个', async () => {
+    const kernel = createLocalSystemKernel({ cwd: tmpdir() })
+    try {
+      const inspection = await kernel.inspectEnvironment()
+      expect(inspection.shells.map((shell) => shell.kind)).toEqual(['posix'])
+      expect(inspection.shells[0]?.kind).toBe(inspection.shell.kind)
+    } finally {
+      await kernel.dispose()
+    }
   })
 })

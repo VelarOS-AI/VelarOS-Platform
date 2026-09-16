@@ -32,8 +32,11 @@ describe('sandbox contract parity across spaces', () => {
       expect(accepts(system, input)).toBe(expected)
       expect(accepts(project, input)).toBe(expected)
     }
-    // project 多的 run 动作与它的三个字段，system 一律拒绝。
-    expect(accepts(project, { action: 'run', sandboxId: '20260915-183000-3fa2c1', command: 'bun test', timeoutMs: 1000, maxOutputChars: 2000 })).toBe(true)
+    // 挑哪个 shell 是 run 才有的字段：create 上出现就被拒，填了词表外的值也被拒。
+    expect(accepts(project, { action: 'create', shell: 'posix' })).toBe(false)
+    expect(accepts(project, { action: 'run', sandboxId: '20260915-183000-3fa2c1', command: 'bun test', shell: 'nushell' })).toBe(false)
+    // project 多的 run 动作与它的四个字段，system 一律拒绝。
+    expect(accepts(project, { action: 'run', sandboxId: '20260915-183000-3fa2c1', command: 'bun test', shell: 'pwsh', timeoutMs: 1000, maxOutputChars: 2000 })).toBe(true)
     expect(accepts(system, { action: 'run', sandboxId: '20260915-183000-3fa2c1', command: 'bun test' })).toBe(false)
     expect(accepts(system, { action: 'diff', sandboxId: '20260915-183000-3fa2c1', command: 'bun test' })).toBe(false)
   })

@@ -374,6 +374,21 @@ describe('actual Project tool surface with final model references', () => {
     expect(result.exitCode).toBe(0)
     await expect(call('project:run', { command: 'printf background', background: true })).rejects.toThrow('后台')
   })
+
+  test('run 把挑定的 shell 原样交给宿主端口，宿主没有的那个由宿主拒绝', async () => {
+    const { call, ctx } = await fixture()
+    const seen: Array<string | undefined> = []
+    ctx.project.runCommand = async (command, commandOptions) => {
+      seen.push(commandOptions?.shell)
+      // 本机没有挑定的那个时，宿主在执行之前拒绝，不换默认 shell 照跑。
+      if (commandOptions?.shell === 'pwsh') throw new Error('本机没有 pwsh，可用：posix（默认）。')
+      return { stdout: command, stderr: '', exitCode: 0, shell: { kind: 'posix', name: 'sh' } } as never
+    }
+    await call('project:run', { command: 'printf ok' })
+    await call('project:run', { command: 'printf ok', shell: 'posix' })
+    await expect(call('project:run', { command: 'printf ok', shell: 'pwsh' })).rejects.toThrow('本机没有 pwsh')
+    expect(seen).toEqual([undefined, 'posix', 'pwsh'])
+  })
 })
 
 describe('edit outcomes and guidance the model can act on', () => {

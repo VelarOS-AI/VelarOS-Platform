@@ -2,7 +2,34 @@
 
 import { describe, expect, test } from 'bun:test'
 
-import { shellCommandPolicy } from '../src/index'
+import { ShellCommandKinds, shellCommandPolicy } from '../src/index'
+
+// 每个种类取一条只读命令和一条危险命令：判定是五种语法的并集，词表里加了新种类却没在这里补一行，测试立刻红，
+// 提醒先去 utils/command-policy.ts 补它的形态——补之前它的命令判不了只读，模型挑了它就没有并发也没有无人值守放行。
+const samplesByKind: Readonly<Record<(typeof ShellCommandKinds)[number], { readOnly: string; dangerous: string }>> = {
+  'git-bash': { readOnly: 'ls -la', dangerous: 'rm -rf ./dist' },
+  posix: { readOnly: 'git status', dangerous: 'rm -rf ./dist' },
+  pwsh: { readOnly: 'Get-ChildItem -Force', dangerous: 'Remove-Item -Recurse -Force dist' },
+  powershell: { readOnly: 'Get-Content README.md', dangerous: 'Remove-Item -Recurse dist' },
+  cmd: { readOnly: 'dir', dangerous: 'rd /s /q dist' },
+}
+
+describe('按 shell 种类的判定覆盖', () => {
+  test('词表里的每个种类都有只读与危险两侧的规则', () => {
+    for (const kind of ShellCommandKinds) {
+      const sample = samplesByKind[kind]
+      expect(shellCommandPolicy.isReadOnly(sample.readOnly)).toBe(true)
+      expect(shellCommandPolicy.analyze(sample.dangerous).isDangerous).toBe(true)
+    }
+  })
+
+  test('判定不按种类分叉：同一条命令在任何种类下都是同一个结论', () => {
+    // 模型挑 cmd 不会让 POSIX 的递归删除漏过去，反过来也一样。
+    for (const { dangerous } of Object.values(samplesByKind)) {
+      expect(shellCommandPolicy.analyze(dangerous).isDangerous).toBe(true)
+    }
+  })
+})
 
 describe('前缀命令', () => {
   test('env、time 本身只读，后面跟的命令才决定整条是否只读', () => {

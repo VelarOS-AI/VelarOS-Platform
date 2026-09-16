@@ -4,7 +4,7 @@
  */
 
 import type { ProjectEditStep, ProjectLineRange } from './editing.js'
-import type { ProjectCodeScope } from './project.js'
+import type { ProjectCodeScope, ProjectShellKind } from './project.js'
 
 /** project:read 的入参：files（每项一个文件，可带 range）或 continuation 二选一；maxChars 是这次调用所有文件共用的字符预算。 */
 export type ProjectReadInput = {
@@ -42,16 +42,17 @@ export type ProjectEditInput = {
   changeRef?: string
 }
 
-/** project:run 的入参：命令、项目内的工作目录、超时、是否后台、输出上限。 */
+/** project:run 的入参：命令、项目内的工作目录、用哪个 shell（不传用默认的）、超时、是否后台、输出上限。 */
 export type ProjectRunInput = {
   command: string
   cwd?: string
+  shell?: ProjectShellKind
   timeoutMs?: number
   background?: boolean
   maxOutputChars?: number
 }
 
-/** project:sandbox 的入参：action 选动作；create 用 source、network、ignored，run 用 command、timeoutMs、maxOutputChars，diff 用 maxFiles，apply 用 paths；除 create 外都要 sandboxId。 */
+/** project:sandbox 的入参：action 选动作；create 用 source、network、ignored，run 用 command、shell、timeoutMs、maxOutputChars，diff 用 maxFiles，apply 用 paths；除 create 外都要 sandboxId。 */
 export type ProjectSandboxInput = {
   action: 'create' | 'run' | 'diff' | 'apply' | 'discard'
   source?: string
@@ -59,6 +60,7 @@ export type ProjectSandboxInput = {
   ignored?: 'link' | 'copy' | 'skip'
   sandboxId?: string
   command?: string
+  shell?: ProjectShellKind
   timeoutMs?: number
   maxOutputChars?: number
   paths?: string[]

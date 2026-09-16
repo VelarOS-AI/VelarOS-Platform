@@ -396,6 +396,18 @@ describe('命令输出', () => {
     expect(result.shell).toBeDefined()
     expect(result.shell).not.toHaveProperty('env')
   })
+
+  test('INV-30 挑定的 shell 本机没有时在起进程之前拒绝，不换默认 shell 照跑', async () => {
+    const kernel = createLocalSystemKernel({ cwd: process.cwd() })
+    const inspection = await kernel.inspectEnvironment()
+    const available = inspection.shells.map((shell) => shell.kind)
+    // 清单第一个就是默认那个；挑清单里没有的种类，命令一个字节的输出都不会有。
+    expect(available[0]).toBe(inspection.shell.kind!)
+    const missing = (['pwsh', 'cmd', 'git-bash', 'powershell', 'posix'] as const).find((kind) => !available.includes(kind))!
+    await expect(kernel.runCommand('echo 不该跑起来', { shell: missing })).rejects.toThrow(`本机没有 ${missing}`)
+    await expect(kernel.runCommand('echo 不该跑起来', { shell: missing })).rejects.toThrow(available[0]!)
+    expect((await kernel.runCommand('echo ok', { shell: available[0] })).stdout.trim()).toBe('ok')
+  })
 })
 
 describe('进程生命周期', () => {
