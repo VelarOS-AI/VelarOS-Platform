@@ -14,6 +14,7 @@ import { createHash } from 'node:crypto'
 import { isNonBlankString, isPresent, isUndefined } from '@velaros-ai/core'
 import {
   createCapabilityToken,
+  KernelModuleApiVersion,
   type KernelModuleDefinition,
 } from '@velaros-ai/kernel'
 import type {
@@ -21,8 +22,13 @@ import type {
   RemoteNodeOperationDescriptor,
 } from '@velaros-ai/kernel/contracts/protocol'
 
-/** 本机 Kernel 的 API 轴;远端代理模块与宿主同轴,不另立版本。 */
-export const RemoteNodeModuleApiVersion = 1
+/**
+ * 本机 Kernel 的 API 轴;远端代理模块与宿主同轴,不另立版本。
+ *
+ * 必须**引用**宿主那份常量而不是另抄一个字面量：抄一份的后果是模块 API 版本升到 2 时,
+ * 所有远端代理模块注册即报 `API_VERSION_MISMATCH`,而两处写的都是「同轴」。
+ */
+export const RemoteNodeModuleApiVersion = KernelModuleApiVersion
 
 /**
  * 代理模块自身的版本。

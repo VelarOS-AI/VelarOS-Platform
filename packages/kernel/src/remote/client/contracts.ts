@@ -122,6 +122,8 @@ export const RemoteNodeClientErrorCodes = {
   /** 被同一 Client 的新连接顶替。 */
   Superseded: 'REMOTE_NODE_SUPERSEDED',
   Disposed: 'REMOTE_NODE_DISPOSED',
+  /** 本机凭据读不出来（钥匙串锁着、文件权限不对……），连都还没连上。 */
+  CredentialsUnavailable: 'REMOTE_NODE_CREDENTIALS_UNAVAILABLE',
   CallTimeout: 'REMOTE_NODE_CALL_TIMEOUT',
   CallFailed: 'REMOTE_NODE_CALL_FAILED',
   /** Node 侧派发后被自己的策略拒绝——是策略事实,不是链路故障。 */

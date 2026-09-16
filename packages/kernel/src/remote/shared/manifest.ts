@@ -1,5 +1,7 @@
 import { createHash } from 'node:crypto'
 
+import { isArray, isRecord } from '@velaros-ai/core'
+
 import type {
   RemoteNodeCapabilityDescriptor,
   RemoteNodeManifest,
@@ -17,7 +19,7 @@ export function computeManifestRevision(
   capabilities: readonly RemoteNodeCapabilityDescriptor[],
   tools: readonly RemoteNodeToolDescriptor[],
 ): string {
-  const canonical = JSON.stringify({
+  const canonical = JSON.stringify(canonicalize({
     capabilities: [...capabilities]
       .map((capability) => ({
         ...capability,
@@ -26,8 +28,24 @@ export function computeManifestRevision(
       }))
       .sort((left, right) => left.capabilityId.localeCompare(right.capabilityId)),
     tools: [...tools].sort((left, right) => left.name.localeCompare(right.name)),
-  })
+  }))
   return createHash('sha256').update(canonical).digest('hex').slice(0, 32)
+}
+
+/**
+ * 递归按键名排序,让摘要只认**内容**、不认书写顺序。
+ *
+ * 数组顺序保留(上面已经按名字显式排过序);对象的键序则是书写细节——工具的 `inputSchema`
+ * 是任意嵌套对象,同一份清单换个键序就换一个 revision,在途调用会被当过期拒绝。
+ */
+function canonicalize(value: unknown): unknown {
+  if (isArray(value)) return value.map(canonicalize)
+  if (!isRecord(value)) return value
+  const sorted: Record<string, unknown> = {}
+  for (const key of Object.keys(value).sort()) {
+    sorted[key] = canonicalize(value[key])
+  }
+  return sorted
 }
 
 export function createManifest(

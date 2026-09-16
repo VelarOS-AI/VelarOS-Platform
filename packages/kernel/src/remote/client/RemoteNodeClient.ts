@@ -137,7 +137,29 @@ export class RemoteNodeClient {
     })
     if (!this.started) {
       this.started = true
-      this.credentials = await this.options.credentials.load()
+      try {
+        this.credentials = await this.options.credentials.load()
+      } catch (error) {
+        // `started` 必须复位、等待者必须结算：原来 `started = true` 在 `await load()` 之前，
+        // load 抛错后没人开 socket，也没人再走这一段——之后每次 connect() 都永远挂着。
+        this.started = false
+        log.warn('Remote node credentials could not be loaded', {
+          error,
+          url: this.options.url,
+        })
+        const failure = new RemoteNodeClientError({
+          code: RemoteNodeClientErrorCodes.CredentialsUnavailable,
+          message: `读不出本机的远程节点凭据：${
+            error instanceof Error ? error.message : String(error)
+          }`,
+          resultUnknown: false,
+          retryable: true,
+        })
+        // 拒绝本批全部等待者（含刚登记的这一个），再把它交回调用方：直接 throw 会留下一个
+        // 没人接的已拒绝 promise。
+        this.rejectReadyWaiters(failure)
+        return waiter
+      }
       this.clientId = this.credentials?.clientId ?? createClientId()
       this.openSocket()
     }

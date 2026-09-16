@@ -392,6 +392,10 @@ export class RemoteNodeServer {
       )
       return
     }
+    // 码一旦被接受就立刻关窗:配对码是**一次性**的。原来关窗在 `await save()` 之后,落盘那段
+    // 时间里同一个码还能被第二条连接再用一次。
+    this.pairing.close()
+    const previousClientId = this.credential?.clientId
     const credential: RemoteNodePairedCredential = {
       clientId,
       publicKey: frame.publicKey,
@@ -411,7 +415,11 @@ export class RemoteNodeServer {
       return
     }
     this.credential = credential
-    this.pairing.close()
+    // 换了配对对象:终态回放缓存属于上一段信任关系,和 `unpair()` 一样必须丢掉,
+    // 否则新 Client 能拿旧 Client 的 callId 把别人的调用结果读出来。
+    if (isPresent(previousClientId) && previousClientId !== clientId) {
+      this.runner.forgetCompleted()
+    }
     sendFrame(connection.socket, { type: 'paired', node: this.node })
     this.grantReady(connection)
   }
