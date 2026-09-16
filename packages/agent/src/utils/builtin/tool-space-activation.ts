@@ -88,7 +88,7 @@ function hasReason(
  * 各写各的会让同一件事在流程里说两遍，纯占预算。
  */
 const AskUserDirectlyActivationHint =
-  '先读 reasons 定位到底缺哪一项，再把需要用户亲自完成的那一步直接说给用户；他完成后重新查看工具页状态，别重复调用当前用不了的工具。'
+  '先读 reasons 定位到底缺哪一项，再把需要用户亲自完成的那一步直接说清楚；等这一步完成后重新查看工具页状态，别重复调用当前用不了的工具。'
 
 /**
  * 「这条路缺一次用户侧动作」的依赖项——**本文件唯一会出现宿主工具名的地方**，点不点名只看宿主声明了没有。
@@ -140,7 +140,7 @@ function userActionActivationSummary(
   if (!pluginUserAction) return '需要先完成能力提供方声明的用户动作；查看 reasons 和 dependencies。'
   if (userActionToolName)
     return `外部连接或用户侧动作尚未完成；先用宿主声明的 ${userActionToolName} 向用户发起请求。`
-  return '外部连接或用户侧动作尚未完成；当前宿主没有可代为发起请求的工具，按 reasons 把要用户做的那一步直接说给他。'
+  return '外部连接或用户侧动作尚未完成；当前宿主没有可代为发起请求的工具，按 reasons 把要用户做的那一步直接说清楚。'
 }
 
 /**
