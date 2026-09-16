@@ -129,12 +129,13 @@
     },
     "packages/cli": {
       "name": "@velaros-ai/cli",
-      "version": "0.2.17",
+      "version": "0.2.18",
       "bin": {
         "velaros": "./dist/bin.js",
       },
       "dependencies": {
         "@velaros-ai/core": "workspace:*",
+        "@velaros-ai/platform": "workspace:*",
       },
       "devDependencies": {
         "@types/node": "^22.19.17",
@@ -168,10 +169,11 @@
     },
     "packages/development": {
       "name": "@velaros-ai/development",
-      "version": "1.1.11",
+      "version": "1.1.12",
       "dependencies": {
         "@codemirror/lang-python": "^6.2.1",
         "@velaros-ai/core": "workspace:*",
+        "@velaros-ai/platform": "workspace:*",
         "@velaros-ai/project": "workspace:*",
         "zod": "^4.3.6",
       },
@@ -185,12 +187,14 @@
     },
     "packages/document-renderer": {
       "name": "@velaros-ai/document-renderer",
-      "version": "0.1.6",
+      "version": "0.1.7",
       "bin": {
         "velar-document-renderer": "./dist/cli.js",
       },
       "dependencies": {
+        "@velaros-ai/core": "workspace:*",
         "@velaros-ai/office": "workspace:*",
+        "@velaros-ai/platform": "workspace:*",
         "zod": "^4.3.6",
       },
       "devDependencies": {

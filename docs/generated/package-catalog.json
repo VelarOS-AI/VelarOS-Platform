@@ -55,7 +55,7 @@
       "domain": "capabilities",
       "directory": "packages/cli",
       "name": "@velaros-ai/cli",
-      "version": "0.2.17",
+      "version": "0.2.18",
       "description": "Official VelarOS command-line distribution and extensible operational namespace router.",
       "exportSubpaths": [
         ".",
@@ -80,7 +80,7 @@
       "domain": "capabilities",
       "directory": "packages/development",
       "name": "@velaros-ai/development",
-      "version": "1.1.11",
+      "version": "1.1.12",
       "description": "Reusable language-service runtime for the Project code-understanding tool.",
       "exportSubpaths": [
         ".",

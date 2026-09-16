@@ -1,11 +1,13 @@
 import { existsSync, readFileSync } from 'node:fs'
-import { isAbsolute, relative, resolve, sep } from 'node:path'
+import { resolve } from 'node:path'
 
 import { optionalWhen } from '@velaros-ai/core'
+import { resolveRealPath } from '@velaros-ai/core/utils/RealPath'
 import {
   asRecord as readJsonRecordValue,
   readRawString as readString,
 } from '@velaros-ai/core/utils/unknownJsonRecord'
+import { currentPlatform } from '@velaros-ai/platform'
 
 import { formatVelarosCliError, formatVelarosCliSuccess } from './output.js'
 import {
@@ -73,7 +75,7 @@ export async function runAgentCli(
       })
 
     if (request.command === 'status') {
-      const result = readAgentTaskStatus(request.args, cwd)
+      const result = await readAgentTaskStatus(request.args, cwd)
       return formatVelarosCliSuccess({
         namespace: 'agent',
         command: 'status',
@@ -120,11 +122,11 @@ interface AgentTaskStatusResult {
   ledger?: Record<string, unknown>
 }
 
-function readAgentTaskStatus(args: string[], cwd: string): AgentTaskStatusResult {
+async function readAgentTaskStatus(args: string[], cwd: string): Promise<AgentTaskStatusResult> {
   const workspaceRoot = resolve(readOption(args, '--workspace-root') ?? cwd)
   const taskId = readOption(args, '--task-id')
   const full = args.includes('--full')
-  const taskJsonPath = resolveTaskJsonPath(workspaceRoot, taskId)
+  const taskJsonPath = await resolveTaskJsonPath(workspaceRoot, taskId)
   const ledger = readJsonRecord(taskJsonPath)
   const resultRecord = optionalRecord(ledger.result)
   const resolvedTaskId = readString(ledger, 'taskId') ?? taskId ?? 'unknown'
@@ -151,12 +153,15 @@ function readAgentTaskStatus(args: string[], cwd: string): AgentTaskStatusResult
  * - **两条轴都要挡，且判据不同**：`taskId` 是**目录名**，只许是单段名字（`assertSafeTaskId`）；
  *   `taskJsonPath` 是**相对路径**，允许多段，所以只能按「解析后是否仍在 workspaceRoot 内」判
  *   （`assertPathWithinWorkspace`）。曾经只挡了前者——后者是 2026-07-30 Q3b 补上的缺口。
+ * - **判定按真实路径**：只比字面路径的话，仓库里放一个符号链接（`.velaros/agent-runs/link.json → /外面/凭据.json`）
+ *   就能让 `--full` 把工作区外的 JSON 原样打到 stdout；读文件跟随链接，判定也必须跟随。
  * - **失败方向**：任何存疑一律拒（exitCode 2），不做「清洗后继续」。
  */
-function resolveTaskJsonPath(workspaceRoot: string, taskId: Nullable<string>): string {
+async function resolveTaskJsonPath(workspaceRoot: string, taskId: Nullable<string>): Promise<string> {
   if (taskId) {
     assertSafeTaskId(taskId)
-    return resolve(workspaceRoot, TaskArtifactRoot, 'tasks', taskId, 'task.json')
+    const byTaskId = resolve(workspaceRoot, TaskArtifactRoot, 'tasks', taskId, 'task.json')
+    return assertPathWithinWorkspace(byTaskId, workspaceRoot, byTaskId)
   }
 
   const latestPath = resolve(workspaceRoot, TaskArtifactRoot, 'latest-task.json')
@@ -167,12 +172,16 @@ function resolveTaskJsonPath(workspaceRoot: string, taskId: Nullable<string>): s
 
   const latestTaskId = readString(latest, 'taskId')
   if (!latestTaskId) {
-    throw new VelarosCliError('TASK_NOT_FOUND', 'Latest agent task pointer has no task id.', 1, {
+    throw new VelarosCliError('TASK_NOT_FOUND', '最新任务指针里没有任务 id。', 1, {
       latestPath,
     })
   }
   assertSafeTaskId(latestTaskId)
-  return resolve(workspaceRoot, TaskArtifactRoot, 'tasks', latestTaskId, 'task.json')
+  return assertPathWithinWorkspace(
+    resolve(workspaceRoot, TaskArtifactRoot, 'tasks', latestTaskId, 'task.json'),
+    workspaceRoot,
+    latestPath
+  )
 }
 
 function assertSafeTaskId(taskId: string): void {
@@ -183,23 +192,27 @@ function assertSafeTaskId(taskId: string): void {
   }
 }
 
-function assertPathWithinWorkspace(
+/**
+ * 指针指向的路径必须仍在工作区内：两端都先解开符号链接（`resolveRealPath` 连还不存在的尾巴一起解），
+ * 再用 platform 的路径文本包含判断（带分隔符边界，名字以 `..` 开头的目录不算越界）。
+ * 返回真实路径：后面读文件跟随的就是它，判定与读取必须是同一条路径。
+ */
+async function assertPathWithinWorkspace(
   resolvedPath: string,
   workspaceRoot: string,
   latestPath: string
-): string {
-  const relativePath = relative(workspaceRoot, resolvedPath)
-  const escapesRoot =
-    relativePath === '..' || relativePath.startsWith(`..${sep}`) || isAbsolute(relativePath)
-  if (escapesRoot) {
+): Promise<string> {
+  const realRoot = await resolveRealPath(workspaceRoot)
+  const realPath = await resolveRealPath(resolvedPath)
+  if (!currentPlatform.isPathTextInside(realPath, realRoot, { caseSensitive: true })) {
     throw new VelarosCliError(
       'INVALID_TASK_POINTER',
-      'Latest agent task pointer escapes the workspace root.',
+      '最新任务指针指向了工作区之外的路径。',
       2,
       { latestPath, resolvedPath, workspaceRoot }
     )
   }
-  return resolvedPath
+  return realPath
 }
 
 function readOption(args: string[], name: string): Nullable<string> {

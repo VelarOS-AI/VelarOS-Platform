@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, stat, symlink } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, stat, symlink } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -130,5 +130,51 @@ describe('independent document renderer capability pack', () => {
     } finally {
       await rm(externalRoot, { recursive: true, force: true })
     }
+  })
+
+  test('拒绝越界的输出路径时，projectRoot 之外一个目录都不建', async () => {
+    temporaryRoot = await mkdtemp(join(tmpdir(), 'velar-renderer-mkdir-'))
+    const externalRoot = await mkdtemp(join(tmpdir(), 'velar-renderer-mkdir-external-'))
+    try {
+      await Bun.write(join(temporaryRoot, 'inside.pdf'), '%PDF-1.4\n%%EOF\n')
+      await symlink(externalRoot, join(temporaryRoot, 'link'))
+
+      const response = await executeRendererRequest({
+        protocolVersion: ProtocolVersion,
+        requestId: 'mkdir-escape',
+        operation: 'render-pdf-page',
+        projectRoot: temporaryRoot,
+        inputPath: 'inside.pdf',
+        outputPath: 'link/newdir/deeper/page.png',
+      })
+
+      expect(response).toMatchObject({ status: 'error', error: { code: 'PATH_DENIED' } })
+      expect(await stat(join(externalRoot, 'newdir')).catch(() => null)).toBeNull()
+    } finally {
+      await rm(externalRoot, { recursive: true, force: true })
+    }
+  })
+
+  test('项目里名叫 ..xxx 的目录不算越界', async () => {
+    temporaryRoot = await mkdtemp(join(tmpdir(), 'velar-renderer-dotdot-'))
+    const document = await PDFDocument.create()
+    document.addPage([160, 100])
+    await mkdir(join(temporaryRoot, '..cache'), { recursive: true })
+    await Bun.write(join(temporaryRoot, '..cache', 'sample.pdf'), await document.save())
+
+    const response = await executeRendererRequest({
+      protocolVersion: ProtocolVersion,
+      requestId: 'dotdot',
+      operation: 'render-pdf-page',
+      projectRoot: temporaryRoot,
+      inputPath: '..cache/sample.pdf',
+      outputPath: '..cache/out/page-1.png',
+      page: 1,
+      scale: 1,
+    })
+
+    expect(response).toMatchObject({ status: 'success' })
+    expect((await stat(join(temporaryRoot, '..cache', 'out', 'page-1.png'))).size)
+      .toBeGreaterThan(100)
   })
 })

@@ -12,6 +12,7 @@ import {
   readFileSync,
   rmSync,
   statSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -163,6 +164,82 @@ test('velaros agent status reads task artifacts without a script bridge', async 
     assert.equal(parsed.result.taskId, 'task-1')
     assert.equal(parsed.result.status, 'passed')
     assert.deepEqual(parsed.result.ledger, ledger)
+  } finally {
+    rmSync(workspaceRoot, { recursive: true, force: true })
+  }
+})
+
+test('velaros agent status refuses a task pointer that escapes through a symbolic link', async () => {
+  const { runVelarosCli } = await import(cliPath.href)
+  const workspaceRoot = mkdtempSync(join(tmpdir(), 'velaros-agent-cli-escape-'))
+  const outsideRoot = mkdtempSync(join(tmpdir(), 'velaros-agent-cli-outside-'))
+
+  try {
+    const runsDir = join(workspaceRoot, '.velaros', 'agent-runs')
+    mkdirSync(runsDir, { recursive: true })
+    writeFileSync(
+      join(outsideRoot, 'credentials.json'),
+      JSON.stringify({ taskId: 'stolen', apiKey: 'never-print-this-credential' }),
+      'utf8'
+    )
+    // 工作区里的软链接指向工作区外：字面路径判定看不出来，读文件却会跟着链接走。
+    symlinkSync(join(outsideRoot, 'credentials.json'), join(runsDir, 'link.json'))
+    writeFileSync(
+      join(runsDir, 'latest-task.json'),
+      JSON.stringify({
+        schemaVersion: 1,
+        taskJsonPath: '.velaros/agent-runs/link.json',
+      }),
+      'utf8'
+    )
+
+    const result = await runVelarosCli([
+      'agent',
+      'status',
+      '--workspace-root',
+      workspaceRoot,
+      '--full',
+      '--json',
+    ])
+
+    assert.equal(result.exitCode, 2)
+    assert.equal(JSON.parse(result.text).error.code, 'INVALID_TASK_POINTER')
+    assert.doesNotMatch(result.text, /never-print-this-credential/)
+  } finally {
+    rmSync(workspaceRoot, { recursive: true, force: true })
+    rmSync(outsideRoot, { recursive: true, force: true })
+  }
+})
+
+test('velaros agent status accepts a task pointer under a directory named ..cache', async () => {
+  const { runVelarosCli } = await import(cliPath.href)
+  const workspaceRoot = mkdtempSync(join(tmpdir(), 'velaros-agent-cli-dotdot-'))
+
+  try {
+    const runsDir = join(workspaceRoot, '.velaros', 'agent-runs')
+    mkdirSync(join(workspaceRoot, '..cache'), { recursive: true })
+    mkdirSync(runsDir, { recursive: true })
+    writeFileSync(
+      join(workspaceRoot, '..cache', 'task.json'),
+      JSON.stringify({ taskId: 'task-cached', result: { status: 'passed' } }),
+      'utf8'
+    )
+    writeFileSync(
+      join(runsDir, 'latest-task.json'),
+      JSON.stringify({ schemaVersion: 1, taskJsonPath: '..cache/task.json' }),
+      'utf8'
+    )
+
+    const result = await runVelarosCli([
+      'agent',
+      'status',
+      '--workspace-root',
+      workspaceRoot,
+      '--json',
+    ])
+
+    assert.equal(result.exitCode, 0)
+    assert.equal(JSON.parse(result.text).result.taskId, 'task-cached')
   } finally {
     rmSync(workspaceRoot, { recursive: true, force: true })
   }

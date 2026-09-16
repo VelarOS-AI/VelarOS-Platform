@@ -1,6 +1,6 @@
 {
   "name": "@velaros-ai/development",
-  "version": "1.1.11",
+  "version": "1.1.12",
   "velaros": {
     "platform": "0.6"
   },
@@ -35,13 +35,14 @@
     "lint": "eslint . --quiet",
     "clean": "rm -rf dist",
     "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/capabilities/build/fix-esm-extensions.mjs dist && node ../../scripts/build/normalize-package-declarations.mjs",
-    "test": "bun run build && bun test test/development.test.ts test/language-diagnostics.test.ts",
+    "test": "bun run build && bun test test/development.test.ts test/language-diagnostics.test.ts test/project-path-boundary.test.ts",
     "check": "bun run typecheck && bun run lint && bun run test",
     "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/development"
   },
   "dependencies": {
     "@codemirror/lang-python": "^6.2.1",
     "@velaros-ai/core": "workspace:*",
+    "@velaros-ai/platform": "workspace:*",
     "@velaros-ai/project": "workspace:*",
     "zod": "^4.3.6"
   },
