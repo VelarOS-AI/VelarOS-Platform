@@ -326,17 +326,19 @@ export default [
     },
   },
   // contract 与 types 是最内层稳定契约,不得依赖任何实现与部署切片。
+  // contract/provides.ts 例外:仓库标准规定类实现的 API 写在类上方,由 provides.ts 用
+  // `export type { X } from '../impl/<类>.js'` 登记,那是登记语句而不是依赖(见 ADR 0007)。
   {
-    files: ['src/contract/**/*.{ts,tsx}', 'src/types/**/*.{ts,tsx}'],
+    files: ['src/contract/requires.ts', 'src/contract/constants.ts', 'src/types/**/*.{ts,tsx}'],
     rules: {
       'no-restricted-imports': [
         'error',
         {
           patterns: [
             {
-              group: ['@velaros-ai/kernel/runtime', '@velaros-ai/kernel/runtime/*', '@velaros-ai/kernel/client', '@velaros-ai/kernel/client/*', '@velaros-ai/kernel/serve', '@velaros-ai/kernel/serve/*', '../impl/*'],
+              group: ['@velaros-ai/kernel/runtime', '@velaros-ai/kernel/runtime/*', '@velaros-ai/kernel/client', '@velaros-ai/kernel/client/*', '@velaros-ai/kernel/serve', '@velaros-ai/kernel/serve/*', '../impl/*', '../utils/*', '../../utils/*'],
               message:
-                'Kernel 的 contract 与 types 不得依赖 impl。',
+                'Kernel 的 contract 与 types 不得依赖 impl 与 utils。',
             },
           ],
         },

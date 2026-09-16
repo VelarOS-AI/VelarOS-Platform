@@ -149,6 +149,34 @@ function scanLines(roots, test, build) {
   return violations
 }
 
+/** 同 {@link scanLines},但先把折成多行的 import / export 语句折回一行(行号取语句开头那一行)。 */
+function scanStatements(roots, test, build) {
+  const violations = []
+  for (const root of roots) {
+    const sourceDir = resolve(RepoRoot, root)
+    if (!existsSync(sourceDir)) continue
+    for (const file of collectSourceFiles(sourceDir)) {
+      const relativeFile = normalizeSeparators(relative(RepoRoot, file))
+      const lines = stripCodeComments(readFileSync(file, 'utf8')).split('\n')
+      for (let index = 0; index < lines.length; index += 1) {
+        let statement = lines[index]
+        let start = index
+        // 折行的 `import type {\n … \n} from '…'`:一直并到出现 `from '…'` 为止。
+        if (/^\s*(?:import|export)\b/.test(statement) && statement.includes('{') && !statement.includes('}')) {
+          while (index + 1 < lines.length && !/\}\s*from\s*['"]/.test(lines[index])) {
+            index += 1
+            statement += ` ${lines[index].trim()}`
+          }
+        }
+        const match = test(statement)
+        if (!match) continue
+        violations.push(build(relativeFile, start + 1, match, statement))
+      }
+    }
+  }
+  return violations
+}
+
 // —— 防线① 包集合冻结 ——
 // VelarOS-Platform 单版本火车:packages/ 是全平台包的公共家,冻结面从「整个 packages/」收敛为
 // 「Kernel 域的包集合」。域包清单单源 = 仓根 package.json 的 velaros.domainPackages.kernel;
@@ -231,24 +259,35 @@ function scanDependencyDirection() {
   )
 
   // contract 与 types 是最内层稳定面,不得认识实现或部署切片。
+  //
+  // wire 类型已经手写进 types/wire.ts、schema 留在 utils/wire 并 `satisfies z.ZodType<…>` 反向守,
+  // 所以这条从「只禁 impl」收紧成「impl 与 utils 都禁」(方案 §3.5 第 1 条)。
+  const contractsForbidden = (line) =>
+    InternalImplementationPattern.test(line)
+    || importsPackage(line, [
+      '@velaros-ai/kernel/runtime',
+      '@velaros-ai/kernel/client',
+      '@velaros-ai/kernel/serve',
+    ])
+    || /(?:from\s+|import\s*\(|require\()\s*['"]\.\.(?:\/\.\.)*\/(?:impl|utils)(?:\/[^'"]*)?['"]/.test(line)
+  const contractsViolation = (file, line) => ({
+    rule: 'contracts-dependency-direction',
+    fingerprint: `contracts-dependency-direction::${file}:${line}`,
+    message: `${file}:${line}: Kernel 的 contract 与 types 不得依赖 impl 与 utils。`,
+  })
+  // types 一条口子都不留:它只引 types 与合同。
   violations.push(
-    ...scanLines(
-      ['packages/kernel/src/contract', 'packages/kernel/src/types'],
-      (line) =>
-        InternalImplementationPattern.test(line)
-        || importsPackage(line, [
-          '@velaros-ai/kernel/runtime',
-          '@velaros-ai/kernel/client',
-          '@velaros-ai/kernel/serve',
-        ])
-        // types 目前还从 utils/wire 引 zod 推断出来的 wire 类型;wire 类型改成手写进 types 之后
-        // 这条一并收紧成 (?:impl|utils)。
-        || /(?:from\s+|import\s*\(|require\()\s*['"]\.\.(?:\/\.\.)*\/impl(?:\/[^'"]*)?['"]/.test(line),
-      (file, line) => ({
-        rule: 'contracts-dependency-direction',
-        fingerprint: `contracts-dependency-direction::${file}:${line}`,
-        message: `${file}:${line}: Kernel 的 contract 与 types 不得依赖 impl。`,
-      }),
+    ...scanLines(['packages/kernel/src/types'], contractsForbidden, contractsViolation),
+  )
+  // contract 唯一的例外是纯类型的登记语句:仓库标准(ADR 0007 / docs/architecture/module-ownership.md)
+  // 规定类实现的 API 写在类上方,由 provides.ts 用 `export type { X } from '../impl/<类>.js'` 登记,
+  // 合同里的接口引用这些登记过的名字也只许 `import type`。那是登记,不是依赖;值一律不许过来。
+  // 语句可能折成多行,所以先把花括号里的换行折回一行再逐行判。
+  violations.push(
+    ...scanStatements(
+      ['packages/kernel/src/contract'],
+      (line) => !/^\s*(?:import|export) type \{/.test(line) && contractsForbidden(line),
+      contractsViolation,
     ),
   )
 
