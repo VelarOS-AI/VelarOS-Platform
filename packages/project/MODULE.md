@@ -1,14 +1,14 @@
 # @velaros-ai/project 模块卡片
 
 > 这一页是本模块的压缩表示：读完就知道它是什么、给了外面什么、骨干链路怎么走、靠什么、状态在哪、失败什么样、哪些承诺不能破。
-> 九个工具都在 `src/impl/ProjectTools.ts` 一个文件里，是最先看的地方；其次是 `src/contract/` 的三个文件（产品面登记、注入面、常量表）和各实现文件类上方的接口。代码怎么分层见最后一节「结构」。
+> 七个工具都在 `src/impl/ProjectTools.ts` 一个文件里，是最先看的地方；其次是 `src/contract/` 的三个文件（产品面登记、注入面、常量表）和各实现文件类上方的接口。代码怎么分层见最后一节「结构」。
 > 门禁：`bun run check:module-ownership`（`--only project` 列出这个包的每一条）。
 
 ## 这是什么
 
 项目空间的能力包：让 agent 在一个项目根里读源码、列文件、搜文本、查代码结构、按版本精确改源码、跑命令、在演练沙箱里先跑一遍再落回。
 每一次改动都是一个带版本防护的事务：几个文件、几处编辑全成或全不成，可以查看、可以撤销，撤销遇到外部修改拒绝覆盖。
-模型编辑只认框架签发的 fileRef：它绑定路径、版本和模型实际看到的那段源码。局部编辑（project:edit 与 change 的 edit 步骤）只能改 fileRef 看得到的行；
+模型编辑只认框架签发的 fileRef：它绑定路径、版本和模型实际看到的那段源码。局部编辑（project:edit 里 apply 的 edit 步骤）只能改 fileRef 看得到的行；
 overwrite 要求看过全文，move、delete 只核对版本。
 
 它不知道系统空间，也不知道界面长什么样；系统空间是另一个独立的包，两边互不引用。命令判定、沙箱契约、磁盘文本的编解码与原子读写这些两个空间共用的东西在能力公共件里（`@velaros-ai/shell-command`、`@velaros-ai/rehearsal-sandbox`、`@velaros-ai/text-files`，ADR 0008）。
@@ -21,7 +21,7 @@ overwrite 要求看过全文，move、delete 只核对版本。
 
 | 值 | 接口 | 做什么 |
 | --- | --- | --- |
-| `projectTools` | `ProjectToolCollection`，元素是 `VelaTool`；三个改动工具是 `ProjectChangeTool` | 九个模型面工具 |
+| `projectTools` | `ProjectToolCollection`，元素是 `VelaTool`；改动工具 project:edit 是 `ProjectEditTool` | 七个模型面工具 |
 | `createProjectCodeAnalysisTools` | `ProjectCodeAnalysisToolCollection` | 可选的 project:code-analysis，宿主有代码图后端时单独登记 |
 | `createProjectBundledModDefinition` | `ProjectBundledModDefinition` | 项目空间作为官方内置 mod 的定义 |
 | `createProjectKernelModule` | 上游的 `KernelModuleDefinition` | 挂进内核的模块 |
@@ -62,7 +62,7 @@ overwrite 要求看过全文，move、delete 只核对版本。
 | --- | --- |
 | `project:read` | 执行门读锁 → 内核 stat/read（授权、脱敏、按行列与字符预算截取）→ 源码窗口（`[行号, 原文]`）→ 文件上下文协调器定稿时签发 fileRef（绑定路径、版本、看到的范围） |
 | `project:list`、`project:search` | 执行门读锁 → 内核列举（gitignore 与策略过滤）/ 搜索（有 ripgrep 用 ripgrep，没有逐文件扫）→ 搜索命中带可编辑的源码窗口 |
-| `project:edit`、`project:file`、`project:change` | 执行门写锁 → 按 fileRef 取回读取时的版本与可见范围 → 规划成编辑意图（范围越界、定位不唯一在这里拒绝）→ 带着要写的路径过修改授权 → 内核准备事务（补丁、差量、风险，不碰磁盘）→ 应用（校验、审批、按版本核对、全成或全逆序还原）→ 回执带新 fileRef 与 changeRef；失败标 not-applied，入参可复用 |
+| `project:edit` | 执行门写锁 → 按 fileRef 取回读取时的版本与可见范围 → 规划成编辑意图（范围越界、定位不唯一在这里拒绝）→ 带着要写的路径过修改授权 → 内核准备事务（补丁、差量、风险，不碰磁盘）→ 应用（校验、审批、按版本核对、全成或全逆序还原）→ 回执带新 fileRef 与 changeRef；失败标 not-applied，入参可复用 |
 | `project:code` | 执行门读锁 → 翻译成宿主代码查询（语言服务类由宿主语言服务执行，代码索引类由代码图谱执行）→ 附来源、覆盖与降级信息 |
 | `project:code-analysis` | 宿主有代码图后端时单独登记 → 执行门读锁 → trace、cycles、deadcode、routing 翻译成代码索引类查询交给宿主 → 附来源与覆盖 |
 | `project:run` | 命令判定（`@velaros-ai/shell-command`）→ 危险命令每次由用户亲自确认 → 会改项目的先过修改授权 → 前台在执行门里跑（只读走读锁）、后台交宿主的任务管理 → 输出经宿主的脱敏后端 |

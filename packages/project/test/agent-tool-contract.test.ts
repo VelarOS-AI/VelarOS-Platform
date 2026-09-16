@@ -23,9 +23,7 @@ describe('Project model-facing tool contract', () => {
       'project:list': 'read',
       'project:search': 'read',
       'project:code': 'read',
-      'project:file': 'write',
       'project:edit': 'write',
-      'project:change': 'write',
       'project:run': 'execute',
       'project:sandbox': 'execute',
     } as const
@@ -349,7 +347,8 @@ describe('Project model-facing tool contract', () => {
     const schema = projectTools[ProjectToolNames.edit].schema
     expect(
       schema.safeParse({
-        files: [{ fileRef: 'view:a', edits: [{ op: 'replace', match: 'a', text: '' }] }],
+        action: 'apply',
+        steps: [{ action: 'edit', fileRef: 'view:a', edits: [{ op: 'replace', match: 'a', text: '' }] }],
       }).success,
     ).toBe(true)
     expect(

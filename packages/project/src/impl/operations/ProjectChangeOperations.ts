@@ -1,6 +1,6 @@
 /**
- * 三个改动操作：`ProjectChangeOperations` 与整个进程唯一的 `projectChangeOperations`。接口 `ProjectChangeOperationsApi` 在本文件的类上方。
- * `project:file`、`project:edit`、`project:change` 各调一个方法。每次改动都先过宿主的项目修改授权，再在项目资源门的写门里开事务、提交、刷新当前文件视图，最后存变更回执。
+ * 改动操作：`ProjectChangeOperations` 与整个进程唯一的 `projectChangeOperations`。接口 `ProjectChangeOperationsApi` 在本文件的类上方。
+ * `project:edit` 的三个动作都走这一个方法。每次改动都先过宿主的项目修改授权，再在项目资源门的写门里开事务、提交、刷新当前文件视图，最后存变更回执。
  */
 
 import { resolve } from 'node:path'
@@ -9,17 +9,16 @@ import { isEmpty, isPlainObject, isString, Log, optionalWhen } from '@velaros-ai
 
 import type { ProjectToolContext } from '../../contract/requires.js'
 import type { PrepareEditInput } from '../../types/edit.js'
-import type { ProjectEditInput, ProjectFileInput } from '../../types/editing.js'
 import type { ProjectChangeReceipt } from '../../types/project.js'
 import type { ProjectSourceWindow } from '../../types/source-window.js'
-import type { ProjectChangeInput } from '../../types/tools.js'
+import type { ProjectEditInput } from '../../types/tools.js'
 import { withProjectEditRecovery } from '../../utils/agent/edit-recovery.js'
 import { changedFileContextRanges, committedFileContextSnapshots, registerProjectFileContext } from '../../utils/agent/file-context.js'
 import { projectPlannerResolver } from '../../utils/agent/planner-resolver.js'
 import { readProjectReceipt, saveProjectReceipt } from '../../utils/agent/receipts.js'
 import { presentProjectContextSnapshot } from '../../utils/agent/source-window.js'
 import { projectCreatedPaths, projectMutationDenied, projectTransactionHasChanges } from '../../utils/agent/transaction-result.js'
-import { compileProjectChange, compileProjectEdit, compileProjectFile } from '../../utils/editing/planner-index.js'
+import { compileProjectEdit } from '../../utils/editing/planner-index.js'
 import { ProjectError } from '../../utils/errors.js'
 import { plannedFilePaths } from '../../utils/transactions/edit-intents.js'
 import { rethrowNotApplied } from '../../utils/transactions/transaction-errors.js'
@@ -30,16 +29,15 @@ import type { ProjectExecutionGateApi } from './ProjectExecutionGate.js'
 import { projectExecutionGate } from './ProjectExecutionGate.js'
 
 /**
- * 三个改动操作：文件动作、源码编辑、组合变更与撤销。改动一律经事务提交：先过宿主的项目修改授权（被拒就一个文件都不写），
- * 再在写门里准备、应用；提交后刷新当前文件视图并归档提交快照，回执带 changeRef，可以凭它 inspect 或 undo。
+ * 改动操作：apply 把文件动作与源码编辑按步骤编进一个事务，inspect 看差量，undo 撤销。改动一律经事务提交：先过宿主的项目修改授权
+ * （被拒就一个文件都不写），再在写门里准备、应用；提交后刷新当前文件视图并归档提交快照，回执带 changeRef，可以凭它 inspect 或 undo。
  */
 export interface ProjectChangeOperationsApi {
-  /** 文件动作：create、overwrite、move、delete、recode，按顺序编进一个事务一起提交。 */
-  file(input: ProjectFileInput, ctx: ProjectToolContext): Promise<Awaited<ReturnType<ProjectChangeOperations['file']>>>
-  /** 源码编辑：每个文件凭 fileRef 定位，按 range 或 match 替换、插入，多个文件同一事务；版本过期时尽量给出可确认的新位置。 */
-  edit(input: ProjectEditInput, ctx: ProjectToolContext): Promise<Awaited<ReturnType<ProjectChangeOperations['edit']>>>
-  /** 组合变更：apply 把文件动作与编辑按步骤编进一个事务；inspect 凭 changeRef 看差量；undo 凭 changeRef 撤销（外部改过就拒绝覆盖）。 */
-  change(input: ProjectChangeInput, ctx: ProjectToolContext): Promise<unknown>
+  /**
+   * project:edit 的三个动作：apply 把 steps（create、overwrite、move、delete、recode、edit）编进一个事务一起提交，
+   * 版本过期时尽量给出可确认的新位置；inspect 凭 changeRef 看差量；undo 凭 changeRef 撤销（外部改过就拒绝覆盖）。
+   */
+  edit(input: ProjectEditInput, ctx: ProjectToolContext): Promise<unknown>
 }
 
 export class ProjectChangeOperations implements ProjectChangeOperationsApi {
@@ -49,25 +47,11 @@ export class ProjectChangeOperations implements ProjectChangeOperationsApi {
 
   constructor(private readonly gate: ProjectExecutionGateApi) {}
 
-  public file(input: ProjectFileInput, context: ProjectToolContext) {
-    return this.applyTransaction({
-      operationLabel: '变更项目文件',
-      plan: () => compileProjectFile(input, projectPlannerResolver(context)),
-    }, context)
-  }
-
-  public edit(input: ProjectEditInput, context: ProjectToolContext) {
-    return this.applyTransaction({
-      operationLabel: '编辑项目源码',
-      plan: () => withProjectEditRecovery(input, context, () => compileProjectEdit(input, projectPlannerResolver(context))),
-    }, context)
-  }
-
-  public async change(input: ProjectChangeInput, context: ProjectToolContext) {
+  public async edit(input: ProjectEditInput, context: ProjectToolContext) {
     if (input.action === 'apply') return this.applyTransaction({
-      operationLabel: '项目事务变更',
+      operationLabel: '变更项目文件',
       // 来源互斥关系已通过 schema 校验，Zod 无法自动推导对应联合类型。
-      plan: () => compileProjectChange({ action: 'apply', steps: input.steps! }, projectPlannerResolver(context)),
+      plan: () => withProjectEditRecovery(input.steps!, context, () => compileProjectEdit({ action: 'apply', steps: input.steps! }, projectPlannerResolver(context))),
     }, context)
     context.abortSignal.throwIfAborted()
     const changeRef = input.changeRef!
@@ -276,5 +260,5 @@ export class ProjectChangeOperations implements ProjectChangeOperationsApi {
   }
 }
 
-/** 整个进程唯一的改动操作；三个改动工具的 execute 交给它。 */
+/** 整个进程唯一的改动操作；project:edit 的 execute 交给它。 */
 export const projectChangeOperations: ProjectChangeOperationsApi = new ProjectChangeOperations(projectExecutionGate)

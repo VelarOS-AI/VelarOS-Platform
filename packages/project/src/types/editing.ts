@@ -144,7 +144,7 @@ export interface ProjectRecodeReceipt {
 }
 
 /**
- * project:file 与 project:change 编译到一半的计划：每个路径在计划里的未来身份、引用绑定到的身份，以及已经排好的事务操作。
+ * project:edit 的 apply 编译到一半的计划：每个路径在计划里的未来身份、引用绑定到的身份，以及已经排好的事务操作。
  * 只在一次编译里用，由 utils/editing/file-planner.ts 的函数推进；不读写磁盘，读取都经过 resolver。
  */
 export interface ProjectFilePlanState {
@@ -185,15 +185,6 @@ export type ProjectContentEdit =
   | { op: 'insert'; range?: ProjectLineRange; match?: string; side: 'before' | 'after'; text: string }
   | { op: 'insert'; at: 'start' | 'end'; text: string }
 
-export interface ProjectEditFile {
-  fileRef: string
-  edits: readonly ProjectContentEdit[]
-}
-
-export interface ProjectEditInput {
-  files: readonly ProjectEditFile[]
-}
-
 export type ProjectRecodeEncoding = 'utf-8' | 'utf-16le' | 'utf-16be' | 'gb18030'
 export type ProjectRecodeNewline = 'lf' | 'crlf'
 
@@ -206,17 +197,6 @@ export interface ProjectRecodeAction {
   newline?: ProjectRecodeNewline
 }
 
-export type ProjectFileAction =
-  | { op: 'create'; path: string; text: string }
-  | { op: 'overwrite'; fileRef: string; text: string }
-  | { op: 'move'; fileRef: string; to: string }
-  | { op: 'delete'; fileRef: string }
-  | ProjectRecodeAction
-
-export interface ProjectFileInput {
-  actions: readonly ProjectFileAction[]
-}
-
 /** sourceRef 跟随文件身份穿过此前的计划步骤；path 只指本计划新建的文件。 */
 export type ProjectPlanSource = { fileRef: string } | { sourceRef: string } | { path: string }
 export type ProjectPlanFileAction =
@@ -226,8 +206,8 @@ export type ProjectPlanFileAction =
   | ({ op: 'delete' } & ProjectPlanSource)
   | ProjectRecodeAction
 
-/** 一次 change 计划里的一步：一步一个目标。文件动作那五个的字段同 project:file，edit 是一个文件加它的几处编辑。 */
-export type ProjectChangeStep =
+/** 一次 apply 计划里的一步：一步一个目标。五个文件动作各自指一个文件，edit 是一个文件加它的几处编辑。 */
+export type ProjectEditStep =
   | { action: 'create'; path: string; text: string }
   | ({ action: 'overwrite'; text: string } & ProjectPlanSource)
   | ({ action: 'move'; to: string } & ProjectPlanSource)
@@ -235,9 +215,9 @@ export type ProjectChangeStep =
   | (Omit<ProjectRecodeAction, 'op'> & { action: 'recode' })
   | ({ action: 'edit'; edits: readonly ProjectContentEdit[] } & ProjectPlanSource)
 
-export interface ProjectChangeApplyInput {
+export interface ProjectEditApplyInput {
   action: 'apply'
-  steps: readonly ProjectChangeStep[]
+  steps: readonly ProjectEditStep[]
 }
 
 /** readPath 观察目标路径存不存在，路径不存在时也返回一个 revision。 */

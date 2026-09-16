@@ -86,7 +86,7 @@ export function toProjectCapabilityError(error: unknown): unknown {
   return new AppError(error.reason, error.message, error, { projectError: toErrorObject(error) })
 }
 
-/** project:change 计划里一个文件的来源只能写一种：fileRef、sourceRef、path 恰好给了一个。 */
+/** project:edit 的一步里，文件来源只能写一种：fileRef、sourceRef、path 恰好给了一个。 */
 export function hasExactlyOneSource(value: { fileRef?: string; sourceRef?: string; path?: string }): boolean {
   return [value.fileRef, value.sourceRef, value.path].filter((item) => !isUndefined(item)).length === 1
 }

@@ -625,6 +625,6 @@ export function forkFileContext(parent: FileContextCarrier, child: FileContextCa
       !child.getCurrentVisibleToolNames ||
       child
         .getCurrentVisibleToolNames()
-        .some((name) => ['project:read', 'project:search', 'project:code', 'project:write', 'project:edit', 'project:file', 'project:change'].includes(name))
+        .some((name) => ['project:read', 'project:search', 'project:code', 'project:write', 'project:edit'].includes(name))
   )
 }

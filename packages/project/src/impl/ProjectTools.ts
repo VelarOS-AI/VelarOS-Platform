@@ -1,5 +1,5 @@
 /**
- * 项目空间的九个模型面工具与可选的 project:code-analysis。每个工具的定义就是模型看到的全部信息面：摘要、适用与禁用场景、协议、用法、示例、
+ * 项目空间的七个模型面工具与可选的 project:code-analysis。每个工具的定义就是模型看到的全部信息面：摘要、适用与禁用场景、协议、用法、示例、
  * 参数（schema 与每个字段的说明）、权限、能力声明都在定义里；execute 一行交给 impl/operations 里的执行类。
  * 按读取、改动、代码理解、执行四类排列，文件末尾是它们怎么分组、作为内置 mod 挂进产品、作为能力服务挂进内核。
  * 这是人最先看的文件，改了要在差量报告里点名。
@@ -18,8 +18,8 @@ import { shellCommandPolicy } from '@velaros-ai/shell-command'
 import { ProjectChangeLimits, ProjectCodeAnalysisToolName, ProjectCodeLimits, ProjectCommandLimits, ProjectFileLimits, ProjectModId, ProjectPackageVersion, ProjectPolicyDefaults, ProjectSpaceId, ProjectToolExposure, ProjectToolNames } from '../contract/constants.js'
 import type { ProjectBundledModDefinition, ProjectCapabilityService, ProjectCodeAnalysisToolCollection, ProjectToolCollection } from '../contract/provides.js'
 import type { CreateProjectKernelModuleOptions, ProjectToolContext } from '../contract/requires.js'
-import type { ProjectChangeStep, ProjectEditInput, ProjectFileInput } from '../types/editing.js'
-import type { ProjectChangeInput, ProjectCodeAnalysisInput, ProjectCodeInput, ProjectListInput, ProjectReadInput, ProjectRunInput, ProjectSandboxInput, ProjectSearchInput } from '../types/tools.js'
+import type { ProjectEditStep } from '../types/editing.js'
+import type { ProjectCodeAnalysisInput, ProjectCodeInput, ProjectEditInput, ProjectListInput, ProjectReadInput, ProjectRunInput, ProjectSandboxInput, ProjectSearchInput } from '../types/tools.js'
 import { defineProjectTool, hasExactlyOneSource, toProjectCapabilityError } from '../utils/tool.js'
 
 import { projectChangeOperations } from './operations/ProjectChangeOperations.js'
@@ -79,7 +79,7 @@ const ProjectLineRangeSchema = z.union([
 const ProjectFileRefSchema = z.string().min(1)
   .describe('从 [Current project files] 或最新的读取、修改回执里原样复制的 fileRef；不能手写。')
 const ProjectChangeRefSchema = z.string().min(1)
-  .describe('原样复制 project:edit、project:file、project:change 成功回执里的 changeRef；示例里的占位符不是有效引用。')
+  .describe('原样复制 project:edit 成功回执里的 changeRef；示例里的占位符不是有效引用。')
 
 /** 一处源码编辑：range 选完整行，match 在区域里选唯一原文，text 只填源码。 */
 const EditSelector = {
@@ -111,12 +111,7 @@ const RecodeFields = {
   bom: z.boolean().optional().describe('写不写 BOM，缺省不写；gb18030 没有 BOM，填 true 会被拒。'),
   newline: z.enum(['lf', 'crlf']).optional().describe('统一物理换行；不给就保留各文件原来的换行。'),
 }
-const ProjectRecodeActionSchema = z.strictObject({
-  op: z.literal('recode').describe('转换磁盘编码：正文不变，只重写字节；已是目标格式的文件跳过。'),
-  ...RecodeFields,
-})
-
-/** project:change 的一步里引用一个文件：fileRef 固定读取版本，sourceRef 跟随此前步骤的移动与修改，path 只引用本计划新建的文件。 */
+/** apply 的一步里引用一个文件：fileRef 固定读取版本，sourceRef 跟随此前步骤的移动与修改，path 只引用本计划新建的文件。 */
 const PlanSource = {
   fileRef: ProjectFileRefSchema.optional().describe('这个文件没被本计划前面的步骤动过时用它：从 [Current project files] 或读取、修改回执里原样复制。'),
   sourceRef: ProjectFileRefSchema.optional().describe('填同一个原 fileRef：文件已被本计划前面的步骤移动或修改时改用它，坐标按改完后的内容算。'),
@@ -126,14 +121,14 @@ const OneSourceMessage = '仅填写 fileRef、sourceRef、path 之一。'
 /** 三选一的要求 Zod refine 只在运行时判；显式写进 meta，供应方那边也看得到。 */
 const OneSourceMeta = { oneOf: [{ required: ['fileRef'] }, { required: ['sourceRef'] }, { required: ['path'] }] }
 
-/** 文件动作的说明与字段，project:file 的 actions 与 project:change 的 steps 共用（前者用 op 判别、只收 fileRef，后者用 action 判别、来源三选一）。 */
-const FileActionNotes = {
+/** 一步能做的六件事：五个文件动作加局部编辑，每条说明就是这一步做什么。 */
+const StepNotes = {
   create: '新建文件：路径已存在就拒绝，缺的上级目录自动建。',
-  overwrite: '整份替换：把这个文件的正文换成 text。',
+  overwrite: '整份替换：把这个文件的正文换成 text；要 fileRef 覆盖整个文件，没读全就先读全。',
   move: '移动或改名：只动文件本身，不改引用它的代码。',
   delete: '删掉这个文件。',
   recode: '转换磁盘编码：正文不变，只重写字节；已是目标格式的文件跳过。',
-  edit: '改一个文件里的几处源码，写法同 project:edit 的一个 files 项。',
+  edit: '改这个文件里的几处源码：每处用 range 选整行、用 match 选唯一原文，或者两个一起用。',
 }
 const CreateFields = {
   path: z.string().min(1).describe('新文件的路径，相对项目根。'),
@@ -269,135 +264,71 @@ const searchTool = defineProjectTool<ProjectSearchInput>({
   execute: (input, ctx) => projectFileOperations.search(input, ctx),
 })
 
-// ── 改动：文件动作、源码编辑、组合变更 ─────────────────────────────────────
-
-/** project:file 的入参：actions 按顺序执行，每项是 create、overwrite、move、delete、recode 之一。 */
-export const ProjectFileSchema = z.strictObject({
-  actions: z.array(z.discriminatedUnion('op', [
-    z.strictObject({ op: z.literal('create').describe(FileActionNotes.create), ...CreateFields }),
-    z.strictObject({ op: z.literal('overwrite').describe(FileActionNotes.overwrite), fileRef: ProjectFileRefSchema, text: OverwriteText }),
-    z.strictObject({ op: z.literal('move').describe(FileActionNotes.move), fileRef: ProjectFileRefSchema, to: MoveTo }),
-    z.strictObject({ op: z.literal('delete').describe(FileActionNotes.delete), fileRef: ProjectFileRefSchema }),
-    ProjectRecodeActionSchema,
-  ])).min(1).max(ProjectChangeLimits.fileActions)
-    .describe(`要做的文件动作，按顺序执行、同一个事务提交；缺省一次事务最多改 ${ProjectPolicyDefaults.maxChangedFilesPerTransaction} 个文件。`),
-})
-
-/** project:file —— 创建、覆盖、移动、删除文件，或批量转换磁盘编码。 */
-const fileTool = defineProjectTool<ProjectFileInput>({
-  name: ProjectToolNames.file,
-  category: 'project-changes',
-  role: 'edit',
-  inputReuse: true,
-  summary: '通过事务创建、整体覆盖、移动、删除项目文件，或批量转换文件的磁盘编码。',
-  suitable: ['新建文件、整份替换、移动或删除文件，或者统一一批文件的磁盘编码与换行。'],
-  usage: [
-    'create 传 path、text，路径已存在就拒绝，缺的上级目录自动建；overwrite 传 fileRef、text，整份替换；move 传 fileRef、to，to 已存在就拒绝；delete 传 fileRef。',
-    'overwrite 要求 fileRef 覆盖整个文件（没读全就先读全）；move、delete 只核对版本，不要求看过全文。它们都要 fileRef，所以只能用在读得到的文本文件上，二进制文件和目录用 project:run。',
-    'recode 传精确的文件路径（不展开 glob、不收目录，先用 project:list 列出来）和可选 encoding（缺省 utf-8）、bom、newline：正文不变，已是目标格式的文件跳过。',
-    `一次事务缺省最多改 ${ProjectPolicyDefaults.maxChangedFilesPerTransaction} 个文件（宿主可调），更多就分几次调用。`,
-    '移动文件又要改引用、需要一起提交时，用 project:change 的 apply；整组撤销用回执的 changeRef 调 project:change 的 undo（本轮有这个工具时）。',
-  ],
-  examples: [{ actions: [{ op: 'create', path: 'src/cache.ts', text: 'export const cache = new Map()\n' }] }],
-  schema: ProjectFileSchema,
-  permissions: ['fs:read', 'fs:write'],
-  capabilities: ProjectWriteCapability,
-  exposure: ProjectToolExposure.file,
-  isConcurrencySafe: () => false,
-  execute: (input, ctx) => projectChangeOperations.file(input, ctx),
-})
-
-/** project:edit 的入参：files 每项一个文件，凭 fileRef 定位，edits 是这个文件里的几处编辑。 */
-export const ProjectEditSchema = z.strictObject({
-  files: z.array(z.strictObject({
-    fileRef: ProjectFileRefSchema,
-    edits: EditsField.describe('这个文件里的几处编辑，都按读取时的行号写、不能重叠。'),
-  })).min(1).max(ProjectChangeLimits.editFiles)
-    .describe(`要改的文件，每项一个文件；几个文件一起提交、全成或全不成，缺省一次事务最多 ${ProjectPolicyDefaults.maxChangedFilesPerTransaction} 个。`),
-})
-
-/** project:edit —— 按已读版本精确替换或插入源码。 */
-const editTool = defineProjectTool<ProjectEditInput>({
-  name: ProjectToolNames.edit,
-  category: 'project-changes',
-  role: 'edit',
-  inputReuse: true,
-  summary: '按已读版本精确替换或插入源码；多个文件作为同一事务校验和提交。',
-  suitable: ['改一个或几个文件里的几处源码：替换、插入、删除几行或几段。'],
-  usage: [
-    'files 每项一个文件：fileRef 加 edits。每处编辑三种定位：只给 range（单个行号或 [首行,末行]）按整行处理；只给 match，在 fileRef 看得到的范围里找唯一一处原文，按字符处理；两个都给，在这几行里找唯一的 match。',
-    'replace 的 text 是新内容，空串就是删除；insert 用 side 放在目标前或后，或用 at:start / at:end 放在文件开头、末尾。按整行处理时 text 不用带首尾换行，框架补齐；按字符处理时换行自己写。',
-    '同一次调用的几处编辑都按读取时的行号写，前面插入的行不会让后面的行号漂移；各处不能重叠。',
-    'match 和 text 照 lines 里的原文写：JSON 字符串解码一次就是源码本身，跨行用 \\n；编码、BOM 和原文件换行由框架处理。',
-    '成功后新的 fileRef 在回执和 [Current project files] 里，再改同一个文件用新的，不用重读；文件不在其中或列在 omittedPaths 时先 project:read。',
-    '失败回执带 inputReuse 时只改出错的字段再发，比如 changes 里 set ["files",0,"edits",0,"range"]，正文自动复用。',
-    `一次事务缺省最多改 ${ProjectPolicyDefaults.maxChangedFilesPerTransaction} 个文件（宿主可调）。撤销用回执的 changeRef 调 project:change 的 undo；文件动作和局部编辑要一起提交用它的 apply（本轮有这个工具时）。`,
-  ],
-  examples: [{ files: [{ fileRef: '<fileRef>', edits: [{ op: 'replace', range: 42, match: 'oldCall()', text: 'newCall()' }] }] }],
-  notes: ['示例是参数模板；<fileRef> 必须替换为当前读取或修改回执的真实 fileRef，range/match/text 按实际源码填写。'],
-  schema: ProjectEditSchema,
-  permissions: ['fs:read', 'fs:write'],
-  capabilities: ProjectWriteCapability,
-  exposure: ProjectToolExposure.edit,
-  isConcurrencySafe: () => false,
-  execute: (input, ctx) => projectChangeOperations.edit(input, ctx),
-})
+// ── 改动：文件动作与源码编辑合成一个事务 ─────────────────────────────────
 
 /**
- * project:change 的入参：apply 带 steps（一步一个目标，按顺序执行），inspect、undo 带 changeRef。
- * 步骤按动作分辨：文件动作那五个与 project:file 的 actions 同名同字段，edit 是「一个文件加它的 edits」。
+ * project:edit 的入参：apply 带 steps（一步一个目标，按顺序执行、合成一个事务），inspect、undo 带 changeRef。
+ * 步骤按 action 分辨：五个文件动作各指一个文件，edit 是「一个文件加它的 edits」。
  */
-export const ProjectChangeSchema = z.strictObject({
+export const ProjectEditSchema = z.strictObject({
   action: z.enum(['apply', 'inspect', 'undo']).describe('apply 把 steps 合成一个事务提交；inspect 看一次改动的差量；undo 撤销一次改动。'),
-  // 来源三选一由 hasExactlyOneSource 校验；Zod 无法从该校验自动推导联合类型，这里按 ProjectChangeStep 标注。
+  // 来源三选一由 hasExactlyOneSource 校验；Zod 无法从该校验自动推导联合类型，这里按 ProjectEditStep 标注。
   steps: z.array(z.discriminatedUnion('action', [
-    z.strictObject({ action: z.literal('create').describe(FileActionNotes.create), ...CreateFields }),
-    z.strictObject({ action: z.literal('overwrite').describe(FileActionNotes.overwrite), ...PlanSource, text: OverwriteText }).refine(hasExactlyOneSource, OneSourceMessage).meta(OneSourceMeta),
-    z.strictObject({ action: z.literal('move').describe(FileActionNotes.move), ...PlanSource, to: MoveTo }).refine(hasExactlyOneSource, OneSourceMessage).meta(OneSourceMeta),
-    z.strictObject({ action: z.literal('delete').describe(FileActionNotes.delete), ...PlanSource }).refine(hasExactlyOneSource, OneSourceMessage).meta(OneSourceMeta),
-    z.strictObject({ action: z.literal('recode').describe(FileActionNotes.recode), ...RecodeFields }),
+    z.strictObject({ action: z.literal('create').describe(StepNotes.create), ...CreateFields }),
+    z.strictObject({ action: z.literal('overwrite').describe(StepNotes.overwrite), ...PlanSource, text: OverwriteText }).refine(hasExactlyOneSource, OneSourceMessage).meta(OneSourceMeta),
+    z.strictObject({ action: z.literal('move').describe(StepNotes.move), ...PlanSource, to: MoveTo }).refine(hasExactlyOneSource, OneSourceMessage).meta(OneSourceMeta),
+    z.strictObject({ action: z.literal('delete').describe(StepNotes.delete), ...PlanSource }).refine(hasExactlyOneSource, OneSourceMessage).meta(OneSourceMeta),
+    z.strictObject({ action: z.literal('recode').describe(StepNotes.recode), ...RecodeFields }),
     z.strictObject({
-      action: z.literal('edit').describe(FileActionNotes.edit),
+      action: z.literal('edit').describe(StepNotes.edit),
       ...PlanSource,
       edits: EditsField.describe('这个文件里的几处编辑，都按这一步开始时的内容算、不能重叠。'),
     }).refine(hasExactlyOneSource, OneSourceMessage).meta(OneSourceMeta),
-  ]) as z.ZodType<ProjectChangeStep>).min(1).max(ProjectChangeLimits.steps).optional()
-    .describe(`apply 的步骤，一步一个目标，按顺序执行、合成一个事务；最多 ${ProjectChangeLimits.steps} 步。`),
+  ]) as z.ZodType<ProjectEditStep>).min(1).max(ProjectChangeLimits.steps).optional()
+    .describe(`apply 的步骤，一步一个目标，按顺序执行、合成一个事务；最多 ${ProjectChangeLimits.steps} 步，缺省一次事务最多改 ${ProjectPolicyDefaults.maxChangedFilesPerTransaction} 个文件。`),
   changeRef: ProjectChangeRefSchema.optional(),
 }).superRefine((value, context) => {
   if (value.action === 'apply' ? !value.steps || !isUndefined(value.changeRef) : !value.changeRef || !isUndefined(value.steps))
     context.addIssue({ code: 'custom', message: 'apply 仅填写 steps；inspect/undo 仅填写 changeRef。' })
 })
 
-/** project:change —— 组合文件动作与编辑为一个事务，查看或撤销变更。 */
-const changeTool = defineProjectTool<ProjectChangeInput>({
-  name: ProjectToolNames.change,
+/** project:edit —— 改项目文件的唯一入口：新建、覆盖、移动、删除、转编码与局部编辑合成一个事务，另可查看、撤销。 */
+const editTool = defineProjectTool<ProjectEditInput>({
+  name: ProjectToolNames.edit,
   category: 'project-changes',
   role: 'edit',
   inputReuse: true,
-  summary: '把文件动作和源码编辑合成一个事务提交，或者查看、撤销之前的一次改动。',
-  suitable: ['要把文件动作和源码编辑合成一个事务（比如移动文件并改掉引用），或者查看、撤销之前的一次改动。'],
+  summary: '改项目里的文件：一次 apply 的步骤合成一个事务，也能查看或撤销之前的改动。',
+  suitable: ['改项目文件：新建、整份替换、移动、删除、转磁盘编码、改其中几处源码；查看或撤销改动。'],
   usage: [
-    'apply 的 steps 一步一个目标，按顺序执行：create、overwrite、move、delete、recode 五个文件动作的字段同 project:file，edit 步是一个文件加它的 edits（写法同 project:edit 的一个 files 项）。',
-    '一次 apply 就是一次事务：全成或全不成、一次确认、一个撤销句柄。project:edit、project:file 各自已经提交，不用再 apply。',
-    'edit 步和后面的文件动作三选一指文件：fileRef（这个文件没被本计划前面的步骤动过）；sourceRef（填同一个原 fileRef，文件已被前面的步骤移动或修改时用，range 按改完后的内容算，拿不准就用 match）；path（本计划 create 的文件）。',
-    'inspect、undo 只传 changeRef：inspect 看这次改了什么，undo 整组撤销，遇到外部修改拒绝覆盖；已经撤销过的再撤一次照常成功，不会改坏东西。',
+    '一次 apply 就是一个事务：全成或全不成、一次确认、一个撤销句柄；同一个文件的几处改动写进同一步 edits。',
+    '每步三选一指文件：fileRef（前面的步骤没动过它）、sourceRef（动过，坐标按改完后的内容算，拿不准用 match）、path（本计划 create 出来的）。',
+    '正文照读到的 lines 原文写，跨行用 \\n；二进制文件和目录不收，交给 project:run。',
+    'undo 遇到外部改过的文件拒绝覆盖，撤销过的再撤一次也成功；失败回执带 inputReuse 时只改出错的字段，如 set ["steps",0,"edits",0,"range"]。',
   ],
   examples: [
+    { action: 'apply', steps: [{ action: 'edit', fileRef: '<fileRef>', edits: [
+      { op: 'replace', range: 42, match: 'oldCall()', text: 'newCall()' },
+      { op: 'insert', at: 'end', text: 'export {}' },
+    ] }] },
     { action: 'apply', steps: [
-      { action: 'move', fileRef: '<old.ts 的 fileRef>', to: 'src/new.ts' },
-      { action: 'edit', sourceRef: '<old.ts 的 fileRef>', edits: [{ op: 'replace', range: 1, match: 'Old', text: 'New' }] },
-      { action: 'edit', fileRef: '<main.ts 的 fileRef>', edits: [{ op: 'replace', range: 3, match: './old', text: './new' }] },
+      { action: 'create', path: 'src/cache.ts', text: 'export const cache = new Map()\n' },
+      { action: 'edit', fileRef: '<fileRef>', edits: [{ op: 'insert', at: 'start', text: "import './cache.js'" }] },
+    ] },
+    { action: 'apply', steps: [
+      { action: 'move', fileRef: '<fileRef>', to: 'src/new.ts' },
+      { action: 'edit', sourceRef: '<fileRef>', edits: [{ op: 'replace', range: 1, match: 'Old', text: 'New' }] },
     ] },
     { action: 'inspect', changeRef: '<changeRef>' },
+    { action: 'undo', changeRef: '<changeRef>' },
   ],
-  notes: ['示例是参数模板；尖括号里的 fileRef、changeRef 必须替换为真实回执里的值。'],
-  schema: ProjectChangeSchema,
+  notes: ['示例是模板：尖括号里的 fileRef、changeRef 必须替换成真实回执里的值。'],
+  schema: ProjectEditSchema,
   permissions: ['fs:read', 'fs:write'],
   capabilities: ProjectWriteCapability,
-  exposure: ProjectToolExposure.change,
+  exposure: ProjectToolExposure.edit,
   isConcurrencySafe: (input) => input.action === 'inspect',
-  execute: (input, ctx) => projectChangeOperations.change(input, ctx),
+  execute: (input, ctx) => projectChangeOperations.edit(input, ctx),
 })
 
 // ── 代码理解 ─────────────────────────────────────────────────────────────
@@ -596,8 +527,8 @@ const sandboxTool = defineProjectTool<ProjectSandboxInput>({
   role: 'edit',
   summary: '演练沙箱：把项目（或其中一个目录）镜像到临时区，脚本先在镜像里跑（写不到镜像外），diff 看变了什么，确认后 apply 落回项目。',
   suitable: ['要一次改很多文件、删目录、跑迁移或批处理脚本之前，先在镜像里跑一遍看结果。', '拿不准一段脚本会不会误删误改的时候。'],
-  forbidden: ['改一两个文件直接用 project:edit 或 project:file；只读命令直接用 project:run。', '不要把镜像里的结果当成已经发生：落回之前项目一个字节都没变。'],
-  protocol: ['要跑的脚本优先直接用 run 传命令（bun -e、node -e、python - <<\'EOF\' …）；确实要脚本文件才先用 project:file 写进项目再 create（它随镜像一起进沙箱，用完记得删）。镜像里的文件用 diff 的文本差量看，或者 run 一条 cat。'],
+  forbidden: ['改一两个文件直接用 project:edit；只读命令直接用 project:run。', '不要把镜像里的结果当成已经发生：落回之前项目一个字节都没变。'],
+  protocol: ['要跑的脚本优先直接用 run 传命令（bun -e、node -e、python - <<\'EOF\' …）；确实要脚本文件才先用 project:edit 写进项目再 create（它随镜像一起进沙箱，用完记得删）。镜像里的文件用 diff 的文本差量看，或者 run 一条 cat。'],
   usage: [
     'create 镜像整个项目或 source 指定的子目录；run 在镜像里跑命令，写到源目录会直接失败，所以脚本里算错的路径在这里只会报错。',
     'diff 看新增、修改、删除三列和文本差量；不对就改脚本再 run，镜像随便糟蹋。',
@@ -611,7 +542,7 @@ const sandboxTool = defineProjectTool<ProjectSandboxInput>({
     { action: 'apply', sandboxId: '20260915-183000-3fa2c1' },
     { action: 'discard', sandboxId: '20260915-183000-3fa2c1' },
   ],
-  notes: ['镜像里的命令连不上网，除非 create 时传 network=true；镜像里的仓库推不出去。', '落回不经过 project:change 的撤销账本，要撤销用 git。'],
+  notes: ['镜像里的命令连不上网，除非 create 时传 network=true；镜像里的仓库推不出去。', '落回不经过 project:edit 的撤销账本，要撤销用 git。'],
   schema: z.strictObject({
     action: z.enum(['create', 'run', 'diff', 'apply', 'discard']).describe('create 建沙箱；run 在镜像里跑命令；diff 看镜像相对创建时的变化；apply 把变化落回项目（会向用户确认）；discard 删掉镜像。'),
     source: z.string().min(1).optional().describe('create：要镜像的项目内目录，相对项目根；不传就是整个项目。'),
@@ -661,11 +592,9 @@ export const projectFileTools = Object.freeze({
   [ProjectToolNames.search]: searchTool,
 })
 
-/** 改动类：文件动作、源码编辑、组合变更。 */
+/** 改动类：文件动作与源码编辑合成的事务，以及它的查看与撤销。 */
 export const projectChangeTools = Object.freeze({
-  [ProjectToolNames.file]: fileTool,
   [ProjectToolNames.edit]: editTool,
-  [ProjectToolNames.change]: changeTool,
 })
 
 /** 执行类：跑命令、演练沙箱。 */
@@ -679,13 +608,11 @@ export const projectCodeTools = Object.freeze({
   [ProjectToolNames.code]: codeTool,
 })
 
-/** 项目空间的九个模型面工具，按工具名索引。 */
+/** 项目空间的七个模型面工具，按工具名索引。 */
 export const projectTools: ProjectToolCollection = Object.freeze({
   ...projectFileTools,
-  [ProjectToolNames.file]: fileTool,
-  [ProjectToolNames.edit]: editTool,
+  ...projectChangeTools,
   ...projectCodeTools,
-  [ProjectToolNames.change]: changeTool,
   ...projectExecutionTools,
 })
 
@@ -728,7 +655,6 @@ const ProjectResidentToolNames = new Set<string>([
   ProjectToolNames.list,
   ProjectToolNames.search,
   ProjectToolNames.edit,
-  ProjectToolNames.file,
   ProjectToolNames.run,
 ])
 
@@ -793,7 +719,7 @@ export function createProjectBundledModDefinition(): ProjectBundledModDefinition
 export const ProjectCapability: CapabilityToken<ProjectCapabilityService> =
   createCapabilityToken<ProjectCapabilityService>(ProjectModId)
 
-/** 创建项目空间的内核模块：激活时把九个工具登记成能力服务；每次调用先严格解析入参，再向宿主解析一次上下文。 */
+/** 创建项目空间的内核模块：激活时把七个工具登记成能力服务；每次调用先严格解析入参，再向宿主解析一次上下文。 */
 export function createProjectKernelModule(options: CreateProjectKernelModuleOptions): KernelModuleDefinition {
   return defineKernelModule({
     manifest: {

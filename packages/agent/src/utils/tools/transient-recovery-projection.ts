@@ -5,9 +5,13 @@ import { isArray, isFalse, isPlainObject, isString, Log, optionalWhen } from '@v
 import type { RestoredReusableInputs } from '../../types/tools.js'
 import { isContextRefEnvelope } from '../context/context-ref-envelope'
 
-const RecoveryToolNames = new Set(['project:edit', 'project:file', 'project:change'])
+const RecoveryToolNames = new Set(['project:edit'])
 const RecoveryKinds = new Set(['project-edit-candidates', 'project-edit-validation'])
 
+/**
+ * 该值是否是受信任的恢复元数据块——纯对象且 `kind` 是 `project-edit-candidates` / `project-edit-validation` 之一。
+ * 只认这两个 kind：候选扫描必须限定在失败回执自带的结构上，源码 JSON 里恰好有同名字段也不能当恢复数据。
+ */
 function isRecovery(value: unknown): value is Record<string, unknown> {
   return isPlainObject(value) && isString(value.kind) && RecoveryKinds.has(value.kind)
 }
@@ -40,6 +44,12 @@ function projectRecovery(value: unknown, archive: boolean, errorOutput: boolean,
   return value
 }
 
+/**
+ * 遍历一条 tool 消息的内容块，只对 RecoveryToolNames（当前是 `project:edit`）的 tool-result 做恢复元数据投影，其余原样放行。
+ * 文本类输出（text / error-text）先 JSON.parse 再投影再序列化回去，parse 或 stringify 失败就保持原文（记一条 debug 日志，不抛）；
+ * json / error-json 直接对值投影。投影没改动时返回原对象引用，避免无谓的新对象。
+ * `archive` 为真表示这条已经越过了最近一次决策边界，可以把恢复详情折成短回执。
+ */
 function projectToolContent(content: unknown, archive: boolean): unknown {
   if (!isArray(content)) return content
   return content.map((part) => {
@@ -60,6 +70,10 @@ function projectToolContent(content: unknown, archive: boolean): unknown {
   })
 }
 
+/**
+ * 从后往前找最近一条 assistant 或 user 消息的下标，没有则返回 -1。
+ * 这条就是「最近一次模型决策」的边界：它之前的工具回执算已消化（恢复详情可折叠），它之后的属于当前这轮，必须原样留着。
+ */
 function latestDecisionIndex(messages: readonly ModelMessage[]): number {
   for (let index = messages.length - 1; index >= 0; index--) {
     if (messages[index].role === 'assistant' || messages[index].role === 'user') return index
@@ -68,8 +82,9 @@ function latestDecisionIndex(messages: readonly ModelMessage[]): number {
 }
 
 /**
- * The next model decision sees each failure's candidates once. Following an assistant/user boundary,
- * only its short receipt remains in provider history; the stored output is untouched and recallable.
+ * 投影发给 provider 的历史：每次失败的恢复候选只让模型完整看见一轮——
+ * 越过 assistant/user 决策边界之后，provider 历史里只留一条短回执（`status: 'archived'` 加一句召回提示）。
+ * 只改这份出站投影；归档的工具输出一个字没动，模型需要细节时仍可 context:recall 取回完整回执。
  */
 export function projectTransientRecoveryHistory(messages: readonly ModelMessage[]): ModelMessage[] {
   const latestDecision = latestDecisionIndex(messages)
@@ -81,6 +96,10 @@ export function projectTransientRecoveryHistory(messages: readonly ModelMessage[
 /** 恢复原参数只展示有限体积；更大的输入保持省略形态，模型按省略元数据召回需要的字段。 */
 const RestoredInputMaxChars = 32_000
 
+/**
+ * 把一个 tool-result 的 output 解成失败回执对象：文本类输出先 JSON.parse，若外层是 context-ref 信封再 parse 一次它的 excerpt。
+ * 任一步 parse 失败或最终不是纯对象就返回 undefined（记 debug 日志，不抛）——解不出回执就当没有可复用的原参数，宁可让模型重填。
+ */
 function decodeFailureReceipt(output: Record<string, unknown>): Optional<Record<string, unknown>> {
   let value: unknown = output.value
   if ((output.type === 'text' || output.type === 'error-text') && isString(value)) {
@@ -100,10 +119,22 @@ function isReusableFailure(receipt: Record<string, unknown>, toolCallId: string)
   return reuse?.reuse === `attempt:${toolCallId}` && receipt.executionOutcome === 'not-applied'
 }
 
+/**
+ * 这份入参在历史里是不是已经被省略过——带 `__historyInputOmissions` 或 `__historyInputPreview` 任一键即为真。
+ * 只有被省略过的调用才值得把原参数读回来填充；没省略过的历史入参本来就是完整的，回填反而是多余的改写。
+ */
 function hasHistoryOmissions(input: unknown): boolean {
   return isPlainObject(input) && (Object.hasOwn(input, '__historyInputOmissions') || Object.hasOwn(input, '__historyInputPreview'))
 }
 
+/**
+ * 最近一次模型决策里若有「可原地修正」的工具失败，把那几次调用在历史中被省略的入参读回来填回去，
+ * 让模型改一处重发即可，而不必凭记忆把整份大参数重写一遍。
+ * 判定很窄：只看最近一条 assistant 决策之后的 tool 回执，且回执必须自报 `inputReuse.reuse === 'attempt:<toolCallId>'`
+ * 并确证 `executionOutcome === 'not-applied'`（真没写入）——已经产生副作用的失败绝不回填。
+ * 回填还有两道闸：原参数序列化后超过 RestoredInputMaxChars 就放弃（保持省略形态，模型按省略元数据自己召回需要的字段）；
+ * 读取抛错只记 debug 不中断。没有任何一处成功回填时原样返回入参消息（浅拷），并告知哪些 toolCallId 被回填过。
+ */
 export async function restoreReusableInputsForNextDecision(
   messages: readonly ModelMessage[],
   readAttemptInput: (toolCallId: string) => Promise<Optional<Record<string, unknown>>>,

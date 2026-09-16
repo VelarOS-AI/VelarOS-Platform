@@ -24,7 +24,7 @@ beforeEach(async () => { root = await mkdtemp(join(tmpdir(), 'project-acceptance
 afterEach(async () => { await rm(root, { recursive: true, force: true }) })
 
 describe('工具面', () => {
-  test('INV-1 只有九个工具，名字来自 ProjectToolNames，每个工具的 schema 拒收未知字段', () => {
+  test('INV-1 只有七个工具，名字来自 ProjectToolNames，每个工具的 schema 拒收未知字段', () => {
     expect(Object.keys(projectTools).sort()).toEqual(Object.values(ProjectToolNames).sort())
     for (const tool of Object.values(projectTools)) {
       const example = DefaultToolContractExampleRegistry.get(tool.name ?? '')?.[0]
@@ -41,7 +41,7 @@ describe('编辑的边界', () => {
     const { call, read } = await createProjectHarness(root)
     const view = await read('a.txt', 2)
     expect(view.fileRef).toStartWith('view:')
-    await expect(call('project:edit', { files: [{ fileRef: view.fileRef, edits: [{ op: 'replace', range: 3, text: 'bad' }] }] }))
+    await expect(call('project:edit', { action: 'apply', steps: [{ action: 'edit', fileRef: view.fileRef, edits: [{ op: 'replace', range: 3, text: 'bad' }] }] }))
       .rejects.toMatchObject({ reason: 'SCOPE_VIOLATION', details: { executionOutcome: 'not-applied' } })
     expect(await readFile(join(root, 'a.txt'), 'utf8')).toBe('first\nsecond\nthird\n')
   })
@@ -51,7 +51,7 @@ describe('编辑的边界', () => {
     const { call, read } = await createProjectHarness(root)
     const view = await read('a.txt')
     await writeFile(join(root, 'a.txt'), 'one\nchanged outside\n')
-    await expect(call('project:edit', { files: [{ fileRef: view.fileRef, edits: [{ op: 'replace', range: 2, text: 'mine' }] }] }))
+    await expect(call('project:edit', { action: 'apply', steps: [{ action: 'edit', fileRef: view.fileRef, edits: [{ op: 'replace', range: 2, text: 'mine' }] }] }))
       .rejects.toMatchObject({ reason: 'BASE_REVISION_MISMATCH', details: { executionOutcome: 'not-applied' } })
     expect(await readFile(join(root, 'a.txt'), 'utf8')).toBe('one\nchanged outside\n')
   })
@@ -62,9 +62,9 @@ describe('编辑的边界', () => {
     const { call, read } = await createProjectHarness(root)
     const a = await read('a.txt')
     const b = await read('b.txt')
-    await expect(call('project:edit', { files: [
-      { fileRef: a.fileRef, edits: [{ op: 'replace', range: 1, text: 'ALPHA' }] },
-      { fileRef: b.fileRef, edits: [{ op: 'replace', match: 'not in the file', text: 'x' }] },
+    await expect(call('project:edit', { action: 'apply', steps: [
+      { action: 'edit', fileRef: a.fileRef, edits: [{ op: 'replace', range: 1, text: 'ALPHA' }] },
+      { action: 'edit', fileRef: b.fileRef, edits: [{ op: 'replace', match: 'not in the file', text: 'x' }] },
     ] })).rejects.toMatchObject({ details: { executionOutcome: 'not-applied' } })
     expect(await readFile(join(root, 'a.txt'), 'utf8')).toBe('alpha\n')
     expect(await readFile(join(root, 'b.txt'), 'utf8')).toBe('beta\n')
@@ -73,10 +73,10 @@ describe('编辑的边界', () => {
   test('INV-5 撤销遇到之后的外部修改拒绝覆盖', async () => {
     await writeFile(join(root, 'a.txt'), 'one\n')
     const { call, read } = await createProjectHarness(root)
-    const edited = await call('project:edit', { files: [{ fileRef: (await read('a.txt')).fileRef, edits: [{ op: 'replace', range: 1, text: 'two' }] }] })
+    const edited = await call('project:edit', { action: 'apply', steps: [{ action: 'edit', fileRef: (await read('a.txt')).fileRef, edits: [{ op: 'replace', range: 1, text: 'two' }] }] })
     expect(edited.changeRef).toStartWith('change:')
     await writeFile(join(root, 'a.txt'), 'three\n')
-    await expect(call('project:change', { action: 'undo', changeRef: edited.changeRef }))
+    await expect(call('project:edit', { action: 'undo', changeRef: edited.changeRef }))
       .rejects.toMatchObject({ reason: 'CONFLICT_WITH_EXTERNAL_EDIT', details: { executionOutcome: 'not-applied' } })
     expect(await readFile(join(root, 'a.txt'), 'utf8')).toBe('three\n')
   })
@@ -89,7 +89,7 @@ describe('编辑的边界', () => {
       const { call } = await createProjectHarness(root)
       await expect(call('project:read', { files: [{ path: '../secret.txt' }] })).rejects.toThrow()
       await expect(call('project:read', { files: [{ path: 'link/secret.txt' }] })).rejects.toThrow()
-      await expect(call('project:file', { actions: [{ op: 'create', path: 'link/new.txt', text: 'x\n' }] })).rejects.toThrow()
+      await expect(call('project:edit', { action: 'apply', steps: [{ action: 'create', path: 'link/new.txt', text: 'x\n' }] })).rejects.toThrow()
       await expect(readFile(join(outside, 'new.txt'))).rejects.toThrow()
     } finally {
       await rm(outside, { recursive: true, force: true })
@@ -99,9 +99,9 @@ describe('编辑的边界', () => {
   test('INV-9 文本改动保留原来的 BOM 与换行，没改到的字节不动；新建文件是无 BOM 的 UTF-8、LF', async () => {
     await writeFile(join(root, 'crlf.txt'), Buffer.from(`${Bom}one\r\ntwo\r\nthree\r\n`, 'utf8'))
     const { call, read } = await createProjectHarness(root)
-    await call('project:edit', { files: [{ fileRef: (await read('crlf.txt')).fileRef, edits: [{ op: 'replace', range: 2, text: 'TWO' }] }] })
+    await call('project:edit', { action: 'apply', steps: [{ action: 'edit', fileRef: (await read('crlf.txt')).fileRef, edits: [{ op: 'replace', range: 2, text: 'TWO' }] }] })
     expect([...await readFile(join(root, 'crlf.txt'))]).toEqual([...Buffer.from(`${Bom}one\r\nTWO\r\nthree\r\n`, 'utf8')])
-    await call('project:file', { actions: [{ op: 'create', path: 'fresh.txt', text: 'a\nb\n' }] })
+    await call('project:edit', { action: 'apply', steps: [{ action: 'create', path: 'fresh.txt', text: 'a\nb\n' }] })
     expect([...await readFile(join(root, 'fresh.txt'))]).toEqual([...Buffer.from('a\nb\n', 'utf8')])
   })
 
@@ -111,9 +111,9 @@ describe('编辑的边界', () => {
     const { call, read } = await createProjectHarness(root)
     const linkView = await read('link.txt')
     const realView = await read('real.txt')
-    await expect(call('project:edit', { files: [
-      { fileRef: linkView.fileRef, edits: [{ op: 'replace', range: 1, text: 'A' }] },
-      { fileRef: realView.fileRef, edits: [{ op: 'replace', range: 2, text: 'B' }] },
+    await expect(call('project:edit', { action: 'apply', steps: [
+      { action: 'edit', fileRef: linkView.fileRef, edits: [{ op: 'replace', range: 1, text: 'A' }] },
+      { action: 'edit', fileRef: realView.fileRef, edits: [{ op: 'replace', range: 2, text: 'B' }] },
     ] })).rejects.toMatchObject({ reason: 'INVALID_INPUT', details: { executionOutcome: 'not-applied' } })
     expect(await readFile(join(root, 'real.txt'), 'utf8')).toBe('L1\nL2\n')
 
@@ -126,14 +126,14 @@ describe('编辑的边界', () => {
 
   test('INV-14 版本库内部缺省不许写，报错说清楚该用 project:run', async () => {
     const { call } = await createProjectHarness(root)
-    await expect(call('project:file', { actions: [{ op: 'create', path: '.git/hooks/pre-commit', text: '#!/bin/sh\n' }] }))
+    await expect(call('project:edit', { action: 'apply', steps: [{ action: 'create', path: '.git/hooks/pre-commit', text: '#!/bin/sh\n' }] }))
       .rejects.toMatchObject({ reason: 'PERMISSION_DENIED', suggestedNextAction: expect.stringContaining('project:run') })
     await expect(readFile(join(root, '.git/hooks/pre-commit'))).rejects.toThrow()
   })
 
   test('INV-10 命中 generatedFiles 的文件不许手改，下一步是改生成器的输入再重新生成', async () => {
     const { call } = await createProjectHarness(root)
-    await expect(call('project:file', { actions: [{ op: 'create', path: 'src/api.generated.ts', text: 'export {}\n' }] }))
+    await expect(call('project:edit', { action: 'apply', steps: [{ action: 'create', path: 'src/api.generated.ts', text: 'export {}\n' }] }))
       .rejects.toMatchObject({ reason: 'GENERATED_FILE', suggestedNextAction: expect.stringContaining('project:run') })
     await expect(readFile(join(root, 'src/api.generated.ts'))).rejects.toThrow()
   })
@@ -185,12 +185,12 @@ describe('命令', () => {
     await writeFile(join(root, 'a.txt'), 'alpha\n')
     const harness = await createProjectHarness(root)
     const file = await harness.read('a.txt')
-    await harness.call('project:change', { action: 'apply', steps: [
+    await harness.call('project:edit', { action: 'apply', steps: [
       { action: 'create', path: 'created.txt', text: 'new\n' },
       { action: 'edit', fileRef: file.fileRef, edits: [{ op: 'replace', range: 1, text: 'ALPHA' }] },
     ] })
     // 先规划、再带着路径问授权：确认卡片列得出这次会写哪些文件。
-    expect(harness.mutations).toEqual(['项目事务变更'])
+    expect(harness.mutations).toEqual(['变更项目文件'])
     expect([...harness.authorizedPaths[0]!].sort()).toEqual(['a.txt', 'created.txt'])
 
     const outside = await createProjectHarness(root)

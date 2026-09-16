@@ -2,6 +2,8 @@
 
 状态：协议已实现；实现边界与实验结果见 [执行记录](./project-tool-surface-implementation.md)。盘点依据是当前源码，不以未经测量的“模型从不使用”作为事实。
 
+后续裁决（09-16，用户拍板）：本文里的 `project:file`、`project:change` 已并进 `project:edit` 一个入口，用 `action: apply | inspect | undo` 分辨，apply 的 `steps` 是唯一的批量维度；`project:code` 的 `action` 加一堆交叉旋钮改成 `intent` 枚举；`project:list` 的 `recursive` 与 `maxDepth` 合成一个 `depth`。下面的分组与字段按这三条读。
+
 ## 目标与工具分组
 
 默认提供 6 个工具：project:read、project:list、project:search、project:file、project:edit、project:run。
@@ -79,7 +81,9 @@ range 不表示行号列表，也不承载列号。空数组、超过两个元�
 
 ```json
 {
-  "files": [{
+  "action": "apply",
+  "steps": [{
+    "action": "edit",
     "fileRef": "<fileRef>",
     "edits": [
       {"op": "replace", "range": [42,44], "text": "function load() {\n  return cache.get(key) ?? null\n}"},

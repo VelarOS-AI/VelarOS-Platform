@@ -1,11 +1,11 @@
-// 域：project:file 与 project:change 的编译。计划是一份按步骤推进的「未来视图」：每个路径在计划里的文件身份、
+// 域：project:edit 的 apply 编译。计划是一份按步骤推进的「未来视图」：每个路径在计划里的文件身份、
 // fileRef / sourceRef 绑定到的身份，以及排好的事务操作。只生成计划，不读写磁盘，读取都经过 resolver。
 import { isEmpty, isUndefined, toOptional } from '@velaros-ai/core'
 import type { TextEncoding } from '@velaros-ai/text-files/contracts'
 
-import { ProjectChangeLimits } from '../../contract/constants.js'
+import { ProjectChangeLimits, ProjectToolContract } from '../../contract/constants.js'
 import type { PrepareEditInput } from '../../types/edit.js'
-import type { FileIdentity, ProjectChangeApplyInput, ProjectChangeStep, ProjectContentEdit, ProjectFileInput, ProjectFilePlanState, ProjectPlanFileAction, ProjectPlannerResolver, ProjectPlanSource, ProjectRecodeAction, ProjectRecodeNewline, SourceSelection } from '../../types/editing.js'
+import type { FileIdentity, ProjectContentEdit, ProjectEditApplyInput, ProjectEditStep, ProjectFilePlanState, ProjectPlanFileAction, ProjectPlannerResolver, ProjectPlanSource, ProjectRecodeAction, ProjectRecodeNewline, SourceSelection } from '../../types/editing.js'
 import { ProjectError } from '../errors.js'
 import { normalizeProjectInputText } from '../text.js'
 
@@ -126,18 +126,16 @@ async function planDestination(plan: ProjectFilePlanState, path: string): Promis
 }
 
 /** 解析一个文件来源（fileRef、sourceRef，或本计划创建的 path），返回它在计划里的身份与当前视图。 */
-async function planSource(plan: ProjectFilePlanState, selector: ProjectPlanSource, allowFuture: boolean): Promise<SourceSelection> {
+async function planSource(plan: ProjectFilePlanState, selector: ProjectPlanSource): Promise<SourceSelection> {
   const supplied = ['fileRef', 'sourceRef', 'path'].filter((key) => key in selector)
   if (supplied.length !== 1) throw new ProjectError('INVALID_INPUT', '仅填写 fileRef、sourceRef、path 之一。')
   if ('path' in selector) {
-    if (!allowFuture) throw new ProjectError('INVALID_INPUT', 'file 工具使用 fileRef；计划内路径引用由 change 提供。')
     const observed = await plan.resolver.readPath(selector.path)
     const identity = plan.paths.get(observed.path)
     if (!identity?.created || identity.deleted) throw new ProjectError('TARGET_NOT_FOUND', 'path 只能引用本计划创建且仍存在的文件。', { path: observed.path })
     return { identity, view: identity.view }
   }
   const follows = 'sourceRef' in selector
-  if (follows && !allowFuture) throw new ProjectError('INVALID_INPUT', 'sourceRef 仅用于 change 计划。')
   const reference = follows ? selector.sourceRef : selector.fileRef
   let binding = plan.references.get(reference)
   if (!binding) {
@@ -168,12 +166,12 @@ async function planSource(plan: ProjectFilePlanState, selector: ProjectPlanSourc
   if (!follows && identity.generation > 0) throw new ProjectError('INVALID_INPUT',
     `这一步引用的文件已被本计划前面的步骤移动或修改（现在是 ${identity.view.path}）。`,
     { path: identity.view.path },
-    '把这一项的键名 fileRef 改成 sourceRef，值不变；range 按前面步骤改完后的内容算，拿不准就用 match。')
+    '同一个文件的几处编辑合并到同一步的 edits 里；确实要分成几步就把这一项的键名 fileRef 改成 sourceRef，值不变，range 按前面步骤改完后的内容算，拿不准就用 match。')
   return binding
 }
 
 /** 执行一个文件动作（create、overwrite、move、delete、recode），推进计划里的文件视图。 */
-async function planFileAction(plan: ProjectFilePlanState, action: ProjectPlanFileAction, allowFuture: boolean): Promise<void> {
+async function planFileAction(plan: ProjectFilePlanState, action: ProjectPlanFileAction): Promise<void> {
   if (action.op === 'recode') {
     await recodePlanFiles(plan, action)
     return
@@ -186,7 +184,7 @@ async function planFileAction(plan: ProjectFilePlanState, action: ProjectPlanFil
     plan.operations.push({ operation: { type: 'create_file', path, content: text } })
     return
   }
-  const { identity, view } = await planSource(plan, action, allowFuture)
+  const { identity, view } = await planSource(plan, action)
   switch (action.op) {
     case 'overwrite': {
       // 整份替换会把没看过的行一起丢掉，所以要求 fileRef 覆盖全文；move、delete 不动正文，只核对版本。
@@ -225,7 +223,7 @@ async function planFileAction(plan: ProjectFilePlanState, action: ProjectPlanFil
 
 /** 执行一步 edit：一步就是一个文件，先把这个文件的几处编辑全部定位、验证完，再推进计划里的文件视图。 */
 async function planEditStep(plan: ProjectFilePlanState, file: ProjectPlanSource & { edits: readonly ProjectContentEdit[] }): Promise<void> {
-  const { identity, view } = await planSource(plan, file, true)
+  const { identity, view } = await planSource(plan, file)
   const mutations = selectProjectMutations(view, file.edits)
   const content = applyProjectMutations(view, mutations)
   plan.operations.push({ operation: { type: 'replace_content', path: view.path, expectedContent: view.content, content, mode: 'edit' } })
@@ -237,44 +235,31 @@ async function planEditStep(plan: ProjectFilePlanState, file: ProjectPlanSource 
   identity.generation += 1
 }
 
-/** 把一步文件动作翻回 project:file 那套形状：字段一样，只是判别键从 action 换回 op。 */
-function stepFileAction(step: Exclude<ProjectChangeStep, { action: 'edit' }>): ProjectPlanFileAction {
+/** 把一步文件动作翻成计划内部那套形状：字段一样，只是判别键从 action 换成 op。 */
+function stepFileAction(step: Exclude<ProjectEditStep, { action: 'edit' }>): ProjectPlanFileAction {
   const { action, ...rest } = step
   return { op: action, ...rest } as ProjectPlanFileAction
 }
 
 /** 把计划收成 prepareEdit 的输入；metadata 记下契约版本、工具名，有 recode 时带上回执。 */
-function planResult(plan: ProjectFilePlanState, tool: string): PrepareEditInput {
-  const metadata: Record<string, unknown> = { projectContract: 2, tool }
+function planResult(plan: ProjectFilePlanState): PrepareEditInput {
+  const metadata: Record<string, unknown> = { projectContract: ProjectToolContract.inputVersion, tool: 'project:edit' }
   if (!isEmpty(plan.recode.converted) || !isEmpty(plan.recode.unchanged)) metadata.recode = plan.recode
   return { operations: plan.operations, baseRevisions: plan.baseRevisions, metadata }
 }
 
-/** 把 project:file 编译成事务输入：按顺序执行文件动作，出错时在错误里补上 actionIndex。 */
-export async function compileProjectFile(input: ProjectFileInput, resolver: ProjectPlannerResolver): Promise<PrepareEditInput> {
-  if (isEmpty(input.actions) || input.actions.length > ProjectChangeLimits.fileActions) throw new ProjectError('INVALID_INPUT', `actions 需要 1–${ProjectChangeLimits.fileActions} 个文件动作。`)
-  const plan = createFilePlan(resolver)
-  for (const [actionIndex, action] of input.actions.entries()) {
-    try { await planFileAction(plan, action, false) } catch (error) {
-      if (!(error instanceof ProjectError)) throw error
-      throw new ProjectError(error.reason, error.message, { ...error.details, actionIndex }, error.suggestedNextAction)
-    }
-  }
-  return planResult(plan, 'project:file')
-}
-
-/** 把 project:change 的有序步骤编译成一个事务输入：后面的步骤可以用 sourceRef、path 跟随前面步骤的结果，出错时补上 stepIndex。 */
-export async function compileProjectChange(input: ProjectChangeApplyInput, resolver: ProjectPlannerResolver): Promise<PrepareEditInput> {
+/** 把 project:edit 的有序步骤编译成一个事务输入：后面的步骤可以用 sourceRef、path 跟随前面步骤的结果，出错时补上 stepIndex。 */
+export async function compileProjectEdit(input: ProjectEditApplyInput, resolver: ProjectPlannerResolver): Promise<PrepareEditInput> {
   if (input.action !== 'apply' || isEmpty(input.steps) || input.steps.length > ProjectChangeLimits.steps) throw new ProjectError('INVALID_INPUT', `apply 需要 1–${ProjectChangeLimits.steps} 个有序步骤。`)
   const plan = createFilePlan(resolver)
   for (const [stepIndex, step] of input.steps.entries()) {
     try {
       if (step.action === 'edit') await planEditStep(plan, step)
-      else await planFileAction(plan, stepFileAction(step), true)
+      else await planFileAction(plan, stepFileAction(step))
     } catch (error) {
       if (!(error instanceof ProjectError)) throw error
       throw new ProjectError(error.reason, error.message, { ...error.details, stepIndex }, error.suggestedNextAction)
     }
   }
-  return planResult(plan, 'project:change')
+  return planResult(plan)
 }

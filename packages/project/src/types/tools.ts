@@ -1,9 +1,9 @@
 /**
- * 模型面工具的入参：九个 project 工具与可选的 project:code-analysis，每个工具一个类型，和工具定义里的 schema 一一对应（解析之后的形状，
- * 带缺省值的字段是必有的）。project:file、project:edit、project:change 的入参在 editing.ts。只放类型。
+ * 模型面工具的入参：七个 project 工具与可选的 project:code-analysis，每个工具一个类型，和工具定义里的 schema 一一对应（解析之后的形状，
+ * 带缺省值的字段是必有的）。project:edit 一步一步的形状在 editing.ts。只放类型。
  */
 
-import type { ProjectChangeStep, ProjectLineRange } from './editing.js'
+import type { ProjectEditStep, ProjectLineRange } from './editing.js'
 import type { ProjectCodeScope } from './project.js'
 
 /** project:read 的入参：files（每项一个文件，可带 range）或 continuation 二选一；maxChars 是这次调用所有文件共用的字符预算。 */
@@ -36,10 +36,10 @@ export type ProjectSearchInput = {
   contextLines?: number
 }
 
-/** project:change 的入参：apply 只带 steps（一步一个目标）；inspect、undo 只带 changeRef。 */
-export type ProjectChangeInput = {
+/** project:edit 的入参：apply 只带 steps（一步一个目标）；inspect、undo 只带 changeRef。 */
+export type ProjectEditInput = {
   action: 'apply' | 'inspect' | 'undo'
-  steps?: ProjectChangeStep[]
+  steps?: ProjectEditStep[]
   changeRef?: string
 }
 

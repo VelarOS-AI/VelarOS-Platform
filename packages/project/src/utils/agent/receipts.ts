@@ -32,7 +32,7 @@ export async function saveProjectReceipt(
 
 /** 每种回执引用的来历与下一步：引用只能原样复制本会话的回执，坏了就照这句重来。 */
 const ReceiptNextActions: Readonly<Record<string, string>> = Object.freeze({
-  change: 'changeRef 只能原样复制本会话 project:edit、project:file、project:change 成功回执里的值。',
+  change: 'changeRef 只能原样复制本会话 project:edit 成功回执里的值。',
   'list-page': '去掉 cursor，按原来的条件重新列一次，再用新回执里的 cursor 续页。',
 })
 

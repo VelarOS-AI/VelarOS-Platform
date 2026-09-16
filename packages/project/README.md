@@ -2,26 +2,24 @@
 
 Project 是 `@velaros-ai` 的项目空间包，统一项目根内的读取、编辑、事务、代码查询与命令执行。只有两个入口：
 
-- `@velaros-ai/project`：给 Node 宿主。产品面（九个模型工具、内置 mod 定义、内核模块、领域内核
+- `@velaros-ai/project`：给 Node 宿主。产品面（七个模型工具、内置 mod 定义、内核模块、领域内核
   `createProjectKernel`、有限事务面、落盘变更记录、审批桥、文件上下文登记）、注入面（宿主端口、provider、插件扩展点）
   以及它们用到的数据类型。
 - `@velaros-ai/project/contracts`：可移植数据，浏览器和渲染进程也能用。常量表（工具与 mod 身份、各工具上限、宿主代码查询的
   语言服务动作）和经过宿主端口流动的数据类型。
 
 宿主用 `createProjectBundledModDefinition` 挂载项目空间（或者自己 `createProjectKernel` 配上 `projectTools`），工具上下文里注入 `ProjectToolApi`。
-默认提供六个工具，另外三个按任务通过能力目录加载：
+默认提供五个工具，另外两个按任务通过能力目录加载：
 
 ```text
 project:read
 project:list
 project:search
-project:file
 project:edit
 project:run
 
 # 按需加载
 project:code
-project:change
 project:sandbox
 ```
 
@@ -34,15 +32,15 @@ Provider 不支持冒号时，由 Agent Runtime 在请求编译阶段映射成�
 `symbols/references/dependencies/relations/impact/diagnostics`。结果携带来源、覆盖与降级信息。
 高级 `trace/cycles/deadcode/routing` 由宿主按实际能力提供 `project:code-analysis`；代码索引的建与查是宿主自己的事，本包不发这类查询。
 
-文件创建、整文件覆盖、移动和删除使用 `project:file`。局部修改使用 `project:edit` 的
-`replace/insert`。混合文件动作和编辑的事务计划使用 `project:change.apply`：`steps` 一步一个目标，
-按动作分辨（`create/overwrite/move/delete/recode/edit`），一次 apply 就是一次事务——全成或全不成、一次确认、
-一个撤销句柄；回执通过 `change.inspect` 检查、`change.undo` 撤销，共用 Kernel 授权、校验和事务边界。
+改文件只有 `project:edit` 一个入口，用 `action` 分辨做什么：`apply` 提交一次改动，`inspect` 查看，`undo` 撤销。
+`apply` 的 `steps` 一步一个目标，按动作分辨（`create/overwrite/move/delete/recode/edit`）：新建、整文件覆盖、移动、
+删除、转磁盘编码各是一个文件动作，`edit` 步是一个文件加它的几处 `replace/insert`。一次 apply 就是一次事务——
+全成或全不成、一次确认、一个撤销句柄；回执凭 `changeRef` 用 `inspect` 检查、`undo` 撤销，共用 Kernel 授权、校验和事务边界。
 
-批量统一磁盘编码使用 `project:file` 的 `recode` 动作：传 `paths` 与可选 `encoding`
+批量统一磁盘编码使用 `recode` 步骤：传 `paths` 与可选 `encoding`
 （utf-8/utf-16le/utf-16be/gb18030，默认 utf-8）、`bom`、`newline`（lf/crlf）。框架探测每个文件
 的原编码并按目标格式重写字节，Unicode 正文不变；已是目标格式的文件跳过。转换是普通事务，回执带
-`recode.converted/unchanged`，可用 `change.undo` 或回滚恢复原字节。这是统一项目编码的备用入口：
+`recode.converted/unchanged`，可用 `undo` 或回滚恢复原字节。这是统一项目编码的备用入口：
 读取、搜索、编辑永远只处理文本，不提供也不接受编码参数。
 
 `project:read` 的入参只有 `files`（每项一个文件，可带 `range`）与 `continuation` 两种，读一个文件就是只有一项的
@@ -62,7 +60,9 @@ Provider 不支持冒号时，由 Agent Runtime 在请求编译阶段映射成�
 
 ```json
 {
-  "files": [{
+  "action": "apply",
+  "steps": [{
+    "action": "edit",
     "fileRef": "<fileRef>",
     "edits": [
       { "op": "replace", "range": [12,14], "text": "const ready = true\nrun(ready)" },
@@ -98,7 +98,7 @@ SDK 读取的 `maxBytes` 按逻辑 UTF-8 字节计费，CRLF 计一个换行；�
 ## 内部结构
 
 按仓库标准（`docs/architecture/module-ownership.md`）分五层：`contract/`（产品面、注入面、常量表）、`types/`（只有类型，
-`types/project.ts` 是可移植数据）、`impl/`（一类一文件；`ProjectTools.ts` 是九个工具的定义，`operations/` 是工具背后的执行类，
+`types/project.ts` 是可移植数据）、`impl/`（一类一文件；`ProjectTools.ts` 是七个工具的定义，`operations/` 是工具背后的执行类，
 `kernel/` 是领域内核，`plugins/`、`transactions/`、`files/`、`strategies/`、`adapters/`、`registries/`、`persistence/` 依次往下）、
 `utils/`（纯函数与可调参数）、`exports/`（两个入口，只转发）。架构门禁禁止文件、编辑、事务服务反向依赖内核组装和 Agent 适配层。
 

@@ -69,18 +69,14 @@ describe('Project Kernel module', () => {
       'project:read',
       'project:list',
       'project:search',
-      'project:file',
       'project:edit',
       'project:code',
-      'project:change',
       'project:run',
       'project:sandbox',
     ])
     expect(service?.getOperationMetadata('project:read')?.permissions)
       .toEqual(['fs:read'])
     expect(service?.getOperationMetadata('project:edit')?.permissions)
-      .toEqual(['fs:read', 'fs:write'])
-    expect(service?.getOperationMetadata('project:file')?.permissions)
       .toEqual(['fs:read', 'fs:write'])
     await expect(service?.invoke(
       'project:code',
@@ -116,13 +112,15 @@ describe('Project Kernel module', () => {
         service = registered as ProjectCapabilityService
       }))
 
-      await service?.invoke('project:file', undefined, {
-        actions: [{ op: 'create', path: 'reports/review.md', text: '# Review\n\nPassed.\n' }],
+      await service?.invoke('project:edit', undefined, {
+        action: 'apply',
+        steps: [{ action: 'create', path: 'reports/review.md', text: '# Review\n\nPassed.\n' }],
       }, new AbortController().signal)
       const observed = await service?.invoke('project:read', undefined, { files: [{ path: 'reports/review.md' }] }, new AbortController().signal)
       const presented: any = await finalizeProjectModelResult(context, observed)
       await service?.invoke('project:edit', undefined, {
-        files: [{ fileRef: presented.files[0].fileRef, edits: [{ op: 'insert', at: 'end', text: 'VELAR-WRITE-MARKER' }] }],
+        action: 'apply',
+        steps: [{ action: 'edit', fileRef: presented.files[0].fileRef, edits: [{ op: 'insert', at: 'end', text: 'VELAR-WRITE-MARKER' }] }],
       }, new AbortController().signal)
 
       expect(await readFile(join(root, 'reports/review.md'), 'utf8')).toBe(

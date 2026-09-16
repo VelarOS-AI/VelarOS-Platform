@@ -27,14 +27,14 @@ export type VelaTool<TInput extends Record<string, any> = Record<string, any>> =
   ToolContractRuntimeSpec<TInput, ProjectToolContext, any, ToolPermission>
 
 /**
- * 改动类工具（project:edit、project:file、project:change 的 apply）的运行时规格：成功回执里宿主界面可以依赖的字段由 `ProjectChangeReceipt` 定下，
- * 其余字段（源码窗口、差量、说明）只给模型看，跟着工具说明与上下文预算走。`projectTools` 里的这三个就是它。
+ * 改动类工具（`project:edit` 的 apply）的运行时规格：成功回执里宿主界面可以依赖的字段由 `ProjectChangeReceipt` 定下，
+ * 其余字段（源码窗口、差量、说明）只给模型看，跟着工具说明与上下文预算走。`projectTools` 里的 project:edit 就是它。
  */
-export type ProjectChangeTool<TInput extends Record<string, any> = Record<string, any>> =
+export type ProjectEditTool<TInput extends Record<string, any> = Record<string, any>> =
   ToolContractRuntimeSpec<TInput, ProjectToolContext, ProjectChangeReceipt & Record<string, unknown>, ToolPermission>
 
 /**
- * 按工具名索引的九个项目工具（其中三个改动工具满足 `ProjectChangeTool`）：集合层面不区分各工具的入参类型，
+ * 按工具名索引的七个项目工具（其中 project:edit 满足 `ProjectEditTool`）：集合层面不区分各工具的入参类型，
  * 宿主拿模型给的入参先用该工具的 schema 严格校验，再调它的 execute。
  */
 export type ProjectToolCollection = Readonly<Record<ProjectToolName, VelaTool<any>>>
@@ -44,7 +44,7 @@ export type ProjectCodeAnalysisToolCollection = Readonly<Record<typeof ProjectCo
 
 /**
  * 项目空间作为官方内置 mod 的定义，由 `createProjectBundledModDefinition()` 创建。
- * 产品壳的 mod 加载器按它把项目空间挂进来：清单声明工具、类别和空间，绑定里是九个工具与四个类别的实物。
+ * 产品壳的 mod 加载器按它把项目空间挂进来：清单声明工具、类别和空间，绑定里是七个工具与四个类别的实物。
  */
 export interface ProjectBundledModDefinition {
   /** mod 身份，固定是 `velaros.project`。 */
@@ -57,7 +57,7 @@ export interface ProjectBundledModDefinition {
   readonly manifest: AgentModManifest
   /** 清单里声明的东西对应的实物。 */
   readonly bindings: {
-    /** 九个工具。 */
+    /** 七个工具。 */
     readonly tools: ProjectToolCollection
     /** 四个工具类别：文件、改动、执行、代码理解。 */
     readonly toolCategories: Readonly<Record<string, ToolCategoryDefinition>>
@@ -71,7 +71,7 @@ export interface ProjectBundledModDefinition {
  * 宿主通过内核按工具名调用项目工具；每次调用先用 schema 严格解析入参，再向宿主解析一次上下文。
  */
 export interface ProjectCapabilityService extends KernelCallableCapabilityService {
-  /** 九个工具的只读视图，给只想读工具说明的宿主用。 */
+  /** 七个工具的只读视图，给只想读工具说明的宿主用。 */
   readonly tools: ProjectToolCollection
 }
 

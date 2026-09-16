@@ -7,7 +7,7 @@ import { afterEach, beforeEach, expect, test } from 'bun:test'
 import { textCodec } from '@velaros-ai/text-files'
 
 import { createProjectKernel } from '../src/exports/index'
-import { compileProjectFile } from '../src/utils/editing/file-planner'
+import { compileProjectEdit } from '../src/utils/editing/file-planner'
 import { detectBinaryByPrefix, hashFileAndDetectBinary, limitContent, readLimitedTextPrefix, readProjectTextFile, readTextLineWindow } from '../src/utils/files/file-reader'
 
 let root = ''
@@ -81,7 +81,7 @@ test('model file creation centralizes UTF-8 without BOM and LF while preserving 
     readPath: async (path: string) => ({ ...(await project.read({ path })).snapshot, coverage: [] }),
     readText: async () => { throw new Error('recode is not part of this fixture') },
   }
-  const prepared = await compileProjectFile({ actions: [{ op: 'create', path: 'new.txt', text: '\uFEFF中文🙂\r\n\\n\\u1234\r\n' }] }, resolver as never)
+  const prepared = await compileProjectEdit({ action: 'apply', steps: [{ action: 'create', path: 'new.txt', text: '\uFEFF中文🙂\r\n\\n\\u1234\r\n' }] }, resolver as never)
   const tx = await project.prepareEdit(prepared)
   await project.applyEdit({ transactionId: tx.transactionId })
   expect(await readFile(join(root, 'new.txt'))).toEqual(Buffer.from('中文🙂\n\\n\\u1234\n'))

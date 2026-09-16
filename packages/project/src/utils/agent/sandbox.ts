@@ -10,7 +10,7 @@ import { resolveInsideProject } from '../files/path-containment.js'
 export function requireSandboxPort(context: ProjectToolContext): ProjectSandboxPort {
   const port = context.project.sandbox
   if (!port) throw new ProjectError('NOT_SUPPORTED', '当前宿主没有接入演练沙箱。', undefined,
-    '这台机器上没有演练沙箱：要改一批文件就直接用 project:file、project:edit，要跑脚本用 project:run。')
+    '这台机器上没有演练沙箱：要改一批文件就直接用 project:edit，要跑脚本用 project:run。')
   return port
 }
 

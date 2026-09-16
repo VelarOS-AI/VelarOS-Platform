@@ -3,23 +3,21 @@
  * 工具说明和 schema 都引这里的数字，改一处模型看到的跟着变。不 import 任何东西，浏览器和渲染进程都能用（从 `@velaros-ai/project/contracts` 取）。
  */
 
-/** 项目空间九个模型面工具的名字。 */
+/** 项目空间七个模型面工具的名字。 */
 export const ProjectToolNames = Object.freeze({
   read: 'project:read',
   list: 'project:list',
   search: 'project:search',
-  file: 'project:file',
   edit: 'project:edit',
   code: 'project:code',
-  change: 'project:change',
   run: 'project:run',
   sandbox: 'project:sandbox',
 } as const)
 
-/** 九个模型面工具之一的名字。 */
+/** 七个模型面工具之一的名字。 */
 export type ProjectToolName = (typeof ProjectToolNames)[keyof typeof ProjectToolNames]
 
-/** 可选工具 project:code-analysis 的名字：宿主有代码图后端时单独登记，不在九个默认工具里。 */
+/** 可选工具 project:code-analysis 的名字：宿主有代码图后端时单独登记，不在七个默认工具里。 */
 export const ProjectCodeAnalysisToolName = 'project:code-analysis' as const
 
 /** 本包的版本，写进 mod 清单、内核模块清单和内置插件；和 package.json 的 version 一致，check:arch 核对。 */
@@ -71,8 +69,8 @@ export type ProjectErrorCode = (typeof ProjectErrorCodes)[keyof typeof ProjectEr
 
 /** 模型面工具入参契约的版本：失败调用的入参复用只在同一版本内进行。 */
 export const ProjectToolContract = Object.freeze({
-  /** 当前模型面工具入参的契约版本。 */
-  inputVersion: 2,
+  /** 当前模型面工具入参的契约版本；第 3 版是改动三合一、代码查询改 intent、list 改 depth 这一轮。 */
+  inputVersion: 3,
 })
 
 /**
@@ -95,40 +93,30 @@ export const ProjectToolExposure = Object.freeze({
     /** 常用档第 3 位。 */
     rank: 30,
   } as const),
-  file: Object.freeze({
+  edit: Object.freeze({
     tier: 'common',
     /** 常用档第 4 位。 */
     rank: 40,
   } as const),
-  edit: Object.freeze({
+  run: Object.freeze({
     tier: 'common',
     /** 常用档第 5 位。 */
     rank: 50,
   } as const),
-  run: Object.freeze({
-    tier: 'common',
-    /** 常用档第 5 位，与 project:edit 并列。 */
-    rank: 50,
-  } as const),
   sandbox: Object.freeze({
     tier: 'common',
-    /** 常用档最后一位：edit 与 run 并列第 5，所以它排第 7。 */
+    /** 常用档最后一位，第 6 位。 */
     rank: 60,
   } as const),
-  change: Object.freeze({
+  code: Object.freeze({
     tier: 'situational',
     /** 按情况档第 1 位。 */
     rank: 20,
   } as const),
-  code: Object.freeze({
+  codeAnalysis: Object.freeze({
     tier: 'situational',
     /** 按情况档第 2 位。 */
     rank: 30,
-  } as const),
-  codeAnalysis: Object.freeze({
-    tier: 'situational',
-    /** 按情况档第 3 位。 */
-    rank: 40,
   } as const),
 })
 
@@ -161,20 +149,16 @@ export const ProjectFileLimits = Object.freeze({
 })
 
 /**
- * 改动类工具（project:file、project:edit、project:change）的公开上限：这些是 schema 的上限；
+ * 改动类工具（project:edit）的公开上限：这些是 schema 的上限；
  * 一次事务实际能改几个文件、几行，还受内核策略 `ProjectPolicyDefaults` 的 maxChangedFilesPerTransaction（缺省 100）、
  * maxChangedLinesPerFile、maxChangedLinesPerTransaction 约束，宿主可以调高。
  */
 export const ProjectChangeLimits = Object.freeze({
-  /** project:file 一次最多几个文件动作。 */
-  fileActions: 1000,
-  /** 一个 recode 动作最多转换几个文件。 */
+  /** 一个 recode 步骤最多转换几个文件。 */
   recodePaths: 1000,
-  /** project:edit 一次最多改几个文件。 */
-  editFiles: 1000,
-  /** 一个文件里最多几处编辑。 */
+  /** 一步 edit 里最多几处编辑。 */
   editsPerFile: 1000,
-  /** project:change 一次 apply 最多几步。 */
+  /** project:edit 一次 apply 最多几步。 */
   steps: 1000,
 })
 

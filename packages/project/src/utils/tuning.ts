@@ -58,7 +58,7 @@ export const ProjectTuning = Object.freeze({
   }),
   /** 事务：回执带多长的差量、编辑失败的回读建议、校验失败回执、校验结果复用。 */
   transactions: Object.freeze({
-    /** 提交回执与 project:change 的 inspect 各带多少字符的差量；超出截断并标 diffTruncated，要看全的去读改后的文件。 */
+    /** 提交回执与 project:edit 的 inspect 各带多少字符的差量；超出截断并标 diffTruncated，要看全的去读改后的文件。 */
     receiptDiffChars: 16_000,
     /** 编辑在 prepare 失败时，回执里建议模型回读出错文件用的 project:read maxChars（字符）。 */
     recoveryReadMaxChars: 12_000,

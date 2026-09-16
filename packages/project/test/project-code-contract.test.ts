@@ -82,9 +82,8 @@ describe('dependency direction contract', () => {
   test('keeps inspection on its direct schema and write tools on their retry envelope', () => {
     const retry = { reuse: 'attempt:failed', changes: [{ op: 'set', path: ['fileRef'], value: 'file:new' }] }
     expect(projectCode.schema.safeParse(retry).success).toBe(false)
-    for (const name of ['project:edit', 'project:file', 'project:change'])
-      expect(projectTools[name]!.schema.safeParse(retry).success).toBe(true)
-    // 入参复用的信封只给正文长的那三个改动工具；读取、执行这些短入参不套。
+    expect(projectTools['project:edit']!.schema.safeParse(retry).success).toBe(true)
+    // 入参复用的信封只给正文长的改动工具；读取、执行这些短入参不套。
     for (const name of ['project:read', 'project:list', 'project:search', 'project:run', 'project:sandbox', 'project:code'])
       expect(projectTools[name]!.schema.safeParse(retry).success).toBe(false)
   })

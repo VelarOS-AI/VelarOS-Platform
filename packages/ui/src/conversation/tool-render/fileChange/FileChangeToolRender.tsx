@@ -74,12 +74,14 @@ function collectRevisionPaths(result: Nullable<Record<string, unknown>>): string
 }
 
 function collectOperationPaths(args: Nullable<Record<string, unknown>>): string[] {
-  // Project 2.0 的模型调用使用平铺的 edits；旧会话里保存的是包在 operations 里的操作。
-  const edits = isArray(args?.edits)
-    ? args.edits
-    : isArray(args?.operations)
-      ? args.operations.map((entry) => isPlainObject(entry) ? entry.operation : null)
-      : []
+  // project:edit 的 apply 用 steps，一步一个目标；旧会话里是平铺的 edits，更旧的是包在 operations 里的操作。
+  const edits = isArray(args?.steps)
+    ? args.steps
+    : isArray(args?.edits)
+      ? args.edits
+      : isArray(args?.operations)
+        ? args.operations.map((entry) => isPlainObject(entry) ? entry.operation : null)
+        : []
   return edits.flatMap((entry) => {
     const operation = asRecord(entry)
     return operation ? collectStringArray([operation.path, operation.from, operation.to]) : []

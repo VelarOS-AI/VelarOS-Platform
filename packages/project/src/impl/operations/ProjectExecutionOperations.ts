@@ -32,7 +32,7 @@ export interface ProjectExecutionOperationsApi {
 }
 
 export class ProjectExecutionOperations implements ProjectExecutionOperationsApi {
-  private static readonly ApplyClosingNote = '删除和覆盖不经过 project:change 的撤销账本；落回前会核对这些文件自建沙箱以来没被别人改过，改过就整批不落。'
+  private static readonly ApplyClosingNote = '删除和覆盖不经过 project:edit 的撤销账本；落回前会核对这些文件自建沙箱以来没被别人改过，改过就整批不落。'
 
   constructor(
     private readonly gate: ProjectExecutionGateApi,

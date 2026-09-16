@@ -110,7 +110,7 @@ export interface ProjectAuthorizationDecision {
 // ── 改动回执（模型与界面共用的那几个字段） ───────────────────────────
 
 /**
- * project:edit、project:file、project:change(apply) 成功后的回执里，宿主界面可以依赖的字段：模型凭 changeRef 查看或撤销，
+ * project:edit 的 apply 成功后的回执里，宿主界面可以依赖的字段：模型凭 changeRef 查看或撤销，
  * 界面按 changedFiles 与前后版本画改动摘要。回执里另有只给模型看的字段（files、diff、diffLines、notes、recode），
  * 它们跟着说明与上下文预算走，不进这份合同。
  */

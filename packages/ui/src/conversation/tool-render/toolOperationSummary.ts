@@ -195,7 +195,18 @@ function describeProjectEditQualifier(edit: RecordValue): Array<Nullable<string>
   ]
 }
 
-function readProjectEditOperations(context: OperationReadContext): ToolOperationSummary[] {
+/** project:edit 的 apply：一步一个动作，作用对象是这一步写得出的路径（fileRef 是不透明回执，路径以结果侧为准）。 */
+function readProjectEditSteps(context: OperationReadContext): ToolOperationSummary[] {
+  return readRecordsArray(context.args, 'steps').flatMap((step) => {
+    const id = readOperationId(step.action)
+    if (!id) return []
+    return [createOperation(id, toTargetText(
+      readFormattedPath(step, 'path', context) ?? readFormattedPath(step, 'to', context)
+    ))]
+  })
+}
+
+function readProjectLegacyEditOperations(context: OperationReadContext): ToolOperationSummary[] {
   return readRecordsArray(context.args, 'operations').flatMap((entry) => {
     // 模型偶尔把 operation 平铺在数组项上而不是包进 `operation`，两种写法都认。
     const edit = asRecord(entry.operation) ?? entry
@@ -209,6 +220,16 @@ function readProjectEditOperations(context: OperationReadContext): ToolOperation
       : joinTargetParts([path ? context.formatPath(path) : null, ...describeProjectEditQualifier(edit)])
     return [createOperation(id, target)]
   })
+}
+
+/** project:edit：新形状是 apply 的 steps，inspect、undo 就是动作本身；旧会话里保存的还是 operations 列表，都认。 */
+function readProjectEditOperations(context: OperationReadContext): ToolOperationSummary[] {
+  const steps = readProjectEditSteps(context)
+  if (!isEmpty(steps)) return steps
+  const legacy = readProjectLegacyEditOperations(context)
+  if (!isEmpty(legacy)) return legacy
+  const action = readOperationId(context.args.action)
+  return action ? [createOperation(action, undefined)] : []
 }
 
 function readProjectWriteOperation(context: OperationReadContext): ToolOperationSummary[] {

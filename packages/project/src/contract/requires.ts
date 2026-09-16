@@ -59,7 +59,7 @@ export type ProjectToolContextResolver = (
 
 /** 把项目空间挂进内核（`createProjectKernelModule`）时宿主给的选项。 */
 export interface CreateProjectKernelModuleOptions {
-  /** 必须：按作用域给出项目工具上下文。模块激活时把九个工具登记成能力服务，之后每次按名调用都先经它拿上下文。 */
+  /** 必须：按作用域给出项目工具上下文。模块激活时把七个工具登记成能力服务，之后每次按名调用都先经它拿上下文。 */
   readonly resolveContext: ProjectToolContextResolver
 }
 
@@ -112,7 +112,7 @@ export interface AgentProjectKernelPort {
   discardTransaction(transactionId: string): { discarded: boolean }
   /**
    * 按事务号取内核里的事务（补丁、改动文件、差量、状态、提交时间），调用方只读；不存在或已被淘汰时返回 undefined。
-   * 改动工具提交后凭它取最终补丁，project:change 的 inspect、undo 凭它核对回执。
+   * 改动工具提交后凭它取最终补丁，project:edit 的 inspect、undo 凭它核对回执。
    */
   getTransaction(
     transactionId: string
@@ -124,7 +124,7 @@ export interface AgentProjectKernelPort {
   applyEdit(input: ApplyEditInput): Promise<AgentProjectApplyResult>
   /**
    * 撤销一个已提交的事务：先核对每个文件仍是提交后的样子（被外部改过就抛 CONFLICT_WITH_EXTERNAL_EDIT，不覆盖），再逆序写回原文、删掉事务新建的文件，
-   * 并撤回提交时对 git intent-to-add 的增删；要么全部撤回，要么保持原样。project:change 的 undo 调它。
+   * 并撤回提交时对 git intent-to-add 的增删；要么全部撤回，要么保持原样。project:edit 的 undo 调它。
    */
   rollback(input: RollbackInput): Promise<RollbackResult>
   /** 内核的状态：项目根（绝对路径）与已登记的校验器 id。工具凭 root 核对当前工作区没有换。 */

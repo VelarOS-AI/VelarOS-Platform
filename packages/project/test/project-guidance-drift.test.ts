@@ -16,7 +16,7 @@ test('static tool guidance cannot restore a discovery requirement missing from r
 
 test('release gate binds current registered schemas, descriptions, examples and assembled prompt families to their explicit review', async () => {
   const actual = await collectGuidanceReview()
-  expect(actual.toolNames).toHaveLength(9)
+  expect(actual.toolNames).toHaveLength(7)
   expect(actual.matrixCases).toBe(192)
   const reviewed = JSON.parse(await readFile(ProjectGuidanceReviewPath, 'utf8'))
   expect(() => assertGuidanceReviewed(actual, reviewed)).not.toThrow()
@@ -30,7 +30,7 @@ test('a new required input rejects stale examples before a review fingerprint ca
 
 test('an operation rename rejects its previously reviewed example', () => {
   const changed = tools.map((tool) => tool.name === 'project:edit'
-    ? { ...tool, schema: z.object({ files: z.array(z.object({ fileRef: z.string(), edits: z.array(z.object({ op: z.literal('renamed-replace') })) })) }) } : tool)
+    ? { ...tool, schema: z.object({ action: z.literal('apply'), steps: z.array(z.object({ action: z.literal('renamed-edit') })) }) } : tool)
   expect(() => validateGuidanceExamples(changed)).toThrow('example rejected by current schema')
 })
 

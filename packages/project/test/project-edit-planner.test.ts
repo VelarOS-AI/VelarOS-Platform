@@ -6,11 +6,11 @@ import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test'
 
 import { createProjectKernel } from '../src/exports/index'
 import { FileStore } from '../src/impl/files/FileStore'
-import { ProjectChangeSchema, ProjectEditSchema, ProjectFileSchema, projectTools } from '../src/impl/ProjectTools'
+import { ProjectEditSchema, projectTools } from '../src/impl/ProjectTools'
 import type { ProjectContentEdit, ProjectEditView, ProjectPlannerResolver } from '../src/types/editing'
 import { normalizeProjectLineRange } from '../src/utils/editing/line-range'
 import { completeProjectCoverage } from '../src/utils/editing/planner-coverage'
-import { compileProjectChange, compileProjectEdit, compileProjectFile, planProjectFileEdits } from '../src/utils/editing/planner-index'
+import { compileProjectEdit, planProjectFileEdits } from '../src/utils/editing/planner-index'
 
 import { ProjectModelEditSchema } from './support/edit-intent-schema'
 
@@ -38,8 +38,6 @@ describe('compact edit selector contract', () => {
 
   test('schemas have one meaning per combination and retain object roots for reuse', () => {
     expect(ProjectEditSchema.type).toBe('object')
-    expect(ProjectFileSchema.type).toBe('object')
-    expect(ProjectChangeSchema.type).toBe('object')
     for (const operation of [
       { op: 'replace', text: 'x' },
       { op: 'replace', range: 1, match: '', text: 'x' },
@@ -47,9 +45,9 @@ describe('compact edit selector contract', () => {
       { op: 'insert', at: 'start', side: 'before', text: 'x' },
       { op: 'insert', at: 'end', range: 1, text: 'x' },
       { op: 'replace', range: 1, side: 'after', text: 'x' },
-    ]) expect(ProjectEditSchema.safeParse({ files: [{ fileRef: 'v', edits: [operation] }] }).success).toBe(false)
-    expect(ProjectChangeSchema.safeParse({ action: 'apply', steps: [{ action: 'edit', sourceRef: 'v', path: 'x', edits: [{ op: 'replace', range: 1, text: 'x' }] }] }).success).toBe(false)
-    expect(ProjectChangeSchema.safeParse({ action: 'inspect', steps: [], changeRef: 'v' }).success).toBe(false)
+    ]) expect(ProjectEditSchema.safeParse({ action: 'apply', steps: [{ action: 'edit', fileRef: 'v', edits: [operation] }] }).success).toBe(false)
+    expect(ProjectEditSchema.safeParse({ action: 'apply', steps: [{ action: 'edit', sourceRef: 'v', path: 'x', edits: [{ op: 'replace', range: 1, text: 'x' }] }] }).success).toBe(false)
+    expect(ProjectEditSchema.safeParse({ action: 'inspect', steps: [], changeRef: 'v' }).success).toBe(false)
     expect(ProjectModelEditSchema.safeParse({ edits: [{ type: 'replace_content', path: 'x', expectedContent: 'a', content: 'b' }] }).success).toBe(false)
   })
 
@@ -235,7 +233,7 @@ async function kernelFixture(files: Record<string, string>, revisionStrategy: 'm
 describe('compiled plans on the real transaction engine', () => {
   test('mixed create, edit, move, overwrite and delete prepare once, apply atomically and undo', async () => {
     const { project, resolver } = await kernelFixture({ 'a.txt': 'alpha\n', 'obsolete.txt': 'old\n' })
-    const plan = await compileProjectChange({ action: 'apply', steps: [
+    const plan = await compileProjectEdit({ action: 'apply', steps: [
       { action: 'create', path: 'new.txt', text: 'seed\n' }, { action: 'move', fileRef: 'a.txt', to: 'moved.txt' },
       { action: 'edit', path: 'new.txt', edits: [{ op: 'replace', range: 1, text: 'grown' }] }, { action: 'edit', sourceRef: 'a.txt', edits: [{ op: 'replace', range: 1, match: 'alpha', text: 'beta' }] },
       { action: 'overwrite', sourceRef: 'a.txt', text: 'final\r\n' }, { action: 'delete', fileRef: 'obsolete.txt' }, { action: 'move', path: 'new.txt', to: 'final.txt' },
@@ -257,7 +255,7 @@ describe('compiled plans on the real transaction engine', () => {
 
   test('a late failing step leaves every disk file untouched', async () => {
     const { resolver } = await kernelFixture({ 'a.txt': 'alpha\n' })
-    await expect(compileProjectChange({ action: 'apply', steps: [
+    await expect(compileProjectEdit({ action: 'apply', steps: [
       { action: 'create', path: 'new.txt', text: 'new' },
       { action: 'edit', fileRef: 'a.txt', edits: [{ op: 'replace', match: 'missing', text: 'bad' }] },
       // 一步一个目标：错在哪一步、哪一处编辑，details 就只有 stepIndex 和 editIndex。
@@ -270,24 +268,24 @@ describe('compiled plans on the real transaction engine', () => {
     const { resolver, views } = await kernelFixture({ 'a.txt': 'visible\nhidden\n' })
     views.set('a.txt', { ...views.get('a.txt')!, coverage: [{ startOffset: 0, endOffset: 8, startLine: 1, endLine: 1, completeLines: true }] })
     const first = { action: 'edit', fileRef: 'a.txt', edits: [{ op: 'replace' as const, range: 1, text: 'new\nvisible' }] }
-    await expect(compileProjectChange({ action: 'apply', steps: [first, { action: 'edit', sourceRef: 'a.txt', edits: [{ op: 'replace', range: 3, text: 'bad' }] }] }, resolver)).rejects.toMatchObject({ reason: 'SCOPE_VIOLATION' })
+    await expect(compileProjectEdit({ action: 'apply', steps: [first, { action: 'edit', sourceRef: 'a.txt', edits: [{ op: 'replace', range: 3, text: 'bad' }] }] }, resolver)).rejects.toMatchObject({ reason: 'SCOPE_VIOLATION' })
     // 前面的步骤动过这个文件：这是入参该换成 sourceRef，不是版本过期。
-    await expect(compileProjectChange({ action: 'apply', steps: [first, { action: 'edit', fileRef: 'a.txt', edits: [{ op: 'replace', range: 1, text: 'bad' }] }] }, resolver)).rejects.toMatchObject({ reason: 'INVALID_INPUT', suggestedNextAction: expect.stringContaining('sourceRef') })
-    const valid = await compileProjectChange({ action: 'apply', steps: [first, { action: 'edit', sourceRef: 'a.txt', edits: [{ op: 'replace', range: 2, text: 'known' }] }] }, resolver)
+    await expect(compileProjectEdit({ action: 'apply', steps: [first, { action: 'edit', fileRef: 'a.txt', edits: [{ op: 'replace', range: 1, text: 'bad' }] }] }, resolver)).rejects.toMatchObject({ reason: 'INVALID_INPUT', suggestedNextAction: expect.stringContaining('sourceRef') })
+    const valid = await compileProjectEdit({ action: 'apply', steps: [first, { action: 'edit', sourceRef: 'a.txt', edits: [{ op: 'replace', range: 2, text: 'known' }] }] }, resolver)
     expect(valid.operations.at(-1)?.operation).toMatchObject({ content: 'new\nknown\nhidden\n' })
   })
 
   test('file operations reject existing destinations, unintended path sources and stale repeat refs', async () => {
     const { resolver } = await kernelFixture({ 'a.txt': 'a', 'b.txt': 'b' })
-    await expect(compileProjectFile({ actions: [{ op: 'create', path: './a.txt', text: 'bad' }] }, resolver)).rejects.toMatchObject({ reason: 'TARGET_EXISTS', details: { path: 'a.txt' } })
-    await expect(compileProjectFile({ actions: [{ op: 'move', fileRef: 'a.txt', to: 'b.txt' }] }, resolver)).rejects.toMatchObject({ reason: 'TARGET_EXISTS', details: { path: 'b.txt' } })
-    await expect(compileProjectChange({ action: 'apply', steps: [{ action: 'edit', path: 'a.txt', edits: [{ op: 'replace', range: 1, text: 'bad' }] }] }, resolver)).rejects.toMatchObject({ reason: 'TARGET_NOT_FOUND' })
-    await expect(compileProjectFile({ actions: [{ op: 'overwrite', fileRef: 'a.txt', text: 'new' }, { op: 'delete', fileRef: 'a.txt' }] }, resolver)).rejects.toMatchObject({ reason: 'INVALID_INPUT' })
+    await expect(compileProjectEdit({ action: 'apply', steps: [{ action: 'create', path: './a.txt', text: 'bad' }] }, resolver)).rejects.toMatchObject({ reason: 'TARGET_EXISTS', details: { path: 'a.txt' } })
+    await expect(compileProjectEdit({ action: 'apply', steps: [{ action: 'move', fileRef: 'a.txt', to: 'b.txt' }] }, resolver)).rejects.toMatchObject({ reason: 'TARGET_EXISTS', details: { path: 'b.txt' } })
+    await expect(compileProjectEdit({ action: 'apply', steps: [{ action: 'edit', path: 'a.txt', edits: [{ op: 'replace', range: 1, text: 'bad' }] }] }, resolver)).rejects.toMatchObject({ reason: 'TARGET_NOT_FOUND' })
+    await expect(compileProjectEdit({ action: 'apply', steps: [{ action: 'overwrite', fileRef: 'a.txt', text: 'new' }, { action: 'delete', fileRef: 'a.txt' }] }, resolver)).rejects.toMatchObject({ reason: 'INVALID_INPUT' })
   })
 
   test.each(['before-prepare', 'before-apply'])('content CAS rejects same metadata external changes %s', async (timing) => {
     const { project, resolver, views } = await kernelFixture({ 'a.txt': 'old\n' }, 'metadata')
-    const plan = await compileProjectEdit({ files: [{ fileRef: 'a.txt', edits: [{ op: 'replace', range: 1, text: 'our' }] }] }, resolver)
+    const plan = await compileProjectEdit({ action: 'apply', steps: [{ action: 'edit', fileRef: 'a.txt', edits: [{ op: 'replace', range: 1, text: 'our' }] }] }, resolver)
     const tx = timing === 'before-apply' ? await project.prepareEdit(plan) : undefined
     await writeFile(join(root, 'a.txt'), 'ext\n')
     await utimes(join(root, 'a.txt'), 10, 10)
@@ -299,7 +297,7 @@ describe('compiled plans on the real transaction engine', () => {
 
   test('file guard survives prepare and protects a delete after same metadata change', async () => {
     const { project, resolver } = await kernelFixture({ 'a.txt': 'old\n' }, 'metadata')
-    const plan = await compileProjectFile({ actions: [{ op: 'delete', fileRef: 'a.txt' }] }, resolver)
+    const plan = await compileProjectEdit({ action: 'apply', steps: [{ action: 'delete', fileRef: 'a.txt' }] }, resolver)
     const tx = await project.prepareEdit(plan)
     expect(tx.patches[0].metadata?.mode).toBe('guard')
     await writeFile(join(root, 'a.txt'), 'ext\n')
@@ -310,7 +308,7 @@ describe('compiled plans on the real transaction engine', () => {
 
   test('an injected failure after a mixed-plan write rolls back all paths', async () => {
     const { project, resolver } = await kernelFixture({ 'a.txt': 'old\n' })
-    const plan = await compileProjectChange({ action: 'apply', steps: [
+    const plan = await compileProjectEdit({ action: 'apply', steps: [
       { action: 'move', fileRef: 'a.txt', to: 'moved.txt' }, { action: 'create', path: 'created.txt', text: 'new' },
     ] }, resolver)
     const tx = await project.prepareEdit(plan)
@@ -340,7 +338,7 @@ describe('compiled plans on the real transaction engine', () => {
       readText: async () => { throw new Error('recode is not part of this fixture') },
       listPaths: async () => { throw new Error('recode is not part of this fixture') },
     }
-    const tx = await project.prepareEdit(await compileProjectEdit({ files: [{ fileRef: 'v', edits: [{ op: 'replace', range: 2, text: '修改🧪' }] }] }, resolver))
+    const tx = await project.prepareEdit(await compileProjectEdit({ action: 'apply', steps: [{ action: 'edit', fileRef: 'v', edits: [{ op: 'replace', range: 2, text: '修改🧪' }] }] }, resolver))
     await project.applyEdit({ transactionId: tx.transactionId })
     expect(await readFile(join(root, 'utf16.txt'))).toEqual(Buffer.from('\uFEFF标题🙂\r\n修改🧪\r\n', 'utf16le'))
     await project.rollback({ transactionId: tx.transactionId })
@@ -360,7 +358,7 @@ describe('compiled plans on the real transaction engine', () => {
       readText: async () => { throw new Error('recode is not part of this fixture') },
       listPaths: async () => { throw new Error('recode is not part of this fixture') },
     }
-    const plan = await compileProjectEdit({ files: [{ fileRef: 'v', edits: [{ op: 'replace', range: 10_000, text: 'changed and verified' }] }] }, resolver)
+    const plan = await compileProjectEdit({ action: 'apply', steps: [{ action: 'edit', fileRef: 'v', edits: [{ op: 'replace', range: 10_000, text: 'changed and verified' }] }] }, resolver)
     const tx = await project.prepareEdit(plan)
     expect(tx.patches[0].metadata?.intentOperation).toBeUndefined()
     expect(tx.patches[0].metadata?.intentOperationType).toBe('replace_content')
@@ -379,7 +377,7 @@ describe('compiled plans on the real transaction engine', () => {
   test('move chains preserve file identity even when its old path is reused', async () => {
     const { project, resolver, views } = await kernelFixture({ 'a.txt': 'source\n' })
     views.set('second-view', views.get('a.txt')!)
-    const plan = await compileProjectChange({ action: 'apply', steps: [
+    const plan = await compileProjectEdit({ action: 'apply', steps: [
       { action: 'move', fileRef: 'a.txt', to: 'b.txt' }, { action: 'create', path: 'a.txt', text: 'replacement\n' }, { action: 'move', sourceRef: 'second-view', to: 'c.txt' },
       { action: 'edit', sourceRef: 'a.txt', edits: [{ op: 'replace', range: 1, text: 'same identity' }] }, { action: 'edit', path: 'a.txt', edits: [{ op: 'insert', at: 'end', text: 'new identity' }] },
     ] }, resolver)

@@ -17,10 +17,8 @@ describe('Project capability', () => {
       'project:read',
       'project:list',
       'project:search',
-      'project:file',
       'project:edit',
       'project:code',
-      'project:change',
       'project:run',
       'project:sandbox',
     ])

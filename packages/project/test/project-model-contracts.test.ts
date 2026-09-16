@@ -5,7 +5,7 @@ import { describe, expect, test } from 'bun:test'
 import { DefaultToolContractExampleRegistry, schemaToInputSchema } from '@velaros-ai/agent/tool-contract'
 
 import { ToolArgsSchemaValidator } from '../../agent/src/utils/tools/tool-args-schema-validator'
-import { ProjectChangeSchema, ProjectEditSchema, projectTools } from '../src/impl/ProjectTools'
+import { ProjectEditSchema, projectTools } from '../src/impl/ProjectTools'
 
 const ProjectReadInputSchema = projectTools['project:read']!.schema
 
@@ -19,8 +19,8 @@ describe('model-facing Project examples and normalization', () => {
     expect(description).not.toContain('工具发现入口')
   })
 
-  test('all nine tool examples survive wire encoding and satisfy their actual schema', () => {
-    expect(Object.keys(projectTools)).toHaveLength(9)
+  test('all seven tool examples survive wire encoding and satisfy their actual schema', () => {
+    expect(Object.keys(projectTools)).toHaveLength(7)
     for (const tool of Object.values(projectTools)) {
       const inputSchema = schemaToInputSchema(tool.schema)
       expect(inputSchema.type === 'object' || Array.isArray(inputSchema.oneOf)).toBe(true)
@@ -46,10 +46,10 @@ describe('model-facing Project examples and normalization', () => {
       const text = await readFile(file, 'utf8')
       expect(text).toContain('参数模板')
       const blocks = [...text.matchAll(/```json\s*\n([\s\S]*?)\n```/gu)].map((match) => JSON.parse(match[1]!))
-      const edits = blocks.filter((value) => Array.isArray(value.files))
+      const edits = blocks.filter((value) => Array.isArray(value.steps))
       expect(edits).toHaveLength(1)
-      expect(edits[0].files[0].fileRef).toBe('<fileRef>')
-      edits[0].files[0].fileRef = `view:${'a'.repeat(64)}`
+      expect(edits[0].steps[0].fileRef).toBe('<fileRef>')
+      edits[0].steps[0].fileRef = `view:${'a'.repeat(64)}`
       // Syntax validation does not grant permission: real execution resolves a stored receipt.
       expect(ProjectEditSchema.safeParse(edits[0]).success).toBe(true)
     }
@@ -57,12 +57,12 @@ describe('model-facing Project examples and normalization', () => {
 
   test('normalization repairs JSON containers without decoding or trimming source strings again', () => {
     const text = '  "literal" \\n \\u0041 C:\\src\\file\r\n中文🙂\n'
-    const files = [{ fileRef: '<fileRef>', edits: [{ op: 'replace', range: [42, 45], match: '"old"\\n', text }] }]
-    const normalized = new ToolArgsSchemaValidator().validateWithNormalization(ProjectEditSchema, { files: JSON.stringify(files) })
+    const steps = [{ action: 'edit', fileRef: '<fileRef>', edits: [{ op: 'replace', range: [42, 45], match: '"old"\\n', text }] }]
+    const normalized = new ToolArgsSchemaValidator().validateWithNormalization(ProjectEditSchema, { action: 'apply', steps: JSON.stringify(steps) })
     expect(normalized.success).toBe(true)
     if (!normalized.success) return
-    expect(normalized.args).toEqual({ files })
-    expect(normalized.adjustments).toEqual([{ field: 'files', action: 'coerced', detail: expect.any(String) }])
+    expect(normalized.args).toEqual({ action: 'apply', steps })
+    expect(normalized.adjustments).toEqual([{ field: 'steps', action: 'coerced', detail: expect.any(String) }])
     expect(ProjectReadInputSchema.parse({ files: [{ path: 'a.ts', range: [42] }] }).files[0].range).toEqual([42])
   })
 
@@ -70,17 +70,17 @@ describe('model-facing Project examples and normalization', () => {
     const validate = new ToolArgsSchemaValidator()
     for (const range of [[45, 42], 0, 1.5, [1, 2, 3]]) {
       expect(validate.validateWithNormalization(ProjectEditSchema, {
-        files: [{ fileRef: '<fileRef>', edits: [{ op: 'replace', range, text: 'new' }] }],
+        action: 'apply', steps: [{ action: 'edit', fileRef: '<fileRef>', edits: [{ op: 'replace', range, text: 'new' }] }],
       }).success).toBe(false)
     }
     for (const edits of [
       [{ op: 'insert', at: 'start', side: 'before', text: 'new' }],
       [{ op: 'replace', range: 1 }],
       [{ op: 'replace_text', match: 'old', text: 'new' }],
-    ]) expect(validate.validateWithNormalization(ProjectEditSchema, { files: [{ fileRef: '<fileRef>', edits }] }).success).toBe(false)
+    ]) expect(validate.validateWithNormalization(ProjectEditSchema, { action: 'apply', steps: [{ action: 'edit', fileRef: '<fileRef>', edits }] }).success).toBe(false)
     expect(validate.validateWithNormalization(ProjectReadInputSchema, { files: [{ path: 'b.ts' }], continuation: 'read-page:abc' }).success).toBe(false)
-    expect(validate.validateWithNormalization(ProjectChangeSchema, { action: 'undo', changeRef: '<changeRef>', steps: [{ action: 'create', path: 'new.ts', text: '' }] }).success).toBe(false)
-    expect(projectTools['project:edit'].schema.safeParse({ reuse: 'attempt:failed', changes: [{ op: 'set', path: ['files', 0, 'edits', 0, 'range'], value: 42 }] }).success).toBe(true)
-    expect(projectTools['project:edit'].schema.safeParse({ reuse: 'attempt:failed', changes: [{ op: 'set', path: ['files'], value: [] }], files: [] }).success).toBe(false)
+    expect(validate.validateWithNormalization(ProjectEditSchema, { action: 'undo', changeRef: '<changeRef>', steps: [{ action: 'create', path: 'new.ts', text: '' }] }).success).toBe(false)
+    expect(projectTools['project:edit'].schema.safeParse({ reuse: 'attempt:failed', changes: [{ op: 'set', path: ['steps', 0, 'edits', 0, 'range'], value: 42 }] }).success).toBe(true)
+    expect(projectTools['project:edit'].schema.safeParse({ reuse: 'attempt:failed', changes: [{ op: 'set', path: ['steps'], value: [] }], action: 'apply', steps: [] }).success).toBe(false)
   })
 })

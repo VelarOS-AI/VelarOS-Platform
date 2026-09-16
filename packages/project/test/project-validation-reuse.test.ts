@@ -97,7 +97,7 @@ test.each([false, true])('candidate syntax failure preserves a large input and s
   const fileRef = await read('example.ts')
   const text = `  run() {\n${'    // 中文🙂 C:\\src\\path 字面转义 \\n\n'.repeat(100)}    return false\n  }`
   expect(text.length).toBeGreaterThan(3000)
-  const input = { files: [{ fileRef, edits: [{ op: 'replace', range: [2, 4], text }] }] }
+  const input = { action: 'apply', steps: [{ action: 'edit', fileRef, edits: [{ op: 'replace', range: [2, 4], text }] }] }
   const failed = await call('failed-candidate', 'project:edit', input)
   expect(failed.result).toMatchObject({
     code: 'VALIDATION_FAILED', executionOutcome: 'not-applied',
@@ -142,7 +142,7 @@ test.each([false, true])('candidate syntax failure preserves a large input and s
   expect(fileContextFor(context)!.currentViews().find((view) => view.path === 'example.ts')!.snapshots[0]!.content).toBe(original)
   expect(JSON.stringify(history[2])).toBe(originalFailure)
 
-  const retry = { reuse: 'attempt:failed-candidate', changes: [{ op: 'set', path: ['files', 0, 'edits', 0, 'range'], value: [2, 5] }] }
+  const retry = { reuse: 'attempt:failed-candidate', changes: [{ op: 'set', path: ['steps', 0, 'edits', 0, 'range'], value: [2, 5] }] }
   expect(JSON.stringify(retry).length).toBeLessThan(text.length / 10)
   const completed = await call('fixed-candidate', 'project:edit', retry)
   expect(completed.error).toBeUndefined()
@@ -151,7 +151,7 @@ test.each([false, true])('candidate syntax failure preserves a large input and s
   const records = await context.contextPayloadStore!.listForSession(context.sessionId!)
   const saved = records.filter((record) => record.toolName === '__tool_attempt_input__').map((record) => JSON.parse(record.serializedResult))
   expect(saved).toHaveLength(2)
-  expect(saved.map((record) => record.args.files[0].edits[0].text)).toEqual([text, text])
+  expect(saved.map((record) => record.args.steps[0].edits[0].text)).toEqual([text, text])
   const outcomes = records.filter((record) => record.toolName === '__tool_attempt_outcome__').map((record) => JSON.parse(record.serializedResult))
   expect(outcomes.map((record) => record.outcome)).toEqual(['not-applied', 'completed'])
   expect(outcomes[1].metrics).toMatchObject({ reused: true, requestedChars: JSON.stringify(retry).length })
@@ -175,7 +175,7 @@ test('a validator rejecting without diagnostics still returns safe reuse through
         validate: () => ({ ok: false, diagnostics: [], checks: [{ id: 'test.empty', ok: false }] }) })
     },
   }])
-  const failure = await call('empty-diagnostics', 'project:file', { actions: [{ op: 'create', path: 'new.txt', text: 'content' }] })
+  const failure = await call('empty-diagnostics', 'project:edit', { action: 'apply', steps: [{ action: 'create', path: 'new.txt', text: 'content' }] })
   expect(failure.result).toMatchObject({ code: 'VALIDATION_FAILED', executionOutcome: 'not-applied', inputReuse: { reuse: 'attempt:empty-diagnostics' } })
   await expect(readFile(join(root, 'new.txt'))).rejects.toThrow()
 })
@@ -189,7 +189,7 @@ test('an error after a committed write cannot gain reuse merely by using a valid
     await apply(input)
     throw new ProjectError('VALIDATION_FAILED', 'injected failure after commit')
   }
-  const failed = await call('committed-failure', 'project:edit', { files: [{ fileRef, edits: [{ op: 'replace', range: 1, text: 'after' }] }] })
+  const failed = await call('committed-failure', 'project:edit', { action: 'apply', steps: [{ action: 'edit', fileRef, edits: [{ op: 'replace', range: 1, text: 'after' }] }] })
   expect(failed.error).toBeDefined()
   expect(failed.result).toMatchObject({ executionOutcome: 'unknown' })
   expect(failed.result).not.toHaveProperty('inputReuse')

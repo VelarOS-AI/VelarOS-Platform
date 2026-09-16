@@ -70,7 +70,7 @@ describe('actual Project tool surface with final model references', () => {
     const resolved = await resolveProjectFileRef(ctx, final.files[0].fileRef)
     expect(resolved.content).toBe('first\nsecond\nthird\n')
     expect(resolved.coverage).toEqual([{ startOffset: 6, endOffset: 13, startLine: 2, endLine: 2, completeLines: true }])
-    await expect(call('project:edit', { files: [{ fileRef: final.files[0].fileRef, edits: [{ op: 'replace', range: 3, text: 'bad' }] }] })).rejects.toMatchObject({ reason: 'SCOPE_VIOLATION', details: { executionOutcome: 'not-applied' } })
+    await expect(call('project:edit', { action: 'apply', steps: [{ action: 'edit', fileRef: final.files[0].fileRef, edits: [{ op: 'replace', range: 3, text: 'bad' }] }] })).rejects.toMatchObject({ reason: 'SCOPE_VIOLATION', details: { executionOutcome: 'not-applied' } })
     expect(await readFile(join(root, 'a.txt'), 'utf8')).toBe('first\nsecond\nthird\n')
   })
 
@@ -78,7 +78,7 @@ describe('actual Project tool surface with final model references', () => {
     await writeFile(join(root, 'a.txt'), 'header\nold\nvalue oldCall()\ntarget\nend\n')
     const { call, read } = await fixture()
     const original = await read('a.txt')
-    const result = await call('project:edit', { files: [{ fileRef: original.fileRef, edits: [
+    const result = await call('project:edit', { action: 'apply', steps: [{ action: 'edit', fileRef: original.fileRef, edits: [
       { op: 'insert', at: 'start', text: 'start' },
       { op: 'replace', range: [2], text: 'new\nextra' },
       { op: 'replace', range: 3, match: 'oldCall()', text: 'newCall()' },
@@ -93,23 +93,25 @@ describe('actual Project tool surface with final model references', () => {
     const current = result.files.find((file: any) => file.path === 'a.txt' && file.fileRef)
     expect(current?.fileRef).toStartWith('view:')
     expect(current.fileRef).not.toBe(original.fileRef)
-    await call('project:edit', { files: [{ fileRef: current.fileRef, edits: [{ op: 'replace', match: 'target!', text: 'confirmed' }] }] })
+    await call('project:edit', { action: 'apply', steps: [{ action: 'edit', fileRef: current.fileRef, edits: [{ op: 'replace', match: 'target!', text: 'confirmed' }] }] })
     expect(await readFile(join(root, 'a.txt'), 'utf8')).toContain('confirmed\n')
-    await expect(call('project:edit', { files: [{ fileRef: original.fileRef, edits: [{ op: 'replace', range: 2, text: 'stale' }] }] })).rejects.toMatchObject({ reason: 'BASE_REVISION_MISMATCH' })
+    await expect(call('project:edit', { action: 'apply', steps: [{ action: 'edit', fileRef: original.fileRef, edits: [{ op: 'replace', range: 2, text: 'stale' }] }] })).rejects.toMatchObject({ reason: 'BASE_REVISION_MISMATCH' })
   })
 
-  test('1000 edits across two narrow windows of a 50,000-line file form one atomic patch', async () => {
+  test('1000 edits across two narrow windows of a 50,000-line file commit and undo as one transaction', async () => {
     const content = Array.from({ length: 50_000 }, (_, index) => `row ${index + 1}`).join('\n')
     await writeFile(join(root, 'large.txt'), content)
     const { call, read, kernel } = await fixture()
     const first = await read('large.txt', [1, 500])
     const last = await read('large.txt', [49_501, 50_000])
     expect(first.fileRef).not.toBe(last.fileRef)
-    const changed = await call('project:edit', { files: [
-      { fileRef: first.fileRef, edits: Array.from({ length: 500 }, (_, index) => ({ op: 'replace', range: index + 1, text: `changed ${index + 1}` })) },
-      { fileRef: last.fileRef, edits: Array.from({ length: 500 }, (_, index) => ({ op: 'replace', range: index + 49_501, text: `changed ${index + 49_501}` })) },
+    const changed = await call('project:edit', { action: 'apply', steps: [
+      { action: 'edit', fileRef: first.fileRef, edits: Array.from({ length: 500 }, (_, index) => ({ op: 'replace', range: index + 1, text: `changed ${index + 1}` })) },
+      // 同一个文件的第二段：前一步已经改过它，按 sourceRef 跟随改完后的内容。
+      { action: 'edit', sourceRef: last.fileRef, edits: Array.from({ length: 500 }, (_, index) => ({ op: 'replace', range: index + 49_501, text: `changed ${index + 49_501}` })) },
     ] })
-    expect(kernel.getTransaction(changed.transactionId)?.patches).toHaveLength(1)
+    // 一步一个补丁，一次事务一起提交：两步都落在 large.txt 上。
+    expect(kernel.getTransaction(changed.transactionId)?.patches.map((patch) => patch.path)).toEqual(['large.txt', 'large.txt'])
     const actual = (await readFile(join(root, 'large.txt'), 'utf8')).split('\n')
     expect(actual).toHaveLength(50_000)
     for (let index = 0; index < 500; index += 1) {
@@ -117,7 +119,7 @@ describe('actual Project tool surface with final model references', () => {
       expect(actual[index + 49_500]).toBe(`changed ${index + 49_501}`)
     }
     expect(actual[501]).toBe('row 502')
-    await call('project:change', { action: 'undo', changeRef: changed.changeRef })
+    await call('project:edit', { action: 'undo', changeRef: changed.changeRef })
     expect(await readFile(join(root, 'large.txt'), 'utf8')).toBe(content)
   })
 
@@ -126,69 +128,71 @@ describe('actual Project tool surface with final model references', () => {
     const { call, read } = await fixture()
     const first = await read('a.txt', 1)
     const last = await read('a.txt', 3)
-    await expect(call('project:edit', { files: [
-      { fileRef: first.fileRef, edits: [{ op: 'replace', match: 'third', text: 'bad' }] },
-      { fileRef: last.fileRef, edits: [{ op: 'replace', match: 'third', text: 'last' }] },
-    ] })).rejects.toMatchObject({ reason: 'TARGET_NOT_FOUND', details: { fileIndex: 0 } })
+    await expect(call('project:edit', { action: 'apply', steps: [
+      { action: 'edit', fileRef: first.fileRef, edits: [{ op: 'replace', match: 'third', text: 'bad' }] },
+      { action: 'edit', sourceRef: last.fileRef, edits: [{ op: 'replace', match: 'third', text: 'last' }] },
+    ] })).rejects.toMatchObject({ reason: 'TARGET_NOT_FOUND', details: { stepIndex: 0 } })
     const whole = await read('a.txt')
-    await expect(call('project:edit', { files: [
-      { fileRef: first.fileRef, edits: [{ op: 'replace', range: 1, text: 'one' }] },
-      { fileRef: whole.fileRef, edits: [{ op: 'replace', range: [1, 2], text: 'two' }] },
-    ] })).rejects.toMatchObject({ reason: 'INVALID_INPUT', details: { fileIndex: 1, conflictsWithFile: 0 } })
+    // 前一步动过这个文件，第二步还写 fileRef：点名改成 sourceRef 或者合并到同一步。
+    await expect(call('project:edit', { action: 'apply', steps: [
+      { action: 'edit', fileRef: first.fileRef, edits: [{ op: 'replace', range: 1, text: 'one' }] },
+      { action: 'edit', fileRef: whole.fileRef, edits: [{ op: 'replace', range: [1, 2], text: 'two' }] },
+    ] })).rejects.toMatchObject({ reason: 'INVALID_INPUT', details: { stepIndex: 1 }, suggestedNextAction: expect.stringContaining('sourceRef') })
     expect(await readFile(join(root, 'a.txt'), 'utf8')).toBe('first\nsecond\nthird\n')
   })
 
   test('file create, overwrite, move, delete use receipts and undo restores the latest file', async () => {
     const { call, read } = await fixture()
-    const created = await call('project:file', { actions: [{ op: 'create', path: 'created.txt', text: 'old\n' }] })
+    const created = await call('project:edit', { action: 'apply', steps: [{ action: 'create', path: 'created.txt', text: 'old\n' }] })
     expect(created.changed).toBe(true)
     const original = await read('created.txt')
-    const overwritten = await call('project:file', { actions: [{ op: 'overwrite', fileRef: original.fileRef, text: 'complete\r\n' }] })
+    const overwritten = await call('project:edit', { action: 'apply', steps: [{ action: 'overwrite', fileRef: original.fileRef, text: 'complete\r\n' }] })
     expect(overwritten.contextRefreshError).toBeUndefined()
     const source = await read('created.txt')
-    await call('project:file', { actions: [{ op: 'move', fileRef: source.fileRef, to: 'moved.txt' }] })
+    await call('project:edit', { action: 'apply', steps: [{ action: 'move', fileRef: source.fileRef, to: 'moved.txt' }] })
     await expect(readFile(join(root, 'created.txt'))).rejects.toThrow()
     const moved = await read('moved.txt')
-    const deleted = await call('project:file', { actions: [{ op: 'delete', fileRef: moved.fileRef }] })
+    const deleted = await call('project:edit', { action: 'apply', steps: [{ action: 'delete', fileRef: moved.fileRef }] })
     await expect(readFile(join(root, 'moved.txt'))).rejects.toThrow()
-    const inspected = await call('project:change', { action: 'inspect', changeRef: deleted.changeRef })
+    const inspected = await call('project:edit', { action: 'inspect', changeRef: deleted.changeRef })
     expect(inspected.changedFiles).toContain('moved.txt')
     expect(inspected.status).toBe('applied')
     expect(inspected.oldRevisions['moved.txt']).toBe(moved.revision)
     expect(inspected.newRevisions['moved.txt']).toBe('deleted')
-    const undone = await call('project:change', { action: 'undo', changeRef: deleted.changeRef })
+    const undone = await call('project:edit', { action: 'undo', changeRef: deleted.changeRef })
     expect(undone.status).toBe('rolled_back')
-    expect((await call('project:change', { action: 'inspect', changeRef: deleted.changeRef })).status).toBe('rolled_back')
+    expect((await call('project:edit', { action: 'inspect', changeRef: deleted.changeRef })).status).toBe('rolled_back')
     expect(await readFile(join(root, 'moved.txt'), 'utf8')).toBe('complete\n')
   })
 
-  test('模型面的入参形状：读只有 files 与 continuation，change 的一步一个动作', () => {
+  test('模型面的入参形状：读只有 files 与 continuation，改动一步一个动作', () => {
     const read = projectTools['project:read']!.schema
     // 读一个文件就是只有一项的 files；顶层 path、range 不再存在（与 system:read 同形）。
     expect(read.safeParse({ files: [{ path: 'a.txt', range: [1, 2] }] }).success).toBe(true)
     expect(read.safeParse({ path: 'a.txt' }).success).toBe(false)
     expect(read.safeParse({ path: 'a.txt', range: 1 }).success).toBe(false)
     expect(read.safeParse({ files: [{ path: 'a.txt' }], continuation: 'read-page:abc' }).success).toBe(false)
-    const change = projectTools['project:change']!.schema
-    expect(change.safeParse({ action: 'apply', steps: [{ action: 'create', path: 'a.txt', text: '' }] }).success).toBe(true)
-    expect(change.safeParse({ action: 'apply', steps: [{ action: 'edit', fileRef: 'view:x', edits: [{ op: 'replace', range: 1, text: 'x' }] }] }).success).toBe(true)
-    // 批量维度只剩 steps 一个：原来的 { tool, actions } / { tool, files } 两层嵌套没了。
-    expect(change.safeParse({ action: 'apply', steps: [{ tool: 'file', actions: [{ op: 'create', path: 'a.txt', text: '' }] }] }).success).toBe(false)
-    expect(change.safeParse({ action: 'apply', steps: [{ tool: 'edit', files: [{ fileRef: 'view:x', edits: [] }] }] }).success).toBe(false)
+    const edit = projectTools['project:edit']!.schema
+    expect(edit.safeParse({ action: 'apply', steps: [{ action: 'create', path: 'a.txt', text: '' }] }).success).toBe(true)
+    expect(edit.safeParse({ action: 'apply', steps: [{ action: 'edit', fileRef: 'view:x', edits: [{ op: 'replace', range: 1, text: 'x' }] }] }).success).toBe(true)
+    // 批量维度只剩 steps 一个：原来按工具分的 actions / files 两套入口都没了。
+    expect(edit.safeParse({ actions: [{ op: 'create', path: 'a.txt', text: '' }] }).success).toBe(false)
+    expect(edit.safeParse({ files: [{ fileRef: 'view:x', edits: [{ op: 'replace', range: 1, text: 'x' }] }] }).success).toBe(false)
+    expect(edit.safeParse({ action: 'apply', steps: [{ tool: 'edit', files: [{ fileRef: 'view:x', edits: [] }] }] }).success).toBe(false)
   })
 
   test('整份替换要求看过全文：只读了几行的 fileRef 覆盖不了整个文件', async () => {
     await writeFile(join(root, 'a.txt'), 'one\ntwo\nthree\nfour\n')
     const { call, read } = await fixture()
     const partial = await read('a.txt', [1, 2])
-    await expect(call('project:file', { actions: [{ op: 'overwrite', fileRef: partial.fileRef, text: 'replaced\n' }] }))
+    await expect(call('project:edit', { action: 'apply', steps: [{ action: 'overwrite', fileRef: partial.fileRef, text: 'replaced\n' }] }))
       .rejects.toMatchObject({ reason: 'SCOPE_VIOLATION', details: { executionOutcome: 'not-applied' } })
     expect(await readFile(join(root, 'a.txt'), 'utf8')).toBe('one\ntwo\nthree\nfour\n')
     // move、delete 不动正文，只核对版本，照旧收只看过一段的 fileRef。
-    const moved = await call('project:file', { actions: [{ op: 'move', fileRef: partial.fileRef, to: 'b.txt' }] })
+    const moved = await call('project:edit', { action: 'apply', steps: [{ action: 'move', fileRef: partial.fileRef, to: 'b.txt' }] })
     expect(moved.changedFiles.sort()).toEqual(['a.txt', 'b.txt'])
     const whole = await read('b.txt')
-    const overwritten = await call('project:file', { actions: [{ op: 'overwrite', fileRef: whole.fileRef, text: 'replaced\n' }] })
+    const overwritten = await call('project:edit', { action: 'apply', steps: [{ action: 'overwrite', fileRef: whole.fileRef, text: 'replaced\n' }] })
     expect(overwritten.changed).toBe(true)
     expect(await readFile(join(root, 'b.txt'), 'utf8')).toBe('replaced\n')
   })
@@ -197,7 +201,7 @@ describe('actual Project tool surface with final model references', () => {
     await writeFile(join(root, 'a.txt'), 'one\n')
     const { call, read } = await fixture()
     const file = await read('a.txt')
-    const result = await call('project:change', { action: 'apply', steps: [
+    const result = await call('project:edit', { action: 'apply', steps: [
       { action: 'create', path: 'fresh.txt', text: 'new\n' },
       { action: 'edit', fileRef: file.fileRef, edits: [{ op: 'replace', range: 1, text: 'two' }] },
     ] })
@@ -207,8 +211,8 @@ describe('actual Project tool surface with final model references', () => {
     expect(result.newRevisions['fresh.txt']).toBeTruthy()
     expect(result.diffLines).toBeGreaterThan(0)
     expect(result.risk).toBeUndefined()
-    await call('project:change', { action: 'undo', changeRef: result.changeRef })
-    const again = await call('project:change', { action: 'undo', changeRef: result.changeRef })
+    await call('project:edit', { action: 'undo', changeRef: result.changeRef })
+    const again = await call('project:edit', { action: 'undo', changeRef: result.changeRef })
     expect(again).toMatchObject({ status: 'rolled_back', alreadyUndone: true })
     expect(await readFile(join(root, 'a.txt'), 'utf8')).toBe('one\n')
   })
@@ -217,29 +221,29 @@ describe('actual Project tool surface with final model references', () => {
     await writeFile(join(root, 'a.txt'), 'same\n')
     const { call, read } = await fixture()
     const first = await read('a.txt')
-    const unchanged = await call('project:edit', { files: [{ fileRef: first.fileRef, edits: [{ op: 'replace', range: 1, text: 'same' }] }] })
+    const unchanged = await call('project:edit', { action: 'apply', steps: [{ action: 'edit', fileRef: first.fileRef, edits: [{ op: 'replace', range: 1, text: 'same' }] }] })
     expect(unchanged.changed).toBe(false)
-    expect((await call('project:change', { action: 'inspect', changeRef: unchanged.changeRef })).status).toBe('applied')
+    expect((await call('project:edit', { action: 'inspect', changeRef: unchanged.changeRef })).status).toBe('applied')
     const current = await read('a.txt')
-    const overwritten = await call('project:file', { actions: [{ op: 'overwrite', fileRef: current.fileRef, text: 'same\n' }] })
+    const overwritten = await call('project:edit', { action: 'apply', steps: [{ action: 'overwrite', fileRef: current.fileRef, text: 'same\n' }] })
     expect(overwritten.changed).toBe(false)
 
-    const empty = await call('project:file', { actions: [{ op: 'create', path: 'empty.txt', text: '' }] })
+    const empty = await call('project:edit', { action: 'apply', steps: [{ action: 'create', path: 'empty.txt', text: '' }] })
     expect(empty.changed).toBe(true)
     const emptyView = await read('empty.txt')
-    const moved = await call('project:file', { actions: [{ op: 'move', fileRef: emptyView.fileRef, to: 'moved-empty.txt' }] })
+    const moved = await call('project:edit', { action: 'apply', steps: [{ action: 'move', fileRef: emptyView.fileRef, to: 'moved-empty.txt' }] })
     expect(moved.changed).toBe(true)
     const movedView = await read('moved-empty.txt')
-    const removed = await call('project:file', { actions: [{ op: 'delete', fileRef: movedView.fileRef }] })
+    const removed = await call('project:edit', { action: 'apply', steps: [{ action: 'delete', fileRef: movedView.fileRef }] })
     expect(removed.changed).toBe(true)
 
-    const cancelled = await call('project:change', { action: 'apply', steps: [
+    const cancelled = await call('project:edit', { action: 'apply', steps: [
       { action: 'create', path: 'temporary.txt', text: '' }, { action: 'delete', path: 'temporary.txt' },
     ] })
     expect(cancelled.changed).toBe(false)
     await expect(readFile(join(root, 'temporary.txt'))).rejects.toThrow()
     const movedSource = await read('a.txt')
-    const roundTrip = await call('project:change', { action: 'apply', steps: [
+    const roundTrip = await call('project:edit', { action: 'apply', steps: [
       { action: 'move', fileRef: movedSource.fileRef, to: 'transit.txt' }, { action: 'move', sourceRef: movedSource.fileRef, to: 'a.txt' },
     ] })
     expect(roundTrip.changed).toBe(false)
@@ -250,14 +254,14 @@ describe('actual Project tool surface with final model references', () => {
     await writeFile(join(root, 'a.txt'), 'old\n')
     const { call, read } = await fixture()
     const file = await read('a.txt')
-    const result = await call('project:change', { action: 'apply', steps: [
+    const result = await call('project:edit', { action: 'apply', steps: [
       { action: 'create', path: 'new.txt', text: 'created\n' }, { action: 'move', fileRef: file.fileRef, to: 'moved.txt' },
       { action: 'edit', sourceRef: file.fileRef, edits: [{ op: 'replace', range: 1, text: 'moved' }] }, { action: 'edit', path: 'new.txt', edits: [{ op: 'insert', at: 'end', text: 'checked' }] },
     ] })
     expect(result.changedFiles).toEqual(expect.arrayContaining(['a.txt', 'new.txt', 'moved.txt']))
     expect(await readFile(join(root, 'moved.txt'), 'utf8')).toBe('moved\n')
     expect(await readFile(join(root, 'new.txt'), 'utf8')).toBe('created\nchecked\n')
-    await call('project:change', { action: 'undo', changeRef: result.changeRef })
+    await call('project:edit', { action: 'undo', changeRef: result.changeRef })
     expect(await readFile(join(root, 'a.txt'), 'utf8')).toBe('old\n')
     await expect(readFile(join(root, 'new.txt'))).rejects.toThrow()
     await expect(readFile(join(root, 'moved.txt'))).rejects.toThrow()
@@ -309,7 +313,7 @@ describe('actual Project tool surface with final model references', () => {
     const window = literal.files[0]
     expect(window.lines).toEqual([[2, 'needle A']])
     expect(window.fileRef).toStartWith('view:')
-    await call('project:edit', { files: [{ fileRef: window.fileRef, edits: [{ op: 'replace', match: 'needle A', text: 'changed A' }] }] })
+    await call('project:edit', { action: 'apply', steps: [{ action: 'edit', fileRef: window.fileRef, edits: [{ op: 'replace', match: 'needle A', text: 'changed A' }] }] })
     const regex = await call('project:search', { query: '(changed|needle) [AB]', regex: true, caseSensitive: true, contextLines: 0 })
     expect(regex.hits).toHaveLength(2)
     expect(regex.files.every((file: any) => typeof file.fileRef === 'string')).toBe(true)
@@ -320,8 +324,8 @@ describe('actual Project tool surface with final model references', () => {
     const { call, read } = await fixture({ approved: false })
     const file = await read('a.txt')
     const denied = { reason: 'PERMISSION_DENIED', details: { executionOutcome: 'not-applied' } }
-    await expect(call('project:edit', { files: [{ fileRef: file.fileRef, edits: [{ op: 'replace', range: 1, text: 'new' }] }] })).rejects.toMatchObject(denied)
-    await expect(call('project:file', { actions: [{ op: 'create', path: 'new.txt', text: 'new' }] })).rejects.toMatchObject(denied)
+    await expect(call('project:edit', { action: 'apply', steps: [{ action: 'edit', fileRef: file.fileRef, edits: [{ op: 'replace', range: 1, text: 'new' }] }] })).rejects.toMatchObject(denied)
+    await expect(call('project:edit', { action: 'apply', steps: [{ action: 'create', path: 'new.txt', text: 'new' }] })).rejects.toMatchObject(denied)
     expect(await readFile(join(root, 'a.txt'), 'utf8')).toBe('old\n')
     await expect(readFile(join(root, 'new.txt'))).rejects.toThrow()
   })
@@ -330,7 +334,7 @@ describe('actual Project tool surface with final model references', () => {
     await writeFile(join(root, 'config.json'), '{"enabled":true}\n')
     const { call, read } = await fixture()
     const file = await read('config.json')
-    await expect(call('project:edit', { files: [{ fileRef: file.fileRef, edits: [{ op: 'replace', range: 1, text: '{invalid' }] }] })).rejects.toMatchObject({ reason: 'VALIDATION_FAILED' })
+    await expect(call('project:edit', { action: 'apply', steps: [{ action: 'edit', fileRef: file.fileRef, edits: [{ op: 'replace', range: 1, text: '{invalid' }] }] })).rejects.toMatchObject({ reason: 'VALIDATION_FAILED' })
     expect(await readFile(join(root, 'config.json'), 'utf8')).toBe('{"enabled":true}\n')
   })
 
@@ -338,9 +342,9 @@ describe('actual Project tool surface with final model references', () => {
     await writeFile(join(root, 'a.txt'), 'old\n')
     const { call, read } = await fixture()
     const file = await read('a.txt')
-    const result = await call('project:edit', { files: [{ fileRef: file.fileRef, edits: [{ op: 'replace', range: 1, text: 'ours' }] }] })
+    const result = await call('project:edit', { action: 'apply', steps: [{ action: 'edit', fileRef: file.fileRef, edits: [{ op: 'replace', range: 1, text: 'ours' }] }] })
     await writeFile(join(root, 'a.txt'), 'external\n')
-    await expect(call('project:change', { action: 'undo', changeRef: result.changeRef })).rejects.toThrow()
+    await expect(call('project:edit', { action: 'undo', changeRef: result.changeRef })).rejects.toThrow()
     expect(await readFile(join(root, 'a.txt'), 'utf8')).toBe('external\n')
   })
 
@@ -359,7 +363,7 @@ describe('edit outcomes and guidance the model can act on', () => {
     const policy = { decide: async ({ action }: { action: string }) => action === 'apply_edit' ? { allow: false, reason: 'writes paused' } : { allow: true } }
     const { call, read } = await fixture({ providers: { policy } as ProjectProviders })
     const file = await read('a.txt')
-    await expect(call('project:edit', { files: [{ fileRef: file.fileRef, edits: [{ op: 'replace', range: 1, text: 'new' }] }] }))
+    await expect(call('project:edit', { action: 'apply', steps: [{ action: 'edit', fileRef: file.fileRef, edits: [{ op: 'replace', range: 1, text: 'new' }] }] }))
       .rejects.toMatchObject({ reason: 'PERMISSION_DENIED', details: { executionOutcome: 'not-applied' } })
     expect(await readFile(join(root, 'a.txt'), 'utf8')).toBe('old\n')
   })
@@ -367,18 +371,18 @@ describe('edit outcomes and guidance the model can act on', () => {
   test('undo that meets a later edit, or an unknown receipt, has not written anything', async () => {
     await writeFile(join(root, 'a.txt'), 'one\n')
     const { call, read } = await fixture()
-    const edited = await call('project:edit', { files: [{ fileRef: (await read('a.txt')).fileRef, edits: [{ op: 'replace', range: 1, text: 'two' }] }] })
+    const edited = await call('project:edit', { action: 'apply', steps: [{ action: 'edit', fileRef: (await read('a.txt')).fileRef, edits: [{ op: 'replace', range: 1, text: 'two' }] }] })
     await writeFile(join(root, 'a.txt'), 'three\n')
-    await expect(call('project:change', { action: 'undo', changeRef: edited.changeRef }))
+    await expect(call('project:edit', { action: 'undo', changeRef: edited.changeRef }))
       .rejects.toMatchObject({ reason: 'CONFLICT_WITH_EXTERNAL_EDIT', details: { executionOutcome: 'not-applied' } })
-    await expect(call('project:change', { action: 'undo', changeRef: `change:${'0'.repeat(64)}` }))
+    await expect(call('project:edit', { action: 'undo', changeRef: `change:${'0'.repeat(64)}` }))
       .rejects.toMatchObject({ reason: 'INVALID_INPUT', details: { executionOutcome: 'not-applied' } })
     expect(await readFile(join(root, 'a.txt'), 'utf8')).toBe('three\n')
   })
 
   test('generated outputs are not hand-edited', async () => {
     const { call } = await fixture()
-    await expect(call('project:file', { actions: [{ op: 'create', path: 'src/api.generated.ts', text: 'export {}\n' }] }))
+    await expect(call('project:edit', { action: 'apply', steps: [{ action: 'create', path: 'src/api.generated.ts', text: 'export {}\n' }] }))
       .rejects.toMatchObject({ reason: 'GENERATED_FILE', suggestedNextAction: expect.stringContaining('project:run') })
     await expect(readFile(join(root, 'src/api.generated.ts'))).rejects.toThrow()
   })
@@ -388,7 +392,7 @@ describe('edit outcomes and guidance the model can act on', () => {
     const { call, read } = await fixture()
     const file = await read('a.txt')
     await utimes(join(root, 'a.txt'), new Date(2001, 1, 1), new Date(2001, 1, 1))
-    await call('project:edit', { files: [{ fileRef: file.fileRef, edits: [{ op: 'replace', range: 1, text: 'kept' }] }] })
+    await call('project:edit', { action: 'apply', steps: [{ action: 'edit', fileRef: file.fileRef, edits: [{ op: 'replace', range: 1, text: 'kept' }] }] })
     expect(await readFile(join(root, 'a.txt'), 'utf8')).toBe('kept\n')
   })
 
@@ -397,9 +401,9 @@ describe('edit outcomes and guidance the model can act on', () => {
     const { call, read } = await fixture()
     const file = await read('a.txt')
     await writeFile(join(root, 'a.txt'), 'gamma\ndelta\n')
-    const failure = await call('project:edit', { files: [{ fileRef: file.fileRef, edits: [{ op: 'replace', range: 1, text: 'x' }] }] }).then(() => undefined, (error) => error)
-    expect(failure).toMatchObject({ reason: 'BASE_REVISION_MISMATCH', details: { fileIndex: 0, executionOutcome: 'not-applied' } })
-    expect(failure.suggestedNextAction).toContain('["files",0,"fileRef"]')
+    const failure = await call('project:edit', { action: 'apply', steps: [{ action: 'edit', fileRef: file.fileRef, edits: [{ op: 'replace', range: 1, text: 'x' }] }] }).then(() => undefined, (error) => error)
+    expect(failure).toMatchObject({ reason: 'BASE_REVISION_MISMATCH', details: { stepIndex: 0, executionOutcome: 'not-applied' } })
+    expect(failure.suggestedNextAction).toContain('["steps",0,"fileRef"]')
     expect(failure.suggestedNextAction).not.toContain('snapshot.revision')
   })
 
@@ -409,9 +413,9 @@ describe('edit outcomes and guidance the model can act on', () => {
     const { call, read } = await fixture()
     const file = await read('a.txt')
     await writeFile(join(root, 'a.txt'), `inserted\n${body}`)
-    const small = await call('project:edit', { files: [{ fileRef: file.fileRef, edits: [{ op: 'replace', range: 5, text: 'x' }] }] }).then(() => undefined, (error) => error)
+    const small = await call('project:edit', { action: 'apply', steps: [{ action: 'edit', fileRef: file.fileRef, edits: [{ op: 'replace', range: 5, text: 'x' }] }] }).then(() => undefined, (error) => error)
     expect(small.details.recovery).toMatchObject({ candidates: [{ editIndex: 0, range: 6 }], window: { kind: 'project-source-window' } })
-    const large = await call('project:edit', { files: [{ fileRef: file.fileRef, edits: [{ op: 'replace', range: [5, 20], text: 'x' }] }] }).then(() => undefined, (error) => error)
+    const large = await call('project:edit', { action: 'apply', steps: [{ action: 'edit', fileRef: file.fileRef, edits: [{ op: 'replace', range: [5, 20], text: 'x' }] }] }).then(() => undefined, (error) => error)
     expect(large.details.recovery.candidates).toEqual([{ editIndex: 0, range: [6, 21], unchanged: true }])
     expect(large.details.recovery.window).toBeUndefined()
     expect(large.suggestedNextAction).toContain('project:read')
@@ -422,7 +426,7 @@ describe('edit outcomes and guidance the model can act on', () => {
     await writeFile(join(root, 'big.ts'), body)
     const { call, read, ctx } = await fixture()
     const file = await read('big.ts', [1, 300])
-    await call('project:edit', { files: [{ fileRef: file.fileRef, edits: [{ op: 'insert', range: 100, side: 'after', text: 'const added = 1' }] }] })
+    await call('project:edit', { action: 'apply', steps: [{ action: 'edit', fileRef: file.fileRef, edits: [{ op: 'insert', range: 100, side: 'after', text: 'const added = 1' }] }] })
     const coordinator = registerProjectFileContext(ctx)!
     await coordinator.prepare()
     const view = coordinator.currentViews().find((item) => item.path === 'big.ts')!

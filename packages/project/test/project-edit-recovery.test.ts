@@ -57,7 +57,7 @@ test('real tool returns a new bounded reference for confirmation and never appli
     }
     const read = await finalizeProjectModelResult(ctx,
       await projectTools['project:read'].execute({ files: [{ path: 'a.txt' }] }, ctx)) as any
-    const input = { files: [{ fileRef: read.files[0].fileRef, edits: [{ op: 'replace', range: 4, text: 'new' }] }] }
+    const input = { action: 'apply', steps: [{ action: 'edit', fileRef: read.files[0].fileRef, edits: [{ op: 'replace', range: 4, text: 'new' }] }] }
     const current = `extra\n${original}`
     await writeFile(join(root, 'a.txt'), current)
     let failure: ProjectError | undefined
@@ -72,11 +72,11 @@ test('real tool returns a new bounded reference for confirmation and never appli
     expect(recovery.candidates[0].range).toBe(5)
     expect(recovery.window.fileRef).toStartWith('view:')
     expect(await readFile(join(root, 'a.txt'), 'utf8')).toBe(current)
-    await projectTools['project:edit'].execute({ files: [{ fileRef: recovery.window.fileRef,
+    await projectTools['project:edit'].execute({ action: 'apply', steps: [{ action: 'edit', fileRef: recovery.window.fileRef,
       edits: [{ op: 'replace', range: recovery.candidates[0].range, text: 'new' }],
     }] }, ctx)
     expect(await readFile(join(root, 'a.txt'), 'utf8')).toBe(current.replace('\nold\n', '\nnew\n'))
-    await expect(projectTools['project:edit'].execute({ files: [{ fileRef: recovery.window.fileRef,
+    await expect(projectTools['project:edit'].execute({ action: 'apply', steps: [{ action: 'edit', fileRef: recovery.window.fileRef,
       edits: [{ op: 'replace', range: 5, text: 'duplicate' }],
     }] }, ctx)).rejects.toThrow()
   } finally { await rm(root, { recursive: true, force: true }) }

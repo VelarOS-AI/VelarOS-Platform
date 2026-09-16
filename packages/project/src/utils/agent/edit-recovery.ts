@@ -6,7 +6,7 @@ import { isNumber, isString } from '@velaros-ai/core'
 
 import type { ProjectToolContext } from '../../contract/requires'
 import type { PrepareEditInput } from '../../types/edit'
-import type { ProjectEditInput } from '../../types/editing'
+import type { ProjectEditStep } from '../../types/editing'
 import type { ProjectSourceWindow } from '../../types/source-window.js'
 import { suggestProjectEditLocations } from '../editing/stale-location'
 import { ProjectError } from '../errors'
@@ -21,7 +21,7 @@ import { projectSourceLines } from './source-window'
  * 只留有限几项，只剩一部分的候选会误导、覆盖不全的窗口签不出可用的 fileRef，所以超出就整体不给。找不到可确认的新位置时照常报过期并说明怎么重读。
  */
 export async function withProjectEditRecovery(
-  input: ProjectEditInput,
+  steps: readonly ProjectEditStep[],
   context: ProjectToolContext,
   prepare: () => Promise<PrepareEditInput>,
 ): Promise<PrepareEditInput> {
@@ -29,12 +29,14 @@ export async function withProjectEditRecovery(
     return await prepare()
   } catch (error) {
     if (!(error instanceof ProjectError) || error.reason !== 'BASE_REVISION_MISMATCH') throw error
-    const fileIndex = error.details?.fileIndex
-    const file = Number.isInteger(fileIndex) ? input.files[fileIndex] : undefined
+    const stepIndex = error.details?.stepIndex
+    const step = Number.isInteger(stepIndex) ? steps[stepIndex] : undefined
+    // 只有「凭 fileRef 定位的 edit 步」才谈得上按原意图重新定位：文件动作不带编辑，sourceRef、path 指的是计划内的文件。
+    const file = step?.action === 'edit' && 'fileRef' in step ? step : undefined
     if (!file) throw error
     // 找不到可确认的新位置时，仍按 fileRef 协议说明下一步，并点名要替换的参数路径。
     const stale = new ProjectError(error.reason, error.message, error.details,
-      `这个文件在该 fileRef 之后改过（可能就是你上一次的修改）：用 [Current project files] 或上一次修改回执里这个文件的新 fileRef，按新行号重做；那里没有再 project:read。回执带 inputReuse 时，用 reuse + changes 设置 ["files",${fileIndex},"fileRef"]（有 range 的同时改行号），正文不用重写。`)
+      `这个文件在该 fileRef 之后改过（可能就是你上一次的修改）：用 [Current project files] 或上一次修改回执里这个文件的新 fileRef，按新行号重做；那里没有再 project:read。回执带 inputReuse 时，用 reuse + changes 设置 ["steps",${stepIndex},"fileRef"]（有 range 的同时改行号），正文不用重写。`)
     try {
       const previous = await loadProjectFileView(context, file.fileRef)
       const kernel = await context.project.kernel()
@@ -50,7 +52,7 @@ export async function withProjectEditRecovery(
         for (let line = Math.max(1, start - 1); line <= Math.min(currentLines.length, end + 1); line++) needed.add(line)
       }
       const lines: Array<[number, string]> = [...needed].sort((a, b) => a - b).map((line) => [line, currentLines[line - 1].text])
-      const recovery: Record<string, unknown> = { kind: 'project-edit-candidates', requiresConfirmation: true, fileIndex, candidates }
+      const recovery: Record<string, unknown> = { kind: 'project-edit-candidates', requiresConfirmation: true, stepIndex, candidates }
       const windowFits = lines.length <= ProjectTuning.agent.recoveryItems && JSON.stringify(lines).length <= ProjectTuning.agent.recoveryWindowChars
       if (windowFits) recovery.window = {
         kind: 'project-source-window', path: previous.path, revision: current.snapshot.revision,
@@ -59,8 +61,8 @@ export async function withProjectEditRecovery(
       } satisfies ProjectSourceWindow
       throw new ProjectError(error.reason, '文件版本已变化；原目标及相邻原文仍可唯一定位，请确认当前上下文。', { ...error.details, recovery },
         windowFits
-          ? `检查 recovery.window 后，用 reuse + changes 设置 ["files",${fileIndex},"fileRef"] 为窗口里的新 fileRef；有 range 的编辑按 candidates 同步新行号，at 边界插入保持 at。text 保持原样；新引用仍需通过提交版本检查。`
-          : `candidates 给出了新行号，但范围太大放不进回执：先用 project:read 读取这些行获取新 fileRef，再用 reuse + changes 设置 ["files",${fileIndex},"fileRef"] 并按 candidates 同步 range。text 保持原样。`)
+          ? `检查 recovery.window 后，用 reuse + changes 设置 ["steps",${stepIndex},"fileRef"] 为窗口里的新 fileRef；有 range 的编辑按 candidates 同步新行号，at 边界插入保持 at。text 保持原样；新引用仍需通过提交版本检查。`
+          : `candidates 给出了新行号，但范围太大放不进回执：先用 project:read 读取这些行获取新 fileRef，再用 reuse + changes 设置 ["steps",${stepIndex},"fileRef"] 并按 candidates 同步 range。text 保持原样。`)
     } catch (recoveryError) {
       if (recoveryError instanceof ProjectError && recoveryError.details?.recovery) throw recoveryError
       throw stale

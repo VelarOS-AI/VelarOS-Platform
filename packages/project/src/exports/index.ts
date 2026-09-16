@@ -9,7 +9,7 @@
 export * from './contracts.js'
 
 // ── 产品面：工具、内置 mod、内核挂载、领域内核、有限事务面、落盘变更记录、审批桥、文件上下文登记 ───────
-export type { ProjectBundledModDefinition, ProjectCapabilityService, ProjectChangeFeed, ProjectChangeTool, ProjectCodeAnalysisToolCollection, ProjectToolCollection, VelaTool } from '../contract/provides.js'
+export type { ProjectBundledModDefinition, ProjectCapabilityService, ProjectChangeFeed, ProjectCodeAnalysisToolCollection, ProjectEditTool, ProjectToolCollection, VelaTool } from '../contract/provides.js'
 export type { ProjectKernel } from '../impl/kernel/LocalProjectKernel.js'
 export { createProjectKernel } from '../impl/kernel/LocalProjectKernel.js'
 export { createSecretRedactionProvider } from '../impl/kernel/PatternSecretRedactionProvider.js'

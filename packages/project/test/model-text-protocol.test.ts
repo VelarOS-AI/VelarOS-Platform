@@ -38,7 +38,7 @@ test.each(['utf8', 'utf8-bom', 'utf16le', 'utf16be', 'utf16le-nobom', 'utf16be-n
       const before = (await visible()).files[0]
       expect(before.lines).toEqual([[1, 'export const message = "中文🙂\\n";'], [2, 'export const count = 1;'], [3, '']])
       expect((await kernel.listSymbols('source.ts')).map((symbol) => symbol.name)).toEqual(expect.arrayContaining(['message', 'count']))
-      const plan = await compileProjectEdit({ files: [{ fileRef: before.fileRef, edits: [{ op: 'replace', range: 2, match: 'count = 1', text: 'count = 2' }] }] }, projectPlannerResolver(context))
+      const plan = await compileProjectEdit({ action: 'apply', steps: [{ action: 'edit', fileRef: before.fileRef, edits: [{ op: 'replace', range: 2, match: 'count = 1', text: 'count = 2' }] }] }, projectPlannerResolver(context))
       const tx = await kernel.prepareEdit(plan)
       await kernel.applyEdit({ transactionId: tx.transactionId })
       expect((await visible()).files[0].lines).toEqual([[1, 'export const message = "中文🙂\\n";'], [2, 'export const count = 2;'], [3, '']])

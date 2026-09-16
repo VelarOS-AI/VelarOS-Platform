@@ -76,11 +76,12 @@
       "disposition": "split",
       "destination": {
         "kind": "tool",
-        "name": "project:file",
+        "name": "project:edit",
         "input": {
-          "actions": [
+          "action": "apply",
+          "steps": [
             {
-              "op": "create",
+              "action": "create",
               "path": "src/new.ts",
               "text": "export {}"
             }
@@ -96,8 +97,10 @@
         "kind": "tool",
         "name": "project:edit",
         "input": {
-          "files": [
+          "action": "apply",
+          "steps": [
             {
+              "action": "edit",
               "fileRef": "view:example",
               "edits": [
                 {
@@ -117,7 +120,7 @@
       "disposition": "merge",
       "destination": {
         "kind": "tool",
-        "name": "project:change",
+        "name": "project:edit",
         "input": {
           "action": "undo",
           "changeRef": "change:example"
@@ -144,8 +147,10 @@
         "kind": "tool",
         "name": "project:edit",
         "input": {
-          "files": [
+          "action": "apply",
+          "steps": [
             {
+              "action": "edit",
               "fileRef": "view:example",
               "edits": [
                 {
@@ -167,8 +172,10 @@
         "kind": "tool",
         "name": "project:edit",
         "input": {
-          "files": [
+          "action": "apply",
+          "steps": [
             {
+              "action": "edit",
               "fileRef": "view:example",
               "edits": [
                 {
@@ -193,8 +200,10 @@
         "kind": "tool",
         "name": "project:edit",
         "input": {
-          "files": [
+          "action": "apply",
+          "steps": [
             {
+              "action": "edit",
               "fileRef": "view:example",
               "edits": [
                 {
@@ -217,8 +226,10 @@
         "kind": "tool",
         "name": "project:edit",
         "input": {
-          "files": [
+          "action": "apply",
+          "steps": [
             {
+              "action": "edit",
               "fileRef": "view:example",
               "edits": [
                 {
@@ -242,8 +253,10 @@
         "kind": "tool",
         "name": "project:edit",
         "input": {
-          "files": [
+          "action": "apply",
+          "steps": [
             {
+              "action": "edit",
               "fileRef": "view:example",
               "edits": [
                 {
@@ -265,8 +278,10 @@
         "kind": "tool",
         "name": "project:edit",
         "input": {
-          "files": [
+          "action": "apply",
+          "steps": [
             {
+              "action": "edit",
               "fileRef": "view:example",
               "edits": [
                 {
@@ -286,11 +301,12 @@
       "disposition": "move",
       "destination": {
         "kind": "tool",
-        "name": "project:file",
+        "name": "project:edit",
         "input": {
-          "actions": [
+          "action": "apply",
+          "steps": [
             {
-              "op": "create",
+              "action": "create",
               "path": "src/new.ts",
               "text": "export {}"
             }
@@ -304,11 +320,12 @@
       "disposition": "move",
       "destination": {
         "kind": "tool",
-        "name": "project:file",
+        "name": "project:edit",
         "input": {
-          "actions": [
+          "action": "apply",
+          "steps": [
             {
-              "op": "delete",
+              "action": "delete",
               "fileRef": "view:example"
             }
           ]
@@ -321,11 +338,12 @@
       "disposition": "move",
       "destination": {
         "kind": "tool",
-        "name": "project:file",
+        "name": "project:edit",
         "input": {
-          "actions": [
+          "action": "apply",
+          "steps": [
             {
-              "op": "move",
+              "action": "move",
               "fileRef": "view:example",
               "to": "src/moved.ts"
             }
@@ -373,8 +391,10 @@
         "kind": "tool",
         "name": "project:edit",
         "input": {
-          "files": [
+          "action": "apply",
+          "steps": [
             {
+              "action": "edit",
               "fileRef": "view:example",
               "edits": [
                 {
@@ -397,8 +417,10 @@
         "kind": "tool",
         "name": "project:edit",
         "input": {
-          "files": [
+          "action": "apply",
+          "steps": [
             {
+              "action": "edit",
               "fileRef": "view:example",
               "edits": [
                 {
@@ -420,8 +442,10 @@
         "kind": "tool",
         "name": "project:edit",
         "input": {
-          "files": [
+          "action": "apply",
+          "steps": [
             {
+              "action": "edit",
               "fileRef": "view:example",
               "edits": [
                 {
@@ -442,11 +466,12 @@
       "disposition": "move",
       "destination": {
         "kind": "tool",
-        "name": "project:file",
+        "name": "project:edit",
         "input": {
-          "actions": [
+          "action": "apply",
+          "steps": [
             {
-              "op": "create",
+              "action": "create",
               "path": "src/new.ts",
               "text": "export {}"
             }
@@ -460,11 +485,12 @@
       "disposition": "move",
       "destination": {
         "kind": "tool",
-        "name": "project:file",
+        "name": "project:edit",
         "input": {
-          "actions": [
+          "action": "apply",
+          "steps": [
             {
-              "op": "overwrite",
+              "action": "overwrite",
               "fileRef": "view:example",
               "text": "export {}"
             }
@@ -480,8 +506,10 @@
         "kind": "tool",
         "name": "project:edit",
         "input": {
-          "files": [
+          "action": "apply",
+          "steps": [
             {
+              "action": "edit",
               "fileRef": "view:example",
               "edits": [
                 {
@@ -503,8 +531,10 @@
         "kind": "tool",
         "name": "project:edit",
         "input": {
-          "files": [
+          "action": "apply",
+          "steps": [
             {
+              "action": "edit",
               "fileRef": "view:example",
               "edits": [
                 {
