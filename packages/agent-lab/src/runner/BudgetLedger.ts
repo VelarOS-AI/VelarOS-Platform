@@ -36,6 +36,14 @@ function maximumNullable(
   return Math.max(current, next);
 }
 
+/**
+ * 一本用量账本。
+ *
+ * **口径**：一本账本只记它自己那段时间的用量——墙钟从 `startedAt` 起算，工具调用与 token 取这段
+ * 时间内驱动报上来的累计值。整程一本（`runJourney` 开头建），每段再开一本（`beginLeg`）：
+ * 段预算拿本段账本比，整程预算拿整程账本比。两者混用就是「第二段刚开始就被整程时间判成超预算」
+ * 的来源，而驱动那边的 `waitSettled` 本来就是按本段计时的。
+ */
 export class BudgetLedger {
   private readonly startedAt: number;
   private currentUsage: BudgetUsage;
@@ -52,6 +60,11 @@ export class BudgetLedger {
       tokens: null,
       legs: 0,
     };
+  }
+
+  /** 开一本只记本段的账本：墙钟从现在起算，段预算按它判。 */
+  public beginLeg(): BudgetLedger {
+    return new BudgetLedger(this.now, this.now());
   }
 
   public observe(observation: Observation): void {

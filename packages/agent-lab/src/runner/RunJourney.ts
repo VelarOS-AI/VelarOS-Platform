@@ -28,6 +28,7 @@ import type {
   VerificationOutcome,
 } from "../protocol/index.js";
 import {
+  AgentLabPackageVersion,
   createUnobservedObservation,
   parseJourneySpec,
 } from "../protocol/index.js";
@@ -179,7 +180,7 @@ function harnessIdentity(
   policyDigest: string,
 ): HarnessIdentity {
   return {
-    packageVersion: options.packageVersion ?? "0.1.0",
+    packageVersion: options.packageVersion ?? AgentLabPackageVersion,
     sourceCommit: options.sourceCommit,
     consumerCommit: options.consumerCommit,
     taskDigest,
@@ -384,6 +385,8 @@ export async function runJourney(
         try {
           const legStartedAt = now();
           const legBudget: Budget = resolveBudget(journey.budget, leg.budget);
+          // 段预算按本段计（与驱动 waitSettled 的计时口径一致），整程预算仍按整程累计比。
+          const legLedger = ledger.beginLeg();
           let watchdogBaseline: ReturnType<
             typeof createWatchdogBaseline
           > | null = null;
@@ -405,12 +408,15 @@ export async function runJourney(
               const observation = normalizeObservation(sample.observation);
               ledger.observe(observation);
               ledger.observeDriverUsage(sample.usage);
+              legLedger.observe(observation);
+              legLedger.observeDriverUsage(sample.usage);
               const sampleFindings = options.detectors.detect(observation, {
                 trial: options.trial,
                 journey,
                 leg,
               });
-              const budgetLimit = ledger.exceeded(legBudget);
+              const budgetLimit =
+                legLedger.exceeded(legBudget) ?? ledger.exceeded(journey.budget);
               if (budgetLimit) {
                 watchdogAbort.current = {
                   detectorId: "budget-exhausted",

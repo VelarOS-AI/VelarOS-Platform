@@ -161,7 +161,7 @@
       "domain": "evaluation",
       "directory": "packages/agent-lab",
       "name": "@velaros-ai/agent-lab",
-      "version": "0.1.4",
+      "version": "0.1.5",
       "description": "Reproducible continuous-journey evaluation, diagnostics, statistics, and certification for AI agents.",
       "exportSubpaths": [
         ".",

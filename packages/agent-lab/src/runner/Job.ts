@@ -14,26 +14,46 @@ export interface JobRuntime {
   readonly onArchive?: (archive: RunArchive) => Promise<void> | void;
 }
 
+/**
+ * 跑完一个 job 的全部试验。
+ *
+ * 一个试验失败就**停止派发**并等在飞的试验收尾，再把第一个错误抛给调用方。原先是
+ * `Promise.all` 一拒绝就返回，其余 worker 却还在队列里取试验、开会话、发提示词——调用方早已
+ * 拿不到它们的归档，被测执行体那边却还在跑，会话与费用都在后台继续。
+ */
 export async function runJob(
   job: JobSpec,
   runtime: JobRuntime,
 ): Promise<readonly RunArchive[]> {
   const pending = [...job.trials];
   const archives: RunArchive[] = [];
+  let failed = false;
+  let failure: unknown = null;
   const workers = Array.from(
     { length: Math.min(job.concurrency, pending.length) },
     async (): Promise<void> => {
       for (;;) {
+        if (failed) return;
         const trial = pending.shift();
         if (!trial) return;
-        const driver = await runtime.resolveDriver(trial);
-        const archive = await runtime.runTrial(trial, driver);
-        archives.push(archive);
-        await runtime.onArchive?.(archive);
+        try {
+          const driver = await runtime.resolveDriver(trial);
+          const archive = await runtime.runTrial(trial, driver);
+          archives.push(archive);
+          await runtime.onArchive?.(archive);
+        } catch (error) {
+          if (!failed) {
+            failed = true;
+            failure = error;
+          }
+          return;
+        }
       }
     },
   );
+  // worker 自己不再抛，所以这里一定等到每个在飞的试验都收了尾，不留后台会话。
   await Promise.all(workers);
+  if (failed) throw failure;
   return archives.sort((left, right) =>
     left.manifest.trial.id.localeCompare(right.manifest.trial.id),
   );
