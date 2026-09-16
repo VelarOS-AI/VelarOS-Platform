@@ -1,59 +1,11 @@
+import { platform } from 'node:process'
+
 import { describe, expect, test } from 'bun:test'
 
 import { matchesAny } from '../src/utils/glob'
-import { createMatcherCache } from '../src/utils/matcher-cache'
-import { ProjectTuning } from '../src/utils/tuning'
 
-describe('glob matcher cache', () => {
-  test('reuses compiled matchers and evicts the least recently used entry at capacity', () => {
-    const compilations: string[] = []
-    const getMatcher = createMatcherCache(2, (pattern) => {
-      compilations.push(pattern)
-      return (input) => input === pattern
-    })
-
-    const firstA = getMatcher('a')
-    const firstB = getMatcher('b')
-    expect(getMatcher('a')).toBe(firstA)
-    expect(compilations).toEqual(['a', 'b'])
-
-    getMatcher('c')
-    expect(getMatcher('a')).toBe(firstA)
-    expect(getMatcher('b')).not.toBe(firstB)
-    expect(compilations).toEqual(['a', 'b', 'c', 'b'])
-  })
-
-  test('enforces a positive integer capacity', () => {
-    const compile = () => () => true
-
-    expect(() => createMatcherCache(0, compile)).toThrow(RangeError)
-    expect(() => createMatcherCache(1.5, compile)).toThrow(RangeError)
-  })
-
-  test('failed compilation keeps the last good matcher cached', () => {
-    let calls = 0
-    const getMatcher = createMatcherCache(1, (pattern) => {
-      calls++
-      if (pattern === 'invalid') throw new SyntaxError('invalid pattern')
-      return (input) => input === pattern
-    })
-    const good = getMatcher('good')
-    expect(() => getMatcher('invalid')).toThrow(SyntaxError)
-    expect(getMatcher('good')).toBe(good)
-    expect(calls).toBe(2)
-  })
-
-  test('production capacity retains hot entries across repeated overflow', () => {
-    const getMatcher = createMatcherCache(ProjectTuning.glob.matcherCacheEntries, (pattern) => (input) => input === pattern)
-    const hot = getMatcher('hot')
-    const cold = getMatcher('cold')
-    for (let index = 0; index < ProjectTuning.glob.matcherCacheEntries * 4; index++) {
-      getMatcher(`pattern-${index}`)
-      expect(getMatcher('hot')).toBe(hot)
-    }
-    expect(getMatcher('cold')).not.toBe(cold)
-  })
-})
+/** 本机的盘区不区分大小写（macOS、Windows 不区分）。 */
+const caseInsensitiveVolume = platform === 'darwin' || platform === 'win32'
 
 describe('glob matching semantics', () => {
   test('preserves exact, directory-prefix, glob, dotfile, and normalized-path matching', () => {
@@ -65,5 +17,15 @@ describe('glob matching semantics', () => {
     expect(matchesAny('.github/workflows/check.yml', ['**/*.yml'])).toBe(true)
     expect(matchesAny('src\\nested\\index.ts', ['src/**'])).toBe(true)
     expect(matchesAny('src/index.js', ['src/*.{ts,tsx}'])).toBe(false)
+    expect(matchesAny('src/index.ts', [])).toBe(false)
+  })
+
+  test('大小写按盘的规矩：不区分大小写的盘上大小写变体命中同一条规则', () => {
+    expect(matchesAny('.ENV', ['.env'])).toBe(caseInsensitiveVolume)
+    expect(matchesAny('SRC/nested/index.ts', ['src/'])).toBe(caseInsensitiveVolume)
+    expect(matchesAny('src/api.GENERATED.ts', ['**/*.generated.*'])).toBe(caseInsensitiveVolume)
+    expect(matchesAny('PACKAGE.json', ['package.json'])).toBe(caseInsensitiveVolume)
+    // 大小写一致时两种盘上都命中。
+    expect(matchesAny('src/api.generated.ts', ['**/*.generated.*'])).toBe(true)
   })
 })

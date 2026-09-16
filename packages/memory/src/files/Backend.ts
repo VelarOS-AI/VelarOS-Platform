@@ -21,7 +21,6 @@ import {
   isString,
   isTrue,
   Log,
-  toNullable,
   trimmedStringOrEmpty,
 } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
@@ -33,14 +32,11 @@ import type {
   MemoryStoreBackend,
 } from '../backend/Contract'
 import type { MemoryAuthorityEnumeration } from '../backend/DerivedIndex'
-import {
-  isMemoryRecallItemExcluded,
-  memoryConceptTypeByCategory,
-} from '../backend/RecallFilter'
 import { redactMemorySecrets, sanitizeMemoryEvidenceInput } from '../memory-tree/Sanitizer'
 import type {
   MemoryCaptureBatchResult,
   MemoryCaptureResult,
+  MemoryConceptType,
   MemoryEvidenceCategory,
   MemoryEvidenceInput,
   MemoryEvidenceRecord,
@@ -53,7 +49,6 @@ import {
   isMemoryVisibleInScope,
   type MemoryScopeId,
   resolveMemoryScopeSelector,
-  scopeTypeForScopeId,
 } from '../MemoryScope'
 
 import {
@@ -83,8 +78,6 @@ export const MemoryFilesBackendId = 'files'
 const IdSeparator = '::'
 /** 索引命中后最多读多少个全文——「按需全文」的上限，防止一次召回把整个记忆库读进内存。 */
 const MaxFullTextReadsPerRecall = 24
-/** 带内容级过滤时的扫描上限：过滤发生在全文上，24 份窗口会让偏好被最近的会话条目挤光。 */
-const MaxFilteredFullTextScansPerRecall = 200
 const ArchivedStatus = 'archived'
 /** 越界路径的诊断去重表上限：同一个坏索引每次召回都会再撞一次，日志不该跟着涨。 */
 const MaxReportedOutOfBoundsPaths = 200
@@ -124,6 +117,20 @@ const filesDescriptor: MemoryBackendDescriptor = Object.freeze({
   // 文件后端没有整理管线，也没有证据可用性状态机。
   verbs: Object.freeze(['capture', 'recall', 'inspect', 'archive'] as const),
 })
+
+const conceptTypeByCategory: Readonly<Record<string, MemoryConceptType>> = {
+  conversation: 'conversation',
+  fact: 'entity',
+  preference: 'user',
+  feedback: 'user',
+  procedure: 'procedure',
+  project: 'project',
+  task: 'task',
+  goal: 'goal',
+  interest: 'interest',
+  entity: 'entity',
+  artifact: 'artifact',
+}
 
 function slugify(value: string): string {
   const replaced = value
@@ -182,21 +189,6 @@ interface ScoredCandidate {
   readonly order: number
 }
 
-interface StableKeyCacheEntry {
-  /** 条目集合的指纹（索引文本 + 条目目录清单）；对不上就整份重建。 */
-  signature: string
-  readonly paths: Map<string, string>
-}
-
-/** 这次召回带不带「要读到全文才判得了」的过滤。带的话读取上限按筛过的算。 */
-function hasContentFilter(options: MemoryRecallOptions): boolean {
-  return (
-    !isEmpty(options.categories ?? [])
-    || !isEmpty(options.excludeSourceTypes ?? [])
-    || isTrue(options.excludeConversationObservations)
-  )
-}
-
 class MemoryFilesBackend implements MemoryStoreBackend {
   public readonly descriptor = filesDescriptor
 
@@ -207,8 +199,6 @@ class MemoryFilesBackend implements MemoryStoreBackend {
   private readonly now: () => number
   /** 已经报过的越界路径；同一个坏索引不必每次召回都刷一条日志。 */
   private readonly reportedOutOfBoundsPaths = new Set<string>()
-  /** 每个根的「稳定键 → 条目路径」映射，按条目集合的签名失效。 */
-  private readonly stableKeyCache = new Map<string, StableKeyCacheEntry>()
 
   public constructor(private readonly options: MemoryFilesBackendOptions) {
     this.io = options.io ?? createInMemoryMemoryFilesIo()
@@ -229,18 +219,15 @@ class MemoryFilesBackend implements MemoryStoreBackend {
     // 落盘前先过全仓同一道证据清洗：秘密打码、正文与标题截断、空内容拒收。
     // 文件后端是出厂默认的权威层，清洗漏在这里 = 用户在聊天里贴的 key 原样进了跟着 git 走的目录。
     const evidenceInput = sanitizeMemoryEvidenceInput(input)
+    const root = this.resolveWriteRoot(evidenceInput)
     const timestamp = evidenceInput.occurredAt ?? this.now()
     const title = (evidenceInput.title ?? '').trim() || firstLine(evidenceInput.content) || 'memory'
     const category: MemoryEvidenceCategory = evidenceInput.category ?? 'fact'
     const stableKey = (evidenceInput.sourceId ?? '').trim()
       || hash(`${evidenceInput.sourceType}|${title}|${evidenceInput.content}`)
 
-    const root = this.resolveWriteRoot(evidenceInput)
-    if (isNull(root))
-      return this.rejectCapture({ input: evidenceInput, title, category, timestamp, stableKey })
-
     const index = this.readIndex(root)
-    const existingPath = this.findPathByStableKey(root, stableKey)
+    const existingPath = this.findPathByStableKey(root, index, stableKey)
     const relativePath = existingPath ?? this.allocatePath(root, index, title)
     const absolutePath = this.resolveEntryPath(root, relativePath)
     if (isNull(absolutePath)) {
@@ -262,9 +249,6 @@ class MemoryFilesBackend implements MemoryStoreBackend {
         || firstLine(evidenceInput.content)
       ).slice(0, 400),
     )
-    // 归档是用户的决定：同一来源再采集只更新内容，不解除归档、也不把索引行放回去。
-    // （Desktop 每次保存会话状态都重放整段对话，不守住这一条，用户归档的条目下一次保存就复活。）
-    const archived = previous?.attributes.status === ArchivedStatus
 
     const document = serializeMemoryFileDocument({
       name: title,
@@ -281,7 +265,7 @@ class MemoryFilesBackend implements MemoryStoreBackend {
         sourceType: evidenceInput.sourceType,
         trust: evidenceInput.trustLevel,
         privacy: evidenceInput.privacyClass ?? 'standard',
-        status: archived ? ArchivedStatus : 'active',
+        status: 'active',
         created: previous?.attributes.created ?? String(timestamp),
         updated: String(timestamp),
         ...optionalTags(evidenceInput.metadata),
@@ -293,21 +277,17 @@ class MemoryFilesBackend implements MemoryStoreBackend {
     if (inserted) {
       this.io.ensureDirectory(this.io.join(root.directory, this.entriesDirectoryName))
       this.io.writeTextFile(absolutePath, document)
-      if (!archived) {
-        this.writeIndex(
-          root,
-          upsertMemoryIndexEntry(index, { path: relativePath, name: title, description }),
-        )
-      }
-      this.rememberStableKeyPath(root, stableKey, relativePath)
+      this.writeIndex(
+        root,
+        upsertMemoryIndexEntry(index, { path: relativePath, name: title, description }),
+      )
     }
 
     return {
       evidence: this.toEvidenceRecord({
         input: evidenceInput,
-        scopeType: root.scopeType,
-        scopeId: root.scopeId,
-        id: `${root.scopeId}${IdSeparator}${relativePath}`,
+        root,
+        relativePath,
         title,
         category,
         timestamp,
@@ -355,29 +335,33 @@ class MemoryFilesBackend implements MemoryStoreBackend {
     candidates.sort((left, right) =>
       right.score - left.score || right.order - left.order)
 
-    // 按需全文：只对索引命中的头部候选读文件。
-    //
-    // 上限分两档，因为过滤发生在**读到的全文**上：不带内容级过滤时 24 份就是结果本身；带过滤时
-    // 24 份是个先截断后过滤的窗口，聊天采集开着的时候最近 24 条全是会话条目，`memory:search`
-    // 的画像召回（`categories`）于是稳定返回 0 条。带过滤时按筛过的算，扫描量另有上限。
-    const budget = hasContentFilter(options)
-      ? MaxFilteredFullTextScansPerRecall
-      : MaxFullTextReadsPerRecall
+    const categories = options.categories?.length ? new Set(options.categories) : undefined
+    const excludedSourceTypes = options.excludeSourceTypes?.length
+      ? new Set(options.excludeSourceTypes)
+      : undefined
     const items: MemoryRecallItem[] = []
-    for (const candidate of candidates.slice(0, budget)) {
+    // 按需全文：只对索引命中的头部候选读文件，类别过滤在读到的文档上完成。
+    for (const candidate of candidates.slice(0, MaxFullTextReadsPerRecall)) {
       if (items.length >= limit) break
       const loaded = this.loadEntry(candidate.root, candidate.entry)
       if (!loaded) continue
-      const item = this.toRecallItem(
-        candidate.root,
-        candidate.entry,
-        loaded.document,
-        isEmpty(tokens) ? 'recent' : 'text',
+      if (loaded.document.attributes.status === ArchivedStatus && !options.includeDormant) continue
+      if (categories && !categories.has(loaded.document.type as MemoryEvidenceCategory)) continue
+      if (options.excludeConversationObservations && loaded.document.type === 'conversation') continue
+      if (
+        excludedSourceTypes
+        && excludedSourceTypes.has(
+          loaded.document.attributes.sourceType as MemoryEvidenceInput['sourceType']
+        )
+      ) continue
+      items.push(
+        this.toRecallItem(
+          candidate.root,
+          candidate.entry,
+          loaded.document,
+          isEmpty(tokens) ? 'recent' : 'text',
+        ),
       )
-      // 过滤判据与叠加编排的语义通道同一处（`isMemoryRecallItemExcluded`）；
-      // 权威层读得到确切类别，直接交给判据，不必按概念类型反推。
-      if (isMemoryRecallItemExcluded(item, options, { category: loaded.document.type })) continue
-      items.push(item)
     }
     return items
   }
@@ -525,15 +509,7 @@ class MemoryFilesBackend implements MemoryStoreBackend {
     this.log.warn('记忆条目路径越界，已跳过', { reference })
   }
 
-  /**
-   * 这条证据往哪个根写；作用域说了是哪个池子而宿主没给对应的根时**拒收**（返回 null）。
-   *
-   * 从前是兜底：`workspace` 型取「任意一个项目根」，否则回落 global 或第一个根。于是
-   * `project:/other` 的证据写进当前项目 `/repo` 的目录（跨项目污染，而且会被 `/repo` 的会话
-   * 召回到），`site:` 的写进系统池（此后在系统空间可见）。作用域是隔离语义，不是检索偏好，
-   * 写错池子比不写坏得多——宿主少给一条根应该看见诊断，而不是让记忆静默流进别的池子。
-   */
-  private resolveWriteRoot(input: MemoryEvidenceInput): Nullable<MemoryFilesScopeRoot> {
+  private resolveWriteRoot(input: MemoryEvidenceInput): MemoryFilesScopeRoot {
     const roots = this.listRoots().filter((root) => !isTrue(root.readOnly))
     if (isEmpty(roots)) {
       throw new AppError(
@@ -545,33 +521,16 @@ class MemoryFilesBackend implements MemoryStoreBackend {
     // 历史实现在这里做过 `scopeId.endsWith(workspaceRoot)` 的后缀兜底，会把
     // `project:/backup/a/b` 当成 `/a/b` 的根写进去——落错池子且在本空间再也召回不到。
     const selector = resolveMemoryScopeSelector(input)
-    // 两轴皆空 = 调用方没说作用域（管理面、无空间宿主）：这时才有兜底可言。
-    if (!selector) return roots.find((root) => root.scopeType === 'global') ?? roots[0]
-    return toNullable(roots.find((root) => root.scopeId === selector))
-  }
+    const bySelector = selector
+      ? roots.find((root) => root.scopeId === selector)
+      : undefined
+    if (bySelector) return bySelector
 
-  /** 找不到对应根时的拒收回执：作用域照实回，不改写；`inserted: false` 且没有条目 id。 */
-  private rejectCapture(context: {
-    input: MemoryEvidenceInput
-    title: string
-    category: MemoryEvidenceCategory
-    timestamp: number
-    stableKey: string
-  }): MemoryCaptureResult {
-    const scopeId = resolveMemoryScopeSelector(context.input)
-    this.log.warn('证据的作用域没有对应的可写根，已拒收（不落进别的池子）', {
-      scopeId,
-      sourceType: context.input.sourceType,
-    })
-    return {
-      evidence: this.toEvidenceRecord({
-        ...context,
-        scopeType: context.input.scopeType ?? scopeTypeForScopeId(scopeId),
-        scopeId,
-        id: '',
-      }),
-      inserted: false,
+    if (input.scopeType === 'workspace') {
+      const anyProject = roots.find((root) => root.scopeType === 'workspace')
+      if (anyProject) return anyProject
     }
+    return roots.find((root) => root.scopeType === 'global') ?? roots[0]
   }
 
   private resolveReadRoots(options: MemoryRecallOptions): readonly MemoryFilesScopeRoot[] {
@@ -641,55 +600,15 @@ class MemoryFilesBackend implements MemoryStoreBackend {
     )
   }
 
-  /**
-   * 稳定键 → 条目路径。
-   *
-   * **覆盖整个条目目录（含已归档）**：归档已经把索引行撤走了，只在索引里找就会让同一来源的
-   * 下一次采集新建一个 `-2` 文件、以在用状态复活——Desktop 每次保存会话状态都重放整段对话，
-   * 用户归档的条目下一次保存就回来了。
-   *
-   * 映射按「索引文本 + 条目目录清单」这道签名缓存在进程内：从前每写一条都把索引里的每个文件
-   * 读一遍，400 条时写 1 条读 403 个文件，还全是同步 fs、跑在 Electron 主进程上。签名对不上
-   * （外部编辑器改过）就整份重建。
-   */
   private findPathByStableKey(
     root: MemoryFilesScopeRoot,
+    entries: readonly MemoryIndexEntry[],
     stableKey: string,
   ): string | undefined {
-    return this.stableKeyPaths(root).get(stableKey)
-  }
-
-  private stableKeyPaths(root: MemoryFilesScopeRoot): Map<string, string> {
-    const signature = this.entriesSignature(root)
-    const cached = this.stableKeyCache.get(root.directory)
-    if (cached && cached.signature === signature) return cached.paths
-
-    const paths = new Map<string, string>()
-    for (const entry of this.listCandidateEntries(root, true)) {
-      const key = this.loadDocument(root, entry.path)?.attributes.stableKey
-      if (key) paths.set(key, entry.path)
+    for (const entry of entries) {
+      if (this.loadDocument(root, entry.path)?.attributes.stableKey === stableKey) return entry.path
     }
-    this.stableKeyCache.set(root.directory, { signature, paths })
-    return paths
-  }
-
-  /** 写完一条之后就地更新映射，省下一次全目录重扫（签名重算只是一次读 + 一次列目录）。 */
-  private rememberStableKeyPath(
-    root: MemoryFilesScopeRoot,
-    stableKey: string,
-    relativePath: string,
-  ): void {
-    const cached = this.stableKeyCache.get(root.directory)
-    if (!cached) return
-    cached.paths.set(stableKey, relativePath)
-    cached.signature = this.entriesSignature(root)
-  }
-
-  /** 条目集合的指纹：索引文本 + 条目目录清单。任一变化就重建稳定键映射。 */
-  private entriesSignature(root: MemoryFilesScopeRoot): string {
-    const index = this.io.readTextFile(this.io.join(root.directory, this.indexFileName)) ?? ''
-    const names = this.io.listFiles(this.io.join(root.directory, this.entriesDirectoryName))
-    return JSON.stringify([index, names])
+    return undefined
   }
 
   private allocatePath(
@@ -739,7 +658,7 @@ class MemoryFilesBackend implements MemoryStoreBackend {
       id,
       claimId: id,
       conceptId: entry.path,
-      conceptType: memoryConceptTypeByCategory[document.type] ?? 'entity',
+      conceptType: conceptTypeByCategory[document.type] ?? 'entity',
       predicate: 'memory',
       title: document.name || entry.name,
       summary: document.description || entry.description,
@@ -764,25 +683,23 @@ class MemoryFilesBackend implements MemoryStoreBackend {
 
   private toEvidenceRecord(input: {
     input: MemoryEvidenceInput
-    scopeType: MemoryScopeType
-    scopeId: string
-    /** 条目 id；拒收时为空串（磁盘上没有这条）。 */
-    id: string
+    root: MemoryFilesScopeRoot
+    relativePath: string
     title: string
     category: MemoryEvidenceCategory
     timestamp: number
     stableKey: string
   }): MemoryEvidenceRecord {
     return {
-      id: input.id,
+      id: `${input.root.scopeId}${IdSeparator}${input.relativePath}`,
       sourceType: input.input.sourceType,
       trustLevel: input.input.trustLevel,
       sourceId: input.stableKey,
       sessionId: input.input.sessionId ?? '',
       executionId: input.input.executionId ?? '',
       workspaceRoot: input.input.workspaceRoot ?? '',
-      scopeType: input.scopeType,
-      scopeId: input.scopeId,
+      scopeType: input.root.scopeType,
+      scopeId: input.root.scopeId,
       occurredAt: input.timestamp,
       title: input.title,
       content: input.input.content,

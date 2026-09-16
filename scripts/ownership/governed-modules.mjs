@@ -55,7 +55,7 @@ export const GovernedModules = [
       // 能力：命令、受管子进程、shell；文件操作与搜索
       [
         'SystemCommandRunner.ts', 'SystemSandboxes.ts', 'SystemShellResolver.ts', 'SystemProcessManager.ts', 'SystemManagedProcess.ts',
-        'SystemOutputDecoder.ts', 'SystemExecutionOperations.ts', 'SystemFileOperations.ts', 'SystemFileHistory.ts', 'SystemGlobalSearch.ts', 'GitIgnoreSystemSearchPolicy.ts',
+        'SystemOutputDecoder.ts', 'SystemExecutionOperations.ts', 'SystemFileOperations.ts', 'SystemFileHistory.ts', 'SystemGlobalSearch.ts',
       ],
       // shell 错误类
       ['SystemShellUnavailableError.ts'],

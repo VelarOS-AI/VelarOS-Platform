@@ -3,13 +3,50 @@ import { readdir } from 'node:fs/promises'
 import * as path from 'node:path'
 
 import { isEmpty, isTrue } from '@velaros-ai/core'
+import type { GitCheckIgnoreRunner } from '@velaros-ai/path-rules'
+import { createIgnorePolicy } from '@velaros-ai/path-rules'
 
-import type { GitignoreRule,ListedDirectory, ListingDependencies, ListingDirectory, ListingNode } from '../../types/files.js'
+import type { CommandProvider } from '../../contract/requires.js'
+import type { ListedDirectory, ListingDependencies, ListingDirectory, ListingNode } from '../../types/files.js'
 import type { FileListEntry, ObserveInput } from '../../types/io.js'
-import { isGitignored, readAncestorGitignoreRules, readGitignoreRules } from '../gitignore.js'
 import { matchesAny } from '../glob.js'
 import { normalizeRel } from '../path.js'
 import { ProjectTuning } from '../tuning.js'
+
+/** git check-ignore 的 `-z`：传进去的路径与读回来的输出都以 NUL 分隔。 */
+const NulSeparator = '\0'
+
+/**
+ * 用宿主的命令口批量问 git 哪些相对路径被忽略：git 自己的引擎比本地解析更能覆盖边界情况（父目录被忽略则子项取不回来等）。
+ * `-z` 只有和 `--stdin` 共用才生效：路径以 NUL 分隔经 stdin 传入，也不受命令行长度限制。退出码 1 表示一条都没被忽略，不是失败；
+ * git 不在、跑不起来、退出码不是 0 或 1 时返回 null，由公共件回退到本地 .gitignore 规则。
+ */
+function gitCheckIgnoreWith(command: CommandProvider): GitCheckIgnoreRunner {
+  return async (root, relativePaths) => {
+    const candidates = [...new Set(relativePaths.map((item) => normalizeRel(item)).filter(Boolean))]
+    if (isEmpty(candidates)) return new Set()
+    try {
+      const result = await command.run({
+        command: 'git',
+        args: ['check-ignore', '--no-index', '--stdin', '-z'],
+        cwd: root,
+        stdin: candidates.join(NulSeparator),
+        timeoutMs: ProjectTuning.files.gitTimeoutMs,
+      })
+      if (result.exitCode === 1) return new Set()
+      if (result.exitCode !== 0) return null
+      return new Set(
+        result.stdout
+          .split(NulSeparator)
+          .filter(Boolean)
+          .map((item) => normalizeRel(item).replace(/\/$/, '')),
+      )
+    } catch {
+      // arch-guard:silent-catch-ok git check-ignore 不可用时回退到本地 gitignore 解析。
+      return null
+    }
+  }
+}
 
 /** 整理 include、exclude 名单：去掉首尾空白、空项和重复。 */
 export function normalizeFilterList(values: LooseOptional<readonly string[]>): string[] {
@@ -37,62 +74,14 @@ export async function listProjectFiles(
     : { abs: dependencies.root, rel: '.' }
   const startDir = startAccess.abs
   const startRel = startAccess.rel || '.'
-  let gitCheckIgnoreUnavailable = false
-
-  const gitCheckIgnoredPaths = async (paths: string[]): Promise<Nullable<Set<string>>> => {
-    const candidates = [...new Set(paths.map((item) => normalizeRel(item)).filter(Boolean))]
-    if (gitCheckIgnoreUnavailable || isEmpty(candidates)) return null
-
-    try {
-      // 优先使用 git 自己的 ignore 引擎，它比本地解析更能覆盖边界情况。-z 只有和 --stdin
-      // 共用才生效：路径以 NUL 分隔经 stdin 传入，也不受命令行长度限制。
-      const result = await dependencies.command.run({
-        command: 'git',
-        args: ['check-ignore', '--no-index', '--stdin', '-z'],
-        cwd: dependencies.root,
-        stdin: candidates.join('\0'),
-        timeoutMs: ProjectTuning.files.gitTimeoutMs,
-      })
-
-      // 退出码 1 表示没有任何路径被忽略，不是失败。
-      if (result.exitCode === 1) return new Set()
-      if (result.exitCode !== 0) {
-        gitCheckIgnoreUnavailable = true
-        return null
-      }
-
-      return new Set(
-        result.stdout
-          .split('\0')
-          .filter(Boolean)
-          .map((item) => normalizeRel(item).replace(/\/$/, '')),
-      )
-    } catch {
-      // arch-guard:silent-catch-ok git check-ignore 不可用时回退到本地 gitignore 解析。
-      gitCheckIgnoreUnavailable = true
-      return null
-    }
-  }
-
-  // 一批路径只起一次 git check-ignore；git 不可用时按每条路径所在目录累积的本地规则判定。
-  const ignoredAmong = async (
-    candidates: ReadonlyArray<{ rel: string; rules: readonly GitignoreRule[] }>,
-  ): Promise<Set<string>> => {
-    const gitIgnored = await gitCheckIgnoredPaths(candidates.map(({ rel }) => rel))
-    return (
-      gitIgnored ??
-      new Set(candidates.filter(({ rel, rules }) => isGitignored(rel, rules)).map(({ rel }) => rel))
-    )
-  }
+  // 忽略判定交给公共件：一次列举一份策略，读过的 .gitignore 与「git 还能不能用」都记在它里面。
+  const ignorePolicy = createIgnorePolicy(dependencies.root, {
+    gitCheckIgnore: gitCheckIgnoreWith(dependencies.command),
+  })
 
   const requestsGitignoreExclusion = input.excludeGitignored ?? true
-  const ancestorGitignoreRules = requestsGitignoreExclusion
-    ? await readAncestorGitignoreRules(dependencies.root, startRel)
-    : []
   const startIgnored =
-    requestsGitignoreExclusion &&
-    startRel !== '.' &&
-    (await ignoredAmong([{ rel: startRel, rules: ancestorGitignoreRules }])).has(startRel)
+    requestsGitignoreExclusion && startRel !== '.' && (await ignorePolicy.shouldSkip(startDir, true))
   if (startIgnored && isTrue(input.excludeGitignored)) return out
   const excludeGitignored = requestsGitignoreExclusion && !startIgnored
 
@@ -100,9 +89,7 @@ export async function listProjectFiles(
   // 递归列举慢一个数量级。被忽略、被排除或不可见的目录不再深入；已发现的可输出条目够 maxFiles
   // 后不再读下一层，工作量随请求的输出规模收敛。
   const topLevel: ListingNode[] = []
-  let level: ListingDirectory[] = [
-    { abs: startDir, rel: startRel, children: topLevel, rules: ancestorGitignoreRules },
-  ]
+  let level: ListingDirectory[] = [{ abs: startDir, rel: startRel, children: topLevel }]
   let discovered = 0
   for (let depth = 1; depth <= maxDepth && !isEmpty(level) && discovered < max; depth += 1) {
     const listed: ListedDirectory[] = []
@@ -114,12 +101,8 @@ export async function listProjectFiles(
         // arch-guard:silent-catch-ok 目录读取失败时跳过该子树，保持 listFiles best-effort。
         continue
       }
-      const rules = excludeGitignored
-        ? [...directory.rules, ...(await readGitignoreRules(dependencies.root, directory.rel))]
-        : []
       listed.push({
         directory,
-        rules,
         entries: entries.map((entry) => {
           const abs = path.join(directory.abs, entry.name)
           return { entry, abs, rel: normalizeRel(path.relative(dependencies.root, abs)) }
@@ -127,14 +110,16 @@ export async function listProjectFiles(
       })
     }
     const ignored = excludeGitignored
-      ? await ignoredAmong(
-          listed.flatMap(({ rules, entries }) => entries.map(({ rel }) => ({ rel, rules }))),
+      ? await ignorePolicy.ignoredAmong(
+          listed.flatMap(({ entries }) =>
+            entries.map(({ entry, abs }) => ({ absolutePath: abs, isDirectory: entry.isDirectory() })),
+          ),
         )
       : new Set<string>()
     const nextLevel: ListingDirectory[] = []
-    for (const { directory, rules, entries } of listed) {
+    for (const { directory, entries } of listed) {
       for (const { entry, abs, rel } of entries) {
-        if (ignored.has(rel)) continue
+        if (ignored.has(abs)) continue
         if (!isEmpty(exclude) && matchesAny(rel, exclude)) continue
         const action = entry.isDirectory() ? 'observe' : 'search'
         let outputRel = rel
@@ -159,7 +144,7 @@ export async function listProjectFiles(
         directory.children.push(node)
         if (node.included) discovered += 1
         if (entry.isDirectory() && recursive && depth < maxDepth) {
-          nextLevel.push({ abs, rel, children: node.children, rules })
+          nextLevel.push({ abs, rel, children: node.children })
         }
       }
     }

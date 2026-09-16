@@ -8,7 +8,8 @@ import {
   test,
 } from 'bun:test'
 
-import { GitIgnoreSystemSearchPolicy } from '../src/impl/GitIgnoreSystemSearchPolicy.js'
+import { createIgnorePolicy } from '@velaros-ai/path-rules'
+
 import { shouldSkipSystemSearchEntry, shouldSkipSystemSearchProtectedDirectory } from '../src/utils/search.js'
 
 describe('System search visibility', () => {
@@ -40,7 +41,7 @@ describe('System search visibility', () => {
     })).toBe(false)
   })
 
-  test('owns repository ignore policy without Core utilities', async () => {
+  test('按公共件的忽略策略判定仓库内的条目', async () => {
     const rootPath = await mkdtemp(join(tmpdir(), 'velaros-system-search-'))
     try {
       await mkdir(join(rootPath, '.git'))
@@ -50,12 +51,13 @@ describe('System search visibility', () => {
         ['ignored/', '*.log', '!important.log'].join('\n'),
       )
 
-      const policy = new GitIgnoreSystemSearchPolicy(rootPath)
+      const policy = createIgnorePolicy(rootPath, { rulesFrom: 'repository' })
       expect(await policy.shouldSkip(join(rootPath, 'ignored'), true)).toBe(true)
       expect(await policy.shouldSkip(join(rootPath, 'debug.log'), false)).toBe(true)
       expect(await policy.shouldSkip(join(rootPath, 'important.log'), false)).toBe(false)
 
-      const unrestrictedPolicy = new GitIgnoreSystemSearchPolicy(rootPath, {
+      const unrestrictedPolicy = createIgnorePolicy(rootPath, {
+        rulesFrom: 'repository',
         unrestricted: true,
       })
       expect(await unrestrictedPolicy.shouldSkip(join(rootPath, 'ignored'), true)).toBe(false)

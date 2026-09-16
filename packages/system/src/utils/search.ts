@@ -1,14 +1,12 @@
 /**
- * 搜索：逐行文本匹配、路径名匹配、gitignore 规则、系统搜索跳过哪些目录。
+ * 搜索：逐行文本匹配、路径名匹配、系统搜索跳过哪些目录。.gitignore 的解析与判定在 `@velaros-ai/path-rules`。
  */
-
-import { readFile, stat } from 'node:fs/promises'
-import { dirname, isAbsolute, relative, resolve, sep } from 'node:path'
 
 import { isEmpty } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
+import { DiscoverySkippedDirectoryNames } from '@velaros-ai/path-rules/contracts'
 
-import type { GitIgnoreRule, SystemSearchProtectedDirectoryInput } from '../types/files.js'
+import type { SystemSearchProtectedDirectoryInput } from '../types/files.js'
 import type { SystemGlobalSearchOptions } from '../types/system.js'
 
 /** 按搜索词生成逐行匹配函数，返回一行里每处命中的列号（从 1 开始），支持正则与区分大小写；正则写错时抛 VALIDATION，空的字面搜索词匹配不到任何东西。 */
@@ -54,181 +52,6 @@ export function buildLineMatcher(input: { pattern: string; regex?: boolean; case
   }
 }
 
-/** 从某个路径往上找最近的 git 仓库根目录；找不到返回 null。 */
-export async function findSystemSearchRepoRoot(startPath: string): Promise<Nullable<string>> {
-  let currentPath = resolve(startPath)
-  const startStats = await stat(currentPath).catch(() => null)
-  if (startStats?.isFile()) currentPath = dirname(currentPath)
-
-  while (true) {
-    const gitMarker = await stat(`${currentPath}${sep}.git`).catch(() => null)
-    if (gitMarker) return currentPath
-
-    const parentPath = dirname(currentPath)
-    if (parentPath === currentPath) return null
-    currentPath = parentPath
-  }
-}
-
-/** 读出一个 .gitignore 文件的各行；文件不存在返回空列表。 */
-export async function readIgnoreLines(path: string): Promise<string[]> {
-  const content = await readFile(path, 'utf-8').catch(() => '')
-  if (isEmpty(content)) return []
-  return content.split(/\r?\n/u)
-}
-
-/** 把 .gitignore 的一行解析成匹配规则；空行与注释返回 null。 */
-export function parseGitIgnoreRule(rawLine: string, baseRelativePath: string): Nullable<GitIgnoreRule> {
-  let line = rawLine.trimEnd()
-  if (isEmpty(line) || line.startsWith('#')) return null
-
-  let negative = false
-  if (line.startsWith('!')) {
-    negative = true
-    line = line.slice(1)
-  } else if (line.startsWith('\\#') || line.startsWith('\\!')) {
-    line = line.slice(1)
-  }
-
-  const directoryOnly = line.endsWith('/')
-  line = line.replace(/^\/+/u, '').replace(/\/+$/u, '')
-  if (isEmpty(line)) return null
-
-  const anchored = rawLine.startsWith('/') || line.includes('/')
-  return {
-    baseRelativePath,
-    negative,
-    directoryOnly,
-    anchored,
-    segments: line.split('/').filter((segment) => segment.length > 0),
-  }
-}
-
-/** 判断一条 gitignore 规则是否命中某个相对路径。 */
-export function matchesGitIgnoreRule(
-  rule: GitIgnoreRule,
-  candidateRelativePath: string,
-  isDirectory: boolean
-): boolean {
-  const candidateSegments = candidateRelativePath.split('/').filter((segment) => segment.length > 0)
-  if (isEmpty(candidateSegments)) return false
-
-  const baseSegments =
-    isEmpty(rule.baseRelativePath) || rule.baseRelativePath === '.'
-      ? []
-      : rule.baseRelativePath.split('/').filter((segment) => segment.length > 0)
-  if (!startsWithSegments(candidateSegments, baseSegments)) return false
-
-  const scopedSegments = candidateSegments.slice(baseSegments.length)
-  if (isEmpty(scopedSegments)) return false
-
-  if (rule.anchored) {
-    if (!startsWithSegments(scopedSegments, rule.segments)) return false
-    return !rule.directoryOnly || isDirectory || scopedSegments.length > rule.segments.length
-  }
-
-  for (let index = 0; index < scopedSegments.length; index += 1) {
-    const segment = scopedSegments[index] ?? ''
-    if (!matchesGitIgnoreSegment(rule.segments[0] ?? '', segment)) continue
-    return !rule.directoryOnly || isDirectory || index < scopedSegments.length - 1
-  }
-
-  return false
-}
-
-/** 判断一段 gitignore 通配模式是否匹配一个路径片段。 */
-function matchesGitIgnoreSegment(pattern: string, value: string): boolean {
-  if (pattern === value) return true
-  const expression = new RegExp(`^${gitIgnoreSegmentPatternToRegex(pattern)}$`, 'u')
-  return expression.test(value)
-}
-
-/** 把 gitignore 片段里的 `*` 与 `?` 通配转成正则表达式文本。 */
-function gitIgnoreSegmentPatternToRegex(pattern: string): string {
-  let expression = ''
-  for (const char of pattern) {
-    switch (char) {
-      case '*':
-        expression += '[^/]*'
-        break
-      case '?':
-        expression += '[^/]'
-        break
-      default:
-        expression += escapeRegexChar(char)
-        break
-    }
-  }
-  return expression
-}
-
-/** 转义正则表达式里的特殊字符。 */
-function escapeRegexChar(char: string): string {
-  return /[.+^${}()|[\]\\]/u.test(char) ? `\\${char}` : char
-}
-
-/** 列出从根目录到某个目录之间的每一级目录，由浅到深。 */
-export function directoriesBetween(rootPath: string, directoryPath: string): string[] {
-  const directories: string[] = []
-  let currentPath = resolve(directoryPath)
-
-  while (isInsidePath(currentPath, rootPath)) {
-    directories.push(currentPath)
-    if (currentPath === rootPath) break
-    currentPath = dirname(currentPath)
-  }
-
-  directories.reverse()
-  return directories
-}
-
-/** 判断一串路径片段是否以另一串片段开头。 */
-function startsWithSegments(candidate: string[], prefix: string[]): boolean {
-  if (prefix.length > candidate.length) return false
-  return prefix.every((segment, index) => candidate[index] === segment)
-}
-
-/** 判断一个路径是否在根目录之内（含根目录本身）。 */
-export function isInsidePath(candidatePath: string, rootPath: string): boolean {
-  const resolvedCandidate = resolve(candidatePath)
-  const resolvedRoot = resolve(rootPath)
-  if (resolvedCandidate === resolvedRoot) return true
-  if (!isAbsolute(resolvedCandidate) || !isAbsolute(resolvedRoot)) return false
-  return resolvedCandidate.startsWith(`${resolvedRoot}${sep}`)
-}
-
-/** 算出相对路径，并统一用 `/` 分隔。 */
-export function toPortableRelativePath(rootPath: string, candidatePath: string): string {
-  return relative(rootPath, candidatePath).replaceAll('\\', '/')
-}
-
-/** 系统搜索默认跳过的目录名：版本库、依赖、虚拟环境、构建产物、缓存与编辑器配置。 */
-export const SystemSearchSkippedDirectoryNames: string[] = [
-  '.codegraph',
-  '.git',
-  '.hg',
-  '.jj',
-  '.svn',
-  'node_modules',
-  'vendor',
-  '.venv',
-  '__pycache__',
-  '.mypy_cache',
-  '.pytest_cache',
-  '.next',
-  '.nuxt',
-  '.turbo',
-  '.cache',
-  '.data',
-  'dist',
-  'build',
-  'out',
-  'coverage',
-  '.idea',
-  '.vscode',
-  'Library',
-]
-
 /** macOS 上受隐私保护、搜索时跳过的主目录子目录名。 */
 export const MacosTccProtectedSearchDirectoryNames: string[] = [
   'Music',
@@ -237,8 +60,7 @@ export const MacosTccProtectedSearchDirectoryNames: string[] = [
   'Library',
 ]
 
-const SystemSearchSkippedDirectoryNameSet =
-  new Set(SystemSearchSkippedDirectoryNames)
+const SystemSearchSkippedDirectoryNameSet = new Set(DiscoverySkippedDirectoryNames)
 
 /** 判断系统搜索是否跳过这个条目：隐藏文件，以及依赖、构建产物、缓存这类目录；不受限模式一律不跳过。 */
 export function shouldSkipSystemSearchEntry(
@@ -297,17 +119,4 @@ export function normalizeExtensions(extensions: LooseOptional<string[]>): Set<st
       extension.startsWith('.') ? extension.toLowerCase() : `.${extension.toLowerCase()}`
     )
   )
-}
-
-/** 读出从仓库根到某个目录之间各级 .gitignore 里的规则，按从上到下的顺序排好；读不到的文件当作没有规则。 */
-export async function readGitIgnoreRulesBetween(repoRootPath: string, directoryPath: string): Promise<GitIgnoreRule[]> {
-  const rules: GitIgnoreRule[] = []
-  for (const directory of directoriesBetween(repoRootPath, directoryPath)) {
-    const baseRelativePath = toPortableRelativePath(repoRootPath, directory)
-    for (const line of await readIgnoreLines(`${directory}${sep}.gitignore`)) {
-      const rule = parseGitIgnoreRule(line, baseRelativePath)
-      if (rule) rules.push(rule)
-    }
-  }
-  return rules
 }

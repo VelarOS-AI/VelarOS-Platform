@@ -7,15 +7,6 @@ import type { FileListEntry, SearchHit } from './io.js'
 import type { CorePolicy } from './policy.js'
 import type { CommandToolRequirement,FileFilterInput } from './provider.js'
 
-export type Matcher = (input: string) => boolean;
-
-export type MatcherCompiler = (pattern: string) => Matcher;
-
-export interface GitignoreRule {
-  negated: boolean;
-  patterns: string[];
-}
-
 export interface RipgrepSearchContext {
   rootAbs: string
   /** rootAbs 下用于收窄搜索范围的相对目录（可选）。 */
@@ -93,17 +84,15 @@ export interface ListingNode {
   readonly children: ListingNode[]
 }
 
-/** 待读取的目录：读到的条目挂到 children 下；rules 是从根目录累积到它父目录的 gitignore 规则。 */
+/** 待读取的目录：读到的条目挂到 children 下。 */
 export interface ListingDirectory {
   readonly abs: string
   readonly rel: string
   readonly children: ListingNode[]
-  readonly rules: readonly GitignoreRule[]
 }
 
-/** 一个目录读到的条目，连同判定它们所用的规则（根目录到该目录逐级累积）。 */
+/** 一个目录读到的条目。 */
 export interface ListedDirectory {
   readonly directory: ListingDirectory
-  readonly rules: readonly GitignoreRule[]
   readonly entries: ReadonlyArray<{ entry: Dirent; abs: string; rel: string }>
 }

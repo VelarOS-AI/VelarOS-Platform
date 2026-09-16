@@ -216,15 +216,6 @@ const saveMemory = defineMemoryTool<SaveMemoryInput>({
         sessionLineage: toNullable(ctx.sessionLineage),
       },
     })
-    // 后端拒收（证据的作用域没有对应的可写记忆目录）时不给条目 id：当场如实报错，
-    // 绝不回一句「已记下」让模型去向用户承诺一件没发生的事。
-    if (!result.evidence.id) {
-      throw new AppError(
-        'VALIDATION',
-        `当前空间（${memoryScope || '未指定作用域'}）没有对应的记忆目录，这条记忆没有写下来；`
-          + '请如实告诉用户，不要说已经记住了。',
-      )
-    }
     // 有整理管线的后端（树档）写入即入队、由 Dream 择时纳入；没有的后端写入即最终态。
     // 对模型只说这一件能兑现的事，treeVersion 这类某一档的 schema 只在该档在跑时才回。
     const consolidating = backend.verbs.includes('dream')

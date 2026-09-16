@@ -41,7 +41,6 @@ import {
   type MemoryDerivedIndexRebuildResult,
   resolveAuthorityEnumeration,
 } from './DerivedIndex'
-import { isMemoryRecallItemExcluded } from './RecallFilter'
 
 /** 派生层出问题时的诊断事件。**永远只是诊断**——没有一条会改变权威层的返回值。 */
 export interface MemoryDerivedIndexFailure {
@@ -147,12 +146,11 @@ export function createLayeredMemoryStoreBackend(
           orphanIds.push(pointer.id)
           continue
         }
-        // 过滤与词法通道走同一个判据(`isMemoryRecallItemExcluded`):否则重建派生索引之后
-        // 归档条目会回到普通召回,`categories` 也形同虚设。
-        if (isMemoryRecallItemExcluded(full, options_)) continue
-        // 检索理由如实标成 semantic(语义层命中),内容逐字来自权威层。
-        // 从前标 deep,和「深层召回=把归档翻出来」撞成一个词,工具说明据此写出了误导用户的话。
-        items.push({ ...full, retrievalReason: 'semantic' })
+        if (
+          recallOptionsExcludeItem(full, options_)
+        ) continue
+        // 检索理由如实标成 deep(语义层),但内容逐字来自权威层。
+        items.push({ ...full, retrievalReason: 'deep' })
       }
     }
     return { items, orphanIds }
@@ -272,6 +270,20 @@ export function createLayeredMemoryStoreBackend(
   }
 
   return backend
+}
+
+function recallOptionsExcludeItem(
+  item: MemoryRecallItem,
+  options: MemoryRecallOptions,
+): boolean {
+  if (options.excludeConversationObservations && item.predicate === 'conversation_observation')
+    return true
+  const excluded = options.excludeSourceTypes
+  return Boolean(
+    excluded?.length
+    && item.sourceTypes?.length
+    && item.sourceTypes.every((sourceType) => excluded.includes(sourceType))
+  )
 }
 
 /**

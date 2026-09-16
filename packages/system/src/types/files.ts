@@ -204,24 +204,11 @@ export interface SystemTextFileContent extends DecodedText {
   buffer: Buffer
 }
 
-export interface SystemSearchIgnorePolicyOptions {
-  unrestricted?: boolean
-}
-
 export interface SystemSearchProtectedDirectoryInput {
   platform: string
   homeDir: string
   rootPath: string
   candidatePath: string
-}
-
-/** 一条解析后的 gitignore 规则：相对哪个目录生效、是否取反、是否只匹配目录、是否锚定、按 `/` 切开的模式片段。 */
-export interface GitIgnoreRule {
-  baseRelativePath: string
-  negative: boolean
-  directoryOnly: boolean
-  anchored: boolean
-  segments: string[]
 }
 
 /** 判断敏感路径、凭证文件时的环境：平台、家目录、临时目录、环境变量，缺省取当前进程的。临时目录不触发敏感路径审批；Windows 与 macOS 的路径按大小写不敏感比较。 */

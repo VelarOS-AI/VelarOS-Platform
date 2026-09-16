@@ -55,11 +55,6 @@ export const ProjectTuning = Object.freeze({
     /** symbols 带 target 查详情时附带的声明源码最多多少字符。 */
     symbolSourceChars: 20_000,
   }),
-  /** glob 匹配（utils/glob.ts）。 */
-  glob: Object.freeze({
-    /** 编译好的 glob 匹配器最多缓存多少个，超过从最久没用的淘汰；pattern 来自模型与用户，缓存不能无界增长。 */
-    matcherCacheEntries: 256,
-  }),
   /** 事务：编辑失败的回读建议、校验失败回执、校验结果复用。 */
   transactions: Object.freeze({
     /** 编辑在 prepare 失败时，回执里建议模型回读出错文件用的 project:read maxChars（字符）。 */

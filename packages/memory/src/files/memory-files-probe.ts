@@ -20,7 +20,7 @@ import { parseMemoryFileDocument, serializeMemoryFileDocument } from './Frontmat
 import { parseMemoryIndex } from './IndexFile'
 import { createInMemoryMemoryFilesIo, type InMemoryMemoryFilesIo } from './Io'
 
-const ExpectedAssertionCount = 73
+const ExpectedAssertionCount = 70
 let assertionCount = 0
 
 function check(ok: unknown, message: string): asserts ok {
@@ -246,25 +246,24 @@ async function probeDualScope(): Promise<void> {
   equal(strict.length, 1, 'includeGlobal=false 严格隔离')
   equal(strict[0].scopeId, 'project:/repos/velaros', '只剩项目作用域')
 
-  // 只读根不接受写入（别人 clone 来的共享记忆）：作用域指名的根不可写 = 没有对应的可写根，
-  // 于是**拒收**——绝不改写作用域落进别的池子。
+  // 只读根不接受写入（别人 clone 来的共享记忆）。
   const readOnlyIo = createInMemoryMemoryFilesIo()
   const readOnlyBackend = createMemoryFilesBackend({
     roots: [GlobalRoot, { ...ProjectRoot, readOnly: true }],
     io: readOnlyIo,
   })
-  const rejected = (await readOnlyBackend.capture(
+  await readOnlyBackend.capture(
     evidence({
       title: '想写进只读根',
       content: '内容。',
       scopeId: 'project:/repos/velaros',
       scopeType: 'workspace',
     }),
-  )) as { inserted: boolean; evidence: { id: string; scopeId: string } }
-  check(!rejected.inserted, '找不到可写根时拒收')
-  equal(rejected.evidence.id, '', '拒收时不给条目 id：磁盘上没有这条')
-  equal(rejected.evidence.scopeId, 'project:/repos/velaros', '拒收不改写作用域')
-  equal(Object.keys(readOnlyIo.snapshot()).length, 0, '既不写只读根，也不写进全局池')
+  )
+  check(
+    !Object.keys(readOnlyIo.snapshot()).some((path) => path.startsWith('/repos/')),
+    '只读根不接受写入，回落到可写根',
+  )
 
   // 根解析是每次调用重新求值：宿主换项目不必重建后端。
   let activeRoots: MemoryFilesScopeRoot[] = [GlobalRoot]

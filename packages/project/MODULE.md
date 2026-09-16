@@ -76,8 +76,10 @@
 - `@velaros-ai/agent` 的 `protocol` 与 `tool-contract` 子路径（peer）：工具运行时规格、mod 清单、审批端口、文件上下文协调器、入参复用、挂进内核时的可调用操作表。
 - `@velaros-ai/shell-command`：命令的只读、危险、长驻判定，确认文案，危险命令的审批请求。
 - `@velaros-ai/rehearsal-sandbox`：沙箱数据形状、公开上限、宿主沙箱端口形状，落回前的核对与确认请求。
+- `@velaros-ai/path-rules`：glob 匹配（策略名单、include/exclude 都经 `utils/glob.ts` 调它，大小写按盘的规矩）、.gitignore 判定与列举时的忽略策略（`git check-ignore` 的执行口由本包注入）。
+- `@velaros-ai/platform`：路径文本的包含判定与本平台的大小写规矩。
 - `@velaros-ai/text-files`：磁盘文本的编码识别、严格解码、按原编码无损写回（GB18030 下保留没改片段的原字节）、原子替换写入、有界读与流式读；它的失败在 `utils/errors.ts` 的 `projectErrorFromTextFile` 一处按错误码翻成 `ProjectError`。
-- `zod`（入参 schema）、`typescript`（JS/TS 解析）、`picomatch`（glob）、`diff`（差量）、`execa`（子进程）。
+- `zod`（入参 schema）、`typescript`（JS/TS 解析）、`diff`（差量）、`execa`（子进程）。
 - 不读环境变量。
 
 ## 状态归谁

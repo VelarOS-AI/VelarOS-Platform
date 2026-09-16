@@ -218,7 +218,7 @@ async function probeParallelRecall(): Promise<void> {
   equal(merged.length, 1, '并联后语义层补上了这一条')
   equal(merged[0].title, '沟通偏好', '标题逐字来自权威层，不是索引里的副本')
   equal(merged[0].value, body, '正文逐字来自权威层回捞')
-  equal(merged[0].retrievalReason, 'semantic', '检索理由如实标成语义层命中（不再和「深层召回」撞成同一个词）')
+  equal(merged[0].retrievalReason, 'deep', '检索理由如实标成语义层')
 
   // 两层都命中时不互相挤掉。
   const both = await layered.recall('构建命令')

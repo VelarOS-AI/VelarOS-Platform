@@ -8,6 +8,7 @@ import { join, relative, sep } from 'node:path'
 
 import { isEmpty, isPresent, Log } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
+import { createIgnorePolicy } from '@velaros-ai/path-rules'
 import type { PlatformCompatibilityApi } from '@velaros-ai/platform'
 import { rehearsalSandboxRules } from '@velaros-ai/rehearsal-sandbox'
 import type { SandboxApplyOptions, SandboxApplyResult, SandboxDiff, SandboxDiffOptions, SandboxDiscardResult, SandboxIgnoredMode, SandboxRecord } from '@velaros-ai/rehearsal-sandbox/contracts'
@@ -21,7 +22,6 @@ import { isPathInsideRoot, realPathForSafety } from '../utils/file-safety.js'
 import { writeSystemFileAtomically } from '../utils/fs.js'
 import { applyMirrorChanges, diffMirror, disableGitPush, isSandboxId, mirrorTree, newSandboxId, readSandboxManifest, removeSandboxDirectory, sandboxBaseDirectory, sandboxChangedSinceConfirmation, sandboxConfinementPolicy, sandboxDirectoryOf, scanTree, stampOfEntry } from '../utils/sandbox.js'
 
-import { GitIgnoreSystemSearchPolicy } from './GitIgnoreSystemSearchPolicy.js'
 import type { SystemCommandRunnerApi } from './SystemCommandRunner.js'
 import { SystemCommandRunner } from './SystemCommandRunner.js'
 import type { SystemProcessManagerApi } from './SystemProcessManager.js'
@@ -128,7 +128,7 @@ export class SystemSandboxes implements SystemSandboxesApi {
         { spec: { file: 'true', args: [] }, policy: sandboxConfinementPolicy(root, temp, options.network) },
         { platform: this.options.platform, env: process.env, provider: this.options.confinementProvider, tempDir: temp }
       )
-      const ignorePolicy = new GitIgnoreSystemSearchPolicy(realSource, {})
+      const ignorePolicy = createIgnorePolicy(realSource, { rulesFrom: 'repository' })
       const mirrored = await mirrorTree(realSource, root, {
         ignored: options.ignored,
         shouldSkip: (absolutePath, isDirectory) => ignorePolicy.shouldSkip(absolutePath, isDirectory),

@@ -1,12 +1,13 @@
 /**
  * 全局搜索：`SystemGlobalSearch`，宿主端口 `globalSearch` 的本地实现。接口 `SystemGlobalSearchApi` 在本文件的类上方。
- * 本地内核持有一个；遍历时跳过哪些条目由 `GitIgnoreSystemSearchPolicy.ts` 判定。
+ * 本地内核持有一个；遍历时跳过哪些条目由 `@velaros-ai/path-rules` 的忽略策略判定。
  */
 
 import { lstat, readdir } from 'node:fs/promises'
 import { basename, extname, join, relative } from 'node:path'
 
 import { AppError } from '@velaros-ai/core/error'
+import { createIgnorePolicy } from '@velaros-ai/path-rules'
 
 import type { SystemFileEntry, SystemGlobalSearchOptions, SystemGlobalSearchResult, SystemSearchMatch } from '../types/system.js'
 import {
@@ -19,7 +20,6 @@ import {
 import { readSystemTextFile } from '../utils/text-file.js'
 import { SystemTuning } from '../utils/tuning.js'
 
-import { GitIgnoreSystemSearchPolicy } from './GitIgnoreSystemSearchPolicy.js'
 
 /**
  * 全局搜索：在一棵目录树里按路径名或按文件内容找东西，是本地内核 `globalSearch` 的实现，给宿主自己的界面用。
@@ -165,7 +165,7 @@ export class SystemGlobalSearch implements SystemGlobalSearchApi {
   ): Promise<boolean> {
     abortSignal?.throwIfAborted()
     const maxDepth = options.maxDepth ?? SystemTuning.search.maxDepth
-    const ignorePolicy = new GitIgnoreSystemSearchPolicy(rootPath, { unrestricted: options.unrestricted })
+    const ignorePolicy = createIgnorePolicy(rootPath, { rulesFrom: 'repository', unrestricted: options.unrestricted })
     const visit = async (currentPath: string, depth: number): Promise<boolean> => {
       abortSignal?.throwIfAborted()
       if (depth > maxDepth) return false

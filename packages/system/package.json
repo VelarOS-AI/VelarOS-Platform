@@ -43,6 +43,7 @@
   "dependencies": {
     "@velaros-ai/core": "workspace:*",
     "@velaros-ai/kernel": "workspace:*",
+    "@velaros-ai/path-rules": "workspace:*",
     "@velaros-ai/platform": "workspace:*",
     "@velaros-ai/rehearsal-sandbox": "workspace:*",
     "@velaros-ai/shell-command": "workspace:*",
