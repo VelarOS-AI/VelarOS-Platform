@@ -76,7 +76,7 @@ export class ProjectExecutionOperations implements ProjectExecutionOperationsApi
     if (input.action !== 'create' && !sandboxId) throw new AppError('VALIDATION', `${input.action} 需要 create 返回的 sandboxId`)
 
     if (input.action === 'create') {
-      const source = resolveSourceInsideProject(rootPath, input.source)
+      const source = await resolveSourceInsideProject(rootPath, input.source)
       const record = await port.createSandbox({ source, network: !!input.network, ignored: input.ignored ?? 'link' })
       return {
         ...record,

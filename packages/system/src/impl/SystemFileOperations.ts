@@ -8,6 +8,7 @@ import { dirname } from 'node:path'
 
 import { isArray, isEmpty, isNotNull, isNull, isPresent, Log, toOptional } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
+import { resolveRealPath } from '@velaros-ai/core/utils/RealPath'
 import type { PlatformCompatibilityApi } from '@velaros-ai/platform'
 import { currentPlatform } from '@velaros-ai/platform'
 import { textCodec } from '@velaros-ai/text-files'
@@ -17,7 +18,7 @@ import { SystemFailureLimits, SystemFileLimits } from '../contract/constants.js'
 import type { SystemToolContext } from '../contract/requires.js'
 import type { SystemEditFileInput, SystemEditFileResult, SystemEditInput, SystemEditPlan, SystemEditProblem, SystemEditReplacedResult, SystemEditResult, SystemEditTarget, SystemEditWindow, SystemReadFileInput, SystemReadFileResult, SystemReadInput, SystemReadResult, SystemTextFileContent, SystemTextRange, SystemViewFileInput, SystemViewFileResult, SystemViewInput, SystemViewResult } from '../types/files.js'
 import { assertFileBatchSize, failureEntry, staleProblem, unresolvedEditFailure, withLinkTarget } from '../utils/file-batch.js'
-import { comparisonPath, confirmCredentialAccess, confirmSensitiveSystemMutation, realPathForSafety } from '../utils/file-safety.js'
+import { comparisonPath, confirmCredentialAccess, confirmSensitiveSystemMutation } from '../utils/file-safety.js'
 import { readErrnoCode, writeSystemFileAtomically } from '../utils/fs.js'
 import { adaptReplacementLineEndings, findOccurrences, lineEndingStyle, withLineEndingStyle } from '../utils/text.js'
 import {
@@ -156,7 +157,7 @@ class SystemFileOperations implements SystemFileOperationsApi {
     const seen = new Set<string>()
     for (const [index, file] of input.files.entries()) {
       const resolvedPath = this.resolvePath(file.path, ctx)
-      const target = await realPathForSafety(resolvedPath)
+      const target = await resolveRealPath(resolvedPath)
       const identity = comparisonPath(target, process.platform)
       if (seen.has(identity)) {
         problems.push({ file: index, path: resolvedPath, reason: 'invalid', message: '同一个文件在这一批里出现了不止一次（写法不同、经符号链接指向同一个文件的也算）；把它的改动合进一项' })
@@ -400,7 +401,7 @@ class SystemFileOperations implements SystemFileOperationsApi {
   /** 读一个文件：按字符取最多 maxChars 个（调用方已把总预算算进去）；给 version 就读改动前留下的那个版本。符号链接按它指向的文件读，版本历史也按那个文件记。 */
   private async readOne(file: SystemReadFileInput, maxChars: number, ctx: SystemToolContext): Promise<SystemReadFileResult> {
     const resolvedPath = this.resolvePath(file.path, ctx)
-    const target = await realPathForSafety(resolvedPath)
+    const target = await resolveRealPath(resolvedPath)
     await confirmCredentialAccess(ctx, target, 'read')
     if (isPresent(file.version)) {
       const snapshot = this.history.recall(target, file.version)
@@ -420,7 +421,7 @@ class SystemFileOperations implements SystemFileOperationsApi {
   /** 看一张图片：整张作为内容块交给模型，返回元数据、内容块和一行说明；不是模型认得的图片就报错。 */
   private async viewOne(file: SystemViewFileInput, ctx: SystemToolContext): Promise<{ entry: SystemViewFileResult; part: SystemViewResult['modelContent'][number]; label: string }> {
     const resolvedPath = this.resolvePath(file.path, ctx)
-    const target = await realPathForSafety(resolvedPath)
+    const target = await resolveRealPath(resolvedPath)
     await confirmCredentialAccess(ctx, target, 'read')
     const buffer = await readBoundedFile(target, SystemFileLimits.fileBytes)
     const media = detectMediaType(buffer)

@@ -105,6 +105,32 @@ describe('编辑的边界', () => {
     expect([...await readFile(join(root, 'fresh.txt'))]).toEqual([...Buffer.from('a\nb\n', 'utf8')])
   })
 
+  test('INV-13 同一个物理文件的项目内别名算同一个文件：一次编辑里出现两次整批拒绝，拒读名单按真实路径判', async () => {
+    await writeFile(join(root, 'real.txt'), 'L1\nL2\n')
+    await symlink('real.txt', join(root, 'link.txt'))
+    const { call, read } = await createProjectHarness(root)
+    const linkView = await read('link.txt')
+    const realView = await read('real.txt')
+    await expect(call('project:edit', { files: [
+      { fileRef: linkView.fileRef, edits: [{ op: 'replace', range: 1, text: 'A' }] },
+      { fileRef: realView.fileRef, edits: [{ op: 'replace', range: 2, text: 'B' }] },
+    ] })).rejects.toMatchObject({ reason: 'INVALID_INPUT', details: { executionOutcome: 'not-applied' } })
+    expect(await readFile(join(root, 'real.txt'), 'utf8')).toBe('L1\nL2\n')
+
+    await writeFile(join(root, '.env'), 'API_KEY=sk-live-SECRET\n')
+    await symlink('.env', join(root, 'env.sample'))
+    const denied = await createProjectHarness(root, { corePolicy: { readDeny: ['.env'] } })
+    await expect(denied.call('project:read', { path: '.env' })).rejects.toMatchObject({ reason: 'PERMISSION_DENIED' })
+    await expect(denied.call('project:read', { path: 'env.sample' })).rejects.toMatchObject({ reason: 'PERMISSION_DENIED' })
+  })
+
+  test('INV-14 版本库内部缺省不许写，报错说清楚该用 project:run', async () => {
+    const { call } = await createProjectHarness(root)
+    await expect(call('project:file', { actions: [{ op: 'create', path: '.git/hooks/pre-commit', text: '#!/bin/sh\n' }] }))
+      .rejects.toMatchObject({ reason: 'PERMISSION_DENIED', suggestedNextAction: expect.stringContaining('project:run') })
+    await expect(readFile(join(root, '.git/hooks/pre-commit'))).rejects.toThrow()
+  })
+
   test('INV-10 命中 generatedFiles 的文件不许手改，下一步是改生成器的输入再重新生成', async () => {
     const { call } = await createProjectHarness(root)
     await expect(call('project:file', { actions: [{ op: 'create', path: 'src/api.generated.ts', text: 'export {}\n' }] }))

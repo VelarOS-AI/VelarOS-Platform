@@ -4,12 +4,14 @@
  */
 
 import { lstat, mkdir, stat } from 'node:fs/promises'
-import { join, relative, sep } from 'node:path'
+import { join } from 'node:path'
 
-import { isEmpty, isPresent, Log } from '@velaros-ai/core'
+import { isEmpty, isNotNull, isPresent, Log } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
+import { resolveRealPath } from '@velaros-ai/core/utils/RealPath'
 import { createIgnorePolicy } from '@velaros-ai/path-rules'
 import type { PlatformCompatibilityApi } from '@velaros-ai/platform'
+import { currentPlatform } from '@velaros-ai/platform'
 import { rehearsalSandboxRules } from '@velaros-ai/rehearsal-sandbox'
 import type { SandboxApplyOptions, SandboxApplyResult, SandboxDiff, SandboxDiffOptions, SandboxDiscardResult, SandboxIgnoredMode, SandboxRecord } from '@velaros-ai/rehearsal-sandbox/contracts'
 import { RehearsalSandboxLimits } from '@velaros-ai/rehearsal-sandbox/contracts'
@@ -18,7 +20,7 @@ import { SystemErrorCodes, SystemFailureLimits } from '../contract/constants.js'
 import type { SystemProcessConfinementProvider } from '../contract/requires.js'
 import type { SystemSandboxManifest } from '../types/sandbox.js'
 import { buildSystemProcessConfinementSpawnSpec } from '../utils/confinement.js'
-import { isPathInsideRoot, realPathForSafety } from '../utils/file-safety.js'
+import { isPathInsideRoot } from '../utils/file-safety.js'
 import { writeSystemFileAtomically } from '../utils/fs.js'
 import { applyMirrorChanges, diffMirror, disableGitPush, isSandboxId, mirrorTree, newSandboxId, readSandboxManifest, removeSandboxDirectory, sandboxBaseDirectory, sandboxChangedSinceConfirmation, sandboxConfinementPolicy, sandboxDirectoryOf, scanTree, stampOfEntry } from '../utils/sandbox.js'
 
@@ -107,11 +109,11 @@ export class SystemSandboxes implements SystemSandboxesApi {
 
   public async create(source: string, options: { network: boolean; ignored: SandboxIgnoredMode }): Promise<SandboxRecord> {
     if (this.entries.size >= RehearsalSandboxLimits.sandboxes) throw new AppError('VALIDATION', `同时最多 ${RehearsalSandboxLimits.sandboxes} 个沙箱；先 discard 一个`)
-    const realSource = await realPathForSafety(source)
+    const realSource = await resolveRealPath(source)
     const sourceStats = await stat(realSource).catch(() => null)
     if (!sourceStats?.isDirectory()) throw new AppError('NOT_FOUND', `沙箱的源不是目录：${source}`)
     await mkdir(this.baseDir, { recursive: true, mode: 0o700 })
-    const realBase = await realPathForSafety(this.baseDir)
+    const realBase = await resolveRealPath(this.baseDir)
     if (isPathInsideRoot(realSource, realBase)) throw new AppError('VALIDATION', '沙箱的源不能在沙箱基目录之内')
     if (isPathInsideRoot(realBase, realSource)) throw new AppError('VALIDATION', '沙箱的源包含了沙箱基目录；换一个范围小一点的目录')
 
@@ -144,7 +146,7 @@ export class SystemSandboxes implements SystemSandboxesApi {
       const manifest: SystemSandboxManifest = { version: 1, record, files: mirrored.files, mirror: mirrored.mirror }
       // 清单原子落盘：写到一半崩溃不会留下读不出来的清单。
       await writeSystemFileAtomically(join(directory, 'manifest.json'), Buffer.from(JSON.stringify(manifest)))
-      this.entries.set(id, { record, directory, realRoot: await realPathForSafety(root), runner: this.createRunner(root, temp, options.network) })
+      this.entries.set(id, { record, directory, realRoot: await resolveRealPath(root), runner: this.createRunner(root, temp, options.network) })
       log.info('sandbox created', { id, source: realSource, files: record.fileCount, bytes: record.bytes })
       return record
     } catch (error) {
@@ -194,19 +196,21 @@ export class SystemSandboxes implements SystemSandboxesApi {
   }
 
   public async runnerFor(cwd: string): Promise<Nullable<SystemCommandRunnerApi>> {
-    const realCwd = await realPathForSafety(cwd)
-    const inside = (entry: SystemSandboxesEntry): boolean => realCwd === entry.realRoot || realCwd.startsWith(entry.realRoot + sep)
+    // 真实路径都解开过，按字面比（realpath 给出的就是盘上的写法）。
+    const realCwd = await resolveRealPath(cwd)
+    const insidePath = (root: string): boolean => currentPlatform.isPathTextInside(realCwd, root, { caseSensitive: true })
+    const inside = (entry: SystemSandboxesEntry): boolean => insidePath(entry.realRoot)
     for (const entry of this.entries.values()) if (inside(entry)) return entry.runner
     // 没登记但落在基目录之下的沙箱（内核重启过）：按清单重新登记，别让它裸跑。
-    const realBase = await realPathForSafety(this.baseDir)
-    if (!realCwd.startsWith(realBase + sep)) return null
-    const candidate = relative(realBase, realCwd).split(sep)[0] ?? ''
+    const realBase = await resolveRealPath(this.baseDir)
+    const belowBase = currentPlatform.relativePathTextInside(realCwd, realBase, { caseSensitive: true })
+    if (!isNotNull(belowBase) || belowBase === '.') return null
+    const candidate = belowBase.split('/')[0] ?? ''
     if (!isSandboxId(candidate)) return null
     const entry = await this.resolveEntry(candidate).catch(() => null)
     if (entry) return inside(entry) ? entry.runner : null
     // 清单读不出来（写坏了、被清理掉了）：cwd 落在这个沙箱的镜像根里就拒绝执行，绝不退回没有约束的执行器。
-    const tree = join(realBase, candidate, 'tree')
-    if (realCwd === tree || realCwd.startsWith(tree + sep)) {
+    if (insidePath(join(realBase, candidate, 'tree'))) {
       throw new AppError(SystemErrorCodes.processConfinementUnavailable, `沙箱 ${candidate} 的清单读不出来，镜像里的命令没法约束，已拒绝执行；discard 这个沙箱后重建`)
     }
     return null
@@ -258,7 +262,7 @@ export class SystemSandboxes implements SystemSandboxesApi {
     const root = join(directory, 'tree')
     const temp = join(directory, 'tmp')
     await mkdir(temp, { recursive: true })
-    const entry: SystemSandboxesEntry = { record: { ...manifest.record, root }, directory, realRoot: await realPathForSafety(root), runner: this.createRunner(root, temp, manifest.record.network) }
+    const entry: SystemSandboxesEntry = { record: { ...manifest.record, root }, directory, realRoot: await resolveRealPath(root), runner: this.createRunner(root, temp, manifest.record.network) }
     this.entries.set(sandboxId, entry)
     return entry
   }

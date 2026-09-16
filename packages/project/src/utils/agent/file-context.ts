@@ -2,14 +2,15 @@
  * 当前文件视图：把项目登记成 agent 文件上下文的来源（按当前授权重读、核对归档快照），从读取结果生成视图快照，编辑后按补丁链迁移模型看过的范围。
  */
 
-import { isAbsolute, relative, resolve } from 'node:path'
+import { resolve } from 'node:path'
 
 import {
   fileContextFor,
   type FileContextRange,
   type FileContextSnapshot,
 } from '@velaros-ai/agent/tool-contract'
-import { isEmpty, isUndefined } from '@velaros-ai/core'
+import { isEmpty, isNull, isUndefined } from '@velaros-ai/core'
+import { currentPlatform } from '@velaros-ai/platform'
 
 import type { DiffHunk,ProjectFileContextCarrier } from '../../types/agent.js'
 import type { AgentProjectPreparedPatch, AgentProjectReadResult } from '../../types/agent-port.js'
@@ -31,10 +32,10 @@ export function registerProjectFileContext(context: ProjectFileContextCarrier): 
     return kernel
   }
   const normalizePath = (path: string) => {
-    const normalized = relative(root, resolve(root, path))
-    if (normalized === '..' || normalized.startsWith('../') || isAbsolute(normalized))
-      throw new Error('文件上下文的路径不在项目之内。')
-    return normalized.replaceAll('\\', '/')
+    // 判定交给 platform：带分隔符边界、折叠 `.` 与 `..`，名字以 `..` 开头的目录（`..cache`）照常算在项目之内。
+    const normalized = currentPlatform.relativePathTextInside(resolve(root, path), root, { caseSensitive: true })
+    if (isNull(normalized)) throw new Error('文件上下文的路径不在项目之内。')
+    return normalized === '.' ? '' : normalized
   }
   coordinator.registerSource({
     workspaceId: root,

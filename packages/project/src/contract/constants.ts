@@ -238,8 +238,12 @@ export const ProjectPolicyDefaults = Object.freeze({
   maxConcurrentBatchTasks: 8,
   /** 不许读的路径 glob。 */
   readDeny: Object.freeze([]),
-  /** 不许写的路径 glob。 */
-  writeDeny: Object.freeze([]),
+  /**
+   * 不许写的路径 glob。缺省挡住版本库内部：`.git` 里的 hooks 与 config（`core.fsmonitor`、`core.pager` 这些）一旦被改，
+   * 内核自己后续的 git 调用（`git add -N`、`git check-ignore`）就会执行写进去的命令——普通一次编辑就变成任意命令执行。
+   * 要提交、切分支、改仓库配置，用 `project:run` 跑 git 命令。
+   */
+  writeDeny: Object.freeze(['.git', '.git/**', '**/.git', '**/.git/**']),
   /** 能读、但没有策略明确允许时不改的文件 glob。 */
   protectedFiles: Object.freeze([]),
   /** 当作生成文件的 glob：改生成器的输入再重新生成，不直接改。 */

@@ -1,43 +1,33 @@
 /**
  * 路径约束：FileStore 的准入门沿符号链接解析路径，挡住经软链逃出工作区。
+ *
+ * 真实路径由 `@velaros-ai/core` 的 `resolveRealPath` 算：写入路径在检查时通常还不存在（create_file），
+ * 它把路径解析到最近一个存在的祖先再把尚不存在的尾巴拼回去，「祖先目录里有软链指向 root 外」照样抓得到。
  */
-import { realpath } from 'node:fs/promises'
-import { basename, dirname, join, resolve } from 'node:path'
+import { isNull } from '@velaros-ai/core'
+import { resolveRealPath } from '@velaros-ai/core/utils/RealPath'
+import { currentPlatform } from '@velaros-ai/platform'
 
 import { ProjectError } from '../errors.js'
 import { isInsideRoot } from '../path.js'
 
-/**
- * 把路径解析到「最近一个真实存在的祖先」的 realpath，再把尚不存在的尾巴拼回去。
- *
- * 为什么不能直接 `realpath(abs)`：写入路径在检查时通常还不存在（create_file），realpath 会
- * 直接抛 ENOENT——那样要么放行未检查的路径（失败方向不安全），要么写不了新文件。逐级上溯
- * 保证「祖先目录里有软链指向 root 外」也能被下面的根内判定抓到。
- */
-export async function realPathPreservingMissing(absPath: string): Promise<string> {
-  let current = resolve(absPath)
-  let tail = ''
-  while (true) {
-    try {
-      return resolve(await realpath(current), tail)
-    } catch {
-      // arch-guard:silent-catch-ok 路径可能尚未存在；继续向上寻找可 realpath 的祖先。
-      const parent = dirname(current)
-      if (parent === current) return resolve(absPath)
-      tail = tail ? join(basename(current), tail) : basename(current)
-      current = parent
-    }
-  }
+/** 一条已经解开符号链接的路径相对真实根的写法（`/` 分隔，根本身是 `.`）；不在根里返回 null。真实路径是盘上的写法，按字面比。 */
+export function relativeInsideRealRoot(realRoot: string, realPath: string): Nullable<string> {
+  const relative = currentPlatform.relativePathTextInside(realPath, realRoot, { caseSensitive: true })
+  return isNull(relative) || relative === '.' ? null : relative
 }
 
-/** 路径连同还不存在的尾巴按 realpath 解析后必须仍在真实根目录里，否则按 PERMISSION_DENIED 拒绝：挡的是经符号链接逃出工作区。 */
-export async function assertConfinedToRoot(
+/**
+ * 路径连同还不存在的尾巴按 realpath 解析后必须仍在真实根目录里，否则按 PERMISSION_DENIED 拒绝：挡的是经符号链接逃出工作区。
+ * 返回解开后的真实路径——同一个物理文件的别名（符号链接、大小写变体）解出来是同一条，策略判定按它算才不会被别名绕过。
+ */
+export async function resolveConfinedRealPath(
   realRoot: string,
   abs: string,
   inputPath: string,
-): Promise<void> {
-  const realTarget = await realPathPreservingMissing(abs)
-  if (isInsideRoot(realRoot, realTarget)) return
+): Promise<string> {
+  const realTarget = await resolveRealPath(abs)
+  if (isInsideRoot(realRoot, realTarget)) return realTarget
   throw new ProjectError(
     'PERMISSION_DENIED',
     `路径解析后越出工作区根目录：${inputPath}`,

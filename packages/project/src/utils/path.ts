@@ -8,6 +8,8 @@
 // 两层必须共用同一份边界判定；分成两份实现时，**弱的那份就是实际安全水位**。
 import * as path from "node:path";
 
+import { currentPlatform } from '@velaros-ai/platform'
+
 import { ProjectError } from "./errors.js";
 
 /** 把路径里的反斜杠换成 /，去掉开头的 ./。 */
@@ -16,13 +18,12 @@ export function normalizeRel(input: string): string {
 }
 
 /**
- * 判断 abs 是否落在 rootAbs 之内。必须带路径分隔符边界，否则像
- * `/project-evil/x`（兄弟目录）会被裸 `startsWith("/project")` 误判为「在内」。
+ * 判断 abs 是否落在 rootAbs 之内（含根本身）。判定交给 platform 的路径文本包含判断：它带分隔符边界（`/project-evil/x`
+ * 这种兄弟目录不算在内）、折叠 `.` 与 `..`、名字以 `..` 开头的目录照常算在里面。两端都按字面比大小写：进这里的路径要么
+ * 已经 `path.resolve` 过、要么是 realpath 的结果，盘上的写法是什么就是什么。
  */
 export function isInsideRoot(rootAbs: string, abs: string): boolean {
-  if (abs === rootAbs) return true;
-  const boundary = rootAbs.endsWith(path.sep) ? rootAbs : rootAbs + path.sep;
-  return abs.startsWith(boundary);
+  return currentPlatform.isPathTextInside(abs, rootAbs, { caseSensitive: true });
 }
 
 /** 把相对 root 的路径（或绝对路径）解析成绝对路径；越出 root 就抛 PERMISSION_DENIED。这是根内约束的词法那一层。 */
@@ -40,6 +41,11 @@ export function toRel(root: string, absOrRel: string): string {
   const rootAbs = path.resolve(root);
   const abs = path.resolve(root, absOrRel);
   return normalizeRel(path.relative(rootAbs, abs));
+}
+
+/** 相对路径是不是版本库内部的东西：任意一层的 `.git` 目录本身或它里面（嵌套仓库、子模块的也算）。 */
+export function isGitInternalPath(rel: string): boolean {
+  return /(?:^|\/)\.git(?:\/|$)/u.test(normalizeRel(rel));
 }
 
 /** 取小写的扩展名（带点，如 .ts）；没有扩展名时是空串。 */

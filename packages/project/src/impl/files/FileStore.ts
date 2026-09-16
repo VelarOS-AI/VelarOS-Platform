@@ -8,13 +8,16 @@
 //  4. `listFiles` / `observe`：遍历路径，含 gitignore 过滤。
 //
 // ## 安全门（挡什么、为什么门在这一层）
-//  - **两段式根内约束**：`toAbs` 拦词法穿越（`../`），`assertConfinedToRoot` 对 realpath 结果
+//  - **两段式根内约束**：`toAbs` 拦词法穿越（`../`），`resolveConfinedRealPath` 对 realpath 结果
 //    再拦一次软链逃逸。门放在 FileStore 而不是各调用点，是因为「新增一个调用点忘了检查」
 //    在上层是查不出来的，在这里则不可能发生——上层拿不到 abs 路径。
 //  - **deny glob 优先于 fileFilter provider**：`skipFileFilter` 只关宿主注入的可见性过滤器
 //    （apply/rollback 需要写回自己刚写过、但对模型不可见的文件），**永远关不掉
 //    `policy.readDeny/writeDeny`**。把 deny 判定挪到 skipFileFilter 之后 = 宿主一个
 //    `skipFileFilter: true` 就能写 `.env`。
+//  - **策略按路径身份判，不按模型写的那串字**：deny 同时对请求路径和它解开符号链接后的真实路径判，
+//    任一命中就拒；glob 的大小写按盘的规矩（macOS、Windows 不区分）。只按字面判时，`.ENV`、
+//    `cfg/prod.key`（cfg 是指向 secrets 的链接）这类别名就能绕过 `.env`、`secrets/**`。
 //  - **已知且刻意接受的 TOCTOU**：authorize 与真正的 write 之间存在时间窗，期间新建的软链
 //    能逃逸。修它要 `openat` + `O_NOFOLLOW` 逐级打开（Node 无跨平台原语），代价远高于收益：
 //    本包的威胁模型是「模型给出坏路径」，不是「攻击者与我们竞速」。
@@ -22,7 +25,8 @@ import type { BigIntStats } from 'node:fs'
 import { lstat, mkdir, readFile, rename, rm, stat } from 'node:fs/promises'
 import * as path from 'node:path'
 
-import { isNull, isObject, isPresent, isUndefined, optionalWhen, toOptional } from '@velaros-ai/core'
+import { isEmpty, isNull, isObject, isPresent, isUndefined, optionalWhen, toOptional } from '@velaros-ai/core'
+import { resolveRealPath } from '@velaros-ai/core/utils/RealPath'
 import { textCodec, textFileIo } from '@velaros-ai/text-files'
 import type { ExpectedBytes, TextEncoding } from '@velaros-ai/text-files/contracts'
 
@@ -39,7 +43,7 @@ import type {
 import type { CorePolicy } from '../../types/policy.js'
 import type { FileFilterInput } from '../../types/provider.js'
 import type { FileSnapshot, ProjectSnapshot } from '../../types/snapshot.js'
-import { ProjectError, projectErrorFromTextFile, RevisionMismatchSuggestedNextAction } from '../../utils/errors.js'
+import { GitInternalWriteSuggestedNextAction, ProjectError, projectErrorFromTextFile, RevisionMismatchSuggestedNextAction } from '../../utils/errors.js'
 import { listProjectFiles } from '../../utils/files/file-listing.js'
 import {
   advanceReadCursor,
@@ -56,11 +60,11 @@ import {
   readTextLineWindow,
   sliceWindowColumns,
 } from '../../utils/files/file-reader.js'
-import { assertConfinedToRoot, realPathPreservingMissing } from '../../utils/files/path-containment.js'
+import { relativeInsideRealRoot, resolveConfinedRealPath } from '../../utils/files/path-containment.js'
 import { validateReadBounds } from '../../utils/files/read-bounds.js'
 import { matchesAny } from '../../utils/glob.js'
 import { metadataFingerprint, metadataRevisionFor, revisionFor, sha256 } from '../../utils/hash.js'
-import { toAbs, toRel } from '../../utils/path.js'
+import { isGitInternalPath, toAbs, toRel } from '../../utils/path.js'
 import { sliceLines } from '../../utils/text.js'
 import { ProjectTuning } from '../../utils/tuning.js'
 
@@ -123,17 +127,38 @@ export class FileStore implements FileStoreApi {
     rel: string,
     action: FileFilterInput['action'],
     options?: { skipFileFilter?: boolean },
+    realRel?: LooseOptional<string>,
   ): Promise<boolean> {
     // 顺序是安全语义的一部分：deny glob 是硬策略，必须先判且 skipFileFilter 关不掉；
     // fileFilter 只是宿主注入的可见性过滤器，apply/rollback 写回时可以显式跳过。
     const deny = action === 'write' ? this.policy.writeDeny : this.policy.readDeny
-    if (matchesAny(rel, deny)) return false
+    if (!isEmpty(deny) && (await this.deniedByPolicy(rel, deny, realRel))) return false
     if (options?.skipFileFilter || !this.fileFilter) return true
-    return this.fileFilter.shouldInclude({ path: rel, action })
+    if (!this.fileFilter.shouldInclude({ path: rel, action })) return false
+    // 宿主的可见性过滤器同样按身份判：项目内的链接、大小写别名指向同一个文件，遮住一条不能从另一条读出来。
+    const identity = realRel ?? (await this.realRelative(rel))
+    return isNull(identity) || identity === rel || this.fileFilter.shouldInclude({ path: identity, action })
+  }
+
+  /** deny 名单同时对请求路径和它的真实路径判：项目内的符号链接、大小写别名指向同一个物理文件，任一命中就拒。 */
+  private async deniedByPolicy(
+    rel: string,
+    deny: readonly string[],
+    realRel?: LooseOptional<string>,
+  ): Promise<boolean> {
+    if (matchesAny(rel, deny)) return true
+    const identity = realRel ?? (await this.realRelative(rel))
+    return !isNull(identity) && identity !== rel && matchesAny(identity, deny)
+  }
+
+  /** 路径解开符号链接后相对真实根的写法（同一个物理文件的各种别名解出来是同一条）；解出来不在根里时返回 null。 */
+  private async realRelative(rel: string): Promise<Nullable<string>> {
+    const real = await resolveRealPath(path.resolve(this.root, rel))
+    return relativeInsideRealRoot(await this.getRealRoot(), real)
   }
 
   private getRealRoot(): Promise<string> {
-    this.realRoot ??= realPathPreservingMissing(this.root)
+    this.realRoot ??= resolveRealPath(this.root)
     return this.realRoot
   }
 
@@ -145,10 +170,16 @@ export class FileStore implements FileStoreApi {
     options?: { skipFileFilter?: boolean },
   ): Promise<{ abs: string; rel: string }> {
     const abs = toAbs(this.root, pathInput)
-    await assertConfinedToRoot(await this.getRealRoot(), abs, pathInput)
+    const realRoot = await this.getRealRoot()
+    const realTarget = await resolveConfinedRealPath(realRoot, abs, pathInput)
     const rel = toRel(this.root, abs)
-    if (!(await this.allowed(rel, action, options))) {
-      throw new ProjectError('PERMISSION_DENIED', `${deniedActionLabel}被拒绝：${rel}`)
+    if (!(await this.allowed(rel, action, options, relativeInsideRealRoot(realRoot, realTarget)))) {
+      throw new ProjectError(
+        'PERMISSION_DENIED',
+        `${deniedActionLabel}被拒绝：${rel}`,
+        { path: rel },
+        optionalWhen(action === 'write' && isGitInternalPath(rel), GitInternalWriteSuggestedNextAction),
+      )
     }
     return { abs, rel }
   }

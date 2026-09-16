@@ -18,3 +18,5 @@
 | INV-11 | 错误原因只来自合同常量表 `ProjectErrorCodes`，宿主按码分支，不按文字 | 类型 | `src/contract/constants.ts::ProjectErrorCode` |
 | INV-12 | 根入口只出产品面、注入面和它们用到的数据；`./contracts` 的整条引用链不碰 Node 内置模块，渲染进程可以直接加载 | 门禁 | `check:module-ownership` |
 | INV-16 | 演练沙箱落回过与编辑同一套写治理（越界、writeDeny、受保护文件、生成文件、宿主可见范围）：有一条不许写就在问用户之前整批拒绝并点名，一个文件都不落 | 测试 | `spec/acceptance.test.ts` |
+| INV-13 | 同一个物理文件的项目内别名（符号链接、大小写变体）算同一个文件：一次事务里两个入参指向同一份内容时，在写任何东西之前整批拒绝（INVALID_INPUT，not-applied）；拒读拒写名单与宿主的可见性过滤器同时按请求路径和解开符号链接后的真实路径判，别名绕不过去 | 测试 | `spec/acceptance.test.ts` |
+| INV-14 | 版本库内部（任意一层的 `.git`）缺省不许写，报错说清楚要用 `project:run` 跑 git 命令；演练沙箱的源目录解开符号链接后必须仍在项目之内，否则 PERMISSION_DENIED | 测试 | `spec/acceptance.test.ts` |

@@ -2,12 +2,14 @@
  * 文件安全：判断路径是否在根目录内、是否属于系统敏感区、是否是凭证文件，写入敏感路径和读凭证之前向用户要确认。
  */
 
-import { readlink, realpath } from 'node:fs/promises'
 import { homedir, tmpdir } from 'node:os'
 import * as path from 'node:path'
 
 import { createApprovalOperationKey } from '@velaros-ai/agent/tool-contract'
-import { isEmpty } from '@velaros-ai/core'
+import { isNotNull, isNull } from '@velaros-ai/core'
+import { resolveRealPath } from '@velaros-ai/core/utils/RealPath'
+import type { PlatformCompatibilityApi } from '@velaros-ai/platform'
+import { createPlatform, currentPlatform } from '@velaros-ai/platform'
 
 import type { SystemToolContext } from '../contract/requires.js'
 import type { SensitiveSystemMutationPathOptions } from '../types/files.js'
@@ -17,23 +19,29 @@ function pathApi(platform: NodeJS.Platform): typeof path.posix | typeof path.win
   return platform === 'win32' ? path.win32 : path.posix
 }
 
+/** 按平台取跨平台兼容层：路径文本在不在根里、区不区分大小写由它回答（当前进程的那份直接用现成的）。 */
+function platformTextRules(platform: NodeJS.Platform): PlatformCompatibilityApi {
+  return platform === currentPlatform.getPlatform() ? currentPlatform : createPlatform({ platform })
+}
+
+/** 这个平台的路径文本区不区分大小写：Windows 与 macOS 的卷缺省不区分。 */
+function comparesCaseSensitively(platform: NodeJS.Platform): boolean {
+  return !(platform === 'win32' || platform === 'darwin')
+}
+
 /** 把路径解析成可比较的形式：Windows 和 macOS 的卷默认不区分大小写，统一小写比较；解开符号链接后的真实路径经它就是文件的身份键。 */
 export function comparisonPath(value: string, platform: NodeJS.Platform): string {
   const resolved = pathApi(platform).resolve(value)
   return platform === 'win32' || platform === 'darwin' ? resolved.toLowerCase() : resolved
 }
 
-/** 判断一个路径是否在某个根目录之内（含根目录本身），Windows 上不区分大小写；根是 `/`、`C:\` 这种本身以分隔符结尾的也对。 */
+/** 判断一个路径是否在某个根目录之内（含根目录本身）：交给 platform 的路径文本判定，Windows 与 macOS 上不区分大小写；根是 `/`、`C:\` 这种也对。 */
 export function isPathInsideRoot(
   candidatePath: string,
   rootPath: string,
   platform: NodeJS.Platform = process.platform
 ): boolean {
-  const resolvedCandidate = comparisonPath(candidatePath, platform)
-  const resolvedRoot = comparisonPath(rootPath, platform)
-  const separator = pathApi(platform).sep
-  if (resolvedCandidate === resolvedRoot) return true
-  return resolvedCandidate.startsWith(resolvedRoot.endsWith(separator) ? resolvedRoot : `${resolvedRoot}${separator}`)
+  return platformTextRules(platform).isPathTextInside(pathApi(platform).resolve(candidatePath), rootPath)
 }
 
 // scratch/临时目录永远豁免确认（与 bash 默认 sandbox cwd 一致）。
@@ -95,8 +103,9 @@ export function isSensitiveSystemMutationPath(
   } else if (isWithinAnyRoot(abs, SensitiveSystemRootPrefixes, platform) || paths.dirname(abs) === '/') return true // 直接放在根目录下的文件也算系统级
 
   const home = options.homeDir ?? homedir()
-  if (home && isPathInsideRoot(abs, home, platform)) {
-    const relativeSegments = paths.relative(comparisonPath(home, platform), comparisonPath(abs, platform)).split(paths.sep)
+  const homeRelative = home ? platformTextRules(platform).relativePathTextInside(abs, home) : null
+  if (isNotNull(homeRelative)) {
+    const relativeSegments = homeRelative.split('/')
     const firstSegment = relativeSegments[0] ?? ''
     if (firstSegment.startsWith('.')) return true
     if (platform === 'win32') {
@@ -124,7 +133,7 @@ export async function confirmSensitiveSystemMutation(
   action: 'write' | 'edit'
 ): Promise<void> {
   // 临时目录本身也要解开符号链接（macOS 的 /var 是 /private/var 的链接），不然临时文件会被误当成系统敏感路径。
-  if (!isSensitiveSystemMutationPath(await realPathForSafety(resolvedPath), { tempDir: await realPathForSafety(tmpdir()) })) return
+  if (!isSensitiveSystemMutationPath(await resolveRealPath(resolvedPath), { tempDir: await resolveRealPath(tmpdir()) })) return
 
   // 审批统一走宿主注入的 ApprovalPort；本包不假设具体确认 UI 或运行模式。
   // autonomous 与后台 never-ask 的自动批准；execution 为空的宿主（web 桥/无人值守）得到设计式
@@ -168,17 +177,19 @@ export function isCredentialPath(resolvedPath: string, options: SensitiveSystemM
   if (CredentialFileNames.has(comparableName) || CredentialExtensions.has(paths.extname(name).toLowerCase())) return true
   if (platform !== 'win32' && isWithinAnyRoot(abs, CredentialSystemPaths, platform)) return true
   const home = options.homeDir ?? homedir()
-  if (!home || !isPathInsideRoot(abs, home, platform)) return false
-  const relative = paths.relative(comparisonPath(home, platform), comparisonPath(abs, platform)).split(paths.sep).join('/')
+  const homeRelative = home ? platformTextRules(platform).relativePathTextInside(abs, home) : null
+  if (isNull(homeRelative)) return false
+  const caseSensitive = comparesCaseSensitively(platform)
+  const relative = caseSensitive ? homeRelative : homeRelative.toLowerCase()
   return CredentialHomeDirectories.some((directory) => {
-    const expected = platform === 'win32' || platform === 'darwin' ? directory.toLowerCase() : directory
+    const expected = caseSensitive ? directory : directory.toLowerCase()
     return relative === expected || relative.startsWith(`${expected}/`)
   })
 }
 
 /** 读或改凭证文件前向用户要确认；先把符号链接解开再判定，没有审批通道的宿主会直接拒绝。 */
 export async function confirmCredentialAccess(ctx: SystemToolContext, resolvedPath: string, action: 'read' | 'write'): Promise<void> {
-  const target = await realPathForSafety(resolvedPath)
+  const target = await resolveRealPath(resolvedPath)
   if (!isCredentialPath(target)) return
   const verb = action === 'read' ? '读取' : '改写'
   await ctx.approval.awaitConfirmation(
@@ -194,25 +205,4 @@ export async function confirmCredentialAccess(ctx: SystemToolContext, resolvedPa
       },
     }
   )
-}
-
-/** 判定安全用的真实路径：解开符号链接（悬空的链接照它指向的路径继续解）；文件还不存在就解开最近的那层已存在的目录，再把剩下的段接回去。 */
-export async function realPathForSafety(resolvedPath: string): Promise<string> {
-  const trailing: string[] = []
-  let current = resolvedPath
-  for (let hops = 0; hops < 40; hops += 1) {
-    const real = await realpath(current).catch(() => null)
-    if (real) return isEmpty(trailing) ? real : path.join(real, ...trailing.reverse())
-    // 悬空的符号链接 realpath 解不开：照它指向的路径继续，写入才会落到目标，而不是把链接换成普通文件。
-    const linkTarget = await readlink(current).catch(() => null)
-    if (linkTarget) {
-      current = path.resolve(path.dirname(current), linkTarget)
-      continue
-    }
-    const parent = path.dirname(current)
-    if (parent === current) return resolvedPath
-    trailing.push(path.basename(current))
-    current = parent
-  }
-  return resolvedPath
 }

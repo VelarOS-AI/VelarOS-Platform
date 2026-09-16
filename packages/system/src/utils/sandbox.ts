@@ -7,12 +7,14 @@ import type { Stats } from 'node:fs'
 import { constants } from 'node:fs'
 import { chmod, copyFile, lstat, mkdir, mkdtemp, readdir, readFile, readlink, rename, rm, rmdir, symlink, unlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { dirname, join, posix, resolve, sep } from 'node:path'
+import { dirname, join, posix, resolve } from 'node:path'
 
 import { createTwoFilesPatch } from 'diff'
 
 import { isEmpty, isFalse, isNull, isPresent, isUndefined } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
+import { resolveRealPath } from '@velaros-ai/core/utils/RealPath'
+import { currentPlatform } from '@velaros-ai/platform'
 import type { SandboxApplyResult, SandboxDiff, SandboxIgnoredMode, SandboxTextDiff } from '@velaros-ai/rehearsal-sandbox/contracts'
 import { RehearsalSandboxLimits } from '@velaros-ai/rehearsal-sandbox/contracts'
 import { textCodec, textFileIo } from '@velaros-ai/text-files'
@@ -21,7 +23,7 @@ import { SystemErrorCodes, SystemFailureLimits } from '../contract/constants.js'
 import type { SystemProcessConfinementPolicy } from '../types/commands.js'
 import type { SystemSandboxApplyFailureDetails, SystemSandboxConflict, SystemSandboxFileStamp, SystemSandboxManifest, SystemSandboxStampTable } from '../types/sandbox.js'
 
-import { isPathInsideRoot, realPathForSafety } from './file-safety.js'
+import { isPathInsideRoot } from './file-safety.js'
 import { readErrnoCode } from './fs.js'
 import { SystemTuning } from './tuning.js'
 
@@ -44,9 +46,11 @@ export function isSandboxId(value: string): boolean {
 
 /** 核对一个路径确实在沙箱基目录之下（两边都解开符号链接再比；基目录本身不算），不在就抛 PERMISSION——递归删除只许删这里面的东西。 */
 export async function assertInsideSandboxBase(path: string, base: string): Promise<string> {
-  const real = await realPathForSafety(path)
-  const realBase = await realPathForSafety(base)
-  if (!real.startsWith(realBase + sep)) {
+  const real = await resolveRealPath(path)
+  const realBase = await resolveRealPath(base)
+  // 真实路径已经解开，按字面比（realpath 给出的就是盘上的写法）；基目录本身不算「在它之下」。
+  const inside = currentPlatform.relativePathTextInside(real, realBase, { caseSensitive: true })
+  if (isNull(inside) || inside === '.') {
     throw new AppError('PERMISSION', `拒绝操作 ${path}：它不在沙箱基目录 ${base} 之下`)
   }
   return real
@@ -62,7 +66,7 @@ export async function sandboxDirectoryOf(base: string, sandboxId: string): Promi
   const stats = await lstat(directory).catch(() => null)
   if (stats?.isSymbolicLink()) throw new AppError('PERMISSION', `拒绝操作 ${directory}：它是符号链接，不是沙箱目录`)
   const real = await assertInsideSandboxBase(directory, base)
-  if (dirname(real) !== await realPathForSafety(base)) throw new AppError('PERMISSION', `拒绝操作 ${directory}：它不是沙箱基目录下面一层的目录`)
+  if (dirname(real) !== await resolveRealPath(base)) throw new AppError('PERMISSION', `拒绝操作 ${directory}：它不是沙箱基目录下面一层的目录`)
   return real
 }
 
@@ -110,7 +114,7 @@ async function gitLinkPointsOutside(linkFile: string, root: string): Promise<boo
   const head = await textFileIo.readHead(linkFile, SystemTuning.files.textSniffBytes).catch(() => null)
   const target = head ? /^gitdir:[ \t]*(.+?)[ \t]*\r?$/mu.exec(head.toString('utf8'))?.[1] : undefined
   if (!target) return false
-  return !isPathInsideRoot(await realPathForSafety(resolve(dirname(linkFile), target)), root)
+  return !isPathInsideRoot(await resolveRealPath(resolve(dirname(linkFile), target)), root)
 }
 
 /**

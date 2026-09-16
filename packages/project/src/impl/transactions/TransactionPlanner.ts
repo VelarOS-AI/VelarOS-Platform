@@ -3,7 +3,10 @@
  * 把编辑意图按版本化快照变成补丁，汇总事务的净变化与风险，守住事务规模与受保护文件；不写盘、不持有事务仓库。
  */
 
+import { resolve } from 'node:path'
+
 import { isNull, isNumber, isPresent, isString, isUndefined, numberOrNull, toOptional } from '@velaros-ai/core'
+import { resolveRealPath } from '@velaros-ai/core/utils/RealPath'
 
 import type { FileAdapter, PatchStrategy } from '../../contract/requires.js'
 import type { RiskLevel } from '../../types/common.js'
@@ -28,7 +31,7 @@ import { matchesAny } from '../../utils/glob.js'
 import { id } from '../../utils/id.js'
 import { toAbs, toRel } from '../../utils/path.js'
 import { assertWellFormedProjectText, countChangedLines } from '../../utils/text.js'
-import { operationPath, withIntentMetadata } from '../../utils/transactions/edit-intents.js'
+import { operationFilePaths, operationPath, withIntentMetadata } from '../../utils/transactions/edit-intents.js'
 import { patchFileAttributes, withPatchFileAttributes } from '../../utils/transactions/patch-attributes.js'
 import { stagedContentAfter, withoutStagedOffsets } from '../../utils/transactions/patch-chain.js'
 import { assertEditsReadOriginal, canRevertToOriginal } from '../../utils/transactions/patch-ownership.js'
@@ -170,6 +173,31 @@ export class TransactionPlanner implements TransactionPlannerApi {
     return toRel(this.dependencies.root, toAbs(this.dependencies.root, pathValue))
   }
 
+  /**
+   * 一次事务里两个入参指向同一个物理文件（项目内的符号链接、大小写别名）时，在写任何东西之前拒绝。
+   * 事务按路径字符串分组、衔接补丁、加锁，同一个文件被当成两个就各写各的：先写的那份被后写的整篇覆盖，
+   * 或者后一处在冲突检查上失败而磁盘已经改了一半——那正是 INV-4「全成或全不成」破掉的样子。
+   */
+  private async assertNoAliasedFiles(intents: readonly EditIntent[]): Promise<void> {
+    const paths = [...new Set(intents.flatMap((intent) => operationFilePaths(intent.operation)))]
+    if (paths.length < 2) return
+    const byRealPath = new Map<string, string>()
+    for (const pathValue of paths) {
+      const realPath = await resolveRealPath(resolve(this.dependencies.root, pathValue))
+      const first = byRealPath.get(realPath)
+      if (isUndefined(first)) {
+        byRealPath.set(realPath, pathValue)
+        continue
+      }
+      throw new ProjectError(
+        'INVALID_INPUT',
+        `${first} 和 ${pathValue} 是同一个文件（项目内的符号链接或大小写别名指向同一份内容），一次事务里不能各改各的`,
+        { paths: [first, pathValue] },
+        `把这两处改动合并成对 ${first} 一个路径的一组编辑，再提交；确实要分开改就拆成两次事务。`,
+      )
+    }
+  }
+
   /** 编辑原语里的文件路径（`path` / `from` / `to`）换成规范形式；`json_patch` 内层的 JSON Pointer 不是文件路径。 */
   private withCanonicalPaths(intent: EditIntent): EditIntent {
     const { operation } = intent
@@ -208,6 +236,7 @@ export class TransactionPlanner implements TransactionPlannerApi {
     const intents = processed.operations.map((operationIntent) =>
       this.withCanonicalPaths(operationIntent),
     )
+    await this.assertNoAliasedFiles(intents)
     let groupedThrough = -1
     for (const [operationIndex, intent] of intents.entries()) {
       if (operationIndex <= groupedThrough) continue
