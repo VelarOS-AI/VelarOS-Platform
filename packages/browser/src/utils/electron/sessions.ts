@@ -1,5 +1,8 @@
 import type electron from 'electron'
 
+import { isPlainObject, isString } from '@velaros-ai/core'
+
+import type { BrowserUserActivityKind } from '../../types/browser'
 import type { BrowserDialogEventSource,BrowserPopupNavigationResolution, BrowserPopupUrlResolution } from '../../types/electron.js'
 import { BrowserTuning } from '../tuning.js'
 
@@ -206,4 +209,46 @@ export function buildBrowserUserActivityBridgeScript(): string {
   return true;
 })()
 `
+}
+
+/** 从页面发来的用户活动里读出它是哪一类。 */
+export function readUserActivityKind(payload: unknown): BrowserUserActivityKind {
+  if (!isPlainObject(payload)) return 'unknown'
+
+  const kind = payload['kind']
+  switch (kind) {
+    case 'click':
+    case 'keyboard':
+    case 'scroll':
+    case 'input':
+    case 'navigation':
+    case 'dialog':
+    case 'download':
+    case 'permission':
+    case 'focus':
+      return kind
+    default:
+      return 'unknown'
+  }
+}
+
+/** 把一次键盘活动拼成一句可读的说明。 */
+export function formatKeyboardActivityDetail(input: { key?: LooseOptional<string> }): Nullable<string> {
+  const key = input.key?.trim()
+  if (!key || key.length === 1) return null
+
+  return `key=${key}`
+}
+
+/** 从事件载荷里读一个字符串字段；没有就当没有。 */
+export function readEventString(value: unknown, key: string): Nullable<string> {
+  if (!isPlainObject(value)) return null
+
+  const property = value[key]
+  return isString(property) ? property : null
+}
+
+/** 判断占位 URL。 */
+export function isPlaceholderUrl(url: LooseOptional<string>): boolean {
+  return url === 'about:blank' || url === 'about:srcdoc'
 }

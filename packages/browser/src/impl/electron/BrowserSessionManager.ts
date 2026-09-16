@@ -20,7 +20,7 @@
 //  - `failedMainFrameNavigations` 记住主框架失败，避免把失败页当成「已就绪」继续跑动作。
 import type electron from 'electron'
 
-import { isEmpty, isNumber, isPlainObject, isString, isTrue, numberOrNull, toNullable, toOptional } from '@velaros-ai/core'
+import { isEmpty, isNumber, isString, isTrue, numberOrNull, toNullable, toOptional } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { Log } from '@velaros-ai/core/logger'
 import { type TimerLease, TimerScope } from '@velaros-ai/core/utils/TimerScope'
@@ -42,6 +42,7 @@ import {
 } from '../../types/electron'
 import type { BrowserPopupBootstrapLease, BrowserSessionLookup } from '../../types/electron.js'
 import { browserUserActivityConsolePrefix } from '../../utils/electron/sessions'
+import { formatKeyboardActivityDetail, isPlaceholderUrl, readEventString, readUserActivityKind } from '../../utils/electron/sessions'
 import { asBrowserDialogEventSource, buildBrowserPopupWindowOptions, buildBrowserUserActivityBridgeScript,isNamedPopupFrame, resolveBrowserPopupNavigation, resolveBrowserPopupUrl } from '../../utils/electron/sessions.js'
 import { BrowserViewNotAttachedReason } from '../../utils/errors'
 import { BrowserTuning } from '../../utils/tuning'
@@ -96,7 +97,6 @@ export interface BrowserSessionManagerApi {
 }
 
 class BrowserSessionManager implements BrowserSessionManagerApi {
-
   /** 当前活跃浏览器会话。 */
   private readonly sessions = new Map<string, BrowserSession>()
   /** 主框架加载失败记录，用于过滤失败后紧跟的 did-finish-load 噪音。 */
@@ -212,7 +212,7 @@ class BrowserSessionManager implements BrowserSessionManagerApi {
 
     const currentUrl = webContents.getURL()
     // about:blank 不能覆盖已有会话 URL，否则会丢失 site context。
-    const sessionUrl = currentUrl && !this.isPlaceholderUrl(currentUrl) ? currentUrl : existing?.url
+    const sessionUrl = currentUrl && !isPlaceholderUrl(currentUrl) ? currentUrl : existing?.url
     const session: BrowserSession = existing
       ? {
           ...existing,
@@ -871,7 +871,7 @@ class BrowserSessionManager implements BrowserSessionManagerApi {
 
       this.recordUserActivity(sessionId, 'keyboard', {
         url: webContents.getURL() || session.url,
-        detail: this.formatKeyboardActivityDetail(input),
+        detail: formatKeyboardActivityDetail(input),
       })
     })
     webContents.on('did-start-navigation', (_event, url, _isInPlace, isMainFrame) => {
@@ -881,7 +881,7 @@ class BrowserSessionManager implements BrowserSessionManagerApi {
     })
     webContents.on('did-navigate', (_event, url, httpResponseCode) => {
       if (!isCurrentWebContents()) return
-      if (this.isPlaceholderUrl(url)) return
+      if (isPlaceholderUrl(url)) return
 
       // B2: 记录导航历史
       session.lastNavigation = { url, type: 'load' }
@@ -932,7 +932,7 @@ class BrowserSessionManager implements BrowserSessionManagerApi {
     )
     webContents.on('did-navigate-in-page', (_event, url, isMainFrame) => {
       if (!isCurrentWebContents()) return
-      if (this.isPlaceholderUrl(url)) return
+      if (isPlaceholderUrl(url)) return
 
       if (isMainFrame) {
         if (this.isFailedMainFrameNavigation(sessionId, url)) {
@@ -949,7 +949,7 @@ class BrowserSessionManager implements BrowserSessionManagerApi {
       if (!isCurrentWebContents()) return
 
       const currentUrl = webContents.getURL()
-      if (currentUrl && !this.isPlaceholderUrl(currentUrl)) {
+      if (currentUrl && !isPlaceholderUrl(currentUrl)) {
         if (this.isFailedMainFrameNavigation(sessionId, currentUrl, { consumeFinish: true })) {
           // did-fail-load 后可能跟一个 did-finish-load，过滤掉这次完成事件。
           return
@@ -1133,8 +1133,8 @@ class BrowserSessionManager implements BrowserSessionManagerApi {
     details
   ) => {
     const lookup = this.findSessionByWebContents(requestingWebContents)
-    const requestingUrl = this.readEventString(details, 'requestingUrl')
-    const embeddingOrigin = this.readEventString(details, 'embeddingOrigin')
+    const requestingUrl = readEventString(details, 'requestingUrl')
+    const embeddingOrigin = readEventString(details, 'embeddingOrigin')
     const url = requestingWebContents?.getURL() || lookup?.session.url || null
 
     if (!lookup) {
@@ -1296,10 +1296,10 @@ class BrowserSessionManager implements BrowserSessionManagerApi {
     const rawPayload = message.slice(browserUserActivityConsolePrefix.length)
     try {
       const payload = JSON.parse(rawPayload)
-      const kind = this.readUserActivityKind(payload)
+      const kind = readUserActivityKind(payload)
       this.recordUserActivity(sessionId, kind, {
-        url: this.readEventString(payload, 'url') ?? sourceId,
-        detail: this.readEventString(payload, 'detail'),
+        url: readEventString(payload, 'url') ?? sourceId,
+        detail: readEventString(payload, 'detail'),
       })
       return true
     } catch (error) {
@@ -1313,39 +1313,11 @@ class BrowserSessionManager implements BrowserSessionManagerApi {
     }
   }
 
-  private readUserActivityKind(payload: unknown): BrowserUserActivityKind {
-    if (!isPlainObject(payload)) return 'unknown'
+  
 
-    const kind = payload['kind']
-    switch (kind) {
-      case 'click':
-      case 'keyboard':
-      case 'scroll':
-      case 'input':
-      case 'navigation':
-      case 'dialog':
-      case 'download':
-      case 'permission':
-      case 'focus':
-        return kind
-      default:
-        return 'unknown'
-    }
-  }
+  
 
-  private formatKeyboardActivityDetail(input: { key?: LooseOptional<string> }): Nullable<string> {
-    const key = input.key?.trim()
-    if (!key || key.length === 1) return null
-
-    return `key=${key}`
-  }
-
-  private readEventString(value: unknown, key: string): Nullable<string> {
-    if (!isPlainObject(value)) return null
-
-    const property = value[key]
-    return isString(property) ? property : null
-  }
+  
 
   /** 记录失败主框架导航。 */
   private rememberFailedMainFrameNavigation(sessionId: string, rawUrl: string): void {
@@ -1415,7 +1387,7 @@ class BrowserSessionManager implements BrowserSessionManagerApi {
       let normalizedIndex = -1
 
       rawEntries.forEach((entry, index) => {
-        if (!entry.url || this.isPlaceholderUrl(entry.url)) return
+        if (!entry.url || isPlaceholderUrl(entry.url)) return
 
         let url = entry.url
         try {
@@ -1510,10 +1482,7 @@ class BrowserSessionManager implements BrowserSessionManagerApi {
     }
   }
 
-  /** 判断占位 URL。 */
-  private isPlaceholderUrl(url: LooseOptional<string>): boolean {
-    return url === 'about:blank' || url === 'about:srcdoc'
-  }
+  
 }
 
 export { BrowserSessionManager }

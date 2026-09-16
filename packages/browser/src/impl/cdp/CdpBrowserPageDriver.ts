@@ -28,7 +28,6 @@
 
 import {
   isArray,
-  isBoolean,
   isEmpty,
   isFiniteNumber,
   isNonBlankString,
@@ -43,9 +42,13 @@ import {
 import { AppError } from '@velaros-ai/core/error'
 
 import type { BrowserPageDriver } from '../../contract/requires.js'
-import type { BrowserEmulationOptions, BrowserGeolocationOptions, BrowserGeolocationState, BrowserKeyModifier, BrowserMouseButton, BrowserNetworkControlOptions, BrowserNetworkRequestDetailsOptions, BrowserNetworkResponseBodyOptions, BrowserNetworkThrottlingPreset, BrowserOriginStorage, BrowserPageDiagnosticEntry, BrowserPageDiagnosticLevel, BrowserPageTargetInfo, BrowserPressKeyOptions, BrowserStorageEntry, BrowserSwitchPageTargetOptions, BrowserTypeTextOptions, BrowserViewportOptions } from '../../types/browser.js'
-import type { CdpBrowserPageDriverTransport, CdpCaptureScreenshotResponse, CdpDomDocumentResponse, CdpDomQuerySelectorResponse, CdpDomStorageItemsResponse, CdpDownloadProgressEvent, CdpDownloadWillBeginEvent, CdpFetchResourcePayload, CdpJavascriptDialogOpeningEvent, CdpLayoutMetricsResponse, CdpNetworkCookie, CdpNetworkGetCookiesResponse, CdpPageFrame, CdpPageFrameTree, CdpPageGetFrameTreeResponse, CdpPageTargetDescription, CdpPrintToPdfResponse, CdpRuntimeConsoleAPICalledEvent, CdpRuntimeEvaluateResponse, CdpRuntimeExceptionDetails, CdpRuntimeExceptionThrownEvent, CdpRuntimeRemoteObject, CdpScreencastConsumerOptions, CdpScreencastStartOptions, CdpTargetListEntry, ScreencastCapturedFrame } from '../../types/cdp.js'
+import type { BrowserEmulationOptions, BrowserGeolocationState, BrowserNetworkControlOptions, BrowserNetworkRequestDetailsOptions, BrowserNetworkResponseBodyOptions, BrowserNetworkThrottlingPreset, BrowserOriginStorage, BrowserPageDiagnosticEntry, BrowserPageTargetInfo, BrowserPressKeyOptions, BrowserStorageEntry, BrowserSwitchPageTargetOptions, BrowserTypeTextOptions, BrowserViewportOptions } from '../../types/browser.js'
+import type { CdpBrowserPageDriverTransport, CdpCaptureScreenshotResponse, CdpDomDocumentResponse, CdpDomQuerySelectorResponse, CdpDomStorageItemsResponse, CdpDownloadProgressEvent, CdpDownloadWillBeginEvent, CdpFetchResourcePayload, CdpJavascriptDialogOpeningEvent, CdpLayoutMetricsResponse, CdpNetworkGetCookiesResponse, CdpPageFrame, CdpPageFrameTree, CdpPageGetFrameTreeResponse, CdpPageTargetDescription, CdpPrintToPdfResponse, CdpRuntimeConsoleAPICalledEvent, CdpRuntimeEvaluateResponse, CdpRuntimeExceptionDetails, CdpRuntimeExceptionThrownEvent, CdpRuntimeRemoteObject, CdpScreencastConsumerOptions, CdpScreencastStartOptions, CdpTargetListEntry, ScreencastCapturedFrame } from '../../types/cdp.js'
 import type { BrowserPageDriverClickCoordinatesOptions, BrowserPageDriverCookie, BrowserPageDriverCookieOptions, BrowserPageDriverDiagnosticsOptions, BrowserPageDriverDownloadEvent, BrowserPageDriverDownloadListener, BrowserPageDriverDragCoordinatesOptions, BrowserPageDriverEmulationState, BrowserPageDriverFetchResourceOptions, BrowserPageDriverFetchResourceResult, BrowserPageDriverFileInputOptions, BrowserPageDriverMoveMouseOptions, BrowserPageDriverNetworkControlState, BrowserPageDriverNetworkIdleOptions, BrowserPageDriverNetworkRequestDetailsResult, BrowserPageDriverNetworkResponseBodyResult, BrowserPageDriverPdfOptions, BrowserPageDriverScreenshot, BrowserPageDriverScreenshotOptions, BrowserPageDriverState, BrowserPageDriverStorageOriginOptions } from '../../types/driver'
+import { buildFetchResourceScript, buildViewportRect, clampPageZoomFactor, clampPositiveInteger, cloneGeolocation, normalizeCpuThrottlingRate, normalizeGeolocation, normalizeNullableEmulationString, readConsoleSource, readNodeId, resolveConsoleLevel, resolveConsoleTimestamp, resolveKeyboardModifiers, resolveKeyCode, resolveMouseButton, resolveTargetListEntryId, unwrapRuntimeEvaluateValue } from '../../utils/cdp/driver'
+import { normalizeDomStorageEntry, normalizeNetworkCookie, normalizePageTargetDescription, resolveConsoleMessage, resolveRegionScreenshotInput } from '../../utils/cdp/driver'
+import { resolveCdpTargetListUrl } from '../../utils/cdp/driver'
+import { resolveCdpTargetId } from '../../utils/cdp/driver.js'
 import { clearBrowserDiagnosticEntries, takeBrowserDiagnosticWindow } from '../../utils/diagnostics.js'
 import { normalizeBrowserPressKeyOptions } from '../../utils/keyboard'
 import { BrowserTuning } from '../../utils/tuning'
@@ -85,15 +88,7 @@ export interface CdpBrowserPageDriverConnectOptions extends CdpWebSocketTranspor
   onDispose?: LooseOptional<() => void>
 }
 
-
 class CdpBrowserPageDriver implements BrowserPageDriver {
-  private static readonly CDP_KEY_MODIFIER_MASKS: Record<BrowserKeyModifier, number> = {
-    alt: 1,
-    control: 2,
-    meta: 4,
-    shift: 8,
-  }
-
   public readonly kind = 'external'
   private currentUrl: string
   private currentTitle: string
@@ -171,7 +166,7 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
       })
     }
 
-    const value = this.unwrapRuntimeEvaluateValue(response)
+    const value = unwrapRuntimeEvaluateValue(response)
     this.updateCachedPageState(value)
     return value as T
   }
@@ -291,9 +286,9 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
 
   public async pressKey(options: BrowserPressKeyOptions): Promise<void> {
     const normalized = normalizeBrowserPressKeyOptions(options)
-    const repeat = this.clampPositiveInteger(normalized.repeat, 1)
-    const modifiers = this.resolveKeyboardModifiers(normalized.modifiers ?? [])
-    const code = this.resolveKeyCode(normalized.key)
+    const repeat = clampPositiveInteger(normalized.repeat, 1)
+    const modifiers = resolveKeyboardModifiers(normalized.modifiers ?? [])
+    const code = resolveKeyCode(normalized.key)
 
     for (let index = 0; index < repeat; index += 1) {
       await this.options.transport.send('Input.dispatchKeyEvent', {
@@ -329,8 +324,8 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
   ): Promise<void> {
     const x = Math.round(options.x)
     const y = Math.round(options.y)
-    const button = this.resolveMouseButton(options.button ?? 'left')
-    const clickCount = this.clampPositiveInteger(options.clickCount, 1)
+    const button = resolveMouseButton(options.button ?? 'left')
+    const clickCount = clampPositiveInteger(options.clickCount, 1)
 
     await this.options.transport.send('Input.dispatchMouseEvent', {
       type: 'mousePressed',
@@ -357,7 +352,7 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
     const startY = Math.round(options.startY)
     const endX = Math.round(options.endX)
     const endY = Math.round(options.endY)
-    const steps = this.clampPositiveInteger(options.steps, 10)
+    const steps = clampPositiveInteger(options.steps, 10)
 
     await this.options.transport.send('Input.dispatchMouseEvent', {
       type: 'mouseMoved',
@@ -413,7 +408,7 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
   public async setFileInputFiles(options: BrowserPageDriverFileInputOptions): Promise<boolean> {
     await this.options.transport.send('DOM.enable')
     const document = await this.options.transport.send<CdpDomDocumentResponse>('DOM.getDocument')
-    const rootNodeId = this.readNodeId(document.root?.nodeId)
+    const rootNodeId = readNodeId(document.root?.nodeId)
     if (!isNotNull(rootNodeId)) {
       throw new AppError('VALIDATION', '无法定位页面 DOM 根节点。')
     }
@@ -425,7 +420,7 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
         selector: options.selector,
       }
     )
-    const nodeId = this.readNodeId(query.nodeId)
+    const nodeId = readNodeId(query.nodeId)
     if (!isNotNull(nodeId)) return false
 
     await this.options.transport.send('DOM.setFileInputFiles', {
@@ -450,7 +445,7 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
     options: BrowserPageDriverFetchResourceOptions
   ): Promise<BrowserPageDriverFetchResourceResult> {
     const payload = await this.executeJavaScript<CdpFetchResourcePayload>(
-      this.buildFetchResourceScript(options),
+      buildFetchResourceScript(options),
       true
     )
     if (!isObject(payload) || !isString(payload.data) || !payload.data.trim()) {
@@ -473,7 +468,7 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
   }
 
   public async setPageZoomFactor(zoomFactor: number): Promise<void> {
-    const normalizedZoomFactor = this.clampPageZoomFactor(zoomFactor)
+    const normalizedZoomFactor = clampPageZoomFactor(zoomFactor)
     await this.options.transport.send('Emulation.setPageScaleFactor', {
       pageScaleFactor: normalizedZoomFactor,
     })
@@ -519,28 +514,28 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
     }
 
     if (isPresent(options.timezoneId)) {
-      this.timezoneId = this.normalizeNullableEmulationString(options.timezoneId)
+      this.timezoneId = normalizeNullableEmulationString(options.timezoneId)
       await this.options.transport.send('Emulation.setTimezoneOverride', {
         timezoneId: this.timezoneId ?? '',
       })
     }
 
     if (isPresent(options.locale)) {
-      this.locale = this.normalizeNullableEmulationString(options.locale)
+      this.locale = normalizeNullableEmulationString(options.locale)
       await this.options.transport.send('Emulation.setLocaleOverride', {
         locale: this.locale ?? '',
       })
     }
 
     if (isPresent(options.geolocation)) {
-      this.geolocation = this.normalizeGeolocation(options.geolocation)
+      this.geolocation = normalizeGeolocation(options.geolocation)
       await this.options.transport.send('Emulation.setGeolocationOverride', {
         ...this.geolocation,
       })
     }
 
     if (isPresent(options.cpuThrottlingRate)) {
-      this.cpuThrottlingRate = this.normalizeCpuThrottlingRate(options.cpuThrottlingRate)
+      this.cpuThrottlingRate = normalizeCpuThrottlingRate(options.cpuThrottlingRate)
       await this.options.transport.send('Emulation.setCPUThrottlingRate', {
         rate: this.cpuThrottlingRate,
       })
@@ -557,7 +552,7 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
       reducedMotion: this.reducedMotion,
       timezoneId: this.timezoneId,
       locale: this.locale,
-      geolocation: this.cloneGeolocation(this.geolocation),
+      geolocation: cloneGeolocation(this.geolocation),
       cpuThrottlingRate: this.cpuThrottlingRate,
       networkThrottling: this.networkThrottling,
     }
@@ -657,16 +652,13 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
       reducedMotion: this.reducedMotion,
       timezoneId: this.timezoneId,
       locale: this.locale,
-      geolocation: this.cloneGeolocation(this.geolocation),
+      geolocation: cloneGeolocation(this.geolocation),
       cpuThrottlingRate: this.cpuThrottlingRate,
       networkThrottling: this.networkThrottling,
     }
   }
 
-  private normalizeCpuThrottlingRate(rate: number): number {
-    if (!Number.isFinite(rate)) return 1
-    return Math.min(20, Math.max(1, rate))
-  }
+  
 
   /**
    * offline 与网络节流共用 Network.emulateNetworkConditions，
@@ -676,7 +668,7 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
   public readDiagnostics(options: BrowserPageDriverDiagnosticsOptions): BrowserPageDiagnosticEntry[] {
     const limit = Math.min(
       BrowserTuning.cdp.diagnosticEntries,
-      this.clampPositiveInteger(options.limit, 100)
+      clampPositiveInteger(options.limit, 100)
     )
     // 先按种类挑，再取窗口；clear 只清这次读的种类，别顺手吃掉别人的证据。
     const entries = takeBrowserDiagnosticWindow(this.diagnostics, limit, options.kinds)
@@ -721,7 +713,7 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
       if (!isArray(response.cookies)) return []
 
       return response.cookies
-        .map((cookie) => this.normalizeNetworkCookie(cookie))
+        .map((cookie) => normalizeNetworkCookie(cookie))
         .filter(isNotNull)
     }
 
@@ -733,7 +725,7 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
     if (!isArray(response.cookies)) return []
 
     return response.cookies
-      .map((cookie) => this.normalizeNetworkCookie(cookie))
+      .map((cookie) => normalizeNetworkCookie(cookie))
       .filter(isNotNull)
   }
 
@@ -749,8 +741,8 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
     if (isEmpty(origins)) return []
 
     await this.options.transport.send('DOMStorage.enable')
-    const limit = this.clampPositiveInteger(options.limit, 100)
-    const maxValueChars = this.clampPositiveInteger(options.maxValueChars, 4_000)
+    const limit = clampPositiveInteger(options.limit, 100)
+    const maxValueChars = clampPositiveInteger(options.maxValueChars, 4_000)
     const result: BrowserOriginStorage[] = []
 
     for (const origin of origins) {
@@ -822,7 +814,7 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
     }
 
     const target = payload
-      .map((entry) => this.normalizePageTargetDescription(entry))
+      .map((entry) => normalizePageTargetDescription(entry))
       .find((entry): entry is CdpPageTargetDescription => entry?.id === targetId)
     if (!target) throw new AppError('NOT_FOUND', `CDP page target 不存在：${targetId}`)
 
@@ -835,7 +827,7 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
     const target = entry as CdpTargetListEntry
     if (target.type !== 'page') return null
 
-    const id = this.resolveTargetListEntryId(target)
+    const id = resolveTargetListEntryId(target)
     if (!id) return null
 
     const url = isString(target.url) ? target.url : ''
@@ -851,29 +843,9 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
     }
   }
 
-  private normalizePageTargetDescription(entry: unknown): Nullable<CdpPageTargetDescription> {
-    if (!isObject(entry)) return null
+  
 
-    const target = entry as CdpTargetListEntry
-    if (target.type !== 'page') return null
-
-    const id = this.resolveTargetListEntryId(target)
-    if (!id || !isNonBlankString(target.webSocketDebuggerUrl)) return null
-
-    return {
-      id,
-      url: isString(target.url) ? target.url : '',
-      title: isString(target.title) ? target.title : '',
-      webSocketDebuggerUrl: target.webSocketDebuggerUrl,
-    }
-  }
-
-  private resolveTargetListEntryId(entry: CdpTargetListEntry): Nullable<string> {
-    if (isNonBlankString(entry.id)) return entry.id
-    if (isString(entry.webSocketDebuggerUrl)) return resolveCdpTargetId(entry.webSocketDebuggerUrl)
-
-    return null
-  }
+  
 
   private buildCurrentPageTarget(): BrowserPageTargetInfo {
     return {
@@ -931,13 +903,7 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
     this.options.onDispose?.()
   }
 
-  private unwrapRuntimeEvaluateValue(response: CdpRuntimeEvaluateResponse): unknown {
-    const result = response.result
-    if (!result) return null
-    if ('value' in result) return result.value
-    if (result.unserializableValue) return result.unserializableValue
-    return toNullable(result.description)
-  }
+  
 
   private subscribeToDiagnosticsEvents(): void {
     if (!this.options.transport.onEvent) return
@@ -1191,16 +1157,16 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
   }
 
   private recordConsoleDiagnostic(event: CdpRuntimeConsoleAPICalledEvent): void {
-    const source = this.readConsoleSource(event.stackTrace)
+    const source = readConsoleSource(event.stackTrace)
     this.appendDiagnostic({
       kind: 'console',
-      level: this.resolveConsoleLevel(event.type),
-      message: this.resolveConsoleMessage(event.args),
+      level: resolveConsoleLevel(event.type),
+      message: resolveConsoleMessage(event.args),
       url: source.url ?? toNullable(this.currentUrl),
       line: source.line,
       column: source.column,
       code: null,
-      capturedAt: this.resolveConsoleTimestamp(event.timestamp),
+      capturedAt: resolveConsoleTimestamp(event.timestamp),
       details: {
         type: isString(event.type) ? event.type : 'console',
       },
@@ -1231,7 +1197,7 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
       line: isFiniteNumber(details.lineNumber) ? Math.round(details.lineNumber) + 1 : null,
       column: isFiniteNumber(details.columnNumber) ? Math.round(details.columnNumber) + 1 : null,
       code: null,
-      capturedAt: this.resolveConsoleTimestamp(event.timestamp),
+      capturedAt: resolveConsoleTimestamp(event.timestamp),
       details: diagnosticDetails,
     })
   }
@@ -1243,70 +1209,15 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
     }
   }
 
-  private resolveConsoleLevel(type: unknown): BrowserPageDiagnosticLevel {
-    if (!isString(type)) return 'info'
+  
 
-    switch (type) {
-      case 'debug':
-        return 'debug'
-      case 'warning':
-        return 'warning'
-      case 'error':
-      case 'assert':
-        return 'error'
-      default:
-        return 'info'
-    }
-  }
+  
 
-  private resolveConsoleMessage(args: unknown): string {
-    if (!isArray(args)) return 'console event'
+  
 
-    const parts = args
-      .map((arg) => this.stringifyConsoleArgument(arg))
-      .filter(isNonBlankString)
-    return parts.join(' ') || 'console event'
-  }
+  
 
-  private stringifyConsoleArgument(arg: unknown): Nullable<string> {
-    if (!isObject(arg)) return null
-
-    const remoteObject = arg as CdpRuntimeRemoteObject
-    if (isString(remoteObject.value)) return remoteObject.value
-    if (isFiniteNumber(remoteObject.value)) return String(remoteObject.value)
-    if (isString(remoteObject.unserializableValue)) return remoteObject.unserializableValue
-    if (isString(remoteObject.description)) return remoteObject.description
-    if (isString(remoteObject.type)) return remoteObject.type
-
-    return null
-  }
-
-  private readConsoleSource(stackTrace: unknown): {
-    url: Nullable<string>
-    line: Nullable<number>
-    column: Nullable<number>
-  } {
-    if (!isObject(stackTrace)) return { url: null, line: null, column: null }
-
-    const frames = (stackTrace as { callFrames?: unknown }).callFrames
-    if (!isArray(frames)) return { url: null, line: null, column: null }
-
-    const frame = frames[0]
-    if (!isObject(frame)) return { url: null, line: null, column: null }
-
-    const rawFrame = frame as { url?: unknown; lineNumber?: unknown; columnNumber?: unknown }
-    return {
-      url: isNonBlankString(rawFrame.url) ? rawFrame.url : null,
-      line: isFiniteNumber(rawFrame.lineNumber) ? Math.round(rawFrame.lineNumber) + 1 : null,
-      column: isFiniteNumber(rawFrame.columnNumber) ? Math.round(rawFrame.columnNumber) + 1 : null,
-    }
-  }
-
-  private resolveConsoleTimestamp(timestamp: unknown): number {
-    if (!isFiniteNumber(timestamp)) return Date.now()
-
-    return Math.round(timestamp)
-  }
+  
 
   private collectFrameOrigins(frameTree: unknown): string[] {
     const origins: string[] = []
@@ -1376,7 +1287,7 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
       if (!isArray(response.entries)) return []
 
       return response.entries
-        .map((entry) => this.normalizeDomStorageEntry(entry, options.maxValueChars))
+        .map((entry) => normalizeDomStorageEntry(entry, options.maxValueChars))
         .filter(isNotNull)
         .slice(0, options.limit)
     } catch (error) {
@@ -1399,76 +1310,19 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
     }
   }
 
-  private normalizeDomStorageEntry(
-    entry: unknown,
-    maxValueChars: number
-  ): Nullable<BrowserStorageEntry> {
-    if (!isArray(entry) || entry.length < 2) return null
-    const name = this.normalizeStorageString(entry[0]).trim()
-    if (!name) return null
+  
 
-    const rawValue = this.normalizeStorageString(entry[1])
-    return {
-      name,
-      value: rawValue.length > maxValueChars ? rawValue.slice(0, maxValueChars) : rawValue,
-      valueTruncated: rawValue.length > maxValueChars,
-    }
-  }
+  
 
-  private normalizeStorageString(value: unknown): string {
-    if (isString(value)) return value
-    if (isFiniteNumber(value)) return String(value)
-    if (isBoolean(value)) return String(value)
-    if (!isPresent(value)) return ''
+  
 
-    return String(value)
-  }
+  
 
-  private normalizeNetworkCookie(cookie: unknown): Nullable<BrowserPageDriverCookie> {
-    if (!isObject(cookie)) return null
+  
 
-    const rawCookie = cookie as CdpNetworkCookie
-    if (!isNonBlankString(rawCookie.name)) return null
+  
 
-    return {
-      name: rawCookie.name,
-      value: this.normalizeCookieString(rawCookie.value),
-      domain: this.normalizeOptionalCookieString(rawCookie.domain),
-      path: this.normalizeOptionalCookieString(rawCookie.path),
-      expires: this.normalizeOptionalCookieNumber(rawCookie.expires),
-      size: this.normalizeOptionalCookieNumber(rawCookie.size),
-      httpOnly: this.normalizeOptionalCookieBoolean(rawCookie.httpOnly),
-      secure: this.normalizeOptionalCookieBoolean(rawCookie.secure),
-      session: this.normalizeOptionalCookieBoolean(rawCookie.session),
-      sameSite: this.normalizeOptionalCookieString(rawCookie.sameSite),
-    }
-  }
-
-  private normalizeCookieString(value: unknown): string {
-    if (isString(value)) return value
-    if (isFiniteNumber(value)) return String(value)
-    if (isBoolean(value)) return String(value)
-
-    return ''
-  }
-
-  private normalizeOptionalCookieString(value: unknown): LooseOptional<string> {
-    if (!isString(value)) return null
-
-    return value
-  }
-
-  private normalizeOptionalCookieNumber(value: unknown): LooseOptional<number> {
-    if (!isFiniteNumber(value)) return null
-
-    return value
-  }
-
-  private normalizeOptionalCookieBoolean(value: unknown): LooseOptional<boolean> {
-    if (!isBoolean(value)) return null
-
-    return value
-  }
+  
 
   private updateCachedPageState(value: unknown): void {
     if (!isObject(value)) return
@@ -1489,7 +1343,7 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
     capture: BrowserPageDriverScreenshot['capture']
   }> {
     if (options.mode === 'full-page') return this.resolveFullPageScreenshotInput(options)
-    if (options.mode === 'region' && options.clip) return this.resolveRegionScreenshotInput(options)
+    if (options.mode === 'region' && options.clip) return resolveRegionScreenshotInput(options)
 
     return {
       params: {
@@ -1505,7 +1359,7 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
         height: Math.max(1, Math.round(options.metadata.viewportHeight)),
         documentWidth: Math.max(1, Math.round(options.metadata.documentWidth)),
         documentHeight: Math.max(1, Math.round(options.metadata.documentHeight)),
-        viewport: this.buildViewportRect(options),
+        viewport: buildViewportRect(options),
         clipped: false,
       },
     }
@@ -1521,18 +1375,18 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
       'Page.getLayoutMetrics'
     )
     const content = metrics.cssContentSize ?? metrics.contentSize
-    const documentWidth = this.clampPositiveInteger(content?.width, options.metadata.documentWidth)
-    const documentHeight = this.clampPositiveInteger(
+    const documentWidth = clampPositiveInteger(content?.width, options.metadata.documentWidth)
+    const documentHeight = clampPositiveInteger(
       content?.height,
       options.metadata.documentHeight
     )
     const captureWidth = Math.min(
       documentWidth,
-      this.clampPositiveInteger(options.maxWidth, documentWidth)
+      clampPositiveInteger(options.maxWidth, documentWidth)
     )
     const captureHeight = Math.min(
       documentHeight,
-      this.clampPositiveInteger(options.maxHeight, documentHeight)
+      clampPositiveInteger(options.maxHeight, documentHeight)
     )
 
     return {
@@ -1557,191 +1411,35 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
         height: captureHeight,
         documentWidth,
         documentHeight,
-        viewport: this.buildViewportRect(options),
+        viewport: buildViewportRect(options),
         clipped: captureWidth < documentWidth || captureHeight < documentHeight,
       },
     }
   }
 
-  private resolveRegionScreenshotInput(
-    options: BrowserPageDriverScreenshotOptions
-  ): {
-    params: Record<string, unknown>
-    capture: BrowserPageDriverScreenshot['capture']
-  } {
-    const clip = options.clip!
-    const x = Math.max(0, Math.round(clip.x))
-    const y = Math.max(0, Math.round(clip.y))
-    const width = Math.max(1, Math.round(clip.width))
-    const height = Math.max(1, Math.round(clip.height))
+  
 
-    return {
-      params: {
-        format: 'png',
-        fromSurface: true,
-        captureBeyondViewport: true,
-        clip: {
-          x,
-          y,
-          width,
-          height,
-          scale: 1,
-        },
-      },
-      capture: {
-        mode: 'region',
-        coordinateSpace: 'page-css-px',
-        x,
-        y,
-        width,
-        height,
-        documentWidth: Math.max(1, Math.round(options.metadata.documentWidth)),
-        documentHeight: Math.max(1, Math.round(options.metadata.documentHeight)),
-        viewport: this.buildViewportRect(options),
-        clipped: width < clip.width || height < clip.height,
-      },
-    }
-  }
+  
 
-  private buildViewportRect(options: BrowserPageDriverScreenshotOptions): BrowserPageDriverScreenshot['capture']['viewport'] {
-    return {
-      x: Math.max(0, Math.round(options.metadata.scrollX)),
-      y: Math.max(0, Math.round(options.metadata.scrollY)),
-      width: Math.max(1, Math.round(options.metadata.viewportWidth)),
-      height: Math.max(1, Math.round(options.metadata.viewportHeight)),
-    }
-  }
+  
 
-  private clampPositiveInteger(value: unknown, fallback: number): number {
-    const numberValue = Number(value)
-    if (!Number.isFinite(numberValue)) return Math.max(1, Math.round(fallback))
+  
 
-    return Math.max(1, Math.round(numberValue))
-  }
+  
 
-  private readNodeId(value: unknown): Nullable<number> {
-    if (!isFiniteNumber(value)) return null
+  
 
-    return Math.round(value)
-  }
+  
 
-  private clampPageZoomFactor(value: unknown): number {
-    if (!isFiniteNumber(value)) return 1
+  
 
-    const normalized = Math.round(value * 100) / 100
-    return Math.min(Math.max(normalized, 0.25), 3)
-  }
+  
 
-  private normalizeNullableEmulationString(value: string): Nullable<string> {
-    const normalized = value.trim()
-    return isNonBlankString(normalized) ? normalized : null
-  }
+  
 
-  private normalizeGeolocation(options: BrowserGeolocationOptions): BrowserGeolocationState {
-    if (!isFiniteNumber(options.latitude) || options.latitude < -90 || options.latitude > 90) {
-      throw new AppError('VALIDATION', '地理位置 latitude 必须在 -90 到 90 之间。')
-    }
-    if (!isFiniteNumber(options.longitude) || options.longitude < -180 || options.longitude > 180) {
-      throw new AppError('VALIDATION', '地理位置 longitude 必须在 -180 到 180 之间。')
-    }
+  
 
-    const accuracy = isFiniteNumber(options.accuracy)
-      ? Math.max(0, options.accuracy)
-      : 1
-
-    return {
-      latitude: options.latitude,
-      longitude: options.longitude,
-      accuracy,
-    }
-  }
-
-  private cloneGeolocation(
-    geolocation: Nullable<BrowserGeolocationState>
-  ): Nullable<BrowserGeolocationState> {
-    if (isNotNull(geolocation)) return { ...geolocation }
-
-    return null
-  }
-
-  private buildFetchResourceScript(options: BrowserPageDriverFetchResourceOptions): string {
-    const url = JSON.stringify(options.url)
-    const referer = JSON.stringify(options.referer?.trim() || null)
-
-    return `;(async () => {
-  const resourceUrl = ${url};
-  const referer = ${referer};
-  const fetchOptions = {
-    credentials: 'include',
-    cache: 'no-store',
-  };
-  if (referer) fetchOptions.referrer = referer;
-  const response = await fetch(resourceUrl, fetchOptions);
-  const buffer = await response.arrayBuffer();
-  const bytes = new Uint8Array(buffer);
-  let binary = '';
-  const chunkSize = 0x8000;
-  for (let index = 0; index < bytes.length; index += chunkSize) {
-    binary += String.fromCharCode.apply(null, bytes.subarray(index, index + chunkSize));
-  }
-  return {
-    ok: response.ok,
-    status: response.status,
-    mimeType: response.headers.get('content-type'),
-    contentLength: Number(response.headers.get('content-length') || bytes.byteLength),
-    data: btoa(binary),
-  };
-})()`
-  }
-
-  private resolveKeyboardModifiers(modifiers: BrowserKeyModifier[]): number {
-    return modifiers.reduce((mask, modifier) => mask | CdpBrowserPageDriver.CDP_KEY_MODIFIER_MASKS[modifier], 0)
-  }
-
-  private resolveKeyCode(key: string): string {
-    if (key.length === 1) return `Key${key.toUpperCase()}`
-
-    return key
-  }
-
-  private resolveMouseButton(button: BrowserMouseButton): 'left' | 'middle' | 'right' {
-    switch (button) {
-      case 'middle':
-        return 'middle'
-      case 'right':
-        return 'right'
-      case 'left':
-        return 'left'
-    }
-  }
-}
-
-function resolveCdpTargetListUrl(webSocketUrl: string): Nullable<string> {
-  if (!URL.canParse(webSocketUrl)) return null
-
-  const url = new URL(webSocketUrl)
-  switch (url.protocol) {
-    case 'ws:':
-      url.protocol = 'http:'
-      break
-    case 'wss:':
-      url.protocol = 'https:'
-      break
-    default:
-      return null
-  }
-  url.pathname = '/json/list'
-  url.search = ''
-  url.hash = ''
-  return url.toString()
-}
-
-function resolveCdpTargetId(webSocketUrl: string): Nullable<string> {
-  if (!URL.canParse(webSocketUrl)) return null
-
-  const pathname = new URL(webSocketUrl).pathname
-  const targetId = pathname.split('/').at(-1)?.trim() || ''
-  return targetId || null
+  
 }
 
 export { CdpBrowserPageDriver }

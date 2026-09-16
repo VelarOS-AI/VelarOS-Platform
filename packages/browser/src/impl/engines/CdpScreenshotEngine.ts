@@ -1,18 +1,14 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 
-import { isFiniteNumber, isObject, isPlainObject } from '@velaros-ai/core'
+import { isFiniteNumber, isPlainObject } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { Log } from '@velaros-ai/core/logger'
 
-import type { BrowserCaptureScreenshotOptions, BrowserScreencastStartResult, BrowserScreencastStopResult, BrowserScreenshotArtifact, BrowserScreenshotCaptureRegion, BrowserScreenshotMetadata } from '../../types/browser.js'
-import type {
-  BrowserPageDriverScreenshotOptions,
-} from '../../types/driver'
+import type { BrowserCaptureScreenshotOptions, BrowserScreencastStartResult, BrowserScreencastStopResult, BrowserScreenshotArtifact, BrowserScreenshotMetadata } from '../../types/browser.js'
 import type { BrowserPageDriverKernel, ExternalBrowserPageSession } from '../../types/runtime.js'
-import type { BrowserWorkspacePath } from '../../types/workspace.js'
+import { applyCaptureRegionToMetadata, resolveScreenshotOptions, resolveScreenshotPath } from '../../utils/cdp/screenshot'
 import { DEFAULT_BROWSER_VIEWPORT } from '../../utils/viewport.js'
-import { resolveBrowserWorkspacePath } from '../../utils/workspace-paths'
 
 /**
  * 截图域的 host 无关外部核（**降级实现**）。
@@ -70,10 +66,10 @@ export class CdpScreenshotEngine implements CdpScreenshotEngineApi {
     }
 
     const metadata = await this.readDegradedScreenshotMetadata(session)
-    const screenshotOptions = this.resolveScreenshotOptions(metadata, options)
+    const screenshotOptions = resolveScreenshotOptions(metadata, options)
     const captured = await session.driver.captureScreenshot(screenshotOptions)
     const bytes = Buffer.from(captured.bytes)
-    const artifactPath = await this.resolveScreenshotPath(context.workspaceRoot, options.path)
+    const artifactPath = await resolveScreenshotPath(context.workspaceRoot, options.path)
 
     await mkdir(dirname(artifactPath.path), { recursive: true })
     await writeFile(artifactPath.path, bytes)
@@ -87,7 +83,7 @@ export class CdpScreenshotEngine implements CdpScreenshotEngineApi {
       bytes: bytes.byteLength,
       capturedAt: Date.now(),
       capture: captured.capture,
-      metadata: this.applyCaptureRegionToMetadata(metadata, captured.capture),
+      metadata: applyCaptureRegionToMetadata(metadata, captured.capture),
       // 诚实缺席:diff / 模型图需要 nativeImage 级栅格处理,CDP 侧不硬造。
       diff: undefined,
       modelImage: undefined,
@@ -198,55 +194,9 @@ export class CdpScreenshotEngine implements CdpScreenshotEngineApi {
     }
   }
 
-  private applyCaptureRegionToMetadata(
-    metadata: BrowserScreenshotMetadata,
-    capture: BrowserScreenshotCaptureRegion
-  ): BrowserScreenshotMetadata {
-    return {
-      ...metadata,
-      documentWidth: capture.documentWidth || metadata.documentWidth,
-      documentHeight: capture.documentHeight || metadata.documentHeight,
-    }
-  }
+  
 
-  private resolveScreenshotOptions(
-    metadata: BrowserScreenshotMetadata,
-    options: BrowserCaptureScreenshotOptions
-  ): BrowserPageDriverScreenshotOptions {
-    if (options.region && isObject(options.region) && 'width' in options.region) {
-      const region = options.region as { x?: number; y?: number; width?: number; height?: number }
-      return {
-        mode: 'region',
-        metadata,
-        clip: {
-          x: Math.max(0, Math.round(region.x ?? 0)),
-          y: Math.max(0, Math.round(region.y ?? 0)),
-          width: Math.max(1, Math.round(region.width ?? metadata.viewportWidth)),
-          height: Math.max(1, Math.round(region.height ?? metadata.viewportHeight)),
-        },
-      }
-    }
+  
 
-    if (options.fullPage) return {
-        mode: 'full-page',
-        metadata,
-      }
-
-    return {
-      mode: 'viewport',
-      metadata,
-    }
-  }
-
-  /** 解析截图落盘路径：与站点工作区的其它落盘同一份判定（按真实路径，解开符号链接）。 */
-  private async resolveScreenshotPath(
-    workspaceRoot: string,
-    requestedPath?: string
-  ): Promise<BrowserWorkspacePath> {
-    const relativePath =
-      requestedPath?.trim() ||
-      `artifacts/screenshots/browser-${new Date().toISOString().replace(/[:.]/g, '-')}.png`
-
-    return resolveBrowserWorkspacePath(workspaceRoot, relativePath, '截图路径')
-  }
+  
 }

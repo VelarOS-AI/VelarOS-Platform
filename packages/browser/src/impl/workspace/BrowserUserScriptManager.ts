@@ -1,79 +1,14 @@
-import { randomUUID } from 'node:crypto'
 
-import { isArray, isBoolean, isEmpty, isFiniteNumber, isNonBlankString, isNotNull, isPlainObject,isPresent, isString, Log, optionalWhen, stringifyPretty,toOptional } from '@velaros-ai/core'
+import { isArray, isBoolean, isEmpty, isNotNull,isPresent, Log, optionalWhen, stringifyPretty } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import { BrowserUserScriptLimits } from '../../contract/constants'
 import type { BrowserSiteContext, BrowserUserScriptDraft, BrowserUserScriptLastRun, BrowserUserScriptOverview, BrowserUserScriptPatch, BrowserUserScriptRecord } from '../../types/browser.js'
-import type { BrowserUserScriptAccess, BrowserUserScriptStore, BrowserUserScriptValidatedPatch } from '../../types/workspace.js'
+import type { BrowserUserScriptAccess, BrowserUserScriptStore } from '../../types/workspace.js'
+import { createScriptId, globMatches, normalizeCode, normalizeDescription, normalizeName, normalizePatterns, scriptPath, sortScripts, validateUserScriptPatch } from '../../utils/user-scripts'
+import { requireScript, requireStoredScript } from '../../utils/user-scripts.js'
 
 const log = Log.tag('BrowserUserScriptManager')
-
-function sortScripts(scripts: BrowserUserScriptRecord[]): BrowserUserScriptRecord[] {
-  return [...scripts].sort(
-    (left, right) => left.position - right.position || left.createdAt - right.createdAt
-  )
-}
-
-function normalizeName(name: string): string {
-  const normalized = name.replace(/\s+/g, ' ').trim()
-  if (!normalized || normalized.length > 120) {
-    throw new AppError('VALIDATION', '脚本名称必须为 1 到 120 个字符。')
-  }
-  return normalized
-}
-
-function normalizeDescription(description: LooseOptional<string>): LooseOptional<string> {
-  const normalized = description?.trim()
-  if (!normalized) return undefined
-  if (normalized.length > 500) throw new AppError('VALIDATION', '脚本描述不能超过 500 个字符。')
-  return normalized
-}
-
-function normalizePatterns(patterns: LooseOptional<string[]>, field: string): string[] {
-  if (!patterns) return []
-  if (patterns.length > BrowserUserScriptLimits.matchRules) {
-    throw new AppError('VALIDATION', `${field} 最多允许 ${BrowserUserScriptLimits.matchRules} 条规则。`)
-  }
-  const normalized = [...new Set(patterns.map((item) => item.trim()).filter(Boolean))]
-  normalized.forEach((pattern) => validateUrlPattern(pattern, field))
-  return normalized
-}
-
-function validateUrlPattern(pattern: string, field: string): void {
-  if (pattern.length > 500) throw new AppError('VALIDATION', `${field} 规则过长。`)
-  if (pattern === '<all_urls>') return
-  if (!pattern.includes('://')) {
-    throw new AppError('VALIDATION', `${field} 必须是浏览器 match pattern。`, undefined, { pattern })
-  }
-  const [scheme, rest] = pattern.split('://', 2)
-  if (!['http', 'https', '*'].includes(scheme ?? '') || !rest?.includes('/')) {
-    throw new AppError('VALIDATION', `${field} 只支持 http/https 浏览器 match pattern。`, undefined, {
-      pattern,
-    })
-  }
-  const host = rest.slice(0, rest.indexOf('/'))
-  if (!host || (host.includes('*') && host !== '*' && !host.startsWith('*.'))) {
-    throw new AppError('VALIDATION', `${field} 的 host 通配符无效。`, undefined, { pattern })
-  }
-}
-
-function normalizeCode(code: string): string {
-  if (!code.trim()) throw new AppError('VALIDATION', '脚本内容不能为空。')
-  if (Buffer.byteLength(code, 'utf8') > BrowserUserScriptLimits.codeBytes) {
-    throw new AppError('VALIDATION', '单个用户脚本不能超过 1 MB。')
-  }
-  return code.endsWith('\n') ? code : `${code}\n`
-}
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-}
-
-function globMatches(value: string, pattern: string): boolean {
-  const expression = `^${pattern.split('*').map(escapeRegExp).join('.*')}$`
-  return new RegExp(expression).test(value)
-}
 
 /** Chrome 风格 match pattern 的有界子集：http/https、* scheme、* / *.host。 */
 export function browserUserScriptPatternMatches(url: string, pattern: string): boolean {
@@ -106,157 +41,6 @@ export function browserUserScriptMatchesUrl(script: BrowserUserScriptRecord, url
   return !(script.excludeMatch ?? []).some((pattern) =>
     browserUserScriptPatternMatches(url, pattern)
   )
-}
-
-function scriptPath(id: string): string {
-  return `scripts/${id}.js`
-}
-
-function assertScriptId(id: string): string {
-  const normalized = id.trim()
-  if (!/^[a-z0-9][a-z0-9-]{7,80}$/.test(normalized)) {
-    throw new AppError('VALIDATION', '用户脚本 id 无效。')
-  }
-  return normalized
-}
-
-function createScriptId(name: string): string {
-  const slug = name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 40) || 'script'
-  return `${slug}-${randomUUID().slice(0, 8)}`
-}
-
-function requireStoredInteger(value: unknown, field: string, minimum: number): number {
-  if (!isFiniteNumber(value) || !Number.isInteger(value) || value < minimum) {
-    throw new AppError('VALIDATION', `浏览器用户脚本索引字段 ${field} 无效。`)
-  }
-  return value
-}
-
-function requireStoredPatterns(value: unknown, field: string, optional: boolean): LooseOptional<string[]> {
-  if (!isPresent(value)) {
-    if (optional) return undefined
-    throw new AppError('VALIDATION', `浏览器用户脚本索引缺少字段 ${field}。`)
-  }
-  if (!isArray(value) || !value.every(isString)) {
-    throw new AppError('VALIDATION', `浏览器用户脚本索引字段 ${field} 无效。`)
-  }
-  const patterns = normalizePatterns(value, field)
-  if (!optional && isEmpty(patterns)) {
-    throw new AppError('VALIDATION', `浏览器用户脚本索引字段 ${field} 不能为空。`)
-  }
-  return patterns
-}
-
-function requireStoredLastRun(value: unknown): LooseOptional<BrowserUserScriptLastRun> {
-  if (!isPresent(value)) return undefined
-  if (!isPlainObject(value)) {
-    throw new AppError('VALIDATION', '浏览器用户脚本索引字段 lastRun 无效。')
-  }
-  const stored = value
-  const status = stored.status
-  if (status !== 'success' && status !== 'error' && status !== 'unsupported') {
-    throw new AppError('VALIDATION', '浏览器用户脚本索引字段 lastRun.status 无效。')
-  }
-  if (!isString(stored.url) || !isString(stored.documentId)) {
-    throw new AppError('VALIDATION', '浏览器用户脚本索引字段 lastRun 无效。')
-  }
-  if (isPresent(stored.error) && !isString(stored.error)) {
-    throw new AppError('VALIDATION', '浏览器用户脚本索引字段 lastRun.error 无效。')
-  }
-  return {
-    status,
-    url: stored.url,
-    documentId: stored.documentId,
-    scriptRevision: requireStoredInteger(stored.scriptRevision, 'lastRun.scriptRevision', 1),
-    startedAt: requireStoredInteger(stored.startedAt, 'lastRun.startedAt', 0),
-    finishedAt: requireStoredInteger(stored.finishedAt, 'lastRun.finishedAt', 0),
-    error: toOptional(stored.error),
-  }
-}
-
-function requireStoredScript(value: unknown): BrowserUserScriptRecord {
-  if (!isPlainObject(value)) {
-    throw new AppError('VALIDATION', '浏览器用户脚本索引包含无效记录。')
-  }
-  const stored = value
-  const id = assertScriptId(isString(stored.id) ? stored.id : '')
-  if (!isString(stored.name) || !isNonBlankString(stored.version)) {
-    throw new AppError('VALIDATION', `浏览器用户脚本 ${id} 缺少名称或版本。`)
-  }
-  if (isPresent(stored.description) && !isString(stored.description)) {
-    throw new AppError('VALIDATION', `浏览器用户脚本 ${id} 的 description 无效。`)
-  }
-  if (!isBoolean(stored.enabled)) {
-    throw new AppError('VALIDATION', `浏览器用户脚本 ${id} 的 enabled 无效。`)
-  }
-  if (
-    stored.source !== 'agent' &&
-    stored.source !== 'user' &&
-    stored.source !== 'user-import'
-  ) {
-    throw new AppError('VALIDATION', `浏览器用户脚本 ${id} 的 source 无效。`)
-  }
-  if (
-    stored.runAt !== 'document-start' &&
-    stored.runAt !== 'document-end' &&
-    stored.runAt !== 'document-idle'
-  ) {
-    throw new AppError('VALIDATION', `浏览器用户脚本 ${id} 的 runAt 无效。`)
-  }
-  if (stored.world !== 'isolated' && stored.world !== 'main') {
-    throw new AppError('VALIDATION', `浏览器用户脚本 ${id} 的 world 无效。`)
-  }
-  if (stored.relativePath !== scriptPath(id)) {
-    throw new AppError('VALIDATION', `浏览器用户脚本 ${id} 的 relativePath 无效。`)
-  }
-
-  return {
-    id,
-    name: normalizeName(stored.name),
-    description: normalizeDescription(stored.description as LooseOptional<string>),
-    version: stored.version.trim(),
-    revision: requireStoredInteger(stored.revision, 'revision', 1),
-    position: requireStoredInteger(stored.position, 'position', 0),
-    match: requireStoredPatterns(stored.match, 'match', false)!,
-    excludeMatch: requireStoredPatterns(stored.excludeMatch, 'excludeMatch', true),
-    runAt: stored.runAt,
-    world: stored.world,
-    enabled: stored.enabled,
-    source: stored.source,
-    // 索引路径即使通过校验也不直接复用，始终由脚本 ID 重建。
-    relativePath: scriptPath(id),
-    createdAt: requireStoredInteger(stored.createdAt, 'createdAt', 0),
-    updatedAt: requireStoredInteger(stored.updatedAt, 'updatedAt', 0),
-    lastRun: requireStoredLastRun(stored.lastRun),
-  }
-}
-
-/**
- * 把 patch 里出现的字段一次性校验成最终值。
- *
- * 这一步不碰磁盘：任何一条不合法都在写任何文件之前抛错，用户脚本不会停在「代码已换、
- * 索引没动」的半截状态上。
- */
-function validateUserScriptPatch(patch: BrowserUserScriptPatch): BrowserUserScriptValidatedPatch {
-  const match = isPresent(patch.match) ? normalizePatterns(patch.match, 'match') : null
-  if (isNotNull(match) && isEmpty(match)) {
-    throw new AppError('VALIDATION', '脚本至少需要一个 match 规则。')
-  }
-
-  return {
-    code: isPresent(patch.code) ? normalizeCode(patch.code) : null,
-    name: isPresent(patch.name) ? normalizeName(patch.name) : null,
-    description: 'description' in patch ? { value: normalizeDescription(patch.description) } : null,
-    match,
-    excludeMatch: isPresent(patch.excludeMatch)
-      ? normalizePatterns(patch.excludeMatch, 'excludeMatch')
-      : null,
-    version: isPresent(patch.version) ? patch.version.trim() || null : null,
-  }
 }
 
 /**
@@ -312,17 +96,20 @@ class BrowserUserScriptManager implements BrowserUserScriptManagerApi {
    * （宿主按请求建实例），锁只能挂在类上：两次修改交错时后写的那份会把先写的改动整份盖掉。
    * 变更都是小文件读写、跑得极快，全站点共用一条队列足够，也不会把任何长操作圈进来。
    */
-  private static indexMutations: Promise<unknown> = Promise.resolve()
+  /** 串行化索引写入：前一次结算之后才开始下一次，避免界面与工具同时改丢更新。 */
+  private indexMutations: Promise<unknown> = Promise.resolve()
 
-  /** 把一次「读索引 → 改 → 写回」放进队列，前一次结算后才开始。 */
-  private static runIndexMutation<T>(mutate: () => Promise<T>): Promise<T> {
-    const next = BrowserUserScriptManager.indexMutations.then(mutate, mutate)
-    BrowserUserScriptManager.indexMutations = next.then(
+  /** 把一次「读索引 → 改 → 写回」排进队列，前一次结算后才开始。 */
+  private runIndexMutation<T>(mutate: () => Promise<T>): Promise<T> {
+    const next = this.indexMutations.then(mutate, mutate)
+    this.indexMutations = next.then(
       () => undefined,
       () => undefined
     )
     return next
   }
+
+  
 
   constructor(private readonly access: BrowserUserScriptAccess) {}
 
@@ -344,7 +131,7 @@ class BrowserUserScriptManager implements BrowserUserScriptManagerApi {
     code: string
   }> {
     const store = await this.loadStore()
-    const script = this.requireScript(store, id)
+    const script = requireScript(store, id)
     const code = await this.readCode(script)
     return {
       overview: {
@@ -365,7 +152,7 @@ class BrowserUserScriptManager implements BrowserUserScriptManagerApi {
     draft: BrowserUserScriptDraft,
     defaults: { source: 'agent' | 'user' | 'user-import'; enabled: boolean }
   ) {
-    return BrowserUserScriptManager.runIndexMutation(async () => {
+    return this.runIndexMutation(async () => {
       const store = await this.loadStore()
       const now = Date.now()
       const name = normalizeName(draft.name)
@@ -418,9 +205,9 @@ class BrowserUserScriptManager implements BrowserUserScriptManagerApi {
     patch: BrowserUserScriptPatch,
     options: { disableAfterExecutionChange?: boolean } = {}
   ) {
-    return BrowserUserScriptManager.runIndexMutation(async () => {
+    return this.runIndexMutation(async () => {
       const store = await this.loadStore()
-      const script = this.requireScript(store, id)
+      const script = requireScript(store, id)
       // ① 全部字段先校验成最终值：任何一条不合法都在这里抛错，此时盘上一个字节都没改。
       const validated = validateUserScriptPatch(patch)
       const previousCode = isNotNull(validated.code) ? await this.readCodeForRollback(script) : null
@@ -460,9 +247,9 @@ class BrowserUserScriptManager implements BrowserUserScriptManagerApi {
   }
 
   public async setScriptEnabled(context: BrowserSiteContext, id: string, enabled: boolean) {
-    return BrowserUserScriptManager.runIndexMutation(async () => {
+    return this.runIndexMutation(async () => {
       const store = await this.loadStore()
-      const script = this.requireScript(store, id)
+      const script = requireScript(store, id)
       script.enabled = enabled
       script.updatedAt = Date.now()
       await this.saveStore(store)
@@ -471,7 +258,7 @@ class BrowserUserScriptManager implements BrowserUserScriptManagerApi {
   }
 
   public async setGlobalEnabled(context: BrowserSiteContext, enabled: boolean) {
-    return BrowserUserScriptManager.runIndexMutation(async () => {
+    return this.runIndexMutation(async () => {
       const store = await this.loadStore()
       store.globalEnabled = enabled
       await this.saveStore(store)
@@ -484,10 +271,10 @@ class BrowserUserScriptManager implements BrowserUserScriptManagerApi {
     id: string,
     direction: 'up' | 'down'
   ) {
-    return BrowserUserScriptManager.runIndexMutation(async () => {
+    return this.runIndexMutation(async () => {
       const store = await this.loadStore()
       const ordered = sortScripts(store.scripts)
-      const script = this.requireScript(store, id)
+      const script = requireScript(store, id)
       const currentIndex = ordered.findIndex((candidate) => candidate.id === script.id)
       const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1
       if (targetIndex >= 0 && targetIndex < ordered.length) {
@@ -506,9 +293,9 @@ class BrowserUserScriptManager implements BrowserUserScriptManagerApi {
   }
 
   public async deleteScript(context: BrowserSiteContext, id: string) {
-    return BrowserUserScriptManager.runIndexMutation(async () => {
+    return this.runIndexMutation(async () => {
       const store = await this.loadStore()
-      const script = this.requireScript(store, id)
+      const script = requireScript(store, id)
       await this.access.deleteFile(script.relativePath)
       store.scripts = store.scripts.filter((candidate) => candidate.id !== script.id)
       await this.saveStore(store)
@@ -530,9 +317,9 @@ class BrowserUserScriptManager implements BrowserUserScriptManagerApi {
   }
 
   public async recordRun(id: string, run: BrowserUserScriptLastRun): Promise<void> {
-    await BrowserUserScriptManager.runIndexMutation(async () => {
+    await this.runIndexMutation(async () => {
       const store = await this.loadStore()
-      const script = this.requireScript(store, id)
+      const script = requireScript(store, id)
       script.lastRun = run
       await this.saveStore(store)
     })
@@ -577,12 +364,7 @@ class BrowserUserScriptManager implements BrowserUserScriptManagerApi {
     }
   }
 
-  private requireScript(store: BrowserUserScriptStore, id: string): BrowserUserScriptRecord {
-    const normalized = assertScriptId(id)
-    const script = store.scripts.find((candidate) => candidate.id === normalized)
-    if (!script) throw new AppError('NOT_FOUND', '找不到用户脚本。', undefined, { id: normalized })
-    return script
-  }
+  
 
   private async readCode(script: BrowserUserScriptRecord): Promise<string> {
     const result = await this.access.readFile(

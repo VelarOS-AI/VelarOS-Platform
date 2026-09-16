@@ -37,6 +37,7 @@ import type {
 } from '../../types/browser'
 import type { BrowserSession } from '../../types/electron'
 import type { BrowserRuntimeKernel } from '../../types/electron.js'
+import { normalizeFetchResourceUrl, normalizeMediaSourceItems, normalizePageResourceIframes, normalizePageResourceLinks, normalizePageResourceOrigins, resolveUploadFilePath, summarizePageDiagnostics } from '../../utils/cdp/page-data.js'
 import { buildBrowserNetworkCaptureNotice, clearBrowserDiagnosticEntries, takeBrowserDiagnosticWindow } from '../../utils/diagnostics.js'
 import { evaluateInWebContents } from '../../utils/electron/evaluate'
 import { clampInteger, readFiniteNumber } from '../../utils/numbers.js'
@@ -251,7 +252,7 @@ export class BrowserPageDataEngine extends CdpPageDataEngine implements BrowserP
   ): Promise<BrowserFetchResourceResult> {
     abortSignal?.throwIfAborted()
     const externalSession = this.getExternalPageSession(sessionId)
-    const targetUrl = this.normalizeFetchResourceUrl(options.url)
+    const targetUrl = normalizeFetchResourceUrl(options.url)
     const artifactPath = await resolveWorkspaceFilePath(
       context.workspaceRoot,
       options.savePath,
@@ -343,7 +344,7 @@ export class BrowserPageDataEngine extends CdpPageDataEngine implements BrowserP
 
     return {
       url: this.resolveCurrentPageUrl(session, context.url),
-      items: this.normalizeMediaSourceItems(result.items),
+      items: normalizeMediaSourceItems(result.items),
       truncated: !!result.truncated,
       capturedAt: Date.now(),
     }
@@ -377,9 +378,9 @@ export class BrowserPageDataEngine extends CdpPageDataEngine implements BrowserP
 
     return {
       url: this.resolveCurrentPageUrl(session, context.url),
-      links: this.normalizePageResourceLinks(result.links),
-      iframes: this.normalizePageResourceIframes(result.iframes),
-      resourceOrigins: this.normalizePageResourceOrigins(result.resourceOrigins, context.url),
+      links: normalizePageResourceLinks(result.links),
+      iframes: normalizePageResourceIframes(result.iframes),
+      resourceOrigins: normalizePageResourceOrigins(result.resourceOrigins, context.url),
       mediaCount: clampInteger(readFiniteNumber(result.mediaCount), 0, 100_000, 0),
       truncated: !!result.truncated,
       capturedAt: Date.now(),
@@ -422,7 +423,7 @@ export class BrowserPageDataEngine extends CdpPageDataEngine implements BrowserP
       url: this.resolveCurrentPageUrl(session, context.url),
       title: session.webContents.getTitle() || null,
       entries,
-      summary: this.summarizePageDiagnostics(entries),
+      summary: summarizePageDiagnostics(entries),
       capturedAt: Date.now(),
     }
     const notice = buildBrowserNetworkCaptureNotice(networkCapture)
@@ -439,7 +440,7 @@ export class BrowserPageDataEngine extends CdpPageDataEngine implements BrowserP
   ): Promise<BrowserUploadFileResult> {
     abortSignal?.throwIfAborted()
     const externalSession = this.getExternalPageSession(sessionId)
-    const absolutePath = await this.resolveUploadFilePath(context.workspaceRoot, options.filePath)
+    const absolutePath = await resolveUploadFilePath(context.workspaceRoot, options.filePath)
     if (externalSession) return super.uploadFile(sessionId, context, options, abortSignal)
 
     const session = await this.getLivePageSessionUnlocked(sessionId, abortSignal)

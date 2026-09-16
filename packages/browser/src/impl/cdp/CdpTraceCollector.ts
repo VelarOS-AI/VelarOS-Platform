@@ -1,8 +1,9 @@
-import { isArray, isEmpty, isString } from '@velaros-ai/core'
+import { isEmpty, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
 import type { CdpHeapSnapshotChunkEvent, CdpIoReadResult, CdpTraceTransport, CdpTracingCompleteEvent, WebContentsDebuggerLike } from '../../types/cdp.js'
+import { parseTraceEvents } from '../../utils/cdp/tracing'
 import { BrowserTuning } from '../../utils/tuning'
 
 /** 把 webContents.debugger 适配成采集器需要的 CDP 会话面。 */
@@ -116,7 +117,7 @@ export class CdpTraceCollector implements CdpTraceCollectorApi {
         throw new AppError('EXECUTION_FAILED', '浏览器没有返回 trace 数据流。')
       }
       const raw = await this.readStream(complete.stream)
-      return this.parseTraceEvents(raw)
+      return parseTraceEvents(raw)
     } finally {
       this.cleanup()
     }
@@ -179,19 +180,7 @@ export class CdpTraceCollector implements CdpTraceCollectorApi {
     return chunks.join('')
   }
 
-  private parseTraceEvents(raw: string): unknown[] {
-    let parsed: unknown
-    try {
-      parsed = JSON.parse(raw)
-    } catch {
-      throw new AppError('EXECUTION_FAILED', 'trace 数据不是合法 JSON。')
-    }
-
-    if (isArray(parsed)) return parsed
-    const events = (parsed as { traceEvents?: unknown }).traceEvents
-    if (isArray(events)) return events
-    throw new AppError('EXECUTION_FAILED', 'trace 数据里没有 traceEvents。')
-  }
+  
 
   private cleanup(): void {
     this.unsubscribe?.()

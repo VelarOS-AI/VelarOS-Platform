@@ -1,6 +1,7 @@
 import { AppError } from '@velaros-ai/core/error'
 
 import type { ToolContext } from '../contract/requires.js'
+import type { BrowserSiteContext, BrowserWorkspaceManifest } from '../types/browser'
 import type { BrowserWorkspaceArtifactFormat } from '../types/browser.js'
 import type { BrowserPageContentFormat } from '../types/tools.js'
 import type { BrowserWorkspaceArtifactAccess } from '../types/workspace.js'
@@ -69,4 +70,47 @@ export function normalizeBrowserRecipePath(path: string): string {
     'recipes',
     '只能读取当前网站工区 recipes/ 目录下的 JSON recipe。'
   )
+}
+
+/** manifest 是否描述的就是当前站点（版本由 tryLoadManifest 把关）。 */
+export function isManifestCurrent(
+  manifest: BrowserWorkspaceManifest,
+  context: BrowserSiteContext
+): boolean {
+  return (
+    manifest.workspaceRoot === context.workspaceRoot &&
+    manifest.siteOrigin === getBrowserSiteOrigin(context.url)
+  )
+}
+
+/** 从 URL 获取站点 origin。 */
+export function getBrowserSiteOrigin(url: string): Nullable<string> {
+  try {
+    const parsedUrl = new URL(url)
+    return parsedUrl.origin !== 'null' ? parsedUrl.origin : null
+  } catch {
+    // arch-guard:silent-catch-ok 推不出 origin 不算失败：调用方按 null 走「没有来源」那条路。
+    return null
+  }
+}
+
+/** 将任意标题/路径片段转成安全文件名。 */
+export function slugifyArtifactName(value: LooseOptional<string>, fallbackPrefix: string): string {
+  const replaced =
+    value
+      ?.trim()
+      .toLowerCase()
+      .replace(/\.[a-z0-9]+$/i, '')
+      .replace(/[^a-z0-9]+/gi, '-')
+      ?? ''
+  let start = 0
+  let end = replaced.length
+  while (replaced[start] === '-') start += 1
+  while (end > start && replaced[end - 1] === '-') end -= 1
+  const normalized = replaced.slice(start, end).slice(0, 80)
+
+  if (normalized) return normalized
+
+  const timePart = new Date().toISOString().replace(/[:.]/g, '-')
+  return `${fallbackPrefix}-${timePart}`
 }

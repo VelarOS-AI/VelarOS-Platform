@@ -7,8 +7,8 @@ import type { BrowserPageDriverDownloadItem } from '../../contract/requires.js'
 import type { BrowserPendingEventSummary } from '../../types/browser.js'
 import type { BrowserJavaScriptDialogDetails } from '../../types/electron'
 import type { PendingDialogEntry, PendingDownloadEntry, PendingPermissionEntry } from '../../types/session.js'
+import { defaultDialogResponse, findPendingEntry } from '../../utils/session'
 import { BrowserTuning } from '../../utils/tuning'
-
 
 /**
  * 管理浏览器阻塞事件（dialog / download / permission）的待处理队列与超时回退。
@@ -83,7 +83,7 @@ class BrowserPendingEventsBroker implements BrowserPendingEventsBrokerApi {
   public clearSession(sessionId: string): void {
     for (const entry of [...this.pendingDialogs.values()]) {
       if (entry.sessionId !== sessionId) continue
-      entry.resolve(this.defaultDialogResponse(entry.type))
+      entry.resolve(defaultDialogResponse(entry.type))
     }
 
     for (const entry of [...this.pendingDownloads.values()]) {
@@ -100,7 +100,7 @@ class BrowserPendingEventsBroker implements BrowserPendingEventsBrokerApi {
   /** 清空当前窗口留下的全部阻塞事件，但不终止 broker 生命周期。 */
   public clearAll(): void {
     for (const entry of [...this.pendingDialogs.values()]) {
-      entry.resolve(this.defaultDialogResponse(entry.type))
+      entry.resolve(defaultDialogResponse(entry.type))
     }
     for (const entry of [...this.pendingDownloads.values()]) {
       this.cancelPendingDownload(entry)
@@ -188,7 +188,7 @@ class BrowserPendingEventsBroker implements BrowserPendingEventsBrokerApi {
         sessionId: input.sessionId,
         type,
       })
-      settle(this.defaultDialogResponse(type))
+      settle(defaultDialogResponse(type))
     })
 
     this.pendingDialogs.set(id, {
@@ -286,7 +286,7 @@ class BrowserPendingEventsBroker implements BrowserPendingEventsBrokerApi {
     accept: boolean
     promptText?: string
   }): { handled: boolean; eventId: string; accept: boolean; promptText: string } {
-    const entry = this.findPendingEntry(this.pendingDialogs, input.sessionId, input.eventId)
+    const entry = findPendingEntry(this.pendingDialogs, input.sessionId, input.eventId)
     if (!entry) {
       throw new AppError('VALIDATION', '没有找到待处理的 JS 弹窗事件。')
     }
@@ -313,7 +313,7 @@ class BrowserPendingEventsBroker implements BrowserPendingEventsBrokerApi {
     savePath: Nullable<string>
     state: Nullable<string>
   } {
-    const entry = this.findPendingEntry(this.pendingDownloads, input.sessionId, input.eventId)
+    const entry = findPendingEntry(this.pendingDownloads, input.sessionId, input.eventId)
     if (!entry || entry.settled) {
       throw new AppError('VALIDATION', '没有找到待处理的下载事件。')
     }
@@ -358,7 +358,7 @@ class BrowserPendingEventsBroker implements BrowserPendingEventsBrokerApi {
     eventId: string
     granted: boolean
   } {
-    const entry = this.findPendingEntry(this.pendingPermissions, input.sessionId, input.eventId)
+    const entry = findPendingEntry(this.pendingPermissions, input.sessionId, input.eventId)
     if (!entry) {
       throw new AppError('VALIDATION', '没有找到待处理的权限请求事件。')
     }
@@ -396,29 +396,9 @@ class BrowserPendingEventsBroker implements BrowserPendingEventsBrokerApi {
     }
   }
 
-  private defaultDialogResponse(type: string): { accept: boolean; promptText: string } {
-    return {
-      accept: type === 'alert',
-      promptText: '',
-    }
-  }
+  
 
-  private findPendingEntry<T extends { id: string; sessionId: string }>(
-    store: Map<string, T>,
-    sessionId: string,
-    eventId?: string
-  ): T | undefined {
-    if (eventId) {
-      const entry = store.get(eventId)
-      return entry?.sessionId === sessionId ? entry : undefined
-    }
-
-    for (const entry of store.values()) {
-      if (entry.sessionId === sessionId) return entry
-    }
-
-    return undefined
-  }
+  
 }
 
 export { BrowserPendingEventsBroker }

@@ -9,13 +9,16 @@ import {
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-import { isArray, isEmpty, isNonBlankString, isPlainObject, isPresent, isString } from '@velaros-ai/core'
+import { isArray, isPresent } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { Log } from '@velaros-ai/core/logger'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
 import type { BrowserPageDriver } from '../../contract/requires.js'
-import type { CdpChromeStderrDiagnostics, CdpDevToolsActivePort, CdpExternalBrowserChildProcess, CdpExternalBrowserLaunchEnv, CdpExternalBrowserLaunchOptions, CdpExternalBrowserSession, CdpExternalBrowserSpawn, CdpTargetDescription } from '../../types/cdp.js'
+import type { CdpChromeStderrDiagnostics, CdpDevToolsActivePort, CdpExternalBrowserChildProcess, CdpExternalBrowserLaunchOptions, CdpExternalBrowserSession, CdpExternalBrowserSpawn, CdpTargetDescription } from '../../types/cdp.js'
+import { getExecutablePathCandidates, parseTargetEntry, shouldRetryLaunchAttempt } from '../../utils/cdp/launcher'
+import { buildLaunchArgs, formatChromeEarlyExitMessage } from '../../utils/cdp/launcher'
+import { captureChromeStderr } from '../../utils/cdp/launcher'
 import { BrowserTuning } from '../../utils/tuning'
 
 import { BrowserPlatformCompatibility } from './BrowserPlatformCompatibility'
@@ -114,7 +117,7 @@ class CdpExternalBrowserLauncher implements CdpExternalBrowserLauncherApi {
         })
       } catch (error) {
         lastError = error
-        if (!this.shouldRetryLaunchAttempt(error, attempt)) throw error
+        if (!shouldRetryLaunchAttempt(error, attempt)) throw error
 
         const appError = AppError.from(error)
         this.log.debug('外部浏览器启动早退，准备重试', {
@@ -154,7 +157,7 @@ class CdpExternalBrowserLauncher implements CdpExternalBrowserLauncherApi {
     await this.unlink(join(userDataDir, 'DevToolsActivePort')).catch(() => {
       // arch-guard:silent-catch-ok 启动前清理允许文件不存在；新浏览器会写入自己的端口文件。
     })
-    const child = this.spawn(executablePath, this.buildLaunchArgs(userDataDir, options, {
+    const child = this.spawn(executablePath, buildLaunchArgs(userDataDir, options, {
       env: launchEnv,
       platform,
     }), {
@@ -162,7 +165,7 @@ class CdpExternalBrowserLauncher implements CdpExternalBrowserLauncherApi {
       env: launchEnv,
       stdio: ['ignore', 'ignore', 'pipe'],
     })
-    const stderr = this.captureChromeStderr(child)
+    const stderr = captureChromeStderr(child)
 
     try {
       const activePort = await this.waitForDevToolsActivePort(child, userDataDir, timeoutMs, stderr)
@@ -192,74 +195,11 @@ class CdpExternalBrowserLauncher implements CdpExternalBrowserLauncherApi {
     }
   }
 
-  private shouldRetryLaunchAttempt(error: unknown, attempt: number): boolean {
-    if (attempt >= BrowserTuning.externalBrowser.launchMaxAttempts) return false
+  
 
-    const appError = AppError.from(error)
-    return appError.code === 'EXECUTION_FAILED'
-  }
+  
 
-  private buildLaunchArgs(
-    userDataDir: string,
-    options: CdpExternalBrowserLaunchOptions,
-    runtime: {
-      env: CdpExternalBrowserLaunchEnv
-      platform: NodeJS.Platform
-    }
-  ): string[] {
-    const profileDirectory = options.profileDirectory?.trim()
-    const useRealKeychain = options.useRealKeychain || isNonBlankString(profileDirectory)
-    const args = [
-      '--remote-debugging-port=0',
-      // 让 Chrome 明示此独立窗口正受自动化控制。带产品名的调试横幅属于
-      // chrome.debugger 扩展；这里的原始 CDP 传输使用 Chrome 原生自动化提示。
-      '--enable-automation',
-      '--no-first-run',
-      '--no-default-browser-check',
-      '--disable-background-networking',
-      '--disable-backgrounding-occluded-windows',
-      '--disable-component-update',
-      '--disable-default-apps',
-      '--disable-hang-monitor',
-      '--disable-popup-blocking',
-      '--disable-prompt-on-repost',
-      '--disable-sync',
-      '--disable-features=Translate',
-      '--metrics-recording-only',
-    ]
-    if (!useRealKeychain) {
-      args.push('--password-store=basic')
-      args.push('--use-mock-keychain')
-    }
-    args.push(`--user-data-dir=${userDataDir}`)
-    if (isNonBlankString(profileDirectory)) {
-      args.push(`--profile-directory=${profileDirectory}`)
-    }
-    args.push(...(options.args ?? []))
-    this.addLinuxChromeStabilityFlags(args, runtime)
-    const url = options.url?.trim()
-    if (url) args.push(url)
-
-    return args
-  }
-
-  private addLinuxChromeStabilityFlags(
-    args: string[],
-    runtime: {
-      env: CdpExternalBrowserLaunchEnv
-      platform: NodeJS.Platform
-    }
-  ): void {
-    if (runtime.platform !== 'linux') return
-    if (!isString(runtime.env.CI)) return
-
-    if (!args.includes('--no-sandbox')) {
-      args.push('--no-sandbox')
-    }
-    if (!args.includes('--disable-dev-shm-usage')) {
-      args.push('--disable-dev-shm-usage')
-    }
-  }
+  
 
   private resolveExecutablePath(
     configuredPath: LooseOptional<string>,
@@ -268,7 +208,7 @@ class CdpExternalBrowserLauncher implements CdpExternalBrowserLauncherApi {
     const executablePath = configuredPath?.trim()
     if (executablePath) return executablePath
 
-    const candidates = this.getExecutablePathCandidates(platform)
+    const candidates = getExecutablePathCandidates(platform)
     const match = candidates.find((candidate) => this.existsSync(candidate))
     if (match) return match
     if (platform === 'linux') return 'google-chrome'
@@ -279,40 +219,7 @@ class CdpExternalBrowserLauncher implements CdpExternalBrowserLauncherApi {
     )
   }
 
-  private getExecutablePathCandidates(platform: NodeJS.Platform): string[] {
-    if (platform === 'darwin')
-      return [
-        '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-        '/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary',
-        '/Applications/Chromium.app/Contents/MacOS/Chromium',
-        '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
-        '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser',
-      ]
-
-    if (platform === 'win32') {
-      const roots = [
-        process.env.LOCALAPPDATA,
-        process.env.PROGRAMFILES,
-        process.env['PROGRAMFILES(X86)'],
-      ].filter((root): root is string => isNonBlankString(root))
-      return roots.flatMap((root) => [
-        join(root, 'Google', 'Chrome', 'Application', 'chrome.exe'),
-        join(root, 'Chromium', 'Application', 'chrome.exe'),
-        join(root, 'Microsoft', 'Edge', 'Application', 'msedge.exe'),
-        join(root, 'BraveSoftware', 'Brave-Browser', 'Application', 'brave.exe'),
-      ])
-    }
-
-    return [
-      '/usr/bin/google-chrome',
-      '/usr/bin/google-chrome-stable',
-      '/usr/bin/chromium',
-      '/usr/bin/chromium-browser',
-      '/snap/bin/chromium',
-      '/usr/bin/microsoft-edge',
-      '/usr/bin/brave-browser',
-    ]
-  }
+  
 
   private async waitForDevToolsActivePort(
     child: CdpExternalBrowserChildProcess,
@@ -328,7 +235,7 @@ class CdpExternalBrowserLauncher implements CdpExternalBrowserLauncherApi {
         await this.sleep(0)
         throw new AppError(
           'EXECUTION_FAILED',
-          this.formatChromeEarlyExitMessage(child, stderr)
+          formatChromeEarlyExitMessage(child, stderr)
         )
       }
 
@@ -341,99 +248,17 @@ class CdpExternalBrowserLauncher implements CdpExternalBrowserLauncherApi {
     throw new AppError('TIMEOUT', '等待外部浏览器 DevToolsActivePort 超时。')
   }
 
-  private captureChromeStderr(child: CdpExternalBrowserChildProcess): CdpChromeStderrDiagnostics {
-    const diagnostics: CdpChromeStderrDiagnostics = { lines: [], pending: '' }
-    const stderr = child.stderr
-    if (!stderr) return diagnostics
+  
 
-    stderr.setEncoding?.('utf8')
-    stderr.on('data', (chunk) => {
-      this.recordChromeStderrChunk(diagnostics, chunk)
-    })
-    let chunk = stderr.read?.()
-    while (isPresent(chunk)) {
-      this.recordChromeStderrChunk(diagnostics, chunk)
-      chunk = stderr.read?.()
-    }
+  
 
-    return diagnostics
-  }
+  
 
-  private recordChromeStderrChunk(
-    diagnostics: CdpChromeStderrDiagnostics,
-    chunk: unknown
-  ): void {
-    const text = isString(chunk) ? chunk : String(chunk)
-    const parts = `${diagnostics.pending}${text}`.split(/\r?\n/u)
-    diagnostics.pending = parts.pop() ?? ''
-    for (const part of parts) {
-      this.pushChromeStderrLine(diagnostics, part)
-    }
-  }
+  
 
-  private pushChromeStderrLine(
-    diagnostics: CdpChromeStderrDiagnostics,
-    line: string
-  ): void {
-    const trimmed = line.trim()
-    if (!trimmed) return
+  
 
-    diagnostics.lines.push(trimmed)
-    if (diagnostics.lines.length > BrowserTuning.externalBrowser.stderrMaxLines) {
-      diagnostics.lines.shift()
-    }
-  }
-
-  private formatChromeEarlyExitMessage(
-    child: CdpExternalBrowserChildProcess,
-    stderr: CdpChromeStderrDiagnostics
-  ): string {
-    if (stderr.pending.trim()) {
-      this.pushChromeStderrLine(stderr, stderr.pending)
-      stderr.pending = ''
-    }
-
-    const status = isPresent(child.exitCode)
-      ? `exitCode=${child.exitCode}`
-      : `signal=${child.signalCode ?? 'unknown'}`
-    const lines = this.selectChromeStderrDiagnostics(stderr.lines)
-    if (isEmpty(lines)) return `外部浏览器启动失败，进程在写入 DevToolsActivePort 前退出：${status}`
-
-    const hint = this.hasSandboxStderr(lines)
-      ? '\nHint: Linux/CI/容器环境可尝试在外部浏览器 args 中加入 --no-sandbox。'
-      : ''
-    return [
-      `外部浏览器启动失败，进程在写入 DevToolsActivePort 前退出：${status}`,
-      'Chrome stderr:',
-      ...lines.map((line) => `  ${line}`),
-    ].join('\n') + hint
-  }
-
-  private selectChromeStderrDiagnostics(lines: string[]): string[] {
-    const relevant = lines.filter((line) => {
-      const lower = line.toLowerCase()
-      return (
-        lower.includes('error') ||
-        lower.includes('fatal') ||
-        lower.includes('sandbox') ||
-        lower.includes('namespace') ||
-        lower.includes('permission') ||
-        lower.includes('cannot') ||
-        lower.includes('failed') ||
-        lower.includes('abort')
-      )
-    })
-    if (!isEmpty(relevant)) return relevant.slice(-5)
-
-    return lines.slice(-5)
-  }
-
-  private hasSandboxStderr(lines: string[]): boolean {
-    return lines.some((line) => {
-      const lower = line.toLowerCase()
-      return lower.includes('sandbox') || lower.includes('namespace')
-    })
-  }
+  
 
   private async readDevToolsActivePort(path: string): Promise<Nullable<CdpDevToolsActivePort>> {
     try {
@@ -522,7 +347,7 @@ class CdpExternalBrowserLauncher implements CdpExternalBrowserLauncherApi {
       if (!isArray(parsed)) return []
 
       return parsed
-        .map((entry) => this.parseTargetEntry(entry))
+        .map((entry) => parseTargetEntry(entry))
         .filter((target): target is CdpTargetDescription => !!target)
     } catch (error) {
       this.log.debug('解析外部浏览器 CDP target list 失败', {
@@ -534,7 +359,7 @@ class CdpExternalBrowserLauncher implements CdpExternalBrowserLauncherApi {
 
   private parseTarget(rawJson: string): Nullable<CdpTargetDescription> {
     try {
-      return this.parseTargetEntry(JSON.parse(rawJson))
+      return parseTargetEntry(JSON.parse(rawJson))
     } catch (error) {
       this.log.debug('解析外部浏览器 CDP target 失败', {
         error: AppError.from(error).message,
@@ -543,18 +368,7 @@ class CdpExternalBrowserLauncher implements CdpExternalBrowserLauncherApi {
     }
   }
 
-  private parseTargetEntry(entry: unknown): Nullable<CdpTargetDescription> {
-    if (!isPlainObject(entry)) return null
-    const record = entry
-    if (!isString(record.webSocketDebuggerUrl)) return null
-
-    return {
-      type: isString(record.type) ? record.type : '',
-      url: isString(record.url) ? record.url : '',
-      title: isString(record.title) ? record.title : '',
-      webSocketDebuggerUrl: record.webSocketDebuggerUrl,
-    }
-  }
+  
 
   private disposeLaunchedBrowser(
     child: CdpExternalBrowserChildProcess,

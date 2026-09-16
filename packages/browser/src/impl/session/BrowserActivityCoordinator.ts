@@ -11,6 +11,7 @@ import type {
   BrowserUserActivityItem,
 } from '../../types/browser.js'
 import type { BrowserActivitySessionState, BrowserUserActivityWaitResult, BrowserUserActivityWaitState } from '../../types/session.js'
+import { formatSummaryItem } from '../../utils/session'
 import { BrowserTuning } from '../../utils/tuning'
 
 /** 建用户活动协调器要的参数，都有缺省。 */
@@ -100,7 +101,7 @@ class BrowserActivityCoordinator implements BrowserActivityCoordinatorApi {
     this.turnContextLedgers.append(sessionId, {
       occurredAt,
       label: BrowserActivityCoordinator.BrowserActivityKindLabels[input.kind],
-      summaryText: this.formatSummaryItem(item).replace(/^- /, ''),
+      summaryText: formatSummaryItem(item).replace(/^- /, ''),
     })
   }
 
@@ -189,33 +190,7 @@ class BrowserActivityCoordinator implements BrowserActivityCoordinatorApi {
     return state
   }
 
-  private formatSummaryItem(item: BrowserUserActivityItem): string {
-    const suffix = item.url ? `（${item.url}）` : ''
-    const detail = item.detail ? `：${item.detail}` : ''
-
-    switch (item.kind) {
-      case 'click':
-        return `- 用户在浏览器中点击页面${suffix}${detail}。`
-      case 'keyboard':
-        return `- 用户在浏览器中使用键盘${suffix}${detail}。`
-      case 'scroll':
-        return `- 用户在浏览器中滚动页面${suffix}${detail}。`
-      case 'input':
-        return `- 用户在浏览器中输入内容，文本未记录${suffix}${detail}。`
-      case 'navigation':
-        return `- 用户在浏览器中导航到 ${item.url ?? '新页面'}${detail}。`
-      case 'dialog':
-        return `- 用户触发或处理了浏览器弹窗${suffix}${detail}。`
-      case 'download':
-        return `- 用户触发或处理了浏览器下载${suffix}${detail}。`
-      case 'permission':
-        return `- 用户触发或处理了浏览器权限请求${suffix}${detail}。`
-      case 'focus':
-        return `- 用户聚焦了浏览器页面${suffix}${detail}。`
-      case 'unknown':
-        return `- 用户操作了浏览器页面${suffix}${detail}。`
-    }
-  }
+  
 
   private emitWaitState(
     sessionId: string,

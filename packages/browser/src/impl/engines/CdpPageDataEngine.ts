@@ -1,18 +1,20 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 
-import { isArray, isBoolean, isEmpty, isFalse, isFiniteNumber, isNonBlankString, isNotNull, isPlainObject, isString, isTrue, optionalWhen, toNullable, toOptional } from '@velaros-ai/core'
+import { isFalse, isFiniteNumber, toNullable, toOptional } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { Log } from '@velaros-ai/core/logger'
 
 import { BrowserFetchLimits } from '../../contract/constants'
-import type { BrowserElementQueryOptions, BrowserElementQueryResult, BrowserEmulationOptions, BrowserEmulationResult, BrowserEvaluateScriptOptions, BrowserEvaluateScriptResult, BrowserExportPagePdfOptions, BrowserExportPagePdfResult, BrowserFetchResourceOptions, BrowserFetchResourceResult, BrowserInspectPageOptions, BrowserListMediaSourcesOptions, BrowserListMediaSourcesResult, BrowserListPageResourcesOptions, BrowserListPageResourcesResult, BrowserMediaSourceItem, BrowserNetworkControlOptions, BrowserNetworkControlResult, BrowserNetworkRequestDetailsOptions, BrowserNetworkRequestDetailsResult, BrowserNetworkResponseBodyOptions, BrowserNetworkResponseBodyResult, BrowserOriginStorage, BrowserPageDiagnostics, BrowserPageDiagnosticsOptions, BrowserPageInspection, BrowserPageStorageOptions, BrowserPageStorageResult, BrowserPageWaitOptions, BrowserPageWaitResult, BrowserSiteContext, BrowserStorageEntry, BrowserUploadFileOptions, BrowserUploadFileResult, BrowserWaitForSelectorOptions, BrowserWaitForSelectorResult } from '../../types/browser.js'
+import type { BrowserElementQueryOptions, BrowserElementQueryResult, BrowserEmulationOptions, BrowserEmulationResult, BrowserEvaluateScriptOptions, BrowserEvaluateScriptResult, BrowserExportPagePdfOptions, BrowserExportPagePdfResult, BrowserFetchResourceOptions, BrowserFetchResourceResult, BrowserInspectPageOptions, BrowserListMediaSourcesOptions, BrowserListMediaSourcesResult, BrowserListPageResourcesOptions, BrowserListPageResourcesResult, BrowserNetworkControlOptions, BrowserNetworkControlResult, BrowserNetworkRequestDetailsOptions, BrowserNetworkRequestDetailsResult, BrowserNetworkResponseBodyOptions, BrowserNetworkResponseBodyResult, BrowserOriginStorage, BrowserPageDiagnostics, BrowserPageDiagnosticsOptions, BrowserPageInspection, BrowserPageStorageOptions, BrowserPageStorageResult, BrowserPageWaitOptions, BrowserPageWaitResult, BrowserSiteContext, BrowserStorageEntry, BrowserUploadFileOptions, BrowserUploadFileResult, BrowserWaitForSelectorOptions, BrowserWaitForSelectorResult } from '../../types/browser.js'
 import type {
-  BrowserPageDriverCookie,
   BrowserPageDriverState,
 } from '../../types/driver'
 import type { BrowserDiagnosticsLimits,BrowserPageDriverKernel, ExternalBrowserPageSession } from '../../types/runtime.js'
-import { clampInteger, readBoundedString, readFiniteNumber } from '../../utils/numbers.js'
+import { normalizeFetchResourceUrl, normalizeMediaSourceItems, normalizePageResourceIframes, normalizePageResourceLinks, resolveUploadFilePath } from '../../utils/cdp/page-data'
+import { summarizePageDiagnostics } from '../../utils/cdp/page-data'
+import { mapExternalCookieToStorageEntry, normalizePageResourceOrigins } from '../../utils/cdp/page-data'
+import { clampInteger, readFiniteNumber } from '../../utils/numbers.js'
 import { buildElementQueryScript } from '../../utils/page-scripts/element-query'
 import { buildEvaluateScript } from '../../utils/page-scripts/evaluate'
 import { buildPageResourcesScript } from '../../utils/page-scripts/extraction'
@@ -26,8 +28,6 @@ import { BrowserTuning } from '../../utils/tuning'
 import { resolveExternalPageUrl } from '../../utils/url.js'
 import { resolveWorkspaceFilePath } from '../../utils/workspace-paths.js'
 import type { BrowserTargetRefStore } from '../session/BrowserTargetRefStore'
-
-
 
 /**
  * 页面数据域执行体的 host 无关外部核（走 CDP driver）。
@@ -247,7 +247,7 @@ export class CdpPageDataEngine implements CdpPageDataEngineApi {
         scope: options.cookieScope ?? 'current-url',
       })
       return cookies
-        .map((cookie) => this.mapExternalCookieToStorageEntry(cookie, maxValueChars))
+        .map((cookie) => mapExternalCookieToStorageEntry(cookie, maxValueChars))
         .filter((entry): entry is BrowserStorageEntry => Boolean(entry))
         .slice(0, limit)
     } catch (error) {
@@ -258,65 +258,15 @@ export class CdpPageDataEngine implements CdpPageDataEngineApi {
     }
   }
 
-  private mapExternalCookieToStorageEntry(
-    cookie: BrowserPageDriverCookie,
-    maxValueChars: number
-  ): Nullable<BrowserStorageEntry> {
-    const name = cookie.name.trim()
-    if (!name) return null
+  
 
-    const value = String(cookie.value ?? '')
-    const details = this.buildExternalCookieDetails(cookie)
-    return {
-      name,
-      value: value.length > maxValueChars ? value.slice(0, maxValueChars) : value,
-      valueTruncated: value.length > maxValueChars,
-      details: optionalWhen(!isEmpty(Object.keys(details)), details),
-    }
-  }
+  
 
-  private buildExternalCookieDetails(cookie: BrowserPageDriverCookie): Record<string, unknown> {
-    const details: Record<string, unknown> = {}
-    this.assignCookieStringDetail(details, 'domain', cookie.domain)
-    this.assignCookieStringDetail(details, 'path', cookie.path)
-    this.assignCookieNumberDetail(details, 'expires', cookie.expires)
-    this.assignCookieNumberDetail(details, 'size', cookie.size)
-    this.assignCookieBooleanDetail(details, 'httpOnly', cookie.httpOnly)
-    this.assignCookieBooleanDetail(details, 'secure', cookie.secure)
-    this.assignCookieBooleanDetail(details, 'session', cookie.session)
-    this.assignCookieStringDetail(details, 'sameSite', cookie.sameSite)
-    return details
-  }
+  
 
-  private assignCookieStringDetail(
-    details: Record<string, unknown>,
-    key: string,
-    value: LooseOptional<string>
-  ): void {
-    if (isNonBlankString(value)) {
-      details[key] = value
-    }
-  }
+  
 
-  private assignCookieNumberDetail(
-    details: Record<string, unknown>,
-    key: string,
-    value: LooseOptional<number>
-  ): void {
-    if (isFiniteNumber(value)) {
-      details[key] = value
-    }
-  }
-
-  private assignCookieBooleanDetail(
-    details: Record<string, unknown>,
-    key: string,
-    value: LooseOptional<boolean>
-  ): void {
-    if (isBoolean(value)) {
-      details[key] = value
-    }
-  }
+  
 
   public async fetchResource(
     sessionId: string,
@@ -326,7 +276,7 @@ export class CdpPageDataEngine implements CdpPageDataEngineApi {
   ): Promise<BrowserFetchResourceResult> {
     _abortSignal?.throwIfAborted()
     const externalSession = this.requireExternalPageSession(sessionId)
-    const targetUrl = this.normalizeFetchResourceUrl(options.url)
+    const targetUrl = normalizeFetchResourceUrl(options.url)
     const artifactPath = await resolveWorkspaceFilePath(
       context.workspaceRoot,
       options.savePath,
@@ -382,27 +332,7 @@ export class CdpPageDataEngine implements CdpPageDataEngineApi {
     }
   }
 
-  protected normalizeFetchResourceUrl(rawUrl: string): string {
-    const trimmed = rawUrl.trim()
-    if (!trimmed) {
-      throw new AppError('VALIDATION', 'url 不能为空。')
-    }
-
-    let parsed: URL
-    try {
-      parsed = new URL(trimmed)
-    } catch (error) {
-      throw new AppError('VALIDATION', `无效的资源 URL：${rawUrl}`, error)
-    }
-
-    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-      throw new AppError('VALIDATION', '仅支持 http(s) 资源 URL。', undefined, {
-        protocol: parsed.protocol,
-      })
-    }
-
-    return parsed.toString()
-  }
+  
 
   public async listMediaSources(
     sessionId: string,
@@ -430,39 +360,13 @@ export class CdpPageDataEngine implements CdpPageDataEngineApi {
 
     return {
       url: resolveExternalPageUrl(externalSession, context.url),
-      items: this.normalizeMediaSourceItems(result.items),
+      items: normalizeMediaSourceItems(result.items),
       truncated: !!result.truncated,
       capturedAt: Date.now(),
     }
   }
 
-  protected normalizeMediaSourceItems(value: unknown): BrowserMediaSourceItem[] {
-    if (!isArray(value)) return []
-
-    return value
-      .map((item): Nullable<BrowserMediaSourceItem> => {
-        if (!isPlainObject(item) || !isString(item.url)) return null
-
-        const kind = item.kind
-        const normalizedKind =
-          kind === 'image' || kind === 'video' || kind === 'audio' || kind === 'other'
-            ? kind
-            : 'other'
-
-        return {
-          kind: normalizedKind,
-          url: item.url,
-          fetchable: isTrue(item.fetchable),
-          tagName: readBoundedString(item.tagName, 32),
-          attribute: readBoundedString(item.attribute, 32),
-          alt: readBoundedString(item.alt, 240),
-          // 保留原语义：非有限值与 0 都记为缺席（0 尺寸的媒体项对调用方无意义）。
-          width: mediaDimension(item.width),
-          height: mediaDimension(item.height),
-        }
-      })
-      .filter((entry): entry is BrowserMediaSourceItem => !!entry)
-  }
+  
 
   public async listPageResources(
     sessionId: string,
@@ -485,87 +389,26 @@ export class CdpPageDataEngine implements CdpPageDataEngineApi {
 
     return {
       url: resolveExternalPageUrl(externalSession, context.url),
-      links: this.normalizePageResourceLinks(result.links),
-      iframes: this.normalizePageResourceIframes(result.iframes),
-      resourceOrigins: this.normalizePageResourceOrigins(result.resourceOrigins, context.url),
+      links: normalizePageResourceLinks(result.links),
+      iframes: normalizePageResourceIframes(result.iframes),
+      resourceOrigins: normalizePageResourceOrigins(result.resourceOrigins, context.url),
       mediaCount: clampInteger(readFiniteNumber(result.mediaCount), 0, 100_000, 0),
       truncated: !!result.truncated,
       capturedAt: Date.now(),
     }
   }
 
-  protected normalizePageResourceLinks(value: unknown): BrowserListPageResourcesResult['links'] {
-    if (!isArray(value)) return []
+  
 
-    return value
-      .map((item): Nullable<BrowserListPageResourcesResult['links'][number]> => {
-        if (!isPlainObject(item) || !isString(item.href)) return null
-        return {
-          text: readBoundedString(item.text, 240),
-          href: item.href,
-        }
-      })
-      .filter((entry): entry is BrowserListPageResourcesResult['links'][number] => !!entry)
-  }
+  
 
-  protected normalizePageResourceIframes(value: unknown): BrowserListPageResourcesResult['iframes'] {
-    if (!isArray(value)) return []
+  
 
-    return value
-      .map((item): Nullable<BrowserListPageResourcesResult['iframes'][number]> => {
-        if (!isPlainObject(item)) return null
-        return {
-          src: readBoundedString(item.src, 4096),
-          title: readBoundedString(item.title, 240),
-          sandbox: readBoundedString(item.sandbox, 240),
-        }
-      })
-      .filter((entry): entry is BrowserListPageResourcesResult['iframes'][number] => !!entry)
-  }
+  
 
-  protected normalizePageResourceOrigins(
-    value: unknown,
-    fallbackUrl: string
-  ): BrowserListPageResourcesResult['resourceOrigins'] {
-    const pageOrigin = this.resolveOrigin(fallbackUrl)
-    if (!isPlainObject(value)) return {
-        pageOrigin,
-        sameOrigin: [],
-        crossOrigin: [],
-        totalUniqueOrigins: 0,
-      }
+  
 
-    const sameOrigin = this.normalizeOriginList(value.sameOrigin)
-    const crossOrigin = this.normalizeOriginList(value.crossOrigin)
-    const uniqueOrigins = new Set([...sameOrigin, ...crossOrigin])
-
-    return {
-      pageOrigin: this.normalizeOriginValue(value.pageOrigin) ?? pageOrigin,
-      sameOrigin,
-      crossOrigin,
-      totalUniqueOrigins: Math.max(
-        uniqueOrigins.size,
-        Math.round(readFiniteNumber(value.totalUniqueOrigins) ?? uniqueOrigins.size)
-      ),
-    }
-  }
-
-  private normalizeOriginList(value: unknown): string[] {
-    if (!isArray(value)) return []
-
-    return [...new Set(value.map((origin) => this.normalizeOriginValue(origin)).filter(isString))]
-      .sort()
-  }
-
-  private normalizeOriginValue(value: unknown): Nullable<string> {
-    if (!isString(value) || !URL.canParse(value)) return null
-
-    return new URL(value).origin
-  }
-
-  protected resolveOrigin(url: string): string {
-    return URL.canParse(url) ? new URL(url).origin : ''
-  }
+  
 
   public async getPageDiagnostics(
     sessionId: string,
@@ -586,77 +429,20 @@ export class CdpPageDataEngine implements CdpPageDataEngineApi {
       url: state.url || context.url,
       title: state.title || null,
       entries,
-      summary: this.summarizePageDiagnostics(entries),
+      summary: summarizePageDiagnostics(entries),
       capturedAt: Date.now(),
     }
   }
 
-  protected summarizePageDiagnostics(
-    entries: BrowserPageDiagnostics['entries']
-  ): BrowserPageDiagnostics['summary'] {
-    const byLevel: Record<string, number> = {}
-    const byKind: Record<string, number> = {}
-    const byOrigin: Record<string, number> = {}
-    const byStatus: Record<string, number> = {}
-    const byResourceType: Record<string, number> = {}
+  
 
-    for (const entry of entries) {
-      this.incrementCount(byLevel, entry.level)
-      this.incrementCount(byKind, entry.kind)
+  
 
-      const origin = entry.url ? this.resolveOrigin(entry.url) : ''
-      if (origin) this.incrementCount(byOrigin, origin)
+  
 
-      const status = this.readDiagnosticNetworkStatus(entry)
-      if (isNotNull(status)) this.incrementCount(byStatus, String(status))
+  
 
-      const resourceType = this.readDiagnosticResourceType(entry)
-      if (resourceType) this.incrementCount(byResourceType, resourceType)
-    }
-
-    return {
-      total: entries.length,
-      byLevel: this.sortCountRecord(byLevel),
-      byKind: this.sortCountRecord(byKind),
-      byOrigin: this.sortCountRecord(byOrigin),
-      byStatus: this.sortCountRecord(byStatus),
-      byResourceType: this.sortCountRecord(byResourceType),
-    }
-  }
-
-  private incrementCount(record: Record<string, number>, key: string): void {
-    record[key] = (record[key] ?? 0) + 1
-  }
-
-  private sortCountRecord(record: Record<string, number>): Record<string, number> {
-    return Object.fromEntries(
-      Object.entries(record).sort(([left], [right]) => left.localeCompare(right))
-    )
-  }
-
-  private readDiagnosticNetworkStatus(
-    entry: BrowserPageDiagnostics['entries'][number]
-  ): Nullable<number> {
-    if (entry.kind !== 'network') return null
-
-    const detailStatus = isPlainObject(entry.details) ? entry.details.status : null
-    const status = isFiniteNumber(detailStatus) ? detailStatus : entry.code
-    if (!isFiniteNumber(status) || status <= 0) return null
-
-    return Math.round(status)
-  }
-
-  private readDiagnosticResourceType(
-    entry: BrowserPageDiagnostics['entries'][number]
-  ): Nullable<string> {
-    if (entry.kind !== 'network') return null
-    if (!isPlainObject(entry.details)) return null
-
-    const resourceType = entry.details.resourceType
-    if (!isString(resourceType)) return null
-
-    return resourceType.trim() || null
-  }
+  
 
   public async uploadFile(
     sessionId: string,
@@ -666,7 +452,7 @@ export class CdpPageDataEngine implements CdpPageDataEngineApi {
   ): Promise<BrowserUploadFileResult> {
     _abortSignal?.throwIfAborted()
     const externalSession = this.requireExternalPageSession(sessionId)
-    const absolutePath = await this.resolveUploadFilePath(context.workspaceRoot, options.filePath)
+    const absolutePath = await resolveUploadFilePath(context.workspaceRoot, options.filePath)
     const hydratedTarget = this.targetRefs.hydrateTarget(sessionId, options.target, 'target')
     if (!externalSession.driver.setFileInputFiles) {
       throw new AppError('VALIDATION', '当前外部浏览器 driver 不支持文件上传。')
@@ -705,9 +491,7 @@ export class CdpPageDataEngine implements CdpPageDataEngineApi {
     }
   }
 
-  protected async resolveUploadFilePath(workspaceRoot: string, requestedPath: string): Promise<string> {
-    return (await resolveWorkspaceFilePath(workspaceRoot, requestedPath, 'filePath')).path
-  }
+  
 
   public async exportPagePdf(
     sessionId: string,
@@ -895,11 +679,3 @@ export class CdpPageDataEngine implements CdpPageDataEngineApi {
   }
 }
 
-/**
- * 媒体项尺寸归一：非有限值与 0 都记为缺席。0 宽/高的媒体项对调用方没有可用信息，
- * 保持与旧实现一致的「假值即 null」语义，避免把占位元素当成真实媒体。
- */
-function mediaDimension(value: unknown): Nullable<number> {
-  const parsed = readFiniteNumber(value)
-  return parsed ? Math.round(parsed) : null
-}

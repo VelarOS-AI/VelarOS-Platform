@@ -1,11 +1,14 @@
-import { isArray, isBoolean, isEmpty, isFiniteNumber, isNumber, isPlainObject, isString, toNullable, toOptional } from '@velaros-ai/core'
+import { isFiniteNumber, toNullable, toOptional } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { Log } from '@velaros-ai/core/logger'
 
 import type { BrowserPageDriver, BrowserSystemPointerDriver } from '../../contract/requires.js'
-import type { BrowserClickCoordinatesOptions, BrowserClickCoordinatesResult, BrowserDragOptions, BrowserDragResult, BrowserElementTargetHint, BrowserMoveMouseOptions, BrowserMoveMouseResult, BrowserPageInspection, BrowserPagePreviewPointerEvent, BrowserPageScrollOptions, BrowserPageScrollResult, BrowserPageZoomOptions, BrowserPageZoomResult, BrowserPressKeyOptions, BrowserPressKeyResult, BrowserSiteContext, BrowserTargetActionEffect, BrowserTargetActionEffectSnapshot, BrowserTargetActionOptions, BrowserTargetActionResult, BrowserTargetActionTextDiff, BrowserTypeTextOptions, BrowserTypeTextResult, BrowserViewportOptions, BrowserViewportResult } from '../../types/browser.js'
+import type { BrowserClickCoordinatesOptions, BrowserClickCoordinatesResult, BrowserDragOptions, BrowserDragResult, BrowserElementTargetHint, BrowserMoveMouseOptions, BrowserMoveMouseResult, BrowserPageInspection, BrowserPagePreviewPointerEvent, BrowserPageScrollOptions, BrowserPageScrollResult, BrowserPageZoomOptions, BrowserPageZoomResult, BrowserPressKeyOptions, BrowserPressKeyResult, BrowserSiteContext, BrowserTargetActionOptions, BrowserTargetActionResult, BrowserTypeTextOptions, BrowserTypeTextResult, BrowserViewportOptions, BrowserViewportResult } from '../../types/browser.js'
 import type { BrowserPageDriverPointerListener, BrowserPageDriverState } from '../../types/driver'
 import type { BrowserPageDriverKernel, BrowserPageDriverSession, BrowserPointerPoint, BrowserTargetActionClickMode, BrowserTargetActionInternalEffectSnapshot, BrowserViewportScreenMetrics,ExternalBrowserPageSession } from '../../types/runtime.js'
+import { clampExternalViewportPoint, normalizeTargetActionEffectSnapshot, normalizeTargetIdentityValue, readBrowserPointerPoint, resolveTargetActionClickMode } from '../../utils/cdp/interaction'
+import { resolvePageZoomFactor } from '../../utils/cdp/interaction'
+import { buildTargetActionEffect, scoreSelfHealingTarget } from '../../utils/cdp/interaction'
 import { normalizeBrowserPressKeyOptions } from '../../utils/keyboard'
 import { clampInteger, clampZoomFactor } from '../../utils/numbers.js'
 import { buildActionEffectSnapshotScript } from '../../utils/page-scripts/action-effect'
@@ -51,19 +54,6 @@ export interface CdpInteractionEngineApi {
 }
 
 export class CdpInteractionEngine implements CdpInteractionEngineApi {
-  private static readonly BrowserSelfHealingStableAttributeWeights: Readonly<Record<string, number>> = {
-    id: 12,
-    'data-testid': 12,
-    'data-test': 12,
-    'data-qa': 12,
-    controlId: 12,
-    href: 10,
-    'aria-labelledby': 10,
-    'aria-label': 9,
-    name: 9,
-    title: 8,
-    placeholder: 8,
-  }
 
   protected readonly log = Log.tag('BrowserInteractionEngine')
   private systemPointerDriver: Nullable<BrowserSystemPointerDriver> = null
@@ -204,7 +194,7 @@ export class CdpInteractionEngine implements CdpInteractionEngineApi {
     abortSignal?.throwIfAborted()
     const externalSession = this.requireExternalPageSession(sessionId)
     const hydratedOptions = this.targetRefs.hydrate(sessionId, options)
-    const clickMode = this.resolveTargetActionClickMode(externalSession.driver, hydratedOptions)
+    const clickMode = resolveTargetActionClickMode(externalSession.driver, hydratedOptions)
     const beforeEffectSnapshot = await this.captureTargetActionEffectSnapshot(
       externalSession.driver
     )
@@ -236,7 +226,7 @@ export class CdpInteractionEngine implements CdpInteractionEngineApi {
     const afterEffectSnapshot = actionResult.matched
       ? await this.captureTargetActionEffectSnapshot(externalSession.driver)
       : null
-    const effect = this.buildTargetActionEffect(
+    const effect = buildTargetActionEffect(
       beforeEffectSnapshot,
       afterEffectSnapshot
     )
@@ -325,7 +315,7 @@ export class CdpInteractionEngine implements CdpInteractionEngineApi {
 
     const ranked = candidates
       .map((candidate) => {
-        const score = this.scoreSelfHealingTarget(options.target, candidate.target)
+        const score = scoreSelfHealingTarget(options.target, candidate.target)
         return score ? { ...candidate, ...score } : null
       })
       .filter((candidate): candidate is NonNullable<typeof candidate> => !!candidate)
@@ -345,83 +335,20 @@ export class CdpInteractionEngine implements CdpInteractionEngineApi {
     return best.target
   }
 
-  private scoreSelfHealingTarget(
-    staleTarget: BrowserElementTargetHint,
-    freshTarget: BrowserElementTargetHint
-  ): Nullable<{ identityScore: number; totalScore: number }> {
-    if (!this.isSelfHealingFrameCompatible(staleTarget, freshTarget)) return null
+  
 
-    let identityScore = 0
-    let contextScore = 0
-    const staleRole = this.normalizeTargetMatchText(staleTarget.role)
-    const freshRole = this.normalizeTargetMatchText(freshTarget.role)
-    const staleText = this.normalizeTargetMatchText(staleTarget.text)
-    const freshText = this.normalizeTargetMatchText(freshTarget.text)
-    const staleName = this.normalizeTargetMatchText(staleTarget.name)
-    const freshName = this.normalizeTargetMatchText(freshTarget.name)
+  
 
-    if (staleRole && freshRole && staleRole !== freshRole) return null
-    if (staleRole && freshRole && staleRole === freshRole) contextScore += 2
-    if (staleText && freshText && staleText === freshText) identityScore += 8
-    if (staleName && freshName && staleName !== freshName) return null
-    if (staleName && freshName && staleName === freshName) identityScore += 9
+  
 
-    for (const [key, weight] of Object.entries(CdpInteractionEngine.BrowserSelfHealingStableAttributeWeights)) {
-      const value = staleTarget.attributes?.[key]
-      const staleValue = this.normalizeTargetIdentityValue(value)
-      const freshValue = this.normalizeTargetIdentityValue(freshTarget.attributes?.[key])
-      // stable attribute 一旦由旧 observation 声明，就是身份约束而不是可选加分项。
-      // 新候选缺字段和字段冲突同样拒绝，不能再靠同名文本误点另一个元素。
-      if (staleValue && staleValue !== freshValue) return null
-      if (staleValue) identityScore += weight
-    }
-
-    // role、动作类型或候选所在列表只描述类别，不足以证明元素身份。
-    if (identityScore < 8) return null
-
-    return {
-      identityScore,
-      totalScore: identityScore + contextScore,
-    }
-  }
-
-  private isSelfHealingFrameCompatible(
-    staleTarget: BrowserElementTargetHint,
-    freshTarget: BrowserElementTargetHint
-  ): boolean {
-    if (!staleTarget.frame && !freshTarget.frame) return true
-    if (!staleTarget.frame || !freshTarget.frame) return false
-
-    let matched = false
-    for (const key of ['css', 'url'] as const) {
-      const staleValue = this.normalizeTargetIdentityValue(staleTarget.frame[key])
-      const freshValue = this.normalizeTargetIdentityValue(freshTarget.frame[key])
-      if (staleValue && staleValue !== freshValue) return false
-      if (staleValue) matched = true
-    }
-    for (const key of ['name', 'title'] as const) {
-      const staleValue = this.normalizeTargetMatchText(staleTarget.frame[key])
-      const freshValue = this.normalizeTargetMatchText(freshTarget.frame[key])
-      if (staleValue && staleValue !== freshValue) return false
-      if (staleValue) matched = true
-    }
-    return matched
-  }
-
-  private normalizeTargetMatchText(value: LooseOptional<string>): string {
-    return String(value ?? '').replace(/\s+/g, ' ').trim().toLowerCase()
-  }
-
-  private normalizeTargetIdentityValue(value: LooseOptional<string>): string {
-    return String(value ?? '').trim()
-  }
+  
 
   private isSameBrowserTargetSelector(
     staleTarget: BrowserElementTargetHint,
     freshTarget: BrowserElementTargetHint
   ): boolean {
-    const staleCss = this.normalizeTargetIdentityValue(staleTarget.css)
-    const freshCss = this.normalizeTargetIdentityValue(freshTarget.css)
+    const staleCss = normalizeTargetIdentityValue(staleTarget.css)
+    const freshCss = normalizeTargetIdentityValue(freshTarget.css)
     if (staleCss && freshCss && staleCss !== freshCss) return false
 
     const staleRef = this.targetRefs.normalizeRef(staleTarget.ref)
@@ -439,7 +366,7 @@ export class CdpInteractionEngine implements CdpInteractionEngineApi {
         buildActionEffectSnapshotScript()
       )
 
-      return this.normalizeTargetActionEffectSnapshot(value)
+      return normalizeTargetActionEffectSnapshot(value)
     } catch (error) {
       this.log.debug('读取浏览器动作效果指纹失败', {
         error: AppError.from(error).message,
@@ -448,104 +375,17 @@ export class CdpInteractionEngine implements CdpInteractionEngineApi {
     }
   }
 
-  private normalizeTargetActionEffectSnapshot(
-    value: unknown
-  ): Nullable<BrowserTargetActionInternalEffectSnapshot> {
-    if (!isPlainObject(value)) return null
-    if (!isString(value.url)) return null
-    if (!isString(value.title)) return null
-    if (!isString(value.textHash)) return null
-    if (!isNumber(value.textLength)) return null
-    const textSampleLines = isArray(value.textSampleLines)
-      ? value.textSampleLines.filter(isString).slice(0, BrowserTuning.page.actionEffectSampleLines)
-      : []
+  
 
-    return {
-      url: value.url,
-      title: value.title,
-      textHash: value.textHash,
-      textLength: Math.max(0, Math.round(value.textLength)),
-      textSampleLines,
-      textSampleTruncated: isBoolean(value.textSampleTruncated) ? value.textSampleTruncated : false,
-    }
-  }
+  
 
-  protected buildTargetActionEffect(
-    before: Nullable<BrowserTargetActionInternalEffectSnapshot>,
-    after: Nullable<BrowserTargetActionInternalEffectSnapshot>
-  ): Nullable<BrowserTargetActionEffect> {
-    if (!before || !after) return null
+  
 
-    const textDiff = this.diffTargetActionTextSamples(before, after)
+  
 
-    return {
-      observed: true,
-      urlChanged: before.url !== after.url,
-      titleChanged: before.title !== after.title,
-      textChanged: before.textHash !== after.textHash || before.textLength !== after.textLength,
-      textDiff,
-      before: this.toPublicTargetActionEffectSnapshot(before),
-      after: this.toPublicTargetActionEffectSnapshot(after),
-    }
-  }
+  
 
-  private toPublicTargetActionEffectSnapshot(
-    snapshot: BrowserTargetActionInternalEffectSnapshot
-  ): BrowserTargetActionEffectSnapshot {
-    return {
-      url: snapshot.url,
-      title: snapshot.title,
-      textHash: snapshot.textHash,
-      textLength: snapshot.textLength,
-    }
-  }
-
-  private diffTargetActionTextSamples(
-    before: BrowserTargetActionInternalEffectSnapshot,
-    after: BrowserTargetActionInternalEffectSnapshot
-  ): BrowserTargetActionTextDiff {
-    const unchanged = this.countLongestCommonSubsequence(
-      before.textSampleLines,
-      after.textSampleLines
-    )
-    const additions = Math.max(0, after.textSampleLines.length - unchanged)
-    const removals = Math.max(0, before.textSampleLines.length - unchanged)
-
-    return {
-      changed: additions > 0 || removals > 0,
-      additions,
-      removals,
-      unchanged,
-      truncated: before.textSampleTruncated || after.textSampleTruncated,
-    }
-  }
-
-  private countLongestCommonSubsequence(before: string[], after: string[]): number {
-    if (isEmpty(before) || isEmpty(after)) return 0
-
-    let previous = Array.from({ length: after.length + 1 }, () => 0)
-    for (const beforeLine of before) {
-      const current = Array.from({ length: after.length + 1 }, () => 0)
-      after.forEach((afterLine, afterIndex) => {
-        current[afterIndex + 1] = beforeLine === afterLine
-          ? previous[afterIndex] + 1
-          : Math.max(previous[afterIndex + 1], current[afterIndex])
-      })
-      previous = current
-    }
-
-    return previous[after.length] ?? 0
-  }
-
-  protected resolveTargetActionClickMode(
-    driver: BrowserPageDriver,
-    options: BrowserTargetActionOptions
-  ): BrowserTargetActionClickMode {
-    if (options.action !== 'click') return 'dom'
-    if (!driver.clickCoordinates) return 'dom'
-
-    return 'coordinate'
-  }
+  
 
   protected async dispatchCoordinateTargetActionIfNeeded(input: {
     sessionId: string
@@ -558,7 +398,7 @@ export class CdpInteractionEngine implements CdpInteractionEngineApi {
     if (input.options.action !== 'click') return input.result
     if (!input.result.matched || input.result.clickMethod !== 'coordinate') return input.result
 
-    const clickPoint = this.readTargetActionClickPoint(input.result.clickPoint)
+    const clickPoint = readBrowserPointerPoint(input.result.clickPoint)
     if (!clickPoint || !input.driver.clickCoordinates) return {
         ...input.result,
         matched: false,
@@ -606,7 +446,7 @@ export class CdpInteractionEngine implements CdpInteractionEngineApi {
   }): Promise<BrowserTargetActionResult> {
     if (!input.result.matched || input.result.clickMethod !== 'coordinate') return input.result
 
-    const hoverPoint = this.readTargetActionClickPoint(input.result.clickPoint)
+    const hoverPoint = readBrowserPointerPoint(input.result.clickPoint)
     if (!hoverPoint || !input.driver.moveMouse) return {
         ...input.result,
         matched: false,
@@ -632,23 +472,9 @@ export class CdpInteractionEngine implements CdpInteractionEngineApi {
     return input.result
   }
 
-  private readTargetActionClickPoint(
-    value: BrowserTargetActionResult['clickPoint']
-  ): Nullable<{ x: number; y: number }> {
-    return this.readBrowserPointerPoint(value)
-  }
+  
 
-  protected readBrowserPointerPoint(
-    value: Optional<Nullable<{ x: number; y: number }>>
-  ): Nullable<{ x: number; y: number }> {
-    if (!value) return null
-    if (!Number.isFinite(value.x) || !Number.isFinite(value.y)) return null
-
-    return {
-      x: Math.round(value.x),
-      y: Math.round(value.y),
-    }
-  }
+  
 
   public async typeText(
     sessionId: string,
@@ -707,7 +533,7 @@ export class CdpInteractionEngine implements CdpInteractionEngineApi {
     if (!externalSession.driver.clickCoordinates) {
       throw new AppError('VALIDATION', '当前外部浏览器 driver 不支持坐标点击。')
     }
-    const point = this.clampExternalViewportPoint(options.x, options.y)
+    const point = clampExternalViewportPoint(options.x, options.y)
     const button = options.button ?? 'left'
     const clickCount = clampInteger(options.clickCount, 1, 5, 1)
     await this.tryMoveSystemPointer(
@@ -781,8 +607,8 @@ export class CdpInteractionEngine implements CdpInteractionEngineApi {
         capturedAt: Date.now(),
       }
 
-    const sourcePoint = this.readBrowserPointerPoint(resolved.source.point)
-    const targetPoint = this.readBrowserPointerPoint(resolved.target.point)
+    const sourcePoint = readBrowserPointerPoint(resolved.source.point)
+    const targetPoint = readBrowserPointerPoint(resolved.target.point)
     if (!sourcePoint || !targetPoint) return {
         ...resolved,
         matched: false,
@@ -795,8 +621,8 @@ export class CdpInteractionEngine implements CdpInteractionEngineApi {
         capturedAt: Date.now(),
       }
 
-    const source = this.clampExternalViewportPoint(sourcePoint.x, sourcePoint.y)
-    const target = this.clampExternalViewportPoint(targetPoint.x, targetPoint.y)
+    const source = clampExternalViewportPoint(sourcePoint.x, sourcePoint.y)
+    const target = clampExternalViewportPoint(targetPoint.x, targetPoint.y)
 
     const usesSystemPointer = await this.tryMoveSystemPointer(
       input.driver,
@@ -854,7 +680,7 @@ export class CdpInteractionEngine implements CdpInteractionEngineApi {
     if (!externalSession.driver.moveMouse) {
       throw new AppError('VALIDATION', '当前外部浏览器 driver 不支持鼠标移动。')
     }
-    const point = this.clampExternalViewportPoint(options.x, options.y)
+    const point = clampExternalViewportPoint(options.x, options.y)
     await this.tryMoveSystemPointer(
       externalSession.driver,
       point,
@@ -878,12 +704,7 @@ export class CdpInteractionEngine implements CdpInteractionEngineApi {
     }
   }
 
-  protected clampExternalViewportPoint(x: number, y: number): BrowserPointerPoint {
-    return {
-      x: clampInteger(x, 0, 32_000, 0),
-      y: clampInteger(y, 0, 32_000, 0),
-    }
-  }
+  
 
   protected createPreviewPointerListener(
     sessionId: string,
@@ -950,7 +771,7 @@ export class CdpInteractionEngine implements CdpInteractionEngineApi {
     }
 
     const previousZoomFactor = clampZoomFactor(pageSession.driver.getPageZoomFactor?.(), 1)
-    const zoomFactor = this.resolvePageZoomFactor(options, previousZoomFactor)
+    const zoomFactor = resolvePageZoomFactor(options, previousZoomFactor)
     await pageSession.driver.setPageZoomFactor(zoomFactor)
     // 缩放 HUD 是 webview 专属浮层，外部 CDP driver 无对应；Electron 子类覆盖时补 HUD。
     const state = await this.refreshPageDriverSessionState(sessionId, pageSession, context.url)
@@ -963,33 +784,9 @@ export class CdpInteractionEngine implements CdpInteractionEngineApi {
     }
   }
 
-  protected resolvePageZoomFactor(
-    options: BrowserPageZoomOptions,
-    currentZoomFactor: number
-  ): number {
-    const step = this.clampZoomStep(options.step, 0.1)
+  
 
-    switch (options.action) {
-      case 'in':
-        return clampZoomFactor(currentZoomFactor + step, 1)
-      case 'out':
-        return clampZoomFactor(currentZoomFactor - step, 1)
-      case 'reset':
-        return 1
-      case 'set':
-        return clampZoomFactor(options.zoomFactor, 1)
-      default:
-        return currentZoomFactor
-    }
-  }
-
-  /** 缩放步长与 `clampZoomFactor` 同形不同界（步长 0.05–0.5，因子 0.25–3），刻意各自成立。 */
-  private clampZoomStep(value: LooseOptional<number>, fallback: number): number {
-    if (!isFiniteNumber(value)) return fallback
-
-    const normalized = Math.round(value * 100) / 100
-    return Math.min(Math.max(normalized, 0.05), 0.5)
-  }
+  
 
   public async scrollPage(
     sessionId: string,

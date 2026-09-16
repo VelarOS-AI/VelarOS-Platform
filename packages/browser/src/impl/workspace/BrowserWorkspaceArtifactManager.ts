@@ -13,14 +13,15 @@ import type {
   WorkspaceFileEntry,
 } from '../../types/browser'
 import type { BrowserWorkspaceArtifactAccess, SaveBrowserPageSnapshotInput, SaveBrowserRecipeSkeletonInput, WriteBrowserArtifactInput } from '../../types/workspace.js'
+import { isManifestCurrent } from '../../utils/artifacts'
+import { slugifyArtifactName } from '../../utils/artifacts'
+import { getBrowserSiteOrigin } from '../../utils/artifacts.js'
 import {
   applyBrowserRecipeTemplate,
   buildBrowserRecipeSkeleton,
 } from '../../utils/recipes/skeleton'
 import { BrowserTuning } from '../../utils/tuning'
 const log = Log.tag('BrowserWorkspaceArtifactManager')
-
-
 
 /**
  * 浏览器工作区 artifact 管理器。
@@ -90,7 +91,7 @@ class BrowserWorkspaceArtifactManager implements BrowserWorkspaceArtifactManager
    */
   public async ensureManifest(context: BrowserSiteContext): Promise<BrowserWorkspaceManifest> {
     const existingManifest = await this.tryLoadManifest()
-    if (existingManifest && this.isManifestCurrent(existingManifest, context)) return existingManifest
+    if (existingManifest && isManifestCurrent(existingManifest, context)) return existingManifest
 
     return this.writeManifest(context, existingManifest)
   }
@@ -105,16 +106,7 @@ class BrowserWorkspaceArtifactManager implements BrowserWorkspaceArtifactManager
     return this.writeManifest(context, await this.tryLoadManifest())
   }
 
-  /** manifest 是否描述的就是当前站点（版本由 tryLoadManifest 把关）。 */
-  private isManifestCurrent(
-    manifest: BrowserWorkspaceManifest,
-    context: BrowserSiteContext
-  ): boolean {
-    return (
-      manifest.workspaceRoot === context.workspaceRoot &&
-      manifest.siteOrigin === getBrowserSiteOrigin(context.url)
-    )
-  }
+  
 
   private async writeManifest(
     context: BrowserSiteContext,
@@ -318,38 +310,6 @@ function buildBrowserArtifactRelativePath(
   const extension = BrowserWorkspaceArtifactFormatExtensionMap[format]
   const slug = slugifyArtifactName(name, kind)
   return `${directory}/${slug}.${extension}`
-}
-
-/** 从 URL 获取站点 origin。 */
-function getBrowserSiteOrigin(url: string): Nullable<string> {
-  try {
-    const parsedUrl = new URL(url)
-    return parsedUrl.origin !== 'null' ? parsedUrl.origin : null
-  } catch (error) {
-    log.debug('从 URL 推导浏览器站点来源失败', { url, error })
-    return null
-  }
-}
-
-/** 将任意标题/路径片段转成安全文件名。 */
-function slugifyArtifactName(value: LooseOptional<string>, fallbackPrefix: string): string {
-  const replaced =
-    value
-      ?.trim()
-      .toLowerCase()
-      .replace(/\.[a-z0-9]+$/i, '')
-      .replace(/[^a-z0-9]+/gi, '-')
-      ?? ''
-  let start = 0
-  let end = replaced.length
-  while (replaced[start] === '-') start += 1
-  while (end > start && replaced[end - 1] === '-') end -= 1
-  const normalized = replaced.slice(start, end).slice(0, 80)
-
-  if (normalized) return normalized
-
-  const timePart = new Date().toISOString().replace(/[:.]/g, '-')
-  return `${fallbackPrefix}-${timePart}`
 }
 
 /** 创建 artifact manager 的工厂函数。 */

@@ -1,10 +1,19 @@
+import { lstat } from 'node:fs/promises'
+import { mkdir, realpath } from 'node:fs/promises'
+import { readFile, stat } from 'node:fs/promises'
+import { isAbsolute } from 'node:path'
 import { resolve } from 'node:path'
 
+import { isObject } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { resolveRealPath } from '@velaros-ai/core/utils/RealPath'
 import { currentPlatform } from '@velaros-ai/platform'
 
+import type { ProjectReadFileResult } from '../types/browser.js'
+import type { BrowserWorkspaceResolvedPath } from '../types/workspace.js'
 import type { BrowserWorkspacePath } from '../types/workspace.js'
+
+import { clampInteger } from './numbers.js'
 
 /**
  * 解析站点工作区内的相对保存路径，防目录穿越。
@@ -77,4 +86,120 @@ export async function resolveBrowserWorkspacePath(
   }
 
   return { path: realPath, relativePath, literalPath }
+}
+
+/** 读一个已经确认在工作区内的文件，并按行与字符上限截断。 */
+export async function readResolvedFile(
+  target: BrowserWorkspaceResolvedPath,
+  requestedPath: string,
+  startLine?: number,
+  endLine?: number,
+  maxChars?: number,
+): Promise<ProjectReadFileResult> {
+  const fileStats = await stat(target.path).catch((error: any) => {
+    throw new AppError('NOT_FOUND', '找不到浏览器工作区文件。', error, {
+      path: requestedPath,
+    })
+  })
+
+  if (!fileStats.isFile()) {
+    throw new AppError(
+      'VALIDATION',
+      '浏览器工作区路径必须指向文件。',
+      undefined,
+      {
+        path: requestedPath,
+      },
+    )
+  }
+
+  const content = await readFile(target.path, 'utf8')
+  const lines = content.split('\n')
+  const totalLines = lines.length
+  const safeStartLine = clampInteger(startLine, 1, Math.max(1, totalLines), 1)
+  const safeEndLine = clampInteger(
+    endLine,
+    safeStartLine,
+    Math.max(safeStartLine, totalLines),
+    totalLines,
+  )
+  const rangedContent = lines.slice(safeStartLine - 1, safeEndLine).join('\n')
+  const safeMaxChars =
+    Number.isFinite(maxChars) && (maxChars as number) > 0
+      ? Math.trunc(maxChars as number)
+      : null
+  const returnedContent =
+    safeMaxChars && rangedContent.length > safeMaxChars
+      ? rangedContent.slice(0, safeMaxChars)
+      : rangedContent
+  const truncated =
+    returnedContent.length < rangedContent.length || safeEndLine < totalLines
+
+  return {
+    path: target.path,
+    content: returnedContent,
+    totalLines,
+    startLine: safeStartLine,
+    endLine: safeEndLine,
+    totalChars: content.length,
+    returnedChars: returnedContent.length,
+    truncated,
+    hasMore: truncated,
+    remainingLines: Math.max(0, totalLines - safeEndLine),
+    nextStartLine: safeEndLine < totalLines ? safeEndLine + 1 : null,
+  }
+}
+
+/**
+ * 列目录：主根与历史根**取并集**，同名相对路径以主根为准。
+ *
+ * 只列主根会让「换粒度」在界面上等价于「资产没了」——制品面板是用户确认自己东西还在的
+ * 唯一入口。上限按合并后的总数算，不给历史根额外配额。
+ */
+
+export function isMissingFileError(error: unknown): boolean {
+  return isObject(error) && (error as { code?: unknown }).code === 'ENOENT'
+}
+
+/** 确保工作区根目录存在，返回它的真实路径。 */
+export async function ensureRoot(workspaceRoot: string): Promise<string> {
+  await mkdir(workspaceRoot, { recursive: true })
+  return realpath(workspaceRoot)
+}
+
+/** 在一个根下把相对路径解析成真实路径；文件不在就返回 null。 */
+export async function resolveExistingPathInRoot(
+  workspaceRoot: string,
+  path: string,
+): Promise<BrowserWorkspaceResolvedPath> {
+  const root = await ensureRoot(workspaceRoot)
+  const target = await resolveBrowserWorkspacePath(
+    root,
+    normalizeRelativePath(path),
+    '浏览器工作区文件路径',
+  )
+  const existingStats = await lstat(target.literalPath).catch((error: any) => {
+    if (isMissingFileError(error)) return null
+    throw error
+  })
+  if (existingStats?.isSymbolicLink()) {
+    throw new AppError(
+      'PERMISSION',
+      '浏览器工作区不能读取符号链接。',
+      undefined,
+      { path },
+    )
+  }
+
+  return { path: target.path, root }
+}
+
+/** 工作区相对路径归一：反斜杠当分隔符，去掉首尾的分隔符与空段。 */
+export function normalizeRelativePath(path: LooseOptional<string>): string {
+  const value = path?.trim() || '.'
+  if (isAbsolute(value)) {
+    throw new AppError('PERMISSION', '浏览器工作区文件路径必须是相对路径。')
+  }
+
+  return value
 }

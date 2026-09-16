@@ -29,10 +29,11 @@
 import electron from 'electron'
 
 import type { TurnContextAppendBus } from '@velaros-ai/agent/run-context'
+import { isEmpty, isNonBlankString, isPlainObject, isPresent, isString, optionalWhen, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { Log } from '@velaros-ai/core/logger'
-import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
+import type { BrowserPageDriver } from '../../contract/requires.js'
 import type {
   BrowserCaptureScreenshotOptions,
   BrowserClickCoordinatesOptions,
@@ -120,14 +121,23 @@ import type {
   BrowserWaitForSelectorOptions,
   BrowserWaitForSelectorResult,
 } from '../../types/browser'
+import type { CdpExternalBrowserLaunchOptions } from '../../types/cdp.js'
 import type { BrowserPageDriverState } from '../../types/driver'
 import {
   type BrowserExternalPageLauncher,
   type BrowserSession,
   type ElectronBrowserRuntimeOptions,
 } from '../../types/electron'
-import { getBrowserUrlCandidate, resolveBrowserSearchFallbackUrl } from '../../utils/address'
+import type { BrowserPageDriverFactory,BrowserPagePresentationTarget, BrowserRuntimeKernel, BrowserRuntimePageDriverSession } from '../../types/electron.js'
+import type { ExternalBrowserPageSession } from '../../types/runtime.js'
+import type { BrowserUserActivityWaitState } from '../../types/session.js'
+import { resolveBrowserSearchFallbackUrl } from '../../utils/address'
+import { applyExternalPageState, buildExternalCurrentPageTarget, buildExternalNavigationResult, buildExternalWindowState, delay, isPlaceholderUrl, normalizeUrl } from '../../utils/electron/runtime'
+import { disposeExternalPageSession } from '../../utils/electron/runtime'
+import { buildBrowserUserScriptExecutionSource } from '../../utils/electron/runtime'
+import { clampInteger } from '../../utils/numbers.js'
 import { BrowserTuning } from '../../utils/tuning'
+import { resolveWorkspaceFilePath } from '../../utils/workspace-paths.js'
 import { CdpExternalBrowserLauncher } from '../cdp/CdpExternalBrowserLauncher'
 import { BrowserPerformanceOrchestrator } from '../engines/BrowserPerformanceOrchestrator'
 import { BrowserActivityCoordinator } from '../session/BrowserActivityCoordinator'
@@ -141,62 +151,6 @@ import { BrowserPageWaiter } from './BrowserPageWaiter'
 import { BrowserScreenshotEngine } from './BrowserScreenshotEngine'
 import { BrowserSessionManager } from './BrowserSessionManager'
 import { createElectronWebContentsBrowserPageDriver } from './ElectronWebContentsBrowserPageDriver'
-
-function buildBrowserUserScriptExecutionSource(
-  script: BrowserUserScriptRecord,
-  code: string,
-  force: boolean
-): string {
-  const scriptKey = `${script.id}@${script.revision}`
-  const idlePrelude =
-    script.runAt === 'document-idle'
-      ? `await new Promise((resolve) => {
-        if (typeof globalThis.requestIdleCallback === 'function') {
-          globalThis.requestIdleCallback(() => resolve(undefined), { timeout: 1500 });
-        } else {
-          globalThis.setTimeout(() => resolve(undefined), 0);
-        }
-      });`
-      : ''
-  return `(async () => {
-    const stateKey = '__velarosUserScriptsV1__';
-    const state = globalThis[stateKey] || Object.defineProperty(globalThis, stateKey, {
-      value: { documentId: 'doc-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2), attempts: Object.create(null) },
-      configurable: false,
-      enumerable: false,
-      writable: false
-    })[stateKey];
-    const key = ${JSON.stringify(scriptKey)};
-    if (!${JSON.stringify(force)} && state.attempts[key]) {
-      return { ok: state.attempts[key] === 'success', alreadyInjected: true, documentId: state.documentId };
-    }
-    state.attempts[key] = 'running';
-    try {
-      ${idlePrelude}
-      await (async () => (0, eval)(${JSON.stringify(code)}))();
-      state.attempts[key] = 'success';
-      return { ok: true, alreadyInjected: false, documentId: state.documentId };
-    } catch (error) {
-      state.attempts[key] = 'error';
-      return {
-        ok: false,
-        alreadyInjected: false,
-        documentId: state.documentId,
-        error: error && typeof error.message === 'string' ? error.message : String(error)
-      };
-    }
-  })()`
-}
-import { isEmpty, isNonBlankString, isPlainObject, isPresent, isString, optionalWhen, toNullable } from '@velaros-ai/core'
-
-import type { BrowserPageDriver } from '../../contract/requires.js'
-import type { CdpExternalBrowserLaunchOptions } from '../../types/cdp.js'
-import type { BrowserPageDriverFactory,BrowserPagePresentationTarget, BrowserRuntimeKernel, BrowserRuntimePageDriverSession } from '../../types/electron.js'
-import type { ExternalBrowserPageSession } from '../../types/runtime.js'
-import type { BrowserUserActivityWaitState } from '../../types/session.js'
-import { clampInteger } from '../../utils/numbers.js'
-import { resolveWorkspaceFilePath } from '../../utils/workspace-paths.js'
-
 
 /**
  * Electron 内嵌浏览器运行时。
@@ -404,7 +358,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
       ),
     syncExternalPageStateFromScriptResult: (sessionId, session, result, fallbackUrl) =>
       this.syncExternalPageStateFromScriptResult(sessionId, session, result, fallbackUrl),
-    delay: (ms) => this.delay(ms),
+    delay: (ms) => delay(ms),
   }
   /** 最近一次页面检查或 annotated screenshot 产出的 ref 定位表（截图/交互域共享）。 */
   private readonly targetRefs = new BrowserTargetRefStore()
@@ -449,7 +403,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
       callbacks: this.withActivityCallbacks(options),
       diagnostics: this.diagnostics,
       pageWaiter: this.pageWaiter,
-      normalizeUrl: (rawUrl) => this.normalizeUrl(rawUrl),
+      normalizeUrl: (rawUrl) => normalizeUrl(rawUrl),
     })
   }
 
@@ -605,7 +559,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
           : []
         const targets = driverTargets.at(0)
           ? driverTargets
-          : [this.buildExternalCurrentPageTarget(externalSession, state)]
+          : [buildExternalCurrentPageTarget(externalSession, state)]
         const activeTargetId = toNullable(targets.find((target) => target.active)?.id)
 
         return {
@@ -663,11 +617,11 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
       const state = await this.refreshExternalPageState(sessionId, nextSession, context.url)
       const targets = nextSession.driver.listPageTargets
         ? await nextSession.driver.listPageTargets()
-        : [this.buildExternalCurrentPageTarget(nextSession, state)]
+        : [buildExternalCurrentPageTarget(nextSession, state)]
       const activeTarget =
         targets.find((target) => target.active) ??
         targets.find((target) => target.id === targetId) ??
-        this.buildExternalCurrentPageTarget(nextSession, state)
+        buildExternalCurrentPageTarget(nextSession, state)
       const capturedAt = Date.now()
 
       return {
@@ -718,7 +672,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
           await this.ensureExternalContextPageUnlocked(sessionId, externalSession, context)
           await externalSession.driver.bringToFront()
           externalSession.visible = true
-          return this.buildExternalWindowState(externalSession)
+          return buildExternalWindowState(externalSession)
         }
 
         const session = await this.ensureContextPageUnlocked(sessionId, context, abortSignal)
@@ -834,7 +788,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
         disposeHost: launchSession.dispose,
       })
       if (externalSession.driver.isDestroyed()) {
-        this.disposeExternalPageSession(externalSession)
+        disposeExternalPageSession(externalSession)
         this.externalPageSessions.delete(sessionId)
         throw new AppError('EXECUTION_FAILED', '外部浏览器页面启动后无法挂接。')
       }
@@ -851,7 +805,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
         await externalSession.driver.bringToFront()
       }
       externalSession.visible = behavior.visible
-      return this.buildExternalWindowState(externalSession)
+      return buildExternalWindowState(externalSession)
     })
   }
 
@@ -866,7 +820,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
   ): ExternalBrowserPageSession {
     const previous = this.externalPageSessions.get(sessionId)
     if (previous?.driver !== driver) {
-      this.disposeExternalPageSession(previous, {
+      disposeExternalPageSession(previous, {
         disposeHost: options.disposePreviousHost ?? true,
       })
     }
@@ -891,7 +845,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
       const externalSession = this.getExternalPageSession(sessionId)
       if (externalSession) {
         externalSession.visible = false
-        return this.buildExternalWindowState(externalSession)
+        return buildExternalWindowState(externalSession)
       }
 
       const session = this.sessionManager.getSession(sessionId)
@@ -927,7 +881,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
       this.latestPresentationTargets.delete(sessionId)
       const externalSession = this.externalPageSessions.get(sessionId)
       if (externalSession) {
-        this.disposeExternalPageSession(externalSession)
+        disposeExternalPageSession(externalSession)
         this.externalPageSessions.delete(sessionId)
       }
 
@@ -949,7 +903,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     this.targetRefs.clearAll()
     this.latestPresentationTargets.clear()
     this.performance.dispose()
-    this.externalPageSessions.forEach((session) => this.disposeExternalPageSession(session))
+    this.externalPageSessions.forEach((session) => disposeExternalPageSession(session))
     this.externalPageSessions.clear()
     this.activityCoordinator.clearAll()
     this.sessionManager.closeAllSessions()
@@ -977,7 +931,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     const session = this.externalPageSessions.get(sessionId)
     if (!session) return null
     if (session.driver.isDestroyed()) {
-      this.disposeExternalPageSession(session)
+      disposeExternalPageSession(session)
       this.externalPageSessions.delete(sessionId)
       return null
     }
@@ -985,23 +939,9 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     return session
   }
 
-  private disposeExternalPageSession(
-    session?: LooseOptional<ExternalBrowserPageSession>,
-    options: { disposeHost?: boolean } = {}
-  ): void {
-    if (!session) return
+  
 
-    session.unsubscribeDownloads?.()
-    this.disposeExternalPageDriver(session.driver)
-    if (options.disposeHost ?? true) {
-      session.disposeHost?.()
-    }
-  }
-
-  private disposeExternalPageDriver(driver?: LooseOptional<BrowserPageDriver>): void {
-    const disposable = driver as LooseOptional<{ dispose?: () => void }>
-    disposable?.dispose?.()
-  }
+  
 
   private registerExternalDownloadEvents(
     sessionId: string,
@@ -1488,8 +1428,8 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
         }
 
         const previousCommittedUrl = this.getLoadedPageUrl(session) ?? session.url
-        const previousUrl = previousCommittedUrl ?? this.normalizeUrl(context.url)
-        let targetUrl = this.normalizeUrl(options.url)
+        const previousUrl = previousCommittedUrl ?? normalizeUrl(context.url)
+        let targetUrl = normalizeUrl(options.url)
         let didStartControlledPageLoad = false
         if (previousUrl === targetUrl) {
           // 目标 URL 已加载时避免重复 loadURL 打断页面状态。
@@ -1788,13 +1728,13 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     session: ExternalBrowserPageSession,
     context: BrowserSiteContext
   ): Promise<ExternalBrowserPageSession> {
-    const targetUrl = this.normalizeUrl(context.url)
+    const targetUrl = normalizeUrl(context.url)
     const currentUrl = session.url || session.driver.getURL()
     if (currentUrl === targetUrl) return session
 
     const previousUrl = session.url
     const state = await session.driver.navigateTo(targetUrl)
-    this.applyExternalPageState(session, state, targetUrl)
+    applyExternalPageState(session, state, targetUrl)
     if (session.url && session.url !== previousUrl) {
       this.sessionManager.syncExternalSessionSiteContext(sessionId, session.url)
     }
@@ -1810,7 +1750,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
   ): Promise<BrowserPageDriverState> {
     const previousUrl = session.url
     const state = await session.driver.refreshPageState()
-    this.applyExternalPageState(session, state, fallbackUrl)
+    applyExternalPageState(session, state, fallbackUrl)
     if (session.url && session.url !== previousUrl) {
       this.sessionManager.syncExternalSessionSiteContext(sessionId, session.url)
     }
@@ -1827,7 +1767,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     inspection: BrowserPageInspection
   ): void {
     const previousUrl = session.url
-    this.applyExternalPageState(session, {
+    applyExternalPageState(session, {
       url: inspection.url || session.driver.getURL(),
       title: inspection.title || session.driver.getTitle(),
     })
@@ -1844,7 +1784,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
   ): void {
     const previousUrl = session.url
     const resultRecord = isPlainObject(result) ? result : {}
-    this.applyExternalPageState(
+    applyExternalPageState(
       session,
       {
         url: isNonBlankString(resultRecord.url) ? resultRecord.url : session.driver.getURL(),
@@ -1868,48 +1808,39 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
         throw new AppError('VALIDATION', 'goto 导航必须提供 URL。')
       }
 
-      const targetUrl = this.normalizeUrl(options.url)
-      const previousUrl = session.url || session.driver.getURL() || this.normalizeUrl(context.url)
+      const targetUrl = normalizeUrl(options.url)
+      const previousUrl = session.url || session.driver.getURL() || normalizeUrl(context.url)
       if (previousUrl === targetUrl)
-        return this.buildExternalNavigationResult(session, options.action, false)
+        return buildExternalNavigationResult(session, options.action, false)
 
       const previousSessionUrl = session.url
       const state = await session.driver.navigateTo(targetUrl)
-      this.applyExternalPageState(session, state, targetUrl)
+      applyExternalPageState(session, state, targetUrl)
       if (session.url && session.url !== previousSessionUrl) {
         this.sessionManager.syncExternalSessionSiteContext(sessionId, session.url)
       }
       this.sessionManager.notifyPageReady(sessionId, session.url || targetUrl)
       this.targetRefs.clear(sessionId)
-      return this.buildExternalNavigationResult(session, options.action, true)
+      return buildExternalNavigationResult(session, options.action, true)
     }
 
     if (options.action === 'reload') {
-      const targetUrl = session.url || session.driver.getURL() || this.normalizeUrl(context.url)
+      const targetUrl = session.url || session.driver.getURL() || normalizeUrl(context.url)
       const previousSessionUrl = session.url
       const state = await session.driver.navigateTo(targetUrl)
-      this.applyExternalPageState(session, state, targetUrl)
+      applyExternalPageState(session, state, targetUrl)
       if (session.url && session.url !== previousSessionUrl) {
         this.sessionManager.syncExternalSessionSiteContext(sessionId, session.url)
       }
       this.sessionManager.notifyPageReady(sessionId, session.url || targetUrl)
       this.targetRefs.clear(sessionId)
-      return this.buildExternalNavigationResult(session, options.action, true)
+      return buildExternalNavigationResult(session, options.action, true)
     }
 
-    return this.buildExternalNavigationResult(session, options.action, false)
+    return buildExternalNavigationResult(session, options.action, false)
   }
 
-  private applyExternalPageState(
-    session: ExternalBrowserPageSession,
-    state: BrowserPageDriverState,
-    fallbackUrl?: LooseOptional<string>
-  ): void {
-    const nextUrl = state.url || fallbackUrl || session.url
-    const nextTitle = state.title || session.title
-    session.url = toNullable(nextUrl)
-    session.title = toNullable(nextTitle)
-  }
+  
 
   /** 确保会话已打开到指定 context.url。 */
   private async ensureContextPageUnlocked(
@@ -1919,7 +1850,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
   ): Promise<BrowserSession> {
     abortSignal?.throwIfAborted()
     const session = await this.sessionManager.waitForSession(sessionId)
-    const url = this.normalizeUrl(context.url)
+    const url = normalizeUrl(context.url)
     const currentUrl = this.getLoadedPageUrl(session)
 
     if (currentUrl === url) {
@@ -2030,43 +1961,9 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     }
   }
 
-  private buildExternalWindowState(session: ExternalBrowserPageSession): BrowserPageWindowState {
-    if (session.driver.isDestroyed())
-      return {
-        active: false,
-        visible: false,
-        driverKind: 'external',
-        url: null,
-        title: null,
-        canGoBack: false,
-        canGoForward: false,
-        viewport: null,
-      }
+  
 
-    return {
-      active: true,
-      visible: session.visible,
-      driverKind: 'external',
-      url: toNullable(session.url || session.driver.getURL()),
-      title: toNullable(session.title || session.driver.getTitle()),
-      canGoBack: false,
-      canGoForward: false,
-      viewport: toNullable(session.viewport),
-    }
-  }
-
-  private buildExternalCurrentPageTarget(
-    session: ExternalBrowserPageSession,
-    state: BrowserPageDriverState
-  ): BrowserPageTargetInfo {
-    return {
-      id: 'current',
-      type: 'page',
-      url: state.url || session.url || session.driver.getURL(),
-      title: state.title || session.title || session.driver.getTitle(),
-      active: true,
-    }
-  }
+  
 
   /** 恢复 Electron navigation history。 */
   /** 尝试把历史快照恢复到占位 webContents；返回是否真的发起了恢复导航。 */
@@ -2080,7 +1977,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
       !navigationHistory ||
       isEmpty(navigationHistory.entries) ||
       webContents.isDestroyed() ||
-      !this.isPlaceholderUrl(webContents.getURL())
+      !isPlaceholderUrl(webContents.getURL())
     )
       return false
 
@@ -2088,7 +1985,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
       .map((entry): Nullable<Electron.NavigationEntry> => {
         try {
           return {
-            url: this.normalizeUrl(entry.url),
+            url: normalizeUrl(entry.url),
             title: entry.title ?? '',
             pageState: entry.pageState || undefined,
           }
@@ -2118,20 +2015,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     }
   }
 
-  /** 把输入坐标锁定在当前浏览器 viewport 内。 */
-  /** 外部 CDP 页面没有内嵌 viewport 可读时，仅清洗为合法 CSS 像素坐标。 */
-  /** 读取页面可视 viewport 尺寸，失败时使用默认桌面尺寸。 */
-  /** 计算新的页面缩放比例。 */
-  /** 限制单次缩放步进。 */
-  /** 页面内短暂显示缩放百分比，模拟浏览器触发缩放后的右上角提示。 */
-  /** 构造页面缩放提示脚本。 */
-  /** 生成从上一次位置到目标点的缓动路径，用于页面内光标平滑移动。 */
-  /** Electron 输入事件：移动鼠标。 */
-  /** Electron 输入事件：点击坐标。 */
-  /** 等待一小段时间，便于用户看到按压反馈。 */
-  private delay(ms: number): Promise<void> {
-    return TimerScope.sleep(ms, { label: 'ElectronBrowserRuntime.delay' })
-  }
+  
 
   /** 沿路径动画展示页面内 macOS 风格光标。 */
   /** 在页面内渲染一个虚拟指针，用于截图可视化鼠标位置。 */
@@ -2153,29 +2037,15 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     }
   }
 
-  private buildExternalNavigationResult(
-    session: ExternalBrowserPageSession,
-    action: BrowserPageNavigationOptions['action'],
-    navigated: boolean
-  ): BrowserPageNavigationResult {
-    return {
-      action,
-      navigated,
-      url: session.url || session.driver.getURL() || '',
-      title: toNullable(session.title || session.driver.getTitle()),
-      canGoBack: false,
-      canGoForward: false,
-      capturedAt: Date.now(),
-    }
-  }
+  
 
   /** 获取当前已加载页面 URL，排除 about:blank 等占位页。 */
   private getLoadedPageUrl(session: BrowserSession): Nullable<string> {
     const currentUrl = session.webContents.getURL()
-    if (!currentUrl || this.isPlaceholderUrl(currentUrl)) return null
+    if (!currentUrl || isPlaceholderUrl(currentUrl)) return null
 
     try {
-      return this.normalizeUrl(currentUrl)
+      return normalizeUrl(currentUrl)
     } catch (error) {
       this.log.debug('已加载浏览器 URL 规范化失败，保留原始地址', {
         url: currentUrl,
@@ -2187,10 +2057,10 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
 
   /** 获取会话记录的已知 URL。 */
   private getKnownSessionUrl(session: BrowserSession): Nullable<string> {
-    if (!session.url || this.isPlaceholderUrl(session.url)) return null
+    if (!session.url || isPlaceholderUrl(session.url)) return null
 
     try {
-      return this.normalizeUrl(session.url)
+      return normalizeUrl(session.url)
     } catch (error) {
       this.log.debug('已知浏览器 URL 规范化失败，保留原始地址', {
         url: session.url,
@@ -2218,7 +2088,7 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
         index += direction
       ) {
         const entry = entries[index]
-        if (entry?.url && !this.isPlaceholderUrl(entry.url)) return index
+        if (entry?.url && !isPlaceholderUrl(entry.url)) return index
       }
     } catch (error) {
       this.log.debug('读取浏览器可导航历史失败', {
@@ -2246,10 +2116,10 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
 
     if (!this.getLoadedPageUrl(session)) {
       const targetEntry = session.webContents.navigationHistory.getEntryAtIndex(targetIndex)
-      if (targetEntry?.url && !this.isPlaceholderUrl(targetEntry.url)) {
+      if (targetEntry?.url && !isPlaceholderUrl(targetEntry.url)) {
         await this.pageWaiter.loadUrl(
           session.webContents,
-          this.normalizeUrl(targetEntry.url),
+          normalizeUrl(targetEntry.url),
           abortSignal
         )
       }
@@ -2275,28 +2145,9 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     return this.getLoadedPageUrl(session) ?? session.url ?? fallbackUrl
   }
 
-  /** 判断占位或错误页 URL。 */
-  private isPlaceholderUrl(url: LooseOptional<string>): boolean {
-    return (
-      url === 'about:blank' ||
-      url === 'about:srcdoc' ||
-      (!!url && url.startsWith('chrome-error://'))
-    )
-  }
+  
 
-  /** 尽力聚焦 WebContents。 */
-  /** 解析截图保存路径，并限制在 browser workspace 内。 */
-  /** 规范化用户输入 URL；本地地址默认 http，其它无协议地址默认 https。 */
-  private normalizeUrl(rawUrl: string): string {
-    const value = rawUrl.trim()
-    const candidate = getBrowserUrlCandidate(value)
-
-    try {
-      return new URL(candidate).toString()
-    } catch (error) {
-      throw new AppError('VALIDATION', `无效的浏览器 URL：${rawUrl}`, error)
-    }
-  }
+  
 }
 
 export { ElectronBrowserRuntime }

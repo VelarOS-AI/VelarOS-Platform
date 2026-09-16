@@ -1,15 +1,18 @@
+/** 浏览器动作策略：宿主给一张「哪些动作按什么档处理」的表，这里按它给出裁决。 */
 import { isNotNull } from '@velaros-ai/core'
 
-import type { BrowserActionPolicyConfig } from '../../types/browser'
-import type { BrowserActionPolicyDecision, BrowserActionPolicyRequest } from '../../types/browser.js'
+import type { BrowserActionPolicyConfig } from '../types/browser'
+import type { BrowserActionPolicyDecision, BrowserActionPolicyRequest } from '../types/browser.js'
 
 
-function normalizePolicyAction(value: LooseOptional<string>): Nullable<string> {
+/** 动作名归一：去空白、转小写；空的当没有。 */
+export function normalizePolicyAction(value: LooseOptional<string>): Nullable<string> {
   const normalized = value?.trim().toLowerCase()
   return normalized ? normalized : null
 }
 
-function normalizeActionSet(
+/** 把一组动作名归一成集合，顺带去掉空的。 */
+export function normalizeActionSet(
   values: LooseOptional<readonly string[]>,
 ): Set<string> {
   const normalized = (values ?? [])
@@ -18,7 +21,8 @@ function normalizeActionSet(
   return new Set(normalized)
 }
 
-function normalizeRequestActions(
+/** 把一次请求里的动作名（含别名）归一成一组。 */
+export function normalizeRequestActions(
   request: BrowserActionPolicyRequest,
 ): string[] {
   const seen = new Set<string>()
@@ -34,7 +38,8 @@ function normalizeRequestActions(
   })
 }
 
-function findPolicyMatch(
+/** 在策略表里找第一条命中这次请求的规则。 */
+export function findPolicyMatch(
   policyActions: Set<string>,
   requestActions: readonly string[],
 ): Nullable<string> {
@@ -54,6 +59,7 @@ function findPolicyMatch(
  * no product host ever populated `policy.confirm`, so it was a fully wired
  * dead configuration tier that never actually triggered.
  */
+/** 按宿主给的策略表裁决一次浏览器动作：放行、要审批还是直接拒绝。 */
 export function checkBrowserActionPolicy(
   policy: LooseOptional<BrowserActionPolicyConfig>,
   request: BrowserActionPolicyRequest,

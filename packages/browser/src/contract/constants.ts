@@ -150,23 +150,29 @@ export const BrowserInspectLimits = Object.freeze({
 export const BrowserCaptureLimits = Object.freeze({
   /** 截图保存路径最长多少字符。 */
   pathChars: 180,
-  /** 截图视口宽度的下限与上限，像素。 */
+  /** 截图视口宽度的下限，像素。 */
   minViewportWidth: 320,
+  /** 截图视口宽度的上限，像素。 */
   maxViewportWidth: 3_840,
-  /** 截图视口高度的下限与上限，像素。 */
+  /** 截图视口高度的下限，像素。 */
   minViewportHeight: 240,
+  /** 截图视口高度的上限，像素。 */
   maxViewportHeight: 2_160,
-  /** 截图前等网络空闲的毫秒数下限与上限。 */
+  /** 截图前等网络空闲最少等多少毫秒。 */
   minNetworkIdleMs: 100,
+  /** 截图前等网络空闲最多等多少毫秒。 */
   maxNetworkIdleMs: 5_000,
-  /** 判 DOM 稳定要连续多少帧没变化的下限与上限。 */
+  /** 判 DOM 稳定至少要连续多少帧没变化。 */
   minDomStableFrames: 3,
+  /** 判 DOM 稳定最多看多少帧。 */
   maxDomStableFrames: 16,
-  /** 判 DOM 稳定的取样间隔毫秒数下限与上限。 */
+  /** 判 DOM 稳定的取样间隔最短多少毫秒。 */
   minDomStableSampleMs: 16,
+  /** 判 DOM 稳定的取样间隔最长多少毫秒。 */
   maxDomStableSampleMs: 250,
-  /** 等 DOM 稳定的毫秒数下限与上限。 */
+  /** 等 DOM 稳定最少等多少毫秒。 */
   minDomStableWaitMs: 250,
+  /** 等 DOM 稳定最多等多少毫秒。 */
   maxDomStableWaitMs: 8_000,
   /** 整页截图单边最多多少像素。 */
   fullPageMaxSide: 32_000,
@@ -174,12 +180,15 @@ export const BrowserCaptureLimits = Object.freeze({
   annotatedElements: 120,
   /** 区域截图的坐标与边长上限，像素。 */
   regionMaxSide: 20_000,
-  /** 录屏帧宽度的下限、上限与缺省，像素。 */
+  /** 录屏帧宽度的下限，像素。 */
   minScreencastWidth: 240,
+  /** 录屏帧宽度的上限，像素。 */
   maxScreencastWidth: 1_600,
+  /** 不给 maxWidth 时录屏帧多宽，像素。 */
   defaultScreencastWidth: 800,
-  /** 录屏抽帧间隔（每 N 帧取 1）的上限与缺省。 */
+  /** 录屏抽帧间隔（每 N 帧取 1）最多隔几帧。 */
   maxScreencastFrameStep: 10,
+  /** 不给 everyNthFrame 时每几帧取一帧。 */
   defaultScreencastFrameStep: 2,
   /** 录屏产物名最长多少字符。 */
   screencastNameChars: 60,
@@ -187,11 +196,13 @@ export const BrowserCaptureLimits = Object.freeze({
 
 /** 性能分析的公开上限与缺省：写进 `browser:performance` 的说明与 schema。 */
 export const BrowserPerformanceLimits = Object.freeze({
-  /** trace 录制窗口的毫秒数下限、上限与缺省。 */
+  /** trace 录制窗口最短多少毫秒。 */
   minTraceMs: 1_000,
+  /** trace 录制窗口最长多少毫秒。 */
   maxTraceMs: 60_000,
+  /** 不给 autoStopMs 时录多少毫秒自动停。 */
   defaultTraceMs: 5_000,
-  /** insight 集合 id 与 insight 名最长多少字符。 */
+  /** insight 集合 id 与 insight 名各自最长多少字符。 */
   insightIdChars: 120,
   /** 堆快照保存路径最长多少字符。 */
   snapshotPathChars: 300,
@@ -213,11 +224,13 @@ export const BrowserPageDataLimits = Object.freeze({
   defaultStorageItems: 50,
   /** 每个存储值最多返回多少字符。 */
   storageValueChars: 50_000,
-  /** 列页面媒体的上限与缺省条数。 */
+  /** 列页面媒体一次最多返回多少条。 */
   mediaSources: 200,
+  /** 不给 limit 时列多少条页面媒体。 */
   defaultMediaSources: 80,
-  /** 列页面资源的上限与缺省条数。 */
+  /** 列页面资源一次最多返回多少条。 */
   pageResources: 500,
+  /** 不给 limit 时列多少条页面资源。 */
   defaultPageResources: 120,
 })
 

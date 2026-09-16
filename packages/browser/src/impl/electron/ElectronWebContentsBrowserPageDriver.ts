@@ -7,7 +7,6 @@ import { Log } from '@velaros-ai/core/logger'
 import type { BrowserPageDriver } from '../../contract/requires.js'
 import type {
   BrowserEmulationOptions,
-  BrowserMouseButton,
   BrowserNetworkControlOptions,
   BrowserNetworkRequestDetailsOptions,
   BrowserNetworkResponseBodyOptions,
@@ -19,6 +18,7 @@ import type { BrowserPageDriverClickCoordinatesOptions, BrowserPageDriverDiagnos
 import type { BrowserPageDriverFactory } from '../../types/electron.js'
 import { applyCdpEmulation, createDefaultCdpEmulationState } from '../../utils/cdp/emulation'
 import { clearBrowserDiagnosticEntries, takeBrowserDiagnosticWindow } from '../../utils/diagnostics.js'
+import { cdpMouseButtonsMask, clampEmbeddedDiagnosticLimit } from '../../utils/electron/webcontents'
 import { BrowserTuning } from '../../utils/tuning'
 import { buildBrowserViewportDeviceMetrics } from '../../utils/viewport'
 import { BrowserCdpNetworkController } from '../cdp/BrowserCdpNetworkController'
@@ -34,20 +34,6 @@ import { electronDebuggerHolds } from './ElectronDebuggerHolds'
 /** 嵌入式网络诊断缓冲上限,与外部 CDP driver 的诊断窗口一致。 */
 
 const embeddedDriverLog = Log.tag('ElectronWebContentsBrowserPageDriver')
-
-/** CDP MouseEvent buttons 位掩码：left=1、right=2、middle=4。 */
-function cdpMouseButtonsMask(button: BrowserMouseButton): number {
-  if (button === 'right') return 2
-  if (button === 'middle') return 4
-  return 1
-}
-
-function clampEmbeddedDiagnosticLimit(value: unknown): number {
-  const numberValue = Number(value)
-  if (!Number.isFinite(numberValue)) return 100
-
-  return Math.max(1, Math.min(BrowserTuning.cdp.embeddedNetworkDiagnostics, Math.round(numberValue)))
-}
 
 class ElectronWebContentsBrowserPageDriver implements BrowserPageDriver {
   public readonly kind = 'webview'

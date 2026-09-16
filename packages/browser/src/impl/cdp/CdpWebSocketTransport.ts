@@ -16,8 +16,9 @@ import { AppError } from '@velaros-ai/core/error'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
 import type { CdpBrowserPageDriverTransport, CdpJsonRpcMessage, CdpPendingRequest, CdpWebSocketLike } from '../../types/cdp.js'
+import { parseMessage } from '../../utils/cdp/transport'
+import { createDefaultSocket } from '../../utils/cdp/transport.js'
 import { BrowserTuning } from '../../utils/tuning'
-
 
 /** 用一条已经连上的 WebSocket 建传输时的参数。 */
 export interface CdpWebSocketTransportOptions {
@@ -48,7 +49,7 @@ class CdpWebSocketTransport implements CdpBrowserPageDriverTransport {
     url: string,
     options: CdpWebSocketTransportConnectOptions = {}
   ): Promise<CdpWebSocketTransport> {
-    const createSocket = options.createSocket ?? this.createDefaultSocket
+    const createSocket = options.createSocket ?? createDefaultSocket
     const socket = createSocket(url)
     const timeoutMs = options.timeoutMs ?? BrowserTuning.cdp.commandTimeoutMs
     const timers = new TimerScope({ name: 'CdpWebSocketTransport.connect' })
@@ -157,7 +158,7 @@ class CdpWebSocketTransport implements CdpBrowserPageDriverTransport {
     const rawData = this.readMessageText((event as MessageEvent).data)
     if (!rawData) return
 
-    const message = this.parseMessage(rawData)
+    const message = parseMessage(rawData)
     if (message instanceof AppError) return
     if (!message) return
     if (!Number.isInteger(message.id)) {
@@ -216,13 +217,7 @@ class CdpWebSocketTransport implements CdpBrowserPageDriverTransport {
     this.rejectAll(new AppError('NETWORK', '浏览器 CDP 连接出错。'))
   }
 
-  private parseMessage(rawData: string): Nullable<CdpJsonRpcMessage> | AppError {
-    try {
-      return JSON.parse(rawData) as CdpJsonRpcMessage
-    } catch (error) {
-      return new AppError('VALIDATION', '收到无法解析的 CDP JSON-RPC 消息。', error)
-    }
-  }
+  
 
   private rejectAll(error: Error): void {
     for (const pending of this.pending.values()) {
@@ -232,14 +227,7 @@ class CdpWebSocketTransport implements CdpBrowserPageDriverTransport {
     this.pending.clear()
   }
 
-  private static createDefaultSocket(url: string): CdpWebSocketLike {
-    const WebSocketCtor = globalThis.WebSocket
-    if (!WebSocketCtor) {
-      throw new AppError('PLATFORM', '当前运行时不支持 WebSocket，无法连接 CDP。')
-    }
-
-    return new WebSocketCtor(url) as CdpWebSocketLike
-  }
+  
 }
 
 export { CdpWebSocketTransport }

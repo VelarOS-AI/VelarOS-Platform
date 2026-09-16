@@ -1,5 +1,3 @@
-import { isBlank, isEmpty, isPlainObject, isString } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
 import {
   type CapabilityToken,
   createCapabilityToken,
@@ -11,45 +9,11 @@ import {
 } from '@velaros-ai/kernel/contracts/abi'
 
 import type { BrowserRuntimeCapabilityService, CreateBrowserKernelModuleOptions } from '../../types/electron.js'
-
+import { parseEmptyInput, parseSessionInput } from '../../utils/electron/kernel-input'
 
 /** 浏览器运行时在内核里的能力令牌：宿主经它拿到本进程唯一的那份运行时。 */
 export const BrowserRuntimeCapability: CapabilityToken<BrowserRuntimeCapabilityService> =
   createCapabilityToken<BrowserRuntimeCapabilityService>('velaros.browser')
-
-/** 能力边界的入参一律拒绝而非纠正：这里收到的形状不对，意味着调用方与本版本 ABI 已不同步。 */
-function invalidCapabilityInput(): AppError {
-  return new AppError('VALIDATION', '浏览器能力的入参形状不对。')
-}
-
-/**
- * 会话入参解析：**只认恰好一个 `sessionId` 字段**。
- *
- * 严到这个程度是刻意的——它是 kernel 能力面（进程外调用方也能打进来）：
- *  - 多余字段 = 调用方以为自己传了参数而实际被丢弃，静默降级最难查；
- *  - 首尾空白不 trim 而是拒绝：会话 id 是索引键，静默归一会让两个「不同」的 id 落到同一会话；
- *  - 512 上限挡的是拿超长字符串当键的内存放大。
- */
-function parseSessionInput(input: unknown): string {
-  if (!isPlainObject(input)) throw invalidCapabilityInput()
-  const sessionId = input.sessionId
-  if (
-    Object.keys(input).length !== 1
-    || !isString(sessionId)
-    || isBlank(sessionId)
-    || sessionId !== sessionId.trim()
-    || sessionId.length > 512
-  ) {
-    throw invalidCapabilityInput()
-  }
-  return sessionId
-}
-
-function parseEmptyInput(input: unknown): void {
-  if (!isPlainObject(input) || !isEmpty(Object.keys(input))) {
-    throw invalidCapabilityInput()
-  }
-}
 
 /**
  * Registers the Electron browser runtime as an optional, product-local module.

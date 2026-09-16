@@ -5,12 +5,8 @@ import type {
 } from "electron";
 
 import {
-  isBlank,
   isFalse,
   isFunction,
-  isNumber,
-  isPlainObject,
-  isString,
 } from "@velaros-ai/core";
 import { AppError } from "@velaros-ai/core/error";
 import { Log } from "@velaros-ai/core/logger";
@@ -18,6 +14,8 @@ import { type TimerLease, TimerScope } from "@velaros-ai/core/utils/TimerScope";
 
 import type { BrowserDomStabilityOptions, BrowserPageStabilityResult } from "../../types/browser";
 import type { SharedWebContentsEvent, WebContentsListener } from '../../types/electron.js'
+import { buildDomAndLayoutStableScript, clearTimer, createUnavailableStabilityResult, createWindowClosedError, isLiveWebContents, isNavigationAbort, normalizeStabilityResult, readWebRequestId } from '../../utils/electron/page-wait'
+import { safeWebContentsOff, stopLoading } from '../../utils/electron/page-wait'
 import { clampInteger } from '../../utils/numbers.js'
 import { BrowserTuning } from '../../utils/tuning'
 
@@ -45,8 +43,6 @@ export interface BrowserPageWaiterApi {
 }
 
 class BrowserPageWaiter implements BrowserPageWaiterApi {
-  private static readonly BrowserNavigationAbortErrorCode = -3;
-
   private readonly sharedEvents = new WeakMap<
     WebContents,
     Map<string, SharedWebContentsEvent>
@@ -60,8 +56,8 @@ class BrowserPageWaiter implements BrowserPageWaiterApi {
     loadOptions?: LoadURLOptions,
   ): Promise<void> {
     return new Promise((resolveLoad, rejectLoad) => {
-      if (!this.isLiveWebContents(webContents)) {
-        rejectLoad(this.createWindowClosedError());
+      if (!isLiveWebContents(webContents)) {
+        rejectLoad(createWindowClosedError());
         return;
       }
 
@@ -75,7 +71,7 @@ class BrowserPageWaiter implements BrowserPageWaiterApi {
         if (cleanedUp) return;
 
         cleanedUp = true;
-        this.clearTimer(timeout);
+        clearTimer(timeout);
         for (const unsubscribe of subscriptions.splice(0)) unsubscribe();
         abortSignal?.removeEventListener("abort", handleAbort);
         timers.dispose();
@@ -118,7 +114,7 @@ class BrowserPageWaiter implements BrowserPageWaiterApi {
           return;
         }
 
-        if (this.isNavigationAbort(errorCode)) {
+        if (isNavigationAbort(errorCode)) {
           sawNavigationAbort = true;
           return;
         }
@@ -134,14 +130,14 @@ class BrowserPageWaiter implements BrowserPageWaiterApi {
       };
       const handleAbort = (): void => {
         // 外部取消时主动停止加载，避免继续占用会话。
-        this.stopLoading(webContents);
+        stopLoading(webContents);
         rejectOnce(new AppError("EXECUTION_ABORTED", "浏览器页面加载已取消。"));
       };
       const handleClosed = (): void => {
-        rejectOnce(this.createWindowClosedError());
+        rejectOnce(createWindowClosedError());
       };
       timeout = timers.after(30_000, () => {
-        this.stopLoading(webContents);
+        stopLoading(webContents);
         rejectOnce(new AppError("TIMEOUT", `浏览器页面加载超时：${url}`));
       });
 
@@ -170,7 +166,7 @@ class BrowserPageWaiter implements BrowserPageWaiterApi {
         );
         abortSignal?.addEventListener("abort", handleAbort, { once: true });
         void webContents.loadURL(url, loadOptions).catch((error) => {
-          if (this.isNavigationAbort(error)) {
+          if (isNavigationAbort(error)) {
             sawNavigationAbort = true;
             return;
           }
@@ -189,8 +185,8 @@ class BrowserPageWaiter implements BrowserPageWaiterApi {
     abortSignal?: AbortSignal,
   ): Promise<void> {
     return new Promise((resolveWait, rejectWait) => {
-      if (!this.isLiveWebContents(webContents)) {
-        rejectWait(this.createWindowClosedError());
+      if (!isLiveWebContents(webContents)) {
+        rejectWait(createWindowClosedError());
         return;
       }
 
@@ -205,7 +201,7 @@ class BrowserPageWaiter implements BrowserPageWaiterApi {
         if (cleanedUp) return;
 
         cleanedUp = true;
-        this.clearTimer(timeout);
+        clearTimer(timeout);
         for (const unsubscribe of subscriptions.splice(0)) unsubscribe();
         abortSignal?.removeEventListener("abort", handleAbort);
         timers.dispose();
@@ -239,7 +235,7 @@ class BrowserPageWaiter implements BrowserPageWaiterApi {
       ): void => {
         if (isFalse(isMainFrame)) return;
 
-        if (this.isNavigationAbort(errorCode)) return;
+        if (isNavigationAbort(errorCode)) return;
 
         rejectOnce(
           new AppError(
@@ -261,11 +257,11 @@ class BrowserPageWaiter implements BrowserPageWaiterApi {
         }
       };
       const handleAbort = (): void => {
-        this.stopLoading(webContents);
+        stopLoading(webContents);
         rejectOnce(new AppError("EXECUTION_ABORTED", "浏览器动作等待已取消。"));
       };
       const handleClosed = (): void => {
-        rejectOnce(this.createWindowClosedError());
+        rejectOnce(createWindowClosedError());
       };
       // 不是每个点击都会导航；短暂等待后默认认为动作已完成。
       timeout = timers.after(1_200, settle);
@@ -306,8 +302,8 @@ class BrowserPageWaiter implements BrowserPageWaiterApi {
     abortSignal?: AbortSignal,
   ): Promise<void> {
     return new Promise((resolveWait, rejectWait) => {
-      if (!this.isLiveWebContents(webContents)) {
-        rejectWait(this.createWindowClosedError());
+      if (!isLiveWebContents(webContents)) {
+        rejectWait(createWindowClosedError());
         return;
       }
 
@@ -323,8 +319,8 @@ class BrowserPageWaiter implements BrowserPageWaiterApi {
         if (cleanedUp) return;
 
         cleanedUp = true;
-        this.clearTimer(timeout);
-        this.clearTimer(idleTimeout);
+        clearTimer(timeout);
+        clearTimer(idleTimeout);
         for (const unsubscribe of subscriptions.splice(0)) unsubscribe();
         abortSignal?.removeEventListener("abort", handleAbort);
         timers.dispose();
@@ -370,7 +366,7 @@ class BrowserPageWaiter implements BrowserPageWaiterApi {
       ): void => {
         if (isFalse(isMainFrame)) return;
 
-        if (this.isNavigationAbort(errorCode)) return;
+        if (isNavigationAbort(errorCode)) return;
 
         rejectOnce(
           new AppError(
@@ -385,16 +381,16 @@ class BrowserPageWaiter implements BrowserPageWaiterApi {
         );
       };
       const handleAbort = (): void => {
-        this.stopLoading(webContents);
+        stopLoading(webContents);
         rejectOnce(new AppError("EXECUTION_ABORTED", "浏览器导航等待已取消。"));
       };
       const handleClosed = (): void => {
-        rejectOnce(this.createWindowClosedError());
+        rejectOnce(createWindowClosedError());
       };
       timeout = timers.after(30_000, settle);
       idleTimeout = timers.after(500, () => {
-        if (!this.isLiveWebContents(webContents)) {
-          rejectOnce(this.createWindowClosedError());
+        if (!isLiveWebContents(webContents)) {
+          rejectOnce(createWindowClosedError());
           return;
         }
 
@@ -439,20 +435,9 @@ class BrowserPageWaiter implements BrowserPageWaiterApi {
     });
   }
 
-  /** 清理定时器。 */
-  private clearTimer(timer: Nullable<TimerLease>): void {
-    timer?.cancel();
-  }
+  
 
-  /** 判断 WebContents 是否仍可访问。 */
-  private isLiveWebContents(webContents: WebContents): boolean {
-    try {
-      return !webContents.isDestroyed();
-    } catch (error) {
-      log.debug("检查 WebContents 存活状态失败", { error });
-      return false;
-    }
-  }
+  
 
   /**
    * 同一 WebContents 的同一原生事件只注册一个分发器。
@@ -495,62 +480,19 @@ class BrowserPageWaiter implements BrowserPageWaiterApi {
       sharedEvent!.subscribers.delete(listener);
       if (sharedEvent!.subscribers.size > 0) return;
 
-      this.safeWebContentsOff(webContents, eventName, sharedEvent!.dispatch);
+      safeWebContentsOff(webContents, eventName, sharedEvent!.dispatch);
       events!.delete(eventName);
       if (events!.size === 0) this.sharedEvents.delete(webContents);
     };
   }
 
-  /** 安全解绑 WebContents 事件。 */
-  private safeWebContentsOff(
-    webContents: WebContents,
-    eventName: string,
-    listener: (...args: any[]) => void,
-  ): void {
-    try {
-      if (!this.isLiveWebContents(webContents) && eventName !== "destroyed")
-        return;
+  
 
-      const eventEmitter = webContents as {
-        off(eventName: string, listener: (...args: any[]) => void): void;
-      };
-      eventEmitter.off(eventName, listener);
-    } catch (error) {
-      log.debug("清理时移除 WebContents 监听器失败", {
-        eventName,
-        error,
-      });
-      // 原生 WebContents 可能已经销毁，清理只能尽力而为。
-    }
-  }
+  
 
-  /** 尽力停止页面加载。 */
-  private stopLoading(webContents: WebContents): void {
-    try {
-      if (this.isLiveWebContents(webContents)) {
-        webContents.stop();
-      }
-    } catch (error) {
-      log.debug("清理时停止 WebContents 加载失败", { error });
-      // Ignore native teardown races.
-    }
-  }
+  
 
-  /** 构造窗口关闭错误。 */
-  private createWindowClosedError(): AppError {
-    return new AppError("EXECUTION_ABORTED", "浏览器窗口已关闭。");
-  }
-
-  /** 判断错误是否是 Electron 导航取消。 */
-  private isNavigationAbort(errorCodeOrError: unknown): boolean {
-    if (errorCodeOrError === BrowserPageWaiter.BrowserNavigationAbortErrorCode) return true;
-
-    const appError = AppError.from(errorCodeOrError);
-    return (
-      appError.context.errorCode === BrowserPageWaiter.BrowserNavigationAbortErrorCode ||
-      /\bERR_ABORTED\b|\(-3\)/.test(appError.message)
-    );
-  }
+  
 
   /** E1: network idle 等待 — SPA 渲染完成后再操作，避免报到旧 DOM
    * 在 idleMs 内没有新的网络请求，则认为 idle
@@ -561,7 +503,7 @@ class BrowserPageWaiter implements BrowserPageWaiterApi {
     maxWaitMs: number = BrowserTuning.page.networkIdleTimeoutMs,
   ): Promise<void> {
     return new Promise<void>((resolve) => {
-      if (!this.isLiveWebContents(webContents)) {
+      if (!isLiveWebContents(webContents)) {
         resolve();
         return;
       }
@@ -591,7 +533,7 @@ class BrowserPageWaiter implements BrowserPageWaiterApi {
         idleTimer = null;
       };
       const onStart = (details: unknown): void => {
-        const requestId = this.readWebRequestId(details);
+        const requestId = readWebRequestId(details);
         if (requestId) {
           pendingRequestIds.add(requestId);
         } else {
@@ -600,7 +542,7 @@ class BrowserPageWaiter implements BrowserPageWaiterApi {
         cancelIdle();
       };
       const onEnd = (details: unknown): void => {
-        const requestId = this.readWebRequestId(details);
+        const requestId = readWebRequestId(details);
         if (requestId) {
           pendingRequestIds.delete(requestId);
         } else {
@@ -651,15 +593,7 @@ class BrowserPageWaiter implements BrowserPageWaiterApi {
     });
   }
 
-  private readWebRequestId(details: unknown): Nullable<string> {
-    if (!isPlainObject(details)) return null;
-
-    const id = details.id;
-    if (isString(id) && !isBlank(id)) return id;
-    if (isNumber(id)) return String(id);
-
-    return null;
-  }
+  
 
   /** 等待 DOM 和主要布局连续多帧稳定，适合 SPA、骨架屏和短动画后的截图。 */
   public async waitForDomAndLayoutStable(
@@ -667,8 +601,8 @@ class BrowserPageWaiter implements BrowserPageWaiterApi {
     options: BrowserDomStabilityOptions = {},
     abortSignal?: AbortSignal,
   ): Promise<BrowserPageStabilityResult> {
-    if (!this.isLiveWebContents(webContents))
-      return this.createUnavailableStabilityResult();
+    if (!isLiveWebContents(webContents))
+      return createUnavailableStabilityResult();
 
     abortSignal?.throwIfAborted();
 
@@ -683,7 +617,7 @@ class BrowserPageWaiter implements BrowserPageWaiterApi {
 
     try {
       const result = (await webContents.executeJavaScript(
-        this.buildDomAndLayoutStableScript({
+        buildDomAndLayoutStableScript({
           stableFrames,
           sampleIntervalMs,
           maxWaitMs,
@@ -692,7 +626,7 @@ class BrowserPageWaiter implements BrowserPageWaiterApi {
       )) as Partial<BrowserPageStabilityResult>;
 
       abortSignal?.throwIfAborted();
-      return this.normalizeStabilityResult(result);
+      return normalizeStabilityResult(result);
     } catch (error) {
       if (abortSignal?.aborted) {
         throw new AppError("EXECUTION_ABORTED", "浏览器 DOM 稳定等待已取消。");
@@ -701,150 +635,15 @@ class BrowserPageWaiter implements BrowserPageWaiterApi {
       log.debug("等待浏览器 DOM/layout 稳定失败，继续截图", {
         error: AppError.from(error).message,
       });
-      return this.createUnavailableStabilityResult();
+      return createUnavailableStabilityResult();
     }
   }
 
-  private buildDomAndLayoutStableScript(
-    options: Required<BrowserDomStabilityOptions>,
-  ): string {
-    const payload = JSON.stringify(options);
+  
 
-    return `(() => {
-  const payload = ${payload};
-  const startedAt = performance.now();
-  const stableFramesTarget = payload.stableFrames;
-  const sampleIntervalMs = payload.sampleIntervalMs;
-  const maxWaitMs = payload.maxWaitMs;
-  const selectors = [
-    'main',
-    '[role="main"]',
-    'form',
-    'dialog',
-    '[role="dialog"]',
-    '[aria-busy="true"]',
-    '[data-loading]',
-    '[data-testid*="loading" i]',
-    '[class*="skeleton" i]',
-    '[class*="spinner" i]',
-    'button',
-    'a[href]',
-    'input:not([type="hidden"])',
-    'select',
-    'textarea'
-  ];
-  const round = (value) => Math.round(Number(value) || 0);
-  const rectOf = (element) => {
-    const rect = element.getBoundingClientRect();
-    return [
-      round(rect.left),
-      round(rect.top),
-      round(rect.width),
-      round(rect.height)
-    ];
-  };
-  const visible = (element) => {
-    const rect = element.getBoundingClientRect();
-    if (rect.width <= 0 || rect.height <= 0) return false;
-    const style = window.getComputedStyle(element);
-    return style.display !== 'none' && style.visibility !== 'hidden' && Number(style.opacity || 1) > 0.02;
-  };
-  const sample = () => {
-    const documentElement = document.documentElement;
-    const body = document.body || documentElement;
-    const elements = [];
-    for (const selector of selectors) {
-      for (const element of Array.from(document.querySelectorAll(selector)).slice(0, 24)) {
-        if (elements.length >= 48) break;
-        if (element instanceof Element && visible(element)) {
-          elements.push(element);
-        }
-      }
-      if (elements.length >= 48) break;
-    }
-    return JSON.stringify({
-      readyState: document.readyState,
-      viewport: [round(window.innerWidth), round(window.innerHeight)],
-      scroll: [round(window.scrollX), round(window.scrollY)],
-      height: Math.max(
-        round(documentElement.scrollHeight),
-        round(body.scrollHeight),
-        round(documentElement.offsetHeight),
-        round(body.offsetHeight)
-      ),
-      busy: document.querySelectorAll('[aria-busy="true"], [data-loading="true"], [data-state="loading"]').length,
-      elements: elements.map((element) => [
-        element.tagName,
-        element.id || '',
-        element.getAttribute('role') || '',
-        element.getAttribute('data-testid') || '',
-        rectOf(element).join(',')
-      ])
-    });
-  };
+  
 
-  return new Promise((resolve) => {
-    let previousSignature = '';
-    let stableFrames = 0;
-    let frames = 0;
-    const finish = (reason) => {
-      resolve({
-        stable: reason === 'stable',
-        reason,
-        durationMs: Math.round(performance.now() - startedAt),
-        frames
-      });
-    };
-    const tick = () => {
-      frames += 1;
-      const signature = sample();
-      if (signature === previousSignature) {
-        stableFrames += 1;
-      } else {
-        stableFrames = 1;
-        previousSignature = signature;
-      }
-      if (stableFrames >= stableFramesTarget) {
-        finish('stable');
-        return;
-      }
-      if (performance.now() - startedAt >= maxWaitMs) {
-        finish('timeout');
-        return;
-      }
-      window.setTimeout(() => window.requestAnimationFrame(tick), sampleIntervalMs);
-    };
-    window.requestAnimationFrame(tick);
-  });
-})()`;
-  }
-
-  private normalizeStabilityResult(
-    result: Partial<BrowserPageStabilityResult>,
-  ): BrowserPageStabilityResult {
-    const reason =
-      result.reason === "stable" ||
-      result.reason === "timeout" ||
-      result.reason === "unavailable"
-        ? result.reason
-        : "unavailable";
-
-    return {
-      stable: reason === "stable",
-      reason,
-      durationMs: clampInteger(result.durationMs, 0, 60_000, 0),
-      frames: clampInteger(result.frames, 0, 10_000, 0),
-    };
-  }
-
-  private createUnavailableStabilityResult(): BrowserPageStabilityResult {
-    return {
-      stable: false,
-      reason: "unavailable",
-      durationMs: 0,
-      frames: 0,
-    };
-  }
+  
 }
 
 export { BrowserPageWaiter };

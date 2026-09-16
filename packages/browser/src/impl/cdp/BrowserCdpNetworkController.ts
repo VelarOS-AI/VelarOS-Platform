@@ -1,7 +1,6 @@
 import {
   isBoolean,
   isEmpty,
-  isFiniteNumber,
   isNonBlankString,
   isNotNull,
   isObject,
@@ -15,7 +14,7 @@ import {
 import { AppError } from '@velaros-ai/core/error'
 import { type TimerLease, TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
-import type { BrowserNetworkControlOptions, BrowserNetworkMockResponse, BrowserNetworkRequestDetailsOptions, BrowserNetworkResponseBodyOptions, BrowserNetworkThrottlingPreset, BrowserPageDiagnosticEntry, BrowserPageDiagnosticLevel } from '../../types/browser.js'
+import type { BrowserNetworkControlOptions, BrowserNetworkMockResponse, BrowserNetworkRequestDetailsOptions, BrowserNetworkResponseBodyOptions, BrowserNetworkThrottlingPreset, BrowserPageDiagnosticEntry } from '../../types/browser.js'
 import type { CdpFetchRequestPausedEvent, CdpNetworkGetResponseBodyResponse, CdpNetworkLoadingFailedEvent, CdpNetworkLoadingFinishedEvent, CdpNetworkRequestPayload, CdpNetworkRequestRecord, CdpNetworkRequestWillBeSentEvent, CdpNetworkResponsePayload, CdpNetworkResponseReceivedEvent, CdpSend } from '../../types/cdp.js'
 import type {
   BrowserPageDriverNetworkControlState,
@@ -24,28 +23,10 @@ import type {
   BrowserPageDriverNetworkResponseBodyResult,
 } from '../../types/driver'
 import { syncCdpNetworkConditions } from '../../utils/cdp/emulation'
+import { assignNetworkBooleanDetail, assignNetworkStringDetail, buildMockResponseHeaders, cloneNetworkMockResponses, computeNetworkRequestDurationMs, matchesURLPattern, normalizeBlockedURLPatterns, normalizeExtraHTTPHeaders, normalizeHeadersRecord, normalizeNetworkStatus, normalizeNullableInteger, normalizeNullableNumber, resolveNetworkResponseDiagnosticLevel } from '../../utils/cdp/network'
+import { normalizeBlockedResourceTypes, normalizeNetworkMockResponses, normalizeNetworkResourceType } from '../../utils/cdp/network'
+import { clampPositiveInteger } from '../../utils/cdp/network'
 import { BrowserTuning } from '../../utils/tuning'
-
-/**
- * CDP 网络子系统的共享控制器。
- *
- * 外部 `CDP` 浏览器（`CdpBrowserPageDriver` 与 WebSocket 传输）和嵌入式网页视图
- * （`webContents.debugger`）共用网络事件记账、详情读取和 `Fetch` 拦截逻辑，只在传输与事件入口上
- * 不同。控制器持有网络请求记录、离线状态、请求头和拦截规则，并通过注入的 `send`、
- * `appendDiagnostic`、`getCurrentUrl` 与 `getNetworkThrottling` 和宿主解耦。
- *
- * 离线状态与网络节流共用 `Network.emulateNetworkConditions`：离线状态归本控制器，节流状态归宿主，
- * 两者通过 `getNetworkThrottling` 回调合流，避免互相覆盖。
- */
-
-/** 网络请求记录表上限:超出按写入顺序淘汰最旧,防止长会话无界增长。 */
-
-function clampPositiveInteger(value: unknown, fallback: number): number {
-  const numberValue = Number(value)
-  if (!Number.isFinite(numberValue)) return Math.max(1, Math.round(fallback))
-
-  return Math.max(1, Math.round(numberValue))
-}
 
 /** 网络控制器要的协作件：内嵌页面与外部 CDP 各自把自己的传输与诊断缓冲塞进来。 */
 export interface BrowserCdpNetworkControllerDeps {
@@ -94,26 +75,6 @@ export interface BrowserCdpNetworkControllerApi {
 export class BrowserCdpNetworkController implements BrowserCdpNetworkControllerApi {
   /** mock 响应没写状态码时按 200 返回。 */
   private static readonly DefaultMockResponseStatus = 200
-
-  private static readonly CdpNetworkResourceTypeByKey: Record<string, string> = {
-    cspviolationreport: 'CSPViolationReport',
-    document: 'Document',
-    eventsource: 'EventSource',
-    fetch: 'Fetch',
-    font: 'Font',
-    image: 'Image',
-    manifest: 'Manifest',
-    media: 'Media',
-    other: 'Other',
-    ping: 'Ping',
-    preflight: 'Preflight',
-    script: 'Script',
-    signedexchange: 'SignedExchange',
-    stylesheet: 'Stylesheet',
-    texttrack: 'TextTrack',
-    websocket: 'WebSocket',
-    xhr: 'XHR',
-  }
 
   private readonly networkRequests = new Map<string, CdpNetworkRequestRecord>()
   private readonly pendingNetworkRequestIds = new Set<string>()
@@ -165,7 +126,7 @@ export class BrowserCdpNetworkController implements BrowserCdpNetworkControllerA
     let shouldSyncFetchInterception = false
 
     if (isPresent(options.extraHTTPHeaders)) {
-      this.extraHTTPHeaders = this.normalizeExtraHTTPHeaders(options.extraHTTPHeaders)
+      this.extraHTTPHeaders = normalizeExtraHTTPHeaders(options.extraHTTPHeaders)
       await this.deps.send('Network.setExtraHTTPHeaders', {
         headers: this.extraHTTPHeaders,
       })
@@ -177,17 +138,17 @@ export class BrowserCdpNetworkController implements BrowserCdpNetworkControllerA
     }
 
     if (isPresent(options.blockedURLPatterns)) {
-      this.blockedURLPatterns = this.normalizeBlockedURLPatterns(options.blockedURLPatterns)
+      this.blockedURLPatterns = normalizeBlockedURLPatterns(options.blockedURLPatterns)
       shouldSyncFetchInterception = true
     }
 
     if (isPresent(options.blockedResourceTypes)) {
-      this.blockedResourceTypes = this.normalizeBlockedResourceTypes(options.blockedResourceTypes)
+      this.blockedResourceTypes = normalizeBlockedResourceTypes(options.blockedResourceTypes)
       shouldSyncFetchInterception = true
     }
 
     if (isPresent(options.mockResponses)) {
-      this.networkMockResponses = this.normalizeNetworkMockResponses(options.mockResponses)
+      this.networkMockResponses = normalizeNetworkMockResponses(options.mockResponses)
       shouldSyncFetchInterception = true
     }
 
@@ -200,7 +161,7 @@ export class BrowserCdpNetworkController implements BrowserCdpNetworkControllerA
       extraHTTPHeaders: { ...this.extraHTTPHeaders },
       blockedURLPatterns: [...this.blockedURLPatterns],
       blockedResourceTypes: [...this.blockedResourceTypes],
-      mockResponses: this.cloneNetworkMockResponses(this.networkMockResponses),
+      mockResponses: cloneNetworkMockResponses(this.networkMockResponses),
     }
   }
 
@@ -269,7 +230,7 @@ export class BrowserCdpNetworkController implements BrowserCdpNetworkControllerA
           }
         : null,
       failure: record.failure ? { ...record.failure } : null,
-      durationMs: this.computeNetworkRequestDurationMs(record),
+      durationMs: computeNetworkRequestDurationMs(record),
     }
 
     if (options.includeResponseBody) {
@@ -354,7 +315,7 @@ export class BrowserCdpNetworkController implements BrowserCdpNetworkControllerA
 
     const request = isObject(event.request) ? (event.request as CdpNetworkRequestPayload) : {}
     const url = isNonBlankString(request.url) ? request.url : this.deps.getCurrentUrl()
-    const resourceType = this.normalizeNetworkResourceType(event.resourceType)
+    const resourceType = normalizeNetworkResourceType(event.resourceType)
     const mockResponse = this.findNetworkMockResponse(url)
     if (isPresent(mockResponse)) {
       this.fulfillMockedRequest(event.requestId, url, mockResponse)
@@ -362,7 +323,7 @@ export class BrowserCdpNetworkController implements BrowserCdpNetworkControllerA
     }
 
     const shouldBlockRequest =
-      this.blockedURLPatterns.some((pattern) => this.matchesURLPattern(pattern, url)) &&
+      this.blockedURLPatterns.some((pattern) => matchesURLPattern(pattern, url)) &&
       this.matchesBlockedResourceType(resourceType)
     if (!shouldBlockRequest) {
       this.continuePausedRequest(event.requestId, url)
@@ -381,7 +342,7 @@ export class BrowserCdpNetworkController implements BrowserCdpNetworkControllerA
       .send('Fetch.fulfillRequest', {
         requestId,
         responseCode: mockResponse.status ?? BrowserCdpNetworkController.DefaultMockResponseStatus,
-        responseHeaders: this.buildMockResponseHeaders(mockResponse),
+        responseHeaders: buildMockResponseHeaders(mockResponse),
         body: Buffer.from(mockResponse.body ?? '', 'utf8').toString('base64'),
       })
       .then(() => {
@@ -492,11 +453,11 @@ export class BrowserCdpNetworkController implements BrowserCdpNetworkControllerA
       requestId: event.requestId,
       method,
       url,
-      headers: this.normalizeHeadersRecord(request.headers),
+      headers: normalizeHeadersRecord(request.headers),
       postData: isString(request.postData) ? request.postData : null,
-      resourceType: this.normalizeNetworkResourceType(event.type),
-      timestamp: this.normalizeNullableNumber(event.timestamp),
-      wallTime: this.normalizeNullableNumber(event.wallTime),
+      resourceType: normalizeNetworkResourceType(event.type),
+      timestamp: normalizeNullableNumber(event.timestamp),
+      wallTime: normalizeNullableNumber(event.wallTime),
       response: null,
       failure: null,
       finishedTimestamp: null,
@@ -513,7 +474,7 @@ export class BrowserCdpNetworkController implements BrowserCdpNetworkControllerA
     const response = isObject(event.response)
       ? (event.response as CdpNetworkResponsePayload)
       : null
-    const status = this.normalizeNetworkStatus(response?.status)
+    const status = normalizeNetworkStatus(response?.status)
     if (!status) return
 
     const requestId = isNonBlankString(event.requestId) ? event.requestId : ''
@@ -521,7 +482,7 @@ export class BrowserCdpNetworkController implements BrowserCdpNetworkControllerA
     const method = request?.method ?? 'GET'
     const url = this.resolveNetworkEventUrl(response?.url, request)
     const statusText = isString(response?.statusText) ? response.statusText : ''
-    const resourceType = this.normalizeNetworkResourceType(event.type, request)
+    const resourceType = normalizeNetworkResourceType(event.type, request)
     if (requestId && response) {
       this.recordNetworkResponseDetails(requestId, response)
     }
@@ -532,12 +493,12 @@ export class BrowserCdpNetworkController implements BrowserCdpNetworkControllerA
       statusText,
       resourceType,
     }
-    this.assignNetworkStringDetail(details, 'mimeType', response?.mimeType)
-    this.assignNetworkBooleanDetail(details, 'fromDiskCache', response?.fromDiskCache)
-    this.assignNetworkBooleanDetail(details, 'fromServiceWorker', response?.fromServiceWorker)
+    assignNetworkStringDetail(details, 'mimeType', response?.mimeType)
+    assignNetworkBooleanDetail(details, 'fromDiskCache', response?.fromDiskCache)
+    assignNetworkBooleanDetail(details, 'fromServiceWorker', response?.fromServiceWorker)
     this.deps.appendDiagnostic({
       kind: 'network',
-      level: this.resolveNetworkResponseDiagnosticLevel(status),
+      level: resolveNetworkResponseDiagnosticLevel(status),
       message: `${method} ${status} ${url}`,
       url: toNullable(url),
       line: null,
@@ -556,16 +517,16 @@ export class BrowserCdpNetworkController implements BrowserCdpNetworkControllerA
     if (!request) return
 
     request.response = {
-      status: this.normalizeNetworkStatus(response.status) ?? 0,
+      status: normalizeNetworkStatus(response.status) ?? 0,
       statusText: isString(response.statusText) ? response.statusText : '',
-      headers: this.normalizeHeadersRecord(response.headers),
+      headers: normalizeHeadersRecord(response.headers),
       mimeType: isString(response.mimeType) ? response.mimeType : null,
       protocol: isString(response.protocol) ? response.protocol : null,
       fromDiskCache: isTrue(response.fromDiskCache),
       fromServiceWorker: isTrue(response.fromServiceWorker),
-      encodedDataLength: this.normalizeNullableNumber(response.encodedDataLength),
+      encodedDataLength: normalizeNullableNumber(response.encodedDataLength),
       remoteIPAddress: isString(response.remoteIPAddress) ? response.remoteIPAddress : null,
-      remotePort: this.normalizeNullableInteger(response.remotePort),
+      remotePort: normalizeNullableInteger(response.remotePort),
       timing: isPlainObject(response.timing) ? { ...(response.timing) } : null,
     }
   }
@@ -576,8 +537,8 @@ export class BrowserCdpNetworkController implements BrowserCdpNetworkControllerA
     const request = requestId ? this.networkRequests.get(requestId) : null
     if (!request) return
 
-    request.finishedTimestamp = this.normalizeNullableNumber(event.timestamp)
-    const encodedDataLength = this.normalizeNullableNumber(event.encodedDataLength)
+    request.finishedTimestamp = normalizeNullableNumber(event.timestamp)
+    const encodedDataLength = normalizeNullableNumber(event.encodedDataLength)
     if (!isNotNull(encodedDataLength)) return
 
     const response = request.response ?? {
@@ -601,15 +562,15 @@ export class BrowserCdpNetworkController implements BrowserCdpNetworkControllerA
     const requestId = isNonBlankString(event.requestId) ? event.requestId : ''
     this.settlePendingNetworkRequest(requestId)
     const request = requestId ? this.networkRequests.get(requestId) : null
-    const resourceType = this.normalizeNetworkResourceType(event.type, request)
+    const resourceType = normalizeNetworkResourceType(event.type, request)
     const errorText = isString(event.errorText) ? event.errorText : '未知的网络错误'
     const details: Record<string, unknown> = {
       requestId,
       resourceType,
       errorText,
     }
-    this.assignNetworkStringDetail(details, 'method', request?.method)
-    this.assignNetworkBooleanDetail(details, 'canceled', event.canceled)
+    assignNetworkStringDetail(details, 'method', request?.method)
+    assignNetworkBooleanDetail(details, 'canceled', event.canceled)
     this.deps.appendDiagnostic({
       kind: 'network',
       level: 'error',
@@ -626,7 +587,7 @@ export class BrowserCdpNetworkController implements BrowserCdpNetworkControllerA
         errorText,
         canceled: isTrue(event.canceled),
       }
-      request.finishedTimestamp = this.normalizeNullableNumber(event.timestamp)
+      request.finishedTimestamp = normalizeNullableNumber(event.timestamp)
     }
   }
 
@@ -655,65 +616,21 @@ export class BrowserCdpNetworkController implements BrowserCdpNetworkControllerA
     }
   }
 
-  private computeNetworkRequestDurationMs(record: CdpNetworkRequestRecord): Nullable<number> {
-    if (!isNotNull(record.timestamp) || !isNotNull(record.finishedTimestamp)) return null
+  
 
-    return Math.max(0, Math.round((record.finishedTimestamp - record.timestamp) * 1000))
-  }
+  
 
-  private normalizeHeadersRecord(value: unknown): Record<string, string> {
-    if (!isObject(value)) return {}
+  
 
-    const result: Record<string, string> = {}
-    for (const [name, rawValue] of Object.entries(value)) {
-      if (!isNonBlankString(name)) continue
+  
 
-      if (isString(rawValue)) {
-        result[name] = rawValue
-        continue
-      }
-      if (isFiniteNumber(rawValue) || isBoolean(rawValue)) {
-        result[name] = String(rawValue)
-      }
-    }
+  
 
-    return result
-  }
+  
 
-  private normalizeNullableNumber(value: unknown): Nullable<number> {
-    return isFiniteNumber(value) ? value : null
-  }
+  
 
-  private normalizeNullableInteger(value: unknown): Nullable<number> {
-    return isFiniteNumber(value) ? Math.round(value) : null
-  }
-
-  private normalizeNetworkStatus(status: unknown): Nullable<number> {
-    if (!isFiniteNumber(status)) return null
-
-    return Math.round(status)
-  }
-
-  private resolveNetworkResponseDiagnosticLevel(status: number): BrowserPageDiagnosticLevel {
-    if (status >= 500) return 'error'
-    if (status >= 400) return 'warning'
-
-    return 'info'
-  }
-
-  private normalizeNetworkResourceType(
-    resourceType: unknown,
-    request?: LooseOptional<CdpNetworkRequestRecord>
-  ): string {
-    if (isNonBlankString(resourceType)) return this.normalizeNetworkResourceTypeValue(resourceType)
-
-    return request?.resourceType ?? 'Other'
-  }
-
-  private normalizeNetworkResourceTypeValue(resourceType: string): string {
-    const normalizedKey = resourceType.trim().replace(/[-_\s]/g, '').toLowerCase()
-    return BrowserCdpNetworkController.CdpNetworkResourceTypeByKey[normalizedKey] ?? resourceType
-  }
+  
 
   private resolveNetworkEventUrl(
     url: unknown,
@@ -725,100 +642,23 @@ export class BrowserCdpNetworkController implements BrowserCdpNetworkControllerA
     return this.deps.getCurrentUrl()
   }
 
-  private assignNetworkStringDetail(
-    details: Record<string, unknown>,
-    key: string,
-    value: unknown
-  ): void {
-    if (isNonBlankString(value)) {
-      details[key] = value
-    }
-  }
+  
 
-  private assignNetworkBooleanDetail(
-    details: Record<string, unknown>,
-    key: string,
-    value: unknown
-  ): void {
-    if (isBoolean(value)) {
-      details[key] = value
-    }
-  }
+  
 
-  private normalizeExtraHTTPHeaders(headers: Record<string, string>): Record<string, string> {
-    const normalized: Record<string, string> = {}
-    for (const [name, value] of Object.entries(headers)) {
-      const normalizedName = name.trim()
-      if (!isNonBlankString(normalizedName)) continue
+  
 
-      normalized[normalizedName] = String(value)
-    }
-    return normalized
-  }
+  
 
-  private normalizeBlockedURLPatterns(patterns: string[]): string[] {
-    return [...new Set(patterns.map((pattern) => pattern.trim()).filter(isNonBlankString))]
-  }
+  
 
-  private normalizeBlockedResourceTypes(resourceTypes: string[]): string[] {
-    return [
-      ...new Set(
-        resourceTypes
-          .map((resourceType) => this.normalizeNetworkResourceTypeFilter(resourceType))
-          .filter(isNonBlankString)
-      ),
-    ]
-  }
+  
 
-  private normalizeNetworkResourceTypeFilter(resourceType: string): string {
-    const normalizedKey = resourceType.trim().replace(/[-_\s]/g, '').toLowerCase()
-    if (!isNonBlankString(normalizedKey)) return ''
+  
 
-    const normalizedResourceType = BrowserCdpNetworkController.CdpNetworkResourceTypeByKey[normalizedKey]
-    if (isNonBlankString(normalizedResourceType)) return normalizedResourceType
+  
 
-    throw new AppError('VALIDATION', `不支持的网络资源类型：${resourceType}`)
-  }
-
-  private normalizeNetworkMockResponses(
-    responses: BrowserNetworkMockResponse[]
-  ): BrowserNetworkMockResponse[] {
-    const normalizedResponses: BrowserNetworkMockResponse[] = []
-    const seenURLPatterns = new Set<string>()
-
-    for (const response of responses) {
-      const urlPattern = response.urlPattern.trim()
-      if (!isNonBlankString(urlPattern) || seenURLPatterns.has(urlPattern)) continue
-
-      seenURLPatterns.add(urlPattern)
-      normalizedResponses.push({
-        urlPattern,
-        status: this.normalizeMockResponseStatus(response.status),
-        contentType: isNonBlankString(response.contentType?.trim())
-          ? response.contentType.trim()
-          : 'application/json',
-        body: isString(response.body) ? response.body : '',
-        headers: this.normalizeExtraHTTPHeaders(response.headers ?? {}),
-      })
-    }
-
-    return normalizedResponses
-  }
-
-  private normalizeMockResponseStatus(status: unknown): number {
-    if (!isFiniteNumber(status)) return 200
-
-    return Math.min(Math.max(Math.round(status), 100), 599)
-  }
-
-  private cloneNetworkMockResponses(
-    responses: BrowserNetworkMockResponse[]
-  ): BrowserNetworkMockResponse[] {
-    return responses.map((response) => ({
-      ...response,
-      headers: { ...(response.headers ?? {}) },
-    }))
-  }
+  
 
   private async syncFetchInterception(): Promise<void> {
     const patterns = this.buildFetchInterceptionPatterns()
@@ -881,34 +721,12 @@ export class BrowserCdpNetworkController implements BrowserCdpNetworkControllerA
   private findNetworkMockResponse(url: string): Nullable<BrowserNetworkMockResponse> {
     return toNullable(
       this.networkMockResponses.find((response) =>
-        this.matchesURLPattern(response.urlPattern, url)
+        matchesURLPattern(response.urlPattern, url)
       )
     )
   }
 
-  private buildMockResponseHeaders(
-    mockResponse: BrowserNetworkMockResponse
-  ): Array<{ name: string; value: string }> {
-    const headers: Array<{ name: string; value: string }> = [
-      {
-        name: 'content-type',
-        value: mockResponse.contentType ?? 'application/json',
-      },
-    ]
+  
 
-    for (const [name, value] of Object.entries(mockResponse.headers ?? {})) {
-      if (name.toLowerCase() === 'content-type') continue
-
-      headers.push({ name, value })
-    }
-
-    return headers
-  }
-
-  private matchesURLPattern(pattern: string, url: string): boolean {
-    if (!isNonBlankString(pattern) || !isNonBlankString(url)) return false
-
-    const source = pattern.replace(/[|\\{}()[\]^$+?.]/g, '\\$&').replace(/\*/g, '.*')
-    return new RegExp(`^${source}$`).test(url)
-  }
+  
 }

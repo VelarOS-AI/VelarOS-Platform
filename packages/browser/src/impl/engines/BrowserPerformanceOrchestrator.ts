@@ -1,13 +1,14 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 
-import { isEmpty, isFiniteNumber, isNull, isPresent, toNullable } from '@velaros-ai/core'
+import { isEmpty, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import type { BrowserHeapSnapshotOptions, BrowserHeapSnapshotResult, BrowserPerformanceInsightOptions, BrowserPerformanceInsightResult, BrowserPerformanceTraceStartOptions, BrowserPerformanceTraceStartResult, BrowserPerformanceTraceStopResult, BrowserSiteContext } from '../../types/browser.js'
 import type { BrowserPageDriverEmulationState } from '../../types/driver'
 import type { BrowserPageDriverKernel,BrowserPerformanceTraceState } from '../../types/runtime.js'
 import { serializeBrowserTraceToGzip } from '../../utils/performance'
+import { resolveAutoStopMs } from '../../utils/performance'
 import { BrowserTuning } from '../../utils/tuning'
 import { resolveBrowserWorkspacePath } from '../../utils/workspace-paths'
 
@@ -52,7 +53,7 @@ export class BrowserPerformanceOrchestrator implements BrowserPerformanceOrchest
     }
 
     const reload = options.reload ?? true
-    const autoStopMs = this.resolveAutoStopMs(options.autoStopMs)
+    const autoStopMs = resolveAutoStopMs(options.autoStopMs)
     const pageSession = await this.kernel.getLivePageDriverSession(sessionId, abortSignal)
     const { driver } = pageSession
     if (!driver.startTracing || !driver.stopTracing) {
@@ -245,12 +246,7 @@ export class BrowserPerformanceOrchestrator implements BrowserPerformanceOrchest
     this.traces.clear()
   }
 
-  private resolveAutoStopMs(value: LooseOptional<number>): number {
-    if (isNull(value) || value === 0) return 0
-    if (!isPresent(value)) return BrowserTuning.performance.traceAutoStopMs
-    if (!isFiniteNumber(value) || value < 0) return BrowserTuning.performance.traceAutoStopMs
-    return Math.min(60_000, Math.max(1_000, Math.round(value)))
-  }
+  
 }
 
 /**

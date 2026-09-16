@@ -10,7 +10,7 @@ import {
 } from 'node:fs/promises'
 import { dirname, isAbsolute, resolve } from 'node:path'
 
-import { isEmpty, isNotNull, isNull, isObject } from '@velaros-ai/core'
+import { isEmpty, isNotNull, isNull } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import { BrowserFileLimits } from '../../contract/constants'
@@ -23,36 +23,18 @@ import type {
   WorkspaceWriteFileResult,
 } from '../../types/browser.js'
 import type { BrowserWorkspaceResolvedPath } from '../../types/workspace.js'
+import { clampInteger } from '../../utils/numbers.js'
 import { BrowserTuning } from '../../utils/tuning'
+import { readResolvedFile } from '../../utils/workspace-paths'
+import {  } from '../../utils/workspace-paths'
+import { isMissingFileError } from '../../utils/workspace-paths'
+import { ensureRoot } from '../../utils/workspace-paths'
+import { resolveExistingPathInRoot } from '../../utils/workspace-paths'
+import { normalizeRelativePath } from '../../utils/workspace-paths'
 import {
   getRelativePathInsideRoot,
   resolveBrowserWorkspacePath,
 } from '../../utils/workspace-paths.js'
-
-
-function clampInteger(
-  value: LooseOptional<number>,
-  min: number,
-  max: number,
-  fallback: number,
-): number {
-  if (!Number.isFinite(value)) return fallback
-
-  return Math.min(Math.max(Math.trunc(value as number), min), max)
-}
-
-function isMissingFileError(error: unknown): boolean {
-  return isObject(error) && (error as { code?: unknown }).code === 'ENOENT'
-}
-
-function normalizeRelativePath(path: LooseOptional<string>): string {
-  const value = path?.trim() || '.'
-  if (isAbsolute(value)) {
-    throw new AppError('PERMISSION', '浏览器工作区文件路径必须是相对路径。')
-  }
-
-  return value
-}
 
 /**
  * 为浏览器制品提供直接文件访问。
@@ -106,12 +88,10 @@ class BrowserWorkspaceFileAccess implements BrowserWorkspaceFileAccessApi {
     return [this.workspaceRoot, ...this.legacyWorkspaceRoots]
   }
 
-  /**
-   * 列目录：主根与历史根**取并集**，同名相对路径以主根为准。
-   *
-   * 只列主根会让「换粒度」在界面上等价于「资产没了」——制品面板是用户确认自己东西还在的
-   * 唯一入口。上限按合并后的总数算，不给历史根额外配额。
-   */
+  
+
+  
+
   public async listFiles(
     options: WorkspaceListOptions = {},
   ): Promise<WorkspaceFileEntry[]> {
@@ -152,7 +132,7 @@ class BrowserWorkspaceFileAccess implements BrowserWorkspaceFileAccessApi {
     seenRelativePaths: Set<string>
   }): Promise<void> {
     const { entries, limit, maxDepth, recursive, seenRelativePaths } = input
-    const target = await this.resolveExistingPathInRoot(
+    const target = await resolveExistingPathInRoot(
       input.workspaceRoot,
       input.path,
     ).catch(() => null)
@@ -224,69 +204,10 @@ class BrowserWorkspaceFileAccess implements BrowserWorkspaceFileAccessApi {
     maxChars?: number,
   ): Promise<ProjectReadFileResult> {
     const target = await this.resolveExistingPath(path)
-    return this.readResolvedFile(target, path, startLine, endLine, maxChars)
+    return readResolvedFile(target, path, startLine, endLine, maxChars)
   }
 
-  private async readResolvedFile(
-    target: BrowserWorkspaceResolvedPath,
-    requestedPath: string,
-    startLine?: number,
-    endLine?: number,
-    maxChars?: number,
-  ): Promise<ProjectReadFileResult> {
-    const fileStats = await stat(target.path).catch((error: any) => {
-      throw new AppError('NOT_FOUND', '找不到浏览器工作区文件。', error, {
-        path: requestedPath,
-      })
-    })
-
-    if (!fileStats.isFile()) {
-      throw new AppError(
-        'VALIDATION',
-        '浏览器工作区路径必须指向文件。',
-        undefined,
-        {
-          path: requestedPath,
-        },
-      )
-    }
-
-    const content = await readFile(target.path, 'utf8')
-    const lines = content.split('\n')
-    const totalLines = lines.length
-    const safeStartLine = clampInteger(startLine, 1, Math.max(1, totalLines), 1)
-    const safeEndLine = clampInteger(
-      endLine,
-      safeStartLine,
-      Math.max(safeStartLine, totalLines),
-      totalLines,
-    )
-    const rangedContent = lines.slice(safeStartLine - 1, safeEndLine).join('\n')
-    const safeMaxChars =
-      Number.isFinite(maxChars) && (maxChars as number) > 0
-        ? Math.trunc(maxChars as number)
-        : null
-    const returnedContent =
-      safeMaxChars && rangedContent.length > safeMaxChars
-        ? rangedContent.slice(0, safeMaxChars)
-        : rangedContent
-    const truncated =
-      returnedContent.length < rangedContent.length || safeEndLine < totalLines
-
-    return {
-      path: target.path,
-      content: returnedContent,
-      totalLines,
-      startLine: safeStartLine,
-      endLine: safeEndLine,
-      totalChars: content.length,
-      returnedChars: returnedContent.length,
-      truncated,
-      hasMore: truncated,
-      remainingLines: Math.max(0, totalLines - safeEndLine),
-      nextStartLine: safeEndLine < totalLines ? safeEndLine + 1 : null,
-    }
-  }
+  
 
   /** 同时接受相对路径和当前站点根内的绝对路径，供 Host 预览已有 browser artifact。 */
   public async readWorkspacePath(
@@ -313,7 +234,7 @@ class BrowserWorkspaceFileAccess implements BrowserWorkspaceFileAccessApi {
         },
       )
     }
-    const root = await this.ensureRoot(owningRoot)
+    const root = await ensureRoot(owningRoot)
     const existing = await realpath(path).catch((error: any) => {
       if (isMissingFileError(error)) {
         throw new AppError('NOT_FOUND', '找不到浏览器工作区文件。', error, {
@@ -333,7 +254,7 @@ class BrowserWorkspaceFileAccess implements BrowserWorkspaceFileAccessApi {
         },
       )
     }
-    return this.readResolvedFile(
+    return readResolvedFile(
       { path: existing, root },
       path,
       startLine,
@@ -401,7 +322,7 @@ class BrowserWorkspaceFileAccess implements BrowserWorkspaceFileAccessApi {
     path: string,
   ): Promise<{ path: string; deleted: boolean }> {
     // 历史根是只读兼容层；删除只允许命中主根，绝不能沿读回退删除旧资产。
-    const target = await this.resolveExistingPathInRoot(
+    const target = await resolveExistingPathInRoot(
       this.workspaceRoot,
       path,
     )
@@ -432,7 +353,7 @@ class BrowserWorkspaceFileAccess implements BrowserWorkspaceFileAccessApi {
     path: string,
   ): Promise<BrowserWorkspaceResolvedPath> {
     for (const root of this.legacyWorkspaceRoots) {
-      const candidate = await this.resolveExistingPathInRoot(root, path).catch(
+      const candidate = await resolveExistingPathInRoot(root, path).catch(
         () => null,
       )
       if (!candidate) continue
@@ -440,13 +361,13 @@ class BrowserWorkspaceFileAccess implements BrowserWorkspaceFileAccessApi {
       if (stats) return candidate
     }
 
-    return this.resolveExistingPathInRoot(this.workspaceRoot, path)
+    return resolveExistingPathInRoot(this.workspaceRoot, path)
   }
 
   private async resolveExistingPath(
     path: string,
   ): Promise<BrowserWorkspaceResolvedPath> {
-    const primary = await this.resolveExistingPathInRoot(
+    const primary = await resolveExistingPathInRoot(
       this.workspaceRoot,
       path,
     )
@@ -456,36 +377,12 @@ class BrowserWorkspaceFileAccess implements BrowserWorkspaceFileAccessApi {
     return this.resolveExistingPathAcrossRoots(path)
   }
 
-  private async resolveExistingPathInRoot(
-    workspaceRoot: string,
-    path: string,
-  ): Promise<BrowserWorkspaceResolvedPath> {
-    const root = await this.ensureRoot(workspaceRoot)
-    const target = await resolveBrowserWorkspacePath(
-      root,
-      normalizeRelativePath(path),
-      '浏览器工作区文件路径',
-    )
-    const existingStats = await lstat(target.literalPath).catch((error: any) => {
-      if (isMissingFileError(error)) return null
-      throw error
-    })
-    if (existingStats?.isSymbolicLink()) {
-      throw new AppError(
-        'PERMISSION',
-        '浏览器工作区不能读取符号链接。',
-        undefined,
-        { path },
-      )
-    }
-
-    return { path: target.path, root }
-  }
+  
 
   private async resolveWritablePath(
     path: string,
   ): Promise<BrowserWorkspaceResolvedPath> {
-    const root = await this.ensureRoot()
+    const root = await ensureRoot(this.workspaceRoot)
     const relativePath = normalizeRelativePath(path)
     // 先建目录再判定：路径还不存在时 resolveRealPath 解到最近一个存在的祖先，
     // 建完目录判出来的才是「写进去真正会落到哪」。
@@ -512,12 +409,7 @@ class BrowserWorkspaceFileAccess implements BrowserWorkspaceFileAccessApi {
     return { path: target.path, root }
   }
 
-  private async ensureRoot(
-    workspaceRoot: string = this.workspaceRoot,
-  ): Promise<string> {
-    await mkdir(workspaceRoot, { recursive: true })
-    return realpath(workspaceRoot)
-  }
+  
 }
 
 function createBrowserWorkspaceFileAccess(

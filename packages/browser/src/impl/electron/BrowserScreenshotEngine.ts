@@ -1,19 +1,16 @@
 import { createHash } from 'node:crypto'
 import { mkdir, writeFile } from 'node:fs/promises'
-import { basename, dirname, resolve } from 'node:path'
+import { dirname } from 'node:path'
 
 import electron from 'electron'
 
-import { isArray, isFalse, isNumber, isObject, isPlainObject, isPresent, isString, isTrue,optionalWhenLazy, toNullable, toOptional } from '@velaros-ai/core'
+import { isNumber, isPlainObject, isString,optionalWhenLazy, toNullable, toOptional } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { Log } from '@velaros-ai/core/logger'
 
 import type { BrowserPageDriver } from '../../contract/requires.js'
 import type {
   BrowserCaptureScreenshotOptions,
-  BrowserDomStabilityOptions,
-  BrowserElementTargetHint,
-  BrowserLoginDetection,
   BrowserPagePreviewFrame,
   BrowserPagePreviewPointerEvent,
   BrowserPagePreviewStreamEvent,
@@ -27,22 +24,20 @@ import type {
   BrowserScreenshotDiff,
   BrowserScreenshotElementLabel,
   BrowserScreenshotElementLabelOptions,
-  BrowserScreenshotElementLegendItem,
   BrowserScreenshotMetadata,
   BrowserScreenshotModelImage,
-  BrowserScreenshotModelImageOptions,
   BrowserScreenshotRegionOptions,
   BrowserSiteContext,
 } from '../../types/browser'
-import type { ScreencastCapturedFrame, ScreencastFrameDecoder } from '../../types/cdp.js'
-import type { BrowserPageDriverScreenshotOptions } from '../../types/driver'
+import type { ScreencastCapturedFrame } from '../../types/cdp.js'
 import { type BrowserSession } from '../../types/electron'
 import type { BrowserRuntimeKernel, BrowserScreenshotDiffFrame, BrowserScreenshotImageCapture } from '../../types/electron.js'
 import type { ExternalBrowserPageSession } from '../../types/runtime.js'
-import type { BrowserWorkspacePath } from '../../types/workspace.js'
 import { evaluateInWebContents } from '../../utils/electron/evaluate'
-import { clampInteger, clampNumber, clampZoomFactor, readBoundedString, readFiniteNumber } from '../../utils/numbers.js'
-import { browserLoginDetectionScriptFragment } from '../../utils/page-scripts/login-detection'
+import { buildScreenshotDiffSample, buildScreenshotElementLabelsScript, buildScreenshotElementLegend, buildScreenshotMetadataScript, buildScreenshotModelCoordinateMap, buildViewportCaptureRegion, compareScreenshotDiffSamples, normalizeScreenshotCursor, normalizeScreenshotElementLabels, readRecentBrowserEvents, resolveDomStabilityOptions, resolveScreenshotElementLabelOptions, resolveScreenshotFullPageOptions, resolveScreenshotModelImageOptions, resolveScreenshotPath, resolveScreenshotRegionRect, writeScreenshotModelImage } from '../../utils/electron/screenshot-image'
+import { normalizeLoginDetection, resolveExternalScreenshotOptions } from '../../utils/electron/screenshot-image'
+import { createElectronScreencastFrameDecoder } from '../../utils/electron/screenshot-image'
+import { clampInteger, clampNumber, clampZoomFactor, readFiniteNumber } from '../../utils/numbers.js'
 import { BrowserTuning } from '../../utils/tuning'
 import { DEFAULT_BROWSER_VIEWPORT } from '../../utils/viewport.js'
 import { resolveBrowserWorkspacePath } from '../../utils/workspace-paths'
@@ -50,26 +45,6 @@ import { DefaultScreencastStartOptions, encodeScreencastFramesToGif } from '../c
 import type { BrowserTargetRefStore } from '../session/BrowserTargetRefStore'
 
 import type { BrowserPageWaiter } from './BrowserPageWaiter'
-
-/** 录屏帧解码：JPEG → RGBA（electron nativeImage,toBitmap 为 BGRA 需换序）。 */
-function createElectronScreencastFrameDecoder(): ScreencastFrameDecoder {
-  return (bytes, maxWidth) => {
-    let image = electron.nativeImage.createFromBuffer(bytes)
-    if (image.isEmpty()) return null
-
-    if (image.getSize().width > maxWidth) {
-      image = image.resize({ width: maxWidth })
-    }
-    const { width, height } = image.getSize()
-    const rgba = Buffer.from(image.toBitmap())
-    for (let offset = 0; offset < rgba.length; offset += 4) {
-      const blue = rgba[offset]!
-      rgba[offset] = rgba[offset + 2]!
-      rgba[offset + 2] = blue
-    }
-    return { width, height, rgba }
-  }
-}
 
 /**
  * 截图域执行体：视口/全页/区域截图、元素标注与图例、模型压缩图、diff 采样、
@@ -155,7 +130,7 @@ export class BrowserScreenshotEngine implements BrowserScreenshotEngineApi {
       context.url
     )
     const metadata = await this.readExternalScreenshotMetadata(externalSession)
-    const screenshotOptions = await this.resolveExternalScreenshotOptions(
+    const screenshotOptions = await resolveExternalScreenshotOptions(
       externalSession,
       metadata,
       {}
@@ -425,7 +400,7 @@ export class BrowserScreenshotEngine implements BrowserScreenshotEngineApi {
         isNumber(options.waitForNetworkIdle) ? options.waitForNetworkIdle : 700
       )
     }
-    const stabilityOptions = this.resolveDomStabilityOptions(options.waitForDomStable)
+    const stabilityOptions = resolveDomStabilityOptions(options.waitForDomStable)
     const stability = stabilityOptions
       ? await this.pageWaiter.waitForDomAndLayoutStable(
           session.webContents,
@@ -434,7 +409,7 @@ export class BrowserScreenshotEngine implements BrowserScreenshotEngineApi {
         )
       : null
 
-    const labelOptions = this.resolveScreenshotElementLabelOptions(options.annotateElements)
+    const labelOptions = resolveScreenshotElementLabelOptions(options.annotateElements)
     let elementLabels: BrowserScreenshotElementLabel[] = []
     let shouldClearElementLabels = false
 
@@ -456,7 +431,7 @@ export class BrowserScreenshotEngine implements BrowserScreenshotEngineApi {
       )
       const imageSize = image.getSize()
       const bytes = image.toPNG()
-      const artifactPath = await this.resolveScreenshotPath(context.workspaceRoot, options.path)
+      const artifactPath = await resolveScreenshotPath(context.workspaceRoot, options.path)
       const diff = optionalWhenLazy(options.compareWithPrevious, () =>
         this.buildScreenshotDiff(sessionId, image, bytes)
       )
@@ -466,7 +441,7 @@ export class BrowserScreenshotEngine implements BrowserScreenshotEngineApi {
         capture
       )
       const persistedModelImage = modelImage
-        ? await this.writeScreenshotModelImage(
+        ? await writeScreenshotModelImage(
             context.workspaceRoot,
             artifactPath.relativePath,
             modelImage
@@ -508,7 +483,7 @@ export class BrowserScreenshotEngine implements BrowserScreenshotEngineApi {
     }
 
     const metadata = await this.readExternalScreenshotMetadata(session)
-    const screenshotOptions = await this.resolveExternalScreenshotOptions(
+    const screenshotOptions = await resolveExternalScreenshotOptions(
       session,
       metadata,
       options
@@ -521,7 +496,7 @@ export class BrowserScreenshotEngine implements BrowserScreenshotEngineApi {
 
     const imageSize = image.getSize()
     const bytes = Buffer.from(captured.bytes)
-    const artifactPath = await this.resolveScreenshotPath(context.workspaceRoot, options.path)
+    const artifactPath = await resolveScreenshotPath(context.workspaceRoot, options.path)
     const diff = optionalWhenLazy(options.compareWithPrevious, () =>
       this.buildScreenshotDiff(sessionId, image, bytes)
     )
@@ -531,7 +506,7 @@ export class BrowserScreenshotEngine implements BrowserScreenshotEngineApi {
       captured.capture
     )
     const persistedModelImage = modelImage
-      ? await this.writeScreenshotModelImage(
+      ? await writeScreenshotModelImage(
           context.workspaceRoot,
           artifactPath.relativePath,
           modelImage
@@ -556,71 +531,13 @@ export class BrowserScreenshotEngine implements BrowserScreenshotEngineApi {
     }
   }
 
-  private resolveScreenshotElementLabelOptions(
-    options: BrowserCaptureScreenshotOptions['annotateElements']
-  ): Nullable<BrowserScreenshotElementLabelOptions> {
-    if (!options) return null
-    if (isObject(options) && isFalse(options.enabled)) return null
+  
 
-    const rawMaxElements = optionalWhenLazy(
-      isObject(options),
-      () => (options as BrowserScreenshotElementLabelOptions).maxElements
-    )
-    return {
-      enabled: true,
-      maxElements: clampInteger(rawMaxElements, 1, 120, BrowserTuning.screenshot.elementLabelLimit),
-    }
-  }
+  
 
-  private resolveDomStabilityOptions(
-    options: BrowserCaptureScreenshotOptions['waitForDomStable']
-  ): Nullable<BrowserDomStabilityOptions> {
-    if (!options) return null
+  
 
-    const rawOptions = isObject(options) ? options : {}
-    return {
-      stableFrames: clampInteger(rawOptions.stableFrames, 3, 16, 5),
-      sampleIntervalMs: clampInteger(rawOptions.sampleIntervalMs, 16, 250, 80),
-      maxWaitMs: clampInteger(rawOptions.maxWaitMs, 250, 8000, 2500),
-    }
-  }
-
-  private resolveScreenshotFullPageOptions(
-    options: BrowserCaptureScreenshotOptions['fullPage']
-  ): Nullable<{ maxWidth: number; maxHeight: number }> {
-    if (!options) return null
-    if (isObject(options) && isFalse(options.enabled)) return null
-
-    const rawOptions = isObject(options) ? options : {}
-    return {
-      maxWidth: clampInteger(rawOptions.maxWidth, 320, 32_000, BrowserTuning.screenshot.fullPageMaxWidth),
-      maxHeight: clampInteger(
-        rawOptions.maxHeight,
-        240,
-        32_000,
-        BrowserTuning.screenshot.fullPageMaxHeight
-      ),
-    }
-  }
-
-  private resolveScreenshotModelImageOptions(
-    options: BrowserCaptureScreenshotOptions['includeModelImage']
-  ): Nullable<Required<BrowserScreenshotModelImageOptions>> {
-    if (!options) return null
-
-    const rawOptions = isObject(options) ? options : {}
-    return {
-      maxWidth: clampInteger(rawOptions.maxWidth, 320, 3840, BrowserTuning.screenshot.modelImageMaxWidth),
-      maxHeight: clampInteger(
-        rawOptions.maxHeight,
-        240,
-        2160,
-        BrowserTuning.screenshot.modelImageMaxHeight
-      ),
-      quality: clampInteger(rawOptions.quality, 1, 100, BrowserTuning.screenshot.modelImageQuality),
-      highlightViewport: !isFalse(rawOptions.highlightViewport),
-    }
-  }
+  
 
   private async captureBrowserScreenshotImage(
     session: BrowserSession,
@@ -632,7 +549,7 @@ export class BrowserScreenshotEngine implements BrowserScreenshotEngineApi {
       if (regionCapture) return regionCapture
     }
 
-    const fullPageOptions = this.resolveScreenshotFullPageOptions(options.fullPage)
+    const fullPageOptions = resolveScreenshotFullPageOptions(options.fullPage)
     if (fullPageOptions) {
       const fullPageCapture = await this.tryCaptureFullPageScreenshot(
         session,
@@ -646,63 +563,13 @@ export class BrowserScreenshotEngine implements BrowserScreenshotEngineApi {
     const size = image.getSize()
     return {
       image,
-      capture: this.buildViewportCaptureRegion(metadata, size.width, size.height),
+      capture: buildViewportCaptureRegion(metadata, size.width, size.height),
     }
   }
 
-  private async resolveExternalScreenshotOptions(
-    session: ExternalBrowserPageSession,
-    metadata: BrowserScreenshotMetadata,
-    options: BrowserCaptureScreenshotOptions
-  ): Promise<BrowserPageDriverScreenshotOptions> {
-    if (options.region) {
-      const clip = await this.resolveExternalScreenshotRegionRect(session, options.region)
-      if (clip)
-        return {
-          mode: 'region',
-          metadata,
-          clip,
-        }
-    }
+  
 
-    const fullPageOptions = this.resolveScreenshotFullPageOptions(options.fullPage)
-    if (fullPageOptions)
-      return {
-        mode: 'full-page',
-        metadata,
-        maxWidth: fullPageOptions.maxWidth,
-        maxHeight: fullPageOptions.maxHeight,
-      }
-
-    return {
-      mode: 'viewport',
-      metadata,
-    }
-  }
-
-  private buildViewportCaptureRegion(
-    metadata: BrowserScreenshotMetadata,
-    imageWidth: number,
-    imageHeight: number
-  ): BrowserScreenshotCaptureRegion {
-    return {
-      mode: 'viewport',
-      coordinateSpace: 'page-css-px',
-      x: metadata.scrollX,
-      y: metadata.scrollY,
-      width: Math.max(1, metadata.viewportWidth),
-      height: Math.max(1, metadata.viewportHeight),
-      documentWidth: metadata.documentWidth,
-      documentHeight: metadata.documentHeight,
-      viewport: {
-        x: metadata.scrollX,
-        y: metadata.scrollY,
-        width: Math.max(1, metadata.viewportWidth),
-        height: Math.max(1, metadata.viewportHeight),
-      },
-      clipped: imageWidth <= 0 || imageHeight <= 0,
-    }
-  }
+  
 
   private async tryCaptureFullPageScreenshot(
     session: BrowserSession,
@@ -795,7 +662,7 @@ export class BrowserScreenshotEngine implements BrowserScreenshotEngineApi {
     metadata: BrowserScreenshotMetadata,
     region: BrowserScreenshotRegionOptions
   ): Promise<Nullable<BrowserScreenshotImageCapture>> {
-    const rect = await this.resolveScreenshotRegionRect(session, region)
+    const rect = await resolveScreenshotRegionRect(session, region)
     if (!rect || rect.width <= 0 || rect.height <= 0) return null
 
     const webContents = session.webContents
@@ -862,65 +729,14 @@ export class BrowserScreenshotEngine implements BrowserScreenshotEngineApi {
     }
   }
 
-  private async resolveScreenshotRegionRect(
-    session: BrowserSession,
-    region: BrowserScreenshotRegionOptions
-  ): Promise<Nullable<{ x: number; y: number; width: number; height: number }>> {
-    if (region.selector?.trim()) {
-      const selectorLiteral = JSON.stringify(region.selector.trim())
-      const resolved = (await evaluateInWebContents(
-        session.webContents,
-        `(() => {
-          const el = document.querySelector(${selectorLiteral});
-          if (!el) return null;
-          const r = el.getBoundingClientRect();
-          return {
-            x: Math.round(window.scrollX + r.x),
-            y: Math.round(window.scrollY + r.y),
-            width: Math.round(r.width),
-            height: Math.round(r.height),
-          };
-        })()`,
-        true
-      )) as Nullable<{ x?: number; y?: number; width?: number; height?: number }>
-      if (
-        resolved &&
-        Number.isFinite(resolved.x) &&
-        Number.isFinite(resolved.y) &&
-        Number.isFinite(resolved.width) &&
-        Number.isFinite(resolved.height)
-      )
-        return {
-          x: resolved.x!,
-          y: resolved.y!,
-          width: resolved.width!,
-          height: resolved.height!,
-        }
-      return null
-    }
-
-    if (
-      Number.isFinite(region.x) &&
-      Number.isFinite(region.y) &&
-      Number.isFinite(region.width) &&
-      Number.isFinite(region.height)
-    )
-      return {
-        x: region.x!,
-        y: region.y!,
-        width: region.width!,
-        height: region.height!,
-      }
-
-    return null
-  }
+  
 
   private async buildScreenshotModelImage(
     image: Electron.NativeImage,
     options: BrowserCaptureScreenshotOptions['includeModelImage'],
     capture: BrowserScreenshotCaptureRegion
   ): Promise<Nullable<BrowserScreenshotModelImage>> {
-    const modelOptions = this.resolveScreenshotModelImageOptions(options)
+    const modelOptions = resolveScreenshotModelImageOptions(options)
     if (!modelOptions) return null
 
     const sourceSize = image.getSize()
@@ -941,7 +757,7 @@ export class BrowserScreenshotEngine implements BrowserScreenshotEngineApi {
             height: targetHeight,
             quality: 'good',
           })
-    const coordinateMap = this.buildScreenshotModelCoordinateMap(capture, targetWidth, targetHeight)
+    const coordinateMap = buildScreenshotModelCoordinateMap(capture, targetWidth, targetHeight)
     const modelImage =
       modelOptions.highlightViewport && capture.mode === 'full-page'
         ? await this.applyModelScreenshotViewportOverlay(resizedImage, coordinateMap)
@@ -979,7 +795,7 @@ export class BrowserScreenshotEngine implements BrowserScreenshotEngineApi {
         sourceHeight,
         scale: effectiveWidth / sourceWidth,
         quality: effectiveQuality,
-        coordinateMap: this.buildScreenshotModelCoordinateMap(
+        coordinateMap: buildScreenshotModelCoordinateMap(
           capture,
           effectiveWidth,
           effectiveHeight
@@ -1005,77 +821,9 @@ export class BrowserScreenshotEngine implements BrowserScreenshotEngineApi {
     }
   }
 
-  private async writeScreenshotModelImage(
-    workspaceRoot: string,
-    originalRelativePath: string,
-    modelImage: BrowserScreenshotModelImage
-  ): Promise<BrowserScreenshotModelImage> {
-    const extension = modelImage.mediaType === 'image/jpeg' ? 'jpg' : 'png'
-    const originalName = basename(originalRelativePath.replace(/\\/g, '/'))
-    const stem = originalName.replace(/\.[^.]*$/, '') || `screenshot-${Date.now()}`
-    const relativePath = `artifacts/screenshots/model/${stem}-model.${extension}`
-    const path = resolve(workspaceRoot, relativePath)
+  
 
-    await mkdir(dirname(path), { recursive: true })
-    await writeFile(path, Buffer.from(modelImage.data, 'base64'))
-
-    return {
-      ...modelImage,
-      path,
-      relativePath,
-    }
-  }
-
-  private buildScreenshotModelCoordinateMap(
-    capture: BrowserScreenshotCaptureRegion,
-    imageWidth: number,
-    imageHeight: number
-  ): NonNullable<BrowserScreenshotModelImage['coordinateMap']> {
-    const pageToImageScaleX = imageWidth / Math.max(1, capture.width)
-    const pageToImageScaleY = imageHeight / Math.max(1, capture.height)
-    const viewportX = clampNumber(
-      capture.viewport.x,
-      capture.x,
-      capture.x + capture.width,
-      capture.x
-    )
-    const viewportY = clampNumber(
-      capture.viewport.y,
-      capture.y,
-      capture.y + capture.height,
-      capture.y
-    )
-    const viewport = {
-      x: viewportX,
-      y: viewportY,
-      width: Math.max(1, Math.min(capture.viewport.width, capture.x + capture.width - viewportX)),
-      height: Math.max(
-        1,
-        Math.min(capture.viewport.height, capture.y + capture.height - viewportY)
-      ),
-    }
-    const viewportRectInImage = {
-      x: Math.round((viewport.x - capture.x) * pageToImageScaleX),
-      y: Math.round((viewport.y - capture.y) * pageToImageScaleY),
-      width: Math.max(1, Math.round(viewport.width * pageToImageScaleX)),
-      height: Math.max(1, Math.round(viewport.height * pageToImageScaleY)),
-    }
-
-    return {
-      coordinateSpace: 'page-css-px',
-      pageToImageScaleX,
-      pageToImageScaleY,
-      imageToPageScaleX: Math.max(1, capture.width) / imageWidth,
-      imageToPageScaleY: Math.max(1, capture.height) / imageHeight,
-      viewportRectInImage,
-      visibleViewport: {
-        x: capture.viewport.x,
-        y: capture.viewport.y,
-        width: capture.viewport.width,
-        height: capture.viewport.height,
-      },
-    }
-  }
+  
 
   private async applyModelScreenshotViewportOverlay(
     image: Electron.NativeImage,
@@ -1209,13 +957,13 @@ export class BrowserScreenshotEngine implements BrowserScreenshotEngineApi {
     bytes: Buffer
   ): BrowserScreenshotDiff {
     const fingerprint = createHash('sha256').update(bytes).digest('hex')
-    const sample = this.buildScreenshotDiffSample(image)
+    const sample = buildScreenshotDiffSample(image)
     const previousFrame = toNullable(this.screenshotDiffFrames.get(sessionId))
     this.screenshotDiffFrames.set(sessionId, { fingerprint, sample })
 
     const changed = previousFrame?.fingerprint !== fingerprint
     const pixelDiff = previousFrame
-      ? this.compareScreenshotDiffSamples(previousFrame.sample, sample)
+      ? compareScreenshotDiffSamples(previousFrame.sample, sample)
       : null
     return {
       changed,
@@ -1232,47 +980,9 @@ export class BrowserScreenshotEngine implements BrowserScreenshotEngineApi {
     }
   }
 
-  private buildScreenshotDiffSample(image: Electron.NativeImage): Buffer {
-    return image
-      .resize({
-        width: 64,
-        height: 64,
-        quality: 'good',
-      })
-      .toBitmap()
-  }
+  
 
-  private compareScreenshotDiffSamples(
-    previousSample: Buffer,
-    sample: Buffer
-  ): {
-    changedPixels: number
-    totalPixels: number
-    changedRatio: number
-  } {
-    const totalPixels = Math.floor(Math.min(previousSample.byteLength, sample.byteLength) / 4)
-    let changedPixels = 0
-
-    for (let pixelIndex = 0; pixelIndex < totalPixels; pixelIndex += 1) {
-      const offset = pixelIndex * 4
-      const delta =
-        Math.abs((previousSample[offset] ?? 0) - (sample[offset] ?? 0)) +
-        Math.abs((previousSample[offset + 1] ?? 0) - (sample[offset + 1] ?? 0)) +
-        Math.abs((previousSample[offset + 2] ?? 0) - (sample[offset + 2] ?? 0)) +
-        Math.abs((previousSample[offset + 3] ?? 0) - (sample[offset + 3] ?? 0))
-
-      if (delta > 28) {
-        changedPixels += 1
-      }
-    }
-
-    return {
-      changedPixels,
-      totalPixels,
-      changedRatio:
-        totalPixels > 0 ? Math.round((changedPixels / totalPixels) * 10_000) / 10_000 : 0,
-    }
-  }
+  
 
   private async installScreenshotElementLabels(
     session: BrowserSession,
@@ -1283,12 +993,12 @@ export class BrowserScreenshotEngine implements BrowserScreenshotEngineApi {
     try {
       const labels = await evaluateInWebContents(
         session.webContents,
-        this.buildScreenshotElementLabelsScript(
+        buildScreenshotElementLabelsScript(
           options.maxElements ?? BrowserTuning.screenshot.elementLabelLimit
         ),
         true
       )
-      return this.normalizeScreenshotElementLabels(labels)
+      return normalizeScreenshotElementLabels(labels)
     } catch (error) {
       this.log.debug('绘制浏览器截图元素标号失败', {
         error: AppError.from(error).message,
@@ -1328,7 +1038,7 @@ export class BrowserScreenshotEngine implements BrowserScreenshotEngineApi {
       try {
         const rawPageMetadata = await evaluateInWebContents(
           session.webContents,
-          this.buildScreenshotMetadataScript(),
+          buildScreenshotMetadataScript(),
           true
         )
         pageMetadata = isPlainObject(rawPageMetadata) ? rawPageMetadata : {}
@@ -1368,12 +1078,12 @@ export class BrowserScreenshotEngine implements BrowserScreenshotEngineApi {
       ),
       deviceScaleFactor: clampNumber(readFiniteNumber(pageMetadata.deviceScaleFactor), 0.1, 8, 1),
       zoomFactor: clampZoomFactor(session.webContents.getZoomFactor(), 1),
-      cursor: this.normalizeScreenshotCursor(pageMetadata.cursor),
+      cursor: normalizeScreenshotCursor(pageMetadata.cursor),
       elementLabels,
-      elementLegend: this.buildScreenshotElementLegend(elementLabels),
+      elementLegend: buildScreenshotElementLegend(elementLabels),
       stability,
-      recentEvents: this.readRecentBrowserEvents(session),
-      login: this.normalizeLoginDetection(pageMetadata.login),
+      recentEvents: readRecentBrowserEvents(session),
+      login: normalizeLoginDetection(pageMetadata.login),
     }
   }
 
@@ -1385,7 +1095,7 @@ export class BrowserScreenshotEngine implements BrowserScreenshotEngineApi {
     if (!session.driver.isDestroyed()) {
       try {
         const rawPageMetadata = await session.driver.executeJavaScript(
-          this.buildScreenshotMetadataScript(),
+          buildScreenshotMetadataScript(),
           true
         )
         pageMetadata = isPlainObject(rawPageMetadata) ? rawPageMetadata : {}
@@ -1425,389 +1135,32 @@ export class BrowserScreenshotEngine implements BrowserScreenshotEngineApi {
       ),
       deviceScaleFactor: clampNumber(readFiniteNumber(pageMetadata.deviceScaleFactor), 0.1, 8, 1),
       zoomFactor: clampZoomFactor(readFiniteNumber(pageMetadata.zoomFactor), 1),
-      cursor: this.normalizeScreenshotCursor(pageMetadata.cursor),
+      cursor: normalizeScreenshotCursor(pageMetadata.cursor),
       elementLabels: [],
       elementLegend: [],
       stability: null,
       recentEvents: [],
-      login: this.normalizeLoginDetection(pageMetadata.login),
+      login: normalizeLoginDetection(pageMetadata.login),
     }
   }
 
-  private async resolveExternalScreenshotRegionRect(
-    session: ExternalBrowserPageSession,
-    region: BrowserScreenshotRegionOptions
-  ): Promise<Nullable<{ x: number; y: number; width: number; height: number }>> {
-    if (region.selector?.trim()) {
-      const selectorLiteral = JSON.stringify(region.selector.trim())
-      const resolved = await session.driver.executeJavaScript<
-        Nullable<{ x?: number; y?: number; width?: number; height?: number }>
-      >(
-        `(() => {
-          const el = document.querySelector(${selectorLiteral});
-          if (!el) return null;
-          const r = el.getBoundingClientRect();
-          return {
-            x: Math.round(window.scrollX + r.x),
-            y: Math.round(window.scrollY + r.y),
-            width: Math.round(r.width),
-            height: Math.round(r.height),
-          };
-        })()`,
-        true
-      )
-      if (
-        resolved &&
-        Number.isFinite(resolved.x) &&
-        Number.isFinite(resolved.y) &&
-        Number.isFinite(resolved.width) &&
-        Number.isFinite(resolved.height)
-      )
-        return {
-          x: resolved.x!,
-          y: resolved.y!,
-          width: resolved.width!,
-          height: resolved.height!,
-        }
-      return null
-    }
+  
 
-    if (
-      Number.isFinite(region.x) &&
-      Number.isFinite(region.y) &&
-      Number.isFinite(region.width) &&
-      Number.isFinite(region.height)
-    )
-      return {
-        x: region.x!,
-        y: region.y!,
-        width: region.width!,
-        height: region.height!,
-      }
+  
 
-    return null
-  }
+  
 
-  private readRecentBrowserEvents(
-    session: BrowserSession
-  ): BrowserScreenshotMetadata['recentEvents'] {
-    return session.diagnostics
-      .filter((entry) => entry.kind !== 'console')
-      .slice(-8)
-      .map((entry) => ({ ...entry }))
-  }
+  
 
-  private buildScreenshotElementLegend(
-    labels: BrowserScreenshotElementLabel[]
-  ): BrowserScreenshotElementLegendItem[] {
-    return labels.map((label) => {
-      const role = label.role || label.tagName || 'element'
-      const quotedText = label.text ? ` "${label.text}"` : ''
-      const selectorText = label.selector ? ` (${label.selector})` : ''
-      const target: BrowserElementTargetHint = {
-        ref: `@e${label.index}`,
-        css: label.selector,
-        role: label.role,
-        text: label.text,
-        name: null,
-        attributes: {},
-      }
+  
 
-      return {
-        index: label.index,
-        label: `[${label.index}]`,
-        role: label.role,
-        text: label.text,
-        selector: label.selector,
-        description: `[${label.index}] ${role}${quotedText}${selectorText}`,
-        target,
-      }
-    })
-  }
+  
 
-  private normalizeScreenshotElementLabels(value: unknown): BrowserScreenshotElementLabel[] {
-    if (!isArray(value)) return []
+  
 
-    return value
-      .map((item): Nullable<BrowserScreenshotElementLabel> => {
-        if (!isPlainObject(item)) return null
+  
 
-        const index = clampInteger(readFiniteNumber(item.index), 1, 10_000, 1)
-        const x = Math.round(readFiniteNumber(item.x) ?? 0)
-        const y = Math.round(readFiniteNumber(item.y) ?? 0)
-        const width = Math.max(1, Math.round(readFiniteNumber(item.width) ?? 1))
-        const height = Math.max(1, Math.round(readFiniteNumber(item.height) ?? 1))
+  
 
-        return {
-          index,
-          tagName: readBoundedString(item.tagName, 32) ?? 'element',
-          role: readBoundedString(item.role, 80),
-          text: readBoundedString(item.text, 120),
-          selector: readBoundedString(item.selector, 240),
-          x,
-          y,
-          width,
-          height,
-        }
-      })
-      .filter((label): label is BrowserScreenshotElementLabel => !!label)
-  }
-
-  private normalizeScreenshotCursor(value: unknown): BrowserScreenshotMetadata['cursor'] {
-    if (!isPlainObject(value)) return null
-
-    const x = readFiniteNumber(value.x)
-    const y = readFiniteNumber(value.y)
-
-    // readFiniteNumber 已保证有限，缺席即非法坐标。
-    if (!isPresent(x) || !isPresent(y)) return null
-
-    return {
-      x: Math.round(x),
-      y: Math.round(y),
-      pressed: !!value.pressed,
-    }
-  }
-
-  private normalizeLoginDetection(value: unknown): BrowserLoginDetection {
-    if (!isPlainObject(value)) return this.createEmptyLoginDetection()
-
-    const confidence = clampNumber(readFiniteNumber(value.confidence), 0, 1, 0)
-    const signals = isArray(value.signals) ? value.signals.filter(isString).slice(0, 12) : []
-
-    return {
-      requiresLogin: isTrue(value.requiresLogin) && confidence >= 0.62,
-      confidence: Math.round(confidence * 100) / 100,
-      reason: readBoundedString(value.reason, 180) ?? '未检测到明确登录墙。',
-      signals,
-      passwordInputs: clampInteger(readFiniteNumber(value.passwordInputs), 0, 50, 0),
-      usernameInputs: clampInteger(readFiniteNumber(value.usernameInputs), 0, 50, 0),
-      loginButtons: clampInteger(readFiniteNumber(value.loginButtons), 0, 50, 0),
-      loginLinks: clampInteger(readFiniteNumber(value.loginLinks), 0, 50, 0),
-      forms: clampInteger(readFiniteNumber(value.forms), 0, 50, 0),
-    }
-  }
-
-  private createEmptyLoginDetection(): BrowserLoginDetection {
-    return {
-      requiresLogin: false,
-      confidence: 0,
-      reason: '未检测到明确登录墙。',
-      signals: [],
-      passwordInputs: 0,
-      usernameInputs: 0,
-      loginButtons: 0,
-      loginLinks: 0,
-      forms: 0,
-    }
-  }
-
-  private buildScreenshotMetadataScript(): string {
-    return `(() => {
-  const pointer = document.getElementById('__velaros_virtual_pointer__');
-${browserLoginDetectionScriptFragment}
-  const readPointerNumber = (name) => {
-    if (!pointer) return null;
-    const value = Number(pointer.dataset[name]);
-    return Number.isFinite(value) ? value : null;
-  };
-  const pointerX = readPointerNumber('x');
-  const pointerY = readPointerNumber('y');
-  const root = document.documentElement;
-  const body = document.body;
-  const viewportWidth = Math.max(1, Math.round(window.innerWidth || root.clientWidth || 1));
-  const viewportHeight = Math.max(1, Math.round(window.innerHeight || root.clientHeight || 1));
-  const documentWidth = Math.max(
-    viewportWidth,
-    Math.round(root.scrollWidth || 0),
-    Math.round(root.offsetWidth || 0),
-    Math.round(root.clientWidth || 0),
-    body ? Math.round(body.scrollWidth || 0) : 0,
-    body ? Math.round(body.offsetWidth || 0) : 0
-  );
-  const documentHeight = Math.max(
-    viewportHeight,
-    Math.round(root.scrollHeight || 0),
-    Math.round(root.offsetHeight || 0),
-    Math.round(root.clientHeight || 0),
-    body ? Math.round(body.scrollHeight || 0) : 0,
-    body ? Math.round(body.offsetHeight || 0) : 0
-  );
-  return {
-    viewportWidth,
-    viewportHeight,
-    scrollX: Math.max(0, Math.round(window.scrollX || root.scrollLeft || 0)),
-    scrollY: Math.max(0, Math.round(window.scrollY || root.scrollTop || 0)),
-    documentWidth,
-    documentHeight,
-    deviceScaleFactor: Number(window.devicePixelRatio) || 1,
-    cursor: pointerX === null || pointerY === null ? null : {
-      x: Math.round(pointerX),
-      y: Math.round(pointerY),
-      pressed: pointer.dataset.pressed === 'true',
-    },
-    login: detectLogin(),
-  };
-})()`
-  }
-
-  private buildScreenshotElementLabelsScript(maxElements: number): string {
-    const payload = JSON.stringify({
-      maxElements: clampInteger(maxElements, 1, 120, BrowserTuning.screenshot.elementLabelLimit),
-    })
-
-    return `(() => {
-  const payload = ${payload};
-  const overlayId = '__velaros_screenshot_labels__';
-  const existing = document.getElementById(overlayId);
-  if (existing) existing.remove();
-
-  const selector = [
-    'a[href]',
-    'button',
-    'input:not([type="hidden"])',
-    'select',
-    'textarea',
-    '[role="button"]',
-    '[role="link"]',
-    '[role="checkbox"]',
-    '[role="radio"]',
-    '[role="tab"]',
-    '[role="menuitem"]',
-    '[contenteditable="true"]',
-    '[tabindex]:not([tabindex="-1"])',
-    '[onclick]'
-  ].join(',');
-  const viewportWidth = Math.max(1, window.innerWidth || document.documentElement.clientWidth || 1);
-  const viewportHeight = Math.max(1, window.innerHeight || document.documentElement.clientHeight || 1);
-  const candidates = Array.from(document.querySelectorAll(selector));
-  const seen = new Set();
-  const normalizeText = (value) => String(value || '').replace(/\\s+/g, ' ').trim().slice(0, 120);
-  const quoteAttr = (value) => String(value || '').replace(/"/g, '\\\\"');
-  const labelFor = (element) =>
-    normalizeText(
-      element.getAttribute('aria-label') ||
-      element.getAttribute('placeholder') ||
-      element.getAttribute('title') ||
-      element.innerText ||
-      element.value ||
-      element.textContent
-    );
-  const selectorFor = (element) => {
-    const tagName = element.tagName ? element.tagName.toLowerCase() : 'element';
-    const testId = element.getAttribute('data-testid') || element.getAttribute('data-test');
-    const name = element.getAttribute('name');
-    const id = element.getAttribute('id');
-    if (id) return '#' + id;
-    if (testId) return tagName + '[data-testid="' + quoteAttr(testId) + '"]';
-    if (name) return tagName + '[name="' + quoteAttr(name) + '"]';
-    return tagName;
-  };
-  const isVisible = (element) => {
-    const rect = element.getBoundingClientRect();
-    if (rect.width < 6 || rect.height < 6) return false;
-    if (rect.right <= 0 || rect.bottom <= 0 || rect.left >= viewportWidth || rect.top >= viewportHeight) return false;
-    const style = window.getComputedStyle(element);
-    return style.display !== 'none' && style.visibility !== 'hidden' && Number(style.opacity || 1) > 0.03;
-  };
-  const items = [];
-  for (const element of candidates) {
-    if (!(element instanceof Element) || seen.has(element) || !isVisible(element)) continue;
-    seen.add(element);
-    const rect = element.getBoundingClientRect();
-    const left = Math.max(0, rect.left);
-    const top = Math.max(0, rect.top);
-    const right = Math.min(viewportWidth, rect.right);
-    const bottom = Math.min(viewportHeight, rect.bottom);
-    items.push({
-      element,
-      tagName: element.tagName ? element.tagName.toLowerCase() : 'element',
-      role: element.getAttribute('role') || null,
-      text: labelFor(element) || null,
-      selector: selectorFor(element),
-      x: Math.round(left),
-      y: Math.round(top),
-      width: Math.max(1, Math.round(right - left)),
-      height: Math.max(1, Math.round(bottom - top)),
-    });
-  }
-
-  items.sort((a, b) => a.y - b.y || a.x - b.x);
-  const labels = items.slice(0, payload.maxElements).map((item, index) => ({
-    index: index + 1,
-    tagName: item.tagName,
-    role: item.role,
-    text: item.text,
-    selector: item.selector,
-    x: item.x,
-    y: item.y,
-    width: item.width,
-    height: item.height,
-  }));
-
-  const overlay = document.createElement('div');
-  overlay.id = overlayId;
-  overlay.setAttribute('aria-hidden', 'true');
-  Object.assign(overlay.style, {
-    position: 'fixed',
-    inset: '0',
-    zIndex: '2147483645',
-    pointerEvents: 'none',
-    overflow: 'hidden',
-    font: '700 11px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-  });
-
-  for (const label of labels) {
-    const box = document.createElement('div');
-    Object.assign(box.style, {
-      position: 'fixed',
-      left: label.x + 'px',
-      top: label.y + 'px',
-      width: label.width + 'px',
-      height: label.height + 'px',
-      border: '2px solid rgba(10, 132, 255, 0.88)',
-      borderRadius: '5px',
-      background: 'rgba(10, 132, 255, 0.08)',
-      boxShadow: '0 0 0 1px rgba(255, 255, 255, 0.72)',
-      boxSizing: 'border-box',
-    });
-    const badge = document.createElement('div');
-    badge.textContent = String(label.index);
-    Object.assign(badge.style, {
-      position: 'fixed',
-      left: Math.min(viewportWidth - 26, Math.max(2, label.x - 1)) + 'px',
-      top: Math.max(2, label.y - 12) + 'px',
-      minWidth: '18px',
-      height: '18px',
-      padding: '0 5px',
-      borderRadius: '999px',
-      display: 'inline-flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      background: '#0a84ff',
-      color: '#ffffff',
-      border: '1px solid rgba(255, 255, 255, 0.94)',
-      boxShadow: '0 4px 12px rgba(15, 23, 42, 0.22)',
-      boxSizing: 'border-box',
-    });
-    overlay.appendChild(box);
-    overlay.appendChild(badge);
-  }
-
-  (document.body || document.documentElement).appendChild(overlay);
-  return labels;
-})()`
-  }
-
-  /** 解析截图落盘路径：与站点工作区的其它落盘同一份判定（按真实路径，解开符号链接）。 */
-  private async resolveScreenshotPath(
-    workspaceRoot: string,
-    requestedPath?: string
-  ): Promise<BrowserWorkspacePath> {
-    const relativePath =
-      requestedPath?.trim() ||
-      `artifacts/screenshots/browser-${new Date().toISOString().replace(/[:.]/g, '-')}.png`
-
-    return resolveBrowserWorkspacePath(workspaceRoot, relativePath, '截图路径')
-  }
+  
 }

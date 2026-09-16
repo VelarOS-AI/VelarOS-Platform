@@ -28,7 +28,6 @@ export {
 export { CdpInteractionEngine } from '../impl/engines/CdpInteractionEngine'
 export { CdpPageDataEngine } from '../impl/engines/CdpPageDataEngine'
 export { CdpScreenshotEngine } from '../impl/engines/CdpScreenshotEngine'
-export { checkBrowserActionPolicy } from '../impl/policies/BrowserActionPolicy'
 export type { BrowserActivityCoordinatorOptions } from '../impl/session/BrowserActivityCoordinator'
 export { BrowserActivityCoordinator } from '../impl/session/BrowserActivityCoordinator'
 export { BrowserPendingEventsBroker } from '../impl/session/BrowserPendingEventsBroker'
@@ -276,6 +275,7 @@ export type {
   BrowserPageDriverSession,
   ExternalBrowserPageSession,
 } from '../types/runtime'
+export { checkBrowserActionPolicy } from '../utils/action-policy'
 export {
   buildBrowserSearchUrl,
   getBrowserSiteHost,
