@@ -10,6 +10,12 @@
 
 （按时间追加。每条写：改了什么、为什么、影响谁。）
 
+- **agent 的工具面按裁决删改、模型看得到的英文整片改中文（09-16 19:40，3f35c7e3、2be55eef、620488d7，0.6.41）。**
+  - **工具面**：`context:distill` 删（容量治理运行时本来就自动做，手动声明只剩仪式感）；`goal:get` 并进 `goal:update`、`plan:get` 并进 `plan:update`（空调用即读取，能力不丢）；`job:cancel` 删、保留 `interrupt`（后台作业只有子 Agent 一种来源，两者落在同一个中断实现，interrupt 还多覆盖同步那一路）；`tooling:map` 的 `op=read` 删（与 `tooling:read` 是同一条实现）；`directive:list` 保留（没有替代品）；`context:handoff` 与 `interaction:confirm` 补进内置清单。**手法**：模型面先做成不可见，导出名留到 1.0.0 那一刀一起删，避免为删四个工具单独破坏一次公开面。
+  - **中文化**：循环恢复与续写提示（只有思考没有答复、流被打断、输出被掐断、半截工具调用）、辅助模型的引导转达提示词整段、系统提示词 17 个段名、失败与防循环文案（重复写入、连续失败、同一对象同一原因）、注入上下文的说明块（强制保留块、上下文看板、历史占位、产品界面快照信封）、`agent:dispatch` 与 `run_workflow` 的示例、目标与计划的回执、后台任务输出的各种标记。按英文断言写的 8 个测试同步改。
+  - `contract/constants.ts` 24 张表、`utils/tuning.ts` 185 项；八个错误类逐个挂上错误码。
+  - **发版前要在 Desktop 里 grep 一次**：`ToolInputReuseError` 的 AppError code 从 `VALIDATION` 改成了专属码，若产品侧按 `VALIDATION` 归类会看到变化。
+
 - **project 工具面归并完成（09-16 18:40，6e2f95fc、afe8afba、d3619b04、3fc0e147）。** 九个工具收成七个，模型面说明从 6,436 字降到 4,716 字（−27%）。
   - **改动只剩一个入口 `project:edit`**（`action: apply | inspect | undo`）：原来的 `project:file`（整文件动作）与 `project:change`（事务）删掉；一次 apply 就是一次事务，步骤是一步一个目标的判别联合。说明从三份 2,612 字合成一份 1,198 字，里面是五个能直接照抄的示例（改一个文件两处、跨文件事务、移动后再改同一文件、inspect、undo）。
   - **`project:code` 改成九个命名意图**（outline / definition / references / callers / callees / imports / importers / impact / diagnostics），字段从十二个收到六个；`direction`、`kind`、`depth` 由意图推出来，`query`、`exact`、`exportedOnly`、`includeReExports`、`includeExternal`、`specifier`、`within`、`kinds` 删掉。说明 929 → 688 字。
