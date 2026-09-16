@@ -12,8 +12,8 @@ import { injectVelarThinkingRouting } from '../../utils/wire/reasoning'
 import type { ModelProviderCollectionApi } from '../providers/ModelProviderCollection'
 import type { VelarCloudModelRuntimeLookup } from '../providers/VelarCloudModelRuntime'
 
+import { languageModelWrappers } from './LanguageModelWrappers'
 import { ModelAdapter } from './ModelAdapter'
-import { applyPromptCacheProviderOptions } from './PromptCacheLanguageModel'
 
 /** Velar Cloud 托管 provider 的适配器；聊天与 embedding 都必须走宿主注入的带认证 fetch。 */
 export class VelarModelAdapter extends ModelAdapter implements ModelProviderAdapter {
@@ -41,7 +41,7 @@ export class VelarModelAdapter extends ModelAdapter implements ModelProviderAdap
     })
     return (modelId) => {
       if (providerId === 'velar' && isBlank(modelId))
-        return applyPromptCacheProviderOptions(provider.chat('velar/auto'))
+        return languageModelWrappers.withPromptCache(provider.chat('velar/auto'))
       if (isBlank(modelId)) {
         throw new AppError(
           'VALIDATION',
@@ -50,7 +50,7 @@ export class VelarModelAdapter extends ModelAdapter implements ModelProviderAdap
       }
 
       // Cloud 下发的公共模型 ID 是不透明契约，Platform 不加前缀、不拆分也不规范化。
-      return applyPromptCacheProviderOptions(provider.chat(modelId))
+      return languageModelWrappers.withPromptCache(provider.chat(modelId))
     }
   }
 

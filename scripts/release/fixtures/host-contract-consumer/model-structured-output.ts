@@ -1,4 +1,4 @@
-import { ModelRequestClient, type ModelRequestObjectInput } from '@velaros-ai/model'
+import type { ModelRequestClientApi, ModelRequestObjectInput } from '@velaros-ai/model'
 
 interface Account {
   id: string
@@ -16,7 +16,7 @@ const AccountSchema = {
   },
 }
 
-declare const client: ModelRequestClient
+declare const client: ModelRequestClientApi
 
 const request = {
   endpoint: 'fixture.structured-output',

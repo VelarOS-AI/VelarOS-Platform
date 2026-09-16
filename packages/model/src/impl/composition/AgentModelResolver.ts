@@ -4,7 +4,6 @@ import { logRuntime } from '@velaros-ai/core/logger'
 
 import { OllamaProviderId, OpenRouterAutoModelId, OpenRouterFreeModelId } from '../../contract/constants.js'
 import type {
-  ModelAdapterRegistryPort,
   ResolvedAgentModelRuntime,
 } from '../../types/adapters'
 import type {
@@ -38,6 +37,8 @@ import { LocalModelEnvironment } from '../providers/LocalModelEnvironment'
 import type { ModelProviderCollectionApi } from '../providers/ModelProviderCollection'
 import type { ProviderModelCatalogApi } from '../providers/ProviderModelCatalogService'
 
+import type { ModelAdapterRegistryApi } from './ModelAdapterRegistry'
+
 /**
  * 把一次产品选择解析成 Agent 能直接用的运行时。
  *
@@ -67,7 +68,7 @@ class AgentModelResolver implements AgentModelResolverApi {
   private readonly log = logRuntime.tag('AgentModelResolver')
 
   constructor(
-    private readonly modelAdapterRegistry: ModelAdapterRegistryPort,
+    private readonly modelAdapterRegistry: ModelAdapterRegistryApi,
     private readonly providerScriptRegistry: ProviderScriptRegistryPort,
     private readonly providers: ModelProviderCollectionApi,
     private readonly localModelEnvironment: LocalModelEnvironmentApi = new LocalModelEnvironment(),

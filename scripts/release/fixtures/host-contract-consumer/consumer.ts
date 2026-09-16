@@ -4,7 +4,7 @@ import {
   type AgentRunLifecycle,
 } from '@velaros-ai/agent'
 import { agentToolContracts, fileContextRegistry } from '@velaros-ai/agent/tool-contract'
-import { ModelRequestClient } from '@velaros-ai/model'
+import { createModelRequestClient } from '@velaros-ai/model'
 import { languageQueries, type LanguageReadPort, type LanguageToolContext } from '@velaros-ai/development'
 import { mountMemoryAdapter, type MountMemoryAdapterInput } from '@velaros-ai/memory/adapter-kernel'
 import { ComputerOperationMetadata, ComputerToolNames, type ComputerOperation } from '@velaros-ai/computer/contracts'
@@ -38,5 +38,5 @@ const lifecycle: AgentRunLifecycle<object> = {
  onTurnSettled: async ({ history }: { history: readonly unknown[] }) => (history.length ? 'stop' : 'continue'),
 }
 const operation: ComputerOperation = ComputerToolNames.screenshot
-void [createAgentExecutionStack, ModelRequestClient, lifecycle, retry,
+void [createAgentExecutionStack, createModelRequestClient, lifecycle, retry,
  agentToolContracts.discoveryDescriptors, agentToolContracts.readSchemaDiscoveryNames({names:['project:read']}), ComputerOperationMetadata[operation]]

@@ -1,104 +1,65 @@
 import {
-  type EmbeddingRequest,
-  type LanguageModelFactory,
-  ModelAdapter,
-  type ModelAdapterConfig,
-  type ModelProviderCollection,
-  ModelRequestClient,
+  createModelRequestClient,
+  createModelRuntimeComposition,
+  modelCatalog,
+  modelProfiles,
+  type ModelProviderAdapter,
+  type ModelProviderCollectionApi,
+  modelProviderRetry,
+  type ModelRequestClientApi,
   type ModelRequestClientOptions,
-  type ModelRequestServiceOptions,
   type ModelRequestTransport,
+  type ModelRuntimeCompositionApi,
+  modelUsage,
+  type ProviderScriptRegistryOptions,
   type VelarCloudManagedProviderId,
   VelarCloudManagedProviderIds,
-  VelarCloudModelRuntime,
-  VelarModelAdapter,
+  type VelarCloudModelRuntimeApi,
 } from '@velaros-ai/model'
-import {
-  LocalModelEnvironment,
-  OllamaProviderId,
-  OpenRouterFreeModelId,
-} from '@velaros-ai/model/catalog'
+import { OllamaProviderId, OpenRouterFreeModelId } from '@velaros-ai/model/catalog'
 import type {
   AgentProviderRuntimeConfig,
   ModelProviderAdapterKind,
   ModelProviderPreset,
   ModelSelection,
 } from '@velaros-ai/model/contracts'
-import {
-  createModelAdapterRegistry,
-  createModelRuntimeComposition,
-  DefaultModelRuntimeComposition,
-  type ModelRuntimeComposition,
-  type ProviderScriptRegistryOptions,
-} from '@velaros-ai/model/node'
 
 declare const requestOptions: ModelRequestClientOptions
-declare const legacyRequestOptions: ModelRequestServiceOptions
 declare const transport: ModelRequestTransport
 declare const providerScripts: ProviderScriptRegistryOptions
 declare const adapterKind: ModelProviderAdapterKind
 declare const preset: ModelProviderPreset
 declare const runtimeConfig: AgentProviderRuntimeConfig
 declare const selection: ModelSelection
+declare const consumerAdapter: ModelProviderAdapter
 
-class ConsumerAdapter extends ModelAdapter {
-  public createLanguageModelFactory(
-    _config: ModelAdapterConfig
-  ): LanguageModelFactory {
-    return () => 'fixture-model'
-  }
-
-  public override createEmbeddingRequest(): EmbeddingRequest {
-    return {
-      url: 'https://example.invalid/embeddings',
-      headers: {},
-    }
-  }
-}
-
-const composition = createModelRuntimeComposition({
+// 0.7.0 起自定义适配器是注入面的一个接口，不再继承本包的基类。
+const composition: ModelRuntimeCompositionApi = createModelRuntimeComposition({
   providerScripts,
-  velarCloudRuntime: new VelarCloudModelRuntime(),
+  adapters: [consumerAdapter],
 })
-const compositionContract: ModelRuntimeComposition = composition
-const providers: ModelProviderCollection = composition.providerCollection
-const cloudRuntime: VelarCloudModelRuntime = compositionContract.velarCloudRuntime
+const providers: ModelProviderCollectionApi = composition.providerCollection
+const cloudRuntime: VelarCloudModelRuntimeApi = composition.velarCloudRuntime
 const cloudProvider: VelarCloudManagedProviderId = VelarCloudManagedProviderIds[1]
-const defaultComposition = new DefaultModelRuntimeComposition({
-  providerScripts,
-})
-const client = new ModelRequestClient({
+const client: ModelRequestClientApi = createModelRequestClient({
   ...requestOptions,
   transport,
 })
-const adapter = new ConsumerAdapter(['custom'], providers)
-const cloudAdapter = new VelarModelAdapter(
-  providers,
-  cloudRuntime
-)
-const registry = createModelAdapterRegistry(
-  composition.providerScriptRegistry,
-  providers,
-  compositionContract.velarCloudRuntime
-)
-const modelEnvironment = new LocalModelEnvironment({
-  VELAROS_OLLAMA_CHAT_MODEL: 'qwen3:8b',
-})
 
-void providers
-void compositionContract
-void cloudRuntime
-void cloudProvider
+void providers.listPresets()
+void composition.agentModelRuntime
+void cloudRuntime.hasProvider(cloudProvider)
 void client
-void adapter
-void cloudAdapter
-void defaultComposition
-void legacyRequestOptions
-void registry
 void adapterKind
 void preset
 void runtimeConfig
 void selection
-void modelEnvironment.resolveOllamaChatModel()
-void OllamaProviderId
+void modelCatalog.resolveOllamaChatModel('qwen3:8b', {
+  read: () => undefined,
+})
+void modelCatalog.manifest(OllamaProviderId)
+void modelCatalog.isOpenRouterCompatible('openrouter')
+void modelProfiles.omitCredential({ apiKey: 'secret', id: 'p1' })
+void modelProviderRetry.plan(new Error('boom'), { retryIndex: 0 })
+void modelUsage.summarize([])
 void OpenRouterFreeModelId

@@ -1,40 +1,40 @@
-export {
-  CustomModelProviderIds,
-  DefaultProviderModels,
-  DirectOpenAICompatibleProviderIds,
-  ModelErrorCodes,
-  ModelInputModalities,
-  ModelProviderAdapterKinds,
-  ModelProviderOperationalManifests,
-  ModelProviderValidationKinds,
-  ModelWireLimits,
-  OllamaEnvNames,
-  OllamaProviderId,
-  OpenAICompatibleGatewayDefaultBaseURL,
-  OpenRouterAutoModelId,
-  OpenRouterCompatibleProviderIds,
-  OpenRouterFreeModelId,
-  ReasoningLevels,
-  ThinkingDepths,
-  VelarAutoModelId,
-  VelarCloudManagedProviderIds,
-} from './contract/constants.js'
+/**
+ * model 域根入口（`@velaros-ai/model`），给 Node 宿主。
+ *
+ * 一个宿主只需要这一个入口：运行时对象图、请求客户端、内核挂载、四个无状态实例，
+ * 加上注入面与它们用到的数据。另外两个入口是它的子集——`./contracts` 只有可移植数据，
+ * `./catalog` 多一份 browser-safe 的 `modelCatalog`。
+ */
+
+// ── 可移植数据与常量表（`./contracts` 的全部内容） ───────────────
+export * from './contracts.js'
+
+// ── 产品面 ──────────────────────────────────────────────────────
 export type {
   AgentModelResolverApi,
   AgentModelRuntimeApi,
   AiSdkModelRequestTransportOptions,
   LocalModelEnvironmentApi,
+  ModelAdapterRegistryApi,
+  ModelCatalogApi,
+  ModelProfilesApi,
   ModelProviderCollectionApi,
   ModelProviderCollectionOptions,
+  ModelProviderRetryApi,
   ModelRequestClientApi,
   ModelRequestClientOptions,
   ModelRuntimeCapabilityService,
+  ModelRuntimeCompositionApi,
+  ModelUsageApi,
   NodeLocalModelEnvironmentApi,
   ProviderModelCatalogApi,
   ProviderModelCatalogCacheApi,
   ProviderModelCatalogServiceOptions,
+  ProviderScriptRegistryApi,
   VelarCloudModelRuntimeApi,
 } from './contract/provides'
+
+// ── 注入面 ──────────────────────────────────────────────────────
 export type {
   CreateModelKernelModuleOptions,
   CreateModelRuntimeCompositionOptions,
@@ -42,105 +42,36 @@ export type {
   ModelProviderAdapter,
   ModelRequestTransport,
   ProviderModelCatalogAttribution,
+  ProviderScriptDefinition,
+  ProviderScriptHelpers,
   ProviderScriptHostBridge,
+  ProviderScriptInput,
   ProviderScriptRegistryOptions,
+  ProviderScriptRuntimeInput,
   VelarCloudModelRuntimeBinding,
 } from './contract/requires'
-export { AnthropicModelAdapter } from './impl/adapters/AnthropicModelAdapter'
-export { DeepSeekModelAdapter } from './impl/adapters/DeepSeekModelAdapter'
-export { GoogleModelAdapter } from './impl/adapters/GoogleModelAdapter'
-export { ModelAdapter } from './impl/adapters/ModelAdapter'
-export { OpenAICompatibleModelAdapter } from './impl/adapters/OpenAICompatibleModelAdapter'
-export { OpenAIModelAdapter } from './impl/adapters/OpenAIModelAdapter'
-export {
-  applyPromptCacheCallOptions,
-  applyPromptCacheProviderOptions,
-} from './impl/adapters/PromptCacheLanguageModel'
-export {
-  applyThinkingDepthProviderOptions,
-  createThinkingDepthProviderOptions,
-  mergeOpenRouterReasoning,
-  requireThinkingDepth,
-  resolveThinkingBudget,
-  resolveThinkingDepthEffort,
-} from './impl/adapters/ThinkingDepthLanguageModel'
-export { VelarModelAdapter } from './impl/adapters/VelarModelAdapter'
-export { AgentModelResolver } from './impl/composition/AgentModelResolver'
-export { AgentModelRuntime } from './impl/composition/AgentModelRuntime'
-export {
-  createModelKernelModule,
-  ModelCapability,
-} from './impl/composition/ModelKernelCapability'
-export {
-  LocalModelEnvironment,
-  resolveOllamaBaseURL,
-  resolveOllamaChatModel,
-  resolveOllamaContextWindow,
-  resolveOllamaVisibleChatModels,
-} from './impl/providers/LocalModelEnvironment'
-export {
-  getModelProviderOperationalManifest,
-  getResolvedProviderModel,
-  getSharedProviderCatalog,
-  getSharedProviderModels,
-  getSharedProviderSuggestedModels,
-  getVisibleProviderModels,
-  isOpenRouterCompatibleProvider,
-  KnownModelContextWindows,
-  OpenAiOnlyModels,
-  resolveProviderModelContextWindow,
-  resolveProviderModelSelection,
-  SharedProviderCatalogs,
-} from './impl/providers/ModelCatalog'
-export {
-  filterEmbeddingModelCandidates,
-  ModelProviderCollection,
-  resolveDefaultEmbeddingModelForProvider,
-  selectEmbeddingModelCandidate,
-} from './impl/providers/ModelProviderCollection'
-export { ProviderModelCatalogService } from './impl/providers/ProviderModelCatalogService'
-export {
-  isVelarCloudManagedProviderId,
-  VelarCloudModelRuntime,
-} from './impl/providers/VelarCloudModelRuntime'
-export { AiSdkModelRequestTransport } from './impl/requests/AiSdkModelRequestTransport'
-export {
-  omitModelProfileCredential,
-  resolveModelProfileCredential,
-  resolveModelProfileCredentialSource,
-  runModelConnectionProbe,
-} from './impl/requests/ModelProfiles'
-export {
-  planModelProviderRetry,
-  waitForModelRetry,
-} from './impl/requests/ModelProviderRetry'
-export {
-  applyModelRequestPolicy,
-  ModelRequestClient,
-  ModelRequestService,
-  type ModelRequestServiceOptions,
-} from './impl/requests/ModelRequestClient'
-export {
-  normalizeModelRunUsage,
-  normalizePersistedModelUsage,
-  summarizeModelUsage,
-} from './impl/requests/ModelUsage'
+
+// ── 值：装配、请求客户端、内核模块，与四个无状态实例 ────────────
+export { createModelRuntimeComposition } from './impl/composition/DefaultModelRuntimeComposition'
+export { createModelKernelModule, ModelCapability } from './impl/composition/ModelKernelCapability'
+export { modelCatalog } from './impl/providers/ModelCatalog'
+export { modelProfiles } from './impl/requests/ModelProfiles'
+export { modelProviderRetry } from './impl/requests/ModelProviderRetry'
+export { createModelRequestClient } from './impl/requests/ModelRequestClient'
+export { modelUsage } from './impl/requests/ModelUsage'
+
+// ── 公开签名用到的数据 ──────────────────────────────────────────
 export type {
   AgentProvider,
   EmbeddingRequest,
   LanguageModelFactory,
   ModelAdapterConfig,
-  ModelAdapterRegistryPort,
-  ModelRegistryPort,
   ModelResolutionTraceEntry,
   ResolvedAgentModelRuntime,
 } from './types/adapters'
-export type * from './types/model'
 export type {
   ModelProviderAvailabilityOptions,
   ModelProviderConfiguredInput,
-  ProviderModelDefinition,
-  SharedProviderCatalog,
 } from './types/providers'
 export type {
   ModelRequestDecodedObjectInput,

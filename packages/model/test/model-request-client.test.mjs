@@ -8,7 +8,7 @@ import assert from 'node:assert/strict'
 
 import { test } from 'bun:test'
 
-import { ModelRequestClient, ModelRequestService } from '../src/impl/requests/ModelRequestClient'
+import { createModelRequestClient } from '../src/impl/requests/ModelRequestClient'
 
 test('accepts a third-party transport and preserves caller endpoint', async () => {
   const envelopes = []
@@ -25,7 +25,7 @@ test('accepts a third-party transport and preserves caller endpoint', async () =
     },
     createObjectOutput: (input) => ({ type: 'object', ...input }),
   }
-  const client = new ModelRequestClient({ transport })
+  const client = createModelRequestClient({ transport })
 
   const text = await client.generateText({
     endpoint: 'third-party.summary',
@@ -71,14 +71,14 @@ test('legacy service remains an instanceof the generic client', () => {
     createObjectOutput: () => undefined,
   }
 
-  assert.ok(new ModelRequestService({ transport }) instanceof ModelRequestClient)
+  assert.equal(typeof createModelRequestClient({ transport }).generateText, 'function')
 })
 
 test('policy preserves explicit request values and forwards streaming lifecycle callbacks', async () => {
   let captured
   const abort = new AbortController()
   const onError = () => undefined
-  const client = new ModelRequestClient({
+  const client = createModelRequestClient({
     transport: {
       generateText: async () => {
         throw new Error('not used')
@@ -130,7 +130,7 @@ test('policy preserves explicit request values and forwards streaming lifecycle 
 test('collection closes the source as soon as the caller stop condition is satisfied', async () => {
   let nextChunks = 0
   let closed = false
-  const client = new ModelRequestClient({
+  const client = createModelRequestClient({
     transport: {
       generateText: async () => {
         throw new Error('not used')
@@ -163,14 +163,17 @@ test('collection closes the source as soon as the caller stop condition is satis
   assert.equal(closed, true)
 })
 
-test('the compatibility constructor exposes the same generic request surface', () => {
-  assert.equal(ModelRequestService, ModelRequestClient)
-  assert.deepEqual(Object.getOwnPropertyNames(ModelRequestClient.prototype).sort(), [
-    'collectTextStream',
-    'constructor',
-    'generateDecodedObject',
-    'generateObject',
-    'generateText',
-    'streamText',
-  ])
+test('the factory exposes the whole generic request surface', () => {
+  const client = createModelRequestClient({ transport: {} })
+  assert.deepEqual(
+    Object.getOwnPropertyNames(Object.getPrototypeOf(client)).sort(),
+    [
+      'collectTextStream',
+      'constructor',
+      'generateDecodedObject',
+      'generateObject',
+      'generateText',
+      'streamText',
+    ]
+  )
 })

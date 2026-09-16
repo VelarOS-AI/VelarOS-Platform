@@ -1,13 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 
-import {
-  type ChatProviderId,
-} from '../src/index'
-import {
-  createModelRuntimeComposition,
-  DefaultModelRuntimeComposition,
-  ModelRuntimeComposition,
-} from '../src/node'
+import type { ChatProviderId, ModelRuntimeCompositionApi } from '../src/index'
+import { createModelRuntimeComposition } from '../src/index'
 
 const IsolatedProviderId = 'test-isolated-provider' as ChatProviderId
 
@@ -43,7 +37,7 @@ describe('model runtime composition', () => {
     })
 
     expect(Object.isFrozen(first)).toBe(true)
-    expect(first).toBeInstanceOf(DefaultModelRuntimeComposition)
+    expect(typeof first.providerCollection.listPresets).toBe('function')
     expect(first).not.toBe(second)
     expect(first.providerScriptRegistry).not.toBe(second.providerScriptRegistry)
     expect(first.providerCollection).not.toBe(second.providerCollection)
@@ -84,24 +78,18 @@ describe('model runtime composition', () => {
     ).toThrow(`未找到 provider 适配器：${IsolatedProviderId}`)
   })
 
-  test('keeps the public interface and constructor value compatible', () => {
-    const concrete = new ModelRuntimeComposition({
+  test('工厂交出的对象图是冻结的接口面，成员按接口取到的就是同一份实例', () => {
+    const concrete = createModelRuntimeComposition({
       providerScripts: { configPaths: [] },
     })
-    const composition: ModelRuntimeComposition = {
-      providerScriptRegistry: concrete.providerScriptRegistry,
-      localModelEnvironment: concrete.localModelEnvironment,
-      providerCollection: concrete.providerCollection,
-      velarCloudRuntime: concrete.velarCloudRuntime,
-      modelAdapterRegistry: concrete.modelAdapterRegistry,
-      agentModelResolver: concrete.agentModelResolver,
-      agentModelRuntime: concrete.agentModelRuntime,
-    }
+    const composition: ModelRuntimeCompositionApi = concrete
 
-    expect(concrete).toBeInstanceOf(DefaultModelRuntimeComposition)
-    expect(Object.isFrozen(concrete)).toBe(false)
+    // 冻结只保护对象图引用不被替换；每个子运行时仍按自身 API 管理状态。
+    expect(Object.isFrozen(concrete)).toBe(true)
+    expect(typeof concrete.providerCollection.listPresets).toBe('function')
     expect(composition.providerCollection).toBe(concrete.providerCollection)
     expect(composition.velarCloudRuntime).toBe(concrete.velarCloudRuntime)
+    expect(composition.providerModelCatalogService).toBe(concrete.providerModelCatalogService)
   })
 
   test('requires explicit provider selection instead of using a global default', () => {

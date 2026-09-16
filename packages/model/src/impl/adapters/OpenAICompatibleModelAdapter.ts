@@ -21,8 +21,8 @@ import type { LocalModelEnvironmentApi } from '../providers/LocalModelEnvironmen
 import { LocalModelEnvironment } from '../providers/LocalModelEnvironment'
 import type { ModelProviderCollectionApi } from '../providers/ModelProviderCollection'
 
+import { languageModelWrappers } from './LanguageModelWrappers'
 import { ModelAdapter } from './ModelAdapter'
-import { applyPromptCacheProviderOptions } from './PromptCacheLanguageModel'
 
 /**
  * 兼容开放接口的模型供应方适配器。
@@ -49,7 +49,7 @@ class OpenAICompatibleModelAdapter extends ModelAdapter implements ModelProvider
       fetch: this.createCompatibleFetch(config.provider, apiKey),
     })
 
-    return (modelId) => applyPromptCacheProviderOptions(compatible.chat(modelId))
+    return (modelId) => languageModelWrappers.withPromptCache(compatible.chat(modelId))
   }
 
   /** 兼容 OpenAI embeddings endpoint 的 embedding 请求。 */

@@ -116,35 +116,44 @@ for (const file of sourceFiles) {
 
 const entrySource = await readFile(path.join(packageDirectory, 'src/index.ts'), 'utf8')
 for (const ownedExport of [
-  './impl/providers/LocalModelEnvironment',
   './impl/providers/ModelCatalog',
-  './impl/providers/ModelProviderCollection',
-  './contract/constants.js',
-  './types/model',
+  './impl/composition/DefaultModelRuntimeComposition',
+  './contracts.js',
+  './contract/provides',
+  './contract/requires',
 ]) {
   if (!entrySource.includes(ownedExport)) {
     failures.push(`public entry must export Model-owned contract ${ownedExport}`)
   }
 }
 
-for (const nodeOnlyModule of [
-  './impl/composition/ModelAdapterRegistry',
-  './impl/composition/DefaultModelRuntimeComposition',
-  './impl/providers/ProviderScriptRegistry',
-  './impl/adapters/UserJsModelAdapter',
+// 0.7.0 起根入口就是 Node 宿主入口（`./node` 已并进来），它只出工厂与实例，类一个都不出。
+const entryExportedNames = new Set(
+  [...entrySource.matchAll(/^\s{2}([A-Za-z][A-Za-z0-9_]*),?$/gmu)].map((match) => match[1]),
+)
+for (const forbiddenClassExport of [
+  'AgentModelResolver',
+  'AgentModelRuntime',
+  'DefaultModelRuntimeComposition',
+  'LocalModelEnvironment',
+  'ModelAdapter',
+  'ModelAdapterRegistry',
+  'ModelProviderCollection',
+  'ModelRequestClient',
+  'ProviderModelCatalogService',
+  'ProviderScriptRegistry',
+  'UserJsModelAdapter',
+  'VelarCloudModelRuntime',
 ]) {
-  if (
-    entrySource.includes(`from '${nodeOnlyModule}'`)
-    || entrySource.includes(`from "${nodeOnlyModule}"`)
-  ) {
-    failures.push(`portable public entry must not export Node-only module ${nodeOnlyModule}`)
+  if (entryExportedNames.has(forbiddenClassExport)) {
+    failures.push(`public entry must not export the class ${forbiddenClassExport}`)
   }
 }
 if (!entrySource.includes('ProviderScriptRegistryPort')) {
   failures.push('portable public entry must export ProviderScriptRegistryPort')
 }
-if (!entrySource.includes('ModelAdapterRegistryPort')) {
-  failures.push('portable public entry must export ModelAdapterRegistryPort')
+if (!entrySource.includes('ModelAdapterRegistryApi')) {
+  failures.push('portable public entry must export ModelAdapterRegistryApi')
 }
 
 const contractsSource = await readFile(
@@ -154,12 +163,16 @@ const contractsSource = await readFile(
 const contractsStatements = contractsSource
   .split('\n')
   .map((line) => line.trim())
-  .filter(Boolean)
+  .filter((line) => line.startsWith('export'))
 if (
   contractsStatements.length === 0
-  || contractsStatements.some((statement) => !statement.startsWith('export type '))
+  || contractsStatements.some(
+    (statement) =>
+      !statement.startsWith('export type ')
+      && statement !== "export * from './contract/constants.js'",
+  )
 ) {
-  failures.push('contracts entry must contain type-only exports and emit no runtime surface')
+  failures.push('contracts entry must export only the constants table and type-only declarations')
 }
 for (const requiredContractOwner of [
   './types/model',
@@ -179,17 +192,12 @@ const catalogOwners = new Set(
 )
 // 渲染进程能加载的目录入口只许经这几个所有者出去；合同与类型是纯声明，不带运行时。
 const expectedCatalogOwners = new Set([
-  './impl/providers/LocalModelEnvironment',
+  './contracts.js',
   './impl/providers/ModelCatalog',
-  './contract/constants.js',
-  './contract/provides',
-  './contract/requires',
-  './types/model',
-  './types/providers',
 ])
 if ([...catalogOwners].some((owner) => !expectedCatalogOwners.has(owner))) {
   failures.push(
-    'catalog entry may export only LocalModelEnvironment, ModelCatalog, the constants table, and declaration files',
+    'catalog entry may export only the portable contracts entry and the ModelCatalog instance',
   )
 }
 // 目录链里真带运行时的只有这两个实现文件，逐个核对它们不碰宿主进程。
@@ -211,21 +219,6 @@ for (const catalogOwner of [
   }
   if (/(?:from|import)\s*(?:\([^)]*)?['"]node:/u.test(executableSource)) {
     failures.push(`${catalogOwner} must not import Node builtins`)
-  }
-}
-
-const nodeEntrySource = await readFile(
-  path.join(packageDirectory, 'src/node.ts'),
-  'utf8',
-)
-for (const nodeHostModule of [
-  './impl/composition/ModelAdapterRegistry',
-  './impl/composition/DefaultModelRuntimeComposition',
-  './impl/providers/NodeLocalModelEnvironment',
-  './impl/providers/ProviderScriptRegistry',
-]) {
-  if (!nodeEntrySource.includes(nodeHostModule)) {
-    failures.push(`Node entry must export host module ${nodeHostModule}`)
   }
 }
 
@@ -293,7 +286,7 @@ if (
 }
 if (
   !compositionSource.includes(
-    'readonly providerCollection: ModelProviderCollection',
+    'readonly providerCollection: ModelProviderCollectionApi',
   )
 ) {
   failures.push('composition must expose its product-owned providerCollection')

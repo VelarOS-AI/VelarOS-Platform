@@ -5,9 +5,8 @@ import type { LanguageModelFactory, ModelAdapterConfig } from '../../types/adapt
 import type { ChatProviderId } from '../../types/model'
 import type { ModelProviderCollectionApi } from '../providers/ModelProviderCollection'
 
+import { languageModelWrappers } from './LanguageModelWrappers'
 import { ModelAdapter } from './ModelAdapter'
-import { applyPromptCacheProviderOptions } from './PromptCacheLanguageModel'
-import { applyThinkingDepthProviderOptions } from './ThinkingDepthLanguageModel'
 
 /** Anthropic provider 适配器。 */
 class AnthropicModelAdapter extends ModelAdapter implements ModelProviderAdapter {
@@ -23,8 +22,8 @@ class AnthropicModelAdapter extends ModelAdapter implements ModelProviderAdapter
     })
 
     return (modelId) =>
-      applyPromptCacheProviderOptions(
-        applyThinkingDepthProviderOptions(
+      languageModelWrappers.withPromptCache(
+        languageModelWrappers.withThinkingDepth(
           anthropic(modelId),
           config.provider,
           modelId,

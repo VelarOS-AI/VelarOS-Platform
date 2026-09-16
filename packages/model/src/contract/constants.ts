@@ -368,13 +368,6 @@ export const ModelEnvironmentVariables = Object.freeze({
   }),
 })
 
-/** Ollama 三个环境变量名的简写，按用途取用。 */
-export const OllamaEnvNames = Object.freeze({
-  baseURL: ModelEnvironmentVariables.ollamaBaseURL.name,
-  chatModel: ModelEnvironmentVariables.ollamaChatModel.name,
-  contextWindow: ModelEnvironmentVariables.ollamaContextWindow.name,
-})
-
 /**
  * Ollama 官方自己定义的服务地址变量。
  *

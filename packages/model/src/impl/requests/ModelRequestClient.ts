@@ -142,16 +142,9 @@ class ModelRequestClient implements ModelRequestClientApi {
   }
 }
 
-/** 把请求策略里的温度、topP 与输出上限兜进一次请求；请求里已有的值不动。 */
-export function applyModelRequestPolicy<TRequest extends object>(
-  request: TRequest,
-  modelRequestOptions?: LooseOptional<ModelRequestOptions>
-): TRequest {
-  return applyRequestPolicy(request, modelRequestOptions)
+/** 建一个模型请求客户端；宿主整个进程可以建多份，各自带自己的 transport。 */
+export function createModelRequestClient(
+  options: ModelRequestClientOptions = {}
+): ModelRequestClientApi {
+  return new ModelRequestClient(options)
 }
-
-export { ModelRequestClient }
-/** @deprecated 使用 ModelRequestClient。 */
-export { ModelRequestClient as ModelRequestService }
-/** @deprecated 使用 ModelRequestClientOptions。 */
-export type { ModelRequestClientOptions as ModelRequestServiceOptions }

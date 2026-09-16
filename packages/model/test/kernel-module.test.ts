@@ -9,8 +9,8 @@ import type {
 
 import {
   createModelKernelModule,
+  type ModelAdapterRegistryApi,
   ModelCapability,
-  type ModelRegistryPort,
   type ModelRuntimeCapabilityService,
 } from '../src/index'
 
@@ -48,7 +48,7 @@ describe('model kernel module', () => {
       createEmbeddingRequest: () => {
         throw new Error('not called')
       },
-    } as ModelRegistryPort
+    } as ModelAdapterRegistryApi
     const module = createModelKernelModule({ registry })
 
     await module.activate(

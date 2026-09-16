@@ -7,7 +7,8 @@
 import { describe, expect, test } from 'bun:test'
 
 import { DefaultProviderModels, ModelProviderOperationalManifests } from '../src/contract/constants'
-import { getSharedProviderCatalog, SharedProviderCatalogs } from '../src/index'
+import { modelCatalog } from '../src/index'
+import { SharedProviderCatalogs } from '../src/utils/catalog/provider-catalogs'
 
 describe('缺省模型常量表', () => {
   test('每个内置 provider 的缺省模型与静态目录一致', () => {
@@ -23,7 +24,7 @@ describe('缺省模型常量表', () => {
 
     expect(Object.keys(DefaultProviderModels).sort()).toEqual([...manifestIds].sort())
     for (const id of manifestIds) {
-      expect(getSharedProviderCatalog(id)).not.toBeNull()
+      expect(modelCatalog.catalog(id)).not.toBeNull()
     }
   })
 })

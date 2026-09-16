@@ -24,10 +24,11 @@ import type {
   EmbeddingRequest,
   LanguageModelFactory,
   ModelAdapterConfig,
-  ModelRegistryPort,
 } from '../../types/adapters'
 import type { ChatProviderId } from '../../types/model'
 import { parseModelCapabilityProviderInput } from '../../utils/kernel-input'
+
+import type { ModelAdapterRegistryApi } from './ModelAdapterRegistry'
 
 /**
  * 挂进内核的模型能力服务。
@@ -37,7 +38,7 @@ import { parseModelCapabilityProviderInput } from '../../utils/kernel-input'
  * 由持有服务的宿主自己负责，不对外开放。
  */
 export interface ModelRuntimeCapabilityService
-  extends ModelRegistryPort, KernelCallableCapabilityService {}
+  extends ModelAdapterRegistryApi, KernelCallableCapabilityService {}
 
 /** 模型能力的服务身份；宿主按它取注册表。 */
 export const ModelCapability: CapabilityToken<ModelRuntimeCapabilityService> =
@@ -60,7 +61,7 @@ class ModelKernelCapability implements ModelRuntimeCapabilityService {
     },
   })
 
-  constructor(private readonly registry: ModelRegistryPort) {}
+  constructor(private readonly registry: ModelAdapterRegistryApi) {}
 
   public getOperationMetadata(
     operation: string

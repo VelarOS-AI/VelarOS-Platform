@@ -43,21 +43,6 @@ export type LanguageModelFactory = (modelId: string, options?: ModelRequestOptio
 /** Agent 侧拿到的 provider：就是一个按 modelId 造语言模型的工厂。 */
 export type AgentProvider = LanguageModelFactory
 
-/**
- * Portable adapter-registry contract used by model resolution and Kernel
- * integration. Hosts may provide the built-in Node registry or their own
- * browser, worker, remote, or test implementation.
- */
-export interface ModelAdapterRegistryPort {
-  supportsProvider(provider: ChatProviderId): boolean
-  createLanguageModelFactory(config: ModelAdapterConfig): LanguageModelFactory
-  createEmbeddingRequest(
-    config: ModelAdapterConfig,
-    model: string,
-    texts: string[]
-  ): EmbeddingRequest
-}
-
 /** 一次解析的结果：发得出去的 provider 工厂，加上界面与记账要的那几个名字。 */
 export interface ResolvedAgentModelRuntime {
   provider: LanguageModelFactory
@@ -90,6 +75,3 @@ export type OpenAIModelFetchInit = Parameters<OpenAIModelFetch>[1]
 
 /** 一次调用上挂着的厂商选项表。 */
 export type ModelCallProviderOptions = NonNullable<LanguageModelV3CallOptions['providerOptions']>
-
-/** @deprecated 用 `ModelAdapterRegistryPort`；同一个概念不要三个名字。 */
-export type ModelRegistryPort = ModelAdapterRegistryPort

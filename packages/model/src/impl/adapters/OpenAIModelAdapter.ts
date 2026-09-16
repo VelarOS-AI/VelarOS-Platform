@@ -13,9 +13,8 @@ import { isOpenRouterCompatibleProvider } from '../../utils/catalog/model-select
 import { createOpenRouterFetch, normalizeOpenRouterRouting } from '../../utils/wire/openrouter'
 import type { ModelProviderCollectionApi } from '../providers/ModelProviderCollection'
 
+import { languageModelWrappers } from './LanguageModelWrappers'
 import { ModelAdapter } from './ModelAdapter'
-import { applyPromptCacheProviderOptions } from './PromptCacheLanguageModel'
-import { applyThinkingDepthProviderOptions } from './ThinkingDepthLanguageModel'
 
 /**
  * OpenAI / OpenRouter 模型适配器。
@@ -40,8 +39,8 @@ class OpenAIModelAdapter extends ModelAdapter implements ModelProviderAdapter {
           baseURL,
         })
 
-        return applyPromptCacheProviderOptions(
-          applyThinkingDepthProviderOptions(
+        return languageModelWrappers.withPromptCache(
+          languageModelWrappers.withThinkingDepth(
             openai(modelId),
             config.provider,
             modelId,
@@ -59,7 +58,7 @@ class OpenAIModelAdapter extends ModelAdapter implements ModelProviderAdapter {
         fetch: createOpenRouterFetch(routing),
       })
 
-      return applyPromptCacheProviderOptions(openrouter.chat(routing.model))
+      return languageModelWrappers.withPromptCache(openrouter.chat(routing.model))
     }
   }
 

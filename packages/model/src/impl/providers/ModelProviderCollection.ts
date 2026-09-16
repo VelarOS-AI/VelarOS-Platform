@@ -14,18 +14,20 @@ import type {
 import type { ModelProviderConfiguredInput, SharedProviderCatalog } from '../../types/providers'
 import type { ProviderScriptRegistryPort } from '../../types/scripts'
 import {
-  filterEmbeddingModels,
   isEmbeddingCapableManifest,
   resolveDefaultEmbeddingModel,
-  selectEmbeddingModel,
 } from '../../utils/catalog/embedding'
 import {
   asOperationalManifests,
   createScriptOperationalManifest,
 } from '../../utils/catalog/manifests'
+import {
+  getSharedProviderCatalogOrNull,
+  resolveSharedProviderModelSelection,
+} from '../../utils/catalog/model-selection'
 import { trimTrailingPathSeparators } from '../../utils/urls'
 
-import { getSharedProviderCatalog, resolveProviderModelSelection } from './ModelCatalog'
+
 
 /** 一个产品装配独占的 provider 集合要什么。 */
 export interface ModelProviderCollectionOptions {
@@ -153,7 +155,7 @@ export class ModelProviderCollection implements ModelProviderCollectionApi {
         })),
       }
 
-    const catalog = getSharedProviderCatalog(provider)
+    const catalog = getSharedProviderCatalogOrNull(provider)
     if (!catalog) {
       throw new AppError(ModelErrorCodes.providerUnknown, `未知模型 provider：${provider}`)
     }
@@ -172,7 +174,7 @@ export class ModelProviderCollection implements ModelProviderCollectionApi {
     const script = this.providerScripts.getProviderScript(provider)
     if (!script) {
       this.requireOperationalManifest(provider)
-      return resolveProviderModelSelection(provider, currentModel)
+      return resolveSharedProviderModelSelection(provider, currentModel)
     }
 
     const requestedModel = currentModel?.trim() ?? ''
@@ -296,34 +298,4 @@ export class ModelProviderCollection implements ModelProviderCollectionApi {
   public isEmbeddingCapable(provider: ChatProviderId): boolean {
     return isEmbeddingCapableManifest(this.requireOperationalManifest(provider))
   }
-}
-
-/**
- * 取一个 provider 的默认 embedding 模型。
- *
- * @deprecated 下一轮入口收口后改用 `composition.providerCollection.defaultEmbeddingModel(provider)`。
- */
-export function resolveDefaultEmbeddingModelForProvider(
-  providerCollection: ModelProviderCollectionApi,
-  provider: ChatProviderId
-): string {
-  return providerCollection.defaultEmbeddingModel(provider)
-}
-
-/**
- * 从一串候选模型里挑最像 embedding 的那个。
- *
- * @deprecated 下一轮入口收口后不再出包；包内改用 `utils/catalog/embedding` 的同名函数。
- */
-export function selectEmbeddingModelCandidate(candidateModels: readonly string[]): string {
-  return selectEmbeddingModel(candidateModels)
-}
-
-/**
- * 只留下看起来像 embedding 的候选模型。
- *
- * @deprecated 下一轮入口收口后不再出包；包内改用 `utils/catalog/embedding` 的同名函数。
- */
-export function filterEmbeddingModelCandidates(candidateModels: readonly string[]): string[] {
-  return filterEmbeddingModels(candidateModels)
 }

@@ -1,13 +1,8 @@
 import { describe, expect, test } from 'bun:test'
 
-import {
-  getModelProviderOperationalManifest,
-  getSharedProviderCatalog,
-  isVelarCloudManagedProviderId,
-  resolveProviderModelSelection,
-  VelarCloudModelRuntime,
-} from '../src/index'
-import { createModelRuntimeComposition } from '../src/node'
+import { VelarCloudModelRuntime } from '../src/impl/providers/VelarCloudModelRuntime'
+import { createModelRuntimeComposition, modelCatalog } from '../src/index'
+import { isVelarCloudManagedProvider } from '../src/utils/catalog/model-selection'
 
 const VelarDevModelId = 'velar-dev/Z3B0LTUuNC1taW5p'
 
@@ -71,8 +66,8 @@ const ChatCallOptions = {
 
 describe('Velar Cloud managed providers', () => {
   test('declares Velar Dev as a Cloud-managed provider with a dynamic catalog', () => {
-    const manifest = getModelProviderOperationalManifest('velar-dev')
-    const catalog = getSharedProviderCatalog('velar-dev')
+    const manifest = modelCatalog.manifest('velar-dev')
+    const catalog = modelCatalog.catalog('velar-dev')
 
     expect(manifest).toMatchObject({
       id: 'velar-dev',
@@ -86,13 +81,13 @@ describe('Velar Cloud managed providers', () => {
       defaultModel: '',
       models: [],
     })
-    expect(resolveProviderModelSelection('velar-dev', VelarDevModelId)).toEqual({
+    expect(modelCatalog.resolveModelSelection('velar-dev', VelarDevModelId)).toEqual({
       model: VelarDevModelId,
       didFallback: false,
     })
-    expect(isVelarCloudManagedProviderId('velar')).toBe(true)
-    expect(isVelarCloudManagedProviderId('velar-dev')).toBe(true)
-    expect(isVelarCloudManagedProviderId('openrouter')).toBe(false)
+    expect(isVelarCloudManagedProvider('velar')).toBe(true)
+    expect(isVelarCloudManagedProvider('velar-dev')).toBe(true)
+    expect(isVelarCloudManagedProvider('openrouter')).toBe(false)
   })
 
   test('keeps the runtime config ready but cannot execute without its own Cloud binding', () => {

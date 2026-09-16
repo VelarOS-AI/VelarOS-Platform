@@ -13,6 +13,7 @@ import type {
 } from '../../types/model'
 import type { RemoteProviderModelEntry } from '../../types/providers'
 import type { ProviderScriptRegistryPort } from '../../types/scripts'
+import { resolveProviderModelContextWindow } from '../../utils/catalog/context-windows'
 import { filterModelsForPurpose } from '../../utils/catalog/embedding'
 import {
   canListRemoteProviderModels,
@@ -23,7 +24,6 @@ import {
 } from '../../utils/catalog-http'
 import { ModelTuning } from '../../utils/tuning'
 
-import { resolveProviderModelContextWindow } from './ModelCatalog'
 import type { ModelProviderCollectionApi } from './ModelProviderCollection'
 import { ProviderModelCatalogCache } from './ProviderModelCatalogCache'
 

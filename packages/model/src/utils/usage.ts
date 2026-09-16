@@ -1,6 +1,46 @@
 import { isFiniteNumber, isNull, isPlainObject, isPresent, toNullable } from '@velaros-ai/core'
 
-import type { ModelPricingRates, ModelRunUsage, ModelUsageSummary } from '../types/model'
+import type {
+  ModelPricingCatalog,
+  ModelPricingEntry,
+  ModelPricingRates,
+  ModelRunUsage,
+  ModelUsageSummary,
+} from '../types/model'
+
+/**
+ * 在单价目录里查一个 provider / 模型的单价对。
+ *
+ * 先按精确的 provider + model 找，再按同一条目登记的别名找；都没有就返回 null——
+ * 查不到单价时账本如实不算钱，绝不按别的模型的价估一个数糊上去。
+ */
+export function findPricingRates(
+  catalog: LooseOptional<ModelPricingCatalog>,
+  provider: string,
+  model: string
+): Nullable<ModelPricingRates> {
+  const entry = matchPricingEntry(catalog, provider, model)
+  if (!entry) return null
+
+  return {
+    inputPerMillion: entry.inputUsdPerMillion,
+    outputPerMillion: entry.outputUsdPerMillion,
+  }
+}
+
+/** 目录里与这个 provider / 模型对上的那一条：精确名优先，其次别名。 */
+function matchPricingEntry(
+  catalog: LooseOptional<ModelPricingCatalog>,
+  provider: string,
+  model: string
+): Nullable<ModelPricingEntry> {
+  const entries = catalog?.entries ?? []
+  const sameProvider = entries.filter((entry) => entry.provider === provider)
+  return toNullable(
+    sameProvider.find((entry) => entry.model === model)
+      ?? sameProvider.find((entry) => entry.aliases.includes(model))
+  )
+}
 
 /** 把 AI SDK 各版本的 usage 形状归一成本包的账本，顺带按单价算钱。 */
 export function normalizeRunUsage(value: unknown, pricing?: ModelPricingRates): ModelRunUsage {

@@ -1,7 +1,15 @@
 import { first, isBlank, toNullable } from '@velaros-ai/core'
 
-import { CustomModelProviderIds, OpenRouterCompatibleProviderIds } from '../../contract/constants.js'
-import type { ChatProviderId, ProviderModelResolution } from '../../types/model'
+import {
+  CustomModelProviderIds,
+  OpenRouterCompatibleProviderIds,
+  VelarCloudManagedProviderIds,
+} from '../../contract/constants.js'
+import type {
+  ChatProviderId,
+  ProviderModelResolution,
+  VelarCloudManagedProviderId,
+} from '../../types/model'
 import type { SharedProviderCatalog } from '../../types/providers'
 import { createReadonlySetSnapshot } from '../snapshots'
 
@@ -99,4 +107,11 @@ export function resolveSharedProviderModelSelection(
     model: first(suggestions) ?? requestedModel,
     didFallback: !isBlank(requestedModel) && (first(suggestions) ?? '') !== requestedModel,
   }
+}
+
+/** 这个 provider 是不是由 VelarOS Cloud 托管的那两个之一。 */
+export function isVelarCloudManagedProvider(
+  providerId: ChatProviderId
+): providerId is VelarCloudManagedProviderId {
+  return (VelarCloudManagedProviderIds as readonly string[]).includes(providerId)
 }

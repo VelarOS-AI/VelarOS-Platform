@@ -1,8 +1,8 @@
 import { AppError } from '@velaros-ai/core/error'
 
-import { ModelErrorCodes, VelarCloudManagedProviderIds } from '../../contract/constants.js'
+import { ModelErrorCodes } from '../../contract/constants.js'
 import type { VelarCloudModelRuntimeBinding } from '../../contract/requires'
-import type { ChatProviderId, VelarCloudManagedProviderId } from '../../types/model'
+import type { VelarCloudManagedProviderId } from '../../types/model'
 import { trimTrailingPathSeparators } from '../../utils/urls'
 
 /**
@@ -72,11 +72,4 @@ export class VelarCloudModelRuntime
     }
     return binding
   }
-}
-
-/** 这个 provider 是不是由 VelarOS Cloud 托管。 */
-export function isVelarCloudManagedProviderId(
-  providerId: ChatProviderId
-): providerId is VelarCloudManagedProviderId {
-  return (VelarCloudManagedProviderIds as readonly string[]).includes(providerId)
 }

@@ -1,6 +1,5 @@
 import type {
   AgentProvider,
-  ModelAdapterRegistryPort,
   ResolvedAgentModelRuntime,
 } from '../../types/adapters'
 import {
@@ -10,6 +9,7 @@ import {
 } from '../../utils/scripts/selection'
 
 import type { AgentModelResolverApi } from './AgentModelResolver'
+import type { ModelAdapterRegistryApi } from './ModelAdapterRegistry'
 
 /**
  * Agent 侧唯一的模型入口。
@@ -35,7 +35,7 @@ export interface AgentModelRuntimeApi {
 
 class AgentModelRuntime implements AgentModelRuntimeApi {
   constructor(
-    private readonly modelAdapterRegistry: ModelAdapterRegistryPort,
+    private readonly modelAdapterRegistry: ModelAdapterRegistryApi,
     private readonly modelResolver: AgentModelResolverApi
   ) {}
 

@@ -4,9 +4,6 @@ import type {
   LanguageModelV3GenerateResult,
   LanguageModelV3StreamResult,
 } from '@ai-sdk/provider'
-import type { LanguageModel } from 'ai'
-
-import { isString } from '@velaros-ai/core'
 
 import { applyPromptCacheCallOptions as applyCallOptions } from '../../utils/wire/prompt-cache'
 
@@ -46,18 +43,4 @@ export class PromptCacheLanguageModel implements PromptCacheLanguageModelApi {
   public doStream(options: LanguageModelV3CallOptions): PromiseLike<LanguageModelV3StreamResult> {
     return this.model.doStream(applyCallOptions(options))
   }
-}
-
-/** 给一个语言模型套上缓存标记翻译层；字符串模型与非 v3 模型原样返回。 */
-export function applyPromptCacheProviderOptions(model: LanguageModel): LanguageModel {
-  if (isString(model) || model.specificationVersion !== 'v3') return model
-
-  return new PromptCacheLanguageModel(model)
-}
-
-/** 出线前把内部缓存标记整体翻译成各家的线上字段。 */
-export function applyPromptCacheCallOptions(
-  options: LanguageModelV3CallOptions
-): LanguageModelV3CallOptions {
-  return applyCallOptions(options)
 }

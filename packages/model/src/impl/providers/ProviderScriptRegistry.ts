@@ -15,6 +15,7 @@ import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
 import { ModelErrorCodes } from '../../contract/constants.js'
 import type {
+  ProviderScriptHelpers,
   ProviderScriptHostBridge,
   ProviderScriptRegistryOptions,
 } from '../../contract/requires'
@@ -27,10 +28,7 @@ import type {
   ProviderScriptRuntimeMetadata,
   ValidateProviderRuntimeRequest,
 } from '../../types/model'
-import type {
-  LoadedProviderScript,
-  ProviderScriptHelpers,
-} from '../../types/script-authoring'
+import type { LoadedProviderScript } from '../../types/script-authoring'
 import type {
   ProviderScriptRegistryPort,
   RegisteredProviderScriptSource,
@@ -41,6 +39,7 @@ import {
   normalizeProviderScriptManifest,
   normalizeProviderScriptModels,
   normalizeRuntimeMetadata,
+  providerScriptDevConfigCandidates,
   readEnabledScriptEntries,
   readProviderScriptDevConfig,
 } from '../../utils/scripts/provider-scripts'
@@ -122,7 +121,7 @@ export class ProviderScriptRegistry
     this.cwd = options.cwd ?? process.cwd()
     this.homeDir = options.homeDir ?? homedir()
     this.configPaths =
-      options.configPaths ?? resolveProviderScriptDevConfigCandidates(this.cwd, this.homeDir)
+      options.configPaths ?? providerScriptDevConfigCandidates(this.cwd, this.homeDir)
     this.hostBridge = options.hostBridge ?? {}
     this.clearRequireCache = options.clearRequireCache ?? true
     this.runtimeMetadataTimeoutMs =
@@ -141,7 +140,7 @@ export class ProviderScriptRegistry
     this.cwd = options.cwd ?? process.cwd()
     this.homeDir = options.homeDir ?? homedir()
     this.configPaths =
-      options.configPaths ?? resolveProviderScriptDevConfigCandidates(this.cwd, this.homeDir)
+      options.configPaths ?? providerScriptDevConfigCandidates(this.cwd, this.homeDir)
     this.resetLoadedState()
   }
 
@@ -466,12 +465,4 @@ export class ProviderScriptRegistry
       return '0.0.0'
     }
   }
-}
-
-/** 开发者本机 dev.json 的候选路径：先看工作目录，再看用户目录。 */
-export function resolveProviderScriptDevConfigCandidates(
-  cwd: string = process.cwd(),
-  homeDir: string = homedir()
-): string[] {
-  return [join(cwd, '.velaros/dev.json'), join(homeDir, '.velaros/dev.json')]
 }

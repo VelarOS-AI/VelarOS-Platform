@@ -5,9 +5,8 @@ import type { LanguageModelFactory, ModelAdapterConfig } from '../../types/adapt
 import type { ChatProviderId } from '../../types/model'
 import type { ModelProviderCollectionApi } from '../providers/ModelProviderCollection'
 
+import { languageModelWrappers } from './LanguageModelWrappers'
 import { ModelAdapter } from './ModelAdapter'
-import { applyPromptCacheProviderOptions } from './PromptCacheLanguageModel'
-import { applyThinkingDepthProviderOptions } from './ThinkingDepthLanguageModel'
 
 /** Google Generative AI provider 适配器。 */
 class GoogleModelAdapter extends ModelAdapter implements ModelProviderAdapter {
@@ -23,8 +22,8 @@ class GoogleModelAdapter extends ModelAdapter implements ModelProviderAdapter {
     })
 
     return (modelId) =>
-      applyPromptCacheProviderOptions(
-        applyThinkingDepthProviderOptions(
+      languageModelWrappers.withPromptCache(
+        languageModelWrappers.withThinkingDepth(
           google(modelId),
           config.provider,
           modelId,

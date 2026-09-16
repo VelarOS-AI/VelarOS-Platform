@@ -6,12 +6,15 @@
  */
 import { afterEach, describe, expect, test } from 'bun:test'
 
-import { OllamaEnvNames } from '../src/contract/constants'
-import {
-  LocalModelEnvironment,
-  resolveOllamaChatModel,
-  resolveOllamaContextWindow,
-} from '../src/impl/providers/LocalModelEnvironment'
+import { LocalModelEnvironment } from '../src/impl/providers/LocalModelEnvironment'
+import { modelCatalog } from '../src/index'
+
+/** 本包读的三个 Ollama 环境变量名；权威登记在 contract/constants.ts 的 ModelEnvironmentVariables。 */
+const OllamaEnvNames = {
+  baseURL: 'VELAROS_OLLAMA_BASE_URL',
+  chatModel: 'VELAROS_OLLAMA_CHAT_MODEL',
+  contextWindow: 'VELAROS_OLLAMA_CONTEXT_WINDOW',
+} as const
 
 const OriginalChatModel = process.env[OllamaEnvNames.chatModel]
 const OriginalContextWindow = process.env[OllamaEnvNames.contextWindow]
@@ -26,8 +29,8 @@ describe('LocalModelEnvironment', () => {
     process.env[OllamaEnvNames.chatModel] = 'ambient-model'
     process.env[OllamaEnvNames.contextWindow] = '65536'
 
-    expect(resolveOllamaChatModel('default-model')).toBe('default-model')
-    expect(resolveOllamaContextWindow()).toBeNull()
+    expect(modelCatalog.resolveOllamaChatModel('default-model')).toBe('default-model')
+    expect(modelCatalog.resolveOllamaContextWindow()).toBeNull()
   })
 
   test('resolves an immutable explicit environment snapshot', () => {

@@ -1,10 +1,8 @@
 import { describe, expect, test } from 'bun:test'
 
-import {
-  ModelProviderCollection,
-  ProviderModelCatalogService,
-  type ProviderScriptRegistryPort,
-} from '../src/index'
+import { ModelProviderCollection } from '../src/impl/providers/ModelProviderCollection'
+import { ProviderModelCatalogService } from '../src/impl/providers/ProviderModelCatalogService'
+import type { ProviderScriptRegistryPort } from '../src/index'
 
 const EmptyProviderScripts: ProviderScriptRegistryPort = {
   supportsProvider: () => false,

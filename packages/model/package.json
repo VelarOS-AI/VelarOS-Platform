@@ -1,6 +1,6 @@
 {
   "name": "@velaros-ai/model",
-  "version": "0.6.4",
+  "version": "0.7.0",
   "velaros": {
     "platform": "0.6"
   },
@@ -34,30 +34,6 @@
     "./contracts": {
       "types": "./dist/contracts.d.ts",
       "import": "./dist/contracts.js"
-    },
-    "./profiles": {
-      "types": "./dist/profiles.d.ts",
-      "import": "./dist/profiles.js"
-    },
-    "./provider-retry": {
-      "types": "./dist/provider-retry.d.ts",
-      "import": "./dist/provider-retry.js"
-    },
-    "./usage": {
-      "types": "./dist/usage.d.ts",
-      "import": "./dist/usage.js"
-    },
-    "./node": {
-      "types": "./dist/node.d.ts",
-      "import": "./dist/node.js"
-    },
-    "./provider-scripts/node": {
-      "types": "./dist/provider-scripts-node.d.ts",
-      "import": "./dist/provider-scripts-node.js"
-    },
-    "./ProviderScriptContextWindow": {
-      "types": "./dist/ProviderScriptContextWindow.d.ts",
-      "import": "./dist/ProviderScriptContextWindow.js"
     }
   },
   "files": [
@@ -72,7 +48,7 @@
     "clean": "rm -rf dist",
     "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/model/build/fix-esm-extensions.mjs dist && node ../../scripts/build/normalize-package-declarations.mjs",
     "test:kernel-module": "bun test test/kernel-module.test.ts",
-    "test": "bun run build && bun test test",
+    "test": "bun run build && bun test test spec/acceptance.test.ts",
     "prepack": "bun run build"
   },
   "dependencies": {

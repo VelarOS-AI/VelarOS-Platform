@@ -554,11 +554,9 @@ export const GovernedModules = [
       // provider 集合、静态目录、环境快照、script 注册表、Cloud 绑定、远端目录服务与缓存
       ['providers/'],
     ],
-    // 卡片与不变量登记是入口收口那一轮的事，这三份现在还不存在，照样登记，燃尽表里看得到
     card: 'MODULE.md',
     invariants: 'spec/invariants.md',
     acceptance: 'spec/acceptance.test.ts',
-    status: 'migrating',
   },
   {
     directory: 'office',

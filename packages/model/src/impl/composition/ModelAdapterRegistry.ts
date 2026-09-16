@@ -6,7 +6,6 @@ import type {
   EmbeddingRequest,
   LanguageModelFactory,
   ModelAdapterConfig,
-  ModelAdapterRegistryPort,
 } from '../../types/adapters'
 import type { ChatProviderId } from '../../types/model'
 import type { ProviderScriptRegistryPort } from '../../types/scripts'
@@ -23,7 +22,6 @@ import { LocalModelEnvironment } from '../providers/LocalModelEnvironment'
 import type { ModelProviderCollectionApi } from '../providers/ModelProviderCollection'
 import type { ProviderScriptRegistryScripts } from '../providers/ProviderScriptRegistry'
 import {
-  VelarCloudModelRuntime,
   type VelarCloudModelRuntimeLookup,
 } from '../providers/VelarCloudModelRuntime'
 
@@ -33,10 +31,49 @@ import {
  * 不同 provider 的 SDK/API 差异都封装在各自的适配器里；Agent 只经注册表按 provider
  * 找到适配器，再创建语言模型或 embedding 请求。适配器顺序即匹配优先级。
  */
-export interface ModelAdapterRegistryApi extends ModelAdapterRegistryPort {}
+export interface ModelAdapterRegistryApi {
+  /** 这个 provider 有没有能用的适配器。 */
+  supportsProvider(provider: ChatProviderId): boolean
+  /** 按这次调用的配置造一个语言模型工厂。 */
+  createLanguageModelFactory(config: ModelAdapterConfig): LanguageModelFactory
+  /** 按这次调用的配置造一个 embedding 请求；不支持 embedding 的 provider 由具体适配器抛可读错误。 */
+  createEmbeddingRequest(
+    config: ModelAdapterConfig,
+    model: string,
+    texts: string[]
+  ): EmbeddingRequest
+}
 
-class ModelAdapterRegistry implements ModelAdapterRegistryApi {
-  constructor(private readonly adapters: readonly ModelProviderAdapter[]) {
+export class ModelAdapterRegistry implements ModelAdapterRegistryApi {
+  private readonly adapters: readonly ModelProviderAdapter[]
+
+  /**
+   * 适配器顺序即匹配优先级：宿主自带的排最前，然后是 Cloud 托管、provider script，
+   * 最后才是各家内置 SDK。可变的 provider script 注册表必须由同一个装配显式传入，
+   * 禁止回落到进程全局状态。
+   */
+  constructor(
+    providerScriptRegistry: ProviderScriptRegistryScripts & ProviderScriptRegistryPort,
+    providers: ModelProviderCollectionApi,
+    velarCloudRuntime: VelarCloudModelRuntimeLookup,
+    localModelEnvironment: LocalModelEnvironmentApi = new LocalModelEnvironment(),
+    injectedAdapters: readonly ModelProviderAdapter[] = []
+  ) {
+    this.adapters = [
+      ...injectedAdapters,
+      new VelarModelAdapter(providers, velarCloudRuntime),
+      new ProviderScriptModelAdapter(providerScriptRegistry, providers),
+      new AnthropicModelAdapter(providers.getProviderIdsByAdapterKind('anthropic-sdk'), providers),
+      new GoogleModelAdapter(providers.getProviderIdsByAdapterKind('google-sdk'), providers),
+      new DeepSeekModelAdapter(providers.getProviderIdsByAdapterKind('deepseek-sdk'), providers),
+      new OpenAICompatibleModelAdapter(
+        providers.getProviderIdsByAdapterKind('openai-compatible'),
+        providers,
+        localModelEnvironment
+      ),
+      new OpenAIModelAdapter(providers.getProviderIdsByAdapterKind('openai-sdk'), providers),
+      new UserJsModelAdapter(providers.getProviderIdsByAdapterKind('custom-js'), providers),
+    ]
   }
 
   /** 判断当前 provider 是否有适配器。 */
@@ -67,59 +104,4 @@ class ModelAdapterRegistry implements ModelAdapterRegistryApi {
 
     return adapter
   }
-}
-
-/**
- * 为一个产品装配创建独立的模型适配器注册表。
- *
- * 适配器顺序会影响 provider 匹配优先级：宿主自带的排在最前，然后是 Cloud 托管、
- * provider script，最后才是各家内置 SDK。可变的 provider script 注册表必须由同一个装配
- * 显式传入，禁止回落到进程全局状态。
- */
-function createModelAdapterRegistry(
-  providerScriptRegistry: ProviderScriptRegistryScripts & ProviderScriptRegistryPort,
-  providers: ModelProviderCollectionApi,
-  velarCloudRuntime: VelarCloudModelRuntimeLookup,
-  localModelEnvironment: LocalModelEnvironmentApi = new LocalModelEnvironment(),
-  injectedAdapters: readonly ModelProviderAdapter[] = []
-): ModelAdapterRegistryApi {
-  return new ModelAdapterRegistry([
-    ...injectedAdapters,
-    new VelarModelAdapter(providers, velarCloudRuntime),
-    new ProviderScriptModelAdapter(providerScriptRegistry, providers),
-    new AnthropicModelAdapter(providers.getProviderIdsByAdapterKind('anthropic-sdk'), providers),
-    new GoogleModelAdapter(providers.getProviderIdsByAdapterKind('google-sdk'), providers),
-    new DeepSeekModelAdapter(providers.getProviderIdsByAdapterKind('deepseek-sdk'), providers),
-    new OpenAICompatibleModelAdapter(
-      providers.getProviderIdsByAdapterKind('openai-compatible'),
-      providers,
-      localModelEnvironment
-    ),
-    new OpenAIModelAdapter(providers.getProviderIdsByAdapterKind('openai-sdk'), providers),
-    new UserJsModelAdapter(providers.getProviderIdsByAdapterKind('custom-js'), providers),
-  ])
-}
-
-/**
- * 不传 Cloud 绑定的兼容入口。
- *
- * @deprecated 0.4.x 时它读进程级的 Velar Cloud 单例；那个单例已经删掉，
- * 现在每次调用都建一个空绑定，等价于"没连接 Cloud"。新宿主一律用
- * {@link createModelAdapterRegistry} 显式注入自己的 `VelarCloudModelRuntime`。
- */
-function createLegacyModelAdapterRegistry(
-  providerScriptRegistry: ProviderScriptRegistryScripts & ProviderScriptRegistryPort,
-  providers: ModelProviderCollectionApi
-): ModelAdapterRegistryApi {
-  return createModelAdapterRegistry(
-    providerScriptRegistry,
-    providers,
-    new VelarCloudModelRuntime()
-  )
-}
-
-export {
-  createLegacyModelAdapterRegistry,
-  createModelAdapterRegistry,
-  ModelAdapterRegistry,
 }

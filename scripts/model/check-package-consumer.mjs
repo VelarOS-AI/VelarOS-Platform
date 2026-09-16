@@ -73,10 +73,6 @@ const RequiredPublishedFiles = [
   'dist/contracts.d.ts',
   'dist/index.js',
   'dist/index.d.ts',
-  'dist/node.js',
-  'dist/node.d.ts',
-  'dist/provider-scripts/node.js',
-  'dist/provider-scripts/node.d.ts',
 ]
 
 export class SynchronousCommandRunner {
@@ -509,39 +505,39 @@ async function writeConsumerProject(consumerDirectory) {
 const runtime = await import('@velaros-ai/model')
 const catalog = await import('@velaros-ai/model/catalog')
 const contracts = await import('@velaros-ai/model/contracts')
-const nodeRuntime = await import('@velaros-ai/model/node')
-const contextWindow = await import(
-  '@velaros-ai/model/ProviderScriptContextWindow'
-)
 
-assert.deepEqual(Object.keys(contracts), [])
-assert.equal(typeof catalog.LocalModelEnvironment, 'function')
-assert.equal(typeof catalog.getModelProviderOperationalManifest, 'function')
-assert.equal(typeof catalog.getSharedProviderCatalog, 'function')
+// 0.7.0：三个入口。可移植入口只有常量表，catalog 多一份目录实例，根入口是全部。
+assert.equal(typeof contracts.ModelErrorCodes.credentialMissing, 'string')
+assert.equal(contracts.modelCatalog, undefined)
+assert.equal(typeof catalog.modelCatalog.manifest, 'function')
+assert.equal(typeof catalog.modelCatalog.catalog, 'function')
 process.env.VELAROS_OLLAMA_CHAT_MODEL = 'ambient-model'
-assert.equal(catalog.resolveOllamaChatModel('fallback-model'), 'fallback-model')
+assert.equal(catalog.modelCatalog.resolveOllamaChatModel('fallback-model'), 'fallback-model')
 assert.equal(
-  new catalog.LocalModelEnvironment({
-    VELAROS_OLLAMA_CHAT_MODEL: 'qwen3:8b',
-  }).resolveOllamaChatModel('fallback-model'),
+  catalog.modelCatalog.resolveOllamaChatModel('fallback-model', {
+    read: (name) => (name === 'VELAROS_OLLAMA_CHAT_MODEL' ? 'qwen3:8b' : undefined),
+  }),
   'qwen3:8b'
 )
-assert.equal(typeof runtime.ModelRequestClient, 'function')
-assert.equal(typeof runtime.VelarCloudModelRuntime, 'function')
+assert.equal(typeof runtime.createModelRequestClient, 'function')
+assert.equal(typeof runtime.createModelRuntimeComposition, 'function')
+assert.equal(typeof runtime.createModelKernelModule, 'function')
+assert.equal(typeof runtime.modelUsage.summarize, 'function')
 assert.deepEqual(runtime.VelarCloudManagedProviderIds, ['velar', 'velar-dev'])
-assert.equal(typeof runtime.isVelarCloudManagedProviderId, 'function')
-assert.equal(typeof runtime.OpenAiOnlyModels.has, 'function')
-assert.equal(runtime.OpenAiOnlyModels.add, undefined)
-assert.equal(runtime.DefaultModelRuntimeComposition, undefined)
-assert.equal(runtime.ModelRuntimeComposition, undefined)
-assert.equal(runtime.ProviderScriptRegistry, undefined)
-assert.equal(typeof nodeRuntime.DefaultModelRuntimeComposition, 'function')
-assert.equal(typeof nodeRuntime.ModelRuntimeComposition, 'function')
-assert.equal(typeof nodeRuntime.NodeLocalModelEnvironment, 'function')
-assert.equal(typeof nodeRuntime.ProviderScriptRegistry, 'function')
-assert.equal(typeof nodeRuntime.createModelAdapterRegistry, 'function')
-assert.equal(typeof nodeRuntime.createLegacyModelAdapterRegistry, 'function')
-assert.equal(typeof contextWindow.resolveProviderScriptContextWindow, 'function')
+for (const name of [
+  'DefaultModelRuntimeComposition',
+  'LocalModelEnvironment',
+  'ModelAdapter',
+  'ModelRequestClient',
+  'ModelRuntimeComposition',
+  'OpenAiOnlyModels',
+  'ProviderScriptRegistry',
+  'VelarCloudModelRuntime',
+  'isVelarCloudManagedProviderId',
+]) {
+  assert.equal(runtime[name], undefined)
+  assert.equal(catalog[name], undefined)
+}
 `
   )
 }

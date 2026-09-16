@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 
 import type { ChatProviderId } from '../src/index'
-import { createModelRuntimeComposition } from '../src/node'
+import { createModelRuntimeComposition } from '../src/index'
 
 const ProviderId = 'test-input-modalities' as ChatProviderId
 const HangingProviderId = 'test-hanging-runtime-metadata' as ChatProviderId

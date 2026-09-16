@@ -11,8 +11,8 @@ import type { ProviderScriptRegistryPort } from '../../types/scripts'
 import type { ModelProviderCollectionApi } from '../providers/ModelProviderCollection'
 import type { ProviderScriptRegistryScripts } from '../providers/ProviderScriptRegistry'
 
+import { languageModelWrappers } from './LanguageModelWrappers'
 import { ModelAdapter } from './ModelAdapter'
-import { applyPromptCacheProviderOptions } from './PromptCacheLanguageModel'
 
 /**
  * 把注入的 provider script 接成一个适配器。
@@ -54,7 +54,7 @@ export class ProviderScriptModelAdapter extends ModelAdapter implements ModelPro
     }
 
     return (modelId, options) =>
-      applyPromptCacheProviderOptions(factory(modelId, options) as LanguageModel)
+      languageModelWrappers.withPromptCache(factory(modelId, options) as LanguageModel)
   }
 
   public createEmbeddingRequest(

@@ -28,8 +28,8 @@ import {
 import { ModelTuning } from '../../utils/tuning'
 import type { ModelProviderCollectionApi } from '../providers/ModelProviderCollection'
 
+import { languageModelWrappers } from './LanguageModelWrappers'
 import { ModelAdapter } from './ModelAdapter'
-import { applyPromptCacheProviderOptions } from './PromptCacheLanguageModel'
 
 /**
  * 用户上传 JS adapter，用于接入未内置的模型供应商。
@@ -135,7 +135,7 @@ class UserJsModelAdapter extends ModelAdapter implements ModelProviderAdapter {
         'Custom adapter model factory 执行失败',
         UserJsModelAdapter.JsonStringifyScript
       )
-      return applyPromptCacheProviderOptions(
+      return languageModelWrappers.withPromptCache(
         createLanguageModelFromDescriptor(
           config,
           normalizeLanguageModelDescriptor(descriptor, 'Custom adapter model factory 执行失败')

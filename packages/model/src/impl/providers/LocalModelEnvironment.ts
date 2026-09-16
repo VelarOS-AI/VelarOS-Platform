@@ -1,6 +1,6 @@
 import { isBlank, toNullable } from '@velaros-ai/core'
 
-import { OllamaEnvNames, OllamaHostEnvironmentName } from '../../contract/constants.js'
+import { OllamaHostEnvironmentName } from '../../contract/constants.js'
 import type { ModelEnvironmentPort } from '../../contract/requires'
 import { toPositiveInteger } from '../../utils/numbers'
 import { trimTrailingPathSeparators } from '../../utils/urls'
@@ -25,6 +25,13 @@ export interface LocalModelEnvironmentApi {
 }
 
 export class LocalModelEnvironment implements LocalModelEnvironmentApi {
+  /** 本类读的三个环境变量名；权威登记在 `contract/constants.ts` 的 `ModelEnvironmentVariables`。 */
+  private static readonly OllamaEnvironmentNames = {
+    baseURL: 'VELAROS_OLLAMA_BASE_URL',
+    chatModel: 'VELAROS_OLLAMA_CHAT_MODEL',
+    contextWindow: 'VELAROS_OLLAMA_CONTEXT_WINDOW',
+  } as const
+
   private readonly environmentVariables: Readonly<Record<string, string | undefined>>
 
   constructor(
@@ -40,7 +47,7 @@ export class LocalModelEnvironment implements LocalModelEnvironmentApi {
 
   public resolveOllamaBaseURL(defaultBaseURL: string): string {
     const configured =
-      this.readString(OllamaEnvNames.baseURL) || this.readString(OllamaHostEnvironmentName)
+      this.readString(LocalModelEnvironment.OllamaEnvironmentNames.baseURL) || this.readString(OllamaHostEnvironmentName)
     const raw = trimTrailingPathSeparators(configured || defaultBaseURL)
     const baseURL = raw && !/^https?:\/\//iu.test(raw) ? `http://${raw}` : raw
     if (!baseURL) return ''
@@ -49,12 +56,12 @@ export class LocalModelEnvironment implements LocalModelEnvironmentApi {
   }
 
   public resolveOllamaChatModel(defaultModel = ''): string {
-    return this.readString(OllamaEnvNames.chatModel) || defaultModel
+    return this.readString(LocalModelEnvironment.OllamaEnvironmentNames.chatModel) || defaultModel
   }
 
   public resolveOllamaContextWindow(defaultContextWindow?: number): Nullable<number> {
     return toNullable(
-      this.readPositiveInteger(OllamaEnvNames.contextWindow) ?? defaultContextWindow
+      this.readPositiveInteger(LocalModelEnvironment.OllamaEnvironmentNames.contextWindow) ?? defaultContextWindow
     )
   }
 
@@ -74,56 +81,4 @@ export class LocalModelEnvironment implements LocalModelEnvironmentApi {
   private readPositiveInteger(name: string): Nullable<number> {
     return toPositiveInteger(this.readString(name))
   }
-}
-
-/**
- * 兼容的函数式入口：保留 0.4.x 的写法，但环境一律显式传进来。
- *
- * @deprecated 下一轮入口收口后改用 `modelCatalog.resolveOllamaBaseURL`。
- */
-export function resolveOllamaBaseURL(
-  defaultBaseURL: string,
-  environment?: ModelEnvironmentPort
-): string {
-  return new LocalModelEnvironment({}, environment).resolveOllamaBaseURL(defaultBaseURL)
-}
-
-/**
- * 兼容的函数式入口，语义同 {@link LocalModelEnvironment.resolveOllamaChatModel}。
- *
- * @deprecated 下一轮入口收口后改用 `modelCatalog.resolveOllamaChatModel`。
- */
-export function resolveOllamaChatModel(
-  defaultModel: string = '',
-  environment?: ModelEnvironmentPort
-): string {
-  return new LocalModelEnvironment({}, environment).resolveOllamaChatModel(defaultModel)
-}
-
-/**
- * 兼容的函数式入口，语义同 {@link LocalModelEnvironment.resolveOllamaContextWindow}。
- *
- * @deprecated 下一轮入口收口后改用 `modelCatalog.resolveOllamaContextWindow`。
- */
-export function resolveOllamaContextWindow(
-  defaultContextWindow?: number,
-  environment?: ModelEnvironmentPort
-): Nullable<number> {
-  return new LocalModelEnvironment({}, environment).resolveOllamaContextWindow(defaultContextWindow)
-}
-
-/**
- * 兼容的函数式入口，语义同 {@link LocalModelEnvironment.resolveOllamaVisibleChatModels}。
- *
- * @deprecated 下一轮入口收口后改用 `modelCatalog.resolveOllamaVisibleChatModels`。
- */
-export function resolveOllamaVisibleChatModels(
-  defaultModel: string = '',
-  selectedModel: string = '',
-  environment?: ModelEnvironmentPort
-): string[] {
-  return new LocalModelEnvironment({}, environment).resolveOllamaVisibleChatModels(
-    defaultModel,
-    selectedModel
-  )
 }

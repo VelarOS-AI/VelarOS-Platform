@@ -11,12 +11,10 @@ import type {
 } from '@ai-sdk/provider'
 import { describe, expect, test } from 'bun:test'
 
+import { languageModelWrappers } from '../src/impl/adapters/LanguageModelWrappers'
 import type { ChatProviderId } from '../src/index'
-import {
-  applyThinkingDepthProviderOptions,
-  createThinkingDepthProviderOptions,
-} from '../src/index'
-import { createModelRuntimeComposition } from '../src/node'
+import { createModelRuntimeComposition } from '../src/index'
+import { createThinkingDepthProviderOptions } from '../src/utils/wire/reasoning'
 
 const AnthropicModelId = 'claude-sonnet-4-6'
 const OpenAiModelId = 'gpt-5.5'
@@ -142,7 +140,7 @@ describe('reasoningLevel=off', () => {
 
   test('适配器包装层把关闭写法合进本次调用', async () => {
     const { model, calls } = createRecordingLanguageModel()
-    const wrapped = applyThinkingDepthProviderOptions(
+    const wrapped = languageModelWrappers.withThinkingDepth(
       model,
       'anthropic',
       AnthropicModelId,

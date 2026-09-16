@@ -1,25 +1,17 @@
 import { describe, expect, test } from 'bun:test'
 
-import {
-  normalizeModelRunUsage,
-  omitModelProfileCredential,
-  planModelProviderRetry,
-  resolveModelProfileCredential,
-  resolveModelProfileCredentialSource,
-  runModelConnectionProbe,
-  summarizeModelUsage,
-} from '../src/index'
+import { modelProfiles, modelProviderRetry, modelUsage } from '../src/index'
 
 describe('Model profiles and usage common layer', () => {
   test('resolves credentials without exposing them in public profiles', () => {
     const profile = { id: 'p1', apiKey: 'secret', model: 'm1' }
-    expect(omitModelProfileCredential(profile)).toEqual({ id: 'p1', model: 'm1' })
-    expect(resolveModelProfileCredential({
+    expect(modelProfiles.omitCredential(profile)).toEqual({ id: 'p1', model: 'm1' })
+    expect(modelProfiles.credential({
       configuredCredential: '',
       environmentName: 'TEST_KEY',
       environment: { TEST_KEY: 'env-secret' },
     })).toBe('env-secret')
-    expect(resolveModelProfileCredentialSource({
+    expect(modelProfiles.credentialSource({
       configuredCredential: '',
       environmentName: null,
       environment: {},
@@ -28,7 +20,7 @@ describe('Model profiles and usage common layer', () => {
   })
 
   test('normalizes provider usage and calculates configured price', () => {
-    const usage = normalizeModelRunUsage({
+    const usage = modelUsage.normalizeRunUsage({
       inputTokens: { total: 1_000, cacheRead: 200 },
       outputTokens: { total: 500, reasoning: 100 },
     }, { inputPerMillion: 2, outputPerMillion: 4 })
@@ -40,7 +32,7 @@ describe('Model profiles and usage common layer', () => {
       totalTokens: 1_500,
       cost: 0.004,
     })
-    expect(summarizeModelUsage([usage, { ...usage, cost: null }])).toMatchObject({
+    expect(modelUsage.summarize([usage, { ...usage, cost: null }])).toMatchObject({
       runs: 2,
       totalTokens: 3_000,
       cost: 0.004,
@@ -50,7 +42,7 @@ describe('Model profiles and usage common layer', () => {
 
   test('forwards caller cancellation to a bounded probe signal', async () => {
     const controller = new AbortController()
-    const probe = runModelConnectionProbe(async (signal) => {
+    const probe = modelProfiles.runConnectionProbe(async (signal) => {
       controller.abort(new Error('cancelled'))
       await Promise.resolve()
       return signal.aborted
@@ -59,15 +51,15 @@ describe('Model profiles and usage common layer', () => {
   })
 
   test('owns provider-neutral transient retry classification and bounds', () => {
-    expect(planModelProviderRetry({ status: 429, headers: { 'retry-after': '3' } }, {
+    expect(modelProviderRetry.plan({ status: 429, headers: { 'retry-after': '3' } }, {
       retryIndex: 1,
       initialDelayMs: 100,
       maxDelayMs: 5_000,
     })).toMatchObject({ kind: 'rate-limit', delayMs: 3_000 })
-    expect(planModelProviderRetry({ status: 401, message: 'Unauthorized' }, {
+    expect(modelProviderRetry.plan({ status: 401, message: 'Unauthorized' }, {
       retryIndex: 1,
     })).toBeNull()
-    expect(planModelProviderRetry({ code: 'ECONNRESET' }, {
+    expect(modelProviderRetry.plan({ code: 'ECONNRESET' }, {
       retryIndex: 9,
       initialDelayMs: 100,
       maxDelayMs: 500,

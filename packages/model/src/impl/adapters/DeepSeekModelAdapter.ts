@@ -5,8 +5,8 @@ import type { LanguageModelFactory, ModelAdapterConfig } from '../../types/adapt
 import type { ChatProviderId } from '../../types/model'
 import type { ModelProviderCollectionApi } from '../providers/ModelProviderCollection'
 
+import { languageModelWrappers } from './LanguageModelWrappers'
 import { ModelAdapter } from './ModelAdapter'
-import { applyPromptCacheProviderOptions } from './PromptCacheLanguageModel'
 
 /** DeepSeek 适配器，复用 OpenAI-compatible AI SDK provider。 */
 class DeepSeekModelAdapter extends ModelAdapter implements ModelProviderAdapter {
@@ -22,7 +22,7 @@ class DeepSeekModelAdapter extends ModelAdapter implements ModelProviderAdapter 
       name: 'deepseek',
     })
 
-    return (modelId) => applyPromptCacheProviderOptions(deepseek.chat(modelId))
+    return (modelId) => languageModelWrappers.withPromptCache(deepseek.chat(modelId))
   }
 }
 

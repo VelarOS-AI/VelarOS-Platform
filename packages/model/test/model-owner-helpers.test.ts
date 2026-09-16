@@ -1,13 +1,11 @@
 import { describe, expect, test } from 'bun:test'
 
+import { ModelProviderCollection } from '../src/impl/providers/ModelProviderCollection'
+import { type ChatProviderId, createModelRuntimeComposition } from '../src/index'
 import {
-  type ChatProviderId,
-  filterEmbeddingModelCandidates,
-  ModelProviderCollection,
-  resolveDefaultEmbeddingModelForProvider,
-  selectEmbeddingModelCandidate,
-} from '../src/index'
-import { createModelRuntimeComposition } from '../src/node'
+  filterEmbeddingModels,
+  selectEmbeddingModel,
+} from '../src/utils/catalog/embedding'
 
 const InjectedEmbeddingProviderId = 'test-embedding-provider' as ChatProviderId
 
@@ -51,7 +49,7 @@ describe('Model-owned embedding selection helpers', () => {
     const { providerCollection } = createIsolatedComposition()
 
     expect(
-      selectEmbeddingModelCandidate([
+      selectEmbeddingModel([
         'chat-model',
         'nomic-embed-text',
         'text-embedding-3-small',
@@ -59,7 +57,7 @@ describe('Model-owned embedding selection helpers', () => {
       ]),
     ).toBe('text-embedding-3-large')
     expect(
-      filterEmbeddingModelCandidates([
+      filterEmbeddingModels([
         ' chat-model ',
         ' text-embedding-3-large ',
         'text-embedding-3-large',
@@ -68,7 +66,7 @@ describe('Model-owned embedding selection helpers', () => {
       ]),
     ).toEqual(['text-embedding-3-large', 'bge-m3'])
     expect(
-      resolveDefaultEmbeddingModelForProvider(providerCollection, 'openai'),
+      providerCollection.defaultEmbeddingModel('openai'),
     ).toBe('text-embedding-3-large')
     expect(providerCollection.defaultEmbeddingModel('openai')).toBe('text-embedding-3-large')
     expect(providerCollection.isEmbeddingCapable('openai')).toBe(true)
@@ -85,19 +83,13 @@ describe('Model-owned embedding selection helpers', () => {
     })
 
     expect(
-      resolveDefaultEmbeddingModelForProvider(
-        first.providerCollection,
-        InjectedEmbeddingProviderId,
-      ),
+      first.providerCollection.defaultEmbeddingModel(InjectedEmbeddingProviderId),
     ).toBe('example-embed-v1')
     expect(
       first.providerCollection.isEmbeddingCapable(InjectedEmbeddingProviderId),
     ).toBe(true)
     expect(() =>
-      resolveDefaultEmbeddingModelForProvider(
-        second.providerCollection,
-        InjectedEmbeddingProviderId,
-      ),
+      second.providerCollection.defaultEmbeddingModel(InjectedEmbeddingProviderId),
     ).toThrow(`未知模型 provider：${InjectedEmbeddingProviderId}`)
   })
 })

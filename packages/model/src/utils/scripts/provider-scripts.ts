@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 
 import {
   isArray,
@@ -18,6 +19,10 @@ import { AppError } from '@velaros-ai/core/error'
 
 import { ModelErrorCodes, ModelProviderOperationalManifests } from '../../contract/constants.js'
 import type {
+  ProviderScriptDefinition,
+  ProviderScriptHelpers,
+} from '../../contract/requires'
+import type {
   ChatProviderId,
   ModelInputModality,
   ModelRequestOptions,
@@ -25,10 +30,6 @@ import type {
   ProviderScriptManifest,
   ProviderScriptRuntimeMetadata,
 } from '../../types/model'
-import type {
-  ProviderScriptDefinition,
-  ProviderScriptHelpers,
-} from '../../types/script-authoring'
 import type { ProviderScriptDevConfig } from '../../types/scripts'
 import { toPositiveInteger } from '../numbers'
 
@@ -244,4 +245,9 @@ export function normalizeLoadedDefinition(
     )
 
   return parseProviderScriptDefinition(candidate, 'provider script 必须导出合法定义对象。')
+}
+
+/** 开发者本机 dev.json 的候选路径：先看工作目录，再看用户目录。 */
+export function providerScriptDevConfigCandidates(cwd: string, homeDir: string): string[] {
+  return [join(cwd, '.velaros/dev.json'), join(homeDir, '.velaros/dev.json')]
 }
