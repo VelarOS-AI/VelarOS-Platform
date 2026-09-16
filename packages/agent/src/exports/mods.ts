@@ -2,13 +2,13 @@
 // 唯一门面；主干之外一律经此消费，不深入子模块。
 export type { AgentModPackReader } from '../contract/requires.js'
 export type { VelarModArchiveSignatureVerifier } from '../contract/requires.js'
-export { assembleAgentMods, discoverAgentModPackages } from '../impl/assembly/AgentModHostAssembler'
 export {
   BuiltinAgentModId,
   BuiltinAgentModToolCollections,
   collectBuiltinAgentModTools,
   createBuiltinAgentModPackage,
-} from '../impl/builtin/BuiltinAgentMod'
+} from '../impl/AgentTools'
+export { assembleAgentMods, discoverAgentModPackages } from '../impl/assembly/AgentModHostAssembler'
 export { AgentModStaleSnapshotError } from '../impl/errors/AgentModStaleSnapshotError'
 export { AgentModLoader, DataOnlyAxes, PayloadRequiredAxes } from '../impl/mods/AgentModLoader'
 export { AgentModRegistry } from '../impl/mods/AgentModRegistry'

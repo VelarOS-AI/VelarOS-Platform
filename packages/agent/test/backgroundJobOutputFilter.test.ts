@@ -2,11 +2,11 @@ import assert from 'node:assert/strict'
 
 import { describe, test } from 'bun:test'
 
+import type { ToolBackgroundJobOutputSnapshot } from '../src/types/tool-context.js'
 import {
   filterBackgroundJobOutput,
   formatBackgroundJobOutput,
-} from '../src/impl/builtin/BackgroundJobOperations'
-import type { ToolBackgroundJobOutputSnapshot } from '../src/types/tool-context.js'
+} from '../src/utils/builtin/background-jobs'
 
 function snapshot(
   overrides: Partial<ToolBackgroundJobOutputSnapshot> = {}

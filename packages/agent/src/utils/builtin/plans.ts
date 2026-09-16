@@ -1,9 +1,10 @@
 import { z } from 'zod'
 
-import type { ExecutionTaskPlanStep } from '../../types/agent.js'
+import { AgentToolLimits } from '../../contract/constants.js'
+import type { ActiveContextArtifact, ExecutionTaskPlanStep } from '../../types/agent.js'
 import type { PlanLifecycle, PlanStepCompletionResult, PlanStepRef, StepEngineOptions,UpdatePlanInput, UserPlanStatus, UserPlanStep } from '../../types/builtin.js'
 
-import { completeSteps } from './step-refs'
+import { completeSteps, describeStepRefsForModel } from './step-refs'
 
 /** 对模型开放的计划步骤状态，收窄为用户能理解的几种状态。 */
 export const planStatusSchema = z.enum([
@@ -111,4 +112,55 @@ export function formatActivePlanContent(
 function toUserPlanStatus(status: ExecutionTaskPlanStep['status']): UserPlanStatus {
   if (status === 'running' || status === 'delegated') return 'in_progress'
   return status
+}
+
+/** 步骤引用：1-based 序号或精确标题；标题长度与步骤标题上限一致，模型看得到。 */
+export const planStepRefSchema: z.ZodType<string | number> = z.union([
+  z.string().trim().min(1).max(AgentToolLimits.planning.stepTitleChars),
+  z.number().int().positive(),
+])
+
+/** 当前执行计划在活动上下文里的固定 artifact id。 */
+export const PlanArtifactId: string = 'active-plan'
+
+/** 计划生命周期的取值表。 */
+export const PlanLifecycleValues: readonly PlanLifecycle[] = ['active', 'paused', 'completed', 'archived']
+
+/** 按取值表建的判定集合，用来认出历史 artifact 上存的生命周期。 */
+export const PlanLifecycleSet: ReadonlySet<unknown> = new Set<unknown>(PlanLifecycleValues)
+
+/** 在活动上下文条目里找出本次执行的计划条目；同一执行有多条时取最近更新的那条。 */
+export function findPlanArtifact(
+  artifacts: readonly ActiveContextArtifact[],
+  executionId: string
+): ActiveContextArtifact | undefined {
+  return artifacts
+    .filter(
+      (candidate) =>
+        candidate.id === PlanArtifactId &&
+        candidate.kind === 'plan' &&
+        candidate.metadata?.executionId === executionId
+    )
+    .sort((left, right) => right.updatedAt - left.updatedAt)[0]
+}
+
+/** 读当前计划的生命周期：优先用条目上存的值，其次看条目状态，最后按步骤推导。 */
+export function readPlanLifecycle(
+  artifacts: readonly ActiveContextArtifact[],
+  plan: readonly ExecutionTaskPlanStep[],
+  executionId: string
+): PlanLifecycle {
+  const artifact = findPlanArtifact(artifacts, executionId)
+  const stored = artifact?.metadata?.planLifecycle
+  if (PlanLifecycleSet.has(stored)) return stored as PlanLifecycle
+  if (artifact?.status === 'archived') return 'archived'
+  if (artifact?.status === 'completed') return 'completed'
+  return resolvePlanLifecycle({ plan: toUserPlanSteps(plan) })
+}
+
+/** 计划步骤 → 模型可引用清单（共享步骤引擎；执行计划的标题字段是 title）。 */
+export function describePlanStepRefsForModel(
+  plan: ReadonlyArray<{ title: string; status: string }>
+): Array<{ ref: number; title: string; status: string }> {
+  return describeStepRefsForModel(plan, (step) => step.title)
 }

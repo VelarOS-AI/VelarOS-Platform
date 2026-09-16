@@ -4,6 +4,7 @@ import { isEmpty, isPresent } from '@velaros-ai/core'
 
 import type { SubAgentTypeId } from '../../types/agent.js'
 import type { DispatchAgentInput } from '../../types/builtin.js'
+import type { SubAgentDispatchInput } from '../../types/delegation.js'
 import {
   renderParameterDescription as parameterDescription,
 } from '../toolkit/tool-description'
@@ -221,4 +222,39 @@ const dispatchAgentSchema = z.object({
     }
 }) satisfies z.ZodType<DispatchAgentInput>
 
-export { dispatchAgentSchema, type SubAgentTypeId }
+/**
+ * 把模型面的 snake_case 入参翻成宿主端口要的 camelCase 请求。
+ *
+ * 只有这几个字段需要改名，其余同名字段整块 spread——逐字段抄一遍既冗长，又会在 schema 加字段时静默漏传。
+ * schema 只为新建调用补默认，续跑保留 undefined 交给派发器从已有线程继承；这里的回退也保护绕过 schema
+ * 直接调 execute 的内部宿主。
+ */
+function buildSubAgentDispatchRequest(input: DispatchAgentInput): SubAgentDispatchInput {
+  const {
+    agent_name: agentName,
+    subagent_type: subagentType,
+    tool_scope: toolScope,
+    tool_categories: toolCategories,
+    thread_id: threadId,
+    route_category: routeCategory,
+    output_schema: outputSchema,
+    prompt,
+    ...sameNameFields
+  } = input
+  const creatingThread = !threadId
+
+  return {
+    ...sameNameFields,
+    prompt: prompt ?? '',
+    agentName,
+    subagentType,
+    toolScope: toolScope ?? (creatingThread ? 'type_default' : undefined),
+    toolCategories: toolCategories ?? (creatingThread ? [] : undefined),
+    threadId,
+    routeCategory,
+    // output_schema 存在时开放结构化输出契约（校验 + 修复闭环复用 Workflow 既有基建）。
+    structuredOutputContract: outputSchema ? { schema: outputSchema } : undefined,
+  }
+}
+
+export { buildSubAgentDispatchRequest,dispatchAgentSchema, type SubAgentTypeId }

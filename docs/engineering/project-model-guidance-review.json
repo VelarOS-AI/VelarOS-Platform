@@ -32,10 +32,10 @@
     {
       "entry": "能力发现、换入、计划与主动召回",
       "sources": [
-        "packages/agent/src/impl/builtin/Categories.tool.ts",
+        "packages/agent/src/impl/AgentTools.ts",
         "packages/agent/src/utils/builtin/context-retrieval.ts",
-        "packages/agent/src/impl/builtin/ContextRetrieval.tool.ts",
-        "packages/agent/src/impl/builtin/Plans.tool.ts"
+        "packages/agent/src/impl/builtin/ContextOperations.ts",
+        "packages/agent/src/impl/builtin/PlanOperations.ts"
       ]
     },
     {
@@ -85,16 +85,16 @@
       "fingerprint": "fc4c1b3f207a8e561f89a45dd895044ab51ebcee41bbc4fe525708ba6e9bb724"
     },
     {
-      "path": "packages/agent/src/impl/builtin/Categories.tool.ts",
-      "fingerprint": "61481221313b23d8da6e9cc22935a5e58d6d1b2532bbdd482021e02f0f080091"
+      "path": "packages/agent/src/impl/AgentTools.ts",
+      "fingerprint": "cbfbf0771a0d7a19ea5e97e5c6c96d8efd82899988b61cc8690c16336f215add"
     },
     {
-      "path": "packages/agent/src/impl/builtin/ContextRetrieval.tool.ts",
-      "fingerprint": "9a67708afe4afe1729da1d2c9dcea77afcaa479ae455a9b661167a9572586607"
+      "path": "packages/agent/src/impl/builtin/ContextOperations.ts",
+      "fingerprint": "8f1c5b0fb52eef51e21ef5d1f61786c75b3048555d87e24c85db57d65ae09c8f"
     },
     {
-      "path": "packages/agent/src/impl/builtin/Plans.tool.ts",
-      "fingerprint": "8cbbce01d7e8145a4e365fc275e2bcc3ef6f1bd530a8e9889d9c319581b99de4"
+      "path": "packages/agent/src/impl/builtin/PlanOperations.ts",
+      "fingerprint": "d73e9a3b453804cf6cec9a8119849a54c597537810b5e8db98a2a69173c78c85"
     },
     {
       "path": "packages/agent/src/impl/runner/PromptStateBuilder.ts",

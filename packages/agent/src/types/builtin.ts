@@ -51,6 +51,32 @@ export interface ActiveDirectiveMetadata {
   directiveType?: unknown
 }
 
+/** 归档长期指令一条都没命中时给出的诊断：说清是撞上了目标约束，还是本来就没有这条 session 指令。 */
+export interface ActiveDirectiveArchiveDiagnostic {
+  /** 没命中的原因：`goal_constraint` 是这些 id 属于目标约束，`no_matching_session_directive` 是本来就没有。 */
+  reason: 'goal_constraint' | 'no_matching_session_directive'
+  /** 调用方传进来、但一条都没匹配上的 id。 */
+  unmatchedIds: string[]
+  /** 这些 id 里看起来其实是目标约束的那几个。 */
+  possibleGoalConstraintIds: string[]
+  /** 命中的目标约束引用，逐条给出目标 id、约束 id 与标题。 */
+  goalConstraintReferences: GoalConstraintReference[]
+  /** 给模型看的中文说明：为什么没归档、该改用哪个工具。 */
+  message: string
+}
+
+/** 归档长期指令的结果：归档了哪几条、共几条、归档后的条目，以及一条都没命中时的诊断。 */
+export interface ActiveDirectiveArchiveResult {
+  /** 实际归档的指令 id。 */
+  archivedIds: string[]
+  /** 实际归档的条数。 */
+  archivedCount: number
+  /** 归档后的条目本身。 */
+  directives: ActiveContextArtifact[]
+  /** 一条都没归档时的诊断；有归档时缺席。 */
+  diagnostic?: ActiveDirectiveArchiveDiagnostic
+}
+
 export interface GoalConstraintReference {
   goalId: string
   constraintId: string

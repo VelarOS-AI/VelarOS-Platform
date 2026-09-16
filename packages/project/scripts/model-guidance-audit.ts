@@ -6,9 +6,7 @@ import { resolve } from 'node:path'
 
 import { DefaultToolContractExampleRegistry } from '@velaros-ai/agent/tool-contract'
 
-import { categoriesTools } from '../../agent/src/impl/builtin/Categories.tool'
-import { contextRetrievalTools } from '../../agent/src/impl/builtin/ContextRetrieval.tool'
-import { plansTools } from '../../agent/src/impl/builtin/Plans.tool'
+import { categoriesTools, contextRetrievalTools, plansTools } from '../../agent/src/impl/AgentTools'
 import { PromptRegistry } from '../../agent/src/impl/guidance/PromptRegistry'
 import { DefaultToolContractExampleRegistry as SourceToolExamples } from '../../agent/src/impl/tools/ToolContractExampleRegistry'
 import type { RuntimePromptSnapshot } from '../../agent/src/types/guidance.js'
@@ -38,7 +36,7 @@ export function registeredGuidanceTools(tools: ReadonlyArray<Omit<GuidanceTool, 
 export const GuidanceSources = [
   { entry: 'Project 工具注册与 schema', sources: ['packages/project/src/impl/ProjectTools.ts', 'packages/project/src/impl/operations', 'packages/project/src/utils/tool.ts'] },
   { entry: 'RunContext → PromptState → 内置段组装', sources: ['packages/agent/src/impl/runner/RunContext.ts', 'packages/agent/src/impl/runner/PromptStateBuilder.ts', 'packages/agent/src/utils/guidance/catalog.ts', 'packages/agent/src/utils/guidance/runtime.ts', 'packages/agent/src/utils/guidance/task.ts'] },
-  { entry: '能力发现、换入、计划与主动召回', sources: ['packages/agent/src/impl/builtin/Categories.tool.ts', 'packages/agent/src/utils/builtin/context-retrieval.ts', 'packages/agent/src/impl/builtin/ContextRetrieval.tool.ts', 'packages/agent/src/impl/builtin/Plans.tool.ts'] },
+  { entry: '能力发现、换入、计划与主动召回', sources: ['packages/agent/src/impl/AgentTools.ts', 'packages/agent/src/utils/builtin/context-retrieval.ts', 'packages/agent/src/impl/builtin/ContextOperations.ts', 'packages/agent/src/impl/builtin/PlanOperations.ts'] },
   { entry: '参数失败恢复与当前源码指导', sources: ['packages/agent/src/utils/tools/tool-args-schema-validator.ts', 'packages/agent/src/impl/tools/ToolInputReuseStore.ts', 'packages/agent/src/utils/tools/transient-recovery-projection.ts', 'packages/agent/src/utils/context/file-context-projection.ts', 'packages/project/src/utils/transactions/transaction-errors.ts'] },
   { entry: '模型回执与最终读取引用', sources: ['packages/agent/src/impl/tools/ToolExecutor.ts', 'packages/agent/src/utils/tools/tool-input-history-projection.ts', 'packages/project/src/utils/agent'] },
   { entry: '用户可读示例与实现说明', sources: ['packages/project/README.md', 'docs/engineering/project-tool-surface-redesign-proposal.md', 'docs/engineering/project-tool-surface-implementation.md', 'docs/engineering/project-text-protocol.md'] },

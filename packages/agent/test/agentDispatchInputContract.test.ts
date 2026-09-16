@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import { dispatchAgentTools } from '../src/impl/builtin/DispatchAgent.tool'
+import { dispatchAgentTools } from '../src/impl/AgentTools'
 import { SubAgentDispatcher } from '../src/impl/delegation/SubAgentDispatcher'
 import { TeamModelRouter } from '../src/impl/delegation/TeamModelRouter'
 import { WriteLeaseCoordinator } from '../src/impl/delegation/WriteLeaseCoordinator'

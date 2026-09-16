@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import { plansTools } from '../src/impl/builtin/Plans.tool'
+import { plansTools } from '../src/impl/AgentTools'
 import { PromptStateBuilder } from '../src/impl/runner/PromptStateBuilder'
 import { CodingSessionTracker } from '../src/impl/session/CodingSessionTracker'
 import type {

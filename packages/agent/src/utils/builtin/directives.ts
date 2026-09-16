@@ -1,3 +1,6 @@
+// 域：会话级长期指令（`directive:*` 三个工具）的纯逻辑：身份归并、匹配、上限判定与读写编排。
+//
+// 这里只认「活动上下文条目」这个接口，不认宿主：所有函数都收调用方传进来的 `ActiveDirectiveContext`。
 import { createHash } from 'node:crypto'
 
 import { z } from 'zod'
@@ -7,7 +10,7 @@ import { AppError } from '@velaros-ai/core/error'
 
 import { AgentToolLimits } from '../../contract/constants.js'
 import type { ActiveContextArtifact, ActiveContextArtifactKind, ActiveContextArtifactStatus, ActiveDirectiveArchiveInput, ActiveDirectiveType, ActiveDirectiveUpsertInput } from '../../types/agent.js'
-import type { ActiveDirectiveContext, ActiveDirectiveMetadata, GoalConstraintReference } from '../../types/builtin.js'
+import type { ActiveDirectiveArchiveDiagnostic, ActiveDirectiveArchiveResult, ActiveDirectiveContext, ActiveDirectiveMetadata, GoalConstraintReference } from '../../types/builtin.js'
 
 
 export const directiveTypeSchema: z.ZodType<ActiveDirectiveType> = z.enum([
@@ -23,21 +26,17 @@ export const ActiveDirectiveLimits: { readonly maxActive: number } = Object.free
   maxActive: AgentToolLimits.directives.maxActive,
 })
 
-interface ActiveDirectiveArchiveResult {
-  archivedIds: string[]
-  archivedCount: number
-  directives: ActiveContextArtifact[]
-  diagnostic?: ReturnType<typeof buildNoArchiveDiagnostic>
-}
-
+/** 读一条活动上下文条目的指令元数据；不是对象就当空表。 */
 function getDirectiveMetadata(artifact: ActiveContextArtifact): ActiveDirectiveMetadata {
   return isPlainObject(artifact.metadata) ? artifact.metadata : {}
 }
 
+/** 判断一条活动上下文条目是不是长期指令（kind=requirement 且 metadata.directive 为真）。 */
 function isActiveDirectiveArtifact(artifact: ActiveContextArtifact): boolean {
   return artifact.kind === 'requirement' && isTrue(getDirectiveMetadata(artifact).directive)
 }
 
+/** 读一条指令的类型；元数据里的值不合法时返回 null。 */
 function getDirectiveType(artifact: ActiveContextArtifact): Nullable<ActiveDirectiveType> {
   const raw = getDirectiveMetadata(artifact).directiveType
   const parsed = directiveTypeSchema.safeParse(raw)
@@ -45,10 +44,12 @@ function getDirectiveType(artifact: ActiveContextArtifact): Nullable<ActiveDirec
   return parsed.success ? parsed.data : null
 }
 
+/** 把指令标题归一成可比较的身份串：NFKC、去首尾空白、折叠空格、转小写。 */
 function normalizeDirectiveIdentity(value: string): string {
   return value.normalize('NFKC').trim().toLowerCase().replace(/\s+/gu, ' ')
 }
 
+/** 由归一化后的身份串派生稳定的 artifact id。 */
 function createDirectiveArtifactId(value: string): string {
   const digest = createHash('sha256')
     .update(normalizeDirectiveIdentity(value))
@@ -96,12 +97,14 @@ function resolveDirectiveArtifactId(
   return createDirectiveArtifactId(requestedId ? `id:${requestedId}` : `title:${input.title}`)
 }
 
+/** 按标题子串匹配一条指令；没给标题时一律算命中。 */
 function matchesDirectiveTitle(artifact: ActiveContextArtifact, title: Nullable<string>): boolean {
   if (!title) return true
 
   return artifact.title.toLowerCase().includes(title.toLowerCase())
 }
 
+/** 从一条目标条目里找出与给定 id 集合相交的约束引用，用来解释「这些 id 是目标约束不是指令」。 */
 function readGoalConstraintReferences(
   artifact: ActiveContextArtifact,
   idSet: ReadonlySet<string>
@@ -130,7 +133,11 @@ function readGoalConstraintReferences(
   })
 }
 
-function buildNoArchiveDiagnostic(input: { ids?: string[] }, artifacts: ActiveContextArtifact[]) {
+/** 归档一条都没命中时，说清楚是撞上了目标约束还是本来就没有这条 session 指令。 */
+function buildNoArchiveDiagnostic(
+  input: { ids?: string[] },
+  artifacts: ActiveContextArtifact[]
+): ActiveDirectiveArchiveDiagnostic {
   const requestedIds = input.ids ?? []
   const idSet = new Set(requestedIds)
   const goalConstraintReferences =
@@ -160,6 +167,7 @@ function buildNoArchiveDiagnostic(input: { ids?: string[] }, artifacts: ActiveCo
   }
 }
 
+/** 列出当前会话里仍然生效的长期指令。 */
 async function listActiveDirectives(
   context: ActiveDirectiveContext,
   status: ActiveContextArtifactStatus | 'all' = 'active'
@@ -171,6 +179,7 @@ async function listActiveDirectives(
   return artifacts.filter(isActiveDirectiveArtifact)
 }
 
+/** 写入或更新一条长期指令；撞上非指令条目或超出条数上限时抛错。 */
 async function upsertActiveDirective(
   context: ActiveDirectiveContext,
   input: ActiveDirectiveUpsertInput
@@ -212,6 +221,7 @@ async function upsertActiveDirective(
   })
 }
 
+/** 按 id、标题或类型归档长期指令；一条都没命中时带上诊断说明。 */
 async function archiveActiveDirectives(
   context: ActiveDirectiveContext,
   input: ActiveDirectiveArchiveInput
@@ -249,4 +259,4 @@ async function archiveActiveDirectives(
   }
 }
 
-export { type ActiveDirectiveArchiveResult, type ActiveDirectiveType, archiveActiveDirectives, buildNoArchiveDiagnostic, createDirectiveArtifactId, getDirectiveType, isActiveDirectiveArtifact, listActiveDirectives, matchesDirectiveTitle, resolveDirectiveArtifactId, upsertActiveDirective }
+export { archiveActiveDirectives, buildNoArchiveDiagnostic, createDirectiveArtifactId, getDirectiveType, isActiveDirectiveArtifact, listActiveDirectives, matchesDirectiveTitle, resolveDirectiveArtifactId, upsertActiveDirective }

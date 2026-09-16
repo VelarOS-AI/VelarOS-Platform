@@ -1,7 +1,7 @@
 import type { ModelMessage } from 'ai'
 import { describe, expect, test } from 'bun:test'
 
-import { contextRetrievalTools } from '../src/impl/builtin/ContextRetrieval.tool'
+import { contextRetrievalTools } from '../src/impl/AgentTools'
 import {
   FileContextCoordinator,
   fileContextFor,

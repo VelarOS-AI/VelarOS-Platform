@@ -24,7 +24,7 @@ import type { AgentModPackReader } from '../../contract/requires.js'
 import type { AgentModDiagnostic } from '../../types/agent.js'
 import type { AgentModAssembly, AgentModDiscoveryResult, AgentModPackage,AgentModPackDescriptorLike, AssembleAgentModsInput } from '../../types/mods.js'
 import { readErrorMessage } from '../../utils/mods/seams'
-import { createBuiltinAgentModPackage } from '../builtin/BuiltinAgentMod'
+import { createBuiltinAgentModPackage } from '../AgentTools'
 import { AgentModLoader } from '../mods/AgentModLoader'
 
 /**

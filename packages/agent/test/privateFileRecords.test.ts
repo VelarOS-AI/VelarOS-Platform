@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
 
-import { contextRetrievalTools } from '../src/impl/builtin/ContextRetrieval.tool'
+import { contextRetrievalTools } from '../src/impl/AgentTools'
 import { InMemoryContextPayloadStore } from '../src/impl/context/InMemoryContextPayloadStore'
 import { ContextRetrievalIndexBuilder } from '../src/impl/retrieval/ContextRetrievalIndexBuilder'
 

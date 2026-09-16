@@ -1,11 +1,11 @@
 import { describe, expect, test } from 'bun:test'
 
-import { assembleAgentMods } from '../src/impl/assembly/AgentModHostAssembler'
 import {
   BuiltinAgentModId,
   collectBuiltinAgentModTools,
   createBuiltinAgentModPackage,
-} from '../src/impl/builtin/BuiltinAgentMod'
+} from '../src/impl/AgentTools'
+import { assembleAgentMods } from '../src/impl/assembly/AgentModHostAssembler'
 import { AgentModStaleSnapshotError } from '../src/impl/errors/AgentModStaleSnapshotError'
 import { AgentModLoader } from '../src/impl/mods/AgentModLoader'
 import { AgentModRegistry } from '../src/impl/mods/AgentModRegistry'

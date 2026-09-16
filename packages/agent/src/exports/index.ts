@@ -1,6 +1,23 @@
 export type { AgentEnvironmentVariable, AgentErrorCode, AgentToolCategoryId, AgentToolName } from '../contract/constants.js'
 export { AgentCapabilityApiVersionString, AgentContextThresholds, AgentEnvironmentVariables, AgentErrorCodes, AgentIdentity, AgentLeasePolicy, AgentProtocolVersions, AgentSkillFiles, AgentStepLimits, AgentToolCategoryByName, AgentToolLimits, AgentToolNames, AgentToolTransport, ExternalAgentBridgeLimits, TurnContextFormat, VelarModArchiveLimits } from '../contract/constants.js'
 export type { AgentBackgroundAgent, AgentBackgroundAgentControlPort, AgentBackgroundAgentPort, AgentBackgroundAgentState, AgentSessionCatalogPort, AgentSessionCatalogQuery, AgentSessionEventPort, AgentSessionLease, AgentSessionLeaseClaim, AgentSessionLeasePort, AgentSessionLifecycleStatus, AgentSessionMetadata, AgentSessionResourceReference, CreateAgentSessionMetadataInput, RemoteHostServicePorts, ToolExecutionApi } from '../contract/requires.js'
+export {
+  activeDirectiveTools,
+  agentWorkflowTools,
+  backgroundJobTools,
+  BuiltinAgentModId,
+  BuiltinAgentModToolCollections,
+  categoriesTools,
+  collectBuiltinAgentModTools,
+  confirmationTools,
+  contextDistillTools,
+  contextHandoffTools,
+  contextRetrievalTools,
+  createBuiltinAgentModPackage,
+  dispatchAgentTools,
+  goalTools,
+  plansTools,
+} from '../impl/AgentTools'
 export { createAgentExecutionStack } from '../impl/assembly/AgentExecutionStack'
 export {
   AgentCapability,
@@ -13,37 +30,6 @@ export type { ChatKernelSessionBridgeOptions } from '../impl/assembly/ChatKernel
 export { ChatKernelSessionBridge } from '../impl/assembly/ChatKernelSessionBridge'
 export type { KernelSessionControllerAdapter } from '../impl/assembly/KernelSessionController'
 export { KernelSessionController } from '../impl/assembly/KernelSessionController'
-export { activeDirectiveTools } from '../impl/builtin/ActiveDirectives.tool'
-export { agentWorkflowTools } from '../impl/builtin/AgentWorkflow.tool'
-export { backgroundJobTools } from '../impl/builtin/BackgroundJobs.tool'
-export {
-  BuiltinAgentModId,
-  BuiltinAgentModToolCollections,
-  collectBuiltinAgentModTools,
-  createBuiltinAgentModPackage,
-} from '../impl/builtin/BuiltinAgentMod'
-export { categoriesTools } from '../impl/builtin/Categories.tool'
-export { confirmationTools } from '../impl/builtin/confirmation-tool'
-export { contextDistillTools, distillContextSchema } from '../impl/builtin/ContextDistill.tool'
-export { contextHandoffTools, handoffContextSchema } from '../impl/builtin/ContextHandoff.tool'
-export { contextRetrievalTools } from '../impl/builtin/ContextRetrieval.tool'
-export type { ActiveDirectiveArchiveResult } from '../impl/builtin/DirectiveOperations'
-export {
-  ActiveDirectiveLimits,
-  archiveActiveDirectives,
-  buildNoArchiveDiagnostic,
-  createDirectiveArtifactId,
-  directiveTypeSchema,
-  getDirectiveType,
-  isActiveDirectiveArtifact,
-  listActiveDirectives,
-  matchesDirectiveTitle,
-  resolveDirectiveArtifactId,
-  upsertActiveDirective,
-} from '../impl/builtin/DirectiveOperations'
-export { dispatchAgentTools } from '../impl/builtin/DispatchAgent.tool'
-export { goalTools } from '../impl/builtin/Goals.tool'
-export { plansTools } from '../impl/builtin/Plans.tool'
 export { ChatMessageHelper, ChatMessageHelper as ChatMessages } from '../impl/chat/ChatMessages'
 export { ChatStreamConsumer } from '../impl/chat/ChatStreamConsumer'
 export { ChatStreamProtocol,chatStreamProtocol } from '../impl/chat/ChatStreamProtocol'
@@ -111,7 +97,6 @@ export {
   createBuiltInPromptRegistry,
   PromptRegistry,
   PromptSegmentTierRank,
-  resolvePromptSegmentStability,
 } from '../impl/guidance/PromptRegistry'
 export type { SkillFileStoreDependencies } from '../impl/guidance/SkillFileStore'
 export {
@@ -174,7 +159,23 @@ export { loopContinue, loopFinish, LoopWindDownGuard } from '../impl/loop/LoopWi
 export { PromptRunPlanner, promptRunPlanner } from '../impl/loop/PromptRunPlanner'
 export type { QueryLoopRoleRuntime, QueryLoopRunContext, QueryLoopRuntime, QueryLoopTurnRunner } from '../impl/loop/QueryLoop'
 export { QueryLoop } from '../impl/loop/QueryLoop'
+export type { ActiveDirectiveArchiveResult } from '../types/builtin.js'
+export { distillContextSchema, handoffContextSchema } from '../utils/builtin/context-tools'
+export {
+  ActiveDirectiveLimits,
+  archiveActiveDirectives,
+  buildNoArchiveDiagnostic,
+  createDirectiveArtifactId,
+  directiveTypeSchema,
+  getDirectiveType,
+  isActiveDirectiveArtifact,
+  listActiveDirectives,
+  matchesDirectiveTitle,
+  resolveDirectiveArtifactId,
+  upsertActiveDirective,
+} from '../utils/builtin/directives'
 export { isBlockedFetchIpAddress } from '../utils/connectors/fetch-safety'
+export { resolvePromptSegmentStability } from '../utils/guidance/prompt-stability'
 /** @deprecated 请改用 `QueryLoop`；该别名保留至 Agent 1.0。 */
 export { QueryLoop as AgentQueryLoop } from '../impl/loop/QueryLoop'
 export type { QueryTurnResult } from '../impl/loop/QueryTurn'

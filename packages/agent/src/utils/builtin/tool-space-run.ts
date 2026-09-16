@@ -17,14 +17,15 @@
 import { type z } from 'zod'
 
 import type { KernelToolContext as ToolContext } from '../../types/tool-context.js'
+
 import {
   mapToolDiscoveryCards,
   pageToolDiscoveryCards,
   searchToolDiscoveryCards,
-} from '../../utils/builtin/tool-space-queries'
-import { replaceToolSpacePages } from '../../utils/builtin/tool-space-replace'
-import { type toolSpaceSchema } from '../../utils/builtin/tool-space-schemas'
-import { readRequestedSkillPages } from '../../utils/builtin/tool-space-skill-read'
+} from './tool-space-queries'
+import { replaceToolSpacePages } from './tool-space-replace'
+import { type toolSpaceSchema } from './tool-space-schemas'
+import { readRequestedSkillPages } from './tool-space-skill-read'
 
 export {
   parseToolSpaceQueryMethodInput,
@@ -32,8 +33,9 @@ export {
   toolSpaceReadMethodSchema,
   toolSpaceReplaceMethodSchema,
   toolSpaceSchema,
-} from '../../utils/builtin/tool-space-schemas'
+} from './tool-space-schemas'
 
+/** 五个 op 到处理器的派发表：find/page/map 只读，read 读技能正文，replace 改会话驻留。 */
 export const ToolSpaceOpHandlers: {
   [K in z.output<typeof toolSpaceSchema>['op']]: (
     ctx: ToolContext,
@@ -47,6 +49,7 @@ export const ToolSpaceOpHandlers: {
   replace: replaceToolSpacePages,
 }
 
+/** 按 op 把一次工具页调用派给对应的处理器；派发表与 schema 的判别联合同型，加了 op 没接就编译不过。 */
 export async function runToolSpace(ctx: ToolContext, input: z.output<typeof toolSpaceSchema>) {
   const handler = ToolSpaceOpHandlers[input.op] as (
     ctx: ToolContext,

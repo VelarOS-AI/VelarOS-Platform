@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test'
 
-import { createBuiltinAgentModPackage } from '../src/impl/builtin/BuiltinAgentMod'
-import { contextDistillTools } from '../src/impl/builtin/ContextDistill.tool'
-import { contextHandoffTools } from '../src/impl/builtin/ContextHandoff.tool'
+import { createBuiltinAgentModPackage } from '../src/impl/AgentTools'
+import { contextDistillTools } from '../src/impl/AgentTools'
+import { contextHandoffTools } from '../src/impl/AgentTools'
 import type { RuntimePromptSnapshot } from '../src/types/guidance.js'
 import type { KernelToolContext } from '../src/types/tool-context.js'
 import { createRuntimePromptSegments } from '../src/utils/guidance/runtime'

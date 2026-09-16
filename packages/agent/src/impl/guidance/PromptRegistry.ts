@@ -33,8 +33,9 @@
 import { AppError } from '@velaros-ai/core/error'
 
 import type { PromptSegmentOverride } from '../../types/agent.js'
-import type { BuiltInPromptOptions,PromptCompositionResult,PromptContribution,PromptRenderContext, PromptSegmentDefinition, PromptSegmentProvider, PromptSegmentStability, PromptSegmentTier, PromptSuppression } from '../../types/guidance.js'
+import type { BuiltInPromptOptions,PromptCompositionResult,PromptContribution,PromptRenderContext, PromptSegmentDefinition, PromptSegmentProvider, PromptSegmentTier, PromptSuppression } from '../../types/guidance.js'
 import { createBuiltInPromptSegments } from '../../utils/guidance/catalog'
+import { resolvePromptSegmentStability } from '../../utils/guidance/prompt-stability'
 import { createSkippedPromptSegment } from '../../utils/guidance/shared'
 import { compareStableStrings } from '../../utils/residency/determinism'
 /** 层序即块序：Tier0 在稳定前缀，Tier1/Tier2 在活动尾且 Tier2 恒排 Tier1 之后。 */
@@ -42,11 +43,6 @@ export const PromptSegmentTierRank: Readonly<Record<PromptSegmentTier, number>> 
   core: 0,
   runtime: 1,
   skill: 2,
-}
-
-/** 稳定性由层派生：只有 Tier0 进稳定前缀。 */
-function resolvePromptSegmentStability(tier: PromptSegmentTier): PromptSegmentStability {
-  return tier === 'core' ? 'stable' : 'dynamic'
 }
 
 /**
@@ -308,4 +304,4 @@ function createBuiltInPromptRegistry(options: BuiltInPromptOptions = {}): Prompt
   return new PromptRegistry(createBuiltInPromptSegments(options))
 }
 
-export { createBuiltInPromptRegistry,PromptRegistry, resolvePromptSegmentStability }
+export { createBuiltInPromptRegistry,PromptRegistry }
