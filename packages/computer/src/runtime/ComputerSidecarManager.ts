@@ -254,7 +254,7 @@ export class ComputerSidecarManager {
     command: ComputerCommand,
     payload: Record<string, unknown>
   ): Promise<TResult> {
-    if (this.disposed) throw new AppError('COMPUTER_SIDECAR_DISPOSED', 'Computer sidecar has been disposed')
+    if (this.disposed) throw new AppError('COMPUTER_SIDECAR_DISPOSED', '桌面控制 sidecar 已释放，无法继续使用。')
     await this.start()
 
     const id = this.nextRequestId++
@@ -262,7 +262,7 @@ export class ComputerSidecarManager {
       const timer = this.timers.after(this.requestTimeoutMs, () => {
         this.pending.delete(id)
         rejectPromise(
-          new AppError('TIMEOUT', `Computer sidecar request "${command}" timed out`, undefined, {
+          new AppError('TIMEOUT', `桌面控制 helper 的 ${command} 请求在 ${this.requestTimeoutMs} 毫秒内没有回应。`, undefined, {
             command,
             requestId: id,
             timeoutMs: this.requestTimeoutMs,
@@ -303,7 +303,7 @@ export class ComputerSidecarManager {
   public start(): Promise<void> {
     if (this.disposed)
       return Promise.reject(
-        new AppError('COMPUTER_SIDECAR_DISPOSED', 'Computer sidecar has been disposed')
+        new AppError('COMPUTER_SIDECAR_DISPOSED', '桌面控制 sidecar 已释放，无法继续使用。')
       )
     if (this.ready) return Promise.resolve()
     if (this.startPromise) return this.startPromise
