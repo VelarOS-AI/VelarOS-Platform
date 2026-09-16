@@ -122,7 +122,7 @@
     },
     {
       "path": "packages/agent/src/utils/guidance/catalog.ts",
-      "fingerprint": "9ccf104031c30ddf8c8062274853abf69643218ab4cbb9444975738d6f5bc949"
+      "fingerprint": "20b043570a91f4a27490cb53ef5099a83d8792673f7c9c4149c48197910e3b2a"
     },
     {
       "path": "packages/agent/src/utils/guidance/runtime.ts",
