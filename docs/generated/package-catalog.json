@@ -313,10 +313,11 @@
       "domain": "surface",
       "directory": "packages/surface-protocol",
       "name": "@velaros-ai/surface-protocol",
-      "version": "0.1.3",
-      "description": "Host-neutral wire contracts for provider-owned VelarOS Agent Surfaces.",
+      "version": "0.2.0",
+      "description": "provider 自持代理面（Agent Surface）的线格式合同：带版本、不认宿主。",
       "exportSubpaths": [
-        "."
+        ".",
+        "./contracts"
       ],
       "repositoryDirectory": "packages/surface-protocol"
     },

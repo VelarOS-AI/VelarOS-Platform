@@ -133,10 +133,10 @@
         "./packages/text-files/src/exports/*"
       ],
       "@velaros-ai/surface-protocol": [
-        "./packages/surface-protocol/src/index.ts"
+        "./packages/surface-protocol/src/exports/index.ts"
       ],
       "@velaros-ai/surface-protocol/*": [
-        "./packages/surface-protocol/src/*"
+        "./packages/surface-protocol/src/exports/*"
       ],
       "@velaros-ai/knowledge": [
         "./packages/knowledge/src/index.ts"

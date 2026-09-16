@@ -238,6 +238,26 @@ export const GovernedModules = [
     acceptance: 'spec/acceptance.test.ts',
   },
   {
+    directory: 'surface-protocol',
+    name: '@velaros-ai/surface-protocol',
+    // 没有工具：不登记 toolsFile、toolDefiner、hostPort
+    contract: 'src/contract',
+    types: 'src/types',
+    portable: 'surface-protocol.ts',
+    impl: 'src/impl',
+    utils: 'src/utils',
+    exports: 'src/exports',
+    // 只依赖 zod，两个入口浏览器扩展与渲染进程都能加载
+    browserSafeEntries: ['index.ts', 'contracts.ts'],
+    layers: [
+      // 线格式校验与绑定构造的唯一出口
+      ['ProviderSurfaceWire.ts'],
+    ],
+    card: 'MODULE.md',
+    invariants: 'spec/invariants.md',
+    acceptance: 'spec/acceptance.test.ts',
+  },
+  {
     directory: 'browser',
     name: '@velaros-ai/browser',
     // 改造中：工具还散在 impl/tools/ 的 14 个 *.tool.ts 里，收进一个工具文件是下一段的事，
