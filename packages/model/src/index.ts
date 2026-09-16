@@ -42,12 +42,8 @@ export type {
   ModelProviderAdapter,
   ModelRequestTransport,
   ProviderModelCatalogAttribution,
-  ProviderScriptDefinition,
-  ProviderScriptHelpers,
   ProviderScriptHostBridge,
-  ProviderScriptInput,
   ProviderScriptRegistryOptions,
-  ProviderScriptRuntimeInput,
   VelarCloudModelRuntimeBinding,
 } from './contract/requires'
 

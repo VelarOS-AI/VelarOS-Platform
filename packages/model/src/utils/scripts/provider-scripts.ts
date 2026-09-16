@@ -19,10 +19,6 @@ import { AppError } from '@velaros-ai/core/error'
 
 import { ModelErrorCodes, ModelProviderOperationalManifests } from '../../contract/constants.js'
 import type {
-  ProviderScriptDefinition,
-  ProviderScriptHelpers,
-} from '../../contract/requires'
-import type {
   ChatProviderId,
   ModelInputModality,
   ModelRequestOptions,
@@ -30,6 +26,10 @@ import type {
   ProviderScriptManifest,
   ProviderScriptRuntimeMetadata,
 } from '../../types/model'
+import type {
+  ProviderScriptDefinition,
+  ProviderScriptHelpers,
+} from '../../types/script-authoring'
 import type { ProviderScriptDevConfig } from '../../types/scripts'
 import { toPositiveInteger } from '../numbers'
 

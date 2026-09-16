@@ -25,7 +25,7 @@ Termel）里的消费点数量。
 | `./profiles` | `.`（`modelProfiles`） | 四个函数变成一个实例的四个方法 |
 | `./provider-retry` | `.`（`modelProviderRetry`） | 同上 |
 | `./usage` | `.`（`modelUsage`） | 同上 |
-| `./provider-scripts/node` | `.` | 零消费；作者契约进注入面 |
+| `./provider-scripts/node` | — | 零消费；脚本作者契约不再出包（见 §3.3 末行）|
 | `./ProviderScriptContextWindow` | `.`（`modelCatalog.scriptContextWindow`） | 零消费 |
 
 新入口的值一共 31 个：
@@ -110,6 +110,7 @@ Termel）里的消费点数量。
 | `ModelAdapterRegistry` / `createModelAdapterRegistry` / `createLegacyModelAdapterRegistry` | `composition.modelAdapterRegistry`（`ModelAdapterRegistryApi`） | `.` | 2（已改完） | — |
 | `ModelAdapterRegistryPort` / `ModelRegistryPort` | `ModelAdapterRegistryApi`（同一个概念不再有三个名字） | `.` | 2（已改完） | Desktop 1 |
 | `ModelAdapter` 基类与 `AnthropicModelAdapter` / `GoogleModelAdapter` / `DeepSeekModelAdapter` / `OpenAIModelAdapter` / `OpenAICompatibleModelAdapter` / `VelarModelAdapter` / `ProviderScriptModelAdapter` / `UserJsModelAdapter` 八个类 | 扩展点换成注入面接口 `ModelProviderAdapter`（C8 前半）：实现它，从 `createModelRuntimeComposition({ adapters })` 传进来，排在内置适配器之前匹配 | `.` | 1（已改完） | — |
+| `ProviderScriptDefinition` / `ProviderScriptInput` / `ProviderScriptRuntimeInput` / `ProviderScriptHelpers`（`./node` 与 `./provider-scripts/node` 上的脚本作者契约） | **不出包**。脚本是宿主从磁盘或插件安装链加载的普通 JS，本来也不从本包 import 类型；把它出包会把 `@ai-sdk/*` 三家的声明文件拖进本包的公开类型图，任何不开 `skipLibCheck` 的消费方都要替那几份第三方声明的类型问题买单（`@ai-sdk/google` 现在就带着一串索引签名错）。同一个判据下，`ProviderScriptHelpers` 里三个厂商 SDK 工厂的类型也改成了不透明的 `OpaqueProviderFactory`——交出去的仍是真函数 | — | 2（已改完） | — |
 | `AiSdkModelRequestTransport`（类） | 不出包；要换 transport 就实现注入面的 `ModelRequestTransport`，选项形状仍是 `AiSdkModelRequestTransportOptions` | `.` | 1（已改完） | — |
 
 ### 3.4 其余函数
@@ -135,6 +136,9 @@ Termel）里的消费点数量。
 | `OllamaEnvNames` | 同一组环境变量名的第三个名字；权威是 `ModelEnvironmentVariables` |
 | `velarCloudModelRuntime`（进程级单例，0.6.x 已 `@deprecated`） | 模块级可变单例会让两个宿主的 Cloud 绑定互串；绑定归对象图 |
 | `ProviderRawStreamText`、提示词缓存的四个写标记函数、`fetchTavily` | 上一轮包内改造时就已经删掉（零消费，agent 侧自有一份） |
+
+`ReasoningEffort` 从可移植数据文件 `types/model.ts` 挪进了 `types/adapters.ts`（仍在包内）：
+它是出线前的 wire 细节，产品只选 `ReasoningLevel` 或 `ThinkingDepth`，映射由本包做。
 
 `ModelPricingEntry` / `ModelPricingCatalog` **没有删**：它们现在由公开接口
 `ModelUsageApi.pricingRates` 用到，仍从 `./contracts` 出包（Desktop 5 个文件、Workbench 2 个文件

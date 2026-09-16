@@ -75,3 +75,11 @@ export type OpenAIModelFetchInit = Parameters<OpenAIModelFetch>[1]
 
 /** 一次调用上挂着的厂商选项表。 */
 export type ModelCallProviderOptions = NonNullable<LanguageModelV3CallOptions['providerOptions']>
+
+/**
+ * 发给服务商的 reasoning 力度三档；五档 `ReasoningLevel` 与三档 `ThinkingDepth` 都映射到它。
+ *
+ * 它是出线前的 wire 细节，不是产品面的轴：产品只选 level 或 depth，映射由本包做，所以它不放在
+ * 可移植数据文件里。
+ */
+export type ReasoningEffort = 'low' | 'medium' | 'high'

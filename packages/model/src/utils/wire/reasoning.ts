@@ -1,6 +1,7 @@
 import { isFiniteNumber, isNumber, isPlainObject, isString, Log } from '@velaros-ai/core'
 
-import type { ChatProviderId, ReasoningEffort, ReasoningLevel, ThinkingDepth } from '../../types/model'
+import type { ReasoningEffort } from '../../types/adapters'
+import type { ChatProviderId, ReasoningLevel, ThinkingDepth } from '../../types/model'
 import { ModelTuning } from '../tuning'
 
 /**

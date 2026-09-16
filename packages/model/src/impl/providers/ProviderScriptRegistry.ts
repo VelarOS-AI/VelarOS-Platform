@@ -15,7 +15,6 @@ import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
 import { ModelErrorCodes } from '../../contract/constants.js'
 import type {
-  ProviderScriptHelpers,
   ProviderScriptHostBridge,
   ProviderScriptRegistryOptions,
 } from '../../contract/requires'
@@ -28,7 +27,7 @@ import type {
   ProviderScriptRuntimeMetadata,
   ValidateProviderRuntimeRequest,
 } from '../../types/model'
-import type { LoadedProviderScript } from '../../types/script-authoring'
+import type { LoadedProviderScript, ProviderScriptHelpers } from '../../types/script-authoring'
 import type {
   ProviderScriptRegistryPort,
   RegisteredProviderScriptSource,

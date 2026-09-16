@@ -15,8 +15,6 @@ export type ChatProviderId = BuiltInChatProviderId | InjectedChatProviderId
 
 export type ThinkingDepth = (typeof ThinkingDepths)[number]
 export type ReasoningLevel = (typeof ReasoningLevels)[number]
-/** 发给服务商的 reasoning 力度三档；五档 level 与三档 depth 都映射到它。 */
-export type ReasoningEffort = 'low' | 'medium' | 'high'
 export type ModelInputModality = (typeof ModelInputModalities)[number]
 export type ModelProviderAdapterKind = (typeof ModelProviderAdapterKinds)[number]
 export type ModelProviderValidationKind = (typeof ModelProviderValidationKinds)[number]
