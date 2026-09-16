@@ -65,6 +65,14 @@ export interface KernelModCatalog {
   }>
 }
 
+/** ModStore 落盘的两条路径：装好的用户 pack 放哪、持久化的索引写在哪。 */
+export interface KernelModStorePaths {
+  /** 装好的用户 pack 所在目录（缺省 `~/.velaros/mods`）。 */
+  readonly userModsDirectory: string
+  /** 覆盖/补充已发现 pack 的 JSON 索引文件；不给就不做持久化。 */
+  readonly indexPath?: string
+}
+
 /** ModStore 里一个 mod pack 的登记记录（身份、来源、开关位与它自称提供的能力）。 */
 export interface KernelModPackRecord {
   /** pack 的 id，仓库内唯一。 */

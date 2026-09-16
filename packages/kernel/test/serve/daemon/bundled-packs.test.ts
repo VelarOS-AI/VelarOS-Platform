@@ -5,12 +5,8 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, test } from 'bun:test'
 
 import { kernelModules } from '../../../src/impl/runtime/KernelModuleKit'
-import { KernelModLoader, persistModIndex } from '../../../src/impl/serve/KernelModLoader'
-import {
-  KernelModStore,
-  registerBundledPacks,
-  registerSystemModPacks,
-} from '../../../src/impl/serve/KernelModStore'
+import { KernelModLoader } from '../../../src/impl/serve/KernelModLoader'
+import { KernelModStore } from '../../../src/impl/serve/KernelModStore'
 import {
   createBundledModPack,
   toBundledPackRecords,
@@ -34,9 +30,7 @@ async function temporaryDirectory(): Promise<string> {
 }
 
 function emptyStore(): KernelModStore {
-  return new KernelModStore({
-    userModsDirectory: join(tmpdir(), 'velaros-bundled-packs-test-mods'),
-  })
+  return new KernelModStore(join(tmpdir(), 'velaros-bundled-packs-test-root'))
 }
 
 const probeModule = kernelModules.define({
@@ -72,7 +66,7 @@ describe('bundled packs', () => {
     expect(pack.version).toBe('2.1.0')
     expect(pack.provides).toEqual(['velaros.probe'])
 
-    registerBundledPacks(store, [pack])
+    store.registerBundled([pack])
     const loaded = await new KernelModLoader(store, importModule).loadEnabled()
 
     expect(loaded.failures).toHaveLength(0)
@@ -99,7 +93,7 @@ describe('bundled packs', () => {
 
   test('registers first-time bundled packs enabled', () => {
     const store = emptyStore()
-    registerBundledPacks(store, [
+    store.registerBundled([
       createBundledModPack({ id: 'system.probe', module: probeModule }),
     ])
     expect(store.get('system.probe')?.enabled).toBe(true)
@@ -107,7 +101,7 @@ describe('bundled packs', () => {
 
   test('keeps a persisted disabled system pack disabled while refreshing metadata', () => {
     const store = emptyStore()
-    // Shape of what loadModIndexIntoStore() restores from mod-index.json.
+    // Shape of what store.loadPersistedIndex() restores from mod-index.json.
     store.register({
       id: 'system.probe',
       kind: 'system',
@@ -117,7 +111,7 @@ describe('bundled packs', () => {
       provides: ['velaros.probe'],
     })
 
-    registerBundledPacks(store, [
+    store.registerBundled([
       createBundledModPack({ id: 'system.probe', module: probeModule }),
     ])
 
@@ -138,7 +132,7 @@ describe('bundled packs', () => {
       provides: ['velaros.probe'],
     })
 
-    registerSystemModPacks(store, [
+    store.registerSystem([
       {
         id: 'system.probe',
         version: '2.1.0',
@@ -152,18 +146,16 @@ describe('bundled packs', () => {
   })
 
   test('persists the enabled bit but never the live module object', async () => {
-    const indexPath = join(await temporaryDirectory(), 'mod-index.json')
-    const store = new KernelModStore({
-      userModsDirectory: join(tmpdir(), 'velaros-bundled-packs-test-mods'),
-      indexPath,
-    })
-    registerBundledPacks(store, [
+    const root = await temporaryDirectory()
+    const store = new KernelModStore(root)
+    store.registerBundled([
       createBundledModPack({ id: 'system.probe', module: probeModule }),
     ])
     store.disable('system.probe')
 
-    await persistModIndex(store)
-    const persisted = JSON.parse(await readFile(indexPath, 'utf8')) as {
+    // 索引的落点由内核自己定：数据根下的 mod-index.json。
+    await store.persistIndex()
+    const persisted = JSON.parse(await readFile(join(root, 'mod-index.json'), 'utf8')) as {
       packs: Array<Record<string, unknown>>
     }
 

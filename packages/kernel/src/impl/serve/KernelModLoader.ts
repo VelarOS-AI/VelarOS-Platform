@@ -1,15 +1,4 @@
-import { access, mkdir, readFile, writeFile } from 'node:fs/promises'
-import { isAbsolute, join, resolve } from 'node:path'
-
-import {
-  isArray,
-  isNotUndefined,
-  isNull,
-  isObject,
-  isUndefined,
-  Log,
-  toOptional,
-} from '@velaros-ai/core'
+import { isUndefined, Log } from '@velaros-ai/core'
 
 import type { KernelModuleDefinition, KernelModuleImporter } from '../../contract/requires'
 import type {
@@ -17,23 +6,13 @@ import type {
   KernelModPackRecord,
   LoadModsResult,
 } from '../../types/serve'
-import { isNodeError } from '../../utils/fs'
 import {
   describeModPackLoadFailure,
-  parseModPackDirectoryManifest,
   toKernelModuleDefinition,
   toModPackImportUrl,
-  toModPackIndexFileContent,
-  toModPackRecordFromIndexEntry,
 } from '../../utils/serve/mod-index'
-import { VelarosModManifestFileName } from '../../utils/wire/mod-envelope'
-import type { KernelModPackKind } from '../../utils/wire/mods'
 
-import {
-  BundledSpecifierScheme,
-  type KernelModStoreApi,
-  type KernelModStorePaths,
-} from './KernelModStore'
+import { BundledSpecifierScheme, type KernelModStoreApi } from './KernelModStore'
 
 const log = Log.tag('KernelModLoader')
 
@@ -114,82 +93,4 @@ export class KernelModLoader implements KernelModLoaderApi {
     }
     return { modules, packs, failures }
   }
-
-}
-
-/**
- * 把一个 user / contrib pack 目录装进仓库索引。
- *
- * 读 `<packDir>/velaros.mod.json` 里的 **`module` 一节**——内核只认这一节；`agent` / `ui` 归
- * Agent 主干与产品外壳，这里连看都不看。这条读取权限的切分，是挡住装载器长回上帝对象的
- * 机械防线。
- *
- * 安装时的状态（kind / enabled）由安装方决定，不由 mod 自己声明：一个 pack 不能自称 contrib，
- * 也不能自称装上就是停用的。
- */
-export async function installModPackFromDirectory(
-  store: KernelModStoreApi,
-  packDirectory: string,
-  kind: KernelModPackKind = 'user',
-): Promise<KernelModPackRecord> {
-  const absolute = isAbsolute(packDirectory)
-    ? packDirectory
-    : resolve(process.cwd(), packDirectory)
-  const manifestPath = join(absolute, VelarosModManifestFileName)
-  const moduleSection = parseModPackDirectoryManifest(
-    await readFile(manifestPath, 'utf8'),
-    manifestPath,
-  )
-  const relativeSpecifier = moduleSection.entry ?? './index.js'
-  const pack: KernelModPackRecord = {
-    id: moduleSection.id,
-    kind,
-    version: moduleSection.version,
-    specifier: resolve(absolute, relativeSpecifier),
-    exportName: toOptional(moduleSection.exportName),
-    enabled: true,
-    provides: moduleSection.provides.map((token) => token.id),
-  }
-  await access(pack.specifier)
-  store.register(pack)
-  await persistModIndex(store)
-  return pack
-}
-
-/** 把持久化的 mod 索引读回仓库；索引文件不存在时什么也不做，坏掉的条目逐条跳过。 */
-export async function loadModIndexIntoStore(
-  store: KernelModStoreApi,
-  paths: KernelModStorePaths = store.paths,
-): Promise<void> {
-  if (isUndefined(paths.indexPath)) return
-  try {
-    const parsed = JSON.parse(await readFile(paths.indexPath, 'utf8')) as unknown
-    if (!isObject(parsed) || isNull(parsed)) return
-    const packs = Reflect.get(parsed, 'packs')
-    if (!isArray(packs)) return
-    for (const entry of packs) {
-      const record = toModPackRecordFromIndexEntry(entry)
-      if (isNotUndefined(record)) store.register(record)
-    }
-  } catch (error) {
-    if (!isNodeError(error, 'ENOENT')) throw error
-  }
-}
-
-/**
- * 把 pack 索引（身份加开关位）落盘；没配索引路径时什么也不做。
- *
- * bundled pack 的 `module` 是活的对象图、不是数据，落盘时刻意丢掉：索引持久化的是**决定**
- * （用户关掉了哪些 pack），载荷永远从构建图里再来一次。
- */
-export async function persistModIndex(store: KernelModStoreApi): Promise<void> {
-  const indexPath = store.paths.indexPath
-  if (isUndefined(indexPath)) return
-  await mkdir(resolve(indexPath, '..'), { recursive: true })
-  await writeFile(
-    indexPath,
-    toModPackIndexFileContent(store.list()),
-    // 索引里有本机的 pack 路径：只给属主读写。
-    { encoding: 'utf8', mode: 0o600 },
-  )
 }

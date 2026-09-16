@@ -22,7 +22,6 @@ export type {
   KernelLauncherResult,
   KernelLocalDaemonApi,
   KernelModStoreApi,
-  KernelModStorePaths,
   KernelModuleActivateContext,
   KernelModuleEventBus,
   KernelModuleHostOptions,
@@ -87,7 +86,7 @@ export type { RemoteNodeCapabilityInvokeRequest, RemoteNodeCapabilityInvokeResul
 export type { RemoteNodeServerOptions, RemoteNodeServerStatus } from './types/remote-node'
 export type { KernelCapabilityCall, KernelLifecycleFailure } from './types/runtime'
 export type { KernelBundledPack, KernelModCatalog, KernelModPackLoadFailure, KernelModPackRecord } from './types/serve'
-export type { KernelClientAccessDecision, KernelClientCapabilityBindRequest } from './types/serve'
+export type { KernelClientAccessDecision, KernelClientCapabilityBindRequest, KernelModStorePaths } from './types/serve'
 export type { KernelServiceStatus, KernelSystemModPackInput } from './types/serve'
 export type { KernelVersionResolver, KernelVersionTarget } from './types/serve'
 export type {

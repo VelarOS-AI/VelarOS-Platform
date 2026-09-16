@@ -1,16 +1,33 @@
-import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { access, mkdir, readFile, writeFile } from 'node:fs/promises'
+import { isAbsolute, join, resolve } from 'node:path'
 
-import { isBlank, isUndefined } from '@velaros-ai/core'
+import {
+  isArray,
+  isBlank,
+  isNotUndefined,
+  isNull,
+  isObject,
+  isUndefined,
+  toOptional,
+} from '@velaros-ai/core'
 
 import type { KernelModuleDefinition } from '../../contract/requires'
 import type {
   KernelBundledPack,
   KernelModPackLoadFailure,
   KernelModPackRecord,
+  KernelModStorePaths,
   KernelSystemModPackInput,
 } from '../../types/serve'
+import { isNodeError } from '../../utils/fs'
+import {
+  parseModPackDirectoryManifest,
+  toModPackIndexFileContent,
+  toModPackRecordFromIndexEntry,
+  toModStorePaths,
+} from '../../utils/serve/mod-index'
 import { toBundledPackRecords } from '../../utils/serve/mod-packs'
+import { VelarosModManifestFileName } from '../../utils/wire/mod-envelope'
 import type { KernelModPackKind } from '../../utils/wire/mods'
 
 export type { KernelModPackKind }
@@ -23,26 +40,11 @@ export type { KernelModPackKind }
  */
 export const BundledSpecifierScheme: string = 'bundled:'
 
-/** ModStore 落盘的两条路径：装好的用户 pack 放哪、持久化的索引写在哪。 */
-export interface KernelModStorePaths {
-  /** 装好的用户 pack 所在目录（缺省 `~/.velaros/mods`）。 */
-  readonly userModsDirectory: string
-  /** 覆盖/补充已发现 pack 的 JSON 索引文件；不给就不做持久化。 */
-  readonly indexPath?: string
-}
-
-/** 按根目录折出 ModStore 的缺省路径（缺省根是 `~/.velaros`）。 */
-export function createDefaultKernelModStorePaths(
-  root: string = join(homedir(), '.velaros'),
-): KernelModStorePaths {
-  return {
-    userModsDirectory: join(root, 'mods'),
-    indexPath: join(root, 'mod-index.json'),
-  }
-}
-
 /**
  * 已安装 mod pack 的索引（system / user / contrib）；实例归装配守护进程的那一处。
+ *
+ * 索引有两副身子：内存里的这一份，和落在 {@link KernelModStoreApi.paths} 下的那一份。登记与
+ * 开关只改内存，什么时候写回磁盘由调用方用 {@link KernelModStoreApi.persistIndex} 决定。
  *
  * 它不装载模块——那是 ModLoader 在解析出「开着的 pack」之后的事。
  */
@@ -69,6 +71,19 @@ export interface KernelModStoreApi {
   registerSystem(packs: readonly KernelSystemModPackInput[]): void
   /** 把宿主交来的编译期 pack 登记进来，返回登记后的现值。 */
   registerBundled(packs: readonly KernelBundledPack[]): readonly KernelModPackRecord[]
+  /**
+   * 把一个 user / contrib pack 目录装进索引并随手落盘，返回装好的记录。
+   *
+   * 清单不是 JSON、不合信封 schema，或者入口文件不存在时抛错，仓库保持原样。
+   */
+  installFromDirectory(
+    packDirectory: string,
+    kind?: KernelModPackKind,
+  ): Promise<KernelModPackRecord>
+  /** 把落盘的索引读回内存；索引文件不存在时什么也不做，坏掉的条目逐条跳过。 */
+  loadPersistedIndex(): Promise<void>
+  /** 把索引（身份加开关位）写回磁盘；没配索引路径时什么也不做。 */
+  persistIndex(): Promise<void>
   /** 记下一个开着却装不上的 pack；由 ModLoader 调。 */
   markLoadFailure(failure: KernelModPackLoadFailure): void
   /** 清掉某个 pack 的装载失败记录（它这次装上了）。 */
@@ -84,9 +99,12 @@ export class KernelModStore implements KernelModStoreApi {
   private readonly packs = new Map<string, KernelModPackRecord>()
   private readonly loadFailures = new Map<string, KernelModPackLoadFailure>()
 
-  public constructor(
-    public readonly paths: KernelModStorePaths = createDefaultKernelModStorePaths(),
-  ) {}
+  public readonly paths: KernelModStorePaths
+
+  /** 数据根目录；不给就是缺省的 `~/.velaros`，落点由内核自己定，宿主只交一个根。 */
+  public constructor(modsRoot?: string) {
+    this.paths = toModStorePaths(modsRoot)
+  }
 
   public register(pack: KernelModPackRecord): void {
     if (isBlank(pack.id.trim())) {
@@ -175,6 +193,79 @@ export class KernelModStore implements KernelModStoreApi {
     return records.map((record) => this.packs.get(record.id) ?? record)
   }
 
+  /**
+   * 把一个 user / contrib pack 目录装进索引。
+   *
+   * 读 `<packDir>/velaros.mod.json` 里的 **`module` 一节**——内核只认这一节；`agent` / `ui` 归
+   * Agent 主干与产品外壳，这里连看都不看。这条读取权限的切分，是挡住仓库长回上帝对象的
+   * 机械防线。
+   *
+   * 安装时的状态（kind / enabled）由安装方决定，不由 mod 自己声明：一个 pack 不能自称 contrib，
+   * 也不能自称装上就是停用的。
+   */
+  public async installFromDirectory(
+    packDirectory: string,
+    kind: KernelModPackKind = 'user',
+  ): Promise<KernelModPackRecord> {
+    const absolute = isAbsolute(packDirectory)
+      ? packDirectory
+      : resolve(process.cwd(), packDirectory)
+    const manifestPath = join(absolute, VelarosModManifestFileName)
+    const moduleSection = parseModPackDirectoryManifest(
+      await readFile(manifestPath, 'utf8'),
+      manifestPath,
+    )
+    const relativeSpecifier = moduleSection.entry ?? './index.js'
+    const pack: KernelModPackRecord = {
+      id: moduleSection.id,
+      kind,
+      version: moduleSection.version,
+      specifier: resolve(absolute, relativeSpecifier),
+      exportName: toOptional(moduleSection.exportName),
+      enabled: true,
+      provides: moduleSection.provides.map((token) => token.id),
+    }
+    await access(pack.specifier)
+    this.register(pack)
+    await this.persistIndex()
+    return pack
+  }
+
+  public async loadPersistedIndex(): Promise<void> {
+    const indexPath = this.paths.indexPath
+    if (isUndefined(indexPath)) return
+    try {
+      const parsed = JSON.parse(await readFile(indexPath, 'utf8')) as unknown
+      if (!isObject(parsed) || isNull(parsed)) return
+      const packs = Reflect.get(parsed, 'packs')
+      if (!isArray(packs)) return
+      for (const entry of packs) {
+        const record = toModPackRecordFromIndexEntry(entry)
+        if (isNotUndefined(record)) this.register(record)
+      }
+    } catch (error) {
+      if (!isNodeError(error, 'ENOENT')) throw error
+    }
+  }
+
+  /**
+   * 把 pack 索引（身份加开关位）落盘。
+   *
+   * bundled pack 的 `module` 是活的对象图、不是数据，落盘时刻意丢掉：索引持久化的是**决定**
+   * （用户关掉了哪些 pack），载荷永远从构建图里再来一次。
+   */
+  public async persistIndex(): Promise<void> {
+    const indexPath = this.paths.indexPath
+    if (isUndefined(indexPath)) return
+    await mkdir(resolve(indexPath, '..'), { recursive: true })
+    await writeFile(
+      indexPath,
+      toModPackIndexFileContent(this.list()),
+      // 索引里有本机的 pack 路径：只给属主读写。
+      { encoding: 'utf8', mode: 0o600 },
+    )
+  }
+
   public markLoadFailure(failure: KernelModPackLoadFailure): void {
     this.loadFailures.set(failure.id, Object.freeze({ ...failure }))
   }
@@ -190,20 +281,4 @@ export class KernelModStore implements KernelModStoreApi {
   public listLoadFailures(): readonly KernelModPackLoadFailure[] {
     return [...this.loadFailures.values()]
   }
-}
-
-/** 登记一批系统 pack（`@velaros-ai/kernel/serve` 的入口函数，转交给仓库自己的方法）。 */
-export function registerSystemModPacks(
-  store: KernelModStoreApi,
-  packs: readonly KernelSystemModPackInput[],
-): void {
-  store.registerSystem(packs)
-}
-
-/** 把宿主交来的 bundled pack 登记进仓库（`@velaros-ai/kernel/serve` 的入口函数）。 */
-export function registerBundledPacks(
-  store: KernelModStoreApi,
-  packs: readonly KernelBundledPack[],
-): readonly KernelModPackRecord[] {
-  return store.registerBundled(packs)
 }

@@ -61,10 +61,7 @@ describe('mods RPC', () => {
 
     const booted = await bootKernelDaemon({
       kernelVersion: '0.3.0-test',
-      modStorePaths: {
-        userModsDirectory: join(root, 'mods'),
-        indexPath: join(root, 'mod-index.json'),
-      },
+      modsRoot: root,
       modules: [
         kernelModules.define({
           manifest: {

@@ -7,7 +7,6 @@ import { afterEach, describe, expect, test } from 'bun:test'
 import { kernelDaemons } from '../../../src/impl/client/KernelDaemonDirectory'
 import { kernelModules } from '../../../src/impl/runtime/KernelModuleKit'
 import { bootKernelDaemon } from '../../../src/impl/serve/KernelDaemonAssembly'
-import { loadModIndexIntoStore } from '../../../src/impl/serve/KernelModLoader'
 import { KernelModStore } from '../../../src/impl/serve/KernelModStore'
 import { createBundledModPack } from '../../../src/utils/serve/mod-packs'
 import { KernelProtocolVersion } from '../../../src/utils/wire/version'
@@ -78,14 +77,10 @@ describe('Kernel 默认装配', () => {
       lockPath: join(runtimeDirectory, 'velaros-kernel.lock'),
       socketPath: join(runtimeDirectory, 'k.sock'),
     }
-    const modStorePaths = {
-      userModsDirectory: join(runtimeDirectory, 'mods'),
-      indexPath: join(runtimeDirectory, 'mod-index.json'),
-    }
 
     // 与 `serve/main.ts` 相同的装配顺序。
-    const modStore = new KernelModStore(modStorePaths)
-    await loadModIndexIntoStore(modStore)
+    const modStore = new KernelModStore(runtimeDirectory)
+    await modStore.loadPersistedIndex()
     modStore.registerAll([
       {
         ...createBundledModPack({ id: 'system.test.echo', module: echoModule }),
@@ -103,7 +98,7 @@ describe('Kernel 默认装配', () => {
 
     const booted = await bootKernelDaemon({
       kernelVersion: '0.2.3',
-      modStorePaths,
+      modsRoot: runtimeDirectory,
       modPacks: modStore.list(),
       paths,
     })

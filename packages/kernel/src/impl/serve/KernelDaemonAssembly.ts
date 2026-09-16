@@ -25,17 +25,11 @@ import { KernelModuleHost } from '../runtime/KernelModuleHost'
 import { AllowLoadedKernelClientAccessBroker } from './AllowLoadedKernelClientAccessBroker'
 import { InProcessKernelTransport } from './InProcessKernelTransport'
 import { KernelLocalDaemon, type KernelLocalDaemonApi } from './KernelLocalDaemon'
-import {
-  installModPackFromDirectory,
-  KernelModLoader,
-  persistModIndex,
-} from './KernelModLoader'
+import { KernelModLoader } from './KernelModLoader'
 import {
   BundledSpecifierScheme,
-  createDefaultKernelModStorePaths,
   KernelModStore,
   type KernelModStoreApi,
-  type KernelModStorePaths,
 } from './KernelModStore'
 import { KernelService, type KernelServiceApi } from './KernelService'
 
@@ -64,8 +58,11 @@ export interface KernelDaemonAssemblyOptions {
    * 不认识任何具体能力（§15.2 依赖方向单向 ⑤→④→③→②）。
    */
   readonly bundledPacks?: readonly KernelBundledPack[]
-  /** ModStore 的落盘路径；不给就用缺省的 `~/.velaros`。 */
-  readonly modStorePaths?: KernelModStorePaths
+  /**
+   * ModStore 的数据根目录：用户 pack 落在它的 `mods/` 下，索引落在它的 `mod-index.json`。
+   * 不给就用缺省的 `~/.velaros`。目录布局由内核自己定，宿主只交一个根。
+   */
+  readonly modsRoot?: string
   /** descriptor、锁与 socket 的落点；不给就用缺省的运行目录。 */
   readonly paths?: KernelDaemonPaths
   /** 本次装配带进来的隔离适配器；模块声明的隔离形态对不上就装不起来。 */
@@ -221,12 +218,12 @@ export class KernelDaemonAssembly implements BootedKernelDaemonApi {
         })),
       setEnabled: async (id, enabled) => {
         const ok = enabled ? store.enable(id) : store.disable(id)
-        if (ok) await persistModIndex(store)
+        if (ok) await store.persistIndex()
         return { ok, reloadRequired: true }
       },
       installFromDirectory: async (directory) => {
-        const pack = await installModPackFromDirectory(store, directory)
-        await persistModIndex(store)
+        // 仓库自己在装完之后落盘，这里不再写一遍。
+        const pack = await store.installFromDirectory(directory)
         return {
           pack: {
             id: pack.id,
@@ -300,9 +297,7 @@ export class KernelDaemonAssembly implements BootedKernelDaemonApi {
 export async function bootKernelDaemon(
   options: KernelDaemonAssemblyOptions,
 ): Promise<BootedKernelDaemonApi> {
-  const modStore = new KernelModStore(
-    options.modStorePaths ?? createDefaultKernelModStorePaths(),
-  )
+  const modStore = new KernelModStore(options.modsRoot)
   if (options.modPacks) {
     modStore.registerAll(options.modPacks)
   }

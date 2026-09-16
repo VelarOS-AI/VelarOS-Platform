@@ -115,9 +115,7 @@ describe('mod loader resilience', () => {
     const wrongShape = join(directory, 'shape.entry.mjs')
     await writeFile(wrongShape, 'export default { nope: true }\n')
 
-    const store = new KernelModStore({
-      userModsDirectory: join(directory, 'mods'),
-    })
+    const store = new KernelModStore(directory)
     store.register(packRecord('system.boom', throwing, ['test.boom']))
     store.register(packRecord('system.healthy', healthy, ['test.healthy']))
     store.register(packRecord('system.shape', wrongShape, ['test.shape']))
@@ -171,7 +169,7 @@ describe('mod loader resilience', () => {
         importModule,
         kernelVersion: '0.3.0-test',
         paths: createDefaultKernelDaemonPaths('mod-loader-kernel', directory),
-        modStorePaths: { userModsDirectory: join(directory, 'mods') },
+        modsRoot: directory,
         modPacks: [
           packRecord('system.boom', throwing, ['test.boom']),
           packRecord('system.healthy', healthy, ['test.healthy']),

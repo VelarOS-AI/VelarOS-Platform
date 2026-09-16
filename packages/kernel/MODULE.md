@@ -58,12 +58,11 @@ VelarOS 的库优先微内核。它只理解四件事：模块生命周期、能
 - `KernelFileModes`、`KernelModuleIsolationValues`、`KernelModuleIsolations`、`KernelRpcLimits`
 - `KernelRpcMethods`、`KernelUpdaterErrorCodes`、`KernelVersionAxes`、`RemoteNodeClientErrorCodes`
 - `RemoteNodeCloseCodes`、`RemoteNodeErrorCodes`、`RemoteNodeLimits`、`RemoteNodeProgressEventType`
-- `RemoteNodeSocketPath`、`VelarosModManifestFileName`、`bootKernelDaemon`、`createDefaultKernelModStorePaths`
-- `createKernel`、`createKernelLauncher`、`createKernelUpdater`、`createRemoteNodeAuditLog`
-- `createRemoteNodeClient`、`createRemoteNodeClientCredentialStore`、`createRemoteNodeIsolationAdapter`、`createRemoteNodeProjection`
-- `createRemoteNodeServer`、`createRemoteNodeServerCredentialStore`、`installModPackFromDirectory`、`kernelDaemonProcess`
-- `kernelDaemons`、`kernelModules`、`loadModIndexIntoStore`、`persistModIndex`
-- `registerBundledPacks`、`registerSystemModPacks`、`velarosModEnvelopes`
+- `RemoteNodeSocketPath`、`VelarosModManifestFileName`、`bootKernelDaemon`、`createKernel`
+- `createKernelLauncher`、`createKernelUpdater`、`createRemoteNodeAuditLog`、`createRemoteNodeClient`
+- `createRemoteNodeClientCredentialStore`、`createRemoteNodeIsolationAdapter`、`createRemoteNodeProjection`、`createRemoteNodeServer`
+- `createRemoteNodeServerCredentialStore`、`kernelDaemonProcess`、`kernelDaemons`、`kernelModules`
+- `velarosModEnvelopes`
 
 ## 骨干链路
 
@@ -82,6 +81,7 @@ VelarOS 的库优先微内核。它只理解四件事：模块生命周期、能
   宿主、`KernelService`、`KernelLocalDaemon` → 拿单实例锁 → 起本机 RPC → 写 descriptor。
   可执行文件走 `kernelDaemonProcess.run({ environment })`（`bin/velaros-kernel-daemon.mjs`）。
   不过网络的进程内客户端由 `booted.createClient()` 给，走的是同一条调用路径（INV-9）。
+  mod 的登记、安装与索引读写全在 `booted.modStore`（`KernelModStoreApi`）上，`./serve` 不另出零件函数。
 - **附着到已运行的守护进程**：`kernelDaemons.discover()` 读 descriptor → `kernelDaemons.connect()`
   建传输与客户端 → `openCapabilitySession(requires)` 绑能力
   → `session.call(...)`。会话外的调用一律 `CAPABILITY_NOT_GRANTED`（INV-14）。

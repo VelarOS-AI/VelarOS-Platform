@@ -34,7 +34,7 @@ export type {
   KernelLauncherResult,
 } from '../impl/serve/KernelLauncher.js'
 export type { KernelLocalDaemonApi } from '../impl/serve/KernelLocalDaemon.js'
-export type { KernelModStoreApi, KernelModStorePaths } from '../impl/serve/KernelModStore.js'
+export type { KernelModStoreApi } from '../impl/serve/KernelModStore.js'
 export type { KernelServiceApi } from '../impl/serve/KernelService.js'
 export type { KernelUpdaterApi } from '../impl/updater/KernelUpdater.js'
 

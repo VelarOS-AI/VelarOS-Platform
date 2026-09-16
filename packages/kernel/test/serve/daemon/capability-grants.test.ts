@@ -17,7 +17,7 @@ import { kernelModules } from '../../../src/impl/runtime/KernelModuleKit'
 import { AllowLoadedKernelClientAccessBroker } from '../../../src/impl/serve/AllowLoadedKernelClientAccessBroker'
 import { InProcessKernelTransport } from '../../../src/impl/serve/InProcessKernelTransport'
 import { KernelLocalRpcServer } from '../../../src/impl/serve/KernelLocalRpcServer'
-import { installModPackFromDirectory, KernelModLoader } from '../../../src/impl/serve/KernelModLoader'
+import { KernelModLoader } from '../../../src/impl/serve/KernelModLoader'
 import { KernelModStore } from '../../../src/impl/serve/KernelModStore'
 import { KernelService } from '../../../src/impl/serve/KernelService'
 import { KernelProtocolVersion } from '../../../src/utils/wire/version'
@@ -272,11 +272,8 @@ export default {
       }),
     )
 
-    const store = new KernelModStore({
-      userModsDirectory: join(directory, 'mods'),
-      indexPath: join(directory, 'mod-index.json'),
-    })
-    const pack = await installModPackFromDirectory(store, packDir)
+    const store = new KernelModStore(directory)
+    const pack = await store.installFromDirectory(packDir)
     expect(pack.id).toBe('user.echo')
     expect(store.listEnabled()).toHaveLength(1)
 

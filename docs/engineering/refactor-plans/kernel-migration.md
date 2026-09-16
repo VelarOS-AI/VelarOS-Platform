@@ -1,8 +1,10 @@
-# `@velaros-ai/kernel` 0.2.3 → 0.3.0 迁移表
+# `@velaros-ai/kernel` 0.2.3 → 0.4.0 迁移表
 
-这是一次**破坏性**发布：12 个入口收成 5 个，288 个导出名从对外面上消失，23 个名字是新的。
+两次破坏性发布，一张表。**0.3.0**：12 个入口收成 5 个，288 个导出名从对外面上消失，
+23 个名字是新的。**0.4.0**：`./serve` 从 10 个值收到 4 个，ModStore / Loader 的六个装配零件
+改成 `KernelModStoreApi` 上的方法（逐条对照在第 6 节）。
 本文件按符号逐条给出去向，并标出每一条在 Platform 仓内与三个产品仓（Desktop、Workbench、
-Termel）里的消费点数量。
+Termel）里的消费点数量；表里写的是**落到 0.4.0** 的最终写法，从 0.2.3 直接升的照着改一次就到位。
 
 - 仓内消费点**本轮已全部改完**（提交 `refactor(capabilities): 九个包的 kernel 引用改到收口后的五个入口`）。
 - 产品仓的调用点**本轮不改**，只列进第 5 节，由各产品仓自己按这张表改。
@@ -30,14 +32,14 @@ Termel）里的消费点数量。
 | `./remote/client` | `./remote`（值）/ `.`（类型） | 两侧依赖闭包相同，合成一个入口 |
 | `./remote/node` | `./remote`（值）/ `.`（类型） | 同上 |
 
-新入口的值一共 39 个：
+新入口的值一共 33 个（0.3.0 时是 39 个，0.4.0 去掉 `./serve` 的六个装配零件）：
 
 | 入口 | 值 |
 | --- | --- |
 | `.` | `createKernel`、`kernelModules`、`velarosModEnvelopes`，加 `contract/constants.ts` 的 18 张常量表与身份字符串 |
 | `./contracts` | 同一批常量表（`.` 的可移植子集），没有别的值 |
 | `./client` | `kernelDaemons` |
-| `./serve` | `bootKernelDaemon`、`kernelDaemonProcess`、`createKernelLauncher`、`createKernelUpdater`，加 ModStore / Loader 的六个装配零件（见 §6） |
+| `./serve` | `bootKernelDaemon`、`kernelDaemonProcess`、`createKernelLauncher`、`createKernelUpdater`（0.4.0 起只有这四件，见 §6） |
 | `./remote` | `createRemoteNodeClient`、`createRemoteNodeServer`、`createRemoteNodeProjection`、`createRemoteNodeIsolationAdapter`、`createRemoteNodeClientCredentialStore`、`createRemoteNodeServerCredentialStore`、`createRemoteNodeAuditLog` |
 
 `browserSafeEntries` 仍是 `index.ts` 与 `contracts.ts`：这两条的引用链不碰 Node 内置模块（INV-11），
@@ -296,7 +298,7 @@ Desktop 16 个文件、Workbench 6 个、Termel 7 个。
 | `tests/maintained/src/main/storage/ModMarketStagingSkillSpaces.test.ts` | `/contracts/protocol`: `VelarosModManifestFileName` | `@velaros-ai/kernel/contracts` |
 
 另外要改但不是 import 的：`tsconfig.node.json` 与 `tsconfig.web.json` 里 `@velaros-ai/kernel/*`
-的 paths（收成五条）、`package.json` 与 `bun.lock` 的版本（`^0.3.0`）、
+的 paths（收成五条）、`package.json` 与 `bun.lock` 的版本（`^0.4.0`）、
 `scripts/build/mainBundledPlatformPackages.json`，以及
 `packages/arch-guard-velaros/src/checks/architecture/memoryProductBoundary.ts` 里按 specifier
 字符串判断的那几条规则。
@@ -310,13 +312,13 @@ Desktop 16 个文件、Workbench 6 个、Termel 7 个。
 | `src/main/kernel/WorkbenchKernelIpc.ts` | `/runtime`: `Kernel`、`KernelCapabilityPermissionDeniedError`、`KernelCapabilityUnavailableError`；`/contracts/abi`: `ScopeRef`、`UnknownKernelCapabilityOperationError` | `createKernel` / `KernelApi` from `@velaros-ai/kernel`；`ScopeRef` from `@velaros-ai/kernel/contracts`；**三处 `instanceof` 改按码判**：`KernelCallErrorCodes.permissionDenied` / `.capabilityNotFound` / `.operationNotFound`，现场在 `error.details` |
 | `src/main/kernel/WorkbenchKernelPermissionPolicy.ts` | `/contracts/abi`: `KernelPermissionBroker`、`KernelPermissionDecision`、`KernelPermissionRequest` | broker 接口 `@velaros-ai/kernel`，两个数据 `@velaros-ai/kernel/contracts` |
 | `tests/workbench-agent-capability-runtime.test.ts` | `/runtime`: `Kernel`；`/contracts/abi`: `KernelEvent` | `createKernel` from `@velaros-ai/kernel`；`KernelEvent` from `@velaros-ai/kernel/contracts` |
-| `package.json` / `bun.lock` | 依赖版本 | `^0.3.0` |
+| `package.json` / `bun.lock` | 依赖版本 | `^0.4.0` |
 
 ### 5.3 VelarOS-Termel（7 个文件）
 
 | 文件 | 现在从哪取什么 | 改成 |
 | --- | --- | --- |
-| `packages/serve-host/src/host.ts` | `/serve`: `bootKernelDaemon`、`BootedKernelDaemon`、`InProcessKernelTransport`、`createDefaultKernelModStorePaths`；`/client`: `KernelClient`；`/client/contracts`: `KernelRpcEndpoint` | `bootKernelDaemon`、`createDefaultKernelModStorePaths` 留在 `./serve`；`BootedKernelDaemonApi` 从 `.` 取；`new KernelClient(new InProcessKernelTransport(booted.service))` → `booted.createClient()`；`KernelRpcEndpoint` 从 `./contracts` 取 |
+| `packages/serve-host/src/host.ts` | `/serve`: `bootKernelDaemon`、`BootedKernelDaemon`、`InProcessKernelTransport`、`createDefaultKernelModStorePaths`；`/client`: `KernelClient`；`/client/contracts`: `KernelRpcEndpoint` | `bootKernelDaemon` 留在 `./serve`；**`createDefaultKernelModStorePaths` 已删**，`modStorePaths: createDefaultKernelModStorePaths(paths.modsRoot)` 整行改成 `modsRoot: paths.modsRoot`（0.4.0，见 §6）；`BootedKernelDaemonApi` 从 `.` 取；`new KernelClient(new InProcessKernelTransport(booted.service))` → `booted.createClient()`；`KernelRpcEndpoint` 从 `./contracts` 取 |
 | `packages/serve-host/src/attached-host.ts` | `/client`: `KernelClient`、`connectToKernelDaemon` | `kernelDaemons.connect()` from `./client`；类型位 `KernelClientApi` from `.` |
 | `packages/serve-host/src/data-root.ts` | `/client/contracts`: `KernelDaemonPaths` | `@velaros-ai/kernel/contracts` |
 | `packages/serve-host/src/permission-policy.ts` | `/contracts/abi`: `KernelPermissionBroker`、`KernelPermissionDecision`、`KernelPermissionRequest` | broker 接口 `.`，两个数据 `./contracts` |
@@ -325,19 +327,67 @@ Desktop 16 个文件、Workbench 6 个、Termel 7 个。
 | `packages/serve-host/test/remote-node.e2e.test.ts` | `/remote/client`: `RemoteNodeClient`、`RemoteNodeCredentials` | `createRemoteNodeClient` from `./remote`；`RemoteNodeCredentials` from `.` |
 | `packages/termel-runtime/src/plugins.ts` | `/contracts/protocol`: `VelarosModManifestFileName`、`parseVelarosModEnvelope` | 常量 `./contracts`；解析 `velarosModEnvelopes.parse` from `.` |
 
-两个 `package.json`（`serve-host`、`termel-runtime`）与 `bun.lock` 的依赖版本提到 `^0.3.0`。
+两个 `package.json`（`serve-host`、`termel-runtime`）与 `bun.lock` 的依赖版本提到 `^0.4.0`。
 
-## 6. 本轮**没有**做完的（已知偏离方案 §2.6）
+## 6. 0.4.0：`./serve` 收窄到四个值（已完成）
 
-`./serve` 上还留着六个 ModStore / Loader 装配零件函数：`installModPackFromDirectory`、
-`loadModIndexIntoStore`、`persistModIndex`、`registerSystemModPacks`、`registerBundledPacks`、
-`createDefaultKernelModStorePaths`。
+0.3.0 时 `./serve` 上还留着六个 ModStore / Loader 的装配零件函数，是方案 §2.6 的已知偏离；
+0.4.0 做掉了。三种去向：真正的实例行为变成 `KernelModStoreApi` 上的方法；本来就只是转发壳的
+直接删；纯路径计算退回包内 utils，由一个新选项顶替。`./serve` 现在只有四个值——
+`bootKernelDaemon`、`kernelDaemonProcess`、`createKernelLauncher`、`createKernelUpdater`，
+全是部署组合的入口。
 
-它们是 `impl/` 里的工厂函数，门禁允许出包（`check:module-ownership` 上 kernel 已经是零条），
-方案 §2.6 想把 `./serve` 收窄到四个值。要做掉这六个，得把它们变成 `KernelModStoreApi` /
-`KernelModLoaderApi` 上的方法——那是一次真正的接口改形，会动到守护进程启动路径与三个测试文件，
-风险与本轮「收口 + 删名」不在一个量级，所以单独留给下一轮。Termel 的 `src/host.ts` 现在
-仍然可以照旧调 `createDefaultKernelModStorePaths`。
+| 旧名（0.3.0 的 `./serve`） | 新写法（0.4.0） | 为什么 |
+| --- | --- | --- |
+| `installModPackFromDirectory(store, dir)` | `store.installFromDirectory(dir)` | 读清单、登记、落盘全是仓库自己的事；装完照旧随手落盘，调用方不用再补一次 `persistModIndex` |
+| `loadModIndexIntoStore(store)` | `store.loadPersistedIndex()` | 同上。原先的第二个参数（覆盖 paths）没有任何调用点，一并删掉 |
+| `persistModIndex(store)` | `store.persistIndex()` | 同上 |
+| `registerSystemModPacks(store, packs)` | `store.registerSystem(packs)` | 它本来就只是转发给同名方法的壳，没有自己的逻辑 |
+| `registerBundledPacks(store, packs)` | `store.registerBundled(packs)` | 同上 |
+| `createDefaultKernelModStorePaths(root)` | **不出包了**；`bootKernelDaemon` 的选项由 `modStorePaths` 换成 `modsRoot: string` | 它是纯路径计算，按仓库标准归 utils（`utils/serve/mod-index.ts` 的 `toModStorePaths`，包内用）。目录布局是内核自己的决定，宿主只交一个数据根，不该替内核拼路径 |
+
+拿到 `KernelModStoreApi` 的口子只有一个：`bootKernelDaemon(...)` 返回的 `booted.modStore`。
+
+两处跟着改形：
+
+| 名字 | 变化 |
+| --- | --- |
+| `KernelDaemonAssemblyOptions.modStorePaths?: KernelModStorePaths` | 换成 `modsRoot?: string`。用户 pack 永远落在 `<root>/mods`，索引永远落在 `<root>/mod-index.json`；原先把两条路径拆开给（或者只给 `userModsDirectory`、以此关掉持久化）的写法没有了 |
+| `KernelModStorePaths` | 还出包，位置从类上方接口挪到 `types/serve.ts` 的纯数据；现在只用来读 `booted.modStore.paths` |
+
+### 跨仓：只有 Termel 一处
+
+`VelarOS-Termel` 的 `packages/serve-host/src/host.ts` 是唯一调过这六个名字的产品仓代码，
+调的是 `createDefaultKernelModStorePaths`，两行跟改：
+
+1. 第 13-18 行的 import 里删掉 `createDefaultKernelModStorePaths` 一行，其余不动：
+
+   ```ts
+   import {
+     type BootedKernelDaemon,
+     bootKernelDaemon,
+     InProcessKernelTransport,
+   } from '@velaros-ai/kernel/serve'
+   ```
+
+   这里只画 0.4.0 这一刀。Termel 还停在 0.2.3，`BootedKernelDaemon` 与
+   `InProcessKernelTransport` 要按 §5.3 一起改（前者换成 `.` 的 `BootedKernelDaemonApi`，
+   后者换成 `booted.createClient()`）——两刀一次做完即可。
+
+2. `bootKernelDaemon({ … })` 里的这一行
+
+   ```ts
+   modStorePaths: createDefaultKernelModStorePaths(paths.modsRoot),
+   ```
+
+   逐字改成
+
+   ```ts
+   modsRoot: paths.modsRoot,
+   ```
+
+`attached-host.ts`、`data-root.ts`、`permission-policy.ts`、`remote-node.ts`、`tool-gateway.ts`
+与 `termel-runtime/src/plugins.ts` 这一轮不受影响，按第 5.3 节改 0.3.0 那一次即可。
 
 ---
 

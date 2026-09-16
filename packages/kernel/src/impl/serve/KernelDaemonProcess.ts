@@ -16,11 +16,7 @@ import {
   type BootedKernelDaemonApi,
   bootKernelDaemon,
 } from './KernelDaemonAssembly'
-import { installModPackFromDirectory, loadModIndexIntoStore } from './KernelModLoader'
-import {
-  createDefaultKernelModStorePaths,
-  KernelModStore,
-} from './KernelModStore'
+import { KernelModStore } from './KernelModStore'
 
 const log = Log.tag('KernelServe')
 
@@ -50,11 +46,11 @@ export class KernelDaemonProcess implements KernelDaemonProcessApi {
 
     // 建 ModStore：先读用户索引，再按环境变量登记系统 pack、安装目录 pack。
     const userModsRoot = environment.VELAROS_KERNEL_USER_MODS?.trim()
-    const paths = createDefaultKernelModStorePaths(
-      isNotUndefined(userModsRoot) && !isEmpty(userModsRoot) ? userModsRoot : undefined,
-    )
-    const store = new KernelModStore(paths)
-    await loadModIndexIntoStore(store)
+    const modsRoot = isNotUndefined(userModsRoot) && !isEmpty(userModsRoot)
+      ? userModsRoot
+      : undefined
+    const store = new KernelModStore(modsRoot)
+    await store.loadPersistedIndex()
 
     const systemPacksJson = environment.VELAROS_KERNEL_SYSTEM_PACKS?.trim()
     if (isNotUndefined(systemPacksJson) && !isEmpty(systemPacksJson)) {
@@ -63,13 +59,13 @@ export class KernelDaemonProcess implements KernelDaemonProcessApi {
 
     const installPack = environment.VELAROS_KERNEL_INSTALL_PACK?.trim()
     if (isNotUndefined(installPack) && !isEmpty(installPack)) {
-      await installModPackFromDirectory(store, installPack)
+      await store.installFromDirectory(installPack)
     }
 
     const booted = await bootKernelDaemon({
       importModule: input.importModule,
       kernelVersion,
-      modStorePaths: paths,
+      modsRoot,
       modPacks: store.list(),
     })
     booted.installShutdownHandlers()

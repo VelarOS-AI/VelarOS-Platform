@@ -1,4 +1,5 @@
-import { isAbsolute, resolve } from 'node:path'
+import { homedir } from 'node:os'
+import { isAbsolute, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 import {
@@ -15,6 +16,7 @@ import {
 import type { KernelModuleDefinition } from '../../contract/requires.js'
 import type {
   KernelModPackRecord,
+  KernelModStorePaths,
   KernelSystemModPackInput,
 } from '../../types/serve.js'
 import type { VelarosModModuleSection } from '../../types/wire.js'
@@ -22,6 +24,14 @@ import {
   parseVelarosModEnvelope,
   VelarosModManifestFileName,
 } from '../wire/mod-envelope'
+
+/** 按数据根目录折出 ModStore 的落盘路径（不给根就用缺省的 `~/.velaros`）。 */
+export function toModStorePaths(root: string = join(homedir(), '.velaros')): KernelModStorePaths {
+  return {
+    userModsDirectory: join(root, 'mods'),
+    indexPath: join(root, 'mod-index.json'),
+  }
+}
 
 /** 把装载失败的原因折成一句人读得懂的话（带上 cause，别把真正的原因丢在最里层）。 */
 export function describeModPackLoadFailure(error: unknown): string {
