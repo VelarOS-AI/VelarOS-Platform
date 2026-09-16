@@ -161,6 +161,35 @@ void describe('能力协议段与技能段已下沉活动尾', () => {
     }
   })
 
+  void test('可用 shell 只有一个就不提挑选，多个才给清单和填法', () => {
+    const originalFacts = readAppRuntimeFacts()
+    const readShellLine = (): string => {
+      const segment = buildPrompt().segments.find((entry) => entry.id === 'runtime.environment')
+      assert.ok(segment)
+      const line = segment.text.split('\n').find((entry) => entry.startsWith('- 命令 Shell：'))
+      assert.ok(line)
+      return line
+    }
+    try {
+      configureAppRuntimeFacts({ platform: 'darwin', shell: '/bin/zsh', availableShells: ['posix'] })
+      const single = readShellLine()
+      assert.equal(single, '- 命令 Shell：posix（/bin/zsh）')
+      assert.doesNotMatch(single, /shell 字段/u)
+
+      configureAppRuntimeFacts({
+        platform: 'win32',
+        shell: 'C:\\Program Files\\Git\\bin\\bash.exe',
+        availableShells: ['git-bash', 'powershell', 'cmd'],
+      })
+      const multiple = readShellLine()
+      // 默认那个排头并标出来，其余按清单原序；填法就写在这一行里，模型不用去别处找。
+      assert.match(multiple, /^- 命令 Shell：git-bash（默认，C:\\Program Files\\Git\\bin\\bash\.exe）；/u)
+      assert.match(multiple, /本机还可用 powershell、cmd（跑命令时填 shell 字段挑，不填就用默认那个）$/u)
+    } finally {
+      configureAppRuntimeFacts(originalFacts)
+    }
+  })
+
   void test('HTML 实时预览协议段是 Tier1（开启时进活动尾，不动前缀）', () => {
     const off = buildPrompt()
     const on = buildPrompt({ shouldInjectHtmlArtifactPrompt: true })

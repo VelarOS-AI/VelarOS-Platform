@@ -127,6 +127,7 @@
 | X2 | Desktop 的 `arch-guard-velaros` 两处按 dist 布局钉路径（memory 三切片、`memory/dist/memory-tree/v2/storage/AtomicFile.js`），以及 browser 的 `dist/composition/`、`dist/tools/` | 三个包的 dist 布局都变了 | Desktop：随升级重写这几处检查 |
 | X4 | browser 工具面 40→32 之后，Desktop 与 Workbench 里点名了被删工具的地方 | Desktop：`UnattendedTaskToolPolicy.ts` 的名单、两份技能文档（a11y-debugging、debug-optimize-lcp）、`docs/modules/infrastructure-browser.md`；Workbench：`WorkbenchBrowserToolHost.ts` 的初始可见工具名单含 `browser:site_context` 及其测试 | 两个产品：随升级改名或删名 |
 | X3 | Desktop 14 个文件 + 两份 package.json 把 `@velaros-ai/memory/knowledge` 换成 `@velaros-ai/knowledge`（导出名不变） | knowledge 已独立成包 | Desktop：随升级机械替换 |
+| X5 | `run` 的 `shell` 字段要能用起来，产品端三处接线 | 字段、词表、拒绝语义、可用性探测都在包内了（`ba7ac608`），但值在产品端 | ① 把 `inspectEnvironment().shells` 的种类按原序写进 `AppRuntimeFacts.availableShells`（第一项是默认那个），**不写则 Windows 上这个能力等于没有**；② project 宿主的 `runCommand` / `runInSandbox` 透传 `options.shell`，做不到就拒绝、别忽略换默认 shell 照跑；③ `SystemEnvironmentInspection` 多了必填的 `shells`，测试替身与 IPC 镜像形状要补 |
 
 ## 八、产品层接线（本仓不改，列给你排期）
 

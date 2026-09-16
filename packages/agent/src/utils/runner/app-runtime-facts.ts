@@ -17,6 +17,7 @@ const facts: AppRuntimeFacts = {
   arch: null,
   osRelease: null,
   shell: null,
+  availableShells: null,
   homeDir: null,
   userDataRoot: null,
 }
@@ -27,9 +28,10 @@ const facts: AppRuntimeFacts = {
  * 只有省略位（`undefined`）被跳过；显式传 `null` 表示「清空这项事实」，必须写入。
  */
 export function configureAppRuntimeFacts(next: Partial<AppRuntimeFacts>): void {
-  const entries = Object.entries(next) as Array<[keyof AppRuntimeFacts, Nullable<string>]>
+  const entries = Object.entries(next) as Array<[keyof AppRuntimeFacts, AppRuntimeFacts[keyof AppRuntimeFacts]]>
   for (const [key, value] of entries) {
-    if (isNotUndefined(value)) facts[key] = value
+    // 各字段类型不同（清单是数组、其余是字符串），逐键写回在编译期对不上号；写的是同一个键的原值。
+    if (isNotUndefined(value)) Object.assign(facts, { [key]: value })
   }
 }
 

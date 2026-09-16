@@ -1256,8 +1256,16 @@ export interface AppRuntimeFacts {
   arch?: LooseOptional<string>
   /** 操作系统版本，如 Darwin kernel release 或 Windows release。 */
   osRelease?: LooseOptional<string>
-  /** 实际承载命令执行的 shell 路径。 */
+  /** 默认承载命令执行的 shell 路径。 */
   shell?: LooseOptional<string>
+  /**
+   * 本机可用的 shell 种类清单，**第一个是默认那个**（`system:run` / `project:run` 的 `shell` 字段就填这些词）。
+   *
+   * 直接把系统能力的 `inspectEnvironment().shells` 按同一顺序取 kind 传进来即可，顺序含义两边一致。
+   * 只有一项时提示词不提「挑」这回事——没得挑的时候摆出选项只会诱导模型去填一个它不必填的字段。
+   * 不写这一项，模型就只知道默认 shell 的路径，`shell` 字段等于没法用。
+   */
+  availableShells?: LooseOptional<string[]>
   /** 当前用户主目录。 */
   homeDir?: LooseOptional<string>
   /** userData 存储根目录（会话数据与本地索引等落盘位置的父目录）。 */

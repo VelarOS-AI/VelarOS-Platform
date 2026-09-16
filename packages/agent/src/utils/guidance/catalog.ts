@@ -3,7 +3,7 @@
 // **Tier0 只有两段**——身份 / 品牌语气。两段都走 `createCorePromptSegment`：
 // 不读 facts、不带谓词，渲染结果在构造期即固定，稳定前缀因此在同一会话内逐字不变。
 // 任何「按开关或按本轮输入注入」的内容（能力协议、当前时间、用户附加提示词）一律 Tier1，落活动尾。
-import { isArray, isEmpty, isTrue } from '@velaros-ai/core'
+import { isArray, isEmpty, isNotNull, isTrue, isUndefined } from '@velaros-ai/core'
 
 import { PromptSegmentPriority } from '../../contract/constants.js'
 import type { AppRuntimeFacts } from '../../contract/requires.js'
@@ -52,6 +52,24 @@ function formatRuntimeFact(value: LooseOptional<string>): Nullable<string> {
   return normalized || null
 }
 
+/**
+ * 渲染「命令 Shell」那一行：默认那个在前，多于一个才把清单摆出来并说清怎么挑。
+ *
+ * 清单的第一项按合同就是默认那个；只有一项时不提挑选——没得挑的时候摆出选项只会诱导模型去填一个它不必填的字段。
+ */
+function formatRuntimeShell(facts: AppRuntimeFacts): Nullable<string> {
+  const path = formatRuntimeFact(facts.shell)
+  const kinds = (isArray(facts.availableShells) ? facts.availableShells : [])
+    .map((kind) => formatRuntimeFact(kind))
+    .filter((kind): kind is string => isNotNull(kind))
+  const [defaultKind, ...alternatives] = kinds
+  if (isUndefined(defaultKind)) return path
+  const head = path ? `${defaultKind}（${isEmpty(alternatives) ? path : `默认，${path}`}）` : defaultKind
+  return isEmpty(alternatives)
+    ? head
+    : `${head}；本机还可用 ${alternatives.join('、')}（跑命令时填 shell 字段挑，不填就用默认那个）`
+}
+
 /** 把宿主已配置的进程级事实渲染成模型首条命令前即可读取的环境说明。 */
 function formatRuntimeEnvironment(facts: AppRuntimeFacts): Nullable<string> {
   const platform = formatRuntimeFact(facts.platform)
@@ -61,7 +79,7 @@ function formatRuntimeEnvironment(facts: AppRuntimeFacts): Nullable<string> {
     ['操作系统', platform ? `${platformLabel ? `${platformLabel} / ` : ''}${platform}` : null],
     ['CPU 架构', formatRuntimeFact(facts.arch)],
     ['系统版本', formatRuntimeFact(facts.osRelease)],
-    ['命令 Shell', formatRuntimeFact(facts.shell)],
+    ['命令 Shell', formatRuntimeShell(facts)],
     ['用户主目录', formatRuntimeFact(facts.homeDir)],
     ['应用数据目录', formatRuntimeFact(facts.userDataRoot)],
   ]

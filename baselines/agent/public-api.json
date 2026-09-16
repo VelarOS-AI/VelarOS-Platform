@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "packageName": "@velaros-ai/agent",
-  "acceptedPackageVersion": "1.0.0",
+  "acceptedPackageVersion": "1.1.0",
   "entries": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -257,7 +257,7 @@
         "AgentWorkflowValueRef\ttype\t503c8f2eb5117fe4bba90420326152d525af67ab1cf13cdaeb5f407f866dfb46",
         "AnyVelaTool\ttype\tbb66a91dd7904b4ccbeb3544ed3267d537c35770074b72b5a5f1ebf16f349b99",
         "AppLocale\ttype\t75ccf1edc48d9ae8fa569b1834e24f7d06cae9324a83536c9c9e96b98638c990",
-        "AppRuntimeFacts\ttype\t250afba50de49e85eb7eb6f12fa6f6d9ec778e5cc76e393adba5155c3eba20d5",
+        "AppRuntimeFacts\ttype\tf640ebfdeff59e67c52e08bf4eb270ce6a356c094a43b58a003916ea50ab95ad",
         "AppendExecutionEventInput\ttype\t5376430be9e6383299f0b7851676b7e9fee750b84a11e33fccc46c2391958597",
         "ApprovalDecision\ttype\tc4bb901d9040e84684581b53126d2c9f7912d3bf96664d205865c7c07be2ea90",
         "ApprovalPort\ttype\t8031929fae21f275b453d0dbd5a16fdadd600cb4d7396460986cfd5719ae146f",

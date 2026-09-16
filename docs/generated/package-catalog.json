@@ -6,7 +6,7 @@
       "domain": "agent",
       "directory": "packages/agent",
       "name": "@velaros-ai/agent",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "description": "Host-agnostic agent loop, prompt, orchestration, team, execution, and tool runtime for VelarOS-compatible hosts.",
       "exportSubpaths": [
         ".",
