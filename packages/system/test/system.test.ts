@@ -185,6 +185,31 @@ describe('System capability', () => {
     }
   })
 
+  test('按字符预算读取时截到整行，一行比预算还长才从行中间截', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'velaros-system-read-lines-'))
+    const path = join(root, 'code.ts')
+    const longLine = join(root, 'long.ts')
+    try {
+      await writeFile(path, 'const a = 1\nconst b = 2\nconst c = 3\n')
+      // 预算 18 落在第二行中间（每行 12 个字符）：只给第一整行，range.end 就是第二行的行首。
+      const first = await readOne({ path, maxChars: 18 })
+      expect(first.content).toBe('const a = 1\n')
+      expect(first.range).toEqual({ offset: 0, end: 12 })
+      expect(first.hasMore).toBe(true)
+      const rest = await readOne({ path, offset: first.range.end })
+      expect(rest.content).toBe('const b = 2\nconst c = 3\n')
+      expect(rest.hasMore).toBe(false)
+
+      // 这一段里没有换行可退：照旧按字符截，不能一个字都不给。
+      await writeFile(longLine, `${'x'.repeat(100)}\ntail\n`)
+      const cut = await readOne({ path: longLine, maxChars: 10 })
+      expect(cut.content).toBe('x'.repeat(10))
+      expect(cut.range).toEqual({ offset: 0, end: 10 })
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   test('decodes UTF-16 text and keeps its line endings', async () => {
     const root = await mkdtemp(join(tmpdir(), 'velaros-system-read-utf16-'))
     const path = join(root, 'utf16.txt')

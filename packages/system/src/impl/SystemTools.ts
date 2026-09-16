@@ -48,7 +48,7 @@ const readTool = defineSystemTool<SystemReadInput>({
     files: z.array(z.strictObject({
       path: z.string().min(1).describe('文件路径，支持 ~；相对路径相对 system:run 的默认目录。'),
       offset: z.number().int().nonnegative().optional().describe('从第几个字符开始读，默认 0。'),
-      maxChars: z.number().int().positive().max(SystemFileLimits.readChars).optional().describe(`最多返回多少字符，默认也是上限 ${SystemFileLimits.readChars}。`),
+      maxChars: z.number().int().positive().max(SystemFileLimits.readChars).optional().describe(`最多返回多少字符，默认也是上限 ${SystemFileLimits.readChars}。没取完时只给完整的行，从 range.end 接着读；某一行本身比预算还长时才会从行中间截。`),
       version: z.string().min(1).optional().describe('读改动前留下的某个版本，版本号来自 read 或 edit 的结果；只有本次运行里 edit 留下的版本能召回。'),
     })).min(1).max(SystemFileLimits.readFiles).describe(`要读的文件，每项一个，一次最多 ${SystemFileLimits.readFiles} 个。`),
   }),

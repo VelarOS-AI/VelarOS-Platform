@@ -142,10 +142,18 @@ export function clampTextRange(content: string, range: SystemTextRange): SystemT
   return { offset, end }
 }
 
-/** 按字符取一段：从 offset 起最多 maxChars 个，不切开代理对，返回内容和它实际落在的范围；maxChars 为 0 时返回空段。 */
+/**
+ * 按字符取一段：从 offset 起最多 maxChars 个，不切开代理对，返回内容和它实际落在的范围；maxChars 为 0 时返回空段。
+ * 没取完时只给完整的行（末尾带换行），不把一行切成两半；某一行本身比预算还长时才从行中间截——否则这一次读一个字都给不出来。
+ */
 export function sliceTextChars(content: string, offset: number, maxChars: number): SystemTextSlice {
   const range = clampTextRange(content, { offset, end: offset + Math.max(0, maxChars) })
-  return { content: content.slice(range.offset, range.end), range }
+  // 取到文件末尾就不用退：只有半途截断才需要往回退到行尾。
+  const lastNewline = range.end < content.length ? content.lastIndexOf('\n', range.end - 1) : -1
+  // 退到的换行要落在本次窗口之内；落在 offset 之前说明这一行比预算还长，那就按字符截，不然这次读会返回空内容、模型原地打转。
+  const end = lastNewline >= range.offset ? lastNewline + 1 : range.end
+  // range 报的是实际给出的那一段，续读从 range.end 接着走，正好是下一行的行首。
+  return { content: content.slice(range.offset, end), range: { offset: range.offset, end } }
 }
 
 /** 确认路径是普通文件，再在同一个句柄上有界读进来（读的途中变长了报外部修改）；超过 maxBytes 报错，让调用方用系统命令截取。 */

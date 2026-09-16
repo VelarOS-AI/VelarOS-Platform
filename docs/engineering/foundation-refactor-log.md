@@ -10,6 +10,8 @@
 
 （按时间追加。每条写：改了什么、为什么、影响谁。）
 
+- **system:read 的字符预算改成按行截断（09-16 13:10）。** 原来按字符硬切，正好切在半行上；代码本来就是按行的，模型拿到半行要么看不懂要么得再读一次。现在预算没取完时只给完整的行（末尾带换行），`range.end` 落在下一行行首、续读接着走；某一行本身比预算还长时才从行中间截（否则这一次读一个字都给不出来）。project:read 本来就是这么做的，只是说明里没写，随契约那一轮补上——两个空间的说法就统一了。影响：模型面 `maxChars` 的说明多一句；同一预算下返回的字符数可能略少于 maxChars。
+
 - **模型面两处形状变更，随契约那一轮一起改（09-16 12:45，你拍板）。** ① `project:read` 只收 `files` 与 `continuation`，删掉顶层 `path`、`range`——读单个文件写成只有一项的 `files`，与 `system:read` 同形（ADR 0004）。② `project:change` 的步骤改成按动作的判别联合（`action: create|overwrite|move|delete|recode|edit`），删掉 `tool` 字段，一步一个目标，同一文件内的多处编辑仍在 `edits` 里。影响：模型面入参形状变了（说明、示例、schema 同改，指纹重算）；宿主里按 project:read 顶层 `path` 或按 `step.tool` 拼入参的地方要跟着改，属于产品层，本仓不动、改完列出调用点。
 
 - **新包 `@velaros-ai/text-files`：文本文件的编码识别、编解码与原子读写合成一份，system 的读写行为因此变了几处（09-16 00:30，b9c2746e、6b6bbf2a、d769bfad、95bcd6ca，ADR 0008 附录）。** 以 project 那份为底。system 看得到的变化：① GBK/GB18030 文件能读能改（原来读成乱码，整份写入还会把 GBK 文件悄悄改存成 UTF-8），读结果的 `encoding` 可能是 `gb18030`；② 既不是合法 UTF-8 也解不成 GB18030 的文件按二进制报错，不再「读成功带替换字符」，全局搜索跳过它们、沙箱差量不附文本；③ 新文本里有孤立代理项整批拒写（原来悄悄写成替换字符）；④ **多硬链接的文件拒改**（原来原子替换会让它和其余链接悄悄分家）；⑤ 写入 fsync，已有文件的权限位原样保留（原来会被 umask 收掉位），新建文件按 umask（022 下仍是 0644）；⑥ 回滚到认不出是文本的版本，改为计划期拒绝（原来先写进去再报失败）。project：根入口不再导出 `ProjectTextEncoding`（宿主改用 `@velaros-ai/text-files/contracts` 的 `TextEncoding`），三句报错文字变了、两处 reason 变了（读事务原字节时路径变成目录或管道：CONFLICT_WITH_EXTERNAL_EDIT → NOT_SUPPORTED；流式解码中途文件被改坏：裸 TypeError → NOT_SUPPORTED）。顺带修掉 Bun 下 GB18030 流式解码在 64 KiB 块边界丢字的问题。
