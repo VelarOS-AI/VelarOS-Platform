@@ -43,7 +43,10 @@ async function runProgram(message) {
    * 这里只要给出 `__velar`：按模块名取那个命名空间的桩，取不到就抛——
    * 能走到这里说明检查已经过了，取不到只可能是宿主授权与改写对不上，该响不该默默给个空对象。
    */
+  const programModule = Object.freeze({ blobs: Object.freeze({ ...message.blobs }) })
   const resolveModule = (specifier) => {
+    // 这次运行本身的环境，恒常授权：我们发明的东西要导入，语言自带的（console）不动。
+    if (specifier === 'velar:program') return programModule
     const namespace = typeof specifier === 'string' && specifier.startsWith('velar:') ? specifier.slice(6) : ''
     const bound = api[namespace]
     if (!bound) throw new Error(`宿主没有授权模块 ${specifier}，它不该通过检查。`)
@@ -51,8 +54,8 @@ async function runProgram(message) {
   }
   // 能力以**形参**注入而不是全局：全局会被程序自己改掉，形参改不动外面。
   const body = `"use strict";\nreturn (async () => {\n${message.source}\n})()`
-  const program = new Function('__velar', 'blobs', 'console', body)
-  return program(resolveModule, Object.freeze({ ...message.blobs }), consoleShim)
+  const program = new Function('__velar', 'console', body)
+  return program(resolveModule, consoleShim)
 }
 
 function safeStringify(value) {

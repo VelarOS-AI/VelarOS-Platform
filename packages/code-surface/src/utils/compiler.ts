@@ -9,18 +9,23 @@ import { isUndefined } from '@velaros-ai/core'
 
 import type { CodeProgramDiagnostic } from '../types/code-surface.js'
 
-import { programForCheck } from './program.js'
+import { programForCheck, ProgramModuleSpecifier } from './program.js'
 
 /** 生成出来的能力声明在内存文件系统里的名字。 */
 export const DeclarationFileName = '/velar.d.ts'
 
 /**
- * 程序世界里恒有的东西，和授权了哪些能力模块无关。
+ * 恒常授权的那个模块：这次运行本身的环境。
  *
- * `blobs` 是大字符串旁路的入口（文件内容不进源码，否则要过好几层转义）；它不是一件能力，
- * 所以不该长在任何命名空间上，而是永远都在。
+ * **我们发明的东西要导入，语言自带的不动**——`blobs` 是我们发明的概念，
+ * 做成隐形全局等于让模型背一条只有提示词告诉过它的暗知识；`console` 是 JavaScript 自带的，
+ * 让模型 `import { console }` 才是真的怪。
+ * 这个模块永远在常驻档，不需要租约、不占授权名额。
  */
-const ProgramPrelude = 'declare const blobs: Record<string, string>'
+const ProgramModuleDeclarations = `declare module '${ProgramModuleSpecifier}' {
+  /** 大字符串旁路：宿主随程序一起送进来的那几段，按名字取。文件内容走这里，不进源码——否则要过好几层转义。 */
+  export const blobs: Record<string, string>
+}`
 
 /**
  * 把这一轮授权的几个命名空间拼成一份声明。
@@ -29,7 +34,7 @@ const ProgramPrelude = 'declare const blobs: Record<string, string>'
  * 这道闸是语言给的，不用我们写判定；也正因为如此，检查器绝不能图省事加载全量。
  */
 export function joinGrantedDeclarations(granted: ReadonlyArray<{ declarations: string }>): string {
-  return [ProgramPrelude, ...granted.map((module) => module.declarations)].join('\n\n')
+  return [ProgramModuleDeclarations, ...granted.map((module) => module.declarations)].join('\n\n')
 }
 
 /** 手滑写成 TypeScript 时用的那份文件名；换个后缀编译器才会按 TS 解析。 */

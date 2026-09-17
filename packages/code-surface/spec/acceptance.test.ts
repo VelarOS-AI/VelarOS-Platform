@@ -140,9 +140,10 @@ export default { 捕获到: caught }`)
 
   test('INV-6 blobs 原样送达，反引号与转义一个不错', async () => {
     const patch = 'const x = `反引号 ${不是插值} \\ 反斜杠 "双引号" \'单引号\'`\n'
-    const outcome = await submit(`${importDemo}\nexport default await write({ text: blobs.patch })`, {
-      blobs: { patch },
-    })
+    const outcome = await submit(
+      [importDemo, "import { blobs } from 'velar:program'", 'export default await write({ text: blobs.patch })'].join('\n'),
+      { blobs: { patch } }
+    )
     if (!outcome.checked) throw new Error('应当通过检查')
     expect(outcome.result.value).toEqual({ received: patch })
   })
@@ -241,6 +242,24 @@ export default first.contents`)
     expect(outcome.checked).toBe(false)
     if (outcome.checked || !('check' in outcome)) throw new Error('应当是诊断')
     expect(outcome.check.diagnostics.some((d) => d.message.includes("Cannot find name 'git'"))).toBe(true)
+  })
+
+  test('INV-15 blobs 必须导入，不是隐形全局；velar:program 不占授权名额也不进租约账', async () => {
+    // 不导入直接用 → 干净的报错，不是「有个全局你本来就该知道」
+    const bare = await submit("export default blobs.patch", { blobs: { patch: 'x' } })
+    expect(bare.checked).toBe(false)
+    if (bare.checked || !('check' in bare)) throw new Error('应当是诊断')
+    expect(bare.check.diagnostics.some((d) => d.message.includes("Cannot find name 'blobs'"))).toBe(true)
+
+    // 导入了就能用，而且 velar:program 不出现在回给宿主的 imports 里
+    const imported = await submit(
+      ["import { blobs } from 'velar:program'", 'export default blobs.patch'].join('\n'),
+      { blobs: { patch: '内容' } }
+    )
+    expect(imported.checked).toBe(true)
+    if (!imported.checked) throw new Error('应当通过检查')
+    expect(imported.result.value).toBe('内容')
+    expect(imported.imports).toBeUndefined()
   })
 
   test('INV-14 租约随 import 一起带回来，不独占一轮', async () => {

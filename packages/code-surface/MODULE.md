@@ -53,6 +53,9 @@
 **程序是一个 ES 模块**：`import { read } from 'velar:system'` 拿能力、顶层 `await` 直接用、
 `export default` 交出答案。写的是真 JavaScript，不是方言——那是代码面唯一的依仗。
 
+**我们发明的东西要导入，语言自带的不动**：`blobs` 走恒常授权的 `velar:program`
+（隐形全局是只有提示词告诉过模型才知道的暗知识），`console` 是 JavaScript 自带的，不动。
+
 定下跑哪份源码（整份重写，或在上一份上按 `edits` 改）→ 查体量 → typecheck（不过就**一行都不执行**）→ 隔离里跑 → 程序发的每次调用转给宿主的能力端口
 → 收集 `notices`（系统插手过的地方）→ 编成结果。
 
@@ -83,8 +86,8 @@
 
 ## 不变量
 
-共 14 条，登记在 `spec/invariants.md`，验收用例在 `spec/acceptance.test.ts`。编号只增不重排。
-按检验方式：测试 14 条。未验证 0 条。
+共 15 条，登记在 `spec/invariants.md`，验收用例在 `spec/acceptance.test.ts`。编号只增不重排。
+按检验方式：测试 15 条。未验证 0 条。
 
 ## 非目标
 

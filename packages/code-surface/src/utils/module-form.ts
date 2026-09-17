@@ -13,7 +13,7 @@ import ts from 'typescript'
 import type { CapabilityLease, ProgramImport } from '../types/code-surface.js'
 import type { ProgramRewrite } from '../types/module-form.js'
 
-import { ProgramFileName, readCapabilityNamespace } from './program.js'
+import { ProgramFileName, ProgramModuleSpecifier, readCapabilityNamespace } from './program.js'
 
 /** 租约的三档：意图，不是期限。不认的值当没写，宿主按缺省策略处理。 */
 const LeaseValues = new Set<CapabilityLease>(['once', 'task', 'done'])
@@ -40,6 +40,8 @@ export function readProgramImports(source: string): ProgramImport[] {
   const imports: ProgramImport[] = []
   for (const statement of file.statements) {
     if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) continue
+    // `velar:program` 恒常授权、不参与租约与回收，报给宿主只是噪声。
+    if (statement.moduleSpecifier.text === ProgramModuleSpecifier) continue
     const namespace = readCapabilityNamespace(statement.moduleSpecifier.text)
     if (namespace === null) continue
     const lease = readLease(statement)
