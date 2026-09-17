@@ -1,8 +1,8 @@
 // 代码面登记：哪些能力以什么命名空间进模型可观测面。门禁与生成器的单一来源。
 //
-// 这里只登记**根**（命名空间 + 操作接口）；具体放出哪几个方法，看方法上有没有 `@modelVisible`。
+// 这里只登记**根**（命名空间 + 操作接口）；具体放出哪几个方法，看方法上有没有 `@AgentView`。
 // 根引用到的类型由机器算闭包，不在这里登记——手工维护闭包一定会烂。
-// 闭包里的每个类型必须带 `@modelVisible`，门禁双向守（在闭包里没标、标了不在闭包里，都红）。
+// 闭包里的每个类型必须带 `@AgentView`，门禁双向守（在闭包里没标、标了不在闭包里，都红）。
 
 export const CodeSurfaces = [
   {
@@ -10,7 +10,7 @@ export const CodeSurfaces = [
     namespace: 'system',
     /** 相对 packages/ 的目录。 */
     directory: 'system',
-    /** 操作接口；方法带 `@modelVisible` 的才进模型面。 */
+    /** 操作接口；方法带 `@AgentView` 的才进模型面。 */
     interfaces: ['SystemFileOperationsApi', 'SystemExecutionOperationsApi'],
   },
 ]
@@ -27,7 +27,7 @@ export const HostContextTypes = new Set([
 ])
 
 /** 进模型可观测面的标记；打在操作方法与它引用到的每个**领域类型**上。 */
-export const ModelVisibleTag = '@modelVisible'
+export const AgentViewTag = '@AgentView'
 
 /**
  * 模型可观测面上**禁用**的类型别名：一律写原生形式。

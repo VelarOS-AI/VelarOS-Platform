@@ -1,6 +1,6 @@
 // 本文件由 scripts/code-surface/generate-declarations.mjs 从能力包源码生成，不要手改。
 // 命名空间 system：5 个方法、49 个类型。
-// 改源码里带 @modelVisible 的东西就是改模型可观测面，重算用 `bun run generate:code-surface`。
+// 改源码里带 @AgentView 的东西就是改模型可观测面，重算用 `bun run generate:code-surface`。
 
 declare const TextEncodings: readonly ['utf8', 'utf8-bom', 'utf16le', 'utf16be', 'utf16le-nobom', 'utf16be-nobom', 'gb18030']
 

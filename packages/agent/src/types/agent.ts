@@ -503,10 +503,11 @@ export interface StreamToolResultModelImage {
 }
 
 /**
+ * @AgentView
  * Provider-neutral content blocks that a tool result can expose directly to the next model turn.
  * Binary data is base64 encoded and kept outside the ordinary textual result so serialization and
  * context compaction never turn media bytes into JSON text.
- @modelVisible */
+ */
 export type ToolResultModelContentPart =
   | { type: 'text'; text: string }
   | { type: 'image-data'; data: string; mediaType: string }
