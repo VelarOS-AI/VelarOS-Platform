@@ -7,6 +7,10 @@ export const CodeSurfaceTuning = Object.freeze({
   defaultTimeoutMs: 30_000,
   /** 诊断代码帧里一行最多摆多长；再长就截，插字符跟着钳到行尾。 */
   frameLineChars: 200,
+  /** 一条插手记录的说明最多多长；能力回的拒绝理由可能很长。 */
+  noticeDetailChars: 300,
+  /** 一条诊断的说明最多多长；类型错会把整个展开的类型打出来。 */
+  diagnosticMessageChars: 600,
   /** 执行账折完之后最多列几条；超出保留结尾（中断现场在尾部）。 */
   journalEntries: 60,
   /** 隔离进程的堆上限（MB）。爆了就终止——超时管得住死循环，管不住一个循环里把整个仓库读进数组。 */

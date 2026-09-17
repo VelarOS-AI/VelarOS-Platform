@@ -3,7 +3,7 @@
 import { isUndefined } from '@velaros-ai/core'
 
 import { CodeSurfaceLimits } from '../contract/constants.js'
-import type { CodeCallNotice, CompletedCall } from '../types/code-surface.js'
+import type { CodeCallNotice, CodeProgramCheckFailure, CodeProgramDiagnostic, CodeProgramResult, CompletedCall } from '../types/code-surface.js'
 
 import { keepTail } from './program.js'
 import { CodeSurfaceTuning } from './tuning.js'
@@ -65,4 +65,106 @@ export function fitValueToBudget(value: unknown, notices: CodeCallNotice[]): unk
     detail: `返回值 ${serialized.length} 字符超过上限 ${CodeSurfaceLimits.valueChars}，前 ${dropped} 字符省略。下次在程序里先筛一遍再 return。`,
   })
   return text
+}
+
+/**
+ * 失败说明按预算保留**开头**：报错的要紧话在第一行（`TypeError: x is not a function`），
+ * 而程序完全可以 `throw new Error(整个文件)`——不截，「正文不进上下文」就被错误通道走私进来了。
+ */
+export function fitFailureToBudget(message: string): string {
+  if (message.length <= CodeSurfaceLimits.failureChars) return message
+  const dropped = message.length - CodeSurfaceLimits.failureChars
+  return `${message.slice(0, CodeSurfaceLimits.failureChars)}…后面 ${dropped} 字符省略（别把大段内容塞进错误里，要看的东西 console.log 一小段或者 export default）`
+}
+
+/**
+ * 插手记录按预算收拢：连着的同一件事折成一条，单条说明截短，总量超了只留开头并说明省了几条。
+ *
+ * 留**开头**而不是结尾：插手记录里最早的那几条通常就是原因（第一次被拒、第一次被钳），
+ * 后面多半是同一个原因反复触发。
+ */
+export function fitNoticesToBudget(notices: readonly CodeCallNotice[]): CodeCallNotice[] {
+  const folded: Array<CodeCallNotice & { repeated: number }> = []
+  for (const notice of notices) {
+    const detail = notice.detail.length > CodeSurfaceTuning.noticeDetailChars
+      ? `${notice.detail.slice(0, CodeSurfaceTuning.noticeDetailChars)}…`
+      : notice.detail
+    const last = folded.at(-1)
+    if (last && last.call === notice.call && last.action === notice.action && last.field === notice.field && last.detail === detail) {
+      last.repeated += 1
+      continue
+    }
+    folded.push({ ...notice, detail, repeated: 1 })
+  }
+
+  const kept: CodeCallNotice[] = []
+  let used = 0
+  for (const [index, { repeated, ...notice }] of folded.entries()) {
+    const shaped = repeated > 1 ? { ...notice, detail: `${notice.detail}（连着 ${repeated} 次）` } : notice
+    const cost = JSON.stringify(shaped).length
+    if (used + cost > CodeSurfaceLimits.noticeChars) {
+      kept.push({ call: 'program', action: 'truncated', detail: `还有 ${folded.length - index} 条插手记录省略。` })
+      break
+    }
+    kept.push(shaped)
+    used += cost
+  }
+  return kept
+}
+
+/** 诊断按条数与总量收拢，单条先截短：一条类型错的说明可以把整个展开的类型打出来。 */
+export function fitDiagnosticsToBudget(diagnostics: readonly CodeProgramDiagnostic[]): {
+  diagnostics: CodeProgramDiagnostic[]
+  omitted: number
+} {
+  const kept: CodeProgramDiagnostic[] = []
+  let used = 0
+  for (const diagnostic of diagnostics.slice(0, CodeSurfaceLimits.diagnostics)) {
+    const message = diagnostic.message.length > CodeSurfaceTuning.diagnosticMessageChars
+      ? `${diagnostic.message.slice(0, CodeSurfaceTuning.diagnosticMessageChars)}…`
+      : diagnostic.message
+    const shaped = { ...diagnostic, message }
+    const cost = JSON.stringify(shaped).length
+    if (used + cost > CodeSurfaceLimits.diagnosticChars) break
+    kept.push(shaped)
+    used += cost
+  }
+  return { diagnostics: kept, omitted: diagnostics.length - kept.length }
+}
+
+/** 检查没过时回给模型的那份：诊断收拢到预算里，省了几条就说几条。 */
+export function rejectWithDiagnostics(all: readonly CodeProgramDiagnostic[]): CodeProgramCheckFailure {
+  const { diagnostics, omitted } = fitDiagnosticsToBudget(all)
+  const failure: CodeProgramCheckFailure = { ok: false, diagnostics }
+  if (omitted > 0) failure.omitted = omitted
+  return failure
+}
+
+/**
+ * 最后一道硬闸：整份结果序列化之后仍然超过总上限，就按「最不要紧的先让」逐项拿掉。
+ *
+ * 各通道都有自己的上限，正常情况下走不到这里；它存在是为了**将来**——
+ * 哪条通道加了新东西、忘了设上限，回到模型那里的仍然不超过这个数。
+ */
+export function enforceResultBudget(result: CodeProgramResult): CodeProgramResult {
+  const fits = (candidate: CodeProgramResult): boolean => JSON.stringify(candidate).length <= CodeSurfaceLimits.resultChars
+  if (fits(result)) return result
+  const dropped = (what: string): CodeCallNotice[] => [{
+    call: 'program',
+    action: 'truncated',
+    detail: `结果超过 ${CodeSurfaceLimits.resultChars} 字符的总上限，${what}已省略。`,
+  }]
+
+  // 让的顺序：执行账 → 日志 → 插手记录 → 返回值。失败说明与失败码永远留着：没有它模型连发生了什么都不知道。
+  const withoutJournal: CodeProgramResult = { ...result, notices: dropped('执行账') }
+  withoutJournal.completed = undefined
+  if (fits(withoutJournal)) return withoutJournal
+
+  const withoutLogs: CodeProgramResult = { ...withoutJournal, notices: dropped('执行账与日志') }
+  withoutLogs.logs = undefined
+  if (fits(withoutLogs)) return withoutLogs
+
+  const shrunk: CodeProgramResult = { ...withoutLogs, notices: dropped('执行账、日志与大半个返回值') }
+  shrunk.value = keepTail(JSON.stringify(result.value) ?? 'null', CodeSurfaceLimits.valueChars / 2).text
+  return shrunk
 }

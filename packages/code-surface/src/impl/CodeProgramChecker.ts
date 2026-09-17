@@ -13,6 +13,7 @@ import { isNotNull } from '@velaros-ai/core'
 import { CodeSurfaceDiagnosticCodes } from '../contract/constants.js'
 import type { CodeProgramCheckResult } from '../types/code-surface.js'
 import type { GrantedModule } from '../types/code-surface.js'
+import { rejectWithDiagnostics } from '../utils/budget.js'
 import {
   diagnoseProgram,
   isTypeScriptOnlySyntax,
@@ -49,13 +50,13 @@ class CodeProgramChecker implements CodeProgramCheckerApi {
     // 手滑写了 TypeScript（`as`、类型标注、interface）不该把一整轮弹回去——仓库的宽容铁律是
     // 「钳制不拒绝」。报错全是那一族时按 TypeScript 再查一遍：真有类型错照样拦，
     // 只是语法偏好不算错，剥掉类型照跑，再在回执里告诉它下次写 JavaScript。
-    if (!diagnostics.every((diagnostic) => isTypeScriptOnlySyntax(diagnostic.code))) return { ok: false, diagnostics }
+    if (!diagnostics.every((diagnostic) => isTypeScriptOnlySyntax(diagnostic.code))) return rejectWithDiagnostics(diagnostics)
     const asTypeScript = diagnoseProgram(
       { source: input.source, declarations },
       TypeScriptProgramFileName,
       TypeScriptCheckOptions
     )
-    if (asTypeScript.length > 0) return { ok: false, diagnostics: asTypeScript }
+    if (asTypeScript.length > 0) return rejectWithDiagnostics(asTypeScript)
     return { ok: true, transpiled: stripTypes(input.source), wroteTypeScript: true }
   }
 

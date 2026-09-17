@@ -25,7 +25,7 @@
 | `NodeSubprocessRunnerIsReleaseReady` | 契约常量 | 恒为 `false`：上面那个运行器不许进正式发版，宿主装配时据此拦下 |
 | `CodeSurfaceModId` | 契约常量 | 本包作为内核模块的身份 |
 | `CodeSurfaceDiagnosticCodes` | 契约常量 | 认得出来的 TypeScript 诊断码：`unresolvedModule` 就是「import 了没授权的能力模块」，那道闸是语言给的 |
-| `CodeSurfaceErrorCodes` / `CodeSurfaceLimits` | 契约常量 | 七个错误码；程序源码、blobs、返回值、日志、调用次数、墙钟的对外上限 |
+| `CodeSurfaceErrorCodes` / `CodeSurfaceLimits` | 契约常量 | 八个错误码；对外上限——程序源码、blobs、调用次数、墙钟，以及**回给模型的总量**（`resultChars`）和它下面每条通道各自的上限 |
 | `ApprovalNamespace` | 契约常量 | 审批模块的命名空间。这个命名空间的调用就是「程序在等人」，会话据此停表——等用户点头的时间不算程序的时间 |
 
 **注入面**在 `contract/requires.ts`：
@@ -40,7 +40,7 @@
 `CodeProgramEdit` / `CodeProgramRange`（在上一份上改的一处）、`CodeCallNotice`（系统插手过的地方）、
 `CapabilityLease` / `ProgramImport`（租约与能力 import）、`GrantedModule`（这一轮授了哪个命名空间）、
 `CodeProgramFailure`、`CodeProgramResult`、`CodeProgramCheckResult`
-（`CodeProgramCheckSuccess` / `CodeProgramCheckFailure`）。`types/runner.ts` 的 `CodeRunnerApi`、`CodeRunRequest`、
+（`CodeProgramCheckSuccess` / `CodeProgramCheckFailure`）。
 `CapabilityOperation` / `CapabilityNamespaceOperations` / `CapabilityOperationTable` 是能力空间交出来的操作表（`CodeCapabilityPort` 的对偶）。`types/runner.ts` 的 `CodeRunnerApi`、`CodeRunRequest`、
 `CodeRunDispatch`、`CodeRunOutcome`、`HoldProgramClock` 是隔离运行器的形状，只走根入口——隔离方案会换，抽成接口才换得动。
 
@@ -62,12 +62,16 @@
 定下跑哪份源码（整份重写，或在上一份上按 `edits` 改）→ 查体量 → typecheck（不过就**一行都不执行**）→ 隔离里跑 → 程序发的每次调用转给宿主的能力端口
 → 收集 `notices`（系统插手过的地方）→ 编成结果。
 
-**改上一份程序不必整份重写**：`edits` 照 `system:edit` 的协议（`oldText` 一字不差、范围里必须唯一、
+**改上一份程序不必整份重写**：`edits` 按 `oldText` 定位（一字不差、范围里必须唯一、
 一组全成或全不成、各处不许重叠），**不用行号**——模型看不见自己刚写那段代码的行号，让它数行是在让它做最不擅长的事。
 同理，诊断一律带**代码帧**：出错那一行连同一个插字符摆出来，它一眼知道改哪儿。
 
 文件内容这类大字符串走 `blobs` 不进 `source`：进了就要过三层转义（JSON → 字符串字面量 → 内容本身），
-反引号、`${`、反斜杠、引号全是雷。走 `blobs` 只有一层，和今天的工具调用一样。
+反引号、`${`、反斜杠、引号全是雷。走 `blobs` 只有一层。
+
+**回给模型的东西总量有上限**，每条通道都算（返回值、日志、插手记录、失败说明、执行账、诊断），
+整份结果再过一道 `resultChars` 硬闸。能力读回来的正文落在程序的变量里，模型看不到——
+除非程序自己交出来，而交出来的也不超过这个数。程序完全可以先看大小再决定交出多少。
 
 ## 依赖什么
 
@@ -84,13 +88,13 @@
 ## 失败语义
 
 错误码见 `contract/constants.ts`：`PROGRAM_ERROR`、`TIMEOUT`、`ABORTED`、`RUNNER_CRASHED`、
-`UNKNOWN_OPERATION`、`TOO_LARGE`、`OPERATION_FAILED`。typecheck 没过时回的是诊断而不是结果——程序一行都没有执行，形状也不一样。
+`UNKNOWN_OPERATION`、`TOO_LARGE`、`EDIT_FAILED`、`OPERATION_FAILED`。typecheck 没过时回的是诊断而不是结果——程序一行都没有执行，形状也不一样。
 能力端口报的错在程序里是一个**能 try/catch 的异常**，不是静默的空回执。
 
 ## 不变量
 
-共 19 条，登记在 `spec/invariants.md`，验收用例在 `spec/acceptance.test.ts`。编号只增不重排。
-按检验方式：测试 18 条、门禁 1 条。未验证 0 条。
+共 20 条，登记在 `spec/invariants.md`，验收用例在 `spec/acceptance.test.ts`。编号只增不重排。
+按检验方式：测试 19 条、门禁 1 条。未验证 0 条。
 
 ## 非目标
 

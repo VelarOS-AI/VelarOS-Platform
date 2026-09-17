@@ -13,7 +13,7 @@ import type {
 } from '../types/code-surface.js'
 import type { CodeRunOutcome } from '../types/runner.js'
 
-import { fitJournalToBudget, fitLogsToBudget, fitValueToBudget } from './budget.js'
+import { enforceResultBudget, fitFailureToBudget, fitJournalToBudget, fitLogsToBudget, fitNoticesToBudget, fitValueToBudget } from './budget.js'
 import { applyProgramEdits } from './edit.js'
 import { describeOversized } from './program.js'
 
@@ -74,7 +74,7 @@ export function composeProgramResult(
   } else if (outcome.error) {
     const failed: CodeProgramFailure = {
       code: outcome.error.code as CodeSurfaceErrorCode,
-      message: outcome.error.message,
+      message: fitFailureToBudget(outcome.error.message),
     }
     if (isNotUndefined(outcome.error.line)) failed.line = outcome.error.line
     result.failed = failed
@@ -83,6 +83,8 @@ export function composeProgramResult(
     if (!isEmpty(journal)) result.completed = journal
   }
 
-  if (!isEmpty(notices)) result.notices = notices
-  return result
+  // 插手记录最后收：上面几步自己也会往里记「我截了什么」。
+  const fittedNotices = fitNoticesToBudget(notices)
+  if (!isEmpty(fittedNotices)) result.notices = fittedNotices
+  return enforceResultBudget(result)
 }

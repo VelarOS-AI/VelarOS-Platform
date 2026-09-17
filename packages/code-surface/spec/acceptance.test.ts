@@ -27,6 +27,7 @@ const granted: GrantedModule[] = [
   export function write(input: { text: string }): Promise<{ received: string }>
   export function danger(input: { command: string }): Promise<{ ok: boolean }>
   export function bulk(input: { size: number }): Promise<{ text: string }>
+  export function refuse(input: { n: number }): Promise<{ ok: boolean }>
 }`,
   },
   {
@@ -41,7 +42,7 @@ const granted: GrantedModule[] = [
 const approvalWaitMs = 1_500
 
 const capabilities: CodeCapabilityPort = {
-  listOperations: () => ({ demo: ['read', 'write', 'danger', 'bulk'], approval: ['request'] }),
+  listOperations: () => ({ demo: ['read', 'write', 'danger', 'bulk', 'refuse'], approval: ['request'] }),
   invoke: async ({ namespace, operation, input }) => {
     if (namespace === 'approval') {
       await new Promise((settle) => setTimeout(settle, approvalWaitMs))
@@ -54,6 +55,7 @@ const capabilities: CodeCapabilityPort = {
     }
     if (operation === 'write') return { value: { received: (value as unknown as { text: string }).text } }
     if (operation === 'bulk') return { value: { text: 'x'.repeat((value as unknown as { size: number }).size) } }
+    if (operation === 'refuse') return { error: { code: 'DENIED', message: `拒绝：${'z'.repeat(10_000)}` } }
     return { error: { code: 'APPROVAL_DENIED', message: '用户拒绝了这条危险命令。' } }
   },
 }
@@ -359,4 +361,32 @@ export default first.contents`)
     expect(outcome.result.failed?.code).toBe(CodeSurfaceErrorCodes.timeout)
     expect(outcome.result.completed).toEqual([{ call: 'approval.request', ok: true }])
   }, 20_000)
+
+  test('INV-21 把读到的大段内容塞进 throw，回到模型那里的仍然只有开头一小段', async () => {
+    const outcome = await submit(`${importDemo}\nconst r = await bulk({ size: 3_000_000 })\nthrow new Error(r.text)`)
+    if (!outcome.checked) throw new Error('应当通过检查')
+    expect(outcome.result.failed?.code).toBe(CodeSurfaceErrorCodes.programError)
+    expect(outcome.result.failed!.message.length).toBeLessThan(CodeSurfaceLimits.failureChars + 200)
+    expect(outcome.result.failed!.message).toContain('字符省略')
+    expect(JSON.stringify(outcome).length).toBeLessThan(CodeSurfaceLimits.resultChars)
+  })
+
+  test('INV-21 被拒两百次、每次一万字：连着的同一件事折成一条', async () => {
+    const outcome = await submit(`import { refuse } from 'velar:demo'
+for (let i = 0; i < 150; i++) { try { await refuse({ n: i }) } catch (error) { void error } }
+export default 1`)
+    if (!outcome.checked) throw new Error('应当通过检查')
+    const denied = outcome.result.notices?.filter((notice) => notice.action === 'denied') ?? []
+    expect(denied).toHaveLength(1)
+    expect(denied[0]!.detail).toContain('连着 150 次')
+    expect(JSON.stringify(outcome).length).toBeLessThan(CodeSurfaceLimits.noticeChars + 500)
+  })
+
+  test('INV-21 两千个类型错只列前面那几条，并说明省了几条', async () => {
+    const outcome = await submit(Array.from({ length: 2000 }, (_, index) => `const v${index} = 1; v${index}.nope()`).join('\n'))
+    if (outcome.checked || !('check' in outcome)) throw new Error('应当是诊断')
+    expect(outcome.check.diagnostics.length).toBeLessThanOrEqual(CodeSurfaceLimits.diagnostics)
+    expect(outcome.check.omitted).toBeGreaterThan(1900)
+    expect(JSON.stringify(outcome).length).toBeLessThan(CodeSurfaceLimits.diagnosticChars + 500)
+  })
 })

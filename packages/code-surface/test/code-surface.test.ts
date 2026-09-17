@@ -3,7 +3,7 @@
 import { describe, expect, test } from 'bun:test'
 
 import { CodeSurfaceErrorCodes, CodeSurfaceLimits } from '../src/contract/constants'
-import { fitJournalToBudget, fitLogsToBudget, fitValueToBudget } from '../src/utils/budget'
+import { enforceResultBudget, fitJournalToBudget, fitLogsToBudget, fitValueToBudget } from '../src/utils/budget'
 import { isTypeScriptOnlySyntax } from '../src/utils/compiler'
 import { applyProgramEdits } from '../src/utils/edit'
 import { readProgramImports, rewriteModuleForIsolate } from '../src/utils/module-form'
@@ -69,6 +69,26 @@ void describe('预算裁剪', () => {
     expect(folded).toHaveLength(CodeSurfaceTuning.journalEntries)
     expect(folded.at(-1)?.call).toBe(`demo.op${many.length - 1}`)
     expect(notices[0]?.detail).toContain('前 5 条省略')
+  })
+})
+
+void describe('总量硬闸', () => {
+  test('哪条通道忘了设上限，整份结果照样被压回总上限以内；失败说明永远留着', () => {
+    const oversized = {
+      value: 'v'.repeat(CodeSurfaceLimits.resultChars),
+      logs: ['l'.repeat(CodeSurfaceLimits.resultChars)],
+      completed: Array.from({ length: 5000 }, (_, index) => ({ call: `demo.op${index}`, ok: true })),
+      failed: { code: 'PROGRAM_ERROR' as const, message: '要紧的那句' },
+    }
+    const fitted = enforceResultBudget(oversized)
+    expect(JSON.stringify(fitted).length).toBeLessThanOrEqual(CodeSurfaceLimits.resultChars)
+    expect(fitted.failed?.message).toBe('要紧的那句')
+    expect(fitted.notices?.[0]?.detail).toContain('总上限')
+  })
+
+  test('没超就原样放行，一个字不动', () => {
+    const small = { value: { ok: true }, logs: ['一行'] }
+    expect(enforceResultBudget(small)).toBe(small)
   })
 })
 

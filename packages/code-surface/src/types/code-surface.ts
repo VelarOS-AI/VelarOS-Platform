@@ -37,7 +37,7 @@ export interface CodeProgramEdit {
  */
 export interface CodeProgramRequest {
   /**
-   * 程序正文，是一段 **JavaScript 函数体**：可以直接 `await`，用 `return` 交出答案。
+   * 程序正文，是一个 **JavaScript ES 模块**：`import` 拿能力，顶层 `await` 直接用，`export default` 交出答案。
    *
    * 写 JavaScript 而不是 TypeScript，但**照样受类型检查**——类型从生成的声明里推，
    * 字段名拼错、读一个不存在的字段、入参形状错，都在执行之前就被拦下。
@@ -115,7 +115,7 @@ export interface CompletedCall {
  * 返回值没了，日志是唯一能说明「走到哪一步、拿到了什么」的东西。
  */
 export interface CodeProgramResult {
-  /** 程序 `return` 出来的值；失败时没有这一格。 */
+  /** 程序 `export default` 交出来的值；失败时没有这一格。 */
   value?: unknown
   /** 程序里 `console.log` 的输出，超出预算时保留结尾（失败现场在尾部）。 */
   logs?: string[]
@@ -139,8 +139,10 @@ export interface CodeProgramResult {
 export interface CodeProgramCheckFailure {
   /** 恒为 false，用来和通过的那支区分。 */
   ok: false
-  /** 逐条诊断。 */
+  /** 逐条诊断，最多 20 条。 */
   diagnostics: CodeProgramDiagnostic[]
+  /** 还有几条没列出。后面的多半是前面那几处连带出来的——先改列出的，再交一次。 */
+  omitted?: number
 }
 
 /** typecheck 通过。 */
