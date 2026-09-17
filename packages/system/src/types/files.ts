@@ -96,6 +96,7 @@ export interface SystemViewFileResult {
  * @AgentView
  * files 与入参的 files 一一对应。**图片本身不在这里**：调用 view 就把图交给你了，
  * 程序跑完之后按顺序放在结果后面，每张前面有一行说明是哪个文件。
+ * 图**只给你看一次**：你一回应它就撤出上下文（那行说明还在），要再看就再调一次 view。
  */
 export interface SystemViewResult {
   files: Array<SystemViewFileResult | SystemFileFailure>

@@ -19,17 +19,14 @@ import {
   ModelToolResultMaxSerializedLength,
   serializeToolResultForModel,
 } from '../tools/tool-result-serialization'
-import { AgentTuning } from '../tuning'
 
-/** 清洗历史时保留最近几条带工具结果正文的消息，值在 `AgentTuning.tools.recentToolResultContentMessages`。 */
-const MaxRecentToolResultContentMessagesToKeep = AgentTuning.tools.recentToolResultContentMessages
 
 const HistoricalImagePlaceholder =
   '[这张图片的字节只是在这次较晚的重放里被省略了；它在原来那一轮里可能是可见的]'
 const HistoricalFilePlaceholder =
   '[这个文件的字节只是在这次较晚的重放里被省略了；它在原来那一轮里可能是可用的]'
 const HistoricalToolMediaPlaceholder =
-  '[这些媒体字节只是在这次较晚的重放里被省略了；它们在原来那条工具结果里可能是可看可听的；请改用这条工具结果里的制品引用]'
+  '[这份媒体你已经看过，看完就撤出上下文，字节不再保留；要再看就重新读取一次]'
 const InvalidTextSurrogatePattern =
   /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g
 const EmptyResponseReplayPrefixes = [
@@ -977,17 +974,17 @@ function hasToolResultBinaryContent(output: unknown): boolean {
 }
 
 /**
- * 裁工具结果里的媒体（截图之类）：先找出所有含二进制片段的 tool-result 的位置，
- * 只保留**最近 `MaxRecentToolResultContentMessagesToKeep` 条消息**里的那些，更早的把二进制片段逐个换成占位文本，
- * 同一片段里的其余非二进制内容照旧保留。含二进制的消息条数没超过阈值时一条都不动。
+ * 裁工具结果里的媒体（截图、读进来的图之类）：**模型看过一次就撤**。
  *
- * 保留窗口按「消息条数」而不是字节：模型真正要看的只有刚截下来的那张图，
- * 而一张截图动辄上百 KB，历史里攒三五张就能把请求撑爆。占位文案里明说「改用这条工具结果里的 artifact 引用」，
- * 让模型知道原件仍然取得回来，而不是以为截图丢了、转头重截一遍。
+ * 只有最后一条助手消息之后的工具结果——模型还没回应、这一次推理才第一次看到的——保留原件；
+ * 模型只要回应过（接着调工具也好、直接回答也好），那些图在之后的每个请求里都换成占位，
+ * 不因为它是「最近一条」就一直挂在上下文里。要再看就重新读取：图的原件还在原处，读一次的代价远小于一直带着它。
+ * 占位只换二进制片段，同一条结果里的文字（比如「图片 1/1：某文件」那行说明）照旧保留，模型仍知道自己看过什么。
  */
 function pruneToolResultBinaryContentForProvider(
   history: ModelMessage[]
 ): ModelHistorySanitizationResult {
+  const lastAssistantIndex = history.findLastIndex((message) => message.role === 'assistant')
   const references: Array<{ messageIndex: number; partIndex: number }> = []
 
   history.forEach((message, messageIndex) => {
@@ -1003,17 +1000,14 @@ function pruneToolResultBinaryContentForProvider(
     })
   })
 
-  const messageIndexes = [...new Set(references.map((reference) => reference.messageIndex))]
-  if (messageIndexes.length <= MaxRecentToolResultContentMessagesToKeep)
-    return { history, changedMessages: 0 }
-
-  const recentMessageIndexes = messageIndexes.slice(-MaxRecentToolResultContentMessagesToKeep)
-  const protectedMessageIndexes = new Set(recentMessageIndexes)
+  // 还没被模型看过的：最后一条助手消息之后的那些。
   const protectedKeys = new Set(
     references
-      .filter((reference) => protectedMessageIndexes.has(reference.messageIndex))
+      .filter((reference) => reference.messageIndex > lastAssistantIndex)
       .map((reference) => `${reference.messageIndex}:${reference.partIndex}`)
   )
+  if (protectedKeys.size === references.length) return { history, changedMessages: 0 }
+
   let changedMessages = 0
   const nextHistory = history.map((message, messageIndex) => {
     if (!isArray(message.content)) return message

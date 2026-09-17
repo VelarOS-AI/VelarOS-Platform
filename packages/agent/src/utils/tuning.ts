@@ -269,8 +269,6 @@ export const AgentTuning = Object.freeze({
     displayResultArrayItems: 20,
     /** 恢复失败调用的原参数时最多展示多少字符，更大的保持省略形态由模型按需召回。 */
     restoredInputChars: 32_000,
-    /** 清洗历史时最多保留最近几条带工具结果正文的消息。 */
-    recentToolResultContentMessages: 1,
   } as const),
   /** 工具契约套件：说明体积与 schema 组装。 */
   toolkit: Object.freeze({

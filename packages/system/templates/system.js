@@ -35,7 +35,7 @@ async function replaceInFile(path = '~/project/config.json', from = '"debug": fa
 }
 
 // 看图：在范围内原样给你，大图会压小；结果里 sent 比原图小就说明压过。
-// 图不在返回值里，跟在结果后面给你看，只留到你下一次调用——一次看一张，看完先把要点写下来。
+// 图不在返回值里，跟在结果后面给你看，只给你看一次：你一回应就撤掉，要再看就再调一次 view。
 async function lookAt(path = '~/Desktop/screen.png') {
   const [image] = (await view({ files: [{ path }] })).files
   return image

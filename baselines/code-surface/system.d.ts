@@ -59,7 +59,7 @@ declare module 'velar:system' {
    * }
    *
    * // 看图：在范围内原样给你，大图会压小；结果里 sent 比原图小就说明压过。
-   * // 图不在返回值里，跟在结果后面给你看，只留到你下一次调用——一次看一张，看完先把要点写下来。
+   * // 图不在返回值里，跟在结果后面给你看，只给你看一次：你一回应就撤掉，要再看就再调一次 view。
    * async function lookAt(path = '~/Desktop/screen.png') {
    *   const [image] = (await view({ files: [{ path }] })).files
    *   return image
@@ -112,6 +112,7 @@ declare module 'velar:system' {
   /**
    * files 与入参的 files 一一对应。**图片本身不在这里**：调用 view 就把图交给你了，
    * 程序跑完之后按顺序放在结果后面，每张前面有一行说明是哪个文件。
+   * 图**只给你看一次**：你一回应它就撤出上下文（那行说明还在），要再看就再调一次 view。
    */
   interface SystemViewResult {
     files: Array<SystemViewFileResult | SystemFileFailure>

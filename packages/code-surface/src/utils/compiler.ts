@@ -35,7 +35,7 @@ const ProgramModuleDeclarations = `declare module '${ProgramModuleSpecifier}' {
    * - 大东西里找东西，在程序里筛好了再交，别整份交
    * - 别把大段内容塞进 \`throw\`，失败说明只留开头 ${CodeSurfaceLimits.failureChars} 字符
    * - 能力交给你的图不在返回值里，跟在结果后面给你看；一次最多 ${CodeSurfaceLimits.images} 张。
-   *   图只留到你下一次调用为止——一次看一张，看完先把要点写下来，再看下一张
+   *   图只给你看一次：你一回应它就撤出上下文，要再看就重新读。所以一次看一张，看完先把要点写下来
    *
    * 每个能力模块开头都有一份代码模版，挑一段照着改。
    */
