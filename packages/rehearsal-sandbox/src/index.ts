@@ -6,12 +6,14 @@
 // ── 子集入口 ────────────────────────────────────────────────────
 export * from './contracts.js'
 
-// ── 产品面：落回规则 ─────────────────────────────────────────────
+// ── 产品面：落回规则，与代码面 `sandbox` 命名空间的五个操作 ───────
 export type { RehearsalSandboxRulesApi } from './impl/RehearsalSandboxRules.js'
 export { rehearsalSandboxRules } from './impl/RehearsalSandboxRules.js'
+export type { SandboxOperationsApi } from './impl/SandboxOperations.js'
+export { sandboxOperations } from './impl/SandboxOperations.js'
 
-// ── 注入面：宿主要实现的沙箱端口 ────────────────────────────────
-export type { RehearsalSandboxHostPort } from './contract/requires.js'
+// ── 注入面：宿主要实现的沙箱端口，与调用命名空间时给的上下文 ─────
+export type { RehearsalSandboxHostPort, SandboxOperationContext, SandboxSurfacePort } from './contract/requires.js'
 
 // ── 上面用到、又不在可移植文件里的数据 ───────────────────────────
-export type { SandboxApplyPrepareInput, SandboxApplyRequest } from './types/apply.js'
+export type { SandboxApplyPolicy, SandboxApplyPrepareInput, SandboxApplyRequest } from './types/apply.js'

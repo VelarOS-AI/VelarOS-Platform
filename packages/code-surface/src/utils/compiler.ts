@@ -5,6 +5,8 @@
 
 import ts from 'typescript'
 
+import { isUndefined } from '@velaros-ai/core'
+
 import type { CodeProgramDiagnostic } from '../types/code-surface.js'
 
 import { wrapProgramSource } from './program.js'
@@ -54,7 +56,7 @@ export function createMemoryCompilerHost(
     readFile: (name) => files.get(name) ?? defaultHost.readFile(name),
     getSourceFile: (name, languageVersion, onError) => {
       const text = files.get(name)
-      if (text === undefined) return defaultHost.getSourceFile(name, languageVersion, onError)
+      if (isUndefined(text)) return defaultHost.getSourceFile(name, languageVersion, onError)
       return ts.createSourceFile(name, text, languageVersion, true)
     },
     writeFile: () => {},
@@ -65,7 +67,7 @@ export function createMemoryCompilerHost(
 export function toModelDiagnostic(diagnostic: ts.Diagnostic): CodeProgramDiagnostic {
   const message = ts.flattenDiagnosticMessageText(diagnostic.messageText, ' ')
   const file = diagnostic.file
-  if (!file || diagnostic.start === undefined) return { line: 1, column: 1, code: diagnostic.code, message }
+  if (!file || isUndefined(diagnostic.start)) return { line: 1, column: 1, code: diagnostic.code, message }
   const { line, character } = file.getLineAndCharacterOfPosition(diagnostic.start)
   return { line: Math.max(1, line), column: character + 1, code: diagnostic.code, message }
 }

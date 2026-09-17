@@ -172,7 +172,7 @@
       "domain": "foundations",
       "directory": "packages/rehearsal-sandbox",
       "name": "@velaros-ai/rehearsal-sandbox",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "description": "Shared contract and rules for the rehearsal sandbox: mirror, run, diff, apply data shapes, public limits, and the pre-apply check that confirms exactly what will be written back.",
       "exportSubpaths": [
         ".",

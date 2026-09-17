@@ -5,7 +5,7 @@
  * 而那正是今天工具面最常见的一类缺陷；让不合法的程序跑起来，等于用真实副作用去试错。
  */
 
-import { isString } from '@velaros-ai/core'
+import { isString, isTrue } from '@velaros-ai/core'
 
 import { CodeSurfaceErrorCodes, CodeSurfaceLimits } from '../contract/constants.js'
 import type { CodeCapabilityPort, CodeRunnerApi, CodeSurfaceEventSink } from '../contract/requires.js'
@@ -67,7 +67,7 @@ class CodeSurfaceSession implements CodeSurfaceSessionApi {
     if (!checked.ok) return { checked: false, check: checked }
 
     const notices: CodeCallNotice[] = []
-    if (checked.wroteTypeScript === true) {
+    if (isTrue(checked.wroteTypeScript)) {
       notices.push({
         call: 'program',
         action: 'normalized',

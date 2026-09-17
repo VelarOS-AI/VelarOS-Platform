@@ -10,9 +10,11 @@ import { existsSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { delimiter, join } from 'node:path'
 
+import { isUndefined } from '@velaros-ai/core'
+
 /** 当前运行时是不是 node 本身。 */
 function runningOnNode(): boolean {
-  return (process.versions as Record<string, string | undefined>).bun === undefined
+  return isUndefined((process.versions as Record<string, string | undefined>).bun)
 }
 
 /**

@@ -83,6 +83,67 @@ export interface SandboxDiscardResult {
   removed: boolean
 }
 
+// ── 代码面 sandbox 命名空间 ──────────────────────────────────────
+// 模型写的入参与它拿到的结果。作用域（source 相对哪个根解析、越界算不算）由宿主端口决定，不在这里，
+// 所以这一套形状 system 与 project 共用，模型面只有一份说明。
+
+/** @AgentView 建沙箱：source 相对宿主给的根解析，不给就是那个根；network 不给时镜像里的命令连不上网；ignored 不给按 link。 */
+export interface SandboxCreateInput {
+  source?: string
+  network?: boolean
+  ignored?: SandboxIgnoredMode
+}
+
+/** @AgentView 在镜像里跑一条命令：工作目录钉在镜像根，写到镜像外会失败；timeoutMs、maxOutputChars 不给用宿主的缺省，超过宿主上限会被钳下来。 */
+export interface SandboxRunInput {
+  id: string
+  command: string
+  timeoutMs?: number
+  maxOutputChars?: number
+}
+
+/** @AgentView 一条命令跑完的回执：命令自己失败（非零退出、超时）也是正常回执，不抛错；exitCode 为 null 表示进程被信号打断，truncated 表示输出按上限截过。 */
+export interface SandboxCommandOutcome {
+  exitCode: Nullable<number>
+  stdout: string
+  stderr: string
+  durationMs: number
+  timedOut: boolean
+  truncated: boolean
+  success: boolean
+}
+
+/** @AgentView 在镜像里跑完一条命令：回执加上是哪个沙箱、跑的哪条命令。 */
+export interface SandboxRunResult extends SandboxCommandOutcome {
+  id: string
+  command: string
+}
+
+/** 宿主在镜像里跑一条命令的选项：工作目录由宿主钉在镜像根，命令自己失败写进回执、不抛错。 */
+export interface SandboxRunOptions {
+  sandboxId: string
+  command: string
+  timeoutMs?: number
+  maxOutputChars?: number
+}
+
+/** @AgentView 看差量：maxFiles 限制新增与修改各列最多列多少条，删除列不受限；不给用宿主的缺省。 */
+export interface SandboxDiffInput {
+  id: string
+  maxFiles?: number
+}
+
+/** @AgentView 把镜像里的变化落回源目录：paths 只落这些相对路径，不给就全部；落回一定先向用户确认，被拒就抛错、什么都不落。 */
+export interface SandboxApplyInput {
+  id: string
+  paths?: string[]
+}
+
+/** @AgentView 丢弃镜像；沙箱本来就不在也不算错。 */
+export interface SandboxDiscardInput {
+  id: string
+}
+
 /** 按调用方点名的路径筛出来的三列；点名了、三列里都没有的路径放在 unknown。 */
 export interface SandboxSelection {
   created: string[]

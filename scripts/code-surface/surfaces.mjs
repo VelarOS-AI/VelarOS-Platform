@@ -13,6 +13,18 @@ export const CodeSurfaces = [
     /** 操作接口；方法带 `@AgentView` 的才进模型面。 */
     interfaces: ['SystemFileOperationsApi', 'SystemExecutionOperationsApi'],
   },
+  {
+    /**
+     * 第一个**跨空间**的命名空间：不挂在 `system.` 或 `project.` 下。
+     *
+     * 沙箱引擎本来就只有一份，重复的只是模型面（两个工具定义、两套说明）。在工具面合并会更乱——
+     * 要引入 scope 判别式，每个字段都变条件字段；在代码面它自然是一份：作用域变成宿主按空间注入的
+     * `SandboxSurfacePort`，模型这边只剩一套说明，不再挑「这是哪个空间的沙箱」。
+     */
+    namespace: 'sandbox',
+    directory: 'rehearsal-sandbox',
+    interfaces: ['SandboxOperationsApi'],
+  },
 ]
 
 /**
@@ -24,6 +36,7 @@ export const HostContextTypes = new Set([
   'ProjectToolContext',
   'ToolContext',
   'KernelToolContext',
+  'SandboxOperationContext',
 ])
 
 /** 进模型可观测面的标记；打在操作方法与它引用到的每个**领域类型**上。 */

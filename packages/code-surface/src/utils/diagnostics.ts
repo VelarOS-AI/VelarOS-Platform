@@ -5,6 +5,8 @@
  * 让它靠数行定位，而数行是模型最不准的事之一。把那一行连同一个插字符摆出来，它一眼就知道改哪儿。
  */
 
+import { isUndefined } from '@velaros-ai/core'
+
 import type { CodeProgramDiagnostic } from '../types/code-surface.js'
 
 import { CodeSurfaceTuning } from './tuning.js'
@@ -12,7 +14,7 @@ import { CodeSurfaceTuning } from './tuning.js'
 /** 一条诊断的代码帧：行号、原文那一行、下面一个指向出错列的插字符。 */
 function renderFrame(sourceLines: readonly string[], diagnostic: CodeProgramDiagnostic): string[] {
   const line = sourceLines[diagnostic.line - 1]
-  if (line === undefined) return []
+  if (isUndefined(line)) return []
   const gutter = String(diagnostic.line)
   const clipped =
     line.length > CodeSurfaceTuning.frameLineChars

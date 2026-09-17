@@ -5,3 +5,4 @@
 
 // ── 类实现的产品面接口：定义在类上方，这里登记 ────────────────
 export type { RehearsalSandboxRulesApi } from '../impl/RehearsalSandboxRules.js'
+export type { SandboxOperationsApi } from '../impl/SandboxOperations.js'

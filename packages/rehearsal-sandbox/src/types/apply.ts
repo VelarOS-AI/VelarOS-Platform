@@ -20,6 +20,9 @@ export interface SandboxApplyPrepareInput {
   isSensitive?: (relativePath: string) => boolean
 }
 
+/** 一个空间落回时的政策：`prepareApply` 的入参里跟这次改动无关、只跟空间有关的那几项，由宿主按空间给。 */
+export type SandboxApplyPolicy = Omit<SandboxApplyPrepareInput, 'diff' | 'paths'>
+
 /** 一次落回的确认请求：筛出来的三列、交给审批端口的文案和选项。 */
 export interface SandboxApplyRequest {
   /** 这次要落的三列（完整的，不截断）。 */

@@ -10,7 +10,7 @@
  * 这里的程序是模型刚写的，没有回执可抄，所以 `oldText` 升为主键、`range` 降为可选的收窄手段。
  */
 
-import { isUndefined } from '@velaros-ai/core'
+import { isString, isUndefined } from '@velaros-ai/core'
 
 import type { CodeProgramEdit } from '../types/code-surface.js'
 import type { ResolvedProgramEdit } from '../types/editing.js'
@@ -48,7 +48,7 @@ export function applyProgramEdits(
   const resolved: ResolvedProgramEdit[] = []
   for (const [index, edit] of edits.entries()) {
     const result = resolveEdit(previous, edit)
-    if (typeof result === 'string') return { failed: `第 ${index + 1} 处改不了：${result}` }
+    if (isString(result)) return { failed: `第 ${index + 1} 处改不了：${result}` }
     resolved.push(result)
   }
 

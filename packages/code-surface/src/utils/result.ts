@@ -1,6 +1,6 @@
 /** 执行之前定下跑哪份源码、判体量，执行之后编成给模型看的结果。都不碰实例状态，所以不放在类里。 */
 
-import { isUndefined } from '@velaros-ai/core'
+import { isEmpty, isNotUndefined, isUndefined } from '@velaros-ai/core'
 
 import type { CodeSurfaceErrorCode } from '../contract/constants.js'
 import { CodeSurfaceErrorCodes, CodeSurfaceLimits } from '../contract/constants.js'
@@ -65,16 +65,16 @@ export function composeProgramResult(outcome: CodeRunOutcome, notices: CodeCallN
 
   if (outcome.ok) {
     const fitted = fitValueToBudget(outcome.value, notices)
-    if (fitted !== undefined) result.value = fitted
+    if (isNotUndefined(fitted)) result.value = fitted
   } else if (outcome.error) {
     const failed: CodeProgramFailure = {
       code: outcome.error.code as CodeSurfaceErrorCode,
       message: outcome.error.message,
     }
-    if (outcome.error.line !== undefined) failed.line = outcome.error.line
+    if (isNotUndefined(outcome.error.line)) failed.line = outcome.error.line
     result.failed = failed
   }
 
-  if (notices.length > 0) result.notices = notices
+  if (!isEmpty(notices)) result.notices = notices
   return result
 }

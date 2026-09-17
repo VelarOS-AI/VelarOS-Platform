@@ -390,12 +390,13 @@
     },
     "packages/rehearsal-sandbox": {
       "name": "@velaros-ai/rehearsal-sandbox",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "dependencies": {
         "@velaros-ai/core": "workspace:*",
       },
       "devDependencies": {
         "@types/node": "^22.19.17",
+        "@velaros-ai/code-surface": "workspace:*",
         "typescript": "^5.7.0",
       },
       "peerDependencies": {

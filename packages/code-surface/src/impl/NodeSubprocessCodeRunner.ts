@@ -9,6 +9,9 @@
 
 import { fork } from 'node:child_process'
 
+import { isNull, isTrue } from '@velaros-ai/core'
+import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
+
 import { CodeSurfaceErrorCodes } from '../contract/constants.js'
 import type { CodeRunnerApi } from '../contract/requires.js'
 import type { CodeRunDispatch, CodeRunOutcome, CodeRunRequest } from '../types/runner.js'
@@ -24,7 +27,7 @@ class NodeSubprocessCodeRunner implements CodeRunnerApi {
   ): Promise<CodeRunOutcome> {
     const childPath = resolveChildPath()
     const nodePath = resolveNodeExecutable()
-    if (nodePath === null) return {
+    if (isNull(nodePath)) return {
         ok: false,
         logs: [],
         error: {
@@ -43,10 +46,12 @@ class NodeSubprocessCodeRunner implements CodeRunnerApi {
     const logs: string[] = []
     return new Promise<CodeRunOutcome>((resolve) => {
       let settled = false
+      // 超时挂在一个 scope 上，停下来时整批释放；到点必停是 INV-3。
+      const timers = new TimerScope({ name: 'NodeSubprocessCodeRunner' })
       const stop = (outcome: CodeRunOutcome): void => {
         if (settled) return
         settled = true
-        clearTimeout(timer)
+        timers.dispose()
         signal?.removeEventListener('abort', onAbort)
         child.kill('SIGKILL')
         resolve(outcome)
@@ -54,9 +59,10 @@ class NodeSubprocessCodeRunner implements CodeRunnerApi {
       const fail = (code: string, message: string): void =>
         stop({ ok: false, logs, error: { code, message } })
 
-      const timer = setTimeout(
+      timers.after(
+        request.timeoutMs,
         () => fail(CodeSurfaceErrorCodes.timeout, `程序超过 ${request.timeoutMs}ms 没跑完，已终止。`),
-        request.timeoutMs
+        { label: 'program-timeout' }
       )
       const onAbort = (): void => fail(CodeSurfaceErrorCodes.aborted, '程序被中止。')
       signal?.addEventListener('abort', onAbort, { once: true })
@@ -66,7 +72,7 @@ class NodeSubprocessCodeRunner implements CodeRunnerApi {
         if (message.type === 'ready') {
           // 隔离**自证**不过就不把程序发进去。宿主跑在 bun 下时 fork 出来的是 bun，
           // 它不认 `--permission`，命令行看着完全正常而隔离一点没生效——只信旗标就会栽在这里。
-          if (message.confined !== true) {
+          if (!isTrue(message.confined)) {
             fail(
               CodeSurfaceErrorCodes.runnerCrashed,
               '隔离没有生效：子进程自证时仍能读到不该读的文件，程序没有执行。' +
@@ -95,10 +101,10 @@ class NodeSubprocessCodeRunner implements CodeRunnerApi {
         if (message.type === 'done') {
           const error = message.error as { message?: string; line?: number } | undefined
           stop({
-            ok: message.ok === true,
+            ok: isTrue(message.ok),
             value: message.value,
             logs,
-            error: message.ok === true
+            error: isTrue(message.ok)
               ? undefined
               : {
                   code: CodeSurfaceErrorCodes.programError,

@@ -176,6 +176,9 @@ export const GovernedModules = [
     tuning: 'tuning.ts',
     browserSafeEntries: ['index.ts', 'contracts.ts'],
     layers: [
+      // 代码面 sandbox 命名空间的五个操作：解析作用域、调宿主端口、整形回执
+      ['SandboxOperations.ts'],
+      // 落回前的核对与确认请求，两个空间的工具和上面那一层共用
       ['RehearsalSandboxRules.ts'],
     ],
     card: 'MODULE.md',
