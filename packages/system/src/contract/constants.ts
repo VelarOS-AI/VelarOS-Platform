@@ -66,8 +66,6 @@ export const SystemErrorCodes = Object.freeze({
   sandboxChanged: 'SYSTEM_SANDBOX_CHANGED',
 } as const)
 
-export type SystemErrorCode = (typeof SystemErrorCodes)[keyof typeof SystemErrorCodes]
-
 /**
  * 本包读写的全部环境变量。环境变量也是注入：宿主设什么、本包读什么，都在这张表里，别处不许再冒出新的变量名。
  *
@@ -106,10 +104,6 @@ export const SystemEnvironmentVariables = Object.freeze({
     description: '自检读到的 shell 版本。',
   },
 } as const)
-
-/** 环境变量表里的一项。 */
-export type SystemEnvironmentVariable = (typeof SystemEnvironmentVariables)[keyof typeof SystemEnvironmentVariables]
-
 /** 读、看、写的上限；读看写三个工具的说明与 schema 直接引用这里，改了模型看到的数字跟着变。 */
 export const SystemFileLimits = Object.freeze({
   /** 文本一次调用总共最多返回多少字符；每个文件的 maxChars 上限与缺省值也是它。 */

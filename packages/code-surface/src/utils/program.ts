@@ -35,9 +35,6 @@ export function programForCheck(source: string): string {
   return source
 }
 
-/** 程序里能引用的形参名之外，固定给这两个。 */
-export const ProgramReservedParameters = Object.freeze(['blobs', 'console'] as const)
-
 /** 体量超限的说明；超限一律拒，不截断后照跑——半截程序跑出来的结果比不跑更坏。 */
 export function describeOversized(what: 'source' | 'blobs', actual: number): string {
   const limit = what === 'source' ? CodeSurfaceLimits.sourceChars : CodeSurfaceLimits.blobChars
