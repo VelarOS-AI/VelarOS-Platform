@@ -7,7 +7,7 @@
 
 import { isEmpty, isString, isTrue } from '@velaros-ai/core'
 
-import { CodeSurfaceErrorCodes, CodeSurfaceLimits } from '../contract/constants.js'
+import { ApprovalNamespace, CodeSurfaceErrorCodes, CodeSurfaceLimits } from '../contract/constants.js'
 import type { CodeCapabilityPort, CodeRunnerApi, CodeSurfaceEventSink } from '../contract/requires.js'
 import type {
   CodeCallNotice,
@@ -97,7 +97,7 @@ class CodeSurfaceSession implements CodeSurfaceSessionApi {
         operations: this.capabilities.listOperations(),
         timeoutMs: Math.min(input.timeoutMs ?? CodeSurfaceTuning.defaultTimeoutMs, CodeSurfaceLimits.timeoutMs),
       },
-      async (call) => {
+      async (call, holdClock) => {
         calls += 1
         if (calls > CodeSurfaceLimits.calls) return {
             error: {
@@ -107,10 +107,16 @@ class CodeSurfaceSession implements CodeSurfaceSessionApi {
           }
         this.events.callStarted?.({ ...call })
         const startedAt = Date.now()
-        const result = await this.capabilities.invoke(
-          { namespace: call.namespace, operation: call.operation, input: call.input },
-          input.signal
-        )
+        // 整个 velar:approval 命名空间就是「在等人」，会话自己停表；别的能力里内联问人的，
+        // 由端口拿 holdClock 自己停。审批单独成模块的第二份红利：宿主看得见程序什么时候在等人。
+        const release = call.namespace === ApprovalNamespace ? holdClock() : undefined
+        const result = await this.capabilities
+          .invoke(
+            { namespace: call.namespace, operation: call.operation, input: call.input },
+            input.signal,
+            holdClock
+          )
+          .finally(() => release?.())
         this.events.callSettled?.({ callId: call.callId, ok: !result.error, elapsedMs: Date.now() - startedAt })
         completed.push({ call: `${call.namespace}.${call.operation}`, ok: !result.error })
         if (result.notices) notices.push(...result.notices)

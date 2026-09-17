@@ -72,11 +72,38 @@ class NodeSubprocessCodeRunner implements CodeRunnerApi {
       const fail = (code: string, message: string): void =>
         stop({ ok: false, logs, error: { code, message } })
 
-      timers.after(
-        request.timeoutMs,
-        () => fail(CodeSurfaceErrorCodes.timeout, `程序超过 ${request.timeoutMs}ms 没跑完，已终止。`),
-        { label: 'program-timeout' }
-      )
+      // 墙钟可以停：等用户点头的时间不算程序的时间（见 HoldProgramClock）。停的是「还剩多久」，
+      // 不是「什么时候到点」——恢复时按剩下的重新计时，用户想多久就多久，程序自己的预算一点不变。
+      let remainingMs = request.timeoutMs
+      let runningSince = Date.now()
+      let holds = 0
+      const arm = (): void => {
+        clock = timers.after(
+          remainingMs,
+          () => fail(CodeSurfaceErrorCodes.timeout, `程序超过 ${request.timeoutMs}ms 没跑完，已终止。`),
+          { label: 'program-timeout' }
+        )
+      }
+      let clock: Optional<ReturnType<TimerScope['after']>>
+      arm()
+
+      const holdClock = (): (() => void) => {
+        if (holds === 0) {
+          timers.cancel(clock)
+          remainingMs -= Date.now() - runningSince
+        }
+        holds += 1
+        let released = false
+        return () => {
+          // 恢复函数重复调只算一次：否则一次 finally 加一次显式调用会把层数减穿，钟再也不走。
+          if (released) return
+          released = true
+          holds -= 1
+          if (holds > 0) return
+          runningSince = Date.now()
+          arm()
+        }
+      }
       const onAbort = (): void => fail(CodeSurfaceErrorCodes.aborted, '程序被中止。')
       signal?.addEventListener('abort', onAbort, { once: true })
 
@@ -108,7 +135,7 @@ class NodeSubprocessCodeRunner implements CodeRunnerApi {
           return
         }
         if (message.type === 'call') {
-          void serveCapabilityCall(child, message, dispatch)
+          void serveCapabilityCall(child, message, dispatch, holdClock)
           return
         }
         if (message.type === 'done') {

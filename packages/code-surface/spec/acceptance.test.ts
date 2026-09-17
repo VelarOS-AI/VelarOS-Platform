@@ -29,11 +29,24 @@ const granted: GrantedModule[] = [
   export function bulk(input: { size: number }): Promise<{ text: string }>
 }`,
   },
+  {
+    namespace: 'approval',
+    declarations: `declare module 'velar:approval' {
+  export function request(input: { what: string }): Promise<{ grant: string }>
+}`,
+  },
 ]
 
+/** 装作在等用户点头：这段时间**不算**程序的时间。 */
+const approvalWaitMs = 1_500
+
 const capabilities: CodeCapabilityPort = {
-  listOperations: () => ({ demo: ['read', 'write', 'danger', 'bulk'] }),
-  invoke: async ({ operation, input }) => {
+  listOperations: () => ({ demo: ['read', 'write', 'danger', 'bulk'], approval: ['request'] }),
+  invoke: async ({ namespace, operation, input }) => {
+    if (namespace === 'approval') {
+      await new Promise((settle) => setTimeout(settle, approvalWaitMs))
+      return { value: { grant: 'grant-1' } }
+    }
     const value = input as Record<string, never>
     if (operation === 'read') {
       const paths = (value as unknown as { paths: string[] }).paths
@@ -313,4 +326,37 @@ export default first.contents`)
     expect(outcome.result.failed?.code).toBe(CodeSurfaceErrorCodes.tooLarge)
     expect(outcome.result.failed?.message).toContain('堆')
   }, 90_000)
+
+  test('INV-18 等用户点头的时间不计进程序超时', async () => {
+    // 审批等 1.5 秒，而程序自己的预算只有 1 秒：不停表的话这段程序必被我们自己杀掉。
+    const outcome = await submit(
+      [
+        "import { request } from 'velar:approval'",
+        importDemo,
+        "const { grant } = await request({ what: '删掉 dist' })",
+        "await read({ paths: ['a.ts'] })",
+        'export default grant',
+      ].join('\n'),
+      { timeoutMs: 1_000 }
+    )
+    if (!outcome.checked) throw new Error('应当通过检查')
+    expect(outcome.result.failed).toBeUndefined()
+    expect(outcome.result.value).toBe('grant-1')
+  }, 20_000)
+
+  test('INV-18 停表只扣等人的那段，程序自己的预算一点不变', async () => {
+    const outcome = await submit(
+      [
+        "import { request } from 'velar:approval'",
+        "await request({ what: '先等我一下' })",
+        '// 等完之后仍然只剩原来的预算，死循环照样按时被掐断',
+        'while (true) {}',
+        'export default 1',
+      ].join('\n'),
+      { timeoutMs: 1_000 }
+    )
+    if (!outcome.checked) throw new Error('应当通过检查')
+    expect(outcome.result.failed?.code).toBe(CodeSurfaceErrorCodes.timeout)
+    expect(outcome.result.completed).toEqual([{ call: 'approval.request', ok: true }])
+  }, 20_000)
 })

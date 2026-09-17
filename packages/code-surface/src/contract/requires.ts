@@ -51,8 +51,19 @@ export interface CodeCapabilityPort {
    * 模型读的声明按它生成，隔离进程里的 RPC 桩也按它造——两边同一个来源，不会对不上。
    */
   listOperations(): Readonly<Record<string, readonly string[]>>
-  /** 执行一次能力调用；`signal` 触发时尽快停下。 */
-  invoke(call: CodeCapabilityCall, signal?: AbortSignal): Promise<CodeCapabilityOutcome>
+  /**
+   * 执行一次能力调用；`signal` 触发时尽快停下。
+   *
+   * `holdClock` 是墙钟的闸：这次调用要**停下来等人**（弹确认卡、等用户输入）时先停表，
+   * 拿回来的函数在等完之后调。等人的时间不是程序的时间——不停表的话，用户去倒杯水回来，
+   * 程序早被我们自己按超时杀了，而他刚点了同意。
+   * `velar:approval` 那个命名空间的调用由会话自己停表，端口不必管；这一格是给**能力里内联问人**的那些用的。
+   */
+  invoke(
+    call: CodeCapabilityCall,
+    signal?: AbortSignal,
+    holdClock?: () => () => void
+  ): Promise<CodeCapabilityOutcome>
 }
 
 /** 程序跑起来之后陆续发生的事，宿主据此往界面上冒卡片与实时输出。 */

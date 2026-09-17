@@ -5,7 +5,7 @@ import type { ChildProcess } from 'node:child_process'
 import { isNull } from '@velaros-ai/core'
 
 import { CodeSurfaceErrorCodes } from '../contract/constants.js'
-import type { CodeRunDispatch } from '../types/runner.js'
+import type { CodeRunDispatch, HoldProgramClock } from '../types/runner.js'
 
 import { CodeSurfaceTuning } from './tuning.js'
 
@@ -18,16 +18,20 @@ import { CodeSurfaceTuning } from './tuning.js'
 export async function serveCapabilityCall(
   child: ChildProcess,
   message: Record<string, unknown>,
-  dispatch: CodeRunDispatch
+  dispatch: CodeRunDispatch,
+  holdClock: HoldProgramClock
 ): Promise<void> {
   const callId = Number(message.callId)
   try {
-    const outcome = await dispatch({
-      callId,
-      namespace: String(message.namespace),
-      operation: String(message.operation),
-      input: message.input,
-    })
+    const outcome = await dispatch(
+      {
+        callId,
+        namespace: String(message.namespace),
+        operation: String(message.operation),
+        input: message.input,
+      },
+      holdClock
+    )
     if (outcome.error) child.send({ type: 'result', callId, ok: false, error: outcome.error })
     else child.send({ type: 'result', callId, ok: true, value: outcome.value })
   } catch (cause) {

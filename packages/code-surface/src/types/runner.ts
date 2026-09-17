@@ -21,13 +21,29 @@ export interface CodeRunRequest {
   timeoutMs: number
 }
 
-/** 运行器把程序发出的调用转出来时用的回调；返回值直接交回程序。 */
-export type CodeRunDispatch = (call: {
-  callId: number
-  namespace: string
-  operation: string
-  input: unknown
-}) => Promise<{ value?: unknown; error?: { code: string; message: string }; notices?: readonly CodeCallNotice[] }>
+/**
+ * 停一下墙钟，返回的函数恢复它。**等用户点头的时间不是程序的时间。**
+ *
+ * 必须在等待**开始**时停，不能等结束了再把时间补回去——用户去倒杯水回来，
+ * 程序早被我们自己杀了，而他刚点了同意。恢复函数重复调只算一次；停表期间再停按层数记，全部恢复才重新走。
+ */
+export type HoldProgramClock = () => () => void
+
+/**
+ * 运行器把程序发出的调用转出来时用的回调；返回值直接交回程序。
+ *
+ * 第二个参数是墙钟的闸：这次调用要等人时先停表。闸在运行器手里（钟是它的），
+ * 什么时候该停由会话判断（它才知道哪次调用会去问人）。
+ */
+export type CodeRunDispatch = (
+  call: {
+    callId: number
+    namespace: string
+    operation: string
+    input: unknown
+  },
+  holdClock: HoldProgramClock
+) => Promise<{ value?: unknown; error?: { code: string; message: string }; notices?: readonly CodeCallNotice[] }>
 
 /** 运行器跑完一次的产物；宿主再把它编成给模型看的结果。 */
 export interface CodeRunOutcome {

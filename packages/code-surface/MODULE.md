@@ -25,6 +25,7 @@
 | `CodeSurfaceModId` | 契约常量 | 本包作为内核模块的身份 |
 | `CodeSurfaceDiagnosticCodes` | 契约常量 | 认得出来的 TypeScript 诊断码：`unresolvedModule` 就是「import 了没授权的能力模块」，那道闸是语言给的 |
 | `CodeSurfaceErrorCodes` / `CodeSurfaceLimits` | 契约常量 | 七个错误码；程序源码、blobs、返回值、日志、调用次数、墙钟的对外上限 |
+| `ApprovalNamespace` | 契约常量 | 审批模块的命名空间。这个命名空间的调用就是「程序在等人」，会话据此停表——等用户点头的时间不算程序的时间 |
 
 **注入面**在 `contract/requires.ts`：
 
@@ -86,8 +87,8 @@
 
 ## 不变量
 
-共 17 条，登记在 `spec/invariants.md`，验收用例在 `spec/acceptance.test.ts`。编号只增不重排。
-按检验方式：测试 17 条。未验证 0 条。
+共 18 条，登记在 `spec/invariants.md`，验收用例在 `spec/acceptance.test.ts`。编号只增不重排。
+按检验方式：测试 18 条。未验证 0 条。
 
 ## 非目标
 
