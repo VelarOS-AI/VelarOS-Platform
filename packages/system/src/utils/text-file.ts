@@ -161,7 +161,7 @@ export async function readBoundedFile(resolvedPath: string, maxBytes: number): P
   await assertRegularFile(resolvedPath)
   const buffer = await textFileIo.readBounded(resolvedPath, maxBytes).catch((err: unknown) => {
     if (err instanceof AppError && err.code === TextFileErrorCodes.tooLarge) {
-      throw new AppError('VALIDATION', `文件太大，不能一次读进来：${String(err.context.size)} 字节，上限 ${maxBytes} 字节；用 run 截取其中一段`)
+      throw new AppError('VALIDATION', `文件太大，不能读进来：${String(err.context.size)} 字节，上限 ${maxBytes} 字节；用 run 取片段（tail -n、grep、sed -n 'a,bp'）`)
     }
     throw normalizeReadError(err, resolvedPath)
   })
@@ -169,13 +169,13 @@ export async function readBoundedFile(resolvedPath: string, maxBytes: number): P
   return buffer
 }
 
-/** 把一份字节按文本解码后从 offset 起取最多 maxChars 个字符，连同范围与版本号一起组成读取结果。 */
+/** 把一份字节按文本整份解码，连同版本号一起组成读取结果；超过这次调用剩下的预算就直接失败，不回半份。 */
 export function readWholeText(resolvedPath: string, buffer: Buffer, budgetChars: number): SystemReadFileResult {
   const { content, encoding } = decodeSystemTextBuffer(buffer, resolvedPath)
   // 整份读回来，不切片：正文落在程序的变量里，模型看不到它，所以没有「分页」这回事。
   // 超过这一次调用剩下的预算就直接失败——半份内容回写就是把文件截断，比读不到坏得多。
   if (content.length > budgetChars) {
-    throw new AppError('VALIDATION', `${resolvedPath} 有 ${content.length} 个字符，超过这次调用剩下的 ${budgetChars}；少读几个文件，或者用 run 里的 sed / tail 先筛一段出来`)
+    throw new AppError('VALIDATION', `${resolvedPath} 有 ${content.length} 个字符，这次调用前面的文件已经用掉了大半预算，剩下 ${budgetChars}；把它单独放进一次 read`)
   }
   return { path: resolvedPath, version: fileVersionOf(buffer), content, encoding }
 }

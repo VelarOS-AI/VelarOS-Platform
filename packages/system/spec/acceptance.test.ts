@@ -289,18 +289,49 @@ describe('文件工具', () => {
     }
   })
 
-  test('INV-22 单个文件超过剩下的预算直接失败，绝不回半份', async () => {
+  test('INV-22 大文件分三档：20 MB 以内整份读写，超过的指向 run，一批读不下的单独失败、绝不回半份', async () => {
+    // 两个上限是同一个数：否则会漏出一段「字节放行、字符拒绝」的文件，读不了也改不了
+    expect(SystemFileLimits.readChars).toBe(SystemFileLimits.fileBytes)
+
     const root = await mkdtemp(join(tmpdir(), 'velaros-inv22-'))
     try {
-      const big = join(root, 'big.txt')
-      await writeFile(big, 'x'.repeat(SystemFileLimits.readChars + 10))
-      const got = await read.execute({ files: [{ path: big }] }, approving).catch((error: unknown) => error)
-      // 整个调用只有这一个文件，全部失败时整个调用报错——但关键是：没有半份内容回来
-      expect(String((got as { message?: string }).message ?? '')).toContain('超过这次调用剩下的')
+      // 第一档：12 MB 的文件整份读回来（砍掉分页之前，这一段超过了 400 万字符的旧预算，读不了）
+      const big = join(root, 'big.log')
+      const line = 'INFO 这一行是填充用的日志\n'
+      const body = line.repeat(Math.floor((12 * 1024 * 1024) / Buffer.byteLength(line)))
+      await writeFile(big, `${body}ERROR 真正要找的那一行\n`)
+      const got = await read.execute({ files: [{ path: big }] }, approving) as { files: Array<{ content: string }> }
+      expect(got.files[0]!.content.endsWith('ERROR 真正要找的那一行\n')).toBe(true)
+
+      // 整份改完写回去，版本对得上
+      const withVersion = await read.execute({ files: [{ path: big }] }, approving) as { files: Array<{ content: string; version: string }> }
+      const next = withVersion.files[0]!.content.replace('ERROR 真正要找的那一行', 'ERROR 已处理')
+      const written = await edit.execute({ files: [{ path: big, newText: next, version: withVersion.files[0]!.version }] }, approving) as { files: Array<{ previousVersion: string | null }> }
+      expect((await readFile(big, 'utf8')).endsWith('ERROR 已处理\n')).toBe(true)
+      // 超过 2 MB 的能写，但不留回滚版本
+      expect(written.files[0]!.previousVersion).toBeNull()
+
+      // 第二档：一批读不下时，读不下的那个单独失败，前面的照常回来——绝不回半份。
+      // 用 ASCII：一个字节一个字符，两份 11 MB 加起来才压得过 20 MB 的字符预算（中文三字节一个字，压不到）。
+      const asciiBody = 'x'.repeat(11 * 1024 * 1024)
+      const first = join(root, 'first.log')
+      const second = join(root, 'second.log')
+      await writeFile(first, asciiBody)
+      await writeFile(second, asciiBody)
+      const batch = await read.execute({ files: [{ path: first }, { path: second }] }, approving) as { files: Array<{ content?: string; error?: { message: string } }> }
+      expect(batch.files[0]!.content?.length).toBeGreaterThan(0)
+      expect(batch.files[1]!.error?.message).toContain('单独放进一次 read')
+      expect(batch.files[1]!.content).toBeUndefined()
+
+      // 第三档：超过 20 MB 的读不进来，报错直接指向 run
+      const huge = join(root, 'huge.log')
+      await writeFile(huge, Buffer.alloc(SystemFileLimits.fileBytes + 1, 0x61))
+      const refused = await read.execute({ files: [{ path: huge }] }, approving).catch((error: unknown) => error as Error)
+      expect(String((refused as Error).message)).toContain('用 run 取片段')
     } finally {
       await rm(root, { recursive: true, force: true })
     }
-  })
+  }, 60_000)
 
   test('INV-19 写系统敏感路径与凭证文件前经审批端口确认，按真实路径判定，被拒整批不写，临时目录不打扰用户', async () => {
     const root = await mkdtemp(join(tmpdir(), 'velaros-inv19-'))
@@ -663,6 +694,55 @@ describe('代码面', () => {
     await systemExecutionOperations.listTasks({ limit: 999_999 }, context)
     expect(asked[1]?.limit).toBe(SystemCommandLimits.taskListItems)
   })
+
+  test('INV-22 大文件穿过隔离：12 MB 读进程序、在程序里改、写回去，模型只看到一行摘要', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'velaros-big-surface-'))
+    try {
+      const path = join(directory, 'big.log')
+      const lines = Array.from({ length: 400_000 }, (_, index) => `${index % 997 === 0 ? 'ERROR' : 'INFO '} line ${index} ${'-'.repeat(12)}`)
+      await writeFile(path, `${lines.join('\n')}\n`)
+      const surface = createSystemCodeSurface({
+        resolveContext: (signal) =>
+          ({
+            abortSignal: signal ?? new AbortController().signal,
+            system: { resolvePath: (target?: string) => target ?? directory },
+            approval: { awaitConfirmation: async () => undefined },
+          }) as unknown as SystemToolContext,
+      })
+      const session = createCodeSurfaceSession({
+        checker: codeProgramChecker,
+        runner: nodeSubprocessCodeRunner,
+        capabilities: createCapabilityPort(surface.operations),
+      })
+      const declarations = await readFile(resolve(import.meta.dir, '../../../baselines/code-surface/system.d.ts'), 'utf8')
+      const outcome = await session.submit({
+        program: {
+          source: [
+            "import { read, edit } from 'velar:system'",
+            `const [file] = (await read({ files: [{ path: ${JSON.stringify(path)} }] })).files`,
+            "if ('error' in file) throw new Error(file.error.message)",
+            "const next = file.content.replaceAll('ERROR', 'FIXED')",
+            `await edit({ files: [{ path: ${JSON.stringify(path)}, newText: next, version: file.version }] })`,
+            "export default { chars: file.content.length, fixed: file.content.split('ERROR').length - 1 }",
+          ].join('\n'),
+        },
+        granted: [{ namespace: 'system', declarations }],
+        timeoutMs: 60_000,
+      })
+      if (!outcome.checked) throw new Error(`应当通过检查：${JSON.stringify(outcome)}`)
+      expect(outcome.result.failed).toBeUndefined()
+      // 模型那边只拿到这一小段：12 MB 的正文一个字都没进它的上下文
+      const value = outcome.result.value as { chars: number; fixed: number }
+      expect(value.chars).toBeGreaterThan(10_000_000)
+      expect(value.fixed).toBe(402)
+      expect(JSON.stringify(outcome.result).length).toBeLessThan(500)
+      const after = await readFile(path, 'utf8')
+      expect(after.includes('ERROR')).toBe(false)
+      expect(after.split('FIXED').length - 1).toBe(402)
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  }, 120_000)
 
   test('INV-31 入参不合法由操作方法自己拦，端口不盖第二层', async () => {
     const surface = createSystemCodeSurface({

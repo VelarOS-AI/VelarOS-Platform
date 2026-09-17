@@ -224,14 +224,14 @@ class SystemFileOperations implements SystemFileOperationsApi {
     {
       const newText = file.newText ?? ''
       if (newText.includes('\0')) return problem('newText 里有 NUL 字节，是二进制数据，不能当文本写入')
-      if (existing?.isFile() && existing.size > SystemFileLimits.fileBytes) return problem(`现有文件太大，不能在这里整个覆盖：${existing.size} 字节，上限 ${SystemFileLimits.fileBytes} 字节；用 run 替换`)
+      if (existing?.isFile() && existing.size > SystemFileLimits.fileBytes) return problem(`现有文件太大，不能在这里整份覆盖：${existing.size} 字节，上限 ${SystemFileLimits.fileBytes} 字节；用 run 就地改（sed -i、awk）`)
       let previous: Nullable<SystemTextFileContent> = null
       let encoding: TextEncoding = 'utf8'
       if (existing?.isFile()) {
         // 已有的文件必须是文本才许整个覆盖：二进制文件被 newText 盖掉就没了，也留不下能回滚的版本。
-        // 不超过可编辑上限的整个读进来留版本；更大的留不下版本，只读开头一段认编码、拒二进制。
+        // 不超过 versionedBytes 的整个读进来留版本；更大的留不下版本，只读开头一段认编码、拒二进制。
         try {
-          if (existing.size <= SystemFileLimits.editableBytes) {
+          if (existing.size <= SystemFileLimits.versionedBytes) {
             previous = await readSystemTextFile(target)
             encoding = previous.encoding
           } else {

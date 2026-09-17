@@ -18,7 +18,11 @@ export interface SystemReadFileInput {
   version?: string
 }
 
-/** @AgentView 一批最多 20 项，每个文件整份读回来；总量超过上限时，超出的那几个各自算失败条目。 */
+/**
+ * @AgentView
+ * 一批最多 20 项，每个文件整份读回来。单个文件最大 20 MB，再大的用 `run` 取片段（`tail -n`、`grep`、`sed -n 'a,bp'`）。
+ * 一批里前面的文件用掉了预算时，读不下的那几个各自算失败条目——单独放进一次 `read` 就行。
+ */
 export type SystemReadInput = {
   files: SystemReadFileInput[]
 }
@@ -82,6 +86,8 @@ export interface SystemViewResult {
  *
  * `version` 是 `read` 返回的版本号，给了就先核对文件现在还是这个版本，被改过就整批不写并给出当前版本；不给就不核对。
  * 想安全地改一个文件，就把 `read` 拿到的 `version` 原样带回来。
+ *
+ * 单个文件最大 20 MB；更大的用 `run` 就地改（`sed -i`、`awk`）。超过 2 MB 的能写，但不留回滚版本。
  */
 export interface SystemEditFileInput {
   path: string
@@ -95,7 +101,7 @@ export type SystemEditInput = {
   files: SystemEditFileInput[]
 }
 
-/** @AgentView previousVersion 是改动前留下的版本，新建或没留下时为 null；path 是解析后的绝对路径，它是符号链接时 target 是真正被写的那个文件。 */
+/** @AgentView previousVersion 是改动前留下的版本，能拿去 `restore`；新建的文件、或者原文件超过 2 MB（不留版本）时为 null。path 是解析后的绝对路径，它是符号链接时 target 是真正被写的那个文件。 */
 export interface SystemEditWrittenResult {
   path: string
   target?: string
