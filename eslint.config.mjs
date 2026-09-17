@@ -170,6 +170,9 @@ export default [
       // dist-in-src:.js/.d.ts 是 tsc 产物(与 .ts 源同目录),不是源码。
       'packages/*/src/**/*.js',
       'packages/*/src/**/*.d.ts',
+      // 代码模版：给模型照抄的范本，一个函数一种用法、彼此不调用；它对不对由各包验收照真实声明做类型检查守着。
+      // 在里面塞 eslint-disable 会原样出现在模型面前，是噪音。
+      'packages/*/templates/**',
       path.basename(import.meta.filename),
     ],
   },

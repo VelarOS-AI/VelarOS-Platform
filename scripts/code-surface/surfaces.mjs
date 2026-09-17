@@ -12,6 +12,8 @@ export const CodeSurfaces = [
     directory: 'system',
     /** 操作接口；方法带 `@AgentView` 的才进模型面。 */
     interfaces: ['SystemFileOperationsApi', 'SystemExecutionOperationsApi'],
+    /** 代码模版：一整份能照抄的程序，import 只写一次；相对包目录。 */
+    templates: 'templates/system.js',
   },
   {
     /**
@@ -23,6 +25,7 @@ export const CodeSurfaces = [
     namespace: 'sandbox',
     directory: 'rehearsal-sandbox',
     interfaces: ['SandboxOperationsApi'],
+    templates: 'templates/sandbox.js',
   },
 ]
 

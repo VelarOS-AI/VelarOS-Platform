@@ -3,7 +3,7 @@
 import { isUndefined } from '@velaros-ai/core'
 
 import { CodeSurfaceLimits } from '../contract/constants.js'
-import type { CodeCallNotice, CodeProgramCheckFailure, CodeProgramDiagnostic, CodeProgramResult, CompletedCall } from '../types/code-surface.js'
+import type { CodeAttachment, CodeCallNotice, CodeProgramCheckFailure, CodeProgramDiagnostic, CodeProgramResult, CompletedCall } from '../types/code-surface.js'
 
 import { keepTail } from './program.js'
 import { CodeSurfaceTuning } from './tuning.js'
@@ -130,6 +130,30 @@ export function fitDiagnosticsToBudget(diagnostics: readonly CodeProgramDiagnost
     used += cost
   }
   return { diagnostics: kept, omitted: diagnostics.length - kept.length }
+}
+
+/**
+ * 交给模型的图按张数与体积收拢：超出的**按顺序丢后面的**，并说明丢了几张。
+ *
+ * 张数上限对齐 API「一个请求超过 20 张，每张都得 ≤ 2000 px」那条线；体积上限给请求体里的历史留地方。
+ * 丢后面的而不是前面的：程序是按它想看的顺序交的，前面的通常是它最想看的。
+ */
+export function fitAttachmentsToBudget(attachments: readonly CodeAttachment[], notices: CodeCallNotice[]): CodeAttachment[] {
+  const kept: CodeAttachment[] = []
+  let used = 0
+  for (const attachment of attachments) {
+    if (kept.length >= CodeSurfaceLimits.images || used + attachment.data.length > CodeSurfaceLimits.imageChars) break
+    kept.push(attachment)
+    used += attachment.data.length
+  }
+  if (kept.length < attachments.length) {
+    notices.push({
+      call: 'program',
+      action: 'truncated',
+      detail: `这次程序交了 ${attachments.length} 张图，只给了前 ${kept.length} 张（一次最多 ${CodeSurfaceLimits.images} 张）。剩下的分几次程序看，看完一张先记下要点再看下一张。`,
+    })
+  }
+  return kept
 }
 
 /** 检查没过时回给模型的那份：诊断收拢到预算里，省了几条就说几条。 */

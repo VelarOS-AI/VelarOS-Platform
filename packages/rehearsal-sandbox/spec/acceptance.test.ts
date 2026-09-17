@@ -221,3 +221,15 @@ export default outcome`)
     expect(space.calls.some((call) => 'applySandbox' in call)).toBe(false)
   }, 30_000)
 })
+
+describe('代码模版', () => {
+  test('INV-6 代码模版整份照真实声明过类型检查', () => {
+    const root = resolve(fileURLToPath(new URL('.', import.meta.url)), '..')
+    const declarations = readFileSync(resolve(root, '../../baselines/code-surface/sandbox.d.ts'), 'utf8')
+    const template = readFileSync(resolve(root, 'templates/sandbox.js'), 'utf8')
+    const checked = codeProgramChecker.check({ source: template, granted: [{ namespace: 'sandbox', declarations }] })
+    expect(checked.ok ? [] : checked.diagnostics).toEqual([])
+    expect(declarations).toContain(template.split('\n')[2] ?? '')
+  })
+})
+

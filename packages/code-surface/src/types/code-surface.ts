@@ -83,6 +83,24 @@ export interface CodeCallNotice {
   detail: string
 }
 
+/**
+ * 程序交给模型看的一张图。
+ *
+ * **不走返回值**：`export default` 是给模型读的文字，base64 进去只会被截成乱码，还白占字数。
+ * 图片走旁边这条通道——能力在调用时把图交出来，宿主在程序跑完之后把它们按顺序放到结果后面，
+ * 模型看到的是真正的图。程序自己拿到的只有尺寸、token 这类元数据。
+ */
+export interface CodeAttachment {
+  /** 恒为 `image-data`；与宿主交给模型的内容块同形，宿主原样转过去。 */
+  type: 'image-data'
+  /** `image/png` 之类。 */
+  mediaType: string
+  /** base64，已经缩到 API 的限制以内。 */
+  data: string
+  /** 放在这张图前面的一行说明，模型据此知道是哪一张。 */
+  label: string
+}
+
 /** 程序没跑完时的失败说明。 */
 export interface CodeProgramFailure {
   /** 失败类别。 */
@@ -180,6 +198,11 @@ export type CodeSurfaceOutcome =
   | {
       checked: true
       result: CodeProgramResult
+      /**
+       * 程序交给模型看的图，按交出的顺序。放在 `result` 旁边而不是里面：
+       * `result` 是文字，受 `resultChars` 约束；图有自己的张数与体积上限，另算。
+       */
+      attachments?: readonly CodeAttachment[]
       /** 程序里的能力 import 与租约意图；宿主据此续租、退租、回收。没有 import 就没有这一格。 */
       imports?: readonly ProgramImport[]
     }

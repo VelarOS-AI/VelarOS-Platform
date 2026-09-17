@@ -6,6 +6,7 @@ import { join, resolve } from 'node:path'
 
 import { describe, expect, test } from 'bun:test'
 
+import { solidPng } from '../spec/support'
 import type { SystemToolContext } from '../src/contract/requires.js'
 import { SystemFileLimits } from '../src/contracts'
 import { createLocalSystemKernel } from '../src/impl/LocalSystemKernel.js'
@@ -35,7 +36,6 @@ function entryOf<T extends { path: string }>(result: { files: Array<T | { path: 
 /** 读一批，一律批准。 */
 const readAll = (input: Parameters<typeof systemFileOperations.read>[0]) => systemFileOperations.read(input, approvingContext)
 /** 看一批，一律批准。 */
-const viewAll = (input: Parameters<typeof systemFileOperations.view>[0]) => systemFileOperations.view(input, approvingContext)
 
 /** 读一个文件的快捷方式。 */
 async function readOne(file: { path: string; version?: string }) {
@@ -199,36 +199,36 @@ describe('System capability', () => {
     }
   })
 
-  test('view hands images to the model whole, files one or many, and refuses everything else', async () => {
+  test('view hands images to the model beside the result, files one or many, and refuses everything else', async () => {
     const root = await mkdtemp(join(tmpdir(), 'velaros-system-view-'))
     try {
-      const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52])
+      const png = solidPng(40, 30)
       const imagePath = join(root, 'shot.png')
       await writeFile(imagePath, png)
-      const viewedImage = await viewAll({ files: [{ path: imagePath }] })
-      expect(entryOf(viewedImage)).toEqual({ path: imagePath, mediaType: 'image/png', bytes: png.byteLength })
-      expect(viewedImage.modelContent).toEqual([
-        { type: 'text', text: `文件 1/1：${imagePath}` },
-        { type: 'image-data', data: png.toString('base64'), mediaType: 'image/png' },
-      ])
+      const attached: Array<{ mediaType: string; data: string; label: string }> = []
+      const context = { ...approvingContext, attachImage: (image: { mediaType: string; data: string; label: string }) => attached.push(image) } as SystemToolContext
+
+      const viewedImage = await systemFileOperations.view({ files: [{ path: imagePath }] }, context)
+      expect(entryOf(viewedImage)).toEqual({ path: imagePath, mediaType: 'image/png', width: 40, height: 30, sent: { width: 40, height: 30 } })
+      expect(attached).toEqual([{ mediaType: 'image/png', data: png.toString('base64'), label: `图片 1/1：${imagePath}（原图 40×30，给你的是 40×30）` }])
       await expect(readAll({ files: [{ path: imagePath }] })).rejects.toThrow('view')
 
       const pdfPath = join(root, 'report.pdf')
       await writeFile(pdfPath, Buffer.from('%PDF-1.4\n%fake\n'))
-      await expect(viewAll({ files: [{ path: pdfPath }] })).rejects.toThrow('这个工具只看图片')
+      await expect(systemFileOperations.view({ files: [{ path: pdfPath }] }, context)).rejects.toThrow('view 只看图片')
       await expect(readAll({ files: [{ path: pdfPath }] })).rejects.toThrow('不是文本')
       const textPath = join(root, 'plain.txt')
       await writeFile(textPath, 'hello')
-      await expect(viewAll({ files: [{ path: textPath }] })).rejects.toThrow('read')
+      await expect(systemFileOperations.view({ files: [{ path: textPath }] }, context)).rejects.toThrow('read')
 
-      // 一批里混着图片和一个不存在的文件：失败的只标记它那一项，内容块按顺序排。
+      // 一批里混着图片和一个不存在的文件：失败的只标记它那一项，交出的图按顺序、标签里带着它在这批里的位置。
+      attached.length = 0
       const secondPath = join(root, 'again.png')
       await writeFile(secondPath, png)
-      const batch = await viewAll({ files: [{ path: imagePath }, { path: join(root, 'missing.png') }, { path: secondPath }] })
+      const batch = await systemFileOperations.view({ files: [{ path: imagePath }, { path: join(root, 'missing.png') }, { path: secondPath }] }, context)
       expect(batch.files.map((entry) => ('error' in entry ? entry.error.code : entry.mediaType))).toEqual(['image/png', 'NOT_FOUND', 'image/png'])
-      expect(batch.modelContent.map((part) => part.type)).toEqual(['text', 'image-data', 'text', 'image-data'])
-      expect(batch.modelContent[2]).toEqual({ type: 'text', text: `文件 3/3：${secondPath}` })
-      await expect(viewAll({ files: [{ path: join(root, 'a.png') }, { path: join(root, 'b.png') }] })).rejects.toThrow('不存在')
+      expect(attached.map((image) => image.label.split('：')[0])).toEqual(['图片 1/3', '图片 3/3'])
+      await expect(systemFileOperations.view({ files: [{ path: join(root, 'a.png') }, { path: join(root, 'b.png') }] }, context)).rejects.toThrow('不存在')
     } finally {
       await rm(root, { recursive: true, force: true })
     }

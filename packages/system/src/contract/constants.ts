@@ -115,8 +115,18 @@ export const SystemFileLimits = Object.freeze({
   viewFiles: 10,
   /** edit 一次最多几个文件。 */
   editFiles: 20,
-  /** 交给模型的一张图片最大多少字节。 */
-  imageBytes: 5 * 1024 * 1024,
+  /**
+   * 交给模型的图，长边最多多少像素；超出的先压再给。
+   *
+   * 取 2000 对齐 API 最严的那条：一个请求里超过 20 张图时，每张都不许超过 2000 px，否则整个请求被拒。
+   * 高分辨率模型本身能看到 2576，但为了那几百像素冒整请求被拒的险不值。
+   */
+  imageEdge: 2000,
+  /**
+   * 交给模型的图，**base64 之后**最多多少字节。API 按 base64 算，不是原文件大小。
+   * 取 5 MB 对齐 Bedrock 与 Google Cloud（直连 API 是 10 MB）；超了就继续压。
+   */
+  imageBase64Bytes: 5 * 1024 * 1024,
   /** 单个文件最大多少字节：`read` 读得进来、`edit` 覆盖得了的上限；再大的用 `run`。 */
   fileBytes: 20 * 1024 * 1024,
   /**

@@ -159,12 +159,27 @@ void describe('模块形态', () => {
     ])
   })
 
-  test('改写成隔离能跑的形状时，行数一个不变——否则抛错的行号就对不上', () => {
+  test('改写成隔离能跑的形状时，模型写的那些行一行都不挪——否则抛错的行号就对不上', () => {
     const source = ["import { read } from 'velar:demo'", 'const r = await read({})', 'export default r'].join('\n')
-    const rewritten = rewriteModuleForIsolate(source)
-    expect(rewritten.split('\n')).toHaveLength(3)
-    expect(rewritten).toContain('const { read } = __velar("velar:demo")')
-    expect(rewritten).toContain('return r;')
+    const lines = rewriteModuleForIsolate(source).split('\n')
+    // 原来三行各在原位，交出的那句接在后面
+    expect(lines).toHaveLength(4)
+    expect(lines[0]).toContain('const { read } = __velar("velar:demo")')
+    expect(lines[1]).toBe('const r = await read({})')
+    expect(lines[2]).toBe('__exports.default = r;')
+    expect(lines[3]).toContain('return')
+  })
+
+  test('具名导出去掉 export 时换成等长空白，列号也不挪；解构出来的名字一个不漏', () => {
+    const source = ['export const { a, b: [c] } = { a: 1, b: [2] }', 'export function f() {}', 'const x = 1', 'export { x as y }'].join('\n')
+    const lines = rewriteModuleForIsolate(source).split('\n')
+    expect(lines[0]).toContain('       const { a, b: [c] }')
+    expect(lines[1]).toBe('       function f() {}')
+    expect(lines[3]).toBe('')
+    expect(lines[4]).toContain('__exports["a"] = a;')
+    expect(lines[4]).toContain('__exports["c"] = c;')
+    expect(lines[4]).toContain('__exports["f"] = f;')
+    expect(lines[4]).toContain('__exports["y"] = x;')
   })
 })
 

@@ -12,6 +12,7 @@
 import type { ApprovalPort } from '@velaros-ai/agent/tool-contract'
 
 import type { SystemProcessConfinementRequest, SystemProcessConfinementResult } from '../types/commands.js'
+import type { SystemAttachedImage, SystemImageResizeRequest, SystemImageResizeResult } from '../types/files.js'
 import type { SystemBackgroundTaskQueryOptions, SystemBackgroundTaskRecord, SystemCommandResult, SystemProcessConfinementMode, SystemRunCommandOptions, SystemShellEnvironmentRefreshResult } from '../types/system.js'
 
 // ── 工具上下文与宿主端口 ────────────────────────────────────────
@@ -31,6 +32,11 @@ export interface SystemToolContext {
   system: SystemToolSystemApi
   /** 审批端口（来自 agent 包）：写敏感路径、跑危险命令前经它向用户确认。 */
   approval: ApprovalPort
+  /**
+   * 把一张图交给模型看。图不进返回值——返回值是给程序的，程序看不了像素；
+   * 宿主收着，在这次结果后面按顺序放出来。不给就用不了 view。
+   */
+  attachImage?: (image: SystemAttachedImage) => void
 }
 
 /**
@@ -68,6 +74,12 @@ export interface SystemToolSystemApi {
     allowDangerous?: boolean,
     abortSignal?: AbortSignal
   ) => Promise<SystemCommandResult>
+  /**
+   * 把图裁一块、缩到长边不超过 `longEdge`，返回新图与它实际的尺寸。**只在需要时才会被调**：
+   * 图在上限以内、又没要求裁的，原样交给模型。宿主做不了图像处理就不实现它，
+   * view 遇到超限的图会明说，并告诉模型先用 run 缩小。
+   */
+  resizeImage?: (request: SystemImageResizeRequest) => Promise<SystemImageResizeResult>
 }
 
 

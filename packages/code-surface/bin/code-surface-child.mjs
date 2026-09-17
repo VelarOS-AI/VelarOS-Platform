@@ -39,7 +39,7 @@ async function runProgram(message) {
   }
   /**
    * 模型写的是真 ES 模块，宿主在送进来之前已经把 `import` 改写成 `__velar(...)`、
-   * `export default X` 改写成 `return X`（行数一个不变，所以抛错的行号仍对得上模型写的那一行）。
+   * 导出改写成登记到 `__exports` 上、末尾统一交出（模型写的那些行行号一个不变，所以抛错的行号仍对得上）。
    * 这里只要给出 `__velar`：按模块名取那个命名空间的桩，取不到就抛——
    * 能走到这里说明检查已经过了，取不到只可能是宿主授权与改写对不上，该响不该默默给个空对象。
    */
@@ -53,7 +53,7 @@ async function runProgram(message) {
     return bound
   }
   // 能力以**形参**注入而不是全局：全局会被程序自己改掉，形参改不动外面。
-  const body = `"use strict";\nreturn (async () => {\n${message.source}\n})()`
+  const body = `${ProgramPrefix}${message.source}\n})()`
   const program = new Function('__velar', 'console', body)
   return program(resolveModule, consoleShim)
 }
@@ -85,19 +85,39 @@ process.on('message', (message) => {
       logs,
       error: {
         message: error?.message ?? String(error),
-        // 程序在包装里从第 1 行起，栈里的行号减 1 才是模型写的那一行。
+        // 栈里的行号减掉包装占的那几行，才是模型写的那一行（见 ProgramLineOffset）。
         line: readProgramLine(error?.stack),
       },
     })
   )
 })
 
+/** 包在程序外面的那一截；程序正文从它后面一行开始。 */
+const ProgramPrefix = '"use strict";\nreturn (async () => {\n'
+
+/**
+ * 程序第 1 行在栈里是第几行，减 1。
+ *
+ * **量出来，不写死**：`new Function` 自己会在正文前面加几行（引擎不同加得不同），外面这截包装也可能改。
+ * 写死过一次——包装改了两行、这里还减 1，报给模型的行号一直差 3，而运行时行号从没被测过。
+ * 所以启动时拿同样的前缀、同步抛一次，看它落在第几行。
+ */
+const ProgramLineOffset = (() => {
+  try {
+    new Function('__velar', 'console', `${ProgramPrefix.replace('async ', '')}throw new Error('probe')\n})()`)()
+  } catch (error) {
+    const matched = /<anonymous>:(\d+):\d+/u.exec(String(error?.stack))
+    if (matched) return Number(matched[1]) - 1
+  }
+  return 0
+})()
+
 /** 从栈里挖出程序自己的行号；挖不到就不给，宁可不说也不要报一个错的位置。 */
 function readProgramLine(stack) {
   if (typeof stack !== 'string') return undefined
   const matched = /<anonymous>:(\d+):\d+/u.exec(stack)
   if (!matched) return undefined
-  const line = Number(matched[1]) - 1
+  const line = Number(matched[1]) - ProgramLineOffset
   return Number.isInteger(line) && line >= 1 ? line : undefined
 }
 

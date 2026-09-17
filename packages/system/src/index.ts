@@ -20,3 +20,4 @@ export type { LocalSystemKernelOptions, SystemProcessConfinementProvider, System
 
 // ── 上面两面用到、又不在可移植文件里的数据 ───────────────────────
 export type { SystemProcessConfinementPolicy, SystemProcessConfinementRequest, SystemProcessConfinementResult } from './types/commands.js'
+export type { SystemAttachedImage, SystemImageRegion, SystemImageResizeRequest, SystemImageResizeResult } from './types/files.js'

@@ -3,7 +3,6 @@
  * 只放类型；后一部分只在包内用，公开签名不引用它们，所以不出包。
  */
 
-import type { ToolResultModelContentPart } from '@velaros-ai/agent/contracts'
 import type { DecodedText, TextEncoding } from '@velaros-ai/text-files/contracts'
 
 /** 文件里的一段字符范围，end 不含。只在包内用。 */
@@ -58,9 +57,22 @@ export interface SystemReadResult {
   files: Array<SystemReadFileResult | SystemFileFailure>
 }
 
-/** @AgentView 一张图片。 */
+/** @AgentView 图上的一块，按原图的像素算。 */
+export interface SystemImageRegion {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+/**
+ * @AgentView
+ * 一张图片。给 region 就只看那一块（按原图像素算，超出图的部分会收进来）。
+ * 大图会被压小再给你；压完看不清的地方，拿 region 把那一块单独要来看。
+ */
 export interface SystemViewFileInput {
   path: string
+  region?: SystemImageRegion
 }
 
 /** @AgentView 一批最多 10 张。 */
@@ -68,17 +80,25 @@ export type SystemViewInput = {
   files: SystemViewFileInput[]
 }
 
-/** @AgentView 看到的一张图片的元数据。 */
+/** @AgentView width、height 是原图的尺寸；sent 是实际给你看的尺寸，比原图（或 region）小就说明压过。 */
 export interface SystemViewFileResult {
   path: string
   mediaType: string
-  bytes: number
+  width: number
+  height: number
+  sent: {
+    width: number
+    height: number
+  }
 }
 
-/** @AgentView files 与入参的 files 一一对应；modelContent 按同样的顺序放每张图，每块前面一行文字说明是哪个文件，失败的文件没有内容块。 */
+/**
+ * @AgentView
+ * files 与入参的 files 一一对应。**图片本身不在这里**：调用 view 就把图交给你了，
+ * 程序跑完之后按顺序放在结果后面，每张前面有一行说明是哪个文件。
+ */
 export interface SystemViewResult {
   files: Array<SystemViewFileResult | SystemFileFailure>
-  modelContent: ToolResultModelContentPart[]
 }
 
 /**
@@ -157,6 +177,32 @@ export interface SystemEditResult {
 }
 
 // ── 实现自己的工作类型，不出包 ─────────────────────────────────────
+
+/** 交给模型看的一张图：宿主经调用上下文收走，放到这次结果后面。 */
+export interface SystemAttachedImage {
+  mediaType: string
+  /** base64，已经在上限以内。 */
+  data: string
+  /** 放在图前面的一行说明。 */
+  label: string
+}
+
+/** 请宿主裁一块、缩到长边不超过 longEdge；两件事都没要求时宿主可以原样返回。 */
+export interface SystemImageResizeRequest {
+  data: Buffer
+  mediaType: string
+  region?: SystemImageRegion
+  longEdge: number
+}
+
+/** 宿主裁完、缩完的图，以及它实际的尺寸与格式。 */
+export interface SystemImageResizeResult {
+  data: Buffer
+  mediaType: string
+  width: number
+  height: number
+}
+
 
 /** 文件改动前留下的一个版本：版本号是内容的哈希，buffer 是当时的原始字节。 */
 export interface SystemFileSnapshot {

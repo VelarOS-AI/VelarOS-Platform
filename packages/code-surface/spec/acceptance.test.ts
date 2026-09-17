@@ -6,6 +6,7 @@ import { describe, expect, test } from 'bun:test'
 
 import { CodeSurfaceErrorCodes, CodeSurfaceLimits } from '../src/contract/constants'
 import type { CodeCapabilityPort } from '../src/contract/requires'
+import { createCapabilityPort } from '../src/impl/CapabilityOperationPort'
 import { codeProgramChecker } from '../src/impl/CodeProgramChecker'
 import { createCodeSurfaceSession } from '../src/impl/CodeSurfaceSession'
 import {
@@ -396,8 +397,69 @@ export default 1`)
     expect(checked.ok).toBe(true)
     const declaration = joinGrantedDeclarations([])
     expect(declaration).toContain('不进你的上下文')
-    expect(declaration).toContain('先看大小再决定交出多少')
+    expect(declaration).toContain('先在程序里看大小，再决定交出多少')
     expect(declaration).toContain(String(CodeSurfaceLimits.resultChars))
     expect(declaration).toContain(String(CodeSurfaceLimits.failureChars))
   })
+
+  test('INV-22 只有 export default 就交它；有具名导出就交 { default?, ...具名 }，跟 import * 的形状一样', async () => {
+    const onlyDefault = await submit('export default 42')
+    if (!onlyDefault.checked) throw new Error('应当通过检查')
+    expect(onlyDefault.result.value).toBe(42)
+
+    const onlyNamed = await submit('export const total = 3\nexport const names = ["a", "b"]')
+    if (!onlyNamed.checked) throw new Error('应当通过检查')
+    expect(onlyNamed.result.value).toEqual({ total: 3, names: ['a', 'b'] })
+
+    const both = await submit('const detail = { ok: true }\nexport { detail }\nexport default "摘要"')
+    if (!both.checked) throw new Error('应当通过检查')
+    expect(both.result.value).toEqual({ default: '摘要', detail: { ok: true } })
+
+    const nothing = await submit('const unused = 1\nvoid unused')
+    if (!nothing.checked) throw new Error('应当通过检查')
+    expect(nothing.result.value).toBeUndefined()
+  })
+
+  test('INV-22 export default 不中断执行：它后面的代码照样跑，运行时报错的行号仍是模型写的那一行', async () => {
+    const after = await submit('export default "先交"\nconsole.log("后面也跑了")')
+    if (!after.checked) throw new Error('应当通过检查')
+    expect(after.result.value).toBe('先交')
+    expect(after.result.logs).toEqual(['后面也跑了'])
+
+    const thrown = await submit('export const a = 1\nexport default a\nthrow new Error("第三行炸了")')
+    if (!thrown.checked) throw new Error('应当通过检查')
+    expect(thrown.result.failed?.line).toBe(3)
+  })
+
+  test('INV-23 能力交出的图走旁边的通道：程序拿不到像素，结果里没有 base64，超过张数上限按顺序丢后面的', async () => {
+    const pixels = Buffer.from('fake-png-bytes').toString('base64')
+    const imaging = createCodeSurfaceSession({
+      checker: codeProgramChecker,
+      runner: nodeSubprocessCodeRunner,
+      capabilities: createCapabilityPort({
+        pics: {
+          show: async (input: { n: number }, { attach }) => {
+            for (let index = 0; index < input.n; index += 1) {
+              attach({ type: 'image-data', mediaType: 'image/png', data: pixels, label: `第 ${index + 1} 张` })
+            }
+            return { shown: input.n }
+          },
+        },
+      }),
+    })
+    const outcome = await imaging.submit({
+      program: { source: "import { show } from 'velar:pics'\nconst r = await show({ n: 25 })\nexport default { shown: r.shown, keys: Object.keys(r) }" },
+      granted: [{ namespace: 'pics', declarations: "declare module 'velar:pics' {\n  export function show(input: { n: number }): Promise<{ shown: number }>\n}" }],
+      timeoutMs: 10_000,
+    })
+    if (!outcome.checked) throw new Error('应当通过检查')
+    // 程序只看得到操作的返回值
+    expect(outcome.result.value).toEqual({ shown: 25, keys: ['shown'] })
+    expect(JSON.stringify(outcome.result)).not.toContain(pixels)
+    // 图在旁边：只给前 20 张，并说明丢了几张
+    expect(outcome.attachments).toHaveLength(CodeSurfaceLimits.images)
+    expect(outcome.attachments?.[0]?.label).toBe('第 1 张')
+    expect(outcome.result.notices?.some((notice) => notice.detail.includes('只给了前 20 张'))).toBe(true)
+  })
 })
+

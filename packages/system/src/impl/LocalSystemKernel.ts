@@ -6,7 +6,7 @@
 import { cpus, freemem, homedir, loadavg, platform, release, totalmem } from 'node:os'
 import { isAbsolute, join, resolve } from 'node:path'
 
-import { isEmpty, Log, toNullable } from '@velaros-ai/core'
+import { AppError, isEmpty, Log, toNullable } from '@velaros-ai/core'
 import type { PlatformCompatibilityApi } from '@velaros-ai/platform'
 import { createPlatform } from '@velaros-ai/platform'
 import type { CommandSpec } from '@velaros-ai/platform/contracts'
@@ -15,7 +15,9 @@ import type { SandboxApplyOptions, SandboxApplyResult, SandboxCreateOptions, San
 
 import type { LocalSystemKernelOptions, SystemToolSystemApi } from '../contract/requires.js'
 import type { ResolvedSystemShell } from '../types/commands.js'
+import type { SystemImageResizeRequest, SystemImageResizeResult } from '../types/files.js'
 import type { SystemBackgroundTaskQueryOptions, SystemBackgroundTaskRecord, SystemBackgroundTaskTerminateRequest, SystemBackgroundTaskTerminateResult, SystemCommandResult, SystemConsoleControlResult, SystemConsoleInputRequest, SystemConsoleInterruptRequest, SystemConsoleOutputChunk, SystemConsoleOutputRequest, SystemEnvironmentInspection, SystemGlobalSearchOptions, SystemGlobalSearchResult, SystemMetricsSnapshot, SystemOpenPortInfo, SystemOpenPortQueryOptions, SystemProcessInfo, SystemProcessQueryOptions, SystemRunCommandOptions, SystemShellDescriptor, SystemShellEnvironmentRefreshResult } from '../types/system.js'
+import { resizeImageWithSips } from '../utils/image.js'
 import { runPlatformCommand } from '../utils/process.js'
 import { detectSystemShells, replaceEnvironment, toShellDescriptor } from '../utils/shell.js'
 import {
@@ -285,6 +287,12 @@ export class LocalSystemKernel implements LocalSystemKernelApi {
     const given = path ?? this.workingDirectory
     const expanded = given === '~' ? this.homeDir : /^~[\\/]/.test(given) ? join(this.homeDir, given.slice(2)) : given
     return isAbsolute(expanded) ? resolve(expanded) : resolve(this.workingDirectory, expanded)
+  }
+
+  public resizeImage(request: SystemImageResizeRequest): Promise<SystemImageResizeResult> {
+    // 本机内核只在 macOS 上有现成的图像工具（系统自带 sips）；别的平台明说，由宿主注入自己的实现。
+    if (platform() !== 'darwin') return Promise.reject(new AppError('PLATFORM', '本机内核只在 macOS 上能裁图缩图（用系统自带的 sips）；这个平台先用 run 调 ImageMagick 之类的工具处理'))
+    return resizeImageWithSips(request)
   }
 
   public createSandbox(options: SandboxCreateOptions = {}): Promise<SandboxRecord> {

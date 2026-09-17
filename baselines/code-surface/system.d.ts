@@ -18,6 +18,77 @@ declare module 'velar:system' {
    * 命令按策略分类，要确认的在执行之前问用户；被拒时命令一个进程都没起。
    */
 
+  /**
+   * 代码模版（templates/system.js）：
+   *
+   * ```js
+   * // velar:system 的代码模版：挑一段照着改，import 只写一次。
+   * // export default 交出来的东西才进你的上下文；能力的返回值只落在程序的变量里。
+   * import { edit, listTasks, read, run, view } from 'velar:system'
+   *
+   * // 读一个不知道多大的文件：先看大小，再决定交出多少。
+   * async function readUnknownSize(path = '~/project/README.md') {
+   *   const [file] = (await read({ files: [{ path }] })).files
+   *   if ('error' in file) throw new Error(file.error.message)
+   *   return file.content.length <= 20000
+   *     ? file.content
+   *     : { chars: file.content.length, head: file.content.slice(0, 4000) }
+   * }
+   *
+   * // 大日志里只捞错误行，不把整份交出去。
+   * async function findErrors(path = '~/build.log') {
+   *   const [log] = (await read({ files: [{ path }] })).files
+   *   if ('error' in log) throw new Error(log.error.message)
+   *   const errors = log.content.split('\n').filter((line) => line.includes('ERROR'))
+   *   return { total: errors.length, last: errors.slice(-20) }
+   * }
+   *
+   * // 一批文件只看开头。
+   * async function headsOf(paths = ['~/project/a.ts', '~/project/b.ts']) {
+   *   const { files } = await read({ files: paths.map((path) => ({ path })) })
+   *   return files.map((f) => ('error' in f ? { path: f.path, error: f.error.message } : { path: f.path, head: f.content.slice(0, 300) }))
+   * }
+   *
+   * // 改文件：在程序里把内容改好，带着 read 给的 version 整份写回去——中间被人改过就不写。
+   * async function replaceInFile(path = '~/project/config.json', from = '"debug": false', to = '"debug": true') {
+   *   const [file] = (await read({ files: [{ path }] })).files
+   *   if ('error' in file) throw new Error(file.error.message)
+   *   const next = file.content.replace(from, to)
+   *   if (next === file.content) throw new Error(`没找到要改的那一处：${from}`)
+   *   return (await edit({ files: [{ path, newText: next, version: file.version }] })).files
+   * }
+   *
+   * // 看图：在范围内原样给你，大图会压小；结果里 sent 比原图小就说明压过。
+   * // 图不在返回值里，跟在结果后面给你看，只留到你下一次调用——一次看一张，看完先把要点写下来。
+   * async function lookAt(path = '~/Desktop/screen.png') {
+   *   const [image] = (await view({ files: [{ path }] })).files
+   *   return image
+   * }
+   *
+   * // 压小之后看不清的地方，用 region 单独要那一块（按原图像素算）；原图尺寸在上一次 view 的结果里。
+   * async function zoomTopRight(path = '~/Desktop/screen.png', width = 3840, height = 2160) {
+   *   const region = { x: Math.floor(width / 2), y: 0, width: Math.ceil(width / 2), height: Math.ceil(height / 2) }
+   *   return (await view({ files: [{ path, region }] })).files
+   * }
+   *
+   * // 跑命令，按退出码判断，只交出结论。
+   * async function runTests(cwd = '~/project') {
+   *   const result = await run({ command: 'npm test', cwd })
+   *   return result.exitCode === 0 ? '全部通过' : { exitCode: result.exitCode, tail: result.stdout.slice(-3000) }
+   * }
+   *
+   * // 起一个长时间跑的服务，之后按 taskId 查它跑到哪了。
+   * async function startServer(cwd = '~/project') {
+   *   const started = await run({ command: 'npm run dev', cwd, background: true })
+   *   const taskId = started.backgroundProcess?.taskId
+   *   return taskId ? await listTasks({ taskId }) : started
+   * }
+   *
+   * // 交出答案：export default 后面接你要给自己看的那一点东西。
+   * export default await readUnknownSize()
+   * ```
+   */
+
   const TextEncodings: readonly ['utf8', 'utf8-bom', 'utf16le', 'utf16be', 'utf16le-nobom', 'utf16be-nobom', 'gb18030']
 
   /**
@@ -38,10 +109,12 @@ declare module 'velar:system' {
     files: SystemViewFileInput[]
   }
 
-  /** files 与入参的 files 一一对应；modelContent 按同样的顺序放每张图，每块前面一行文字说明是哪个文件，失败的文件没有内容块。 */
+  /**
+   * files 与入参的 files 一一对应。**图片本身不在这里**：调用 view 就把图交给你了，
+   * 程序跑完之后按顺序放在结果后面，每张前面有一行说明是哪个文件。
+   */
   interface SystemViewResult {
     files: Array<SystemViewFileResult | SystemFileFailure>
-    modelContent: ToolResultModelContentPart[]
   }
 
   /** 一批最多 20 项，全成或全不成。 */
@@ -132,27 +205,26 @@ declare module 'velar:system' {
     }
   }
 
-  /** 一张图片。 */
+  /**
+   * 一张图片。给 region 就只看那一块（按原图像素算，超出图的部分会收进来）。
+   * 大图会被压小再给你；压完看不清的地方，拿 region 把那一块单独要来看。
+   */
   interface SystemViewFileInput {
     path: string
+    region?: SystemImageRegion
   }
 
-  /** 看到的一张图片的元数据。 */
+  /** width、height 是原图的尺寸；sent 是实际给你看的尺寸，比原图（或 region）小就说明压过。 */
   interface SystemViewFileResult {
     path: string
     mediaType: string
-    bytes: number
+    width: number
+    height: number
+    sent: {
+      width: number
+      height: number
+    }
   }
-
-  /**
-   * Provider-neutral content blocks that a tool result can expose directly to the next model turn.
-   * Binary data is base64 encoded and kept outside the ordinary textual result so serialization and
-   * context compaction never turn media bytes into JSON text.
-   */
-  type ToolResultModelContentPart =
-    | { type: 'text'; text: string }
-    | { type: 'image-data'; data: string; mediaType: string }
-    | { type: 'file-data'; data: string; mediaType: string; filename?: string }
 
   /**
    * 两种改法只用一种：`newText` 当整个文件写进去（不存在就连同上级目录新建，已有的二进制文件拒改），
@@ -249,6 +321,14 @@ declare module 'velar:system' {
 
   /** 一种磁盘文本编码，取值见常量表 `TextEncodings`。 */
   type TextEncoding = (typeof TextEncodings)[number]
+
+  /** 图上的一块，按原图的像素算。 */
+  interface SystemImageRegion {
+    x: number
+    y: number
+    width: number
+    height: number
+  }
 
   /** previousVersion 是改动前留下的版本，能拿去 `restore`；新建的文件、或者原文件超过 2 MB（不留版本）时为 null。path 是解析后的绝对路径，它是符号链接时 target 是真正被写的那个文件。 */
   interface SystemEditWrittenResult {

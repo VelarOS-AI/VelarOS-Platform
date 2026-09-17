@@ -10,3 +10,4 @@
 | INV-3 | 落回的审批是高风险、必须用户亲自点、不可记忆的确认 | 测试 | `spec/acceptance.test.ts` |
 | INV-4 | 根入口与 `./contracts` 的整条引用链不碰 Node 内置模块，渲染进程可以直接加载 | 门禁 | `check:module-ownership` |
 | INV-5 | 代码面的 `sandbox` 命名空间是一条真路，不是一道恒空的门：模型写的程序照生成的 `baselines/code-surface/sandbox.d.ts` 过 typecheck，在隔离里把 create → run → diff → apply/discard 整条链跑完，回执形状对得上。作用域由宿主注入的端口解析、不由模型挑（project 的实现把越界的 source 拒掉，system 的实现收任意绝对路径），落回照样过「确认的就是要落的」那道确认，用户不点头就抛错、一个文件都不落 | 测试 | `spec/acceptance.test.ts` |
+| INV-6 | 代码模版（`templates/sandbox.js`）是一整份能照抄的程序，import 只写一次；它**整份照生成的真实声明过类型检查**，并且原样嵌在声明的模块头里——模型打开 `velar:sandbox` 就看得到，写错的模版会原样教出去，所以不许漂 | 测试 | `spec/acceptance.test.ts` |

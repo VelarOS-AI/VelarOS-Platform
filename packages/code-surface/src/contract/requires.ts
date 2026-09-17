@@ -5,7 +5,7 @@
  * 哪些能力存在、每一次调用要不要向用户要授权、危险不危险、算不算一次运行事件，全在宿主这一侧。
  */
 
-import type { CodeCallNotice } from '../types/code-surface.js'
+import type { CodeAttachment, CodeCallNotice } from '../types/code-surface.js'
 import type { CodeRunDispatch, CodeRunOutcome, CodeRunRequest } from '../types/runner.js'
 
 /** 程序发出的一次能力调用。 */
@@ -36,6 +36,8 @@ export interface CodeCapabilityOutcome {
   }
   /** 系统在这次调用上插手过的地方，随最终结果回给模型。 */
   notices?: readonly CodeCallNotice[]
+  /** 这次调用交给模型看的图；不进 `value`，程序拿不到它们的像素。 */
+  attachments?: readonly CodeAttachment[]
 }
 
 /**

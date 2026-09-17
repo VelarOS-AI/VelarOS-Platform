@@ -26,7 +26,7 @@ import {
 import { buildSystemProcessConfinementSpawnSpec } from '../src/utils/confinement.js'
 import { assertInsideSandboxBase, sandboxBaseDirectory } from '../src/utils/sandbox.js'
 
-import { fakeChild } from './support'
+import { fakeChild, solidPng } from './support'
 
 describe('命令安全门', () => {
   test('INV-4 危险命令的审批是高风险手动确认，不可按类记忆，并标明精确命令', async () => {
@@ -771,3 +771,128 @@ describe('代码面', () => {
     expect(registered).toEqual(declared)
   })
 })
+
+describe('看图与代码模版', () => {
+  const declarationsPath = resolve(import.meta.dir, '../../../baselines/code-surface/system.d.ts')
+  const templatePath = resolve(import.meta.dir, '../templates/system.js')
+
+  test('INV-33 代码模版整份照真实声明过类型检查，声明里嵌的就是这份文件', async () => {
+    const declarations = await readFile(declarationsPath, 'utf8')
+    const template = await readFile(templatePath, 'utf8')
+    const checked = codeProgramChecker.check({ source: template, granted: [{ namespace: 'system', declarations }] })
+    expect(checked.ok ? [] : checked.diagnostics).toEqual([])
+    // 嵌进声明的那份要跟文件一字不差（去掉行首的注释前缀之后），否则模型看到的是旧模版
+    const embedded = declarations
+      .split('\n')
+      .map((line) => line.replace(/^\s*\* ?/u, ''))
+      .join('\n')
+    for (const line of template.trim().split('\n').filter((text) => text.trim().length > 0)) {
+      expect(embedded).toContain(line)
+    }
+  })
+
+  const viewContext = (options: { resize?: (request: never) => Promise<unknown>; attach?: boolean } = {}) => {
+    const attached: Array<{ mediaType: string; data: string; label: string }> = []
+    const resized: unknown[] = []
+    const context = {
+      abortSignal: new AbortController().signal,
+      approval: { awaitConfirmation: async () => undefined },
+      system: {
+        resolvePath: (path?: string) => path ?? process.cwd(),
+        resizeImage: options.resize
+          ? async (request: never) => {
+            resized.push(request)
+            return options.resize!(request)
+          }
+          : undefined,
+      },
+      attachImage: options.attach === false ? undefined : (image: { mediaType: string; data: string; label: string }) => attached.push(image),
+    } as unknown as SystemToolContext
+    return { context, attached, resized }
+  }
+
+  test('INV-34 在范围内的图原样交出，不碰缩放器；结果里只有尺寸，没有像素', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'velaros-view-'))
+    try {
+      const path = join(directory, 'small.png')
+      await writeFile(path, solidPng(800, 600))
+      const { context, attached, resized } = viewContext({ resize: async () => { throw new Error('不该被调') } })
+      const result = await systemFileOperations.view({ files: [{ path }] }, context)
+      expect(result.files[0]).toEqual({ path, mediaType: 'image/png', width: 800, height: 600, sent: { width: 800, height: 600 } })
+      expect(JSON.stringify(result)).not.toContain('iVBOR')
+      expect(resized).toHaveLength(0)
+      expect(attached).toHaveLength(1)
+      expect(attached[0]!.label).toContain('原图 800×600')
+      expect(Buffer.from(attached[0]!.data, 'base64').equals(await readFile(path))).toBe(true)
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  test('INV-34 超出长边才请宿主压；要了 region 才请宿主裁，整块在图外直接拒', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'velaros-view-'))
+    try {
+      const path = join(directory, 'big.png')
+      await writeFile(path, solidPng(4000, 3000))
+      const shrunk = solidPng(2000, 1500)
+      const { context, resized } = viewContext({ resize: async () => ({ data: shrunk, mediaType: 'image/png', width: 2000, height: 1500 }) })
+
+      const whole = await systemFileOperations.view({ files: [{ path }] }, context)
+      expect(whole.files[0]).toMatchObject({ width: 4000, height: 3000, sent: { width: 2000, height: 1500 } })
+      expect(resized[0]).toMatchObject({ longEdge: SystemFileLimits.imageEdge })
+
+      await systemFileOperations.view({ files: [{ path, region: { x: 3000, y: 0, width: 5000, height: 500 } }] }, context)
+      // region 超出图的部分收进来：x 从 3000 起，最多到 4000
+      expect(resized[1]).toMatchObject({ region: { x: 3000, y: 0, width: 1000, height: 500 } })
+
+      await expect(systemFileOperations.view({ files: [{ path, region: { x: 5000, y: 0, width: 10, height: 10 } }] }, context))
+        .rejects.toThrow('整块都在图外')
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  test('INV-34 宿主压不了时，超限的图明说并给出 run 命令；没有交图通道时 view 直接不可用', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'velaros-view-'))
+    try {
+      const path = join(directory, 'big.png')
+      await writeFile(path, solidPng(3000, 2000))
+      const noResizer = viewContext()
+      await expect(systemFileOperations.view({ files: [{ path }] }, noResizer.context)).rejects.toThrow('sips -Z')
+      const noChannel = viewContext({ attach: false })
+      await expect(systemFileOperations.view({ files: [{ path }] }, noChannel.context)).rejects.toThrow('没有把图交给模型的通道')
+      const text = join(directory, 'note.txt')
+      await writeFile(text, '不是图')
+      await expect(systemFileOperations.view({ files: [{ path: text }] }, viewContext().context)).rejects.toThrow('不是模型能看的图片')
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  test.skipIf(process.platform !== 'darwin')('INV-34 本机内核在 macOS 上用 sips 真压、真裁：先裁后缩，尺寸与颜色都对', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'velaros-view-'))
+    const kernel = createLocalSystemKernel({ cwd: directory })
+    try {
+      const path = join(directory, 'wide.png')
+      await writeFile(path, solidPng(3000, 2000))
+      const attached: Array<{ data: string }> = []
+      const context = {
+        abortSignal: new AbortController().signal,
+        approval: { awaitConfirmation: async () => undefined },
+        system: kernel,
+        attachImage: (image: { data: string }) => attached.push(image),
+      } as unknown as SystemToolContext
+
+      const whole = await systemFileOperations.view({ files: [{ path }] }, context)
+      expect(whole.files[0]).toMatchObject({ width: 3000, height: 2000, sent: { width: 2000, height: 1333 } })
+
+      // 右半边（纯蓝）裁 1000×800：不超长边，不该被放大
+      const zoomed = await systemFileOperations.view({ files: [{ path, region: { x: 2000, y: 0, width: 1000, height: 800 } }] }, context)
+      expect(zoomed.files[0]).toMatchObject({ sent: { width: 1000, height: 800 } })
+    } finally {
+      await kernel.dispose()
+      await rm(directory, { recursive: true, force: true })
+    }
+  }, 60_000)
+})
+

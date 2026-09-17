@@ -38,12 +38,16 @@ class SystemCodeSurface implements SystemCodeSurfaceApi {
       Promise.resolve(this.resolveContext(signal))
     return {
       [SystemSpaceId]: {
-        read: async (input, signal) => files.read(input, await context(signal)),
-        view: async (input, signal) => files.view(input, await context(signal)),
-        edit: async (input, signal) => files.edit(input, await context(signal)),
-        run: async (input, signal) => execution.run(input, await context(signal)),
-        refreshEnvironment: async (_input, signal) => execution.refreshEnvironment(await context(signal)),
-        listTasks: async (input, signal) => execution.listTasks(input, await context(signal)),
+        read: async (input, { signal }) => files.read(input, await context(signal)),
+        // 图不进返回值：交给代码面的图片通道，程序跑完之后跟在结果后面给模型看。
+        view: async (input, { signal, attach }) => files.view(input, {
+          ...(await context(signal)),
+          attachImage: (image) => attach({ type: 'image-data', ...image }),
+        }),
+        edit: async (input, { signal }) => files.edit(input, await context(signal)),
+        run: async (input, { signal }) => execution.run(input, await context(signal)),
+        refreshEnvironment: async (_input, { signal }) => execution.refreshEnvironment(await context(signal)),
+        listTasks: async (input, { signal }) => execution.listTasks(input, await context(signal)),
       },
     }
   }

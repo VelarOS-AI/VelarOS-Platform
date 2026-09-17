@@ -25,6 +25,9 @@ import { rehearsalSandboxRules } from './RehearsalSandboxRules.js'
  * 代码面第一个跨空间的命名空间：模型在程序里写 `sandbox.create`、`sandbox.run` …，system 与 project 各注入自己的
  * `SandboxSurfacePort`。作用域（source 相对哪个根解析、越界算不算）由那个端口定，不由模型挑，所以模型面只有这一套说明。
  * 实现是 `SandboxOperations`，整个进程只有一份（`sandboxOperations`）。
+ *
+ * @AgentView
+ * 演练沙箱：把一个目录镜像出来，命令在镜像里跑、写不到外面；看过差量、用户点头之后才落回源目录。
  */
 export interface SandboxOperationsApi {
   /**

@@ -6,9 +6,10 @@
  * 这是代码面能成立的前提：一次调用才是可审查单元，一段程序不是。
  */
 
-import { isUndefined } from '@velaros-ai/core'
+import { isEmpty, isUndefined } from '@velaros-ai/core'
 
 import type { CodeCapabilityCall, CodeCapabilityOutcome, CodeCapabilityPort } from '../contract/requires.js'
+import type { CodeAttachment } from '../types/code-surface.js'
 import type { CapabilityOperationTable } from '../types/operations.js'
 import { describeUnknownOperation, shapeOperationFailure } from '../utils/capability-failure.js'
 
@@ -28,8 +29,13 @@ class CapabilityOperationPort implements CodeCapabilityPort {
 
     // 不在这里校验：入参合不合法是那件能力自己的事，它本来就要拦。
     // 盖在这一层只会变成第二个主人，而且换个入口就漏。
+    // 图不进返回值：操作经 attach 交出来，端口单独收着，跟在结果旁边回去。
+    const attachments: CodeAttachment[] = []
     try {
-      return { value: await operation(call.input, signal) }
+      const value = await operation(call.input, { signal, attach: (attachment) => attachments.push(attachment) })
+      const outcome: CodeCapabilityOutcome = { value }
+      if (!isEmpty(attachments)) outcome.attachments = attachments
+      return outcome
     } catch (cause) {
       return { error: shapeOperationFailure(cause) }
     }

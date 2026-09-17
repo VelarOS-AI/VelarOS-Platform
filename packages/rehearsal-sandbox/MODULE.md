@@ -69,8 +69,8 @@ system:sandbox 与 project:sandbox 两个工具、宿主的沙箱实现都用这
 
 ## 不变量
 
-共 5 条，登记在 `spec/invariants.md`，验收用例在 `spec/acceptance.test.ts`。编号只增不重排。
-按检验方式：测试 4 条、门禁 1 条。未验证 0 条。
+共 6 条，登记在 `spec/invariants.md`，验收用例在 `spec/acceptance.test.ts`。编号只增不重排。
+按检验方式：测试 5 条、门禁 1 条。未验证 0 条。
 
 ## 非目标
 

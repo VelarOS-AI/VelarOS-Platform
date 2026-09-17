@@ -25,19 +25,19 @@ export const DeclarationFileName = '/velar.d.ts'
  */
 const ProgramModuleDeclarations = `declare module '${ProgramModuleSpecifier}' {
   /**
-   * 你写的是一段程序：**能力调用的返回值落在程序的变量里，不进你的上下文**。
-   * 你只看得到两样——\`export default\` 交出来的值（最多 ${CodeSurfaceLimits.valueChars} 字符）和
-   * \`console.log\` 的输出（最多 ${CodeSurfaceLimits.logChars} 字符）；整份结果不超过 ${CodeSurfaceLimits.resultChars} 字符，超出的截掉并告诉你。
+   * 你写的是一段程序：\`import\` 拿能力，顶层 \`await\` 直接用，\`export default\` 交出答案；
+   * 也可以具名导出几样（\`export const total = …\`），结果就是 \`{ default?, total, … }\`。
    *
-   * 所以读一个不知道多大的东西，**先看大小再决定交出多少**，在同一个程序里做完：
+   * **能力调用的返回值落在程序的变量里，不进你的上下文。** 你只看得到两样：
+   * \`export default\` 交出来的值（最多 ${CodeSurfaceLimits.valueChars} 字符）和 \`console.log\` 的输出（最多 ${CodeSurfaceLimits.logChars} 字符）；
+   * 整份结果不超过 ${CodeSurfaceLimits.resultChars} 字符，超出的截掉并告诉你。所以：
+   * - 不知道东西多大，先在程序里看大小，再决定交出多少
+   * - 大东西里找东西，在程序里筛好了再交，别整份交
+   * - 别把大段内容塞进 \`throw\`，失败说明只留开头 ${CodeSurfaceLimits.failureChars} 字符
+   * - 能力交给你的图不在返回值里，跟在结果后面给你看；一次最多 ${CodeSurfaceLimits.images} 张。
+   *   图只留到你下一次调用为止——一次看一张，看完先把要点写下来，再看下一张
    *
-   *   const [file] = (await read({ files: [{ path }] })).files
-   *   export default file.content.length <= 20000
-   *     ? file.content
-   *     : { chars: file.content.length, head: file.content.slice(0, 4000) }
-   *
-   * 大文件里找东西，就在程序里筛好了再交出来，别整份交。
-   * 也别把大段内容塞进 \`throw\`：失败说明只留开头 ${CodeSurfaceLimits.failureChars} 字符。
+   * 每个能力模块开头都有一份代码模版，挑一段照着改。
    */
 
   /** 大字符串旁路：宿主随程序一起送进来的那几段，按名字取。文件内容走这里，不进源码——否则要过好几层转义。 */

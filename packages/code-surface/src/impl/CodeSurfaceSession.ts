@@ -1,8 +1,8 @@
 /**
  * 会话层：把一次「模型交了段程序」办完。
  *
- * 顺序是硬的——**先 typecheck，不过就不执行**。这一关拦掉的是模型对回执形状的误解，
- * 这一关拦掉的是模型对回执形状的误解；让不合法的程序跑起来，等于用真实副作用去试错。
+ * 顺序是硬的——**先 typecheck，不过就不执行**。这一关拦掉的是模型对回执形状的误解；
+ * 让不合法的程序跑起来，等于用真实副作用去试错。
  */
 
 import { isEmpty, isString, isTrue } from '@velaros-ai/core'
@@ -10,12 +10,14 @@ import { isEmpty, isString, isTrue } from '@velaros-ai/core'
 import { ApprovalNamespace, CodeSurfaceErrorCodes, CodeSurfaceLimits } from '../contract/constants.js'
 import type { CodeCapabilityPort, CodeRunnerApi, CodeSurfaceEventSink } from '../contract/requires.js'
 import type {
+  CodeAttachment,
   CodeCallNotice,
   CodeProgramRequest,
   CodeSurfaceOutcome,
   CompletedCall,
 } from '../types/code-surface.js'
 import type { GrantedModule } from '../types/code-surface.js'
+import { fitAttachmentsToBudget } from '../utils/budget.js'
 import { readProgramImports, rewriteModuleForIsolate } from '../utils/module-form.js'
 import { composeProgramResult, describeProgramOversize, resolveProgramSource } from '../utils/result.js'
 import { CodeSurfaceTuning } from '../utils/tuning.js'
@@ -88,6 +90,8 @@ class CodeSurfaceSession implements CodeSurfaceSessionApi {
     }
     // 执行账：每一笔**已经落定**的能力调用都记一条。中止/超时/抛错时它是模型唯一的「我做到哪了」。
     const completed: CompletedCall[] = []
+    // 交给模型的图：不进程序，也不进文字结果，单独收着，程序跑完跟在结果旁边回去。
+    const attachments: CodeAttachment[] = []
     let calls = 0
     const outcome = await this.runner.run(
       {
@@ -120,6 +124,7 @@ class CodeSurfaceSession implements CodeSurfaceSessionApi {
         this.events.callSettled?.({ callId: call.callId, ok: !result.error, elapsedMs: Date.now() - startedAt })
         completed.push({ call: `${call.namespace}.${call.operation}`, ok: !result.error })
         if (result.notices) notices.push(...result.notices)
+        if (result.attachments) attachments.push(...result.attachments)
         if (result.error) {
           notices.push({
             call: `${call.namespace}.${call.operation}`,
@@ -133,14 +138,15 @@ class CodeSurfaceSession implements CodeSurfaceSessionApi {
       input.signal
     )
 
+    // 图先收拢：它自己也会往插手记录里记一笔「丢了几张」，得赶在文字结果编好之前。
+    const shown = fitAttachmentsToBudget(attachments, notices)
     const result = composeProgramResult(outcome, notices, completed)
+    const settled: Extract<CodeSurfaceOutcome, { checked: true }> = { checked: true, result }
     const imports = readProgramImports(source)
-    return isEmpty(imports) ? { checked: true, result } : { checked: true, result, imports }
+    if (!isEmpty(imports)) settled.imports = imports
+    if (!isEmpty(shown)) settled.attachments = shown
+    return settled
   }
-
-
-
-
 }
 
 /** 装一个代码面会话；运行器与能力端口由宿主给。 */

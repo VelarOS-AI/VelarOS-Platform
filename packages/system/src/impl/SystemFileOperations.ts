@@ -16,10 +16,29 @@ import type { TextEncoding } from '@velaros-ai/text-files/contracts'
 
 import { SystemFileLimits } from '../contract/constants.js'
 import type { SystemToolContext } from '../contract/requires.js'
-import type { SystemEditFileInput, SystemEditFileResult, SystemEditInput, SystemEditPlan, SystemEditProblem, SystemEditResult, SystemReadFileInput, SystemReadFileResult, SystemReadInput, SystemReadResult, SystemTextFileContent, SystemViewFileInput, SystemViewFileResult, SystemViewInput, SystemViewResult } from '../types/files.js'
+import type {
+  SystemEditFileInput,
+  SystemEditFileResult,
+  SystemEditInput,
+  SystemEditPlan,
+  SystemEditProblem,
+  SystemEditResult,
+  SystemImageRegion,
+  SystemImageResizeRequest,
+  SystemReadFileInput,
+  SystemReadFileResult,
+  SystemReadInput,
+  SystemReadResult,
+  SystemTextFileContent,
+  SystemViewFileInput,
+  SystemViewFileResult,
+  SystemViewInput,
+  SystemViewResult,
+} from '../types/files.js'
 import { assertFileBatchSize, failureEntry, staleProblem, unresolvedEditFailure, withLinkTarget } from '../utils/file-batch.js'
 import { comparisonPath, confirmCredentialAccess, confirmSensitiveSystemMutation } from '../utils/file-safety.js'
 import { readErrnoCode, writeSystemFileAtomically } from '../utils/fs.js'
+import { base64Length, clampImageRegion, readImageSize, shrinkImageToLimits } from '../utils/image.js'
 import {
   currentFileVersion,
   detectMediaType,
@@ -116,14 +135,20 @@ class SystemFileOperations implements SystemFileOperationsApi {
   public async view(input: SystemViewInput, ctx: SystemToolContext): Promise<SystemViewResult> {
     if (!isArray(input.files)) throw new AppError('VALIDATION', '缺少 files：每张要看的图片一项')
     assertFileBatchSize(input.files.length, SystemFileLimits.viewFiles, 'view')
+    const attach = ctx.attachImage
+    if (!attach) throw new AppError('PLATFORM', '这个宿主没有把图交给模型的通道，view 用不了')
     const files: SystemViewResult['files'] = []
-    const modelContent: SystemViewResult['modelContent'] = []
     const failures: AppError[] = []
     for (const [index, file] of input.files.entries()) {
       try {
         const viewed = await this.viewOne(file, ctx)
+        const where = viewed.region ? `，区域 ${viewed.region.x},${viewed.region.y} ${viewed.region.width}×${viewed.region.height}` : ''
+        attach({
+          mediaType: viewed.image.mediaType,
+          data: viewed.image.data.toString('base64'),
+          label: `图片 ${index + 1}/${input.files.length}：${viewed.entry.path}（原图 ${viewed.entry.width}×${viewed.entry.height}${where}，给你的是 ${viewed.entry.sent.width}×${viewed.entry.sent.height}）`,
+        })
         files.push(viewed.entry)
-        modelContent.push({ type: 'text', text: `文件 ${index + 1}/${input.files.length}：${viewed.label}` }, viewed.part)
       } catch (error) {
         const failure = AppError.from(error)
         log.debug('one file in a view batch failed', { path: file.path, code: failure.code, message: failure.message })
@@ -132,7 +157,7 @@ class SystemFileOperations implements SystemFileOperationsApi {
       }
     }
     if (failures.length === input.files.length) throw failures[0]
-    return { files, modelContent }
+    return { files }
   }
 
   public async edit(input: SystemEditInput, ctx: SystemToolContext): Promise<SystemEditResult> {
@@ -290,7 +315,15 @@ class SystemFileOperations implements SystemFileOperationsApi {
   }
 
   /** 看一张图片：整张作为内容块交给模型，返回元数据、内容块和一行说明；不是模型认得的图片就报错。 */
-  private async viewOne(file: SystemViewFileInput, ctx: SystemToolContext): Promise<{ entry: SystemViewFileResult; part: SystemViewResult['modelContent'][number]; label: string }> {
+  /**
+   * 看一张图：在上限以内、又没要求裁的，原样交出去；超了或要裁，才请宿主处理。
+   * 大多数图不用动——压分辨率只是给超限的图兜底，裁一块只在模型自己要放大看时才发生。
+   */
+  private async viewOne(file: SystemViewFileInput, ctx: SystemToolContext): Promise<{
+    entry: SystemViewFileResult
+    image: { data: Buffer; mediaType: string }
+    region: Nullable<SystemImageRegion>
+  }> {
     const resolvedPath = this.resolvePath(file.path, ctx)
     const target = await resolveRealPath(resolvedPath)
     await confirmCredentialAccess(ctx, target, 'read')
@@ -298,17 +331,34 @@ class SystemFileOperations implements SystemFileOperationsApi {
     const media = detectMediaType(buffer)
     if (media?.kind !== 'image') {
       throw new AppError('VALIDATION', media
-        ? `${resolvedPath} 是 PDF；这个工具只看图片，文档不在这里读`
+        ? `${resolvedPath} 是 PDF；view 只看图片，文档不在这里读`
         : `${resolvedPath} 不是模型能看的图片（PNG、JPEG、GIF、WebP）；文本文件用 read，别的格式先转换`)
     }
-    if (buffer.byteLength > SystemFileLimits.imageBytes) {
-      throw new AppError('VALIDATION', `图片太大，不能交给模型：${buffer.byteLength} 字节，上限 ${SystemFileLimits.imageBytes} 字节；先用 run 缩小`)
+    const size = readImageSize(buffer, media.mediaType)
+    if (!size) throw new AppError('VALIDATION', `${resolvedPath} 的图片头读不出来，文件可能坏了`)
+    const region = isPresent(file.region) ? clampImageRegion(file.region, size) : null
+    if (isPresent(file.region) && !region) throw new AppError('VALIDATION', `region 整块都在图外：${resolvedPath} 是 ${size.width}×${size.height}`)
+
+    const source = region ?? { width: size.width, height: size.height }
+    const fits = !region
+      && Math.max(source.width, source.height) <= SystemFileLimits.imageEdge
+      && base64Length(buffer.byteLength) <= SystemFileLimits.imageBase64Bytes
+    if (fits) {
+      const entry = { path: resolvedPath, mediaType: media.mediaType, width: size.width, height: size.height, sent: { ...size } }
+      return { entry, image: { data: buffer, mediaType: media.mediaType }, region }
     }
-    return {
-      entry: { path: resolvedPath, mediaType: media.mediaType, bytes: buffer.byteLength },
-      part: { type: 'image-data', data: buffer.toString('base64'), mediaType: media.mediaType },
-      label: resolvedPath,
+
+    const resize = ctx.system.resizeImage
+    if (!resize) {
+      throw new AppError('PLATFORM', region
+        ? '这个宿主裁不了图；先用 run 把那一块裁出来再看'
+        : `${resolvedPath} 是 ${size.width}×${size.height}，超过长边 ${SystemFileLimits.imageEdge} px 或 ${SystemFileLimits.imageBase64Bytes} 字节的上限，这个宿主压不了；先用 run 缩小（macOS：sips -Z ${SystemFileLimits.imageEdge} 原图 --out 新图）`)
     }
+    const request: Omit<SystemImageResizeRequest, 'longEdge'> = { data: buffer, mediaType: media.mediaType }
+    if (region) request.region = region
+    const shrunk = await shrinkImageToLimits(resize, request, { longEdge: SystemFileLimits.imageEdge, base64Bytes: SystemFileLimits.imageBase64Bytes })
+    const entry = { path: resolvedPath, mediaType: shrunk.mediaType, width: size.width, height: size.height, sent: { width: shrunk.width, height: shrunk.height } }
+    return { entry, image: { data: shrunk.data, mediaType: shrunk.mediaType }, region }
   }
 
   /** 把用户输入的路径变成绝对路径：规整特殊空格与开头的 `@`，`~` 和相对路径都交给宿主按它的家目录与默认工作目录解析。 */

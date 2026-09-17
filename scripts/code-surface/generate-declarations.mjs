@@ -322,6 +322,18 @@ function generate(surface) {
     }
   }
 
+  // 代码模版不能省：我们知道这些能力怎么组合，模型未必知道。一个命名空间一份模版文件，
+  // import 只写一次，嵌进生成物的模块头，模型一打开这个模块就看得到；对不对由各包的验收整份做类型检查。
+  const templatePath = surface.templates ? resolve(RepoRoot, `packages/${surface.directory}`, surface.templates) : null
+  const template = templatePath && ts.sys.fileExists(templatePath) ? readFileSync(templatePath, 'utf8').trim() : ''
+  if (template.length === 0) {
+    problems.push(`${surface.namespace} 没有代码模版：在 packages/${surface.directory}/templates/ 写一份能照抄的程序，并在 surfaces.mjs 登记`)
+  } else if (template.includes('*/')) {
+    problems.push(`${surface.templates} 里有「*/」：模版会被嵌进注释，它会把注释提前截断；模版里的注释一律用 //`)
+  } else {
+    headers.push(['/**', ` * 代码模版（${surface.templates}）：`, ' *', ' * ```js', ...template.split('\n').map((line) => (line.length > 0 ? ` * ${line}` : ' *')), ' * ```', ' */'].join('\n'))
+  }
+
   // 闭包：签名引用到的类型，以及它们自己引用到的
   const closure = new Map()
   const queue = [...wanted]

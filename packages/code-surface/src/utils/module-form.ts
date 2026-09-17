@@ -70,29 +70,57 @@ function bindingFor(clause: Optional<ts.ImportClause>, specifier: string): strin
 }
 
 /**
- * 把模块改写成隔离里能跑的函数体。
+ * 把程序改写成隔离里能跑的函数体：隔离里没有模块系统。
  *
- * **行数必须一个不变**：改写后的每条语句仍占原来那一行，抛错时栈里的行号才对得上模型写的那一行。
- * 所以只做同行替换，不插入也不删除换行。
+ * - `import { x } from 'velar:ns'` → `const { x } = __velar("velar:ns");`
+ * - `export default X` → `__exports.default = X;`（**不是** return：ES 里 export default 不中断执行）
+ * - `export const / let / var / function / class` → 去掉 `export`，末尾补一句登记
+ * - `export { a, b as c }` → 删掉这句，末尾补登记
+ * - 末尾统一交出：只有 default 就交 default；有具名导出就交 `{ default?, ...具名 }`，
+ *   跟 `import * as m` 拿到的形状一样；什么都没导出就是 undefined。
+ *
+ * **行数一个不变**：改写都落在原来那一行里，补的登记接在最后一行后面——
+ * 否则抛错的行号就对不上模型写的那一行。
  */
 export function rewriteModuleForIsolate(source: string): string {
   const file = ts.createSourceFile(ProgramFileName, source, ts.ScriptTarget.ES2022, true)
   const rewrites: ProgramRewrite[] = []
+  const exported: Array<{ name: string; local: string }> = []
+  const textOf = (node: ts.Node): string => source.slice(node.getStart(file), node.getEnd())
+
   for (const statement of file.statements) {
     if (ts.isImportDeclaration(statement) && ts.isStringLiteral(statement.moduleSpecifier)) {
-      rewrites.push({
-        start: statement.getStart(file),
-        end: statement.getEnd(),
-        text: `${bindingFor(statement.importClause, statement.moduleSpecifier.text)};`,
-      })
+      rewrites.push({ start: statement.getStart(file), end: statement.getEnd(), text: `${bindingFor(statement.importClause, statement.moduleSpecifier.text)};` })
       continue
     }
     if (ts.isExportAssignment(statement) && !isTrue(statement.isExportEquals)) {
-      rewrites.push({
-        start: statement.getStart(file),
-        end: statement.getEnd(),
-        text: `return ${source.slice(statement.expression.getStart(file), statement.expression.getEnd())};`,
-      })
+      rewrites.push({ start: statement.getStart(file), end: statement.getEnd(), text: `__exports.default = ${textOf(statement.expression)};` })
+      continue
+    }
+    if (ts.isExportDeclaration(statement) && !statement.moduleSpecifier && statement.exportClause && ts.isNamedExports(statement.exportClause)) {
+      for (const element of statement.exportClause.elements) {
+        exported.push({ name: element.name.text, local: (element.propertyName ?? element.name).getText(file) })
+      }
+      rewrites.push({ start: statement.getStart(file), end: statement.getEnd(), text: '' })
+      continue
+    }
+    const modifiers = ts.canHaveModifiers(statement) ? ts.getModifiers(statement) ?? [] : []
+    const exportKeyword = modifiers.find((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword)
+    if (!exportKeyword) continue
+    const defaultKeyword = modifiers.find((modifier) => modifier.kind === ts.SyntaxKind.DefaultKeyword)
+    if (defaultKeyword) {
+      // export default function / class：变成一个赋值表达式
+      rewrites.push({ start: exportKeyword.getStart(file), end: defaultKeyword.getEnd(), text: '__exports.default =' })
+      continue
+    }
+    // 其余的具名导出：把 export 换成等长空白，列号也不挪
+    rewrites.push({ start: exportKeyword.getStart(file), end: exportKeyword.getEnd(), text: ' '.repeat(exportKeyword.getEnd() - exportKeyword.getStart(file)) })
+    if (ts.isVariableStatement(statement)) {
+      for (const declaration of statement.declarationList.declarations) {
+        for (const name of bindingNames(declaration.name)) exported.push({ name, local: name })
+      }
+    } else if ((ts.isFunctionDeclaration(statement) || ts.isClassDeclaration(statement)) && statement.name) {
+      exported.push({ name: statement.name.text, local: statement.name.text })
     }
   }
 
@@ -100,5 +128,13 @@ export function rewriteModuleForIsolate(source: string): string {
   for (const rewrite of [...rewrites].sort((left, right) => right.start - left.start)) {
     output = output.slice(0, rewrite.start) + rewrite.text + output.slice(rewrite.end)
   }
-  return output
+  const registrations = exported.map(({ name, local }) => `__exports[${JSON.stringify(name)}] = ${local};`).join(' ')
+  // 开头那句接在第一行前面、结尾那句另起一行接在最后：两处都不改变模型写的那些行的行号。
+  return `const __exports = {}; ${output}\n${registrations} return ((exports) => { const names = Object.keys(exports); return names.length === 0 ? undefined : names.length === 1 && names[0] === 'default' ? exports.default : exports })(__exports);`
+}
+
+/** 一个声明左边绑定出来的全部名字：`const { a, b: [c] } = …` 得到 a、c。 */
+function bindingNames(name: ts.BindingName): string[] {
+  if (ts.isIdentifier(name)) return [name.text]
+  return name.elements.flatMap((element) => (ts.isOmittedExpression(element) ? [] : bindingNames(element.name)))
 }

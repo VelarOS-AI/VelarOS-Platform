@@ -17,6 +17,7 @@ export { createCodeSurfaceSession } from './impl/CodeSurfaceSession.js'
 export { nodeSubprocessCodeRunner,NodeSubprocessRunnerIsReleaseReady } from './impl/NodeSubprocessCodeRunner.js'
 export type {
   CapabilityLease,
+  CodeAttachment,
   CodeCallNotice,
   CodeProgramCheckFailure,
   CodeProgramCheckResult,
@@ -35,6 +36,7 @@ export type {
 export type {
   CapabilityNamespaceOperations,
   CapabilityOperation,
+  CapabilityOperationContext,
   CapabilityOperationTable,
 } from './types/operations.js'
 export type { CodeRunDispatch, CodeRunOutcome, CodeRunRequest, HoldProgramClock } from './types/runner.js'
