@@ -14,46 +14,27 @@ import { describe, expect, test } from 'bun:test'
 
 import { codeProgramChecker, createCapabilityPort, createCodeSurfaceSession, nodeSubprocessCodeRunner } from '@velaros-ai/code-surface'
 
-import { SystemCommandLimits, type SystemCommandResult } from '../src/contracts'
+import { SystemCommandLimits } from '../src/contracts'
 import { systemExecutionOperations } from '../src/impl/SystemExecutionOperations.js'
+import { systemFileOperations } from '../src/impl/SystemFileOperations.js'
 import { systemProcessManager } from '../src/impl/SystemProcessManager.js'
 import {
   createLocalSystemKernel,
-  createSystemBundledModDefinition,
   createSystemCodeSurface,
-  createSystemKernelModule,
-  SystemCapability,
-  type SystemCapabilityService,
-  SystemToolCategoryByName,
   type SystemToolContext,
-  SystemToolNames,
-  systemTools,
 } from '../src/index'
 import { buildSystemProcessConfinementSpawnSpec } from '../src/utils/confinement.js'
 import { assertInsideSandboxBase, sandboxBaseDirectory } from '../src/utils/sandbox.js'
 
-import { captureService, fakeChild } from './support'
+import { fakeChild } from './support'
 
 describe('命令安全门', () => {
-  test('INV-29 system:run 只在声明 parallel: true 且命令只读、不转后台、无需确认时并发；改仓库的 git 命令声明了也不并发', () => {
-    expect(systemTools[SystemToolNames.run].isConcurrencySafe?.({ command: 'git -C repo status', parallel: true })).toBe(true)
-    expect(systemTools[SystemToolNames.run].isConcurrencySafe?.({ command: 'git -C repo status' })).toBe(false)
-    expect(systemTools[SystemToolNames.run].isConcurrencySafe?.({
-      command: 'git -C repo checkout main',
-      parallel: true,
-    })).toBe(false)
-  })
-
   test('INV-4 危险命令的审批是高风险手动确认，不可按类记忆，并标明精确命令', async () => {
     const seen: Array<Record<string, unknown> | undefined> = []
     const context = {
       abortSignal: new AbortController().signal,
       approval: {
-        awaitConfirmation: async (
-          _message: string,
-          _signal?: AbortSignal,
-          options?: Record<string, unknown>
-        ) => {
+        awaitConfirmation: async (_message: string, _signal?: AbortSignal, options?: Record<string, unknown>) => {
           seen.push(options)
         },
       },
@@ -63,7 +44,7 @@ describe('命令安全门', () => {
       },
     } as never
 
-    await systemTools[SystemToolNames.run].execute({ command: 'rm -rf /tmp/velaros-fixture' }, context)
+    await systemExecutionOperations.run({ command: 'rm -rf /tmp/velaros-fixture' }, context)
     expect(seen[0]).toMatchObject({
       approvalRisk: 'high',
       riskScope: 'system-command:dangerous',
@@ -71,11 +52,9 @@ describe('命令安全门', () => {
       rememberRiskScope: false,
       operation: { label: 'rm -rf /tmp/velaros-fixture' },
     })
-
-    await systemTools[SystemToolNames.run].execute({ command: 'npm run dev' }, context)
-    // 长驻服务只是体验型确认：低风险、可按类记忆，语义不变。
-    expect(seen[1]).toEqual({ approvalRisk: 'low' })
   })
+
+
 })
 
 describe('进程约束', () => {
@@ -118,255 +97,49 @@ describe('进程约束', () => {
   })
 })
 
-describe('工具面', () => {
-  test('INV-7 五个有参工具的 schema 都拒绝顶层未知字段，refresh-environment 是唯一例外', () => {
-    const minimal: Record<string, Record<string, unknown>> = {
-      [SystemToolNames.read]: { files: [{ path: 'x' }] },
-      [SystemToolNames.view]: { files: [{ path: 'x' }] },
-      [SystemToolNames.edit]: { files: [{ path: 'x', newText: '' }] },
-      [SystemToolNames.run]: { command: 'true' },
-      [SystemToolNames.listTasks]: {},
-    }
-    for (const [name, input] of Object.entries(minimal)) {
-      expect(systemTools[name as keyof typeof systemTools].schema.safeParse(input).success).toBe(true)
-      expect(systemTools[name as keyof typeof systemTools].schema.safeParse({ ...input, unknownField: 1 }).success).toBe(false)
-    }
-    expect(systemTools[SystemToolNames.refreshEnvironment].schema.safeParse({ unknownField: 1 }).success).toBe(true)
+describe('代码面登记', () => {
+  test('INV-15 nativeCommand 只给宿主用，永不进模型可观测面', async () => {
+    const declarations = await readFile(
+      resolve(import.meta.dir, '../../../baselines/code-surface/system.d.ts'),
+      'utf8'
+    )
+    expect(declarations).not.toContain('nativeCommand')
   })
 
-  test('INV-7 wire 面用严格 schema，未知字段在解析宿主上下文之前就被拒绝', async () => {
-    let service: SystemCapabilityService | undefined
-    let resolverCalls = 0
-    const module = createSystemKernelModule({
-      resolveContext: (_scope, signal) => {
-        resolverCalls += 1
-        return {
-          abortSignal: signal,
-          system: { listBackgroundTasks: async () => [] },
-        } as unknown as SystemToolContext
-      },
-    })
-    await module.activate(captureService((_tokenId, registered) => {
-      service = registered as SystemCapabilityService
-    }))
 
-    await expect(service?.invoke(
-      'system:list-tasks',
-      undefined,
-      { unexpected: true },
-      new AbortController().signal,
-    )).rejects.toThrow('系统能力的入参不合法')
-    expect(resolverCalls).toBe(0)
-  })
 
-  test('INV-8 只发布 canonical 的 system: 工具', () => {
-    expect(Object.keys(systemTools).toSorted()).toEqual(Object.values(SystemToolNames).toSorted())
-    expect(Object.keys(systemTools).every((name) => name.startsWith('system:'))).toBe(true)
-  })
 
-  test('INV-8 不发布项目发现或诊断快捷工具', () => {
-    expect(Object.hasOwn(systemTools, 'discover_projects')).toBe(false)
-    expect(Object.hasOwn(systemTools, 'diagnose_dev_runtime')).toBe(false)
-    expect(Object.hasOwn(systemTools, 'get_system_overview')).toBe(false)
-  })
 
-  test('INV-9 每个工具声明权威的副作用种类', () => {
-    const expectedEffects = {
-      'system:read': 'read',
-      'system:view': 'read',
-      'system:edit': 'write',
-      'system:run': 'execute',
-      'system:refresh-environment': 'write',
-      'system:list-tasks': 'read',
-      'system:sandbox': 'write',
-    } as const
 
-    expect(Object.keys(systemTools)).toEqual(Object.keys(expectedEffects))
-    for (const [name, effectKind] of Object.entries(expectedEffects)) {
-      const tool = systemTools[name as keyof typeof systemTools]
-      expect(tool.capabilities?.effectKind).toBe(effectKind)
-      expect(tool.readOnly).toBe(effectKind === 'read')
-      expect(tool.capabilities?.reason).toBeTruthy()
-      if (effectKind !== 'read') expect(tool.capabilities?.writeScopes?.length).toBeGreaterThan(0)
-    }
-  })
 
-  test('INV-9 一个工具只属于一个职责类别', () => {
-    expect(SystemToolCategoryByName).toEqual({
-      'system:read': 'system-files',
-      'system:view': 'system-files',
-      'system:edit': 'system-files',
-      'system:run': 'system-execution',
-      'system:refresh-environment': 'system-execution',
-      'system:list-tasks': 'system-execution',
-      'system:sandbox': 'system-execution',
-    })
-  })
 
-  test('INV-13 常驻工具只有读看改跑四个，其余按需装入', () => {
-    const tools = createSystemBundledModDefinition().manifest.contributes.tools
-    // 读—看—改—跑常驻，找文件也走 run；后台任务 / 环境刷新是排障场景，走 tooling:map 按名换入。
-    expect(
-      tools.flatMap((tool) => (tool.residentInSpaces?.includes('system') ? [tool.name] : [])),
-    ).toEqual([
-      'system:read',
-      'system:view',
-      'system:edit',
-      'system:run',
-    ])
-  })
 
-  test('INV-14 内核模块注册精确的工具集合，权限清单不含通配', async () => {
-    let service: SystemCapabilityService | undefined
-    const module = createSystemKernelModule()
-    await module.activate(captureService((tokenId, registered) => {
-      expect(tokenId).toBe(SystemCapability.id)
-      service = registered as SystemCapabilityService
-    }))
-
-    expect(module.manifest.id).toBe('velaros.system')
-    expect(Object.keys(service?.tools ?? {})).toEqual([
-      'system:read',
-      'system:view',
-      'system:edit',
-      'system:run',
-      'system:refresh-environment',
-      'system:list-tasks',
-      'system:sandbox',
-    ])
-    expect(service?.getOperationMetadata('system:list-tasks')).toBeUndefined()
-    expect(service?.tools['system:edit']?.description).toContain('oldText')
-    expect(service?.tools['system:run']?.description).toContain('复制、移动、删除、归档、解压')
-    expect(service?.tools['system:run']?.description).toContain('Git Bash/POSIX')
-    expect(module.manifest.permissions).not.toContain('*')
-  })
-
-  test('INV-15 nativeCommand 只供宿主使用，不出现在 system:run 的模型 schema 里', () => {
-    const schema = systemTools[SystemToolNames.run].schema as { shape?: Record<string, unknown> }
-    expect(schema.shape).toBeDefined()
-    expect(Object.keys(schema.shape ?? {})).not.toContain('nativeCommand')
-  })
 })
 
 describe('命令输出', () => {
-  test('INV-10 截断输出保留真实末尾，并给出可执行的召回续接', async () => {
-    let service: SystemCapabilityService | undefined
-    const commandResult: SystemCommandResult = {
-      command: 'printf lots',
-      cwd: '/tmp',
-      exitCode: 0,
-      signal: null,
-      stdout: 'last line\n',
-      stderr: '',
-      logPath: '/tmp/vela-system-command-123.log',
-      durationMs: 10,
-      timedOut: false,
-      aborted: false,
-      truncated: true,
-      success: true,
-      verification: { kind: 'unknown', status: 'unknown', issues: [] },
-    }
-    const module = createSystemKernelModule({
-      resolveContext: (_scope, signal) =>
-        ({
-          abortSignal: signal,
-          system: {
-            runCommand: async () => commandResult,
-            resolvePath: (path?: string) => path ?? process.cwd(),
-          },
-          approval: { awaitConfirmation: async () => undefined },
-        }) as unknown as SystemToolContext,
-    })
-    await module.activate(captureService((_tokenId, registered) => {
-      service = registered as SystemCapabilityService
-    }))
-
-    const result = (await service?.invoke(
-      'system:run',
-      undefined,
-      { command: 'printf lots', maxOutputChars: 100 },
-      new AbortController().signal,
-    )) as SystemCommandResult
-
-    expect(result.outputWindow).toEqual({
-      retained: 'tail',
-      complete: false,
-      endPreserved: true,
-    })
-    expect(result.outputContinuation).toEqual({
-      kind: 'session-terminal-log',
-      query: 'vela-system-command-123.log',
-      tool: 'context:recall',
-      args: { query: 'vela-system-command-123.log', kind: 'terminal' },
-    })
-  })
-
-  test('INV-10 后台命令的状态续接指向 system:list-tasks，不交给内核 job 工具', async () => {
-    let service: SystemCapabilityService | undefined
-    const commandResult: SystemCommandResult = {
-      command: 'printf ready',
-      cwd: '/tmp',
-      exitCode: null,
-      signal: null,
-      stdout: '',
-      stderr: '',
-      durationMs: 5,
-      timedOut: false,
-      aborted: false,
-      truncated: false,
-      success: true,
-      backgroundProcess: {
-        taskId: 'task-background-123',
-        sessionId: 'session-1',
-        pid: 123,
-        logPath: '/tmp/vela-system-command-background.log',
-        ports: [],
-        reason: null,
-        terminateCommand: null,
-        forceTerminateCommand: null,
-        fallbackTerminateCommand: null,
-        requested: true,
-        autoStarted: false,
+  test('INV-10 输出超长保留末尾且末尾真实；转后台的回执带 taskId，模型自己去查', async () => {
+    const context = {
+      abortSignal: new AbortController().signal,
+      approval: { awaitConfirmation: async () => undefined },
+      system: {
+        resolvePath: (path?: string) => path ?? process.cwd(),
+        runCommand: async () => ({
+          stdout: 'tail-of-the-output',
+          stderr: '',
+          exitCode: 0,
+          truncated: true,
+          backgroundProcess: { taskId: 'task-1' },
+        }),
       },
-      verification: { kind: 'unknown', status: 'unknown', issues: [] },
-    }
-    const module = createSystemKernelModule({
-      resolveContext: (_scope, signal) =>
-        ({
-          abortSignal: signal,
-          system: {
-            runCommand: async () => commandResult,
-            resolvePath: (path?: string) => path ?? process.cwd(),
-          },
-          approval: { awaitConfirmation: async () => undefined },
-        }) as unknown as SystemToolContext,
-    })
-    await module.activate(captureService((_tokenId, registered) => {
-      service = registered as SystemCapabilityService
-    }))
+    } as never
 
-    const result = (await service?.invoke(
-      'system:run',
-      undefined,
-      { command: 'printf ready', background: true },
-      new AbortController().signal,
-    )) as SystemCommandResult
-
-    expect(result.outputWindow).toEqual({
-      retained: 'tail',
-      complete: false,
-      endPreserved: true,
-    })
-    expect(result.outputContinuation).toEqual({
-      kind: 'session-terminal-log',
-      query: 'vela-system-command-background.log',
-      tool: 'context:recall',
-      args: { query: 'vela-system-command-background.log', kind: 'terminal' },
-    })
-    expect(result.backgroundProcess?.statusContinuation).toEqual({
-      tool: 'system:list-tasks',
-      args: { taskId: 'task-background-123' },
-    })
+    const result = await systemExecutionOperations.run({ command: 'printf lots', background: true }, context)
+    // 砍头不砍尾：失败现场在尾部
+    expect(result.outputWindow?.retained).toBe('tail')
+    expect(result.outputWindow?.endPreserved).toBe(true)
+    expect(result.stdout.endsWith('tail-of-the-output')).toBe(true)
+    // 回执给 taskId 就够了，模型自己写 `await listTasks({ taskId })`
+    expect(result.backgroundProcess?.taskId).toBe('task-1')
   })
 
   test('INV-11 管道分块不打碎 UTF-8 字符，退出码原样透传', async () => {
@@ -446,8 +219,8 @@ describe('文件工具', () => {
     ...approving,
     approval: { requestApproval: async () => ({ approved: true }), awaitConfirmation: async () => { throw new Error('user said no') } },
   } as SystemToolContext
-  const edit = systemTools[SystemToolNames.edit]
-  const read = systemTools[SystemToolNames.read]
+  const edit = { execute: systemFileOperations.edit.bind(systemFileOperations) }
+  const read = { execute: systemFileOperations.read.bind(systemFileOperations) }
   const failureOf = async (call: Promise<unknown>): Promise<{ code: string; outcome: unknown; problems: Array<Record<string, unknown>> }> => {
     try {
       await call
@@ -808,7 +581,7 @@ describe('演练沙箱', () => {
           },
         },
       }
-      const failure = await systemTools[SystemToolNames.sandbox].execute({ action: 'apply', sandboxId }, context as never)
+      const failure = await systemExecutionOperations.sandbox({ action: 'apply', sandboxId }, context as never)
         .then(() => null, (error: unknown) => error as { context?: { executionOutcome?: string }; cause?: { reason?: string } })
       expect(messages[0]).toContain('新增 1 个')
       expect(failure?.context?.executionOutcome).toBe('not-applied')

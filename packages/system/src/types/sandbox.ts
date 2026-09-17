@@ -1,5 +1,5 @@
 /**
- * 演练沙箱：system:sandbox 的入参与结果，以及实现自己的工作类型（镜像清单与文件印记、落回时的冲突与失败回执）。只在包内用，不出包；对外的沙箱数据在 `system.ts`。
+ * 演练沙箱：sandbox 的入参与结果，以及实现自己的工作类型（镜像清单与文件印记、落回时的冲突与失败回执）。只在包内用，不出包；对外的沙箱数据在 `system.ts`。
  */
 
 import type { SandboxApplyResult, SandboxDiff, SandboxDiscardResult, SandboxIgnoredMode, SandboxRecord } from '@velaros-ai/rehearsal-sandbox/contracts'
@@ -39,7 +39,7 @@ export interface SystemSandboxApplyFailureDetails {
   conflicts: SystemSandboxConflict[]
 }
 
-// ── system:sandbox 的入参与结果 ─────────────────────────────────
+// ── sandbox 的入参与结果 ─────────────────────────────────
 
 /** @AgentView create 用 source、network、ignored，diff 用 maxFiles，apply 用 paths；除 create 外都要 sandboxId。不传 source 就镜像默认工作目录。 */
 export type SystemSandboxInput = {

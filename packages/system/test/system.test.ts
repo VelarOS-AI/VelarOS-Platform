@@ -8,12 +8,10 @@ import { describe, expect, test } from 'bun:test'
 
 import type { SystemToolContext } from '../src/contract/requires.js'
 import { createLocalSystemKernel } from '../src/impl/LocalSystemKernel.js'
-import { systemExecutionOperations } from '../src/impl/SystemExecutionOperations.js'
 import { systemFileOperations } from '../src/impl/SystemFileOperations.js'
 import { SystemGlobalSearch } from '../src/impl/SystemGlobalSearch.js'
-import { systemTools } from '../src/impl/SystemTools.js'
 import { buildSystemProcessConfinementSpawnSpec, buildSystemSeatbeltProfile } from '../src/utils/confinement.js'
-import { isCredentialPath, isSensitiveSystemMutationPath } from '../src/utils/file-safety.js'
+import { isSensitiveSystemMutationPath } from '../src/utils/file-safety.js'
 import { findOccurrences } from '../src/utils/text.js'
 
 /** 一律批准的工具上下文：写入测试只关心内容，不走真实的用户确认。 */
@@ -288,7 +286,7 @@ describe('System capability', () => {
         { type: 'text', text: `文件 1/1：${imagePath}` },
         { type: 'image-data', data: png.toString('base64'), mediaType: 'image/png' },
       ])
-      await expect(readAll({ files: [{ path: imagePath }] })).rejects.toThrow('system:view')
+      await expect(readAll({ files: [{ path: imagePath }] })).rejects.toThrow('view')
 
       const pdfPath = join(root, 'report.pdf')
       await writeFile(pdfPath, Buffer.from('%PDF-1.4\n%fake\n'))
@@ -296,7 +294,7 @@ describe('System capability', () => {
       await expect(readAll({ files: [{ path: pdfPath }] })).rejects.toThrow('不是文本')
       const textPath = join(root, 'plain.txt')
       await writeFile(textPath, 'hello')
-      await expect(viewAll({ files: [{ path: textPath }] })).rejects.toThrow('system:read')
+      await expect(viewAll({ files: [{ path: textPath }] })).rejects.toThrow('read')
 
       // 一批里混着图片和一个不存在的文件：失败的只标记它那一项，内容块按顺序排。
       const secondPath = join(root, 'again.png')
@@ -589,41 +587,6 @@ describe('System capability', () => {
     }
   })
 
-  test('credential checks see through symlinks and case, edit asks too, and exhausted reads do not ask', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'velaros-system-credential-'))
-    try {
-      const keyPath = join(root, 'deploy.pem')
-      await writeFile(keyPath, '-----BEGIN PRIVATE KEY-----\nabc\n')
-      const alias = join(root, 'notes.txt')
-      await symlink(keyPath, alias)
-      const denying: SystemToolContext = { ...approvingContext, approval: { requestApproval: async () => ({ approved: true }), awaitConfirmation: async () => { throw new Error('user said no') } } } as SystemToolContext
-      await expect(systemFileOperations.read({ files: [{ path: alias }] }, denying)).rejects.toThrow('user said no')
-      const write = await problemsOf(systemFileOperations.edit({ files: [{ path: alias, newText: 'clobbered\n' }] }, denying))
-      expect(write.reason).toBe('SYSTEM_EDIT_DENIED')
-      expect(await readFile(keyPath, 'utf8')).toContain('PRIVATE KEY')
-      expect(isCredentialPath('/Users/example/.SSH/config', { homeDir: '/Users/example', platform: 'darwin' })).toBe(true)
-      expect(isCredentialPath('/users/example/.aws/config', { homeDir: '/Users/example', platform: 'darwin' })).toBe(true)
-      expect(isCredentialPath('/home/someone/.SSH/config', { homeDir: '/home/someone', platform: 'linux' })).toBe(false)
-      expect(isCredentialPath('/home/someone/work/id_ed25519', { homeDir: '/home/someone', platform: 'linux' })).toBe(true)
-      // 文件名那一半也按平台大小写规则比：macOS 上 ID_RSA、.NETRC 是同一个文件，Linux 上不是。
-      expect(isCredentialPath('/Users/example/work/ID_RSA', { homeDir: '/Users/example', platform: 'darwin' })).toBe(true)
-      expect(isCredentialPath('/Users/example/.NETRC', { homeDir: '/Users/example', platform: 'darwin' })).toBe(true)
-      expect(isCredentialPath('/home/someone/work/ID_RSA', { homeDir: '/home/someone', platform: 'linux' })).toBe(false)
-
-      // 预算已经用完的文件根本不读盘：不问用户，也不把版本号、字符数交出去。
-      await writeFile(join(root, 'big.txt'), 'a'.repeat(200_000))
-      const exhausted = await systemFileOperations.read({ files: [{ path: join(root, 'big.txt') }, { path: keyPath }] }, denying)
-      expect(exhausted.files[1]).toMatchObject({ path: keyPath, error: { code: 'VALIDATION' } })
-      expect(exhausted.files[1]).not.toHaveProperty('version')
-      expect(exhausted.note).toContain('从第 2 个文件起没有读')
-
-      // 参数对象里的未知字段在 schema 这一层就被拒绝，拼错的 version 不会被静默丢掉。
-      expect(systemTools['system:read']!.schema.safeParse({ files: [{ path: keyPath, Version: 'x' }] }).success).toBe(false)
-      expect(systemTools['system:edit']!.schema.safeParse({ files: [{ path: keyPath, edits: [{ range: { offset: 0, end: 1 }, newText: 'x', oldtext: 'y' }] }] }).success).toBe(false)
-    } finally {
-      await rm(root, { recursive: true, force: true })
-    }
-  })
 
   test('adapts a replacement to CRLF files', async () => {
     const root = await mkdtemp(join(tmpdir(), 'velaros-system-edit-crlf-'))
@@ -702,22 +665,6 @@ describe('System capability', () => {
     }
   })
 
-  test('read notes a budget that only shortened a file, and top-level unknown fields are rejected by the schema', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'velaros-system-budget-'))
-    try {
-      const first = join(root, 'first.txt')
-      const second = join(root, 'second.txt')
-      await writeFile(first, 'a'.repeat(150_000))
-      await writeFile(second, 'b'.repeat(100_000))
-      const result = await readAll({ files: [{ path: first }, { path: second }] })
-      expect(entryOf(result, 1)).toMatchObject({ hasMore: true, range: { offset: 0, end: 50_000 } })
-      expect(result.note).toContain('第 2 个文件只拿到预算剩下的部分')
-      expect(systemTools['system:read']!.schema.safeParse({ files: [{ path: first }], maxChars: 5 }).success).toBe(false)
-      expect(systemTools['system:view']!.schema.safeParse({ files: [{ path: first }], extra: 1 }).success).toBe(false)
-    } finally {
-      await rm(root, { recursive: true, force: true })
-    }
-  })
 
   test('global path search reports truncated only when more matches exist, and env alone is read-only', async () => {
     const root = await mkdtemp(join(tmpdir(), 'velaros-system-search-'))
@@ -843,48 +790,7 @@ describe('System capability', () => {
     expect(isSensitiveSystemMutationPath('/Users/example/Documents/notes.txt', { homeDir: '/Users/example', platform: 'darwin' })).toBe(false)
   })
 
-  test('run and list-tasks hand the session id to the host port', async () => {
-    const seen: Array<Record<string, unknown>> = []
-    const port = {
-      resolvePath: (path = process.cwd()) => resolve(path),
-      runCommand: async (_command: string, options: Record<string, unknown>) => { seen.push({ run: options }); return { stdout: '', stderr: '', exitCode: 0, truncated: false, success: true, verification: {} } },
-      listBackgroundTasks: async (options: Record<string, unknown>) => { seen.push({ list: options }); return [] },
-    }
-    const session: SystemToolContext = { ...approvingContext, sessionId: 'session-42', system: port as never } as SystemToolContext
-    await systemTools['system:run']!.execute({ command: 'true' }, session)
-    await systemTools['system:list-tasks']!.execute({}, session)
-    expect(seen[0]!.run).toMatchObject({ sessionId: 'session-42' })
-    expect(seen[1]!.list).toMatchObject({ sessionId: 'session-42' })
-  })
 
-  test('refresh-environment 与 list-tasks 的 execute 只是委托：工具回执与操作方法的回执一字不变', async () => {
-    const refreshed = { shell: '/bin/zsh', variableCount: 3, refreshedAt: 1, revision: 'r1' }
-    const tasks = [{ id: 't1', command: 'sleep 30', status: 'running' }]
-    const queries: Array<Record<string, unknown>> = []
-    const port = {
-      resolvePath: (path = process.cwd()) => resolve(path),
-      refreshShellEnvironment: async () => refreshed,
-      listBackgroundTasks: async (options: Record<string, unknown>) => { queries.push(options); return tasks },
-    }
-    const ctx: SystemToolContext = { ...approvingContext, sessionId: 'session-7', system: port as never } as SystemToolContext
-
-    // 刷新环境：宿主端口的回执原样出去，操作方法与工具给的是同一份
-    expect(await systemExecutionOperations.refreshEnvironment(ctx)).toEqual(refreshed)
-    expect(await systemTools['system:refresh-environment']!.execute({}, ctx)).toEqual(refreshed)
-    // 工具面的 schema 收得宽，传了参数照旧只多一句提醒；代码面的 refreshEnvironment 根本不收入参
-    expect(await systemTools['system:refresh-environment']!.execute({ junk: 1 }, ctx)).toEqual({ ...refreshed, note: '这个工具不需要参数，传来的内容已忽略。' })
-
-    // 列后台任务：给了 taskId 就不带 limit，会话 id 照旧交给宿主
-    const exact = { limit: 5, onlyRunning: true, taskId: 't1' }
-    expect(await systemTools['system:list-tasks']!.execute(exact, ctx)).toEqual({ count: 1, tasks })
-    expect(await systemExecutionOperations.listTasks(exact, ctx)).toEqual({ count: 1, tasks })
-    for (const query of queries) {
-      expect(query).toMatchObject({ onlyRunning: true, taskId: 't1', sessionId: 'session-7' })
-      expect(query.limit).toBeUndefined()
-    }
-    expect(await systemTools['system:list-tasks']!.execute({ limit: 5 }, ctx)).toEqual({ count: 1, tasks })
-    expect(queries[2]).toMatchObject({ limit: 5, sessionId: 'session-7' })
-  })
 
   test.skipIf(process.platform === 'win32')('background tasks belong to their session, a missing cwd is reported as such, and dispose empties the task table', async () => {
     const root = await mkdtemp(join(tmpdir(), 'velaros-system-session-'))

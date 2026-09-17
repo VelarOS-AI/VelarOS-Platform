@@ -1,35 +1,23 @@
 /**
- * 约定的常量表（对外合同的一部分）：工具身份与类别、mod 与空间身份、错误码、环境变量表、公开的上限。
- * 宿主按这里的名字登记工具、按错误码判断失败、按环境变量表配置本包；上限直接被工具说明与 schema 引用，是模型看到的数字。
+ * 约定的常量表（对外合同的一部分）：操作名、mod 与空间身份、错误码、环境变量表、公开的上限。
+ * 宿主按这里的名字登记操作、按错误码判断失败、按环境变量表配置本包；上限直接被操作方法引用，是模型看到的数字。
  * 包内可调、不对外承诺的参数不在这里，在 `utils/tuning.ts`。
  * 不 import 任何东西、不用 Node 专属类型，整个文件随 `./contracts` 入口出包。
  */
 
-/** 七个系统工具的 canonical 名字。 */
-export const SystemToolNames = Object.freeze({
-  read: 'system:read',
-  view: 'system:view',
-  edit: 'system:edit',
-  run: 'system:run',
-  refreshEnvironment: 'system:refresh-environment',
-  listTasks: 'system:list-tasks',
-  sandbox: 'system:sandbox',
+/** 代码面上七个操作的名字：模型写 `read(...)`，宿主按它登记。 */
+export const SystemOperationNames = Object.freeze({
+  read: 'read',
+  view: 'view',
+  edit: 'edit',
+  run: 'run',
+  refreshEnvironment: 'refreshEnvironment',
+  listTasks: 'listTasks',
+  sandbox: 'sandbox',
 } as const)
 
-export type SystemToolName = (typeof SystemToolNames)[keyof typeof SystemToolNames]
-
-/** 每个工具所属的唯一职责类别：文件、执行。 */
-export const SystemToolCategoryByName = Object.freeze({
-  [SystemToolNames.read]: 'system-files',
-  [SystemToolNames.view]: 'system-files',
-  [SystemToolNames.edit]: 'system-files',
-  [SystemToolNames.run]: 'system-execution',
-  [SystemToolNames.refreshEnvironment]: 'system-execution',
-  [SystemToolNames.listTasks]: 'system-execution',
-  [SystemToolNames.sandbox]: 'system-execution',
-} as const)
-
-export type SystemToolCategoryId = (typeof SystemToolCategoryByName)[SystemToolName]
+/** 七个操作名之一。 */
+export type SystemOperationName = (typeof SystemOperationNames)[keyof typeof SystemOperationNames]
 
 /** 系统空间作为官方内置 mod 的身份。 */
 export const SystemModId = 'velaros.system' as const
@@ -56,13 +44,13 @@ export const SystemErrorCodes = Object.freeze({
   shellUnavailable: 'SYSTEM_SHELL_UNAVAILABLE',
   /** 请求了受约束的进程模式，但当前宿主没有可用后端。实现必须拒绝执行，不得退回裸进程。 */
   processConfinementUnavailable: 'SYSTEM_PROCESS_CONFINEMENT_UNAVAILABLE',
-  /** system:edit 整批定不下来（找不到、多处匹配、重叠、版本过期）：什么都没写，错误 cause.details.problems 列出每个问题，入参可复用。 */
+  /** edit 整批定不下来（找不到、多处匹配、重叠、版本过期）：什么都没写，错误 cause.details.problems 列出每个问题，入参可复用。 */
   editUnresolved: 'SYSTEM_EDIT_UNRESOLVED',
-  /** system:edit 里有文件的写入被用户拒绝：什么都没写。 */
+  /** edit 里有文件的写入被用户拒绝：什么都没写。 */
   editDenied: 'SYSTEM_EDIT_DENIED',
-  /** system:sandbox 落回时源目录里的文件自建沙箱以来变过，或者上级路径是符号链接、会写到源目录外：什么都没写，错误 cause.details.conflicts 列出每处冲突。 */
+  /** sandbox 落回时源目录里的文件自建沙箱以来变过，或者上级路径是符号链接、会写到源目录外：什么都没写，错误 cause.details.conflicts 列出每处冲突。 */
   sandboxConflict: 'SYSTEM_SANDBOX_CONFLICT',
-  /** system:sandbox 落回时镜像在用户确认之后又变过（镜像里可能还有命令在跑）：什么都没写，重新 diff、重新确认。 */
+  /** sandbox 落回时镜像在用户确认之后又变过（镜像里可能还有命令在跑）：什么都没写，重新 diff、重新确认。 */
   sandboxChanged: 'SYSTEM_SANDBOX_CHANGED',
 } as const)
 

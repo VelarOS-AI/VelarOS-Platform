@@ -31,7 +31,7 @@ export function unresolvedEditFailure(problems: readonly SystemEditProblem[]): A
   const cause = {
     reason: denied ? SystemErrorCodes.editDenied : SystemErrorCodes.editUnresolved,
     details,
-    suggestedNextAction: '什么都没写。用 reuse + changes 只改列出的那几处再调一次 system:edit（例如把 path ["files", 0, "edits", 1, "range"] 改成挑中的锚点 range），没列出的文件和改动原样保留。',
+    suggestedNextAction: '什么都没写。用 reuse + changes 只改列出的那几处再调一次 edit（例如把 path ["files", 0, "edits", 1, "range"] 改成挑中的锚点 range），没列出的文件和改动原样保留。',
   }
   return toolFailures.create(denied ? 'PERMISSION' : problems.every((problem) => problem.reason === 'not-found') ? 'NOT_FOUND' : 'VALIDATION', `有 ${problems.length} 个问题，这一批改动没有应用，什么都没写。${summary}`, cause, { notApplied: true })
 }

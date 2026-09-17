@@ -1,6 +1,6 @@
 /**
  * 三个文件操作：`SystemFileOperations` 与整个进程唯一的 `systemFileOperations`。接口 `SystemFileOperationsApi` 在本文件的类上方。
- * `system:read`、`system:view`、`system:edit` 各调一个方法；三个都是一批文件（一个文件就一项），读和看里某个文件失败只标记它那一项、全部失败才整个报错，写是整批同成败；列目录和搜文本由 `system:run` 用系统命令做。PDF 与其他文档不在这里看。
+ * `read`、`view`、`edit` 各调一个方法；三个都是一批文件（一个文件就一项），读和看里某个文件失败只标记它那一项、全部失败才整个报错，写是整批同成败；列目录和搜文本由 `run` 用系统命令做。PDF 与其他文档不在这里看。
  */
 
 import { mkdir, stat } from 'node:fs/promises'
@@ -44,7 +44,7 @@ import { SystemFileHistory } from './SystemFileHistory.js'
 const log = Log.tag('SystemFileOperations')
 
 /**
- * 三个文件操作：读文本、看图片与 PDF、写。`system:read`、`system:view`、`system:edit` 各调一个方法；列目录和搜文本由 `system:run` 用系统命令做。
+ * 三个文件操作：读文本、看图片与 PDF、写。`read`、`view`、`edit` 各调一个方法；列目录和搜文本由 `run` 用系统命令做。
  *
  * 实现是 `SystemFileOperations`，整个进程只有一份（`systemFileOperations`）。
  *
@@ -216,7 +216,7 @@ class SystemFileOperations implements SystemFileOperationsApi {
     // 管道、设备、套接字：读它可能永远等不到数据（读命名管道会一直挂着），整个替换又会把它换成普通文件，一律不碰。
     if (existing && !existing.isFile()) return problem(`路径不是普通文件（管道、设备或套接字），不能当文本改：${resolvedPath}`)
     // 原子替换是写一个新文件再改名：多个硬链接的文件换完就和其余链接分家了，一律不碰。
-    if (existing && existing.nlink > 1) return problem(`文件有 ${existing.nlink} 个硬链接，原子替换会让它和其余链接分家，不能在这里改：${resolvedPath}；用 system:run 改`)
+    if (existing && existing.nlink > 1) return problem(`文件有 ${existing.nlink} 个硬链接，原子替换会让它和其余链接分家，不能在这里改：${resolvedPath}；用 run 改`)
     const stamp = stampOf(existing)
     // 父路径已经存在却不是目录，写入注定失败，在计划期就报出来（缺失的父目录写的时候会补建）。
     const parentCode = await stat(dirname(target)).then((parent) => (parent.isDirectory() ? null : 'ENOTDIR')).catch((error: unknown) => readErrnoCode(error))
@@ -238,7 +238,7 @@ class SystemFileOperations implements SystemFileOperationsApi {
 
     if (isPresent(file.newText)) {
       if (file.newText.includes('\0')) return problem('newText 里有 NUL 字节，是二进制数据，不能当文本写入')
-      if (existing?.isFile() && existing.size > SystemFileLimits.fileBytes) return problem(`现有文件太大，不能在这里整个覆盖：${existing.size} 字节，上限 ${SystemFileLimits.fileBytes} 字节；用 system:run 替换`)
+      if (existing?.isFile() && existing.size > SystemFileLimits.fileBytes) return problem(`现有文件太大，不能在这里整个覆盖：${existing.size} 字节，上限 ${SystemFileLimits.fileBytes} 字节；用 run 替换`)
       let previous: Nullable<SystemTextFileContent> = null
       let encoding: TextEncoding = 'utf8'
       if (existing?.isFile()) {
@@ -254,7 +254,7 @@ class SystemFileOperations implements SystemFileOperationsApi {
         } catch (error) {
           const failure = AppError.from(error)
           log.debug('an existing file cannot be overwritten as text', { path: target, code: failure.code })
-          return problem(`现有文件不能按文本重写（${failure.message}）；二进制文件用 system:run 替换`, { reason: failure.code === 'PERMISSION' ? 'denied' : 'invalid' })
+          return problem(`现有文件不能按文本重写（${failure.message}）；二进制文件用 run 替换`, { reason: failure.code === 'PERMISSION' ? 'denied' : 'invalid' })
         }
       }
       // 按原编码写不出来（孤立代理项、GB18030 表示不了的字符）就是这个文件的问题，整批不写，不静默换成替换字符或别的编码。
@@ -274,7 +274,7 @@ class SystemFileOperations implements SystemFileOperationsApi {
     if (isEmpty(edits)) return problem('edits 是空的；至少给一处要改的地方')
     if (edits.length > SystemFileLimits.editsPerFile) return problem(`一个文件一次最多改 ${SystemFileLimits.editsPerFile} 处，这里给了 ${edits.length} 处；分几次改`)
     if (!existing) return problem(`文件不存在：${resolvedPath}`, { reason: 'not-found' })
-    if (existing.size > SystemFileLimits.editableBytes) return problem(`文件太大，不能用 edits 改：${existing.size} 字节，上限 ${SystemFileLimits.editableBytes} 字节；用 system:run 改`)
+    if (existing.size > SystemFileLimits.editableBytes) return problem(`文件太大，不能用 edits 改：${existing.size} 字节，上限 ${SystemFileLimits.editableBytes} 字节；用 run 改`)
     let textFile: SystemTextFileContent
     try {
       textFile = await readSystemTextFile(target)
@@ -286,8 +286,8 @@ class SystemFileOperations implements SystemFileOperationsApi {
     const baseVersion = fileVersionOf(textFile.buffer)
     const stale = staleProblem(file.version, baseVersion)
     if (stale) return problem(stale.message, stale)
-    // 解码再编码必须得到原来的字节，否则改动区间之外的字节也会被改写；这种文件让 system:run 去改。
-    if (!reencodesExactly(textFile)) return problem(`文件里有按 ${textFile.encoding} 解码再编码得不到原样的字节，改写会连带改掉没动的地方；用 system:run 改`)
+    // 解码再编码必须得到原来的字节，否则改动区间之外的字节也会被改写；这种文件让 run 去改。
+    if (!reencodesExactly(textFile)) return problem(`文件里有按 ${textFile.encoding} 解码再编码得不到原样的字节，改写会连带改掉没动的地方；用 run 改`)
     const content = textFile.content
     const fileStyle = lineEndingStyle(content)
 
@@ -415,7 +415,7 @@ class SystemFileOperations implements SystemFileOperationsApi {
     const buffer = await readBoundedFile(target, SystemFileLimits.fileBytes)
     const media = detectMediaType(buffer)
     if (media) {
-      throw new AppError('VALIDATION', media.kind === 'image' ? `${resolvedPath} 是图片，用 system:view 看` : `${resolvedPath} 是 PDF，不是文本；文档不在这里读`)
+      throw new AppError('VALIDATION', media.kind === 'image' ? `${resolvedPath} 是图片，用 view 看` : `${resolvedPath} 是 PDF，不是文本；文档不在这里读`)
     }
     return readTextWindow(resolvedPath, buffer, file.offset ?? 0, maxChars)
   }
@@ -430,10 +430,10 @@ class SystemFileOperations implements SystemFileOperationsApi {
     if (media?.kind !== 'image') {
       throw new AppError('VALIDATION', media
         ? `${resolvedPath} 是 PDF；这个工具只看图片，文档不在这里读`
-        : `${resolvedPath} 不是模型能看的图片（PNG、JPEG、GIF、WebP）；文本文件用 system:read，别的格式先转换`)
+        : `${resolvedPath} 不是模型能看的图片（PNG、JPEG、GIF、WebP）；文本文件用 read，别的格式先转换`)
     }
     if (buffer.byteLength > SystemFileLimits.imageBytes) {
-      throw new AppError('VALIDATION', `图片太大，不能交给模型：${buffer.byteLength} 字节，上限 ${SystemFileLimits.imageBytes} 字节；先用 system:run 缩小`)
+      throw new AppError('VALIDATION', `图片太大，不能交给模型：${buffer.byteLength} 字节，上限 ${SystemFileLimits.imageBytes} 字节；先用 run 缩小`)
     }
     return {
       entry: { path: resolvedPath, mediaType: media.mediaType, bytes: buffer.byteLength },

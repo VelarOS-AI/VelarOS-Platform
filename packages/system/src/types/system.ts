@@ -71,7 +71,7 @@ export interface SystemRunCommandOptions {
   maxOutputChars?: number
   sessionId?: string
   /**
-   * 用哪个 shell 跑这条命令，来自 `system:run` 的 `shell` 字段；不给就用宿主自己挑的默认 shell。
+   * 用哪个 shell 跑这条命令，来自 `run` 的 `shell` 字段；不给就用宿主自己挑的默认 shell。
    * 宿主必须在这个 shell 里执行：本机没有它就在执行之前拒绝（`VALIDATION`，报错里点名可用的有哪些），
    * 不许换一个 shell 照跑——模型是按这个 shell 的语法写的命令，换一个跑出来的是错的结果而不是报错。
    */
@@ -97,7 +97,7 @@ export interface SystemBackgroundProcessInfo {
   console?: SystemConsoleSessionInfo
   /** 把这个 taskId 交给 listTasks 就查得到这条任务的状态。 */
   statusContinuation?: {
-    tool: 'system:list-tasks'
+    tool: 'listTasks'
     args: { taskId: string }
   }
 }
@@ -533,7 +533,7 @@ export interface SystemEnvironmentCommandAvailability {
  * 一次环境体检的完整结果：操作系统、shell 与关心的命令是否齐备。
  *
  * `shell` 是默认用的那个，`shells` 是本机可用的全部。宿主把这两样写进每回合给模型的环境报告，模型才知道
- * `system:run` / `project:run` 的 `shell` 字段能填哪几个、不填时用的是哪个；POSIX 机器上 `shells` 只有 `posix` 一项，模型就不会去填。
+ * `run` / `project:run` 的 `shell` 字段能填哪几个、不填时用的是哪个；POSIX 机器上 `shells` 只有 `posix` 一项，模型就不会去填。
  */
 export interface SystemEnvironmentInspection {
   os: { platform: SystemRuntimePlatform; arch: string; release: string; homeDir: string }

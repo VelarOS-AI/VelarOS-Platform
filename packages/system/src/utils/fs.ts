@@ -15,7 +15,7 @@ export function readErrnoCode(error: unknown): Nullable<string> {
 
 /**
  * 原子地替换文件的全部字节（公共件 text-files：同目录临时文件写完 fsync 再改名，已有文件的权限位精确保留，新文件的权限由 umask 定）；
- * 没有写权限时报权限错误；有多个硬链接或不是普通文件的路径拒写，说明改用 system:run。
+ * 没有写权限时报权限错误；有多个硬链接或不是普通文件的路径拒写，说明改用 run。
  */
 export async function writeSystemFileAtomically(
   resolvedPath: string,
@@ -29,7 +29,7 @@ export async function writeSystemFileAtomically(
       throw new AppError('PERMISSION', `没有权限写这个文件：${resolvedPath}`)
     }
     if (err instanceof AppError && err.code === TextFileErrorCodes.notRegular) {
-      throw new AppError('VALIDATION', `不能原子替换这个文件：${resolvedPath}。它有多个硬链接（替换后会和其余链接分家）或不是普通文件；确实要改就用 system:run`)
+      throw new AppError('VALIDATION', `不能原子替换这个文件：${resolvedPath}。它有多个硬链接（替换后会和其余链接分家）或不是普通文件；确实要改就用 run`)
     }
     throw err
   }

@@ -368,7 +368,7 @@ export async function diffMirror(
     omittedDiffs,
     fingerprint,
   }
-  if (omittedDiffs > 0) result.note = `${omittedDiffs} 个文件没附差量（二进制、太大、超过预算，或源目录里那份也变了没有基线）；用 system:read 直接看镜像里的文件。`
+  if (omittedDiffs > 0) result.note = `${omittedDiffs} 个文件没附差量（二进制、太大、超过预算，或源目录里那份也变了没有基线）；用 read 直接看镜像里的文件。`
   return result
 }
 
@@ -388,7 +388,7 @@ export function sandboxChangedSinceConfirmation(): AppError {
   return toolFailures.create(
     'VALIDATION',
     '确认之后沙箱里的改动又变了（镜像里可能还有命令在跑），什么都没写；停掉镜像里的任务，重新 diff 再落回。',
-    { reason: SystemErrorCodes.sandboxChanged, suggestedNextAction: '什么都没写。先用 system:list-tasks 找到并停掉镜像里还在跑的任务，再 diff、apply。' },
+    { reason: SystemErrorCodes.sandboxChanged, suggestedNextAction: '什么都没写。先用 listTasks 找到并停掉镜像里还在跑的任务，再 diff、apply。' },
     { notApplied: true }
   )
 }

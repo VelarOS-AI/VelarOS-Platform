@@ -70,7 +70,6 @@ export const GovernedModules = [
   {
     directory: 'system',
     name: '@velaros-ai/system',
-    toolsFile: 'src/impl/SystemTools.ts',
     contract: 'src/contract',
     types: 'src/types',
     portable: 'system.ts',
@@ -83,10 +82,11 @@ export const GovernedModules = [
     environmentTable: 'SystemEnvironmentVariables',
     // 宿主端口：注入面里工具经 ctx.system 调的那个接口；它的每个方法都必须有工具在调，没人调的不许留
     hostPort: 'SystemToolSystemApi',
+    surfaceFile: 'src/impl/SystemCodeSurface.ts',
     // 实现文件的分层，从上到下；上层可以引下层与同层，下层不许引上层
     layers: [
-      // 模型面的两个出口：工具时代的七个工具定义，与代码面的那张操作表。共用下面同一批操作方法
-      ['SystemTools.ts', 'SystemCodeSurface.ts'],
+      // 模型面：代码面的那张操作表
+      ['SystemCodeSurface.ts'],
       // 宿主：宿主端口的本机实现
       ['LocalSystemKernel.ts'],
       // 能力：命令、受管子进程、shell；文件操作与搜索
@@ -97,7 +97,6 @@ export const GovernedModules = [
       // shell 错误类
       ['SystemShellUnavailableError.ts'],
     ],
-    toolDefiner: 'defineSystemTool',
     card: 'MODULE.md',
     invariants: 'spec/invariants.md',
     acceptance: 'spec/acceptance.test.ts',

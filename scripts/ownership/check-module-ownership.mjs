@@ -287,6 +287,8 @@ for (const module of selectedModules) {
 
   const srcRoot = join(packageRoot, 'src')
   const toolsFilePath = module.toolsFile ? join(packageRoot, module.toolsFile) : null
+  // 端口可达性从「模型面的入口」出发。工具时代那个入口是工具文件，代码面时代是操作表。
+  const surfaceFilePath = module.surfaceFile ? join(packageRoot, module.surfaceFile) : toolsFilePath
   const contractRoot = join(packageRoot, module.contract)
   const typesRoot = join(packageRoot, module.types)
   const implRoot = join(packageRoot, module.impl)
@@ -1116,7 +1118,8 @@ for (const module of selectedModules) {
     if (!usedVariables.has(name)) fail(`${label}: ${module.environmentTable} 登记了 ${name}，但代码里没有用到；不用的登记删掉`)
   }
   const calledPortMembers = new Set()
-  if (toolsSourceFile) {
+  const surfaceSourceFile = surfaceFilePath ? program.getSourceFile(surfaceFilePath) : undefined
+  if (surfaceSourceFile) {
     const portField = module.hostPortField ?? 'system'
     const visitCalls = (node) => {
       if (ts.isPropertyAccessExpression(node) && ts.isPropertyAccessExpression(node.expression) && node.expression.name.text === portField) {
@@ -1124,9 +1127,9 @@ for (const module of selectedModules) {
       }
       ts.forEachChild(node, visitCalls)
     }
-    // 工具文件自己调的，加上从它出发、沿相对 import 能走到的 impl 与 utils 文件里调的（execute 一行交给类、类再交给工具函数时，端口调用在更深处）。
-    const reachable = new Set([toolsFilePath])
-    const queue = [toolsFilePath]
+    // 入口文件自己调的，加上从它出发、沿相对 import 能走到的 impl 与 utils 文件里调的（入口一行交给类、类再交给工具函数时，端口调用在更深处）。
+    const reachable = new Set([surfaceFilePath])
+    const queue = [surfaceFilePath]
     while (queue.length > 0) {
       const file = queue.pop()
       for (const { specifier } of relativeSpecifiers(parse(file))) {
@@ -1145,7 +1148,7 @@ for (const module of selectedModules) {
     for (const member of hostPortDeclaration.members ?? []) {
       const memberName = member.name?.getText(hostPortDeclaration.getSourceFile())
       if (memberName && !calledPortMembers.has(memberName)) {
-        fail(`${label}: 宿主端口 ${module.hostPort}.${memberName} 没有任何工具在调；注入面只留工具真会用的方法，宿主界面要的能力放到本地内核的接口上`)
+        fail(`${label}: 宿主端口 ${module.hostPort}.${memberName} 从模型面入口走不到；注入面只留操作真会用的方法，宿主界面要的能力放到本地内核的接口上`)
       }
     }
   }

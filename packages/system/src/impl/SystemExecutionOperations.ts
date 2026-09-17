@@ -1,6 +1,6 @@
 /**
  * 四个执行操作：`SystemExecutionOperations` 与整个进程唯一的 `systemExecutionOperations`。接口 `SystemExecutionOperationsApi` 在本文件的类上方。
- * `system:run`、`system:sandbox`、`system:refresh-environment`、`system:list-tasks` 各调一个方法，它们的执行前分类、向用户确认和结果整形写在这里。
+ * `run`、`sandbox`、`refreshEnvironment`、`listTasks` 各调一个方法，它们的执行前分类、向用户确认和结果整形写在这里。
  * 刷新环境、列后台任务只调一次宿主端口，收在这里不是因为实现多，是因为不在操作接口上就进不了代码面。
  * 真正跑命令、建镜像的是宿主端口 `ctx.system`（本机就是本地内核）。
  */
@@ -14,7 +14,7 @@ import { rehearsalSandboxRules } from '@velaros-ai/rehearsal-sandbox'
 import type { ShellCommandApprovalApi, ShellCommandPolicyApi } from '@velaros-ai/shell-command'
 import { shellCommandApproval, shellCommandPolicy } from '@velaros-ai/shell-command'
 
-import { SystemCommandLimits, SystemToolNames } from '../contract/constants.js'
+import { SystemCommandLimits, SystemOperationNames } from '../contract/constants.js'
 import type { SystemToolContext } from '../contract/requires.js'
 import type { SystemListTasksInput, SystemListTasksResult, SystemRunInput, SystemRunResult } from '../types/commands.js'
 import type { SystemSandboxInput, SystemSandboxResult } from '../types/sandbox.js'
@@ -24,7 +24,7 @@ import { isCredentialPath, isSensitiveSystemMutationPath } from '../utils/file-s
 import { clampPositive } from '../utils/text.js'
 
 /**
- * 四个执行操作：跑命令、演练沙箱、刷新环境、列后台任务。`system:run`、`system:sandbox`、`system:refresh-environment`、`system:list-tasks` 各调一个方法。
+ * 四个执行操作：跑命令、演练沙箱、刷新环境、列后台任务。`run`、`sandbox`、`refreshEnvironment`、`listTasks` 各调一个方法。
  *
  * 实现是 `SystemExecutionOperations`，整个进程只有一份（`systemExecutionOperations`）。命令交给宿主执行，
  * 这里负责执行前按命令策略分类、要确认的先问用户，以及把宿主的回执整形成模型看的样子。
@@ -110,7 +110,7 @@ export class SystemExecutionOperations implements SystemExecutionOperationsApi {
     // 整形。要了控制台却没拿到，说明这个宿主跑不了交互式命令，直说，别让模型干等用户输入
     const shaped: SystemRunResult = exposeCommandOutputWindow(result)
     if (interactive && !result.backgroundProcess?.console) {
-      shaped.note = '当前宿主没有把它跑成控制台任务，用户无法输入：改成不需要输入的写法（答案用管道喂进去、加 --yes 这类参数），并用 system:list-tasks 里的 terminateCommand 停掉可能已经起来的任务。'
+      shaped.note = '当前宿主没有把它跑成控制台任务，用户无法输入：改成不需要输入的写法（答案用管道喂进去、加 --yes 这类参数），并用 listTasks 里的 terminateCommand 停掉可能已经起来的任务。'
     }
     if (result.backgroundProcess) {
       shaped.backgroundProcess = {
@@ -119,7 +119,7 @@ export class SystemExecutionOperations implements SystemExecutionOperationsApi {
         reason: plan.reason,
         autoStarted: plan.shouldStartInBackground && !background,
         statusContinuation: result.backgroundProcess.taskId
-          ? { tool: SystemToolNames.listTasks, args: { taskId: result.backgroundProcess.taskId } }
+          ? { tool: SystemOperationNames.listTasks, args: { taskId: result.backgroundProcess.taskId } }
           : result.backgroundProcess.statusContinuation,
       }
     }
@@ -135,7 +135,7 @@ export class SystemExecutionOperations implements SystemExecutionOperationsApi {
       const detachedNote = isEmpty(detached) ? '' : `这些目录的 .git 指向源目录外的真实仓库（git worktree、子模块），没有放进镜像，镜像里它们不是 git 仓库：${detached.join('、')}。`
       return {
         ...record,
-        note: `镜像根是 ${record.root}：脚本用 system:edit 写进去，system:run 传 cwd=${record.root} 跑，跑完用 diff 看变化；镜像里的命令写不到镜像外，${record.network ? '可以联网' : '连不上网'}。用完 discard。${detachedNote}`,
+        note: `镜像根是 ${record.root}：脚本用 edit 写进去，run 传 cwd=${record.root} 跑，跑完用 diff 看变化；镜像里的命令写不到镜像外，${record.network ? '可以联网' : '连不上网'}。用完 discard。${detachedNote}`,
       }
     }
     if (input.action === 'diff') return ctx.system.diffSandbox({ sandboxId, maxFiles: input.maxFiles })
@@ -177,5 +177,5 @@ export class SystemExecutionOperations implements SystemExecutionOperationsApi {
   }
 }
 
-/** 整个进程唯一的执行操作；system:run 与 system:sandbox 的 execute 交给它。 */
+/** 整个进程唯一的执行操作；run 与 sandbox 的 execute 交给它。 */
 export const systemExecutionOperations: SystemExecutionOperationsApi = new SystemExecutionOperations(shellCommandPolicy, shellCommandApproval, rehearsalSandboxRules)

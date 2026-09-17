@@ -409,7 +409,7 @@ declare module 'velar:system' {
     console?: SystemConsoleSessionInfo
     /** 把这个 taskId 交给 listTasks 就查得到这条任务的状态。 */
     statusContinuation?: {
-      tool: 'system:list-tasks'
+      tool: 'listTasks'
       args: { taskId: string }
     }
   }

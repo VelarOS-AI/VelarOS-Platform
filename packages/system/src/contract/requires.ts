@@ -1,8 +1,7 @@
 /**
  * 注入面：宿主必须或可以塞进来的东西，每个注入点一个接口。本包只从这些口子接收外部能力，别处不留钩子。
  *
- * - 工具上下文 `SystemToolContext`：必须。宿主每次调工具时给，里面是宿主端口 `SystemToolSystemApi` 与审批端口 `ApprovalPort`。
- * - 上下文解析器 `SystemToolContextResolver`：挂进内核且要按名调用工具时必须，放在 `CreateSystemKernelModuleOptions` 里给。
+ * - 调用上下文 `SystemToolContext`：必须。宿主每次调用操作时给，里面是宿主端口 `SystemToolSystemApi` 与审批端口 `ApprovalPort`。
  * - 本地内核配置 `LocalSystemKernelOptions`：用本地内核时必须，创建时给。
  * - 进程约束后端 `SystemProcessConfinementProvider`：可选，放在本地内核配置里，没有内置约束后端的平台（Windows）靠它。
  * - 环境变量：可选，全部登记在 `contract/system.ts` 的 `SystemEnvironmentVariables`。
@@ -11,9 +10,6 @@
  */
 
 import type { ApprovalPort } from '@velaros-ai/agent/tool-contract'
-import type {
-  ScopeRef,
-} from '@velaros-ai/kernel/contracts'
 import type { RehearsalSandboxHostPort } from '@velaros-ai/rehearsal-sandbox'
 import type { SandboxApplyOptions, SandboxApplyResult, SandboxCreateOptions, SandboxDiff, SandboxDiffOptions, SandboxDiscardResult, SandboxRecord } from '@velaros-ai/rehearsal-sandbox/contracts'
 
@@ -23,7 +19,7 @@ import type { SystemBackgroundTaskQueryOptions, SystemBackgroundTaskRecord, Syst
 // ── 工具上下文与宿主端口 ────────────────────────────────────────
 
 /**
- * 每次工具调用拿到的上下文。
+ * 每次调用拿到的上下文。
  *
  * 审批通道由宿主注入且始终存在；无人值守宿主应提供默认拒绝端口。
  * 需审批的敏感操作在没有交互执行通道时仍必须拒绝。
@@ -50,7 +46,7 @@ export interface SystemToolContext {
 export interface SystemToolSystemApi extends RehearsalSandboxHostPort {
   /**
    * 把用户给的路径解析成绝对路径：`~` 与 `~/…` 展开到宿主的家目录，相对路径相对宿主的默认工作目录；不给路径就返回默认工作目录。
-   * 文件工具的路径和 system:run 的 cwd 都经它解析，审批看到的目标和实际操作的目标因此一致。
+   * 文件工具的路径和 run 的 cwd 都经它解析，审批看到的目标和实际操作的目标因此一致。
    */
   resolvePath: (path?: string) => string
   /** 查询以后台方式启动的命令任务，可按任务 id、会话、过滤词、只看运行中筛选。 */
@@ -88,19 +84,6 @@ export interface SystemToolSystemApi extends RehearsalSandboxHostPort {
   discardSandbox: (sandboxId: string) => Promise<SandboxDiscardResult>
 }
 
-// ── 挂进内核 ────────────────────────────────────────────────────
-
-/** 按作用域给出一次工具调用的上下文；内核每次按名调用系统工具前调用一次。 */
-export type SystemToolContextResolver = (
-  scope: LooseOptional<ScopeRef>,
-  signal: AbortSignal,
-) => SystemToolContext | Promise<SystemToolContext>
-
-/** 把本包挂进内核时宿主给的选项。 */
-export interface CreateSystemKernelModuleOptions {
-  /** 产品壳提供按作用域绑定的系统上下文；不提供时内核模块只登记工具，不能被调用。 */
-  resolveContext?: SystemToolContextResolver
-}
 
 // ── 本地内核 ────────────────────────────────────────────────────
 

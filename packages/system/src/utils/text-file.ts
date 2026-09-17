@@ -71,7 +71,7 @@ export async function readRawSystemFileBuffer(resolvedPath: string): Promise<Buf
   return contentBuffer
 }
 
-/** 识别字节的文本编码并严格解码；认不出（二进制、非法字节、认不出的编码）时报错，报错里提示图片用 system:view 看。 */
+/** 识别字节的文本编码并严格解码；认不出（二进制、非法字节、认不出的编码）时报错，报错里提示图片用 view 看。 */
 export function decodeSystemTextBuffer(buffer: Buffer, resolvedPath = '<buffer>'): DecodedText {
   const decoded = textCodec.decode(buffer)
   if (!decoded) throw binaryTextError(resolvedPath)
@@ -95,9 +95,9 @@ export function reencodesExactly(textFile: SystemTextFileContent): boolean {
   }
 }
 
-/** 认不出是文本时的报错：二进制文件读不了，图片用 system:view 看。 */
+/** 认不出是文本时的报错：二进制文件读不了，图片用 view 看。 */
 function binaryTextError(resolvedPath: string): AppError {
-  return new AppError('VALIDATION', `文件是二进制的，不能当文本读：${resolvedPath}（图片用 system:view 看，其他二进制文件读不了）`)
+  return new AppError('VALIDATION', `文件是二进制的，不能当文本读：${resolvedPath}（图片用 view 看，其他二进制文件读不了）`)
 }
 
 /** 算出一份文件内容的版本号：字节的 SHA-1 前 12 位，内容一样版本号就一样。 */
@@ -161,7 +161,7 @@ export async function readBoundedFile(resolvedPath: string, maxBytes: number): P
   await assertRegularFile(resolvedPath)
   const buffer = await textFileIo.readBounded(resolvedPath, maxBytes).catch((err: unknown) => {
     if (err instanceof AppError && err.code === TextFileErrorCodes.tooLarge) {
-      throw new AppError('VALIDATION', `文件太大，不能一次读进来：${String(err.context.size)} 字节，上限 ${maxBytes} 字节；用 system:run 截取其中一段`)
+      throw new AppError('VALIDATION', `文件太大，不能一次读进来：${String(err.context.size)} 字节，上限 ${maxBytes} 字节；用 run 截取其中一段`)
     }
     throw normalizeReadError(err, resolvedPath)
   })

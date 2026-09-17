@@ -10,7 +10,7 @@ import { RehearsalSandboxLimits } from '@velaros-ai/rehearsal-sandbox/contracts'
 import type { SystemToolContext } from '../src/contract/requires.js'
 import type { LocalSystemKernelApi } from '../src/impl/LocalSystemKernel.js'
 import { createLocalSystemKernel } from '../src/impl/LocalSystemKernel.js'
-import { systemTools } from '../src/impl/SystemTools.js'
+import { systemExecutionOperations } from '../src/impl/SystemExecutionOperations.js'
 import { isPathInsideRoot } from '../src/utils/file-safety.js'
 import { assertInsideSandboxBase, isSandboxId, sandboxBaseDirectory } from '../src/utils/sandbox.js'
 
@@ -56,7 +56,8 @@ function recordingContext(kernel: LocalSystemKernelApi, onConfirm: (message: str
   } as unknown as SystemToolContext
 }
 
-const sandboxTool = systemTools['system:sandbox']!
+/** 代码面上的 sandbox 操作；工具那层删了之后直接调它。 */
+const sandboxTool = { execute: systemExecutionOperations.sandbox.bind(systemExecutionOperations) }
 
 describe('rehearsal sandbox', () => {
   test('sandbox ids and the base-directory guard keep deletes inside the sandbox area', async () => {
