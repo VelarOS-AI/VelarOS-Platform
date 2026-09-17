@@ -24,16 +24,16 @@
  * - `nativeCommand` 只供宿主组合能力使用，绝不出现在模型工具 schema 里（INV-15）。
  */
 
-/** 已批准命令在操作系统进程层实际采用的文件副作用边界。 @model */
+/** 已批准命令在操作系统进程层实际采用的文件副作用边界。 @modelVisible */
 export type SystemProcessConfinementMode =
   | 'read-only'
   | 'workspace-write'
   | 'danger-full-access'
 
-/** 约束强度。`partial` 只能作为可观测事实，不能被需要绝对边界的调用方当作 `full`。 @model */
+/** 约束强度。`partial` 只能作为可观测事实，不能被需要绝对边界的调用方当作 `full`。 @modelVisible */
 export type SystemProcessConfinementEnforcement = 'none' | 'partial' | 'full'
 
-/** 实际承担约束的后端：macOS 是 Seatbelt，Linux 是 bubblewrap，`host` 表示宿主注入的实现。 @model */
+/** 实际承担约束的后端：macOS 是 Seatbelt，Linux 是 bubblewrap，`host` 表示宿主注入的实现。 @modelVisible */
 export type SystemProcessConfinementBackend =
   | 'none'
   | 'bubblewrap'
@@ -45,7 +45,7 @@ export type SystemProcessConfinementBackend =
  *
  * 这是事实不是意愿：请求了 `workspace-write` 但没有后端时，实现必须拒绝执行，
  * 而不是在这里写一个 `enforcement: 'none'` 蒙混过去。
- @model */
+ @modelVisible */
 export interface SystemProcessConfinementEvidence {
   mode: SystemProcessConfinementMode
   enforcement: SystemProcessConfinementEnforcement
@@ -55,7 +55,7 @@ export interface SystemProcessConfinementEvidence {
   writableRoots: string[]
 }
 
-/** 进程归属事实：子进程树由谁负责在父进程退出时清理，以及实际能不能做到。 @model */
+/** 进程归属事实：子进程树由谁负责在父进程退出时清理，以及实际能不能做到。 @modelVisible */
 export interface SystemProcessOwnership {
   backend: 'windows-job' | 'process-tree'
   parentDeathCleanup: boolean
@@ -89,7 +89,7 @@ export interface SystemRunCommandOptions {
  * 命令被送进后台管理时的回执。
  *
  * `statusContinuation` 指向 `system:list-tasks`，因为系统后台任务不归内核 `job:*` 工具管。
- @model */
+ @modelVisible */
 export interface SystemBackgroundProcessInfo {
   taskId: Nullable<string>
   sessionId: Nullable<string>
@@ -115,14 +115,14 @@ export interface SystemBackgroundProcessInfo {
  * 对命令结果的一句话判定，给模型当验证摘要用。
  *
  * 成功命令的 stdout / stderr 不会被当作 issue；失败、超时、取消时把输出末尾摘进 issues。
- @model */
+ @modelVisible */
 export interface SystemVerificationSummary {
   kind: 'build' | 'lint' | 'test' | 'typecheck' | 'unknown'
   status: 'aborted' | 'failed' | 'passed' | 'timed-out' | 'unknown'
   issues: string[]
 }
 
-/** 返回给调用方的输出窗口是怎么截的。 @model */
+/** 返回给调用方的输出窗口是怎么截的。 @modelVisible */
 export interface SystemCommandOutputWindow {
   /** 返回窗口保留完整输出的末尾，而不是开头。 */
   retained: 'tail'
@@ -132,7 +132,7 @@ export interface SystemCommandOutputWindow {
   endPreserved: true
 }
 
-/** 输出被截断时，去哪里找完整内容。 @model */
+/** 输出被截断时，去哪里找完整内容。 @modelVisible */
 export interface SystemCommandOutputContinuation {
   /** 完整输出由会话内部终端日志管理，不是普通文件。 */
   kind: 'session-terminal-log'
@@ -143,7 +143,7 @@ export interface SystemCommandOutputContinuation {
   args: { query: string; kind: 'terminal' }
 }
 
-/** 命令输出采集事实；字节数按解码后的 UTF-8 文本计算。 @model */
+/** 命令输出采集事实；字节数按解码后的 UTF-8 文本计算。 @modelVisible */
 export interface SystemCommandOutputCapture {
   status: 'complete' | 'truncated' | 'failed'
   encoding: 'utf-8'
@@ -159,7 +159,7 @@ export interface SystemCommandOutputCapture {
  *
  * `success` 只看退出码为 0 且没有超时、没有被取消。`outputWindow` 一定给出；
  * `outputContinuation` 只在宿主留了会话终端日志（`logPath`）时才有，本地内核不落日志文件，只保留结尾窗口。
- @model */
+ @modelVisible */
 export interface SystemCommandResult {
   command: string
   cwd: string
@@ -355,10 +355,10 @@ export interface SystemBackgroundTaskTerminateResult {
  * 任务表、状态查询、终止都照旧走后台任务那套，这里只多出「写输入、读增量输出、发中断」三件事。
  */
 
-/** 控制台后面接的是什么：真正的终端（宿主提供 PTY，有回显和终端尺寸）还是一根保持打开的 stdin 管道。 @model */
+/** 控制台后面接的是什么：真正的终端（宿主提供 PTY，有回显和终端尺寸）还是一根保持打开的 stdin 管道。 @modelVisible */
 export type SystemConsoleChannel = 'pty' | 'pipe'
 
-/** 一个交互式任务的控制台。 @model */
+/** 一个交互式任务的控制台。 @modelVisible */
 export interface SystemConsoleSessionInfo {
   /** 控制台归哪个后台任务，和 `backgroundProcess.taskId` 是同一个。 */
   taskId: string
@@ -492,12 +492,10 @@ export interface SystemGlobalSearchResult {
  * 刻意不出现在这里，避免泄漏到模型面。
  */
 
-/** 实际选中的命令语言。Windows 按 Git Bash、PowerShell 7、Windows PowerShell、CMD 的顺序挑选。 *
- * @model
- */
+/** 实际选中的命令语言。Windows 按 Git Bash、PowerShell 7、Windows PowerShell、CMD 的顺序挑选。 @modelVisible */
 export type SystemShellKind = 'git-bash' | 'pwsh' | 'powershell' | 'cmd' | 'posix'
 
-/** 当前机器缺少推荐的 shell 时给用户的安装建议。 @model */
+/** 当前机器缺少推荐的 shell 时给用户的安装建议。 @modelVisible */
 export interface SystemShellRecommendation {
   code: 'INSTALL_GIT_BASH'
   message: string
@@ -508,7 +506,7 @@ export interface SystemShellRecommendation {
  * 生成命令之前就已确定的 shell 描述。可安全地传给浏览器端。
  *
  * `readiness` 为 `detected` 表示只发现了可执行文件，`ready` 表示已通过启动、版本与 UTF-8 自检。
- @model */
+ @modelVisible */
 export interface SystemShellDescriptor {
   kind: SystemShellKind
   name: string

@@ -1,49 +1,42 @@
 // 本文件由 scripts/code-surface/generate-declarations.mjs 从能力包源码生成，不要手改。
 // 命名空间 system：5 个方法、49 个类型。
-// 改源码里带 @model 的东西就是改模型可观测面，重算用 `bun run generate:code-surface`。
+// 改源码里带 @modelVisible 的东西就是改模型可观测面，重算用 `bun run generate:code-surface`。
 
 declare const TextEncodings: readonly ['utf8', 'utf8-bom', 'utf16le', 'utf16be', 'utf16le-nobom', 'utf16be-nobom', 'gb18030']
 
-/** 读文本文件的入参：files 里每项一个文件，一个文件就一项，一批就多项；一次调用总共最多返回 20 万字符。 *
- */
+/** 读文本文件的入参：files 里每项一个文件，一个文件就一项，一批就多项；一次调用总共最多返回 20 万字符。 */
 type SystemReadInput = {
   files: SystemReadFileInput[]
 }
 
-/** 读文本文件的结果：files 与入参的 files 一一对应，每项是读到的内容或这个文件的失败；一次调用的字符预算不够时，被截短的文件 hasMore 为真，预算用完后的文件不读盘、那一项换成失败条目，note 说明从第几个文件起。 *
- */
+/** 读文本文件的结果：files 与入参的 files 一一对应，每项是读到的内容或这个文件的失败；一次调用的字符预算不够时，被截短的文件 hasMore 为真，预算用完后的文件不读盘、那一项换成失败条目，note 说明从第几个文件起。 */
 interface SystemReadResult {
   files: Array<SystemReadFileResult | SystemFileFailure>
   note?: string
 }
 
-/** 看图片的入参：files 每项一个文件，一个文件就一项，一批就多项。 *
- */
+/** 看图片的入参：files 每项一个文件，一个文件就一项，一批就多项。 */
 type SystemViewInput = {
   files: SystemViewFileInput[]
 }
 
-/** 看图片的结果：files 与入参的 files 一一对应；modelContent 按同样的顺序放每张图的内容块（整张交给模型，效果和用户上传一样），每块前面一行文字说明是哪个文件，失败的文件没有内容块。 *
- */
+/** 看图片的结果：files 与入参的 files 一一对应；modelContent 按同样的顺序放每张图的内容块（整张交给模型，效果和用户上传一样），每块前面一行文字说明是哪个文件，失败的文件没有内容块。 */
 interface SystemViewResult {
   files: Array<SystemViewFileResult | SystemFileFailure>
   modelContent: ToolResultModelContentPart[]
 }
 
-/** 写文件的入参：files 每项一个文件，一个文件就一项，一批就多项，各自带各自的改法；一批全成或全不成。 *
- */
+/** 写文件的入参：files 每项一个文件，一个文件就一项，一批就多项，各自带各自的改法；一批全成或全不成。 */
 type SystemEditInput = {
   files: SystemEditFileInput[]
 }
 
-/** 写文件的结果：files 与入参的 files 一一对应。一批全成或全不成：任何一处定不下来整个调用报错、什么都不写，问题列在失败回执的 details.problems 里。 *
- */
+/** 写文件的结果：files 与入参的 files 一一对应。一批全成或全不成：任何一处定不下来整个调用报错、什么都不写，问题列在失败回执的 details.problems 里。 */
 interface SystemEditResult {
   files: SystemEditFileResult[]
 }
 
-/** system:run 的入参：命令、工作目录（不传用宿主给的默认目录）、用哪个 shell（不传用默认的）、超时、是否后台、是否交互式、输出上限，以及只给调度器看的 parallel 与 allowRepeat。 *
- */
+/** system:run 的入参：命令、工作目录（不传用宿主给的默认目录）、用哪个 shell（不传用默认的）、超时、是否后台、是否交互式、输出上限，以及只给调度器看的 parallel 与 allowRepeat。 */
 type SystemRunInput = {
   command: string
   cwd?: string
@@ -56,14 +49,12 @@ type SystemRunInput = {
   allowRepeat?: boolean
 }
 
-/** system:run 的结果：带输出窗口说明的命令结果；要了控制台却没拿到时 note 说明怎么改写命令。 *
- */
+/** system:run 的结果：带输出窗口说明的命令结果；要了控制台却没拿到时 note 说明怎么改写命令。 */
 interface SystemRunResult extends SystemCommandResult {
   note?: string
 }
 
-/** system:sandbox 的入参：action 选动作；create 用 source、network、ignored，diff 用 maxFiles，apply 用 paths；除 create 外都要 sandboxId。 *
- */
+/** system:sandbox 的入参：action 选动作；create 用 source、network、ignored，diff 用 maxFiles，apply 用 paths；除 create 外都要 sandboxId。 */
 type SystemSandboxInput = {
   action: 'create' | 'diff' | 'apply' | 'discard'
   source?: string
@@ -74,12 +65,10 @@ type SystemSandboxInput = {
   maxFiles?: number
 }
 
-/** system:sandbox 的结果：create、diff、apply、discard 各自的回执。 *
- */
+/** system:sandbox 的结果：create、diff、apply、discard 各自的回执。 */
 type SystemSandboxResult = SystemSandboxCreated | SandboxDiff | SystemSandboxApplied | SandboxDiscardResult
 
-/** 读一个文本文件：从第几个字符起、最多多少字符，都可省；给 version 就读改动前留下的那个版本（只有本次运行里 edit 留下的版本在）。 *
- */
+/** 读一个文本文件：从第几个字符起、最多多少字符，都可省；给 version 就读改动前留下的那个版本（只有本次运行里 edit 留下的版本在）。 */
 interface SystemReadFileInput {
   path: string
   offset?: number
@@ -87,8 +76,7 @@ interface SystemReadFileInput {
   version?: string
 }
 
-/** 一个文件读到的内容：content 是 range 这段的原文，hasMore 时把 range.end 当下一次的 offset 接着读；version 是这份内容的版本号。 *
- */
+/** 一个文件读到的内容：content 是 range 这段的原文，hasMore 时把 range.end 当下一次的 offset 接着读；version 是这份内容的版本号。 */
 interface SystemReadFileResult {
   path: string
   version: string
@@ -99,8 +87,7 @@ interface SystemReadFileResult {
   encoding: TextEncoding
 }
 
-/** 一批里某个文件读不了或看不了：只有它自己失败，其余文件照常返回；全部失败时整个调用报错。path 照传入的原样。 *
- */
+/** 一批里某个文件读不了或看不了：只有它自己失败，其余文件照常返回；全部失败时整个调用报错。path 照传入的原样。 */
 interface SystemFileFailure {
   path: string
   error: {
@@ -109,14 +96,12 @@ interface SystemFileFailure {
   }
 }
 
-/** 看一张图片。 *
- */
+/** 看一张图片。 */
 interface SystemViewFileInput {
   path: string
 }
 
-/** 看到的一张图片的元数据。 *
- */
+/** 看到的一张图片的元数据。 */
 interface SystemViewFileResult {
   path: string
   mediaType: string
@@ -147,12 +132,10 @@ interface SystemEditFileInput {
   version?: string
 }
 
-/** 一个文件写完的结果。 *
- */
+/** 一个文件写完的结果。 */
 type SystemEditFileResult = SystemEditWrittenResult | SystemEditReplacedResult | SystemEditRestoredResult
 
-/** 实际选中的命令语言。Windows 按 Git Bash、PowerShell 7、Windows PowerShell、CMD 的顺序挑选。 *
- */
+/** 实际选中的命令语言。Windows 按 Git Bash、PowerShell 7、Windows PowerShell、CMD 的顺序挑选。 */
 type SystemShellKind = 'git-bash' | 'pwsh' | 'powershell' | 'cmd' | 'posix'
 
 /**
@@ -188,8 +171,7 @@ interface SystemCommandResult {
 /** 镜像时 gitignore 忽略的目录怎么处理：link 链接到真实目录（能读、写不进），copy 复制过来，skip 不要。忽略的文件一律不复制。 */
 type SandboxIgnoredMode = 'link' | 'copy' | 'skip'
 
-/** 建好沙箱的回执：沙箱记录加一句怎么用镜像的提醒。 *
- */
+/** 建好沙箱的回执：沙箱记录加一句怎么用镜像的提醒。 */
 interface SystemSandboxCreated extends SandboxRecord {
   note: string
 }
@@ -210,8 +192,7 @@ interface SandboxDiff {
   fingerprint?: string
 }
 
-/** 落回的回执：真正落回的三列；什么都没落或只落了指定路径时 note 说明。 *
- */
+/** 落回的回执：真正落回的三列；什么都没落或只落了指定路径时 note 说明。 */
 interface SystemSandboxApplied extends SandboxApplyResult {
   note?: string
 }
@@ -222,8 +203,7 @@ interface SandboxDiscardResult {
   removed: boolean
 }
 
-/** 文件里的一段字符范围：从 offset 起到 end 止，end 不含。read 返回它，edit 收它。 *
- */
+/** 文件里的一段字符范围：从 offset 起到 end 止，end 不含。read 返回它，edit 收它。 */
 interface SystemTextRange {
   offset: number
   end: number
@@ -232,16 +212,14 @@ interface SystemTextRange {
 /** 一种磁盘文本编码，取值见常量表 `TextEncodings`。 */
 type TextEncoding = (typeof TextEncodings)[number]
 
-/** 一处改动：在 range 这段里改；给 oldText 就只换这段里唯一的那一处，不给就把整段换成 newText，range 是空段就是在那个位置插入。 *
- */
+/** 一处改动：在 range 这段里改；给 oldText 就只换这段里唯一的那一处，不给就把整段换成 newText，range 是空段就是在那个位置插入。 */
 interface SystemTextEdit {
   range: SystemTextRange
   oldText?: string
   newText: string
 }
 
-/** 整个文件写入的结果：version 是写完后的版本号，previousVersion 是改动前留下的版本，新建或没留下时为 null；path 是按传入路径解析出的绝对路径，它是符号链接时 target 是真正被写的那个文件。 *
- */
+/** 整个文件写入的结果：version 是写完后的版本号，previousVersion 是改动前留下的版本，新建或没留下时为 null；path 是按传入路径解析出的绝对路径，它是符号链接时 target 是真正被写的那个文件。 */
 interface SystemEditWrittenResult {
   path: string
   target?: string
@@ -253,8 +231,7 @@ interface SystemEditWrittenResult {
   totalChars: number
 }
 
-/** 改了几处的结果：edits 是改了几处，windows 每处一段新文本前后各 200 字符；盖住所有改动那段（各处 range 的并集）不超过 2 万字符时，content 和 range 整段给出，不用再读一遍确认；超过就只有 windows。 *
- */
+/** 改了几处的结果：edits 是改了几处，windows 每处一段新文本前后各 200 字符；盖住所有改动那段（各处 range 的并集）不超过 2 万字符时，content 和 range 整段给出，不用再读一遍确认；超过就只有 windows。 */
 interface SystemEditReplacedResult {
   path: string
   target?: string
@@ -269,8 +246,7 @@ interface SystemEditReplacedResult {
   range?: SystemTextRange
 }
 
-/** 回滚的结果：文件回到 version 那个版本，回滚前的内容留成 previousVersion，回滚本身也能再回滚。 *
- */
+/** 回滚的结果：文件回到 version 那个版本，回滚前的内容留成 previousVersion，回滚本身也能再回滚。 */
 interface SystemEditRestoredResult {
   path: string
   target?: string
@@ -417,8 +393,7 @@ interface SandboxApplyResult {
   skippedGit: boolean
 }
 
-/** 一处改动改完后的样子：edit 是 edits 里第几处，content 是新文本前后各带 200 字符的原文，range 是这段在新文件里的位置。 *
- */
+/** 一处改动改完后的样子：edit 是 edits 里第几处，content 是新文本前后各带 200 字符的原文，range 是这段在新文件里的位置。 */
 interface SystemEditWindow {
   edit: number
   range: SystemTextRange

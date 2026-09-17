@@ -33,7 +33,7 @@ export interface SystemExecutionOperationsApi {
    * 要确认的先问用户；危险命令每次都由用户亲自裁决（高风险、手动审批，宿主在任何档位都弹卡）。
    * 交给宿主执行后补上输出窗口说明；进了后台的补上端口、原因、是否自动转后台和查状态的续接（指向 system:list-tasks）；要了控制台却没拿到时 note 说明怎么改写命令。
    *
-   * @model
+   * @modelVisible
    */
   run(input: SystemRunInput, ctx: SystemToolContext): Promise<SystemRunResult>
   /**
@@ -41,7 +41,7 @@ export interface SystemExecutionOperationsApi {
    * apply 先算完整差量（不截断），paths 里有没变化的路径就在问用户之前拒绝；把删除、覆盖的条数与路径和其中的敏感路径摆给用户确认（高风险、每次都问），
    * 确认了才让宿主落回，并把确认时的差量指纹一起交过去，镜像在确认之后又变过就整批不落；镜像里没有文件变化就什么都不落，只落指定路径时 note 说明。
    *
-   * @model
+   * @modelVisible
    */
   sandbox(input: SystemSandboxInput, ctx: SystemToolContext): Promise<SystemSandboxResult>
 }

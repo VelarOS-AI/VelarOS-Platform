@@ -3,7 +3,7 @@
  * system 与 project 两个空间、宿主的沙箱实现共用这一份。不 import 任何东西，不带函数，浏览器和渲染进程都能用；从 `@velaros-ai/rehearsal-sandbox/contracts` 取。
  */
 
-/** 镜像时 gitignore 忽略的目录怎么处理：link 链接到真实目录（能读、写不进），copy 复制过来，skip 不要。忽略的文件一律不复制。 @model */
+/** 镜像时 gitignore 忽略的目录怎么处理：link 链接到真实目录（能读、写不进），copy 复制过来，skip 不要。忽略的文件一律不复制。 @modelVisible */
 export type SandboxIgnoredMode = 'link' | 'copy' | 'skip'
 
 /** 建沙箱的选项：source 缺省是宿主的默认目录（系统空间是默认工作目录，项目空间是项目根）；network 缺省 false，镜像里的命令连不上网；ignored 缺省 link。 */
@@ -13,7 +13,7 @@ export interface SandboxCreateOptions {
   ignored?: SandboxIgnoredMode
 }
 
-/** 一个沙箱：id 就是目录名，root 是镜像根（cwd 落在它之内的命令一律受约束），source 是被镜像的真实目录。 @model */
+/** 一个沙箱：id 就是目录名，root 是镜像根（cwd 落在它之内的命令一律受约束），source 是被镜像的真实目录。 @modelVisible */
 export interface SandboxRecord {
   id: string
   root: string
@@ -38,14 +38,14 @@ export interface SandboxDiffOptions {
   textDiffs?: boolean
 }
 
-/** 一个文本文件的统一差量；超过预算时 truncated 为真、diff 被截断。 @model */
+/** 一个文本文件的统一差量；超过预算时 truncated 为真、diff 被截断。 @modelVisible */
 export interface SandboxTextDiff {
   path: string
   diff: string
   truncated: boolean
 }
 
-/** 镜像相对创建时的变化：三列相对路径（删除列永远完整，truncated 说明另外两列被截），文本差量有界，omittedDiffs 是没附差量的文件数；gitChanged 表示 .git 里有东西变了。 @model */
+/** 镜像相对创建时的变化：三列相对路径（删除列永远完整，truncated 说明另外两列被截），文本差量有界，omittedDiffs 是没附差量的文件数；gitChanged 表示 .git 里有东西变了。 @modelVisible */
 export interface SandboxDiff {
   sandboxId: string
   source: string
@@ -68,7 +68,7 @@ export interface SandboxApplyOptions {
   fingerprint?: string
 }
 
-/** 落回的结果：三列是真正写进源目录的相对路径；skippedGit 表示 .git 里的变化没有落（永远不落）。 @model */
+/** 落回的结果：三列是真正写进源目录的相对路径；skippedGit 表示 .git 里的变化没有落（永远不落）。 @modelVisible */
 export interface SandboxApplyResult {
   sandboxId: string
   created: string[]
@@ -77,7 +77,7 @@ export interface SandboxApplyResult {
   skippedGit: boolean
 }
 
-/** 丢弃的结果：沙箱本来就不在时 removed 为 false。 @model */
+/** 丢弃的结果：沙箱本来就不在时 removed 为 false。 @modelVisible */
 export interface SandboxDiscardResult {
   sandboxId: string
   removed: boolean

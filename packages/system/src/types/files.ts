@@ -6,17 +6,13 @@
 import type { ToolResultModelContentPart } from '@velaros-ai/agent/contracts'
 import type { DecodedText, TextEncoding } from '@velaros-ai/text-files/contracts'
 
-/** 文件里的一段字符范围：从 offset 起到 end 止，end 不含。read 返回它，edit 收它。 *
- * @model
- */
+/** 文件里的一段字符范围：从 offset 起到 end 止，end 不含。read 返回它，edit 收它。 @modelVisible */
 export interface SystemTextRange {
   offset: number
   end: number
 }
 
-/** 读一个文本文件：从第几个字符起、最多多少字符，都可省；给 version 就读改动前留下的那个版本（只有本次运行里 edit 留下的版本在）。 *
- * @model
- */
+/** 读一个文本文件：从第几个字符起、最多多少字符，都可省；给 version 就读改动前留下的那个版本（只有本次运行里 edit 留下的版本在）。 @modelVisible */
 export interface SystemReadFileInput {
   path: string
   offset?: number
@@ -24,16 +20,12 @@ export interface SystemReadFileInput {
   version?: string
 }
 
-/** 读文本文件的入参：files 里每项一个文件，一个文件就一项，一批就多项；一次调用总共最多返回 20 万字符。 *
- * @model
- */
+/** 读文本文件的入参：files 里每项一个文件，一个文件就一项，一批就多项；一次调用总共最多返回 20 万字符。 @modelVisible */
 export type SystemReadInput = {
   files: SystemReadFileInput[]
 }
 
-/** 一个文件读到的内容：content 是 range 这段的原文，hasMore 时把 range.end 当下一次的 offset 接着读；version 是这份内容的版本号。 *
- * @model
- */
+/** 一个文件读到的内容：content 是 range 这段的原文，hasMore 时把 range.end 当下一次的 offset 接着读；version 是这份内容的版本号。 @modelVisible */
 export interface SystemReadFileResult {
   path: string
   version: string
@@ -44,9 +36,7 @@ export interface SystemReadFileResult {
   encoding: TextEncoding
 }
 
-/** 一批里某个文件读不了或看不了：只有它自己失败，其余文件照常返回；全部失败时整个调用报错。path 照传入的原样。 *
- * @model
- */
+/** 一批里某个文件读不了或看不了：只有它自己失败，其余文件照常返回；全部失败时整个调用报错。path 照传入的原样。 @modelVisible */
 export interface SystemFileFailure {
   path: string
   error: {
@@ -55,48 +45,36 @@ export interface SystemFileFailure {
   }
 }
 
-/** 读文本文件的结果：files 与入参的 files 一一对应，每项是读到的内容或这个文件的失败；一次调用的字符预算不够时，被截短的文件 hasMore 为真，预算用完后的文件不读盘、那一项换成失败条目，note 说明从第几个文件起。 *
- * @model
- */
+/** 读文本文件的结果：files 与入参的 files 一一对应，每项是读到的内容或这个文件的失败；一次调用的字符预算不够时，被截短的文件 hasMore 为真，预算用完后的文件不读盘、那一项换成失败条目，note 说明从第几个文件起。 @modelVisible */
 export interface SystemReadResult {
   files: Array<SystemReadFileResult | SystemFileFailure>
   note?: string
 }
 
-/** 看一张图片。 *
- * @model
- */
+/** 看一张图片。 @modelVisible */
 export interface SystemViewFileInput {
   path: string
 }
 
-/** 看图片的入参：files 每项一个文件，一个文件就一项，一批就多项。 *
- * @model
- */
+/** 看图片的入参：files 每项一个文件，一个文件就一项，一批就多项。 @modelVisible */
 export type SystemViewInput = {
   files: SystemViewFileInput[]
 }
 
-/** 看到的一张图片的元数据。 *
- * @model
- */
+/** 看到的一张图片的元数据。 @modelVisible */
 export interface SystemViewFileResult {
   path: string
   mediaType: string
   bytes: number
 }
 
-/** 看图片的结果：files 与入参的 files 一一对应；modelContent 按同样的顺序放每张图的内容块（整张交给模型，效果和用户上传一样），每块前面一行文字说明是哪个文件，失败的文件没有内容块。 *
- * @model
- */
+/** 看图片的结果：files 与入参的 files 一一对应；modelContent 按同样的顺序放每张图的内容块（整张交给模型，效果和用户上传一样），每块前面一行文字说明是哪个文件，失败的文件没有内容块。 @modelVisible */
 export interface SystemViewResult {
   files: Array<SystemViewFileResult | SystemFileFailure>
   modelContent: ToolResultModelContentPart[]
 }
 
-/** 一处改动：在 range 这段里改；给 oldText 就只换这段里唯一的那一处，不给就把整段换成 newText，range 是空段就是在那个位置插入。 *
- * @model
- */
+/** 一处改动：在 range 这段里改；给 oldText 就只换这段里唯一的那一处，不给就把整段换成 newText，range 是空段就是在那个位置插入。 @modelVisible */
 export interface SystemTextEdit {
   range: SystemTextRange
   oldText?: string
@@ -109,7 +87,7 @@ export interface SystemTextEdit {
  * 一批里所有文件所有改动先一起定下来再一起写，全成或全不成；某处的 oldText 在范围里匹配到多处时整批不写，失败回执里给出是第几处和每处的锚点，把选中锚点的 range 填回那一处就是二次确认。
  * version 是 read 返回的版本号，给了就先核对文件现在还是这个版本，被改过就整批不写并给出当前版本；不给就不核对。
  *
- * @model
+ * @modelVisible
  */
 export interface SystemEditFileInput {
   path: string
@@ -119,16 +97,12 @@ export interface SystemEditFileInput {
   version?: string
 }
 
-/** 写文件的入参：files 每项一个文件，一个文件就一项，一批就多项，各自带各自的改法；一批全成或全不成。 *
- * @model
- */
+/** 写文件的入参：files 每项一个文件，一个文件就一项，一批就多项，各自带各自的改法；一批全成或全不成。 @modelVisible */
 export type SystemEditInput = {
   files: SystemEditFileInput[]
 }
 
-/** 整个文件写入的结果：version 是写完后的版本号，previousVersion 是改动前留下的版本，新建或没留下时为 null；path 是按传入路径解析出的绝对路径，它是符号链接时 target 是真正被写的那个文件。 *
- * @model
- */
+/** 整个文件写入的结果：version 是写完后的版本号，previousVersion 是改动前留下的版本，新建或没留下时为 null；path 是按传入路径解析出的绝对路径，它是符号链接时 target 是真正被写的那个文件。 @modelVisible */
 export interface SystemEditWrittenResult {
   path: string
   target?: string
@@ -140,18 +114,14 @@ export interface SystemEditWrittenResult {
   totalChars: number
 }
 
-/** 一处改动改完后的样子：edit 是 edits 里第几处，content 是新文本前后各带 200 字符的原文，range 是这段在新文件里的位置。 *
- * @model
- */
+/** 一处改动改完后的样子：edit 是 edits 里第几处，content 是新文本前后各带 200 字符的原文，range 是这段在新文件里的位置。 @modelVisible */
 export interface SystemEditWindow {
   edit: number
   range: SystemTextRange
   content: string
 }
 
-/** 改了几处的结果：edits 是改了几处，windows 每处一段新文本前后各 200 字符；盖住所有改动那段（各处 range 的并集）不超过 2 万字符时，content 和 range 整段给出，不用再读一遍确认；超过就只有 windows。 *
- * @model
- */
+/** 改了几处的结果：edits 是改了几处，windows 每处一段新文本前后各 200 字符；盖住所有改动那段（各处 range 的并集）不超过 2 万字符时，content 和 range 整段给出，不用再读一遍确认；超过就只有 windows。 @modelVisible */
 export interface SystemEditReplacedResult {
   path: string
   target?: string
@@ -166,9 +136,7 @@ export interface SystemEditReplacedResult {
   range?: SystemTextRange
 }
 
-/** 回滚的结果：文件回到 version 那个版本，回滚前的内容留成 previousVersion，回滚本身也能再回滚。 *
- * @model
- */
+/** 回滚的结果：文件回到 version 那个版本，回滚前的内容留成 previousVersion，回滚本身也能再回滚。 @modelVisible */
 export interface SystemEditRestoredResult {
   path: string
   target?: string
@@ -204,14 +172,10 @@ export interface SystemEditFailureDetails {
   problems: SystemEditProblem[]
 }
 
-/** 一个文件写完的结果。 *
- * @model
- */
+/** 一个文件写完的结果。 @modelVisible */
 export type SystemEditFileResult = SystemEditWrittenResult | SystemEditReplacedResult | SystemEditRestoredResult
 
-/** 写文件的结果：files 与入参的 files 一一对应。一批全成或全不成：任何一处定不下来整个调用报错、什么都不写，问题列在失败回执的 details.problems 里。 *
- * @model
- */
+/** 写文件的结果：files 与入参的 files 一一对应。一批全成或全不成：任何一处定不下来整个调用报错、什么都不写，问题列在失败回执的 details.problems 里。 @modelVisible */
 export interface SystemEditResult {
   files: SystemEditFileResult[]
 }

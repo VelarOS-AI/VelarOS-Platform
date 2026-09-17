@@ -5,7 +5,7 @@
 
 import type { TextEncodings } from '../contract/constants.js'
 
-/** 一种磁盘文本编码，取值见常量表 `TextEncodings`。 @model */
+/** 一种磁盘文本编码，取值见常量表 `TextEncodings`。 @modelVisible */
 export type TextEncoding = (typeof TextEncodings)[number]
 
 /** 一段字节解码出的正文与认出的编码。 */

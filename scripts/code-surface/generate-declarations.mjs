@@ -4,7 +4,7 @@
 // 提取靠**源码文本切片**而不是重新打印 AST：操作接口上的中文注释逐字保留，它们正是这件事的全部价值。
 // 不带参数是校验（生成物与源码不一致就退 1）；带 --write 才落盘。
 //
-// 双向守 `@model`：闭包里没标的要你标，标了不在闭包里的要你删。这样标记不可能过期——
+// 双向守 `@modelVisible`：闭包里没标的要你标，标了不在闭包里的要你删。这样标记不可能过期——
 // 加一个字段引用了新类型，门禁当场告诉你「它进模型可观测面了」。
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url'
 
 import ts from 'typescript'
 
-import { BannedModelFacingAliases, CodeSurfaces, HostContextTypes, ModelFacingTag } from './surfaces.mjs'
+import { BannedModelFacingAliases, CodeSurfaces, HostContextTypes, ModelVisibleTag } from './surfaces.mjs'
 
 const Here = dirname(fileURLToPath(import.meta.url))
 const RepoRoot = resolve(Here, '../..')
@@ -86,9 +86,9 @@ function sliceWithDoc(node, file) {
   return `${docComment(node, file)}${file.text.slice(node.getStart(file), node.getEnd())}`.trimStart()
 }
 
-/** 这个节点自己的 JSDoc 里有没有那个标记。要词边界——`@model` 会误匹配 `@modelcontextprotocol`（实测栽过）。 */
+/** 这个节点自己的 JSDoc 里有没有那个标记。要词边界——`@modelVisible` 会误匹配 `@modelcontextprotocol`（实测栽过）。 */
 function hasModelTag(node, file) {
-  return new RegExp(`${ModelFacingTag}\\b`, 'u').test(docComment(node, file))
+  return new RegExp(`${ModelVisibleTag}\\b`, 'u').test(docComment(node, file))
 }
 
 /**
@@ -255,7 +255,7 @@ function stripExport(text) {
 function stripModelTag(text) {
   return text
     .split('\n')
-    .map((line) => line.replace(new RegExp(`\\s*${ModelFacingTag}\\b`, 'u'), ''))
+    .map((line) => line.replace(new RegExp(`\\s*${ModelVisibleTag}\\b`, 'u'), ''))
     .filter((line) => line.trim() !== '*')
     .join('\n')
 }
@@ -299,11 +299,11 @@ function generate(surface) {
   const unmarked = [...closure.entries()].filter(([, found]) => !hasModelTag(found.node, found.file)).map(([name]) => name)
   if (unmarked.length > 0) {
     problems.push(
-      `这些类型进了模型可观测面却没标 ${ModelFacingTag}，在它们的 JSDoc 里加上（顺便想清楚模型看见它合不合适）：\n    ${unmarked.join('\n    ')}`
+      `这些类型进了模型可观测面却没标 ${ModelVisibleTag}，在它们的 JSDoc 里加上（顺便想清楚模型看见它合不合适）：\n    ${unmarked.join('\n    ')}`
     )
   }
   for (const stray of findStrayTags(program, closure, surface)) {
-    problems.push(`${stray} 标了 ${ModelFacingTag} 却不在模型可观测面上；删掉标记，免得它烂成装饰`)
+    problems.push(`${stray} 标了 ${ModelVisibleTag} 却不在模型可观测面上；删掉标记，免得它烂成装饰`)
   }
 
   const constants = []
@@ -318,7 +318,7 @@ function generate(surface) {
   const header = [
     '// 本文件由 scripts/code-surface/generate-declarations.mjs 从能力包源码生成，不要手改。',
     `// 命名空间 ${surface.namespace}：${methods.length} 个方法、${declared.length} 个类型。`,
-    `// 改源码里带 ${ModelFacingTag} 的东西就是改模型可观测面，重算用 \`bun run generate:code-surface\`。`,
+    `// 改源码里带 ${ModelVisibleTag} 的东西就是改模型可观测面，重算用 \`bun run generate:code-surface\`。`,
   ].join('\n')
 
   const text = `${header}\n\n${types.join('\n\n')}\n\ndeclare const ${surface.namespace}: {\n${methods.join('\n')}\n}\n`
