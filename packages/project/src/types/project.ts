@@ -8,8 +8,8 @@ import type { ProjectCodeLanguageActions } from '../contract/constants.js'
 // ── 命令 ──────────────────────────────────────────────────────────
 
 /**
- * 用哪个 shell 跑一条命令。可移植文件一个 import 都不许有，所以这里是 `@velaros-ai/shell-command` 的 `ShellCommandKind` 的同形副本
- * （同 `SystemShellKind` 的先例）；两边的形状由 `project:run` 的 schema 与入参类型在编译期对上，谁改一边没同步另一边，typecheck 立刻红。
+ * 用哪个 shell 跑一条命令。可移植文件只许从本包常量表 import，所以这里是 `@velaros-ai/shell-command` 的 `ShellCommandKind` 的同形副本；
+ * 两边的形状由 `project:run` 的 schema 与入参类型在编译期对上，谁改一边没同步另一边，typecheck 立刻红。
  */
 export type ProjectShellKind = 'git-bash' | 'pwsh' | 'powershell' | 'cmd' | 'posix'
 

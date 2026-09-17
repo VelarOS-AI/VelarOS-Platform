@@ -8,7 +8,8 @@
 
 演练沙箱（ADR 0006）的公共部分：宿主端口上流动的沙箱数据形状、公开上限，落回前的核对与确认请求，
 以及代码面 `sandbox` 命名空间的五个操作。
-system:sandbox 与 project:sandbox 两个工具、宿主的沙箱实现都用这一份，「确认的就是要落的」只在这里实现一次（ADR 0008）。
+`velar:sandbox`、项目空间的沙箱工具、宿主的沙箱实现都用这一份，「确认的就是要落的」只在这里实现一次（ADR 0008）。
+**能力不绑空间**：模型看到的只有 `velar:sandbox` 这一份声明，每个空间注入自己的 `SandboxSurfacePort`（系统空间的实现在 `@velaros-ai/system` 的 `createSystemSpace` 里）。
 它只处理数据与规则，不建镜像、不跑命令、不读写文件；根入口不碰 Node 模块，渲染进程也能加载。
 
 ## 提供什么
@@ -19,7 +20,7 @@ system:sandbox 与 project:sandbox 两个工具、宿主的沙箱实现都用这
 | --- | --- | --- |
 | `rehearsalSandboxRules` | `RehearsalSandboxRulesApi` | 按路径筛三列；落回前的核对与确认请求 |
 | `sandboxOperations` | `SandboxOperationsApi` | 代码面 `sandbox` 命名空间的五个操作：create / run / diff / apply / discard |
-| `RehearsalSandboxLimits` | 契约常量表 | 沙箱的公开上限，两个空间的工具说明与 schema、宿主实现都引它 |
+| `RehearsalSandboxLimits` | 契约常量表 | 沙箱的公开上限，`velar:sandbox` 的声明、项目空间的工具说明与 schema、宿主实现都引它 |
 | `SandboxApplyOperationKind` | 契约常量 | 落回审批的操作身份种类 |
 
 **数据面**是 `types/`：`types/rehearsal-sandbox.ts` 是可移植数据（建、跑命令、看差量、落回、丢弃的入参与结果，筛出来的三列），`types/apply.ts` 是落回确认请求的入参、结果与空间的落回政策 `SandboxApplyPolicy`（引用 agent 的确认选项类型，从根入口导出）。
@@ -35,7 +36,7 @@ system:sandbox 与 project:sandbox 两个工具、宿主的沙箱实现都用这
 
 | 接口 | 谁给、什么时候给 |
 | --- | --- |
-| `RehearsalSandboxHostPort` | 宿主的演练沙箱实现（建镜像、看差量、落回、丢弃）。本包的工具面不调它，它是两个空间共用的端口形状：system 的宿主端口 `SystemToolSystemApi` 与 project 的沙箱端口 `ProjectSandboxPort` 都扩展它；本机实现是 `@velaros-ai/system` 的本地内核 |
+| `RehearsalSandboxHostPort` | 宿主的演练沙箱实现（建镜像、看差量、落回、丢弃）。它是各空间共用的端口形状：系统空间的宿主 `SystemSpaceHost` 与项目空间的沙箱端口 `ProjectSandboxPort` 都扩展它；本机实现是 `@velaros-ai/system` 的本地内核 |
 | `SandboxSurfacePort` | 代码面用的那一份：上面那个端口，加上在镜像里跑命令，加上两条**作用域**规则（`resolveSource` 把模型给的 source 解析成真实目录，`applyPolicy` 给这个空间的落回政策）。两个空间的差别全在这里，模型面因此只有一套说明 |
 | `SandboxOperationContext` | 宿主每次分发 `sandbox` 命名空间的调用时装好：取消信号、上面那个端口、审批端口 |
 
@@ -77,7 +78,7 @@ system:sandbox 与 project:sandbox 两个工具、宿主的沙箱实现都用这
 - 不建镜像、不算差量、不跑命令、不落回：引擎在宿主的沙箱实现里（本机是 `@velaros-ai/system` 的本地内核），本包只定端口形状并转调。
 - 不决定作用域：source 相对哪个根解析、越界算不算，全由宿主注入的 `SandboxSurfacePort` 说了算。
 - 不决定被拒之后怎么办，也不做落回前的其它授权（project 空间还要过项目修改授权），由空间自己定。
-- 不管两个工具的入参 schema 与说明：形状相同、文案按空间不同，各持一份，数字引本包的上限。
+- 不管项目空间沙箱工具的入参 schema 与说明：那是项目空间自己的，数字引本包的上限。
 
 ## 结构
 
@@ -93,7 +94,7 @@ spec/           不变量登记与验收测试
 test/           实现细节测试
 ```
 
-**分层。** 上层是 `SandboxOperations.ts`（代码面的五个操作），下层是 `RehearsalSandboxRules.ts`（落回规则）；上层调下层，两个空间的工具直接用下层。
+**分层。** 上层是 `SandboxOperations.ts`（代码面的五个操作），下层是 `RehearsalSandboxRules.ts`（落回规则）；上层调下层，项目空间的沙箱工具直接用下层。
 
 **类与接口。** 类实现的接口定义在类文件里、紧挨在类的上方并导出，在 `contract/provides.ts` 登记；整个进程只需要一份，文件末尾给出那一份，按公开接口标注类型。
 

@@ -1,6 +1,6 @@
 # @velaros-ai/code-surface
 
-代码面：模型写一段**真 ES 模块**——`import { read } from 'velar:system'` 拿能力、顶层 `await` 直接用、`export default` 交出答案——用生成出来的能力声明把事情一次办完，而不是一次一个工具地调。
+代码面：模型写一段**真 ES 模块**——`import { read } from 'velar:files'` 拿能力、顶层 `await` 直接用、`export default` 交出答案——用生成出来的能力声明把事情一次办完，而不是一次一个工具地调。
 
 - `codeProgramChecker.check({ source, declarations })`：执行之前的那道门。程序是 JavaScript，但照样受 TypeScript 检查（类型从声明里推）；**只加载这一轮授权的模块**，没授权的 `import` 不出来——字段拼错、读不存在的字段、入参形状错、输出被截断，都在这里拦下，报错直接给出正确的名字。
 - `createCodeSurfaceSession({ checker, runner, capabilities, events })`：办完一次程序——查体量、检查、隔离里执行、把程序发的能力调用转给宿主、编成给模型看的结果。

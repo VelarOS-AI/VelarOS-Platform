@@ -15,10 +15,10 @@ export const ProgramFileName = '/program.js'
 /** 这次运行本身的环境模块：`import { blobs } from 'velar:program'`。恒常授权，不占名额。 */
 export const ProgramModuleSpecifier = 'velar:program'
 
-/** 能力模块的统一前缀：`import { read } from 'velar:system'`。 */
+/** 能力模块的统一前缀：`import { read } from 'velar:files'`。 */
 export const CapabilityModulePrefix = 'velar:'
 
-/** 从模块名取命名空间：`velar:system` → `system`。不是能力模块就返回 null。 */
+/** 从模块名取命名空间：`velar:files` → `files`。不是能力模块就返回 null。 */
 export function readCapabilityNamespace(moduleSpecifier: string): Nullable<string> {
   return moduleSpecifier.startsWith(CapabilityModulePrefix)
     ? moduleSpecifier.slice(CapabilityModulePrefix.length)
@@ -45,7 +45,7 @@ export function describeOversized(what: 'source' | 'blobs', actual: number): str
 /**
  * 按预算保留结尾。
  *
- * 保留结尾而不是开头，与 `system:run` 的输出窗口同一个口径：失败现场在尾部。
+ * 保留结尾而不是开头，与 `velar:shell` 的 run 回执同一个口径：失败现场在尾部。
  * 截掉时在头上留一句说明，模型才知道自己看到的是一段而不是全部。
  */
 export function keepTail(text: string, budgetChars: number): { text: string; dropped: number } {

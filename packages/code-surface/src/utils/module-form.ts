@@ -3,7 +3,7 @@
  *
  * 模型写的是真 ES 模块（`import` 拿能力、顶层 `await`、`export default` 交答案）。
  * 隔离里用 `new Function` 跑，那里没有模块系统，所以进去之前做一次**形状明确的改写**：
- * `import { read } from 'velar:system'` → `const { read } = __velar('velar:system')`，
+ * `import { read } from 'velar:files'` → `const { read } = __velar('velar:files')`，
  * `export default X` → `return X`。
  * 改写只动这两种语句、按 AST 定位再按文本切片替换，**行数一个不变**——否则抛错的行号就对不上模型写的那一行。
  */

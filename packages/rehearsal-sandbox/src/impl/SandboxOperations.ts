@@ -22,7 +22,7 @@ import type { RehearsalSandboxRulesApi } from './RehearsalSandboxRules.js'
 import { rehearsalSandboxRules } from './RehearsalSandboxRules.js'
 
 /**
- * 代码面第一个跨空间的命名空间：模型在程序里写 `sandbox.create`、`sandbox.run` …，system 与 project 各注入自己的
+ * 代码面跨空间的命名空间之一：模型在程序里写 `create(...)`、`run(...)` …，每个空间注入自己的
  * `SandboxSurfacePort`。作用域（source 相对哪个根解析、越界算不算）由那个端口定，不由模型挑，所以模型面只有这一套说明。
  * 实现是 `SandboxOperations`，整个进程只有一份（`sandboxOperations`）。
  *
@@ -67,7 +67,7 @@ export class SandboxOperations implements SandboxOperationsApi {
 
   public async create(input: SandboxCreateInput, ctx: SandboxOperationContext): Promise<SandboxRecord> {
     ctx.abortSignal.throwIfAborted()
-    // 作用域在端口里：system 的实现收任意绝对路径，project 的实现钳在项目内、越界就拒绝。
+    // 作用域在端口里：系统空间的实现收任意路径，项目空间的实现钳在项目内、越界就拒绝。
     const source = await ctx.sandbox.resolveSource(input.source)
     return ctx.sandbox.createSandbox({ source, network: input.network, ignored: input.ignored })
   }

@@ -31,6 +31,7 @@
       ],
       "foundations": [
         "code-surface",
+        "files",
         "shell-command",
         "rehearsal-sandbox",
         "text-files",
@@ -156,6 +157,7 @@
     "@typescript-eslint/eslint-plugin": "^8.67.0",
     "@typescript-eslint/parser": "^8.67.0",
     "@velaros-ai/arch-guard": "github:VelarOS-AI/VelarOS-Arch-Guard#ce2b221d99c1b93736568f281a180ad3593f086f",
+    "@velaros-ai/files": "workspace:*",
     "@velaros-ai/path-rules": "workspace:*",
     "@velaros-ai/rehearsal-sandbox": "workspace:*",
     "@velaros-ai/shell-command": "workspace:*",

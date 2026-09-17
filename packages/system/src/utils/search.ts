@@ -6,7 +6,7 @@ import { isEmpty } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { DiscoverySkippedDirectoryNames } from '@velaros-ai/path-rules/contracts'
 
-import type { SystemSearchProtectedDirectoryInput } from '../types/files.js'
+import type { SystemSearchProtectedDirectoryInput } from '../types/paths.js'
 import type { SystemGlobalSearchOptions } from '../types/system.js'
 
 /** 按搜索词生成逐行匹配函数，返回一行里每处命中的列号（从 1 开始），支持正则与区分大小写；正则写错时抛 VALIDATION，空的字面搜索词匹配不到任何东西。 */

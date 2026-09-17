@@ -142,7 +142,7 @@ void describe('手滑判据', () => {
 
 void describe('模块形态', () => {
   test('能力模块名剥出命名空间；别的模块名不认', () => {
-    expect(readCapabilityNamespace('velar:system')).toBe('system')
+    expect(readCapabilityNamespace('velar:files')).toBe('files')
     expect(readCapabilityNamespace('node:fs')).toBeNull()
   })
 

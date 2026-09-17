@@ -1,38 +1,19 @@
 /**
- * 约定的常量表（对外合同的一部分）：操作名、mod 与空间身份、错误码、环境变量表、公开的上限。
- * 宿主按这里的名字登记操作、按错误码判断失败、按环境变量表配置本包；上限直接被操作方法引用，是模型看到的数字。
- * 包内可调、不对外承诺的参数不在这里，在 `utils/tuning.ts`。
+ * 约定的常量表（对外合同的一部分）：错误码与环境变量表。
+ * 宿主按错误码判断失败、按环境变量表配置本包。模型看得见的上限在各能力包的常量表里（`@velaros-ai/files` 的 `FileLimits`、
+ * `@velaros-ai/shell-command` 的 `ShellLimits`）；包内可调、不对外承诺的参数在 `utils/tuning.ts`。
  * 不 import 任何东西、不用 Node 专属类型，整个文件随 `./contracts` 入口出包。
  */
 
-/** 代码面上六个操作的名字：模型写 `read(...)`，宿主按它登记。 */
-export const SystemOperationNames = Object.freeze({
-  read: 'read',
-  view: 'view',
-  edit: 'edit',
-  run: 'run',
-  refreshEnvironment: 'refreshEnvironment',
-  listTasks: 'listTasks',
-} as const)
-
-/** 六个操作名之一。 */
-export type SystemOperationName = (typeof SystemOperationNames)[keyof typeof SystemOperationNames]
-
-/** 系统空间作为官方内置 mod 的身份。 */
-export const SystemModId = 'velaros.system' as const
-
-/** 系统空间自己的身份，mod 清单里声明的空间用它。 */
-export const SystemSpaceId = 'system' as const
-
 /**
- * 系统空间对外承诺的错误语义。
+ * 本地内核对外承诺的错误语义。
  *
  * 失败关闭是默认姿态：拿不到安全的执行条件时拒绝执行，而不是降级成裸进程或静默跳过。
  *
  * 错误分两类：
- * 1. 下面两个专属错误码。调用方可以按码分支处理，码本身是契约的一部分，不得改名。
+ * 1. 下面这几个专属错误码。调用方可以按码分支处理，码本身是契约的一部分，不得改名。
  * 2. 通用 `AppError` 码，含义沿用 `@velaros-ai/core`：
- *    - `VALIDATION`：入参不合法，包括 wire 面出现未知字段（schema 一律严格）。
+ *    - `VALIDATION`：入参不合法，或挑了本机没有的 shell。
  *    - `PERMISSION`：路径或操作越过了审批边界、宿主未开放该能力，或后台任务不属于当前会话。
  *    - `NOT_FOUND`：路径、进程或后台任务不存在。
  *    - `PLATFORM`：当前操作系统不支持该操作，或平台命令本身执行失败。
@@ -43,13 +24,9 @@ export const SystemErrorCodes = Object.freeze({
   shellUnavailable: 'SYSTEM_SHELL_UNAVAILABLE',
   /** 请求了受约束的进程模式，但当前宿主没有可用后端。实现必须拒绝执行，不得退回裸进程。 */
   processConfinementUnavailable: 'SYSTEM_PROCESS_CONFINEMENT_UNAVAILABLE',
-  /** edit 整批定不下来（找不到、多处匹配、重叠、版本过期）：什么都没写，错误 cause.details.problems 列出每个问题，入参可复用。 */
-  editUnresolved: 'SYSTEM_EDIT_UNRESOLVED',
-  /** edit 里有文件的写入被用户拒绝：什么都没写。 */
-  editDenied: 'SYSTEM_EDIT_DENIED',
-  /** sandbox 落回时源目录里的文件自建沙箱以来变过，或者上级路径是符号链接、会写到源目录外：什么都没写，错误 cause.details.conflicts 列出每处冲突。 */
+  /** 沙箱落回时源目录里的文件自建沙箱以来变过，或者上级路径是符号链接、会写到源目录外：什么都没写，message 列出每处冲突。 */
   sandboxConflict: 'SYSTEM_SANDBOX_CONFLICT',
-  /** sandbox 落回时镜像在用户确认之后又变过（镜像里可能还有命令在跑）：什么都没写，重新 diff、重新确认。 */
+  /** 沙箱落回时镜像在用户确认之后又变过（镜像里可能还有命令在跑）：什么都没写，重新 diff、重新确认。 */
   sandboxChanged: 'SYSTEM_SANDBOX_CHANGED',
 } as const)
 
@@ -91,62 +68,3 @@ export const SystemEnvironmentVariables = Object.freeze({
     description: '自检读到的 shell 版本。',
   },
 } as const)
-/** 读、看、写的上限；读看写三个工具的说明与 schema 直接引用这里，改了模型看到的数字跟着变。 */
-/**
- * 文件操作对外承诺的上限。
- *
- * `readChars` 与 `fileBytes` 必须是同一个数（INV-22 钉着）：两个数一旦各写各的，
- * 中间就会漏出一段「字节上限放行、字符预算拒绝」的文件，读不了也改不了。
- */
-export const SystemFileLimits = Object.freeze({
-  /**
-   * 一次 `read` 总共最多读回多少字符，**与单个文件的字节上限是同一个数**。
-   *
-   * 支持的编码里解出来的字符数都不超过字节数（UTF-8、GB18030 一个字至少一字节，UTF-16 两字节一个），
-   * 所以任何过得了字节上限的文件，放进一次空的调用里一定读得下——这个预算只在**一批读好几个**时才会咬人。
-   * 两个数一旦各写各的，中间就会漏出一段「字节上限放行、字符预算拒绝」的文件，读不了也改不了。
-   *
-   * 它保护的是这一侧的内存与 IPC，不是模型的上下文：正文落在程序的变量里，模型看不到。
-   */
-  readChars: 20 * 1024 * 1024,
-  /** read 一次最多几个文件。 */
-  readFiles: 20,
-  /** view 一次最多几张图片。 */
-  viewFiles: 10,
-  /** edit 一次最多几个文件。 */
-  editFiles: 20,
-  /**
-   * 交给模型的图，长边最多多少像素；超出的先压再给。
-   *
-   * 取 2000 对齐 API 最严的那条：一个请求里超过 20 张图时，每张都不许超过 2000 px，否则整个请求被拒。
-   * 高分辨率模型本身能看到 2576，但为了那几百像素冒整请求被拒的险不值。
-   */
-  imageEdge: 2000,
-  /**
-   * 交给模型的图，**base64 之后**最多多少字节。API 按 base64 算，不是原文件大小。
-   * 取 5 MB 对齐 Bedrock 与 Google Cloud（直连 API 是 10 MB）；超了就继续压。
-   */
-  imageBase64Bytes: 5 * 1024 * 1024,
-  /** 单个文件最大多少字节：`read` 读得进来、`edit` 覆盖得了的上限；再大的用 `run`。 */
-  fileBytes: 20 * 1024 * 1024,
-  /**
-   * 整份写入时，不超过这么大的文件会先把原内容留成一个版本，之后能 `restore` 回去；
-   * 更大的照样能写，只是不留版本（结果里 `previousVersion` 为 null）——十份 20 MB 的快照放在内存里太贵。
-   */
-  versionedBytes: 2 * 1024 * 1024,
-})
-
-/** run 与 list-tasks 的上限；两个工具的说明与 schema 直接引用这里。 */
-export const SystemCommandLimits = Object.freeze({
-  /** run 的超时最多给多少毫秒。 */
-  timeoutMs: 600_000,
-  /** run 的 stdout、stderr 各最多返回多少字符。 */
-  outputChars: 50_000,
-  /** 后台任务条目里的 recentOutput 保留输出末尾多少字符。 */
-  recentOutputChars: 4_000,
-  /** list-tasks 一次最多列多少条。 */
-  taskListItems: 100,
-  /** 后台任务 id 最长多少字符。 */
-  taskIdChars: 120,
-})
-

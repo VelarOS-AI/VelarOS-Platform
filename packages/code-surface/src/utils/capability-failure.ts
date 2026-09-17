@@ -1,6 +1,6 @@
 /** 能力那一侧的两件整形：调了个没有的操作怎么说、抛出来的东西怎么变成程序看得懂的错误。都不碰实例状态。 */
 
-import { isUndefined } from '@velaros-ai/core'
+import { isEmpty, isString, isUndefined } from '@velaros-ai/core'
 
 import { CodeSurfaceErrorCodes } from '../contract/constants.js'
 import type { CodeCapabilityOutcome } from '../contract/requires.js'
@@ -29,8 +29,8 @@ export function describeUnknownOperation(
  */
 export function shapeOperationFailure(cause: unknown): NonNullable<CodeCapabilityOutcome['error']> {
   const known = cause as { code?: unknown; message?: unknown }
-  const message = typeof known.message === 'string' && known.message.length > 0 ? known.message : String(cause)
-  return typeof known.code === 'string' && known.code.length > 0
+  const message = isString(known.message) && !isEmpty(known.message) ? known.message : String(cause)
+  return isString(known.code) && !isEmpty(known.code)
     ? { code: known.code, message }
     : { code: CodeSurfaceErrorCodes.operationFailed, message }
 }

@@ -3,59 +3,55 @@
  *
  * 改动或删除已有用例要在差量报告里点名并说明理由。
  * 这里只测对外承诺的行为，不测实现细节；实现细节的测试在 test/ 目录。
+ * 能力本身（`velar:files`、`velar:shell`、`velar:sandbox` 的操作）在各自的包里验收；这里验收本机宿主，以及系统空间把它们装起来之后的样子。
  */
 
-import { existsSync } from 'node:fs'
-import { chmod, lstat, mkdir, mkdtemp, readdir, readFile, rm, symlink, utimes, writeFile } from 'node:fs/promises'
+import { existsSync, readFileSync } from 'node:fs'
+import { chmod, mkdir, mkdtemp, readdir, readFile, realpath, rm, symlink, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 
 import { describe, expect, test } from 'bun:test'
 
+import type { ApprovalPort } from '@velaros-ai/agent/tool-contract'
 import { codeProgramChecker, createCapabilityPort, createCodeSurfaceSession, nodeSubprocessCodeRunner } from '@velaros-ai/code-surface'
 
-import { SystemCommandLimits, SystemFileLimits } from '../src/contracts'
-import { systemExecutionOperations } from '../src/impl/SystemExecutionOperations.js'
-import { systemFileOperations } from '../src/impl/SystemFileOperations.js'
 import { systemProcessManager } from '../src/impl/SystemProcessManager.js'
-import {
-  createLocalSystemKernel,
-  createSystemCodeSurface,
-  type SystemToolContext,
-} from '../src/index'
+import { createLocalSystemKernel, createSystemSpace } from '../src/index'
 import { buildSystemProcessConfinementSpawnSpec } from '../src/utils/confinement.js'
 import { assertInsideSandboxBase, sandboxBaseDirectory } from '../src/utils/sandbox.js'
 
 import { fakeChild, solidPng } from './support'
 
-describe('命令安全门', () => {
-  test('INV-4 危险命令的审批是高风险手动确认，不可按类记忆，并标明精确命令', async () => {
-    const seen: Array<Record<string, unknown> | undefined> = []
-    const context = {
-      abortSignal: new AbortController().signal,
-      approval: {
-        awaitConfirmation: async (_message: string, _signal?: AbortSignal, options?: Record<string, unknown>) => {
-          seen.push(options)
-        },
-      },
-      system: {
-        resolvePath: (path?: string) => path ?? process.cwd(),
-        runCommand: async () => ({ stdout: '', stderr: '', exitCode: 0, truncated: false }),
-      },
-    } as never
+const BaselineDirectory = resolve(import.meta.dir, '../../../baselines/code-surface')
+const canConfine = (process.platform === 'darwin' && existsSync('/usr/bin/sandbox-exec'))
+  || (process.platform === 'linux' && ['/usr/bin/bwrap', '/usr/local/bin/bwrap'].some((path) => existsSync(path)))
 
-    await systemExecutionOperations.run({ command: 'rm -rf /tmp/velaros-fixture' }, context)
-    expect(seen[0]).toMatchObject({
-      approvalRisk: 'high',
-      riskScope: 'system-command:dangerous',
-      requireManualApproval: true,
-      rememberRiskScope: false,
-      operation: { label: 'rm -rf /tmp/velaros-fixture' },
-    })
-  })
-
-
-})
+/**
+ * 一个真的系统空间：真本地内核、真操作表；审批端口记下每次确认，按 `answer` 回答（缺省放行）。
+ * 用完调 `dispose`，内核起过的后台进程一并停掉。
+ */
+function systemSpaceAt(cwd: string, answer?: (message: string) => void | Promise<void>) {
+  const kernel = createLocalSystemKernel({ cwd })
+  const confirmations: string[] = []
+  const approval: ApprovalPort = {
+    awaitConfirmation: async (message) => {
+      confirmations.push(message)
+      await answer?.(message)
+    },
+    awaitConfirmationDecision: async () => ({ approved: true, message: null, autoApproved: false }),
+  }
+  const space = createSystemSpace({ host: kernel, resolveCall: (signal) => ({ abortSignal: signal ?? new AbortController().signal, approval, sessionId: 'session-1' }) })
+  const port = createCapabilityPort(space.operations)
+  const program = async (source: string) => {
+    const session = createCodeSurfaceSession({ checker: codeProgramChecker, runner: nodeSubprocessCodeRunner, capabilities: port })
+    const granted = ['files', 'shell', 'sandbox'].map((namespace) => ({ namespace, declarations: readFileSync(join(BaselineDirectory, `${namespace}.d.ts`), 'utf8') }))
+    const outcome = await session.submit({ program: { source }, granted, timeoutMs: 30_000 })
+    if (!outcome.checked) throw new Error(`应当通过检查：${JSON.stringify(outcome)}`)
+    return outcome
+  }
+  return { kernel, space, port, program, confirmations, dispose: () => kernel.dispose() }
+}
 
 describe('进程约束', () => {
   test('INV-5 受约束模式没有可用后端时失败关闭，不退回裸进程', () => {
@@ -97,49 +93,30 @@ describe('进程约束', () => {
   })
 })
 
-describe('代码面登记', () => {
-  test('INV-15 nativeCommand 只给宿主用，永不进模型可观测面', async () => {
-    const declarations = await readFile(
-      resolve(import.meta.dir, '../../../baselines/code-surface/system.d.ts'),
-      'utf8'
-    )
-    expect(declarations).not.toContain('nativeCommand')
-  })
-
-
-
-
-
-
-
-
-
-})
-
 describe('命令输出', () => {
-  test('INV-10 输出超长保留末尾且末尾真实；转后台的回执带 taskId，模型自己去查', async () => {
-    const context = {
-      abortSignal: new AbortController().signal,
-      approval: { awaitConfirmation: async () => undefined },
-      system: {
-        resolvePath: (path?: string) => path ?? process.cwd(),
-        runCommand: async () => ({
-          stdout: 'tail-of-the-output',
-          stderr: '',
-          exitCode: 0,
-          truncated: true,
-          backgroundProcess: { taskId: 'task-1' },
-        }),
-      },
-    } as never
+  test('INV-10 输出超长保留末尾且末尾真实；转后台的命令回执里带 taskId', async () => {
+    const kernel = createLocalSystemKernel({ cwd: process.cwd() })
+    try {
+      const long = await kernel.runCommand('fixture', {
+        nativeCommand: { file: process.execPath, args: ['-e', "process.stdout.write('x'.repeat(5000) + 'TAIL-END')"] },
+        maxOutputChars: 100,
+      })
+      // 砍头不砍尾：失败现场在尾部
+      expect(long.truncated).toBe(true)
+      expect(long.stdout.endsWith('TAIL-END')).toBe(true)
+      expect(long.stdout.length).toBeLessThanOrEqual(100)
 
-    const result = await systemExecutionOperations.run({ command: 'printf lots', background: true }, context)
-    // 砍头不砍尾：失败现场在尾部
-    expect(result.outputWindow?.retained).toBe('tail')
-    expect(result.outputWindow?.endPreserved).toBe(true)
-    expect(result.stdout.endsWith('tail-of-the-output')).toBe(true)
-    // 回执给 taskId 就够了，模型自己写 `await listTasks({ taskId })`
-    expect(result.backgroundProcess?.taskId).toBe('task-1')
+      const started = await kernel.runCommand('fixture', {
+        nativeCommand: { file: process.execPath, args: ['-e', 'setTimeout(() => {}, 10000)'] },
+        background: true,
+      })
+      const taskId = started.backgroundProcess?.taskId
+      expect(taskId).toBeTruthy()
+      expect((await kernel.listBackgroundTasks({ taskId: taskId! })).map((task) => task.id)).toEqual([taskId!])
+      await kernel.terminateBackgroundTask({ taskId: taskId!, force: true })
+    } finally {
+      await kernel.dispose()
+    }
   })
 
   test('INV-11 管道分块不打碎 UTF-8 字符，退出码原样透传', async () => {
@@ -209,195 +186,7 @@ describe('进程生命周期', () => {
   })
 })
 
-describe('文件工具', () => {
-  const approving: SystemToolContext = {
-    abortSignal: new AbortController().signal,
-    approval: { requestApproval: async () => ({ approved: true }), awaitConfirmation: async () => undefined },
-    system: { resolvePath: (path = process.cwd()) => resolve(path) } as never,
-  } as SystemToolContext
-  const denying: SystemToolContext = {
-    ...approving,
-    approval: { requestApproval: async () => ({ approved: true }), awaitConfirmation: async () => { throw new Error('user said no') } },
-  } as SystemToolContext
-  const edit = { execute: systemFileOperations.edit.bind(systemFileOperations) }
-  const read = { execute: systemFileOperations.read.bind(systemFileOperations) }
-  const failureOf = async (call: Promise<unknown>): Promise<{ code: string; outcome: unknown; problems: Array<Record<string, unknown>> }> => {
-    try {
-      await call
-    } catch (error) {
-      const failure = error as { code: string; context?: { executionOutcome?: unknown }; cause?: { details?: { problems?: Array<Record<string, unknown>> } } }
-      return { code: failure.code, outcome: failure.context?.executionOutcome, problems: failure.cause?.details?.problems ?? [] }
-    }
-    throw new Error('expected the call to fail')
-  }
-
-  test('INV-20 一批全成或全不成：版本对不上就什么都不写，并逐个点名', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'velaros-inv20-'))
-    try {
-      const a = join(root, 'a.txt')
-      const b = join(root, 'b.txt')
-      await writeFile(a, 'alpha\n')
-      await writeFile(b, 'beta\n')
-      const before = await read.execute({ files: [{ path: a }, { path: b }] }, approving) as { files: Array<{ version: string }> }
-      // 拿到 version 之后别人又改了 b：整批不写，a 也不动
-      await writeFile(b, 'beta changed\n')
-      const failure = await failureOf(edit.execute({
-        files: [
-          { path: a, newText: 'alpha 2\n', version: before.files[0]!.version },
-          { path: b, newText: 'beta 2\n', version: before.files[1]!.version },
-        ],
-      }, approving))
-      expect(failure.outcome).toBe('not-applied')
-      expect(failure.problems).toHaveLength(1)
-      expect(failure.problems[0]).toMatchObject({ file: 1, reason: 'stale' })
-      expect(await readFile(a, 'utf8')).toBe('alpha\n')
-      expect(await readFile(b, 'utf8')).toBe('beta changed\n')
-    } finally {
-      await rm(root, { recursive: true, force: true })
-    }
-  })
-
-  test('INV-20 计划之后、落盘之前被人改了——哪怕大小和修改时间都没变——也不覆盖', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'velaros-inv20-race-'))
-    try {
-      const plain = join(root, 'plain.txt')
-      const key = join(root, 'deploy.pem')
-      // 超过 64 KB：这么大的文件落盘前只看「大小 + 修改时间」，两样都没变就不重读（小文件一律重读，拦不到这里）。
-      const original = `${'a'.repeat(100 * 1024)}\n`
-      const concurrent = `${'z'.repeat(100 * 1024)}\n`
-      await writeFile(plain, original)
-      await writeFile(key, '-----BEGIN PRIVATE KEY-----\nabc\n')
-      // 修改时间先落在整数秒上：拨回去时才能分毫不差，否则纳秒级的差别会让印记核对自己就发现了
-      const pinned = 1_700_000_000
-      await utimes(plain, pinned, pinned)
-      // 第二个文件要审批：用户看确认卡的时候，别人把第一个文件改成同样长度的内容，并把修改时间拨回去。
-      // 印记核对会以为没变；落盘时核对字节才拦得住。
-      const racing = {
-        ...approving,
-        approval: {
-          requestApproval: async () => ({ approved: true }),
-          awaitConfirmation: async () => {
-            await writeFile(plain, concurrent)
-            await utimes(plain, pinned, pinned)
-          },
-        },
-      } as SystemToolContext
-      const failure = await failureOf(edit.execute({ files: [{ path: plain, newText: 'beta\n' }, { path: key, newText: 'x\n' }] }, racing))
-      expect(failure.code).toBe('VALIDATION')
-      expect(await readFile(plain, 'utf8')).toBe(concurrent)
-    } finally {
-      await rm(root, { recursive: true, force: true })
-    }
-  })
-
-  test('INV-21 文本改动无损：GBK 原样回写；二进制不许被 newText 覆盖；写的是符号链接指向的文件', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'velaros-inv21-'))
-    try {
-      // GB18030：读出来是中文，改完写回去仍是 GBK 字节，不会变成 UTF-8
-      const gbk = join(root, 'gbk.txt')
-      await writeFile(gbk, Buffer.from([0xd6, 0xd0, 0xce, 0xc4, 0x0a]))
-      const got = await read.execute({ files: [{ path: gbk }] }, approving) as { files: Array<{ content: string; encoding: string }> }
-      expect(got.files[0]!.encoding).toBe('gb18030')
-      await edit.execute({ files: [{ path: gbk, newText: `${got.files[0]!.content}中文\n` }] }, approving)
-      const back = await readFile(gbk)
-      expect(back.subarray(0, 4)).toEqual(Buffer.from([0xd6, 0xd0, 0xce, 0xc4]))
-
-      // 已有的二进制文件不许被整个覆盖
-      const binary = join(root, 'blob.bin')
-      await writeFile(binary, Buffer.from([0x00, 0x01, 0x02, 0x00]))
-      const refused = await failureOf(edit.execute({ files: [{ path: binary, newText: 'text\n' }] }, approving))
-      expect(refused.outcome).toBe('not-applied')
-      expect(await readFile(binary)).toEqual(Buffer.from([0x00, 0x01, 0x02, 0x00]))
-
-      // 符号链接：写的是它指向的那个文件，链接本身还是链接
-      const real = join(root, 'real.txt')
-      const link = join(root, 'link.txt')
-      await writeFile(real, 'one\n')
-      await symlink(real, link)
-      await edit.execute({ files: [{ path: link, newText: 'two\n' }] }, approving)
-      expect(await readFile(real, 'utf8')).toBe('two\n')
-      expect((await lstat(link)).isSymbolicLink()).toBe(true)
-    } finally {
-      await rm(root, { recursive: true, force: true })
-    }
-  })
-
-  test('INV-22 大文件分三档：20 MB 以内整份读写，超过的指向 run，一批读不下的单独失败、绝不回半份', async () => {
-    // 两个上限是同一个数：否则会漏出一段「字节放行、字符拒绝」的文件，读不了也改不了
-    expect(SystemFileLimits.readChars).toBe(SystemFileLimits.fileBytes)
-
-    const root = await mkdtemp(join(tmpdir(), 'velaros-inv22-'))
-    try {
-      // 第一档：12 MB 的文件整份读回来（砍掉分页之前，这一段超过了 400 万字符的旧预算，读不了）
-      const big = join(root, 'big.log')
-      const line = 'INFO 这一行是填充用的日志\n'
-      const body = line.repeat(Math.floor((12 * 1024 * 1024) / Buffer.byteLength(line)))
-      await writeFile(big, `${body}ERROR 真正要找的那一行\n`)
-      const got = await read.execute({ files: [{ path: big }] }, approving) as { files: Array<{ content: string }> }
-      expect(got.files[0]!.content.endsWith('ERROR 真正要找的那一行\n')).toBe(true)
-
-      // 整份改完写回去，版本对得上
-      const withVersion = await read.execute({ files: [{ path: big }] }, approving) as { files: Array<{ content: string; version: string }> }
-      const next = withVersion.files[0]!.content.replace('ERROR 真正要找的那一行', 'ERROR 已处理')
-      const written = await edit.execute({ files: [{ path: big, newText: next, version: withVersion.files[0]!.version }] }, approving) as { files: Array<{ previousVersion: string | null }> }
-      expect((await readFile(big, 'utf8')).endsWith('ERROR 已处理\n')).toBe(true)
-      // 超过 2 MB 的能写，但不留回滚版本
-      expect(written.files[0]!.previousVersion).toBeNull()
-
-      // 第二档：一批读不下时，读不下的那个单独失败，前面的照常回来——绝不回半份。
-      // 用 ASCII：一个字节一个字符，两份 11 MB 加起来才压得过 20 MB 的字符预算（中文三字节一个字，压不到）。
-      const asciiBody = 'x'.repeat(11 * 1024 * 1024)
-      const first = join(root, 'first.log')
-      const second = join(root, 'second.log')
-      await writeFile(first, asciiBody)
-      await writeFile(second, asciiBody)
-      const batch = await read.execute({ files: [{ path: first }, { path: second }] }, approving) as { files: Array<{ content?: string; error?: { message: string } }> }
-      expect(batch.files[0]!.content?.length).toBeGreaterThan(0)
-      expect(batch.files[1]!.error?.message).toContain('单独放进一次 read')
-      expect(batch.files[1]!.content).toBeUndefined()
-
-      // 第三档：超过 20 MB 的读不进来，报错直接指向 run
-      const huge = join(root, 'huge.log')
-      await writeFile(huge, Buffer.alloc(SystemFileLimits.fileBytes + 1, 0x61))
-      const refused = await read.execute({ files: [{ path: huge }] }, approving).catch((error: unknown) => error as Error)
-      expect(String((refused as Error).message)).toContain('用 run 取片段')
-    } finally {
-      await rm(root, { recursive: true, force: true })
-    }
-  }, 60_000)
-
-  test('INV-19 写系统敏感路径与凭证文件前经审批端口确认，按真实路径判定，被拒整批不写，临时目录不打扰用户', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'velaros-inv19-'))
-    try {
-      const key = join(root, 'deploy.pem')
-      await writeFile(key, '-----BEGIN PRIVATE KEY-----\nabc\n')
-      const alias = join(root, 'notes.txt')
-      await symlink(key, alias)
-      const plain = join(root, 'plain.txt')
-      await writeFile(plain, 'alpha\n')
-      // 临时目录里的普通文件：拒绝一切确认的端口也能写，说明没有去问用户。
-      const written = await edit.execute({ files: [{ path: plain, newText: 'beta\n' }] }, denying) as { files: Array<{ action: string }> }
-      expect(written.files[0]!.action).toBe('written')
-      // 凭证文件藏在符号链接后面也要问；被拒时整批不写。
-      const denied = await failureOf(edit.execute({ files: [{ path: plain, newText: 'gamma\n' }, { path: alias, newText: 'x\n' }] }, denying))
-      expect(denied.code).toBe('PERMISSION')
-      expect(denied.problems[0]).toMatchObject({ file: 1, reason: 'denied' })
-      expect(await readFile(plain, 'utf8')).toBe('beta\n')
-      expect(await readFile(key, 'utf8')).toContain('PRIVATE KEY')
-    } finally {
-      await rm(root, { recursive: true, force: true })
-    }
-  })
-
-
-
-
-})
-
 describe('演练沙箱', () => {
-  const canConfine = (process.platform === 'darwin' && existsSync('/usr/bin/sandbox-exec'))
-    || (process.platform === 'linux' && ['/usr/bin/bwrap', '/usr/local/bin/bwrap'].some((path) => existsSync(path)))
-
   /** 一个带假 .git 的源目录。 */
   async function makeSource(): Promise<string> {
     const source = await mkdtemp(join(tmpdir(), 'velaros-inv-sandbox-'))
@@ -439,7 +228,8 @@ describe('演练沙箱', () => {
       await writeFile(join(record.root, 'a.txt'), 'ALPHA\n')
       await writeFile(join(record.root, 'b.txt'), 'beta\n')
       await writeFile(join(source, 'a.txt'), 'changed outside\n')
-      const failure = await kernel.applySandbox({ sandboxId }).then(() => null, (error: unknown) => error as { context?: { executionOutcome?: string } })
+      const failure = await kernel.applySandbox({ sandboxId }).then(() => null, (error: unknown) => error as { code?: string; context?: { executionOutcome?: string } })
+      expect(failure?.code).toBe('SYSTEM_SANDBOX_CONFLICT')
       expect(failure?.context?.executionOutcome).toBe('not-applied')
       expect(await readFile(join(source, 'a.txt'), 'utf8')).toBe('changed outside\n')
       expect(existsSync(join(source, 'b.txt'))).toBe(false)
@@ -599,9 +389,9 @@ describe('演练沙箱', () => {
       await writeFile(join(record.root, 'c.txt'), 'late\n')
 
       const failure = await kernel.applySandbox({ sandboxId, fingerprint: confirmed.fingerprint })
-        .then(() => null, (error: unknown) => error as { context?: { executionOutcome?: string }; cause?: { reason?: string } })
+        .then(() => null, (error: unknown) => error as { code?: string; context?: { executionOutcome?: string } })
       expect(failure?.context?.executionOutcome).toBe('not-applied')
-      expect(failure?.cause?.reason).toBe('SYSTEM_SANDBOX_CHANGED')
+      expect(failure?.code).toBe('SYSTEM_SANDBOX_CHANGED')
       expect(existsSync(join(source, 'b.txt'))).toBe(false)
       expect(existsSync(join(source, 'c.txt'))).toBe(false)
     } finally {
@@ -625,8 +415,9 @@ describe('演练沙箱', () => {
       await mkdir(join(record.root, 'ext'))
       await writeFile(join(record.root, 'ext', 'evil.txt'), 'evil\n')
       const escaped = await kernel.applySandbox({ sandboxId, paths: ['ext/evil.txt'] })
-        .then(() => null, (error: unknown) => error as { cause?: { details?: { conflicts?: Array<{ path: string; reason: string }> } } })
-      expect(escaped?.cause?.details?.conflicts?.[0]).toMatchObject({ path: 'ext/evil.txt', reason: 'link' })
+        .then(() => null, (error: unknown) => error as { code?: string; context?: { conflicts?: Array<{ path: string; reason: string }> } })
+      expect(escaped?.code).toBe('SYSTEM_SANDBOX_CONFLICT')
+      expect(escaped?.context?.conflicts?.[0]).toMatchObject({ path: 'ext/evil.txt', reason: 'link' })
       expect(existsSync(join(outside, 'evil.txt'))).toBe(false)
 
       // 暂存拷不全（镜像里有个文件读不出来）：别的文件也一个都不落，源目录里不留暂存目录。
@@ -649,283 +440,141 @@ describe('演练沙箱', () => {
   })
 })
 
-describe('代码面', () => {
-  test('INV-31 模型写的程序经生成的声明调到真实操作：读真文件、在程序里筛、只交出要的', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'velaros-code-surface-'))
-    try {
-      await writeFile(join(directory, 'a.ts'), 'const a = 1\n// TODO: 补这里\n', 'utf8')
-      await writeFile(join(directory, 'b.ts'), '干净文件，没有待办\n', 'utf8')
-
-      const surface = createSystemCodeSurface({
-        resolveContext: (signal) =>
-          ({
-            abortSignal: signal ?? new AbortController().signal,
-            system: { resolvePath: (path?: string) => path ?? directory },
-            approval: { awaitConfirmation: async () => undefined },
-          }) as unknown as SystemToolContext,
-      })
-      const session = createCodeSurfaceSession({
-        checker: codeProgramChecker,
-        runner: nodeSubprocessCodeRunner,
-        capabilities: createCapabilityPort(surface.operations),
-      })
-      // 授权用的就是**生成的那份声明**：模型看的和这里执行的是同一个源码的两头，
-      // 一旦声明与操作漂了，程序连编译都过不去。
-      const declarations = await readFile(
-        resolve(import.meta.dir, '../../../baselines/code-surface/system.d.ts'),
-        'utf8'
-      )
-
-      const outcome = await session.submit({
-        program: {
-          source: [
-            "import { read } from 'velar:system'",
-            `const r = await read({ files: [{ path: '${join(directory, 'a.ts')}' }, { path: '${join(directory, 'b.ts')}' }] })`,
-            'export default r.files',
-            "  .filter((f) => !('error' in f) && f.content.includes('TODO'))",
-            '  .map((f) => f.path.split("/").pop())',
-          ].join('\n'),
-        },
-        granted: [{ namespace: 'system', declarations }],
-        timeoutMs: 20_000,
-      })
-
-      if (!outcome.checked) throw new Error(`应当通过检查：${JSON.stringify(outcome)}`)
-      expect(outcome.result.failed).toBeUndefined()
-      expect(outcome.result.value).toEqual(['a.ts'])
-    } finally {
-      await rm(directory, { recursive: true, force: true })
-    }
-  }, 60_000)
-
-  test('INV-32 上限由那件能力自己钳，不靠入参 schema 拦：换个入口也漏不掉', async () => {
-    const asked: Array<Record<string, unknown>> = []
-    const context = {
-      abortSignal: new AbortController().signal,
-      system: {
-        resolvePath: (path?: string) => path ?? process.cwd(),
-        runCommand: async (_command: string, options: Record<string, unknown>) => {
-          asked.push(options)
-          return { stdout: '', stderr: '', exitCode: 0, truncated: false }
-        },
-        listBackgroundTasks: async (options: Record<string, unknown>) => {
-          asked.push(options)
-          return []
-        },
-      },
-      approval: { awaitConfirmation: async () => undefined },
-    } as unknown as SystemToolContext
-
-    // 直接调操作方法、绕开入参 schema——这正是「换一个入口」的样子。预算是这件能力自己的，得它自己兜底。
-    await systemExecutionOperations.run(
-      { command: 'echo hi', timeoutMs: 999_999_999, maxOutputChars: 999_999_999 },
-      context
-    )
-    expect(asked[0]?.timeoutMs).toBe(SystemCommandLimits.timeoutMs)
-    expect(asked[0]?.maxOutputChars).toBe(SystemCommandLimits.outputChars)
-
-    await systemExecutionOperations.listTasks({ limit: 999_999 }, context)
-    expect(asked[1]?.limit).toBe(SystemCommandLimits.taskListItems)
-  })
-
-  test('INV-22 大文件穿过隔离：12 MB 读进程序、在程序里改、写回去，模型只看到一行摘要', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'velaros-big-surface-'))
-    try {
-      const path = join(directory, 'big.log')
-      const lines = Array.from({ length: 400_000 }, (_, index) => `${index % 997 === 0 ? 'ERROR' : 'INFO '} line ${index} ${'-'.repeat(12)}`)
-      await writeFile(path, `${lines.join('\n')}\n`)
-      const surface = createSystemCodeSurface({
-        resolveContext: (signal) =>
-          ({
-            abortSignal: signal ?? new AbortController().signal,
-            system: { resolvePath: (target?: string) => target ?? directory },
-            approval: { awaitConfirmation: async () => undefined },
-          }) as unknown as SystemToolContext,
-      })
-      const session = createCodeSurfaceSession({
-        checker: codeProgramChecker,
-        runner: nodeSubprocessCodeRunner,
-        capabilities: createCapabilityPort(surface.operations),
-      })
-      const declarations = await readFile(resolve(import.meta.dir, '../../../baselines/code-surface/system.d.ts'), 'utf8')
-      const outcome = await session.submit({
-        program: {
-          source: [
-            "import { read, edit } from 'velar:system'",
-            `const [file] = (await read({ files: [{ path: ${JSON.stringify(path)} }] })).files`,
-            "if ('error' in file) throw new Error(file.error.message)",
-            "const next = file.content.replaceAll('ERROR', 'FIXED')",
-            `await edit({ files: [{ path: ${JSON.stringify(path)}, newText: next, version: file.version }] })`,
-            "export default { chars: file.content.length, fixed: file.content.split('ERROR').length - 1 }",
-          ].join('\n'),
-        },
-        granted: [{ namespace: 'system', declarations }],
-        timeoutMs: 60_000,
-      })
-      if (!outcome.checked) throw new Error(`应当通过检查：${JSON.stringify(outcome)}`)
-      expect(outcome.result.failed).toBeUndefined()
-      // 模型那边只拿到这一小段：12 MB 的正文一个字都没进它的上下文
-      const value = outcome.result.value as { chars: number; fixed: number }
-      expect(value.chars).toBeGreaterThan(10_000_000)
-      expect(value.fixed).toBe(402)
-      expect(JSON.stringify(outcome.result).length).toBeLessThan(500)
-      const after = await readFile(path, 'utf8')
-      expect(after.includes('ERROR')).toBe(false)
-      expect(after.split('FIXED').length - 1).toBe(402)
-    } finally {
-      await rm(directory, { recursive: true, force: true })
-    }
-  }, 120_000)
-
-  test('INV-31 入参不合法由操作方法自己拦，端口不盖第二层', async () => {
-    const surface = createSystemCodeSurface({
-      resolveContext: () => ({ abortSignal: new AbortController().signal }) as unknown as SystemToolContext,
+describe('系统空间：三件能力配上本机端口', () => {
+  test('INV-19 写系统敏感路径与凭证文件前按真实路径问用户，被拒整批不写；读凭证文件被拒只是那一项失败；临时目录不打扰用户', async () => {
+    const root = await realpath(await mkdtemp(join(tmpdir(), 'velaros-inv19-')))
+    const system = systemSpaceAt(root, (message) => {
+      if (message.includes('凭证文件')) throw new Error('用户没同意')
     })
-    const port = createCapabilityPort(surface.operations)
-    // 绕开编译期（模型写 JSON.parse 就是这样）送进一个坏形状：拦它的是 SystemFileOperations 自己
-    const outcome = await port.invoke({ namespace: 'system', operation: 'read', input: { files: '不是数组' } })
-    expect(outcome.value).toBeUndefined()
-    expect(outcome.error?.code).toBe('VALIDATION')
-    expect(outcome.error?.message).toContain('files')
+    try {
+      await writeFile(join(root, 'deploy.pem'), '-----BEGIN PRIVATE KEY-----\nabc\n')
+      await symlink(join(root, 'deploy.pem'), join(root, 'notes.txt'))
+      await writeFile(join(root, 'plain.txt'), 'alpha\n')
+      // 临时目录里的普通文件：不问用户就写了
+      const written = await system.port.invoke({ namespace: 'files', operation: 'edit', input: { files: [{ path: 'plain.txt', newText: 'beta\n' }] } })
+      expect(written.error).toBeUndefined()
+      expect(system.confirmations).toEqual([])
+      // 凭证文件藏在符号链接后面也要问，问的是它指向的那个；被拒整批不写
+      const denied = await system.port.invoke({ namespace: 'files', operation: 'edit', input: { files: [{ path: 'plain.txt', newText: 'gamma\n' }, { path: 'notes.txt', newText: 'x\n' }] } })
+      expect(denied.error?.code).toBe('FILES_EDIT_DENIED')
+      expect(system.confirmations[0]).toContain(join(root, 'deploy.pem'))
+      expect(await readFile(join(root, 'plain.txt'), 'utf8')).toBe('beta\n')
+      expect(await readFile(join(root, 'deploy.pem'), 'utf8')).toContain('PRIVATE KEY')
+      // 读凭证文件同样要问，被拒只是那一项失败
+      const read = await system.port.invoke({ namespace: 'files', operation: 'read', input: { files: [{ path: 'deploy.pem' }, { path: 'plain.txt' }] } })
+      expect(read.value).toMatchObject({ files: [{ error: { message: '用户没同意' } }, { content: 'beta\n' }] })
+    } finally {
+      await system.dispose()
+      await rm(root, { recursive: true, force: true })
+    }
   })
 
-  test('INV-31 登记的操作名与模型看到的声明逐个对上，没有一个只在一边有', async () => {
-    const surface = createSystemCodeSurface({
-      resolveContext: () => ({ abortSignal: new AbortController().signal }) as unknown as SystemToolContext,
+  test('INV-20 本机落盘核对计划时的字节：审批期间被同尺寸、同修改时间地改掉，也不覆盖', async () => {
+    const root = await realpath(await mkdtemp(join(tmpdir(), 'velaros-inv20-')))
+    const plain = join(root, 'plain.txt')
+    // 超过 64 KB：这么大的文件落盘前只看「大小 + 修改时间」，两样都没变就不重读（小文件一律重读，拦不到这里）。
+    const concurrent = `${'z'.repeat(100 * 1024)}\n`
+    const pinned = 1_700_000_000
+    // 用户看凭证文件的确认卡时，别人把第一个文件改成同样长度的内容，并把修改时间拨回整数秒
+    const system = systemSpaceAt(root, async () => {
+      await writeFile(plain, concurrent)
+      await utimes(plain, pinned, pinned)
     })
-    const registered = [...(createCapabilityPort(surface.operations).listOperations().system ?? [])].sort()
-    // 声明是模型唯一能看见的东西：声明里有而表里没有 = 模型照着写却调不通；
-    // 表里有而声明里没有 = 那件能力模型根本不知道存在。两边都必须为空。
-    const declarations = await readFile(
-      resolve(import.meta.dir, '../../../baselines/code-surface/system.d.ts'),
-      'utf8'
-    )
-    const declared = [...declarations.matchAll(/export function (\w+)/gu)].map((match) => match[1]).sort()
-    expect(registered).toEqual(declared)
-  })
-})
-
-describe('看图与代码模版', () => {
-  const declarationsPath = resolve(import.meta.dir, '../../../baselines/code-surface/system.d.ts')
-  const templatePath = resolve(import.meta.dir, '../templates/system.js')
-
-  test('INV-33 代码模版整份照真实声明过类型检查，声明里嵌的就是这份文件', async () => {
-    const declarations = await readFile(declarationsPath, 'utf8')
-    const template = await readFile(templatePath, 'utf8')
-    const checked = codeProgramChecker.check({ source: template, granted: [{ namespace: 'system', declarations }] })
-    expect(checked.ok ? [] : checked.diagnostics).toEqual([])
-    // 嵌进声明的那份要跟文件一字不差（去掉行首的注释前缀之后），否则模型看到的是旧模版
-    const embedded = declarations
-      .split('\n')
-      .map((line) => line.replace(/^\s*\* ?/u, ''))
-      .join('\n')
-    for (const line of template.trim().split('\n').filter((text) => text.trim().length > 0)) {
-      expect(embedded).toContain(line)
-    }
-  })
-
-  const viewContext = (options: { resize?: (request: never) => Promise<unknown>; attach?: boolean } = {}) => {
-    const attached: Array<{ mediaType: string; data: string; label: string }> = []
-    const resized: unknown[] = []
-    const context = {
-      abortSignal: new AbortController().signal,
-      approval: { awaitConfirmation: async () => undefined },
-      system: {
-        resolvePath: (path?: string) => path ?? process.cwd(),
-        resizeImage: options.resize
-          ? async (request: never) => {
-            resized.push(request)
-            return options.resize!(request)
-          }
-          : undefined,
-      },
-      attachImage: options.attach === false ? undefined : (image: { mediaType: string; data: string; label: string }) => attached.push(image),
-    } as unknown as SystemToolContext
-    return { context, attached, resized }
-  }
-
-  test('INV-34 在范围内的图原样交出，不碰缩放器；结果里只有尺寸，没有像素', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'velaros-view-'))
     try {
-      const path = join(directory, 'small.png')
-      await writeFile(path, solidPng(800, 600))
-      const { context, attached, resized } = viewContext({ resize: async () => { throw new Error('不该被调') } })
-      const result = await systemFileOperations.view({ files: [{ path }] }, context)
-      expect(result.files[0]).toEqual({ path, mediaType: 'image/png', width: 800, height: 600, sent: { width: 800, height: 600 } })
-      expect(JSON.stringify(result)).not.toContain('iVBOR')
-      expect(resized).toHaveLength(0)
-      expect(attached).toHaveLength(1)
-      expect(attached[0]!.label).toContain('原图 800×600')
-      expect(Buffer.from(attached[0]!.data, 'base64').equals(await readFile(path))).toBe(true)
+      await writeFile(plain, `${'a'.repeat(100 * 1024)}\n`)
+      await utimes(plain, pinned, pinned)
+      await writeFile(join(root, 'deploy.pem'), 'secret\n')
+      const outcome = await system.port.invoke({ namespace: 'files', operation: 'edit', input: { files: [{ path: 'plain.txt', newText: 'beta\n' }, { path: 'deploy.pem', newText: 'x\n' }] } })
+      expect(outcome.error?.code).toBe('VALIDATION')
+      expect(outcome.error?.message).toContain('被别人改了')
+      expect(await readFile(plain, 'utf8')).toBe(concurrent)
     } finally {
-      await rm(directory, { recursive: true, force: true })
+      await system.dispose()
+      await rm(root, { recursive: true, force: true })
     }
   })
 
-  test('INV-34 超出长边才请宿主压；要了 region 才请宿主裁，整块在图外直接拒', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'velaros-view-'))
+  test('INV-31 操作表登记的名字与模型看到的三份声明逐个对上；入参不合法由操作方法自己拦', async () => {
+    const system = systemSpaceAt(tmpdir())
     try {
-      const path = join(directory, 'big.png')
-      await writeFile(path, solidPng(4000, 3000))
-      const shrunk = solidPng(2000, 1500)
-      const { context, resized } = viewContext({ resize: async () => ({ data: shrunk, mediaType: 'image/png', width: 2000, height: 1500 }) })
-
-      const whole = await systemFileOperations.view({ files: [{ path }] }, context)
-      expect(whole.files[0]).toMatchObject({ width: 4000, height: 3000, sent: { width: 2000, height: 1500 } })
-      expect(resized[0]).toMatchObject({ longEdge: SystemFileLimits.imageEdge })
-
-      await systemFileOperations.view({ files: [{ path, region: { x: 3000, y: 0, width: 5000, height: 500 } }] }, context)
-      // region 超出图的部分收进来：x 从 3000 起，最多到 4000
-      expect(resized[1]).toMatchObject({ region: { x: 3000, y: 0, width: 1000, height: 500 } })
-
-      await expect(systemFileOperations.view({ files: [{ path, region: { x: 5000, y: 0, width: 10, height: 10 } }] }, context))
-        .rejects.toThrow('整块都在图外')
+      const registered = system.port.listOperations()
+      expect(Object.keys(registered).sort()).toEqual(['files', 'sandbox', 'shell'])
+      for (const [namespace, operations] of Object.entries(registered)) {
+        const declarations = readFileSync(join(BaselineDirectory, `${namespace}.d.ts`), 'utf8')
+        const declared = [...declarations.matchAll(/export function (\w+)/gu)].map((match) => match[1]).sort()
+        expect({ namespace, operations: [...operations].sort() }).toEqual({ namespace, operations: declared })
+      }
+      // 绕开编译期（模型写 JSON.parse 就是这样）送进一个坏形状：拦它的是那件能力自己
+      const outcome = await system.port.invoke({ namespace: 'files', operation: 'read', input: { files: '不是数组' } })
+      expect(outcome.value).toBeUndefined()
+      expect(outcome.error).toMatchObject({ code: 'VALIDATION', message: expect.stringContaining('files') })
     } finally {
-      await rm(directory, { recursive: true, force: true })
+      await system.dispose()
     }
   })
 
-  test('INV-34 宿主压不了时，超限的图明说并给出 run 命令；没有交图通道时 view 直接不可用', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'velaros-view-'))
+  test.skipIf(process.platform !== 'darwin')('INV-34 本机在 macOS 上用 sips 真压、真裁：超长边的图压到上限以内，裁出来的一块不被放大', async () => {
+    const root = await realpath(await mkdtemp(join(tmpdir(), 'velaros-inv34-')))
+    const system = systemSpaceAt(root)
     try {
-      const path = join(directory, 'big.png')
-      await writeFile(path, solidPng(3000, 2000))
-      const noResizer = viewContext()
-      await expect(systemFileOperations.view({ files: [{ path }] }, noResizer.context)).rejects.toThrow('sips -Z')
-      const noChannel = viewContext({ attach: false })
-      await expect(systemFileOperations.view({ files: [{ path }] }, noChannel.context)).rejects.toThrow('没有把图交给模型的通道')
-      const text = join(directory, 'note.txt')
-      await writeFile(text, '不是图')
-      await expect(systemFileOperations.view({ files: [{ path: text }] }, viewContext().context)).rejects.toThrow('不是模型能看的图片')
-    } finally {
-      await rm(directory, { recursive: true, force: true })
-    }
-  })
-
-  test.skipIf(process.platform !== 'darwin')('INV-34 本机内核在 macOS 上用 sips 真压、真裁：先裁后缩，尺寸与颜色都对', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'velaros-view-'))
-    const kernel = createLocalSystemKernel({ cwd: directory })
-    try {
-      const path = join(directory, 'wide.png')
-      await writeFile(path, solidPng(3000, 2000))
-      const attached: Array<{ data: string }> = []
-      const context = {
-        abortSignal: new AbortController().signal,
-        approval: { awaitConfirmation: async () => undefined },
-        system: kernel,
-        attachImage: (image: { data: string }) => attached.push(image),
-      } as unknown as SystemToolContext
-
-      const whole = await systemFileOperations.view({ files: [{ path }] }, context)
-      expect(whole.files[0]).toMatchObject({ width: 3000, height: 2000, sent: { width: 2000, height: 1333 } })
-
+      await writeFile(join(root, 'wide.png'), solidPng(3000, 2000))
+      const whole = await system.port.invoke({ namespace: 'files', operation: 'view', input: { files: [{ path: 'wide.png' }] } })
+      expect(whole.value).toMatchObject({ files: [{ width: 3000, height: 2000, sent: { width: 2000, height: 1333 } }] })
+      expect(whole.attachments?.[0]?.mediaType).toBe('image/png')
       // 右半边（纯蓝）裁 1000×800：不超长边，不该被放大
-      const zoomed = await systemFileOperations.view({ files: [{ path, region: { x: 2000, y: 0, width: 1000, height: 800 } }] }, context)
-      expect(zoomed.files[0]).toMatchObject({ sent: { width: 1000, height: 800 } })
+      const zoomed = await system.port.invoke({ namespace: 'files', operation: 'view', input: { files: [{ path: 'wide.png', region: { x: 2000, y: 0, width: 1000, height: 800 } }] } })
+      expect(zoomed.value).toMatchObject({ files: [{ sent: { width: 1000, height: 800 } }] })
     } finally {
-      await kernel.dispose()
-      await rm(directory, { recursive: true, force: true })
+      await system.dispose()
+      await rm(root, { recursive: true, force: true })
+    }
+  }, 60_000)
+
+  test('INV-35 一段真程序经系统空间用上三件能力：相对路径相对内核的工作目录，命令在本机跑，结果只交出要的', async () => {
+    const root = await realpath(await mkdtemp(join(tmpdir(), 'velaros-inv35-')))
+    const system = systemSpaceAt(root)
+    try {
+      await writeFile(join(root, 'notes.txt'), 'TODO: 补这里\n干净的一行\n')
+      const outcome = await system.program(`import { edit, read } from 'velar:files'
+import { run } from 'velar:shell'
+
+const [file] = (await read({ files: [{ path: 'notes.txt' }] })).files
+if ('error' in file) throw new Error(file.error.message)
+await edit({ files: [{ path: 'notes.txt', newText: file.content.replace('TODO', 'DONE'), version: file.version }] })
+const listed = await run({ command: 'ls' })
+export default { path: file.path, listed: listed.stdout.includes('notes.txt'), cwd: listed.cwd }`)
+      expect(outcome.result.failed).toBeUndefined()
+      expect(outcome.result.value).toEqual({ path: join(root, 'notes.txt'), listed: true, cwd: root })
+      expect(await readFile(join(root, 'notes.txt'), 'utf8')).toBe('DONE: 补这里\n干净的一行\n')
+    } finally {
+      await system.dispose()
+      await rm(root, { recursive: true, force: true })
+    }
+  }, 60_000)
+
+  test.skipIf(!canConfine)('INV-35 系统空间的沙箱：镜像任意目录，镜像里的命令写不到外面，落回前按源目录问用户', async () => {
+    const root = await realpath(await mkdtemp(join(tmpdir(), 'velaros-inv35-sandbox-')))
+    const system = systemSpaceAt(tmpdir())
+    try {
+      await writeFile(join(root, 'a.txt'), 'alpha\n')
+      const outcome = await system.program(`import { apply, create, diff, run } from 'velar:sandbox'
+
+const box = await create({ source: ${JSON.stringify(root)} })
+const inside = await run({ id: box.id, command: 'printf beta > b.txt' })
+const outside = await run({ id: box.id, command: 'printf x > ${join(root, 'a.txt')}' })
+const changes = await diff({ id: box.id })
+const applied = await apply({ id: box.id })
+export default { inside: inside.success, escaped: outside.success, created: changes.created, applied: applied.created }`)
+      expect(outcome.result.failed).toBeUndefined()
+      expect(outcome.result.value).toEqual({ inside: true, escaped: false, created: ['b.txt'], applied: ['b.txt'] })
+      expect(await readFile(join(root, 'b.txt'), 'utf8')).toBe('beta')
+      expect(await readFile(join(root, 'a.txt'), 'utf8')).toBe('alpha\n')
+      expect(system.confirmations).toHaveLength(1)
+      expect(system.confirmations[0]).toContain(root)
+      for (const record of system.kernel.listSandboxes()) await system.kernel.discardSandbox(record.id)
+    } finally {
+      await system.dispose()
+      await rm(root, { recursive: true, force: true })
     }
   }, 60_000)
 })
-

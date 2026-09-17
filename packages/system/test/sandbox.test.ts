@@ -5,12 +5,12 @@ import { join } from 'node:path'
 
 import { describe, expect, test } from 'bun:test'
 
-import { sandboxOperations } from '@velaros-ai/rehearsal-sandbox'
+import type { ApprovalPort } from '@velaros-ai/agent/tool-contract'
+import { createCapabilityPort } from '@velaros-ai/code-surface'
 import { RehearsalSandboxLimits } from '@velaros-ai/rehearsal-sandbox/contracts'
 
-import type { SystemToolContext } from '../src/contract/requires.js'
-import type { LocalSystemKernelApi } from '../src/impl/LocalSystemKernel.js'
-import { createLocalSystemKernel } from '../src/impl/LocalSystemKernel.js'
+import type { LocalSystemKernelApi } from '../src/index'
+import { createLocalSystemKernel, createSystemSpace } from '../src/index'
 import { isPathInsideRoot } from '../src/utils/file-safety.js'
 import { assertInsideSandboxBase, isSandboxId, sandboxBaseDirectory } from '../src/utils/sandbox.js'
 
@@ -32,53 +32,25 @@ async function makeSource(): Promise<string> {
   return source
 }
 
-/** 工具上下文：宿主端口就是本地内核，审批按给定的方式回答。 */
-function contextFor(kernel: LocalSystemKernelApi, approve: boolean): SystemToolContext {
-  return {
-    abortSignal: new AbortController().signal,
-    approval: {
-      requestApproval: async () => ({ approved: true }),
-      awaitConfirmation: async () => { if (!approve) throw new Error('user said no') },
-    },
-    system: kernel,
-  } as unknown as SystemToolContext
-}
-
-/** 工具上下文：宿主端口就是本地内核，每次确认都交给 onConfirm（记下文案、或者趁机改镜像），然后放行。 */
-function recordingContext(kernel: LocalSystemKernelApi, onConfirm: (message: string) => void): SystemToolContext {
-  return {
-    abortSignal: new AbortController().signal,
-    approval: {
-      requestApproval: async () => ({ approved: true }),
-      awaitConfirmation: async (message: string) => { onConfirm(message) },
-    },
-    system: kernel,
-  } as unknown as SystemToolContext
-}
-
 /**
- * 把这些用例仍然按 `action` 写的调用转成 `velar:sandbox` 的四个函数。
- * 走的是真实消费者 `sandboxOperations`，端口按 system 空间的语义现装：源目录随便给、落回政策是系统那套。
+ * 经系统空间里真实的沙箱端口调 `velar:sandbox`，走的就是代码面那条路：程序看得见的只有返回值、错误码与说明。
+ * `answer` 为 false 时每次确认都拒绝，是函数时把确认文案交给它（记下、或者趁机改镜像）再放行。
  */
-const sandboxTool = {
-  execute: async (input: Record<string, unknown>, ctx: SystemToolContext): Promise<unknown> => {
-    const kernel = ctx.system as unknown as LocalSystemKernelApi
-    const surface = {
-      createSandbox: (options?: never) => kernel.createSandbox(options),
-      diffSandbox: (options: never) => kernel.diffSandbox(options),
-      applySandbox: (options: never) => kernel.applySandbox(options),
-      discardSandbox: (id: string) => kernel.discardSandbox(id),
-      resolveSource: async (source?: string) => source ?? kernel.resolvePath(),
-      runInSandbox: async () => { throw new Error('这些用例不经 sandbox.run') },
-      applyPolicy: (source: string) => ({ targetLabel: source, closingNote: '删除和覆盖无法撤销。', riskScope: 'system-sandbox:apply' }),
-    }
-    const context = { abortSignal: ctx.abortSignal, approval: ctx.approval, sandbox: surface } as never
-    const id = String(input.sandboxId ?? '')
-    if (input.action === 'create') return sandboxOperations.create({ source: input.source as string | undefined, network: input.network as boolean | undefined, ignored: input.ignored as never }, context)
-    if (input.action === 'diff') return sandboxOperations.diff({ id, maxFiles: input.maxFiles as number | undefined }, context)
-    if (input.action === 'discard') return sandboxOperations.discard({ id }, context)
-    return sandboxOperations.apply({ id, paths: input.paths as string[] | undefined }, context)
-  },
+function sandboxVia(kernel: LocalSystemKernelApi, answer: boolean | ((message: string) => void) = true) {
+  const approval: ApprovalPort = {
+    awaitConfirmation: async (message) => {
+      if (answer === false) throw new Error('user said no')
+      if (typeof answer === 'function') answer(message)
+    },
+    awaitConfirmationDecision: async () => ({ approved: answer !== false, message: null, autoApproved: false }),
+  }
+  const space = createSystemSpace({ host: kernel, resolveCall: (signal) => ({ abortSignal: signal ?? new AbortController().signal, approval }) })
+  const port = createCapabilityPort(space.operations)
+  return async <T = Record<string, unknown>>(operation: string, input: Record<string, unknown> = {}): Promise<T> => {
+    const outcome = await port.invoke({ namespace: 'sandbox', operation, input })
+    if (outcome.error) throw Object.assign(new Error(outcome.error.message), { code: outcome.error.code })
+    return outcome.value as T
+  }
 }
 
 describe('rehearsal sandbox', () => {
@@ -122,7 +94,7 @@ describe('rehearsal sandbox', () => {
     const kernel = createLocalSystemKernel({ cwd: source })
     let sandboxId = ''
     try {
-      const created = await sandboxTool.execute({ action: 'create' }, contextFor(kernel, true)) as { id: string; root: string; source: string; fileCount: number; linkedDirectories: string[]; git: boolean; network: boolean }
+      const created = await sandboxVia(kernel)<{ id: string; root: string; source: string; fileCount: number; linkedDirectories: string[]; git: boolean; network: boolean }>('create')
       sandboxId = created.id
       expect(isSandboxId(created.id)).toBe(true)
       expect(created.root.startsWith(sandboxBaseDirectory())).toBe(true)
@@ -230,18 +202,18 @@ describe('rehearsal sandbox', () => {
       await rm(join(record.root, 'README.md'))
       await writeFile(join(record.root, '.git', 'HEAD'), 'ref: refs/heads/rehearsal\n')
 
-      const changes = await sandboxTool.execute({ action: 'diff', sandboxId: record.id }, contextFor(kernel, true)) as { created: string[]; modified: string[]; deleted: string[]; gitChanged: boolean; textDiffs: Array<{ path: string; diff: string }>; source: string }
+      const changes = await sandboxVia(kernel)<{ created: string[]; modified: string[]; deleted: string[]; gitChanged: boolean; textDiffs: Array<{ path: string; diff: string }>; source: string }>('diff', { id: record.id })
       expect(changes).toMatchObject({ created: ['src/new.txt'], modified: ['src/a.txt'], deleted: ['README.md'], gitChanged: true, source: await realpath(source) })
       expect(changes.textDiffs.find((entry) => entry.path === 'src/a.txt')?.diff).toContain('-alpha')
       expect(changes.textDiffs.find((entry) => entry.path === 'src/a.txt')?.diff).toContain('+ALPHA')
 
       // 拒绝确认：什么都不落。
-      await expect(sandboxTool.execute({ action: 'apply', sandboxId: record.id }, contextFor(kernel, false))).rejects.toThrow('user said no')
+      await expect(sandboxVia(kernel, false)('apply', { id: record.id })).rejects.toThrow('user said no')
       expect(await readFile(join(source, 'src', 'a.txt'), 'utf8')).toBe('alpha\nbeta\n')
       expect(existsSync(join(source, 'README.md'))).toBe(true)
 
       // 批准：三列都落回，.git 不落。
-      const applied = await sandboxTool.execute({ action: 'apply', sandboxId: record.id }, contextFor(kernel, true)) as { created: string[]; modified: string[]; deleted: string[]; skippedGit: boolean }
+      const applied = await sandboxVia(kernel)<{ created: string[]; modified: string[]; deleted: string[]; skippedGit: boolean }>('apply', { id: record.id })
       expect(applied).toMatchObject({ created: ['src/new.txt'], modified: ['src/a.txt'], deleted: ['README.md'], skippedGit: true })
       expect(await readFile(join(source, 'src', 'a.txt'), 'utf8')).toBe('ALPHA\nbeta\n')
       expect(await readFile(join(source, 'src', 'new.txt'), 'utf8')).toBe('fresh\n')
@@ -250,11 +222,14 @@ describe('rehearsal sandbox', () => {
 
       // 源文件自建沙箱以来变过（刚才落回去的就算）：再落就冲突，整批不落。
       await writeFile(join(record.root, 'src', 'a.txt'), 'ALPHA\nBETA\n')
-      const conflict = await sandboxTool.execute({ action: 'apply', sandboxId: record.id }, contextFor(kernel, true)).then(() => null, (error: unknown) => error as { context?: { executionOutcome?: string }; cause?: { reason?: string; details?: { conflicts?: Array<{ path: string; reason: string }> } } })
-      expect(conflict?.context?.executionOutcome).toBe('not-applied')
-      expect(conflict?.cause?.reason).toBe('SYSTEM_SANDBOX_CONFLICT')
-      // 上一次落回之后源目录整体都变了：新建的文件算凭空出现、改过的算变过、删掉的算丢了，全部列出来。
-      expect(conflict?.cause?.details?.conflicts).toEqual(expect.arrayContaining([
+      const conflict = await sandboxVia(kernel)('apply', { id: record.id }).then(() => null, (error: unknown) => error as { code?: string; message?: string })
+      // 程序看得见的就是码和说明：冲突的路径写在说明里。
+      expect(conflict?.code).toBe('SYSTEM_SANDBOX_CONFLICT')
+      expect(conflict?.message).toContain('src/a.txt')
+      // 上一次落回之后源目录整体都变了：新建的文件算凭空出现、改过的算变过、删掉的算丢了，宿主的错误里全部列出来。
+      const detailed = await kernel.applySandbox({ sandboxId: record.id }).then(() => null, (error: unknown) => error as { context?: { executionOutcome?: string; conflicts?: Array<{ path: string; reason: string }> } })
+      expect(detailed?.context?.executionOutcome).toBe('not-applied')
+      expect(detailed?.context?.conflicts).toEqual(expect.arrayContaining([
         expect.objectContaining({ path: 'src/a.txt', reason: 'changed' }),
         expect.objectContaining({ path: 'src/new.txt', reason: 'appeared' }),
         expect.objectContaining({ path: 'README.md', reason: 'missing' }),
@@ -276,12 +251,12 @@ describe('rehearsal sandbox', () => {
       await mkdir(join(record.root, 'many'))
       for (let index = 0; index < count; index += 1) await writeFile(join(record.root, 'many', `f${index}.txt`), 'x')
       const messages: string[] = []
-      const applied = await sandboxTool.execute({ action: 'apply', sandboxId: record.id }, recordingContext(kernel, (message) => { messages.push(message) })) as { created: string[] }
+      const applied = await sandboxVia(kernel, (message) => { messages.push(message) })<{ created: string[] }>('apply', { id: record.id })
       expect(messages[0]).toContain(`新增 ${count} 个`)
       expect(applied.created.length).toBe(count)
 
       const asked: string[] = []
-      await expect(sandboxTool.execute({ action: 'apply', sandboxId: record.id, paths: ['never-changed.txt'] }, recordingContext(kernel, (message) => { asked.push(message) })))
+      await expect(sandboxVia(kernel, (message) => { asked.push(message) })('apply', { id: record.id, paths: ['never-changed.txt'] }))
         .rejects.toMatchObject({ code: 'VALIDATION' })
       expect(asked).toEqual([])
     } finally {
@@ -301,7 +276,7 @@ describe('rehearsal sandbox', () => {
       await mkdir(join(record.root, 'docs'))
       await writeFile(join(record.root, 'docs', 'index.md'), '# docs\n')
       await writeFile(join(record.root, 'b.txt'), 'new b\n')
-      const applied = await sandboxTool.execute({ action: 'apply', sandboxId: record.id }, contextFor(kernel, true)) as { created: string[]; deleted: string[] }
+      const applied = await sandboxVia(kernel)<{ created: string[]; deleted: string[] }>('apply', { id: record.id })
       expect(applied).toMatchObject({ created: ['b.txt', 'docs/index.md'], deleted: ['docs'] })
       expect((await lstat(join(source, 'docs'))).isDirectory()).toBe(true)
       expect(await readFile(join(source, 'docs', 'index.md'), 'utf8')).toBe('# docs\n')
@@ -328,7 +303,7 @@ describe('rehearsal sandbox', () => {
       await rm(join(record.root, 'src', 'a.txt'))
       const changes = await kernel.diffSandbox({ sandboxId: record.id })
       expect(changes.modified).toEqual(['README.md'])
-      await sandboxTool.execute({ action: 'apply', sandboxId: record.id }, contextFor(kernel, true))
+      await sandboxVia(kernel)('apply', { id: record.id })
       expect(((await stat(join(source, 'README.md'))).mode & 0o777).toString(8)).toBe('755')
       expect(existsSync(join(source, 'build'))).toBe(false)
       expect(existsSync(join(source, 'src'))).toBe(true)
@@ -372,7 +347,7 @@ describe('rehearsal sandbox', () => {
       const outside = await second.runCommand(`printf clobbered > "${join(source, 'README.md')}"`, { cwd: record.root })
       expect(outside.exitCode).not.toBe(0)
       expect(await readFile(join(source, 'README.md'), 'utf8')).toBe('# demo\n')
-      const discarded = await sandboxTool.execute({ action: 'discard', sandboxId: record.id }, contextFor(second, true)) as { removed: boolean }
+      const discarded = await sandboxVia(second)<{ removed: boolean }>('discard', { id: record.id })
       expect(discarded.removed).toBe(true)
       expect(existsSync(record.root)).toBe(false)
       expect(await second.discardSandbox(record.id)).toMatchObject({ removed: false })

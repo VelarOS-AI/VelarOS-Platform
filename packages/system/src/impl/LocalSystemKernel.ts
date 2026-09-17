@@ -1,23 +1,22 @@
 /**
- * 本地内核：`LocalSystemKernel`，宿主端口 `ctx.system` 在本机上的实现。接口见 `interface/provides.ts` 的 `LocalSystemKernelApi`。
+ * 本地内核：`LocalSystemKernel`，系统空间的宿主 `SystemSpaceHost` 在本机上的实现。接口 `LocalSystemKernelApi` 在本文件的类上方。
  * 它只做转接：命令、后台任务与交互式任务的控制台交给命令执行器，演练沙箱交给沙箱登记表（cwd 落在镜像根内的命令走沙箱专属执行器），搜索交给全局搜索，进程、端口、指标跑平台命令读出来。
  */
 
 import { cpus, freemem, homedir, loadavg, platform, release, totalmem } from 'node:os'
 import { isAbsolute, join, resolve } from 'node:path'
 
-import { AppError, isEmpty, Log, toNullable } from '@velaros-ai/core'
+import { isEmpty, Log, toNullable } from '@velaros-ai/core'
 import type { PlatformCompatibilityApi } from '@velaros-ai/platform'
 import { createPlatform } from '@velaros-ai/platform'
 import type { CommandSpec } from '@velaros-ai/platform/contracts'
-import type { RehearsalSandboxHostPort } from '@velaros-ai/rehearsal-sandbox'
 import type { SandboxApplyOptions, SandboxApplyResult, SandboxCreateOptions, SandboxDiff, SandboxDiffOptions, SandboxDiscardResult, SandboxRecord } from '@velaros-ai/rehearsal-sandbox/contracts'
+import type { ShellBackgroundTaskQueryOptions, ShellBackgroundTaskRecord, ShellCommandResult, ShellDescriptor, ShellEnvironmentRefreshResult, ShellRunCommandOptions } from '@velaros-ai/shell-command/contracts'
 
-import type { LocalSystemKernelOptions, SystemToolSystemApi } from '../contract/requires.js'
+import type { LocalSystemKernelOptions, SystemSpaceHost } from '../contract/requires.js'
 import type { ResolvedSystemShell } from '../types/commands.js'
-import type { SystemImageResizeRequest, SystemImageResizeResult } from '../types/files.js'
-import type { SystemBackgroundTaskQueryOptions, SystemBackgroundTaskRecord, SystemBackgroundTaskTerminateRequest, SystemBackgroundTaskTerminateResult, SystemCommandResult, SystemConsoleControlResult, SystemConsoleInputRequest, SystemConsoleInterruptRequest, SystemConsoleOutputChunk, SystemConsoleOutputRequest, SystemEnvironmentInspection, SystemGlobalSearchOptions, SystemGlobalSearchResult, SystemMetricsSnapshot, SystemOpenPortInfo, SystemOpenPortQueryOptions, SystemProcessInfo, SystemProcessQueryOptions, SystemRunCommandOptions, SystemShellDescriptor, SystemShellEnvironmentRefreshResult } from '../types/system.js'
-import { resizeImageWithSips } from '../utils/image.js'
+import type { SystemBackgroundTaskTerminateResult, SystemConsoleControlResult, SystemConsoleOutputChunk, SystemEnvironmentInspection } from '../types/host.js'
+import type { SystemBackgroundTaskTerminateRequest, SystemConsoleInputRequest, SystemConsoleInterruptRequest, SystemConsoleOutputRequest, SystemGlobalSearchOptions, SystemGlobalSearchResult, SystemMetricsSnapshot, SystemOpenPortInfo, SystemOpenPortQueryOptions, SystemProcessInfo, SystemProcessQueryOptions } from '../types/system.js'
 import { runPlatformCommand } from '../utils/process.js'
 import { detectSystemShells, replaceEnvironment, toShellDescriptor } from '../utils/shell.js'
 import {
@@ -51,15 +50,15 @@ export function createLocalSystemKernel(options: LocalSystemKernelOptions): Loca
 }
 
 /**
- * 本地内核：宿主端口 `ctx.system` 在本机上的实现，产品壳创建一个交给工具用。
+ * 本地内核：系统空间的宿主 `SystemSpaceHost` 在本机上的实现，产品壳创建一个交给 `createSystemSpace`。
  *
- * 实现是 `LocalSystemKernel`，只做转接：命令与后台任务交给命令执行器，搜索交给全局搜索，
+ * 实现是 `LocalSystemKernel`，只做转接：命令与后台任务交给命令执行器，演练沙箱交给沙箱登记表，搜索交给全局搜索，
  * 进程、端口、指标跑平台命令读出来。相对路径都相对构造时给的 cwd，`~` 展开到家目录。
- * 宿主端口本身的方法见 `requires.ts` 的 `SystemToolSystemApi`；这里另给产品壳十一个方法：环境检查、指标、释放、沙箱列表，
+ * 系统空间要的方法见 `requires.ts` 的 `SystemSpaceHost`；这里另给产品壳十个方法：环境检查、指标、释放，
  * 全局搜索、进程、端口、终止后台任务，以及交互式任务的控制台三件事（写输入、读增量输出、发中断）。
- * 这些方法都没有工具在调（模型改用 `run` 跑系统命令，控制台归用户），是宿主自己的界面要的。由 `createLocalSystemKernel(options)` 创建。
+ * 这些方法模型碰不到（模型用 `velar:shell` 的 run 跑系统命令，控制台归用户），是宿主自己的界面要的。由 `createLocalSystemKernel(options)` 创建。
  */
-export interface LocalSystemKernelApi extends SystemToolSystemApi, RehearsalSandboxHostPort {
+export interface LocalSystemKernelApi extends SystemSpaceHost {
   /**
    * 环境检查：操作系统、经过自检的默认 shell 和它的 PATH、本机可用的全部 shell（`shells`，按优先顺序，第一个就是默认那个），
    * 以及给定的每个命令在不在、在哪。宿主把 `shells` 与默认那个写进每回合给模型的环境报告，`run` / `project:run` 的 `shell` 字段就照着这份清单填。
@@ -75,8 +74,6 @@ export interface LocalSystemKernelApi extends SystemToolSystemApi, RehearsalSand
   listProcesses(options?: SystemProcessQueryOptions): Promise<SystemProcessInfo[]>
   /** 列出正在监听的 TCP 端口和占用它们的进程，可按端口、端口范围、进程筛选，最多 limit 条（默认 50）。 */
   listOpenPorts(options?: SystemOpenPortQueryOptions): Promise<SystemOpenPortInfo[]>
-  /** 登记着的演练沙箱，给宿主界面列沙箱、展示差量用。 */
-  listSandboxes(): SandboxRecord[]
   /** 终止一个后台任务：核对任务存在、属于请求里的会话、进程确实是自己启动的那个，再发信号并等它退出；返回终止前后的状态。 */
   terminateBackgroundTask(request: SystemBackgroundTaskTerminateRequest): Promise<SystemBackgroundTaskTerminateResult>
   /**
@@ -233,7 +230,7 @@ export class LocalSystemKernel implements LocalSystemKernelApi {
     return selectOpenPorts(entries, new Map(owners.map((processInfo) => [processInfo.pid, processInfo])), options)
   }
 
-  public async listBackgroundTasks(options: SystemBackgroundTaskQueryOptions = {}): Promise<SystemBackgroundTaskRecord[]> {
+  public async listBackgroundTasks(options: ShellBackgroundTaskQueryOptions = {}): Promise<ShellBackgroundTaskRecord[]> {
     const tasks = [this.commands, ...this.sandboxes.runners()].flatMap((runner) => runner.listTasks(options))
     return tasks.sort((a, b) => b.startedAt - a.startedAt).slice(0, options.limit ?? SystemTuning.command.taskListItems)
   }
@@ -254,13 +251,13 @@ export class LocalSystemKernel implements LocalSystemKernelApi {
     return this.runnerOwning(request.taskId).interruptConsole(request)
   }
 
-  public async refreshShellEnvironment(): Promise<SystemShellEnvironmentRefreshResult> {
+  public async refreshShellEnvironment(): Promise<ShellEnvironmentRefreshResult> {
     // Windows 上重读用户与系统环境变量并写回本进程，之后起的子进程才看得到新装的命令；其他平台每条命令都经登录 shell 重读配置，这里只重新选 shell。
     const refreshed = await this.shells.refreshWindowsEnvironment(process.env, this.hostPlatform)
     // 写回时宿主设的输入变量（VELAROS_SHELL_PATH 等）照留：刷新结果不带它们，直接按结果覆盖会把宿主指定的 shell 弄丢。
     if (this.hostPlatform === 'win32' && refreshed.refreshed) replaceEnvironment(process.env, refreshed.env)
     const shell = await this.resolveShell()
-    const result: SystemShellEnvironmentRefreshResult = {
+    const result: ShellEnvironmentRefreshResult = {
       shell: shell.shellPath,
       runtime: toShellDescriptor(shell),
       shells: this.detectShells(),
@@ -274,10 +271,10 @@ export class LocalSystemKernel implements LocalSystemKernelApi {
 
   public runCommand(
     command: string,
-    options: SystemRunCommandOptions = {},
+    options: ShellRunCommandOptions = {},
     _allowDangerous = false,
     abortSignal?: AbortSignal
-  ): Promise<SystemCommandResult> {
+  ): Promise<ShellCommandResult> {
     const cwd = this.resolvePath(options.cwd)
     // cwd 落在某个沙箱根之内，就交给那个沙箱专属的执行器：约束钉死在镜像根，写不到源目录。
     return this.sandboxes.runnerFor(cwd).then((runner) => (runner ?? this.commands).run(command, cwd, options, abortSignal))
@@ -287,12 +284,6 @@ export class LocalSystemKernel implements LocalSystemKernelApi {
     const given = path ?? this.workingDirectory
     const expanded = given === '~' ? this.homeDir : /^~[\\/]/.test(given) ? join(this.homeDir, given.slice(2)) : given
     return isAbsolute(expanded) ? resolve(expanded) : resolve(this.workingDirectory, expanded)
-  }
-
-  public resizeImage(request: SystemImageResizeRequest): Promise<SystemImageResizeResult> {
-    // 本机内核只在 macOS 上有现成的图像工具（系统自带 sips）；别的平台明说，由宿主注入自己的实现。
-    if (platform() !== 'darwin') return Promise.reject(new AppError('PLATFORM', '本机内核只在 macOS 上能裁图缩图（用系统自带的 sips）；这个平台先用 run 调 ImageMagick 之类的工具处理'))
-    return resizeImageWithSips(request)
   }
 
   public createSandbox(options: SandboxCreateOptions = {}): Promise<SandboxRecord> {
@@ -331,7 +322,7 @@ export class LocalSystemKernel implements LocalSystemKernelApi {
   }
 
   /** 本机可用的 shell 清单，按挑选优先顺序，第一个就是默认的那个；只查文件不试跑，所以每回合报告都付得起。 */
-  private detectShells(): SystemShellDescriptor[] {
+  private detectShells(): ShellDescriptor[] {
     return detectSystemShells({ platform: this.hostPlatform, env: process.env }).map(toShellDescriptor)
   }
 

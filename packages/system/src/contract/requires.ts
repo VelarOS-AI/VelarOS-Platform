@@ -1,87 +1,54 @@
 /**
  * 注入面：宿主必须或可以塞进来的东西，每个注入点一个接口。本包只从这些口子接收外部能力，别处不留钩子。
  *
- * - 调用上下文 `SystemToolContext`：必须。宿主每次调用操作时给，里面是宿主端口 `SystemToolSystemApi` 与审批端口 `ApprovalPort`。
+ * - 系统空间的宿主 `SystemSpaceHost`：装系统空间时必须给，本机实现就是本地内核 `LocalSystemKernel`。
+ * - 调用上下文 `SystemCallContext`：必须。宿主每次分发调用时给，里面是审批端口、会话与交图通道。
  * - 本地内核配置 `LocalSystemKernelOptions`：用本地内核时必须，创建时给。
  * - 进程约束后端 `SystemProcessConfinementProvider`：可选，放在本地内核配置里，没有内置约束后端的平台（Windows）靠它。
- * - 环境变量：可选，全部登记在 `contract/system.ts` 的 `SystemEnvironmentVariables`。
+ * - 环境变量：可选，全部登记在 `contract/constants.ts` 的 `SystemEnvironmentVariables`。
  *
  * 这里的每个接口都必须从根入口导出。
  */
 
 import type { ApprovalPort } from '@velaros-ai/agent/tool-contract'
+import type { FileAttachedImage } from '@velaros-ai/files'
+import type { RehearsalSandboxHostPort } from '@velaros-ai/rehearsal-sandbox'
+import type { SandboxRecord } from '@velaros-ai/rehearsal-sandbox/contracts'
+import type { ShellProcessConfinementMode, ShellSpacePort } from '@velaros-ai/shell-command'
 
 import type { SystemProcessConfinementRequest, SystemProcessConfinementResult } from '../types/commands.js'
-import type { SystemAttachedImage, SystemImageResizeRequest, SystemImageResizeResult } from '../types/files.js'
-import type { SystemBackgroundTaskQueryOptions, SystemBackgroundTaskRecord, SystemCommandResult, SystemProcessConfinementMode, SystemRunCommandOptions, SystemShellEnvironmentRefreshResult } from '../types/system.js'
 
-// ── 工具上下文与宿主端口 ────────────────────────────────────────
+// ── 系统空间 ────────────────────────────────────────────────────
 
 /**
- * 每次调用拿到的上下文。
- *
- * 审批通道由宿主注入且始终存在；无人值守宿主应提供默认拒绝端口。
- * 需审批的敏感操作在没有交互执行通道时仍必须拒绝。
+ * 系统空间要宿主给的本机能力：解析路径、跑命令的三件事、演练沙箱的四件事，加上列出登记着的沙箱。
+ * 系统空间拿它装出 `velar:files`、`velar:shell`、`velar:sandbox` 三个端口；本机实现是本地内核。
  */
-export interface SystemToolContext {
-  /** 本次调用的取消信号；用户取消或上层超时时触发，工具和宿主都要尽快收手。 */
-  abortSignal: AbortSignal
-  /** 本次调用所属会话的标识。宿主给了，后台任务与交互式控制台就按会话登记与核对归属，别的会话列不到也停不了；不给就不隔离。 */
-  sessionId?: string
-  /** 宿主端口：工具经它向宿主要系统能力。 */
-  system: SystemToolSystemApi
-  /** 审批端口（来自 agent 包）：写敏感路径、跑危险命令前经它向用户确认。 */
-  approval: ApprovalPort
-  /**
-   * 把一张图交给模型看。图不进返回值——返回值是给程序的，程序看不了像素；
-   * 宿主收着，在这次结果后面按顺序放出来。不给就用不了 view。
-   */
-  attachImage?: (image: SystemAttachedImage) => void
-}
-
-/**
- * 宿主端口：工具在运行时能向宿主要什么，工具里写作 `ctx.system`。全仓唯一权威。
- *
- * 本包的本地实现是 `LocalSystemKernel`。产品壳（如 Desktop 的 SystemContextTypes）用 `extends` 追加宿主专属能力，
- * 例如通知、安装建议；这些扩展不进通用端口。
- * 端口里只有工具真会调的方法，门禁按工具文件核对；宿主自己的界面要的搜索、进程、端口、终止任务在本地内核的接口上。
- */
-export interface SystemToolSystemApi {
+export interface SystemSpaceHost extends RehearsalSandboxHostPort, Pick<ShellSpacePort, 'runCommand' | 'listBackgroundTasks' | 'refreshShellEnvironment'> {
   /**
    * 把用户给的路径解析成绝对路径：`~` 与 `~/…` 展开到宿主的家目录，相对路径相对宿主的默认工作目录；不给路径就返回默认工作目录。
-   * 文件工具的路径和 run 的 cwd 都经它解析，审批看到的目标和实际操作的目标因此一致。
+   * 文件的路径、命令的 cwd、沙箱的源目录都经它解析，审批看到的目标和实际操作的目标因此一致。
    */
-  resolvePath: (path?: string) => string
-  /** 查询以后台方式启动的命令任务，可按任务 id、会话、过滤词、只看运行中筛选。 */
-  listBackgroundTasks: (
-    options?: SystemBackgroundTaskQueryOptions
-  ) => Promise<SystemBackgroundTaskRecord[]>
-  /** 重新选定能用的 shell 并读取它的环境变量，返回刷新后的 shell 描述、刷新后本机可用的 shell 清单和变量个数。 */
-  refreshShellEnvironment: () => Promise<SystemShellEnvironmentRefreshResult>
-  /**
-   * 在系统层运行一条命令：前台等它结束并返回输出；background 为真时登记成后台任务后立即返回。命令自己失败不抛错，如实写进结果；宿主不能或不允许跑后台任务时，就在这里以 PERMISSION 拒绝，不另设能力开关。
-   *
-   * `options.shell` 挑定用哪个 shell（不给就用宿主自己挑的默认 shell）。宿主必须在挑定的那个里执行：本机没有它就在执行之前以 `VALIDATION` 拒绝、一个进程都不起，
-   * 报错里点名本机可用的是哪几个、哪个是默认。不许忽略它换默认 shell 照跑——模型是按挑定的那个 shell 的语法写的命令，换一个跑出来的是错的结果而不是报错。
-   *
-   * `options.interactive` 为真（一定和 background 一起来）时，任务要能接受用户输入：宿主有 PTY 就用 PTY，
-   * 没有就让 stdin 保持打开的管道；启动成功后在回执的 `backgroundProcess.console` 里给出这个控制台，
-   * 用户经产品面 `LocalSystemKernelApi` 的三个控制台方法与它打交道。宿主做不到交互式时不报错，只是回执里没有 console。
-   */
-  runCommand: (
-    command: string,
-    options?: SystemRunCommandOptions,
-    allowDangerous?: boolean,
-    abortSignal?: AbortSignal
-  ) => Promise<SystemCommandResult>
-  /**
-   * 把图裁一块、缩到长边不超过 `longEdge`，返回新图与它实际的尺寸。**只在需要时才会被调**：
-   * 图在上限以内、又没要求裁的，原样交给模型。宿主做不了图像处理就不实现它，
-   * view 遇到超限的图会明说，并告诉模型先用 run 缩小。
-   */
-  resizeImage?: (request: SystemImageResizeRequest) => Promise<SystemImageResizeResult>
+  resolvePath(path?: string): string
+  /** 登记着的演练沙箱：在镜像里跑命令时按沙箱 id 找到镜像根。 */
+  listSandboxes(): SandboxRecord[]
 }
 
+/**
+ * 每次调用拿到的上下文，宿主分发调用时给。
+ *
+ * 审批通道始终存在；无人值守宿主应提供默认拒绝端口，需要审批的操作在那种宿主上一定被拒。
+ */
+export interface SystemCallContext {
+  /** 本次调用的取消信号；用户取消或上层超时时触发，操作和宿主都要尽快收手。 */
+  abortSignal: AbortSignal
+  /** 本次调用所属会话。给了，后台任务就按会话登记与核对归属，别的会话列不到也停不了；不给就不隔离。 */
+  sessionId?: string
+  /** 审批端口（来自 agent 包）：写敏感路径、碰凭证文件、跑危险命令、落回沙箱前经它向用户确认。 */
+  approval: ApprovalPort
+  /** 把一张图交给模型看；宿主收着，在这次结果后面按顺序放出来。不给就用不了 view。 */
+  attachImage?: (image: FileAttachedImage) => void
+}
 
 // ── 本地内核 ────────────────────────────────────────────────────
 
@@ -99,7 +66,7 @@ export interface LocalSystemKernelOptions {
    */
   processConfinement?: {
     /** 约束模式：只读、只许写工作区，或不约束。 */
-    mode: SystemProcessConfinementMode
+    mode: ShellProcessConfinementMode
     /** 工作区根，只许写工作区时的写边界；缺省是 cwd。 */
     workspaceRoot?: string
     /** 宿主额外批准的写根，例如受管日志目录；模型不能直接控制。 */

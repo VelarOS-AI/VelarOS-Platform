@@ -1,6 +1,6 @@
 /**
- * 注入面：宿主要实现的演练沙箱端口。system 空间的宿主端口（`SystemToolSystemApi`）与 project 空间的沙箱端口都扩展它，
- * 两个工具经它建镜像、看差量、落回、丢弃；本机的实现是 `@velaros-ai/system` 的本地内核。
+ * 注入面：宿主要实现的演练沙箱端口。系统空间的宿主（`SystemSpaceHost`）与项目空间的沙箱端口都扩展它，
+ * 经它建镜像、看差量、落回、丢弃；本机的实现是 `@velaros-ai/system` 的本地内核。
  * 代码面的 `sandbox` 命名空间要的那一份是 `SandboxSurfacePort`，多出在镜像里跑命令与作用域两件事，每次调用的上下文是
  * `SandboxOperationContext`。这里的每个接口都必须从根入口导出。
  */
@@ -10,7 +10,7 @@ import type { ApprovalPort } from '@velaros-ai/agent/tool-contract'
 import type { SandboxApplyPolicy } from '../types/apply.js'
 import type { SandboxApplyOptions, SandboxApplyResult, SandboxCommandOutcome, SandboxCreateOptions, SandboxDiff, SandboxDiffOptions, SandboxDiscardResult, SandboxRecord, SandboxRunOptions } from '../types/rehearsal-sandbox.js'
 
-/** 宿主的演练沙箱：把一个目录镜像到临时区、看镜像相对创建时的变化、把变化落回源目录、丢弃镜像。镜像里的命令由空间各自的执行端口跑，不在这里。 */
+/** 宿主的演练沙箱：把一个目录镜像到临时区、看镜像相对创建时的变化、把变化落回源目录、丢弃镜像。镜像里的命令由空间各自的端口跑，不在这里。 */
 export interface RehearsalSandboxHostPort {
   /** 建沙箱：镜像源目录（gitignore 忽略的目录按 ignored 处理），镜像里的仓库剪掉推送地址；超过上限（数量、文件数、字节）建不出。 */
   createSandbox: (options?: SandboxCreateOptions) => Promise<SandboxRecord>
@@ -26,7 +26,7 @@ export interface RehearsalSandboxHostPort {
  * 代码面 `sandbox` 命名空间的宿主端口：公共沙箱端口，加上在镜像里跑命令和这个空间的两条作用域规则。
  *
  * **两个空间的差别全落在这里**，模型那边因此只有一套说明，不再挑「这是哪个空间的沙箱」：
- * system 的实现让 `resolveSource` 收任意绝对路径、不给就用默认工作目录，project 的实现把它钳在项目内、越界就拒绝；
+ * 系统空间的实现让 `resolveSource` 收任意路径、不给就用默认工作目录，项目空间的实现把它钳在项目内、越界就拒绝；
  * `applyPolicy` 同理，各自给各自的风险分类与落回提醒。安全故事因此在端口里，不在提示词里。
  */
 export interface SandboxSurfacePort extends RehearsalSandboxHostPort {

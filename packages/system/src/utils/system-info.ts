@@ -5,14 +5,15 @@
 import { basename } from 'node:path'
 
 import { isNotNull, isNull, isPresent, toNullable } from '@velaros-ai/core'
+import type { ShellBackgroundTaskQueryOptions, ShellBackgroundTaskRecord } from '@velaros-ai/shell-command/contracts'
 
 import type { ByteStats, ParsedProcessRow, RawPortEntry } from '../types/processes.js'
-import type { SystemBackgroundTaskQueryOptions, SystemBackgroundTaskRecord, SystemOpenPortInfo, SystemOpenPortQueryOptions, SystemProcessInfo, SystemProcessQueryOptions } from '../types/system.js'
+import type { SystemOpenPortInfo, SystemOpenPortQueryOptions, SystemProcessInfo, SystemProcessQueryOptions } from '../types/system.js'
 
 import { SystemTuning } from './tuning.js'
 
 /** 按查询条件筛选后台任务，最新启动的在前：过滤词（命令行里不区分大小写的包含）、任务 id、会话、会话集合、只看运行中；先过滤再截断，最多 limit 条。 */
-export function selectBackgroundTasks(tasks: readonly SystemBackgroundTaskRecord[], options: SystemBackgroundTaskQueryOptions): SystemBackgroundTaskRecord[] {
+export function selectBackgroundTasks(tasks: readonly ShellBackgroundTaskRecord[], options: ShellBackgroundTaskQueryOptions): ShellBackgroundTaskRecord[] {
   const sessionIds = new Set(options.sessionIds ?? [])
   const filter = options.filter?.trim().toLowerCase()
   return [...tasks]

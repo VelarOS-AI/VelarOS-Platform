@@ -4,24 +4,29 @@
 // 根引用到的类型由机器算闭包，不在这里登记——手工维护闭包一定会烂。
 // 闭包里的每个类型必须带 `@AgentView`，门禁双向守（在闭包里没标、标了不在闭包里，都红）。
 
+//
+// **命名空间按能力起名，不按空间起名。** 一件能力只有一份实现、一份声明、一份代码模版；
+// 每个空间注入自己的端口（作用域、策略、落盘），模型那边不必挑「这是哪个空间的读文件」。
+// 空间是一张装配表：给哪些能力、每件能力用哪个端口（例如 `@velaros-ai/system` 的 `createSystemSpace`）。
+
 export const CodeSurfaces = [
   {
-    /** 模型在程序里写成 `system.read(...)` 的那个名字。 */
-    namespace: 'system',
+    /** 模型在程序里写成 `import { read } from 'velar:files'` 的那个名字。 */
+    namespace: 'files',
     /** 相对 packages/ 的目录。 */
-    directory: 'system',
+    directory: 'files',
     /** 操作接口；方法带 `@AgentView` 的才进模型面。 */
-    interfaces: ['SystemFileOperationsApi', 'SystemExecutionOperationsApi'],
+    interfaces: ['FileOperationsApi'],
     /** 代码模版：一整份能照抄的程序，import 只写一次；相对包目录。 */
-    templates: 'templates/system.js',
+    templates: 'templates/files.js',
   },
   {
-    /**
-     * 第一个**跨空间**的命名空间：不挂在 `system.` 或 `project.` 下。
-     *
-     * 沙箱引擎只有一份，作用域由宿主按空间注入 `SandboxSurfacePort`，
-     * 模型这边只有一套说明，不必挑「这是哪个空间的沙箱」。
-     */
+    namespace: 'shell',
+    directory: 'shell-command',
+    interfaces: ['ShellOperationsApi'],
+    templates: 'templates/shell.js',
+  },
+  {
     namespace: 'sandbox',
     directory: 'rehearsal-sandbox',
     interfaces: ['SandboxOperationsApi'],
@@ -34,10 +39,8 @@ export const CodeSurfaces = [
  * 登记在这里而不是靠猜，是因为丢错一个参数模型就会写出调不通的程序。
  */
 export const HostContextTypes = new Set([
-  'SystemToolContext',
-  'ProjectToolContext',
-  'ToolContext',
-  'KernelToolContext',
+  'FileOperationContext',
+  'ShellOperationContext',
   'SandboxOperationContext',
 ])
 

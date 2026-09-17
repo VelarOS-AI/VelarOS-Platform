@@ -14,9 +14,9 @@ import { isPlainObject, isString, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 import type { CommandSpec } from '@velaros-ai/platform/contracts'
+import type { ShellProcessOwnership } from '@velaros-ai/shell-command/contracts'
 
 import type { SystemProcessHostOptions } from '../types/commands.js'
-import type { SystemProcessOwnership } from '../types/system.js'
 
 import { SystemTuning } from './tuning.js'
 
@@ -40,7 +40,7 @@ export function getSystemProcessHostPath(options: SystemProcessHostOptions = {})
 export function buildSystemOwnedProcessSpec(
   spec: CommandSpec & { windowsVerbatimArguments?: boolean },
   options: SystemProcessHostOptions = {}
-): { spec: CommandSpec; ownership: SystemProcessOwnership } {
+): { spec: CommandSpec; ownership: ShellProcessOwnership } {
   const host = getSystemProcessHostPath(options)
   if (!host) return {
     spec,

@@ -53,7 +53,7 @@
 
 ## 骨干链路
 
-**程序是一个 ES 模块**：`import { read } from 'velar:system'` 拿能力、顶层 `await` 直接用、
+**程序是一个 ES 模块**：`import { read } from 'velar:files'` 拿能力、顶层 `await` 直接用、
 `export default` 交出答案。写的是真 JavaScript，不是方言——那是代码面唯一的依仗。
 
 **我们发明的东西要导入，语言自带的不动**：`blobs` 走恒常授权的 `velar:program`

@@ -12,7 +12,7 @@ import type { SandboxSelection } from '../types/rehearsal-sandbox.js'
 import { buildSandboxApplyConfirmationMessage, selectSandboxChanges } from '../utils/apply.js'
 
 /**
- * 演练沙箱落回前的规则，实例是 `rehearsalSandboxRules`；system:sandbox 与 project:sandbox 共用，保证「确认的就是要落的」。
+ * 演练沙箱落回前的规则，实例是 `rehearsalSandboxRules`；`velar:sandbox` 与项目空间的沙箱工具共用，保证「确认的就是要落的」。
  * 只出核对结果与确认请求：交给哪个审批端口、被拒了是抛错还是返回结构化拒绝、落回之前还要不要别的授权，由空间自己决定。
  */
 export interface RehearsalSandboxRulesApi {

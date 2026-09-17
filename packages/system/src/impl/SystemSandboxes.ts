@@ -15,7 +15,6 @@ import { currentPlatform } from '@velaros-ai/platform'
 import { rehearsalSandboxRules } from '@velaros-ai/rehearsal-sandbox'
 import type { SandboxApplyOptions, SandboxApplyResult, SandboxDiff, SandboxDiffOptions, SandboxDiscardResult, SandboxIgnoredMode, SandboxRecord } from '@velaros-ai/rehearsal-sandbox/contracts'
 import { RehearsalSandboxLimits } from '@velaros-ai/rehearsal-sandbox/contracts'
-import { ToolFailureLimits } from '@velaros-ai/tool-contract/contracts'
 
 import { SystemErrorCodes } from '../contract/constants.js'
 import type { SystemProcessConfinementProvider } from '../contract/requires.js'
@@ -24,6 +23,7 @@ import { buildSystemProcessConfinementSpawnSpec } from '../utils/confinement.js'
 import { isPathInsideRoot } from '../utils/file-safety.js'
 import { writeSystemFileAtomically } from '../utils/fs.js'
 import { applyMirrorChanges, diffMirror, disableGitPush, isSandboxId, mirrorTree, newSandboxId, readSandboxManifest, removeSandboxDirectory, sandboxBaseDirectory, sandboxChangedSinceConfirmation, sandboxConfinementPolicy, sandboxDirectoryOf, scanTree, stampOfEntry } from '../utils/sandbox.js'
+import { SystemTuning } from '../utils/tuning.js'
 
 import type { SystemCommandRunnerApi } from './SystemCommandRunner.js'
 import { SystemCommandRunner } from './SystemCommandRunner.js'
@@ -172,7 +172,7 @@ export class SystemSandboxes implements SystemSandboxesApi {
     // 用户确认时看到的差量和现在的对不上（确认之后镜像又被改过）：整批不落，让调用方重新 diff、重新确认。
     if (isPresent(options.fingerprint) && options.fingerprint !== changes.fingerprint) throw sandboxChangedSinceConfirmation()
     const selection = rehearsalSandboxRules.select(changes, options.paths)
-    if (!isEmpty(selection.unknown)) throw new AppError('VALIDATION', `这些路径在沙箱里没有变化：${selection.unknown.slice(0, ToolFailureLimits.listItems).join('、')}`)
+    if (!isEmpty(selection.unknown)) throw new AppError('VALIDATION', `这些路径在沙箱里没有变化：${selection.unknown.slice(0, SystemTuning.sandbox.listedPaths).join('、')}`)
     const applied = await applyMirrorChanges(manifest, selection)
     log.info('sandbox applied', { id: entry.record.id, created: applied.created.length, modified: applied.modified.length, deleted: applied.deleted.length })
     // .git 里的变化差量阶段就已经只汇总不列出，所以这里按差量的 gitChanged 如实报「没落」。

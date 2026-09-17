@@ -2,7 +2,7 @@
  * 包内可调参数：超时、缓冲、保留条数、缺省条数、阈值。都是取舍，没有唯一正确的值；要调就改这一个文件，全包跟着变。
  *
  * 常量按四处放（ADR 0007）：
- * - 对外承诺的（工具名、错误码、环境变量、写进工具说明和 schema 的上限）在 `contract/constants.ts`，改了等于改契约；
+ * - 对外承诺的（错误码、环境变量）在 `contract/constants.ts`，改了等于改契约；模型看得见的上限在各能力包的常量表里；
  * - 可调的都在这里，按用途分组、每项一句说明；实现里不再散写数字缺省值，门禁核对；
  * - 某个类里固定用的文案、模式、名单写成那个类的 `private static readonly`；
  * - 规则本身的数据（危险命令名单、敏感路径名单、搜索跳过的目录）跟着规则写在各自的 utils 文件里；算法与格式里的数字（哈希取几位、编码判定的比例）就地写。
@@ -10,11 +10,11 @@
 
 /** 系统包的可调参数，按用途分组。 */
 export const SystemTuning = Object.freeze({
-  /** 跑命令与后台任务：SystemCommandRunner、LocalSystemKernel、命令结果整形。 */
+  /** 跑命令与后台任务：SystemCommandRunner、LocalSystemKernel、命令回执。 */
   command: Object.freeze({
-    /** 命令没给 timeoutMs 时的超时，毫秒；上限是 SystemCommandLimits.timeoutMs。 */
+    /** 命令没给 timeoutMs 时的超时，毫秒；上限是 `velar:shell` 的 ShellLimits.timeoutMs。 */
     timeoutMs: 120_000,
-    /** 命令没给 maxOutputChars 时 stdout、stderr 各返回末尾多少字符；上限是 SystemCommandLimits.outputChars。 */
+    /** 命令没给 maxOutputChars 时 stdout、stderr 各返回末尾多少字符；上限是 ShellLimits.outputChars。 */
     outputChars: 50_000,
     /** 已结束的后台任务最多留多少条，超过从最早结束的删起，进程句柄一起释放。 */
     finishedTasks: 200,
@@ -22,8 +22,10 @@ export const SystemTuning = Object.freeze({
     consoleBufferChars: 100_000,
     /** 往控制台写输入最多等多少毫秒：进程到期还没读走就报「已排队」返回，不让调用方一直挂着。 */
     consoleWriteTimeoutMs: 2_000,
-    /** 列后台任务没给 limit 时返回多少条；上限是 SystemCommandLimits.taskListItems。 */
+    /** 列后台任务没给 limit 时返回多少条；上限是 ShellLimits.taskListItems。 */
     taskListItems: 50,
+    /** 后台任务条目里的 recentOutput 保留输出末尾多少字符（`velar:shell` 的声明里写着这个数）。 */
+    recentOutputChars: 4_000,
     /** 验证摘要里从失败输出末尾摘多少字符。 */
     verificationIssueChars: 1_000,
   }),
@@ -110,18 +112,12 @@ export const SystemTuning = Object.freeze({
       }),
     }),
   }),
-  /** 文件读写：SystemFileOperations、SystemFileHistory、文本文件工具函数。 */
-  files: Object.freeze({
-    /** 超过可编辑上限的文件整个写入前只读开头这么多字节认编码；沙箱里 `.git` 链接文件也只读这么多。 */
-    textSniffBytes: 8192,
-    /** 小于这个字节数的文件写前一律重读核版本：印记的时间精度不够时，小文件重读几乎不花钱。 */
-    alwaysRehashBytes: 64 * 1024,
-    /** 改动前留下的版本每个文件最多几份。 */
-    snapshotsPerFile: 10,
-    /** 单份版本最大多少字节，再大不留。 */
-    snapshotBytes: 2 * 1024 * 1024,
-    /** 全部版本加起来最多多少字节，超了从最早的删起。 */
-    historyBytes: 64 * 1024 * 1024,
+  /** 演练沙箱：SystemSandboxes 与沙箱工具函数。 */
+  sandbox: Object.freeze({
+    /** 镜像时 `.git` 链接文件只读开头这么多字节，认出它指向哪个仓库。 */
+    gitLinkBytes: 8192,
+    /** 报错里最多点名多少条路径（冲突、没有变化的路径）；完整清单在错误的 context 里。 */
+    listedPaths: 20,
   }),
   /** 全局搜索：SystemGlobalSearch。 */
   search: Object.freeze({

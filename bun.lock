@@ -38,6 +38,7 @@
         "@typescript-eslint/eslint-plugin": "^8.67.0",
         "@typescript-eslint/parser": "^8.67.0",
         "@velaros-ai/arch-guard": "github:VelarOS-AI/VelarOS-Arch-Guard#ce2b221d99c1b93736568f281a180ad3593f086f",
+        "@velaros-ai/files": "workspace:*",
         "@velaros-ai/path-rules": "workspace:*",
         "@velaros-ai/rehearsal-sandbox": "workspace:*",
         "@velaros-ai/shell-command": "workspace:*",
@@ -214,6 +215,23 @@
         "@types/bun": "^1.3.10",
         "@types/node": "^22.19.17",
         "typescript": "^5.7.0",
+      },
+    },
+    "packages/files": {
+      "name": "@velaros-ai/files",
+      "version": "0.1.0",
+      "dependencies": {
+        "@velaros-ai/core": "workspace:*",
+        "@velaros-ai/platform": "workspace:*",
+        "@velaros-ai/text-files": "workspace:*",
+      },
+      "devDependencies": {
+        "@types/node": "^22.19.17",
+        "@velaros-ai/code-surface": "workspace:*",
+        "typescript": "^5.7.0",
+      },
+      "peerDependencies": {
+        "@velaros-ai/agent": "workspace:^",
       },
     },
     "packages/html-artifacts": {
@@ -411,6 +429,7 @@
       },
       "devDependencies": {
         "@types/node": "^22.19.17",
+        "@velaros-ai/code-surface": "workspace:*",
         "typescript": "^5.7.0",
       },
       "peerDependencies": {
@@ -434,15 +453,13 @@
       "dependencies": {
         "@velaros-ai/code-surface": "workspace:*",
         "@velaros-ai/core": "workspace:*",
-        "@velaros-ai/kernel": "workspace:*",
+        "@velaros-ai/files": "workspace:*",
         "@velaros-ai/path-rules": "workspace:*",
         "@velaros-ai/platform": "workspace:*",
         "@velaros-ai/rehearsal-sandbox": "workspace:*",
         "@velaros-ai/shell-command": "workspace:*",
         "@velaros-ai/text-files": "workspace:*",
-        "@velaros-ai/tool-contract": "workspace:*",
         "diff": "^8.0.4",
-        "zod": "^4.3.6",
       },
       "devDependencies": {
         "@types/node": "^22.19.17",
@@ -1129,6 +1146,8 @@
     "@velaros-ai/development": ["@velaros-ai/development@workspace:packages/development"],
 
     "@velaros-ai/document-renderer": ["@velaros-ai/document-renderer@workspace:packages/document-renderer"],
+
+    "@velaros-ai/files": ["@velaros-ai/files@workspace:packages/files"],
 
     "@velaros-ai/html-artifacts": ["@velaros-ai/html-artifacts@workspace:packages/html-artifacts"],
 

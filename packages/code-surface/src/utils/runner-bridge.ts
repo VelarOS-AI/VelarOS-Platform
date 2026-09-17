@@ -2,7 +2,7 @@
 
 import type { ChildProcess } from 'node:child_process'
 
-import { isNull } from '@velaros-ai/core'
+import { isEmpty, isNull } from '@velaros-ai/core'
 
 import { CodeSurfaceErrorCodes } from '../contract/constants.js'
 import type { CodeRunDispatch, HoldProgramClock } from '../types/runner.js'
@@ -67,6 +67,6 @@ export function describeChildExit(code: Nullable<number>, stderr: string): {
   const why = isNull(code) ? '被信号杀掉' : `码 ${code}`
   return {
     code: CodeSurfaceErrorCodes.runnerCrashed,
-    message: quoted.length === 0 ? `隔离进程意外退出，${why}。` : `隔离进程意外退出，${why}：${quoted}`,
+    message: isEmpty(quoted) ? `隔离进程意外退出，${why}。` : `隔离进程意外退出，${why}：${quoted}`,
   }
 }

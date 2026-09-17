@@ -7,7 +7,7 @@ import type { ShellCommandConcurrencyInput, ShellCommandConcurrencyOptions, Shel
 import { analyzeCommandExecution, buildBackgroundCommandConfirmationMessage, isParallelCommandExecutionSafe, isShellCommandReadOnly } from '../utils/command-policy.js'
 
 /**
- * 执行前给一条 shell 命令分类，实例是 `shellCommandPolicy`。system:run、project:run、演练沙箱里的 run、宿主的审批界面与无人值守放行都用这一份，判定处处一致。
+ * 执行前给一条 shell 命令分类，实例是 `shellCommandPolicy`。`velar:shell` 的 run、演练沙箱里的 run、项目空间的 run、宿主的审批界面与无人值守放行都用这一份，判定处处一致。
  *
  * 只读判定是白名单加整体否决：命令名不在只读名单，或者带能写盘、能执行别的程序的参数、前缀、环境变量赋值，或者出现重定向、子 shell、后台符、换行，整条判非只读。
  * 危险判定是黑名单：递归删除、丢弃未提交改动的 Git 操作、mkfs、dd、shutdown、sudo 等；漏判只是少弹一次确认，真正的授权门在宿主的审批端口。

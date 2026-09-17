@@ -355,9 +355,6 @@ function generate(surface) {
       `这些类型进了模型可观测面却没标 ${AgentViewTag}，在它们的 JSDoc 里加上（顺便想清楚模型看见它合不合适）：\n    ${unmarked.join('\n    ')}`
     )
   }
-  for (const stray of findStrayTags(program, closure, surface)) {
-    problems.push(`${stray} 标了 ${AgentViewTag} 却不在模型可观测面上；删掉标记，免得它烂成装饰`)
-  }
 
   const constants = []
   for (const name of wantedValues) {
@@ -375,8 +372,8 @@ function generate(surface) {
     `// 改源码里带 ${AgentViewTag} 的东西就是改模型可观测面，重算用 \`bun run generate:code-surface\`。`,
   ].join('\n')
 
-  // 类型与方法都放进 `declare module` 块里：模型写 `import { read } from 'velar:system'`，
-  // 而且类型因此有了作用域——system 与 project 可以各有一个同名类型而不撞，平铺声明做不到。
+  // 类型与方法都放进 `declare module` 块里：模型写 `import { read } from 'velar:files'`，
+  // 而且类型因此有了作用域——两件能力可以各有一个同名类型而不撞，平铺声明做不到。
   const indented = (text) => text.split('\n').map((line) => (line.length > 0 ? `  ${line}` : line)).join('\n')
   const body = [...headers.map(indented), ...types.map(indented), ...methods.map((method) => indented(exportedMethod(method)))].join('\n\n')
   const text = `${header}\n\ndeclare module '${CapabilityModulePrefix}${surface.namespace}' {\n${body}\n}\n`
@@ -392,6 +389,7 @@ function generate(surface) {
     problems,
     methodCount: methods.length,
     typeCount: types.length,
+    marked: new Set([...closure.keys(), ...surface.interfaces]),
   }
 }
 
@@ -403,24 +401,36 @@ function exportedMethod(method) {
   return lines.join('\n')
 }
 
-/** 找标了标记却没进闭包的类型：标记烂成装饰就失去了意义。 */
-function findStrayTags(program, closure, surface) {
+/**
+ * 找标了标记却不在**任何**模型面上的类型：标记烂成装饰就失去了意义。
+ *
+ * 扫全部包，不只扫登记过的目录：一件能力搬走之后留在原包里的标记，只有这样才抓得到；
+ * 闭包是所有命名空间的并集，因为一个包里的类型可以被别的命名空间引用（`TextEncoding` 在 text-files 里，被 files 用）。
+ */
+function findStrayTags(marked) {
   const stray = []
-  for (const file of program.getSourceFiles()) {
-    if (file.isDeclarationFile || !file.fileName.includes(`/packages/${surface.directory}/`)) continue
-    for (const statement of file.statements) {
-      const named = ts.isInterfaceDeclaration(statement) || ts.isTypeAliasDeclaration(statement)
-      // 操作接口自己带标记是合法的：它的头部说明进模块级注释，不是「烂成装饰的标记」。
-      if (!named || closure.has(statement.name.text) || surface.interfaces.includes(statement.name.text)) continue
-      if (hasModelTag(statement, file)) stray.push(statement.name.text)
+  const packagesRoot = resolve(RepoRoot, 'packages')
+  for (const entry of ts.sys.getDirectories(packagesRoot)) {
+    const sourceRoot = resolve(packagesRoot, entry, 'src')
+    if (!ts.sys.directoryExists(sourceRoot)) continue
+    for (const fileName of ts.sys.readDirectory(sourceRoot, ['.ts'])) {
+      const text = readFileSync(fileName, 'utf8')
+      if (!text.includes(AgentViewTag)) continue
+      const file = ts.createSourceFile(fileName, text, ts.ScriptTarget.Latest, true)
+      for (const statement of file.statements) {
+        const named = ts.isInterfaceDeclaration(statement) || ts.isTypeAliasDeclaration(statement)
+        if (named && !marked.has(statement.name.text) && hasModelTag(statement, file)) stray.push(`packages/${entry}/src/${fileName.slice(sourceRoot.length + 1)} 的 ${statement.name.text}`)
+      }
     }
   }
   return stray
 }
 
 let failed = false
+const marked = new Set()
 for (const surface of CodeSurfaces) {
   const result = generate(surface)
+  for (const name of result.marked) marked.add(name)
   const outputPath = resolve(OutputDirectory, `${surface.namespace}.d.ts`)
 
   if (result.problems.length > 0) {
@@ -444,6 +454,22 @@ for (const surface of CodeSurfaces) {
   process.stdout.write(
     `✗ ${surface.namespace}: 生成物与源码不一致。你改的是模型可观测面——先看清楚改了什么，再 \`bun run generate:code-surface\` 重算并提交。\n`
   )
+}
+
+const stray = findStrayTags(marked)
+if (stray.length > 0) {
+  failed = true
+  process.stdout.write(`✗ 这些类型标了 ${AgentViewTag} 却不在任何模型面上；删掉标记，免得它烂成装饰：\n  - ${stray.join('\n  - ')}\n`)
+}
+
+// 登记表里没有的命名空间，产物也不该留着：模型会读到一件已经不存在的能力。
+const expected = new Set(CodeSurfaces.map((surface) => `${surface.namespace}.d.ts`))
+const leftovers = ts.sys.directoryExists(OutputDirectory)
+  ? ts.sys.readDirectory(OutputDirectory, ['.d.ts']).map((path) => path.slice(OutputDirectory.length + 1)).filter((name) => !expected.has(name))
+  : []
+if (leftovers.length > 0) {
+  failed = true
+  process.stdout.write(`✗ ${OutputDirectory} 里有登记表之外的声明：${leftovers.join('、')}；那件能力已经不在了，删掉它\n`)
 }
 
 if (failed) process.exit(1)

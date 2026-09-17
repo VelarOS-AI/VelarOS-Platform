@@ -23,8 +23,9 @@
 //   environmentTable    常量表里登记环境变量的表名（不读环境变量的包不填；不填时代码里出现环境变量名就拦）
 //   environmentPrefixes 除 VELAROS_ 外还要扫的环境变量前缀（读别人定义、改不了的名字时才填）：只扩大扫描面，不是豁免，
 //                       登记的名字照样要有人用、代码里的名字照样要先登记；新起的变量名一律 VELAROS_
-//   hostPort            注入面里的宿主端口接口名；端口只放工具真会调的方法，门禁从工具文件出发沿 import 核对
-//   hostPortField       工具上下文里放宿主端口的字段名（ctx.<字段>.方法），缺省 system
+//   hostPort            注入面里的端口接口名；端口只放真会被调的方法，门禁从模型面入口（surfaceFile，没有就是 toolsFile）出发沿 import 核对
+//   hostPortField       调端口时的字段名（ctx.<字段>.方法 或 this.<字段>.方法），缺省 system
+//   surfaceFile         模型面入口（相对包根）：代码面能力的操作类，或空间的装配表；端口可达性从这里出发
 //   status              'migrating' 表示正在按标准改造：问题照查照报条数，不计入失败（改造完删掉这一项）
 //   lazyImports         允许动态 import() 的目标（不填的包一条都不许有）：每项 { specifier, file, reason }——
 //                       specifier 是 import() 里的字符串原文，file 是唯一允许加载它的源文件（相对包根），
@@ -80,19 +81,20 @@ export const GovernedModules = [
     browserSafeEntries: ['contracts.ts'],
     // 可移植数据文件里的环境变量表：代码里出现的每个 VELAROS_* 名字都要登记在这里
     environmentTable: 'SystemEnvironmentVariables',
-    // 宿主端口：注入面里工具经 ctx.system 调的那个接口；它的每个方法都必须有工具在调，没人调的不许留
-    hostPort: 'SystemToolSystemApi',
-    surfaceFile: 'src/impl/SystemCodeSurface.ts',
+    // 系统空间的宿主：装配表经 this.host 调它；它自己声明的每个方法都必须有人调
+    hostPort: 'SystemSpaceHost',
+    hostPortField: 'host',
+    surfaceFile: 'src/impl/SystemSpace.ts',
     // 实现文件的分层，从上到下；上层可以引下层与同层，下层不许引上层
     layers: [
-      // 模型面：代码面的那张操作表
-      ['SystemCodeSurface.ts'],
-      // 宿主：宿主端口的本机实现
+      // 系统空间：三件能力配上本机端口的那张装配表
+      ['SystemSpace.ts'],
+      // 宿主：系统空间要的本机能力的实现
       ['LocalSystemKernel.ts'],
-      // 能力：命令、受管子进程、shell；文件操作与搜索
+      // 本机能力：命令、受管子进程、shell、演练沙箱、搜索
       [
         'SystemCommandRunner.ts', 'SystemSandboxes.ts', 'SystemShellResolver.ts', 'SystemProcessManager.ts', 'SystemManagedProcess.ts',
-        'SystemOutputDecoder.ts', 'SystemExecutionOperations.ts', 'SystemFileOperations.ts', 'SystemFileHistory.ts', 'SystemGlobalSearch.ts',
+        'SystemOutputDecoder.ts', 'SystemGlobalSearch.ts',
       ],
       // shell 错误类
       ['SystemShellUnavailableError.ts'],
@@ -148,16 +150,46 @@ export const GovernedModules = [
   {
     directory: 'shell-command',
     name: '@velaros-ai/shell-command',
-    // 没有工具：不登记 toolsFile、toolDefiner、hostPort
     contract: 'src/contract',
     types: 'src/types',
     portable: 'shell-command.ts',
     impl: 'src/impl',
     utils: 'src/utils',
     browserSafeEntries: ['index.ts', 'contracts.ts'],
+    // 空间端口：velar:shell 的操作经 ctx.shell 调它；每个方法都必须有操作在调
+    hostPort: 'ShellSpacePort',
+    hostPortField: 'shell',
+    surfaceFile: 'src/impl/ShellOperations.ts',
     layers: [
-      // 命令策略与审批请求互不依赖
+      // 代码面 shell 命名空间的三个操作
+      ['ShellOperations.ts'],
+      // 命令策略与审批请求互不依赖，上面那一层与项目空间的工具共用
       ['ShellCommandPolicy.ts', 'ShellCommandApproval.ts'],
+    ],
+    card: 'MODULE.md',
+    invariants: 'spec/invariants.md',
+    acceptance: 'spec/acceptance.test.ts',
+  },
+  {
+    directory: 'files',
+    name: '@velaros-ai/files',
+    contract: 'src/contract',
+    types: 'src/types',
+    portable: 'files.ts',
+    impl: 'src/impl',
+    utils: 'src/utils',
+    tuning: 'tuning.ts',
+    // 根入口读磁盘，只给 Node；渲染进程只能加载可移植数据
+    browserSafeEntries: ['contracts.ts'],
+    // 空间端口：velar:files 的操作经 ctx.files 调它；每个方法都必须有操作在调
+    hostPort: 'FileSpacePort',
+    hostPortField: 'files',
+    surfaceFile: 'src/impl/FileOperations.ts',
+    layers: [
+      // 代码面 files 命名空间的三个操作
+      ['FileOperations.ts'],
+      // 改动前留下的版本
+      ['FileHistory.ts'],
     ],
     card: 'MODULE.md',
     invariants: 'spec/invariants.md',

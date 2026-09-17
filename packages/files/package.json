@@ -1,0 +1,66 @@
+{
+  "name": "@velaros-ai/files",
+  "version": "0.1.0",
+  "velaros": {
+    "platform": "0.6"
+  },
+  "description": "The file capability shared by every space: the velar:files operations (read whole text files, view images within provider limits, edit whole files in one batch with versions and restore) over a port each space injects for scope, policy and persistence.",
+  "license": "Apache-2.0",
+  "author": "VelarOS",
+  "homepage": "https://github.com/VelarOS-AI/VelarOS-Platform/tree/main/packages/files#readme",
+  "bugs": {
+    "url": "https://github.com/VelarOS-AI/VelarOS-Platform/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/VelarOS-AI/VelarOS-Platform.git",
+    "directory": "packages/files"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./contracts": {
+      "types": "./dist/contracts.d.ts",
+      "import": "./dist/contracts.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "clean": "rm -rf dist",
+    "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/capabilities/build/fix-esm-extensions.mjs dist && node ../../scripts/build/normalize-package-declarations.mjs",
+    "test": "bun run build && bun test spec/acceptance.test.ts test/files.test.ts",
+    "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/files"
+  },
+  "dependencies": {
+    "@velaros-ai/core": "workspace:*",
+    "@velaros-ai/platform": "workspace:*",
+    "@velaros-ai/text-files": "workspace:*"
+  },
+  "peerDependencies": {
+    "@velaros-ai/agent": "workspace:^"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.17",
+    "@velaros-ai/code-surface": "workspace:*",
+    "typescript": "^5.7.0"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://npm.pkg.github.com"
+  }
+}

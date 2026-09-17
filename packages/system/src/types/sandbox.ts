@@ -1,5 +1,5 @@
 /**
- * 演练沙箱引擎自己的工作类型：镜像清单与文件印记、落回时的冲突与失败回执。只在包内用，不出包。
+ * 演练沙箱引擎自己的工作类型：镜像清单与文件印记、落回时的冲突。只在包内用，不出包。
  * 模型面上的沙箱是 `velar:sandbox` 那个跨空间命名空间（`@velaros-ai/rehearsal-sandbox`），本包只出引擎。
  */
 
@@ -32,10 +32,4 @@ export interface SystemSandboxConflict {
   path: string
   reason: 'changed' | 'missing' | 'appeared' | 'link'
   message: string
-}
-
-/** 落回失败回执的 details：什么都没写（executionOutcome 固定是 not-applied），conflicts 列出每处冲突。 */
-export interface SystemSandboxApplyFailureDetails {
-  executionOutcome: 'not-applied'
-  conflicts: SystemSandboxConflict[]
 }

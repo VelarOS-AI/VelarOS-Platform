@@ -1,17 +1,17 @@
 /**
- * 命令数据：进程约束的策略与请求结果，以及命令执行、shell 选择、进程约束实现自己的工作类型（受管进程的收尾结果、选中的 shell 与自检结果、
- * 刷新后的环境、准备好的命令、控制台缓冲、带回调的选项）。只放类型；后一部分只在包内用，不出包。
+ * 命令数据：进程约束的策略与请求结果（宿主注入约束后端时要用，从根入口导出），以及命令执行、shell 选择、进程约束实现自己的工作类型
+ * （受管进程的收尾结果、选中的 shell 与自检结果、刷新后的环境、准备好的命令、控制台缓冲、带回调的选项）。只放类型；后一部分只在包内用，不出包。
  */
 
 import type { ShellCommandSpecOptions } from '@velaros-ai/platform'
 import type { CommandSpec } from '@velaros-ai/platform/contracts'
+import type { ShellDescriptor, ShellProcessConfinementEvidence, ShellProcessConfinementMode, ShellProcessOwnership } from '@velaros-ai/shell-command/contracts'
 
 import type { SystemProcessConfinementProvider } from '../contract/requires.js'
 
-import type { SystemBackgroundTaskRecord, SystemCommandResult, SystemProcessConfinementEvidence, SystemProcessConfinementMode, SystemProcessOwnership, SystemShellDescriptor, SystemShellKind } from './system.js'
 
 export interface SystemProcessConfinementPolicy {
-  mode: SystemProcessConfinementMode
+  mode: ShellProcessConfinementMode
   /** `workspace-write` 的主要写边界；其余模式仍携带它，便于一次解析后统一审计。 */
   workspaceRoot: string
   /** 宿主额外批准的写根（例如受管日志目录）；模型不得直接控制。 */
@@ -27,7 +27,7 @@ export interface SystemProcessConfinementRequest {
 
 export interface SystemProcessConfinementResult {
   spec: CommandSpec
-  evidence: SystemProcessConfinementEvidence
+  evidence: ShellProcessConfinementEvidence
   /** 仅供本机调试和测试；不得当作授权来源。 */
   profile?: string
 }
@@ -43,7 +43,7 @@ export interface SystemProcessCompletion {
   cleanupIncomplete: boolean
 }
 
-export interface ResolvedSystemShell extends SystemShellDescriptor {
+export interface ResolvedSystemShell extends ShellDescriptor {
   env: NodeJS.ProcessEnv
 }
 
@@ -64,9 +64,9 @@ export interface RefreshedWindowsEnvironment {
 export interface PreparedSystemCommand {
   spec: CommandSpec
   env: NodeJS.ProcessEnv
-  evidence: SystemProcessConfinementEvidence
-  ownership: SystemProcessOwnership
-  shell: SystemShellDescriptor
+  evidence: ShellProcessConfinementEvidence
+  ownership: ShellProcessOwnership
+  shell: ShellDescriptor
 }
 
 /** 一个交互式任务的控制台输出缓冲：只留末尾一段，produced 记住这路输出从头到现在一共产生过多少字符。 */
@@ -117,42 +117,4 @@ export interface SystemProcessConfinementBuildOptions {
   bubblewrapAvailable?: boolean
   /** 临时目录，约束里一律允许写它。 */
   tempDir?: string
-}
-
-// ── 执行类工具的入参与结果 ──────────────────────────────────────
-
-/**
- * @AgentView
- * 不传 cwd 用宿主给的默认目录，不传 shell 用环境报告里的默认 shell。
- */
-export type SystemRunInput = {
-  command: string
-  cwd?: string
-  shell?: SystemShellKind
-  timeoutMs?: number
-  background?: boolean
-  interactive?: boolean
-  maxOutputChars?: number
-}
-
-
-/** @AgentView 要了 interactive 却没拿到控制台时，note 说明怎么把命令改成不用输入的写法。 */
-export interface SystemRunResult extends SystemCommandResult {
-  note?: string
-}
-
-/** refreshEnvironment 的入参：这个工具不要参数，传了什么都忽略。代码面上刷新环境不收入参，所以它不进模型面。 */
-export type SystemRefreshEnvironmentInput = Record<string, unknown>
-
-/** @AgentView 给 taskId 就精确查那一条，limit 不再起作用；不传 limit 默认列 50 条。 */
-export type SystemListTasksInput = {
-  limit?: number
-  onlyRunning?: boolean
-  taskId?: string
-}
-
-/** @AgentView 后台任务表：最新启动的在前，count 是这次列出了几条。 */
-export type SystemListTasksResult = {
-  count: number
-  tasks: SystemBackgroundTaskRecord[]
 }

@@ -114,6 +114,36 @@ API 按 **base64 之后**的大小限（直连 10 MB、Bedrock/Google Cloud 5 MB
 `export default` 不中断执行。顺带查出一个老 bug：运行时报错的行号一直差 3——
 包装改了两行、换算还减 1，而运行时行号从没被测过。现在偏移在隔离进程启动时量出来。
 
+## 能力按注入装配，不绑死在空间上
+
+**命名空间按能力起名，不按空间起名**：`velar:files`（read / view / edit）、`velar:shell`（run / listTasks / refreshEnvironment）、
+`velar:sandbox`（create / run / diff / apply / discard）。原来的 `velar:system` 拆掉了——系统空间与项目空间有一大半能力是同一件事
+（读写文件、跑命令、演练沙箱），各写一份就是两套实现、两份说明、两份模版，模型还得挑「这是哪个空间的读文件」。
+
+**一件能力只有一份实现、一份声明、一份代码模版**，住在自己的包里（`@velaros-ai/files`、`@velaros-ai/shell-command`、
+`@velaros-ai/rehearsal-sandbox`），不认识任何空间。空间之间不一样的地方全落在**注入的端口**上：
+
+| 能力 | 端口 | 空间要回答的问题 |
+| --- | --- | --- |
+| `velar:files` | `FileSpacePort` | `locate`：路径怎么解析、越界算不算；`reviewRead` / `reviewWrite`：哪些要先问用户、哪些直接拒；`commit`：怎么落盘（逐个原子替换，还是一个事务）；`resizeImage`：宿主会不会缩图 |
+| `velar:shell` | `ShellSpacePort` | `resolveCwd`：命令在哪儿跑；`commandPolicy`：确认文案与风险分类；跑命令、列任务、刷新环境交给哪个宿主 |
+| `velar:sandbox` | `SandboxSurfacePort` | `resolveSource`：能镜像哪些目录；`applyPolicy`：落回时怎么确认；镜像里的命令交给谁 |
+
+**空间就是一张装配表**：给哪几件能力、每件能力用哪个端口。系统空间是 `@velaros-ai/system` 的 `createSystemSpace`——
+路径可以是本机任意位置、`~` 展开到家目录，凭证文件与系统敏感路径先问用户，写是逐个原子替换，命令在本机任意目录跑。
+项目空间下一步照这个样子装：同样三件能力，端口把路径钳在项目内、写合成事务、命令先过项目的写授权，外加它独有的 `velar:code`。
+
+判据和上一节是同一条：**所有空间都一样的事在能力里只做一份**（有界读、认编码、核版本、留版本、压图、一批的成败、
+命令分类、危险命令确认、钳上限），**只有空间真不一样的才进端口**。端口方法宁少勿多——项目空间接进来时要的钩子
+（输出脱敏、资源门、写授权、读到的内容能不能整份写回）等它真接的时候再加，不提前猜。
+
+模型那边：声明是空间中立的，说明里不写「系统空间怎样、项目空间怎样」，只写「由当前空间决定」；
+代码模版用相对路径，在哪个空间照抄都能跑。空间的差别由环境报告（根目录在哪）和端口的报错（为什么被拒）说清楚。
+
+程序里看得见的只有返回值、`error.code` 与 `error.message`——工具时代那套 `cause.details`、`context.applied`、
+`suggestedNextAction` 模型根本拿不到，所以要让模型知道的都写进 message，要让程序能分支的都给成专属错误码
+（`FILES_EDIT_UNRESOLVED`、`FILES_EDIT_DENIED`、`SYSTEM_SANDBOX_CONFLICT`、`SYSTEM_SANDBOX_CHANGED`）。
+
 ## schema 这一层直接消失
 
 你问「为什么不把校验写进函数里，schema 全部消失」。**对，而且仓库里早有先例**：
@@ -158,7 +188,7 @@ zod 是盖在上面的第二层。
 
 | 档 | 给什么 | 谁在这一档 |
 | --- | --- | --- |
-| **常驻** | 完整声明 | 这个空间的核心几个（system 的 read/edit/run 这类） |
+| **常驻** | 完整声明 | 这个空间的核心几个（`velar:files`、`velar:shell` 这类） |
 | **索引** | 模块名 + 方法名，一个方法十来个字符 | 其余内置的，以及**用户 mod 注入的** |
 | **导入后** | 完整声明，**留在本会话里** | 模型 `import` 过的 |
 
@@ -251,7 +281,7 @@ import { blame } from 'velar:git' with { lease: 'done' }  // 用完了，退租
 `export default` 是这一轮的答案；**其余具名导出存进工作空间**（提交里给了模块名才存，不给就什么都不留）。
 
 ```js
-import { read } from 'velar:system'
+import { read } from 'velar:files'
 export function parseChangelog(text) { … }          // 本轮就能用，同时被存下来
 const file = await read({ files: [{ path: 'CHANGELOG.md' }] })
 export default parseChangelog(file.files[0].content)
@@ -264,12 +294,12 @@ import 在 **typecheck 时**解析，那会儿文件还不存在，**编不过**
 
 ### 那条硬规矩不用实现，它自动成立
 
-工作空间里的模块在**当轮授权下编译**。想 `export { run } from 'velar:system'` 而当轮没授 system？**编不过。**
+工作空间里的模块在**当轮授权下编译**。想 `export { run } from 'velar:shell'` 而当轮没授 shell？**编不过。**
 存下来的助手当不成后门——不是因为我们拦着，是因为它根本编不出来。
 
 ### 「每轮重写 import」它自己就能解决
 
-用 re-export 策展自己的工作面（`export { read, edit } from 'velar:system'`），之后每段程序一行。
+用 re-export 策展自己的工作面（`export { read, edit } from 'velar:files'`），之后每段程序一行。
 **我们没有把任何东西变成隐式**——程序仍然逐字说明它碰什么。
 
 ### 还没想好的两件
@@ -345,7 +375,7 @@ for (const f of files) await edit({ files: [{ path: f, … }], grant })
 就已经被杀了，那笔时间根本没机会补。第一版差点写成补时间的样子。
 
 谁来停？**整个 `velar:approval` 命名空间的调用就是「在等人」**，会话自己停，端口不必管；
-能力里内联问人的（今天 `system:run` 就是这样）由端口拿 `holdClock` 自己停。
+能力里内联问人的（今天 `velar:shell` 的 run 就是这样）由端口拿 `holdClock` 自己停。
 这是审批单独成模块的第二份红利——第一份是类型系统焊死了门，这一份是**宿主看得见程序什么时候在等人**。
 
 ### ⑤ 内存没有上限（观察项转必修，**已实现**，INV-17）
@@ -425,7 +455,7 @@ for (const f of files) await edit({ files: [{ path: f, … }], grant })
 
 ## 还没定的
 
-- 那扇门叫什么名字（`code`？`run`？要避开 `system:run`）。
+- 那扇门叫什么名字（`code`？`run`？要避开 `velar:shell` 的 `run`）。
 - 网络缺口：`node --permission` 不覆盖 socket，`NodeSubprocessCodeRunner` 因此**不可发版**（INV-5）。
   正式版换 WASM 里的 QuickJS；`CodeRunnerApi` 已抽成注入面，换的时候不返工。
 - 审批中途挂起怎么回到界面：API 函数是 async，`await` 一下审批即可，但交互与界面要跟着改。

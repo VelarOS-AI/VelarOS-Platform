@@ -8,10 +8,10 @@ import { delimiter, isAbsolute, resolve } from 'node:path'
 import { isEmpty, isFalse, isTrue } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import type { CommandSpec } from '@velaros-ai/platform/contracts'
+import type { ShellProcessConfinementBackend, ShellProcessConfinementEnforcement, ShellProcessConfinementEvidence, ShellProcessConfinementMode } from '@velaros-ai/shell-command/contracts'
 
 import { SystemErrorCodes } from '../contract/constants.js'
 import type { SystemProcessConfinementBuildOptions, SystemProcessConfinementPolicy, SystemProcessConfinementRequest, SystemProcessConfinementResult } from '../types/commands.js'
-import type { SystemProcessConfinementBackend, SystemProcessConfinementEnforcement, SystemProcessConfinementEvidence, SystemProcessConfinementMode } from '../types/system.js'
 
 const DefaultSandboxExecPath = '/usr/bin/sandbox-exec'
 
@@ -159,12 +159,12 @@ function assertProviderResult(
 
 /** 生成一份「约束已生效」的证据记录；只约束得住一部分副作用的后端传 partial 和说明它管到哪里的 reason。 */
 function enforcedEvidence(
-  mode: SystemProcessConfinementMode,
-  backend: SystemProcessConfinementBackend,
+  mode: ShellProcessConfinementMode,
+  backend: ShellProcessConfinementBackend,
   writableRoots: string[],
-  enforcement: SystemProcessConfinementEnforcement = 'full',
+  enforcement: ShellProcessConfinementEnforcement = 'full',
   reason = 'enforced'
-): SystemProcessConfinementEvidence {
+): ShellProcessConfinementEvidence {
   return { mode, backend, enforcement, reason, writableRoots }
 }
 

@@ -219,7 +219,7 @@ export type CapabilityLease = 'once' | 'task' | 'done'
 export interface ProgramImport {
   /** 命名空间，如 `system`；`velar:` 前缀已剥掉。 */
   namespace: string
-  /** 原样的模块名，如 `velar:system`。 */
+  /** 原样的模块名，如 `velar:files`。 */
   specifier: string
   /** 模型给的租约意图；没写就没有这一格。 */
   lease?: CapabilityLease

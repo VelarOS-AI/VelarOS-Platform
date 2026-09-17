@@ -9,7 +9,7 @@ VelarOS Platform is a flat Bun workspace. Every publishable package lives direct
 | Kernel | `packages/kernel` |
 | Agent | `packages/agent` |
 | Core | `packages/core`, `packages/platform` |
-| Foundations | `packages/shell-command`, `packages/rehearsal-sandbox`, `packages/text-files`, `packages/path-rules`, `packages/tool-contract` |
+| Foundations | `packages/files`, `packages/shell-command`, `packages/rehearsal-sandbox`, `packages/text-files`, `packages/path-rules`, `packages/tool-contract` |
 | Model | `packages/model` |
 | Capabilities | `packages/browser`, `packages/cli`, `packages/computer`, `packages/development`, `packages/office`, `packages/project`, `packages/system` |
 | Memory | `packages/memory`, `packages/knowledge` |

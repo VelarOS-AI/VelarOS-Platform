@@ -1,18 +1,18 @@
 /**
- * 文件安全：判断路径是否在根目录内、是否属于系统敏感区、是否是凭证文件，写入敏感路径和读凭证之前向用户要确认。
+ * 文件安全：判断路径是否在根目录内、是否属于系统敏感区、是否是凭证文件，并造出写敏感路径、碰凭证文件之前要用户确认的请求。
  */
 
 import { homedir, tmpdir } from 'node:os'
 import * as path from 'node:path'
 
+import { agentToolContracts } from '@velaros-ai/agent/tool-contract'
 import { isNotNull, isNull } from '@velaros-ai/core'
 import { resolveRealPath } from '@velaros-ai/core/utils/RealPath'
+import type { FileConfirmation } from '@velaros-ai/files'
 import type { PlatformCompatibilityApi } from '@velaros-ai/platform'
 import { createPlatform, currentPlatform } from '@velaros-ai/platform'
-import { toolIdentity } from '@velaros-ai/tool-contract'
 
-import type { SystemToolContext } from '../contract/requires.js'
-import type { SensitiveSystemMutationPathOptions } from '../types/files.js'
+import type { SensitiveSystemMutationPathOptions } from '../types/paths.js'
 
 /** 按平台取 posix 或 win32 的路径工具。 */
 function pathApi(platform: NodeJS.Platform): typeof path.posix | typeof path.win32 {
@@ -126,32 +126,26 @@ export function isSensitiveSystemMutationPath(
 }
 
 
-/** 写入或修改系统敏感路径前向用户要确认；先把符号链接解开再判定，没有审批通道的宿主会直接拒绝。 */
-export async function confirmSensitiveSystemMutation(
-  ctx: SystemToolContext,
-  resolvedPath: string,
-  action: 'write' | 'edit'
-): Promise<void> {
-  // 临时目录本身也要解开符号链接（macOS 的 /var 是 /private/var 的链接），不然临时文件会被误当成系统敏感路径。
-  if (!isSensitiveSystemMutationPath(await resolveRealPath(resolvedPath), { tempDir: await resolveRealPath(tmpdir()) })) return
-
-  // 审批统一走宿主注入的 ApprovalPort；本包不假设具体确认 UI 或运行模式。
-  // autonomous 与后台 never-ask 的自动批准；execution 为空的宿主（web 桥/无人值守）得到设计式
-  // deny——敏感路径写入按「无审批通道即拒绝」处理，不再对 ~/.ssh、/etc、LaunchAgents 等 fail-open。
-  const verb = action === 'write' ? '写入/覆盖' : '修改'
-  await ctx.approval.awaitConfirmation(
-    `即将${verb}系统敏感路径：\n${resolvedPath}\n\n该路径位于系统目录或主目录的配置/凭证区（如 ~/.ssh、shell 启动文件、/etc 等），可能影响登录、凭证或系统行为。确认继续？`,
-    ctx.abortSignal,
-    {
+/**
+ * 写系统敏感路径前要用户确认的那件事；不是敏感路径返回 null。传进来的必须是解开符号链接后的真实路径。
+ *
+ * 只造请求、不自己问：问不问、被拒怎么办由调用方（系统空间的文件端口交给 `velar:files`）决定。
+ * 临时目录本身也要解开符号链接（macOS 的 /var 是 /private/var 的链接），不然临时文件会被误当成系统敏感路径。
+ */
+export async function sensitiveMutationConfirmation(target: string): Promise<Nullable<FileConfirmation>> {
+  if (!isSensitiveSystemMutationPath(target, { tempDir: await resolveRealPath(tmpdir()) })) return null
+  return {
+    message: `即将写入/覆盖系统敏感路径：\n${target}\n\n该路径位于系统目录或主目录的配置/凭证区（如 ~/.ssh、shell 启动文件、/etc 等），可能影响登录、凭证或系统行为。确认继续？`,
+    options: {
       approvalRisk: 'high',
       riskScope: 'system-mutation:sensitive-path',
       operation: {
-        key: toolIdentity.approvalOperationKey('file-mutation', { path: resolvedPath }),
+        key: agentToolContracts.createApprovalOperationKey('file-mutation', { path: target }),
         label: '修改系统敏感文件',
-        target: resolvedPath,
+        target,
       },
-    }
-  )
+    },
+  }
 }
 
 /** 主目录下装凭证的目录：私钥、云服务凭证、密码库。 */
@@ -187,22 +181,20 @@ export function isCredentialPath(resolvedPath: string, options: SensitiveSystemM
   })
 }
 
-/** 读或改凭证文件前向用户要确认；先把符号链接解开再判定，没有审批通道的宿主会直接拒绝。 */
-export async function confirmCredentialAccess(ctx: SystemToolContext, resolvedPath: string, action: 'read' | 'write'): Promise<void> {
-  const target = await resolveRealPath(resolvedPath)
-  if (!isCredentialPath(target)) return
+/** 读或改凭证文件前要用户确认的那件事；不是凭证文件返回 null。传进来的必须是解开符号链接后的真实路径。 */
+export function credentialConfirmation(target: string, action: 'read' | 'write'): Nullable<FileConfirmation> {
+  if (!isCredentialPath(target)) return null
   const verb = action === 'read' ? '读取' : '改写'
-  await ctx.approval.awaitConfirmation(
-    `即将${verb}凭证文件：\n${resolvedPath}\n\n该文件可能包含私钥、令牌或口令，${action === 'read' ? '读取后内容会进入模型上下文' : '改坏会影响登录与访问'}。确认继续？`,
-    ctx.abortSignal,
-    {
+  return {
+    message: `即将${verb}凭证文件：\n${target}\n\n该文件可能包含私钥、令牌或口令，${action === 'read' ? '读取后内容可能进入模型上下文' : '改坏会影响登录与访问'}。确认继续？`,
+    options: {
       approvalRisk: 'high',
       riskScope: 'system-read:credential',
       operation: {
-        key: toolIdentity.approvalOperationKey('file-read', { path: resolvedPath, action }),
+        key: agentToolContracts.createApprovalOperationKey('file-read', { path: target, action }),
         label: action === 'read' ? '读取凭证文件' : '改写凭证文件',
-        target: resolvedPath,
+        target,
       },
-    }
-  )
+    },
+  }
 }

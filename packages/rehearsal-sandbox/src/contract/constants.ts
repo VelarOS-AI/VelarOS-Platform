@@ -1,5 +1,5 @@
 /**
- * 常量表：演练沙箱的公开上限与落回审批的操作身份。system:sandbox、project:sandbox 的说明与 schema、宿主的沙箱实现都引这里的数字。
+ * 常量表：演练沙箱的公开上限与落回审批的操作身份。`velar:sandbox` 的声明、项目空间的工具说明与 schema、宿主的沙箱实现都引这里的数字。
  * 不 import 任何东西，浏览器和渲染进程都能用（从 `@velaros-ai/rehearsal-sandbox/contracts` 取）。
  */
 

@@ -4,7 +4,7 @@
   "velaros": {
     "platform": "0.6"
   },
-  "description": "Shared semantics for an agent running a shell command: read-only and dangerous classification, long-running detection, concurrency safety, confirmation text and the dangerous-command approval request.",
+  "description": "The shell capability shared by every space: read-only and dangerous classification, long-running detection, concurrency safety, confirmation text, the dangerous-command approval request, and the velar:shell operations (run, listTasks, refreshEnvironment) over a port each space injects.",
   "license": "Apache-2.0",
   "author": "VelarOS",
   "homepage": "https://github.com/VelarOS-AI/VelarOS-Platform/tree/main/packages/shell-command#readme",
@@ -54,6 +54,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.19.17",
+    "@velaros-ai/code-surface": "workspace:*",
     "typescript": "^5.7.0"
   },
   "publishConfig": {

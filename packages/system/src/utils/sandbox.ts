@@ -18,11 +18,10 @@ import { currentPlatform } from '@velaros-ai/platform'
 import type { SandboxApplyResult, SandboxDiff, SandboxIgnoredMode, SandboxTextDiff } from '@velaros-ai/rehearsal-sandbox/contracts'
 import { RehearsalSandboxLimits } from '@velaros-ai/rehearsal-sandbox/contracts'
 import { textCodec, textFileIo } from '@velaros-ai/text-files'
-import { toolFailures } from '@velaros-ai/tool-contract'
 
 import { SystemErrorCodes } from '../contract/constants.js'
 import type { SystemProcessConfinementPolicy } from '../types/commands.js'
-import type { SystemSandboxApplyFailureDetails, SystemSandboxConflict, SystemSandboxFileStamp, SystemSandboxManifest, SystemSandboxStampTable } from '../types/sandbox.js'
+import type { SystemSandboxConflict, SystemSandboxFileStamp, SystemSandboxManifest, SystemSandboxStampTable } from '../types/sandbox.js'
 
 import { isPathInsideRoot } from './file-safety.js'
 import { readErrnoCode } from './fs.js'
@@ -112,7 +111,7 @@ function isGitConfigPath(relativePath: string): boolean {
 
 /** 一个 `.git` 链接文件（内容是 `gitdir: <路径>`，git worktree 与子模块用它）指向的仓库目录是否落在 root 之外；不是链接文件返回 false。 */
 async function gitLinkPointsOutside(linkFile: string, root: string): Promise<boolean> {
-  const head = await textFileIo.readHead(linkFile, SystemTuning.files.textSniffBytes).catch(() => null)
+  const head = await textFileIo.readHead(linkFile, SystemTuning.sandbox.gitLinkBytes).catch(() => null)
   const target = head ? /^gitdir:[ \t]*(.+?)[ \t]*\r?$/mu.exec(head.toString('utf8'))?.[1] : undefined
   if (!target) return false
   return !isPathInsideRoot(await resolveRealPath(resolve(dirname(linkFile), target)), root)
@@ -368,28 +367,28 @@ export async function diffMirror(
     omittedDiffs,
     fingerprint,
   }
-  if (omittedDiffs > 0) result.note = `${omittedDiffs} 个文件没附差量（二进制、太大、超过预算，或源目录里那份也变了没有基线）；用 read 直接看镜像里的文件。`
+  if (omittedDiffs > 0) result.note = `${omittedDiffs} 个文件没附差量（二进制、太大、超过预算，或源目录里那份也变了没有基线）；在镜像里 run 一条 cat 直接看。`
   return result
 }
 
-/** 落回时整批不落的错误：什么都没写，cause.details.conflicts 列出每处冲突，context.executionOutcome 是 not-applied。 */
+/** 落回时整批不落的错误：什么都没写，码是 SYSTEM_SANDBOX_CONFLICT，message 列出每处冲突；完整清单在 context.conflicts。 */
 export function sandboxApplyConflict(conflicts: readonly SystemSandboxConflict[]): AppError {
-  const details: SystemSandboxApplyFailureDetails = { executionOutcome: 'not-applied', conflicts: toolFailures.listed(conflicts) }
-  return toolFailures.create(
-    'VALIDATION',
-    `源目录里有 ${conflicts.length} 个文件自建沙箱以来变过，什么都没写。${toolFailures.listed(conflicts).map((conflict) => `${conflict.path}：${conflict.message}`).join('；')}`,
-    { reason: SystemErrorCodes.sandboxConflict, details, suggestedNextAction: '什么都没写。从现在的源目录重建沙箱，或者只落回没有冲突的路径。' },
-    { notApplied: true }
+  const listed = conflicts.slice(0, SystemTuning.sandbox.listedPaths).map((conflict) => `${conflict.path}：${conflict.message}`).join('；')
+  return new AppError(
+    SystemErrorCodes.sandboxConflict,
+    `源目录里有 ${conflicts.length} 个文件自建沙箱以来变过，什么都没写。${listed}。从现在的源目录重建沙箱，或者只落回没有冲突的路径`,
+    undefined,
+    { executionOutcome: 'not-applied', conflicts: [...conflicts] }
   )
 }
 
-/** 落回时镜像跟用户确认时看到的不一样了：什么都没写，cause.reason 是 SYSTEM_SANDBOX_CHANGED，context.executionOutcome 是 not-applied。 */
+/** 落回时镜像跟用户确认时看到的不一样了：什么都没写，码是 SYSTEM_SANDBOX_CHANGED。 */
 export function sandboxChangedSinceConfirmation(): AppError {
-  return toolFailures.create(
-    'VALIDATION',
-    '确认之后沙箱里的改动又变了（镜像里可能还有命令在跑），什么都没写；停掉镜像里的任务，重新 diff 再落回。',
-    { reason: SystemErrorCodes.sandboxChanged, suggestedNextAction: '什么都没写。先用 listTasks 找到并停掉镜像里还在跑的任务，再 diff、apply。' },
-    { notApplied: true }
+  return new AppError(
+    SystemErrorCodes.sandboxChanged,
+    '确认之后沙箱里的改动又变了（镜像里可能还有命令在跑），什么都没写；先用 listTasks 找到并停掉镜像里还在跑的任务，再 diff、apply',
+    undefined,
+    { executionOutcome: 'not-applied' }
   )
 }
 
@@ -453,11 +452,12 @@ async function removeEmptiedDirectories(root: string, source: string, deleted: r
   }
 }
 
-/** 落回途中出错时的报错：一条都还没落回就标 not-applied；落回了一部分就在 context.applied 里点名已经落回的路径。 */
+/** 落回途中出错时的报错：一条都还没落回就标 not-applied；落回了一部分就在 message 与 context.applied 里点名已经落回的路径。 */
 function sandboxApplyFailure(error: unknown, applied: readonly string[]): AppError {
   const failure = AppError.from(error)
-  if (isEmpty(applied)) return toolFailures.create(failure.code, `落回时出错，源目录里什么都没改：${failure.message}`, error, { notApplied: true })
-  return toolFailures.create(failure.code, `已经落回了 ${applied.length} 个路径，后面的没落：${failure.message}`, error, { applied })
+  if (isEmpty(applied)) return new AppError(failure.code, `落回时出错，源目录里什么都没改：${failure.message}`, error, { executionOutcome: 'not-applied' })
+  const listed = applied.slice(0, SystemTuning.sandbox.listedPaths).join('、')
+  return new AppError(failure.code, `已经落回了 ${applied.length} 个路径（${listed}），后面的没落：${failure.message}`, error, { executionOutcome: 'failed', applied: [...applied] })
 }
 
 /**

@@ -24,6 +24,6 @@ export interface ShellCommandApprovalInput {
 export interface ShellCommandApprovalRequest {
   /** 确认文案：命令、理由、递归删除时的仓库提醒、是否后台、可能占用的端口。 */
   message: string
-  /** 高风险、必须用户亲自点、不可记忆的确认选项，带跨工具共享的操作身份。 */
+  /** 高风险、必须用户亲自点、不可记忆的确认选项，带跨入口共享的操作身份。 */
   options: ToolConfirmationDecisionOptions
 }

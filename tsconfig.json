@@ -93,6 +93,12 @@
       "@velaros-ai/path-rules/*": [
         "./packages/path-rules/src/*"
       ],
+      "@velaros-ai/files": [
+        "./packages/files/src/index.ts"
+      ],
+      "@velaros-ai/files/*": [
+        "./packages/files/src/*"
+      ],
       "@velaros-ai/rehearsal-sandbox": [
         "./packages/rehearsal-sandbox/src/index.ts"
       ],

@@ -3,11 +3,12 @@
  * 本地内核持有一个；遍历时跳过哪些条目由 `@velaros-ai/path-rules` 的忽略策略判定。
  */
 
-import { lstat, readdir } from 'node:fs/promises'
+import { lstat, readdir, readFile } from 'node:fs/promises'
 import { basename, extname, join, relative } from 'node:path'
 
 import { AppError } from '@velaros-ai/core/error'
 import { createIgnorePolicy } from '@velaros-ai/path-rules'
+import { textCodec } from '@velaros-ai/text-files'
 
 import type { SystemFileEntry, SystemGlobalSearchOptions, SystemGlobalSearchResult, SystemSearchMatch } from '../types/system.js'
 import {
@@ -17,7 +18,6 @@ import {
   shouldSkipSystemSearchEntry,
   shouldSkipSystemSearchProtectedDirectory,
 } from '../utils/search.js'
-import { readSystemTextFile } from '../utils/text-file.js'
 import { SystemTuning } from '../utils/tuning.js'
 
 
@@ -120,7 +120,8 @@ export class SystemGlobalSearch implements SystemGlobalSearchApi {
       if (!stats?.isFile() || stats.size > SystemTuning.search.fileBytes) return false
 
       abortSignal?.throwIfAborted()
-      const textFile = await readSystemTextFile(absolutePath).catch(() => null)
+      // 认不出是文本（二进制、非法字节、认不出的编码）的文件跳过，不读成替换字符再去匹配。
+      const textFile = textCodec.decode(await readFile(absolutePath).catch(() => Buffer.alloc(0)))
       if (!textFile) return false
 
       let perFileMatches = 0

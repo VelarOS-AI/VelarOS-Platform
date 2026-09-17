@@ -96,7 +96,7 @@
       "directory": "packages/system",
       "name": "@velaros-ai/system",
       "version": "1.2.0",
-      "description": "System-space tools for VelarOS hosts: text file read/view/edit, shell command execution, background tasks and interactive consoles, process and port inspection, global search, and the local kernel.",
+      "description": "The system space for VelarOS hosts: the local kernel (commands, background tasks and interactive consoles, rehearsal sandboxes, process and port inspection, global search) and the system-space assembly that serves velar:files, velar:shell and velar:sandbox with machine-wide scope.",
       "exportSubpaths": [
         ".",
         "./contracts"
@@ -158,6 +158,18 @@
     },
     {
       "domain": "foundations",
+      "directory": "packages/files",
+      "name": "@velaros-ai/files",
+      "version": "0.1.0",
+      "description": "The file capability shared by every space: the velar:files operations (read whole text files, view images within provider limits, edit whole files in one batch with versions and restore) over a port each space injects for scope, policy and persistence.",
+      "exportSubpaths": [
+        ".",
+        "./contracts"
+      ],
+      "repositoryDirectory": "packages/files"
+    },
+    {
+      "domain": "foundations",
       "directory": "packages/path-rules",
       "name": "@velaros-ai/path-rules",
       "version": "0.1.0",
@@ -185,7 +197,7 @@
       "directory": "packages/shell-command",
       "name": "@velaros-ai/shell-command",
       "version": "0.1.0",
-      "description": "Shared semantics for an agent running a shell command: read-only and dangerous classification, long-running detection, concurrency safety, confirmation text and the dangerous-command approval request.",
+      "description": "The shell capability shared by every space: read-only and dangerous classification, long-running detection, concurrency safety, confirmation text, the dangerous-command approval request, and the velar:shell operations (run, listTasks, refreshEnvironment) over a port each space injects.",
       "exportSubpaths": [
         ".",
         "./contracts"

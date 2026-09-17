@@ -8,18 +8,18 @@ import { win32 } from 'node:path'
 import { isEmpty, Log } from '@velaros-ai/core'
 import { createPlatform, currentPlatform } from '@velaros-ai/platform'
 import type { CommandSpec } from '@velaros-ai/platform/contracts'
+import type { ShellCommandKind, ShellDescriptor, ShellRecommendation } from '@velaros-ai/shell-command/contracts'
 
 import { SystemEnvironmentVariables } from '../contract/constants.js'
 import type { ResolvedSystemShell, ResolveSystemShellOptions } from '../types/commands.js'
-import type { SystemShellDescriptor, SystemShellKind, SystemShellRecommendation } from '../types/system.js'
 
 
-const shellNames: Record<SystemShellKind, string> = {
+const shellNames: Record<ShellCommandKind, string> = {
   'git-bash': 'Git Bash', pwsh: 'PowerShell 7', powershell: 'Windows PowerShell',
   cmd: 'CMD', posix: 'POSIX shell',
 }
 
-const gitRecommendation: SystemShellRecommendation = {
+const gitRecommendation: ShellRecommendation = {
   code: 'INSTALL_GIT_BASH',
   message: '推荐安装 Git for Windows，以获得 Git Bash 和一致的 Unix 命令工具。',
   url: 'https://git-scm.com/download/win',
@@ -295,14 +295,14 @@ export function buildSystemNativeCommandSpec(
  * 挑定的 shell 本机没有时给模型的报错：点名可用的是哪几个、哪个是默认，并说下一步怎么改。
  * 候选表按挑选优先顺序，第一个就是默认的那个；一个候选都没有时说清楚本机一个 shell 也没找到。
  */
-export function describeUnavailableShellKind(kind: SystemShellKind, candidates: readonly SystemShellDescriptor[]): string {
+export function describeUnavailableShellKind(kind: ShellCommandKind, candidates: readonly ShellDescriptor[]): string {
   if (isEmpty(candidates)) return `本机没有 ${kind}，而且一个可用的 shell 都没找到。先让用户装一个 shell，再重试这条命令。`
   const available = candidates.map((candidate, index) => index === 0 ? `${candidate.kind}（默认）` : candidate.kind).join('、')
   return `本机没有 ${kind}，可用：${available}。不填 shell 就用默认的那个，要挑别的就从这几个里挑一个，按它的语法重写命令再调一次。`
 }
 
 /** 把解析出的 shell 缩成命令结果里展示的描述：种类、名称、路径、参数、就绪状态、版本、安装建议，不带环境变量。 */
-export function toShellDescriptor(shell: SystemShellDescriptor): SystemShellDescriptor {
+export function toShellDescriptor(shell: ShellDescriptor): ShellDescriptor {
   return { kind: shell.kind, name: shell.name, shellPath: shell.shellPath, args: shell.args,
     readiness: shell.readiness, version: shell.version, recommendation: shell.recommendation }
 }
