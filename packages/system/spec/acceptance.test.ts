@@ -12,11 +12,14 @@ import { join, resolve } from 'node:path'
 
 import { describe, expect, test } from 'bun:test'
 
+import { codeProgramChecker, createCapabilityPort, createCodeSurfaceSession, nodeSubprocessCodeRunner } from '@velaros-ai/code-surface'
+
 import type { SystemCommandResult } from '../src/contracts'
 import { systemProcessManager } from '../src/impl/SystemProcessManager.js'
 import {
   createLocalSystemKernel,
   createSystemBundledModDefinition,
+  createSystemCodeSurface,
   createSystemKernelModule,
   SystemCapability,
   type SystemCapabilityService,
@@ -853,5 +856,81 @@ describe('演练沙箱', () => {
       await rm(source, { recursive: true, force: true })
       await rm(outside, { recursive: true, force: true })
     }
+  })
+})
+
+describe('代码面', () => {
+  test('INV-31 模型写的程序经生成的声明调到真实操作：读真文件、在程序里筛、只交出要的', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'velaros-code-surface-'))
+    try {
+      await writeFile(join(directory, 'a.ts'), 'const a = 1\n// TODO: 补这里\n', 'utf8')
+      await writeFile(join(directory, 'b.ts'), '干净文件，没有待办\n', 'utf8')
+
+      const surface = createSystemCodeSurface({
+        resolveContext: (signal) =>
+          ({
+            abortSignal: signal ?? new AbortController().signal,
+            system: { resolvePath: (path?: string) => path ?? directory },
+            approval: { awaitConfirmation: async () => undefined },
+          }) as unknown as SystemToolContext,
+      })
+      const session = createCodeSurfaceSession({
+        checker: codeProgramChecker,
+        runner: nodeSubprocessCodeRunner,
+        capabilities: createCapabilityPort(surface.operations),
+      })
+      // 授权用的就是**生成的那份声明**：模型看的和这里执行的是同一个源码的两头，
+      // 一旦声明与操作漂了，程序连编译都过不去。
+      const declarations = await readFile(
+        resolve(import.meta.dir, '../../../baselines/code-surface/system.d.ts'),
+        'utf8'
+      )
+
+      const outcome = await session.submit({
+        program: {
+          source: [
+            "import { read } from 'velar:system'",
+            `const r = await read({ files: [{ path: '${join(directory, 'a.ts')}' }, { path: '${join(directory, 'b.ts')}' }] })`,
+            'export default r.files',
+            "  .filter((f) => !('error' in f) && f.content.includes('TODO'))",
+            '  .map((f) => f.path.split("/").pop())',
+          ].join('\n'),
+        },
+        granted: [{ namespace: 'system', declarations }],
+        timeoutMs: 20_000,
+      })
+
+      if (!outcome.checked) throw new Error(`应当通过检查：${JSON.stringify(outcome)}`)
+      expect(outcome.result.failed).toBeUndefined()
+      expect(outcome.result.value).toEqual(['a.ts'])
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  }, 60_000)
+
+  test('INV-31 入参没过校验时程序还没动手，回的话点名是哪个字段', async () => {
+    const surface = createSystemCodeSurface({
+      resolveContext: () => ({ abortSignal: new AbortController().signal }) as unknown as SystemToolContext,
+    })
+    const port = createCapabilityPort(surface.operations)
+    const outcome = await port.invoke({ namespace: 'system', operation: 'read', input: { files: [{ path: '' }] } })
+    expect(outcome.value).toBeUndefined()
+    expect(outcome.error?.code).toBe('INVALID_INPUT')
+    expect(outcome.error?.message).toContain('files[0].path')
+  })
+
+  test('INV-31 登记的操作名与模型看到的声明逐个对上，没有一个只在一边有', async () => {
+    const surface = createSystemCodeSurface({
+      resolveContext: () => ({ abortSignal: new AbortController().signal }) as unknown as SystemToolContext,
+    })
+    const registered = [...(createCapabilityPort(surface.operations).listOperations().system ?? [])].sort()
+    // 声明是模型唯一能看见的东西：声明里有而表里没有 = 模型照着写却调不通；
+    // 表里有而声明里没有 = 那件能力模型根本不知道存在。两边都必须为空。
+    const declarations = await readFile(
+      resolve(import.meta.dir, '../../../baselines/code-surface/system.d.ts'),
+      'utf8'
+    )
+    const declared = [...declarations.matchAll(/export function (\w+)/gu)].map((match) => match[1]).sort()
+    expect(registered).toEqual(declared)
   })
 })

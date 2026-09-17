@@ -8,7 +8,6 @@
  * 这是人最先看的文件，改了要在差量报告里点名。
  */
 
-import { z } from 'zod'
 
 import type { AgentModManifest, ToolCategoryDefinition } from '@velaros-ai/agent/contracts'
 import { isEmpty, optionalWhen } from '@velaros-ai/core'
@@ -21,9 +20,7 @@ import {
 import type {
   CapabilityToken,
 } from '@velaros-ai/kernel/contracts'
-import { RehearsalSandboxLimits } from '@velaros-ai/rehearsal-sandbox/contracts'
 import { shellCommandPolicy } from '@velaros-ai/shell-command'
-import { ShellCommandKinds } from '@velaros-ai/shell-command/contracts'
 import { toolDescriptions, toolKernelModules } from '@velaros-ai/tool-contract'
 
 import type { SystemToolCategoryId } from '../contract/constants.js'
@@ -33,6 +30,15 @@ import type { CreateSystemKernelModuleOptions, SystemToolContext } from '../cont
 import type { SystemListTasksInput, SystemRefreshEnvironmentInput, SystemRunInput } from '../types/commands.js'
 import type { SystemEditInput, SystemReadInput, SystemViewInput } from '../types/files.js'
 import type { SystemSandboxInput } from '../types/sandbox.js'
+import {
+  editInputSchema,
+  listTasksInputSchema,
+  readInputSchema,
+  refreshEnvironmentInputSchema,
+  runInputSchema,
+  sandboxInputSchema,
+  viewInputSchema,
+} from '../utils/operation-schemas.js'
 import { defineSystemTool } from '../utils/tool.js'
 
 import { systemExecutionOperations } from './SystemExecutionOperations.js'
@@ -53,14 +59,7 @@ const readTool = defineSystemTool<SystemReadInput>({
   ],
   examples: [{ files: [{ path: '~/build.log' }] }, { files: [{ path: '~/.zshrc' }, { path: '~/build.log', offset: SystemFileLimits.readChars }] }],
   notes: ['其他二进制文件读不了。读私钥、云凭证这类文件会先向用户确认。'],
-  schema: z.strictObject({
-    files: z.array(z.strictObject({
-      path: z.string().min(1).describe('文件路径，支持 ~；相对路径相对 system:run 的默认目录。'),
-      offset: z.number().int().nonnegative().optional().describe('从第几个字符开始读，默认 0。'),
-      maxChars: z.number().int().positive().max(SystemFileLimits.readChars).optional().describe(`最多返回多少字符，默认也是上限 ${SystemFileLimits.readChars}。没取完时只给完整的行，从 range.end 接着读；某一行本身比预算还长时才会从行中间截。`),
-      version: z.string().min(1).optional().describe('读改动前留下的某个版本，版本号来自 read 或 edit 的结果；只有本次运行里 edit 留下的版本能召回。'),
-    })).min(1).max(SystemFileLimits.readFiles).describe(`要读的文件，每项一个，一次最多 ${SystemFileLimits.readFiles} 个。`),
-  }),
+  schema: readInputSchema,
   permissions: ['fs:read'],
   capabilities: {
     effectKind: 'read',
@@ -84,11 +83,7 @@ const viewTool = defineSystemTool<SystemViewInput>({
   usage: ['结果的 files 与传入的一一对应，内容块按同样的顺序排；某个文件看不了只有它那一项是 error。'],
   examples: [{ files: [{ path: '~/Desktop/screenshot.png' }] }, { files: [{ path: '~/Desktop/before.png' }, { path: '~/Desktop/after.png' }] }],
   notes: [`只认 PNG、JPEG、GIF、WebP，最大 ${SystemFileLimits.imageBytes / 1024 / 1024} MB；别的格式或太大的先用 system:run 转换、缩小。`],
-  schema: z.strictObject({
-    files: z.array(z.strictObject({
-      path: z.string().min(1).describe('图片路径，支持 ~；相对路径相对 system:run 的默认目录。'),
-    })).min(1).max(SystemFileLimits.viewFiles).describe(`要看的图片，每项一张，一次最多 ${SystemFileLimits.viewFiles} 张。`),
-  }),
+  schema: viewInputSchema,
   permissions: ['fs:read'],
   capabilities: {
     effectKind: 'read',
@@ -132,22 +127,7 @@ const editTool = defineSystemTool<SystemEditInput>({
   ],
   notes: [`写系统敏感路径、私钥和云凭证这类文件会先向用户确认；路径是符号链接时改的是它指向的文件，结果里 target 给出那个文件。newText 只能写到文本文件或新文件上，已有的二进制文件用 system:run 换。改完之后 windows 每处带新位置，改动那段不超过 ${SystemFileLimits.editWholeChars} 字符时 content 和 range 整段给出；旧的 range 已经作废，再改同一个文件用新的。`],
   inputReuse: true,
-  schema: z.strictObject({
-    files: z.array(z.strictObject({
-      path: z.string().min(1).describe('文件路径，支持 ~；相对路径相对 system:run 的默认目录。'),
-      newText: z.string().optional().describe('整个文件写入的内容，不存在就新建；改几处时不用给，改动写在 edits 里。'),
-      edits: z.array(z.strictObject({
-        range: z.strictObject({
-          offset: z.number().int().nonnegative().describe('起点字符位置。'),
-          end: z.number().int().nonnegative().describe('终点字符位置，不含。'),
-        }).describe('system:read 返回的 range，只在这段里改。'),
-        oldText: z.string().optional().describe('要换掉的原文，只在 range 里找、必须只出现一次；不给就把整段换成 newText。'),
-        newText: z.string().describe('换成的新文本。'),
-      })).min(1).max(SystemFileLimits.editsPerFile).optional().describe('要改的地方，每项一处；同一个文件的几处一起改，全成或全不成，各处不能重叠。'),
-      restore: z.string().min(1).optional().describe('回滚到这个版本，版本号来自 read 或 edit 结果里的 version 或 previousVersion；不和 newText、edits 同用，可以带 version 先核对文件没被改过。'),
-      version: z.string().min(1).optional().describe('read 返回的这个文件的版本号；给了就先核对文件没被改过，改过就整批不写并给出当前版本。'),
-    })).min(1).max(SystemFileLimits.editFiles).describe(`要写的文件，每项一个，一次最多 ${SystemFileLimits.editFiles} 个；每项只用 newText、edits、restore 中的一种。`),
-  }),
+  schema: editInputSchema,
   permissions: ['fs:read', 'fs:write'],
   capabilities: {
     effectKind: 'write',
@@ -194,17 +174,7 @@ const runTool = defineSystemTool<SystemRunInput>({
     { command: 'Get-ChildItem -Force', shell: 'pwsh' },
   ],
   notes: ['cwd 与 shell 只影响本次命令，不改宿主的默认值。'],
-  schema: z.strictObject({
-    command: z.string().min(1).describe('要执行的 shell 命令。'),
-    cwd: z.string().optional().describe('命令的工作目录；不传用宿主给的默认目录。'),
-    shell: z.enum(ShellCommandKinds).optional().describe('用哪个 shell 执行；不传用环境报告里的默认 shell。只能填环境报告列为可用的那几个，填了本机没有的会在执行之前被拒，报错里给出可用的清单。'),
-    timeoutMs: z.number().int().positive().max(SystemCommandLimits.timeoutMs).optional().describe('命令超时时间，单位毫秒。'),
-    background: z.boolean().optional().describe('后台启动，立即返回后台任务；长驻服务传 true。'),
-    interactive: z.boolean().optional().describe('命令需要用户输入时传 true：命令在控制台里跑，用户在卡片里输入。'),
-    maxOutputChars: z.number().int().positive().max(SystemCommandLimits.outputChars).optional().describe('stdout/stderr 返回字符上限。'),
-    parallel: z.boolean().optional().describe('命令只读、可以和别的命令同时跑时传 true，调度器会并发执行。'),
-    allowRepeat: z.boolean().optional().describe('要故意再跑一遍完全相同的命令时传 true，否则同样的调用会被拦。'),
-  }),
+  schema: runInputSchema,
   permissions: ['process:exec'],
   capabilities: {
     effectKind: 'execute',
@@ -234,7 +204,7 @@ const refreshEnvironmentTool = defineSystemTool<SystemRefreshEnvironmentInput>({
     ],
   notes: ['只改宿主进程的环境，不会改用户的 shell 配置文件；结果里的 reason 说明 Windows 上为什么没刷新成功。'],
   // 没有参数就不校验：传了什么都不报错，只在结果里提醒一句。
-  schema: z.record(z.string(), z.unknown()),
+  schema: refreshEnvironmentInputSchema,
   permissions: [],
   capabilities: {
     effectKind: 'write',
@@ -272,11 +242,7 @@ const listTasksTool = defineSystemTool<SystemListTasksInput>({
     { taskId: '3f6c2c2e-8a1d-4b7e-9c2a-6f1e0d2b4a55' },
   ],
   notes: ['taskId 只在这里和 system:run 之间流转，不交给 job:*。', '要停掉任务，用 system:run 执行条目里的 terminateCommand；强制停用 forceTerminateCommand。'],
-  schema: z.strictObject({
-    limit: z.number().int().positive().max(SystemCommandLimits.taskListItems).optional().describe('最多返回数量。'),
-    onlyRunning: z.boolean().optional().describe('是否只返回运行中任务。'),
-    taskId: z.string().min(1).max(SystemCommandLimits.taskIdChars).optional().describe('精确后台任务 id；取自 system:run 的 backgroundProcess.taskId。'),
-  }),
+  schema: listTasksInputSchema,
   permissions: [],
   capabilities: {
     effectKind: 'read',
@@ -312,15 +278,7 @@ const sandboxTool = defineSystemTool<SystemSandboxInput>({
     { action: 'discard', sandboxId: '20260915-183000-3fa2c1' },
   ],
   notes: ['镜像里的命令连不上网，除非 create 时传 network=true；镜像仓库推不出去。没有进程约束后端的机器上建不出沙箱。'],
-  schema: z.strictObject({
-    action: z.enum(['create', 'diff', 'apply', 'discard']).describe('create 建沙箱；diff 看镜像相对创建时的变化；apply 把变化落回源目录（会向用户确认）；discard 删掉镜像。'),
-    source: z.string().min(1).optional().describe('create：要镜像的目录，支持 ~；不传就是 system:run 的默认目录。'),
-    network: z.boolean().optional().describe('create：镜像里的命令能不能联网，默认不能。'),
-    ignored: z.enum(['link', 'copy', 'skip']).optional().describe('create：gitignore 忽略的目录怎么处理：link 链接到真实目录（能读不能写，默认）、copy 复制、skip 不要；忽略的文件一律不复制。'),
-    sandboxId: z.string().min(1).max(RehearsalSandboxLimits.idChars).optional().describe('diff / apply / discard：create 返回的沙箱 id。'),
-    paths: z.array(z.string().min(1)).max(RehearsalSandboxLimits.applyPaths).optional().describe('apply：只落这些相对路径；不传就全部。'),
-    maxFiles: z.number().int().positive().max(RehearsalSandboxLimits.diffFilesMax).optional().describe(`diff：新增与修改各列最多列多少条，默认 ${RehearsalSandboxLimits.diffFiles}；删除列永远完整。`),
-  }),
+  schema: sandboxInputSchema,
   permissions: ['fs:read', 'fs:write'],
   capabilities: {
     effectKind: 'write',

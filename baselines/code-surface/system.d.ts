@@ -137,7 +137,10 @@ declare module 'velar:system' {
     encoding: TextEncoding
   }
 
-  /** 一批里某个文件读不了或看不了：只有它这一项是失败，其余文件照常返回；全部失败时整个调用才报错。path 照传入的原样。 */
+  /**
+   * 一批里某个文件读不了或看不了：只有它这一项是失败，其余文件照常返回；全部失败时整个调用才报错。path 照传入的原样。
+   * 它和成功那支**没有判别字段**，用 `'error' in file` 分开（`file.error` 在联合上取不到）。
+   */
   interface SystemFileFailure {
     path: string
     error: {

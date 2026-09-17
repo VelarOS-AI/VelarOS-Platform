@@ -432,6 +432,7 @@
       "name": "@velaros-ai/system",
       "version": "1.2.0",
       "dependencies": {
+        "@velaros-ai/code-surface": "workspace:*",
         "@velaros-ai/core": "workspace:*",
         "@velaros-ai/kernel": "workspace:*",
         "@velaros-ai/path-rules": "workspace:*",

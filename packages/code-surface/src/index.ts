@@ -9,6 +9,7 @@ export type {
   CodeRunnerApi,
   CodeSurfaceEventSink,
 } from './contract/requires.js'
+export { createCapabilityPort } from './impl/CapabilityOperationPort.js'
 export type { CodeProgramCheckerApi } from './impl/CodeProgramChecker.js'
 export { codeProgramChecker } from './impl/CodeProgramChecker.js'
 export type { CodeSurfaceSessionApi } from './impl/CodeSurfaceSession.js'
@@ -31,4 +32,9 @@ export type {
   GrantedModule,
   ProgramImport,
 } from './types/code-surface.js'
+export type {
+  CapabilityNamespaceOperations,
+  CapabilityOperation,
+  CapabilityOperationTable,
+} from './types/operations.js'
 export type { CodeRunDispatch, CodeRunOutcome, CodeRunRequest, HoldProgramClock } from './types/runner.js'

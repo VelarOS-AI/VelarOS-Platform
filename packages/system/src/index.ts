@@ -13,6 +13,8 @@ export * from './contracts.js'
 export type { SystemBundledModDefinition, SystemCapabilityService, SystemToolCollection, VelaTool } from './contract/provides.js'
 export type { LocalSystemKernelApi } from './impl/LocalSystemKernel.js'
 export { createLocalSystemKernel } from './impl/LocalSystemKernel.js'
+export type { SystemCodeSurfaceApi } from './impl/SystemCodeSurface.js'
+export { createSystemCodeSurface } from './impl/SystemCodeSurface.js'
 export { createSystemBundledModDefinition, createSystemKernelModule, SystemCapability, systemTools } from './impl/SystemTools.js'
 
 // ── 注入面：宿主要给的东西 ──────────────────────────────────────

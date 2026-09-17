@@ -19,6 +19,7 @@
 | 值 | 接口 | 做什么 |
 | --- | --- | --- |
 | `systemTools` | `SystemToolCollection`，元素是 `VelaTool` | 七个模型面工具 |
+| `createSystemCodeSurface` | `SystemCodeSurfaceApi` | 代码面的那一头：一张操作表（`velar:system` 的七个方法各一格），交给 `createCapabilityPort` 接成能力端口。**表里没有一个字是给模型看的**——模型面是 `@AgentView` 从两个操作接口生成的那份声明。和 `systemTools` 共用同一批 schema 与同一批操作方法，不会各做各的 |
 | `createSystemBundledModDefinition` | `SystemBundledModDefinition` | 系统空间作为官方内置 mod 的定义 |
 | `createSystemKernelModule` | 上游的 `KernelModuleDefinition` | 挂进内核的模块 |
 | `SystemCapability` | 能力令牌，服务是 `SystemCapabilityService` | 在内核里按名调用系统工具 |
@@ -111,8 +112,8 @@
 
 ## 不变量
 
-共 26 条，登记在 `spec/invariants.md`，验收用例在 `spec/acceptance.test.ts`。编号只增不重排，INV-1 已移出为仓库级跨包约束，INV-2、INV-3、INV-18 随命令判定移到 `@velaros-ai/shell-command`。
-按检验方式：测试 24 条、类型 1 条、门禁 1 条。未验证 0 条。
+共 27 条，登记在 `spec/invariants.md`，验收用例在 `spec/acceptance.test.ts`。编号只增不重排，INV-1 已移出为仓库级跨包约束，INV-2、INV-3、INV-18 随命令判定移到 `@velaros-ai/shell-command`。
+按检验方式：测试 25 条、类型 1 条、门禁 1 条。未验证 0 条。
 
 ## 非目标
 

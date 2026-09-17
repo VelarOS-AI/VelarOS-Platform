@@ -41,6 +41,7 @@
     "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/system"
   },
   "dependencies": {
+    "@velaros-ai/code-surface": "workspace:*",
     "@velaros-ai/core": "workspace:*",
     "@velaros-ai/kernel": "workspace:*",
     "@velaros-ai/path-rules": "workspace:*",

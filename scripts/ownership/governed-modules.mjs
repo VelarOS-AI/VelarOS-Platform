@@ -85,8 +85,8 @@ export const GovernedModules = [
     hostPort: 'SystemToolSystemApi',
     // 实现文件的分层，从上到下；上层可以引下层与同层，下层不许引上层
     layers: [
-      // 工具：七个工具的定义与挂载
-      ['SystemTools.ts'],
+      // 模型面的两个出口：工具时代的七个工具定义，与代码面的那张操作表。共用下面同一批操作方法
+      ['SystemTools.ts', 'SystemCodeSurface.ts'],
       // 宿主：宿主端口的本机实现
       ['LocalSystemKernel.ts'],
       // 能力：命令、受管子进程、shell；文件操作与搜索
@@ -202,6 +202,8 @@ export const GovernedModules = [
       ['CodeSurfaceSession.ts'],
       // 执行前的检查，与隔离里的执行；两者互不相干
       ['CodeProgramChecker.ts', 'NodeSubprocessCodeRunner.ts'],
+      // 能力那一侧：把空间交来的操作表接成端口。不认识任何一件具体能力
+      ['CapabilityOperationPort.ts'],
     ],
     card: 'MODULE.md',
     invariants: 'spec/invariants.md',

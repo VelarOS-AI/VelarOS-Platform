@@ -2,6 +2,7 @@
 
 export type { CodeSurfaceErrorCode } from './contract/constants.js'
 export { ApprovalNamespace, CodeSurfaceDiagnosticCodes, CodeSurfaceErrorCodes, CodeSurfaceLimits, CodeSurfaceModId } from './contract/constants.js'
+export { createCapabilityPort } from './impl/CapabilityOperationPort.js'
 export type {
   CapabilityLease,
   CodeCallNotice,
@@ -19,4 +20,8 @@ export type {
   GrantedModule,
   ProgramImport,
 } from './types/code-surface.js'
-
+export type {
+  CapabilityNamespaceOperations,
+  CapabilityOperation,
+  CapabilityOperationTable,
+} from './types/operations.js'
