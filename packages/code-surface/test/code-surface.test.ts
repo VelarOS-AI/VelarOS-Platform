@@ -2,13 +2,15 @@
 
 import { describe, expect, test } from 'bun:test'
 
-import { CodeSurfaceLimits } from '../src/contract/constants'
-import { fitLogsToBudget, fitValueToBudget } from '../src/utils/budget'
+import { CodeSurfaceErrorCodes, CodeSurfaceLimits } from '../src/contract/constants'
+import { fitJournalToBudget, fitLogsToBudget, fitValueToBudget } from '../src/utils/budget'
 import { isTypeScriptOnlySyntax } from '../src/utils/compiler'
 import { applyProgramEdits } from '../src/utils/edit'
 import { readProgramImports, rewriteModuleForIsolate } from '../src/utils/module-form'
 import { keepTail, readCapabilityNamespace } from '../src/utils/program'
 import { describeProgramOversize } from '../src/utils/result'
+import { describeChildExit } from '../src/utils/runner-bridge'
+import { CodeSurfaceTuning } from '../src/utils/tuning'
 
 void describe('预算裁剪', () => {
   test('没超预算时一个字不动，也不留 notice', () => {
@@ -36,6 +38,60 @@ void describe('预算裁剪', () => {
     const notices: unknown[] = []
     expect(fitValueToBudget(undefined, notices as never)).toBeUndefined()
     expect(notices).toHaveLength(0)
+  })
+
+  test('执行账只折连着的那几笔，隔开的同名调用仍然分成两条', () => {
+    const notices: unknown[] = []
+    const folded = fitJournalToBudget(
+      [
+        { call: 'demo.read', ok: true },
+        { call: 'demo.read', ok: true },
+        { call: 'demo.read', ok: false },
+        { call: 'demo.read', ok: true },
+      ],
+      notices as never
+    )
+    expect(folded).toEqual([
+      { call: 'demo.read', ok: true, times: 2 },
+      { call: 'demo.read', ok: false },
+      { call: 'demo.read', ok: true },
+    ])
+    expect(notices).toHaveLength(0)
+  })
+
+  test('账太长时保留结尾并说明——中断现场在尾部', () => {
+    const notices: Array<{ detail: string }> = []
+    const many = Array.from({ length: CodeSurfaceTuning.journalEntries + 5 }, (_, index) => ({
+      call: `demo.op${index}`,
+      ok: true,
+    }))
+    const folded = fitJournalToBudget(many, notices as never)
+    expect(folded).toHaveLength(CodeSurfaceTuning.journalEntries)
+    expect(folded.at(-1)?.call).toBe(`demo.op${many.length - 1}`)
+    expect(notices[0]?.detail).toContain('前 5 条省略')
+  })
+})
+
+void describe('子进程崩溃判读', () => {
+  test('堆爆认成 TOO_LARGE，并把上限和下一步一起说了', () => {
+    const fatal = [
+      '<--- Last few GCs --->',
+      '[1:0x0] 766 ms: Mark-Compact (reduce) 507.5 (513.4) -> 507.2 (510.4) MB',
+      'FATAL ERROR: Ineffective mark-compacts near heap limit Allocation failed - JavaScript heap out of memory',
+      '----- Native stack trace -----',
+    ].join('\n')
+    const described = describeChildExit(null, fatal)
+    expect(described.code).toBe(CodeSurfaceErrorCodes.tooLarge)
+    expect(described.message).toContain(String(CodeSurfaceTuning.heapMb))
+    expect(described.message).toContain('边拿边筛')
+  })
+
+  test('别的崩溃把 stderr 的开头引给模型；什么都没有时也得说清是码还是信号', () => {
+    const withStderr = describeChildExit(1, 'ReferenceError: velar is not defined\n    at file:///x.mjs:3:1')
+    expect(withStderr.code).toBe(CodeSurfaceErrorCodes.runnerCrashed)
+    expect(withStderr.message).toContain('ReferenceError')
+    expect(describeChildExit(null, '').message).toContain('被信号杀掉')
+    expect(describeChildExit(7, '').message).toContain('码 7')
   })
 })
 

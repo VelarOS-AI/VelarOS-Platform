@@ -16,7 +16,8 @@ import { CodeSurfaceErrorCodes } from '../contract/constants.js'
 import type { CodeRunnerApi } from '../contract/requires.js'
 import type { CodeRunDispatch, CodeRunOutcome, CodeRunRequest } from '../types/runner.js'
 import { resolveChildPath, resolveNodeExecutable } from '../utils/node-executable.js'
-import { serveCapabilityCall } from '../utils/runner-bridge.js'
+import { describeChildExit, serveCapabilityCall } from '../utils/runner-bridge.js'
+import { CodeSurfaceTuning } from '../utils/tuning.js'
 
 class NodeSubprocessCodeRunner implements CodeRunnerApi {
   public async run(
@@ -38,9 +39,21 @@ class NodeSubprocessCodeRunner implements CodeRunnerApi {
     const child = fork(childPath, [], {
       // 必须是真的 node：fork 缺省用 process.execPath，宿主跑在 bun 下时那是 bun，它不认 --permission。
       execPath: nodePath,
-      // 只放开读引导脚本自己；程序源码走 IPC，不落盘。
-      execArgv: ['--permission', `--allow-fs-read=${childPath}`],
+      // 只放开读引导脚本自己；程序源码走 IPC，不落盘。堆也要封顶：超时管得住死循环，
+      // 管不住「一个循环里把整个仓库读进一个数组」——那会把宿主机器一起拖垮。
+      execArgv: [
+        '--permission',
+        `--allow-fs-read=${childPath}`,
+        `--max-old-space-size=${CodeSurfaceTuning.heapMb}`,
+      ],
       stdio: ['ignore', 'ignore', 'pipe', 'ipc'],
+    })
+
+    // stderr 必须有人读：管道没人收会把子进程堵死，而且堆爆时的现场只在这里。留头不留尾（见 tuning）。
+    let stderr = ''
+    child.stderr?.setEncoding('utf8')
+    child.stderr?.on('data', (chunk: string) => {
+      if (stderr.length < CodeSurfaceTuning.stderrCaptureChars) stderr += chunk
     })
 
     const logs: string[] = []
@@ -115,9 +128,12 @@ class NodeSubprocessCodeRunner implements CodeRunnerApi {
         }
       })
 
-      child.on('exit', (code) =>
-        fail(CodeSurfaceErrorCodes.runnerCrashed, `隔离进程意外退出，码 ${code}。`)
-      )
+      // 认 close 不认 exit：exit 在进程退出那一刻就响，stderr 里的现场此时可能还没读完，
+      // 堆爆会因此被报成一句没信息的「意外退出」。close 等 stdio 收完才响。
+      child.on('close', (code) => {
+        const exit = describeChildExit(code, stderr)
+        fail(exit.code, exit.message)
+      })
       child.on('error', (error) => fail(CodeSurfaceErrorCodes.runnerCrashed, error.message))
     })
   }

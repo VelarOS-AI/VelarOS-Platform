@@ -9,10 +9,11 @@ import type {
   CodeProgramFailure,
   CodeProgramRequest,
   CodeProgramResult,
+  CompletedCall,
 } from '../types/code-surface.js'
 import type { CodeRunOutcome } from '../types/runner.js'
 
-import { fitLogsToBudget, fitValueToBudget } from './budget.js'
+import { fitJournalToBudget, fitLogsToBudget, fitValueToBudget } from './budget.js'
 import { applyProgramEdits } from './edit.js'
 import { describeOversized } from './program.js'
 
@@ -58,7 +59,11 @@ export function describeProgramOversize(
  * 成功时 `value` 是主角，其余有才给；失败时主角换成 `failed` 与 `logs`——返回值没了，
  * 日志是唯一能说明「走到哪一步、拿到了什么」的东西。
  */
-export function composeProgramResult(outcome: CodeRunOutcome, notices: CodeCallNotice[]): CodeProgramResult {
+export function composeProgramResult(
+  outcome: CodeRunOutcome,
+  notices: CodeCallNotice[],
+  completed: readonly CompletedCall[] = []
+): CodeProgramResult {
   const result: CodeProgramResult = {}
   const logs = fitLogsToBudget(outcome.logs, notices)
   if (logs.length > 0) result.logs = logs
@@ -73,6 +78,9 @@ export function composeProgramResult(outcome: CodeRunOutcome, notices: CodeCallN
     }
     if (isNotUndefined(outcome.error.line)) failed.line = outcome.error.line
     result.failed = failed
+    // 账只在没跑完时给：跑完了模型自己知道调了什么，没跑完时它对着一个 ABORTED 什么都不知道。
+    const journal = fitJournalToBudget(completed, notices)
+    if (!isEmpty(journal)) result.completed = journal
   }
 
   if (!isEmpty(notices)) result.notices = notices

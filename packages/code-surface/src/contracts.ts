@@ -15,6 +15,7 @@ export type {
   CodeProgramRequest,
   CodeProgramResult,
   CodeSurfaceOutcome,
+  CompletedCall,
   GrantedModule,
   ProgramImport,
 } from './types/code-surface.js'

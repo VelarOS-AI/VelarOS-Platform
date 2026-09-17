@@ -13,6 +13,7 @@ import type {
   CodeCallNotice,
   CodeProgramRequest,
   CodeSurfaceOutcome,
+  CompletedCall,
 } from '../types/code-surface.js'
 import type { GrantedModule } from '../types/code-surface.js'
 import { readProgramImports, rewriteModuleForIsolate } from '../utils/module-form.js'
@@ -85,6 +86,8 @@ class CodeSurfaceSession implements CodeSurfaceSessionApi {
         detail: '这次的程序里有 TypeScript 语法，已经替你剥掉后执行。下次直接写 JavaScript。',
       })
     }
+    // 执行账：每一笔**已经落定**的能力调用都记一条。中止/超时/抛错时它是模型唯一的「我做到哪了」。
+    const completed: CompletedCall[] = []
     let calls = 0
     const outcome = await this.runner.run(
       {
@@ -109,6 +112,7 @@ class CodeSurfaceSession implements CodeSurfaceSessionApi {
           input.signal
         )
         this.events.callSettled?.({ callId: call.callId, ok: !result.error, elapsedMs: Date.now() - startedAt })
+        completed.push({ call: `${call.namespace}.${call.operation}`, ok: !result.error })
         if (result.notices) notices.push(...result.notices)
         if (result.error) {
           notices.push({
@@ -123,7 +127,7 @@ class CodeSurfaceSession implements CodeSurfaceSessionApi {
       input.signal
     )
 
-    const result = composeProgramResult(outcome, notices)
+    const result = composeProgramResult(outcome, notices, completed)
     const imports = readProgramImports(source)
     return isEmpty(imports) ? { checked: true, result } : { checked: true, result, imports }
   }

@@ -95,6 +95,21 @@ export interface CodeProgramFailure {
   line?: number
 }
 
+/** 账上的一笔：程序发出去并且**已经落定**的一次能力调用。 */
+export interface CompletedCall {
+  /** 调的是谁，如 `system.edit`。 */
+  call: string
+  /** 成没成。没成时副作用通常没发生，但这要看那件能力自己的语义。 */
+  ok: boolean
+  /**
+   * 连着调了几次。只有 >1 时才给。
+   *
+   * 账上只记「调的是谁」不记参数（参数可以很大），所以循环里连着的同名同结果那几笔本来就分不开，
+   * 折成一个数不丢信息，却让「读了 23 个文件之后停在这」一眼看得出来。
+   */
+  times?: number
+}
+
 /**
  * 一次程序跑完之后回给模型的东西。
  *
@@ -108,6 +123,16 @@ export interface CodeProgramResult {
   logs?: string[]
   /** 系统插手过的地方。 */
   notices?: CodeCallNotice[]
+  /**
+   * 程序中止或失败时，已经做完的那些调用**逐条**列在这里；正常跑完时没有这一格。
+   *
+   * 成功时不列是因为程序是模型自己写的、它知道自己调了什么；
+   * **失败与中止时它不知道自己做到哪了**——工具面里中断落在两次调用之间、天然干净，
+   * 程序里落在执行中途，副作用是真的。只回一个 `ABORTED` 等于让它对着三个字瞎猜。
+   *
+   * 这是**账**不是事务：它不承诺回滚（跑过的命令回滚不了），承诺**知道**。
+   */
+  completed?: CompletedCall[]
   /** 程序没跑完时的说明。 */
   failed?: CodeProgramFailure
 }

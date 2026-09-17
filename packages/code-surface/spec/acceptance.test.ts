@@ -271,4 +271,46 @@ export default first.contents`)
     expect(outcome.result.value).toBe(1)
     expect(outcome.imports).toEqual([{ namespace: 'demo', specifier: 'velar:demo', lease: 'task' }])
   })
+
+  test('INV-16 被时间掐断时交出执行账，模型知道自己做到哪了', async () => {
+    const outcome = await submit(
+      [
+        importDemo,
+        "await read({ paths: ['a.ts'] })",
+        "await read({ paths: ['b.ts'] })",
+        "try { await danger({ command: 'x' }) } catch (error) { console.log(error.message) }",
+        'while (true) {}',
+      ].join('\n'),
+      { timeoutMs: 800 }
+    )
+    if (!outcome.checked) throw new Error('应当通过检查')
+    expect(outcome.result.failed?.code).toBe(CodeSurfaceErrorCodes.timeout)
+    // 连着的同名同结果折成一条：循环里读了两个文件是「read ×2」，不是两行一模一样的账
+    expect(outcome.result.completed).toEqual([
+      { call: 'demo.read', ok: true, times: 2 },
+      { call: 'demo.danger', ok: false },
+    ])
+  })
+
+  test('INV-16 跑完了不交账：程序是模型自己写的，它知道自己调了什么', async () => {
+    const outcome = await submit(`${importDemo}\nawait read({ paths: ['a.ts'] })\nexport default 'ok'`)
+    if (!outcome.checked) throw new Error('应当通过检查')
+    expect(outcome.result.value).toBe('ok')
+    expect(outcome.result.completed).toBeUndefined()
+  })
+
+  test('INV-17 堆爆了是 TOO_LARGE 并说清怎么改，不是一句「意外退出」', async () => {
+    const outcome = await submit(
+      [
+        'const kept = []',
+        '// 一直攒到堆满；--max-old-space-size 之外没有别的东西拦得住它',
+        'while (true) kept.push("x".repeat(1_000_000))',
+        'export default kept.length',
+      ].join('\n'),
+      { timeoutMs: 60_000 }
+    )
+    if (!outcome.checked) throw new Error('应当通过检查')
+    expect(outcome.result.failed?.code).toBe(CodeSurfaceErrorCodes.tooLarge)
+    expect(outcome.result.failed?.message).toContain('堆')
+  }, 90_000)
 })

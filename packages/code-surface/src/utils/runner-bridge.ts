@@ -2,8 +2,12 @@
 
 import type { ChildProcess } from 'node:child_process'
 
+import { isNull } from '@velaros-ai/core'
+
 import { CodeSurfaceErrorCodes } from '../contract/constants.js'
 import type { CodeRunDispatch } from '../types/runner.js'
+
+import { CodeSurfaceTuning } from './tuning.js'
 
 /**
  * 转一次调用。
@@ -36,5 +40,29 @@ export async function serveCapabilityCall(
         message: cause instanceof Error ? cause.message : String(cause),
       },
     })
+  }
+}
+
+/**
+ * 隔离进程没按流程结束时，从退出码和 stderr 尾巴上判出一句能用的话。
+ *
+ * 堆爆了要单独认出来：V8 是**直接 abort**，不抛异常、`done` 也发不出来，
+ * 光看退出码只会报成「意外退出」，模型下一轮照样把整个仓库读进一个数组。
+ */
+export function describeChildExit(code: Nullable<number>, stderr: string): {
+  code: string
+  message: string
+} {
+  if (stderr.includes('heap out of memory')) return {
+      code: CodeSurfaceErrorCodes.tooLarge,
+      message:
+        `程序把 ${CodeSurfaceTuning.heapMb}MB 堆用光了，已被终止。` +
+        '别把结果整个攒在内存里——边拿边筛、只留要用的那几个字段，或者分几次程序做。',
+    }
+  const quoted = stderr.slice(0, CodeSurfaceTuning.stderrQuoteChars).trim()
+  const why = isNull(code) ? '被信号杀掉' : `码 ${code}`
+  return {
+    code: CodeSurfaceErrorCodes.runnerCrashed,
+    message: quoted.length === 0 ? `隔离进程意外退出，${why}。` : `隔离进程意外退出，${why}：${quoted}`,
   }
 }
