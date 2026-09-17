@@ -1,4 +1,15 @@
 /**
+ * **旧工具面（provider tool-calling）。代码面接通之后整个文件删除。**
+ *
+ * 分工看一眼就清楚：
+ * - 模型看什么，新面看 `baselines/code-surface/system.d.ts`（`@AgentView` 从源码生成）；
+ *   旧面看这里的 summary/suitable/usage/examples 与 schema 的 `.describe()`。**两份说明只在这个过渡期并存。**
+ * - 谁去做事，两边都是 `SystemFileOperations` / `SystemExecutionOperations` 那同一批方法，不会各做各的。
+ * - 入参谁拦，新面由那批方法自己拦；旧面靠下面的 schema——那条路上模型直接发 JSON，没有编译期检查，不拦不行。
+ *
+ * 所以**不要再往这里加东西**。要加能力，加到操作接口上并打 `@AgentView`；
+ * 只有「旧面才需要」的东西（`parallel`、`allowRepeat` 这类给调度器的提示）才留在这里。
+ *
  * 系统空间的七个模型面工具。每个工具的说明就是它的定义：摘要、适用与禁用场景、协议、用法、示例、参数、权限和能力声明都在定义里，上方不再另写一遍；
  * execute 一律只把入参转交给 impl 里的操作方法：读、看、写交给 `SystemFileOperations`，跑命令、演练沙箱、刷新环境、列后台任务交给 `SystemExecutionOperations`。
  * 七个工具的操作方法都在操作接口上，缺一个它就进不了代码面（`baselines/code-surface/system.d.ts`）。

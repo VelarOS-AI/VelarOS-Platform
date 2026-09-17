@@ -1,5 +1,9 @@
 /**
- * 系统空间的代码面：模型写 `import { read } from 'velar:system'`，调用落到这里。
+ * **新代码面。** 模型写 `import { read } from 'velar:system'`，调用落到这里。
+ *
+ * 状态：这一侧已经完整（操作表 + 端口 + 端到端验收 INV-31），但**还没有消费者**——
+ * agent 那边的 `code:run` 门还没建，所以今天真正通着的仍是 `SystemTools.ts` 那条旧路。
+ * 门一接通，旧文件就可以整个删掉。
  *
  * 这个文件里**没有一个字是给模型看的**。模型面是 `@AgentView` 从两个操作接口的源码生成的那份声明
  * （`baselines/code-surface/system.d.ts`）——说明、示例、字段解释全在那里，只有那一份。
