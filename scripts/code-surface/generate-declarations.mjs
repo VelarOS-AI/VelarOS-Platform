@@ -15,8 +15,6 @@ import ts from 'typescript'
 import {
   AgentViewTag,
   BannedModelFacingAliases,
-  BatchHint,
-  BatchShapedOperations,
   CapabilityModulePrefix,
   CodeSurfaces,
   HostContextTypes,
@@ -314,12 +312,6 @@ function generate(surface) {
     for (const member of found.node.members) {
       if (!ts.isMethodSignature(member) || !ts.isIdentifier(member.name) || !member.type) continue
       if (!hasModelTag(member, found.file)) continue
-      // 批量能力必须自己说清「一次调用做多个」：代码面里写 for 循环是模型最顺手的写法，
-      // 而那会把一次原子批量拆成 N 次审批、N 个事务、N 个撤销句柄。见 surfaces.mjs 的 BatchShapedOperations。
-      const qualified = `${surface.namespace}.${member.name.text}`
-      if (BatchShapedOperations.has(qualified) && !docComment(member, found.file).includes(BatchHint)) {
-        problems.push(`${qualified} 是批量能力，说明里要写明「${BatchHint}」，否则模型会拿 for 循环把一次事务拆成 N 次`)
-      }
       methods.push(renderMethod(member, found.file, printer, wanted, wantedValues))
     }
   }

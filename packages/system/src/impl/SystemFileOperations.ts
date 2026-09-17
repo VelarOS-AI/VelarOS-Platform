@@ -59,21 +59,20 @@ const log = Log.tag('SystemFileOperations')
 export interface SystemFileOperationsApi {
   /**
    * @AgentView
-   * 读文本文件，**一次调用做多个，不要写循环**：paths 给几个就读几个。
+   * 读文本文件。
    * 每个文件从 offset 起最多 maxChars 个字符，两个都不传就一次读到上限；不切开代理对。路径是符号链接时读它指向的文件。
    * 图片要改用 view；PDF 与其他文档、其他二进制文件、目录、设备文件、超过 20 MB 的文件，都算这个文件失败。
    */
   read(input: SystemReadInput, ctx: SystemToolContext): Promise<SystemReadResult>
   /**
    * @AgentView
-   * 看图片：整张图交给模型，效果和用户上传一样。**一次调用做多个，不要写循环**。
+   * 看图片：整张图交给模型，效果和用户上传一样。
    * 只认 PNG、JPEG、GIF、WebP，单张最大 5 MB；PDF 与其他文档、文本文件、其他二进制文件、目录、设备文件、超过 20 MB 的文件，都算这个文件失败。
    */
   view(input: SystemViewInput, ctx: SystemToolContext): Promise<SystemViewResult>
   /**
    * @AgentView
-   * 写文件，**一次调用做多个，不要写循环**：files 里放几个就改几个，整批是一次事务、一次审批、一个撤销点；
-   * 拿 for 循环一个个改会变成 N 次审批、N 个事务，中途失败时前面几个已经落了地。
+   * 写文件。**优先用批量事务**：files 里放几个就改几个，整批是一次事务、一次审批、一个撤销点。
    * 要用户确认而被拒时是**整批不写**；等用户确认那段时间里文件被别人改过，同样整批不写。
    * 路径先解开符号链接：判重、审批、写入都按它指向的那个文件，链接本身不会被换成普通文件。路径是管道、设备、套接字，或文件有多个硬链接时不碰。
    * edits 写进去的文本跟着原文的换行风格走（CRLF 文件里的裸 LF 换成 CRLF），newText 整个写入原样写。新文本编不成原编码（孤立代理项、GB18030 表示不了的字符）就整批不写。
