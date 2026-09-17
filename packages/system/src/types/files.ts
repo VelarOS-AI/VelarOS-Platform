@@ -27,7 +27,12 @@ export type SystemReadInput = {
   files: SystemReadFileInput[]
 }
 
-/** @AgentView content 是整个文件的原文，换行风格原样保留。version 是这份内容的版本号，回写时带上它就能挡住「读完之后别人又改过」。 */
+/**
+ * @AgentView
+ * content 是整个文件的原文，换行风格原样保留。它**落在程序的变量里，不进你的上下文**——
+ * 要看哪一段就 export default 哪一段；不知道文件多大，先看 `content.length` 再决定。
+ * version 是这份内容的版本号，回写时带上它就能挡住「读完之后别人又改过」。
+ */
 export interface SystemReadFileResult {
   path: string
   version: string

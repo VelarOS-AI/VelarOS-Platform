@@ -62,7 +62,7 @@ export function fitValueToBudget(value: unknown, notices: CodeCallNotice[]): unk
   notices.push({
     call: 'return',
     action: 'truncated',
-    detail: `返回值 ${serialized.length} 字符超过上限 ${CodeSurfaceLimits.valueChars}，前 ${dropped} 字符省略。下次在程序里先筛一遍再 return。`,
+    detail: `返回值 ${serialized.length} 字符超过上限 ${CodeSurfaceLimits.valueChars}，前 ${dropped} 字符省略。下次在程序里先看大小、筛好了再 export default。`,
   })
   return text
 }

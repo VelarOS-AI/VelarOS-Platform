@@ -14,6 +14,7 @@ import {
 } from '../src/impl/NodeSubprocessCodeRunner'
 import type { CodeProgramEdit } from '../src/types/code-surface'
 import type { GrantedModule } from '../src/types/module-form'
+import { joinGrantedDeclarations } from '../src/utils/compiler'
 import { renderDiagnostics } from '../src/utils/diagnostics'
 import { resolveNodeExecutable } from '../src/utils/node-executable'
 
@@ -388,5 +389,15 @@ export default 1`)
     expect(outcome.check.diagnostics.length).toBeLessThanOrEqual(CodeSurfaceLimits.diagnostics)
     expect(outcome.check.omitted).toBeGreaterThan(1900)
     expect(JSON.stringify(outcome).length).toBeLessThan(CodeSurfaceLimits.diagnosticChars + 500)
+  })
+
+  test('INV-21 恒常授权的 velar:program 把「返回值不进上下文、先看大小再交出」讲清楚，数字跟着常量表走', () => {
+    const checked = codeProgramChecker.check({ source: "import { blobs } from 'velar:program'\nexport default blobs", granted: [] })
+    expect(checked.ok).toBe(true)
+    const declaration = joinGrantedDeclarations([])
+    expect(declaration).toContain('不进你的上下文')
+    expect(declaration).toContain('先看大小再决定交出多少')
+    expect(declaration).toContain(String(CodeSurfaceLimits.resultChars))
+    expect(declaration).toContain(String(CodeSurfaceLimits.failureChars))
   })
 })

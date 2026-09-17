@@ -31,7 +31,7 @@ void describe('预算裁剪', () => {
     const fitted = fitValueToBudget('x'.repeat(CodeSurfaceLimits.valueChars + 100), notices as never)
     expect(String(fitted)).toContain('字符省略')
     expect(notices[0]?.action).toBe('truncated')
-    expect(notices[0]?.detail).toContain('先筛一遍再 return')
+    expect(notices[0]?.detail).toContain('先看大小、筛好了再 export default')
   })
 
   test('undefined 不算返回值，不进结果也不留 notice', () => {
