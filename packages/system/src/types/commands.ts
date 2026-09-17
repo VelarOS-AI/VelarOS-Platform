@@ -124,7 +124,6 @@ export interface SystemProcessConfinementBuildOptions {
 /**
  * @AgentView
  * 不传 cwd 用宿主给的默认目录，不传 shell 用环境报告里的默认 shell。
- * parallel 与 allowRepeat 不改变命令本身，只是给调度器的提示：这条只读、可以和别的命令同时跑；这次是故意再跑一遍完全一样的命令。
  */
 export type SystemRunInput = {
   command: string
@@ -134,6 +133,20 @@ export type SystemRunInput = {
   background?: boolean
   interactive?: boolean
   maxOutputChars?: number
+}
+
+/**
+ * 旧工具面才收的两个字段：它们**不改变命令本身**，是给 agent 那边的调度器看的提示——
+ * `parallel` 说这条只读、可以和别的工具调用同时跑（工具的 `isConcurrencySafe` 读它），
+ * `allowRepeat` 说这次是故意再跑一遍完全一样的命令（`CodingSessionTracker` 读它）。
+ *
+ * **代码面不要它们，因为那边根本没有那个调度器**：并发由程序自己 `Promise.all` 决定，
+ * 重复由程序自己知道。放进模型可观测面等于给它两个填了也没人读的字段——
+ * 这比多余更坏，那是声明在说谎。所以这个类型不带 `@AgentView`。
+ *
+ * 用交叉类型而不是另抄一份：共有的那几个字段只声明在上面一处，两个面不可能漂。
+ */
+export type SystemRunToolInput = SystemRunInput & {
   parallel?: boolean
   allowRepeat?: boolean
 }

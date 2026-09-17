@@ -27,7 +27,7 @@ import type { SystemToolCategoryId } from '../contract/constants.js'
 import { SystemCommandLimits, SystemFileLimits, SystemModId, SystemSpaceId, SystemToolCategoryByName, SystemToolNames } from '../contract/constants.js'
 import type { SystemBundledModDefinition, SystemCapabilityService, SystemToolCollection } from '../contract/provides.js'
 import type { CreateSystemKernelModuleOptions, SystemToolContext } from '../contract/requires.js'
-import type { SystemListTasksInput, SystemRefreshEnvironmentInput, SystemRunInput } from '../types/commands.js'
+import type { SystemListTasksInput, SystemRefreshEnvironmentInput, SystemRunToolInput } from '../types/commands.js'
 import type { SystemEditInput, SystemReadInput, SystemViewInput } from '../types/files.js'
 import type { SystemSandboxInput } from '../types/sandbox.js'
 import {
@@ -145,7 +145,7 @@ const editTool = defineSystemTool<SystemEditInput>({
 // ── 执行：跑命令、刷新环境 ──────────────────────────────────
 
 /** system:run —— 在系统 shell 中执行命令，shell 字段挑哪一个。 */
-const runTool = defineSystemTool<SystemRunInput>({
+const runTool = defineSystemTool<SystemRunToolInput>({
   name: SystemToolNames.run,
   role: 'execute',
   summary: '在系统 shell 里执行命令：不填 shell 就用环境报告里的默认那个。',

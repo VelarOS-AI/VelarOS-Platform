@@ -102,9 +102,15 @@ function sliceWithDoc(node, file) {
   return `${docComment(node, file)}${file.text.slice(node.getStart(file), node.getEnd())}`.trimStart()
 }
 
-/** 这个节点自己的 JSDoc 里有没有那个标记。要词边界——`@AgentView` 会误匹配 `@modelcontextprotocol`（实测栽过）。 */
+/**
+ * 这个节点自己的 JSDoc 里有没有那个标记。
+ *
+ * 两处讲究，都是实测栽出来的：要**词边界**，否则 `@AgentView` 会误匹配 `@modelcontextprotocol`；
+ * 还要求它处在**标签位**（一行的开头，前面只许有 `/**` 或 `*`），否则正文里提一句
+ * 「这个类型不带 @AgentView」也会把那个类型标上——写说明的人正好在说它没有。
+ */
 function hasModelTag(node, file) {
-  return new RegExp(`${AgentViewTag}\\b`, 'u').test(docComment(node, file))
+  return new RegExp(`^\\s*(?:/\\*\\*|\\*)?\\s*${AgentViewTag}\\b`, 'mu').test(docComment(node, file))
 }
 
 /**

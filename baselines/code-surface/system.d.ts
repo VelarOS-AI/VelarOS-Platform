@@ -58,7 +58,6 @@ declare module 'velar:system' {
 
   /**
    * 不传 cwd 用宿主给的默认目录，不传 shell 用环境报告里的默认 shell。
-   * parallel 与 allowRepeat 不改变命令本身，只是给调度器的提示：这条只读、可以和别的命令同时跑；这次是故意再跑一遍完全一样的命令。
    */
   type SystemRunInput = {
     command: string
@@ -68,8 +67,6 @@ declare module 'velar:system' {
     background?: boolean
     interactive?: boolean
     maxOutputChars?: number
-    parallel?: boolean
-    allowRepeat?: boolean
   }
 
   /** 要了 interactive 却没拿到控制台时，note 说明怎么把命令改成不用输入的写法。 */
