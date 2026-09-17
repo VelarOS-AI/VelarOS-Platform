@@ -260,13 +260,26 @@ function renderMethod(member, file, printer, wanted, wantedValues) {
 
   const printed = parameters.map((parameter) => printer.printNode(ts.EmitHint.Unspecified, parameter, file))
   const returns = printer.printNode(ts.EmitHint.Unspecified, member.type, file)
-  const doc = stripModelTag(sliceWithDoc(member, file).split(`${member.name.text}(`)[0].trimEnd())
+  const doc = stripModelTag(afterModelTag(sliceWithDoc(member, file).split(`${member.name.text}(`)[0].trimEnd()))
   return expandBannedAliases(`${doc}\n  ${member.name.text}(${printed.join(', ')}): ${returns}`)
 }
 
 /** 剥掉 `export`：模型读的是一份环境声明，带了 export 它就成了模块，`declare const` 也就不再是全局的了。 */
 function stripExport(text) {
   return text.replace(/^(\s*)export\s+(?=(?:declare\s+)?(?:interface|type)\b)/mu, '$1')
+}
+
+/**
+ * 只留标记**之后**的那段说明。
+ *
+ * 方法上标记就在第一行，整段都是模型面的——这条规则对它们是恒等变换。
+ * 接口头上则可以先写给我们自己看的话（实现类叫什么、进程里有几份），再用标记起一段模型面的说明。
+ * 同一条规则两处都成立，不必再发明第二种写法。
+ */
+function afterModelTag(doc) {
+  const lines = doc.split('\n')
+  const at = lines.findIndex((line) => new RegExp(`${AgentViewTag}\\b`, 'u').test(line))
+  return at < 0 ? doc : ['/**', ...lines.slice(at)].join('\n')
 }
 
 /** 标记是给维护的人看的，不进模型面——模型不需要知道我们内部怎么登记。 */
@@ -282,6 +295,7 @@ function generate(surface) {
   const program = createProgram(surface.directory)
   const printer = ts.createPrinter({ removeComments: true })
   const methods = []
+  const headers = []
   const wanted = new Set()
   const wantedValues = new Set()
   const problems = []
@@ -291,6 +305,11 @@ function generate(surface) {
     if (!found || !ts.isInterfaceDeclaration(found.node)) {
       problems.push(`找不到接口 ${interfaceName}（登记在 scripts/code-surface/surfaces.mjs）`)
       continue
+    }
+    // 接口头上带标记的那段进模块级注释：那里写的是**整个命名空间**都成立的事
+    // （位置按字符算、编码怎么保留、哪些路径会先问用户），逐个方法抄一遍既啰嗦又必然抄漏。
+    if (hasModelTag(found.node, found.file)) {
+      headers.push(stripModelTag(afterModelTag(docComment(found.node, found.file))).trim())
     }
     for (const member of found.node.members) {
       if (!ts.isMethodSignature(member) || !ts.isIdentifier(member.name) || !member.type) continue
@@ -349,7 +368,7 @@ function generate(surface) {
   // 类型与方法都放进 `declare module` 块里：模型写 `import { read } from 'velar:system'`，
   // 而且类型因此有了作用域——system 与 project 可以各有一个同名类型而不撞，平铺声明做不到。
   const indented = (text) => text.split('\n').map((line) => (line.length > 0 ? `  ${line}` : line)).join('\n')
-  const body = [...types.map(indented), ...methods.map((method) => indented(exportedMethod(method)))].join('\n\n')
+  const body = [...headers.map(indented), ...types.map(indented), ...methods.map((method) => indented(exportedMethod(method)))].join('\n\n')
   const text = `${header}\n\ndeclare module '${CapabilityModulePrefix}${surface.namespace}' {\n${body}\n}\n`
   if (problems.length === 0) {
     const broken = verifyDeclarations(text)
@@ -381,7 +400,8 @@ function findStrayTags(program, closure, surface) {
     if (file.isDeclarationFile || !file.fileName.includes(`/packages/${surface.directory}/`)) continue
     for (const statement of file.statements) {
       const named = ts.isInterfaceDeclaration(statement) || ts.isTypeAliasDeclaration(statement)
-      if (!named || closure.has(statement.name.text)) continue
+      // 操作接口自己带标记是合法的：它的头部说明进模块级注释，不是「烂成装饰的标记」。
+      if (!named || closure.has(statement.name.text) || surface.interfaces.includes(statement.name.text)) continue
       if (hasModelTag(statement, file)) stray.push(statement.name.text)
     }
   }

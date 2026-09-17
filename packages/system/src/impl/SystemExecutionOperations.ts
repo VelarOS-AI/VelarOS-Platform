@@ -25,8 +25,13 @@ import { isCredentialPath, isSensitiveSystemMutationPath } from '../utils/file-s
 /**
  * 四个执行操作：跑命令、演练沙箱、刷新环境、列后台任务。`system:run`、`system:sandbox`、`system:refresh-environment`、`system:list-tasks` 各调一个方法。
  *
- * 实现是 `SystemExecutionOperations`，整个进程只有一份（`systemExecutionOperations`）。路径交给宿主解析（`~` 与相对路径），命令交给宿主执行，
+ * 实现是 `SystemExecutionOperations`，整个进程只有一份（`systemExecutionOperations`）。命令交给宿主执行，
  * 这里负责执行前按命令策略分类、要确认的先问用户，以及把宿主的回执整形成模型看的样子。
+ *
+ * @AgentView
+ * 下面这几件事**四个方法都成立**，各自说明里不再重复：
+ * 路径按用户输入规整，`~` 展开到家目录，相对路径相对默认工作目录。
+ * 命令按策略分类，要确认的在执行之前问用户；被拒时命令一个进程都没起。
  */
 export interface SystemExecutionOperationsApi {
   /**
