@@ -87,8 +87,8 @@
 
 ## 不变量
 
-共 18 条，登记在 `spec/invariants.md`，验收用例在 `spec/acceptance.test.ts`。编号只增不重排。
-按检验方式：测试 18 条。未验证 0 条。
+共 19 条，登记在 `spec/invariants.md`，验收用例在 `spec/acceptance.test.ts`。编号只增不重排。
+按检验方式：测试 18 条、门禁 1 条。未验证 0 条。
 
 ## 非目标
 
