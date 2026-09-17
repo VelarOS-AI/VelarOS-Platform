@@ -27,7 +27,7 @@ export async function resolveSourceInsideProject(rootPath: string, source: Loose
       'PERMISSION_DENIED',
       `沙箱的源目录必须在当前项目之内：${requested}`,
       { path: requested, resolvedPath: realPath },
-      '换一个项目之内的真实目录做源（经符号链接指到项目外的也不行）；要演练项目外的目录，用 system:sandbox。',
+      '换一个项目之内的真实目录做源（经符号链接指到项目外的也不行）；项目外的目录不在这个空间的沙箱范围里。',
     )
   return resolved
 }

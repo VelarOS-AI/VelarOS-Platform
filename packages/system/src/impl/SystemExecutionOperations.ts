@@ -1,13 +1,11 @@
 /**
- * 四个执行操作：`SystemExecutionOperations` 与整个进程唯一的 `systemExecutionOperations`。接口 `SystemExecutionOperationsApi` 在本文件的类上方。
+ * 三个执行操作：`SystemExecutionOperations` 与整个进程唯一的 `systemExecutionOperations`。接口 `SystemExecutionOperationsApi` 在本文件的类上方。
  * `run`、`sandbox`、`refreshEnvironment`、`listTasks` 各调一个方法，它们的执行前分类、向用户确认和结果整形写在这里。
  * 刷新环境、列后台任务只调一次宿主端口，收在这里不是因为实现多，是因为不在操作接口上就进不了代码面。
  * 真正跑命令、建镜像的是宿主端口 `ctx.system`（本机就是本地内核）。
  */
 
 
-import type { RehearsalSandboxRulesApi } from '@velaros-ai/rehearsal-sandbox'
-import { rehearsalSandboxRules } from '@velaros-ai/rehearsal-sandbox'
 import type { ShellCommandApprovalApi, ShellCommandPolicyApi } from '@velaros-ai/shell-command'
 import { shellCommandApproval, shellCommandPolicy } from '@velaros-ai/shell-command'
 
@@ -19,13 +17,13 @@ import { exposeCommandOutputWindow } from '../utils/command-result.js'
 import { clampPositive } from '../utils/text.js'
 
 /**
- * 四个执行操作：跑命令、演练沙箱、刷新环境、列后台任务。`run`、`sandbox`、`refreshEnvironment`、`listTasks` 各调一个方法。
+ * 三个执行操作：跑命令、刷新环境、列后台任务。演练沙箱在跨空间的 `velar:sandbox` 里，不在这里。
  *
  * 实现是 `SystemExecutionOperations`，整个进程只有一份（`systemExecutionOperations`）。命令交给宿主执行，
  * 这里负责执行前按命令策略分类、要确认的先问用户，以及把宿主的回执整形成模型看的样子。
  *
  * @AgentView
- * 下面这几件事**四个方法都成立**，各自说明里不再重复：
+ * 下面这几件事**三个方法都成立**，各自说明里不再重复：
  * 路径按用户输入规整，`~` 展开到家目录，相对路径相对默认工作目录。
  * 命令按策略分类，要确认的在执行之前问用户；被拒时命令一个进程都没起。
  */
@@ -55,7 +53,6 @@ export class SystemExecutionOperations implements SystemExecutionOperationsApi {
   constructor(
     private readonly policy: ShellCommandPolicyApi,
     private readonly approvals: ShellCommandApprovalApi,
-    private readonly sandboxRules: RehearsalSandboxRulesApi,
   ) {}
 
   public async run({ command, cwd, shell, timeoutMs, background, interactive, maxOutputChars }: SystemRunInput, ctx: SystemToolContext): Promise<SystemRunResult> {
@@ -135,4 +132,4 @@ export class SystemExecutionOperations implements SystemExecutionOperationsApi {
 }
 
 /** 整个进程唯一的执行操作；run 与 sandbox 的 execute 交给它。 */
-export const systemExecutionOperations: SystemExecutionOperationsApi = new SystemExecutionOperations(shellCommandPolicy, shellCommandApproval, rehearsalSandboxRules)
+export const systemExecutionOperations: SystemExecutionOperationsApi = new SystemExecutionOperations(shellCommandPolicy, shellCommandApproval)

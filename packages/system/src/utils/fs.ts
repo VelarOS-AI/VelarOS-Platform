@@ -5,6 +5,7 @@
 import { isPlainObject, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { textFileIo } from '@velaros-ai/text-files'
+import type { ExpectedBytes } from '@velaros-ai/text-files/contracts'
 import { TextFileErrorCodes } from '@velaros-ai/text-files/contracts'
 
 /** 读出 Node 文件系统错误的错误码字符串，如 ENOENT；认不出返回 null。 */
@@ -15,18 +16,23 @@ export function readErrnoCode(error: unknown): Nullable<string> {
 
 /**
  * 原子地替换文件的全部字节（公共件 text-files：同目录临时文件写完 fsync 再改名，已有文件的权限位精确保留，新文件的权限由 umask 定）；
+ * 给了 expected 时写前、改名前各核对一次磁盘上还是不是那份字节，对不上就什么都不写——核对完版本到真正落盘之间也有人会改；
  * 没有写权限时报权限错误；有多个硬链接或不是普通文件的路径拒写，说明改用 run。
  */
 export async function writeSystemFileAtomically(
   resolvedPath: string,
-  contentBuffer: Buffer
+  contentBuffer: Buffer,
+  expected?: ExpectedBytes
 ): Promise<void> {
   try {
-    await textFileIo.writeBytes(resolvedPath, contentBuffer)
+    await textFileIo.writeBytes(resolvedPath, contentBuffer, expected ? { expected } : {})
   } catch (err) {
     const code = readErrnoCode(err)
     if (code === 'EACCES' || code === 'EPERM') {
       throw new AppError('PERMISSION', `没有权限写这个文件：${resolvedPath}`)
+    }
+    if (err instanceof AppError && err.code === TextFileErrorCodes.externalEdit) {
+      throw new AppError('VALIDATION', `写的时候 ${resolvedPath} 被别人改了，这个文件什么都没写；重新 read 一遍再改`)
     }
     if (err instanceof AppError && err.code === TextFileErrorCodes.notRegular) {
       throw new AppError('VALIDATION', `不能原子替换这个文件：${resolvedPath}。它有多个硬链接（替换后会和其余链接分家）或不是普通文件；确实要改就用 run`)

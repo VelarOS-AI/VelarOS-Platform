@@ -6,7 +6,7 @@
  */
 
 import { existsSync } from 'node:fs'
-import { chmod, lstat, mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from 'node:fs/promises'
+import { chmod, lstat, mkdir, mkdtemp, readdir, readFile, rm, symlink, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 
@@ -252,6 +252,39 @@ describe('文件工具', () => {
       expect(failure.problems[0]).toMatchObject({ file: 1, reason: 'stale' })
       expect(await readFile(a, 'utf8')).toBe('alpha\n')
       expect(await readFile(b, 'utf8')).toBe('beta changed\n')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('INV-20 计划之后、落盘之前被人改了——哪怕大小和修改时间都没变——也不覆盖', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'velaros-inv20-race-'))
+    try {
+      const plain = join(root, 'plain.txt')
+      const key = join(root, 'deploy.pem')
+      // 超过 64 KB：这么大的文件落盘前只看「大小 + 修改时间」，两样都没变就不重读（小文件一律重读，拦不到这里）。
+      const original = `${'a'.repeat(100 * 1024)}\n`
+      const concurrent = `${'z'.repeat(100 * 1024)}\n`
+      await writeFile(plain, original)
+      await writeFile(key, '-----BEGIN PRIVATE KEY-----\nabc\n')
+      // 修改时间先落在整数秒上：拨回去时才能分毫不差，否则纳秒级的差别会让印记核对自己就发现了
+      const pinned = 1_700_000_000
+      await utimes(plain, pinned, pinned)
+      // 第二个文件要审批：用户看确认卡的时候，别人把第一个文件改成同样长度的内容，并把修改时间拨回去。
+      // 印记核对会以为没变；落盘时核对字节才拦得住。
+      const racing = {
+        ...approving,
+        approval: {
+          requestApproval: async () => ({ approved: true }),
+          awaitConfirmation: async () => {
+            await writeFile(plain, concurrent)
+            await utimes(plain, pinned, pinned)
+          },
+        },
+      } as SystemToolContext
+      const failure = await failureOf(edit.execute({ files: [{ path: plain, newText: 'beta\n' }, { path: key, newText: 'x\n' }] }, racing))
+      expect(failure.code).toBe('VALIDATION')
+      expect(await readFile(plain, 'utf8')).toBe(concurrent)
     } finally {
       await rm(root, { recursive: true, force: true })
     }

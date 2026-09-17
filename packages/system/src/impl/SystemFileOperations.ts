@@ -65,7 +65,6 @@ const log = Log.tag('SystemFileOperations')
  * @AgentView
  * 下面这几件事**三个方法都成立**，各自说明里不再重复：
  * 路径按用户输入规整，`~` 展开到家目录，相对路径相对默认工作目录。
- * **位置一律按字符算，没有行的概念**——offset 与 range 都是字符下标。
  * 读写保留原文件的编码（UTF-8、带 BOM、UTF-16、GB18030），认不出编码或有非法字节的按二进制处理。
  * 写是原子替换（先写临时文件、fsync 再换上去，权限位原样保留），失败不会留下半截文件。
  * 碰凭证文件（私钥、云凭证、口令库）与系统敏感路径前先向用户确认，被拒就不动。
@@ -74,7 +73,7 @@ export interface SystemFileOperationsApi {
   /**
    * @AgentView
    * 读文本文件。
-   * 每个文件从 offset 起最多 maxChars 个字符，两个都不传就一次读到上限；不切开代理对。路径是符号链接时读它指向的文件。
+   * 每个文件整份读回来。路径是符号链接时读它指向的文件。
    * 图片要改用 view；PDF 与其他文档、其他二进制文件、目录、设备文件、超过 20 MB 的文件，都算这个文件失败。
    */
   read(input: SystemReadInput, ctx: SystemToolContext): Promise<SystemReadResult>
@@ -89,7 +88,7 @@ export interface SystemFileOperationsApi {
    * 写文件。**优先用批量事务**：files 里放几个就改几个，整批是一次事务、一次审批、一个撤销点。
    * 要用户确认而被拒时是**整批不写**；等用户确认那段时间里文件被别人改过，同样整批不写。
    * 路径先解开符号链接：判重、审批、写入都按它指向的那个文件，链接本身不会被换成普通文件。路径是管道、设备、套接字，或文件有多个硬链接时不碰。
-   * edits 写进去的文本跟着原文的换行风格走（CRLF 文件里的裸 LF 换成 CRLF），newText 整个写入原样写。新文本编不成原编码（孤立代理项、GB18030 表示不了的字符）就整批不写。
+   * newText 原样写进去，换行风格由你决定（read 回来的 content 保留了原文的换行，照着改就不会变）。新文本编不成原编码（孤立代理项、GB18030 表示不了的字符）就整批不写。
    * 写的过程中出错时前面的文件已经落盘，错误的 context.applied 里点名是哪几个，这时不能整批重发。
    */
   edit(input: SystemEditInput, ctx: SystemToolContext): Promise<SystemEditResult>
@@ -286,12 +285,14 @@ class SystemFileOperations implements SystemFileOperationsApi {
     if (plan.kind === 'restore') {
       const previousVersion = plan.current ? this.history.remember(plan.target, plan.current) : null
       await mkdir(dirname(plan.target), { recursive: true })
-      await writeSystemFileAtomically(plan.target, plan.snapshot.buffer)
+      await writeSystemFileAtomically(plan.target, plan.snapshot.buffer, plan.current ? { exists: true, bytes: plan.current } : { exists: false })
       return { path: plan.path, action: 'restored', version: plan.snapshot.version, previousVersion, bytes: plan.snapshot.buffer.byteLength, totalChars: plan.totalChars }
     }
     const previousVersion = plan.previous ? this.history.remember(plan.target, plan.previous.buffer) : null
     await mkdir(dirname(plan.target), { recursive: true })
-    await writeSystemFileAtomically(plan.target, plan.bytes)
+    // 计划时手上有原文的，落盘前后核对磁盘上还是它；新建的核对它仍不存在。超过 versionedBytes 的没留原文，只靠上面那次印记核对。
+    const expected = plan.previous ? { exists: true, bytes: plan.previous.buffer } : plan.created ? { exists: false } : undefined
+    await writeSystemFileAtomically(plan.target, plan.bytes, expected)
     return { path: plan.path, action: 'written', created: plan.created, version: fileVersionOf(plan.bytes), previousVersion, bytes: plan.bytes.byteLength, totalChars: plan.newText.length }
   }
 

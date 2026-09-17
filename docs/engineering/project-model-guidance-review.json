@@ -218,7 +218,7 @@
     },
     {
       "path": "packages/project/src/utils/agent/sandbox.ts",
-      "fingerprint": "54db985a41e915176c97f8c2e574079cb55831e733268ec6974afee74d8d9d3b"
+      "fingerprint": "a841c0bc3854ad2a843b4aaa672497539af44d1b87b377949bd06c417c0a5161"
     },
     {
       "path": "packages/project/src/utils/agent/source-window.ts",
