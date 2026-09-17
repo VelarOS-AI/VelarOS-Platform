@@ -19,3 +19,5 @@
 | INV-10 | 手滑写了 TypeScript 不废掉一整轮：整份诊断都落在「这个语法只能在 TypeScript 文件里用」那一族时，按 TypeScript 再查一遍（真类型错照样拦），剥掉类型照跑，并在 `notices` 里告诉模型下次直接写 JavaScript | 测试 | `spec/acceptance.test.ts` |
 | INV-11 | 改上一份程序不必整份重写：`edits` 照 `system:edit` 的协议（`oldText` 一字不差、范围里必须唯一、一组全成或全不成、各处不许重叠），**不用行号**——模型看不见自己刚写那段代码的行号。`source` 与 `edits` 只能给一个；传了 `edits` 却没有上一份时明确拒绝，不猜一份出来 | 测试 | `spec/acceptance.test.ts` |
 | INV-12 | 诊断必须带代码帧：出错那一行连同一个指向出错列的插字符一起给出。只回行列号等于让模型靠数行定位，而数行是它最不准的事之一 | 测试 | `spec/acceptance.test.ts` |
+| INV-13 | 非常驻能力必须先导入才能用：`import` 了没授权的模块时**一行都不执行**，回要补的命名空间让模型拿到签名再重写；没 `import` 直接用那个名字是干净的 `Cannot find name`，不是「要补模块」。检查器只加载「常驻 + 本会话已导入」，**不加载全量**——加载全量就把这道闸拆了 | 测试 | `spec/acceptance.test.ts` |
+| INV-14 | 租约写在 `import` 的属性上、随程序一起带回来，**续租退租不独占一轮**；认不出的租约值当没写（不为一个拼错的字废掉一轮） | 测试 | `spec/acceptance.test.ts` |

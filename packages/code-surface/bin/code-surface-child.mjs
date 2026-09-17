@@ -28,7 +28,6 @@ function buildApi(operations) {
 }
 
 async function runProgram(message) {
-  const namespaces = Object.keys(message.operations)
   const api = buildApi(message.operations)
   const consoleShim = {
     log: (...args) => {
@@ -38,11 +37,22 @@ async function runProgram(message) {
       process.send({ type: 'log', line })
     },
   }
+  /**
+   * 模型写的是真 ES 模块，宿主在送进来之前已经把 `import` 改写成 `__velar(...)`、
+   * `export default X` 改写成 `return X`（行数一个不变，所以抛错的行号仍对得上模型写的那一行）。
+   * 这里只要给出 `__velar`：按模块名取那个命名空间的桩，取不到就抛——
+   * 能走到这里说明检查已经过了，取不到只可能是宿主授权与改写对不上，该响不该默默给个空对象。
+   */
+  const resolveModule = (specifier) => {
+    const namespace = typeof specifier === 'string' && specifier.startsWith('velar:') ? specifier.slice(6) : ''
+    const bound = api[namespace]
+    if (!bound) throw new Error(`宿主没有授权模块 ${specifier}，它不该通过检查。`)
+    return bound
+  }
   // 能力以**形参**注入而不是全局：全局会被程序自己改掉，形参改不动外面。
-  const parameters = [...namespaces, 'blobs', 'console']
   const body = `"use strict";\nreturn (async () => {\n${message.source}\n})()`
-  const program = new Function(...parameters, body)
-  return program(...namespaces.map((name) => api[name]), Object.freeze({ ...message.blobs }), consoleShim)
+  const program = new Function('__velar', 'blobs', 'console', body)
+  return program(resolveModule, Object.freeze({ ...message.blobs }), consoleShim)
 }
 
 function safeStringify(value) {

@@ -6,7 +6,8 @@ import { CodeSurfaceLimits } from '../src/contract/constants'
 import { fitLogsToBudget, fitValueToBudget } from '../src/utils/budget'
 import { isTypeScriptOnlySyntax } from '../src/utils/compiler'
 import { applyProgramEdits } from '../src/utils/edit'
-import { keepTail, wrapProgramSource } from '../src/utils/program'
+import { readProgramImports, rewriteModuleForIsolate } from '../src/utils/module-form'
+import { keepTail, readCapabilityNamespace } from '../src/utils/program'
 import { describeProgramOversize } from '../src/utils/result'
 
 void describe('预算裁剪', () => {
@@ -63,10 +64,31 @@ void describe('手滑判据', () => {
   })
 })
 
-void describe('包装约定', () => {
-  test('`{` 后面紧跟换行，模型写的第 1 行就落在文件第 1 行', () => {
-    const wrapped = wrapProgramSource('return 1')
-    expect(wrapped.split('\n')[1]).toBe('return 1')
+void describe('模块形态', () => {
+  test('能力模块名剥出命名空间；别的模块名不认', () => {
+    expect(readCapabilityNamespace('velar:system')).toBe('system')
+    expect(readCapabilityNamespace('node:fs')).toBeNull()
+  })
+
+  test('import 与租约挖得出来；没写租约就没有那一格', () => {
+    const program = (attribute: string) =>
+      [`import { read } from 'velar:demo'${attribute}`, 'export default 1'].join('\n')
+    expect(readProgramImports(program(" with { lease: 'task' }"))).toEqual([
+      { namespace: 'demo', specifier: 'velar:demo', lease: 'task' },
+    ])
+    expect(readProgramImports(program(''))).toEqual([{ namespace: 'demo', specifier: 'velar:demo' }])
+    // 认不出的租约值当没写：宿主按缺省策略处理，不为一个拼错的字废掉一轮
+    expect(readProgramImports(program(" with { lease: '3turns' }"))).toEqual([
+      { namespace: 'demo', specifier: 'velar:demo' },
+    ])
+  })
+
+  test('改写成隔离能跑的形状时，行数一个不变——否则抛错的行号就对不上', () => {
+    const source = ["import { read } from 'velar:demo'", 'const r = await read({})', 'export default r'].join('\n')
+    const rewritten = rewriteModuleForIsolate(source)
+    expect(rewritten.split('\n')).toHaveLength(3)
+    expect(rewritten).toContain('const { read } = __velar("velar:demo")')
+    expect(rewritten).toContain('return r;')
   })
 })
 

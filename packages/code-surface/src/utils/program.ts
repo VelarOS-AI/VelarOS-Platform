@@ -1,21 +1,38 @@
-/** 程序正文的包装与编码：typecheck 与隔离运行两侧共用同一份，包装方式不一致会让行号对不上。 */
+/**
+ * 程序正文的约定与编码。
+ *
+ * **程序是一个 ES 模块**：`import` 拿能力，顶层 `await` 直接用，`export default` 交出答案。
+ * 早先用「函数体 + `return`」是为了支持顶层 await，但模块原生就支持它，那个理由没了；
+ * 而「import 在上面、然后 return」**不是合法 JS**，等于让模型写一种方言——
+ * 这恰恰违背「模型写它熟悉的东西」这条依仗，而那是代码面唯一的依仗。
+ */
 
 import { CodeSurfaceLimits } from '../contract/constants.js'
 
 /** 内存里那份程序的文件名；诊断按它过滤。后缀是 `.js`——模型写的就是 JavaScript，靠 `checkJs` 查。 */
 export const ProgramFileName = '/program.js'
 
-/**
- * 把模型写的函数体包成一个可检查、可执行的整体。
- *
- * `{` 后面必须紧跟换行：这样模型写的第 1 行正好落在文件第 1 行（0 基），报出去的行号与它写的对得上。
- * 少这个换行，首行的诊断就会偏一位——模型照着改会改错地方。
- */
-export function wrapProgramSource(source: string): string {
-  return `export default (async () => {\n${source}\n})`
+/** 能力模块的统一前缀：`import { read } from 'velar:system'`。 */
+export const CapabilityModulePrefix = 'velar:'
+
+/** 从模块名取命名空间：`velar:system` → `system`。不是能力模块就返回 null。 */
+export function readCapabilityNamespace(moduleSpecifier: string): Nullable<string> {
+  return moduleSpecifier.startsWith(CapabilityModulePrefix)
+    ? moduleSpecifier.slice(CapabilityModulePrefix.length)
+    : null
 }
 
-/** 程序里能引用的形参名：能力命名空间之外，固定给这两个。 */
+/**
+ * 检查时用的程序正文。
+ *
+ * 模块本来就能直接检查，不用包装——**这一点很重要**：不包装就没有行号偏移，
+ * 诊断报的行号就是模型写的那一行，不需要任何换算。
+ */
+export function programForCheck(source: string): string {
+  return source
+}
+
+/** 程序里能引用的形参名之外，固定给这两个。 */
 export const ProgramReservedParameters = Object.freeze(['blobs', 'console'] as const)
 
 /** 体量超限的说明；超限一律拒，不截断后照跑——半截程序跑出来的结果比不跑更坏。 */

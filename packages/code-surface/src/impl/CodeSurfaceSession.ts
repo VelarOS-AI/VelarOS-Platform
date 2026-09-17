@@ -5,7 +5,7 @@
  * 而那正是今天工具面最常见的一类缺陷；让不合法的程序跑起来，等于用真实副作用去试错。
  */
 
-import { isString, isTrue } from '@velaros-ai/core'
+import { isEmpty, isString, isTrue } from '@velaros-ai/core'
 
 import { CodeSurfaceErrorCodes, CodeSurfaceLimits } from '../contract/constants.js'
 import type { CodeCapabilityPort, CodeRunnerApi, CodeSurfaceEventSink } from '../contract/requires.js'
@@ -14,6 +14,8 @@ import type {
   CodeProgramRequest,
   CodeSurfaceOutcome,
 } from '../types/code-surface.js'
+import type { GrantedModule } from '../types/code-surface.js'
+import { readProgramImports, rewriteModuleForIsolate } from '../utils/module-form.js'
 import { composeProgramResult, describeProgramOversize, resolveProgramSource } from '../utils/result.js'
 import { CodeSurfaceTuning } from '../utils/tuning.js'
 
@@ -27,7 +29,11 @@ export interface CodeSurfaceSessionApi {
    */
   submit(input: {
     program: CodeProgramRequest
-    declarations: string
+    /**
+     * 这一轮授给程序的能力模块（常驻的 + 本会话已导入的）。
+     * **只给授权的**：没授权的模块 `import` 不出来，这道闸是语言给的。
+     */
+    granted: readonly GrantedModule[]
     /**
      * 上一份程序的正文，宿主记着并给进来；模型传 `edits` 时在它上面改。
      * 不给而模型又传了 `edits`，会被明确拒绝并让它改发整份——**不猜一份出来**。
@@ -48,7 +54,7 @@ class CodeSurfaceSession implements CodeSurfaceSessionApi {
 
   public async submit(input: {
     program: CodeProgramRequest
-    declarations: string
+    granted: readonly GrantedModule[]
     previousSource?: string
     timeoutMs?: number
     signal?: AbortSignal
@@ -63,7 +69,12 @@ class CodeSurfaceSession implements CodeSurfaceSessionApi {
         result: { failed: { code: CodeSurfaceErrorCodes.tooLarge, message: oversized } },
       }
 
-    const checked = this.checker.check({ source, declarations: input.declarations })
+    // 非常驻能力必须先导入才能用：import 了没授权的模块时**一行都不执行**，回它们的签名让模型重写。
+    // 这不是失败，是「先拿说明书」——代码面里写错一处的代价是整段程序不执行，不是一次调用失败。
+    const missing = this.checker.missingModules({ source, granted: input.granted })
+    if (!isEmpty(missing)) return { checked: false, needsModules: missing }
+
+    const checked = this.checker.check({ source, granted: input.granted })
     if (!checked.ok) return { checked: false, check: checked }
 
     const notices: CodeCallNotice[] = []
@@ -77,8 +88,8 @@ class CodeSurfaceSession implements CodeSurfaceSessionApi {
     let calls = 0
     const outcome = await this.runner.run(
       {
-        // 手滑写了 TypeScript 时跑剥完类型的那份；常规路径就是模型写的原文，不经转译。
-        source: checked.transpiled ?? source,
+        // 隔离里没有模块系统：import 改写成 __velar(...)、export default 改写成 return，行数一个不变。
+        source: rewriteModuleForIsolate(checked.transpiled ?? source),
         blobs: input.program.blobs ?? {},
         operations: this.capabilities.listOperations(),
         timeoutMs: Math.min(input.timeoutMs ?? CodeSurfaceTuning.defaultTimeoutMs, CodeSurfaceLimits.timeoutMs),
@@ -112,7 +123,9 @@ class CodeSurfaceSession implements CodeSurfaceSessionApi {
       input.signal
     )
 
-    return { checked: true, result: composeProgramResult(outcome, notices) }
+    const result = composeProgramResult(outcome, notices)
+    const imports = readProgramImports(source)
+    return isEmpty(imports) ? { checked: true, result } : { checked: true, result, imports }
   }
 
 

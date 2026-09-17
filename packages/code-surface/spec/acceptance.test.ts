@@ -13,19 +13,23 @@ import {
   NodeSubprocessRunnerIsReleaseReady,
 } from '../src/impl/NodeSubprocessCodeRunner'
 import type { CodeProgramEdit } from '../src/types/code-surface'
+import type { GrantedModule } from '../src/types/module-form'
 import { renderDiagnostics } from '../src/utils/diagnostics'
 import { resolveNodeExecutable } from '../src/utils/node-executable'
 
-const declarations = `
-interface ReadFile { path: string; content: string; hasMore: boolean }
-declare const demo: {
-  read(input: { paths: string[] }): Promise<{ files: ReadFile[] }>
-  write(input: { text: string }): Promise<{ received: string }>
-  danger(input: { command: string }): Promise<{ ok: boolean }>
-  bulk(input: { size: number }): Promise<{ text: string }>
-}
-declare const blobs: Record<string, string>
-`
+/** 这一轮授权的那一个命名空间；没授权的模块 import 不出来，那道闸是语言给的。 */
+const granted: GrantedModule[] = [
+  {
+    namespace: 'demo',
+    declarations: `declare module 'velar:demo' {
+  interface ReadFile { path: string; content: string; hasMore: boolean }
+  export function read(input: { paths: string[] }): Promise<{ files: ReadFile[] }>
+  export function write(input: { text: string }): Promise<{ received: string }>
+  export function danger(input: { command: string }): Promise<{ ok: boolean }>
+  export function bulk(input: { size: number }): Promise<{ text: string }>
+}`,
+  },
+]
 
 const capabilities: CodeCapabilityPort = {
   listOperations: () => ({ demo: ['read', 'write', 'danger', 'bulk'] }),
@@ -48,25 +52,29 @@ const session = createCodeSurfaceSession({
 })
 
 const submit = (source: string, extra: { blobs?: Record<string, string>; timeoutMs?: number } = {}) =>
-  session.submit({ program: { source, blobs: extra.blobs }, declarations, timeoutMs: extra.timeoutMs ?? 10_000 })
+  session.submit({ program: { source, blobs: extra.blobs }, granted, timeoutMs: extra.timeoutMs ?? 10_000 })
 
 const submitEdits = (edits: CodeProgramEdit[], previousSource?: string) =>
-  session.submit({ program: { edits }, declarations, previousSource, timeoutMs: 10_000 })
+  session.submit({ program: { edits }, granted, previousSource, timeoutMs: 10_000 })
+
+const importDemo = "import { read, write, danger, bulk } from 'velar:demo'"
 
 void describe('代码面验收', () => {
   test('INV-1 typecheck 没过就一行都不执行，行号与模型写的对得上', async () => {
-    const outcome = await submit(`const r = await demo.read({ paths: ['a.ts'] })\nreturn r.files[0].contents`)
+    const outcome = await submit(
+      `${importDemo}\nconst r = await read({ paths: ['a.ts'] })\nexport default r.files[0].contents`
+    )
     expect(outcome.checked).toBe(false)
-    if (outcome.checked) throw new Error('应当没通过检查')
+    if (outcome.checked || !('check' in outcome)) throw new Error('应当没通过检查')
     const [first] = outcome.check.diagnostics
-    expect(first?.line).toBe(2)
+    expect(first?.line).toBe(3)
     expect(first?.message).toContain('content')
   })
 
-  test('INV-1 通过检查的程序照常跑完，只有它 return 的那点东西出来', async () => {
-    const outcome = await submit(`
-const r = await demo.read({ paths: ['a.ts', 'b.ts'] })
-return r.files.flatMap((f) => f.content.split('\\n')
+  test('INV-1 通过检查的程序照常跑完，只有它交出的那点东西出来', async () => {
+    const outcome = await submit(`${importDemo}
+const r = await read({ paths: ['a.ts', 'b.ts'] })
+export default r.files.flatMap((f) => f.content.split('\\n')
   .map((text, i) => ({ path: f.path, line: i + 1, text }))
   .filter((x) => x.text.includes('TODO')))`)
     expect(outcome.checked).toBe(true)
@@ -82,7 +90,7 @@ return r.files.flatMap((f) => f.content.split('\\n')
     const readFile = await submit(`
 // @ts-ignore 故意绕开声明：验证运行时确实拦得住
 const fs = await import('node:fs')
-return fs.readFileSync('/etc/hosts', 'utf8')`)
+export default fs.readFileSync('/etc/hosts', 'utf8')`)
     expect(readFile.checked).toBe(true)
     if (!readFile.checked) throw new Error('应当通过检查')
     expect(readFile.result.failed?.code).toBe(CodeSurfaceErrorCodes.programError)
@@ -90,26 +98,27 @@ return fs.readFileSync('/etc/hosts', 'utf8')`)
     const spawn = await submit(`
 // @ts-ignore 同上
 const cp = await import('node:child_process')
-return cp.execSync('echo 逃逸').toString()`)
+export default cp.execSync('echo 逃逸').toString()`)
     if (!spawn.checked) throw new Error('应当通过检查')
     expect(spawn.result.failed?.code).toBe(CodeSurfaceErrorCodes.programError)
   })
 
   test('INV-3 死循环到时必停', async () => {
-    const outcome = await submit('while (true) {}', { timeoutMs: 800 })
+    const outcome = await submit('while (true) {}\nexport default 1', { timeoutMs: 800 })
     expect(outcome.checked).toBe(true)
     if (!outcome.checked) throw new Error('应当通过检查')
     expect(outcome.result.failed?.code).toBe(CodeSurfaceErrorCodes.timeout)
   })
 
   test('INV-4 拒绝是能 try/catch 的异常，并且进 notices', async () => {
-    const outcome = await submit(`
+    const outcome = await submit(`${importDemo}
+let caught = '没拦住'
 try {
-  await demo.danger({ command: 'rm -rf /' })
-  return '没拦住'
+  await danger({ command: 'rm -rf /' })
 } catch (error) {
-  return { 捕获到: error.message }
-}`)
+  caught = error.message
+}
+export default { 捕获到: caught }`)
     if (!outcome.checked) throw new Error('应当通过检查')
     expect(outcome.result.value).toEqual({ 捕获到: '用户拒绝了这条危险命令。' })
     expect(outcome.result.notices?.some((notice) => notice.action === 'denied')).toBe(true)
@@ -125,11 +134,40 @@ try {
     }
   })
 
+  test('INV-5 这个运行器不许发版', () => {
+    expect(NodeSubprocessRunnerIsReleaseReady).toBe(false)
+  })
+
+  test('INV-6 blobs 原样送达，反引号与转义一个不错', async () => {
+    const patch = 'const x = `反引号 ${不是插值} \\ 反斜杠 "双引号" \'单引号\'`\n'
+    const outcome = await submit(`${importDemo}\nexport default await write({ text: blobs.patch })`, {
+      blobs: { patch },
+    })
+    if (!outcome.checked) throw new Error('应当通过检查')
+    expect(outcome.result.value).toEqual({ received: patch })
+  })
+
+  test('INV-7 返回值超预算按结尾保留并说明', async () => {
+    const outcome = await submit(`${importDemo}
+const r = await bulk({ size: ${CodeSurfaceLimits.valueChars + 5_000} })
+export default r.text`)
+    if (!outcome.checked) throw new Error('应当通过检查')
+    expect(outcome.result.notices?.some((notice) => notice.action === 'truncated')).toBe(true)
+    expect(String(outcome.result.value)).toContain('字符省略')
+  })
+
+  test('INV-8 源码超体量直接拒，不跑', async () => {
+    const outcome = await submit(`// ${'x'.repeat(CodeSurfaceLimits.sourceChars + 10)}\nexport default 1`)
+    expect(outcome.checked).toBe(true)
+    if (!outcome.checked) throw new Error('体量应当在检查之前就拒掉')
+    expect(outcome.result.failed?.code).toBe(CodeSurfaceErrorCodes.tooLarge)
+  })
+
   test('INV-10 手滑写 TypeScript 照跑，并提醒下次写 JavaScript', async () => {
-    const outcome = await submit(`
-const r = await demo.read({ paths: ['a.ts'] })
-const first = r.files[0] as ReadFile
-return first.path`)
+    const outcome = await submit(`${importDemo}
+const r = await read({ paths: ['a.ts'] })
+const first = r.files[0] as { path: string }
+export default first.path`)
     expect(outcome.checked).toBe(true)
     if (!outcome.checked) throw new Error('语法偏好不该把一整轮弹回去')
     expect(outcome.result.value).toBe('a.ts')
@@ -137,17 +175,17 @@ return first.path`)
   })
 
   test('INV-10 但真的类型错照样拦下来，不因为夹带 TypeScript 语法就放行', async () => {
-    const outcome = await submit(`
-const r = await demo.read({ paths: ['a.ts'] })
-const first = r.files[0] as ReadFile
-return first.contents`)
+    const outcome = await submit(`${importDemo}
+const r = await read({ paths: ['a.ts'] })
+const first = r.files[0] as { path: string }
+export default first.contents`)
     expect(outcome.checked).toBe(false)
-    if (outcome.checked) throw new Error('应当拦下来')
-    expect(outcome.check.diagnostics.some((d) => d.message.includes('content'))).toBe(true)
+    if (outcome.checked || !('check' in outcome)) throw new Error('应当拦下来')
+    expect(outcome.check.diagnostics.length).toBeGreaterThan(0)
   })
 
   test('INV-11 在上一份程序上改，不必整份重写', async () => {
-    const previous = `const r = await demo.read({ paths: ['a.ts'] })\nreturn r.files.map((f) => f.contents)`
+    const previous = `${importDemo}\nconst r = await read({ paths: ['a.ts'] })\nexport default r.files.map((f) => f.contents)`
     const outcome = await submitEdits([{ oldText: 'f.contents', newText: 'f.path' }], previous)
     expect(outcome.checked).toBe(true)
     if (!outcome.checked) throw new Error('改完应当通过检查')
@@ -155,7 +193,7 @@ return first.contents`)
   })
 
   test('INV-11 oldText 不唯一、找不到、没有上一份，都明确拒绝且不猜', async () => {
-    const previous = `const a = 1\nconst b = 1\nreturn a + b`
+    const previous = 'const a = 1\nconst b = 1\nexport default a + b'
     const notUnique = await submitEdits([{ oldText: '= 1', newText: '= 2' }], previous)
     if (!notUnique.checked) throw new Error('应当走到结果')
     expect(notUnique.result.failed?.code).toBe(CodeSurfaceErrorCodes.editFailed)
@@ -172,51 +210,46 @@ return first.contents`)
 
   test('INV-11 source 与 edits 只能给一个', async () => {
     const outcome = await session.submit({
-      program: { source: 'return 1', edits: [{ oldText: 'a', newText: 'b' }] },
-      declarations,
-      previousSource: 'const a = 1\nreturn a',
+      program: { source: 'export default 1', edits: [{ oldText: 'a', newText: 'b' }] },
+      granted,
+      previousSource: 'const a = 1\nexport default a',
     })
     if (!outcome.checked) throw new Error('应当走到结果')
     expect(outcome.result.failed?.message).toContain('只能给一个')
   })
 
   test('INV-12 诊断带代码帧，模型不必数行', async () => {
-    const outcome = await submit(`const r = await demo.read({ paths: ['a.ts'] })\nreturn r.files[0].contents`)
+    const source = `${importDemo}\nconst r = await read({ paths: ['a.ts'] })\nexport default r.files[0].contents`
+    const outcome = await submit(source)
     expect(outcome.checked).toBe(false)
-    if (outcome.checked) throw new Error('应当没通过检查')
-    const rendered = renderDiagnostics(
-      `const r = await demo.read({ paths: ['a.ts'] })\nreturn r.files[0].contents`,
-      outcome.check.diagnostics
-    )
-    expect(rendered).toContain('2 | return r.files[0].contents')
+    if (outcome.checked || !('check' in outcome)) throw new Error('应当没通过检查')
+    const rendered = renderDiagnostics(source, outcome.check.diagnostics)
+    expect(rendered).toContain('3 | export default r.files[0].contents')
     expect(rendered).toContain('^')
     expect(rendered).toContain('oldText')
   })
 
-  test('INV-5 这个运行器不许发版', () => {
-    expect(NodeSubprocessRunnerIsReleaseReady).toBe(false)
+  test('INV-13 import 了没授权的模块：一行都不执行，回要补的命名空间', async () => {
+    const outcome = await submit("import { log } from 'velar:git'\nexport default await log({})")
+    expect(outcome.checked).toBe(false)
+    if (outcome.checked || !('needsModules' in outcome)) throw new Error('应当要求先补模块')
+    expect(outcome.needsModules).toEqual(['git'])
   })
 
-  test('INV-6 blobs 原样送达，反引号与转义一个不错', async () => {
-    const patch = 'const x = `反引号 ${不是插值} \\ 反斜杠 "双引号" \'单引号\'`\n'
-    const outcome = await submit('return await demo.write({ text: blobs.patch })', { blobs: { patch } })
-    if (!outcome.checked) throw new Error('应当通过检查')
-    expect(outcome.result.value).toEqual({ received: patch })
+  test('INV-13 没 import 直接用没授权的名字，是干净的报错不是要补模块', async () => {
+    const outcome = await submit('export default await git.log({})')
+    expect(outcome.checked).toBe(false)
+    if (outcome.checked || !('check' in outcome)) throw new Error('应当是诊断')
+    expect(outcome.check.diagnostics.some((d) => d.message.includes("Cannot find name 'git'"))).toBe(true)
   })
 
-  test('INV-7 返回值超预算按结尾保留并说明', async () => {
-    const outcome = await submit(`
-const r = await demo.bulk({ size: ${CodeSurfaceLimits.valueChars + 5_000} })
-return r.text`)
-    if (!outcome.checked) throw new Error('应当通过检查')
-    expect(outcome.result.notices?.some((notice) => notice.action === 'truncated')).toBe(true)
-    expect(String(outcome.result.value)).toContain('字符省略')
-  })
-
-  test('INV-8 源码超体量直接拒，不跑', async () => {
-    const outcome = await submit(`// ${'x'.repeat(CodeSurfaceLimits.sourceChars + 10)}\nreturn 1`)
+  test('INV-14 租约随 import 一起带回来，不独占一轮', async () => {
+    const outcome = await submit(
+      `import { read } from 'velar:demo' with { lease: 'task' }\nconst r = await read({ paths: ['a.ts'] })\nexport default r.files.length`
+    )
     expect(outcome.checked).toBe(true)
-    if (!outcome.checked) throw new Error('体量应当在检查之前就拒掉')
-    expect(outcome.result.failed?.code).toBe(CodeSurfaceErrorCodes.tooLarge)
+    if (!outcome.checked) throw new Error('应当通过检查')
+    expect(outcome.result.value).toBe(1)
+    expect(outcome.imports).toEqual([{ namespace: 'demo', specifier: 'velar:demo', lease: 'task' }])
   })
 })

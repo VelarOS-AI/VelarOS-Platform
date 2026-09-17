@@ -148,7 +148,7 @@
     },
     "packages/code-surface": {
       "name": "@velaros-ai/code-surface",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "dependencies": {
         "@velaros-ai/core": "workspace:*",
         "typescript": "^5.7.0",

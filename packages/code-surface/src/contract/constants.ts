@@ -28,6 +28,17 @@ export const CodeSurfaceErrorCodes = Object.freeze({
 export type CodeSurfaceErrorCode = (typeof CodeSurfaceErrorCodes)[keyof typeof CodeSurfaceErrorCodes]
 
 /**
+ * 「找不到这个模块」的 TypeScript 诊断码。
+ *
+ * `import { x } from 'velar:git'` 而 git 没授权时就是它。认这个专属码就够了，不用自己写判定——
+ * **那道「非常驻能力必须先导入」的闸是语言给的**，我们只是认出它。
+ */
+export const CodeSurfaceDiagnosticCodes = Object.freeze({
+  /** `Cannot find module 'velar:git'`：import 了没授权的能力模块。 */
+  unresolvedModule: 2307,
+} as const)
+
+/**
  * 对外承诺的上限。超过就拒，不截断后照跑——半截程序跑出来的结果比不跑更坏。
  * 返回值与日志是例外：它们在跑完之后才知道大小，按预算截断并在 `notices` 里说明。
  */

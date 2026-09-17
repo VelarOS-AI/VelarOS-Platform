@@ -23,6 +23,7 @@
 | `nodeSubprocessCodeRunner` | `CodeRunnerApi` | **开发期专用**的隔离运行器，见「非目标」 |
 | `NodeSubprocessRunnerIsReleaseReady` | 契约常量 | 恒为 `false`：上面那个运行器不许进正式发版，宿主装配时据此拦下 |
 | `CodeSurfaceModId` | 契约常量 | 本包作为内核模块的身份 |
+| `CodeSurfaceDiagnosticCodes` | 契约常量 | 认得出来的 TypeScript 诊断码：`unresolvedModule` 就是「import 了没授权的能力模块」，那道闸是语言给的 |
 | `CodeSurfaceErrorCodes` / `CodeSurfaceLimits` | 契约常量 | 七个错误码；程序源码、blobs、返回值、日志、调用次数、墙钟的对外上限 |
 
 **注入面**在 `contract/requires.ts`：
@@ -35,6 +36,7 @@
 
 **数据面**是 `types/code-surface.ts`，可移植：`CodeProgramRequest`（程序与 `blobs`）、`CodeProgramDiagnostic`（一条诊断）、
 `CodeProgramEdit` / `CodeProgramRange`（在上一份上改的一处）、`CodeCallNotice`（系统插手过的地方）、
+`CapabilityLease` / `ProgramImport`（租约与能力 import）、`GrantedModule`（这一轮授了哪个命名空间）、
 `CodeProgramFailure`、`CodeProgramResult`、`CodeProgramCheckResult`
 （`CodeProgramCheckSuccess` / `CodeProgramCheckFailure`）。`types/runner.ts` 的 `CodeRunnerApi`、`CodeRunRequest`、
 `CodeRunDispatch`、`CodeRunOutcome` 是隔离运行器的形状，只走根入口——隔离方案会换，抽成接口才换得动。
@@ -47,6 +49,9 @@
 | `./contracts` | 渲染进程与任何不碰 Node 的地方 | 只有可移植数据与常量表：错误码、对外上限、程序与结果的形状 |
 
 ## 骨干链路
+
+**程序是一个 ES 模块**：`import { read } from 'velar:system'` 拿能力、顶层 `await` 直接用、
+`export default` 交出答案。写的是真 JavaScript，不是方言——那是代码面唯一的依仗。
 
 定下跑哪份源码（整份重写，或在上一份上按 `edits` 改）→ 查体量 → typecheck（不过就**一行都不执行**）→ 隔离里跑 → 程序发的每次调用转给宿主的能力端口
 → 收集 `notices`（系统插手过的地方）→ 编成结果。
@@ -78,8 +83,8 @@
 
 ## 不变量
 
-共 12 条，登记在 `spec/invariants.md`，验收用例在 `spec/acceptance.test.ts`。编号只增不重排。
-按检验方式：测试 12 条。未验证 0 条。
+共 14 条，登记在 `spec/invariants.md`，验收用例在 `spec/acceptance.test.ts`。编号只增不重排。
+按检验方式：测试 14 条。未验证 0 条。
 
 ## 非目标
 
@@ -95,9 +100,11 @@
 ```
 src/
   contract/   constants.ts 错误码与对外上限；provides.ts 交出去的接口；requires.ts 宿主注入的能力端口与事件槽
-  types/      code-surface.ts 可移植数据（程序、诊断、结果）；runner.ts 隔离运行器的形状
+  types/      code-surface.ts 可移植数据（程序、诊断、结果）；module-form.ts import 与租约；
+              editing.ts 编辑落到原文后的形状；runner.ts 隔离运行器的形状
   impl/       CodeSurfaceSession 会话编排；CodeProgramChecker 执行前的检查；NodeSubprocessCodeRunner 开发期隔离
-  utils/      compiler.ts 编译器那一侧的活；edit.ts 在上一份程序上改；diagnostics.ts 带代码帧的诊断；
+  utils/      compiler.ts 编译器那一侧的活；module-form.ts 挖 import 与租约、改写成隔离能跑的形状；
+              edit.ts 在上一份程序上改；diagnostics.ts 带代码帧的诊断；
               result.ts 定源码与编结果；budget.ts 预算裁剪；program.ts 包装；node-executable.ts 找一个真的 node；tuning.ts 可调参数
 bin/          code-surface-child.mjs 隔离进程侧引导，自身不引任何模块
 ```

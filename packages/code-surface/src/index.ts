@@ -1,7 +1,7 @@
 /** 根入口：给 Node 宿主用；起隔离进程、跑 TypeScript 检查，都要 Node。 */
 
 export type { CodeSurfaceErrorCode } from './contract/constants.js'
-export { CodeSurfaceErrorCodes, CodeSurfaceLimits, CodeSurfaceModId } from './contract/constants.js'
+export { CodeSurfaceDiagnosticCodes, CodeSurfaceErrorCodes, CodeSurfaceLimits, CodeSurfaceModId } from './contract/constants.js'
 export type {
   CodeCapabilityCall,
   CodeCapabilityOutcome,
@@ -15,6 +15,7 @@ export type { CodeSurfaceSessionApi } from './impl/CodeSurfaceSession.js'
 export { createCodeSurfaceSession } from './impl/CodeSurfaceSession.js'
 export { nodeSubprocessCodeRunner,NodeSubprocessRunnerIsReleaseReady } from './impl/NodeSubprocessCodeRunner.js'
 export type {
+  CapabilityLease,
   CodeCallNotice,
   CodeProgramCheckFailure,
   CodeProgramCheckResult,
@@ -26,5 +27,7 @@ export type {
   CodeProgramRequest,
   CodeProgramResult,
   CodeSurfaceOutcome,
+  GrantedModule,
+  ProgramImport,
 } from './types/code-surface.js'
 export type { CodeRunDispatch, CodeRunOutcome, CodeRunRequest } from './types/runner.js'

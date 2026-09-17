@@ -146,4 +146,41 @@ export type CodeProgramCheckResult = CodeProgramCheckSuccess | CodeProgramCheckF
  */
 export type CodeSurfaceOutcome =
   | { checked: false; check: CodeProgramCheckFailure }
-  | { checked: true; result: CodeProgramResult }
+  | {
+      /** typecheck 没走到：程序 import 了没授权的模块。 */
+      checked: false
+      /** 要补签名的命名空间，按程序里出现的顺序。 */
+      needsModules: string[]
+    }
+  | {
+      checked: true
+      result: CodeProgramResult
+      /** 程序里的能力 import 与租约意图；宿主据此续租、退租、回收。没有 import 就没有这一格。 */
+      imports?: readonly ProgramImport[]
+    }
+
+/**
+ * 租约的三档：**意图，不是期限**。
+ *
+ * 不让模型报「几轮」——它看不见前缀预算，报短了被回收白花一轮重导，报长了前缀膨胀它也感知不到。
+ * `once` / `task` / `done` 是它答得对的东西。宿主拥有回收策略，这三档只是优先级信号。
+ */
+export type CapabilityLease = 'once' | 'task' | 'done'
+
+/** 程序里的一条能力 import。 */
+export interface ProgramImport {
+  /** 命名空间，如 `system`；`velar:` 前缀已剥掉。 */
+  namespace: string
+  /** 原样的模块名，如 `velar:system`。 */
+  specifier: string
+  /** 模型给的租约意图；没写就没有这一格。 */
+  lease?: CapabilityLease
+}
+
+/** 这一轮授给程序的一个能力模块：命名空间与它的完整声明。 */
+export interface GrantedModule {
+  /** 命名空间，如 `system`。 */
+  namespace: string
+  /** 这个命名空间的完整 `.d.ts` 正文。 */
+  declarations: string
+}

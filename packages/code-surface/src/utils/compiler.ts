@@ -9,10 +9,28 @@ import { isUndefined } from '@velaros-ai/core'
 
 import type { CodeProgramDiagnostic } from '../types/code-surface.js'
 
-import { wrapProgramSource } from './program.js'
+import { programForCheck } from './program.js'
 
 /** 生成出来的能力声明在内存文件系统里的名字。 */
 export const DeclarationFileName = '/velar.d.ts'
+
+/**
+ * 程序世界里恒有的东西，和授权了哪些能力模块无关。
+ *
+ * `blobs` 是大字符串旁路的入口（文件内容不进源码，否则要过好几层转义）；它不是一件能力，
+ * 所以不该长在任何命名空间上，而是永远都在。
+ */
+const ProgramPrelude = 'declare const blobs: Record<string, string>'
+
+/**
+ * 把这一轮授权的几个命名空间拼成一份声明。
+ *
+ * **只拼授权的**——不授权的模块不进来，`import` 它就解析不出来（TS2307）。
+ * 这道闸是语言给的，不用我们写判定；也正因为如此，检查器绝不能图省事加载全量。
+ */
+export function joinGrantedDeclarations(granted: ReadonlyArray<{ declarations: string }>): string {
+  return [ProgramPrelude, ...granted.map((module) => module.declarations)].join('\n\n')
+}
 
 /** 手滑写成 TypeScript 时用的那份文件名；换个后缀编译器才会按 TS 解析。 */
 export const TypeScriptProgramFileName = '/program.ts'
@@ -63,13 +81,18 @@ export function createMemoryCompilerHost(
   }
 }
 
-/** 把一条 TS 诊断换算成模型面的形状：包装只占第一行，所以 0 基行号正好是模型写的行号（从 1 起）。 */
+/**
+ * 把一条 TS 诊断换算成模型面的形状。
+ *
+ * **程序不包装**（它本来就是个模块），所以编译器给的 0 基行号要加一才是模型写的那一行。
+ * 早先用「函数体 + 包装」时包装恰好占掉第 0 行，两者数值相等——那是巧合，形态一改就错一位。
+ */
 export function toModelDiagnostic(diagnostic: ts.Diagnostic): CodeProgramDiagnostic {
   const message = ts.flattenDiagnosticMessageText(diagnostic.messageText, ' ')
   const file = diagnostic.file
   if (!file || isUndefined(diagnostic.start)) return { line: 1, column: 1, code: diagnostic.code, message }
   const { line, character } = file.getLineAndCharacterOfPosition(diagnostic.start)
-  return { line: Math.max(1, line), column: character + 1, code: diagnostic.code, message }
+  return { line: line + 1, column: character + 1, code: diagnostic.code, message }
 }
 
 /** 按给定的文件名与编译选项查一遍，只留程序自己的诊断——声明是我们生成的，它有问题该在生成那一侧炸。 */
@@ -80,7 +103,7 @@ export function diagnoseProgram(
 ): CodeProgramDiagnostic[] {
   const files = new Map([
     [DeclarationFileName, input.declarations],
-    [fileName, wrapProgramSource(input.source)],
+    [fileName, programForCheck(input.source)],
   ])
   const program = ts.createProgram([DeclarationFileName, fileName], options, createMemoryCompilerHost(files, options))
   return [...program.getSyntacticDiagnostics(), ...program.getSemanticDiagnostics()]

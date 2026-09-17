@@ -9,7 +9,11 @@
  * 编译器那一侧的活全在 `utils/compiler.ts`，本类只负责按什么顺序用它们。
  */
 
+import { isNotNull } from '@velaros-ai/core'
+
+import { CodeSurfaceDiagnosticCodes } from '../contract/constants.js'
 import type { CodeProgramCheckResult } from '../types/code-surface.js'
+import type { GrantedModule } from '../types/code-surface.js'
 import {
   diagnoseProgram,
   isTypeScriptOnlySyntax,
@@ -18,7 +22,8 @@ import {
   TypeScriptCheckOptions,
   TypeScriptProgramFileName,
 } from '../utils/compiler.js'
-import { ProgramFileName } from '../utils/program.js'
+import { joinGrantedDeclarations } from '../utils/compiler.js'
+import { ProgramFileName, readCapabilityNamespace } from '../utils/program.js'
 
 /** 程序检查器。 */
 export interface CodeProgramCheckerApi {
@@ -26,21 +31,46 @@ export interface CodeProgramCheckerApi {
    * 按给定的能力声明检查一段程序。
    * 诊断的行列号已经换算成模型写的那一行（从 1 起），照抄回灌就能让它自己改对。
    */
-  check(input: { source: string; declarations: string }): CodeProgramCheckResult
+  check(input: { source: string; granted: readonly GrantedModule[] }): CodeProgramCheckResult
+  /**
+   * 程序 import 了哪些**没授权**的能力模块。
+   *
+   * 认 TS2307（`Cannot find module 'velar:git'`）这个专属码，不自己写判定——
+   * 语言本身已经把这道闸给了：没授权的模块名解析不出来。
+   */
+  missingModules(input: { source: string; granted: readonly GrantedModule[] }): string[]
 }
 
 class CodeProgramChecker implements CodeProgramCheckerApi {
-  public check(input: { source: string; declarations: string }): CodeProgramCheckResult {
-    const diagnostics = diagnoseProgram(input, ProgramFileName, JavaScriptCheckOptions)
+  public check(input: { source: string; granted: readonly GrantedModule[] }): CodeProgramCheckResult {
+    const declarations = joinGrantedDeclarations(input.granted)
+    const diagnostics = diagnoseProgram({ source: input.source, declarations }, ProgramFileName, JavaScriptCheckOptions)
     if (diagnostics.length === 0) return { ok: true }
 
     // 手滑写了 TypeScript（`as`、类型标注、interface）不该把一整轮弹回去——仓库的宽容铁律是
     // 「钳制不拒绝」。报错全是那一族时按 TypeScript 再查一遍：真有类型错照样拦，
     // 只是语法偏好不算错，剥掉类型照跑，再在回执里告诉它下次写 JavaScript。
     if (!diagnostics.every((diagnostic) => isTypeScriptOnlySyntax(diagnostic.code))) return { ok: false, diagnostics }
-    const asTypeScript = diagnoseProgram(input, TypeScriptProgramFileName, TypeScriptCheckOptions)
+    const asTypeScript = diagnoseProgram(
+      { source: input.source, declarations },
+      TypeScriptProgramFileName,
+      TypeScriptCheckOptions
+    )
     if (asTypeScript.length > 0) return { ok: false, diagnostics: asTypeScript }
     return { ok: true, transpiled: stripTypes(input.source), wroteTypeScript: true }
+  }
+
+  public missingModules(input: { source: string; granted: readonly GrantedModule[] }): string[] {
+    const declarations = joinGrantedDeclarations(input.granted)
+    const diagnostics = diagnoseProgram({ source: input.source, declarations }, ProgramFileName, JavaScriptCheckOptions)
+    const missing: string[] = []
+    for (const diagnostic of diagnostics) {
+      if (diagnostic.code !== CodeSurfaceDiagnosticCodes.unresolvedModule) continue
+      const matched = /'([^']+)'/u.exec(diagnostic.message)
+      const namespace = matched ? readCapabilityNamespace(matched[1] ?? '') : null
+      if (isNotNull(namespace) && !missing.includes(namespace)) missing.push(namespace)
+    }
+    return missing
   }
 }
 

@@ -148,8 +148,8 @@
       "domain": "foundations",
       "directory": "packages/code-surface",
       "name": "@velaros-ai/code-surface",
-      "version": "0.1.0",
-      "description": "Code surface for capability spaces: the model writes TypeScript against generated capability declarations, the program is typechecked before it runs, and it executes in an isolated process whose only reachable capabilities are the host operations it calls back into.",
+      "version": "0.2.0",
+      "description": "Code surface for capability spaces: the model writes a JavaScript ES module that imports generated capability declarations, the program is typechecked before it runs, and it executes in an isolated process whose only reachable capabilities are the host operations it calls back into.",
       "exportSubpaths": [
         ".",
         "./contracts"
