@@ -56,3 +56,6 @@ export const BannedModelFacingAliases = Object.freeze({
   Nullish: 'null | undefined',
   PlainObject: 'Record<string, unknown>',
 })
+
+/** 能力模块的统一前缀；与 `@velaros-ai/code-surface` 的 `CapabilityModulePrefix` 必须一致。 */
+export const CapabilityModulePrefix = 'velar:'

@@ -113,20 +113,26 @@ async function runModelProgram(space: ReturnType<typeof fakeSpace>, source: stri
     },
   }
   const session = createCodeSurfaceSession({ checker: codeProgramChecker, runner: nodeSubprocessCodeRunner, capabilities })
-  const outcome = await session.submit({ program: { source }, declarations: ModelFacingDeclarations, timeoutMs: 20_000 })
-  if (!outcome.checked) throw new Error(`程序没过 typecheck：${JSON.stringify(outcome.check.diagnostics)}`)
+  const granted = [{ namespace: 'sandbox', declarations: ModelFacingDeclarations }]
+  const outcome = await session.submit({ program: { source }, granted, timeoutMs: 20_000 })
+  if (!outcome.checked) {
+    const why = 'needsModules' in outcome ? `要先补模块 ${outcome.needsModules.join(', ')}` : JSON.stringify(outcome.check.diagnostics)
+    throw new Error(`程序没过 typecheck：${why}`)
+  }
   if (outcome.result.failed) throw new Error(`程序没跑完：${outcome.result.failed.message}`)
   return outcome.result.value
 }
 
 /** 端到端那条程序：建镜像、在里面跑测试、看变化，自己算一下再决定落回还是丢弃。中间结果一个都不进上下文。 */
-const EndToEndProgram = `
-const box = await sandbox.create({ source: 'src' })
-const ran = await sandbox.run({ id: box.id, command: 'bun test' })
-if (!ran.success) return { 没跑过: ran.stderr }
-const changes = await sandbox.diff({ id: box.id })
-const touched = [...changes.created, ...changes.modified, ...changes.deleted]
-return touched.length > 20 ? await sandbox.discard({ id: box.id }) : await sandbox.apply({ id: box.id })`
+const EndToEndProgram = `import { create, run, diff, apply, discard } from 'velar:sandbox'
+
+const box = await create({ source: 'src' })
+const ran = await run({ id: box.id, command: 'bun test' })
+const changes = ran.success ? await diff({ id: box.id }) : null
+const touched = changes ? [...changes.created, ...changes.modified, ...changes.deleted] : []
+export default !changes
+  ? { 没跑过: ran.stderr }
+  : touched.length > 20 ? await discard({ id: box.id }) : await apply({ id: box.id })`
 
 describe('落回前的核对与确认请求', () => {
   test('INV-1 截断的差量直接拒绝；条数与敏感路径按完整三列算，操作身份带指纹与条数', () => {
@@ -177,33 +183,39 @@ describe('代码面 sandbox 命名空间', () => {
 
   test('INV-5 作用域由宿主注入，不由模型挑：project 那样的端口把越界的 source 拒掉，system 那样的收任意绝对路径', async () => {
     const clamped = fakeSpace({ root: '/repo', clamp: true })
-    const refused = await runModelProgram(clamped, `
+    const refused = await runModelProgram(clamped, `import { create } from 'velar:sandbox'
+
+let outcome
 try {
-  await sandbox.create({ source: '../outside' })
-  return '没拦住'
+  await create({ source: '../outside' })
+  outcome = '没拦住'
 } catch (error) {
-  return { 拒绝: error.message }
-}`)
+  outcome = { 拒绝: error.message }
+}
+export default outcome`)
     expect(refused).toEqual({ 拒绝: '../outside 在项目之外，沙箱只镜像项目内的目录。' })
     expect(clamped.calls.some((call) => 'createSandbox' in call)).toBe(false)
 
     const anywhere = fakeSpace({ root: '/home/me', clamp: false })
-    const mirrored = await runModelProgram(anywhere, `
-const box = await sandbox.create({ source: '/etc/app' })
-return box.source`)
+    const mirrored = await runModelProgram(anywhere, `import { create } from 'velar:sandbox'
+const box = await create({ source: '/etc/app' })
+export default box.source`)
     expect(mirrored).toBe('/etc/app')
   }, 30_000)
 
   test('INV-5 落回照样过那道确认：用户不点头就抛错，一个文件都不落', async () => {
     const space = fakeSpace({ root: '/repo', clamp: true, approved: false })
-    const refused = await runModelProgram(space, `
-const box = await sandbox.create({})
+    const refused = await runModelProgram(space, `import { create, apply } from 'velar:sandbox'
+
+const box = await create({})
+let outcome
 try {
-  await sandbox.apply({ id: box.id })
-  return '没拦住'
+  await apply({ id: box.id })
+  outcome = '没拦住'
 } catch (error) {
-  return { 拒绝: error.message }
-}`)
+  outcome = { 拒绝: error.message }
+}
+export default outcome`)
     expect(refused).toEqual({ 拒绝: '用户拒绝了这次落回。' })
     expect(space.confirmations).toHaveLength(1)
     expect(space.calls.some((call) => 'applySandbox' in call)).toBe(false)

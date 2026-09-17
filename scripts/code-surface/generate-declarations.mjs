@@ -12,12 +12,28 @@ import { fileURLToPath } from 'node:url'
 
 import ts from 'typescript'
 
-import { BannedModelFacingAliases, CodeSurfaces, HostContextTypes, AgentViewTag } from './surfaces.mjs'
+import {
+  AgentViewTag,
+  BannedModelFacingAliases,
+  CapabilityModulePrefix,
+  CodeSurfaces,
+  HostContextTypes,
+} from './surfaces.mjs'
 
 const Here = dirname(fileURLToPath(import.meta.url))
 const RepoRoot = resolve(Here, '../..')
-const OutputDirectory = resolve(RepoRoot, 'baselines/code-surface')
 const ShouldWrite = process.argv.includes('--write')
+
+/**
+ * 产物目录。`--out <目录>` 可以改到别处：验证新格式时不该碰真基线，
+ * 尤其是有人正在并行改那几份产物的时候。
+ */
+const OutputDirectory = resolve(RepoRoot, readOutOption() ?? 'baselines/code-surface')
+
+function readOutOption() {
+  const index = process.argv.indexOf('--out')
+  return index >= 0 ? process.argv[index + 1] : null
+}
 
 /** 内置泛型与类型参数：它们从 lib 来，不该也不可能在包里找到声明。 */
 const BuiltinTypeNames = new Set(['Promise', 'Array', 'Readonly', 'Record', 'Partial', 'Omit', 'Pick'])
@@ -311,17 +327,22 @@ function generate(surface) {
     const found = findConstant(program, name)
     if (!found) continue
     const asType = constantAsType(found)
-    if (asType) constants.push(`declare const ${name}: ${asType}`)
+    // 块里已经是 ambient 上下文，再写 `declare` 是 TS1038。
+    if (asType) constants.push(`const ${name}: ${asType}`)
   }
   const declared = [...closure.values()].map(({ node, file }) => expandBannedAliases(stripExport(stripModelTag(sliceWithDoc(node, file)))))
   const types = [...constants, ...declared]
   const header = [
     '// 本文件由 scripts/code-surface/generate-declarations.mjs 从能力包源码生成，不要手改。',
-    `// 命名空间 ${surface.namespace}：${methods.length} 个方法、${declared.length} 个类型。`,
+    `// 模型写 \`import { … } from '${CapabilityModulePrefix}${surface.namespace}'\`：${methods.length} 个方法、${declared.length} 个类型。`,
     `// 改源码里带 ${AgentViewTag} 的东西就是改模型可观测面，重算用 \`bun run generate:code-surface\`。`,
   ].join('\n')
 
-  const text = `${header}\n\n${types.join('\n\n')}\n\ndeclare const ${surface.namespace}: {\n${methods.join('\n')}\n}\n`
+  // 类型与方法都放进 `declare module` 块里：模型写 `import { read } from 'velar:system'`，
+  // 而且类型因此有了作用域——system 与 project 可以各有一个同名类型而不撞，平铺声明做不到。
+  const indented = (text) => text.split('\n').map((line) => (line.length > 0 ? `  ${line}` : line)).join('\n')
+  const body = [...types.map(indented), ...methods.map((method) => indented(exportedMethod(method)))].join('\n\n')
+  const text = `${header}\n\ndeclare module '${CapabilityModulePrefix}${surface.namespace}' {\n${body}\n}\n`
   if (problems.length === 0) {
     const broken = verifyDeclarations(text)
     if (broken.length > 0) {
@@ -335,6 +356,14 @@ function generate(surface) {
     methodCount: methods.length,
     typeCount: types.length,
   }
+}
+
+/** 方法在模块块里要写成 `export function`，否则模型 import 不出来。 */
+function exportedMethod(method) {
+  const lines = method.split('\n')
+  const last = lines.length - 1
+  lines[last] = (lines[last] ?? '').replace(/^(\s*)([A-Za-z]+)\(/u, '$1export function $2(')
+  return lines.join('\n')
 }
 
 /** 找标了标记却没进闭包的类型：标记烂成装饰就失去了意义。 */

@@ -10,6 +10,8 @@
 
 import ts from 'typescript'
 
+import { isNull, isTrue } from '@velaros-ai/core'
+
 import type { CapabilityLease, ProgramImport } from '../types/code-surface.js'
 import type { ProgramRewrite } from '../types/module-form.js'
 
@@ -43,7 +45,7 @@ export function readProgramImports(source: string): ProgramImport[] {
     // `velar:program` 恒常授权、不参与租约与回收，报给宿主只是噪声。
     if (statement.moduleSpecifier.text === ProgramModuleSpecifier) continue
     const namespace = readCapabilityNamespace(statement.moduleSpecifier.text)
-    if (namespace === null) continue
+    if (isNull(namespace)) continue
     const lease = readLease(statement)
     const entry: ProgramImport = { namespace, specifier: statement.moduleSpecifier.text }
     if (lease) entry.lease = lease
@@ -85,7 +87,7 @@ export function rewriteModuleForIsolate(source: string): string {
       })
       continue
     }
-    if (ts.isExportAssignment(statement) && statement.isExportEquals !== true) {
+    if (ts.isExportAssignment(statement) && !isTrue(statement.isExportEquals)) {
       rewrites.push({
         start: statement.getStart(file),
         end: statement.getEnd(),
