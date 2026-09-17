@@ -5,10 +5,7 @@
  * 真正跑命令、建镜像的是宿主端口 `ctx.system`（本机就是本地内核）。
  */
 
-import { join } from 'node:path'
 
-import { isEmpty } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
 import type { RehearsalSandboxRulesApi } from '@velaros-ai/rehearsal-sandbox'
 import { rehearsalSandboxRules } from '@velaros-ai/rehearsal-sandbox'
 import type { ShellCommandApprovalApi, ShellCommandPolicyApi } from '@velaros-ai/shell-command'
@@ -17,10 +14,8 @@ import { shellCommandApproval, shellCommandPolicy } from '@velaros-ai/shell-comm
 import { SystemCommandLimits, SystemOperationNames } from '../contract/constants.js'
 import type { SystemToolContext } from '../contract/requires.js'
 import type { SystemListTasksInput, SystemListTasksResult, SystemRunInput, SystemRunResult } from '../types/commands.js'
-import type { SystemSandboxInput, SystemSandboxResult } from '../types/sandbox.js'
 import type { SystemShellEnvironmentRefreshResult } from '../types/system.js'
 import { exposeCommandOutputWindow } from '../utils/command-result.js'
-import { isCredentialPath, isSensitiveSystemMutationPath } from '../utils/file-safety.js'
 import { clampPositive } from '../utils/text.js'
 
 /**
@@ -42,12 +37,6 @@ export interface SystemExecutionOperationsApi {
    * shell 只能填本机有的那几个，填了没有的在执行之前就被拒，一个进程都不起。
    */
   run(input: SystemRunInput, ctx: SystemToolContext): Promise<SystemRunResult>
-  /**
-   * @AgentView
-   * 演练沙箱的四个动作，除 create 外都要 sandboxId。镜像里的命令写不到镜像外，apply 之前源目录一个字节都没变。
-   * apply 每次都要用户亲自确认，确认之后镜像又变过就整批不落；paths 里有没变化的路径，问用户之前就先拒绝。
-   */
-  sandbox(input: SystemSandboxInput, ctx: SystemToolContext): Promise<SystemSandboxResult>
   /**
    * @AgentView
    * 重新选定本机能用的 shell 并读一遍它的环境变量；Windows 上还会重读用户与系统环境变量写回本进程，没成功时结果的 reason 说明原因。
@@ -124,38 +113,6 @@ export class SystemExecutionOperations implements SystemExecutionOperationsApi {
       }
     }
     return shaped
-  }
-
-  public async sandbox(input: SystemSandboxInput, ctx: SystemToolContext): Promise<SystemSandboxResult> {
-    const sandboxId = input.sandboxId ?? ''
-    if (input.action !== 'create' && !sandboxId) throw new AppError('VALIDATION', `${input.action} 需要 create 返回的 sandboxId`)
-    if (input.action === 'create') {
-      const record = await ctx.system.createSandbox({ source: input.source, network: input.network, ignored: input.ignored })
-      const detached = record.detachedGitLinks ?? []
-      const detachedNote = isEmpty(detached) ? '' : `这些目录的 .git 指向源目录外的真实仓库（git worktree、子模块），没有放进镜像，镜像里它们不是 git 仓库：${detached.join('、')}。`
-      return {
-        ...record,
-        note: `镜像根是 ${record.root}：脚本用 edit 写进去，run 传 cwd=${record.root} 跑，跑完用 diff 看变化；镜像里的命令写不到镜像外，${record.network ? '可以联网' : '连不上网'}。用完 discard。${detachedNote}`,
-      }
-    }
-    if (input.action === 'diff') return ctx.system.diffSandbox({ sandboxId, maxFiles: input.maxFiles })
-    if (input.action === 'discard') return ctx.system.discardSandbox(sandboxId)
-
-    // 落回：先算完整差量（不截断、不附文本差量），核对与确认请求交给公共规则：条数、敏感路径都按完整的三列算，确认时的差量指纹交给宿主，镜像在确认之后又变过就整批不落。
-    const changes = await ctx.system.diffSandbox({ sandboxId, maxFiles: Number.MAX_SAFE_INTEGER, textDiffs: false })
-    const request = this.sandboxRules.prepareApply({
-      diff: changes,
-      paths: input.paths,
-      targetLabel: changes.source,
-      closingNote: '删除和覆盖无法撤销；落回前会核对这些文件自建沙箱以来没被别人改过，改过就整批不落。',
-      riskScope: 'system-sandbox:apply',
-      isSensitive: (path) => isSensitiveSystemMutationPath(join(changes.source, path)) || isCredentialPath(join(changes.source, path)),
-    })
-    if (!request) return { sandboxId, created: [], modified: [], deleted: [], skippedGit: changes.gitChanged, note: '镜像里没有文件变化，什么都没落。' }
-    await ctx.approval.awaitConfirmation(request.message, ctx.abortSignal, request.options)
-    const applied = await ctx.system.applySandbox({ sandboxId, paths: input.paths, fingerprint: changes.fingerprint })
-    // 宿主的回执原样不动，note 放进新对象里。
-    return input.paths ? { ...applied, note: `只落了指定的 ${input.paths.length} 个路径。` } : applied
   }
 
   public refreshEnvironment(ctx: SystemToolContext): Promise<SystemShellEnvironmentRefreshResult> {

@@ -18,14 +18,14 @@
 
 | 值 | 接口 | 做什么 |
 | --- | --- | --- |
-| `createSystemCodeSurface` | `SystemCodeSurfaceApi` | 一张操作表：`velar:system` 的七个方法各一格，交给 `createCapabilityPort` 接成能力端口。**表里没有一个字是给模型看的**，模型面只有生成的那份声明；入参合不合法由操作方法自己拦 |
+| `createSystemCodeSurface` | `SystemCodeSurfaceApi` | 一张操作表：`velar:system` 的六个方法各一格，交给 `createCapabilityPort` 接成能力端口。**表里没有一个字是给模型看的**，模型面只有生成的那份声明；入参合不合法由操作方法自己拦 |
 | `createLocalSystemKernel` | `LocalSystemKernelApi` | 宿主端口的本机实现，外加宿主界面要的搜索、进程、端口、终止任务，以及交互式任务控制台的写输入、读增量输出、发中断 |
 
 **注入面**，写在 `contract/requires.ts`，是宿主要塞进来的东西。本包只从这些口子接收外部能力，别处不留钩子：
 
 | 注入点 | 必须 | 谁给、什么时候 |
 | --- | --- | --- |
-| `SystemToolContext`，里面是宿主端口 `SystemToolSystemApi` 与上游审批端口 `ApprovalPort` | 必须 | 宿主每次调用操作时给。端口只有八个方法（路径解析、后台任务、刷新环境、跑命令，以及演练沙箱的建、看差量、落回、丢弃），每个都从操作表走得到，门禁核对 |
+| `SystemToolContext`，里面是宿主端口 `SystemToolSystemApi` 与上游审批端口 `ApprovalPort` | 必须 | 宿主每次调用操作时给。端口只有四个方法（路径解析、后台任务、刷新环境、跑命令），每个都从操作表走得到，门禁核对。演练沙箱那四个在 `LocalSystemKernelApi` 上，由 `velar:sandbox` 的端口用 |
 | `LocalSystemKernelOptions` | 用本地内核时必须 | 创建本地内核时给 |
 | `SystemProcessConfinementProvider` | 可选 | 放在本地内核配置里，没有内置约束后端的平台靠它 |
 | 环境变量，全部登记在 `SystemEnvironmentVariables` | 可选 | 四个输入变量由宿主设，三个标记变量由本包写给子进程 |
@@ -39,7 +39,7 @@
 | `.` | Node 宿主 | 三个面的全部 |
 | `./contracts` | 任何进程，含浏览器 | 可移植数据 |
 
-模型面是生成的那份声明，不是代码里的某张表：给方法或类型打上 `@AgentView`，它就进模型可观测面，门禁双向守（在闭包里没标、标了不在闭包里，都红）。七个操作的实现在两个类里——读、看、写在 `SystemFileOperations`，跑命令、演练沙箱、刷新环境、列后台任务在 `SystemExecutionOperations`。
+模型面是生成的那份声明，不是代码里的某张表：给方法或类型打上 `@AgentView`，它就进模型可观测面，门禁双向守（在闭包里没标、标了不在闭包里，都红）。六个操作的实现在两个类里——读、看、写在 `SystemFileOperations`，跑命令、刷新环境、列后台任务在 `SystemExecutionOperations`。演练沙箱的**引擎**也在本包（`SystemSandboxes`），但模型面上它是跨空间的 `velar:sandbox` 命名空间（`@velaros-ai/rehearsal-sandbox`），不在 `velar:system` 里重复一份。
 
 **未接线**：`createSystemCodeSurface` 还没有消费者，产品壳那边的 `code:run` 门尚未建。
 
@@ -55,7 +55,6 @@
 | `run` | ① 执行前分类（只读 / 危险 / 后台；判定认全部五种 shell 语法，挑了哪个 shell 都是同一个结论）→ ② 显式 background 优先，否则按命令形态推断；`interactive` 为真时一定走后台，命令跑在控制台里等用户输入 → ③ 审批：危险命令高风险手动确认，长驻服务低风险确认 → ④ 宿主执行（`shell` 挑定哪一种，不填用默认的；本机没有挑定的那个，宿主在起进程之前拒绝并点名可用的有哪些）→ ⑤ 整形：输出窗口、召回续接、后台状态续接；要了控制台却没拿到就在 note 里说清楚宿主不支持 |
 | `refreshEnvironment` | Windows 上重读用户与系统环境变量写回宿主进程（宿主设的 `VELAROS_SHELL_PATH` 这类输入变量照留）→ 重新选定并自检 shell → 返回 shell 描述、刷新后可用的 shell 清单与 revision |
 | `listTasks` | 给了 taskId 精确查一条，否则按 limit / onlyRunning 列表 → 附 count |
-| `sandbox` | create：源目录解开链接后镜像到临时区（写时复制；gitignore 忽略的目录缺省链接过去，ignored=copy 时连里面的东西整个复制过来，忽略目录之外被忽略的文件不复制；主人不可写的目录照原权限位建出来）→ 先探测约束后端，没有就拒绝、不留目录 → 剪断镜像里每个仓库（含嵌套仓库、子模块）的推送，指向源目录外真实仓库的 `.git` 链接文件（git worktree）不进镜像 → 清单原子落盘、登记专属执行器，之后 cwd 落在镜像根内的 `run` 一律约束到镜像根（内核重启后按清单重新登记，同一沙箱同时被几处用到只建一个执行器；清单读不出来就拒绝执行）→ diff：扫描镜像印记对比清单，新增、修改、删除三列加有界文本差量，.git 只汇总 → apply：先算完整差量（不截断；paths 里没变化的路径在问用户之前就拒绝）、向用户确认（条数、删除、覆盖与敏感路径都按完整三列）→ 宿主拿确认时的差量指纹核对镜像之后没再变，变了整批不落 → 逐个核对源文件自建沙箱以来没变过、上级路径不是符号链接，冲突整批不落 → 新增与覆盖先暂存进源目录里的临时目录，拷不全什么都不落 → 挪到位（镜像把文件换成同名目录的先删那个文件）、按删除列删掉、清掉删空而镜像里也没有的目录，.git 不落 → discard：核对 id 合形状、这一项不是符号链接、正好是基目录下面一层，再递归删除（碰到只读目录先改成主人可写再删；删成功才注销）|
 
 宿主侧的第二段链路（`run` 的 ④ 里面发生的事）：本地内核解析 cwd，交给命令执行器 `SystemCommandRunner.run` → 选 shell（`options.shell` 挑定哪一种，本机没有它就以 `VALIDATION` 拒绝、一个进程都不起；宿主给了 nativeCommand 就走原生 argv，否则按实际 shell 语法）→ 进程约束 → 受管进程启动 → 采集解码 → 超时 / 取消收敛 → 验证摘要 → 后台登记。每一步做什么见 `src/impl/SystemCommandRunner.ts` 类上方的 `SystemCommandRunnerApi` 的说明。
 
@@ -111,8 +110,9 @@
 ## 非目标
 
 - 不做项目感知：不发现项目、不读项目配置、不做开发环境诊断，模型面上也不提项目空间。空间之间的切换和协作是宿主的事。
+- 不在模型面上重复演练沙箱：引擎在本包，但模型看到的是跨空间的 `velar:sandbox`，`velar:system` 里没有 sandbox。
 - 不做授权决策与权限记忆：只发起审批，决定权在宿主。
-- 不给 `run` 能做的事单独开操作：列目录、搜文本、看进程和端口、终止进程、打开文件和应用都用 `run` 跑系统命令。留下的七个各有 `run` 做不到的理由：读和写把内容和精确匹配绕开 shell 引号并过敏感路径审批，看图片要把内容当图交给模型，后台任务表只在本包，刷新环境改的是宿主进程。整个文件的重写并在 `edit` 里，不单开 write。
+- 不给 `run` 能做的事单独开操作：列目录、搜文本、看进程和端口、终止进程、打开文件和应用都用 `run` 跑系统命令。留下的六个各有 `run` 做不到的理由：读和写把内容和精确匹配绕开 shell 引号并过敏感路径审批，看图片要把内容当图交给模型，后台任务表只在本包，刷新环境改的是宿主进程。整个文件的重写并在 `edit` 里，不单开 write。
 - 不提供 Electron 专属能力：通知、安装建议界面由产品壳用 `extends` 扩展服务接口。
 - 不内置 Windows 的进程约束后端：需要受约束执行的 Windows 宿主自己注入 provider，否则明确失败。
 
@@ -140,7 +140,7 @@ src/
 
 | 实现文件 | 接口 | 做什么 |
 | --- | --- | --- |
-| `SystemCodeSurface.ts` | `SystemCodeSurfaceApi`（同文件，provides 登记） | 操作表：`velar:system` 的七个方法各一格，转给下面两个操作类 |
+| `SystemCodeSurface.ts` | `SystemCodeSurfaceApi`（同文件，provides 登记） | 操作表：`velar:system` 的六个方法各一格，转给下面两个操作类 |
 | `LocalSystemKernel.ts` | `LocalSystemKernelApi`（同文件，provides 登记），扩展宿主端口 `SystemToolSystemApi`（requires） | 宿主端口的本机实现，只做转接 |
 | `SystemSandboxes.ts` | `SystemSandboxesApi`（同文件） | 演练沙箱登记表：镜像、差量、落回、丢弃，每个沙箱一个约束到镜像根的执行器 |
 | `SystemCommandRunner.ts` | `SystemCommandRunnerApi`（同文件） | 跑命令：前台采集，后台登记成任务、可查可停；交互式任务另带控制台，可写输入、读增量输出、发中断 |
@@ -148,7 +148,7 @@ src/
 | `SystemProcessManager.ts` | `SystemProcessManagerApi`（同文件） | 受管子进程登记表 |
 | `SystemManagedProcess.ts` | `ManagedSystemProcess`（同文件） | 单个受管子进程的超时、取消、有界终止与收尾 |
 | `SystemOutputDecoder.ts` | `SystemOutputDecoderApi`（同文件） | 子进程输出的 UTF-8 解码 |
-| `SystemExecutionOperations.ts` | `SystemExecutionOperationsApi`（同文件） | `run`、`sandbox`、`refreshEnvironment`、`listTasks`：执行前分类、向用户确认、交给宿主、结果整形 |
+| `SystemExecutionOperations.ts` | `SystemExecutionOperationsApi`（同文件） | `run`、`refreshEnvironment`、`listTasks`：执行前分类、向用户确认、交给宿主、结果整形 |
 | `SystemFileOperations.ts` | `SystemFileOperationsApi`（同文件） | 读文本、看图片、写三个文件操作，位置按字符算 |
 | `SystemFileHistory.ts` | `SystemFileHistoryApi`（同文件） | 改动前留下的文件版本，供召回与回滚；只在内存里 |
 | `SystemGlobalSearch.ts` | `SystemGlobalSearchApi`（同文件） | 全局搜索：按路径或按内容遍历目录树，给宿主界面用 |

@@ -568,22 +568,14 @@ describe('演练沙箱', () => {
       const record = await kernel.createSandbox({})
       sandboxId = record.id
       await writeFile(join(record.root, 'b.txt'), 'beta\n')
-      const messages: string[] = []
       // 用户看确认卡的时候镜像里还有命令在写（这里直接写一个新文件）：确认的是一份，镜像里已经是另一份。
-      const context = {
-        abortSignal: new AbortController().signal,
-        system: kernel,
-        approval: {
-          requestApproval: async () => ({ approved: true }),
-          awaitConfirmation: async (message: string) => {
-            messages.push(message)
-            await writeFile(join(record.root, 'c.txt'), 'late\n')
-          },
-        },
-      }
-      const failure = await systemExecutionOperations.sandbox({ action: 'apply', sandboxId }, context as never)
+      // 确认用的那份差量算完之后，镜像又变了，落回时拿旧指纹去核对就必须整批不落。
+      const confirmed = await kernel.diffSandbox({ sandboxId, maxFiles: Number.MAX_SAFE_INTEGER, textDiffs: false })
+      expect(confirmed.created).toEqual(['b.txt'])
+      await writeFile(join(record.root, 'c.txt'), 'late\n')
+
+      const failure = await kernel.applySandbox({ sandboxId, fingerprint: confirmed.fingerprint })
         .then(() => null, (error: unknown) => error as { context?: { executionOutcome?: string }; cause?: { reason?: string } })
-      expect(messages[0]).toContain('新增 1 个')
       expect(failure?.context?.executionOutcome).toBe('not-applied')
       expect(failure?.cause?.reason).toBe('SYSTEM_SANDBOX_CHANGED')
       expect(existsSync(join(source, 'b.txt'))).toBe(false)

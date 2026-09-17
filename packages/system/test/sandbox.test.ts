@@ -5,12 +5,12 @@ import { join } from 'node:path'
 
 import { describe, expect, test } from 'bun:test'
 
+import { sandboxOperations } from '@velaros-ai/rehearsal-sandbox'
 import { RehearsalSandboxLimits } from '@velaros-ai/rehearsal-sandbox/contracts'
 
 import type { SystemToolContext } from '../src/contract/requires.js'
 import type { LocalSystemKernelApi } from '../src/impl/LocalSystemKernel.js'
 import { createLocalSystemKernel } from '../src/impl/LocalSystemKernel.js'
-import { systemExecutionOperations } from '../src/impl/SystemExecutionOperations.js'
 import { isPathInsideRoot } from '../src/utils/file-safety.js'
 import { assertInsideSandboxBase, isSandboxId, sandboxBaseDirectory } from '../src/utils/sandbox.js'
 
@@ -56,8 +56,30 @@ function recordingContext(kernel: LocalSystemKernelApi, onConfirm: (message: str
   } as unknown as SystemToolContext
 }
 
-/** 代码面上的 sandbox 操作；工具那层删了之后直接调它。 */
-const sandboxTool = { execute: systemExecutionOperations.sandbox.bind(systemExecutionOperations) }
+/**
+ * 把这些用例仍然按 `action` 写的调用转成 `velar:sandbox` 的四个函数。
+ * 走的是真实消费者 `sandboxOperations`，端口按 system 空间的语义现装：源目录随便给、落回政策是系统那套。
+ */
+const sandboxTool = {
+  execute: async (input: Record<string, unknown>, ctx: SystemToolContext): Promise<unknown> => {
+    const kernel = ctx.system as unknown as LocalSystemKernelApi
+    const surface = {
+      createSandbox: (options?: never) => kernel.createSandbox(options),
+      diffSandbox: (options: never) => kernel.diffSandbox(options),
+      applySandbox: (options: never) => kernel.applySandbox(options),
+      discardSandbox: (id: string) => kernel.discardSandbox(id),
+      resolveSource: async (source?: string) => source ?? kernel.resolvePath(),
+      runInSandbox: async () => { throw new Error('这些用例不经 sandbox.run') },
+      applyPolicy: (source: string) => ({ targetLabel: source, closingNote: '删除和覆盖无法撤销。', riskScope: 'system-sandbox:apply' }),
+    }
+    const context = { abortSignal: ctx.abortSignal, approval: ctx.approval, sandbox: surface } as never
+    const id = String(input.sandboxId ?? '')
+    if (input.action === 'create') return sandboxOperations.create({ source: input.source as string | undefined, network: input.network as boolean | undefined, ignored: input.ignored as never }, context)
+    if (input.action === 'diff') return sandboxOperations.diff({ id, maxFiles: input.maxFiles as number | undefined }, context)
+    if (input.action === 'discard') return sandboxOperations.discard({ id }, context)
+    return sandboxOperations.apply({ id, paths: input.paths as string[] | undefined }, context)
+  },
+}
 
 describe('rehearsal sandbox', () => {
   test('sandbox ids and the base-directory guard keep deletes inside the sandbox area', async () => {
@@ -317,18 +339,6 @@ describe('rehearsal sandbox', () => {
     }
   })
 
-  test('apply leaves the host receipt untouched and adds the note on a new object', async () => {
-    const receipt = Object.freeze({ sandboxId: '20260915-183000-3fa2c1', created: ['a.txt'], modified: [], deleted: [], skippedGit: false })
-    const system = {
-      resolvePath: (path?: string) => path ?? '/',
-      diffSandbox: async () => ({ sandboxId: receipt.sandboxId, source: '/src', created: ['a.txt'], modified: [], deleted: [], truncated: false, gitChanged: false, textDiffs: [], omittedDiffs: 0, fingerprint: 'f' }),
-      applySandbox: async () => receipt,
-    }
-    const context = { abortSignal: new AbortController().signal, approval: { awaitConfirmation: async () => {} }, system } as unknown as SystemToolContext
-    const result = await sandboxTool.execute({ action: 'apply', sandboxId: receipt.sandboxId, paths: ['a.txt'] }, context)
-    expect(result).toMatchObject({ created: ['a.txt'], note: '只落了指定的 1 个路径。' })
-    expect(receipt).not.toHaveProperty('note')
-  })
 
   test.skipIf(!canConfine)('after a restart, simultaneous first uses of one sandbox share a single runner, so every background task stays listed and stoppable', async () => {
     const source = await makeSource()

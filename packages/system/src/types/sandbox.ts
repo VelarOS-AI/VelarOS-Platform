@@ -1,8 +1,9 @@
 /**
- * 演练沙箱：sandbox 的入参与结果，以及实现自己的工作类型（镜像清单与文件印记、落回时的冲突与失败回执）。只在包内用，不出包；对外的沙箱数据在 `system.ts`。
+ * 演练沙箱引擎自己的工作类型：镜像清单与文件印记、落回时的冲突与失败回执。只在包内用，不出包。
+ * 模型面上的沙箱是 `velar:sandbox` 那个跨空间命名空间（`@velaros-ai/rehearsal-sandbox`），本包只出引擎。
  */
 
-import type { SandboxApplyResult, SandboxDiff, SandboxDiscardResult, SandboxIgnoredMode, SandboxRecord } from '@velaros-ai/rehearsal-sandbox/contracts'
+import type { SandboxRecord } from '@velaros-ai/rehearsal-sandbox/contracts'
 
 /** 镜像里一个文件的印记：大小、修改时间、权限位；符号链接记它指向哪。 */
 export interface SystemSandboxFileStamp {
@@ -38,29 +39,3 @@ export interface SystemSandboxApplyFailureDetails {
   executionOutcome: 'not-applied'
   conflicts: SystemSandboxConflict[]
 }
-
-// ── sandbox 的入参与结果 ─────────────────────────────────
-
-/** @AgentView create 用 source、network、ignored，diff 用 maxFiles，apply 用 paths；除 create 外都要 sandboxId。不传 source 就镜像默认工作目录。 */
-export type SystemSandboxInput = {
-  action: 'create' | 'diff' | 'apply' | 'discard'
-  source?: string
-  network?: boolean
-  ignored?: SandboxIgnoredMode
-  sandboxId?: string
-  paths?: string[]
-  maxFiles?: number
-}
-
-/** @AgentView 建好的沙箱；note 是一句怎么用这个镜像的提醒。 */
-export interface SystemSandboxCreated extends SandboxRecord {
-  note: string
-}
-
-/** @AgentView 真正落回源目录的三列；什么都没落或只落了指定路径时 note 说明。 */
-export interface SystemSandboxApplied extends SandboxApplyResult {
-  note?: string
-}
-
-/** @AgentView create、diff、apply、discard 各自的回执，按 action 决定是哪一种。 */
-export type SystemSandboxResult = SystemSandboxCreated | SandboxDiff | SystemSandboxApplied | SandboxDiscardResult

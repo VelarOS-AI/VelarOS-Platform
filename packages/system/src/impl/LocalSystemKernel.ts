@@ -10,6 +10,7 @@ import { isEmpty, Log, toNullable } from '@velaros-ai/core'
 import type { PlatformCompatibilityApi } from '@velaros-ai/platform'
 import { createPlatform } from '@velaros-ai/platform'
 import type { CommandSpec } from '@velaros-ai/platform/contracts'
+import type { RehearsalSandboxHostPort } from '@velaros-ai/rehearsal-sandbox'
 import type { SandboxApplyOptions, SandboxApplyResult, SandboxCreateOptions, SandboxDiff, SandboxDiffOptions, SandboxDiscardResult, SandboxRecord } from '@velaros-ai/rehearsal-sandbox/contracts'
 
 import type { LocalSystemKernelOptions, SystemToolSystemApi } from '../contract/requires.js'
@@ -56,7 +57,7 @@ export function createLocalSystemKernel(options: LocalSystemKernelOptions): Loca
  * 全局搜索、进程、端口、终止后台任务，以及交互式任务的控制台三件事（写输入、读增量输出、发中断）。
  * 这些方法都没有工具在调（模型改用 `run` 跑系统命令，控制台归用户），是宿主自己的界面要的。由 `createLocalSystemKernel(options)` 创建。
  */
-export interface LocalSystemKernelApi extends SystemToolSystemApi {
+export interface LocalSystemKernelApi extends SystemToolSystemApi, RehearsalSandboxHostPort {
   /**
    * 环境检查：操作系统、经过自检的默认 shell 和它的 PATH、本机可用的全部 shell（`shells`，按优先顺序，第一个就是默认那个），
    * 以及给定的每个命令在不在、在哪。宿主把 `shells` 与默认那个写进每回合给模型的环境报告，`run` / `project:run` 的 `shell` 字段就照着这份清单填。

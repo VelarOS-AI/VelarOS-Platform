@@ -42,7 +42,6 @@ class SystemCodeSurface implements SystemCodeSurfaceApi {
         view: async (input, signal) => files.view(input, await context(signal)),
         edit: async (input, signal) => files.edit(input, await context(signal)),
         run: async (input, signal) => execution.run(input, await context(signal)),
-        sandbox: async (input, signal) => execution.sandbox(input, await context(signal)),
         refreshEnvironment: async (_input, signal) => execution.refreshEnvironment(await context(signal)),
         listTasks: async (input, signal) => execution.listTasks(input, await context(signal)),
       },

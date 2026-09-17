@@ -5,7 +5,7 @@
  * 不 import 任何东西、不用 Node 专属类型，整个文件随 `./contracts` 入口出包。
  */
 
-/** 代码面上七个操作的名字：模型写 `read(...)`，宿主按它登记。 */
+/** 代码面上六个操作的名字：模型写 `read(...)`，宿主按它登记。 */
 export const SystemOperationNames = Object.freeze({
   read: 'read',
   view: 'view',
@@ -13,10 +13,9 @@ export const SystemOperationNames = Object.freeze({
   run: 'run',
   refreshEnvironment: 'refreshEnvironment',
   listTasks: 'listTasks',
-  sandbox: 'sandbox',
 } as const)
 
-/** 七个操作名之一。 */
+/** 六个操作名之一。 */
 export type SystemOperationName = (typeof SystemOperationNames)[keyof typeof SystemOperationNames]
 
 /** 系统空间作为官方内置 mod 的身份。 */

@@ -1,5 +1,5 @@
 // 本文件由 scripts/code-surface/generate-declarations.mjs 从能力包源码生成，不要手改。
-// 模型写 `import { … } from 'velar:system'`：7 个方法、54 个类型。
+// 模型写 `import { … } from 'velar:system'`：6 个方法、44 个类型。
 // 改源码里带 @AgentView 的东西就是改模型可观测面，重算用 `bun run generate:code-surface`。
 
 declare module 'velar:system' {
@@ -73,20 +73,6 @@ declare module 'velar:system' {
   interface SystemRunResult extends SystemCommandResult {
     note?: string
   }
-
-  /** create 用 source、network、ignored，diff 用 maxFiles，apply 用 paths；除 create 外都要 sandboxId。不传 source 就镜像默认工作目录。 */
-  type SystemSandboxInput = {
-    action: 'create' | 'diff' | 'apply' | 'discard'
-    source?: string
-    network?: boolean
-    ignored?: SandboxIgnoredMode
-    sandboxId?: string
-    paths?: string[]
-    maxFiles?: number
-  }
-
-  /** create、diff、apply、discard 各自的回执，按 action 决定是哪一种。 */
-  type SystemSandboxResult = SystemSandboxCreated | SandboxDiff | SystemSandboxApplied | SandboxDiscardResult
 
   /** 刷新之后的 shell 环境：`shell` 是重新选定的那个默认 shell 的可执行文件路径，`runtime` 是它的完整描述。 */
   interface SystemShellEnvironmentRefreshResult {
@@ -213,41 +199,6 @@ declare module 'velar:system' {
     confinement?: SystemProcessConfinementEvidence
     backgroundProcess?: SystemBackgroundProcessInfo
     verification: SystemVerificationSummary
-  }
-
-  /** 镜像时 gitignore 忽略的目录怎么处理：link 链接到真实目录（能读、写不进），copy 复制过来，skip 不要。忽略的文件一律不复制。 */
-  type SandboxIgnoredMode = 'link' | 'copy' | 'skip'
-
-  /** 建好的沙箱；note 是一句怎么用这个镜像的提醒。 */
-  interface SystemSandboxCreated extends SandboxRecord {
-    note: string
-  }
-
-  /** 镜像相对创建时的变化：三列相对路径（删除列永远完整，truncated 说明另外两列被截），文本差量有界，omittedDiffs 是没附差量的文件数；gitChanged 表示 .git 里有东西变了。 */
-  interface SandboxDiff {
-    sandboxId: string
-    source: string
-    created: string[]
-    modified: string[]
-    deleted: string[]
-    truncated: boolean
-    gitChanged: boolean
-    textDiffs: SandboxTextDiff[]
-    omittedDiffs: number
-    note?: string
-    /** 这份差量的指纹：三列的完整路径与镜像里对应文件的印记算出来的摘要，不受 maxFiles 截断影响；落回时交回来，镜像在确认之后又变过就整批不落。 */
-    fingerprint?: string
-  }
-
-  /** 真正落回源目录的三列；什么都没落或只落了指定路径时 note 说明。 */
-  interface SystemSandboxApplied extends SandboxApplyResult {
-    note?: string
-  }
-
-  /** 丢弃的结果：沙箱本来就不在时 removed 为 false。 */
-  interface SandboxDiscardResult {
-    sandboxId: string
-    removed: boolean
   }
 
   /** `readiness` 为 `detected` 表示只发现了可执行文件，`ready` 表示已通过启动、版本与 UTF-8 自检。 */
@@ -421,40 +372,6 @@ declare module 'velar:system' {
     issues: string[]
   }
 
-  /** 一个沙箱：id 就是目录名，root 是镜像根（cwd 落在它之内的命令一律受约束），source 是被镜像的真实目录。 */
-  interface SandboxRecord {
-    id: string
-    root: string
-    source: string
-    createdAt: number
-    network: boolean
-    ignored: SandboxIgnoredMode
-    fileCount: number
-    bytes: number
-    /** 链接到真实目录的忽略目录（相对路径）。 */
-    linkedDirectories: string[]
-    /** 源目录是 git 仓库：镜像里的 .git 已把推送地址改掉（嵌套仓库、子模块的也改）。 */
-    git: boolean
-    /** 没放进镜像的 `.git` 链接文件（相对路径）：它们指向源目录外的真实仓库（git worktree、单独镜像的子模块），放进来镜像里的 git 会直接读写那个仓库。 */
-    detachedGitLinks?: string[]
-  }
-
-  /** 一个文本文件的统一差量；超过预算时 truncated 为真、diff 被截断。 */
-  interface SandboxTextDiff {
-    path: string
-    diff: string
-    truncated: boolean
-  }
-
-  /** 落回的结果：三列是真正写进源目录的相对路径；skippedGit 表示 .git 里的变化没有落（永远不落）。 */
-  interface SandboxApplyResult {
-    sandboxId: string
-    created: string[]
-    modified: string[]
-    deleted: string[]
-    skippedGit: boolean
-  }
-
   /** 当前机器缺少推荐的 shell 时给用户的安装建议。 */
   interface SystemShellRecommendation {
     code: 'INSTALL_GIT_BASH'
@@ -531,12 +448,6 @@ declare module 'velar:system' {
      * shell 只能填本机有的那几个，填了没有的在执行之前就被拒，一个进程都不起。
      */
     export function run(input: SystemRunInput): Promise<SystemRunResult>
-
-  /**
-     * 演练沙箱的四个动作，除 create 外都要 sandboxId。镜像里的命令写不到镜像外，apply 之前源目录一个字节都没变。
-     * apply 每次都要用户亲自确认，确认之后镜像又变过就整批不落；paths 里有没变化的路径，问用户之前就先拒绝。
-     */
-    export function sandbox(input: SystemSandboxInput): Promise<SystemSandboxResult>
 
   /**
      * 重新选定本机能用的 shell 并读一遍它的环境变量；Windows 上还会重读用户与系统环境变量写回本进程，没成功时结果的 reason 说明原因。
