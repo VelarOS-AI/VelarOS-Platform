@@ -5,8 +5,8 @@ import { describe, expect, test } from 'bun:test'
 import { CodeSurfaceLimits } from '../src/contract/constants'
 import { fitLogsToBudget, fitValueToBudget } from '../src/utils/budget'
 import { isTypeScriptOnlySyntax } from '../src/utils/compiler'
-import { keepTail, wrapProgramSource } from '../src/utils/program'
 import { applyProgramEdits } from '../src/utils/edit'
+import { keepTail, wrapProgramSource } from '../src/utils/program'
 import { describeProgramOversize } from '../src/utils/result'
 
 void describe('预算裁剪', () => {
