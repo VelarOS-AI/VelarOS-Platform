@@ -57,12 +57,16 @@ export interface SystemFileOperationsApi {
    * 给 version 就读改动前留下的那个版本，用来召回旧状态；版本只在本次运行的内存里留最近几份，找不到算这个文件失败。
    * 图片算失败并指向 view，PDF 算失败并说明文档不在这里读；其他二进制文件、目录、设备文件、超过 20 MB 的文件也算失败。
    * 某个文件失败只把它那一项换成失败条目，其余文件照常返回；全部失败时整个调用报错。
+   *
+   * @model
    */
   read(input: SystemReadInput, ctx: SystemToolContext): Promise<SystemReadResult>
   /**
    * 看图片，files 每项一个，一个文件就一项，一批最多 10 项；返回与 files 一一对应的 files，每张图整张作为模型可见的内容块按同样的顺序放在 modelContent 里交给模型，效果和用户上传一样，每块前面一行文字说明是哪个文件。
    * 只认模型本来就认得的 PNG、JPEG、GIF、WebP，没有字符上限，只有 5 MB 的字节上限，超过算失败让调用方先缩小。
    * PDF 和其他文档不在这里看；文本文件、其他二进制文件、目录、设备文件、超过 20 MB 的文件算失败。某个文件失败只把它那一项换成失败条目，全部失败时整个调用报错。
+   *
+   * @model
    */
   view(input: SystemViewInput, ctx: SystemToolContext): Promise<SystemViewResult>
   /**
@@ -78,6 +82,8 @@ export interface SystemFileOperationsApi {
    * 每次改动前把原内容留成一个版本，结果里给出新版本号和改动前的版本号；改了几处的结果还返回每处新文本前后各 200 字符的小段，盖住所有改动那段不超过 2 万字符时整段也给，不用再读一遍确认。
    * edits 里写进去的文本跟着原文的换行风格走（看那一段，那一段没有换行就看整个文件）：CRLF 文件里的裸 LF 换成 CRLF；newText 整个写入原样写。
    * 沿用原编码，写不成原编码的新文本（孤立代理项、GB18030 表示不了的字符）整批不写。路径是管道、设备或套接字，或者文件有多个硬链接（原子替换会让它和其余链接分家）时不碰。写到一半出错原样报错，不标 not-applied，已写的文件在 context.applied 里点名。
+   *
+   * @model
    */
   edit(input: SystemEditInput, ctx: SystemToolContext): Promise<SystemEditResult>
 }
