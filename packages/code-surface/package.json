@@ -1,0 +1,61 @@
+{
+  "name": "@velaros-ai/code-surface",
+  "version": "0.1.0",
+  "velaros": {
+    "platform": "0.6"
+  },
+  "description": "Code surface for capability spaces: the model writes TypeScript against generated capability declarations, the program is typechecked before it runs, and it executes in an isolated process whose only reachable capabilities are the host operations it calls back into.",
+  "license": "Apache-2.0",
+  "author": "VelarOS",
+  "homepage": "https://github.com/VelarOS-AI/VelarOS-Platform/tree/main/packages/code-surface#readme",
+  "bugs": {
+    "url": "https://github.com/VelarOS-AI/VelarOS-Platform/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/VelarOS-AI/VelarOS-Platform.git",
+    "directory": "packages/code-surface"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./contracts": {
+      "types": "./dist/contracts.d.ts",
+      "import": "./dist/contracts.js"
+    }
+  },
+  "files": [
+    "dist",
+    "bin",
+    "README.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "clean": "rm -rf dist",
+    "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/capabilities/build/fix-esm-extensions.mjs dist && node ../../scripts/build/normalize-package-declarations.mjs",
+    "test": "bun run build && bun test spec/acceptance.test.ts test/code-surface.test.ts",
+    "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/code-surface"
+  },
+  "dependencies": {
+    "@velaros-ai/core": "workspace:*",
+    "typescript": "^5.7.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.17"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://npm.pkg.github.com"
+  }
+}

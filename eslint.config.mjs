@@ -65,6 +65,7 @@ const Domains = [
     globs: [
       'packages/browser/**',
       'packages/cli/**',
+      'packages/code-surface/**',
       'packages/computer/**',
       'packages/development/**',
       'packages/office/**',

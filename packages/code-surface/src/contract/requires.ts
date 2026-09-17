@@ -1,0 +1,93 @@
+/**
+ * 注入面：宿主要塞进来的东西。
+ *
+ * 代码面本身不认识任何一件具体能力——它只负责「安全地跑一段程序，并把程序发出的调用转给宿主」。
+ * 哪些能力存在、每一次调用要不要向用户要授权、危险不危险、算不算一次运行事件，全在宿主这一侧。
+ */
+
+import type { CodeCallNotice } from '../types/code-surface.js'
+import type { CodeRunDispatch, CodeRunOutcome, CodeRunRequest } from '../types/runner.js'
+
+/** 程序发出的一次能力调用。 */
+export interface CodeCapabilityCall {
+  /** 命名空间，如 `system`。 */
+  namespace: string
+  /** 操作名，如 `read`。 */
+  operation: string
+  /** 入参；已经过隔离边界，是纯 JSON 值。 */
+  input: unknown
+}
+
+/** 一次能力调用的结果。 */
+export interface CodeCapabilityOutcome {
+  /** 交回给程序的值；调用失败时不给这一格。 */
+  value?: unknown
+  /**
+   * 调用失败（审批被拒、入参不合法、能力自己报错）。
+   *
+   * 它在程序里是一个**能 try/catch 的异常**，不是一份静默的空回执——
+   * 模型可以接住它换条路走，也可以让它把整个程序带停。
+   */
+  error?: {
+    /** 失败类别；能力自己定的码，代码面不解释它。程序里从 `error.code` 读得到。 */
+    code: string
+    /** 给模型看的一句话，说清为什么没做成、下一步能怎么办。 */
+    message: string
+  }
+  /** 系统在这次调用上插手过的地方，随最终结果回给模型。 */
+  notices?: readonly CodeCallNotice[]
+}
+
+/**
+ * 能力端口：代码面与真实能力之间唯一的通道。
+ *
+ * **审批、危险判定、权限、运行事件都在 `invoke` 里面撞。** 这是代码面能成立的前提：
+ * 今天「危险命令硬门化」能成立，是因为一次工具调用就是一个可审查单元；
+ * 代码块里几十条语句不是，所以门必须下沉到这里，而不是留在协议层。
+ */
+export interface CodeCapabilityPort {
+  /**
+   * 登记的能力清单：命名空间 → 操作名。
+   * 模型读的声明按它生成，隔离进程里的 RPC 桩也按它造——两边同一个来源，不会对不上。
+   */
+  listOperations(): Readonly<Record<string, readonly string[]>>
+  /** 执行一次能力调用；`signal` 触发时尽快停下。 */
+  invoke(call: CodeCapabilityCall, signal?: AbortSignal): Promise<CodeCapabilityOutcome>
+}
+
+/** 程序跑起来之后陆续发生的事，宿主据此往界面上冒卡片与实时输出。 */
+export interface CodeSurfaceEventSink {
+  /** 程序发起了一次能力调用。 */
+  callStarted?(call: CodeCapabilityCall & { callId: number }): void
+  /** 那次调用有结果了。 */
+  callSettled?(settled: { callId: number; ok: boolean; elapsedMs: number }): void
+  /**
+   * 程序打了一行日志。
+   *
+   * 界面要**实时**看见它（用户得知道程序跑到哪了）；模型那边不走这条路，
+   * 日志随最终结果一起回——一次 tool_use 只能回一个 tool_result，中途没法单独成轮。
+   */
+  logged?(line: string): void
+}
+
+/**
+ * 隔离运行器：会话要一个，装配时给。
+ *
+ * 抽成注入面是因为隔离方案会换——今天这个 `node --permission` 子进程挡得住文件系统与起子进程，
+ * 挡不住网络（Node 的权限模型不覆盖 socket），只能开发期用；正式版换 WASM 里的 QuickJS。
+ * 两边模型写的程序、检查、能力分发完全相同，换的只是这一层。
+ */
+export interface CodeRunnerApi {
+  /**
+   * 在隔离环境里跑一段程序。
+   *
+   * 实现必须保证三件事：程序拿不到宿主的任何环境能力；到 `timeoutMs` 一定停；
+   * `signal` 触发时尽快停。程序**不落盘**——源码经通道送进去，落盘等于凭空多一个可读文件。
+   */
+  run(
+    request: CodeRunRequest,
+    dispatch: CodeRunDispatch,
+    onLog: (line: string) => void,
+    signal?: AbortSignal
+  ): Promise<CodeRunOutcome>
+}

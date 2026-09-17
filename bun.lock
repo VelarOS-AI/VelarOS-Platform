@@ -146,6 +146,17 @@
         "typescript": "^5.7.0",
       },
     },
+    "packages/code-surface": {
+      "name": "@velaros-ai/code-surface",
+      "version": "0.1.0",
+      "dependencies": {
+        "@velaros-ai/core": "workspace:*",
+        "typescript": "^5.7.0",
+      },
+      "devDependencies": {
+        "@types/node": "^22.19.17",
+      },
+    },
     "packages/computer": {
       "name": "@velaros-ai/computer",
       "version": "0.3.0",
@@ -1106,6 +1117,8 @@
     "@velaros-ai/browser": ["@velaros-ai/browser@workspace:packages/browser"],
 
     "@velaros-ai/cli": ["@velaros-ai/cli@workspace:packages/cli"],
+
+    "@velaros-ai/code-surface": ["@velaros-ai/code-surface@workspace:packages/code-surface"],
 
     "@velaros-ai/computer": ["@velaros-ai/computer@workspace:packages/computer"],
 

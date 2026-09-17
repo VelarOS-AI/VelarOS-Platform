@@ -183,6 +183,28 @@ export const GovernedModules = [
     acceptance: 'spec/acceptance.test.ts',
   },
   {
+    directory: 'code-surface',
+    name: '@velaros-ai/code-surface',
+    // 没有工具：本包是模型写程序的那条路本身，不是一件能力
+    contract: 'src/contract',
+    types: 'src/types',
+    portable: 'code-surface.ts',
+    impl: 'src/impl',
+    utils: 'src/utils',
+    tuning: 'tuning.ts',
+    // 根入口起子进程、跑编译器，只给 Node；渲染进程只能加载可移植数据
+    browserSafeEntries: ['contracts.ts'],
+    layers: [
+      // 会话编排：查体量、检查、执行、编结果
+      ['CodeSurfaceSession.ts'],
+      // 执行前的检查，与隔离里的执行；两者互不相干
+      ['CodeProgramChecker.ts', 'NodeSubprocessCodeRunner.ts'],
+    ],
+    card: 'MODULE.md',
+    invariants: 'spec/invariants.md',
+    acceptance: 'spec/acceptance.test.ts',
+  },
+  {
     directory: 'text-files',
     name: '@velaros-ai/text-files',
     // 没有工具：不登记 toolsFile、toolDefiner、hostPort
