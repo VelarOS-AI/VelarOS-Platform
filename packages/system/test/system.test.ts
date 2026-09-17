@@ -8,6 +8,7 @@ import { describe, expect, test } from 'bun:test'
 
 import type { SystemToolContext } from '../src/contract/requires.js'
 import { createLocalSystemKernel } from '../src/impl/LocalSystemKernel.js'
+import { systemExecutionOperations } from '../src/impl/SystemExecutionOperations.js'
 import { systemFileOperations } from '../src/impl/SystemFileOperations.js'
 import { SystemGlobalSearch } from '../src/impl/SystemGlobalSearch.js'
 import { systemTools } from '../src/impl/SystemTools.js'
@@ -854,6 +855,35 @@ describe('System capability', () => {
     await systemTools['system:list-tasks']!.execute({}, session)
     expect(seen[0]!.run).toMatchObject({ sessionId: 'session-42' })
     expect(seen[1]!.list).toMatchObject({ sessionId: 'session-42' })
+  })
+
+  test('refresh-environment 与 list-tasks 的 execute 只是委托：工具回执与操作方法的回执一字不变', async () => {
+    const refreshed = { shell: '/bin/zsh', variableCount: 3, refreshedAt: 1, revision: 'r1' }
+    const tasks = [{ id: 't1', command: 'sleep 30', status: 'running' }]
+    const queries: Array<Record<string, unknown>> = []
+    const port = {
+      resolvePath: (path = process.cwd()) => resolve(path),
+      refreshShellEnvironment: async () => refreshed,
+      listBackgroundTasks: async (options: Record<string, unknown>) => { queries.push(options); return tasks },
+    }
+    const ctx: SystemToolContext = { ...approvingContext, sessionId: 'session-7', system: port as never } as SystemToolContext
+
+    // 刷新环境：宿主端口的回执原样出去，操作方法与工具给的是同一份
+    expect(await systemExecutionOperations.refreshEnvironment(ctx)).toEqual(refreshed)
+    expect(await systemTools['system:refresh-environment']!.execute({}, ctx)).toEqual(refreshed)
+    // 工具面的 schema 收得宽，传了参数照旧只多一句提醒；代码面的 refreshEnvironment 根本不收入参
+    expect(await systemTools['system:refresh-environment']!.execute({ junk: 1 }, ctx)).toEqual({ ...refreshed, note: '这个工具不需要参数，传来的内容已忽略。' })
+
+    // 列后台任务：给了 taskId 就不带 limit，会话 id 照旧交给宿主
+    const exact = { limit: 5, onlyRunning: true, taskId: 't1' }
+    expect(await systemTools['system:list-tasks']!.execute(exact, ctx)).toEqual({ count: 1, tasks })
+    expect(await systemExecutionOperations.listTasks(exact, ctx)).toEqual({ count: 1, tasks })
+    for (const query of queries) {
+      expect(query).toMatchObject({ onlyRunning: true, taskId: 't1', sessionId: 'session-7' })
+      expect(query.limit).toBeUndefined()
+    }
+    expect(await systemTools['system:list-tasks']!.execute({ limit: 5 }, ctx)).toEqual({ count: 1, tasks })
+    expect(queries[2]).toMatchObject({ limit: 5, sessionId: 'session-7' })
   })
 
   test.skipIf(process.platform === 'win32')('background tasks belong to their session, a missing cwd is reported as such, and dispose empties the task table', async () => {

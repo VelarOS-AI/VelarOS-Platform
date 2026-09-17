@@ -1,6 +1,7 @@
 /**
  * 系统空间的七个模型面工具。每个工具的说明就是它的定义：摘要、适用与禁用场景、协议、用法、示例、参数、权限和能力声明都在定义里，上方不再另写一遍；
- * execute 只放简单的一两步（直接调一次宿主端口），实现多的交给 impl 里的类：读、看、写交给 `SystemFileOperations`，跑命令和演练沙箱交给 `SystemExecutionOperations`。
+ * execute 一律只把入参转交给 impl 里的操作方法：读、看、写交给 `SystemFileOperations`，跑命令、演练沙箱、刷新环境、列后台任务交给 `SystemExecutionOperations`。
+ * 七个工具的操作方法都在操作接口上，缺一个它就进不了代码面（`baselines/code-surface/system.d.ts`）。
  * 按文件、执行两类排列，文件末尾是它们怎么分组、作为内置 mod 挂进产品、作为能力服务挂进内核。
  * 只留 `system:run` 替代不了的：读和写要把内容和精确匹配绕开 shell 引号，看图片要把内容当图交给模型，后台任务表只在本包，刷新环境改的是宿主进程，演练沙箱要把命令钉在镜像里。PDF 与其他文档归别的 mod。
  * 读、看、写都是 files 每项一个文件，一个文件就一项。列目录、搜文本、看进程和端口、终止进程都用 `system:run` 跑系统命令。
@@ -245,9 +246,9 @@ const refreshEnvironmentTool = defineSystemTool<SystemRefreshEnvironmentInput>({
     reason: 'refresh host shell environment cache',
   },
   isConcurrencySafe: () => false,
+  // 传了参数不报错，只提醒一句：这是工具面 schema 收得宽才有的情况，代码面的 refreshEnvironment 不收入参。
   execute: async (input, ctx) => {
-    // 由 system provider 重新加载 PATH 和 shell 环境变量。传了参数不报错，只提醒一句。
-    const refreshed = await ctx.system.refreshShellEnvironment()
+    const refreshed = await systemExecutionOperations.refreshEnvironment(ctx)
     return isEmpty(Object.keys(input)) ? refreshed : { ...refreshed, note: '这个工具不需要参数，传来的内容已忽略。' }
   },
 })
@@ -286,21 +287,7 @@ const listTasksTool = defineSystemTool<SystemListTasksInput>({
     reason: 'managed system background task inspection',
   },
   isConcurrencySafe: () => true,
-  execute: async ({ limit, onlyRunning, taskId }, ctx) => {
-    // onlyRunning 可过滤掉已结束的历史任务。
-    const tasks = await ctx.system.listBackgroundTasks({
-      limit: taskId ? undefined : limit,
-      onlyRunning,
-      taskId,
-      sessionId: ctx.sessionId,
-    })
-
-    return {
-      // count 给调用方提供轻量摘要。
-      count: tasks.length,
-      tasks,
-    }
-  },
+  execute: (input, ctx) => systemExecutionOperations.listTasks(input, ctx),
 })
 
 // ── 演练沙箱：把目录镜像到临时区，脚本先在镜像里跑 ────────────

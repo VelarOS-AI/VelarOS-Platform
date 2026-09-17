@@ -41,7 +41,7 @@ export interface SystemSandboxApplyFailureDetails {
 
 // ── system:sandbox 的入参与结果 ─────────────────────────────────
 
-/** @AgentView system:sandbox 的入参：action 选动作；create 用 source、network、ignored，diff 用 maxFiles，apply 用 paths；除 create 外都要 sandboxId。 */
+/** @AgentView create 用 source、network、ignored，diff 用 maxFiles，apply 用 paths；除 create 外都要 sandboxId。不传 source 就镜像默认工作目录。 */
 export type SystemSandboxInput = {
   action: 'create' | 'diff' | 'apply' | 'discard'
   source?: string
@@ -52,15 +52,15 @@ export type SystemSandboxInput = {
   maxFiles?: number
 }
 
-/** @AgentView 建好沙箱的回执：沙箱记录加一句怎么用镜像的提醒。 */
+/** @AgentView 建好的沙箱；note 是一句怎么用这个镜像的提醒。 */
 export interface SystemSandboxCreated extends SandboxRecord {
   note: string
 }
 
-/** @AgentView 落回的回执：真正落回的三列；什么都没落或只落了指定路径时 note 说明。 */
+/** @AgentView 真正落回源目录的三列；什么都没落或只落了指定路径时 note 说明。 */
 export interface SystemSandboxApplied extends SandboxApplyResult {
   note?: string
 }
 
-/** @AgentView system:sandbox 的结果：create、diff、apply、discard 各自的回执。 */
+/** @AgentView create、diff、apply、discard 各自的回执，按 action 决定是哪一种。 */
 export type SystemSandboxResult = SystemSandboxCreated | SandboxDiff | SystemSandboxApplied | SandboxDiscardResult

@@ -24,13 +24,13 @@
  * - `nativeCommand` 只供宿主组合能力使用，绝不出现在模型工具 schema 里（INV-15）。
  */
 
-/** @AgentView 已批准命令在操作系统进程层实际采用的文件副作用边界。 */
+/** @AgentView 命令在操作系统进程层实际采用的文件副作用边界。 */
 export type SystemProcessConfinementMode =
   | 'read-only'
   | 'workspace-write'
   | 'danger-full-access'
 
-/** @AgentView 约束强度。`partial` 只能作为可观测事实，不能被需要绝对边界的调用方当作 `full`。 */
+/** @AgentView 约束强度；`partial` 不等于 `full`，别把它当成绝对边界。 */
 export type SystemProcessConfinementEnforcement = 'none' | 'partial' | 'full'
 
 /** @AgentView 实际承担约束的后端：macOS 是 Seatbelt，Linux 是 bubblewrap，`host` 表示宿主注入的实现。 */
@@ -40,13 +40,7 @@ export type SystemProcessConfinementBackend =
   | 'seatbelt'
   | 'host'
 
-/**
- * @AgentView
- * 一次真实进程启动的约束证据。
- *
- * 这是事实不是意愿：请求了 `workspace-write` 但没有后端时，实现必须拒绝执行，
- * 而不是在这里写一个 `enforcement: 'none'` 蒙混过去。
- */
+/** @AgentView 这次进程启动真实生效的约束，不是请求的那个。 */
 export interface SystemProcessConfinementEvidence {
   mode: SystemProcessConfinementMode
   enforcement: SystemProcessConfinementEnforcement
@@ -56,7 +50,7 @@ export interface SystemProcessConfinementEvidence {
   writableRoots: string[]
 }
 
-/** @AgentView 进程归属事实：子进程树由谁负责在父进程退出时清理，以及实际能不能做到。 */
+/** @AgentView 子进程树由谁负责在父进程退出时清理，以及实际能不能做到。 */
 export interface SystemProcessOwnership {
   backend: 'windows-job' | 'process-tree'
   parentDeathCleanup: boolean
@@ -86,12 +80,7 @@ export interface SystemRunCommandOptions {
   nativeCommand?: { file: string; args: string[]; env?: Record<string, string> }
 }
 
-/**
- * @AgentView
- * 命令被送进后台管理时的回执。
- *
- * `statusContinuation` 指向 `system:list-tasks`，因为系统后台任务不归内核 `job:*` 工具管。
- */
+/** @AgentView 命令进了后台时的回执；`autoStarted` 表示不是调用方要的后台，是按命令本身判出来自动转的。 */
 export interface SystemBackgroundProcessInfo {
   taskId: Nullable<string>
   sessionId: Nullable<string>
@@ -106,47 +95,38 @@ export interface SystemBackgroundProcessInfo {
   autoStarted: boolean
   /** 交互式任务的控制台：命令正在等用户输入，用户在聊天里的控制台卡片里打字。不是交互式任务时缺席。 */
   console?: SystemConsoleSessionInfo
-  /** 精确查询该系统后台任务状态；不能交给内核 job:* 工具。 */
+  /** 把这个 taskId 交给 listTasks 就查得到这条任务的状态。 */
   statusContinuation?: {
     tool: 'system:list-tasks'
     args: { taskId: string }
   }
 }
 
-/**
- * @AgentView
- * 对命令结果的一句话判定，给模型当验证摘要用。
- *
- * 成功命令的 stdout / stderr 不会被当作 issue；失败、超时、取消时把输出末尾摘进 issues。
- */
+/** @AgentView 成功命令的 stdout / stderr 不会被当作 issue；失败、超时、取消时把输出末尾摘进 issues。 */
 export interface SystemVerificationSummary {
   kind: 'build' | 'lint' | 'test' | 'typecheck' | 'unknown'
   status: 'aborted' | 'failed' | 'passed' | 'timed-out' | 'unknown'
   issues: string[]
 }
 
-/** @AgentView 返回给调用方的输出窗口是怎么截的。 */
+/** @AgentView 输出窗口留的是完整输出的末尾，不是开头。 */
 export interface SystemCommandOutputWindow {
-  /** 返回窗口保留完整输出的末尾，而不是开头。 */
   retained: 'tail'
-  /** false 表示整体输出更长；不影响已返回末尾窗口的真实性。 */
+  /** false 表示完整输出更长；不影响已返回的这段末尾的真实性。 */
   complete: boolean
-  /** 进程结束后窗口的末端与完整输出末端一致。 */
+  /** 进程结束后窗口的末端就是完整输出的末端。 */
   endPreserved: true
 }
 
-/** @AgentView 输出被截断时，去哪里找完整内容。 */
+/** @AgentView 输出被截断时去哪里找完整内容：它在会话的终端日志里，不是一个能直接读的文件。 */
 export interface SystemCommandOutputContinuation {
-  /** 完整输出由会话内部终端日志管理，不是普通文件。 */
   kind: 'session-terminal-log'
-  /** 交给会话终端输出召回能力的稳定查询词。 */
   query: string
-  /** 可直接执行的召回工具，避免把系统命令误交给 job:*。 */
   tool: 'context:recall'
   args: { query: string; kind: 'terminal' }
 }
 
-/** @AgentView 命令输出采集事实；字节数按解码后的 UTF-8 文本计算。 */
+/** @AgentView 各项字节数都按解码后的 UTF-8 文本算。 */
 export interface SystemCommandOutputCapture {
   status: 'complete' | 'truncated' | 'failed'
   encoding: 'utf-8'
@@ -159,10 +139,8 @@ export interface SystemCommandOutputCapture {
 
 /**
  * @AgentView
- * 一次命令执行的完整结果。
- *
- * `success` 只看退出码为 0 且没有超时、没有被取消。`outputWindow` 一定给出；
- * `outputContinuation` 只在宿主留了会话终端日志（`logPath`）时才有，本地内核不落日志文件，只保留结尾窗口。
+ * `success` 只看退出码为 0 且没有超时、没有被取消——命令自己失败不算这次调用失败。
+ * `outputWindow` 一定给出；`outputContinuation` 只在宿主留了会话终端日志（`logPath`）时才有。
  */
 export interface SystemCommandResult {
   command: string
@@ -183,7 +161,6 @@ export interface SystemCommandResult {
   outputWindow?: SystemCommandOutputWindow
   outputContinuation?: SystemCommandOutputContinuation
   success: boolean
-  /** 缺席仅用于兼容旧宿主；新执行器必须报告真实的进程约束事实。 */
   confinement?: SystemProcessConfinementEvidence
   backgroundProcess?: SystemBackgroundProcessInfo
   verification: SystemVerificationSummary
@@ -283,14 +260,13 @@ export interface SystemMetricsSnapshot {
 
 // ── 后台任务 ────────────────────────────────────────────────────
 
-/** 后台任务状态；进程是否真的还在，拿不准时报 `unknown` 而不是猜。 */
+/** @AgentView 后台任务状态；进程是否真的还在，拿不准时报 `unknown` 而不是猜。 */
 export type SystemBackgroundTaskStatus = 'running' | 'exited' | 'unknown'
 
 /**
- * 本模块管理的一条后台任务。
- *
- * 任务由 `system:run` 的后台模式创建，`id` 就是当时返回的 `taskId`；
- * 终止命令三档（普通、强制、兜底）都是给人看的建议，真正终止走 `terminateBackgroundTask`。
+ * @AgentView
+ * 一条后台任务：`id` 就是 run 返回的 `taskId`。
+ * 终止命令三档（普通、强制、兜底）是给 run 直接执行的现成命令。
  */
 export interface SystemBackgroundTaskRecord {
   exitCode?: LooseOptional<number>
@@ -314,6 +290,7 @@ export interface SystemBackgroundTaskRecord {
   startedAt: number
   updatedAt: number
   status: SystemBackgroundTaskStatus
+  /** 这条任务输出的末尾 4000 字符。 */
   recentOutput: Nullable<string>
   /** 交互式任务的控制台；不是交互式任务时缺席。 */
   console?: SystemConsoleSessionInfo
@@ -364,13 +341,13 @@ export type SystemConsoleChannel = 'pty' | 'pipe'
 
 /** @AgentView 一个交互式任务的控制台。 */
 export interface SystemConsoleSessionInfo {
-  /** 控制台归哪个后台任务，和 `backgroundProcess.taskId` 是同一个。 */
+  /** 和 `backgroundProcess.taskId` 是同一个。 */
   taskId: string
-  /** 后面接的是终端还是管道。管道下没有回显，只读 tty 的密码提示可能根本不出现。 */
+  /** 管道下没有回显，只读 tty 的密码提示可能根本不出现。 */
   channel: SystemConsoleChannel
-  /** 现在还能不能往里写输入；进程退出后为 false。 */
+  /** 进程退出后为 false。 */
   acceptsInput: boolean
-  /** 一句给模型看的说明：任务正在控制台里等用户，不要再等这次工具调用的输出。 */
+  /** 一句话说明：任务正在控制台里等用户，别再等这次调用的输出。 */
   note: string
 }
 
@@ -506,12 +483,7 @@ export interface SystemShellRecommendation {
   url: string
 }
 
-/**
- * @AgentView
- * 生成命令之前就已确定的 shell 描述。可安全地传给浏览器端。
- *
- * `readiness` 为 `detected` 表示只发现了可执行文件，`ready` 表示已通过启动、版本与 UTF-8 自检。
- */
+/** @AgentView `readiness` 为 `detected` 表示只发现了可执行文件，`ready` 表示已通过启动、版本与 UTF-8 自检。 */
 export interface SystemShellDescriptor {
   kind: SystemShellKind
   name: string
@@ -535,14 +507,15 @@ export type SystemRuntimePlatform =
   | 'win32'
   | (string & {})
 
-/** 刷新 shell 环境后的回执；`revision` 变化意味着之前缓存的 shell 选择已作废。 */
+/** @AgentView 刷新之后的 shell 环境：`shell` 是重新选定的那个默认 shell 的可执行文件路径，`runtime` 是它的完整描述。 */
 export interface SystemShellEnvironmentRefreshResult {
   shell: string
   variableCount: number
   refreshedAt: number
   runtime?: SystemShellDescriptor
-  /** 刷新之后本机可用的全部 shell，按挑选优先顺序，第一个就是 `runtime` 那个默认的。刚装上的 shell 在这里出现，模型不必等下一个回合的环境报告。 */
+  /** 刷新之后本机可用的全部 shell，按挑选优先顺序，第一个就是 `runtime` 那个默认的。刚装上的 shell 在这里就看得到，不必等下一个回合的环境报告。 */
   shells?: SystemShellDescriptor[]
+  /** 这次选定的 shell 环境的版本号；变了说明之前缓存的 shell 选择已作废。 */
   revision?: string
   /** Windows 上重读用户与系统环境变量失败时的原因；成功或不是 Windows 时没有。 */
   reason?: string

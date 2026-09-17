@@ -1,6 +1,7 @@
 /**
- * 两个执行操作：`SystemExecutionOperations` 与整个进程唯一的 `systemExecutionOperations`。接口 `SystemExecutionOperationsApi` 在本文件的类上方。
- * `system:run`、`system:sandbox` 各调一个方法，它们的执行前分类、向用户确认和结果整形写在这里；只调一次宿主端口的简单工具（刷新环境、列后台任务）直接写在工具文件里。
+ * 四个执行操作：`SystemExecutionOperations` 与整个进程唯一的 `systemExecutionOperations`。接口 `SystemExecutionOperationsApi` 在本文件的类上方。
+ * `system:run`、`system:sandbox`、`system:refresh-environment`、`system:list-tasks` 各调一个方法，它们的执行前分类、向用户确认和结果整形写在这里。
+ * 刷新环境、列后台任务只调一次宿主端口，收在这里不是因为实现多，是因为不在操作接口上就进不了代码面。
  * 真正跑命令、建镜像的是宿主端口 `ctx.system`（本机就是本地内核）。
  */
 
@@ -15,13 +16,14 @@ import { shellCommandApproval, shellCommandPolicy } from '@velaros-ai/shell-comm
 
 import { SystemToolNames } from '../contract/constants.js'
 import type { SystemToolContext } from '../contract/requires.js'
-import type { SystemRunInput, SystemRunResult } from '../types/commands.js'
+import type { SystemListTasksInput, SystemListTasksResult, SystemRunInput, SystemRunResult } from '../types/commands.js'
 import type { SystemSandboxInput, SystemSandboxResult } from '../types/sandbox.js'
+import type { SystemShellEnvironmentRefreshResult } from '../types/system.js'
 import { exposeCommandOutputWindow } from '../utils/command-result.js'
 import { isCredentialPath, isSensitiveSystemMutationPath } from '../utils/file-safety.js'
 
 /**
- * 两个执行操作：跑命令、演练沙箱。`system:run`、`system:sandbox` 各调一个方法。
+ * 四个执行操作：跑命令、演练沙箱、刷新环境、列后台任务。`system:run`、`system:sandbox`、`system:refresh-environment`、`system:list-tasks` 各调一个方法。
  *
  * 实现是 `SystemExecutionOperations`，整个进程只有一份（`systemExecutionOperations`）。路径交给宿主解析（`~` 与相对路径），命令交给宿主执行，
  * 这里负责执行前按命令策略分类、要确认的先问用户，以及把宿主的回执整形成模型看的样子。
@@ -29,19 +31,29 @@ import { isCredentialPath, isSensitiveSystemMutationPath } from '../utils/file-s
 export interface SystemExecutionOperationsApi {
   /**
    * @AgentView
-   * 跑一条命令：先按命令策略分类（只读、要不要确认、该不该丢后台），交互式命令一定跑在后台，因为它要一直开着等用户在控制台里输入。
-   * 分类不看挑的是哪个 shell——判定认全部五种语法，所以挑哪个 shell 都不会让危险命令少弹一次确认；`shell` 原样交给宿主，本机没有它由宿主在执行之前拒绝。
-   * 要确认的先问用户；危险命令每次都由用户亲自裁决（高风险、手动审批，宿主在任何档位都弹卡）。
-   * 交给宿主执行后补上输出窗口说明；进了后台的补上端口、原因、是否自动转后台和查状态的续接（指向 system:list-tasks）；要了控制台却没拿到时 note 说明怎么改写命令。
+   * 跑一条命令。background 或 interactive 的命令立刻返回，之后用 listTasks 看它跑到哪了；interactive 一定跑在后台，它要开着等用户在控制台里输入。
+   * 要确认的命令先问过用户才跑；危险命令每次都由用户亲自裁决。换个 shell 写也照样问——判定认全部五种 shell 的语法。
+   * shell 只能填本机有的那几个，填了没有的在执行之前就被拒，一个进程都不起。
    */
   run(input: SystemRunInput, ctx: SystemToolContext): Promise<SystemRunResult>
   /**
    * @AgentView
-   * 演练沙箱的四个动作，除 create 外都要 sandboxId：create 建镜像并提醒怎么用；diff 看镜像相对创建时的变化；discard 删镜像。
-   * apply 先算完整差量（不截断），paths 里有没变化的路径就在问用户之前拒绝；把删除、覆盖的条数与路径和其中的敏感路径摆给用户确认（高风险、每次都问），
-   * 确认了才让宿主落回，并把确认时的差量指纹一起交过去，镜像在确认之后又变过就整批不落；镜像里没有文件变化就什么都不落，只落指定路径时 note 说明。
+   * 演练沙箱的四个动作，除 create 外都要 sandboxId。镜像里的命令写不到镜像外，apply 之前源目录一个字节都没变。
+   * apply 每次都要用户亲自确认，确认之后镜像又变过就整批不落；paths 里有没变化的路径，问用户之前就先拒绝。
    */
   sandbox(input: SystemSandboxInput, ctx: SystemToolContext): Promise<SystemSandboxResult>
+  /**
+   * @AgentView
+   * 重新选定本机能用的 shell 并读一遍它的环境变量；Windows 上还会重读用户与系统环境变量写回本进程，没成功时结果的 reason 说明原因。
+   * 只改本进程的环境，不动用户的 shell 配置文件，也不装任何东西：刷过一次还缺的命令就是没装。
+   */
+  refreshEnvironment(ctx: SystemToolContext): Promise<SystemShellEnvironmentRefreshResult>
+  /**
+   * @AgentView
+   * 列出 run 起在后台的任务，最新的在前。宿主按会话隔离时只看得到本会话起的那些。
+   * 要停掉一条，用 run 执行它条目里的 terminateCommand 或 forceTerminateCommand，别自己拼 pid。
+   */
+  listTasks(input: SystemListTasksInput, ctx: SystemToolContext): Promise<SystemListTasksResult>
 }
 
 export class SystemExecutionOperations implements SystemExecutionOperationsApi {
@@ -128,6 +140,24 @@ export class SystemExecutionOperations implements SystemExecutionOperationsApi {
     const applied = await ctx.system.applySandbox({ sandboxId, paths: input.paths, fingerprint: changes.fingerprint })
     // 宿主的回执原样不动，note 放进新对象里。
     return input.paths ? { ...applied, note: `只落了指定的 ${input.paths.length} 个路径。` } : applied
+  }
+
+  public refreshEnvironment(ctx: SystemToolContext): Promise<SystemShellEnvironmentRefreshResult> {
+    // 由 system provider 重新加载 PATH 和 shell 环境变量。
+    return ctx.system.refreshShellEnvironment()
+  }
+
+  public async listTasks({ limit, onlyRunning, taskId }: SystemListTasksInput, ctx: SystemToolContext): Promise<SystemListTasksResult> {
+    // 精确查一条时 limit 没有意义；onlyRunning 可过滤掉已结束的历史任务。
+    const tasks = await ctx.system.listBackgroundTasks({
+      limit: taskId ? undefined : limit,
+      onlyRunning,
+      taskId,
+      sessionId: ctx.sessionId,
+    })
+
+    // count 给调用方提供轻量摘要。
+    return { count: tasks.length, tasks }
   }
 }
 

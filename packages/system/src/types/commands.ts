@@ -8,7 +8,7 @@ import type { CommandSpec } from '@velaros-ai/platform/contracts'
 
 import type { SystemProcessConfinementProvider } from '../contract/requires.js'
 
-import type { SystemCommandResult, SystemProcessConfinementEvidence, SystemProcessConfinementMode, SystemProcessOwnership, SystemShellDescriptor, SystemShellKind } from './system.js'
+import type { SystemBackgroundTaskRecord, SystemCommandResult, SystemProcessConfinementEvidence, SystemProcessConfinementMode, SystemProcessOwnership, SystemShellDescriptor, SystemShellKind } from './system.js'
 
 export interface SystemProcessConfinementPolicy {
   mode: SystemProcessConfinementMode
@@ -121,7 +121,11 @@ export interface SystemProcessConfinementBuildOptions {
 
 // ── 执行类工具的入参与结果 ──────────────────────────────────────
 
-/** @AgentView system:run 的入参：命令、工作目录（不传用宿主给的默认目录）、用哪个 shell（不传用默认的）、超时、是否后台、是否交互式、输出上限，以及只给调度器看的 parallel 与 allowRepeat。 */
+/**
+ * @AgentView
+ * 不传 cwd 用宿主给的默认目录，不传 shell 用环境报告里的默认 shell。
+ * parallel 与 allowRepeat 不改变命令本身，只是给调度器的提示：这条只读、可以和别的命令同时跑；这次是故意再跑一遍完全一样的命令。
+ */
 export type SystemRunInput = {
   command: string
   cwd?: string
@@ -134,17 +138,23 @@ export type SystemRunInput = {
   allowRepeat?: boolean
 }
 
-/** @AgentView system:run 的结果：带输出窗口说明的命令结果；要了控制台却没拿到时 note 说明怎么改写命令。 */
+/** @AgentView 要了 interactive 却没拿到控制台时，note 说明怎么把命令改成不用输入的写法。 */
 export interface SystemRunResult extends SystemCommandResult {
   note?: string
 }
 
-/** system:refresh-environment 的入参：这个工具不要参数，传了什么都忽略。 */
+/** system:refresh-environment 的入参：这个工具不要参数，传了什么都忽略。代码面上刷新环境不收入参，所以它不进模型面。 */
 export type SystemRefreshEnvironmentInput = Record<string, unknown>
 
-/** system:list-tasks 的入参：taskId 精确查一个；不给就按 limit、onlyRunning 列。 */
+/** @AgentView 给 taskId 就精确查那一条，limit 不再起作用；不传 limit 默认列 50 条。 */
 export type SystemListTasksInput = {
   limit?: number
   onlyRunning?: boolean
   taskId?: string
+}
+
+/** @AgentView 后台任务表：最新启动的在前，count 是这次列出了几条。 */
+export type SystemListTasksResult = {
+  count: number
+  tasks: SystemBackgroundTaskRecord[]
 }
