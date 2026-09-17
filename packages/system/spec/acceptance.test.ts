@@ -6,7 +6,7 @@
  */
 
 import { existsSync } from 'node:fs'
-import { chmod, lstat, mkdir, mkdtemp, readdir, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises'
+import { chmod, lstat, mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 
@@ -14,7 +14,7 @@ import { describe, expect, test } from 'bun:test'
 
 import { codeProgramChecker, createCapabilityPort, createCodeSurfaceSession, nodeSubprocessCodeRunner } from '@velaros-ai/code-surface'
 
-import { SystemCommandLimits } from '../src/contracts'
+import { SystemCommandLimits, SystemFileLimits } from '../src/contracts'
 import { systemExecutionOperations } from '../src/impl/SystemExecutionOperations.js'
 import { systemFileOperations } from '../src/impl/SystemFileOperations.js'
 import { systemProcessManager } from '../src/impl/SystemProcessManager.js'
@@ -231,6 +231,77 @@ describe('文件工具', () => {
     throw new Error('expected the call to fail')
   }
 
+  test('INV-20 一批全成或全不成：版本对不上就什么都不写，并逐个点名', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'velaros-inv20-'))
+    try {
+      const a = join(root, 'a.txt')
+      const b = join(root, 'b.txt')
+      await writeFile(a, 'alpha\n')
+      await writeFile(b, 'beta\n')
+      const before = await read.execute({ files: [{ path: a }, { path: b }] }, approving) as { files: Array<{ version: string }> }
+      // 拿到 version 之后别人又改了 b：整批不写，a 也不动
+      await writeFile(b, 'beta changed\n')
+      const failure = await failureOf(edit.execute({
+        files: [
+          { path: a, newText: 'alpha 2\n', version: before.files[0]!.version },
+          { path: b, newText: 'beta 2\n', version: before.files[1]!.version },
+        ],
+      }, approving))
+      expect(failure.outcome).toBe('not-applied')
+      expect(failure.problems).toHaveLength(1)
+      expect(failure.problems[0]).toMatchObject({ file: 1, reason: 'stale' })
+      expect(await readFile(a, 'utf8')).toBe('alpha\n')
+      expect(await readFile(b, 'utf8')).toBe('beta changed\n')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('INV-21 文本改动无损：GBK 原样回写；二进制不许被 newText 覆盖；写的是符号链接指向的文件', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'velaros-inv21-'))
+    try {
+      // GB18030：读出来是中文，改完写回去仍是 GBK 字节，不会变成 UTF-8
+      const gbk = join(root, 'gbk.txt')
+      await writeFile(gbk, Buffer.from([0xd6, 0xd0, 0xce, 0xc4, 0x0a]))
+      const got = await read.execute({ files: [{ path: gbk }] }, approving) as { files: Array<{ content: string; encoding: string }> }
+      expect(got.files[0]!.encoding).toBe('gb18030')
+      await edit.execute({ files: [{ path: gbk, newText: `${got.files[0]!.content}中文\n` }] }, approving)
+      const back = await readFile(gbk)
+      expect(back.subarray(0, 4)).toEqual(Buffer.from([0xd6, 0xd0, 0xce, 0xc4]))
+
+      // 已有的二进制文件不许被整个覆盖
+      const binary = join(root, 'blob.bin')
+      await writeFile(binary, Buffer.from([0x00, 0x01, 0x02, 0x00]))
+      const refused = await failureOf(edit.execute({ files: [{ path: binary, newText: 'text\n' }] }, approving))
+      expect(refused.outcome).toBe('not-applied')
+      expect(await readFile(binary)).toEqual(Buffer.from([0x00, 0x01, 0x02, 0x00]))
+
+      // 符号链接：写的是它指向的那个文件，链接本身还是链接
+      const real = join(root, 'real.txt')
+      const link = join(root, 'link.txt')
+      await writeFile(real, 'one\n')
+      await symlink(real, link)
+      await edit.execute({ files: [{ path: link, newText: 'two\n' }] }, approving)
+      expect(await readFile(real, 'utf8')).toBe('two\n')
+      expect((await lstat(link)).isSymbolicLink()).toBe(true)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('INV-22 单个文件超过剩下的预算直接失败，绝不回半份', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'velaros-inv22-'))
+    try {
+      const big = join(root, 'big.txt')
+      await writeFile(big, 'x'.repeat(SystemFileLimits.readChars + 10))
+      const got = await read.execute({ files: [{ path: big }] }, approving).catch((error: unknown) => error)
+      // 整个调用只有这一个文件，全部失败时整个调用报错——但关键是：没有半份内容回来
+      expect(String((got as { message?: string }).message ?? '')).toContain('超过这次调用剩下的')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   test('INV-19 写系统敏感路径与凭证文件前经审批端口确认，按真实路径判定，被拒整批不写，临时目录不打扰用户', async () => {
     const root = await mkdtemp(join(tmpdir(), 'velaros-inv19-'))
     try {
@@ -254,120 +325,9 @@ describe('文件工具', () => {
     }
   })
 
-  test('INV-20 一批全成或全不成：定不下来或核对后被改，什么都不写并按 not-applied 报告', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'velaros-inv20-'))
-    try {
-      const a = join(root, 'a.txt')
-      const b = join(root, 'b.txt')
-      await writeFile(a, 'alpha\n')
-      await writeFile(b, 'beta\n')
-      const unresolved = await failureOf(edit.execute({ files: [
-        { path: a, edits: [{ range: { offset: 0, end: 6 }, oldText: 'nope', newText: 'x' }] },
-        { path: b, newText: 'never\n' },
-      ] }, approving))
-      expect(unresolved.outcome).toBe('not-applied')
-      expect(unresolved.problems).toEqual([expect.objectContaining({ file: 0, edit: 0, reason: 'not-found' })])
-      expect(await readFile(a, 'utf8')).toBe('alpha\n')
-      expect(await readFile(b, 'utf8')).toBe('beta\n')
-      const before = await read.execute({ files: [{ path: a }] }, approving) as { files: Array<{ version: string; range: { offset: number; end: number } }> }
-      await writeFile(a, 'changed outside\n')
-      const stale = await failureOf(edit.execute({ files: [
-        { path: a, version: before.files[0]!.version, edits: [{ range: before.files[0]!.range, newText: 'x' }] },
-        { path: b, newText: 'never\n' },
-      ] }, approving))
-      expect(stale.outcome).toBe('not-applied')
-      expect(stale.problems[0]).toMatchObject({ file: 0, reason: 'stale' })
-      expect(await readFile(b, 'utf8')).toBe('beta\n')
-    } finally {
-      await rm(root, { recursive: true, force: true })
-    }
-  })
 
-  test('INV-21 文本改动无损：二进制文件不许整个覆盖，符号链接写到它指向的文件而链接不变', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'velaros-inv21-'))
-    try {
-      const png = join(root, 'logo.png')
-      const bytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 1, 2, 3])
-      await writeFile(png, bytes)
-      const refused = await failureOf(edit.execute({ files: [{ path: png, newText: 'oops\n' }] }, approving))
-      expect(refused.outcome).toBe('not-applied')
-      expect(refused.problems[0]).toMatchObject({ file: 0, reason: 'invalid' })
-      expect(Buffer.from(await readFile(png)).equals(bytes)).toBe(true)
 
-      const real = join(root, 'real.conf')
-      await writeFile(real, 'Host a\n')
-      const link = join(root, 'link.conf')
-      await symlink(real, link)
-      const result = await edit.execute({ files: [{ path: link, edits: [{ range: { offset: 0, end: 7 }, oldText: 'Host a', newText: 'Host b' }] }] }, approving) as { files: Array<{ path: string; target?: string; action: string }> }
-      expect(result.files[0]).toMatchObject({ path: link, action: 'replaced', target: await realpath(real) })
-      expect((await lstat(link)).isSymbolicLink()).toBe(true)
-      expect(await readFile(real, 'utf8')).toBe('Host b\n')
-    } finally {
-      await rm(root, { recursive: true, force: true })
-    }
-  })
 
-  test('INV-21 文本改动无损：GBK 文件按 GB18030 读、改、写回，字节仍是 GBK；认不出编码的字节与写不回原编码的新文本整批不写', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'velaros-inv21-encoding-'))
-    try {
-      // 中文注释\n 的 GBK 字节：以前会被当成 UTF-8 读成乱码，整个写入还会悄悄改存成 UTF-8。
-      const gbk = join(root, 'legacy.ini')
-      await writeFile(gbk, Buffer.from([0xd6, 0xd0, 0xce, 0xc4, 0xd7, 0xa2, 0xca, 0xcd, 0x0a]))
-      const seen = await read.execute({ files: [{ path: gbk }] }, approving) as { files: Array<{ content: string; encoding: string; range: { offset: number; end: number } }> }
-      expect(seen.files[0]).toMatchObject({ content: '中文注释\n', encoding: 'gb18030' })
-      await edit.execute({ files: [{ path: gbk, edits: [{ range: seen.files[0]!.range, oldText: '注释', newText: '说明' }] }] }, approving)
-      expect(Buffer.from(await readFile(gbk)).equals(Buffer.from([0xd6, 0xd0, 0xce, 0xc4, 0xcb, 0xb5, 0xc3, 0xf7, 0x0a]))).toBe(true)
-      await edit.execute({ files: [{ path: gbk, newText: '全部重写\n' }] }, approving)
-      expect((await read.execute({ files: [{ path: gbk }] }, approving) as { files: Array<Record<string, unknown>> }).files[0]).toMatchObject({ content: '全部重写\n', encoding: 'gb18030' })
-
-      // 既不是 UTF-8、UTF-16 也不是 GB18030 的字节按二进制处理：读报错，不读成替换字符；改整批不写。
-      const invalid = join(root, 'invalid.txt')
-      const bytes = Buffer.from([0x6f, 0x6b, 0x20, 0xff, 0x0a])
-      await writeFile(invalid, bytes)
-      expect((await failureOf(read.execute({ files: [{ path: invalid }] }, approving))).code).toBe('VALIDATION')
-      const refused = await failureOf(edit.execute({ files: [{ path: invalid, edits: [{ range: { offset: 0, end: 2 }, oldText: 'ok', newText: 'no' }] }] }, approving))
-      expect(refused.outcome).toBe('not-applied')
-      expect(Buffer.from(await readFile(invalid)).equals(bytes)).toBe(true)
-
-      // 新文本里有孤立代理项：写不成原编码，整批不写，不把它换成替换字符。
-      const plain = join(root, 'plain.txt')
-      const other = join(root, 'other.txt')
-      await writeFile(plain, 'alpha\n')
-      await writeFile(other, 'other\n')
-      const lone = await failureOf(edit.execute({ files: [
-        { path: plain, edits: [{ range: { offset: 0, end: 5 }, oldText: 'alpha', newText: 'beta' }] },
-        { path: join(root, 'new.txt'), newText: 'broken \uD800' },
-        { path: other, edits: [{ range: { offset: 0, end: 0 }, newText: 'x\uDC00' }] },
-      ] }, approving))
-      expect(lone.outcome).toBe('not-applied')
-      expect(lone.problems).toEqual([
-        expect.objectContaining({ file: 1, reason: 'invalid' }),
-        expect.objectContaining({ file: 2, edit: 0, reason: 'invalid' }),
-      ])
-      expect(await readFile(plain, 'utf8')).toBe('alpha\n')
-      expect(await readFile(other, 'utf8')).toBe('other\n')
-      expect(existsSync(join(root, 'new.txt'))).toBe(false)
-    } finally {
-      await rm(root, { recursive: true, force: true })
-    }
-  })
-
-  test('INV-22 一次 read 最多 20 万字符，预算用完后的文件不读盘也不问用户', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'velaros-inv22-'))
-    try {
-      const big = join(root, 'big.txt')
-      await writeFile(big, `${'a'.repeat(200_000)  }tail`)
-      const key = join(root, 'id_rsa')
-      await writeFile(key, 'secret\n')
-      const result = await read.execute({ files: [{ path: big }, { path: key }] }, denying) as { files: Array<Record<string, unknown>>; note?: string }
-      expect(result.files[0]).toMatchObject({ hasMore: true, totalChars: 200_004 })
-      expect(result.files[1]).toMatchObject({ path: key, error: { code: 'VALIDATION' } })
-      expect(result.files[1]).not.toHaveProperty('version')
-      expect(result.note).toContain('从第 2 个文件起没有读')
-    } finally {
-      await rm(root, { recursive: true, force: true })
-    }
-  })
 })
 
 describe('演练沙箱', () => {

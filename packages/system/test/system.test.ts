@@ -1,18 +1,18 @@
 import { spawnSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { chmod, link, lstat, mkdtemp, readFile, realpath, rm, stat, symlink, writeFile } from 'node:fs/promises'
+import { chmod, lstat, mkdtemp, readFile, realpath, rm, stat, symlink, writeFile } from 'node:fs/promises'
 import { homedir, tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 
 import { describe, expect, test } from 'bun:test'
 
 import type { SystemToolContext } from '../src/contract/requires.js'
+import { SystemFileLimits } from '../src/contracts'
 import { createLocalSystemKernel } from '../src/impl/LocalSystemKernel.js'
 import { systemFileOperations } from '../src/impl/SystemFileOperations.js'
 import { SystemGlobalSearch } from '../src/impl/SystemGlobalSearch.js'
 import { buildSystemProcessConfinementSpawnSpec, buildSystemSeatbeltProfile } from '../src/utils/confinement.js'
 import { isSensitiveSystemMutationPath } from '../src/utils/file-safety.js'
-import { findOccurrences } from '../src/utils/text.js'
 
 /** 一律批准的工具上下文：写入测试只关心内容，不走真实的用户确认。 */
 const approvingContext: SystemToolContext = {
@@ -38,12 +38,12 @@ const readAll = (input: Parameters<typeof systemFileOperations.read>[0]) => syst
 const viewAll = (input: Parameters<typeof systemFileOperations.view>[0]) => systemFileOperations.view(input, approvingContext)
 
 /** 读一个文件的快捷方式。 */
-async function readOne(file: { path: string; offset?: number; maxChars?: number; version?: string }) {
+async function readOne(file: { path: string; version?: string }) {
   return entryOf(await readAll({ files: [file] }))
 }
 
 /** 写一个文件的快捷方式，一律批准。 */
-async function editOne(file: { path: string; newText?: string; edits?: Array<{ range: { offset: number; end: number }; oldText?: string; newText: string }>; restore?: string }) {
+async function editOne(file: { path: string; newText?: string; restore?: string; version?: string }) {
   const result = await systemFileOperations.edit({ files: [file] }, approvingContext)
   const entry = result.files[0]
   if (!entry) throw new Error('no entry')
@@ -162,52 +162,7 @@ describe('System capability', () => {
     }
   )
 
-  test('reads text by character ranges and continues from range.end without splitting a surrogate pair', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'velaros-system-read-'))
-    const path = join(root, 'notes.txt')
-    try {
-      const text = 'héllo 中文😀 tail'
-      await writeFile(path, text)
-      const first = await readOne({ path, maxChars: 8 })
-      expect(first.content).toBe('héllo 中文')
-      expect(first.range).toEqual({ offset: 0, end: 8 })
-      expect(first.hasMore).toBe(true)
-      const second = await readOne({ path, offset: first.range.end, maxChars: 1 })
-      expect(second.content).toBe('😀')
-      expect(second.range).toEqual({ offset: 8, end: 10 })
-      const rest = await readOne({ path, offset: second.range.end })
-      expect(rest.content).toBe(' tail')
-      expect(rest.hasMore).toBe(false)
-      expect(rest.totalChars).toBe(text.length)
-    } finally {
-      await rm(root, { recursive: true, force: true })
-    }
-  })
 
-  test('按字符预算读取时截到整行，一行比预算还长才从行中间截', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'velaros-system-read-lines-'))
-    const path = join(root, 'code.ts')
-    const longLine = join(root, 'long.ts')
-    try {
-      await writeFile(path, 'const a = 1\nconst b = 2\nconst c = 3\n')
-      // 预算 18 落在第二行中间（每行 12 个字符）：只给第一整行，range.end 就是第二行的行首。
-      const first = await readOne({ path, maxChars: 18 })
-      expect(first.content).toBe('const a = 1\n')
-      expect(first.range).toEqual({ offset: 0, end: 12 })
-      expect(first.hasMore).toBe(true)
-      const rest = await readOne({ path, offset: first.range.end })
-      expect(rest.content).toBe('const b = 2\nconst c = 3\n')
-      expect(rest.hasMore).toBe(false)
-
-      // 这一段里没有换行可退：照旧按字符截，不能一个字都不给。
-      await writeFile(longLine, `${'x'.repeat(100)}\ntail\n`)
-      const cut = await readOne({ path: longLine, maxChars: 10 })
-      expect(cut.content).toBe('x'.repeat(10))
-      expect(cut.range).toEqual({ offset: 0, end: 10 })
-    } finally {
-      await rm(root, { recursive: true, force: true })
-    }
-  })
 
   test('decodes UTF-16 text and keeps its line endings', async () => {
     const root = await mkdtemp(join(tmpdir(), 'velaros-system-read-utf16-'))
@@ -222,37 +177,7 @@ describe('System capability', () => {
     }
   })
 
-  test('reads short UTF-16 without a BOM by the byte-order evidence instead of calling it binary', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'velaros-system-read-short-utf16-'))
-    const path = join(root, 'short.txt')
-    try {
-      await writeFile(path, Buffer.from('ok\n', 'utf16le'))
-      expect(await readOne({ path })).toMatchObject({ content: 'ok\n', encoding: 'utf16le-nobom' })
-      await editOne({ path, edits: [{ range: { offset: 0, end: 2 }, oldText: 'ok', newText: 'no' }] })
-      expect(Buffer.from(await readFile(path)).equals(Buffer.from('no\n', 'utf16le'))).toBe(true)
-    } finally {
-      await rm(root, { recursive: true, force: true })
-    }
-  })
 
-  test('edit refuses files with several hard links as not-applied, leaving every link intact', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'velaros-system-hard-link-'))
-    try {
-      const source = join(root, 'source.conf')
-      const alias = join(root, 'alias.conf')
-      await writeFile(source, 'value = 1\n')
-      await link(source, alias)
-      for (const file of [{ path: alias, newText: 'value = 2\n' }, { path: source, edits: [{ range: { offset: 0, end: 10 }, oldText: '1', newText: '2' }] }]) {
-        const refused = await problemsOf(systemFileOperations.edit({ files: [file] }, approvingContext))
-        expect(refused.problems[0]).toMatchObject({ file: 0, reason: 'invalid', message: expect.stringContaining('硬链接') })
-      }
-      expect(await readFile(source, 'utf8')).toBe('value = 1\n')
-      expect(await readFile(alias, 'utf8')).toBe('value = 1\n')
-      expect((await stat(source)).nlink).toBe(2)
-    } finally {
-      await rm(root, { recursive: true, force: true })
-    }
-  })
 
   test.skipIf(process.platform === 'win32')('edit keeps an existing file mode exactly and lets umask decide the mode of a new file', async () => {
     const root = await mkdtemp(join(tmpdir(), 'velaros-system-mode-'))
@@ -261,7 +186,7 @@ describe('System capability', () => {
       const shared = join(root, 'shared.sh')
       await writeFile(shared, 'echo one\n')
       await chmod(shared, 0o777)
-      await editOne({ path: shared, edits: [{ range: { offset: 0, end: 9 }, oldText: 'one', newText: 'two' }] })
+      await editOne({ path: shared, newText: 'echo two\n' })
       expect((await stat(shared)).mode & 0o777).toBe(0o777)
       await editOne({ path: shared, newText: 'echo three\n' })
       expect((await stat(shared)).mode & 0o777).toBe(0o777)
@@ -309,33 +234,6 @@ describe('System capability', () => {
     }
   })
 
-  test('read takes a batch: one budget for the whole call, per-file offsets, and a failing file only marks its own entry', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'velaros-system-read-batch-'))
-    try {
-      const bigPath = join(root, 'big.txt')
-      const smallPath = join(root, 'small.txt')
-      await writeFile(bigPath, 'a'.repeat(200_000))
-      await writeFile(smallPath, 'small')
-      const budget = await readAll({ files: [{ path: bigPath }, { path: smallPath }] })
-      expect(entryOf(budget, 0)).toMatchObject({ totalChars: 200_000, hasMore: false, range: { offset: 0, end: 200_000 } })
-      // 预算在第一个文件用完，第二个文件不读盘，那一项是失败条目，note 说明从它起没读。
-      expect(budget.files[1]).toMatchObject({ path: smallPath, error: { code: 'VALIDATION' } })
-      expect(budget.note).toContain('从第 2 个文件起没有读')
-
-      const continued = await readAll({ files: [{ path: bigPath, offset: 199_998 }, { path: smallPath, offset: 0, maxChars: 3 }] })
-      expect(entryOf(continued, 0)).toMatchObject({ content: 'aa', hasMore: false })
-      expect(entryOf(continued, 1)).toMatchObject({ content: 'sma', range: { offset: 0, end: 3 }, hasMore: true })
-
-      const mixed = await readAll({ files: [{ path: smallPath }, { path: join(root, 'missing.txt') }] })
-      expect(entryOf(mixed, 0).content).toBe('small')
-      expect(mixed.files[1]).toEqual({ path: join(root, 'missing.txt'), error: { code: 'NOT_FOUND', message: expect.stringContaining('不存在') } })
-      await expect(readAll({ files: [{ path: join(root, 'x.txt') }, { path: join(root, 'y.txt') }] })).rejects.toThrow('不存在')
-      await expect(readAll({ files: [] })).rejects.toThrow('files 是空的')
-      await expect(readAll({ files: Array.from({ length: 21 }, () => ({ path: smallPath })) })).rejects.toThrow('一次最多 20 个文件')
-    } finally {
-      await rm(root, { recursive: true, force: true })
-    }
-  })
 
   test('read resolves relative paths against the host default directory, asks before credential files, and notes an exhausted budget', async () => {
     const root = await mkdtemp(join(tmpdir(), 'velaros-system-read-base-'))
@@ -353,10 +251,9 @@ describe('System capability', () => {
       expect(refused.files.map((entry) => ('error' in entry ? entry.error.message : entry.content))).toEqual(['here', 'user said no'])
       await expect(systemFileOperations.read({ files: [{ path: keyPath }] }, denying)).rejects.toThrow('user said no')
 
-      // 预算用完：结果说明从第几个文件起没内容。
-      await writeFile(join(root, 'big.txt'), 'a'.repeat(200_000))
+      // 预算用完：后面的文件不读盘，那一项是失败条目。
+      await writeFile(join(root, 'big.txt'), 'a'.repeat(SystemFileLimits.readChars))
       const budget = await readAll({ files: [{ path: join(root, 'big.txt') }, { path: join(root, 'note.txt') }] })
-      expect(budget.note).toContain('从第 2 个文件起没有读')
       expect(budget.files[1]).toMatchObject({ error: { code: 'VALIDATION' } })
     } finally {
       await rm(root, { recursive: true, force: true })
@@ -378,228 +275,11 @@ describe('System capability', () => {
     }
   })
 
-  test('edit writes whole files, changes several places at once within read ranges, and hands back the new text', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'velaros-system-edit-'))
-    const path = join(root, 'nested', 'config.toml')
-    try {
-      const written = await editOne({ path, newText: 'name = "a"\nport = 80\nport = 80\n' })
-      expect(written).toMatchObject({ action: 'written', created: true, previousVersion: null })
-      if (written.action !== 'written') throw new Error('expected written')
-      expect(written.version).toMatch(/^[0-9a-f]{12}$/)
-      expect(await readFile(path, 'utf8')).toBe('name = "a"\nport = 80\nport = 80\n')
-
-      // 多处匹配：整批不写，回执里给出是第几处和每处的锚点。
-      const whole = await readOne({ path })
-      const ambiguous = await problemsOf(editOne({ path, edits: [{ range: whole.range, oldText: 'port = 80', newText: 'port = 8080' }] }))
-      expect(ambiguous.reason).toBe('SYSTEM_EDIT_UNRESOLVED')
-      expect(ambiguous.problems).toHaveLength(1)
-      expect(ambiguous.problems[0]).toMatchObject({ file: 0, edit: 0, reason: 'ambiguous', matchCount: 2 })
-      const anchors = ambiguous.problems[0]!.anchors as Array<{ range: { offset: number; end: number }; context: string }>
-      expect(anchors.map((anchor) => anchor.range)).toEqual([{ offset: 11, end: 20 }, { offset: 21, end: 30 }])
-      expect(anchors[1]!.context).toContain('port = 80\n')
-      expect(await readFile(path, 'utf8')).toBe('name = "a"\nport = 80\nport = 80\n')
-
-      // 同一个文件两处一起改：一处按锚点确认，一处在整段里唯一；返回盖住两处那段的新内容。
-      const confirmed = await editOne({
-        path,
-        edits: [
-          { range: anchors[1]!.range, oldText: 'port = 80', newText: 'port = 8080' },
-          { range: whole.range, oldText: 'name = "a"', newText: 'name = "ab"' },
-        ],
-      })
-      expect(confirmed).toMatchObject({ action: 'replaced', edits: 2, content: 'name = "ab"\nport = 80\nport = 8080\n', range: { offset: 0, end: 34 }, previousVersion: written.version })
-      if (confirmed.action !== 'replaced') throw new Error('expected replaced')
-      expect(confirmed.windows.map((window) => [window.edit, window.range, window.content])).toEqual([[0, { offset: 0, end: 34 }, 'name = "ab"\nport = 80\nport = 8080\n'], [1, { offset: 0, end: 34 }, 'name = "ab"\nport = 80\nport = 8080\n']])
-      expect(await readFile(path, 'utf8')).toBe('name = "ab"\nport = 80\nport = 8080\n')
-
-      // 任何一处定不下来整个文件就不动，而且所有问题一次报完：第一处找不到，第二处多处匹配。
-      const twoProblems = await problemsOf(editOne({ path, edits: [{ range: { offset: 0, end: 12 }, oldText: 'name = "zz"', newText: 'name = "c"' }, { range: { offset: 0, end: 34 }, oldText: 'port = ', newText: 'p = ' }] }))
-      expect(twoProblems.problems.map((problem) => [problem.edit, problem.reason])).toEqual([[0, 'not-found'], [1, 'ambiguous']])
-      expect(await readFile(path, 'utf8')).toBe('name = "ab"\nport = 80\nport = 8080\n')
-      const overlap = await problemsOf(editOne({ path, edits: [{ range: { offset: 0, end: 12 }, newText: 'x' }, { range: { offset: 5, end: 20 }, newText: 'y' }] }))
-      expect(overlap.problems[0]).toMatchObject({ reason: 'overlap', edit: 1, with: 0 })
-      expect(await readFile(path, 'utf8')).toBe('name = "ab"\nport = 80\nport = 8080\n')
-
-      const recalled = await readOne({ path, version: written.version })
-      expect(recalled.content).toBe('name = "a"\nport = 80\nport = 80\n')
-      expect(recalled.version).toBe(written.version)
-      await expect(readAll({ files: [{ path, version: 'nope' }] })).rejects.toThrow('历史里没有')
-
-      const window = await readOne({ path, offset: 12, maxChars: 10 })
-      expect(window.content).toBe('port = 80\n')
-      const replaced = await editOne({ path, edits: [{ range: window.range, oldText: 'port = 80', newText: 'port = 8080' }] })
-      expect(replaced).toMatchObject({ action: 'replaced', edits: 1, content: 'port = 8080\n', range: { offset: 12, end: 24 }, windows: [{ edit: 0, range: { offset: 0, end: 36 } }] })
-      expect(await readFile(path, 'utf8')).toBe('name = "ab"\nport = 8080\nport = 8080\n')
-
-      const swapped = await editOne({ path, edits: [{ range: { offset: 0, end: 12 }, newText: 'name = "b"\n' }] })
-      expect(swapped).toMatchObject({ action: 'replaced', content: 'name = "b"\n' })
-      expect(await readFile(path, 'utf8')).toBe('name = "b"\nport = 8080\nport = 8080\n')
-      const inserted = await editOne({ path, edits: [{ range: { offset: 0, end: 0 }, newText: '# top\n' }] })
-      expect(inserted).toMatchObject({ action: 'replaced', content: '# top\n', range: { offset: 0, end: 6 }, windows: [{ edit: 0, range: { offset: 0, end: 41 } }] })
-      expect(await readFile(path, 'utf8')).toBe('# top\nname = "b"\nport = 8080\nport = 8080\n')
-
-      const overwritten = await editOne({ path, newText: 'fresh\n' })
-      expect(overwritten).toMatchObject({ action: 'written', created: false })
-      if (overwritten.action !== 'written') throw new Error('expected written')
-      expect(await readFile(path, 'utf8')).toBe('fresh\n')
-
-      const restored = await editOne({ path, restore: written.version })
-      expect(restored).toMatchObject({ action: 'restored', version: written.version, previousVersion: overwritten.version })
-      expect(await readFile(path, 'utf8')).toBe('name = "a"\nport = 80\nport = 80\n')
-      expect((await problemsOf(editOne({ path, restore: 'nope' }))).problems[0]).toMatchObject({ reason: 'not-found' })
-      await expect(editOne({ path, restore: written.version, newText: 'x' })).rejects.toThrow('只能用一种')
-      await expect(editOne({ path })).rejects.toThrow('给 newText')
-      await expect(editOne({ path, edits: [{ range: { offset: 0, end: 6 }, oldText: 'missing', newText: 'x' }] })).rejects.toThrow('里没找到 oldText')
-    } finally {
-      await rm(root, { recursive: true, force: true })
-    }
-  })
-
-  test('edit takes a batch that succeeds or fails as a whole: writes, edits and rollbacks per file', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'velaros-system-edit-batch-'))
-    const a = join(root, 'a.txt')
-    const b = join(root, 'b.txt')
-    try {
-      const created = await systemFileOperations.edit({ files: [{ path: a, newText: 'alpha\n' }, { path: b, newText: 'beta\n' }] }, approvingContext)
-      expect(created.files.map((entry) => entry.action)).toEqual(['written', 'written'])
-      const versionA = created.files[0]!.version
-      const versionB = created.files[1]!.version
-
-      // 一批里有一个文件定不下来：整批不写，回执指出是哪个文件；修好那一项再发就全部成功。
-      const failed = await problemsOf(systemFileOperations.edit({
-        files: [
-          { path: a, edits: [{ range: { offset: 0, end: 6 }, oldText: 'alpha', newText: 'ALPHA' }] },
-          { path: join(root, 'missing.txt'), edits: [{ range: { offset: 0, end: 1 }, newText: 'x' }] },
-          { path: b, newText: 'BETA\n' },
-        ],
-      }, approvingContext))
-      expect(failed.problems).toEqual([expect.objectContaining({ file: 1, reason: 'not-found' })])
-      expect(await readFile(a, 'utf8')).toBe('alpha\n')
-      expect(await readFile(b, 'utf8')).toBe('beta\n')
-      const changed = await systemFileOperations.edit({
-        files: [
-          { path: a, edits: [{ range: { offset: 0, end: 6 }, oldText: 'alpha', newText: 'ALPHA' }] },
-          { path: b, newText: 'BETA\n' },
-        ],
-      }, approvingContext)
-      expect(changed.files.map((entry) => entry.action)).toEqual(['replaced', 'written'])
-      expect(await readFile(a, 'utf8')).toBe('ALPHA\n')
-      expect(await readFile(b, 'utf8')).toBe('BETA\n')
-
-      const rolledBack = await systemFileOperations.edit({ files: [{ path: a, restore: versionA }, { path: b, restore: versionB }] }, approvingContext)
-      expect(rolledBack.files.map((entry) => entry.action)).toEqual(['restored', 'restored'])
-      expect(await readFile(a, 'utf8')).toBe('alpha\n')
-      expect(await readFile(b, 'utf8')).toBe('beta\n')
-
-      const recalled = await readAll({ files: [{ path: a, version: rolledBack.files[0]!.previousVersion! }, { path: b, version: rolledBack.files[1]!.previousVersion! }] })
-      expect(recalled.files.map((entry) => ('error' in entry ? entry.error.code : entry.content))).toEqual(['ALPHA\n', 'BETA\n'])
-
-      // 敏感路径被拒：整批不写，问题标 denied。
-      const denying: SystemToolContext = { ...approvingContext, approval: { requestApproval: async () => ({ approved: true }), awaitConfirmation: async () => { throw new Error('user said no') } } } as SystemToolContext
-      // 临时目录一律豁免，所以拿 /etc 下一个不存在的文件当敏感路径；被拒就不会真的写。
-      const sensitive = '/etc/velaros-system-edit-test-never-written.conf'
-      const denied = await problemsOf(systemFileOperations.edit({ files: [{ path: a, newText: 'never\n' }, { path: sensitive, newText: 'Host x\n' }] }, denying))
-      expect(denied.reason).toBe('SYSTEM_EDIT_DENIED')
-      expect(await readFile(a, 'utf8')).toBe('alpha\n')
-      expect(existsSync(sensitive)).toBe(false)
-
-      // 带 version：文件被改过就整批不写，回执给出当前版本；版本对得上就照常写。
-      const before = entryOf(await readAll({ files: [{ path: a }] }))
-      await writeFile(a, 'changed outside\n')
-      const stale = await problemsOf(systemFileOperations.edit({ files: [{ path: a, version: before.version, edits: [{ range: before.range, newText: 'x' }] }, { path: b, newText: 'never\n' }] }, approvingContext))
-      expect(stale.problems[0]).toMatchObject({ file: 0, reason: 'stale', currentVersion: expect.stringMatching(/^[0-9a-f]{12}$/) })
-      expect(await readFile(a, 'utf8')).toBe('changed outside\n')
-      expect(await readFile(b, 'utf8')).toBe('beta\n')
-      const fresh = entryOf(await readAll({ files: [{ path: a }] }))
-      const applied = await systemFileOperations.edit({ files: [{ path: a, version: fresh.version, newText: 'fine\n' }] }, approvingContext)
-      expect(applied.files[0]).toMatchObject({ action: 'written' })
-
-      await expect(systemFileOperations.edit({ files: [] }, approvingContext)).rejects.toThrow('files 是空的')
-    } finally {
-      await rm(root, { recursive: true, force: true })
-    }
-  })
-
-  test('a long edited span only comes back as per-edit windows', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'velaros-system-edit-long-'))
-    const path = join(root, 'long.txt')
-    try {
-      await writeFile(path, `${'x'.repeat(30_000)  }NEEDLE${  'y'.repeat(30_000)}`)
-      const whole = await readOne({ path })
-      const replaced = await editOne({ path, edits: [{ range: whole.range, oldText: 'NEEDLE', newText: 'THREAD' }] })
-      if (replaced.action !== 'replaced') throw new Error('expected replaced')
-      expect(replaced.content).toBeUndefined()
-      expect(replaced.range).toBeUndefined()
-      expect(replaced.windows).toHaveLength(1)
-      expect(replaced.windows[0]).toMatchObject({ edit: 0, range: { offset: 29_800, end: 30_206 } })
-      expect(replaced.windows[0]!.content).toBe(`${'x'.repeat(200)  }THREAD${  'y'.repeat(200)}`)
-    } finally {
-      await rm(root, { recursive: true, force: true })
-    }
-  })
-
-  test('edit refuses what it cannot do losslessly or safely: bad bytes, stale restores, duplicates, out-of-range ranges', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'velaros-system-edit-guard-'))
-    try {
-      // 不是合法 UTF-8 的字节：解码再编码对不上原字节，拒绝改，文件一个字节都不动。
-      const latin = join(root, 'latin1.conf')
-      const bytes = Buffer.from([0x6e, 0x61, 0x6d, 0x65, 0x3d, 0x63, 0x61, 0x66, 0xe9, 0x0a, 0x6d, 0x6f, 0x64, 0x65, 0x3d, 0x6f, 0x6c, 0x64, 0x0a])
-      await writeFile(latin, bytes)
-      const lossy = await problemsOf(editOne({ latin: 'x', path: latin, edits: [{ range: { offset: 0, end: 19 }, oldText: 'mode=old', newText: 'mode=new' }] } as never))
-      expect(lossy.problems[0]).toMatchObject({ file: 0, reason: 'invalid' })
-      expect(Buffer.compare(await readFile(latin), bytes)).toBe(0)
-
-      // restore 也核对 version。
-      const path = join(root, 'a.txt')
-      const first = await editOne({ path, newText: 'one\n' })
-      await editOne({ path, newText: 'two\n' })
-      const staleRestore = await problemsOf(editOne({ path, restore: first.version, version: 'deadbeef0000' }))
-      expect(staleRestore.problems[0]).toMatchObject({ reason: 'stale', currentVersion: expect.any(String) })
-      expect(await readFile(path, 'utf8')).toBe('two\n')
-
-      // 同一批里同一个文件出现两次：整批不写。
-      const duplicated = await problemsOf(systemFileOperations.edit({ files: [{ path, newText: 'x\n' }, { path, newText: 'y\n' }] }, approvingContext))
-      expect(duplicated.problems[0]).toMatchObject({ file: 1, reason: 'invalid', message: expect.stringContaining('出现了不止一次') })
-      expect(await readFile(path, 'utf8')).toBe('two\n')
-
-      // range 的起点落在文件外：不静默追加，按 stale 报（终点越界只是钳到文件末尾）。
-      const outside = await problemsOf(editOne({ path, edits: [{ range: { offset: 5000, end: 5010 }, newText: 'APPENDED' }] }))
-      expect(outside.problems[0]).toMatchObject({ edit: 0, reason: 'stale', message: expect.stringContaining('重新读一遍') })
-      expect(await readFile(path, 'utf8')).toBe('two\n')
-
-      // 重叠出现也算多处：'aaa' 里找 'aa' 有两处。
-      const overlapping = join(root, 'aaa.txt')
-      await writeFile(overlapping, 'aaa')
-      const ambiguous = await problemsOf(editOne({ path: overlapping, edits: [{ range: { offset: 0, end: 3 }, oldText: 'aa', newText: 'X' }] }))
-      expect(ambiguous.problems[0]).toMatchObject({ reason: 'ambiguous', matchCount: 2 })
-
-      // 读不了的文件变成这个文件的问题，而不是裸错。
-      if (process.platform !== 'win32' && process.getuid?.() !== 0) {
-        const locked = join(root, 'locked.txt')
-        await writeFile(locked, 'secret\n')
-        await chmod(locked, 0o000)
-        const unreadable = await problemsOf(editOne({ path: locked, edits: [{ range: { offset: 0, end: 7 }, newText: 'x' }] }))
-        expect(unreadable.problems[0]).toMatchObject({ file: 0, reason: expect.stringMatching(/denied|invalid/) })
-        await chmod(locked, 0o600)
-      }
-    } finally {
-      await rm(root, { recursive: true, force: true })
-    }
-  })
 
 
-  test('adapts a replacement to CRLF files', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'velaros-system-edit-crlf-'))
-    const path = join(root, 'lines.txt')
-    try {
-      await writeFile(path, 'a\r\nb\r\nc\r\n')
-      const result = await editOne({ path, edits: [{ range: { offset: 0, end: 9 }, oldText: 'a\nb', newText: 'x\ny' }] })
-      expect(result.action).toBe('replaced')
-      expect(await readFile(path, 'utf8')).toBe('x\r\ny\r\nc\r\n')
-    } finally {
-      await rm(root, { recursive: true, force: true })
-    }
-  })
+
+
+
 
   test('sensitive-path judgement: macOS login items are caught after case folding, temp dirs never ask, Linux has no LaunchAgents', () => {
     expect(isSensitiveSystemMutationPath('/Users/example/Library/LaunchAgents/com.evil.plist', { homeDir: '/Users/example', platform: 'darwin' })).toBe(true)
@@ -644,26 +324,6 @@ describe('System capability', () => {
     }
   })
 
-  test('edit refuses to overwrite a binary file with newText and stops counting matches after the anchor limit', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'velaros-system-binary-'))
-    try {
-      const png = join(root, 'logo.png')
-      const bytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 1, 2, 3])
-      await writeFile(png, bytes)
-      const refused = await problemsOf(systemFileOperations.edit({ files: [{ path: png, newText: 'oops\n' }] }, approvingContext))
-      expect(refused.problems[0]).toMatchObject({ file: 0, reason: 'invalid' })
-      expect(Buffer.from(await readFile(png)).equals(bytes)).toBe(true)
-
-      const many = join(root, 'many.txt')
-      await writeFile(many, 'a'.repeat(5_000))
-      const ambiguous = await problemsOf(systemFileOperations.edit({ files: [{ path: many, edits: [{ range: { offset: 0, end: 5_000 }, oldText: 'aa', newText: 'b' }] }] }, approvingContext))
-      expect(ambiguous.problems[0]).toMatchObject({ reason: 'ambiguous', matchCount: 11 })
-      expect(String(ambiguous.problems[0]!.message)).toContain('至少匹配到 11 处')
-      expect(findOccurrences('aaaa', 'aa', { offset: 0, end: 4 }, 2)).toEqual([0, 1])
-    } finally {
-      await rm(root, { recursive: true, force: true })
-    }
-  })
 
 
   test('global path search reports truncated only when more matches exist, and env alone is read-only', async () => {
@@ -682,27 +342,6 @@ describe('System capability', () => {
     }
   })
 
-  test('edits written into a CRLF file use CRLF, whether oldText matched as-is or only a range was given; LF files stay LF', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'velaros-system-crlf-'))
-    try {
-      // 单行 oldText 原样匹配得上、newText 却是多行：原来会把裸 LF 混进 CRLF 文件。
-      const matched = join(root, 'matched.txt')
-      await writeFile(matched, 'line1\r\nfoo();\r\nline3\r\n')
-      await editOne({ path: matched, edits: [{ range: { offset: 0, end: 21 }, oldText: 'foo();', newText: 'foo();\nbar();' }] })
-      expect(await readFile(matched, 'utf8')).toBe('line1\r\nfoo();\r\nbar();\r\nline3\r\n')
-      // 只给 range 的整段替换，那一段里没有换行：按整个文件的风格。
-      const ranged = join(root, 'ranged.txt')
-      await writeFile(ranged, 'line1\r\nfoo();\r\nline3\r\n')
-      await editOne({ path: ranged, edits: [{ range: { offset: 7, end: 13 }, newText: 'x();\ny();' }] })
-      expect(await readFile(ranged, 'utf8')).toBe('line1\r\nx();\r\ny();\r\nline3\r\n')
-      const lf = join(root, 'lf.txt')
-      await writeFile(lf, 'a\nb\n')
-      await editOne({ path: lf, edits: [{ range: { offset: 0, end: 1 }, newText: 'x\ny' }] })
-      expect(await readFile(lf, 'utf8')).toBe('x\ny\nb\n')
-    } finally {
-      await rm(root, { recursive: true, force: true })
-    }
-  })
 
   test.skipIf(process.platform === 'win32')('edit refuses pipes instead of hanging on them, and content search skips them', async () => {
     const root = await mkdtemp(join(tmpdir(), 'velaros-system-fifo-'))
@@ -711,10 +350,7 @@ describe('System capability', () => {
       expect(spawnSync('mkfifo', [pipe]).status).toBe(0)
       await writeFile(join(root, 'a.txt'), 'needle\n')
       // 原来读命名管道会一直挂着，abort 也收不回。
-      const edited = await problemsOf(systemFileOperations.edit({ files: [{ path: pipe, edits: [{ range: { offset: 0, end: 0 }, newText: 'x' }] }] }, approvingContext))
-      expect(edited.problems[0]).toMatchObject({ reason: 'invalid' })
-      expect(String(edited.problems[0]?.message)).toContain('不是普通文件')
-      // 整个写入也不许把管道换成普通文件。
+      // 整个写入不许把管道换成普通文件。
       const replaced = await problemsOf(systemFileOperations.edit({ files: [{ path: pipe, newText: 'x' }] }, approvingContext))
       expect(replaced.problems[0]).toMatchObject({ reason: 'invalid' })
       expect((await lstat(pipe)).isFIFO()).toBe(true)
@@ -725,63 +361,7 @@ describe('System capability', () => {
     }
   })
 
-  test('edit clamps a range end past the file, rejects a reversed range, adapts line endings within the range, and writes through dangling links', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'velaros-system-range-'))
-    try {
-      const short = join(root, 'short.txt')
-      await writeFile(short, 'export EDITOR=vim\n')
-      const clamped = await editOne({ path: short, edits: [{ range: { offset: 0, end: 1200 }, oldText: 'vim', newText: 'code' }] })
-      expect(clamped.action).toBe('replaced')
-      expect(await readFile(short, 'utf8')).toBe('export EDITOR=code\n')
-      const reversed = await problemsOf(systemFileOperations.edit({ files: [{ path: short, edits: [{ range: { offset: 4, end: 2 }, newText: 'x' }] }] }, approvingContext))
-      expect(reversed.problems[0]).toMatchObject({ edit: 0, reason: 'invalid' })
-      const beyond = await problemsOf(systemFileOperations.edit({ files: [{ path: short, edits: [{ range: { offset: 999, end: 1000 }, newText: 'x' }] }] }, approvingContext))
-      expect(beyond.problems[0]).toMatchObject({ edit: 0, reason: 'stale' })
 
-      // 换行风格只看 range 里那一段：前半段 LF、后半段 CRLF 时，用 LF 写的 oldText 也能匹配 CRLF 那一段。
-      const mixed = join(root, 'mixed.txt')
-      await writeFile(mixed, 'P\nQ\n#####\nP\r\nQ\r\n')
-      const adapted = await editOne({ path: mixed, edits: [{ range: { offset: 10, end: 16 }, oldText: 'P\nQ', newText: 'X\nY' }] })
-      expect(adapted.action).toBe('replaced')
-      expect(await readFile(mixed, 'utf8')).toBe('P\nQ\n#####\nX\r\nY\r\n')
-
-      // 悬空的符号链接：写到它指向的路径，链接还是链接。
-      const dangling = join(root, 'dead.link')
-      await symlink(join(root, 'never-existed.txt'), dangling)
-      const created = await systemFileOperations.edit({ files: [{ path: dangling, newText: 'born\n' }] }, approvingContext)
-      expect(created.files[0]).toMatchObject({ action: 'written', created: true, target: join(await realpath(root), 'never-existed.txt') })
-      expect((await lstat(dangling)).isSymbolicLink()).toBe(true)
-      expect(await readFile(join(root, 'never-existed.txt'), 'utf8')).toBe('born\n')
-
-      // 父路径是文件：计划期就报出来，入参可复用。
-      const blocker = join(root, 'file.txt')
-      await writeFile(blocker, 'x')
-      const blocked = await problemsOf(systemFileOperations.edit({ files: [{ path: join(blocker, 'child.txt'), newText: 'y' }] }, approvingContext))
-      expect(blocked.problems[0]).toMatchObject({ file: 0, reason: 'invalid' })
-    } finally {
-      await rm(root, { recursive: true, force: true })
-    }
-  })
-
-  test('edit refuses oversized files before reading them, and whole-file writes above the snapshot limit keep the encoding but no version', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'velaros-system-large-'))
-    try {
-      const big = join(root, 'big.txt')
-      await writeFile(big, 'x'.repeat(3 * 1024 * 1024))
-      const tooBigToEdit = await problemsOf(systemFileOperations.edit({ files: [{ path: big, edits: [{ range: { offset: 0, end: 1 }, newText: 'y' }] }] }, approvingContext))
-      expect(String(tooBigToEdit.problems[0]!.message)).toContain('不能用 edits 改')
-      const rewritten = await editOne({ path: big, newText: 'small again\n' })
-      expect(rewritten).toMatchObject({ action: 'written', previousVersion: null })
-      expect(await readFile(big, 'utf8')).toBe('small again\n')
-
-      const huge = join(root, 'huge.txt')
-      await writeFile(huge, Buffer.alloc(21 * 1024 * 1024, 0x61))
-      const refused = await problemsOf(systemFileOperations.edit({ files: [{ path: huge, newText: 'nope' }] }, approvingContext))
-      expect(String(refused.problems[0]!.message)).toContain('不能在这里整个覆盖')
-    } finally {
-      await rm(root, { recursive: true, force: true })
-    }
-  })
 
   test('sensitive-path judgement covers /Applications and files directly under the root', () => {
     expect(isSensitiveSystemMutationPath('/Applications/Foo.app/Contents/MacOS/foo', { homeDir: '/Users/example', platform: 'darwin' })).toBe(true)

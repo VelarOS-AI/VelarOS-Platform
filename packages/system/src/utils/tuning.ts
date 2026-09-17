@@ -112,8 +112,6 @@ export const SystemTuning = Object.freeze({
   }),
   /** 文件读写：SystemFileOperations、SystemFileHistory、文本文件工具函数。 */
   files: Object.freeze({
-    /** edit 多处匹配时，每个锚点前后各带多少字符原文。 */
-    anchorContextChars: 80,
     /** 超过可编辑上限的文件整个写入前只读开头这么多字节认编码；沙箱里 `.git` 链接文件也只读这么多。 */
     textSniffBytes: 8192,
     /** 小于这个字节数的文件写前一律重读核版本：印记的时间精度不够时，小文件重读几乎不花钱。 */

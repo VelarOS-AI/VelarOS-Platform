@@ -6,33 +6,28 @@
 import type { ToolResultModelContentPart } from '@velaros-ai/agent/contracts'
 import type { DecodedText, TextEncoding } from '@velaros-ai/text-files/contracts'
 
-/** @AgentView 文件里的一段字符范围，end 不含。read 返回它，edit 原样收回去。 */
+/** 文件里的一段字符范围，end 不含。只在包内用。 */
 export interface SystemTextRange {
   offset: number
   end: number
 }
 
-/** @AgentView 给 version 就读改动前留下的那个版本；只有本次运行里 edit 留下的几份还在，找不到算这个文件失败。 */
+/** @AgentView 整个文件读回来。给 version 就读改动前留下的那个版本；只有本次运行里 edit 留下的几份还在，找不到算这个文件失败。 */
 export interface SystemReadFileInput {
   path: string
-  offset?: number
-  maxChars?: number
   version?: string
 }
 
-/** @AgentView 一批最多 20 项；一次调用总共最多返回 20 万字符，按顺序分给各文件。 */
+/** @AgentView 一批最多 20 项，每个文件整份读回来；总量超过上限时，超出的那几个各自算失败条目。 */
 export type SystemReadInput = {
   files: SystemReadFileInput[]
 }
 
-/** @AgentView content 是 range 这段的原文；hasMore 时把 range.end 当下一次的 offset 接着读。version 是这份内容的版本号，read 与 edit 都收它。 */
+/** @AgentView content 是整个文件的原文，换行风格原样保留。version 是这份内容的版本号，回写时带上它就能挡住「读完之后别人又改过」。 */
 export interface SystemReadFileResult {
   path: string
   version: string
   content: string
-  range: SystemTextRange
-  totalChars: number
-  hasMore: boolean
   encoding: TextEncoding
 }
 
@@ -49,10 +44,9 @@ export interface SystemFileFailure {
   }
 }
 
-/** @AgentView files 与入参的 files 一一对应。字符预算用完之后的文件根本没读，那一项是失败条目；note 说明哪个文件被截短、从第几个起没读。 */
+/** @AgentView files 与入参的 files 一一对应；某个文件读不了只有它那一项是失败。 */
 export interface SystemReadResult {
   files: Array<SystemReadFileResult | SystemFileFailure>
-  note?: string
 }
 
 /** @AgentView 一张图片。 */
@@ -78,23 +72,20 @@ export interface SystemViewResult {
   modelContent: ToolResultModelContentPart[]
 }
 
-/** @AgentView 只在 range 这段里改，不在整个文件里找：给 oldText 就只换这段里唯一的那一处，不给就把整段换成 newText，range 是空段就是在那个位置插入。 */
-export interface SystemTextEdit {
-  range: SystemTextRange
-  oldText?: string
-  newText: string
-}
-
 /**
  * @AgentView
- * 三种改法只用一种：newText 当整个文件写进去，不存在就连同上级目录新建，已有的二进制文件拒改；
- * edits 在 read 读到的范围里改几处，一次最多 50 处、各处不能重叠；restore 回到改动前留下的那个版本。
- * version 是 read 返回的版本号，给了就先核对文件现在还是这个版本，被改过就整批不写并给出当前版本；不给就不核对。
+ * 两种改法只用一种：`newText` 当整个文件写进去（不存在就连同上级目录新建，已有的二进制文件拒改），
+ * `restore` 回到改动前留下的那个版本。
+ *
+ * 改一小段也是给整份 `newText`——先 `read` 拿到 `content`，在程序里算出新内容再写回来。
+ * **正文不经模型的上下文**，所以整份写和改一处一样便宜；`content.replace(...)` 比任何编辑协议都准。
+ *
+ * `version` 是 `read` 返回的版本号，给了就先核对文件现在还是这个版本，被改过就整批不写并给出当前版本；不给就不核对。
+ * 想安全地改一个文件，就把 `read` 拿到的 `version` 原样带回来。
  */
 export interface SystemEditFileInput {
   path: string
   newText?: string
-  edits?: SystemTextEdit[]
   restore?: string
   version?: string
 }
@@ -116,28 +107,6 @@ export interface SystemEditWrittenResult {
   totalChars: number
 }
 
-/** @AgentView edit 是 edits 里第几处；content 是新文本前后各带 200 字符，range 是这段在新文件里的位置。 */
-export interface SystemEditWindow {
-  edit: number
-  range: SystemTextRange
-  content: string
-}
-
-/** @AgentView windows 每处给一段新文本前后各 200 字符；盖住所有改动那段（各处 range 的并集）不超过 2 万字符时，content 和 range 把整段给出，不用再读一遍确认。 */
-export interface SystemEditReplacedResult {
-  path: string
-  target?: string
-  action: 'replaced'
-  edits: number
-  version: string
-  previousVersion: Nullable<string>
-  bytes: number
-  totalChars: number
-  windows: SystemEditWindow[]
-  content?: string
-  range?: SystemTextRange
-}
-
 /** @AgentView 文件回到 version 那个版本；回滚前的内容留成 previousVersion，回滚本身也能再回滚。 */
 export interface SystemEditRestoredResult {
   path: string
@@ -149,39 +118,28 @@ export interface SystemEditRestoredResult {
   totalChars: number
 }
 
-/** 一处候选：range 是它在文件里的位置，context 是前后各带一小段的原文，用来分辨是哪一处。 */
-export interface SystemEditAnchor {
-  range: SystemTextRange
-  context: string
-}
-
-/** 一处定不下来的问题：file 是 files 里第几个（从 0 起），edit 是它 edits 里第几处（从 0 起，整个文件的问题没有）；多处匹配时 anchors 列出前 10 处、matchCount 是找到几处（超过 10 处只数到 11 为止），选一个把它的 range 填回那一处；重叠时 with 是和它重叠的那一处；文件被改过时 currentVersion 是它现在的版本。 */
+/** 一处写不下去的问题：file 是 files 里第几个（从 0 起）；文件被改过时 currentVersion 是它现在的版本。 */
 export interface SystemEditProblem {
   file: number
   path: string
-  reason: 'ambiguous' | 'not-found' | 'overlap' | 'invalid' | 'denied' | 'stale'
+  reason: 'invalid' | 'denied' | 'stale'
   message: string
-  edit?: number
-  anchors?: SystemEditAnchor[]
-  matchCount?: number
-  with?: number
   currentVersion?: string
 }
 
-/** edit 失败回执的 details：什么都没写（executionOutcome 固定是 not-applied，所以入参可以复用），problems 列出每个问题；用 reuse + changes 只改出问题的那一处再发。 */
+/** edit 失败回执的 details：什么都没写（executionOutcome 固定是 not-applied），problems 列出每个问题。 */
 export interface SystemEditFailureDetails {
   executionOutcome: 'not-applied'
   problems: SystemEditProblem[]
 }
 
 /** @AgentView 一个文件写完的结果，按 action 分辨是哪一种。 */
-export type SystemEditFileResult = SystemEditWrittenResult | SystemEditReplacedResult | SystemEditRestoredResult
+export type SystemEditFileResult = SystemEditWrittenResult | SystemEditRestoredResult
 
 /**
  * @AgentView
- * files 与入参的 files 一一对应。
- * 任何一处定不下来就整个报错、一个文件都不写，错误的 cause.details.problems 逐条给出是第几个文件第几处、为什么；
- * 某处 oldText 在范围里匹配到多处时带出每处的锚点，把选中那处的 range 填回去再发一次就是二次确认。
+ * files 与入参的 files 一一对应。任何一个写不下去就整个报错、一个文件都不写，
+ * 错误的 cause.details.problems 逐条给出是第几个文件、为什么。
  */
 export interface SystemEditResult {
   files: SystemEditFileResult[]
@@ -228,13 +186,6 @@ export interface SensitiveSystemMutationPathOptions {
   env?: NodeJS.ProcessEnv
 }
 
-/** 一处已经定下来的目标：edit 是 edits 里第几处，range 是改动前原文里的位置。 */
-export interface SystemEditTarget {
-  edit: number
-  range: SystemTextRange
-  newText: string
-}
-
 /** 文件的印记：修改时间与大小。写之前再 stat 一次，印记没变的大文件不用重读核版本。 */
 export interface SystemFileStamp {
   mtimeMs: number
@@ -242,11 +193,10 @@ export interface SystemFileStamp {
 }
 
 /**
- * 一个文件定下来的写入计划：回滚、整个写入、或改几处。path 是按传入路径解析出的绝对路径，target 是解开符号链接后真正要写的文件，
+ * 一个文件定下来的写入计划：回滚，或整个写入。path 是按传入路径解析出的绝对路径，target 是解开符号链接后真正要写的文件，
  * baseVersion 与 stamp 是计划时文件的版本和印记（不存在为 null），写之前再核一次。要写的字节在计划时就按原编码编好（bytes），编不成的在计划期就成了问题：
- * 回滚带回滚后正文的字符数，整个写入时 previous 只在文件不超过可编辑上限时保留（留版本用），改几处时 updated 是改完的正文。第一段只做计划，第二段照计划写。
+ * 回滚带回滚后正文的字符数，整个写入时 previous 只在文件不超过可编辑上限时保留（留版本用）。第一段只做计划，第二段照计划写。
  */
 export type SystemEditPlan =
   | { kind: 'restore'; index: number; path: string; target: string; current: Nullable<Buffer>; snapshot: { version: string; buffer: Buffer }; totalChars: number; baseVersion: Nullable<string>; stamp: Nullable<SystemFileStamp> }
   | { kind: 'write'; index: number; path: string; target: string; created: boolean; previous: Nullable<{ buffer: Buffer }>; newText: string; bytes: Buffer; baseVersion: Nullable<string>; stamp: Nullable<SystemFileStamp> }
-  | { kind: 'edits'; index: number; path: string; target: string; textFile: SystemTextFileContent; ordered: SystemEditTarget[]; scopes: SystemTextRange[]; updated: string; bytes: Buffer; baseVersion: Nullable<string>; stamp: Nullable<SystemFileStamp> }

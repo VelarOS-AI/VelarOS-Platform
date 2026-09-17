@@ -170,18 +170,14 @@ export async function readBoundedFile(resolvedPath: string, maxBytes: number): P
 }
 
 /** 把一份字节按文本解码后从 offset 起取最多 maxChars 个字符，连同范围与版本号一起组成读取结果。 */
-export function readTextWindow(resolvedPath: string, buffer: Buffer, offset: number, maxChars: number): SystemReadFileResult {
+export function readWholeText(resolvedPath: string, buffer: Buffer, budgetChars: number): SystemReadFileResult {
   const { content, encoding } = decodeSystemTextBuffer(buffer, resolvedPath)
-  const slice = sliceTextChars(content, offset, maxChars)
-  return {
-    path: resolvedPath,
-    version: fileVersionOf(buffer),
-    content: slice.content,
-    range: slice.range,
-    totalChars: content.length,
-    hasMore: slice.range.end < content.length,
-    encoding,
+  // 整份读回来，不切片：正文落在程序的变量里，模型看不到它，所以没有「分页」这回事。
+  // 超过这一次调用剩下的预算就直接失败——半份内容回写就是把文件截断，比读不到坏得多。
+  if (content.length > budgetChars) {
+    throw new AppError('VALIDATION', `${resolvedPath} 有 ${content.length} 个字符，超过这次调用剩下的 ${budgetChars}；少读几个文件，或者用 run 里的 sed / tail 先筛一段出来`)
   }
+  return { path: resolvedPath, version: fileVersionOf(buffer), content, encoding }
 }
 
 /** 把读文件时的系统错误翻成对应的错误码。 */

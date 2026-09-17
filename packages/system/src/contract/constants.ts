@@ -93,20 +93,20 @@ export const SystemEnvironmentVariables = Object.freeze({
 } as const)
 /** 读、看、写的上限；读看写三个工具的说明与 schema 直接引用这里，改了模型看到的数字跟着变。 */
 export const SystemFileLimits = Object.freeze({
-  /** 文本一次调用总共最多返回多少字符；每个文件的 maxChars 上限与缺省值也是它。 */
-  readChars: 200_000,
+  /**
+   * 一次调用总共最多读回多少字符。
+   *
+   * 它保护的是**这一侧的内存与 IPC**，不是模型的上下文——读回来的正文落在程序的变量里，
+   * 模型看不到它，除非程序自己把它交出来（那条路另有 40,000 字符的上限）。
+   * 所以这个数字可以比工具时代大得多：那时它是上下文预算，现在只是堆的常识。
+   */
+  readChars: 4_000_000,
   /** read 一次最多几个文件。 */
   readFiles: 20,
   /** view 一次最多几张图片。 */
   viewFiles: 10,
   /** edit 一次最多几个文件。 */
   editFiles: 20,
-  /** edit 一个文件一次最多改几处。 */
-  editsPerFile: 50,
-  /** edit 改完后改动那段不超过这么多字符时，结果整段给出新内容。 */
-  editWholeChars: 20_000,
-  /** edit 改完后每处前后各带多少字符的新样子。 */
-  editContextChars: 200,
   /** 交给模型的一张图片最大多少字节。 */
   imageBytes: 5 * 1024 * 1024,
   /** 读进来的文件最大多少字节，再大就让模型用系统命令截取。 */

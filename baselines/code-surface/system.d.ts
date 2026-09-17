@@ -1,5 +1,5 @@
 // 本文件由 scripts/code-surface/generate-declarations.mjs 从能力包源码生成，不要手改。
-// 模型写 `import { … } from 'velar:system'`：6 个方法、44 个类型。
+// 模型写 `import { … } from 'velar:system'`：6 个方法、40 个类型。
 // 改源码里带 @AgentView 的东西就是改模型可观测面，重算用 `bun run generate:code-surface`。
 
 declare module 'velar:system' {
@@ -20,15 +20,14 @@ declare module 'velar:system' {
 
   const TextEncodings: readonly ['utf8', 'utf8-bom', 'utf16le', 'utf16be', 'utf16le-nobom', 'utf16be-nobom', 'gb18030']
 
-  /** 一批最多 20 项；一次调用总共最多返回 20 万字符，按顺序分给各文件。 */
+  /** 一批最多 20 项，每个文件整份读回来；总量超过上限时，超出的那几个各自算失败条目。 */
   type SystemReadInput = {
     files: SystemReadFileInput[]
   }
 
-  /** files 与入参的 files 一一对应。字符预算用完之后的文件根本没读，那一项是失败条目；note 说明哪个文件被截短、从第几个起没读。 */
+  /** files 与入参的 files 一一对应；某个文件读不了只有它那一项是失败。 */
   interface SystemReadResult {
     files: Array<SystemReadFileResult | SystemFileFailure>
-    note?: string
   }
 
   /** 一批最多 10 张。 */
@@ -48,9 +47,8 @@ declare module 'velar:system' {
   }
 
   /**
-   * files 与入参的 files 一一对应。
-   * 任何一处定不下来就整个报错、一个文件都不写，错误的 cause.details.problems 逐条给出是第几个文件第几处、为什么；
-   * 某处 oldText 在范围里匹配到多处时带出每处的锚点，把选中那处的 range 填回去再发一次就是二次确认。
+   * files 与入参的 files 一一对应。任何一个写不下去就整个报错、一个文件都不写，
+   * 错误的 cause.details.problems 逐条给出是第几个文件、为什么。
    */
   interface SystemEditResult {
     files: SystemEditFileResult[]
@@ -101,22 +99,17 @@ declare module 'velar:system' {
     tasks: SystemBackgroundTaskRecord[]
   }
 
-  /** 给 version 就读改动前留下的那个版本；只有本次运行里 edit 留下的几份还在，找不到算这个文件失败。 */
+  /** 整个文件读回来。给 version 就读改动前留下的那个版本；只有本次运行里 edit 留下的几份还在，找不到算这个文件失败。 */
   interface SystemReadFileInput {
     path: string
-    offset?: number
-    maxChars?: number
     version?: string
   }
 
-  /** content 是 range 这段的原文；hasMore 时把 range.end 当下一次的 offset 接着读。version 是这份内容的版本号，read 与 edit 都收它。 */
+  /** content 是整个文件的原文，换行风格原样保留。version 是这份内容的版本号，回写时带上它就能挡住「读完之后别人又改过」。 */
   interface SystemReadFileResult {
     path: string
     version: string
     content: string
-    range: SystemTextRange
-    totalChars: number
-    hasMore: boolean
     encoding: TextEncoding
   }
 
@@ -155,20 +148,22 @@ declare module 'velar:system' {
     | { type: 'file-data'; data: string; mediaType: string; filename?: string }
 
   /**
-   * 三种改法只用一种：newText 当整个文件写进去，不存在就连同上级目录新建，已有的二进制文件拒改；
-   * edits 在 read 读到的范围里改几处，一次最多 50 处、各处不能重叠；restore 回到改动前留下的那个版本。
-   * version 是 read 返回的版本号，给了就先核对文件现在还是这个版本，被改过就整批不写并给出当前版本；不给就不核对。
+   * 两种改法只用一种：`newText` 当整个文件写进去（不存在就连同上级目录新建，已有的二进制文件拒改），
+   * `restore` 回到改动前留下的那个版本。
+   * 改一小段也是给整份 `newText`——先 `read` 拿到 `content`，在程序里算出新内容再写回来。
+   * **正文不经模型的上下文**，所以整份写和改一处一样便宜；`content.replace(...)` 比任何编辑协议都准。
+   * `version` 是 `read` 返回的版本号，给了就先核对文件现在还是这个版本，被改过就整批不写并给出当前版本；不给就不核对。
+   * 想安全地改一个文件，就把 `read` 拿到的 `version` 原样带回来。
    */
   interface SystemEditFileInput {
     path: string
     newText?: string
-    edits?: SystemTextEdit[]
     restore?: string
     version?: string
   }
 
   /** 一个文件写完的结果，按 action 分辨是哪一种。 */
-  type SystemEditFileResult = SystemEditWrittenResult | SystemEditReplacedResult | SystemEditRestoredResult
+  type SystemEditFileResult = SystemEditWrittenResult | SystemEditRestoredResult
 
   /** 实际选中的命令语言。Windows 按 Git Bash、PowerShell 7、Windows PowerShell、CMD 的顺序挑选。 */
   type SystemShellKind = 'git-bash' | 'pwsh' | 'powershell' | 'cmd' | 'posix'
@@ -244,21 +239,8 @@ declare module 'velar:system' {
     console?: SystemConsoleSessionInfo
   }
 
-  /** 文件里的一段字符范围，end 不含。read 返回它，edit 原样收回去。 */
-  interface SystemTextRange {
-    offset: number
-    end: number
-  }
-
   /** 一种磁盘文本编码，取值见常量表 `TextEncodings`。 */
   type TextEncoding = (typeof TextEncodings)[number]
-
-  /** 只在 range 这段里改，不在整个文件里找：给 oldText 就只换这段里唯一的那一处，不给就把整段换成 newText，range 是空段就是在那个位置插入。 */
-  interface SystemTextEdit {
-    range: SystemTextRange
-    oldText?: string
-    newText: string
-  }
 
   /** previousVersion 是改动前留下的版本，新建或没留下时为 null；path 是解析后的绝对路径，它是符号链接时 target 是真正被写的那个文件。 */
   interface SystemEditWrittenResult {
@@ -270,21 +252,6 @@ declare module 'velar:system' {
     previousVersion: string | null
     bytes: number
     totalChars: number
-  }
-
-  /** windows 每处给一段新文本前后各 200 字符；盖住所有改动那段（各处 range 的并集）不超过 2 万字符时，content 和 range 把整段给出，不用再读一遍确认。 */
-  interface SystemEditReplacedResult {
-    path: string
-    target?: string
-    action: 'replaced'
-    edits: number
-    version: string
-    previousVersion: string | null
-    bytes: number
-    totalChars: number
-    windows: SystemEditWindow[]
-    content?: string
-    range?: SystemTextRange
   }
 
   /** 文件回到 version 那个版本；回滚前的内容留成 previousVersion，回滚本身也能再回滚。 */
@@ -392,13 +359,6 @@ declare module 'velar:system' {
     acceptsInput: boolean
     /** 一句话说明：任务正在控制台里等用户，别再等这次调用的输出。 */
     note: string
-  }
-
-  /** edit 是 edits 里第几处；content 是新文本前后各带 200 字符，range 是这段在新文件里的位置。 */
-  interface SystemEditWindow {
-    edit: number
-    range: SystemTextRange
-    content: string
   }
 
   /** 命令在操作系统进程层实际采用的文件副作用边界。 */

@@ -21,19 +21,19 @@ export function failureEntry(path: string, failure: AppError): SystemFileFailure
 }
 
 /**
- * edit 整批定不下来时抛的错误：什么都没写。problems 放在 cause 的 details 里让 Agent 边界原样交给模型，
- * context 里标 executionOutcome 为 not-applied，模型就能用 reuse + changes 只改出问题的那一处再发一次。
+ * edit 整批写不下去时抛的错误：什么都没写。problems 放在 cause 的 details 里原样交给模型，
+ * context 里标 executionOutcome 为 not-applied——**一个文件都没动**，模型改完出问题的那几项再发一次就行。
  */
 export function unresolvedEditFailure(problems: readonly SystemEditProblem[]): AppError {
   const denied = problems.some((problem) => problem.reason === 'denied')
-  const summary = toolFailures.listed(problems).map((problem) => `files[${problem.file}]${isPresent(problem.edit) ? `.edits[${problem.edit}]` : ''}: ${problem.message}`).join('; ')
+  const summary = toolFailures.listed(problems).map((problem) => `files[${problem.file}]: ${problem.message}`).join('; ')
   const details: SystemEditFailureDetails = { executionOutcome: 'not-applied', problems: toolFailures.listed(problems) }
   const cause = {
     reason: denied ? SystemErrorCodes.editDenied : SystemErrorCodes.editUnresolved,
     details,
-    suggestedNextAction: '什么都没写。用 reuse + changes 只改列出的那几处再调一次 edit（例如把 path ["files", 0, "edits", 1, "range"] 改成挑中的锚点 range），没列出的文件和改动原样保留。',
+    suggestedNextAction: '什么都没写。列出的那几个文件重新 read 一遍拿到当前 version，改完再调一次 edit。',
   }
-  return toolFailures.create(denied ? 'PERMISSION' : problems.every((problem) => problem.reason === 'not-found') ? 'NOT_FOUND' : 'VALIDATION', `有 ${problems.length} 个问题，这一批改动没有应用，什么都没写。${summary}`, cause, { notApplied: true })
+  return toolFailures.create(denied ? 'PERMISSION' : 'VALIDATION', `有 ${problems.length} 个问题，这一批改动没有应用，什么都没写。${summary}`, cause, { notApplied: true })
 }
 
 /** 核对调用方给的版本和文件现在的版本：给了且对不上就返回一条 stale 问题的字段，其余情况返回 null。文件不存在时当前版本为 null。 */

@@ -6,24 +6,21 @@
 import { mkdir, stat } from 'node:fs/promises'
 import { dirname } from 'node:path'
 
-import { isArray, isEmpty, isNotNull, isNull, isPresent, Log, toOptional } from '@velaros-ai/core'
+import { isArray, isEmpty, isPresent, Log, toOptional } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { resolveRealPath } from '@velaros-ai/core/utils/RealPath'
 import type { PlatformCompatibilityApi } from '@velaros-ai/platform'
 import { currentPlatform } from '@velaros-ai/platform'
 import { textCodec } from '@velaros-ai/text-files'
 import type { TextEncoding } from '@velaros-ai/text-files/contracts'
-import { ToolFailureLimits } from '@velaros-ai/tool-contract/contracts'
 
 import { SystemFileLimits } from '../contract/constants.js'
 import type { SystemToolContext } from '../contract/requires.js'
-import type { SystemEditFileInput, SystemEditFileResult, SystemEditInput, SystemEditPlan, SystemEditProblem, SystemEditReplacedResult, SystemEditResult, SystemEditTarget, SystemEditWindow, SystemReadFileInput, SystemReadFileResult, SystemReadInput, SystemReadResult, SystemTextFileContent, SystemTextRange, SystemViewFileInput, SystemViewFileResult, SystemViewInput, SystemViewResult } from '../types/files.js'
+import type { SystemEditFileInput, SystemEditFileResult, SystemEditInput, SystemEditPlan, SystemEditProblem, SystemEditResult, SystemReadFileInput, SystemReadFileResult, SystemReadInput, SystemReadResult, SystemTextFileContent, SystemViewFileInput, SystemViewFileResult, SystemViewInput, SystemViewResult } from '../types/files.js'
 import { assertFileBatchSize, failureEntry, staleProblem, unresolvedEditFailure, withLinkTarget } from '../utils/file-batch.js'
 import { comparisonPath, confirmCredentialAccess, confirmSensitiveSystemMutation } from '../utils/file-safety.js'
 import { readErrnoCode, writeSystemFileAtomically } from '../utils/fs.js'
-import { adaptReplacementLineEndings, findOccurrences, lineEndingStyle, withLineEndingStyle } from '../utils/text.js'
 import {
-  clampTextRange,
   currentFileVersion,
   detectMediaType,
   fileVersionOf,
@@ -31,12 +28,10 @@ import {
   readRawSystemFileBuffer,
   readSystemTextEncodingFromHead,
   readSystemTextFile,
-  readTextWindow,
-  reencodesExactly,
+  readWholeText,
   stampOf,
   stampProvesUnchanged,
 } from '../utils/text-file.js'
-import { SystemTuning } from '../utils/tuning.js'
 
 import type { SystemFileHistoryApi } from './SystemFileHistory.js'
 import { SystemFileHistory } from './SystemFileHistory.js'
@@ -95,20 +90,16 @@ class SystemFileOperations implements SystemFileOperationsApi {
     assertFileBatchSize(input.files.length, SystemFileLimits.readFiles, 'read')
     const files: SystemReadResult['files'] = []
     const failures: AppError[] = []
-    // 一次调用总共最多 readChars 个字符：按顺序分给每个文件；预算用完后的文件根本不读盘，那一项换成失败条目，note 说明从哪起。
+    // 一次调用总共最多 readChars 个字符：预算用完之后的文件根本不读盘，那一项换成失败条目。
+    // 这个预算保护的是这一侧的内存与 IPC——正文落在程序的变量里，模型看不到它。
     let remaining = SystemFileLimits.readChars
-    let shortenedAt: Nullable<number> = null
-    let exhaustedAt: Nullable<number> = null
-    for (const [index, file] of input.files.entries()) {
+    for (const file of input.files) {
       if (remaining <= 0) {
-        if (isNull(exhaustedAt)) exhaustedAt = index
         files.push(failureEntry(file.path, new AppError('VALIDATION', `本次调用的 ${SystemFileLimits.readChars} 字符预算已被前面的文件用完，这个文件没有读；另起一次调用再读`)))
         continue
       }
       try {
-        const requested = Math.min(SystemFileLimits.readChars, file.maxChars ?? SystemFileLimits.readChars)
-        const result = await this.readOne(file, Math.min(requested, remaining), ctx)
-        if (result.hasMore && remaining < requested && isNull(shortenedAt)) shortenedAt = index
+        const result = await this.readOne(file, remaining, ctx)
         remaining -= result.content.length
         files.push(result)
       } catch (error) {
@@ -119,12 +110,7 @@ class SystemFileOperations implements SystemFileOperationsApi {
       }
     }
     if (failures.length === input.files.length) throw failures[0]
-    const result: SystemReadResult = { files }
-    const notes: string[] = []
-    if (isNotNull(shortenedAt)) notes.push(`第 ${shortenedAt + 1} 个文件只拿到预算剩下的部分`)
-    if (isNotNull(exhaustedAt)) notes.push(`从第 ${exhaustedAt + 1} 个文件起没有读`)
-    if (!isEmpty(notes)) result.note = `一次调用最多 ${SystemFileLimits.readChars} 字符：${notes.join('，')}；把各自的 range.end 当 offset 再读一次，或分成几次调用。`
-    return result
+    return { files }
   }
 
   public async view(input: SystemViewInput, ctx: SystemToolContext): Promise<SystemViewResult> {
@@ -167,7 +153,7 @@ class SystemFileOperations implements SystemFileOperationsApi {
       }
       seen.add(identity)
       try {
-        await confirmSensitiveSystemMutation(ctx, target, isPresent(file.edits) ? 'edit' : 'write')
+        await confirmSensitiveSystemMutation(ctx, target, 'write')
         await confirmCredentialAccess(ctx, target, 'write')
       } catch (error) {
         const failure = AppError.from(error)
@@ -207,10 +193,8 @@ class SystemFileOperations implements SystemFileOperationsApi {
     const problem = (message: string, extra: Partial<SystemEditProblem> = {}): SystemEditProblem[] => [{ file: index, path: resolvedPath, reason: 'invalid', message, ...extra }]
     const restoring = isPresent(file.restore)
     const wholeFile = isPresent(file.newText)
-    const editing = isPresent(file.edits)
-    const modes = [restoring, wholeFile, editing].filter(Boolean).length
-    if (modes === 0) return problem('给 newText 整个写入、给 edits 改其中几处，或者给 restore 回滚，三者选一')
-    if (modes > 1) return problem('newText、edits、restore 只能用一种')
+    if (!restoring && !wholeFile) return problem('给 newText 整个写入，或者给 restore 回滚，两者选一')
+    if (restoring && wholeFile) return problem('newText 与 restore 只能用一种')
     const existing = await stat(target).catch(() => null)
     if (existing?.isDirectory()) return problem(`路径是目录，不是文件：${resolvedPath}`)
     // 管道、设备、套接字：读它可能永远等不到数据（读命名管道会一直挂着），整个替换又会把它换成普通文件，一律不碰。
@@ -224,7 +208,7 @@ class SystemFileOperations implements SystemFileOperationsApi {
 
     if (isPresent(file.restore)) {
       const snapshot = this.history.recall(target, file.restore)
-      if (!snapshot) return problem(`历史里没有版本 ${file.restore}：只有本次运行里改动前留下的最近几份，而且只在内存里`, { reason: 'not-found' })
+      if (!snapshot) return problem(`历史里没有版本 ${file.restore}：只有本次运行里改动前留下的最近几份，而且只在内存里`)
       // 回滚后的字符数在计划期就算好：认不出是文本的版本在这里就拒，不会写完了才报错。
       const restored = textCodec.decode(snapshot.buffer)
       if (!restored) return problem(`版本 ${file.restore} 不是能认出的文本（二进制、非法字节或认不出的编码），不能在这里回滚`)
@@ -236,8 +220,10 @@ class SystemFileOperations implements SystemFileOperationsApi {
       return { kind: 'restore', index, path: resolvedPath, target, current, snapshot, totalChars: restored.content.length, baseVersion, stamp }
     }
 
-    if (isPresent(file.newText)) {
-      if (file.newText.includes('\0')) return problem('newText 里有 NUL 字节，是二进制数据，不能当文本写入')
+    // 到这里只剩整个写入：上面两支（restore、两者选一）都已经 return。
+    {
+      const newText = file.newText ?? ''
+      if (newText.includes('\0')) return problem('newText 里有 NUL 字节，是二进制数据，不能当文本写入')
       if (existing?.isFile() && existing.size > SystemFileLimits.fileBytes) return problem(`现有文件太大，不能在这里整个覆盖：${existing.size} 字节，上限 ${SystemFileLimits.fileBytes} 字节；用 run 替换`)
       let previous: Nullable<SystemTextFileContent> = null
       let encoding: TextEncoding = 'utf8'
@@ -260,101 +246,17 @@ class SystemFileOperations implements SystemFileOperationsApi {
       // 按原编码写不出来（孤立代理项、GB18030 表示不了的字符）就是这个文件的问题，整批不写，不静默换成替换字符或别的编码。
       let bytes: Buffer
       try {
-        bytes = textCodec.encode(file.newText, encoding)
+        bytes = textCodec.encode(newText, encoding)
       } catch (error) {
         return problem(`newText 不能按 ${encoding} 无损写进这个文件：${AppError.from(error).message}`)
       }
       const baseVersion = previous ? fileVersionOf(previous.buffer) : existing?.isFile() ? await currentFileVersion(target) : null
       const stale = staleProblem(file.version, baseVersion)
       if (stale) return problem(stale.message, stale)
-      return { kind: 'write', index, path: resolvedPath, target, created: !existing, previous, newText: file.newText, bytes, baseVersion, stamp }
+      return { kind: 'write', index, path: resolvedPath, target, created: !existing, previous, newText, bytes, baseVersion, stamp }
     }
-
-    const edits = file.edits ?? []
-    if (isEmpty(edits)) return problem('edits 是空的；至少给一处要改的地方')
-    if (edits.length > SystemFileLimits.editsPerFile) return problem(`一个文件一次最多改 ${SystemFileLimits.editsPerFile} 处，这里给了 ${edits.length} 处；分几次改`)
-    if (!existing) return problem(`文件不存在：${resolvedPath}`, { reason: 'not-found' })
-    if (existing.size > SystemFileLimits.editableBytes) return problem(`文件太大，不能用 edits 改：${existing.size} 字节，上限 ${SystemFileLimits.editableBytes} 字节；用 run 改`)
-    let textFile: SystemTextFileContent
-    try {
-      textFile = await readSystemTextFile(target)
-    } catch (error) {
-      const failure = AppError.from(error)
-      log.debug('a file in an edit batch could not be read', { path: target, code: failure.code })
-      return problem(failure.message, { reason: failure.code === 'NOT_FOUND' ? 'not-found' : failure.code === 'PERMISSION' ? 'denied' : 'invalid' })
-    }
-    const baseVersion = fileVersionOf(textFile.buffer)
-    const stale = staleProblem(file.version, baseVersion)
-    if (stale) return problem(stale.message, stale)
-    // 解码再编码必须得到原来的字节，否则改动区间之外的字节也会被改写；这种文件让 run 去改。
-    if (!reencodesExactly(textFile)) return problem(`文件里有按 ${textFile.encoding} 解码再编码得不到原样的字节，改写会连带改掉没动的地方；用 run 改`)
-    const content = textFile.content
-    const fileStyle = lineEndingStyle(content)
-
-    // 每一处都在改动前的原文上定目标；多处匹配给锚点，找不到、重叠也都记下来，一次报完。
-    const problems: SystemEditProblem[] = []
-    const targets: SystemEditTarget[] = []
-    const scopes: SystemTextRange[] = []
-    for (const [edit, change] of edits.entries()) {
-      const at = (message: string, extra: Partial<SystemEditProblem> = {}): void => { problems.push({ file: index, path: resolvedPath, reason: 'invalid', message, edit, ...extra }) }
-      if (change.newText.includes('\0')) { at('newText 里有 NUL 字节，是二进制数据，不能当文本写入'); continue }
-      const lone = textCodec.findLoneSurrogate(change.newText)
-      if (lone) { at(`newText 在 UTF-16 offset ${lone.offset} 是不完整的 Unicode 字符（孤立代理项），写不进文件；重新构造完整的字符`); continue }
-      if (change.range.end < change.range.offset) { at(`range ${change.range.offset}-${change.range.end} 是反的：end 不能小于 offset`); continue }
-      // 起点已经落在文件外，说明位置来自过期的内容；终点越界只是读到的段比现在长，收进文件长度即可。
-      if (change.range.offset > content.length) {
-        at(`range 从 ${change.range.offset} 开始，但文件只有 ${content.length} 个字符；重新读一遍`, { reason: 'stale', currentVersion: baseVersion })
-        continue
-      }
-      const scope = clampTextRange(content, change.range)
-      scopes.push(scope)
-      const scopeText = content.slice(scope.offset, scope.end)
-      // 写进去的新文本跟着原文的换行风格走：看这一段，这一段里没有换行就看整个文件。
-      const style = lineEndingStyle(scopeText) ?? fileStyle
-      if (!isPresent(change.oldText)) { targets.push({ edit, range: scope, newText: withLineEndingStyle(change.newText, style) }); continue }
-      if (isEmpty(change.oldText)) { at('oldText 是空的；要整段替换就不给 oldText'); continue }
-      const replacement = adaptReplacementLineEndings(scopeText, change.oldText, change.newText, style)
-      // 只需要知道唯一不唯一和前 ToolFailureLimits.listItems 个锚点，多找一个就停，大文件里的短 oldText 不会扫出百万个匹配。
-      const matches = findOccurrences(content, replacement.oldText, scope, ToolFailureLimits.listItems + 1)
-      if (isEmpty(matches)) { at(`在 range ${scope.offset}-${scope.end} 里没找到 oldText；重新读这一段`, { reason: 'not-found' }); continue }
-      if (matches.length > 1) {
-        const count = matches.length > ToolFailureLimits.listItems ? `至少匹配到 ${matches.length} 处` : `匹配到 ${matches.length} 处`
-        at(`oldText 在 range ${scope.offset}-${scope.end} 里${count}；从 anchors 里挑一处，把它的 range 填到这里`, {
-          reason: 'ambiguous',
-          matchCount: matches.length,
-          anchors: matches.slice(0, ToolFailureLimits.listItems).map((offset) => {
-            const range = { offset, end: offset + replacement.oldText.length }
-            const around = clampTextRange(content, { offset: range.offset - SystemTuning.files.anchorContextChars, end: range.end + SystemTuning.files.anchorContextChars })
-            return { range, context: content.slice(around.offset, around.end) }
-          }),
-        })
-        continue
-      }
-      targets.push({ edit, range: { offset: matches[0]!, end: matches[0]! + replacement.oldText.length }, newText: replacement.newText })
-    }
-    const ordered = [...targets].sort((a, b) => a.range.offset - b.range.offset || a.range.end - b.range.end)
-    for (let i = 1; i < ordered.length; i += 1) {
-      const before = ordered[i - 1]!
-      const after = ordered[i]!
-      const overlapping = after.range.offset < before.range.end || (after.range.offset === before.range.offset && before.range.end === before.range.offset && after.range.end === after.range.offset)
-      if (overlapping) problems.push({ file: index, path: resolvedPath, reason: 'overlap', message: `edits[${before.edit}] 和 edits[${after.edit}] 重叠；合成一处`, edit: after.edit, with: before.edit })
-    }
-    if (!isEmpty(problems)) return problems
-    // 改完的正文与要写的字节在计划期就定下来：从后往前套用，前面的位置不受后面改动影响；按原编码写不出来就是这个文件的问题。
-    let updated = content
-    for (const target of [...ordered].reverse()) {
-      updated = updated.slice(0, target.range.offset) + target.newText + updated.slice(target.range.end)
-    }
-    let bytes: Buffer
-    try {
-      bytes = textCodec.encode(updated, textFile.encoding)
-    } catch (error) {
-      return problem(`改完的文本不能按 ${textFile.encoding} 无损写进这个文件：${AppError.from(error).message}`)
-    }
-    return { kind: 'edits', index, path: resolvedPath, target, textFile, ordered, scopes, updated, bytes, baseVersion, stamp }
   }
 
-  /** 按计划写一个文件：一律写到 target（真实路径），改动前把原内容留成一个版本，版本历史也按真实路径记。 */
   private async applyOne(plan: SystemEditPlan): Promise<SystemEditFileResult> {
     if (plan.kind === 'restore') {
       const previousVersion = plan.current ? this.history.remember(plan.target, plan.current) : null
@@ -362,46 +264,13 @@ class SystemFileOperations implements SystemFileOperationsApi {
       await writeSystemFileAtomically(plan.target, plan.snapshot.buffer)
       return { path: plan.path, action: 'restored', version: plan.snapshot.version, previousVersion, bytes: plan.snapshot.buffer.byteLength, totalChars: plan.totalChars }
     }
-    if (plan.kind === 'write') {
-      const previousVersion = plan.previous ? this.history.remember(plan.target, plan.previous.buffer) : null
-      await mkdir(dirname(plan.target), { recursive: true })
-      await writeSystemFileAtomically(plan.target, plan.bytes)
-      return { path: plan.path, action: 'written', created: plan.created, version: fileVersionOf(plan.bytes), previousVersion, bytes: plan.bytes.byteLength, totalChars: plan.newText.length }
-    }
-    const { updated, bytes: buffer } = plan
-    const previousVersion = this.history.remember(plan.target, plan.textFile.buffer)
-    await writeSystemFileAtomically(plan.target, buffer)
-    // 改完每处都交回新文本前后各一小段；盖住所有改动那段（各处 range 的并集）不长时整段也给，位置按改动前后的长度差挪。
-    const windows: SystemEditWindow[] = []
-    let shift = 0
-    for (const target of plan.ordered) {
-      const start = target.range.offset + shift
-      const end = start + target.newText.length
-      const around = clampTextRange(updated, { offset: start - SystemFileLimits.editContextChars, end: end + SystemFileLimits.editContextChars })
-      windows.push({ edit: target.edit, range: around, content: updated.slice(around.offset, around.end) })
-      shift += target.newText.length - (target.range.end - target.range.offset)
-    }
-    windows.sort((a, b) => a.edit - b.edit)
-    const union = clampTextRange(updated, { offset: Math.min(...plan.scopes.map((scope) => scope.offset)), end: Math.max(...plan.scopes.map((scope) => scope.end)) + shift })
-    const result: SystemEditReplacedResult = {
-      path: plan.path,
-      action: 'replaced',
-      edits: plan.ordered.length,
-      version: fileVersionOf(buffer),
-      previousVersion,
-      bytes: buffer.byteLength,
-      totalChars: updated.length,
-      windows,
-    }
-    if (union.end - union.offset <= SystemFileLimits.editWholeChars) {
-      result.content = updated.slice(union.offset, union.end)
-      result.range = union
-    }
-    return result
+    const previousVersion = plan.previous ? this.history.remember(plan.target, plan.previous.buffer) : null
+    await mkdir(dirname(plan.target), { recursive: true })
+    await writeSystemFileAtomically(plan.target, plan.bytes)
+    return { path: plan.path, action: 'written', created: plan.created, version: fileVersionOf(plan.bytes), previousVersion, bytes: plan.bytes.byteLength, totalChars: plan.newText.length }
   }
 
-  /** 读一个文件：按字符取最多 maxChars 个（调用方已把总预算算进去）；给 version 就读改动前留下的那个版本。符号链接按它指向的文件读，版本历史也按那个文件记。 */
-  private async readOne(file: SystemReadFileInput, maxChars: number, ctx: SystemToolContext): Promise<SystemReadFileResult> {
+  private async readOne(file: SystemReadFileInput, budgetChars: number, ctx: SystemToolContext): Promise<SystemReadFileResult> {
     const resolvedPath = this.resolvePath(file.path, ctx)
     const target = await resolveRealPath(resolvedPath)
     await confirmCredentialAccess(ctx, target, 'read')
@@ -410,14 +279,14 @@ class SystemFileOperations implements SystemFileOperationsApi {
       if (!snapshot) {
         throw new AppError('NOT_FOUND', `历史里没有 ${resolvedPath} 的版本 ${file.version}：只有本次运行里改动前留下的最近几份，而且只在内存里`)
       }
-      return readTextWindow(resolvedPath, snapshot.buffer, file.offset ?? 0, maxChars)
+      return readWholeText(resolvedPath, snapshot.buffer, budgetChars)
     }
     const buffer = await readBoundedFile(target, SystemFileLimits.fileBytes)
     const media = detectMediaType(buffer)
     if (media) {
       throw new AppError('VALIDATION', media.kind === 'image' ? `${resolvedPath} 是图片，用 view 看` : `${resolvedPath} 是 PDF，不是文本；文档不在这里读`)
     }
-    return readTextWindow(resolvedPath, buffer, file.offset ?? 0, maxChars)
+    return readWholeText(resolvedPath, buffer, budgetChars)
   }
 
   /** 看一张图片：整张作为内容块交给模型，返回元数据、内容块和一行说明；不是模型认得的图片就报错。 */
