@@ -939,15 +939,16 @@ describe('代码面', () => {
     expect(asked[1]?.limit).toBe(SystemCommandLimits.taskListItems)
   })
 
-  test('INV-31 入参没过校验时程序还没动手，回的话点名是哪个字段', async () => {
+  test('INV-31 入参不合法由操作方法自己拦，端口不盖第二层', async () => {
     const surface = createSystemCodeSurface({
       resolveContext: () => ({ abortSignal: new AbortController().signal }) as unknown as SystemToolContext,
     })
     const port = createCapabilityPort(surface.operations)
-    const outcome = await port.invoke({ namespace: 'system', operation: 'read', input: { files: [{ path: '' }] } })
+    // 绕开编译期（模型写 JSON.parse 就是这样）送进一个坏形状：拦它的是 SystemFileOperations 自己
+    const outcome = await port.invoke({ namespace: 'system', operation: 'read', input: { files: '不是数组' } })
     expect(outcome.value).toBeUndefined()
-    expect(outcome.error?.code).toBe('INVALID_INPUT')
-    expect(outcome.error?.message).toContain('files[0].path')
+    expect(outcome.error?.code).toBe('VALIDATION')
+    expect(outcome.error?.message).toContain('files')
   })
 
   test('INV-31 登记的操作名与模型看到的声明逐个对上，没有一个只在一边有', async () => {

@@ -22,13 +22,11 @@ export const CodeSurfaceErrorCodes = Object.freeze({
   tooLarge: 'TOO_LARGE',
   /** 在上一份程序上改的那组编辑落不下去（找不到、不唯一、重叠、没有上一份）。 */
   editFailed: 'EDIT_FAILED',
-  /** 调用的入参没过能力那一侧的校验；程序**还没动手**。 */
-  invalidInput: 'INVALID_INPUT',
   /** 能力自己失败了且没给出码。 */
   operationFailed: 'OPERATION_FAILED',
 } as const)
 
-/** 九个错误码之一。 */
+/** 八个错误码之一。 */
 export type CodeSurfaceErrorCode = (typeof CodeSurfaceErrorCodes)[keyof typeof CodeSurfaceErrorCodes]
 
 /**

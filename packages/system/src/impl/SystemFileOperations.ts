@@ -91,6 +91,7 @@ class SystemFileOperations implements SystemFileOperationsApi {
   }
 
   public async read(input: SystemReadInput, ctx: SystemToolContext): Promise<SystemReadResult> {
+    if (!isArray(input.files)) throw new AppError('VALIDATION', '缺少 files：每个要读的文件一项')
     assertFileBatchSize(input.files.length, SystemFileLimits.readFiles, 'read')
     const files: SystemReadResult['files'] = []
     const failures: AppError[] = []
@@ -127,6 +128,7 @@ class SystemFileOperations implements SystemFileOperationsApi {
   }
 
   public async view(input: SystemViewInput, ctx: SystemToolContext): Promise<SystemViewResult> {
+    if (!isArray(input.files)) throw new AppError('VALIDATION', '缺少 files：每张要看的图片一项')
     assertFileBatchSize(input.files.length, SystemFileLimits.viewFiles, 'view')
     const files: SystemViewResult['files'] = []
     const modelContent: SystemViewResult['modelContent'] = []

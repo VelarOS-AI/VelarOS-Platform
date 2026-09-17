@@ -1,17 +1,15 @@
 /**
- * 七个操作的入参校验。
+ * 七个工具的入参 schema——**这是旧工具面的东西，随它一起退休。**
  *
- * 抽出来是因为**校验与说明是两件事**，而工具时代把它们塞进了同一个 schema：
- * `.describe()` 写给模型看、`strictObject`/`min`/`max` 拿来拦东西。
- * 模型那边的真相源现在是 `@AgentView` 从源码生成的声明（`baselines/code-surface/system.d.ts`），
- * 字段什么意思写在类型的注释上。这里的 `.describe()` 只为还活着的旧工具面留着，旧面退休时跟着走；
- * 真正长期有用的是那些约束。
+ * 在工具时代它身兼两职：`.describe()` 是模型看到的参数说明（经 `z.toJSONSchema` 发给 provider），
+ * 约束是那条路上唯一的关——模型直接发 JSON，没有任何编译期检查，不拦不行。
  *
- * **上限不在这里。** 预算属于那件能力自己（`assertFileBatchSize`、readChars 的分配循环、
- * `clampPositive`），谁拥有预算谁兜底；靠调用方这一侧的 schema 拦，换一个入口就漏了——
- * 实测过：`run` 的 timeoutMs 与 maxOutputChars 一度**只有** schema 在拦，绕开它调操作方法就没有上限。
- * 这里剩下的只有形状：TS 类型表达不了的那几样（整数、非负、非空串、拒绝多余键），
- * 而且只在动态口子上才轮得到它们——静态那条路编译器已经拦了。
+ * 代码面不用它，一个字都不用：模型那边的真相源是 `@AgentView` 生成的声明
+ * （`baselines/code-surface/system.d.ts`），入参合不合法由**操作方法自己**拦——
+ * 那本来就是它的职责，它要处理路径不存在、文件太大、编码认不出，顺手把形状也看了；
+ * 盖在调用方这一侧的校验换个入口就漏（`run` 的 timeoutMs 曾经只有 schema 在拦，就是这么漏的）。
+ *
+ * 所以这里**不要再加新东西**。要拦什么，写进那个操作方法里。
  */
 
 import { z } from 'zod'
@@ -89,26 +87,3 @@ export const sandboxInputSchema = z.strictObject({
   paths: z.array(z.string().min(1)).max(RehearsalSandboxLimits.applyPaths).optional().describe('apply：只落这些相对路径；不传就全部。'),
   maxFiles: z.number().int().positive().max(RehearsalSandboxLimits.diffFilesMax).optional().describe(`diff：新增与修改各列最多列多少条，默认 ${RehearsalSandboxLimits.diffFiles}；删除列永远完整。`),
 })
-
-/**
- * 按 schema 校验一次入参，失败时给一句**能让模型直接改对**的话。
- *
- * 逐条列出「哪个字段、错在哪」，而不是回一句「参数不合法」——代码面里模型拿到这句话之后
- * 要自己改程序再发一轮，话说不清就等于白花一轮。路径带上下标（`files[2].path`），
- * 因为一次调用里有一批文件，不说是第几个它没法定位。
- */
-export function parseOperationInput(
-  schema: { safeParse(input: unknown): { success: boolean; data?: unknown; error?: { issues: ReadonlyArray<{ path: readonly PropertyKey[]; message: string }> } } },
-  input: unknown
-): { value: unknown } | { error: string } {
-  const parsed = schema.safeParse(input)
-  if (parsed.success) return { value: parsed.data }
-  const issues = (parsed.error?.issues ?? []).map((issue) => {
-    const where = issue.path.reduce<string>(
-      (path, key) => (typeof key === 'number' ? `${path}[${key}]` : path.length === 0 ? String(key) : `${path}.${String(key)}`),
-      ''
-    )
-    return where.length === 0 ? issue.message : `${where}：${issue.message}`
-  })
-  return { error: issues.length === 0 ? '入参不合法。' : `入参不合法——${issues.join('；')}。` }
-}

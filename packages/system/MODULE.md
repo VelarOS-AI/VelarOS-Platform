@@ -19,7 +19,7 @@
 | 值 | 接口 | 做什么 |
 | --- | --- | --- |
 | `systemTools` | `SystemToolCollection`，元素是 `VelaTool` | 七个模型面工具 |
-| `createSystemCodeSurface` | `SystemCodeSurfaceApi` | 代码面的那一头：一张操作表（`velar:system` 的七个方法各一格），交给 `createCapabilityPort` 接成能力端口。**表里没有一个字是给模型看的**——模型面是 `@AgentView` 从两个操作接口生成的那份声明。和 `systemTools` 共用同一批 schema 与同一批操作方法，不会各做各的 |
+| `createSystemCodeSurface` | `SystemCodeSurfaceApi` | 代码面的那一头：一张操作表（`velar:system` 的七个方法各一格），交给 `createCapabilityPort` 接成能力端口。**表里没有一个字是给模型看的**——模型面是 `@AgentView` 从两个操作接口生成的那份声明。和 `systemTools` 共用同一批操作方法，不会各做各的；这一侧**没有 schema**，入参由操作方法自己拦 |
 | `createSystemBundledModDefinition` | `SystemBundledModDefinition` | 系统空间作为官方内置 mod 的定义 |
 | `createSystemKernelModule` | 上游的 `KernelModuleDefinition` | 挂进内核的模块 |
 | `SystemCapability` | 能力令牌，服务是 `SystemCapabilityService` | 在内核里按名调用系统工具 |

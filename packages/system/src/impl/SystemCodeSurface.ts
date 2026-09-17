@@ -3,10 +3,13 @@
  *
  * 这个文件里**没有一个字是给模型看的**。模型面是 `@AgentView` 从两个操作接口的源码生成的那份声明
  * （`baselines/code-surface/system.d.ts`）——说明、示例、字段解释全在那里，只有那一份。
- * 这里只剩两件事：**校验入参**、**把调用转给操作方法**。
+ * 这里只剩一件事：**把调用转给操作方法**。入参合不合法由操作方法自己拦——
+ * 那是它自己的职责（它本来就要拦路径不存在、文件太大、编码认不出），
+ * 再在这一层盖一份 schema 只会变成第二个主人，而且换个入口就漏。
  *
  * 和 `SystemTools.ts` 的分工：那边是工具时代的七个工具定义（说明 + schema + 权限 + 能力声明混在一起），
- * 两边共用同一批 schema 与同一批操作方法，所以不会各做各的。
+ * 两边共用同一批操作方法，所以不会各做各的；那边的 schema 是**旧面自己的参数声明**
+ * （经 `z.toJSONSchema` 发给 provider），代码面一个字都不用。
  * 旧工具面留到 agent-lab 上打平为止——没有对照就没法证明这套换得对。
  */
 
@@ -14,16 +17,6 @@ import type { CapabilityOperationTable } from '@velaros-ai/code-surface/contract
 
 import { SystemSpaceId } from '../contract/constants.js'
 import type { SystemToolContext } from '../contract/requires.js'
-import {
-  editInputSchema,
-  listTasksInputSchema,
-  parseOperationInput,
-  readInputSchema,
-  refreshEnvironmentInputSchema,
-  runInputSchema,
-  sandboxInputSchema,
-  viewInputSchema,
-} from '../utils/operation-schemas.js'
 
 import { systemExecutionOperations } from './SystemExecutionOperations.js'
 import { systemFileOperations } from './SystemFileOperations.js'
@@ -51,34 +44,13 @@ class SystemCodeSurface implements SystemCodeSurfaceApi {
       Promise.resolve(this.resolveContext(signal))
     return {
       [SystemSpaceId]: {
-        read: {
-          parse: (input) => parseOperationInput(readInputSchema, input),
-          run: async (input, signal) => files.read(input, await context(signal)),
-        },
-        view: {
-          parse: (input) => parseOperationInput(viewInputSchema, input),
-          run: async (input, signal) => files.view(input, await context(signal)),
-        },
-        edit: {
-          parse: (input) => parseOperationInput(editInputSchema, input),
-          run: async (input, signal) => files.edit(input, await context(signal)),
-        },
-        run: {
-          parse: (input) => parseOperationInput(runInputSchema, input),
-          run: async (input, signal) => execution.run(input, await context(signal)),
-        },
-        sandbox: {
-          parse: (input) => parseOperationInput(sandboxInputSchema, input),
-          run: async (input, signal) => execution.sandbox(input, await context(signal)),
-        },
-        refreshEnvironment: {
-          parse: (input) => parseOperationInput(refreshEnvironmentInputSchema, input),
-          run: async (_input, signal) => execution.refreshEnvironment(await context(signal)),
-        },
-        listTasks: {
-          parse: (input) => parseOperationInput(listTasksInputSchema, input),
-          run: async (input, signal) => execution.listTasks(input, await context(signal)),
-        },
+        read: async (input, signal) => files.read(input, await context(signal)),
+        view: async (input, signal) => files.view(input, await context(signal)),
+        edit: async (input, signal) => files.edit(input, await context(signal)),
+        run: async (input, signal) => execution.run(input, await context(signal)),
+        sandbox: async (input, signal) => execution.sandbox(input, await context(signal)),
+        refreshEnvironment: async (_input, signal) => execution.refreshEnvironment(await context(signal)),
+        listTasks: async (input, signal) => execution.listTasks(input, await context(signal)),
       },
     }
   }
