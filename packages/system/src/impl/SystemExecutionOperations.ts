@@ -14,13 +14,14 @@ import { rehearsalSandboxRules } from '@velaros-ai/rehearsal-sandbox'
 import type { ShellCommandApprovalApi, ShellCommandPolicyApi } from '@velaros-ai/shell-command'
 import { shellCommandApproval, shellCommandPolicy } from '@velaros-ai/shell-command'
 
-import { SystemToolNames } from '../contract/constants.js'
+import { SystemCommandLimits, SystemToolNames } from '../contract/constants.js'
 import type { SystemToolContext } from '../contract/requires.js'
 import type { SystemListTasksInput, SystemListTasksResult, SystemRunInput, SystemRunResult } from '../types/commands.js'
 import type { SystemSandboxInput, SystemSandboxResult } from '../types/sandbox.js'
 import type { SystemShellEnvironmentRefreshResult } from '../types/system.js'
 import { exposeCommandOutputWindow } from '../utils/command-result.js'
 import { isCredentialPath, isSensitiveSystemMutationPath } from '../utils/file-safety.js'
+import { clampPositive } from '../utils/text.js'
 
 /**
  * 四个执行操作：跑命令、演练沙箱、刷新环境、列后台任务。`system:run`、`system:sandbox`、`system:refresh-environment`、`system:list-tasks` 各调一个方法。
@@ -88,10 +89,20 @@ export class SystemExecutionOperations implements SystemExecutionOperationsApi {
       await ctx.approval.awaitConfirmation(request.message, ctx.abortSignal, request.options)
     }
 
-    // 交给宿主执行
+    // 交给宿主执行。上限在这里钳，**不在入参 schema 里拦**：预算是这件能力自己的，
+    // 谁拥有预算谁兜底；靠调用方那一侧的 schema 拦，换一个入口（代码面、内核按名调用）就漏了。
+    // 钳而不拒也是仓库的口径：超了就按上限跑，别为一个数字废掉一整次调用。
     const result = await ctx.system.runCommand(
       command,
-      { cwd: commandCwd, shell, timeoutMs, background: shouldRunInBackground, interactive, maxOutputChars, sessionId: ctx.sessionId },
+      {
+        cwd: commandCwd,
+        shell,
+        timeoutMs: clampPositive(timeoutMs, SystemCommandLimits.timeoutMs),
+        background: shouldRunInBackground,
+        interactive,
+        maxOutputChars: clampPositive(maxOutputChars, SystemCommandLimits.outputChars),
+        sessionId: ctx.sessionId,
+      },
       plan.isDangerous,
       ctx.abortSignal
     )
@@ -155,7 +166,7 @@ export class SystemExecutionOperations implements SystemExecutionOperationsApi {
   public async listTasks({ limit, onlyRunning, taskId }: SystemListTasksInput, ctx: SystemToolContext): Promise<SystemListTasksResult> {
     // 精确查一条时 limit 没有意义；onlyRunning 可过滤掉已结束的历史任务。
     const tasks = await ctx.system.listBackgroundTasks({
-      limit: taskId ? undefined : limit,
+      limit: taskId ? undefined : clampPositive(limit, SystemCommandLimits.taskListItems),
       onlyRunning,
       taskId,
       sessionId: ctx.sessionId,

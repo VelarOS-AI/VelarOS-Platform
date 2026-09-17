@@ -7,8 +7,11 @@
  * 字段什么意思写在类型的注释上。这里的 `.describe()` 只为还活着的旧工具面留着，旧面退休时跟着走；
  * 真正长期有用的是那些约束。
  *
- * 代码面里校验比工具面更要紧：工具面一次入参错就是这一次失败，
- * 代码面里程序可能**已经做了 N 件事**才走到这一句，所以宁可在动手之前拦下来。
+ * **上限不在这里。** 预算属于那件能力自己（`assertFileBatchSize`、readChars 的分配循环、
+ * `clampPositive`），谁拥有预算谁兜底；靠调用方这一侧的 schema 拦，换一个入口就漏了——
+ * 实测过：`run` 的 timeoutMs 与 maxOutputChars 一度**只有** schema 在拦，绕开它调操作方法就没有上限。
+ * 这里剩下的只有形状：TS 类型表达不了的那几样（整数、非负、非空串、拒绝多余键），
+ * 而且只在动态口子上才轮得到它们——静态那条路编译器已经拦了。
  */
 
 import { z } from 'zod'
@@ -23,16 +26,16 @@ export const readInputSchema = z.strictObject({
   files: z.array(z.strictObject({
     path: z.string().min(1).describe('文件路径，支持 ~；相对路径相对 system:run 的默认目录。'),
     offset: z.number().int().nonnegative().optional().describe('从第几个字符开始读，默认 0。'),
-    maxChars: z.number().int().positive().max(SystemFileLimits.readChars).optional().describe(`最多返回多少字符，默认也是上限 ${SystemFileLimits.readChars}。没取完时只给完整的行，从 range.end 接着读；某一行本身比预算还长时才会从行中间截。`),
+    maxChars: z.number().int().positive().optional().describe(`最多返回多少字符，默认也是上限 ${SystemFileLimits.readChars}。没取完时只给完整的行，从 range.end 接着读；某一行本身比预算还长时才会从行中间截。`),
     version: z.string().min(1).optional().describe('读改动前留下的某个版本，版本号来自 read 或 edit 的结果；只有本次运行里 edit 留下的版本能召回。'),
-  })).min(1).max(SystemFileLimits.readFiles).describe(`要读的文件，每项一个，一次最多 ${SystemFileLimits.readFiles} 个。`),
+  })).min(1).describe(`要读的文件，每项一个，一次最多 ${SystemFileLimits.readFiles} 个。`),
 })
 
 /** 看图片：files 每项一张。 */
 export const viewInputSchema = z.strictObject({
   files: z.array(z.strictObject({
     path: z.string().min(1).describe('图片路径，支持 ~；相对路径相对 system:run 的默认目录。'),
-  })).min(1).max(SystemFileLimits.viewFiles).describe(`要看的图片，每项一张，一次最多 ${SystemFileLimits.viewFiles} 张。`),
+  })).min(1).describe(`要看的图片，每项一张，一次最多 ${SystemFileLimits.viewFiles} 张。`),
 })
 
 /** 写：files 每项一个文件，一个文件可以改几处。 */
@@ -50,7 +53,7 @@ export const editInputSchema = z.strictObject({
     })).min(1).max(SystemFileLimits.editsPerFile).optional().describe('要改的地方，每项一处；同一个文件的几处一起改，全成或全不成，各处不能重叠。'),
     restore: z.string().min(1).optional().describe('回滚到这个版本，版本号来自 read 或 edit 结果里的 version 或 previousVersion；不和 newText、edits 同用，可以带 version 先核对文件没被改过。'),
     version: z.string().min(1).optional().describe('read 返回的这个文件的版本号；给了就先核对文件没被改过，改过就整批不写并给出当前版本。'),
-  })).min(1).max(SystemFileLimits.editFiles).describe(`要写的文件，每项一个，一次最多 ${SystemFileLimits.editFiles} 个；每项只用 newText、edits、restore 中的一种。`),
+  })).min(1).describe(`要写的文件，每项一个，一次最多 ${SystemFileLimits.editFiles} 个；每项只用 newText、edits、restore 中的一种。`),
 })
 
 /** 跑命令。 */
@@ -58,10 +61,10 @@ export const runInputSchema = z.strictObject({
   command: z.string().min(1).describe('要执行的 shell 命令。'),
   cwd: z.string().optional().describe('命令的工作目录；不传用宿主给的默认目录。'),
   shell: z.enum(ShellCommandKinds).optional().describe('用哪个 shell 执行；不传用环境报告里的默认 shell。只能填环境报告列为可用的那几个，填了本机没有的会在执行之前被拒，报错里给出可用的清单。'),
-  timeoutMs: z.number().int().positive().max(SystemCommandLimits.timeoutMs).optional().describe('命令超时时间，单位毫秒。'),
+  timeoutMs: z.number().int().positive().optional().describe('命令超时时间，单位毫秒。'),
   background: z.boolean().optional().describe('后台启动，立即返回后台任务；长驻服务传 true。'),
   interactive: z.boolean().optional().describe('命令需要用户输入时传 true：命令在控制台里跑，用户在卡片里输入。'),
-  maxOutputChars: z.number().int().positive().max(SystemCommandLimits.outputChars).optional().describe('stdout/stderr 返回字符上限。'),
+  maxOutputChars: z.number().int().positive().optional().describe('stdout/stderr 返回字符上限。'),
   parallel: z.boolean().optional().describe('命令只读、可以和别的命令同时跑时传 true，调度器会并发执行。'),
   allowRepeat: z.boolean().optional().describe('要故意再跑一遍完全相同的命令时传 true，否则同样的调用会被拦。'),
 })
@@ -71,7 +74,7 @@ export const refreshEnvironmentInputSchema = z.record(z.string(), z.unknown())
 
 /** 列后台任务。 */
 export const listTasksInputSchema = z.strictObject({
-  limit: z.number().int().positive().max(SystemCommandLimits.taskListItems).optional().describe('最多返回数量。'),
+  limit: z.number().int().positive().optional().describe('最多返回数量。'),
   onlyRunning: z.boolean().optional().describe('是否只返回运行中任务。'),
   taskId: z.string().min(1).max(SystemCommandLimits.taskIdChars).optional().describe('精确后台任务 id；取自 system:run 的 backgroundProcess.taskId。'),
 })

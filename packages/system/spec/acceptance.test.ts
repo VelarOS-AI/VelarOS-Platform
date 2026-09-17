@@ -14,7 +14,8 @@ import { describe, expect, test } from 'bun:test'
 
 import { codeProgramChecker, createCapabilityPort, createCodeSurfaceSession, nodeSubprocessCodeRunner } from '@velaros-ai/code-surface'
 
-import type { SystemCommandResult } from '../src/contracts'
+import { SystemCommandLimits, type SystemCommandResult } from '../src/contracts'
+import { systemExecutionOperations } from '../src/impl/SystemExecutionOperations.js'
 import { systemProcessManager } from '../src/impl/SystemProcessManager.js'
 import {
   createLocalSystemKernel,
@@ -907,6 +908,36 @@ describe('代码面', () => {
       await rm(directory, { recursive: true, force: true })
     }
   }, 60_000)
+
+  test('INV-32 上限由那件能力自己钳，不靠入参 schema 拦：换个入口也漏不掉', async () => {
+    const asked: Array<Record<string, unknown>> = []
+    const context = {
+      abortSignal: new AbortController().signal,
+      system: {
+        resolvePath: (path?: string) => path ?? process.cwd(),
+        runCommand: async (_command: string, options: Record<string, unknown>) => {
+          asked.push(options)
+          return { stdout: '', stderr: '', exitCode: 0, truncated: false }
+        },
+        listBackgroundTasks: async (options: Record<string, unknown>) => {
+          asked.push(options)
+          return []
+        },
+      },
+      approval: { awaitConfirmation: async () => undefined },
+    } as unknown as SystemToolContext
+
+    // 直接调操作方法、绕开入参 schema——这正是「换一个入口」的样子。预算是这件能力自己的，得它自己兜底。
+    await systemExecutionOperations.run(
+      { command: 'echo hi', timeoutMs: 999_999_999, maxOutputChars: 999_999_999 },
+      context
+    )
+    expect(asked[0]?.timeoutMs).toBe(SystemCommandLimits.timeoutMs)
+    expect(asked[0]?.maxOutputChars).toBe(SystemCommandLimits.outputChars)
+
+    await systemExecutionOperations.listTasks({ limit: 999_999 }, context)
+    expect(asked[1]?.limit).toBe(SystemCommandLimits.taskListItems)
+  })
 
   test('INV-31 入参没过校验时程序还没动手，回的话点名是哪个字段', async () => {
     const surface = createSystemCodeSurface({

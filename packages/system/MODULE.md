@@ -112,8 +112,8 @@
 
 ## 不变量
 
-共 27 条，登记在 `spec/invariants.md`，验收用例在 `spec/acceptance.test.ts`。编号只增不重排，INV-1 已移出为仓库级跨包约束，INV-2、INV-3、INV-18 随命令判定移到 `@velaros-ai/shell-command`。
-按检验方式：测试 25 条、类型 1 条、门禁 1 条。未验证 0 条。
+共 28 条，登记在 `spec/invariants.md`，验收用例在 `spec/acceptance.test.ts`。编号只增不重排，INV-1 已移出为仓库级跨包约束，INV-2、INV-3、INV-18 随命令判定移到 `@velaros-ai/shell-command`。
+按检验方式：测试 26 条、类型 1 条、门禁 1 条。未验证 0 条。
 
 ## 非目标
 
