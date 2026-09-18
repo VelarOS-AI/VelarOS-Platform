@@ -1,7 +1,7 @@
-/** 磁盘上的几个小动作：原子写、新建但不覆盖、判断文件在不在、列目录与读小文件、删文件；「不存在」按正常结果交回，别的错照常抛。 */
+/** 磁盘上的几个小动作：原子写、新建但不覆盖、列目录与读小文件、删文件；「不存在」按正常结果交回，别的错照常抛。 */
 
 import { randomUUID } from 'node:crypto'
-import { readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
+import { readdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 
 import { readErrnoCode } from '@velaros-ai/core'
 
@@ -21,11 +21,6 @@ export async function writeFileIfMissing(path: string, content: string): Promise
   await writeFile(path, content, { encoding: 'utf8', flag: 'wx' }).catch((error: unknown) => {
     if (readErrnoCode(error) !== 'EEXIST') throw error
   })
-}
-
-/** 文件在不在：stat 不到（不存在、读不到）都算不在。 */
-export async function fileExists(path: string): Promise<boolean> {
-  return stat(path).then((stats) => stats.isFile(), () => false)
 }
 
 /** 列一个目录下的名字；目录还不存在时交回空的。 */

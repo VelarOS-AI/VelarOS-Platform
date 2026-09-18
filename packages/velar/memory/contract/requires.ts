@@ -21,7 +21,7 @@ export interface MemoryStoreOptions {
 export interface MemoryScopePort {
   /** 这个作用域的全部记忆，含正文，按更新时间从新到旧。 */
   list: () => Promise<MemoryEntry[]>
-  /** 写一条：id 已有就整条覆盖，没有就新建；更新时间由记忆库填。 */
+  /** 写一条：id 已有就整条覆盖（tags 不给就沿用原来的，给 [] 才清空），没有就新建；更新时间由记忆库填。 */
   save: (input: MemorySaveInput) => Promise<MemorySaved>
   /** 删一条：真删；本来就没有时 removed 为假。 */
   remove: (input: MemoryIdInput) => Promise<MemoryRemoved>

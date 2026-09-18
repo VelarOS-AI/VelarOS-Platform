@@ -84,7 +84,7 @@ describe('作用域', () => {
 })
 
 describe('读写', () => {
-  test('INV-4 同一个 id 再写就是整条覆盖；头部只有五个字段，更新时间由记忆库填，标签规整，不留临时文件', async () => {
+  test('INV-4 同一个 id 再写就是整条覆盖（tags 见 INV-13）；头部只有五个字段，更新时间由记忆库填，标签规整，不留临时文件', async () => {
     const scope = createMemoryStore({ root }).scope('system')
     const first = { ...entry('reply-style'), title: '  回复风格  ', tags: [' 汇报 ', 'Lang', 'lang', ''], extra: '不落盘' } as MemorySaveInput
     expect(await scope.save(first)).toEqual({ id: 'reply-style', created: true })
@@ -95,7 +95,7 @@ describe('读写', () => {
     expect(await scope.save(entry('reply-style', { title: '回复风格（改）', content: '  新的正文  ' }))).toEqual({ id: 'reply-style', created: false })
     const listed = await scope.list()
     expect(listed).toHaveLength(1)
-    expect(listed[0]).toMatchObject({ title: '回复风格（改）', content: '新的正文', tags: [] })
+    expect(listed[0]).toMatchObject({ title: '回复风格（改）', content: '新的正文', tags: ['汇报', 'lang'] })
 
     const [directory] = await readdir(root)
     expect((await readdir(join(root, directory!))).sort()).toEqual(['.scope', 'reply-style.md'])
@@ -105,7 +105,7 @@ describe('读写', () => {
       'title: 回复风格（改）',
       'description: 描述 reply-style',
       'type: work',
-      'tags:',
+      'tags: 汇报, lang',
       `updated: ${listed[0]!.updatedAt}`,
       '---',
     ])
@@ -117,6 +117,27 @@ describe('读写', () => {
     const tricky = { title: "'开头是引号", description: '中间有: 冒号 #井号' }
     await scope.save(entry('tricky', tricky))
     expect((await scope.list())[0]).toMatchObject(tricky)
+  })
+
+  test('INV-13 改一条时 tags 不给就沿用原来的，给 [] 才清空，给了就整组换掉；新建时不给就是没有', async () => {
+    const scope = createMemoryStore({ root }).scope('system')
+    const tagsOf = async (id: string) => (await scope.list()).find((memory) => memory.id === id)?.tags
+    await scope.save(entry('plain'))
+    expect(await tagsOf('plain')).toEqual([])
+
+    await scope.save(entry('tagged', { tags: ['发版', '提交'] }))
+    expect(await scope.save(entry('tagged', { content: '只改了正文' }))).toEqual({ id: 'tagged', created: false })
+    expect(await tagsOf('tagged')).toEqual(['发版', '提交'])
+    await scope.save(entry('tagged', { tags: ['发版'] }))
+    expect(await tagsOf('tagged')).toEqual(['发版'])
+    await scope.save(entry('tagged', { tags: [] }))
+    expect(await tagsOf('tagged')).toEqual([])
+
+    // 人手改过的文件也一样：头部里手写的标签，模型改正文时没给 tags，照样留着
+    const [directory] = await readdir(root)
+    await writeFile(join(root, directory!, 'hand-written.md'), '---\ntitle: 手写\ntags: [Release, 发版]\n---\n正文')
+    await scope.save(entry('hand-written', { content: '模型改过的正文' }))
+    expect(await tagsOf('hand-written')).toEqual(['release', '发版'])
   })
 
   test('INV-5 remove 真删：文件没了、之后列不到；本来就没有时 removed 为假', async () => {

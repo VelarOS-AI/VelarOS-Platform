@@ -70,18 +70,22 @@ export function normalizeTags(tags: readonly string[]): string[] {
  * 没有头部时标题取 id、描述取正文第一行；认不出的类别当作 work；没有标签就是空的。
  */
 export function parseMemoryFile(id: string, raw: string, modifiedAt: Date): MemoryEntry {
-  const text = raw.charCodeAt(0) === 0xfe_ff ? raw.slice(1) : raw
-  const { fields, body } = splitFrontmatter(text.replaceAll('\r\n', '\n').replaceAll('\r', '\n'))
+  const { fields, body } = splitFrontmatter(normalizeText(raw))
   const updated = Date.parse(fields.get('updated') ?? '')
   return {
     id,
     type: memoryTypeOf(fields.get('type') ?? ''),
     title: fields.get('title') || id,
     description: fields.get('description') || firstLine(body),
-    tags: normalizeTags((fields.get('tags') ?? '').replace(/^\[|\]$/gu, '').split(',').map(decodeValue)),
+    tags: tagsOf(fields.get('tags') ?? ''),
     content: body,
     updatedAt: (Number.isFinite(updated) ? new Date(updated) : modifiedAt).toISOString(),
   }
+}
+
+/** 读一个记忆文件头部里的标签（规整过的）；没有头部或没写标签就是空的。 */
+export function parseMemoryTags(raw: string): string[] {
+  return tagsOf(splitFrontmatter(normalizeText(raw)).fields.get('tags') ?? '')
 }
 
 /** 把一条核对、规整过的记忆写成文件内容：头部五个字段，空一行，再是正文。updatedAt 是这次写入的时刻。 */
@@ -106,6 +110,12 @@ export function compareByRecency(left: MemoryEntry, right: MemoryEntry): number 
   return left.id < right.id ? -1 : 1
 }
 
+/** 去掉开头的 BOM，换行统一成 LF。 */
+function normalizeText(raw: string): string {
+  const text = raw.charCodeAt(0) === 0xfe_ff ? raw.slice(1) : raw
+  return text.replaceAll('\r\n', '\n').replaceAll('\r', '\n')
+}
+
 /** 把文件拆成头部字段（按别名归一，同名的键第一次出现的算数）与正文；头部没有闭合时整篇都是正文。 */
 function splitFrontmatter(text: string): { fields: Map<string, string>; body: string } {
   const fields = new Map<string, string>()
@@ -119,6 +129,11 @@ function splitFrontmatter(text: string): { fields: Map<string, string>; body: st
     if (field && !fields.has(field)) fields.set(field, decodeValue(match![2] ?? ''))
   }
   return { fields, body: lines.slice(end + 1).join('\n').trim() }
+}
+
+/** 头部 tags 那一格拆成规整过的标签：逗号分隔，YAML 流式列表的方括号也认。 */
+function tagsOf(value: string): string[] {
+  return normalizeTags(value.replace(/^\[|\]$/gu, '').split(',').map(decodeValue))
 }
 
 /** 头部写的类别：认得的原样用，认不出的当作 work。 */

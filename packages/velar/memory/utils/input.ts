@@ -11,17 +11,21 @@ import type { MemorySaveInput, MemoryType } from '../types/memory.js'
 
 import { isMemoryId, normalizeTags } from './entry-file.js'
 
-/** 核对并规整 save 的入参：去掉首尾空白、标签规整好，多出来的字段不要。 */
-export function saveInput(input: unknown): Required<MemorySaveInput> {
+/**
+ * 核对并规整 save 的入参：去掉首尾空白、标签规整好，多出来的字段不要。
+ * 没给 tags 时交回的也没有这一项：沿用原来的标签还是空着，由作用域看这条原来有没有来定。
+ */
+export function saveInput(input: unknown): MemorySaveInput {
   if (!isPlainObject(input)) throw new AppError('VALIDATION', 'save 要一个对象：{ id, type, title, description, tags?, content }')
-  return {
+  const entry: MemorySaveInput = {
     id: memoryId(input.id),
     type: memoryType(input.type),
     title: lineField('title', input.title, MemoryLimits.titleChars),
     description: lineField('description', input.description, MemoryLimits.descriptionChars),
-    tags: tagsField(input.tags),
     content: contentField(input.content),
   }
+  if (isPresent(input.tags)) entry.tags = tagsField(input.tags)
+  return entry
 }
 
 /** 核对 remove 的入参，交回 id。 */
@@ -62,9 +66,8 @@ function contentField(value: unknown): string {
   return text
 }
 
-/** 标签：可以不给；给的话是字符串数组，每个不含逗号和换行、不超长，规整之后不超过条数上限。 */
+/** 标签：字符串数组，每个不含逗号和换行、不超长，规整之后不超过条数上限。 */
 function tagsField(value: unknown): string[] {
-  if (!isPresent(value)) return []
   if (!isArray(value) || !value.every(isString)) throw new AppError('VALIDATION', "tags 要是字符串数组，比如 ['发版', '提交']")
   for (const tag of value) {
     if (/[,\r\n]/u.test(tag)) throw new AppError('VALIDATION', `标签「${tag}」里有逗号或换行；一个标签写一个主题`)

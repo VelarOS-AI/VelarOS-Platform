@@ -8,7 +8,7 @@
 ## 这是什么
 
 **跨会话的长期记忆：一个作用域一个目录的 Markdown。** 一条记忆一个 `<id>.md`，头部五个字段（title、description、type、tags、updated），
-下面是正文。模型面是代码面 `velar:memory` 的三个操作——`list`（这一份的全部记忆，含正文）、`save`（同一个 id 就整条覆盖）、
+下面是正文。模型面是代码面 `velar:memory` 的三个操作——`list`（这一份的全部记忆，含正文）、`save`（同一个 id 就整条覆盖，只有没给的 tags 沿用原来的）、
 `remove`（真删）；宿主面是记忆库本身：给一个根目录，按作用域取一份，会话开场排一段索引放进系统提示词。
 
 **记忆不认识工作区、项目、站点与空间。** 作用域是产品层给的任意非空字符串，记忆不解释它，只按它隔离：一个作用域一个目录，
@@ -51,7 +51,7 @@
 | 能力或动作 | 链路 |
 | --- | --- |
 | `list` | `memoryOperations.list` 查取消 → `ctx.memory.list()` → 列作用域目录（还没建就是空的）→ 只认 `<合法 id>.md` → 逐个读文件与修改时间，`parseMemoryFile` 宽容解析 → `compareByRecency` 从新到旧 |
-| `save` | 查取消 → `ctx.memory.save(input)` → `saveInput` 核对并规整（id、类别、一行字段、正文、标签）→ 看这个 id 在不在 → 建目录、`.scope` 没有就写上 → `serializeMemoryFile` 带上这次的更新时间 → 临时文件改名落盘 → `{ id, created }` |
+| `save` | 查取消 → `ctx.memory.save(input)` → `saveInput` 核对并规整（id、类别、一行字段、正文、标签）→ 读这个 id 原来的文件（没有就是新建；入参没给 tags 时沿用它的标签）→ 建目录、`.scope` 没有就写上 → `serializeMemoryFile` 带上这次的更新时间 → 临时文件改名落盘 → `{ id, created }` |
 | `remove` | 查取消 → `ctx.memory.remove(input)` → `removeInput` 核对 id → 删文件，本来就没有时 `removed` 为假 |
 | 开场索引 | 宿主在会话开始时调 `scope.renderIndex()` → `list()` → `renderMemoryIndex`：先放 user 与 feedback、再按更新时间放 work 与 reference，条数或字数到上限就停 → 按类别分组、一行一条 → 现有标签一行 → 没列的报条数 |
 | 列作用域 | `store.listScopes()` → 列根目录 → 读各目录的 `.scope` 拿原串 → 各自 `list()` 数条数、取最近更新 → 没有记忆的不列 → 最近更新的在前 |
@@ -83,8 +83,8 @@
 
 ## 不变量
 
-共 12 条，登记在 `spec/invariants.md`，验收用例在 `spec/acceptance.test.ts`。编号只增不重排；ADR 0010 重写本单元时旧编号整体作废、从 1 重新起。
-按检验方式：测试 11 条、门禁 1 条。未验证 0 条。
+共 13 条，登记在 `spec/invariants.md`，验收用例在 `spec/acceptance.test.ts`。编号只增不重排；ADR 0010 重写本单元时旧编号整体作废、从 1 重新起。
+按检验方式：测试 12 条、门禁 1 条。未验证 0 条。
 
 ## 非目标
 

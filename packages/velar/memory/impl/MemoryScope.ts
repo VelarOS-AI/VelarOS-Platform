@@ -10,8 +10,8 @@ import { isPresent } from '@velaros-ai/core'
 
 import type { MemoryScopePort } from '../contract/requires.js'
 import type { MemoryEntry, MemoryIdInput, MemoryRemoved, MemorySaved, MemorySaveInput } from '../types/memory.js'
-import { compareByRecency, memoryFileName, memoryIdOfFile, parseMemoryFile, serializeMemoryFile } from '../utils/entry-file.js'
-import { fileExists, readDirectoryNames, removeFileIfExists, writeFileAtomically, writeFileIfMissing } from '../utils/fs.js'
+import { compareByRecency, memoryFileName, memoryIdOfFile, parseMemoryFile, parseMemoryTags, serializeMemoryFile } from '../utils/entry-file.js'
+import { readDirectoryNames, readTextIfExists, removeFileIfExists, writeFileAtomically, writeFileIfMissing } from '../utils/fs.js'
 import { renderMemoryIndex } from '../utils/index-text.js'
 import { removeInput, saveInput } from '../utils/input.js'
 import { ScopeRecordFileName } from '../utils/scope-directory.js'
@@ -37,11 +37,13 @@ export class MemoryScope implements MemoryScopeApi {
   public async save(input: MemorySaveInput): Promise<MemorySaved> {
     const entry = saveInput(input)
     const path = join(this.directory, memoryFileName(entry.id))
-    const existed = await fileExists(path)
+    const previous = await readTextIfExists(path)
+    // 没给 tags 就沿用这条原来的：看着开场索引改一条时拿不到标签，整条覆盖会把它悄悄清掉
+    const tags = entry.tags ?? (isPresent(previous) ? parseMemoryTags(previous) : [])
     await mkdir(this.directory, { recursive: true })
     await writeFileIfMissing(join(this.directory, ScopeRecordFileName), this.scope)
-    await writeFileAtomically(path, serializeMemoryFile(entry, new Date().toISOString()))
-    return { id: entry.id, created: !existed }
+    await writeFileAtomically(path, serializeMemoryFile({ ...entry, tags }, new Date().toISOString()))
+    return { id: entry.id, created: !isPresent(previous) }
   }
 
   public async remove(input: MemoryIdInput): Promise<MemoryRemoved> {
