@@ -1,6 +1,6 @@
 /**
  * 常量表：本包对外约定的身份与上限。
- * 不 import 任何东西，渲染进程与浏览器都能用（从 `@velaros-ai/development/contracts` 取）。
+ * 不 import 任何东西，渲染进程与浏览器都能用（从 `@velaros-ai/velar/development/contracts` 取）。
  */
 
 /** 内置语言服务的 id：模型写 `language` 时认得出这两个，也认语言名与扩展名简写。 */

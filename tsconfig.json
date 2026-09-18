@@ -51,12 +51,6 @@
       "@velaros-ai/core": [
         "./packages/core/src/index.ts"
       ],
-      "@velaros-ai/development": [
-        "./packages/development/src/index.ts"
-      ],
-      "@velaros-ai/development/*": [
-        "./packages/development/src/*"
-      ],
       "@velaros-ai/html-artifacts": [
         "./packages/html-artifacts/src/index.ts"
       ],

@@ -4,7 +4,7 @@ import { join } from 'node:path'
 
 import { afterEach, describe, expect, test } from 'bun:test'
 
-import { createExternalLanguageService } from '../src/index'
+import { createExternalLanguageService } from '../index'
 
 const roots: string[] = []
 

@@ -36,6 +36,18 @@
       ],
       "@velaros-ai/velar/shell/contracts": [
         "packages/velar/shell/contracts.ts"
+      ],
+      "@velaros-ai/velar/project": [
+        "packages/velar/project/index.ts"
+      ],
+      "@velaros-ai/velar/project/contracts": [
+        "packages/velar/project/contracts.ts"
+      ],
+      "@velaros-ai/velar/development": [
+        "packages/velar/development/index.ts"
+      ],
+      "@velaros-ai/velar/development/contracts": [
+        "packages/velar/development/contracts.ts"
       ]
     }
   },
@@ -45,7 +57,8 @@
     "images/**/*.ts",
     "shell/**/*.ts",
     "sandbox/**/*.ts",
-    "project/**/*.ts"
+    "project/**/*.ts",
+    "development/**/*.ts"
   ],
   "exclude": [
     "*/spec/**",

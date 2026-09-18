@@ -1,4 +1,4 @@
-# @velaros-ai/development 模块卡片
+# @velaros-ai/velar/development 模块卡片
 
 > 这一页是本模块的压缩表示：读完就知道它是什么、给了外面什么、骨干链路怎么走、靠什么、状态在哪、失败什么样、哪些承诺不能破。
 > 先看四个类上方的接口（`contract/provides.ts` 登记它们）与 `contract/requires.ts` 的三个注入点，常量表在 `contract/constants.ts`。
@@ -6,11 +6,11 @@
 
 ## 这是什么
 
-Project 代码理解背后的语言服务库。宿主拿它实现 project 注入面里的 `ProjectToolApi.queryCode`：
-`project:code` / `project:code-analysis` 把模型的请求翻译成一条 `ProjectCodeQuery` 交过来，语言服务类的七个动作
-（找符号、列导出、列引入、找引用方、找引用、诊断、符号影响面）由本包回答，代码图谱类动作交给宿主自己的图后端。
+`velar:code` 背后的语言服务。模型用的 `velar:code` 在 project 单元里；宿主拿本单元实现项目工具的空间端口 `ProjectSpacePort.queryCode`：
+`velar:code` 的 query、analyze 把模型的请求翻译成一条 `ProjectCodeQuery` 交过来，语言服务类的七个动作
+（找符号、列导出、列引入、找引用方、找引用、诊断、符号影响面）由本单元回答，代码图谱类动作交给宿主自己的图后端。
 
-本包自己没有模型面工具，也不认宿主：只要给得起「列文件 / 读正文 / 列符号」三个读方法，Desktop、Workbench、Termel
+本单元是 `@velaros-ai/velar` 里没有模型面的一件（能力的实现，不是模型 import 的模块），也不认宿主：只要给得起「列文件 / 读正文 / 列符号」三个读方法，Desktop、Workbench、Termel
 都能直接用。另有一件独立能力：把用户本机装好的外部语言服务（basedpyright、gopls、rust-analyzer…）按 LSP 拉起来，
 给 JavaScript/TypeScript 与 Python 之外的语言补上诊断与跳转。
 
@@ -42,16 +42,16 @@ Project 代码理解背后的语言服务库。宿主拿它实现 project 注入
 外加常量表派生的 `LanguageServiceId` 与 `CodeQuerySource`。语言查询自己的输入、记录与结果是包内工作类型，不出包——
 它们经 `queryCode` 变成普通对象交给 project，由 project 的工具合同负责形状。
 
-两个入口对应 `package.json` 的 `exports`，源文件是 `src` 根上的入口文件，只有转发语句：
+两个入口对应 `@velaros-ai/velar` 的 `./development` 与 `./development/contracts`，源文件是单元根上的入口文件，只有转发语句：
 
 | 入口 | 给谁用 | 里面有什么 |
 | --- | --- | --- |
-| `.` | Node 进程（要读磁盘、要拉子进程） | 四件能力、三个注入点与可移植数据 |
-| `./contracts` | 渲染进程与浏览器 | 常量表与可移植数据，整条链不碰 Node |
+| `./development` | Node 进程（要读磁盘、要拉子进程） | 四件能力、三个注入点与可移植数据 |
+| `./development/contracts` | 渲染进程与浏览器 | 常量表与可移植数据，整条链不碰 Node |
 
 ## 骨干链路
 
-本包没有模型面工具，链路按每件能力写：
+本单元没有模型面工具，链路按每件能力写：
 
 | 能力 | 链路 |
 | --- | --- |
@@ -60,14 +60,47 @@ Project 代码理解背后的语言服务库。宿主拿它实现 project 注入
 | 找符号 / 列导出 / 列引入 / 找引用 / 找引用方 | 语言服务 → `utils/source-files.ts` 选文件（按结果条数换算扫描面）→ 逐个经只读端口读正文 → 语法层解析（`utils/jsts-syntax.ts` / `utils/python-syntax.ts`）→ 去重排序 |
 | 诊断 | `JsTsLanguageService.getDiagnostics` → 解析路径并卡住项目边界 → 选文件（跳过 .gitignore 与依赖、构建目录）→ `groupFilesByTypeScriptProject` 按所属 tsconfig 分组 → 每组一次 `typeScriptProjectPool.acquire` → 逐文件取语法/语义/建议诊断，文件之间让出事件循环 → 排序截断，截断与降级写进 `note` / `degraded` |
 | 符号影响面 | `analyzeImpactWithService` → 声明（找符号）+ 引用（找引用）+ 引用方（沿声明文件逐个找）+ 相关测试路径 |
-| 外部语言服务 | `createExternalLanguageService(root, specs?)` → 按扩展名挑规格 → `ExternalLanguageServerClient.start` 拉进程并握手 → `didOpen` / `didChange` 同步正文 → 等 `publishDiagnostics` 或发一条请求 → `utils/lsp.ts` 归一成本包形状 |
+| 外部语言服务 | `createExternalLanguageService(root, specs?)` → 按扩展名挑规格 → `ExternalLanguageServerClient.start` 拉进程并握手 → `didOpen` / `didChange` 同步正文 → 等 `publishDiagnostics` 或发一条请求 → `utils/lsp.ts` 归一成本单元形状 |
+
+## 宿主怎么接
+
+```ts
+import { createProjectCodeQuery, languageQueries, typeScriptProjects } from '@velaros-ai/velar/development'
+
+// 项目工具的空间端口要的 queryCode：语言服务类动作走内置实现，代码图谱类动作交给宿主的图后端
+const queryCode = createProjectCodeQuery(codeIndex)
+
+// 只给得起「列文件 / 读正文 / 列符号」的宿主，直接用语言查询
+await languageQueries.run({ action: 'find_symbols', query: 'UserService', exact: true }, context)
+
+// 关闭项目时释放这个项目的 TypeScript 语言服务
+typeScriptProjects.release(projectRoot)
+```
+
+`LanguageToolContext` 只有中止信号、项目根与只读内核端口（`listFiles` / `read` / `listSymbols`）：语言查询不消耗项目的修改、
+执行与审批能力，宿主给的内核就算带着写入口，本单元也够不着。代码图谱后端（`ProjectCodeIndexApi`）是可选的，给一个永远不可用的
+空实现也合法：内置的七个语言动作照常可用，代码图谱类动作抛 code 为 `UNAVAILABLE` 的错误，由 `velar:code` 写成降级说明。
+
+**标准库。** TypeScript 类型诊断依赖标准库声明（`lib.*.d.ts`），按这个顺序找：`typescript` 包自身所在目录；宿主调
+`typeScriptProjects.configureLibraryDirectory(absoluteDir)` 显式声明的目录；Electron 约定目录 `<process.resourcesPath>/typescript/lib`。
+目录里要有编译选项实际加载的标准库及其经 `/// <reference lib>` 传递引用的全部文件才算命中。Electron 打包默认剔除
+`node_modules` 里的 `.d.ts`，宿主把 `node_modules/typescript/lib/lib*.d.ts` 作为 extraResources 放到 `typescript/lib` 就能命中第三条。
+三处都没有完整标准库时，诊断结果带 `degraded` 说明、只给语法诊断，不把标准库缺席导致的伪错误当真结果返回。
+
+**语言服务池。** 每个（项目根，tsconfig）常驻一个 `ts.LanguageService`，同一项目的连续查询共用增量缓存——诊断能在一两秒内
+回答靠的就是它。池按最近使用淘汰；宿主关闭项目时必须调 `typeScriptProjects.release(projectRoot)`，退出时调 `typeScriptProjects.release()`。
+
+**外部语言服务。** `createExternalLanguageService(projectRoot, specs?)` 负责用户本机已装好的 language server 的进程生命周期、
+JSON-RPC framing、超时与取消，以及诊断与跳转结果的有界归一；只启动规格表（`BuiltinExternalLanguageServers` 或宿主自己给的表）
+里的命令，只解析项目根以内的文件。二进制与资源发现、启用策略、状态展示归宿主。
 
 ## 依赖什么
 
 - `@velaros-ai/core`：`AppError`、`Log`、类型守卫、`TimerScope`、`resolveRealPath`。
-- `@velaros-ai/platform`：路径文本包含判断（越界判定的唯一实现）。
-- `@velaros-ai/velar/project`：只取类型与 `./project/contracts` 的常量，**运行时不加载项目单元的根入口**（`check:capabilities-arch` 守着这条）。
-- `typescript`：JS/TS 的语法树、tsconfig 解析与 `ts.LanguageService`。是 devDependency：公开签名里不出现任何 `ts.*` 类型。
+- `@velaros-ai/platform`：路径文本单元含判断（越界判定的唯一实现）。
+- `@velaros-ai/velar/project`：只取类型与 `./project/contracts` 的常量，**运行时不加载项目单元的根入口**（`check:project-arch` 守着这条）；
+  反过来项目单元不许引本单元，同一道门守着。
+- `typescript`：JS/TS 的语法树、tsconfig 解析与 `ts.LanguageService`（velar 的运行依赖，项目单元也要它）；公开签名里不出现任何 `ts.*` 类型。
 - `@codemirror/lang-python`：Python 的 Lezer 语法树。
 - Node 内置模块：`node:fs`、`node:path`、`node:crypto`、`node:child_process`、`node:url`、`node:timers/promises`。
 - 不读任何环境变量（标准库目录读的是 Electron 的 `process.resourcesPath`，不是环境变量），所以常量表里没有环境变量表。
@@ -106,23 +139,23 @@ Project 代码理解背后的语言服务库。宿主拿它实现 project 注入
 
 ## 非目标
 
-- 不装语言服务：外部语言服务的命令要用户自己装，本包不下载、不安装、不改名。
-- 不做代码图谱：跨文件调用链、类型层次、死代码这些归宿主的图后端，本包只把请求转过去。
+- 不装语言服务：外部语言服务的命令要用户自己装，本单元不下载、不安装、不改名。
+- 不做代码图谱：跨文件调用链、类型层次、死代码这些归宿主的图后端，本单元只把请求转过去。
 - 不改代码：只读源码，没有写入、执行与审批能力，也不给自己留这些口子。
 - 不做增量索引：每次查询按当前磁盘内容回答，唯一的缓存是 TypeScript 程序的增量缓存。
 
 ## 结构
 
 ```text
-src/
+development/
   contract/     对外合同：provides.ts 登记三件能力的 API（定义在类上方，这里 re-export），requires.ts 是三个注入点，constants.ts 是语言服务身份、结果来源、诊断上限与内置外部语言服务规格表
   types/        只放类型：development.ts 可移植（外部语言服务的五种数据），language.ts 语言查询的输入与结果，syntax.ts 语法层中间形状，external-language.ts LSP 工作类型，typescript.ts 语言服务池工作类型
   impl/         一类一文件，八个类：代码查询分派、语言查询、语言服务登记处、两个语言服务、TypeScript 项目池、外部语言服务与它的客户端
   utils/        纯函数：选文件与扫描外壳、两种语言的语法解析、tsconfig 发现与解析、诊断归一、LSP 归一、路径边界、结果合并，tuning.ts 是可调参数表
-  index.ts      `.` 入口，只转发
-  contracts.ts  `./contracts` 入口，只转发
-spec/           不变量登记与验收测试
-test/           实现测试：诊断、查询语义、路径边界、外部语言服务
+  index.ts      `./development` 入口，只转发
+  contracts.ts  `./development/contracts` 入口，只转发
+  spec/         不变量登记与验收测试
+  test/         实现测试：诊断、查询语义、路径边界、外部语言服务
 ```
 
 **分层**（登记在 `governed-modules.mjs` 的 `layers`，上层可以引下层与同层，下层不许引上层）：

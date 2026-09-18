@@ -18,10 +18,10 @@ import type { ApprovalPort } from '@velaros-ai/agent/tool-contract'
 
 import type { CodeCapabilityPort, CodeGateReply, MountedCapabilityModule } from '../../packages/code-surface/src/index'
 import { codeProgramChecker, createCapabilityPort, createCodeProgramGate, nodeSubprocessCodeRunner } from '../../packages/code-surface/src/index'
-import { createProjectCodeQuery } from '../../packages/development/src/index'
 import { createProjectSpace, type ProjectCallContext, type ProjectHostPort } from '../../packages/project/src/index'
 import { solidPng } from '../../packages/system/spec/support'
 import { createLocalSystemKernel, createSystemSpace } from '../../packages/system/src/index'
+import { createProjectCodeQuery } from '../../packages/velar/development/index'
 import { createProjectKernel, typescriptPlugin } from '../../packages/velar/project/index'
 
 const RepoRoot = resolve(import.meta.dir, '../..')

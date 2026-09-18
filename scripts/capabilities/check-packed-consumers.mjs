@@ -151,29 +151,6 @@ Object.assign(globalThis, { __velarosSystemContractsBrowserGate: SystemContracts
 ])
 const consumerTypeFixtures = new Map([
   [
-    '@velaros-ai/development',
-    `import {
-  languageQueries,
-  type LanguageReadPort,
-  type LanguageToolContext,
-} from '@velaros-ai/development'
-import { BuiltinExternalLanguageServers } from '@velaros-ai/development/contracts'
-
-declare const source: LanguageReadPort
-
-const languageContext: LanguageToolContext = {
-  abortSignal: new AbortController().signal,
-  project: {
-    getRootPath: () => '/workspace/example',
-    kernel: async () => source,
-  },
-}
-
-void languageQueries.run({ action: 'find_symbols' }, languageContext)
-void BuiltinExternalLanguageServers.length
-`,
-  ],
-  [
     '@velaros-ai/office',
     `import type {
   OfficeEnvironmentInspection,

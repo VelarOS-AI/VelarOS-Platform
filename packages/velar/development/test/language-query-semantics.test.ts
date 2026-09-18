@@ -11,8 +11,8 @@ import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from '
 
 import { createProjectKernel } from '@velaros-ai/velar/project'
 
-import { typeScriptProjectPool } from '../src/impl/TypeScriptProjectPool'
-import { languageQueries, type LanguageToolContext, typeScriptProjects } from '../src/index'
+import { typeScriptProjectPool } from '../impl/TypeScriptProjectPool'
+import { languageQueries, type LanguageToolContext, typeScriptProjects } from '../index'
 
 setDefaultTimeout(30_000)
 

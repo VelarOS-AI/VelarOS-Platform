@@ -14,19 +14,21 @@ import {
 
 import * as ts from 'typescript'
 
-// 项目单元（`@velaros-ai/velar/project`）的架构门：源码根就是单元目录，spec/ 与 test/ 不算源码；
-// 版本、入口、依赖这些包级的事由 velar 的清单与所有权门禁管，这里只管单元内部的方向与领域规矩。
+// 项目单元（`@velaros-ai/velar/project`）与它背后的语言服务单元（`@velaros-ai/velar/development`）的架构门：
+// 源码根就是单元目录，spec/ 与 test/ 不算源码；版本、入口、依赖这些包级的事由 velar 的清单与所有权门禁管，
+// 这里只管单元内部的方向与领域规矩。语言服务依赖项目单元，反过来不行。
 const WorkspaceRoot = resolve(import.meta.dirname, '../..')
 const RepoRoot = resolve(WorkspaceRoot, 'packages/velar')
 const ManifestPath = resolve(RepoRoot, 'package.json')
 const TsconfigPath = resolve(RepoRoot, 'tsconfig.json')
 const SourceRoot = resolve(RepoRoot, 'project')
+const DevelopmentRoot = resolve(RepoRoot, 'development')
 const UnitCompanions = new Set(['spec', 'test'])
 const SourceExtensions = new Set(['.ts', '.tsx', '.js', '.mjs', '.cjs'])
 const ForbiddenHostImport =
   /(?:from\s+|import\s*\(|require\()\s*['"](?:electron(?:\/[^'"]*)?|@electron\/[^'"]*|@velaros\/ipc(?:\/[^'"]*)?|@(?:components|features|hooks|pages|styles|shared)\/[^'"]*|@\/[^'"]*|@preload|@main\/[^'"]*)['"]/
 const ForbiddenCapabilityImport =
-  /(?:from\s+|import\s*\(|require\()\s*['"]@velaros-ai\/(?:browser|memory|computer|system|development|office)(?:\/[^'"]*)?['"]/
+  /(?:from\s+|import\s*\(|require\()\s*['"]@velaros-ai\/(?:browser|memory|computer|system|office|velar\/development)(?:\/[^'"]*)?['"]/
 const ForbiddenKernelSemanticImport =
   /(?:from\s+|import\s*\(|require\()\s*['"](?:@velaros-ai\/agent|@velaros-ai\/core\/(?:constants\/(?:project[^'"]*|model[^'"]*|memory[^'"]*|knowledge[^'"]*)|spaces\/[^'"]*|utils\/Browser[^'"]*))['"]/
 const CoreTypesImport =
@@ -377,6 +379,18 @@ for (const path of walk(SourceRoot)) {
 
 for (const violation of registeredValidatorContextViolations()) fail(violation)
 
+// 语言服务读的是项目单元的类型与可移植常量：运行时加载项目单元的根入口会把整个项目内核拖进每一次语言查询。
+for (const path of walk(DevelopmentRoot)) {
+  if (!SourceExtensions.has(extname(path))) continue
+  const source = readFileSync(path, 'utf8')
+  if (ForbiddenHostImport.test(source)) {
+    fail(`host import in ${relative(RepoRoot, path)}`)
+  }
+  if (importsRuntimeSpecifier(source, '@velaros-ai/velar/project')) {
+    fail(`language services must not load the project unit's root entry at runtime (types only; values from @velaros-ai/velar/project/contracts) in ${relative(RepoRoot, path)}`)
+  }
+}
+
 if (failures.length > 0) {
   console.error(`Project architecture check failed (${failures.length}):`)
   for (const failure of failures) console.error(`- ${failure}`)
@@ -388,14 +402,87 @@ console.info('✓ Project-owned Agent adapter contracts and host/capability boun
 console.info('✓ Project domain, runtime, Agent, and persistence dependency directions')
 console.info('✓ ProjectKernel transaction lifecycle changes go through TransactionStateMachine')
 console.info('✓ Project validators share one typed validation context contract')
+console.info('✓ development unit: no host imports, project unit loaded for types and portable contracts only')
 
-function walk(directory) {
+/** 一个单元目录下的源码文件：spec/ 与 test/ 不算源码。 */
+function walk(directory, unitRoot = directory) {
   if (!existsSync(directory)) return []
   return readdirSync(directory).flatMap((entry) => {
     if (entry === '.git' || entry === 'node_modules' || entry === 'dist') return []
-    if (directory === SourceRoot && UnitCompanions.has(entry)) return []
+    if (directory === unitRoot && UnitCompanions.has(entry)) return []
     const path = resolve(directory, entry)
     const stats = statSync(path)
-    return stats.isDirectory() ? walk(path) : [path]
+    return stats.isDirectory() ? walk(path, unitRoot) : [path]
   })
+}
+
+/** 这段源码在运行时加载 specifier（只导类型的 import、export 不算）。 */
+function importsRuntimeSpecifier(source, specifier) {
+  const sourceFile = ts.createSourceFile(
+    "capability-source.ts",
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+  );
+  let importsRuntime = false;
+
+  const visit = (node) => {
+    if (importsRuntime) return;
+    if (
+      (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) &&
+      node.moduleSpecifier &&
+      ts.isStringLiteralLike(node.moduleSpecifier) &&
+      node.moduleSpecifier.text === specifier
+    ) {
+      if (ts.isExportDeclaration(node)) {
+        if (node.isTypeOnly) return;
+        if (
+          node.exportClause &&
+          ts.isNamedExports(node.exportClause) &&
+          node.exportClause.elements.every((element) => element.isTypeOnly)
+        ) return;
+        importsRuntime = true;
+        return;
+      }
+
+      const clause = node.importClause;
+      if (!clause?.isTypeOnly) {
+        const bindings = clause?.namedBindings;
+        const namedTypesOnly =
+          !clause?.name &&
+          bindings &&
+          ts.isNamedImports(bindings) &&
+          bindings.elements.every((element) => element.isTypeOnly);
+        if (!namedTypesOnly) importsRuntime = true;
+      }
+      return;
+    }
+    if (
+      ts.isImportEqualsDeclaration(node) &&
+      !node.isTypeOnly &&
+      ts.isExternalModuleReference(node.moduleReference) &&
+      node.moduleReference.expression &&
+      ts.isStringLiteralLike(node.moduleReference.expression) &&
+      node.moduleReference.expression.text === specifier
+    ) {
+      importsRuntime = true;
+      return;
+    }
+    if (
+      ts.isCallExpression(node) &&
+      node.arguments.length > 0 &&
+      ts.isStringLiteralLike(node.arguments[0]) &&
+      node.arguments[0].text === specifier &&
+      (
+        node.expression.kind === ts.SyntaxKind.ImportKeyword ||
+        (ts.isIdentifier(node.expression) && node.expression.text === "require")
+      )
+    ) {
+      importsRuntime = true;
+      return;
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+  return importsRuntime;
 }

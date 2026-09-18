@@ -11,12 +11,34 @@ VelarOS Platform is a flat Bun workspace. Every publishable package lives direct
 | Core | `packages/core`, `packages/platform` |
 | Foundations | `packages/code-surface`, `packages/velar`, `packages/text-files`, `packages/path-rules`, `packages/tool-contract` |
 | Model | `packages/model` |
-| Capabilities | `packages/browser`, `packages/cli`, `packages/computer`, `packages/development`, `packages/office`, `packages/project`, `packages/system` |
+| Capabilities | `packages/browser`, `packages/cli`, `packages/computer`, `packages/office`, `packages/project`, `packages/system` |
 | Memory | `packages/memory`, `packages/knowledge` |
 | UI | `packages/ui` |
 | HTML artifacts | `packages/html-artifacts` |
 | Surface | `packages/surface-protocol` |
 | Evaluation | `packages/agent-lab` |
+
+## Target topology
+
+The repository is converging on three rules; packages move one at a time, each move keeping every gate green.
+
+1. **Every capability the model uses is a unit of `@velaros-ai/velar`** (`packages/velar/<unit>`, imported by the model as `velar:<unit>`),
+   together with the implementations only that capability uses. A unit without a model face is allowed when it is the
+   implementation behind one (`development` answers `velar:code`).
+2. **Core execution stays outside `velar`**: `kernel`, `agent`, `model`, `code-surface` (the program gate), `tool-contract`,
+   `surface-protocol`, and the cross-domain foundations `core` and `platform`.
+3. **Product assembly is not in this repository.** A space (which capabilities are mounted, with which ports and policies)
+   is assembled by each product (Desktop, Workbench, Termel). Reusable host implementations those products share — the local
+   machine host behind shell and sandbox, for example — are capability implementations and live in `velar`.
+
+| Package | Destination | Status |
+| --- | --- | --- |
+| `development` | `velar/development` (language services behind `velar:code`) | done |
+| `system` | local machine host → `velar`; space assembly → products | pending |
+| `project` | space assembly and ports → products; verification policy → `velar/project` | pending |
+| `text-files`, `path-rules` | internal units of `velar` (only capabilities use them) | pending |
+| `computer`, `knowledge`, `office` (+ `document-renderer`), `memory`, `browser` | tool collections become `velar` modules; engines that are not tools stay separate packages | pending |
+| `ui`, `html-artifacts`, `cli`, `agent-lab` | grouped by responsibility after the moves above | pending |
 
 ## Shared infrastructure
 

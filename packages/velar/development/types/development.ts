@@ -7,7 +7,7 @@
 export interface ExternalLanguageServerSpec {
   /** 规格 id，也是进程池里的键（`basedpyright`、`gopls`…）。 */
   readonly id: string
-  /** 可执行文件名；要由用户自己装到 PATH 上，本包不下载也不安装。 */
+  /** 可执行文件名；要由用户自己装到 PATH 上，本单元不下载也不安装。 */
   readonly command: string
   /** 启动参数，原样传给命令。 */
   readonly args: readonly string[]
@@ -73,7 +73,7 @@ export interface ExternalLanguageLocation {
   readonly endLine: Nullable<number>
   /** 结束列；语言服务没给范围结束时为 `null`。 */
   readonly endColumn: Nullable<number>
-  /** 目标处的一行预览；本包不读目标文件，恒为 `null`。 */
+  /** 目标处的一行预览；本单元不读目标文件，恒为 `null`。 */
   readonly preview: Nullable<string>
 }
 

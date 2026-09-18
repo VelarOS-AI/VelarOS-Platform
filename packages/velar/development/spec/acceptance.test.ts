@@ -10,7 +10,7 @@ import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from '
 
 import { createProjectKernel } from '@velaros-ai/velar/project'
 
-import { typeScriptProjectPool } from '../src/impl/TypeScriptProjectPool'
+import { typeScriptProjectPool } from '../impl/TypeScriptProjectPool'
 import {
   createExternalLanguageService,
   createProjectCodeQuery,
@@ -18,7 +18,7 @@ import {
   type LanguageReadPort,
   type LanguageToolContext,
   typeScriptProjects,
-} from '../src/index'
+} from '../index'
 
 // 用例跑真实类型检查，机器繁忙时会超过默认的 5 秒。
 setDefaultTimeout(30_000)
@@ -104,7 +104,7 @@ afterAll(async () => {
   )
 })
 
-describe('@velaros-ai/development 验收', () => {
+describe('@velaros-ai/velar/development 验收', () => {
   test('INV-1 语言查询只借读源码端口，别的能力一个都够不着', async () => {
     const kernel = await createProjectKernel({ root, plugins: [] })
     const touched = new Set<string>()
