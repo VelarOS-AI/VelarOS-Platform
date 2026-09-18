@@ -592,36 +592,6 @@ export default { path: file.path, listed: listed.stdout.includes('notes.txt'), c
     }
   })
 
-  test('INV-37 velar:files 落盘之前把要写、要删的文件报给代码面：改与撤回都报、报的时候还没落盘，读不报', async () => {
-    const root = await realpath(await mkdtemp(join(tmpdir(), 'velaros-inv37-')))
-    const system = systemSpaceAt(root)
-    try {
-      await writeFile(join(root, 'kept.txt'), 'one\n')
-      const touched: string[][] = []
-      const seen: string[] = []
-      const watch = {
-        touching: async (paths: readonly string[]) => {
-          touched.push([...paths])
-          seen.push(await readFile(join(root, 'kept.txt'), 'utf8'))
-        },
-      }
-      const edited = await system.port.invoke({ namespace: 'files', operation: 'edit', input: { files: [{ path: 'kept.txt', newText: 'two\n' }, { path: 'fresh.txt', newText: 'hi\n' }] } }, undefined, watch)
-      expect(edited.error).toBeUndefined()
-      expect(touched).toEqual([[join(root, 'kept.txt'), join(root, 'fresh.txt')]])
-      // 报的时候磁盘上还是改之前的样子：时间线在这一刻记下改前的哈希。
-      expect(seen).toEqual(['one\n'])
-      await system.port.invoke({ namespace: 'files', operation: 'read', input: { files: [{ path: 'kept.txt' }] } }, undefined, watch)
-      expect(touched).toHaveLength(1)
-      const undone = await system.port.invoke({ namespace: 'files', operation: 'undo', input: { changeId: (edited.value as { changeId: string }).changeId } }, undefined, watch)
-      expect(undone.error).toBeUndefined()
-      expect(touched[1]?.slice().sort()).toEqual([join(root, 'fresh.txt'), join(root, 'kept.txt')])
-      expect(seen[1]).toBe('two\n')
-    } finally {
-      await system.dispose()
-      await rm(root, { recursive: true, force: true })
-    }
-  })
-
   test.skipIf(!canConfine)('INV-35 系统空间的沙箱：镜像任意目录，镜像里的命令写不到外面，落回不问用户', async () => {
     const root = await realpath(await mkdtemp(join(tmpdir(), 'velaros-inv35-sandbox-')))
     const system = systemSpaceAt(tmpdir())

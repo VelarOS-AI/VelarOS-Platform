@@ -8,7 +8,7 @@
 import { createHash } from 'node:crypto'
 import type { Stats } from 'node:fs'
 import { createReadStream } from 'node:fs'
-import { lstat, readlink } from 'node:fs/promises'
+import { readlink } from 'node:fs/promises'
 
 import { isArray, isString, isUndefined } from '@velaros-ai/core'
 
@@ -46,19 +46,6 @@ export async function hashWorkspaceFile(path: string, info: Stats): Promise<stri
   if (info.isSymbolicLink()) return sha256Text(`symlink:${await readlink(path)}`)
   if (info.size > CodeSurfaceTuning.markerHashBytes) return sha256Text(`large:${info.size}:${info.mtimeMs}`)
   return sha256File(path)
-}
-
-/** 一个本机文件现在的内容哈希（符号链接记它指向哪）；不存在、是目录或者读不了时交回 undefined。 */
-export async function hashPath(path: string): Promise<Optional<string>> {
-  const info = await lstat(path).catch(
-    // arch-guard:silent-catch-ok 读不到就是不存在：改前不存在的文件新建了，改后不存在的是删掉了，都按「不在」记。
-    () => undefined,
-  )
-  if (isUndefined(info) || info.isDirectory()) return undefined
-  return hashWorkspaceFile(path, info).catch(
-    // arch-guard:silent-catch-ok 读不了（没权限、刚被删）当它不在：记不出哈希，也比让整次调用失败好。
-    () => undefined,
-  )
 }
 
 /** 哈希只摆前八位给模型看：同一个工作区里够分得开。 */

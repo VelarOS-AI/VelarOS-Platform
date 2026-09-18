@@ -172,7 +172,7 @@ describe('系统空间里的模版', () => {
   })
 
   test('velar:files：看、找、批量读、改一行、删几行、改 JSON、新建、几个文件一起改、撤回', async () => {
-    const { values, reply } = await runProgram(space, 'files', `${template('files/template.js')}
+    const { values } = await runProgram(space, 'files', `${template('files/template.js')}
 export const shown = await showFile('.zshrc')
 export const grep = await grepFile('logs/app.log', /error/i, 2)
 export const many = await readMany(['.zshrc', 'missing.cfg'])
@@ -202,8 +202,6 @@ export const reverted = typeof replaced === 'string' ? replaced : await revert(r
     // 撤回之后两个文件都回到改之前。
     expect(values.reverted.files).toHaveLength(2)
     expect(await readFile(join(root, 'notes/b.md'), 'utf8')).toBe('nothing\noldName again, oldName\n')
-    // 系统空间没有工作区标记：经 velar:files 改的文件在落盘前报出路径，时间线记下这一步改了哪些（改了又撤回的不算）。
-    expect(reply.steps[0]?.changes?.map((change) => relative(root, change.path))).toEqual(['.zshrc', 'bin/hello.sh', 'settings.json'])
   }, 180_000)
 
   test('velar:shell：跑测试、筛错误、看 git、rg 找东西、起后台服务再停掉、刷新环境', async () => {

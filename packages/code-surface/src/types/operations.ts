@@ -21,7 +21,7 @@ import type { CodeAttachment } from './code-surface.js'
  */
 export type CapabilityOperation = (input: any, context: CapabilityOperationContext) => Promise<unknown>
 
-/** 一次操作能用到的东西：取消信号、把图交给模型的口子、改本机文件之前报路径的口子。 */
+/** 一次操作能用到的东西：取消信号，与把图交给模型的口子。 */
 export interface CapabilityOperationContext {
   /** 本次调用的取消信号。 */
   signal?: AbortSignal
@@ -30,11 +30,6 @@ export interface CapabilityOperationContext {
    * 交出去的图在程序跑完之后按顺序放到结果后面，模型看到的是真正的图。
    */
   attach(attachment: CodeAttachment): void
-  /**
-   * 接下来要改（写、删）这些本机文件（绝对路径）：在动手之前调、等它完成。时间线据此在改前、改后各记一次内容哈希——
-   * 系统空间给不了整个磁盘的标记，经 `velar:files` 改的文件靠这个记下来。没人要记时它什么都不做。
-   */
-  touching(paths: readonly string[]): Promise<void>
 }
 
 /** 一个命名空间的操作表：操作名 → 那个函数。 */

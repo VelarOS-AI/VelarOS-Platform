@@ -44,15 +44,6 @@ export interface CodeCapabilityOutcome {
 }
 
 /**
- * 一次能力调用要改哪些本机文件：能力在动手之前报给代码面，时间线据此在改前、改后各记一次内容哈希。
- * 系统空间没法给整个磁盘打标记，经 `velar:files` 改的文件只能这样记；项目空间有整棵树的标记，用不着它。
- */
-export interface CodeCallFileWatch {
-  /** 这次调用接下来要改（写、删）这些文件（绝对路径）；等它记下改前的样子再动手。 */
-  touching(paths: readonly string[]): Promise<void>
-}
-
-/**
  * 能力端口：代码面与真实能力之间唯一的通道。
  *
  * **审批、危险判定、权限、运行事件都在 `invoke` 里面撞。** 这是代码面能成立的前提：
@@ -66,12 +57,12 @@ export interface CodeCapabilityPort {
    */
   listOperations(): Readonly<Record<string, readonly string[]>>
   /**
-   * 执行一次能力调用；`signal` 触发时尽快停下；`watch` 给了，能力改本机文件之前经它报出路径（见 `CapabilityOperationContext.touching`）。
+   * 执行一次能力调用；`signal` 触发时尽快停下。
    *
    * 调用的时间不计进程序的墙钟：会话在调用开始时停表、落定时恢复，能力自己的时限（命令的 timeoutMs）与等用户点头都在这里面。
    * 程序停下（跑完、失败、超时、被中止）时还没落定的调用，会话会触发 `signal` 要它停下——做不到立刻停的，也该尽快收尾。
    */
-  invoke(call: CodeCapabilityCall, signal?: AbortSignal, watch?: CodeCallFileWatch): Promise<CodeCapabilityOutcome>
+  invoke(call: CodeCapabilityCall, signal?: AbortSignal): Promise<CodeCapabilityOutcome>
 }
 
 /** 程序跑起来之后陆续发生的事，宿主据此往界面上冒卡片与实时输出。 */

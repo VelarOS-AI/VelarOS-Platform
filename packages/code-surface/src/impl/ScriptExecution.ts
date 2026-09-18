@@ -17,7 +17,6 @@ import type { ResolvedCode, ScriptRunPlan, ScriptStepResult, TimelineStepRecord,
 import { renderDiagnostics } from '../utils/diagnostics.js'
 import { applyProgramEdits } from '../utils/edit.js'
 import { describeNeededModules, grantedModules, renderProgramResult } from '../utils/gate.js'
-import { hashPath } from '../utils/markers.js'
 import { readModuleSpecifiers } from '../utils/module-form.js'
 import { readCapabilityNamespace } from '../utils/program.js'
 import { callRef, checkScriptPath, isRelativeSpecifier, parseCallBound, parseTimelineRef, resolveLibraryImport, stepRef, versionRef } from '../utils/refs.js'
@@ -28,7 +27,6 @@ import { describeChanges, describeExternal, describeStepSubject, fitReply } from
 import type { CodeProgramCheckerApi } from './CodeProgramChecker.js'
 import { createCodeSurfaceSession } from './CodeSurfaceSession.js'
 import type { ScriptTimelineApi } from './ScriptTimeline.js'
-import { TouchedFiles } from './TouchedFiles.js'
 
 /** 一次 exec：从头到尾办完。 */
 export interface ScriptExecutionApi {
@@ -261,13 +259,12 @@ export class ScriptExecution implements ScriptExecutionApi {
     if (!isEmpty(missing)) return this.fail(record, CodeSurfaceErrorCodes.refNotFound, `${ref} 当时用到的 ${missing.map(([path, version]) => versionRef(path, version)).join('、')} 找不到了，重放不了。`)
     this.grantQuietly([source, ...Object.values(library.modules)])
 
-    // 跑之前：它当时改过的文件，现在得还是当时改前的样子，否则是在别的底子上重放。
-    // 有工作区标记的空间，那一步当时打上了标记才核对；系统空间每一步都经能力报过改了哪些文件，照样核对。
-    const tracked = !this.timeline.marking || !isUndefined(original.marker) || !isUndefined(original.changes)
+    // 跑之前：它当时改过的文件，现在得还是当时改前的样子，否则是在别的底子上重放。有工作区标记、那一步当时也打上了标记才核对。
+    const marked = this.timeline.marking && (!isUndefined(original.marker) || !isUndefined(original.changes))
     const expected = original.changes ?? []
-    if (tracked && !isEmpty(expected)) {
-      if (this.timeline.marking && isUndefined(this.scan)) return this.fail(record, CodeSurfaceErrorCodes.replayMismatch, '这次没能给工作区打上标记（文件太多），核对不了改前的样子，没有重放。')
-      const current = await this.currentHashes(expected.map((change) => change.path))
+    if (marked && !isEmpty(expected)) {
+      if (isUndefined(this.scan)) return this.fail(record, CodeSurfaceErrorCodes.replayMismatch, '这次没能给工作区打上标记（文件太多），核对不了改前的样子，没有重放。')
+      const current = this.scan.files
       const before = replayPreMismatches(expected, current)
       if (!isEmpty(before)) {
         const applied = expected.every((change) => current.get(change.path) === change.after)
@@ -288,7 +285,7 @@ export class ScriptExecution implements ScriptExecutionApi {
     if (!isUndefined(params.blobs)) plan.blobs = params.blobs
     const done = await this.execute(record, plan)
     // 跑完之后：改出来的得和当时一模一样。
-    if (!tracked || !done.report.ok || (this.timeline.marking && isUndefined(done.record.marker))) return done
+    if (!marked || !done.report.ok || isUndefined(done.record.marker)) return done
     const after = replayPostMismatches(expected, done.record.changes ?? [])
     if (isEmpty(after)) return done
     const failure: CodeProgramFailure = { code: CodeSurfaceErrorCodes.replayMismatch, message: `${ref} 重放完，改出来的和当时不一样。` }
@@ -314,9 +311,7 @@ export class ScriptExecution implements ScriptExecutionApi {
     // 模版不常驻：跟着程序送进隔离进程，程序用 template() 读到才进上下文。
     const templates = Object.fromEntries(space.modules.map(({ surface }) => [surface.specifier, surface.template]))
     const program = { source: plan.source, path: plan.path, modules: plan.modules, input: plan.input, blobs: plan.blobs }
-    // 没有工作区标记的空间（系统空间）：能力改本机文件之前报出路径，这一步改了哪些文件靠它记。
-    const touched = this.timeline.marking ? undefined : new TouchedFiles()
-    const submit = (): Promise<CodeSurfaceOutcome> => session.submit({ program, granted: this.granted(), templates, timeoutMs: this.input.timeoutMs, signal: this.input.signal, watch: touched })
+    const submit = (): Promise<CodeSurfaceOutcome> => session.submit({ program, granted: this.granted(), templates, timeoutMs: this.input.timeoutMs, signal: this.input.signal })
     let outcome = await submit()
     if (!outcome.checked && 'needsModules' in outcome) {
       const needed = this.admitNeeded(outcome.needsModules)
@@ -337,26 +332,11 @@ export class ScriptExecution implements ScriptExecutionApi {
     if (outcome.result.failed) record.error = outcome.result.failed
     if (outcome.calls && !isEmpty(outcome.calls)) record.calls = [...outcome.calls]
     const lines = [renderProgramResult(outcome.result)]
-    let changes: Optional<ScriptFileChange[]>
-    if (isUndefined(touched)) changes = await this.markAfterRun(record)
-    else {
-      changes = await touched.changes()
-      if (!isEmpty(changes)) record.changes = changes
-    }
+    const changes = await this.markAfterRun(record)
     if (changes && !isEmpty(changes)) lines.push(describeChanges(changes))
     const text = lines.join('\n')
     record.result = await this.timeline.put(text)
     return { record, report: this.report(record, { outcome, changes }), text, images: outcome.attachments ?? [] }
-  }
-
-  /**
-   * 这几个文件现在的内容哈希：有工作区标记时取刚扫的那一遍（路径相对工作区根目录），系统空间直接去算（绝对路径）。
-   * 不存在的是 undefined。
-   */
-  private async currentHashes(paths: readonly string[]): Promise<Map<string, Optional<string>>> {
-    const current = new Map<string, Optional<string>>()
-    for (const path of paths) current.set(path, this.timeline.marking ? this.scan?.files.get(path) : await hashPath(path))
-    return current
   }
 
   /** 跑完一段代码之后扫一遍工作区：记下标记与这一步改了哪些文件。被中止了也扫——副作用是真的，得记下来。 */

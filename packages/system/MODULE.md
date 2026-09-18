@@ -51,7 +51,7 @@
 | 链路 | 怎么走 |
 | --- | --- |
 | 系统空间的一次调用 | 模型的程序调 `read(...)` / `run(...)` / `create(...)` → 能力端口按命名空间找到装配表里那一格 → `resolveCall` 给出这一次调用的审批通道、取消信号、会话 → 装成那件能力要的上下文（端口在构造时装好一次，上下文每次现装）→ 交给 `fileOperations` / `shellOperations` / `sandboxOperations` |
-| `velar:files` 的系统端口 | `locate`：`host.resolvePath`（`~` 与相对路径）→ 解开符号链接得到真实目标；读写前不问用户；`commit`：先把这一批要写、要删的文件经 `touching` 报给代码面（脚本时间线据此记下改前改后的哈希），再按顺序写或删——写是补建上级目录后原子替换（同目录临时文件写完 fsync 再改名，权限位原样保留，核对 expected），删（撤回一次新建）是核对 expected 之后删掉；出错时在 context.applied 里点名已做的 |
+| `velar:files` 的系统端口 | `locate`：`host.resolvePath`（`~` 与相对路径）→ 解开符号链接得到真实目标；读写前不问用户；`commit`：按顺序写或删——写是补建上级目录后原子替换（同目录临时文件写完 fsync 再改名，权限位原样保留，核对 expected），删（撤回一次新建）是核对 expected 之后删掉；出错时在 context.applied 里点名已做的 |
 | `velar:images` 的系统端口 | `locate`：`host.resolvePath` → 解开符号链接得到真实目标；`resizeImage`：只在 macOS 上给，sips 先裁后缩、分两次调 |
 | `velar:shell` 的系统端口 | `resolveCwd`：`host.resolvePath`；`commandPolicy`：确认文案说在哪个目录（没给就是系统运行环境），风险分类 `system-command:dangerous`；跑命令、列后台任务、刷新环境、终止后台任务直接交给本地内核 |
 | `velar:sandbox` 的系统端口 | 建、看差量、落回、丢弃直接交给本地内核；`resolveSource`：`host.resolvePath`；`runInSandbox`：按沙箱 id 找到镜像根，交给 `host.runCommand`（cwd 落在镜像根里，内核就换成钉死在镜像里的执行器）；落回不问用户 |
@@ -98,8 +98,8 @@
 
 ## 不变量
 
-共 20 条，登记在 `spec/invariants.md`，验收用例在 `spec/acceptance.test.ts`。编号只增不重排，空号的去向写在登记表开头。
-按检验方式：测试 19 条、门禁 1 条。未验证 0 条。
+共 19 条，登记在 `spec/invariants.md`，验收用例在 `spec/acceptance.test.ts`。编号只增不重排，空号的去向写在登记表开头。
+按检验方式：测试 18 条、门禁 1 条。未验证 0 条。
 
 ## 非目标
 

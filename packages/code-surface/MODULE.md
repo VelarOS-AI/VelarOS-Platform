@@ -44,7 +44,6 @@
 | --- | --- |
 | `CodeCapabilityPort` | 代码面与真实能力之间唯一的通道。`listOperations` 报有哪些能力（声明与隔离里的桩都按它造），`invoke` 执行一次调用——**危险判定、运行事件都在它里面撞** |
 | `CodeCapabilityCall` / `CodeCapabilityOutcome` | 一次调用的入参与结果；结果里的 `error` 在程序里是一个能 `try/catch` 的异常 |
-| `CodeCallFileWatch` | 一次调用要改哪些本机文件：能力动手之前经操作上下文的 `touching` 报出绝对路径，时间线在改前、改后各记一次哈希。系统空间没有整棵树的标记，经 `velar:files` 改的文件靠它记 |
 | `CodeSurfaceEventSink` | 脚本跑起来之后陆续发生的事：调用起止与日志。界面要实时看见日志，模型那边不走这条路 |
 | `CodeSurfaceTimelinePort` | 这个空间的时间线放在哪（应用数据目录下的一个目录，每个项目一份）、给哪个目录打标记（项目空间给项目根，系统空间不给）、保留上限（不给用缺省）。同一个目录只该由一个宿主进程写 |
 | `CodeSurfaceSpacePort` | 这一次调用所在的空间：挂的模块、按这次调用装好的能力端口、时间线 |
@@ -59,8 +58,7 @@
 （`CodeProgramCheckSuccess` / `CodeProgramCheckFailure`）。
 门的入参与回执在 `types/gate.ts`，只走根入口：`CodeGateExecInput`、`CodeGateQuery`、`CodeGateReply`、`ScriptStepInput`、`ScriptStepReport`、
 `ScriptHistoryInput`、`ScriptShowInput`、`ScriptDiffInput`。
-`CapabilityOperation` / `CapabilityNamespaceOperations` / `CapabilityOperationTable` 是能力空间交出来的操作表（`CodeCapabilityPort` 的对偶），
-操作拿到的 `CapabilityOperationContext` 有取消信号、交图的口子，和改本机文件之前报路径的 `touching`。`types/runner.ts` 的 `CodeRunnerApi`、`CodeRunRequest`、
+`CapabilityOperation` / `CapabilityNamespaceOperations` / `CapabilityOperationTable` 是能力空间交出来的操作表（`CodeCapabilityPort` 的对偶）。`types/runner.ts` 的 `CodeRunnerApi`、`CodeRunRequest`、
 `CodeRunDispatch`、`CodeRunOutcome`、`HoldProgramClock` 是隔离运行器的形状，只走根入口——隔离方案会换，抽成接口才换得动。
 
 两个入口对应 `package.json` 的 `exports`，源文件是 `src` 根上的入口文件，只有转发语句：
@@ -81,8 +79,7 @@
 - write、edit、restore：定下正文（edit 在底稿上按 `edits` 改）→ 连同它 import 到的库里的脚本一起过检查（要是 JavaScript）→ 存成这个路径的新版本（和最新版一样就不存；版本号接着这个路径存过的最后一版往下排）；
 - remove：把脚本从库里拿掉（各版本还在，restore 或者再 write 就回来了），还在 import 它的脚本当场点名；
 - run：代码是 `program`，或者 `from` 已有的代码（脚本的一版、之前某一步的代码，带 `edits` 就先改），参数不给就沿用那一步当时的 →
-  顺着相对 import 找全库里的脚本（最新版）→ 交给会话跑 → 跑完再扫一遍工作区，记下这一步改了哪些文件
-  （系统空间没有整棵树的标记：能力改本机文件之前经 `touching` 报出路径，`TouchedFiles` 记下改前改后的哈希）；
+  顺着相对 import 找全库里的脚本（最新版）→ 交给会话跑 → 跑完再扫一遍工作区，记下这一步改了哪些文件；
 - replay：取那一步当时的代码、参数与库版本 → 跑之前核对它改过的文件还是改前的样子 → 跑 → 跑完核对改出来的和当时一样，对不上就算没成；
   给 from、to 一段调用号时，按先后展开成那一段里跑成了、改过文件的每一步，文件已经是它改后（或这一段做完）的样子的跳过。
 不是这一轮写的代码（库里的脚本、之前某一步的代码）import 的能力模块直接给上，不让模型为它们先读一遍声明。
@@ -140,8 +137,8 @@ exec 里某一步没成时回执说清楚是哪一步、为什么，后面的步
 
 ## 不变量
 
-共 35 条，登记在 `spec/invariants.md`，验收用例在 `spec/acceptance.test.ts`。编号只增不重排。
-按检验方式：测试 34 条、门禁 1 条。未验证 0 条。
+共 34 条，登记在 `spec/invariants.md`，验收用例在 `spec/acceptance.test.ts`。编号只增不重排。
+按检验方式：测试 33 条、门禁 1 条。未验证 0 条。
 
 ## 非目标
 
@@ -149,7 +146,7 @@ exec 里某一步没成时回执说清楚是哪一步、为什么，后面的步
 - **不存工作区文件的内容，也不替模型回退工作区**：时间线只有哈希，写不回旧内容。它告诉模型每一步改了哪些文件、
   改前是什么哈希，撤回靠已有的手段（`velar:project` 的 undo、git、模型照原脚本写反向改动），撤完用 `script:diff` 核对到没到。
   重放是把脚本再跑一遍，脚本里的外部动作（命令、网络）也会再做一遍。
-- **系统空间不打整棵树的标记**：整个磁盘扫不了，只记经 `velar:files` 改的文件（能力在落盘前报路径）；shell、沙箱落回在系统空间里改的文件记不住，按时间点比文件的 diff 也比不了。
+- **系统空间不打标记**：整个磁盘扫不了，那里只记操作（每一步的代码、参数、结果与调过的能力），不记文件改动，重放也不核对文件。
 - **`nodeSubprocessCodeRunner` 不是可发版的隔离**：它挡得住读写文件与起子进程（实测 `ERR_ACCESS_DENIED`），
   **挡不住网络**，Node 的权限模型不覆盖 socket。正式版换 WASM 里的 QuickJS。`NodeSubprocessRunnerIsReleaseReady` 恒为 `false`，宿主装配时据此拦下。
 - **不生成能力声明**：声明由能力包那一侧从源码生成，本包只负责按给定的声明检查与执行。
@@ -165,7 +162,6 @@ src/
   impl/       CodeSurfaceTools.ts 门在模型面上的四个工具与内核模块（工具文件）；CodeProgramGate 模型写脚本的那扇门；
               ScriptExecution 办一次 exec；ScriptTimelineViews 读时间线（history、show、diff）；CodeSurfaceSession 办一段脚本；
               ScriptTimeline 一个空间的时间线；CodeProgramChecker 执行前的检查；NodeSubprocessCodeRunner 开发期隔离；WorkspaceMarkers 工作区标记；
-              TouchedFiles 一步里经能力改过的本机文件（系统空间）；
               CapabilityOperationPort 操作表接成能力端口；TimelineStorage 时间线落盘
   utils/      compiler.ts 编译器那一侧的活；module-form.ts 挖 import 与租约、改写成隔离能跑的形状；
               edit.ts 在底稿上改；diagnostics.ts 带代码帧的诊断；gate.ts 门给模型的说明与回执、写成工具结果；tool.ts 定义门的工具；

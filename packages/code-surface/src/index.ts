@@ -4,7 +4,6 @@ export type { CodeSurfaceErrorCode, CodeSurfaceToolName, ScriptDiffKind, ScriptS
 export { CodeSurfaceDiagnosticCodes, CodeSurfaceErrorCodes, CodeSurfaceKernelModuleVersion, CodeSurfaceLimits, CodeSurfaceModId, CodeSurfaceToolCategoryId, CodeSurfaceToolNames, ScriptDiffKinds, ScriptStepOps } from './contract/constants.js'
 export type { CodeSurfaceCapabilityService, CodeSurfaceTool, CodeSurfaceToolCollection } from './contract/provides.js'
 export type {
-  CodeCallFileWatch,
   CodeCapabilityCall,
   CodeCapabilityOutcome,
   CodeCapabilityPort,

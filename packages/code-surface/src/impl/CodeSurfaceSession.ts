@@ -8,7 +8,7 @@
 import { isEmpty, isString, isTrue } from '@velaros-ai/core'
 
 import { CodeSurfaceErrorCodes, CodeSurfaceLimits } from '../contract/constants.js'
-import type { CodeCallFileWatch, CodeCapabilityPort, CodeRunnerApi, CodeSurfaceEventSink } from '../contract/requires.js'
+import type { CodeCapabilityPort, CodeRunnerApi, CodeSurfaceEventSink } from '../contract/requires.js'
 import type {
   CodeAttachment,
   CodeCallNotice,
@@ -43,8 +43,6 @@ export interface CodeSurfaceSessionApi {
     templates?: Readonly<Record<string, string>>
     timeoutMs?: number
     signal?: AbortSignal
-    /** 能力改本机文件之前报路径的去处：给了就转给每一次能力调用。 */
-    watch?: CodeCallFileWatch
   }): Promise<CodeSurfaceOutcome>
 }
 
@@ -62,7 +60,6 @@ class CodeSurfaceSession implements CodeSurfaceSessionApi {
     templates?: Readonly<Record<string, string>>
     timeoutMs?: number
     signal?: AbortSignal
-    watch?: CodeCallFileWatch
   }): Promise<CodeSurfaceOutcome> {
     const { program } = input
     const source = program.source
@@ -127,7 +124,7 @@ class CodeSurfaceSession implements CodeSurfaceSessionApi {
         // 调用的时间不是程序的时间：命令跑多久由它自己的时限管，等用户点头也在调用里。开始就停表，落定再接着走。
         const release = holdClock()
         const result = await this.capabilities
-          .invoke({ namespace: call.namespace, operation: call.operation, input: call.input }, run.signal, input.watch)
+          .invoke({ namespace: call.namespace, operation: call.operation, input: call.input }, run.signal)
           .finally(() => {
             release()
             inFlight.delete(call.callId)

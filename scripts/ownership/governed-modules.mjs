@@ -393,8 +393,8 @@ export const GovernedModules = [
       ['ScriptExecution.ts', 'ScriptTimelineViews.ts'],
       // 办一段脚本：查体量、检查、执行、编结果；一个空间的时间线：日志、脚本库、标记
       ['CodeSurfaceSession.ts', 'ScriptTimeline.ts'],
-      // 执行前的检查、隔离里的执行、给工作区打标记、记下经能力改过的本机文件；互不相干
-      ['CodeProgramChecker.ts', 'NodeSubprocessCodeRunner.ts', 'WorkspaceMarkers.ts', 'TouchedFiles.ts'],
+      // 执行前的检查、隔离里的执行、给工作区打标记；三者互不相干
+      ['CodeProgramChecker.ts', 'NodeSubprocessCodeRunner.ts', 'WorkspaceMarkers.ts'],
       // 能力那一侧：把空间交来的操作表接成端口，不认识任何一件具体能力；时间线落盘
       ['CapabilityOperationPort.ts', 'TimelineStorage.ts'],
     ],

@@ -75,15 +75,7 @@ class SystemSpace implements SystemSpaceApi {
   public get operations(): CapabilityOperationTable {
     const files = async (context: CapabilityOperationContext): Promise<FileOperationContext> => {
       const call = await this.call(context)
-      // 落盘之前把要写、要删的文件报给代码面：系统空间没法给整个磁盘打标记，时间线靠这个记下这一步改前改后的哈希。
-      const port: FileSpacePort = {
-        locate: this.filePort.locate,
-        commit: async (writes) => {
-          await context.touching(writes.map((write) => write.target))
-          await this.filePort.commit(writes)
-        },
-      }
-      return { abortSignal: call.abortSignal, files: port }
+      return { abortSignal: call.abortSignal, files: this.filePort }
     }
     const images = async (context: CapabilityOperationContext): Promise<ImageOperationContext> => {
       const call = await this.call(context)
