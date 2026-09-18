@@ -17,7 +17,7 @@ function mismatchOf(path: string, expected: Optional<string>, actual: Optional<s
 }
 
 /** 跑之前：那一步当时改过的每个文件，现在得是当时改前的样子（当时不存在的，现在也得不存在）。 */
-export function replayPreMismatches(expected: readonly ScriptFileChange[], current: ReadonlyMap<string, string>): ReplayMismatch[] {
+export function replayPreMismatches(expected: readonly ScriptFileChange[], current: ReadonlyMap<string, Optional<string>>): ReplayMismatch[] {
   return expected
     .filter((change) => current.get(change.path) !== change.before)
     .map((change) => mismatchOf(change.path, change.before, current.get(change.path)))

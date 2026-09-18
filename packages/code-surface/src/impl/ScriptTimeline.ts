@@ -59,9 +59,13 @@ export interface ScriptTimelineApi {
   call(call: number): Optional<TimelineCallView>
   /** 一步；没有时交回 undefined。 */
   step(call: number, step: number): Optional<TimelineStepRecord>
-  /** 脚本库：路径 → 各版本（从旧到新），按路径排。 */
+  /** 脚本库：路径 → 各版本（从旧到新），按路径排；删掉了的不在里面。 */
   library(): ReadonlyMap<string, readonly ScriptVersionRecord[]>
-  /** 一版脚本；不给版本就是最新版。没有时交回 undefined。 */
+  /** 删掉了的脚本：路径 → 删之前的最后一版，按路径排。 */
+  removedScripts(): ReadonlyMap<string, ScriptVersionRecord>
+  /** 一个路径存过的全部版本（从旧到新），删掉了的也算：新版本的号接着它们往下排。 */
+  versions(path: string): readonly ScriptVersionRecord[]
+  /** 一版脚本：给了版本就是那一版（删掉了的也取得到）；不给就是最新版，删掉了的没有。没有时交回 undefined。 */
   version(path: string, version?: number): Optional<ScriptVersionRecord>
   /** 存一段文字（代码、参数、结果），交回它的哈希。 */
   put(text: string): Promise<string>
@@ -79,6 +83,8 @@ export class ScriptTimeline implements ScriptTimelineApi {
   private readonly callViews = new Map<number, TimelineCallView>()
   /** 脚本库：路径 → 各版本。 */
   private readonly scripts = new Map<string, ScriptVersionRecord[]>()
+  /** 删掉了的脚本路径；之后再存一版就回来了。 */
+  private readonly removedPaths = new Set<string>()
   /** 标记 → 工作区是这个样子的那些时间点。 */
   private readonly points = new Map<string, TimelinePoint[]>()
   /** 最近一次记到的标记。 */
@@ -177,12 +183,26 @@ export class ScriptTimeline implements ScriptTimelineApi {
   }
 
   public library(): ReadonlyMap<string, readonly ScriptVersionRecord[]> {
-    return new Map([...this.scripts.entries()].sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0)))
+    return new Map([...this.scripts.entries()].filter(([path]) => !this.removedPaths.has(path)).sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0)))
+  }
+
+  public removedScripts(): ReadonlyMap<string, ScriptVersionRecord> {
+    const removed = new Map<string, ScriptVersionRecord>()
+    for (const path of [...this.removedPaths].sort()) {
+      const last = this.scripts.get(path)?.at(-1)
+      if (last) removed.set(path, last)
+    }
+    return removed
+  }
+
+  public versions(path: string): readonly ScriptVersionRecord[] {
+    return this.scripts.get(path) ?? []
   }
 
   public version(path: string, version?: number): Optional<ScriptVersionRecord> {
     const versions = this.scripts.get(path) ?? []
-    return isUndefined(version) ? versions.at(-1) : versions.find((record) => record.version === version)
+    if (isUndefined(version)) return this.removedPaths.has(path) ? undefined : versions.at(-1)
+    return versions.find((record) => record.version === version)
   }
 
   public put(text: string): Promise<string> {
@@ -279,7 +299,9 @@ export class ScriptTimeline implements ScriptTimelineApi {
       const versions = this.scripts.get(record.path) ?? []
       versions.push({ path: record.path, version: record.version, code: record.code, step: stepRef(record.call, record.step), at: record.at })
       this.scripts.set(record.path, versions)
+      this.removedPaths.delete(record.path)
     }
+    if (record.ok && record.op === 'remove' && record.path) this.removedPaths.add(record.path)
     if (record.marker) {
       this.notePoint(record.marker, { ref: stepRef(record.call, record.step) })
       this.latestMarker = record.marker

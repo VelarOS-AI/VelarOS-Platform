@@ -18,7 +18,7 @@ const GateRules = [
   '参数放进 input，大段文本（文件正文、补丁）放进 blobs，脚本里 `import { input, blobs } from \'velar:program\'` 取，不写进源码。',
   '能力调用失败在脚本里是能 try/catch 的异常，只有 error.code 与 error.message；危险命令在那次调用里自己会问用户。脚本没跑完时，回执列出已经做完的调用和停下时还没落定的调用。',
   '脚本在隔离里跑，没有文件系统、网络和子进程，事情一律经能力模块做。每个能力模块都有一份代码模版，是日常常用写法的示例：拿不准怎么组合时先用 `velar:program` 的 template 读它，照你的需要写，不必照着写。',
-  '跑脚本、存脚本都用 script:exec，一次给几步、按顺序做：run 跑代码；要反复用的用 write 存进脚本库（lib/x.js 这样的路径，每存一次是一个新版本），别的脚本用相对路径 import 它（`import { parse } from \'./lib/x.js\'`）。直接跑的代码也会存下来，按步骤号（C14.2）引用：run、edit 用 from 指它、用 edits 改几处，不用整份重发。',
+  '跑脚本、存脚本都用 script:exec，一次给几步、按顺序做：run 跑代码；要反复用的用 write 存进脚本库（lib/x.js 这样的路径，每存一次是一个新版本，不要了用 remove 拿掉），别的脚本用相对路径 import 它（`import { parse } from \'./lib/x.js\'`）。直接跑的代码也会存下来，按步骤号（C14.2）引用：run、edit 用 from 指它、用 edits 改几处，不用整份重发。',
   '每一次调用、每一步的代码、参数和结果都记在这个空间的时间线上，项目空间还记下每一步改了哪些文件（只有哈希，不存内容）：script:history 列，script:show 看，script:diff 比；脚本改坏了用 restore 退回旧版本，工作区的改动用 replay 按记录重跑。',
 ]
 

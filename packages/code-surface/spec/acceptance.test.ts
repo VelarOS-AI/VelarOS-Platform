@@ -825,6 +825,82 @@ describe('门与时间线', () => {
   }, 60_000)
 })
 
+describe('脚本库的删除与系统空间的改动', () => {
+  const notes: MountedCapabilityModule = {
+    resident: true,
+    surface: { specifier: 'velar:notes', namespace: 'notes', methods: ['list'], declarations: "declare module 'velar:notes' {\n  export function list(input: { limit: number }): Promise<{ items: string[] }>\n}", template: '// velar:notes' },
+  }
+  const localDisk: MountedCapabilityModule = {
+    resident: true,
+    surface: { specifier: 'velar:local', namespace: 'local', methods: ['write'], declarations: "declare module 'velar:local' {\n  export function write(input: { path: string; text: string }): Promise<{ ok: boolean }>\n}", template: '// velar:local' },
+  }
+  const gateOf = () => createCodeProgramGate({ checker: codeProgramChecker, runner: nodeSubprocessCodeRunner })
+  const exec = (gate: CodeProgramGateApi, space: CodeSurfaceSpacePort, steps: ScriptStepInput[]) => gate.exec({ sessionId: 's1', steps, space, timeoutMs: 20_000 })
+
+  test('INV-35 脚本库能删脚本：remove 之后最新版取不到、库目录里不列、import 它报找不到，还在 import 它的脚本当场点名；带版本号照样取得到，restore 让它回来，版本号接着往下排', async () => {
+    const gate = gateOf()
+    const space: CodeSurfaceSpacePort = {
+      modules: [notes],
+      capabilities: createCapabilityPort({ notes: { list: async (input) => ({ items: Array.from({ length: (input as { limit: number }).limit }, (_, index) => `n${index}`) }) } }),
+      timeline: { directory: await temporary('cs-timeline-') },
+    }
+    const query = { sessionId: 's1', timeline: space.timeline }
+    await exec(gate, space, [
+      { op: 'write', path: 'lib/base.js', program: '// 基础\nexport const base = 1' },
+      { op: 'write', path: 'lib/user.js', program: "import { base } from './base.js'\nexport const user = base + 1" },
+    ])
+    const removed = await exec(gate, space, [{ op: 'remove', path: 'lib/base.js' }])
+    expect(removed.steps[0]?.ok).toBe(true)
+    expect(removed.text).toContain('最后一版是 @1')
+    expect(removed.text).toContain('还在 import 它的：lib/user.js')
+    const listing = await gate.show({ ...query, query: {} })
+    expect(listing).toContain('脚本库里有 1 个脚本')
+    expect(listing).toContain('拿掉了的（restore 能找回来）：lib/base.js（最后一版 @1）')
+    expect((await exec(gate, space, [{ op: 'run', program: "import { base } from './lib/base.js'\nexport default base" }])).steps[0]?.error?.code).toBe(CodeSurfaceErrorCodes.checkFailed)
+    const fromRemoved = await exec(gate, space, [{ op: 'run', from: 'lib/base.js' }])
+    expect(fromRemoved.text).toContain('已经从脚本库里拿掉了')
+    expect(await gate.show({ ...query, query: { ref: 'lib/base.js@1' } })).toContain('已经从脚本库里拿掉了')
+    expect((await exec(gate, space, [{ op: 'remove', path: 'lib/base.js' }])).text).toContain('已经删掉了')
+    const back = await exec(gate, space, [{ op: 'restore', path: 'lib/base.js', version: 1 }, { op: 'run', program: "import { user } from './lib/user.js'\nexport default user" }])
+    expect(back.steps[0]?.saved).toBe('lib/base.js@2')
+    expect(back.text).toContain('── C6.2 run 直接跑的代码 ──\n2')
+  }, 60_000)
+
+  test('INV-36 没有工作区标记的空间（系统空间）：能力改本机文件之前报出路径，这一步记下改了哪些文件（绝对路径、前后哈希）；重放照样核对这些文件', async () => {
+    const root = await temporary('cs-local-')
+    const gate = gateOf()
+    const space: CodeSurfaceSpacePort = {
+      modules: [localDisk],
+      capabilities: createCapabilityPort({
+        local: {
+          write: async (input, context) => {
+            const { path, text } = input as { path: string; text: string }
+            const target = join(root, path)
+            await context.touching([target])
+            await writeFile(target, text)
+            return { ok: true }
+          },
+        },
+      }),
+      timeline: { directory: await temporary('cs-timeline-') },
+    }
+    const writing = "import { write } from 'velar:local'\nawait write({ path: 'note.txt', text: 'hello' })\nexport default 'ok'"
+    const first = await exec(gate, space, [{ op: 'run', program: writing }])
+    expect(first.steps[0]?.changes).toEqual([{ path: join(root, 'note.txt'), after: createHash('sha256').update('hello').digest('hex') }])
+    expect(first.text).toContain(`改了 1 个文件：${join(root, 'note.txt')}（新）`)
+    expect(await gate.history({ sessionId: 's1', timeline: space.timeline, query: { file: join(root, 'note.txt') } })).toContain('C1.1')
+    // 系统空间没有整棵树的标记，比时间点比不了；每一步改了什么照样看得到。
+    expect(await gate.diff({ sessionId: 's1', timeline: space.timeline, query: { from: 'C1' } })).toContain('比不了文件')
+    await rm(join(root, 'note.txt'))
+    const replayed = await exec(gate, space, [{ op: 'replay', step: 'C1.1' }])
+    expect(replayed.steps[0]?.ok).toBe(true)
+    expect(await readFile(join(root, 'note.txt'), 'utf8')).toBe('hello')
+    const again = await exec(gate, space, [{ op: 'replay', step: 'C1.1' }])
+    expect(again.steps[0]?.error?.code).toBe(CodeSurfaceErrorCodes.replayMismatch)
+    expect(again.text).toContain('现在已经在了')
+  }, 60_000)
+})
+
 describe('门的工具', () => {
   const pictures: MountedCapabilityModule = {
     resident: true,

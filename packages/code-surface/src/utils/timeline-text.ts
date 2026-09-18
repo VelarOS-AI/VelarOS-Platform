@@ -71,6 +71,7 @@ export function describeStepSubject(step: TimelineStepRecord): string {
   if (step.op === 'write') return `write ${step.path ?? ''}${saved}`
   if (step.op === 'edit') return `edit ${step.base ?? step.path ?? ''}${saved}`
   if (step.op === 'restore') return `restore ${step.base ?? step.path ?? ''}${saved}`
+  if (step.op === 'remove') return `remove ${step.path ?? ''}`
   if (step.op === 'replay') return `replay ${step.replayOf ?? ''}`
   return isUndefined(step.base) ? 'run 直接跑的代码' : `run from ${step.base}`
 }
@@ -109,16 +110,22 @@ export function describeCalls(calls: readonly CompletedCall[]): string {
   }).join('、')
 }
 
-/** 脚本库目录：每个脚本一行，最新版、什么时候由哪一步存的、正文的第一行说明（有的话）。 */
-export function renderLibrary(library: ReadonlyMap<string, readonly ScriptVersionRecord[]>, summaries: ReadonlyMap<string, string>): string {
-  if (library.size === 0) return '脚本库是空的。用 script:exec 的 write 把要反复用的代码存进来（比如 lib/changelog.js），别的脚本用相对路径 import 它。'
-  const lines = [`脚本库里有 ${library.size} 个脚本：`]
+/** 脚本库目录：每个脚本一行，最新版、什么时候由哪一步存的、正文的第一行说明（有的话）；删掉了的另起一行点名。 */
+export function renderLibrary(
+  library: ReadonlyMap<string, readonly ScriptVersionRecord[]>,
+  summaries: ReadonlyMap<string, string>,
+  removed: ReadonlyMap<string, ScriptVersionRecord>,
+): string {
+  const lines = library.size === 0
+    ? ['脚本库是空的。用 script:exec 的 write 把要反复用的代码存进来（比如 lib/changelog.js），别的脚本用相对路径 import 它。']
+    : [`脚本库里有 ${library.size} 个脚本：`]
   for (const [path, versions] of library) {
     const latest = versions.at(-1)
     if (isUndefined(latest)) continue
     const summary = summaries.get(path)
     lines.push(`${versionRef(path, latest.version)} · ${formatMoment(latest.at)} 由 ${latest.step} 存${summary ? ` · ${summary}` : ''}`)
   }
+  if (removed.size > 0) lines.push(`拿掉了的（restore 能找回来）：${[...removed.values()].map((last) => `${last.path}（最后一版 @${last.version}）`).join('、')}`)
   return lines.join('\n')
 }
 

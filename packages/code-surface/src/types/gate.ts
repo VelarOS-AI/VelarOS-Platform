@@ -9,7 +9,7 @@ import type { CodeAttachment, CodeProgramEdit, CodeProgramFailure, CodeSurfaceOu
 
 /**
  * `script:exec` 的一步。哪几个字段有用看 op：
- * write 要 path、program；edit 要 path、edits，from 可选；restore 要 path、version；
+ * write 要 path、program；edit 要 path、edits，from 可选；restore 要 path、version；remove 要 path；
  * run 要 program 或 from（带 from 时可以加 edits），input、blobs 可选；replay 要 step，或者 from、to 一段调用号。
  */
 export type ScriptStepInput = {
@@ -23,7 +23,7 @@ export type ScriptStepInput = {
   to?: string
   /** 在底稿上改的几处（edit、run）。 */
   edits?: CodeProgramEdit[]
-  /** 脚本库里的路径（write、edit、restore）。 */
+  /** 脚本库里的路径（write、edit、restore、remove）。 */
   path?: string
   /** 退回到哪一版（restore）。 */
   version?: number

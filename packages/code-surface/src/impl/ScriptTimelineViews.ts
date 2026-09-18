@@ -73,7 +73,7 @@ export class ScriptTimelineViews implements ScriptTimelineViewsApi {
         const summary = isUndefined(source) ? undefined : leadingComment(source)
         if (!isUndefined(summary)) summaries.set(path, summary)
       }
-      return fitReply(renderLibrary(timeline.library(), summaries))
+      return fitReply(renderLibrary(timeline.library(), summaries, timeline.removedScripts()))
     }
     const parsed = parseTimelineRef(ref)
     if (isString(parsed)) return parsed
@@ -99,15 +99,18 @@ export class ScriptTimelineViews implements ScriptTimelineViewsApi {
   /** 一版脚本：哪一步存的、各版本、正文。 */
   private async showScript(path: string, version: Optional<number>): Promise<string> {
     const timeline = this.timeline
-    const versions = timeline.library().get(path) ?? []
+    const versions = timeline.versions(path)
     const record = timeline.version(path, version)
+    const removed = timeline.removedScripts().get(path)
+    if (isUndefined(record) && removed && isUndefined(version)) return `${path} 已经从脚本库里拿掉了（最后一版 @${removed.version}）：要看就写 ${versionRef(path, removed.version)}，要找回来用 restore。`
     if (isUndefined(record)) return isEmpty(versions)
         ? `脚本库里没有 ${path}。用 script:show（不给 ref）看库里有哪些。`
         : `${path} 没有第 ${version ?? 0} 版；有的是 ${versions.map((entry) => `@${entry.version}`).join('、')}。`
     const source = await timeline.get(record.code)
-    const latest = versions.at(-1)
+    const latest = timeline.version(path)
+    const state = isUndefined(latest) ? '已经从脚本库里拿掉了' : `最新是 @${latest.version}`
     return fitReply([
-      `${versionRef(path, record.version)}（最新是 @${latest?.version ?? record.version}）· ${formatMoment(record.at)} 由 ${record.step} 存`,
+      `${versionRef(path, record.version)}（${state}）· ${formatMoment(record.at)} 由 ${record.step} 存`,
       `各版本：${versions.map((entry) => `@${entry.version} ${entry.step}`).join(' · ')}`,
       '── 正文 ──',
       source ?? '（正文找不到了）',

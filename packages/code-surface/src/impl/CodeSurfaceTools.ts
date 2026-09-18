@@ -31,12 +31,12 @@ const editSchema = z.object({
 
 /** exec 的一步：哪几个字段有用看 op。 */
 const stepSchema = z.object({
-  op: z.enum(ScriptStepOps).describe('这一步做什么：run 跑代码、write 存脚本、edit 改脚本、restore 退回旧版、replay 按记录重跑'),
+  op: z.enum(ScriptStepOps).describe('这一步做什么：run 跑代码、write 存脚本、edit 改脚本、restore 退回旧版、remove 从库里拿掉、replay 按记录重跑'),
   program: z.string().min(1).max(CodeSurfaceLimits.sourceChars).optional().describe('代码正文，一个 JavaScript ES 模块（run、write）'),
   from: z.string().min(1).optional().describe('已有的代码：lib/x.js（最新版）、lib/x.js@3，或者之前的一步 C3.2（run、edit）；replay 一段时是从哪次调用起，如 C1'),
   to: z.string().min(1).optional().describe('replay 一段时到哪次调用止，如 C4；不给是到最近一次'),
   edits: z.array(editSchema).min(1).optional().describe('在 from 那份代码上改的几处（run、edit）'),
-  path: z.string().min(1).max(CodeSurfaceLimits.scriptPathChars).optional().describe('脚本库里的路径，如 lib/changelog.js（write、edit、restore）'),
+  path: z.string().min(1).max(CodeSurfaceLimits.scriptPathChars).optional().describe('脚本库里的路径，如 lib/changelog.js（write、edit、restore、remove）'),
   version: z.number().int().min(1).optional().describe('退回到第几版（restore）'),
   step: z.string().min(1).optional().describe('重放哪一步，如 C3.2（replay）'),
   input: z.unknown().optional().describe('参数，任意 JSON 值（run）：脚本里 import { input } from \'velar:program\' 取'),
@@ -75,7 +75,7 @@ const exec = defineCodeSurfaceTool<ScriptExecInput>({
   suitable: ['这个空间里的事都写成脚本做：import 能力模块、调它们的方法；要反复用的存进脚本库。'],
   protocol: [
     'run 跑一段代码：program 给正文，或者 from 给已有的代码（lib/x.js 最新版、lib/x.js@3、之前的一步 C3.2——沿用它当时的 input 与 blobs，给了新的就用新的），带 edits 就先在它上面改几处再跑。',
-    'write 把 program 存成脚本库里 path 的新版本；edit 在 from（不给就是 path 的最新版）上改几处，存成 path 的新版本；restore 把 path 的第 version 版存成最新版。这三种都先过类型检查，不跑。',
+    'write 把 program 存成脚本库里 path 的新版本；edit 在 from（不给就是 path 的最新版）上改几处，存成 path 的新版本；restore 把 path 的第 version 版存成最新版——这三种都先过类型检查，不跑。remove 把 path 从库里拿掉，各版本还在，restore 能找回来。',
     'replay 按记录重跑：step 填一步（C3.2），或者 from、to 填一段调用号（C1 到 C4，to 不给是到最近一次），按先后重跑那一段里跑成了、改过文件的每一步，改动已经在了的跳过。同一份代码、同一组参数、当时的库版本；跑前核对它改过的文件还是当时改前的样子，跑完核对改出来的和当时一样，对不上就停。',
   ],
   usage: ['edits 每处 oldText 照原文一字不差、在代码里唯一，newText 写新的；诊断里框出来的那段原文可以直接当 oldText。'],

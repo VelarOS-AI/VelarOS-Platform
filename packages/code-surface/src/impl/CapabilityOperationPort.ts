@@ -8,7 +8,7 @@
 
 import { isEmpty, isUndefined } from '@velaros-ai/core'
 
-import type { CodeCapabilityCall, CodeCapabilityOutcome, CodeCapabilityPort } from '../contract/requires.js'
+import type { CodeCallFileWatch, CodeCapabilityCall, CodeCapabilityOutcome, CodeCapabilityPort } from '../contract/requires.js'
 import type { CodeAttachment } from '../types/code-surface.js'
 import type { CapabilityOperationTable } from '../types/operations.js'
 import { describeUnknownOperation, shapeOperationFailure } from '../utils/capability-failure.js'
@@ -22,7 +22,7 @@ class CapabilityOperationPort implements CodeCapabilityPort {
     )
   }
 
-  public async invoke(call: CodeCapabilityCall, signal?: AbortSignal): Promise<CodeCapabilityOutcome> {
+  public async invoke(call: CodeCapabilityCall, signal?: AbortSignal, watch?: CodeCallFileWatch): Promise<CodeCapabilityOutcome> {
     const namespace = this.table[call.namespace]
     const operation = namespace?.[call.operation]
     if (isUndefined(operation)) return { error: describeUnknownOperation(call, namespace) }
@@ -32,7 +32,10 @@ class CapabilityOperationPort implements CodeCapabilityPort {
     // 图不进返回值：操作经 attach 交出来，端口单独收着，跟在结果旁边回去。
     const attachments: CodeAttachment[] = []
     try {
-      const value = await operation(call.input, { signal, attach: (attachment) => attachments.push(attachment) })
+      const touching = async (paths: readonly string[]): Promise<void> => {
+        await watch?.touching(paths)
+      }
+      const value = await operation(call.input, { signal, attach: (attachment) => attachments.push(attachment), touching })
       const outcome: CodeCapabilityOutcome = { value }
       if (!isEmpty(attachments)) outcome.attachments = attachments
       return outcome

@@ -31,10 +31,11 @@ export type CodeSurfaceToolName = (typeof CodeSurfaceToolNames)[keyof typeof Cod
 export const CodeSurfaceToolCategoryId = 'script' as const
 
 /**
- * `script:exec` 一步能做的五件事。
- * write、edit、restore 只改脚本库（先过类型检查，不跑）；run 跑一段代码；replay 按记录把之前的一步再跑一遍。
+ * `script:exec` 一步能做的六件事。
+ * write、edit、restore 改脚本库（先过类型检查，不跑），remove 把一个脚本从库里拿掉（各版本还在时间线上）；
+ * run 跑一段代码；replay 按记录把之前的一步（或一段）再跑一遍。
  */
-export const ScriptStepOps = Object.freeze(['write', 'edit', 'restore', 'run', 'replay'] as const)
+export const ScriptStepOps = Object.freeze(['write', 'edit', 'restore', 'remove', 'run', 'replay'] as const)
 
 /** 一步做的事。 */
 export type ScriptStepOp = (typeof ScriptStepOps)[number]

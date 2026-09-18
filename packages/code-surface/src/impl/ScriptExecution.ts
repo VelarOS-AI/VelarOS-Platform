@@ -17,6 +17,7 @@ import type { ResolvedCode, ScriptRunPlan, ScriptStepResult, TimelineStepRecord,
 import { renderDiagnostics } from '../utils/diagnostics.js'
 import { applyProgramEdits } from '../utils/edit.js'
 import { describeNeededModules, grantedModules, renderProgramResult } from '../utils/gate.js'
+import { hashPath } from '../utils/markers.js'
 import { readModuleSpecifiers } from '../utils/module-form.js'
 import { readCapabilityNamespace } from '../utils/program.js'
 import { callRef, checkScriptPath, isRelativeSpecifier, parseCallBound, parseTimelineRef, resolveLibraryImport, stepRef, versionRef } from '../utils/refs.js'
@@ -27,6 +28,7 @@ import { describeChanges, describeExternal, describeStepSubject, fitReply } from
 import type { CodeProgramCheckerApi } from './CodeProgramChecker.js'
 import { createCodeSurfaceSession } from './CodeSurfaceSession.js'
 import type { ScriptTimelineApi } from './ScriptTimeline.js'
+import { TouchedFiles } from './TouchedFiles.js'
 
 /** 一次 exec：从头到尾办完。 */
 export interface ScriptExecutionApi {
@@ -110,6 +112,7 @@ export class ScriptExecution implements ScriptExecutionApi {
     if (step.op === 'write') return this.write(step, record)
     if (step.op === 'edit') return this.edit(step, record)
     if (step.op === 'restore') return this.restore(step, record)
+    if (step.op === 'remove') return this.remove(step, record)
     if (step.op === 'replay') return this.replay(step, record, rangeEnd)
     return this.runCode(step, record)
   }
@@ -146,6 +149,31 @@ export class ScriptExecution implements ScriptExecutionApi {
     return this.save(record, step.path, base.source)
   }
 
+  /**
+   * remove：把 path 从脚本库里拿掉。各版本还在时间线上（带版本号照样取得到），restore 或者再 write 一版就回来了，版本号接着往下排。
+   * 库里还有脚本 import 它时一并说出来：跑到它们会报找不到这个模块。
+   */
+  private async remove(step: ScriptStepInput, record: TimelineStepRecord): Promise<ScriptStepResult> {
+    if (isUndefined(step.path)) return this.fail(record, CodeSurfaceErrorCodes.invalidStep, 'remove 要给 path：脚本库里要拿掉的那个脚本。')
+    const path = step.path
+    record.path = path
+    const latest = this.timeline.version(path)
+    if (isUndefined(latest)) {
+      const removed = this.timeline.removedScripts().get(path)
+      return this.fail(record, CodeSurfaceErrorCodes.refNotFound, removed ? `${path} 已经删掉了（最后一版 @${removed.version}）。` : `脚本库里没有 ${path}。用 script:show（不给 ref）看库里有哪些。`)
+    }
+    const dependents: string[] = []
+    for (const [other, versions] of this.timeline.library()) {
+      const last = versions.at(-1)
+      const source = other === path || isUndefined(last) ? undefined : await this.timeline.get(last.code)
+      if (isUndefined(source)) continue
+      if (readModuleSpecifiers(source).some((specifier) => isRelativeSpecifier(specifier) && resolveLibraryImport(other, specifier) === path)) dependents.push(other)
+    }
+    record.ok = true
+    const warning = isEmpty(dependents) ? '' : `\n还在 import 它的：${dependents.join('、')}——跑到它们时会报找不到这个模块，要么一起改，要么 restore 回来。`
+    return this.finish(record, `从脚本库里拿掉了 ${path}（各版本还在时间线上，最后一版是 @${latest.version}；要找回来用 restore）。${warning}`)
+  }
+
   /** 存进脚本库：先过检查（要是 JavaScript），和最新版一样就不存新版本。检查没过的代码也记下，下一步能在它上面改。 */
   private async save(record: TimelineStepRecord, path: string, source: string): Promise<ScriptStepResult> {
     record.path = path
@@ -165,7 +193,8 @@ export class ScriptExecution implements ScriptExecutionApi {
     const latest = this.timeline.version(path)
     record.ok = true
     if (latest?.code === record.code) return this.finish(record, `和 ${versionRef(path, latest.version)} 一模一样，没存新版本。`, { saved: versionRef(path, latest.version) })
-    record.version = (latest?.version ?? 0) + 1
+    // 版本号接着这个路径存过的最后一版往下排，删掉过的也算：同一个号永远只指一份正文。
+    record.version = (this.timeline.versions(path).at(-1)?.version ?? 0) + 1
     return this.finish(record, `存成 ${versionRef(path, record.version)}（检查通过）。`, { saved: versionRef(path, record.version) })
   }
 
@@ -233,15 +262,16 @@ export class ScriptExecution implements ScriptExecutionApi {
     this.grantQuietly([source, ...Object.values(library.modules)])
 
     // 跑之前：它当时改过的文件，现在得还是当时改前的样子，否则是在别的底子上重放。
-    const marked = this.timeline.marking && (!isUndefined(original.marker) || !isUndefined(original.changes))
+    // 有工作区标记的空间，那一步当时打上了标记才核对；系统空间每一步都经能力报过改了哪些文件，照样核对。
+    const tracked = !this.timeline.marking || !isUndefined(original.marker) || !isUndefined(original.changes)
     const expected = original.changes ?? []
-    if (marked && !isEmpty(expected)) {
-      if (isUndefined(this.scan)) return this.fail(record, CodeSurfaceErrorCodes.replayMismatch, '这次没能给工作区打上标记（文件太多），核对不了改前的样子，没有重放。')
-      const before = replayPreMismatches(expected, this.scan.files)
+    if (tracked && !isEmpty(expected)) {
+      if (this.timeline.marking && isUndefined(this.scan)) return this.fail(record, CodeSurfaceErrorCodes.replayMismatch, '这次没能给工作区打上标记（文件太多），核对不了改前的样子，没有重放。')
+      const current = await this.currentHashes(expected.map((change) => change.path))
+      const before = replayPreMismatches(expected, current)
       if (!isEmpty(before)) {
-        const current = (path: string): Optional<string> => this.scan?.files.get(path)
-        const applied = expected.every((change) => current(change.path) === change.after)
-        const inEffect = rangeEnd && expected.every((change) => current(change.path) === change.after || (rangeEnd.has(change.path) && current(change.path) === rangeEnd.get(change.path)))
+        const applied = expected.every((change) => current.get(change.path) === change.after)
+        const inEffect = rangeEnd && expected.every((change) => current.get(change.path) === change.after || (rangeEnd.has(change.path) && current.get(change.path) === rangeEnd.get(change.path)))
         if (inEffect) {
           record.ok = true
           return this.finish(record, applied ? `${ref} 的改动现在已经在了，跳过。` : `${ref} 改过的文件已经是这一段做完的样子（后面的步骤接着改过），跳过。`)
@@ -258,7 +288,7 @@ export class ScriptExecution implements ScriptExecutionApi {
     if (!isUndefined(params.blobs)) plan.blobs = params.blobs
     const done = await this.execute(record, plan)
     // 跑完之后：改出来的得和当时一模一样。
-    if (!marked || !done.report.ok || isUndefined(done.record.marker)) return done
+    if (!tracked || !done.report.ok || (this.timeline.marking && isUndefined(done.record.marker))) return done
     const after = replayPostMismatches(expected, done.record.changes ?? [])
     if (isEmpty(after)) return done
     const failure: CodeProgramFailure = { code: CodeSurfaceErrorCodes.replayMismatch, message: `${ref} 重放完，改出来的和当时不一样。` }
@@ -284,7 +314,9 @@ export class ScriptExecution implements ScriptExecutionApi {
     // 模版不常驻：跟着程序送进隔离进程，程序用 template() 读到才进上下文。
     const templates = Object.fromEntries(space.modules.map(({ surface }) => [surface.specifier, surface.template]))
     const program = { source: plan.source, path: plan.path, modules: plan.modules, input: plan.input, blobs: plan.blobs }
-    const submit = (): Promise<CodeSurfaceOutcome> => session.submit({ program, granted: this.granted(), templates, timeoutMs: this.input.timeoutMs, signal: this.input.signal })
+    // 没有工作区标记的空间（系统空间）：能力改本机文件之前报出路径，这一步改了哪些文件靠它记。
+    const touched = this.timeline.marking ? undefined : new TouchedFiles()
+    const submit = (): Promise<CodeSurfaceOutcome> => session.submit({ program, granted: this.granted(), templates, timeoutMs: this.input.timeoutMs, signal: this.input.signal, watch: touched })
     let outcome = await submit()
     if (!outcome.checked && 'needsModules' in outcome) {
       const needed = this.admitNeeded(outcome.needsModules)
@@ -305,11 +337,26 @@ export class ScriptExecution implements ScriptExecutionApi {
     if (outcome.result.failed) record.error = outcome.result.failed
     if (outcome.calls && !isEmpty(outcome.calls)) record.calls = [...outcome.calls]
     const lines = [renderProgramResult(outcome.result)]
-    const changes = await this.markAfterRun(record)
+    let changes: Optional<ScriptFileChange[]>
+    if (isUndefined(touched)) changes = await this.markAfterRun(record)
+    else {
+      changes = await touched.changes()
+      if (!isEmpty(changes)) record.changes = changes
+    }
     if (changes && !isEmpty(changes)) lines.push(describeChanges(changes))
     const text = lines.join('\n')
     record.result = await this.timeline.put(text)
     return { record, report: this.report(record, { outcome, changes }), text, images: outcome.attachments ?? [] }
+  }
+
+  /**
+   * 这几个文件现在的内容哈希：有工作区标记时取刚扫的那一遍（路径相对工作区根目录），系统空间直接去算（绝对路径）。
+   * 不存在的是 undefined。
+   */
+  private async currentHashes(paths: readonly string[]): Promise<Map<string, Optional<string>>> {
+    const current = new Map<string, Optional<string>>()
+    for (const path of paths) current.set(path, this.timeline.marking ? this.scan?.files.get(path) : await hashPath(path))
+    return current
   }
 
   /** 跑完一段代码之后扫一遍工作区：记下标记与这一步改了哪些文件。被中止了也扫——副作用是真的，得记下来。 */
@@ -339,7 +386,9 @@ export class ScriptExecution implements ScriptExecutionApi {
     if (parsed.kind === 'script') {
       const version = this.timeline.version(parsed.path, parsed.version)
       if (isUndefined(version)) {
-        const versions = this.timeline.library().get(parsed.path) ?? []
+        const versions = this.timeline.versions(parsed.path)
+        const removed = this.timeline.removedScripts().get(parsed.path)
+        if (removed && isUndefined(parsed.version)) return failed(CodeSurfaceErrorCodes.refNotFound, `${parsed.path} 已经从脚本库里拿掉了（最后一版 @${removed.version}）：要用它就先 restore，或者写上版本号（${versionRef(parsed.path, removed.version)}）。`)
         return failed(CodeSurfaceErrorCodes.refNotFound, isEmpty(versions)
           ? `脚本库里没有 ${parsed.path}。用 script:show（不给 ref）看库里有哪些。`
           : `${parsed.path} 没有第 ${parsed.version ?? 0} 版；有的是 ${versions.map((entry) => `@${entry.version}`).join('、')}。`)
