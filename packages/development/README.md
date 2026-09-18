@@ -1,8 +1,7 @@
 # `@velaros-ai/development`
 
-Project 代码理解背后的语言服务库。模型看到的工具在 `@velaros-ai/project`（`project:code` 与按需的
-`project:code-analysis`），本包不带工具、也不参与 Mod 装载，只提供可复用的实现：宿主拿它实现 project
-注入面里的 `ProjectToolApi.queryCode`。
+项目代码理解背后的语言服务库。模型看到的能力是 `velar:code`（`@velaros-ai/velar/project`），本包不带工具、也不参与 Mod 装载，
+只提供可复用的实现：宿主拿它实现项目工具的空间端口 `ProjectSpacePort.queryCode` 的语言服务那一半。
 
 ## 两个入口
 

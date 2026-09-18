@@ -1,6 +1,6 @@
 import { AppError } from '@velaros-ai/core'
-import type { ProjectCallContext } from '@velaros-ai/project'
-import type { ProjectCodeQuery as ProjectCodeQueryInput } from '@velaros-ai/project/contracts'
+import type { ProjectOperationContext } from '@velaros-ai/velar/project'
+import type { ProjectCodeQuery as ProjectCodeQueryInput } from '@velaros-ai/velar/project/contracts'
 
 import { CodeQuerySources } from '../contract/constants.js'
 import type { ProjectCodeIndexApi } from '../contract/requires.js'
@@ -20,14 +20,14 @@ export interface ProjectCodeQueryApi {
    * 语言服务类的七个动作交给内置语言服务；其余（代码图谱类）交给宿主后端，后端不可用时抛
    * code 为 `UNAVAILABLE` 的错误——project 据此把它写成降级说明，而不是当成查询失败。
    */
-  run(input: ProjectCodeQueryInput, context: ProjectCallContext): Promise<unknown>
+  run(input: ProjectCodeQueryInput, context: ProjectOperationContext): Promise<unknown>
 }
 
 /** 代码查询的两路分派，见接口说明。 */
 class ProjectCodeQuery implements ProjectCodeQueryApi {
   public constructor(private readonly codeIndex: ProjectCodeIndexApi) {}
 
-  public async run(input: ProjectCodeQueryInput, context: ProjectCallContext): Promise<unknown> {
+  public async run(input: ProjectCodeQueryInput, context: ProjectOperationContext): Promise<unknown> {
     if (isProjectCodeLanguageQuery(input)) return languageQueries.run(input, context)
     if (!this.codeIndex.isAvailable()) {
       throw new AppError(
@@ -47,7 +47,7 @@ class ProjectCodeQuery implements ProjectCodeQueryApi {
  */
 export function createProjectCodeQuery(
   codeIndex: ProjectCodeIndexApi
-): (input: ProjectCodeQueryInput, context: ProjectCallContext) => Promise<unknown> {
+): (input: ProjectCodeQueryInput, context: ProjectOperationContext) => Promise<unknown> {
   const query = new ProjectCodeQuery(codeIndex)
   return (input, context) => query.run(input, context)
 }

@@ -81,37 +81,6 @@ Object.assign(globalThis, { __velarosComputerContractsBrowserGate: {
     },
   ],
   [
-    '@velaros-ai/project',
-    {
-      bundleName: 'project-contracts',
-      source: `import {
-  ProjectCodeLanguageActions,
-  ProjectFileLimits,
-  ProjectSpaceId,
-  ProjectToolNames,
-  type ProjectBackgroundProcessInfo,
-  type ProjectCodeQuery,
-  type ProjectCommandResult,
-  type ProjectSandboxDiff,
-} from '@velaros-ai/project/contracts'
-
-export interface ProjectContractsTypeFixture {
-  backgroundProcess: ProjectBackgroundProcessInfo
-  commandResult: ProjectCommandResult
-  sandboxDiff: ProjectSandboxDiff
-  codeQuery: ProjectCodeQuery
-}
-
-Object.assign(globalThis, { __velarosProjectContractsBrowserGate: {
-  ProjectCodeLanguageActions,
-  ProjectFileLimits,
-  ProjectSpaceId,
-  ProjectToolNames,
-} })
-`,
-    },
-  ],
-  [
     '@velaros-ai/browser',
     {
       bundleName: 'browser-contracts',
@@ -141,6 +110,16 @@ Object.assign(globalThis, { __velarosBrowserContractsBrowserGate: {
   searchFallbackUrl: browserAddress.searchFallbackUrl,
   resolveSearchOrNavigationInput: browserAddress.resolveSearchOrNavigationInput,
 } })
+`,
+    },
+  ],
+  [
+    '@velaros-ai/project',
+    {
+      bundleName: 'project-contracts',
+      source: `import { ProjectSpaceId } from '@velaros-ai/project/contracts'
+
+Object.assign(globalThis, { __velarosProjectContractsBrowserGate: { ProjectSpaceId } })
 `,
     },
   ],

@@ -83,8 +83,8 @@
       "domain": "capabilities",
       "directory": "packages/project",
       "name": "@velaros-ai/project",
-      "version": "2.3.0",
-      "description": "Project-space files, atomic changes, governed execution, contracts, and Agent composition.",
+      "version": "3.0.0",
+      "description": "The project space for VelarOS hosts: the assembly that mounts velar:project and velar:code (the project tools and kernel from @velaros-ai/velar/project) together with velar:shell, velar:sandbox and velar:images on project ports — commands confined to the project root and its resource gate with output redacted, sandboxes mirroring only project directories and applying through the project's write governance, pictures only from inside the project — plus the verification policy handed to the agent's coding session.",
       "exportSubpaths": [
         ".",
         "./contracts"
@@ -196,13 +196,15 @@
       "domain": "foundations",
       "directory": "packages/velar",
       "name": "@velaros-ai/velar",
-      "version": "0.1.0",
-      "description": "The capability units the model imports as velar:* modules and every space mounts with its own port: files (machine files, system space), images (view pictures within provider limits), shell (run commands) and sandbox (rehearse in a mirror, then apply). One plain directory per unit, one convention for all.",
+      "version": "0.2.0",
+      "description": "The capability units the model imports as velar:* modules and every space mounts with its own port: files (machine files, system space), images (view pictures within provider limits), shell (run commands), sandbox (rehearse in a mirror, then apply) and project (governed project files and code questions: velar:project and velar:code, with the project kernel and its transactions underneath; the project space that mounts them is @velaros-ai/project). One plain directory per unit, one convention for all.",
       "exportSubpaths": [
         "./files",
         "./files/contracts",
         "./images",
         "./images/contracts",
+        "./project",
+        "./project/contracts",
         "./sandbox",
         "./sandbox/contracts",
         "./shell",

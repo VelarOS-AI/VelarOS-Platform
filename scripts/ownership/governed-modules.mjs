@@ -13,7 +13,7 @@
 //                   环境变量表、公开上限）。改这三个文件等于改对外契约
 //   types           类型目录：扁平，只放类型、一个值都没有，按域分文件；哪些出包由合同的签名闭包决定。
 //                   可移植文件 = types/<portable> + contract/constants.ts：不 import（可移植类型文件只许从常量表 import type）、不用 Node 类型、不带函数成员
-//   portable        可移植数据类型文件（相对 types）；`./contracts` 入口 = 它 + contract/constants.ts
+//   portable        可移植数据类型文件（相对 types）；`./contracts` 入口 = 它 + contract/constants.ts。没有自己的可移植数据的包（只做装配的空间）不填，`./contracts` 只转发常量表
 //   impl            实现目录：扁平，不分子目录。一个类一个文件，文件名就是类名（工具文件除外，它不放类）；
 //                   每个类实现一个接口（公开的定义在类上方并在 provides.ts 登记，注入面的在 requires.ts），公开成员不超出接口，私有方法必须用到实例状态
 //   utils           纯工具函数目录：扁平，按类别分文件；只放函数和常量，每个函数上方一句中文说明，只引 utils、types 与合同
@@ -27,7 +27,7 @@
 //                       登记的名字照样要有人用、代码里的名字照样要先登记；新起的变量名一律 VELAROS_
 //   hostPort            注入面里的端口接口名；端口只放真会被调的方法，门禁从模型面入口（surfaceFile，没有就是 toolsFile）出发沿 import 核对
 //   hostPortField       调端口时的字段名（ctx.<字段>.方法 或 this.<字段>.方法），缺省 system
-//   surfaceFile         模型面入口（相对包根）：代码面能力的操作类，或空间的装配表；端口可达性从这里出发
+//   surfaceFile         模型面入口（相对包根）：代码面能力的操作类，或空间的装配表；端口可达性从这里出发。一个单元出几件能力、各有操作类时写成数组
 //   status              'migrating' 表示正在按标准改造：问题照查照报条数，不计入失败（改造完删掉这一项）
 //   lazyImports         允许动态 import() 的目标（不填的包一条都不许有）：每项 { specifier, file, reason }——
 //                       specifier 是 import() 里的字符串原文，file 是唯一允许加载它的源文件（相对包根），
@@ -110,24 +110,18 @@ export const GovernedModules = [
     name: '@velaros-ai/project',
     contract: 'src/contract',
     types: 'src/types',
-    portable: 'project.ts',
+    // 项目空间没有自己的可移植数据：不登记 portable，./contracts 只转发常量表
     impl: 'src/impl',
     utils: 'src/utils',
     tuning: 'tuning.ts',
     browserSafeEntries: ['contracts.ts'],
-    // 项目空间的宿主端口：装配表与两件项目独有的能力经 ctx.project 调它；每个方法都必须有操作在调
+    // 项目空间的宿主端口：给共用能力装的项目端口经 ctx.project 调它（两件项目工具要的那几个在它继承的 ProjectSpacePort 上）；每个方法都必须有端口在调
     hostPort: 'ProjectHostPort',
     hostPortField: 'project',
     surfaceFile: 'src/impl/ProjectSpace.ts',
     layers: [
-      // 项目空间：项目独有的两件能力，加上三件共用能力的项目端口
-      ['ProjectSpace.ts'],
-      // velar:project、velar:code 的操作与项目资源门
-      ['operations/'],
-      // 项目内核
-      ['kernel/'],
-      ['plugins/'],
-      ['transactions/', 'files/', 'strategies/', 'adapters/', 'registries/', 'persistence/'],
+      // 项目空间的装配表，与交给 agent 编码会话的验证判据，互不依赖
+      ['ProjectSpace.ts', 'ProjectVerificationPolicy.ts'],
     ],
     card: 'MODULE.md',
     invariants: 'spec/invariants.md',
@@ -153,7 +147,7 @@ export const GovernedModules = [
     acceptance: 'spec/acceptance.test.ts',
   },
   {
-    // 能力单元：@velaros-ai/velar 里按目录放的四件共用能力，布局一样，清单与许可只在包根一份
+    // 能力单元：@velaros-ai/velar 里按目录放的几件能力，布局一样，清单与许可只在包根一份
     directory: 'velar',
     unit: 'files',
     name: '@velaros-ai/velar/files',
@@ -251,6 +245,35 @@ export const GovernedModules = [
     card: 'sandbox/MODULE.md',
     invariants: 'sandbox/spec/invariants.md',
     acceptance: 'sandbox/spec/acceptance.test.ts',
+  },
+  {
+    // 能力单元：项目受治理的文件（velar:project）与问代码（velar:code），连同它们底下的项目内核。问代码要用内核的符号表与读取，
+    // 离不开这个内核，所以两件放在同一个单元里；把它们与共用能力装配成项目空间的是 @velaros-ai/project
+    directory: 'velar',
+    unit: 'project',
+    name: '@velaros-ai/velar/project',
+    contract: 'project/contract',
+    types: 'project/types',
+    portable: 'project.ts',
+    impl: 'project/impl',
+    utils: 'project/utils',
+    tuning: 'tuning.ts',
+    browserSafeEntries: ['contracts.ts'],
+    // 空间端口：两件工具经 ctx.project 调它；每个方法都必须有操作在调
+    hostPort: 'ProjectSpacePort',
+    hostPortField: 'project',
+    surfaceFile: ['project/impl/operations/ProjectFileOperations.ts', 'project/impl/operations/ProjectCodeOperations.ts'],
+    layers: [
+      // velar:project、velar:code 的操作与项目资源门
+      ['operations/'],
+      // 项目内核
+      ['kernel/'],
+      ['plugins/'],
+      ['transactions/', 'files/', 'strategies/', 'adapters/', 'registries/', 'persistence/'],
+    ],
+    card: 'project/MODULE.md',
+    invariants: 'project/spec/invariants.md',
+    acceptance: 'project/spec/acceptance.test.ts',
   },
   {
     directory: 'code-surface',

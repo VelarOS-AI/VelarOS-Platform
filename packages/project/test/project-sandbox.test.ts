@@ -9,10 +9,10 @@ import { join } from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
+import { createSecretRedactionProvider } from '@velaros-ai/velar/project'
 import type { SandboxDiff, SandboxRecord } from '@velaros-ai/velar/sandbox/contracts'
 
 import type { ProjectSandboxPort } from '../src/contract/requires'
-import { createSecretRedactionProvider } from '../src/index'
 
 import { failureOf, projectSpaceFixture } from './support/space'
 

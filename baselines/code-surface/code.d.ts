@@ -10,7 +10,7 @@ declare module 'velar:code' {
    */
 
   /**
-   * 代码模版（templates/code.js）：
+   * 代码模版（code-template.js）：
    *
    * ```js
    * // velar:code 的代码模版：挑一段照着改，import 只写一次。

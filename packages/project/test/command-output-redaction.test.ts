@@ -4,7 +4,7 @@ import { join } from 'node:path'
 
 import { afterEach, beforeEach, expect, test } from 'bun:test'
 
-import { createSecretRedactionProvider } from '../src/index'
+import { createSecretRedactionProvider } from '@velaros-ai/velar/project'
 
 import { projectSpaceFixture } from './support/space'
 

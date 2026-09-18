@@ -48,10 +48,9 @@ const PortableContracts = [
     packageName: "@velaros-ai/project",
     exportKey: "./contracts",
     contractsFile: "src/contracts.ts",
+    // 项目空间没有自己的可移植数据：可移植入口只转发常量表（空间身份）；两件工具的可移植数据在 @velaros-ai/velar/project/contracts。
     modules: new Set([
-      "./types/project.js",
       "./contract/constants.js",
-      "./contract/surface.js",
     ]),
   },
   {
@@ -479,10 +478,10 @@ for (const expected of CapabilityPackages) {
     }
     if (
       expected.directory === "development" &&
-      importsRuntimeSpecifier(source, "@velaros-ai/project")
+      importsRuntimeSpecifier(source, "@velaros-ai/velar/project")
     ) {
       fail(
-        `${expected.name}: lightweight language reads must not load the Project root entry at runtime (types only; values from @velaros-ai/project/contracts) in ${relative(packageRoot, path)}`,
+        `${expected.name}: lightweight language reads must not load the project unit's root entry at runtime (types only; values from @velaros-ai/velar/project/contracts) in ${relative(packageRoot, path)}`,
       );
     }
     for (const match of source.matchAll(CoreTypesImport)) {
@@ -543,13 +542,6 @@ requirePublicTypeContracts(
   "src/contracts.ts",
   "src/types/browser.ts",
   ["BrowserActionPolicyConfig", "BrowserAutomationMode"],
-);
-requirePublicTypeContracts(
-  "project",
-  "src/index.ts",
-  "src/contracts.ts",
-  "src/types/project.ts",
-  ["ProjectAuthorizationDecision", "ProjectCodeQuery"],
 );
 requirePublicTypeContracts(
   "office",

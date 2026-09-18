@@ -46,15 +46,18 @@ export const CodeSurfaces = [
   },
   {
     namespace: 'project',
-    directory: 'project',
+    directory: 'velar',
+    unit: 'project',
     interfaces: ['ProjectFileOperationsApi'],
-    templates: 'templates/project.js',
+    templates: 'template.js',
   },
   {
+    // 问代码要用项目内核的符号表与读取，和 velar:project 住在同一个单元里；模版各一份
     namespace: 'code',
-    directory: 'project',
+    directory: 'velar',
+    unit: 'project',
     interfaces: ['ProjectCodeOperationsApi'],
-    templates: 'templates/code.js',
+    templates: 'code-template.js',
   },
 ]
 
@@ -67,7 +70,7 @@ export const HostContextTypes = new Set([
   'ImageOperationContext',
   'ShellOperationContext',
   'SandboxOperationContext',
-  'ProjectCallContext',
+  'ProjectOperationContext',
 ])
 
 /** 进模型可观测面的标记；打在操作方法与它引用到的每个**领域类型**上。 */

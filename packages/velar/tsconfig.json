@@ -5,15 +5,37 @@
     "moduleResolution": "Bundler",
     "lib": [
       "ES2022",
-      "DOM"
+      "DOM",
+      "DOM.Iterable"
     ],
     "strict": true,
     "skipLibCheck": true,
     "noEmit": true,
     "baseUrl": "../..",
     "paths": {
+      "@velaros-ai/velar/files": [
+        "packages/velar/files/index.ts"
+      ],
+      "@velaros-ai/velar/files/contracts": [
+        "packages/velar/files/contracts.ts"
+      ],
+      "@velaros-ai/velar/images": [
+        "packages/velar/images/index.ts"
+      ],
+      "@velaros-ai/velar/images/contracts": [
+        "packages/velar/images/contracts.ts"
+      ],
+      "@velaros-ai/velar/sandbox": [
+        "packages/velar/sandbox/index.ts"
+      ],
+      "@velaros-ai/velar/sandbox/contracts": [
+        "packages/velar/sandbox/contracts.ts"
+      ],
       "@velaros-ai/velar/shell": [
         "packages/velar/shell/index.ts"
+      ],
+      "@velaros-ai/velar/shell/contracts": [
+        "packages/velar/shell/contracts.ts"
       ]
     }
   },
@@ -22,7 +44,8 @@
     "files/**/*.ts",
     "images/**/*.ts",
     "shell/**/*.ts",
-    "sandbox/**/*.ts"
+    "sandbox/**/*.ts",
+    "project/**/*.ts"
   ],
   "exclude": [
     "*/spec/**",

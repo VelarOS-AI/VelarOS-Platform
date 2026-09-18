@@ -15,8 +15,7 @@ export const CapabilityOwners = [
         entrySubpaths: ['.', './contracts'],
         sourceRoots: [''],
         electronRoots: [],
-        schemaExports: ['projectTools'],
-        schemaEntry: 'dist/index.js',
+        schemaExports: [],
       },
       {
         directory: 'development',
@@ -64,8 +63,8 @@ export const CapabilityOwners = [
         entrySubpaths: ['.', './contracts'],
         sourceRoots: [''],
         electronRoots: [],
-        schemaExports: ['systemTools'],
-        schemaEntry: 'dist/index.js',
+        // 系统空间没有工具面了：模型面是能力单元生成的声明，这里没有 tool schema 可核
+        schemaExports: [],
       },
     ],
   },

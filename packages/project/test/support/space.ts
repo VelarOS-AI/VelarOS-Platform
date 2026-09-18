@@ -10,11 +10,11 @@ import type { ApprovalPort } from '@velaros-ai/agent/tool-contract'
 import { type CodeAttachment, createCapabilityPort } from '@velaros-ai/code-surface'
 import { AppError } from '@velaros-ai/core/error'
 import type { ImageAttachment } from '@velaros-ai/velar/images'
+import { createProjectKernel, type CreateProjectKernelOptions } from '@velaros-ai/velar/project'
+import type { ProjectCodeQuery } from '@velaros-ai/velar/project/contracts'
 
-import type { CreateProjectKernelOptions, ProjectCallContext, ProjectHostPort, ProjectSandboxPort } from '../../src/contract/requires'
-import { createProjectKernel } from '../../src/impl/kernel/LocalProjectKernel'
+import type { ProjectCallContext, ProjectHostPort, ProjectSandboxPort } from '../../src/contract/requires'
 import { createProjectSpace } from '../../src/impl/ProjectSpace'
-import type { ProjectCodeQuery } from '../../src/types/project'
 
 /** 一次确认：审批端口收到的文案与选项，以及它是经哪个口子问的。 */
 export interface RecordedConfirmation {

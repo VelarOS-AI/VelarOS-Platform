@@ -110,7 +110,7 @@ API 按 **base64 之后**的大小限（直连 10 MB、Bedrock/Google Cloud 5 MB
 
 ### 代码模版不能省
 
-我们知道这些能力怎么组合，模型未必知道。每个命名空间一份模版文件（能力单元里是 `packages/velar/<单元>/template.js`，项目空间的两份在 `packages/project/templates/<ns>.js`），
+我们知道这些能力怎么组合，模型未必知道。每个命名空间一份模版文件（能力单元里是 `packages/velar/<单元>/template.js`，一个单元出两件能力时另一件的叫 `<模块>-template.js`（`packages/velar/project/code-template.js`）），
 **import 只写一次**，下面一段一个函数、一种用法，嵌进生成的声明，模型打开模块就看得到。
 没有模版的命名空间生成器不给过；模版**整份照真实声明过类型检查**——写错的模版会把错的写法原样教出去。
 模版里的注释一律用 `//`：它嵌在块注释里，`*/` 会把外层注释提前截断，生成器也拦这件事。
@@ -131,8 +131,8 @@ API 按 **base64 之后**的大小限（直连 10 MB、Bedrock/Google Cloud 5 MB
 | `velar:images` | view | ✓ | ✓ | `@velaros-ai/velar` 的 `images/` |
 | `velar:shell` | run / listTasks / refreshEnvironment | ✓ | ✓ | `@velaros-ai/velar` 的 `shell/` |
 | `velar:sandbox` | create / run / diff / apply / discard | ✓ | ✓ | `@velaros-ai/velar` 的 `sandbox/` |
-| `velar:project` | read / list / search / edit / inspect / undo | — | ✓ 受项目治理的文件 | `@velaros-ai/project` |
-| `velar:code` | query / analyze | — | ✓ | `@velaros-ai/project` |
+| `velar:project` | read / list / search / edit / inspect / undo | — | ✓ 受项目治理的文件 | `@velaros-ai/velar` 的 `project/` |
+| `velar:code` | query / analyze | — | ✓ | `@velaros-ai/velar` 的 `project/` |
 
 **一件能力只有一份实现、一份声明、一份代码模版**，不认识任何空间。空间之间不一样的地方全落在**注入的端口**上：
 
@@ -152,14 +152,17 @@ API 按 **base64 之后**的大小限（直连 10 MB、Bedrock/Google Cloud 5 MB
 
 **空间就是一张装配表**：给哪几件能力、每件能力用哪个端口。系统空间是 `@velaros-ai/system` 的 `createSystemSpace`——
 路径可以是本机任意位置、`~` 展开到家目录，凭证文件与系统敏感路径先问用户，写是逐个原子替换，命令在本机任意目录跑。
-项目空间是 `@velaros-ai/project` 的 `createProjectSpace`——两件项目独有的能力，外加给共用能力装的项目端口：
+项目空间是 `@velaros-ai/project` 的 `createProjectSpace`——挂上两件项目独有的能力（`@velaros-ai/velar/project`），外加给共用能力装的项目端口：
 命令的工作目录钳在项目内、会改项目的命令过修改授权与资源门、输出脱敏；沙箱只镜像项目内的目录、落回前核对写治理；看图只看项目里、读取策略许看的图。
 
-**能力单元是普通的目录，按同一套规范放在一起。** 跨空间注入的这几件（files、images、shell、sandbox）都在 `packages/velar/` 下，
-一件一个目录，目录名就是模块名（`velar:files` ⇄ `packages/velar/files/`）；它们合成一个包 `@velaros-ai/velar`，
+**能力单元是普通的目录，按同一套规范放在一起。** 模型 import 的每一件都在 `packages/velar/` 下——跨空间注入的 files、images、shell、sandbox，
+和项目独有的 project、code——一件一个目录，目录名就是模块名（`velar:files` ⇄ `packages/velar/files/`）；它们合成一个包 `@velaros-ai/velar`，
 许可、说明、构建配置只有包根那一份，单元目录里不再各抄一遍。每个单元目录的样子一样：模块卡片 `MODULE.md`、入口 `index.ts` 与 `contracts.ts`、
 `contract/ types/ impl/ utils/` 四个目录、代码模版 `template.js`、`spec/`（不变量登记与验收）与 `test/`。宿主按 `@velaros-ai/velar/<单元>` 引用。
-项目独有的两件（project、code）直接长在项目内核上，留在 `@velaros-ai/project`。
+项目独有的两件长在项目内核上：问代码要用内核的符号表与读取，所以 `velar:project` 与 `velar:code` 同住 `packages/velar/project/`，内核也在那里——
+它就是「受项目治理」那套规矩的实现。**空间不在 velar 里**：`@velaros-ai/system` 与 `@velaros-ai/project` 各是一个包，只做装配、只写端口，
+能力一件都不实现。工具经空间端口（`ProjectSpacePort`）向空间要项目根、内核、修改授权与代码查询；项目空间的宿主端口在它之上再加命令、沙箱与缩图，
+那是给共用能力装端口用的。
 
 判据和上一节是同一条：**所有空间都一样的事在能力里只做一份**（有界读、认编码、核版本、留原文、压图、一批的成败、
 命令分类、危险命令确认、钳上限），**只有空间真不一样的才进端口**。端口方法宁少勿多：项目空间接进来时要的钩子

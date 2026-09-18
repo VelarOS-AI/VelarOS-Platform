@@ -1,163 +1,117 @@
 # @velaros-ai/project 模块卡片
 
 > 这一页是本模块的压缩表示：读完就知道它是什么、给了外面什么、骨干链路怎么走、靠什么、状态在哪、失败什么样、哪些承诺不能破。
-> 模型面是两份生成的声明：`baselines/code-surface/project.d.ts`（`velar:project`）与 `code.d.ts`（`velar:code`），那是模型看到的全部。
-> 最先看 `src/impl/ProjectSpace.ts`（项目空间的装配表），其次是两个操作类上方的接口（`impl/operations/ProjectFileOperations.ts`、`ProjectCodeOperations.ts`）
-> 和 `src/contract/` 的三个文件（产品面登记、注入面、常量表）。代码怎么分层见最后一节「结构」。
-> 门禁：`bun run check:module-ownership`（`--only project` 列出这个包的每一条）、`bun run check:code-surface`。
+> 本包没有自己的模型面：模型看到的是五件能力的声明（`baselines/code-surface/project.d.ts`、`code.d.ts`、`shell.d.ts`、`sandbox.d.ts`、`images.d.ts`）。
+> 代码这一侧最先看 `src/impl/ProjectSpace.ts` 的装配表，其次是 `src/contract/requires.ts` 的宿主端口和 `src/utils/ports.ts` 里两个端口的说明。代码怎么分层见最后一节「结构」。
+> 门禁：`bun run check:module-ownership`。
 
 ## 这是什么
 
-项目空间的能力包：让 agent 在一个项目根里读源码、列文件、搜文本、查代码结构、按版本精确改源码，并给跨空间共用的命令、沙箱、看图装上项目的端口。
-项目独有的两件能力在这里：
+项目空间：让 agent 在一个项目根里读源码、改源码、问代码、跑命令、演练脚本、看图，出不了项目，每一步都过项目的治理与宿主的审批边界。
 
-- **`velar:project`**：受项目治理的文件。读出来的是带行号与版本的源码窗口，窗口上的 fileRef 绑定路径、版本和实际交出去的那几行；
-  一次 edit 的步骤（create、overwrite、move、delete、recode、edit）编成一个带版本防护的事务：全成或全不成、跑校验器、可以查看、可以撤销，撤销遇到外部修改拒绝覆盖。
-  局部编辑只能改 fileRef 看得到的行，overwrite 要求看过全文，move、delete 只核对版本；文件在读完之后被改过时，按原意图给出新位置与新 fileRef。
-- **`velar:code`**：问代码之间的关系（定义、引用、调用、依赖、影响面、诊断），查询交给宿主的语言服务与代码图谱。
+一个空间就是一张装配表——给哪几件能力、每件能力用哪个端口。能力本身不在本包，都是 `@velaros-ai/velar` 里的能力单元，一件只有一份实现：
 
-跨空间共用的三件不在这里，一件只有一份实现：`velar:shell`（`@velaros-ai/velar/shell`）、`velar:sandbox`（`@velaros-ai/velar/sandbox`）、`velar:images`（`@velaros-ai/velar/images`）；
-项目空间给它们装的端口在 `ProjectSpace.ts`：命令的工作目录钳在项目内、会改项目的命令过修改授权与资源门、输出脱敏；沙箱只镜像项目内的目录、落回前核对写治理；看图只看项目里、读取策略许看的图。
-本机文件（`velar:files`，系统空间）与这里的项目文件是两件能力：项目的读取治理、事务与校验器是项目的规则，不往系统空间套。
+- 项目独有的两件在 `@velaros-ai/velar/project`：`velar:project`（受项目治理的文件：带行号与 fileRef 的读、事务编辑与撤销）与 `velar:code`（问代码之间的关系），连同它们底下的项目内核。空间把宿主给的上下文原样交给它们——宿主端口在结构上满足它们要的空间端口。
+- 跨空间共用的三件：`velar:shell`、`velar:sandbox`、`velar:images`。本包只写它们在项目里的端口：命令的工作目录钳在项目内、会改项目的命令先过修改授权再进项目资源门、输出交给程序之前脱敏；沙箱只镜像项目内的目录、落回前核对项目的写治理与修改授权；看图只看项目里、读取策略许看的图。
+
+另外交给 agent 的编码会话一条判据：改到哪些文件之后值得再跑一次验证。它不知道系统空间，也不知道界面长什么样；两个空间互不引用。
 
 ## 提供什么
 
 本包对外只有三个面，都由接口控制：导出的类型只能来自 `src/contract/`（provides 登记的接口、requires、constants）和 `src/types/`，导出的值必须标注成公开接口；类、工具函数和包内部的接口一律不出包。门禁机械核对。
 
-**产品面**，登记在 `contract/provides.ts`：类实现的 API 定义在各自类的上方、这里 re-export，没有类的公开接口直接声明在这里。
+**产品面**，登记在 `contract/provides.ts`：
 
 | 值 | 接口 | 做什么 |
 | --- | --- | --- |
-| `createProjectSpace` | `ProjectSpaceApi` | 项目空间的装配表：`project`、`code`、`shell`、`sandbox`、`images` 五个命名空间，交给代码面接成能力端口 |
-| `projectFileOperations` | `ProjectFileOperationsApi` | `velar:project` 的六个操作：read、list、search、edit、inspect、undo |
-| `projectCodeOperations` | `ProjectCodeOperationsApi` | `velar:code` 的两个操作：query、analyze |
-| `createProjectKernel` | `ProjectKernel` | 领域内核：读写、事务、校验、撤销、代码查询 |
-| `createProjectTransactionController` | `ProjectTransactionControllerApi` | 给界面那一侧的有限事务面（`ProjectChangeFeed` 加应用、回滚） |
-| `createFileProjectChangeFeed` | `FileProjectChangeFeedApi` | 落盘的变更记录，事务跨进程重启后仍能列出和回滚 |
-| `projectApprovalBridge` | `ProjectApprovalBridgeApi` | 把内核的审批请求接到当前那次调用的审批端口 |
-| `projectVerificationPolicy` | `ProjectVerificationPolicyApi` | 「改到这个文件之后要不要再跑一次验证」的判据，交给 agent 的编码会话 |
-| `typescriptPlugin` | `ProjectPlugin` | TypeScript 适配器、补丁策略与语法校验器 |
-| `createSecretRedactionProvider` | `SecretRedactionProvider` | 按内容正则给 API key、token 打码的脱敏后端 |
-| `VelarProjectModule` | 生成的合同（`contract/surface.ts`） | `velar:project` 随包发布的模型面：模块名、放出去的方法、生成的完整声明（与 `baselines/code-surface/project.d.ts` 同一份）；空间挂这件能力时交给代码面的门 |
-| `VelarCodeModule` | 生成的合同（`contract/surface.ts`） | `velar:code` 随包发布的模型面：模块名、放出去的方法、生成的完整声明（与 `baselines/code-surface/code.d.ts` 同一份）；空间挂这件能力时交给代码面的门 |
+| `createProjectSpace` | `ProjectSpaceApi` | 项目空间：一张操作表，`project`、`code`、`shell`、`sandbox`、`images` 五个命名空间，交给代码面的 `createCapabilityPort` 接成能力端口；加上挂了哪几件、哪几件常驻（项目文件与命令）。**表里没有一个字是给模型看的** |
+| `projectVerificationPolicy` | `ProjectVerificationPolicyApi` | 「改到这个文件之后要不要再跑一次验证」的判据，宿主交给 agent 的编码会话（`CodingSessionPolicy.isVerificationRelevantPath`） |
 
-**注入面**，写在 `contract/requires.ts`，是宿主要塞进来的东西。本包只从这些口子接收外部能力：
+**注入面**，写在 `contract/requires.ts`：
 
 | 注入点 | 必须 | 谁给、什么时候 |
 | --- | --- | --- |
-| `ProjectCallContext` / `ProjectHostPort` | 是 | 宿主每次分发调用时给：取消信号、审批端口、会话、可选的交图通道，以及宿主端口——项目根、领域内核端口 `AgentProjectKernelPort`、修改授权、跑命令与后台任务、刷新 shell 环境、代码查询 `queryCode`，可选的沙箱端口 `ProjectSandboxPort` 与裁图缩图 |
-| `CreateProjectKernelOptions` / `ProjectProviders` | 是 | 建内核时给：项目根、策略覆盖、事务状态文件、变更记录写端 `ProjectChangeFeedWriter`，以及可选的策略、审批、文件过滤、脱敏、证据包、日志、命令、遥测、代码智能后端（`PolicyProvider`、`ApprovalProvider`、`FileFilterProvider`、`SecretRedactionProvider`、`ContextProvider`、`LoggerProvider`、`CommandProvider`、`TelemetryProvider`、`ProjectCodeIntelligenceHost`） |
-| `ProjectPlugin` / `ProjectPluginContext` | 否 | 插件扩展点：`FileAdapter`、`FileAdapterFactory`、`PatchStrategy`、`ProjectValidator`、`ProjectFixer`、`ProjectHook`、`PipelineStage` |
+| `ProjectCallContext` | 是 | 宿主每次分发调用时给：取消信号、审批端口 `ApprovalPort`（来自 agent 包）、会话、可选的交图通道，以及宿主端口 |
+| `ProjectHostPort` | 是 | 继承两件项目工具的空间端口（`@velaros-ai/velar/project` 的 `ProjectSpacePort`：项目根、内核、修改授权、代码查询），再加共用能力的项目端口要的：跑命令、列后台任务、刷新 shell 环境，可选的演练沙箱与裁图缩图。它自己声明的每个方法都有端口在调，门禁核对 |
+| `ProjectSandboxPort` | 否 | 宿主有演练沙箱时给：公共沙箱端口加上在镜像里跑命令；不给，项目空间里的 `velar:sandbox` 明说做不了 |
 
-**常量表**是 `contract/constants.ts`：空间身份（`ProjectSpaceId`、`ProjectPackageVersion`）、错误原因 `ProjectErrorCodes`、脱敏占位符 `ProjectRedactionMarker`、
-公开上限与模型面缺省值（`ProjectFileLimits`、`ProjectCodeLimits`、`ProjectCommandLimits`、`ProjectTransactionLimits`）、内核缺省策略 `ProjectPolicyDefaults`、宿主代码查询的语言服务动作 `ProjectCodeLanguageActions`。
-模型面声明里的数字都引它们；沙箱的上限在 `@velaros-ai/velar/sandbox` 的 `RehearsalSandboxLimits`，看图的在 `@velaros-ai/velar/images` 的 `ImageLimits`。
-
-**数据面**是 `types/`，只放类型；`types/files.ts` 是 `velar:project` 的模型面（入参与回执），`types/code.ts` 是 `velar:code` 的，
-`types/project.ts` 是可移植数据（宿主端口上流动的命令回执、授权决定、在镜像里跑命令的选项、宿主代码查询）。
+**数据面**是 `types/`：`host.ts` 里只有在镜像里跑命令的选项 `ProjectSandboxRunOptions`（它引用 shell 的命令种类，所以从根入口导出）。本包没有自己的可移植数据；**常量表**是 `contract/constants.ts`，只有空间身份 `ProjectSpaceId`。两件项目工具的数据、上限与错误原因在 `@velaros-ai/velar/project/contracts`。
 
 两个入口对应 `package.json` 的 `exports`，源文件是 `src` 根上的入口文件，只有转发语句：
 
 | 入口 | 给谁用 | 里面有什么 |
 | --- | --- | --- |
-| `.` | Node 宿主 | 产品面、注入面、它们用到的数据 |
-| `./contracts` | 任何进程，含浏览器 | 常量表与可移植数据 |
+| `.` | Node 宿主 | 三个面的全部 |
+| `./contracts` | 任何进程，含浏览器 | 常量表 |
 
 ## 骨干链路
 
-`createProjectSpace` 的操作表每次调用都向宿主要一次 `ProjectCallContext`，交给对应的操作：
-
-| 能力 | 链路 |
+| 链路 | 怎么走 |
 | --- | --- |
-| `project.read` | 资源门读锁 → 入参核对 → 路径钳在项目内（按真实路径）→ 内核 read（授权、脱敏、按行列与字符预算截取）→ 源码窗口（`[行号, 原文]`，长行给带列范围的片段）→ 按实际交出去的行签发 fileRef（同一份源码的几个窗口共用可见范围的并集）与续读页 |
-| `project.list`、`project.search` | 资源门读锁 → 内核列举（gitignore 与策略过滤，按稳定指纹分页）/ 搜索（有 ripgrep 用 ripgrep，没有逐文件扫）→ 搜索命中合成可编辑的源码窗口（总量有上限，装不下的只留位置） |
-| `project.edit` | 资源门写锁 → 步骤里的路径钳在项目内 → 编辑规划：按 fileRef 取回读取时的版本与可见范围，编成内核的编辑意图（范围越界、定位不唯一在这里拒绝，版本过期时按原意图找新位置）→ 带着要写的路径过宿主的修改授权 → 内核准备事务（补丁、差量、风险，不碰磁盘）→ 应用（校验、审批、按版本核对、全成或全逆序还原）→ 回执带改动处的新窗口（新 fileRef）与 changeRef |
-| `project.inspect`、`project.undo` | changeRef 取回事务 → inspect 给差量；undo 过修改授权后在写锁里交内核回滚（外部改过拒绝覆盖，撤过的幂等成功） |
-| `code.query`、`code.analyze` | 资源门读锁 → 翻译成宿主代码查询（语言服务类由宿主语言服务执行，代码索引类由代码图谱执行）→ 附来源、覆盖与降级信息 |
-| 共用能力的项目端口 | `shell`：cwd 钳在项目内 → 危险命令由共用能力问用户 → 会改项目的命令过修改授权 → 前台在资源门里跑（只读走读锁）→ 输出经宿主的脱敏后端；`sandbox`：只镜像项目内的目录，落回前核对写治理与修改授权；`images`：路径钳在项目内、过内核的读取授权，缩图用宿主的能力 |
-
-失败一律交给 `projectFailure`：代码面只把 `error.code` 与 `error.message` 交给程序，所以原因码当错误码，details 里的位置（第几步第几处）、候选、诊断、改完之后的预览与下一步都写进 message。
+| 项目空间的一次调用 | 模型的程序调 `read(...)` / `run(...)` / `view(...)` → 能力端口按命名空间找到装配表里那一格 → `resolveCall` 给出这一次调用的上下文（项目根、内核、审批通道、取消信号、会话）→ 交给那件能力：`project`、`code` 直接拿这份上下文，`shell`、`sandbox`、`images` 装成它们要的上下文与端口 |
+| `velar:shell` 的项目端口 | `resolveCwd`：按真实路径钳在项目内；`commandPolicy`：确认文案说「当前项目」，风险分类 `project-command:dangerous`；`reviewCommand`：只读命令放行，其余先过宿主的修改授权；`runCommand`：后台命令直接交宿主，前台命令在项目资源门里跑（只读走读门，其余走写门），输出过内核的脱敏后端 |
+| `velar:sandbox` 的项目端口 | `resolveSource`：源目录按真实路径钳在项目内；建、看差量、丢弃交宿主的沙箱端口；`runInSandbox`：交宿主、输出脱敏；`reviewApply`：三列路径先过内核的写授权（有一条不许写就在问用户之前整批拒绝并点名），再过宿主的修改授权；`applyPolicy`：风险分类 `project-sandbox:apply` |
+| `velar:images` 的项目端口 | `locate`：路径钳在项目内、换成相对项目根的写法，经内核的 `stat` 过读取策略（内核的拒绝按 `reason` 翻成通用码）；`resizeImage`：宿主给了才有 |
 
 ## 依赖什么
 
-- `@velaros-ai/core`：类型守卫、缺席值、日志、`AppError`。
-- `@velaros-ai/agent` 的 `tool-contract` 子路径（peer）：审批端口与确认选项。
-- `@velaros-ai/code-surface`：代码面的操作表类型（装配表交给它接成能力端口）。
-- `@velaros-ai/velar/images`：`velar:images` 的看图操作与空间端口（项目空间给它装端口）。
-- `@velaros-ai/velar/shell`：`velar:shell` 的操作与空间端口，命令的只读判定（资源门走读锁还是写锁）。
-- `@velaros-ai/velar/sandbox`：`velar:sandbox` 的操作与空间端口，宿主沙箱端口形状。
-- `@velaros-ai/path-rules`：glob 匹配（策略名单、include/exclude 都经 `utils/glob.ts` 调它，大小写按盘的规矩）、.gitignore 判定与列举时的忽略策略（`git check-ignore` 的执行口由本包注入）。
-- `@velaros-ai/platform`：路径文本的包含判定与本平台的大小写规矩。
-- `@velaros-ai/text-files`：磁盘文本的编码识别、严格解码、按原编码无损写回（GB18030 下保留没改片段的原字节）、原子替换写入、有界读与流式读；它的失败在 `utils/errors.ts` 的 `projectErrorFromTextFile` 一处按错误码翻成 `ProjectError`。
-- `typescript`（JS/TS 解析）、`diff`（差量）、`execa`（子进程）。
+- `@velaros-ai/velar`：`project` 单元的两件工具、项目资源门、内核的 Agent 视图与模块声明；`shell`、`sandbox`、`images` 单元的操作、端口形状与模块声明。
+- `@velaros-ai/code-surface`：操作表与模块清单的类型。
+- `@velaros-ai/core`：`AppError`、类型守卫、真实路径；`@velaros-ai/platform`：路径文本的包含判断与相对写法。
+- `@velaros-ai/agent` 的 `tool-contract` 子路径（peer）：审批端口。
 - 不读环境变量。
 
 ## 状态归谁
 
-- **领域内核**：每个项目根一个 `LocalProjectKernel`，持有事务仓库（内存里保留最近的事务，可选落盘的事务状态文件）、路径锁、审计日志（内存，有上限）、解析过的目标与证据包（有上限）、插件与登记表。可撤销历史按条数和字节预算（`ProjectTuning.persistence.historyBytes`，内存与状态文件共用）双重淘汰，最旧先出；还没应用的事务与正在写盘的事务永远保留，所以历史再大也不会让提交失败。
-- **变更记录**：宿主给的写端（落盘的用 `createFileProjectChangeFeed`，放在宿主私有目录），不给就在内存里。
-- **fileRef、续读页与回执引用**：按会话存在进程内存里（`utils/agent/file-refs.ts`），每个会话有条数与字符数上限，最久没用的先出；进程重启后全部作废，重读就是。
-- **资源门**：进程内按项目根排队，只在内存里。
+本包没有自己的状态：装配表每次调用现装端口，上下文由宿主每次给。项目资源门（进程内按项目根排队的读写门）属于 `@velaros-ai/velar/project`，本包的 shell 端口与两件项目工具共用同一个。
 
 ## 生命周期
 
-内核随宿主创建、随宿主丢弃，没有要释放的句柄；落盘的变更记录要 `close()`。给了事务状态文件时，重启后内核逐个恢复中断的应用或回滚（并发的事务各有各的恢复点），只还原能证明属于该事务的内容。
+`createProjectSpace` 随宿主创建、随宿主丢弃，没有要释放的句柄。内核、变更记录这些有生命周期的东西由宿主从 `@velaros-ai/velar/project` 建、经宿主端口的 `kernel()` 交进来。
 
 ## 失败语义
 
-- 错误原因只来自 `ProjectErrorCodes`，挂在 `ProjectError.reason`；交给程序时原因码就是 `error.code`，说明、位置、候选、诊断与下一步都在 `error.message` 里。
-- 改动类失败一个文件都没写（`details.executionOutcome = 'not-applied'`）；程序改好入参重提即可。
-- 版本过期（文件或列举出的目录）`BASE_REVISION_MISMATCH`；range 超出看到的范围 `SCOPE_VIOLATION`；路径出了项目 `PERMISSION_DENIED`；撤销遇外部修改 `CONFLICT_WITH_EXTERNAL_EDIT`；生成文件 `GENERATED_FILE`；受保护文件 `PROTECTED_FILE`；重启恢复遇到无法归属的改动 `TRANSACTION_RECOVERY_CONFLICT`；宿主缺能力 `NOT_SUPPORTED`；模型给的正则写错或跑不完 `INVALID_INPUT`。
-- 改动已被字节预算挤出可撤销历史时，撤销报 `NOT_SUPPORTED` 并说明没有留下撤销记录（改动本身仍在变更记录里可查）；记录已经不在内核里是 `TARGET_NOT_FOUND`，引用本身不是本会话签发的才是 `INVALID_INPUT`。撤销一个已经撤销过的改动是幂等成功，不是错误。
-- 命令自己失败不抛错，如实写进回执；用户或宿主拒绝时抛错，一个进程都没起。
+- 共用能力的项目端口抛通用码：出了项目、修改授权被拒、写治理拦下都是 `PERMISSION`，message 里点名为什么与下一步；宿主没接演练沙箱是 `UNAVAILABLE`。
+- 看图时内核的拒绝按原因码翻成通用码（`PERMISSION_DENIED` → `PERMISSION`，`TARGET_NOT_FOUND` → `NOT_FOUND`），下一步照写进 message。
+- 被拒时一个进程都不起、一个文件都不落；命令自己失败（非零退出、超时）不抛错，如实写进回执。
+- 两件项目工具的失败语义见 `@velaros-ai/velar/project` 的卡片。
 
 ## 不变量
 
-共 22 条，登记在 `spec/invariants.md`，验收用例在 `spec/acceptance.test.ts`。编号只增不重排（INV-15 作废，编号不复用）。
-按检验方式：测试 20 条、类型 1 条、门禁 1 条。未验证 0 条。
+共 6 条，登记在 `spec/invariants.md`，验收用例在 `spec/acceptance.test.ts`。编号只增不重排，从两件工具那边搬来的几条在登记表开头写了出处。
+按检验方式：测试 5 条、门禁 1 条。未验证 0 条。
 
 ## 非目标
 
-- 不管项目以外的文件和系统级操作：那是系统空间（`velar:files`）；项目空间的能力出不了项目根。
-- 不做 Git 界面、项目根管理、文件树可见性这些产品功能：它们归产品壳。
-- 不自己跑语言服务和代码图谱：`velar:code` 把查询交给宿主的语言服务与代码图谱后端。
-- 不做「当前文件视图」这类自动进上下文的东西：代码面里只有程序的返回值与显式输出进上下文。
+- 不写能力本身：读写文件、问代码、跑命令、演练、看图的操作各在 `@velaros-ai/velar` 的单元里，本包只给项目空间的端口。
+- 不建项目内核、不管事务与变更记录：宿主从 `@velaros-ai/velar/project` 建，经宿主端口交进来。
+- 不做项目根管理、Git 界面、文件树可见性：它们归产品壳。
+- 不管项目以外的东西：那是系统空间（`@velaros-ai/system`）。
 
 ## 结构
 
 ```text
 src/
-  contract/     对外合同：provides.ts（产品面，登记类上方接口）、requires.ts（注入面）、constants.ts（常量表）；surface.ts 是生成的模型面（随包发布的声明）
-  types/        只放类型，按域分文件；project.ts 是可移植数据
-  impl/         一类一文件，按层分子目录（上层可以引下层）：
-    ProjectSpace.ts    项目空间的装配表：五个命名空间，三件共用能力的项目端口
-    operations/        velar:project 与 velar:code 的操作类、项目资源门、验证判据
-    kernel/            领域内核 LocalProjectKernel，有限事务面，命令、审批与脱敏后端
-    plugins/           核心插件、TypeScript 插件与它们的校验器
-    transactions/ files/ strategies/ adapters/ registries/ persistence/   事务、文件访问、补丁策略、文件适配器、登记表、持久化
-  utils/        纯函数与可调参数（tuning.ts）；agent/（Agent 适配）、editing/（编辑规划）、files/（文件读写）、kernel/、transactions/ 按域分子目录
+  contract/     对外合同：provides.ts 登记产品面，requires.ts 宿主端口与调用上下文，constants.ts 空间身份
+  types/        只放类型：host.ts 是在镜像里跑命令的选项
+  impl/         扁平，一个类一个文件：ProjectSpace.ts 装配表（shell 端口要用资源门，写在这里）、ProjectVerificationPolicy.ts 验证判据
+  utils/        ports.ts 是不带状态的两个端口与它们用到的判定（路径钳制、输出脱敏、落回前的写授权、失败翻译）；
+                verification-paths.ts 是「什么算代码文件」的判据；tuning.ts 是可调参数
   index.ts      `.` 入口，只转发
   contracts.ts  `./contracts` 入口，只转发
-spec/           不变量登记、验收测试与测试替身
-test/           实现细节测试；test/support 是项目空间的测试夹具与内核编辑意图的 schema
+spec/           不变量登记与验收测试
+test/           实现细节测试；test/support 是项目空间的测试夹具
 ```
 
-**类与接口。** 每个类实现一个接口，定义在类文件里、紧挨在类的上方并导出；公开的在 `contract/provides.ts` 登记，扩展点与宿主端口在 `contract/requires.ts`。类的公开方法只能是接口里的方法；用不着实例状态的私有逻辑进 utils。继承 `Error` 的错误类（`ProjectError`）只有字段，放在 utils。
+**看代码的顺序**：五份生成的声明（模型看到的全部）→ `ProjectSpace.ts` 的装配表 → `contract/requires.ts` → `utils/ports.ts` 里函数上方的一句说明。
 
-| 层 | 实现文件 | 接口 |
+**类与接口。** 每个类实现一个接口，定义在类文件里、紧挨在类的上方并导出；公开的在 `contract/provides.ts` 登记。
+
+| 实现文件 | 接口 | 做什么 |
 | --- | --- | --- |
-| 空间 | `ProjectSpace` | `ProjectSpaceApi`（provides 登记） |
-| operations | `ProjectFileOperations`、`ProjectCodeOperations`、`ProjectExecutionGate`、`ProjectVerificationPolicy` | 同名加 `Api`，写在各自类上方 |
-| kernel | `LocalProjectKernel` | `ProjectKernel`（provides 登记）、`ProjectPluginContext`（requires）、`LocalProjectKernelStartup` |
-| kernel | `ProjectTransactionController` | `ProjectTransactionControllerApi`（provides 登记） |
-| kernel | `NodeCommandProvider`、`ProjectApprovalBridge`、`PatternSecretRedactionProvider` | `CommandProvider`、`ProjectApprovalBridgeApi`（provides 登记）、`SecretRedactionProvider`（requires） |
-| plugins | `CoreProjectPlugin`、`TypeScriptProjectPlugin` | `ProjectPlugin`（requires） |
-| plugins | `ScopeValidator`、`PostconditionValidator`、`TypeScriptSyntaxValidator` | `ProjectValidator`（requires） |
-| transactions | `TransactionPlanner`、`TransactionCoordinator`、`TransactionOverlay`、`TransactionValidation`、`TransactionStateMachine`、`TransactionRepository`、`TransactionProjectionRepository`、`TransactionRecovery`、`LockManager` | 同名加 `Api` |
-| files | `FileStore`、`ProjectQueries`、`ProjectGitIndex` | 同名加 `Api` |
-| strategies | `PreparedContentStrategy`、`TextPatchStrategy`、`JsonPatchStrategy`、`JsTsPatchStrategy` | `PatchStrategy`（requires） |
-| adapters | 纯文本、JSON、Markdown、通用代码、JS/TS 各一个 `XxxFileAdapter` 与 `XxxFileAdapterFactory` | `FileAdapter`、`FileAdapterFactory`（requires） |
-| registries | 适配器、补丁策略、校验器、修复器、hook、流水线、插件七个登记表 | 同名加 `Api` |
-| persistence | `AuditJournal`、`FileProjectTransactionStateStore`、`FileProjectChangeFeed`、`MemoryProjectChangeFeed`、`BaseProjectChangeFeed` | 同名加 `Api`；变更记录实现 `ProjectChangeFeedWriter`（requires），落盘的另有 `FileProjectChangeFeedApi`（provides 登记） |
+| `ProjectSpace.ts` | `ProjectSpaceApi`（同文件，provides 登记） | 项目空间的装配表：五件能力配上项目的端口 |
+| `ProjectVerificationPolicy.ts` | `ProjectVerificationPolicyApi`（同文件，provides 登记） | 验证判据 |
 
-**常量分四处。** 对外承诺的在 `contract/constants.ts`，每个数字一句说明；可调的在 `utils/tuning.ts` 的 `ProjectTuning`，按用途分组、每项一句说明；某个类里固定用的写成那个类的 `private static readonly`；规则数据（命令名单、状态转移表）跟着规则留在各自的 utils 文件里。以上由门禁核对。
+两个实现文件在同一层，互不依赖；utils 在最底下，只引 utils、types 与合同。每个文件属于哪一层登记在 `scripts/ownership/governed-modules.mjs`。
+
+`./contracts` 入口会被渲染进程加载，它的整条引用链不碰 Node 模块。`contract/` 的三个文件改了等于改对外契约，要在差量报告里点名。

@@ -43,7 +43,7 @@
     "@codemirror/lang-python": "^6.2.1",
     "@velaros-ai/core": "workspace:*",
     "@velaros-ai/platform": "workspace:*",
-    "@velaros-ai/project": "workspace:*",
+    "@velaros-ai/velar": "workspace:*",
     "zod": "^4.3.6"
   },
   "peerDependencies": {

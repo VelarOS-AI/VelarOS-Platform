@@ -298,7 +298,8 @@ for (const module of selectedModules) {
   const srcRoot = unit ? join(packageRoot, unit) : join(packageRoot, 'src')
   const toolsFilePath = module.toolsFile ? join(packageRoot, module.toolsFile) : null
   // 端口可达性从「模型面的入口」出发。工具时代那个入口是工具文件，代码面时代是操作表。
-  const surfaceFilePath = module.surfaceFile ? join(packageRoot, module.surfaceFile) : toolsFilePath
+  // 模型面入口可以是几个文件（一个单元出两件能力、各有自己的操作类时）；没登记就是工具文件。
+  const surfaceFilePaths = module.surfaceFile ? [module.surfaceFile].flat().map((file) => join(packageRoot, file)) : [toolsFilePath].filter(Boolean)
   const contractRoot = join(packageRoot, module.contract)
   const typesRoot = join(packageRoot, module.types)
   const implRoot = join(packageRoot, module.impl)
@@ -319,7 +320,8 @@ for (const module of selectedModules) {
   const providesPath = join(contractRoot, 'provides.ts')
   const requiresPath = join(contractRoot, 'requires.ts')
   const constantsPath = join(contractRoot, 'constants.ts')
-  const portablePath = join(typesRoot, module.portable)
+  // 没有自己的可移植数据的包（比如只做装配的空间）不登记 portable：`./contracts` 只转发常量表。
+  const portablePath = module.portable ? join(typesRoot, module.portable) : null
   const publicInterfacePaths = [providesPath, requiresPath].filter((path) => existsSync(path))
   const inside = (file, root) => file.startsWith(`${root}/`)
   const isPublicInterfaceFile = (file) => publicInterfacePaths.includes(file)
@@ -421,7 +423,7 @@ for (const module of selectedModules) {
 
   // ── 2. types：只放类型 ──────────────────────────────────────────────
   checkSubdirectories(typesRoot, '类型')
-  for (const path of [portablePath, constantsPath]) {
+  for (const path of [portablePath, constantsPath].filter(Boolean)) {
     if (!existsSync(path)) {
       fail(`${label}: 缺少可移植文件 ${shortPath(path)}`)
       continue
@@ -1057,7 +1059,7 @@ for (const module of selectedModules) {
       fail(`${label}: 对外导出了 ${shortPath(file)} 的 ${record.name}，但没有任何公开接口用到它；不是公开签名需要的数据不出包`)
     }
   }
-  const portableSourceFile = program.getSourceFile(portablePath)
+  const portableSourceFile = portablePath ? program.getSourceFile(portablePath) : undefined
   for (const statement of portableSourceFile?.statements ?? []) {
     if (!(ts.isInterfaceDeclaration(statement) || ts.isTypeAliasDeclaration(statement) || ts.isVariableStatement(statement))) continue
     if (ts.isVariableStatement(statement)) continue
@@ -1139,8 +1141,8 @@ for (const module of selectedModules) {
     if (!usedVariables.has(name)) fail(`${label}: ${module.environmentTable} 登记了 ${name}，但代码里没有用到；不用的登记删掉`)
   }
   const calledPortMembers = new Set()
-  const surfaceSourceFile = surfaceFilePath ? program.getSourceFile(surfaceFilePath) : undefined
-  if (surfaceSourceFile) {
+  const surfaceSourceFiles = surfaceFilePaths.filter((file) => program.getSourceFile(file))
+  if (surfaceSourceFiles.length > 0) {
     const portField = module.hostPortField ?? 'system'
     const visitCalls = (node) => {
       if (ts.isPropertyAccessExpression(node) && ts.isPropertyAccessExpression(node.expression) && node.expression.name.text === portField) {
@@ -1149,8 +1151,8 @@ for (const module of selectedModules) {
       ts.forEachChild(node, visitCalls)
     }
     // 入口文件自己调的，加上从它出发、沿相对 import 能走到的 impl 与 utils 文件里调的（入口一行交给类、类再交给工具函数时，端口调用在更深处）。
-    const reachable = new Set([surfaceFilePath])
-    const queue = [surfaceFilePath]
+    const reachable = new Set(surfaceSourceFiles)
+    const queue = [...surfaceSourceFiles]
     while (queue.length > 0) {
       const file = queue.pop()
       for (const { specifier } of relativeSpecifiers(parse(file))) {

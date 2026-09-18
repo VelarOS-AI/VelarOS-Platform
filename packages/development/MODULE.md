@@ -66,7 +66,7 @@ Project 代码理解背后的语言服务库。宿主拿它实现 project 注入
 
 - `@velaros-ai/core`：`AppError`、`Log`、类型守卫、`TimerScope`、`resolveRealPath`。
 - `@velaros-ai/platform`：路径文本包含判断（越界判定的唯一实现）。
-- `@velaros-ai/project`：只取类型与 `./contracts` 的常量，**运行时不加载 project 根入口**（`check:capabilities-arch` 守着这条）。
+- `@velaros-ai/velar/project`：只取类型与 `./project/contracts` 的常量，**运行时不加载项目单元的根入口**（`check:capabilities-arch` 守着这条）。
 - `typescript`：JS/TS 的语法树、tsconfig 解析与 `ts.LanguageService`。是 devDependency：公开签名里不出现任何 `ts.*` 类型。
 - `@codemirror/lang-python`：Python 的 Lezer 语法树。
 - Node 内置模块：`node:fs`、`node:path`、`node:crypto`、`node:child_process`、`node:url`、`node:timers/promises`。

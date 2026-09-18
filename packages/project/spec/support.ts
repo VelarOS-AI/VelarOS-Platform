@@ -1,5 +1,5 @@
 /**
- * 验收测试的替身：一个装着真内核的假宿主。项目空间只经根入口拿（createProjectSpace、createProjectKernel），
+ * 验收测试的替身：一个装着真内核的假宿主。项目空间只经根入口拿（createProjectSpace），内核经 `@velaros-ai/velar/project` 的根入口拿（createProjectKernel），
  * 调用走代码面的能力端口（createCapabilityPort），和模型的程序调 `velar:project` 是同一条路：失败时程序只看得见 code 与 message。
  * 审批、修改授权、跑命令都记下来给断言用。
  */
@@ -8,17 +8,10 @@ import type { ApprovalPort } from '@velaros-ai/agent/tool-contract'
 import { createCapabilityPort } from '@velaros-ai/code-surface'
 import { AppError } from '@velaros-ai/core/error'
 import type { ImageAttachment } from '@velaros-ai/velar/images'
+import { createProjectKernel, type CreateProjectKernelOptions, type ProjectProviders } from '@velaros-ai/velar/project'
 import type { ShellCommandResult } from '@velaros-ai/velar/shell/contracts'
 
-import {
-  createProjectKernel,
-  type CreateProjectKernelOptions,
-  createProjectSpace,
-  type ProjectCallContext,
-  type ProjectHostPort,
-  type ProjectProviders,
-  type ProjectSandboxPort,
-} from '../src/index'
+import { createProjectSpace, type ProjectCallContext, type ProjectHostPort, type ProjectSandboxPort } from '../src/index'
 
 /** 替身宿主的开关：用户点不点确认、宿主给不给项目修改授权、内核的策略与 provider、演练沙箱。 */
 export interface ProjectHarnessOptions {

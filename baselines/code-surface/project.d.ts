@@ -14,7 +14,7 @@ declare module 'velar:project' {
    */
 
   /**
-   * 代码模版（templates/project.js）：
+   * 代码模版（template.js）：
    *
    * ```js
    * // velar:project 的代码模版：挑一段照着改，import 只写一次。

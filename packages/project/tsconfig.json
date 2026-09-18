@@ -5,23 +5,15 @@
     "moduleResolution": "Bundler",
     "lib": [
       "ES2022",
-      "DOM",
-      "DOM.Iterable"
+      "DOM"
     ],
     "strict": true,
-    "noImplicitAny": false,
     "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
     "noEmit": true,
-    "baseUrl": ".",
-    "paths": {
-      "@velaros-ai/project": [
-        "./src/index.ts"
-      ]
-    }
+    "baseUrl": "../..",
+    "paths": {}
   },
   "include": [
-    "src/**/*.ts",
-    "src/**/*.d.ts"
+    "src/**/*.ts"
   ]
 }

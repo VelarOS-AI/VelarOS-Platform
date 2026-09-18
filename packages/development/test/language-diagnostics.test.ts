@@ -5,7 +5,7 @@ import { dirname, join } from 'node:path'
 import { afterAll, afterEach, beforeAll, describe, expect, setDefaultTimeout, test } from 'bun:test'
 import * as ts from 'typescript'
 
-import { createProjectKernel, typescriptPlugin } from '@velaros-ai/project'
+import { createProjectKernel, typescriptPlugin } from '@velaros-ai/velar/project'
 
 import { languageServiceRegistry } from '../src/impl/LanguageServiceRegistry'
 import { languageQueries, type LanguageToolContext, typeScriptProjects } from '../src/index'
