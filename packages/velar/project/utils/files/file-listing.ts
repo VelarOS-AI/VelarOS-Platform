@@ -17,6 +17,12 @@ import { ProjectTuning } from '../tuning.js'
 const NulSeparator = '\0'
 
 /**
+ * 版本库内部（子模块、worktree 里是同名的链接文件）：它不是项目文件，列举——以及靠列举找文件的回退搜索、recode 的 glob 展开——都跳过它，
+ * 和 `git ls-files`、rg 一样；git 自己从不把它算作被忽略，只靠 .gitignore 过滤拦不住。点名读里面的文件照样读得到，看仓库状态用 git 命令。
+ */
+const VersionControlEntryName = '.git'
+
+/**
  * 用宿主的命令口批量问 git 哪些相对路径被忽略：git 自己的引擎比本地解析更能覆盖边界情况（父目录被忽略则子项取不回来等）。
  * `-z` 只有和 `--stdin` 共用才生效：路径以 NUL 分隔经 stdin 传入，也不受命令行长度限制。退出码 1 表示一条都没被忽略，不是失败；
  * git 不在、跑不起来、退出码不是 0 或 1 时返回 null，由公共件回退到本地 .gitignore 规则。
@@ -55,7 +61,7 @@ export function normalizeFilterList(values: LooseOptional<readonly string[]>): s
 
 /**
  * 按路径、include、exclude、深度与条数列出文件和目录：一层层读目录，每层条目的 gitignore 判定合成一次 git check-ignore
- * （git 不可用时按逐级累积的本地 .gitignore 规则判断）；被忽略、被排除或不可见的目录不再深入，输出按深度优先、满 maxFiles 即止。
+ * （git 不可用时按逐级累积的本地 .gitignore 规则判断）；版本库内部、被忽略、被排除或不可见的目录不再深入，输出按深度优先、满 maxFiles 即止。
  */
 export async function listProjectFiles(
   input: ObserveInput,
@@ -103,7 +109,7 @@ export async function listProjectFiles(
       }
       listed.push({
         directory,
-        entries: entries.map((entry) => {
+        entries: entries.filter((entry) => entry.name !== VersionControlEntryName).map((entry) => {
           const abs = path.join(directory.abs, entry.name)
           return { entry, abs, rel: normalizeRel(path.relative(dependencies.root, abs)) }
         }),

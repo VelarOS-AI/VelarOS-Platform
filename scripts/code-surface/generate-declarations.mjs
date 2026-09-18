@@ -383,14 +383,14 @@ function generate(surface) {
     }
   }
 
-  // 代码模版不能省：我们知道这些能力怎么组合，模型未必知道。一个命名空间一份模版文件，import 只写一次、一段一个函数一种用法。
+  // 代码模版不能省：我们知道这些能力怎么组合，模型未必知道。一个命名空间一份模版文件，import 只写一次、一段一个函数一种日常用法——只是示例，模型按需要改写。
   // 它**不嵌进声明、不常驻**：随包发布在模型面的 template 字段里，模型拿不准怎么组合时在程序里 template('velar:x') 读；
-  // 对不对由各单元的验收照真实声明整份做类型检查。
+  // 对不对有两道：各单元的验收照真实声明整份做类型检查，仓库层的测试在真的空间里把每个函数跑一遍。
   const templateHome = surface.unit ? `packages/${surface.directory}/${surface.unit}` : `packages/${surface.directory}`
   const templatePath = surface.templates ? resolve(RepoRoot, templateHome, surface.templates) : null
   const template = templatePath && ts.sys.fileExists(templatePath) ? readFileSync(templatePath, 'utf8').trim() : ''
   if (template.length === 0) {
-    problems.push(`${surface.namespace} 没有代码模版：在 ${templateHome}/ 写一份能照抄的程序，并在 surfaces.mjs 登记`)
+    problems.push(`${surface.namespace} 没有代码模版：在 ${templateHome}/ 写一份日常用法的示例程序，并在 surfaces.mjs 登记`)
   }
 
   // 闭包：签名引用到的类型，以及它们自己引用到的

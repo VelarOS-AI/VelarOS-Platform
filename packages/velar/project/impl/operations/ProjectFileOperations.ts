@@ -44,7 +44,7 @@ import { projectExecutionGate } from './ProjectExecutionGate.js'
 export interface ProjectFileOperationsApi {
   /** @AgentView 读项目里的文本文件：交回带行号的窗口，每个窗口带 fileRef。看图用 `velar:images`，目录用 list。 */
   read(input: ProjectReadInput, ctx: ProjectOperationContext): Promise<ProjectReadResult>
-  /** @AgentView 列项目里的文件和目录，按深度优先的稳定顺序全部交回；.gitignore 忽略的不列。 */
+  /** @AgentView 列项目里的文件和目录，按深度优先的稳定顺序全部交回；.gitignore 忽略的与版本库内部（.git）不列。 */
   list(input: ProjectListInput, ctx: ProjectOperationContext): Promise<ProjectListResult>
   /** @AgentView 按字面文本或正则搜项目源码，交回全部命中；命中所在的行合成带 fileRef 的窗口，可以直接拿去 edit。 */
   search(input: ProjectSearchInput, ctx: ProjectOperationContext): Promise<ProjectSearchResult>

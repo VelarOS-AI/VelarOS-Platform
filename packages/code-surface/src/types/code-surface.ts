@@ -240,7 +240,7 @@ export interface CapabilityModuleSurface {
   /** 生成的完整 `.d.ts` 正文，检查程序时按它推类型。 */
   readonly declarations: string
   /**
-   * 代码模版：一整段能照抄的程序，一段一个函数、一种用法。不进声明、不常驻——模型拿不准怎么组合时，
+   * 代码模版：日常最常用写法的示例，一段一个函数，只是示例、不要求照着写。不进声明、不常驻——模型拿不准怎么组合时，
    * 在程序里 `template('velar:files')`（`velar:program`）读它。
    */
   readonly template: string

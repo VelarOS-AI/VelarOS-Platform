@@ -27,7 +27,7 @@
   types/          只放类型；模型面上的类型带 @AgentView
   impl/           一类一文件：操作类（接口写在类上方，方法带 @AgentView 的才进模型面）
   utils/          纯函数与可调参数（tuning.ts）
-  template.js     代码模版：一整份能照抄的程序（一个单元出两件能力时，另一件的模版叫 <模块>-template.js）
+  template.js     代码模版：日常用法的示例程序，只是示例、不要求照着写（一个单元出两件能力时，另一件的模版叫 <模块>-template.js）
   spec/           不变量登记 invariants.md 与验收测试 acceptance.test.ts
   test/           实现细节测试
 ```

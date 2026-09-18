@@ -20,7 +20,7 @@ export const CodeSurfaces = [
     unit: 'files',
     /** 操作接口；方法带 `@AgentView` 的才进模型面。 */
     interfaces: ['FileOperationsApi'],
-    /** 代码模版：一整份能照抄的程序，import 只写一次；相对单元目录（没有单元就相对包目录）。 */
+    /** 代码模版：日常最常用写法的示例（只是示例，不要求照着写），import 只写一次；相对单元目录（没有单元就相对包目录）。 */
     templates: 'template.js',
   },
   {

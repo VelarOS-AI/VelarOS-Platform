@@ -26,8 +26,8 @@ export const ProgramModuleDeclarations = `declare module '${ProgramModuleSpecifi
   export const blobs: Record<string, string>
 
   /**
-   * 一个能力模块的代码模版：一整段能照抄的程序，一段一个函数、一种用法，展示这个模块的几件能力怎么组合。
-   * 拿不准怎么写时先读它：\`export default template('velar:shell')\`。模块名写错时抛错，并列出这个空间有哪些。
+   * 一个能力模块的代码模版：日常最常用的几种写法，一段一个函数，展示这个模块的几件能力怎么组合。
+   * 只是示例，按你的需要改写，不必照着写。拿不准怎么写时先读它：\`export default template('velar:shell')\`。模块名写错时抛错，并列出这个空间有哪些。
    */
   export function template(module: string): string
 }`
@@ -61,6 +61,9 @@ export const JavaScriptCheckOptions: ts.CompilerOptions = Object.freeze({
   checkJs: true,
   // `catch (e)` 在 JS 里没法写 `as Error`；不放开这条，模型每写一个 try/catch 都会红。
   useUnknownInCatchVariables: false,
+  // 程序是普通 JS：自己写的小函数、JSON.parse 出来的数据上的回调不带类型是常态，逼着写注解只会让一段对的程序一行都不执行。
+  // 要拦的是用错能力——能力的返回值都有声明，字段写错、入参形状错照样拦得住。
+  noImplicitAny: false,
   // 不让程序看见 @types/*：模型只该看见我们给的声明，多一个环境类型就多一条它以为能用的路。
   types: [],
 })

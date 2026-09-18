@@ -19,7 +19,7 @@
 | INV-5 | 作用域与策略由空间注入、不由模型挑：越出空间范围的路径（经符号链接越出去的也算）读的那一项失败（`PERMISSION`），写的那一批整批不写（`FILES_EDIT_DENIED`）；空间要问的按真实路径问，写的时候第一次被拒就停、后面的不再打扰，整批不写；读被拒只是那一项失败；撤回也算写，要问的照样问，被拒就不撤 | 测试 | `spec/acceptance.test.ts` |
 | INV-6 | 代码面的 `files` 命名空间是一条真路：模型写的程序照生成的 `baselines/code-surface/files.d.ts` 过 typecheck（形状写错的一行都不执行），在隔离里经空间的操作表读真文件、按行改、撤回；十几 MB 的正文穿过隔离，模型只看到 export default 交出的那一点；写不下去时程序接得住，看得见的就是 `error.code` 与 `error.message` | 测试 | `spec/acceptance.test.ts` |
 | INV-7 | 入参不合法由操作方法自己拦，不靠调用方：一批的形状不对（不是对象、files 不是数组、空批、项不是对象、超过批量上限）一律 `VALIDATION`，碰不到空间；读的一项不合法（path 不是字符串、range 不是合法的行号）只那一项失败；写的一项不合法（两种改法都给或都不给、newText 不是字符串、edits 形状不对）进 `FILES_EDIT_UNRESOLVED` 的问题清单；undo 没给 changeId 是 `VALIDATION`；抛出来的一律是带码的错误，不会半途崩 | 测试 | `spec/acceptance.test.ts` |
-| INV-9 | 代码模版（`template.js`）是一整份能照抄的程序，import 只写一次；它**整份照生成的真实声明过类型检查**，并且原样嵌在声明的模块头里 | 测试 | `spec/acceptance.test.ts` |
+| INV-9 | 代码模版（`template.js`）是日常用法的示例程序（只是示例，模型按需要改写、不要求照着写），import 只写一次；它**整份照生成的真实声明过类型检查**，不嵌进声明，随模型面发布、按需读（`velar:program` 的 template）；在真的空间里把每个函数跑一遍、看交回的是不是它说的样子，由仓库层的 `tests/capabilities/capability-templates.test.ts` 核对 | 测试 | `spec/acceptance.test.ts` |
 | INV-10 | 模型面与常量表一致：声明里写的批量上限、单个文件上限、留原文的上限、留几次改动与三个错误码都与 `FileLimits`、`FileErrorCodes` 对得上；声明里只有 `read`、`edit`、`undo` 三个方法，空间端口与调用上下文不进模型面，看图指向 `velar:images` | 测试 | `spec/acceptance.test.ts` |
 | INV-11 | 文件分工与对外边界不塌（同 system 的 INV-16）；`./contracts` 入口整条引用链不碰 Node 内置模块，渲染进程可以直接加载 | 门禁 | `check:module-ownership` |
 | INV-12 | 行的数法和 `wc -l` 一样（结尾的换行不多出一行，最后一行没换行也算一行）：`read` 交回 `[行号, 原文]` 与整个文件的 version，range 末行超出就收到最后一行、首行超出就那一项失败；`edits` 的行号都按 read 那一版算、给的顺序不要紧，几处不许重叠（插入点落在被换掉的几行中间也算），重叠的整批不写；按行号改必须带 version | 测试 | `spec/acceptance.test.ts` |

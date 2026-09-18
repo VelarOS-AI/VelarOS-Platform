@@ -110,6 +110,18 @@ for (const engine of engines) {
   })
 }
 
+test('列举跳过版本库内部：.git 目录与子模块里的 .git 链接文件都不列，点名读里面的文件照样读得到', async () => {
+  execFileSync('git', ['init', '-q'], { cwd: root })
+  await mkdir(join(root, 'vendor/lib'), { recursive: true })
+  await writeFile(join(root, 'vendor/lib/.git'), 'gitdir: ../../.git/modules/lib\n')
+  await writeFile(join(root, 'vendor/lib/index.ts'), 'export {}\n')
+  const kernel = await createProjectKernel({ root })
+  const paths = (await kernel.listFiles({ recursive: true, maxDepth: 10 })).map((entry) => entry.path)
+  expect(paths.filter((path) => path.split('/').includes('.git'))).toEqual([])
+  expect(paths).toEqual(expect.arrayContaining(['pkg/src/y.ts', 'vendor/lib/index.ts']))
+  expect((await kernel.read({ path: '.git/HEAD' })).content).toStartWith('ref: ')
+})
+
 test('列子目录时不列出被根 .gitignore 忽略的构建产物', async () => {
   execFileSync('git', ['init', '-q'], { cwd: root })
   const kernel = await createProjectKernel({ root })
