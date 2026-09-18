@@ -67,13 +67,6 @@ export const CodeSurfaces = [
     templates: 'template.js',
   },
   {
-    namespace: 'knowledge',
-    directory: 'velar',
-    unit: 'knowledge',
-    interfaces: ['KnowledgeOperationsApi'],
-    templates: 'template.js',
-  },
-  {
     namespace: 'memory',
     directory: 'velar',
     unit: 'memory',
@@ -100,7 +93,6 @@ export const HostContextTypes = new Set([
   'SandboxOperationContext',
   'ProjectOperationContext',
   'ComputerOperationContext',
-  'KnowledgeOperationContext',
   'MemoryOperationContext',
   'OfficeOperationContext',
 ])

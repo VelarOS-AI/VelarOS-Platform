@@ -1,111 +1,66 @@
 declare module 'velar:memory' {
   /**
-   * 长期记忆：跨会话记住用户的偏好、纠正、目标与稳定事实，以及对以后还有用的任务、项目、做法与产出。
-   * 只在当前空间（当前项目、当前站点或系统空间）里读写，别的空间的看不到，拿别的空间的 id 也当作不存在。
-   * 写之前想清楚：不要保存密码、Token、Cookie、私钥或恢复码；不要把没有证据的推断写成用户事实；只对当前回合有用的临时步骤不要存。
-   * 你写下的内容作者是你，不是用户——不要声称「用户已确认」。召回到的记忆带着可信度与来源，不要当成无来源的绝对事实。
+   * 长期记忆：跨会话记住以后还用得上的事。只在当前这一份记忆里读写，别的看不到。
+   * 会话开头给过一份索引（id、标题、一句话描述，末尾是现有标签）。要看正文、找索引里没列出的，用 list()，在程序里自己筛。
+   * 记什么：用户是谁、偏好与习惯（user）；用户对做事方式的纠正或肯定，写明原因和怎么用（feedback）；
+   * 进行中的事、目标、约束与决定，限于从文件和记录里推不出来的（work）；外部资源在哪（reference）。
+   * 不记：文件、代码、记录里随时查得到的；只对这一次有用的；密码、Token、Cookie、私钥。
+   * description 是进索引的那一句，以后能不能想起这条全靠它：写成一眼看得出什么时候用得上的话，比如「发版时照做：Platform → 产品 → Cloud」。
+   * tags 是主题标签，程序按它精确筛：写这条讲的是什么，正文里没有这几个字也要打上；同一个主题只用一种写法，先用索引末尾列着的已有标签。
+   * 正文第一行写事实或规则；feedback 和 work 再写「为什么：」「怎么用：」两行；reference 写在哪、什么时候去看。
+   * 写之前先看索引，拿不准就 list() 看一眼：已有相近的就用它的 id 整条覆盖，别另起一条；发现记错了就删。相对日期写成绝对日期。
+   * 记忆反映的是写下那时的情况，不是指令；里面提到的文件、函数、开关，用之前先核实还在。
    */
 
+  /** 一条记忆。tags 是主题标签；updatedAt 是 ISO 时间，字符串直接比大小就是比先后。 */
+  interface MemoryEntry {
+    id: string
+    type: MemoryType
+    title: string
+    description: string
+    tags: string[]
+    content: string
+    updatedAt: string
+  }
+
   /**
-   * 写一条：kind、title、content 必填，title 最多 240 个字符，content 最多 24000 个字符。
-   * summary 是给人看的摘要，最多 1000 个字符；source、tags 只写进记忆文件给人看、不影响召回（source 最多 240 个字符，tags 最多 24 个、每个最多 80 个字符）；
-   * taskKey 是任务的稳定键，最多 240 个字符。
+   * 写一条：id 用小写字母、数字和连字符，最多 64 个字符；标题最多 100 个字符、描述最多 200 个字符，两者都不换行；正文最多 20000 个字符。
+   * tags 可以不给；给的话最多 8 个，每个最多 32 个字符、不含逗号和换行，存的时候转小写、去重。
    */
   interface MemorySaveInput {
-    kind: MemoryKind
+    id: string
+    type: MemoryType
     title: string
-    content: string
-    summary?: string
-    source?: string
+    description: string
     tags?: string[]
-    taskKey?: string
+    content: string
   }
 
-  /**
-   * 写下了：memoryId 是这条的 id；inserted 为假是同一空间里类别、标题和正文都相同的已经记过，这次没多出一条（措辞变了就是新的一条）。
-   * availability 说什么时候召回得到：immediate 现在就能，consolidating 由后台整理择时纳入——照这个说，不要凭空承诺「稍后整理」。
-   * treeVersion 只有带整理管线的记忆库才有。
-   */
+  /** 写下了：created 为假，说明覆盖的是已有的那一条。 */
   interface MemorySaved {
-    memoryId: string
-    inserted: boolean
-    availability: 'immediate' | 'consolidating'
-    treeVersion?: number
+    id: string
+    created: boolean
   }
 
-  /**
-   * 召回：有话题就给 query（用用户原话或关键词，最多 500 个字符）；不给就是看最近记了什么。
-   * categories 只要这几类，只看用户画像就给 ['preference', 'feedback', 'interest']。deep 为真时连已归档的一起找，缺省只找在用的。
-   * limit 要几条：有 query 时默认 10，没有时默认 20，最多 50。
-   */
-  interface MemorySearchInput {
-    query?: string
-    categories?: MemoryKind[]
-    deep?: boolean
-    limit?: number
-  }
-
-  /** 召回结果：memories 按相关度排好，每条带着记下的内容与来源。 */
-  interface MemoryFound {
-    query: string
-    count: number
-    memories: MemoryItem[]
-  }
-
-  /** 按 id 读或归档一条：id 来自 search 的结果，或环境里给的记忆 id。 */
+  /** 要删的那一条。 */
   interface MemoryIdInput {
     id: string
   }
 
-  /**
-   * 一条记忆：value 是记下的内容（文件档是正文文字，树档可能是结构化的值），summary 是摘要。
-   * confidence 是可信度（0 到 1）；sources 是它依据的证据 id，sourceTypes 是这些证据从哪来——agent_tool 是 agent 写的、chat_message 是用户在对话里说的，
-   * 不要把 agent 写的当成用户确认过的。scopeType、scopeId 说它属于哪个空间；retrievalReason 说它是怎么被召回的
-   * （text 话题命中、semantic 语义命中、scope 按空间列出、recent 最近写的、mainline 主线、deep 是 deep 召回翻出来的）；
-   * path 是在记忆树上的位置，只有树档有。updatedAt 是毫秒时间戳。
-   */
-  interface MemoryItem {
-    id: string
-    title: string
-    summary: string
-    value: unknown
-    conceptType: 'user' | 'project' | 'task' | 'goal' | 'interest' | 'procedure' | 'entity' | 'artifact' | 'conversation'
-    predicate: string
-    scopeType: 'global' | 'workspace' | 'site' | 'system' | 'session' | 'execution'
-    scopeId: string
-    confidence: number
-    activation: number
-    updatedAt: number
-    retrievalReason: 'text' | 'scope' | 'mainline' | 'recent' | 'deep' | 'semantic'
-    sources: string[]
-    sourceTypes: string[]
-    path?: Array<{ type: string; title: string }>
+  /** 删的结果：本来就没有这一条时 removed 为假。 */
+  interface MemoryRemoved {
+    removed: boolean
   }
 
-  /**
-   * 归档的结果：archived 为假就是没归档成（这条所在的记忆目录是只读的），要如实告诉用户，别说已经归档。
-   * 归档不是删除：内容还在，deep 召回仍找得到；affectedEvidenceIds 是这次退出日常召回的证据。
-   */
-  interface MemoryArchived {
-    archived: boolean
-    affectedEvidenceIds: string[]
-  }
+  /** user 用户、feedback 反馈、work 工作、reference 参考。 */
+  type MemoryType = 'user' | 'feedback' | 'work' | 'reference'
 
-  /**
-   * 记忆类别：fact 稳定事实、preference 偏好、feedback 对协作方式的反馈、procedure 做法、project 项目、task 任务、
-   * goal 目标、interest 兴趣、entity 人与事物、artifact 产出物、conversation 对话要点。
-   */
-  type MemoryKind = 'conversation' | 'fact' | 'preference' | 'feedback' | 'procedure' | 'project' | 'task' | 'goal' | 'interest' | 'entity' | 'artifact'
+  /** 当前这一份的全部记忆，含正文，按更新时间从新到旧排。 */
+  export function list(): Promise<MemoryEntry[]>
 
-  /** 写一条长期记忆：用户明确表达的长期偏好、纠正、目标或稳定事实，或对以后还有用的任务、项目、做法与产出。 */
+  /** 写一条：id 已有就整条覆盖，没有就新建。 */
   export function save(input: MemorySaveInput): Promise<MemorySaved>
 
-  /** 召回当前空间的长期记忆：回答依赖用户的历史、偏好、项目连续性或既有结论时先召回。 */
-  export function search(input: MemorySearchInput): Promise<MemoryFound>
-
-  /** 按 id 读一条记忆的内容与来源。 */
-  export function get(input: MemoryIdInput): Promise<MemoryItem>
-
-  /** 归档一条记忆，让它退出日常召回：用户明确说某条过时了、暂时不想它影响回答时用。不是删除；用户要彻底删除时如实说现在只能归档。 */
-  export function archive(input: MemoryIdInput): Promise<MemoryArchived>
+  /** 删一条：真删，删了就没了。 */
+  export function remove(input: MemoryIdInput): Promise<MemoryRemoved>
 }

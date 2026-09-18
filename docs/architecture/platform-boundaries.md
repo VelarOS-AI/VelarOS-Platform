@@ -60,7 +60,7 @@ contracts -> runtime -> client or serve -> product adapter
 
 ## Memory
 
-Memory backends implement explicit ports and are selected through host composition. Evidence ownership, recall, Dream scheduling, retention, erasure, and credential access cannot be inferred from a product shell. The canonical memory-tree format and hashing rules live in the Platform memory specifications and probes.
+Memory is one directory of Markdown files per scope under a root the host provides ([ADR 0010](../decisions/0010-memory-slimming.md)). The scope is an opaque string chosen by the product; the memory unit never interprets it, it only isolates by it. The product decides which scope a session uses and puts the session-start index into the system prompt; the entry format, the index, and the three model-facing operations belong to `packages/velar/memory`.
 
 ## Mods and UI
 

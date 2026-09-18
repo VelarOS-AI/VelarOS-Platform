@@ -56,12 +56,8 @@ Host products own their adapters, installation UI, and product-specific policies
 
 | Document | Purpose |
 | --- | --- |
-| [Memory backend contract](memory/memory-backends.md) | Backend ports, capability ownership, and integration boundaries |
-| [Memory host adapter](memory/adapter-kernel.md) | `mountMemoryAdapter`: evidence capture, turn recall, and Dream scheduling as the three host ports |
-| [Memory tree specification freeze](memory/memory-tree-spec-freeze.md) | Canonical serialization, hashing, domain strings, and TreeDiff construction |
-| [Memory tree architecture](memory/memory-tree-product-architecture.md) | Evidence, Dream, TreeDiff, erasure, encryption, and meaning-model design |
-| [Memory tree requirements](memory/memory-tree-product-requirements.md) | Product behavior and privacy requirements |
-| [Memory migration guide](memory/0.3-migration.md) | Historical migration into the current package boundary |
+| [Memory slimming (ADR 0010)](decisions/0010-memory-slimming.md) | One directory of Markdown per host-given scope, the session-start index, and the three model-facing operations; why the memory tree, vector retrieval, and the knowledge base were removed |
+| [Memory module card](../packages/velar/memory/MODULE.md) | What `velar:memory` provides, its chains, failure semantics, and invariants |
 
 Historical review and revision documents remain evidence of prior decisions. They must be clearly labeled as historical and cannot override current schemas, tests, architecture documents, or accepted decision records.
 

@@ -260,21 +260,6 @@ function checkRuntimeDependencyOwnership() {
     }
   }
 
-  // 向量库只有知识库用：velar 按可选 peer 注入 LanceDB（装了才有 velar:knowledge 的向量通道），不许经运行时依赖装进来；
-  // 同包的记忆单元一行也不许引它，由 check:memory-boundaries 守着。
-  const velarManifest = readJson(join(packageRoot, 'velar', 'package.json'))
-  if (
-    velarManifest.peerDependencies?.['@lancedb/lancedb'] !== '^0.27.2'
-    || velarManifest.peerDependenciesMeta?.['@lancedb/lancedb']?.optional !== true
-  ) {
-    fail('@velaros-ai/velar: LanceDB must remain an optional injected peer runtime')
-  }
-  for (const section of runtimeSections) {
-    if (velarManifest[section]?.['@lancedb/lancedb']) {
-      fail(`@velaros-ai/velar: LanceDB must not be installed through ${section}`)
-    }
-  }
-
   const cliManifest = readJson(join(packageRoot, 'cli', 'package.json'))
   for (const dependency of ['@velaros-ai/remote-host', '@velaros-ai/serve-host']) {
     for (const section of [...runtimeSections, 'peerDependencies']) {

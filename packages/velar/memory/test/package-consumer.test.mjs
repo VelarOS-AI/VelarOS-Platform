@@ -1,65 +1,32 @@
 /**
  * @test-meta
- * title: Memory product package consumer API
- * summary: 经构建产物的 `./memory` 入口验证记忆的工厂面（类不出单元，只有工厂与实例）。
+ * title: Memory package consumer API
+ * summary: 经构建产物的 `./memory` 入口验证记忆库：类不出单元，只有记忆库的工厂与三个操作的实例，照着就能读写一个作用域。
  * area: package
  */
 import assert from 'node:assert/strict'
+import { mkdtemp, realpath, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { basename, join } from 'node:path'
 
 import { test } from 'bun:test'
 
-import {
-  createMemoryRuntime,
-  mountMemoryAdapter,
-} from '../../dist/memory/index.js'
+import { createMemoryStore, MemoryLimits, memoryOperations, MemoryTypes, VelarMemoryModule } from '../../dist/memory/index.js'
 
-test('package root exposes the runtime factory only, and it hands back one domain facade', () => {
-  const databaseProvider = () => {
-    throw new Error('consumer fixture does not open storage')
+test('package root exposes the store factory and the three operations', async () => {
+  const root = await realpath(await mkdtemp(join(tmpdir(), 'velaros-memory-consumer-')))
+  assert.ok(basename(root).startsWith('velaros-memory-consumer-'))
+  try {
+    const scope = createMemoryStore({ root }).scope('project:/srv/consumer')
+    const context = { abortSignal: new AbortController().signal, memory: scope }
+    const saved = await memoryOperations.save({ id: 'consumer', type: 'reference', title: '构建产物', description: '入口照样能用', content: '' }, context)
+    assert.deepEqual(saved, { id: 'consumer', created: true })
+    assert.deepEqual((await memoryOperations.list(context)).map((entry) => entry.id), ['consumer'])
+    assert.match(await scope.renderIndex(), /\[构建产物\]\(consumer\)/u)
+  } finally {
+    await rm(root, { recursive: true, force: true })
   }
-  const memory = createMemoryRuntime({ databaseProvider })
-
-  assert.equal(memory.domain, undefined)
-  assert.equal(typeof memory.memoryDomainService.recall, 'function')
-})
-
-test('kernel adapter factory returns an explicit lifecycle object', () => {
-  const domain = {
-    recall: () => [],
-    recoverOrphanDreamRuns: () => undefined,
-    warmup: () => ({ state: 'idle' }),
-  }
-  const always = () => true
-  const adapter = mountMemoryAdapter({
-    tree: {
-      domain,
-      idleSignal: {
-        getIdleSeconds: () => 0,
-        isOnBatteryPower: () => false,
-        isAppFocused: () => true,
-      },
-    },
-    config: {
-      isEnabled: always,
-      isBackgroundGrowthEnabled: always,
-      allowBatteryGrowth: always,
-      isAutomaticDeepRecallEnabled: always,
-      isChatCaptureEnabled: always,
-      isWorkspaceCaptureEnabled: always,
-      isComputerUseCaptureEnabled: always,
-      isExecutionCaptureEnabled: always,
-    },
-    hostContext: {
-      resolveScope: ({ sessionId }) => ({
-        scopeType: 'session',
-        scopeId: `session:${sessionId}`,
-      }),
-      turnContextScopes: ['user'],
-    },
-  })
-
-  assert.equal(typeof adapter.evidenceBridge, 'object')
-  assert.equal(typeof adapter.turnRecall, 'object')
-  assert.equal(typeof adapter.service.close, 'function')
-  adapter.service.close()
+  assert.deepEqual([...VelarMemoryModule.methods].sort(), ['list', 'remove', 'save'])
+  assert.deepEqual([...MemoryTypes], ['user', 'feedback', 'work', 'reference'])
+  assert.equal(MemoryLimits.idChars, 64)
 })

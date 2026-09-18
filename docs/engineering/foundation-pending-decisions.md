@@ -9,7 +9,7 @@
 | --- | --- |
 | agent | A1 入口 23→4、升 1.0.0：**做**。A2 工具契约拆成独立包 `@velaros-ai/tool-contract`：**拆**——六个空间包只为写工具就依赖整个 agent 运行时，这是最深的一处耦合，拆完三件公共件（工具定义辅助、内核模块样板、失败回执构造器）才有落点。A3 工具面删改：**按判据逐条做**（判据＝别的工具替代得了、只剩仪式感才删）。A4 空间知识搬家：**做，放最后一轮**，它改发请求字节、要和重放基线一起动。A5 提示词修正：**做**。 |
 | browser | B1 工具面 40→32：**做**。B2 `CdpBrowserRuntime`：**删**（零消费、无测试、`enter_site` 在它上面必失败；真要支持无 Electron 宿主时按需重写）。B3 `enter_site` 进常驻集：**做**。B4 提示词改写：**做**。B5 客居空间改宿主声明：**做**。B6 `bindToolApi`：**做**（两个宿主现在各写千行适配层）。B7 用户脚本高风险操作走审批端口：**做**。B8 `contentBoundary`：**删**。B9 懒加载门禁开口：**做**（加登记字段，只放行登记过的目标）。B10 四个入口、0.3.0：**做**。 |
-| memory | M1 知识库拆成 `@velaros-ai/knowledge`：**拆**。M2 入口 8→2、0.5.0：**做**。M3 树 v2 不出包：**做**。M4 工具面删改：**做**。M5 `privacyClass` 从模型面拿掉：**做**。M6 宿主按作用域给可写根：**产品层待办**，本仓只保证拒收时说清楚。 |
+| memory | M1 知识库拆成 `@velaros-ai/knowledge`：**拆**。M2 入口 8→2、0.5.0：**做**。M3 树 v2 不出包：**做**。M4 工具面删改：**做**。M5 `privacyClass` 从模型面拿掉：**做**。M6 宿主按作用域给可写根：**产品层待办**，本仓只保证拒收时说清楚。**以上由 ADR 0010 取代**：知识库删掉、记忆树与向量检索放弃，记忆只认宿主给的一个作用域。 |
 | kernel | K1 入口 12→5、类不出包、0.3.0：**做**。K2 删 HostBridge/sidecar 整条链：**删**（ABI 里的 `'sidecar'` 取值一并删）。K3 身份注册 RPC：**删**。K4 `mods.*` RPC：**留**。K5 进程内调用带调用方归属：**做**。K6 事件订阅者失败隔离：**做**。K7 更新器强制 HTTPS 并默认验签、远程节点强制 `wss`（本机回环除外）：**做**。K8 守护进程权限策略注入口：**做**。 |
 | model / office / computer | C1 三包入口收口与版本：**做**。C2 office 删 `cwd`：**删**。C3 安装建议与替代方案搬回宿主：**做**。C4 生成文档默认作者留空、`autoRefresh` 缺省 false：**做**。C5 computer 删 `screen_size`、`move` 绑定截图、`leftClick` 改名 `click`：**做**。C6「启用即授权」从工具说明拿掉、改由卡片与宿主表达：**做**。C7 `ModelErrorCodes`：**做**。C8 `ModelAdapter` 基类换注入点、删 `fetchTavily`：**做**；`reasoningLevel: ultra` 抬预算：**做，单独一轮**（改请求字节）。 |
 | 七个小包 | S1 门禁加「原语包」档（只给 core）：**做**。S2 core 三处改名：**做，与全仓同车**。S3 cli 删 `velaros agent` 命名空间、帮助改中文：**做**。S4 document-renderer 删包内 `bin` 与 `./cli`：**删**。S5 html-artifacts 改 ui 五个文件、删空转的 `check:dist`：**做**。S6 agent-lab Hooks 驱动迁回 Desktop、预算口径改双账本、允许依赖 core：**做**。S7 development 两处语义如实上报：**做**。S8 标准补两条（可执行入口放包根 `bin/`、环境变量前缀）：**做**。 |
@@ -61,6 +61,8 @@
 | B10 | 入口 4 个还是 5 个（React 是否单开 `./react`）、宿主端口改名、版本 0.3.0 | 4 个 | Desktop、Workbench |
 
 ## 三、memory
+
+> 本节已由 [ADR 0010](../decisions/0010-memory-slimming.md) 取代：知识库整个删掉，记忆树、向量检索、证据与回合召回一并去掉；留在这里只作记录。
 
 | # | 事项 | 我的建议 | 影响 |
 | --- | --- | --- | --- |
@@ -126,7 +128,7 @@
 | X1 | VelarScript-Libraries 的 `packages/contract-codegen/tests/support/platform.mjs:20` 读 `packages/kernel/dist/contracts/protocol/index.js` | kernel 搬家后该产物路径不存在，新位置是 `dist/contracts-protocol.js`（53 个 schema、内容一致）；kernel 入口收口后还会再变一次 | 那个仓：改这一行并重生成已提交的 `kernel.manifest.json`、`kernel.report.json`。**建议等 kernel 收口到 0.3.0 之后一次改到位** |
 | X2 | Desktop 的 `arch-guard-velaros` 两处按 dist 布局钉路径（memory 三切片、`memory/dist/memory-tree/v2/storage/AtomicFile.js`），以及 browser 的 `dist/composition/`、`dist/tools/` | 三个包的 dist 布局都变了 | Desktop：随升级重写这几处检查 |
 | X4 | browser 工具面 40→32 之后，Desktop 与 Workbench 里点名了被删工具的地方 | Desktop：`UnattendedTaskToolPolicy.ts` 的名单、两份技能文档（a11y-debugging、debug-optimize-lcp）、`docs/modules/infrastructure-browser.md`；Workbench：`WorkbenchBrowserToolHost.ts` 的初始可见工具名单含 `browser:site_context` 及其测试 | 两个产品：随升级改名或删名 |
-| X3 | Desktop 把 `@velaros-ai/memory`、`@velaros-ai/memory/knowledge`（14 个文件 + 两份 package.json）换成 `@velaros-ai/velar/memory`、`@velaros-ai/velar/knowledge`（`/contracts` 同理）；记忆与知识的七个工具换成代码面的 `velar:memory`、`velar:knowledge`，空间端口照两张模块卡片接 | 两个包已整包并进 `@velaros-ai/velar`，旧包删除；运行时、后端、适配器的工厂名不变 | Desktop：随升级接线 |
+| X3 | Desktop 删掉知识库与旧记忆的全部接线（`@velaros-ai/memory`、`@velaros-ai/memory/knowledge`、LanceDB 插件、嵌入设置、采集开关、`memory.recall` 回合上下文源）；记忆照 ADR 0010 接：`createMemoryStore({ root })` 造一次，每个会话定一个作用域，开场 `renderIndex()` 放进系统提示词（Tier0 之后单独一段、整场不变），`velar:memory` 设成常驻 | ADR 0010：知识库删掉，记忆只剩一个作用域一个目录的 Markdown 与三个操作 | Desktop：随升级接线 |
 | X8 | 验证判据接上 `CodingSessionPolicy` | 两张代码文件知识表（42 扩展名 + 27 构建清单）随 A4 搬进 project，出包为 `projectVerificationPolicy.isVerificationRelevantPath`；agent 1.3.0 改从注入的判据拿结论 | Desktop：升级时把 `projectVerificationPolicy.isVerificationRelevantPath` 接上 `CodingSessionPolicy`。**不接不会坏，但行为偏保守**——验证失败之后只改 `.png` 这类非代码资产也仍算「有待验证的改动」，提醒比现在多 |
 | X6 | 宿主声明「请求用户动作该调哪个工具」 | agent 1.2.0 加了可选字段 `userActionRequestToolName`（`AgentRuntimeCapabilityPorts` 与 `AgentRuntimeCapabilityExtension` 各一个）；不填不会坏，只是指引改走不点名那条路 | Desktop：组装 `AgentRuntimeCapabilityPorts` 时填 `userActionRequestToolName: 'interaction:show_action_cards'`。补上之后再回头把 `solo-run-plan-preparer.ts` 里三处保底名单也改成读声明（现在改会先丢保护） |
 | X7 | kernel `./serve` 收窄，Termel 改两行 | `5b1020f3`，kernel 0.4.0 | Termel `packages/serve-host/src/host.ts`：删掉 `createDefaultKernelModStorePaths` 的 import；`modStorePaths: createDefaultKernelModStorePaths(paths.modsRoot)` → `modsRoot: paths.modsRoot`。依赖版本提到 `^0.4.0`（两个 `package.json` 与 `bun.lock`）。Termel 还停在 0.2.3，与 0.3.0 那一刀一次做完 |
@@ -134,6 +136,6 @@
 
 ## 八、产品层接线（本仓不改，列给你排期）
 
-- Desktop：project 端口新增的两个方法（已自动满足）、memory 按作用域给可写根、browser 适配层（B6）、office 安装建议卡（C3）、model 按错误码判「缺 key」（C7）、各包入口收口后的 import 迁移。
+- Desktop：project 端口新增的两个方法（已自动满足）、memory 照 ADR 0010 接线（作用域由产品定）、browser 适配层（B6）、office 安装建议卡（C3）、model 按错误码判「缺 key」（C7）、各包入口收口后的 import 迁移。
 - Workbench：project 的 `runInDirectory` 删除后按 `options.cwd` 接线、browser 适配层、命令执行策略。
 - Termel：agent、kernel、surface-protocol、development 的入口迁移。

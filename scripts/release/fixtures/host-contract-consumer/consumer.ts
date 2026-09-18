@@ -12,14 +12,12 @@ import { createProjectSpace, type ProjectCallContext } from '@velaros-ai/project
 import { FileLimits } from '@velaros-ai/velar/files/contracts'
 import { officeOperations, type OfficeOperationContext } from '@velaros-ai/velar/office'
 import type { OfficeEnvironmentInspection, OfficeWritten } from '@velaros-ai/velar/office/contracts'
-import { createKnowledgeRuntime, type KnowledgeRuntimeApi, type KnowledgeRuntimeProviders } from '@velaros-ai/velar/knowledge'
 import {
-  createMemoryRuntime,
-  type MemoryAdapterTreePort,
-  type MemoryTreeRuntimeApi,
-  type MemoryTreeRuntimeProviders,
-  mountMemoryAdapter,
-  type MountMemoryAdapterInput,
+  createMemoryStore,
+  memoryOperations,
+  type MemoryOperationContext,
+  type MemoryScopeApi,
+  type MemoryStoreApi,
 } from '@velaros-ai/velar/memory'
 import { shellCommandPolicy } from '@velaros-ai/velar/shell'
 
@@ -45,25 +43,11 @@ const inspectForOffice: OfficeOperationContext['office']['inspectEnvironment'] =
 const wordWritten: Promise<OfficeWritten> = officeOperations.createWord({ outputPath: 'report.docx', content: '# 周报' }, officeContext)
 void [inspectForOffice, wordWritten]
 
-// 知识库与记忆整包在 velar 的两个单元里：两个运行时工厂按公开接口接得上，记忆适配器单独挂后端或连同树治理一起挂都行。
-declare const knowledgeProviders: KnowledgeRuntimeProviders
-declare const memoryProviders: MemoryTreeRuntimeProviders
-const knowledge: KnowledgeRuntimeApi = createKnowledgeRuntime(knowledgeProviders)
-const memoryTree: MemoryTreeRuntimeApi = createMemoryRuntime(memoryProviders)
-void [
-  knowledge.warmup(),
-  knowledge.knowledgeDomainService.searchKnowledge('认证流程', { workspaceRoot: '/srv/project' }),
-  knowledge.knowledgeVectors,
-  memoryTree.memoryDomainService.recall('技术说明偏好'),
-]
-
-declare const backend: NonNullable<MountMemoryAdapterInput['backend']>
-declare const config: MountMemoryAdapterInput['config']
-declare const hostContext: MountMemoryAdapterInput['hostContext']
-declare const tree: MemoryAdapterTreePort
-const standalone = mountMemoryAdapter({ backend, config, hostContext })
-const withGovernance = mountMemoryAdapter({ backend, tree, config, hostContext })
-void [standalone.service, withGovernance.service?.warmup(), withGovernance.turnRecall.createTurnContextSource()]
+// 记忆在 velar 的 memory 单元里：宿主给根目录造一个记忆库，按会话的作用域取一份、开场排一段索引；三个操作经调用上下文里的作用域端口读写。
+const memoryStore: MemoryStoreApi = createMemoryStore({ root: '/srv/velaros/memory' })
+const memoryScope: MemoryScopeApi = memoryStore.scope('project:/srv/project')
+const memoryContext: MemoryOperationContext = { abortSignal: new AbortController().signal, memory: memoryScope }
+void [memoryScope.renderIndex(), memoryStore.listScopes(), memoryOperations.list(memoryContext)]
 
 const retry: AgentModelRetryPolicy = {
  allowPartialContinuation: false,

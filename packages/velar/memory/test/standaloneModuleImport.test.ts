@@ -1,7 +1,6 @@
 // 每个源文件都能在全新进程里单独加载：本单元在包清单里的每个入口与单元下每个源文件各起一个 bun 进程只 import 它，不许报错。
-// 去 barrel 之前，包内互相经 `./memory-tree`、`./backend` 等中间转发绕回来，模块图里带环；单独 import 环上的
-// 文件会在初始化时撞上「Cannot access … before initialization」（TDZ），只因为消费方总先 import 根入口才没炸出来。
-// 探针是可执行脚本不是模块，import 就会跑断言、其中几个还要 Electron 的原生 SQLite；它们在 `test/probes/`，本来就不在这条检查里。
+// 模块图里一旦带环，单独 import 环上的文件会在初始化时撞上「Cannot access … before initialization」（TDZ）；
+// 消费方总先 import 根入口，这种问题平时炸不出来，所以在这里逐个文件单独加载。
 import { spawn } from 'node:child_process'
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { availableParallelism } from 'node:os'
@@ -17,17 +16,16 @@ const Unit = 'memory'
 const Companions = new Set(['spec', 'test'])
 /** 单个文件单独加载的时限；正常几百毫秒。 */
 const ImportTimeoutMs = 30_000
-/** 整条检查的时限：一百多个文件，按并发数分批跑。 */
+/** 整条检查的时限：按并发数分批跑。 */
 const SuiteTimeoutMs = 240_000
 const Concurrency = Math.max(2, Math.min(8, availableParallelism()))
 
-/** 单元下全部源文件（不含验收、测试、.d.ts 与探针脚本）。 */
+/** 单元下全部源文件（不含验收、测试与 .d.ts）。 */
 function sourceFiles(directory: string): string[] {
   return readdirSync(directory).flatMap((entry) => {
     const path = join(directory, entry)
     if (statSync(path).isDirectory()) return directory === UnitRoot && Companions.has(entry) ? [] : sourceFiles(path)
-    if (!entry.endsWith('.ts') || entry.endsWith('.d.ts')) return []
-    return entry.endsWith('-probe.ts') ? [] : [path]
+    return entry.endsWith('.ts') && !entry.endsWith('.d.ts') ? [path] : []
   })
 }
 

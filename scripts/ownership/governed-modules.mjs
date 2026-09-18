@@ -309,40 +309,7 @@ export const GovernedModules = [
     acceptance: 'computer/spec/acceptance.test.ts',
   },
   {
-    // 能力单元：工作区知识库（velar:knowledge），整包并进来的：模型面的三个操作，连同底下的摄入、分块、全文与向量索引、嵌入；
-    // 宿主拿它的领域门面实现空间端口的三个知识方法，工作区由空间自己定
-    directory: 'velar',
-    unit: 'knowledge',
-    name: '@velaros-ai/velar/knowledge',
-    contract: 'knowledge/contract',
-    types: 'knowledge/types',
-    portable: 'knowledge.ts',
-    impl: 'knowledge/impl',
-    utils: 'knowledge/utils',
-    tuning: 'tuning.ts',
-    // 根入口要 SQLite 与 LanceDB，只给 Node；渲染进程只能加载可移植数据
-    browserSafeEntries: ['contracts.ts'],
-    // 空间端口：三个操作经 ctx.knowledge 调它；每个方法都必须有操作在调
-    hostPort: 'KnowledgeSpacePort',
-    hostPortField: 'knowledge',
-    surfaceFile: 'knowledge/impl/KnowledgeOperations.ts',
-    layers: [
-      // 代码面 knowledge 命名空间的三个操作：入参核对、定工作区、零命中补一次同步、结果投影，只经端口碰知识库
-      ['KnowledgeOperations.ts'],
-      // 运行时对象图
-      ['KnowledgeRuntime.ts'],
-      // 领域：门面、查询、写入、维护、摄入、工作区
-      ['domain/'],
-      // 存储：关系仓、向量表、嵌入客户端
-      ['storage/'],
-    ],
-    card: 'knowledge/MODULE.md',
-    invariants: 'knowledge/spec/invariants.md',
-    acceptance: 'knowledge/spec/acceptance.test.ts',
-  },
-  {
-    // 能力单元：长期记忆（velar:memory），整包并进来的：模型面的四个操作，连同底下的证据、三种后端（树、文件、向量）、
-    // 宿主适配器与回合召回；宿主把自己的记忆后端接成空间端口，这一次调用的作用域与会话装在调用上下文里
+    // 能力单元：长期记忆（velar:memory）：一个作用域一个目录的 Markdown，模型面三个操作；作用域由宿主给，记忆不解释它，只按它隔离
     directory: 'velar',
     unit: 'memory',
     name: '@velaros-ai/velar/memory',
@@ -352,23 +319,19 @@ export const GovernedModules = [
     impl: 'memory/impl',
     utils: 'memory/utils',
     tuning: 'tuning.ts',
-    // 根入口要 SQLite 与文件 IO，只给 Node；渲染进程只能加载可移植数据
+    // 根入口读写磁盘，只给 Node；渲染进程只能加载可移植数据
     browserSafeEntries: ['contracts.ts'],
-    // 空间端口：四个操作经 ctx.memory 调它；每个方法都必须有操作在调
-    hostPort: 'MemorySpacePort',
+    // 作用域端口：三个操作经 ctx.memory 调它；每个方法都必须有操作在调
+    hostPort: 'MemoryScopePort',
     hostPortField: 'memory',
     surfaceFile: 'memory/impl/MemoryOperations.ts',
     layers: [
-      // 代码面 memory 命名空间的四个操作：来源与信任级、去重键、作用域读门、结果投影，只经 ctx.memory 调宿主
+      // 代码面 memory 命名空间的三个操作：查取消，再经 ctx.memory 调作用域
       ['MemoryOperations.ts'],
-      // 宿主胶水：装配、证据采集桥、回合召回、树治理门面、空闲整理调度、后端令牌族
-      ['host/'],
-      // 后端编排与规则：叠加体、树后端适配、动词与派生索引判定、作用域规则
-      ['backends/'],
-      // 三个互不相引的后端实现
-      ['files/', 'vector/', 'tree/'],
-      // 树 v2：独立子系统，除探针外没人引它，也不出单元
-      ['tree-v2/'],
+      // 记忆库：根目录下按作用域分目录，列出有记忆的作用域
+      ['MemoryStore.ts'],
+      // 一个作用域：读写目录里的条目，排会话开场的索引
+      ['MemoryScope.ts'],
     ],
     card: 'memory/MODULE.md',
     invariants: 'memory/spec/invariants.md',

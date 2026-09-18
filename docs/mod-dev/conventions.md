@@ -31,10 +31,6 @@ UI 显示「该工作区所属 mod 已停用，数据已保全，可重新启用
 
 没有这个索引，「orphaned-but-preserved」与「重新 enable 后复活」都**不可计算**。
 
-一条例外见 [capabilities.md §5.5](./capabilities.md#55-与数据生命周期的对齐)：
-记忆域的 `ownerModId` 打在**派生索引**一侧，**权威文件不打 mod 标签**——
-权威内容不属于任何 mod，一旦打上，卸载语义就又变回「数据跟着 mod 走」。
-
 ---
 
 ## 二、工具参数的宽容铁律
@@ -88,8 +84,6 @@ UI 显示「该工作区所属 mod 已停用，数据已保全，可重新启用
 它就不属于 Kernel；只认识「模块 / 能力 / 权限 / 事件 / 状态 / 引用 / 错误」的才留。
 
 机械形态：`packages/kernel/src/**` 有硬墙——出现 `memory` 这类具体能力词即判红。
-这就是为什么记忆后端的 capability token 住 `packages/velar/memory/impl/host/`
-而不是 core。
 
 ### 对 mod 作者的三条推论
 

@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict'
+import { mkdtemp, realpath, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { basename, join } from 'node:path'
 
 import {
   createAgentExecutionStack,
@@ -9,28 +12,7 @@ import {
 } from '@velaros-ai/agent'
 import { AgentProtocolVersions, AgentToolNames } from '@velaros-ai/agent/contracts'
 import { logRuntime } from '@velaros-ai/core/logger'
-import { createMemoryFilesBackend, mountMemoryAdapter } from '@velaros-ai/velar/memory'
-
-/** 纯内存的文件端口：0.3 起包内的内存实现不出包，发版夹具自己写一份最小实现。 */
-function createFixtureMemoryFilesIo() {
-  const files = new Map()
-  return {
-    join: (...segments) => segments.join('/'),
-    ensureDirectory: () => {},
-    listFiles: (directory) =>
-      [...files.keys()]
-        .filter((path) => path.startsWith(`${directory}/`) && !path.slice(directory.length + 1).includes('/'))
-        .map((path) => path.slice(directory.length + 1)),
-    readTextFile: (path) => files.get(path) ?? null,
-    writeTextFile: (path, content) => {
-      files.set(path, content)
-    },
-    deleteFile: (path) => {
-      files.delete(path)
-    },
-    snapshot: () => Object.fromEntries(files),
-  }
-}
+import { createMemoryStore, memoryOperations } from '@velaros-ai/velar/memory'
 
 const usage = {
   inputTokens: { total: 10, noCache: 10, cacheRead: 0, cacheWrite: 0 },
@@ -401,57 +383,37 @@ async function probeToolContracts() {
   assert.deepEqual(harness.executed, [{ value: 'paired' }])
 }
 
-async function probeIndependentMemoryBackend() {
-  const io = createFixtureMemoryFilesIo()
-  const backend = createMemoryFilesBackend({
-    roots: [{ scopeType: 'global', scopeId: 'global', directory: '/memory' }],
-    io,
-    now: () => 1_700_000_000_000,
-  })
-  const adapter = mountMemoryAdapter({
-    backend,
-    config: {
-      isEnabled: () => true,
-      isBackgroundGrowthEnabled: () => false,
-      allowBatteryGrowth: () => false,
-      isAutomaticDeepRecallEnabled: () => false,
-      isChatCaptureEnabled: () => true,
-      isWorkspaceCaptureEnabled: () => true,
-      isComputerUseCaptureEnabled: () => true,
-      isExecutionCaptureEnabled: () => true,
-    },
-    hostContext: {
-      resolveScope: () => ({ scopeType: 'global', scopeId: 'global' }),
-      turnContextScopes: ['system'],
-    },
-  })
-  assert.equal(adapter.service, null)
-  assert.equal(adapter.storeDescriptor.id, 'files')
-  assert.equal(adapter.isDefaultStore, false)
-
-  const captured = await adapter.store.capture({
-    sourceType: 'user_correction',
-    trustLevel: 'user_stated',
-    sourceId: 'packed-memory-1',
-    title: 'Packed memory contract',
-    content: 'The packed host keeps independent memory backends.',
-    category: 'fact',
-    scopeType: 'global',
-    scopeId: 'global',
-  })
-  assert.equal(captured.inserted, true)
-  const recalled = await adapter.store.recall('independent memory', { limit: 3 })
-  assert.equal(recalled.length, 1)
-  assert.equal(recalled[0].id, captured.evidence.id)
-  const archived = await adapter.store.archive(captured.evidence.id)
-  assert.equal(archived.claimId, captured.evidence.id)
-  assert.deepEqual(await adapter.store.recall('independent memory', { limit: 3 }), [])
-  assert.equal((await adapter.store.getItem(captured.evidence.id))?.id, captured.evidence.id)
-  assert.ok(Object.keys(io.snapshot()).some((name) => name.endsWith('.md')))
+/** 记忆库照发布的包接得上：宿主给根目录，按作用域取一份，三个操作经作用域端口读写，别的作用域看不见。 */
+async function probeMemoryStore() {
+  const root = await realpath(await mkdtemp(join(tmpdir(), 'velaros-packed-memory-')))
+  assert.ok(basename(root).startsWith('velaros-packed-memory-'))
+  try {
+    const store = createMemoryStore({ root })
+    const scope = store.scope('project:/srv/packed')
+    const context = { abortSignal: new AbortController().signal, memory: scope }
+    const saved = await memoryOperations.save({
+      id: 'packed-contract',
+      type: 'work',
+      title: '发版夹具',
+      description: '打包之后的记忆库照样能读写',
+      tags: ['发版'],
+      content: '宿主给根目录，按作用域取一份。',
+    }, context)
+    assert.deepEqual(saved, { id: 'packed-contract', created: true })
+    const [entry] = await memoryOperations.list(context)
+    assert.equal(entry.title, '发版夹具')
+    assert.deepEqual(entry.tags, ['发版'])
+    assert.match(await scope.renderIndex(), /\[发版夹具\]\(packed-contract\)/u)
+    assert.deepEqual(await store.scope('project:/srv/other').list(), [])
+    assert.deepEqual((await store.listScopes()).map((summary) => [summary.scope, summary.count]), [['project:/srv/packed', 1]])
+    assert.deepEqual(await memoryOperations.remove({ id: 'packed-contract' }, context), { removed: true })
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
 }
 
 await probeAgentExecution()
 await probeToolContracts()
-await probeIndependentMemoryBackend()
+await probeMemoryStore()
 
-console.info('✓ packed runtime contracts: Solo/Query, cancellation, tool pairing, schema refresh and independent Memory backend')
+console.info('✓ packed runtime contracts: Solo/Query, cancellation, tool pairing, schema refresh and the memory store')

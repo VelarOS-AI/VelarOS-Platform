@@ -23,8 +23,8 @@ The repository is converging on three rules; packages move one at a time, each m
 
 1. **Tool packages move into `@velaros-ai/velar` whole.** Every capability the model imports is a unit there (`packages/velar/<unit>`,
    imported as `velar:<unit>`), and the package that carried it moves in with its implementation, not as a projection over a package
-   left outside: the project kernel behind `velar:project` and `velar:code`, the helper sidecar behind `velar:computer`, the knowledge
-   base behind `velar:knowledge`, the memory store and its host adapter behind `velar:memory`. The old package is then deleted — there
+   left outside: the project kernel behind `velar:project` and `velar:code`, the helper sidecar behind `velar:computer`, the memory
+   store behind `velar:memory`. The old package is then deleted — there
    is never a second copy. A package with no model face is not a tool and stays outside `velar`, grouped by responsibility:
    `development`, the language services a host plugs into `velar:code`, is one.
 2. **Core execution stays outside `velar`**: `kernel`, `agent`, `model`, `code-surface` (the program gate), `tool-contract`,
@@ -40,8 +40,8 @@ The repository is converging on three rules; packages move one at a time, each m
 | `project` | space assembly and ports → products; verification policy → `velar/project` | pending |
 | `text-files`, `path-rules` | stay foundations: libraries the `velar` units build on, not tools | done |
 | `computer` | `velar/computer` (`velar:computer`, with the helper sidecar runtime and its bundled Python helpers) | done |
-| `knowledge` | whole → `velar/knowledge` (`velar:knowledge`, with the knowledge base underneath: ingestion, full-text and vector indexes, embeddings); `packages/knowledge` deleted | done |
-| `memory` | whole → `velar/memory` (`velar:memory`, with the memory store underneath: backends, host adapter, turn recall); `packages/memory` deleted | done |
+| `knowledge` | deleted with its vector and full-text indexes ([ADR 0010](../decisions/0010-memory-slimming.md)): each space searches and reads its own files | done |
+| `memory` | `velar/memory` (`velar:memory`: one directory of Markdown per host-given scope, [ADR 0010](../decisions/0010-memory-slimming.md)); `packages/memory` deleted | done |
 | `office` | whole → `velar/office` (`velar:office`, with the document engines, converters and the renderer primitives underneath); `packages/office` deleted; `document-renderer` now builds on `@velaros-ai/velar/office/renderer` | done |
 | `browser` | whole → a `velar` unit with its engine; what cannot move (an execution loop, not a tool) stays a separate package | pending |
 | `ui`, `html-artifacts`, `cli`, `agent-lab` | grouped by responsibility after the moves above | pending |

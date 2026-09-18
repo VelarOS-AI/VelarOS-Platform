@@ -20,7 +20,7 @@ agent 的运行时行为。
 | [package-format-v1.md](./package-format-v1.md) | `.velarmod` 压缩包、扫描/信任/权限确认、内置构建与发布流程 |
 | [axes/README.md](./axes/README.md)             | 十一根贡献轴的索引与总表（九根 agent 轴 + 两族 ui 轴）     |
 | [seams.md](./seams.md)                         | Hook 生命周期：15 个 event、匹配/折叠语义与 5 个已接线事件 |
-| [capabilities.md](./capabilities.md)           | capability token 与权限 broker；记忆后端当案例             |
+| [capabilities.md](./capabilities.md)           | capability token 与权限 broker                             |
 | [product-agent-surfaces.md](./product-agent-surfaces.md) | 领域产品如何组合 State、Memory、Skill、Workflow 与 Agent 表面 |
 | [integration.md](./integration.md)             | MCP / velar-hooks / 旧插件市场 三者与 mod 的定位边界       |
 | [distribution.md](./distribution.md)           | bundled / installed / 市场 / 整合包，以及认证模型          |

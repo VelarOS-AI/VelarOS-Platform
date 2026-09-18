@@ -162,8 +162,7 @@ edit 与 inspect 交回完整差量，`velar:code` 不按条数截，`velar:shel
 | `velar:project` | read / list / search / edit / inspect / undo | — | ✓ 受项目治理的文件 | `@velaros-ai/velar` 的 `project/` |
 | `velar:code` | query / analyze | — | ✓ | `@velaros-ai/velar` 的 `project/` |
 | `velar:computer` | screenshot / move / click / typeText / key | 宿主装了桌面控制插件时挂 | — | `@velaros-ai/velar` 的 `computer/` |
-| `velar:knowledge` | search / sync / diagnostics | 宿主开了知识库时挂 | 宿主开了知识库时挂 | `@velaros-ai/velar` 的 `knowledge/`（知识库本身也在这个单元里） |
-| `velar:memory` | save / search / get / archive | 宿主开了长期记忆时挂 | 宿主开了长期记忆时挂 | `@velaros-ai/velar` 的 `memory/`（记忆库本身也在这个单元里） |
+| `velar:memory` | list / save / remove | 宿主开了长期记忆时挂 | 宿主开了长期记忆时挂 | `@velaros-ai/velar` 的 `memory/`（记忆库本身也在这个单元里） |
 | `velar:office` | createWord / createPresentation / createSpreadsheet / readPdf / wordToPdf / latexToPdf / editPdf / preview / toMarkdown | ✓ | ✓ | `@velaros-ai/velar` 的 `office/`（文档生成、转换与解析的实现也在这个单元里） |
 
 **一件能力只有一份实现、一份声明、一份代码模版**，不认识任何空间。空间之间不一样的地方全落在**注入的端口**上：
@@ -175,8 +174,7 @@ edit 与 inspect 交回完整差量，`velar:code` 不按条数截，`velar:shel
 | `velar:shell` | `ShellSpacePort` | `resolveCwd`：命令在哪儿跑；`commandPolicy`：危险命令的确认文案与风险分类；跑命令、列任务、刷新环境交给哪个宿主 |
 | `velar:sandbox` | `SandboxSurfacePort` | `resolveSource`：能镜像哪些目录；镜像里的命令交给谁 |
 | `velar:computer` | `ComputerSpacePort` | 桌面控制交给哪份运行时：宿主把 `createComputerRuntime` 造的那份直接交进来（结构上满足端口）；没有桌面的宿主不挂这件能力 |
-| `velar:knowledge` | `KnowledgeSpacePort` | `resolveWorkspace`：这次落在哪个工作区（项目空间是项目根，没有默认工作区的空间要调用方给）；检索、同步、诊断转给宿主开的那份知识库（`createKnowledgeRuntime` 的领域门面） |
-| `velar:memory` | `MemorySpacePort` | 记忆落在哪个后端（与自动采集同一个）：端口就是后端的动词；这一次调用的作用域与会话装在调用上下文里。来源与信任级、去重、作用域可见性读门都在操作里，空间不裁决 |
+| `velar:memory` | `MemoryScopePort` | 这个会话落在哪个作用域：宿主用 `createMemoryStore({ root }).scope(作用域)` 取一份交进来，作用域字符串由产品定、记忆不解释；会话开场的索引也由宿主用同一份的 `renderIndex()` 放进系统提示词（ADR 0010） |
 | `velar:office` | `OfficeSpacePort` | `getRootPath`：文档读写落在哪个根里（出了根一律拒绝）；`inspectEnvironment`、`runCommand`：本机有没有 LibreOffice、LaTeX 编译器，外部命令交给谁跑（只收原生 argv）；`locateMarkItDown`：按宿主自己的插件状态回答 MarkItDown 装没装、停没停用 |
 
 **真正是两件事的不硬合。** 本机文件与项目文件看上去都是「读写文件」，其实不是一件事：项目里的文件有项目那一套——
@@ -191,7 +189,7 @@ edit 与 inspect 交回完整差量，`velar:code` 不按条数截，`velar:shel
 项目空间是 `@velaros-ai/project` 的 `createProjectSpace`——挂上两件项目独有的能力（`@velaros-ai/velar/project`），外加给共用能力装的项目端口：
 命令的工作目录钳在项目内、前台命令进项目资源门排队；沙箱只镜像项目内的目录；看图只看项目里的图。
 
-**能力单元是普通的目录，按同一套规范放在一起。** 模型 import 的每一件都在 `packages/velar/` 下——跨空间注入的 files、images、shell、sandbox、knowledge、memory，宿主装了插件才挂的 computer，
+**能力单元是普通的目录，按同一套规范放在一起。** 模型 import 的每一件都在 `packages/velar/` 下——跨空间注入的 files、images、shell、sandbox、memory，宿主装了插件才挂的 computer，
 和项目独有的 project、code——一件一个目录，目录名就是模块名（`velar:files` ⇄ `packages/velar/files/`）；它们合成一个包 `@velaros-ai/velar`，
 许可、说明、构建配置只有包根那一份，单元目录里不再各抄一遍。每个单元目录的样子一样：模块卡片 `MODULE.md`、入口 `index.ts` 与 `contracts.ts`、
 `contract/ types/ impl/ utils/` 四个目录、代码模版 `template.js`、`spec/`（不变量登记与验收）与 `test/`。宿主按 `@velaros-ai/velar/<单元>` 引用。
