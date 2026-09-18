@@ -6,30 +6,11 @@
 //   electronRoots  允许 import electron 的 src 子目录(相对 src/);其余源码零 Electron
 export const CapabilityOwners = [
   {
-    owner: 'project',
+    owner: 'development',
     packages: [
-      {
-        directory: 'project',
-        name: '@velaros-ai/project',
-        entrySubpaths: ['.', './contracts'],
-        sourceRoots: [''],
-        electronRoots: [],
-      },
       {
         directory: 'development',
         name: '@velaros-ai/development',
-        entrySubpaths: ['.', './contracts'],
-        sourceRoots: [''],
-        electronRoots: [],
-      },
-    ],
-  },
-  {
-    owner: 'system',
-    packages: [
-      {
-        directory: 'system',
-        name: '@velaros-ai/system',
         entrySubpaths: ['.', './contracts'],
         sourceRoots: [''],
         electronRoots: [],

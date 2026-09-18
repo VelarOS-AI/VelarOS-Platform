@@ -8,7 +8,8 @@
 // **命名空间按能力起名，不按空间起名。** 一件能力只有一份实现、一份声明、一份代码模版；
 // 每个空间注入自己的端口（作用域、策略、落盘），模型那边不必挑「这是哪个空间的看图」。
 // 真正是两件事的不硬合：本机文件（`files`，系统空间）与受项目治理的文件（`project`，项目空间）各是一件能力。
-// 空间是一张装配表：给哪些能力、每件能力用哪个端口（`@velaros-ai/system` 的 `createSystemSpace`、`@velaros-ai/project` 的 `createProjectSpace`）。
+// 空间是一张装配表：给哪些能力、每件能力用哪个端口、哪几件常驻。装空间是产品的事（ADR 0013），端口的本机实现在各单元的 `./local` 入口，
+// 项目给共用能力的端口在 `@velaros-ai/velar/project` 的 `projectCapabilityPorts`；仓库层测试照这个写法装的两份在 `tests/support/spaces.ts`。
 
 export const CodeSurfaces = [
   {

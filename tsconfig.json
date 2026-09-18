@@ -117,23 +117,11 @@
       "@velaros-ai/document-renderer/*": [
         "./packages/document-renderer/src/*"
       ],
-      "@velaros-ai/system": [
-        "./packages/system/src/index.ts"
-      ],
-      "@velaros-ai/system/*": [
-        "./packages/system/src/*"
-      ],
       "@velaros-ai/ui": [
         "./packages/ui/src/index.ts"
       ],
       "@velaros-ai/ui/*": [
         "./packages/ui/src/*"
-      ],
-      "@velaros-ai/project": [
-        "./packages/project/src/index.ts"
-      ],
-      "@velaros-ai/project/*": [
-        "./packages/project/src/*"
       ]
     }
   },

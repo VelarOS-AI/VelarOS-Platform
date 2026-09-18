@@ -1,10 +1,11 @@
 # @velaros-ai/velar
 
 模型在程序里 import 的能力单元：`velar:files`、`velar:images`、`velar:shell`、`velar:sandbox`、`velar:computer`、`velar:memory`、`velar:office`，项目的两件 `velar:project`、`velar:code`，以及浏览器的两件 `velar:browser`、`velar:devtools`。
-带工具的包整个搬进来，实现一起：单元底下就是服务它的那套实现（项目内核、桌面控制的 helper 运行时、记忆库、办公文档的生成与转换、浏览器的驱动与会话运行时），外面不留第二份。
-没有模型面的东西（语言服务、本机宿主）不是工具，是各自的包，宿主拿它们实现单元的空间端口。
-一件能力一个目录，目录名就是模块名（`velar:files` ⇄ `files/`；问代码离不开项目内核，和 `velar:project` 同住 `project/`；`velar:devtools` 与 `velar:browser` 共用一个端口，同住 `browser/`）；每个空间挂哪几件、给每件装什么端口，由空间的装配表决定
-（系统空间在 `@velaros-ai/system`，项目空间在 `@velaros-ai/project`）。
+带工具的包整个搬进来，实现一起：单元底下就是服务它的那套实现（项目内核、桌面控制的 helper 运行时、记忆库、办公文档的生成与转换、浏览器的驱动与会话运行时，
+以及命令、沙箱、文件、看图在本机上的端口实现），外面不留第二份。没有模型面的东西（语言服务）不是工具，是各自的包。
+一件能力一个目录，目录名就是模块名（`velar:files` ⇄ `files/`；问代码离不开项目内核，和 `velar:project` 同住 `project/`；`velar:devtools` 与 `velar:browser` 共用一个端口，同住 `browser/`）。
+每个空间挂哪几件、给每件装什么端口是产品的事，仓库里没有空间的装配表（ADR 0013）；产品用各单元 `./local` 入口里的本机实现和
+`project/` 的 `projectCapabilityPorts` 自己装，写法见 `tests/support/spaces.ts`。
 
 | 单元 | 模型写 | 做什么 | 谁挂 |
 | --- | --- | --- | --- |
@@ -19,6 +20,9 @@
 | `browser/` | `import { open, inspect, click, fill, screenshot, waitForSelector, table, content } from 'velar:browser'`、`import { diagnostics, request, startTrace } from 'velar:devtools'` | 浏览器：进站、看页面、按元素或坐标动手、等、取表格列表正文、下载与导出；排障时读控制台与网络、调页面条件、录 trace 与录屏、管用户脚本。底下是 CDP 驱动、页面引擎、Electron 会话运行时与站点工作区 | 宿主的浏览器空间；项目空间可以客居 |
 
 宿主按 `@velaros-ai/velar/<单元>` 引用（可移植数据在 `@velaros-ai/velar/<单元>/contracts`）。
+端口在本机上的实现只给 Node，各在单元的 `./local` 入口：`shell/local`（本机 shell 宿主：跑命令、后台任务、交互式控制台、shell 选择、进程约束，
+外加宿主界面要的进程、端口、资源快照与环境体检；受约束执行器）、`sandbox/local`（本机演练沙箱）、`files/local`（本机文件端口、全局搜索）、
+`images/local`（本机看图端口，macOS 上用 sips 缩图）。它们的接口与配置从单元根入口导出。
 
 ## 单元的规范
 
@@ -29,6 +33,7 @@
   MODULE.md       模块卡片：是什么、提供什么、骨干链路、依赖、状态、失败语义、不变量、非目标、结构
   index.ts        入口，只转发：操作、空间端口、它们用到的数据
   contracts.ts    可移植数据入口：常量表与不碰 Node 的类型
+  local.ts        本机实现入口（有的单元才有）：空间端口在本机上的实现，只给 Node
   contract/       provides.ts（操作的 API 登记）、requires.ts（空间端口与调用上下文）、constants.ts（错误码与公开上限）
   types/          只放类型；模型面上的类型带 @AgentView
   impl/           一类一文件：操作类（接口写在类上方，方法带 @AgentView 的才进模型面）
@@ -38,14 +43,14 @@
   test/           实现细节测试；要原生依赖或真实计时的探针放 test/probes/（不进 bun test，由仓库脚本拉起）
 ```
 
-单元自带、随包发布的非代码资产（比如 `computer/runtime/` 的 Python helper、`office/vendor/` 的 PptxGenJS、`browser/vendor/` 的 DevTools 性能引擎）登记在所有权门的 `assets` 里，并写进包清单的 `files`。
+单元自带、随包发布的非代码资产（比如 `computer/runtime/` 的 Python helper、`office/vendor/` 的 PptxGenJS、`browser/vendor/` 的 DevTools 性能引擎、`shell/native/` 的 Windows 原生进程宿主）登记在所有权门的 `assets` 里，并写进包清单的 `files`。
 
 模型看到的声明从源码生成（`baselines/code-surface/<单元>.d.ts`，`bun run generate:code-surface`），
 门禁：`bun run check:module-ownership`、`bun run check:code-surface`。
 
 ## 项目内核：宿主怎么建
 
-`project/` 单元里的项目内核按项目根建一个，经项目空间（`@velaros-ai/project`）的宿主端口交给两件工具。
+`project/` 单元里的项目内核按项目根建一个，经宿主端口（`ProjectSpacePort` 的 `kernel()`）交给两件工具。
 需要跨进程重启继续 apply/rollback 的宿主，把事务状态和变更记录放在宿主私有目录，
 并把有限事务面（只有 `list/get/subscribe/apply/rollback`，拿不到项目根、状态路径、provider）交给界面那一侧；路径只在宿主侧出现：
 

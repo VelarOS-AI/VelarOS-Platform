@@ -46,8 +46,8 @@ reason, and effective writable roots.
 VelarOS currently provides a Seatbelt backend on macOS and a bubblewrap backend on Linux. Hosts may inject
 a stronger provider such as a Windows restricted-token or container implementation. If a confined mode is
 requested and neither a built-in backend nor an injected provider is available, execution fails closed with
-`SYSTEM_PROCESS_CONFINEMENT_UNAVAILABLE`; it never silently falls back to a bare process. The
-`LocalSystemKernel` compatibility default is explicit `danger-full-access`, which reports
+`SHELL_CONFINEMENT_UNAVAILABLE`; it never silently falls back to a bare process. The local shell host's
+(`createLocalShellHost`, `@velaros-ai/velar/shell/local`) default for ordinary commands is explicit `danger-full-access`, which reports
 `enforcement: "none"` rather than pretending to be isolated.
 
 File confinement does not itself grant permission to execute a command. The host still owns user approval,

@@ -1,7 +1,8 @@
 /**
  * 代码模版是给模型看的日常用法示例。只过类型检查不够：结果键取错一个、默认的写法跑不通，模型照着写就跟着错。
- * 这里在真的空间里把每份模版的每个函数都调一遍——系统空间用真的本地内核（真命令、真后台任务、真沙箱，macOS 上用 sips 裁图），
+ * 这里在真的空间里把每份模版的每个函数都调一遍——系统空间用本机实现（真命令、真后台任务、真沙箱，macOS 上用 sips 裁图），
  * 项目空间用真的项目内核加内置语言服务——程序经真的门（检查器 + 隔离子进程）交上去，和模型交程序是同一条路。
+ * 两个空间照产品的写法装在 `tests/support/spaces.ts`（仓库里没有空间的装配表，装空间是产品的事）。
  * 断言看的是每个函数交回的东西是不是它说的那个样子、磁盘上是不是真改了，不钉具体文字。
  * 模版横跨能力单元与两个空间，所以测试放在仓库层。
  */
@@ -19,10 +20,12 @@ import type { ApprovalPort } from '@velaros-ai/agent/tool-contract'
 import type { CodeCapabilityPort, CodeGateReply, CodeSurfaceTimelinePort, MountedCapabilityModule } from '../../packages/code-surface/src/index'
 import { codeProgramChecker, CodeSurfaceErrorCodes, createCapabilityPort, createCodeProgramGate, nodeSubprocessCodeRunner } from '../../packages/code-surface/src/index'
 import { createProjectCodeQuery } from '../../packages/development/src/index'
-import { createProjectSpace, type ProjectCallContext, type ProjectHostPort } from '../../packages/project/src/index'
-import { solidPng } from '../../packages/system/spec/support'
-import { createLocalSystemKernel, createSystemSpace } from '../../packages/system/src/index'
+import { solidPng } from '../../packages/velar/images/spec/support'
+import type { ProjectHostPort } from '../../packages/velar/project/index'
 import { createProjectKernel, typescriptPlugin } from '../../packages/velar/project/index'
+import { createLocalSandboxHost } from '../../packages/velar/sandbox/local'
+import { createLocalShellHost } from '../../packages/velar/shell/local'
+import { projectSpace, systemSpace } from '../support/spaces'
 
 const RepoRoot = resolve(import.meta.dir, '../..')
 const canConfine = (process.platform === 'darwin' && existsSync('/usr/bin/sandbox-exec'))
@@ -154,14 +157,16 @@ describe('系统空间里的模版', () => {
     })
     gitRepo(join(root, 'repo'))
     await writeFile(join(root, 'repo/README.md'), 'hello, world\n')
-    const kernel = createLocalSystemKernel({ cwd: root })
-    const system = createSystemSpace({ host: kernel, resolveCall: (signal) => ({ abortSignal: signal ?? new AbortController().signal, approval, sessionId: 'templates' }) })
+    const shell = createLocalShellHost({ cwd: root })
+    const sandboxes = createLocalSandboxHost()
+    const system = systemSpace({ shell, sandbox: sandboxes, resolveCall: (signal) => ({ abortSignal: signal ?? new AbortController().signal, approval, sessionId: 'templates' }) })
     // 系统空间只记操作、不打标记：整个磁盘扫不了。
     const timeline = await realpath(await mkdtemp(join(tmpdir(), 'velar-templates-timeline-')))
     space = { modules: system.modules, port: createCapabilityPort(system.operations), timeline: { directory: timeline } }
     dispose = async () => {
-      for (const sandbox of kernel.listSandboxes()) await kernel.discardSandbox(sandbox.id)
-      await kernel.dispose()
+      for (const sandbox of sandboxes.listSandboxes()) await sandboxes.discardSandbox(sandbox.id)
+      await sandboxes.dispose()
+      await shell.dispose()
       await removeTemporary(timeline)
     }
   })
@@ -275,7 +280,7 @@ describe('项目空间里的模版', () => {
     })
     gitRepo(root)
     await writeFile(join(root, 'README.md'), 'demo, changed\n')
-    const commands = createLocalSystemKernel({ cwd: root })
+    const commands = createLocalShellHost({ cwd: root })
     const kernel = await createProjectKernel({ root, plugins: [typescriptPlugin()] })
     // 代码图谱没接：语言服务类查询走内置实现，图谱类的如实报 UNAVAILABLE。
     const queryCode = createProjectCodeQuery({ isAvailable: () => false, query: async () => ({}) })
@@ -288,8 +293,7 @@ describe('项目空间里的模版', () => {
       refreshShellEnvironment: () => commands.refreshShellEnvironment(),
       terminateBackgroundTask: (request) => commands.terminateBackgroundTask(request),
     }
-    const context: ProjectCallContext = { abortSignal: new AbortController().signal, project: host, approval, sessionId: 'templates' }
-    const project = createProjectSpace({ resolveCall: () => context })
+    const project = projectSpace({ resolveCall: () => ({ abortSignal: new AbortController().signal, project: host, approval, sessionId: 'templates' }) })
     // 项目空间给项目根打标记：模版里改文件的那几步，时间线记下改了哪些文件。
     const timeline = await realpath(await mkdtemp(join(tmpdir(), 'velar-templates-timeline-')))
     space = { modules: project.modules, port: createCapabilityPort(project.operations), timeline: { directory: timeline, workspace: root } }

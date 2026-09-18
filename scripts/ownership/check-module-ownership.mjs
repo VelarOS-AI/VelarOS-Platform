@@ -1149,7 +1149,8 @@ for (const module of selectedModules) {
   const calledPortMembers = new Set()
   const surfaceSourceFiles = surfaceFilePaths.filter((file) => program.getSourceFile(file))
   if (surfaceSourceFiles.length > 0) {
-    const portField = module.hostPortField ?? 'system'
+    const portField = module.hostPortField
+    if (module.hostPort && !portField) fail(`${label}: 登记了 hostPort ${module.hostPort}，就要写 hostPortField（操作经 ctx.<字段> 调端口的那个字段名）`)
     const visitCalls = (node) => {
       if (ts.isPropertyAccessExpression(node) && ts.isPropertyAccessExpression(node.expression) && node.expression.name.text === portField) {
         calledPortMembers.add(node.name.text)

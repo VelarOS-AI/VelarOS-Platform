@@ -1,7 +1,7 @@
 /**
  * 代码面 `shell` 命名空间的三个操作：`ShellOperations` 与整个进程唯一的 `shellOperations`。接口 `ShellOperationsApi` 在本文件的类上方。
  * 这里只做三件事：执行前分类、危险命令先问用户、把回执整成模型看的样子；工作目录由空间端口解析，
- * 进程由空间端口起——一个进程都不在这里起（本机是 `@velaros-ai/system` 的本地内核）。
+ * 进程由空间端口起——一个进程都不在这里起（本机实现是 `./local` 入口的本机宿主）。
  */
 
 import { isNull, isTrue } from '@velaros-ai/core'

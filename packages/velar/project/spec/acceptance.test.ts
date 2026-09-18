@@ -1,8 +1,9 @@
 /**
- * 两件项目工具（`velar:project`、`velar:code`）与项目内核的验收测试：每一条对应 spec/invariants.md 里的一个编号。
+ * 两件项目工具（`velar:project`、`velar:code`）、项目内核与项目给共用能力装的端口（`projectCapabilityPorts`）的验收测试：
+ * 每一条对应 spec/invariants.md 里的一个编号。
  * 改动或删除已有用例要在差量报告里点名并说明理由。这里只测对外承诺的行为，不测实现细节；实现细节的测试在 test/ 目录。
  * 一律经代码面的能力端口调（和模型的程序是同一条路），断言程序看得到的 code 与 message。
- * 项目空间的装配与三件共用能力的项目端口在 `@velaros-ai/project` 的验收里测。
+ * 共用能力（`velar:shell`、`velar:sandbox`、`velar:images`）用的是它们真实的操作，只有宿主是假的（INV-26～INV-29）。
  */
 
 import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
@@ -16,7 +17,7 @@ import { codeProgramChecker } from '@velaros-ai/code-surface'
 import { ProjectCodeLimits, ProjectFileLimits, ProjectPolicyDefaults, VelarCodeModule, VelarProjectModule } from '../contracts'
 import { ProjectExecutionGate } from '../impl/operations/ProjectExecutionGate'
 
-import { createProjectHarness, failureOf } from './support'
+import { commandResult, createProjectHarness, createProjectPortsHarness, failureOf, fakeSandboxHost, pngHeader } from './support'
 
 /** UTF-8 的 BOM。 */
 const Bom = String.fromCharCode(0xfeff)
@@ -332,5 +333,95 @@ describe('不问人，只排队', () => {
     releaseFirst()
     await Promise.all([firstRead, writer, lateRead, cancelled.catch(() => undefined)])
     expect(order).toEqual(['read-1 start', 'read-2', 'write', 'read-3'])
+  })
+})
+
+describe('共用能力的项目端口', () => {
+  test('INV-26 项目里的危险命令每次都由用户亲自确认；被拒一个进程都不起；别的命令（会改项目的、长驻的也一样）不问，直接跑，输出原样交回', async () => {
+    const denied = await createProjectPortsHarness(root, { approve: false })
+    expect((await failureOf(denied.call('shell', 'run', { command: 'rm -rf ./dist' }))).code).toBe('PERMISSION')
+    expect(denied.runs).toEqual([])
+    expect(denied.confirmations).toHaveLength(1)
+    expect(denied.confirmations[0]?.options).toMatchObject({ approvalRisk: 'high', requireManualApproval: true, rememberRiskScope: false, riskScope: 'project-command:dangerous' })
+    expect(denied.confirmations[0]?.message).toContain('当前项目')
+
+    // 用户点了头：宿主收到的是「已确认的危险命令」。
+    const approved = await createProjectPortsHarness(root)
+    await approved.call('shell', 'run', { command: 'rm -rf ./dist' })
+    expect(approved.runs.map(({ command, allowDangerous }) => ({ command, allowDangerous }))).toEqual([{ command: 'rm -rf ./dist', allowDangerous: true }])
+
+    // 会改项目的、长驻的都不问（审批端口会拒，也一次都没被叫到）；输出原样交回，像密钥的片段也不遮。
+    const secret = ['sk', 'live', '0123456789abcdefghijklmnopqrstuvwxyz'].join('-')
+    const quiet = await createProjectPortsHarness(root, {
+      approve: false,
+      runCommand: async (command, options) => commandResult(command, options?.cwd ?? root, { stdout: `key=${secret}` }),
+    })
+    for (const command of ['touch created.txt', 'npm run dev', 'ls']) expect((await quiet.call('shell', 'run', { command })).stdout).toBe(`key=${secret}`)
+    expect(quiet.confirmations).toEqual([])
+    expect(quiet.runs.map(({ command, options }) => [command, options?.background])).toEqual([['touch created.txt', false], ['npm run dev', true], ['ls', false]])
+  })
+
+  test('INV-27 命令的工作目录与沙箱的源目录按真实路径钳在项目之内：出了项目（含经符号链接指到外面）在问用户之前就拒绝，一个进程都不起、什么都不镜像', async () => {
+    const outside = await mkdtemp(join(tmpdir(), 'project-acceptance-outside-'))
+    await mkdir(join(root, 'src'))
+    await symlink(outside, join(root, 'escape'))
+    const sandbox = fakeSandboxHost(root)
+    try {
+      const harness = await createProjectPortsHarness(root, { sandbox: sandbox.host })
+      for (const where of ['..', outside, 'escape', 'escape/deeper']) {
+        const refused = await failureOf(harness.call('shell', 'run', { command: 'rm -rf build', cwd: where }))
+        expect({ where, code: refused.code }).toEqual({ where, code: 'PERMISSION' })
+        expect(refused.message).toContain('项目之内')
+        const mirrored = await failureOf(harness.call('sandbox', 'create', { source: where }))
+        expect({ where, code: mirrored.code }).toEqual({ where, code: 'PERMISSION' })
+      }
+      expect(harness.confirmations).toEqual([])
+      expect(harness.runs).toEqual([])
+      expect(sandbox.calls).toEqual([])
+      // 项目里的照常：工作目录与源目录交给宿主时是解析好的绝对路径。
+      await harness.call('shell', 'run', { command: 'ls', cwd: 'src' })
+      expect(harness.runs[0]?.options?.cwd).toBe(join(root, 'src'))
+      expect(await harness.call('sandbox', 'create', { source: 'src' })).toMatchObject({ source: join(root, 'src') })
+    } finally {
+      await rm(outside, { recursive: true, force: true })
+    }
+  })
+
+  test('INV-28 演练沙箱落回不问人、不按名单拦：点名的路径核过就把同一份差量的指纹交给宿主落回，点名了没变化的就拒绝；镜像里命令的输出原样交回', async () => {
+    const secret = ['sk', 'live', '0123456789abcdefghij'].join('-')
+    const sandbox = fakeSandboxHost(root, { stdout: `${secret}\n`, diff: { created: ['src/api.generated.ts'], modified: ['notes.txt', '.env'], deleted: ['deploy.key'], fingerprint: 'fp' } })
+    const { call, confirmations } = await createProjectPortsHarness(root, { sandbox: sandbox.host, approve: false })
+    const applied = await call('sandbox', 'apply', { id: 'sb' })
+    expect(applied).toMatchObject({ created: ['src/api.generated.ts'], modified: ['notes.txt', '.env'], deleted: ['deploy.key'] })
+    expect(sandbox.calls.at(-1)).toEqual({ apply: { sandboxId: 'sb', fingerprint: 'fp' } })
+    const unknown = await failureOf(call('sandbox', 'apply', { id: 'sb', paths: ['never-changed.txt'] }))
+    expect(unknown.code).toBe('VALIDATION')
+    expect(unknown.message).toContain('never-changed.txt')
+    expect(sandbox.calls.filter((entry) => 'apply' in entry)).toHaveLength(1)
+    expect((await call('sandbox', 'run', { id: 'sb', command: 'cat .env' })).stdout).toBe(`${secret}\n`)
+    // 审批端口会拒，却一次都没被叫到：落回与不危险的命令都不问人。
+    expect(confirmations).toEqual([])
+  })
+
+  test('INV-29 项目里看图只看项目里的图：出了项目（含经符号链接指到外面）的那一张 PERMISSION，项目里的都照常交给模型', async () => {
+    await writeFile(join(root, 'shot.png'), pngHeader(40, 30))
+    await writeFile(join(root, '.env.png'), pngHeader(10, 10))
+    const outside = await mkdtemp(join(tmpdir(), 'project-acceptance-image-'))
+    try {
+      await writeFile(join(outside, 'far.png'), pngHeader(10, 10))
+      await symlink(join(outside, 'far.png'), join(root, 'link.png'))
+      const { call, attachments } = await createProjectPortsHarness(root)
+      const seen = await call('images', 'view', { files: [{ path: 'shot.png' }, { path: '.env.png' }, { path: 'link.png' }] })
+      expect(seen.files).toMatchObject([
+        { path: 'shot.png', width: 40, height: 30 },
+        { path: '.env.png', width: 10 },
+        { path: 'link.png', error: { code: 'PERMISSION' } },
+      ])
+      expect(attachments).toHaveLength(2)
+      expect((await failureOf(call('images', 'view', { files: [{ path: join(outside, 'far.png') }] }))).code).toBe('PERMISSION')
+      expect(attachments).toHaveLength(2)
+    } finally {
+      await rm(outside, { recursive: true, force: true })
+    }
   })
 })

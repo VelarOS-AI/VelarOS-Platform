@@ -15,4 +15,15 @@ export const FileTuning = Object.freeze({
     /** 所有留着的原文加起来最多多少字节，超了从最早的那次改动丢起。 */
     totalBytes: 64 * 1024 * 1024,
   }),
+  /** 本机全局搜索：LocalFileSearch（宿主界面用，模型碰不到）。 */
+  search: Object.freeze({
+    /** 没给 limit 时最多返回多少条。 */
+    limit: 60,
+    /** 没给 maxDepth 时最多往下走几层目录。 */
+    maxDepth: 6,
+    /** 按内容搜时跳过大于这么多字节的文件。 */
+    fileBytes: 1024 * 1024,
+    /** 按内容搜没给 maxResultsPerFile 时每个文件最多几条。 */
+    resultsPerFile: 5,
+  }),
 })

@@ -1,5 +1,5 @@
 /**
- * 常量表：演练沙箱的公开上限。`velar:sandbox` 的声明与宿主的沙箱实现都引这里的数字。
+ * 常量表：演练沙箱的公开上限与本机沙箱（`./local` 入口）的专属错误码。`velar:sandbox` 的声明与宿主的沙箱实现都引这里的数字。
  * 不 import 任何东西，浏览器和渲染进程都能用（从 `@velaros-ai/velar/sandbox/contracts` 取）。
  */
 
@@ -25,3 +25,14 @@ export const RehearsalSandboxLimits = Object.freeze({
   /** 拒绝落回时报错里最多点名几条路径。 */
   reportedPaths: 10,
 })
+
+/**
+ * 落回失败的专属错误码：两种都是什么都没写，调用方按码分支，码本身是契约的一部分，不得改名。
+ * 没有约束后端建不出沙箱时报的是 shell 的 `SHELL_CONFINEMENT_UNAVAILABLE`（约束由跑命令的那一侧兑现）。
+ */
+export const SandboxErrorCodes = Object.freeze({
+  /** 源目录里的文件自建沙箱以来变过，或者上级路径是符号链接、会写到源目录外：message 列出每处冲突，完整清单在 context.conflicts。 */
+  conflict: 'SANDBOX_CONFLICT',
+  /** 镜像在落回前核对之后又变过（镜像里可能还有命令在跑）：重新 diff 再落。 */
+  changed: 'SANDBOX_CHANGED',
+} as const)

@@ -41,30 +41,6 @@
       "repositoryDirectory": "packages/development"
     },
     {
-      "domain": "capabilities",
-      "directory": "packages/project",
-      "name": "@velaros-ai/project",
-      "version": "3.0.0",
-      "description": "The project space for VelarOS hosts: the assembly that mounts velar:project and velar:code (the project tools and kernel from @velaros-ai/velar/project) together with velar:shell, velar:sandbox and velar:images on project ports — commands confined to the project root and its resource gate, sandboxes mirroring only project directories, pictures only from inside the project, and only dangerous commands asking the user — plus the verification policy handed to the agent's coding session.",
-      "exportSubpaths": [
-        ".",
-        "./contracts"
-      ],
-      "repositoryDirectory": "packages/project"
-    },
-    {
-      "domain": "capabilities",
-      "directory": "packages/system",
-      "name": "@velaros-ai/system",
-      "version": "1.2.0",
-      "description": "The system space for VelarOS hosts: the local kernel (commands, background tasks and interactive consoles, rehearsal sandboxes, process and port inspection, global search) and the system-space assembly that serves velar:files, velar:shell and velar:sandbox with machine-wide scope.",
-      "exportSubpaths": [
-        ".",
-        "./contracts"
-      ],
-      "repositoryDirectory": "packages/system"
-    },
-    {
       "domain": "core",
       "directory": "packages/core",
       "name": "@velaros-ai/core",
@@ -158,7 +134,7 @@
       "directory": "packages/velar",
       "name": "@velaros-ai/velar",
       "version": "0.2.0",
-      "description": "The capability units the model imports as velar:* modules and every space mounts with its own port: files (machine files, system space), images (view pictures within provider limits), shell (run commands), sandbox (rehearse in a mirror, then apply), project (governed project files and code questions: velar:project and velar:code, with the project kernel and its transactions underneath; the project space that mounts them is @velaros-ai/project), computer (desktop control: screenshots, pointer, keyboard, with the helper sidecar runtime underneath), memory (long-term memory: one directory of Markdown files per host-given scope, plus the index a host puts at the start of each session), office (Word, PowerPoint and Excel generation, PDF reading and editing, Word and LaTeX to PDF, document preview and Markdown conversion, with the document engines underneath and the narrow renderer primitives the Document Renderer uses) and browser (velar:browser to drive and read pages, velar:devtools for console, network, storage, performance, recording, emulation and user scripts, with the CDP drivers, page engines, Electron session runtime and site workspace underneath). One plain directory per unit, one convention for all.",
+      "description": "The capability units the model imports as velar:* modules and every space mounts with its own port (products assemble the spaces; each unit's ./local entry gives its port on this machine): files (machine files, system space; with the machine file port and a global search for host UIs underneath), images (view pictures within provider limits; with the machine image port, sips on macOS), shell (run commands; with the local machine host underneath: background tasks, interactive consoles, shell selection, process confinement, the Windows process host, and the processes, ports and metrics a host UI shows), sandbox (rehearse in a mirror, then apply; with the local rehearsal sandbox underneath), project (governed project files and code questions: velar:project and velar:code, with the project kernel and its transactions underneath, and the ports a project hands to shell, sandbox and images), computer (desktop control: screenshots, pointer, keyboard, with the helper sidecar runtime underneath), memory (long-term memory: one directory of Markdown files per host-given scope, plus the index a host puts at the start of each session), office (Word, PowerPoint and Excel generation, PDF reading and editing, Word and LaTeX to PDF, document preview and Markdown conversion, with the document engines underneath and the narrow renderer primitives the Document Renderer uses) and browser (velar:browser to drive and read pages, velar:devtools for console, network, storage, performance, recording, emulation and user scripts, with the CDP drivers, page engines, Electron session runtime and site workspace underneath). One plain directory per unit, one convention for all.",
       "exportSubpaths": [
         "./browser",
         "./browser/contracts",
@@ -168,8 +144,10 @@
         "./computer/contracts",
         "./files",
         "./files/contracts",
+        "./files/local",
         "./images",
         "./images/contracts",
+        "./images/local",
         "./memory",
         "./memory/contracts",
         "./office",
@@ -179,8 +157,10 @@
         "./project/contracts",
         "./sandbox",
         "./sandbox/contracts",
+        "./sandbox/local",
         "./shell",
-        "./shell/contracts"
+        "./shell/contracts",
+        "./shell/local"
       ],
       "repositoryDirectory": "packages/velar"
     },

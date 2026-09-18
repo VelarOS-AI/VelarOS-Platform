@@ -13,18 +13,18 @@
 `createKernel()`（根入口 `@velaros-ai/kernel`）。
 
 ```ts
-import { createProjectKernelModule } from '@velaros-ai/project'
 import { bootKernelDaemon } from '@velaros-ai/kernel/serve'
 
-const projectModule = createProjectKernelModule({ resolveContext })
+// 按内核模块 SDK 写的一个模块：manifest 声明它的版本和它提供哪些令牌。
+import { exampleModule } from './example-module.js'
 
 const booted = await bootKernelDaemon({
   kernelVersion,
   bundledPacks: [{
-    id: 'velaros.project',
-    version: projectModule.manifest.version,
-    provides: projectModule.manifest.provides.map((token) => token.id),
-    module: projectModule,
+    id: 'example.module',
+    version: exampleModule.manifest.version,
+    provides: exampleModule.manifest.provides.map((token) => token.id),
+    module: exampleModule,
   }],
 })
 

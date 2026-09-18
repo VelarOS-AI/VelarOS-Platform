@@ -26,7 +26,7 @@
 //   environmentPrefixes 除 VELAROS_ 外还要扫的环境变量前缀（读别人定义、改不了的名字时才填）：只扩大扫描面，不是豁免，
 //                       登记的名字照样要有人用、代码里的名字照样要先登记；新起的变量名一律 VELAROS_
 //   hostPort            注入面里的端口接口名；端口只放真会被调的方法，门禁从模型面入口（surfaceFile，没有就是 toolsFile）出发沿 import 核对
-//   hostPortField       调端口时的字段名（ctx.<字段>.方法 或 this.<字段>.方法），缺省 system
+//   hostPortField       调端口时的字段名（ctx.<字段>.方法 或 this.<字段>.方法）；登记了 hostPort 就必须写
 //   surfaceFile         模型面入口（相对包根）：代码面能力的操作类，或空间的装配表；端口可达性从这里出发。一个单元出几件能力、各有操作类时写成数组
 //   assets              单元里随包发布的非 TypeScript 资产目录（只有能力单元填，写单元目录下的目录名）：比如 helper 脚本。门禁不扫里面的文件，
 //                       但它必须真在、并且写进包清单的 files（`<单元>/<目录>`），不然装出来的包里没有它
@@ -73,62 +73,6 @@ export const GovernedModules = [
     acceptance: 'spec/acceptance.test.ts',
   },
   {
-    directory: 'system',
-    name: '@velaros-ai/system',
-    contract: 'src/contract',
-    types: 'src/types',
-    portable: 'system.ts',
-    impl: 'src/impl',
-    utils: 'src/utils',
-    // 包内可调参数：超时、缓冲、保留条数、缺省条数、阈值，一处改全包生效
-    tuning: 'tuning.ts',
-    browserSafeEntries: ['contracts.ts'],
-    // 可移植数据文件里的环境变量表：代码里出现的每个 VELAROS_* 名字都要登记在这里
-    environmentTable: 'SystemEnvironmentVariables',
-    // 系统空间的宿主：装配表经 this.host 调它；它自己声明的每个方法都必须有人调
-    hostPort: 'SystemSpaceHost',
-    hostPortField: 'host',
-    surfaceFile: 'src/impl/SystemSpace.ts',
-    // 实现文件的分层，从上到下；上层可以引下层与同层，下层不许引上层
-    layers: [
-      // 系统空间：四件能力配上本机端口的那张装配表
-      ['SystemSpace.ts'],
-      // 宿主：系统空间要的本机能力的实现
-      ['LocalSystemKernel.ts'],
-      // 本机能力：命令、受管子进程、shell、演练沙箱、搜索
-      [
-        'SystemCommandRunner.ts', 'SystemSandboxes.ts', 'SystemShellResolver.ts', 'SystemProcessManager.ts', 'SystemManagedProcess.ts',
-        'SystemOutputDecoder.ts', 'SystemGlobalSearch.ts',
-      ],
-      // shell 错误类
-      ['SystemShellUnavailableError.ts'],
-    ],
-    card: 'MODULE.md',
-    invariants: 'spec/invariants.md',
-    acceptance: 'spec/acceptance.test.ts',
-  },
-  {
-    directory: 'project',
-    name: '@velaros-ai/project',
-    contract: 'src/contract',
-    types: 'src/types',
-    // 项目空间没有自己的可移植数据：不登记 portable，./contracts 只转发常量表
-    impl: 'src/impl',
-    utils: 'src/utils',
-    browserSafeEntries: ['contracts.ts'],
-    // 项目空间的宿主端口：给共用能力装的项目端口经 ctx.project 调它（两件项目工具要的那几个在它继承的 ProjectSpacePort 上）；每个方法都必须有端口在调
-    hostPort: 'ProjectHostPort',
-    hostPortField: 'project',
-    surfaceFile: 'src/impl/ProjectSpace.ts',
-    layers: [
-      // 项目空间的装配表，与交给 agent 编码会话的验证判据，互不依赖
-      ['ProjectSpace.ts', 'ProjectVerificationPolicy.ts'],
-    ],
-    card: 'MODULE.md',
-    invariants: 'spec/invariants.md',
-    acceptance: 'spec/acceptance.test.ts',
-  },
-  {
     directory: 'platform',
     name: '@velaros-ai/platform',
     // 没有工具：不登记 toolsFile、toolDefiner、hostPort
@@ -165,8 +109,8 @@ export const GovernedModules = [
     hostPortField: 'files',
     surfaceFile: 'files/impl/FileOperations.ts',
     layers: [
-      // 代码面 files 命名空间的三个操作
-      ['FileOperations.ts'],
+      // 代码面 files 命名空间的三个操作，与本机实现（本机文件端口、给宿主界面的全局搜索），互不依赖
+      ['FileOperations.ts', 'LocalFilePort.ts', 'LocalFileSearch.ts'],
       // 留着能撤回的改动
       ['FileChanges.ts'],
     ],
@@ -191,8 +135,8 @@ export const GovernedModules = [
     hostPortField: 'images',
     surfaceFile: 'images/impl/ImageOperations.ts',
     layers: [
-      // 代码面 images 命名空间的 view
-      ['ImageOperations.ts'],
+      // 代码面 images 命名空间的 view，与本机看图端口，互不依赖
+      ['ImageOperations.ts', 'LocalImagePort.ts'],
     ],
     card: 'images/MODULE.md',
     invariants: 'images/spec/invariants.md',
@@ -207,14 +151,21 @@ export const GovernedModules = [
     portable: 'shell-command.ts',
     impl: 'shell/impl',
     utils: 'shell/utils',
+    // 本机宿主可调的超时、缓冲、保留条数、指标阈值，一处改全单元生效
+    tuning: 'tuning.ts',
+    // 根入口与可移植数据渲染进程都能加载：本机实现只从根入口导出类型，值在只给 Node 的 local 入口
     browserSafeEntries: ['index.ts', 'contracts.ts'],
+    // 本机宿主读写的环境变量：代码里出现的每个 VELAROS_* 名字都要登记在这里
+    environmentTable: 'ShellEnvironmentVariables',
     // 空间端口：velar:shell 的操作经 ctx.shell 调它；每个方法都必须有操作在调
     hostPort: 'ShellSpacePort',
     hostPortField: 'shell',
     surfaceFile: 'shell/impl/ShellOperations.ts',
+    // Windows 原生进程宿主（C++ 源码与构建脚本，构建产物放 native/win32-<架构>/）
+    assets: ['native'],
     layers: [
-      // 代码面 shell 命名空间的三个操作
-      ['ShellOperations.ts'],
+      // 代码面 shell 命名空间的操作，与本机实现（本机宿主、受约束执行器、命令执行器、shell 选择、受管子进程），互不依赖
+      ['ShellOperations.ts', 'local/'],
       // 命令策略与审批请求互不依赖，上面那一层与演练沙箱共用
       ['ShellCommandPolicy.ts', 'ShellCommandApproval.ts'],
     ],
@@ -231,14 +182,16 @@ export const GovernedModules = [
     portable: 'rehearsal-sandbox.ts',
     impl: 'sandbox/impl',
     utils: 'sandbox/utils',
+    tuning: 'tuning.ts',
+    // 根入口与可移植数据渲染进程都能加载：本机沙箱只从根入口导出类型，值在只给 Node 的 local 入口
     browserSafeEntries: ['index.ts', 'contracts.ts'],
     // 空间端口：velar:sandbox 的操作经 ctx.sandbox 调它；每个方法都必须有操作在调
     hostPort: 'SandboxSurfacePort',
     hostPortField: 'sandbox',
     surfaceFile: 'sandbox/impl/SandboxOperations.ts',
     layers: [
-      // 代码面 sandbox 命名空间的五个操作：解析作用域、调宿主端口、整形回执
-      ['SandboxOperations.ts'],
+      // 代码面 sandbox 命名空间的五个操作（解析作用域、调宿主端口、整形回执），与本机演练沙箱，互不依赖
+      ['SandboxOperations.ts', 'LocalSandboxHost.ts'],
       // 落回前的核对、镜像里危险命令的确认请求
       ['RehearsalSandboxRules.ts'],
     ],
@@ -248,7 +201,7 @@ export const GovernedModules = [
   },
   {
     // 能力单元：项目受治理的文件（velar:project）与问代码（velar:code），连同它们底下的项目内核。问代码要用内核的符号表与读取，
-    // 离不开这个内核，所以两件放在同一个单元里；把它们与共用能力装配成项目空间的是 @velaros-ai/project
+    // 离不开这个内核，所以两件放在同一个单元里；项目给共用能力装的端口也在这里，把它们装成项目空间是产品的事
     directory: 'velar',
     unit: 'project',
     name: '@velaros-ai/velar/project',
@@ -264,7 +217,7 @@ export const GovernedModules = [
     hostPortField: 'project',
     surfaceFile: ['project/impl/operations/ProjectFileOperations.ts', 'project/impl/operations/ProjectCodeOperations.ts'],
     layers: [
-      // velar:project、velar:code 的操作与项目资源门
+      // velar:project、velar:code 的操作，项目资源门，项目给共用能力装的端口与验证判据
       ['operations/'],
       // 项目内核
       ['kernel/'],

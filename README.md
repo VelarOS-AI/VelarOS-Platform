@@ -24,7 +24,7 @@ packages declare a shared `velaros.platform` generation for cross-package compat
 | Shared primitives | `@velaros-ai/core`, `@velaros-ai/platform` |
 | Shared capability foundations | `@velaros-ai/code-surface`, `@velaros-ai/velar`, `@velaros-ai/text-files`, `@velaros-ai/path-rules`, `@velaros-ai/tool-contract` |
 | Model providers | `@velaros-ai/model` |
-| Capabilities | `@velaros-ai/cli`, `@velaros-ai/development`, `@velaros-ai/project`, `@velaros-ai/system` |
+| Capabilities | `@velaros-ai/cli`, `@velaros-ai/development` |
 | UI | `@velaros-ai/ui` |
 | HTML artifacts | `@velaros-ai/html-artifacts` |
 | Surface protocol | `@velaros-ai/surface-protocol` |

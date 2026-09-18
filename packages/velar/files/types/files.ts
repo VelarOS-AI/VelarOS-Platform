@@ -1,5 +1,6 @@
 /**
- * 可移植数据：`velar:files` 的入参与写、撤回的结果（读的结果带文本编码，在 `text.ts`），以及空间端口定位出来的路径。
+ * 可移植数据：`velar:files` 的入参与写、撤回的结果（读的结果带文本编码，在 `text.ts`），空间端口定位出来的路径，
+ * 以及本机全局搜索（给宿主界面用）的输入与输出。
  * 只从常量表 import type，不带函数、不用 Node 类型，浏览器和渲染进程都能用；从 `@velaros-ai/velar/files/contracts` 取。
  */
 
@@ -125,4 +126,63 @@ export interface FileLocation {
   target: string
   /** path 经过了符号链接（target 与字面路径不同）：回执里把 target 也交出去。 */
   linked: boolean
+}
+
+// ── 本机全局搜索（`@velaros-ai/velar/files/local` 的 LocalFileSearch，给宿主界面用；模型列目录、搜文本用命令） ──
+
+/** 搜索命中的一个文件系统条目。 */
+export interface FileSearchEntry {
+  path: string
+  type: 'file' | 'directory'
+}
+
+/** 内容搜索命中的一行：定位到文件、行、列，并附一段摘录。 */
+export interface FileSearchMatch {
+  path: string
+  line: number
+  column: number
+  excerpt: string
+}
+
+/** 搜索模式：`paths` 按路径名找条目，`content` 在文件内容里找文本。 */
+export type FileSearchMode = 'paths' | 'content'
+
+/** 路径模式下的匹配方式：包含、精确、模糊。 */
+export type FileSearchPathMatchMode = 'contains' | 'exact' | 'fuzzy'
+
+/**
+ * 系统范围搜索的输入。
+ *
+ * 未给出的字段一律由实现取默认值：默认根目录、默认条数上限、默认深度上限。
+ * `unrestricted` 只表达调用方的意愿，实现仍会跳过受系统保护的目录（见不变量登记）。
+ */
+export interface FileSearchOptions {
+  query: string
+  mode?: FileSearchMode
+  rootPath?: string
+  limit?: number
+  maxDepth?: number
+  entryTypes?: Array<FileSearchEntry['type']>
+  pathMatchMode?: FileSearchPathMatchMode
+  extensions?: string[]
+  caseSensitive?: boolean
+  regex?: boolean
+  maxResultsPerFile?: number
+  includeHidden?: boolean
+  unrestricted?: boolean
+}
+
+/**
+ * 系统范围搜索的输出。
+ *
+ * `count` 是本次返回的条数；`truncated` 为 true 表示还有结果没有返回，而不是搜索失败。
+ * 路径模式填 `entries`，内容模式填 `matches`，两者不会同时出现。
+ */
+export interface FileSearchResult {
+  mode: FileSearchMode
+  rootPath: string
+  count: number
+  truncated: boolean
+  entries?: FileSearchEntry[]
+  matches?: FileSearchMatch[]
 }

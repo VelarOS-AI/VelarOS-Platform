@@ -41,8 +41,6 @@
       ],
       "capabilities": [
         "cli",
-        "system",
-        "project",
         "development"
       ],
       "ui": [
@@ -184,9 +182,7 @@
     "@velaros-ai/model": "workspace:*",
     "@velaros-ai/platform": "workspace:*",
     "@velaros-ai/surface-protocol": "workspace:*",
-    "@velaros-ai/system": "workspace:*",
-    "@velaros-ai/ui": "workspace:*",
-    "@velaros-ai/project": "workspace:*"
+    "@velaros-ai/ui": "workspace:*"
   },
   "repository": {
     "type": "git",

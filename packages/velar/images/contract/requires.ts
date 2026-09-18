@@ -1,8 +1,10 @@
 /**
- * 注入面：`velar:images` 要空间塞进来的东西。本包只从这些口子接收外部能力，别处不留钩子。
+ * 注入面：`velar:images` 要空间塞进来的东西，以及本机实现（`./local` 入口）要宿主给的配置。本单元只从这些口子接收外部能力，别处不留钩子。
  *
  * - 空间端口 `ImageSpacePort`：每个挂 `velar:images` 的空间给一份——路径能到哪儿、许不许看、由谁来裁图缩图，都由它说了算。
+ *   本机实现是 `createLocalImagePort`（本机任意位置，macOS 上用 sips 缩图）。
  * - 调用上下文 `ImageOperationContext`：宿主分发每一次调用时装好。
+ * - 本机看图端口的配置 `LocalImagePortOptions`。
  *
  * 这里的每个接口都必须从根入口导出。
  */
@@ -11,7 +13,7 @@ import type { ImageAttachment, ImageLocation, ImageResizeRequest, ImageResizeRes
 
 /**
  * `velar:images` 的空间端口：作用域与缩图两件事。空间之间的差别全落在这里，模型那边因此只有一套说明：
- * 系统空间的路径是本机任意位置，项目空间的钳在项目内、还要过项目的读取策略。
+ * 系统空间的路径是本机任意位置，项目空间的钳在项目内。
  */
 export interface ImageSpacePort {
   /**
@@ -31,4 +33,12 @@ export interface ImageOperationContext {
   images: ImageSpacePort
   /** 把一张图交给模型看：宿主收着，在这次结果后面按顺序放出来。没有这个通道时 view 用不了。 */
   attachImage?: (image: ImageAttachment) => void
+}
+
+/** 本机看图端口的配置：路径怎么解析由宿主定。 */
+export interface LocalImagePortOptions {
+  /** 把模型给的路径解析成绝对路径（系统空间：`~` 展开到家目录、相对路径相对工作目录）；端口再解开符号链接，读真正的目标。 */
+  resolvePath: (path: string) => string
+  /** 按哪个平台决定给不给缩图口子（只有 macOS 自带 sips）；缺省是当前进程的平台。 */
+  platform?: NodeJS.Platform
 }

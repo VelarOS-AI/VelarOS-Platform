@@ -1,7 +1,7 @@
 /**
  * 验收测试与实现测试共用的假对象：一个落在真磁盘上的看图空间（定位、缩图、交图都记下来）、一个像 sips 那样的假缩放器、
- * 造四种图片头的小工具、跑一段模型程序的代码面会话，以及只删自己建的临时目录的清理。
- * 放在 spec 下，因为验收测试依赖它们；实现测试也从这里取，不再各抄一份。
+ * 造四种图片头的小工具、一张真能交给 sips 解码的纯色 PNG、跑一段模型程序的代码面会话，以及只删自己建的临时目录的清理。
+ * 放在 spec 下，因为验收测试依赖它们；实现测试（仓库层的能力模版测试也算）从这里取，不再各抄一份。
  */
 
 import { readFileSync } from 'node:fs'
@@ -187,6 +187,22 @@ export function pngImage(width: number, height: number, options: { bytes?: numbe
     chunks.push(pngChunk('vpAd', Buffer.alloc(padding)))
   }
   return Buffer.concat([PngSignature, ...chunks, end])
+}
+
+/**
+ * 造一张真能解码的纯色 PNG：8 位 RGB，左半红、右半蓝，裁剪后看颜色就知道裁的是哪一边。
+ * 交给真的缩放器（macOS 的 sips）用；只核对头的测试用更小的 `pngImage`。
+ */
+export function solidPng(width: number, height: number): Buffer {
+  const header = Buffer.alloc(13)
+  header.writeUInt32BE(width, 0)
+  header.writeUInt32BE(height, 4)
+  header.writeUInt8(8, 8)
+  header.writeUInt8(2, 9)
+  const row = Buffer.alloc(1 + width * 3)
+  for (let x = 0; x < width; x += 1) row.set(x < width / 2 ? [255, 0, 0] : [0, 0, 255], 1 + x * 3)
+  const pixels = Buffer.concat(Array.from({ length: height }, () => row))
+  return Buffer.concat([PngSignature, pngChunk('IHDR', header), pngChunk('IDAT', deflateSync(pixels)), pngChunk('IEND', Buffer.alloc(0))])
 }
 
 /** 一段 JPEG 段：0xFF、标记、两字节段长（算上段长自己），再接内容。 */

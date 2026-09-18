@@ -1,7 +1,7 @@
 /**
  * 代码面 `sandbox` 命名空间的五个操作：`SandboxOperations` 与整个进程唯一的 `sandboxOperations`。接口 `SandboxOperationsApi` 在本文件的类上方。
  * 这里只做几件事：把模型给的作用域交给宿主端口解析、要问人的先问（落回、镜像里的危险命令）、调端口、把回执整成模型看的样子——一个文件系统调用都不发，
- * 建镜像、跑命令、算差量、落回全在宿主那一侧（本机是 `@velaros-ai/system` 的本地内核）。
+ * 建镜像、跑命令、算差量、落回全在宿主那一侧（本机实现是 `./local` 入口的本机演练沙箱）。
  */
 
 import { isArray, isEmpty, isString } from '@velaros-ai/core'

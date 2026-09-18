@@ -16,8 +16,10 @@
 - **`velar:code`**：问代码之间的关系（定义、引用、调用、依赖、影响面、诊断），查询交给宿主的语言服务与代码图谱；它要用内核的符号表与读取核对目标，所以和 `velar:project` 住在同一个单元。
 - **项目内核**：校验器、带版本防护的事务、撤销账本、变更记录——路径只受根内约束，没有读写名单、不脱敏、不问人（ADR 0009）。宿主按项目根建一个，经空间端口交给两件工具。
 
-两件工具不认识任何空间：项目根、内核、代码查询都从空间端口 `ProjectSpacePort` 要。把它们与共用的命令、沙箱、看图装配在一起、给那三件装项目端口的，
-是项目空间 `@velaros-ai/project`。项目资源门（同一项目根上写串行、读并发）在这里，空间里的前台命令也排进同一扇门。
+两件工具不认识任何空间：项目根、内核、代码查询都从空间端口 `ProjectSpacePort` 要。项目给共用的命令、沙箱、看图装的端口也在这里
+（`projectCapabilityPorts`：命令的工作目录钳在项目内、前台命令排进项目资源门；沙箱只镜像项目内的目录；看图只看项目里的图），
+还有交给 agent 编码会话的验证判据 `projectVerificationPolicy`。把这些装成项目空间是产品的事（ADR 0013）。
+项目资源门（同一项目根上写串行、读并发）在这里，项目里的前台命令也排进同一扇门。
 本机文件（`velar:files`，系统空间）与这里的项目文件是两件能力：项目的读取治理、事务与校验器是项目的规则，不往系统空间套。
 
 ## 提供什么
@@ -30,6 +32,8 @@
 | --- | --- | --- |
 | `projectFileOperations` | `ProjectFileOperationsApi` | `velar:project` 的六个操作：read、list、search、edit、inspect、undo |
 | `projectCodeOperations` | `ProjectCodeOperationsApi` | `velar:code` 的两个操作：query、analyze |
+| `projectCapabilityPorts` | `ProjectCapabilityPortsApi` | 项目给共用能力装的端口：`shell(宿主端口, 取消信号)`、`sandbox(…)`、`images(宿主端口)`，每次调用按这一次的宿主端口现装 |
+| `projectVerificationPolicy` | `ProjectVerificationPolicyApi` | 「改到这个文件之后要不要再跑一次验证」的判据，宿主交给 agent 的编码会话（`CodingSessionPolicy.isVerificationRelevantPath`） |
 | `projectExecutionGate` | `ProjectExecutionGateApi` | 项目资源门：按项目根排队，读之间共享、写独占、排队的写者不被后来的读者饿死；两件工具与项目空间里的前台命令共用这一扇 |
 | `createProjectKernel` | `ProjectKernel` | 领域内核：读写、事务、校验、撤销、代码查询 |
 | `createProjectTransactionController` | `ProjectTransactionControllerApi` | 给界面那一侧的有限事务面（`ProjectChangeFeed` 加应用、回滚） |
@@ -43,6 +47,7 @@
 | 注入点 | 必须 | 谁给、什么时候 |
 | --- | --- | --- |
 | `ProjectOperationContext` / `ProjectSpacePort` | 是 | 空间每次分发调用时给：取消信号、会话，以及空间端口——项目根、领域内核端口 `AgentProjectKernelPort`、代码查询 `queryCode`。项目空间的宿主端口在它之上再加命令、沙箱与缩图，那是给共用能力用的 |
+| `ProjectHostPort` | 装共用能力的项目端口时 | 产品每次分发共用能力的调用时给：`ProjectSpacePort` 那三件，加上跑命令与管后台任务的四件（`velar:shell` 的 `ShellHostPort`，本机实现是 `@velaros-ai/velar/shell/local`）、可选的演练沙箱（`RehearsalSandboxHostPort`）与缩图 |
 | `CreateProjectKernelOptions` / `ProjectProviders` | 是 | 建内核时给：项目根、策略覆盖、事务状态文件、变更记录写端 `ProjectChangeFeedWriter`，以及可选的列举过滤、证据包、日志、命令、遥测、代码智能后端（`FileFilterProvider`、`ContextProvider`、`LoggerProvider`、`CommandProvider`、`TelemetryProvider`、`ProjectCodeIntelligenceHost`） |
 | `ProjectPlugin` / `ProjectPluginContext` | 否 | 插件扩展点：`FileAdapter`、`FileAdapterFactory`、`PatchStrategy`、`ProjectValidator`、`ProjectFixer`、`ProjectHook`、`PipelineStage` |
 
@@ -63,7 +68,7 @@
 
 ## 骨干链路
 
-项目空间的操作表每次调用都交来一份这一次的上下文（`ProjectOperationContext`），两个操作类按它办：
+产品装的项目空间每次调用都交来一份这一次的上下文（`ProjectOperationContext`），两个操作类按它办：
 
 | 能力 | 链路 |
 | --- | --- |
@@ -71,6 +76,7 @@
 | `project.list`、`project.search` | 资源门读锁 → 内核列举（跳过版本库内部，gitignore 与策略过滤，全部条目，超过内存上限整个失败）/ 搜索（有 ripgrep 用 ripgrep，没有逐文件扫；全部命中，没收全整个失败）→ 每个命中的文件整份读一次，命中所在的行合成一个可编辑的源码窗口 |
 | `project.edit` | 资源门写锁 → 步骤里的路径钳在项目内 → 编辑规划：按 fileRef 取回读取时的版本与可见范围，编成内核的编辑意图（范围越界、定位不唯一在这里拒绝，版本过期时按原意图找新位置）→ 内核准备事务（补丁、差量、风险，不碰磁盘）→ 应用（校验、按版本核对、全成或全逆序还原）→ 回执带每个改过的文件的新窗口（新 fileRef）、完整差量与 changeRef |
 | `project.inspect`、`project.undo` | changeRef 取回事务 → inspect 给完整差量；undo 在写锁里交内核回滚（外部改过拒绝覆盖，撤过的幂等成功） |
+| 共用能力的项目端口 | `projectCapabilityPorts.shell`：`resolveCwd` 按真实路径钳在项目内（出了项目在问用户之前就拒绝）→ `commandPolicy` 说「当前项目」、风险分类 `project-command:dangerous` → `runCommand` 前台命令进资源门（只读走读门，其余走写门）、后台命令直接交宿主。`sandbox`：`resolveSource` 钳在项目内，其余交宿主的沙箱，没有就 `UNAVAILABLE`。`images`：路径钳在项目内、换成相对项目根的写法，经内核的 `stat` 取真实路径（内核的拒绝按原因码翻成通用码） |
 | `code.query`、`code.analyze` | 资源门读锁 → 入参核对（intent、目标、范围）→ 翻译成宿主代码查询（语言服务类由宿主语言服务执行，条数上限只为守内存；代码索引类由代码图谱执行）→ 结果原样附来源、覆盖与降级信息，不再截 |
 
 失败一律交给 `projectFailure`：代码面只把 `error.code` 与 `error.message` 交给程序，所以原因码当错误码，details 里的位置（第几步第几处）、候选、诊断、改完之后的预览与下一步都写进 message。
@@ -82,6 +88,7 @@
 - `@velaros-ai/platform`：路径文本的包含判定与本平台的大小写规矩。
 - `@velaros-ai/text-files`：磁盘文本的编码识别、严格解码、按原编码无损写回（GB18030 下保留没改片段的原字节）、原子替换写入、有界读与流式读；它的失败在 `utils/errors.ts` 的 `projectErrorFromTextFile` 一处按错误码翻成 `ProjectError`。
 - `typescript`（JS/TS 解析）、`diff`（差量）、`execa`（子进程）。
+- 同包的单元：`@velaros-ai/velar/shell`（命令判定，决定前台命令走读门还是写门；执行端口的形状）、`@velaros-ai/velar/sandbox` 与 `@velaros-ai/velar/images`（端口形状），经它们的根入口引用。
 - 不读环境变量。
 
 ## 状态归谁
@@ -104,13 +111,13 @@
 
 ## 不变量
 
-共 21 条，登记在 `spec/invariants.md`，验收用例在 `spec/acceptance.test.ts`。编号只增不重排（INV-15 作废；INV-7、INV-16、INV-21 随项目空间搬去 `@velaros-ai/project`，编号都不复用）。
-按检验方式：测试 19 条、类型 1 条、门禁 1 条。未验证 0 条。
+共 25 条，登记在 `spec/invariants.md`，验收用例在 `spec/acceptance.test.ts`。编号只增不重排：INV-15 作废；INV-7、INV-16、INV-21 当初随项目空间搬去 `@velaros-ai/project`，那个包拆掉之后（ADR 0013），项目给共用能力装端口的承诺以 INV-26～INV-29 回到这里，旧编号都不复用。
+按检验方式：测试 23 条、类型 1 条、门禁 1 条。未验证 0 条。
 
 ## 非目标
 
 - 不管项目以外的文件和系统级操作：那是系统空间（`velar:files`）；两件工具出不了项目根。
-- 不装配空间、不给共用能力装端口：那是 `@velaros-ai/project`。
+- 不装空间：项目空间挂哪几件、哪几件常驻，是产品的事（ADR 0013）；这里只给端口。
 - 不做 Git 界面、项目根管理、文件树可见性这些产品功能：它们归产品壳。
 - 不自己跑语言服务和代码图谱：`velar:code` 把查询交给宿主的语言服务与代码图谱后端。
 - 不做「当前文件视图」这类自动进上下文的东西：代码面里只有程序的返回值与显式输出进上下文。
@@ -122,11 +129,11 @@ project/
   contract/     对外合同：provides.ts（产品面，登记类上方接口）、requires.ts（注入面）、constants.ts（常量表）；surface.ts 是生成的模型面（随包发布的声明）
   types/        只放类型，按域分文件；project.ts 是可移植数据，files.ts、code.ts 是两件工具的模型面
   impl/         一类一文件，按层分子目录（上层可以引下层）：
-    operations/        velar:project 与 velar:code 的操作类、项目资源门
+    operations/        velar:project 与 velar:code 的操作类、项目资源门、项目给共用能力装的端口、验证判据
     kernel/            领域内核 LocalProjectKernel，有限事务面，命令后端
     plugins/           核心插件、TypeScript 插件与它们的校验器
     transactions/ files/ strategies/ adapters/ registries/ persistence/   事务、文件访问、补丁策略、文件适配器、登记表、持久化
-  utils/        纯函数与可调参数（tuning.ts）；agent/（两件工具的适配层）、editing/（编辑规划）、files/（文件读写）、kernel/、transactions/ 按域分子目录
+  utils/        纯函数与可调参数（tuning.ts）；capability-ports.ts（项目端口的路径判定与拒绝翻译）、verification-paths.ts（验证判据的名单）；agent/（两件工具的适配层）、editing/（编辑规划）、files/（文件读写）、kernel/、transactions/ 按域分子目录
   template.js       velar:project 的代码模版
   code-template.js  velar:code 的代码模版
   index.ts      `./project` 入口，只转发
@@ -139,7 +146,7 @@ project/
 
 | 层 | 实现文件 | 接口 |
 | --- | --- | --- |
-| operations | `ProjectFileOperations`、`ProjectCodeOperations`、`ProjectExecutionGate` | 同名加 `Api`，写在各自类上方（provides 登记） |
+| operations | `ProjectFileOperations`、`ProjectCodeOperations`、`ProjectExecutionGate`、`ProjectCapabilityPorts`、`ProjectVerificationPolicy` | 同名加 `Api`，写在各自类上方（provides 登记） |
 | kernel | `LocalProjectKernel` | `ProjectKernel`（provides 登记）、`ProjectPluginContext`（requires）、`LocalProjectKernelStartup` |
 | kernel | `ProjectTransactionController` | `ProjectTransactionControllerApi`（provides 登记） |
 | kernel | `NodeCommandProvider` | `CommandProvider`（requires） |

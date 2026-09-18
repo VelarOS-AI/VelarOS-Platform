@@ -1,5 +1,5 @@
 /**
- * 验收测试与实现测试共用的假对象：一个落在真磁盘上的空间端口、跑一段模型程序的会话。
+ * 验收测试与实现测试共用的假对象：一个落在真磁盘上的空间端口、接成系统空间那样的本机文件端口（`./local` 入口）、跑一段模型程序的会话。
  * 放在 spec 下，因为验收测试依赖它们；实现测试也从这里取，不再各抄一份。
  */
 
@@ -16,6 +16,7 @@ import { TextFileErrorCodes } from '@velaros-ai/text-files/contracts'
 
 import type { FileOperationContext, FileSpacePort, FileWrite } from '../index'
 import { fileOperations } from '../index'
+import { createLocalFilePort } from '../local'
 
 /** 单元目录（packages/velar/files）。 */
 export const UnitRoot = resolve(import.meta.dir, '..')
@@ -93,6 +94,24 @@ export function diskSpace(options: {
   }
   const context: FileOperationContext = { abortSignal: new AbortController().signal, files: port }
   return { port, context, commits, located }
+}
+
+/**
+ * 本机文件端口（`./local` 入口）接成系统空间那样的上下文：`~` 展开到 `home`（缺省就是 cwd），相对路径相对 `cwd`，绝对路径原样。
+ * `onResolve` 在端口每次解析模型给的路径时先被叫到（同步），测试借它在「定改法」与「落盘」之间插一手。
+ */
+export function localFileSpace(options: { cwd: string; home?: string; onResolve?: (path: string) => void }) {
+  const home = options.home ?? options.cwd
+  const port = createLocalFilePort({
+    resolvePath: (path) => {
+      options.onResolve?.(path)
+      if (path === '~') return home
+      if (path.startsWith('~/')) return join(home, path.slice(2))
+      return resolve(options.cwd, path)
+    },
+  })
+  const context: FileOperationContext = { abortSignal: new AbortController().signal, files: port }
+  return { port, context }
 }
 
 /** 等一个调用失败，交出它的码、说明与上下文。 */

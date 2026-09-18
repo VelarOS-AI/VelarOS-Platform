@@ -1,9 +1,13 @@
 # 看图能力不变量登记
 
 每一条都是本模块对外的承诺。改动或删除任何一条，都要在差量报告里点名并说明原来的承诺为什么不对；新增一条同样要点名。
-检验方式与 `packages/system/spec/invariants.md` 相同：测试 / 类型 / 门禁 / 运行时 / 文字，`check:module-ownership` 核对每一行的检验器是否存在。
+检验方式与 `packages/agent/spec/invariants.md` 相同：测试 / 类型 / 门禁 / 运行时 / 文字，`check:module-ownership` 核对每一行的检验器是否存在。
 
 编号只增不重排。看图原来是 `velar:files` 的 view，承诺合在 `@velaros-ai/velar/files` 的登记表里（主要是那边的 INV-8）；拆成独立的 `velar:images` 之后随实现搬到这里并拆细：INV-1～INV-5 接过那边的 INV-8，INV-8、INV-11～INV-14 接过那边入参、代码面、模版、模型面、门禁几条里看图的那一半；INV-6、INV-7、INV-9、INV-10 是拆出来之后新立的。
+
+2026-09-18：`@velaros-ai/system` 整包拆掉，系统空间的看图端口成了本单元的本机看图端口（`createLocalImagePort`，macOS 上用系统自带的 sips 裁图缩图），值从只给 Node 的 `./local` 入口出。
+INV-15 就是 system 原来的 INV-34，主语从「系统空间」换成本机看图端口，并把「又裁又缩的先裁后缩」写成可测的一句；门禁行 INV-14 补了「本机看图端口只在 `./local` 入口」一句。
+system 原来的 INV-31（系统空间的操作表与模块清单）、INV-35（经系统空间跑一段真程序）随装配表作废：空间由产品自己装，仓库层的 `tests/capabilities/capability-templates.test.ts` 用测试装配接着核对那一份。
 
 | 编号 | 不变量 | 检验方式 | 检验器 |
 | --- | --- | --- | --- |
@@ -20,4 +24,5 @@
 | INV-11 | 代码面的 `images` 命名空间是一条真路：模型写的程序照生成的 `baselines/code-surface/images.d.ts` 过 typecheck，在隔离里调到真实操作；图走代码面的图片通道、跟在结果旁边回去，程序拿到的只有尺寸（读像素的写法过不了 typecheck）；全部失败时程序接得住，看得见的就是 `error.code` 与 `error.message` | 测试 | `spec/acceptance.test.ts` |
 | INV-12 | 代码模版（`template.js`）是日常用法的示例程序（只是示例，模型按需要改写、不要求照着写），import 只写一次；它**整份照生成的真实声明过类型检查**，不嵌进声明，随模型面发布、按需读（`velar:program` 的 template）。写错的模版会原样教出去，所以不许漂；在真的空间里把每个函数跑一遍、看交回的是不是它说的样子，由仓库层的 `tests/capabilities/capability-templates.test.ts` 核对 | 测试 | `spec/acceptance.test.ts` |
 | INV-13 | 模型面与常量表一致：声明里写的张数、长边、base64 体积上限都与 `ImageLimits` 对得上，带单位的数字一处都不漂；view 在模型面上只有一个入参，空间端口、调用上下文、缩图与交图的口子都不进模型面 | 测试 | `spec/acceptance.test.ts` |
-| INV-14 | 分工与对外边界不塌：合同、类型、实现、工具函数各在其位，空间端口的每个方法都有操作在调；`./contracts` 入口整条引用链不碰 Node 内置模块，渲染进程可以直接加载 | 门禁 | `check:module-ownership` |
+| INV-14 | 分工与对外边界不塌：合同、类型、实现、工具函数各在其位，空间端口的每个方法都有操作在调；`./contracts` 入口整条引用链不碰 Node 内置模块，渲染进程可以直接加载；本机看图端口的值只在只给 Node 的 `./local` 入口 | 门禁 | `check:module-ownership` |
+| INV-15 | 本机看图端口的缩图裁图在 macOS 上用系统自带的 `sips`，**裁与缩分两次调**（它不管参数顺序都先缩后裁），又裁又缩的先在原图上裁、再缩；超长边的图压到上限以内，裁出来的一块不被放大，交出的图真是报的那个尺寸；别的平台不给这个口子，超限的图照 INV-5 明说做不了 | 测试 | `spec/acceptance.test.ts` |

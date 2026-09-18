@@ -1,26 +1,31 @@
 /**
- * 项目单元根入口（`@velaros-ai/velar/project`），给 Node 宿主：`velar:project` 与 `velar:code` 两件工具，连同项目内核。
+ * 项目单元根入口（`@velaros-ai/velar/project`），给 Node 宿主：`velar:project` 与 `velar:code` 两件工具，连同项目内核，
+ * 以及项目给共用能力（命令、沙箱、看图）装的端口与验证判据。
  *
  * 只出三样东西：产品面（`contract/provides.ts` 登记的接口和它们的实例、工厂）、注入面（`contract/requires.ts` 的接口）、
  * 以及它们用到的数据（`types/`）与常量表（`contract/constants.ts`）。另一个入口 `./contracts` 是它的子集，只有可移植数据。
- * 项目空间（把这两件工具与共用的命令、沙箱、看图装配在一起）在 `@velaros-ai/project`。
+ * 把这两件工具与共用能力装成项目空间是产品的事：产品每次分发调用时给宿主端口，从 `projectCapabilityPorts` 取共用能力的项目端口。
  */
 
 // ── 子集入口 ────────────────────────────────────────────────────
 export * from './contracts.js'
 
-// ── 产品面：项目文件、代码理解、项目资源门、领域内核、有限事务面、落盘变更记录 ───────
+// ── 产品面：项目文件、代码理解、项目资源门、共用能力的项目端口、验证判据、领域内核、有限事务面、落盘变更记录 ───────
 export type { ProjectChangeFeed } from './contract/provides.js'
 export type { ProjectKernel } from './impl/kernel/LocalProjectKernel.js'
 export { createProjectKernel } from './impl/kernel/LocalProjectKernel.js'
 export type { ProjectTransactionControllerApi } from './impl/kernel/ProjectTransactionController.js'
 export { createProjectTransactionController } from './impl/kernel/ProjectTransactionController.js'
+export type { ProjectCapabilityPortsApi } from './impl/operations/ProjectCapabilityPorts.js'
+export { projectCapabilityPorts } from './impl/operations/ProjectCapabilityPorts.js'
 export type { ProjectCodeOperationsApi } from './impl/operations/ProjectCodeOperations.js'
 export { projectCodeOperations } from './impl/operations/ProjectCodeOperations.js'
 export type { ProjectExecutionGateApi } from './impl/operations/ProjectExecutionGate.js'
 export { projectExecutionGate } from './impl/operations/ProjectExecutionGate.js'
 export type { ProjectFileOperationsApi } from './impl/operations/ProjectFileOperations.js'
 export { projectFileOperations } from './impl/operations/ProjectFileOperations.js'
+export type { ProjectVerificationPolicyApi } from './impl/operations/ProjectVerificationPolicy.js'
+export { projectVerificationPolicy } from './impl/operations/ProjectVerificationPolicy.js'
 export type { FileProjectChangeFeedApi } from './impl/persistence/FileProjectChangeFeed.js'
 export { createFileProjectChangeFeed } from './impl/persistence/FileProjectChangeFeed.js'
 export { typescriptPlugin } from './impl/plugins/TypeScriptProjectPlugin.js'
@@ -41,6 +46,7 @@ export type {
   ProjectCodeIntelligenceHost,
   ProjectFixer,
   ProjectHook,
+  ProjectHostPort,
   ProjectOperationContext,
   ProjectPlugin,
   ProjectPluginContext,

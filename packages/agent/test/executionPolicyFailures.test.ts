@@ -175,7 +175,7 @@ describe('tool execution failure projection', () => {
   })
 
   test('preserves diagnostics from the kernel-module projectCapabilityError shape (AppError with a ProjectError cause and context.projectError)', () => {
-    // 复刻 packages/project/src/kernel-module.ts 里 projectCapabilityError 的构造方式：
+    // 复刻项目内核的能力错误（projectCapabilityError）的构造方式：
     // AppError.code 已被提升为领域 reason，cause 是原始 ProjectError，
     // context.projectError 是它的序列化镜像。
     class FakeProjectError extends Error {

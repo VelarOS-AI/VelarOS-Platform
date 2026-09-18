@@ -1,6 +1,6 @@
 /**
  * 跨空间的命令操作身份：系统空间与项目空间都挂 `velar:shell`，两边共用任务级审批端口；同一条危险命令换个空间也不能绕过用户的拒绝，
- * 批准也不会进任务记忆（危险命令每次都要人点头）。两个空间互不引用，这条约束属于仓库层，所以测试放在这里。
+ * 批准也不会进任务记忆（危险命令每次都要人点头）。两个空间照产品的写法装在 `tests/support/spaces.ts`，这条约束属于仓库层，所以测试放在这里。
  */
 
 import { mkdtempSync, realpathSync, rmSync } from 'node:fs'
@@ -13,8 +13,9 @@ import type { ApprovalPort } from '../../packages/agent/src/contract/requires.js
 import { CodingSessionTracker } from '../../packages/agent/src/impl/session/CodingSessionTracker'
 import { agentToolContracts } from '../../packages/agent/src/impl/tools/AgentToolContracts'
 import { createCapabilityPort } from '../../packages/code-surface/src/index'
-import { createProjectSpace } from '../../packages/project/src/index'
-import { createSystemSpace, type SystemSpaceHost } from '../../packages/system/src/index'
+import type { ProjectHostPort } from '../../packages/velar/project/index'
+import type { ShellHostPort } from '../../packages/velar/shell/index'
+import { projectSpace, systemSpace } from '../support/spaces'
 
 const roots: string[] = []
 afterEach(() => {
@@ -43,34 +44,24 @@ function spaces(approved: boolean) {
       verification: { kind: 'unknown' as const, status: 'unknown' as const, issues: [] } }
   }
   const unused = (): never => { throw new Error('unexpected host access') }
-  const host = {
+  const shell: ShellHostPort & { resolvePath(path?: string): string } = {
     resolvePath: (path?: string) => resolve(workspaceRoot, path ?? '.'),
     runCommand: run,
     listBackgroundTasks: unused,
     refreshShellEnvironment: unused,
     terminateBackgroundTask: unused,
-    listSandboxes: unused,
-    createSandbox: unused,
-    diffSandbox: unused,
-    applySandbox: unused,
-    discardSandbox: unused,
-  } as unknown as SystemSpaceHost
-  const system = createCapabilityPort(createSystemSpace({ host, resolveCall: () => ({ abortSignal: new AbortController().signal, approval }) }).operations)
-  const project = createCapabilityPort(createProjectSpace({
-    resolveCall: () => ({
-      abortSignal: new AbortController().signal,
-      approval,
-      project: {
-        getRootPath: () => workspaceRoot,
-        runCommand: run,
-        kernel: unused,
-        listBackgroundTasks: unused,
-        refreshShellEnvironment: unused,
-        terminateBackgroundTask: unused,
-        queryCode: unused,
-      },
-    }),
-  }).operations)
+  }
+  const host: ProjectHostPort = {
+    getRootPath: () => workspaceRoot,
+    runCommand: run,
+    kernel: unused,
+    listBackgroundTasks: unused,
+    refreshShellEnvironment: unused,
+    terminateBackgroundTask: unused,
+    queryCode: unused,
+  }
+  const system = createCapabilityPort(systemSpace({ shell, resolveCall: () => ({ abortSignal: new AbortController().signal, approval }) }).operations)
+  const project = createCapabilityPort(projectSpace({ resolveCall: () => ({ abortSignal: new AbortController().signal, approval, project: host }) }).operations)
   const runIn = (port: typeof system, command: string) => port.invoke({ namespace: 'shell', operation: 'run', input: { command } })
   return { system, project, runIn, tracker, cards: () => cards, runs: () => runs }
 }

@@ -1,11 +1,11 @@
 /**
  * 文件能力的验收测试：每一条对应 spec/invariants.md 里的一个编号。
  * 这里只测对外承诺的行为，不测实现细节；实现细节的测试在 test/ 目录。
- * 空间端口用 `spec/support.ts` 的真磁盘端口：作用域、审查、落盘都能按用例换。
+ * 空间端口用 `spec/support.ts` 的真磁盘端口：作用域、落盘都能按用例换；本机文件端口（`./local` 入口）的承诺用真端口测（INV-14～INV-16）。
  */
 
-import { existsSync, readFileSync } from 'node:fs'
-import { lstat, mkdtemp, readFile, realpath, rm, symlink, unlink, utimes, writeFile } from 'node:fs/promises'
+import { existsSync, readFileSync, utimesSync, writeFileSync } from 'node:fs'
+import { lstat, mkdir, mkdtemp, readFile, realpath, rm, symlink, unlink, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 
@@ -20,7 +20,7 @@ import { VelarFilesModule } from '../contract/surface'
 import type { FileLineRange, FileOperationContext, FileReadItem, FileText } from '../index'
 import { FileErrorCodes, FileLimits, fileOperations } from '../index'
 
-import { Declarations, diskSpace, failureOf, runModelProgram, submitModelProgram,UnitRoot } from './support'
+import { Declarations, diskSpace, failureOf, localFileSpace, runModelProgram, submitModelProgram, UnitRoot } from './support'
 
 let root = ''
 beforeEach(async () => {
@@ -827,5 +827,98 @@ describe('撤回', () => {
     expect(expired.message).toContain(`只留最近 ${FileLimits.undoChanges} 次`)
     await fileOperations.undo({ changeId: last.changeId }, space.context)
     expect(await readFile(join(root, 'counter.txt'), 'utf8')).toBe(`${FileLimits.undoChanges}\n`)
+  })
+})
+
+describe('本机文件端口', () => {
+  test('INV-14 读写凭证文件与系统敏感路径不问用户：经符号链接改私钥、读私钥、撤回照常，`~/.ssh` 里的新建、读、撤回也一样', async () => {
+    // 家目录换成用例自己的临时目录：`~` 展开到这里，和宿主给的 resolvePath 一样。上下文里本来就没有审批端口，问不了人。
+    const home = join(root, 'home')
+    await mkdir(join(home, '.ssh'), { recursive: true })
+    const { context } = localFileSpace({ cwd: root, home })
+    await writeFile(join(root, 'deploy.pem'), '-----BEGIN PRIVATE KEY-----\nabc\n')
+    await symlink(join(root, 'deploy.pem'), join(root, 'notes.txt'))
+    const edited = await fileOperations.edit({ files: [{ path: 'notes.txt', newText: 'rotated\n' }] }, context)
+    expect(edited.files).toMatchObject([{ path: join(root, 'notes.txt'), target: join(root, 'deploy.pem') }])
+    expect(await readFile(join(root, 'deploy.pem'), 'utf8')).toBe('rotated\n')
+    expect((await lstat(join(root, 'notes.txt'))).isSymbolicLink()).toBe(true)
+    expect((await readText('deploy.pem', context)).lines).toEqual([[1, 'rotated']])
+    const undone = await fileOperations.undo({ changeId: edited.changeId }, context)
+    expect(undone.files).toMatchObject([{ action: 'restored' }])
+    expect(await readFile(join(root, 'deploy.pem'), 'utf8')).toBe('-----BEGIN PRIVATE KEY-----\nabc\n')
+
+    const created = await fileOperations.edit({ files: [{ path: '~/.ssh/id_ed25519', newText: 'KEY\n' }] }, context)
+    expect(created.files).toMatchObject([{ path: join(home, '.ssh', 'id_ed25519'), created: true }])
+    expect((await readText('~/.ssh/id_ed25519', context)).lines).toEqual([[1, 'KEY']])
+    await fileOperations.undo({ changeId: created.changeId }, context)
+    expect(existsSync(join(home, '.ssh', 'id_ed25519'))).toBe(false)
+  })
+
+  test('INV-15 落盘核对计划时的字节：定下改法之后文件被同尺寸、同修改时间地改掉，也不覆盖（VALIDATION，message 说明被别人改了）', async () => {
+    const plain = join(root, 'plain.txt')
+    // 超过 64 KB：这么大的文件落盘前只看「大小 + 修改时间」，两样都没变就不重读（小文件一律重读，拦不到这里）。
+    const concurrent = `${'z'.repeat(100 * 1024)}\n`
+    const pinned = 1_700_000_000
+    // 定第二个文件的改法时，别人把第一个文件改成同样长度的内容，并把修改时间拨回整数秒。
+    const { context } = localFileSpace({ cwd: root, onResolve: (path) => {
+      if (path !== 'second.txt') return
+      writeFileSync(plain, concurrent)
+      utimesSync(plain, pinned, pinned)
+    } })
+    await writeFile(plain, `${'a'.repeat(100 * 1024)}\n`)
+    await utimes(plain, pinned, pinned)
+    await writeFile(join(root, 'second.txt'), 'second\n')
+    const failure = await failureOf(fileOperations.edit({ files: [{ path: 'plain.txt', newText: 'beta\n' }, { path: 'second.txt', newText: 'x\n' }] }, context))
+    expect(failure.code).toBe('VALIDATION')
+    expect(failure.message).toContain('被别人改了')
+    expect(await readFile(plain, 'utf8')).toBe(concurrent)
+    expect(await readFile(join(root, 'second.txt'), 'utf8')).toBe('second\n')
+  })
+
+  test('INV-15 新建的核对它仍不存在：落盘那一刻同名文件已经有了就不覆盖（VALIDATION）；缺的上级目录补建', async () => {
+    const { port } = localFileSpace({ cwd: root })
+    const fresh = join(root, 'fresh.txt')
+    await writeFile(fresh, 'someone else\n')
+    const refused = await failureOf(port.commit([{ target: fresh, bytes: Buffer.from('mine\n'), expected: { exists: false } }]))
+    expect(refused).toMatchObject({ code: 'VALIDATION', context: { applied: [] } })
+    expect(refused.message).toContain('被别人改了')
+    expect(await readFile(fresh, 'utf8')).toBe('someone else\n')
+    const nested = join(root, 'deep', 'er', 'new.txt')
+    await port.commit([{ target: nested, bytes: Buffer.from('mine\n'), expected: { exists: false } }])
+    expect(await readFile(nested, 'utf8')).toBe('mine\n')
+  })
+
+  test('INV-16 撤回写回改之前的字节、删掉那次新建的文件；那之后别人又改过就整个不撤（FILES_UNDO_CONFLICT）；整份写照原文件的换行风格存', async () => {
+    const { context } = localFileSpace({ cwd: root })
+    await writeFile(join(root, 'kept.txt'), 'one\r\ntwo\r\n')
+    const edited = await fileOperations.edit({ files: [
+      { path: 'kept.txt', newText: 'uno\ndos\n' },
+      { path: 'fresh/new.txt', newText: 'hello\n' },
+    ] }, context)
+    // 整份写照原文件的换行风格存：原来是 CRLF 的还是 CRLF。
+    expect(await readFile(join(root, 'kept.txt'), 'utf8')).toBe('uno\r\ndos\r\n')
+    const undone = await fileOperations.undo({ changeId: edited.changeId }, context)
+    expect(undone.files).toMatchObject([{ action: 'restored' }, { action: 'deleted' }])
+    expect(await readFile(join(root, 'kept.txt'), 'utf8')).toBe('one\r\ntwo\r\n')
+    expect(existsSync(join(root, 'fresh/new.txt'))).toBe(false)
+    // 改动之后别人又动过：整个不撤，一个文件都不动。
+    const again = await fileOperations.edit({ files: [{ path: 'kept.txt', newText: 'tres\n' }] }, context)
+    await writeFile(join(root, 'kept.txt'), 'someone else\n')
+    const refused = await failureOf(fileOperations.undo({ changeId: again.changeId }, context))
+    expect(refused.code).toBe(FileErrorCodes.undoConflict)
+    expect(await readFile(join(root, 'kept.txt'), 'utf8')).toBe('someone else\n')
+  })
+
+  test('INV-16 删掉那次新建的文件之前核对它还是那次写下的内容：对不上就不删（VALIDATION），对得上才删', async () => {
+    const { port } = localFileSpace({ cwd: root })
+    const target = join(root, 'made.txt')
+    const written = { exists: true, bytes: Buffer.from('hello\n') }
+    await writeFile(target, 'changed by someone\n')
+    const refused = await failureOf(port.commit([{ target, bytes: null, expected: written }]))
+    expect(refused).toMatchObject({ code: 'VALIDATION', context: { applied: [] } })
+    expect(await readFile(target, 'utf8')).toBe('changed by someone\n')
+    await writeFile(target, 'hello\n')
+    await port.commit([{ target, bytes: null, expected: written }])
+    expect(existsSync(target)).toBe(false)
   })
 })

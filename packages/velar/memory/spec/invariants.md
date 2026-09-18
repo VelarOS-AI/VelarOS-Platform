@@ -1,7 +1,7 @@
 # 长期记忆不变量登记
 
 每一条都是本模块对外的承诺。改动或删除任何一条，都要在差量报告里点名并说明原来的承诺为什么不对；新增一条同样要点名。
-检验方式与 `packages/system/spec/invariants.md` 相同：测试 / 类型 / 门禁 / 运行时 / 文字，`check:module-ownership` 核对每一行的检验器是否存在。
+检验方式与 `packages/agent/spec/invariants.md` 相同：测试 / 类型 / 门禁 / 运行时 / 文字，`check:module-ownership` 核对每一行的检验器是否存在。
 
 编号只增不重排。ADR 0010 把记忆单元整个重写成「一个作用域一个目录的 Markdown」：原来的 23 条随记忆树、向量档、证据与回合召回一起作废，
 编号从 1 重新起。

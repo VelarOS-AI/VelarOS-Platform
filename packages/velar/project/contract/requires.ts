@@ -3,7 +3,8 @@
  *
  * - 调用上下文 `ProjectOperationContext`：必须。空间每次分发 `velar:project`、`velar:code` 的调用时给，里面是空间端口 `ProjectSpacePort`（写作 `ctx.project`）；
  *   空间端口的 `kernel()` 交出项目内核的 Agent 视图 `AgentProjectKernelPort`。
- *   项目空间（`@velaros-ai/project`）的宿主端口在它之上再加命令、演练沙箱与缩图，那些是给共用能力装端口用的，工具用不着。
+ * - 宿主端口 `ProjectHostPort`：给共用能力装项目端口（`projectCapabilityPorts`）时给。它在空间端口之上再加跑命令、演练沙箱与缩图，
+ *   那些是共用能力要的，两件项目工具用不着。
  * - 内核配置 `CreateProjectKernelOptions`：建项目内核时必须。里面的宿主能力 `ProjectProviders`（列举过滤、证据包、日志、子进程、遥测、代码智能）
  *   与变更记录写端 `ProjectChangeFeedWriter` 都可选。
  * - 插件 `ProjectPlugin`：可选，放在内核配置里给；插件在 setup 里经 `ProjectPluginContext` 登记文件适配器工厂 `FileAdapterFactory`、补丁策略 `PatchStrategy`、
@@ -11,6 +12,10 @@
  *
  * 这里的每个接口都必须从根入口导出。
  */
+
+import type { ImageResizeRequest, ImageResizeResult } from '@velaros-ai/velar/images'
+import type { RehearsalSandboxHostPort } from '@velaros-ai/velar/sandbox'
+import type { ShellHostPort } from '@velaros-ai/velar/shell'
 
 import type { AdapterCapability, AdapterKind, AdapterPrepareEditInput, AdapterSearchHit, AdapterSearchInput, AdapterValidateInput, ParseInput, ParseResult, ProjectSymbol } from '../types/adapter.js'
 import type { AgentProjectApplyResult, AgentProjectKernelReadResult, AgentProjectPreparedTransaction, AgentProjectSearchResult, AgentProjectStoredTransaction } from '../types/agent-port.js'
@@ -374,4 +379,17 @@ export interface ProjectOperationContext {
   project: ProjectSpacePort
   /** 本次调用所属会话：fileRef、续读页与改动引用按会话签发与核对。 */
   sessionId?: string
+}
+
+/**
+ * 宿主端口：项目给三件共用能力（`velar:shell`、`velar:sandbox`、`velar:images`）装端口时向宿主要的东西。宿主每次分发调用时给一份，绑定当前项目根与会话。
+ * 项目根与内核来自空间端口 `ProjectSpacePort`；跑命令、管后台任务的四件来自 `velar:shell` 的 `ShellHostPort`
+ * （本机实现是 `@velaros-ai/velar/shell/local` 的本机宿主，项目端口会把工作目录钳在项目内、前台命令排进项目资源门再交给它）；
+ * 演练沙箱与缩图可选。
+ */
+export interface ProjectHostPort extends ProjectSpacePort, ShellHostPort {
+  /** 演练沙箱（本机实现是 `@velaros-ai/velar/sandbox/local`）；没接的宿主，项目里的 `velar:sandbox` 每个操作都明说做不了。 */
+  sandbox?: RehearsalSandboxHostPort
+  /** 裁图缩图（可选）：`velar:images` 看超过上限的图、只看一块区域时用。宿主没有图像处理能力就不给，view 遇到这种图会明说做不了。 */
+  resizeImage?: (request: ImageResizeRequest) => Promise<ImageResizeResult>
 }

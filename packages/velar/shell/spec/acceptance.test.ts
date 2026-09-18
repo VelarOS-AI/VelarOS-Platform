@@ -1,10 +1,13 @@
 /**
  * shell 能力的验收测试：每一条对应 spec/invariants.md 里的一个编号。
  * 这里只测对外承诺的行为，不测实现细节；实现细节的测试在 test/ 目录。
+ * 本机实现（`./local` 入口：本机宿主、受约束执行器）的承诺也在这里验收，用的是真宿主、真进程（INV-11～INV-16）。
  */
 
-import { readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { existsSync, readFileSync } from 'node:fs'
+import { mkdtemp, realpath, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { describe, expect, test } from 'bun:test'
@@ -15,8 +18,13 @@ import { codeProgramChecker, createCodeSurfaceSession, nodeSubprocessCodeRunner 
 import { AppError } from '@velaros-ai/core/error'
 
 import { VelarShellModule } from '../contract/surface'
-import type { ShellCommandResult, ShellListTasksInput, ShellOperationContext, ShellRunCommandOptions, ShellRunInput, ShellSpacePort, ShellStopInput, ShellTaskTerminateRequest } from '../index'
-import { shellCommandApproval, ShellCommandOperationKind, shellCommandPolicy, ShellLimits, shellOperations } from '../index'
+import { shellProcessManager } from '../impl/local/ShellProcessManager'
+import type { ShellCommandResult, ShellListTasksInput, ShellOperationContext, ShellProcessConfinementEvidence, ShellRunCommandOptions, ShellRunInput, ShellSpacePort, ShellStopInput, ShellTaskTerminateRequest } from '../index'
+import { shellCommandApproval, ShellCommandOperationKind, shellCommandPolicy, ShellErrorCodes, ShellLimits, shellOperations } from '../index'
+import { createConfinedShellRunner, createLocalShellHost } from '../local'
+import { buildConfinedSpawnSpec } from '../utils/confinement'
+
+import { canConfine, fakeChild } from './support'
 
 const UnitRoot = resolve(fileURLToPath(new URL('.', import.meta.url)), '..')
 const ModelFacingDeclarations = readFileSync(resolve(UnitRoot, '../../../baselines/code-surface/shell.d.ts'), 'utf8')
@@ -405,6 +413,192 @@ describe('模型面', () => {
   test('INV-9 nativeCommand 只给宿主用，永不进模型可观测面；空间端口与调用上下文也不进', () => {
     for (const hidden of ['nativeCommand', 'ShellRunCommandOptions', 'ShellSpacePort', 'ShellOperationContext', 'commandPolicy', 'resolveCwd']) {
       expect(ModelFacingDeclarations).not.toContain(hidden)
+    }
+  })
+})
+
+/** 等一个同步调用抛错，交出抛出来的东西；没抛就让用例挂掉。 */
+function thrownBy(call: () => unknown): { code?: string; message?: string } {
+  try {
+    call()
+  } catch (error) {
+    return error as { code?: string; message?: string }
+  }
+  throw new Error('应当抛错，却没有')
+}
+
+/** 在系统临时目录下建一个空目录，交回解开符号链接之后的路径。 */
+async function scratch(prefix: string): Promise<string> {
+  return realpath(await mkdtemp(join(tmpdir(), prefix)))
+}
+
+describe('本机宿主：进程约束', () => {
+  test('INV-11 受约束模式没有可用后端时失败关闭：拒绝执行、报 SHELL_CONFINEMENT_UNAVAILABLE，不交回没包约束的启动规格', () => {
+    // Windows 没有内置后端、Linux 没有 bubblewrap：都拒绝，不退回裸进程。
+    const windows = thrownBy(() => buildConfinedSpawnSpec(
+      { spec: { file: 'cmd.exe', args: ['/c', 'exit 0'] }, policy: { mode: 'read-only', workspaceRoot: 'C:\\workspace' } },
+      { platform: 'win32' }
+    ))
+    const linux = thrownBy(() => buildConfinedSpawnSpec(
+      { spec: { file: '/bin/sh', args: ['-lc', 'true'] }, policy: { mode: 'read-only', workspaceRoot: '/workspace' } },
+      { platform: 'linux', bubblewrapAvailable: false }
+    ))
+    for (const failure of [windows, linux]) {
+      expect(failure).toMatchObject({ code: ShellErrorCodes.processConfinementUnavailable, message: expect.stringContaining('已拒绝以裸进程继续执行') })
+    }
+  })
+
+  test.skipIf(process.platform === 'win32')('INV-11 本机宿主与受约束执行器在没有后端的平台上一条命令都不跑：宿主拒绝执行，执行器建的时候就拒绝', async () => {
+    const root = await scratch('velaros-shell-inv11-')
+    // 按一个没有内置约束后端的平台跑：宿主要受约束地跑命令，就一个字节都不执行。
+    const host = createLocalShellHost({ cwd: root, platform: 'freebsd', processConfinement: { mode: 'workspace-write' } })
+    try {
+      await expect(host.runCommand('printf x > marker.txt')).rejects.toMatchObject({ code: ShellErrorCodes.processConfinementUnavailable })
+      expect(existsSync(join(root, 'marker.txt'))).toBe(false)
+      // 受约束执行器（演练沙箱的每个镜像根一个）建的时候先探测后端：没有就拒绝，不给调用方留一个会裸跑的执行器。
+      expect(thrownBy(() => createConfinedShellRunner({ root, tempDir: root, network: false, platform: 'freebsd' })))
+        .toMatchObject({ code: ShellErrorCodes.processConfinementUnavailable })
+    } finally {
+      await host.dispose()
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('INV-12 约束证据如实上报：不约束就写 enforcement none、backend none，不冒充隔离；用户确认过的危险命令也不改写约束事实', async () => {
+    const unconfined: ShellProcessConfinementEvidence = { mode: 'danger-full-access', enforcement: 'none', backend: 'none', reason: 'explicit-danger-full-access', writableRoots: [] }
+    const result = buildConfinedSpawnSpec({
+      spec: { file: '/bin/sh', args: ['-lc', 'true'] },
+      policy: { mode: 'danger-full-access', workspaceRoot: '/workspace' },
+    })
+    expect(result.spec).toEqual({ file: '/bin/sh', args: ['-lc', 'true'] })
+    expect(result.evidence).toEqual(unconfined)
+    // 本机宿主缺省不约束，回执照实写 none；审批（allowDangerous 为真）是另一件事，约束事实不跟着变。
+    const host = createLocalShellHost({ cwd: process.cwd() })
+    try {
+      expect((await host.runCommand('true')).confinement).toEqual(unconfined)
+      expect((await host.runCommand('true', {}, true)).confinement).toEqual(unconfined)
+    } finally {
+      await host.dispose()
+    }
+  })
+
+  test.skipIf(!canConfine)('INV-12 受约束的宿主报真实的后端与覆盖面：macOS 的 sandbox-exec 只拦得住文件写，报 partial，不冒充 full', async () => {
+    const root = await scratch('velaros-shell-inv12-')
+    const host = createLocalShellHost({ cwd: root, processConfinement: { mode: 'workspace-write' } })
+    try {
+      const result = await host.runCommand('printf ok > inside.txt')
+      expect(result.exitCode).toBe(0)
+      expect(result.confinement).toMatchObject(process.platform === 'darwin'
+        ? { mode: 'workspace-write', backend: 'seatbelt', enforcement: 'partial', reason: 'enforced-file-writes-only' }
+        : { mode: 'workspace-write', backend: 'bubblewrap', enforcement: 'full' })
+      expect(result.confinement?.writableRoots).toContain(root)
+    } finally {
+      await host.dispose()
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('本机宿主：命令输出', () => {
+  test('INV-13 输出超长只留末尾且末尾真实、truncated 为真；转后台的命令回执里带 taskId，按它查得到那条任务', async () => {
+    const host = createLocalShellHost({ cwd: process.cwd() })
+    try {
+      const long = await host.runCommand('fixture', {
+        nativeCommand: { file: process.execPath, args: ['-e', "process.stdout.write('x'.repeat(5000) + 'TAIL-END')"] },
+        maxOutputChars: 100,
+      })
+      // 砍头不砍尾：失败现场在尾部。
+      expect(long.truncated).toBe(true)
+      expect(long.stdout.endsWith('TAIL-END')).toBe(true)
+      expect(long.stdout.length).toBeLessThanOrEqual(100)
+
+      const started = await host.runCommand('fixture', {
+        nativeCommand: { file: process.execPath, args: ['-e', 'setTimeout(() => {}, 10000)'] },
+        background: true,
+      })
+      const taskId = started.backgroundProcess?.taskId
+      expect(taskId).toBeTruthy()
+      expect((await host.listBackgroundTasks({ taskId: taskId! })).map((task) => task.id)).toEqual([taskId!])
+      await host.terminateBackgroundTask({ taskId: taskId!, force: true })
+    } finally {
+      await host.dispose()
+    }
+  })
+
+  test('INV-14 管道分块不打碎 UTF-8 字符，退出码原样透传，shell 描述符里不带 env', async () => {
+    const host = createLocalShellHost({ cwd: process.cwd() })
+    const text = '中文🙂'
+    try {
+      const result = await host.runCommand('fixture', { nativeCommand: { file: process.execPath, args: ['-e', `
+        const bytes = Buffer.from(${JSON.stringify(text)});
+        let offset = 0;
+        const timer = setInterval(() => {
+          const byte = bytes.subarray(offset, ++offset);
+          process.stdout.write(byte);
+          process.stderr.write(byte);
+          if (offset === bytes.length) {
+            clearInterval(timer);
+            process.exitCode = 7;
+          }
+        }, 10);
+      `] }, timeoutMs: 3_000 })
+
+      expect(result.stdout).toBe(text)
+      expect(result.stderr).toBe(text)
+      expect(result.exitCode).toBe(7)
+      expect(result.success).toBe(false)
+      expect(result.timedOut).toBe(false)
+      expect(result.capture?.decodeErrors).toBe(0)
+      expect(result.verification).toEqual({
+        kind: 'unknown',
+        status: 'failed',
+        issues: [`stdout:\n${text}`, `stderr:\n${text}`],
+      })
+      expect(result.shell).toBeDefined()
+      expect(result.shell).not.toHaveProperty('env')
+    } finally {
+      await host.dispose()
+    }
+  })
+})
+
+describe('本机宿主：进程生命周期', () => {
+  test('INV-15 终止信号无人响应、close 永不到达时，进程管理仍在期限内收敛，并如实标记清理未完成', async () => {
+    const child = fakeChild()
+    const signals: string[] = []
+    const owned = shellProcessManager.manage(child, {
+      timeoutMs: 5,
+      terminateGraceMs: 5,
+      terminationDeadlineMs: 35,
+      terminate: (signal) => {
+        signals.push(signal)
+        return new Promise(() => {})
+      },
+    })
+    const result = await owned.completion
+    expect(result.timedOut).toBe(true)
+    expect(result.cleanupIncomplete).toBe(true)
+    expect(signals).toEqual(['SIGTERM', 'SIGKILL'])
+    expect(child.stdout!.destroyed).toBe(true)
+    expect(await owned.stop('SIGKILL')).toBe(false)
+  })
+})
+
+describe('本机宿主：shell 的选择', () => {
+  test('INV-16 挑定的 shell 本机没有时在起进程之前拒绝，报错点名可用的与默认的那个，不换默认 shell 照跑', async () => {
+    const host = createLocalShellHost({ cwd: process.cwd() })
+    try {
+      const inspection = await host.inspectEnvironment()
+      const available = inspection.shells.map((shell) => shell.kind)
+      // 清单第一个就是默认那个；挑清单里没有的种类，命令一个字节的输出都不会有。
+      expect(available[0]).toBe(inspection.shell.kind!)
+      const missing = (['pwsh', 'cmd', 'git-bash', 'powershell', 'posix'] as const).find((kind) => !available.includes(kind))!
+      await expect(host.runCommand('echo 不该跑起来', { shell: missing })).rejects.toMatchObject({ code: 'VALIDATION' })
+      await expect(host.runCommand('echo 不该跑起来', { shell: missing })).rejects.toThrow(`本机没有 ${missing}`)
+      await expect(host.runCommand('echo 不该跑起来', { shell: missing })).rejects.toThrow(available[0]!)
+      expect((await host.runCommand('echo ok', { shell: available[0] })).stdout.trim()).toBe('ok')
+    } finally {
+      await host.dispose()
     }
   })
 })

@@ -1,14 +1,20 @@
 # 项目工具不变量登记
 
 每一条都是本模块对外的承诺。改动或删除任何一条，都要在差量报告里点名并说明原来的承诺为什么不对；新增一条同样要点名。
-检验方式与 `packages/system/spec/invariants.md` 相同：测试 / 类型 / 门禁 / 运行时 / 文字，`check:module-ownership` 核对每一行的检验器是否存在。
+检验方式与 `packages/agent/spec/invariants.md` 相同：测试 / 类型 / 门禁 / 运行时 / 文字，`check:module-ownership` 核对每一行的检验器是否存在。
 
 迁到代码面之后（模型写程序、import `velar:project` 与 `velar:code`），承诺照旧按编号保留：INV-1 从「七个工具」改成「两个命名空间」，失败回执里的 `not-applied` 与入参复用随工具面一起退场——代码面只把 `error.code` 与 `error.message` 交给程序（INV-20）。INV-15 早已作废，编号不复用。
 
-项目空间与两件工具分开之后，属于空间的承诺搬去了 `packages/project/spec/invariants.md`：原 INV-7（项目里的危险命令）、INV-16（沙箱落回的写治理）、INV-21（项目里看图）是那边的 INV-2、INV-4、INV-5，原 INV-14、INV-17 里「沙箱源目录、命令工作目录钳在项目内」那一半并进了那边的 INV-3。这三个编号在这里作废，不复用。
+项目空间与两件工具分开之后，属于空间的承诺搬去了项目空间包（`@velaros-ai/project`）的登记表：原 INV-7（项目里的危险命令）、INV-16（沙箱落回的写治理）、INV-21（项目里看图）是那边的 INV-2、INV-4、INV-5，原 INV-14、INV-17 里「沙箱源目录、命令工作目录钳在项目内」那一半并进了那边的 INV-3。这三个编号在这里作废，不复用。
 
 2026-09-18（ADR 0009）权限与脱敏整个拆掉，五条改写：INV-10（生成文件不许手改）、INV-14（`.git` 缺省不许写）、INV-17（改动问修改授权）、INV-19（像密钥的片段遮住、只读）原来的承诺作废，改成反过来的承诺；INV-13 去掉「拒读拒写名单」那一半，宿主的过滤器只管列举。
 原来这几道闸拦不住任何事——同样的读写 shell 不经确认就能做——却让模型读到 `[REDACTED]` 改不了文件、改生成物被拒、每次改动等人点头。
+
+2026-09-18：`@velaros-ai/project`（项目空间）整包拆掉：装配表（`createProjectSpace`）离开本仓库，空间由产品自己装；给三件共用能力装项目端口的那一半搬回本单元，
+成了 `projectCapabilityPorts`（连同交给 agent 编码会话的验证判据 `projectVerificationPolicy`），宿主端口 `ProjectHostPort` 也登记在本单元的注入面。
+那边登记表的 INV-2、INV-3、INV-4、INV-5 随端口搬回来、接着编号，成了这里的 INV-26、INV-27、INV-28、INV-29，改由 `projectCapabilityPorts` 配上三件能力真实的操作来测；
+它们本来就是从这里的原 INV-7、INV-16、INV-21（以及原 INV-14、INV-17 的一半）搬过去的；INV-7、INV-16、INV-21 照旧作废、不复用。
+那边的 INV-1（空间挂五个命名空间、模块清单）随装配表作废；INV-6（入口门禁）由本单元的 INV-12 管着，不另立。
 
 | 编号 | 不变量 | 检验方式 | 检验器 |
 | --- | --- | --- | --- |
@@ -33,3 +39,7 @@
 | INV-23 | 行号照 `wc -l` 数，和 `velar:files` 一样：结尾换行之后那个零宽的行不给模型看、不算进 totalLines（空文件是 0 行），越出行数的说明也照它数；它仍在可见范围里，在文件末尾插入照样成立；停在空行上的范围照样交出那一空行 | 测试 | `spec/acceptance.test.ts` |
 | INV-24 | 什么都不折叠，看多少由程序定：read 交回要的整段（不给 range 就是整个文件，没有续读），list 交回全部条目（不给 depth 就是整棵树，没有分页），search 交回全部命中、每个命中的文件一个带 fileRef 的窗口，edit 与 inspect 交回完整差量，`velar:code` 不按条数截；只有守内存的上限（`ProjectFileLimits.readChars`、`listEntries`、`searchHits`，`ProjectCodeLimits.results`），超了明说（SCOPE_VIOLATION，或宿主标的 coverage.truncated），不交回一部分冒充全部 | 测试 | `spec/acceptance.test.ts` |
 | INV-25 | 声明里写给模型的上限就是常量表 `ProjectFileLimits`、`ProjectCodeLimits` 与缺省策略里的数：改常量不改说明（或反过来）过不了验收 | 测试 | `spec/acceptance.test.ts` |
+| INV-26 | 项目里的危险命令每次都由用户亲自确认（高风险、手动、不可记忆，确认文案说「当前项目」，风险分类 `project-command:dangerous`）；被拒时抛错、一个进程都不起；别的命令（会改项目的、长驻的也一样）不问，直接跑，输出原样交回 | 测试 | `spec/acceptance.test.ts` |
+| INV-27 | 命令的工作目录与演练沙箱的源目录按解开符号链接后的真实路径钳在项目之内：出了项目在问用户之前就拒绝（`PERMISSION`），一个进程都不起、什么都不镜像；项目里的交给宿主时是解析好的绝对路径 | 测试 | `spec/acceptance.test.ts` |
+| INV-28 | 演练沙箱落回不问人、不按名单拦：点名的路径核过（点名了没变化的就拒绝，`VALIDATION`）就把同一份差量的指纹交给宿主落回；镜像里命令的输出原样交回 | 测试 | `spec/acceptance.test.ts` |
+| INV-29 | 项目里看图（共用的 `velar:images`）只看项目里的图：出了项目（含经符号链接指到外面）的那一张看不了（`PERMISSION`），项目里的都照常交给模型 | 测试 | `spec/acceptance.test.ts` |

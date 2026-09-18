@@ -1,6 +1,7 @@
 /**
  * 可移植数据：一条 shell 命令执行前的分类结果、调度器问「能不能并发」时给的入参与选项，
- * 以及 `velar:shell` 的入参、回执与宿主端口上流动的命令数据（跑命令的选项、回执、后台任务、控制台、shell 描述）。
+ * 以及 `velar:shell` 的入参、回执与宿主端口上流动的命令数据（跑命令的选项、回执、后台任务、控制台、shell 描述），
+ * 还有本机宿主给宿主界面的数据（进程、端口、资源快照、控制台、环境体检）。
  * 只从常量表 import type，不带函数，浏览器和渲染进程都能用；从 `@velaros-ai/velar/shell/contracts` 取。
  */
 
@@ -160,7 +161,7 @@ export interface ShellInfo {
 // ── 命令回执 ────────────────────────────────────────────────────
 
 /**
- * 宿主跑完一条命令交回的完整回执（界面与本地内核都用它）。`success` 只看退出码为 0 且没有超时、没有被取消：命令自己失败是正常回执、不抛错。
+ * 宿主跑完一条命令交回的完整回执（界面与本机宿主都用它）。`success` 只看退出码为 0 且没有超时、没有被取消：命令自己失败是正常回执、不抛错。
  * stdout、stderr 超过 maxOutputChars 时**只留末尾**（失败现场在尾部），truncated 为真。模型看到的是从它整出来的 `ShellRunResult`。
  */
 export interface ShellCommandResult {
@@ -389,7 +390,7 @@ export interface ShellTaskTerminateRequest {
   force: boolean
 }
 
-/** 宿主终止后台任务的结果：`terminated` 为 false 时看 `message`（本来就不在跑）。本地内核的终止结果在结构上就满足它。 */
+/** 宿主终止后台任务的结果：`terminated` 为 false 时看 `message`（本来就不在跑）。本机宿主给的 `ShellTaskTerminateReport` 在它之上多记几项。 */
 export interface ShellTaskTerminateResult {
   terminated: boolean
   statusAfter: ShellBackgroundTaskStatus
@@ -402,4 +403,203 @@ export interface ShellCommandSpacePolicy {
   scopeLabel: string
   /** 危险命令审批的风险分类，例如 `system-command:dangerous`；宿主靠 `:dangerous` 后缀认出硬门。 */
   riskScope: string
+}
+
+// ── 本机宿主给宿主界面的数据（`@velaros-ai/velar/shell/local` 的 LocalShellHost；模型碰不到） ──────────
+
+/**
+ * 进程能力的对外数据结构：进程列表、开放端口、资源快照。
+ *
+ * 所有查询都遵守同一条规则：先按 `filter` 对完整命令行做不区分大小写的包含匹配，
+ * 再按 `limit` 截断（默认 50）。先截断再过滤会漏掉命中，所以顺序不能反。
+ */
+
+/** 目前只报告 TCP 监听端口。 */
+export type SystemOpenPortProtocol = 'tcp'
+
+/** 资源指标的分级。 */
+export type SystemMetricLevel = 'normal' | 'warn' | 'high' | 'unknown'
+
+/** 一个进程的快照。 */
+export interface SystemProcessInfo {
+  pid: number
+  ppid: number
+  name: string
+  command: string
+  cwd: Nullable<string>
+  startTime: Nullable<string>
+  user: string
+  cpuPercent: number
+  memoryBytes: number
+  status: string
+}
+
+/** 查询进程的过滤条件。 */
+export interface SystemProcessQueryOptions {
+  /** 对进程名与完整命令行做不区分大小写的包含匹配，在 limit 截断前过滤。 */
+  filter?: string
+  /** 匹配结果数量上限；默认 50。 */
+  limit?: number
+  pid?: number
+  pids?: number[]
+  name?: string
+  commandContains?: string
+  user?: string
+  onlyCurrentUser?: boolean
+  minCpuPercent?: number
+  minMemoryBytes?: number
+  includeCwd?: boolean
+}
+
+/** 一个开放端口及占用它的进程。 */
+export interface SystemOpenPortInfo {
+  port: number
+  protocol: SystemOpenPortProtocol
+  pid: Nullable<number>
+  processName: Nullable<string>
+  command: Nullable<string>
+  address: string
+  state: Nullable<string>
+  cwd: Nullable<string>
+}
+
+/** 查询开放端口的过滤条件。 */
+export interface SystemOpenPortQueryOptions {
+  /** 对进程名与完整命令行做不区分大小写的包含匹配，在 limit 截断前过滤。 */
+  filter?: string
+  /** 匹配结果数量上限；默认 50。 */
+  limit?: number
+  pid?: number
+  processName?: string
+  port?: number
+  ports?: number[]
+  rangeStart?: number
+  rangeEnd?: number
+  includeCwd?: boolean
+}
+
+/** 一次系统资源采样。拿不到的指标填 null，不填 0。 */
+export interface SystemMetricsSnapshot {
+  sampledAt: number
+  cpuUsagePercent: Nullable<number>
+  cpuCoreCount: number
+  memoryUsedBytes: number
+  memoryTotalBytes: number
+  memoryUsagePercent: number
+  swapUsedBytes: Nullable<number>
+  swapTotalBytes: Nullable<number>
+  swapUsagePercent: Nullable<number>
+  diskUsedBytes: Nullable<number>
+  diskTotalBytes: Nullable<number>
+  diskUsagePercent: Nullable<number>
+  loadAverage: { oneMinute: number; fiveMinutes: number; fifteenMinutes: number }
+  levels: Record<'cpu' | 'memory' | 'swap' | 'disk' | 'load', SystemMetricLevel>
+  topProcesses: SystemProcessInfo[]
+}
+
+/**
+ * 交互式后台任务的控制台数据：命令在控制台里跑，用户在界面上看输出、往里打字、发中断。
+ *
+ * 命令用 `interactive` 启动后就是一条普通的后台任务，只是多了一个控制台：
+ * 任务表、状态查询、终止都照旧走后台任务那套，这里只多出「写输入、读增量输出、发中断」三件事。
+ */
+
+/** 读控制台增量输出的请求；`cursor` 是上一次返回的位置，不给就从留着的最早一段开始读。 */
+export interface ShellConsoleOutputRequest {
+  taskId: string
+  sessionId?: string
+  cursor?: number
+}
+
+/** 往控制台写一段输入的请求。 */
+export interface ShellConsoleInputRequest {
+  taskId: string
+  sessionId?: string
+  /** 写进去的文本。 */
+  text: string
+  /** 是否在末尾补一个换行，相当于用户按回车；缺省为真。 */
+  submit?: boolean
+}
+
+/** 给控制台发中断（SIGINT，相当于用户按 Ctrl+C）的请求。 */
+export interface ShellConsoleInterruptRequest {
+  taskId: string
+  sessionId?: string
+}
+
+/** 本机宿主终止后台任务的完整结果：在端口要的那三项之外，记下进程号、发的信号与终止前的状态，给宿主界面用。 */
+export interface ShellTaskTerminateReport extends ShellTaskTerminateResult {
+  taskId: string
+  sessionId: Nullable<string>
+  pid: number
+  signal: 'SIGTERM' | 'SIGKILL'
+  statusBefore: ShellBackgroundTaskStatus
+}
+
+/** 控制台的一段增量输出。 */
+export interface ShellConsoleOutputChunk {
+  taskId: string
+  /** 从请求的 cursor 起新产生的输出。 */
+  text: string
+  /** 下一次请求把这个值当 cursor 传回来。 */
+  cursor: number
+  /** 缓冲区放不下、已经丢掉的字符数；大于 0 表示中间有一段永远看不到了。 */
+  droppedChars: number
+  /** 任务此刻的状态。 */
+  status: ShellBackgroundTaskStatus
+  /** 现在还能不能写输入。 */
+  acceptsInput: boolean
+}
+
+/** 写输入或发中断的结果：`accepted` 为 false 时看 `message`，不猜原因。 */
+export interface ShellConsoleControlResult {
+  taskId: string
+  accepted: boolean
+  status: ShellBackgroundTaskStatus
+  message: string
+}
+
+/**
+ * 一次环境体检的完整结果：操作系统、shell 与关心的命令是否齐备。
+ *
+ * `shell` 是默认用的那个，`shells` 是本机可用的全部。宿主把这两样写进每回合给模型的环境报告，模型才知道
+ * `run` 的 `shell` 字段能填哪几个、不填时用的是哪个；POSIX 机器上 `shells` 只有 `posix` 一项，模型就不会去填。
+ */
+export interface ShellEnvironmentInspection {
+  os: { platform: SystemRuntimePlatform; arch: string; release: string; homeDir: string }
+  /** 本机可用的全部 shell，按挑选优先顺序（Windows 是 Git Bash、PowerShell 7、Windows PowerShell、CMD），第一个就是 `shell` 那个默认的。 */
+  shells: ShellDescriptor[]
+  shell: {
+    path: string
+    variableCount: number
+    pathEntries: string[]
+    kind?: ShellCommandKind
+    name?: string
+    readiness?: ShellDescriptor['readiness']
+    version?: LooseOptional<string>
+    recommendation?: LooseOptional<ShellRecommendation>
+    revision?: string
+  }
+  commands: ShellCommandAvailability[]
+}
+
+/** 运行平台标识；保留 `string & {}` 是为了让未知平台也能原样上报而不是被压成 never。 */
+export type SystemRuntimePlatform =
+  | 'aix'
+  | 'android'
+  | 'darwin'
+  | 'freebsd'
+  | 'haiku'
+  | 'linux'
+  | 'openbsd'
+  | 'sunos'
+  | 'win32'
+  | (string & {})
+
+/** 某个命令在当前 shell 下是否可用，以及它是原生程序、脚本、批处理还是内置命令。 */
+export interface ShellCommandAvailability {
+  name: string
+  available: boolean
+  path: Nullable<string>
+  kind?: LooseOptional<'native' | 'script' | 'batch' | 'builtin'>
 }

@@ -40,32 +40,6 @@ const RequiredPackageFiles = ["dist", "README.md"];
 // README 改中文重写，本门随之改口径：证明包有人写文档，别再规定它长什么样。
 const MinimumReadmeCharacters = 400;
 const ChineseCharacter = /[一-鿿]/;
-// 可移植契约入口:exportKey = package.json exports 键,contractsFile = 对应源文件(合包在切片下),
-// modules = 该入口只许 import 的可移植模块集合(相对 contractsFile 所在目录，入口在 src 根上所以是 ./)。
-const PortableContracts = [
-  {
-    packageDirectory: "project",
-    packageName: "@velaros-ai/project",
-    exportKey: "./contracts",
-    contractsFile: "src/contracts.ts",
-    // 项目空间没有自己的可移植数据：可移植入口只转发常量表（空间身份）；两件工具的可移植数据在 @velaros-ai/velar/project/contracts。
-    modules: new Set([
-      "./contract/constants.js",
-    ]),
-  },
-  {
-    packageDirectory: "system",
-    packageName: "@velaros-ai/system",
-    exportKey: "./contracts",
-    contractsFile: "src/contracts.ts",
-    // 可移植入口只许转发可移植数据文件与常量表；两者零依赖（见 packages/system/MODULE.md）。
-    modules: new Set([
-      "./types/system.js",
-      "./contract/constants.js",
-    ]),
-  },
-];
-
 // Workspace packages are flat: every package lives at packages/<package>/.
 function listPackageDirectories() {
   const found = [];
@@ -125,71 +99,6 @@ function requirePublicTypeContracts(
     );
     if (!declaration.test(contractsSource)) {
       fail(`${packageDirectory}: missing public type contract ${typeName}`);
-    }
-  }
-}
-
-function requirePortableContractsEntry({
-  packageDirectory,
-  packageName,
-  exportKey,
-  contractsFile,
-  modules,
-}) {
-  const packageRoot = resolve(PackagesRoot, packageDirectory);
-  const manifest = readJson(resolve(packageRoot, "package.json"));
-  const distBase = `./${contractsFile.replace(/^src\//u, "").replace(/\.ts$/u, "")}`;
-  if (
-    manifest.exports?.[exportKey]?.types !==
-      `./dist/${distBase.slice(2)}.d.ts` ||
-    manifest.exports?.[exportKey]?.import !== `./dist/${distBase.slice(2)}.js`
-  ) {
-    fail(
-      `${packageName} ${exportKey} must publish explicit types and import targets`,
-    );
-  }
-
-  const contractsPath = resolve(packageRoot, contractsFile);
-  if (!existsSync(contractsPath)) {
-    fail(`${packageName} ${exportKey} is missing ${contractsFile}`);
-    return;
-  }
-
-  const contractsSource = readFileSync(contractsPath, "utf8");
-  // 登记的白名单写 ".js"，入口里可能写 ".js" 也可能不带扩展名（包里哪种写法多用哪种）；
-  // 两种都指向同一个模块，比对前统一去掉扩展名。
-  const withoutExtension = (specifier) => specifier.replace(/\.js$/u, "");
-  const allowedModules = new Set([...modules].map(withoutExtension));
-  const contractImports = [
-    ...contractsSource.matchAll(/\bfrom\s+['"]([^'"]+)['"]/gu),
-  ].map((match) => match[1]);
-  for (const specifier of contractImports) {
-    if (!allowedModules.has(withoutExtension(specifier))) {
-      fail(
-        `${packageName}/contracts imports forbidden implementation module ${specifier}`,
-      );
-    }
-  }
-
-  const portableSources = [
-    [contractsFile, contractsSource],
-    ...[...modules].map((specifier) => {
-      const relativePath = specifier
-        .replace(/^\.\//u, "")
-        .replace(/\.js$/u, ".ts");
-      return [
-        relativePath,
-        readFileSync(resolve(dirname(contractsPath), relativePath), "utf8"),
-      ];
-    }),
-  ];
-  const hostDependencyImport =
-    /(?:from\s+|import\s*\(|require\()\s*['"](?:node:[^'"]*|execa(?:\/[^'"]*)?)['"]/u;
-  for (const [relativePath, source] of portableSources) {
-    if (hostDependencyImport.test(source)) {
-      fail(
-        `${packageName}/contracts portable module ${relativePath} imports a host dependency`,
-      );
     }
   }
 }
@@ -509,19 +418,18 @@ for (const expected of CapabilityPackages) {
   }
 }
 
+// 已经拆掉的包不许回来：工具并进了 velar 的能力单元，空间的装配归产品（ADR 0013）。
 for (const obsoleteDirectory of [
   "workspace",
   "workspace-agent-tools",
   "system-tools",
+  "system",
+  "project",
 ]) {
   if (existsSync(resolve(PackagesRoot, obsoleteDirectory)))
     fail(
       `obsolete capability package directory must be removed: ${obsoleteDirectory}`,
     );
-}
-
-for (const contracts of PortableContracts) {
-  requirePortableContractsEntry(contracts);
 }
 
 // 浏览器整包并进了 velar 的 browser 单元（ADR 0011）：可移植数据仍要从根入口转发。

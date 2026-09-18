@@ -3,13 +3,13 @@ import {
   type AgentModelRetryPolicy,
   type AgentRunLifecycle,
 } from '@velaros-ai/agent'
-import { agentToolContracts } from '@velaros-ai/agent/tool-contract'
+import { agentToolContracts, type ApprovalPort } from '@velaros-ai/agent/tool-contract'
 import { createModelRequestClient } from '@velaros-ai/model'
 import { languageQueries, type LanguageReadPort, type LanguageToolContext } from '@velaros-ai/development'
 import { ComputerInputLimits, type ComputerPoint } from '@velaros-ai/velar/computer/contracts'
 import { createCapabilityPort } from '@velaros-ai/code-surface'
-import { createProjectSpace, type ProjectCallContext } from '@velaros-ai/project'
 import { FileLimits } from '@velaros-ai/velar/files/contracts'
+import { createLocalFilePort } from '@velaros-ai/velar/files/local'
 import { officeOperations, type OfficeOperationContext } from '@velaros-ai/velar/office'
 import type { OfficeEnvironmentInspection, OfficeWritten } from '@velaros-ai/velar/office/contracts'
 import {
@@ -19,12 +19,24 @@ import {
   type MemoryScopeApi,
   type MemoryStoreApi,
 } from '@velaros-ai/velar/memory'
-import { shellCommandPolicy } from '@velaros-ai/velar/shell'
+import { projectCapabilityPorts, type ProjectHostPort } from '@velaros-ai/velar/project'
+import { type LocalShellHostApi, shellCommandPolicy, shellOperations } from '@velaros-ai/velar/shell'
+import { createLocalShellHost } from '@velaros-ai/velar/shell/local'
 
-// 项目空间是一张操作表：宿主每次调用给一份上下文，接成代码面的能力端口；共用能力单元按 `@velaros-ai/velar/<单元>` 引。
-declare const projectCall: ProjectCallContext
-const projectCapabilities = createCapabilityPort(createProjectSpace({ resolveCall: () => projectCall }).operations)
-void [projectCapabilities.listOperations(), shellCommandPolicy.analyze('ls -la').isReadOnly, FileLimits.fileBytes]
+// 空间由宿主自己装：共用能力的项目端口从 projectCapabilityPorts 取，本机实现从各单元的 `./local` 入口取，再接成代码面的能力端口。
+declare const projectHost: ProjectHostPort
+declare const approval: ApprovalPort
+const localShell: LocalShellHostApi = createLocalShellHost({ cwd: '/workspace/example' })
+const machineFiles = createLocalFilePort({ resolvePath: (path) => localShell.resolvePath(path) })
+const projectCapabilities = createCapabilityPort({
+  shell: {
+    run: async (input, context) => {
+      const abortSignal = context.signal ?? new AbortController().signal
+      return shellOperations.run(input, { abortSignal, approval, shell: projectCapabilityPorts.shell(projectHost, abortSignal) })
+    },
+  },
+})
+void [projectCapabilities.listOperations(), machineFiles.locate('~/notes.md'), shellCommandPolicy.analyze('ls -la').isReadOnly, FileLimits.fileBytes]
 
 declare const source: LanguageReadPort
 const languageContext: LanguageToolContext = {

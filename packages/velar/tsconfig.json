@@ -19,11 +19,17 @@
       "@velaros-ai/velar/files/contracts": [
         "packages/velar/files/contracts.ts"
       ],
+      "@velaros-ai/velar/files/local": [
+        "packages/velar/files/local.ts"
+      ],
       "@velaros-ai/velar/images": [
         "packages/velar/images/index.ts"
       ],
       "@velaros-ai/velar/images/contracts": [
         "packages/velar/images/contracts.ts"
+      ],
+      "@velaros-ai/velar/images/local": [
+        "packages/velar/images/local.ts"
       ],
       "@velaros-ai/velar/sandbox": [
         "packages/velar/sandbox/index.ts"
@@ -31,11 +37,17 @@
       "@velaros-ai/velar/sandbox/contracts": [
         "packages/velar/sandbox/contracts.ts"
       ],
+      "@velaros-ai/velar/sandbox/local": [
+        "packages/velar/sandbox/local.ts"
+      ],
       "@velaros-ai/velar/shell": [
         "packages/velar/shell/index.ts"
       ],
       "@velaros-ai/velar/shell/contracts": [
         "packages/velar/shell/contracts.ts"
+      ],
+      "@velaros-ai/velar/shell/local": [
+        "packages/velar/shell/local.ts"
       ],
       "@velaros-ai/velar/project": [
         "packages/velar/project/index.ts"

@@ -13,9 +13,7 @@
         "@velaros-ai/kernel": "workspace:*",
         "@velaros-ai/model": "workspace:*",
         "@velaros-ai/platform": "workspace:*",
-        "@velaros-ai/project": "workspace:*",
         "@velaros-ai/surface-protocol": "workspace:*",
-        "@velaros-ai/system": "workspace:*",
         "@velaros-ai/ui": "workspace:*",
       },
       "devDependencies": {
@@ -233,23 +231,6 @@
         "typescript": "^5.7.0",
       },
     },
-    "packages/project": {
-      "name": "@velaros-ai/project",
-      "version": "3.0.0",
-      "dependencies": {
-        "@velaros-ai/code-surface": "workspace:*",
-        "@velaros-ai/core": "workspace:*",
-        "@velaros-ai/platform": "workspace:*",
-        "@velaros-ai/velar": "workspace:*",
-      },
-      "devDependencies": {
-        "@types/node": "^22.19.17",
-        "typescript": "^5.7.0",
-      },
-      "peerDependencies": {
-        "@velaros-ai/agent": "workspace:^",
-      },
-    },
     "packages/surface-protocol": {
       "name": "@velaros-ai/surface-protocol",
       "version": "0.2.0",
@@ -259,26 +240,6 @@
       "devDependencies": {
         "@types/node": "^22.19.17",
         "typescript": "^5.7.0",
-      },
-    },
-    "packages/system": {
-      "name": "@velaros-ai/system",
-      "version": "1.2.0",
-      "dependencies": {
-        "@velaros-ai/code-surface": "workspace:*",
-        "@velaros-ai/core": "workspace:*",
-        "@velaros-ai/path-rules": "workspace:*",
-        "@velaros-ai/platform": "workspace:*",
-        "@velaros-ai/text-files": "workspace:*",
-        "@velaros-ai/velar": "workspace:*",
-        "diff": "^8.0.4",
-      },
-      "devDependencies": {
-        "@types/node": "^22.19.17",
-        "typescript": "^5.7.0",
-      },
-      "peerDependencies": {
-        "@velaros-ai/agent": "workspace:^",
       },
     },
     "packages/text-files": {
@@ -977,11 +938,7 @@
 
     "@velaros-ai/platform": ["@velaros-ai/platform@workspace:packages/platform"],
 
-    "@velaros-ai/project": ["@velaros-ai/project@workspace:packages/project"],
-
     "@velaros-ai/surface-protocol": ["@velaros-ai/surface-protocol@workspace:packages/surface-protocol"],
-
-    "@velaros-ai/system": ["@velaros-ai/system@workspace:packages/system"],
 
     "@velaros-ai/text-files": ["@velaros-ai/text-files@workspace:packages/text-files"],
 

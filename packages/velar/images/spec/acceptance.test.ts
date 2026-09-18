@@ -1,12 +1,12 @@
 /**
  * 看图能力的验收测试：每一条对应 spec/invariants.md 里的一个编号。
  * 这里只测对外承诺的行为，不测实现细节；实现细节的测试在 test/ 目录。
- * 空间端口用 `spec/support.ts` 的真磁盘端口：作用域、缩图口子、交图通道都能按用例换。
+ * 空间端口用 `spec/support.ts` 的真磁盘端口：作用域、缩图口子、交图通道都能按用例换；本机看图端口（`./local` 入口）用真端口、真 sips 测（INV-15）。
  */
 
 import { readFileSync } from 'node:fs'
 import { mkdir, symlink, truncate, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
@@ -16,6 +16,7 @@ import { AppError } from '@velaros-ai/core/error'
 import { VelarImagesModule } from '../contract/surface'
 import type { ImageAttachment, ImageOperationContext, ImageSpacePort } from '../index'
 import { ImageLimits, imageOperations } from '../index'
+import { createLocalImagePort } from '../local'
 
 import {
   checkModelProgram,
@@ -29,6 +30,7 @@ import {
   pngResizer,
   removeScratch,
   runModelProgram,
+  solidPng,
   webpImage,
 } from './support'
 
@@ -502,4 +504,46 @@ describe('模型面', () => {
     ]
     for (const name of hidden) expect({ name, shown: ImageDeclarations.includes(name) }).toEqual({ name, shown: false })
   })
+})
+
+/** 本机看图端口（`./local` 入口）接成系统空间那样的上下文：相对路径相对用例的临时目录，按给的平台决定有没有缩图口子；交出的图都记下来。 */
+function localImageSpace(platform: NodeJS.Platform) {
+  const attached: ImageAttachment[] = []
+  const port = createLocalImagePort({ resolvePath: (path) => resolve(root, path), platform })
+  const context: ImageOperationContext = { abortSignal: new AbortController().signal, images: port, attachImage: (image) => attached.push(image) }
+  return { port, context, attached }
+}
+
+/** 交出的 PNG 真正的宽高：从它自己的 IHDR 里读，不信谁报的数。 */
+function pngSizeOf(image: ImageAttachment): { width: number; height: number } {
+  const bytes = Buffer.from(image.data, 'base64')
+  return { width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) }
+}
+
+describe('本机看图端口', () => {
+  test('INV-15 只有 macOS 给缩图口子，别的平台不给：超限的图照样明说做不了（PLATFORM），不交一张超限的图', async () => {
+    expect(localImageSpace('darwin').port.resizeImage).toBeFunction()
+    for (const platform of ['linux', 'win32'] as const) expect(localImageSpace(platform).port.resizeImage).toBeUndefined()
+    await writeFile(join(root, 'wide.png'), pngImage(3000, 2000))
+    const space = localImageSpace('linux')
+    expect((await failureOf(imageOperations.view({ files: [{ path: 'wide.png' }] }, space.context))).code).toBe('PLATFORM')
+    expect(space.attached).toEqual([])
+  })
+
+  test.skipIf(process.platform !== 'darwin')('INV-15 macOS 上用 sips 真压、真裁：超长边的图压到上限以内，裁出来的一块不被放大，又裁又缩的先裁后缩', async () => {
+    await writeFile(join(root, 'wide.png'), solidPng(3000, 2000))
+    const space = localImageSpace('darwin')
+    const whole = await imageOperations.view({ files: [{ path: 'wide.png' }] }, space.context)
+    expect(whole.files).toMatchObject([{ path: join(root, 'wide.png'), width: 3000, height: 2000, sent: { width: 2000, height: 1333 } }])
+    expect(space.attached[0]?.mediaType).toBe('image/png')
+    expect(pngSizeOf(space.attached[0]!)).toEqual({ width: 2000, height: 1333 })
+    // 右半边（纯蓝）裁 1000×800：不超长边，不该被放大。
+    const zoomed = await imageOperations.view({ files: [{ path: 'wide.png', region: { x: 2000, y: 0, width: 1000, height: 800 } }] }, space.context)
+    expect(zoomed.files).toMatchObject([{ sent: { width: 1000, height: 800 } }])
+    expect(pngSizeOf(space.attached[1]!)).toEqual({ width: 1000, height: 800 })
+    // 又裁又缩：先在原图上裁出 2500×1000，再缩到长边 2000。sips 不管参数怎么排都先缩后裁，一次调完的话这一块会落到图外面去。
+    const both = await imageOperations.view({ files: [{ path: 'wide.png', region: { x: 500, y: 1000, width: 2500, height: 1000 } }] }, space.context)
+    expect(both.files).toMatchObject([{ sent: { width: 2000, height: 800 } }])
+    expect(pngSizeOf(space.attached[2]!)).toEqual({ width: 2000, height: 800 })
+  }, 60_000)
 })

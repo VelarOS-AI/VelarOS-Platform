@@ -118,7 +118,7 @@ API 按 **base64 之后**的大小限（直连 10 MB、Bedrock/Google Cloud 5 MB
 **import 只写一次**，下面一段一个函数、一种日常最常用的写法（跑测试只交失败的尾巴、改一行配置、搜到就改、看过差量再落回……）。
 **模版只是示例**：模版头、门的规矩、`template()` 的说明里都写着按需要改写、不必照着写——它教的是能力怎么组合，不是程序必须长成这样。
 没有模版的命名空间生成器不给过。写错的模版会把错的写法原样教出去，所以有两道核对：各单元的验收把模版**整份照真实声明过类型检查**；
-仓库层的 `tests/capabilities/capability-templates.test.ts` 在真的系统空间与项目空间里（真的本地内核、真命令、真沙箱、真的项目内核与语言服务）
+仓库层的 `tests/capabilities/capability-templates.test.ts` 在真的系统空间与项目空间里（本机实现、真命令、真沙箱、真的项目内核与语言服务；两个空间照产品的写法装在 `tests/support/spaces.ts`）
 经真的门把**每个函数都跑一遍**，看它交回的是不是它说的样子、磁盘上是不是真改了——结果键取错一个、默认写法跑不通，类型检查看不出来，跑一遍就露出来。
 这一轮核对就抓到两处：类型检查挡下了一段再普通不过的 `.map((symbol) => …)`（于是给模型的程序放开了 `noImplicitAny`，见上），
 实跑发现项目的 list 把 `.git/` 里的东西全列了出来（现在列举跳过版本库内部）。
@@ -155,10 +155,10 @@ edit 与 inspect 交回完整差量，`velar:code` 不按条数截，`velar:shel
 
 | 模块 | 操作 | 系统空间 | 项目空间 | 实现住在 |
 | --- | --- | --- | --- | --- |
-| `velar:files` | read / edit / undo | ✓ 本机文件 | — | `@velaros-ai/velar` 的 `files/` |
-| `velar:images` | view | ✓ | ✓ | `@velaros-ai/velar` 的 `images/` |
-| `velar:shell` | run / listTasks / stop / refreshEnvironment | ✓ | ✓ | `@velaros-ai/velar` 的 `shell/` |
-| `velar:sandbox` | create / run / diff / apply / discard | ✓ | ✓ | `@velaros-ai/velar` 的 `sandbox/` |
+| `velar:files` | read / edit / undo | ✓ 本机文件 | — | `@velaros-ai/velar` 的 `files/`（本机端口在 `files/local`） |
+| `velar:images` | view | ✓ | ✓ | `@velaros-ai/velar` 的 `images/`（本机端口在 `images/local`） |
+| `velar:shell` | run / listTasks / stop / refreshEnvironment | ✓ | ✓ | `@velaros-ai/velar` 的 `shell/`（本机 shell 宿主、受约束执行器在 `shell/local`） |
+| `velar:sandbox` | create / run / diff / apply / discard | ✓ | ✓ | `@velaros-ai/velar` 的 `sandbox/`（本机演练沙箱在 `sandbox/local`） |
 | `velar:project` | read / list / search / edit / inspect / undo | — | ✓ 受项目治理的文件 | `@velaros-ai/velar` 的 `project/` |
 | `velar:code` | query / analyze | — | ✓ | `@velaros-ai/velar` 的 `project/` |
 | `velar:computer` | screenshot / move / click / typeText / key | 宿主装了桌面控制插件时挂 | — | `@velaros-ai/velar` 的 `computer/` |
@@ -171,10 +171,10 @@ edit 与 inspect 交回完整差量，`velar:code` 不按条数截，`velar:shel
 
 | 能力 | 端口 | 空间要回答的问题 |
 | --- | --- | --- |
-| `velar:files` | `FileSpacePort` | `locate`：路径怎么解析、越界算不算；`commit`：怎么落盘（写或删，核对原字节） |
-| `velar:images` | `ImageSpacePort` | `locate`：能看哪儿的图；`resizeImage`：宿主会不会裁图缩图 |
-| `velar:shell` | `ShellSpacePort` | `resolveCwd`：命令在哪儿跑；`commandPolicy`：危险命令的确认文案与风险分类；跑命令、列任务、刷新环境交给哪个宿主 |
-| `velar:sandbox` | `SandboxSurfacePort` | `resolveSource`：能镜像哪些目录；镜像里的命令交给谁 |
+| `velar:files` | `FileSpacePort` | `locate`：路径怎么解析、越界算不算；`commit`：怎么落盘（写或删，核对原字节）。本机实现 `createLocalFilePort` |
+| `velar:images` | `ImageSpacePort` | `locate`：能看哪儿的图；`resizeImage`：宿主会不会裁图缩图。本机实现 `createLocalImagePort`，项目里是 `projectCapabilityPorts.images` |
+| `velar:shell` | `ShellSpacePort` | `resolveCwd`：命令在哪儿跑；`commandPolicy`：危险命令的确认文案与风险分类；跑命令、列任务、刷新环境、停任务交给哪个宿主（`ShellHostPort`，本机实现 `createLocalShellHost`；项目里是 `projectCapabilityPorts.shell`，多一道项目资源门） |
+| `velar:sandbox` | `SandboxSurfacePort` | `resolveSource`：能镜像哪些目录；其余交给宿主的沙箱（`RehearsalSandboxHostPort`，含在镜像里跑命令；本机实现 `createLocalSandboxHost`，项目里是 `projectCapabilityPorts.sandbox`） |
 | `velar:computer` | `ComputerSpacePort` | 桌面控制交给哪份运行时：宿主把 `createComputerRuntime` 造的那份直接交进来（结构上满足端口）；没有桌面的宿主不挂这件能力 |
 | `velar:memory` | `MemoryScopePort` | 这个会话落在哪个作用域：宿主用 `createMemoryStore({ root }).scope(作用域)` 取一份交进来，作用域字符串由产品定、记忆不解释；会话开场的索引也由宿主用同一份的 `renderIndex()` 放进系统提示词（ADR 0010） |
 | `velar:office` | `OfficeSpacePort` | `getRootPath`：文档读写落在哪个根里（出了根一律拒绝）；`inspectEnvironment`、`runCommand`：本机有没有 LibreOffice、LaTeX 编译器，外部命令交给谁跑（只收原生 argv）；`locateMarkItDown`：按宿主自己的插件状态回答 MarkItDown 装没装、停没停用 |
@@ -187,19 +187,21 @@ edit 与 inspect 交回完整差量，`velar:code` 不按条数截，`velar:shel
 `velar:project` 给项目空间，各有各的声明、模版与实现。两边在「怎么读」上仍然一致：读出来都是带行号的行（`[行号, 原文]`），带版本号，改的时候按行号改。
 看图对两边是同一件事，所以拆成单独的 `velar:images`，两个空间挂同一份。
 
-**空间就是一张装配表**：给哪几件能力、每件能力用哪个端口。系统空间是 `@velaros-ai/system` 的 `createSystemSpace`——
-路径可以是本机任意位置、`~` 展开到家目录，写是逐个原子替换，命令在本机任意目录跑。
-项目空间是 `@velaros-ai/project` 的 `createProjectSpace`——挂上两件项目独有的能力（`@velaros-ai/velar/project`），外加给共用能力装的项目端口：
-命令的工作目录钳在项目内、前台命令进项目资源门排队；沙箱只镜像项目内的目录；看图只看项目里的图。
+**空间就是一张装配表**：给哪几件能力、每件能力用哪个端口、哪几件常驻。**装空间是产品的事**（ADR 0013），仓库里只有端口：
+系统空间用各单元 `./local` 入口里的本机实现——路径可以是本机任意位置、`~` 展开到家目录（本机 shell 宿主的 `resolvePath`），
+写是逐个原子替换，命令在本机任意目录跑，沙箱能镜像任意目录。项目空间挂上两件项目独有的能力（`@velaros-ai/velar/project`），
+共用能力的项目端口取自同一个单元的 `projectCapabilityPorts`：命令的工作目录钳在项目内、前台命令进项目资源门排队；
+沙箱只镜像项目内的目录；看图只看项目里的图。
 
 **能力单元是普通的目录，按同一套规范放在一起。** 模型 import 的每一件都在 `packages/velar/` 下——跨空间注入的 files、images、shell、sandbox、memory，宿主装了插件才挂的 computer，
 和项目独有的 project、code——一件一个目录，目录名就是模块名（`velar:files` ⇄ `packages/velar/files/`）；它们合成一个包 `@velaros-ai/velar`，
 许可、说明、构建配置只有包根那一份，单元目录里不再各抄一遍。每个单元目录的样子一样：模块卡片 `MODULE.md`、入口 `index.ts` 与 `contracts.ts`、
 `contract/ types/ impl/ utils/` 四个目录、代码模版 `template.js`、`spec/`（不变量登记与验收）与 `test/`。宿主按 `@velaros-ai/velar/<单元>` 引用。
 项目独有的两件长在项目内核上：问代码要用内核的符号表与读取，所以 `velar:project` 与 `velar:code` 同住 `packages/velar/project/`，内核也在那里——
-它就是项目那套规矩（事务、校验、撤销）的实现。**空间不在 velar 里**：`@velaros-ai/system` 与 `@velaros-ai/project` 各是一个包，只做装配、只写端口，
-能力一件都不实现。工具经空间端口（`ProjectSpacePort`）向空间要项目根、内核与代码查询；项目空间的宿主端口在它之上再加命令、沙箱与缩图，
-那是给共用能力装端口用的。
+它就是项目那套规矩（事务、校验、撤销）的实现。**装配不在仓库里，实现都在能力里**：端口的本机实现跟着它实现的那件能力走
+（本机 shell 宿主与受约束执行器在 `shell/local`，演练沙箱在 `sandbox/local`，本机文件与全局搜索在 `files/local`，本机看图在 `images/local`），
+渲染进程能加载的根入口因此不掺 Node。工具经空间端口（`ProjectSpacePort`）向空间要项目根、内核与代码查询；
+项目的宿主端口 `ProjectHostPort` 在它之上再加命令、沙箱与缩图，那是给共用能力装端口用的。
 
 判据和上一节是同一条：**所有空间都一样的事在能力里只做一份**（有界读、认编码、核版本、留原文、压图、一批的成败、
 命令分类、危险命令确认、钳上限），**只有空间真不一样的才进端口**。端口方法宁少勿多：要加钩子，等空间真要接的时候再加，不提前猜。
@@ -215,7 +217,7 @@ edit 与 inspect 交回完整差量，`velar:code` 不按条数截，`velar:shel
 
 程序里看得见的只有返回值、`error.code` 与 `error.message`——工具时代那套 `cause.details`、`context.applied`、
 `suggestedNextAction` 模型根本拿不到，所以要让模型知道的都写进 message，要让程序能分支的都给成专属错误码
-（`FILES_EDIT_UNRESOLVED`、`FILES_EDIT_DENIED`、`FILES_UNDO_CONFLICT`、`SYSTEM_SANDBOX_CONFLICT`、`SYSTEM_SANDBOX_CHANGED`；
+（`FILES_EDIT_UNRESOLVED`、`FILES_EDIT_DENIED`、`FILES_UNDO_CONFLICT`、`SANDBOX_CONFLICT`、`SANDBOX_CHANGED`、`SHELL_UNAVAILABLE`；
 项目那边直接用 `ProjectErrorCodes` 的原因码，候选、诊断、第几步第几处与下一步都写进 message）。
 
 ## schema 这一层直接消失

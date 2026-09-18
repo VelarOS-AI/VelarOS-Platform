@@ -11,7 +11,7 @@ VelarOS Platform is a flat Bun workspace. Every publishable package lives direct
 | Core | `packages/core`, `packages/platform` |
 | Foundations | `packages/code-surface`, `packages/velar`, `packages/text-files`, `packages/path-rules`, `packages/tool-contract` |
 | Model | `packages/model` |
-| Capabilities | `packages/cli`, `packages/development`, `packages/project`, `packages/system` |
+| Capabilities | `packages/cli`, `packages/development` |
 | UI | `packages/ui` |
 | HTML artifacts | `packages/html-artifacts` |
 | Surface | `packages/surface-protocol` |
@@ -25,20 +25,22 @@ The repository is converging on three rules; packages move one at a time, each m
    imported as `velar:<unit>`), and the package that carried it moves in with its implementation, not as a projection over a package
    left outside: the project kernel behind `velar:project` and `velar:code`, the helper sidecar behind `velar:computer`, the memory
    store behind `velar:memory`, the document engines behind `velar:office`, and the CDP drivers, page engines and Electron session
-   runtime behind `velar:browser` and `velar:devtools`. The old package is then deleted — there
-   is never a second copy. A package with no model face is not a tool and stays outside `velar`, grouped by responsibility:
-   `development`, the language services a host plugs into `velar:code`, is one.
+   runtime behind `velar:browser` and `velar:devtools`, and the local machine host behind `velar:shell` and `velar:sandbox`. The old
+   package is then deleted — there is never a second copy. A package with no model face is not a tool and stays outside `velar`,
+   grouped by responsibility: `development`, the language services a host plugs into `velar:code`, is one.
 2. **Core execution stays outside `velar`**: `kernel`, `agent`, `model`, `code-surface` (the program gate), `tool-contract`,
    `surface-protocol`, and the cross-domain foundations `core` and `platform`.
 3. **Product assembly is not in this repository.** A space (which capabilities are mounted, with which ports and policies)
-   is assembled by each product (Desktop, Workbench, Termel). Reusable host implementations those products share — the local
-   machine host behind shell and sandbox, for example — are not tools either: they stay packages of their own.
+   is assembled by each product (Desktop, Workbench, Termel). The implementations those products share are the capabilities'
+   own and live with them: each unit's Node-only `./local` entry gives its port on this machine (the local shell host, the rehearsal
+   sandbox, machine files, machine images), and `velar/project` gives the ports the project hands to the shared capabilities
+   ([ADR 0013](../decisions/0013-spaces-leave-platform.md)). `tests/support/spaces.ts` shows how a product assembles the two spaces.
 
 | Package | Destination | Status |
 | --- | --- | --- |
 | `development` | stays `packages/development`: language services a host plugs into `velar:code`, not a tool | done |
-| `system` | space assembly → products; the local machine host stays a package of its own | pending |
-| `project` | space assembly and ports → products; verification policy → `velar/project` | pending |
+| `system` | space assembly → products; the local machine host → `velar/shell/local` (commands, background tasks, consoles, shell selection, process confinement, the Windows process host, plus the processes, ports, metrics and environment report a host UI shows) and `velar/sandbox/local` (the rehearsal sandbox); the machine file and image ports → `velar/files/local`, `velar/images/local`, the global search a host UI shows → `velar/files/local` (ADR 0013); `packages/system` deleted | done |
+| `project` | space assembly → products; the ports the project hands to shell, sandbox and images, and the verification policy → `velar/project` (ADR 0013); `packages/project` deleted | done |
 | `text-files`, `path-rules` | stay foundations: libraries the `velar` units build on, not tools | done |
 | `computer` | `velar/computer` (`velar:computer`, with the helper sidecar runtime and its bundled Python helpers) | done |
 | `knowledge` | deleted with its vector and full-text indexes ([ADR 0010](../decisions/0010-memory-slimming.md)): each space searches and reads its own files | done |
