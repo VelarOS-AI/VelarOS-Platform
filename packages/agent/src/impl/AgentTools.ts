@@ -312,7 +312,6 @@ export const recallContext: VelaTool<RecallContextInput> = defineVelaTool<Recall
     '折叠桩标注 excerptTruncated:false 时内容已完整可见，不要对它召回。',
   ],
   usage: [
-    '取回旧文件时传 path 列版本，path + revision 读旧版本；也可直接传快照 ref，系统自动识别。只读历史，不更新当前文件。',
     '搜索未知内容时传 query，kind 默认 all，会同时查会话历史和终端日志。',
     '精确取回时只需传 ref（refKind/reason 可省略，系统按 ref 形状自动判别）。',
     '历史参数视图带 __historyInputOmissions 时，用其中 ref/jsonPath 取回省略字段；标注不是源码。失败回执带 inputReuse 时优先差量重试，无需重新输入正文。',
@@ -986,7 +985,7 @@ export const readBackgroundJobOutput: VelaTool<ReadBackgroundJobOutputInput> = d
     '需要非阻塞地轮询后台任务输出，而不是 sleep 或重复派发同一任务。',
   ],
   forbidden: [
-    '不要用它读取系统 shell 命令历史；系统后台命令仍使用 system:list-tasks。',
+    '不要用它读 shell 命令的输出；后台命令在程序里用 velar:shell 的 listTasks 看。',
     '不要在没有 job_id 时猜测；先从 agent:dispatch 返回或后台通知中取得 job id。',
   ],
   usage: [
@@ -1003,7 +1002,7 @@ export const readBackgroundJobOutput: VelaTool<ReadBackgroundJobOutputInput> = d
   ],
   notes: [
     '该工具只访问当前会话拥有的内核后台 job；跨会话或不存在的 job 会返回 not found。',
-    '它不等待任务完成；需要等待外部条件（端口/HTTP/文件）时用 system:run 轮询（如 curl/test -f 循环）。',
+    '它不等待任务完成；需要等待外部条件（端口/HTTP/文件）时在程序里用 velar:shell 的 run 轮询（如 curl/test -f 循环）。',
   ],
   schema: readBackgroundJobOutputSchema,
   permissions: [],
@@ -1024,7 +1023,7 @@ export const waitBackgroundJobs: VelaTool<WaitBackgroundJobsInput> = defineVelaT
     '需要一次性等待当前会话内所有已运行后台 job，可省略 job_ids。',
   ],
   forbidden: [
-    '不要用它等待普通系统命令；系统后台命令用 system:list-tasks 或系统任务工具。',
+    '不要用它等待普通命令；后台命令在程序里用 velar:shell 的 listTasks 看。',
     '不要把 thread_id 当 job_id；job_id 来自 agent:dispatch 返回或后台通知。',
   ],
   usage: [

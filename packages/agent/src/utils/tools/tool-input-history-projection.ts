@@ -47,6 +47,7 @@ export function projectToolInputForHistory(input: Record<string, unknown>, toolC
     if (isString(value)) {
       if (HistoryPreviewPlaceholderHeaderPattern.test(value.trimStart())) return omit(path)
       if (field === 'widget_code' && value.length <= 8_000) return value
+      if (field === 'program' && value.length <= AgentTuning.tools.programHistoryChars) return value
       const largeField = isString(field) && LargeFields.has(field) && value.length > 240
       if (largeField || value.length > AgentTuning.tools.inputHistoryStringChars || value.startsWith('data:')) return omit(path, { chars: value.length })
       return value

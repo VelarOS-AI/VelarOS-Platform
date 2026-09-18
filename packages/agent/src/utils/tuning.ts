@@ -245,6 +245,11 @@ export const AgentTuning = Object.freeze({
     inputHistoryChars: 12_000,
     /** 历史里工具入参投影中单个字符串的上限。 */
     inputHistoryStringChars: 900,
+    /**
+     * 门的程序正文（`program:run` 入参里的 program）在历史里原样留多长：模型下一轮要照着它写 edits，看不见就改不了。
+     * 更长的照常省略、可召回；整份入参仍受 inputHistoryChars 管，所以这里要比它小。
+     */
+    programHistoryChars: 10_000,
     /** 历史里工具入参投影中单个数组最多留几项。 */
     inputHistoryArrayItems: 100,
     /** 历史里工具入参投影最多记几条省略说明。 */

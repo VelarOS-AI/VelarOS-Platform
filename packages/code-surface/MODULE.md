@@ -12,6 +12,10 @@
 
 本包**不认识任何一件具体能力**。哪些能力存在、某次调用要不要向用户要授权、算不算危险，全在宿主那一侧。
 
+模型面上只有一个工具：门本身，`program:run`（`impl/CodeSurfaceTools.ts`）。provider 那层协议去不掉，但只剩这一个——
+模型交一段程序，别的能力都在程序里 import。写程序的规矩与常驻模块的完整声明由 `describe` 编好，宿主放进系统提示词最前面那段
+（按空间恒定，能命中前缀缓存）；工具说明只讲入参怎么填。
+
 ## 提供什么
 
 **产品面**，登记在 `contract/provides.ts`：两件东西的 API 定义在各自类的上方，这里 re-export。
@@ -21,6 +25,9 @@
 | `codeProgramChecker` | `CodeProgramCheckerApi` | 执行之前的那道门。程序是 JavaScript，但照样受类型检查（`checkJs`，类型从声明里推）——字段拼错、读一个不存在的字段、入参形状错、输出被截断，都在这里拦下，报错直接给出正确的名字。模型手滑写了 TypeScript 时不废掉整轮：剥掉类型照跑 |
 | `createCodeSurfaceSession` | `CodeSurfaceSessionApi` | 把一次「模型交了段程序」办完：查体量 → 检查 → 隔离里执行 → 把能力调用转给宿主 → 编成给模型看的结果 |
 | `nodeSubprocessCodeRunner` | `CodeRunnerApi` | **开发期专用**的隔离运行器，见「非目标」 |
+| `codeSurfaceTools` | `CodeSurfaceToolCollection`（其中的 `CodeSurfaceTool`） | 门在模型面上的工具，按工具名索引：只有 `program:run`。常驻、回执不卸载、同一会话不并发；执行时把程序交给上下文里的门，回执写成 agent 原样转给模型的内容块（文字在前、图在后），模型不收图时图不放进去 |
+| `createCodeSurfaceKernelModule` / `CodeSurfaceCapability` | `CodeSurfaceCapabilityService` | 把 `program:run` 挂进 VelarOS 内核的模块与它的身份令牌；宿主给了上下文解析器，才能按名调用 |
+| `CodeSurfaceToolNames` / `CodeSurfaceToolCategoryId` / `CodeSurfaceKernelModuleVersion` | 契约常量 | 门的工具名（`program:run`）、工具类别（`program`，宿主在会话里打开它门才出现）、内核模块版本 |
 | `createCodeProgramGate` | `CodeProgramGateApi` | 模型写程序的那扇门：按会话记着导入过的模块与上一份程序，给模型的说明（写程序的规矩、常驻模块的完整声明、其余模块的方法名）也由它编。头一次 import 按需模块时不执行、交回完整声明；退租过的再用到时静默装回；诊断带代码帧；跑完的结果编成模型读的回执，图跟在后面 |
 | `createCapabilityPort` | `CodeCapabilityPort` | 能力空间交一张**操作表**（命名空间 → 操作名 → 那个函数），拿回代码面要的那个端口。登记、转发、整形错误这三件事每个空间一模一样，写一遍就够。表里**没有校验也没有一个字给模型**：说明在生成的声明里，校验在操作方法自己里——盖在调用方这一侧换个入口就漏 |
 | `NodeSubprocessRunnerIsReleaseReady` | 契约常量 | 恒为 `false`：上面那个运行器不许进正式发版，宿主装配时据此拦下 |
@@ -36,6 +43,8 @@
 | `CodeCapabilityPort` | 代码面与真实能力之间唯一的通道。`listOperations` 报有哪些能力（声明与隔离里的桩都按它造），`invoke` 执行一次调用——**审批、危险判定、权限、运行事件都在它里面撞** |
 | `CodeCapabilityCall` / `CodeCapabilityOutcome` | 一次调用的入参与结果；结果里的 `error` 在程序里是一个能 `try/catch` 的异常 |
 | `CodeSurfaceEventSink` | 程序跑起来之后陆续发生的事：调用起止与日志。界面要实时看见日志，模型那边不走这条路 |
+| `CodeSurfaceToolContext` | 门那个工具每次被调用时宿主给的上下文：取消信号、会话身份（带上分支与检查点）、门、这一次调用所在的空间（`CodeSurfaceSpacePort`：挂的模块与按这次调用装好的能力端口）、模型收不收图、界面事件槽 |
+| `CodeSurfaceToolContextResolver` / `CreateCodeSurfaceKernelModuleOptions` | 内核按工具名调用时，宿主用它把作用域换成一份门的上下文；建内核模块时放在选项里给 |
 
 **数据面**是 `types/code-surface.ts`，可移植：`CodeProgramRequest`（程序与 `blobs`）、`CodeProgramDiagnostic`（一条诊断）、
 `CodeProgramEdit` / `CodeProgramRange`（在上一份上改的一处）、`CodeCallNotice`（系统插手过的地方）、
@@ -54,6 +63,10 @@
 | `./contracts` | 渲染进程与任何不碰 Node 的地方 | 只有可移植数据与常量表：错误码、对外上限、程序与结果的形状 |
 
 ## 骨干链路
+
+**门那个工具**（`impl/CodeSurfaceTools.ts`）：模型调 `program:run` → 入参（`program` 或 `edits`，外加 `blobs`）换成程序请求
+→ `ctx.gate.run`（按会话定源码、授声明、检查、执行）→ `programToolResult` 把回执写成内容块：文字在前，每张图前面一行说明，
+`result` 与内容块里的文字逐字一致（agent 据此原样转给模型）；模型不收图时图不放进去、只说一声。
 
 **程序是一个 ES 模块**：`import { read } from 'velar:files'` 拿能力、顶层 `await` 直接用、
 `export default` 交出答案。写的是真 JavaScript，不是方言——那是代码面唯一的依仗。
@@ -77,7 +90,8 @@
 
 ## 依赖什么
 
-`typescript`（检查与手滑那条路的剥类型）、`@velaros-ai/core`。能力端口与事件槽由宿主注入。
+`typescript`（检查与手滑那条路的剥类型）、`@velaros-ai/core`；门的工具用 `@velaros-ai/tool-contract`（定义工具、渲染说明、挂进内核）、
+`@velaros-ai/kernel`（内核模块与能力令牌）与 `zod`（入参 schema）。能力端口、门、空间与事件槽由宿主注入。
 
 ## 状态归谁
 
@@ -96,8 +110,8 @@
 
 ## 不变量
 
-共 23 条，登记在 `spec/invariants.md`，验收用例在 `spec/acceptance.test.ts`。编号只增不重排。
-按检验方式：测试 22 条、门禁 1 条。未验证 0 条。
+共 24 条，登记在 `spec/invariants.md`，验收用例在 `spec/acceptance.test.ts`。编号只增不重排。
+按检验方式：测试 23 条、门禁 1 条。未验证 0 条。
 
 ## 非目标
 
@@ -115,10 +129,10 @@ src/
   contract/   constants.ts 错误码与对外上限；provides.ts 交出去的接口；requires.ts 宿主注入的能力端口与事件槽
   types/      code-surface.ts 可移植数据（程序、诊断、结果）；module-form.ts import 与租约；
               editing.ts 编辑落到原文后的形状；runner.ts 隔离运行器的形状；gate.ts 门的入参、回执与会话状态
-  impl/       CodeProgramGate 模型写程序的那扇门；CodeSurfaceSession 会话编排；CodeProgramChecker 执行前的检查；NodeSubprocessCodeRunner 开发期隔离；
+  impl/       CodeSurfaceTools.ts 门在模型面上的工具 program:run 与内核模块（工具文件）；CodeProgramGate 模型写程序的那扇门；CodeSurfaceSession 会话编排；CodeProgramChecker 执行前的检查；NodeSubprocessCodeRunner 开发期隔离；
               CapabilityOperationPort 操作表接成能力端口
   utils/      compiler.ts 编译器那一侧的活；module-form.ts 挖 import 与租约、改写成隔离能跑的形状；
-              edit.ts 在上一份程序上改；diagnostics.ts 带代码帧的诊断；gate.ts 门给模型的说明与回执；
+              edit.ts 在上一份程序上改；diagnostics.ts 带代码帧的诊断；gate.ts 门给模型的说明与回执；tool.ts 定义门的工具；
               result.ts 定源码与编结果；budget.ts 预算裁剪；program.ts 包装；node-executable.ts 找一个真的 node；tuning.ts 可调参数
 bin/          code-surface-child.mjs 隔离进程侧引导，自身不引任何模块
 ```

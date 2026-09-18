@@ -477,14 +477,48 @@ for (const f of files) await edit({ files: [{ path: f, … }], grant })
    过程中实测抓到三件：转译漏做、大回包被 `process.exit` 截断、以及**隔离静默失效**——
    `fork` 缺省用 `process.execPath`，宿主跑在 bun 下时起出来的是 bun，它忽略 `--permission`，
    命令行看着正常而隔离一点没生效。因此立下 INV-9：**隔离必须自证才接活**，只信旗标不算数。
-2. **生成器**：能力包 TS 类型 → `.d.ts`，先 system 全量，再铺开。加门禁守生成物与源码一致。
-3. **接进 agent**：作为一种执行模式（`listExecutionModes()`），与今天的工具面并存。
+2. ~~**生成器**：能力包 TS 类型 → `.d.ts`，先 system 全量，再铺开。加门禁守生成物与源码一致。~~
+   **已完成**，六个命名空间全量生成；声明除了 `baselines/code-surface/` 还**随包发布**——每件能力在自己包的
+   `contract/surface.ts` 里带一份（模块名、放出的方法、完整声明），产品不必另找；检查模式两处都核。
+3. **接进 agent**：模型写程序的那扇门。**平台这一侧已建**，见下面「门：`program:run`」；
+   **产品壳那一侧未接**（Desktop 等不在本仓）。工具面已经删了，不再「并存」。
 4. **对照**：agent-lab 上两种形态跑同一批 journey。
 5. **收口**：代码面打平之后删掉旧工具面，连同它的三套补丁（工具空间分页、批量字段、回执截断句柄）。
 
+## 门：`program:run`
+
+门在模型面上只有一个工具，名字定成 `program:run`（`code` 撞 `velar:code`，`run` 撞 `velar:shell` 的 `run`），
+类别 `program`，住在 `@velaros-ai/code-surface`：`codeSurfaceTools` / `createCodeSurfaceKernelModule` 是它的工具与内核模块，
+`createCodeProgramGate` 是它背后按会话记状态的门，空间交 `operations` 与 `modules`。
+
+**文字放哪**（按前缀缓存与上下文治理定）：
+
+| 内容 | 放哪 | 为什么 |
+| --- | --- | --- |
+| 写程序的规矩 + 常驻模块的完整声明 + 其余模块的方法名（`gate.describe(space.modules)`） | 系统提示词最前面那段（Tier0 `core`，`retention: 'protected'`，priority 小于 1000，不带 `when`） | 按空间恒定，命中第一个缓存断点；切空间时失效一次。工具说明有 6000 字硬上限，放不下，也不该按空间变 |
+| 按需模块的完整声明 | 门的回执（头一次 import 时交回），进历史、只追加 | 用到才付那一份的字数 |
+| 入参怎么填 | 工具说明（静态、不到 1800 字） | |
+
+**回执的形状**：工具结果写成 `{ result, modelContent }`，文字在前、图在后（每张前面一行说明），`result` 与内容块里的文字逐字一致——
+agent 认出这一点就把内容块原样交给模型，不转义、不截断；工具声明 `outputInline`，回执不卸载成句柄。模型不收图时图不放进去、只说一声
+（带图的请求会被纯文本模型整轮拒掉）。程序正文在历史里原样留着（`AgentTuning.tools.programHistoryChars`，1 万字以内）：
+下一轮的 `edits` 要照它一字不差地写。
+
+**宿主要接的**（产品壳那一侧，缺一条门就不在或者会串）：
+
+- 工具上下文里给 `gate`（进程里一个）与 `space`（`{ modules, capabilities: createCapabilityPort(space.operations) }`，按这一次调用装好）；
+  `sessionId` 带上分支与检查点（切分支、回检查点时导入与上一份程序不串）；`events` 接到界面（日志 → 进度，调用起止 → 元数据）。
+- 系统提示词：一个 `CapabilityPromptContributor`，按当前空间返回上面那段 Tier0。
+- 曝光：类别 `program` 的 `defaultState: 'resident'` 并在会话里打开；`program:run` 写进 `allocation.baselineToolNames` 与
+  `scopePolicy.getResidency().residentToolNames`（工具自己已声明 `alwaysResident`）。否则新任务的第一问看不见它，或者预算紧时被挤掉。
+- 治理：按需声明那条回执 pin 住（分类器认 `program:run` 加回执开头「程序 import 了还没给过声明的模块」）。
+- 生命周期：在调 `AgentExecutionStack.clearSession` 与转交新会话的同一处调 `gate.forget`；不要挂在每次执行都发的 `session:end` 上。
+- 子 Agent：和父会话同一个 sessionId，先用 `delegationPolicy.blockedToolNames` 不给它开这扇门，或者给它自己的会话键。
+- 运行器：正式版不能用 `nodeSubprocessCodeRunner`（`NodeSubprocessRunnerIsReleaseReady` 恒为 false）。
+- 环境报告里写上空间的根目录：共用能力的声明说的是「由当前空间决定」。
+
 ## 还没定的
 
-- 那扇门叫什么名字（`code`？`run`？要避开 `velar:shell` 的 `run`）。
 - 网络缺口：`node --permission` 不覆盖 socket，`NodeSubprocessCodeRunner` 因此**不可发版**（INV-5）。
   正式版换 WASM 里的 QuickJS；`CodeRunnerApi` 已抽成注入面，换的时候不返工。
 - 审批中途挂起怎么回到界面：API 函数是 async，`await` 一下审批即可，但交互与界面要跟着改。

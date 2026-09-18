@@ -6,6 +6,21 @@
 /** 本包作为内核模块的身份。 */
 export const CodeSurfaceModId = 'velaros.code-surface' as const
 
+/** 内核模块的版本：门的工具形状（名字、入参、回执）变了就升。 */
+export const CodeSurfaceKernelModuleVersion = '0.1.0' as const
+
+/** 门在模型面上的那一个工具：模型交一段程序就用它，别的能力都在程序里 import。 */
+export const CodeSurfaceToolNames = Object.freeze({
+  /** 交一段程序：检查、执行、交回结果。 */
+  runProgram: 'program:run',
+} as const)
+
+/** 门的工具名。 */
+export type CodeSurfaceToolName = (typeof CodeSurfaceToolNames)[keyof typeof CodeSurfaceToolNames]
+
+/** 门的工具类别：宿主在会话里打开它，门才出现在模型面前。 */
+export const CodeSurfaceToolCategoryId = 'program' as const
+
 /** 代码面的错误码；模型与宿主都按码判断，不按报错文字。 */
 export const CodeSurfaceErrorCodes = Object.freeze({
   /** 程序自己抛了。 */

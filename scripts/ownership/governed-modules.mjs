@@ -255,7 +255,9 @@ export const GovernedModules = [
   {
     directory: 'code-surface',
     name: '@velaros-ai/code-surface',
-    // 没有工具：本包是模型写程序的那条路本身，不是一件能力
+    // 只有一个工具：门本身（program:run）。模型交一段程序就用它，别的能力都在程序里 import
+    toolsFile: 'src/impl/CodeSurfaceTools.ts',
+    toolDefiner: 'defineCodeSurfaceTool',
     contract: 'src/contract',
     types: 'src/types',
     portable: 'code-surface.ts',
@@ -265,6 +267,8 @@ export const GovernedModules = [
     // 根入口起子进程、跑编译器，只给 Node；渲染进程只能加载可移植数据
     browserSafeEntries: ['contracts.ts'],
     layers: [
+      // 门在模型面上的那一个工具，与把它挂进内核的模块
+      ['CodeSurfaceTools.ts'],
       // 模型写程序的那扇门：按会话记导入与上一份程序，编给模型的说明与回执
       ['CodeProgramGate.ts'],
       // 会话编排：查体量、检查、执行、编结果

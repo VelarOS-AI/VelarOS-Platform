@@ -1,8 +1,9 @@
 /** 门的几段文字：给模型的使用说明（连同常驻模块的声明与其余模块的索引）、要补声明时的回执、程序跑完的回执。都不碰实例状态。 */
 
-import { isEmpty } from '@velaros-ai/core'
+import { isBlank, isEmpty, isUndefined } from '@velaros-ai/core'
 
-import type { CodeProgramResult, GrantedModule, MountedCapabilityModule } from '../types/code-surface.js'
+import type { CodeProgramRequest, CodeProgramResult, GrantedModule, MountedCapabilityModule } from '../types/code-surface.js'
+import type { CodeGateReply, ProgramModelContentPart, ProgramToolResult, RunProgramInput } from '../types/gate.js'
 
 /** 怎么写一段交给门的程序：对所有空间都成立的那几条。 */
 const GateRules = [
@@ -55,4 +56,31 @@ export function grantedModules(modules: readonly MountedCapabilityModule[], impo
 /** 程序跑完（或没跑完）的回执：结果原样写成 JSON，模型照着字段读。 */
 export function describeProgramResult(result: CodeProgramResult): string {
   return JSON.stringify(result)
+}
+
+/** 工具入参换成会话要的程序请求：program 就是 source，edits 与 blobs 原样带过去。 */
+export function programRequestOf(input: RunProgramInput): CodeProgramRequest {
+  const request: CodeProgramRequest = {}
+  if (!isUndefined(input.program)) request.source = input.program
+  if (!isUndefined(input.edits)) request.edits = input.edits
+  if (!isUndefined(input.blobs)) request.blobs = input.blobs
+  return request
+}
+
+/**
+ * 门的回执写成工具结果：文字在前，每张图前面一行说明；result 就是这些文字按换行拼起来，
+ * agent 认出两边一致就把 modelContent 原样交给模型（不转义、不截断）。模型不收图时图不放进去，只说一声。
+ */
+export function programToolResult(reply: CodeGateReply, acceptsImages: boolean): ProgramToolResult {
+  const images = acceptsImages ? reply.images : []
+  const dropped = reply.images.length - images.length
+  const text = dropped > 0 ? `${reply.text}\n（程序交出了 ${dropped} 张图；当前模型不收图，没有放进来。）` : reply.text
+  const parts: ProgramModelContentPart[] = [{ type: 'text', text: text.trim() }]
+  for (const image of images) {
+    // 说明是空白的图也要有一行：agent 会丢掉空白的文字块，两边就对不上了。
+    parts.push({ type: 'text', text: isBlank(image.label) ? '程序交出的图' : image.label.trim() })
+    parts.push({ type: 'image-data', data: image.data, mediaType: image.mediaType })
+  }
+  const result = parts.flatMap((part) => (part.type === 'text' ? [part.text] : [])).join('\n').trim()
+  return { result, modelContent: parts }
 }

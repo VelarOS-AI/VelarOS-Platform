@@ -4,12 +4,13 @@ import { existsSync } from 'node:fs'
 
 import { describe, expect, test } from 'bun:test'
 
-import { CodeSurfaceErrorCodes, CodeSurfaceLimits } from '../src/contract/constants'
+import { CodeSurfaceErrorCodes, CodeSurfaceLimits, CodeSurfaceModId, CodeSurfaceToolNames } from '../src/contract/constants'
 import type { CodeCapabilityPort } from '../src/contract/requires'
 import { createCapabilityPort } from '../src/impl/CapabilityOperationPort'
 import { codeProgramChecker } from '../src/impl/CodeProgramChecker'
 import { createCodeProgramGate } from '../src/impl/CodeProgramGate'
 import { createCodeSurfaceSession } from '../src/impl/CodeSurfaceSession'
+import { codeSurfaceTools, createCodeSurfaceKernelModule } from '../src/impl/CodeSurfaceTools'
 import {
   nodeSubprocessCodeRunner,
   NodeSubprocessRunnerIsReleaseReady,
@@ -543,5 +544,54 @@ describe('门', () => {
     gate.forget('s1')
     const lost = await run(gate, 's1', { edits: [{ oldText: 'r.items', newText: 'r.items.length' }] })
     expect(JSON.parse(lost.text).failed.message).toContain('没有上一份程序')
+  }, 60_000)
+})
+
+describe('门的工具', () => {
+  const pictures: MountedCapabilityModule = {
+    resident: true,
+    surface: { specifier: 'velar:pics', namespace: 'pics', methods: ['show'], declarations: "declare module 'velar:pics' {\n  export function show(input: { n: number }): Promise<{ shown: number }>\n}" },
+  }
+  const pixels = Buffer.from('fake-png-bytes').toString('base64')
+  const capabilities = createCapabilityPort({
+    pics: {
+      show: async (input: unknown, { attach }) => {
+        const { n } = input as { n: number }
+        for (let index = 0; index < n; index += 1) attach({ type: 'image-data', mediaType: 'image/png', data: pixels, label: `第 ${index + 1} 张` })
+        return { shown: n }
+      },
+    },
+  })
+  const contextOf = (modalities: readonly string[]) => ({
+    abortSignal: new AbortController().signal,
+    sessionId: 's1',
+    gate: createCodeProgramGate({ checker: codeProgramChecker, runner: nodeSubprocessCodeRunner }),
+    space: { modules: [pictures], capabilities },
+    getSupportedModelInputModalities: () => modalities,
+  })
+  const tool = codeSurfaceTools[CodeSurfaceToolNames.runProgram]
+
+  test('INV-25 模型面上只有 program:run 一个工具：常驻、回执不卸载、不并发，说明只讲入参怎么填', () => {
+    expect(Object.keys(codeSurfaceTools)).toEqual(['program:run'])
+    expect(tool.category).toBe('program')
+    expect(tool.outputInline).toBe(true)
+    expect(tool.exposure).toMatchObject({ tier: 'essential', alwaysResident: true })
+    expect(tool.isConcurrencySafe?.({ program: 'export default 1' })).toBe(false)
+    expect(tool.description.length).toBeLessThanOrEqual(1_800)
+    expect(createCodeSurfaceKernelModule().manifest.id).toBe(CodeSurfaceModId)
+  })
+
+  test('INV-25 回执的文字与交给模型的内容块逐字一致，图跟在后面、各带一行说明；模型不收图时图不放进去、只说一声', async () => {
+    const program = "import { show } from 'velar:pics'\nexport default await show({ n: 2 })"
+    const seen = await tool.execute({ program }, contextOf(['text', 'image'])) as { result: string; modelContent: Array<{ type: string; text?: string }> }
+    const texts = seen.modelContent.filter((part) => part.type === 'text').map((part) => part.text)
+    expect(seen.result).toBe(texts.join('\n').trim())
+    expect(JSON.parse(texts[0]!)).toEqual({ value: { shown: 2 } })
+    expect(seen.modelContent.map((part) => part.type)).toEqual(['text', 'text', 'image-data', 'text', 'image-data'])
+    expect(texts.slice(1)).toEqual(['第 1 张', '第 2 张'])
+
+    const blind = await tool.execute({ program }, contextOf(['text'])) as { result: string; modelContent: Array<{ type: string }> }
+    expect(blind.modelContent.map((part) => part.type)).toEqual(['text'])
+    expect(blind.result).toContain('当前模型不收图')
   }, 60_000)
 })

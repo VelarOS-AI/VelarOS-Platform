@@ -4,7 +4,17 @@
 
 import type { CodeCapabilityPort, CodeSurfaceEventSink } from '../contract/requires.js'
 
-import type { CodeAttachment, CodeProgramRequest, CodeSurfaceOutcome, MountedCapabilityModule } from './code-surface.js'
+import type { CodeAttachment, CodeProgramEdit, CodeProgramRequest, CodeSurfaceOutcome, MountedCapabilityModule } from './code-surface.js'
+
+/** 门那个工具（`program:run`）的入参：整份程序，或者在这个会话的上一份程序上改几处，外加大段文本。 */
+export type RunProgramInput = {
+  /** 程序正文，一个 JavaScript ES 模块；与 edits 只给一个。 */
+  program?: string
+  /** 在这个会话的上一份程序上改的几处；与 program 只给一个。 */
+  edits?: CodeProgramEdit[]
+  /** 大段文本：程序里 `import { blobs } from 'velar:program'` 按名字取。 */
+  blobs?: Record<string, string>
+}
 
 /** 门跑一次要的东西：哪个会话、模型交来的程序、这个空间挂的能力与它们的端口。 */
 export interface CodeGateRunInput {
@@ -42,4 +52,20 @@ export interface CodeGateSessionState {
   retired: Set<string>
   /** 上一份程序的正文：模型传 edits 时在它上面改。 */
   previousSource?: string
+}
+
+/** 门的工具结果里交给模型的一块：一段文字，或者一张图。 */
+export type ProgramModelContentPart =
+  | { type: 'text'; text: string }
+  | { type: 'image-data'; data: string; mediaType: string }
+
+/**
+ * 门的工具结果：result 与 modelContent 里的文字逐字相同——agent 认出这一点，就把 modelContent 原样交给模型，
+ * 不再转义、截断；图跟在文字后面，每张前面一行说明。
+ */
+export interface ProgramToolResult {
+  /** 给模型读的全部文字（modelContent 里各段文字按换行拼起来）。 */
+  result: string
+  /** 交给模型的内容块：文字在前，图在后。 */
+  modelContent: ProgramModelContentPart[]
 }

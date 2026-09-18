@@ -5,7 +5,10 @@
  * 哪些能力存在、每一次调用要不要向用户要授权、危险不危险、算不算一次运行事件，全在宿主这一侧。
  */
 
-import type { CodeAttachment, CodeCallNotice } from '../types/code-surface.js'
+import type { ScopeRef } from '@velaros-ai/kernel/contracts'
+
+import type { CodeProgramGateApi } from '../impl/CodeProgramGate.js'
+import type { CodeAttachment, CodeCallNotice, MountedCapabilityModule } from '../types/code-surface.js'
 import type { CodeRunDispatch, CodeRunOutcome, CodeRunRequest } from '../types/runner.js'
 
 /** 程序发出的一次能力调用。 */
@@ -103,4 +106,43 @@ export interface CodeRunnerApi {
     onLog: (line: string) => void,
     signal?: AbortSignal
   ): Promise<CodeRunOutcome>
+}
+
+/** 这一次调用所在的空间交给门的东西。 */
+export interface CodeSurfaceSpacePort {
+  /** 这个空间挂的能力（空间的 `modules`）：常驻的声明一直给检查器，其余 import 了才给。 */
+  modules: readonly MountedCapabilityModule[]
+  /** 这个空间的能力端口，按这一次调用装好（审批通道、取消信号、会话都是这一次的），如 `createCapabilityPort(space.operations)`。 */
+  capabilities: CodeCapabilityPort
+}
+
+/** 门那个工具（`program:run`）每次被调用时宿主给的上下文。 */
+export interface CodeSurfaceToolContext {
+  /** 本次调用的取消信号：用户停下这一轮时触发，程序与它发出的调用都要停。 */
+  abortSignal: AbortSignal
+  /**
+   * 会话身份：门按它记导入过的模块与上一份程序。会话切了分支、回到检查点时，宿主把分支与检查点一起拼进来，
+   * 两条分支的导入与上一份程序就不串；子 Agent 与父会话同一个 sessionId 时也要区分开，或者不给子 Agent 开这扇门。
+   */
+  sessionId: string
+  /** 门：宿主进程里装一个（`createCodeProgramGate`），所有会话共用；会话结束、转交新会话时宿主调它的 `forget`。 */
+  gate: CodeProgramGateApi
+  /** 这一次调用所在的空间。 */
+  space: CodeSurfaceSpacePort
+  /** 模型收哪些输入形态（`text`、`image`……）；不收图时程序交出的图不放进回执，只说一声。不给当收。 */
+  getSupportedModelInputModalities?: () => readonly string[]
+  /** 界面要实时看见的事（程序发起、结束的调用，打的日志）；模型那边不走这条路。 */
+  events?: CodeSurfaceEventSink
+}
+
+/** 内核按工具名调用时，宿主用它把作用域换成一份门的上下文。 */
+export type CodeSurfaceToolContextResolver = (
+  scope: LooseOptional<ScopeRef>,
+  signal: AbortSignal,
+) => CodeSurfaceToolContext | Promise<CodeSurfaceToolContext>
+
+/** 建门的内核模块时的选项。 */
+export interface CreateCodeSurfaceKernelModuleOptions {
+  /** 宿主自己的、绑定了作用域的上下文解析器；不给就只登记工具目录，不支持按名调用。 */
+  resolveContext?: CodeSurfaceToolContextResolver
 }
