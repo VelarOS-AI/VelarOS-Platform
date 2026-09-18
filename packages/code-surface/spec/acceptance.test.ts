@@ -141,6 +141,26 @@ export default { 捕获到: caught }`)
     expect(outcome.result.notices?.some((notice) => notice.action === 'denied')).toBe(true)
   })
 
+  test('INV-4 只有拒绝进 notices：调用自己的失败程序接得住，不再回放；程序死在拒绝上时 failed 说了就不重复', async () => {
+    const missing = createCodeSurfaceSession({
+      checker: codeProgramChecker,
+      runner: nodeSubprocessCodeRunner,
+      capabilities: { listOperations: () => ({ demo: ['read'] }), invoke: async () => ({ error: { code: 'TARGET_NOT_FOUND', message: '没有这个文件。' } }) },
+    })
+    const caught = await missing.submit({ program: { source: `import { read } from 'velar:demo'
+let outcome
+try { await read({ paths: ['nope.ts'] }) } catch (error) { outcome = error.code }
+export default outcome` }, granted, timeoutMs: 10_000 })
+    if (!caught.checked) throw new Error('应当通过检查')
+    expect(caught.result.value).toBe('TARGET_NOT_FOUND')
+    expect(caught.result.notices).toBeUndefined()
+
+    const refused = await submit(`${importDemo}\nawait danger({ command: 'rm -rf /' })`)
+    if (!refused.checked) throw new Error('应当通过检查')
+    expect(refused.result.failed?.message).toBe('用户拒绝了这条危险命令。')
+    expect(refused.result.notices).toBeUndefined()
+  })
+
   test('INV-9 非 node 运行时下必须解析到真正的 node，否则拒绝执行', () => {
     const resolved = resolveNodeExecutable()
     expect(resolved).not.toBeNull()
@@ -429,6 +449,12 @@ export default 1`)
     const thrown = await submit('export const a = 1\nexport default a\nthrow new Error("第三行炸了")')
     if (!thrown.checked) throw new Error('应当通过检查')
     expect(thrown.result.failed?.line).toBe(3)
+
+    // 能力报的错没接住：行号是发起那次调用的那一行（错误是收回音时造的，栈上本来没有程序的帧）。
+    const uncaught = await submit(`${importDemo}\nawait read({ paths: ['a.ts'] })\n\nawait danger({ command: 'rm -rf /' })\nexport default '到不了'`)
+    if (!uncaught.checked) throw new Error('应当通过检查')
+    expect(uncaught.result.failed?.message).toBe('用户拒绝了这条危险命令。')
+    expect(uncaught.result.failed?.line).toBe(4)
   })
 
   test('INV-23 能力交出的图走旁边的通道：程序拿不到像素，结果里没有 base64，超过张数上限按顺序丢后面的', async () => {

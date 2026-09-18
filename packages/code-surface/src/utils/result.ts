@@ -78,6 +78,9 @@ export function composeProgramResult(
     }
     if (isNotUndefined(outcome.error.line)) failed.line = outcome.error.line
     result.failed = failed
+    // 程序正是死在这次拒绝上的：failed 已经说了，notices 里同一句不再重复。
+    const repeated = notices.findIndex((notice) => notice.action === 'denied' && notice.detail === outcome.error!.message)
+    if (repeated >= 0) notices.splice(repeated, 1)
     // 账只在没跑完时给：跑完了模型自己知道调了什么，没跑完时它对着一个 ABORTED 什么都不知道。
     const journal = fitJournalToBudget(completed, notices)
     if (!isEmpty(journal)) result.completed = journal

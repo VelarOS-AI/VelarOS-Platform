@@ -11,10 +11,23 @@ const logs = []
 
 function call(namespace, operation, input) {
   const callId = (nextId += 1)
+  // 发起调用这一刻的栈上有程序那一帧；回音到的时候已经没有了，所以现在就记下来。
+  const site = new Error('发起能力调用').stack
   return new Promise((resolve, reject) => {
-    pending.set(callId, { resolve, reject })
+    pending.set(callId, { resolve, reject, site })
     process.send({ type: 'call', callId, namespace, operation, input })
   })
+}
+
+/**
+ * 能力报的错换成程序里的异常：错误对象是在收回音时造的，它自己的栈上没有程序的帧；
+ * 换上发起调用时记下的那几帧，程序没接住时才报得出是哪一行发起的这次调用。
+ */
+function capabilityError(waiter, error) {
+  const failure = Object.assign(new Error(error.message), { code: error.code })
+  const frames = typeof waiter.site === 'string' ? waiter.site.split('\n').slice(1).join('\n') : ''
+  failure.stack = `Error: ${error.code}\n${frames}`
+  return failure
 }
 
 function buildApi(operations) {
@@ -73,7 +86,7 @@ process.on('message', (message) => {
     pending.delete(message.callId)
     // 宿主拒绝（审批被拒、危险命令被挡）在程序里是一个能 try/catch 的异常，不是一份静默的空回执。
     if (message.ok) waiter.resolve(message.value)
-    else waiter.reject(Object.assign(new Error(message.error.message), { code: message.error.code }))
+    else waiter.reject(capabilityError(waiter, message.error))
     return
   }
   if (message.type !== 'program') return

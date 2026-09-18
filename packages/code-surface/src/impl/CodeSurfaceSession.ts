@@ -18,6 +18,7 @@ import type {
 } from '../types/code-surface.js'
 import type { GrantedModule } from '../types/code-surface.js'
 import { fitAttachmentsToBudget } from '../utils/budget.js'
+import { isRefusal } from '../utils/capability-failure.js'
 import { readProgramImports, rewriteModuleForIsolate } from '../utils/module-form.js'
 import { composeProgramResult, describeProgramOversize, resolveProgramSource } from '../utils/result.js'
 import { CodeSurfaceTuning } from '../utils/tuning.js'
@@ -125,7 +126,7 @@ class CodeSurfaceSession implements CodeSurfaceSessionApi {
         completed.push({ call: `${call.namespace}.${call.operation}`, ok: !result.error })
         if (result.notices) notices.push(...result.notices)
         if (result.attachments) attachments.push(...result.attachments)
-        if (result.error) {
+        if (result.error && isRefusal(result.error.code)) {
           notices.push({
             call: `${call.namespace}.${call.operation}`,
             action: 'denied',
