@@ -4,7 +4,7 @@
   "velaros": {
     "platform": "0.6"
   },
-  "description": "The capability units the model imports as velar:* modules and every space mounts with its own port: files (machine files, system space), images (view pictures within provider limits), shell (run commands), sandbox (rehearse in a mirror, then apply), project (governed project files and code questions: velar:project and velar:code, with the project kernel and its transactions underneath; the project space that mounts them is @velaros-ai/project), computer (desktop control: screenshots, pointer, keyboard, with the helper sidecar runtime underneath) and development (the language services behind velar:code: JS/TS and Python navigation and diagnostics, external language servers). One plain directory per unit, one convention for all.",
+  "description": "The capability units the model imports as velar:* modules and every space mounts with its own port: files (machine files, system space), images (view pictures within provider limits), shell (run commands), sandbox (rehearse in a mirror, then apply), project (governed project files and code questions: velar:project and velar:code, with the project kernel and its transactions underneath; the project space that mounts them is @velaros-ai/project) and computer (desktop control: screenshots, pointer, keyboard, with the helper sidecar runtime underneath). One plain directory per unit, one convention for all.",
   "license": "Apache-2.0",
   "author": "VelarOS",
   "homepage": "https://github.com/VelarOS-AI/VelarOS-Platform/tree/main/packages/velar#readme",
@@ -62,14 +62,6 @@
       "types": "./dist/project/contracts.d.ts",
       "import": "./dist/project/contracts.js"
     },
-    "./development": {
-      "types": "./dist/development/index.d.ts",
-      "import": "./dist/development/index.js"
-    },
-    "./development/contracts": {
-      "types": "./dist/development/contracts.d.ts",
-      "import": "./dist/development/contracts.js"
-    },
     "./computer": {
       "types": "./dist/computer/index.d.ts",
       "import": "./dist/computer/index.js"
@@ -90,11 +82,10 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "clean": "rm -rf dist",
     "build": "bun run clean && tsc -p tsconfig.build.json && node ../../scripts/capabilities/build/fix-esm-extensions.mjs dist && node ../../scripts/build/normalize-package-declarations.mjs",
-    "test": "bun run build && bun test files/spec/acceptance.test.ts files/test images/spec/acceptance.test.ts images/test shell/spec/acceptance.test.ts shell/test sandbox/spec/acceptance.test.ts sandbox/test project/spec/acceptance.test.ts project/test development/spec/acceptance.test.ts development/test computer/spec/acceptance.test.ts computer/test",
+    "test": "bun run build && bun test files/spec/acceptance.test.ts files/test images/spec/acceptance.test.ts images/test shell/spec/acceptance.test.ts shell/test sandbox/spec/acceptance.test.ts sandbox/test project/spec/acceptance.test.ts project/test computer/spec/acceptance.test.ts computer/test",
     "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/velar"
   },
   "dependencies": {
-    "@codemirror/lang-python": "^6.2.1",
     "@velaros-ai/code-surface": "workspace:*",
     "@velaros-ai/core": "workspace:*",
     "@velaros-ai/path-rules": "workspace:*",
@@ -103,8 +94,7 @@
     "@velaros-ai/tool-contract": "workspace:*",
     "diff": "^8.0.4",
     "execa": "^9.6.1",
-    "typescript": "^5.7.0",
-    "zod": "^4.3.6"
+    "typescript": "^5.7.0"
   },
   "peerDependencies": {
     "@velaros-ai/agent": "workspace:^"

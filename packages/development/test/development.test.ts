@@ -11,9 +11,9 @@ import {
   createProjectCodeQuery,
   languageQueries,
   type LanguageToolContext,
-} from '../index'
+} from '../src/index'
 
-describe('@velaros-ai/velar/development', () => {
+describe('@velaros-ai/development', () => {
   test('routes CodeGraph actions through the optional Project index overlay', async () => {
     const calls: string[] = []
     const queryCode = createProjectCodeQuery({

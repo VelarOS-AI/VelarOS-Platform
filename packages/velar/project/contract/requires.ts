@@ -356,7 +356,7 @@ export interface ProjectSpacePort {
   kernel: () => Promise<AgentProjectKernelPort>
   /**
    * 代码查询端口：`velar:code` 的两个操作翻译成 `ProjectCodeQuery` 交过来，本单元自己不带实现
-   * （语言服务那一半可以用 `@velaros-ai/velar/development` 的 `createProjectCodeQuery`，代码图谱那一半由宿主的图后端提供）。
+   * （语言服务那一半可以用 `@velaros-ai/development` 的 `createProjectCodeQuery`，代码图谱那一半由宿主的图后端提供）。
    * 语言服务类动作（`ProjectCodeLanguageActions` 里的七个）抛错时这次查询失败；代码图谱类动作没有后端时，抛 code 为 UNAVAILABLE
    * （或 reason 为 NOT_SUPPORTED）的错误：`query` 把它当降级写进回执，`analyze` 直接失败。
    * 返回普通对象，其中的 source、revision、truncated、degraded、note 会被装进回执。

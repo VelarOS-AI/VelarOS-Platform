@@ -1,5 +1,5 @@
 /**
- * 根入口（`@velaros-ai/velar/development`）：语言查询、代码查询工厂、外部语言服务与 TypeScript 项目池。
+ * 根入口（`@velaros-ai/development`）：语言查询、代码查询工厂、外部语言服务与 TypeScript 项目池。
  * 要读磁盘、要拉子进程，只给 Node；另一个入口 `./contracts` 是它的子集，只有可移植数据。
  */
 

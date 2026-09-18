@@ -225,6 +225,76 @@ function dependencyEntries(manifest) {
   ];
 }
 
+function importsRuntimeSpecifier(source, specifier) {
+  const sourceFile = ts.createSourceFile(
+    "capability-source.ts",
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+  );
+  let importsRuntime = false;
+
+  const visit = (node) => {
+    if (importsRuntime) return;
+    if (
+      (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) &&
+      node.moduleSpecifier &&
+      ts.isStringLiteralLike(node.moduleSpecifier) &&
+      node.moduleSpecifier.text === specifier
+    ) {
+      if (ts.isExportDeclaration(node)) {
+        if (node.isTypeOnly) return;
+        if (
+          node.exportClause &&
+          ts.isNamedExports(node.exportClause) &&
+          node.exportClause.elements.every((element) => element.isTypeOnly)
+        ) return;
+        importsRuntime = true;
+        return;
+      }
+
+      const clause = node.importClause;
+      if (!clause?.isTypeOnly) {
+        const bindings = clause?.namedBindings;
+        const namedTypesOnly =
+          !clause?.name &&
+          bindings &&
+          ts.isNamedImports(bindings) &&
+          bindings.elements.every((element) => element.isTypeOnly);
+        if (!namedTypesOnly) importsRuntime = true;
+      }
+      return;
+    }
+    if (
+      ts.isImportEqualsDeclaration(node) &&
+      !node.isTypeOnly &&
+      ts.isExternalModuleReference(node.moduleReference) &&
+      node.moduleReference.expression &&
+      ts.isStringLiteralLike(node.moduleReference.expression) &&
+      node.moduleReference.expression.text === specifier
+    ) {
+      importsRuntime = true;
+      return;
+    }
+    if (
+      ts.isCallExpression(node) &&
+      node.arguments.length > 0 &&
+      ts.isStringLiteralLike(node.arguments[0]) &&
+      node.arguments[0].text === specifier &&
+      (
+        node.expression.kind === ts.SyntaxKind.ImportKeyword ||
+        (ts.isIdentifier(node.expression) && node.expression.text === "require")
+      )
+    ) {
+      importsRuntime = true;
+      return;
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+  return importsRuntime;
+}
+
 // VelarOS-Platform 单版本火车:packages/ 是全平台包的公共家,冻结面从「整个 packages/」收敛为
 // 「capabilities 域的包集合」。域包清单单源 = 仓根 package.json 的
 // velaros.domainPackages.capabilities;新增能力包必须同时登记该清单与 capability-owners.mjs。
@@ -404,6 +474,14 @@ for (const expected of CapabilityPackages) {
     if (ConcreteAgentRuntimeImport.test(source)) {
       fail(
         `${expected.name}: capability code must not import domain-named core helpers in ${relative(packageRoot, path)}`,
+      );
+    }
+    if (
+      expected.directory === "development" &&
+      importsRuntimeSpecifier(source, "@velaros-ai/velar/project")
+    ) {
+      fail(
+        `${expected.name}: lightweight language reads must not load the project unit's root entry at runtime (types only; values from @velaros-ai/velar/project/contracts) in ${relative(packageRoot, path)}`,
       );
     }
     for (const match of source.matchAll(CoreTypesImport)) {

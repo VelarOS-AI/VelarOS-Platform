@@ -276,37 +276,6 @@ export const GovernedModules = [
     acceptance: 'project/spec/acceptance.test.ts',
   },
   {
-    // 能力单元里没有模型面的一件：velar:code 的操作在 project 单元，这里只给它背后的语言服务实现
-    // （宿主拿 createProjectCodeQuery 实现 ProjectSpacePort.queryCode），所以不登记 hostPort、surfaceFile
-    directory: 'velar',
-    unit: 'development',
-    name: '@velaros-ai/velar/development',
-    contract: 'development/contract',
-    types: 'development/types',
-    portable: 'development.ts',
-    impl: 'development/impl',
-    utils: 'development/utils',
-    tuning: 'tuning.ts',
-    // 根入口要读磁盘、要拉语言服务子进程，只给 Node；渲染进程只能加载可移植数据
-    browserSafeEntries: ['contracts.ts'],
-    // 不读环境变量：标准库目录读的是 Electron 的 process.resourcesPath，不是环境变量
-    layers: [
-      // 代码查询的两路分派；外部语言服务集合（两者互不依赖）
-      ['ProjectCodeQuery.ts', 'ExternalLanguageService.ts'],
-      // 语言查询的分派与合并；一个外部语言服务进程的客户端
-      ['LanguageQueries.ts', 'ExternalLanguageServerClient.ts'],
-      // 内置语言服务的登记处：这次查询该由谁答
-      ['LanguageServiceRegistry.ts'],
-      // 两个内置语言服务
-      ['JsTsLanguageService.ts', 'PythonLanguageService.ts'],
-      // ts.LanguageService 池
-      ['TypeScriptProjectPool.ts'],
-    ],
-    card: 'development/MODULE.md',
-    invariants: 'development/spec/invariants.md',
-    acceptance: 'development/spec/acceptance.test.ts',
-  },
-  {
     // 能力单元：桌面控制（velar:computer），连同底下管 Python helper 子进程的运行时与 helper 定位器；
     // 宿主把运行时直接当空间端口交进来（结构上满足），界面要的就绪、屏幕几何、释放也在运行时上
     directory: 'velar',
@@ -532,6 +501,36 @@ export const GovernedModules = [
       ['VelarosCliRouter.ts'],
       // 命名空间：velaros terminal
       ['TerminalNamespace.ts'],
+    ],
+    card: 'MODULE.md',
+    invariants: 'spec/invariants.md',
+    acceptance: 'spec/acceptance.test.ts',
+  },
+  {
+    directory: 'development',
+    name: '@velaros-ai/development',
+    // 没有模型面，不是工具，所以不在 velar 里：不登记 toolsFile、toolDefiner、hostPort。模型看到的 velar:code 归
+    // @velaros-ai/velar/project，本包只提供它背后的语言服务实现（宿主拿 createProjectCodeQuery 实现 ProjectSpacePort.queryCode）
+    contract: 'src/contract',
+    types: 'src/types',
+    portable: 'development.ts',
+    impl: 'src/impl',
+    utils: 'src/utils',
+    tuning: 'tuning.ts',
+    // 根入口要读磁盘、要拉语言服务子进程，只给 Node；渲染进程只能加载可移植数据
+    browserSafeEntries: ['contracts.ts'],
+    // 不读环境变量：标准库目录读的是 Electron 的 process.resourcesPath，不是环境变量
+    layers: [
+      // 代码查询的两路分派；外部语言服务集合（两者互不依赖）
+      ['ProjectCodeQuery.ts', 'ExternalLanguageService.ts'],
+      // 语言查询的分派与合并；一个外部语言服务进程的客户端
+      ['LanguageQueries.ts', 'ExternalLanguageServerClient.ts'],
+      // 内置语言服务的登记处：这次查询该由谁答
+      ['LanguageServiceRegistry.ts'],
+      // 两个内置语言服务
+      ['JsTsLanguageService.ts', 'PythonLanguageService.ts'],
+      // ts.LanguageService 池
+      ['TypeScriptProjectPool.ts'],
     ],
     card: 'MODULE.md',
     invariants: 'spec/invariants.md',

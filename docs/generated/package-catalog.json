@@ -44,6 +44,18 @@
     },
     {
       "domain": "capabilities",
+      "directory": "packages/development",
+      "name": "@velaros-ai/development",
+      "version": "2.0.0",
+      "description": "Project 代码理解背后的语言服务库：JavaScript/TypeScript 与 Python 的即时导航与诊断。",
+      "exportSubpaths": [
+        ".",
+        "./contracts"
+      ],
+      "repositoryDirectory": "packages/development"
+    },
+    {
+      "domain": "capabilities",
       "directory": "packages/office",
       "name": "@velaros-ai/office",
       "version": "2.0.0",
@@ -173,12 +185,10 @@
       "directory": "packages/velar",
       "name": "@velaros-ai/velar",
       "version": "0.2.0",
-      "description": "The capability units the model imports as velar:* modules and every space mounts with its own port: files (machine files, system space), images (view pictures within provider limits), shell (run commands), sandbox (rehearse in a mirror, then apply), project (governed project files and code questions: velar:project and velar:code, with the project kernel and its transactions underneath; the project space that mounts them is @velaros-ai/project), computer (desktop control: screenshots, pointer, keyboard, with the helper sidecar runtime underneath) and development (the language services behind velar:code: JS/TS and Python navigation and diagnostics, external language servers). One plain directory per unit, one convention for all.",
+      "description": "The capability units the model imports as velar:* modules and every space mounts with its own port: files (machine files, system space), images (view pictures within provider limits), shell (run commands), sandbox (rehearse in a mirror, then apply), project (governed project files and code questions: velar:project and velar:code, with the project kernel and its transactions underneath; the project space that mounts them is @velaros-ai/project) and computer (desktop control: screenshots, pointer, keyboard, with the helper sidecar runtime underneath). One plain directory per unit, one convention for all.",
       "exportSubpaths": [
         "./computer",
         "./computer/contracts",
-        "./development",
-        "./development/contracts",
         "./files",
         "./files/contracts",
         "./images",

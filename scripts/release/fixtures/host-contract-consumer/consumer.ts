@@ -5,7 +5,7 @@ import {
 } from '@velaros-ai/agent'
 import { agentToolContracts } from '@velaros-ai/agent/tool-contract'
 import { createModelRequestClient } from '@velaros-ai/model'
-import { languageQueries, type LanguageReadPort, type LanguageToolContext } from '@velaros-ai/velar/development'
+import { languageQueries, type LanguageReadPort, type LanguageToolContext } from '@velaros-ai/development'
 import { mountMemoryAdapter, type MountMemoryAdapterInput } from '@velaros-ai/memory'
 import { ComputerInputLimits, type ComputerPoint } from '@velaros-ai/velar/computer/contracts'
 import { createCapabilityPort } from '@velaros-ai/code-surface'

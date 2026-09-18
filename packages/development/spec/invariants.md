@@ -7,7 +7,7 @@
 
 | 编号 | 不变量 | 检验方式 | 检验器 |
 | --- | --- | --- | --- |
-| INV-1 | 语言查询只借读源码端口（`listFiles` / `read` / `listSymbols`）：不消耗项目的修改、执行与审批能力，宿主给的内核就算带着写入口本单元也够不着 | 测试 | `spec/acceptance.test.ts` |
+| INV-1 | 语言查询只借读源码端口（`listFiles` / `read` / `listSymbols`）：不消耗项目的修改、执行与审批能力，宿主给的内核就算带着写入口本包也够不着 | 测试 | `spec/acceptance.test.ts` |
 | INV-2 | 代码图谱后端不可用时内置的七个语言动作照常可用，代码图谱类动作抛 code 为 `UNAVAILABLE` 的错误（project 据此降级，而不是当成查询失败） | 测试 | `spec/acceptance.test.ts` |
 | INV-3 | 空结果不伪装成「全部通过」：没扫到文件、文件数被截断、耗时超预算、标准库缺失，一律写进 `note` / `degraded` | 测试 | `spec/acceptance.test.ts` |
 | INV-4 | 目录诊断按文件所属的 tsconfig 分组，同一个文件在目录模式与单文件模式下得到一样的诊断 | 测试 | `spec/acceptance.test.ts` |
@@ -16,5 +16,5 @@
 | INV-7 | `find_references` 提前停扫时引用数是下限：`referenceCountIsLowerBound` 为真且 `note` 里写明，不把下限当总数交给模型 | 测试 | `spec/acceptance.test.ts` |
 | INV-8 | 认不出的 `language` 当场失败并列出可用值，不静默选中零个服务返回一份看似「没有结果」的空答复 | 测试 | `spec/acceptance.test.ts` |
 | INV-9 | TypeScript 语言服务池可以被宿主释放：`typeScriptProjects.release()` 之后旧凭据自报失效，调用方按 `isCurrent()` 重新取 | 测试 | `spec/acceptance.test.ts` |
-| INV-10 | `./development/contracts` 入口整条引用链不碰 Node 内置模块，渲染进程与浏览器都能加载；语言服务实现、工具函数与内部接口一律不出单元 | 门禁 | `check:module-ownership` |
-| INV-11 | 语言查询的注入面只借内核的三个读方法，多一个都借不到：类型上就是对 `AgentProjectKernelPort` 取 `listFiles`、`read`、`listSymbols` 三键的 `Pick` | 类型 | `contract/requires.ts::LanguageReadPort` |
+| INV-10 | `./contracts` 入口整条引用链不碰 Node 内置模块，渲染进程与浏览器都能加载；语言服务实现、工具函数与内部接口一律不出包 | 门禁 | `check:module-ownership` |
+| INV-11 | 语言查询的注入面只借内核的三个读方法，多一个都借不到：类型上就是对 `AgentProjectKernelPort` 取 `listFiles`、`read`、`listSymbols` 三键的 `Pick` | 类型 | `src/contract/requires.ts::LanguageReadPort` |

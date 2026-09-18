@@ -11,7 +11,7 @@ VelarOS Platform is a flat Bun workspace. Every publishable package lives direct
 | Core | `packages/core`, `packages/platform` |
 | Foundations | `packages/code-surface`, `packages/velar`, `packages/text-files`, `packages/path-rules`, `packages/tool-contract` |
 | Model | `packages/model` |
-| Capabilities | `packages/browser`, `packages/cli`, `packages/office`, `packages/project`, `packages/system` |
+| Capabilities | `packages/browser`, `packages/cli`, `packages/development`, `packages/office`, `packages/project`, `packages/system` |
 | Memory | `packages/memory`, `packages/knowledge` |
 | UI | `packages/ui` |
 | HTML artifacts | `packages/html-artifacts` |
@@ -22,21 +22,22 @@ VelarOS Platform is a flat Bun workspace. Every publishable package lives direct
 
 The repository is converging on three rules; packages move one at a time, each move keeping every gate green.
 
-1. **Every capability the model uses is a unit of `@velaros-ai/velar`** (`packages/velar/<unit>`, imported by the model as `velar:<unit>`),
-   together with the implementations only that capability uses. A unit without a model face is allowed when it is the
-   implementation behind one (`development` answers `velar:code`).
+1. **`@velaros-ai/velar` holds tools only.** Every capability the model imports is a unit there (`packages/velar/<unit>`,
+   imported as `velar:<unit>`), together with the implementation that exists only to serve it — the project kernel behind
+   `velar:project` and `velar:code`, the helper sidecar behind `velar:computer`. A package with no model face is not a tool and
+   stays outside `velar`, grouped by responsibility: `development`, the language services a host plugs into `velar:code`, is one.
 2. **Core execution stays outside `velar`**: `kernel`, `agent`, `model`, `code-surface` (the program gate), `tool-contract`,
    `surface-protocol`, and the cross-domain foundations `core` and `platform`.
 3. **Product assembly is not in this repository.** A space (which capabilities are mounted, with which ports and policies)
    is assembled by each product (Desktop, Workbench, Termel). Reusable host implementations those products share — the local
-   machine host behind shell and sandbox, for example — are capability implementations and live in `velar`.
+   machine host behind shell and sandbox, for example — are not tools either: they stay packages of their own.
 
 | Package | Destination | Status |
 | --- | --- | --- |
-| `development` | `velar/development` (language services behind `velar:code`) | done |
-| `system` | local machine host → `velar`; space assembly → products | pending |
+| `development` | stays `packages/development`: language services a host plugs into `velar:code`, not a tool | done |
+| `system` | space assembly → products; the local machine host stays a package of its own | pending |
 | `project` | space assembly and ports → products; verification policy → `velar/project` | pending |
-| `text-files`, `path-rules` | internal units of `velar` (only capabilities use them) | pending |
+| `text-files`, `path-rules` | stay foundations: libraries the `velar` units build on, not tools | done |
 | `computer` | `velar/computer` (`velar:computer`, with the helper sidecar runtime and its bundled Python helpers) | done |
 | `knowledge`, `office` (+ `document-renderer`), `memory`, `browser` | tool collections become `velar` modules; engines that are not tools stay separate packages | pending |
 | `ui`, `html-artifacts`, `cli`, `agent-lab` | grouped by responsibility after the moves above | pending |

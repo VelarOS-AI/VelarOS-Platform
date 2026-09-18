@@ -3,7 +3,6 @@
 模型在程序里 import 的能力单元：`velar:files`、`velar:images`、`velar:shell`、`velar:sandbox`、`velar:computer`，以及项目的两件 `velar:project`、`velar:code`。
 一件能力一个目录，目录名就是模块名（`velar:files` ⇄ `files/`；问代码离不开项目内核，和 `velar:project` 同住 `project/`）；每个空间挂哪几件、给每件装什么端口，由空间的装配表决定
 （系统空间在 `@velaros-ai/system`，项目空间在 `@velaros-ai/project`）。
-有的单元没有模型面，是某件能力背后的实现，只有那件能力用它：`development/` 是 `velar:code` 背后的语言服务。
 
 | 单元 | 模型写 | 做什么 | 谁挂 |
 | --- | --- | --- | --- |
@@ -13,7 +12,6 @@
 | `sandbox/` | `import { create, run, diff, apply, discard } from 'velar:sandbox'` | 演练沙箱：在镜像里先跑，看过变化再落回 | 系统空间、项目空间 |
 | `project/` | `import { read, list, search, edit, inspect, undo } from 'velar:project'`、`import { query, analyze } from 'velar:code'` | 受项目治理的文件（fileRef、事务、撤销）与问代码，连同底下的项目内核 | 项目空间 |
 | `computer/` | `import { screenshot, move, click, typeText, key } from 'velar:computer'` | 桌面控制：截主屏交给模型看，按截图坐标移动、点击，输入文字、按组合键；底下是管 Python helper 子进程的运行时与随包的 helper 脚本 | 宿主装了桌面控制插件时，挂在它的系统空间上 |
-| `development/` | —（没有模型面） | `velar:code` 背后的语言服务：JS/TS 与 Python 的导航与诊断、外部 language server；宿主拿 `createProjectCodeQuery` 实现 `queryCode` | 宿主装项目空间时 |
 
 宿主按 `@velaros-ai/velar/<单元>` 引用（可移植数据在 `@velaros-ai/velar/<单元>/contracts`）。
 

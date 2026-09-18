@@ -43,12 +43,6 @@
       "@velaros-ai/velar/project/contracts": [
         "packages/velar/project/contracts.ts"
       ],
-      "@velaros-ai/velar/development": [
-        "packages/velar/development/index.ts"
-      ],
-      "@velaros-ai/velar/development/contracts": [
-        "packages/velar/development/contracts.ts"
-      ],
       "@velaros-ai/velar/computer": [
         "packages/velar/computer/index.ts"
       ],
@@ -64,7 +58,6 @@
     "shell/**/*.ts",
     "sandbox/**/*.ts",
     "project/**/*.ts",
-    "development/**/*.ts",
     "computer/**/*.ts"
   ],
   "exclude": [

@@ -66,6 +66,7 @@ const Domains = [
       'packages/browser/**',
       'packages/cli/**',
       'packages/code-surface/**',
+      'packages/development/**',
       'packages/office/**',
       'packages/document-renderer/**',
       'packages/system/**',

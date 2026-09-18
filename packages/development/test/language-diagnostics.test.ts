@@ -7,9 +7,9 @@ import * as ts from 'typescript'
 
 import { createProjectKernel, typescriptPlugin } from '@velaros-ai/velar/project'
 
-import { languageServiceRegistry } from '../impl/LanguageServiceRegistry'
-import { languageQueries, type LanguageToolContext, typeScriptProjects } from '../index'
-import { groupFilesByTypeScriptProject } from '../utils/typescript-config'
+import { languageServiceRegistry } from '../src/impl/LanguageServiceRegistry'
+import { languageQueries, type LanguageToolContext, typeScriptProjects } from '../src/index'
+import { groupFilesByTypeScriptProject } from '../src/utils/typescript-config'
 
 // 用例跑的是真实类型检查与数百个文件的夹具，机器繁忙时会超过默认的 5 秒。
 setDefaultTimeout(30_000)
