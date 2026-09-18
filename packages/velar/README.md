@@ -8,7 +8,7 @@
 | --- | --- | --- | --- |
 | `files/` | `import { read, edit, undo } from 'velar:files'` | 本机文件：带行号地读、按行号改或整份写、整次撤回 | 系统空间 |
 | `images/` | `import { view } from 'velar:images'` | 把图片交到模型眼前，超出上限的请宿主压 | 系统空间、项目空间 |
-| `shell/` | `import { run, listTasks, refreshEnvironment } from 'velar:shell'` | 跑命令、看后台任务、刷新 shell 环境 | 系统空间、项目空间 |
+| `shell/` | `import { run, listTasks, stop, refreshEnvironment } from 'velar:shell'` | 跑命令、看和停后台任务、刷新 shell 环境 | 系统空间、项目空间 |
 | `sandbox/` | `import { create, run, diff, apply, discard } from 'velar:sandbox'` | 演练沙箱：在镜像里先跑，看过变化再落回 | 系统空间、项目空间 |
 | `project/` | `import { read, list, search, edit, inspect, undo } from 'velar:project'`、`import { query, analyze } from 'velar:code'` | 受项目治理的文件（fileRef、事务、撤销）与问代码，连同底下的项目内核 | 项目空间 |
 

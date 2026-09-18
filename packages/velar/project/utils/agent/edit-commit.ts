@@ -10,7 +10,6 @@ import type { ProjectEditInput, ProjectEditResult, ProjectRecodeReceipt } from '
 import { compileProjectEdit } from '../editing/planner-index.js'
 import { plannedFilePaths } from '../transactions/edit-intents.js'
 import { rethrowNotApplied } from '../transactions/transaction-errors.js'
-import { ProjectTuning } from '../tuning.js'
 
 import { authorizeProjectWrite, seenFileSpans } from './change-records.js'
 import { changeWindows } from './change-windows.js'
@@ -18,9 +17,6 @@ import { withEditRecovery } from './edit-recovery.js'
 import { saveReceipt } from './file-refs.js'
 import { projectPlannerResolver } from './planner-resolver.js'
 import { projectCreatedPaths, projectTransactionHasChanges } from './transaction-result.js'
-
-/** 差量太长时回执里的那句说明。 */
-const TruncatedDiffNote = `差量太长，只给了前 ${ProjectTuning.transactions.receiptDiffChars} 个字符；要看完整结果就 read 改后的文件。`
 
 /**
  * 规划并提交一次改动：规划是纯计算（版本过期时按原意图重新定位）；计划有写入时带着要写的路径过宿主的修改授权，
@@ -34,7 +30,7 @@ export async function commitProjectEdit(steps: ProjectEditInput['steps'], ctx: P
   if (isEmpty(plan.operations)) {
     const unchanged: ProjectEditResult = {
       changeRef: '', transactionId: '', changed: false, changedFiles: [], oldRevisions: {}, newRevisions: {},
-      files: [], diff: '', diffTruncated: false, diffLines: 0,
+      files: [], diff: '', diffLines: 0,
       notes: ['没有需要写入的文件，什么都没改（changeRef 为空）。'],
     }
     if (recode) unchanged.recode = recode
@@ -49,7 +45,6 @@ export async function commitProjectEdit(steps: ProjectEditInput['steps'], ctx: P
     const applied = await kernel.applyEdit({ transactionId: prepared.transactionId })
     const final = kernel.getTransaction(prepared.transactionId) ?? prepared
     const created = projectCreatedPaths(final.patches)
-    const diff = final.diff.slice(0, ProjectTuning.transactions.receiptDiffChars)
     const receipt: ProjectEditResult = {
       changeRef: saveReceipt(ctx, 'change', { transactionId: prepared.transactionId, oldRevisions: applied.oldRevisions, newRevisions: applied.newRevisions }),
       transactionId: prepared.transactionId,
@@ -59,11 +54,9 @@ export async function commitProjectEdit(steps: ProjectEditInput['steps'], ctx: P
       oldRevisions: Object.fromEntries(Object.entries(applied.oldRevisions).filter(([path]) => !created.has(path))),
       newRevisions: applied.newRevisions,
       files: await changeWindows(ctx, final.patches, applied.newRevisions, previous),
-      diff,
-      diffTruncated: diff.length < final.diff.length,
+      diff: final.diff,
       diffLines: final.changedLines,
     }
-    if (receipt.diffTruncated) receipt.notes = [TruncatedDiffNote]
     if (recode) receipt.recode = recode
     return receipt
   } catch (error) {

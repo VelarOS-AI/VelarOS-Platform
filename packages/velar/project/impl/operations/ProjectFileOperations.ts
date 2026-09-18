@@ -25,7 +25,6 @@ import { changeInput, editInput } from '../../utils/agent/file-input.js'
 import { listEntries, readFiles, searchFiles } from '../../utils/agent/file-reads.js'
 import { locateEditSteps } from '../../utils/agent/planner-resolver.js'
 import { projectFailure } from '../../utils/agent/ports.js'
-import { ProjectTuning } from '../../utils/tuning.js'
 import { projectApprovalBridge } from '../kernel/ProjectApprovalBridge.js'
 
 import type { ProjectExecutionGateApi } from './ProjectExecutionGate.js'
@@ -38,15 +37,16 @@ import { projectExecutionGate } from './ProjectExecutionGate.js'
  * 读出来的是带版本的窗口：lines 每项 [行号, 原文]，窗口上的 fileRef 是编辑凭据，edit 凭它核对文件没被改过、要改的行都读到过。
  * 改动经事务：一次 edit 全成或全不成，跑项目的校验器，保留文件原来的编码与换行；成了给 changeRef，inspect 看差量、undo 整次撤销。
  * 项目的读写策略管着这里：不许读的文件读不到，像密钥的片段读出来是遮住的（这样的窗口只能看不能改），生成文件、受保护文件改不了。
- * 引用（fileRef、continuation、cursor、changeRef）只在本会话里有效，一律原样用，不能手写。
- * 失败时 error.code 是原因（INVALID_INPUT、TARGET_NOT_FOUND、NOT_SUPPORTED、PERMISSION_DENIED、BASE_REVISION_MISMATCH……），error.message 写着为什么、下一步怎么办。
+ * 什么都不折叠：read 交回要的整段，list 交回全部条目，search 交回全部命中，edit、inspect 交回完整差量；看多少、筛什么在程序里定。
+ * 引用（fileRef、changeRef）只在本会话里有效，一律原样用，不能手写。
+ * 失败时 error.code 是原因（INVALID_INPUT、TARGET_NOT_FOUND、NOT_SUPPORTED、PERMISSION_DENIED、BASE_REVISION_MISMATCH、超过守内存上限的 SCOPE_VIOLATION……），error.message 写着为什么、下一步怎么办。
  */
 export interface ProjectFileOperationsApi {
   /** @AgentView 读项目里的文本文件：交回带行号的窗口，每个窗口带 fileRef。看图用 `velar:images`，目录用 list。 */
   read(input: ProjectReadInput, ctx: ProjectOperationContext): Promise<ProjectReadResult>
-  /** @AgentView 列项目里的文件和目录，按深度优先的稳定顺序分页；.gitignore 忽略的不列。 */
+  /** @AgentView 列项目里的文件和目录，按深度优先的稳定顺序全部交回；.gitignore 忽略的不列。 */
   list(input: ProjectListInput, ctx: ProjectOperationContext): Promise<ProjectListResult>
-  /** @AgentView 按字面文本或正则搜项目源码，命中处合成带 fileRef 的窗口，可以直接拿去 edit。 */
+  /** @AgentView 按字面文本或正则搜项目源码，交回全部命中；命中所在的行合成带 fileRef 的窗口，可以直接拿去 edit。 */
   search(input: ProjectSearchInput, ctx: ProjectOperationContext): Promise<ProjectSearchResult>
   /** @AgentView 改项目文件：steps 按顺序合成一个事务提交。要确认的只问一次，被拒就一个文件都不写。 */
   edit(input: ProjectEditInput, ctx: ProjectOperationContext): Promise<ProjectEditResult>
@@ -57,7 +57,6 @@ export interface ProjectFileOperationsApi {
 }
 
 export class ProjectFileOperations implements ProjectFileOperationsApi {
-  /** 差量装不下时的说明：回执只给前一段，要看全的去读改完的文件。 */
   constructor(private readonly gate: ProjectExecutionGateApi) {}
 
   public read(input: ProjectReadInput, ctx: ProjectOperationContext): Promise<ProjectReadResult> {
@@ -89,10 +88,9 @@ export class ProjectFileOperations implements ProjectFileOperationsApi {
       const { changeRef } = changeInput(input)
       const record = changeRecordOf(changeRef, ctx)
       const transaction = await changeTransactionOf(ctx, record.transactionId, changeRef)
-      const diff = transaction.diff.slice(0, ProjectTuning.transactions.receiptDiffChars)
       const inspected: ProjectChangeInspection = {
         changeRef, status: transaction.status, changedFiles: transaction.changedFiles,
-        diff, diffTruncated: diff.length < transaction.diff.length, diffLines: transaction.changedLines,
+        diff: transaction.diff, diffLines: transaction.changedLines,
       }
       if (record.oldRevisions) inspected.oldRevisions = record.oldRevisions
       if (record.newRevisions) inspected.newRevisions = record.newRevisions

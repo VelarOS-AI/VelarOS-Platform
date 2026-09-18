@@ -90,7 +90,7 @@ export function parseRipgrepJsonLines(stdout: string, maxResults: number, filter
 
 /**
  * 通过 CommandProvider 运行 ripgrep。失败时返回 hits=null，方便调用方回退。
- * 退出码 1 表示没有命中（空结果列表）。
+ * 退出码 1 表示没有命中（空结果列表）。命中收满 maxResults、超时、输出超过宿主缓冲时标 truncated：结果可能不全。
  */
 export async function searchWithRipgrep(ctx: RipgrepSearchContext): Promise<RipgrepSearchResult> {
   const maxResults = Math.min(Math.max(1, ctx.maxResults), ProjectTuning.ripgrep.maxResults)
@@ -112,7 +112,8 @@ export async function searchWithRipgrep(ctx: RipgrepSearchContext): Promise<Ripg
   if (!ctx.regex) args.push('--fixed-strings')
   if (!isTrue(ctx.caseSensitive)) args.push('--ignore-case')
 
-  args.push('--max-count', String(Math.min(ProjectTuning.ripgrep.perFileMatches, maxResults * 8)))
+  // 一个文件的命中不另设上限：单个文件就能填满整次结果，每个文件最多也就要这么多行。
+  args.push('--max-count', String(maxResults))
 
   const pattern = ctx.query
   args.push('--', pattern)
@@ -153,7 +154,7 @@ export async function searchWithRipgrep(ctx: RipgrepSearchContext): Promise<Ripg
     return {
       hits: filtered.length <= maxResults ? filtered : filtered.slice(0, maxResults),
       timedOut,
-      truncated,
+      truncated: truncated || hits.length >= maxResults,
       diagnostics: optionalWhen(!isEmpty(diagnostics), diagnostics),
       toolRequirements: result.toolRequirements,
     }

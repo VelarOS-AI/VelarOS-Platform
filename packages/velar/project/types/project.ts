@@ -39,16 +39,15 @@ export interface ProjectAuthorizationDecision {
 
 // ── 宿主代码查询（ProjectSpacePort.queryCode 收到的查询） ─────────────────
 // `velar:code` 的入参由本包翻译成下面的查询交给宿主：语言服务类动作（find_symbols 等七个）由宿主的语言服务执行，
-// 其余是代码索引类动作，宿主有代码图谱时执行。缺省值已经填好，数字已经钳在范围之内。
+// 其余是代码索引类动作，宿主有代码图谱时执行。入参已经核对过，条数上限由本包填（ProjectCodeLimits.results）。
 
 /**
  * @AgentView
- * 代码查询共用的范围：language 只查这一种语言、limit 最多返回几条（1–200）、extensions 只扫这些扩展名（最多 20 个）、maxDepth 往下扫几层目录（0–16）。
+ * 代码查询共用的范围：language 只查这一种语言、extensions 只扫这些扩展名（最多 20 个）、maxDepth 往下扫几层目录（0–16）。
  * 模型的 `velar:code` 入参与宿主收到的语言服务查询共用它；路径一律相对项目根。
  */
 export interface ProjectCodeScope {
   language?: string
-  limit?: number
   extensions?: string[]
   maxDepth?: number
 }
@@ -67,8 +66,12 @@ export type ProjectCodeIndexQuery =
   | { action: 'find_dead_code'; limit: number }
   | { action: 'routing_manifest'; framework?: string }
 
-/** 语言服务类查询：找符号、列导出、看一个文件引了谁、看谁引了它、找引用、诊断、符号改动的影响面。 */
-export type ProjectCodeLanguageQuery = ProjectCodeScope & (
+/**
+ * 语言服务类查询：找符号、列导出、看一个文件引了谁、看谁引了它、找引用、诊断、符号改动的影响面。
+ * limit 是这次最多交回几条，封顶时结果里标 truncated：`velar:code` 总是给 ProjectCodeLimits.results（只为守住内存），
+ * 宿主自己发的查询不给时由语言服务用它的缺省。
+ */
+export type ProjectCodeLanguageQuery = ProjectCodeScope & { limit?: number } & (
   | { action: 'find_symbols'; query?: string; path?: string; kinds?: string[]; exact?: boolean }
   | { action: 'list_exports'; path?: string; query?: string; includeReExports?: boolean }
   | { action: 'find_imports'; path?: string; specifier?: string; kind?: string; includeExternal?: boolean }

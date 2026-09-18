@@ -1,15 +1,22 @@
 // velar:project 的代码模版：一段一个函数、一种用法，挑要的照着改。
 import { edit, inspect, list, read, search, undo } from 'velar:project'
 
-// 带行号地看一段：lines 每项是 [行号, 原文]；fileRef 是这段的编辑凭据，留着给 edit 用。
-async function show(path = 'src/service.ts', from = 1, to = 80) {
-  const [window] = (await read({ files: [{ path, range: [from, to] }] })).files
-  return { fileRef: window.fileRef, totalLines: window.totalLines, text: window.lines.map(([line, text]) => `${line}: ${text}`).join('\n') }
+// 读：不给 range 是整个文件，给了只读那几行。lines 每项是 [行号, 原文]，全在程序的变量里，看多少自己挑；fileRef 是编辑凭据，留着给 edit 用。
+async function todos(path = 'src/service.ts') {
+  const [window] = (await read({ files: [{ path }] })).files
+  const found = window.lines.filter(([, text]) => text.includes('TODO'))
+  return { fileRef: window.fileRef, totalLines: window.totalLines, todos: found.map(([line, text]) => `${line}: ${text}`) }
+}
+
+// 一次读几个文件：读不到的在 issues 里（各带原因和下一步），读到的照常在 files 里。
+async function heads(paths = ['src/a.ts', 'src/b.ts']) {
+  const { files, issues } = await read({ files: paths.map((path) => ({ path, range: [1, 20] })) })
+  return { heads: files.map((window) => ({ path: window.path, text: window.lines.map(([, text]) => text).join('\n') })), issues }
 }
 
 // 改几处：range 选整行、match 选唯一的原文，两个一起给最稳；行号都按读到的那一版算。
 async function renameCall(path = 'src/service.ts') {
-  const [window] = (await read({ files: [{ path, range: [1, 200] }] })).files
+  const [window] = (await read({ files: [{ path }] })).files
   if (!window.fileRef) return window.note
   return edit({ steps: [{ action: 'edit', fileRef: window.fileRef, edits: [
     { op: 'replace', range: 42, match: 'oldCall()', text: 'newCall()' },
@@ -17,10 +24,18 @@ async function renameCall(path = 'src/service.ts') {
   ] }] })
 }
 
+// 命中很多时在程序里汇总：search 交回全部命中，按文件数一数，只导出要看的。
+async function whereUsed(query = 'useSettings') {
+  const { hits } = await search({ query, include: ['*.ts', '*.tsx'] })
+  /** @type {Record<string, number>} */
+  const perFile = {}
+  for (const hit of hits) perFile[hit.path] = (perFile[hit.path] ?? 0) + 1
+  return { total: hits.length, perFile }
+}
+
 // 搜到就改：命中处的窗口带 fileRef，直接拿去 edit，不用再读。步骤在 edit 的入参里就地算，类型检查才认得出每一步是什么。
 async function replaceEverywhere(query = 'loadSettings', replacement = 'readSettings') {
-  const { files, truncated } = await search({ query, path: 'src' })
-  if (truncated) return '命中太多，先收窄 query 或 path'
+  const { files } = await search({ query, path: 'src' })
   const targets = files.filter((window) => window.fileRef && window.lines.some(([, text]) => text.includes(query)))
   if (!targets.length) return '没有要改的'
   return edit({ steps: targets.map((window) => ({
@@ -61,15 +76,14 @@ async function editOrExplain(path = 'src/service.ts') {
   }
 }
 
-// 看看一次改动改了什么，不对就整次撤销。
+// 看看一次改动改了什么（完整差量），不对就整次撤销。
 async function review(changeRef = 'edit 回执里的 changeRef') {
   const change = await inspect({ changeRef })
   return change.diffLines > 200 ? undo({ changeRef }) : change.diff
 }
 
-// 列目录：depth 1 只列这一层，glob 相对 path 写；有下一页就带 cursor 接着列。
-async function sourcesHere() {
-  const first = await list({ path: 'src', include: ['*.ts'], depth: 1 })
-  const rest = first.cursor ? (await list({ cursor: first.cursor })).entries : []
-  return [...first.entries, ...rest].map((entry) => entry.path)
+// 列目录：不给 depth 是整棵树、全部条目都交回，在程序里筛；depth 1 只列这一层。glob 相对 path 写。
+async function testFiles() {
+  const { entries } = await list({ path: 'src', include: ['*.test.ts'] })
+  return entries.filter((entry) => entry.type === 'file').map((entry) => entry.path)
 }

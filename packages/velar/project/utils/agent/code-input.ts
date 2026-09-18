@@ -1,10 +1,11 @@
 /**
- * `velar:code` 的入参核对：程序在写的时候过了类型检查，这里拦类型挡不住的——不认识的 intent、缺了必填的 target 或 path、绕过检查塞进来的错形状。
- * 不合法就当场以 INVALID_INPUT 拒绝，不去问宿主。
+ * `velar:code` 的入参核对：程序在写的时候过了类型检查，这里拦类型挡不住的——不认识的 intent、缺了必填的 target 或 path、
+ * 范围越界（扩展名太多、目录层数不对），以及绕过检查塞进来的错形状。不合法就当场以 INVALID_INPUT 拒绝，不去问宿主。
  */
 
-import { isPlainObject, isString, isUndefined } from '@velaros-ai/core'
+import { isArray, isNonBlankString, isNumber, isPlainObject, isString, isUndefined } from '@velaros-ai/core'
 
+import { ProjectCodeLimits } from '../../contract/constants.js'
 import type { CodeAnalysisInput, CodeQueryInput } from '../../types/code.js'
 import { ProjectError } from '../errors.js'
 
@@ -30,7 +31,22 @@ function checkTarget(value: unknown, field: string): void {
   }
 }
 
-/** query 的入参：intent 认得，要 target 的给了 target，要 path 的给了 path；类型是声明给的，形状照样逐项核（程序可能绕过检查）。 */
+/** 查询范围：language 非空，extensions 最多 ProjectCodeLimits.extensions 个非空字符串，maxDepth 是 0–ProjectCodeLimits.scanDepth 的整数。 */
+function checkScope(value: Record<string, unknown>): void {
+  if (!isUndefined(value.language) && !isNonBlankString(value.language)) throw invalid('language 要非空字符串，比如 \'typescript\'')
+  if (!isUndefined(value.extensions)) {
+    const extensions = value.extensions
+    if (!isArray(extensions) || extensions.length > ProjectCodeLimits.extensions || !extensions.every(isNonBlankString)) {
+      throw invalid(`extensions 要最多 ${ProjectCodeLimits.extensions} 个扩展名的数组（比如 ['.ts', '.tsx']），这里给的是 ${JSON.stringify(extensions)}`)
+    }
+  }
+  const depth = value.maxDepth
+  if (!isUndefined(depth) && (!isNumber(depth) || !Number.isInteger(depth) || depth < 0 || depth > ProjectCodeLimits.scanDepth)) {
+    throw invalid(`maxDepth 要 0–${ProjectCodeLimits.scanDepth} 之间的整数，这里给的是 ${JSON.stringify(depth)}`)
+  }
+}
+
+/** query 的入参：intent 认得，要 target 的给了 target，要 path 的给了 path，范围在界内；类型是声明给的，形状照样逐项核（程序可能绕过检查）。 */
 export function codeQueryInput(input: CodeQueryInput): CodeQueryInput {
   const value: unknown = input
   if (!isPlainObject(value)) throw invalid(`query 要一个对象作入参，这里给的是 ${JSON.stringify(value)}`)
@@ -40,6 +56,7 @@ export function codeQueryInput(input: CodeQueryInput): CodeQueryInput {
   if (!needsTarget && !needsPath) throw invalid(`query 的 intent 只收 ${[...QueryIntents.path, ...QueryIntents.target].join('、')}，这里给的是 ${JSON.stringify(intent)}；trace、cycles、deadcode、routing 用 analyze`)
   if (needsTarget) checkTarget(value.target, 'target')
   if (needsPath && (!isString(value.path) || !value.path.trim())) throw invalid(`${String(intent)} 要 path（要看的那个文件，相对项目根）`)
+  checkScope(value)
   return input
 }
 

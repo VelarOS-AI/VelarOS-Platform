@@ -29,7 +29,7 @@ export const ProjectErrorCodes = Object.freeze({
   targetExists: 'TARGET_EXISTS',
   /** 补丁套不上当前内容。 */
   patchApplyError: 'PATCH_APPLY_ERROR',
-  /** 超出允许的范围：range 超出 fileRef 实际显示的范围、符号引用不属于当前项目，或者一个事务的文件数、行数超过预算。 */
+  /** 超出允许的范围：range 超出 fileRef 实际显示的范围、符号引用不属于当前项目、一个事务的文件数或行数超过预算，或者一次读、列、搜的量超过守内存的上限。 */
   scopeViolation: 'SCOPE_VIOLATION',
   /** 目标在项目策略的受保护文件里。 */
   protectedFile: 'PROTECTED_FILE',
@@ -58,24 +58,19 @@ export type ProjectErrorCode = (typeof ProjectErrorCodes)[keyof typeof ProjectEr
 export const ProjectFileLimits = Object.freeze({
   /** read 一次最多读几个文件。 */
   readFiles: 20,
-  /** read 一次调用所有文件共用的字符预算最多多大。 */
-  readChars: 500_000,
-  /** read 不给 maxChars 时一次调用所有文件共用的字符预算。 */
-  readCharsDefault: 24_000,
+  /**
+   * read 一次交回的正文总共最多多少字符。**只为守住内存**：读回来的东西不进模型的上下文，看多少由程序定；
+   * 装不下的文件在 issues 里，单独读或用 range 读一段。
+   */
+  readChars: 20_000_000,
   /** list、search 的 include / exclude 各最多几条 glob。 */
   patterns: 20,
-  /** list 的 depth 最多给到几层（depth='all' 不受它限制）。 */
+  /** list 的 depth 给数字时最多几层（不给就是整棵树）。 */
   listDepth: 30,
-  /** list 不给 depth 时往下几层。 */
-  listDepthDefault: 3,
-  /** list 每页最多几条。 */
-  listPage: 2_000,
-  /** list 不给 limit 时每页几条。 */
-  listPageDefault: 200,
-  /** search 最多返回几处命中。 */
-  searchHits: 100,
-  /** search 不给 limit 时最多返回几处命中。 */
-  searchHitsDefault: 30,
+  /** list 一次最多列多少条，同样只为守住内存：超了整个调用失败，收窄 path、include 或 depth 再列。 */
+  listEntries: 100_000,
+  /** search 一次最多多少处命中，同样只为守住内存：超了整个调用失败，收窄 query、path 或 include 再搜。 */
+  searchHits: 5_000,
   /** search 每处命中前后最多各带几行。 */
   searchContextLines: 10,
   /** search 不给 contextLines 时每处命中前后各带几行。 */
@@ -90,25 +85,16 @@ export const ProjectFileLimits = Object.freeze({
 
 /** 代码理解能力（`velar:code` 的 query、analyze）的公开上限与缺省值。 */
 export const ProjectCodeLimits = Object.freeze({
-  /** 一次查询最多返回几条结果。 */
-  results: 200,
-  /** 不给 limit 时一次查询返回几条结果。 */
-  resultsDefault: 30,
+  /** 一次查询最多交回几条结果。只为守住内存：结果不进模型的上下文，看多少由程序定。 */
+  results: 5_000,
   /** 按扩展名过滤时最多给几个扩展名。 */
   extensions: 20,
   /** 扫描目录时最多往下几层。 */
   scanDepth: 16,
   /** callers、callees、impact 沿关系走几层。 */
   relationDepthDefault: 2,
-  /** cycles 至少扫多少个文件。 */
-  cycleFilesMin: 10,
-  /** cycles 最多扫多少个文件。 */
-  cycleFiles: 120,
-  /** deadcode 最多返回几个候选。 */
-  deadCodeCandidates: 80,
 })
 
-/** 项目里跑命令（`velar:shell` 的 run、沙箱里的 run）的公开上限。 */
 /** 变更记录与有限事务面的公开上限。 */
 export const ProjectTransactionLimits = Object.freeze({
   /** 列变更记录时不给 limit 列几条。 */

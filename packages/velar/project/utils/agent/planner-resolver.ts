@@ -72,7 +72,7 @@ export function projectPlannerResolver(ctx: ProjectOperationContext): ProjectPla
       const kernel = await ctx.project.kernel()
       // 和 list 同一套写法：不带 / 的按文件名、任意深度都算，带 / 的从项目根起算。
       const include = scopeListPatterns(ctx.project.getRootPath(), '', [pattern])
-      const entries = await kernel.listFiles({ include, recursive: true, maxDepth: ProjectFileLimits.listDepth, maxFiles: ProjectTuning.list.maxEntries })
+      const entries = await kernel.listFiles({ include, recursive: true, maxDepth: ProjectFileLimits.listDepth, maxFiles: ProjectFileLimits.listEntries })
       return entries.filter((entry) => entry.type === 'file').map((entry) => entry.path)
     },
   }

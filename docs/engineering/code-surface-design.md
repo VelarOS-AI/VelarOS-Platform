@@ -114,7 +114,7 @@ API 按 **base64 之后**的大小限（直连 10 MB、Bedrock/Google Cloud 5 MB
 
 **模版按需读、不常驻。** 它不嵌进声明、不进门的说明：随能力的模型面发布（`contract/surface.ts` 的 `template`），跟着程序送进隔离进程，
 模型拿不准怎么组合时在程序里读——`import { template } from 'velar:program'`，`export default template('velar:project')`——导出了才进上下文。
-常驻模块的声明因此小了一半（`velar:files` 8478 → 4402 字符，`velar:project` 13252 → 8986）。
+常驻模块的声明因此小了一半（`velar:files` 8478 → 4402 字符，`velar:project` 13252 → 8492）。
 模版里也不教导出这种基本操作：怎么交出结果写在门的规矩里，一处就够。
 
 ### 导出照 ES 模块
@@ -125,6 +125,19 @@ API 按 **base64 之后**的大小限（直连 10 MB、Bedrock/Google Cloud 5 MB
 `export default` 不中断执行。顺带查出一个老 bug：运行时报错的行号一直差 3——
 包装改了两行、换算还减 1，而运行时行号从没被测过。现在偏移在隔离进程启动时量出来。
 
+### 能力不折叠
+
+能力交回的东西落在程序的变量里、不进上下文，所以能力不替模型决定看多少：`velar:files` 与 `velar:project` 的 read 交回要的整段（不给 range 就是整个文件），
+`velar:project` 的 list 交回全部条目（不给 depth 就是整棵树）、search 交回全部命中和它们所在的行（每个命中的文件一个带 fileRef 的窗口）、
+edit 与 inspect 交回完整差量，`velar:code` 不按条数截，`velar:shell` 与 `velar:sandbox` 的 run 交回整份输出。
+续读、游标、每页几条、结果预算、差量截断这些都删了——它们是工具时代的补丁，存在只因为回执要整个进上下文。
+看多少、筛什么由模型在程序里定（先看大小，再切、再筛、再导出），门的规矩里写着这一条，模版里有「命中很多时先在程序里汇总」的写法。
+
+剩下的只有**守内存的上限**，每个都在常量表里标明「只为守住内存」，写进声明，两边的数一致由验收核对：一次 read 交回的正文、一次 list 的条目、
+一次 search 的命中、一次代码查询的条数、命令输出的字符数。超了不交回一部分冒充全部——读、列、搜整个失败（`SCOPE_VIOLATION`，message 说怎么收窄），
+批量读里装不下的那个文件进 issues；命令输出是流，超了只留末尾并标 `truncated`。内核里原来按文件截命中（ripgrep 每个文件 400 处、回退扫描每个文件 120 处）的上限也拿掉了，
+不然「全部命中」底下还是悄悄折叠。门的回执自己另有上限（导出的值、日志），那是交给模型的量，由程序决定导出什么，不是能力交给程序的量。
+
 ## 能力按注入装配，不绑死在空间上
 
 **命名空间按能力起名，不按空间起名**。模型那边一件能力一个模块：
@@ -133,7 +146,7 @@ API 按 **base64 之后**的大小限（直连 10 MB、Bedrock/Google Cloud 5 MB
 | --- | --- | --- | --- | --- |
 | `velar:files` | read / edit / undo | ✓ 本机文件 | — | `@velaros-ai/velar` 的 `files/` |
 | `velar:images` | view | ✓ | ✓ | `@velaros-ai/velar` 的 `images/` |
-| `velar:shell` | run / listTasks / refreshEnvironment | ✓ | ✓ | `@velaros-ai/velar` 的 `shell/` |
+| `velar:shell` | run / listTasks / stop / refreshEnvironment | ✓ | ✓ | `@velaros-ai/velar` 的 `shell/` |
 | `velar:sandbox` | create / run / diff / apply / discard | ✓ | ✓ | `@velaros-ai/velar` 的 `sandbox/` |
 | `velar:project` | read / list / search / edit / inspect / undo | — | ✓ 受项目治理的文件 | `@velaros-ai/velar` 的 `project/` |
 | `velar:code` | query / analyze | — | ✓ | `@velaros-ai/velar` 的 `project/` |

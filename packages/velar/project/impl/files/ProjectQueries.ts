@@ -362,14 +362,13 @@ export class ProjectQueries implements ProjectQueriesApi {
     return entries.filter((entry) => entry.type === 'file').map((entry) => entry.path)
   }
 
-  /** 回退搜索：通过 adapter 扫描文件，每个文件限制命中数，再做全局合并。 */
+  /** 回退搜索：通过 adapter 逐个文件扫描再合并；一个文件的命中不另设上限，收满 maxResults 就停并标 truncated。 */
   private async searchViaAdapters(
     processed: SearchInput,
     maxResults: number,
     selectedFiles?: string[],
   ): Promise<{ hits: SearchHit[]; scannedFiles: number; truncated: boolean }> {
     const files = selectedFiles ?? await this.searchFilePaths(processed)
-    const perFileCap = Math.min(ProjectTuning.queries.fallbackHitsPerFileMax, Math.max(maxResults * 2, ProjectTuning.queries.fallbackHitsPerFileMin))
     const hits: SearchHit[] = []
     let scannedFiles = 0
     let stoppedEarly = false
@@ -395,7 +394,7 @@ export class ProjectQueries implements ProjectQueriesApi {
           snapshot: snap,
           query: processed.query,
           regex: processed.regex,
-          maxResults: perFileCap,
+          maxResults,
           caseSensitive: processed.caseSensitive,
         })
         for (const hit of adapterHits) {

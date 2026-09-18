@@ -14,7 +14,7 @@
 ```text
 velar:project   read / list / search / edit / inspect / undo   受项目治理的文件（@velaros-ai/velar/project）
 velar:code      query / analyze                               代码之间的关系（@velaros-ai/velar/project）
-velar:shell     run / listTasks / refreshEnvironment          命令（@velaros-ai/velar/shell，配项目端口）
+velar:shell     run / listTasks / stop / refreshEnvironment   命令（@velaros-ai/velar/shell，配项目端口）
 velar:sandbox   create / run / diff / apply / discard         演练沙箱（@velaros-ai/velar/sandbox，配项目端口）
 velar:images    view                                          看图（@velaros-ai/velar/images，配项目端口）
 ```

@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
 import { AppError } from '@velaros-ai/core/error'
 
+import { ProjectCodeLimits } from '../contract/constants'
 import { typescriptPlugin } from '../impl/plugins/TypeScriptProjectPlugin'
 import type { ProjectCodeQuery } from '../types/project'
 
@@ -110,15 +111,43 @@ describe('九个 intent 的代码查询', () => {
     expect((await failureOf(containers.query({ intent: 'definition', target }))).code).toBe('AMBIGUOUS_TARGET')
   })
 
-  test('references 保留搜索范围，并说明按名字收集的局限', async () => {
+  test('references 保留搜索范围，并说明按名字收集的局限；条数不由模型定，宿主拿到的是守内存的上限', async () => {
     const { query, calls } = await fixture(() => ({ source: 'language-service', references: [{ path: 'other.ts', line: 1, excerpt: 'Service()' }], scannedFiles: 2, truncated: true }))
-    const result = await query({ intent: 'references', target, path: 'tests', limit: 10 })
-    expect(calls).toMatchObject([{ action: 'find_references', path: 'tests', symbol: 'Service', exactWord: true, limit: 10 }])
+    const result = await query({ intent: 'references', target, path: 'tests' })
+    expect(calls).toMatchObject([{ action: 'find_references', path: 'tests', symbol: 'Service', exactWord: true, limit: ProjectCodeLimits.results }])
     expect(result.target).toMatchObject(target)
     // 「按名字收候选」在 degraded 里用中文说清楚，不另给一个英文枚举。
     expect(result.resolution).toBeUndefined()
     expect(result.degraded.join('')).toContain('按名字收集引用候选')
     expect(result.coverage).toMatchObject({ path: 'tests', scannedFiles: 2, truncated: true, versioned: false })
+    expect(result.coverage.limit).toBeUndefined()
+  })
+
+  test('范围自己核对：扩展名最多 20 个、目录层数 0–16，越界当场拒绝、不去问宿主', async () => {
+    const { query, calls } = await fixture()
+    for (const scope of [
+      { extensions: Array.from({ length: ProjectCodeLimits.extensions + 1 }, (_, index) => `.e${index}`) },
+      { extensions: [''] },
+      { maxDepth: ProjectCodeLimits.scanDepth + 1 },
+      { maxDepth: -1 },
+      { language: '' },
+    ]) {
+      const failure = await query({ intent: 'outline', path: 'service.ts', ...scope }).catch((error: unknown) => error)
+      expect(failure, JSON.stringify(scope)).toMatchObject({ code: 'INVALID_INPUT' })
+    }
+    expect(calls).toEqual([])
+  })
+
+  test('关系查询后端给多少交多少：不按条数截，也不截整段的文字', async () => {
+    const callers = Array.from({ length: 500 }, (_, index) => ({ id: `n${index}`, name: `caller${index}` }))
+    const output = 'x'.repeat(50_000)
+    const { query } = await fixture((input) => input.action === 'search_symbols'
+      ? { source: 'codegraph', results: [{ id: 'node:service', name: 'Service', path: 'service.ts', line: 1 }] }
+      : { source: 'codegraph', callers, output })
+    const result = await query({ intent: 'callers', target })
+    expect(result.callers).toHaveLength(500)
+    expect(result.output).toHaveLength(50_000)
+    expect(result.coverage.truncated).toBe(false)
   })
 
   test('同一文件里不同容器的同名符号：给了 container 就定得下来', async () => {
@@ -185,11 +214,11 @@ describe('九个 intent 的代码查询', () => {
 describe('要图后端的分析', () => {
   test('cycles、deadcode、routing 各发一条图查询；索引的建与查不在这个包里', async () => {
     const { analyze, calls, port } = await fixture(() => ({ candidates: [{ name: 'possibleUnused' }] }))
-    const deadcode = await analyze({ intent: 'deadcode', limit: 4 })
-    await analyze({ intent: 'cycles', maxFiles: 40 })
+    const deadcode = await analyze({ intent: 'deadcode' })
+    await analyze({ intent: 'cycles' })
     await analyze({ intent: 'routing', framework: 'velar' })
     expect(deadcode).toMatchObject({ intent: 'deadcode', candidates: [{ name: 'possibleUnused' }] })
-    expect(calls).toEqual([{ action: 'find_dead_code', limit: 4 }, { action: 'find_cycles', maxFiles: 40 }, { action: 'routing_manifest', framework: 'velar' }])
+    expect(calls).toEqual([{ action: 'find_dead_code', limit: ProjectCodeLimits.results }, { action: 'find_cycles' }, { action: 'routing_manifest', framework: 'velar' }])
     // code 命名空间只有这两个操作：没有走到索引生命周期的路。
     expect(port.listOperations().code).toEqual(['query', 'analyze'])
   })

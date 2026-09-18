@@ -49,8 +49,9 @@
 | `ProjectPlugin` / `ProjectPluginContext` | 否 | 插件扩展点：`FileAdapter`、`FileAdapterFactory`、`PatchStrategy`、`ProjectValidator`、`ProjectFixer`、`ProjectHook`、`PipelineStage` |
 
 **常量表**是 `contract/constants.ts`：版本 `ProjectPackageVersion`（与 `@velaros-ai/velar` 同一个，写进内置插件）、错误原因 `ProjectErrorCodes`、脱敏占位符 `ProjectRedactionMarker`、
-公开上限与模型面缺省值（`ProjectFileLimits`、`ProjectCodeLimits`、`ProjectCommandLimits`、`ProjectTransactionLimits`）、内核缺省策略 `ProjectPolicyDefaults`、宿主代码查询的语言服务动作 `ProjectCodeLanguageActions`。
-模型面声明里的数字都引它们；沙箱的上限在 `@velaros-ai/velar/sandbox` 的 `RehearsalSandboxLimits`，看图的在 `@velaros-ai/velar/images` 的 `ImageLimits`。
+公开上限与模型面缺省值（`ProjectFileLimits`、`ProjectCodeLimits`、`ProjectTransactionLimits`）、内核缺省策略 `ProjectPolicyDefaults`、宿主代码查询的语言服务动作 `ProjectCodeLanguageActions`。
+模型面声明里的数字都引它们，两边一致由验收核对（INV-25）。两件工具不折叠结果：读、列、搜的上限只为守住内存，超了明说、不交回一部分（INV-24）。
+沙箱的上限在 `@velaros-ai/velar/sandbox` 的 `RehearsalSandboxLimits`，看图的在 `@velaros-ai/velar/images` 的 `ImageLimits`。
 
 **数据面**是 `types/`，只放类型；`types/files.ts` 是 `velar:project` 的模型面（入参与回执），`types/code.ts` 是 `velar:code` 的，
 `types/project.ts` 是可移植数据（空间端口上流动的修改授权请求与决定、写授权判定、宿主代码查询）。
@@ -68,11 +69,11 @@
 
 | 能力 | 链路 |
 | --- | --- |
-| `project.read` | 资源门读锁 → 入参核对 → 路径钳在项目内（按真实路径）→ 内核 read（授权、脱敏、按行列与字符预算截取）→ 源码窗口（`[行号, 原文]`，长行给带列范围的片段）→ 按实际交出去的行签发 fileRef（同一份源码的几个窗口共用可见范围的并集）与续读页 |
-| `project.list`、`project.search` | 资源门读锁 → 内核列举（gitignore 与策略过滤，按稳定指纹分页）/ 搜索（有 ripgrep 用 ripgrep，没有逐文件扫）→ 搜索命中合成可编辑的源码窗口（总量有上限，装不下的只留位置） |
-| `project.edit` | 资源门写锁 → 步骤里的路径钳在项目内 → 编辑规划：按 fileRef 取回读取时的版本与可见范围，编成内核的编辑意图（范围越界、定位不唯一在这里拒绝，版本过期时按原意图找新位置）→ 带着要写的路径过宿主的修改授权 → 内核准备事务（补丁、差量、风险，不碰磁盘）→ 应用（校验、审批、按版本核对、全成或全逆序还原）→ 回执带改动处的新窗口（新 fileRef）与 changeRef |
-| `project.inspect`、`project.undo` | changeRef 取回事务 → inspect 给差量；undo 过修改授权后在写锁里交内核回滚（外部改过拒绝覆盖，撤过的幂等成功） |
-| `code.query`、`code.analyze` | 资源门读锁 → 翻译成宿主代码查询（语言服务类由宿主语言服务执行，代码索引类由代码图谱执行）→ 附来源、覆盖与降级信息 |
+| `project.read` | 资源门读锁 → 入参核对 → 路径钳在项目内（按真实路径）→ 内核 read（授权、脱敏，交回要的整段；整次调用的正文总量守着内存上限，装不下的文件进 issues）→ 源码窗口（`[行号, 原文]`，都是整行）→ 按实际交出去的行签发 fileRef（同一份源码的几个窗口共用可见范围的并集） |
+| `project.list`、`project.search` | 资源门读锁 → 内核列举（gitignore 与策略过滤，全部条目，超过内存上限整个失败）/ 搜索（有 ripgrep 用 ripgrep，没有逐文件扫；全部命中，没收全整个失败）→ 每个命中的文件整份读一次，命中所在的行合成一个可编辑的源码窗口 |
+| `project.edit` | 资源门写锁 → 步骤里的路径钳在项目内 → 编辑规划：按 fileRef 取回读取时的版本与可见范围，编成内核的编辑意图（范围越界、定位不唯一在这里拒绝，版本过期时按原意图找新位置）→ 带着要写的路径过宿主的修改授权 → 内核准备事务（补丁、差量、风险，不碰磁盘）→ 应用（校验、审批、按版本核对、全成或全逆序还原）→ 回执带每个改过的文件的新窗口（新 fileRef）、完整差量与 changeRef |
+| `project.inspect`、`project.undo` | changeRef 取回事务 → inspect 给完整差量；undo 过修改授权后在写锁里交内核回滚（外部改过拒绝覆盖，撤过的幂等成功） |
+| `code.query`、`code.analyze` | 资源门读锁 → 入参核对（intent、目标、范围）→ 翻译成宿主代码查询（语言服务类由宿主语言服务执行，条数上限只为守内存；代码索引类由代码图谱执行）→ 结果原样附来源、覆盖与降级信息，不再截 |
 
 失败一律交给 `projectFailure`：代码面只把 `error.code` 与 `error.message` 交给程序，所以原因码当错误码，details 里的位置（第几步第几处）、候选、诊断、改完之后的预览与下一步都写进 message。
 
@@ -90,7 +91,7 @@
 
 - **领域内核**：每个项目根一个 `LocalProjectKernel`，持有事务仓库（内存里保留最近的事务，可选落盘的事务状态文件）、路径锁、审计日志（内存，有上限）、解析过的目标与证据包（有上限）、插件与登记表。可撤销历史按条数和字节预算（`ProjectTuning.persistence.historyBytes`，内存与状态文件共用）双重淘汰，最旧先出；还没应用的事务与正在写盘的事务永远保留，所以历史再大也不会让提交失败。
 - **变更记录**：宿主给的写端（落盘的用 `createFileProjectChangeFeed`，放在宿主私有目录），不给就在内存里。
-- **fileRef、续读页与回执引用**：按会话存在进程内存里（`utils/agent/file-refs.ts`），每个会话有条数与字符数上限，最久没用的先出；进程重启后全部作废，重读就是。
+- **源码快照、fileRef 与改动回执**：按会话存在进程内存里（`utils/agent/file-refs.ts`），每个会话有条数与字符数上限，最久没用的先出；进程重启后全部作废，重读就是。
 - **资源门**：进程内按项目根排队，只在内存里。
 
 ## 生命周期
@@ -101,13 +102,13 @@
 
 - 错误原因只来自 `ProjectErrorCodes`，挂在 `ProjectError.reason`；交给程序时原因码就是 `error.code`，说明、位置、候选、诊断与下一步都在 `error.message` 里。
 - 改动类失败一个文件都没写（`details.executionOutcome = 'not-applied'`）；程序改好入参重提即可。
-- 版本过期（文件或列举出的目录）`BASE_REVISION_MISMATCH`；range 超出看到的范围 `SCOPE_VIOLATION`；路径出了项目 `PERMISSION_DENIED`；撤销遇外部修改 `CONFLICT_WITH_EXTERNAL_EDIT`；生成文件 `GENERATED_FILE`；受保护文件 `PROTECTED_FILE`；重启恢复遇到无法归属的改动 `TRANSACTION_RECOVERY_CONFLICT`；宿主缺能力 `NOT_SUPPORTED`；模型给的正则写错或跑不完 `INVALID_INPUT`。
+- 版本过期 `BASE_REVISION_MISMATCH`；range 超出看到的范围、一次读列搜的量超过守内存的上限 `SCOPE_VIOLATION`；路径出了项目 `PERMISSION_DENIED`；撤销遇外部修改 `CONFLICT_WITH_EXTERNAL_EDIT`；生成文件 `GENERATED_FILE`；受保护文件 `PROTECTED_FILE`；重启恢复遇到无法归属的改动 `TRANSACTION_RECOVERY_CONFLICT`；宿主缺能力 `NOT_SUPPORTED`；模型给的正则写错或跑不完 `INVALID_INPUT`。
 - 改动已被字节预算挤出可撤销历史时，撤销报 `NOT_SUPPORTED` 并说明没有留下撤销记录（改动本身仍在变更记录里可查）；记录已经不在内核里是 `TARGET_NOT_FOUND`，引用本身不是本会话签发的才是 `INVALID_INPUT`。撤销一个已经撤销过的改动是幂等成功，不是错误。
 
 ## 不变量
 
-共 19 条，登记在 `spec/invariants.md`，验收用例在 `spec/acceptance.test.ts`。编号只增不重排（INV-15 作废；INV-7、INV-16、INV-21 随项目空间搬去 `@velaros-ai/project`，编号都不复用）。
-按检验方式：测试 17 条、类型 1 条、门禁 1 条。未验证 0 条。
+共 21 条，登记在 `spec/invariants.md`，验收用例在 `spec/acceptance.test.ts`。编号只增不重排（INV-15 作废；INV-7、INV-16、INV-21 随项目空间搬去 `@velaros-ai/project`，编号都不复用）。
+按检验方式：测试 19 条、类型 1 条、门禁 1 条。未验证 0 条。
 
 ## 非目标
 

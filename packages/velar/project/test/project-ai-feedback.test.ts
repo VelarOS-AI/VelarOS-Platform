@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
 import type { AgentProjectKernelPort } from '../contract/requires.js'
 import { createProjectKernel, type EditOperation, typescriptPlugin } from '../index'
-import { executeAgentProjectRead, executeAgentProjectSearch } from '../utils/agent/kernel-port'
+import { executeAgentProjectSearch, readAgentFile } from '../utils/agent/kernel-port'
 import { diagnoseTextMatchMiss, findLineWhitespaceTolerantMatches } from '../utils/editing/text-match-feedback'
 import { includesLineEndingAware } from '../utils/text'
 
@@ -53,25 +53,16 @@ describe('read range clamping', () => {
   test('a batch range beyond one short file keeps every other file and explains the short one', async () => {
     await writeFile(join(root, 'long.txt'), numberedLines(200))
     await writeFile(join(root, 'short.txt'), numberedLines(3))
-    const project = await createProjectKernel({ root })
+    const { call } = await projectToolFixture({ root })
 
-    const result = await executeAgentProjectRead(project, {
-      path: ['long.txt', 'short.txt'],
-      range: { startLine: 150, endLine: 400 },
-      maxChars: 280_000,
-    }, { rootPath: root })
+    const result = await call('project', 'read', { files: [{ path: 'long.txt', range: [150, 400] }, { path: 'short.txt', range: [150, 400] }] })
 
     expect(result.issues).toBeUndefined()
-    expect(result.files[0]?.content?.split('\n')[0]).toBe('line 150')
-    expect(result.files[0]?.content?.split('\n').at(-1)).toBe('line 200')
-    expect(result.files[1]).toMatchObject({
-      snapshot: { path: 'short.txt', exists: true },
-      content: '',
-      totalLines: 3,
-      hasMore: false,
-    })
-    expect(result.files[1]?.note).toContain('文件共 3 行')
-    expect(result.files[1]?.note).toContain('起始行 150')
+    expect(result.files[0].lines[0]).toEqual([150, 'line 150'])
+    expect(result.files[0].lines.at(-1)).toEqual([200, 'line 200'])
+    expect(result.files[1]).toMatchObject({ path: 'short.txt', lines: [], totalLines: 3 })
+    expect(result.files[1].note).toContain('文件共 3 行')
+    expect(result.files[1].note).toContain('起始行 150')
   })
 
   test('a single out-of-range read returns a note instead of failing on both read paths', async () => {
@@ -102,50 +93,28 @@ describe('read range clamping', () => {
     expect(plain.note).toBeUndefined()
   })
 
-  test('isolates per-file failures in a batch as path-bearing issues, but still throws for one file', async () => {
+  test('reading one file throws a path-bearing project error with a next step when there is no text to read', async () => {
     await writeFile(join(root, 'a.txt'), 'alpha\n')
-    await writeFile(join(root, 'b.txt'), 'beta\n')
+    await mkdir(join(root, 'dir'))
     const project = await createProjectKernel({ root })
 
-    const batch = await executeAgentProjectRead(project, {
-      path: ['a.txt', 'b.txt'],
-      baseRevisions: { 'a.txt': 'stale-revision' },
-    }, { rootPath: root })
-    expect(batch.files.map((file) => file.snapshot.path)).toEqual(['b.txt'])
-    expect(batch.issues).toEqual([{
-      path: 'a.txt',
-      code: 'BASE_REVISION_MISMATCH',
-      message: expect.stringContaining('a.txt'),
-      next: expect.any(String),
-    }])
-    expect(batch.nextAction).toContain('只重读这些路径')
-
-    await expect(executeAgentProjectRead(project, {
-      path: 'a.txt',
-      baseRevisions: { 'a.txt': 'stale-revision' },
-    }, { rootPath: root })).rejects.toMatchObject({ reason: 'BASE_REVISION_MISMATCH' })
+    await expect(readAgentFile(project, { path: 'missing.txt' })).rejects.toMatchObject({
+      reason: 'TARGET_NOT_FOUND', message: expect.stringContaining('missing.txt'), suggestedNextAction: expect.stringContaining('list'),
+    })
+    await expect(readAgentFile(project, { path: 'dir' })).rejects.toMatchObject({ reason: 'NOT_SUPPORTED', message: expect.stringContaining('目录') })
+    await expect(readAgentFile(project, { path: 'a.txt', baseRevision: 'stale-revision' })).rejects.toMatchObject({ reason: 'BASE_REVISION_MISMATCH' })
+    // 读得到的只投影 Agent 边界要的字段：没有续读位置，也没有绝对路径这些内核元数据。
+    const read = await readAgentFile(project, { path: 'a.txt' })
+    expect(Object.keys(read).sort()).toEqual(['content', 'note', 'range', 'redacted', 'snapshot', 'totalLines', 'truncated'])
+    expect(read).toMatchObject({ content: 'alpha\n', truncated: false })
   })
 
-  test('rejects a file-independent range error once for the whole batch', async () => {
+  test('a model-facing batch rejects an inverted range once for the whole call', async () => {
     await writeFile(join(root, 'big.txt'), numberedLines(30))
     await writeFile(join(root, 'short.txt'), numberedLines(3))
-    const project = await createProjectKernel({ root })
-
-    const error = await executeAgentProjectRead(project, {
-      path: ['big.txt', 'short.txt'],
-      range: { startLine: 10, endLine: 2 },
-    }, { rootPath: root }).catch((caught: unknown) => caught)
-    expect(error).toMatchObject({ reason: 'INVALID_INPUT', message: '读取范围的 endLine 不能早于 startLine' })
-
-    // 与具体文件相关的列越界仍逐文件隔离：只有第 1 行不够长的文件记为 issue。
-    await writeFile(join(root, 'wide.txt'), 'a much longer first line\nsecond')
-    const columns = await executeAgentProjectRead(project, {
-      path: ['wide.txt', 'short.txt'],
-      range: { startLine: 1, startColumn: 12 },
-    }, { rootPath: root })
-    expect(columns.files.map((file) => file.snapshot.path)).toEqual(['wide.txt'])
-    expect(columns.issues).toEqual([expect.objectContaining({ path: 'short.txt', code: 'INVALID_INPUT' })])
-    expect(columns.nextAction).toBeDefined()
+    const { call } = await projectToolFixture({ root })
+    const failure = await call('project', 'read', { files: [{ path: 'big.txt', range: [10, 2] }, { path: 'short.txt' }] }).catch((error: unknown) => error)
+    expect(failure).toMatchObject({ code: 'INVALID_INPUT', message: expect.stringContaining('files[0].range') })
   })
 
   test('keeps the remaining column errors but names the file', async () => {
@@ -592,11 +561,8 @@ describe('text feedback with the TypeScript plugin installed', () => {
     await project.applyEdit({ transactionId: transaction.transactionId })
     expect(await readFile(join(root, 'mod.ts'), 'utf8')).toBe('export function run() {\n  return "ok"\n}\n')
 
-    const read = await executeAgentProjectRead(project, {
-      path: ['mod.ts'],
-      range: { startLine: 50 },
-    }, { rootPath: root })
-    expect(read.files[0]).toMatchObject({ content: '', totalLines: 4, note: expect.stringContaining('起始行 50') })
+    const read = await readAgentFile(project, { path: 'mod.ts', range: { startLine: 50, endLine: 60 } })
+    expect(read).toMatchObject({ content: '', totalLines: 4, note: expect.stringContaining('起始行 50') })
   })
 })
 

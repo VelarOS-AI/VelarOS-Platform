@@ -5,7 +5,7 @@
  * 项目空间的装配与三件共用能力的项目端口在 `@velaros-ai/project` 的验收里测。
  */
 
-import { mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 
@@ -13,7 +13,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
 import { codeProgramChecker } from '@velaros-ai/code-surface'
 
-import { VelarCodeModule, VelarProjectModule } from '../contracts'
+import { ProjectCodeLimits, ProjectFileLimits, ProjectPolicyDefaults, VelarCodeModule, VelarProjectModule } from '../contracts'
 import { ProjectExecutionGate } from '../impl/operations/ProjectExecutionGate'
 import { createSecretRedactionProvider } from '../index'
 
@@ -221,11 +221,9 @@ describe('编辑的边界', () => {
     const whole = await read('a.txt')
     expect(whole.lines).toEqual([[1, 'one'], [2, 'two'], [3, '']])
     expect(whole.totalLines).toBe(3)
-    // 范围停在一个空行上，那一行照样交出来；读到了最后一行，就没有续读。
+    // 范围停在一个空行上，那一行照样交出来。
     const ranged = await read('a.txt', [2, 3])
     expect(ranged.lines).toEqual([[2, 'two'], [3, '']])
-    expect(ranged.hasMore).toBeUndefined()
-    expect(ranged.continuation).toBeUndefined()
     await call('project', 'edit', { steps: [{ action: 'edit', fileRef: ranged.fileRef, edits: [{ op: 'insert', at: 'end', text: 'four' }] }] })
     expect(await readFile(join(root, 'a.txt'), 'utf8')).toBe('one\ntwo\n\nfour\n')
     // 空文件是 0 行；越出行数的行号报出文件实际有几行，并指向在末尾插入的写法。
@@ -237,6 +235,68 @@ describe('编辑的边界', () => {
     const beyond = await failureOf(call('project', 'edit', { steps: [{ action: 'edit', fileRef: current.fileRef, edits: [{ op: 'replace', range: 9, text: 'x' }] }] }))
     expect(beyond.message).toContain('第 9 行超出了文件的行数（4 行）')
     expect(beyond.message).toContain("at: 'end'")
+  })
+})
+
+describe('不折叠', () => {
+  test('INV-24 read、list、search、edit、inspect 交回全部，看多少由程序定；只有守内存的上限，超了明说', async () => {
+    const long = Array.from({ length: 3000 }, (_, index) => `line ${index + 1}`)
+    await writeFile(join(root, 'long.txt'), `${long.join('\n')}\n`)
+    await mkdir(join(root, 'a/b/c/d/e'), { recursive: true })
+    await writeFile(join(root, 'a/b/c/d/e/leaf.txt'), 'leaf\n')
+    for (let index = 0; index < 150; index++) await writeFile(join(root, `a/hit-${index}.txt`), `before\nneedle ${index}\nafter\n`)
+    const { call, read, kernel } = await createProjectHarness(root)
+
+    // 不给 range 就是整个文件：三千行都在，没有续读。
+    const whole = await read('long.txt')
+    expect(whole.lines).toHaveLength(3000)
+    expect(whole).not.toHaveProperty('continuation')
+    // 不给 depth 就是整棵树：第五层的文件也在，没有分页。
+    const listed = await call('project', 'list', { path: 'a' })
+    expect(listed.entries.map((entry: { path: string }) => entry.path)).toContain('a/b/c/d/e/leaf.txt')
+    expect(Object.keys(listed)).toEqual(['entries'])
+    // 全部命中，每个命中的文件一个能直接改的窗口。
+    const searched = await call('project', 'search', { query: 'needle' })
+    expect(searched.hits).toHaveLength(150)
+    expect(searched.files).toHaveLength(150)
+    expect(searched.files.every((window: { fileRef?: string }) => window.fileRef?.startsWith('view:'))).toBe(true)
+    // 差量是完整的：整份换掉三千行，每一行都在 diff 里，inspect 给的是同一份。
+    const edited = await call('project', 'edit', { steps: [{ action: 'overwrite', fileRef: whole.fileRef, text: `${long.map((line) => `${line}!`).join('\n')}\n` }] })
+    expect(edited.diff).toContain('+line 3000!')
+    expect(edited).not.toHaveProperty('diffTruncated')
+    expect((await call('project', 'inspect', { changeRef: edited.changeRef })).diff).toBe(edited.diff)
+
+    // 守内存的上限：超了整个失败并说清怎么收窄，不交回一部分。
+    kernel.search = async (input) => ({ query: input.query, hits: [], truncated: true, diagnostics: ['ripgrep 搜索超过 120000 毫秒超时'] })
+    const search = await failureOf(call('project', 'search', { query: 'needle' }))
+    expect(search.code).toBe('SCOPE_VIOLATION')
+    expect(search.message).toContain('收窄')
+    kernel.listFiles = async (input) => Array.from({ length: input?.maxFiles ?? 0 }, (_, index) => ({ path: `f${index}`, type: 'file' as const }))
+    const list = await failureOf(call('project', 'list', {}))
+    expect(list.code).toBe('SCOPE_VIOLATION')
+    expect(list.message).toContain(String(ProjectFileLimits.listEntries))
+  }, 60_000)
+
+  test('INV-25 声明里写给模型的上限就是常量表里的数', () => {
+    const project = VelarProjectModule.declarations
+    for (const phrase of [
+      `一次最多 ${ProjectFileLimits.readFiles} 个`,
+      `不超过 ${ProjectFileLimits.readChars} 字符`,
+      `各最多 ${ProjectFileLimits.patterns} 条`,
+      `数字最多 ${ProjectFileLimits.listDepth}`,
+      `超过 ${ProjectFileLimits.listEntries} 条`,
+      `超过 ${ProjectFileLimits.searchHits} 处`,
+      `缺省 ${ProjectFileLimits.searchContextLinesDefault}、最多 ${ProjectFileLimits.searchContextLines}`,
+      `一次最多 ${ProjectFileLimits.steps} 步`,
+      `展开后一次最多 ${ProjectFileLimits.recodePaths} 个`,
+      `缺省最多改 ${ProjectPolicyDefaults.maxChangedFilesPerTransaction} 个文件`,
+    ]) expect(project, phrase).toContain(phrase)
+    const code = VelarCodeModule.declarations
+    for (const phrase of [
+      `最多 ${ProjectCodeLimits.extensions} 个`,
+      `0–${ProjectCodeLimits.scanDepth}`,
+      `超过 ${ProjectCodeLimits.results} 条`,
+    ]) expect(code, phrase).toContain(phrase)
   })
 })
 

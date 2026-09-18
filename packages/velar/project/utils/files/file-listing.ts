@@ -6,7 +6,6 @@ import { isEmpty, isTrue } from '@velaros-ai/core'
 import type { GitCheckIgnoreRunner } from '@velaros-ai/path-rules'
 import { createIgnorePolicy } from '@velaros-ai/path-rules'
 
-import { ProjectFileLimits } from '../../contract/constants.js'
 import type { CommandProvider } from '../../contract/requires.js'
 import type { ListedDirectory, ListingDependencies, ListingDirectory, ListingNode } from '../../types/file-store.js'
 import type { FileListEntry, ObserveInput } from '../../types/io.js'
@@ -65,7 +64,7 @@ export async function listProjectFiles(
   const out: FileListEntry[] = []
   const max = input.maxFiles ?? ProjectTuning.files.listMaxFiles
   const recursive = !!input.recursive
-  const maxDepth = input.maxDepth ?? (recursive ? ProjectFileLimits.listDepthDefault : 1)
+  const maxDepth = input.maxDepth ?? (recursive ? ProjectTuning.files.listDepth : 1)
   const include = normalizeFilterList(input.include)
   const exclude = normalizeFilterList(input.exclude)
   const startPathInput = input.path?.trim()

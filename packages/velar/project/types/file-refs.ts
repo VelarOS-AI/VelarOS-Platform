@@ -1,5 +1,5 @@
 /**
- * 文件引用的记录：源码快照、可编辑视图（fileRef）、续读页，以及变更、列表续页这类回执。
+ * 文件引用的记录：源码快照、可编辑视图（fileRef）与改动回执。
  * 记录按会话存在进程内存里，引用是记录的内容哈希；只在包内用，模型只见到引用字符串。
  */
 
@@ -40,15 +40,7 @@ export interface ViewRecord {
   coverage: ProjectVisibleCoverage[]
 }
 
-/** 一个续读页：指向一份源码快照，带着下一页从哪儿开始。 */
-export interface PageRecord {
-  kind: 'project-read-page'
-  version: 1
-  source: string
-  range: { startLine: number; startColumn?: number; endLine?: number; endColumn?: number }
-}
-
-/** 一张回执（变更、列表续页）：签发它的引擎根与内容。 */
+/** 一张回执（改动）：签发它的引擎根与内容。 */
 export interface ReceiptRecord {
   kind: 'project-receipt'
   version: 1
@@ -58,7 +50,7 @@ export interface ReceiptRecord {
 }
 
 /** 引用背后的任何一种记录。 */
-export type RefRecord = SourceRecord | ViewRecord | PageRecord | ReceiptRecord
+export type RefRecord = SourceRecord | ViewRecord | ReceiptRecord
 
 /** 一个会话的引用记录：按最近使用排序，另记着总字符数（超了从最旧的删起）。 */
 export interface RefSession {

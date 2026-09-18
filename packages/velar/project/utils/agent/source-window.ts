@@ -1,21 +1,23 @@
 /**
- * 源码窗口：把读取结果排成 [行号, 原文] 的行与带列范围的片段，按实际交给程序的范围签发 fileRef 与续读引用，最后写成模型面的 `ProjectWindow`。
+ * 源码窗口：把读取结果排成 [行号, 原文] 的行，按实际交给程序的行签发 fileRef，最后写成模型面的 `ProjectWindow`。
  * 分两步：先出候选窗口（记着源码快照），交出去之前再按窗口里真有的行核对一遍、签发 fileRef——同一份源码的几个窗口共用可见范围的并集。
- * 引用签发不了时源码照常作为只读内容给出，只是不带编辑权。
+ * 读取总是整行的，窗口里没有半行。引用签发不了时源码照常作为只读内容给出，只是不带编辑权。
  */
 
-import { isArray, isEmpty, isNumber, isPlainObject, isString, isTrue, isUndefined, Log, numberOrNull, optionalWhen, toOptional } from '@velaros-ai/core'
+import { isEmpty, isNumber, isString, isTrue, isUndefined, Log } from '@velaros-ai/core'
 
 import { ProjectPolicyDefaults } from '../../contract/constants.js'
 import type { ProjectOperationContext } from '../../contract/requires.js'
+import type { LineSpan } from '../../types/agent.js'
 import type { AgentProjectReadResult } from '../../types/agent-port.js'
 import type { ProjectVisibleCoverage } from '../../types/file-refs.js'
-import type { ProjectFragment, ProjectWindow } from '../../types/files.js'
+import type { ProjectWindow } from '../../types/files.js'
 import type { ProjectSourceLine, ProjectSourceWindow } from '../../types/source-window.js'
-import { assertWellFormedProjectText } from '../text.js'
+import { ProjectError } from '../errors.js'
 import { ProjectTuning } from '../tuning.js'
 
-import { loadFileView, resolveFileSource, saveFileRef, saveFileSource, saveReadPage } from './file-refs.js'
+import { loadFileView, resolveFileSource, saveFileRef, saveFileSource } from './file-refs.js'
+import { readAgentFile } from './kernel-port.js'
 
 const log = Log.tag('FileSourceWindow')
 
@@ -33,79 +35,89 @@ export function projectSourceLines(content: string): ProjectSourceLine[] {
 }
 
 /**
- * 把一次读取排成候选窗口：能拿到完整原文时按原文定位每一行（整行进 lines、半行进 fragments）并落一份源码快照；
- * 拿不到（脱敏过、太大、读的时候文件变了）就只给只读窗口。编辑引用要等 `finalizeFileWindows` 按实际交出去的行签发。
+ * 能拿来签发编辑引用的整份原文：读的就是整个文件时就是读到的正文，只读了一段时钉住同一个版本再整份读一次。
+ * 被遮住过、读不全、读的时候文件变了就拿不到；超过可编辑的大小的也不给，另外说一声，好给只读窗口一句说明。
  */
-export async function presentFileRead(
-  ctx: ProjectOperationContext,
-  file: AgentProjectReadResult,
-  requestedRange?: { startLine?: number; startColumn?: number },
-  sourceRef?: string
-): Promise<ProjectSourceWindow> {
-  const { content = '', ...metadata } = file
-  const result: ProjectSourceWindow = {
-    ...metadata, kind: 'project-source-window', path: file.snapshot.path,
-    revision: file.snapshot.revision, lines: [],
-  }
-  if (file.snapshot.isDirectory || file.snapshot.isBinary || !file.snapshot.exists) return result
-  const startLine = file.range?.startLine ?? requestedRange?.startLine ?? 1
-  const startColumn = file.range?.startColumn ?? requestedRange?.startColumn ?? 1
-  if (!isUndefined(file.totalLines) && startLine > Math.max(1, file.totalLines)) return result
-  let original: Optional<string>
-  let beyondEditableSize = false
-  if (sourceRef) {
-    try {
-      original = resolveFileSource(ctx, sourceRef).content
-    } catch (error) {
-      log.debug('原来的源码快照不可用，改读当前授权的源码', { error: String(error) })
-    }
-  }
-  if (isUndefined(original) && !file.redacted && file.snapshot.revision) {
+async function editableOriginal(ctx: ProjectOperationContext, file: AgentProjectReadResult, content: string, wholeFile: boolean): Promise<{ original?: string; beyondEditableSize?: boolean }> {
+  if (file.redacted || !file.snapshot.revision) return {}
+  let full: Optional<string>
+  if (wholeFile && !file.truncated) full = content
+  else {
     try {
       const kernel = await ctx.project.kernel()
-      const full = await kernel.read({ path: file.snapshot.path, baseRevision: file.snapshot.revision, maxChars: ProjectTuning.agent.fullReadChars })
-      if (!full.redacted && !full.truncated && !full.hasMore && isString(full.content)) {
-        // 读得全不等于改得了：补丁策略要的是带完整正文的快照，快照正文受 policy.maxFileSizeToReadBytes 约束。
-        // 两边上限对齐，超限的文件只给只读窗口并说明，不签发一个用起来必然 NOT_SUPPORTED 的编辑引用。
-        if (Buffer.byteLength(full.content, 'utf8') > ProjectPolicyDefaults.maxFileSizeToReadBytes) beyondEditableSize = true
-        else original = full.content
-      }
+      const read = await kernel.read({ path: file.snapshot.path, baseRevision: file.snapshot.revision, maxChars: ProjectTuning.agent.fullReadChars })
+      if (!read.redacted && !read.truncated && !read.hasMore && isString(read.content)) full = read.content
     } catch (error) {
       // 再读一次时文件变了或被拒：已经读到的照样给，只是不授予编辑范围。
       log.debug('整份原文读不到，窗口只读', { error: String(error) })
     }
   }
+  if (isUndefined(full)) return {}
+  // 读得全不等于改得了：补丁策略要的是带完整正文的快照，快照正文受 policy.maxFileSizeToReadBytes 约束。
+  // 两边上限对齐，超限的文件只给只读窗口并说明，不签发一个用起来必然 NOT_SUPPORTED 的编辑引用。
+  if (Buffer.byteLength(full, 'utf8') > ProjectPolicyDefaults.maxFileSizeToReadBytes) return { beyondEditableSize: true }
+  return { original: full }
+}
+
+/**
+ * 只读窗口的行：照读到的正文按行切（CRLF 的 \r 去掉）。读到了文件末尾、正文以换行结尾时，最后那个空段是结尾换行之后的零宽行，
+ * 和可编辑窗口一样照 `wc -l` 不算一行，总行数跟着改。
+ */
+function readOnlyLines(result: ProjectSourceWindow, content: string, startLine: number, kernelTotal: Optional<number>): void {
+  const parts = content.split('\n')
+  const lastLine = startLine + parts.length - 1
+  if (isEmpty(parts.at(-1) ?? '') && isNumber(kernelTotal) && lastLine >= kernelTotal) {
+    parts.pop()
+    result.totalLines = lastLine - 1
+  }
+  for (const [index, raw] of parts.entries()) result.lines.push([startLine + index, raw.endsWith('\r') ? raw.slice(0, -1) : raw])
+  result.editable = false
+}
+
+/** 照 `wc -l` 数行：结尾换行之后那个零宽的行（空文件里是唯一的那一行）不算。 */
+function wcLineCount(fullLines: readonly ProjectSourceLine[]): number {
+  const last = fullLines.at(-1)
+  return last && last.start === last.end ? fullLines.length - 1 : fullLines.length
+}
+
+/**
+ * 把一次读取排成候选窗口：拿得到可编辑的整份原文时按原文定位每一行、落一份源码快照（编辑引用等 `finalizeFileWindows` 按实际交出去的行签发）；
+ * 拿不到（遮住过、超过可编辑的大小、读的时候文件变了）就给只读窗口。requested 是请求的行范围，不给就是读了整个文件。
+ * 交进来的读取要是读全了的：调用方先挡掉 truncated。
+ */
+export async function presentFileRead(ctx: ProjectOperationContext, file: AgentProjectReadResult, requested?: LineSpan): Promise<ProjectSourceWindow> {
+  const content = file.content ?? ''
+  const result: ProjectSourceWindow = { kind: 'project-source-window', path: file.snapshot.path, revision: file.snapshot.revision, lines: [] }
+  if (isNumber(file.totalLines)) result.totalLines = file.totalLines
+  if (isTrue(file.redacted)) result.redacted = true
+  if (isString(file.note)) result.note = file.note
+  if (file.snapshot.isDirectory || file.snapshot.isBinary || !file.snapshot.exists) return result
+  // 起始行在文件外时内核不回 range：起始行按请求的算。
+  const startLine = file.range?.startLine ?? requested?.startLine ?? 1
+  const { original, beyondEditableSize } = await editableOriginal(ctx, file, content, isUndefined(requested))
   const fullLines = isUndefined(original) ? undefined : projectSourceLines(original)
+  if (isNumber(file.totalLines) && startLine > Math.max(1, file.totalLines)) {
+    // 没有行可给，也不签编辑引用。内核按换行切来数行，拿得到原文时照 wc -l 重数，说明也照它写。
+    if (fullLines) {
+      const total = wcLineCount(fullLines)
+      result.totalLines = total
+      result.note = `文件共 ${total} 行，要的起始行 ${startLine} 超出范围，没有返回内容；要读末尾，起始行不要超过 ${Math.max(1, total)}。`
+    }
+    return result
+  }
   const start = fullLines?.[startLine - 1]
-  if (fullLines && start && original?.slice(start.start + startColumn - 1, start.start + startColumn - 1 + content.length) === content) {
-    const from = start.start + startColumn - 1
-    const to = from + content.length
+  if (!isUndefined(original) && fullLines && start && original.slice(start.start, start.start + content.length) === content) {
+    const end = start.start + content.length
+    // 按范围读的正文不带末行的换行符，所以末行止于 end；以换行结尾是因为最后那行是空行，它也交出去了。
     for (const line of fullLines) {
-      if (line.line < startLine || line.start > to) continue
-      // 整读的正文带着行尾换行，止于换行符时下一行的正文还没显示；按范围读的正文不带末行的换行符，
-      // 以换行结尾是因为最后那行是空行，它已经交出去了。
-      if (!file.range && line.start === to && content.endsWith('\n') && to < original.length) continue
-      if (line.bodyEnd < from) continue
-      if (from <= line.start && to >= line.bodyEnd) result.lines.push([line.line, line.text])
-      else {
-        const a = Math.max(from, line.start)
-        const b = Math.min(to, line.bodyEnd)
-        if (b > a) (result.fragments ??= []).push({ line: line.line, columns: [a - line.start + 1, b - line.start + 1], text: original.slice(a, b) })
-      }
+      if (line.line >= startLine && line.start <= end && line.bodyEnd <= end) result.lines.push([line.line, line.text])
     }
     result.viewSource = saveFileSource(ctx, { path: file.snapshot.path, revision: file.snapshot.revision!, content: original })
     countLikeWc(result, fullLines)
   } else {
-    // 只读降级也用于脱敏过的内容；末行的边界保守处理，免得扩大编辑范围。
-    const parts = content.split('\n')
-    for (const [index, raw] of parts.entries()) {
-      const line = startLine + index
-      const complete = (index > 0 || startColumn === 1) && (index < parts.length - 1 || !file.hasMore)
-      if (complete) result.lines.push([line, raw.endsWith('\r') ? raw.slice(0, -1) : raw])
-      else if (raw) (result.fragments ??= []).push({ line, columns: [index ? 1 : startColumn, (index ? 1 : startColumn) + raw.length], text: raw })
-    }
-    result.editable = false
-    if (beyondEditableSize) {
+    // 只读降级也用于脱敏过的内容。
+    readOnlyLines(result, content, startLine, file.totalLines)
+    if (isTrue(beyondEditableSize)) {
       result.referenceUnavailable = `文件超过可编辑的上限（${Math.floor(ProjectPolicyDefaults.maxFileSizeToReadBytes / 1024 / 1024)} MiB），只给只读窗口：用命令处理它，或者先把文件拆小。`
     }
   }
@@ -114,126 +126,92 @@ export async function presentFileRead(
 
 /**
  * 行数照 `wc -l` 数：结尾换行之后那个零宽的行不算一行（空文件是 0 行）。它在内核里照样有行号：
- * 窗口交出了最后一行真实的行（或者文件是空的）时，把它记进可见范围——程序凭这个 fileRef 在文件末尾插入要它——
- * 同时标成 trailingLine，交给模型之前去掉；这时文件已经读到头，续读也就没有了。
+ * 窗口交出了最后一行真实的行（或者文件是空的）时，把它记进可见范围——程序凭这个 fileRef 在文件末尾插入要它；
+ * range 本身就读到了它（从最后一行的下一行起读）也一样。它标成 trailingLine，交给模型之前去掉。
  */
 function countLikeWc(result: ProjectSourceWindow, fullLines: readonly ProjectSourceLine[]): void {
   const last = fullLines.at(-1)
   // 最后一段长度为零：它就是结尾换行之后那个行（空文件里是唯一的那一行）；没有结尾换行的文件，最后一段是真实的一行。
   if (!last || last.start !== last.end) return
-  result.totalLines = fullLines.length - 1
-  const lastReal = fullLines.at(-2)
+  result.totalLines = wcLineCount(fullLines)
   const shown = new Set(result.lines.map(([line]) => line))
-  if (lastReal && !shown.has(lastReal.line)) return
-  if (!shown.has(last.line)) result.lines.push([last.line, ''])
+  if (!shown.has(last.line)) {
+    const lastReal = fullLines.at(-2)
+    if (lastReal && !shown.has(lastReal.line)) return
+    result.lines.push([last.line, ''])
+  }
   result.trailingLine = last.line
-  result.hasMore = false
-  delete result.continuation
 }
 
-/** 是不是普通对象（可以当键值表读）。 */
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return isPlainObject(value)
+/**
+ * 一个文件里几段行的窗口（search 的命中处、edit 回执的改动处）：钉住版本整份读一次，只留这几段里的行，签发的 fileRef 也只覆盖它们。
+ * 文件在那个版本之后又被改了抛 BASE_REVISION_MISMATCH，大到整份读不全抛 SCOPE_VIOLATION：调用方决定跳过还是重来。
+ */
+export async function presentFileSpans(ctx: ProjectOperationContext, path: string, revision: string, spans: readonly LineSpan[]): Promise<ProjectSourceWindow> {
+  const kernel = await ctx.project.kernel()
+  const file = await readAgentFile(kernel, { path, baseRevision: revision, maxChars: ProjectTuning.agent.fullReadChars })
+  if (isTrue(file.truncated)) throw new ProjectError('SCOPE_VIOLATION', `${path} 太大，整份读不全，给不了它的窗口。`, { path }, '用 read 带 range 读要看的那几行。')
+  const window = await presentFileRead(ctx, file)
+  const inside = (line: number) => spans.some((span) => span.startLine <= line && line <= span.endLine)
+  // 结尾换行之后那个零宽的行跟着最后一行真实的行走：那一行在，它才进可见范围。空文件里它就是唯一的那一行。
+  const trailing = window.trailingLine
+  window.lines = window.lines.filter(([line]) => inside(line) || (line === trailing && inside(Math.max(1, line - 1))))
+  if (isNumber(trailing) && !window.lines.some(([line]) => line === trailing)) delete window.trailingLine
+  return window
 }
 
-/** 签发不了引用时去掉续读位置，改成一句怎么重读。 */
-function withoutUnsignedContinuation(result: Record<string, unknown>): Record<string, unknown> {
-  if (!isRecord(result.continuation)) return result
-  const range = optionalWhen(isPlainObject, result.continuation.range)
-  delete result.continuation
-  const startLine = Number(range?.startLine)
-  result.continuationUnavailable = Number.isSafeInteger(startLine) && startLine > 0
-    ? `续读引用签发不了：从第 ${startLine} 行起重新 read 这个文件。`
-    : '续读引用签发不了：重新 read 这个文件。'
-  return result
-}
-
-/** 按窗口里真有的行与片段算出可见范围：行文本对不上原文的（脱敏、截断）一律不算。 */
-function visibleCoverage(sourceContent: string, window: Record<string, unknown>): ProjectVisibleCoverage[] {
+/** 按窗口里真有的行算出可见范围：行文本对不上原文的（被遮住的）不算，相邻的行并成一段。 */
+function visibleCoverage(sourceContent: string, lines: ReadonlyArray<[number, string]>): ProjectVisibleCoverage[] {
   const sourceLines = projectSourceLines(sourceContent)
   const coverage: ProjectVisibleCoverage[] = []
-  for (const record of isArray(window.lines) ? window.lines : []) {
-    if (!isArray(record) || record.length !== 2 || !Number.isInteger(record[0]) || !isString(record[1])) continue
-    const line = sourceLines[Number(record[0]) - 1]
-    if (!line || line.text !== record[1]) continue
-    coverage.push({ startOffset: line.start, endOffset: line.end, startLine: line.line, endLine: line.line, completeLines: true })
+  for (const [number, text] of [...lines].sort((a, b) => a[0] - b[0])) {
+    const line = sourceLines[number - 1]
+    if (!line || line.text !== text) continue
+    const last = coverage.at(-1)
+    if (last && last.endOffset === line.start && last.endLine + 1 === line.line) {
+      last.endOffset = line.end
+      last.endLine = line.line
+    } else coverage.push({ startOffset: line.start, endOffset: line.end, startLine: line.line, endLine: line.line, completeLines: true })
   }
-  for (const fragment of isArray(window.fragments) ? window.fragments : []) {
-    if (!isRecord(fragment) || !Number.isInteger(fragment.line) || !isArray(fragment.columns) || fragment.columns.length !== 2 || !isString(fragment.text)) continue
-    const line = sourceLines[Number(fragment.line) - 1]
-    const [a, b] = fragment.columns
-    if (!line || !isNumber(a) || !isNumber(b) || !Number.isInteger(a) || !Number.isInteger(b) || a < 1 || b <= a || b > line.text.length + 1 || line.text.slice(a - 1, b - 1) !== fragment.text) continue
-    assertWellFormedProjectText(fragment.text)
-    coverage.push({ startOffset: line.start + a - 1, endOffset: line.start + b - 1, startLine: line.line, endLine: line.line, completeLines: false })
-  }
-  coverage.sort((a, b) => a.startOffset - b.startOffset || a.endOffset - b.endOffset)
-  const merged: ProjectVisibleCoverage[] = []
-  for (const region of coverage) {
-    const last = merged.at(-1)
-    if (last?.completeLines && region.completeLines && last.endOffset === region.startOffset && last.endLine + 1 === region.startLine) {
-      last.endOffset = region.endOffset
-      last.endLine = region.endLine
-    } else merged.push({ ...region })
-  }
-  return merged
+  return coverage
 }
 
-/** 给一个候选窗口签发 fileRef 与续读引用：源码快照对不上窗口（路径、版本）或窗口被遮住时不签，只读给出。 */
-function signWindow(ctx: ProjectOperationContext, value: Record<string, unknown>): Record<string, unknown> {
-  const result = { ...value }
-  const ref = optionalWhen(isString, result.viewSource)
-  delete result.viewSource
-  if (!ref || result.redacted) return withoutUnsignedContinuation(result)
+/** 给一个候选窗口签发 fileRef：源码快照对不上窗口（路径、版本）或窗口被遮住时不签，只读给出。 */
+function signWindow(ctx: ProjectOperationContext, value: ProjectSourceWindow): ProjectSourceWindow {
+  const { viewSource, ...result } = value
+  if (!isString(viewSource) || isTrue(result.redacted)) return result
   try {
-    const source = resolveFileSource(ctx, ref)
-    if (source.path !== result.path || source.revision !== result.revision) return withoutUnsignedContinuation(result)
-    const coverage = visibleCoverage(source.content, result)
-    if (!isEmpty(coverage)) result.fileRef = saveFileRef(ctx, ref, coverage)
-    if (isRecord(result.continuation) && isRecord(result.continuation.range)) {
-      const range = result.continuation.range
-      if (isNumber(range.startLine)) {
-        result.continuation = saveReadPage(ctx, ref, {
-          startLine: range.startLine,
-          startColumn: toOptional(numberOrNull(range.startColumn)),
-          endLine: toOptional(numberOrNull(range.endLine)),
-          endColumn: toOptional(numberOrNull(range.endColumn)),
-        })
-      }
-    }
+    const source = resolveFileSource(ctx, viewSource)
+    if (source.path !== result.path || source.revision !== result.revision) return result
+    const coverage = visibleCoverage(source.content, result.lines)
+    if (!isEmpty(coverage)) result.fileRef = saveFileRef(ctx, viewSource, coverage)
   } catch (error) {
     // 会话的引用被挤掉、正文不合法这类情况：不给编辑权，源码仍作为只读内容给出。
     log.debug('签发编辑引用失败，窗口只读', { error: String(error) })
   }
-  return withoutUnsignedContinuation(result)
+  return result
 }
 
-/** 合并同一份源码的可见范围：整行范围相交或相邻就并起来，已被整行范围盖住的片段丢掉，其余片段按行合并，结果按偏移排序。 */
-function mergeCoverage(input: ProjectVisibleCoverage[]): ProjectVisibleCoverage[] {
-  const full: ProjectVisibleCoverage[] = []
-  for (const region of input.filter((item) => item.completeLines).sort((a, b) => a.startOffset - b.startOffset || b.endOffset - a.endOffset)) {
-    const last = full.at(-1)
+/** 合并同一份源码的可见范围（都是整行）：相交或相邻就并起来，结果按偏移排序。 */
+function mergeCoverage(input: readonly ProjectVisibleCoverage[]): ProjectVisibleCoverage[] {
+  const merged: ProjectVisibleCoverage[] = []
+  for (const region of [...input].sort((a, b) => a.startOffset - b.startOffset || b.endOffset - a.endOffset)) {
+    const last = merged.at(-1)
     if (last && region.startOffset <= last.endOffset && region.startLine <= last.endLine + 1) {
       last.endOffset = Math.max(last.endOffset, region.endOffset)
       last.endLine = Math.max(last.endLine, region.endLine)
-    } else full.push({ ...region })
+    } else merged.push({ ...region })
   }
-  const fragments: ProjectVisibleCoverage[] = []
-  for (const region of input.filter((item) => !item.completeLines).sort((a, b) => a.startOffset - b.startOffset)) {
-    if (full.some((item) => item.startOffset <= region.startOffset && item.endOffset >= region.endOffset)) continue
-    const last = fragments.at(-1)
-    if (last && last.startLine === region.startLine && region.startOffset <= last.endOffset) last.endOffset = Math.max(last.endOffset, region.endOffset)
-    else fragments.push({ ...region })
-  }
-  return [...full, ...fragments].sort((a, b) => a.startOffset - b.startOffset)
+  return merged
 }
 
 /**
  * 交出去之前的最后一步：给每个候选窗口按它真有的行签发 fileRef；同一份源码的几个窗口（包括不相连的）改签成一个，
  * 覆盖它们可见范围的并集——程序拿其中任何一个都能改所有这些行。
  */
-export async function finalizeFileWindows(ctx: ProjectOperationContext, windows: readonly ProjectSourceWindow[]): Promise<Array<Record<string, unknown>>> {
+export async function finalizeFileWindows(ctx: ProjectOperationContext, windows: readonly ProjectSourceWindow[]): Promise<ProjectSourceWindow[]> {
   const signed = windows.map((window) => signWindow(ctx, window))
-  const groups = new Map<string, { source: string; coverage: ProjectVisibleCoverage[]; windows: Array<Record<string, unknown>> }>()
+  const groups = new Map<string, { source: string; coverage: ProjectVisibleCoverage[]; windows: ProjectSourceWindow[] }>()
   for (const window of signed) {
     if (!isString(window.fileRef)) continue
     try {
@@ -256,22 +234,18 @@ export async function finalizeFileWindows(ctx: ProjectOperationContext, windows:
 }
 
 /** 把签好的窗口写成模型面的 `ProjectWindow`：只留声明里的字段。 */
-export function toProjectWindow(window: Record<string, unknown>): ProjectWindow {
-  const lines = isArray(window.lines) ? window.lines as Array<[number, string]> : []
+export function toProjectWindow(window: ProjectSourceWindow): ProjectWindow {
   const shaped: ProjectWindow = {
-    path: String(window.path),
+    path: window.path,
     // 结尾换行之后那个零宽的行只进可见范围，不给模型看（模型面照 wc -l 数行）。
-    lines: isNumber(window.trailingLine) ? lines.filter(([line, text]) => line !== window.trailingLine || !isEmpty(text)) : lines,
+    lines: isNumber(window.trailingLine) ? window.lines.filter(([line, text]) => line !== window.trailingLine || !isEmpty(text)) : window.lines,
   }
   if (isString(window.revision)) shaped.revision = window.revision
   if (isString(window.fileRef)) shaped.fileRef = window.fileRef
   if (isNumber(window.totalLines)) shaped.totalLines = window.totalLines
-  if (isArray(window.fragments) && !isEmpty(window.fragments)) shaped.fragments = window.fragments as ProjectFragment[]
-  if (isTrue(window.hasMore)) shaped.hasMore = true
-  if (isString(window.continuation)) shaped.continuation = window.continuation
   if (isTrue(window.redacted)) shaped.redacted = true
   if (!isString(window.fileRef)) shaped.editable = false
-  const notes = [window.referenceUnavailable, window.continuationUnavailable, window.note].filter(isString)
+  const notes = [window.referenceUnavailable, window.note].filter(isString)
   if (!isString(window.fileRef) && isEmpty(notes)) notes.push(isTrue(window.redacted) ? '有内容被遮住了，这段只能看、不能改。' : '这段只能看、不能改：重新 read 拿可编辑的窗口。')
   if (!isEmpty(notes)) shaped.note = notes.join(' ')
   return shaped

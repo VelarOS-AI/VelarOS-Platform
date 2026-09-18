@@ -54,6 +54,7 @@ export interface AgentProjectFileSnapshot {
   revision?: string
 }
 
+/** 内核读到的一个文件在 Agent 边界上的样子：快照只留定位要的字段，正文只放一份。 */
 export interface AgentProjectReadResult {
   redacted?: boolean
   snapshot: AgentProjectFileSnapshot
@@ -67,28 +68,17 @@ export interface AgentProjectReadResult {
     endOffset?: number
   }
   totalLines?: number
+  /** 要的那一段没读全：字符上限不够装下它。 */
   truncated?: boolean
-  nextStartLine?: number
-  remainingLines?: number
-  hasMore?: boolean
-  continuation?: AgentProjectReadContinuation
   /** 范围被钳制或起始行越界时的说明；此时读取仍算成功。 */
   note?: string
 }
 
-export interface AgentProjectReadContinuation {
-  path: string
-  range: {
-    startLine: number
-    startColumn?: number
-    endLine?: number
-    endColumn?: number
-  }
-  maxChars?: number
-  baseRevisions?: Record<string, string>
-}
-
-export interface AgentProjectKernelReadResult extends Omit<AgentProjectReadResult, 'continuation'> {
+/** 内核端口的 read 交回的：Agent 边界上的那些，加上后面还有没有内容、从哪儿接着读（给内核的其它调用方用，Agent 边界不续读）。 */
+export interface AgentProjectKernelReadResult extends AgentProjectReadResult {
+  nextStartLine?: number
+  remainingLines?: number
+  hasMore?: boolean
   continuation?: {
     path: string
     range?: {
@@ -102,22 +92,13 @@ export interface AgentProjectKernelReadResult extends Omit<AgentProjectReadResul
   }
 }
 
-/** 一个读不到的路径：码来自合同错误原因表，message 说发生了什么，next 说下一步怎么办。 */
-export interface AgentProjectReadIssue {
-  path: string
-  /** 合同错误原因：路径不存在或是目录、二进制时分别是 TARGET_NOT_FOUND、NOT_SUPPORTED，其余按抛出的码。 */
-  code: string
-  message: string
-  /** 这一条的下一步；没有可照做的下一步时缺省。 */
-  next?: string
-}
-
+/** 内核端口的 search 交回的：命中、有没有收全（没收全时 diagnostics 可能说明为什么，比如超时），缺搜索命令时的工具需求。 */
 export interface AgentProjectSearchResult {
   query: string
   hits: AgentProjectSearchHit[]
   truncated?: boolean
+  diagnostics?: string[]
   toolRequirements?: AgentProjectCommandToolRequirement[]
-  nextAction?: string
 }
 
 export interface AgentProjectSearchHit {
@@ -132,26 +113,15 @@ export interface AgentProjectSearchHit {
   snippet?: string
 }
 
+/** Agent 边界读一个文件：相对项目根的路径，可带整行范围、钉住的版本（文件变了就拒绝）与字符上限。 */
 export interface AgentProjectReadRequest {
-  path: string | string[]
-  range?: {
-    startLine?: number
-    endLine?: number
-    startColumn?: number
-    endColumn?: number
-    startOffset?: number
-    endOffset?: number
-  }
-  maxBytes?: number
+  path: string
+  range?: { startLine: number; endLine: number }
+  baseRevision?: string
   maxChars?: number
-  allowUnbounded?: boolean
-  baseRevisions?: Record<string, string>
-  trust?: {
-    source: 'system' | 'user' | 'project' | 'tool' | 'external'
-    trust: 'trusted' | 'untrusted'
-  }
 }
 
+/** Agent 边界搜一次源码：条件都已核对并换成相对项目根的写法。 */
 export interface AgentProjectSearchRequest {
   query: string
   path?: string
@@ -159,7 +129,6 @@ export interface AgentProjectSearchRequest {
   exclude?: string[]
   regex?: boolean
   caseSensitive?: boolean
-  limit?: number
 }
 
 export interface AgentProjectErrorLike extends Error {

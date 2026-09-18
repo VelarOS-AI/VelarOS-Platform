@@ -5,18 +5,6 @@
 
 /** 项目包的可调参数，按用途分组。 */
 export const ProjectTuning = Object.freeze({
-  /** search 搜源码（utils/agent/file-reads.ts、kernel-port.ts）：命中列表与源码窗口的总量（缺省命中条数是对外承诺，在常量表）。 */
-  search: Object.freeze({
-    /** 命中合成的源码窗口总共最多多少字符（按窗口的 JSON 算，含路径、版本、引用这些固定元数据）；装不下的命中只留定位。 */
-    windowBudgetChars: 12_000,
-    /** 命中列表（只含路径、版本、范围、片段）按 JSON 算最多多少字符；装不下的命中截掉并标 truncated，让模型收窄条件。 */
-    hitsBudgetChars: 24_000,
-  }),
-  /** list 列文件（utils/agent/file-reads.ts）的扫描上限。 */
-  list: Object.freeze({
-    /** 一次最多扫描多少个条目；超过就提示收窄 path 或 include。 */
-    maxEntries: 100_000,
-  }),
   /** 文件能力的适配层（utils/agent）：要整份正文时的读取预算，编辑版本过期时的恢复说明。 */
   agent: Object.freeze({
     /** 要整份正文时（签发可编辑视图、编辑恢复找新位置、编码转换）向内核读取的字符预算；读不全就不签发编辑引用、不给恢复候选、拒绝转换。 */
@@ -26,30 +14,24 @@ export const ProjectTuning = Object.freeze({
     /** 恢复说明里确认窗口的行最多多少字符；装不下就只给候选行号，让模型先 read。 */
     recoveryWindowChars: 10_000,
   }),
-  /** 文件引用（utils/agent/file-refs.ts）：fileRef、续读页、回执按会话存在进程内存里，这是它们的上限。 */
+  /** 文件引用（utils/agent/file-refs.ts）：源码快照、fileRef、改动回执按会话存在进程内存里，这是它们的上限。 */
   refs: Object.freeze({
     /** 最多同时留几个会话的引用，超了丢掉最久没用的那个会话的全部引用。 */
     sessions: 32,
-    /** 每个会话最多几条记录（源码快照、视图、续读页、回执各算一条），超了从最久没用的删起。 */
+    /** 每个会话最多几条记录（源码快照、视图、回执各算一条），超了从最久没用的删起。 */
     recordsPerSession: 2_000,
     /** 每个会话的记录最多占多少字符（源码快照带完整正文），超了从最久没用的删起。 */
     charsPerSession: 64_000_000,
   }),
-  /** edit 回执里改过的文件的窗口（utils/agent/change-windows.ts）：看哪几段、带多少。 */
+  /** edit 回执里改过的文件的窗口（utils/agent/change-windows.ts）。 */
   receiptWindows: Object.freeze({
-    /** 所有改过的文件的窗口共用的字符预算；装不下的文件不给窗口，要接着改先 read。 */
-    chars: 24_000,
-    /** 一个文件最多给几段；超过时先留和本次改动相交的段。 */
-    focusRanges: 8,
     /** 每段改动前后各多带几行。 */
     changeContextLines: 5,
   }),
-  /** 代码查询（utils/agent/code-query.ts）：`velar:code` 的 query 与 analyze 的回执体量（缺省条数是对外承诺，在常量表）。 */
+  /** 代码查询（utils/agent/code-query.ts）：`velar:code` 找目标符号的候选数。 */
   codeQuery: Object.freeze({
     /** 按符号名到代码图谱找节点时最多取几个候选；符号搜索回退到代码图谱时也不超过它。 */
     graphCandidates: 50,
-    /** 关系查询结果里 output、relationshipMap 这类整段文字最多留多少字符，超出截断并标 truncated。 */
-    relationTextChars: 20_000,
   }),
   /** 模型给的正则（utils/regex-guard.ts）：文本搜索与编辑定位都在带时限的沙箱里执行，灾难回溯不再卡住整个进程。 */
   regex: Object.freeze({
@@ -58,8 +40,6 @@ export const ProjectTuning = Object.freeze({
   }),
   /** 事务：回执带多长的差量、编辑失败的回读建议、校验失败回执、校验结果复用。 */
   transactions: Object.freeze({
-    /** edit 回执与 inspect 各带多少字符的差量；超出截断并标 diffTruncated，要看全的去读改后的文件。 */
-    receiptDiffChars: 16_000,
     /** 编辑在 prepare 失败时，建议回读出错文件用的 read maxChars（字符）。 */
     recoveryReadMaxChars: 12_000,
     /** 知道出错行时，建议回读的范围从出错行往上多读几行。 */
@@ -131,6 +111,8 @@ export const ProjectTuning = Object.freeze({
     searchTextKindIdleMs: 60_000,
     /** 列目录没给 maxFiles 时最多列多少条。 */
     listMaxFiles: 5_000,
+    /** 列目录要递归却没给 maxDepth 时往下几层（第 1 层是起点这一层）。 */
+    listDepth: 3,
     /** observe 扫描工作区没给 maxDepth 时往下走几层。 */
     observeDepth: 20,
     /** 文件层跑的 git 子命令（check-ignore、add --intent-to-add、rm --cached、diff --cached）的超时，毫秒。 */
@@ -138,7 +120,7 @@ export const ProjectTuning = Object.freeze({
     /** 探测项目根在不在 git 工作区里（git rev-parse）的超时，毫秒。 */
     gitProbeTimeoutMs: 5_000,
   }),
-  /** 内核的查询面：搜索、目标解析、证据包（ProjectQueries）。 */
+  /** 内核的查询面：搜索、目标解析、证据包（ProjectQueries）。搜索命中的总数由调用方的 maxResults 管，一个文件的命中不另设上限。 */
   queries: Object.freeze({
     /** 内核搜索没给 maxResults 时最多返回几处命中。 */
     searchResults: 50,
@@ -152,10 +134,6 @@ export const ProjectTuning = Object.freeze({
     evidenceWindowBytes: 80_000,
     /** 证据包给「往前 / 往后接着读」的建议时，至少建议读几行。 */
     evidenceSuggestedReadLines: 20,
-    /** 回退搜索（没有 ripgrep 时逐文件扫）每个文件最多留几处命中的上限。 */
-    fallbackHitsPerFileMax: 120,
-    /** 回退搜索每个文件至少留几处命中（maxResults 很小时也不少于它）。 */
-    fallbackHitsPerFileMin: 24,
     /** 交给模型的命中片段最多多少字符；脱敏之后才截，截断不会把密钥切成脱敏正则认不出的半截。 */
     snippetChars: 400,
     /** 脱敏前先取多宽的窗口：命中所在的整行，行比它还长时以命中为中心向两侧各取一半。 */
@@ -163,12 +141,10 @@ export const ProjectTuning = Object.freeze({
   }),
   /** ripgrep 搜索（utils/files/ripgrep.ts）。 */
   ripgrep: Object.freeze({
-    /** 一次搜索最多返回几处命中，调用方给得再多也按它截。 */
-    maxResults: 500,
+    /** 一次搜索最多返回几处命中，调用方给得再多也按它截；截到了就标 truncated。要不小于 `velar:project` 的 search 上限加一。 */
+    maxResults: 10_000,
     /** 每处命中的片段最多多少字符（也是传给 rg 的 --max-columns）。 */
     snippetChars: 400,
-    /** 每个文件最多几处命中（--max-count 的上限）。 */
-    perFileMatches: 400,
     /** rg 用几个线程。 */
     threads: 4,
   }),

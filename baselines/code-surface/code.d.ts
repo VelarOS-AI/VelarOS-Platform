@@ -9,8 +9,8 @@ declare module 'velar:code' {
    * 问代码：一个 intent 就是一句「要知道什么」。
    * outline 这个文件里有什么、definition 符号定义在哪、references 谁在用它、callers 谁调用它、callees 它调用谁、
    * imports 这个文件引了谁、importers 谁引它、impact 改了会波及谁、diagnostics 这个文件报什么错。
-   * `language` 只查这一种语言（不给就按扩展名交给能处理它的语言服务），`limit` 最多返回几条（缺省 30、最多 200），
-   * `extensions`、`maxDepth` 收窄扫描范围。路径都相对项目根。
+   * `language` 只查这一种语言（不给就按扩展名交给能处理它的语言服务），`extensions`、`maxDepth` 收窄扫描范围。路径都相对项目根。
+   * 结果全部交回，看多少在程序里定。
    */
   type CodeQueryInput =
     | (ProjectCodeScope & { intent: 'outline'; path: string })
@@ -22,8 +22,8 @@ declare module 'velar:code' {
     | (ProjectCodeScope & { intent: 'diagnostics'; path: string })
 
   /**
-   * 一次代码查询的回执。**正文的形状随 intent 与后端而定**（symbols、references、callers、diagnostics……），
-   * 所以除了下面几项之外按名字取值：先看 `degraded` 再决定信到什么程度。
+   * 一次代码查询的回执。**正文的形状随 intent 与后端而定**，所以除了下面几项，正文按名字直接取、按拿到的样子用（类型是 any）；
+   * 拿不准有哪些键就先看 `Object.keys(result)`。先看 `degraded` 再决定信到什么程度。
    */
   interface CodeResult {
     /** 这次问的是哪个 intent，原样回给你，便于程序分支。 */
@@ -32,27 +32,30 @@ declare module 'velar:code' {
     coverage: CodeResultCoverage
     /** 不为空时结果只是候选：按名字找到的符号与引用不等于精确绑定，空诊断也不等于没问题。 */
     degraded: string[]
-    /** 具体结果按 intent 放在各自的键上（outline 是 symbols，references 是 references，diagnostics 是 diagnostics……）。 */
-    [key: string]: unknown
+    /**
+     * 具体结果按 intent 放在各自的键上：outline、definition 是 symbols（definition 另有 declaration、body 两个范围），
+     * references 是 references，imports、importers 是 imports、importers，impact 是 references、importers、relatedTestPaths，
+     * diagnostics 是 diagnostics，callers、callees 是图后端给的调用关系（callers 或 callees，有的后端给 nodes 与 relations）。
+     */
+    [key: string]: any
   }
 
   /**
    * 四类要代码图谱后端才答得了的分析：trace 追两个符号之间的调用路径、cycles 找依赖环、
-   * deadcode 找没用到的代码候选、routing 列框架路由。宿主没接图后端时整个调用失败（`UNAVAILABLE`）。
+   * deadcode 找没用到的代码候选、routing 列框架路由（framework 只列这个框架的）。宿主没接图后端时整个调用失败（`UNAVAILABLE`）。
    */
   type CodeAnalysisInput =
     | { intent: 'trace'; from: CodeTarget; to: CodeTarget }
-    | { intent: 'cycles'; maxFiles?: number }
-    | { intent: 'deadcode'; limit?: number }
+    | { intent: 'cycles' }
+    | { intent: 'deadcode' }
     | { intent: 'routing'; framework?: string }
 
   /**
-   * 代码查询共用的范围：language 只查这一种语言、limit 最多返回几条（1–200）、extensions 只扫这些扩展名（最多 20 个）、maxDepth 往下扫几层目录（0–16）。
+   * 代码查询共用的范围：language 只查这一种语言、extensions 只扫这些扩展名（最多 20 个）、maxDepth 往下扫几层目录（0–16）。
    * 模型的 `velar:code` 入参与宿主收到的语言服务查询共用它；路径一律相对项目根。
    */
   interface ProjectCodeScope {
     language?: string
-    limit?: number
     extensions?: string[]
     maxDepth?: number
   }
@@ -73,13 +76,15 @@ declare module 'velar:code' {
     services?: unknown
   }
 
-  /** 这次查询覆盖到哪儿：范围、语言、扫了多少文件、有没有被条数截断、结果绑没绑文件版本。 */
+  /**
+   * 这次查询覆盖到哪儿：范围、语言、扫了多少文件、结果绑没绑文件版本。
+   * truncated 为真是后端没给全（超过 5000 条，或者后端自己设了上限）：收窄 path、extensions 或 maxDepth 再问。
+   */
   interface CodeResultCoverage {
     path: string
     language?: string
     scannedFiles?: unknown
     truncated: boolean
-    limit: number
     /** 结果绑在确定的文件版本上才为真；为假时它只是「现在看到的位置」，改动之后可能就不对了。 */
     versioned: boolean
     revisions: Array<{ revision: string; scope: string }>

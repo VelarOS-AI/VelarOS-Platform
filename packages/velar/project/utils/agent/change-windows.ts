@@ -1,6 +1,6 @@
 /**
  * edit 回执里改过的文件的窗口：本次每段改动前后几行，加上这次编辑用到的 fileRef 原来看得到、沿补丁链迁到新内容上的范围。
- * 按共用的字符预算从改完的文件里读回来，签发新的 fileRef——程序接着改就用它，不必重读。
+ * 每个文件从改完的内容里整份读一次、只留这些行，签发新的 fileRef——程序接着改就用它，不必重读。
  * 行号全部由最终补丁推导（含 rebase），不用模型提交时的原始坐标。
  */
 
@@ -13,8 +13,7 @@ import type { ProjectWindow } from '../../types/files.js'
 import type { ProjectSourceWindow } from '../../types/source-window.js'
 import { ProjectTuning } from '../tuning.js'
 
-import { executeAgentProjectRead } from './kernel-port.js'
-import { finalizeFileWindows, presentFileRead, toProjectWindow } from './source-window.js'
+import { finalizeFileWindows, presentFileSpans, toProjectWindow } from './source-window.js'
 
 const log = Log.tag('FileChangeWindows')
 
@@ -52,19 +51,15 @@ function migrateSpan(span: LineSpan, hunks: readonly DiffHunk[]): LineSpan {
   return { startLine, endLine: Math.max(startLine, migrateLine(span.endLine, hunks, 'end')) }
 }
 
-/** 合并相交或相邻的范围；超过段数上限时先留和本次改动相交的。 */
-function mergeFocusSpans(changed: readonly LineSpan[], seen: readonly LineSpan[]): LineSpan[] {
+/** 合并相交或相邻的范围，按起始行排好。 */
+function mergeSpans(spans: readonly LineSpan[]): LineSpan[] {
   const merged: LineSpan[] = []
-  for (const span of [...changed, ...seen].sort((a, b) => a.startLine - b.startLine)) {
+  for (const span of [...spans].sort((a, b) => a.startLine - b.startLine)) {
     const last = merged.at(-1)
     if (last && span.startLine <= last.endLine + 1) last.endLine = Math.max(last.endLine, span.endLine)
     else merged.push({ ...span })
   }
-  if (merged.length <= ProjectTuning.receiptWindows.focusRanges) return merged
-  const nearChange = (span: LineSpan) => changed.some((item) => item.startLine <= span.endLine && span.startLine <= item.endLine)
-  return [...merged.filter(nearChange), ...merged.filter((span) => !nearChange(span))]
-    .slice(0, ProjectTuning.receiptWindows.focusRanges)
-    .sort((a, b) => a.startLine - b.startLine)
+  return merged
 }
 
 /**
@@ -86,14 +81,14 @@ export function changedSpans(patches: ReadonlyArray<{ path: string; diff: string
         changed.push({ startLine, endLine: Math.max(startLine, hunk.newStart + hunk.newLines + ProjectTuning.receiptWindows.changeContextLines) })
       }
     }
-    spans[path] = mergeFocusSpans(changed, seen)
+    spans[path] = mergeSpans([...changed, ...seen])
   }
   return spans
 }
 
 /**
- * 读回改过的文件的窗口并签发新的 fileRef：删掉的、移走的旧路径不给；预算装不下的文件不给窗口（程序要接着改就先 read）。
- * 读不到（刚改完又被别人改了）就跳过这个文件，回执照样成立。
+ * 读回改过的文件的窗口并签发新的 fileRef：每个改过的文件一个窗口，删掉的、移走的旧路径不给。
+ * 读不到（刚改完又被别人改了）就跳过这个文件，回执照样成立；程序要接着改它就先 read。
  */
 export async function changeWindows(
   ctx: ProjectOperationContext,
@@ -101,29 +96,14 @@ export async function changeWindows(
   newRevisions: Readonly<Record<string, string>>,
   previous: Readonly<Record<string, readonly LineSpan[]>>,
 ): Promise<ProjectWindow[]> {
-  const spans = changedSpans(patches, previous)
-  const kernel = await ctx.project.kernel()
   const windows: ProjectSourceWindow[] = []
-  let remaining = ProjectTuning.receiptWindows.chars
-  for (const [path, ranges] of Object.entries(spans)) {
+  for (const [path, spans] of Object.entries(changedSpans(patches, previous))) {
     const revision = newRevisions[path]
-    if (!revision || isEmpty(ranges) || remaining <= 0) continue
-    for (const span of ranges) {
-      if (remaining <= 0) break
-      try {
-        const read = await executeAgentProjectRead(kernel, {
-          path, range: { startLine: span.startLine, endLine: span.endLine },
-          baseRevisions: { [path]: revision },
-          maxChars: remaining,
-        }, { rootPath: ctx.project.getRootPath() })
-        for (const file of read.files) {
-          const window = await presentFileRead(ctx, file)
-          windows.push(window)
-          remaining -= JSON.stringify(window).length
-        }
-      } catch (error) {
-        log.debug('改后的窗口读不到', { path, error: String(error) })
-      }
+    if (!revision || isEmpty(spans)) continue
+    try {
+      windows.push(await presentFileSpans(ctx, path, revision, spans))
+    } catch (error) {
+      log.debug('改后的窗口读不到', { path, error: String(error) })
     }
   }
   return (await finalizeFileWindows(ctx, windows)).map(toProjectWindow)

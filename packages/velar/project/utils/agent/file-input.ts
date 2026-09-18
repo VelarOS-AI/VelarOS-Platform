@@ -6,12 +6,12 @@
 import { isArray, isBoolean, isEmpty, isNumber, isPlainObject, isString, isUndefined } from '@velaros-ai/core'
 
 import { ProjectFileLimits } from '../../contract/constants.js'
-import type { ListQuery } from '../../types/agent.js'
 import type {
   ProjectChangeInput,
   ProjectEditInput,
   ProjectEditStep,
   ProjectLineRange,
+  ProjectListInput,
   ProjectReadItem,
   ProjectSearchInput,
 } from '../../types/files.js'
@@ -34,9 +34,9 @@ function text(value: unknown, field: string): string {
   return value
 }
 
-/** 在 [min, max] 之内的整数；没给时用缺省值（缺省值为 undefined 时照样返回 undefined）。 */
-function integer<T extends Optional<number>>(value: unknown, field: string, min: number, max: number, fallback: T): number | T {
-  if (isUndefined(value)) return fallback
+/** 可选的、在 [min, max] 之内的整数。 */
+function integer(value: unknown, field: string, min: number, max: number): Optional<number> {
+  if (isUndefined(value)) return undefined
   if (!isNumber(value) || !Number.isInteger(value) || value < min || value > max) throw invalid(`${field} 要 ${min}–${max} 之间的整数，这里给的是 ${JSON.stringify(value)}`)
   return value
 }
@@ -64,42 +64,24 @@ export function lineRange(value: unknown, field: string): Optional<ProjectLineRa
   throw invalid(`${field} 要行号或 [首行, 末行]（从 1 起，末行不小于首行），这里给的是 ${JSON.stringify(value)}`)
 }
 
-/** read 的入参：files 与 continuation 只给一个，maxChars 至少给每个文件分到一个字符。 */
-export function readInput(input: unknown): { files?: ProjectReadItem[]; continuation?: string; maxChars?: number } {
+/** read 的入参：1–ProjectFileLimits.readFiles 个文件，每个可带整行范围。 */
+export function readInput(input: unknown): ProjectReadItem[] {
   const value = objectOf(input, 'read')
-  const hasFiles = !isUndefined(value.files)
-  const hasContinuation = !isUndefined(value.continuation)
-  if (hasFiles === hasContinuation) throw invalid('read 的 files 与 continuation 只给一个：读新文件给 files，接着上次读给 continuation')
-  const maxChars = integer(value.maxChars, 'maxChars', 1, ProjectFileLimits.readChars, undefined)
-  if (hasContinuation) {
-    const continuation = text(value.continuation, 'continuation')
-    if (!continuation.startsWith('read-page:')) throw invalid('continuation 要原样用上次窗口里的 continuation（read-page:…）')
-    return { continuation, maxChars }
-  }
   if (!isArray(value.files) || isEmpty(value.files) || value.files.length > ProjectFileLimits.readFiles) throw invalid(`files 要 1–${ProjectFileLimits.readFiles} 项的数组`)
-  const files = value.files.map((item, index) => {
+  return value.files.map((item, index) => {
     const file = objectOf(item, `files[${index}]`)
     const read: ProjectReadItem = { path: text(file.path, `files[${index}].path`) }
     const range = lineRange(file.range, `files[${index}].range`)
     if (!isUndefined(range)) read.range = range
     return read
   })
-  if (!isUndefined(maxChars) && maxChars < files.length) throw invalid(`读 ${files.length} 个文件时 maxChars 至少是 ${files.length}（每个文件至少分到一个字符）`)
-  return { files, maxChars }
 }
 
-/** list 的入参：续页只传 cursor 与可选的 limit。 */
-export function listInput(input: unknown): ListQuery {
+/** list 的入参：都可选，depth 给了就是 1–ProjectFileLimits.listDepth 层。 */
+export function listInput(input: unknown): ProjectListInput {
   const value = objectOf(input ?? {}, 'list')
-  const limit = integer(value.limit, 'limit', 1, ProjectFileLimits.listPage, ProjectFileLimits.listPageDefault)
-  if (!isUndefined(value.cursor)) {
-    if (!isUndefined(value.path) || !isUndefined(value.include) || !isUndefined(value.exclude) || !isUndefined(value.depth)) {
-      throw invalid('续页只传 cursor 和可选的 limit；要换条件就去掉 cursor 重新列')
-    }
-    return { cursor: text(value.cursor, 'cursor'), limit }
-  }
-  const depth = value.depth === 'all' ? 'all' : integer(value.depth, 'depth', 1, ProjectFileLimits.listDepth, undefined)
-  const listed: ListQuery = { limit }
+  const depth = integer(value.depth, 'depth', 1, ProjectFileLimits.listDepth)
+  const listed: ProjectListInput = {}
   if (!isUndefined(value.path)) listed.path = text(value.path, 'path')
   const include = patterns(value.include, 'include')
   const exclude = patterns(value.exclude, 'exclude')
@@ -122,9 +104,7 @@ export function searchInput(input: unknown): ProjectSearchInput {
   const caseSensitive = flag(value.caseSensitive, 'caseSensitive')
   if (!isUndefined(regex)) search.regex = regex
   if (!isUndefined(caseSensitive)) search.caseSensitive = caseSensitive
-  const limit = integer(value.limit, 'limit', 1, ProjectFileLimits.searchHits, undefined)
-  const contextLines = integer(value.contextLines, 'contextLines', 0, ProjectFileLimits.searchContextLines, undefined)
-  if (!isUndefined(limit)) search.limit = limit
+  const contextLines = integer(value.contextLines, 'contextLines', 0, ProjectFileLimits.searchContextLines)
   if (!isUndefined(contextLines)) search.contextLines = contextLines
   return search
 }

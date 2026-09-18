@@ -1,37 +1,20 @@
 /**
- * 内核端口在 Agent 边界上的投影：批量读取按共用预算逐文件读，把内核的读取与搜索结果裁成模型要看的字段，把错误整理成 JSON 安全的对象。
- * 参数结构与校验留在项目领域内；返回的只有 Agent 编排读取和事务编辑时真正观察的字段。
+ * 内核端口在 Agent 边界上的投影：读一个文件、搜一次源码，把内核的结果裁成这边要看的字段，把错误整理成 JSON 安全的对象。
+ * 这里不设预算、不截断：没读全、没搜全都如实交出去或直接失败，由调用方决定怎么办。参数结构与校验留在项目领域内。
  */
 
-import {
-  isEmpty,
-  isNull,
-  isPositiveNumber,
-  isPresent,
-  isString,
-  isTrue,
-  isUndefined,
-  mapDefined,
-  optionalWhen,
-  toOptional,
-} from '@velaros-ai/core'
+import { isEmpty, isNull, isPresent, isString, isTrue, isUndefined, mapDefined, toOptional } from '@velaros-ai/core'
 
 import { ProjectFileLimits } from '../../contract/constants.js'
 import type { AgentProjectKernelPort } from '../../contract/requires.js'
-import type { AgentProjectErrorLike,AgentProjectKernelReadResult, AgentProjectReadContinuation, AgentProjectReadIssue, AgentProjectReadRequest, AgentProjectReadResult, AgentProjectSearchHit, AgentProjectSearchRequest, AgentProjectSearchResult } from '../../types/agent-port.js'
+import type { AgentProjectErrorLike, AgentProjectKernelReadResult, AgentProjectReadRequest, AgentProjectReadResult, AgentProjectSearchHit, AgentProjectSearchRequest } from '../../types/agent-port.js'
 import { ProjectError } from '../errors.js'
-import { validateReadBounds } from '../files/read-bounds.js'
-import { ProjectTuning } from '../tuning.js'
 
 /**
- * Project Kernel 的 FileSnapshot 还包含正文、绝对路径、内容哈希和适配器元数据。
- * Agent 边界必须显式投影，避免结构类型允许的额外字段在运行时穿透，并防止正文
- * 同时出现在 snapshot.content 与顶层 content 中占用两份模型上下文。
+ * Project Kernel 的读取结果还带着绝对路径、内容哈希、适配器元数据与续读位置。Agent 边界必须显式投影，
+ * 免得结构类型允许的额外字段在运行时穿透。
  */
-export function projectAgentReadResult(
-  filePath: string,
-  result: AgentProjectKernelReadResult
-): AgentProjectReadResult {
+export function projectAgentReadResult(filePath: string, result: AgentProjectKernelReadResult): AgentProjectReadResult {
   return {
     snapshot: {
       path: result.snapshot.path || filePath,
@@ -45,142 +28,28 @@ export function projectAgentReadResult(
     range: result.range,
     totalLines: result.totalLines,
     truncated: result.truncated,
-    nextStartLine: result.nextStartLine,
-    remainingLines: result.remainingLines,
-    hasMore: result.hasMore,
-    continuation: projectAgentReadContinuation(filePath, result.continuation),
     note: result.note,
   }
 }
 
-/** 续读位置：内核没给起始行时没有可续读的位置。 */
-function projectAgentReadContinuation(
-  filePath: string,
-  continuation: AgentProjectKernelReadResult['continuation']
-): Optional<AgentProjectReadContinuation> {
-  const range = continuation?.range
-  if (!continuation || !range?.startLine) return undefined
-  const path = continuation.path || filePath
-  const projected: AgentProjectReadContinuation = {
-    path,
-    range: {
-      startLine: range.startLine,
-      startColumn: range.startColumn,
-      endLine: range.endLine,
-      endColumn: range.endColumn,
-    },
-    maxChars: optionalWhen(isPositiveNumber, continuation.maxChars),
-  }
-  if (continuation.baseRevision) projected.baseRevisions = { [path]: continuation.baseRevision }
-  return projected
-}
-
-/** 读到的不是可读文本（不存在、是目录、是二进制）时给一条带码和下一步的 issue；读到了正文返回 undefined。 */
-function unreadableIssue(file: AgentProjectReadResult): Optional<AgentProjectReadIssue> {
-  if (!file.snapshot.exists) return {
-    path: file.snapshot.path,
-    code: 'TARGET_NOT_FOUND',
-    message: '这个路径不存在，什么都没读到。',
-    next: '先 list 出准确的路径再读，别接着猜文件名。',
-  }
-  if (file.snapshot.isDirectory) return {
-    path: file.snapshot.path,
-    code: 'NOT_SUPPORTED',
-    message: '这个路径是目录，read 不列目录。',
-    next: '用 list 列这个目录，再读里面的文件。',
-  }
-  if (file.snapshot.isBinary) return {
-    path: file.snapshot.path,
-    code: 'NOT_SUPPORTED',
-    message: '这个路径是二进制文件，read 只读文本。',
-    next: '图片用 view 看；别的格式用命令处理。',
-  }
+/** 读到的不是可读文本（不存在、是目录、是二进制）时的错误，带码和下一步；读到了正文返回 undefined。 */
+function unreadable(file: AgentProjectReadResult): Optional<ProjectError> {
+  const path = file.snapshot.path
+  if (!file.snapshot.exists) return new ProjectError('TARGET_NOT_FOUND', `${path}：这个路径不存在，什么都没读到。`, { path }, '先 list 出准确的路径再读，别接着猜文件名。')
+  if (file.snapshot.isDirectory) return new ProjectError('NOT_SUPPORTED', `${path}：这个路径是目录，read 不列目录。`, { path }, '用 list 列这个目录，再读里面的文件。')
+  if (file.snapshot.isBinary) return new ProjectError('NOT_SUPPORTED', `${path}：这个路径是二进制文件，read 只读文本。`, { path }, '图片用 `velar:images` 的 view 看；别的格式用命令处理。')
   return undefined
 }
 
 /**
- * 批量读取：一个或多个路径逐个经内核端口读，maxChars 是全部文件共用的字符预算，按剩余文件平均分；两个上限都没给时按 ProjectFileLimits.readChars 封顶并在结果里说明。
- * 单个文件的领域错误只记成带路径的 issue、不连累其他文件；只读一个文件时照常抛出。
+ * 经内核读一个文件，投影成 Agent 边界上的结果。读不到可读文本时抛带码与下一步的项目错误；
+ * 读到了但字符上限装不下要的那一段时不抛，由结果的 truncated 说。
  */
-export async function executeAgentProjectRead(
-  project: AgentProjectKernelPort,
-  input: AgentProjectReadRequest,
-  options: { rootPath?: string } = {}
-): Promise<{
-  rootPath: string
-  count: number
-  files: AgentProjectReadResult[]
-  issues?: AgentProjectReadIssue[]
-  nextAction?: string
-  appliedDefaultBound?: { maxChars: number }
-}> {
-  const {
-    path,
-    baseRevisions,
-    allowUnbounded: _allowUnbounded,
-    maxChars,
-    ...rest
-  } = input
-  const paths = isString(path) ? [path] : path
-  // 与文件无关的参数错误属于整次调用：先整体校验，别让下面的逐文件隔离把它拆成 N 条相同的 issue。
-  validateReadBounds({ range: input.range, maxBytes: input.maxBytes, maxChars })
-  const appliedDefaultBound = isUndefined(input.maxBytes) && isUndefined(maxChars)
-  const totalMaxChars = appliedDefaultBound ? ProjectFileLimits.readChars : maxChars
-  if (!isUndefined(totalMaxChars) && totalMaxChars < paths.length) {
-    throw new ProjectError(
-      'INVALID_INPUT',
-      `批量读取 ${paths.length} 个文件时 maxChars 至少为 ${paths.length}。`,
-      { maxChars: totalMaxChars, pathCount: paths.length },
-      '请提高 maxChars，或减少本次读取的文件数量。'
-    )
-  }
-  let remainingChars = totalMaxChars
-  const files: AgentProjectReadResult[] = []
-  const issues: AgentProjectReadIssue[] = []
-  for (const [index, filePath] of paths.entries()) {
-    const remainingFiles = paths.length - index
-    const fileMaxChars = isUndefined(remainingChars)
-      ? undefined
-      : Math.floor(remainingChars / remainingFiles)
-    // 批量读取是 N 次独立读取：单个文件的领域错误记为带路径的 issue，不连累其它文件；
-    // 单文件调用仍直接抛出，让失败保持为工具失败。
-    const result = await project.read({
-      ...rest,
-      maxChars: fileMaxChars,
-      path: filePath,
-      baseRevision: baseRevisions?.[filePath],
-    }).catch((error: unknown) => {
-      if (paths.length === 1 || !isAgentProjectError(error)) throw error
-      const issue: AgentProjectReadIssue = { path: filePath, code: error.reason, message: error.message }
-      if (isString(error.suggestedNextAction)) issue.next = error.suggestedNextAction
-      issues.push(issue)
-      return undefined
-    })
-    if (isUndefined(result)) continue
-    const file = projectAgentReadResult(filePath, result)
-    const issue = unreadableIssue(file)
-    // 读不到的路径只进 issues：再给一个空窗口只会让模型以为文件是空的。
-    if (isPresent(issue)) issues.push(issue)
-    else files.push(file)
-    if (!isUndefined(remainingChars)) {
-      remainingChars = Math.max(0, remainingChars - [...(result.content ?? '')].length)
-    }
-  }
-  const rootPath = options.rootPath ?? (await project.status()).root
-  return {
-    rootPath,
-    count: files.length,
-    files,
-    issues: optionalWhen(!isEmpty(issues), issues),
-    nextAction: readIssuesNextAction(issues),
-    appliedDefaultBound: optionalWhen(appliedDefaultBound, { maxChars: ProjectFileLimits.readChars }),
-  }
-}
-
-/** 整次调用的下一步：每条 issue 自己带 next，这里只在有读不到的路径时说一句怎么收场。 */
-function readIssuesNextAction(issues: readonly AgentProjectReadIssue[]): Optional<string> {
-  if (isEmpty(issues)) return undefined
-  return '这几个路径没读到，原因和下一步见 issues；按各条改好后只重读这些路径，已经读到的不用重读。'
+export async function readAgentFile(project: AgentProjectKernelPort, input: AgentProjectReadRequest): Promise<AgentProjectReadResult> {
+  const file = projectAgentReadResult(input.path, await project.read(input))
+  const failure = unreadable(file)
+  if (failure) throw failure
+  return file
 }
 
 /** 把一处内核搜索命中裁成定位要用的路径、版本、范围和片段，丢掉得分、后端这些诊断字段。 */
@@ -212,16 +81,13 @@ function literalQueryRegexHint(query: string): Optional<string> {
 }
 
 /**
- * Project Kernel 搜索结果含 revision/score/backend/adapter/trust 等诊断元数据。
- * Agent 搜索边界只投影定位所需的 path/range/snippet，并同时受条数和序列化字符双重约束；
- * 命中很多时让模型缩小 query/path，而不是把整批内部结果塞进后续每一轮上下文。
+ * 搜一次源码，交回全部命中（只留定位要的路径、版本、范围、片段）。内核没收全时——命中超过上限、搜索超时、输出超过缓冲——
+ * 整个调用失败，不交回一部分：一部分命中会被当成全部。字面搜索 0 命中而 query 像正则时，nextAction 点破字面语义。
  */
 export async function executeAgentProjectSearch(
   project: AgentProjectKernelPort,
   input: AgentProjectSearchRequest
-): Promise<AgentProjectSearchResult> {
-  const requestedLimit = input.limit ?? ProjectFileLimits.searchHitsDefault
-  const effectiveLimit = Math.min(ProjectFileLimits.searchHits, Math.max(1, requestedLimit))
+): Promise<{ hits: AgentProjectSearchHit[]; nextAction?: string }> {
   const result = await project.search({
     query: input.query,
     root: input.path,
@@ -229,40 +95,16 @@ export async function executeAgentProjectSearch(
     exclude: input.exclude,
     regex: input.regex,
     caseSensitive: input.caseSensitive,
-    maxResults: effectiveLimit,
+    // 多要一处：拿到上限加一处，就知道命中超了。
+    maxResults: ProjectFileLimits.searchHits + 1,
   })
-  const hits: AgentProjectSearchHit[] = []
-  let serializedChars = 2
-  let responseTruncated = isTrue(result.truncated) || result.hits.length > effectiveLimit
-
-  for (const richHit of result.hits.slice(0, effectiveLimit)) {
-    const hit = projectAgentSearchHit(richHit)
-    const hitChars = JSON.stringify(hit).length + (!isEmpty(hits) ? 1 : 0)
-    if (serializedChars + hitChars > ProjectTuning.search.hitsBudgetChars) {
-      responseTruncated = true
-      break
-    }
-    hits.push(hit)
-    serializedChars += hitChars
+  if (isTrue(result.truncated) || result.hits.length > ProjectFileLimits.searchHits) {
+    const why = isEmpty(result.diagnostics ?? []) ? `命中超过 ${ProjectFileLimits.searchHits} 处（这个上限只为守住内存）` : result.diagnostics!.join(' ')
+    throw new ProjectError('SCOPE_VIOLATION', `搜索没能收全命中，这次什么都没交回：${why}。`, { query: input.query }, '收窄 query、path 或 include 再搜。')
   }
-
-  const literalHint = isEmpty(hits) && !isTrue(input.regex) ? literalQueryRegexHint(input.query) : undefined
-  return {
-    query: result.query,
-    hits,
-    truncated: optionalWhen(responseTruncated, true),
-    nextAction:
-      literalHint ??
-      optionalWhen(
-        responseTruncated,
-        '命中太多，只给了前面这些；收窄 query、path 或 include 再搜，不要改搜父目录。'
-      ),
-    toolRequirements: result.toolRequirements?.map((requirement) => ({
-      kind: requirement.kind,
-      command: requirement.command,
-      reason: requirement.reason,
-    })),
-  }
+  const hits = result.hits.map(projectAgentSearchHit)
+  const nextAction = isEmpty(hits) && !isTrue(input.regex) ? literalQueryRegexHint(input.query) : undefined
+  return isUndefined(nextAction) ? { hits } : { hits, nextAction }
 }
 
 /** 判断一个错误是不是带 reason 的项目领域错误；给了 reason 时还要求码相同。 */

@@ -15,7 +15,6 @@ import type { ProjectProviders } from '../contract/requires'
 import { typescriptPlugin } from '../index'
 import { completeProjectCoverage } from '../utils/editing/planner-coverage'
 import { suggestProjectEditLocations } from '../utils/editing/stale-location'
-import { ProjectTuning } from '../utils/tuning'
 
 import { failureOf, projectToolFixture } from './support/tools'
 
@@ -173,7 +172,7 @@ describe('edit：几步合成一个事务', () => {
     expect(result.oldRevisions['fresh.txt']).toBeUndefined()
     expect(result.newRevisions['fresh.txt']).toBeTruthy()
     expect(result.diffLines).toBeGreaterThan(0)
-    expect(result.diffTruncated).toBe(false)
+    expect(result.diffTruncated).toBeUndefined()
     await call('project', 'undo', { changeRef: result.changeRef })
     const again = await call('project', 'undo', { changeRef: result.changeRef })
     expect(again).toMatchObject({ changeRef: result.changeRef, alreadyUndone: true })
@@ -376,7 +375,7 @@ describe('回执窗口', () => {
     expect((await disk('big.ts')).split('\n')[250]).toBe('const value250 = 0')
   })
 
-  test('一个事务改 100 个文件：全成；回执窗口总量有上限，给出的窗口都在新版本上', async () => {
+  test('一个事务改 100 个文件：全成；回执给每个文件一个新版本上的窗口，差量是完整的', async () => {
     const paths = Array.from({ length: 100 }, (_, index) => `${index}.txt`)
     await Promise.all(paths.map((path, index) => writeFile(join(root, path), `before-${index}`)))
     const { call } = await projectToolFixture({ root })
@@ -386,14 +385,15 @@ describe('回执窗口', () => {
     const result = await edit(call, windows.map((window, index) => ({ action: 'edit', fileRef: window.fileRef, edits: [{ op: 'replace', match: `before-${index}`, text: `after-${index}` }] })))
     expect(result.changedFiles).toHaveLength(100)
     for (const [index, path] of paths.entries()) expect(await disk(path)).toBe(`after-${index}`)
-    expect(result.files.length).toBeGreaterThan(0)
+    expect(result.files.map((window: { path: string }) => window.path).sort()).toEqual([...paths].sort())
     for (const window of result.files) {
       expect(window.revision, window.path).toBe(result.newRevisions[window.path])
+      expect(window.fileRef, window.path).toStartWith('view:')
       expect(window.lines[0][1], window.path).toBe(`after-${window.path.replace('.txt', '')}`)
     }
-    // 超出预算的最多多出最后一个窗口。
-    const largest = Math.max(...result.files.map((window: unknown) => JSON.stringify(window).length))
-    expect(JSON.stringify(result.files).length).toBeLessThanOrEqual(ProjectTuning.receiptWindows.chars + largest + result.files.length)
+    // 不裁差量：每个文件的改动都在 diff 里，inspect 给的是同一份。
+    for (const [index] of paths.entries()) expect(result.diff).toContain(`+after-${index}`)
+    expect((await call('project', 'inspect', { changeRef: result.changeRef })).diff).toBe(result.diff)
     // 再多一个文件就整批拒绝，一个都不写。
     const tooMany = await failureOf(edit(call, Array.from({ length: 101 }, (_, index) => ({ action: 'create', path: `new-${index}.txt`, text: 'x' }))))
     expect(tooMany.code).toBe('SCOPE_VIOLATION')

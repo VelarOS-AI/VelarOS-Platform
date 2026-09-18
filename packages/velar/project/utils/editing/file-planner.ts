@@ -194,7 +194,7 @@ async function planFileAction(plan: ProjectFilePlanState, action: ProjectPlanFil
       // 整份替换会把没看过的行一起丢掉，所以要求 fileRef 覆盖全文；move、delete 不动正文，只核对版本。
       if (!coversWholeProjectFile(view))
         throw new ProjectError('SCOPE_VIOLATION', `${view.path} 只看过其中一段，不能整份替换。`, { path: view.path },
-          '整份替换前先 read 整个文件（不给 range 就是从头读，读不完就用 continuation 接着读），拿覆盖整个文件的 fileRef 再 overwrite；只改其中几处用 edit 步骤。')
+          '整份替换前先 read 整个文件（不给 range 就是整个文件），拿覆盖整个文件的 fileRef 再 overwrite；只改其中几处用 edit 步骤。')
       const source = createProjectSourceCoordinates(view.content)
       const text = normalizePhysicalNewlines(normalizeProjectInputText(action.text), sourceNewlineAt(source, 0, view.content.length))
       plan.operations.push({ operation: { type: 'replace_content', path: view.path, expectedContent: view.content, content: text, mode: 'overwrite' } })

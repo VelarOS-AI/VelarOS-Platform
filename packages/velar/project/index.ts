@@ -59,7 +59,7 @@ export type {
 // ── 上面两面用到、又不在可移植文件里的数据 ───────────────────────
 export type { AdapterCapability, AdapterKind, AdapterPrepareEditInput, AdapterSearchHit, AdapterSearchInput, AdapterValidateInput, ParseInput, ParseResult, ProjectSymbol, SymbolInfo } from './types/adapter.js'
 export type { ProjectApprovalContext } from './types/agent.js'
-export type { AgentProjectApplyResult, AgentProjectCommandToolRequirement, AgentProjectFileSnapshot, AgentProjectKernelReadResult, AgentProjectPreparedPatch, AgentProjectPreparedTransaction, AgentProjectReadContinuation, AgentProjectReadResult, AgentProjectSearchHit, AgentProjectSearchResult, AgentProjectStoredTransaction } from './types/agent-port.js'
+export type { AgentProjectApplyResult, AgentProjectCommandToolRequirement, AgentProjectFileSnapshot, AgentProjectKernelReadResult, AgentProjectPreparedPatch, AgentProjectPreparedTransaction, AgentProjectReadResult, AgentProjectSearchHit, AgentProjectSearchResult, AgentProjectStoredTransaction } from './types/agent-port.js'
 export type { BatchConflict, BatchInput, BatchMetrics, BatchResult, BatchTask, BatchTaskOperation, BatchTaskResult } from './types/batch.js'
 export type { FileProjectChangeFeedOptions, ProjectChangeLifecycle, ProjectChangeListener, ProjectChangeListOptions, ProjectChangePatch, ProjectChangeRecord, ProjectChangeRecordInput, ProjectChangeRevision } from './types/change-feed.js'
 export type { CodeAnalysisInput, CodeQueryInput, CodeResult, CodeResultCoverage, CodeResultSource, CodeTarget } from './types/code.js'
@@ -74,7 +74,6 @@ export type {
   ProjectEditResult,
   ProjectEditStep,
   ProjectEntry,
-  ProjectFragment,
   ProjectLineRange,
   ProjectListInput,
   ProjectListResult,

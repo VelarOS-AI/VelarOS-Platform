@@ -46,31 +46,9 @@ function graphRows(result: RecordValue): RecordValue[] {
   })
 }
 
-/** 给关系结果封顶：callers、callees、nodes 各留前 limit 条，边只留两端都还在的，output、relationshipMap 这类整段文字截短；截过就标 truncated。 */
-function boundRelations(result: RecordValue, limit: number): RecordValue {
-  const bounded = { ...result }
-  let truncated = isTrue(result.truncated)
-  for (const key of ['callers', 'callees', 'nodes']) {
-    if (!isArray(result[key])) continue
-    const values = result[key] as unknown[]
-    bounded[key] = values.slice(0, limit)
-    truncated ||= values.length > limit
-  }
-  if (isArray(bounded.nodes) && isArray(bounded.relations)) {
-    const ids = new Set(rows(bounded.nodes).map((node) => node.id))
-    bounded.relations = rows(bounded.relations).filter((edge) => ids.has(edge.from) && ids.has(edge.to))
-  }
-  for (const key of ['output', 'relationshipMap']) {
-    if (!isString(bounded[key]) || bounded[key].length <= ProjectTuning.codeQuery.relationTextChars) continue
-    bounded[key] = bounded[key].slice(0, ProjectTuning.codeQuery.relationTextChars)
-    truncated = true
-  }
-  return { ...bounded, truncated }
-}
-
-/** 从 query 的入参里取出交给语言服务的公共范围：语言、条数上限、扩展名与目录深度。 */
-function scope(input: ProjectCodeScope): ProjectCodeScope {
-  return { language: input.language, limit: input.limit, extensions: input.extensions, maxDepth: input.maxDepth }
+/** 从 query 的入参里取出交给语言服务的公共范围（语言、扩展名、目录深度），加上条数上限：本包总是要全部，只为守住内存封顶。 */
+function scope(input: ProjectCodeScope): ProjectCodeScope & { limit: number } {
+  return { language: input.language, extensions: input.extensions, maxDepth: input.maxDepth, limit: ProjectCodeLimits.results }
 }
 
 /** 代码能力目录：关系查询后端没启用时随降级回执一起给出，只列模型自己调得到的 intent。 */
@@ -85,8 +63,8 @@ function unavailable(error: unknown): boolean {
   return value?.code === 'UNAVAILABLE' || value?.reason === 'NOT_SUPPORTED'
 }
 
-/** 把宿主结果装进回执信封：标出 intent、来源后端、覆盖范围（路径、语言、扫描文件数、是否截断、条数上限、版本）和降级说明，extra 覆盖在最后。 */
-function envelope(input: { intent: string; path?: string; language?: string; limit?: number }, raw: unknown, extra: RecordValue = {}): CodeResult {
+/** 把宿主结果装进回执信封：标出 intent、来源后端、覆盖范围（路径、语言、扫描文件数、后端有没有给全、版本）和降级说明，extra 覆盖在最后。 */
+function envelope(input: { intent: string; path?: string; language?: string }, raw: unknown, extra: RecordValue = {}): CodeResult {
   const result = record(raw)
   const degradation = [result.degraded, result.note].filter((value): value is string => isString(value) && value.length > 0)
   const backend = isString(result.source) ? result.source : 'host'
@@ -95,7 +73,6 @@ function envelope(input: { intent: string; path?: string; language?: string; lim
     language: input.language,
     scannedFiles: result.scannedFiles,
     truncated: isTrue(result.truncated),
-    limit: input.limit ?? ProjectCodeLimits.resultsDefault,
     // 结果是不是绑在一个确定版本上：绑了才敢当依据，没绑就只是当前这一眼看到的位置。
     versioned: isString(result.revision),
     revisions: isString(result.revision) ? [{ revision: result.revision, scope: backend }] : [],
@@ -249,7 +226,7 @@ async function definition(input: Extract<CodeQueryInput, { intent: 'definition' 
 }
 
 /**
- * callers / callees：从目标符号所在的图节点往一个方向展开调用关系并封顶；
+ * callers / callees：从目标符号所在的图节点往一个方向展开调用关系，后端给多少交多少；
  * 关系后端没启用时返回空关系加降级说明与能力目录，不拿文本命中冒充调用关系。
  */
 async function calls(input: Extract<CodeQueryInput, { intent: 'callers' | 'callees' }>, context: ProjectOperationContext) {
@@ -257,7 +234,7 @@ async function calls(input: Extract<CodeQueryInput, { intent: 'callers' | 'calle
   const depth = ProjectCodeLimits.relationDepthDefault
   try {
     const target = await graphTarget(await resolveCodeTarget(input.target, input, context), context)
-    const result = boundRelations(await query({ action: input.intent === 'callers' ? 'callers' : 'callees', nodeId: target.nodeId, depth }, context), input.limit ?? ProjectCodeLimits.resultsDefault)
+    const result = await query({ action: input.intent === 'callers' ? 'callers' : 'callees', nodeId: target.nodeId, depth }, context)
     return envelope(input, result, { target, sources: [{ backend: result.source ?? 'codegraph' }] })
   } catch (error) {
     if (!unavailable(error)) throw error
@@ -320,8 +297,8 @@ export async function analyzeProjectCode(input: CodeAnalysisInput, context: Proj
       request = { action: 'trace', fromSymbol: from.nodeId, toSymbol: to.nodeId }
       break
     }
-    case 'cycles': request = { action: 'find_cycles', maxFiles: input.maxFiles }; break
-    case 'deadcode': request = { action: 'find_dead_code', limit: input.limit ?? ProjectCodeLimits.resultsDefault }; break
+    case 'cycles': request = { action: 'find_cycles' }; break
+    case 'deadcode': request = { action: 'find_dead_code', limit: ProjectCodeLimits.results }; break
     case 'routing': request = { action: 'routing_manifest', framework: input.framework }; break
   }
   return envelope(input, await query(request, context))

@@ -1,5 +1,5 @@
 /**
- * 文件引用：源码快照（source:）、可编辑视图（view:，就是 fileRef）、续读页（read-page:）与回执（change:、list-page:）的签发与解析。
+ * 文件引用：源码快照（source:）、可编辑视图（view:，就是 fileRef）与改动回执（change:）的签发与解析。
  * 引用是记录的内容哈希。记录按会话存在进程内存里，每个会话有条数与字符数上限，最久没用的先出；进程重启后引用全部作废，重读就是。
  * 解析时核对会话与项目根，编辑前再按当前的读取授权与脱敏复核一遍。
  */
@@ -8,7 +8,7 @@ import { createHash } from 'node:crypto'
 import { resolve } from 'node:path'
 
 import type { AgentProjectKernelPort, ProjectOperationContext } from '../../contract/requires.js'
-import type { PageRecord, ProjectFileView, ProjectVisibleCoverage, ReceiptRecord, RefRecord, RefSession, SourceRecord } from '../../types/file-refs.js'
+import type { ProjectFileView, ProjectVisibleCoverage, ReceiptRecord, RefRecord, RefSession, SourceRecord } from '../../types/file-refs.js'
 import { ProjectError } from '../errors.js'
 import { ProjectTuning } from '../tuning.js'
 
@@ -98,11 +98,11 @@ export function saveFileSource(ctx: ProjectOperationContext, input: { path: stri
   }, 'source:')
 }
 
-/** 把 source:、view: 或 read-page: 引用解析到它背后的源码快照。 */
+/** 把 source: 或 view: 引用解析到它背后的源码快照。 */
 export function resolveFileSource(ctx: ProjectOperationContext, ref: string): SourceRecord {
-  const record = get(ctx, ref, ['source:', 'view:', 'read-page:'])
+  const record = get(ctx, ref, ['source:', 'view:'])
   if (record.kind === 'project-file-source') return record
-  if (record.kind === 'project-file-view' || record.kind === 'project-read-page') return resolveFileSource(ctx, record.source)
+  if (record.kind === 'project-file-view') return resolveFileSource(ctx, record.source)
   throw new ProjectError('INVALID_INPUT', '源码引用无效。', { ref }, ReadForReferenceNextAction)
 }
 
@@ -118,7 +118,7 @@ export function saveFileRef(ctx: ProjectOperationContext, source: string, covera
  * 而且历史正文要按当前的读取授权与脱敏再过一遍，现在不许读或会被遮住就不能凭它编辑。
  */
 export async function loadFileView(ctx: ProjectOperationContext, fileRef: string): Promise<ProjectFileView> {
-  const record = get(ctx, fileRef, ['view:', 'source:', 'read-page:'])
+  const record = get(ctx, fileRef, ['view:', 'source:'])
   if (record.kind !== 'project-file-view') {
     throw new ProjectError('INVALID_INPUT', '这不是可编辑的 fileRef：编辑只收窗口上的 view:… 引用。', { ref: fileRef }, ReadForReferenceNextAction)
   }
@@ -147,25 +147,9 @@ export async function resolveFileRef(ctx: ProjectOperationContext, fileRef: stri
   return { ...view, revision: current.snapshot.revision }
 }
 
-/** 给读到一半的源码签发续读引用（read-page:），记下源码快照和下一页的范围。 */
-export function saveReadPage(ctx: ProjectOperationContext, source: string, range: PageRecord['range']): string {
-  resolveFileSource(ctx, source)
-  return put(ctx, { kind: 'project-read-page', version: 1, source, range }, 'read-page:')
-}
-
-/** 解析续读引用：交回源码的路径、版本、正文和下一页的范围。 */
-export async function resolveReadPage(ctx: ProjectOperationContext, ref: string) {
-  const page = get(ctx, ref, ['read-page:'])
-  if (page.kind !== 'project-read-page') throw new ProjectError('INVALID_INPUT', '续读引用无效。', { ref }, '去掉 continuation，按原来的路径重新 read。')
-  const source = resolveFileSource(ctx, page.source)
-  await kernelOf(ctx, source.root, ref)
-  return { path: source.path, revision: source.revision, content: source.content, range: page.range, source: page.source }
-}
-
 /** 每种回执引用的来历与下一步：引用只能原样用本会话签发的，坏了就照这句重来。 */
 const ReceiptNextActions: Readonly<Record<string, string>> = Object.freeze({
   change: 'changeRef 只能原样用本会话 edit 回执里的值。',
-  'list-page': '去掉 cursor，按原来的条件重新 list，再用新回执里的 cursor 续页。',
 })
 
 /** 存一张回执，返回「kind: + 内容哈希」形式的不透明引用。 */
