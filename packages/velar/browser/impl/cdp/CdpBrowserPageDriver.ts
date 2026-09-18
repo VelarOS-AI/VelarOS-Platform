@@ -41,23 +41,25 @@ import {
 } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import type { BrowserPageDriver } from '../../contract/requires.js'
-import type { BrowserEmulationOptions, BrowserGeolocationState, BrowserNetworkControlOptions, BrowserNetworkRequestDetailsOptions, BrowserNetworkResponseBodyOptions, BrowserNetworkThrottlingPreset, BrowserOriginStorage, BrowserPageDiagnosticEntry, BrowserPageTargetInfo, BrowserPressKeyOptions, BrowserStorageEntry, BrowserSwitchPageTargetOptions, BrowserTypeTextOptions, BrowserViewportOptions } from '../../types/browser.js'
+import { BrowserErrorCodes } from '../../contract/constants.js'
+import type { BrowserPageDriver, BrowserProtocolChannel } from '../../contract/requires.js'
+import type { BrowserEmulationOptions, BrowserFrameInfo, BrowserGeolocationState, BrowserInsertTextOptions, BrowserNetworkControlOptions, BrowserNetworkRequestDetailsOptions, BrowserNetworkResponseBodyOptions, BrowserNetworkThrottlingPreset, BrowserOriginStorage, BrowserPageDiagnosticEntry, BrowserPageTargetInfo, BrowserStorageEntry, BrowserSwitchPageTargetOptions, BrowserViewportOptions } from '../../types/browser.js'
 import type { CdpBrowserPageDriverTransport, CdpCaptureScreenshotResponse, CdpDomDocumentResponse, CdpDomQuerySelectorResponse, CdpDomStorageItemsResponse, CdpDownloadProgressEvent, CdpDownloadWillBeginEvent, CdpFetchResourcePayload, CdpJavascriptDialogOpeningEvent, CdpLayoutMetricsResponse, CdpNetworkGetCookiesResponse, CdpPageFrame, CdpPageFrameTree, CdpPageGetFrameTreeResponse, CdpPageTargetDescription, CdpPrintToPdfResponse, CdpRuntimeConsoleAPICalledEvent, CdpRuntimeEvaluateResponse, CdpRuntimeExceptionDetails, CdpRuntimeExceptionThrownEvent, CdpRuntimeRemoteObject, CdpScreencastConsumerOptions, CdpScreencastStartOptions, CdpTargetListEntry, ScreencastCapturedFrame } from '../../types/cdp.js'
-import type { BrowserPageDriverClickCoordinatesOptions, BrowserPageDriverCookie, BrowserPageDriverCookieOptions, BrowserPageDriverDiagnosticsOptions, BrowserPageDriverDownloadEvent, BrowserPageDriverDownloadListener, BrowserPageDriverDragCoordinatesOptions, BrowserPageDriverEmulationState, BrowserPageDriverFetchResourceOptions, BrowserPageDriverFetchResourceResult, BrowserPageDriverFileInputOptions, BrowserPageDriverMoveMouseOptions, BrowserPageDriverNetworkControlState, BrowserPageDriverNetworkIdleOptions, BrowserPageDriverNetworkRequestDetailsResult, BrowserPageDriverNetworkResponseBodyResult, BrowserPageDriverPdfOptions, BrowserPageDriverScreenshot, BrowserPageDriverScreenshotOptions, BrowserPageDriverState, BrowserPageDriverStorageOriginOptions } from '../../types/driver'
-import { buildFetchResourceScript, buildViewportRect, clampPageZoomFactor, clampPositiveInteger, cloneGeolocation, normalizeCpuThrottlingRate, normalizeGeolocation, normalizeNullableEmulationString, readConsoleSource, readNodeId, resolveConsoleLevel, resolveConsoleTimestamp, resolveKeyboardModifiers, resolveKeyCode, resolveMouseButton, resolveTargetListEntryId, unwrapRuntimeEvaluateValue } from '../../utils/cdp/driver'
+import type { BrowserPageDriverClickCoordinatesOptions, BrowserPageDriverCookie, BrowserPageDriverCookieOptions, BrowserPageDriverDiagnosticsOptions, BrowserPageDriverDownloadEvent, BrowserPageDriverDownloadListener, BrowserPageDriverDragCoordinatesOptions, BrowserPageDriverEmulationState, BrowserPageDriverFetchResourceOptions, BrowserPageDriverFetchResourceResult, BrowserPageDriverFileInputOptions, BrowserPageDriverKeyEvent, BrowserPageDriverMouseEvent, BrowserPageDriverMoveMouseOptions, BrowserPageDriverNetworkControlState, BrowserPageDriverNetworkIdleOptions, BrowserPageDriverNetworkRequestDetailsResult, BrowserPageDriverNetworkResponseBodyResult, BrowserPageDriverPdfOptions, BrowserPageDriverScreenshot, BrowserPageDriverScreenshotOptions, BrowserPageDriverState, BrowserPageDriverStorageOriginOptions } from '../../types/driver'
+import { buildFetchResourceScript, buildViewportRect, clampPageZoomFactor, clampPositiveInteger, cloneGeolocation, normalizeCpuThrottlingRate, normalizeGeolocation, normalizeNullableEmulationString, readConsoleSource, readNodeId, readRuntimeEvaluateValue, resolveConsoleLevel, resolveConsoleTimestamp, resolveMouseButton, resolveTargetListEntryId } from '../../utils/cdp/driver'
 import { normalizeDomStorageEntry, normalizeNetworkCookie, normalizePageTargetDescription, resolveConsoleMessage, resolveRegionScreenshotInput } from '../../utils/cdp/driver'
 import { resolveCdpTargetListUrl } from '../../utils/cdp/driver'
 import { resolveCdpTargetId } from '../../utils/cdp/driver.js'
 import { captureCdpHeapSnapshot } from '../../utils/cdp/tracing.js'
 import { openCdpWebSocket } from '../../utils/cdp/transport.js'
 import { clearBrowserDiagnosticEntries, takeBrowserDiagnosticWindow } from '../../utils/diagnostics.js'
-import { normalizeBrowserPressKeyOptions } from '../../utils/keyboard'
 import { BrowserTuning } from '../../utils/tuning'
 import { buildBrowserViewportDeviceMetrics } from '../../utils/viewport'
 
 import { BrowserCdpNetworkController } from './BrowserCdpNetworkController'
 import { CdpBrowserPageDownloadItem } from './CdpBrowserPageDownloadItem.js'
+import { CdpFrameSessions } from './CdpFrameSessions'
+import { CdpProtocolChannel } from './CdpProtocolChannel'
 import { CdpScreencastRecorder } from './CdpScreencastRecorder'
 import { CdpTraceCollector } from './CdpTraceCollector'
 import {
@@ -109,6 +111,8 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
   private locale: Nullable<string> = null
   private geolocation: Nullable<BrowserGeolocationState> = null
   private destroyed = false
+  /** 框架树与在子框架里跑脚本，含跨进程的 iframe（第一次要框架时才在这条连接上挂子会话）。 */
+  private readonly frameSessions: CdpFrameSessions
   /** 网络子系统共享控制器:记账 / 详情读取 / Fetch 拦截,与嵌入式 webview 共用同一套逻辑。 */
   private readonly networkController = new BrowserCdpNetworkController({
     send: (method, params) => this.options.transport.send(method, params),
@@ -141,6 +145,7 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
   constructor(private readonly options: CdpBrowserPageDriverOptions) {
     this.currentUrl = options.initialUrl?.trim() || ''
     this.currentTitle = options.initialTitle?.trim() || ''
+    this.frameSessions = new CdpFrameSessions(options.transport)
     const unsubscribeClose = options.transport.onClose?.(() => this.dispose())
     if (unsubscribeClose) this.eventUnsubscribers.push(unsubscribeClose)
     this.subscribeToDiagnosticsEvents()
@@ -160,17 +165,7 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
       }
     )
 
-    if (response.exceptionDetails) {
-      const message =
-        response.exceptionDetails.exception?.description ||
-        response.exceptionDetails.text ||
-        'unknown exception'
-      throw new AppError('EXECUTION_FAILED', `浏览器 CDP 脚本执行失败：${message}`, undefined, {
-        cdpMethod: 'Runtime.evaluate',
-      })
-    }
-
-    const value = unwrapRuntimeEvaluateValue(response)
+    const value = readRuntimeEvaluateValue(response)
     this.updateCachedPageState(value)
     return value as T
   }
@@ -282,32 +277,41 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
     }
   }
 
-  public async typeText(options: BrowserTypeTextOptions): Promise<void> {
+  public async insertText(options: BrowserInsertTextOptions): Promise<void> {
     await this.options.transport.send('Input.insertText', {
       text: options.text,
     })
   }
 
-  public async pressKey(options: BrowserPressKeyOptions): Promise<void> {
-    const normalized = normalizeBrowserPressKeyOptions(options)
-    const repeat = clampPositiveInteger(normalized.repeat, 1)
-    const modifiers = resolveKeyboardModifiers(normalized.modifiers ?? [])
-    const code = resolveKeyCode(normalized.key)
+  public async dispatchKeyEvent(event: BrowserPageDriverKeyEvent): Promise<void> {
+    await this.options.transport.send('Input.dispatchKeyEvent', { ...event })
+  }
 
-    for (let index = 0; index < repeat; index += 1) {
-      await this.options.transport.send('Input.dispatchKeyEvent', {
-        type: 'keyDown',
-        key: normalized.key,
-        code,
-        modifiers,
-      })
-      await this.options.transport.send('Input.dispatchKeyEvent', {
-        type: 'keyUp',
-        key: normalized.key,
-        code,
-        modifiers,
-      })
-    }
+  public async dispatchMouseEvent(event: BrowserPageDriverMouseEvent): Promise<void> {
+    await this.options.transport.send('Input.dispatchMouseEvent', { ...event })
+  }
+
+  public async listFrames(): Promise<BrowserFrameInfo[]> {
+    return (await this.frameSessions.listFrames()).map((frame) => frame.info)
+  }
+
+  /**
+   * 在一个框架里跑脚本，框架自己的主世界（与内嵌页面同一口径）：顶层页面就是 executeJavaScript；子框架与跨进程的 iframe 交给 {@link CdpFrameSessions}。
+   */
+  public async executeJavaScriptInFrame<T = unknown>(frameId: string, script: string, userGesture?: boolean): Promise<T> {
+    const frame = (await this.frameSessions.listFrames()).find((candidate) => candidate.info.id === frameId)
+    if (!frame) throw new AppError(BrowserErrorCodes.frameNotFound, `框架 ${frameId} 不在当前页面的框架树里（页面跳转之后旧 id 作废）：重新 frames()。`)
+    if (!frame.info.parentId) return this.executeJavaScript<T>(script, userGesture)
+    return (await this.frameSessions.evaluateInFrame(frame, script, !!userGesture)) as T
+  }
+
+  /** 给模型单开一条 CDP 会话：连同一个页面的第二条 WebSocket（调试地址从 target 列表里取）。 */
+  public async openProtocolChannel(): Promise<BrowserProtocolChannel> {
+    const activeTargetId = this.options.activeTargetId?.trim()
+    if (!activeTargetId) throw new AppError('VALIDATION', '这个外部浏览器驱动不知道自己是哪个 target，开不了单独的 CDP 会话。')
+    const target = await this.findPageTargetDescription(activeTargetId)
+    const socket = await openCdpWebSocket(target.webSocketDebuggerUrl, {})
+    return new CdpProtocolChannel(new CdpWebSocketTransport({ socket, timeoutMs: BrowserTuning.protocol.commandTimeoutMs }))
   }
 
   public async moveMouse(options: BrowserPageDriverMoveMouseOptions): Promise<void> {
@@ -331,12 +335,14 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
     const button = resolveMouseButton(options.button ?? 'left')
     const clickCount = clampPositiveInteger(options.clickCount, 1)
 
+    const modifiers = options.modifiers ?? 0
     await this.options.transport.send('Input.dispatchMouseEvent', {
       type: 'mousePressed',
       x,
       y,
       button,
       clickCount,
+      modifiers,
     })
     options.onPointerEvent?.({ x, y, phase: 'down', button: options.button ?? 'left' })
     await this.options.transport.send('Input.dispatchMouseEvent', {
@@ -345,6 +351,7 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
       y,
       button,
       clickCount,
+      modifiers,
     })
     options.onPointerEvent?.({ x, y, phase: 'up', button: options.button ?? 'left' })
   }
@@ -357,11 +364,13 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
     const endX = Math.round(options.endX)
     const endY = Math.round(options.endY)
     const steps = clampPositiveInteger(options.steps, 10)
+    const modifiers = options.modifiers ?? 0
 
     await this.options.transport.send('Input.dispatchMouseEvent', {
       type: 'mouseMoved',
       x: startX,
       y: startY,
+      modifiers,
     })
     options.onPointerEvent?.({ x: startX, y: startY, phase: 'move' })
     await this.options.transport.send('Input.dispatchMouseEvent', {
@@ -371,6 +380,7 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
       button: 'left',
       buttons: 1,
       clickCount: 1,
+      modifiers,
     })
     options.onPointerEvent?.({ x: startX, y: startY, phase: 'down', button: 'left' })
 
@@ -384,6 +394,7 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
         y,
         button: 'left',
         buttons: 1,
+        modifiers,
       })
       options.onPointerEvent?.({ x, y, phase: 'move', button: 'left' })
     }
@@ -395,6 +406,7 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
       button: 'left',
       buttons: 0,
       clickCount: 1,
+      modifiers,
     })
     options.onPointerEvent?.({ x: endX, y: endY, phase: 'up', button: 'left' })
   }
@@ -497,8 +509,8 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
     return this.networkController.readNetworkRequestDetails(options)
   }
 
-  public async waitForNetworkIdle(options: BrowserPageDriverNetworkIdleOptions): Promise<void> {
-    await this.networkController.waitForNetworkIdle(options)
+  public async waitForNetworkIdle(options: BrowserPageDriverNetworkIdleOptions): Promise<boolean> {
+    return this.networkController.waitForNetworkIdle(options)
   }
 
   public async configureEmulation(
@@ -897,6 +909,7 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
       unsubscribe()
     }
     this.eventUnsubscribers.splice(0, this.eventUnsubscribers.length)
+    this.frameSessions.dispose()
     this.downloadListeners.clear()
     this.downloads.clear()
     this.networkController.reset()

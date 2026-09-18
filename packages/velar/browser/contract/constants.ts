@@ -1,5 +1,5 @@
 /**
- * 约定的常量表（对外合同的一部分）：错误码、写进 `velar:browser` 与 `velar:devtools` 声明的上限、偏好的合法值闭集、跨层标记。
+ * 约定的常量表（对外合同的一部分）：错误码、写进 `velar:browser`、`velar:devtools` 与 `velar:cdp` 声明的上限、偏好的合法值闭集、跨层标记。
  * 上限写进声明给模型看，入参核对用的也是这一份，验收核对两边一致；不给上限时一律取到这里的上限（代码面不替模型折叠），
  * 这些上限只为守住内存与一次页面往返的体量。整份随 `./browser/contracts` 出包，宿主与渲染进程都读得到。
  *
@@ -13,11 +13,19 @@
 export const BrowserErrorCodes = Object.freeze({
   /** 还没进站点（没 open，或者已经 leave）：要页面的操作一律先要求 open，空间端口一次都不调。 */
   siteNotOpen: 'BROWSER_SITE_NOT_OPEN',
+  /** evaluate、waitForFunction 的页面脚本抛了错（语法错误也算）：message 带页面给的错误名、说明与脚本里的行列。 */
+  scriptFailed: 'BROWSER_SCRIPT_FAILED',
+  /** evaluate 或一条 CDP 命令的结果超过只为守住内存的上限：在脚本里先筛、切片，或者分几次取。 */
+  resultTooLarge: 'BROWSER_RESULT_TOO_LARGE',
+  /** velar:cdp 的命令被协议拒绝（方法不存在、参数不对、目标没了）：message 是协议给的原话。 */
+  protocolFailed: 'BROWSER_PROTOCOL_FAILED',
+  /** 指定的 frame 不在当前页面的框架树里（页面跳转之后旧 id 作废）：重新 frames()。 */
+  frameNotFound: 'BROWSER_FRAME_NOT_FOUND',
   /** 界面没装浏览器合成 Provider，拿不到受控页面。 */
   compositionNotInstalled: 'BROWSER_COMPOSITION_NOT_INSTALLED',
 })
 
-/** 看页面的上限：写进 `inspect`、`query` 的声明。 */
+/** 看页面的上限：写进 `inspect` 的声明；`selectorChars` 也管元素目标里的 CSS selector。 */
 export const BrowserInspectLimits = Object.freeze({
   /** 一次 inspect 最多交回多少字符正文。 */
   textChars: 100_000,
@@ -29,84 +37,68 @@ export const BrowserInspectLimits = Object.freeze({
   selectorChars: 1_000,
   /** 一次最多排除多少个噪音子树 selector。 */
   ignoreSelectors: 50,
-  /** 一次 query 最多交回多少个匹配元素。 */
-  queryElements: 100,
-  /** query 时每个元素最多交回多少文本字符。 */
-  queryTextChars: 20_000,
-  /** query 时每个元素最多交回多少 HTML 字符。 */
-  queryHtmlChars: 50_000,
-  /** 一次 query 最多额外读几个属性。 */
-  queryAttributes: 20,
-  /** 一个属性名最长多少字符。 */
-  attributeNameChars: 80,
 })
 
-/** 动手与等待的上限：写进点击、填写、键鼠、滚动、拖拽与各个 waitFor 的声明。 */
+/** 输入与导航的上限：写进点击、填写、键鼠、拖拽与 goto 的声明。 */
 export const BrowserActionLimits = Object.freeze({
   /** 一个网址最长多少字符。 */
   urlChars: 2_048,
-  /** type 一次输入、fill 一次写入最多多少字符。 */
+  /** fill 一次写入、insertText 一次插入最多多少字符。 */
   textChars: 20_000,
-  /** select 一次最多选几个选项。 */
-  selectValues: 50,
-  /** 一个选项的值或可见文本最长多少字符。 */
-  selectValueChars: 1_000,
   /** 一个键名最长多少字符。 */
   keyChars: 80,
-  /** 同一个键最多连按几次。 */
+  /** press 同一个键最多连按几次。 */
   keyRepeat: 50,
-  /** 视口坐标与滚动偏移的绝对值上限，像素。 */
+  /** 视口坐标的上限，也是滚轮一次滚动的绝对值上限，像素。 */
   coordinate: 10_000,
-  /** 一次按方向滚动最多滚多少像素。 */
-  scrollAmount: 5_000,
-  /** 一次坐标点击最多连击几下。 */
+  /** 一次点击最多连击几下。 */
   clickCount: 5,
-  /** 拖拽最多拆成几步移动。 */
-  dragSteps: 60,
-  /** waitForText 的文字、waitForFunction 的表达式最长多少字符。 */
-  waitExpressionChars: 5_000,
-  /** 各个 waitFor 最多等多少毫秒，wait 最多停多少毫秒。 */
-  waitMs: 60_000,
+  /** mouseMove 与拖拽最多拆成几步移动。 */
+  moveSteps: 60,
 })
 
-/** 取内容的上限与翻页的缺省：写进 `table`、`list`、`paginate`、`content` 的声明。 */
-export const BrowserExtractLimits = Object.freeze({
-  /** 页面有多张表时，tableIndex 最大是几（从 0 起）。 */
-  tableIndex: 50,
-  /** 不给 tableIndex 时取第几张（从 0 起）。 */
-  defaultTableIndex: 0,
-  /** 一张表最多取多少行。 */
-  tableRows: 2_000,
-  /** 列表一次最多取多少条。 */
-  listItems: 500,
-  /** 翻页最多翻几页。 */
-  paginatePages: 20,
-  /** 不给 maxPages 时翻几页：翻页会真的点下一页，所以缺省不翻到上限。 */
-  defaultPaginatePages: 5,
-  /** 翻页时每页最多取多少条。 */
-  paginateItemsPerPage: 500,
-  /** 正文一次最多交回多少字符。 */
-  contentChars: 200_000,
+/** 等待的上限与缺省：写进 `waitForFunction`、`waitForLoad` 与 velar:cdp `waitForEvent` 的声明。 */
+export const BrowserWaitLimits = Object.freeze({
+  /** 一次等待最多等多少毫秒。 */
+  maxMs: 60_000,
+  /** 不给 timeoutMs 时等多少毫秒。 */
+  defaultMs: 30_000,
+  /** waitForFunction 两次判定之间最短隔多少毫秒。 */
+  minIntervalMs: 50,
+  /** waitForFunction 两次判定之间最长隔多少毫秒。 */
+  maxIntervalMs: 5_000,
+  /** 不给 intervalMs 时隔多少毫秒判定一次。 */
+  defaultIntervalMs: 100,
 })
 
-/** 页面求值的上限：写进 `evaluate` 的声明。 */
+/** 页面脚本的上限：写进 `evaluate` 与 `waitForFunction` 的声明。 */
 export const BrowserEvaluateLimits = Object.freeze({
   /** 一段脚本最长多少字符。 */
   scriptChars: 20_000,
+  /** args 按 JSON 算最长多少字符。 */
+  argsChars: 1_000_000,
   /** 一次求值最多等多少毫秒。 */
   timeoutMs: 30_000,
-  /** 一次求值最多取回多少字符的结果 JSON；超了只回截断标记。 */
-  resultChars: 200_000,
+  /** 不给 timeoutMs 时等多少毫秒。 */
+  defaultTimeoutMs: 5_000,
+  /** 结果 JSON 最长多少字符（只为守住内存）；超了抛 BROWSER_RESULT_TOO_LARGE，不交半截。 */
+  resultChars: 10_000_000,
 })
 
-/** 页面存储与媒体清单的上限：写进 `storage`、`media` 的声明。 */
-export const BrowserPageDataLimits = Object.freeze({
-  /** 每类存储一次最多交回多少项。 */
-  storageItems: 300,
-  /** 每个存储值最多交回多少字符。 */
-  storageValueChars: 50_000,
-  /** 一次最多列多少条页面媒体。 */
-  mediaSources: 200,
+/** 模型自己那条 CDP 会话的上限：写进 velar:cdp 的声明。 */
+export const BrowserProtocolLimits = Object.freeze({
+  /** 方法名最长多少字符。 */
+  methodChars: 200,
+  /** params 按 JSON 算最长多少字符。 */
+  paramsChars: 10_000_000,
+  /** 子会话 id 最长多少字符。 */
+  sessionChars: 200,
+  /** 一条命令的结果 JSON 最长多少字符（只为守住内存）；超了抛 BROWSER_RESULT_TOO_LARGE。 */
+  resultChars: 10_000_000,
+  /** 事件缓冲最多留多少条（只为守住内存）；挤掉的从最早的算起，条数记在 dropped。 */
+  bufferedEvents: 5_000,
+  /** 被 Fetch 拦下的请求多少毫秒没人放行，宿主替它放行。 */
+  autoContinueMs: 30_000,
 })
 
 /** 抓取与导出的上限：写进 `download`、`savePdf` 的声明。 */
@@ -131,7 +123,7 @@ export const BrowserDiagnosticsLimits = Object.freeze({
   responseBodyChars: 200_000,
 })
 
-/** 页面条件的上限：写进 `zoom`、`network`、`emulate` 的声明；`setViewport` 的宽高范围与截图共用 `BrowserCaptureLimits`。 */
+/** 页面条件的上限：写进 `zoom`、`network` 的声明。 */
 export const BrowserConditionLimits = Object.freeze({
   /** 缩放系数的下限。 */
   minZoomFactor: 0.25,
@@ -155,25 +147,19 @@ export const BrowserConditionLimits = Object.freeze({
   mockBodyChars: 1_000_000,
   /** URL 规则最长多少字符。 */
   urlPatternChars: 2_048,
-  /** 时区名最长多少字符。 */
-  timezoneChars: 120,
-  /** 语言标签最长多少字符。 */
-  localeChars: 80,
-  /** CPU 降速倍数的上限（1 是不降速）。 */
-  maxCpuThrottlingRate: 20,
 })
 
-/** 截图、视口与录屏的公开上限与缺省：写进 `screenshot`、`setViewport`、`startRecording` 的声明，入参核对用的也是这一份。 */
+/** 截图与录屏的公开上限与缺省：写进 `screenshot`、`startRecording` 的声明，入参核对用的也是这一份。 */
 export const BrowserCaptureLimits = Object.freeze({
   /** 截图保存路径最长多少字符。 */
   pathChars: 180,
-  /** 截图与设置视口时，宽度的下限，像素。 */
+  /** 截图前设视口时，宽度的下限，像素。 */
   minViewportWidth: 320,
-  /** 截图与设置视口时，宽度的上限，像素。 */
+  /** 截图前设视口时，宽度的上限，像素。 */
   maxViewportWidth: 3_840,
-  /** 截图与设置视口时，高度的下限，像素。 */
+  /** 截图前设视口时，高度的下限，像素。 */
   minViewportHeight: 240,
-  /** 截图与设置视口时，高度的上限，像素。 */
+  /** 截图前设视口时，高度的上限，像素。 */
   maxViewportHeight: 2_160,
   /** 截图前等网络空闲最少等多少毫秒。 */
   minNetworkIdleMs: 100,

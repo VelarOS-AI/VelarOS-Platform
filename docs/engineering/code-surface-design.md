@@ -164,8 +164,9 @@ edit 与 inspect 交回完整差量，`velar:code` 不按条数截，`velar:shel
 | `velar:computer` | screenshot / move / click / typeText / key | 宿主装了桌面控制插件时挂 | — | `@velaros-ai/velar` 的 `computer/` |
 | `velar:memory` | list / save / remove | 宿主开了长期记忆时挂 | 宿主开了长期记忆时挂 | `@velaros-ai/velar` 的 `memory/`（记忆库本身也在这个单元里） |
 | `velar:office` | createWord / createPresentation / createSpreadsheet / readPdf / wordToPdf / latexToPdf / editPdf / preview / toMarkdown | ✓ | ✓ | `@velaros-ai/velar` 的 `office/`（文档生成、转换与解析的实现也在这个单元里） |
-| `velar:browser` | open / inspect / query / screenshot / click / fill / goto / waitFor… / table / list / content / download 等 48 个 | — | 客居（前端开发要看渲染） | `@velaros-ai/velar` 的 `browser/`（CDP 驱动、页面引擎、Electron 会话运行时、站点工作区也在这个单元里；浏览器空间挂它） |
-| `velar:devtools` | diagnostics / request / storage / setViewport / emulate / network / startTrace / insight / heapSnapshot / 录屏 / 用户脚本等 22 个 | — | 客居 | 同上，与 `velar:browser` 共用一个空间端口 |
+| `velar:browser` | open / inspect / screenshot / evaluate / frames / click / fill / press / 键鼠原子（keyDown、mouseMove……）/ goto / waitFor… / download 等 34 个 | — | 客居（前端开发要看渲染） | `@velaros-ai/velar` 的 `browser/`（CDP 驱动、页面引擎、Electron 会话运行时、站点工作区也在这个单元里；浏览器空间挂它） |
+| `velar:devtools` | diagnostics / request / zoom / network / startTrace / insight / heapSnapshot / 录屏 / 用户脚本等 18 个 | — | 客居 | 同上，与 `velar:browser` 共用一个空间端口 |
+| `velar:cdp` | send / events / waitForEvent / reset：模型自己的一条 CDP 会话（ADR 0012） | — | 客居 | 同上，与 `velar:browser` 共用一个空间端口 |
 
 **一件能力只有一份实现、一份声明、一份代码模版**，不认识任何空间。空间之间不一样的地方全落在**注入的端口**上：
 
@@ -178,7 +179,7 @@ edit 与 inspect 交回完整差量，`velar:code` 不按条数截，`velar:shel
 | `velar:computer` | `ComputerSpacePort` | 桌面控制交给哪份运行时：宿主把 `createComputerRuntime` 造的那份直接交进来（结构上满足端口）；没有桌面的宿主不挂这件能力 |
 | `velar:memory` | `MemoryScopePort` | 这个会话落在哪个作用域：宿主用 `createMemoryStore({ root }).scope(作用域)` 取一份交进来，作用域字符串由产品定、记忆不解释；会话开场的索引也由宿主用同一份的 `renderIndex()` 放进系统提示词（ADR 0010） |
 | `velar:office` | `OfficeSpacePort` | `getRootPath`：文档读写落在哪个根里（出了根一律拒绝）；`inspectEnvironment`、`runCommand`：本机有没有 LibreOffice、LaTeX 编译器，外部命令交给谁跑（只收原生 argv）；`locateMarkItDown`：按宿主自己的插件状态回答 MarkItDown 装没装、停没停用 |
-| `velar:browser`、`velar:devtools` | `BrowserSpacePort` | 已经绑好会话与站点的浏览器：宿主拿 Electron 运行时按会话与站点拼它（要登录墙门控就用 `createBrowserLoginGate` 包一层）；站点工作区在哪由它的 `getContext` 回答，浏览器空间另外挂站点工作区上的 `velar:files` |
+| `velar:browser`、`velar:devtools`、`velar:cdp` | `BrowserSpacePort` | 已经绑好会话与站点的浏览器：宿主拿 Electron 运行时按会话与站点拼它（要登录墙门控就用 `createBrowserLoginGate` 包一层）；站点工作区在哪由它的 `getContext` 回答，浏览器空间另外挂站点工作区上的 `velar:files` |
 
 **真正是两件事的不硬合。** 本机文件与项目文件看上去都是「读写文件」，其实不是一件事：项目里的文件有项目那一套——
 校验器、带版本防护的事务、撤销账本、fileRef 只许改看到过的行；本机上的文件没有这些，

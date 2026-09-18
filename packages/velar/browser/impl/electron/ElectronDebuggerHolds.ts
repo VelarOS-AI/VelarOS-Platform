@@ -30,6 +30,12 @@ export interface ElectronDebuggerHoldsEmulation {
   networkEnabled: boolean
 }
 
+/** 一条 WebContents 上开着的模型 CDP 会话：debugger 上挂出来的子会话，断了 debugger 它就没了。 */
+export interface ElectronDebuggerHoldsProtocol {
+  /** 子会话的 id。 */
+  sessionId: string
+}
+
 /** 一条 WebContents 上持久生效的网络采集。 */
 export interface ElectronDebuggerHoldsNetwork {
   /** 网络控制器：离线、请求头、拦截与 mock 都经它下发。 */
@@ -44,9 +50,9 @@ export interface ElectronDebuggerHoldsNetwork {
  * 内嵌页面挂在 WebContents 上的 debugger 占用登记。
  *
  * 为什么不放在驱动实例里：内嵌页面的 `BrowserPageDriver` 是**每次调用临时包一个**的，而 trace 录制、录屏、
- * 环境模拟与网络采集都跨多次工具调用；状态只能按 WebContents 存。四类占用共用一个登记处还有一层意思：
- * CDP 的 Emulation override 与 Fetch 拦截在 debugger detach 之后就失效，所以只要有一项还占着，
- * 临时操作（截图、一次 trace）收尾时就**不许** detach——判断「现在能不能 detach」要一次看全四类。
+ * 环境模拟、网络采集与模型的 CDP 会话都跨多次工具调用；状态只能按 WebContents 存。五类占用共用一个登记处还有一层意思：
+ * CDP 的 Emulation override、Fetch 拦截与挂在 debugger 上的子会话在 detach 之后都失效，所以只要有一项还占着，
+ * 临时操作（截图、一次 trace）收尾时就**不许** detach——判断「现在能不能 detach」要一次看全五类。
  *
  * 实例归进程：WeakMap 以 WebContents 为键，页面销毁后自动释放；文件末尾给出进程唯一的一份。
  */
@@ -77,6 +83,12 @@ export interface ElectronDebuggerHoldsApi {
   hasNetwork(webContents: electron.WebContents): boolean
   /** 登记网络采集。 */
   setNetwork(webContents: electron.WebContents, hold: ElectronDebuggerHoldsNetwork): void
+  /** 读模型 CDP 会话的占用；没有返回 undefined。 */
+  getProtocol(webContents: electron.WebContents): ElectronDebuggerHoldsProtocol | undefined
+  /** 登记模型的 CDP 会话。 */
+  setProtocol(webContents: electron.WebContents, hold: ElectronDebuggerHoldsProtocol): void
+  /** 撤销模型 CDP 会话的登记。 */
+  deleteProtocol(webContents: electron.WebContents): void
 }
 
 export class ElectronDebuggerHolds implements ElectronDebuggerHoldsApi {
@@ -84,9 +96,10 @@ export class ElectronDebuggerHolds implements ElectronDebuggerHoldsApi {
   private readonly screencasts = new WeakMap<electron.WebContents, ElectronDebuggerHoldsScreencast>()
   private readonly emulations = new WeakMap<electron.WebContents, ElectronDebuggerHoldsEmulation>()
   private readonly networks = new WeakMap<electron.WebContents, ElectronDebuggerHoldsNetwork>()
+  private readonly protocols = new WeakMap<electron.WebContents, ElectronDebuggerHoldsProtocol>()
 
   public hasPersistentHold(webContents: electron.WebContents): boolean {
-    return this.emulations.has(webContents) || this.networks.has(webContents)
+    return this.emulations.has(webContents) || this.networks.has(webContents) || this.protocols.has(webContents)
   }
 
   public getTrace(webContents: electron.WebContents): ElectronDebuggerHoldsTrace | undefined {
@@ -145,6 +158,18 @@ export class ElectronDebuggerHolds implements ElectronDebuggerHoldsApi {
 
   public setNetwork(webContents: electron.WebContents, hold: ElectronDebuggerHoldsNetwork): void {
     this.networks.set(webContents, hold)
+  }
+
+  public getProtocol(webContents: electron.WebContents): ElectronDebuggerHoldsProtocol | undefined {
+    return this.protocols.get(webContents)
+  }
+
+  public setProtocol(webContents: electron.WebContents, hold: ElectronDebuggerHoldsProtocol): void {
+    this.protocols.set(webContents, hold)
+  }
+
+  public deleteProtocol(webContents: electron.WebContents): void {
+    this.protocols.delete(webContents)
   }
 }
 

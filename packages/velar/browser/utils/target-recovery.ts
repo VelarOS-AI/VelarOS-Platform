@@ -8,6 +8,7 @@ import {
   isTrue,
 } from '@velaros-ai/core'
 
+import { BrowserEvaluateLimits } from '../contract/constants.js'
 import type { BrowserOperationContext } from '../contract/requires.js'
 import type {
   BrowserActed,
@@ -21,6 +22,7 @@ import type {
 import type { CoordinateClickPoint } from '../types/operations.js'
 
 import { buildBrowserScreenshotOptions } from './screenshot-options'
+import { scriptOutcomeValue } from './script-outcome.js'
 
 /** 坐标恢复的探针截图路径：固定一份、每次覆盖写。 */
 const BrowserTargetRecoveryScreenshotPath = 'artifacts/screenshots/recovery/target-action.png'
@@ -224,28 +226,27 @@ async function findClickPointFromBounds(
   const css = target.css?.trim()
   if (!css) return null
 
-  const selectorLiteral = JSON.stringify(css)
-  const bounds = await ctx.browser.evaluateScript({
+  const payload = scriptOutcomeValue(await ctx.browser.evaluateScript({
     script: [
-      `const matches = Array.from(document.querySelectorAll(${selectorLiteral}));`,
-      `if (matches.length !== 1) return { found: false, matchCount: matches.length };`,
-      `const el = matches[0];`,
-      'const r = el.getBoundingClientRect();',
-      'return {',
-      '  found: true,',
-      '  width: r.width,',
-      '  height: r.height,',
-      '  centerX: Math.round(r.x + r.width / 2),',
-      '  centerY: Math.round(r.y + r.height / 2),',
-      '  viewportWidth: window.innerWidth,',
-      '  viewportHeight: window.innerHeight,',
-      '};',
+      '(selector) => {',
+      '  const matches = Array.from(document.querySelectorAll(selector))',
+      '  if (matches.length !== 1) return { found: false, matchCount: matches.length }',
+      '  const r = matches[0].getBoundingClientRect()',
+      '  return {',
+      '    found: true,',
+      '    width: r.width,',
+      '    height: r.height,',
+      '    centerX: Math.round(r.x + r.width / 2),',
+      '    centerY: Math.round(r.y + r.height / 2),',
+      '    viewportWidth: window.innerWidth,',
+      '    viewportHeight: window.innerHeight,',
+      '  }',
+      '}',
     ].join('\n'),
-    mode: 'function-body',
-  })
+    args: [css],
+    maxResultChars: BrowserEvaluateLimits.resultChars,
+  }))
 
-  // evaluateScript 恒返回 BrowserEvaluateScriptResult 信封(engine 在页面内构造),载荷只在 .result。
-  const payload = bounds.result
   if (!isPlainObject(payload) || !isTrue(payload.found)) return null
 
   const width = readFiniteNumber(payload.width)

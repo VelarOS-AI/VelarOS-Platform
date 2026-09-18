@@ -1,6 +1,7 @@
 // velar:devtools 的代码模版：排障、调页面时最常用的几种写法，一段一个函数。只是示例——按你的需要改写、只取其中几行都行，不必照着写。
 // 都作用在 velar:browser 当前打开的站点上，先 open。trace、堆快照、录屏的产物落在站点工作区。
-import { createUserScript, diagnostics, emulate, insight, network, request, setViewport, startRecording, startTrace, stopRecording, storage } from 'velar:devtools'
+// 页面存储用 velar:browser 的 evaluate 读；视口、深浅色、时区、cookie 这类直接用 velar:cdp 发命令。
+import { createUserScript, diagnostics, insight, network, request, startRecording, startTrace, stopRecording } from 'velar:devtools'
 
 // 页面报错了：看最近的控制台错误与未处理异常，读完把这一类清掉。
 async function consoleErrors() {
@@ -27,23 +28,10 @@ async function measureLoad() {
   return { metrics: trace.keyMetrics, lcp: detail?.output.slice(0, 3000) }
 }
 
-// 复现手机上的深色布局：设视口与配色，再回 velar:browser 截图看。
-async function mobileDark() {
-  await setViewport({ width: 390, height: 844 })
-  await emulate({ colorScheme: 'dark' })
-  return '视口与配色已设好，接着用 velar:browser 的 screenshot 看效果'
-}
-
-// 断网或给接口回假数据，看页面怎么降级。
+// 给接口回假数据，看页面怎么降级：规则常驻，程序跑完也一直生效，再调一次 network 就换掉。
 async function mockApi(urlPattern = '*/api/profile*') {
   await network({ mockResponses: [{ urlPattern, status: 500, contentType: 'application/json', body: '{"error":"boom"}' }] })
   return '之后匹配的请求都会拿到 500，刷新页面看效果；恢复就再调一次 network 清掉'
-}
-
-// 看页面存了什么：localStorage、sessionStorage 与 cookie。
-async function peekStorage() {
-  const stored = await storage({ includeCookies: true, limit: 50 })
-  return { local: stored.localStorage?.map((item) => item.name), cookies: stored.cookies?.map((item) => item.name) }
 }
 
 // 录下一段操作：开始录，做完操作再停，GIF 落在站点工作区。

@@ -1,5 +1,5 @@
 /**
- * `velar:browser` 与 `velar:devtools` 的入参核对：形状、取值与上限在做事之前一次核对完，不合法当场 `VALIDATION`，空间端口一次都不调。
+ * `velar:browser`、`velar:devtools` 与 `velar:cdp` 的入参核对：形状、取值与上限在做事之前一次核对完，不合法当场 `VALIDATION`，空间端口一次都不调。
  * 上限都引 `contract/constants.ts` 的表——声明里写给模型的数字就是它们。顶层入参是严格对象：多给的字段直接拒绝，不静默丢掉。
  */
 
@@ -14,19 +14,16 @@ import {
   BrowserConditionLimits,
   BrowserDiagnosticsLimits,
   BrowserEvaluateLimits,
-  BrowserExtractLimits,
   BrowserFetchLimits,
   BrowserInspectLimits,
-  BrowserPageDataLimits,
   BrowserPendingEventLimits,
   BrowserPerformanceLimits,
+  BrowserProtocolLimits,
   BrowserUserScriptLimits,
+  BrowserWaitLimits,
 } from '../contract/constants.js'
 import type {
-  BrowserCheckInput,
-  BrowserClickAtInput,
   BrowserClickInput,
-  BrowserContentInput,
   BrowserDialogInput,
   BrowserDownloadDecisionInput,
   BrowserDownloadInput,
@@ -34,34 +31,28 @@ import type {
   BrowserEvaluateInput,
   BrowserFillInput,
   BrowserGotoInput,
+  BrowserHoverInput,
+  BrowserInsertTextInput,
   BrowserInspectInput,
-  BrowserListInput,
-  BrowserMediaInput,
+  BrowserKeyInput,
+  BrowserMouseButtonInput,
+  BrowserMouseMoveInput,
   BrowserOpenInput,
-  BrowserPaginateInput,
   BrowserPermissionInput,
-  BrowserPointInput,
   BrowserPressInput,
-  BrowserQueryInput,
   BrowserSavePdfInput,
   BrowserScreenshotInput,
-  BrowserScrollInput,
-  BrowserSelectInput,
   BrowserSwitchTabInput,
-  BrowserTableInput,
-  BrowserTargetInput,
-  BrowserTypeInput,
   BrowserUploadInput,
   BrowserWaitForEventInput,
   BrowserWaitForFunctionInput,
   BrowserWaitForLoadInput,
-  BrowserWaitForSelectorInput,
-  BrowserWaitForTextInput,
-  BrowserWaitForUrlInput,
-  BrowserWaitInput,
+  BrowserWheelInput,
+  CdpEventsInput,
+  CdpSendInput,
+  CdpWaitForEventInput,
   DevtoolsCreateUserScriptInput,
   DevtoolsDiagnosticsInput,
-  DevtoolsEmulateInput,
   DevtoolsEnableUserScriptInput,
   DevtoolsEnableUserScriptsInput,
   DevtoolsHeapSnapshotInput,
@@ -71,26 +62,38 @@ import type {
   DevtoolsRecordingInput,
   DevtoolsRequestInput,
   DevtoolsStopRecordingInput,
-  DevtoolsStorageInput,
   DevtoolsTraceInput,
   DevtoolsUpdateUserScriptInput,
   DevtoolsUserScriptIdInput,
-  DevtoolsViewportInput,
   DevtoolsZoomInput,
 } from '../types/browser.js'
+import type { BrowserClickRequest } from '../types/operations.js'
 
+import { isKnownKeyName } from './keyboard.js'
 import { BrowserTuning } from './tuning.js'
 
 // ── 共用片段 ────────────────────────────────────────────────────
 
 const selectorSchema = z.string().trim().min(1).max(BrowserInspectLimits.selectorChars)
-const optionalSelectorSchema = selectorSchema.optional()
 const ignoreSelectorsSchema = z.array(selectorSchema).max(BrowserInspectLimits.ignoreSelectors).optional()
 const urlSchema = z.string().trim().min(1).max(BrowserActionLimits.urlChars)
-const waitTimeoutSchema = z.number().int().positive().max(BrowserActionLimits.waitMs).optional()
 const coordinateSchema = z.number().int().min(0).max(BrowserActionLimits.coordinate)
 const workspacePathSchema = z.string().trim().min(1).max(BrowserFetchLimits.pathChars)
 const eventIdSchema = z.string().trim().min(1).optional()
+const mouseButtonSchema = z.enum(['left', 'middle', 'right'])
+const clickCountSchema = z.number().int().positive().max(BrowserActionLimits.clickCount)
+const waitTimeoutSchema = z.number().int().positive().max(BrowserWaitLimits.maxMs).optional()
+const keySchema = z
+  .string()
+  .min(1)
+  .max(BrowserActionLimits.keyChars)
+  .refine(isKnownKeyName, '不认识这个键：写 Enter、Tab、Escape、Backspace、ArrowDown、Home、F5 这类键名，或者一个字符')
+const scriptSchema = z.string().min(1).max(BrowserEvaluateLimits.scriptChars)
+const scriptArgsSchema = z
+  .array(z.unknown())
+  .refine((value) => jsonLength(value) <= BrowserEvaluateLimits.argsChars, `args 按 JSON 算超过 ${BrowserEvaluateLimits.argsChars} 个字符`)
+  .optional()
+const frameIdSchema = z.string().trim().min(1).optional()
 
 /** 定位线索：ref、css、text、name、attributes 至少一样；字段都可以是 null（inspect 结果里的 target 原样传回时就是这样）。 */
 const targetHintSchema = z
@@ -116,6 +119,11 @@ const targetHintSchema = z
   )
 const targetSchema = z.union([z.string().trim().min(1).max(BrowserInspectLimits.selectorChars), targetHintSchema])
 
+/** 一个值按 JSON 写出来有多少字符：args 与 CDP 的 params 按它限长。 */
+function jsonLength(value: unknown): number {
+  return JSON.stringify(value).length
+}
+
 /** 核对一次入参：不合法抛 `VALIDATION`，message 点名是哪个操作、哪几个字段不对。 */
 function parseInput<T>(schema: z.ZodType, input: unknown, operation: string): T {
   const parsed = schema.safeParse(input ?? {})
@@ -137,17 +145,6 @@ const inspectSchema = z.strictObject({
   maxHtmlChars: z.number().int().positive().max(BrowserInspectLimits.htmlChars).optional(),
   maxElements: z.number().int().positive().max(BrowserInspectLimits.elements).optional(),
   ignoreSelectors: ignoreSelectorsSchema,
-})
-const querySchema = z.strictObject({
-  selector: selectorSchema,
-  attributes: z
-    .array(z.string().trim().min(1).max(BrowserInspectLimits.attributeNameChars))
-    .max(BrowserInspectLimits.queryAttributes)
-    .optional(),
-  includeHtml: z.boolean().optional(),
-  limit: z.number().int().positive().max(BrowserInspectLimits.queryElements).optional(),
-  maxTextChars: z.number().int().positive().max(BrowserInspectLimits.queryTextChars).optional(),
-  maxHtmlChars: z.number().int().positive().max(BrowserInspectLimits.queryHtmlChars).optional(),
 })
 const regionSchema = z.union([
   z.strictObject({ selector: selectorSchema }),
@@ -172,74 +169,65 @@ const screenshotSchema = z.strictObject({
   compareWithPrevious: z.boolean().optional(),
 })
 const evaluateSchema = z.strictObject({
-  script: z.string().min(1).max(BrowserEvaluateLimits.scriptChars),
-  mode: z.enum(['expression', 'function-body']).optional(),
+  script: scriptSchema,
+  args: scriptArgsSchema,
+  frame: frameIdSchema,
   timeoutMs: z.number().int().positive().max(BrowserEvaluateLimits.timeoutMs).optional(),
 })
-const mediaSchema = z.strictObject({
-  limit: z.number().int().positive().max(BrowserPageDataLimits.mediaSources).optional(),
-  includeDataUrls: z.boolean().optional(),
-  includeBlobUrls: z.boolean().optional(),
-})
-const clickSchema = z.strictObject({ target: targetSchema, waitForNavigation: z.boolean().optional() })
+const clickSchema = z
+  .strictObject({
+    target: targetSchema.optional(),
+    x: coordinateSchema.optional(),
+    y: coordinateSchema.optional(),
+    button: mouseButtonSchema.optional(),
+    clickCount: clickCountSchema.optional(),
+    waitForNavigation: z.boolean().optional(),
+  })
+  .refine(
+    (value) => isPresent(value.target) !== (isPresent(value.x) || isPresent(value.y)) && isPresent(value.x) === isPresent(value.y),
+    'target 与 x、y 只给一样：点元素给 target，点坐标给 x 和 y'
+  )
 const fillSchema = z.strictObject({ target: targetSchema, value: z.string().max(BrowserActionLimits.textChars) })
-const selectSchema = z.strictObject({
-  target: targetSchema,
-  value: z.union([
-    z.string().max(BrowserActionLimits.selectValueChars),
-    z.array(z.string().max(BrowserActionLimits.selectValueChars)).min(1).max(BrowserActionLimits.selectValues),
-  ]),
-})
-const checkSchema = z.strictObject({ target: targetSchema, checked: z.boolean().optional() })
-const targetOnlySchema = z.strictObject({ target: targetSchema })
-const gotoSchema = z.strictObject({ url: urlSchema })
-const scrollSchema = z.strictObject({
-  direction: z.enum(['up', 'down', 'left', 'right', 'top', 'bottom']).optional(),
-  amount: z.number().int().positive().max(BrowserActionLimits.scrollAmount).optional(),
-  x: z.number().int().min(-BrowserActionLimits.coordinate).max(BrowserActionLimits.coordinate).optional(),
-  y: z.number().int().min(-BrowserActionLimits.coordinate).max(BrowserActionLimits.coordinate).optional(),
-})
-const typeSchema = z.strictObject({ text: z.string().min(1).max(BrowserActionLimits.textChars) })
+const hoverSchema = z.strictObject({ target: targetSchema })
+const insertTextSchema = z.strictObject({ text: z.string().min(1).max(BrowserActionLimits.textChars) })
 const pressSchema = z.strictObject({
-  key: z.string().min(1).max(BrowserActionLimits.keyChars),
+  key: keySchema,
   modifiers: z.array(z.enum(['shift', 'control', 'alt', 'meta'])).max(4).optional(),
   repeat: z.number().int().positive().max(BrowserActionLimits.keyRepeat).optional(),
   waitForNavigation: z.boolean().optional(),
 })
-const pointSchema = z.strictObject({ x: coordinateSchema, y: coordinateSchema })
-const clickAtSchema = z.strictObject({
+const singleKeySchema = z.strictObject({
+  key: keySchema.refine((key) => !/.\+./u.test(key), '一次一个键：组合键先 keyDown 修饰键，或者用 press'),
+})
+const mouseMoveSchema = z.strictObject({
   x: coordinateSchema,
   y: coordinateSchema,
-  button: z.enum(['left', 'middle', 'right']).optional(),
-  clickCount: z.number().int().positive().max(BrowserActionLimits.clickCount).optional(),
-  waitForNavigation: z.boolean().optional(),
+  steps: z.number().int().positive().max(BrowserActionLimits.moveSteps).optional(),
 })
+const mouseButtonInputSchema = z.strictObject({ button: mouseButtonSchema.optional(), clickCount: clickCountSchema.optional() })
+const wheelDeltaSchema = z.number().int().min(-BrowserActionLimits.coordinate).max(BrowserActionLimits.coordinate)
+const wheelSchema = z
+  .strictObject({ deltaX: wheelDeltaSchema.optional(), deltaY: wheelDeltaSchema.optional() })
+  .refine((value) => isPresent(value.deltaX) || isPresent(value.deltaY), '至少给 deltaX、deltaY 中的一个')
 const dragSchema = z.strictObject({
   source: targetSchema,
   target: targetSchema,
-  steps: z.number().int().positive().max(BrowserActionLimits.dragSteps).optional(),
+  steps: z.number().int().positive().max(BrowserActionLimits.moveSteps).optional(),
   waitForNavigation: z.boolean().optional(),
 })
 const uploadSchema = z.strictObject({ target: targetSchema, filePath: workspacePathSchema })
-const waitForSelectorSchema = z.strictObject({
-  selector: selectorSchema,
-  state: z.enum(['attached', 'visible', 'hidden', 'detached']).optional(),
-  timeoutMs: waitTimeoutSchema,
-})
-const waitForTextSchema = z.strictObject({
-  text: z.string().min(1).max(BrowserActionLimits.waitExpressionChars),
-  timeoutMs: waitTimeoutSchema,
-})
-const waitForUrlSchema = z.strictObject({ url: urlSchema, timeoutMs: waitTimeoutSchema })
+const gotoSchema = z.strictObject({ url: urlSchema })
 const waitForFunctionSchema = z.strictObject({
-  expression: z.string().min(1).max(BrowserActionLimits.waitExpressionChars),
+  script: scriptSchema,
+  args: scriptArgsSchema,
+  frame: frameIdSchema,
   timeoutMs: waitTimeoutSchema,
+  intervalMs: z.number().int().min(BrowserWaitLimits.minIntervalMs).max(BrowserWaitLimits.maxIntervalMs).optional(),
 })
 const waitForLoadSchema = z.strictObject({
   state: z.enum(['domcontentloaded', 'load', 'networkidle']).optional(),
   timeoutMs: waitTimeoutSchema,
 })
-const waitSchema = z.strictObject({ ms: z.number().int().positive().max(BrowserActionLimits.waitMs) })
 const waitForEventSchema = z.strictObject({
   kind: z.enum(['dialog', 'download', 'permission']).optional(),
   timeoutMs: z.number().int().positive().max(BrowserPendingEventLimits.maxWaitMs).optional(),
@@ -249,27 +237,6 @@ const downloadDecisionSchema = z
   .strictObject({ eventId: eventIdSchema, savePath: workspacePathSchema.optional(), cancel: z.boolean().optional() })
   .refine((value) => !!value.cancel !== isPresent(value.savePath), '要么给 savePath 保存，要么 cancel: true 取消，只给一样')
 const permissionSchema = z.strictObject({ eventId: eventIdSchema, grant: z.boolean() })
-const tableSchema = z.strictObject({
-  selector: optionalSelectorSchema,
-  tableIndex: z.number().int().min(0).max(BrowserExtractLimits.tableIndex).optional(),
-  maxRows: z.number().int().positive().max(BrowserExtractLimits.tableRows).optional(),
-})
-const listSchema = z.strictObject({
-  selector: optionalSelectorSchema,
-  maxItems: z.number().int().positive().max(BrowserExtractLimits.listItems).optional(),
-})
-const paginateSchema = z.strictObject({
-  selector: optionalSelectorSchema,
-  maxPages: z.number().int().positive().max(BrowserExtractLimits.paginatePages).optional(),
-  maxItemsPerPage: z.number().int().positive().max(BrowserExtractLimits.paginateItemsPerPage).optional(),
-  nextPageSelector: optionalSelectorSchema,
-})
-const contentSchema = z.strictObject({
-  format: z.enum(['plain', 'markdown', 'html']).optional(),
-  selector: optionalSelectorSchema,
-  ignoreSelectors: ignoreSelectorsSchema,
-  maxChars: z.number().int().positive().max(BrowserExtractLimits.contentChars).optional(),
-})
 const downloadSchema = z.strictObject({
   url: z.string().trim().url().max(BrowserFetchLimits.pathChars),
   savePath: workspacePathSchema,
@@ -292,11 +259,6 @@ export function inspectInput(input: unknown): BrowserInspectInput {
   return parseInput(inspectSchema, input, 'inspect')
 }
 
-/** query 的入参。 */
-export function queryInput(input: unknown): BrowserQueryInput {
-  return parseInput(querySchema, input, 'query')
-}
-
 /** screenshot 的入参。 */
 export function screenshotInput(input: unknown): BrowserScreenshotInput {
   return parseInput(screenshotSchema, input, 'screenshot')
@@ -307,14 +269,11 @@ export function evaluateInput(input: unknown): BrowserEvaluateInput {
   return parseInput(evaluateSchema, input, 'evaluate')
 }
 
-/** media 的入参。 */
-export function mediaInput(input: unknown): BrowserMediaInput {
-  return parseInput(mediaSchema, input, 'media')
-}
-
-/** click 的入参。 */
-export function clickInput(input: unknown): BrowserClickInput {
-  return parseInput(clickSchema, input, 'click')
+/** click 的入参：核对完分成点元素与点坐标两种。 */
+export function clickInput(input: unknown): BrowserClickRequest {
+  const { target, x, y, ...options }: BrowserClickInput = parseInput(clickSchema, input, 'click')
+  if (isPresent(target)) return { kind: 'target', target, ...options }
+  return { kind: 'point', x: x ?? 0, y: y ?? 0, ...options }
 }
 
 /** fill 的入参。 */
@@ -322,34 +281,14 @@ export function fillInput(input: unknown): BrowserFillInput {
   return parseInput(fillSchema, input, 'fill')
 }
 
-/** select 的入参。 */
-export function selectInput(input: unknown): BrowserSelectInput {
-  return parseInput(selectSchema, input, 'select')
+/** hover 的入参。 */
+export function hoverInput(input: unknown): BrowserHoverInput {
+  return parseInput(hoverSchema, input, 'hover')
 }
 
-/** check 的入参。 */
-export function checkInput(input: unknown): BrowserCheckInput {
-  return parseInput(checkSchema, input, 'check')
-}
-
-/** 只要一个元素的那几个操作（hover、focus、clear、selectText、scrollIntoView）的入参。 */
-export function targetInput(input: unknown, operation: string): BrowserTargetInput {
-  return parseInput(targetOnlySchema, input, operation)
-}
-
-/** goto 的入参。 */
-export function gotoInput(input: unknown): BrowserGotoInput {
-  return parseInput(gotoSchema, input, 'goto')
-}
-
-/** scroll 的入参。 */
-export function scrollInput(input: unknown): BrowserScrollInput {
-  return parseInput(scrollSchema, input, 'scroll')
-}
-
-/** type 的入参。 */
-export function typeInput(input: unknown): BrowserTypeInput {
-  return parseInput(typeSchema, input, 'type')
+/** insertText 的入参。 */
+export function insertTextInput(input: unknown): BrowserInsertTextInput {
+  return parseInput(insertTextSchema, input, 'insertText')
 }
 
 /** press 的入参。 */
@@ -357,14 +296,24 @@ export function pressInput(input: unknown): BrowserPressInput {
   return parseInput(pressSchema, input, 'press')
 }
 
-/** mouseMove 的入参。 */
-export function pointInput(input: unknown): BrowserPointInput {
-  return parseInput(pointSchema, input, 'mouseMove')
+/** keyDown、keyUp 的入参。 */
+export function keyInput(input: unknown, operation: 'keyDown' | 'keyUp'): BrowserKeyInput {
+  return parseInput(singleKeySchema, input, operation)
 }
 
-/** clickAt 的入参。 */
-export function clickAtInput(input: unknown): BrowserClickAtInput {
-  return parseInput(clickAtSchema, input, 'clickAt')
+/** mouseMove 的入参。 */
+export function mouseMoveInput(input: unknown): BrowserMouseMoveInput {
+  return parseInput(mouseMoveSchema, input, 'mouseMove')
+}
+
+/** mouseDown、mouseUp 的入参。 */
+export function mouseButtonInput(input: unknown, operation: 'mouseDown' | 'mouseUp'): BrowserMouseButtonInput {
+  return parseInput(mouseButtonInputSchema, input, operation)
+}
+
+/** wheel 的入参。 */
+export function wheelInput(input: unknown): BrowserWheelInput {
+  return parseInput(wheelSchema, input, 'wheel')
 }
 
 /** drag 的入参。 */
@@ -377,19 +326,9 @@ export function uploadInput(input: unknown): BrowserUploadInput {
   return parseInput(uploadSchema, input, 'upload')
 }
 
-/** waitForSelector 的入参。 */
-export function waitForSelectorInput(input: unknown): BrowserWaitForSelectorInput {
-  return parseInput(waitForSelectorSchema, input, 'waitForSelector')
-}
-
-/** waitForText 的入参。 */
-export function waitForTextInput(input: unknown): BrowserWaitForTextInput {
-  return parseInput(waitForTextSchema, input, 'waitForText')
-}
-
-/** waitForUrl 的入参。 */
-export function waitForUrlInput(input: unknown): BrowserWaitForUrlInput {
-  return parseInput(waitForUrlSchema, input, 'waitForUrl')
+/** goto 的入参。 */
+export function gotoInput(input: unknown): BrowserGotoInput {
+  return parseInput(gotoSchema, input, 'goto')
 }
 
 /** waitForFunction 的入参。 */
@@ -400,11 +339,6 @@ export function waitForFunctionInput(input: unknown): BrowserWaitForFunctionInpu
 /** waitForLoad 的入参。 */
 export function waitForLoadInput(input: unknown): BrowserWaitForLoadInput {
   return parseInput(waitForLoadSchema, input, 'waitForLoad')
-}
-
-/** wait 的入参。 */
-export function waitInput(input: unknown): BrowserWaitInput {
-  return parseInput(waitSchema, input, 'wait')
 }
 
 /** waitForEvent 的入参。 */
@@ -425,26 +359,6 @@ export function downloadDecisionInput(input: unknown): BrowserDownloadDecisionIn
 /** handlePermission 的入参。 */
 export function permissionInput(input: unknown): BrowserPermissionInput {
   return parseInput(permissionSchema, input, 'handlePermission')
-}
-
-/** table 的入参。 */
-export function tableInput(input: unknown): BrowserTableInput {
-  return parseInput(tableSchema, input, 'table')
-}
-
-/** list 的入参。 */
-export function listInput(input: unknown): BrowserListInput {
-  return parseInput(listSchema, input, 'list')
-}
-
-/** paginate 的入参。 */
-export function paginateInput(input: unknown): BrowserPaginateInput {
-  return parseInput(paginateSchema, input, 'paginate')
-}
-
-/** content 的入参。 */
-export function contentInput(input: unknown): BrowserContentInput {
-  return parseInput(contentSchema, input, 'content')
 }
 
 /** download 的入参。 */
@@ -473,19 +387,6 @@ const requestSchema = z.strictObject({
   requestId: z.string().trim().min(1).max(BrowserDiagnosticsLimits.requestIdChars),
   includeResponseBody: z.boolean().optional(),
   maxBodyChars: z.number().int().positive().max(BrowserDiagnosticsLimits.responseBodyChars).optional(),
-})
-const storageSchema = z.strictObject({
-  includeLocalStorage: z.boolean().optional(),
-  includeSessionStorage: z.boolean().optional(),
-  includeCookies: z.boolean().optional(),
-  storageScope: z.enum(['current-origin', 'all-origins']).optional(),
-  cookieScope: z.enum(['current-url', 'all']).optional(),
-  limit: z.number().int().positive().max(BrowserPageDataLimits.storageItems).optional(),
-  maxValueChars: z.number().int().positive().max(BrowserPageDataLimits.storageValueChars).optional(),
-})
-const viewportSchema = z.strictObject({
-  width: z.number().int().min(BrowserCaptureLimits.minViewportWidth).max(BrowserCaptureLimits.maxViewportWidth),
-  height: z.number().int().min(BrowserCaptureLimits.minViewportHeight).max(BrowserCaptureLimits.maxViewportHeight),
 })
 const zoomSchema = z
   .strictObject({
@@ -519,23 +420,6 @@ const networkSchema = z
       .optional(),
   })
   .refine((value) => Object.values(value).some(isPresent), '至少要设一样：offline、extraHTTPHeaders、blockedURLPatterns、blockedResourceTypes 或 mockResponses')
-const emulateSchema = z
-  .strictObject({
-    colorScheme: z.enum(['light', 'dark', 'no-preference']).optional(),
-    reducedMotion: z.enum(['reduce', 'no-preference']).optional(),
-    timezoneId: z.string().min(1).max(BrowserConditionLimits.timezoneChars).optional(),
-    locale: z.string().min(1).max(BrowserConditionLimits.localeChars).optional(),
-    geolocation: z
-      .strictObject({
-        latitude: z.number().min(-90).max(90),
-        longitude: z.number().min(-180).max(180),
-        accuracy: z.number().min(0).max(100_000).optional(),
-      })
-      .optional(),
-    cpuThrottlingRate: z.number().min(1).max(BrowserConditionLimits.maxCpuThrottlingRate).optional(),
-    networkThrottling: z.enum(['none', 'slow-3g', 'fast-3g', 'slow-4g', 'fast-4g']).optional(),
-  })
-  .refine((value) => Object.values(value).some(isPresent), '至少要设一样：colorScheme、reducedMotion、timezoneId、locale、geolocation、cpuThrottlingRate 或 networkThrottling')
 const traceSchema = z.strictObject({
   reload: z.boolean().optional(),
   autoStopMs: z.number().int().min(BrowserPerformanceLimits.minTraceMs).max(BrowserPerformanceLimits.maxTraceMs).nullable().optional(),
@@ -590,16 +474,6 @@ export function requestInput(input: unknown): DevtoolsRequestInput {
   return parseInput(requestSchema, input, 'request')
 }
 
-/** storage 的入参。 */
-export function storageInput(input: unknown): DevtoolsStorageInput {
-  return parseInput(storageSchema, input, 'storage')
-}
-
-/** setViewport 的入参。 */
-export function viewportInput(input: unknown): DevtoolsViewportInput {
-  return parseInput(viewportSchema, input, 'setViewport')
-}
-
 /** zoom 的入参。 */
 export function zoomInput(input: unknown): DevtoolsZoomInput {
   return parseInput(zoomSchema, input, 'zoom')
@@ -608,11 +482,6 @@ export function zoomInput(input: unknown): DevtoolsZoomInput {
 /** network 的入参。 */
 export function networkInput(input: unknown): DevtoolsNetworkInput {
   return parseInput(networkSchema, input, 'network')
-}
-
-/** emulate 的入参。 */
-export function emulateInput(input: unknown): DevtoolsEmulateInput {
-  return parseInput(emulateSchema, input, 'emulate')
 }
 
 /** startTrace 的入参。 */
@@ -668,4 +537,49 @@ export function enableUserScriptsInput(input: unknown): DevtoolsEnableUserScript
 /** moveUserScript 的入参。 */
 export function moveUserScriptInput(input: unknown): DevtoolsMoveUserScriptInput {
   return parseInput(moveUserScriptSchema, input, 'moveUserScript')
+}
+
+// ── velar:cdp ───────────────────────────────────────────────────
+
+const protocolMethodSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(BrowserProtocolLimits.methodChars)
+  .regex(/^[A-Z][A-Za-z]*\.[a-zA-Z]+$/u, 'method 写成「域.方法」，如 DOM.getDocument')
+const protocolMethodFilterSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(BrowserProtocolLimits.methodChars)
+  .regex(/^[A-Z][A-Za-z]*\.(?:[a-zA-Z]+)?$/u, 'method 写成完整方法名（Network.responseReceived）或以点结尾的域（Network.）')
+const sendSchema = z.strictObject({
+  method: protocolMethodSchema,
+  params: z
+    .record(z.string(), z.unknown())
+    .refine((value) => jsonLength(value) <= BrowserProtocolLimits.paramsChars, `params 按 JSON 算超过 ${BrowserProtocolLimits.paramsChars} 个字符`)
+    .optional(),
+  session: z.string().trim().min(1).max(BrowserProtocolLimits.sessionChars).optional(),
+})
+const eventCursorSchema = z.number().int().min(0).optional()
+const eventsSchema = z.strictObject({ method: protocolMethodFilterSchema.optional(), after: eventCursorSchema })
+const protocolWaitSchema = z.strictObject({
+  method: protocolMethodFilterSchema,
+  after: eventCursorSchema,
+  timeoutMs: waitTimeoutSchema,
+})
+
+/** send 的入参。 */
+export function sendInput(input: unknown): CdpSendInput {
+  return parseInput(sendSchema, input, 'send')
+}
+
+/** events 的入参。 */
+export function eventsInput(input: unknown): CdpEventsInput {
+  return parseInput(eventsSchema, input, 'events')
+}
+
+/** velar:cdp 的 waitForEvent 的入参。 */
+export function protocolWaitInput(input: unknown): CdpWaitForEventInput {
+  return parseInput(protocolWaitSchema, input, 'waitForEvent')
 }

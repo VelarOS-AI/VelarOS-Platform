@@ -1,8 +1,9 @@
 declare module 'velar:devtools' {
   /**
-   * 开发者工具：读控制台、网络与未处理异常，读一次请求的详情与响应体，读页面存储；改视口、缩放、网络条件与环境仿真；
+   * 开发者工具：读控制台、网络与未处理异常（从页面打开起一直在录），读一次请求的详情与响应体；调缩放、设常驻的网络规则（断网、请求头、拦截、假响应）；
    * 录性能 trace 看 LCP、INP、CLS 与瓶颈，采堆快照查内存泄漏；录屏合成 GIF；管理进到匹配网站时自动注入的用户脚本。
    * 都作用在 velar:browser 当前打开的站点上，没进站点时抛 BROWSER_SITE_NOT_OPEN。trace、堆快照、录屏的产物落在站点工作区。
+   * 页面存储用 velar:browser 的 evaluate 读；cookie（含 HttpOnly）、视口、时区、地理位置、深浅色这类仿真直接用 velar:cdp 发命令。
    */
 
   /**
@@ -47,46 +48,6 @@ declare module 'velar:devtools' {
     capturedAt: number
   }
 
-  /**
-   * 读页面存储：localStorage 与 sessionStorage 缺省都读，cookie 要 includeCookies 为真才读；storageScope、cookieScope 选当前来源还是全部；
-   * limit 是每类最多几项（最多 300），maxValueChars 是每个值最多多少字符（最多 50000）。不给就取到上限。
-   */
-  interface DevtoolsStorageInput {
-    includeLocalStorage?: boolean
-    includeSessionStorage?: boolean
-    includeCookies?: boolean
-    storageScope?: BrowserStorageScope
-    cookieScope?: BrowserCookieScope
-    limit?: number
-    maxValueChars?: number
-  }
-
-  /** 页面存储：localStorage、sessionStorage、cookies 各是一组，origins 是按来源分开的存储。 */
-  interface BrowserPageStorageResult {
-    url: string
-    localStorage?: BrowserStorageEntry[]
-    sessionStorage?: BrowserStorageEntry[]
-    origins?: BrowserOriginStorage[]
-    cookies?: BrowserStorageEntry[]
-    capturedAt: number
-  }
-
-  /** 把视口设成指定尺寸（复现手机、平板布局）：宽 320 到 3840，高 240 到 2160，影响之后的截图与坐标。 */
-  interface DevtoolsViewportInput {
-    width: number
-    height: number
-  }
-
-  /** 设视口之后的尺寸。 */
-  interface BrowserViewportResult {
-    url: string
-    width: number
-    height: number
-    /** 实际应用的移动设备 viewport 语义；旧实现可能不返回此字段。 */
-    mobile?: boolean
-    capturedAt: number
-  }
-
   /** 调页面缩放：action 是 in、out、reset、set；set 要给 zoomFactor（0.25 到 3），in、out 的步长 step 是 0.05 到 0.5。 */
   interface DevtoolsZoomInput {
     action: BrowserPageZoomAction
@@ -123,33 +84,6 @@ declare module 'velar:devtools' {
     blockedURLPatterns: string[]
     blockedResourceTypes: string[]
     mockResponses: BrowserNetworkMockResponse[]
-    capturedAt: number
-  }
-
-  /**
-   * 仿真环境，至少给一样：colorScheme 深浅色，reducedMotion 减少动效，timezoneId 时区（最多 120 个字符），locale 语言（最多 80 个字符），
-   * geolocation 地理位置，cpuThrottlingRate 是 CPU 降速几倍（1 到 20），networkThrottling 是网络节流档位。
-   */
-  interface DevtoolsEmulateInput {
-    colorScheme?: BrowserColorScheme
-    reducedMotion?: BrowserReducedMotion
-    timezoneId?: string
-    locale?: string
-    geolocation?: BrowserGeolocationOptions
-    cpuThrottlingRate?: number
-    networkThrottling?: BrowserNetworkThrottlingPreset
-  }
-
-  /** 仿真设好之后的全部状态：配色、动效、时区、语言、地理位置、CPU 降速倍数与网络节流档位。 */
-  interface BrowserEmulationResult {
-    url: string
-    colorScheme: BrowserColorScheme
-    reducedMotion: BrowserReducedMotion
-    timezoneId: string | null
-    locale: string | null
-    geolocation: BrowserGeolocationState | null
-    cpuThrottlingRate: number
-    networkThrottling: BrowserNetworkThrottlingPreset
     capturedAt: number
   }
 
@@ -411,27 +345,6 @@ declare module 'velar:devtools' {
     bodyTruncated: boolean
   }
 
-  /** 存储读哪儿：current-origin 当前来源，all-origins 页面里所有来源（外部浏览器才有）。 */
-  type BrowserStorageScope = 'current-origin' | 'all-origins'
-
-  /** cookie 读哪些：current-url 当前地址会带的，all 这个浏览器里的全部。 */
-  type BrowserCookieScope = 'current-url' | 'all'
-
-  /** 一项存储或 cookie：name、value（valueTruncated 为真表示值被截断），details 里是 cookie 的域、路径、过期时间这些。 */
-  interface BrowserStorageEntry {
-    name: string
-    value: string
-    valueTruncated: boolean
-    details?: Record<string, unknown>
-  }
-
-  /** 一个来源的 localStorage 与 sessionStorage。 */
-  interface BrowserOriginStorage {
-    origin: string
-    localStorage?: BrowserStorageEntry[]
-    sessionStorage?: BrowserStorageEntry[]
-  }
-
   /** 缩放动作：in 放大、out 缩小、reset 还原、set 设成指定倍数。 */
   type BrowserPageZoomAction = 'in' | 'out' | 'reset' | 'set'
 
@@ -442,29 +355,6 @@ declare module 'velar:devtools' {
     contentType?: string
     body?: string
     headers?: Record<string, string>
-  }
-
-  /** 配色：light、dark、no-preference。 */
-  type BrowserColorScheme = 'light' | 'dark' | 'no-preference'
-
-  /** 动效偏好：reduce 减少动效，no-preference 不限。 */
-  type BrowserReducedMotion = 'reduce' | 'no-preference'
-
-  /** 地理位置：latitude 纬度（-90 到 90），longitude 经度（-180 到 180），accuracy 精度（米）。 */
-  interface BrowserGeolocationOptions {
-    latitude: number
-    longitude: number
-    accuracy?: number
-  }
-
-  /** 网络节流档位：none 不节流，slow-3g、fast-3g、slow-4g、fast-4g 与 DevTools 的 Network conditions 同一套数值。 */
-  type BrowserNetworkThrottlingPreset = 'none' | 'slow-3g' | 'fast-3g' | 'slow-4g' | 'fast-4g'
-
-  /** 当前仿真的地理位置。 */
-  interface BrowserGeolocationState {
-    latitude: number
-    longitude: number
-    accuracy: number
   }
 
   /** 用户脚本一览：globalEnabled 是总开关，scripts 是全部脚本，matchedScriptIds 是匹配当前页面的那几个。 */
@@ -593,20 +483,11 @@ declare module 'velar:devtools' {
   /** 读一次网络请求的请求头、postData、响应头、耗时与体积，可带响应体；较早的请求可能已经读不到。 */
   export function request(input: DevtoolsRequestInput): Promise<BrowserNetworkRequestDetailsResult>
 
-  /** 读页面的 localStorage、sessionStorage 与 cookie。 */
-  export function storage(input: DevtoolsStorageInput): Promise<BrowserPageStorageResult>
-
-  /** 把视口设成指定尺寸。 */
-  export function setViewport(input: DevtoolsViewportInput): Promise<BrowserViewportResult>
-
   /** 调页面缩放。 */
   export function zoom(input: DevtoolsZoomInput): Promise<BrowserPageZoomResult>
 
-  /** 设网络条件：断网、加请求头、拦请求、给请求回假响应。 */
+  /** 设常驻的网络规则：断网、加请求头、拦请求、给请求回假响应（宿主一直替你应答，程序跑完也生效，再调一次就换掉）。 */
   export function network(input: DevtoolsNetworkInput): Promise<BrowserNetworkControlResult>
-
-  /** 仿真环境：深浅色、减少动效、时区、语言、地理位置、CPU 与网络节流。 */
-  export function emulate(input: DevtoolsEmulateInput): Promise<BrowserEmulationResult>
 
   /** 开始录性能 trace；到点自动停时直接交回分析摘要。 */
   export function startTrace(input: DevtoolsTraceInput): Promise<BrowserPerformanceTraceStartResult>
@@ -649,7 +530,4 @@ declare module 'velar:devtools' {
 
   /** 删掉一个用户脚本（不撤销当前页面已经执行的副作用）。 */
   export function deleteUserScript(input: DevtoolsUserScriptIdInput): Promise<BrowserUserScriptMutationResult>
-
-  /** 在当前页面立刻跑一次某个用户脚本。 */
-  export function runUserScript(input: DevtoolsUserScriptIdInput): Promise<BrowserUserScriptMutationResult>
 }

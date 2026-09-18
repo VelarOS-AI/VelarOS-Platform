@@ -1,5 +1,5 @@
 /**
- * 浏览器根入口（`@velaros-ai/velar/browser`），给 Node 宿主：代码面 `velar:browser` 与 `velar:devtools` 的操作、
+ * 浏览器根入口（`@velaros-ai/velar/browser`），给 Node 宿主：代码面 `velar:browser`、`velar:devtools` 与 `velar:cdp` 的操作、
  * 站点工作区的文件访问、用户脚本存储、登录墙门控与动作策略，产品面与注入面的接口，以及它们签名里用到的数据。
  * 类与工具函数一律不出单元。另三个入口：`./browser/contracts`（可移植数据，任何进程）、`./browser/renderer`（渲染进程要的值）、
  * `./browser/electron`（要 electron peer 的运行时）；`./browser/renderer` 与 `./browser/electron` 里每个公开接口的**类型**在这里也叫得出来。
@@ -19,6 +19,7 @@ export type {
   BrowserScreenshotPolicyApi,
   BrowserUserScriptManagerApi,
   BrowserWorkspaceFileAccessApi,
+  CdpOperationsApi,
   DevtoolsOperationsApi,
   ElectronBrowserRuntimeApi,
 } from './contract/provides.js'
@@ -32,6 +33,7 @@ export type {
   BrowserOperationContext,
   BrowserPageDriver,
   BrowserPageDriverDownloadItem,
+  BrowserProtocolChannel,
   BrowserRuntimeCapabilityService,
   BrowserSpacePort,
   BrowserSystemPointerDriver,
@@ -60,7 +62,9 @@ export type {
   BrowserPageDriverFetchResourceOptions,
   BrowserPageDriverFetchResourceResult,
   BrowserPageDriverFileInputOptions,
+  BrowserPageDriverKeyEvent,
   BrowserPageDriverKind,
+  BrowserPageDriverMouseEvent,
   BrowserPageDriverMoveMouseOptions,
   BrowserPageDriverNetworkCaptureState,
   BrowserPageDriverNetworkControlState,
@@ -91,8 +95,9 @@ export type { BrowserTurnContextDeltaSource, ExternalBrowserPageSession } from '
 export type { BrowserUserActivityWaitState } from './types/session.js'
 export type { BrowserUserScriptAccess } from './types/workspace.js'
 
-// ── 值：两件能力的操作、站点工作区的工厂与策略实例 ──────────────────
+// ── 值：三件能力的操作、站点工作区的工厂与策略实例 ──────────────────
 export { browserOperations } from './impl/BrowserOperations.js'
+export { cdpOperations } from './impl/CdpOperations.js'
 export { devtoolsOperations } from './impl/DevtoolsOperations.js'
 export { browserActionPolicy } from './impl/policies/BrowserActionPolicy.js'
 export { createBrowserLoginGate } from './impl/workspace/BrowserLoginGate.js'

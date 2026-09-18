@@ -11,7 +11,7 @@
 //    点（§1.4 白名单②）。调用方的类型安全感到此为止，字段存在性要自己判。
 //  - **坏帧不炸链路**：解析失败转成 `AppError` 返回值而非抛出——一个畸形事件包不该终结整条
 //    会话（失败方向：降级且可查，而不是整体消失）。
-import { isString } from '@velaros-ai/core'
+import { isString, optionalWhen } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
@@ -42,10 +42,15 @@ export interface CdpWebSocketTransportConnectOptions {
  * 以及 `dispose` —— socket 是它自己持有的资源。
  */
 export interface CdpWebSocketTransportApi extends CdpBrowserPageDriverTransport {
-  /** 下发一条 CDP 命令并等回包；`T` 是断言不是校验。 */
-  send<T = unknown>(method: string, params?: Record<string, unknown>): Promise<T>
-  /** 订阅一类 CDP 事件；返回取消订阅的函数。 */
+  /**
+   * 下发一条 CDP 命令并等回包；`T` 是断言不是校验。sessionId 给 flatten 模式下的子会话。
+   * 协议报错拒绝成 `EXECUTION_FAILED`，context 里 `protocolMessage` 是协议给的原话。
+   */
+  send<T = unknown>(method: string, params?: Record<string, unknown>, sessionId?: string): Promise<T>
+  /** 订阅一类 CDP 事件（只收页面本身的，不收子会话的）；返回取消订阅的函数。 */
   onEvent<T = unknown>(method: string, listener: (params: T) => void): () => void
+  /** 订阅这条连接上的全部事件，连同子会话的（sessionId 是子会话，页面本身是 undefined）；返回取消订阅的函数。 */
+  onAnyEvent(listener: (method: string, params: unknown, sessionId: Optional<string>) => void): () => void
   /** 订阅传输关闭；返回取消订阅的函数。 */
   onClose(listener: () => void): () => void
   /** 关掉 socket 并拒绝所有在飞请求。 */
@@ -57,6 +62,7 @@ class CdpWebSocketTransport implements CdpWebSocketTransportApi {
   private nextId = 1
   private readonly pending = new Map<number, CdpPendingRequest>()
   private readonly eventListeners = new Map<string, Set<(params: unknown) => void>>()
+  private readonly anyEventListeners = new Set<(method: string, params: unknown, sessionId: Optional<string>) => void>()
   private readonly closeListeners = new Set<() => void>()
   private readonly timeoutMs: number
   private readonly timers = new TimerScope({ name: 'CdpWebSocketTransport' })
@@ -69,7 +75,7 @@ class CdpWebSocketTransport implements CdpWebSocketTransportApi {
     options.socket.addEventListener('error', this.handleError)
   }
 
-  public send<T = unknown>(method: string, params?: Record<string, unknown>): Promise<T> {
+  public send<T = unknown>(method: string, params?: Record<string, unknown>, sessionId?: string): Promise<T> {
     const id = this.nextId
     this.nextId += 1
 
@@ -82,16 +88,15 @@ class CdpWebSocketTransport implements CdpWebSocketTransportApi {
         unref: true,
       })
       this.pending.set(id, {
+        method,
         resolve: (value) => resolve(value as T),
         reject,
         timeout,
       })
 
-      this.options.socket.send(JSON.stringify({
-        id,
-        method,
-        params,
-      }))
+      const message: CdpJsonRpcMessage = { id, method, params }
+      if (sessionId) message.sessionId = sessionId
+      this.options.socket.send(JSON.stringify(message))
     })
   }
 
@@ -109,6 +114,14 @@ class CdpWebSocketTransport implements CdpWebSocketTransportApi {
     }
   }
 
+  public onAnyEvent(listener: (method: string, params: unknown, sessionId: Optional<string>) => void): () => void {
+    this.anyEventListeners.add(listener)
+
+    return () => {
+      this.anyEventListeners.delete(listener)
+    }
+  }
+
   public onClose(listener: () => void): () => void {
     this.closeListeners.add(listener)
 
@@ -123,6 +136,7 @@ class CdpWebSocketTransport implements CdpWebSocketTransportApi {
     this.options.socket.removeEventListener('error', this.handleError)
     this.closeListeners.clear()
     this.eventListeners.clear()
+    this.anyEventListeners.clear()
     this.rejectAll(new AppError('EXECUTION_ABORTED', '浏览器 CDP 连接已释放。'))
     this.timers.dispose()
     this.options.socket.close()
@@ -151,7 +165,10 @@ class CdpWebSocketTransport implements CdpWebSocketTransportApi {
       const messageText = isString(message.error.message)
         ? message.error.message
         : '未知的 CDP 错误'
-      pending.reject(new AppError('EXECUTION_FAILED', `浏览器 CDP 命令失败：${messageText}`))
+      pending.reject(new AppError('EXECUTION_FAILED', `浏览器 CDP 命令失败：${messageText}`, undefined, {
+        cdpMethod: pending.method,
+        protocolMessage: messageText,
+      }))
       return
     }
 
@@ -172,6 +189,12 @@ class CdpWebSocketTransport implements CdpWebSocketTransportApi {
   private dispatchEventMessage(message: CdpJsonRpcMessage): void {
     if (!isString(message.method)) return
 
+    const sessionId = optionalWhen(isString, message.sessionId)
+    for (const listener of [...this.anyEventListeners]) {
+      listener(message.method, message.params, sessionId)
+    }
+    // 按方法订阅的是驱动自己那条会话的事件：子会话的同名事件不能混进来。
+    if (sessionId) return
     const listeners = this.eventListeners.get(message.method)
     if (!listeners) return
 

@@ -2,6 +2,7 @@
 import type { BrowserPageDriver } from '../contract/requires.js'
 
 import type {
+  BrowserMouseButton,
   BrowserTargetActionEffectSnapshot,
   BrowserTurnContextSourcePeekInput,
   BrowserTurnContextSourcePeekResult,
@@ -48,6 +49,14 @@ export interface BrowserDiagnosticsLimits {
 }
 
 export interface BrowserPointerPoint {
+  x: number
+  y: number
+}
+
+/** 一个会话的输入状态：按着的键（DOM key 值）、按着的鼠标键、指针在视口里的位置。输入原子与点击、拖拽共用，按着的修饰键带到每个输入事件上。 */
+export interface BrowserInputState {
+  held: Set<string>
+  buttons: Set<BrowserMouseButton>
   x: number
   y: number
 }

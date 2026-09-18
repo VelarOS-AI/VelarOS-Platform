@@ -3,7 +3,7 @@ import type { TimerLease } from '@velaros-ai/core/utils/TimerScope'
 
 import type { BrowserPageDriver } from '../contract/requires.js'
 
-import type { BrowserPageDiagnosticEntry } from './browser.js'
+import type { BrowserFrameInfo, BrowserPageDiagnosticEntry } from './browser.js'
 
 export type CdpSend = (method: string, params?: Record<string, unknown>) => Promise<unknown>
 
@@ -15,6 +15,8 @@ export interface CdpWebSocketLike {
 }
 
 export interface CdpPendingRequest {
+  /** 这条命令的方法名：协议报错时写进错误的 context。 */
+  method: string
   resolve: (value: unknown) => void
   reject: (error: Error) => void
   timeout: TimerLease
@@ -25,7 +27,10 @@ export interface CdpJsonRpcMessage {
   method?: unknown
   params?: unknown
   result?: unknown
+  /** flatten 模式下子会话的消息带着它的 sessionId；页面本身的消息没有。 */
+  sessionId?: unknown
   error?: {
+    code?: unknown
     message?: unknown
   }
 }
@@ -41,8 +46,8 @@ export interface CdpTraceTransport {
 export interface WebContentsDebuggerLike {
   debugger: {
     sendCommand(method: string, params?: Record<string, unknown>): Promise<unknown>
-    on(event: 'message', listener: (event: unknown, method: string, params: unknown) => void): void
-    off(event: 'message', listener: (event: unknown, method: string, params: unknown) => void): void
+    on(event: 'message', listener: (event: unknown, method: string, params: unknown, sessionId?: string) => void): void
+    off(event: 'message', listener: (event: unknown, method: string, params: unknown, sessionId?: string) => void): void
   }
 }
 
@@ -177,10 +182,12 @@ export type CdpExternalBrowserLaunchEnv = Record<string, string | undefined>
 
 /** CDP 传输：驱动只经它收发命令与事件，不关心底下是 WebSocket 还是 Electron 的 debugger。 */
 export interface CdpBrowserPageDriverTransport {
-  /** 下发一条 CDP 命令并等回包。 */
-  send<T = unknown>(method: string, params?: Record<string, unknown>): Promise<T>
+  /** 下发一条 CDP 命令并等回包；sessionId 给 flatten 模式下的子会话。 */
+  send<T = unknown>(method: string, params?: Record<string, unknown>, sessionId?: string): Promise<T>
   /** 订阅一类 CDP 事件；返回取消订阅的函数。传输不支持事件时可以不实现。 */
   onEvent?<T = unknown>(method: string, listener: (params: T) => void): () => void
+  /** 订阅全部 CDP 事件，含 flatten 子会话上的（sessionId 标出是哪条，这条连接自己的是 undefined）；传输不支持时可以不实现。 */
+  onAnyEvent?(listener: (method: string, params: unknown, sessionId: Optional<string>) => void): () => void
   /** 订阅传输关闭；返回取消订阅的函数。 */
   onClose?(listener: () => void): () => void
 }
@@ -275,7 +282,11 @@ export interface CdpNetworkGetCookiesResponse {
 }
 
 export interface CdpPageFrame {
+  id?: unknown
+  parentId?: unknown
   url?: unknown
+  name?: unknown
+  securityOrigin?: unknown
 }
 
 export interface CdpPageFrameTree {
@@ -285,6 +296,45 @@ export interface CdpPageFrameTree {
 
 export interface CdpPageGetFrameTreeResponse {
   frameTree?: unknown
+}
+
+/**
+ * 外部浏览器页面里的一个框架与它归哪条会话：驱动那条连接上的 session 是 null，跨进程 iframe 里的是挂出来的子会话；
+ * sessionRoot 为真是那条会话的顶层框架（驱动连接上就是页面本身）。
+ */
+export interface CdpSessionFrame {
+  info: BrowserFrameInfo
+  session: Nullable<string>
+  sessionRoot: boolean
+}
+
+export interface CdpTargetAttachedEvent {
+  sessionId?: unknown
+  targetInfo?: {
+    type?: unknown
+  }
+}
+
+export interface CdpTargetDetachedEvent {
+  sessionId?: unknown
+}
+
+export interface CdpDomFrameOwnerResponse {
+  backendNodeId?: unknown
+}
+
+export interface CdpDomDescribeNodeResponse {
+  node?: {
+    contentDocument?: {
+      backendNodeId?: unknown
+    }
+  }
+}
+
+export interface CdpDomResolveNodeResponse {
+  object?: {
+    objectId?: unknown
+  }
 }
 
 export interface CdpDomStorageItemsResponse {

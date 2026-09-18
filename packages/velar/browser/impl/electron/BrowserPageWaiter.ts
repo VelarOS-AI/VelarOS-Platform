@@ -37,7 +37,7 @@ export interface BrowserPageWaiterApi {
   /** E1: network idle 等待 — SPA 渲染完成后再操作，避免报到旧 DOM
    * 在 idleMs 内没有新的网络请求，则认为 idle
    */
-  waitForNetworkIdle(webContents: WebContents, idleMs?: number, maxWaitMs?: number): Promise<void>
+  waitForNetworkIdle(webContents: WebContents, idleMs?: number, maxWaitMs?: number): Promise<boolean>
   /** 等待 DOM 和主要布局连续多帧稳定，适合 SPA、骨架屏和短动画后的截图。 */
   waitForDomAndLayoutStable(webContents: WebContents, options?: BrowserDomStabilityOptions, abortSignal?: AbortSignal): Promise<BrowserPageStabilityResult>
 }
@@ -501,10 +501,11 @@ class BrowserPageWaiter implements BrowserPageWaiterApi {
     webContents: WebContents,
     idleMs: number = BrowserTuning.page.networkIdleMs,
     maxWaitMs: number = BrowserTuning.page.networkIdleTimeoutMs,
-  ): Promise<void> {
-    return new Promise<void>((resolve) => {
+  ): Promise<boolean> {
+    // 交回等没等到：空闲了是 true，到了 maxWaitMs 还有请求在飞是 false（页面没了也算没等到）。
+    return new Promise<boolean>((resolve) => {
       if (!isLiveWebContents(webContents)) {
-        resolve();
+        resolve(false);
         return;
       }
 
@@ -514,7 +515,7 @@ class BrowserPageWaiter implements BrowserPageWaiterApi {
       let idleTimer: Nullable<TimerLease> = null;
       let maxTimer: Nullable<TimerLease> = timers.after(maxWaitMs, () => {
         cleanup();
-        resolve();
+        resolve(false);
       });
 
       const hasPendingRequests = (): boolean =>
@@ -525,7 +526,7 @@ class BrowserPageWaiter implements BrowserPageWaiterApi {
         // 没有请求持续 idleMs 后认为网络空闲。
         idleTimer = timers.after(idleMs, () => {
           cleanup();
-          resolve();
+          resolve(true);
         });
       };
       const cancelIdle = (): void => {
@@ -585,8 +586,9 @@ class BrowserPageWaiter implements BrowserPageWaiterApi {
           onEnd(details),
         );
       } catch (error) {
+        // 量不了就不拦着：当作已经空闲。
         log.debug("安装网络空闲 webRequest 钩子失败", { error });
-        resolve();
+        resolve(true);
         return;
       }
       scheduleIdle();

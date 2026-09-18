@@ -96,6 +96,14 @@ export const CodeSurfaces = [
     interfaces: ['DevtoolsOperationsApi'],
     templates: 'devtools-template.js',
   },
+  {
+    // 模型自己的一条 CDP 会话：与另两件共用空间端口，住在同一个单元里；模版各一份
+    namespace: 'cdp',
+    directory: 'velar',
+    unit: 'browser',
+    interfaces: ['CdpOperationsApi'],
+    templates: 'cdp-template.js',
+  },
 ]
 
 /**

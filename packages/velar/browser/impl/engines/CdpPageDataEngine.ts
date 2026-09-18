@@ -6,7 +6,7 @@ import { AppError } from '@velaros-ai/core/error'
 import { Log } from '@velaros-ai/core/logger'
 
 import { BrowserFetchLimits } from '../../contract/constants'
-import type { BrowserElementQueryOptions, BrowserElementQueryResult, BrowserEmulationOptions, BrowserEmulationResult, BrowserEvaluateScriptOptions, BrowserEvaluateScriptResult, BrowserExportPagePdfOptions, BrowserExportPagePdfResult, BrowserFetchResourceOptions, BrowserFetchResourceResult, BrowserInspectPageOptions, BrowserListMediaSourcesOptions, BrowserListMediaSourcesResult, BrowserListPageResourcesOptions, BrowserListPageResourcesResult, BrowserNetworkControlOptions, BrowserNetworkControlResult, BrowserNetworkRequestDetailsOptions, BrowserNetworkRequestDetailsResult, BrowserNetworkResponseBodyOptions, BrowserNetworkResponseBodyResult, BrowserOriginStorage, BrowserPageDiagnostics, BrowserPageDiagnosticsOptions, BrowserPageInspection, BrowserPageStorageOptions, BrowserPageStorageResult, BrowserPageWaitOptions, BrowserPageWaitResult, BrowserSiteContext, BrowserStorageEntry, BrowserUploadFileOptions, BrowserUploadFileResult, BrowserWaitForSelectorOptions, BrowserWaitForSelectorResult } from '../../types/browser.js'
+import type { BrowserElementQueryOptions, BrowserElementQueryResult, BrowserEmulationOptions, BrowserEmulationResult, BrowserEvaluateScriptOptions, BrowserExportPagePdfOptions, BrowserExportPagePdfResult, BrowserFetchResourceOptions, BrowserFetchResourceResult, BrowserFrameInfo, BrowserInspectPageOptions, BrowserListMediaSourcesOptions, BrowserListMediaSourcesResult, BrowserListPageResourcesOptions, BrowserListPageResourcesResult, BrowserNetworkControlOptions, BrowserNetworkControlResult, BrowserNetworkRequestDetailsOptions, BrowserNetworkRequestDetailsResult, BrowserNetworkResponseBodyOptions, BrowserNetworkResponseBodyResult, BrowserOriginStorage, BrowserPageDiagnostics, BrowserPageDiagnosticsOptions, BrowserPageInspection, BrowserPageStorageOptions, BrowserPageStorageResult, BrowserPageWaitOptions, BrowserPageWaitResult, BrowserScriptOutcome, BrowserSiteContext, BrowserStorageEntry, BrowserUploadFileOptions, BrowserUploadFileResult, BrowserWaitForSelectorOptions, BrowserWaitForSelectorResult } from '../../types/browser.js'
 import type {
   BrowserPageDriverState,
 } from '../../types/driver'
@@ -44,7 +44,9 @@ export interface CdpPageDataEngineApi {
   /** 按 CSS selector 查元素的文本、属性与可点击目标。 */
   queryElements(sessionId: string, context: BrowserSiteContext, options: BrowserElementQueryOptions, _abortSignal?: AbortSignal): Promise<BrowserElementQueryResult>
   /** 在页面上下文里跑一段受控脚本并取回结果。 */
-  evaluateScript(sessionId: string, context: BrowserSiteContext, options: BrowserEvaluateScriptOptions, _abortSignal?: AbortSignal): Promise<BrowserEvaluateScriptResult>
+  evaluateScript(sessionId: string, context: BrowserSiteContext, options: BrowserEvaluateScriptOptions, _abortSignal?: AbortSignal): Promise<BrowserScriptOutcome>
+  /** 列出页面的框架树（顶层页面与各层 iframe）。 */
+  listFrames(sessionId: string, context: BrowserSiteContext, abortSignal?: AbortSignal): Promise<BrowserFrameInfo[]>
   /** 读 localStorage、sessionStorage 与 cookie。 */
   readPageStorage(sessionId: string, context: BrowserSiteContext, options?: BrowserPageStorageOptions, _abortSignal?: AbortSignal): Promise<BrowserPageStorageResult>
   /** 带页面会话的 cookie 下载一个 http(s) 资源到站点工作区。 */
@@ -167,15 +169,25 @@ export class CdpPageDataEngine implements CdpPageDataEngineApi {
     context: BrowserSiteContext,
     options: BrowserEvaluateScriptOptions,
     _abortSignal?: AbortSignal
-  ): Promise<BrowserEvaluateScriptResult> {
+  ): Promise<BrowserScriptOutcome> {
     _abortSignal?.throwIfAborted()
     const externalSession = this.requireExternalPageSession(sessionId)
-    const result = await externalSession.driver.executeJavaScript<BrowserEvaluateScriptResult>(
-      buildEvaluateScript(options),
-      true
-    )
+    const script = buildEvaluateScript(options)
+    const driver = externalSession.driver
+    if (options.frame) {
+      if (!driver.executeJavaScriptInFrame) throw new AppError('VALIDATION', '当前外部浏览器 driver 不支持在指定框架里跑脚本。')
+      return driver.executeJavaScriptInFrame<BrowserScriptOutcome>(options.frame, script, true)
+    }
+    const result = await driver.executeJavaScript<BrowserScriptOutcome>(script, true)
     this.syncExternalPageStateFromScriptResult(sessionId, externalSession, result, context.url)
     return result
+  }
+
+  public async listFrames(sessionId: string, _context: BrowserSiteContext, abortSignal?: AbortSignal): Promise<BrowserFrameInfo[]> {
+    abortSignal?.throwIfAborted()
+    const externalSession = this.requireExternalPageSession(sessionId)
+    if (!externalSession.driver.listFrames) throw new AppError('VALIDATION', '当前外部浏览器 driver 不支持列框架树。')
+    return externalSession.driver.listFrames()
   }
 
   public async readPageStorage(
@@ -661,11 +673,12 @@ export class CdpPageDataEngine implements CdpPageDataEngineApi {
   ): Promise<BrowserPageWaitResult> {
     _abortSignal?.throwIfAborted()
     const externalSession = this.requireExternalPageSession(sessionId)
+    let networkIdle = true
     if (options.loadState === 'networkidle') {
       if (!externalSession.driver.waitForNetworkIdle) {
         throw new AppError('VALIDATION', '当前外部浏览器 driver 不支持 networkidle 等待。')
       }
-      await externalSession.driver.waitForNetworkIdle({
+      networkIdle = await externalSession.driver.waitForNetworkIdle({
         idleMs: BrowserTuning.page.networkIdleMs,
         timeoutMs: options.timeoutMs ?? BrowserTuning.page.networkIdleTimeoutMs,
       })
@@ -675,7 +688,8 @@ export class CdpPageDataEngine implements CdpPageDataEngineApi {
       true
     )
     this.syncExternalPageStateFromScriptResult(sessionId, externalSession, result, context.url)
-    return result
+    // 页面脚本只认 readyState：网络空闲没等到时如实回没到。
+    return networkIdle ? result : { ...result, matched: false, timedOut: true }
   }
 }
 

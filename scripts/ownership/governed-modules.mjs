@@ -379,7 +379,7 @@ export const GovernedModules = [
     acceptance: 'office/spec/acceptance.test.ts',
   },
   {
-    // 能力单元：浏览器（velar:browser 与 velar:devtools），整包并进来的：模型面的两件能力，连同底下的 CDP 驱动、交互 / 页面数据 / 截图 / 性能引擎、
+    // 能力单元：浏览器（velar:browser、velar:devtools 与 velar:cdp），整包并进来的：模型面的三件能力，连同底下的 CDP 驱动、交互 / 页面数据 / 截图 / 性能引擎、
     // Electron 会话运行时、站点工作区、登录墙、用户脚本存储、动作策略与页面脚本；地址栏、偏好、截图策略与 React 合成给渲染进程
     directory: 'velar',
     unit: 'browser',
@@ -392,17 +392,15 @@ export const GovernedModules = [
     tuning: 'tuning.ts',
     // 渲染进程会加载这两个：可移植数据与渲染进程要的那几件纯策略值
     browserSafeEntries: ['contracts.ts', 'renderer.ts'],
-    // 空间端口：两件能力经 ctx.browser 调它（已经绑好会话与站点）；每个方法都必须有操作在调
+    // 空间端口：三件能力经 ctx.browser 调它（已经绑好会话与站点）；每个方法都必须有操作在调
     hostPort: 'BrowserSpacePort',
     hostPortField: 'browser',
-    surfaceFile: ['browser/impl/BrowserOperations.ts', 'browser/impl/DevtoolsOperations.ts'],
+    surfaceFile: ['browser/impl/BrowserOperations.ts', 'browser/impl/DevtoolsOperations.ts', 'browser/impl/CdpOperations.ts'],
     // 随包的 DevTools 性能引擎（约 2.5 MB 的生成产物），经包清单的子路径导入 #devtools-performance-engine 取用
     assets: ['vendor'],
     layers: [
-      // 代码面 browser、devtools 两个命名空间的操作：入参核对，交给端口或执行类
-      ['BrowserOperations.ts', 'DevtoolsOperations.ts'],
-      // 执行：结构化取内容（表格、列表、翻页、正文）
-      ['BrowserExtraction.ts'],
+      // 代码面 browser、devtools、cdp 三个命名空间的操作：入参核对，交给端口
+      ['BrowserOperations.ts', 'DevtoolsOperations.ts', 'CdpOperations.ts'],
       // 运行时装配：Electron 运行时
       ['electron/'],
       // 领域引擎：交互、页面数据、截图、性能

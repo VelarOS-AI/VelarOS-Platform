@@ -38,7 +38,7 @@ function createRecoveryProbe(input: RecoveryProbeInput) {
     },
     evaluateScript: async (options: { script: string }) => {
       scripts.push(options.script)
-      return { ok: true, result: input.bounds ?? { found: false, matchCount: 0 } }
+      return { url: 'https://example.test/', ok: true, json: JSON.stringify(input.bounds ?? { found: false, matchCount: 0 }) }
     },
     clickCoordinates: async (point: { x: number; y: number }) => {
       clicks.push(point)

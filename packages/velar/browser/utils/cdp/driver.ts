@@ -3,9 +3,9 @@
 import { isArray, isBoolean, isFiniteNumber, isNonBlankString, isNotNull, isObject, isPresent, isString, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import type { BrowserStorageEntry } from '../../types/browser.js'
-import type { BrowserGeolocationOptions, BrowserGeolocationState, BrowserKeyModifier, BrowserMouseButton, BrowserPageDiagnosticLevel } from '../../types/browser.js'
-import type { CdpNetworkCookie, CdpPageTargetDescription } from '../../types/cdp.js'
+import type { BrowserFrameInfo, BrowserStorageEntry } from '../../types/browser.js'
+import type { BrowserGeolocationOptions, BrowserGeolocationState, BrowserMouseButton, BrowserPageDiagnosticLevel } from '../../types/browser.js'
+import type { CdpNetworkCookie, CdpPageFrame, CdpPageFrameTree, CdpPageTargetDescription } from '../../types/cdp.js'
 import type { CdpRuntimeEvaluateResponse, CdpRuntimeRemoteObject, CdpTargetListEntry } from '../../types/cdp.js'
 import type { BrowserPageDriverCookie } from '../../types/driver'
 import type { BrowserPageDriverFetchResourceOptions, BrowserPageDriverScreenshot, BrowserPageDriverScreenshotOptions } from '../../types/driver'
@@ -22,6 +22,15 @@ export function resolveTargetListEntryId(entry: CdpTargetListEntry): Nullable<st
   if (isString(entry.webSocketDebuggerUrl)) return resolveCdpTargetId(entry.webSocketDebuggerUrl)
 
   return null
+}
+
+/** 剥出 Runtime.evaluate、Runtime.callFunctionOn 回包里的值；脚本抛了没接住的异常就抛 EXECUTION_FAILED，带上异常的原话。 */
+export function readRuntimeEvaluateValue(response: CdpRuntimeEvaluateResponse): unknown {
+  if (response.exceptionDetails) {
+    const message = response.exceptionDetails.exception?.description || response.exceptionDetails.text || 'unknown exception'
+    throw new AppError('EXECUTION_FAILED', `浏览器 CDP 脚本执行失败：${message}`, undefined, { cdpMethod: 'Runtime.evaluate' })
+  }
+  return unwrapRuntimeEvaluateValue(response)
 }
 
 /** 从 CDP Runtime.evaluate 的回包里剥出真正的值。 */
@@ -233,25 +242,6 @@ return {
 }
 
 /** CDP 的修饰键位掩码：协议规定的数，跟着用它的那个函数放。 */
-const CdpKeyModifierMasks: Record<BrowserKeyModifier, number> = {
-  alt: 1,
-  control: 2,
-  meta: 4,
-  shift: 8,
-}
-
-/** 把修饰键名翻成 CDP 的位掩码。 */
-export function resolveKeyboardModifiers(modifiers: BrowserKeyModifier[]): number {
-  return modifiers.reduce((mask, modifier) => mask | CdpKeyModifierMasks[modifier], 0)
-}
-
-/** 把按键名翻成 CDP 的 code。 */
-export function resolveKeyCode(key: string): string {
-  if (key.length === 1) return `Key${key.toUpperCase()}`
-
-  return key
-}
-
 /** 把鼠标键名翻成 CDP 认的取值。 */
 export function resolveMouseButton(button: BrowserMouseButton): 'left' | 'middle' | 'right' {
   switch (button) {
@@ -399,4 +389,40 @@ export function resolveCdpTargetListUrl(webSocketUrl: string): Nullable<string> 
   url.search = ''
   url.hash = ''
   return url.toString()
+}
+
+/** 框架树顶层那个框架的源；读不出来是 null。 */
+export function cdpFrameTreeOrigin(tree: unknown): Nullable<string> {
+  if (!isObject(tree)) return null
+  const { frame } = tree as CdpPageFrameTree
+  if (!isObject(frame)) return null
+  const { securityOrigin } = frame as CdpPageFrame
+  return isString(securityOrigin) ? securityOrigin : null
+}
+
+/**
+ * CDP 的框架树展平成一张表：id、上一层、地址、名字，与顶层页面不同源的记成 crossOrigin。
+ * topOrigin 是页面顶层的源：展平跨进程 iframe 子会话上的那棵树时传进来（那棵树的根不是页面顶层）；不给就取这棵树自己的根。
+ */
+export function flattenCdpFrameTree(tree: unknown, topOrigin: Nullable<string> = null): BrowserFrameInfo[] {
+  const frames: BrowserFrameInfo[] = []
+  const visit = (node: unknown, topOrigin: Nullable<string>): void => {
+    if (!isObject(node)) return
+    const { frame, childFrames } = node as CdpPageFrameTree
+    if (!isObject(frame)) return
+    const { id, parentId, url, name, securityOrigin } = frame as CdpPageFrame
+    if (!isString(id)) return
+    const origin = isString(securityOrigin) ? securityOrigin : null
+    const top = topOrigin ?? origin
+    frames.push({
+      id,
+      parentId: isString(parentId) ? parentId : null,
+      url: isString(url) ? url : '',
+      name: isString(name) ? name : '',
+      crossOrigin: isString(parentId) && origin !== top,
+    })
+    if (isArray(childFrames)) for (const child of childFrames) visit(child, top)
+  }
+  visit(tree, topOrigin)
+  return frames
 }

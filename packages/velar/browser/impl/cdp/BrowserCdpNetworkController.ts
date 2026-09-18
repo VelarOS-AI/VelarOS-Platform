@@ -62,7 +62,7 @@ export interface BrowserCdpNetworkControllerApi {
   /** 按 requestId 读请求、响应与 timing 详情。 */
   readNetworkRequestDetails(options: BrowserNetworkRequestDetailsOptions): Promise<BrowserPageDriverNetworkRequestDetailsResult>
   /** 等页面网络空闲（一段时间内没有新请求）。 */
-  waitForNetworkIdle(options: BrowserPageDriverNetworkIdleOptions): Promise<void>
+  waitForNetworkIdle(options: BrowserPageDriverNetworkIdleOptions): Promise<boolean>
   /**
    * offline 与网络节流共用 Network.emulateNetworkConditions,统一按当前状态合成下发。
    * throttling 由宿主 emulation 状态提供(getNetworkThrottling),offline 归本控制器。
@@ -250,11 +250,12 @@ export class BrowserCdpNetworkController implements BrowserCdpNetworkControllerA
     return result
   }
 
-  public async waitForNetworkIdle(options: BrowserPageDriverNetworkIdleOptions): Promise<void> {
+  public async waitForNetworkIdle(options: BrowserPageDriverNetworkIdleOptions): Promise<boolean> {
     const idleMs = Math.min(60_000, clampPositiveInteger(options.idleMs, 500))
     const timeoutMs = Math.min(60_000, clampPositiveInteger(options.timeoutMs, 5000))
 
-    return new Promise<void>((resolve) => {
+    // 交回等没等到：空闲了是 true，到点还有请求在飞是 false。
+    return new Promise<boolean>((resolve) => {
       let settled = false
       const timers = new TimerScope({ name: 'BrowserCdpNetworkController.networkIdle' })
       let idleTimer: Nullable<TimerLease> = null
@@ -265,7 +266,7 @@ export class BrowserCdpNetworkController implements BrowserCdpNetworkControllerA
         idleTimer.cancel()
         idleTimer = null
       }
-      const finish = (): void => {
+      const finish = (idle: boolean): void => {
         if (settled) return
         settled = true
         cancelIdleTimer()
@@ -275,7 +276,7 @@ export class BrowserCdpNetworkController implements BrowserCdpNetworkControllerA
         }
         timers.dispose()
         this.networkIdleStateListeners.delete(check)
-        resolve()
+        resolve(idle)
       }
       const check = (): void => {
         if (this.pendingNetworkRequestIds.size > 0) {
@@ -283,11 +284,11 @@ export class BrowserCdpNetworkController implements BrowserCdpNetworkControllerA
           return
         }
         if (idleTimer) return
-        idleTimer = timers.after(idleMs, finish)
+        idleTimer = timers.after(idleMs, () => finish(true))
       }
 
       this.networkIdleStateListeners.add(check)
-      timeoutTimer = timers.after(timeoutMs, finish)
+      timeoutTimer = timers.after(timeoutMs, () => finish(false))
       check()
     })
   }

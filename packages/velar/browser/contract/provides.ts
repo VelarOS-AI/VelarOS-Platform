@@ -3,8 +3,9 @@
  * 这里登记的每个接口都从根入口导出。空间与宿主要塞进来的东西在 `contract/requires.ts`。改这个文件等于改对外契约。
  */
 
-// ── 模型面：velar:browser 与 velar:devtools ───────────────────────
+// ── 模型面：velar:browser、velar:devtools 与 velar:cdp ───────────────
 export type { BrowserOperationsApi } from '../impl/BrowserOperations.js'
+export type { CdpOperationsApi } from '../impl/CdpOperations.js'
 export type { DevtoolsOperationsApi } from '../impl/DevtoolsOperations.js'
 
 // ── 纯策略：地址栏、偏好、截图选项、动作策略。渲染进程与主进程共用同一份判据 ──

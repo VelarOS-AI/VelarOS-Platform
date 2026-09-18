@@ -19,21 +19,22 @@ import {
   BrowserDiagnosticsLimits,
   BrowserErrorCodes,
   BrowserEvaluateLimits,
-  BrowserExtractLimits,
   BrowserFetchLimits,
   BrowserInspectLimits,
   type BrowserLoginDetection,
-  BrowserPageDataLimits,
   BrowserPendingEventLimits,
   BrowserPerformanceLimits,
+  BrowserProtocolLimits,
   type BrowserSiteContext,
   type BrowserSpacePort,
   type BrowserUserScriptAccess,
   BrowserUserScriptLimits,
+  BrowserWaitLimits,
   createBrowserLoginGate,
   createBrowserUserScriptStore,
   createBrowserWorkspaceFileAccess,
   VelarBrowserModule,
+  VelarCdpModule,
   VelarDevtoolsModule,
 } from '../index.js'
 import { browserAddress, browserPreferences } from '../renderer.js'
@@ -41,6 +42,7 @@ import { browserAddress, browserPreferences } from '../renderer.js'
 import {
   BrowserDeclarations,
   browserSpace,
+  CdpDeclarations,
   checkModelProgram,
   createHarness,
   DevtoolsDeclarations,
@@ -141,36 +143,47 @@ describe('浏览器单元的对外承诺', () => {
     expect(gate.shouldPrompt('https://other.com', detection)).toBe(true)
   })
 
-  test('INV-17 模型面是 velar:browser 与 velar:devtools：声明从源码生成，模型的程序照它调到真实操作', async () => {
+  test('INV-17 模型面是 velar:browser、velar:devtools 与 velar:cdp：声明从源码生成，模型的程序照它调到真实操作', async () => {
     expect(VelarBrowserModule.specifier).toBe('velar:browser')
     expect(VelarDevtoolsModule.specifier).toBe('velar:devtools')
+    expect(VelarCdpModule.specifier).toBe('velar:cdp')
     expect(VelarBrowserModule.declarations).toBe(BrowserDeclarations)
     expect(VelarDevtoolsModule.declarations).toBe(DevtoolsDeclarations)
-    expect(VelarBrowserModule.methods).toContain('open')
-    expect(VelarBrowserModule.methods).toContain('click')
-    expect(VelarDevtoolsModule.methods).toContain('diagnostics')
-    for (const declarations of [BrowserDeclarations, DevtoolsDeclarations]) {
-      for (const hidden of ['BrowserOperationContext', 'BrowserSpacePort', 'browser:', 'recipe', 'Recipe', 'enterSite']) {
+    expect(VelarCdpModule.declarations).toBe(CdpDeclarations)
+    expect(VelarBrowserModule.methods).toEqual(expect.arrayContaining(['open', 'evaluate', 'frames', 'click', 'fill', 'keyDown', 'mouseDown', 'wheel', 'waitForFunction']))
+    expect(VelarCdpModule.methods).toEqual(['send', 'events', 'waitForEvent', 'reset'])
+    // ADR 0012 删掉的操作不在模型面上：页面脚本做得到的、重复的入口。
+    for (const removed of ['query', 'media', 'table', 'list', 'paginate', 'content', 'select', 'check', 'scroll', 'clickAt', 'waitForSelector', 'waitForText', 'waitForUrl', 'tabs', 'events', 'type']) {
+      expect(VelarBrowserModule.methods).not.toContain(removed)
+    }
+    for (const removed of ['storage', 'setViewport', 'emulate', 'runUserScript']) expect(VelarDevtoolsModule.methods).not.toContain(removed)
+    for (const declarations of [BrowserDeclarations, DevtoolsDeclarations, CdpDeclarations]) {
+      for (const hidden of ['BrowserOperationContext', 'BrowserSpacePort', 'browser:', 'recipe', 'Recipe', 'enterSite', 'sendProtocolCommand']) {
         expect(declarations).not.toContain(hidden)
       }
     }
 
     const harness = createHarness({ open: false })
-    const result = await runModelProgram(browserSpace(harness), `import { open, inspect, click } from 'velar:browser'
+    const result = await runModelProgram(browserSpace(harness), `import { open, inspect, click, evaluate } from 'velar:browser'
 import { diagnostics } from 'velar:devtools'
+import { send } from 'velar:cdp'
 const site = await open({ url: 'https://example.com' })
 const page = await inspect({})
 const action = page.actions.find((candidate) => candidate.target)
 const clicked = action?.target ? await click({ target: action.target }) : null
+const rows = await evaluate({ script: '(sel) => [...document.querySelectorAll(sel)].map((row) => [...row.cells].map((cell) => cell.innerText))', args: ['tbody tr'] })
 const errors = await diagnostics({ kind: 'console', errorsOnly: true })
+const { cookies } = await send({ method: 'Network.getCookies' })
 export const root = site.site.workspaceRoot
 export const title = page.title
 export const matched = clicked?.matched
+export const firstRow = rows[0]
 export const errorCount = errors.entries.length
+export const cookieCount = cookies.length
 `)
     expect(result.failed).toBeUndefined()
-    expect(result.value).toMatchObject({ title: 'Example Domain', matched: true, errorCount: 1 })
-    expect(harness.methods()).toEqual(expect.arrayContaining(['enterSite', 'inspectPage', 'performTargetAction', 'getPageDiagnostics']))
+    expect(result.value).toMatchObject({ title: 'Example Domain', matched: true, firstRow: ['华北', '1200'], errorCount: 1, cookieCount: 1 })
+    expect(harness.methods()).toEqual(expect.arrayContaining(['enterSite', 'inspectPage', 'performTargetAction', 'evaluateScript', 'getPageDiagnostics', 'sendProtocolCommand']))
   }, 120_000)
 
   test('INV-18 声明里写给模型的数字就是常量表里的', () => {
@@ -181,39 +194,30 @@ export const errorCount = errors.entries.length
       `maxHtmlChars 最多 ${BrowserInspectLimits.htmlChars}`,
       `可交互元素最多几个（最多 ${BrowserInspectLimits.elements}）`,
       `最多 ${BrowserInspectLimits.ignoreSelectors} 个 selector`,
-      `最多 ${BrowserInspectLimits.queryAttributes} 个，每个最多 ${BrowserInspectLimits.attributeNameChars} 个字符`,
-      `limit 最多几个元素（最多 ${BrowserInspectLimits.queryElements}）`,
-      `（最多 ${BrowserInspectLimits.queryTextChars}、${BrowserInspectLimits.queryHtmlChars}）`,
       `最多 ${BrowserCaptureLimits.pathChars} 个字符`,
       `单边最多 ${BrowserCaptureLimits.fullPageMaxSide} 像素`,
       `最多 ${BrowserCaptureLimits.annotatedElements} 个`,
       `宽 ${BrowserCaptureLimits.minViewportWidth} 到 ${BrowserCaptureLimits.maxViewportWidth}，高 ${BrowserCaptureLimits.minViewportHeight} 到 ${BrowserCaptureLimits.maxViewportHeight}`,
       `${BrowserCaptureLimits.minNetworkIdleMs} 到 ${BrowserCaptureLimits.maxNetworkIdleMs}`,
       `含滚动，最多 ${BrowserCaptureLimits.regionMaxSide}`,
-      `script 最多 ${BrowserEvaluateLimits.scriptChars} 个字符`,
-      `timeoutMs 最多 ${BrowserEvaluateLimits.timeoutMs}`,
-      `超过 ${BrowserEvaluateLimits.resultChars} 个字符`,
-      `limit 最多几条（最多 ${BrowserPageDataLimits.mediaSources}`,
+      `最多 ${BrowserEvaluateLimits.scriptChars} 个字符`,
+      `合起来最多 ${BrowserEvaluateLimits.argsChars} 个字符`,
+      `timeoutMs 缺省 ${BrowserEvaluateLimits.defaultTimeoutMs}、最多 ${BrowserEvaluateLimits.timeoutMs}`,
+      `超过 ${BrowserEvaluateLimits.resultChars} 个字符抛 BROWSER_RESULT_TOO_LARGE`,
+      `（0 到 ${BrowserActionLimits.coordinate}；取自截图时`,
+      `连击几下（最多 ${BrowserActionLimits.clickCount}`,
       `value 最多 ${BrowserActionLimits.textChars} 个字符`,
-      `最多 ${BrowserActionLimits.selectValues} 个，每个最多 ${BrowserActionLimits.selectValueChars} 个字符`,
-      `一次滚多少像素（最多 ${BrowserActionLimits.scrollAmount}）`,
-      `绝对值最多 ${BrowserActionLimits.coordinate}`,
+      `text 最多 ${BrowserActionLimits.textChars} 个字符`,
       `（最多 ${BrowserActionLimits.keyChars} 个字符）`,
       `连按几次（最多 ${BrowserActionLimits.keyRepeat}）`,
-      `0 到 ${BrowserActionLimits.coordinate}`,
-      `连击几下（最多 ${BrowserActionLimits.clickCount}）`,
-      `拆成几步移动（最多 ${BrowserActionLimits.dragSteps}）`,
+      `拆成几步移动（最多 ${BrowserActionLimits.moveSteps}，缺省 1）`,
+      `绝对值最多 ${BrowserActionLimits.coordinate}`,
+      `连击的第几下（双击的第二下给 2，最多 ${BrowserActionLimits.clickCount}）`,
+      `拆成几步移动（最多 ${BrowserActionLimits.moveSteps}）`,
       `最多 ${BrowserFetchLimits.pathChars} 个字符`,
-      `timeoutMs 最多 ${BrowserActionLimits.waitMs}`,
-      `text 最多 ${BrowserActionLimits.waitExpressionChars} 个字符`,
-      `ms 最多 ${BrowserActionLimits.waitMs}`,
+      `intervalMs（${BrowserWaitLimits.minIntervalMs} 到 ${BrowserWaitLimits.maxIntervalMs}，缺省 ${BrowserWaitLimits.defaultIntervalMs}）`,
+      `timeoutMs 最多 ${BrowserWaitLimits.maxMs}、缺省 ${BrowserWaitLimits.defaultMs}`,
       `缺省 ${BrowserPendingEventLimits.defaultWaitMs}、最多 ${BrowserPendingEventLimits.maxWaitMs}`,
-      `最多 ${BrowserExtractLimits.tableIndex}，缺省 ${BrowserExtractLimits.defaultTableIndex}`,
-      `最多几行（最多 ${BrowserExtractLimits.tableRows}`,
-      `最多几条（最多 ${BrowserExtractLimits.listItems}`,
-      `maxPages 缺省 ${BrowserExtractLimits.defaultPaginatePages}、最多 ${BrowserExtractLimits.paginatePages}`,
-      `每页最多几条（最多 ${BrowserExtractLimits.paginateItemsPerPage}）`,
-      `maxChars 最多 ${BrowserExtractLimits.contentChars}`,
       `单个文件最多 ${BrowserFetchLimits.fileBytes} 字节`,
     ]
     for (const text of browser) expect(BrowserDeclarations).toContain(text)
@@ -224,18 +228,12 @@ export const errorCount = errors.entries.length
       `resourceType（最多 ${BrowserDiagnosticsLimits.resourceTypeChars} 个字符）`,
       `网络条目（最多 ${BrowserDiagnosticsLimits.requestIdChars} 个字符）`,
       `maxBodyChars 最多 ${BrowserDiagnosticsLimits.responseBodyChars}`,
-      `每类最多几项（最多 ${BrowserPageDataLimits.storageItems}）`,
-      `每个值最多多少字符（最多 ${BrowserPageDataLimits.storageValueChars}）`,
-      `宽 ${BrowserCaptureLimits.minViewportWidth} 到 ${BrowserCaptureLimits.maxViewportWidth}，高 ${BrowserCaptureLimits.minViewportHeight} 到 ${BrowserCaptureLimits.maxViewportHeight}`,
       `zoomFactor（${BrowserConditionLimits.minZoomFactor} 到 ${BrowserConditionLimits.maxZoomFactor}）`,
       `step 是 ${BrowserConditionLimits.minZoomStep} 到 ${BrowserConditionLimits.maxZoomStep}`,
       `名最多 ${BrowserConditionLimits.headerNameChars}、值最多 ${BrowserConditionLimits.headerValueChars} 个字符`,
       `最多 ${BrowserConditionLimits.blockedUrlPatterns} 条，每条最多 ${BrowserConditionLimits.urlPatternChars} 个字符`,
       `最多 ${BrowserConditionLimits.blockedResourceTypes} 种`,
       `最多 ${BrowserConditionLimits.mockResponses} 条，正文最多 ${BrowserConditionLimits.mockBodyChars} 个字符`,
-      `时区（最多 ${BrowserConditionLimits.timezoneChars} 个字符）`,
-      `语言（最多 ${BrowserConditionLimits.localeChars} 个字符）`,
-      `降速几倍（1 到 ${BrowserConditionLimits.maxCpuThrottlingRate}）`,
       `缺省 ${BrowserPerformanceLimits.defaultTraceMs}，${BrowserPerformanceLimits.minTraceMs} 到 ${BrowserPerformanceLimits.maxTraceMs}`,
       `各最多 ${BrowserPerformanceLimits.insightIdChars} 个字符`,
       `最多 ${BrowserPerformanceLimits.snapshotPathChars} 个字符`,
@@ -246,10 +244,21 @@ export const errorCount = errors.entries.length
       `各最多 ${BrowserUserScriptLimits.matchRules} 条、每条最多 ${BrowserUserScriptLimits.matchRuleChars} 个字符`,
     ]
     for (const text of devtools) expect(DevtoolsDeclarations).toContain(text)
+
+    const cdp = [
+      `最多 ${BrowserProtocolLimits.methodChars} 个字符）`,
+      `按 JSON 算最多 ${BrowserProtocolLimits.paramsChars} 个字符`,
+      `子会话 id（最多 ${BrowserProtocolLimits.sessionChars} 个字符）`,
+      `超过 ${BrowserProtocolLimits.resultChars} 个字符抛 BROWSER_RESULT_TOO_LARGE`,
+      `最多留 ${BrowserProtocolLimits.bufferedEvents} 条`,
+      `${BrowserProtocolLimits.autoContinueMs} 毫秒没人放行`,
+      `timeoutMs 最多 ${BrowserWaitLimits.maxMs}、缺省 ${BrowserWaitLimits.defaultMs}`,
+    ]
+    for (const text of cdp) expect(CdpDeclarations).toContain(text)
   })
 
   test('INV-19 代码模版照真实声明过类型检查，不嵌进声明，随模型面发布', () => {
-    for (const module of [VelarBrowserModule, VelarDevtoolsModule]) {
+    for (const module of [VelarBrowserModule, VelarDevtoolsModule, VelarCdpModule]) {
       expect(module.template.length).toBeGreaterThan(0)
       expect(module.declarations).not.toContain(module.template.split('\n')[0]!)
       expect(checkModelProgram(module.template)).toEqual([])
@@ -265,11 +274,15 @@ export const errorCount = errors.entries.length
     const space = browserSpace(harness)
     for (const [namespace, operation, input] of [
       ['browser', 'inspect', {}],
+      ['browser', 'evaluate', { script: 'document.title' }],
       ['browser', 'click', { target: '#go' }],
+      ['browser', 'keyDown', { key: 'Shift' }],
       ['browser', 'back', undefined],
       ['browser', 'screenshot', {}],
       ['devtools', 'diagnostics', {}],
       ['devtools', 'userScripts', undefined],
+      ['cdp', 'send', { method: 'DOM.getDocument' }],
+      ['cdp', 'reset', undefined],
     ] as const) {
       const failure = await failureOf(space.call(namespace, operation, input))
       expect(failure.code).toBe(BrowserErrorCodes.siteNotOpen)
@@ -289,10 +302,18 @@ export const errorCount = errors.entries.length
     expect(tooLong.code).toBe('VALIDATION')
     expect(tooLong.message).toContain('url')
     expect((await failureOf(space.call('browser', 'click', { target: {} }))).code).toBe('VALIDATION')
+    expect((await failureOf(space.call('browser', 'click', { target: '#go', x: 1, y: 1 }))).code).toBe('VALIDATION')
+    expect((await failureOf(space.call('browser', 'click', { x: 1 }))).code).toBe('VALIDATION')
+    expect((await failureOf(space.call('browser', 'evaluate', { script: 'document.title', mode: 'expression' }))).code).toBe('VALIDATION')
+    expect((await failureOf(space.call('browser', 'keyDown', { key: 'Hyper' }))).code).toBe('VALIDATION')
+    expect((await failureOf(space.call('browser', 'keyDown', { key: 'Control+a' }))).code).toBe('VALIDATION')
+    expect((await failureOf(space.call('browser', 'wheel', {}))).code).toBe('VALIDATION')
     expect((await failureOf(space.call('browser', 'handleDownload', {}))).code).toBe('VALIDATION')
     expect((await failureOf(space.call('devtools', 'zoom', { action: 'set' }))).code).toBe('VALIDATION')
     expect((await failureOf(space.call('devtools', 'network', {}))).code).toBe('VALIDATION')
     expect((await failureOf(space.call('devtools', 'updateUserScript', { id: 'script-1' }))).code).toBe('VALIDATION')
+    expect((await failureOf(space.call('cdp', 'send', { method: 'getDocument' }))).code).toBe('VALIDATION')
+    expect((await failureOf(space.call('cdp', 'events', { method: 'network' }))).code).toBe('VALIDATION')
     expect(harness.calls).toEqual([])
   })
 
@@ -317,26 +338,80 @@ export const errorCount = errors.entries.length
     const harness = createHarness()
     const space = browserSpace(harness)
     await space.call('browser', 'inspect', {})
-    await space.call('browser', 'query', { selector: 'a' })
-    await space.call('browser', 'media', {})
     await space.call('browser', 'evaluate', { script: 'document.title' })
     await space.call('devtools', 'diagnostics', {})
-    await space.call('devtools', 'storage', {})
     await space.call('devtools', 'request', { requestId: 'req-1', includeResponseBody: true })
     const argsOf = (method: string) => harness.calls.find((call) => call.method === method)!.args[0] as Record<string, unknown>
     expect(argsOf('inspectPage')).toMatchObject({ maxTextChars: BrowserInspectLimits.textChars, maxHtmlChars: BrowserInspectLimits.htmlChars, maxElements: BrowserInspectLimits.elements })
-    expect(argsOf('queryElements')).toMatchObject({ limit: BrowserInspectLimits.queryElements, maxTextChars: BrowserInspectLimits.queryTextChars })
-    expect(argsOf('listMediaSources')).toMatchObject({ limit: BrowserPageDataLimits.mediaSources })
-    expect(argsOf('evaluateScript')).toMatchObject({ maxResultChars: BrowserEvaluateLimits.resultChars })
+    expect(argsOf('evaluateScript')).toMatchObject({ maxResultChars: BrowserEvaluateLimits.resultChars, timeoutMs: BrowserEvaluateLimits.defaultTimeoutMs })
     expect(argsOf('getPageDiagnostics')).toMatchObject({ limit: BrowserDiagnosticsLimits.entries })
-    expect(argsOf('readPageStorage')).toMatchObject({ limit: BrowserPageDataLimits.storageItems, maxValueChars: BrowserPageDataLimits.storageValueChars })
     expect(argsOf('readNetworkRequestDetails')).toMatchObject({ maxBodyChars: BrowserDiagnosticsLimits.responseBodyChars })
+  })
 
-    // 取内容走页面提取脚本：上限写进脚本的载荷里。
-    await space.call('browser', 'table', {})
-    await space.call('browser', 'content', {})
-    const scripts = harness.calls.filter((call) => call.method === 'evaluateScript').map((call) => (call.args[0] as { script: string }).script)
-    expect(scripts.some((script) => script.includes(`"maxRows":${BrowserExtractLimits.tableRows}`))).toBe(true)
-    expect(scripts.some((script) => script.includes(`"maxChars":${BrowserExtractLimits.contentChars}`))).toBe(true)
+  test('INV-24 页面脚本的结果整份交回，参数经 args 进页面，抛错与超限各有专属码', async () => {
+    const harness = createHarness()
+    const space = browserSpace(harness)
+    expect(await space.call('browser', 'evaluate', { script: "(value) => { const select = document.querySelector('select[name=country]'); return value }", args: ['CN'] })).toBe('CN')
+    const sent = harness.calls.find((call) => call.method === 'evaluateScript')!.args[0] as { script: string; args: unknown[] }
+    expect(sent.args).toEqual(['CN'])
+    expect(sent.script).not.toContain("'CN'")
+
+    const thrown = await failureOf(space.call('browser', 'evaluate', { script: '() => document.querySelector("#missing").innerText /* __throws__ */' }))
+    expect(thrown.code).toBe(BrowserErrorCodes.scriptFailed)
+    expect(thrown.message).toContain('TypeError')
+    expect(thrown.message).toContain('第 2 行第 7 列')
+    const huge = await failureOf(space.call('browser', 'evaluate', { script: '"__huge__"' }))
+    expect(huge.code).toBe(BrowserErrorCodes.resultTooLarge)
+    // 等待也是页面脚本：抛错同一个码，不空等到超时。
+    const waited = await failureOf(space.call('browser', 'waitForFunction', { script: '__throws__', timeoutMs: 5000 }))
+    expect(waited.code).toBe(BrowserErrorCodes.scriptFailed)
+  })
+
+  test('INV-25 fill 是真实输入：全选、插入、再读状态，不在页面里直接改 value', async () => {
+    const harness = createHarness()
+    const space = browserSpace(harness)
+    const filled = await space.call('browser', 'fill', { target: 'input[name=email]', value: 'user@example.com' })
+    expect(filled.action).toBe('fill')
+    expect(filled.effect).toBeUndefined()
+    expect(harness.methods()).toEqual(['performTargetAction', 'insertText', 'performTargetAction'])
+    const actions = harness.calls.filter((call) => call.method === 'performTargetAction').map((call) => (call.args[0] as { action: string }).action)
+    expect(actions).toEqual(['select_all', 'focus'])
+    expect(harness.calls[1]!.args[0]).toEqual({ text: 'user@example.com' })
+
+    // 清空就是全选之后按退格。
+    const clearing = createHarness()
+    await browserSpace(clearing).call('browser', 'fill', { target: 'input[name=email]', value: '' })
+    expect(clearing.calls.find((call) => call.method === 'pressKey')!.args[0]).toEqual({ key: 'Backspace' })
+    expect(clearing.methods()).not.toContain('insertText')
+  })
+
+  test('INV-26 等待等到了交回值，等不到抛 TIMEOUT', async () => {
+    const harness = createHarness()
+    const space = browserSpace(harness)
+    expect(await space.call('browser', 'waitForFunction', { script: "document.querySelectorAll('.result').length > 0" })).toBe(true)
+    expect(await space.call('browser', 'waitForLoad', {})).toMatchObject({ url: 'https://example.com/', title: 'Example Domain' })
+    expect(await space.call('browser', 'waitForEvent', { kind: 'download' })).toMatchObject({ id: 'download-1', kind: 'download' })
+
+    const stuck = createHarness()
+    stuck.port.waitForPage = async (options) => ({
+      url: 'https://example.com/', loadState: 'loading', requestedLoadState: options.loadState ?? null, urlPattern: null, functionExpression: null,
+      functionResult: null, text: null, matched: false, durationMs: 0, timeoutMs: options.timeoutMs ?? 0, elapsedMs: options.timeoutMs ?? 0, timedOut: true, capturedAt: 1,
+    })
+    const stuckSpace = browserSpace(stuck)
+    expect((await failureOf(stuckSpace.call('browser', 'waitForLoad', { state: 'networkidle', timeoutMs: 100 }))).code).toBe('TIMEOUT')
+    expect((await failureOf(stuckSpace.call('browser', 'waitForEvent', { kind: 'dialog', timeoutMs: 100 }))).code).toBe('TIMEOUT')
+    // 替身里「有没有下一页」恒为假：判定式一直不成立。
+    expect((await failureOf(stuckSpace.call('browser', 'waitForFunction', { script: "!!document.querySelector('a[rel=next]')", timeoutMs: 150 }))).code).toBe('TIMEOUT')
+  })
+
+  test('INV-27 state 带标签页与挂起事件；离站先断开模型的 CDP 会话', async () => {
+    const harness = createHarness()
+    const space = browserSpace(harness)
+    const state = await space.call('browser', 'state')
+    expect(state).toMatchObject({ active: true, tabs: [{ id: 'page-1', active: true }], pending: [{ id: 'download-1', kind: 'download' }] })
+    await space.call('browser', 'leave')
+    const methods = harness.methods()
+    expect(methods.indexOf('resetProtocolSession')).toBeGreaterThanOrEqual(0)
+    expect(methods.indexOf('resetProtocolSession')).toBeLessThan(methods.indexOf('leaveSite'))
   })
 })

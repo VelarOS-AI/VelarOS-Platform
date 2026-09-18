@@ -31,10 +31,22 @@ export const BrowserTuning = Object.freeze({
     recentErrorWindowMs: 300_000,
     /** 等会话的 WebContents attach 完成的缺省毫秒数。 */
     attachTimeoutMs: 5_000,
-    /** 等一个挂起事件出现的缺省毫秒数；模型没给 timeoutMs 时用它。 */
-    pendingEventWaitTimeoutMs: 5_000,
     /** 等挂起事件时的轮询间隔毫秒数。 */
     pendingEventPollIntervalMs: 50,
+  }),
+  /** 宿主轮询的等待：页面判定式。 */
+  wait: Object.freeze({
+    /** 判定式每一拍在页面里最多跑多少毫秒；跳转途中那一拍拿不到回话，靠它尽快进下一拍。 */
+    conditionTickTimeoutMs: 5_000,
+  }),
+  /** 模型自己那条 CDP 会话：命令超时、读事件、兜住没人放行的拦截。 */
+  protocol: Object.freeze({
+    /** 一条命令最多等多少毫秒回话；模型的命令可能要等页面里的 Promise（awaitPromise），给得比宿主自己的宽。 */
+    commandTimeoutMs: 60_000,
+    /** 等事件时读缓冲的间隔毫秒数。 */
+    eventPollIntervalMs: 50,
+    /** 检查被拦下的请求有没有超时没人放行的间隔毫秒数。 */
+    pausedRequestSweepMs: 1_000,
   }),
   /** CDP 协议层：命令超时、诊断与网络记录保留条数、trace 传输。 */
   cdp: Object.freeze({
@@ -159,17 +171,6 @@ export const BrowserTuning = Object.freeze({
      */
     evaluateDeadlineMs: 90_000,
   }),
-  /** 提取：结构化提取与正文提取的页内超时。 */
-  extraction: Object.freeze({
-    /** 表格 / 列表提取的页内求值超时毫秒数。 */
-    structuredTimeoutMs: 10_000,
-    /** 正文提取的页内求值超时毫秒数（正文脚本要遍历整篇文档，给得更宽）。 */
-    contentTimeoutMs: 15_000,
-    /** 翻页提取里「下一页存在吗」这一小段判定脚本的求值超时毫秒数。 */
-    paginateProbeTimeoutMs: 5_000,
-    /** 翻页提取点完下一页之后等页面换内容的毫秒数。 */
-    paginateSettleMs: 1_200,
-  }),
   /** 录屏：帧间隔与合成。 */
   screencast: Object.freeze({
     /** 两帧之间的最小间隔毫秒数，低于它按这个算，避免 GIF 播得过快。 */
@@ -200,14 +201,6 @@ export const BrowserTuning = Object.freeze({
     reloadNetworkIdleMs: 800,
     /** 录 trace 前重载页面后，等网络空闲最多等多少毫秒。 */
     reloadNetworkIdleTimeoutMs: 10_000,
-  }),
-  /** 诊断：宿主侧记录器的保留条数。 */
-  /** 页面求值：结果压扁时的递归与取项上限。 */
-  evaluate: Object.freeze({
-    /** 页面求值结果压扁时最多递归多少层；与页面脚本里的字面量由单测机械绑定。 */
-    simplifyMaxDepth: 8,
-    /** 单个对象最多取多少个键 / 数组最多取多少项；同上由单测绑定。 */
-    simplifyMaxEntries: 100,
   }),
   /** Electron：内嵌页面这条路上的平台常量。 */
   electron: Object.freeze({

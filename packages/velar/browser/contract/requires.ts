@@ -1,7 +1,7 @@
 /**
  * 注入面：空间与宿主必须或可以塞进来的东西，每个注入点一个接口。本单元只从这些口子接收外部能力，别处不留钩子。
  *
- * - 调用上下文 `BrowserOperationContext`：必须。空间每次分发 `velar:browser`、`velar:devtools` 的调用时给，
+ * - 调用上下文 `BrowserOperationContext`：必须。空间每次分发 `velar:browser`、`velar:devtools`、`velar:cdp` 的调用时给，
  *   里面是已经绑好会话与站点的空间端口 `BrowserSpacePort` 与交图通道。
  * - 页面驱动 `BrowserPageDriver`、外部浏览器启动器 `BrowserExternalPageLauncher`、系统指针 `BrowserSystemPointerDriver`：可选，
  *   创建运行时时给，接别的浏览器后端、远程浏览器与真实鼠标。
@@ -25,16 +25,13 @@ import type {
   BrowserClickCoordinatesResult,
   BrowserDragOptions,
   BrowserDragResult,
-  BrowserElementQueryOptions,
-  BrowserElementQueryResult,
   BrowserEmulationOptions,
-  BrowserEmulationResult,
   BrowserEvaluateScriptOptions,
-  BrowserEvaluateScriptResult,
   BrowserExportPagePdfOptions,
   BrowserExportPagePdfResult,
   BrowserFetchResourceOptions,
   BrowserFetchResourceResult,
+  BrowserFrameInfo,
   BrowserHandleDialogOptions,
   BrowserHandleDialogResult,
   BrowserHandleDownloadOptions,
@@ -43,11 +40,14 @@ import type {
   BrowserHandlePermissionResult,
   BrowserHeapSnapshotOptions,
   BrowserHeapSnapshotResult,
+  BrowserInsertTextOptions,
+  BrowserInsertTextResult,
   BrowserInspectPageOptions,
-  BrowserListMediaSourcesOptions,
-  BrowserListMediaSourcesResult,
+  BrowserKeyInput,
+  BrowserKeyResult,
+  BrowserMouseButtonInput,
+  BrowserMouseResult,
   BrowserMoveMouseOptions,
-  BrowserMoveMouseResult,
   BrowserNetworkControlOptions,
   BrowserNetworkControlResult,
   BrowserNetworkRequestDetailsOptions,
@@ -58,10 +58,6 @@ import type {
   BrowserPageInspection,
   BrowserPageNavigationOptions,
   BrowserPageNavigationResult,
-  BrowserPageScrollOptions,
-  BrowserPageScrollResult,
-  BrowserPageStorageOptions,
-  BrowserPageStorageResult,
   BrowserPageTargetsResult,
   BrowserPageWaitOptions,
   BrowserPageWaitResult,
@@ -76,30 +72,30 @@ import type {
   BrowserPerformanceTraceStopResult,
   BrowserPressKeyOptions,
   BrowserPressKeyResult,
+  BrowserProtocolEvents,
   BrowserScreencastStartOptions,
   BrowserScreencastStartResult,
   BrowserScreencastStopOptions,
   BrowserScreencastStopResult,
   BrowserScreenshotArtifact,
+  BrowserScriptOutcome,
   BrowserSiteContext,
   BrowserSwitchPageTargetOptions,
   BrowserSwitchPageTargetResult,
   BrowserTargetActionOptions,
   BrowserTargetActionResult,
-  BrowserTypeTextOptions,
-  BrowserTypeTextResult,
   BrowserUploadFileOptions,
   BrowserUploadFileResult,
   BrowserUserScriptManageRequest,
   BrowserUserScriptMutationResult,
   BrowserViewportOptions,
-  BrowserViewportResult,
-  BrowserWaitForSelectorOptions,
-  BrowserWaitForSelectorResult,
+  BrowserWheelInput,
+  CdpEventsInput,
+  CdpSendInput,
 } from '../types/browser'
 import type { BrowserLoginDetection, BrowserOriginStorage, BrowserPageDiagnosticEntry, BrowserPageState,BrowserPageTargetInfo } from '../types/browser.js'
 import type { CdpExternalBrowserLaunchOptions, CdpExternalBrowserSession, CdpScreencastConsumerOptions, CdpScreencastStartOptions, ScreencastCapturedFrame } from '../types/cdp.js'
-import type { BrowserPageDriverClickCoordinatesOptions, BrowserPageDriverCookie, BrowserPageDriverCookieOptions, BrowserPageDriverDiagnosticsOptions, BrowserPageDriverDownloadListener, BrowserPageDriverDragCoordinatesOptions, BrowserPageDriverEmulationState,BrowserPageDriverFetchResourceOptions, BrowserPageDriverFetchResourceResult, BrowserPageDriverFileInputOptions, BrowserPageDriverKind, BrowserPageDriverMoveMouseOptions, BrowserPageDriverNetworkCaptureState, BrowserPageDriverNetworkControlState, BrowserPageDriverNetworkIdleOptions, BrowserPageDriverNetworkRequestDetailsResult, BrowserPageDriverNetworkResponseBodyResult, BrowserPageDriverPdfOptions, BrowserPageDriverScreenshot, BrowserPageDriverScreenshotOptions, BrowserPageDriverState, BrowserPageDriverStorageOriginOptions, BrowserSystemPointerMoveOptions } from '../types/driver.js'
+import type { BrowserPageDriverClickCoordinatesOptions, BrowserPageDriverCookie, BrowserPageDriverCookieOptions, BrowserPageDriverDiagnosticsOptions, BrowserPageDriverDownloadListener, BrowserPageDriverDragCoordinatesOptions, BrowserPageDriverEmulationState,BrowserPageDriverFetchResourceOptions, BrowserPageDriverFetchResourceResult, BrowserPageDriverFileInputOptions, BrowserPageDriverKeyEvent, BrowserPageDriverKind, BrowserPageDriverMouseEvent, BrowserPageDriverMoveMouseOptions, BrowserPageDriverNetworkCaptureState, BrowserPageDriverNetworkControlState, BrowserPageDriverNetworkIdleOptions, BrowserPageDriverNetworkRequestDetailsResult, BrowserPageDriverNetworkResponseBodyResult, BrowserPageDriverPdfOptions, BrowserPageDriverScreenshot, BrowserPageDriverScreenshotOptions, BrowserPageDriverState, BrowserPageDriverStorageOriginOptions, BrowserSystemPointerMoveOptions } from '../types/driver.js'
 
 /** 启动/接入外部浏览器并返回 page-level CDP driver 的 host 无关 launcher 面。 */
 /**
@@ -177,10 +173,12 @@ export interface BrowserPageDriver {
   captureScreenshot?(
     options: BrowserPageDriverScreenshotOptions
   ): Promise<BrowserPageDriverScreenshot>
-  /** 往当前焦点或指定目标输入文本。 */
-  typeText?(options: BrowserTypeTextOptions): Promise<void>
-  /** 发一次键盘按键。 */
-  pressKey?(options: BrowserPressKeyOptions): Promise<void>
+  /** 在当前焦点处插入文字（像输入法上屏，不发按键事件）。 */
+  insertText?(options: BrowserInsertTextOptions): Promise<void>
+  /** 发一个键盘事件：`Input.dispatchKeyEvent` 的参数，由交互引擎按键位表与按住的修饰键拼好。 */
+  dispatchKeyEvent?(event: BrowserPageDriverKeyEvent): Promise<void>
+  /** 发一个鼠标事件：`Input.dispatchMouseEvent` 的参数，坐标是视口 CSS 像素。 */
+  dispatchMouseEvent?(event: BrowserPageDriverMouseEvent): Promise<void>
   /** 把鼠标移到某个坐标（用于 hover）。 */
   moveMouse?(options: BrowserPageDriverMoveMouseOptions): Promise<void>
   /** 在某个坐标点一下。 */
@@ -210,6 +208,12 @@ export interface BrowserPageDriver {
    * 并如实回报「这次才开始」，回执才能告诉模型之前的请求看不到。
    */
   ensureNetworkCapture?(): Promise<BrowserPageDriverNetworkCaptureState>
+  /** 列出页面的框架树：顶层页面与各层 iframe（含跨源的）。 */
+  listFrames?(): Promise<BrowserFrameInfo[]>
+  /** 在一个框架里跑一段脚本（frameId 取自 listFrames）；框架已经不在时抛 `BROWSER_FRAME_NOT_FOUND`。 */
+  executeJavaScriptInFrame?<T = unknown>(frameId: string, script: string, userGesture?: boolean): Promise<T>
+  /** 给模型单开一条 CDP 会话：和驱动自己用的那条互不影响，关掉就撤掉它做过的一切。 */
+  openProtocolChannel?(): Promise<BrowserProtocolChannel>
   /** 列出这个浏览器里的页面（内嵌页面只有当前这一页）。 */
   listPageTargets?(): Promise<BrowserPageTargetInfo[]>
   /** 切到另一页，返回那一页的驱动。 */
@@ -236,8 +240,8 @@ export interface BrowserPageDriver {
   readNetworkRequestDetails?(
     options: BrowserNetworkRequestDetailsOptions
   ): Promise<BrowserPageDriverNetworkRequestDetailsResult>
-  /** 等页面网络空闲。 */
-  waitForNetworkIdle?(options: BrowserPageDriverNetworkIdleOptions): Promise<void>
+  /** 等页面网络空闲：空闲了交回 true，到点还有请求在飞交回 false。 */
+  waitForNetworkIdle?(options: BrowserPageDriverNetworkIdleOptions): Promise<boolean>
   /** 配置环境模拟：色彩方案、时区、地理位置、CPU 与网络节流。 */
   configureEmulation?(
     options: BrowserEmulationOptions
@@ -271,6 +275,24 @@ export interface BrowserPageDriver {
   dispose?(): void
 }
 
+/**
+ * 模型自己的一条 CDP 会话：**页面驱动交出来的通道**。
+ *
+ * 谁给、什么时候：页面驱动的 `openProtocolChannel` 在模型第一次用 `velar:cdp` 时给。内嵌页面是 debugger 上用
+ * `Target.attachToTarget` 连页面自己挂出来的子会话；外部浏览器是连同一个页面的第二条 WebSocket。
+ * 这条会话上开关的域、设的仿真与 Fetch 拦截只算在它自己身上，`close` 之后一并撤掉，驱动自己那条会话不受影响。
+ */
+export interface BrowserProtocolChannel {
+  /** 发一条命令并等结果：sessionId 给它挂出来的子会话（flatten），不给是页面本身；协议报错抛 `BROWSER_PROTOCOL_FAILED`。 */
+  send(method: string, params: Optional<Record<string, unknown>>, sessionId?: string): Promise<unknown>
+  /** 订阅这条会话与它挂出来的子会话上的全部事件（sessionId 是子会话，页面本身是 undefined）；返回取消订阅的函数。 */
+  onEvent(listener: (method: string, params: unknown, sessionId: Optional<string>) => void): () => void
+  /** 订阅会话断开（页面关了、调试器被拿走、连接断了）；返回取消订阅的函数。 */
+  onClose(listener: () => void): () => void
+  /** 断开这条会话。 */
+  close(): Promise<void>
+}
+
 /** 用户对一次登录墙征询的裁决。 */
 export interface BrowserLoginGateDecision {
   /** 用户是否表示「已完成登录，继续」。 */
@@ -301,9 +323,9 @@ export interface BrowserLoginGatePort {
 }
 
 /**
- * 空间端口：`velar:browser` 与 `velar:devtools` 的操作在运行时能向空间要什么，写作 `ctx.browser`。全仓唯一权威。
+ * 空间端口：`velar:browser`、`velar:devtools` 与 `velar:cdp` 的操作在运行时能向空间要什么，写作 `ctx.browser`。全仓唯一权威。
  *
- * 已经绑定了当前会话与站点，所以方法参数里不带 sessionId。扁平一层，只放操作真会调的方法——门禁按两个操作文件逐方法核对。
+ * 已经绑定了当前会话与站点，所以方法参数里不带 sessionId。扁平一层，只放操作真会调的方法——门禁按三个操作文件逐方法核对。
  * 宿主拿 `./browser/electron` 的运行时拼它；要登录墙门控时用 `createBrowserLoginGate(port).wrap(api)` 包一层再交进来。
  */
 export interface BrowserSpacePort {
@@ -323,34 +345,36 @@ export interface BrowserSpacePort {
   captureScreenshot: (
     options?: BrowserCaptureScreenshotOptions
   ) => Promise<BrowserScreenshotArtifact>
-  /** 按目标元素描述执行点击等动作，比坐标点击更稳定。 */
+  /** 按目标元素描述执行点击、悬停、聚焦、全选这类动作：元素在页面里定位，点击与悬停发真实的鼠标事件。 */
   performTargetAction: (options: BrowserTargetActionOptions) => Promise<BrowserTargetActionResult>
   /** 导航到新地址或触发前进/后退/刷新。 */
   navigatePage: (options: BrowserPageNavigationOptions) => Promise<BrowserPageNavigationResult>
-  /** 滚动页面，用于长页面探查和定位目标元素。 */
-  scrollPage: (options?: BrowserPageScrollOptions) => Promise<BrowserPageScrollResult>
-  /** 用选择器/文本条件查询页面元素。 */
-  queryElements: (options: BrowserElementQueryOptions) => Promise<BrowserElementQueryResult>
   /** 获取控制台、网络和加载状态等诊断信息。 */
   getPageDiagnostics: (options?: BrowserPageDiagnosticsOptions) => Promise<BrowserPageDiagnostics>
-  /** 向当前焦点或目标元素输入文本。 */
-  typeText: (options: BrowserTypeTextOptions) => Promise<BrowserTypeTextResult>
-  /** 发送键盘按键，如 Enter、Escape、Tab。 */
+  /** 在当前焦点处插入文字（像输入法上屏，不发按键事件）。 */
+  insertText: (options: BrowserInsertTextOptions) => Promise<BrowserInsertTextResult>
+  /** 按一个键（按下再抬起），可连按、可带修饰键。 */
   pressKey: (options: BrowserPressKeyOptions) => Promise<BrowserPressKeyResult>
-  /** 移动鼠标，用于 hover 或人工可视化调试。 */
-  moveMouse: (options: BrowserMoveMouseOptions) => Promise<BrowserMoveMouseResult>
-  /** 坐标点击，作为目标元素点击失败时的兜底能力。 */
+  /** 按下一个键并记着它，直到 keyUp；按住的修饰键带到之后的输入事件上。 */
+  keyDown: (input: BrowserKeyInput) => Promise<BrowserKeyResult>
+  /** 抬起一个按着的键。 */
+  keyUp: (input: BrowserKeyInput) => Promise<BrowserKeyResult>
+  /** 把鼠标移到视口里的一个点，可拆成几步；按着鼠标键时就是拖。 */
+  moveMouse: (options: BrowserMoveMouseOptions) => Promise<BrowserMouseResult>
+  /** 在鼠标现在的位置按下一个鼠标键。 */
+  mouseDown: (input: BrowserMouseButtonInput) => Promise<BrowserMouseResult>
+  /** 在鼠标现在的位置松开一个鼠标键。 */
+  mouseUp: (input: BrowserMouseButtonInput) => Promise<BrowserMouseResult>
+  /** 在鼠标现在的位置滚一下滚轮。 */
+  mouseWheel: (input: BrowserWheelInput) => Promise<BrowserMouseResult>
+  /** 按视口坐标点一下（真实的鼠标事件）。 */
   clickCoordinates: (
     options: BrowserClickCoordinatesOptions
   ) => Promise<BrowserClickCoordinatesResult>
   /** 按两个目标元素拖拽。 */
   dragTargets: (options: BrowserDragOptions) => Promise<BrowserDragResult>
-  /** 等待选择器出现/消失，保证后续动作在页面稳定后执行。 */
-  waitForSelector: (options: BrowserWaitForSelectorOptions) => Promise<BrowserWaitForSelectorResult>
-  /** 等待页面 readyState 或短暂停顿，适合轻量异步渲染稳定。 */
+  /** 等页面加载到某个状态（readyState 或网络空闲）。 */
   waitForPage: (options: BrowserPageWaitOptions) => Promise<BrowserPageWaitResult>
-  /** 修改受控浏览器 viewport，便于复现移动端或桌面布局。 */
-  setViewport: (options: BrowserViewportOptions) => Promise<BrowserViewportResult>
   /** 调整页面缩放比例，便于视觉定位和点击。 */
   setPageZoom: (options: BrowserPageZoomOptions) => Promise<BrowserPageZoomResult>
   /** 配置外部 CDP 浏览器页面网络状态。 */
@@ -361,10 +385,6 @@ export interface BrowserSpacePort {
   readNetworkRequestDetails: (
     options: BrowserNetworkRequestDetailsOptions
   ) => Promise<BrowserNetworkRequestDetailsResult>
-  /** 配置外部 CDP 浏览器页面环境模拟。 */
-  configureEmulation: (
-    options: BrowserEmulationOptions
-  ) => Promise<BrowserEmulationResult>
   /** 开始录制性能 trace。 */
   startPerformanceTrace: (
     options: BrowserPerformanceTraceStartOptions
@@ -407,16 +427,18 @@ export interface BrowserSpacePort {
   uploadFile: (options: BrowserUploadFileOptions) => Promise<BrowserUploadFileResult>
   /** 用当前会话 cookie 下载远程资源到浏览器工作区。 */
   fetchResource: (options: BrowserFetchResourceOptions) => Promise<BrowserFetchResourceResult>
-  /** 枚举当前页面媒体 URL。 */
-  listMediaSources: (
-    options?: BrowserListMediaSourcesOptions
-  ) => Promise<BrowserListMediaSourcesResult>
   /** 将当前页面导出为 PDF。 */
   exportPagePdf: (options?: BrowserExportPagePdfOptions) => Promise<BrowserExportPagePdfResult>
-  /** 读取 localStorage/sessionStorage/cookie 等页面存储。 */
-  readPageStorage: (options?: BrowserPageStorageOptions) => Promise<BrowserPageStorageResult>
-  /** 在页面上下文执行受控脚本，适合读取复杂 DOM 状态。 */
-  evaluateScript: (options: BrowserEvaluateScriptOptions) => Promise<BrowserEvaluateScriptResult>
+  /** 列出页面的框架树（顶层页面与各层 iframe，含跨源的）。 */
+  listFrames: () => Promise<BrowserFrameInfo[]>
+  /** 在页面（或指定的框架）里跑一段脚本：整份 JSON 取回，抛错与超限如实回报。 */
+  evaluateScript: (options: BrowserEvaluateScriptOptions) => Promise<BrowserScriptOutcome>
+  /** 在模型自己的那条 CDP 会话上发一条命令；会话第一次用到时才建。 */
+  sendProtocolCommand: (command: CdpSendInput) => Promise<unknown>
+  /** 读模型那条 CDP 会话收到的事件。 */
+  readProtocolEvents: (query: CdpEventsInput) => Promise<BrowserProtocolEvents>
+  /** 断开模型那条 CDP 会话：它开过的域、设过的仿真与拦截、缓冲的事件一并撤掉。 */
+  resetProtocolSession: () => Promise<void>
   /** 获取当前页轻量状态，通常用于动作后的确认。 */
   getPageState: () => Promise<BrowserPageState>
   /** 管理当前浏览器会话共享的持久用户脚本。 */

@@ -604,12 +604,16 @@ export interface BrowserTargetActionOptions {
   target: BrowserElementTargetHint
   value?: BrowserTargetActionValue
   waitForNavigation?: boolean
+  /** 点击用哪个键，缺省 left。 */
+  button?: BrowserMouseButton
+  /** 点击连击几下，缺省 1。 */
+  clickCount?: number
 }
 
 /**
  * @AgentView
- * 按元素动手的结果：matched 为假时 failureReason 说为什么（not-found 没找到、not-interactable 点不动、covered 被挡住、option-not-found 没有这个选项），blockedBy 是挡住它的元素。
- * effect 是动手前后页面的变化，selectedValues、availableOptions 是 select 的结果与可选项，controlState 是动完之后控件的值或勾选状态。
+ * 按元素动手的结果：matched 为假时 failureReason 说为什么（not-found 没找到、not-interactable 点不动或不是文本控件、covered 被挡住），blockedBy 是挡住它的元素。
+ * effect 是动手前后页面的变化，controlState 是动完之后控件的值或勾选状态。
  */
 export interface BrowserTargetActionResult {
   action: BrowserTargetActionKind
@@ -681,7 +685,7 @@ export interface BrowserPageNavigationResult {
   capturedAt: number
 }
 
-/** @AgentView 滚动方向：up、down、left、right、top（到顶）、bottom（到底）。 */
+/** 滚动方向：up、down、left、right、top（到顶）、bottom（到底）。 */
 export type BrowserPageScrollDirection = 'up' | 'down' | 'left' | 'right' | 'top' | 'bottom'
 
 export interface BrowserPageScrollOptions {
@@ -691,7 +695,7 @@ export interface BrowserPageScrollOptions {
   y?: number
 }
 
-/** @AgentView 滚动之后的位置：scrollX、scrollY 是当前滚动位置，maxScrollX、maxScrollY 是能滚到的最远处（scrollY 等于 maxScrollY 就是到底了）。 */
+/** 滚动之后的位置：scrollX、scrollY 是当前滚动位置，maxScrollX、maxScrollY 是能滚到的最远处（scrollY 等于 maxScrollY 就是到底了）。 */
 export interface BrowserPageScrollResult {
   url: string
   scrollX: number
@@ -712,7 +716,7 @@ export interface BrowserElementQueryOptions {
   maxHtmlChars?: number
 }
 
-/** @AgentView query 找到的一个元素：tagName、text、attributes、href、value、checked、visible，以及交给 click 这类操作的 target。 */
+/** query 找到的一个元素：tagName、text、attributes、href、value、checked、visible，以及交给 click 这类操作的 target。 */
 export interface BrowserQueriedElement {
   index: number
   tagName: string
@@ -728,7 +732,7 @@ export interface BrowserQueriedElement {
   target: Nullable<BrowserElementTargetHint>
 }
 
-/** @AgentView query 的结果：count 是一共匹配几个，elements 是交回的那几个；selectorError 是 selector 写错时的说明。 */
+/** query 的结果：count 是一共匹配几个，elements 是交回的那几个；selectorError 是 selector 写错时的说明。 */
 export interface BrowserElementQueryResult {
   url: string
   selector: string
@@ -785,7 +789,7 @@ export interface BrowserPendingEventSummary {
   details: Record<string, unknown>
 }
 
-/** @AgentView 此刻挂着的全部事件。 */
+/** 此刻挂着的全部事件。 */
 export interface BrowserPendingEventsResult {
   pending: BrowserPendingEventSummary[]
   capturedAt: number
@@ -862,10 +866,10 @@ export interface BrowserFetchResourceResult {
   capturedAt: number
 }
 
-/** @AgentView 媒体种类：image、video、audio、other。 */
+/** 媒体种类：image、video、audio、other。 */
 export type BrowserMediaSourceKind = 'image' | 'video' | 'audio' | 'other'
 
-/** @AgentView 页面上的一个媒体地址：fetchable 为真的可以直接交给 download（blob:、data: 不行），tagName、attribute 说它从哪个元素的哪个属性来。 */
+/** 页面上的一个媒体地址：fetchable 为真的可以直接交给 download（blob:、data: 不行），tagName、attribute 说它从哪个元素的哪个属性来。 */
 export interface BrowserMediaSourceItem {
   kind: BrowserMediaSourceKind
   url: string
@@ -883,7 +887,7 @@ export interface BrowserListMediaSourcesOptions {
   includeBlobUrls?: boolean
 }
 
-/** @AgentView 页面上的媒体地址：truncated 为真表示超过上限没列全。 */
+/** 页面上的媒体地址：truncated 为真表示超过上限没列全。 */
 export interface BrowserListMediaSourcesResult {
   url: string
   items: BrowserMediaSourceItem[]
@@ -1010,12 +1014,13 @@ export interface BrowserPageDiagnostics {
   capturedAt: number
 }
 
-export interface BrowserTypeTextOptions {
+/** 在当前焦点处插入一段文字。 */
+export interface BrowserInsertTextOptions {
   text: string
 }
 
-/** @AgentView 输入的结果：textLength 是输了几个字符。 */
-export interface BrowserTypeTextResult {
+/** @AgentView 插入的结果：textLength 是插入了几个字符。 */
+export interface BrowserInsertTextResult {
   url: string
   textLength: number
   capturedAt: number
@@ -1042,17 +1047,11 @@ export interface BrowserPressKeyResult {
 /** @AgentView 鼠标按键：left、middle、right。 */
 export type BrowserMouseButton = 'left' | 'middle' | 'right'
 
+/** 把鼠标移到视口里的一个点：steps 是拆成几步移动。 */
 export interface BrowserMoveMouseOptions {
   x: number
   y: number
-}
-
-/** @AgentView 移动鼠标的结果：鼠标现在停在视口里的 x、y。 */
-export interface BrowserMoveMouseResult {
-  url: string
-  x: number
-  y: number
-  capturedAt: number
+  steps?: number
 }
 
 export interface BrowserClickCoordinatesOptions {
@@ -1063,7 +1062,7 @@ export interface BrowserClickCoordinatesOptions {
   waitForNavigation?: boolean
 }
 
-/** @AgentView 坐标点击的结果：点在视口里的 x、y，用的哪个键、点了几下。 */
+/** 坐标点击的结果：点在视口里的 x、y，用的哪个键、点了几下。 */
 export interface BrowserClickCoordinatesResult {
   url: string
   x: number
@@ -1121,10 +1120,10 @@ export interface BrowserWaitForSelectorOptions {
   timeoutMs?: number
 }
 
-/** @AgentView 等 selector 到什么状态：attached（出现在文档里）、visible（看得见）、hidden（看不见）、detached（从文档里没了）。 */
+/** 等 selector 到什么状态：attached（出现在文档里）、visible（看得见）、hidden（看不见）、detached（从文档里没了）。 */
 export type BrowserWaitForSelectorState = 'attached' | 'visible' | 'hidden' | 'detached'
 
-/** @AgentView 等 selector 的结果：matched 为假表示等到超时也没到，count 是匹配几个，target 是第一个匹配的元素。 */
+/** 等 selector 的结果：matched 为假表示等到超时也没到，count 是匹配几个，target 是第一个匹配的元素。 */
 export interface BrowserWaitForSelectorResult {
   url: string
   selector: string
@@ -1149,7 +1148,7 @@ export interface BrowserPageWaitOptions {
   timeoutMs?: number
 }
 
-/** @AgentView 等页面的结果：matched 为真表示等到了，timedOut 为真表示等到超时；functionResult 是 waitForFunction 的表达式最后的值，elapsedMs 是实际等了多久。 */
+/** 等页面的结果：matched 为真表示等到了，timedOut 为真表示等到超时；functionResult 是 waitForFunction 的表达式最后的值，elapsedMs 是实际等了多久。 */
 export interface BrowserPageWaitResult {
   url: string
   loadState: 'loading' | 'interactive' | 'complete'
@@ -1174,7 +1173,7 @@ export interface BrowserViewportOptions {
   mobile?: boolean
 }
 
-/** @AgentView 设视口之后的尺寸。 */
+/** 设视口之后的尺寸。 */
 export interface BrowserViewportResult {
   url: string
   width: number
@@ -1304,27 +1303,27 @@ export interface BrowserNetworkRequestDetailsResult {
   capturedAt: number
 }
 
-/** @AgentView 配色：light、dark、no-preference。 */
+/** 配色：light、dark、no-preference。 */
 export type BrowserColorScheme = 'light' | 'dark' | 'no-preference'
 
-/** @AgentView 动效偏好：reduce 减少动效，no-preference 不限。 */
+/** 动效偏好：reduce 减少动效，no-preference 不限。 */
 export type BrowserReducedMotion = 'reduce' | 'no-preference'
 
-/** @AgentView 地理位置：latitude 纬度（-90 到 90），longitude 经度（-180 到 180），accuracy 精度（米）。 */
+/** 地理位置：latitude 纬度（-90 到 90），longitude 经度（-180 到 180），accuracy 精度（米）。 */
 export interface BrowserGeolocationOptions {
   latitude: number
   longitude: number
   accuracy?: number
 }
 
-/** @AgentView 当前仿真的地理位置。 */
+/** 当前仿真的地理位置。 */
 export interface BrowserGeolocationState {
   latitude: number
   longitude: number
   accuracy: number
 }
 
-/** @AgentView 网络节流档位：none 不节流，slow-3g、fast-3g、slow-4g、fast-4g 与 DevTools 的 Network conditions 同一套数值。 */
+/** 网络节流档位：none 不节流，slow-3g、fast-3g、slow-4g、fast-4g 与 DevTools 的 Network conditions 同一套数值。 */
 export type BrowserNetworkThrottlingPreset = 'none' | 'slow-3g' | 'fast-3g' | 'slow-4g' | 'fast-4g'
 
 export interface BrowserEmulationOptions {
@@ -1339,7 +1338,7 @@ export interface BrowserEmulationOptions {
   networkThrottling?: BrowserNetworkThrottlingPreset
 }
 
-/** @AgentView 仿真设好之后的全部状态：配色、动效、时区、语言、地理位置、CPU 降速倍数与网络节流档位。 */
+/** 仿真设好之后的全部状态：配色、动效、时区、语言、地理位置、CPU 降速倍数与网络节流档位。 */
 export interface BrowserEmulationResult {
   url: string
   colorScheme: BrowserColorScheme
@@ -1461,13 +1460,13 @@ export interface BrowserPageStorageOptions {
   maxValueChars?: number
 }
 
-/** @AgentView 存储读哪儿：current-origin 当前来源，all-origins 页面里所有来源（外部浏览器才有）。 */
+/** 存储读哪儿：current-origin 当前来源，all-origins 页面里所有来源（外部浏览器才有）。 */
 export type BrowserStorageScope = 'current-origin' | 'all-origins'
 
-/** @AgentView cookie 读哪些：current-url 当前地址会带的，all 这个浏览器里的全部。 */
+/** cookie 读哪些：current-url 当前地址会带的，all 这个浏览器里的全部。 */
 export type BrowserCookieScope = 'current-url' | 'all'
 
-/** @AgentView 一项存储或 cookie：name、value（valueTruncated 为真表示值被截断），details 里是 cookie 的域、路径、过期时间这些。 */
+/** 一项存储或 cookie：name、value（valueTruncated 为真表示值被截断），details 里是 cookie 的域、路径、过期时间这些。 */
 export interface BrowserStorageEntry {
   name: string
   value: string
@@ -1475,14 +1474,14 @@ export interface BrowserStorageEntry {
   details?: Record<string, unknown>
 }
 
-/** @AgentView 一个来源的 localStorage 与 sessionStorage。 */
+/** 一个来源的 localStorage 与 sessionStorage。 */
 export interface BrowserOriginStorage {
   origin: string
   localStorage?: BrowserStorageEntry[]
   sessionStorage?: BrowserStorageEntry[]
 }
 
-/** @AgentView 页面存储：localStorage、sessionStorage、cookies 各是一组，origins 是按来源分开的存储。 */
+/** 页面存储：localStorage、sessionStorage、cookies 各是一组，origins 是按来源分开的存储。 */
 export interface BrowserPageStorageResult {
   url: string
   localStorage?: BrowserStorageEntry[]
@@ -1492,32 +1491,38 @@ export interface BrowserPageStorageResult {
   capturedAt: number
 }
 
-/** @AgentView 脚本写法：expression 是一个表达式，function-body 是函数体（用 return 交回）。 */
-export type BrowserEvaluateScriptMode = 'expression' | 'function-body'
-
+/** 页面脚本的一次求值。 */
 export interface BrowserEvaluateScriptOptions {
+  /** 一个表达式；求出来是函数就用 args 调它，是 Promise 就等它。 */
   script: string
-  mode?: BrowserEvaluateScriptMode
+  /** 交给函数的参数（JSON 值）。 */
+  args?: unknown[]
+  /** 在哪个框架里跑（listFrames 给的 id）；不给是顶层页面。 */
+  frame?: string
+  /** 页面里最多等多少毫秒。 */
   timeoutMs?: number
-  maxResultChars?: number
+  /** 结果 JSON 最长多少字符；超了只回它的长度，不把结果运出页面。 */
+  maxResultChars: number
 }
 
-/** @AgentView 脚本的结果：ok 为假时 error 是页面里抛的错；result 是交回的值（按 JSON 取回），resultTruncated 为真时 result 取不全、resultText 是截断的 JSON 文本。 */
-export interface BrowserEvaluateScriptResult {
+/** 页面脚本抛的错：name、message 原样，line、column 是它在 script 里的行列（从 1 数，定位不到时缺席）。 */
+export interface BrowserScriptError {
+  name: string
+  message: string
+  line?: number
+  column?: number
+}
+
+/**
+ * 页面脚本求值的结局，三种之一：成功时 json 是结果的 JSON（返回 undefined 时缺席）；页面里抛了错时 error 在；
+ * 结果超过上限时 tooLargeChars 是它的 JSON 长度。url 是求值时页面的地址。
+ */
+export interface BrowserScriptOutcome {
   url: string
   ok: boolean
-  mode: BrowserEvaluateScriptMode
-  result: unknown
-  /** 结果的缩进 JSON 文本，只在 resultTruncated 为真时给出（没截断时 result 就是完整内容，不再重复一份）。 */
-  resultText?: LooseOptional<string>
-  resultTruncated: boolean
-  error: LooseOptional<{
-    name: string
-    message: string
-    stack: Nullable<string>
-  }>
-  durationMs: number
-  capturedAt: number
+  json?: string
+  error?: BrowserScriptError
+  tooLargeChars?: number
 }
 
 /** @AgentView 受控页面的窗口状态：visible 是用户看不看得见，driverKind 是内嵌页面（webview）还是外部浏览器（external），以及地址、标题、能不能前进后退。 */
@@ -1573,7 +1578,7 @@ export interface BrowserPageTargetInfo {
   active: boolean
 }
 
-/** @AgentView 标签页列表：activeTargetId 是当前在操作的那一页。 */
+/** 标签页列表：activeTargetId 是当前在操作的那一页。 */
 export interface BrowserPageTargetsResult {
   driverKind: 'webview' | 'external'
   activeTargetId: Nullable<string>
@@ -1663,7 +1668,7 @@ export interface ControlledBrowserSurfaceInput {
  * @AgentView
  * 定位一个元素的线索，至少给一样：ref 是 inspect、标注截图给的引用（如 @e3:g2，原样传回；新的一次 inspect 或标注截图之后旧 ref 作废），
  * css 是 CSS selector（最多 1000 个字符），text、name、role、attributes（id、data-testid 这类）按可见文字、可访问名称、角色与属性找；
- * frame 限定在哪个同源 iframe 里找（只进一层）。inspect、query 结果里的 target 可以原样传进来。
+ * frame 限定在哪个同源 iframe 里找（只进一层）。inspect 结果、截图 legend 里的 target 可以原样传进来。
  */
 export interface BrowserTargetHint {
   ref?: LooseOptional<string>
@@ -1688,7 +1693,7 @@ export interface BrowserOpenInput {
   url: string
 }
 
-/** @AgentView 切到外部浏览器的另一个标签页：targetId 取自 tabs() 结果里的 targets[].id。 */
+/** @AgentView 切到外部浏览器的另一个标签页：targetId 取自 state() 结果里的 tabs[].id。 */
 export interface BrowserSwitchTabInput {
   targetId: string
 }
@@ -1705,21 +1710,6 @@ export interface BrowserInspectInput {
   maxHtmlChars?: number
   maxElements?: number
   ignoreSelectors?: string[]
-}
-
-/**
- * @AgentView
- * 按 CSS selector 找元素：selector 最多 1000 个字符，一层同源 iframe 里的元素写成 `iframe[name="x"] >> .inner`；
- * attributes 是额外要读的属性名（最多 20 个，每个最多 80 个字符），includeHtml 为真再带上每个元素的 HTML；
- * limit 最多几个元素（最多 100），maxTextChars、maxHtmlChars 是每个元素的文本与 HTML 最多多少字符（最多 20000、50000）。不给就取到上限。
- */
-export interface BrowserQueryInput {
-  selector: string
-  attributes?: string[]
-  includeHtml?: boolean
-  limit?: number
-  maxTextChars?: number
-  maxHtmlChars?: number
 }
 
 /** @AgentView 只截页面上的一块：给 selector（截那个元素），或者给完整的 x、y、width、height（页面 CSS 像素，含滚动，最多 20000）。 */
@@ -1749,77 +1739,57 @@ export interface BrowserScreenshotInput {
 
 /**
  * @AgentView
- * 在页面里跑一段 JavaScript：script 最多 20000 个字符。mode 缺省 expression（一个表达式，交回它的值），
- * function-body 是函数体（多条语句，用 return 交回）。timeoutMs 最多 30000；结果按 JSON 取回，超过 200000 个字符时只回截断标记。
+ * 在页面里跑一段 JavaScript：script 是一个表达式（最多 20000 个字符），求出来是函数就用 args 调它，是 Promise 就等它；
+ * 多条语句写成 `() => { …; return x }`。args 是交给函数的参数（JSON 值，合起来最多 1000000 个字符）：值用它传，别拼进源码。
+ * frame 是 frames() 给的 id，不给就在顶层页面里跑。timeoutMs 缺省 5000、最多 30000。
  */
 export interface BrowserEvaluateInput {
   script: string
-  mode?: BrowserEvaluateScriptMode
+  args?: unknown[]
+  frame?: string
   timeoutMs?: number
 }
 
-/** @AgentView 列页面上的图片、视频、音频地址：limit 最多几条（最多 200，不给就取到上限），data: 与 blob: 地址缺省不列。 */
-export interface BrowserMediaInput {
-  limit?: number
-  includeDataUrls?: boolean
-  includeBlobUrls?: boolean
-}
-
-/** @AgentView 点一个元素：waitForNavigation 为真时按完整的导航稳定窗口等（缺省只短暂等一下可能的跳转）。 */
+/**
+ * @AgentView
+ * 点一下：target 是元素（点它的中心：先滚进视口，确认没被挡住），或者给视口坐标 x、y（0 到 10000；取自截图时按 image.coordinateMap 换算），两样只给一样。
+ * button 缺省 left，clickCount 是连击几下（最多 5，双击给 2）；按住的修饰键（keyDown）会带上。
+ * waitForNavigation 为真时按完整的导航稳定窗口等（缺省只短暂等一下可能的跳转）。
+ */
 export interface BrowserClickInput {
-  target: BrowserTarget
+  target?: BrowserTarget
+  x?: number
+  y?: number
+  button?: BrowserMouseButton
+  clickCount?: number
   waitForNavigation?: boolean
 }
 
-/** @AgentView 往输入框或可编辑区域写入文字（先清空再写）：value 最多 20000 个字符。 */
+/**
+ * @AgentView
+ * 往输入框、文本域或可编辑区域写入文字，替换原来的内容：value 最多 20000 个字符，空字符串就是清空。
+ * 是真实输入：聚焦、全选，再像输入法一样插入，React、Vue 与富文本编辑器都认。勾选框、下拉框、日期这类不是文本的控件回 matched 为假：
+ * 勾选用 click，下拉框与日期在 evaluate 里设值再派发 change。
+ */
 export interface BrowserFillInput {
   target: BrowserTarget
   value: string
 }
 
-/** @AgentView 选原生 select 的选项：value 按选项的值或可见文字匹配，多选给数组（最多 50 个，每个最多 1000 个字符）。 */
-export interface BrowserSelectInput {
-  target: BrowserTarget
-  value: string | string[]
-}
-
-/** @AgentView 勾选或取消勾选复选框、单选项：checked 缺省 true。 */
-export interface BrowserCheckInput {
-  target: BrowserTarget
-  checked?: boolean
-}
-
-/** @AgentView 只要一个元素的操作（悬停、聚焦、清空、选中文字、滚到视口里）。 */
-export interface BrowserTargetInput {
+/** @AgentView 悬停：把鼠标移到元素中心（出菜单、出提示）；移到一个坐标用 mouseMove。 */
+export interface BrowserHoverInput {
   target: BrowserTarget
 }
 
-/** @AgentView 跳到一个网址：url 最多 2048 个字符。 */
-export interface BrowserGotoInput {
-  url: string
-}
-
-/**
- * @AgentView
- * 滚动页面：direction 是 up、down、left、right、top、bottom（缺省 down），amount 是一次滚多少像素（最多 5000）；
- * 也可以直接给 x、y 偏移（绝对值最多 10000）。
- */
-export interface BrowserScrollInput {
-  direction?: BrowserPageScrollDirection
-  amount?: number
-  x?: number
-  y?: number
-}
-
-/** @AgentView 在当前焦点处输入文字（真的按键，不直接改 value）：text 最多 20000 个字符。要先点中输入框。 */
-export interface BrowserTypeInput {
+/** @AgentView 在当前焦点处插入文字（像输入法上屏：发 beforeinput、input，不发按键事件）：text 最多 20000 个字符。要先点中输入框。 */
+export interface BrowserInsertTextInput {
   text: string
 }
 
 /**
  * @AgentView
- * 按一个键：key 是 Enter、Escape、Tab、ArrowDown 这类键名或一个字符（最多 80 个字符），组合键写 Control+a 或给 modifiers；
- * repeat 是连按几次（最多 50），waitForNavigation 为真时按完等可能的跳转。
+ * 按一个键（按下再抬起）：key 是 Enter、Tab、Escape、Backspace、ArrowDown、Home、F5 这类键名或一个字符（最多 80 个字符），组合键写 Control+a 或给 modifiers；
+ * repeat 是连按几次（最多 50），waitForNavigation 为真时按完等可能的跳转。按住的修饰键（keyDown）也会带上。
  */
 export interface BrowserPressInput {
   key: string
@@ -1828,22 +1798,35 @@ export interface BrowserPressInput {
   waitForNavigation?: boolean
 }
 
-/** @AgentView 视口里的一个点（CSS 像素，0 到 10000）。 */
-export interface BrowserPointInput {
-  x: number
-  y: number
+/**
+ * @AgentView
+ * 按下或抬起一个键：key 的写法同 press，一次一个键（最多 80 个字符）。Shift、Control、Alt、Meta 按下之后带到之后的每个按键与鼠标事件上，
+ * 直到 keyUp：keyDown Shift 之后的 click 就是 Shift 点击。
+ */
+export interface BrowserKeyInput {
+  key: string
 }
 
-/** @AgentView 按视口坐标点一下（定位不到元素时的兜底）：button 缺省 left，clickCount 是连击几下（最多 5）。 */
-export interface BrowserClickAtInput {
+/** @AgentView 把鼠标移到视口里的一个点（CSS 像素，0 到 10000）：steps 是拆成几步移动（最多 60，缺省 1）；按着鼠标键时就是拖。 */
+export interface BrowserMouseMoveInput {
   x: number
   y: number
+  steps?: number
+}
+
+/** @AgentView 在鼠标现在的位置按下或松开一个键：button 缺省 left，clickCount 是连击的第几下（双击的第二下给 2，最多 5）。 */
+export interface BrowserMouseButtonInput {
   button?: BrowserMouseButton
   clickCount?: number
-  waitForNavigation?: boolean
 }
 
-/** @AgentView 把一个元素拖到另一个元素上：steps 是拆成几步移动（最多 60）。 */
+/** @AgentView 在鼠标现在的位置滚一下滚轮：deltaX、deltaY 是像素（绝对值最多 10000，往下、往右为正），至少给一个。要先 mouseMove 到要滚的区域上。 */
+export interface BrowserWheelInput {
+  deltaX?: number
+  deltaY?: number
+}
+
+/** @AgentView 把一个元素拖到另一个元素上：steps 是拆成几步移动（最多 60）。拖出任意路径用 mouseDown、mouseMove、mouseUp。 */
 export interface BrowserDragInput {
   source: BrowserTarget
   target: BrowserTarget
@@ -1857,43 +1840,32 @@ export interface BrowserUploadInput {
   filePath: string
 }
 
-/** @AgentView 等一个 selector 到某个状态：state 缺省 visible，timeoutMs 最多 60000。 */
-export interface BrowserWaitForSelectorInput {
-  selector: string
-  state?: BrowserWaitForSelectorState
-  timeoutMs?: number
-}
-
-/** @AgentView 等页面正文里出现一段文字：text 最多 5000 个字符，timeoutMs 最多 60000。 */
-export interface BrowserWaitForTextInput {
-  text: string
-  timeoutMs?: number
-}
-
-/** @AgentView 等地址变成某个样子：url 是完整地址或带 * 的通配（最多 2048 个字符），timeoutMs 最多 60000。 */
-export interface BrowserWaitForUrlInput {
+/** @AgentView 跳到一个网址：url 最多 2048 个字符。 */
+export interface BrowserGotoInput {
   url: string
-  timeoutMs?: number
 }
 
-/** @AgentView 等页面里一个表达式变成真：expression 最多 5000 个字符，timeoutMs 最多 60000。 */
+/**
+ * @AgentView
+ * 等页面里一个条件成立：script、args、frame 的写法同 evaluate；宿主每隔 intervalMs（50 到 5000，缺省 100）在当前页面上跑一次，
+ * 结果为真就交回它，页面跳转途中的那一次算没到、新页面上接着判。timeoutMs 最多 60000、缺省 30000，等不到抛 TIMEOUT；
+ * 页面里抛错直接抛 BROWSER_SCRIPT_FAILED（元素可能还没出现时写 `?.`）。
+ */
 export interface BrowserWaitForFunctionInput {
-  expression: string
+  script: string
+  args?: unknown[]
+  frame?: string
   timeoutMs?: number
+  intervalMs?: number
 }
 
-/** @AgentView 等页面加载到某个状态：state 缺省 load，timeoutMs 最多 60000。 */
+/** @AgentView 等页面加载到某个状态：state 缺省 load（也可以 domcontentloaded、networkidle），timeoutMs 最多 60000、缺省 30000，等不到抛 TIMEOUT。 */
 export interface BrowserWaitForLoadInput {
   state?: BrowserPageWaitLoadState
   timeoutMs?: number
 }
 
-/** @AgentView 原地停一会儿：ms 最多 60000。能等具体条件时用 waitFor 那几个。 */
-export interface BrowserWaitInput {
-  ms: number
-}
-
-/** @AgentView 等一个挂起事件出现：kind 缺省 download，timeoutMs 缺省 5000、最多 60000。 */
+/** @AgentView 等一个挂起事件出现：kind 缺省 download，timeoutMs 缺省 5000、最多 60000，等不到抛 TIMEOUT。 */
 export interface BrowserWaitForEventInput {
   kind?: BrowserPendingEventKind
   timeoutMs?: number
@@ -1917,39 +1889,6 @@ export interface BrowserDownloadDecisionInput {
 export interface BrowserPermissionInput {
   eventId?: string
   grant: boolean
-}
-
-/** @AgentView 取一张表：selector 限定在哪张表或哪个容器里找，tableIndex 是第几张（从 0 起，最多 50，缺省 0），maxRows 最多几行（最多 2000，不给就取到上限）。 */
-export interface BrowserTableInput {
-  selector?: string
-  tableIndex?: number
-  maxRows?: number
-}
-
-/** @AgentView 按重复出现的容器取一组条目（搜索结果、商品卡片）：selector 是每一条的容器，maxItems 最多几条（最多 500，不给就取到上限）。 */
-export interface BrowserListInput {
-  selector?: string
-  maxItems?: number
-}
-
-/**
- * @AgentView
- * 翻页收集列表：每页照 list 取一遍再点下一页，翻不动、内容没变或这页是空的就停。maxPages 缺省 5、最多 20，
- * maxItemsPerPage 每页最多几条（最多 500），nextPageSelector 是下一页按钮（缺省只认 rel=next 与写明「下一页」「next」的按钮）。先确认当前在第一页。
- */
-export interface BrowserPaginateInput {
-  selector?: string
-  maxPages?: number
-  maxItemsPerPage?: number
-  nextPageSelector?: string
-}
-
-/** @AgentView 取正文：format 缺省 markdown（也可以 plain、html），selector 限定范围，ignoreSelectors 先排除的子树，maxChars 最多 200000（不给就取到上限）。 */
-export interface BrowserContentInput {
-  format?: BrowserPageContentFormat
-  selector?: string
-  ignoreSelectors?: string[]
-  maxChars?: number
 }
 
 /**
@@ -1976,11 +1915,26 @@ export interface BrowserOpened {
   page: BrowserPageState
 }
 
-/** @AgentView 当前状态：没进站点时 active 为假、其余字段都没有；进了站点时带着站点与页面状态。 */
+/**
+ * @AgentView
+ * 当前状态：没进站点时 active 为假、其余字段都没有；进了站点时带着站点与页面状态，tabs 是标签页（内嵌页面只有当前这一页，外部浏览器是全部），
+ * pending 是挂着等处理的弹窗、下载与权限请求（没人处理的会在超时后按缺省结算：弹窗取消、下载取消、权限拒绝）。
+ */
 export interface BrowserState {
   active: boolean
   site?: BrowserSiteContext
   page?: BrowserPageState
+  tabs?: BrowserPageTargetInfo[]
+  pending?: BrowserPendingEventSummary[]
+}
+
+/** @AgentView 页面里的一个框架：id 交给 evaluate、waitForFunction 的 frame，parentId 是上一层（顶层页面是 null），crossOrigin 为真是和顶层页面不同源的 iframe。 */
+export interface BrowserFrameInfo {
+  id: string
+  parentId: Nullable<string>
+  url: string
+  name: string
+  crossOrigin: boolean
 }
 
 /** @AgentView 交给你看的那张图：宽高（像素）、相对原图缩了多少（scale）、页面 CSS 坐标与图上坐标怎么换算（coordinateMap）。 */
@@ -2028,70 +1982,29 @@ export interface BrowserActionEffectHint {
 
 /**
  * @AgentView
- * 按元素动手的结果：matched 为假时 failureReason 说为什么（没找到、点不动、被挡住、没有这个选项），blockedBy 是挡住它的元素；
- * effect 是动手前后页面的变化（地址、标题、正文），selectedValues、availableOptions 是 select 的结果与可选项，controlState 是动完之后控件的状态。
- * selectorRecovery 在改用坐标补点时出现，actionEffect 在点中了却没有变化时出现。
+ * 按元素动手的结果：matched 为假时 failureReason 说为什么（没找到、点不动、被挡住），blockedBy 是挡住它的元素；
+ * effect 是动手前后页面的变化（地址、标题、正文），controlState 是动完之后控件的状态（fill 之后读它确认写进去的值）。
+ * 按坐标点的 selector 与 text 是 null。selectorRecovery 在改用坐标补点时出现，actionEffect 在点中了却没有变化时出现。
  */
 export interface BrowserActed extends BrowserTargetActionResult {
   selectorRecovery?: BrowserSelectorRecovery
   actionEffect?: BrowserActionEffectHint
 }
 
-/** @AgentView 列表里的一条：title 是标题（没有就取正文开头），href 是链接，description 是摘要。 */
-export interface BrowserListItem {
-  title: string
-  href: Nullable<string>
-  description: Nullable<string>
-}
-
-/** @AgentView 取到的表：ok 为假时 error 说为什么（比如页面上没有表格）；tables 是页面上一共几张表，headers 是表头，rows 是各行的文字。 */
-export interface BrowserTable {
-  ok: boolean
-  error: Nullable<string>
-  tables: number
-  selector: Nullable<string>
-  headers: string[]
-  rows: string[][]
-  url?: string
-}
-
-/** @AgentView 取到的一组条目。 */
-export interface BrowserList {
-  ok: boolean
-  selector: Nullable<string>
-  items: BrowserListItem[]
-  url?: string
-}
-
-/** @AgentView 翻页收集的结果：pagesVisited 是翻了几页，items 是各页条目按顺序接起来。 */
-export interface BrowserPaginated {
-  pagesVisited: number
-  items: BrowserListItem[]
-}
-
-/** @AgentView 取到的正文：ok 为假表示 selector 没找到东西；truncated 为真表示超过 maxChars 被截断。 */
-export interface BrowserContent {
-  ok: boolean
-  format: BrowserPageContentFormat
-  selector: Nullable<string>
-  content: string
-  truncated: boolean
+/** @AgentView 按键之后：held 是现在还按着的键（keyDown 了还没 keyUp 的）。 */
+export interface BrowserKeyResult {
   url: string
+  key: string
+  held: string[]
 }
 
-/** @AgentView 等挂起事件的结果：matched 为真时 event 是等到的那个；timedOut 为真是等到超时也没来。pending 是此刻还挂着的全部事件。 */
-export interface BrowserPendingEventWaitResult {
-  matched: boolean
-  timedOut: boolean
-  kind: BrowserPendingEventKind
-  event: Nullable<BrowserPendingEventSummary>
-  pending: BrowserPendingEventSummary[]
-  timeoutMs: number
-  elapsedMs: number
+/** @AgentView 鼠标动过之后：x、y 是它现在在视口里的位置，buttons 是还按着的鼠标键。 */
+export interface BrowserMouseResult {
+  url: string
+  x: number
+  y: number
+  buttons: BrowserMouseButton[]
 }
-
-/** @AgentView 正文的格式：plain 纯文本、markdown、html。 */
-export type BrowserPageContentFormat = 'plain' | 'markdown' | 'html'
 
 // ── 模型面：velar:devtools 的入参 ────────────────────────────────
 
@@ -2122,27 +2035,6 @@ export interface DevtoolsRequestInput {
   maxBodyChars?: number
 }
 
-/**
- * @AgentView
- * 读页面存储：localStorage 与 sessionStorage 缺省都读，cookie 要 includeCookies 为真才读；storageScope、cookieScope 选当前来源还是全部；
- * limit 是每类最多几项（最多 300），maxValueChars 是每个值最多多少字符（最多 50000）。不给就取到上限。
- */
-export interface DevtoolsStorageInput {
-  includeLocalStorage?: boolean
-  includeSessionStorage?: boolean
-  includeCookies?: boolean
-  storageScope?: BrowserStorageScope
-  cookieScope?: BrowserCookieScope
-  limit?: number
-  maxValueChars?: number
-}
-
-/** @AgentView 把视口设成指定尺寸（复现手机、平板布局）：宽 320 到 3840，高 240 到 2160，影响之后的截图与坐标。 */
-export interface DevtoolsViewportInput {
-  width: number
-  height: number
-}
-
 /** @AgentView 调页面缩放：action 是 in、out、reset、set；set 要给 zoomFactor（0.25 到 3），in、out 的步长 step 是 0.05 到 0.5。 */
 export interface DevtoolsZoomInput {
   action: BrowserPageZoomAction
@@ -2162,21 +2054,6 @@ export interface DevtoolsNetworkInput {
   blockedURLPatterns?: string[]
   blockedResourceTypes?: string[]
   mockResponses?: BrowserNetworkMockResponse[]
-}
-
-/**
- * @AgentView
- * 仿真环境，至少给一样：colorScheme 深浅色，reducedMotion 减少动效，timezoneId 时区（最多 120 个字符），locale 语言（最多 80 个字符），
- * geolocation 地理位置，cpuThrottlingRate 是 CPU 降速几倍（1 到 20），networkThrottling 是网络节流档位。
- */
-export interface DevtoolsEmulateInput {
-  colorScheme?: BrowserColorScheme
-  reducedMotion?: BrowserReducedMotion
-  timezoneId?: string
-  locale?: string
-  geolocation?: BrowserGeolocationOptions
-  cpuThrottlingRate?: number
-  networkThrottling?: BrowserNetworkThrottlingPreset
 }
 
 /**
@@ -2318,3 +2195,44 @@ export type BrowserPageDiagnosticsReadResult =
   | BrowserConsoleEventsResult
   | BrowserNetworkEventsResult
   | BrowserPageErrorsResult
+
+// ── 模型面：velar:cdp ──────────────────────────────────────────
+
+/**
+ * @AgentView
+ * 一条 CDP 命令：method 是完整方法名（如 DOM.getDocument，最多 200 个字符），params 是它的参数（按 JSON 算最多 10000000 个字符）。
+ * session 是子会话 id（最多 200 个字符）：跨源 iframe、worker 先发 Target.setAutoAttach（autoAttach、flatten 为真），从 Target.attachedToTarget 事件里取；不给就是页面本身。
+ */
+export interface CdpSendInput {
+  method: string
+  params?: Record<string, unknown>
+  session?: string
+}
+
+/** @AgentView 读事件：method 是完整方法名，或以点结尾的域（如 Network.），不给就是全部；after 是上一次拿到的 last，只要它之后的。 */
+export interface CdpEventsInput {
+  method?: string
+  after?: number
+}
+
+/** @AgentView 等一条事件：method 写法同 events；after 不给就从现在起等新来的，给了就从那之后找（已经到了的也算）。timeoutMs 最多 60000、缺省 30000，等不到抛 TIMEOUT。 */
+export interface CdpWaitForEventInput {
+  method: string
+  after?: number
+  timeoutMs?: number
+}
+
+/** @AgentView 一条 CDP 事件：seq 是序号（只增不减），session 是它来自哪个子会话（页面本身是 null），params 是协议原样的参数。 */
+export interface BrowserProtocolEvent {
+  seq: number
+  method: string
+  params: any
+  session: Nullable<string>
+}
+
+/** @AgentView 缓冲里的事件：events 按收到的先后排，last 交给下一次的 after；dropped 是缓冲满了挤掉的条数（最多留 5000 条）。 */
+export interface BrowserProtocolEvents {
+  events: BrowserProtocolEvent[]
+  last: number
+  dropped: number
+}

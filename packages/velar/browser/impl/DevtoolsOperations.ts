@@ -1,19 +1,17 @@
 /**
  * 开发者工具能力（`velar:devtools`）的操作：`DevtoolsOperations` 与整个进程唯一的 `devtoolsOperations`。接口 `DevtoolsOperationsApi` 在本文件的类上方。
- * 与 `velar:browser` 共用同一个空间端口 `BrowserSpacePort`：排障、调页面时才 import，驱动页面的声明因此保持小。
+ * 与 `velar:browser`、`velar:cdp` 共用同一个空间端口 `BrowserSpacePort`：排障、调页面时才 import，驱动页面的声明因此保持小。
  */
 
-import { BrowserDiagnosticsLimits, BrowserPageDataLimits } from '../contract/constants.js'
+import { BrowserDiagnosticsLimits } from '../contract/constants.js'
 import type { BrowserOperationContext } from '../contract/requires.js'
 import type {
-  BrowserEmulationResult,
   BrowserHeapSnapshotResult,
   BrowserNetworkControlResult,
   BrowserNetworkRequestDetailsResult,
   BrowserPageDiagnosticKind,
   BrowserPageDiagnosticsReadKind,
   BrowserPageDiagnosticsReadResult,
-  BrowserPageStorageResult,
   BrowserPageZoomResult,
   BrowserPerformanceInsightResult,
   BrowserPerformanceTraceStartResult,
@@ -21,10 +19,8 @@ import type {
   BrowserScreencastStartResult,
   BrowserScreencastStopResult,
   BrowserUserScriptMutationResult,
-  BrowserViewportResult,
   DevtoolsCreateUserScriptInput,
   DevtoolsDiagnosticsInput,
-  DevtoolsEmulateInput,
   DevtoolsEnableUserScriptInput,
   DevtoolsEnableUserScriptsInput,
   DevtoolsHeapSnapshotInput,
@@ -34,11 +30,9 @@ import type {
   DevtoolsRecordingInput,
   DevtoolsRequestInput,
   DevtoolsStopRecordingInput,
-  DevtoolsStorageInput,
   DevtoolsTraceInput,
   DevtoolsUpdateUserScriptInput,
   DevtoolsUserScriptIdInput,
-  DevtoolsViewportInput,
   DevtoolsZoomInput,
 } from '../types/browser.js'
 import {
@@ -49,7 +43,6 @@ import {
 import {
   createUserScriptInput,
   diagnosticsInput,
-  emulateInput,
   enableUserScriptInput,
   enableUserScriptsInput,
   heapSnapshotInput,
@@ -59,36 +52,29 @@ import {
   recordingInput,
   requestInput,
   stopRecordingInput,
-  storageInput,
   traceInput,
   updateUserScriptInput,
   userScriptIdInput,
-  viewportInput,
   zoomInput,
 } from '../utils/input.js'
 import { requireOpenSite } from '../utils/site.js'
 
 /**
  * @AgentView
- * 开发者工具：读控制台、网络与未处理异常，读一次请求的详情与响应体，读页面存储；改视口、缩放、网络条件与环境仿真；
+ * 开发者工具：读控制台、网络与未处理异常（从页面打开起一直在录），读一次请求的详情与响应体；调缩放、设常驻的网络规则（断网、请求头、拦截、假响应）；
  * 录性能 trace 看 LCP、INP、CLS 与瓶颈，采堆快照查内存泄漏；录屏合成 GIF；管理进到匹配网站时自动注入的用户脚本。
  * 都作用在 velar:browser 当前打开的站点上，没进站点时抛 BROWSER_SITE_NOT_OPEN。trace、堆快照、录屏的产物落在站点工作区。
+ * 页面存储用 velar:browser 的 evaluate 读；cookie（含 HttpOnly）、视口、时区、地理位置、深浅色这类仿真直接用 velar:cdp 发命令。
  */
 export interface DevtoolsOperationsApi {
   /** @AgentView 读诊断：先按种类过滤再取最近的几条，网络条目带 requestId。 */
   diagnostics(input: DevtoolsDiagnosticsInput, ctx: BrowserOperationContext): Promise<BrowserPageDiagnosticsReadResult>
   /** @AgentView 读一次网络请求的请求头、postData、响应头、耗时与体积，可带响应体；较早的请求可能已经读不到。 */
   request(input: DevtoolsRequestInput, ctx: BrowserOperationContext): Promise<BrowserNetworkRequestDetailsResult>
-  /** @AgentView 读页面的 localStorage、sessionStorage 与 cookie。 */
-  storage(input: DevtoolsStorageInput, ctx: BrowserOperationContext): Promise<BrowserPageStorageResult>
-  /** @AgentView 把视口设成指定尺寸。 */
-  setViewport(input: DevtoolsViewportInput, ctx: BrowserOperationContext): Promise<BrowserViewportResult>
   /** @AgentView 调页面缩放。 */
   zoom(input: DevtoolsZoomInput, ctx: BrowserOperationContext): Promise<BrowserPageZoomResult>
-  /** @AgentView 设网络条件：断网、加请求头、拦请求、给请求回假响应。 */
+  /** @AgentView 设常驻的网络规则：断网、加请求头、拦请求、给请求回假响应（宿主一直替你应答，程序跑完也生效，再调一次就换掉）。 */
   network(input: DevtoolsNetworkInput, ctx: BrowserOperationContext): Promise<BrowserNetworkControlResult>
-  /** @AgentView 仿真环境：深浅色、减少动效、时区、语言、地理位置、CPU 与网络节流。 */
-  emulate(input: DevtoolsEmulateInput, ctx: BrowserOperationContext): Promise<BrowserEmulationResult>
   /** @AgentView 开始录性能 trace；到点自动停时直接交回分析摘要。 */
   startTrace(input: DevtoolsTraceInput, ctx: BrowserOperationContext): Promise<BrowserPerformanceTraceStartResult>
   /** @AgentView 停止录 trace，交回 Core Web Vitals 与可深入分析的 insight 清单；原始 trace 落在站点工作区。 */
@@ -117,8 +103,6 @@ export interface DevtoolsOperationsApi {
   moveUserScript(input: DevtoolsMoveUserScriptInput, ctx: BrowserOperationContext): Promise<BrowserUserScriptMutationResult>
   /** @AgentView 删掉一个用户脚本（不撤销当前页面已经执行的副作用）。 */
   deleteUserScript(input: DevtoolsUserScriptIdInput, ctx: BrowserOperationContext): Promise<BrowserUserScriptMutationResult>
-  /** @AgentView 在当前页面立刻跑一次某个用户脚本。 */
-  runUserScript(input: DevtoolsUserScriptIdInput, ctx: BrowserOperationContext): Promise<BrowserUserScriptMutationResult>
 }
 
 /**
@@ -166,24 +150,6 @@ export class DevtoolsOperations implements DevtoolsOperationsApi {
     })
   }
 
-  public async storage(input: DevtoolsStorageInput, ctx: BrowserOperationContext): Promise<BrowserPageStorageResult> {
-    ctx.abortSignal.throwIfAborted()
-    const options = storageInput(input)
-    requireOpenSite(ctx)
-    return ctx.browser.readPageStorage({
-      ...options,
-      limit: options.limit ?? BrowserPageDataLimits.storageItems,
-      maxValueChars: options.maxValueChars ?? BrowserPageDataLimits.storageValueChars,
-    })
-  }
-
-  public async setViewport(input: DevtoolsViewportInput, ctx: BrowserOperationContext): Promise<BrowserViewportResult> {
-    ctx.abortSignal.throwIfAborted()
-    const options = viewportInput(input)
-    requireOpenSite(ctx)
-    return ctx.browser.setViewport(options)
-  }
-
   public async zoom(input: DevtoolsZoomInput, ctx: BrowserOperationContext): Promise<BrowserPageZoomResult> {
     ctx.abortSignal.throwIfAborted()
     const options = zoomInput(input)
@@ -196,13 +162,6 @@ export class DevtoolsOperations implements DevtoolsOperationsApi {
     const options = networkInput(input)
     requireOpenSite(ctx)
     return ctx.browser.configureNetwork(options)
-  }
-
-  public async emulate(input: DevtoolsEmulateInput, ctx: BrowserOperationContext): Promise<BrowserEmulationResult> {
-    ctx.abortSignal.throwIfAborted()
-    const options = emulateInput(input)
-    requireOpenSite(ctx)
-    return ctx.browser.configureEmulation(options)
   }
 
   public async startTrace(input: DevtoolsTraceInput, ctx: BrowserOperationContext): Promise<BrowserPerformanceTraceStartResult> {
@@ -300,13 +259,6 @@ export class DevtoolsOperations implements DevtoolsOperationsApi {
     const { id } = userScriptIdInput(input, 'deleteUserScript')
     requireOpenSite(ctx)
     return ctx.browser.manageUserScripts({ action: 'delete', id })
-  }
-
-  public async runUserScript(input: DevtoolsUserScriptIdInput, ctx: BrowserOperationContext): Promise<BrowserUserScriptMutationResult> {
-    ctx.abortSignal.throwIfAborted()
-    const { id } = userScriptIdInput(input, 'runUserScript')
-    requireOpenSite(ctx)
-    return ctx.browser.manageUserScripts({ action: 'run_now', id })
   }
 }
 

@@ -1,12 +1,13 @@
 import type electron from 'electron'
 
-import { isPresent } from '@velaros-ai/core'
+import { isPresent, isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { Log } from '@velaros-ai/core/logger'
 
-import type { BrowserPageDriver } from '../../contract/requires.js'
+import type { BrowserPageDriver, BrowserProtocolChannel } from '../../contract/requires.js'
 import type {
   BrowserEmulationOptions,
+  BrowserFrameInfo,
   BrowserNetworkControlOptions,
   BrowserNetworkRequestDetailsOptions,
   BrowserNetworkResponseBodyOptions,
@@ -14,11 +15,12 @@ import type {
   BrowserViewportOptions,
 } from '../../types/browser'
 import type { CdpScreencastConsumerOptions, CdpScreencastStartOptions, CdpSend,ScreencastCapturedFrame } from '../../types/cdp.js'
-import type { BrowserPageDriverClickCoordinatesOptions, BrowserPageDriverDiagnosticsOptions, BrowserPageDriverDragCoordinatesOptions, BrowserPageDriverEmulationState, BrowserPageDriverMoveMouseOptions, BrowserPageDriverNetworkCaptureState, BrowserPageDriverNetworkControlState, BrowserPageDriverNetworkIdleOptions, BrowserPageDriverNetworkRequestDetailsResult, BrowserPageDriverNetworkResponseBodyResult, BrowserPageDriverState } from '../../types/driver'
+import type { BrowserPageDriverClickCoordinatesOptions, BrowserPageDriverDiagnosticsOptions, BrowserPageDriverDragCoordinatesOptions, BrowserPageDriverEmulationState, BrowserPageDriverKeyEvent, BrowserPageDriverMouseEvent, BrowserPageDriverMoveMouseOptions, BrowserPageDriverNetworkCaptureState, BrowserPageDriverNetworkControlState, BrowserPageDriverNetworkIdleOptions, BrowserPageDriverNetworkRequestDetailsResult, BrowserPageDriverNetworkResponseBodyResult, BrowserPageDriverState } from '../../types/driver'
 import { applyCdpEmulation, createDefaultCdpEmulationState } from '../../utils/cdp/emulation'
 import { captureCdpHeapSnapshot, createWebContentsCdpTraceTransport } from '../../utils/cdp/tracing.js'
 import { clearBrowserDiagnosticEntries, takeBrowserDiagnosticWindow } from '../../utils/diagnostics.js'
-import { cdpMouseButtonsMask, clampEmbeddedDiagnosticLimit } from '../../utils/electron/webcontents'
+import { evaluateInFrame } from '../../utils/electron/evaluate'
+import { cdpMouseButtonsMask, clampEmbeddedDiagnosticLimit, listWebContentsFrames } from '../../utils/electron/webcontents'
 import { BrowserTuning } from '../../utils/tuning'
 import { buildBrowserViewportDeviceMetrics } from '../../utils/viewport'
 import { BrowserCdpNetworkController } from '../cdp/BrowserCdpNetworkController'
@@ -26,6 +28,7 @@ import { CdpScreencastRecorder } from '../cdp/CdpScreencastRecorder'
 import { CdpTraceCollector } from '../cdp/CdpTraceCollector'
 
 import { electronDebuggerHolds } from './ElectronDebuggerHolds'
+import { ElectronProtocolChannel } from './ElectronProtocolChannel'
 
 /** 嵌入式网络诊断缓冲上限,与外部 CDP driver 的诊断窗口一致。 */
 
@@ -47,9 +50,8 @@ class ElectronWebContentsBrowserPageDriver implements BrowserPageDriver {
 
   private detachDebugger(shouldDetach: boolean): void {
     if (!shouldDetach || this.webContents.isDestroyed()) return
-    // 模拟或网络采集持有 debugger 时,临时操作不得 detach(否则 override / 事件订阅失效)。
-    if (electronDebuggerHolds.hasEmulation(this.webContents)) return
-    if (electronDebuggerHolds.hasNetwork(this.webContents)) return
+    // 模拟、网络采集或模型的 CDP 会话持有 debugger 时,临时操作不得 detach(否则 override、事件订阅与子会话一起失效)。
+    if (electronDebuggerHolds.hasPersistentHold(this.webContents)) return
     if (!this.webContents.debugger.isAttached()) return
     try {
       this.webContents.debugger.detach()
@@ -120,8 +122,11 @@ class ElectronWebContentsBrowserPageDriver implements BrowserPageDriver {
     const messageListener = (
       _event: electron.Event,
       method: string,
-      params: unknown
+      params: unknown,
+      sessionId?: string
     ): void => {
+      // 子会话（模型自己的那条 CDP 会话与它挂出来的）的网络事件不是宿主这条的：混进来会把同一个请求记两遍。
+      if (sessionId) return
       controller.handleCdpEvent(method, params)
     }
     this.webContents.debugger.on('message', messageListener)
@@ -152,9 +157,9 @@ class ElectronWebContentsBrowserPageDriver implements BrowserPageDriver {
     return hold.controller.readNetworkRequestDetails(options)
   }
 
-  public async waitForNetworkIdle(options: BrowserPageDriverNetworkIdleOptions): Promise<void> {
+  public async waitForNetworkIdle(options: BrowserPageDriverNetworkIdleOptions): Promise<boolean> {
     const hold = await this.ensureNetworkHold()
-    await hold.controller.waitForNetworkIdle(options)
+    return hold.controller.waitForNetworkIdle(options)
   }
 
   /**
@@ -340,13 +345,14 @@ class ElectronWebContentsBrowserPageDriver implements BrowserPageDriver {
     const y = Math.round(options.y)
     const button = options.button ?? 'left'
     const clickCount = Math.max(1, Math.round(options.clickCount ?? 1))
+    const modifiers = options.modifiers ?? 0
     this.webContents.focus()
 
     const buttons = cdpMouseButtonsMask(button)
     const dispatched = await this.dispatchCdpMouseEvents([
-      { type: 'mouseMoved', x, y, button: 'none', buttons: 0 },
-      { type: 'mousePressed', x, y, button, buttons, clickCount },
-      { type: 'mouseReleased', x, y, button, buttons: 0, clickCount },
+      { type: 'mouseMoved', x, y, button: 'none', buttons: 0, modifiers },
+      { type: 'mousePressed', x, y, button, buttons, clickCount, modifiers },
+      { type: 'mouseReleased', x, y, button, buttons: 0, clickCount, modifiers },
     ])
     if (!dispatched) {
       this.webContents.sendInputEvent({
@@ -413,18 +419,20 @@ class ElectronWebContentsBrowserPageDriver implements BrowserPageDriver {
       })
     }
 
+    const modifiers = options.modifiers ?? 0
     this.webContents.focus()
     const dispatched = await this.dispatchCdpMouseEvents([
-      { type: 'mouseMoved', x: startX, y: startY, button: 'none', buttons: 0 },
-      { type: 'mousePressed', x: startX, y: startY, button: 'left', buttons: 1, clickCount: 1 },
+      { type: 'mouseMoved', x: startX, y: startY, button: 'none', buttons: 0, modifiers },
+      { type: 'mousePressed', x: startX, y: startY, button: 'left', buttons: 1, clickCount: 1, modifiers },
       ...path.map((point) => ({
         type: 'mouseMoved',
         x: point.x,
         y: point.y,
         button: 'left',
         buttons: 1,
+        modifiers,
       })),
-      { type: 'mouseReleased', x: endX, y: endY, button: 'left', buttons: 0, clickCount: 1 },
+      { type: 'mouseReleased', x: endX, y: endY, button: 'left', buttons: 0, clickCount: 1, modifiers },
     ])
     if (!dispatched) {
       this.webContents.sendInputEvent({
@@ -465,6 +473,44 @@ class ElectronWebContentsBrowserPageDriver implements BrowserPageDriver {
       options.onPointerEvent?.({ x: point.x, y: point.y, phase: 'move', button: 'left' })
     }
     options.onPointerEvent?.({ x: endX, y: endY, phase: 'up', button: 'left' })
+  }
+
+  /** 键盘事件走 CDP：键位、上屏文字与修饰键由交互引擎拼好；debugger 持久 attach，与鼠标同一条路。 */
+  public async dispatchKeyEvent(event: BrowserPageDriverKeyEvent): Promise<void> {
+    this.ensureInputDebugger()
+    await this.debuggerSend('Input.dispatchKeyEvent', { ...event })
+  }
+
+  /** 鼠标原子（按下、松开、分步移动、滚轮）走 CDP，失败就抛：原子没有退回 sendInputEvent 的余地，坐标系不一样。 */
+  public async dispatchMouseEvent(event: BrowserPageDriverMouseEvent): Promise<void> {
+    this.ensureInputDebugger()
+    this.webContents.focus()
+    await this.debuggerSend('Input.dispatchMouseEvent', { ...event })
+  }
+
+  public listFrames(): Promise<BrowserFrameInfo[]> {
+    return Promise.resolve(listWebContentsFrames(this.webContents))
+  }
+
+  public executeJavaScriptInFrame<T = unknown>(frameId: string, script: string, userGesture?: boolean): Promise<T> {
+    return evaluateInFrame<T>(this.webContents, frameId, script, userGesture)
+  }
+
+  /** 给模型单开一条 CDP 会话：debugger 上用 Target.attachToTarget 连页面自己，挂出一条 flatten 子会话。 */
+  public async openProtocolChannel(): Promise<BrowserProtocolChannel> {
+    this.ensureInputDebugger()
+    const info = (await this.debuggerSend('Target.getTargetInfo')) as { targetInfo?: { targetId?: unknown } }
+    const targetId = info.targetInfo?.targetId
+    if (!isString(targetId)) throw new AppError('EXECUTION_FAILED', '读不到页面的 target id，开不了单独的 CDP 会话。')
+    const attached = (await this.debuggerSend('Target.attachToTarget', { targetId, flatten: true })) as { sessionId?: unknown }
+    if (!isString(attached.sessionId)) throw new AppError('EXECUTION_FAILED', 'Target.attachToTarget 没有交回会话 id。')
+    return new ElectronProtocolChannel(this.webContents, attached.sessionId)
+  }
+
+  /** 输入与模型会话要一直挂着的 debugger：没 attach 就 attach，不主动 detach（与模拟、网络采集同样的持久语义）。 */
+  private ensureInputDebugger(): void {
+    if (this.webContents.isDestroyed()) throw new AppError('VALIDATION', '页面已销毁，发不了输入事件。')
+    if (!this.webContents.debugger.isAttached()) this.webContents.debugger.attach('1.3')
   }
 
   public async setViewport(options: BrowserViewportOptions): Promise<void> {

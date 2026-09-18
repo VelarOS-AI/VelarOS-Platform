@@ -12,11 +12,11 @@ import type {
   BrowserElementQueryOptions,
   BrowserElementQueryResult,
   BrowserEvaluateScriptOptions,
-  BrowserEvaluateScriptResult,
   BrowserExportPagePdfOptions,
   BrowserExportPagePdfResult,
   BrowserFetchResourceOptions,
   BrowserFetchResourceResult,
+  BrowserFrameInfo,
   BrowserInspectPageOptions,
   BrowserListMediaSourcesOptions,
   BrowserListMediaSourcesResult,
@@ -29,6 +29,7 @@ import type {
   BrowserPageStorageResult,
   BrowserPageWaitOptions,
   BrowserPageWaitResult,
+  BrowserScriptOutcome,
   BrowserSiteContext,
   BrowserUploadFileOptions,
   BrowserUploadFileResult,
@@ -39,7 +40,8 @@ import type { BrowserSession } from '../../types/electron'
 import type { BrowserRuntimeKernel } from '../../types/electron.js'
 import { normalizeFetchResourceUrl, normalizeMediaSourceItems, normalizePageResourceIframes, normalizePageResourceLinks, normalizePageResourceOrigins, resolveUploadFilePath, summarizePageDiagnostics } from '../../utils/cdp/page-data.js'
 import { buildBrowserNetworkCaptureNotice, clearBrowserDiagnosticEntries, takeBrowserDiagnosticWindow } from '../../utils/diagnostics.js'
-import { evaluateInWebContents } from '../../utils/electron/evaluate'
+import { evaluateInFrame, evaluateInWebContents } from '../../utils/electron/evaluate'
+import { listWebContentsFrames } from '../../utils/electron/webcontents'
 import { clampInteger, readFiniteNumber } from '../../utils/numbers.js'
 import { buildElementQueryScript } from '../../utils/page-scripts/element-query'
 import { buildEvaluateScript } from '../../utils/page-scripts/evaluate'
@@ -77,7 +79,9 @@ export interface BrowserPageDataEngineApi {
   /** 按 CSS selector 查元素的文本、属性与可点击目标。 */
   queryElements(sessionId: string, context: BrowserSiteContext, options: BrowserElementQueryOptions, abortSignal?: AbortSignal): Promise<BrowserElementQueryResult>
   /** 在页面上下文里跑一段受控脚本并取回结果。 */
-  evaluateScript(sessionId: string, context: BrowserSiteContext, options: BrowserEvaluateScriptOptions, abortSignal?: AbortSignal): Promise<BrowserEvaluateScriptResult>
+  evaluateScript(sessionId: string, context: BrowserSiteContext, options: BrowserEvaluateScriptOptions, abortSignal?: AbortSignal): Promise<BrowserScriptOutcome>
+  /** 列出页面的框架树（顶层页面与各层 iframe，含跨源的）。 */
+  listFrames(sessionId: string, context: BrowserSiteContext, abortSignal?: AbortSignal): Promise<BrowserFrameInfo[]>
   /** 读 localStorage、sessionStorage 与 cookie。 */
   readPageStorage(sessionId: string, context: BrowserSiteContext, options?: BrowserPageStorageOptions, abortSignal?: AbortSignal): Promise<BrowserPageStorageResult>
   /** 带页面会话的 cookie 下载一个 http(s) 资源到站点工作区。 */
@@ -204,25 +208,27 @@ export class BrowserPageDataEngine extends CdpPageDataEngine implements BrowserP
     context: BrowserSiteContext,
     options: BrowserEvaluateScriptOptions,
     abortSignal?: AbortSignal
-  ): Promise<BrowserEvaluateScriptResult> {
+  ): Promise<BrowserScriptOutcome> {
     abortSignal?.throwIfAborted()
     const externalSession = this.getExternalPageSession(sessionId)
     if (externalSession) return super.evaluateScript(sessionId, context, options, abortSignal)
 
     const session = await this.getLivePageSessionUnlocked(sessionId, abortSignal)
-
+    const script = buildEvaluateScript(options)
     // 主进程上限 = 页内超时 + 注入/序列化余量。页内那道 `Promise.race` 只在渲染进程还肯
     // 回话时才有效；被脚本卡死或中途导航走时它永远不触发，兜底必须由这一侧拿着
     // （AGENT-12 的第一因：一个永不 settle 的求值占死会话队列，把整条会话焊死）。
-    return evaluateInWebContents<BrowserEvaluateScriptResult>(
-      session.webContents,
-      buildEvaluateScript(options),
-      true,
-      {
-        label: 'evaluateScript',
-        timeoutMs: clampInteger(options.timeoutMs, 1, 30_000, 5_000) + 10_000,
-      }
-    )
+    const deadline = { label: 'evaluateScript', timeoutMs: clampInteger(options.timeoutMs, 1, 30_000, 5_000) + 10_000 }
+    return options.frame
+      ? evaluateInFrame<BrowserScriptOutcome>(session.webContents, options.frame, script, true, deadline)
+      : evaluateInWebContents<BrowserScriptOutcome>(session.webContents, script, true, deadline)
+  }
+
+  public override async listFrames(sessionId: string, context: BrowserSiteContext, abortSignal?: AbortSignal): Promise<BrowserFrameInfo[]> {
+    abortSignal?.throwIfAborted()
+    if (this.getExternalPageSession(sessionId)) return super.listFrames(sessionId, context, abortSignal)
+    const session = await this.getLivePageSessionUnlocked(sessionId, abortSignal)
+    return listWebContentsFrames(session.webContents)
   }
 
   public override async readPageStorage(
@@ -576,18 +582,11 @@ export class BrowserPageDataEngine extends CdpPageDataEngine implements BrowserP
     if (externalSession) return super.waitForPage(sessionId, context, options, abortSignal)
 
     const session = await this.getLivePageSessionUnlocked(sessionId, abortSignal)
-    if (options.loadState === 'networkidle') {
-      await this.pageWaiter.waitForNetworkIdle(
-        session.webContents,
-        500,
-        options.timeoutMs ?? BrowserTuning.page.networkIdleTimeoutMs
-      )
-    }
-
-    return evaluateInWebContents(
-      session.webContents,
-      buildPageWaitScript(options),
-      true
-    ) as Promise<BrowserPageWaitResult>
+    const networkIdle = options.loadState === 'networkidle'
+      ? await this.pageWaiter.waitForNetworkIdle(session.webContents, BrowserTuning.page.networkIdleMs, options.timeoutMs ?? BrowserTuning.page.networkIdleTimeoutMs)
+      : true
+    const result = await evaluateInWebContents<BrowserPageWaitResult>(session.webContents, buildPageWaitScript(options), true)
+    // 页面脚本只认 readyState：网络空闲没等到时如实回没到。
+    return networkIdle ? result : { ...result, matched: false, timedOut: true }
   }
 }

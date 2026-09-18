@@ -1,8 +1,9 @@
 /**
  * 验收测试与实现测试共用的夹具：
- * - 一份空间端口替身：记下操作调了端口的哪些方法、带了什么参数，按固定的一页假页面回答（标题、正文、表单、表格、列表、诊断、存储……）；
- *   页面提取脚本（表格、列表、正文）按脚本里的特征认出来、交回对应的载荷，别的求值交回页面标题。
- * - 经真的能力端口挂上 `velar:browser` 与 `velar:devtools` 的空间，以及照生成的声明跑一段模型程序的代码面会话。
+ * - 一份空间端口替身：记下操作调了端口的哪些方法、带了什么参数，按固定的一页假页面回答（标题、正文、表单、框架、诊断……）；
+ *   页面脚本按脚本里的特征认出来、交回对应的 JSON（表格行、搜索结果、下拉框的值、元素位置……），别的求值交回页面标题。
+ *   模型的 CDP 会话是一张事件表：命令按方法名交回固定结果，Page.reload、Runtime.evaluate 这类会往表里推它们会引出的事件。
+ * - 经真的能力端口挂上 `velar:browser`、`velar:devtools` 与 `velar:cdp` 的空间，以及照生成的声明跑一段模型程序的代码面会话。
  * 放在 spec 下，因为验收测试依赖它们；实现测试也从这里取。
  */
 
@@ -14,8 +15,8 @@ import { codeProgramChecker, createCapabilityPort, createCodeSurfaceSession, nod
 import { AppError } from '@velaros-ai/core/error'
 import type { ImageAttachment } from '@velaros-ai/velar/images'
 
-import type { BrowserOperationContext, BrowserSiteContext, BrowserSpacePort } from '../index.js'
-import { browserOperations, devtoolsOperations } from '../index.js'
+import type { BrowserMouseButton, BrowserOperationContext, BrowserProtocolEvent, BrowserScriptOutcome, BrowserSiteContext, BrowserSpacePort } from '../index.js'
+import { browserOperations, cdpOperations, devtoolsOperations } from '../index.js'
 
 /** 端口上的一次调用：方法名与参数。 */
 export interface PortCall {
@@ -39,13 +40,36 @@ export const HarnessSite: BrowserSiteContext = { url: 'https://example.com/', wo
 const page = { url: 'https://example.com/', title: 'Example Domain', loadState: 'loaded' as const, viewport: null, lastNavigationError: null }
 const target = (css: string) => ({ ref: '@e1:g1', css, role: null, text: null, name: null, attributes: {} })
 
-/** 页面提取脚本的载荷：按脚本里的特征认是哪一种。 */
-function extractionPayload(script: string): Record<string, unknown> {
-  if (script.includes('tables.length'))
-    return { ok: true, error: null, tables: 1, tableIndex: 0, selector: null, headers: ['区域', '金额'], rows: [['华北', '1200']], rowCount: 1, url: page.url }
-  if (script.includes('itemCount'))
-    return { ok: true, selector: '.result', items: [{ title: '第一条', href: 'https://example.com/1', description: null }], itemCount: 1, url: page.url }
-  return { ok: true, format: 'markdown', selector: null, content: '# Example Domain\n\n正文', truncated: false, url: page.url }
+/** 页面脚本交回什么：按脚本里的特征认出是哪一种读法，交回那一页假页面上的结果。 */
+function pageScriptValue(script: string, args: unknown[]): unknown {
+  if (script.includes('row.cells')) return [['华北', '1200']]
+  if (script.includes("'.result').length > 0")) return true
+  if (script.includes("'.result a')].map") || script.includes("'.result')].map")) return [{ title: '第一条', href: 'https://example.com/1' }]
+  if (script.includes('a[rel=next]')) return false
+  if (script.includes('select[name=country]')) return args[0]
+  if (script.includes("includes('提交成功')")) return true
+  if (script.includes("querySelector('.result a')?.href !== previous")) return true
+  if (script.includes('getBoundingClientRect')) return { x: 100, y: 200 }
+  if (script.includes('innerText.slice(0, 2000)')) return 'iframe 里的正文'
+  return page.title
+}
+
+/** 模型 CDP 会话里一条命令的固定结果，与它会引出的事件。 */
+function protocolReply(method: string, fetchEnabled: boolean): { result: unknown; events: Array<{ method: string; params: unknown }> } {
+  if (method === 'Network.getCookies') return { result: { cookies: [{ name: 'sid', domain: 'example.com', httpOnly: true }] }, events: [] }
+  if (method === 'Page.addScriptToEvaluateOnNewDocument') return { result: { identifier: 'script-1' }, events: [] }
+  if (method === 'Runtime.evaluate') return {
+      result: { result: { type: 'undefined' } },
+      events: [
+        { method: 'Network.requestWillBeSent', params: { requestId: 'r1', request: { method: 'GET', url: 'https://example.com/api/more' } } },
+        { method: 'Network.loadingFinished', params: { requestId: 'r1' } },
+      ],
+    }
+  if (method === 'Page.reload' && fetchEnabled) return {
+      result: {},
+      events: [{ method: 'Fetch.requestPaused', params: { requestId: 'paused-1', request: { method: 'GET', url: 'https://example.com/api/profile' } } }],
+    }
+  return { result: {}, events: [] }
 }
 
 /**
@@ -64,6 +88,14 @@ export function createHarness(options: { open?: boolean; attach?: boolean } = {}
     relativePath: 'user-scripts/script-1.js', createdAt: 1, updatedAt: 1,
   }
   const overview = { browserContext: HarnessSite, globalEnabled: true, scripts: [userScript], matchedScriptIds: ['script-1'] }
+  const inputState = { held: new Set<string>(), buttons: new Set<BrowserMouseButton>(), x: 0, y: 0 }
+  const mouse = () => ({ url: page.url, x: inputState.x, y: inputState.y, buttons: [...inputState.buttons] })
+  const protocol = { events: [] as BrowserProtocolEvent[], lastSeq: 0, fetchEnabled: false }
+  const pushProtocolEvent = (method: string, params: unknown) => {
+    protocol.lastSeq += 1
+    protocol.events.push({ seq: protocol.lastSeq, method, params, session: null })
+  }
+  const outcome = (value: unknown): BrowserScriptOutcome => ({ url: page.url, ok: true, json: JSON.stringify(value) })
   const port: BrowserSpacePort = {
     isActive: () => active,
     getContext: () => (active ? HarnessSite : null),
@@ -105,9 +137,7 @@ export function createHarness(options: { open?: boolean; attach?: boolean } = {}
       record('performTargetAction', [input])
       return { action: input.action, url: page.url, matched: true, selector: input.target.css, text: null, capturedAt: 1 }
     },
-    navigatePage: async (input) => { record('navigatePage', [input]); return { action: input.action, navigated: true, url: input.url ?? page.url, title: page.title, canGoBack: true, canGoForward: false, capturedAt: 1 } },
-    scrollPage: async (input) => { record('scrollPage', [input]); return { url: page.url, scrollX: 0, scrollY: 800, maxScrollX: 0, maxScrollY: 2000, viewportWidth: 1280, viewportHeight: 800, capturedAt: 1 } },
-    queryElements: async (input) => { record('queryElements', [input]); return { url: page.url, selector: input.selector, selectorError: null, count: 0, limit: input.limit ?? 0, elements: [], capturedAt: 1 } },
+    navigatePage: async (options) => { record('navigatePage', [options]); return { action: options.action, navigated: true, url: options.url ?? page.url, title: page.title, canGoBack: true, canGoForward: false, capturedAt: 1 } },
     getPageDiagnostics: async (input) => {
       record('getPageDiagnostics', [input])
       const all = [
@@ -117,16 +147,20 @@ export function createHarness(options: { open?: boolean; attach?: boolean } = {}
       const entries = input?.kinds ? all.filter((entry) => input.kinds!.includes(entry.kind)) : all
       return { url: page.url, title: page.title, entries, summary: { total: 2, byLevel: {}, byKind: {}, byOrigin: {}, byStatus: {}, byResourceType: {} }, capturedAt: 1 }
     },
-    typeText: async (input) => { record('typeText', [input]); return { url: page.url, textLength: input.text.length, capturedAt: 1 } },
-    pressKey: async (input) => { record('pressKey', [input]); return { url: page.url, key: input.key, repeat: input.repeat ?? 1, capturedAt: 1 } },
-    moveMouse: async (input) => { record('moveMouse', [input]); return { url: page.url, x: input.x, y: input.y, capturedAt: 1 } },
-    clickCoordinates: async (input) => { record('clickCoordinates', [input]); return { url: page.url, x: input.x, y: input.y, button: input.button ?? 'left', clickCount: input.clickCount ?? 1, capturedAt: 1 } },
+    insertText: async (options) => { record('insertText', [options]); return { url: page.url, textLength: options.text.length, capturedAt: 1 } },
+    pressKey: async (options) => { record('pressKey', [options]); return { url: page.url, key: options.key, repeat: options.repeat ?? 1, capturedAt: 1 } },
+    keyDown: async (key) => { record('keyDown', [key]); inputState.held.add(key.key); return { url: page.url, key: key.key, held: [...inputState.held] } },
+    keyUp: async (key) => { record('keyUp', [key]); inputState.held.delete(key.key); return { url: page.url, key: key.key, held: [...inputState.held] } },
+    moveMouse: async (move) => { record('moveMouse', [move]); inputState.x = move.x; inputState.y = move.y; return mouse() },
+    mouseDown: async (press) => { record('mouseDown', [press]); inputState.buttons.add(press.button ?? 'left'); return mouse() },
+    mouseUp: async (release) => { record('mouseUp', [release]); inputState.buttons.delete(release.button ?? 'left'); return mouse() },
+    mouseWheel: async (delta) => { record('mouseWheel', [delta]); return mouse() },
+    clickCoordinates: async (click) => { record('clickCoordinates', [click]); inputState.x = click.x; inputState.y = click.y; return { url: page.url, x: click.x, y: click.y, button: click.button ?? 'left', clickCount: click.clickCount ?? 1, capturedAt: 1 } },
     dragTargets: async (input) => {
       record('dragTargets', [input])
       const end = { matched: true, selector: null, text: null, point: { x: 1, y: 1 } }
       return { url: page.url, matched: true, source: end, target: end, startX: 1, startY: 1, endX: 2, endY: 2, steps: input.steps ?? 1, failureReason: null, capturedAt: 1 }
     },
-    waitForSelector: async (input) => { record('waitForSelector', [input]); return { url: page.url, selector: input.selector, state: input.state ?? 'visible', matched: true, visible: true, count: 1, elapsedMs: 1, target: null, capturedAt: 1 } },
     waitForPage: async (input) => {
       record('waitForPage', [input])
       return {
@@ -134,7 +168,6 @@ export function createHarness(options: { open?: boolean; attach?: boolean } = {}
         functionResult: null, text: input.text ?? null, matched: true, durationMs: input.durationMs ?? 0, timeoutMs: input.timeoutMs ?? 0, elapsedMs: 1, timedOut: false, capturedAt: 1,
       }
     },
-    setViewport: async (input) => { record('setViewport', [input]); return { url: page.url, width: input.width, height: input.height, capturedAt: 1 } },
     setPageZoom: async (input) => { record('setPageZoom', [input]); return { url: page.url, zoomFactor: input.zoomFactor ?? 1, previousZoomFactor: 1, capturedAt: 1 } },
     configureNetwork: async (input) => {
       record('configureNetwork', [input])
@@ -150,10 +183,6 @@ export function createHarness(options: { open?: boolean; attach?: boolean } = {}
         responseBody: input.includeResponseBody ? { body: '{"error":"boom"}', base64Encoded: false, bodyLength: 16, returnedChars: 16, bodyTruncated: false } : undefined,
         capturedAt: 1,
       }
-    },
-    configureEmulation: async (input) => {
-      record('configureEmulation', [input])
-      return { url: page.url, colorScheme: input.colorScheme ?? 'no-preference', reducedMotion: input.reducedMotion ?? 'no-preference', timezoneId: input.timezoneId ?? null, locale: input.locale ?? null, geolocation: null, cpuThrottlingRate: input.cpuThrottlingRate ?? 1, networkThrottling: input.networkThrottling ?? 'none', capturedAt: 1 }
     },
     startPerformanceTrace: async (input) => {
       record('startPerformanceTrace', [input])
@@ -180,19 +209,38 @@ export function createHarness(options: { open?: boolean; attach?: boolean } = {}
     handlePermission: async (input) => { record('handlePermission', [input]); return { handled: true, eventId: input.eventId ?? 'permission-1', granted: input.grant } },
     uploadFile: async (input) => { record('uploadFile', [input]); return { matched: true, selector: input.target.css, files: [input.filePath], capturedAt: 1 } },
     fetchResource: async (input) => { record('fetchResource', [input]); return { url: input.url, path: `${HarnessSite.workspaceRoot}/${input.savePath}`, relativePath: input.savePath, mimeType: 'image/png', bytes: 100, status: 200, capturedAt: 1 } },
-    listMediaSources: async (input) => { record('listMediaSources', [input]); return { url: page.url, items: [{ kind: 'image', url: 'https://example.com/hero.png', fetchable: true, tagName: 'img', attribute: 'src', alt: null, width: 100, height: 100 }], truncated: false, capturedAt: 1 } },
     exportPagePdf: async (input) => { record('exportPagePdf', [input]); return { url: page.url, path: '/tmp/page.pdf', relativePath: input?.savePath ?? 'exports/page.pdf', bytes: 100, capturedAt: 1 } },
-    readPageStorage: async (input) => {
-      record('readPageStorage', [input])
-      const entry = { name: 'token', value: 'abc', valueTruncated: false }
-      return { url: page.url, localStorage: [entry], sessionStorage: [], cookies: input?.includeCookies ? [{ name: 'sid', value: '1', valueTruncated: false }] : undefined, capturedAt: 1 }
+    listFrames: async () => {
+      record('listFrames', [])
+      return [
+        { id: '1', parentId: null, url: page.url, name: '', crossOrigin: false },
+        { id: '2', parentId: '1', url: 'https://pay.example.net/checkout', name: 'pay', crossOrigin: true },
+      ]
     },
-    evaluateScript: async (input) => {
-      record('evaluateScript', [input])
-      if (input.script.startsWith('JSON.stringify(')) return { url: page.url, ok: true, mode: 'expression', result: JSON.stringify(extractionPayload(input.script)), resultTruncated: false, error: null, durationMs: 1, capturedAt: 1 }
-      // 翻页探下一页按钮：替身里没有下一页。
-      if (input.script.includes('aria-disabled')) return { url: page.url, ok: true, mode: 'expression', result: false, resultTruncated: false, error: null, durationMs: 1, capturedAt: 1 }
-      return { url: page.url, ok: true, mode: input.mode ?? 'expression', result: page.title, resultTruncated: false, error: null, durationMs: 1, capturedAt: 1 }
+    evaluateScript: async (options) => {
+      record('evaluateScript', [options])
+      // 两种失败：脚本里写 __throws__ 就当页面抛了错，写 __huge__ 就当结果超了上限。
+      if (options.script.includes('__throws__')) return { url: page.url, ok: false, error: { name: 'TypeError', message: "Cannot read properties of null (reading 'innerText')", line: 2, column: 7 } }
+      if (options.script.includes('__huge__')) return { url: page.url, ok: false, tooLargeChars: options.maxResultChars + 1 }
+      return outcome(pageScriptValue(options.script, options.args ?? []))
+    },
+    sendProtocolCommand: async (command) => {
+      record('sendProtocolCommand', [command])
+      if (command.method === 'Fetch.enable') protocol.fetchEnabled = true
+      if (command.method === 'Fetch.disable') protocol.fetchEnabled = false
+      const reply = protocolReply(command.method, protocol.fetchEnabled)
+      for (const event of reply.events) pushProtocolEvent(event.method, event.params)
+      return reply.result
+    },
+    readProtocolEvents: async (query) => {
+      record('readProtocolEvents', [query])
+      const matches = (method: string) => !query.method || (query.method.endsWith('.') ? method.startsWith(query.method) : method === query.method)
+      return { events: protocol.events.filter((event) => event.seq > (query.after ?? 0) && matches(event.method)), last: protocol.lastSeq, dropped: 0 }
+    },
+    resetProtocolSession: async () => {
+      record('resetProtocolSession', [])
+      protocol.events = []
+      protocol.fetchEnabled = false
     },
     getPageState: async () => { record('getPageState', []); return page },
     manageUserScripts: async (request) => {
@@ -207,7 +255,7 @@ export function createHarness(options: { open?: boolean; attach?: boolean } = {}
   return { context, port, calls, attached, methods: () => calls.map((call) => call.method) }
 }
 
-/** 一个挂着 `velar:browser` 与 `velar:devtools` 的空间：经真的能力端口调两件能力，取消信号跟着每次调用，图经代码面的 attach 交出去。 */
+/** 一个挂着 `velar:browser`、`velar:devtools` 与 `velar:cdp` 的空间：经真的能力端口调三件能力，取消信号跟着每次调用，图经代码面的 attach 交出去。 */
 export function browserSpace(harness: BrowserHarness) {
   const hostContext = (call: CapabilityOperationContext): BrowserOperationContext => {
     const scoped: BrowserOperationContext = { ...harness.context, abortSignal: call.signal ?? new AbortController().signal }
@@ -229,9 +277,9 @@ export function browserSpace(harness: BrowserHarness) {
           return [name, (input: unknown, call: CapabilityOperationContext) => (method.length === 1 ? method(hostContext(call)) : method(input, hostContext(call)))]
         })
     )
-  const capabilities = createCapabilityPort({ browser: table(browserOperations), devtools: table(devtoolsOperations) })
+  const capabilities = createCapabilityPort({ browser: table(browserOperations), devtools: table(devtoolsOperations), cdp: table(cdpOperations) })
   /** 像模型的程序那样调一次：成功交回返回值，失败抛带 code 的错误。入参与返回值都过一遍 JSON。 */
-  const call = async (namespace: 'browser' | 'devtools', operation: string, input?: unknown): Promise<any> => {
+  const call = async (namespace: 'browser' | 'devtools' | 'cdp', operation: string, input?: unknown): Promise<any> => {
     const outcome = await capabilities.invoke({ namespace, operation, input: input === undefined ? undefined : JSON.parse(JSON.stringify(input)) })
     if (outcome.error) throw Object.assign(new Error(outcome.error.message), { code: outcome.error.code })
     return outcome.value === undefined ? undefined : JSON.parse(JSON.stringify(outcome.value))
@@ -256,11 +304,14 @@ export async function failureOf(call: Promise<unknown>): Promise<{ code: string;
 export const BrowserDeclarations = readFileSync(fileURLToPath(new URL('../../../../baselines/code-surface/browser.d.ts', import.meta.url)), 'utf8')
 /** 模型读到的 `velar:devtools` 声明。 */
 export const DevtoolsDeclarations = readFileSync(fileURLToPath(new URL('../../../../baselines/code-surface/devtools.d.ts', import.meta.url)), 'utf8')
+/** 模型读到的 `velar:cdp` 声明。 */
+export const CdpDeclarations = readFileSync(fileURLToPath(new URL('../../../../baselines/code-surface/cdp.d.ts', import.meta.url)), 'utf8')
 
-/** 这一轮授给程序的模块：browser 与 devtools。 */
+/** 这一轮授给程序的模块：browser、devtools 与 cdp。 */
 const Granted = [
   { namespace: 'browser', declarations: BrowserDeclarations },
   { namespace: 'devtools', declarations: DevtoolsDeclarations },
+  { namespace: 'cdp', declarations: CdpDeclarations },
 ]
 
 /** 只照生成的声明做 typecheck、不执行：交回诊断，过了就是空的。 */
