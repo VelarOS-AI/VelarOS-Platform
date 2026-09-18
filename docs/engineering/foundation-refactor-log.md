@@ -10,6 +10,14 @@
 
 （按时间追加。每条写：改了什么、为什么、影响谁。）
 
+- **浏览器能力改成四层、从哪层都能下手，新增 `velar:cdp`（09-19，ADR 0012，`44bebfb9` 与紧跟的删死代码一笔）。** 起因是你那句「必须给模型提供一些更加底层的能力」。
+  - 四层：协议（新模块 `velar:cdp`：`send` 任意 CDP 命令、`events` / `waitForEvent` 读事件、`reset` 撤掉自己做过的一切）→ 输入原子（`keyDown`、`keyUp`、`mouseMove`、`mouseDown`、`mouseUp`、`wheel`、`insertText`）→ 页面脚本（`evaluate` 整份取回、`frames` 含跨源 iframe）→ 常用组合（`open`、`inspect`、`click`、`fill`……）。
+  - ADR 0011 否决「裸 CDP」的两条理由（坐标对不上、关掉 Network 把诊断弄断）现在靠**会话隔离**解掉，不设闸：模型的命令跑在它自己的一条 CDP 会话上（内嵌页面是 debugger 上的 flatten 子会话，外部 Chrome 是同一页面的第二条 WebSocket），它开关的域、设的仿真与拦截只算在这条上，`reset` 或离站时一并撤掉；被它拦下 30 秒没人放行的请求由宿主放行，并记一条事件。
+  - 面：browser 48 → 34、devtools 22 → 18、cdp 4 个；删掉的是 evaluate 一行就能替的（extract、table、paginate、query、scroll、storage、emulate……）。声明 browser.d.ts 1170 → 873 行。
+  - 顺手改掉的几处坑：evaluate 不再截 100 项 / 2 万字；`fill` 改成真实输入（以前 React 的受控输入认不到）；三个 wait 等不到就抛 `TIMEOUT`（以前回 `matched: false`，程序忘了查就带着没到位的页面往下走），也撑得过跳转。
+  - 真机：用仓库里的 Electron 跑真运行时，内嵌页面与外部 Chrome 各 24 项、48 项全过（探针 `packages/velar/browser/test/probes/electron-low-level.probe.mjs`）。**真机抓到一处**：外部 Chrome 里跨源 iframe 在 `frames()` 里整个看不见（它在另一个进程），已补；顺带把外部浏览器的子框架求值从隔离世界改到框架主世界，和内嵌页面同一口径。
+  - **影响 Desktop**：运行时删了七个只为旧工具存在的方法（`scrollPage`、`queryElements`、`readPageStorage`、`listMediaSources`、`listPageResources`、`configureEmulation`、`waitForSelector`）和随它们走的公开类型；Desktop 旧的 BrowserTools 端口在升级 Platform 时要换到代码面（本来就在 X 系列接线里）。`setViewport`、`runUserScript` 留着，Desktop 界面在用。
+
 - **全仓扫「工具说明指向不存在的东西」，确证五条（09-17 05:20，`3ca63703` 修掉四条；每条都在仓库里逐条核过才动手）。** 起因是 `shell` 那一轮抓到的同类缺陷——说明指着一个实际不存在的东西，模型照做就落空。
   - **`tooling:map` 教模型传 `op="read"`**，可它的枚举只有 `map/find/page`，照做**当场被 Zod 拒**。讽刺的是紧挨着枚举那行的代码注释本来就写着「read 不在模型面」。
   - **`tooling:map` 还留着 `ids`、`detail` 两个参数**，说明写的是「read 模式下…」。read 到不了，这两个参数归一时按 strip **静默丢掉**——模型以为自己指定了正文和详情级别，其实什么都没发生，拿回一份完整工具地图。已从模型面删掉。

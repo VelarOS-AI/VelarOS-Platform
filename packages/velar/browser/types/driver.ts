@@ -1,6 +1,6 @@
 import type { BrowserPageDriverDownloadItem } from '../contract/requires.js'
 
-import type { BrowserClickCoordinatesOptions, BrowserDragCoordinatesOptions, BrowserGeolocationState, BrowserMouseButton, BrowserMoveMouseOptions, BrowserNetworkControlOptions, BrowserNetworkRequestDetailsResult, BrowserNetworkThrottlingPreset, BrowserPageDiagnosticKind, BrowserScreenshotCaptureRegion, BrowserScreenshotMetadata, BrowserScreenshotRect } from './browser.js'
+import type { BrowserClickCoordinatesOptions, BrowserDragCoordinatesOptions, BrowserMouseButton, BrowserMoveMouseOptions, BrowserNetworkControlOptions, BrowserNetworkRequestDetailsResult, BrowserPageDiagnosticKind, BrowserScreenshotCaptureRegion, BrowserScreenshotMetadata, BrowserScreenshotRect } from './browser.js'
 
 export type BrowserPageDriverKind = 'webview' | 'external'
 
@@ -143,30 +143,6 @@ export interface BrowserPageDriverDiagnosticsOptions {
   clear?: boolean
 }
 
-export interface BrowserPageDriverCookie {
-  name: string
-  value: string
-  domain?: LooseOptional<string>
-  path?: LooseOptional<string>
-  expires?: LooseOptional<number>
-  size?: LooseOptional<number>
-  httpOnly?: LooseOptional<boolean>
-  secure?: LooseOptional<boolean>
-  session?: LooseOptional<boolean>
-  sameSite?: LooseOptional<string>
-}
-
-export interface BrowserPageDriverCookieOptions {
-  scope?: LooseOptional<'current-url' | 'all'>
-}
-
-export interface BrowserPageDriverStorageOriginOptions {
-  includeLocalStorage?: boolean
-  includeSessionStorage?: boolean
-  limit: number
-  maxValueChars: number
-}
-
 export interface BrowserPageDriverNetworkControlState {
   offline: boolean
   extraHTTPHeaders: Record<string, string>
@@ -192,16 +168,6 @@ export type BrowserPageDriverNetworkRequestDetailsResult = Omit<
 export interface BrowserPageDriverNetworkIdleOptions {
   idleMs: number
   timeoutMs: number
-}
-
-export interface BrowserPageDriverEmulationState {
-  colorScheme: 'light' | 'dark' | 'no-preference'
-  reducedMotion: 'reduce' | 'no-preference'
-  timezoneId: Nullable<string>
-  locale: Nullable<string>
-  geolocation: Nullable<BrowserGeolocationState>
-  cpuThrottlingRate: number
-  networkThrottling: BrowserNetworkThrottlingPreset
 }
 
 export interface BrowserPageDriverDownloadEvent {

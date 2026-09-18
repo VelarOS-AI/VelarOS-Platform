@@ -1,11 +1,9 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 
-import { toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import type { BrowserHeapSnapshotOptions, BrowserHeapSnapshotResult, BrowserPerformanceInsightOptions, BrowserPerformanceInsightResult, BrowserPerformanceTraceStartOptions, BrowserPerformanceTraceStartResult, BrowserPerformanceTraceStopResult, BrowserSiteContext } from '../../types/browser.js'
-import type { BrowserPageDriverEmulationState } from '../../types/driver'
 import type { BrowserPageDriverKernel,BrowserPerformanceTraceState } from '../../types/runtime.js'
 import { extractKeyMetricsFromSummary, serializeBrowserTraceToGzip } from '../../utils/performance'
 import { resolveAutoStopMs } from '../../utils/performance'
@@ -131,17 +129,7 @@ export class BrowserPerformanceOrchestrator implements BrowserPerformanceOrchest
       throw new AppError('EXECUTION_FAILED', '浏览器页面连接已断开，trace 录制丢失。')
     }
     const events = await pageSession.driver.stopTracing()
-    const emulation: Nullable<BrowserPageDriverEmulationState> = toNullable(
-      pageSession.driver.getEmulationState?.()
-    )
-
-    const recording = await this.traceEngine.parse(events, {
-      cpuThrottling: emulation?.cpuThrottlingRate,
-      networkThrottling:
-        emulation && emulation.networkThrottling !== 'none'
-          ? emulation.networkThrottling
-          : undefined,
-    })
+    const recording = await this.traceEngine.parse(events)
 
     // 原始 trace 落盘：可直接拖进 DevTools Performance 面板复查。
     const stamp = new Date().toISOString().replace(/[:.]/g, '-')

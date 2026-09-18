@@ -90,7 +90,7 @@ function createPort(runtime, sessionId, context) {
     getContext: () => context,
     ...Object.fromEntries(['getPageState', 'listPageTargets', 'listPendingEvents', 'resetProtocolSession', 'listFrames', 'evaluateScript', 'performTargetAction',
       'insertText', 'pressKey', 'keyDown', 'keyUp', 'moveMouse', 'mouseDown', 'mouseUp', 'mouseWheel', 'clickCoordinates', 'getPageDiagnostics',
-      'sendProtocolCommand', 'readProtocolEvents', 'waitForPage'].map((method) => [method, bind(method)])),
+      'sendProtocolCommand', 'readProtocolEvents', 'waitForPage', 'navigatePage', 'configureNetwork'].map((method) => [method, bind(method)])),
   }
 }
 
@@ -207,6 +207,17 @@ async function suite(label, ctx) {
   await evaluate("() => { setTimeout(() => { location.href = '/page2' }, 300); return 1 }")
   const arrived = await browserOperations.waitForFunction({ script: "location.pathname === '/page2' && document.readyState === 'complete'", timeoutMs: 10000 }, ctx)
   check('waitForFunction 跨过真跳转', arrived === true)
+
+  // 等加载与离线开关
+  await browserOperations.goto({ url: new URL('/', ctx.browser.getContext().url).href }, ctx)
+  const loaded = await browserOperations.waitForLoad({ state: 'load', timeoutMs: 10000 }, ctx)
+  check('waitForLoad 交回加载好的页面', new URL(loaded.url).pathname === '/' && (await evaluate('document.readyState')) === 'complete', loaded.url)
+  const fetchPath = "() => fetch('/api?probe=offline').then(() => 'ok', () => 'failed')"
+  await devtoolsOperations.network({ offline: true }, ctx)
+  const whileOffline = await evaluate(fetchPath)
+  await devtoolsOperations.network({ offline: false }, ctx)
+  const backOnline = await evaluate(fetchPath)
+  check('devtools 的离线开关真断网、关掉就恢复', whileOffline === 'failed' && backOnline === 'ok', `离线时 ${whileOffline}，恢复后 ${backOnline}`)
 }
 
 async function run() {

@@ -264,23 +264,6 @@ export interface CdpFetchResourcePayload {
   data?: unknown
 }
 
-export interface CdpNetworkCookie {
-  name?: unknown
-  value?: unknown
-  domain?: unknown
-  path?: unknown
-  expires?: unknown
-  size?: unknown
-  httpOnly?: unknown
-  secure?: unknown
-  session?: unknown
-  sameSite?: unknown
-}
-
-export interface CdpNetworkGetCookiesResponse {
-  cookies?: unknown
-}
-
 export interface CdpPageFrame {
   id?: unknown
   parentId?: unknown
@@ -335,10 +318,6 @@ export interface CdpDomResolveNodeResponse {
   object?: {
     objectId?: unknown
   }
-}
-
-export interface CdpDomStorageItemsResponse {
-  entries?: unknown
 }
 
 export interface CdpJavascriptDialogOpeningEvent {

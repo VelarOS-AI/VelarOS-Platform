@@ -2,7 +2,7 @@ import { isEmpty } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { Log } from '@velaros-ai/core/logger'
 
-import type { BrowserParsedTraceRecording, BrowserTraceParseMetadata } from '../../types/runtime.js'
+import type { BrowserParsedTraceRecording } from '../../types/runtime.js'
 import { readBrowserTraceInsight } from '../../utils/performance'
 
 import type * as DevtoolsPerformanceEngineModule from '#devtools-performance-engine'
@@ -32,7 +32,7 @@ const log = Log.tag('BrowserPerformanceTraceEngine')
  */
 export interface BrowserPerformanceTraceEngineApi {
   /** 把原始 trace 事件交给 vendor 引擎解析成 insights。 */
-  parse(events: unknown[], metadata?: BrowserTraceParseMetadata): Promise<BrowserParsedTraceRecording>
+  parse(events: unknown[]): Promise<BrowserParsedTraceRecording>
   /** 把解析结果格式化成整体摘要（含可用 insight 清单）。 */
   formatSummary(recording: BrowserParsedTraceRecording): Promise<string>
   /** 把某一个 insight 格式化成详细分析文本。 */
@@ -47,11 +47,8 @@ export class BrowserPerformanceTraceEngine implements BrowserPerformanceTraceEng
   /** vendor 引擎的 i18n 只引导一次。 */
   private i18nBootstrapped = false
 
-  public parse(
-    events: unknown[],
-    metadata: BrowserTraceParseMetadata = {}
-  ): Promise<BrowserParsedTraceRecording> {
-    const operation = this.parseQueue.then(() => this.parseNow(events, metadata))
+  public parse(events: unknown[]): Promise<BrowserParsedTraceRecording> {
+    const operation = this.parseQueue.then(() => this.parseNow(events))
     this.parseQueue = operation.then(
       () => undefined,
       () => undefined
@@ -106,10 +103,7 @@ export class BrowserPerformanceTraceEngine implements BrowserPerformanceTraceEng
     this.i18nBootstrapped = true
   }
 
-  private async parseNow(
-    events: unknown[],
-    metadata: BrowserTraceParseMetadata
-  ): Promise<BrowserParsedTraceRecording> {
+  private async parseNow(events: unknown[]): Promise<BrowserParsedTraceRecording> {
     if (isEmpty(events)) {
       throw new AppError('EXECUTION_FAILED', '性能 trace 没有采集到任何事件。')
     }
@@ -118,7 +112,7 @@ export class BrowserPerformanceTraceEngine implements BrowserPerformanceTraceEng
     this.engine ??= module.TraceEngine.TraceModel.Model.createWithAllHandlers()
     this.engine.resetProcessor()
     try {
-      await this.engine.parse(events, { metadata: { ...metadata } })
+      await this.engine.parse(events, { metadata: {} })
     } catch (error) {
       const reason = AppError.from(error).message
       log.warn('trace 引擎解析失败', { reason, events: events.length })

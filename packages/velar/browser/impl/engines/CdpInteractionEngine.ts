@@ -3,7 +3,7 @@ import { AppError } from '@velaros-ai/core/error'
 import { Log } from '@velaros-ai/core/logger'
 
 import type { BrowserPageDriver, BrowserSystemPointerDriver } from '../../contract/requires.js'
-import type { BrowserClickCoordinatesOptions, BrowserClickCoordinatesResult, BrowserDragOptions, BrowserDragResult, BrowserElementTargetHint, BrowserInsertTextOptions, BrowserInsertTextResult, BrowserKeyInput, BrowserKeyResult, BrowserMouseButton, BrowserMouseButtonInput, BrowserMouseResult, BrowserMoveMouseOptions, BrowserPageInspection, BrowserPagePreviewPointerEvent, BrowserPageScrollOptions, BrowserPageScrollResult, BrowserPageZoomOptions, BrowserPageZoomResult, BrowserPressKeyOptions, BrowserPressKeyResult, BrowserSiteContext, BrowserTargetActionOptions, BrowserTargetActionResult, BrowserViewportOptions, BrowserViewportResult, BrowserWheelInput } from '../../types/browser.js'
+import type { BrowserClickCoordinatesOptions, BrowserClickCoordinatesResult, BrowserDragOptions, BrowserDragResult, BrowserElementTargetHint, BrowserInsertTextOptions, BrowserInsertTextResult, BrowserKeyInput, BrowserKeyResult, BrowserMouseButton, BrowserMouseButtonInput, BrowserMouseResult, BrowserMoveMouseOptions, BrowserPageInspection, BrowserPagePreviewPointerEvent, BrowserPageZoomOptions, BrowserPageZoomResult, BrowserPressKeyOptions, BrowserPressKeyResult, BrowserSiteContext, BrowserTargetActionOptions, BrowserTargetActionResult, BrowserViewportOptions, BrowserViewportResult, BrowserWheelInput } from '../../types/browser.js'
 import type { BrowserPageDriverPointerListener, BrowserPageDriverState } from '../../types/driver'
 import type { BrowserInputState, BrowserPageDriverKernel, BrowserPageDriverSession, BrowserPointerPoint, BrowserTargetActionClickMode, BrowserTargetActionInternalEffectSnapshot, BrowserViewportScreenMetrics, ExternalBrowserPageSession } from '../../types/runtime.js'
 import { clampExternalViewportPoint, normalizeTargetActionEffectSnapshot, normalizeTargetIdentityValue, readBrowserPointerPoint, resolveTargetActionClickMode } from '../../utils/cdp/interaction'
@@ -14,7 +14,6 @@ import { clampInteger, clampZoomFactor } from '../../utils/numbers.js'
 import { buildActionEffectSnapshotScript } from '../../utils/page-scripts/action-effect'
 import { buildDragTargetScript } from '../../utils/page-scripts/drag'
 import { buildInspectionScript } from '../../utils/page-scripts/inspection'
-import { buildScrollScript } from '../../utils/page-scripts/scroll'
 import { buildTargetActionScript } from '../../utils/page-scripts/target-action'
 import { mouseButtonsMask } from '../../utils/pointer.js'
 import { BrowserTuning } from '../../utils/tuning'
@@ -34,7 +33,7 @@ import type { BrowserTargetRefStore } from '../session/BrowserTargetRefStore'
 export interface CdpInteractionEngineApi {
   /** 宿主可在装配完成或运行期设置变化后替换系统指针驱动。 */
   setSystemPointerDriver(driver: LooseOptional<BrowserSystemPointerDriver>): void
-  /** 按目标元素描述执行动作（点击、填值、选项），比坐标点击稳。 */
+  /** 按目标元素描述做一步（点击、悬停、聚焦、全选），比坐标点击稳。 */
   performTargetAction(sessionId: string, context: BrowserSiteContext, options: BrowserTargetActionOptions, abortSignal?: AbortSignal): Promise<BrowserTargetActionResult>
   /** 在当前焦点处插入文字（像输入法上屏，不发按键事件）。 */
   insertText(sessionId: string, context: BrowserSiteContext, options: BrowserInsertTextOptions, _abortSignal?: AbortSignal): Promise<BrowserInsertTextResult>
@@ -64,8 +63,6 @@ export interface CdpInteractionEngineApi {
   setViewport(sessionId: string, context: BrowserSiteContext, options: BrowserViewportOptions, abortSignal?: AbortSignal): Promise<BrowserViewportResult>
   /** 改页面缩放比例。 */
   setPageZoom(sessionId: string, context: BrowserSiteContext, options: BrowserPageZoomOptions, abortSignal?: AbortSignal): Promise<BrowserPageZoomResult>
-  /** 滚动页面。 */
-  scrollPage(sessionId: string, context: BrowserSiteContext, options?: BrowserPageScrollOptions, _abortSignal?: AbortSignal): Promise<BrowserPageScrollResult>
 }
 
 export class CdpInteractionEngine implements CdpInteractionEngineApi {
@@ -960,25 +957,5 @@ export class CdpInteractionEngine implements CdpInteractionEngineApi {
       previousZoomFactor,
       capturedAt: Date.now(),
     }
-  }
-
-  
-
-  
-
-  public async scrollPage(
-    sessionId: string,
-    context: BrowserSiteContext,
-    options: BrowserPageScrollOptions = {},
-    _abortSignal?: AbortSignal
-  ): Promise<BrowserPageScrollResult> {
-    _abortSignal?.throwIfAborted()
-    const externalSession = this.requireExternalPageSession(sessionId)
-    const result = await externalSession.driver.executeJavaScript<BrowserPageScrollResult>(
-      buildScrollScript(options),
-      true
-    )
-    this.syncExternalPageStateFromScriptResult(sessionId, externalSession, result, context.url)
-    return result
   }
 }

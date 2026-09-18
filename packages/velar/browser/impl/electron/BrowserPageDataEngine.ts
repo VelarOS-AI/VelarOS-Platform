@@ -9,8 +9,6 @@ import { AppError } from '@velaros-ai/core/error'
 import { BrowserFetchLimits } from '../../contract/constants'
 import type { BrowserPageDriver } from '../../contract/requires.js'
 import type {
-  BrowserElementQueryOptions,
-  BrowserElementQueryResult,
   BrowserEvaluateScriptOptions,
   BrowserExportPagePdfOptions,
   BrowserExportPagePdfResult,
@@ -18,40 +16,27 @@ import type {
   BrowserFetchResourceResult,
   BrowserFrameInfo,
   BrowserInspectPageOptions,
-  BrowserListMediaSourcesOptions,
-  BrowserListMediaSourcesResult,
-  BrowserListPageResourcesOptions,
-  BrowserListPageResourcesResult,
   BrowserPageDiagnostics,
   BrowserPageDiagnosticsOptions,
   BrowserPageInspection,
-  BrowserPageStorageOptions,
-  BrowserPageStorageResult,
   BrowserPageWaitOptions,
   BrowserPageWaitResult,
   BrowserScriptOutcome,
   BrowserSiteContext,
   BrowserUploadFileOptions,
   BrowserUploadFileResult,
-  BrowserWaitForSelectorOptions,
-  BrowserWaitForSelectorResult,
 } from '../../types/browser'
 import type { BrowserSession } from '../../types/electron'
 import type { BrowserRuntimeKernel } from '../../types/electron.js'
-import { normalizeFetchResourceUrl, normalizeMediaSourceItems, normalizePageResourceIframes, normalizePageResourceLinks, normalizePageResourceOrigins, resolveUploadFilePath, summarizePageDiagnostics } from '../../utils/cdp/page-data.js'
+import { normalizeFetchResourceUrl, resolveUploadFilePath, summarizePageDiagnostics } from '../../utils/cdp/page-data.js'
 import { buildBrowserNetworkCaptureNotice, clearBrowserDiagnosticEntries, takeBrowserDiagnosticWindow } from '../../utils/diagnostics.js'
 import { evaluateInFrame, evaluateInWebContents } from '../../utils/electron/evaluate'
 import { listWebContentsFrames } from '../../utils/electron/webcontents'
-import { clampInteger, readFiniteNumber } from '../../utils/numbers.js'
-import { buildElementQueryScript } from '../../utils/page-scripts/element-query'
+import { clampInteger } from '../../utils/numbers.js'
 import { buildEvaluateScript } from '../../utils/page-scripts/evaluate'
-import { buildPageResourcesScript } from '../../utils/page-scripts/extraction'
 import { buildResolveFileInputScript } from '../../utils/page-scripts/file-upload'
 import { buildInspectionScript } from '../../utils/page-scripts/inspection'
-import { buildListMediaSourcesScript } from '../../utils/page-scripts/media-sources'
 import { buildPageWaitScript } from '../../utils/page-scripts/page-wait'
-import { buildPageStorageScript } from '../../utils/page-scripts/storage'
-import { buildWaitForSelectorScript } from '../../utils/page-scripts/wait-for-selector'
 import { BrowserTuning } from '../../utils/tuning'
 import { resolveWorkspaceFilePath } from '../../utils/workspace-paths.js'
 import { CdpPageDataEngine } from '../engines/CdpPageDataEngine'
@@ -76,28 +61,18 @@ type ElectronNetFetchOptions = Parameters<typeof electron.net.fetch>[1] & {
 export interface BrowserPageDataEngineApi {
   /** 读页面：正文、标题结构、链接、可交互元素与它们的 ref。 */
   inspectPage(sessionId: string, context: BrowserSiteContext, options?: BrowserInspectPageOptions, abortSignal?: AbortSignal): Promise<BrowserPageInspection>
-  /** 按 CSS selector 查元素的文本、属性与可点击目标。 */
-  queryElements(sessionId: string, context: BrowserSiteContext, options: BrowserElementQueryOptions, abortSignal?: AbortSignal): Promise<BrowserElementQueryResult>
   /** 在页面上下文里跑一段受控脚本并取回结果。 */
   evaluateScript(sessionId: string, context: BrowserSiteContext, options: BrowserEvaluateScriptOptions, abortSignal?: AbortSignal): Promise<BrowserScriptOutcome>
   /** 列出页面的框架树（顶层页面与各层 iframe，含跨源的）。 */
   listFrames(sessionId: string, context: BrowserSiteContext, abortSignal?: AbortSignal): Promise<BrowserFrameInfo[]>
-  /** 读 localStorage、sessionStorage 与 cookie。 */
-  readPageStorage(sessionId: string, context: BrowserSiteContext, options?: BrowserPageStorageOptions, abortSignal?: AbortSignal): Promise<BrowserPageStorageResult>
   /** 带页面会话的 cookie 下载一个 http(s) 资源到站点工作区。 */
   fetchResource(sessionId: string, context: BrowserSiteContext, options: BrowserFetchResourceOptions, abortSignal?: AbortSignal): Promise<BrowserFetchResourceResult>
-  /** 列页面上的图片、视频、音频地址，并说明能不能直接下载。 */
-  listMediaSources(sessionId: string, context: BrowserSiteContext, options?: BrowserListMediaSourcesOptions, abortSignal?: AbortSignal): Promise<BrowserListMediaSourcesResult>
-  /** 列页面的链接、iframe 与媒体概览。 */
-  listPageResources(sessionId: string, context: BrowserSiteContext, options?: BrowserListPageResourcesOptions, abortSignal?: AbortSignal): Promise<BrowserListPageResourcesResult>
   /** 读最近的 console、加载错误与网络诊断，并给一份汇总。 */
   getPageDiagnostics(sessionId: string, context: BrowserSiteContext, options?: BrowserPageDiagnosticsOptions, abortSignal?: AbortSignal): Promise<BrowserPageDiagnostics>
   /** 把站点工作区里的文件放进页面的 file input。 */
   uploadFile(sessionId: string, context: BrowserSiteContext, options: BrowserUploadFileOptions, abortSignal?: AbortSignal): Promise<BrowserUploadFileResult>
   /** 把当前页面导出成 PDF 存进站点工作区。 */
   exportPagePdf(sessionId: string, context: BrowserSiteContext, options?: BrowserExportPagePdfOptions, abortSignal?: AbortSignal): Promise<BrowserExportPagePdfResult>
-  /** 等某个选择器出现或消失。 */
-  waitForSelector(sessionId: string, context: BrowserSiteContext, options: BrowserWaitForSelectorOptions, abortSignal?: AbortSignal): Promise<BrowserWaitForSelectorResult>
   /** 等页面加载状态稳定，或等一小段时间。 */
   waitForPage(sessionId: string, context: BrowserSiteContext, options: BrowserPageWaitOptions, abortSignal?: AbortSignal): Promise<BrowserPageWaitResult>
 }
@@ -167,42 +142,6 @@ export class BrowserPageDataEngine extends CdpPageDataEngine implements BrowserP
     return inspection
   }
 
-  public override async queryElements(
-    sessionId: string,
-    context: BrowserSiteContext,
-    options: BrowserElementQueryOptions,
-    abortSignal?: AbortSignal
-  ): Promise<BrowserElementQueryResult> {
-    abortSignal?.throwIfAborted()
-    const externalSession = this.getExternalPageSession(sessionId)
-    if (externalSession) return super.queryElements(sessionId, context, options, abortSignal)
-
-    const session = await this.getLivePageSessionUnlocked(sessionId, abortSignal)
-
-    const result = (await evaluateInWebContents(
-      session.webContents,
-      buildElementQueryScript(options),
-      true
-    )) as BrowserElementQueryResult
-
-    const firstElement = result.elements[0]
-    if (firstElement?.target?.css || options.selector) {
-      void this.interaction.highlightTarget(
-        session,
-        firstElement?.target ?? {
-          css: options.selector,
-          role: null,
-          text: null,
-          name: null,
-          attributes: {},
-        },
-        firstElement?.text ?? options.selector
-      )
-    }
-
-    return result
-  }
-
   public override async evaluateScript(
     sessionId: string,
     context: BrowserSiteContext,
@@ -229,25 +168,6 @@ export class BrowserPageDataEngine extends CdpPageDataEngine implements BrowserP
     if (this.getExternalPageSession(sessionId)) return super.listFrames(sessionId, context, abortSignal)
     const session = await this.getLivePageSessionUnlocked(sessionId, abortSignal)
     return listWebContentsFrames(session.webContents)
-  }
-
-  public override async readPageStorage(
-    sessionId: string,
-    context: BrowserSiteContext,
-    options: BrowserPageStorageOptions = {},
-    abortSignal?: AbortSignal
-  ): Promise<BrowserPageStorageResult> {
-    abortSignal?.throwIfAborted()
-    const externalSession = this.getExternalPageSession(sessionId)
-    if (externalSession) return super.readPageStorage(sessionId, context, options, abortSignal)
-
-    const session = await this.getLivePageSessionUnlocked(sessionId, abortSignal)
-
-    return evaluateInWebContents(
-      session.webContents,
-      buildPageStorageScript(options),
-      true
-    ) as Promise<BrowserPageStorageResult>
   }
 
   public override async fetchResource(
@@ -319,76 +239,6 @@ export class BrowserPageDataEngine extends CdpPageDataEngine implements BrowserP
       mimeType: response.headers.get('content-type'),
       bytes: bytes.byteLength,
       status,
-      capturedAt: Date.now(),
-    }
-  }
-
-  public override async listMediaSources(
-    sessionId: string,
-    context: BrowserSiteContext,
-    options: BrowserListMediaSourcesOptions = {},
-    abortSignal?: AbortSignal
-  ): Promise<BrowserListMediaSourcesResult> {
-    abortSignal?.throwIfAborted()
-    const externalSession = this.getExternalPageSession(sessionId)
-    const limit = clampInteger(options.limit, 1, 200, 80)
-    const includeDataUrls = !!options.includeDataUrls
-    const includeBlobUrls = !!options.includeBlobUrls
-    if (externalSession) return super.listMediaSources(sessionId, context, options, abortSignal)
-
-    const session = await this.getLivePageSessionUnlocked(sessionId, abortSignal)
-
-    const result = (await evaluateInWebContents(
-      session.webContents,
-      buildListMediaSourcesScript({
-        limit,
-        includeDataUrls,
-        includeBlobUrls,
-      }),
-      true
-    )) as { items?: unknown; truncated?: boolean }
-
-    return {
-      url: this.resolveCurrentPageUrl(session, context.url),
-      items: normalizeMediaSourceItems(result.items),
-      truncated: !!result.truncated,
-      capturedAt: Date.now(),
-    }
-  }
-
-  public override async listPageResources(
-    sessionId: string,
-    context: BrowserSiteContext,
-    options: BrowserListPageResourcesOptions = {},
-    abortSignal?: AbortSignal
-  ): Promise<BrowserListPageResourcesResult> {
-    abortSignal?.throwIfAborted()
-    const externalSession = this.getExternalPageSession(sessionId)
-    const limit = clampInteger(options.limit, 1, 500, 120)
-    const includeIframes = !isFalse(options.includeIframes)
-    if (externalSession) return super.listPageResources(sessionId, context, options, abortSignal)
-
-    const session = await this.getLivePageSessionUnlocked(sessionId, abortSignal)
-
-    const result = (await evaluateInWebContents(
-      session.webContents,
-      buildPageResourcesScript({ limit, includeIframes }),
-      true
-    )) as {
-      links?: unknown
-      iframes?: unknown
-      resourceOrigins?: unknown
-      mediaCount?: unknown
-      truncated?: boolean
-    }
-
-    return {
-      url: this.resolveCurrentPageUrl(session, context.url),
-      links: normalizePageResourceLinks(result.links),
-      iframes: normalizePageResourceIframes(result.iframes),
-      resourceOrigins: normalizePageResourceOrigins(result.resourceOrigins, context.url),
-      mediaCount: clampInteger(readFiniteNumber(result.mediaCount), 0, 100_000, 0),
-      truncated: !!result.truncated,
       capturedAt: Date.now(),
     }
   }
@@ -550,25 +400,6 @@ export class BrowserPageDataEngine extends CdpPageDataEngine implements BrowserP
       bytes: pdfBuffer.byteLength,
       capturedAt: Date.now(),
     }
-  }
-
-  public override async waitForSelector(
-    sessionId: string,
-    context: BrowserSiteContext,
-    options: BrowserWaitForSelectorOptions,
-    abortSignal?: AbortSignal
-  ): Promise<BrowserWaitForSelectorResult> {
-    abortSignal?.throwIfAborted()
-    const externalSession = this.getExternalPageSession(sessionId)
-    if (externalSession) return super.waitForSelector(sessionId, context, options, abortSignal)
-
-    const session = await this.getLivePageSessionUnlocked(sessionId, abortSignal)
-
-    return evaluateInWebContents(
-      session.webContents,
-      buildWaitForSelectorScript(options),
-      true
-    ) as Promise<BrowserWaitForSelectorResult>
   }
 
   public override async waitForPage(

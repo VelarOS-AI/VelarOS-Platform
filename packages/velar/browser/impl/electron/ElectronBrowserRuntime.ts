@@ -50,10 +50,6 @@ import type {
   BrowserClickCoordinatesResult,
   BrowserDragOptions,
   BrowserDragResult,
-  BrowserElementQueryOptions,
-  BrowserElementQueryResult,
-  BrowserEmulationOptions,
-  BrowserEmulationResult,
   BrowserEvaluateScriptOptions,
   BrowserExportPagePdfOptions,
   BrowserExportPagePdfResult,
@@ -73,10 +69,6 @@ import type {
   BrowserInspectPageOptions,
   BrowserKeyInput,
   BrowserKeyResult,
-  BrowserListMediaSourcesOptions,
-  BrowserListMediaSourcesResult,
-  BrowserListPageResourcesOptions,
-  BrowserListPageResourcesResult,
   BrowserMouseButtonInput,
   BrowserMouseResult,
   BrowserMoveMouseOptions,
@@ -94,10 +86,6 @@ import type {
   BrowserPageNavigationResult,
   BrowserPagePreviewFrame,
   BrowserPagePreviewStreamEvent,
-  BrowserPageScrollOptions,
-  BrowserPageScrollResult,
-  BrowserPageStorageOptions,
-  BrowserPageStorageResult,
   BrowserPageTargetInfo,
   BrowserPageTargetsResult,
   BrowserPageWaitOptions,
@@ -132,8 +120,6 @@ import type {
   BrowserUserScriptRecord,
   BrowserViewportOptions,
   BrowserViewportResult,
-  BrowserWaitForSelectorOptions,
-  BrowserWaitForSelectorResult,
   BrowserWheelInput,
   CdpEventsInput,
   CdpSendInput,
@@ -245,10 +231,8 @@ export interface ElectronBrowserRuntimeApi {
   startPreviewFrameStream(sessionId: string, context: BrowserSiteContext, options: { maxWidth?: number; quality?: number }, onEvent: (event: BrowserPagePreviewStreamEvent) => void, abortSignal?: AbortSignal): Promise<void>
   /** 停止画中画实时帧流。 */
   stopPreviewFrameStream(sessionId: string): Promise<void>
-  /** 按目标元素描述执行动作（点击、填值、选项），比坐标点击稳。 */
+  /** 按目标元素描述做一步（点击、悬停、聚焦、全选），比坐标点击稳。 */
   performTargetAction(sessionId: string, context: BrowserSiteContext, options: BrowserTargetActionOptions, abortSignal?: AbortSignal): Promise<BrowserTargetActionResult>
-  /** 滚动页面。 */
-  scrollPage(sessionId: string, context: BrowserSiteContext, options?: BrowserPageScrollOptions, abortSignal?: AbortSignal): Promise<BrowserPageScrollResult>
   /** 往当前焦点或指定目标输入文本。 */
   insertText(sessionId: string, context: BrowserSiteContext, options: BrowserInsertTextOptions, abortSignal?: AbortSignal): Promise<BrowserInsertTextResult>
   /** 发一次键盘按键。 */
@@ -275,8 +259,6 @@ export interface ElectronBrowserRuntimeApi {
   setPageZoom(sessionId: string, context: BrowserSiteContext, options: BrowserPageZoomOptions, abortSignal?: AbortSignal): Promise<BrowserPageZoomResult>
   /** 读页面：正文、标题结构、链接、可交互元素与它们的 ref。 */
   inspectPage(sessionId: string, context: BrowserSiteContext, options?: BrowserInspectPageOptions, abortSignal?: AbortSignal): Promise<BrowserPageInspection>
-  /** 按 CSS selector 查元素的文本、属性与可点击目标。 */
-  queryElements(sessionId: string, context: BrowserSiteContext, options: BrowserElementQueryOptions, abortSignal?: AbortSignal): Promise<BrowserElementQueryResult>
   /** 在页面上下文里跑一段受控脚本并取回结果。 */
   evaluateScript(sessionId: string, context: BrowserSiteContext, options: BrowserEvaluateScriptOptions, abortSignal?: AbortSignal): Promise<BrowserScriptOutcome>
   /** 列出页面的框架树（顶层页面与各层 iframe，含跨源的）。 */
@@ -294,14 +276,8 @@ export interface ElectronBrowserRuntimeApi {
    * evaluate-on-new-document 注册，当前返回 unsupported，由 UI/工具展示。
    */
   runUserScript(sessionId: string, context: BrowserSiteContext, input: { script: BrowserUserScriptRecord; code: string; force?: boolean }, abortSignal?: AbortSignal): Promise<BrowserUserScriptLastRun>
-  /** 读 localStorage、sessionStorage 与 cookie。 */
-  readPageStorage(sessionId: string, context: BrowserSiteContext, options?: BrowserPageStorageOptions, abortSignal?: AbortSignal): Promise<BrowserPageStorageResult>
   /** 带页面会话的 cookie 下载一个 http(s) 资源到站点工作区。 */
   fetchResource(sessionId: string, context: BrowserSiteContext, options: BrowserFetchResourceOptions, abortSignal?: AbortSignal): Promise<BrowserFetchResourceResult>
-  /** 列页面上的图片、视频、音频地址，并说明能不能直接下载。 */
-  listMediaSources(sessionId: string, context: BrowserSiteContext, options?: BrowserListMediaSourcesOptions, abortSignal?: AbortSignal): Promise<BrowserListMediaSourcesResult>
-  /** 列页面的链接、iframe 与媒体概览。 */
-  listPageResources(sessionId: string, context: BrowserSiteContext, options?: BrowserListPageResourcesOptions, abortSignal?: AbortSignal): Promise<BrowserListPageResourcesResult>
   /** 读最近的 console、加载错误与网络诊断，并给一份汇总。 */
   getPageDiagnostics(sessionId: string, context: BrowserSiteContext, options?: BrowserPageDiagnosticsOptions, abortSignal?: AbortSignal): Promise<BrowserPageDiagnostics>
   /** 把站点工作区里的文件放进页面的 file input。 */
@@ -314,10 +290,6 @@ export interface ElectronBrowserRuntimeApi {
   readNetworkResponseBody(sessionId: string, context: BrowserSiteContext, options: BrowserNetworkResponseBodyOptions, abortSignal?: AbortSignal): Promise<BrowserNetworkResponseBodyResult>
   /** 按 requestId 读请求、响应与 timing 详情。 */
   readNetworkRequestDetails(sessionId: string, context: BrowserSiteContext, options: BrowserNetworkRequestDetailsOptions, abortSignal?: AbortSignal): Promise<BrowserNetworkRequestDetailsResult>
-  /** 配置环境模拟：色彩方案、时区、地理位置、CPU 与网络节流。 */
-  configureEmulation(sessionId: string, context: BrowserSiteContext, options: BrowserEmulationOptions, abortSignal?: AbortSignal): Promise<BrowserEmulationResult>
-  /** 等某个选择器出现或消失。 */
-  waitForSelector(sessionId: string, context: BrowserSiteContext, options: BrowserWaitForSelectorOptions, abortSignal?: AbortSignal): Promise<BrowserWaitForSelectorResult>
   /** 等页面加载状态稳定，或等一小段时间。 */
   waitForPage(sessionId: string, context: BrowserSiteContext, options: BrowserPageWaitOptions, abortSignal?: AbortSignal): Promise<BrowserPageWaitResult>
   /** 执行浏览器导航动作。 */
@@ -1101,17 +1073,6 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     )
   }
 
-  public async scrollPage(
-    sessionId: string,
-    context: BrowserSiteContext,
-    options: BrowserPageScrollOptions = {},
-    abortSignal?: AbortSignal
-  ): Promise<BrowserPageScrollResult> {
-    return this.actionQueue.run(sessionId, () =>
-      this.interaction.scrollPage(sessionId, context, options, abortSignal)
-    )
-  }
-
   public async insertText(
     sessionId: string,
     context: BrowserSiteContext,
@@ -1235,17 +1196,6 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     )
   }
 
-  public async queryElements(
-    sessionId: string,
-    context: BrowserSiteContext,
-    options: BrowserElementQueryOptions,
-    abortSignal?: AbortSignal
-  ): Promise<BrowserElementQueryResult> {
-    return this.actionQueue.run(sessionId, () =>
-      this.pageData.queryElements(sessionId, context, options, abortSignal)
-    )
-  }
-
   public async evaluateScript(
     sessionId: string,
     context: BrowserSiteContext,
@@ -1355,17 +1305,6 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     })
   }
 
-  public async readPageStorage(
-    sessionId: string,
-    context: BrowserSiteContext,
-    options: BrowserPageStorageOptions = {},
-    abortSignal?: AbortSignal
-  ): Promise<BrowserPageStorageResult> {
-    return this.actionQueue.run(sessionId, () =>
-      this.pageData.readPageStorage(sessionId, context, options, abortSignal)
-    )
-  }
-
   public async fetchResource(
     sessionId: string,
     context: BrowserSiteContext,
@@ -1374,28 +1313,6 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
   ): Promise<BrowserFetchResourceResult> {
     return this.actionQueue.run(sessionId, () =>
       this.pageData.fetchResource(sessionId, context, options, abortSignal)
-    )
-  }
-
-  public async listMediaSources(
-    sessionId: string,
-    context: BrowserSiteContext,
-    options: BrowserListMediaSourcesOptions = {},
-    abortSignal?: AbortSignal
-  ): Promise<BrowserListMediaSourcesResult> {
-    return this.actionQueue.runReadOnly(sessionId, () =>
-      this.pageData.listMediaSources(sessionId, context, options, abortSignal)
-    )
-  }
-
-  public async listPageResources(
-    sessionId: string,
-    context: BrowserSiteContext,
-    options: BrowserListPageResourcesOptions = {},
-    abortSignal?: AbortSignal
-  ): Promise<BrowserListPageResourcesResult> {
-    return this.actionQueue.runReadOnly(sessionId, () =>
-      this.pageData.listPageResources(sessionId, context, options, abortSignal)
     )
   }
 
@@ -1462,28 +1379,6 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
   ): Promise<BrowserNetworkRequestDetailsResult> {
     return this.actionQueue.run(sessionId, () =>
       this.pageData.readNetworkRequestDetails(sessionId, context, options, abortSignal)
-    )
-  }
-
-  public async configureEmulation(
-    sessionId: string,
-    context: BrowserSiteContext,
-    options: BrowserEmulationOptions,
-    abortSignal?: AbortSignal
-  ): Promise<BrowserEmulationResult> {
-    return this.actionQueue.run(sessionId, () =>
-      this.pageData.configureEmulation(sessionId, context, options, abortSignal)
-    )
-  }
-
-  public async waitForSelector(
-    sessionId: string,
-    context: BrowserSiteContext,
-    options: BrowserWaitForSelectorOptions,
-    abortSignal?: AbortSignal
-  ): Promise<BrowserWaitForSelectorResult> {
-    return this.actionQueue.run(sessionId, () =>
-      this.pageData.waitForSelector(sessionId, context, options, abortSignal)
     )
   }
 
@@ -1687,10 +1582,6 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     })
   }
 
-  /** 使用当前浏览器会话抓取远程资源并写入工作区。 */
-  /** 枚举当前页面可下载的图片/视频/音频 URL。 */
-  /** 枚举页面链接、iframe 与媒体数量概览。 */
-  /** 将当前页面导出为 PDF 并写入工作区。 */
   /** 允许或拒绝待处理权限请求。 */
   public async handlePermission(
     sessionId: string,
@@ -1713,21 +1604,6 @@ class ElectronBrowserRuntime implements ElectronBrowserRuntimeApi {
     })
   }
 
-  /** 向 file input 上传本地文件（CDP DOM.setFileInputFiles）。 */
-  /** 读取页面诊断记录。 */
-  /** 向当前焦点输入文本。 */
-  /** 发送键盘事件。 */
-  /** 发送鼠标点击坐标事件。 */
-  /** 按两个目标元素中心点执行拖拽。 */
-  /** 移动鼠标并更新虚拟指针。 */
-  /** 等待 CSS selector 出现或可见。 */
-  /** 等待页面 readyState 或短暂停顿，供异步渲染和轻量加载稳定。 */
-  /** 设置目标视口大小。 */
-  /** 设置页面缩放比例。 */
-  /** 配置外部 CDP 浏览器页面网络状态。 */
-  /** 读取当前外部 CDP 浏览器页面已捕获请求的响应体。 */
-  /** 读取当前外部 CDP 浏览器页面已捕获请求的完整详情。 */
-  /** 配置外部 CDP 浏览器页面环境模拟。 */
   /**
    * 开始录制性能 trace（吸收自 chrome-devtools-mcp 的 performance_start_trace 流程）。
    *

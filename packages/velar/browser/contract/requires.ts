@@ -25,7 +25,6 @@ import type {
   BrowserClickCoordinatesResult,
   BrowserDragOptions,
   BrowserDragResult,
-  BrowserEmulationOptions,
   BrowserEvaluateScriptOptions,
   BrowserExportPagePdfOptions,
   BrowserExportPagePdfResult,
@@ -93,9 +92,9 @@ import type {
   CdpEventsInput,
   CdpSendInput,
 } from '../types/browser'
-import type { BrowserLoginDetection, BrowserOriginStorage, BrowserPageDiagnosticEntry, BrowserPageState,BrowserPageTargetInfo } from '../types/browser.js'
+import type { BrowserLoginDetection, BrowserPageDiagnosticEntry, BrowserPageState,BrowserPageTargetInfo } from '../types/browser.js'
 import type { CdpExternalBrowserLaunchOptions, CdpExternalBrowserSession, CdpScreencastConsumerOptions, CdpScreencastStartOptions, ScreencastCapturedFrame } from '../types/cdp.js'
-import type { BrowserPageDriverClickCoordinatesOptions, BrowserPageDriverCookie, BrowserPageDriverCookieOptions, BrowserPageDriverDiagnosticsOptions, BrowserPageDriverDownloadListener, BrowserPageDriverDragCoordinatesOptions, BrowserPageDriverEmulationState,BrowserPageDriverFetchResourceOptions, BrowserPageDriverFetchResourceResult, BrowserPageDriverFileInputOptions, BrowserPageDriverKeyEvent, BrowserPageDriverKind, BrowserPageDriverMouseEvent, BrowserPageDriverMoveMouseOptions, BrowserPageDriverNetworkCaptureState, BrowserPageDriverNetworkControlState, BrowserPageDriverNetworkIdleOptions, BrowserPageDriverNetworkRequestDetailsResult, BrowserPageDriverNetworkResponseBodyResult, BrowserPageDriverPdfOptions, BrowserPageDriverScreenshot, BrowserPageDriverScreenshotOptions, BrowserPageDriverState, BrowserPageDriverStorageOriginOptions, BrowserSystemPointerMoveOptions } from '../types/driver.js'
+import type { BrowserPageDriverClickCoordinatesOptions, BrowserPageDriverDiagnosticsOptions, BrowserPageDriverDownloadListener, BrowserPageDriverDragCoordinatesOptions,BrowserPageDriverFetchResourceOptions, BrowserPageDriverFetchResourceResult, BrowserPageDriverFileInputOptions, BrowserPageDriverKeyEvent, BrowserPageDriverKind, BrowserPageDriverMouseEvent, BrowserPageDriverMoveMouseOptions, BrowserPageDriverNetworkCaptureState, BrowserPageDriverNetworkControlState, BrowserPageDriverNetworkIdleOptions, BrowserPageDriverNetworkRequestDetailsResult, BrowserPageDriverNetworkResponseBodyResult, BrowserPageDriverPdfOptions, BrowserPageDriverScreenshot, BrowserPageDriverScreenshotOptions, BrowserPageDriverState, BrowserSystemPointerMoveOptions } from '../types/driver.js'
 
 /** 启动/接入外部浏览器并返回 page-level CDP driver 的 host 无关 launcher 面。 */
 /**
@@ -222,12 +221,6 @@ export interface BrowserPageDriver {
   onDownload?(listener: BrowserPageDriverDownloadListener): () => void
   /** 预先授予一组权限，省掉页面弹权限框。 */
   grantPermissions?(permissions: string[], origin?: LooseOptional<string>): Promise<void>
-  /** 读 cookie。 */
-  readCookies?(options?: BrowserPageDriverCookieOptions): Promise<BrowserPageDriverCookie[]>
-  /** 按来源读 localStorage / sessionStorage。 */
-  readStorageOrigins?(
-    options: BrowserPageDriverStorageOriginOptions
-  ): Promise<BrowserOriginStorage[]>
   /** 配置页面网络：离线、请求头、拦截与 mock。 */
   configureNetwork?(
     options: BrowserNetworkControlOptions
@@ -242,12 +235,6 @@ export interface BrowserPageDriver {
   ): Promise<BrowserPageDriverNetworkRequestDetailsResult>
   /** 等页面网络空闲：空闲了交回 true，到点还有请求在飞交回 false。 */
   waitForNetworkIdle?(options: BrowserPageDriverNetworkIdleOptions): Promise<boolean>
-  /** 配置环境模拟：色彩方案、时区、地理位置、CPU 与网络节流。 */
-  configureEmulation?(
-    options: BrowserEmulationOptions
-  ): Promise<BrowserPageDriverEmulationState>
-  /** 读当前生效的环境模拟状态。 */
-  getEmulationState?(): BrowserPageDriverEmulationState
   /** 开始录制性能 trace（CDP Tracing domain）。 */
   startTracing?(): Promise<void>
   /** 停止录制并返回全部 trace 事件。 */

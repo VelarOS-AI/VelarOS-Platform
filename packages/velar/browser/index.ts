@@ -52,13 +52,10 @@ export type {
 } from './types/cdp.js'
 export type {
   BrowserPageDriverClickCoordinatesOptions,
-  BrowserPageDriverCookie,
-  BrowserPageDriverCookieOptions,
   BrowserPageDriverDiagnosticsOptions,
   BrowserPageDriverDownloadEvent,
   BrowserPageDriverDownloadListener,
   BrowserPageDriverDragCoordinatesOptions,
-  BrowserPageDriverEmulationState,
   BrowserPageDriverFetchResourceOptions,
   BrowserPageDriverFetchResourceResult,
   BrowserPageDriverFileInputOptions,
@@ -77,7 +74,6 @@ export type {
   BrowserPageDriverScreenshot,
   BrowserPageDriverScreenshotOptions,
   BrowserPageDriverState,
-  BrowserPageDriverStorageOriginOptions,
   BrowserSystemPointerMoveOptions,
 } from './types/driver.js'
 export type {

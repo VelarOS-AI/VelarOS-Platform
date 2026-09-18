@@ -33,7 +33,6 @@ import {
   isNonBlankString,
   isNotNull,
   isObject,
-  isPresent,
   isString,
   isTrue,
   optionalWhen,
@@ -43,11 +42,11 @@ import { AppError } from '@velaros-ai/core/error'
 
 import { BrowserErrorCodes } from '../../contract/constants.js'
 import type { BrowserPageDriver, BrowserProtocolChannel } from '../../contract/requires.js'
-import type { BrowserEmulationOptions, BrowserFrameInfo, BrowserGeolocationState, BrowserInsertTextOptions, BrowserNetworkControlOptions, BrowserNetworkRequestDetailsOptions, BrowserNetworkResponseBodyOptions, BrowserNetworkThrottlingPreset, BrowserOriginStorage, BrowserPageDiagnosticEntry, BrowserPageTargetInfo, BrowserStorageEntry, BrowserSwitchPageTargetOptions, BrowserViewportOptions } from '../../types/browser.js'
-import type { CdpBrowserPageDriverTransport, CdpCaptureScreenshotResponse, CdpDomDocumentResponse, CdpDomQuerySelectorResponse, CdpDomStorageItemsResponse, CdpDownloadProgressEvent, CdpDownloadWillBeginEvent, CdpFetchResourcePayload, CdpJavascriptDialogOpeningEvent, CdpLayoutMetricsResponse, CdpNetworkGetCookiesResponse, CdpPageFrame, CdpPageFrameTree, CdpPageGetFrameTreeResponse, CdpPageTargetDescription, CdpPrintToPdfResponse, CdpRuntimeConsoleAPICalledEvent, CdpRuntimeEvaluateResponse, CdpRuntimeExceptionDetails, CdpRuntimeExceptionThrownEvent, CdpRuntimeRemoteObject, CdpScreencastConsumerOptions, CdpScreencastStartOptions, CdpTargetListEntry, ScreencastCapturedFrame } from '../../types/cdp.js'
-import type { BrowserPageDriverClickCoordinatesOptions, BrowserPageDriverCookie, BrowserPageDriverCookieOptions, BrowserPageDriverDiagnosticsOptions, BrowserPageDriverDownloadEvent, BrowserPageDriverDownloadListener, BrowserPageDriverDragCoordinatesOptions, BrowserPageDriverEmulationState, BrowserPageDriverFetchResourceOptions, BrowserPageDriverFetchResourceResult, BrowserPageDriverFileInputOptions, BrowserPageDriverKeyEvent, BrowserPageDriverMouseEvent, BrowserPageDriverMoveMouseOptions, BrowserPageDriverNetworkControlState, BrowserPageDriverNetworkIdleOptions, BrowserPageDriverNetworkRequestDetailsResult, BrowserPageDriverNetworkResponseBodyResult, BrowserPageDriverPdfOptions, BrowserPageDriverScreenshot, BrowserPageDriverScreenshotOptions, BrowserPageDriverState, BrowserPageDriverStorageOriginOptions } from '../../types/driver'
-import { buildFetchResourceScript, buildViewportRect, clampPageZoomFactor, clampPositiveInteger, cloneGeolocation, normalizeCpuThrottlingRate, normalizeGeolocation, normalizeNullableEmulationString, readConsoleSource, readNodeId, readRuntimeEvaluateValue, resolveConsoleLevel, resolveConsoleTimestamp, resolveMouseButton, resolveTargetListEntryId } from '../../utils/cdp/driver'
-import { normalizeDomStorageEntry, normalizeNetworkCookie, normalizePageTargetDescription, resolveConsoleMessage, resolveRegionScreenshotInput } from '../../utils/cdp/driver'
+import type { BrowserFrameInfo, BrowserInsertTextOptions, BrowserNetworkControlOptions, BrowserNetworkRequestDetailsOptions, BrowserNetworkResponseBodyOptions, BrowserPageDiagnosticEntry, BrowserPageTargetInfo, BrowserSwitchPageTargetOptions, BrowserViewportOptions } from '../../types/browser.js'
+import type { CdpBrowserPageDriverTransport, CdpCaptureScreenshotResponse, CdpDomDocumentResponse, CdpDomQuerySelectorResponse, CdpDownloadProgressEvent, CdpDownloadWillBeginEvent, CdpFetchResourcePayload, CdpJavascriptDialogOpeningEvent, CdpLayoutMetricsResponse, CdpPageTargetDescription, CdpPrintToPdfResponse, CdpRuntimeConsoleAPICalledEvent, CdpRuntimeEvaluateResponse, CdpRuntimeExceptionDetails, CdpRuntimeExceptionThrownEvent, CdpRuntimeRemoteObject, CdpScreencastConsumerOptions, CdpScreencastStartOptions, CdpTargetListEntry, ScreencastCapturedFrame } from '../../types/cdp.js'
+import type { BrowserPageDriverClickCoordinatesOptions, BrowserPageDriverDiagnosticsOptions, BrowserPageDriverDownloadEvent, BrowserPageDriverDownloadListener, BrowserPageDriverDragCoordinatesOptions, BrowserPageDriverFetchResourceOptions, BrowserPageDriverFetchResourceResult, BrowserPageDriverFileInputOptions, BrowserPageDriverKeyEvent, BrowserPageDriverMouseEvent, BrowserPageDriverMoveMouseOptions, BrowserPageDriverNetworkControlState, BrowserPageDriverNetworkIdleOptions, BrowserPageDriverNetworkRequestDetailsResult, BrowserPageDriverNetworkResponseBodyResult, BrowserPageDriverPdfOptions, BrowserPageDriverScreenshot, BrowserPageDriverScreenshotOptions, BrowserPageDriverState } from '../../types/driver'
+import { buildFetchResourceScript, buildViewportRect, clampPageZoomFactor, clampPositiveInteger, readConsoleSource, readNodeId, readRuntimeEvaluateValue, resolveConsoleLevel, resolveConsoleTimestamp, resolveMouseButton, resolveTargetListEntryId } from '../../utils/cdp/driver'
+import { normalizePageTargetDescription, resolveConsoleMessage, resolveRegionScreenshotInput } from '../../utils/cdp/driver'
 import { resolveCdpTargetListUrl } from '../../utils/cdp/driver'
 import { resolveCdpTargetId } from '../../utils/cdp/driver.js'
 import { captureCdpHeapSnapshot } from '../../utils/cdp/tracing.js'
@@ -101,15 +100,8 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
   private readonly eventUnsubscribers: Array<() => void> = []
   private readonly downloadListeners = new Set<BrowserPageDriverDownloadListener>()
   private readonly downloads = new Map<string, CdpBrowserPageDownloadItem>()
-  private networkThrottling: BrowserNetworkThrottlingPreset = 'none'
-  private cpuThrottlingRate = 1
   private traceCollector: Nullable<CdpTraceCollector> = null
   private screencastRecorder: Nullable<CdpScreencastRecorder> = null
-  private colorScheme: BrowserPageDriverEmulationState['colorScheme'] = 'no-preference'
-  private reducedMotion: BrowserPageDriverEmulationState['reducedMotion'] = 'no-preference'
-  private timezoneId: Nullable<string> = null
-  private locale: Nullable<string> = null
-  private geolocation: Nullable<BrowserGeolocationState> = null
   private destroyed = false
   /** 框架树与在子框架里跑脚本，含跨进程的 iframe（第一次要框架时才在这条连接上挂子会话）。 */
   private readonly frameSessions: CdpFrameSessions
@@ -118,7 +110,6 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
     send: (method, params) => this.options.transport.send(method, params),
     appendDiagnostic: (entry) => this.appendDiagnostic(entry),
     getCurrentUrl: () => this.currentUrl,
-    getNetworkThrottling: () => this.networkThrottling,
   })
 
   /** 给同一个浏览器里的另一个 target 连一个兄弟驱动：socket、target 坐标与依赖都沿用本实例的。 */
@@ -513,67 +504,6 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
     return this.networkController.waitForNetworkIdle(options)
   }
 
-  public async configureEmulation(
-    options: BrowserEmulationOptions
-  ): Promise<BrowserPageDriverEmulationState> {
-    const shouldConfigureMedia = isPresent(options.colorScheme) || isPresent(options.reducedMotion)
-    if (isPresent(options.colorScheme)) this.colorScheme = options.colorScheme
-    if (isPresent(options.reducedMotion)) this.reducedMotion = options.reducedMotion
-
-    if (shouldConfigureMedia) {
-      await this.options.transport.send('Emulation.setEmulatedMedia', {
-        features: [
-          { name: 'prefers-color-scheme', value: this.colorScheme },
-          { name: 'prefers-reduced-motion', value: this.reducedMotion },
-        ],
-      })
-    }
-
-    if (isPresent(options.timezoneId)) {
-      this.timezoneId = normalizeNullableEmulationString(options.timezoneId)
-      await this.options.transport.send('Emulation.setTimezoneOverride', {
-        timezoneId: this.timezoneId ?? '',
-      })
-    }
-
-    if (isPresent(options.locale)) {
-      this.locale = normalizeNullableEmulationString(options.locale)
-      await this.options.transport.send('Emulation.setLocaleOverride', {
-        locale: this.locale ?? '',
-      })
-    }
-
-    if (isPresent(options.geolocation)) {
-      this.geolocation = normalizeGeolocation(options.geolocation)
-      await this.options.transport.send('Emulation.setGeolocationOverride', {
-        ...this.geolocation,
-      })
-    }
-
-    if (isPresent(options.cpuThrottlingRate)) {
-      this.cpuThrottlingRate = normalizeCpuThrottlingRate(options.cpuThrottlingRate)
-      await this.options.transport.send('Emulation.setCPUThrottlingRate', {
-        rate: this.cpuThrottlingRate,
-      })
-    }
-
-    if (isPresent(options.networkThrottling)) {
-      this.networkThrottling = options.networkThrottling
-      // offline↔节流合流由控制器统一下发(读本 driver 的 networkThrottling + 控制器的 offline)。
-      await this.networkController.syncNetworkConditions()
-    }
-
-    return {
-      colorScheme: this.colorScheme,
-      reducedMotion: this.reducedMotion,
-      timezoneId: this.timezoneId,
-      locale: this.locale,
-      geolocation: cloneGeolocation(this.geolocation),
-      cpuThrottlingRate: this.cpuThrottlingRate,
-      networkThrottling: this.networkThrottling,
-    }
-  }
-
   /** 开始录制性能 trace（CDP Tracing domain）。 */
   public async startTracing(): Promise<void> {
     if (this.traceCollector?.isRunning()) {
@@ -661,26 +591,6 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
     return !!this.screencastRecorder?.isRunning()
   }
 
-  /** 读取当前环境模拟状态（trace 元数据等旁路消费，不触发 CDP 调用）。 */
-  public getEmulationState(): BrowserPageDriverEmulationState {
-    return {
-      colorScheme: this.colorScheme,
-      reducedMotion: this.reducedMotion,
-      timezoneId: this.timezoneId,
-      locale: this.locale,
-      geolocation: cloneGeolocation(this.geolocation),
-      cpuThrottlingRate: this.cpuThrottlingRate,
-      networkThrottling: this.networkThrottling,
-    }
-  }
-
-  
-
-  /**
-   * offline 与网络节流共用 Network.emulateNetworkConditions，
-   * 统一在这里按当前状态合成下发，避免互相覆盖。
-   * 预设数值与 DevTools「Network conditions」面板同源（吸收自 chrome-devtools-mcp）。
-   */
   public readDiagnostics(options: BrowserPageDriverDiagnosticsOptions): BrowserPageDiagnosticEntry[] {
     const limit = Math.min(
       BrowserTuning.cdp.diagnosticEntries,
@@ -717,72 +627,6 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
       permissions: normalizedPermissions,
       origin: optionalWhen(isNonBlankString, origin?.trim()),
     })
-  }
-
-  public async readCookies(
-    options: BrowserPageDriverCookieOptions = {}
-  ): Promise<BrowserPageDriverCookie[]> {
-    if (options.scope === 'all') {
-      const response = await this.options.transport.send<CdpNetworkGetCookiesResponse>(
-        'Network.getAllCookies'
-      )
-      if (!isArray(response.cookies)) return []
-
-      return response.cookies
-        .map((cookie) => normalizeNetworkCookie(cookie))
-        .filter(isNotNull)
-    }
-
-    const url = this.currentUrl.trim()
-    const response = await this.options.transport.send<CdpNetworkGetCookiesResponse>(
-      'Network.getCookies',
-      url ? { urls: [url] } : {}
-    )
-    if (!isArray(response.cookies)) return []
-
-    return response.cookies
-      .map((cookie) => normalizeNetworkCookie(cookie))
-      .filter(isNotNull)
-  }
-
-  public async readStorageOrigins(
-    options: BrowserPageDriverStorageOriginOptions
-  ): Promise<BrowserOriginStorage[]> {
-    const includeLocalStorage = options.includeLocalStorage ?? true
-    const includeSessionStorage = options.includeSessionStorage ?? true
-    if (!includeLocalStorage && !includeSessionStorage) return []
-
-    const frameTree = await this.options.transport.send<CdpPageGetFrameTreeResponse>('Page.getFrameTree')
-    const origins = this.collectFrameOrigins(frameTree.frameTree)
-    if (isEmpty(origins)) return []
-
-    await this.options.transport.send('DOMStorage.enable')
-    const limit = clampPositiveInteger(options.limit, 100)
-    const maxValueChars = clampPositiveInteger(options.maxValueChars, 4_000)
-    const result: BrowserOriginStorage[] = []
-
-    for (const origin of origins) {
-      const entry: BrowserOriginStorage = { origin }
-      if (includeLocalStorage) {
-        entry.localStorage = await this.readDomStorageItems({
-          origin,
-          isLocalStorage: true,
-          limit,
-          maxValueChars,
-        })
-      }
-      if (includeSessionStorage) {
-        entry.sessionStorage = await this.readDomStorageItems({
-          origin,
-          isLocalStorage: false,
-          limit,
-          maxValueChars,
-        })
-      }
-      result.push(entry)
-    }
-
-    return result
   }
 
   public getURL(): string {
@@ -1236,30 +1080,6 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
 
   
 
-  private collectFrameOrigins(frameTree: unknown): string[] {
-    const origins: string[] = []
-    const seen = new Set<string>()
-    const visit = (entry: unknown): void => {
-      if (!isObject(entry)) return
-
-      const tree = entry as CdpPageFrameTree
-      const frame = isObject(tree.frame) ? tree.frame as CdpPageFrame : null
-      const origin = this.parseFrameOrigin(frame?.url)
-      if (origin && !seen.has(origin)) {
-        seen.add(origin)
-        origins.push(origin)
-      }
-
-      if (!isArray(tree.childFrames)) return
-      for (const child of tree.childFrames) {
-        visit(child)
-      }
-    }
-
-    visit(frameTree)
-    return origins
-  }
-
   private parseFrameOrigin(url: unknown): Nullable<string> {
     if (!isNonBlankString(url)) return null
 
@@ -1282,48 +1102,6 @@ class CdpBrowserPageDriver implements BrowserPageDriver {
         },
       })
       return null
-    }
-  }
-
-  private async readDomStorageItems(options: {
-    origin: string
-    isLocalStorage: boolean
-    limit: number
-    maxValueChars: number
-  }): Promise<BrowserStorageEntry[]> {
-    try {
-      const response = await this.options.transport.send<CdpDomStorageItemsResponse>(
-        'DOMStorage.getDOMStorageItems',
-        {
-          storageId: {
-            securityOrigin: options.origin,
-            isLocalStorage: options.isLocalStorage,
-          },
-        }
-      )
-      if (!isArray(response.entries)) return []
-
-      return response.entries
-        .map((entry) => normalizeDomStorageEntry(entry, options.maxValueChars))
-        .filter(isNotNull)
-        .slice(0, options.limit)
-    } catch (error) {
-      this.appendDiagnostic({
-        kind: 'storage',
-        level: 'warning',
-        message: `CDP DOMStorage 读取失败：${options.origin}`,
-        url: toNullable(this.currentUrl),
-        line: null,
-        column: null,
-        code: null,
-        capturedAt: Date.now(),
-        details: {
-          origin: options.origin,
-          storage: options.isLocalStorage ? 'localStorage' : 'sessionStorage',
-          error: AppError.from(error).message,
-        },
-      })
-      return []
     }
   }
 

@@ -17,7 +17,7 @@ import type {
   BrowserScreenshotElementLabel,
   BrowserSelectorRecovery,
   BrowserTargetActionOptions,
-  BrowserTargetActionResult,
+  BrowserTargetActionOutcome,
 } from '../types/browser.js'
 import type { CoordinateClickPoint } from '../types/operations.js'
 
@@ -35,10 +35,10 @@ const BrowserTargetRecoveryScreenshotPath = 'artifacts/screenshots/recovery/targ
  * 别再在别处复制本逻辑。
  */
 export async function performTargetActionWithRecovery(
-  action: BrowserTargetActionOptions,
+  action: BrowserTargetActionOptions & { action: 'click' | 'hover' },
   ctx: BrowserOperationContext
 ): Promise<BrowserActed> {
-  const result = await ctx.browser.performTargetAction(action)
+  const result: BrowserActed = { ...(await ctx.browser.performTargetAction(action)), action: action.action }
   const actionEffect = buildTargetActionEffectRecovery(action, result)
   if (result.matched || action.action !== 'click') return actionEffect ? { ...result, actionEffect } : result
 
@@ -73,7 +73,7 @@ export async function performTargetActionWithRecovery(
 /** 点击没命中时，按效果指纹判断要不要再试一次、怎么试。 */
 function buildTargetActionEffectRecovery(
   action: BrowserTargetActionOptions,
-  result: BrowserTargetActionResult
+  result: BrowserTargetActionOutcome
 ): Nullable<BrowserActionEffectHint> {
   const effect = result.effect
   if (action.action !== 'click') return null

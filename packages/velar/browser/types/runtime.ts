@@ -95,11 +95,6 @@ export interface BrowserParsedTraceRecording {
   rawEvents: unknown[]
 }
 
-export interface BrowserTraceParseMetadata {
-  cpuThrottling?: number
-  networkThrottling?: string
-}
-
 /** 每个 session 的性能 trace 状态：录制中 / 最近一次录制的解析产物。 */
 export interface BrowserPerformanceTraceState {
   running: boolean

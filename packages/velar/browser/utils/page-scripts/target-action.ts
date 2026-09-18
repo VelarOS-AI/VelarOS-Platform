@@ -3,9 +3,7 @@ import type { BrowserTargetActionScriptBuildOptions } from '../../types/operatio
 import type { BrowserTargetActionClickMode } from '../../types/runtime.js'
 
 
-/** 构造点击/填充目标元素的页面脚本。 */
-
-/** 根据 target 的 css/属性/文本线索定位元素并执行 click 或 fill。 */
+/** 根据 target 的 css、属性、文本线索定位元素，做一步：click、hover、focus 或 select_all。 */
 export function buildTargetActionScript(
   options: BrowserTargetActionOptions,
   buildOptions: BrowserTargetActionScriptBuildOptions = {}
@@ -16,7 +14,6 @@ export function buildTargetActionScript(
     action: options.action,
     clickMode,
     target: options.target,
-    value: options.value ?? '',
   })
   const coordinatePointReturnScript = `return {
           action: payload.action,
@@ -37,7 +34,7 @@ export function buildTargetActionScript(
         ? coordinatePointReturnScript
         : `element.click()`
 
-  // target 来自 inspect/query/wait 返回的结构，脚本会按 selector -> 属性 -> 文本顺序兜底定位。
+  // target 来自 inspect 返回的结构，脚本会按 selector -> 属性 -> 文本顺序兜底定位。
   return `(() => {
     const payload = ${payload}
     const normalize = (value) => String(value || '').replace(/\\s+/g, ' ').trim()
@@ -328,90 +325,6 @@ export function buildTargetActionScript(
         ? { kind: 'checkable', checked: readCheckableState(checkable) }
         : null
     }
-    const dispatchCheckableChange = (control) => {
-      control.dispatchEvent(new Event('input', { bubbles: true }))
-      control.dispatchEvent(new Event('change', { bubbles: true }))
-    }
-    const applyCheckableState = (control, desiredChecked) => {
-      const currentChecked = readCheckableState(control)
-      if (typeof control.focus === 'function') control.focus()
-      if (currentChecked === desiredChecked) return
-
-      if (isNativeCheckable(control)) {
-        control.checked = desiredChecked
-        dispatchCheckableChange(control)
-        return
-      }
-
-      if (typeof control.click === 'function') control.click()
-      if (readCheckableState(control) !== desiredChecked) {
-        control.setAttribute('aria-checked', String(desiredChecked))
-        dispatchCheckableChange(control)
-      }
-    }
-    const readSelectValues = (value) => (
-      Array.isArray(value)
-        ? value.map((entry) => String(entry))
-        : [String(value ?? '')]
-    )
-    const readSelectOptions = (select) => Array.from(select.options).map((option) => ({
-      value: String(option.value ?? ''),
-      text: normalize(option.textContent),
-      selected: option.selected,
-    }))
-    const optionMatchesValue = (option, value) => {
-      const normalizedValue = normalize(value)
-      return (
-        option.value === value
-        || normalize(option.value) === normalizedValue
-        || normalize(option.textContent) === normalizedValue
-      )
-    }
-    const applySelectValues = (select, value) => {
-      const requestedValues = readSelectValues(value)
-      const options = Array.from(select.options)
-      const matchedOptions = options.filter((option) =>
-        requestedValues.some((requestedValue) => optionMatchesValue(option, requestedValue))
-      )
-      const availableOptions = readSelectOptions(select)
-      if (matchedOptions.length === 0) {
-        return { matched: false, selectedValues: [], availableOptions }
-      }
-
-      select.focus()
-      if (select.multiple) {
-        for (const option of options) {
-          option.selected = matchedOptions.includes(option)
-        }
-      } else {
-        for (const option of options) option.selected = false
-        matchedOptions[0].selected = true
-      }
-      select.dispatchEvent(new Event('input', { bubbles: true }))
-      select.dispatchEvent(new Event('change', { bubbles: true }))
-
-      const selectedValues = Array.from(select.selectedOptions).map((option) => option.value)
-      return { matched: true, selectedValues, availableOptions: readSelectOptions(select) }
-    }
-    const dispatchEditableChange = (node) => {
-      node.dispatchEvent(new Event('input', { bubbles: true }))
-      node.dispatchEvent(new Event('change', { bubbles: true }))
-    }
-    const clearEditableValue = (node) => {
-      if (isTextInputElement(node) || isHtmlTextAreaElement(node)) {
-        node.focus()
-        node.value = ''
-        dispatchEditableChange(node)
-        return true
-      }
-      if (isHtmlElement(node) && node.isContentEditable) {
-        node.focus()
-        node.textContent = ''
-        dispatchEditableChange(node)
-        return true
-      }
-      return false
-    }
     const selectEditableContents = (node) => {
       if (isTextInputElement(node) || isHtmlTextAreaElement(node)) {
         node.focus()
@@ -492,117 +405,8 @@ export function buildTargetActionScript(
 
     const visibleText = elementText(element) || readFieldLabelText(element)
     element.scrollIntoView({ block: 'center', inline: 'center' })
-    let selectedValues = null
-
-    if (payload.action === 'select') {
-      if (!isHtmlSelectElement(element)) {
-        return {
-          action: payload.action,
-          url: location.href,
-          matched: false,
-          selector: matchedSelector || target.css || null,
-          text: visibleText || null,
-          clickPoint: null,
-          clickMethod: null,
-          failureReason: 'not-interactable',
-          blockedBy: null,
-          capturedAt: Date.now(),
-        }
-      }
-
-      const selectResult = applySelectValues(element, payload.value)
-      if (!selectResult.matched) {
-        return {
-          action: payload.action,
-          url: location.href,
-          matched: false,
-          selector: matchedSelector || target.css || null,
-          text: visibleText || null,
-          clickPoint: null,
-          clickMethod: null,
-          selectedValues: selectResult.selectedValues,
-          availableOptions: selectResult.availableOptions,
-          failureReason: 'option-not-found',
-          blockedBy: null,
-          capturedAt: Date.now(),
-        }
-      }
-      selectedValues = selectResult.selectedValues
-    } else if (payload.action === 'fill') {
-      const value = String(payload.value || '')
-      if (isHtmlInputElement(element) && ['checkbox', 'radio'].includes(element.type.toLowerCase())) {
-        const normalizedValue = value.trim().toLowerCase()
-        element.focus()
-        element.checked = ['true', '1', 'yes', 'y', 'on', 'checked'].includes(normalizedValue)
-        element.dispatchEvent(new Event('input', { bubbles: true }))
-        element.dispatchEvent(new Event('change', { bubbles: true }))
-      } else if (isHtmlSelectElement(element)) {
-        element.focus()
-        const normalizedValue = normalize(value)
-        const optionByTextOrValue = Array.from(element.options).find((option) =>
-          option.value === value
-          || normalize(option.value) === normalizedValue
-          || normalize(option.textContent) === normalizedValue
-        )
-        if (!optionByTextOrValue) {
-          return {
-            action: payload.action,
-            url: location.href,
-            matched: false,
-            selector: matchedSelector || target.css || null,
-            text: visibleText || null,
-            clickPoint: null,
-            clickMethod: null,
-            failureReason: 'option-not-found',
-            blockedBy: null,
-            capturedAt: Date.now(),
-          }
-        }
-        element.value = optionByTextOrValue.value
-        element.dispatchEvent(new Event('input', { bubbles: true }))
-        element.dispatchEvent(new Event('change', { bubbles: true }))
-      } else if (isHtmlInputElement(element) || isHtmlTextAreaElement(element)) {
-        element.focus()
-        element.value = value
-        element.dispatchEvent(new Event('input', { bubbles: true }))
-        element.dispatchEvent(new Event('change', { bubbles: true }))
-      } else if (isHtmlElement(element) && element.isContentEditable) {
-        element.focus()
-        element.textContent = value
-        element.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: value }))
-      } else {
-        return {
-          action: payload.action,
-          url: location.href,
-          matched: false,
-          selector: matchedSelector || target.css || null,
-          text: visibleText || null,
-          clickPoint: null,
-          clickMethod: null,
-          failureReason: 'not-interactable',
-          blockedBy: null,
-          capturedAt: Date.now(),
-        }
-      }
-    } else if (payload.action === 'scroll_into_view') {
-      // 上方通用 scrollIntoView 已完成动作，这里避免继续走点击分支。
-    } else if (payload.action === 'focus') {
+    if (payload.action === 'focus') {
       element.focus()
-    } else if (payload.action === 'clear') {
-      if (!clearEditableValue(element)) {
-        return {
-          action: payload.action,
-          url: location.href,
-          matched: false,
-          selector: matchedSelector || target.css || null,
-          text: visibleText || null,
-          clickPoint: null,
-          clickMethod: null,
-          failureReason: 'not-interactable',
-          blockedBy: null,
-          capturedAt: Date.now(),
-        }
-      }
     } else if (payload.action === 'select_all') {
       if (!selectEditableContents(element)) {
         return {
@@ -618,24 +422,6 @@ export function buildTargetActionScript(
           capturedAt: Date.now(),
         }
       }
-    } else if (payload.action === 'check' || payload.action === 'uncheck') {
-      const control = resolveCheckableControl(element)
-      if (!control) {
-        return {
-          action: payload.action,
-          url: location.href,
-          matched: false,
-          selector: matchedSelector || target.css || null,
-          text: visibleText || null,
-          clickPoint: null,
-          clickMethod: null,
-          failureReason: 'not-interactable',
-          blockedBy: null,
-          capturedAt: Date.now(),
-        }
-      }
-      const desiredChecked = payload.action === 'check'
-      applyCheckableState(control, desiredChecked)
     } else {
       const point = getHitTestPoint(element)
       if (!point) {
@@ -682,7 +468,6 @@ export function buildTargetActionScript(
       text: visibleText || null,
       clickPoint: null,
       clickMethod: payload.action === 'click' ? 'dom' : null,
-      selectedValues,
       controlState: readControlState(element),
       failureReason: null,
       blockedBy: null,

@@ -14,7 +14,7 @@ import {
 import { AppError } from '@velaros-ai/core/error'
 import { type TimerLease, TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
-import type { BrowserNetworkControlOptions, BrowserNetworkMockResponse, BrowserNetworkRequestDetailsOptions, BrowserNetworkResponseBodyOptions, BrowserNetworkThrottlingPreset, BrowserPageDiagnosticEntry } from '../../types/browser.js'
+import type { BrowserNetworkControlOptions, BrowserNetworkMockResponse, BrowserNetworkRequestDetailsOptions, BrowserNetworkResponseBodyOptions, BrowserPageDiagnosticEntry } from '../../types/browser.js'
 import type { CdpFetchRequestPausedEvent, CdpNetworkGetResponseBodyResponse, CdpNetworkLoadingFailedEvent, CdpNetworkLoadingFinishedEvent, CdpNetworkRequestPayload, CdpNetworkRequestRecord, CdpNetworkRequestWillBeSentEvent, CdpNetworkResponsePayload, CdpNetworkResponseReceivedEvent, CdpSend } from '../../types/cdp.js'
 import type {
   BrowserPageDriverNetworkControlState,
@@ -22,7 +22,6 @@ import type {
   BrowserPageDriverNetworkRequestDetailsResult,
   BrowserPageDriverNetworkResponseBodyResult,
 } from '../../types/driver'
-import { syncCdpNetworkConditions } from '../../utils/cdp/emulation'
 import { assignNetworkBooleanDetail, assignNetworkStringDetail, buildMockResponseHeaders, cloneNetworkMockResponses, computeNetworkRequestDurationMs, matchesURLPattern, normalizeBlockedURLPatterns, normalizeExtraHTTPHeaders, normalizeHeadersRecord, normalizeNetworkStatus, normalizeNullableInteger, normalizeNullableNumber, resolveNetworkResponseDiagnosticLevel } from '../../utils/cdp/network'
 import { normalizeBlockedResourceTypes, normalizeNetworkMockResponses, normalizeNetworkResourceType } from '../../utils/cdp/network'
 import { clampPositiveInteger } from '../../utils/cdp/network'
@@ -36,8 +35,6 @@ export interface BrowserCdpNetworkControllerDeps {
   appendDiagnostic: (entry: BrowserPageDiagnosticEntry) => void
   /** 当前页面 URL,用于事件缺 url 时兜底。 */
   getCurrentUrl: () => string
-  /** 当前网络节流预设(emulation 状态,宿主持有),与 offline 合流下发。 */
-  getNetworkThrottling: () => BrowserNetworkThrottlingPreset
 }
 
 /**
@@ -53,8 +50,6 @@ export interface BrowserCdpNetworkControllerApi {
   enableNetworkCapture(): Promise<void>
   /** 统一 CDP 事件入口:两条 transport 的网络/Fetch 事件都路由到这里。 */
   handleCdpEvent(method: string, params: unknown): void
-  /** 当前是否处于离线态(供 emulation 合成网络条件时读取)。 */
-  isOffline(): boolean
   /** 配置页面网络：离线、请求头、拦截与 mock。 */
   configureNetwork(options: BrowserNetworkControlOptions): Promise<BrowserPageDriverNetworkControlState>
   /** 按 requestId 读响应体；不在缓存里就如实回报读不到。 */
@@ -63,11 +58,6 @@ export interface BrowserCdpNetworkControllerApi {
   readNetworkRequestDetails(options: BrowserNetworkRequestDetailsOptions): Promise<BrowserPageDriverNetworkRequestDetailsResult>
   /** 等页面网络空闲（一段时间内没有新请求）。 */
   waitForNetworkIdle(options: BrowserPageDriverNetworkIdleOptions): Promise<boolean>
-  /**
-   * offline 与网络节流共用 Network.emulateNetworkConditions,统一按当前状态合成下发。
-   * throttling 由宿主 emulation 状态提供(getNetworkThrottling),offline 归本控制器。
-   */
-  syncNetworkConditions(): Promise<void>
   /** 会话重置/销毁时清空记录表与待结请求。 */
   reset(): void
 }
@@ -113,11 +103,6 @@ export class BrowserCdpNetworkController implements BrowserCdpNetworkControllerA
       default:
         return
     }
-  }
-
-  /** 当前是否处于离线态(供 emulation 合成网络条件时读取)。 */
-  public isOffline(): boolean {
-    return this.networkOffline
   }
 
   public async configureNetwork(
@@ -293,16 +278,14 @@ export class BrowserCdpNetworkController implements BrowserCdpNetworkControllerA
     })
   }
 
-  /**
-   * offline 与网络节流共用 Network.emulateNetworkConditions,统一按当前状态合成下发。
-   * throttling 由宿主 emulation 状态提供(getNetworkThrottling),offline 归本控制器。
-   */
-  public async syncNetworkConditions(): Promise<void> {
-    await syncCdpNetworkConditions(
-      this.deps.send,
-      this.deps.getNetworkThrottling(),
-      this.networkOffline
-    )
+  /** 按离线开关下发网络条件：离线就断网，不离线就不限速。 */
+  private async syncNetworkConditions(): Promise<void> {
+    await this.deps.send('Network.emulateNetworkConditions', {
+      offline: this.networkOffline,
+      latency: 0,
+      downloadThroughput: -1,
+      uploadThroughput: -1,
+    })
   }
 
   /** 会话重置/销毁时清空记录表与待结请求。 */

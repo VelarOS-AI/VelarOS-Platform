@@ -1,20 +1,13 @@
 /** CDP 页面驱动里用不着实例状态的那部分：CDP 回包的归一、键鼠码表、视口矩形。 */
 
-import { isArray, isBoolean, isFiniteNumber, isNonBlankString, isNotNull, isObject, isPresent, isString, toNullable } from '@velaros-ai/core'
+import { isArray, isFiniteNumber, isNonBlankString, isObject, isString, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import type { BrowserFrameInfo, BrowserStorageEntry } from '../../types/browser.js'
-import type { BrowserGeolocationOptions, BrowserGeolocationState, BrowserMouseButton, BrowserPageDiagnosticLevel } from '../../types/browser.js'
-import type { CdpNetworkCookie, CdpPageFrame, CdpPageFrameTree, CdpPageTargetDescription } from '../../types/cdp.js'
+import type { BrowserFrameInfo } from '../../types/browser.js'
+import type { BrowserMouseButton, BrowserPageDiagnosticLevel } from '../../types/browser.js'
+import type { CdpPageFrame, CdpPageFrameTree, CdpPageTargetDescription } from '../../types/cdp.js'
 import type { CdpRuntimeEvaluateResponse, CdpRuntimeRemoteObject, CdpTargetListEntry } from '../../types/cdp.js'
-import type { BrowserPageDriverCookie } from '../../types/driver'
 import type { BrowserPageDriverFetchResourceOptions, BrowserPageDriverScreenshot, BrowserPageDriverScreenshotOptions } from '../../types/driver'
-
-/** CPU 减速倍率归一：1 表示不减速。 */
-export function normalizeCpuThrottlingRate(rate: number): number {
-  if (!Number.isFinite(rate)) return 1
-  return Math.min(20, Math.max(1, rate))
-}
 
 /** 从 CDP 的 target 列表条目里读出它的 id。 */
 export function resolveTargetListEntryId(entry: CdpTargetListEntry): Nullable<string> {
@@ -102,46 +95,6 @@ export function resolveConsoleTimestamp(timestamp: unknown): number {
   return Math.round(timestamp)
 }
 
-/** 存储值归一成字符串。 */
-export function normalizeStorageString(value: unknown): string {
-  if (isString(value)) return value
-  if (isFiniteNumber(value)) return String(value)
-  if (isBoolean(value)) return String(value)
-  if (!isPresent(value)) return ''
-
-  return String(value)
-}
-
-/** cookie 的必填字段归一成字符串。 */
-export function normalizeCookieString(value: unknown): string {
-  if (isString(value)) return value
-  if (isFiniteNumber(value)) return String(value)
-  if (isBoolean(value)) return String(value)
-
-  return ''
-}
-
-/** cookie 的可选字符串字段归一；没有就当缺席。 */
-export function normalizeOptionalCookieString(value: unknown): LooseOptional<string> {
-  if (!isString(value)) return null
-
-  return value
-}
-
-/** cookie 的可选数字字段归一；不是有限数就当缺席。 */
-export function normalizeOptionalCookieNumber(value: unknown): LooseOptional<number> {
-  if (!isFiniteNumber(value)) return null
-
-  return value
-}
-
-/** cookie 的可选布尔字段归一；不是布尔就当缺席。 */
-export function normalizeOptionalCookieBoolean(value: unknown): LooseOptional<boolean> {
-  if (!isBoolean(value)) return null
-
-  return value
-}
-
 /** 按截图选项算出这次要截的视口矩形。 */
 export function buildViewportRect(options: BrowserPageDriverScreenshotOptions): BrowserPageDriverScreenshot['capture']['viewport'] {
   return {
@@ -173,41 +126,6 @@ export function clampPageZoomFactor(value: unknown): number {
 
   const normalized = Math.round(value * 100) / 100
   return Math.min(Math.max(normalized, 0.25), 3)
-}
-
-/** 环境模拟的字符串字段归一：空串当成「不模拟」。 */
-export function normalizeNullableEmulationString(value: string): Nullable<string> {
-  const normalized = value.trim()
-  return isNonBlankString(normalized) ? normalized : null
-}
-
-/** 地理位置入参归一成运行时的状态形状。 */
-export function normalizeGeolocation(options: BrowserGeolocationOptions): BrowserGeolocationState {
-  if (!isFiniteNumber(options.latitude) || options.latitude < -90 || options.latitude > 90) {
-    throw new AppError('VALIDATION', '地理位置 latitude 必须在 -90 到 90 之间。')
-  }
-  if (!isFiniteNumber(options.longitude) || options.longitude < -180 || options.longitude > 180) {
-    throw new AppError('VALIDATION', '地理位置 longitude 必须在 -180 到 180 之间。')
-  }
-
-  const accuracy = isFiniteNumber(options.accuracy)
-    ? Math.max(0, options.accuracy)
-    : 1
-
-  return {
-    latitude: options.latitude,
-    longitude: options.longitude,
-    accuracy,
-  }
-}
-
-/** 复制一份地理位置状态，避免调用方改到内部的那份。 */
-export function cloneGeolocation(
-  geolocation: Nullable<BrowserGeolocationState>
-): Nullable<BrowserGeolocationState> {
-  if (isNotNull(geolocation)) return { ...geolocation }
-
-  return null
 }
 
 /** 拼一段在页面里带 cookie 抓资源的脚本。 */
@@ -289,44 +207,6 @@ export function resolveConsoleMessage(args: unknown): string {
     .map((arg) => stringifyConsoleArgument(arg))
     .filter(isNonBlankString)
   return parts.join(' ') || 'console event'
-}
-
-/** localStorage / sessionStorage 的一条记录归一，并按上限截断值。 */
-export function normalizeDomStorageEntry(
-  entry: unknown,
-  maxValueChars: number
-): Nullable<BrowserStorageEntry> {
-  if (!isArray(entry) || entry.length < 2) return null
-  const name = normalizeStorageString(entry[0]).trim()
-  if (!name) return null
-
-  const rawValue = normalizeStorageString(entry[1])
-  return {
-    name,
-    value: rawValue.length > maxValueChars ? rawValue.slice(0, maxValueChars) : rawValue,
-    valueTruncated: rawValue.length > maxValueChars,
-  }
-}
-
-/** CDP 的 cookie 归一成回执的形状。 */
-export function normalizeNetworkCookie(cookie: unknown): Nullable<BrowserPageDriverCookie> {
-  if (!isObject(cookie)) return null
-
-  const rawCookie = cookie as CdpNetworkCookie
-  if (!isNonBlankString(rawCookie.name)) return null
-
-  return {
-    name: rawCookie.name,
-    value: normalizeCookieString(rawCookie.value),
-    domain: normalizeOptionalCookieString(rawCookie.domain),
-    path: normalizeOptionalCookieString(rawCookie.path),
-    expires: normalizeOptionalCookieNumber(rawCookie.expires),
-    size: normalizeOptionalCookieNumber(rawCookie.size),
-    httpOnly: normalizeOptionalCookieBoolean(rawCookie.httpOnly),
-    secure: normalizeOptionalCookieBoolean(rawCookie.secure),
-    session: normalizeOptionalCookieBoolean(rawCookie.session),
-    sameSite: normalizeOptionalCookieString(rawCookie.sameSite),
-  }
 }
 
 /** 把区域截图的入参翻成 CDP 截图要的裁剪矩形。 */

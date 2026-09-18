@@ -1,29 +1,23 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 
-import { isFalse, isFiniteNumber, toNullable, toOptional } from '@velaros-ai/core'
+import { isFalse, isFiniteNumber, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { Log } from '@velaros-ai/core/logger'
 
 import { BrowserFetchLimits } from '../../contract/constants'
-import type { BrowserElementQueryOptions, BrowserElementQueryResult, BrowserEmulationOptions, BrowserEmulationResult, BrowserEvaluateScriptOptions, BrowserExportPagePdfOptions, BrowserExportPagePdfResult, BrowserFetchResourceOptions, BrowserFetchResourceResult, BrowserFrameInfo, BrowserInspectPageOptions, BrowserListMediaSourcesOptions, BrowserListMediaSourcesResult, BrowserListPageResourcesOptions, BrowserListPageResourcesResult, BrowserNetworkControlOptions, BrowserNetworkControlResult, BrowserNetworkRequestDetailsOptions, BrowserNetworkRequestDetailsResult, BrowserNetworkResponseBodyOptions, BrowserNetworkResponseBodyResult, BrowserOriginStorage, BrowserPageDiagnostics, BrowserPageDiagnosticsOptions, BrowserPageInspection, BrowserPageStorageOptions, BrowserPageStorageResult, BrowserPageWaitOptions, BrowserPageWaitResult, BrowserScriptOutcome, BrowserSiteContext, BrowserStorageEntry, BrowserUploadFileOptions, BrowserUploadFileResult, BrowserWaitForSelectorOptions, BrowserWaitForSelectorResult } from '../../types/browser.js'
+import type { BrowserEvaluateScriptOptions, BrowserExportPagePdfOptions, BrowserExportPagePdfResult, BrowserFetchResourceOptions, BrowserFetchResourceResult, BrowserFrameInfo, BrowserInspectPageOptions, BrowserNetworkControlOptions, BrowserNetworkControlResult, BrowserNetworkRequestDetailsOptions, BrowserNetworkRequestDetailsResult, BrowserNetworkResponseBodyOptions, BrowserNetworkResponseBodyResult, BrowserPageDiagnostics, BrowserPageDiagnosticsOptions, BrowserPageInspection, BrowserPageWaitOptions, BrowserPageWaitResult, BrowserScriptOutcome, BrowserSiteContext, BrowserUploadFileOptions, BrowserUploadFileResult } from '../../types/browser.js'
 import type {
   BrowserPageDriverState,
 } from '../../types/driver'
 import type { BrowserDiagnosticsLimits,BrowserPageDriverKernel, ExternalBrowserPageSession } from '../../types/runtime.js'
-import { normalizeFetchResourceUrl, normalizeMediaSourceItems, normalizePageResourceIframes, normalizePageResourceLinks, resolveUploadFilePath } from '../../utils/cdp/page-data'
+import { normalizeFetchResourceUrl, resolveUploadFilePath } from '../../utils/cdp/page-data'
 import { summarizePageDiagnostics } from '../../utils/cdp/page-data'
-import { mapExternalCookieToStorageEntry, normalizePageResourceOrigins } from '../../utils/cdp/page-data'
-import { clampInteger, readFiniteNumber } from '../../utils/numbers.js'
-import { buildElementQueryScript } from '../../utils/page-scripts/element-query'
+import { clampInteger } from '../../utils/numbers.js'
 import { buildEvaluateScript } from '../../utils/page-scripts/evaluate'
-import { buildPageResourcesScript } from '../../utils/page-scripts/extraction'
 import { buildResolveFileInputScript } from '../../utils/page-scripts/file-upload'
 import { buildInspectionScript } from '../../utils/page-scripts/inspection'
-import { buildListMediaSourcesScript } from '../../utils/page-scripts/media-sources'
 import { buildPageWaitScript } from '../../utils/page-scripts/page-wait'
-import { buildPageStorageScript } from '../../utils/page-scripts/storage'
-import { buildWaitForSelectorScript } from '../../utils/page-scripts/wait-for-selector'
 import { BrowserTuning } from '../../utils/tuning'
 import { resolveExternalPageUrl } from '../../utils/url.js'
 import { resolveWorkspaceFilePath } from '../../utils/workspace-paths.js'
@@ -32,29 +26,20 @@ import type { BrowserTargetRefStore } from '../session/BrowserTargetRefStore'
 /**
  * 页面数据域执行体的 host 无关外部核（走 CDP driver）。
  *
- * 承载页面检查/元素查询/脚本评估/存储读取/网络数据/媒体清单/诊断摘要/上传/PDF/等待的
- * external 分支与全部纯计算助手，以及嵌入/外部共用的 driver 多态方法（网络控制/响应体/
- * 请求详情/环境模拟）。Electron 宿主的 `BrowserPageDataEngine` 继承本类补 embedded 分支。
+ * 承载页面检查/脚本评估/框架/下载/诊断摘要/上传/PDF/等加载的 external 分支与全部纯计算助手，
+ * 以及嵌入/外部共用的 driver 多态方法（网络控制/响应体/请求详情）。Electron 宿主的 `BrowserPageDataEngine` 继承本类补 embedded 分支。
  *
  * 方法默认在 runtime 的 actionQueue 内被调用。
  */
 export interface CdpPageDataEngineApi {
   /** 读页面：正文、标题结构、链接、可交互元素与它们的 ref。 */
   inspectPage(sessionId: string, _context: BrowserSiteContext, options?: BrowserInspectPageOptions, _abortSignal?: AbortSignal): Promise<BrowserPageInspection>
-  /** 按 CSS selector 查元素的文本、属性与可点击目标。 */
-  queryElements(sessionId: string, context: BrowserSiteContext, options: BrowserElementQueryOptions, _abortSignal?: AbortSignal): Promise<BrowserElementQueryResult>
   /** 在页面上下文里跑一段受控脚本并取回结果。 */
   evaluateScript(sessionId: string, context: BrowserSiteContext, options: BrowserEvaluateScriptOptions, _abortSignal?: AbortSignal): Promise<BrowserScriptOutcome>
   /** 列出页面的框架树（顶层页面与各层 iframe）。 */
   listFrames(sessionId: string, context: BrowserSiteContext, abortSignal?: AbortSignal): Promise<BrowserFrameInfo[]>
-  /** 读 localStorage、sessionStorage 与 cookie。 */
-  readPageStorage(sessionId: string, context: BrowserSiteContext, options?: BrowserPageStorageOptions, _abortSignal?: AbortSignal): Promise<BrowserPageStorageResult>
   /** 带页面会话的 cookie 下载一个 http(s) 资源到站点工作区。 */
   fetchResource(sessionId: string, context: BrowserSiteContext, options: BrowserFetchResourceOptions, _abortSignal?: AbortSignal): Promise<BrowserFetchResourceResult>
-  /** 列页面上的图片、视频、音频地址，并说明能不能直接下载。 */
-  listMediaSources(sessionId: string, context: BrowserSiteContext, options?: BrowserListMediaSourcesOptions, _abortSignal?: AbortSignal): Promise<BrowserListMediaSourcesResult>
-  /** 列页面的链接、iframe 与媒体概览。 */
-  listPageResources(sessionId: string, context: BrowserSiteContext, options?: BrowserListPageResourcesOptions, _abortSignal?: AbortSignal): Promise<BrowserListPageResourcesResult>
   /** 读最近的 console、加载错误与网络诊断，并给一份汇总。 */
   getPageDiagnostics(sessionId: string, context: BrowserSiteContext, options?: BrowserPageDiagnosticsOptions, _abortSignal?: AbortSignal): Promise<BrowserPageDiagnostics>
   /** 把站点工作区里的文件放进页面的 file input。 */
@@ -67,10 +52,6 @@ export interface CdpPageDataEngineApi {
   readNetworkResponseBody(sessionId: string, context: BrowserSiteContext, options: BrowserNetworkResponseBodyOptions, abortSignal?: AbortSignal): Promise<BrowserNetworkResponseBodyResult>
   /** 按 requestId 读请求、响应与 timing 详情。 */
   readNetworkRequestDetails(sessionId: string, context: BrowserSiteContext, options: BrowserNetworkRequestDetailsOptions, abortSignal?: AbortSignal): Promise<BrowserNetworkRequestDetailsResult>
-  /** 配置环境模拟：色彩方案、时区、地理位置、CPU 与网络节流。 */
-  configureEmulation(sessionId: string, context: BrowserSiteContext, options: BrowserEmulationOptions, abortSignal?: AbortSignal): Promise<BrowserEmulationResult>
-  /** 等某个选择器出现或消失。 */
-  waitForSelector(sessionId: string, context: BrowserSiteContext, options: BrowserWaitForSelectorOptions, _abortSignal?: AbortSignal): Promise<BrowserWaitForSelectorResult>
   /** 等页面加载状态稳定，或等一小段时间。 */
   waitForPage(sessionId: string, context: BrowserSiteContext, options: BrowserPageWaitOptions, _abortSignal?: AbortSignal): Promise<BrowserPageWaitResult>
 }
@@ -148,22 +129,6 @@ export class CdpPageDataEngine implements CdpPageDataEngineApi {
     return inspection
   }
 
-  public async queryElements(
-    sessionId: string,
-    context: BrowserSiteContext,
-    options: BrowserElementQueryOptions,
-    _abortSignal?: AbortSignal
-  ): Promise<BrowserElementQueryResult> {
-    _abortSignal?.throwIfAborted()
-    const externalSession = this.requireExternalPageSession(sessionId)
-    const result = await externalSession.driver.executeJavaScript<BrowserElementQueryResult>(
-      buildElementQueryScript(options),
-      true
-    )
-    this.syncExternalPageStateFromScriptResult(sessionId, externalSession, result, context.url)
-    return result
-  }
-
   public async evaluateScript(
     sessionId: string,
     context: BrowserSiteContext,
@@ -188,86 +153,6 @@ export class CdpPageDataEngine implements CdpPageDataEngineApi {
     const externalSession = this.requireExternalPageSession(sessionId)
     if (!externalSession.driver.listFrames) throw new AppError('VALIDATION', '当前外部浏览器 driver 不支持列框架树。')
     return externalSession.driver.listFrames()
-  }
-
-  public async readPageStorage(
-    sessionId: string,
-    context: BrowserSiteContext,
-    options: BrowserPageStorageOptions = {},
-    _abortSignal?: AbortSignal
-  ): Promise<BrowserPageStorageResult> {
-    _abortSignal?.throwIfAborted()
-    const externalSession = this.requireExternalPageSession(sessionId)
-    const result = await externalSession.driver.executeJavaScript<BrowserPageStorageResult>(
-      buildPageStorageScript(options),
-      true
-    )
-    this.syncExternalPageStateFromScriptResult(sessionId, externalSession, result, context.url)
-    const origins = await this.readExternalStorageOrigins(externalSession, options)
-    if (options.includeCookies && externalSession.driver.readCookies) {
-      const cookies = await this.readExternalBrowserCookies(
-        externalSession,
-        options,
-        result.cookies ?? []
-      )
-      return {
-        ...result,
-        origins: toOptional(origins),
-        cookies,
-      }
-    }
-    return {
-      ...result,
-      origins: toOptional(origins),
-    }
-  }
-
-  protected async readExternalStorageOrigins(
-    externalSession: ExternalBrowserPageSession,
-    options: BrowserPageStorageOptions
-  ): Promise<Nullable<BrowserOriginStorage[]>> {
-    if (options.storageScope !== 'all-origins' || !externalSession.driver.readStorageOrigins) return null
-
-    try {
-      const limit = clampInteger(options.limit, 1, 300, 100)
-      const maxValueChars = clampInteger(options.maxValueChars, 1, 50_000, 4_000)
-      return await externalSession.driver.readStorageOrigins({
-        includeLocalStorage: options.includeLocalStorage ?? true,
-        includeSessionStorage: options.includeSessionStorage ?? true,
-        limit,
-        maxValueChars,
-      })
-    } catch (error) {
-      this.log.debug('读取外部浏览器跨 origin storage 失败，回退当前页面 storage', {
-        error: AppError.from(error).message,
-      })
-      return null
-    }
-  }
-
-  protected async readExternalBrowserCookies(
-    externalSession: ExternalBrowserPageSession,
-    options: BrowserPageStorageOptions,
-    fallbackCookies: BrowserStorageEntry[]
-  ): Promise<BrowserStorageEntry[]> {
-    if (!externalSession.driver.readCookies) return fallbackCookies
-
-    try {
-      const limit = clampInteger(options.limit, 1, 300, 100)
-      const maxValueChars = clampInteger(options.maxValueChars, 1, 50_000, 4_000)
-      const cookies = await externalSession.driver.readCookies({
-        scope: options.cookieScope ?? 'current-url',
-      })
-      return cookies
-        .map((cookie) => mapExternalCookieToStorageEntry(cookie, maxValueChars))
-        .filter((entry): entry is BrowserStorageEntry => Boolean(entry))
-        .slice(0, limit)
-    } catch (error) {
-      this.log.debug('读取外部浏览器 cookie jar 失败，回退页面脚本 cookie', {
-        error: AppError.from(error).message,
-      })
-      return fallbackCookies
-    }
   }
 
   
@@ -346,69 +231,7 @@ export class CdpPageDataEngine implements CdpPageDataEngineApi {
 
   
 
-  public async listMediaSources(
-    sessionId: string,
-    context: BrowserSiteContext,
-    options: BrowserListMediaSourcesOptions = {},
-    _abortSignal?: AbortSignal
-  ): Promise<BrowserListMediaSourcesResult> {
-    _abortSignal?.throwIfAborted()
-    const externalSession = this.requireExternalPageSession(sessionId)
-    const limit = clampInteger(options.limit, 1, 200, BrowserTuning.lists.mediaSources)
-    const includeDataUrls = !!options.includeDataUrls
-    const includeBlobUrls = !!options.includeBlobUrls
-    const result = await externalSession.driver.executeJavaScript<{
-      items?: unknown
-      truncated?: boolean
-    }>(
-      buildListMediaSourcesScript({
-        limit,
-        includeDataUrls,
-        includeBlobUrls,
-      }),
-      true
-    )
-    this.syncExternalPageStateFromScriptResult(sessionId, externalSession, result, context.url)
-
-    return {
-      url: resolveExternalPageUrl(externalSession, context.url),
-      items: normalizeMediaSourceItems(result.items),
-      truncated: !!result.truncated,
-      capturedAt: Date.now(),
-    }
-  }
-
   
-
-  public async listPageResources(
-    sessionId: string,
-    context: BrowserSiteContext,
-    options: BrowserListPageResourcesOptions = {},
-    _abortSignal?: AbortSignal
-  ): Promise<BrowserListPageResourcesResult> {
-    _abortSignal?.throwIfAborted()
-    const externalSession = this.requireExternalPageSession(sessionId)
-    const limit = clampInteger(options.limit, 1, 500, 120)
-    const includeIframes = !isFalse(options.includeIframes)
-    const result = await externalSession.driver.executeJavaScript<{
-      links?: unknown
-      iframes?: unknown
-      resourceOrigins?: unknown
-      mediaCount?: unknown
-      truncated?: boolean
-    }>(buildPageResourcesScript({ limit, includeIframes }), true)
-    this.syncExternalPageStateFromScriptResult(sessionId, externalSession, result, context.url)
-
-    return {
-      url: resolveExternalPageUrl(externalSession, context.url),
-      links: normalizePageResourceLinks(result.links),
-      iframes: normalizePageResourceIframes(result.iframes),
-      resourceOrigins: normalizePageResourceOrigins(result.resourceOrigins, context.url),
-      mediaCount: clampInteger(readFiniteNumber(result.mediaCount), 0, 100_000, 0),
-      truncated: !!result.truncated,
-      capturedAt: Date.now(),
-    }
-  }
 
   
 
@@ -615,54 +438,6 @@ export class CdpPageDataEngine implements CdpPageDataEngineApi {
       responseBody: details.responseBody,
       capturedAt: Date.now(),
     }
-  }
-
-  public async configureEmulation(
-    sessionId: string,
-    context: BrowserSiteContext,
-    options: BrowserEmulationOptions,
-    abortSignal?: AbortSignal
-  ): Promise<BrowserEmulationResult> {
-    abortSignal?.throwIfAborted()
-    // 多态:嵌入式 webview 与外部 CDP 都经 webContents.debugger/WebSocket 走 CDP Emulation。
-    const pageSession = await this.kernel.getLivePageDriverSession(sessionId, abortSignal)
-    if (!pageSession.driver.configureEmulation) {
-      throw new AppError('VALIDATION', '当前浏览器页面 driver 不支持环境模拟。')
-    }
-
-    const emulationState = await pageSession.driver.configureEmulation(options)
-    const pageState = await this.kernel.refreshPageDriverSessionState(
-      sessionId,
-      pageSession,
-      context.url
-    )
-    return {
-      url: pageState.url || context.url,
-      colorScheme: emulationState.colorScheme,
-      reducedMotion: emulationState.reducedMotion,
-      timezoneId: emulationState.timezoneId,
-      locale: emulationState.locale,
-      geolocation: emulationState.geolocation,
-      cpuThrottlingRate: emulationState.cpuThrottlingRate,
-      networkThrottling: emulationState.networkThrottling,
-      capturedAt: Date.now(),
-    }
-  }
-
-  public async waitForSelector(
-    sessionId: string,
-    context: BrowserSiteContext,
-    options: BrowserWaitForSelectorOptions,
-    _abortSignal?: AbortSignal
-  ): Promise<BrowserWaitForSelectorResult> {
-    _abortSignal?.throwIfAborted()
-    const externalSession = this.requireExternalPageSession(sessionId)
-    const result = await externalSession.driver.executeJavaScript<BrowserWaitForSelectorResult>(
-      buildWaitForSelectorScript(options),
-      true
-    )
-    this.syncExternalPageStateFromScriptResult(sessionId, externalSession, result, context.url)
-    return result
   }
 
   public async waitForPage(

@@ -18,8 +18,6 @@ import type {
   BrowserMouseResult,
   BrowserMoveMouseOptions,
   BrowserPagePreviewPointerEvent,
-  BrowserPageScrollOptions,
-  BrowserPageScrollResult,
   BrowserPageZoomOptions,
   BrowserPageZoomResult,
   BrowserPressKeyOptions,
@@ -37,7 +35,6 @@ import { evaluateInWebContents } from '../../utils/electron/evaluate'
 import { buildPageZoomHudScript, buildVirtualPointerScript } from '../../utils/electron/interaction'
 import { clampInteger, clampZoomFactor } from '../../utils/numbers.js'
 import { buildDragTargetScript } from '../../utils/page-scripts/drag'
-import { buildScrollScript } from '../../utils/page-scripts/scroll'
 import { buildTargetActionScript } from '../../utils/page-scripts/target-action'
 import { buildHighlightFromTargetScript, buildHighlightScript } from '../../utils/page-scripts/target-highlight'
 import { DEFAULT_BROWSER_VIEWPORT } from '../../utils/viewport.js'
@@ -59,7 +56,7 @@ export interface BrowserInteractionEngineApi {
   clearPointerState(webContentsId: number): void
   /** 运行时销毁时清空全部指针状态。 */
   dispose(): void
-  /** 按目标元素描述执行动作（点击、填值、选项），比坐标点击稳。 */
+  /** 按目标元素描述做一步（点击、悬停、聚焦、全选），比坐标点击稳。 */
   performTargetAction(sessionId: string, context: BrowserSiteContext, options: BrowserTargetActionOptions, abortSignal?: AbortSignal): Promise<BrowserTargetActionResult>
   /** 在当前焦点处插入文字（像输入法上屏，不发按键事件）。 */
   insertText(sessionId: string, context: BrowserSiteContext, options: BrowserInsertTextOptions, abortSignal?: AbortSignal): Promise<BrowserInsertTextResult>
@@ -89,8 +86,6 @@ export interface BrowserInteractionEngineApi {
   focusWebContents(session: BrowserSession): void
   /** 改页面缩放比例。 */
   setPageZoom(sessionId: string, context: BrowserSiteContext, options: BrowserPageZoomOptions, abortSignal?: AbortSignal): Promise<BrowserPageZoomResult>
-  /** 滚动页面。 */
-  scrollPage(sessionId: string, context: BrowserSiteContext, options?: BrowserPageScrollOptions, abortSignal?: AbortSignal): Promise<BrowserPageScrollResult>
 }
 
 export class BrowserInteractionEngine extends CdpInteractionEngine implements BrowserInteractionEngineApi {
@@ -717,27 +712,5 @@ export class BrowserInteractionEngine extends CdpInteractionEngine implements Br
         error: AppError.from(error).message,
       })
     }
-  }
-
-  
-
-  public override async scrollPage(
-    sessionId: string,
-    context: BrowserSiteContext,
-    options: BrowserPageScrollOptions = {},
-    abortSignal?: AbortSignal
-  ): Promise<BrowserPageScrollResult> {
-    abortSignal?.throwIfAborted()
-    const externalSession = this.getExternalPageSession(sessionId)
-    if (externalSession) return super.scrollPage(sessionId, context, options, abortSignal)
-
-    const session = await this.getLivePageSessionUnlocked(sessionId, abortSignal)
-
-    // 滚动脚本返回滚动位置和最大滚动范围。
-    return evaluateInWebContents(
-      session.webContents,
-      buildScrollScript(options),
-      true
-    ) as Promise<BrowserPageScrollResult>
   }
 }

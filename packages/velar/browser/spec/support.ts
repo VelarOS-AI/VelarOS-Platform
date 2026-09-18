@@ -164,8 +164,7 @@ export function createHarness(options: { open?: boolean; attach?: boolean } = {}
     waitForPage: async (input) => {
       record('waitForPage', [input])
       return {
-        url: page.url, loadState: 'complete', requestedLoadState: input.loadState ?? null, urlPattern: input.urlPattern ?? null, functionExpression: input.functionExpression ?? null,
-        functionResult: null, text: input.text ?? null, matched: true, durationMs: input.durationMs ?? 0, timeoutMs: input.timeoutMs ?? 0, elapsedMs: 1, timedOut: false, capturedAt: 1,
+        url: page.url, loadState: 'complete', requestedLoadState: input.loadState ?? null, matched: true, timeoutMs: input.timeoutMs ?? 0, elapsedMs: 1, timedOut: false, capturedAt: 1,
       }
     },
     setPageZoom: async (input) => { record('setPageZoom', [input]); return { url: page.url, zoomFactor: input.zoomFactor ?? 1, previousZoomFactor: 1, capturedAt: 1 } },

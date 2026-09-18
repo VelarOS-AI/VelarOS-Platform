@@ -171,11 +171,12 @@ declare module 'velar:browser' {
   }
 
   /**
-   * 按元素动手的结果：matched 为假时 failureReason 说为什么（没找到、点不动、被挡住），blockedBy 是挡住它的元素；
+   * click、fill、hover 的结果：action 是做的哪件事；matched 为假时 failureReason 说为什么（没找到、点不动、被挡住），blockedBy 是挡住它的元素；
    * effect 是动手前后页面的变化（地址、标题、正文），controlState 是动完之后控件的状态（fill 之后读它确认写进去的值）。
    * 按坐标点的 selector 与 text 是 null。selectorRecovery 在改用坐标补点时出现，actionEffect 在点中了却没有变化时出现。
    */
-  interface BrowserActed extends BrowserTargetActionResult {
+  interface BrowserActed extends BrowserTargetActionOutcome {
+    action: 'click' | 'fill' | 'hover'
     selectorRecovery?: BrowserSelectorRecovery
     actionEffect?: BrowserActionEffectHint
   }
@@ -605,8 +606,7 @@ declare module 'velar:browser' {
    * 按元素动手的结果：matched 为假时 failureReason 说为什么（not-found 没找到、not-interactable 点不动或不是文本控件、covered 被挡住），blockedBy 是挡住它的元素。
    * effect 是动手前后页面的变化，controlState 是动完之后控件的值或勾选状态。
    */
-  interface BrowserTargetActionResult {
-    action: BrowserTargetActionKind
+  interface BrowserTargetActionOutcome {
     url: string
     matched: boolean
     selector: string | null
@@ -614,10 +614,8 @@ declare module 'velar:browser' {
     clickPoint?: { x: number; y: number } | null | undefined
     clickMethod?: ('dom' | 'coordinate') | null | undefined
     effect?: BrowserTargetActionEffect | null | undefined
-    failureReason?: ('not-found' | 'not-interactable' | 'covered' | 'option-not-found') | null | undefined
+    failureReason?: ('not-found' | 'not-interactable' | 'covered') | null | undefined
     blockedBy?: string | null | undefined
-    selectedValues?: string[] | null | undefined
-    availableOptions?: Array<{ value: string; text: string; selected: boolean }> | null | undefined
     controlState?: ({
       kind: 'text' | 'checkable' | 'select' | 'contenteditable'
       value?: string | null | undefined
@@ -730,19 +728,6 @@ declare module 'velar:browser' {
     } | null | undefined
     attributes?: Record<string, string>
   }
-
-  /** 按元素动手的动作：click、fill、select、clear、select_all、scroll_into_view、focus、hover、check、uncheck。 */
-  type BrowserTargetActionKind =
-    | 'click'
-    | 'fill'
-    | 'select'
-    | 'clear'
-    | 'select_all'
-    | 'scroll_into_view'
-    | 'focus'
-    | 'hover'
-    | 'check'
-    | 'uncheck'
 
   /** 动手前后页面的变化：observed 为真表示量到了，urlChanged、titleChanged、textChanged 说哪里变了。都没变时多半没点中想要的东西，重新 inspect 看看。 */
   interface BrowserTargetActionEffect {

@@ -233,10 +233,7 @@ export function normalizeNetworkMockResponses(
  * 外部 `CDP` 浏览器（`CdpBrowserPageDriver` 与 WebSocket 传输）和嵌入式网页视图
  * （`webContents.debugger`）共用网络事件记账、详情读取和 `Fetch` 拦截逻辑，只在传输与事件入口上
  * 不同。控制器持有网络请求记录、离线状态、请求头和拦截规则，并通过注入的 `send`、
- * `appendDiagnostic`、`getCurrentUrl` 与 `getNetworkThrottling` 和宿主解耦。
- *
- * 离线状态与网络节流共用 `Network.emulateNetworkConditions`：离线状态归本控制器，节流状态归宿主，
- * 两者通过 `getNetworkThrottling` 回调合流，避免互相覆盖。
+ * `appendDiagnostic` 与 `getCurrentUrl` 和宿主解耦。
  */
 
 /** 网络请求记录表上限:超出按写入顺序淘汰最旧,防止长会话无界增长。 */

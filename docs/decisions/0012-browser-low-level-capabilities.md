@@ -129,7 +129,13 @@ trace 与 insight（DevTools 分析引擎）、堆快照、录屏（GIF 编码�
 `velar:browser`、`velar:devtools` 的模型面按上表变；空间端口 `BrowserSpacePort` 删掉 `scrollPage`、`queryElements`、`waitForSelector`、`listMediaSources`、
 `readPageStorage`、`configureEmulation`、`setViewport`，改了 `evaluateScript` 的入参与回执，加了 `listFrames`、`keyDown`、`keyUp`、`mouseDown`、`mouseUp`、
 `mouseWheel` 与三个协议会话的方法；`moveMouse` 多了 `steps`，`performTargetAction` 的点击多了 `button`、`clickCount`。
-运行时 `ElectronBrowserRuntimeApi` 加上对应的方法；只为被删操作存在的运行时方法与页面脚本随后删掉。产品还没接代码面，不留过渡。
+运行时 `ElectronBrowserRuntimeApi` 加上对应的方法，同时删掉只为被删操作存在的七个：`scrollPage`、`queryElements`、`readPageStorage`、
+`listMediaSources`、`listPageResources`、`configureEmulation`、`waitForSelector`（`setViewport`、`runUserScript` 留着，桌面端界面在用）。
+连带删掉的：对应的页面脚本（查元素、媒体、滚动、存储、等选择器、提取），驱动的 `readCookies`、`readStorageOrigins`、`configureEmulation`、
+`getEmulationState` 与整套仿真状态（配色、时区、地理位置、CPU 与网络节流——没有谁再能改它，trace 也不再从它读节流标注），
+`waitForPage` 只剩等加载状态，`performTargetAction` 只剩 click、hover、focus、select_all 四步。
+回执里模型看得到的 `BrowserActed` 改成在不带动作名的 `BrowserTargetActionOutcome` 上加 `action: 'click' | 'fill' | 'hover'`，
+页面里那四步的名字不再出现在模型面上。产品还没接代码面，不留过渡。
 
 ## Validation
 
@@ -137,11 +143,11 @@ trace 与 insight（DevTools 分析引擎）、堆快照、录屏（GIF 编码�
   等待跨跳转与超时抛错、state 带标签页与挂起事件、`velar:cdp` 的会话隔离与事件游标与拦截兜底。
 - 三份代码模版照真实声明过类型检查，并经真的代码面会话逐个函数跑通。
 - 真机探针（`packages/velar/browser/test/probes/electron-low-level.probe.mjs`，不进 bun test）：用仓库里的 Electron 跑真的运行时，
-  内嵌页面与外部 Chrome（产品自带的启动器，临时配置目录、无头）各一轮、每轮 22 项：evaluate 取回上万项的数组、报错行列换算，
+  内嵌页面与外部 Chrome（产品自带的启动器，临时配置目录、无头）各一轮、每轮 24 项：evaluate 取回上万项的数组、报错行列换算，
   三层框架（跨源 iframe、同源子框架、跨源里再套回主站的）都列得出、都在框架主世界里求值，模型经 CDP 子会话进跨源 iframe，
   fill 让 React 式受控输入认到改动、可编辑区替换、空值清空，Enter 提交表单、Shift 按住输入大写，鼠标原子拖出的是真事件、滚轮落在指针下、
   clickCount 2 是一次真双击，模型会话的 Network 事件不让宿主诊断记两遍、模型关掉 Network 域宿主照常，reset 撤掉仿真，
-  拦截 30 秒没人放行由宿主放行并记事件，waitForFunction 跨过真跳转。44 项全过。
+  拦截 30 秒没人放行由宿主放行并记事件，waitForFunction 跨过真跳转，waitForLoad 交回加载好的页面，devtools 的离线开关真断网、关掉就恢复。48 项全过。
 
 ## Consequences
 

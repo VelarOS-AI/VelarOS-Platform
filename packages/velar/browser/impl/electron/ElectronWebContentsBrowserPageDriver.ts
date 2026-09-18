@@ -1,12 +1,11 @@
 import type electron from 'electron'
 
-import { isPresent, isString } from '@velaros-ai/core'
+import { isString } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { Log } from '@velaros-ai/core/logger'
 
 import type { BrowserPageDriver, BrowserProtocolChannel } from '../../contract/requires.js'
 import type {
-  BrowserEmulationOptions,
   BrowserFrameInfo,
   BrowserNetworkControlOptions,
   BrowserNetworkRequestDetailsOptions,
@@ -15,8 +14,7 @@ import type {
   BrowserViewportOptions,
 } from '../../types/browser'
 import type { CdpScreencastConsumerOptions, CdpScreencastStartOptions, CdpSend,ScreencastCapturedFrame } from '../../types/cdp.js'
-import type { BrowserPageDriverClickCoordinatesOptions, BrowserPageDriverDiagnosticsOptions, BrowserPageDriverDragCoordinatesOptions, BrowserPageDriverEmulationState, BrowserPageDriverKeyEvent, BrowserPageDriverMouseEvent, BrowserPageDriverMoveMouseOptions, BrowserPageDriverNetworkCaptureState, BrowserPageDriverNetworkControlState, BrowserPageDriverNetworkIdleOptions, BrowserPageDriverNetworkRequestDetailsResult, BrowserPageDriverNetworkResponseBodyResult, BrowserPageDriverState } from '../../types/driver'
-import { applyCdpEmulation, createDefaultCdpEmulationState } from '../../utils/cdp/emulation'
+import type { BrowserPageDriverClickCoordinatesOptions, BrowserPageDriverDiagnosticsOptions, BrowserPageDriverDragCoordinatesOptions, BrowserPageDriverKeyEvent, BrowserPageDriverMouseEvent, BrowserPageDriverMoveMouseOptions, BrowserPageDriverNetworkCaptureState, BrowserPageDriverNetworkControlState, BrowserPageDriverNetworkIdleOptions, BrowserPageDriverNetworkRequestDetailsResult, BrowserPageDriverNetworkResponseBodyResult, BrowserPageDriverState } from '../../types/driver'
 import { captureCdpHeapSnapshot, createWebContentsCdpTraceTransport } from '../../utils/cdp/tracing.js'
 import { clearBrowserDiagnosticEntries, takeBrowserDiagnosticWindow } from '../../utils/diagnostics.js'
 import { evaluateInFrame } from '../../utils/electron/evaluate'
@@ -64,33 +62,6 @@ class ElectronWebContentsBrowserPageDriver implements BrowserPageDriver {
   private debuggerSend: CdpSend = (method, params) =>
     this.webContents.debugger.sendCommand(method, params)
 
-  /** 配置环境模拟(CPU/网络节流、色彩、时区、locale、地理位置)。需持久 attach。 */
-  public async configureEmulation(
-    options: BrowserEmulationOptions
-  ): Promise<BrowserPageDriverEmulationState> {
-    // 持久 attach:不经 attachDebugger 的临时语义,attach 后由 emulation hold 持有。
-    if (!this.webContents.debugger.isAttached()) {
-      this.webContents.debugger.attach('1.3')
-    }
-    let hold = electronDebuggerHolds.getEmulation(this.webContents)
-    if (!hold) {
-      hold = { state: createDefaultCdpEmulationState(), networkEnabled: false }
-      electronDebuggerHolds.setEmulation(this.webContents, hold)
-    }
-    // Network.emulateNetworkConditions 需要 Network domain;只 enable 一次。
-    if (isPresent(options.networkThrottling) && !hold.networkEnabled) {
-      await this.debuggerSend('Network.enable')
-      hold.networkEnabled = true
-    }
-
-    hold.state = await applyCdpEmulation(this.debuggerSend, hold.state, options)
-    return hold.state
-  }
-
-  public getEmulationState(): BrowserPageDriverEmulationState {
-    return electronDebuggerHolds.getEmulation(this.webContents)?.state ?? createDefaultCdpEmulationState()
-  }
-
   /**
    * 惰性建立嵌入式网络采集:持久 attach debugger、登记 message 监听把 Network/Fetch 事件路由进
    * 共享控制器、enable Network domain。采集从首次网络操作起生效,与外部 CDP driver 共用同一套
@@ -116,8 +87,6 @@ class ElectronWebContentsBrowserPageDriver implements BrowserPageDriver {
         }
       },
       getCurrentUrl: () => this.webContents.getURL(),
-      getNetworkThrottling: () =>
-        electronDebuggerHolds.getEmulation(this.webContents)?.state.networkThrottling ?? 'none',
     })
     const messageListener = (
       _event: electron.Event,
@@ -514,17 +483,12 @@ class ElectronWebContentsBrowserPageDriver implements BrowserPageDriver {
   }
 
   public async setViewport(options: BrowserViewportOptions): Promise<void> {
-    // Device metrics override 依赖持续存在的 debugger 连接。复用 emulation hold，
-    // 避免后续截图/trace 的临时 driver 把连接 detach 后悄悄丢失 viewport。
+    // Device metrics override 依赖持续存在的 debugger 连接：登记成 Emulation 占用，
+    // 免得之后截图、trace 的临时 driver 收尾时把连接 detach，视口悄悄丢掉。
     if (!this.webContents.debugger.isAttached()) {
       this.webContents.debugger.attach('1.3')
     }
-    if (!electronDebuggerHolds.hasEmulation(this.webContents)) {
-      electronDebuggerHolds.setEmulation(this.webContents, {
-        state: createDefaultCdpEmulationState(),
-        networkEnabled: false,
-      })
-    }
+    electronDebuggerHolds.holdEmulation(this.webContents)
 
     const metrics = buildBrowserViewportDeviceMetrics(options)
     await this.debuggerSend('Emulation.setDeviceMetricsOverride', { ...metrics })

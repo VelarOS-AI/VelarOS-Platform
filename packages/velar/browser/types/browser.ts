@@ -584,25 +584,12 @@ export interface BrowserScreenshotArtifact {
   loginGate?: BrowserLoginGateRecord
 }
 
-/** @AgentView 按元素动手的动作：click、fill、select、clear、select_all、scroll_into_view、focus、hover、check、uncheck。 */
-export type BrowserTargetActionKind =
-  | 'click'
-  | 'fill'
-  | 'select'
-  | 'clear'
-  | 'select_all'
-  | 'scroll_into_view'
-  | 'focus'
-  | 'hover'
-  | 'check'
-  | 'uncheck'
-
-export type BrowserTargetActionValue = string | string[]
+/** 页面里按元素做的一步：click、hover 发真实的鼠标事件；focus 聚焦；select_all 聚焦并全选（fill 在页面里只做这一步，文字由宿主插入）。 */
+export type BrowserTargetActionKind = 'click' | 'hover' | 'focus' | 'select_all'
 
 export interface BrowserTargetActionOptions {
   action: BrowserTargetActionKind
   target: BrowserElementTargetHint
-  value?: BrowserTargetActionValue
   waitForNavigation?: boolean
   /** 点击用哪个键，缺省 left。 */
   button?: BrowserMouseButton
@@ -615,8 +602,7 @@ export interface BrowserTargetActionOptions {
  * 按元素动手的结果：matched 为假时 failureReason 说为什么（not-found 没找到、not-interactable 点不动或不是文本控件、covered 被挡住），blockedBy 是挡住它的元素。
  * effect 是动手前后页面的变化，controlState 是动完之后控件的值或勾选状态。
  */
-export interface BrowserTargetActionResult {
-  action: BrowserTargetActionKind
+export interface BrowserTargetActionOutcome {
   url: string
   matched: boolean
   selector: Nullable<string>
@@ -624,10 +610,8 @@ export interface BrowserTargetActionResult {
   clickPoint?: LooseOptional<{ x: number; y: number }>
   clickMethod?: LooseOptional<'dom' | 'coordinate'>
   effect?: LooseOptional<BrowserTargetActionEffect>
-  failureReason?: LooseOptional<'not-found' | 'not-interactable' | 'covered' | 'option-not-found'>
+  failureReason?: LooseOptional<'not-found' | 'not-interactable' | 'covered'>
   blockedBy?: LooseOptional<string>
-  selectedValues?: LooseOptional<string[]>
-  availableOptions?: LooseOptional<Array<{ value: string; text: string; selected: boolean }>>
   controlState?: LooseOptional<{
     kind: 'text' | 'checkable' | 'select' | 'contenteditable'
     value?: LooseOptional<string>
@@ -636,6 +620,11 @@ export interface BrowserTargetActionResult {
     selectedValues?: LooseOptional<string[]>
   }>
   capturedAt: number
+}
+
+/** 页面里按元素做一步的结果：action 是请求的那一步。 */
+export interface BrowserTargetActionResult extends BrowserTargetActionOutcome {
+  action: BrowserTargetActionKind
 }
 
 /** @AgentView 动手前或动手后页面的一份指纹：地址、标题、正文的哈希与长度。 */
@@ -682,64 +671,6 @@ export interface BrowserPageNavigationResult {
   title: Nullable<string>
   canGoBack: boolean
   canGoForward: boolean
-  capturedAt: number
-}
-
-/** 滚动方向：up、down、left、right、top（到顶）、bottom（到底）。 */
-export type BrowserPageScrollDirection = 'up' | 'down' | 'left' | 'right' | 'top' | 'bottom'
-
-export interface BrowserPageScrollOptions {
-  direction?: BrowserPageScrollDirection
-  amount?: number
-  x?: number
-  y?: number
-}
-
-/** 滚动之后的位置：scrollX、scrollY 是当前滚动位置，maxScrollX、maxScrollY 是能滚到的最远处（scrollY 等于 maxScrollY 就是到底了）。 */
-export interface BrowserPageScrollResult {
-  url: string
-  scrollX: number
-  scrollY: number
-  maxScrollX: number
-  maxScrollY: number
-  viewportWidth: number
-  viewportHeight: number
-  capturedAt: number
-}
-
-export interface BrowserElementQueryOptions {
-  selector: string
-  attributes?: string[]
-  includeHtml?: boolean
-  limit?: number
-  maxTextChars?: number
-  maxHtmlChars?: number
-}
-
-/** query 找到的一个元素：tagName、text、attributes、href、value、checked、visible，以及交给 click 这类操作的 target。 */
-export interface BrowserQueriedElement {
-  index: number
-  tagName: string
-  text: string
-  textTruncated: boolean
-  html?: string
-  htmlTruncated?: boolean
-  attributes: Record<string, string>
-  href: Nullable<string>
-  value: Nullable<string>
-  checked: Nullable<boolean>
-  visible: boolean
-  target: Nullable<BrowserElementTargetHint>
-}
-
-/** query 的结果：count 是一共匹配几个，elements 是交回的那几个；selectorError 是 selector 写错时的说明。 */
-export interface BrowserElementQueryResult {
-  url: string
-  selector: string
-  selectorError: Nullable<string>
-  count: number
-  limit: number
-  elements: BrowserQueriedElement[]
   capturedAt: number
 }
 
@@ -863,68 +794,6 @@ export interface BrowserFetchResourceResult {
   mimeType: Nullable<string>
   bytes: number
   status: number
-  capturedAt: number
-}
-
-/** 媒体种类：image、video、audio、other。 */
-export type BrowserMediaSourceKind = 'image' | 'video' | 'audio' | 'other'
-
-/** 页面上的一个媒体地址：fetchable 为真的可以直接交给 download（blob:、data: 不行），tagName、attribute 说它从哪个元素的哪个属性来。 */
-export interface BrowserMediaSourceItem {
-  kind: BrowserMediaSourceKind
-  url: string
-  fetchable: boolean
-  tagName: Nullable<string>
-  attribute: Nullable<string>
-  alt: Nullable<string>
-  width: Nullable<number>
-  height: Nullable<number>
-}
-
-export interface BrowserListMediaSourcesOptions {
-  limit?: number
-  includeDataUrls?: boolean
-  includeBlobUrls?: boolean
-}
-
-/** 页面上的媒体地址：truncated 为真表示超过上限没列全。 */
-export interface BrowserListMediaSourcesResult {
-  url: string
-  items: BrowserMediaSourceItem[]
-  truncated: boolean
-  capturedAt: number
-}
-
-export interface BrowserListPageResourcesOptions {
-  limit?: number
-  includeIframes?: boolean
-}
-
-export interface BrowserPageResourceLink {
-  text: Nullable<string>
-  href: string
-}
-
-export interface BrowserPageResourceIframe {
-  src: Nullable<string>
-  title: Nullable<string>
-  sandbox: Nullable<string>
-}
-
-export interface BrowserPageResourceOrigins {
-  pageOrigin: string
-  sameOrigin: string[]
-  crossOrigin: string[]
-  totalUniqueOrigins: number
-}
-
-export interface BrowserListPageResourcesResult {
-  url: string
-  links: BrowserPageResourceLink[]
-  iframes: BrowserPageResourceIframe[]
-  resourceOrigins: BrowserPageResourceOrigins
-  mediaCount: number
-  truncated: boolean
   capturedAt: number
 }
 
@@ -1113,52 +982,21 @@ export interface BrowserDragResult {
   capturedAt: number
 }
 
-export interface BrowserWaitForSelectorOptions {
-  selector: string
-  state?: BrowserWaitForSelectorState
-  visible?: boolean
-  timeoutMs?: number
-}
-
-/** 等 selector 到什么状态：attached（出现在文档里）、visible（看得见）、hidden（看不见）、detached（从文档里没了）。 */
-export type BrowserWaitForSelectorState = 'attached' | 'visible' | 'hidden' | 'detached'
-
-/** 等 selector 的结果：matched 为假表示等到超时也没到，count 是匹配几个，target 是第一个匹配的元素。 */
-export interface BrowserWaitForSelectorResult {
-  url: string
-  selector: string
-  state: BrowserWaitForSelectorState
-  matched: boolean
-  visible: boolean
-  count: number
-  elapsedMs: number
-  target: Nullable<BrowserElementTargetHint>
-  capturedAt: number
-}
-
 /** @AgentView 页面加载状态：domcontentloaded、load、networkidle（网络空闲）。 */
 export type BrowserPageWaitLoadState = 'domcontentloaded' | 'load' | 'networkidle'
 
+/** 等页面到某个加载状态：不给 loadState 就不等；timeoutMs 是最多等多久。 */
 export interface BrowserPageWaitOptions {
-  durationMs?: number
   loadState?: BrowserPageWaitLoadState
-  urlPattern?: string
-  functionExpression?: string
-  text?: string
   timeoutMs?: number
 }
 
-/** 等页面的结果：matched 为真表示等到了，timedOut 为真表示等到超时；functionResult 是 waitForFunction 的表达式最后的值，elapsedMs 是实际等了多久。 */
+/** 等页面的结果：matched 为真表示等到了，timedOut 为真表示到点没等到；elapsedMs 是实际等了多久。 */
 export interface BrowserPageWaitResult {
   url: string
   loadState: 'loading' | 'interactive' | 'complete'
   requestedLoadState: Nullable<BrowserPageWaitLoadState>
-  urlPattern: Nullable<string>
-  functionExpression: Nullable<string>
-  functionResult: unknown
-  text: Nullable<string>
   matched: boolean
-  durationMs: number
   timeoutMs: number
   elapsedMs: number
   timedOut: boolean
@@ -1303,54 +1141,6 @@ export interface BrowserNetworkRequestDetailsResult {
   capturedAt: number
 }
 
-/** 配色：light、dark、no-preference。 */
-export type BrowserColorScheme = 'light' | 'dark' | 'no-preference'
-
-/** 动效偏好：reduce 减少动效，no-preference 不限。 */
-export type BrowserReducedMotion = 'reduce' | 'no-preference'
-
-/** 地理位置：latitude 纬度（-90 到 90），longitude 经度（-180 到 180），accuracy 精度（米）。 */
-export interface BrowserGeolocationOptions {
-  latitude: number
-  longitude: number
-  accuracy?: number
-}
-
-/** 当前仿真的地理位置。 */
-export interface BrowserGeolocationState {
-  latitude: number
-  longitude: number
-  accuracy: number
-}
-
-/** 网络节流档位：none 不节流，slow-3g、fast-3g、slow-4g、fast-4g 与 DevTools 的 Network conditions 同一套数值。 */
-export type BrowserNetworkThrottlingPreset = 'none' | 'slow-3g' | 'fast-3g' | 'slow-4g' | 'fast-4g'
-
-export interface BrowserEmulationOptions {
-  colorScheme?: BrowserColorScheme
-  reducedMotion?: BrowserReducedMotion
-  timezoneId?: string
-  locale?: string
-  geolocation?: BrowserGeolocationOptions
-  /** CPU 减速倍率（1 = 不减速，4 = 4 倍减速）。 */
-  cpuThrottlingRate?: number
-  /** 网络节流预设；none 恢复原速。与 configure_network 的 offline 互相独立。 */
-  networkThrottling?: BrowserNetworkThrottlingPreset
-}
-
-/** 仿真设好之后的全部状态：配色、动效、时区、语言、地理位置、CPU 降速倍数与网络节流档位。 */
-export interface BrowserEmulationResult {
-  url: string
-  colorScheme: BrowserColorScheme
-  reducedMotion: BrowserReducedMotion
-  timezoneId: Nullable<string>
-  locale: Nullable<string>
-  geolocation: Nullable<BrowserGeolocationState>
-  cpuThrottlingRate: number
-  networkThrottling: BrowserNetworkThrottlingPreset
-  capturedAt: number
-}
-
 export interface BrowserPerformanceTraceStartOptions {
   /** true（默认）：先跳 about:blank 再回跳原 URL，录制完整加载过程；false：从当前页面状态原地开录。 */
   reload?: boolean
@@ -1447,47 +1237,6 @@ export interface BrowserPerformanceInsightResult {
   insightSetId: string
   insightName: string
   output: string
-  capturedAt: number
-}
-
-export interface BrowserPageStorageOptions {
-  includeLocalStorage?: boolean
-  includeSessionStorage?: boolean
-  includeCookies?: boolean
-  storageScope?: BrowserStorageScope
-  cookieScope?: BrowserCookieScope
-  limit?: number
-  maxValueChars?: number
-}
-
-/** 存储读哪儿：current-origin 当前来源，all-origins 页面里所有来源（外部浏览器才有）。 */
-export type BrowserStorageScope = 'current-origin' | 'all-origins'
-
-/** cookie 读哪些：current-url 当前地址会带的，all 这个浏览器里的全部。 */
-export type BrowserCookieScope = 'current-url' | 'all'
-
-/** 一项存储或 cookie：name、value（valueTruncated 为真表示值被截断），details 里是 cookie 的域、路径、过期时间这些。 */
-export interface BrowserStorageEntry {
-  name: string
-  value: string
-  valueTruncated: boolean
-  details?: Record<string, unknown>
-}
-
-/** 一个来源的 localStorage 与 sessionStorage。 */
-export interface BrowserOriginStorage {
-  origin: string
-  localStorage?: BrowserStorageEntry[]
-  sessionStorage?: BrowserStorageEntry[]
-}
-
-/** 页面存储：localStorage、sessionStorage、cookies 各是一组，origins 是按来源分开的存储。 */
-export interface BrowserPageStorageResult {
-  url: string
-  localStorage?: BrowserStorageEntry[]
-  sessionStorage?: BrowserStorageEntry[]
-  origins?: BrowserOriginStorage[]
-  cookies?: BrowserStorageEntry[]
   capturedAt: number
 }
 
@@ -1982,11 +1731,12 @@ export interface BrowserActionEffectHint {
 
 /**
  * @AgentView
- * 按元素动手的结果：matched 为假时 failureReason 说为什么（没找到、点不动、被挡住），blockedBy 是挡住它的元素；
+ * click、fill、hover 的结果：action 是做的哪件事；matched 为假时 failureReason 说为什么（没找到、点不动、被挡住），blockedBy 是挡住它的元素；
  * effect 是动手前后页面的变化（地址、标题、正文），controlState 是动完之后控件的状态（fill 之后读它确认写进去的值）。
  * 按坐标点的 selector 与 text 是 null。selectorRecovery 在改用坐标补点时出现，actionEffect 在点中了却没有变化时出现。
  */
-export interface BrowserActed extends BrowserTargetActionResult {
+export interface BrowserActed extends BrowserTargetActionOutcome {
+  action: 'click' | 'fill' | 'hover'
   selectorRecovery?: BrowserSelectorRecovery
   actionEffect?: BrowserActionEffectHint
 }

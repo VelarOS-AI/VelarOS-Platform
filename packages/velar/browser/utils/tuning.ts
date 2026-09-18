@@ -5,7 +5,7 @@
  * - 对外承诺的（错误码、写进声明的上限）在 `contract/constants.ts`，改了等于改契约；
  * - 可调的都在这里，按用途分组、每项一句说明；实现里不再散写数字缺省值，门禁核对；
  * - 某个类里固定用的文案、模式、名单写成那个类的 `private static readonly`；
- * - 规则本身的数据（节流预设的带宽与时延、自愈权重）跟着规则写在各自的文件里；算法与格式里的数字就地写。
+ * - 规则本身的数据（比如自愈权重）跟着规则写在各自的文件里；算法与格式里的数字就地写。
  */
 
 /** 浏览器包的可调参数，按用途分组。 */
@@ -58,12 +58,6 @@ export const BrowserTuning = Object.freeze({
     networkRequestRecords: 300,
     /** 内嵌页面的网络诊断最多留多少条。 */
     embeddedNetworkDiagnostics: 300,
-    /** 网络节流预设 slow-3g 的往返时延（毫秒）。 */
-    throttlingLatencySlow3gMs: 2_000,
-    /** 网络节流预设 fast-3g 与 slow-4g 的往返时延（毫秒）：两档带宽相同，只是叫法不同。 */
-    throttlingLatencyMid3gMs: 562.5,
-    /** 网络节流预设 fast-4g 的往返时延（毫秒）。 */
-    throttlingLatencyFast4gMs: 165,
     /** 读 trace 数据流时每次取多少字节。 */
     traceStreamChunkBytes: 1_048_576,
     /** 停止 trace 后等它落完的毫秒数。 */
@@ -184,14 +178,12 @@ export const BrowserTuning = Object.freeze({
     /** 合成 GIF 的缺省宽度上限，像素。 */
     gifMaxWidth: 800,
   }),
-  /** 列表缺省：工作区文件与页面资源。 */
+  /** 列表缺省：工作区文件。 */
   lists: Object.freeze({
     /** 列工作区文件缺省返回多少条。 */
     workspaceFiles: 200,
     /** 递归列工作区文件缺省往下走几层。 */
     workspaceDepth: 4,
-    /** 列页面媒体缺省返回多少条。 */
-    mediaSources: 80,
   }),
   /** 性能：trace 与 insight。 */
   performance: Object.freeze({

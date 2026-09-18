@@ -46,6 +46,3 @@ export interface BrowserProtocolEventWaitOptions {
 
 /** 一个站点在本次会话里的登录门控状态：问过、批准了、拒绝了。 */
 export type BrowserLoginGateOriginState = 'prompted' | 'approved' | 'declined'
-
-/** 页面提取脚本返回的原始载荷：页面侧构造的纯 JSON 对象，操作层再按形状交出去。 */
-export type BrowserExtractionPayload = Record<string, unknown>
