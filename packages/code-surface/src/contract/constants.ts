@@ -7,19 +7,43 @@
 export const CodeSurfaceModId = 'velaros.code-surface' as const
 
 /** 内核模块的版本：门的工具形状（名字、入参、回执）变了就升。 */
-export const CodeSurfaceKernelModuleVersion = '0.1.0' as const
+export const CodeSurfaceKernelModuleVersion = '0.2.0' as const
 
-/** 门在模型面上的那一个工具：模型交一段程序就用它，别的能力都在程序里 import。 */
+/**
+ * 门在模型面上的四个工具。改东西的只有 exec：跑脚本、存脚本、重放都是它的步骤；另外三个只读时间线。
+ * 别的能力都在脚本里 import。
+ */
 export const CodeSurfaceToolNames = Object.freeze({
-  /** 交一段程序：检查、执行、交回结果。 */
-  runProgram: 'program:run',
+  /** 一次给几步，按顺序做：跑脚本、存进脚本库、改版本、退回旧版本、按记录重放。 */
+  exec: 'script:exec',
+  /** 列时间线：每次调用、每一步做了什么。 */
+  history: 'script:history',
+  /** 看时间线上的一样东西：一次调用、一步、一版脚本，或者脚本库目录。 */
+  show: 'script:show',
+  /** 比两样东西：两版代码逐行比，两个时间点按文件比。 */
+  diff: 'script:diff',
 } as const)
 
 /** 门的工具名。 */
 export type CodeSurfaceToolName = (typeof CodeSurfaceToolNames)[keyof typeof CodeSurfaceToolNames]
 
 /** 门的工具类别：宿主在会话里打开它，门才出现在模型面前。 */
-export const CodeSurfaceToolCategoryId = 'program' as const
+export const CodeSurfaceToolCategoryId = 'script' as const
+
+/**
+ * `script:exec` 一步能做的五件事。
+ * write、edit、restore 只改脚本库（先过类型检查，不跑）；run 跑一段代码；replay 按记录把之前的一步再跑一遍。
+ */
+export const ScriptStepOps = Object.freeze(['write', 'edit', 'restore', 'run', 'replay'] as const)
+
+/** 一步做的事。 */
+export type ScriptStepOp = (typeof ScriptStepOps)[number]
+
+/** `script:diff` 比的是什么：两版代码逐行比，还是两个时间点之间的工作区按文件比。 */
+export const ScriptDiffKinds = Object.freeze(['code', 'files'] as const)
+
+/** diff 比的东西。 */
+export type ScriptDiffKind = (typeof ScriptDiffKinds)[number]
 
 /** 代码面的错误码；模型与宿主都按码判断，不按报错文字。 */
 export const CodeSurfaceErrorCodes = Object.freeze({
@@ -35,13 +59,23 @@ export const CodeSurfaceErrorCodes = Object.freeze({
   unknownOperation: 'UNKNOWN_OPERATION',
   /** 程序超过了体量上限（源码、blobs、返回值）。 */
   tooLarge: 'TOO_LARGE',
-  /** 在上一份程序上改的那组编辑落不下去（找不到、不唯一、重叠、没有上一份）。 */
+  /** 在底稿上改的那组编辑落不下去（找不到、不唯一、重叠）。 */
   editFailed: 'EDIT_FAILED',
   /** 能力自己失败了且没给出码。 */
   operationFailed: 'OPERATION_FAILED',
+  /** 没过类型检查：代码一行都没执行，也没存进脚本库。 */
+  checkFailed: 'CHECK_FAILED',
+  /** 头一次 import 按需模块：这一步没执行，交回了那个模块的完整声明。 */
+  modulesNeeded: 'MODULES_NEEDED',
+  /** 引用的调用、步骤或脚本版本不存在。 */
+  refNotFound: 'REF_NOT_FOUND',
+  /** 步骤的写法不对：字段和它的 op 对不上、脚本路径不合规。 */
+  invalidStep: 'INVALID_STEP',
+  /** 重放对不上：跑之前文件已经不是当时改前的样子，或者跑出来的和当时不一样。 */
+  replayMismatch: 'REPLAY_MISMATCH',
 } as const)
 
-/** 八个错误码之一。 */
+/** 十三个错误码之一。 */
 export type CodeSurfaceErrorCode = (typeof CodeSurfaceErrorCodes)[keyof typeof CodeSurfaceErrorCodes]
 
 /**
@@ -60,9 +94,9 @@ export const CodeSurfaceDiagnosticCodes = Object.freeze({
  * 返回值与日志是例外：它们在跑完之后才知道大小，按预算截断并在 `notices` 里说明。
  */
 export const CodeSurfaceLimits = Object.freeze({
-  /** 程序正文的字符上限。 */
+  /** 一份脚本正文的字符上限。 */
   sourceChars: 60_000,
-  /** 所有 blobs 加起来的字符上限。 */
+  /** 一步的 blobs 加上 input（按 JSON 算）的字符上限。 */
   blobChars: 400_000,
   /**
    * **一次提交回给模型的全部东西**（返回值、日志、插手记录、失败说明、执行账，或者诊断）序列化之后的总上限。
@@ -100,4 +134,12 @@ export const CodeSurfaceLimits = Object.freeze({
   calls: 200,
   /** 程序的墙钟上限（毫秒）。 */
   timeoutMs: 120_000,
+  /** `script:exec` 一次最多几步。 */
+  steps: 50,
+  /** `script:history` 一次最多列几条。 */
+  historyEntries: 200,
+  /** `script:history` 不给 limit 时列最近几条。 */
+  historyDefaultEntries: 30,
+  /** 脚本库路径的字符上限。 */
+  scriptPathChars: 160,
 } as const)

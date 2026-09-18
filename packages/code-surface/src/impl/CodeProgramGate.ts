@@ -1,41 +1,51 @@
 /**
  * 代码面的门：`CodeProgramGate`，接口 `CodeProgramGateApi` 在本文件的类上方，由 `createCodeProgramGate` 创建。
  *
- * 模型交来一段程序，门把它办完：定下跑哪份源码 → 按「常驻 + 本会话导入过的」声明检查并执行 → 编成模型读的回执。
- * 一个会话一份状态：导入过的模块、上一份程序。常驻、索引、导入三档与租约的道理见 docs/engineering/code-surface-design.md。
+ * 模型经 `script:exec` 交一串步骤，门把它交给一次执行（`ScriptExecution`）按顺序办完，每一步记进这个空间的时间线；
+ * `script:history`、`script:show`、`script:diff` 只读时间线。门按会话记导入过的模块，按空间开时间线（同一个目录一条，进程里共用）。
+ * 常驻、索引、导入三档与租约的道理见 docs/engineering/code-surface-design.md。
  */
 
-import { isEmpty, isUndefined } from '@velaros-ai/core'
+import { isUndefined, toNullable } from '@velaros-ai/core'
 
-import type { CodeRunnerApi } from '../contract/requires.js'
+import type { CodeRunnerApi, CodeSurfaceTimelinePort } from '../contract/requires.js'
 import type { MountedCapabilityModule } from '../types/code-surface.js'
-import type { CodeGateReply, CodeGateRunInput, CodeGateSessionState } from '../types/gate.js'
-import { renderDiagnostics } from '../utils/diagnostics.js'
-import { describeGate, describeNeededModules, grantedModules, renderProgramResult } from '../utils/gate.js'
-import { resolveProgramSource } from '../utils/result.js'
+import type { CodeGateExecInput, CodeGateQuery, CodeGateReply, CodeGateSessionState, ScriptDiffInput, ScriptHistoryInput, ScriptShowInput } from '../types/gate.js'
+import { describeGate } from '../utils/gate.js'
 import { CodeSurfaceTuning } from '../utils/tuning.js'
 
 import type { CodeProgramCheckerApi } from './CodeProgramChecker.js'
-import { createCodeSurfaceSession } from './CodeSurfaceSession.js'
+import { ScriptExecution } from './ScriptExecution.js'
+import type { ScriptTimelineApi } from './ScriptTimeline.js'
+import { ScriptTimeline } from './ScriptTimeline.js'
+import type { ScriptTimelineViewsApi } from './ScriptTimelineViews.js'
+import { ScriptTimelineViews } from './ScriptTimelineViews.js'
 
 /**
- * 模型写程序的那扇门，宿主每个进程装一个，按会话记状态。
- * 门不认识任何一件具体能力：空间挂了哪些、端口怎么办调用，都在每次调用的入参里。
+ * 模型写脚本的那扇门，宿主每个进程装一个：按会话记导入过的模块，按空间开时间线。
+ * 门不认识任何一件具体能力：空间挂了哪些、端口怎么办调用、时间线放在哪，都在每次调用的入参里。
  */
 export interface CodeProgramGateApi {
-  /** 给模型看的门的说明：怎么写程序、常驻模块的完整声明、其余模块的方法名。空间一定，这段文字就一定。 */
+  /** 给模型看的门的说明：怎么写脚本、怎么用四个工具、常驻模块的完整声明、其余模块的方法名。空间一定，这段文字就一定。 */
   describe(modules: readonly MountedCapabilityModule[]): string
   /**
-   * 办一次程序：import 了头一次见的模块就不执行、交回它们的完整声明（之后这个会话一直可用）；
-   * 退租过的模块再用到时静默装回去；检查不过交回带代码帧的诊断；跑完交回结果与图。
+   * 办一次 `script:exec`：按顺序做每一步，某一步没成就停；每一步连同代码、参数、结果记进时间线。
+   * 同一条时间线上的 exec 排队做，每一步前后的工作区标记才对得上。
    */
-  run(input: CodeGateRunInput): Promise<CodeGateReply>
-  /** 会话结束：丢掉它导入过的模块与上一份程序。 */
+  exec(input: CodeGateExecInput): Promise<CodeGateReply>
+  /** `script:history`：列时间线上的调用与步骤，最新的在后面。 */
+  history(input: CodeGateQuery<ScriptHistoryInput>): Promise<string>
+  /** `script:show`：看一次调用、一步、一版脚本，或者脚本库目录。 */
+  show(input: CodeGateQuery<ScriptShowInput>): Promise<string>
+  /** `script:diff`：两版代码逐行比，或者两个时间点之间的工作区按文件比。 */
+  diff(input: CodeGateQuery<ScriptDiffInput>): Promise<string>
+  /** 会话结束：丢掉它导入过的模块。时间线不受影响，它属于空间。 */
   forget(sessionId: string): void
 }
 
 class CodeProgramGate implements CodeProgramGateApi {
   private readonly sessions = new Map<string, CodeGateSessionState>()
+  private readonly timelines = new Map<string, ScriptTimelineApi>()
 
   public constructor(
     private readonly checker: CodeProgramCheckerApi,
@@ -46,53 +56,46 @@ class CodeProgramGate implements CodeProgramGateApi {
     return describeGate(modules)
   }
 
-  public async run(input: CodeGateRunInput): Promise<CodeGateReply> {
+  public async exec(input: CodeGateExecInput): Promise<CodeGateReply> {
+    const timeline = await this.timelineOf(input.space.timeline)
     const state = this.stateOf(input.sessionId)
-    const session = createCodeSurfaceSession({ checker: this.checker, runner: this.runner, capabilities: input.capabilities, events: input.events })
-    const resolved = resolveProgramSource(input.program, state.previousSource)
-    if ('failed' in resolved) {
-      const outcome = { checked: true as const, result: { failed: resolved.failed } }
-      return { text: renderProgramResult(outcome.result), images: [], outcome }
-    }
-    const source = resolved.source
-    // 后面的 edits 都在这一份上改，不管它这次检查过没过。
-    state.previousSource = source
-    // 模版不常驻：跟着程序送进隔离进程，程序用 template() 读到才进上下文。
-    const templates = Object.fromEntries(input.modules.map(({ surface }) => [surface.specifier, surface.template]))
-    const submit = () => session.submit({ program: { source, blobs: input.program.blobs }, granted: grantedModules(input.modules, state.imported), templates, timeoutMs: input.timeoutMs, signal: input.signal })
-    let outcome = await submit()
-    if (!outcome.checked && 'needsModules' in outcome) {
-      const byName = new Map(input.modules.map((module) => [module.surface.namespace, module]))
-      // 模型见过声明、后来退租的：静默装回去再来一次，回收对它不可见。
-      const returning = outcome.needsModules.filter((name) => state.retired.has(name) && byName.has(name))
-      const fresh = outcome.needsModules.filter((name) => !returning.includes(name))
-      for (const name of outcome.needsModules) {
-        if (!byName.has(name)) continue
-        state.imported.add(name)
-        state.retired.delete(name)
-      }
-      if (isEmpty(fresh)) outcome = await submit()
-      else {
-        const needed = fresh.flatMap((name) => byName.get(name) ?? [])
-        const unknown = fresh.filter((name) => !byName.has(name))
-        return { text: describeNeededModules(needed, unknown, input.modules), images: [], outcome }
-      }
-    }
-    if (!outcome.checked) {
-      if ('needsModules' in outcome) return { text: describeNeededModules([], outcome.needsModules, input.modules), images: [], outcome }
-      const omitted = outcome.check.omitted ? `\n还有 ${outcome.check.omitted} 条没列出，多半是上面这几处连带出来的——先改这些再交。` : ''
-      return { text: `${renderDiagnostics(source, outcome.check.diagnostics)}${omitted}`, images: [], outcome }
-    }
-    // 租约：once 查一下就完、done 用完了——这一次之后退租；常驻的不受影响。
-    for (const imported of outcome.imports ?? []) {
-      if (imported.lease !== 'once' && imported.lease !== 'done') continue
-      if (state.imported.delete(imported.namespace)) state.retired.add(imported.namespace)
-    }
-    return { text: renderProgramResult(outcome.result), images: outcome.attachments ?? [], outcome }
+    return timeline.exclusive(() => new ScriptExecution(timeline, this.checker, this.runner, state, input).run())
+  }
+
+  public async history(input: CodeGateQuery<ScriptHistoryInput>): Promise<string> {
+    return (await this.viewsOf(input)).history(input.query)
+  }
+
+  public async show(input: CodeGateQuery<ScriptShowInput>): Promise<string> {
+    return (await this.viewsOf(input)).show(input.query)
+  }
+
+  public async diff(input: CodeGateQuery<ScriptDiffInput>): Promise<string> {
+    return (await this.viewsOf(input)).diff(input.query, input.signal)
   }
 
   public forget(sessionId: string): void {
     this.sessions.delete(sessionId)
+  }
+
+  /** 查询用的视图：这一次查的那条时间线。 */
+  private async viewsOf(input: CodeGateQuery<unknown>): Promise<ScriptTimelineViewsApi> {
+    return new ScriptTimelineViews(await this.timelineOf(input.timeline), input.sessionId)
+  }
+
+  /**
+   * 这个空间的时间线：同一个目录进程里只开一条；开着的超过上限时丢掉最久没用的（有 exec 在做的不丢），下次用到再从磁盘读。
+   */
+  private async timelineOf(port: CodeSurfaceTimelinePort): Promise<ScriptTimelineApi> {
+    const key = JSON.stringify([port.directory, toNullable(port.workspace), toNullable(port.retainBytes)])
+    let timeline = this.timelines.get(key)
+    if (timeline) this.timelines.delete(key)
+    else timeline = new ScriptTimeline(port)
+    this.timelines.set(key, timeline)
+    const idle = [...this.timelines.entries()].filter(([name, open]) => name !== key && !open.busy).map(([name]) => name)
+    for (const name of idle.slice(0, Math.max(0, this.timelines.size - CodeSurfaceTuning.gateTimelines))) this.timelines.delete(name)
+    await timeline.load()
+    return timeline
   }
 
   /** 这个会话的状态；超过记账上限时丢掉最久没用的那个会话（它下一次来就当新会话）。 */

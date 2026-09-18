@@ -13,8 +13,12 @@ import type { CodeCallNotice } from './code-surface.js'
 export interface CodeRunRequest {
   /** 程序正文（函数体）。 */
   source: string
+  /** 程序 import 到的库里的脚本，已经改写成函数体：路径 → 正文。隔离里按路径加载，每个只跑一次。 */
+  modules: Readonly<Record<string, string>>
   /** 大字符串旁路，按名字注入程序。 */
   blobs: Readonly<Record<string, string>>
+  /** 这一次的参数，原样注入程序（`velar:program` 的 input）。 */
+  input: unknown
   /** 可调用的能力清单：命名空间 → 操作名；运行器按它造 RPC 桩。 */
   operations: Readonly<Record<string, readonly string[]>>
   /** 这个空间挂的各能力模块的代码模版：模块名（`velar:files`）→ 模版正文。程序在 `velar:program` 里用 `template()` 按名字读。 */

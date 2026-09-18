@@ -38,8 +38,8 @@ export function programForCheck(source: string): string {
 /** 体量超限的说明；超限一律拒，不截断后照跑——半截程序跑出来的结果比不跑更坏。 */
 export function describeOversized(what: 'source' | 'blobs', actual: number): string {
   const limit = what === 'source' ? CodeSurfaceLimits.sourceChars : CodeSurfaceLimits.blobChars
-  const name = what === 'source' ? '程序正文' : 'blobs 合计'
-  return `${name} ${actual} 字符，超过上限 ${limit}。把它拆成几次，或者把大块内容留在能力那一侧处理（比如让 project:search 先筛一遍），不要整段搬进来。`
+  const name = what === 'source' ? '脚本正文' : 'blobs 加 input 合计'
+  return `${name} ${actual} 字符，超过上限 ${limit}。把它拆成几次，或者把大块内容留在能力那一侧处理（比如先用 velar:project 的 search 筛一遍），不要整段搬进来。`
 }
 
 /**

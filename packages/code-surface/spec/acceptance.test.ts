@@ -1,13 +1,18 @@
 /** 代码面验收：每条用例以不变量编号开头，`spec/invariants.md` 是它的登记表。 */
 
+import { createHash } from 'node:crypto'
 import { existsSync } from 'node:fs'
+import { mkdir, mkdtemp, readdir, readFile, realpath, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { dirname, join, sep } from 'node:path'
 
-import { describe, expect, test } from 'bun:test'
+import { afterAll, describe, expect, test } from 'bun:test'
 
 import { CodeSurfaceErrorCodes, CodeSurfaceLimits, CodeSurfaceModId, CodeSurfaceToolNames } from '../src/contract/constants'
-import type { CodeCapabilityPort } from '../src/contract/requires'
+import type { CodeCapabilityPort, CodeSurfaceSpacePort, CodeSurfaceToolContext } from '../src/contract/requires'
 import { createCapabilityPort } from '../src/impl/CapabilityOperationPort'
 import { codeProgramChecker } from '../src/impl/CodeProgramChecker'
+import type { CodeProgramGateApi } from '../src/impl/CodeProgramGate'
 import { createCodeProgramGate } from '../src/impl/CodeProgramGate'
 import { createCodeSurfaceSession } from '../src/impl/CodeSurfaceSession'
 import { codeSurfaceTools, createCodeSurfaceKernelModule } from '../src/impl/CodeSurfaceTools'
@@ -15,12 +20,42 @@ import {
   nodeSubprocessCodeRunner,
   NodeSubprocessRunnerIsReleaseReady,
 } from '../src/impl/NodeSubprocessCodeRunner'
-import type { CodeProgramEdit, MountedCapabilityModule } from '../src/types/code-surface'
-import type { GrantedModule } from '../src/types/module-form'
+import type { GrantedModule, MountedCapabilityModule } from '../src/types/code-surface'
+import type { CodeGateReply, ScriptStepInput } from '../src/types/gate'
+import type { CapabilityOperationTable } from '../src/types/operations'
 import { ProgramModuleDeclarations } from '../src/utils/compiler'
 import { renderDiagnostics } from '../src/utils/diagnostics'
 import { renderProgramResult } from '../src/utils/gate'
 import { resolveNodeExecutable } from '../src/utils/node-executable'
+
+/** 这份验收建的临时目录：跑完一起删，删之前核对它确实在系统临时区里——删错目录的代价太大。 */
+const temporaries: string[] = []
+
+/** 在系统临时区里建一个目录，记下来跑完删。 */
+async function temporary(prefix: string): Promise<string> {
+  const path = await realpath(await mkdtemp(join(tmpdir(), prefix)))
+  temporaries.push(path)
+  return path
+}
+
+afterAll(async () => {
+  const base = await realpath(tmpdir())
+  for (const path of temporaries) {
+    if (!path.startsWith(`${base}${sep}`)) throw new Error(`拒绝删除临时区以外的目录：${path}`)
+    await rm(path, { recursive: true, force: true })
+  }
+})
+
+/** 一个目录下内容里带着 text 的文件。 */
+async function filesContaining(root: string, text: string): Promise<string[]> {
+  const found: string[] = []
+  for (const entry of await readdir(root, { recursive: true, withFileTypes: true })) {
+    if (!entry.isFile()) continue
+    const path = join(entry.parentPath, entry.name)
+    if ((await readFile(path, 'utf8')).includes(text)) found.push(path)
+  }
+  return found
+}
 
 /** 这一轮授权的那一个命名空间；没授权的模块 import 不出来，那道闸是语言给的。 */
 const granted: GrantedModule[] = [
@@ -88,9 +123,6 @@ const session = createCodeSurfaceSession({
 
 const submit = (source: string, extra: { blobs?: Record<string, string>; timeoutMs?: number } = {}) =>
   session.submit({ program: { source, blobs: extra.blobs }, granted, timeoutMs: extra.timeoutMs ?? 10_000 })
-
-const submitEdits = (edits: CodeProgramEdit[], previousSource?: string) =>
-  session.submit({ program: { edits }, granted, previousSource, timeoutMs: 10_000 })
 
 const importDemo = "import { read, write, danger, bulk } from 'velar:demo'"
 
@@ -240,40 +272,6 @@ export default first.contents`)
     expect(outcome.check.diagnostics.length).toBeGreaterThan(0)
   })
 
-  test('INV-11 在上一份程序上改，不必整份重写', async () => {
-    const previous = `${importDemo}\nconst r = await read({ paths: ['a.ts'] })\nexport default r.files.map((f) => f.contents)`
-    const outcome = await submitEdits([{ oldText: 'f.contents', newText: 'f.path' }], previous)
-    expect(outcome.checked).toBe(true)
-    if (!outcome.checked) throw new Error('改完应当通过检查')
-    expect(outcome.result.value).toEqual(['a.ts'])
-  })
-
-  test('INV-11 oldText 不唯一、找不到、没有上一份，都明确拒绝且不猜', async () => {
-    const previous = 'const a = 1\nconst b = 1\nexport default a + b'
-    const notUnique = await submitEdits([{ oldText: '= 1', newText: '= 2' }], previous)
-    if (!notUnique.checked) throw new Error('应当走到结果')
-    expect(notUnique.result.failed?.code).toBe(CodeSurfaceErrorCodes.editFailed)
-    expect(notUnique.result.failed?.message).toContain('不止一次')
-
-    const missing = await submitEdits([{ oldText: '找不到的原文', newText: 'x' }], previous)
-    if (!missing.checked) throw new Error('应当走到结果')
-    expect(missing.result.failed?.message).toContain('找不到')
-
-    const noBase = await submitEdits([{ oldText: 'a', newText: 'b' }])
-    if (!noBase.checked) throw new Error('应当走到结果')
-    expect(noBase.result.failed?.message).toContain('发一份完整的')
-  })
-
-  test('INV-11 source 与 edits 只能给一个', async () => {
-    const outcome = await session.submit({
-      program: { source: 'export default 1', edits: [{ oldText: 'a', newText: 'b' }] },
-      granted,
-      previousSource: 'const a = 1\nexport default a',
-    })
-    if (!outcome.checked) throw new Error('应当走到结果')
-    expect(outcome.result.failed?.message).toContain('只能给一个')
-  })
-
   test('INV-12 诊断带代码帧，模型不必数行', async () => {
     const source = `${importDemo}\nconst r = await read({ paths: ['a.ts'] })\nexport default r.files[0].contents`
     const outcome = await submit(source)
@@ -282,7 +280,6 @@ export default first.contents`)
     const rendered = renderDiagnostics(source, outcome.check.diagnostics)
     expect(rendered).toContain('3 | export default r.files[0].contents')
     expect(rendered).toContain('^')
-    expect(rendered).toContain('oldText')
   })
 
   test('INV-13 import 了没授权的模块：一行都不执行，回要补的命名空间', async () => {
@@ -518,7 +515,7 @@ export default 1`)
   })
 })
 
-describe('门', () => {
+describe('门与时间线', () => {
   const notes: MountedCapabilityModule = {
     resident: true,
     surface: { specifier: 'velar:notes', namespace: 'notes', methods: ['list'], declarations: "declare module 'velar:notes' {\n  export function list(input: { limit: number }): Promise<{ items: string[] }>\n}", template: "// velar:notes 的代码模版\nimport { list } from 'velar:notes'\n\nasync function firstTwo() {\n  return (await list({ limit: 2 })).items\n}" },
@@ -527,53 +524,304 @@ describe('门', () => {
     resident: false,
     surface: { specifier: 'velar:extra', namespace: 'extra', methods: ['count'], declarations: "declare module 'velar:extra' {\n  /** 数一数有几个字。 */\n  export function count(input: { of: string }): Promise<{ n: number }>\n}", template: "// velar:extra 的代码模版\nimport { count } from 'velar:extra'" },
   }
-  const modules = [notes, extra]
-  const capabilities = createCapabilityPort({
-    notes: { list: async (input) => ({ items: Array.from({ length: (input as { limit: number }).limit }, (_, index) => `n${index}`) }) },
-    extra: { count: async (input) => ({ n: String((input as { of: string }).of).length }) },
-  })
+  const disk: MountedCapabilityModule = {
+    resident: true,
+    surface: { specifier: 'velar:disk', namespace: 'disk', methods: ['write', 'remove'], declarations: "declare module 'velar:disk' {\n  export function write(input: { path: string; text: string }): Promise<{ ok: boolean }>\n  export function remove(input: { path: string }): Promise<{ ok: boolean }>\n}", template: '// velar:disk 的代码模版' },
+  }
+  /** 一个空间：notes、extra 两件，给了 workspace 就再挂一件往那个目录里写文件的 disk，并给它打标记。 */
+  const spaceOf = async (options: { workspace?: string; retainBytes?: number } = {}): Promise<CodeSurfaceSpacePort> => {
+    const root = options.workspace
+    const operations: CapabilityOperationTable = {
+      notes: { list: async (input) => ({ items: Array.from({ length: (input as { limit: number }).limit }, (_, index) => `n${index}`) }) },
+      extra: { count: async (input) => ({ n: String((input as { of: string }).of).length }) },
+    }
+    const timeline: CodeSurfaceSpacePort['timeline'] = { directory: await temporary('cs-timeline-') }
+    if (options.retainBytes) timeline.retainBytes = options.retainBytes
+    if (root === undefined) return { modules: [notes, extra], capabilities: createCapabilityPort(operations), timeline }
+    timeline.workspace = root
+    const withDisk: CapabilityOperationTable = {
+      ...operations,
+      disk: {
+        write: async (input) => {
+          const { path, text } = input as { path: string; text: string }
+          await mkdir(dirname(join(root, path)), { recursive: true })
+          await writeFile(join(root, path), text)
+          return { ok: true }
+        },
+        remove: async (input) => {
+          await rm(join(root, (input as { path: string }).path), { force: true })
+          return { ok: true }
+        },
+      },
+    }
+    return { modules: [notes, extra, disk], capabilities: createCapabilityPort(withDisk), timeline }
+  }
   const gateOf = () => createCodeProgramGate({ checker: codeProgramChecker, runner: nodeSubprocessCodeRunner })
-  const run = (gate: ReturnType<typeof gateOf>, sessionId: string, program: { source?: string; edits?: CodeProgramEdit[] }) =>
-    gate.run({ sessionId, program, modules, capabilities, timeoutMs: 20_000 })
+  const exec = (gate: CodeProgramGateApi, sessionId: string, space: CodeSurfaceSpacePort, steps: ScriptStepInput[]) =>
+    gate.exec({ sessionId, steps, space, timeoutMs: 20_000 })
+  /** 只有一步的回执里，段头下面的那部分。 */
+  const bodyOf = (reply: CodeGateReply): string => reply.text.split('\n').slice(1).join('\n')
   const counting = (of: string, lease = '') => `import { count } from 'velar:extra'${lease}\nconst { n } = await count({ of: '${of}' })\nexport default n`
 
-  test('INV-24 门的说明里有写程序的规矩、常驻模块的完整声明、其余模块的方法名（按需模块的声明不在里面）', () => {
-    const text = gateOf().describe(modules)
+  test('INV-24 门的说明里有写脚本的规矩、四个工具怎么用、常驻模块的完整声明、其余模块的方法名（按需模块的声明与代码模版不在里面）', () => {
+    const text = gateOf().describe([notes, extra])
     expect(text).toContain('export default')
+    expect(text).toContain('script:exec')
+    expect(text).toContain('script:history')
     expect(text).toContain('export function list(input: { limit: number })')
     expect(text).toContain('velar:extra：count')
     expect(text).not.toContain('数一数有几个字')
-    // 代码模版不常驻：说明里没有它们，程序要看时自己读。
+    // 代码模版不常驻：说明里没有它们，脚本要看时自己读。
     expect(text).not.toContain('velar:notes 的代码模版')
   })
 
   test('INV-24 头一次 import 按需模块不执行、交回它的完整声明；之后这个会话一直能用；退租后再用静默装回；别的会话各算各的', async () => {
     const gate = gateOf()
-    const first = await run(gate, 's1', { source: counting('abc') })
-    expect(first.outcome.checked).toBe(false)
-    expect(first.text).toContain('这一次没有执行')
+    const space = await spaceOf()
+    const first = await exec(gate, 's1', space, [{ op: 'run', program: counting('abc') }])
+    expect(first.steps[0]?.error?.code).toBe(CodeSurfaceErrorCodes.modulesNeeded)
+    expect(first.text).toContain('这一步没有执行')
     expect(first.text).toContain('数一数有几个字')
-    expect((await run(gate, 's1', { source: counting('abc') })).text).toBe('3')
-    expect((await run(gate, 's1', { source: counting('abcd', " with { lease: 'done' }") })).text).toBe('4')
+    expect(bodyOf(await exec(gate, 's1', space, [{ op: 'run', program: counting('abc') }]))).toBe('3')
+    expect(bodyOf(await exec(gate, 's1', space, [{ op: 'run', program: counting('abcd', " with { lease: 'done' }") }]))).toBe('4')
     // 退租之后又用到：静默装回去再检查一遍，不让模型白跑一轮。
-    expect((await run(gate, 's1', { source: counting('ab') })).text).toBe('2')
-    expect((await run(gate, 's2', { source: counting('ab') })).outcome.checked).toBe(false)
+    expect(bodyOf(await exec(gate, 's1', space, [{ op: 'run', program: counting('ab') }]))).toBe('2')
+    expect((await exec(gate, 's2', space, [{ op: 'run', program: counting('ab') }])).steps[0]?.ok).toBe(false)
     // 空间里没有的模块：说清楚有哪些。
-    const missing = await run(gate, 's1', { source: "import { x } from 'velar:nowhere'\nexport default await x()" })
+    const missing = await exec(gate, 's1', space, [{ op: 'run', program: "import { x } from 'velar:nowhere'\nexport default await x()" }])
     expect(missing.text).toContain('这个空间里没有 velar:nowhere')
   }, 60_000)
 
-  test('INV-24 edits 在同一个会话的上一份程序上改，检查没过的那份也算；诊断带代码帧；会话结束就忘掉上一份', async () => {
+  test('INV-11 在底稿上改，不必整份重写：没过检查的那一步也能当底稿；会话结束也还在，时间线属于空间', async () => {
     const gate = gateOf()
-    const broken = await run(gate, 's1', { source: "import { list } from 'velar:notes'\nconst r = await list({ limit: 2 })\nexport default r.itemz" })
-    expect(broken.text).toContain('typecheck 没过')
+    const space = await spaceOf()
+    const broken = await exec(gate, 's1', space, [{ op: 'run', program: "import { list } from 'velar:notes'\nconst r = await list({ limit: 2 })\nexport default r.itemz" }])
+    expect(broken.steps[0]?.error?.code).toBe(CodeSurfaceErrorCodes.checkFailed)
     expect(broken.text).toContain('export default r.itemz')
-    const fixed = await run(gate, 's1', { edits: [{ oldText: 'r.itemz', newText: 'r.items' }] })
-    expect(fixed.text).toBe('["n0","n1"]')
+    expect(broken.text).toContain('from 填 C1.1')
     gate.forget('s1')
-    const lost = await run(gate, 's1', { edits: [{ oldText: 'r.items', newText: 'r.items.length' }] })
-    expect(lost.text).toContain('程序没跑完（EDIT_FAILED）')
-    expect(lost.text).toContain('没有上一份程序')
+    const fixed = await exec(gate, 's1', space, [{ op: 'run', from: 'C1.1', edits: [{ oldText: 'r.itemz', newText: 'r.items' }] }])
+    expect(bodyOf(fixed)).toBe('["n0","n1"]')
+  }, 60_000)
+
+  test('INV-11 oldText 不唯一、找不到都整组不落；from 指到没有的步骤明确拒绝，不猜', async () => {
+    const gate = gateOf()
+    const space = await spaceOf()
+    await exec(gate, 's1', space, [{ op: 'run', program: 'const a = 1\nconst b = 1\nexport default a + b' }])
+    const notUnique = await exec(gate, 's1', space, [{ op: 'run', from: 'C1.1', edits: [{ oldText: '= 1', newText: '= 2' }] }])
+    expect(notUnique.steps[0]?.error?.code).toBe(CodeSurfaceErrorCodes.editFailed)
+    expect(notUnique.text).toContain('不止一次')
+    const missing = await exec(gate, 's1', space, [{ op: 'run', from: 'C1.1', edits: [{ oldText: '找不到的原文', newText: 'x' }] }])
+    expect(missing.text).toContain('找不到')
+    const noBase = await exec(gate, 's1', space, [{ op: 'run', from: 'C9.9' }])
+    expect(noBase.steps[0]?.error?.code).toBe(CodeSurfaceErrorCodes.refNotFound)
+  }, 60_000)
+
+  test('INV-11 program 与 from 只给一个；edits 要和 from 一起给', async () => {
+    const gate = gateOf()
+    const space = await spaceOf()
+    const both = await exec(gate, 's1', space, [{ op: 'run', program: 'export default 1', from: 'C1.1' }])
+    expect(both.steps[0]?.error?.code).toBe(CodeSurfaceErrorCodes.invalidStep)
+    expect(both.text).toContain('给一个')
+    const loose = await exec(gate, 's1', space, [{ op: 'run', program: 'export default 1', edits: [{ oldText: '1', newText: '2' }] }])
+    expect(loose.text).toContain('edits 要和 from 一起给')
+  }, 60_000)
+
+  test('INV-29 一次调用里写、存、跑：按顺序做，某一步没成就停；存进库的先过检查（要是 JavaScript），同样的内容不存新版本；回执每步一段、开头是步骤号', async () => {
+    const gate = gateOf()
+    const space = await spaceOf()
+    const pick = "import { list } from 'velar:notes'\nexport async function pick(n) { return (await list({ limit: n })).items }"
+    const reply = await exec(gate, 's1', space, [
+      { op: 'write', path: 'lib/pick.js', program: pick },
+      { op: 'run', program: "import { input } from 'velar:program'\nimport { pick } from './lib/pick.js'\nexport default (await pick(input.n)).join(',')", input: { n: 3 } },
+      { op: 'write', path: 'lib/pick.js', program: pick },
+      { op: 'write', path: 'lib/typed.js', program: 'export const x: number = 1' },
+      { op: 'run', program: 'export default 1' },
+    ])
+    expect(reply.call).toBe('C1')
+    expect(reply.steps.map((step) => [step.ref, step.ok])).toEqual([['C1.1', true], ['C1.2', true], ['C1.3', true], ['C1.4', false]])
+    expect(reply.steps[0]?.saved).toBe('lib/pick.js@1')
+    expect(reply.text).toContain('── C1.2 run 直接跑的代码 ──\nn0,n1,n2')
+    expect(reply.text).toContain('和 lib/pick.js@1 一模一样，没存新版本')
+    expect(reply.steps[3]?.error?.code).toBe(CodeSurfaceErrorCodes.checkFailed)
+    expect(reply.text).toContain('要是 JavaScript')
+    expect(reply.text).toContain('后面 1 步没做')
+    // 路径不合规矩、缺字段：这一步不做，说清楚怎么写。
+    const invalid = await exec(gate, 's1', space, [{ op: 'write', path: '../escape.js', program: 'export default 1' }])
+    expect(invalid.steps[0]?.error?.code).toBe(CodeSurfaceErrorCodes.invalidStep)
+  }, 60_000)
+
+  test('INV-30 每一步的代码、参数、结果都记在时间线上：换一扇门（重启）也还在，history、show、diff 读得到；restore 追加一个同样内容的新版本，run 从之前的一步来时沿用当时的参数', async () => {
+    const space = await spaceOf()
+    await exec(gateOf(), 's1', space, [
+      { op: 'write', path: 'lib/greet.js', program: "// 打招呼\nexport function greet(name) { return 'hi ' + name }" },
+      { op: 'edit', path: 'lib/greet.js', edits: [{ oldText: "'hi '", newText: "'hello '" }] },
+      { op: 'run', program: "import { input } from 'velar:program'\nimport { greet } from './lib/greet.js'\nexport default greet(input.name)", input: { name: 'velar' } },
+    ])
+    // 新的一扇门：时间线从磁盘读回来。
+    const gate = gateOf()
+    const query = { sessionId: 's2', timeline: space.timeline }
+    const history = await gate.history({ ...query, query: {} })
+    expect(history).toContain('别的会话')
+    expect(history).toContain('C1.2 edit lib/greet.js@1 → lib/greet.js@2 · 成功')
+    expect(history).toContain('C1.3 run 直接跑的代码 · input {"name":"velar"} · 成功')
+    const step = await gate.show({ ...query, query: { ref: 'C1.3' } })
+    expect(step).toContain('用到库里的：lib/greet.js@2')
+    expect(step).toContain("import { greet } from './lib/greet.js'")
+    expect(step).toContain('hello velar')
+    expect(await gate.show({ ...query, query: {} })).toContain('lib/greet.js@2 · ')
+    expect(await gate.show({ ...query, query: {} })).toContain('打招呼')
+    const diff = await gate.diff({ ...query, query: { from: 'lib/greet.js@1' } })
+    expect(diff).toContain("-export function greet(name) { return 'hi ' + name }")
+    expect(diff).toContain("+export function greet(name) { return 'hello ' + name }")
+    const restored = await exec(gate, 's2', space, [{ op: 'restore', path: 'lib/greet.js', version: 1 }, { op: 'run', from: 'C1.3' }])
+    expect(restored.steps[0]?.saved).toBe('lib/greet.js@3')
+    // 沿用 C1.3 当时的参数，库用最新版（退回来的 @3）。
+    expect(restored.text).toContain('── C2.2 run from C1.3 ──\nhi velar')
+    expect(await gate.history({ ...query, query: { script: 'lib/greet.js', limit: 2 } })).toContain('更早的还有')
+  }, 60_000)
+
+  test('INV-31 只存哈希不存文件内容：每一步记下改了哪些文件（前后 sha256），.gitignore 忽略的不算；外面改的在下一次调用开头记成外部改动，整份退回之前某一点时认得出', async () => {
+    const workspace = await temporary('cs-workspace-')
+    await writeFile(join(workspace, '.gitignore'), 'build/\n')
+    await writeFile(join(workspace, 'keep.txt'), 'keep')
+    const space = await spaceOf({ workspace })
+    const gate = gateOf()
+    // 写进文件的内容在脚本里现拼，脚本正文与参数里都没有它：时间线里就不该出现它。
+    const first = await exec(gate, 's1', space, [{ op: 'run', program: "import { write } from 'velar:disk'\nconst text = 'Q'.repeat(3) + '-generated-' + (6 * 7)\nawait write({ path: 'src/a.txt', text })\nawait write({ path: 'build/out.txt', text })\nexport default 'ok'" }])
+    const generated = 'QQQ-generated-42'
+    expect(first.steps[0]?.changes).toEqual([{ path: 'src/a.txt', after: createHash('sha256').update(generated).digest('hex') }])
+    expect(first.text).toContain('改了 1 个文件：src/a.txt（新）')
+    expect(await filesContaining(space.timeline.directory, generated)).toEqual([])
+
+    await writeFile(join(workspace, 'keep.txt'), 'changed')
+    const noticed = await exec(gate, 's1', space, [{ op: 'run', program: 'export default 1' }])
+    expect(noticed.text).toContain('工作区被外面改了 1 个文件：keep.txt')
+    expect(await gate.history({ sessionId: 's1', timeline: space.timeline, query: { file: 'keep.txt' } })).toContain('C2 · ')
+
+    // 整份退回 C1 之前的样子：认得出是哪一点。
+    await writeFile(join(workspace, 'keep.txt'), 'keep')
+    await rm(join(workspace, 'src'), { recursive: true, force: true })
+    const back = await exec(gate, 's1', space, [{ op: 'run', program: 'export default 1' }])
+    expect(back.text).toContain('现在工作区和 C1 开头一模一样')
+    const files = await gate.diff({ sessionId: 's1', timeline: space.timeline, query: { from: 'C1' } })
+    expect(files).toContain('C1 之后 → 现在：改了 1 个文件')
+    expect(files).toContain('删除 src/a.txt')
+  }, 60_000)
+
+  test('INV-32 重放按记录再跑一遍：同一份代码、参数与当时的库版本；跑前核对改前、跑后核对改后，对不上就停；改动已经在了明说不用重放', async () => {
+    const workspace = await temporary('cs-workspace-')
+    const space = await spaceOf({ workspace })
+    const gate = gateOf()
+    await exec(gate, 's1', space, [
+      { op: 'write', path: 'lib/emit.js', program: "import { write } from 'velar:disk'\nexport function emit(name) { return write({ path: 'notes/' + name + '.txt', text: name.toUpperCase() }) }" },
+      { op: 'run', program: "import { input } from 'velar:program'\nimport { emit } from './lib/emit.js'\nawait emit(input.name)\nexport default 'done'", input: { name: 'first' } },
+    ])
+    await exec(gate, 's1', space, [{ op: 'edit', path: 'lib/emit.js', edits: [{ oldText: 'toUpperCase', newText: 'toLowerCase' }] }])
+    // 不小心全撤了：重放回来，用的是当时的库版本（大写），不是后来改的。
+    await rm(join(workspace, 'notes'), { recursive: true, force: true })
+    const replayed = await exec(gate, 's1', space, [{ op: 'replay', step: 'C1.2' }])
+    expect(replayed.steps[0]?.ok).toBe(true)
+    expect(await readFile(join(workspace, 'notes/first.txt'), 'utf8')).toBe('FIRST')
+    const again = await exec(gate, 's1', space, [{ op: 'replay', step: 'C1.2' }])
+    expect(again.steps[0]?.error?.code).toBe(CodeSurfaceErrorCodes.replayMismatch)
+    expect(again.text).toContain('现在已经在了')
+    // 改前的底子变了：不重放，逐个文件说清楚。
+    await writeFile(join(workspace, 'notes/first.txt'), 'other')
+    const drifted = await exec(gate, 's1', space, [{ op: 'replay', step: 'C1.2' }, { op: 'run', program: 'export default 1' }])
+    expect(drifted.text).toContain('notes/first.txt：应当不存在')
+    expect(drifted.steps).toHaveLength(1)
+    // 跑出来和当时不一样（依赖时间）：跑了，但算没成。
+    await exec(gate, 's1', space, [{ op: 'run', program: "import { write } from 'velar:disk'\nawait write({ path: 'clock.txt', text: String(Date.now()) + Math.random() })\nexport default 1" }])
+    await rm(join(workspace, 'clock.txt'), { force: true })
+    const clock = await exec(gate, 's1', space, [{ op: 'replay', step: 'C6.1' }])
+    expect(clock.steps[0]?.error?.code).toBe(CodeSurfaceErrorCodes.replayMismatch)
+    expect(clock.text).toContain('改出来的和当时不一样')
+    // 只有 run 与 replay 能重放。
+    const notRunnable = await exec(gate, 's1', space, [{ op: 'replay', step: 'C1.1' }])
+    expect(notRunnable.steps[0]?.error?.code).toBe(CodeSurfaceErrorCodes.invalidStep)
+  }, 90_000)
+
+  test('INV-32 一段一段地重放：给 from、to 两个调用号，按先后重跑那一段里跑成了、改过文件的每一步；改动已经在了的跳过，不算没成', async () => {
+    const workspace = await temporary('cs-workspace-')
+    const space = await spaceOf({ workspace })
+    const gate = gateOf()
+    const writing = (path: string, text: string) => `import { write } from 'velar:disk'\nawait write({ path: '${path}', text: '${text}' })\nexport default 'ok'`
+    await exec(gate, 's1', space, [{ op: 'run', program: writing('notes/a.txt', 'A') }])
+    await exec(gate, 's1', space, [{ op: 'run', program: writing('notes/b.txt', 'B') }, { op: 'run', program: writing('notes/a.txt', 'A2') }])
+    await exec(gate, 's1', space, [{ op: 'run', program: 'export default 1' }])
+    // 不小心整个目录都没了：从 C1 起按先后重放回来。
+    await rm(join(workspace, 'notes'), { recursive: true, force: true })
+    const replayed = await exec(gate, 's1', space, [{ op: 'replay', from: 'C1' }])
+    expect(replayed.steps.map((step) => [step.ref, step.ok])).toEqual([['C4.1', true], ['C4.2', true], ['C4.3', true]])
+    expect(replayed.text).toContain('── C4.1 replay C1.1 ──')
+    expect(replayed.text).toContain('── C4.3 replay C2.2 ──')
+    expect(await readFile(join(workspace, 'notes/a.txt'), 'utf8')).toBe('A2')
+    expect(await readFile(join(workspace, 'notes/b.txt'), 'utf8')).toBe('B')
+    // 再来一遍：都已经在了，全部跳过；这一段里的重放步骤（C4.x）也一样。
+    const again = await exec(gate, 's1', space, [{ op: 'replay', from: 'C1', to: 'C4' }])
+    expect(again.steps.every((step) => step.ok)).toBe(true)
+    expect(again.text).toContain('C5.1 replay C1.1 ──\nC1.1 改过的文件已经是这一段做完的样子')
+    expect(again.text).toContain('C5.2 replay C2.1 ──\nC2.1 的改动现在已经在了，跳过')
+    // 这一段里没有能重放的：说清楚。
+    const empty = await exec(gate, 's1', space, [{ op: 'replay', from: 'C3', to: 'C3' }])
+    expect(empty.steps[0]?.error?.code).toBe(CodeSurfaceErrorCodes.invalidStep)
+    expect(empty.text).toContain('没什么可重放')
+  }, 90_000)
+
+  test('INV-33 脚本库：相对路径 import 库里的脚本，每个只跑一次；检查连带检查，诊断带那个脚本的路径与代码帧；出错报库里的行号；别人写的代码 import 的能力模块直接给上；循环 import 说清楚', async () => {
+    const gate = gateOf()
+    const space = await spaceOf()
+    const reply = await exec(gate, 's1', space, [
+      { op: 'write', path: 'lib/base.js', program: "console.log('base 跑了一次')\nexport const unit = 2" },
+      { op: 'write', path: 'lib/twice.js', program: "import { unit } from './base.js'\nexport const twice = (n) => n * unit" },
+      { op: 'write', path: 'lib/boom.js', program: "export function boom() {\n  throw new Error('炸了')\n}" },
+      { op: 'run', program: "import { unit } from './lib/base.js'\nimport { twice } from './lib/twice.js'\nexport default twice(unit)" },
+    ])
+    expect(reply.steps.every((step) => step.ok)).toBe(true)
+    expect(reply.text).toContain('── console.log ──\nbase 跑了一次')
+    expect(reply.text.match(/base 跑了一次/gu)).toHaveLength(1)
+    const failed = await exec(gate, 's1', space, [{ op: 'run', program: "import { boom } from './lib/boom.js'\n\nboom()" }])
+    expect(failed.text).toContain('第 3 行')
+    expect(failed.text).toContain('出在库里的 lib/boom.js 第 2 行')
+
+    // 库里的脚本有错：诊断带着它的路径，代码帧取自它。
+    const modules = { 'lib/a.js': 'export function f() { return missingName }' }
+    const checked = codeProgramChecker.check({ source: "import { f } from './lib/a.js'\nexport default f()", granted, modules })
+    if (checked.ok) throw new Error('应当没通过检查')
+    expect(checked.diagnostics[0]?.file).toBe('lib/a.js')
+    expect(renderDiagnostics("import { f } from './lib/a.js'\nexport default f()", checked.diagnostics, modules)).toContain('1 | export function f() { return missingName }')
+
+    // s1 写的脚本用了按需模块；s2 头一次用它，不用先读声明。
+    await exec(gate, 's1', space, [{ op: 'write', path: 'lib/len.js', program: counting('x').replace('export default n', 'export const len = n') }])
+    await exec(gate, 's1', space, [{ op: 'write', path: 'lib/len.js', program: counting('x').replace('export default n', 'export const len = n') }])
+    const quiet = await exec(gate, 's2', space, [{ op: 'run', program: "import { len } from './lib/len.js'\nexport default len" }])
+    expect(bodyOf(quiet)).toBe('1')
+
+    await exec(gate, 's1', space, [
+      { op: 'write', path: 'lib/ping.js', program: 'export const ping = 1' },
+      { op: 'write', path: 'lib/pong.js', program: "import { ping } from './ping.js'\nexport const pong = ping" },
+      { op: 'write', path: 'lib/ping.js', program: "import { pong } from './pong.js'\nexport const ping = 1\nexport const echo = () => pong" },
+    ])
+    const cycle = await exec(gate, 's1', space, [{ op: 'run', program: "import { ping } from './lib/ping.js'\nexport default ping" }])
+    expect(cycle.text).toContain('循环 import')
+  }, 90_000)
+
+  test('INV-34 存的东西超过保留上限时从最旧的调用清起：结果正文、参数与标记清掉，代码留着；清掉参数的步骤不能重放，run 要沿用参数时要求重给', async () => {
+    const gate = gateOf()
+    const space = await spaceOf({ retainBytes: 1 })
+    await exec(gate, 's1', space, [{ op: 'run', program: "import { input } from 'velar:program'\nexport default input.x", input: { x: 7 } }])
+    await exec(gate, 's1', space, [{ op: 'run', program: 'export default 2' }])
+    const query = { sessionId: 's1', timeline: space.timeline }
+    const shown = await gate.show({ ...query, query: { ref: 'C1.1' } })
+    expect(shown).toContain('时间线的保留上限清掉了：结果正文、参数（不能再重放）')
+    expect(shown).toContain('── 代码 ──')
+    expect(await gate.history({ ...query, query: {} })).toContain('参数已清')
+    const replay = await exec(gate, 's1', space, [{ op: 'replay', step: 'C1.1' }])
+    expect(replay.text).toContain('参数已经被时间线的保留上限清掉了')
+    const reuse = await exec(gate, 's1', space, [{ op: 'run', from: 'C1.1' }])
+    expect(reuse.text).toContain('当时的参数已经被时间线的保留上限清掉了')
+    expect(bodyOf(await exec(gate, 's1', space, [{ op: 'run', from: 'C1.1', input: { x: 8 } }]))).toBe('8')
   }, 60_000)
 })
 
@@ -592,37 +840,45 @@ describe('门的工具', () => {
       },
     },
   })
-  const contextOf = (modalities: readonly string[]) => ({
+  const gate = createCodeProgramGate({ checker: codeProgramChecker, runner: nodeSubprocessCodeRunner })
+  const contextOf = async (modalities: readonly string[]): Promise<CodeSurfaceToolContext> => ({
     abortSignal: new AbortController().signal,
     sessionId: 's1',
-    gate: createCodeProgramGate({ checker: codeProgramChecker, runner: nodeSubprocessCodeRunner }),
-    space: { modules: [pictures], capabilities },
+    gate,
+    space: { modules: [pictures], capabilities, timeline: { directory: await temporary('cs-timeline-') } },
     getSupportedModelInputModalities: () => modalities,
   })
-  const tool = codeSurfaceTools[CodeSurfaceToolNames.runProgram]
 
-  test('INV-25 模型面上只有 program:run 一个工具：常驻、回执不卸载、不并发，说明只讲入参怎么填', () => {
-    expect(Object.keys(codeSurfaceTools)).toEqual(['program:run'])
-    expect(tool.category).toBe('program')
-    expect(tool.outputInline).toBe(true)
-    expect(tool.exposure).toMatchObject({ tier: 'essential', alwaysResident: true })
-    expect(tool.isConcurrencySafe?.({ program: 'export default 1' })).toBe(false)
-    expect(tool.description.length).toBeLessThanOrEqual(1_800)
+  test('INV-25 模型面上是四个工具：script:exec 改东西，另外三个只读时间线；都常驻、回执不卸载，说明只讲入参怎么填', () => {
+    expect(Object.keys(codeSurfaceTools)).toEqual(['script:exec', 'script:history', 'script:show', 'script:diff'])
+    for (const tool of Object.values(codeSurfaceTools)) {
+      expect(tool.category).toBe('script')
+      expect(tool.outputInline).toBe(true)
+      expect(tool.exposure).toMatchObject({ tier: 'essential', alwaysResident: true })
+      expect(tool.description.length).toBeLessThanOrEqual(1_800)
+    }
+    expect(codeSurfaceTools[CodeSurfaceToolNames.exec].isConcurrencySafe?.({ steps: [] })).toBe(false)
+    expect(codeSurfaceTools[CodeSurfaceToolNames.history].isConcurrencySafe?.({})).toBe(true)
     expect(createCodeSurfaceKernelModule().manifest.id).toBe(CodeSurfaceModId)
   })
 
-  test('INV-25 回执的文字与交给模型的内容块逐字一致，图跟在后面、各带一行说明；模型不收图时图不放进去、只说一声', async () => {
-    const program = "import { show } from 'velar:pics'\nexport default await show({ n: 2 })"
-    const seen = await tool.execute({ program }, contextOf(['text', 'image'])) as { result: string; modelContent: Array<{ type: string; text?: string }> }
+  test('INV-25 回执的文字与交给模型的内容块逐字一致，图跟在后面、各带一行说明；模型不收图时图不放进去、只说一声；只读的三个交回一块文字', async () => {
+    const tool = codeSurfaceTools[CodeSurfaceToolNames.exec]
+    const steps = [{ op: 'run', program: "import { show } from 'velar:pics'\nexport default await show({ n: 2 })" }]
+    const seen = await tool.execute({ steps }, await contextOf(['text', 'image'])) as { result: string; modelContent: Array<{ type: string; text?: string }> }
     const texts = seen.modelContent.filter((part) => part.type === 'text').map((part) => part.text)
     expect(seen.result).toBe(texts.join('\n').trim())
-    expect(texts[0]).toBe('{"shown":2}')
+    expect(texts[0]).toBe('── C1.1 run 直接跑的代码 ──\n{"shown":2}')
     expect(seen.modelContent.map((part) => part.type)).toEqual(['text', 'text', 'image-data', 'text', 'image-data'])
     expect(texts.slice(1)).toEqual(['第 1 张', '第 2 张'])
 
-    const blind = await tool.execute({ program }, contextOf(['text'])) as { result: string; modelContent: Array<{ type: string }> }
+    const blind = await tool.execute({ steps }, await contextOf(['text'])) as { result: string; modelContent: Array<{ type: string }> }
     expect(blind.modelContent.map((part) => part.type)).toEqual(['text'])
     expect(blind.result).toContain('当前模型不收图')
+
+    const shown = await codeSurfaceTools[CodeSurfaceToolNames.show].execute({}, await contextOf(['text'])) as { result: string; modelContent: Array<{ type: string; text?: string }> }
+    expect(shown.modelContent).toEqual([{ type: 'text', text: shown.result }])
+    expect(shown.result).toContain('脚本库是空的')
   }, 60_000)
 })
 
@@ -669,7 +925,7 @@ describe('程序停下、模版与回执', () => {
     expect(shown).toContain('── export text ──\na\nb')
     // 没跑完：第一行是失败码、行号与说明，已经做完的调用跟在后面。
     const failed = renderProgramResult({ failed: { code: 'PROGRAM_ERROR', message: 'boom', line: 3 }, completed: [{ call: 'demo.read', ok: true, times: 2 }] })
-    expect(failed.split('\n')[0]).toBe('程序没跑完（PROGRAM_ERROR，第 3 行）：boom')
+    expect(failed.split('\n')[0]).toBe('脚本没跑完（PROGRAM_ERROR，第 3 行）：boom')
     expect(failed).toContain('demo.read ×2')
   }, 20_000)
 })

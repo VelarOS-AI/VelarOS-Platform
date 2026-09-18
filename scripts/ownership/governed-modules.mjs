@@ -377,7 +377,7 @@ export const GovernedModules = [
   {
     directory: 'code-surface',
     name: '@velaros-ai/code-surface',
-    // 只有一个工具：门本身（program:run）。模型交一段程序就用它，别的能力都在程序里 import
+    // 四个工具：script:exec 跑脚本、存脚本、重放，另外三个（history、show、diff）只读时间线。别的能力都在脚本里 import
     toolsFile: 'src/impl/CodeSurfaceTools.ts',
     toolDefiner: 'defineCodeSurfaceTool',
     contract: 'src/contract',
@@ -389,16 +389,18 @@ export const GovernedModules = [
     // 根入口起子进程、跑编译器，只给 Node；渲染进程只能加载可移植数据
     browserSafeEntries: ['contracts.ts'],
     layers: [
-      // 门在模型面上的那一个工具，与把它挂进内核的模块
+      // 门在模型面上的四个工具，与把它们挂进内核的模块
       ['CodeSurfaceTools.ts'],
-      // 模型写程序的那扇门：按会话记导入与上一份程序，编给模型的说明与回执
+      // 模型写脚本的那扇门：按会话记导入，按空间开时间线，编给模型的说明
       ['CodeProgramGate.ts'],
-      // 会话编排：查体量、检查、执行、编结果
-      ['CodeSurfaceSession.ts'],
-      // 执行前的检查，与隔离里的执行；两者互不相干
-      ['CodeProgramChecker.ts', 'NodeSubprocessCodeRunner.ts'],
-      // 能力那一侧：把空间交来的操作表接成端口。不认识任何一件具体能力
-      ['CapabilityOperationPort.ts'],
+      // 办一次 exec（按顺序做每一步、记进时间线），与读时间线给模型看（history、show、diff）
+      ['ScriptExecution.ts', 'ScriptTimelineViews.ts'],
+      // 办一段脚本：查体量、检查、执行、编结果；一个空间的时间线：日志、脚本库、标记
+      ['CodeSurfaceSession.ts', 'ScriptTimeline.ts'],
+      // 执行前的检查、隔离里的执行、给工作区打标记；三者互不相干
+      ['CodeProgramChecker.ts', 'NodeSubprocessCodeRunner.ts', 'WorkspaceMarkers.ts'],
+      // 能力那一侧：把空间交来的操作表接成端口，不认识任何一件具体能力；时间线落盘
+      ['CapabilityOperationPort.ts', 'TimelineStorage.ts'],
     ],
     card: 'MODULE.md',
     invariants: 'spec/invariants.md',

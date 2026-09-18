@@ -65,7 +65,7 @@ export function fitValueToBudget(value: unknown, notices: CodeCallNotice[]): unk
   notices.push({
     call: 'export',
     action: 'truncated',
-    detail: `导出的值 ${text.length} 字符超过上限 ${CodeSurfaceLimits.valueChars}，前 ${kept.dropped} 字符省略。下次在程序里先看大小、筛好了再导出。`,
+    detail: `导出的值 ${text.length} 字符超过上限 ${CodeSurfaceLimits.valueChars}，前 ${kept.dropped} 字符省略。下次在脚本里先看大小、筛好了再导出。`,
   })
   return kept.text
 }
@@ -153,7 +153,7 @@ export function fitAttachmentsToBudget(attachments: readonly CodeAttachment[], n
     notices.push({
       call: 'program',
       action: 'truncated',
-      detail: `这次程序交了 ${attachments.length} 张图，只给了前 ${kept.length} 张（一次最多 ${CodeSurfaceLimits.images} 张）。剩下的分几次程序看，看完一张先记下要点再看下一张。`,
+      detail: `这次脚本交了 ${attachments.length} 张图，只给了前 ${kept.length} 张（一次最多 ${CodeSurfaceLimits.images} 张）。剩下的分几次看，看完一张先记下要点再看下一张。`,
     })
   }
   return kept

@@ -1,7 +1,7 @@
 /** 根入口：给 Node 宿主用；起隔离进程、跑 TypeScript 检查，都要 Node。 */
 
-export type { CodeSurfaceErrorCode, CodeSurfaceToolName } from './contract/constants.js'
-export { CodeSurfaceDiagnosticCodes, CodeSurfaceErrorCodes, CodeSurfaceKernelModuleVersion, CodeSurfaceLimits, CodeSurfaceModId, CodeSurfaceToolCategoryId, CodeSurfaceToolNames } from './contract/constants.js'
+export type { CodeSurfaceErrorCode, CodeSurfaceToolName, ScriptDiffKind, ScriptStepOp } from './contract/constants.js'
+export { CodeSurfaceDiagnosticCodes, CodeSurfaceErrorCodes, CodeSurfaceKernelModuleVersion, CodeSurfaceLimits, CodeSurfaceModId, CodeSurfaceToolCategoryId, CodeSurfaceToolNames, ScriptDiffKinds, ScriptStepOps } from './contract/constants.js'
 export type { CodeSurfaceCapabilityService, CodeSurfaceTool, CodeSurfaceToolCollection } from './contract/provides.js'
 export type {
   CodeCapabilityCall,
@@ -10,6 +10,7 @@ export type {
   CodeRunnerApi,
   CodeSurfaceEventSink,
   CodeSurfaceSpacePort,
+  CodeSurfaceTimelinePort,
   CodeSurfaceToolContext,
   CodeSurfaceToolContextResolver,
   CreateCodeSurfaceKernelModuleOptions,
@@ -41,8 +42,18 @@ export type {
   GrantedModule,
   MountedCapabilityModule,
   ProgramImport,
+  ScriptFileChange,
 } from './types/code-surface.js'
-export type { CodeGateReply, CodeGateRunInput } from './types/gate.js'
+export type {
+  CodeGateExecInput,
+  CodeGateQuery,
+  CodeGateReply,
+  ScriptDiffInput,
+  ScriptHistoryInput,
+  ScriptShowInput,
+  ScriptStepInput,
+  ScriptStepReport,
+} from './types/gate.js'
 export type {
   CapabilityNamespaceOperations,
   CapabilityOperation,

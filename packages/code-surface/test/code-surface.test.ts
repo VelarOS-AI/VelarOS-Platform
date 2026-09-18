@@ -1,4 +1,4 @@
-/** utils 的单元测试：预算裁剪、体量判定、手滑判据、包装约定。不起隔离进程。 */
+/** utils 的单元测试：预算裁剪、体量判定、手滑判据、模块改写、底稿编辑、时间线的引用、逐行差量、工作区标记、重放核对。不起隔离进程。 */
 
 import { describe, expect, test } from 'bun:test'
 
@@ -6,10 +6,15 @@ import { CodeSurfaceErrorCodes, CodeSurfaceLimits } from '../src/contract/consta
 import { enforceResultBudget, fitJournalToBudget, fitLogsToBudget, fitValueToBudget } from '../src/utils/budget'
 import { isTypeScriptOnlySyntax } from '../src/utils/compiler'
 import { applyProgramEdits } from '../src/utils/edit'
-import { readProgramImports, rewriteModuleForIsolate } from '../src/utils/module-form'
+import { unifiedLineDiff } from '../src/utils/line-diff'
+import { buildMarkerTree, diffFileMaps, diffMarkerTrees, markerFiles } from '../src/utils/markers'
+import { readModuleSpecifiers, readProgramImports, rewriteModuleForIsolate } from '../src/utils/module-form'
 import { keepTail, readCapabilityNamespace } from '../src/utils/program'
+import { checkScriptPath, parseTimelineRef, resolveLibraryImport } from '../src/utils/refs'
+import { replayPostMismatches, replayPreMismatches } from '../src/utils/replay'
 import { describeProgramOversize } from '../src/utils/result'
 import { describeChildExit } from '../src/utils/runner-bridge'
+import { markerAt, selectHistory } from '../src/utils/timeline'
 import { CodeSurfaceTuning } from '../src/utils/tuning'
 
 void describe('预算裁剪', () => {
@@ -116,12 +121,14 @@ void describe('子进程崩溃判读', () => {
 })
 
 void describe('体量判定', () => {
-  test('源码与 blobs 各自看自己的上限，没超返回 null', () => {
+  test('源码看自己的上限，blobs 与 input 合在一起看；没超返回 null', () => {
     expect(describeProgramOversize('return 1', undefined)).toBeNull()
-    expect(describeProgramOversize('x'.repeat(CodeSurfaceLimits.sourceChars + 1), undefined)).toContain('程序正文')
+    expect(describeProgramOversize('x'.repeat(CodeSurfaceLimits.sourceChars + 1), undefined)).toContain('脚本正文')
     expect(
       describeProgramOversize('return 1', { a: 'x'.repeat(CodeSurfaceLimits.blobChars + 1) })
-    ).toContain('blobs 合计')
+    ).toContain('blobs 加 input 合计')
+    const half = 'x'.repeat(CodeSurfaceLimits.blobChars / 2)
+    expect(describeProgramOversize('return 1', { a: half }, { b: half })).toContain('blobs 加 input 合计')
   })
 
   test('超限的说明要给出下一步，不是只说「太大了」', () => {
@@ -183,7 +190,7 @@ void describe('模块形态', () => {
   })
 })
 
-void describe('在上一份程序上改', () => {
+void describe('在底稿上改', () => {
   test('oldText 唯一时落得下去；多处改动从后往前落，偏移不会互相挪动', () => {
     const previous = 'const a = 1\nconst b = 2\nreturn a + b'
     const applied = applyProgramEdits(previous, [
@@ -209,5 +216,149 @@ void describe('在上一份程序上改', () => {
     expect('failed' in missing && missing.failed).toContain('第 2 处')
     const empty = applyProgramEdits('const a = 1', [{ oldText: '', newText: 'x' }])
     expect('failed' in empty && empty.failed).toContain('oldText 是空的')
+  })
+})
+
+void describe('库里的脚本改写', () => {
+  test('相对 import 落到库里的路径、等它跑完；能力模块照旧同步取桩', () => {
+    const source = ["import { read } from 'velar:demo'", "import { parse } from './util.js'", "import * as all from '../shared/all.js'", 'export default parse(read)'].join('\n')
+    const lines = rewriteModuleForIsolate(source, { importer: 'lib/tools/main.js' }).split('\n')
+    expect(lines[0]).toContain('const { read } = __velar("velar:demo")')
+    expect(lines[1]).toBe('const { parse } = (await __import("lib/tools/util.js"));')
+    expect(lines[2]).toBe('const all = (await __import("lib/shared/all.js"));')
+    expect(readModuleSpecifiers(source)).toEqual(['velar:demo', './util.js', '../shared/all.js'])
+  })
+
+  test('转出去的就地取出来、末尾登记；export * 不转 default；库里的脚本总是交整个导出对象', () => {
+    const source = ["export { parse as read } from './util.js'", "export * from './more.js'", "export * as ns from 'velar:demo'", 'export const x = 1'].join('\n')
+    const output = rewriteModuleForIsolate(source, { importer: 'lib/index.js', library: true })
+    const lines = output.split('\n')
+    expect(lines[0]).toBe('const __exports = {}; const __reexport0 = (await __import("lib/util.js"));')
+    expect(lines[1]).toBe('const __reexport1 = (await __import("lib/more.js"));')
+    expect(lines[2]).toBe('const __reexport2 = __velar("velar:demo");')
+    expect(lines[4]).toContain("if (name !== 'default') __exports[name] = value;")
+    expect(lines[4]).toContain('__exports["read"] = __reexport0["parse"];')
+    expect(lines[4]).toContain('__exports["ns"] = __reexport2;')
+    expect(lines[4].endsWith('return __exports;')).toBe(true)
+  })
+
+  test('跨几行的 import 换完补足换行，后面每一行的行号都不挪', () => {
+    const source = ['import {', '  read,', '  write,', "} from 'velar:demo'", 'const r = await read({})', 'export default r'].join('\n')
+    const lines = rewriteModuleForIsolate(source).split('\n')
+    expect(lines[0]).toContain('const { read, write } = __velar("velar:demo");')
+    expect(lines[4]).toBe('const r = await read({})')
+    expect(lines[5]).toBe('__exports.default = r;')
+  })
+})
+
+void describe('时间线的引用', () => {
+  test('调用、步骤、脚本（带不带版本）、now 各自认得出；认不出的说清楚怎么写', () => {
+    expect(parseTimelineRef('C14')).toEqual({ kind: 'call', call: 14 })
+    expect(parseTimelineRef('C14.2')).toEqual({ kind: 'step', call: 14, step: 2 })
+    expect(parseTimelineRef('lib/x.js')).toEqual({ kind: 'script', path: 'lib/x.js' })
+    expect(parseTimelineRef('lib/x.js@3')).toEqual({ kind: 'script', path: 'lib/x.js', version: 3 })
+    expect(parseTimelineRef('now')).toEqual({ kind: 'now' })
+    expect(parseTimelineRef('C14.x')).toContain('引用写成调用 C14')
+  })
+
+  test('脚本路径：相对、/ 分段、以 .js 结尾，每段不以点开头；相对 import 走不出库根', () => {
+    expect(checkScriptPath('lib/changelog.js')).toBeNull()
+    expect(checkScriptPath('lib/changelog.ts')).toContain('.js 结尾')
+    expect(checkScriptPath('../x.js')).toContain('不合规矩')
+    expect(checkScriptPath('.hidden.js')).toContain('不合规矩')
+    expect(checkScriptPath(`${'a'.repeat(CodeSurfaceLimits.scriptPathChars)}.js`)).toContain('太长')
+    expect(resolveLibraryImport(undefined, './lib/x.js')).toBe('lib/x.js')
+    expect(resolveLibraryImport('lib/a/b.js', '../c.js')).toBe('lib/c.js')
+    expect(resolveLibraryImport('lib/a.js', '../../x.js')).toBeNull()
+  })
+})
+
+void describe('逐行差量', () => {
+  test('和 git diff 一个样子：改动处前后带上下文，离得远的分成两块；一样时是空串', () => {
+    const before = Array.from({ length: 12 }, (_, index) => `line ${index + 1}`)
+    const after = [...before]
+    after[1] = 'line 2 changed'
+    after[10] = 'line 11 changed'
+    const diff = unifiedLineDiff(before.join('\n'), after.join('\n'), { from: 'a@1', to: 'a@2' })
+    expect(diff.split('\n').slice(0, 2)).toEqual(['--- a@1', '+++ a@2'])
+    expect(diff).toContain('@@ -1,5 +1,5 @@')
+    expect(diff).toContain('-line 2\n+line 2 changed')
+    expect(diff.match(/^@@/gmu)).toHaveLength(2)
+    expect(unifiedLineDiff('same', 'same', { from: 'a', to: 'b' })).toBe('')
+  })
+})
+
+void describe('工作区标记', () => {
+  const nodes = new Map<string, string>()
+  const read = async (hash: string) => nodes.get(hash)
+  const mark = (files: Record<string, string>) => {
+    const built = buildMarkerTree(new Map(Object.entries(files)))
+    for (const [hash, text] of built.nodes) nodes.set(hash, text)
+    return built.marker
+  }
+
+  test('内容相同标记就相同；树里只有哈希，读回来的文件表和原来一样', async () => {
+    const files = { 'a.txt': 'h1', 'src/b.ts': 'h2', 'src/deep/c.ts': 'h3' }
+    const marker = mark(files)
+    expect(mark({ 'src/deep/c.ts': 'h3', 'a.txt': 'h1', 'src/b.ts': 'h2' })).toBe(marker)
+    expect(Object.fromEntries(await markerFiles(marker, read))).toEqual(files)
+  })
+
+  test('两棵树之间改了哪些文件：新增、删除、改了，文件换成目录两边都照记；和按文件表比出来的一样', async () => {
+    const before = { 'a.txt': 'h1', 'src/b.ts': 'h2', 'x': 'hx' }
+    const after = { 'a.txt': 'h1-new', 'src/c.ts': 'h3', 'x/inner.txt': 'hi' }
+    const changes = await diffMarkerTrees(mark(before), mark(after), read)
+    expect(changes).toEqual([
+      { path: 'a.txt', before: 'h1', after: 'h1-new' },
+      { path: 'src/b.ts', before: 'h2' },
+      { path: 'src/c.ts', after: 'h3' },
+      { path: 'x', before: 'hx' },
+      { path: 'x/inner.txt', after: 'hi' },
+    ])
+    expect(diffFileMaps(new Map(Object.entries(before)), new Map(Object.entries(after)))).toEqual(changes)
+  })
+})
+
+void describe('重放核对', () => {
+  const change = { path: 'a.txt', before: 'h0', after: 'h1' }
+
+  test('跑之前：改过的文件得还是改前的样子，新建的得还不存在', () => {
+    expect(replayPreMismatches([change], new Map([['a.txt', 'h0']]))).toEqual([])
+    expect(replayPreMismatches([change], new Map([['a.txt', 'h9']]))).toEqual([{ path: 'a.txt', expected: 'h0', actual: 'h9' }])
+    expect(replayPreMismatches([{ path: 'new.txt', after: 'h1' }], new Map([['new.txt', 'h1']]))).toEqual([{ path: 'new.txt', actual: 'h1' }])
+  })
+
+  test('跑之后：多改、少改、改得不一样都算对不上', () => {
+    expect(replayPostMismatches([change], [change])).toEqual([])
+    expect(replayPostMismatches([change], [{ ...change, after: 'h2' }])).toEqual([{ path: 'a.txt', expected: 'h1', actual: 'h2' }])
+    expect(replayPostMismatches([change], [])).toEqual([{ path: 'a.txt', expected: 'h1', actual: 'h0' }])
+    expect(replayPostMismatches([], [{ path: 'extra.txt', after: 'h5' }])).toEqual([{ path: 'extra.txt', actual: 'h5' }])
+  })
+})
+
+void describe('时间线挑拣', () => {
+  const view = (call: number, marker: string, steps: Array<{ step: number; marker?: string; path?: string; changes?: Array<{ path: string; after?: string }> }>) => ({
+    record: { t: 'call' as const, call, session: 's1', at: 0, marker },
+    steps: steps.map((step) => ({ t: 'step' as const, call, op: 'run' as const, at: 0, ms: 0, ok: true, ...step })),
+  })
+  const views = [
+    view(1, 'm0', [{ step: 1, marker: 'm1', changes: [{ path: 'a.txt', after: 'h' }] }, { step: 2, path: 'lib/x.js' }]),
+    view(2, 'm1', [{ step: 1 }, { step: 2, marker: 'm2', changes: [{ path: 'b.txt', after: 'h' }] }]),
+  ]
+
+  test('某个时间点的标记：从那次调用开头起，顺着每一步做完时的标记走', () => {
+    expect(markerAt(views, 1)).toBe('m1')
+    expect(markerAt(views, 1, 1)).toBe('m1')
+    expect(markerAt(views, 2, 1)).toBe('m1')
+    expect(markerAt(views, 2)).toBe('m2')
+    expect(markerAt(views, 3)).toBeUndefined()
+  })
+
+  test('按文件、按脚本筛；只留最近的几条，更早的数一数', () => {
+    expect(selectHistory(views, { file: 'b.txt', limit: 10 }).calls.map(({ view, steps }) => [view.record.call, steps.map((step) => step.step)])).toEqual([[2, [2]]])
+    expect(selectHistory(views, { script: 'lib/x.js', limit: 10 }).calls).toHaveLength(1)
+    const recent = selectHistory(views, { limit: 2 })
+    expect(recent.omitted).toBe(2)
+    expect(recent.calls.map(({ view, steps }) => [view.record.call, steps.length])).toEqual([[2, 2]])
   })
 })

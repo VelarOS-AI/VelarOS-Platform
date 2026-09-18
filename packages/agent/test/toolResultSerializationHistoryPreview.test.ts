@@ -87,10 +87,12 @@ describe('history input omission metadata', () => {
     expect(compactToolInputForModel({ widget_code: source.repeat(2) }).widget_code).toBeUndefined()
   })
 
-  test('keeps the program a model sent to program:run, so it can write edits against it next turn', () => {
-    // 门的 edits 要求 oldText 与上一份程序一字不差：程序正文省略掉，模型下一轮就看不见自己写了什么。
+  test('keeps the program a model sent in a script:exec step, so it can write edits against it next turn', () => {
+    // edits 要求 oldText 与底稿一字不差：脚本正文省略掉，模型下一轮就看不见自己写了什么。
     const program = `import { read } from 'velar:project'\n${'const x = 1\n'.repeat(600)}export default x`
     expect(compactToolInputForModel({ program })).toEqual({ program })
+    const steps = [{ op: 'write', path: 'lib/x.js', program }]
+    expect(compactToolInputForModel({ steps })).toEqual({ steps })
     const huge = 'x'.repeat(10_001)
     const shown = compactToolInputForModel({ program: huge }, 'call-1')
     expect(shown.program).toBeUndefined()

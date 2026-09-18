@@ -50,6 +50,7 @@
   "dependencies": {
     "@velaros-ai/core": "workspace:*",
     "@velaros-ai/kernel": "workspace:*",
+    "@velaros-ai/path-rules": "workspace:*",
     "@velaros-ai/tool-contract": "workspace:*",
     "typescript": "^5.7.0",
     "zod": "^4.3.6"

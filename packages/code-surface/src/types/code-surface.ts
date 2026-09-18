@@ -6,47 +6,49 @@
 import type { CodeSurfaceErrorCode } from '../contract/constants.js'
 
 /**
- * 在上一份程序上改的一处：`oldText` 一字不差、在程序里唯一，换成 `newText`；一组全成或全不成、各处不许重叠。
+ * 在底稿上改的一处：`oldText` 一字不差、在底稿里唯一，换成 `newText`；一组全成或全不成、各处不许重叠。
+ * 底稿是一份已有的代码：脚本库里的一版，或者之前某一步跑过、存过的代码。
  *
- * **不用行号，也不用字符位置**——模型看不见自己刚写的那段代码的行号与偏移，让它数是在让它做最不擅长的事。
+ * **不用行号，也不用字符位置**——模型看不见自己写过的代码的行号与偏移，让它数是在让它做最不擅长的事。
  * 不唯一时多带几行上下文，直到唯一为止。
  */
 export interface CodeProgramEdit {
-  /** 要换掉的原文，必须和上一份程序里的字符一模一样（含缩进与换行），且在整份程序里唯一。 */
+  /** 要换掉的原文，必须和底稿里的字符一模一样（含缩进与换行），且在整份底稿里唯一。 */
   oldText: string
   /** 换成什么；空串就是把那一段删掉。 */
   newText: string
 }
 
 /**
- * 模型交上来的一次程序。
+ * 交给会话的一份脚本：正文、它在脚本库里的位置、它会 import 的库里的脚本，以及这一次的参数。
  *
  * `blobs` 是这份契约里最不显然的一格，理由值得写下来：文件内容这类大字符串**不许进 `source`**。
  * 进了就要过三层转义（JSON 字符串 → JS 字符串字面量 → 内容本身），反引号、`${`、反斜杠、引号全是雷。
- * 走 `blobs` 只有一层；程序里按名字引用（`blobs.patch`）。
+ * 走 `blobs` 只有一层；脚本里按名字引用（`blobs.patch`）。
  */
 export interface CodeProgramRequest {
   /**
-   * 程序正文，是一个 **JavaScript ES 模块**：`import` 拿能力，顶层 `await` 直接用，`export default` 交出答案。
+   * 脚本正文，是一个 **JavaScript ES 模块**：`import` 拿能力，顶层 `await` 直接用，`export` 交出答案。
    *
    * 写 JavaScript 而不是 TypeScript，但**照样受类型检查**——类型从生成的声明里推，
    * 字段名拼错、读一个不存在的字段、入参形状错，都在执行之前就被拦下。
    * 不写类型标注换来的是：中间不必转译，因而没有转译带来的行号错位，报给模型的位置永远是它写的那一行。
    */
-  source?: string
-  /**
-   * 在**上一份程序**上改，而不是整份重写。与 `source` 二选一。
-   *
-   * typecheck 挡回去之后整份重发，六十行的程序每迭代一次就是六十行输出，还容易在别处改出新错。
-   * 上一份程序由宿主记着并在 `submit` 时给进来；给不出来时这条会被明确拒绝，让模型改发整份。
-   */
-  edits?: readonly CodeProgramEdit[]
-  /** 大字符串旁路：键是程序里引用的名字，值原样送达，不经任何转义加工。 */
+  source: string
+  /** 这份脚本在脚本库里的路径（`lib/changelog.js`），它里面的相对 import 从这里算；直接跑的代码没有路径，从库根算。 */
+  path?: string
+  /** 它会 import 到的库里的脚本：路径 → 正文。检查与执行都只用这里给的这一份，版本由调用方定。 */
+  modules?: Readonly<Record<string, string>>
+  /** 这一次的参数：脚本里 `import { input } from 'velar:program'` 取，原样送达（JSON 值）。 */
+  input?: unknown
+  /** 大字符串旁路：键是脚本里引用的名字，值原样送达，不经任何转义加工。 */
   blobs?: Record<string, string>
 }
 
 /** typecheck 的一条诊断；行列号已经换算成模型写的那一行。 */
 export interface CodeProgramDiagnostic {
+  /** 出在脚本库里的哪个脚本（它 import 的那些）；出在交上来的这份本身时不给。 */
+  file?: string
   /** 模型源码里的行号，从 1 起。 */
   line: number
   /** 列号，从 1 起。 */
@@ -111,9 +113,26 @@ export interface CompletedCall {
    * 连着调了几次。只有 >1 时才给。
    *
    * 账上只记「调的是谁」不记参数（参数可以很大），所以循环里连着的同名同结果那几笔本来就分不开，
-   * 折成一个数不丢信息，却让「读了 23 个文件之后停在这」一眼看得出来。
+   * 折成一个数不丢信息，却让「读了 23 个文件之后停在这」一眼看得出来。带 changeRef 的不折。
    */
   times?: number
+  /** 能力回执里带的改动引用（`velar:project` 的 edit 给的 changeRef）：撤这次改动凭它。 */
+  changeRef?: string
+  /** 同一份回执里的 changedFiles：这次改动动了哪些文件。 */
+  changedFiles?: string[]
+}
+
+/**
+ * 一步改了工作区里的一个文件：改前、改后各是什么内容的哈希（sha256）。
+ * 只有哈希，不存内容；新建的文件没有 before，删掉的没有 after。
+ */
+export interface ScriptFileChange {
+  /** 相对工作区根目录的路径。 */
+  path: string
+  /** 改前的内容哈希；这一步之前文件不存在时不给。 */
+  before?: string
+  /** 改后的内容哈希；这一步把文件删了时不给。 */
+  after?: string
 }
 
 /**
@@ -206,6 +225,8 @@ export type CodeSurfaceOutcome =
       attachments?: readonly CodeAttachment[]
       /** 程序里的能力 import 与租约意图；宿主据此续租、退租、回收。没有 import 就没有这一格。 */
       imports?: readonly ProgramImport[]
+      /** 这次程序落定的全部能力调用（连着的同名同结果折成一条），时间线记账用；不回给模型。没有调用就没有这一格。 */
+      calls?: readonly CompletedCall[]
     }
 
 /**

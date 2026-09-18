@@ -51,9 +51,9 @@ async function runProgram(message) {
     },
   }
   /**
-   * 模型写的是真 ES 模块，宿主在送进来之前已经把 `import` 改写成 `__velar(...)`、
+   * 模型写的是真 ES 模块，宿主在送进来之前已经把 `import` 改写成 `__velar(...)`（能力模块）与 `await __import(...)`（库里的脚本）、
    * 导出改写成登记到 `__exports` 上、末尾统一交出（模型写的那些行行号一个不变，所以抛错的行号仍对得上）。
-   * 这里只要给出 `__velar`：按模块名取那个命名空间的桩，取不到就抛——
+   * 这里给出 `__velar`：按模块名取那个命名空间的桩，取不到就抛——
    * 能走到这里说明检查已经过了，取不到只可能是宿主授权与改写对不上，该响不该默默给个空对象。
    */
   const templates = { ...message.templates }
@@ -62,7 +62,7 @@ async function runProgram(message) {
     const known = Object.keys(templates)
     throw new Error(`没有 ${String(name)} 的代码模版${known.length > 0 ? `；这个空间有的是 ${known.join('、')}` : ''}。`)
   }
-  const programModule = Object.freeze({ blobs: Object.freeze({ ...message.blobs }), template })
+  const programModule = Object.freeze({ blobs: Object.freeze({ ...message.blobs }), input: message.input, template })
   const resolveModule = (specifier) => {
     // 这次运行本身的环境，恒常授权：我们发明的东西要导入，语言自带的（console）不动。
     if (specifier === 'velar:program') return programModule
@@ -71,10 +71,31 @@ async function runProgram(message) {
     if (!bound) throw new Error(`宿主没有授权模块 ${specifier}，它不该通过检查。`)
     return bound
   }
+  /**
+   * 库里的脚本：每个路径只跑一次，跑完交出它的导出对象，后面再 import 它拿到的是同一个。
+   * 每段末尾带一行 sourceURL，栈里就是 `lib/x.js:行号`，出错时报得出是库里哪个脚本的哪一行。
+   */
+  const librarySources = { ...message.modules }
+  const loaded = new Map()
+  const importModule = (path) => {
+    const known = loaded.get(path)
+    if (known) {
+      if (known.done) return known.promise
+      throw new Error(`库里的 ${path} 被循环 import 了：它还没跑完，又被它 import 的脚本 import 回来。把共用的部分挪进第三个脚本。`)
+    }
+    const body = librarySources[path]
+    if (typeof body !== 'string') throw new Error(`脚本库里没有 ${path}。`)
+    const entry = { done: false, promise: undefined }
+    loaded.set(path, entry)
+    const factory = new Function('__velar', '__import', 'console', `${ProgramPrefix}${body}\n})()\n//# sourceURL=${path}`)
+    entry.promise = factory(resolveModule, importModule, consoleShim)
+    entry.done = true
+    return entry.promise
+  }
   // 能力以**形参**注入而不是全局：全局会被程序自己改掉，形参改不动外面。
   const body = `${ProgramPrefix}${message.source}\n})()`
-  const program = new Function('__velar', 'console', body)
-  return program(resolveModule, consoleShim)
+  const program = new Function('__velar', '__import', 'console', body)
+  return program(resolveModule, importModule, consoleShim)
 }
 
 function safeStringify(value) {
@@ -103,7 +124,7 @@ process.on('message', (message) => {
       ok: false,
       logs,
       error: {
-        message: error?.message ?? String(error),
+        message: `${error?.message ?? String(error)}${describeLibraryFrame(error?.stack)}`,
         // 栈里的行号减掉包装占的那几行，才是模型写的那一行（见 ProgramLineOffset）。
         line: readProgramLine(error?.stack),
       },
@@ -123,7 +144,7 @@ const ProgramPrefix = '"use strict";\nreturn (async () => {\n'
  */
 const ProgramLineOffset = (() => {
   try {
-    new Function('__velar', 'console', `${ProgramPrefix.replace('async ', '')}throw new Error('probe')\n})()`)()
+    new Function('__velar', '__import', 'console', `${ProgramPrefix.replace('async ', '')}throw new Error('probe')\n})()`)()
   } catch (error) {
     const matched = /<anonymous>:(\d+):\d+/u.exec(String(error?.stack))
     if (matched) return Number(matched[1]) - 1
@@ -138,6 +159,18 @@ function readProgramLine(stack) {
   if (!matched) return undefined
   const line = Number(matched[1]) - ProgramLineOffset
   return Number.isInteger(line) && line >= 1 ? line : undefined
+}
+
+/**
+ * 错误出在库里的脚本里时，栈顶那一帧是 `lib/x.js:行号`：换算成库里那个脚本自己的行号，接在说明后面。
+ * 程序自己那一行照旧由 readProgramLine 报（是它调了出错的那个函数）。不是库里的脚本出的错，交回空串。
+ */
+function describeLibraryFrame(stack) {
+  if (typeof stack !== 'string') return ''
+  const matched = /\(?([A-Za-z0-9_][A-Za-z0-9._/-]*\.js):(\d+):\d+\)?/u.exec(stack.split('\n').slice(1).join('\n'))
+  if (!matched) return ''
+  const line = Number(matched[2]) - ProgramLineOffset
+  return Number.isInteger(line) && line >= 1 ? `（出在库里的 ${matched[1]} 第 ${line} 行）` : ''
 }
 
 /**

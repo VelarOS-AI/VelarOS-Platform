@@ -18,9 +18,10 @@ import type {
 } from '../types/code-surface.js'
 import type { GrantedModule } from '../types/code-surface.js'
 import { fitAttachmentsToBudget } from '../utils/budget.js'
+import { foldCalls, settledCall } from '../utils/calls.js'
 import { isRefusal } from '../utils/capability-failure.js'
 import { hasNamedExports, readProgramImports, rewriteModuleForIsolate } from '../utils/module-form.js'
-import { composeProgramResult, describeProgramOversize, resolveProgramSource } from '../utils/result.js'
+import { composeProgramResult, describeProgramOversize } from '../utils/result.js'
 import { CodeSurfaceTuning } from '../utils/tuning.js'
 
 import type { CodeProgramCheckerApi } from './CodeProgramChecker.js'
@@ -29,7 +30,7 @@ import type { CodeProgramCheckerApi } from './CodeProgramChecker.js'
 export interface CodeSurfaceSessionApi {
   /**
    * 办完一次程序：查体量 → typecheck → 隔离里跑 → 把能力调用转给宿主 → 编成给模型看的结果。
-   * `declarations` 是这一轮给模型看的能力声明，检查用的就是它——两边同一份，模型写得出来的就检查得过。
+   * 程序连同它 import 到的库里的脚本一起检查、一起送进隔离；参数与大段文本原样送进 `velar:program`。
    */
   submit(input: {
     program: CodeProgramRequest
@@ -38,11 +39,6 @@ export interface CodeSurfaceSessionApi {
      * **只给授权的**：没授权的模块 `import` 不出来，这道闸是语言给的。
      */
     granted: readonly GrantedModule[]
-    /**
-     * 上一份程序的正文，宿主记着并给进来；模型传 `edits` 时在它上面改。
-     * 不给而模型又传了 `edits`，会被明确拒绝并让它改发整份——**不猜一份出来**。
-     */
-    previousSource?: string
     /** 这个空间挂的各能力模块的代码模版（模块名 → 正文）：程序在 `velar:program` 里用 `template()` 读。不给就是没有模版可读。 */
     templates?: Readonly<Record<string, string>>
     timeoutMs?: number
@@ -61,16 +57,13 @@ class CodeSurfaceSession implements CodeSurfaceSessionApi {
   public async submit(input: {
     program: CodeProgramRequest
     granted: readonly GrantedModule[]
-    previousSource?: string
     templates?: Readonly<Record<string, string>>
     timeoutMs?: number
     signal?: AbortSignal
   }): Promise<CodeSurfaceOutcome> {
-    const resolved = resolveProgramSource(input.program, input.previousSource)
-    if ('failed' in resolved) return { checked: true, result: { failed: resolved.failed } }
-    const source = resolved.source
-
-    const oversized = describeProgramOversize(source, input.program.blobs)
+    const { program } = input
+    const source = program.source
+    const oversized = describeProgramOversize(source, program.blobs, program.input)
     if (isString(oversized)) return {
         checked: true,
         result: { failed: { code: CodeSurfaceErrorCodes.tooLarge, message: oversized } },
@@ -78,10 +71,11 @@ class CodeSurfaceSession implements CodeSurfaceSessionApi {
 
     // 非常驻能力必须先导入才能用：import 了没授权的模块时**一行都不执行**，回它们的签名让模型重写。
     // 这不是失败，是「先拿说明书」——代码面里写错一处的代价是整段程序不执行，不是一次调用失败。
-    const missing = this.checker.missingModules({ source, granted: input.granted })
+    const target = { source, granted: input.granted, path: program.path, modules: program.modules }
+    const missing = this.checker.missingModules(target)
     if (!isEmpty(missing)) return { checked: false, needsModules: missing }
 
-    const checked = this.checker.check({ source, granted: input.granted })
+    const checked = this.checker.check(target)
     if (!checked.ok) return { checked: false, check: checked }
 
     const notices: CodeCallNotice[] = []
@@ -89,7 +83,7 @@ class CodeSurfaceSession implements CodeSurfaceSessionApi {
       notices.push({
         call: 'program',
         action: 'normalized',
-        detail: '这次的程序里有 TypeScript 语法，已经替你剥掉后执行。下次直接写 JavaScript。',
+        detail: '这次的脚本里有 TypeScript 语法，已经替你剥掉后执行。下次直接写 JavaScript。',
       })
     }
     // 执行账：每一笔**已经落定**的能力调用都记一条。中止/超时/抛错时它是模型唯一的「我做到哪了」。
@@ -103,11 +97,14 @@ class CodeSurfaceSession implements CodeSurfaceSessionApi {
     // 交给模型的图：不进程序，也不进文字结果，单独收着，程序跑完跟在结果旁边回去。
     const attachments: CodeAttachment[] = []
     let calls = 0
+    // 隔离里没有模块系统：import 改写成 __velar(...) 与 __import(...)、导出改写成登记，行数一个不变。
+    const modules = Object.fromEntries(Object.entries(program.modules ?? {}).map(([path, text]) => [path, rewriteModuleForIsolate(text, { importer: path, library: true })]))
     const outcome = await this.runner.run(
       {
-        // 隔离里没有模块系统：import 改写成 __velar(...)、export default 改写成 return，行数一个不变。
-        source: rewriteModuleForIsolate(checked.transpiled ?? source),
-        blobs: input.program.blobs ?? {},
+        source: rewriteModuleForIsolate(checked.transpiled ?? source, { importer: program.path }),
+        modules,
+        blobs: program.blobs ?? {},
+        input: program.input,
         operations: this.capabilities.listOperations(),
         templates: input.templates ?? {},
         timeoutMs: Math.min(input.timeoutMs ?? CodeSurfaceTuning.defaultTimeoutMs, CodeSurfaceLimits.timeoutMs),
@@ -117,7 +114,7 @@ class CodeSurfaceSession implements CodeSurfaceSessionApi {
         if (calls > CodeSurfaceLimits.calls) return {
             error: {
               code: CodeSurfaceErrorCodes.tooLarge,
-              message: `这次程序已经发了 ${CodeSurfaceLimits.calls} 次能力调用，到上限了。把循环收窄，或者分几次程序做。`,
+              message: `这次脚本已经发了 ${CodeSurfaceLimits.calls} 次能力调用，到上限了。把循环收窄，或者分几次做。`,
             },
           }
         const name = `${call.namespace}.${call.operation}`
@@ -133,7 +130,7 @@ class CodeSurfaceSession implements CodeSurfaceSessionApi {
             inFlight.delete(call.callId)
           })
         this.events.callSettled?.({ callId: call.callId, ok: !result.error, elapsedMs: Date.now() - startedAt })
-        completed.push({ call: name, ok: !result.error })
+        completed.push(settledCall(name, result))
         if (result.notices) notices.push(...result.notices)
         if (result.attachments) attachments.push(...result.attachments)
         if (result.error && isRefusal(result.error.code)) {
@@ -146,7 +143,7 @@ class CodeSurfaceSession implements CodeSurfaceSessionApi {
     )
     input.signal?.removeEventListener('abort', stopRun)
     const unsettled = [...inFlight.values()]
-    if (!isEmpty(unsettled)) run.abort(new Error('程序已经停了，这次调用没人等了'))
+    if (!isEmpty(unsettled)) run.abort(new Error('脚本已经停了，这次调用没人等了'))
 
     // 图先收拢：它自己也会往插手记录里记一笔「丢了几张」，得赶在文字结果编好之前。
     const shown = fitAttachmentsToBudget(attachments, notices)
@@ -155,6 +152,7 @@ class CodeSurfaceSession implements CodeSurfaceSessionApi {
     const imports = readProgramImports(source)
     if (!isEmpty(imports)) settled.imports = imports
     if (!isEmpty(shown)) settled.attachments = shown
+    if (!isEmpty(completed)) settled.calls = foldCalls(completed)
     return settled
   }
 }

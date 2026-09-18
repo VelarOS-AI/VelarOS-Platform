@@ -60,8 +60,8 @@ export function describeChildExit(code: Nullable<number>, stderr: string): {
   if (stderr.includes('heap out of memory')) return {
       code: CodeSurfaceErrorCodes.tooLarge,
       message:
-        `程序把 ${CodeSurfaceTuning.heapMb}MB 堆用光了，已被终止。` +
-        '别把结果整个攒在内存里——边拿边筛、只留要用的那几个字段，或者分几次程序做。',
+        `脚本把 ${CodeSurfaceTuning.heapMb}MB 堆用光了，已被终止。` +
+        '别把结果整个攒在内存里——边拿边筛、只留要用的那几个字段，或者分几次做。',
     }
   const quoted = stderr.slice(0, CodeSurfaceTuning.stderrQuoteChars).trim()
   const why = isNull(code) ? '被信号杀掉' : `码 ${code}`

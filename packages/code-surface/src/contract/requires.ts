@@ -102,21 +102,41 @@ export interface CodeRunnerApi {
   ): Promise<CodeRunOutcome>
 }
 
+/**
+ * 这个空间的时间线放在哪、给哪个目录打标记。
+ *
+ * 时间线记下每一次调用、每一步的代码、参数与结果，脚本库也在里面；它只存这些操作和哈希，不存工作区文件的内容。
+ * 同一个目录只该由一个宿主进程写：调用号在进程里分配。
+ */
+export interface CodeSurfaceTimelinePort {
+  /** 时间线的目录：应用数据目录下给这个空间的一个目录（每个项目一份），没有就建。跨会话、跨重启都在。 */
+  directory: string
+  /**
+   * 要打标记的工作区根目录（绝对路径）：每一步前后给它算一个哈希标记，记下这一步改了哪些文件。
+   * 项目空间给项目根；系统空间不给——整个磁盘打不了标记，那里只记操作。
+   */
+  workspace?: string
+  /** 时间线最多存多少字节（代码、参数、结果、目录节点）；超了从最旧的调用清起。不给用缺省（500 MB）。 */
+  retainBytes?: number
+}
+
 /** 这一次调用所在的空间交给门的东西。 */
 export interface CodeSurfaceSpacePort {
   /** 这个空间挂的能力（空间的 `modules`）：常驻的声明一直给检查器，其余 import 了才给。 */
   modules: readonly MountedCapabilityModule[]
   /** 这个空间的能力端口，按这一次调用装好（审批通道、取消信号、会话都是这一次的），如 `createCapabilityPort(space.operations)`。 */
   capabilities: CodeCapabilityPort
+  /** 这个空间的时间线：放在哪、给哪个目录打标记。 */
+  timeline: CodeSurfaceTimelinePort
 }
 
-/** 门那个工具（`program:run`）每次被调用时宿主给的上下文。 */
+/** 门的工具（`script:exec` 等四个）每次被调用时宿主给的上下文。 */
 export interface CodeSurfaceToolContext {
   /** 本次调用的取消信号：用户停下这一轮时触发，程序与它发出的调用都要停。 */
   abortSignal: AbortSignal
   /**
-   * 会话身份：门按它记导入过的模块与上一份程序。会话切了分支、回到检查点时，宿主把分支与检查点一起拼进来，
-   * 两条分支的导入与上一份程序就不串；子 Agent 与父会话同一个 sessionId 时也要区分开，或者不给子 Agent 开这扇门。
+   * 会话身份：门按它记导入过的模块，时间线按它标出每次调用是哪个会话的。会话切了分支、回到检查点时，宿主把分支与检查点一起拼进来，
+   * 两条分支的导入就不串；子 Agent 与父会话同一个 sessionId 时也要区分开，或者不给子 Agent 开这扇门。
    */
   sessionId: string
   /** 门：宿主进程里装一个（`createCodeProgramGate`），所有会话共用；会话结束、转交新会话时宿主调它的 `forget`。 */

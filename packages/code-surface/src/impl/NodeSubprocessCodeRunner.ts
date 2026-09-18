@@ -33,7 +33,7 @@ class NodeSubprocessCodeRunner implements CodeRunnerApi {
         logs: [],
         error: {
           code: CodeSurfaceErrorCodes.runnerCrashed,
-          message: '本机找不到 node，隔离起不来，程序没有执行。隔离靠的是 node 的权限模型，换一个不认那套旗标的运行时等于没有隔离。',
+          message: '本机找不到 node，隔离起不来，脚本没有执行。隔离靠的是 node 的权限模型，换一个不认那套旗标的运行时等于没有隔离。',
         },
       }
     const child = fork(childPath, [], {
@@ -80,7 +80,7 @@ class NodeSubprocessCodeRunner implements CodeRunnerApi {
       const arm = (): void => {
         clock = timers.after(
           remainingMs,
-          () => fail(CodeSurfaceErrorCodes.timeout, `程序超过 ${request.timeoutMs}ms 没跑完，已终止。`),
+          () => fail(CodeSurfaceErrorCodes.timeout, `脚本超过 ${request.timeoutMs}ms 没跑完，已终止。`),
           { label: 'program-timeout' }
         )
       }
@@ -104,7 +104,7 @@ class NodeSubprocessCodeRunner implements CodeRunnerApi {
           arm()
         }
       }
-      const onAbort = (): void => fail(CodeSurfaceErrorCodes.aborted, '程序被中止。')
+      const onAbort = (): void => fail(CodeSurfaceErrorCodes.aborted, '脚本被中止。')
       signal?.addEventListener('abort', onAbort, { once: true })
 
       child.on('message', (raw: unknown) => {
@@ -115,7 +115,7 @@ class NodeSubprocessCodeRunner implements CodeRunnerApi {
           if (!isTrue(message.confined)) {
             fail(
               CodeSurfaceErrorCodes.runnerCrashed,
-              '隔离没有生效：子进程自证时仍能读到不该读的文件，程序没有执行。' +
+              '隔离没有生效：子进程自证时仍能读到不该读的文件，脚本没有执行。' +
                 '多半是宿主跑在不认 --permission 的运行时下（比如 bun）把 fork 出来的进程也变成了同一个运行时。'
             )
             return
@@ -123,7 +123,9 @@ class NodeSubprocessCodeRunner implements CodeRunnerApi {
           child.send({
             type: 'program',
             source: request.source,
+            modules: request.modules,
             blobs: request.blobs,
+            input: request.input,
             operations: request.operations,
             templates: request.templates,
           })
@@ -149,7 +151,7 @@ class NodeSubprocessCodeRunner implements CodeRunnerApi {
               ? undefined
               : {
                   code: CodeSurfaceErrorCodes.programError,
-                  message: error?.message ?? '程序失败但没给出原因。',
+                  message: error?.message ?? '脚本失败但没给出原因。',
                   line: error?.line,
                 },
           })

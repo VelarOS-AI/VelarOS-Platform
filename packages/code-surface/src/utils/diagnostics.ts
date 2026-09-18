@@ -28,20 +28,18 @@ function renderFrame(sourceLines: readonly string[], diagnostic: CodeProgramDiag
 }
 
 /**
- * 编成给模型看的整段诊断。
- *
- * 末尾那句是改法指引：**优先按 `match` 改**，不用数行号——模型看不见自己代码的行号，
- * 让它数行是在让它做最不擅长的事。
+ * 编成给模型看的整段诊断：每条一行位置与说明，下面是代码帧。出在库里别的脚本上的，位置前面写上那个脚本的路径，
+ * 代码帧取自那个脚本（modules 里给的那一份）。怎么改（在哪一步上用 edits）由调用方接在后面，它知道步骤号。
  */
-export function renderDiagnostics(source: string, diagnostics: readonly CodeProgramDiagnostic[]): string {
-  const sourceLines = source.split('\n')
+export function renderDiagnostics(
+  source: string,
+  diagnostics: readonly CodeProgramDiagnostic[],
+  modules: Readonly<Record<string, string>> = {},
+): string {
+  const linesOf = (file: Optional<string>): readonly string[] => (isUndefined(file) ? source : modules[file] ?? '').split('\n')
   const body = diagnostics.flatMap((diagnostic) => [
-    `(${diagnostic.line},${diagnostic.column}) TS${diagnostic.code}: ${diagnostic.message}`,
-    ...renderFrame(sourceLines, diagnostic),
+    `${isUndefined(diagnostic.file) ? '' : `${diagnostic.file} `}(${diagnostic.line},${diagnostic.column}) TS${diagnostic.code}: ${diagnostic.message}`,
+    ...renderFrame(linesOf(diagnostic.file), diagnostic),
   ])
-  return [
-    'typecheck 没过，程序一行都没有执行：',
-    ...body,
-    '改的时候不用重发整份程序：传 edits，oldText 写上面框出来的那段原文（一字不差、在程序里唯一），newText 写新的。',
-  ].join('\n')
+  return ['typecheck 没过，代码一行都没有执行：', ...body].join('\n')
 }

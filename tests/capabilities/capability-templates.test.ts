@@ -16,8 +16,8 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 
 import type { ApprovalPort } from '@velaros-ai/agent/tool-contract'
 
-import type { CodeCapabilityPort, CodeGateReply, MountedCapabilityModule } from '../../packages/code-surface/src/index'
-import { codeProgramChecker, createCapabilityPort, createCodeProgramGate, nodeSubprocessCodeRunner } from '../../packages/code-surface/src/index'
+import type { CodeCapabilityPort, CodeGateReply, CodeSurfaceTimelinePort, MountedCapabilityModule } from '../../packages/code-surface/src/index'
+import { codeProgramChecker, CodeSurfaceErrorCodes, createCapabilityPort, createCodeProgramGate, nodeSubprocessCodeRunner } from '../../packages/code-surface/src/index'
 import { createProjectCodeQuery } from '../../packages/development/src/index'
 import { createProjectSpace, type ProjectCallContext, type ProjectHostPort } from '../../packages/project/src/index'
 import { solidPng } from '../../packages/system/spec/support'
@@ -39,24 +39,26 @@ const approval: ApprovalPort = {
   awaitConfirmationDecision: async () => ({ approved: true, message: null, autoApproved: false }),
 }
 
-/** 一个空间在门眼里的样子：挂了哪几件、调用经哪个端口。 */
+/** 一个空间在门眼里的样子：挂了哪几件、调用经哪个端口、时间线放在哪。 */
 interface Space {
   modules: readonly MountedCapabilityModule[]
   port: CodeCapabilityPort
+  timeline: CodeSurfaceTimelinePort
 }
 
 const gate = createCodeProgramGate({ checker: codeProgramChecker, runner: nodeSubprocessCodeRunner })
 
 /**
- * 像模型那样交一段程序：头一次 import 按需模块时门不执行、先交回声明，模型照着再交一次——这里也再交一次。
- * 检查没过或者程序没跑完就把门的回执整段抛出来，一看就知道是哪一行。
+ * 像模型那样经 script:exec 跑一段脚本：头一次 import 按需模块时那一步不执行、先交回声明，模型照着再交一次——这里也再交一次。
+ * 检查没过或者脚本没跑完就把门的回执整段抛出来，一看就知道是哪一行。
  */
 async function runProgram(space: Space, sessionId: string, source: string): Promise<{ values: Record<string, any>; reply: CodeGateReply }> {
-  const submit = () => gate.run({ sessionId, program: { source }, modules: space.modules, capabilities: space.port, timeoutMs: 120_000 })
+  const submit = () => gate.exec({ sessionId, steps: [{ op: 'run', program: source }], space: { modules: space.modules, capabilities: space.port, timeline: space.timeline }, timeoutMs: 120_000 })
   let reply = await submit()
-  if (!reply.outcome.checked && 'needsModules' in reply.outcome) reply = await submit()
-  if (!reply.outcome.checked || reply.outcome.result.failed) throw new Error(reply.text)
-  return { values: reply.outcome.result.value as Record<string, any>, reply }
+  if (reply.steps[0]?.error?.code === CodeSurfaceErrorCodes.modulesNeeded) reply = await submit()
+  const outcome = reply.steps[0]?.outcome
+  if (!reply.steps[0]?.ok || !outcome?.checked) throw new Error(reply.text)
+  return { values: outcome.result.value as Record<string, any>, reply }
 }
 
 /** 删临时目录前先核对它确实在系统临时区里：删错目录的代价太大。 */
@@ -154,10 +156,13 @@ describe('系统空间里的模版', () => {
     await writeFile(join(root, 'repo/README.md'), 'hello, world\n')
     const kernel = createLocalSystemKernel({ cwd: root })
     const system = createSystemSpace({ host: kernel, resolveCall: (signal) => ({ abortSignal: signal ?? new AbortController().signal, approval, sessionId: 'templates' }) })
-    space = { modules: system.modules, port: createCapabilityPort(system.operations) }
+    // 系统空间只记操作、不打标记：整个磁盘扫不了。
+    const timeline = await realpath(await mkdtemp(join(tmpdir(), 'velar-templates-timeline-')))
+    space = { modules: system.modules, port: createCapabilityPort(system.operations), timeline: { directory: timeline } }
     dispose = async () => {
       for (const sandbox of kernel.listSandboxes()) await kernel.discardSandbox(sandbox.id)
       await kernel.dispose()
+      await removeTemporary(timeline)
     }
   })
 
@@ -285,8 +290,13 @@ describe('项目空间里的模版', () => {
     }
     const context: ProjectCallContext = { abortSignal: new AbortController().signal, project: host, approval, sessionId: 'templates' }
     const project = createProjectSpace({ resolveCall: () => context })
-    space = { modules: project.modules, port: createCapabilityPort(project.operations) }
-    dispose = () => commands.dispose()
+    // 项目空间给项目根打标记：模版里改文件的那几步，时间线记下改了哪些文件。
+    const timeline = await realpath(await mkdtemp(join(tmpdir(), 'velar-templates-timeline-')))
+    space = { modules: project.modules, port: createCapabilityPort(project.operations), timeline: { directory: timeline, workspace: root } }
+    dispose = async () => {
+      await commands.dispose()
+      await removeTemporary(timeline)
+    }
   })
 
   afterAll(async () => {

@@ -1,56 +1,30 @@
-/** 执行之前定下跑哪份源码、判体量，执行之后编成给模型看的结果。都不碰实例状态，所以不放在类里。 */
+/** 执行之前判体量，执行之后编成给模型看的结果。都不碰实例状态，所以不放在类里。 */
 
 import { isEmpty, isNotUndefined, isPlainObject, isUndefined } from '@velaros-ai/core'
 
 import type { CodeSurfaceErrorCode } from '../contract/constants.js'
-import { CodeSurfaceErrorCodes, CodeSurfaceLimits } from '../contract/constants.js'
+import { CodeSurfaceLimits } from '../contract/constants.js'
 import type {
   CodeCallNotice,
   CodeProgramFailure,
-  CodeProgramRequest,
   CodeProgramResult,
   CompletedCall,
 } from '../types/code-surface.js'
 import type { CodeRunOutcome } from '../types/runner.js'
 
 import { enforceResultBudget, fitFailureToBudget, fitJournalToBudget, fitLogsToBudget, fitNoticesToBudget, fitValueToBudget } from './budget.js'
-import { applyProgramEdits } from './edit.js'
 import { describeOversized } from './program.js'
 
-/**
- * 定下这一轮到底跑哪份源码：整份重写就是它本身，传 `edits` 就在上一份上改。
- *
- * 两者只能给一个。传了 `edits` 却没有上一份时**明确拒绝，不猜一份出来**——
- * 猜错会把编辑落到别的程序上，那比直接说「重发整份」坏得多。
- */
-export function resolveProgramSource(
-  program: CodeProgramRequest,
-  previousSource: Optional<string>
-): { source: string } | { failed: CodeProgramFailure } {
-  const fail = (message: string): { failed: CodeProgramFailure } => ({
-    failed: { code: CodeSurfaceErrorCodes.editFailed, message },
-  })
-  const edits = program.edits
-  const hasEdits = !isUndefined(edits) && edits.length > 0
-  const hasSource = !isUndefined(program.source)
-
-  if (!hasSource && !hasEdits) return fail('程序是空的：要么给 source 写一份新的，要么给 edits 在上一份上改。')
-  if (hasSource && hasEdits) return fail('source 和 edits 只能给一个：要么整份重写，要么在上一份上改。')
-  if (hasSource) return { source: program.source ?? '' }
-  if (isUndefined(previousSource)) return fail('这一轮没有上一份程序可改（可能是新会话，或者上下文已经清过）。这次请用 source 发一份完整的。')
-
-  const applied = applyProgramEdits(previousSource, edits ?? [])
-  return 'failed' in applied ? fail(applied.failed) : { source: applied.source }
-}
-
-/** 体量超限一律拒，不截断后照跑——半截程序跑出来的结果比不跑更坏。没超返回 null。 */
+/** 体量超限一律拒，不截断后照跑——半截程序跑出来的结果比不跑更坏。blobs 与 input（按 JSON 算）合在一起算。没超返回 null。 */
 export function describeProgramOversize(
   source: string,
-  blobs: Optional<Readonly<Record<string, string>>>
+  blobs: Optional<Readonly<Record<string, string>>>,
+  input?: unknown,
 ): Nullable<string> {
   if (source.length > CodeSurfaceLimits.sourceChars) return describeOversized('source', source.length)
   const blobChars = Object.values(blobs ?? {}).reduce((sum, value) => sum + value.length, 0)
-  return blobChars > CodeSurfaceLimits.blobChars ? describeOversized('blobs', blobChars) : null
+  const inputChars = isUndefined(input) ? 0 : (JSON.stringify(input) ?? '').length
+  return blobChars + inputChars > CodeSurfaceLimits.blobChars ? describeOversized('blobs', blobChars + inputChars) : null
 }
 
 /**
