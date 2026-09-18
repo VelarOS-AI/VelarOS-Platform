@@ -62,7 +62,6 @@ const Domains = [
       'packages/development/**',
       'packages/document-renderer/**',
       'packages/velar/**',
-      'packages/tool-contract/**',
       'tests/capabilities/**',
     ],
   },

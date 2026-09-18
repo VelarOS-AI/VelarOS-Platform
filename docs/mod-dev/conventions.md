@@ -40,22 +40,16 @@ UI 显示「该工作区所属 mod 已停用，数据已保全，可重新启用
 > **可引用句柄 / 钳制不拒绝 / strip 不 strict / 缺参给默认 /
 > 字段无歧义时推断 action / 自动过滤器与 scaffold 不得静默否决显式意图。**
 
-现成原语在 `packages/core/src/utils/ForgivingSchema.ts`：
-
-| 原语 | 用途 |
-| --- | --- |
-| `clampedInt(min, max)` | 越界**钳制**而不是报错 |
-| `withDefaultNote(schema, …)` | 缺参给默认并留可读说明 |
-| `preferFirst(...)` | 多个同义字段取第一个非空 |
-| `emptyIsNoop(value)` | 空数组 / 空对象判为 no-op，而不是「非法」 |
-| `inferActionFromFields(...)` | 字段无歧义时推断 `action` |
-| `buildAppliedAdjustments(...)` / `AppliedAdjustment` | 把「我替你改了什么」回报给模型 |
-| `buildValidItemsHint(...)` | 报错时告诉模型合法值是什么 |
+Agent 内置工具用的三个原语（`clampedInt` 越界钳制、`withDefaultNote` 缺参给默认并把默认写进说明、
+`inferActionFromFields` 字段无歧义时推断 `action`）住在 `@velaros-ai/agent` 包内部，不对外导出；
+能力按同一套铁律自己收参数：越界**钳制**而不是报错、缺参给默认、空数组 / 空对象判为 no-op 而不是「非法」、
+报错时告诉模型合法值是什么。
 
 统一执行门会把 schema 实际产出的参数作为 effective args 写回调用历史，并通过工具元数据返回
-`inputAdjustments`。因此 `.default()`、`clampedInt()`、类型纠正和 `.strip()` 删除的字段都可对账；
-工具实现与去重账本只读取这份生效参数。领域工具若还做了 schema 之外的业务调整，继续使用
-`buildAppliedAdjustments(...)` 在结果里说明，不能静默改变目标、路径或写入值。
+`inputAdjustments`。因此 `.default()`、钳制、类型纠正和 `.strip()` 删除的字段都可对账；
+工具实现与去重账本只读取这份生效参数。领域工具若还做了 schema 之外的业务调整，要在结果里按
+`AppliedAdjustment` 的形状（`field` / `action` / `detail`，从 `@velaros-ai/agent/tool-contract` 取类型）说明，
+不能静默改变目标、路径或写入值。
 
 注意这与 **manifest** 的宽容口径**不同**：manifest 是
 **形态层宽容、语义层零宽容**（未知字段即拒载）。

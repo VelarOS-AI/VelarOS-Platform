@@ -3,7 +3,15 @@ import {
   type AgentModelRetryPolicy,
   type AgentRunLifecycle,
 } from '@velaros-ai/agent'
-import { agentToolContracts, type ApprovalPort } from '@velaros-ai/agent/tool-contract'
+import {
+  agentToolContracts,
+  type ApprovalPort,
+  type ToolDefiner,
+  toolContracts,
+  toolDescriptions,
+  toolKernelModules,
+  toolSchemas,
+} from '@velaros-ai/agent/tool-contract'
 import { createModelRequestClient } from '@velaros-ai/model'
 import { languageQueries, type LanguageReadPort, type LanguageToolContext } from '@velaros-ai/development'
 import { ComputerInputLimits, type ComputerPoint } from '@velaros-ai/velar/computer/contracts'
@@ -70,5 +78,10 @@ const lifecycle: AgentRunLifecycle<object> = {
  onTurnSettled: async ({ history }: { history: readonly unknown[] }) => (history.length ? 'stop' : 'continue'),
 }
 const point: ComputerPoint = { x: 10, y: 20, coordinateSpace: 'global' }
+
+// 写工具的契约在 agent 的 `./tool-contract` 入口：定义工具、整类说明的结构化断言、挂进内核、schema 包都从这里取。
+type HostToolContext = { abortSignal: AbortSignal }
+const defineHostTool: ToolDefiner<HostToolContext> = toolContracts.createDefiner<HostToolContext>({ categoryOf: () => 'host' })
+void [defineHostTool, toolDescriptions.forCategory, toolKernelModules.define, toolSchemas.bundle]
 void [createAgentExecutionStack, createModelRequestClient, lifecycle, retry,
  agentToolContracts.discoveryDescriptors, agentToolContracts.readSchemaDiscoveryNames({names:['project:read']}), point, ComputerInputLimits.clickCount]

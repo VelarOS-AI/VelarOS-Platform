@@ -1,100 +1,180 @@
-/** 模型面工具说明的渲染、判定、解析、压缩与两道长度闸：实现在 `@velaros-ai/tool-contract`，这里按原名转发。 */
+/**
+ * 模型面说明的渲染、判定、解析与两道长度闸：工具说明七节、参数说明四节，渲染与判定共用 `description-syntax.ts` 的同一部语法，
+ * 顺序、必填节与「没给就不渲染」都是语法的一部分。两道闸只在说明被写下来的那一刻拦（定义工具时），
+ * 因为模型面说明从不压缩——`适合`、`禁止` 是行为约束，压掉等于删规则。
+ */
 
-import { renderParameterDescription as renderParameter, toolDescriptions } from '@velaros-ai/tool-contract'
+import { isBlank } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 
-import type { ToolCategoryId } from '../../types/agent.js'
 import type {
   StructuredParameterDescriptionSpec,
   StructuredToolDescriptionParts,
   StructuredToolDescriptionSpec,
   ToolDescriptionBudgetWaiver,
-  ToolDescriptionLike,
+  ToolDescriptionBudgetWaiverReason,
 } from '../../types/toolkit.js'
+import { AgentTuning } from '../tuning'
 
-/** 单个工具说明的开发期硬上限（字符）：保底闸，不是预算；撞线基本等于这个工具该拆。 */
-const ToolDescriptionMaxChars: number = toolDescriptions.maxChars
+import {
+  DescriptionSectionPrefix,
+  isStructuredDescription,
+  normalizeDescriptionText,
+  ParameterDescriptionGrammar,
+  parseListSectionItems,
+  renderListSection,
+  ToolDescriptionGrammar,
+} from './description-syntax'
 
-/** 模型面工具说明的软预算（字符）：复杂用法属于技能文书，出路是拆 companion skill 或显式豁免。 */
-const ToolDescriptionBudgetChars: number = toolDescriptions.budgetChars
+/** 软预算豁免只认这两种理由；加第三种之前先改判决。 */
+const ToolDescriptionBudgetWaiverReasons: ReadonlySet<string> = new Set<ToolDescriptionBudgetWaiverReason>([
+  'safety-protocol',
+  'meta-tool',
+])
 
-/** 保底闸：单个工具描述超过 `ToolDescriptionMaxChars` 就抛 `VALIDATION`，这道闸不可豁免。 */
-function assertToolDescriptionWithinLimit(name: string, description: string): void {
-  toolDescriptions.assertWithinLimit(name, description)
+/** 按七节语法渲染一段工具说明：描述压成单行，没给的分节整节不出现。 */
+export function renderToolDescription(spec: StructuredToolDescriptionSpec): string {
+  const description = normalizeDescriptionText(spec.description)
+  const sections = [
+    `${DescriptionSectionPrefix}${description}`,
+    renderListSection('适合', spec.suitable),
+    spec.forbidden ? renderListSection('禁止', spec.forbidden) : null,
+    spec.protocol ? renderListSection('强制流程', spec.protocol) : null,
+    spec.usage ? renderListSection('用法', spec.usage) : null,
+    spec.examples ? renderListSection('示例', spec.examples) : null,
+    spec.notes ? renderListSection('注意', spec.notes) : null,
+  ].filter((section): section is string => Boolean(section))
+
+  return sections.join('\n\n')
 }
 
-/** 软预算闸：超过 `ToolDescriptionBudgetChars` 就抛 `VALIDATION`；带合法豁免时跳过长度判定。 */
-function assertToolDescriptionWithinBudget(
+/**
+ * 按四节语法渲染**单个参数**的说明：`描述` → `取值` → `用法` → `注意`，只有描述必填、没给的节不出现。
+ * 参数的合法取值与边界必须写进「取值」——入参 schema 经 transform 之后 JSON Schema 里不再带
+ * minimum/maximum，模型只能从这里看到边界。
+ */
+export function renderParameterDescription(spec: StructuredParameterDescriptionSpec): string {
+  const description = normalizeDescriptionText(spec.description)
+  const sections = [
+    `${DescriptionSectionPrefix}${description}`,
+    spec.values ? renderListSection('取值', spec.values) : null,
+    spec.usage ? renderListSection('用法', spec.usage) : null,
+    spec.notes ? renderListSection('注意', spec.notes) : null,
+  ].filter((section): section is string => Boolean(section))
+
+  return sections.join('\n\n')
+}
+
+/** 声明了 companion skill 时追加到说明末尾的那一行指路（进「注意」分节的最后一条）。 */
+export function renderUsageSkillNote(usageSkillId: string): string {
+  return `深度用法：当前技能目录可读取 skill:${usageSkillId} 时先读该技能。`
+}
+
+/** 这段工具说明是不是完全结构化的（七节语法，`适合` 必填）。 */
+export function isStructuredToolDescription(description: string): boolean {
+  return isStructuredDescription(description, ToolDescriptionGrammar)
+}
+
+/** 这段参数说明是不是完全结构化的（四节语法，没有必填分节）。 */
+export function isStructuredParameterDescription(description: string): boolean {
+  return isStructuredDescription(description, ParameterDescriptionGrammar)
+}
+
+/** 把一段已渲染的工具说明解析回七个分节；不是合法结构化说明时返回 null。 */
+export function parseStructuredToolDescription(description: string): Nullable<StructuredToolDescriptionParts> {
+  const trimmed = description.trim()
+  if (!isStructuredToolDescription(trimmed)) return null
+
+  const parts: StructuredToolDescriptionParts = {
+    description: '',
+    suitable: [],
+    forbidden: [],
+    protocol: [],
+    usage: [],
+    examples: [],
+    notes: [],
+  }
+
+  const blocks = trimmed.split(/\n{2,}/)
+  parts.description = blocks[0]?.slice(DescriptionSectionPrefix.length).trim() ?? ''
+
+  for (const block of blocks.slice(1)) {
+    const firstLine = block.split('\n')[0] ?? ''
+    switch (firstLine) {
+      case '适合：':
+        parts.suitable = parseListSectionItems(block)
+        break
+      case '禁止：':
+        parts.forbidden = parseListSectionItems(block)
+        break
+      case '强制流程：':
+        parts.protocol = parseListSectionItems(block)
+        break
+      case '用法：':
+        parts.usage = parseListSectionItems(block)
+        break
+      case '示例：':
+        parts.examples = parseListSectionItems(block)
+        break
+      case '注意：':
+        parts.notes = parseListSectionItems(block)
+        break
+      default:
+        break
+    }
+  }
+
+  return parts
+}
+
+/** 产出模型面的工具说明文本，幂等：已是合法结构化说明就 trim 后原样返回，否则按七节语法渲染。 */
+export function structureToolDescriptionForModel(spec: StructuredToolDescriptionSpec): string {
+  const trimmed = spec.description.trim()
+  if (isStructuredToolDescription(trimmed)) return trimmed
+
+  return renderToolDescription({ ...spec, description: trimmed })
+}
+
+/** 硬上限闸：说明超过 `AgentTuning.toolkit.descriptionMaxChars` 就抛 VALIDATION，不可豁免；撞线基本等于这个工具该拆。 */
+export function assertToolDescriptionWithinLimit(name: string, description: string): void {
+  const maxChars = AgentTuning.toolkit.descriptionMaxChars
+  if (description.length <= maxChars) return
+
+  throw new AppError(
+    'VALIDATION',
+    `工具 ${name} 的描述有 ${description.length} 字符，超过 ${maxChars} 字符的硬上限；这基本等于这个工具该拆了，请拆分工具，或把细节移出模型面描述（挪进 tooling:read 的按需正文）。`
+  )
+}
+
+/** 软预算闸：说明超过 `AgentTuning.toolkit.descriptionBudgetChars` 就抛 VALIDATION；带合法豁免（理由认可且 note 非空白）时跳过长度判定。 */
+export function assertToolDescriptionWithinBudget(
   name: string,
   description: string,
   waiver?: ToolDescriptionBudgetWaiver
 ): void {
-  toolDescriptions.assertWithinBudget(name, description, waiver)
-}
+  if (waiver) {
+    if (!ToolDescriptionBudgetWaiverReasons.has(waiver.reason)) {
+      throw new AppError(
+        'VALIDATION',
+        `工具 ${name} 的描述预算豁免理由 "${waiver.reason}" 不被认可；只接受 safety-protocol / meta-tool 两种。`
+      )
+    }
 
-/** 声明了 companion skill 时追加到描述末尾的指路行（`注意` 分节的最后一条）。 */
-function renderUsageSkillNote(usageSkillId: string): string {
-  return toolDescriptions.renderUsageSkillNote(usageSkillId)
-}
+    if (isBlank(waiver.note)) {
+      throw new AppError(
+        'VALIDATION',
+        `工具 ${name} 的描述预算豁免必须带上 note，写清它凭什么算 ${waiver.reason} 这一类；note 空白的豁免不予放行。`
+      )
+    }
 
-/** 把结构化描述规格渲染成模型看到的那段文本：固定分节顺序，没给的分节整节不出现。 */
-function renderToolDescription(spec: StructuredToolDescriptionSpec): string {
-  return toolDescriptions.renderTool(spec)
-}
+    return
+  }
 
-/** 渲染**单个参数**的结构化描述，语法比工具描述窄：只有 `描述` → `取值` → `用法` → `注意` 四节。 */
-function renderParameterDescription(spec: StructuredParameterDescriptionSpec): string {
-  return renderParameter(spec)
-}
+  const budgetChars = AgentTuning.toolkit.descriptionBudgetChars
+  if (description.length <= budgetChars) return
 
-/** 判定一段**工具**描述是否结构化：七节语法，其中 `适合` 必填。 */
-function isStructuredToolDescription(description: string): boolean {
-  return toolDescriptions.isToolDescription(description)
-}
-
-/** 判定一段**参数**描述是否结构化：四节语法，没有必填分节。 */
-function isStructuredParameterDescription(description: string): boolean {
-  return toolDescriptions.isParameterDescription(description)
-}
-
-/** 把一段已渲染的工具描述解析回七个分节；不是合法结构化描述就返回 null。 */
-function parseStructuredToolDescription(
-  description: string
-): Nullable<StructuredToolDescriptionParts> {
-  return toolDescriptions.parseTool(description)
-}
-
-/** 产出模型面的工具描述文本，幂等：已是合法结构化描述就 trim 后原样返回。 */
-function structureToolDescriptionForModel(
-  input: StructuredToolDescriptionSpec & { categoryId: ToolCategoryId }
-): string {
-  return toolDescriptions.forModel(input)
-}
-
-/** 工具描述 tier-1 精简版：`强制流程：` 完整保留，其余分节各留首条。 */
-function compactStructuredToolDescription(description: string): string {
-  return toolDescriptions.compactTool(description)
-}
-
-/** 整类工具描述的结构化断言：有一个不是完全结构化就抛 `VALIDATION`；只校验不改写。 */
-function structureToolDescriptionsForCategory<
-  TTool extends ToolDescriptionLike,
-  TMap extends Record<string, TTool>,
->(tools: TMap, categoryId: ToolCategoryId): TMap {
-  return toolDescriptions.forCategory(tools, categoryId)
-}
-
-export {
-  assertToolDescriptionWithinBudget,
-  assertToolDescriptionWithinLimit,
-  compactStructuredToolDescription,
-  isStructuredParameterDescription,
-  isStructuredToolDescription,
-  parseStructuredToolDescription,
-  renderParameterDescription,
-  renderToolDescription,
-  renderUsageSkillNote,
-  structureToolDescriptionForModel,
-  structureToolDescriptionsForCategory,
-  ToolDescriptionBudgetChars,
-  ToolDescriptionMaxChars,
+  throw new AppError(
+    'VALIDATION',
+    `工具 ${name} 的描述有 ${description.length} 字符，超过 ${budgetChars} 字符的软预算；出路只有两条：把工艺细节搬进配套技能（在契约里声明 usageSkillId 指路），或声明 descriptionBudgetWaiver 并给出 safety-protocol / meta-tool 之一的理由。不要靠压缩描述过关。`
+  )
 }

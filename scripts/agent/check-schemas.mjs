@@ -11,8 +11,8 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { createAgentWorkflowRuntime } from '@velaros-ai/agent'
+import { toolSchemas } from '@velaros-ai/agent/tool-contract'
 import { agentWorkflowSchema } from '../../packages/agent/src/utils/builtin/workflow-schemas.ts'
-import { toolSchemas } from '@velaros-ai/tool-contract'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const RepoRoot = resolve(HERE, '../..')

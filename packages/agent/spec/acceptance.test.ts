@@ -5,6 +5,7 @@
  * 这里只测对外承诺的行为，不测实现细节；实现细节的测试在 test/ 目录。
  */
 import { describe, expect, test } from 'bun:test'
+import { z } from 'zod'
 
 import {
   AgentContextThresholds,
@@ -28,11 +29,22 @@ import {
   createUnattendedSubAgentApprovalPort,
   defaultDenyApprovalPort,
   defaultUnsupportedInteractionPort,
+  toolContracts,
+  toolDescriptions,
   toolInputReuseStore,
 } from '../src/tool-contract'
 import type { AgentModDiagnostic, AgentModManifest } from '../src/types/agent'
 import type { AgentModHostProfile } from '../src/types/mods'
+import type { DefineToolRuntimeSpecInput } from '../src/types/toolkit'
 import { resolveAgentSessionLeaseClaim } from '../src/utils/product-session/lifecycle'
+import { createToolCallableOperations } from '../src/utils/toolkit/callable-operations'
+import { resolveToolReadOnly } from '../src/utils/toolkit/define-tool-contract'
+import {
+  isStructuredToolDescription,
+  parseStructuredToolDescription,
+  renderToolDescription,
+} from '../src/utils/toolkit/tool-description'
+import { AgentTuning } from '../src/utils/tuning'
 
 function createModHost(): AgentModHostProfile {
   return {
@@ -237,5 +249,131 @@ describe('mod 宿主组装面', () => {
   test('INV-5 宿主不给 bundled 时组装器自己用随包内置 mod', async () => {
     const assembly = await agentModHost.assembleAgentMods({ host: createModHost() })
     expect(assembly.report.activated.some((entry) => entry.modId.includes('builtin'))).toBe(true)
+  })
+})
+
+// ── 工具契约：定义一条工具、说明的两道闸与分节语法、只读判据、挂进内核（INV-23 起，原 @velaros-ai/tool-contract 的 INV-1…INV-6）──
+
+interface ProbeToolContext {
+  abortSignal: AbortSignal
+  ready: boolean
+}
+
+/** 造一份能过全部校验的最小工具定义，调用方只覆盖要测的那几格。 */
+function probeToolInput(
+  overrides: Partial<DefineToolRuntimeSpecInput<{ text: string }, ProbeToolContext>> = {}
+): DefineToolRuntimeSpecInput<{ text: string }, ProbeToolContext> {
+  return {
+    name: 'probe:echo',
+    category: 'probe',
+    role: 'inspect',
+    summary: '把收到的文本原样回显。',
+    suitable: ['确认工具链路通不通'],
+    schema: z.strictObject({ text: z.string() }),
+    permissions: [],
+    execute: async (input) => input.text,
+    ...overrides,
+  }
+}
+
+/** 探针类别的定义函数：走对外的 `toolContracts.createDefiner`，与写工具的一方同一条路。 */
+const defineProbeTool = toolContracts.createDefiner<ProbeToolContext>({ categoryOf: () => 'probe' })
+
+describe('INV-23 工具名必须是 canonical 工具 id', () => {
+  test('INV-23 不合法的工具名在定义期就抛，进不了注册表', () => {
+    expect(() => defineProbeTool(probeToolInput())).not.toThrow()
+    expect(() => defineProbeTool(probeToolInput({ name: 'Probe:Echo' }))).toThrow(/canonical/u)
+    expect(() => defineProbeTool(probeToolInput({ name: 'probe' }))).toThrow(/canonical/u)
+  })
+})
+
+describe('INV-24 示例按模型会发的那份 JSON 校验', () => {
+  test('INV-24 示例过不了工具自己的 schema 就在定义期抛，报错点名工具', () => {
+    expect(() => defineProbeTool(probeToolInput({ examples: [{ text: '你好' }] }))).not.toThrow()
+    // undefined 只在内存里成立：序列化后整格消失，必填的 text 就缺了。
+    expect(() => defineProbeTool(probeToolInput({ examples: [{ text: undefined }] }))).toThrow(/probe:echo/u)
+    expect(() => defineProbeTool(probeToolInput({ examples: [{ text: 1 }] }))).toThrow(/示例/u)
+  })
+})
+
+describe('INV-25 说明的两道长度闸', () => {
+  test('INV-25 硬上限不可豁免，软预算只认两种理由且 note 不能空白', () => {
+    const long = (count: number): string => '啊'.repeat(count)
+    const { descriptionBudgetChars, descriptionMaxChars } = AgentTuning.toolkit
+    const waiver = { reason: 'safety-protocol', note: '整条流程就是护栏' } as const
+    expect(() => defineProbeTool(probeToolInput({ summary: long(descriptionMaxChars + 1) }))).toThrow(/硬上限/u)
+    expect(() =>
+      defineProbeTool(probeToolInput({ summary: long(descriptionMaxChars + 1), descriptionBudgetWaiver: waiver }))
+    ).toThrow(/硬上限/u)
+    expect(() => defineProbeTool(probeToolInput({ summary: long(descriptionBudgetChars + 1) }))).toThrow(/软预算/u)
+    expect(() =>
+      defineProbeTool(probeToolInput({ summary: long(descriptionBudgetChars + 1), descriptionBudgetWaiver: waiver }))
+    ).not.toThrow()
+    expect(() =>
+      defineProbeTool(probeToolInput({
+        summary: long(descriptionBudgetChars + 1),
+        descriptionBudgetWaiver: { reason: 'safety-protocol', note: '   ' },
+      }))
+    ).toThrow(/note/u)
+  })
+})
+
+describe('INV-26 说明的分节语法固定', () => {
+  test('INV-26 渲染出来的说明一定判为结构化，乱序、缺必填节或空节判非结构化', () => {
+    const rendered = renderToolDescription({
+      description: '把收到的文本原样回显。',
+      suitable: ['确认工具链路通不通'],
+      forbidden: ['当成日志工具用'],
+      notes: ['回显不改动内容'],
+    })
+    expect(isStructuredToolDescription(rendered)).toBe(true)
+    const parsed = parseStructuredToolDescription(rendered)
+    expect(parsed?.suitable).toEqual(['确认工具链路通不通'])
+    expect(parsed?.usage).toEqual([])
+    // 缺必填的「适合」、分节回头、以及只有标题的空节都判非结构化；对外的整类断言同样拦下。
+    expect(isStructuredToolDescription('描述：只有描述')).toBe(false)
+    expect(isStructuredToolDescription('描述：x\n\n禁止：\n- a\n\n适合：\n- b')).toBe(false)
+    expect(isStructuredToolDescription('描述：x\n\n适合：')).toBe(false)
+    expect(() => toolDescriptions.forCategory({ echo: { description: '描述：只有描述' } }, 'probe')).toThrow(/probe\/echo/u)
+  })
+})
+
+describe('INV-27 只读判据的顺序', () => {
+  test('INV-27 readOnly 的判据顺序是 effectKind → 显式 readOnly → role', () => {
+    expect(resolveToolReadOnly({ capabilities: { effectKind: 'read' }, readOnly: false, role: 'edit' })).toBe(true)
+    expect(resolveToolReadOnly({ capabilities: { effectKind: 'write' }, readOnly: true, role: 'inspect' })).toBe(false)
+    expect(resolveToolReadOnly({ readOnly: true, role: 'edit' })).toBe(true)
+    expect(resolveToolReadOnly({ role: 'inspect' })).toBe(true)
+    expect(resolveToolReadOnly({ role: 'edit' })).toBe(false)
+    // 定义出来的工具按同一套判据定出 readOnly。
+    expect(defineProbeTool(probeToolInput({ role: 'edit', capabilities: { effectKind: 'read' } })).readOnly).toBe(true)
+  })
+})
+
+describe('INV-28 内核可调用操作固定四步', () => {
+  test('INV-28 严格解析入参、换上内核的 abortSignal、不可用报 UNAVAILABLE；没给解析器一个都不登记', async () => {
+    const tool = defineProbeTool(probeToolInput({ execute: async (input, ctx) => `${input.text}:${ctx.ready}` }))
+    expect(createToolCallableOperations({ 'probe:echo': tool }, undefined, { label: '探针' })).toEqual({})
+
+    const operations = createToolCallableOperations<ProbeToolContext>(
+      { 'probe:echo': tool },
+      (_scope, signal) => ({ abortSignal: signal, ready: true }),
+      { label: '探针' }
+    )
+    const controller = new AbortController()
+    await expect(
+      operations['probe:echo']!.invoke(undefined, { text: '嗨', extra: 1 }, controller.signal)
+    ).rejects.toThrow(/入参不合法/u)
+    await expect(operations['probe:echo']!.invoke(undefined, '嗨', controller.signal)).rejects.toThrow(/必须是对象/u)
+    expect(await operations['probe:echo']!.invoke(undefined, { text: '嗨' }, controller.signal)).toBe('嗨:true')
+
+    const unavailable = createToolCallableOperations<ProbeToolContext>(
+      { 'probe:echo': { ...tool, isAvailable: () => false } },
+      (_scope, signal) => ({ abortSignal: signal, ready: true }),
+      { label: '探针' }
+    )
+    await expect(
+      unavailable['probe:echo']!.invoke(undefined, { text: '嗨' }, controller.signal)
+    ).rejects.toThrow(/不可用/u)
   })
 })

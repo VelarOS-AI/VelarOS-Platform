@@ -1,4 +1,4 @@
-// 写工具时用得到、但没有搬进 @velaros-ai/tool-contract 的那几件：审批请求的构造与入参边界。
+// 写工具时的审批与入参边界那几件：审批请求的构造、审批端口的包装、读取类工具的入参边界与两条自恢复工具的目录描述。
 import { type z } from 'zod'
 
 import type { ApprovalPort } from '../../contract/requires'
@@ -10,10 +10,10 @@ import { createApprovalOperationKey, createTaskApprovalPort } from '../../utils/
 import { applyDefaultRecursiveMaxDepth, optionalReadEndLine, optionalReadMaxChars, optionalReadStartLine, refineBoundedReadInput, requiredNonNegativeMaxDepth, requiredPositiveMaxDepth, requiredResultLimit, withReadBoundJsonSchemaConstraints } from '../../utils/toolkit/tool-input-bounds'
 
 /**
- * Agent 侧的工具契约补充件。
+ * 写工具时的审批与入参边界补充件。
  *
- * 通用的工具定义、说明渲染、schema 打包、宽容入参、身份判定都在 `@velaros-ai/tool-contract`；
- * 留在这里的是跟 Agent 审批语义与读取类工具入参边界绑定的那几件。无状态，进程内共用一份。
+ * 定义工具、整类说明断言、挂进内核、schema 包各有自己的实例（`toolContracts`、`toolDescriptions`、
+ * `toolKernelModules`、`toolSchemas`）；留在这里的是跟 Agent 审批语义与读取类工具入参边界绑定的那几件。无状态，进程内共用一份。
  */
 export interface AgentToolContractsApi {
   /** 两条自恢复工具的目录描述：随每份工具目录常驻，模型在 schema 漂移后还能靠它们找回路。 */

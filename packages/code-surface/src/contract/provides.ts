@@ -1,7 +1,8 @@
 /** 对外合同的产品面：交出去的整件能力。类实现的 API 定义在类上方，这里 re-export 登记；没有类的公开接口（工具集合、能力服务）直接声明在这里。 */
 
+import type { ToolPermission } from '@velaros-ai/agent/contracts'
+import type { ToolContractRuntimeSpec } from '@velaros-ai/agent/tool-contract'
 import type { KernelCallableCapabilityService } from '@velaros-ai/kernel'
-import type { ToolContractRuntimeSpec, ToolPermission } from '@velaros-ai/tool-contract'
 
 import type { CodeSurfaceToolName } from './constants.js'
 import type { CodeSurfaceToolContext } from './requires.js'

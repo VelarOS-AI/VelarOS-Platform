@@ -114,7 +114,7 @@
 ## 依赖什么
 
 `typescript`（检查与手滑那条路的剥类型）、`@velaros-ai/core`、`@velaros-ai/core/path-rules`（打标记时按 .gitignore 与默认跳过的目录名判哪些不算）；
-门的工具用 `@velaros-ai/tool-contract`（定义工具、渲染说明、挂进内核）、`@velaros-ai/kernel`（内核模块与能力令牌）与 `zod`（入参 schema）。
+门的工具用 `@velaros-ai/agent` 的工具契约（`./tool-contract` 入口：定义工具、整类说明的结构化断言、挂进内核；权限等协议数据从 `./contracts` 取；agent 由宿主装，这里是 peer 依赖）、`@velaros-ai/kernel`（内核模块与能力令牌）与 `zod`（入参 schema）。
 能力端口、门、空间、时间线的位置与事件槽由宿主注入。
 
 ## 状态归谁

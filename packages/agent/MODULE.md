@@ -26,19 +26,22 @@ VelarOS 的 Agent 运行时：一次「用户说话 → 模型跑 → 工具做�
 | `.` | Desktop / Workbench / Termel 装 Agent 运行时 | Node |
 | `./contracts` | 任何进程拿可移植的契约数据与常量表 | 任何环境 |
 | `./chat` | 渲染进程消费聊天流、投影消息与展示态 | 任何环境 |
-| `./tool-contract` | 空间包与宿主写工具时的审批、入参复用与文件上下文 | 任何环境 |
+| `./tool-contract` | 写工具的整套契约：定义工具、整类说明断言、挂进内核、schema 包，外加审批、入参复用与文件上下文 | 任何环境 |
 
-`./contracts` 是根入口的可移植子集（`contract/constants.ts` 的 26 张常量表 + `types/agent.ts` 的可移植数据）：
+`./contracts` 是根入口的可移植子集（`contract/constants.ts` 的 28 个常量 + `types/agent.ts` 的可移植数据）：
 只要数据不要值的调用方认它；拿值一律从 `.`、`./chat` 或 `./tool-contract` 取。
 
-通用的工具定义、说明渲染、schema 打包、宽容入参与身份判定不在这里，在 `@velaros-ai/tool-contract`。
+写工具的契约也在这里（ADR 0014 从 `@velaros-ai/tool-contract` 整包并回）：`toolContracts.createDefiner` 定义工具，
+`toolDescriptions.forCategory` 断言整类说明，`toolKernelModules.define` 把工具集合挂进内核，`toolSchemas.bundle` 出紧凑 schema 包。
+说明的分节语法与两道长度闸、示例校验、canonical 工具 id 都在同一条定义流水线里；工具协议的基础词汇
+（权限、类别、角色、能力声明、暴露策略）在可移植数据里只有一份。
 
 <!-- 名字清单：门禁要求每个导出的值与每个公开接口都在这一节里出现 -->
 
 ### 公开接口
 
-共 169 个：产品面（`contract/provides.ts`）直接声明 2 个、登记类上方接口 81 个，注入面
-（`contract/requires.ts`）86 个。全部从根入口导出，名字与它们的类一一对应（`XxxApi` ↔ `impl/**/Xxx.ts`）。
+共 174 个：产品面（`contract/provides.ts`）直接声明 2 个、登记类上方接口 85 个，注入面
+（`contract/requires.ts`）87 个。全部从根入口导出，名字与它们的类一一对应（`XxxApi` ↔ `impl/**/Xxx.ts`）。
 
 - `AgentBackgroundAgent`、`AgentBackgroundAgentControlPort`、`AgentBackgroundAgentPort`、`AgentBackgroundAgentState`
 - `AgentCapabilityEventPublisherApi`、`AgentCapabilityRuntime`、`AgentChatKitApi`、`AgentChatRuntimeConfig`
@@ -77,49 +80,51 @@ VelarOS 的 Agent 运行时：一次「用户说话 → 模型跑 → 工具做�
 - `SoloExecutionServiceApi`、`SubAgentConfigPort`、`SubAgentDispatcherApi`、`SubAgentGuidanceRelayRegistryApi`
 - `SubAgentQueryRunner`、`SubAgentSessionStoreApi`、`SubAgentTypeProvider`、`TaskApprovalStateApi`
 - `TeamModelRouterApi`、`TeamModelRoutingPort`、`ToolActiveContextApi`、`ToolAllocationMetadata`
-- `ToolCapabilityRegistryApi`、`ToolContractExecutionFacadeApi`、`ToolConversationContextApi`、`ToolExecutionApi`
-- `ToolExecutionPolicyApi`、`ToolExecutorApi`、`ToolInputReuseStoreApi`、`ToolRegistryApi`
-- `ToolResultMiddleware`、`ToolRoleApi`、`ToolRuntimeApi`、`ToolSkillsApi`
-- `ToolTransportNamesApi`、`ToolValidationHintProvider`、`TurnContextAppendHubApi`、`TurnContextLedgerApi`
-- `TurnContextSessionLedgersApi`、`TurnHistoryApi`、`VelarModArchiveImporterApi`、`VelarModArchiveSignatureVerifier`
-- `WriteLeaseCoordinatorApi`
+- `ToolCapabilityRegistryApi`、`ToolContextResolver`、`ToolContractDefinitionApi`、`ToolContractExecutionFacadeApi`
+- `ToolConversationContextApi`、`ToolDescriptionsApi`、`ToolExecutionApi`、`ToolExecutionPolicyApi`
+- `ToolExecutorApi`、`ToolInputReuseStoreApi`、`ToolKernelModulesApi`、`ToolRegistryApi`
+- `ToolResultMiddleware`、`ToolRoleApi`、`ToolRuntimeApi`、`ToolSchemasApi`
+- `ToolSkillsApi`、`ToolTransportNamesApi`、`ToolValidationHintProvider`、`TurnContextAppendHubApi`
+- `TurnContextLedgerApi`、`TurnContextSessionLedgersApi`、`TurnHistoryApi`、`VelarModArchiveImporterApi`
+- `VelarModArchiveSignatureVerifier`、`WriteLeaseCoordinatorApi`
 
 ### 导出的值
 
-共 126 个。`.` 带出全部；`./contracts` 只带 26 张常量表，`./chat` 7 个、`./tool-contract` 8 个各带自己那一撮。
+共 132 个。`.` 带出全部；`./contracts` 只带 28 个常量（常量表与字符串身份），`./chat` 7 个、`./tool-contract` 12 个各带自己那一撮。
 
 - `AgentCapability`、`AgentCapabilityApiVersionString`、`AgentCapabilityEnvelopeLimits`、`AgentContextThresholds`
 - `AgentEnvironmentVariables`、`AgentErrorCodes`、`AgentExecutionPermission`、`AgentFieldValues`
 - `AgentIdentity`、`AgentKernelModuleId`、`AgentLeasePolicy`、`AgentModAxes`
 - `AgentProtocolVersions`、`AgentSkillFailureCodes`、`AgentSkillFiles`、`AgentStepLimits`
 - `AgentSurfaceLimits`、`AgentToolCategoryByName`、`AgentToolLimits`、`AgentToolNames`
-- `AgentToolTransport`、`BuiltinAgentModId`、`ExternalAgentBridgeLimits`、`ExternalAgentBridgeProtocol`
-- `McpLimits`、`PromptSegmentPriority`、`StreamRuntimeStateKinds`、`TurnContextFormat`
-- `TurnContextProcessGeneration`、`VelarModArchiveFiles`、`VelarModArchiveLimits`、`agentChat`
-- `agentLedgerFiles`、`agentModHost`、`agentRetryPolicy`、`agentRuntime`
-- `agentSessionKit`、`agentToolContracts`、`agentTools`、`agentTurnHistory`
-- `agentWire`、`assertSafeHttpFetchUrl`、`chatMessages`、`chatRuntimeEvents`
-- `chatSearchMessages`、`chatSearchRanking`、`chatStreamProtocol`、`compileProviderSendRequest`
-- `createAgentCapabilityEventPublisher`、`createAgentExecutionStack`、`createAgentGoalService`、`createAgentKernelModule`
-- `createAgentModLoader`、`createAgentModSeamDispatcher`、`createAgentPlanService`、`createAgentQuestionService`
-- `createAgentRoleEngine`、`createAgentSkillRepository`、`createAgentWorkflowRuntime`、`createBackgroundJobManager`
-- `createBuiltInPromptRegistry`、`createBuiltinAgentModDefinition`、`createChatContextRetrievalService`、`createChatKernelSessionBridge`
-- `createChatStreamConsumer`、`createChatStreamSessionLog`、`createCodingSessionTracker`、`createContextGovernanceSessionRegistry`
-- `createContextPayloadRef`、`createContextUserTextRef`、`createExecutionEventBus`、`createExecutionGuidanceQueue`
-- `createExecutionPlanLedger`、`createExecutionPlanState`、`createExecutionRouting`、`createExecutionService`
-- `createExternalAgentBridgeCommandQueue`、`createExternalAgentBridgeEventWindow`、`createExternalAgentBridgeLoopbackServer`、`createExternalAgentBridgePairingThrottle`
-- `createFileSkillProvider`、`createInMemoryContextPayloadStore`、`createJsonlContextMigrationEventSink`、`createLedgerExecutionSpanScopeFactory`
-- `createMcpClientConnection`、`createNoopExecutionEventBus`、`createPrimaryAgentProfile`、`createPromptRegistry`
-- `createProviderRequestCompiler`、`createSessionLedger`、`createSessionStore`、`createSkillFileStore`
-- `createSkillMarketClient`、`createSoloExecutionService`、`createSubAgentDispatcher`、`createSubAgentGuidanceRelayRegistry`
-- `createSubAgentSessionStore`、`createTeamModelRouter`、`createToolCapabilityRegistry`、`createToolContractExecutionFacade`
-- `createToolExecutionPolicy`、`createToolExecutor`、`createToolRegistry`、`createTurnContextAppendHub`
-- `createTurnContextSessionLedgers`、`createUnattendedSubAgentApprovalPort`、`createVelarModArchiveImporter`、`createWriteLeaseCoordinator`
-- `defaultDenyApprovalPort`、`defaultUnsupportedInteractionPort`、`directiveOperations`、`externalAgentBridgeTokensEqual`
-- `fileContextRegistry`、`formatSkillDisplayMarkdown`、`guidanceRelay`、`mcpToolTranslator`
-- `parseFrontmatter`、`parseFrontmatterList`、`readPromptAuditFile`、`resolveSubAgentExecutionKey`
-- `resolveToolInputReuse`、`runRemoteNodeMcpStdio`、`safeFetch`、`toolInputReuseStore`
-- `toolTransportNames`、`withToolInputReuse`
+- `AgentToolTransport`、`BuiltinAgentModId`、`CanonicalToolIdPatternSource`、`ExternalAgentBridgeLimits`
+- `ExternalAgentBridgeProtocol`、`McpLimits`、`PromptSegmentPriority`、`StreamRuntimeStateKinds`
+- `ToolDomainErrorContextKey`、`TurnContextFormat`、`TurnContextProcessGeneration`、`VelarModArchiveFiles`
+- `VelarModArchiveLimits`、`agentChat`、`agentLedgerFiles`、`agentModHost`
+- `agentRetryPolicy`、`agentRuntime`、`agentSessionKit`、`agentToolContracts`
+- `agentTools`、`agentTurnHistory`、`agentWire`、`assertSafeHttpFetchUrl`
+- `chatMessages`、`chatRuntimeEvents`、`chatSearchMessages`、`chatSearchRanking`
+- `chatStreamProtocol`、`compileProviderSendRequest`、`createAgentCapabilityEventPublisher`、`createAgentExecutionStack`
+- `createAgentGoalService`、`createAgentKernelModule`、`createAgentModLoader`、`createAgentModSeamDispatcher`
+- `createAgentPlanService`、`createAgentQuestionService`、`createAgentRoleEngine`、`createAgentSkillRepository`
+- `createAgentWorkflowRuntime`、`createBackgroundJobManager`、`createBuiltInPromptRegistry`、`createBuiltinAgentModDefinition`
+- `createChatContextRetrievalService`、`createChatKernelSessionBridge`、`createChatStreamConsumer`、`createChatStreamSessionLog`
+- `createCodingSessionTracker`、`createContextGovernanceSessionRegistry`、`createContextPayloadRef`、`createContextUserTextRef`
+- `createExecutionEventBus`、`createExecutionGuidanceQueue`、`createExecutionPlanLedger`、`createExecutionPlanState`
+- `createExecutionRouting`、`createExecutionService`、`createExternalAgentBridgeCommandQueue`、`createExternalAgentBridgeEventWindow`
+- `createExternalAgentBridgeLoopbackServer`、`createExternalAgentBridgePairingThrottle`、`createFileSkillProvider`、`createInMemoryContextPayloadStore`
+- `createJsonlContextMigrationEventSink`、`createLedgerExecutionSpanScopeFactory`、`createMcpClientConnection`、`createNoopExecutionEventBus`
+- `createPrimaryAgentProfile`、`createPromptRegistry`、`createProviderRequestCompiler`、`createSessionLedger`
+- `createSessionStore`、`createSkillFileStore`、`createSkillMarketClient`、`createSoloExecutionService`
+- `createSubAgentDispatcher`、`createSubAgentGuidanceRelayRegistry`、`createSubAgentSessionStore`、`createTeamModelRouter`
+- `createToolCapabilityRegistry`、`createToolContractExecutionFacade`、`createToolExecutionPolicy`、`createToolExecutor`
+- `createToolRegistry`、`createTurnContextAppendHub`、`createTurnContextSessionLedgers`、`createUnattendedSubAgentApprovalPort`
+- `createVelarModArchiveImporter`、`createWriteLeaseCoordinator`、`defaultDenyApprovalPort`、`defaultUnsupportedInteractionPort`
+- `directiveOperations`、`externalAgentBridgeTokensEqual`、`fileContextRegistry`、`formatSkillDisplayMarkdown`
+- `guidanceRelay`、`mcpToolTranslator`、`parseFrontmatter`、`parseFrontmatterList`
+- `readPromptAuditFile`、`resolveSubAgentExecutionKey`、`resolveToolInputReuse`、`runRemoteNodeMcpStdio`
+- `safeFetch`、`toolContracts`、`toolDescriptions`、`toolInputReuseStore`
+- `toolKernelModules`、`toolSchemas`、`toolTransportNames`、`withToolInputReuse`
 
 ## 模型面工具
 
@@ -167,6 +172,10 @@ VelarOS 的 Agent 运行时：一次「用户说话 → 模型跑 → 工具做�
 - **上下文治理**：请求超过可用输入容量才动手（`AgentContextThresholds.compactionPercent`），
   界面提醒线只提示不压缩（INV-11）。治理状态挂在 `ContextGovernanceSessionRegistry` 的每会话账本上，
   账本只追加；投影按驻留态生成，纪元不匹配的旧结果一律拒收。
+- **写一条工具**：`toolContracts.createDefiner({ categoryOf })` 造出定义函数 → 定义流水线（`utils/toolkit/define-tool-contract.ts`：
+  断言 canonical 工具 id → 按模型会发的 JSON 校验示例 → 编译说明并过硬上限与软预算两道闸 → 逐 surface 再走一遍 → 定 `readOnly`），
+  内置工具的 `defineVelaTool` 走同一条（INV-23 到 INV-27）。整类说明交 `toolDescriptions.forCategory` 断言；
+  挂进内核走 `toolKernelModules.define`，每次调用严格解析入参 → 解析上下文并换上内核的 abortSignal → 不可用报 `UNAVAILABLE` → 执行（INV-28）。
 - **工具执行**：唯一路径是 `ToolExecutor`。没注入审批端口时 `defaultDenyApprovalPort` 一律拒（INV-1）；
   无人值守宿主用 `createUnattendedSubAgentApprovalPort` 按显式策略升级（INV-2）。
   投给模型的结果有硬上限，超限截断但原文可经 `context:recall` 取回（INV-10）。
@@ -181,8 +190,7 @@ VelarOS 的 Agent 运行时：一次「用户说话 → 模型跑 → 工具做�
 ## 依赖什么
 
 - `@velaros-ai/core`：日志、断言式类型判定、错误、计时器作用域。
-- `@velaros-ai/kernel`：作为内核模块挂进宿主（`createAgentKernelModule`）、远程能力节点客户端。
-- `@velaros-ai/tool-contract`：写工具的通用件（定义、说明渲染、schema、宽容入参、身份）。
+- `@velaros-ai/kernel`：作为内核模块挂进宿主（`createAgentKernelModule`）、把写好的工具集合做成内核模块（`toolKernelModules`）、远程能力节点客户端。
 - `ai`：模型请求的 provider 适配；`zod`：wire 与工具入参的运行期校验（schema 不出包）。
 - `@modelcontextprotocol/sdk`、`ws`、`jszip`、`gpt-tokenizer`：MCP 连接、远程节点、`.velarmod` 归档、分词。
 
@@ -225,15 +233,15 @@ Agent **不依赖任何空间包**：依赖方向单向，空间包引 Agent，A
 
 ## 不变量
 
-共 22 条，登记在 `spec/invariants.md`：测试 15 条（`spec/acceptance.test.ts`）、门禁 6 条、类型 1 条，
-未验证 0 条。
+共 28 条，登记在 `spec/invariants.md`：测试 21 条（`spec/acceptance.test.ts`）、门禁 6 条、类型 1 条，
+未验证 0 条。INV-23 到 INV-28 是工具契约并回时从 `@velaros-ai/tool-contract` 搬来的，新旧编号对照写在登记表开头。
 
 ## 非目标
 
 - 不认识任何具体能力：Agent 里不许出现文件、浏览器、记忆、项目这些域词。
 - 不做会话权威：会话住在产品的 renderer 里，Agent 只回答一次次执行。
 - 不做模型供应方适配：provider 的差异由 `@velaros-ai/model` 与注入的模型端口负责。
-- 不做工具定义的通用基建：那在 `@velaros-ai/tool-contract`。
+- 不替写工具的一方登记名单：工具契约只定一条工具长什么样、怎么被定义、怎么挂进内核；类别、权限、错误码都由写工具的一方自己出。
 - 不做界面：目标停靠区、容量条、搜索结果的形状由 `./chat` 给数据，画由产品画。
 
 ## 结构
@@ -242,12 +250,12 @@ Agent **不依赖任何空间包**：依赖方向单向，空间包引 Agent，A
 packages/agent/
   MODULE.md                       本卡片
   spec/  invariants.md  acceptance.test.ts
-  test/                           实现测试（119 个文件）
+  test/                           实现测试（122 个文件）
   src/
     contract/  provides.ts  requires.ts  constants.ts
     types/     agent.ts（可移植）+ 21 个按域的类型文件
-    impl/      AgentTools.ts + 19 个域子目录（202 个文件）
-    utils/     tuning.ts  capabilities.ts + 22 个域子目录（306 个文件）
+    impl/      AgentTools.ts + 19 个域子目录（206 个文件）
+    utils/     tuning.ts  capabilities.ts + 22 个域子目录（305 个文件）
     index.ts               `.` 入口，只转发
     contracts.ts           `./contracts` 入口，只转发
     chat.ts                `./chat` 入口，只转发
@@ -265,7 +273,7 @@ packages/agent/
 | 5 委派 | `delegation/` | 子 Agent 派发、线程存储、团队路由与写租约 |
 | 6 运行 | `runner/` | Runner、模型运行时、提示词组装、角色、工作流解释器 |
 | 7 回合 | `loop/` | 主会话/子 Agent 循环、回合、请求组装、流消费、重试、纪元与前缀守卫 |
-| 8 会话态与工具链 | `session/`、`tools/` | 会话工作态、审批、提醒；工具执行、策略、注册表、输出句柄化 |
+| 8 会话态与工具链 | `session/`、`tools/` | 会话工作态、审批、提醒；工具执行、策略、注册表、输出句柄化；写工具的契约（定义、说明断言、挂进内核、schema 包） |
 | 9 上下文 | `context/`、`residency/`、`retrieval/` | 请求编译、驻留账本与治理、召回 |
 | 10 基础能力 | `guidance/`、`mods/`、`connectors/`、`chat/` | 提示词段与技能、mod 注册机、MCP/远程/外部桥/安全取网、渲染侧聊天流 |
 | 11 执行记录 | `records/` | 执行记录、账本、事件总线、回合事件归约、后台任务、回合上下文账本 |

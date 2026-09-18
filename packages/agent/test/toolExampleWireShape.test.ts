@@ -1,28 +1,24 @@
 import { expect, test } from 'bun:test'
 import { z } from 'zod'
 
-import { createToolExampleRegistry, serializeToolExampleInput } from '@velaros-ai/tool-contract'
-
 import { defineToolRuntimeSpec } from '../src/utils/toolkit/define-tool-contract'
+import { serializeToolExampleInput } from '../src/utils/toolkit/examples'
 
 function tool(schema: z.ZodType<any>, example: Record<string, unknown>) {
-  return defineToolRuntimeSpec(
-    {
-      name: 'probe:example',
-      category: 'probe',
-      role: 'inspect',
-      summary: '读取示例。',
-      suitable: ['验证调用参数。'],
-      forbidden: ['不执行写入。'],
-      usage: ['按示例字段调用。'],
-      notes: ['示例使用真实传输形状。'],
-      examples: [example],
-      schema,
-      permissions: [],
-      execute: async () => null,
-    },
-    createToolExampleRegistry()
-  )
+  return defineToolRuntimeSpec({
+    name: 'probe:example',
+    category: 'probe',
+    role: 'inspect',
+    summary: '读取示例。',
+    suitable: ['验证调用参数。'],
+    forbidden: ['不执行写入。'],
+    usage: ['按示例字段调用。'],
+    notes: ['示例使用真实传输形状。'],
+    examples: [example],
+    schema,
+    permissions: [],
+    execute: async () => null,
+  })
 }
 
 test('model-facing examples are directly parseable JSON with exact escaping', () => {

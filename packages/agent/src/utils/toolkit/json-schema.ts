@@ -1,14 +1,13 @@
 /**
- * JSON Schema 的搬运工：剥元字段、稳定键序、共享定义的引用归一、内联与改名、补引用描述。
- * 只认 JSON Schema 的结构，不解释业务含义；对外的转换入口在 `impl/ToolSchemas.ts`。
+ * JSON Schema 的搬运工：单条 zod schema 转成输入侧 JSON Schema、剥元字段、共享定义的引用归一、内联与改名、补引用描述。
+ * 只认 JSON Schema 的结构，不解释业务含义；一整批工具出紧凑 schema 包的入口在 `impl/tools/ToolSchemas.ts`。
  */
 
-import type { z } from 'zod'
+import { z } from 'zod'
 
-import { isArray, isEmpty, isPlainObject, isRecord, isString } from '@velaros-ai/core'
+import { isArray, isPlainObject, isRecord, isString } from '@velaros-ai/core'
 
-import type { ToolSchemaBundle } from '../types/tool-contract.js'
-import type { ToolSchemaBundleContext } from '../types/toolkit.js'
+import type { ToolSchemaBundle, ToolSchemaBundleContext } from '../../types/toolkit.js'
 
 /** 包内共享定义的引用前缀；一份 bundle 自包含时全部引用都长这样。 */
 export const BundleSharedSchemaRefPrefix = '#/$defs/'
@@ -19,6 +18,17 @@ export const BundleSharedSchemaRefPrefix = '#/$defs/'
  */
 export function normalizeSchema(value: unknown): Record<string, unknown> {
   return isPlainObject(value) ? value : {}
+}
+
+/**
+ * 把单条 zod schema 转成自包含的 JSON Schema 对象：一律 `io:'input'`，定长元组补上长度界，剥掉对端用不上的元字段。
+ * 带 `.transform` 的宽容 schema 只有输入侧可表示，用默认的 output 视角会抛「Transforms cannot be represented in JSON Schema」，
+ * 结果是这些工具退化成零参数兜底 schema、模型侧一个参数都看不见（真实事故）。
+ */
+export function schemaToInputSchema(schema: z.ZodType): Record<string, unknown> {
+  return stripSchemaMetadata(
+    z.toJSONSchema(schema, { io: 'input', override: boundTupleLength })
+  ) as Record<string, unknown>
 }
 
 /**
@@ -261,92 +271,6 @@ function cloneSchemaValue(value: unknown): unknown {
   if (isArray(value)) return value.map(cloneSchemaValue)
   if (!isRecord(value)) return value
   return Object.fromEntries(Object.entries(value).map(([key, nested]) => [key, cloneSchemaValue(nested)]))
-}
-
-/**
- * 规范化任意 schema 节点的入口：数组保持原顺序逐项递归（数组次序在 JSON Schema 里有语义，
- * 不排序），对象交给 `canonicalizeSchemaObject`，标量原样返回。
- */
-function canonicalizeSchemaValue(value: unknown): unknown {
-  if (isArray(value)) return value.map(canonicalizeSchemaValue)
-  if (!isRecord(value)) return value
-  return canonicalizeSchemaObject(value)
-}
-
-/**
- * 把一个 schema 对象重建成稳定形态：键名按字典序重排（同一份 schema 无论怎么拼出来，
- * 序列化结果都一致，provider 侧的前缀缓存才不会因键序抖动失效），并对几类键特殊处理——
- * `properties` / `patternProperties` / `$defs` / `definitions` / `dependentSchemas` 的子键也排序；
- * `required` 去非字符串项并排序，**空数组整个键丢掉**；`dependentRequired` 同理，清空后丢键。
- * 丢空键是收紧：留着 `required: []` 只是噪声，语义上等于没有。
- */
-export function canonicalizeSchemaObject(value: Record<string, unknown>): Record<string, unknown> {
-  const next: Record<string, unknown> = {}
-  for (const key of Object.keys(value).sort()) {
-    const nested = value[key]
-    switch (key) {
-      case 'properties':
-      case 'patternProperties':
-      case '$defs':
-      case 'definitions':
-      case 'dependentSchemas':
-        next[key] = canonicalizeNamedSchemaMap(nested)
-        break
-      case 'required': {
-        const required = canonicalizeStringArray(nested)
-        if (!isEmpty(required)) next[key] = required
-        break
-      }
-      case 'dependentRequired': {
-        const dependentRequired = canonicalizeDependentRequired(nested)
-        if (dependentRequired) next[key] = dependentRequired
-        break
-      }
-      default:
-        next[key] = canonicalizeSchemaValue(nested)
-        break
-    }
-  }
-  return next
-}
-
-/**
- * 规范化「名字 → 子 schema」这类映射（properties、$defs 等）：键按字典序重排，值各自递归规范化。
- * 这些键是属性名而非 schema 关键字，排序对语义无影响。入参不是对象时退回通用规范化。
- */
-function canonicalizeNamedSchemaMap(value: unknown): unknown {
-  if (!isRecord(value)) return canonicalizeSchemaValue(value)
-  return Object.fromEntries(
-    Object.keys(value)
-      .sort()
-      .map((key) => [key, canonicalizeSchemaValue(value[key])])
-  )
-}
-
-/**
- * 规范化 `dependentRequired`：外层键排序，每个值当字符串数组去杂项后排序，
- * **依赖列表为空的条目整条丢掉**；一条都不剩（或入参不是对象）时返回 null，
- * 调用方据此连 `dependentRequired` 这个键一起不写。
- */
-function canonicalizeDependentRequired(value: unknown): Nullable<Record<string, string[]>> {
-  if (!isRecord(value)) return null
-
-  const entries = Object.keys(value)
-    .sort()
-    .flatMap((key): Array<[string, string[]]> => {
-      const required = canonicalizeStringArray(value[key])
-      return isEmpty(required) ? [] : [[key, required]]
-    })
-  return isEmpty(entries) ? null : Object.fromEntries(entries)
-}
-
-/**
- * 把值收成稳定的字符串数组：非数组返回空数组，是数组则丢掉非字符串项后按字典序排序。
- * 只用于 `required` / `dependentRequired` 这类**次序无语义**的名字列表。
- */
-function canonicalizeStringArray(value: unknown): string[] {
-  if (!isArray(value)) return []
-  return value.filter(isString).sort()
 }
 
 /**

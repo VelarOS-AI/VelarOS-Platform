@@ -533,6 +533,22 @@ export const TurnContextFormat = Object.freeze({
 } as const)
 
 /**
+ * canonical 工具 id 的正则源文本：形如 `namespace:tool`，两段都必须以小写字母开头，
+ * 命名空间段只允许小写字母、数字、`.`、`-`，工具段只允许小写字母、数字、`_`、`-`。
+ * 模型、清单、传输三方靠它对齐同一套工具身份；定义工具时不合法的名字当场抛。
+ */
+export const CanonicalToolIdPatternSource = '^[a-z][a-z0-9.-]*:[a-z][a-z0-9_-]*$' as const
+
+/**
+ * 领域错误镜像进 `AppError.context` 的键名。
+ *
+ * 跨内核与 IPC 一趟 `toJSON` → `fromJSON` 会丢掉 cause（context 不丢），镜像就是那时唯一还在的
+ * 结构化诊断来源。能力把领域错误翻成 AppError 时写这一格，Agent 的失败提取端按这一格回退读取，
+ * 两边都不认识对方的名字。
+ */
+export const ToolDomainErrorContextKey = 'toolDomainError' as const
+
+/**
  * 工具传输名的对外约定。
  *
  * 供应方对工具名的字符集比 canonical 名严格，发请求前要按这个模式改写并在回传时还原。

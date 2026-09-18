@@ -101,14 +101,18 @@ export type { ChatSearchMessagesApi } from '../impl/retrieval/ChatSearchMessages
 export type { ChatSearchRankingApi } from '../impl/retrieval/ChatSearchRanking.js'
 export type { ContextRetrievalQueryTraceStoreApi } from '../impl/retrieval/ContextRetrievalQueryTraceStore.js'
 
-// 工具面
+// 工具面（含写工具的契约：定义、说明闸、挂进内核、schema 包）
 export type { DirectiveOperationsApi } from '../impl/builtin/DirectiveOperations.js'
 export type { AgentToolContractsApi } from '../impl/tools/AgentToolContracts.js'
 export type { ToolCapabilityRegistryApi } from '../impl/tools/ToolCapabilityRegistry.js'
+export type { ToolContractDefinitionApi } from '../impl/tools/ToolContractDefinition.js'
+export type { ToolDescriptionsApi } from '../impl/tools/ToolDescriptions.js'
 export type { ToolExecutionPolicyApi } from '../impl/tools/ToolExecutionPolicy.js'
 export type { ToolExecutorApi } from '../impl/tools/ToolExecutor.js'
 export type { ToolInputReuseStoreApi } from '../impl/tools/ToolInputReuseStore.js'
+export type { ToolKernelModulesApi } from '../impl/tools/ToolKernelModules.js'
 export type { ToolRegistryApi } from '../impl/tools/ToolRegistry.js'
+export type { ToolSchemasApi } from '../impl/tools/ToolSchemas.js'
 export type { ToolTransportNamesApi } from '../impl/tools/ToolTransportNames.js'
 
 // 提示词、技能与 mod

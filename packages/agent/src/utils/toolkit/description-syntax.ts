@@ -1,11 +1,11 @@
 /**
- * 结构化说明的语法本身：分节名单与顺序、渲染一节、判定一块、按语法判定整段、解析回条目、按语法压缩。
- * 工具说明与参数说明共用这一套，只换语法表；对外的渲染、判定、断言在 `impl/ToolDescriptions.ts`。
+ * 结构化说明的语法本身：分节名单与顺序、渲染一节、判定一块、按语法判定整段、解析回条目。
+ * 工具说明与参数说明共用这一套，只换语法表；渲染整段、判定、解析与两道长度闸在同目录的 `tool-description.ts`。
  */
 
-import { isBlank, isNumber, isString } from '@velaros-ai/core'
+import { isBlank, isNumber } from '@velaros-ai/core'
 
-import type { StructuredDescriptionGrammar } from '../types/toolkit.js'
+import type { StructuredDescriptionGrammar } from '../../types/toolkit.js'
 
 /** 工具说明的七个分节，顺序就是渲染顺序。 */
 export const StructuredToolDescriptionSections = [
@@ -147,35 +147,4 @@ export function parseListSectionItems(block: string): string[] {
     .slice(1)
     .map((line) => (line.startsWith('- ') ? line.slice(2).trim() : ''))
     .filter((item) => item.length > 0)
-}
-
-/**
- * 渐进式披露的压缩内核：保留 `描述：` 段落与分节顺序，逐节只留首条要点。
- *
- * `keepInFullSection` 是**不许压缩的那一节**——它承载模型做对事所必需的硬信息
- * （工具的强制流程门禁、参数的合法取值枚举），压掉就等于删约束。
- * 结果仍是合法结构化描述（每个必需分节至少留一条），可继续过 `isStructured*` 校验。
- * 非结构化输入原样返回。
- */
-export function compactStructuredDescription(
-  description: string,
-  isStructured: (value: string) => boolean,
-  keepInFullSection: string
-): string {
-  const trimmed = description.trim()
-  if (!isStructured(trimmed)) return trimmed
-
-  return trimmed
-    .split(/\n{2,}/)
-    .map((block, index) => {
-      if (index === 0) return block
-
-      const lines = block.split('\n')
-      const title = lines[0] ?? ''
-      if (title === keepInFullSection) return block
-
-      const firstBullet = lines.slice(1).find((line) => line.startsWith('- '))
-      return isString(firstBullet) ? `${title}\n${firstBullet}` : block
-    })
-    .join('\n\n')
 }

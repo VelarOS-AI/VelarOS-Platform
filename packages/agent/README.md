@@ -27,7 +27,7 @@
 | `@velaros-ai/agent/chat` | **browser-safe** 聊天客户端公共面:会话投影、搜索、上下文用量与回合环境格式化 |
 | `@velaros-ai/agent/chat-stream` | 聊天流协议与消费者(`ChatStreamProtocol` / `ChatStreamConsumer` / 会话流日志) |
 | `@velaros-ai/agent/run-context` | 回合上下文账本与追加通道，供能力适配器接入，不暴露 Agent 根运行时 |
-| `@velaros-ai/agent/tool-contract` | 工具定义、审批端口、描述构造与 schema 辅助，只承载 Agent 工具契约 |
+| `@velaros-ai/agent/tool-contract` | **browser-safe** 写工具的整套契约：`toolContracts` 定义工具、`toolDescriptions` 断言整类说明、`toolKernelModules` 把工具集合挂进内核、`toolSchemas` 出紧凑 schema 包，外加审批端口、入参复用与文件上下文（ADR 0014 从 `@velaros-ai/tool-contract` 并回） |
 | `@velaros-ai/agent/mcp` | stdio / HTTP / SSE 连接、OAuth 挑战、工具与资源的 MCP 公共机制 |
 | `@velaros-ai/agent/mods` | Agent Mod 装载/投影以及 `.velarmod` 扫描、信任与安装事务 |
 | `@velaros-ai/agent/bridge` | External Agent Bridge 的 loopback transport 与有界 replay/dedup/配对节流状态机；产品保留凭据、Session 和工具适配 |

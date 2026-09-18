@@ -1,8 +1,8 @@
 import { isArray, isBigInt, isEmpty, isFunction,isNonBlankString, isObject, isPlainObject, isString, optionalWhen } from '@velaros-ai/core'
 import { type AppError } from '@velaros-ai/core/error'
 import { readStringScalar } from '@velaros-ai/core/utils/unknownJsonRecord'
-import { ToolDomainErrorContextKey } from '@velaros-ai/tool-contract/contracts'
 
+import { ToolDomainErrorContextKey } from '../../contract/constants.js'
 import type { ErrorCauseRecord, RuntimeToolIssue, ToolFailureBuildOptions,ToolFailureResult, ToolSpaceRecoveryGuide } from '../../types/tools.js'
 import { AgentTuning } from '../tuning'
 
@@ -268,8 +268,8 @@ function buildExecutionFailureResult(toolName: string, error: AppError): ToolFai
   if (embeddedFailure) return withRuntimeToolIssue(embeddedFailure)
 
   // 跨 Kernel/IPC 边界一趟 AppError.toJSON → fromJSON 往返会丢掉 cause（context 不丢），
-  // 这时 cause 链上什么都读不到；各空间挂内核时经 `toolFailures.domain` 镜像进 context 的领域错误对象
-  // 就是这种情况下唯一还在的诊断来源，作回退读取。这一格由工具契约约定，Agent 不认识任何空间的名字。
+  // 这时 cause 链上什么都读不到；能力把领域错误翻成 AppError 时镜像进 context 的那一格（`ToolDomainErrorContextKey`）
+  // 就是这种情况下唯一还在的诊断来源，作回退读取。这一格由工具契约的常量表约定，Agent 不认识任何空间的名字。
   const domainErrorMirror = error.context[ToolDomainErrorContextKey]
   const nestedReason =
     extractNestedErrorReason(error) ?? extractNestedErrorReason(domainErrorMirror)

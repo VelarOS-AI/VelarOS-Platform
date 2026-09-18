@@ -14,15 +14,15 @@ VelarOS Desktop 是首款真实产品、桌面 Shell 和 reference integration�
 
 ## 仓库结构
 
-VelarOS Platform 包含 19 个 package workspace，其中 18 个独立发布。公开包各自遵循 semver，
+VelarOS Platform 包含 12 个 package workspace，其中 11 个独立发布。公开包各自遵循 semver，
 并通过统一的 `velaros.platform` 代号声明跨包兼容性。
 
 | 领域 | 包 |
 | --- | --- |
 | Kernel | `@velaros-ai/kernel` |
-| Agent 运行时 | `@velaros-ai/agent` |
+| Agent 运行时 | `@velaros-ai/agent`（写工具的契约在 `@velaros-ai/agent/tool-contract`） |
 | 共享原语 | `@velaros-ai/core`（基础原语，外加 `platform`、`text-files`、`path-rules` 三个单元） |
-| 能力公共件 | `@velaros-ai/code-surface`、`@velaros-ai/velar`、`@velaros-ai/tool-contract` |
+| 能力公共件 | `@velaros-ai/code-surface`、`@velaros-ai/velar` |
 | 模型供应方 | `@velaros-ai/model` |
 | 能力 | `@velaros-ai/cli`、`@velaros-ai/development` |
 | UI | `@velaros-ai/ui` |

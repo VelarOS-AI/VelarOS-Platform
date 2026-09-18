@@ -277,6 +277,12 @@ export const AgentTuning = Object.freeze({
   } as const),
   /** 工具契约套件：说明体积与 schema 组装。 */
   toolkit: Object.freeze({
+    /** 单个工具说明的开发期硬上限（字符）：保底闸，不是预算；正常单一职责的工具够不到，撞线基本等于这个工具该拆。 */
+    descriptionMaxChars: 6_000,
+    /** 单个工具说明的软预算（字符）：复杂用法属于技能文书，不该每轮随工具清单进上下文。 */
+    descriptionBudgetChars: 1_800,
+    /** 发给模型的 schema 包里，共享定义短于多少字符时直接内联，不单独建 $defs。 */
+    inlineSharedDefChars: 120,
     /** 工具发现打分低于最高分的多少比例就算低置信，标记给模型。 */
     lowConfidenceScoreRatio: 0.3,
   } as const),

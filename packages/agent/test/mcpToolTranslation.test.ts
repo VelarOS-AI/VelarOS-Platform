@@ -9,7 +9,7 @@ import {
   buildMcpToolName,
   translateMcpTool,
 } from '../src/utils/connectors/mcp-tool-translation'
-import { isCanonicalToolId } from '../src/utils/toolkit/identity'
+import { isCanonicalToolId } from '../src/utils/tools/tool-identity'
 
 function translateWithAnnotations(
   annotations: McpToolDescriptor['annotations']

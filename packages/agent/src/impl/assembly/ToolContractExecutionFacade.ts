@@ -9,7 +9,7 @@ import type { CreateToolContractExecutionFacade, ToolContractExecutionBinding, T
 import type { ToolExecutionPolicyRegistry, ToolExecutorEvents } from '../../types/tools.js'
 import { resolveToolReadOnly } from '../../utils/toolkit/define-tool-contract'
 import { ToolContractDiscoveryDescriptors } from '../../utils/toolkit/discovery'
-import { normalizeSchema } from '../../utils/toolkit/schema-bundle'
+import { normalizeSchema } from '../../utils/toolkit/json-schema'
 import { buildExecutionFailureResult } from '../../utils/tools/execution-policy-failures'
 import { ToolCatalogDiscoveryToolName, ToolSchemaDiscoveryToolName } from '../../utils/wire/lease'
 import { buildLeaseDeniedResponse, buildToolCatalogSnapshot, buildToolContractBaseEnvelope, buildToolContractResultEnvelope, buildToolContractSuccessEnvelope, buildToolSchemaDiscoveryEnvelope } from '../../utils/wire/tool-contract-envelopes'

@@ -458,34 +458,6 @@ export const GovernedModules = [
     acceptance: 'spec/acceptance.test.ts',
   },
   {
-    directory: 'tool-contract',
-    name: '@velaros-ai/tool-contract',
-    // 本包不向模型交工具，它是各空间写工具用的契约：不登记 toolsFile、toolDefiner、hostPort
-    contract: 'src/contract',
-    types: 'src/types',
-    portable: 'tool-contract.ts',
-    impl: 'src/impl',
-    utils: 'src/utils',
-    tuning: 'tuning.ts',
-    // 两个入口都不碰 Node 模块；只登记可移植数据那一个，根入口带 zod 与内核 ABI
-    browserSafeEntries: ['contracts.ts'],
-    layers: [
-      // 定义一条工具：断言身份、校验示例、编译说明
-      ['ToolContractDefinition.ts'],
-      // 把工具集合挂进内核
-      ['ToolKernelModules.ts'],
-      // 入参一侧：出 schema、宽容修正、失败回执
-      ['ToolSchemas.ts', 'ToolInputForgiveness.ts', 'ToolFailures.ts'],
-      // 模型面说明的渲染与判定
-      ['ToolDescriptions.ts'],
-      // 最底下两件：示例登记表与身份
-      ['ToolExampleRegistry.ts', 'ToolIdentity.ts'],
-    ],
-    card: 'MODULE.md',
-    invariants: 'spec/invariants.md',
-    acceptance: 'spec/acceptance.test.ts',
-  },
-  {
     directory: 'html-artifacts',
     name: '@velaros-ai/html-artifacts',
     // 没有工具：这是一个浏览器库，不向模型交工具，不登记 toolsFile、toolDefiner、hostPort

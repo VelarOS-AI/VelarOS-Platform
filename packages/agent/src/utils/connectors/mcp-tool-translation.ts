@@ -18,7 +18,7 @@ import type { ToolApprovalRiskLevel,ToolCapabilitySchema, ToolCategoryId, ToolRo
 import type { VelaTool } from '../../types/builtin.js'
 import type { McpAutoApprovePolicy, McpToolDescriptor, TranslatedMcpTool, TranslateMcpToolInput } from '../../types/connectors.js'
 import type { KernelToolContext } from '../../types/tool-context.js'
-import { schemaToInputSchema } from '../toolkit/schema-bundle'
+import { schemaToInputSchema } from '../toolkit/json-schema'
 import { createApprovalOperationKey } from '../toolkit/task-approval'
 
 import { describeMcpApprovalArguments } from './mcp-approval-arguments'

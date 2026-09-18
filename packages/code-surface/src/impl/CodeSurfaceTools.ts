@@ -9,10 +9,10 @@
 
 import { z } from 'zod'
 
+import { toolDescriptions, toolKernelModules } from '@velaros-ai/agent/tool-contract'
 import type { KernelModuleDefinition } from '@velaros-ai/kernel'
 import { kernelModules } from '@velaros-ai/kernel'
 import type { CapabilityToken } from '@velaros-ai/kernel/contracts'
-import { toolDescriptions, toolKernelModules } from '@velaros-ai/tool-contract'
 
 import { CodeSurfaceKernelModuleVersion, CodeSurfaceLimits, CodeSurfaceModId, CodeSurfaceToolCategoryId, CodeSurfaceToolNames, ScriptDiffKinds, ScriptStepOps } from '../contract/constants.js'
 import type { CodeSurfaceCapabilityService, CodeSurfaceToolCollection } from '../contract/provides.js'

@@ -418,7 +418,8 @@ for (const expected of CapabilityPackages) {
   }
 }
 
-// 已经拆掉的包不许回来：工具并进了 velar 的能力单元，空间的装配归产品（ADR 0013），底层能力并进 core 做单元、没人用的协议删掉（ADR 0014）。
+// 已经拆掉的包不许回来：工具并进了 velar 的能力单元，空间的装配归产品（ADR 0013），底层能力并进 core 做单元、没人用的协议删掉、
+// 工具契约并回 agent 的 `./tool-contract` 入口（ADR 0014）。
 for (const obsoleteDirectory of [
   "workspace",
   "workspace-agent-tools",
@@ -429,6 +430,7 @@ for (const obsoleteDirectory of [
   "platform",
   "text-files",
   "path-rules",
+  "tool-contract",
 ]) {
   if (existsSync(resolve(PackagesRoot, obsoleteDirectory)))
     fail(

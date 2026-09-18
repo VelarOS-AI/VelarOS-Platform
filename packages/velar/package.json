@@ -157,7 +157,6 @@
     "@velaros-ai/code-surface": "workspace:*",
     "@velaros-ai/core": "workspace:*",
     "@velaros-ai/kernel": "workspace:*",
-    "@velaros-ai/tool-contract": "workspace:*",
     "diff": "^8.0.4",
     "docx": "^9.6.1",
     "exceljs": "^4.4.0",

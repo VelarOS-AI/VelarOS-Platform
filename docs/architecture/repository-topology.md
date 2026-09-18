@@ -7,9 +7,9 @@ VelarOS Platform is a flat Bun workspace. Every publishable package lives direct
 | Domain | Directories |
 | --- | --- |
 | Kernel | `packages/kernel` |
-| Agent | `packages/agent` |
+| Agent | `packages/agent` (the tool contract is its `./tool-contract` entry) |
 | Core | `packages/core` (base primitives in `src/`, plus the `platform`, `text-files` and `path-rules` units) |
-| Foundations | `packages/code-surface`, `packages/velar`, `packages/tool-contract` |
+| Foundations | `packages/code-surface`, `packages/velar` |
 | Model | `packages/model` |
 | Capabilities | `packages/cli`, `packages/development` |
 | UI | `packages/ui` |
@@ -27,7 +27,7 @@ The repository is converging on three rules; packages move one at a time, each m
    runtime behind `velar:browser` and `velar:devtools`, and the local machine host behind `velar:shell` and `velar:sandbox`. The old
    package is then deleted — there is never a second copy. A package with no model face is not a tool and stays outside `velar`,
    grouped by responsibility: `development`, the language services a host plugs into `velar:code`, is one.
-2. **Core execution stays outside `velar`**: `kernel`, `agent`, `model`, `code-surface` (the program gate), `tool-contract`,
+2. **Core execution stays outside `velar`**: `kernel`, `agent` (which also carries the tool contract), `model`, `code-surface` (the program gate),
    and the cross-domain foundation `core`. Low-level libraries with no domain runtime are units of `core`, below the kernel so the
    kernel can use them too; packages nobody in the repository uses are deleted, not moved ([ADR 0014](../decisions/0014-packages-by-responsibility.md)).
 3. **Product assembly is not in this repository.** A space (which capabilities are mounted, with which ports and policies)
@@ -43,6 +43,7 @@ The repository is converging on three rules; packages move one at a time, each m
 | `project` | space assembly → products; the ports the project hands to shell, sandbox and images, and the verification policy → `velar/project` (ADR 0013); `packages/project` deleted | done |
 | `platform`, `text-files`, `path-rules` | units of `core` (`@velaros-ai/core/platform`, `/text-files`, `/path-rules`): domain-free libraries below the kernel, not tools ([ADR 0014](../decisions/0014-packages-by-responsibility.md)); the three packages deleted | done |
 | `surface-protocol` | deleted: no package in the repository used it, and the external-agent wire format gets rewritten on the code surface (ADR 0014); products keep the published version until then | done |
+| `tool-contract` | into `agent`'s existing `./tool-contract` entry (ADR 0014): defining a tool, the description gates, mounting a tool set onto the kernel and the schema bundle move in with their implementation, the forwarding shims and the mirrored protocol types are gone, and what nobody used (the failure envelope, the example registry, the forgiving helpers and description concepts nobody called) is deleted; `packages/tool-contract` deleted | done |
 | `computer` | `velar/computer` (`velar:computer`, with the helper sidecar runtime and its bundled Python helpers) | done |
 | `knowledge` | deleted with its vector and full-text indexes ([ADR 0010](../decisions/0010-memory-slimming.md)): each space searches and reads its own files | done |
 | `memory` | `velar/memory` (`velar:memory`: one directory of Markdown per host-given scope, [ADR 0010](../decisions/0010-memory-slimming.md)); `packages/memory` deleted | done |

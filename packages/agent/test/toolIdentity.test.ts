@@ -3,12 +3,10 @@ import { describe, expect, it } from 'bun:test'
 import { ProviderToolReferenceCanonicalizer } from '../src/impl/tools/ProviderToolReferenceCanonicalizer'
 import {
   assertCanonicalToolId,
-  isCanonicalToolId,
-} from '../src/utils/toolkit/identity'
-import {
   completeToolTransportNameAliases,
   createToolTransportNamePlan,
   createToolTransportProjection,
+  isCanonicalToolId,
   ProviderToolNamePattern,
   rewriteCanonicalToolReferences,
   rewriteProviderToolReferences,

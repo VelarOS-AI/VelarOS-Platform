@@ -700,10 +700,7 @@ export interface ToolExposurePolicy {
 /** Provider-neutral model input kinds used by model runtimes and tool requirements. */
 export type AgentModelInputModality = 'text' | 'image' | 'audio'
 
-/**
- * 工具角色：刻画工具对外部世界的作用面，用于子 Agent 暴露收窄与读改分离归类。
- * 与 tool-contract 的 ToolContractRole 同源（后者直接别名到此），避免 core 内部循环依赖。
- */
+/** 工具角色：刻画工具对外部世界的作用面，用于子 Agent 暴露收窄与读改分离归类；定义工具时写在说明规格的 `role` 上。 */
 export type ToolRole = string
 
 export interface ToolDescriptor {

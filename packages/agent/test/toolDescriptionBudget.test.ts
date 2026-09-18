@@ -1,15 +1,13 @@
 import { describe, expect, test } from 'bun:test'
 import { z } from 'zod'
 
-import { createToolExampleRegistry } from '@velaros-ai/tool-contract'
-
 import type { DefineToolRuntimeSpecInput } from '../src/types/toolkit.js'
 import { mapToolDiscoveryCards } from '../src/utils/builtin/tool-space-queries'
 import { defineToolRuntimeSpec } from '../src/utils/toolkit/define-tool-contract'
-import {
-  isStructuredToolDescription,
-  ToolDescriptionBudgetChars,
-} from '../src/utils/toolkit/tool-description'
+import { isStructuredToolDescription } from '../src/utils/toolkit/tool-description'
+import { AgentTuning } from '../src/utils/tuning'
+
+const ToolDescriptionBudgetChars = AgentTuning.toolkit.descriptionBudgetChars
 
 /**
  * 造一个描述长度可控的工具契约。
@@ -25,25 +23,21 @@ function defineProbeTool(
     ? ['基线注意事项。', 'x'.repeat(fillerChars)]
     : ['基线注意事项。']
 
-  return defineToolRuntimeSpec<{ value: string }>(
-    {
-      name: 'probe:budget',
-      category: 'system',
-      role: 'inspect',
-      summary: '预算门探针工具。',
-      suitable: ['需要验证软预算门时。'],
-      forbidden: ['不要在产品里注册它。'],
-      usage: ['传 value。'],
-      examples: [{ value: 'x' }],
-      notes,
-      schema: z.object({ value: z.string() }),
-      permissions: [],
-      execute: async () => null,
-      ...contractOverrides,
-    },
-    // 每个用例用独立示例注册表，避免探针工具名污染进程级默认注册表。
-    createToolExampleRegistry()
-  )
+  return defineToolRuntimeSpec<{ value: string }>({
+    name: 'probe:budget',
+    category: 'system',
+    role: 'inspect',
+    summary: '预算门探针工具。',
+    suitable: ['需要验证软预算门时。'],
+    forbidden: ['不要在产品里注册它。'],
+    usage: ['传 value。'],
+    examples: [{ value: 'x' }],
+    notes,
+    schema: z.object({ value: z.string() }),
+    permissions: [],
+    execute: async () => null,
+    ...contractOverrides,
+  })
 }
 
 describe('tool description soft budget', () => {

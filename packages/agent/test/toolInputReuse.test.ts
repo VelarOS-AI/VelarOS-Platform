@@ -3,7 +3,7 @@ import { z } from 'zod'
 
 import { InMemoryContextPayloadStore } from '../src/impl/context/InMemoryContextPayloadStore'
 import { resolveToolInputReuse, ToolInputReuseError, toolInputReuseStore, withToolInputReuse } from '../src/impl/tools/ToolInputReuseStore'
-import { schemaToInputSchema } from '../src/utils/toolkit/schema-bundle'
+import { schemaToInputSchema } from '../src/utils/toolkit/json-schema'
 
 const toolName = 'project:edit'
 function context(store = new InMemoryContextPayloadStore(), root = '/repo') {

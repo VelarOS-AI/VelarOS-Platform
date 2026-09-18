@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test'
 
 import { AppError } from '@velaros-ai/core/error'
-import { ToolDomainErrorContextKey } from '@velaros-ai/tool-contract/contracts'
 
+import { ToolDomainErrorContextKey } from '../src/contract/constants'
 import {
   buildExecutionFailureResult,
   buildToolFailureResult,

@@ -994,6 +994,19 @@ export interface InteractionPort {
   getCurrentExecutionAdvice: () => Nullable<ExecutionTaskExecutionAdvice>
 }
 
+/**
+ * 工具上下文解析器：内核按名调一个工具之前，由宿主按作用域给出这次调用的工具上下文。
+ *
+ * 谁给：把工具集合挂进内核的那一方（它知道自己的上下文长什么样），经 `toolKernelModules.define` 的
+ * `resolveContext` 交进来；什么时候给：每次按名调用工具、且入参已经过 schema 严格解析之后；
+ * 必不必须：可以不给——不给时能力服务一个操作都不登记，工具说明仍可读但谁都调不动。
+ * 返回的上下文里的 `abortSignal` 会被换成内核给的那个，实现不必自己拼。
+ */
+export type ToolContextResolver<TContext> = (
+  scope: LooseOptional<ScopeRef>,
+  signal: AbortSignal,
+) => TContext | Promise<TContext>
+
 /** 工具回执的模型面投影端口：决定模型实际看到多少、完整正文往哪存。 */
 export interface KernelToolOutputStore {
   /**

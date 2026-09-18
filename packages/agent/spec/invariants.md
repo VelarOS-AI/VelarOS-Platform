@@ -15,6 +15,12 @@
 
 编号只增不重排。本表随 1.0.0 的入口收口落成。
 
+INV-23 起是工具契约并回本包（ADR 0014）时从 `@velaros-ai/tool-contract` 搬来的承诺，原编号对照：
+tool-contract INV-1 → INV-23，INV-2 → INV-24，INV-3 → INV-25，INV-4 → INV-26，INV-5 → INV-27，INV-6 → INV-28。
+另外两条不再单列：原 INV-7（失败回执的三种结论写在 `context.executionOutcome`）随 `toolFailures` 一起作废——
+仓里没有任何一处调它，结论这一格由各能力自己写、执行门照 `executionOutcome === 'not-applied'` 读，本包不再代造信封；
+原 INV-8（`./contracts` 的引用链不碰 Node 内置模块）并进 INV-16：工具契约现在住在 `./tool-contract`，同一道 `check:agent-browser` 管着。
+
 | 编号 | 不变量 | 检验方式 | 检验器 |
 | --- | --- | --- | --- |
 | INV-1 | 没注入审批端口时，任何要审批的工具一律拒绝（默认端口抛，不放行） | 测试 | `spec/acceptance.test.ts` |
@@ -39,3 +45,9 @@
 | INV-20 | 模型面工具的 schema 与已审基线逐字节一致 | 门禁 | `check:agent-schemas` |
 | INV-21 | Agent 运行时不认识任何具体空间与能力：代码、文案、注释里不出现域词 | 门禁 | `check:agent-arch` |
 | INV-22 | 工具名类型由常量表派生，不许另写一份字符串联合 | 类型 | `src/contract/constants.ts::AgentToolName` |
+| INV-23 | 工具名必须是 canonical 工具 id（`namespace:tool`，两段都以小写字母开头）；不合法的名字在定义期就抛，进不了注册表 | 测试 | `spec/acceptance.test.ts` |
+| INV-24 | 契约里写的每条示例都按「模型实际会发的那份 JSON」序列化再解析，然后过工具自己的 schema；有一条不过就在定义期抛 `VALIDATION`，message 点名工具、原示例与逐条路径 | 测试 | `spec/acceptance.test.ts` |
+| INV-25 | 模型面说明只在定义期被写下来，硬上限与软预算两道闸也只在那时拦：超硬上限一律抛且不可豁免；超软预算抛，除非带上理由为 `safety-protocol` / `meta-tool` 且 `note` 非空白的豁免 | 测试 | `spec/acceptance.test.ts` |
+| INV-26 | 说明的分节语法固定：`描述` 开头且正文非空，其余分节按 `适合`→`禁止`→`强制流程`→`用法`→`示例`→`注意` 的顺序出现、不重复、每行都是 `- ` 条目，`适合` 必填；渲染与判定同一部语法，渲染出来的说明一定判为结构化 | 测试 | `spec/acceptance.test.ts` |
+| INV-27 | `readOnly` 的判据顺序是 `capabilities.effectKind === 'read'` → 显式 `readOnly` → `role === 'inspect'`，前一档有值就不看后一档 | 测试 | `spec/acceptance.test.ts` |
+| INV-28 | 内核可调用操作每次调用固定四步：按工具 schema 严格解析入参（对象 schema 拒收未知字段）→ 解析上下文并换上内核给的 abortSignal → 不可用报 `UNAVAILABLE` → 执行；宿主没给上下文解析器时一个操作都不登记 | 测试 | `spec/acceptance.test.ts` |

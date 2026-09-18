@@ -6,10 +6,29 @@
  */
 
 
+import { CanonicalToolIdPatternSource } from '../../contract/constants.js'
 import type { ToolTransportNamePlan, ToolTransportProjection } from '../../types/tools.js'
-import { assertCanonicalToolId, isCanonicalToolId } from '../toolkit/identity'
 
 const ProviderToolNamePattern = /^[a-zA-Z0-9_-]{1,64}$/
+
+/** canonical 工具 id 的正则，由合同里的源文本编出来，模型、清单、传输三方只有这一个出处。 */
+const CanonicalToolIdPattern = new RegExp(CanonicalToolIdPatternSource, 'u')
+
+/**
+ * 判断字符串是否是合法的 canonical 工具 id：形如 `namespace:tool`，两段都必须以小写字母开头，
+ * 命名空间段只允许小写字母、数字、`.`、`-`，工具段只允许小写字母、数字、`_`、`-`。
+ */
+function isCanonicalToolId(value: string): boolean {
+  return CanonicalToolIdPattern.test(value)
+}
+
+/** `isCanonicalToolId` 的断言版：不合法就抛出带原值和期望格式的 Error，合法则静默返回。 */
+function assertCanonicalToolId(value: string): void {
+  if (!isCanonicalToolId(value))
+    throw new Error(
+      `canonical 工具 id "${value}" 不合法：应写成 namespace:tool，两段都以小写字母开头，命名空间段只能用小写字母、数字、点和短横线，工具段只能用小写字母、数字、下划线和短横线。`
+    )
+}
 
 /**
  * 对 canonical 工具 id 算一个稳定的短指纹（FNV-1a 32 位，转 36 进制并左补零到 7 位）。
@@ -224,10 +243,12 @@ function rewriteToolReferences(
 }
 
 export {
+  assertCanonicalToolId,
   completeToolTransportNameAliases,
   createToolTransportNamePlan,
   createToolTransportProjection,
   escapeRegularExpression,
+  isCanonicalToolId,
   ProviderToolIdentityTokenCharacters,
   ProviderToolNamePattern,
   rewriteCanonicalToolReferences,

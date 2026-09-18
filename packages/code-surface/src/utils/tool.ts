@@ -1,6 +1,7 @@
-/** 工具：定义门的工具。类别固定填 program，其余交给 `@velaros-ai/tool-contract` 的公共实现。 */
+/** 工具：定义门的工具。类别固定填 program，其余交给 `@velaros-ai/agent` 的工具契约（`./tool-contract` 入口）。 */
 
-import { type DefineToolRuntimeSpecInput, toolContracts, type ToolPermission } from '@velaros-ai/tool-contract'
+import type { ToolPermission } from '@velaros-ai/agent/contracts'
+import { type DefineToolRuntimeSpecInput, toolContracts } from '@velaros-ai/agent/tool-contract'
 
 import { CodeSurfaceToolCategoryId } from '../contract/constants.js'
 import type { CodeSurfaceTool } from '../contract/provides.js'

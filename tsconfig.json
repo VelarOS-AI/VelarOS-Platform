@@ -102,12 +102,6 @@
       "@velaros-ai/velar/*": [
         "./packages/velar/*"
       ],
-      "@velaros-ai/tool-contract": [
-        "./packages/tool-contract/src/index.ts"
-      ],
-      "@velaros-ai/tool-contract/*": [
-        "./packages/tool-contract/src/*"
-      ],
       "@velaros-ai/document-renderer": [
         "./packages/document-renderer/src/index.ts"
       ],
