@@ -5,27 +5,17 @@
 
 import type { CodeSurfaceErrorCode } from '../contract/constants.js'
 
-/** 一段字符区间，两端都从 0 起、右开。 */
-export interface CodeProgramRange {
-  /** 起点，从 0 起。 */
-  offset: number
-  /** 终点，右开。 */
-  end: number
-}
-
 /**
- * 在上一份程序上改的一处：`oldText` 一字不差、范围里必须唯一、一组全成或全不成、各处不许重叠。
+ * 在上一份程序上改的一处：`oldText` 一字不差、在程序里唯一，换成 `newText`；一组全成或全不成、各处不许重叠。
  *
- * **不用行号**——模型看不见自己刚写的那段代码的行号，让它数行是在让它做最不擅长的事。
- * `oldText` 是主键，`range` 只是可选的收窄手段：程序是模型刚写的，没有回执可以照抄位置。
+ * **不用行号，也不用字符位置**——模型看不见自己刚写的那段代码的行号与偏移，让它数是在让它做最不擅长的事。
+ * 不唯一时多带几行上下文，直到唯一为止。
  */
 export interface CodeProgramEdit {
-  /** 要换掉的原文，必须和上一份程序里的字符一模一样（含缩进与换行），且在范围里唯一。 */
-  oldText?: string
+  /** 要换掉的原文，必须和上一份程序里的字符一模一样（含缩进与换行），且在整份程序里唯一。 */
+  oldText: string
   /** 换成什么；空串就是把那一段删掉。 */
   newText: string
-  /** 可选：把查找范围收窄到这一段；不给就在整份程序里找。不给 `oldText` 时则是把这一整段换掉，空区间就是在那个位置插入。 */
-  range?: CodeProgramRange
 }
 
 /**
@@ -133,8 +123,13 @@ export interface CompletedCall {
  * 返回值没了，日志是唯一能说明「走到哪一步、拿到了什么」的东西。
  */
 export interface CodeProgramResult {
-  /** 程序 `export default` 交出来的值；失败时没有这一格。 */
+  /**
+   * 程序导出的东西：只有 `export default` 时就是它；有具名导出时是 `{ default?, 名字: 值… }`（跟 `import * as m` 同形）。
+   * 什么都没导出、或者没跑完时没有这一格。
+   */
   value?: unknown
+  /** 程序有具名导出、`value` 是 `{ default?, 名字: 值… }` 时为真：回执按名字分开给模型看。 */
+  named?: true
   /** 程序里 `console.log` 的输出，超出预算时保留结尾（失败现场在尾部）。 */
   logs?: string[]
   /** 系统插手过的地方。 */
@@ -149,6 +144,12 @@ export interface CodeProgramResult {
    * 这是**账**不是事务：它不承诺回滚（跑过的命令回滚不了），承诺**知道**。
    */
   completed?: CompletedCall[]
+  /**
+   * 程序停下时（不管是跑完、失败、超时还是被中止）还没落定的能力调用，按发出的顺序；都已经要求它们停下。
+   *
+   * 程序不 await 就结束、或者死在一次调用中途时才会有：这些调用的副作用可能做了一半，模型要知道去核对哪几样。
+   */
+  unsettled?: string[]
   /** 程序没跑完时的说明。 */
   failed?: CodeProgramFailure
 }
@@ -238,6 +239,11 @@ export interface CapabilityModuleSurface {
   readonly methods: readonly string[]
   /** 生成的完整 `.d.ts` 正文，检查程序时按它推类型。 */
   readonly declarations: string
+  /**
+   * 代码模版：一整段能照抄的程序，一段一个函数、一种用法。不进声明、不常驻——模型拿不准怎么组合时，
+   * 在程序里 `template('velar:files')`（`velar:program`）读它。
+   */
+  readonly template: string
 }
 
 /**

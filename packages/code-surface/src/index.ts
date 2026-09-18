@@ -1,7 +1,7 @@
 /** 根入口：给 Node 宿主用；起隔离进程、跑 TypeScript 检查，都要 Node。 */
 
 export type { CodeSurfaceErrorCode, CodeSurfaceToolName } from './contract/constants.js'
-export { ApprovalNamespace, CodeSurfaceDiagnosticCodes, CodeSurfaceErrorCodes, CodeSurfaceKernelModuleVersion, CodeSurfaceLimits, CodeSurfaceModId, CodeSurfaceToolCategoryId, CodeSurfaceToolNames } from './contract/constants.js'
+export { CodeSurfaceDiagnosticCodes, CodeSurfaceErrorCodes, CodeSurfaceKernelModuleVersion, CodeSurfaceLimits, CodeSurfaceModId, CodeSurfaceToolCategoryId, CodeSurfaceToolNames } from './contract/constants.js'
 export type { CodeSurfaceCapabilityService, CodeSurfaceTool, CodeSurfaceToolCollection } from './contract/provides.js'
 export type {
   CodeCapabilityCall,
@@ -34,7 +34,6 @@ export type {
   CodeProgramDiagnostic,
   CodeProgramEdit,
   CodeProgramFailure,
-  CodeProgramRange,
   CodeProgramRequest,
   CodeProgramResult,
   CodeSurfaceOutcome,

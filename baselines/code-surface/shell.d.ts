@@ -1,56 +1,9 @@
-// 本文件由 scripts/code-surface/generate-declarations.mjs 从能力包源码生成，不要手改。
-// 模型写 `import { … } from 'velar:shell'`：3 个方法、21 个类型。
-// 改源码里带 @AgentView 的东西就是改模型可观测面，重算用 `bun run generate:code-surface`。
-
 declare module 'velar:shell' {
   /**
    * 跑命令、看后台任务、刷新 shell 环境。
    * 命令先按策略分类：危险命令每次都由用户亲自确认，长驻命令（开发服务器这类）要先问一声；
    * 当前空间还可能要求别的授权（项目空间里会改项目的命令要先过一次）。任何一关被拒时一个进程都没起，调用抛错。
    * 判定认全部五种 shell 的语法，换个 shell 写照样问。
-   */
-
-  /**
-   * 代码模版（template.js）：
-   *
-   * ```js
-   * // velar:shell 的代码模版：挑一段照着改，import 只写一次。
-   * // export default 交出来的东西才进你的上下文；命令的输出只落在程序的变量里。
-   * import { listTasks, refreshEnvironment, run } from 'velar:shell'
-   *
-   * // 跑测试，只交出结论和失败现场的末尾。
-   * async function runTests(cwd = '.') {
-   *   const result = await run({ command: 'npm test', cwd, timeoutMs: 600000 })
-   *   if (result.success) return { passed: true, ms: result.durationMs }
-   *   return { passed: false, exitCode: result.exitCode, issues: result.verification.issues }
-   * }
-   *
-   * // 输出很长时在程序里筛，只交出要的那几行。
-   * async function failingLines(cwd = '.') {
-   *   const result = await run({ command: 'npm run lint', cwd, maxOutputChars: 50000 })
-   *   const lines = `${result.stdout}\n${result.stderr}`.split('\n').filter((line) => /error/i.test(line))
-   *   return { exitCode: result.exitCode, truncated: result.truncated, count: lines.length, last: lines.slice(-30) }
-   * }
-   *
-   * // 起开发服务器：长驻命令自动转后台，回执里有 taskId；按它查跑到哪了，停它用条目里的现成命令。
-   * async function startServer(cwd = '.') {
-   *   const started = await run({ command: 'npm run dev', cwd })
-   *   const taskId = started.backgroundProcess?.taskId
-   *   if (!taskId) return { started: false, exitCode: started.exitCode, stderr: started.stderr.slice(-2000) }
-   *   const [task] = (await listTasks({ taskId })).tasks
-   *   return { taskId, status: task?.status, output: task?.recentOutput?.slice(-1000), stop: task?.terminateCommand }
-   * }
-   *
-   * // 刚装完一个命令却还找不到：刷新一次环境再试。
-   * async function afterInstall(command = 'rg --version') {
-   *   await refreshEnvironment()
-   *   const result = await run({ command })
-   *   return result.success ? result.stdout.trim() : { missing: true, stderr: result.stderr.slice(-500) }
-   * }
-   *
-   * // 交出答案：export default 后面接你要给自己看的那一点东西。
-   * export default await runTests()
-   * ```
    */
 
   /**

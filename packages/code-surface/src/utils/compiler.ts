@@ -7,7 +7,6 @@ import ts from 'typescript'
 
 import { isUndefined } from '@velaros-ai/core'
 
-import { CodeSurfaceLimits } from '../contract/constants.js'
 import type { CodeProgramDiagnostic } from '../types/code-surface.js'
 
 import { programForCheck, ProgramModuleSpecifier } from './program.js'
@@ -16,32 +15,21 @@ import { programForCheck, ProgramModuleSpecifier } from './program.js'
 export const DeclarationFileName = '/velar.d.ts'
 
 /**
- * 恒常授权的那个模块：这次运行本身的环境。
+ * 恒常可用的那个模块：这次运行本身——随程序交来的大段文本，与各能力模块的代码模版。
  *
- * **我们发明的东西要导入，语言自带的不动**——`blobs` 是我们发明的概念，
- * 做成隐形全局等于让模型背一条只有提示词告诉过它的暗知识；`console` 是 JavaScript 自带的，
- * 让模型 `import { console }` 才是真的怪。
- * 这个模块永远在常驻档，不需要租约、不占授权名额。
+ * **我们发明的东西要导入，语言自带的不动**——`blobs`、`template` 是我们发明的，做成隐形全局等于让模型背一条只有提示词告诉过它的暗知识；
+ * `console` 是 JavaScript 自带的，让模型 `import { console }` 才是真的怪。这个模块永远在常驻档，不需要租约、不占授权名额。
+ * 这一段也是给模型看的：门的说明里原样放着它（`describeGate`），检查器按它推类型——两边同一份。
  */
-const ProgramModuleDeclarations = `declare module '${ProgramModuleSpecifier}' {
-  /**
-   * 你写的是一段程序：\`import\` 拿能力，顶层 \`await\` 直接用，\`export default\` 交出答案；
-   * 也可以具名导出几样（\`export const total = …\`），结果就是 \`{ default?, total, … }\`。
-   *
-   * **能力调用的返回值落在程序的变量里，不进你的上下文。** 你只看得到两样：
-   * \`export default\` 交出来的值（最多 ${CodeSurfaceLimits.valueChars} 字符）和 \`console.log\` 的输出（最多 ${CodeSurfaceLimits.logChars} 字符）；
-   * 整份结果不超过 ${CodeSurfaceLimits.resultChars} 字符，超出的截掉并告诉你。所以：
-   * - 不知道东西多大，先在程序里看大小，再决定交出多少
-   * - 大东西里找东西，在程序里筛好了再交，别整份交
-   * - 别把大段内容塞进 \`throw\`，失败说明只留开头 ${CodeSurfaceLimits.failureChars} 字符
-   * - 能力交给你的图不在返回值里，跟在结果后面给你看；一次最多 ${CodeSurfaceLimits.images} 张。
-   *   图只给你看一次：你一回应它就撤出上下文，要再看就重新读。所以一次看一张，看完先把要点写下来
-   *
-   * 每个能力模块开头都有一份代码模版，挑一段照着改。
-   */
-
-  /** 大字符串旁路：宿主随程序一起送进来的那几段，按名字取。文件内容走这里，不进源码——否则要过好几层转义。 */
+export const ProgramModuleDeclarations = `declare module '${ProgramModuleSpecifier}' {
+  /** 随程序一起交来的大段文本，按名字取。文件正文、补丁放这里，不写进源码——写进源码要过好几层转义。 */
   export const blobs: Record<string, string>
+
+  /**
+   * 一个能力模块的代码模版：一整段能照抄的程序，一段一个函数、一种用法，展示这个模块的几件能力怎么组合。
+   * 拿不准怎么写时先读它：\`export default template('velar:shell')\`。模块名写错时抛错，并列出这个空间有哪些。
+   */
+  export function template(module: string): string
 }`
 
 /**

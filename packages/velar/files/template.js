@@ -1,5 +1,4 @@
-// velar:files 的代码模版：挑一段照着改，import 只写一次。
-// export default 交出来的东西才进你的上下文；读回来的行只落在程序的变量里。
+// velar:files 的代码模版：一段一个函数、一种用法，挑要的照着改。
 import { edit, read, undo } from 'velar:files'
 
 // 带行号地看一段：lines 每项是 [行号, 原文]，排成「行号: 原文」交出去最好读。
@@ -71,6 +70,3 @@ async function renameEverywhere(paths = ['a.txt', 'b.txt'], from = 'oldName', to
 async function revert(changeId = 'edit 结果里的 changeId') {
   return undo({ changeId })
 }
-
-// 交出答案：export default 后面接你要给自己看的那一点东西。
-export default await show()

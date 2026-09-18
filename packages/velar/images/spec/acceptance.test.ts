@@ -13,6 +13,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
 import { AppError } from '@velaros-ai/core/error'
 
+import { VelarImagesModule } from '../contract/surface'
 import type { ImageAttachment, ImageOperationContext, ImageSpacePort } from '../index'
 import { ImageLimits, imageOperations } from '../index'
 
@@ -469,11 +470,12 @@ export default outcome`)
 })
 
 describe('模型面', () => {
-  test('INV-12 代码模版整份照真实声明过类型检查，声明里嵌的就是这份文件', () => {
+  test('INV-12 代码模版整份照真实声明过类型检查；它不嵌进声明，随模型面发布的就是这份文件', () => {
     const template = readFileSync(fileURLToPath(new URL('../template.js', import.meta.url)), 'utf8')
     expect(checkModelProgram(template)).toEqual([])
     expect(template.match(/^import /gmu)).toHaveLength(1)
-    for (const line of template.trim().split('\n').filter((text) => text.trim().length > 0)) expect(ImageDeclarations).toContain(line)
+    expect(VelarImagesModule.template).toBe(template.trim())
+    expect(ImageDeclarations).not.toContain('的代码模版')
   })
 
   test('INV-13 声明里写的张数、长边、体积上限都与常量表一致；view 只有一个入参', () => {

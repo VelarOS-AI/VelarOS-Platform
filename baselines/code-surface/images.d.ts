@@ -1,43 +1,8 @@
-// 本文件由 scripts/code-surface/generate-declarations.mjs 从能力包源码生成，不要手改。
-// 模型写 `import { … } from 'velar:images'`：1 个方法、6 个类型。
-// 改源码里带 @AgentView 的东西就是改模型可观测面，重算用 `bun run generate:code-surface`。
-
 declare module 'velar:images' {
   /**
    * 看图：把 PNG、JPEG、GIF、WebP 交到你眼前。路径怎么写、能到哪儿由当前空间决定（环境报告里写着），越界的那一张看不了。
    * 在上限以内（长边 2000 px、base64 后 5 MB）的图原样给你；超了先压小，要看细节就用 region 单独要那一块。
    * 文本文件用读文件的能力读；PDF 与其他文档不在这里看。
-   */
-
-  /**
-   * 代码模版（template.js）：
-   *
-   * ```js
-   * // velar:images 的代码模版：挑一段照着改，import 只写一次。
-   * // 图不在返回值里：调用 view 就交给你看了，跟在结果后面，只给你看一次——你一回应就撤掉，要再看就再调一次 view。
-   * import { view } from 'velar:images'
-   *
-   * // 看一张图：在上限以内的原样给你，大图会压小；结果里 sent 比原图小就说明压过。
-   * async function lookAt(path = 'screen.png') {
-   *   const [image] = (await view({ files: [{ path }] })).files
-   *   return image
-   * }
-   *
-   * // 一次看几张：看不了的那一张单独是失败（用 'error' in 分开），别的照常。
-   * async function compare(paths = ['before.png', 'after.png']) {
-   *   const { files } = await view({ files: paths.map((path) => ({ path })) })
-   *   return files.map((f) => ('error' in f ? { path: f.path, error: f.error.message } : { path: f.path, size: `${f.width}×${f.height}` }))
-   * }
-   *
-   * // 压小之后看不清的地方，用 region 单独要那一块（按原图像素算）；原图尺寸在上一次 view 的结果里。
-   * async function zoomTopRight(path = 'screen.png', width = 3840, height = 2160) {
-   *   const region = { x: Math.floor(width / 2), y: 0, width: Math.ceil(width / 2), height: Math.ceil(height / 2) }
-   *   return (await view({ files: [{ path, region }] })).files
-   * }
-   *
-   * // 交出答案：export default 后面接你要给自己看的那一点东西。
-   * export default await lookAt()
-   * ```
    */
 
   /** 一批最多 10 张，单个图片文件最大 20 MB（再大的先用命令缩小）。 */

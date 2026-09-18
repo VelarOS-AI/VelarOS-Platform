@@ -13,7 +13,7 @@
 本包**不认识任何一件具体能力**。哪些能力存在、某次调用要不要向用户要授权、算不算危险，全在宿主那一侧。
 
 模型面上只有一个工具：门本身，`program:run`（`impl/CodeSurfaceTools.ts`）。provider 那层协议去不掉，但只剩这一个——
-模型交一段程序，别的能力都在程序里 import。写程序的规矩与常驻模块的完整声明由 `describe` 编好，宿主放进系统提示词最前面那段
+模型交一段程序，别的能力都在程序里 import。写程序的规矩、`velar:program` 的声明与常驻模块的完整声明由 `describe` 编好，宿主放进系统提示词最前面那段
 （按空间恒定，能命中前缀缓存）；工具说明只讲入参怎么填。
 
 ## 提供什么
@@ -34,7 +34,6 @@
 | `CodeSurfaceModId` | 契约常量 | 本包作为内核模块的身份 |
 | `CodeSurfaceDiagnosticCodes` | 契约常量 | 认得出来的 TypeScript 诊断码：`unresolvedModule` 就是「import 了没授权的能力模块」，那道闸是语言给的 |
 | `CodeSurfaceErrorCodes` / `CodeSurfaceLimits` | 契约常量 | 八个错误码；对外上限——程序源码、blobs、调用次数、墙钟，以及**回给模型的总量**（`resultChars`）和它下面每条通道各自的上限 |
-| `ApprovalNamespace` | 契约常量 | 审批模块的命名空间。这个命名空间的调用就是「程序在等人」，会话据此停表——等用户点头的时间不算程序的时间 |
 
 **注入面**在 `contract/requires.ts`：
 
@@ -47,7 +46,7 @@
 | `CodeSurfaceToolContextResolver` / `CreateCodeSurfaceKernelModuleOptions` | 内核按工具名调用时，宿主用它把作用域换成一份门的上下文；建内核模块时放在选项里给 |
 
 **数据面**是 `types/code-surface.ts`，可移植：`CodeProgramRequest`（程序与 `blobs`）、`CodeProgramDiagnostic`（一条诊断）、
-`CodeProgramEdit` / `CodeProgramRange`（在上一份上改的一处）、`CodeCallNotice`（系统插手过的地方）、
+`CodeProgramEdit`（在上一份上改的一处：`oldText` 换 `newText`）、`CodeCallNotice`（系统插手过的地方）、
 `CapabilityLease` / `ProgramImport`（租约与能力 import）、`GrantedModule`（这一轮授了哪个命名空间）、
 `CapabilityModuleSurface`（一件能力随包发布的模型面）/ `MountedCapabilityModule`（空间挂的一件能力与它常不常驻）、
 `CodeProgramFailure`、`CodeProgramResult`、`CodeProgramCheckResult`
@@ -68,23 +67,25 @@
 → `ctx.gate.run`（按会话定源码、授声明、检查、执行）→ `programToolResult` 把回执写成内容块：文字在前，每张图前面一行说明，
 `result` 与内容块里的文字逐字一致（agent 据此原样转给模型）；模型不收图时图不放进去、只说一声。
 
-**程序是一个 ES 模块**：`import { read } from 'velar:files'` 拿能力、顶层 `await` 直接用、
-`export default` 交出答案。写的是真 JavaScript，不是方言——那是代码面唯一的依仗。
+**程序是一个 ES 模块**：`import { run } from 'velar:shell'` 拿能力、顶层 `await` 直接用、
+用 `export` 交出要看的东西（`export default` 或具名导出）。写的是真 JavaScript，不是方言——那是代码面唯一的依仗。
 
-**我们发明的东西要导入，语言自带的不动**：`blobs` 走恒常授权的 `velar:program`
+**我们发明的东西要导入，语言自带的不动**：`blobs` 与 `template` 走恒常可用的 `velar:program`
 （隐形全局是只有提示词告诉过模型才知道的暗知识），`console` 是 JavaScript 自带的，不动。
+**代码模版不常驻**：它们随能力的模型面发布、跟着程序送进隔离进程，程序 `template('velar:x')` 读到、导出了才进上下文。
 
 定下跑哪份源码（整份重写，或在上一份上按 `edits` 改）→ 查体量 → typecheck（不过就**一行都不执行**）→ 隔离里跑 → 程序发的每次调用转给宿主的能力端口
-→ 收集 `notices`（系统插手过的地方）→ 编成结果。
+（调用期间停表：命令、等用户点头都不算程序的时间）→ 收集 `notices`（系统插手过的地方）→ 程序停下时叫停还没落定的调用、记进 `unsettled` → 编成结果，
+再写成模型读的文字（字符串原样、别的按 JSON、具名导出按名字分段）。
 
-**改上一份程序不必整份重写**：`edits` 按 `oldText` 定位（一字不差、范围里必须唯一、
-一组全成或全不成、各处不许重叠），**不用行号**——模型看不见自己刚写那段代码的行号，让它数行是在让它做最不擅长的事。
+**改上一份程序不必整份重写**：`edits` 按 `oldText` 定位（一字不差、在程序里唯一、
+一组全成或全不成、各处不许重叠），**不用行号也不用字符位置**——模型看不见自己刚写那段代码的行号与偏移，让它数是在让它做最不擅长的事。
 同理，诊断一律带**代码帧**：出错那一行连同一个插字符摆出来，它一眼知道改哪儿。
 
 文件内容这类大字符串走 `blobs` 不进 `source`：进了就要过三层转义（JSON → 字符串字面量 → 内容本身），
 反引号、`${`、反斜杠、引号全是雷。走 `blobs` 只有一层。
 
-**回给模型的东西总量有上限**，每条通道都算（返回值、日志、插手记录、失败说明、执行账、诊断），
+**回给模型的东西总量有上限**，每条通道都算（导出的值、日志、插手记录、失败说明、执行账、诊断），
 整份结果再过一道 `resultChars` 硬闸。能力读回来的正文落在程序的变量里，模型看不到——
 除非程序自己交出来，而交出来的也不超过这个数。程序完全可以先看大小再决定交出多少。
 
@@ -110,8 +111,8 @@
 
 ## 不变量
 
-共 24 条，登记在 `spec/invariants.md`，验收用例在 `spec/acceptance.test.ts`。编号只增不重排。
-按检验方式：测试 23 条、门禁 1 条。未验证 0 条。
+共 27 条，登记在 `spec/invariants.md`，验收用例在 `spec/acceptance.test.ts`。编号只增不重排。
+按检验方式：测试 26 条、门禁 1 条。未验证 0 条。
 
 ## 非目标
 

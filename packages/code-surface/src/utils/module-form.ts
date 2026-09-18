@@ -1,7 +1,7 @@
 /**
  * 模块形态的两件活：把 `import` 与租约挖出来，以及把模块改写成隔离里能跑的那段。
  *
- * 模型写的是真 ES 模块（`import` 拿能力、顶层 `await`、`export default` 交答案）。
+ * 模型写的是真 ES 模块（`import` 拿能力、顶层 `await`、用 `export` 交出要看的东西）。
  * 隔离里用 `new Function` 跑，那里没有模块系统，所以进去之前做一次**形状明确的改写**：
  * `import { read } from 'velar:files'` → `const { read } = __velar('velar:files')`，
  * `export default X` → `return X`。
@@ -52,6 +52,21 @@ export function readProgramImports(source: string): ProgramImport[] {
     imports.push(entry)
   }
   return imports
+}
+
+/**
+ * 程序有没有具名导出（`export const x`、`export function f`、`export { a }`，不算 `export default`）。
+ * 有的话交回来的是 `{ default?, 名字: 值… }`，回执按名字分开给模型看；语法错的程序当没有。
+ */
+export function hasNamedExports(source: string): boolean {
+  const file = ts.createSourceFile(ProgramFileName, source, ts.ScriptTarget.ES2022, true)
+  return file.statements.some((statement) => {
+    if (ts.isExportDeclaration(statement)) return !statement.moduleSpecifier && Boolean(statement.exportClause)
+    if (ts.isExportAssignment(statement)) return false
+    const modifiers = ts.canHaveModifiers(statement) ? ts.getModifiers(statement) ?? [] : []
+    return modifiers.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword)
+      && !modifiers.some((modifier) => modifier.kind === ts.SyntaxKind.DefaultKeyword)
+  })
 }
 
 /** 把 import 的绑定写成解构：`{ read, write as w }` 或 `* as system` 或 `system`（默认导入当命名空间用）。 */

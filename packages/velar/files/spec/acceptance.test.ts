@@ -16,6 +16,7 @@ import { AppError } from '@velaros-ai/core/error'
 import { textCodec } from '@velaros-ai/text-files'
 import type { TextEncoding } from '@velaros-ai/text-files/contracts'
 
+import { VelarFilesModule } from '../contract/surface'
 import type { FileLineRange, FileOperationContext, FileReadItem, FileText } from '../index'
 import { FileErrorCodes, FileLimits, fileOperations } from '../index'
 
@@ -644,13 +645,13 @@ describe('入参', () => {
 })
 
 describe('模型面', () => {
-  test('INV-9 代码模版整份照真实声明过类型检查，import 只写一次，声明里原样嵌着这份文件', () => {
+  test('INV-9 代码模版整份照真实声明过类型检查，import 只写一次；它不嵌进声明，随模型面发布的就是这份文件', () => {
     const template = readFileSync(resolve(UnitRoot, 'template.js'), 'utf8')
     const checked = codeProgramChecker.check({ source: template, granted: [{ namespace: 'files', declarations: Declarations }] })
     expect(checked.ok ? [] : checked.diagnostics).toEqual([])
     expect(template.match(/^import /gm)).toHaveLength(1)
-    const embedded = template.trimEnd().split('\n').map((line) => (line ? `   * ${line}` : '   *')).join('\n')
-    expect(Declarations).toContain(`   * \`\`\`js\n${embedded}\n   * \`\`\``)
+    expect(VelarFilesModule.template).toBe(template.trim())
+    expect(Declarations).not.toContain('的代码模版')
   })
 
   test('INV-10 声明里写的上限与错误码和常量表一致；模型面上没有空间端口、调用上下文，也没有看图', () => {

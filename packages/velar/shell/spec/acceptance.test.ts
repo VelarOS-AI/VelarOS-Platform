@@ -14,6 +14,7 @@ import type { CodeCapabilityPort } from '@velaros-ai/code-surface'
 import { codeProgramChecker, createCodeSurfaceSession, nodeSubprocessCodeRunner } from '@velaros-ai/code-surface'
 import { AppError } from '@velaros-ai/core/error'
 
+import { VelarShellModule } from '../contract/surface'
 import type { ShellCommandResult, ShellListTasksInput, ShellOperationContext, ShellRunCommandOptions, ShellRunInput, ShellSpacePort } from '../index'
 import { shellCommandApproval, ShellCommandOperationKind, shellCommandPolicy, ShellLimits, shellOperations } from '../index'
 
@@ -363,13 +364,12 @@ export default outcome`)
 })
 
 describe('代码模版', () => {
-  test('INV-8 代码模版整份照真实声明过类型检查，声明里嵌的就是这份文件', () => {
+  test('INV-8 代码模版整份照真实声明过类型检查；它不嵌进声明，随模型面发布的就是这份文件', () => {
     const template = readFileSync(resolve(UnitRoot, 'template.js'), 'utf8')
     const checked = codeProgramChecker.check({ source: template, granted: [{ namespace: 'shell', declarations: ModelFacingDeclarations }] })
     expect(checked.ok ? [] : checked.diagnostics).toEqual([])
-    for (const line of template.trim().split('\n').filter((text) => text.trim().length > 0)) {
-      expect(ModelFacingDeclarations).toContain(line)
-    }
+    expect(VelarShellModule.template).toBe(template.trim())
+    expect(ModelFacingDeclarations).not.toContain('的代码模版')
   })
 })
 

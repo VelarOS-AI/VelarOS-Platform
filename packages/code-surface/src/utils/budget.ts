@@ -1,6 +1,6 @@
 /** 回给模型之前的预算裁剪：日志与返回值都要在上限之内，裁了必须说。 */
 
-import { isUndefined } from '@velaros-ai/core'
+import { isString, isUndefined } from '@velaros-ai/core'
 
 import { CodeSurfaceLimits } from '../contract/constants.js'
 import type { CodeAttachment, CodeCallNotice, CodeProgramCheckFailure, CodeProgramDiagnostic, CodeProgramResult, CompletedCall } from '../types/code-surface.js'
@@ -53,18 +53,21 @@ export function fitJournalToBudget(
   return folded.slice(dropped)
 }
 
-/** 返回值超预算时按结尾截断并说明；模型得知道自己看到的是一段而不是全部，否则它会拿半截数据当全部用。 */
+/**
+ * 导出的值超预算时按结尾截断并说明；模型得知道自己看到的是一段而不是全部，否则它会拿半截数据当全部用。
+ * 字符串按原文截（它原样交给模型），别的按 JSON 截。
+ */
 export function fitValueToBudget(value: unknown, notices: CodeCallNotice[]): unknown {
   if (isUndefined(value)) return undefined
-  const serialized = JSON.stringify(value) ?? 'null'
-  if (serialized.length <= CodeSurfaceLimits.valueChars) return value
-  const { text, dropped } = keepTail(serialized, CodeSurfaceLimits.valueChars)
+  const text = isString(value) ? value : JSON.stringify(value) ?? 'null'
+  if (text.length <= CodeSurfaceLimits.valueChars) return value
+  const kept = keepTail(text, CodeSurfaceLimits.valueChars)
   notices.push({
-    call: 'return',
+    call: 'export',
     action: 'truncated',
-    detail: `返回值 ${serialized.length} 字符超过上限 ${CodeSurfaceLimits.valueChars}，前 ${dropped} 字符省略。下次在程序里先看大小、筛好了再 export default。`,
+    detail: `导出的值 ${text.length} 字符超过上限 ${CodeSurfaceLimits.valueChars}，前 ${kept.dropped} 字符省略。下次在程序里先看大小、筛好了再导出。`,
   })
-  return text
+  return kept.text
 }
 
 /**

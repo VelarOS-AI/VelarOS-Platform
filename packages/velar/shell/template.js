@@ -1,5 +1,4 @@
-// velar:shell 的代码模版：挑一段照着改，import 只写一次。
-// export default 交出来的东西才进你的上下文；命令的输出只落在程序的变量里。
+// velar:shell 的代码模版：一段一个函数、一种用法，挑要的照着改。
 import { listTasks, refreshEnvironment, run } from 'velar:shell'
 
 // 跑测试，只交出结论和失败现场的末尾。
@@ -31,6 +30,3 @@ async function afterInstall(command = 'rg --version') {
   const result = await run({ command })
   return result.success ? result.stdout.trim() : { missing: true, stderr: result.stderr.slice(-500) }
 }
-
-// 交出答案：export default 后面接你要给自己看的那一点东西。
-export default await runTests()

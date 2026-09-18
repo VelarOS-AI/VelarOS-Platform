@@ -59,16 +59,10 @@ export interface CodeCapabilityPort {
   /**
    * 执行一次能力调用；`signal` 触发时尽快停下。
    *
-   * `holdClock` 是墙钟的闸：这次调用要**停下来等人**（弹确认卡、等用户输入）时先停表，
-   * 拿回来的函数在等完之后调。等人的时间不是程序的时间——不停表的话，用户去倒杯水回来，
-   * 程序早被我们自己按超时杀了，而他刚点了同意。
-   * `velar:approval` 那个命名空间的调用由会话自己停表，端口不必管；这一格是给**能力里内联问人**的那些用的。
+   * 调用的时间不计进程序的墙钟：会话在调用开始时停表、落定时恢复，能力自己的时限（命令的 timeoutMs）与等用户点头都在这里面。
+   * 程序停下（跑完、失败、超时、被中止）时还没落定的调用，会话会触发 `signal` 要它停下——做不到立刻停的，也该尽快收尾。
    */
-  invoke(
-    call: CodeCapabilityCall,
-    signal?: AbortSignal,
-    holdClock?: () => () => void
-  ): Promise<CodeCapabilityOutcome>
+  invoke(call: CodeCapabilityCall, signal?: AbortSignal): Promise<CodeCapabilityOutcome>
 }
 
 /** 程序跑起来之后陆续发生的事，宿主据此往界面上冒卡片与实时输出。 */

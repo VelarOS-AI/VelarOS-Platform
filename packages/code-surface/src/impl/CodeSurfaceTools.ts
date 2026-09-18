@@ -22,14 +22,10 @@ import { defineCodeSurfaceTool } from '../utils/tool.js'
 
 // ── 入参 ──────────────────────────────────────────────────────
 
-/** 在上一份程序上改的一处：oldText 定位、newText 换上；range 只用来把查找收窄。 */
+/** 在上一份程序上改的一处：oldText 照原文一字不差、在程序里唯一，换成 newText。 */
 const programEditSchema = z.object({
-  oldText: z.string().optional().describe('要换掉的原文：和上一份程序里的一模一样（含缩进与换行），在程序里唯一'),
+  oldText: z.string().min(1).describe('要换掉的原文：和上一份程序里的一模一样（含缩进与换行），在程序里唯一；不唯一就多带几行上下文'),
   newText: z.string().describe('换成什么；空串就是删掉那一段'),
-  range: z.object({
-    offset: z.number().int().min(0).describe('起点，从 0 起的字符偏移'),
-    end: z.number().int().min(0).describe('终点，右开'),
-  }).strict().optional().describe('可选：把查找收窄到这一段字符'),
 }).strict()
 
 const runProgramSchema = z.object({
@@ -44,14 +40,14 @@ const runProgram = defineCodeSurfaceTool<RunProgramInput>({
   name: CodeSurfaceToolNames.runProgram,
   role: 'execute',
   summary: '交一段 JavaScript 程序，在程序里 import 能力模块（velar:*）把事情一次办完。',
-  suitable: ['读写文件、跑命令、查代码、看图——这个空间的能力都在程序里调，没有别的工具。'],
+  suitable: ['这个空间里的事都在程序里做：import 能力模块、调它们的方法，没有别的工具。'],
   protocol: [
-    '程序是 ES 模块：import 能力模块、顶层直接 await、export default 交出答案；有哪些模块、每个怎么调，见系统提示词里门的说明与声明。',
+    '程序是 ES 模块：import 能力模块、顶层直接 await，用 export 交出要看的东西（export default 或具名导出都行）；有哪些模块、每个怎么调，见系统提示词里门的说明与声明。',
     'program 与 edits 只给一个：改上一份程序传 edits（oldText 照原文一字不差、在程序里唯一，newText 写新的），不用整份重发。',
   ],
-  usage: ['大段文本（文件正文、补丁）放进 blobs，程序里按名字取，不要写进源码。'],
-  examples: [{ program: "import { read } from 'velar:project'\nconst { files: [file] } = await read({ files: [{ path: 'package.json' }] })\nexport default file.lines.slice(0, 20)" }],
-  notes: ['只有 export default 的值回到你这里；typecheck 没过或者头一次 import 按需模块时，程序一行都不执行，回的是诊断或那个模块的完整声明。'],
+  usage: ['大段文本（文件正文、补丁）放进 blobs，程序里按名字取，不写进源码。'],
+  examples: [{ program: "import { run } from 'velar:shell'\nconst { stdout } = await run({ command: 'git status --short' })\nexport const changed = stdout.split('\\n').filter(Boolean)" }],
+  notes: ['只有导出的值与 console.log 的输出回到你这里；typecheck 没过或者头一次 import 按需模块时，程序一行都不执行，回的是诊断或那个模块的完整声明。'],
   schema: runProgramSchema,
   permissions: ['fs:read', 'fs:write', 'process:exec'],
   capabilities: {

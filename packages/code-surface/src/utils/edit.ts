@@ -4,34 +4,22 @@
  * typecheck 挡回去之后，模型今天得把整个程序重发一遍——六十行的程序每迭代一次就是六十行输出，
  * 还容易在别处改出新错。
  *
- * 协议：`oldText` 一字不差、范围里必须唯一、全成或全不成、各处不许重叠。**不用行号**：
- * 模型看不见自己刚写的那段代码的行号，让它数行是在让它做最不擅长的事。
- * 这里的程序是模型刚写的，没有回执可抄，所以 `oldText` 是主键、`range` 只是可选的收窄手段。
+ * 协议：`oldText` 一字不差、在程序里唯一、全成或全不成、各处不许重叠。**不用行号，也不用字符位置**：
+ * 模型看不见自己刚写的那段代码的行号与偏移，让它数是在让它做最不擅长的事；不唯一就多带几行上下文。
  */
 
-import { isString, isUndefined } from '@velaros-ai/core'
+import { isEmpty, isString } from '@velaros-ai/core'
 
 import type { CodeProgramEdit } from '../types/code-surface.js'
 import type { ResolvedProgramEdit } from '../types/editing.js'
 
 /** 解一条编辑到字符区间；解不出来返回一句给模型看的话。 */
 function resolveEdit(source: string, edit: CodeProgramEdit): ResolvedProgramEdit | string {
-  const within = isUndefined(edit.range)
-    ? { start: 0, end: source.length }
-    : { start: edit.range.offset, end: edit.range.end }
-  if (within.start < 0 || within.end > source.length || within.start > within.end) return `range 超出了上一份程序（它一共 ${source.length} 个字符）。range 可以不给，不给就在整份程序里找 oldText。`
-
-  if (isUndefined(edit.oldText)) {
-    if (isUndefined(edit.range)) return '这一处既没给 oldText 也没给 range，不知道改哪里。一般写 oldText 就够了。'
-    // 不给 oldText 就把整段换掉；空区间是在那个位置插入。与 system:edit 同义。
-    return { start: within.start, end: within.end, text: edit.newText }
-  }
-
-  const slice = source.slice(within.start, within.end)
-  const first = slice.indexOf(edit.oldText)
+  if (!isString(edit.oldText) || isEmpty(edit.oldText)) return 'oldText 是空的，不知道改哪里：写上要换掉的那段原文。'
+  const first = source.indexOf(edit.oldText)
   if (first < 0) return 'oldText 在上一份程序里找不到；它必须和原文的字符一模一样（含缩进与换行）。'
-  if (slice.includes(edit.oldText, first + 1)) return 'oldText 在范围里出现了不止一次，定不下来改哪一处。把 oldText 写长一点带上前后文，或者用 range 收窄。'
-  return { start: within.start + first, end: within.start + first + edit.oldText.length, text: edit.newText }
+  if (source.includes(edit.oldText, first + 1)) return 'oldText 在程序里出现了不止一次，定不下来改哪一处。把 oldText 写长一点，带上前后几行。'
+  return { start: first, end: first + edit.oldText.length, text: edit.newText }
 }
 
 /**

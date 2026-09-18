@@ -17,14 +17,16 @@ export interface CodeRunRequest {
   blobs: Readonly<Record<string, string>>
   /** 可调用的能力清单：命名空间 → 操作名；运行器按它造 RPC 桩。 */
   operations: Readonly<Record<string, readonly string[]>>
+  /** 这个空间挂的各能力模块的代码模版：模块名（`velar:files`）→ 模版正文。程序在 `velar:program` 里用 `template()` 按名字读。 */
+  templates: Readonly<Record<string, string>>
   /** 墙钟上限（毫秒），到点终止。 */
   timeoutMs: number
 }
 
 /**
- * 停一下墙钟，返回的函数恢复它。**等用户点头的时间不是程序的时间。**
+ * 停一下墙钟，返回的函数恢复它。**能力调用的时间不是程序的时间**：命令跑多久由它自己的时限管，等用户点头也在调用里。
  *
- * 必须在等待**开始**时停，不能等结束了再把时间补回去——用户去倒杯水回来，
+ * 必须在调用**开始**时停，不能等结束了再把时间补回去——用户去倒杯水回来，
  * 程序早被我们自己杀了，而他刚点了同意。恢复函数重复调只算一次；停表期间再停按层数记，全部恢复才重新走。
  */
 export type HoldProgramClock = () => () => void
@@ -32,8 +34,7 @@ export type HoldProgramClock = () => () => void
 /**
  * 运行器把程序发出的调用转出来时用的回调；返回值直接交回程序。
  *
- * 第二个参数是墙钟的闸：这次调用要等人时先停表。闸在运行器手里（钟是它的），
- * 什么时候该停由会话判断（它才知道哪次调用会去问人）。
+ * 第二个参数是墙钟的闸：闸在运行器手里（钟是它的），会话在每次调用开始时停表、落定时恢复。
  */
 export type CodeRunDispatch = (
   call: {

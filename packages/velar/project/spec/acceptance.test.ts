@@ -51,13 +51,14 @@ describe('模型面', () => {
     }
   })
 
-  test('INV-22 两份代码模版整份照生成的声明过类型检查，声明里嵌的就是这两份文件', async () => {
-    for (const [namespace, file] of [['project', 'template.js'], ['code', 'code-template.js']] as const) {
-      const declarations = await readFile(join(Baselines, `${namespace}.d.ts`), 'utf8')
+  test('INV-22 两份代码模版整份照生成的声明过类型检查；它们不嵌进声明，随模型面发布的就是这两份文件', async () => {
+    for (const [surface, file] of [[VelarProjectModule, 'template.js'], [VelarCodeModule, 'code-template.js']] as const) {
+      const declarations = await readFile(join(Baselines, `${surface.namespace}.d.ts`), 'utf8')
       const template = await readFile(resolve(import.meta.dir, '..', file), 'utf8')
-      const checked = codeProgramChecker.check({ source: template, granted: [{ namespace, declarations }] })
-      expect({ namespace, diagnostics: checked.ok ? [] : checked.diagnostics }).toEqual({ namespace, diagnostics: [] })
-      for (const line of template.trim().split('\n').filter((text) => text.trim().length > 0)) expect(declarations).toContain(line)
+      const checked = codeProgramChecker.check({ source: template, granted: [{ namespace: surface.namespace, declarations }] })
+      expect({ file, diagnostics: checked.ok ? [] : checked.diagnostics }).toEqual({ file, diagnostics: [] })
+      expect(surface.template).toBe(template.trim())
+      expect(declarations).not.toContain('的代码模版')
     }
   })
 })

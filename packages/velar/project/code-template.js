@@ -1,4 +1,4 @@
-// velar:code 的代码模版：挑一段照着改，import 只写一次。
+// velar:code 的代码模版：一段一个函数、一种用法，挑要的照着改。
 // 结果的正文按 intent 放在各自的键上；先看 degraded 再决定信到什么程度。
 import { analyze, query } from 'velar:code'
 
@@ -36,6 +36,3 @@ async function dependencyCycles() {
     return error.code === 'UNAVAILABLE' ? '没有代码图谱后端' : error.message
   }
 }
-
-// 交出答案：export default 后面接你要给自己看的那一点东西。
-export default await outline()

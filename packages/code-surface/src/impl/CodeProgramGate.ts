@@ -11,7 +11,7 @@ import type { CodeRunnerApi } from '../contract/requires.js'
 import type { MountedCapabilityModule } from '../types/code-surface.js'
 import type { CodeGateReply, CodeGateRunInput, CodeGateSessionState } from '../types/gate.js'
 import { renderDiagnostics } from '../utils/diagnostics.js'
-import { describeGate, describeNeededModules, describeProgramResult, grantedModules } from '../utils/gate.js'
+import { describeGate, describeNeededModules, grantedModules, renderProgramResult } from '../utils/gate.js'
 import { resolveProgramSource } from '../utils/result.js'
 import { CodeSurfaceTuning } from '../utils/tuning.js'
 
@@ -52,12 +52,14 @@ class CodeProgramGate implements CodeProgramGateApi {
     const resolved = resolveProgramSource(input.program, state.previousSource)
     if ('failed' in resolved) {
       const outcome = { checked: true as const, result: { failed: resolved.failed } }
-      return { text: describeProgramResult(outcome.result), images: [], outcome }
+      return { text: renderProgramResult(outcome.result), images: [], outcome }
     }
     const source = resolved.source
     // 后面的 edits 都在这一份上改，不管它这次检查过没过。
     state.previousSource = source
-    const submit = () => session.submit({ program: { source, blobs: input.program.blobs }, granted: grantedModules(input.modules, state.imported), timeoutMs: input.timeoutMs, signal: input.signal })
+    // 模版不常驻：跟着程序送进隔离进程，程序用 template() 读到才进上下文。
+    const templates = Object.fromEntries(input.modules.map(({ surface }) => [surface.specifier, surface.template]))
+    const submit = () => session.submit({ program: { source, blobs: input.program.blobs }, granted: grantedModules(input.modules, state.imported), templates, timeoutMs: input.timeoutMs, signal: input.signal })
     let outcome = await submit()
     if (!outcome.checked && 'needsModules' in outcome) {
       const byName = new Map(input.modules.map((module) => [module.surface.namespace, module]))
@@ -86,7 +88,7 @@ class CodeProgramGate implements CodeProgramGateApi {
       if (imported.lease !== 'once' && imported.lease !== 'done') continue
       if (state.imported.delete(imported.namespace)) state.retired.add(imported.namespace)
     }
-    return { text: describeProgramResult(outcome.result), images: outcome.attachments ?? [], outcome }
+    return { text: renderProgramResult(outcome.result), images: outcome.attachments ?? [], outcome }
   }
 
   public forget(sessionId: string): void {

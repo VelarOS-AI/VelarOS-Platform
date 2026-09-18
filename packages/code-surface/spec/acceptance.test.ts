@@ -17,8 +17,9 @@ import {
 } from '../src/impl/NodeSubprocessCodeRunner'
 import type { CodeProgramEdit, MountedCapabilityModule } from '../src/types/code-surface'
 import type { GrantedModule } from '../src/types/module-form'
-import { joinGrantedDeclarations } from '../src/utils/compiler'
+import { ProgramModuleDeclarations } from '../src/utils/compiler'
 import { renderDiagnostics } from '../src/utils/diagnostics'
+import { renderProgramResult } from '../src/utils/gate'
 import { resolveNodeExecutable } from '../src/utils/node-executable'
 
 /** 这一轮授权的那一个命名空间；没授权的模块 import 不出来，那道闸是语言给的。 */
@@ -32,6 +33,8 @@ const granted: GrantedModule[] = [
   export function danger(input: { command: string }): Promise<{ ok: boolean }>
   export function bulk(input: { size: number }): Promise<{ text: string }>
   export function refuse(input: { n: number }): Promise<{ ok: boolean }>
+  export function slow(input: { ms: number }): Promise<{ done: boolean }>
+  export function hang(input: { tag: string }): Promise<{ never: boolean }>
 }`,
   },
   {
@@ -45,9 +48,12 @@ const granted: GrantedModule[] = [
 /** 装作在等用户点头：这段时间**不算**程序的时间。 */
 const approvalWaitMs = 1_500
 
+/** 挂着不回的调用收到的取消：程序停下之后，会话要叫停它们。 */
+const hangAborted: string[] = []
+
 const capabilities: CodeCapabilityPort = {
-  listOperations: () => ({ demo: ['read', 'write', 'danger', 'bulk', 'refuse'], approval: ['request'] }),
-  invoke: async ({ namespace, operation, input }) => {
+  listOperations: () => ({ demo: ['read', 'write', 'danger', 'bulk', 'refuse', 'slow', 'hang'], approval: ['request'] }),
+  invoke: async ({ namespace, operation, input }, signal) => {
     if (namespace === 'approval') {
       await new Promise((settle) => setTimeout(settle, approvalWaitMs))
       return { value: { grant: 'grant-1' } }
@@ -60,6 +66,16 @@ const capabilities: CodeCapabilityPort = {
     if (operation === 'write') return { value: { received: (value as unknown as { text: string }).text } }
     if (operation === 'bulk') return { value: { text: 'x'.repeat((value as unknown as { size: number }).size) } }
     if (operation === 'refuse') return { error: { code: 'DENIED', message: `拒绝：${'z'.repeat(10_000)}` } }
+    if (operation === 'slow') {
+      await new Promise((settle) => setTimeout(settle, (value as unknown as { ms: number }).ms))
+      return { value: { done: true } }
+    }
+    if (operation === 'hang') {
+      // 一直不回，直到被叫停：像一条还在跑的命令。
+      await new Promise<void>((settle) => signal?.addEventListener('abort', () => settle(), { once: true }))
+      hangAborted.push((value as unknown as { tag: string }).tag)
+      return { error: { code: 'ABORTED', message: '被叫停了' } }
+    }
     return { error: { code: 'APPROVAL_DENIED', message: '用户拒绝了这条危险命令。' } }
   },
 }
@@ -353,6 +369,14 @@ export default first.contents`)
     expect(outcome.result.failed?.message).toContain('堆')
   }, 90_000)
 
+  test('INV-18 能力调用的时间不计进程序超时：命令跑多久由它自己的时限管', async () => {
+    // 调用本身要 1.5 秒，而程序自己的预算只有 1 秒：调用期间不停表的话，这段程序必被我们自己杀掉。
+    const outcome = await submit("import { slow } from 'velar:demo'\nconst { done } = await slow({ ms: 1500 })\nexport default done", { timeoutMs: 1_000 })
+    if (!outcome.checked) throw new Error('应当通过检查')
+    expect(outcome.result.failed).toBeUndefined()
+    expect(outcome.result.value).toBe(true)
+  }, 20_000)
+
   test('INV-18 等用户点头的时间不计进程序超时', async () => {
     // 审批等 1.5 秒，而程序自己的预算只有 1 秒：不停表的话这段程序必被我们自己杀掉。
     const outcome = await submit(
@@ -414,14 +438,17 @@ export default 1`)
     expect(JSON.stringify(outcome).length).toBeLessThan(CodeSurfaceLimits.diagnosticChars + 500)
   })
 
-  test('INV-21 恒常授权的 velar:program 把「返回值不进上下文、先看大小再交出」讲清楚，数字跟着常量表走', () => {
-    const checked = codeProgramChecker.check({ source: "import { blobs } from 'velar:program'\nexport default blobs", granted: [] })
+  test('INV-21 门的说明里模型看得见 velar:program 与写程序的规矩：导出什么才回来、上限多少，数字跟着常量表走', () => {
+    const checked = codeProgramChecker.check({ source: "import { blobs, template } from 'velar:program'\nexport default [blobs, template('velar:demo')]", granted: [] })
     expect(checked.ok).toBe(true)
-    const declaration = joinGrantedDeclarations([])
-    expect(declaration).toContain('不进你的上下文')
-    expect(declaration).toContain('先在程序里看大小，再决定交出多少')
-    expect(declaration).toContain(String(CodeSurfaceLimits.resultChars))
-    expect(declaration).toContain(String(CodeSurfaceLimits.failureChars))
+    const text = createCodeProgramGate({ checker: codeProgramChecker, runner: nodeSubprocessCodeRunner }).describe([])
+    // 检查器用的那份声明原样摆在模型面前：两边同一份。
+    expect(text).toContain(ProgramModuleDeclarations)
+    expect(text).toContain('export function template(module: string): string')
+    expect(text).toContain('不进你的上下文')
+    expect(text).toContain('具名导出')
+    expect(text).toContain(String(CodeSurfaceLimits.resultChars))
+    expect(text).toContain(String(CodeSurfaceLimits.valueChars))
   })
 
   test('INV-22 只有 export default 就交它；有具名导出就交 { default?, ...具名 }，跟 import * 的形状一样', async () => {
@@ -494,11 +521,11 @@ export default 1`)
 describe('门', () => {
   const notes: MountedCapabilityModule = {
     resident: true,
-    surface: { specifier: 'velar:notes', namespace: 'notes', methods: ['list'], declarations: "declare module 'velar:notes' {\n  export function list(input: { limit: number }): Promise<{ items: string[] }>\n}" },
+    surface: { specifier: 'velar:notes', namespace: 'notes', methods: ['list'], declarations: "declare module 'velar:notes' {\n  export function list(input: { limit: number }): Promise<{ items: string[] }>\n}", template: "// velar:notes 的代码模版\nimport { list } from 'velar:notes'\n\nasync function firstTwo() {\n  return (await list({ limit: 2 })).items\n}" },
   }
   const extra: MountedCapabilityModule = {
     resident: false,
-    surface: { specifier: 'velar:extra', namespace: 'extra', methods: ['count'], declarations: "declare module 'velar:extra' {\n  /** 数一数有几个字。 */\n  export function count(input: { of: string }): Promise<{ n: number }>\n}" },
+    surface: { specifier: 'velar:extra', namespace: 'extra', methods: ['count'], declarations: "declare module 'velar:extra' {\n  /** 数一数有几个字。 */\n  export function count(input: { of: string }): Promise<{ n: number }>\n}", template: "// velar:extra 的代码模版\nimport { count } from 'velar:extra'" },
   }
   const modules = [notes, extra]
   const capabilities = createCapabilityPort({
@@ -516,6 +543,8 @@ describe('门', () => {
     expect(text).toContain('export function list(input: { limit: number })')
     expect(text).toContain('velar:extra：count')
     expect(text).not.toContain('数一数有几个字')
+    // 代码模版不常驻：说明里没有它们，程序要看时自己读。
+    expect(text).not.toContain('velar:notes 的代码模版')
   })
 
   test('INV-24 头一次 import 按需模块不执行、交回它的完整声明；之后这个会话一直能用；退租后再用静默装回；别的会话各算各的', async () => {
@@ -524,10 +553,10 @@ describe('门', () => {
     expect(first.outcome.checked).toBe(false)
     expect(first.text).toContain('这一次没有执行')
     expect(first.text).toContain('数一数有几个字')
-    expect(JSON.parse((await run(gate, 's1', { source: counting('abc') })).text)).toEqual({ value: 3 })
-    expect(JSON.parse((await run(gate, 's1', { source: counting('abcd', " with { lease: 'done' }") })).text)).toEqual({ value: 4 })
+    expect((await run(gate, 's1', { source: counting('abc') })).text).toBe('3')
+    expect((await run(gate, 's1', { source: counting('abcd', " with { lease: 'done' }") })).text).toBe('4')
     // 退租之后又用到：静默装回去再检查一遍，不让模型白跑一轮。
-    expect(JSON.parse((await run(gate, 's1', { source: counting('ab') })).text)).toEqual({ value: 2 })
+    expect((await run(gate, 's1', { source: counting('ab') })).text).toBe('2')
     expect((await run(gate, 's2', { source: counting('ab') })).outcome.checked).toBe(false)
     // 空间里没有的模块：说清楚有哪些。
     const missing = await run(gate, 's1', { source: "import { x } from 'velar:nowhere'\nexport default await x()" })
@@ -540,17 +569,18 @@ describe('门', () => {
     expect(broken.text).toContain('typecheck 没过')
     expect(broken.text).toContain('export default r.itemz')
     const fixed = await run(gate, 's1', { edits: [{ oldText: 'r.itemz', newText: 'r.items' }] })
-    expect(JSON.parse(fixed.text)).toEqual({ value: ['n0', 'n1'] })
+    expect(fixed.text).toBe('["n0","n1"]')
     gate.forget('s1')
     const lost = await run(gate, 's1', { edits: [{ oldText: 'r.items', newText: 'r.items.length' }] })
-    expect(JSON.parse(lost.text).failed.message).toContain('没有上一份程序')
+    expect(lost.text).toContain('程序没跑完（EDIT_FAILED）')
+    expect(lost.text).toContain('没有上一份程序')
   }, 60_000)
 })
 
 describe('门的工具', () => {
   const pictures: MountedCapabilityModule = {
     resident: true,
-    surface: { specifier: 'velar:pics', namespace: 'pics', methods: ['show'], declarations: "declare module 'velar:pics' {\n  export function show(input: { n: number }): Promise<{ shown: number }>\n}" },
+    surface: { specifier: 'velar:pics', namespace: 'pics', methods: ['show'], declarations: "declare module 'velar:pics' {\n  export function show(input: { n: number }): Promise<{ shown: number }>\n}", template: "// velar:pics 的代码模版\nimport { show } from 'velar:pics'" },
   }
   const pixels = Buffer.from('fake-png-bytes').toString('base64')
   const capabilities = createCapabilityPort({
@@ -586,7 +616,7 @@ describe('门的工具', () => {
     const seen = await tool.execute({ program }, contextOf(['text', 'image'])) as { result: string; modelContent: Array<{ type: string; text?: string }> }
     const texts = seen.modelContent.filter((part) => part.type === 'text').map((part) => part.text)
     expect(seen.result).toBe(texts.join('\n').trim())
-    expect(JSON.parse(texts[0]!)).toEqual({ value: { shown: 2 } })
+    expect(texts[0]).toBe('{"shown":2}')
     expect(seen.modelContent.map((part) => part.type)).toEqual(['text', 'text', 'image-data', 'text', 'image-data'])
     expect(texts.slice(1)).toEqual(['第 1 张', '第 2 张'])
 
@@ -594,4 +624,52 @@ describe('门的工具', () => {
     expect(blind.modelContent.map((part) => part.type)).toEqual(['text'])
     expect(blind.result).toContain('当前模型不收图')
   }, 60_000)
+})
+
+describe('程序停下、模版与回执', () => {
+  test('INV-26 程序停下时还没落定的调用被叫停，并逐条列在 unsettled 里', async () => {
+    // 发出去不等就交卷：程序跑完了，那次调用还挂着。
+    const leftBehind = await submit("import { hang } from 'velar:demo'\nvoid hang({ tag: 'left' })\nexport default 'done'")
+    if (!leftBehind.checked) throw new Error('应当通过检查')
+    expect(leftBehind.result.value).toBe('done')
+    expect(leftBehind.result.unsettled).toEqual(['demo.hang'])
+    expect(hangAborted).toContain('left')
+
+    // 外面停下这一轮：死在一次调用中途，模型要知道哪件事可能做了一半。
+    const stop = new AbortController()
+    setTimeout(() => stop.abort(), 300)
+    const stopped = await session.submit({ program: { source: "import { hang } from 'velar:demo'\nawait hang({ tag: 'stopped' })\nexport default 1" }, granted, timeoutMs: 10_000, signal: stop.signal })
+    if (!stopped.checked) throw new Error('应当通过检查')
+    expect(stopped.result.failed?.code).toBe(CodeSurfaceErrorCodes.aborted)
+    expect(stopped.result.unsettled).toEqual(['demo.hang'])
+    expect(hangAborted).toContain('stopped')
+  }, 20_000)
+
+  test('INV-27 代码模版不常驻，程序里 template() 按模块名读；写错名字抛错并列出有哪些', async () => {
+    const templates = { 'velar:demo': "// velar:demo 的代码模版\nimport { read } from 'velar:demo'" }
+    const read = await session.submit({ program: { source: "import { template } from 'velar:program'\nexport default template('velar:demo')" }, granted, templates, timeoutMs: 10_000 })
+    if (!read.checked) throw new Error('应当通过检查')
+    expect(read.result.value).toBe(templates['velar:demo'])
+    const wrong = await session.submit({ program: { source: "import { template } from 'velar:program'\nexport default template('velar:nope')" }, granted, templates, timeoutMs: 10_000 })
+    if (!wrong.checked) throw new Error('应当通过检查')
+    expect(wrong.result.failed?.code).toBe(CodeSurfaceErrorCodes.programError)
+    expect(wrong.result.failed?.message).toContain('velar:demo')
+  }, 20_000)
+
+  test('INV-28 回执写成可读的文字：字符串原样、别的按 JSON，具名导出按名字分段，没跑完第一行说为什么', async () => {
+    // 只导出一个字符串：原样交回，多行照原样，不转义。
+    expect(renderProgramResult({ value: 'line "1"\nline 2' })).toBe('line "1"\nline 2')
+    // 具名导出：每个名字一段，字符串照原样，别的按 JSON。
+    const named = await submit("export const total = 3\nexport const text = 'a\\nb'\nexport default { ok: true }")
+    if (!named.checked) throw new Error('应当通过检查')
+    expect(named.result.named).toBe(true)
+    const shown = renderProgramResult(named.result)
+    expect(shown).toContain('── export default ──\n{"ok":true}')
+    expect(shown).toContain('── export total ──\n3')
+    expect(shown).toContain('── export text ──\na\nb')
+    // 没跑完：第一行是失败码、行号与说明，已经做完的调用跟在后面。
+    const failed = renderProgramResult({ failed: { code: 'PROGRAM_ERROR', message: 'boom', line: 3 }, completed: [{ call: 'demo.read', ok: true, times: 2 }] })
+    expect(failed.split('\n')[0]).toBe('程序没跑完（PROGRAM_ERROR，第 3 行）：boom')
+    expect(failed).toContain('demo.read ×2')
+  }, 20_000)
 })

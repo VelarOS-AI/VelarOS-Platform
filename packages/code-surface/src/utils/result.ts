@@ -1,6 +1,6 @@
 /** 执行之前定下跑哪份源码、判体量，执行之后编成给模型看的结果。都不碰实例状态，所以不放在类里。 */
 
-import { isEmpty, isNotUndefined, isUndefined } from '@velaros-ai/core'
+import { isEmpty, isNotUndefined, isPlainObject, isUndefined } from '@velaros-ai/core'
 
 import type { CodeSurfaceErrorCode } from '../contract/constants.js'
 import { CodeSurfaceErrorCodes, CodeSurfaceLimits } from '../contract/constants.js'
@@ -62,15 +62,20 @@ export function describeProgramOversize(
 export function composeProgramResult(
   outcome: CodeRunOutcome,
   notices: CodeCallNotice[],
-  completed: readonly CompletedCall[] = []
+  completed: readonly CompletedCall[] = [],
+  unsettled: readonly string[] = [],
+  named = false
 ): CodeProgramResult {
   const result: CodeProgramResult = {}
+  // 程序停下时还没落定的调用：跑完了也可能有（发出去没 await），副作用可能做了一半，一律列出。
+  if (!isEmpty(unsettled)) result.unsettled = [...unsettled]
   const logs = fitLogsToBudget(outcome.logs, notices)
   if (logs.length > 0) result.logs = logs
 
   if (outcome.ok) {
     const fitted = fitValueToBudget(outcome.value, notices)
     if (isNotUndefined(fitted)) result.value = fitted
+    if (named && isPlainObject(fitted)) result.named = true
   } else if (outcome.error) {
     const failed: CodeProgramFailure = {
       code: outcome.error.code as CodeSurfaceErrorCode,

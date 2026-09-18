@@ -7,7 +7,7 @@
 
 import { isEmpty, isString, isTrue } from '@velaros-ai/core'
 
-import { ApprovalNamespace, CodeSurfaceErrorCodes, CodeSurfaceLimits } from '../contract/constants.js'
+import { CodeSurfaceErrorCodes, CodeSurfaceLimits } from '../contract/constants.js'
 import type { CodeCapabilityPort, CodeRunnerApi, CodeSurfaceEventSink } from '../contract/requires.js'
 import type {
   CodeAttachment,
@@ -19,7 +19,7 @@ import type {
 import type { GrantedModule } from '../types/code-surface.js'
 import { fitAttachmentsToBudget } from '../utils/budget.js'
 import { isRefusal } from '../utils/capability-failure.js'
-import { readProgramImports, rewriteModuleForIsolate } from '../utils/module-form.js'
+import { hasNamedExports, readProgramImports, rewriteModuleForIsolate } from '../utils/module-form.js'
 import { composeProgramResult, describeProgramOversize, resolveProgramSource } from '../utils/result.js'
 import { CodeSurfaceTuning } from '../utils/tuning.js'
 
@@ -43,6 +43,8 @@ export interface CodeSurfaceSessionApi {
      * 不给而模型又传了 `edits`，会被明确拒绝并让它改发整份——**不猜一份出来**。
      */
     previousSource?: string
+    /** 这个空间挂的各能力模块的代码模版（模块名 → 正文）：程序在 `velar:program` 里用 `template()` 读。不给就是没有模版可读。 */
+    templates?: Readonly<Record<string, string>>
     timeoutMs?: number
     signal?: AbortSignal
   }): Promise<CodeSurfaceOutcome>
@@ -60,6 +62,7 @@ class CodeSurfaceSession implements CodeSurfaceSessionApi {
     program: CodeProgramRequest
     granted: readonly GrantedModule[]
     previousSource?: string
+    templates?: Readonly<Record<string, string>>
     timeoutMs?: number
     signal?: AbortSignal
   }): Promise<CodeSurfaceOutcome> {
@@ -91,6 +94,12 @@ class CodeSurfaceSession implements CodeSurfaceSessionApi {
     }
     // 执行账：每一笔**已经落定**的能力调用都记一条。中止/超时/抛错时它是模型唯一的「我做到哪了」。
     const completed: CompletedCall[] = []
+    // 还没落定的调用：程序停下时它们没人等了，一律叫停并列给模型——副作用可能做了一半。
+    const inFlight = new Map<number, string>()
+    // 这一轮自己的取消信号：外面停这一轮时跟着停；程序停下时用它叫停还在飞的调用。
+    const run = new AbortController()
+    const stopRun = (): void => run.abort(input.signal?.reason)
+    input.signal?.addEventListener('abort', stopRun, { once: true })
     // 交给模型的图：不进程序，也不进文字结果，单独收着，程序跑完跟在结果旁边回去。
     const attachments: CodeAttachment[] = []
     let calls = 0
@@ -100,6 +109,7 @@ class CodeSurfaceSession implements CodeSurfaceSessionApi {
         source: rewriteModuleForIsolate(checked.transpiled ?? source),
         blobs: input.program.blobs ?? {},
         operations: this.capabilities.listOperations(),
+        templates: input.templates ?? {},
         timeoutMs: Math.min(input.timeoutMs ?? CodeSurfaceTuning.defaultTimeoutMs, CodeSurfaceLimits.timeoutMs),
       },
       async (call, holdClock) => {
@@ -110,38 +120,37 @@ class CodeSurfaceSession implements CodeSurfaceSessionApi {
               message: `这次程序已经发了 ${CodeSurfaceLimits.calls} 次能力调用，到上限了。把循环收窄，或者分几次程序做。`,
             },
           }
+        const name = `${call.namespace}.${call.operation}`
         this.events.callStarted?.({ ...call })
         const startedAt = Date.now()
-        // 整个 velar:approval 命名空间就是「在等人」，会话自己停表；别的能力里内联问人的，
-        // 由端口拿 holdClock 自己停。审批单独成模块的第二份红利：宿主看得见程序什么时候在等人。
-        const release = call.namespace === ApprovalNamespace ? holdClock() : undefined
+        inFlight.set(call.callId, name)
+        // 调用的时间不是程序的时间：命令跑多久由它自己的时限管，等用户点头也在调用里。开始就停表，落定再接着走。
+        const release = holdClock()
         const result = await this.capabilities
-          .invoke(
-            { namespace: call.namespace, operation: call.operation, input: call.input },
-            input.signal,
-            holdClock
-          )
-          .finally(() => release?.())
+          .invoke({ namespace: call.namespace, operation: call.operation, input: call.input }, run.signal)
+          .finally(() => {
+            release()
+            inFlight.delete(call.callId)
+          })
         this.events.callSettled?.({ callId: call.callId, ok: !result.error, elapsedMs: Date.now() - startedAt })
-        completed.push({ call: `${call.namespace}.${call.operation}`, ok: !result.error })
+        completed.push({ call: name, ok: !result.error })
         if (result.notices) notices.push(...result.notices)
         if (result.attachments) attachments.push(...result.attachments)
         if (result.error && isRefusal(result.error.code)) {
-          notices.push({
-            call: `${call.namespace}.${call.operation}`,
-            action: 'denied',
-            detail: result.error.message,
-          })
+          notices.push({ call: name, action: 'denied', detail: result.error.message })
         }
         return result
       },
       (line) => this.events.logged?.(line),
       input.signal
     )
+    input.signal?.removeEventListener('abort', stopRun)
+    const unsettled = [...inFlight.values()]
+    if (!isEmpty(unsettled)) run.abort(new Error('程序已经停了，这次调用没人等了'))
 
     // 图先收拢：它自己也会往插手记录里记一笔「丢了几张」，得赶在文字结果编好之前。
     const shown = fitAttachmentsToBudget(attachments, notices)
-    const result = composeProgramResult(outcome, notices, completed)
+    const result = composeProgramResult(outcome, notices, completed, unsettled, hasNamedExports(checked.transpiled ?? source))
     const settled: Extract<CodeSurfaceOutcome, { checked: true }> = { checked: true, result }
     const imports = readProgramImports(source)
     if (!isEmpty(imports)) settled.imports = imports

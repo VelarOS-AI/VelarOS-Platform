@@ -125,6 +125,7 @@ class NodeSubprocessCodeRunner implements CodeRunnerApi {
             source: request.source,
             blobs: request.blobs,
             operations: request.operations,
+            templates: request.templates,
           })
           return
         }

@@ -31,7 +31,7 @@ void describe('预算裁剪', () => {
     const fitted = fitValueToBudget('x'.repeat(CodeSurfaceLimits.valueChars + 100), notices as never)
     expect(String(fitted)).toContain('字符省略')
     expect(notices[0]?.action).toBe('truncated')
-    expect(notices[0]?.detail).toContain('先看大小、筛好了再 export default')
+    expect(notices[0]?.detail).toContain('先看大小、筛好了再导出')
   })
 
   test('undefined 不算返回值，不进结果也不留 notice', () => {
@@ -195,14 +195,19 @@ void describe('在上一份程序上改', () => {
 
   test('重叠的两处一律不落：模型对原文的判断已经错了，硬落更危险', () => {
     const applied = applyProgramEdits('abcdef', [
-      { range: { offset: 0, end: 4 }, newText: 'X' },
-      { range: { offset: 2, end: 6 }, newText: 'Y' },
+      { oldText: 'abcd', newText: 'X' },
+      { oldText: 'cdef', newText: 'Y' },
     ])
     expect('failed' in applied && applied.failed).toContain('重叠')
   })
 
-  test('空区间就是在那个位置插入', () => {
-    const applied = applyProgramEdits('ab', [{ range: { offset: 1, end: 1 }, newText: 'X' }])
-    expect('source' in applied && applied.source).toBe('aXb')
+  test('oldText 不唯一、找不到或是空的，整组不落并说清是第几处', () => {
+    const repeated = applyProgramEdits('a = 1\na = 1', [{ oldText: 'a = 1', newText: 'a = 2' }])
+    expect('failed' in repeated && repeated.failed).toContain('第 1 处')
+    expect('failed' in repeated && repeated.failed).toContain('不止一次')
+    const missing = applyProgramEdits('const a = 1', [{ oldText: 'a = 1', newText: 'a = 2' }, { oldText: 'b', newText: 'c' }])
+    expect('failed' in missing && missing.failed).toContain('第 2 处')
+    const empty = applyProgramEdits('const a = 1', [{ oldText: '', newText: 'x' }])
+    expect('failed' in empty && empty.failed).toContain('oldText 是空的')
   })
 })

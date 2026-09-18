@@ -1,4 +1,4 @@
-// velar:images 的代码模版：挑一段照着改，import 只写一次。
+// velar:images 的代码模版：一段一个函数、一种用法，挑要的照着改。
 // 图不在返回值里：调用 view 就交给你看了，跟在结果后面，只给你看一次——你一回应就撤掉，要再看就再调一次 view。
 import { view } from 'velar:images'
 
@@ -19,6 +19,3 @@ async function zoomTopRight(path = 'screen.png', width = 3840, height = 2160) {
   const region = { x: Math.floor(width / 2), y: 0, width: Math.ceil(width / 2), height: Math.ceil(height / 2) }
   return (await view({ files: [{ path, region }] })).files
 }
-
-// 交出答案：export default 后面接你要给自己看的那一点东西。
-export default await lookAt()

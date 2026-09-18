@@ -56,7 +56,13 @@ async function runProgram(message) {
    * 这里只要给出 `__velar`：按模块名取那个命名空间的桩，取不到就抛——
    * 能走到这里说明检查已经过了，取不到只可能是宿主授权与改写对不上，该响不该默默给个空对象。
    */
-  const programModule = Object.freeze({ blobs: Object.freeze({ ...message.blobs }) })
+  const templates = { ...message.templates }
+  const template = (name) => {
+    if (typeof templates[name] === 'string') return templates[name]
+    const known = Object.keys(templates)
+    throw new Error(`没有 ${String(name)} 的代码模版${known.length > 0 ? `；这个空间有的是 ${known.join('、')}` : ''}。`)
+  }
+  const programModule = Object.freeze({ blobs: Object.freeze({ ...message.blobs }), template })
   const resolveModule = (specifier) => {
     // 这次运行本身的环境，恒常授权：我们发明的东西要导入，语言自带的（console）不动。
     if (specifier === 'velar:program') return programModule

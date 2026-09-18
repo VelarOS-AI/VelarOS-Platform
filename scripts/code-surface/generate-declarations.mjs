@@ -39,7 +39,7 @@ function readOutOption() {
 /** 随包发布的那份（contract/surface.ts）的文件头；所有权门禁认这一行，手写的合同文件冒充不了。 */
 const SurfaceFileHeader = [
   '// 本文件由 scripts/code-surface/generate-declarations.mjs 从能力包源码生成，不要手改。',
-  '// 模型面的声明随包发布：空间挂这件能力时把它交给代码面的门，宿主不必另找一份。',
+  '// 模型面的声明与代码模版随包发布：空间挂这件能力时把它交给代码面的门，宿主不必另找一份。改了源码里带 @AgentView 的东西或模版，`bun run generate:code-surface` 重算。',
 ].join('\n')
 
 /** 内置泛型与类型参数：它们从 lib 来，不该也不可能在包里找到声明。 */
@@ -383,17 +383,14 @@ function generate(surface) {
     }
   }
 
-  // 代码模版不能省：我们知道这些能力怎么组合，模型未必知道。一个命名空间一份模版文件，
-  // import 只写一次，嵌进生成物的模块头，模型一打开这个模块就看得到；对不对由各包的验收整份做类型检查。
+  // 代码模版不能省：我们知道这些能力怎么组合，模型未必知道。一个命名空间一份模版文件，import 只写一次、一段一个函数一种用法。
+  // 它**不嵌进声明、不常驻**：随包发布在模型面的 template 字段里，模型拿不准怎么组合时在程序里 template('velar:x') 读；
+  // 对不对由各单元的验收照真实声明整份做类型检查。
   const templateHome = surface.unit ? `packages/${surface.directory}/${surface.unit}` : `packages/${surface.directory}`
   const templatePath = surface.templates ? resolve(RepoRoot, templateHome, surface.templates) : null
   const template = templatePath && ts.sys.fileExists(templatePath) ? readFileSync(templatePath, 'utf8').trim() : ''
   if (template.length === 0) {
     problems.push(`${surface.namespace} 没有代码模版：在 ${templateHome}/ 写一份能照抄的程序，并在 surfaces.mjs 登记`)
-  } else if (template.includes('*/')) {
-    problems.push(`${surface.templates} 里有「*/」：模版会被嵌进注释，它会把注释提前截断；模版里的注释一律用 //`)
-  } else {
-    headers.push(['/**', ` * 代码模版（${surface.templates}）：`, ' *', ' * ```js', ...template.split('\n').map((line) => (line.length > 0 ? ` * ${line}` : ' *')), ' * ```', ' */'].join('\n'))
   }
 
   // 闭包：签名引用到的类型，以及它们自己引用到的
@@ -438,17 +435,13 @@ function generate(surface) {
     if (asType) constants.push(`const ${name}: ${asType}`)
   }
   const types = [...constants, ...declared]
-  const header = [
-    '// 本文件由 scripts/code-surface/generate-declarations.mjs 从能力包源码生成，不要手改。',
-    `// 模型写 \`import { … } from '${CapabilityModulePrefix}${surface.namespace}'\`：${methods.length} 个方法、${declared.length} 个类型。`,
-    `// 改源码里带 ${AgentViewTag} 的东西就是改模型可观测面，重算用 \`bun run generate:code-surface\`。`,
-  ].join('\n')
 
   // 类型与方法都放进 `declare module` 块里：模型写 `import { read } from 'velar:files'`，
   // 而且类型因此有了作用域——两件能力可以各有一个同名类型而不撞，平铺声明做不到。
   const indented = (text) => text.split('\n').map((line) => (line.length > 0 ? `  ${line}` : line)).join('\n')
   const body = [...headers.map(indented), ...types.map(indented), ...methods.map((method) => indented(exportedMethod(method)))].join('\n\n')
-  const text = `${header}\n\ndeclare module '${CapabilityModulePrefix}${surface.namespace}' {\n${body}\n}\n`
+  // 这份文字就是模型看到的全部：维护者要的说明（谁生成的、怎么重算）写在随包发布的 surface.ts 与这个脚本里，不进来。
+  const text = `declare module '${CapabilityModulePrefix}${surface.namespace}' {\n${body}\n}\n`
   if (problems.length === 0) {
     const broken = verifyDeclarations(text)
     if (broken.length > 0) {
@@ -458,6 +451,7 @@ function generate(surface) {
 
   return {
     text,
+    template,
     problems,
     methodNames,
     methodCount: methods.length,
@@ -484,12 +478,13 @@ function surfaceModules() {
     const path = resolve(RepoRoot, home, 'contract', 'surface.ts')
     const specifier = `${CapabilityModulePrefix}${surface.namespace}`
     const block = [
-      `/** \`${specifier}\` 的模型面：模型 import 的模块名、放出去的方法、生成的完整声明（与 baselines/code-surface/${surface.namespace}.d.ts 是同一份）。 */`,
-      `export const ${surfaceConstantName(surface.namespace)}: { readonly specifier: string; readonly namespace: string; readonly methods: readonly string[]; readonly declarations: string } = Object.freeze({`,
+      `/** \`${specifier}\` 的模型面：模型 import 的模块名、放出去的方法、生成的完整声明（与 baselines/code-surface/${surface.namespace}.d.ts 是同一份）、代码模版（${surface.templates}）。 */`,
+      `export const ${surfaceConstantName(surface.namespace)}: { readonly specifier: string; readonly namespace: string; readonly methods: readonly string[]; readonly declarations: string; readonly template: string } = Object.freeze({`,
       `  specifier: '${specifier}',`,
       `  namespace: '${surface.namespace}',`,
       `  methods: Object.freeze([${result.methodNames.map((name) => `'${name}'`).join(', ')}]),`,
       `  declarations: ${JSON.stringify(result.text)},`,
+      `  template: ${JSON.stringify(result.template)},`,
       '})',
     ].join('\n')
     files.set(path, [...(files.get(path) ?? []), block])

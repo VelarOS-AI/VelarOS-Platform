@@ -14,6 +14,7 @@ import type { CodeCapabilityPort } from '@velaros-ai/code-surface'
 import { codeProgramChecker, createCodeSurfaceSession, nodeSubprocessCodeRunner } from '@velaros-ai/code-surface'
 import { AppError } from '@velaros-ai/core/error'
 
+import { VelarSandboxModule } from '../contract/surface'
 import type {
   SandboxApplyInput,
   SandboxCreateInput,
@@ -256,13 +257,14 @@ export default outcome`)
 })
 
 describe('代码模版', () => {
-  test('INV-6 代码模版整份照真实声明过类型检查', () => {
+  test('INV-6 代码模版整份照真实声明过类型检查；它不嵌进声明，随模型面发布的就是这份文件', () => {
     const root = resolve(fileURLToPath(new URL('.', import.meta.url)), '..')
     const declarations = readFileSync(resolve(root, '../../../baselines/code-surface/sandbox.d.ts'), 'utf8')
     const template = readFileSync(resolve(root, 'template.js'), 'utf8')
     const checked = codeProgramChecker.check({ source: template, granted: [{ namespace: 'sandbox', declarations }] })
     expect(checked.ok ? [] : checked.diagnostics).toEqual([])
-    expect(declarations).toContain(template.split('\n')[2] ?? '')
+    expect(VelarSandboxModule.template).toBe(template.trim())
+    expect(declarations).not.toContain('的代码模版')
   })
 })
 

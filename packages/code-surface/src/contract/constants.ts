@@ -45,16 +45,6 @@ export const CodeSurfaceErrorCodes = Object.freeze({
 export type CodeSurfaceErrorCode = (typeof CodeSurfaceErrorCodes)[keyof typeof CodeSurfaceErrorCodes]
 
 /**
- * 审批模块的命名空间：`import { request } from 'velar:approval'`。
- *
- * 审批自成一个模块，而不是每次调用时弹一次，换来两件事：
- * 一是**类型系统替我们把门焊死**——要 grant 的操作在声明里就要一个 grant 参数，
- * 拿不到 grant 的程序**编译不过**，根本轮不到运行期去拦；
- * 二是宿主**看得见程序什么时候在等人**（就是这个命名空间的调用），于是能把等人的时间从超时里扣掉。
- */
-export const ApprovalNamespace = 'approval' as const
-
-/**
  * 「找不到这个模块」的 TypeScript 诊断码。
  *
  * `import { x } from 'velar:git'` 而 git 没授权时就是它。认这个专属码就够了，不用自己写判定——

@@ -1,4 +1,4 @@
-// velar:sandbox 的代码模版：挑一段照着改，import 只写一次。
+// velar:sandbox 的代码模版：一段一个函数、一种用法，挑要的照着改。
 // 镜像里的命令写不到镜像外；落回源目录之前一定会先问用户。
 import { apply, create, diff, discard, run } from 'velar:sandbox'
 
@@ -18,5 +18,3 @@ async function tryInMirror(source = '~/project', command = 'npx prettier --write
 async function applySome(id = 'create 返回的 id', paths = ['src/index.ts']) {
   return apply({ id, paths })
 }
-
-export default await tryInMirror()
