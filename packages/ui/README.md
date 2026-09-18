@@ -34,9 +34,23 @@ tone 与主题一律走 CSS 变量单源。需要单点特殊外貌 → 在**消
 | `@velaros-ai/ui/i18n/UiLocalizationProvider` | 窄本地化 Provider |
 | `@velaros-ai/ui/lib/cn`、`/lib/styleUtils` | class 合并与样式辅助(纯函数) |
 | `@velaros-ai/ui/utility-types` | 显式模块化 utility types——**本包不安装任何 ambient global** |
+| `@velaros-ai/ui/html-artifacts` | HTML 工件：把模型的增量文本流变成实时、隔离的 HTML 界面（增量协议、沙箱文档、iframe 宿主），零运行时依赖、不依赖 React；用法见 [docs/html-artifacts.md](./docs/html-artifacts.md) |
+| `@velaros-ai/ui/html-artifacts/contracts` | HTML 工件的约定常量与可移植数据 |
 
 **只有 `package.json#exports` 里声明的路径属于公共 API**;未声明的 `src` / `dist` 深路径
 是**刻意私有**的。组件清单不在本文手工维护——看下面的组件图鉴。
+
+## 安装
+
+`@velaros-ai/ui` 是托管在 GitHub Packages 上的**公开包（public package）**。GitHub 的 npm registry 目前安装公开包**仍然需要认证**：
+在本机或其他受控消费环境中，使用至少带 `read:packages` 权限的 personal access token（classic），通过进程环境或凭据管理器注入。
+把 `@velaros-ai` scope 映射到 `https://npm.pkg.github.com`，提供 token 后：
+
+```bash
+npm install @velaros-ai/ui
+```
+
+> 在 VelarOS-Platform 单仓内，`dist/` 不入版本库（仓根 `.gitignore` 忽略 `dist/`），由构建产出；走 npm 包的消费方拿到的是发布时打进 tarball 的 `dist/`。
 
 ## 组件图鉴(权威清单在这里,不在 README)
 
@@ -183,8 +197,8 @@ const SaveButton = (props: Pick<ButtonProps, 'disabled'>) => (
 
 ## 与相邻包的关系
 
-- 上游:React 19(peer)、Radix 原语、`@phosphor-icons/react`、`streamdown`(会话 markdown)、
-  以及 `@velaros-ai/html-artifacts`(会话件的 HTML 预览)。
+- 上游:React 19(peer)、Radix 原语、`@phosphor-icons/react`、`streamdown`(会话 markdown)。
+  会话件的 HTML 预览用本包自己的 HTML 工件单元(`html-artifacts/`,原来的独立包 `@velaros-ai/ui/html-artifacts`,ADR 0014)。
 - **不依赖任何其他 VelarOS 运行时包**(Kernel / Agent / Model / Memory / Workspace / Browser 全不依赖)。
 - 消费方:VelarOS-Desktop 与 VelarOS-Workbench。
 

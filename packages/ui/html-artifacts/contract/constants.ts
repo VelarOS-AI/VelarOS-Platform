@@ -1,6 +1,6 @@
 /**
  * 常量表：HTML 制品协议与沙箱外壳的约定值。
- * 不 import 任何东西，浏览器、渲染进程、扩展都能用（从 `@velaros-ai/html-artifacts/contracts` 取）。
+ * 不 import 任何东西，浏览器、渲染进程、扩展都能用（从 `@velaros-ai/ui/html-artifacts/contracts` 取）。
  * 同一个数字只在这里写一次：注入 iframe 的脚本、宿主侧的钳制、协议解析器都引这里，改一处三处跟着变。
  */
 

@@ -17,7 +17,7 @@
 | 档 | 形态 | 谁写渲染代码 | 信任级门 | 隔离 | 失败模式 | 用途判据 |
 | --- | --- | --- | --- | --- | --- | --- |
 | **T1** | 声明式卡片 DSL（壳的 CardKit 词汇，mod 只交**数据**） | **壳**（mod 零渲染代码） | **任何信任级**（含 `local-dev`） | 天然——mod 代码从不进渲染树 | 词条不认识 → 该词条降级为纯文本，卡不碎 | 结构化结果、状态、行动卡——**九成 mod 需求** |
-| **T2** | 沙箱 HTML（复用 `@velaros-ai/html-artifacts` 的 iframe 流式运行时） | mod（HTML/JS） | **任何信任级** | iframe + blob URL + 既有 sandbox / security 面 | 沙箱内崩溃 / 超时 → 框内显错，壳无感 | 任意 UI、图表、小交互——壳词表表达不了的 |
+| **T2** | 沙箱 HTML（复用 `@velaros-ai/ui/html-artifacts` 的 iframe 流式运行时） | mod（HTML/JS） | **任何信任级** | iframe + blob URL + 既有 sandbox / security 面 | 沙箱内崩溃 / 超时 → 框内显错，壳无感 | 任意 UI、图表、小交互——壳词表表达不了的 |
 | **T3** | 原生 React 模块（远程模块装载，直接进壳渲染树） | mod（React） | **仅 `bundled-official` / `marketplace-signed`** | **无**——同进程同渲染树 | 逐贡献错误边界 + lazy 分包 | 深度集成件（可替换槽位、复杂面板）——**例外，不是默认** |
 
 **为什么 T2 不设信任级门**：iframe 沙箱是**机制性**隔离，不是**承诺性**隔离——
@@ -76,7 +76,7 @@ T1 的 DSL **不发明新视觉语汇**，它是既有零件盒的**数据化投
 
 | 件 | 落点 |
 | --- | --- |
-| 运行时 | `@velaros-ai/html-artifacts`，子路径 `.` / `./protocol` / `./browser` / `./sandbox` / `./runtime` |
+| 运行时 | `@velaros-ai/ui/html-artifacts`（三件能力：`htmlArtifactProtocol`、`htmlArtifactDocuments`、`mountHtmlArtifact()`）与它的 `/contracts` |
 | 协议 | `HtmlArtifactProtocolParser`、`HTML_ARTIFACT_PROTOCOL_VERSION`、`HtmlArtifactRenderPatch`（`./protocol`） |
 | 沙箱面 | `./sandbox` 导出 `resolveHtmlArtifactFrameFit`、`normalizeHtmlArtifactExternalUrl`、`buildHtmlArtifactDocument`、`HTML_ARTIFACT_WHEEL_MESSAGE_TYPE` |
 | 壳侧挂载点 | `HtmlPreviewFrame`（`packages/ui/src/conversation/html-preview/`，子路径 `@velaros-ai/ui/conversation/html-preview`）——iframe + blob URL + IntersectionObserver 懒挂 |

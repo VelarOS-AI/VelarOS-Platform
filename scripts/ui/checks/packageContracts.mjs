@@ -150,10 +150,8 @@ async function verifyExternalConsumer() {
         `Expected ${UiPackageDirectories.length} UI tarball(s), received ${packageTarballs.length}`,
       );
     }
-    const installTargets = [
-      ...packageTarballs,
-      ...(await packLocalHtmlArtifactsDependency(temporary)),
-    ];
+    // HTML 工件并进 ui 成了它的单元（ADR 0014），不再另打一个包；它的两个入口就在下面「每个入口」的类型导入与运行时导入里
+    const installTargets = [...packageTarballs];
 
     await writeFile(
       path.join(temporary, "package.json"),
@@ -257,65 +255,13 @@ async function verifyExternalConsumer() {
       [
         "--input-type=module",
         "--eval",
-        "await import('@velaros-ai/ui/conversation/contracts'); await import('@velaros-ai/ui/conversation/stream')",
+        "await import('@velaros-ai/ui/conversation/contracts'); await import('@velaros-ai/ui/conversation/stream'); await import('@velaros-ai/ui/html-artifacts'); await import('@velaros-ai/ui/html-artifacts/contracts')",
       ],
       temporary,
     );
   } finally {
     await rm(temporary, { recursive: true, force: true });
   }
-}
-
-async function packLocalHtmlArtifactsDependency(destination) {
-  const packageDirectory = path.join(
-    repositoryRoot,
-    "packages",
-    "html-artifacts",
-  );
-  try {
-    await access(path.join(packageDirectory, "package.json"));
-  } catch {
-    return [];
-  }
-
-  const manifest = JSON.parse(
-    await readFile(path.join(packageDirectory, "package.json"), "utf8"),
-  );
-  const conversationManifest = JSON.parse(
-    await readFile(
-      path.join(repositoryRoot, "packages/ui/package.json"),
-      "utf8",
-    ),
-  );
-  const requiredVersion =
-    conversationManifest.dependencies?.["@velaros-ai/html-artifacts"];
-  // 单版本火车:conversation 切片对 html-artifacts 写 workspace:*,由同仓包直接满足,
-  // 无版本可比;仍校验包名,防止打错包。
-  const isWorkspaceSpec = requiredVersion === "workspace:*";
-  const normalizedRequiredVersion = requiredVersion?.replace(/^[~^]/u, "");
-  if (
-    manifest.name !== "@velaros-ai/html-artifacts" ||
-    (!isWorkspaceSpec && manifest.version !== normalizedRequiredVersion)
-  ) {
-    throw new Error(
-      `Local HTML Artifacts package ${manifest.name}@${manifest.version} does not satisfy ${requiredVersion}`,
-    );
-  }
-
-  const before = new Set(await readdir(destination));
-  await safePackPackage({
-    destination,
-    packageDirectory,
-  });
-  const created = (await readdir(destination)).filter(
-    (file) => file.endsWith(".tgz") && !before.has(file),
-  );
-  if (created.length !== 1) {
-    throw new Error(
-      `Expected one local HTML Artifacts tarball, received ${created.length}`,
-    );
-  }
-  return created.map((file) => path.join(destination, file));
 }
 
 async function buildEveryExportTypeImports() {

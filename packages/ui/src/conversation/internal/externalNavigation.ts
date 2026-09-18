@@ -1,5 +1,5 @@
 // 对话内打开外部链接的唯一出口。所有渲染器共用协议白名单，非法链接一律拒绝。
-import { htmlArtifactDocuments } from '@velaros-ai/html-artifacts'
+import { htmlArtifactDocuments } from '@velaros-ai/ui/html-artifacts'
 
 /**
  * 校验并打开外部链接。返回是否真的打开了（false = 被协议门拒绝或环境无 `window.open`）。

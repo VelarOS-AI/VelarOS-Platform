@@ -68,8 +68,10 @@ const Domains = [
   {
     name: 'ui',
     config: uiConfig,
+    // ui 自己的组件与测试；html-artifacts 单元用它自己那套规则（下一条），不叠 React 的这套
     globs: [
-      'packages/ui/**',
+      'packages/ui/src/**',
+      'packages/ui/test/**',
       'component-library/**',
       'tests/ui/**',
     ],
@@ -77,7 +79,7 @@ const Domains = [
   {
     name: 'html-artifacts',
     config: htmlArtifactsConfig,
-    globs: ['packages/html-artifacts/**'],
+    globs: ['packages/ui/html-artifacts/**'],
   },
   {
     name: 'document-renderer',

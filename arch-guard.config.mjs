@@ -36,7 +36,7 @@ const platformCodeStyle = definePlugin({
       // 全部包的 src 都算运行时业务代码；非 src 目录已被下面的 excludePatterns 挡掉。
       runtimeRoots: ['packages/'],
       // React 面：JSX 类规则只扫这里。
-      frontendRoots: ['packages/ui/src/', 'packages/html-artifacts/src/'],
+      frontendRoots: ['packages/ui/src/', 'packages/ui/html-artifacts/'],
       // Agent Lab 是可独立消费的 host-neutral 基础设施包，刻意不依赖 @velaros-ai/core 的
       // 全局守卫 / 缺席值 / Log 扩展；portable library 档仍由 TypeScript、ESLint、包架构门和
       // 自身测试约束，不能套用要求 Core helper 的产品运行时代码风格规则。
@@ -56,7 +56,7 @@ const platformCodeStyle = definePlugin({
       // 零依赖的浏览器库 html-artifacts 自带一份守卫实现（不能 import core），
       // 守卫本体只能用 typeof 判定，不能套用「改用 isFunction」的自身 autofix。
       'code-style/forbid-raw-runtime-type-guards': {
-        allowFiles: ['packages/html-artifacts/src/utils/runtime-guards.ts'],
+        allowFiles: ['packages/ui/html-artifacts/utils/runtime-guards.ts'],
       },
       'code-style/forbid-console': {
         allowFiles: [

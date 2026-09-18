@@ -123,18 +123,6 @@
       "repositoryDirectory": "packages/velar"
     },
     {
-      "domain": "html-artifacts",
-      "directory": "packages/html-artifacts",
-      "name": "@velaros-ai/html-artifacts",
-      "version": "0.2.0",
-      "description": "A framework-neutral streaming HTML artifact protocol and sandboxed iframe runtime.",
-      "exportSubpaths": [
-        ".",
-        "./contracts"
-      ],
-      "repositoryDirectory": "packages/html-artifacts"
-    },
-    {
       "domain": "kernel",
       "directory": "packages/kernel",
       "name": "@velaros-ai/kernel",
@@ -167,7 +155,7 @@
       "directory": "packages/ui",
       "name": "@velaros-ai/ui",
       "version": "0.2.54",
-      "description": "A reusable React component library with accessible primitives, application shells, and design tokens, plus the host-agnostic conversation UI (message blocks, tool renderers, stream pacing) under ./conversation.",
+      "description": "A reusable React component library with accessible primitives, application shells, and design tokens, plus the host-agnostic conversation UI (message blocks, tool renderers, stream pacing) under ./conversation and the HTML artifacts unit under ./html-artifacts (a framework-neutral streaming HTML artifact protocol and sandboxed iframe runtime).",
       "exportSubpaths": [
         ".",
         "./conversation",
@@ -190,6 +178,8 @@
         "./conversation/tool-render/command/CommandToolRenderDetails",
         "./conversation/tool-render/command/commandToolRender.shared",
         "./hooks/usePointerResize",
+        "./html-artifacts",
+        "./html-artifacts/contracts",
         "./i18n/UiLocalizationProvider",
         "./lib/cn",
         "./lib/styleUtils",

@@ -431,6 +431,7 @@ for (const obsoleteDirectory of [
   "text-files",
   "path-rules",
   "tool-contract",
+  "html-artifacts",
 ]) {
   if (existsSync(resolve(PackagesRoot, obsoleteDirectory)))
     fail(

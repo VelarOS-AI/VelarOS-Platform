@@ -27,7 +27,6 @@ const packageScopes = [
     // **清单面**只有一份(合包只有一个 package.json),挂在本 scope 上,允许集 = 两切片并集。
     manifest: 'packages/ui/package.json',
     allowedVelarosPackages: new Set([
-      '@velaros-ai/html-artifacts',
       '@velaros-ai/ui',
     ]),
   },

@@ -1,5 +1,5 @@
 // ESLint configuration for HTML Artifacts. Source and build scripts use the shared
-// Platform baseline; generated output, demos, and retired fixtures are excluded.
+// Platform baseline; the unit's acceptance and tests are excluded (it lives in packages/ui/html-artifacts).
 import { dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -10,10 +10,7 @@ const rootDir = dirname(fileURLToPath(import.meta.url))
 export default createDomainConfig({
   rootDir,
   ignores: [
-    'packages/html-artifacts/demo/**',
-    'packages/html-artifacts/spec/**',
-    'packages/html-artifacts/test/**',
-    'packages/html-artifacts/dist/**',
-    'packages/html-artifacts/demo-dist/**',
+    'packages/ui/html-artifacts/spec/**',
+    'packages/ui/html-artifacts/test/**',
   ],
 })

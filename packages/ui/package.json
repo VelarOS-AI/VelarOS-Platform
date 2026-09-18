@@ -4,7 +4,7 @@
   "velaros": {
     "platform": "0.6"
   },
-  "description": "A reusable React component library with accessible primitives, application shells, and design tokens, plus the host-agnostic conversation UI (message blocks, tool renderers, stream pacing) under ./conversation.",
+  "description": "A reusable React component library with accessible primitives, application shells, and design tokens, plus the host-agnostic conversation UI (message blocks, tool renderers, stream pacing) under ./conversation and the HTML artifacts unit under ./html-artifacts (a framework-neutral streaming HTML artifact protocol and sandboxed iframe runtime).",
   "license": "Apache-2.0",
   "engines": {
     "node": ">=20"
@@ -24,6 +24,14 @@
     "./utility-types": {
       "types": "./dist/types/utilityTypes.d.ts",
       "import": "./dist/types/utilityTypes.js"
+    },
+    "./html-artifacts": {
+      "types": "./dist/html-artifacts/index.d.ts",
+      "import": "./dist/html-artifacts/index.js"
+    },
+    "./html-artifacts/contracts": {
+      "types": "./dist/html-artifacts/contracts.d.ts",
+      "import": "./dist/html-artifacts/contracts.js"
     },
     "./styles/tokens/theme-light.css": "./dist/styles/tokens/theme-light.css",
     "./styles/tokens/theme-dark.css": "./dist/styles/tokens/theme-dark.css",
@@ -483,7 +491,6 @@
     "@streamdown/code": "^1.1.1",
     "@streamdown/math": "^1.0.2",
     "@streamdown/mermaid": "^1.0.2",
-    "@velaros-ai/html-artifacts": "workspace:*",
     "ahooks": "^3.9.7",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -500,7 +507,8 @@
     "dev": "bun run --cwd ../.. dev",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "clean": "rm -rf dist",
-    "build": "node ../../scripts/ui/build/generate-html-preview-css-module.mjs && bun run clean && tsc -p tsconfig.build.json && node ../../scripts/ui/build/fix-esm-extensions.mjs dist && mkdir -p dist/styles/tokens dist/styles/components dist/styles/components/primitives && cp -R src/styles/tokens/*.css dist/styles/tokens/ && cp -R src/styles/components/*.css dist/styles/components/ && cp -R src/styles/components/primitives/*.css dist/styles/components/primitives/ && node ../../scripts/ui/build/copy-css-assets-to-dist.mjs && node ../../scripts/ui/build/compile-tailwind-css-assets.mjs dist && node ../../scripts/build/normalize-package-declarations.mjs --utility-module @velaros-ai/ui/utility-types",
+    "build": "node ../../scripts/ui/build/generate-html-preview-css-module.mjs && bun run clean && tsc -p tsconfig.units.build.json && tsc -p tsconfig.build.json && node ../../scripts/ui/build/fix-esm-extensions.mjs dist && mkdir -p dist/styles/tokens dist/styles/components dist/styles/components/primitives && cp -R src/styles/tokens/*.css dist/styles/tokens/ && cp -R src/styles/components/*.css dist/styles/components/ && cp -R src/styles/components/primitives/*.css dist/styles/components/primitives/ && node ../../scripts/ui/build/copy-css-assets-to-dist.mjs && node ../../scripts/ui/build/compile-tailwind-css-assets.mjs dist && node ../../scripts/build/normalize-package-declarations.mjs --utility-module @velaros-ai/ui/utility-types",
+    "test": "bun test html-artifacts/spec/acceptance.test.ts html-artifacts/test",
     "prepack": "node ../../scripts/build/buildPackageTopology.mjs --for @velaros-ai/ui"
   },
   "repository": {

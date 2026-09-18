@@ -2,8 +2,8 @@
 
 import { describe, expect, test } from 'bun:test'
 
-import { htmlArtifactProtocol } from '../src/index.js'
-import type { HtmlArtifactProtocolEvent } from '../src/index.js'
+import { htmlArtifactProtocol } from '../index.js'
+import type { HtmlArtifactProtocolEvent } from '../index.js'
 
 /** 把一段源码切成固定长度的 chunk 喂进一个新状态，返回事件与最终状态。 */
 function streamInChunks(source: string, chunkSize = 7) {

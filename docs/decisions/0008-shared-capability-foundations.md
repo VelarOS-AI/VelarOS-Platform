@@ -94,3 +94,5 @@ project 改用两个公共件：命令判定、危险命令审批请求走 `@vel
 - 宿主改引 `@velaros-ai/velar/<单元>` 与 `@velaros-ai/velar/<单元>/contracts`，导出的名字一个没改；旧的四个包名作废，不留转发。
 - `velar:sandbox` 的 run 补上危险命令确认（ADR 0006 定的「镜像里照常问」此前两个空间都漏了）：判定与审批请求用 `@velaros-ai/velar/shell` 的那一套，在共用的单元里做，两个空间一起补上。
 - `@velaros-ai/text-files`、`@velaros-ai/path-rules`、`@velaros-ai/tool-contract` 不是模型 import 的模块，照旧各自成包。
+  （同日被 [ADR 0014](0014-packages-by-responsibility.md) 推翻：前两个并进 `@velaros-ai/core` 做单元，tool-contract 回到 `@velaros-ai/agent/tool-contract`，
+  上面 2026-09-16 补记里的 `toolFailures`、`toolExamples`、`toolIdentity`、`toolInputForgiveness` 与同形副本随之删掉。）

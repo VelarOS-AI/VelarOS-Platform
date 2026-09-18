@@ -7,10 +7,18 @@
     "noEmit": false,
     "outDir": "dist",
     "paths": {
-      "#contracts": ["./packages/ui/src/conversation/contracts/index.ts"],
-      "#internal/*": ["./packages/ui/src/conversation/internal/*"]
+      "#contracts": [
+        "./packages/ui/src/conversation/contracts/index.ts"
+      ],
+      "#internal/*": [
+        "./packages/ui/src/conversation/internal/*"
+      ]
     },
     "rootDir": "src",
     "sourceMap": true
-  }
+  },
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.tsx"
+  ]
 }

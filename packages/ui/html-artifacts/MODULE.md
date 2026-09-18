@@ -1,7 +1,7 @@
-# @velaros-ai/html-artifacts 模块卡片
+# @velaros-ai/ui/html-artifacts 模块卡片
 
 > 这一页是本模块的压缩表示：读完就知道它是什么、给了外面什么、骨干链路怎么走、靠什么、状态在哪、失败什么样、哪些承诺不能破。
-> 先看三件能力各自类上方的接口（`src/impl/` 里，`contract/provides.ts` 登记它们），常量表在 `contract/constants.ts`，注入面在 `contract/requires.ts`。
+> 先看三件能力各自类上方的接口（`impl/` 里，`contract/provides.ts` 登记它们），常量表在 `contract/constants.ts`，注入面在 `contract/requires.ts`。
 > 门禁：`bun run check:module-ownership`、`bun run check:html-artifacts-package`。
 
 ## 这是什么
@@ -13,6 +13,9 @@
 它刻意不认产品：不依赖 React、Electron、Agent Loop，也不绑定任何一家模型 API；零运行时依赖，整条引用链不碰 Node 模块。
 VelarOS 自己的两个消费方——`@velaros-ai/ui` 的聊天预览与 Desktop 的会话制品——都只用前两件能力（自己托管 iframe）；
 第三件 `mountHtmlArtifact` 是给「不想自己托管 iframe」的接入方的整套实现。
+
+以前是独立包 `@velaros-ai/html-artifacts`，2026-09-18 并进 `@velaros-ai/ui` 成为它的一个单元，入口换成 `@velaros-ai/ui/html-artifacts` 子路径（ADR 0014）。
+用法与宿主的安全责任见 ui 的 [`docs/html-artifacts.md`](../docs/html-artifacts.md)。
 
 ## 提供什么
 
@@ -43,12 +46,12 @@ webview 与测试用；不给就用包自带的 DOM 实现。
 `HtmlArtifactShellDocumentOptions`、`HtmlArtifactFrameFit`、`HtmlArtifactFrameFitInput`、`NormalizeHtmlArtifactExternalUrlOptions`）；
 带回调的挂载选项 `MountHtmlArtifactOptions` 与宿主错误 `HtmlArtifactHostError` 在 `types/browser.ts`，不进可移植文件。
 
-两个入口对应 `package.json` 的 `exports`，源文件是 `src` 根上的入口文件，只有转发语句：
+两个入口对应 `@velaros-ai/ui` 包清单 `exports` 里的 `./html-artifacts` 子路径，源文件是单元目录上的入口文件，只有转发语句：
 
 | 入口 | 给谁用 | 里面有什么 |
 | --- | --- | --- |
-| `.` | 任何浏览器环境，含渲染进程与扩展 | 三件能力、注入面、常量表与全部公开数据 |
-| `./contracts` | 同上，只要数据不要能力时 | 常量表与可移植数据 |
+| `./html-artifacts` | 任何浏览器环境，含渲染进程与扩展 | 三件能力、注入面、常量表与全部公开数据 |
+| `./html-artifacts/contracts` | 同上，只要数据不要能力时 | 常量表与可移植数据 |
 
 ## 骨干链路
 
@@ -102,13 +105,13 @@ webview 与测试用；不给就用包自带的 DOM 实现。
 ## 结构
 
 ```text
-src/
+html-artifacts/
   contract/     对外合同：provides.ts 登记三件能力的 API（定义在各自类上方，这里 re-export），requires.ts 只有一个注入口子，constants.ts 是协议约定、尺寸缺省、资源上限、桥接消息名与外链白名单
   types/        只放类型：html-artifacts.ts 是可移植数据，browser.ts 是带回调的挂载选项与宿主错误，internals.ts 是不出包的工作类型
   impl/         一类一文件：HtmlArtifactProtocol、HtmlArtifactProtocolParser、HtmlArtifactDocuments、HtmlArtifactRuntime、DomHtmlArtifactEnvironment
   utils/        protocol-stream.ts 状态机本体、shell-document.ts 文档构造、size-controller.ts 注入脚本源码、frame-fit.ts 宿主缩放、external-url.ts 外链白名单、host-bridge.ts 宿主侧小工具、runtime-guards.ts 与 runtime-log.ts 零依赖副本、tuning.ts 可调参数
-  index.ts      `.` 入口，只转发
-  contracts.ts  `./contracts` 入口，只转发
+  index.ts      `./html-artifacts` 入口，只转发
+  contracts.ts  `./html-artifacts/contracts` 入口，只转发
 spec/           不变量登记、验收测试与共用的浏览器假件
 test/           实现细节测试
 demo/           一个不进包的演示页

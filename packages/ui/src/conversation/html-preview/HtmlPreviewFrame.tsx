@@ -1,13 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { useEventListener, useLatest, useMemoizedFn } from 'ahooks'
 
+import { StyleUtils } from '@velaros-ai/ui'
 import {
   HtmlArtifactBridgeMessageTypes,
   htmlArtifactDocuments,
   type HtmlArtifactFrameFit,
   type HtmlArtifactRenderPatch,
-} from '@velaros-ai/html-artifacts'
-import { StyleUtils } from '@velaros-ai/ui'
+} from '@velaros-ai/ui/html-artifacts'
 
 import { useIntersectionObserver } from '../react-hooks/useIntersectionObserver'
 import { useTimerScope } from '../react-hooks/useTimerScope'

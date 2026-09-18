@@ -14,7 +14,7 @@ The source code is licensed under the [Apache License 2.0](LICENSE). Third-party
 
 ## Repository structure
 
-VelarOS Platform has 12 package workspaces, 11 of which are published independently. Published
+VelarOS Platform has 11 package workspaces, 10 of which are published independently. Published
 packages declare a shared `velaros.platform` generation for cross-package compatibility.
 
 | Domain | Packages |
@@ -25,8 +25,7 @@ packages declare a shared `velaros.platform` generation for cross-package compat
 | Shared capability foundations | `@velaros-ai/code-surface`, `@velaros-ai/velar` |
 | Model providers | `@velaros-ai/model` |
 | Capabilities | `@velaros-ai/cli`, `@velaros-ai/development` |
-| UI | `@velaros-ai/ui` |
-| HTML artifacts | `@velaros-ai/html-artifacts` |
+| UI | `@velaros-ai/ui` (components, conversation UI, and the `html-artifacts` unit) |
 | Evaluation | `@velaros-ai/agent-lab` |
 
 The package inventory in the root `package.json` is the machine-checked source of truth. The

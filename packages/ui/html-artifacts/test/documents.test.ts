@@ -8,8 +8,8 @@ import {
   HtmlArtifactBridgeMessageTypes,
   HtmlArtifactDefaults,
   htmlArtifactDocuments,
-} from '../src/index.js'
-import { HTML_ARTIFACT_SIZE_CONTROLLER_FACTORY_SOURCE } from '../src/utils/size-controller.js'
+} from '../index.js'
+import { HTML_ARTIFACT_SIZE_CONTROLLER_FACTORY_SOURCE } from '../utils/size-controller.js'
 
 /** 一次尺寸测量的高度输入。 */
 interface HeightMeasurement {

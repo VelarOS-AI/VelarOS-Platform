@@ -458,14 +458,16 @@ export const GovernedModules = [
     acceptance: 'spec/acceptance.test.ts',
   },
   {
-    directory: 'html-artifacts',
-    name: '@velaros-ai/html-artifacts',
+    // ui 的单元：HTML 工件（原独立包 @velaros-ai/html-artifacts，ADR 0014）；ui 自己的组件在 src/，不在这张登记表里
+    directory: 'ui',
+    unit: 'html-artifacts',
+    name: '@velaros-ai/ui/html-artifacts',
     // 没有工具：这是一个浏览器库，不向模型交工具，不登记 toolsFile、toolDefiner、hostPort
-    contract: 'src/contract',
-    types: 'src/types',
+    contract: 'html-artifacts/contract',
+    types: 'html-artifacts/types',
     portable: 'html-artifacts.ts',
-    impl: 'src/impl',
-    utils: 'src/utils',
+    impl: 'html-artifacts/impl',
+    utils: 'html-artifacts/utils',
     tuning: 'tuning.ts',
     // 零运行时依赖的浏览器库：两个入口渲染进程与浏览器扩展都能加载
     browserSafeEntries: ['index.ts', 'contracts.ts'],
@@ -477,9 +479,9 @@ export const GovernedModules = [
       // 自己管状态的解析器，由 htmlArtifactProtocol.createParser() 给出
       ['HtmlArtifactProtocolParser.ts'],
     ],
-    card: 'MODULE.md',
-    invariants: 'spec/invariants.md',
-    acceptance: 'spec/acceptance.test.ts',
+    card: 'html-artifacts/MODULE.md',
+    invariants: 'html-artifacts/spec/invariants.md',
+    acceptance: 'html-artifacts/spec/acceptance.test.ts',
   },
   {
     directory: 'document-renderer',

@@ -626,7 +626,7 @@ function scanReleaseIdentityBoundary() {
       forbiddenMarkers: ['built natively in GitHub Actions'],
     },
     {
-      file: 'packages/html-artifacts/README.md',
+      file: 'packages/ui/README.md',
       markers: ['personal access token', '进程环境或凭据管理器注入'],
       forbiddenMarkers: ['GITHUB_TOKEN'],
     },

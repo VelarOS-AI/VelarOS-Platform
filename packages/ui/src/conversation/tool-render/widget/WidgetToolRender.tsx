@@ -1,7 +1,7 @@
 import React, { memo, useCallback, useMemo, useState } from 'react'
 import { WarningCircleIcon } from '@phosphor-icons/react'
 
-import { htmlArtifactDocuments } from '@velaros-ai/html-artifacts'
+import { htmlArtifactDocuments } from '@velaros-ai/ui/html-artifacts'
 import { Text } from '@velaros-ai/ui/primitives/display/Text'
 
 import { HtmlArtifactSourceCode } from '../../artifacts/HtmlArtifactSourceCode'

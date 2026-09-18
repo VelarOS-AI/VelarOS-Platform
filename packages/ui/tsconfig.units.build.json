@@ -1,0 +1,22 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "declaration": true,
+    "declarationMap": true,
+    "emitDeclarationOnly": false,
+    "noEmit": false,
+    "outDir": "dist",
+    "rootDir": ".",
+    "sourceMap": true
+  },
+  "include": [
+    "html-artifacts/**/*.ts",
+    "src/velaros-globals.d.ts"
+  ],
+  "exclude": [
+    "html-artifacts/spec/**",
+    "html-artifacts/test/**",
+    "dist",
+    "node_modules"
+  ]
+}

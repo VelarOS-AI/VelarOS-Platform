@@ -170,7 +170,7 @@ React Provider 的生命周期归宿主装配根。卸载会话面之前:取消�
 
 - **不得**依赖 Desktop 的 renderer 源码、store、IPC 实例或 `react-router`。
 - **不得**依赖任何 VelarOS 运行时包(Kernel / Core / Agent / Workspace / Browser / Memory / Model);
-  只允许消费 `@velaros-ai/ui` 与 `@velaros-ai/html-artifacts`。
+  只允许消费 `@velaros-ai/ui`（含它的 HTML 工件单元 `@velaros-ai/ui/html-artifacts`）。
 - **不得**依赖 Desktop 的 i18n;宿主在装配点注入自己的实现。
 - 跨复用的无状态原语(`CardKit` / `ActionCard`)属于 `@velaros-ai/ui`,**不放进本切片**。
 - **不拥有**会话持久化、模型调用、工具执行、权限决策与导航。宿主保留权威状态,

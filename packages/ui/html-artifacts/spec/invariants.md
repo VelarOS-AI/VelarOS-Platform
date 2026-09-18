@@ -13,4 +13,4 @@
 | INV-4 | 协议资源上限对超长或恶意流生效：缓冲区、制品 HTML、协议原文、补丁载荷四项按 `HtmlArtifactProtocolLimitDefaults` 兜底，宿主可以逐项收紧 | 测试 | `spec/acceptance.test.ts` |
 | INV-5 | 注入 iframe 的脚本不另抄常量：缺省高度上限与宽度倍数上限就是 `HtmlArtifactDefaults` 里那两个数字，改常量表脚本跟着变 | 测试 | `spec/acceptance.test.ts` |
 | INV-6 | 两个入口整条引用链不碰 Node 内置模块，浏览器扩展与渲染进程都能直接加载；类与工具函数不出包，外面只拿得到三件能力的实例、工厂与常量表 | 门禁 | `check:module-ownership` |
-| INV-7 | 解析状态是纯数据：宿主可以自己把 `HtmlArtifactProtocolStreamState` 存下来、换个进程再喂 chunk 续读，状态里没有函数、没有类实例 | 类型 | `src/types/html-artifacts.ts::HtmlArtifactProtocolStreamState` |
+| INV-7 | 解析状态是纯数据：宿主可以自己把 `HtmlArtifactProtocolStreamState` 存下来、换个进程再喂 chunk 续读，状态里没有函数、没有类实例 | 类型 | `types/html-artifacts.ts::HtmlArtifactProtocolStreamState` |

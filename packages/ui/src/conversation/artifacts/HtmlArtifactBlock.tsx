@@ -9,7 +9,7 @@ import React, {
 } from 'react'
 import { useEventListener } from 'ahooks'
 
-import { htmlArtifactDocuments } from '@velaros-ai/html-artifacts'
+import { htmlArtifactDocuments } from '@velaros-ai/ui/html-artifacts'
 import { Button } from '@velaros-ai/ui/primitives/buttons/Button'
 import { Text } from '@velaros-ai/ui/primitives/display/Text'
 

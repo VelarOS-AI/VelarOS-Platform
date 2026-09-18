@@ -30,7 +30,6 @@ The full check builds every package, runs type checking, lint, tests, maintained
 | UI | `check:ui-hook-deps` | React hook dependency regression gate |
 | UI | `check:ui-package-contracts` | Package export and metadata contracts |
 | UI | `check:ui-component-library` | Component API generation, documentation freshness, and isolation |
-| HTML Artifacts | `check:html-artifacts-package` | Package contract and distributable output |
 | Project | `check:project-arch` | Package shape and host/capability boundaries |
 | Agent Lab | `check:agent-lab-package` | Evaluation package contract and tests |
 

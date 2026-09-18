@@ -2,8 +2,8 @@ import type {
   HtmlArtifactContentKind,
   HtmlArtifactDocumentOptions,
   HtmlArtifactRenderPatch,
-} from '@velaros-ai/html-artifacts'
-import { htmlArtifactDocuments } from '@velaros-ai/html-artifacts'
+} from '@velaros-ai/ui/html-artifacts'
+import { htmlArtifactDocuments } from '@velaros-ai/ui/html-artifacts'
 
 import {
   HTML_PREVIEW_MAX_REPORTED_HEIGHT,

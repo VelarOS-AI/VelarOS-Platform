@@ -11,8 +11,8 @@ import {
   htmlArtifactDocuments,
   htmlArtifactProtocol,
   mountHtmlArtifact,
-} from '../src/index.js'
-import type { HtmlArtifactHostError, HtmlArtifactProtocolEvent } from '../src/index.js'
+} from '../index.js'
+import type { HtmlArtifactHostError, HtmlArtifactProtocolEvent } from '../index.js'
 import { bridgeType, createFakeEnvironment, FakeDocument, FakeTarget, FakeWindow } from './support.js'
 
 /** 把一段源码切成固定长度的 chunk 喂进去，返回全部事件。 */

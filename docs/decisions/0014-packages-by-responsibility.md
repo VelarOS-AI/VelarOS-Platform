@@ -33,6 +33,7 @@
 
 `tool-contract` 并进 `@velaros-ai/agent` 现有的 `./tool-contract` 入口。它依赖 kernel（把工具挂成内核模块），进 core 会成环；
 agent 本来就握着审批那一半，agent 里还有一排按原名转发它的垫片，两边的工具协议类型是靠测试盯着的同形副本——并进来只留一份。
+code-surface 原来依赖 tool-contract，现在对 agent 用同版本线的 peer 依赖（agent 不做任何包的运行时依赖，velar 也是这么接的）。
 
 ### 没人用的删掉
 
@@ -41,12 +42,21 @@ agent 本来就握着审批那一半，agent 里还有一排按原名转发它�
 
 ### html-artifacts 并进 ui
 
-`html-artifacts` 只被 ui 与 Desktop 用，并进 `@velaros-ai/ui`。
+`html-artifacts` 只被 ui 与 Desktop 用，并进 `@velaros-ai/ui`，做法与 core 的单元一样：ui 自己的组件留在 `src/`，
+HTML 工件放在单元目录 `ui/html-artifacts/`，入口换成 `@velaros-ai/ui/html-artifacts` 与 `/contracts`。
+
+### core 的基础原语不改布局
+
+原计划把 core 的基础原语也改成单元布局、纳入所有权门禁。动手前核过，不做：那套门禁是给能力单元定的——入口不许导出 utils 函数，
+也不许导出类（错误类也一样），类上不放公开静态成员；core 的基础原语对外恰恰就是根入口转出的一组工具函数，加上 `AppError` 这个类和它的
+`from` / `fromJSON` 静态工厂，
+Desktop 646 个文件、Workbench 165 个文件在引。套上门禁等于为一条给能力单元写的规则改遍全部调用方，职责上却什么也没理清。
+基础原语照旧留在 `src/`，由 core 的领域词门禁看着。
 
 ### 顺序
 
 每一步单独提交、单独跑全套 check：空间包移出（0013）之后 → 删 surface-protocol、三个底层包并进 core → tool-contract 并进 agent →
-core 的基础原语改成标准布局并纳入所有权门禁 → html-artifacts 并进 ui。产品仓升级时再改引用，这一轮只动 Platform。
+html-artifacts 并进 ui。产品仓升级时再改引用，这一轮只动 Platform。
 
 ## Alternatives
 

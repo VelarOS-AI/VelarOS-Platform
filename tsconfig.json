@@ -39,12 +39,6 @@
       "@velaros-ai/development/*": [
         "./packages/development/src/*"
       ],
-      "@velaros-ai/html-artifacts": [
-        "./packages/html-artifacts/src/index.ts"
-      ],
-      "@velaros-ai/html-artifacts/contracts": [
-        "./packages/html-artifacts/src/contracts.ts"
-      ],
       "@velaros-ai/core/platform": [
         "./packages/core/platform/index.ts"
       ],
@@ -110,6 +104,12 @@
       ],
       "@velaros-ai/ui": [
         "./packages/ui/src/index.ts"
+      ],
+      "@velaros-ai/ui/html-artifacts": [
+        "./packages/ui/html-artifacts/index.ts"
+      ],
+      "@velaros-ai/ui/html-artifacts/contracts": [
+        "./packages/ui/html-artifacts/contracts.ts"
       ],
       "@velaros-ai/ui/*": [
         "./packages/ui/src/*"

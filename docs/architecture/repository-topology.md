@@ -12,8 +12,7 @@ VelarOS Platform is a flat Bun workspace. Every publishable package lives direct
 | Foundations | `packages/code-surface`, `packages/velar` |
 | Model | `packages/model` |
 | Capabilities | `packages/cli`, `packages/development` |
-| UI | `packages/ui` |
-| HTML artifacts | `packages/html-artifacts` |
+| UI | `packages/ui` (components in `src/`, plus the `html-artifacts` unit) |
 | Evaluation | `packages/agent-lab` |
 
 ## Target topology
@@ -49,7 +48,7 @@ The repository is converging on three rules; packages move one at a time, each m
 | `memory` | `velar/memory` (`velar:memory`: one directory of Markdown per host-given scope, [ADR 0010](../decisions/0010-memory-slimming.md)); `packages/memory` deleted | done |
 | `office` | whole → `velar/office` (`velar:office`, with the document engines, converters and the renderer primitives underneath); `packages/office` deleted; `document-renderer` now builds on `@velaros-ai/velar/office/renderer` | done |
 | `browser` | whole → `velar/browser` (`velar:browser` to drive and read pages, `velar:devtools` for console, network, storage, performance, recording, emulation and user scripts; with the CDP drivers, page engines, Electron session runtime and site workspace underneath); recipes, the site artifact manager and the tool-era mod manifest dropped (ADR 0011); `packages/browser` deleted | done |
-| `html-artifacts` | into `ui` (ADR 0014) | pending |
+| `html-artifacts` | unit of `ui` (`@velaros-ai/ui/html-artifacts`, ADR 0014); its demo page and standalone package contract check dropped, the ui package contract covers its entries; `packages/html-artifacts` deleted | done |
 | `cli`, `agent-lab`, `document-renderer` | stay: distribution, evaluation and a product package | done |
 
 ## Shared infrastructure
