@@ -7,7 +7,7 @@
 
 | 编号 | 不变量 | 检验方式 | 检验器 |
 | --- | --- | --- | --- |
-| INV-1 | 项目空间挂五个命名空间（`project`、`code`、`shell`、`sandbox`、`images`）；项目独有的是 `velar:project` 的六个操作（read、list、search、edit、inspect、undo）与 `velar:code` 的两个（query、analyze），声明从源码生成、只放出这些，调用上下文与宿主端口不进模型面 | 测试 | `spec/acceptance.test.ts` |
+| INV-1 | 项目空间挂五个命名空间（`project`、`code`、`shell`、`sandbox`、`images`）；项目独有的是 `velar:project` 的六个操作（read、list、search、edit、inspect、undo）与 `velar:code` 的两个（query、analyze），声明从源码生成、只放出这些，调用上下文与宿主端口不进模型面；空间交出的模块清单（`modules`）正好是这五件，每件随包发布的声明与生成物是同一份、放出的方法就是能调的那些，常驻的是项目文件与命令 | 测试 | `spec/acceptance.test.ts` |
 | INV-2 | 编辑只认本会话读取、搜索或编辑回执里的 fileRef：它绑定路径、版本和实际交给程序的那段源码；range 越出这段就整批拒绝（SCOPE_VIOLATION），文件一个字节都不变；整份替换（overwrite）要求 fileRef 覆盖全文，move、delete 只核对版本 | 测试 | `spec/acceptance.test.ts` |
 | INV-3 | 文件在读取之后被外部改过，基于旧版本的编辑整批拒绝（BASE_REVISION_MISMATCH），不覆盖外部改动 | 测试 | `spec/acceptance.test.ts` |
 | INV-4 | 一次 edit 是一个事务：几个文件、几处编辑全成或全不成；定不下来的那一处在 message 里点名第几步第几处 | 测试 | `spec/acceptance.test.ts` |

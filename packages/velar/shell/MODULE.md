@@ -26,6 +26,7 @@ agent 代跑一条 shell 命令的能力，所有空间共用一份：执行前�
 | `ShellCommandOperationKind` | 契约常量 | 危险命令审批的操作身份种类 |
 | `ShellCommandKinds` | 契约常量 | 模型能为一条命令挑的 shell 种类封闭词表，所有 `shell` 字段都取它；派生类型 `ShellCommandKind` |
 | `ShellLimits` | 契约常量 | `velar:shell` 的公开上限：超时、输出字符、任务条数 |
+| `VelarShellModule` | 生成的合同（`contract/surface.ts`） | `velar:shell` 随包发布的模型面：模块名、放出去的方法、生成的完整声明（与 `baselines/code-surface/shell.d.ts` 同一份）；空间挂这件能力时交给代码面的门 |
 
 **数据面**是 `types/`：`types/shell-command.ts` 是可移植数据（命令分类 `ShellCommandPlan`、并发判定的入参与选项；
 `velar:shell` 的入参与回执；宿主端口上流动的命令数据：`ShellRunCommandOptions`、`ShellCommandResult`、后台任务、控制台、shell 描述、空间口径 `ShellCommandSpacePolicy`），
@@ -92,7 +93,7 @@ agent 代跑一条 shell 命令的能力，所有空间共用一份：执行前�
 
 ```text
 shell/
-  contract/     对外合同：provides.ts 登记三件能力的 API，requires.ts 是空间端口与调用上下文，constants.ts 是操作身份、shell 词表与公开上限
+  contract/     对外合同：provides.ts 登记三件能力的 API，requires.ts 是空间端口与调用上下文，constants.ts 是操作身份、shell 词表与公开上限；surface.ts 是生成的模型面（随包发布的声明）
   types/        只放类型：shell-command.ts 是可移植数据，approval.ts 是审批请求的入参与结果，invocation.ts 是判定内部的工作类型
   impl/         一类一文件：ShellOperations（velar:shell）、ShellCommandPolicy（判定的唯一出口）、ShellCommandApproval（审批请求）
   utils/        command-policy.ts 是判定本身，limits.ts 是钳上限；全是纯函数，每个函数上方一句说明

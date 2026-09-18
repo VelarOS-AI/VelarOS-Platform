@@ -21,6 +21,7 @@
 | --- | --- | --- |
 | `imageOperations` | `ImageOperationsApi` | 代码面 `images` 命名空间的 view：把图交到模型眼前，返回值里只有尺寸 |
 | `ImageLimits` | 契约常量 | 公开上限：一批几张、读进来的文件多大、交给模型的图的长边与 base64 字节 |
+| `VelarImagesModule` | 生成的合同（`contract/surface.ts`） | `velar:images` 随包发布的模型面：模块名、放出去的方法、生成的完整声明（与 `baselines/code-surface/images.d.ts` 同一份）；空间挂这件能力时交给代码面的门 |
 
 **数据面**是 `types/`：`types/images.ts` 是可移植数据（view 的入参与结果），`types/space.ts` 是空间端口上流动的数据
 （定位出来的一张图、裁图缩图的请求与结果、交给模型看的一张图，带 `Buffer`，从根入口导出）与看图的工作类型（不出包）。
@@ -81,7 +82,7 @@
 
 ```text
 images/
-  contract/     对外合同：provides.ts 登记 view 的 API，requires.ts 是空间端口与调用上下文，constants.ts 是公开上限
+  contract/     对外合同：provides.ts 登记 view 的 API，requires.ts 是空间端口与调用上下文，constants.ts 是公开上限；surface.ts 是生成的模型面（随包发布的声明）
   types/        只放类型：images.ts 是可移植数据，space.ts 是空间端口上的数据与看图的工作类型
   impl/         一类一文件：ImageOperations（velar:images）
   utils/        image.ts（认格式、读宽高、有界读、区域、压进上限）、input.ts（入参核对）、tuning.ts（可调参数）；全是函数与常量，每个函数上方一句说明

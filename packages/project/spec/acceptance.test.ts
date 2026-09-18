@@ -44,6 +44,14 @@ describe('模型面', () => {
       expect(text).not.toContain('ProjectCallContext')
       expect(text).not.toContain('ProjectHostPort')
     }
+    // 挂的模块清单就是这五件：随包发布的声明与生成物是同一份，放出的方法就是能调的那些；常驻的是项目文件与命令。
+    expect(space.modules.map(({ surface }) => surface.namespace).sort()).toEqual(Object.keys(table).sort())
+    for (const { surface } of space.modules) {
+      expect(surface.specifier).toBe(`velar:${surface.namespace}`)
+      expect(surface.declarations).toBe(await readFile(join(Baselines, `${surface.namespace}.d.ts`), 'utf8'))
+      expect([...surface.methods].sort()).toEqual(Object.keys(table[surface.namespace]!).sort())
+    }
+    expect(space.modules.filter((module) => module.resident).map(({ surface }) => surface.namespace)).toEqual(['project', 'shell'])
   })
 
   test('INV-22 两份代码模版整份照生成的声明过类型检查，声明里嵌的就是这两份文件', async () => {

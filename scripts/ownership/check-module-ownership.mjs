@@ -6,7 +6,7 @@
 //      工具文件只放定义：execute 只许简单的一两步（最多 ExecuteStatementLimit 条语句），实现多的交给 impl 里的类。
 //   2. types：只放类型，一个值都不许有；只用 type import，只引 types 与合同；哪些类型出包由合同的签名闭包决定。
 //      可移植文件（types/<portable> 与 contract/constants.ts）不 import、不用 Node 类型，可移植数据不带函数成员。
-//   3. contract：只有 provides.ts、requires.ts、constants.ts 三个文件。provides / requires 只放带中文说明的接口声明（每个成员也有说明），
+//   3. contract：只有 provides.ts、requires.ts、constants.ts 三个文件（代码面能力另有生成器写的 surface.ts：模型面的声明随包发布）。provides / requires 只放带中文说明的接口声明（每个成员也有说明），
 //      或者 export type { X } from '../impl/<类文件>.js' 登记类上方的接口（合同里的接口要用登记过的接口时可以 import type 它）；constants.ts 只放 Object.freeze 的常量表、字符串身份和由它们派生的类型别名。
 //   4. impl：一个类一个文件、文件名即类名（工具文件不放类）；只许声明并导出本文件的类实现的接口和以类名开头的配套接口，
 //      都要有中文说明，其余类型不许写在这里（带 typeof 的除外）；每个类 implements 一个接口：写在类上方（公开的在 provides.ts 登记，注入面的在 requires.ts；继承 Error 的错误类除外），公开成员都在接口里，没有公开静态成员，
@@ -46,6 +46,8 @@ import {
 } from './governed-modules.mjs'
 
 const RepoRoot = resolve(import.meta.dir, '../..')
+/** 生成的 contract/surface.ts 的第一行；手写的文件冒充不了。 */
+const GeneratedSurfaceHeader = '// 本文件由 scripts/code-surface/generate-declarations.mjs 从能力包源码生成，不要手改。'
 const PackagesRoot = join(RepoRoot, 'packages')
 const RootManifest = JSON.parse(readFileSync(join(RepoRoot, 'package.json'), 'utf8'))
 /** 本仓自己定义的环境变量一律用这个前缀；别人定义的前缀由登记表的 environmentPrefixes 补充。 */
@@ -456,9 +458,13 @@ for (const module of selectedModules) {
 
   // ── 3. contract：对外合同，三个文件 ─────────────────────────────────────
   for (const directory of childDirectories(contractRoot)) fail(`${label}: ${module.contract}/${directory}/ 是子目录；合同目录保持扁平`)
-  const contractFileNames = new Set(['provides.ts', 'requires.ts', 'constants.ts'])
+  // surface.ts 是第四份合同：代码面能力的模型面（生成物，随包发布），只许生成器写。
+  const contractFileNames = new Set(['provides.ts', 'requires.ts', 'constants.ts', 'surface.ts'])
   for (const file of walkAll(contractRoot)) {
-    if (!contractFileNames.has(basename(file))) fail(`${label}: ${shortPath(file)} 不是合同文件；${module.contract}/ 只有 provides.ts、requires.ts、constants.ts`)
+    if (!contractFileNames.has(basename(file))) fail(`${label}: ${shortPath(file)} 不是合同文件；${module.contract}/ 只有 provides.ts、requires.ts、constants.ts，代码面能力另有生成的 surface.ts`)
+    else if (basename(file) === 'surface.ts' && !readFileSync(file, 'utf8').startsWith(GeneratedSurfaceHeader)) {
+      fail(`${label}: ${shortPath(file)} 不是生成器写的；模型面的声明只由 \`bun run generate:code-surface\` 生成，不手写`)
+    }
   }
   if (!existsSync(providesPath)) fail(`${label}: 缺少产品面文件 ${shortPath(providesPath)}`)
   const providesRegistered = new Map() // 类上方接口的声明 → 登记它的名字

@@ -22,6 +22,7 @@
 | `sandboxOperations` | `SandboxOperationsApi` | 代码面 `sandbox` 命名空间的五个操作：create / run / diff / apply / discard |
 | `RehearsalSandboxLimits` | 契约常量表 | 沙箱的公开上限，`velar:sandbox` 的声明与宿主实现都引它 |
 | `SandboxApplyOperationKind` | 契约常量 | 落回审批的操作身份种类 |
+| `VelarSandboxModule` | 生成的合同（`contract/surface.ts`） | `velar:sandbox` 随包发布的模型面：模块名、放出去的方法、生成的完整声明（与 `baselines/code-surface/sandbox.d.ts` 同一份）；空间挂这件能力时交给代码面的门 |
 
 **数据面**是 `types/`：`types/rehearsal-sandbox.ts` 是可移植数据（建、跑命令、看差量、落回、丢弃的入参与结果，筛出来的三列），`types/apply.ts` 是落回确认请求的入参、结果与空间的落回政策 `SandboxApplyPolicy`（引用 agent 的确认选项类型，从根入口导出）。
 
@@ -84,7 +85,7 @@
 
 ```text
 sandbox/
-  contract/     对外合同：provides.ts 登记两个类的 API，requires.ts 是三个注入点（宿主沙箱端口、代码面端口、调用上下文），constants.ts 是公开上限与操作身份
+  contract/     对外合同：provides.ts 登记两个类的 API，requires.ts 是三个注入点（宿主沙箱端口、代码面端口、调用上下文），constants.ts 是公开上限与操作身份；surface.ts 是生成的模型面（随包发布的声明）
   types/        只放类型：rehearsal-sandbox.ts 是可移植数据，apply.ts 是确认请求的入参、结果与空间的落回政策
   impl/         SandboxOperations（代码面五个操作）、RehearsalSandboxRules（落回规则的唯一出口）
   utils/        apply.ts（筛选与确认文案的纯函数）、input.ts（入参核对）、tuning.ts（可调参数）

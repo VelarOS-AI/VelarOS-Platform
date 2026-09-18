@@ -10,17 +10,21 @@
 import { mkdir } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 
-import type { CapabilityOperationContext, CapabilityOperationTable } from '@velaros-ai/code-surface/contracts'
+import type { CapabilityOperationContext, CapabilityOperationTable, MountedCapabilityModule } from '@velaros-ai/code-surface/contracts'
 import { AppError, isNotNull, isNull } from '@velaros-ai/core'
 import { resolveRealPath } from '@velaros-ai/core/utils/RealPath'
 import type { FileOperationContext, FileSpacePort } from '@velaros-ai/velar/files'
 import { fileOperations } from '@velaros-ai/velar/files'
+import { VelarFilesModule } from '@velaros-ai/velar/files/contracts'
 import type { ImageOperationContext, ImageSpacePort } from '@velaros-ai/velar/images'
 import { imageOperations } from '@velaros-ai/velar/images'
+import { VelarImagesModule } from '@velaros-ai/velar/images/contracts'
 import type { SandboxOperationContext, SandboxSurfacePort } from '@velaros-ai/velar/sandbox'
 import { sandboxOperations } from '@velaros-ai/velar/sandbox'
+import { VelarSandboxModule } from '@velaros-ai/velar/sandbox/contracts'
 import type { ShellOperationContext, ShellSpacePort } from '@velaros-ai/velar/shell'
 import { shellOperations } from '@velaros-ai/velar/shell'
+import { VelarShellModule } from '@velaros-ai/velar/shell/contracts'
 
 import type { SystemCallContext, SystemSpaceHost } from '../contract/requires.js'
 import { credentialConfirmation, isCredentialPath, isSensitiveSystemMutationPath, sensitiveMutationConfirmation } from '../utils/file-safety.js'
@@ -35,9 +39,21 @@ export interface SystemSpaceApi {
    * 缓存一份就等于把上一次调用的审批通道借给下一次用。
    */
   readonly operations: CapabilityOperationTable
+  /**
+   * 挂了哪几件能力、哪几件常驻：本机文件与命令是系统空间的核心，常驻；看图与演练沙箱只给模块名与方法名，
+   * 程序 import 了才把完整声明给模型。代码面的门按它决定给模型看什么、检查程序时加载哪几份声明。
+   */
+  readonly modules: readonly MountedCapabilityModule[]
 }
 
 class SystemSpace implements SystemSpaceApi {
+  private static readonly Modules: readonly MountedCapabilityModule[] = Object.freeze([
+    { surface: VelarFilesModule, resident: true },
+    { surface: VelarShellModule, resident: true },
+    { surface: VelarImagesModule, resident: false },
+    { surface: VelarSandboxModule, resident: false },
+  ])
+
   private static readonly SandboxClosingNote = '删除和覆盖无法撤销；落回前会核对这些文件自建沙箱以来没被别人改过，改过就整批不落。'
 
   private readonly filePort: FileSpacePort
@@ -53,6 +69,10 @@ class SystemSpace implements SystemSpaceApi {
     this.shellPort = this.createShellPort()
     this.sandboxPort = this.createSandboxPort()
     this.imagePort = this.createImagePort()
+  }
+
+  public get modules(): readonly MountedCapabilityModule[] {
+    return SystemSpace.Modules
   }
 
   public get operations(): CapabilityOperationTable {

@@ -8,12 +8,13 @@ import { CodeSurfaceErrorCodes, CodeSurfaceLimits } from '../src/contract/consta
 import type { CodeCapabilityPort } from '../src/contract/requires'
 import { createCapabilityPort } from '../src/impl/CapabilityOperationPort'
 import { codeProgramChecker } from '../src/impl/CodeProgramChecker'
+import { createCodeProgramGate } from '../src/impl/CodeProgramGate'
 import { createCodeSurfaceSession } from '../src/impl/CodeSurfaceSession'
 import {
   nodeSubprocessCodeRunner,
   NodeSubprocessRunnerIsReleaseReady,
 } from '../src/impl/NodeSubprocessCodeRunner'
-import type { CodeProgramEdit } from '../src/types/code-surface'
+import type { CodeProgramEdit, MountedCapabilityModule } from '../src/types/code-surface'
 import type { GrantedModule } from '../src/types/module-form'
 import { joinGrantedDeclarations } from '../src/utils/compiler'
 import { renderDiagnostics } from '../src/utils/diagnostics'
@@ -489,3 +490,58 @@ export default 1`)
   })
 })
 
+describe('门', () => {
+  const notes: MountedCapabilityModule = {
+    resident: true,
+    surface: { specifier: 'velar:notes', namespace: 'notes', methods: ['list'], declarations: "declare module 'velar:notes' {\n  export function list(input: { limit: number }): Promise<{ items: string[] }>\n}" },
+  }
+  const extra: MountedCapabilityModule = {
+    resident: false,
+    surface: { specifier: 'velar:extra', namespace: 'extra', methods: ['count'], declarations: "declare module 'velar:extra' {\n  /** 数一数有几个字。 */\n  export function count(input: { of: string }): Promise<{ n: number }>\n}" },
+  }
+  const modules = [notes, extra]
+  const capabilities = createCapabilityPort({
+    notes: { list: async (input) => ({ items: Array.from({ length: (input as { limit: number }).limit }, (_, index) => `n${index}`) }) },
+    extra: { count: async (input) => ({ n: String((input as { of: string }).of).length }) },
+  })
+  const gateOf = () => createCodeProgramGate({ checker: codeProgramChecker, runner: nodeSubprocessCodeRunner })
+  const run = (gate: ReturnType<typeof gateOf>, sessionId: string, program: { source?: string; edits?: CodeProgramEdit[] }) =>
+    gate.run({ sessionId, program, modules, capabilities, timeoutMs: 20_000 })
+  const counting = (of: string, lease = '') => `import { count } from 'velar:extra'${lease}\nconst { n } = await count({ of: '${of}' })\nexport default n`
+
+  test('INV-24 门的说明里有写程序的规矩、常驻模块的完整声明、其余模块的方法名（按需模块的声明不在里面）', () => {
+    const text = gateOf().describe(modules)
+    expect(text).toContain('export default')
+    expect(text).toContain('export function list(input: { limit: number })')
+    expect(text).toContain('velar:extra：count')
+    expect(text).not.toContain('数一数有几个字')
+  })
+
+  test('INV-24 头一次 import 按需模块不执行、交回它的完整声明；之后这个会话一直能用；退租后再用静默装回；别的会话各算各的', async () => {
+    const gate = gateOf()
+    const first = await run(gate, 's1', { source: counting('abc') })
+    expect(first.outcome.checked).toBe(false)
+    expect(first.text).toContain('这一次没有执行')
+    expect(first.text).toContain('数一数有几个字')
+    expect(JSON.parse((await run(gate, 's1', { source: counting('abc') })).text)).toEqual({ value: 3 })
+    expect(JSON.parse((await run(gate, 's1', { source: counting('abcd', " with { lease: 'done' }") })).text)).toEqual({ value: 4 })
+    // 退租之后又用到：静默装回去再检查一遍，不让模型白跑一轮。
+    expect(JSON.parse((await run(gate, 's1', { source: counting('ab') })).text)).toEqual({ value: 2 })
+    expect((await run(gate, 's2', { source: counting('ab') })).outcome.checked).toBe(false)
+    // 空间里没有的模块：说清楚有哪些。
+    const missing = await run(gate, 's1', { source: "import { x } from 'velar:nowhere'\nexport default await x()" })
+    expect(missing.text).toContain('这个空间里没有 velar:nowhere')
+  }, 60_000)
+
+  test('INV-24 edits 在同一个会话的上一份程序上改，检查没过的那份也算；诊断带代码帧；会话结束就忘掉上一份', async () => {
+    const gate = gateOf()
+    const broken = await run(gate, 's1', { source: "import { list } from 'velar:notes'\nconst r = await list({ limit: 2 })\nexport default r.itemz" })
+    expect(broken.text).toContain('typecheck 没过')
+    expect(broken.text).toContain('export default r.itemz')
+    const fixed = await run(gate, 's1', { edits: [{ oldText: 'r.itemz', newText: 'r.items' }] })
+    expect(JSON.parse(fixed.text)).toEqual({ value: ['n0', 'n1'] })
+    gate.forget('s1')
+    const lost = await run(gate, 's1', { edits: [{ oldText: 'r.items', newText: 'r.items.length' }] })
+    expect(JSON.parse(lost.text).failed.message).toContain('没有上一份程序')
+  }, 60_000)
+})

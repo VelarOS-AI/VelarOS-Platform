@@ -51,6 +51,7 @@ const PortableContracts = [
     modules: new Set([
       "./types/project.js",
       "./contract/constants.js",
+      "./contract/surface.js",
     ]),
   },
   {

@@ -26,6 +26,7 @@
 | `fileOperations` | `FileOperationsApi` | 代码面 `files` 命名空间的三个操作：带行号地读、按行号改或整份写、整次撤回 |
 | `FileLimits` | 契约常量 | 公开上限：批量条数、单文件字节、读的字符预算、一个文件改几处、留原文的上限、留几次改动 |
 | `FileErrorCodes` | 契约常量 | 三个专属错误码：`FILES_EDIT_UNRESOLVED`、`FILES_EDIT_DENIED`、`FILES_UNDO_CONFLICT`，模型的程序接住异常时 `error.code` 就是它 |
+| `VelarFilesModule` | 生成的合同（`contract/surface.ts`） | `velar:files` 随包发布的模型面：模块名、放出去的方法、生成的完整声明（与 `baselines/code-surface/files.d.ts` 同一份）；空间挂这件能力时交给代码面的门 |
 
 **数据面**是 `types/`：`types/files.ts` 是可移植数据（读的入参、写与撤回的入参和结果、空间定位出来的路径 `FileLocation`），
 `types/text.ts` 是读的结果（带文本编码，从根入口导出）与读的工作类型，`types/space.ts` 是空间端口上流动的数据
@@ -93,7 +94,7 @@
 
 ```text
 files/
-  contract/     对外合同：provides.ts 登记三个操作的 API，requires.ts 是空间端口与调用上下文，constants.ts 是错误码与公开上限
+  contract/     对外合同：provides.ts 登记三个操作的 API，requires.ts 是空间端口与调用上下文，constants.ts 是错误码与公开上限；surface.ts 是生成的模型面（随包发布的声明）
   types/        只放类型：files.ts 是可移植数据，text.ts 是读的结果与读的工作类型，space.ts 是空间端口上的数据，edit.ts 是写与撤回的工作类型
   impl/         一类一文件：FileOperations（velar:files）、FileChanges（留着能撤回的改动）
   utils/        batch.ts（一批的核对与失败）、plan.ts（一个文件的写入规划）、lines.ts（拆行、按行号改、拼回、换行风格）、text-file.ts（有界读、解码、版本、印记、媒体类型）、

@@ -265,6 +265,8 @@ export const GovernedModules = [
     // 根入口起子进程、跑编译器，只给 Node；渲染进程只能加载可移植数据
     browserSafeEntries: ['contracts.ts'],
     layers: [
+      // 模型写程序的那扇门：按会话记导入与上一份程序，编给模型的说明与回执
+      ['CodeProgramGate.ts'],
       // 会话编排：查体量、检查、执行、编结果
       ['CodeSurfaceSession.ts'],
       // 执行前的检查，与隔离里的执行；两者互不相干

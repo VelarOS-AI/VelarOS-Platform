@@ -12,11 +12,14 @@ export type {
 export { createCapabilityPort } from './impl/CapabilityOperationPort.js'
 export type { CodeProgramCheckerApi } from './impl/CodeProgramChecker.js'
 export { codeProgramChecker } from './impl/CodeProgramChecker.js'
+export type { CodeProgramGateApi } from './impl/CodeProgramGate.js'
+export { createCodeProgramGate } from './impl/CodeProgramGate.js'
 export type { CodeSurfaceSessionApi } from './impl/CodeSurfaceSession.js'
 export { createCodeSurfaceSession } from './impl/CodeSurfaceSession.js'
 export { nodeSubprocessCodeRunner,NodeSubprocessRunnerIsReleaseReady } from './impl/NodeSubprocessCodeRunner.js'
 export type {
   CapabilityLease,
+  CapabilityModuleSurface,
   CodeAttachment,
   CodeCallNotice,
   CodeProgramCheckFailure,
@@ -31,8 +34,10 @@ export type {
   CodeSurfaceOutcome,
   CompletedCall,
   GrantedModule,
+  MountedCapabilityModule,
   ProgramImport,
 } from './types/code-surface.js'
+export type { CodeGateReply, CodeGateRunInput } from './types/gate.js'
 export type {
   CapabilityNamespaceOperations,
   CapabilityOperation,

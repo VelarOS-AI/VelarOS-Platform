@@ -9,17 +9,21 @@
  * 这里没有一个字是给模型看的：模型面是五份生成的声明。
  */
 
-import type { CapabilityOperationContext, CapabilityOperationTable } from '@velaros-ai/code-surface/contracts'
+import type { CapabilityOperationContext, CapabilityOperationTable, MountedCapabilityModule } from '@velaros-ai/code-surface/contracts'
 import { AppError } from '@velaros-ai/core/error'
 import type { ImageOperationContext } from '@velaros-ai/velar/images'
 import { imageOperations } from '@velaros-ai/velar/images'
 import type { ImageViewInput } from '@velaros-ai/velar/images/contracts'
+import { VelarImagesModule } from '@velaros-ai/velar/images/contracts'
 import type { SandboxOperationContext } from '@velaros-ai/velar/sandbox'
 import { sandboxOperations } from '@velaros-ai/velar/sandbox'
+import { VelarSandboxModule } from '@velaros-ai/velar/sandbox/contracts'
 import type { ShellOperationContext, ShellSpacePort } from '@velaros-ai/velar/shell'
 import { shellCommandPolicy, shellOperations } from '@velaros-ai/velar/shell'
+import { VelarShellModule } from '@velaros-ai/velar/shell/contracts'
 
 import type { ProjectCallContext } from '../contract/requires.js'
+import { VelarCodeModule, VelarProjectModule } from '../contract/surface.js'
 import type { CodeAnalysisInput, CodeQueryInput } from '../types/code.js'
 import type { ProjectChangeInput, ProjectEditInput, ProjectListInput, ProjectReadInput, ProjectSearchInput } from '../types/files.js'
 import { redactCommandOutput } from '../utils/agent/execution.js'
@@ -38,13 +42,30 @@ export interface ProjectSpaceApi {
    * 每次调用都向宿主要一次上下文（项目根、内核、审批通道、取消信号都是**这一次调用**的），端口也按这次的上下文现装。
    */
   readonly operations: CapabilityOperationTable
+  /**
+   * 挂了哪几件能力、哪几件常驻：项目文件与命令是项目空间的核心，常驻；问代码、演练沙箱、看图只给模块名与方法名，
+   * 程序 import 了才把完整声明给模型。代码面的门按它决定给模型看什么、检查程序时加载哪几份声明。
+   */
+  readonly modules: readonly MountedCapabilityModule[]
 }
 
 class ProjectSpace implements ProjectSpaceApi {
+  private static readonly Modules: readonly MountedCapabilityModule[] = Object.freeze([
+    { surface: VelarProjectModule, resident: true },
+    { surface: VelarShellModule, resident: true },
+    { surface: VelarCodeModule, resident: false },
+    { surface: VelarSandboxModule, resident: false },
+    { surface: VelarImagesModule, resident: false },
+  ])
+
   public constructor(
     private readonly resolveCall: (signal: Optional<AbortSignal>) => ProjectCallContext | Promise<ProjectCallContext>,
     private readonly gate: ProjectExecutionGateApi,
   ) {}
+
+  public get modules(): readonly MountedCapabilityModule[] {
+    return ProjectSpace.Modules
+  }
 
   public get operations(): CapabilityOperationTable {
     const shell = async (context: CapabilityOperationContext): Promise<ShellOperationContext> => {

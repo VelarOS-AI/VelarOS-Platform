@@ -504,6 +504,14 @@ describe('系统空间：四件能力配上本机端口', () => {
         const declared = [...declarations.matchAll(/export function (\w+)/gu)].map((match) => match[1]).sort()
         expect({ namespace, operations: [...operations].sort() }).toEqual({ namespace, operations: declared })
       }
+      // 挂的模块清单就是这四个：随包发布的声明与生成物是同一份，放出的方法就是能调的那些；常驻的是本机文件与命令。
+      expect(system.space.modules.map(({ surface }) => surface.namespace).sort()).toEqual(Object.keys(registered).sort())
+      for (const { surface } of system.space.modules) {
+        expect(surface.specifier).toBe(`velar:${surface.namespace}`)
+        expect(surface.declarations).toBe(readFileSync(join(BaselineDirectory, `${surface.namespace}.d.ts`), 'utf8'))
+        expect([...surface.methods].sort()).toEqual([...registered[surface.namespace]!].sort())
+      }
+      expect(system.space.modules.filter((module) => module.resident).map(({ surface }) => surface.namespace)).toEqual(['files', 'shell'])
       // 绕开编译期（模型写 JSON.parse 就是这样）送进一个坏形状：拦它的是那件能力自己
       const outcome = await system.port.invoke({ namespace: 'files', operation: 'read', input: { files: '不是数组' } })
       expect(outcome.value).toBeUndefined()

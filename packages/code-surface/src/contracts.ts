@@ -5,6 +5,7 @@ export { ApprovalNamespace, CodeSurfaceDiagnosticCodes, CodeSurfaceErrorCodes, C
 export { createCapabilityPort } from './impl/CapabilityOperationPort.js'
 export type {
   CapabilityLease,
+  CapabilityModuleSurface,
   CodeAttachment,
   CodeCallNotice,
   CodeProgramCheckFailure,
@@ -19,6 +20,7 @@ export type {
   CodeSurfaceOutcome,
   CompletedCall,
   GrantedModule,
+  MountedCapabilityModule,
   ProgramImport,
 } from './types/code-surface.js'
 export type {

@@ -21,6 +21,7 @@
 | `codeProgramChecker` | `CodeProgramCheckerApi` | 执行之前的那道门。程序是 JavaScript，但照样受类型检查（`checkJs`，类型从声明里推）——字段拼错、读一个不存在的字段、入参形状错、输出被截断，都在这里拦下，报错直接给出正确的名字。模型手滑写了 TypeScript 时不废掉整轮：剥掉类型照跑 |
 | `createCodeSurfaceSession` | `CodeSurfaceSessionApi` | 把一次「模型交了段程序」办完：查体量 → 检查 → 隔离里执行 → 把能力调用转给宿主 → 编成给模型看的结果 |
 | `nodeSubprocessCodeRunner` | `CodeRunnerApi` | **开发期专用**的隔离运行器，见「非目标」 |
+| `createCodeProgramGate` | `CodeProgramGateApi` | 模型写程序的那扇门：按会话记着导入过的模块与上一份程序，给模型的说明（写程序的规矩、常驻模块的完整声明、其余模块的方法名）也由它编。头一次 import 按需模块时不执行、交回完整声明；退租过的再用到时静默装回；诊断带代码帧；跑完的结果编成模型读的回执，图跟在后面 |
 | `createCapabilityPort` | `CodeCapabilityPort` | 能力空间交一张**操作表**（命名空间 → 操作名 → 那个函数），拿回代码面要的那个端口。登记、转发、整形错误这三件事每个空间一模一样，写一遍就够。表里**没有校验也没有一个字给模型**：说明在生成的声明里，校验在操作方法自己里——盖在调用方这一侧换个入口就漏 |
 | `NodeSubprocessRunnerIsReleaseReady` | 契约常量 | 恒为 `false`：上面那个运行器不许进正式发版，宿主装配时据此拦下 |
 | `CodeSurfaceModId` | 契约常量 | 本包作为内核模块的身份 |
@@ -39,6 +40,7 @@
 **数据面**是 `types/code-surface.ts`，可移植：`CodeProgramRequest`（程序与 `blobs`）、`CodeProgramDiagnostic`（一条诊断）、
 `CodeProgramEdit` / `CodeProgramRange`（在上一份上改的一处）、`CodeCallNotice`（系统插手过的地方）、
 `CapabilityLease` / `ProgramImport`（租约与能力 import）、`GrantedModule`（这一轮授了哪个命名空间）、
+`CapabilityModuleSurface`（一件能力随包发布的模型面）/ `MountedCapabilityModule`（空间挂的一件能力与它常不常驻）、
 `CodeProgramFailure`、`CodeProgramResult`、`CodeProgramCheckResult`
 （`CodeProgramCheckSuccess` / `CodeProgramCheckFailure`）。
 `CapabilityOperation` / `CapabilityNamespaceOperations` / `CapabilityOperationTable` 是能力空间交出来的操作表（`CodeCapabilityPort` 的对偶）。`types/runner.ts` 的 `CodeRunnerApi`、`CodeRunRequest`、
@@ -79,7 +81,8 @@
 
 ## 状态归谁
 
-本包不持有任何跨调用状态。一次程序一个隔离进程，跑完即销毁。
+一次程序一个隔离进程，跑完即销毁。跨调用的状态只在门里：每个会话导入过的模块、退租过的模块、上一份程序，
+按会话记、有总数上限（丢最久没用的那个），会话结束由宿主调 `forget` 清掉。
 
 ## 生命周期
 
@@ -93,8 +96,8 @@
 
 ## 不变量
 
-共 22 条，登记在 `spec/invariants.md`，验收用例在 `spec/acceptance.test.ts`。编号只增不重排。
-按检验方式：测试 21 条、门禁 1 条。未验证 0 条。
+共 23 条，登记在 `spec/invariants.md`，验收用例在 `spec/acceptance.test.ts`。编号只增不重排。
+按检验方式：测试 22 条、门禁 1 条。未验证 0 条。
 
 ## 非目标
 
@@ -111,11 +114,11 @@
 src/
   contract/   constants.ts 错误码与对外上限；provides.ts 交出去的接口；requires.ts 宿主注入的能力端口与事件槽
   types/      code-surface.ts 可移植数据（程序、诊断、结果）；module-form.ts import 与租约；
-              editing.ts 编辑落到原文后的形状；runner.ts 隔离运行器的形状
-  impl/       CodeSurfaceSession 会话编排；CodeProgramChecker 执行前的检查；NodeSubprocessCodeRunner 开发期隔离；
+              editing.ts 编辑落到原文后的形状；runner.ts 隔离运行器的形状；gate.ts 门的入参、回执与会话状态
+  impl/       CodeProgramGate 模型写程序的那扇门；CodeSurfaceSession 会话编排；CodeProgramChecker 执行前的检查；NodeSubprocessCodeRunner 开发期隔离；
               CapabilityOperationPort 操作表接成能力端口
   utils/      compiler.ts 编译器那一侧的活；module-form.ts 挖 import 与租约、改写成隔离能跑的形状；
-              edit.ts 在上一份程序上改；diagnostics.ts 带代码帧的诊断；
+              edit.ts 在上一份程序上改；diagnostics.ts 带代码帧的诊断；gate.ts 门给模型的说明与回执；
               result.ts 定源码与编结果；budget.ts 预算裁剪；program.ts 包装；node-executable.ts 找一个真的 node；tuning.ts 可调参数
 bin/          code-surface-child.mjs 隔离进程侧引导，自身不引任何模块
 ```

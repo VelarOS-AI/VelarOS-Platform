@@ -38,6 +38,8 @@
 | `projectVerificationPolicy` | `ProjectVerificationPolicyApi` | 「改到这个文件之后要不要再跑一次验证」的判据，交给 agent 的编码会话 |
 | `typescriptPlugin` | `ProjectPlugin` | TypeScript 适配器、补丁策略与语法校验器 |
 | `createSecretRedactionProvider` | `SecretRedactionProvider` | 按内容正则给 API key、token 打码的脱敏后端 |
+| `VelarProjectModule` | 生成的合同（`contract/surface.ts`） | `velar:project` 随包发布的模型面：模块名、放出去的方法、生成的完整声明（与 `baselines/code-surface/project.d.ts` 同一份）；空间挂这件能力时交给代码面的门 |
+| `VelarCodeModule` | 生成的合同（`contract/surface.ts`） | `velar:code` 随包发布的模型面：模块名、放出去的方法、生成的完整声明（与 `baselines/code-surface/code.d.ts` 同一份）；空间挂这件能力时交给代码面的门 |
 
 **注入面**，写在 `contract/requires.ts`，是宿主要塞进来的东西。本包只从这些口子接收外部能力：
 
@@ -125,7 +127,7 @@
 
 ```text
 src/
-  contract/     对外合同：provides.ts（产品面，登记类上方接口）、requires.ts（注入面）、constants.ts（常量表）
+  contract/     对外合同：provides.ts（产品面，登记类上方接口）、requires.ts（注入面）、constants.ts（常量表）；surface.ts 是生成的模型面（随包发布的声明）
   types/        只放类型，按域分文件；project.ts 是可移植数据
   impl/         一类一文件，按层分子目录（上层可以引下层）：
     ProjectSpace.ts    项目空间的装配表：五个命名空间，三件共用能力的项目端口

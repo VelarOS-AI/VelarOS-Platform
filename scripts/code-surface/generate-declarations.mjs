@@ -28,12 +28,19 @@ const ShouldWrite = process.argv.includes('--write')
  * 产物目录。`--out <目录>` 可以改到别处：验证新格式时不该碰真基线，
  * 尤其是有人正在并行改那几份产物的时候。
  */
-const OutputDirectory = resolve(RepoRoot, readOutOption() ?? 'baselines/code-surface')
+const OutputOption = readOutOption()
+const OutputDirectory = resolve(RepoRoot, OutputOption ?? 'baselines/code-surface')
 
 function readOutOption() {
   const index = process.argv.indexOf('--out')
   return index >= 0 ? process.argv[index + 1] : null
 }
+
+/** 随包发布的那份（contract/surface.ts）的文件头；所有权门禁认这一行，手写的合同文件冒充不了。 */
+const SurfaceFileHeader = [
+  '// 本文件由 scripts/code-surface/generate-declarations.mjs 从能力包源码生成，不要手改。',
+  '// 模型面的声明随包发布：空间挂这件能力时把它交给代码面的门，宿主不必另找一份。',
+].join('\n')
 
 /** 内置泛型与类型参数：它们从 lib 来，不该也不可能在包里找到声明。 */
 const BuiltinTypeNames = new Set(['Promise', 'Array', 'Readonly', 'Record', 'Partial', 'Omit', 'Pick'])
@@ -351,6 +358,7 @@ function generate(surface) {
   const program = createProgram(surface.directory)
   const printer = ts.createPrinter({ removeComments: true })
   const methods = []
+  const methodNames = []
   const headers = []
   const wanted = new Set()
   const wantedValues = new Set()
@@ -370,6 +378,7 @@ function generate(surface) {
     for (const member of found.node.members) {
       if (!ts.isMethodSignature(member) || !ts.isIdentifier(member.name) || !member.type) continue
       if (!hasModelTag(member, found.file)) continue
+      methodNames.push(member.name.text)
       methods.push(renderMethod(member, found.file, printer, wanted, wantedValues))
     }
   }
@@ -450,10 +459,42 @@ function generate(surface) {
   return {
     text,
     problems,
+    methodNames,
     methodCount: methods.length,
     typeCount: types.length,
     marked: new Set([...closure.keys(), ...surface.interfaces]),
   }
+}
+
+/** 能力模块在包里的常量名：`velar:files` → `VelarFilesModule`。 */
+function surfaceConstantName(namespace) {
+  return `Velar${namespace.charAt(0).toUpperCase()}${namespace.slice(1)}Module`
+}
+
+/**
+ * 按包编出每份 `contract/surface.ts`：一个包里挂几个命名空间（项目空间的 project 与 code）就写几个常量。
+ * 只放数据、不 import 任何东西，渲染进程也能加载；类型就地写明，不让能力包为这一行去依赖代码面。
+ */
+function surfaceModules() {
+  const files = new Map()
+  for (const surface of CodeSurfaces) {
+    const result = generated.get(surface.namespace)
+    if (!result || result.problems.length > 0) continue
+    const home = surface.unit ? `packages/${surface.directory}/${surface.unit}` : `packages/${surface.directory}/src`
+    const path = resolve(RepoRoot, home, 'contract', 'surface.ts')
+    const specifier = `${CapabilityModulePrefix}${surface.namespace}`
+    const block = [
+      `/** \`${specifier}\` 的模型面：模型 import 的模块名、放出去的方法、生成的完整声明（与 baselines/code-surface/${surface.namespace}.d.ts 是同一份）。 */`,
+      `export const ${surfaceConstantName(surface.namespace)}: { readonly specifier: string; readonly namespace: string; readonly methods: readonly string[]; readonly declarations: string } = Object.freeze({`,
+      `  specifier: '${specifier}',`,
+      `  namespace: '${surface.namespace}',`,
+      `  methods: Object.freeze([${result.methodNames.map((name) => `'${name}'`).join(', ')}]),`,
+      `  declarations: ${JSON.stringify(result.text)},`,
+      '})',
+    ].join('\n')
+    files.set(path, [...(files.get(path) ?? []), block])
+  }
+  return [...files].map(([path, blocks]) => [path, [SurfaceFileHeader, ...blocks].join('\n\n') + '\n'])
 }
 
 /** 方法在模块块里要写成 `export function`，否则模型 import 不出来。 */
@@ -491,8 +532,10 @@ function findStrayTags(marked) {
 
 let failed = false
 const marked = new Set()
+const generated = new Map()
 for (const surface of CodeSurfaces) {
   const result = generate(surface)
+  generated.set(surface.namespace, result)
   for (const name of result.marked) marked.add(name)
   const outputPath = resolve(OutputDirectory, `${surface.namespace}.d.ts`)
 
@@ -517,6 +560,22 @@ for (const surface of CodeSurfaces) {
   process.stdout.write(
     `✗ ${surface.namespace}: 生成物与源码不一致。你改的是模型可观测面——先看清楚改了什么，再 \`bun run generate:code-surface\` 重算并提交。\n`
   )
+}
+
+// 声明随包发布：每件能力在自己包的 contract/surface.ts 里带一份（模块名、放出去的方法、完整声明），
+// 空间挂它时交给代码面的门；和上面那份 baselines 是同一份。写到别的目录（--out）时不碰包里的文件。
+if (!OutputOption) {
+  for (const [path, text] of surfaceModules()) {
+    const current = ts.sys.fileExists(path) ? readFileSync(path, 'utf8') : null
+    if (current === text) continue
+    if (ShouldWrite) {
+      writeFileSync(path, text)
+      process.stdout.write(`✓ ${path.slice(RepoRoot.length + 1)}：随包发布的模型面已更新\n`)
+      continue
+    }
+    failed = true
+    process.stdout.write(`✗ ${path.slice(RepoRoot.length + 1)} 与生成的声明不一致；\`bun run generate:code-surface\` 重算并提交\n`)
+  }
 }
 
 const stray = findStrayTags(marked)

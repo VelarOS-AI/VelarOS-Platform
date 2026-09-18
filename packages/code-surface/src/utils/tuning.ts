@@ -24,4 +24,6 @@ export const CodeSurfaceTuning = Object.freeze({
   stderrCaptureChars: 8_000,
   /** 崩溃说明里引用多少 stderr 给模型看；收下来的那 8000 字是给判定用的，不是给它读的。 */
   stderrQuoteChars: 600,
+  /** 门最多同时替多少个会话记状态（导入过的模块、上一份程序）；再多就丢最久没用的，它下次来当新会话。 */
+  gateSessions: 256,
 })

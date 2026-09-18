@@ -225,6 +225,32 @@ export interface ProgramImport {
   lease?: CapabilityLease
 }
 
+/**
+ * 一件能力随包发布的模型面：模型 import 的模块名、放出去的方法、生成的完整声明。
+ * 能力包的生成物（`contract/surface.ts`）给出它，本包不认识任何一件具体能力。
+ */
+export interface CapabilityModuleSurface {
+  /** 模型写在 import 里的模块名，如 `velar:files`。 */
+  readonly specifier: string
+  /** 命名空间，如 `files`；能力端口按它分发调用。 */
+  readonly namespace: string
+  /** 放出去的方法名；给模型的索引只列这些。 */
+  readonly methods: readonly string[]
+  /** 生成的完整 `.d.ts` 正文，检查程序时按它推类型。 */
+  readonly declarations: string
+}
+
+/**
+ * 空间挂的一件能力：它的模型面，加上在这个空间里常不常驻。
+ * 常驻的完整声明一直给模型；其余只列模块名与方法名，程序 import 了才把完整声明给它、留在这个会话里。
+ */
+export interface MountedCapabilityModule {
+  /** 这件能力的模型面。 */
+  readonly surface: CapabilityModuleSurface
+  /** 这个空间的核心几件常驻；其余按需导入。 */
+  readonly resident: boolean
+}
+
 /** 这一轮授给程序的一个能力模块：命名空间与它的完整声明。 */
 export interface GrantedModule {
   /** 命名空间，如 `system`。 */
